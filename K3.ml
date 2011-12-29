@@ -40,6 +40,11 @@ type expr_tag_t
     | Var   of id_t * type_t
     | Tuple
 
+    | Empty     of type_t
+    | Singleton of type_t
+    | Combine
+    | Range     of type_t
+
 (* Expression Tree *)
 type 'a expr_t = ('a, expr_tag_t) tree_t
 
