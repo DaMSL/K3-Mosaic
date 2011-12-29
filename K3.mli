@@ -45,6 +45,15 @@ type expr_tag_t
     | Combine
     | Range     of type_t
 
+    | Add
+    | Mult
+    | Neg
+
+    | Eq
+    | Lt
+    | Neq
+    | Leq
+
 (* Expression Tree *)
 type 'a expr_t = ('a, expr_tag_t) tree_t
 
