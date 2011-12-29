@@ -31,6 +31,9 @@ type arg_t
     = AVar      of id_t * type_t
     | ATuple    of (id_t * type_t) list
 
+type address_t
+    = Local of id_t
+
 (* Constants *)
 type constant_t
     = CBool of bool
@@ -81,6 +84,8 @@ type expr_tag_t
     | Lookup
     | Update
     | Slice of int list
+
+    | Send of address_t
 
 (* Expression Tree *)
 type 'a expr_t = ('a, expr_tag_t) tree_t
