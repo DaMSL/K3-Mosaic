@@ -77,6 +77,11 @@ type expr_tag_t
     | Head
     | Tail
 
+    | Member
+    | Lookup
+    | Update
+    | Slice of int list
+
 (* Expression Tree *)
 type 'a expr_t = ('a, expr_tag_t) tree_t
 
