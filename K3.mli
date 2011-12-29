@@ -67,6 +67,16 @@ type expr_tag_t
     | Iterate
     | IfThenElse
 
+    | Map
+    | FilterMap
+    | Flatten
+    | Aggregate
+    | GroupByAggregate
+    | Sort
+    | Rank
+    | Head
+    | Tail
+
 (* Expression Tree *)
 type 'a expr_t = ('a, expr_tag_t) tree_t
 
