@@ -23,6 +23,26 @@ type type_t
     | TCollection   of collection_type_t * type_t
     | TFunction     of type_t * type_t
 
+(* Identifiers *)
+type id_t = string
+
+(* Constants *)
+type constant_t
+    = CBool of bool
+    | CInt    of int
+    | CFloat  of float
+    | CString of string
+
+(* Expressions *)
+type expr_tag_t
+
+    = Const of constant_t
+    | Var   of id_t * type_t
+    | Tuple
+
+(* Expression Tree *)
+type 'a expr_t = ('a, expr_tag_t) tree_t
+
 (* Utilities *)
 
 let string_of_collection_type t_c = match t_c with
