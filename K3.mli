@@ -63,6 +63,10 @@ type expr_tag_t
     | AssocLambda   of arg_t * arg_t
     | Apply
 
+    | Block
+    | Iterate
+    | IfThenElse
+
 (* Expression Tree *)
 type 'a expr_t = ('a, expr_tag_t) tree_t
 
