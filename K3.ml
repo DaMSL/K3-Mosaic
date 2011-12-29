@@ -26,6 +26,11 @@ type type_t
 (* Identifiers *)
 type id_t = string
 
+(* Arguments *)
+type arg_t
+    = AVar      of id_t * type_t
+    | ATuple    of (id_t * type_t) list
+
 (* Constants *)
 type constant_t
     = CBool of bool
@@ -53,6 +58,10 @@ type expr_tag_t
     | Lt
     | Neq
     | Leq
+
+    | Lambda        of arg_t
+    | AssocLambda   of arg_t * arg_t
+    | Apply
 
 (* Expression Tree *)
 type 'a expr_t = ('a, expr_tag_t) tree_t

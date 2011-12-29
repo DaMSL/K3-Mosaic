@@ -23,15 +23,20 @@ type type_t
     | TCollection   of collection_type_t * type_t
     | TFunction     of type_t * type_t
 
+(* Identifiers *)
+type id_t = string
+
+(* Arguments *)
+type arg_t
+    = AVar      of id_t * type_t
+    | ATuple    of (id_t * type_t) list
+
 (* Constants *)
 type constant_t
     = CBool     of bool
     | CInt      of int
     | CFloat    of float
     | CString   of string
-
-(* Identifiers *)
-type id_t = string
 
 (* Expressions *)
 type expr_tag_t
@@ -53,6 +58,10 @@ type expr_tag_t
     | Lt
     | Neq
     | Leq
+
+    | Lambda        of arg_t
+    | AssocLambda   of arg_t * arg_t
+    | Apply
 
 (* Expression Tree *)
 type 'a expr_t = ('a, expr_tag_t) tree_t
