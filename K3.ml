@@ -160,3 +160,10 @@ let string_of_arg a = match a with
         -> "ATuple("^(String.concat ", "
                 (List.map (function (i, t) -> i^": "^string_of_type(t)) its))
         ^")"
+
+let string_of_expr_tag tag children = match tag with
+    | Const(c)  -> "Const("^string_of_const(c)^")"
+
+let string_of_expr e = match e with
+    | Leaf(meta, tag) -> string_of_expr_tag tag []
+    | Node(meta, tag, children) -> string_of_expr_tag tag children

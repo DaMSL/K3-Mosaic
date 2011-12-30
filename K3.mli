@@ -125,3 +125,5 @@ val string_of_type: type_t -> string
 val string_of_const: constant_t -> string
 val string_of_address: address_t -> string
 val string_of_arg: arg_t -> string
+val string_of_expr_tag: expr_tag_t -> expr_t list -> string
+val string_of_expr: expr_t -> string
