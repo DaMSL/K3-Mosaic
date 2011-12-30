@@ -161,9 +161,11 @@ let string_of_arg a = match a with
                 (List.map (function (i, t) -> i^": "^string_of_type(t)) its))
         ^")"
 
-let string_of_expr_tag tag children = match tag with
+let rec string_of_expr_tag tag children = match tag with
     | Const(c)  -> "Const("^string_of_const(c)^")"
+    | Var(i, t) -> "Var("^i^": "^string_of_type(t)^")"
+    | Tuple     -> "Tuple("^(String.concat ", " (List.map string_of_expr children))^")"
 
-let string_of_expr e = match e with
+and string_of_expr e = match e with
     | Leaf(meta, tag) -> string_of_expr_tag tag []
     | Node(meta, tag, children) -> string_of_expr_tag tag children
