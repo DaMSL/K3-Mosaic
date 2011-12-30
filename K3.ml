@@ -161,11 +161,30 @@ let string_of_arg a = match a with
                 (List.map (function (i, t) -> i^": "^string_of_type(t)) its))
         ^")"
 
-let rec string_of_expr_tag tag children = match tag with
+let string_of_expr_tag tag children = match tag with
     | Const(c)  -> "Const("^string_of_const(c)^")"
     | Var(i, t) -> "Var("^i^": "^string_of_type(t)^")"
-    | Tuple     -> "Tuple("^(String.concat ", " (List.map string_of_expr children))^")"
+    | Tuple     -> "Tuple("^(String.concat ", " children)^")"
 
-and string_of_expr e = match e with
-    | Leaf(meta, tag) -> string_of_expr_tag tag []
-    | Node(meta, tag, children) -> string_of_expr_tag tag children
+    | Empty(t) -> "Empty("^string_of_type(t)^")"
+    | Singleton(t)
+        -> "Singleton("^string_of_type(t)^", "^(List.hd children)^")"
+    | Combine
+        -> "Combine("
+            ^(List.nth children 0)^", "
+            ^(List.nth children 1)
+        ^")"
+    | Range(t)
+        -> "Range("
+            ^string_of_type(t)^", "
+            ^(List.nth children 0)^", "
+            ^(List.nth children 1)^", "
+            ^(List.nth children 2)^", "
+        ^")"
+
+let rec string_of_tree string_of_tag root = match root with
+    | Leaf(aux, tag) -> string_of_tag tag []
+    | Node(aux, tag, children)
+        -> string_of_tag tag (List.map (string_of_tree string_of_tag) children)
+
+let string_of_expr = string_of_tree string_of_expr_tag
