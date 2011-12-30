@@ -90,6 +90,34 @@ type expr_tag_t
 (* Expression Tree *)
 type 'a expr_t = ('a, expr_tag_t) tree_t
 
+(* Trigger Effects *)
+type 'a effect_t
+    = Assign of id_t * 'a expr_t
+    | Mutate of 'a expr_t
+
+(* Top-Level Declarations *)
+type declaration_t
+    = Global        of id_t * type_t
+    | Foreign       of id_t * type_t
+    | Source        of id_t * type_t
+    | InputAdaptor  of id_t * type_t
+    | OutputAdaptor of id_t * type_t
+    | Trigger       of id_t * arg_t * (id_t * type_t) list * int effect_t list
+    | Bind          of id_t * id_t list
+    | Loof          of id_t * id_t list
+
+(* Top-Level Directives *)
+type directive_t
+    = Consume of id_t list
+
+(* All Top-Level Statements *)
+type statement_t
+    = Declaration   of declaration_t
+    | Directive     of directive_t
+
+(* K3 Programs *)
+type program_t = statement_t list
+
 (* Utilities *)
 
 let string_of_collection_type t_c = match t_c with
