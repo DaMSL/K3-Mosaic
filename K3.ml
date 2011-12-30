@@ -144,3 +144,19 @@ let rec string_of_type t = match t with
 
     | TFunction(t_a, t_r)
         -> "TFunction("^string_of_type t_a ^", "^ string_of_type t_r ^")"
+
+let string_of_const c = match c with
+    | CBool(b)   -> "CBool("^string_of_bool(b)^")"
+    | CInt(i)    -> "CInt("^string_of_int(i)^")"
+    | CFloat(f)  -> "CFloat("^string_of_float(f)^")"
+    | CString(s) -> "CString(\""^s^"\")"
+
+let string_of_address a = match a with
+    | Local(i) -> "Local("^i^")"
+
+let string_of_arg a = match a with
+    | AVar(i, t) -> "AVar("^i^": "^string_of_type(t)^")"
+    | ATuple(its)
+        -> "ATuple("^(String.concat ", "
+                (List.map (function (i, t) -> i^": "^string_of_type(t)) its))
+        ^")"

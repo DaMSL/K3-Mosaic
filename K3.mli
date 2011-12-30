@@ -122,3 +122,6 @@ type program_t = statement_t list
 
 val string_of_collection_type: collection_type_t -> string
 val string_of_type: type_t -> string
+val string_of_const: constant_t -> string
+val string_of_address: address_t -> string
+val string_of_arg: arg_t -> string
