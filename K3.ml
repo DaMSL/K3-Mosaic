@@ -201,6 +201,17 @@ let string_of_expr_tag tag children = match tag with
     | Apply
         -> "Apply("^(List.nth children 0)^", "^(List.nth children 1)^")"
 
+    | Block
+        -> "Block("^(String.concat ", " children)^")"
+    | Iterate
+        -> "Iterate("^(List.nth children 0)^", "^(List.nth children 1)^")"
+    | IfThenElse
+        -> "IfThenElse("
+            ^(List.nth children 0)^", "
+            ^(List.nth children 1)^", "
+            ^(List.nth children 2)
+        ^")"
+
 let rec string_of_tree string_of_tag root = match root with
     | Leaf(aux, tag) -> string_of_tag tag []
     | Node(aux, tag, children)
