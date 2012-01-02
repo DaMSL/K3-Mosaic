@@ -182,6 +182,14 @@ let string_of_expr_tag tag children = match tag with
             ^(List.nth children 2)^", "
         ^")"
 
+    | Add   -> "Add("^(List.nth children 0)^", "^(List.nth children 1)^")"
+    | Mult  -> "Mult("^(List.nth children 0)^", "^(List.nth children 1)^")"
+    | Neg   -> "Neg("^(List.nth children 0)^")"
+    | Eq    -> "Eq("^(List.nth children 0)^", "^(List.nth children 1)^")"
+    | Neq   -> "Neq("^(List.nth children 0)^", "^(List.nth children 1)^")"
+    | Lt    -> "Lt("^(List.nth children 0)^", "^(List.nth children 1)^")"
+    | Leq   -> "Leq("^(List.nth children 0)^", "^(List.nth children 1)^")"
+
 let rec string_of_tree string_of_tag root = match root with
     | Leaf(aux, tag) -> string_of_tag tag []
     | Node(aux, tag, children)
