@@ -1,9 +1,13 @@
 (* The K3 Programming Language *)
 
+open Tree
+
 (* Generic Tree Structure *)
+(*
 type ('a, 'tag) tree_t
     = Leaf of 'a * 'tag
     | Node of 'a * 'tag * ('a, 'tag) tree_t list
+*)
 
 (* Collection Types *)
 type collection_type_t
@@ -104,7 +108,7 @@ type declaration_t
     | OutputAdaptor of id_t * type_t
     | Trigger       of id_t * arg_t * (id_t * type_t) list * int effect_t list
     | Bind          of id_t * id_t list
-    | Loof          of id_t * id_t list
+    | Loop          of id_t * id_t list
 
 (* Top-Level Directives *)
 type directive_t
@@ -126,9 +130,10 @@ val string_of_const: constant_t -> string
 val string_of_address: address_t -> string
 val string_of_arg: arg_t -> string
 val string_of_expr_tag: expr_tag_t -> string list -> string
-val string_of_expr: expr_t -> string
+val string_of_expr_meta: ('a -> string list -> string) -> 'a expr_t -> string
+val string_of_expr: 'a expr_t -> string
 
-val string_of_effect: effect_t -> string
+val string_of_effect: 'a effect_t -> string
 val string_of_declaration: declaration_t -> string
 val string_of_directive: directive_t -> string
 val string_of_statement: statement_t -> string

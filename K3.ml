@@ -1,9 +1,13 @@
 (* The K3 Programming Language *)
 
+open Tree
+
 (* Generic Tree Structure *)
+(*
 type ('a, 'tag) tree_t
     = Leaf of 'a * 'tag
     | Node of 'a * 'tag * ('a, 'tag) tree_t list
+*)
 
 (* Collection Types *)
 type collection_type_t
@@ -267,13 +271,19 @@ let string_of_expr_tag tag children = match tag with
             ^(List.nth children 0)
         ^")"
 
+(*
 let rec string_of_tree string_of_tag root = match root with
     | Leaf(aux, tag) -> string_of_tag tag []
     | Node(aux, tag, children)
         -> string_of_tag tag (List.map (string_of_tree string_of_tag) children)
+*)
 
-let string_of_expr = string_of_tree string_of_expr_tag
+let string_of_expr_meta string_of_meta =
+  string_of_tree string_of_meta string_of_expr_tag
 
+let string_of_expr =
+  string_of_tree (fun _ _ -> "") string_of_expr_tag
+  
 let string_of_effect f = match f with
     | Assign(i, e) -> "Assign("^i^", "^string_of_expr(e)^")"
     | Mutate(e) -> "Mutate("^string_of_expr(e)^")"
