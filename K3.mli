@@ -127,3 +127,9 @@ val string_of_address: address_t -> string
 val string_of_arg: arg_t -> string
 val string_of_expr_tag: expr_tag_t -> string list -> string
 val string_of_expr: expr_t -> string
+
+val string_of_effect: effect_t -> string
+val string_of_declaration: declaration_t -> string
+val string_of_directive: directive_t -> string
+val string_of_statement: statement_t -> string
+val string_of_program: program_t -> string

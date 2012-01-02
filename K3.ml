@@ -104,7 +104,7 @@ type declaration_t
     | OutputAdaptor of id_t * type_t
     | Trigger       of id_t * arg_t * (id_t * type_t) list * int effect_t list
     | Bind          of id_t * id_t list
-    | Loof          of id_t * id_t list
+    | Loop          of id_t * id_t list
 
 (* Top-Level Directives *)
 type directive_t
@@ -273,3 +273,35 @@ let rec string_of_tree string_of_tag root = match root with
         -> string_of_tag tag (List.map (string_of_tree string_of_tag) children)
 
 let string_of_expr = string_of_tree string_of_expr_tag
+
+let string_of_effect f = match f with
+    | Assign(i, e) -> "Assign("^i^", "^string_of_expr(e)^")"
+    | Mutate(e) -> "Mutate("^string_of_expr(e)^")"
+
+let string_of_declaration d = match d with
+    | Global(i, t)  -> "Global("^i^", "^string_of_type(t)^")"
+    | Foreign(i, t) -> "Foreign("^i^", "^string_of_type(t)^")"
+    | Source(i, t)  -> "Source("^i^", "^string_of_type(t)^")"
+
+    | InputAdaptor(i, t)    -> "InputAdaptor("^i^", "^string_of_type(t)^")"
+    | OutputAdaptor(i, t)   -> "OutputAdaptor("^i^", "^string_of_type(t)^")"
+
+    | Trigger(i, arg, ds, es)
+        -> "Trigger("^i^", "^string_of_arg(arg)^", ["
+            ^(String.concat ", " (List.map
+                (function d -> "("^fst d^", "^string_of_type(snd d)^")") ds))^"], "
+            ^(String.concat ", " (List.map string_of_effect es))
+        ^")"
+
+    | Bind(i, rs) -> "Bind("^i^", ["^(String.concat ", " rs)^"])"
+    | Loop(id, ids) -> "Loop("^id^", ["^(String.concat ", " ids)^"])"
+
+let string_of_directive d = match d with
+    | Consume(ids) -> "Consume(["^(String.concat ", " ids)^"])"
+
+let string_of_statement s = match s with
+    | Declaration(d) -> string_of_declaration(d)
+    | Directive(d)   -> string_of_directive(d)
+
+let string_of_program ss
+    = "K3(["^(String.concat ", " (List.map string_of_statement ss))^"])"
