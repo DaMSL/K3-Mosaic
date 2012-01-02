@@ -190,6 +190,17 @@ let string_of_expr_tag tag children = match tag with
     | Lt    -> "Lt("^(List.nth children 0)^", "^(List.nth children 1)^")"
     | Leq   -> "Leq("^(List.nth children 0)^", "^(List.nth children 1)^")"
 
+    | Lambda(a)
+        -> "Lambda("^string_of_arg(a)^", "^(List.nth children 0)^")"
+    | AssocLambda(a, b)
+        -> "AssocLambda("
+            ^string_of_arg(a)^", "
+            ^string_of_arg(b)^", "
+            ^(List.nth children 0)
+        ^")"
+    | Apply
+        -> "Apply("^(List.nth children 0)^", "^(List.nth children 1)^")"
+
 let rec string_of_tree string_of_tag root = match root with
     | Leaf(aux, tag) -> string_of_tag tag []
     | Node(aux, tag, children)
