@@ -212,6 +212,61 @@ let string_of_expr_tag tag children = match tag with
             ^(List.nth children 2)
         ^")"
 
+    | Map
+        -> "Map("^(List.nth children 0)^", "^(List.nth children 1)^")"
+    | FilterMap
+        -> "FilterMap("
+            ^(List.nth children 0)^", "
+            ^(List.nth children 1)^", "
+            ^(List.nth children 2)
+        ^")"
+    | Flatten
+        -> "Flatten("^(List.nth children 0)^")"
+    | Aggregate
+        -> "Aggregate("
+            ^(List.nth children 0)^", "
+            ^(List.nth children 1)^", "
+            ^(List.nth children 2)
+        ^")"
+    | GroupByAggregate
+        -> "GroupByAggregate("
+            ^(List.nth children 0)^", "
+            ^(List.nth children 1)^", "
+            ^(List.nth children 2)^", "
+            ^(List.nth children 3)
+        ^")"
+    | Sort
+        -> "Sort("^(List.nth children 0)^", "^(List.nth children 1)^")"
+    | Rank
+        -> "Rank("^(List.nth children 0)^", "^(List.nth children 1)^")"
+
+    | Member -> "Member("^(List.nth children 0)^", "^(List.nth children 1)^")"
+    | Lookup -> "Lookup("^(List.nth children 0)^", "^(List.nth children 1)^")"
+    | Slice(ks)
+        -> "Slice("
+            ^(List.nth children 0)^", ["
+            ^(String.concat ", " (List.map
+                (function (i, e) ->
+                    "("^(string_of_int i)^", "^ e ^")")
+                (List.combine ks (List.tl children)))
+            )
+        ^"])"
+    | Update
+        -> "Update("
+            ^(List.nth children 0)^", "
+            ^(List.nth children 1)^", "
+            ^(List.nth children 2)
+        ^")"
+
+    | Head -> "Head("^(List.nth children 0)^")"
+    | Tail -> "Tail("^(List.nth children 0)^")"
+
+    | Send(a)
+        -> "Send("
+            ^string_of_address(a)^", "
+            ^(List.nth children 0)
+        ^")"
+
 let rec string_of_tree string_of_tag root = match root with
     | Leaf(aux, tag) -> string_of_tag tag []
     | Node(aux, tag, children)
