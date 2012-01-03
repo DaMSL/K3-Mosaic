@@ -27,6 +27,13 @@ rule tokenize = parse
     | ')' { RPAREN }
     | ',' { COMMA }
 
+    | '{' { LBRACE }
+    | '}' { RBRACE }
+    | "{|" { LBRACEBAR }
+    | "|}" { RBRACEBAR }
+    | '[' { LBRACKET }
+    | ']' { RBRACKET }
+
     | '+' { PLUS }
     | '*' { TIMES }
     | '-' { NEG }
