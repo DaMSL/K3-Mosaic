@@ -281,7 +281,7 @@ let rec string_of_tree string_of_tag root = match root with
 let string_of_expr_meta string_of_meta =
   string_of_tree string_of_meta string_of_expr_tag
 
-let string_of_expr = string_of_tree (fun _ _ -> "") string_of_expr_tag
+let string_of_expr e = string_of_tree (fun _ _ -> "") string_of_expr_tag e
 
 let string_of_effect f = match f with
     | Assign(i, e) -> "Assign("^i^", "^string_of_expr(e)^")"
