@@ -27,6 +27,10 @@ rule tokenize = parse
     | ')' { RPAREN }
     | ',' { COMMA }
 
+    | '+' { PLUS }
+    | '*' { TIMES }
+    | '-' { NEG }
+
     | identifier as name {
         IDENTIFIER (name)
     }

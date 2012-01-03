@@ -21,10 +21,18 @@
 
 %token LPAREN RPAREN COMMA
 
+%token PLUS MINUS NEG
+%token TIMES
+
 %token <string> IDENTIFIER
 
 %start line
 %type <int K3.expr_t> line
+
+%left PLUS MINUS
+%left TIMES
+
+%right NEG
 
 %%
 
@@ -34,6 +42,8 @@ expr:
     | LPAREN tuple RPAREN { $2 }
     | constant { mkleaf(Const($1)) }
     | identifier { mkleaf(Var($1, TUnknown)) }
+
+    | arithmetic { $1 }
 
 tuple:
     | expr_list { if List.length $1 == 1 then List.hd $1 else mknode Tuple $1 }
@@ -50,3 +60,9 @@ constant:
 
 identifier:
     | IDENTIFIER { $1 }
+
+arithmetic:
+    | NEG expr { mknode Neg [$2] }
+    | expr PLUS expr { mknode Add [$1; $3] }
+    | expr NEG expr %prec MINUS { mknode Add [$1; mknode Neg [$3]] }
+    | expr TIMES expr { mknode Mult [$1; $3] }
