@@ -26,6 +26,7 @@ rule tokenize = parse
     | '(' { LPAREN }
     | ')' { RPAREN }
     | ',' { COMMA }
+    | ';' { SEMICOLON }
 
     | '{' { LBRACE }
     | '}' { RBRACE }

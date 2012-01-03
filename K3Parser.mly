@@ -10,6 +10,11 @@
 
     let mkleaf tag = Leaf(get_uuid(), tag)
     let mknode tag children = Node(get_uuid(), tag, children)
+
+    let rec build_collection exprs ctype = match exprs with
+        | [] -> mkleaf(Empty(ctype))
+        | [e] -> mknode (Singleton(ctype)) [e]
+        | e :: es -> mknode Combine [mknode (Singleton(ctype)) [e]; build_collection es ctype]
 %}
 
 %token EOF
@@ -19,7 +24,7 @@
 %token <string> STRING
 %token <bool> BOOL
 
-%token LPAREN RPAREN COMMA
+%token LPAREN RPAREN COMMA SEMICOLON
 
 %token LBRACE RBRACE LBRACEBAR RBRACEBAR LBRACKET RBRACKET
 
@@ -60,6 +65,10 @@ expr_list:
     | expr { [$1] }
     | expr COMMA expr_list { $1 :: $3 }
 
+expr_seq:
+    | tuple { [$1] }
+    | tuple SEMICOLON expr_seq { $1 :: $3 }
+
 constant:
     | INTEGER { CInt($1) }
     | FLOAT { CFloat($1) }
@@ -85,3 +94,7 @@ collection:
     | LBRACE RBRACE { mkleaf(Empty(TCollection(TSet, TUnknown))) }
     | LBRACEBAR RBRACEBAR { mkleaf(Empty(TCollection(TBag, TUnknown))) }
     | LBRACKET RBRACKET { mkleaf(Empty(TCollection(TList, TUnknown))) }
+
+    | LBRACE expr_seq RBRACE { build_collection $2 (TCollection(TSet, TUnknown)) }
+    | LBRACEBAR expr_seq RBRACEBAR { build_collection $2 (TCollection(TBag, TUnknown)) }
+    | LBRACKET expr_seq RBRACKET { build_collection $2 (TCollection(TList, TUnknown)) }
