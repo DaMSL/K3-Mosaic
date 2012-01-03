@@ -11,6 +11,8 @@ let digit = ['0'-'9']
 let integer = digit+
 let real = digit+ '.' digit+
 
+let identifier = ['_''a'-'z''A'-'Z']['_''a'-'z''A'-'Z''0'-'9']*
+
 rule tokenize = parse
     | whitespace { tokenize lexbuf }
     | eof { EOF }
@@ -20,3 +22,7 @@ rule tokenize = parse
     | '"' (([^'"']|"\\\"")* as s) '"'  { STRING s }
     | "true" { BOOL true }
     | "false" { BOOL false }
+
+    | identifier as name {
+        IDENTIFIER (name)
+    }
