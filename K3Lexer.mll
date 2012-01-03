@@ -23,6 +23,10 @@ rule tokenize = parse
     | "true" { BOOL true }
     | "false" { BOOL false }
 
+    | '(' { LPAREN }
+    | ')' { RPAREN }
+    | ',' { COMMA }
+
     | identifier as name {
         IDENTIFIER (name)
     }
