@@ -8,13 +8,14 @@
 
     let get_uuid () = let t = !uuid in uuid := !uuid + 1; t
 
-    let mkleaf tag = Leaf(get_uuid(), tag)
-    let mknode tag children = Node(get_uuid(), tag, children)
+    let mkexpr tag children = match children with
+        | [] -> Leaf(get_uuid(), tag)
+        | _  -> Node(get_uuid(), tag, children)
 
     let rec build_collection exprs ctype = match exprs with
-        | [] -> mkleaf(Empty(ctype))
-        | [e] -> mknode (Singleton(ctype)) [e]
-        | e :: es -> mknode Combine [mknode (Singleton(ctype)) [e]; build_collection es ctype]
+        | [] -> mkexpr (Empty(ctype)) []
+        | [e] -> mkexpr (Singleton(ctype)) [e]
+        | e :: es -> mkexpr Combine [mkexpr (Singleton(ctype)) [e]; build_collection es ctype]
 %}
 
 %token EOF
@@ -51,15 +52,15 @@ line: expr EOF { $1 }
 
 expr:
     | LPAREN tuple RPAREN { $2 }
-    | constant { mkleaf(Const($1)) }
-    | identifier { mkleaf(Var($1, TUnknown)) }
+    | constant { mkexpr (Const($1)) [] }
+    | identifier { mkexpr (Var($1, TUnknown)) [] }
 
     | arithmetic { $1 }
     | predicate { $1 }
     | collection { $1 }
 
 tuple:
-    | expr_list { if List.length $1 == 1 then List.hd $1 else mknode Tuple $1 }
+    | expr_list { if List.length $1 == 1 then List.hd $1 else mkexpr Tuple $1 }
 
 expr_list:
     | expr { [$1] }
@@ -79,21 +80,21 @@ identifier:
     | IDENTIFIER { $1 }
 
 arithmetic:
-    | NEG expr { mknode Neg [$2] }
-    | expr PLUS expr { mknode Add [$1; $3] }
-    | expr NEG expr %prec MINUS { mknode Add [$1; mknode Neg [$3]] }
-    | expr TIMES expr { mknode Mult [$1; $3] }
+    | NEG expr { mkexpr Neg [$2] }
+    | expr PLUS expr { mkexpr Add [$1; $3] }
+    | expr NEG expr %prec MINUS { mkexpr Add [$1; mkexpr Neg [$3]] }
+    | expr TIMES expr { mkexpr Mult [$1; $3] }
 
 predicate:
-    | expr LT expr { mknode Lt [$1; $3] }
-    | expr EQ expr { mknode Eq [$1; $3] }
-    | expr LEQ expr { mknode Leq [$1; $3] }
-    | expr NEQ expr { mknode Neq [$1; $3] }
+    | expr LT expr { mkexpr Lt [$1; $3] }
+    | expr EQ expr { mkexpr Eq [$1; $3] }
+    | expr LEQ expr { mkexpr Leq [$1; $3] }
+    | expr NEQ expr { mkexpr Neq [$1; $3] }
 
 collection:
-    | LBRACE RBRACE { mkleaf(Empty(TCollection(TSet, TUnknown))) }
-    | LBRACEBAR RBRACEBAR { mkleaf(Empty(TCollection(TBag, TUnknown))) }
-    | LBRACKET RBRACKET { mkleaf(Empty(TCollection(TList, TUnknown))) }
+    | LBRACE RBRACE { mkexpr (Empty(TCollection(TSet, TUnknown))) [] }
+    | LBRACEBAR RBRACEBAR { mkexpr (Empty(TCollection(TBag, TUnknown))) [] }
+    | LBRACKET RBRACKET { mkexpr (Empty(TCollection(TList, TUnknown))) [] }
 
     | LBRACE expr_seq RBRACE { build_collection $2 (TCollection(TSet, TUnknown)) }
     | LBRACEBAR expr_seq RBRACEBAR { build_collection $2 (TCollection(TBag, TUnknown)) }
