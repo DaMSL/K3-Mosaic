@@ -31,6 +31,11 @@ rule tokenize = parse
     | '*' { TIMES }
     | '-' { NEG }
 
+    | '<' { LT }
+    | "==" { EQ }
+    | "<=" { LEQ }
+    | "!=" { NEQ }
+
     | identifier as name {
         IDENTIFIER (name)
     }

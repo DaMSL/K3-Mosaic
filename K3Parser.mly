@@ -24,10 +24,14 @@
 %token PLUS MINUS NEG
 %token TIMES
 
+%token LT EQ LEQ NEQ
+
 %token <string> IDENTIFIER
 
 %start line
 %type <int K3.expr_t> line
+
+%left LT EQ LEQ NEQ
 
 %left PLUS MINUS
 %left TIMES
@@ -44,6 +48,7 @@ expr:
     | identifier { mkleaf(Var($1, TUnknown)) }
 
     | arithmetic { $1 }
+    | predicate { $1 }
 
 tuple:
     | expr_list { if List.length $1 == 1 then List.hd $1 else mknode Tuple $1 }
@@ -66,3 +71,9 @@ arithmetic:
     | expr PLUS expr { mknode Add [$1; $3] }
     | expr NEG expr %prec MINUS { mknode Add [$1; mknode Neg [$3]] }
     | expr TIMES expr { mknode Mult [$1; $3] }
+
+predicate:
+    | expr LT expr { mknode Lt [$1; $3] }
+    | expr EQ expr { mknode Eq [$1; $3] }
+    | expr LEQ expr { mknode Leq [$1; $3] }
+    | expr NEQ expr { mknode Neq [$1; $3] }
