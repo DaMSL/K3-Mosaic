@@ -36,8 +36,8 @@ driver: Tree.cmo K3.cmo K3Parser.cmo K3Lexer.cmo driver.cmo
 	ocamlc -o driver Tree.cmo K3.cmo K3Parser.cmo K3Lexer.cmo driver.cmo
 
 clean:
-	rm *.cm*
-	rm *.annot
-	rm K3Lexer.ml K3Parser.ml
-	rm K3Parser.mli K3Parser.output
-	rm driver
+	-rm *.cm*
+	-rm *.annot
+	-rm K3Lexer.ml K3Parser.ml
+	-rm K3Parser.mli K3Parser.output
+	-rm driver
