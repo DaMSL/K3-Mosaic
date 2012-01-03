@@ -7,6 +7,9 @@
     let uuid = ref 1
 
     let get_uuid () = let t = !uuid in uuid := !uuid + 1; t
+
+    let mkleaf tag = Leaf(get_uuid(), tag)
+    let mknode tag children = Node(get_uuid(), tag, children)
 %}
 
 %token EOF
@@ -26,8 +29,8 @@
 line: expr EOF { $1 }
 
 expr:
-    | constant { Leaf(get_uuid(), Const($1)) }
-    | identifier { Leaf(get_uuid(), Var($1, TUnknown)) }
+    | constant { mkleaf(Const($1)) }
+    | identifier { mkleaf(Var($1, TUnknown)) }
 
 constant:
     | INTEGER { CInt($1) }
