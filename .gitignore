@@ -4,3 +4,12 @@
 *.cmo
 
 *.annot
+*.output
+
+K3Parser.mli
+K3Parser.ml
+
+K3Lexer.mli
+K3Lexer.ml
+
+driver
