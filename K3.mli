@@ -100,13 +100,13 @@ type 'a effect_t
     | Mutate of 'a expr_t
 
 (* Top-Level Declarations *)
-type declaration_t
+type 'a declaration_t
     = Global        of id_t * type_t
     | Foreign       of id_t * type_t
     | Source        of id_t * type_t
     | InputAdaptor  of id_t * type_t
     | OutputAdaptor of id_t * type_t
-    | Trigger       of id_t * arg_t * (id_t * type_t) list * int effect_t list
+    | Trigger       of id_t * arg_t * (id_t * type_t) list * 'a effect_t list
     | Bind          of id_t * id_t list
     | Loop          of id_t * id_t list
 
@@ -115,12 +115,12 @@ type directive_t
     = Consume of id_t list
 
 (* All Top-Level Statements *)
-type statement_t
-    = Declaration   of declaration_t
+type 'a statement_t
+    = Declaration   of 'a declaration_t
     | Directive     of directive_t
 
 (* K3 Programs *)
-type program_t = statement_t list
+type 'a program_t = 'a statement_t list
 
 (* Utilities *)
 
@@ -134,7 +134,7 @@ val string_of_expr_meta: ('a -> string list -> string) -> 'a expr_t -> string
 val string_of_expr: 'a expr_t -> string
 
 val string_of_effect: 'a effect_t -> string
-val string_of_declaration: declaration_t -> string
+val string_of_declaration: 'a declaration_t -> string
 val string_of_directive: directive_t -> string
-val string_of_statement: statement_t -> string
-val string_of_program: program_t -> string
+val string_of_statement: 'a statement_t -> string
+val string_of_program: 'a program_t -> string
