@@ -9,9 +9,14 @@ let whitespace = [' ' '\t' '\n']
 
 let digit = ['0'-'9']
 let integer = digit+
+let real = digit+ '.' digit+
 
 rule tokenize = parse
     | whitespace { tokenize lexbuf }
     | eof { EOF }
 
     | integer as value { INTEGER (int_of_string value) }
+    | real as value { FLOAT (float_of_string value) }
+    | '"' (([^'"']|"\\\"")* as s) '"'  { STRING s }
+    | "true" { BOOL true }
+    | "false" { BOOL false }

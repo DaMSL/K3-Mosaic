@@ -12,6 +12,9 @@
 %token EOF
 
 %token <int> INTEGER
+%token <float> FLOAT
+%token <string> STRING
+%token <bool> BOOL
 
 %start line
 %type <int K3.expr_t> line
@@ -25,3 +28,6 @@ expr:
 
 constant:
     | INTEGER { CInt($1) }
+    | FLOAT { CFloat($1) }
+    | STRING { CString($1) }
+    | BOOL { CBool($1) }
