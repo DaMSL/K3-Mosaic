@@ -45,6 +45,7 @@ rule tokenize = parse
     | "!=" { NEQ }
 
     | "->" { RARROW }
+    | "<->" { LRARROW }
     | ':' { COLON }
     | '\\' { BACKSLASH }
 

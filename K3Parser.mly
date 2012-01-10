@@ -36,7 +36,7 @@
 
 %token LT EQ LEQ NEQ
 
-%token RARROW
+%token LRARROW RARROW
 
 %token COLON
 %token BACKSLASH
@@ -47,6 +47,7 @@
 %type <int K3.expr_t> line
 
 %right RARROW
+%right LRARROW
 
 %left LT EQ LEQ NEQ
 
@@ -89,6 +90,7 @@ expr:
     | collection { $1 }
 
     | lambda { $1 }
+
     | IDENTIFIER LPAREN tuple RPAREN {
         mkexpr Apply [mkexpr (Var($1, TUnknown)) []; $3]
     }
@@ -150,3 +152,4 @@ collection:
 
 lambda:
     | BACKSLASH arg RARROW expr { mkexpr (Lambda($2)) [$4] }
+    | BACKSLASH arg LRARROW arg RARROW expr { mkexpr (AssocLambda($2, $4)) [$6] }
