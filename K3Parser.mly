@@ -55,6 +55,19 @@ line: expr EOF { $1 }
 type_expr:
     | TYPE { $1 }
 
+    | LBRACE type_tuple RBRACE { TCollection(TSet, $2) }
+    | LBRACEBAR type_tuple RBRACEBAR { TCollection(TBag, $2) }
+    | LBRACKET type_tuple RBRACKET { TCollection(TList, $2) }
+
+    | LPAREN type_tuple RPAREN { $2 }
+
+type_tuple:
+    | type_expr_list { if List.length $1 == 1 then List.hd $1 else TTuple($1) }
+
+type_expr_list:
+    | type_expr { [$1] }
+    | type_expr COMMA type_expr_list { $1 :: $3 }
+
 expr:
     | LPAREN tuple RPAREN { $2 }
     | constant { mkexpr (Const($1)) [] }
