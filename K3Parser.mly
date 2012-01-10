@@ -89,6 +89,9 @@ expr:
     | collection { $1 }
 
     | lambda { $1 }
+    | IDENTIFIER LPAREN tuple RPAREN {
+        mkexpr Apply [mkexpr (Var($1, TUnknown)) []; $3]
+    }
 
 arg:
     | identifier { AVar(fst $1, snd $1) }
