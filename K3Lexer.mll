@@ -44,6 +44,8 @@ rule tokenize = parse
     | "<=" { LEQ }
     | "!=" { NEQ }
 
+    | "->" { RARROW }
+
     | "bool" { TYPE TBool }
     | "int" { TYPE TInt }
     | "float" { TYPE TFloat }

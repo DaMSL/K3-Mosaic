@@ -36,6 +36,8 @@
 
 %token LT EQ LEQ NEQ
 
+%token RARROW
+
 %token <string> IDENTIFIER
 
 %start line
@@ -47,6 +49,8 @@
 %left TIMES
 
 %right NEG
+
+%right RARROW
 
 %%
 
@@ -60,6 +64,8 @@ type_expr:
     | LBRACKET type_tuple RBRACKET { TCollection(TList, $2) }
 
     | LPAREN type_tuple RPAREN { $2 }
+
+    | type_expr RARROW type_expr { TFunction($1, $3) }
 
 type_tuple:
     | type_expr_list { if List.length $1 == 1 then List.hd $1 else TTuple($1) }
