@@ -38,10 +38,15 @@
 
 %token RARROW
 
+%token COLON
+%token BACKSLASH
+
 %token <string> IDENTIFIER
 
 %start line
 %type <int K3.expr_t> line
+
+%right RARROW
 
 %left LT EQ LEQ NEQ
 
@@ -50,7 +55,7 @@
 
 %right NEG
 
-%right RARROW
+%left COLON
 
 %%
 
@@ -77,11 +82,26 @@ type_expr_list:
 expr:
     | LPAREN tuple RPAREN { $2 }
     | constant { mkexpr (Const($1)) [] }
-    | identifier { mkexpr (Var($1, TUnknown)) [] }
+    | identifier { mkexpr (Var(fst $1, snd $1)) [] }
 
     | arithmetic { $1 }
     | predicate { $1 }
     | collection { $1 }
+
+    | lambda { $1 }
+
+arg:
+    | identifier { AVar(fst $1, snd $1) }
+    | LPAREN arg_list RPAREN  {
+        if List.length $2 == 1 then
+            let arg = List.hd $2 in
+            AVar(fst arg, snd arg)
+        else ATuple($2)
+    }
+
+arg_list:
+    | identifier { [($1)] }
+    | identifier COMMA arg_list { $1 :: $3 }
 
 tuple:
     | expr_list { if List.length $1 == 1 then List.hd $1 else mkexpr Tuple $1 }
@@ -101,7 +121,8 @@ constant:
     | BOOL { CBool($1) }
 
 identifier:
-    | IDENTIFIER { $1 }
+    | IDENTIFIER { ($1, TUnknown) }
+    | IDENTIFIER COLON type_expr { ($1, $3) }
 
 arithmetic:
     | NEG expr { mkexpr Neg [$2] }
@@ -123,3 +144,6 @@ collection:
     | LBRACE expr_seq RBRACE { build_collection $2 (TCollection(TSet, TUnknown)) }
     | LBRACEBAR expr_seq RBRACEBAR { build_collection $2 (TCollection(TBag, TUnknown)) }
     | LBRACKET expr_seq RBRACKET { build_collection $2 (TCollection(TList, TUnknown)) }
+
+lambda:
+    | BACKSLASH arg RARROW expr { mkexpr (Lambda($2)) [$4] }

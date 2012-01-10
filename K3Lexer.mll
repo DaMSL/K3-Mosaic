@@ -45,6 +45,8 @@ rule tokenize = parse
     | "!=" { NEQ }
 
     | "->" { RARROW }
+    | ':' { COLON }
+    | '\\' { BACKSLASH }
 
     | "bool" { TYPE TBool }
     | "int" { TYPE TInt }
