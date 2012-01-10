@@ -44,6 +44,11 @@ rule tokenize = parse
     | "<=" { LEQ }
     | "!=" { NEQ }
 
+    | "bool" { TYPE TBool }
+    | "int" { TYPE TInt }
+    | "float" { TYPE TFloat }
+    | "string" { TYPE TString }
+
     | identifier as name {
         IDENTIFIER (name)
     }

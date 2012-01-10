@@ -25,6 +25,8 @@
 %token <string> STRING
 %token <bool> BOOL
 
+%token <K3.type_t> TYPE
+
 %token LPAREN RPAREN COMMA SEMICOLON
 
 %token LBRACE RBRACE LBRACEBAR RBRACEBAR LBRACKET RBRACKET
@@ -49,6 +51,9 @@
 %%
 
 line: expr EOF { $1 }
+
+type_expr:
+    | TYPE { $1 }
 
 expr:
     | LPAREN tuple RPAREN { $2 }
