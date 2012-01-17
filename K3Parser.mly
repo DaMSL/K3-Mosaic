@@ -16,6 +16,11 @@
         | [] -> mkexpr (Empty(ctype)) []
         | [e] -> mkexpr (Singleton(ctype)) [e]
         | e :: es -> mkexpr Combine [mkexpr (Singleton(ctype)) [e]; build_collection es ctype]
+
+    let rec accumulate_slice_indices exprs i = match exprs with
+        | [] -> []
+        | Leaf(_, Var("_", _)) :: es -> accumulate_slice_indices es (i + 1)
+        | e :: es -> (e, i) :: accumulate_slice_indices es (i + 1)
 %}
 
 %token EOF
@@ -159,4 +164,14 @@ lambda:
     | BACKSLASH arg LRARROW arg RARROW expr { mkexpr (AssocLambda($2, $4)) [$6] }
 
 access:
+    | expr LBRACKET tuple RBRACKET {
+        match $3 with
+            | Leaf(_, Var("_", _)) -> mkexpr Lookup [$1;$3]
+            | Node(_, Tuple, keys) ->
+                let values, indices = List.split (accumulate_slice_indices keys 0) in
+                if List.length indices == List.length keys
+                then mkexpr Lookup [$1;$3]
+                else mkexpr (Slice(indices)) ($1 :: values)
+            | _ -> mkexpr Lookup [$1;$3]
+    }
     | expr LBRACKET tuple RBRACKET QUESTION { mkexpr Member [$1;$3] }
