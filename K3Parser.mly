@@ -50,6 +50,8 @@
 
 %token GETS
 
+%token DO
+
 %token <string> IDENTIFIER
 
 %start line
@@ -101,6 +103,8 @@ expr:
     | lambda { $1 }
 
     | access { $1 }
+
+    | block { $1 }
 
     | IDENTIFIER LPAREN tuple RPAREN {
         mkexpr Apply [mkexpr (Var($1, TUnknown)) []; $3]
@@ -178,3 +182,5 @@ access:
     }
     | expr LBRACKET tuple RBRACKET QUESTION { mkexpr Member [$1;$3] }
     | expr LBRACKET tuple RBRACKET GETS expr { mkexpr Update [$1;$3;$6] }
+
+block: DO LBRACE expr_seq RBRACE { mkexpr Block $3 }

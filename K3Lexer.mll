@@ -52,6 +52,8 @@ rule tokenize = parse
     | '?' { QUESTION }
     | '=' { GETS }
 
+    | "do" { DO }
+
     | "bool" { TYPE TBool }
     | "int" { TYPE TInt }
     | "float" { TYPE TFloat }
