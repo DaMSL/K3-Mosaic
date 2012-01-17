@@ -49,6 +49,8 @@ rule tokenize = parse
     | ':' { COLON }
     | '\\' { BACKSLASH }
 
+    | '?' { QUESTION }
+
     | "bool" { TYPE TBool }
     | "int" { TYPE TInt }
     | "float" { TYPE TFloat }

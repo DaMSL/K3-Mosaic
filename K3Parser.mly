@@ -41,6 +41,8 @@
 %token COLON
 %token BACKSLASH
 
+%token QUESTION
+
 %token <string> IDENTIFIER
 
 %start line
@@ -90,6 +92,8 @@ expr:
     | collection { $1 }
 
     | lambda { $1 }
+
+    | access { $1 }
 
     | IDENTIFIER LPAREN tuple RPAREN {
         mkexpr Apply [mkexpr (Var($1, TUnknown)) []; $3]
@@ -153,3 +157,6 @@ collection:
 lambda:
     | BACKSLASH arg RARROW expr { mkexpr (Lambda($2)) [$4] }
     | BACKSLASH arg LRARROW arg RARROW expr { mkexpr (AssocLambda($2, $4)) [$6] }
+
+access:
+    | expr LBRACKET tuple RBRACKET QUESTION { mkexpr Member [$1;$3] }
