@@ -48,6 +48,8 @@
 
 %token QUESTION
 
+%token GETS
+
 %token <string> IDENTIFIER
 
 %start line
@@ -175,3 +177,4 @@ access:
             | _ -> mkexpr Lookup [$1;$3]
     }
     | expr LBRACKET tuple RBRACKET QUESTION { mkexpr Member [$1;$3] }
+    | expr LBRACKET tuple RBRACKET GETS expr { mkexpr Update [$1;$3;$6] }

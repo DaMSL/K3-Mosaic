@@ -50,6 +50,7 @@ rule tokenize = parse
     | '\\' { BACKSLASH }
 
     | '?' { QUESTION }
+    | '=' { GETS }
 
     | "bool" { TYPE TBool }
     | "int" { TYPE TInt }
