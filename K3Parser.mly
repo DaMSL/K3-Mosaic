@@ -39,6 +39,8 @@
 %token PLUS MINUS NEG
 %token TIMES
 
+%token AND OR NOT
+
 %token LT EQ LEQ NEQ
 
 %token LRARROW RARROW
@@ -74,12 +76,15 @@
 
 %left LT EQ LEQ NEQ
 
+%left OR
+%left AND
+
 %left PLUS MINUS
 %left TIMES
 
 %left ANNOTATE
 
-%right NEG
+%right NEG NOT
 
 %left COLON
 
@@ -167,6 +172,10 @@ arithmetic:
     | expr PLUS expr { mkexpr Add [$1; $3] }
     | expr NEG expr %prec MINUS { mkexpr Add [$1; mkexpr Neg [$3]] }
     | expr TIMES expr { mkexpr Mult [$1; $3] }
+
+    | NOT expr { mkexpr Neg [$2] }
+    | expr OR expr { mkexpr Add [$1;$3] }
+    | expr AND expr { mkexpr Mult [$1;$3] }
 
 predicate:
     | expr LT expr { mkexpr Lt [$1; $3] }

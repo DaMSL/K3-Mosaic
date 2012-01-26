@@ -39,6 +39,10 @@ rule tokenize = parse
     | '*' { TIMES }
     | '-' { NEG }
 
+    | '&' { AND }
+    | '|' { OR }
+    | '!' { NOT }
+
     | '<' { LT }
     | "==" { EQ }
     | "<=" { LEQ }
