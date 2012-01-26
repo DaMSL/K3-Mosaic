@@ -74,6 +74,8 @@ rule tokenize = parse
     | "then" { THEN }
     | "else" { ELSE }
 
+    | '@' { ANNOTATE }
+
     | identifier as name {
         IDENTIFIER (name)
     }

@@ -60,6 +60,8 @@
 
 %token IF THEN ELSE
 
+%token ANNOTATE
+
 %token <string> IDENTIFIER
 
 %start line
@@ -74,6 +76,8 @@
 
 %left PLUS MINUS
 %left TIMES
+
+%left ANNOTATE
 
 %right NEG
 
@@ -118,6 +122,7 @@ expr:
     | access { $1 }
 
     | block { $1 }
+    | annotation { $1 }
 
     | IDENTIFIER LPAREN tuple RPAREN {
         mkexpr Apply [mkexpr (Var($1, TUnknown)) []; $3]
@@ -238,3 +243,6 @@ access:
     | expr LBRACKET tuple RBRACKET GETS expr { mkexpr Update [$1;$3;$6] }
 
 block: DO LBRACE expr_seq RBRACE { mkexpr Block $3 }
+
+annotation:
+    | expr ANNOTATE expr { $1 }
