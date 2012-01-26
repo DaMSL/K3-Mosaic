@@ -70,6 +70,10 @@ rule tokenize = parse
     | "head" { HEAD }
     | "tail" { TAIL }
 
+    | "if" { IF }
+    | "then" { THEN }
+    | "else" { ELSE }
+
     | identifier as name {
         IDENTIFIER (name)
     }

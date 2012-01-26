@@ -58,6 +58,8 @@
 
 %token HEAD TAIL
 
+%token IF THEN ELSE
+
 %token <string> IDENTIFIER
 
 %start line
@@ -65,6 +67,8 @@
 
 %right RARROW
 %right LRARROW
+
+%right IF THEN ELSE
 
 %left LT EQ LEQ NEQ
 
@@ -106,6 +110,8 @@ expr:
     | predicate { $1 }
     | collection { $1 }
     | collection_op { $1 }
+
+    | conditional { $1 }
 
     | lambda { $1 }
 
@@ -207,6 +213,11 @@ collection_op:
 
     | HEAD LPAREN expr RPAREN { mkexpr Head [$3] }
     | TAIL LPAREN expr RPAREN { mkexpr Tail [$3] }
+
+conditional:
+    | IF expr THEN expr ELSE expr {
+        mkexpr IfThenElse [$2;$4;$6]
+    }
 
 lambda:
     | BACKSLASH arg RARROW expr { mkexpr (Lambda($2)) [$4] }
