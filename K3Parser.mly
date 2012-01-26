@@ -62,6 +62,8 @@
 
 %token IF THEN ELSE
 
+%token SEND
+
 %token ANNOTATE
 
 %token <string> IDENTIFIER
@@ -129,6 +131,8 @@ expr:
     | block { $1 }
     | annotation { $1 }
 
+    | SEND LPAREN address COMMA tuple RPAREN { mkexpr (Send($3)) [$5] }
+
     | IDENTIFIER LPAREN tuple RPAREN {
         mkexpr Apply [mkexpr (Var($1, TUnknown)) []; $3]
     }
@@ -156,6 +160,9 @@ expr_list:
 expr_seq:
     | tuple { [$1] }
     | tuple SEMICOLON expr_seq { $1 :: $3 }
+
+address:
+    | IDENTIFIER { Local($1) }
 
 constant:
     | INTEGER { CInt($1) }

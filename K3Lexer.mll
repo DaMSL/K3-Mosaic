@@ -78,6 +78,8 @@ rule tokenize = parse
     | "then" { THEN }
     | "else" { ELSE }
 
+    | "send" { SEND }
+
     | '@' { ANNOTATE }
 
     | identifier as name {
