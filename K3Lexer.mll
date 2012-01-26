@@ -59,6 +59,17 @@ rule tokenize = parse
     | "float" { TYPE TFloat }
     | "string" { TYPE TString }
 
+    | "map" { MAP }
+    | "iterate" { ITERATE }
+    | "filtermap" { FILTERMAP }
+    | "flatten" { FLATTEN }
+    | "fold" { AGGREGATE }
+    | "groupby" { GROUPBYAGGREGATE }
+    | "sort" { SORT }
+    | "rank" { RANK }
+    | "head" { HEAD }
+    | "tail" { TAIL }
+
     | identifier as name {
         IDENTIFIER (name)
     }

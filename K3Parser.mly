@@ -52,6 +52,12 @@
 
 %token DO
 
+%token MAP ITERATE FILTERMAP FLATTEN
+%token AGGREGATE GROUPBYAGGREGATE
+%token SORT RANK
+
+%token HEAD TAIL
+
 %token <string> IDENTIFIER
 
 %start line
@@ -99,6 +105,7 @@ expr:
     | arithmetic { $1 }
     | predicate { $1 }
     | collection { $1 }
+    | collection_op { $1 }
 
     | lambda { $1 }
 
@@ -164,6 +171,42 @@ collection:
     | LBRACE expr_seq RBRACE { build_collection $2 (TCollection(TSet, TUnknown)) }
     | LBRACEBAR expr_seq RBRACEBAR { build_collection $2 (TCollection(TBag, TUnknown)) }
     | LBRACKET expr_seq RBRACKET { build_collection $2 (TCollection(TList, TUnknown)) }
+
+collection_op:
+    | MAP LPAREN expr COMMA expr RPAREN {
+        mkexpr Map [$3;$5]
+    }
+
+    | ITERATE LPAREN expr COMMA expr RPAREN {
+        mkexpr Iterate [$3;$5]
+    }
+
+    | FILTERMAP LPAREN expr COMMA expr COMMA expr RPAREN {
+        mkexpr FilterMap [$3;$5;$7]
+    }
+
+    | FLATTEN LPAREN expr RPAREN {
+        mkexpr Flatten [$3]
+    }
+
+    | AGGREGATE LPAREN expr COMMA expr COMMA expr RPAREN {
+        mkexpr Aggregate [$3;$5;$7]
+    }
+
+    | GROUPBYAGGREGATE LPAREN expr COMMA expr COMMA expr COMMA expr RPAREN {
+        mkexpr GroupByAggregate [$3;$5;$7;$9]
+    }
+
+    | SORT LPAREN expr COMMA expr RPAREN {
+        mkexpr Sort [$3;$5]
+    }
+
+    | RANK LPAREN expr COMMA expr RPAREN {
+        mkexpr Rank [$3;$5]
+    }
+
+    | HEAD LPAREN expr RPAREN { mkexpr Head [$3] }
+    | TAIL LPAREN expr RPAREN { mkexpr Tail [$3] }
 
 lambda:
     | BACKSLASH arg RARROW expr { mkexpr (Lambda($2)) [$4] }
