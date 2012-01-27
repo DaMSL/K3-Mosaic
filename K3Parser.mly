@@ -8,6 +8,8 @@
 
     let get_uuid () = let t = !uuid in uuid := !uuid + 1; t
 
+    let globals = ref []
+
     let mkexpr tag children = match children with
         | [] -> Leaf(get_uuid(), tag)
         | _  -> Node(get_uuid(), tag, children)
@@ -100,11 +102,18 @@
 %%
 
 program:
-    | statement EOF { [$1] }
+    | EOF { [Declaration(Trigger("on_start", ATuple([]), [], !globals))] }
     | statement program { $1 :: $2 }
 
 statement:
+    | global { Declaration($1) }
     | trigger { Declaration($1) }
+
+global:
+    | DECLARE identifier SEMICOLON { Global(fst $2, snd $2) }
+    | DECLARE identifier GETS expr SEMICOLON {
+        globals := !globals @ [Assign(fst $2, $4)]; Global(fst $2, snd $2)
+    }
 
 trigger:
     | TRIGGER IDENTIFIER arg LBRACE effect_seq RBRACE {
