@@ -28,6 +28,8 @@
 %token <string> STRING
 %token <bool> BOOL
 
+%token EOF
+
 %token <K3.type_t> TYPE
 
 %token LPAREN RPAREN COMMA SEMICOLON
@@ -36,6 +38,8 @@
 
 %token PLUS MINUS NEG
 %token TIMES
+
+%token CONCAT
 
 %token AND OR NOT
 
@@ -75,6 +79,8 @@
 %right RARROW
 %right LRARROW
 
+%right CONCAT
+
 %right IF THEN ELSE
 
 %left LT EQ LEQ NEQ
@@ -94,7 +100,7 @@
 %%
 
 program:
-    | statement { [$1] }
+    | statement EOF { [$1] }
     | statement program { $1 :: $2 }
 
 statement:
@@ -226,6 +232,10 @@ collection:
     | LBRACKET expr_seq RBRACKET { build_collection $2 (TCollection(TList, TUnknown)) }
 
 collection_op:
+    | expr CONCAT expr {
+        mkexpr Combine [$1;$3]
+    }
+
     | MAP LPAREN expr COMMA expr RPAREN {
         mkexpr Map [$3;$5]
     }
