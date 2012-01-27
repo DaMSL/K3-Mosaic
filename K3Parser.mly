@@ -23,8 +23,6 @@
         | e :: es -> (e, i) :: accumulate_slice_indices es (i + 1)
 %}
 
-%token EOF
-
 %token <int> INTEGER
 %token <float> FLOAT
 %token <string> STRING
@@ -68,8 +66,11 @@
 
 %token <string> IDENTIFIER
 
-%start line
-%type <int K3.expr_t> line
+%token DECLARE
+%token TRIGGER
+
+%start program
+%type <int K3.program_t> program
 
 %right RARROW
 %right LRARROW
@@ -92,7 +93,32 @@
 
 %%
 
-line: expr EOF { $1 }
+program:
+    | statement { [$1] }
+    | statement program { $1 :: $2 }
+
+statement:
+    | trigger { Declaration($1) }
+
+trigger:
+    | TRIGGER IDENTIFIER arg LBRACE effect_seq RBRACE {
+        let names, effects = List.split $5 in
+        let declarations = List.filter (
+            function i -> match i with
+                | ("_", TUnknown) -> false
+                | _ -> true
+            ) names in
+        Trigger($2, $3, declarations, effects)
+    }
+
+effect:
+    | DECLARE identifier GETS expr { ($2, Assign(fst $2, $4)) }
+    | identifier GETS expr { (("_", TUnknown), Assign(fst $1, $3)) }
+    | expr { (("_", TUnknown), Mutate($1)) }
+
+effect_seq:
+    | effect SEMICOLON { [$1] }
+    | effect SEMICOLON effect_seq { $1 :: $3 }
 
 type_expr:
     | TYPE { $1 }
