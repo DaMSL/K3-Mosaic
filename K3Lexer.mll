@@ -84,9 +84,12 @@ rule tokenize = parse
 
     | '@' { ANNOTATE }
 
+    | ">>=" { BINDARROW }
+
     | "declare" { DECLARE }
     | "foreign" { FOREIGN }
     | "trigger" { TRIGGER }
+    | "bind" { BIND }
 
     | identifier as name {
         IDENTIFIER (name)

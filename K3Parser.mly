@@ -75,6 +75,7 @@
 %token DECLARE
 %token TRIGGER
 %token FOREIGN
+%token BIND BINDARROW
 
 %start program
 %type <int K3.program_t> program
@@ -110,6 +111,7 @@ statement:
     | global { Declaration($1) }
     | foreign { Declaration($1) }
     | trigger { Declaration($1) }
+    | bind { Declaration($1) }
 
 global:
     | DECLARE identifier SEMICOLON { Global(fst $2, snd $2) }
@@ -130,6 +132,12 @@ trigger:
             ) names in
         Trigger($2, $3, declarations, effects)
     }
+
+bind: BIND IDENTIFIER BINDARROW id_list SEMICOLON { Bind($2, $4) }
+
+id_list:
+    | IDENTIFIER { [$1] }
+    | IDENTIFIER COMMA id_list { $1 :: $3 }
 
 effect:
     | DECLARE identifier GETS expr { ($2, Assign(fst $2, $4)) }
