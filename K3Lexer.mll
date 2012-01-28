@@ -85,6 +85,7 @@ rule tokenize = parse
     | '@' { ANNOTATE }
 
     | "declare" { DECLARE }
+    | "foreign" { FOREIGN }
     | "trigger" { TRIGGER }
 
     | identifier as name {

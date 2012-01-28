@@ -74,6 +74,7 @@
 
 %token DECLARE
 %token TRIGGER
+%token FOREIGN
 
 %start program
 %type <int K3.program_t> program
@@ -107,6 +108,7 @@ program:
 
 statement:
     | global { Declaration($1) }
+    | foreign { Declaration($1) }
     | trigger { Declaration($1) }
 
 global:
@@ -114,6 +116,9 @@ global:
     | DECLARE identifier GETS expr SEMICOLON {
         globals := !globals @ [Assign(fst $2, $4)]; Global(fst $2, snd $2)
     }
+
+foreign:
+    | FOREIGN identifier SEMICOLON { Foreign(fst $2, snd $2) }
 
 trigger:
     | TRIGGER IDENTIFIER arg LBRACE effect_seq RBRACE {
