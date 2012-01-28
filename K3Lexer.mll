@@ -94,6 +94,9 @@ rule tokenize = parse
     | "loop" { LOOP }
     | "source" { SOURCE }
 
+    | "input adaptor" { INPUT_ADAPTOR }
+    | "output adaptor" { OUTPUT_ADAPTOR }
+
     | identifier as name {
         IDENTIFIER (name)
     }
