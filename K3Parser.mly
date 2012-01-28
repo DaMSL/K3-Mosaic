@@ -76,6 +76,9 @@
 %token TRIGGER
 %token FOREIGN
 %token BIND BINDARROW
+%token CONSUME
+%token LOOP
+%token SOURCE
 
 %start program
 %type <int K3.program_t> program
@@ -112,6 +115,9 @@ statement:
     | foreign { Declaration($1) }
     | trigger { Declaration($1) }
     | bind { Declaration($1) }
+    | consume { Directive($1) }
+    | loop { Declaration($1) }
+    | source { Declaration($1) }
 
 global:
     | DECLARE identifier SEMICOLON { Global(fst $2, snd $2) }
@@ -134,6 +140,12 @@ trigger:
     }
 
 bind: BIND IDENTIFIER BINDARROW id_list SEMICOLON { Bind($2, $4) }
+
+consume: CONSUME id_list SEMICOLON { Consume($2) }
+
+loop: LOOP IDENTIFIER GETS id_list SEMICOLON { Loop($2, $4) }
+
+source: SOURCE identifier SEMICOLON { Source(fst $2, snd $2) }
 
 id_list:
     | IDENTIFIER { [$1] }

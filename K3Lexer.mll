@@ -90,6 +90,9 @@ rule tokenize = parse
     | "foreign" { FOREIGN }
     | "trigger" { TRIGGER }
     | "bind" { BIND }
+    | "consume" { CONSUME }
+    | "loop" { LOOP }
+    | "source" { SOURCE }
 
     | identifier as name {
         IDENTIFIER (name)
