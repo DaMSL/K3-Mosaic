@@ -167,22 +167,24 @@ effect_seq:
     | effect SEMICOLON effect_seq { $1 :: $3 }
 
 type_expr:
+    | primitive_type_expr { $1 }
+    | primitive_type_expr RARROW primitive_type_expr { TFunction($1, $3) }
+
+primitive_type_expr:
     | TYPE { $1 }
 
-    | LBRACE type_tuple RBRACE { TCollection(TSet, $2) }
-    | LBRACEBAR type_tuple RBRACEBAR { TCollection(TBag, $2) }
-    | LBRACKET type_tuple RBRACKET { TCollection(TList, $2) }
+    | LBRACE primitive_type_tuple RBRACE { TCollection(TSet, $2) }
+    | LBRACEBAR primitive_type_tuple RBRACEBAR { TCollection(TBag, $2) }
+    | LBRACKET primitive_type_tuple RBRACKET { TCollection(TList, $2) }
 
-    | LPAREN type_tuple RPAREN { $2 }
+    | LPAREN primitive_type_tuple RPAREN { $2 }
 
-    | type_expr RARROW type_expr { TFunction($1, $3) }
+primitive_type_tuple:
+    | primitive_type_expr_list { if List.length $1 == 1 then List.hd $1 else TTuple($1) }
 
-type_tuple:
-    | type_expr_list { if List.length $1 == 1 then List.hd $1 else TTuple($1) }
-
-type_expr_list:
-    | type_expr { [$1] }
-    | type_expr COMMA type_expr_list { $1 :: $3 }
+primitive_type_expr_list:
+    | primitive_type_expr { [$1] }
+    | primitive_type_expr COMMA primitive_type_expr_list { $1 :: $3 }
 
 expr:
     | LPAREN tuple RPAREN { $2 }
