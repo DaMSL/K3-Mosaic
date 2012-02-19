@@ -35,9 +35,11 @@ rule tokenize = parse
     | '[' { LBRACKET }
     | ']' { RBRACKET }
 
+    | '-' { NEG }
     | '+' { PLUS }
     | '*' { TIMES }
-    | '-' { NEG }
+    | '/' { DIVIDE }
+    | '%' { MODULO }
 
     | '&' { AND }
     | '|' { OR }

@@ -38,19 +38,15 @@
 
 %token LBRACE RBRACE LBRACEBAR RBRACEBAR LBRACKET RBRACKET
 
-%token PLUS MINUS NEG
-%token TIMES
+%token NEG PLUS MINUS TIMES DIVIDE MODULO
 
 %token CONCAT
 
-%token AND OR NOT
+%token AND OR NOT LT EQ LEQ NEQ
 
-%token LT EQ LEQ NEQ
-
-%token LRARROW RARROW
+%token BACKSLASH LRARROW RARROW
 
 %token COLON
-%token BACKSLASH
 
 %token QUESTION
 
@@ -97,7 +93,7 @@
 %left AND
 
 %left PLUS MINUS
-%left TIMES
+%left TIMES DIVIDE MODULO
 
 %left ANNOTATE
 
@@ -253,6 +249,8 @@ arithmetic:
     | expr PLUS expr { mkexpr Add [$1; $3] }
     | expr NEG expr %prec MINUS { mkexpr Add [$1; mkexpr Neg [$3]] }
     | expr TIMES expr { mkexpr Mult [$1; $3] }
+    | expr DIVIDE expr { mkexpr Apply [mkexpr (Var("divide", TUnknown)) []; $1; $3] }
+    | expr MODULO expr { mkexpr Apply [mkexpr (Var("modulo", TUnknown)) []; $1; $3] }
 
     | NOT expr { mkexpr Neg [$2] }
     | expr OR expr { mkexpr Add [$1;$3] }
@@ -274,49 +272,22 @@ collection:
     | LBRACKET expr_seq RBRACKET { build_collection $2 (TCollection(TList, TUnknown)) }
 
 collection_op:
-    | expr CONCAT expr {
-        mkexpr Combine [$1;$3]
-    }
+    | expr CONCAT expr { mkexpr Combine [$1;$3] }
 
-    | MAP LPAREN expr COMMA expr RPAREN {
-        mkexpr Map [$3;$5]
-    }
-
-    | ITERATE LPAREN expr COMMA expr RPAREN {
-        mkexpr Iterate [$3;$5]
-    }
-
-    | FILTERMAP LPAREN expr COMMA expr COMMA expr RPAREN {
-        mkexpr FilterMap [$3;$5;$7]
-    }
-
-    | FLATTEN LPAREN expr RPAREN {
-        mkexpr Flatten [$3]
-    }
-
-    | AGGREGATE LPAREN expr COMMA expr COMMA expr RPAREN {
-        mkexpr Aggregate [$3;$5;$7]
-    }
-
+    | MAP LPAREN expr COMMA expr RPAREN { mkexpr Map [$3;$5] }
+    | ITERATE LPAREN expr COMMA expr RPAREN { mkexpr Iterate [$3;$5] }
+    | FILTERMAP LPAREN expr COMMA expr COMMA expr RPAREN { mkexpr FilterMap [$3;$5;$7] }
+    | FLATTEN LPAREN expr RPAREN { mkexpr Flatten [$3] }
+    | AGGREGATE LPAREN expr COMMA expr COMMA expr RPAREN { mkexpr Aggregate [$3;$5;$7] }
     | GROUPBYAGGREGATE LPAREN expr COMMA expr COMMA expr COMMA expr RPAREN {
         mkexpr GroupByAggregate [$3;$5;$7;$9]
     }
-
-    | SORT LPAREN expr COMMA expr RPAREN {
-        mkexpr Sort [$3;$5]
-    }
-
-    | RANK LPAREN expr COMMA expr RPAREN {
-        mkexpr Rank [$3;$5]
-    }
-
+    | SORT LPAREN expr COMMA expr RPAREN { mkexpr Sort [$3;$5] }
+    | RANK LPAREN expr COMMA expr RPAREN { mkexpr Rank [$3;$5] }
     | HEAD LPAREN expr RPAREN { mkexpr Head [$3] }
     | TAIL LPAREN expr RPAREN { mkexpr Tail [$3] }
 
-conditional:
-    | IF expr THEN expr ELSE expr {
-        mkexpr IfThenElse [$2;$4;$6]
-    }
+conditional: IF expr THEN expr ELSE expr { mkexpr IfThenElse [$2;$4;$6] }
 
 lambda:
     | BACKSLASH arg RARROW expr { mkexpr (Lambda($2)) [$4] }
