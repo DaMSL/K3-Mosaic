@@ -74,13 +74,12 @@ type expr_tag_t
     | GroupByAggregate
     | Sort
     | Rank
-    | Head
-    | Tail
 
-    | Member
-    | Lookup
-    | Update
     | Slice of int list
+
+    | Insert
+    | Delete
+    | Update
 
     | Send of address_t
 
@@ -232,8 +231,6 @@ let string_of_expr_tag tag children = match tag with
     | Rank
         -> "Rank("^(List.nth children 0)^", "^(List.nth children 1)^")"
 
-    | Member -> "Member("^(List.nth children 0)^", "^(List.nth children 1)^")"
-    | Lookup -> "Lookup("^(List.nth children 0)^", "^(List.nth children 1)^")"
     | Slice(ks)
         -> "Slice("
             ^(List.nth children 0)^", ["
@@ -243,15 +240,19 @@ let string_of_expr_tag tag children = match tag with
                 (List.combine ks (List.tl children)))
             )
         ^"])"
+
+    | Insert
+        -> "Insert("
+            ^(List.nth children 0)^", "
+            ^(List.nth children 1)^", "
+        ^")"
+
     | Update
         -> "Update("
             ^(List.nth children 0)^", "
             ^(List.nth children 1)^", "
             ^(List.nth children 2)
         ^")"
-
-    | Head -> "Head("^(List.nth children 0)^")"
-    | Tail -> "Tail("^(List.nth children 0)^")"
 
     | Send(a)
         -> "Send("

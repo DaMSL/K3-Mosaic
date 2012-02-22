@@ -74,13 +74,12 @@ type expr_tag_t
     | GroupByAggregate
     | Sort
     | Rank
-    | Head
-    | Tail
 
-    | Member
-    | Lookup
-    | Update
     | Slice of int list
+
+    | Insert
+    | Delete
+    | Update
 
     | Send of address_t
 
