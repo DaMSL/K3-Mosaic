@@ -2,13 +2,6 @@
 
 open Tree
 
-(* Generic Tree Structure *)
-(*
-type ('a, 'tag) tree_t
-    = Leaf of 'a * 'tag
-    | Node of 'a * 'tag * ('a, 'tag) tree_t list
-*)
-
 (* Collection Types *)
 type collection_type_t
     = TSet
