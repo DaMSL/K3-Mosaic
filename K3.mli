@@ -94,11 +94,6 @@ type expr_tag_t
 (* Expression Tree *)
 type 'a expr_t = ('a, expr_tag_t) tree_t
 
-(* Trigger Effects *)
-type 'a effect_t
-    = Assign of id_t * 'a expr_t
-    | Mutate of 'a expr_t
-
 (* Top-Level Declarations *)
 type 'a declaration_t
     = Global        of id_t * type_t
@@ -106,7 +101,7 @@ type 'a declaration_t
     | Source        of id_t * type_t
     | InputAdaptor  of id_t * type_t
     | OutputAdaptor of id_t * type_t
-    | Trigger       of id_t * arg_t * (id_t * type_t) list * 'a effect_t list
+    | Trigger       of id_t * arg_t * (id_t * type_t * 'a expr_t option) list * 'a expr_t
     | Bind          of id_t * id_t list
     | Loop          of id_t * id_t list
 
@@ -133,7 +128,6 @@ val string_of_expr_tag: expr_tag_t -> string list -> string
 val string_of_expr_meta: ('a -> string list -> string) -> 'a expr_t -> string
 val string_of_expr: 'a expr_t -> string
 
-val string_of_effect: 'a effect_t -> string
 val string_of_declaration: 'a declaration_t -> string
 val string_of_directive: directive_t -> string
 val string_of_statement: 'a statement_t -> string
