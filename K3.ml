@@ -254,6 +254,12 @@ let string_of_expr_tag tag children = match tag with
             ^(List.nth children 2)
         ^")"
 
+    | Delete
+        -> "Delete("
+            ^(List.nth children 0)^", "
+            ^(List.nth children 1)^", "
+        ^")"
+
     | Send(a)
         -> "Send("
             ^string_of_address(a)^", "
