@@ -2,6 +2,13 @@
 
 open Tree
 
+(* Identifiers *)
+type id_t = string
+
+type address_t
+    = Local     of id_t
+    | Remote    of id_t * id_t * int
+
 (* Collection Types *)
 type collection_type_t
     = TSet
@@ -19,17 +26,12 @@ type type_t
     | TTuple        of type_t list
     | TCollection   of collection_type_t * type_t
     | TFunction     of type_t * type_t
-
-(* Identifiers *)
-type id_t = string
+    | TTarget       of address_t * type_t
 
 (* Arguments *)
 type arg_t
     = AVar      of id_t * type_t
     | ATuple    of (id_t * type_t) list
-
-type address_t
-    = Local of id_t
 
 (* Constants *)
 type constant_t
@@ -111,10 +113,10 @@ type 'a program_t = 'a statement_t list
 
 (* Utilities *)
 
+val string_of_address: address_t -> string
 val string_of_collection_type: collection_type_t -> string
 val string_of_type: type_t -> string
 val string_of_const: constant_t -> string
-val string_of_address: address_t -> string
 val string_of_arg: arg_t -> string
 val string_of_expr_tag: expr_tag_t -> string list -> string
 val string_of_expr_meta: ('a -> string list -> string) -> 'a expr_t -> string

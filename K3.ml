@@ -2,6 +2,13 @@
 
 open Tree
 
+(* Identifiers *)
+type id_t = string
+
+type address_t
+    = Local     of id_t
+    | Remote    of id_t * id_t * int
+
 (* Collection Types *)
 type collection_type_t
     = TSet
@@ -19,17 +26,12 @@ type type_t
     | TTuple        of type_t list
     | TCollection   of collection_type_t * type_t
     | TFunction     of type_t * type_t
-
-(* Identifiers *)
-type id_t = string
+    | TTarget       of address_t * type_t
 
 (* Arguments *)
 type arg_t
     = AVar      of id_t * type_t
     | ATuple    of (id_t * type_t) list
-
-type address_t
-    = Local of id_t
 
 (* Constants *)
 type constant_t
@@ -111,6 +113,10 @@ type 'a program_t = 'a statement_t list
 
 (* Utilities *)
 
+let string_of_address a = match a with
+    | Local(i) -> "Local("^i^")"
+    | Remote(i, h, p) -> "Remote("^i^"@"^h^":"^string_of_int p^")"
+
 let string_of_collection_type t_c = match t_c with
     | TSet  -> "TSet"
     | TBag  -> "TBag"
@@ -136,14 +142,14 @@ let rec string_of_type t = match t with
     | TFunction(t_a, t_r)
         -> "TFunction("^string_of_type t_a ^", "^ string_of_type t_r ^")"
 
+    | TTarget(a, t)
+        -> "TTarget("^string_of_address(a)^", "^string_of_type(t)^")"
+
 let string_of_const c = match c with
     | CBool(b)   -> "CBool("^string_of_bool(b)^")"
     | CInt(i)    -> "CInt("^string_of_int(i)^")"
     | CFloat(f)  -> "CFloat("^string_of_float(f)^")"
     | CString(s) -> "CString(\""^s^"\")"
-
-let string_of_address a = match a with
-    | Local(i) -> "Local("^i^")"
 
 let string_of_arg a = match a with
     | AVar(i, t) -> "AVar("^i^": "^string_of_type(t)^")"
