@@ -84,6 +84,8 @@ type expr_tag_t
     | Delete
     | Update
 
+    | Peek
+
     | Send of address_t
 
 (* Expression Tree *)
@@ -266,6 +268,8 @@ let string_of_expr_tag tag children = match tag with
             ^(List.nth children 0)^", "
             ^(List.nth children 1)^", "
         ^")"
+
+    | Peek -> "Peek("^List.nth children 0^")"
 
     | Send(a)
         -> "Send("

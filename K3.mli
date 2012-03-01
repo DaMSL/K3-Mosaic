@@ -104,6 +104,9 @@ type expr_tag_t
     (* Update(c, x, y): Update item with value x to have value y in collection c. *)
     | Update
 
+    (* Peek(c:TCollection(C, T)): Get one element from collection c. *)
+    | Peek
+
     (* Send(a:TTarget(N, T), args:T): Send a message of type T to a target. *)
     | Send of address_t
 
