@@ -5,6 +5,7 @@ open Tree
 (* Identifiers *)
 type id_t = string
 
+(* Addresses *)
 type address_t
     = Local     of id_t
     | Remote    of id_t * id_t * int
