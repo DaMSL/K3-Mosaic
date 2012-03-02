@@ -28,6 +28,7 @@ type type_t
     | TCollection   of collection_type_t * type_t
     | TFunction     of type_t * type_t
     | TTarget       of address_t * type_t
+    | TMaybe        of type_t
 
 (* Arguments *)
 type arg_t
@@ -36,10 +37,11 @@ type arg_t
 
 (* Constants *)
 type constant_t
-    = CBool of bool
-    | CInt    of int
-    | CFloat  of float
-    | CString of string
+    = CBool     of bool
+    | CInt      of int
+    | CFloat    of float
+    | CString   of string
+    | CNothing
 
 (* Expressions *)
 type expr_tag_t
@@ -47,6 +49,8 @@ type expr_tag_t
     = Const of constant_t
     | Var   of id_t * type_t
     | Tuple
+
+    | Just
 
     | Empty     of type_t
     | Singleton of type_t
@@ -147,11 +151,15 @@ let rec string_of_type t = match t with
     | TTarget(a, t)
         -> "TTarget("^string_of_address(a)^", "^string_of_type(t)^")"
 
+    | TMaybe(t)
+        -> "TMaybe("^string_of_type(t)^")"
+
 let string_of_const c = match c with
     | CBool(b)   -> "CBool("^string_of_bool(b)^")"
     | CInt(i)    -> "CInt("^string_of_int(i)^")"
     | CFloat(f)  -> "CFloat("^string_of_float(f)^")"
     | CString(s) -> "CString(\""^s^"\")"
+    | CNothing   -> "CNothing"
 
 let string_of_arg a = match a with
     | AVar(i, t) -> "AVar("^i^": "^string_of_type(t)^")"
@@ -164,6 +172,8 @@ let string_of_expr_tag tag children = match tag with
     | Const(c)  -> "Const("^string_of_const(c)^")"
     | Var(i, t) -> "Var("^i^": "^string_of_type(t)^")"
     | Tuple     -> "Tuple("^(String.concat ", " children)^")"
+
+    | Just -> "Just("^(List.hd children)^")"
 
     | Empty(t) -> "Empty("^string_of_type(t)^")"
     | Singleton(t)

@@ -28,6 +28,7 @@ type type_t
     | TCollection   of collection_type_t * type_t
     | TFunction     of type_t * type_t
     | TTarget       of address_t * type_t
+    | TMaybe        of type_t
 
 (* Arguments *)
 type arg_t
@@ -40,6 +41,7 @@ type constant_t
     | CInt      of int
     | CFloat    of float
     | CString   of string
+    | CNothing
 
 (* Expressions *)
 type expr_tag_t
@@ -47,6 +49,8 @@ type expr_tag_t
     = Const of constant_t
     | Var   of id_t * type_t
     | Tuple
+
+    | Just
 
     | Empty     of type_t
     | Singleton of type_t
