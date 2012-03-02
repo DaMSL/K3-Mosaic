@@ -58,8 +58,19 @@ type expr_tag_t
      *)
     | Range     of type_t
 
+    (* Add(x:T, y:T') -> T'': Overloaded disjunction; acts as addition for
+     * numeric types and logical disjunction for booleans. `TInt' is promoted to
+     * `TFloat' if required.
+     *)
     | Add
+
+    (* Mult(x:T, y:T') -> T'': Overloaded conjunction; acts as multiplication
+     * for numeric types and logical conjunction for booleans. `TInt' is
+     * promoted to `TFloat' if required.
+     *)
     | Mult
+
+    (* Neg(x:T) -> T: Overloaded negation for numeric and boolean types. *)
     | Neg
 
     | Eq
