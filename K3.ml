@@ -76,7 +76,6 @@ type expr_tag_t
     | Aggregate
     | GroupByAggregate
     | Sort
-    | Rank
 
     | Slice of int list
 
@@ -237,8 +236,6 @@ let string_of_expr_tag tag children = match tag with
         ^")"
     | Sort
         -> "Sort("^(List.nth children 0)^", "^(List.nth children 1)^")"
-    | Rank
-        -> "Rank("^(List.nth children 0)^", "^(List.nth children 1)^")"
 
     | Slice(ks)
         -> "Slice("

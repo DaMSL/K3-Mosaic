@@ -117,7 +117,6 @@ type expr_tag_t
     | GroupByAggregate
 
     | Sort
-    | Rank
 
     (*
      * Slice(c:TCollection(C, T), p): Retrieve a sub-collection from a given
