@@ -71,20 +71,19 @@ type expr_tag_t
     | AssocLambda   of arg_t * arg_t
     | Apply
 
-    (* Block(e_1, e_2, ... , e_n, e) -> Execute side-effecting operations `e_1' -
-     * `e_n', then execute and return the value of `e'.
+    (* Block(e_1:TUnit, e_2:TUnit, ... , e_n:TUnit, e:T) -> T: Execute
+     * side-effecting operations `e_1' - `e_n', then execute and return the
+     * value of `e'.
      *)
     | Block
 
-    (* Iterate(c, f) -> Execute the side-effecting operation `f' on each element
-     * of collection c.
+    (* Iterate(c:TCollection(C, T), f:(T -> TUnit)) -> TUnit: Execute the
+     * side-effecting operation `f' on each element of collection `c'.
      *)
     | Iterate
 
     (* IfThenElse(p:TBool, t:T, e:T) -> T: `t' if `p' is True, `e' otherwise. *)
     | IfThenElse
-
-    (* Collection Transformers *)
 
     (* Map(f:(T -> T'), c:TCollection(C, T)) -> TCollection(C, T'): Create a new
      * collection by applying function `f' to each element in `c'.
@@ -116,11 +115,14 @@ type expr_tag_t
      *)
     | GroupByAggregate
 
+    (* Sort(c:TCollection(C, T)) -> TCollection(TList, T): Sort a collection,
+     * and return a list.
+     *)
     | Sort
 
-    (*
-     * Slice(c:TCollection(C, T), p): Retrieve a sub-collection from a given
-     * collection, according to a partially specified element pattern.
+    (* Slice(c:TCollection(C, T), p) -> TCollection(C, T): Retrieve a
+     * sub-collection from a given collection, according to a partially
+     * specified element pattern.
      *
      * The pattern `p' is an underspecified element of type T, which forms a set
      * of equality predicates over the collection `c'. The slice operation
@@ -129,13 +131,13 @@ type expr_tag_t
      *)
     | Slice of int list
 
-    (* Insert(c, x): Insert item with value `x' into collection `c'. *)
+    (* Insert(c, x) -> TUnit: Insert item with value `x' into collection `c'. *)
     | Insert
 
-    (* Delete(c, x): Delete item with value `x' from collection `c'. *)
+    (* Delete(c, x) -> TUnit: Delete item with value `x' from collection `c'. *)
     | Delete
 
-    (* Update(c, x, y): Update item with value `x' to have value `y' in
+    (* Update(c, x, y) -> TUnit: Update item with value `x' to have value `y' in
      * collection `c'.
      *)
     | Update
