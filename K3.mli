@@ -77,6 +77,7 @@ type expr_tag_t
     (* Neg(x:T) -> T: Overloaded negation for numeric and boolean types. *)
     | Neg
 
+    (* [=,<,!=,<=](x:T, y:T -> TBool): Comparison Operators *)
     | Eq
     | Lt
     | Neq
