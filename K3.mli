@@ -21,6 +21,7 @@ type type_t
     = TUnknown
     | TUnit
     | TBool
+    | TByte
     | TInt
     | TFloat
     | TString
@@ -29,6 +30,7 @@ type type_t
     | TFunction     of type_t * type_t
     | TTarget       of address_t * type_t
     | TMaybe        of type_t
+    | TRef          of type_t
 
 (* Arguments *)
 type arg_t
