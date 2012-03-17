@@ -84,6 +84,11 @@ type expr_tag_t
     | Leq
 
     | Lambda        of arg_t
+
+    (* A lambda defined to be associative in its two arguments.
+     * TODO: Kill this and put the associativity property in an annotation,
+     * along with commutativity and idempotance, and other nice things.
+     *)
     | AssocLambda   of arg_t * arg_t
     | Apply
 
