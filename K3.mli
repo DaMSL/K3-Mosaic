@@ -138,8 +138,9 @@ type expr_tag_t
      *)
     | GroupByAggregate
 
-    (* Sort(c:TCollection(C, T), f:((x:T, y:T) -> TInt)) -> TCollection(TList, T): Sort a collection,
-     * and return a list.
+    (* Sort(c:TCollection(C, T), f:((x:T, y:T) -> TBool)) -> TCollection(TList,
+     * T): Sort a collection, and return a list. The second argument is a
+     * less-than operator for the element types.
      *)
     | Sort
 
