@@ -96,20 +96,21 @@ type expr_tag_t
 (* Expression Tree *)
 type 'a expr_t = ('a, expr_tag_t) tree_t
 
+type consumable_t
+    = Source        of id_t * type_t
+    | Loop          of id_t * consumable_t list
+
 (* Top-Level Declarations *)
 type 'a declaration_t
     = Global        of id_t * type_t
     | Foreign       of id_t * type_t
-    | Source        of id_t * type_t
-    | InputAdaptor  of id_t * type_t
-    | OutputAdaptor of id_t * type_t
     | Trigger       of id_t * arg_t * (id_t * type_t * 'a expr_t option) list * 'a expr_t
-    | Bind          of id_t * id_t list
-    | Loop          of id_t * id_t list
+    | Bind          of id_t * id_t
+    | Consumable    of id_t
 
 (* Top-Level Directives *)
 type directive_t
-    = Consume of id_t list
+    = Consume of id_t
 
 (* All Top-Level Statements *)
 type 'a statement_t
@@ -291,13 +292,15 @@ let string_of_expr_meta string_of_meta =
 
 let string_of_expr e = string_of_tree (fun _ _ -> "") string_of_expr_tag e
 
+let rec string_of_consumable c = match c with
+    | Source(i, t) -> "Source("^i^", "^string_of_type(t)^")"
+    | Loop(id, cs) -> "Loop("^id^", ["
+        ^(String.concat ", " (List.map string_of_consumable cs))
+        ^"])"
+
 let string_of_declaration d = match d with
     | Global(i, t)  -> "Global("^i^", "^string_of_type(t)^")"
     | Foreign(i, t) -> "Foreign("^i^", "^string_of_type(t)^")"
-    | Source(i, t)  -> "Source("^i^", "^string_of_type(t)^")"
-
-    | InputAdaptor(i, t)    -> "InputAdaptor("^i^", "^string_of_type(t)^")"
-    | OutputAdaptor(i, t)   -> "OutputAdaptor("^i^", "^string_of_type(t)^")"
 
     | Trigger(i, arg, ds, e)
         -> "Trigger("^i^", "^string_of_arg(arg)^", ["
@@ -313,11 +316,11 @@ let string_of_declaration d = match d with
             ^string_of_expr(e)
         ^")"
 
-    | Bind(i, rs) -> "Bind("^i^", ["^(String.concat ", " rs)^"])"
-    | Loop(id, ids) -> "Loop("^id^", ["^(String.concat ", " ids)^"])"
+    | Bind(i, i') -> "Bind("^i^", "^i'^")"
+    | Consumable(c) -> "Consumable("^c^")"
 
 let string_of_directive d = match d with
-    | Consume(ids) -> "Consume(["^(String.concat ", " ids)^"])"
+    | Consume(id) -> "Consume("^id^")"
 
 let string_of_statement s = match s with
     | Declaration(d) -> string_of_declaration(d)

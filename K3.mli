@@ -175,20 +175,21 @@ type expr_tag_t
 (* Expression Tree *)
 type 'a expr_t = ('a, expr_tag_t) tree_t
 
+type consumable_t
+    = Source        of id_t * type_t
+    | Loop          of id_t * consumable_t list
+
 (* Top-Level Declarations *)
 type 'a declaration_t
     = Global        of id_t * type_t
     | Foreign       of id_t * type_t
-    | Source        of id_t * type_t
-    | InputAdaptor  of id_t * type_t
-    | OutputAdaptor of id_t * type_t
     | Trigger       of id_t * arg_t * (id_t * type_t * 'a expr_t option) list * 'a expr_t
-    | Bind          of id_t * id_t list
-    | Loop          of id_t * id_t list
+    | Bind          of id_t * id_t
+    | Consumable    of id_t
 
 (* Top-Level Directives *)
 type directive_t
-    = Consume of id_t list
+    = Consume of id_t
 
 (* All Top-Level Statements *)
 type 'a statement_t
