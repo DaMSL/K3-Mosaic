@@ -91,6 +91,8 @@ type expr_tag_t
 
     | Peek
 
+    | AssignToRef
+
     | Send of address_t
 
 (* Expression Tree *)
@@ -280,6 +282,12 @@ let string_of_expr_tag tag children = match tag with
         ^")"
 
     | Peek -> "Peek("^List.nth children 0^")"
+
+    | AssignToRef
+        -> "AssignToRef("
+            ^List.nth children 0^", "
+            ^List.nth children 1
+        ^")"
 
     | Send(a)
         -> "Send("

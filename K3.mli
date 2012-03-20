@@ -169,6 +169,11 @@ type expr_tag_t
     (* Peek(c:TCollection(C, T)): Get one element from collection `c'. *)
     | Peek
 
+    (* AssignToRef(left:TRef(T), right:T/TRef(T)) -> TUnit: Store a value in a
+     * ref Right-Side refs will be dereferenced.
+     *)
+    | AssignToRef
+
     (* Send(a:TTarget(N, T), args:T): Send a message of type `T' to target `a'. *)
     | Send of address_t
 
