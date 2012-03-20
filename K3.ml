@@ -197,7 +197,7 @@ let string_of_expr_tag tag children = match tag with
             ^string_of_type(t)^", "
             ^(List.nth children 0)^", "
             ^(List.nth children 1)^", "
-            ^(List.nth children 2)^", "
+            ^(List.nth children 2)
         ^")"
 
     | Add   -> "Add("^(List.nth children 0)^", "^(List.nth children 1)^")"
@@ -265,7 +265,7 @@ let string_of_expr_tag tag children = match tag with
     | Insert
         -> "Insert("
             ^(List.nth children 0)^", "
-            ^(List.nth children 1)^", "
+            ^(List.nth children 1)
         ^")"
 
     | Update
@@ -278,7 +278,7 @@ let string_of_expr_tag tag children = match tag with
     | Delete
         -> "Delete("
             ^(List.nth children 0)^", "
-            ^(List.nth children 1)^", "
+            ^(List.nth children 1)
         ^")"
 
     | Peek -> "Peek("^List.nth children 0^")"
