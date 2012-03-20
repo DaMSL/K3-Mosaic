@@ -166,7 +166,7 @@ type expr_tag_t
      *)
     | Update
 
-    (* Peek(c:TCollection(C, T)): Get one element from collection `c'. *)
+    (* Peek(c:TCollection(C, T)) -> T: Get one element from collection `c'. *)
     | Peek
 
     (* AssignToRef(left:TRef(T), right:T/TRef(T)) -> TUnit: Store a value in a
