@@ -187,14 +187,14 @@ type 'a declaration_t
     | Bind          of id_t * id_t
     | Consumable    of id_t
 
-(* Top-Level Directives *)
-type directive_t
+(* Top-Level Instructions *)
+type instruction_t
     = Consume of id_t
 
 (* All Top-Level Statements *)
 type 'a statement_t
     = Declaration   of 'a declaration_t
-    | Directive     of directive_t
+    | Instruction   of instruction_t
 
 (* K3 Programs *)
 type 'a program_t = 'a statement_t list
@@ -211,6 +211,6 @@ val string_of_expr_meta: ('a -> string list -> string) -> 'a expr_t -> string
 val string_of_expr: 'a expr_t -> string
 
 val string_of_declaration: 'a declaration_t -> string
-val string_of_directive: directive_t -> string
+val string_of_instruction: instruction_t -> string
 val string_of_statement: 'a statement_t -> string
 val string_of_program: 'a program_t -> string

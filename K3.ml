@@ -108,14 +108,14 @@ type 'a declaration_t
     | Bind          of id_t * id_t
     | Consumable    of id_t
 
-(* Top-Level Directives *)
-type directive_t
+(* Top-Level Instructions *)
+type instruction_t
     = Consume of id_t
 
 (* All Top-Level Statements *)
 type 'a statement_t
     = Declaration   of 'a declaration_t
-    | Directive     of directive_t
+    | Instruction   of instruction_t
 
 (* K3 Programs *)
 type 'a program_t = 'a statement_t list
@@ -319,12 +319,12 @@ let string_of_declaration d = match d with
     | Bind(i, i') -> "Bind("^i^", "^i'^")"
     | Consumable(c) -> "Consumable("^c^")"
 
-let string_of_directive d = match d with
+let string_of_instruction i = match i with
     | Consume(id) -> "Consume("^id^")"
 
 let string_of_statement s = match s with
     | Declaration(d) -> string_of_declaration(d)
-    | Directive(d)   -> string_of_directive(d)
+    | Instruction(i)   -> string_of_instruction(i)
 
 let string_of_program ss
     = "K3(["^(String.concat ", " (List.map string_of_statement ss))^"])"
