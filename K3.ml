@@ -98,9 +98,20 @@ type expr_tag_t
 (* Expression Tree *)
 type 'a expr_t = ('a, expr_tag_t) tree_t
 
+type stop_behavior_t
+    = UntilCurrent
+    | UntilEmpty
+    | UntilEOF
+
 type consumable_t
     = Source        of id_t * type_t
-    | Loop          of id_t * consumable_t list
+    | Loop          of id_t * consumable_t
+
+    | Choice        of consumable_t list
+    | Sequence      of consumable_t list
+    | Optional      of consumable_t
+
+    | Repeat        of consumable_t * stop_behavior_t
 
 (* Top-Level Declarations *)
 type 'a declaration_t
@@ -300,11 +311,27 @@ let string_of_expr_meta string_of_meta =
 
 let string_of_expr e = string_of_tree (fun _ _ -> "") string_of_expr_tag e
 
+let string_of_stop_behavior_t s = match s with
+    | UntilCurrent -> "UntilCurrent"
+    | UntilEmpty -> "UntilEmpty"
+    | UntilEOF -> "UntilEOF"
+
 let rec string_of_consumable c = match c with
     | Source(i, t) -> "Source("^i^", "^string_of_type(t)^")"
-    | Loop(id, cs) -> "Loop("^id^", ["
-        ^(String.concat ", " (List.map string_of_consumable cs))
-        ^"])"
+    | Loop(id, c) -> "Loop("^id^", "^string_of_consumable(c)^")"
+    | Choice(cs)
+        -> "Choice("^String.concat ", "
+            (List.map string_of_consumable cs)
+        ^")"
+
+    | Sequence(cs)
+        -> "Sequence("^String.concat ", "
+            (List.map string_of_consumable cs)
+        ^")"
+
+    | Optional(c) -> "Optional("^string_of_consumable c^")"
+    | Repeat(c, s)
+        -> "Repeat("^string_of_consumable c^", "^string_of_stop_behavior_t s^")"
 
 let string_of_declaration d = match d with
     | Global(i, t)  -> "Global("^i^", "^string_of_type(t)^")"
