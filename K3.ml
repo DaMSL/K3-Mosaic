@@ -134,6 +134,7 @@ let rec string_of_type t = match t with
     | TUnknown  -> "TUnknown"
     | TUnit     -> "TUnit"
     | TBool     -> "TBool"
+    | TByte     -> "TByte"
     | TInt      -> "TInt"
     | TFloat    -> "TFloat"
     | TString   -> "TString"
@@ -155,6 +156,9 @@ let rec string_of_type t = match t with
 
     | TMaybe(t)
         -> "TMaybe("^string_of_type(t)^")"
+
+    | TRef(t)
+        -> "TRef("^string_of_type(t)^")"
 
 let string_of_const c = match c with
     | CBool(b)   -> "CBool("^string_of_bool(b)^")"
