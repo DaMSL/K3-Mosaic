@@ -83,7 +83,7 @@ type expr_tag_t
     | GroupByAggregate
     | Sort
 
-    | Slice of int list
+    | Slice of type_t
 
     | Insert
     | Delete
@@ -249,15 +249,11 @@ let string_of_expr_tag tag children = match tag with
     | Sort
         -> "Sort("^(List.nth children 0)^", "^(List.nth children 1)^")"
 
-    | Slice(ks)
+    | Slice(t)
         -> "Slice("
-            ^(List.nth children 0)^", ["
-            ^(String.concat ", " (List.map
-                (function (i, e) ->
-                    "("^(string_of_int i)^", "^ e ^")")
-                (List.combine ks (List.tl children)))
-            )
-        ^"])"
+            ^(List.nth children 0)^", "
+            ^(List.nth children 1)
+        ^")"
 
     | Insert
         -> "Insert("
