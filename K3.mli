@@ -170,7 +170,7 @@ type expr_tag_t
     | Peek
 
     (* AssignToRef(left:TRef(T), right:T/TRef(T)) -> TUnit: Store a value in a
-     * ref Right-Side refs will be dereferenced.
+     * ref. Right-Side refs will be dereferenced.
      *)
     | AssignToRef
 
