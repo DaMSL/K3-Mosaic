@@ -17,7 +17,7 @@ type collection_type_t
     | TList
 
 (* Basic Types *)
-type type_t
+type base_type_t
     = TUnknown
     | TUnit
     | TBool
@@ -25,12 +25,18 @@ type type_t
     | TInt
     | TFloat
     | TString
-    | TTuple        of type_t list
-    | TCollection   of collection_type_t * type_t
-    | TFunction     of type_t * type_t
-    | TTarget       of address_t * type_t
-    | TMaybe        of type_t
-    | TRef          of type_t
+    | TTuple        of base_type_t list
+    | TCollection   of collection_type_t * ref_type_t
+    | TTarget       of address_t * base_type_t
+    | TMaybe        of base_type_t
+
+and ref_type_t
+    = TRef  of base_type_t
+    | BaseT of base_type_t
+
+type type_t
+    = TFunction of ref_type_t * ref_type_t
+    | RefT      of ref_type_t
 
 (* Arguments *)
 type arg_t
@@ -219,6 +225,8 @@ type 'a program_t = 'a statement_t list
 
 val string_of_address: address_t -> string
 val string_of_collection_type: collection_type_t -> string
+val string_of_base_type: base_type_t -> string
+val string_of_ref_type: ref_type_t -> string
 val string_of_type: type_t -> string
 val string_of_const: constant_t -> string
 val string_of_arg: arg_t -> string

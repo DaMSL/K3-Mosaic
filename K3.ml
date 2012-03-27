@@ -17,7 +17,7 @@ type collection_type_t
     | TList
 
 (* Basic Types *)
-type type_t
+type base_type_t
     = TUnknown
     | TUnit
     | TBool
@@ -25,12 +25,18 @@ type type_t
     | TInt
     | TFloat
     | TString
-    | TTuple        of type_t list
-    | TCollection   of collection_type_t * type_t
-    | TFunction     of type_t * type_t
-    | TTarget       of address_t * type_t
-    | TMaybe        of type_t
-    | TRef          of type_t
+    | TTuple        of base_type_t list
+    | TCollection   of collection_type_t * ref_type_t
+    | TTarget       of address_t * base_type_t
+    | TMaybe        of base_type_t
+
+and ref_type_t
+    = TRef  of base_type_t
+    | BaseT of base_type_t
+
+type type_t
+    = TFunction of ref_type_t * ref_type_t
+    | RefT      of ref_type_t
 
 (* Arguments *)
 type arg_t
@@ -144,7 +150,7 @@ let string_of_collection_type t_c = match t_c with
     | TBag  -> "TBag"
     | TList -> "TList"
 
-let rec string_of_type t = match t with
+let rec string_of_base_type t = match t with
     | TUnknown  -> "TUnknown"
     | TUnit     -> "TUnit"
     | TBool     -> "TBool"
@@ -154,25 +160,29 @@ let rec string_of_type t = match t with
     | TString   -> "TString"
 
     | TTuple(t_l)
-        -> "TTuple("^(String.concat ", " (List.map string_of_type t_l))^")"
+        -> "TTuple("^(String.concat ", " (List.map string_of_base_type t_l))^")"
 
     | TCollection(t_c, t_e)
         -> "TCollection("
             ^string_of_collection_type(t_c)^", "
-            ^string_of_type(t_e)
+            ^string_of_ref_type(t_e)
         ^")"
 
-    | TFunction(t_a, t_r)
-        -> "TFunction("^string_of_type t_a ^", "^ string_of_type t_r ^")"
-
     | TTarget(a, t)
-        -> "TTarget("^string_of_address(a)^", "^string_of_type(t)^")"
+        -> "TTarget("^string_of_address(a)^", "^string_of_base_type(t)^")"
 
     | TMaybe(t)
-        -> "TMaybe("^string_of_type(t)^")"
+        -> "TMaybe("^string_of_base_type(t)^")"
 
+and string_of_ref_type t = match t with
     | TRef(t)
-        -> "TRef("^string_of_type(t)^")"
+        -> "TRef("^string_of_base_type(t)^")"
+    | BaseT(t) -> string_of_base_type(t)
+
+let string_of_type t = match t with
+    | TFunction(t_a, t_r)
+        -> "TFunction("^string_of_ref_type t_a ^", "^ string_of_ref_type t_r ^")"
+    | RefT(t) -> string_of_ref_type(t)
 
 let string_of_const c = match c with
     | CBool(b)   -> "CBool("^string_of_bool(b)^")"
