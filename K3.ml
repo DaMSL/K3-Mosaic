@@ -2,6 +2,14 @@
 
 open Tree
 
+(* Identifiers *)
+type id_t = string
+
+(* Addresses *)
+type address_t
+    = Local     of id_t
+    | Remote    of id_t * id_t * int
+
 (* Collection Types *)
 type collection_type_t
     = TSet
@@ -9,34 +17,39 @@ type collection_type_t
     | TList
 
 (* Basic Types *)
-type type_t
+type base_type_t
     = TUnknown
     | TUnit
     | TBool
+    | TByte
     | TInt
     | TFloat
     | TString
-    | TTuple        of type_t list
-    | TCollection   of collection_type_t * type_t
-    | TFunction     of type_t * type_t
+    | TTuple        of base_type_t list
+    | TCollection   of collection_type_t * ref_type_t
+    | TTarget       of address_t * base_type_t
+    | TMaybe        of base_type_t
 
-(* Identifiers *)
-type id_t = string
+and ref_type_t
+    = TRef  of base_type_t
+    | BaseT of base_type_t
+
+type type_t
+    = TFunction of ref_type_t * ref_type_t
+    | RefT      of ref_type_t
 
 (* Arguments *)
 type arg_t
     = AVar      of id_t * type_t
     | ATuple    of (id_t * type_t) list
 
-type address_t
-    = Local of id_t
-
 (* Constants *)
 type constant_t
-    = CBool of bool
-    | CInt    of int
-    | CFloat  of float
-    | CString of string
+    = CBool     of bool
+    | CInt      of int
+    | CFloat    of float
+    | CString   of string
+    | CNothing
 
 (* Expressions *)
 type expr_tag_t
@@ -44,6 +57,8 @@ type expr_tag_t
     = Const of constant_t
     | Var   of id_t * type_t
     | Tuple
+
+    | Just
 
     | Empty     of type_t
     | Singleton of type_t
@@ -73,83 +88,108 @@ type expr_tag_t
     | Aggregate
     | GroupByAggregate
     | Sort
-    | Rank
-    | Head
-    | Tail
 
-    | Member
-    | Lookup
+    | Slice of type_t
+
+    | Insert
+    | Delete
     | Update
-    | Slice of int list
+
+    | Peek
+
+    | AssignToRef
 
     | Send of address_t
 
 (* Expression Tree *)
 type 'a expr_t = ('a, expr_tag_t) tree_t
 
-(* Trigger Effects *)
-type 'a effect_t
-    = Assign of id_t * 'a expr_t
-    | Mutate of 'a expr_t
+type stop_behavior_t
+    = UntilCurrent
+    | UntilEmpty
+    | UntilEOF
+
+type consumable_t
+    = Source        of id_t * type_t
+    | Loop          of id_t * consumable_t
+
+    | Choice        of consumable_t list
+    | Sequence      of consumable_t list
+    | Optional      of consumable_t
+
+    | Repeat        of consumable_t * stop_behavior_t
 
 (* Top-Level Declarations *)
 type 'a declaration_t
     = Global        of id_t * type_t
     | Foreign       of id_t * type_t
-    | Source        of id_t * type_t
-    | InputAdaptor  of id_t * type_t
-    | OutputAdaptor of id_t * type_t
-    | Trigger       of id_t * arg_t * (id_t * type_t) list * 'a effect_t list
-    | Bind          of id_t * id_t list
-    | Loop          of id_t * id_t list
+    | Trigger       of id_t * arg_t * (id_t * type_t * 'a expr_t option) list * 'a expr_t
+    | Bind          of id_t * id_t
+    | Consumable    of id_t
 
-(* Top-Level Directives *)
-type directive_t
-    = Consume of id_t list
+(* Top-Level Instructions *)
+type instruction_t
+    = Consume of id_t
 
 (* All Top-Level Statements *)
 type 'a statement_t
     = Declaration   of 'a declaration_t
-    | Directive     of directive_t
+    | Instruction   of instruction_t
 
 (* K3 Programs *)
 type 'a program_t = 'a statement_t list
 
 (* Utilities *)
 
+let string_of_address a = match a with
+    | Local(i) -> "Local("^i^")"
+    | Remote(i, h, p) -> "Remote("^i^"@"^h^":"^string_of_int p^")"
+
 let string_of_collection_type t_c = match t_c with
     | TSet  -> "TSet"
     | TBag  -> "TBag"
     | TList -> "TList"
 
-let rec string_of_type t = match t with
+let rec string_of_base_type t = match t with
     | TUnknown  -> "TUnknown"
     | TUnit     -> "TUnit"
     | TBool     -> "TBool"
+    | TByte     -> "TByte"
     | TInt      -> "TInt"
     | TFloat    -> "TFloat"
     | TString   -> "TString"
 
     | TTuple(t_l)
-        -> "TTuple("^(String.concat ", " (List.map string_of_type t_l))^")"
+        -> "TTuple("^(String.concat ", " (List.map string_of_base_type t_l))^")"
 
     | TCollection(t_c, t_e)
         -> "TCollection("
             ^string_of_collection_type(t_c)^", "
-            ^string_of_type(t_e)
+            ^string_of_ref_type(t_e)
         ^")"
 
+    | TTarget(a, t)
+        -> "TTarget("^string_of_address(a)^", "^string_of_base_type(t)^")"
+
+    | TMaybe(t)
+        -> "TMaybe("^string_of_base_type(t)^")"
+
+and string_of_ref_type t = match t with
+    | TRef(t)
+        -> "TRef("^string_of_base_type(t)^")"
+    | BaseT(t) -> string_of_base_type(t)
+
+let string_of_type t = match t with
     | TFunction(t_a, t_r)
-        -> "TFunction("^string_of_type t_a ^", "^ string_of_type t_r ^")"
+        -> "TFunction("^string_of_ref_type t_a ^", "^ string_of_ref_type t_r ^")"
+    | RefT(t) -> string_of_ref_type(t)
 
 let string_of_const c = match c with
     | CBool(b)   -> "CBool("^string_of_bool(b)^")"
     | CInt(i)    -> "CInt("^string_of_int(i)^")"
     | CFloat(f)  -> "CFloat("^string_of_float(f)^")"
     | CString(s) -> "CString(\""^s^"\")"
-
-let string_of_address a = match a with
-    | Local(i) -> "Local("^i^")"
+    | CNothing   -> "CNothing"
 
 let string_of_arg a = match a with
     | AVar(i, t) -> "AVar("^i^": "^string_of_type(t)^")"
@@ -162,6 +202,8 @@ let string_of_expr_tag tag children = match tag with
     | Const(c)  -> "Const("^string_of_const(c)^")"
     | Var(i, t) -> "Var("^i^": "^string_of_type(t)^")"
     | Tuple     -> "Tuple("^(String.concat ", " children)^")"
+
+    | Just -> "Just("^(List.hd children)^")"
 
     | Empty(t) -> "Empty("^string_of_type(t)^")"
     | Singleton(t)
@@ -176,7 +218,7 @@ let string_of_expr_tag tag children = match tag with
             ^string_of_type(t)^", "
             ^(List.nth children 0)^", "
             ^(List.nth children 1)^", "
-            ^(List.nth children 2)^", "
+            ^(List.nth children 2)
         ^")"
 
     | Add   -> "Add("^(List.nth children 0)^", "^(List.nth children 1)^")"
@@ -234,20 +276,19 @@ let string_of_expr_tag tag children = match tag with
         ^")"
     | Sort
         -> "Sort("^(List.nth children 0)^", "^(List.nth children 1)^")"
-    | Rank
-        -> "Rank("^(List.nth children 0)^", "^(List.nth children 1)^")"
 
-    | Member -> "Member("^(List.nth children 0)^", "^(List.nth children 1)^")"
-    | Lookup -> "Lookup("^(List.nth children 0)^", "^(List.nth children 1)^")"
-    | Slice(ks)
+    | Slice(t)
         -> "Slice("
-            ^(List.nth children 0)^", ["
-            ^(String.concat ", " (List.map
-                (function (i, e) ->
-                    "("^(string_of_int i)^", "^ e ^")")
-                (List.combine ks (List.tl children)))
-            )
-        ^"])"
+            ^(List.nth children 0)^", "
+            ^(List.nth children 1)
+        ^")"
+
+    | Insert
+        -> "Insert("
+            ^(List.nth children 0)^", "
+            ^(List.nth children 1)
+        ^")"
+
     | Update
         -> "Update("
             ^(List.nth children 0)^", "
@@ -255,8 +296,19 @@ let string_of_expr_tag tag children = match tag with
             ^(List.nth children 2)
         ^")"
 
-    | Head -> "Head("^(List.nth children 0)^")"
-    | Tail -> "Tail("^(List.nth children 0)^")"
+    | Delete
+        -> "Delete("
+            ^(List.nth children 0)^", "
+            ^(List.nth children 1)
+        ^")"
+
+    | Peek -> "Peek("^List.nth children 0^")"
+
+    | AssignToRef
+        -> "AssignToRef("
+            ^List.nth children 0^", "
+            ^List.nth children 1
+        ^")"
 
     | Send(a)
         -> "Send("
@@ -269,34 +321,55 @@ let string_of_expr_meta string_of_meta =
 
 let string_of_expr e = string_of_tree (fun _ _ -> "") string_of_expr_tag e
 
-let string_of_effect f = match f with
-    | Assign(i, e) -> "Assign("^i^", "^string_of_expr(e)^")"
-    | Mutate(e) -> "Mutate("^string_of_expr(e)^")"
+let string_of_stop_behavior_t s = match s with
+    | UntilCurrent -> "UntilCurrent"
+    | UntilEmpty -> "UntilEmpty"
+    | UntilEOF -> "UntilEOF"
+
+let rec string_of_consumable c = match c with
+    | Source(i, t) -> "Source("^i^", "^string_of_type(t)^")"
+    | Loop(id, c) -> "Loop("^id^", "^string_of_consumable(c)^")"
+    | Choice(cs)
+        -> "Choice("^String.concat ", "
+            (List.map string_of_consumable cs)
+        ^")"
+
+    | Sequence(cs)
+        -> "Sequence("^String.concat ", "
+            (List.map string_of_consumable cs)
+        ^")"
+
+    | Optional(c) -> "Optional("^string_of_consumable c^")"
+    | Repeat(c, s)
+        -> "Repeat("^string_of_consumable c^", "^string_of_stop_behavior_t s^")"
 
 let string_of_declaration d = match d with
     | Global(i, t)  -> "Global("^i^", "^string_of_type(t)^")"
     | Foreign(i, t) -> "Foreign("^i^", "^string_of_type(t)^")"
-    | Source(i, t)  -> "Source("^i^", "^string_of_type(t)^")"
 
-    | InputAdaptor(i, t)    -> "InputAdaptor("^i^", "^string_of_type(t)^")"
-    | OutputAdaptor(i, t)   -> "OutputAdaptor("^i^", "^string_of_type(t)^")"
-
-    | Trigger(i, arg, ds, es)
+    | Trigger(i, arg, ds, e)
         -> "Trigger("^i^", "^string_of_arg(arg)^", ["
             ^(String.concat ", " (List.map
-                (function d -> "("^fst d^", "^string_of_type(snd d)^")") ds))^"], "
-            ^(String.concat ", " (List.map string_of_effect es))
+                (function (i', t', e') -> "("
+                    ^i'^", " ^string_of_type(t') ^", "^(
+                        match e' with
+                            | Some e'' -> string_of_expr(e'')
+                            | None -> ""
+                        )
+                    ^")"
+                ) ds))^"], "
+            ^string_of_expr(e)
         ^")"
 
-    | Bind(i, rs) -> "Bind("^i^", ["^(String.concat ", " rs)^"])"
-    | Loop(id, ids) -> "Loop("^id^", ["^(String.concat ", " ids)^"])"
+    | Bind(i, i') -> "Bind("^i^", "^i'^")"
+    | Consumable(c) -> "Consumable("^c^")"
 
-let string_of_directive d = match d with
-    | Consume(ids) -> "Consume(["^(String.concat ", " ids)^"])"
+let string_of_instruction i = match i with
+    | Consume(id) -> "Consume("^id^")"
 
 let string_of_statement s = match s with
     | Declaration(d) -> string_of_declaration(d)
-    | Directive(d)   -> string_of_directive(d)
+    | Instruction(i)   -> string_of_instruction(i)
 
 let string_of_program ss
     = "K3(["^(String.concat ", " (List.map string_of_statement ss))^"])"
