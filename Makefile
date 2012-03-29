@@ -14,6 +14,12 @@ K3.cmi: K3.mli Tree.cmi
 K3.cmo: K3.ml K3.cmi Tree.cmi
 	ocamlc -c K3.ml
 
+K3Typechecker.cmi: K3Typechecker.mli K3.cmi Tree.cmi
+	ocamlc -c K3Typechecker.mli
+
+K3Typechecker.cmo: K3Typechecker.ml K3Typechecker.cmi K3.cmi Tree.cmi
+	ocamlc -c K3Typechecker.ml
+
 K3Parser.mli K3Parser.ml: K3Parser.mly
 	ocamlyacc -v K3Parser.mly
 
