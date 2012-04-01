@@ -4,8 +4,13 @@ type ('a, 'tag) tree_t
     | Node of 'a * 'tag * ('a, 'tag) tree_t list
 
 (* Tree decomposition *)
-let decompose_tree =
-  function Node (d,t,c) -> (d,t), c | Leaf (d,t) -> (d,t),[]
+let decompose_tree t = match t with
+    | Leaf(meta, tag) -> (meta, tag), []
+    | Node(meta, tag, children) -> (meta, tag), children
+
+let recompose_tree ((meta, tag), children) = match children with
+    | [] -> Leaf(meta, tag)
+    | _ -> Node(meta, tag, children)
 
 let data_of_tree e = fst (decompose_tree e)
 let sub_of_tree e = snd (decompose_tree e)

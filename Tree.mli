@@ -5,6 +5,7 @@ type ('a, 'tag) tree_t
 
 (* Tree decomposition *)
 val decompose_tree : ('a, 'tag) tree_t -> ('a * 'tag) * (('a, 'tag) tree_t list)
+val recompose_tree : ('a * 'tag) * (('a, 'tag) tree_t list) -> ('a, 'tag) tree_t
 
 val data_of_tree : ('a, 'tag) tree_t -> ('a * 'tag)
 val sub_of_tree : ('a, 'tag) tree_t -> ('a, 'tag) tree_t list
