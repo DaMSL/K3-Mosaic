@@ -6,7 +6,19 @@ open K3
 exception MalformedTree
 exception TypeError
 
-let check_tag_arity tag children = true
+let check_tag_arity tag children = let length = List.length children in
+    let correct_arity = match tag with
+        | Const(_)  -> 0
+        | Var(_, _) -> 0
+        | Tuple     -> length
+        | Just -> 1
+
+        | Empty(_)      -> 0
+        | Singleton(_)  -> 1
+        | Combine       -> 2
+
+        | _ -> length
+    in length = correct_arity
 
 let type_of expr = let ((id, t), tag), children = decompose_tree expr in t
 
