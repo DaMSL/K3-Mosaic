@@ -3,7 +3,10 @@
 open Tree
 open K3
 
+exception MalformedTree
 exception TypeError
+
+let check_tag_arity tag children = true
 
 let type_of expr = let ((id, t), tag), children = decompose_tree expr in t
 
@@ -17,6 +20,9 @@ let deduce_constant_type c = let constant_type = match c with
 
 let rec deduce_type env expr =
     let (meta, tag), untyped_children = decompose_tree expr in
+
+    (* Check Tag Arity *)
+    if not (check_tag_arity tag untyped_children) then raise MalformedTree else
 
     (* Determine if we need to augment the type environment. *)
     let new_env = match tag with
