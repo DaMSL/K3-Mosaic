@@ -26,17 +26,17 @@ type base_type_t
     | TFloat
     | TString
     | TTuple        of base_type_t list
-    | TCollection   of collection_type_t * ref_type_t
+    | TCollection   of collection_type_t * value_type_t
     | TTarget       of address_t * base_type_t
     | TMaybe        of base_type_t
 
-and ref_type_t
+and value_type_t
     = TRef  of base_type_t
     | BaseT of base_type_t
 
 type type_t
-    = TFunction of ref_type_t * ref_type_t
-    | RefT      of ref_type_t
+    = TFunction of value_type_t * value_type_t
+    | ValueT    of value_type_t
 
 (* Arguments *)
 type arg_t
@@ -165,7 +165,7 @@ let rec string_of_base_type t = match t with
     | TCollection(t_c, t_e)
         -> "TCollection("
             ^string_of_collection_type(t_c)^", "
-            ^string_of_ref_type(t_e)
+            ^string_of_value_type(t_e)
         ^")"
 
     | TTarget(a, t)
@@ -174,15 +174,15 @@ let rec string_of_base_type t = match t with
     | TMaybe(t)
         -> "TMaybe("^string_of_base_type(t)^")"
 
-and string_of_ref_type t = match t with
+and string_of_value_type t = match t with
     | TRef(t)
         -> "TRef("^string_of_base_type(t)^")"
     | BaseT(t) -> string_of_base_type(t)
 
 let string_of_type t = match t with
     | TFunction(t_a, t_r)
-        -> "TFunction("^string_of_ref_type t_a ^", "^ string_of_ref_type t_r ^")"
-    | RefT(t) -> string_of_ref_type(t)
+        -> "TFunction("^string_of_value_type t_a ^", "^ string_of_value_type t_r ^")"
+    | ValueT(t) -> string_of_value_type(t)
 
 let string_of_const c = match c with
     | CBool(b)   -> "CBool("^string_of_bool(b)^")"

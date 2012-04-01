@@ -26,17 +26,17 @@ type base_type_t
     | TFloat
     | TString
     | TTuple        of base_type_t list
-    | TCollection   of collection_type_t * ref_type_t
+    | TCollection   of collection_type_t * value_type_t
     | TTarget       of address_t * base_type_t
     | TMaybe        of base_type_t
 
-and ref_type_t
+and value_type_t
     = TRef  of base_type_t
     | BaseT of base_type_t
 
 type type_t
-    = TFunction of ref_type_t * ref_type_t
-    | RefT      of ref_type_t
+    = TFunction of value_type_t * value_type_t
+    | ValueT    of value_type_t
 
 (* Arguments *)
 type arg_t
@@ -226,7 +226,7 @@ type 'a program_t = 'a statement_t list
 val string_of_address: address_t -> string
 val string_of_collection_type: collection_type_t -> string
 val string_of_base_type: base_type_t -> string
-val string_of_ref_type: ref_type_t -> string
+val string_of_value_type: value_type_t -> string
 val string_of_type: type_t -> string
 val string_of_const: constant_t -> string
 val string_of_arg: arg_t -> string

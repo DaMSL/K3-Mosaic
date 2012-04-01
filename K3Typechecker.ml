@@ -13,7 +13,7 @@ let deduce_constant_type c = let constant_type = match c with
         | CFloat(_) -> TFloat
         | CString(_) -> TString
         | CNothing -> TMaybe(TUnknown)
-    in RefT(BaseT(constant_type))
+    in ValueT(BaseT(constant_type))
 
 let rec deduce_type env expr =
     let (meta, tag), untyped_children = decompose_tree expr in
@@ -37,9 +37,9 @@ let rec deduce_type env expr =
             | Var(id, t) -> t
             | Tuple -> let child_types = List.map (
                     fun e -> match type_of e with
-                        | RefT(BaseT(bt)) -> bt
+                        | ValueT(BaseT(bt)) -> bt
                         | _ -> raise TypeError
                     ) typed_children in
-                RefT(BaseT(TTuple(child_types)))
-            | _ -> RefT(BaseT(TUnknown))
+                ValueT(BaseT(TTuple(child_types)))
+            | _ -> ValueT(BaseT(TUnknown))
         in attach_type current_type
