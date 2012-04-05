@@ -16,8 +16,41 @@ let check_tag_arity tag children = let length = List.length children in
         | Empty(_)      -> 0
         | Singleton(_)  -> 1
         | Combine       -> 2
+        | Range(_)      -> 3
 
-        | _ -> length
+        | Add   -> 2
+        | Mult  -> 2
+        | Neg   -> 1
+
+        | Eq    -> 2
+        | Lt    -> 2
+        | Neq   -> 2
+        | Leq   -> 2
+
+        | Lambda(_)         -> 1
+        | AssocLambda(_)    -> 1
+        | Apply             -> 2
+
+        | Block         -> length
+        | Iterate       -> length
+        | IfThenElse    -> 3
+
+        | Map               -> 2
+        | FilterMap         -> 3
+        | Flatten           -> 1
+        | Aggregate         -> 3
+        | GroupByAggregate  -> 4
+        | Sort              -> 2
+
+        | Slice(_)  -> 2
+        | Insert    -> 2
+        | Delete    -> 2
+        | Update    -> 3
+        | Peek      -> 1
+
+        | AssignToRef   -> 2
+
+        | Send(_)   -> 1
     in length = correct_arity
 
 let type_of expr = let ((id, t), tag), children = decompose_tree expr in t
