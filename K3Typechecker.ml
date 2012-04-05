@@ -97,5 +97,27 @@ let rec deduce_type env expr =
                         | ValueT(BaseT(bt)) -> ValueT(BaseT(TMaybe(bt)))
                         | _ -> raise TypeError
                 )
+
+            | Empty(t)      -> t
+            | Singleton(t)  -> t
+
+            | Combine -> let a, b =
+                List.nth typed_children 0,
+                List.nth typed_children 1 in (
+                    match (type_of a, type_of b) with
+                        | (ValueT(BaseT(TCollection(a_ct, a_et))),
+                          (ValueT(BaseT(TCollection(b_ct, b_et))))) ->
+                            if a_et <> b_et then raise TypeError else
+                                let new_ct = (
+                                    match (a_ct, b_ct) with
+                                        | (TList, _)    -> TList
+                                        | (_, TList)    -> TList
+                                        | (TBag, _)     -> TBag
+                                        | (_, TBag)     -> TBag
+                                        | (TSet, TSet)  -> TSet
+                                ) in ValueT(BaseT(TCollection(new_ct, a_et)))
+                        | _ -> raise TypeError
+                    )
+
             | _ -> ValueT(BaseT(TUnknown))
         in attach_type current_type
