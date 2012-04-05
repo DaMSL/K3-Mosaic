@@ -92,5 +92,10 @@ let rec deduce_type env expr =
                         | _ -> raise TypeError
                     ) typed_children in
                 ValueT(BaseT(TTuple(child_types)))
+            | Just -> let inner_type = type_of (List.hd typed_children) in (
+                    match inner_type with
+                        | ValueT(BaseT(bt)) -> ValueT(BaseT(TMaybe(bt)))
+                        | _ -> raise TypeError
+                )
             | _ -> ValueT(BaseT(TUnknown))
         in attach_type current_type
