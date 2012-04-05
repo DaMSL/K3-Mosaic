@@ -3,6 +3,7 @@
 open Tree
 open K3
 
+(* TODO: Make exceptions more informative for error reporting. *)
 exception MalformedTree
 exception TypeError
 
@@ -63,6 +64,11 @@ let deduce_constant_type c = let constant_type = match c with
         | CNothing -> TMaybe(TUnknown)
     in ValueT(BaseT(constant_type))
 
+let get_base_type t = match t with
+    | ValueT(TRef(bt)) -> bt
+    | ValueT(BaseT(bt)) -> bt
+    | _ -> raise TypeError
+
 let rec deduce_type env expr =
     let (meta, tag), untyped_children = decompose_tree expr in
 
@@ -119,5 +125,36 @@ let rec deduce_type env expr =
                         | _ -> raise TypeError
                     )
 
+            | Range(t) -> t
+
+            | (Add|Mult) -> let a, b =
+                List.nth typed_children 0,
+                List.nth typed_children 1 in
+                    let result_type = (
+                        match (get_base_type (type_of a), get_base_type (type_of b)) with
+                            | (TFloat, TFloat) -> TFloat
+                            | (TInt, TFloat) -> TFloat
+                            | (TFloat, TInt) -> TFloat
+                            | (TInt, TInt) -> TInt
+                            | (TBool, TBool) -> TBool
+                            | _ -> raise TypeError
+                    ) in ValueT(BaseT(result_type))
+
+            | Neg -> let a = List.hd typed_children in
+                let result_type = (
+                    match get_base_type (type_of a) with
+                        | (TBool|TInt|TFloat) as t -> t
+                        | _ -> raise TypeError
+                ) in ValueT(BaseT(result_type))
+
+            (* TODO: Define comparable, equatable types. *)
+            | (Eq|Lt|Neq|Leq) -> let a, b =
+                List.nth typed_children 0,
+                List.nth typed_children 1 in (
+                    match (type_of a, type_of b) with
+                        | (ValueT(a_vt), ValueT(b_vt)) ->
+                             if a_vt <> b_vt then ValueT(BaseT(TBool)) else raise TypeError
+                        | _ -> raise TypeError
+                )
             | _ -> ValueT(BaseT(TUnknown))
         in attach_type current_type
