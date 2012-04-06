@@ -156,5 +156,25 @@ let rec deduce_type env expr =
                              if a_vt <> b_vt then ValueT(BaseT(TBool)) else raise TypeError
                         | _ -> raise TypeError
                 )
+
+            | Lambda(a) -> let arg_type = (
+                    match a with
+                        | AVar(i, t) -> (
+                            match t with
+                                | ValueT(vt) -> vt
+                                | _ -> raise TypeError
+                            )
+                        | ATuple(its) -> BaseT(TTuple(
+                                List.fold_right (fun t -> fun ts -> (
+                                        match t with
+                                            | ValueT(BaseT(bt)) -> bt
+                                            | _ -> raise TypeError
+                                ) :: ts) (snd (List.split its)) []
+                            ))
+                ) in let return_type = (
+                    match type_of (List.hd typed_children) with
+                        | ValueT(vt) -> vt
+                        | _ -> raise TypeError
+                ) in TFunction(arg_type, return_type)
             | _ -> ValueT(BaseT(TUnknown))
         in attach_type current_type
