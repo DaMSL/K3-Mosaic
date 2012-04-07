@@ -25,7 +25,7 @@ type base_type_t
     | TInt
     | TFloat
     | TString
-    | TTuple        of base_type_t list
+    | TTuple        of value_type_t list
     | TCollection   of collection_type_t * value_type_t
     | TTarget       of address_t * base_type_t
     | TMaybe        of base_type_t
@@ -40,8 +40,8 @@ type type_t
 
 (* Arguments *)
 type arg_t
-    = AVar      of id_t * type_t
-    | ATuple    of (id_t * type_t) list
+    = AVar      of id_t * value_type_t
+    | ATuple    of (id_t * value_type_t) list
 
 (* Constants *)
 type constant_t

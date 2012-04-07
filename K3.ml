@@ -25,7 +25,7 @@ type base_type_t
     | TInt
     | TFloat
     | TString
-    | TTuple        of base_type_t list
+    | TTuple        of value_type_t list
     | TCollection   of collection_type_t * value_type_t
     | TTarget       of address_t * base_type_t
     | TMaybe        of base_type_t
@@ -40,8 +40,8 @@ type type_t
 
 (* Arguments *)
 type arg_t
-    = AVar      of id_t * type_t
-    | ATuple    of (id_t * type_t) list
+    = AVar      of id_t * value_type_t
+    | ATuple    of (id_t * value_type_t) list
 
 (* Constants *)
 type constant_t
@@ -160,7 +160,7 @@ let rec string_of_base_type t = match t with
     | TString   -> "TString"
 
     | TTuple(t_l)
-        -> "TTuple("^(String.concat ", " (List.map string_of_base_type t_l))^")"
+        -> "TTuple("^(String.concat ", " (List.map string_of_value_type t_l))^")"
 
     | TCollection(t_c, t_e)
         -> "TCollection("
@@ -192,10 +192,10 @@ let string_of_const c = match c with
     | CNothing   -> "CNothing"
 
 let string_of_arg a = match a with
-    | AVar(i, t) -> "AVar("^i^": "^string_of_type(t)^")"
+    | AVar(i, t) -> "AVar("^i^": "^string_of_type(ValueT(t))^")"
     | ATuple(its)
         -> "ATuple("^(String.concat ", "
-                (List.map (function (i, t) -> i^": "^string_of_type(t)) its))
+                (List.map (function (i, t) -> i^": "^string_of_type(ValueT(t))) its))
         ^")"
 
 let string_of_expr_tag tag children = match tag with
