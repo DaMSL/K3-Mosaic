@@ -91,7 +91,12 @@ let rec deduce_type env expr =
     (* Deduce the type of the current node. *)
     let current_type = match tag with
             | Const(c) -> deduce_constant_type c
-            | Var(id, t) -> t
+            | Var(id, t) -> (
+                    match t with
+                        | ValueT(BaseT(TUnknown)) ->
+                            (try List.assoc id new_env with Not_found -> raise TypeError)
+                        | _ -> raise TypeError
+                )
             | Tuple -> let child_types = List.map (
                     fun e -> match type_of e with
                         | ValueT(vt) -> vt
