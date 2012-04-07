@@ -77,8 +77,8 @@ let rec deduce_type env expr =
 
     (* Determine if we need to augment the type environment. *)
     let new_env = match tag with
-            | Lambda(AVar(i, t)) -> (i, t) :: env
-            | Lambda(ATuple(xs)) -> xs @ env
+            | Lambda(AVar(i, t)) -> (i, ValueT(t)) :: env
+            | Lambda(ATuple(xs)) -> (List.map (fun (i, t) -> (i, ValueT(t))) xs) @ env
             | _ -> env
         in
 
@@ -94,7 +94,7 @@ let rec deduce_type env expr =
             | Var(id, t) -> t
             | Tuple -> let child_types = List.map (
                     fun e -> match type_of e with
-                        | ValueT(BaseT(bt)) -> bt
+                        | ValueT(vt) -> vt
                         | _ -> raise TypeError
                     ) typed_children in
                 ValueT(BaseT(TTuple(child_types)))
@@ -159,18 +159,8 @@ let rec deduce_type env expr =
 
             | Lambda(a) -> let arg_type = (
                     match a with
-                        | AVar(i, t) -> (
-                            match t with
-                                | ValueT(vt) -> vt
-                                | _ -> raise TypeError
-                            )
-                        | ATuple(its) -> BaseT(TTuple(
-                                List.fold_right (fun t -> fun ts -> (
-                                        match t with
-                                            | ValueT(BaseT(bt)) -> bt
-                                            | _ -> raise TypeError
-                                ) :: ts) (snd (List.split its)) []
-                            ))
+                        | AVar(i, t) -> t
+                        | ATuple(its) -> BaseT(TTuple(snd (List.split its)))
                 ) in let return_type = (
                     match type_of (List.hd typed_children) with
                         | ValueT(vt) -> vt
