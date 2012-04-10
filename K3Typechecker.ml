@@ -212,5 +212,17 @@ let rec deduce_type env expr =
                             | _ -> raise TypeError
                     )
 
+            | Map ->
+                    let map_function = List.nth typed_children 0 in
+                    let map_collection = List.nth typed_children 1 in (
+                        match type_of map_function with
+                            | TFunction(a_t, r_t) -> (
+                                    match type_of map_collection with
+                                        | ValueT(BaseT(TCollection(c_t, e_t))) when e_t = a_t ->
+                                            ValueT(BaseT(TCollection(c_t, r_t)))
+                                        | _ -> raise TypeError
+                                )
+                            | _ -> raise TypeError
+                    )
             | _ -> ValueT(BaseT(TUnknown))
         in attach_type current_type
