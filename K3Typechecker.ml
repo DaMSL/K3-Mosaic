@@ -201,5 +201,16 @@ let rec deduce_type env expr =
                     if List.for_all (fun x -> type_of x = (ValueT(BaseT(TUnit)))) typed_children
                     then (ValueT(BaseT(TUnit))) else raise TypeError
 
+            | IfThenElse ->
+                    let predicate = List.nth typed_children 0 in
+                    let then_clause = List.nth typed_children 1 in
+                    let else_clause = List.nth typed_children 2 in (
+                        match type_of predicate with
+                            | ValueT(BaseT(TBool)) ->
+                                if type_of then_clause = type_of else_clause
+                                then type_of then_clause else raise TypeError
+                            | _ -> raise TypeError
+                    )
+
             | _ -> ValueT(BaseT(TUnknown))
         in attach_type current_type
