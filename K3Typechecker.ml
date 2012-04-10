@@ -205,24 +205,24 @@ let rec deduce_type env expr =
                 let predicate = List.nth typed_children 0 in
                 let then_clause = List.nth typed_children 1 in
                 let else_clause = List.nth typed_children 2 in (
-                    match type_of predicate with
-                        | ValueT(BaseT(TBool)) ->
-                            if type_of then_clause = type_of else_clause
-                            then type_of then_clause else raise TypeError
-                        | _ -> raise TypeError
+                match type_of predicate with
+                    | ValueT(BaseT(TBool)) ->
+                        if type_of then_clause = type_of else_clause
+                        then type_of then_clause else raise TypeError
+                    | _ -> raise TypeError
                 )
 
             | Map ->
                 let map_function = List.nth typed_children 0 in
-                let map_collection = List.nth typed_children 1 in (
-                    match type_of map_function with
-                        | TFunction(a_t, r_t) -> (
-                                match type_of map_collection with
-                                    | ValueT(BaseT(TCollection(c_t, e_t))) when e_t = a_t ->
-                                        ValueT(BaseT(TCollection(c_t, r_t)))
-                                    | _ -> raise TypeError
-                            )
-                        | _ -> raise TypeError
+                let collection = List.nth typed_children 1 in (
+                match type_of collection with
+                    | ValueT(BaseT(TCollection(c_t, e_t))) -> (
+                        match type_of map_function with
+                            | TFunction(a_t, r_t) when a_t = e_t ->
+                                ValueT(BaseT(TCollection(c_t, r_t)))
+                            | _ -> raise TypeError
+                        )
+                    | _ -> raise TypeError
                 )
             | _ -> ValueT(BaseT(TUnknown))
         in attach_type current_type
