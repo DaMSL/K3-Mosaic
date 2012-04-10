@@ -252,5 +252,21 @@ let rec deduce_type env expr =
                     | _ -> raise TypeError
                 )
 
+            | Aggregate ->
+                let aggregator = List.nth typed_children 0 in
+                let zero = List.nth typed_children 1 in
+                let collection = List.nth typed_children 2 in
+                let z_t = type_of zero in (
+                match type_of collection with
+                    | ValueT(BaseT(TCollection(c_t, e_t))) -> (
+                        match type_of aggregator with
+                            | TFunction((BaseT(TTuple([a_t1; a_t2]))), r_t)
+                                when ValueT(a_t1) = z_t && a_t2 = e_t && ValueT(r_t) = z_t ->
+                                    z_t
+                            | _ -> raise TypeError
+                        )
+                    | _ -> raise TypeError
+                )
+
             | _ -> ValueT(BaseT(TUnknown))
         in attach_type current_type
