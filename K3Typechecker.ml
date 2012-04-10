@@ -162,7 +162,7 @@ let rec deduce_type env expr =
                 List.nth typed_children 1 in (
                     match (type_of a, type_of b) with
                         | (ValueT(a_vt), ValueT(b_vt)) ->
-                             if a_vt <> b_vt then ValueT(BaseT(TBool)) else raise TypeError
+                             if a_vt = b_vt then ValueT(BaseT(TBool)) else raise TypeError
                         | _ -> raise TypeError
                 )
 
