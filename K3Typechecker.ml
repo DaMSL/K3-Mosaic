@@ -224,5 +224,25 @@ let rec deduce_type env expr =
                         )
                     | _ -> raise TypeError
                 )
+
+            | FilterMap ->
+                let filter_predicate = List.nth typed_children 0 in
+                let map_function = List.nth typed_children 1 in
+                let collection = List.nth typed_children 2 in (
+                match type_of collection with
+                    | ValueT(BaseT(TCollection(c_t, e_t))) -> (
+                        match type_of map_function with
+                            | TFunction(a_t, r_t) when a_t = e_t -> (
+                                match type_of filter_predicate with
+                                    | TFunction(p_t, (BaseT(TBool)))
+                                        when p_t = r_t ->
+                                            ValueT(BaseT(TCollection(c_t, r_t)))
+                                    | _ -> raise TypeError
+                                )
+                            | _ -> raise TypeError
+                        )
+                    | _ -> raise TypeError
+                )
+
             | _ -> ValueT(BaseT(TUnknown))
         in attach_type current_type
