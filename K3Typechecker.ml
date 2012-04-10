@@ -64,6 +64,10 @@ let deduce_constant_type c = let constant_type = match c with
         | CNothing -> TMaybe(TUnknown)
     in ValueT(BaseT(constant_type))
 
+let deduce_arg_type a = match a with
+    | AVar(i, t) -> t
+    | ATuple(its) -> BaseT(TTuple(snd(List.split its)))
+
 let get_base_type t = match t with
     | ValueT(TRef(bt)) -> bt
     | ValueT(BaseT(bt)) -> bt
@@ -162,14 +166,18 @@ let rec deduce_type env expr =
                         | _ -> raise TypeError
                 )
 
-            | Lambda(a) -> let arg_type = (
-                    match a with
-                        | AVar(i, t) -> t
-                        | ATuple(its) -> BaseT(TTuple(snd (List.split its)))
-                ) in let return_type = (
+            | Lambda(a) -> let return_type = (
                     match type_of (List.hd typed_children) with
                         | ValueT(vt) -> vt
                         | _ -> raise TypeError
-                ) in TFunction(arg_type, return_type)
+                ) in TFunction(deduce_arg_type a, return_type)
+
+            | AssocLambda(a1, a2) -> let return_type = (
+                    match type_of (List.hd typed_children) with
+                        | ValueT(vt) -> vt
+                        | _ -> raise TypeError
+                ) in TFunction(
+                    BaseT(TTuple([deduce_arg_type a1; deduce_arg_type a2])), return_type
+                )
             | _ -> ValueT(BaseT(TUnknown))
         in attach_type current_type
