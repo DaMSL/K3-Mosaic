@@ -179,5 +179,23 @@ let rec deduce_type env expr =
                 ) in TFunction(
                     BaseT(TTuple([deduce_arg_type a1; deduce_arg_type a2])), return_type
                 )
+
+            | Apply -> let (callable_arg_type, callable_return_type) = (
+                    match type_of (List.nth typed_children 0) with
+                        | TFunction(a, r) -> (a, r)
+                        | _ -> raise TypeError
+                ) in let arg_type = type_of (List.nth typed_children 1) in
+                    if arg_type = ValueT(callable_arg_type)
+                    then ValueT(callable_return_type)
+                    else raise TypeError
+
+            | Block -> let rec validate_block_type components = (
+                    match components with
+                        | e :: [] -> type_of e
+                        | h :: t when (type_of h) = (ValueT(BaseT(TUnit)))
+                            -> validate_block_type t
+                        | _ -> raise TypeError
+                ) in validate_block_type typed_children
+
             | _ -> ValueT(BaseT(TUnknown))
         in attach_type current_type
