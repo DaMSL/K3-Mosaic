@@ -197,5 +197,9 @@ let rec deduce_type env expr =
                         | _ -> raise TypeError
                 ) in validate_block_type typed_children
 
+            | Iterate ->
+                    if List.for_all (fun x -> type_of x = (ValueT(BaseT(TUnit)))) typed_children
+                    then (ValueT(BaseT(TUnit))) else raise TypeError
+
             | _ -> ValueT(BaseT(TUnknown))
         in attach_type current_type
