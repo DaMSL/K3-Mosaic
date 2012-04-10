@@ -244,5 +244,13 @@ let rec deduce_type env expr =
                     | _ -> raise TypeError
                 )
 
+            | Flatten -> (
+                match type_of (List.hd typed_children) with
+                    | ValueT(BaseT(TCollection(c_t1,
+                          (BaseT(TCollection(c_t2, e_t2)))
+                        ))) -> ValueT(BaseT(TCollection(c_t1, e_t2)))
+                    | _ -> raise TypeError
+                )
+
             | _ -> ValueT(BaseT(TUnknown))
         in attach_type current_type
