@@ -73,6 +73,14 @@ let get_base_type t = match t with
     | ValueT(BaseT(bt)) -> bt
     | _ -> raise TypeError
 
+let (=~) t1 t2 = get_base_type t1 = get_base_type t2
+
+let (~>) t1 t2 =
+  match t2 with
+    | ValueT(TRef(bt)) -> t2 = t1
+    | ValueT(BaseT(bt)) -> t2 =~ t1
+    | _ -> false
+
 let rec deduce_type env expr =
     let (meta, tag), untyped_children = decompose_tree expr in
 
