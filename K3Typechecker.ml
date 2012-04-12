@@ -363,5 +363,40 @@ let rec deduce_type env expr =
                     | _ -> raise TypeError
             )
 
-            | _ -> ValueT(BaseT(TUnknown))
-        in attach_type current_type
+        | Insert ->
+            let collection = bind 0 /=. TypeError in
+            let n_t = bind 1 /=. TypeError in (
+
+                (* Insert is only possible into ref collections. *)
+                match collection with
+                    | TRef(TCollection(c_t, e_t)) when n_t =~ e_t ->
+                        ValueT(BaseT(TUnit))
+                    | _ -> raise TypeError
+            )
+
+        | Update ->
+            let collection = bind 0 /=. TypeError in
+            let o_t = bind 1 /=. TypeError in
+            let n_t = bind 2 /=. TypeError in (
+
+                (* Update is only possible into collections of ref elements *)
+                match !: collection with
+                    | TCollection(c_t, TRef(e_t)) when !: o_t = e_t && !: n_t = e_t ->
+                        ValueT(BaseT(TUnit))
+                    | _ -> raise TypeError
+            )
+
+        | Delete ->
+            let collection = bind 0 /=. TypeError in
+            let o_t = bind 1 /=. TypeError in (
+
+                (* Delete is only possible from a ref collection. *)
+                match collection with
+                    | TRef(TCollection(c_t, e_t)) when o_t =~ e_t ->
+                        ValueT(BaseT(TUnit))
+                    | _ -> raise TypeError
+            )
+
+
+        | _ -> ValueT(BaseT(TUnknown))
+    in attach_type current_type
