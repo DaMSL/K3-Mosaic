@@ -159,7 +159,7 @@ type expr_tag_t
      * returns the sub-collection of `c' whose elements satisfy these equality
      * predicates.
      *)
-    | Slice of type_t
+    | Slice
 
     (* Insert(c, x) -> TUnit: Insert item with value `x' into collection `c'. *)
     | Insert

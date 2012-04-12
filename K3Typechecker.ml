@@ -382,6 +382,37 @@ let rec deduce_type env expr =
                                  ValueT(BaseT(TCollection(TList, e_t)))
                     | _ -> raise TypeError
             )
+
+        | Slice ->
+            let collection = bind 0 /=. TypeError in
+            let pattern = bind 1 /=. TypeError in
+
+            (* Ensure that `collection' is actually a collection. *)
+            let c_t, e_t = (
+                match !: collection with
+                    | TCollection(c_t, e_t) -> (c_t, e_t)
+                    | _ -> raise TypeError
+            ) in
+
+            let rec match_slice_pattern = (
+                function
+                    | ([], []) -> true
+                    | (p_h :: p_ts), (e_h :: e_ts) when p_h =~> e_h ->
+                        match_slice_pattern (p_ts, e_ts)
+                    | (BaseT(TUnknown) :: p_ts), (e_h :: e_ts) ->
+                        match_slice_pattern (p_ts, e_ts)
+                    | _ -> raise TypeError
+            ) in (
+
+                (* Handle single-element vs. tuples separately. *)
+                match !: pattern, !: e_t with
+                    | TTuple(p_ts), TTuple(e_ts)
+                        when match_slice_pattern (p_ts, e_ts) ->
+                            ValueT(collection)
+                    | p_t, e_bt when p_t = e_bt -> ValueT(collection)
+                    | _ -> raise TypeError
+            )
+
         | Insert ->
             let collection = bind 0 /=. TypeError in
             let n_t = bind 1 /=. TypeError in (
@@ -446,6 +477,4 @@ let rec deduce_type env expr =
             (* If a ref is passed into a send, its values are copied. *)
             if !: arg = expected_arg then ValueT(BaseT(TUnit))
             else raise TypeError
-
-        | _ -> ValueT(BaseT(TUnknown))
     in attach_type current_type
