@@ -404,6 +404,15 @@ let rec deduce_type env expr =
                     | _ -> raise TypeError
             )
 
+        | AssignToRef ->
+            let left = bind 0 /=. TypeError in
+            let right = bind 1 /=. TypeError in (
+
+            (* AssignToRef must assign to a ref. *)
+                match left with
+                    | TRef(_) when right =~> left -> ValueT(BaseT(TUnit))
+                    | _ -> raise TypeError
+            )
 
         | _ -> ValueT(BaseT(TUnknown))
     in attach_type current_type
