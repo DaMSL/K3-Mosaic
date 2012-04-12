@@ -181,7 +181,7 @@ type expr_tag_t
     | AssignToRef
 
     (* Send(a:TTarget(N, T), args:T): Send a message of type `T' to target `a'. *)
-    | Send of address_t
+    | Send
 
 (* Expression Tree *)
 type 'a expr_t = ('a, expr_tag_t) tree_t

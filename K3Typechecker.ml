@@ -414,5 +414,19 @@ let rec deduce_type env expr =
                     | _ -> raise TypeError
             )
 
+        | Send ->
+            let target = bind 0 /=. TypeError in
+            let arg = bind 1 /=. TypeError in
+
+            let expected_arg = (
+                match !: target with
+                    | TTarget(_, t) -> t
+                    | _ -> raise TypeError
+            ) in
+
+            (* If a ref is passed into a send, its values are copied. *)
+            if !: arg = expected_arg then ValueT(BaseT(TUnit))
+            else raise TypeError
+
         | _ -> ValueT(BaseT(TUnknown))
     in attach_type current_type

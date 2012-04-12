@@ -99,7 +99,7 @@ type expr_tag_t
 
     | AssignToRef
 
-    | Send of address_t
+    | Send
 
 (* Expression Tree *)
 type 'a expr_t = ('a, expr_tag_t) tree_t
