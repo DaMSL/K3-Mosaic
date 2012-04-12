@@ -397,6 +397,13 @@ let rec deduce_type env expr =
                     | _ -> raise TypeError
             )
 
+        | Peek ->
+            let collection = bind 0 /=. TypeError in (
+                match !: collection with
+                    | TCollection(c_t, e_t) -> ValueT(e_t)
+                    | _ -> raise TypeError
+            )
+
 
         | _ -> ValueT(BaseT(TUnknown))
     in attach_type current_type
