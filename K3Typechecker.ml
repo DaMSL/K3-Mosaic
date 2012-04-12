@@ -363,6 +363,25 @@ let rec deduce_type env expr =
                     | _ -> raise TypeError
             )
 
+        | Sort ->
+            let collection = bind 0 /=. TypeError in
+            let cmp_a, cmp_r = bind 1 /=> TypeError in
+
+            (* Ensure that `collection' is actually a collection. *)
+            let c_t, e_t = (
+                match !: collection with
+                    | TCollection(c_t, e_t) -> (c_t, e_t)
+                    | _ -> raise TypeError
+            ) in (
+
+                (* Ensure that the comparator is well-formed. *)
+                match cmp_a, cmp_r with
+                    | BaseT(TTuple([arg_lt; arg_rt])), BaseT(TBool)
+                        when e_t =~> arg_lt &&
+                             e_t =~> arg_rt ->
+                                 ValueT(BaseT(TCollection(TList, e_t)))
+                    | _ -> raise TypeError
+            )
         | Insert ->
             let collection = bind 0 /=. TypeError in
             let n_t = bind 1 /=. TypeError in (
