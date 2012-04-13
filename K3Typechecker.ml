@@ -10,7 +10,7 @@ exception TypeError
 let check_tag_arity tag children = let length = List.length children in
     let correct_arity = match tag with
         | Const(_)  -> 0
-        | Var(_, _) -> 0
+        | Var(_) -> 0
         | Tuple     -> length
         | Just -> 1
 
@@ -141,10 +141,8 @@ let rec deduce_expr_type env expr =
     (* Deduce the type of the current node. *)
     let current_type = match tag with
         | Const(c) -> deduce_constant_type c
-        | Var(id, t) ->
-            if t = ValueT(BaseT(TUnknown)) then
-                (try List.assoc id new_env with | Not_found -> raise TypeError)
-            else raise TypeError
+        | Var(id) ->
+            (try List.assoc id new_env with | Not_found -> raise TypeError)
 
         | Tuple ->
             let child_types = List.map (fun e -> type_of e /=. TypeError) typed_children in

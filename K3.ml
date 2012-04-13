@@ -55,7 +55,7 @@ type constant_t
 type expr_tag_t
 
     = Const of constant_t
-    | Var   of id_t * type_t
+    | Var   of id_t
     | Tuple
 
     | Just
@@ -63,7 +63,7 @@ type expr_tag_t
     | Empty     of type_t
     | Singleton of type_t
     | Combine
-    | Range     of type_t
+    | Range     of collection_type_t
 
     | Add
     | Mult
@@ -89,7 +89,7 @@ type expr_tag_t
     | GroupByAggregate
     | Sort
 
-    | Slice of type_t
+    | Slice
 
     | Insert
     | Delete
@@ -200,7 +200,7 @@ let string_of_arg a = match a with
 
 let string_of_expr_tag tag children = match tag with
     | Const(c)  -> "Const("^string_of_const(c)^")"
-    | Var(i, t) -> "Var("^i^": "^string_of_type(t)^")"
+    | Var(i) -> "Var("^i^")"
     | Tuple     -> "Tuple("^(String.concat ", " children)^")"
 
     | Just -> "Just("^(List.hd children)^")"
@@ -213,9 +213,9 @@ let string_of_expr_tag tag children = match tag with
             ^(List.nth children 0)^", "
             ^(List.nth children 1)
         ^")"
-    | Range(t)
+    | Range(ct)
         -> "Range("
-            ^string_of_type(t)^", "
+            ^string_of_collection_type(t)^", "
             ^(List.nth children 0)^", "
             ^(List.nth children 1)^", "
             ^(List.nth children 2)
@@ -277,7 +277,7 @@ let string_of_expr_tag tag children = match tag with
     | Sort
         -> "Sort("^(List.nth children 0)^", "^(List.nth children 1)^")"
 
-    | Slice(t)
+    | Slice
         -> "Slice("
             ^(List.nth children 0)^", "
             ^(List.nth children 1)
@@ -310,10 +310,10 @@ let string_of_expr_tag tag children = match tag with
             ^List.nth children 1
         ^")"
 
-    | Send(a)
+    | Send
         -> "Send("
-            ^string_of_address(a)^", "
-            ^(List.nth children 0)
+            ^(List.nth children 0)^", "
+            ^(List.nth children 1)^", "
         ^")"
 
 let string_of_expr_meta string_of_meta =

@@ -55,7 +55,7 @@ type constant_t
 type expr_tag_t
 
     = Const of constant_t
-    | Var   of id_t * type_t
+    | Var   of id_t
     | Tuple
 
     | Just
@@ -68,7 +68,7 @@ type expr_tag_t
      * Creates a new collection of length (`steps' + 1) of integers starting at
      * `start' at intervals of `stride'.
      *)
-    | Range     of type_t
+    | Range     of collection_type_t
 
     (* Add(x:T, y:T') -> T'': Overloaded disjunction; acts as addition for
      * numeric types and logical disjunction for booleans. `TInt' is promoted to
