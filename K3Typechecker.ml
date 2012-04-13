@@ -173,7 +173,19 @@ let rec deduce_expr_type env expr =
                     | (TSet, TSet)  -> TSet
             ) in ValueT(BaseT(TCollection(new_ct, a_et)))
 
-        | Range(t) -> t
+        | Range(ct) ->
+            let start = bind 0 /=. TypeError in
+            let stride = bind 1 /=. TypeError in
+            let steps = bind 2 /=. TypeError in (
+
+                (* We can compute a range if `stride' can be added to `start', and
+                 * `steps' is TInt. *)
+                match !: start, !: stride, !: steps with
+                    | (TInt|TFloat), (TInt|TFloat), TInt
+                        -> ValueT(BaseT(TCollection(ct, start)))
+                    | _ -> raise TypeError
+            )
+
 
         | (Add|Mult) ->
             let a = bind 0 /=. TypeError in
