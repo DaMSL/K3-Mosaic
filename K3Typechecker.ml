@@ -95,7 +95,7 @@ let (=~>) = ref_value_coerceable
 let (@:) f x = f x
 let (>>) f g = function x -> f (g x)
 
-let rec deduce_type env expr =
+let rec deduce_expr_type env expr =
     let (meta, tag), untyped_children = decompose_tree expr in
 
     (* Check Tag Arity *)
@@ -109,7 +109,7 @@ let rec deduce_type env expr =
         in
 
     (* Deduce the types of all children nodes. *)
-    let typed_children = List.map (deduce_type new_env) untyped_children in
+    let typed_children = List.map (deduce_expr_type new_env) untyped_children in
 
     (* Define some helpers. *)
     let attach_type t = recompose_tree (((meta, t), tag), typed_children) in
