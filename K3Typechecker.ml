@@ -129,6 +129,13 @@ let rec deduce_expr_type env expr =
             | TFunction(_, _) -> raise x
     in let (/=.) = value_or_raise in
 
+    (* An assertion that the given type is a collection. *)
+    let collection_or_raise bt x =
+        match bt with
+            | TCollection(c_t, e_t) -> (c_t, e_t)
+            | _ -> raise x
+    in let (/=@) = collection_or_raise in
+
     let bind = (type_of >> get_child) in
 
     (* Deduce the type of the current node. *)
@@ -152,20 +159,8 @@ let rec deduce_expr_type env expr =
         | Combine ->
             let a = bind 0 /=. TypeError in
             let b = bind 1 /=. TypeError in
-
-            (* Ensure `a' is a collection. *)
-            let (a_ct, a_et) = (
-                match !:a with
-                    | TCollection(a_ct, a_et) -> (a_ct, a_et)
-                    | _ -> raise TypeError
-            ) in
-
-            (* Ensure `b' is a collection. *)
-            let (b_ct, b_et) = (
-                match !:b with
-                    | TCollection(a_ct, a_et) -> (a_ct, a_et)
-                    | _ -> raise TypeError
-            ) in
+            let (a_ct, a_et) = !: a /=@ TypeError in
+            let (b_ct, b_et) = !: b /=@ TypeError in
 
             (* Only collections of matching element types can be combined. *)
             if a_et <> b_et then raise TypeError else
@@ -240,13 +235,7 @@ let rec deduce_expr_type env expr =
         | Iterate ->
             let a_t, r_t = bind 0 /=> TypeError in
             let collection = bind 1 /=. TypeError in
-
-            (* Ensure that `collection' is actually a collection. *)
-            let c_t, e_t = (
-                match !: collection with
-                    | TCollection(c_t, e_t) -> (c_t, e_t)
-                    | _ -> raise TypeError
-            ) in
+            let c_t, e_t = !: collection /=@ TypeError in
 
             (* Iterate function argument type must match collection element type. *)
             if not(e_t =~> a_t) then raise TypeError else
@@ -274,13 +263,7 @@ let rec deduce_expr_type env expr =
         | Map ->
             let a_t, r_t = bind 0 /=> TypeError in
             let collection = bind 1 /=. TypeError in
-
-            (* Ensure that `collection' is actually a collection. *)
-            let c_t, e_t = (
-                match !: collection with
-                    | TCollection(c_t, e_t) -> (c_t, e_t)
-                    | _ -> raise TypeError
-            ) in
+            let c_t, e_t = !: collection /=@ TypeError  in
 
             (* Element type should be coerceable to argument type. *)
             if not(e_t =~> a_t) then raise TypeError else
@@ -292,13 +275,7 @@ let rec deduce_expr_type env expr =
             let pa_t, pr_t = bind 0 /=> TypeError in
             let a_t, r_t = bind 1 /=> TypeError in
             let collection = bind 2 /=. TypeError in
-
-            (* Ensure that `collection' is actually a collection. *)
-            let c_t, e_t = (
-                match !: collection with
-                    | TCollection(c_t, e_t) -> (c_t, e_t)
-                    | _ -> raise TypeError
-            ) in
+            let c_t, e_t = !: collection /=@ TypeError in
 
             (* Element type should be coerceable to argument type. *)
             if not(e_t =~> a_t) then raise TypeError else
@@ -310,28 +287,24 @@ let rec deduce_expr_type env expr =
             ValueT(BaseT(TCollection(c_t, r_t)))
 
         | Flatten ->
-            let collection = bind 0 /=. TypeError in (
+            let collection = bind 0 /=. TypeError in
+            let (c_t1, e_t1) = !: collection /=@ TypeError in
+            let (c_t2, e_t2) = !: e_t1 /=@ TypeError in
 
-            (* Ensure `collection' is actually a collection of collections. *)
-            (* TODO: What if the inner collection type is a ref'd collection? *)
-            match !: collection with
-                | TCollection(c_t1,
-                      (BaseT(TCollection(c_t2, e_t2)))
-                    ) -> ValueT(BaseT(TCollection(c_t1, e_t2)))
-                | _ -> raise TypeError
-            )
+            (* Outer collection type, inner element type. *)
+            ValueT(BaseT(TCollection(c_t1, e_t2)))
+            (* match !: collection with *)
+                (* | TCollection(c_t1, *)
+                      (* (BaseT(TCollection(c_t2, e_t2))) *)
+                    (* ) -> ValueT(BaseT(TCollection(c_t1, e_t2))) *)
+                (* | _ -> raise TypeError *)
+            (* ) *)
 
         | Aggregate ->
             let agg_a_t, r_t = bind 0 /=> TypeError in
             let z_t = bind 1 /=. TypeError in
             let collection = bind 2 /=. TypeError in
-
-            (* Ensure that `collection' is actually a collection. *)
-            let c_t, e_t = (
-                match !: collection with
-                    | TCollection(c_t, e_t) -> (c_t, e_t)
-                    | _ -> raise TypeError
-            ) in (
+            let c_t, e_t = !: collection /=@ TypeError in (
 
                 (* Ensure that the aggregator has the correct form, function of
                  * tuple consisting of zero type and element type.
@@ -352,13 +325,7 @@ let rec deduce_expr_type env expr =
             let agg_a_t, r_t = bind 1 /=> TypeError in
             let z_t = bind 2 /=. TypeError in
             let collection = bind 3 /=. TypeError in
-
-            (* Ensure that `collection' is actually a collection. *)
-            let c_t, e_t = (
-                match !: collection with
-                    | TCollection(c_t, e_t) -> (c_t, e_t)
-                    | _ -> raise TypeError
-            ) in
+            let c_t, e_t = !: collection /=@ TypeError in
 
             (* Ensure that the grouper acts on the element type. *)
             if not(e_t =~> a_t) then raise TypeError else (
@@ -382,13 +349,7 @@ let rec deduce_expr_type env expr =
         | Sort ->
             let collection = bind 0 /=. TypeError in
             let cmp_a, cmp_r = bind 1 /=> TypeError in
-
-            (* Ensure that `collection' is actually a collection. *)
-            let c_t, e_t = (
-                match !: collection with
-                    | TCollection(c_t, e_t) -> (c_t, e_t)
-                    | _ -> raise TypeError
-            ) in (
+            let c_t, e_t = !: collection /=@ TypeError in (
 
                 (* Ensure that the comparator is well-formed. *)
                 match cmp_a, cmp_r with
@@ -402,13 +363,7 @@ let rec deduce_expr_type env expr =
         | Slice ->
             let collection = bind 0 /=. TypeError in
             let pattern = bind 1 /=. TypeError in
-
-            (* Ensure that `collection' is actually a collection. *)
-            let c_t, e_t = (
-                match !: collection with
-                    | TCollection(c_t, e_t) -> (c_t, e_t)
-                    | _ -> raise TypeError
-            ) in
+            let c_t, e_t = !: collection /=@ TypeError in
 
             let rec match_slice_pattern = (
                 function
