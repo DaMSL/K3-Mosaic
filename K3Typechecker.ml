@@ -238,8 +238,24 @@ let rec deduce_type env expr =
             ) in validate_block_type typed_children
 
         | Iterate ->
-            if List.for_all (fun x -> type_of x = (ValueT(BaseT(TUnit)))) typed_children
-            then (ValueT(BaseT(TUnit))) else raise TypeError
+            let a_t, r_t = bind 0 /=> TypeError in
+            let collection = bind 1 /=. TypeError in
+
+            (* Ensure that `collection' is actually a collection. *)
+            let c_t, e_t = (
+                match !: collection with
+                    | TCollection(c_t, e_t) -> (c_t, e_t)
+                    | _ -> raise TypeError
+            ) in
+
+            (* Iterate function argument type must match collection element type. *)
+            if not(e_t =~> a_t) then raise TypeError else
+
+            (* Iterate function must return TUnit. *)
+            if not(r_t = BaseT(TUnit)) then raise TypeError else
+
+            (* Iteration does not return a value. *)
+            ValueT(BaseT(TUnit))
 
         | IfThenElse ->
             let predicate = bind 0 /=. TypeError in
