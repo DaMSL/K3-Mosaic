@@ -463,10 +463,10 @@ let rec deduce_expr_type env expr =
 let rec deduce_type env p = match p with [] -> [] | s :: ss -> (
         match s with
             | Instruction(i) -> deduce_type env ss
-            | Declaration(d) -> (
+            | Declaration(d) -> let new_d, new_env = (
                 match d with
-                    | Global(i, t) -> Declaration(Global(i, t)) :: deduce_type ((i, t) :: env) ss
-                    | Foreign(i, t) -> Declaration(Foreign(i, t)) :: deduce_type ((i, t) :: env) ss
+                    | Global(i, t) -> (Global(i, t), ((i, t) :: env))
+                    | Foreign(i, t) -> (Foreign(i, t), ((i, t) :: env))
                     | Trigger(i, a, its, e) ->
                         let self_type = ValueT(BaseT(TTarget((Local(i)), !: (deduce_arg_type a)))) in
                         let new_bindings = (
@@ -480,17 +480,17 @@ let rec deduce_type env p = match p with [] -> [] | s :: ss -> (
                                 | (i', t', Some init) -> (i', t', Some (deduce_expr_type [] init))
                                 | (i', t', None) -> (i', t', None)
                         ) its in
-                        Declaration(Trigger(i, a, its', e')) :: deduce_type ((i, self_type) :: env) ss
+                        (Trigger(i, a, its', e'), ((i, self_type) :: env))
                     | Bind(a, b) ->
                         let source_type = (try List.assoc a env with Not_found -> raise TypeError) in
                         let target_type = (try List.assoc b env with Not_found -> raise TypeError) in
                         if source_type <> target_type then raise TypeError else
-                        Declaration(Bind(a, b)) :: deduce_type env ss
+                        (Bind(a, b), env)
                     | Consumable(c) -> (
                             match c with
-                                | Source(i, t) -> Declaration(Consumable(Source(i, t))) ::
-                                    deduce_type ((i, t) :: env) ss
-                                | _ -> Declaration(Consumable(c)) :: deduce_type env ss
+                                | Source(i, t) -> (Consumable(Source(i, t)), ((i, t) :: env))
+                                | _ -> (Consumable(c), env)
                         )
-            )
+                )
+            in Declaration(new_d) :: deduce_type new_env ss
         )
