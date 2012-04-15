@@ -362,7 +362,7 @@ let string_of_declaration d = match d with
         ^")"
 
     | Bind(i, i') -> "Bind("^i^", "^i'^")"
-    | Consumable(c) -> "Consumable("^c^")"
+    | Consumable(c) -> "Consumable("^string_of_consumable c^")"
 
 let string_of_instruction i = match i with
     | Consume(id) -> "Consume("^id^")"
