@@ -459,3 +459,36 @@ let rec deduce_expr_type env expr =
             if !: arg = expected_arg then ValueT(BaseT(TUnit))
             else raise TypeError
     in attach_type current_type
+
+let rec deduce_type env p = match p with [] -> [] | s :: ss -> (
+        match s with
+            | Instruction(i) -> deduce_type env ss
+            | Declaration(d) -> (
+                match d with
+                    | Global(i, t) -> s :: deduce_type ((i, t) :: env) ss
+                    | Foreign(i, t) -> s :: deduce_type ((i, t) :: env) ss
+                    | Trigger(i, a, its, e) ->
+                        let self_type = ValueT(BaseT(TTarget((Local(i)), !: (deduce_arg_type a)))) in
+                        let new_bindings = (
+                            match a with
+                                | AVar(i', t') -> [(i', ValueT(t'))]
+                                | ATuple(xs) -> (List.map (fun (i', t') -> (i', ValueT(t'))) xs)
+                        ) in
+                        let e' = deduce_expr_type ((i, self_type) :: new_bindings @ env) e in
+                        let its' = List.map (
+                            function
+                                | (i', t', Some init) -> (i', t', Some (deduce_expr_type [] init))
+                                | (i', t', None) -> (i', t', None)
+                        ) its in
+                        Declaration(Trigger(i, a, its', e')) :: deduce_type ((i, self_type) :: env) e
+                    | Bind(a, b) ->
+                        let source_type = (try List.assoc env a with Not_found -> raise TypeError) in
+                        let target_type = (try List.assoc env b with Not_found -> raise TypeError) in
+                        if a <> b then raise TypeError else s :: deduce_type env ss
+                    | Consumable(c) -> (
+                            match c with
+                                | Source(i, t) -> s :: deduce_type ((i, s) :: env) ss
+                                | _ -> deduce_type env ss
+                        )
+            )
+        )
