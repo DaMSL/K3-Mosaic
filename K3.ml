@@ -215,7 +215,7 @@ let string_of_expr_tag tag children = match tag with
         ^")"
     | Range(ct)
         -> "Range("
-            ^string_of_collection_type(t)^", "
+            ^string_of_collection_type(ct)^", "
             ^(List.nth children 0)^", "
             ^(List.nth children 1)^", "
             ^(List.nth children 2)
