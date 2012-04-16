@@ -9,6 +9,7 @@ type ocaml_K3_value_t
     | OFloat of float
     | OString of string
     | OTuple of ocaml_K3_value_t list
+    | ORef of ocaml_K3_value_t
     | OMaybe of ocaml_K3_value_t option
     | OSet of ocaml_K3_value_t list
     | OBag of ocaml_K3_value_t list
