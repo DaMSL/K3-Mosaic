@@ -18,6 +18,10 @@ type ocaml_K3_value_t
 
 exception RuntimeError
 
+let deref = function
+    | ORef(v) -> v
+    | v -> v
+
 let rec eval env e = let ((_, t), tag), children = decompose_tree e in
     let eval' n = eval env (List.nth children n) in
     match tag with
@@ -31,7 +35,7 @@ let rec eval env e = let ((_, t), tag), children = decompose_tree e in
             )
 
         | Add ->
-            let a, b = eval' 0, eval' 1 in (
+            let a, b = deref (eval' 0), deref (eval' 1) in (
                 match a, b with
                     | OFloat(f1), OFloat(f2) -> OFloat(f1 +. f2)
                     | OFloat(f1), OInt(i2) -> OFloat(f1 +. float_of_int i2)
@@ -40,7 +44,7 @@ let rec eval env e = let ((_, t), tag), children = decompose_tree e in
                     | _ -> raise RuntimeError
                 )
         | Mult ->
-            let a, b = eval' 0, eval' 1 in (
+            let a, b = deref (eval' 0), deref (eval' 1) in (
                 match a, b with
                     | OFloat(f1), OFloat(f2) -> OFloat(f1 *. f2)
                     | OFloat(f1), OInt(i2) -> OFloat(f1 *. float_of_int i2)
@@ -49,7 +53,7 @@ let rec eval env e = let ((_, t), tag), children = decompose_tree e in
                     | _ -> raise RuntimeError
                 )
         | Neg ->
-            let a = eval' 0 in (
+            let a = deref (eval' 0) in (
                 match a with
                     | OBool(b) -> OBool(not b)
                     | OInt(i) -> OInt(-i)
@@ -58,7 +62,7 @@ let rec eval env e = let ((_, t), tag), children = decompose_tree e in
             )
 
         | (Eq|Neq) as cmp ->
-            let a, b = eval' 0, eval' 1 in
+            let a, b = deref (eval' 0), deref (eval' 1) in
             let (===) = if cmp = Eq then (=) else (<>) in (
                 match a, b with
                     | OBool(b1), OBool(b2) -> OBool(b1 === b2)
@@ -72,7 +76,7 @@ let rec eval env e = let ((_, t), tag), children = decompose_tree e in
             )
 
         | (Lt|Leq) as cmp ->
-            let a, b = eval' 0, eval' 1 in
+            let a, b = deref (eval' 0), deref (eval' 1) in
             let (===) = if cmp = Lt then (<) else (<=) in (
                 match a, b with
                     | OBool(b1), OBool(b2) -> OBool(b1 === b2)
