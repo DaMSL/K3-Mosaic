@@ -96,4 +96,12 @@ let rec eval env e = let ((_, t), tag), children = decompose_tree e in
                     | _ -> raise RuntimeError
             )
 
+        | IfThenElse ->
+            let p = deref (eval' 0) in
+            let condition = (
+                match p with
+                    | VBool(b) -> b
+                    | _ -> raise RuntimeError
+            ) in
+            if condition then eval' 1 else eval' 2
         | _ -> raise RuntimeError
