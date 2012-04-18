@@ -112,4 +112,27 @@ let rec eval env e = let ((_, t), tag), children = decompose_tree e in
                     | VRef(r) -> r := right; VUnit
                     | _ -> raise RuntimeError
             )
+
+        | Lambda(arg) ->
+            let body = List.nth children 0 in VFunction(arg, body)
+
+        | Apply ->
+            let f = eval' 0 in
+            let arg = eval' 1 in
+            let args, body = (
+                match f with
+                    | VFunction(args, body) -> (args, body)
+                    | _ -> raise RuntimeError
+            ) in
+            let bindings = (
+                match args with
+                    | AVar(id, t) -> [(id, arg)]
+                    | ATuple(idts) -> (
+                        match arg with
+                            | VTuple(vs) when List.length vs = List.length idts ->
+                                List.combine (fst (List.split idts)) vs
+                            | _ -> raise RuntimeError
+                        )
+            ) in eval (bindings @ env) body
+
         | _ -> raise RuntimeError
