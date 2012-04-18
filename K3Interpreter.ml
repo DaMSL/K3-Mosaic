@@ -104,4 +104,12 @@ let rec eval env e = let ((_, t), tag), children = decompose_tree e in
                     | _ -> raise RuntimeError
             ) in
             if condition then eval' 1 else eval' 2
+
+        | AssignToRef ->
+            let left = eval' 0 in
+            let right = deref (eval' 1) in (
+                match left with
+                    | VRef(r) -> r := right; VUnit
+                    | _ -> raise RuntimeError
+            )
         | _ -> raise RuntimeError
