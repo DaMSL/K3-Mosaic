@@ -16,4 +16,4 @@ type value_t
     | VList of value_t list
     | VFunction of arg_t * (int * type_t) expr_t
 
-val eval: (id_t * value_t) list -> (int * type_t) expr_t -> value_t
+val eval: (id_t * value_t) list -> (int * type_t) expr_t -> (id_t * value_t) list * value_t
