@@ -137,6 +137,9 @@ let rec eval env e = let ((_, t), tag), children = decompose_tree e in
                         )
             ) in eval (bindings @ enva) body
 
+        | Block ->
+            let env', res' = eval_chain env children in env', List.hd (List.rev res')
+
         | IfThenElse ->
             let envp, p = eval' env 0 in
             let condition = (
