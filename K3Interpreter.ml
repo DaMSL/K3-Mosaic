@@ -50,8 +50,40 @@ let rec eval env e = let ((_, t), tag), children = decompose_tree e in
         | Tuple -> let env', res' = eval_chain env children in env', VTuple(res')
         | Just -> let env', res' = eval' env 0 in env', VMaybe(Some (res'))
 
+        | Empty(vt) ->
+            let c_t, e_t = (
+                match !: vt with
+                | TCollection(c_t, e_t) -> (c_t, e_t)
+                | _ -> raise RuntimeError
+            ) in let collection = (
+                match c_t with
+                | TSet -> VSet([])
+                | TBag -> VBag([])
+                | TList -> VList([])
+            ) in env, (
+                match vt with
+                | TRef(_) -> VRef(ref collection)
+                | BaseT(_) -> collection
+            )
+
+        | Singleton(vt) ->
+            let env', element = eval' env 0 in
+            let c_t, e_t = (
+                match !: vt with
+                | TCollection(c_t, e_t) -> (c_t, e_t)
+                | _ -> raise RuntimeError
+            ) in let collection = (
+                match c_t with
+                | TSet -> VSet([element])
+                | TBag -> VBag([element])
+                | TList -> VList([element])
+            ) in env, (
+                match vt with
+                | TRef(_) -> VRef(ref collection)
+                | BaseT(_) -> collection
+            )
+
         | Add ->
-            (* let a, b = deref (eval' 0), deref (eval' 1) in ( *)
             let enva, a' = eval' env 0 in
             let envb, b' = eval' enva 1 in
             let a, b = deref a', deref b' in envb, (
