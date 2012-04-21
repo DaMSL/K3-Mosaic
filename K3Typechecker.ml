@@ -151,8 +151,8 @@ let rec deduce_expr_type env expr =
         | Just -> let inner_type = bind 0 /=. TypeError in
             ValueT(BaseT(TMaybe(!:inner_type)))
 
-        | Empty(t)      -> t
-        | Singleton(t)  -> t
+        | Empty(t)      -> ValueT(t)
+        | Singleton(t)  -> ValueT(t)
 
         | Combine ->
             let a = bind 0 /=. TypeError in

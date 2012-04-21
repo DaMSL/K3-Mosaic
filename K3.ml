@@ -60,8 +60,8 @@ type expr_tag_t
 
     | Just
 
-    | Empty     of type_t
-    | Singleton of type_t
+    | Empty     of value_type_t
+    | Singleton of value_type_t
     | Combine
     | Range     of collection_type_t
 
@@ -205,9 +205,9 @@ let string_of_expr_tag tag children = match tag with
 
     | Just -> "Just("^(List.hd children)^")"
 
-    | Empty(t) -> "Empty("^string_of_type(t)^")"
+    | Empty(t) -> "Empty("^string_of_value_type(t)^")"
     | Singleton(t)
-        -> "Singleton("^string_of_type(t)^", "^(List.hd children)^")"
+        -> "Singleton("^string_of_value_type(t)^", "^(List.hd children)^")"
     | Combine
         -> "Combine("
             ^(List.nth children 0)^", "

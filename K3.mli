@@ -60,8 +60,8 @@ type expr_tag_t
 
     | Just
 
-    | Empty     of type_t
-    | Singleton of type_t
+    | Empty     of value_type_t
+    | Singleton of value_type_t
     | Combine
 
     (* Range(start:TInt, stride:TInt, steps:TInt) -> TCollection(C, TInt):
