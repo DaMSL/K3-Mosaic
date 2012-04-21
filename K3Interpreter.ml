@@ -198,13 +198,6 @@ let rec eval env e = let ((_, t), tag), children = decompose_tree e in
                 | VFunction(inner_func) -> inner_func envf a
                 | _ -> raise RuntimeError
             )
-            (* let args, body = ( *)
-                (* match f with *)
-                    (* | VFunction(args, body) -> (args, body) *)
-                    (* | _ -> raise RuntimeError *)
-            (* ) in *)
-            (* let bindings = bind_args args a *)
-            (* in eval (bindings @ enva) body *)
 
         | Block ->
             let env', res' = eval_chain env children in env', List.hd (List.rev res')
