@@ -83,6 +83,14 @@ let rec eval env e = let ((_, t), tag), children = decompose_tree e in
                 | BaseT(_) -> collection
             )
 
+        | Combine ->
+            let enva, a = eval' env 0 in
+            let envb, b = eval' enva 1 in envb, (
+                match deref a, deref b with
+                | VList(xs), VList(ys) -> VList(xs @ ys)
+                | _ -> raise RuntimeError
+            )
+
         | Add ->
             let enva, a' = eval' env 0 in
             let envb, b' = eval' enva 1 in
