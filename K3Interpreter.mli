@@ -14,6 +14,6 @@ type value_t
     | VSet of value_t list
     | VBag of value_t list
     | VList of value_t list
-    | VFunction of arg_t * (int * type_t) expr_t
+    | VFunction of ((id_t * value_t) list -> value_t -> (id_t * value_t) list * value_t)
 
 val eval: (id_t * value_t) list -> (int * type_t) expr_t -> (id_t * value_t) list * value_t

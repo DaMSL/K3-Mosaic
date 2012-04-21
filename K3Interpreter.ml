@@ -15,7 +15,7 @@ type value_t
     | VSet of value_t list
     | VBag of value_t list
     | VList of value_t list
-    | VFunction of arg_t * (int * type_t) expr_t
+    | VFunction of ((id_t * value_t) list -> value_t -> (id_t * value_t) list * value_t)
 
 exception RuntimeError
 
@@ -32,6 +32,10 @@ let bind_args a v =
             List.combine (fst (List.split its)) vs
         | _ -> raise RuntimeError
     )
+
+let rec mkrange start stride steps =
+    if steps = 0 then []
+    else start :: (mkrange (start + stride) stride (steps - 1))
 
 let rec eval env e = let ((_, t), tag), children = decompose_tree e in
     let eval' cenv n = eval cenv (List.nth children n) in
@@ -89,6 +93,21 @@ let rec eval env e = let ((_, t), tag), children = decompose_tree e in
                 match deref a, deref b with
                 | VList(xs), VList(ys) -> VList(xs @ ys)
                 | _ -> raise RuntimeError
+            )
+
+        | Range(ct) ->
+            let enva, start = eval' env 0 in
+            let envb, stride = eval' enva 1 in
+            let envc, steps = eval' envb 2 in envc, (
+                match ct with
+                | TList -> (
+                    match deref start, deref stride, deref steps with
+                    | VInt(a), VInt(b), VInt(c) when c >= 0 -> VList(
+                            List.map (fun x -> VInt(x)) (mkrange a b c)
+                        )
+                    | _ -> raise RuntimeError
+                )
+                | _ -> print_endline "ha"; raise RuntimeError
             )
 
         | Add ->
@@ -166,18 +185,26 @@ let rec eval env e = let ((_, t), tag), children = decompose_tree e in
                     | _ -> raise RuntimeError
             )
 
-        | Lambda(arg) -> env, VFunction(arg, List.hd children)
+        | Lambda(arg) ->
+            let apply_function old_env input_args =
+                let bindings = bind_args arg input_args in
+                eval (bindings @ old_env) (List.hd children)
+            in env, VFunction(apply_function)
 
         | Apply ->
             let envf, f = eval' env 0 in
-            let enva, a = eval' envf 1 in
-            let args, body = (
+            let enva, a = eval' envf 1 in (
                 match f with
-                    | VFunction(args, body) -> (args, body)
-                    | _ -> raise RuntimeError
-            ) in
-            let bindings = bind_args args a
-            in eval (bindings @ enva) body
+                | VFunction(inner_func) -> inner_func envf a
+                | _ -> raise RuntimeError
+            )
+            (* let args, body = ( *)
+                (* match f with *)
+                    (* | VFunction(args, body) -> (args, body) *)
+                    (* | _ -> raise RuntimeError *)
+            (* ) in *)
+            (* let bindings = bind_args args a *)
+            (* in eval (bindings @ enva) body *)
 
         | Block ->
             let env', res' = eval_chain env children in env', List.hd (List.rev res')
@@ -190,6 +217,36 @@ let rec eval env e = let ((_, t), tag), children = decompose_tree e in
                     | _ -> raise RuntimeError
             ) in
             if condition then eval' envp 1 else eval' envp 2
+
+        | Map ->
+            let collection_of_type_as v vl = (
+                match v with
+                | VSet(_) -> VSet(vl)
+                | VBag(_) -> VBag(vl)
+                | VList(_) -> VList(vl)
+                | _ -> raise RuntimeError
+            ) in
+            let envf, f = eval' env 0 in
+            let envc, c = eval' envf 1 in
+            let inner_func = (
+                match f with
+                | VFunction(f') -> f'
+                | _ -> raise RuntimeError
+            ) in
+            let inner_c = (
+                match c with
+                | VSet(vl) -> vl
+                | VBag(vl) -> vl
+                | VList(vl) -> vl
+                | _ -> raise RuntimeError
+            ) in
+            let final_env, map_results = List.fold_left (
+                fun (cenv, vl) v ->
+                    let nenv, mv = inner_func cenv v
+                    in nenv, vl @ [mv]
+            ) (envc, []) inner_c in
+            final_env, collection_of_type_as c map_results
+
 
         | _ -> raise RuntimeError
 
