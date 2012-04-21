@@ -247,7 +247,6 @@ let rec eval env e = let ((_, t), tag), children = decompose_tree e in
             ) (envc, []) inner_c in
             final_env, collection_of_type_as c map_results
 
-
         | _ -> raise RuntimeError
 
 and eval_chain env exprs =
