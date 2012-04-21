@@ -33,6 +33,13 @@ let bind_args a v =
         | _ -> raise RuntimeError
     )
 
+let collection_of_type_as v vl =
+    match v with
+    | VSet(_) -> VSet(vl)
+    | VBag(_) -> VBag(vl)
+    | VList(_) -> VList(vl)
+    | _ -> raise RuntimeError
+
 let rec mkrange start stride steps =
     if steps = 0 then []
     else start :: (mkrange (start + stride) stride (steps - 1))
@@ -212,13 +219,6 @@ let rec eval env e = let ((_, t), tag), children = decompose_tree e in
             if condition then eval' envp 1 else eval' envp 2
 
         | Map ->
-            let collection_of_type_as v vl = (
-                match v with
-                | VSet(_) -> VSet(vl)
-                | VBag(_) -> VBag(vl)
-                | VList(_) -> VList(vl)
-                | _ -> raise RuntimeError
-            ) in
             let envf, f = eval' env 0 in
             let envc, c = eval' envf 1 in
             let inner_func = (
@@ -239,6 +239,37 @@ let rec eval env e = let ((_, t), tag), children = decompose_tree e in
                     in nenv, vl @ [mv]
             ) (envc, []) inner_c in
             final_env, collection_of_type_as c map_results
+
+        | FilterMap ->
+            let envp, p = eval' env 0 in
+            let envf, f = eval' envp 1 in
+            let envc, c = eval' envf 2 in
+            let inner_pred = (
+                match p with
+                | VFunction(p') -> p'
+                | _ -> raise RuntimeError
+            ) in
+            let inner_func = (
+                match f with
+                | VFunction(f') -> f'
+                | _ -> raise RuntimeError
+            ) in
+            let inner_c = (
+                match c with
+                | VSet(vl) -> vl
+                | VBag(vl) -> vl
+                | VList(vl) -> vl
+                | _ -> raise RuntimeError
+            ) in
+            let final_env, filtermap_results = List.fold_left (
+                fun (cenv, vl) v ->
+                    let penv, fv = inner_pred cenv v in
+                    if fv = VBool(true) then
+                        let nenv, mv = inner_func cenv v
+                        in nenv, vl @ [mv]
+                    else penv, vl
+            ) (envc, []) inner_c in
+            final_env, collection_of_type_as c filtermap_results
 
         | _ -> raise RuntimeError
 
