@@ -23,6 +23,16 @@ let deref = function
     | VRef(v) -> !v
     | v -> v
 
+let bind_args a v =
+    match a with
+    | AVar(i, t) -> [(i, v)]
+    | ATuple(its) -> (
+        match v with
+        | VTuple(vs) when List.length vs = List.length its ->
+            List.combine (fst (List.split its)) vs
+        | _ -> raise RuntimeError
+    )
+
 let rec eval env e = let ((_, t), tag), children = decompose_tree e in
     let eval' cenv n = eval cenv (List.nth children n) in
     match tag with
@@ -126,16 +136,8 @@ let rec eval env e = let ((_, t), tag), children = decompose_tree e in
                     | VFunction(args, body) -> (args, body)
                     | _ -> raise RuntimeError
             ) in
-            let bindings = (
-                match args with
-                    | AVar(id, t) -> [(id, a)]
-                    | ATuple(idts) -> (
-                        match a with
-                            | VTuple(vs) when List.length vs = List.length idts ->
-                                List.combine (fst (List.split idts)) vs
-                            | _ -> raise RuntimeError
-                        )
-            ) in eval (bindings @ enva) body
+            let bindings = bind_args args a
+            in eval (bindings @ enva) body
 
         | Block ->
             let env', res' = eval_chain env children in env', List.hd (List.rev res')
