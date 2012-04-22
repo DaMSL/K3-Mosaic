@@ -271,6 +271,17 @@ let rec eval env e = let ((_, t), tag), children = decompose_tree e in
             ) (envc, []) inner_c in
             final_env, collection_of_type_as c filtermap_results
 
+        | Peek ->
+            let envc, c = eval' env 0 in envc, (
+                match c with
+                | VList(inner_c) -> (
+                    match inner_c with
+                    | h :: t -> h
+                    | [] -> raise RuntimeError
+                )
+                | _ -> raise RuntimeError
+            )
+
         | _ -> raise RuntimeError
 
 and eval_chain env exprs =
