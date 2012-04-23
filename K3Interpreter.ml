@@ -285,6 +285,27 @@ let rec eval env e = let ((_, t), tag), children = decompose_tree e in
                 | _ -> raise RuntimeError
             )
 
+        | Slice ->
+            let envc, c = eval' env 0 in
+            let envp, p = eval' envc 1 in
+            let predicates = (
+                match p with
+                | VTuple(vs) ->
+                    fun v -> (
+                        match v with
+                        | VTuple(vs') ->
+                            List.for_all2 (fun x -> fun y -> x = VUnknown || x = y) vs vs'
+                        | _ -> raise RuntimeError
+                    )
+                | VUnknown -> (fun v -> true)
+                | value -> fun v -> v == value
+            ) in
+            let inner_c = (
+                match c with
+                | VList(vs) -> vs
+                | _ -> raise RuntimeError
+            ) in envp, collection_of_type_as c (List.filter predicates inner_c)
+
         | _ -> raise RuntimeError
 
 and eval_chain env exprs =

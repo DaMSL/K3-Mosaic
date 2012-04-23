@@ -392,7 +392,7 @@ let rec deduce_expr_type env expr =
                     | TTuple(p_ts), TTuple(e_ts)
                         when match_slice_pattern (p_ts, e_ts) ->
                             ValueT(collection)
-                    | p_t, e_bt when p_t = e_bt -> ValueT(collection)
+                    | p_t, e_bt when p_t = e_bt || p_t = TUnknown -> ValueT(collection)
                     | _ -> raise TypeError
             )
 
