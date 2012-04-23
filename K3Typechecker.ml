@@ -57,6 +57,8 @@ let check_tag_arity tag children = let length = List.length children in
 let type_of expr = let ((id, t), tag), children = decompose_tree expr in t
 
 let deduce_constant_type c = let constant_type = match c with
+        | CUnit -> TUnit
+        | CUnknown -> TUnknown
         | CBool(_) -> TBool
         | CInt(_) -> TInt
         | CFloat(_) -> TFloat

@@ -3,6 +3,7 @@ open K3
 
 type value_t
     = VUnit
+    | VUnknown
     | VBool of bool
     | VByte of int
     | VInt of int

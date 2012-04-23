@@ -4,6 +4,7 @@ open K3Typechecker
 
 type value_t
     = VUnit
+    | VUnknown
     | VBool of bool
     | VByte of int
     | VInt of int
@@ -49,6 +50,8 @@ let rec eval env e = let ((_, t), tag), children = decompose_tree e in
     match tag with
         | Const(c) -> env, (
             match c with
+                | CUnit -> VUnit
+                | CUnknown -> VUnknown
                 | CInt(n) -> VInt(n)
                 | CFloat(n) -> VFloat(n)
                 | CString(s) -> VString(s)
