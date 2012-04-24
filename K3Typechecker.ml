@@ -305,12 +305,6 @@ let rec deduce_expr_type env expr =
 
             (* Outer collection type, inner element type. *)
             ValueT(BaseT(TCollection(c_t1, e_t2)))
-            (* match !: collection with *)
-                (* | TCollection(c_t1, *)
-                      (* (BaseT(TCollection(c_t2, e_t2))) *)
-                    (* ) -> ValueT(BaseT(TCollection(c_t1, e_t2))) *)
-                (* | _ -> raise TypeError *)
-            (* ) *)
 
         | Aggregate ->
             let agg_a_t, r_t = bind 0 /=> TypeError in
