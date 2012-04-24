@@ -45,7 +45,9 @@ type arg_t
 
 (* Constants *)
 type constant_t
-    = CBool     of bool
+    = CUnit
+    | CUnknown
+    | CBool     of bool
     | CInt      of int
     | CFloat    of float
     | CString   of string
@@ -185,6 +187,8 @@ let string_of_type t = match t with
     | ValueT(t) -> string_of_value_type(t)
 
 let string_of_const c = match c with
+    | CUnit      -> "CUnit"
+    | CUnknown   -> "CUnknown"
     | CBool(b)   -> "CBool("^string_of_bool(b)^")"
     | CInt(i)    -> "CInt("^string_of_int(i)^")"
     | CFloat(f)  -> "CFloat("^string_of_float(f)^")"

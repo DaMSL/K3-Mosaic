@@ -45,7 +45,9 @@ type arg_t
 
 (* Constants *)
 type constant_t
-    = CBool     of bool
+    = CUnit
+    | CUnknown
+    | CBool     of bool
     | CInt      of int
     | CFloat    of float
     | CString   of string

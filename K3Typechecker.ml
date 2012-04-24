@@ -57,6 +57,8 @@ let check_tag_arity tag children = let length = List.length children in
 let type_of expr = let ((id, t), tag), children = decompose_tree expr in t
 
 let deduce_constant_type c = let constant_type = match c with
+        | CUnit -> TUnit
+        | CUnknown -> TUnknown
         | CBool(_) -> TBool
         | CInt(_) -> TInt
         | CFloat(_) -> TFloat
@@ -303,12 +305,6 @@ let rec deduce_expr_type env expr =
 
             (* Outer collection type, inner element type. *)
             ValueT(BaseT(TCollection(c_t1, e_t2)))
-            (* match !: collection with *)
-                (* | TCollection(c_t1, *)
-                      (* (BaseT(TCollection(c_t2, e_t2))) *)
-                    (* ) -> ValueT(BaseT(TCollection(c_t1, e_t2))) *)
-                (* | _ -> raise TypeError *)
-            (* ) *)
 
         | Aggregate ->
             let agg_a_t, r_t = bind 0 /=> TypeError in
@@ -390,7 +386,7 @@ let rec deduce_expr_type env expr =
                     | TTuple(p_ts), TTuple(e_ts)
                         when match_slice_pattern (p_ts, e_ts) ->
                             ValueT(collection)
-                    | p_t, e_bt when p_t = e_bt -> ValueT(collection)
+                    | p_t, e_bt when p_t = e_bt || p_t = TUnknown -> ValueT(collection)
                     | _ -> raise TypeError
             )
 
