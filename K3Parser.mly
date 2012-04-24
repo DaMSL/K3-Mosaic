@@ -32,7 +32,7 @@
 
 %token EOF
 
-%token <K3.type_t> TYPE
+%token <K3.base_type_t> TYPE
 
 %token LPAREN RPAREN COMMA SEMICOLON
 

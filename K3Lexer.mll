@@ -62,7 +62,9 @@ rule tokenize = parse
 
     | "do" { DO }
 
+    | "unit" { TYPE TUnit }
     | "bool" { TYPE TBool }
+    | "byte" { TYPE TByte }
     | "int" { TYPE TInt }
     | "float" { TYPE TFloat }
     | "string" { TYPE TString }
