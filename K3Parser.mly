@@ -25,6 +25,7 @@
         | e :: es -> (e, i) :: accumulate_slice_indices es (i + 1)
 %}
 
+%token UNIT UNKNOWN
 %token <int> INTEGER
 %token <float> FLOAT
 %token <string> STRING

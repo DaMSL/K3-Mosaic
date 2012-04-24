@@ -22,6 +22,8 @@ rule tokenize = parse
     | '"' (([^'"']|"\\\"")* as s) '"'  { STRING s }
     | "true" { BOOL true }
     | "false" { BOOL false }
+    | "_" { UNKNOWN }
+    | "()" { UNIT }
 
     | '(' { LPAREN }
     | ')' { RPAREN }
