@@ -207,7 +207,7 @@ type consumable_t
 type 'a declaration_t
     = Global        of id_t * type_t
     | Foreign       of id_t * type_t
-    | Trigger       of id_t * arg_t * (id_t * type_t * 'a expr_t option) list * 'a expr_t
+    | Trigger       of id_t * arg_t * (id_t * value_type_t) list * 'a expr_t
     | Bind          of id_t * id_t
     | Consumable    of consumable_t
 

@@ -125,7 +125,7 @@ type consumable_t
 type 'a declaration_t
     = Global        of id_t * type_t
     | Foreign       of id_t * type_t
-    | Trigger       of id_t * arg_t * (id_t * type_t * 'a expr_t option) list * 'a expr_t
+    | Trigger       of id_t * arg_t * (id_t * value_type_t) list * 'a expr_t
     | Bind          of id_t * id_t
     | Consumable    of consumable_t
 
@@ -317,7 +317,7 @@ let string_of_expr_tag tag children = match tag with
     | Send
         -> "Send("
             ^(List.nth children 0)^", "
-            ^(List.nth children 1)^", "
+            ^(List.nth children 1)
         ^")"
 
 let string_of_expr_meta string_of_meta =
@@ -353,15 +353,7 @@ let string_of_declaration d = match d with
 
     | Trigger(i, arg, ds, e)
         -> "Trigger("^i^", "^string_of_arg(arg)^", ["
-            ^(String.concat ", " (List.map
-                (function (i', t', e') -> "("
-                    ^i'^", " ^string_of_type(t') ^", "^(
-                        match e' with
-                            | Some e'' -> string_of_expr(e'')
-                            | None -> ""
-                        )
-                    ^")"
-                ) ds))^"], "
+            ^String.concat ", " (List.map (fun (id, t) -> "("^id^", "^string_of_value_type t^")") ds)^"], "
             ^string_of_expr(e)
         ^")"
 

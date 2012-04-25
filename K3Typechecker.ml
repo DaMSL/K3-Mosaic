@@ -51,7 +51,7 @@ let check_tag_arity tag children = let length = List.length children in
 
         | AssignToRef   -> 2
 
-        | Send(_)   -> 1
+        | Send -> 1
     in length = correct_arity
 
 let type_of expr = let ((id, t), tag), children = decompose_tree expr in t

@@ -17,13 +17,19 @@ rule tokenize = parse
     | whitespace { tokenize lexbuf }
     | eof { EOF }
 
+    | "declare" { DECLARE }
+    | "foreign" { FOREIGN }
+    | "trigger" { TRIGGER }
+    | "consume" { CONSUME }
+
+    | "()" { UNIT }
+    | '_' { UNKNOWN }
+    | "nothing" { NOTHING }
+    | "true" { BOOL true }
+    | "false" { BOOL false }
     | integer as value { INTEGER (int_of_string value) }
     | real as value { FLOAT (float_of_string value) }
     | '"' (([^'"']|"\\\"")* as s) '"'  { STRING s }
-    | "true" { BOOL true }
-    | "false" { BOOL false }
-    | "_" { UNKNOWN }
-    | "()" { UNIT }
 
     | '(' { LPAREN }
     | ')' { RPAREN }
@@ -52,6 +58,9 @@ rule tokenize = parse
     | "<=" { LEQ }
     | "!=" { NEQ }
 
+    | '>' { GT }
+    | ">=" { GEQ }
+
     | "->" { RARROW }
     | "<->" { LRARROW }
     | ':' { COLON }
@@ -59,6 +68,7 @@ rule tokenize = parse
 
     | '?' { QUESTION }
     | '=' { GETS }
+    | ":=" { COLONGETS }
 
     | "++" { CONCAT }
 
@@ -70,6 +80,11 @@ rule tokenize = parse
     | "int" { TYPE TInt }
     | "float" { TYPE TFloat }
     | "string" { TYPE TString }
+    | "maybe" { MAYBE }
+    | "ref" { REF }
+    | "just" { JUST }
+
+    | "range" { RANGE }
 
     | "map" { MAP }
     | "iterate" { ITERATE }
@@ -78,9 +93,6 @@ rule tokenize = parse
     | "fold" { AGGREGATE }
     | "groupby" { GROUPBYAGGREGATE }
     | "sort" { SORT }
-    | "rank" { RANK }
-    | "head" { HEAD }
-    | "tail" { TAIL }
 
     | "if" { IF }
     | "then" { THEN }
@@ -88,20 +100,11 @@ rule tokenize = parse
 
     | "send" { SEND }
 
+    | "insert" { INSERT }
+    | "update" { UPDATE }
+    | "delete" { DELETE }
+
     | '@' { ANNOTATE }
-
-    | ">>=" { BINDARROW }
-
-    | "declare" { DECLARE }
-    | "foreign" { FOREIGN }
-    | "trigger" { TRIGGER }
-    | "bind" { BIND }
-    | "consume" { CONSUME }
-    | "loop" { LOOP }
-    | "source" { SOURCE }
-
-    | "input adaptor" { INPUT_ADAPTOR }
-    | "output adaptor" { OUTPUT_ADAPTOR }
 
     | identifier as name {
         IDENTIFIER (name)

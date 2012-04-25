@@ -18,18 +18,18 @@
         | [] -> mkexpr (Empty(ctype)) []
         | [e] -> mkexpr (Singleton(ctype)) [e]
         | e :: es -> mkexpr Combine [mkexpr (Singleton(ctype)) [e]; build_collection es ctype]
-
-    let rec accumulate_slice_indices exprs i = match exprs with
-        | [] -> []
-        | Leaf(_, Var("_", _)) :: es -> accumulate_slice_indices es (i + 1)
-        | e :: es -> (e, i) :: accumulate_slice_indices es (i + 1)
 %}
 
-%token UNIT UNKNOWN
+%token DECLARE FOREIGN TRIGGER CONSUME
+
+%token UNIT UNKNOWN NOTHING
 %token <int> INTEGER
 %token <float> FLOAT
 %token <string> STRING
 %token <bool> BOOL
+%token MAYBE JUST
+%token REF
+%token RANGE
 
 %token EOF
 
@@ -43,23 +43,22 @@
 
 %token CONCAT
 
-%token AND OR NOT LT EQ LEQ NEQ
+%token AND OR NOT LT EQ LEQ NEQ GT GEQ
 
 %token BACKSLASH LRARROW RARROW
 
 %token COLON
 
 %token QUESTION
+%token INSERT UPDATE DELETE
 
-%token GETS
+%token GETS COLONGETS
 
 %token DO
 
 %token MAP ITERATE FILTERMAP FLATTEN
 %token AGGREGATE GROUPBYAGGREGATE
 %token SORT RANK
-
-%token HEAD TAIL
 
 %token IF THEN ELSE
 
@@ -69,17 +68,9 @@
 
 %token <string> IDENTIFIER
 
-%token DECLARE
-%token TRIGGER
-%token FOREIGN
-%token BIND BINDARROW
-%token CONSUME
-%token LOOP
-%token SOURCE
-%token INPUT_ADAPTOR OUTPUT_ADAPTOR
-
 %start program
 %type <int K3.program_t> program
+%type <int K3.expr_t> expr
 
 %right RARROW
 %right LRARROW
@@ -88,7 +79,7 @@
 
 %right IF THEN ELSE
 
-%left LT EQ LEQ NEQ
+%left LT EQ LEQ NEQ GT GEQ
 
 %left OR
 %left AND
@@ -105,157 +96,150 @@
 %%
 
 program:
-    | EOF { [Declaration(Trigger("on_start", ATuple([]), [], !globals))] }
+    | statement { [$1] }
     | statement program { $1 :: $2 }
+;
 
 statement:
-    | global { Declaration($1) }
-    | foreign { Declaration($1) }
-    | trigger { Declaration($1) }
-    | bind { Declaration($1) }
-    | consume { Directive($1) }
-    | loop { Declaration($1) }
-    | source { Declaration($1) }
-    | adaptor { Declaration($1) }
+    | declaration { Declaration($1) }
+    | instruction { Instruction($1) }
+;
 
-global:
-    | DECLARE identifier SEMICOLON { Global(fst $2, snd $2) }
-    | DECLARE identifier GETS expr SEMICOLON {
-        globals := !globals @ [Assign(fst $2, $4)]; Global(fst $2, snd $2)
-    }
+declaration:
+    | DECLARE IDENTIFIER COLON type_expr { Global($2, $4) }
+    | DECLARE IDENTIFIER COLON type_expr GETS expr { Global($2, $4) }
+    | FOREIGN IDENTIFIER COLON type_expr { Foreign($2, $4) }
 
-foreign:
-    | FOREIGN identifier SEMICOLON { Foreign(fst $2, snd $2) }
+    | TRIGGER IDENTIFIER arg LBRACE RBRACE GETS expr { Trigger($2, $3, [], $7) }
+    | TRIGGER IDENTIFIER arg LBRACE value_typed_identifier_list RBRACE GETS expr { Trigger($2, $3, $5, $8) }
+;
 
-trigger:
-    | TRIGGER IDENTIFIER arg LBRACE effect_seq RBRACE {
-        let names, effects = List.split $5 in
-        let declarations = List.filter (
-            function i -> match i with
-                | ("_", TUnknown) -> false
-                | _ -> true
-            ) names in
-        Trigger($2, $3, declarations, effects)
-    }
-
-bind: BIND IDENTIFIER BINDARROW id_list SEMICOLON { Bind($2, $4) }
-
-consume: CONSUME id_list SEMICOLON { Consume($2) }
-
-loop: LOOP IDENTIFIER GETS id_list SEMICOLON { Loop($2, $4) }
-
-source: SOURCE identifier SEMICOLON { Source(fst $2, snd $2) }
-
-adaptor:
-    | INPUT_ADAPTOR identifier SEMICOLON { InputAdaptor(fst $2, snd $2) }
-    | OUTPUT_ADAPTOR identifier SEMICOLON { OutputAdaptor(fst $2, snd $2) }
-
-id_list:
-    | IDENTIFIER { [$1] }
-    | IDENTIFIER COMMA id_list { $1 :: $3 }
-
-effect:
-    | DECLARE identifier GETS expr { ($2, Assign(fst $2, $4)) }
-    | identifier GETS expr { (("_", TUnknown), Assign(fst $1, $3)) }
-    | expr { (("_", TUnknown), Mutate($1)) }
-
-effect_seq:
-    | effect SEMICOLON { [$1] }
-    | effect SEMICOLON effect_seq { $1 :: $3 }
+instruction:
+    | CONSUME IDENTIFIER { Consume($2) }
+;
 
 type_expr:
-    | primitive_type_expr { $1 }
-    | primitive_type_expr RARROW primitive_type_expr { TFunction($1, $3) }
+    | value_type_expr { ValueT($1) }
+    | LPAREN value_type_expr RARROW value_type_expr RPAREN { TFunction($2, $4) }
+;
 
-primitive_type_expr:
+value_type_expr:
+    | base_type_expr { BaseT($1) }
+    | LPAREN base_type_expr REF RPAREN { TRef($2) }
+;
+
+base_type_expr:
     | TYPE { $1 }
+    | LPAREN base_type_tuple RPAREN { $2 }
+    | LBRACE value_type_expr RBRACE { TCollection(TSet, $2) }
+    | LBRACEBAR value_type_expr RBRACEBAR { TCollection(TBag, $2) }
+    | LBRACKET value_type_expr RBRACKET { TCollection(TList, $2) }
+    | LPAREN MAYBE base_type_expr RPAREN { TMaybe($3) }
+;
 
-    | LBRACE primitive_type_tuple RBRACE { TCollection(TSet, $2) }
-    | LBRACEBAR primitive_type_tuple RBRACEBAR { TCollection(TBag, $2) }
-    | LBRACKET primitive_type_tuple RBRACKET { TCollection(TList, $2) }
+base_type_tuple:
+    | value_type_expr COMMA value_type_expr_list {
+        TTuple($1 :: $3)
+    }
+;
 
-    | LPAREN primitive_type_tuple RPAREN { $2 }
-
-primitive_type_tuple:
-    | primitive_type_expr_list { if List.length $1 == 1 then List.hd $1 else TTuple($1) }
-
-primitive_type_expr_list:
-    | primitive_type_expr { [$1] }
-    | primitive_type_expr COMMA primitive_type_expr_list { $1 :: $3 }
+value_type_expr_list:
+    | value_type_expr { [$1] }
+    | value_type_expr COMMA value_type_expr_list { $1 :: $3 }
+;
 
 expr:
     | LPAREN tuple RPAREN { $2 }
-    | constant { mkexpr (Const($1)) [] }
-    | identifier { mkexpr (Var(fst $1, snd $1)) [] }
+    | block { $1 }
 
+    | JUST expr { mkexpr Just [$2] }
+
+    | constant { mkexpr (Const($1)) [] }
+    | collection { $1 }
+    | range { $1 }
+    | variable { mkexpr (Var($1)) [] }
     | arithmetic { $1 }
     | predicate { $1 }
-    | collection { $1 }
-    | collection_op { $1 }
-
     | conditional { $1 }
-
     | lambda { $1 }
-
     | access { $1 }
-
-    | block { $1 }
+    | transformers { $1 }
+    | mutation { $1 }
     | annotation { $1 }
 
-    | SEND LPAREN address COMMA tuple RPAREN { mkexpr (Send($3)) [$5] }
-
-    | IDENTIFIER LPAREN tuple RPAREN {
-        mkexpr Apply [mkexpr (Var($1, TUnknown)) []; $3]
-    }
-
-arg:
-    | identifier { AVar(fst $1, snd $1) }
-    | LPAREN arg_list RPAREN  {
-        if List.length $2 == 1 then
-            let arg = List.hd $2 in
-            AVar(fst arg, snd arg)
-        else ATuple($2)
-    }
-
-arg_list:
-    | identifier { [($1)] }
-    | identifier COMMA arg_list { $1 :: $3 }
-
-tuple:
-    | expr_list { if List.length $1 == 1 then List.hd $1 else mkexpr Tuple $1 }
+    | SEND LPAREN variable COMMA tuple RPAREN { mkexpr Send [mkexpr (Var($3)) []; $5] }
+    | expr LPAREN expr RPAREN { mkexpr Apply [$1; $3] }
+;
 
 expr_list:
     | expr { [$1] }
     | expr COMMA expr_list { $1 :: $3 }
+;
 
 expr_seq:
-    | tuple { [$1] }
-    | tuple SEMICOLON expr_seq { $1 :: $3 }
+    | expr { [$1] }
+    | expr SEMICOLON expr_seq { $1 :: $3 }
+;
 
-address:
-    | IDENTIFIER { Local($1) }
+tuple:
+    | expr_list { if List.length $1 == 1 then List.hd $1 else mkexpr Tuple $1 }
+;
+
+value_typed_identifier:
+    | IDENTIFIER COLON value_type_expr { ($1, $3) }
+;
+
+value_typed_identifier_list:
+    | value_typed_identifier { [($1)] }
+    | value_typed_identifier COMMA value_typed_identifier_list { $1 :: $3 }
+;
+
+arg:
+    | value_typed_identifier { AVar(fst $1, snd $1) }
+    | LPAREN value_typed_identifier_list RPAREN  {
+        if List.length $2 == 1 then
+            let arg = List.hd $2 in AVar(fst arg, snd arg)
+        else ATuple($2)
+    }
 
 constant:
+    | UNKNOWN { CUnknown }
+    | UNIT { CUnit }
+    | NOTHING { CNothing }
+    | BOOL { CBool($1) }
     | INTEGER { CInt($1) }
     | FLOAT { CFloat($1) }
     | STRING { CString($1) }
-    | BOOL { CBool($1) }
+;
 
-identifier:
-    | IDENTIFIER { ($1, TUnknown) }
-    | IDENTIFIER COLON type_expr { ($1, $3) }
+range:
+    | LBRACE expr COLON expr COLON expr RBRACE { mkexpr (Range(TSet)) [$2; $4; $6] }
+    | LBRACEBAR expr COLON expr COLON expr RBRACEBAR { mkexpr (Range(TBag)) [$2; $4; $6] }
+    | LBRACKET expr COLON expr COLON expr RBRACKET { mkexpr (Range(TList)) [$2; $4; $6] }
+;
+
+collection:
+    | LBRACE RBRACE { mkexpr (Empty(BaseT(TCollection(TSet, BaseT(TUnknown))))) [] }
+    | LBRACEBAR RBRACEBAR { mkexpr (Empty(BaseT(TCollection(TBag, BaseT(TUnknown))))) [] }
+    | LBRACKET RBRACKET { mkexpr (Empty(BaseT(TCollection(TList, BaseT(TUnknown))))) [] }
+
+    | LBRACE expr_seq RBRACE { build_collection $2 (BaseT(TCollection(TSet, BaseT(TUnknown)))) }
+    | LBRACEBAR expr_seq RBRACEBAR { build_collection $2 (BaseT(TCollection(TBag, BaseT(TUnknown)))) }
+    | LBRACKET expr_seq RBRACKET { build_collection $2 (BaseT(TCollection(TList, BaseT(TUnknown)))) }
+;
+
+variable:
+    | IDENTIFIER { $1 }
+;
 
 arithmetic:
     | NEG expr { mkexpr Neg [$2] }
     | expr PLUS expr { mkexpr Add [$1; $3] }
     | expr NEG expr %prec MINUS { mkexpr Add [$1; mkexpr Neg [$3]] }
     | expr TIMES expr { mkexpr Mult [$1; $3] }
-    | expr DIVIDE expr { mkexpr Apply [mkexpr (Var("divide", TUnknown)) []; $1; $3] }
-    | expr MODULO expr { mkexpr Apply [mkexpr (Var("modulo", TUnknown)) []; $1; $3] }
-
-    | NOT expr { mkexpr Neg [$2] }
-    | expr OR expr { mkexpr Add [$1;$3] }
-    | expr AND expr { mkexpr Mult [$1;$3] }
+    | expr DIVIDE expr { mkexpr Apply [mkexpr (Var("/")) []; mkexpr Tuple [$1; $3]] }
+    | expr MODULO expr { mkexpr Apply [mkexpr (Var("%")) []; mkexpr Tuple [$1; $3]] }
+;
 
 predicate:
     | expr LT expr { mkexpr Lt [$1; $3] }
@@ -263,52 +247,47 @@ predicate:
     | expr LEQ expr { mkexpr Leq [$1; $3] }
     | expr NEQ expr { mkexpr Neq [$1; $3] }
 
-collection:
-    | LBRACE RBRACE { mkexpr (Empty(TCollection(TSet, TUnknown))) [] }
-    | LBRACEBAR RBRACEBAR { mkexpr (Empty(TCollection(TBag, TUnknown))) [] }
-    | LBRACKET RBRACKET { mkexpr (Empty(TCollection(TList, TUnknown))) [] }
+    | expr GT expr { mkexpr Neg [mkexpr Leq [$1; $3]] }
+    | expr GEQ expr { mkexpr Neg [mkexpr Lt [$1; $3]] }
+;
 
-    | LBRACE expr_seq RBRACE { build_collection $2 (TCollection(TSet, TUnknown)) }
-    | LBRACEBAR expr_seq RBRACEBAR { build_collection $2 (TCollection(TBag, TUnknown)) }
-    | LBRACKET expr_seq RBRACKET { build_collection $2 (TCollection(TList, TUnknown)) }
-
-collection_op:
-    | expr CONCAT expr { mkexpr Combine [$1;$3] }
-
-    | MAP LPAREN expr COMMA expr RPAREN { mkexpr Map [$3;$5] }
-    | ITERATE LPAREN expr COMMA expr RPAREN { mkexpr Iterate [$3;$5] }
-    | FILTERMAP LPAREN expr COMMA expr COMMA expr RPAREN { mkexpr FilterMap [$3;$5;$7] }
-    | FLATTEN LPAREN expr RPAREN { mkexpr Flatten [$3] }
-    | AGGREGATE LPAREN expr COMMA expr COMMA expr RPAREN { mkexpr Aggregate [$3;$5;$7] }
-    | GROUPBYAGGREGATE LPAREN expr COMMA expr COMMA expr COMMA expr RPAREN {
-        mkexpr GroupByAggregate [$3;$5;$7;$9]
-    }
-    | SORT LPAREN expr COMMA expr RPAREN { mkexpr Sort [$3;$5] }
-    | RANK LPAREN expr COMMA expr RPAREN { mkexpr Rank [$3;$5] }
-    | HEAD LPAREN expr RPAREN { mkexpr Head [$3] }
-    | TAIL LPAREN expr RPAREN { mkexpr Tail [$3] }
-
-conditional: IF expr THEN expr ELSE expr { mkexpr IfThenElse [$2;$4;$6] }
+conditional:
+    | IF expr THEN expr ELSE expr { mkexpr IfThenElse [$2; $4; $6] }
+;
 
 lambda:
     | BACKSLASH arg RARROW expr { mkexpr (Lambda($2)) [$4] }
-    | BACKSLASH arg LRARROW arg RARROW expr { mkexpr (AssocLambda($2, $4)) [$6] }
+;
 
 access:
-    | expr LBRACKET tuple RBRACKET {
-        match $3 with
-            | Leaf(_, Var("_", _)) -> mkexpr Lookup [$1;$3]
-            | Node(_, Tuple, keys) ->
-                let values, indices = List.split (accumulate_slice_indices keys 0) in
-                if List.length indices == List.length keys
-                then mkexpr Lookup [$1;$3]
-                else mkexpr (Slice(indices)) ($1 :: values)
-            | _ -> mkexpr Lookup [$1;$3]
+    | expr LBRACKET tuple RBRACKET { mkexpr Slice [$1; $3] }
+;
+
+mutation:
+    | INSERT LPAREN expr COMMA expr RPAREN { mkexpr Insert [$3; $5] }
+    | UPDATE LPAREN expr COMMA expr, COMMA expr RPAREN { mkexpr Update [$3; $5; $7] }
+    | DELETE LPAREN expr COMMA expr RPAREN { mkexpr Delete [$3; $5] }
+    | expr COLONGETS expr { mkexpr AssignToRef [$1; $3] }
+;
+
+transformers:
+    | expr CONCAT expr { mkexpr Combine [$1; $3] }
+    | MAP LPAREN expr COMMA expr RPAREN { mkexpr Map [$3; $5] }
+    | ITERATE LPAREN expr COMMA expr RPAREN { mkexpr Iterate [$3; $5] }
+    | FILTERMAP LPAREN expr COMMA expr COMMA expr RPAREN { mkexpr FilterMap [$3; $5; $7] }
+    | FLATTEN LPAREN expr RPAREN { mkexpr Flatten [$3] }
+    | AGGREGATE LPAREN expr COMMA expr COMMA expr RPAREN { mkexpr Aggregate [$3; $5; $7] }
+    | GROUPBYAGGREGATE LPAREN expr COMMA expr COMMA expr COMMA expr RPAREN {
+        mkexpr GroupByAggregate [$3; $5; $7; $9]
     }
-    | expr LBRACKET tuple RBRACKET QUESTION { mkexpr Member [$1;$3] }
-    | expr LBRACKET tuple RBRACKET GETS expr { mkexpr Update [$1;$3;$6] }
+    | SORT LPAREN expr COMMA expr RPAREN { mkexpr Sort [$3; $5] }
+;
 
-block: DO LBRACE expr_seq RBRACE { mkexpr Block $3 }
+block:
+    | DO LBRACE expr_seq RBRACE { mkexpr Block $3 }
+;
 
+/* TODO: Add the annotations to the aux data on the expression. */
 annotation:
     | expr ANNOTATE expr { $1 }
+;
