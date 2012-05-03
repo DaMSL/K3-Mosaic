@@ -14,6 +14,12 @@ K3.cmi: K3.mli Tree.cmi
 K3.cmo: K3.ml K3.cmi Tree.cmi
 	ocamlc -annot -c K3.ml
 
+K3Helpers.cmi: K3Helpers.mli K3.cmi Tree.cmi
+	ocamlc -annot -c K3Helpers.mli
+
+K3Helpers.cmo: K3Helpers.ml K3Helpers.cmi K3.cmi Tree.cmi
+	ocamlc -annot -c K3Helpers.ml
+
 K3Typechecker.cmi: K3Typechecker.mli K3.cmi Tree.cmi
 	ocamlc -annot -c K3Typechecker.mli
 
@@ -44,7 +50,7 @@ K3Parser.cmo: K3Lexer.cmo K3Parser.ml
 driver.cmo: driver.ml K3Parser.cmo 
 	ocamlc -annot -c driver.ml
 
-driver: Tree.cmo K3.cmo K3Parser.cmo K3Lexer.cmo driver.cmo
+driver: Tree.cmo K3.cmo K3Helpers.cmo K3Parser.cmo K3Lexer.cmo driver.cmo 
 	ocamlc -annot -o driver Tree.cmo K3.cmo K3Parser.cmo K3Lexer.cmo driver.cmo
 
 clean:

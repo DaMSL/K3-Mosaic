@@ -36,12 +36,12 @@ let mk_range meta ctype start stride steps =
     recompose_tree ((meta, Range(ctype)), [start; stride; steps])
 ;;
 
-let mk_add meta x =
-    recompose_tree ((meta, Add), [x])
+let mk_add meta x y =
+    recompose_tree ((meta, Add), [x; y])
 ;;
 
-let mk_mult meta x =
-    recompose_tree ((meta, Mult), [x])
+let mk_mult meta x y =
+    recompose_tree ((meta, Mult), [x; y])
 ;;
 
 let mk_neg meta x =
@@ -65,7 +65,7 @@ let mk_leq meta left right =
 ;;
 
 let mk_lambda meta argt expr =
-    recompose_tree ((meta, Lambda(argt)), expr)
+    recompose_tree ((meta, Lambda(argt)), [expr])
 ;;
 
 let mk_apply meta lambda input =
@@ -80,7 +80,7 @@ let mk_iterate meta collection iter_fun =
     recompose_tree ((meta, Iterate), [collection; iter_fun])
 ;;
 
-let mk_ifThenElse meta pred true_exp false_exp =
+let mk_ifthenelse meta pred true_exp false_exp =
     recompose_tree ((meta, IfThenElse), [pred; true_exp; false_exp])
 ;;
 
