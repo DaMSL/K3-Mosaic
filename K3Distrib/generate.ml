@@ -146,7 +146,7 @@ Trigger(trig_orig_name^"_Switch",
                 (ATuple[("ip", BaseT(TInt));("map_names", BaseT(TInt))])
                 (mk_send a 
                     (mk_apply a 
-                        (mk_var a "promote_address") 
+                        (mk_var a "promote_address")  (* correct? *)
                         (mk_tuple a [Local(trig_orig_name^"_Fetch"); mk_var a ("ip")])
                     )
                     (mk_tuple a [mk_var a "bound_with_v"; mk_var a "map_names"])
@@ -168,7 +168,7 @@ Trigger(trig_orig_name^"_Switch",
                 )
                 (mk_empty a (BaseT(TCollection(BaseT(TInt))))) (* [] *)
                 (List.fold_left
-                    (fun (rhs_map_name, rhs_map_key, rhs_map_pat) acc_code ->
+                    (fun acc_code (rhs_map_name, rhs_map_key, rhs_map_pat) ->
                         let route_fn = route_for rhs_map_name in
                         (mk_combine a (* problem: need 1st case to be different ie. no combine ***)
                             (mk_map a 
@@ -186,21 +186,35 @@ Trigger(trig_orig_name^"_Switch",
                             acc_code
                         )
                     )
-                    (mk_tuple a ... ) (* what do we put for default case?  ***)
+                    (mk_tuple a ... ) (* what do we put for init?  ***)
                     (read_maps_of_trigger trig_orig_name)
                 ) 
             )
         )
         ;
    
-   // send completes for statements that do not perform a fetch.
-   .~ (List.fold_left
-        (fun ((lhs_map_name, lhs_map_key, lhs_map_pat, complete_trig_addr),
-              acc_code) -> 
-          let route_fn = route_for lhs_map_name in
-          .<iter(\ip ->
-              send(promote_address(complete_trig_addr,ip), bound_with_v),
-              .~route_fn(.~lhs_map_key, .~(k3_of_int_list lhs_map_pat)))>.)
+        (* send completes for statements that do not perform a fetch. *)
+        List.fold_left
+            (fun acc_code 
+                (lhs_map_name, lhs_map_key, lhs_map_pat, complete_trig_addr) -> 
+                let route_fn = route_for lhs_map_name in
+                (mk_iter a 
+                    (mk_lambda a (AVar("ip", BaseT(TInt)))
+                        (mk_send a
+                            (mk_apply a 
+                                (mk_var a "promote_address")
+                                (mk_tuple a 
+                                    [mk_var a "complete_trig_addr";
+                                        mk_var a "ip"]
+                                )
+                            )
+                            (mk_var a "bound_with_v")
+                        )
+                    (mk_apply a (mk_var a route_fn)
+                        (
+
+                send(promote_address(complete_trig_addr,ip), bound_with_v),
+                .~route_fn(.~lhs_map_key, .~(k3_of_int_list lhs_map_pat)))>.)
         .<[]>.,
         (direct_completions T_trigger))
 
