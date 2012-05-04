@@ -5,52 +5,50 @@
  *
  *)
 
-(* Basic types *
- * maps are numbered globally and implemented as int
- * trigger is implemented as int
- * statement is implemented as (int * int) or (trigger, stmt) *)
+(* Basic types *)
+maps are numbered globally and implemented as int
+trigger is implemented as int
+statement is implemented as (int * int) or (trigger, stmt)
 
-(* Triggers generated ------------------------------------------------- *
- * for each trigger               : on_insert_<trigger_name>_switch
- * for each map read by a trigger : <trigger_name>_<read_map_name>_fetch *)
+(* Triggers generated ------------------------------------------------- *)
+for each trigger               : on_insert_<trigger_name>_switch
+for each map read by a trigger : <trigger_name>_<read_map_name>_fetch
 
-(* Call Graph * 
- * on_insert_<trigger>_switch  
- *    on_put_<trigger>
- *    do_complete_<trigger> (* no maps *) 
- *    on_insert_<trigger>_fetch 
- *        <trigger>_fetch_<rhs_map> -> 
- *            <trigger>_push_<rhs_map> -> 
- *                get_completed_stmts
- *                do_complete_<trigger>_<stmt>
- *                    get_corrective_list
- *                    On_corrective_<trigger>_<delta_rhs_map>
- *                        get_completed_stmts_corrective
- *                        do_complete_corrective_<trigger>_<stmt>_<delta_rhs_map>
- *                            On_corrective_<trigger>_<delta_rhs_map>
- *                            ...
- *)
+(* Call Graph *)
+on_insert_<trigger>_switch  
+    on_put_<trigger>
+    do_complete_<trigger> (* no maps *) 
+    on_insert_<trigger>_fetch 
+        <trigger>_fetch_<rhs_map> -> 
+            <trigger>_push_<rhs_map> -> 
+                get_completed_stmts
+                do_complete_<trigger>_<stmt>
+                    get_corrective_list
+                    On_corrective_<trigger>_<delta_rhs_map>
+                        get_completed_stmts_corrective
+                        do_complete_corrective_<trigger>_<stmt>_<delta_rhs_map>
+                            On_corrective_<trigger>_<delta_rhs_map>
+                            ...
 
 (* Data structures we need -------------------------------------------- *)
 
 (* A data structure holding trigger addresses of fetch triggers per
- trigger and map pair.
- * let fetch_map_triggers : ((int * int) * address_t) list = ... *)
+ trigger and map pair.*)
+let fetch_map_triggers : ((int * int) * address_t) list = ...
 
-(* A data structure converting from (trigger_id, stmt_id) to do_complete address 
- * let do_complete_stmts : ((int * int) * address_t) list = ... *)
+(* A data structure converting from (trigger_id, stmt_id) to do_complete address *)
+let do_complete_stmts : ((int * int) * address_t) list = ...
 
 (* Data structure checking which statements within a trigger can be completed when a rhs map's
- * data arrives 
- * let map_possible_completions : 
-     * (map_id : int, trigger_id : int, stmt_id : * int) list *)
+ * data arrives *)
+let map_possible_completions : (map_id : int, trigger_id : int, stmt_id : int) 
+    list
 
 (* stmt_cnt is a list of counters for each statement keeping track of msgs received. 
- * It's initialized to 0 whenever a statement starts executing (via a put). 
- * let stmt_counters : (vid : int, trigger_id: int, stmt_id : int, count : int)
- *)
+ * It's initialized to 0 whenever a statement starts executing (via a put). *)
+let stmt_counters : (vid : int, trigger_id: int, stmt_id : int, count : int)
 
-(* 
+(* *)
 build_switch
     - metadata: arguments, rhs_map_name, rhs_map_key, rhs_map_pat 
 
@@ -104,94 +102,35 @@ build_switch
     - stmt_has_rhs_map: 
       (* return whether a statement has a particular map on the rhs *)
       statement -> map_id -> bool
- *)
 
 (* on_insert_<trigger>_switch:
  * -----------------------------------------------
  * The switch starts the process
  *)
-(* we assume at this point that we receive the trigger *)
+.<
+on_insert_T_switch(QUERY_1_1_pR1_pS1T_T__C, QUERY_1_1_pR1_pS1T_D) {
 
-Exception ProcessingFailed of string;;
-
-(* extract trigger name and args *)
-let (trig_orig_name, trig_args) = match trigger with
-    | Trigger(name, ATuple(trig_args), _, _) -> (name, args)
-    | _ -> raise ProcessingFailed("Trigger not found")
-;;
-
-(* extract argument types *)
-let trig_arg_types = List.Map (fun (_,typ) -> typ) trig_args;;
-let trig_args_with_v = trig_args@("vid", BaseT(TFloat));; 
-
-let t_switch = 
-Trigger(trig_orig_name^"_Switch", 
-    Atuple(trig_args@("vid", BaseT(TFloat))), (* args *)
-    [("bound", TRef(TTuple(trig_arg_types));  (* locals *)
-        ("bound_with_v", TRef(TTuple(trig_arg_types@BaseT(TFloat)))],
-(mk_block a
-    [
-        (mk_assigntoref a  (* is this correct ? *)
-            (mk_var a "bound") 
-            (mk_tuple a (trig_args)))
-        ;
-        (mk_assigntoref a 
-            (mk_var a "bound_with_v") 
-            (mk_tuple a trig_args_with_v))
-        ;
-
-        (* send fetches for all maps appearing on statement RHS.*)
-        (mk_iter a
-            (mk_lambda a 
-                (ATuple[("ip", BaseT(TInt));("map_names", BaseT(TInt))])
-                (mk_send a 
-                    (mk_apply a 
-                        (mk_var a "promote_address") 
-                        (mk_tuple a [Local(trig_orig_name^"_Fetch"); mk_var a ("ip")])
-                    )
-                    (mk_tuple a [mk_var a "bound_with_v"; mk_var a "map_names"])
-                )
-            )
-            (mk_groupbyaggregate a
-                (mk_lambda a 
-                    (ATuple([("map_name",BaseT(TInt)); ("ip",BaseT(TInt)); 
-                        ("acc", BaseT(TCollection(TList, BaseT(TInt))))])
-                    )
-                    (mk_combine a
-                        (mk_var a "acc")
-                        (mk_var a "map_name") (* !!! Needs to be in list: how? *)
-                    )
-                ) 
-                (mk_lambda a
-                    (ATuple([("map_name", BaseT(TInt)); ("ip", BaseT(TInt))]))
-                    (mk_var a "ip")
-                )
-                (mk_empty a (BaseT(TCollection(BaseT(TInt))))) (* [] *)
-                (List.fold_left
-                    (fun (rhs_map_name, rhs_map_key, rhs_map_pat) acc_code ->
-                        let route_fn = route_for rhs_map_name in
-                        (mk_combine a (* problem: need 1st case to be different ie. no combine ***)
-                            (mk_map a 
-                                (mk_lambda a (AVar("ip", BaseT(TInt)))
-                                    (mk_tuple a 
-                                        [(rhs_map_name, BaseT(TInt)); ("ip", BaseT(TInt))]
-                                    )
-                                    (* *** Is this correct? Using var for function *)
-                                    (mk_apply a 
-                                        (mk_var a route_fn)
-                                        (k3_of_int_list rhs_map_pat)
-                                    )
-                                )
-                            )
-                            acc_code
-                        )
-                    )
-                    (mk_tuple a ... ) (* what do we put for default case?  ***)
-                    (read_maps_of_trigger trig_orig_name)
-                ) 
-            )
-        )
-        ;
+   let bound = tuple(QUERY_1_1_pR1_pS1T_T__C, QUERY_1_1_pR1_pS1T_D) in
+   let bound_with_v = tuple(QUERY_1_1_pR1_pS1T_T__C, QUERY_1_1_pR1_pS1T_D, vid) in
+   
+   // send fetches for all maps appearing on statement RHS.
+   iter(\(ip, map_names) ->
+          send(promote_address(fetch_trigger_T,ip),
+               bound_with_v, map_names),
+     groupby(
+       \(map_name, ip, acc) -> combine(acc, [map_name]),
+       [],
+       \(map_name, ip) -> ip,
+         .~ (List.fold_left
+           (fun ((rhs_map_name, rhs_map_key, rhs_map_pat), acc_code) ->
+             let route_fn = route_for rhs_map_name in
+             .<combine(
+                 map(\ip -> (.~rhs_map_name, ip),
+                     .~route_fn(.~rhs_map_key,
+                                .~(k3_of_int_list rhs_map_pat))),
+               .~acc_code)>.),
+           .<[]>.,
+           (read_maps_of_trigger T_trigger))))
    
    // send completes for statements that do not perform a fetch.
    .~ (List.fold_left
@@ -230,10 +169,9 @@ Trigger(trig_orig_name^"_Switch",
                   (map_pairs_of_statement stmt)),
               .<[]>.,
               (stmts_of_trigger T_trigger)))))
-)
+}
 >.
 
-(* debug
 (* Trigger_fetch_map
  * ----------------------------------------
  * Generated code to respond to fetches by sending a push message
@@ -521,4 +459,4 @@ in
 }
 >.
 
-debug *)
+
