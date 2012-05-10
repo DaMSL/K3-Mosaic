@@ -126,102 +126,172 @@ let trig_args_with_v = trig_args@("vid", BaseT(TFloat));;
 
 let t_switch = 
 Trigger(trig_orig_name^"_Switch", 
-    Atuple(trig_args@("vid", BaseT(TFloat))), (* args *)
-    [("bound", TRef(TTuple(trig_arg_types));  (* locals *)
-        ("bound_with_v", TRef(TTuple(trig_arg_types@BaseT(TFloat)))],
-(mk_block a
-    [
-        (mk_assigntoref a  (* is this correct ? *)
-            (mk_var a "bound") 
-            (mk_tuple a (trig_args)))
-        ;
-        (mk_assigntoref a 
-            (mk_var a "bound_with_v") 
-            (mk_tuple a trig_args_with_v))
-        ;
+  Atuple(trig_args@("vid", BaseT(TFloat))), (* args *)
+  [("bound", TRef(TTuple(trig_arg_types));  (* locals *)
+     ("bound_with_v", TRef(TTuple(trig_arg_types@BaseT(TFloat)))],
+(mk_apply
+  (mk_lambda (AVar("bound", BaseT(TTuple(trig_args))
+    (mk_apply
+      (mk_lambda (AVar("bound_with_v", BaseT(TTuple(trig_args_with_v))
+        (mk_block
 
-        (* send fetches for all maps appearing on statement RHS.*)
-        (mk_iter a
-            (mk_lambda a 
-                (ATuple[("ip", BaseT(TInt));("map_names", BaseT(TInt))])
-                (mk_send a 
-                    (mk_apply a 
-                        (mk_var a "promote_address")  (* correct? *)
-                        (mk_tuple a [Local(trig_orig_name^"_Fetch"); mk_var a ("ip")])
-                    )
-                    (mk_tuple a [mk_var a "bound_with_v"; mk_var a "map_names"])
+          (* send fetches for all maps appearing on statement RHS.*)
+          (mk_iter
+            (mk_lambda 
+              (ATuple[("ip", BaseT(TInt));("map_names", BaseT(TInt))])
+              (mk_send 
+                (mk_apply 
+                  (mk_var "promote_address")
+                  (mk_tuple [Local(trig_orig_name^"_Fetch"); mk_var ("ip")])
                 )
+                (mk_tuple [mk_var "bound_with_v"; mk_var "map_names"])
+              )
             )
-            (mk_groupbyaggregate a
-                (mk_lambda a 
-                    (ATuple([("map_name",BaseT(TInt)); ("ip",BaseT(TInt)); 
-                        ("acc", BaseT(TCollection(TList, BaseT(TInt))))])
-                    )
-                    (mk_combine a
-                        (mk_var a "acc")
-                        (mk_var a "map_name") (* !!! Needs to be in list: how? *)
-                    )
-                ) 
-                (mk_lambda a
-                    (ATuple([("map_name", BaseT(TInt)); ("ip", BaseT(TInt))]))
-                    (mk_var a "ip")
+            (mk_groupbyaggregate
+              (mk_lambda 
+                (* how does the lambda work here. Can it just take X params?****)
+                (ATuple([("map_name",BaseT(TInt)); ("ip",BaseT(TInt)); 
+                  ("acc", BaseT(TCollection(TList, BaseT(TInt))))])
                 )
-                (mk_empty a (BaseT(TCollection(BaseT(TInt))))) (* [] *)
-                (List.fold_left
-                    (fun acc_code (rhs_map_name, rhs_map_key, rhs_map_pat) ->
-                        let route_fn = route_for rhs_map_name in
-                        (mk_combine a (* problem: need 1st case to be different ie. no combine ***)
-                            (mk_map a 
-                                (mk_lambda a (AVar("ip", BaseT(TInt)))
-                                    (mk_tuple a 
-                                        [(rhs_map_name, BaseT(TInt)); ("ip", BaseT(TInt))]
-                                    )
-                                    (* *** Is this correct? Using var for function *)
-                                    (mk_apply a 
-                                        (mk_var a route_fn)
-                                        (k3_of_int_list rhs_map_pat)
-                                    )
-                                )
-                            )
-                            acc_code
+                (mk_combine
+                  (mk_var "acc")
+                  (mk_singleton (mk_var "map_name")) 
+                )
+              ) 
+              (mk_lambda
+                (ATuple([("map_name", BaseT(TInt)); ("ip", BaseT(TInt))]))
+                (mk_var "ip")
+              )
+              (mk_empty (BaseT(TCollection(BaseT(TInt))))) (* [] *)
+              (List.fold_left
+                (fun acc_code (rhs_map_name, rhs_map_key, rhs_map_pat) ->
+                  let route_fn = route_for rhs_map_name in (* adjust args *)
+                    (mk_combine
+                      (mk_map 
+                        (mk_lambda (AVar("ip", BaseT(TInt)))
+                          (mk_tuple 
+                            [(rhs_map_name, BaseT(TInt)); ("ip", BaseT(TInt))]
+                          )
                         )
+                        (mk_apply 
+                          (mk_var route_fn)
+                          (k3_of_int_list rhs_map_pat)
+                        )
+                      )
+                      acc_code
                     )
-                    (mk_tuple a ... ) (* what do we put for init?  ***)
-                    (read_maps_of_trigger trig_orig_name)
-                ) 
+                )
+                (mk_empty (BaseT(TCollection(TList, BaseT(TTuple([TInt; TInt]))))))
+                (read_maps_of_trigger trig_orig_name)
+              ) 
             )
-        )
-        ;
+          )::
    
-        (* send completes for statements that do not perform a fetch. *)
-        List.fold_left
+          (* send completes for statements that do not perform fetch. *)
+          List.fold_left
             (fun acc_code 
-                (lhs_map_name, lhs_map_key, lhs_map_pat, complete_trig_addr) -> 
-                let route_fn = route_for lhs_map_name in
-                (mk_iter a 
-                    (mk_lambda a (AVar("ip", BaseT(TInt)))
-                        (mk_send a
-                            (mk_apply a 
-                                (mk_var a "promote_address")
-                                (mk_tuple a 
-                                    [mk_var a "complete_trig_addr";
-                                        mk_var a "ip"]
-                                )
-                            )
-                            (mk_var a "bound_with_v")
+              (lhs_map_name, lhs_map_key, lhs_map_pat, complete_trig_addr) -> 
+              let route_fn = route_for lhs_map_name in
+                [(mk_iter 
+                  (mk_lambda (AVar("ip", BaseT(TInt)))
+                    (mk_send
+                      (mk_apply 
+                        (mk_var "promote_address")
+                        (mk_tuple 
+                          [mk_var "complete_trig_addr"; mk_var "ip"]
                         )
-                    (mk_apply a (mk_var a route_fn)
-                        (
+                      )
+                      (mk_var "bound_with_v")
+                    )
+                  )
+                  (mk_apply (mk_var route_fn)
+                    (lhs_map_key) (k3_of_int_list lhs_map_pat)
+                  )
+                )]@acc_code
+            ) 
+            []
+            (direct_completions trig_orig_name) (* need to implement *)
+            @
 
-                send(promote_address(complete_trig_addr,ip), bound_with_v),
-                .~route_fn(.~lhs_map_key, .~(k3_of_int_list lhs_map_pat)))>.)
-        .<[]>.,
-        (direct_completions T_trigger))
+          (* send puts
+           * count is generated by counting the number of messages going to a
+           * specific IP *)
 
-   // send puts
-   // count is generated by counting the number of messages going to a specific IP
-   iter(\(ip, id_cnt_list) ->
-          send(promote_address(On_put_T,ip), bound_with_v, id_cnt_list)
+          mk_iter
+            (mk_lambda 
+              (ATuple(["ip", BaseT(TInt); "id_cnt_list", BaseT(TInt)]))
+              (mk_send
+                (mk_apply
+                  (mk_var "promote_address")
+                  (mk_tuple
+                    [mk_var trig_orig_name^"_Put"; mk_var "ip"]
+                  )
+                )
+                (mk_tuple [mk_var "bound_with_v"; mk_var "id_cnt_list"])
+              )
+              (mk_groupbyaggregate
+                (mk_lambda
+                  (ATuple(["ip", BaseT(TInt); "stmt_id", BaseT(TInt); "count",
+                    BaseT(TInt); "acc", BaseT(TCollection(TList,
+                    BaseT(TTuple([BaseT(TInt); BaseT(TInt)]))))) 
+                  )
+                  (* missing group func !!! *)
+                  (mk_empty
+                    (BaseT(TCollection(TList, BaseT(TTuple([BaseT(TInt); 
+                    BaseT(TInt)])))))
+                  )
+                  (mk_groupbyaggregate
+                    (mk_lambda
+                      (ATuple(["ip", BaseT(TInt); "stmt_id", BaseT(TInt);
+                        "acc", BaseT(TInt)) 
+                      )
+                      (mk_add
+                        (mk_var "acc")
+                        (mk_const CInt(1))
+                      )
+                    )
+                    (mk_lambda
+                      (ATuple(["ip", BaseT(TInt); "stmt_id", BaseT(TInt);
+                        "acc", BaseT(TInt)) 
+                      )
+                      (mk_tuple
+                        [mk_var "ip"; mk_var "stmt_id"]
+                      )
+                    )
+                    0
+                    (List.fold_left
+                      (fun acc_code stmt ->
+                        List.fold_left
+                          (fun acc_code (rhs_map_name, rhs_map_key, rhs_map_pat, lhs_map_name) ->
+                            let stmt_id = id_of_stmt stmt in  (* implement ***)
+                            let shuffle_fn = shuffle_for rhs_map_name lhs_map_name in (* todo ***)
+                            mk_combine
+                              (mk_map
+                                (mk_lambda
+                                  (ATuple(["ip", BaseT(TInt); "tuples",
+                                    BaseT(TTuple(trig_arg_types)))
+                                  )
+                                  (mk_tuple
+                                    [mk_var "ip"; mk_const CInt(stmt_id)]
+                                  )
+                                )
+                                mk_apply
+                                  (mk_var shuffle_fn)
+                                  (mk_tuple
+                                  [mk_const CBool(true);  
+                                    (mk_
+
+
+                                    
+                              )
+                          )
+                      )
+                    )
+                  )
+
+                  
+            ) 
+            
      groupby(
        \(ip, stmt_id, count, acc) -> acc@[stmt_id, count]
        [], 
