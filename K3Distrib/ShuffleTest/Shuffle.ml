@@ -214,7 +214,7 @@ let route bmod num_of_nodes m_key m_pat   =
  * To handle empty messages, we create all possible empty messages up front
  * and fill in with the tuples given. *)
 
-let shuffle_m_to_n n_bmod num_of_nodes m_to_n_pat shuffle_on_empty n_pat n_key tuples =
+let shuffle_m_to_n n_bmod num_of_nodes m_to_n_pat n_pat n_key tuples shuffle_on_empty =
 
     (* shuffle_on_empty = boolean flag to indicate whether a shuffle
      *   should be sent out to empty tuple destinations
