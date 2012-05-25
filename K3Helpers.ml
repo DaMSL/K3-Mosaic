@@ -74,6 +74,54 @@ let mk_apply lambda input =
     recompose_tree ((meta, Apply), [lambda; input])
 ;;
 
+(* a lambda with 2 arguments for things like aggregation functions *)
+let mk_assoc_lambda arg1 arg2 expr =
+    let get_names l = List.map (fun (name, typ) -> name) li in
+    let get_types l = List.map (fun (name, typ) -> typ) li in
+    let strip_args arg = match arg with
+        ATuple(list_x) -> list_x
+        | AVar(x) -> [x]
+        | _ -> invalid_arg "strip_args requires ATuple or AVar arguments"
+    in
+    let need_subst arg = match arg with
+        ATuple(list_x) -> true
+        | AVar(x) -> false
+        | _ -> invalid_arg "check_subst_arg requires ATuple or AVar arguments"
+    in
+    let arg1_stripped = strip_args arg1 in
+    let arg2_stripped = strip_args arg2 in
+    let destroy_tuple tuple_name arg expr = 
+        if need_subst arg then
+        (mk_apply
+            (mk_lambda
+                (ATuple(arg))
+                (expr)
+            )
+            (mk_var tuple_name)
+        )
+        else expr
+    in
+    let subst_arg arg arg_list name =
+        if need_subst arg then (name, (TTuple(get_types arg_list)))
+        else arg_list
+    in
+    mk_lambda
+        (ATuple([subst_arg arg1 arg1_stripped "__temp1"; 
+            subst_arg arg2 arg2_stripped "__temp2"])
+        )
+        (destroy_tuple "__temp1" arg1 (destroy_tuple "__temp2" arg2 expr))
+;;
+
+(* a classic let x = e1 in e2 construct *)
+let mk_let var_name var_type var_value expr =
+    mk_apply
+        (mk_lambda (AVar(var_name, var_type))
+            (expr)
+        )
+        (var_value)
+;;
+    
+
 let mk_block statements =
     recompose_tree ((meta, Block), statements)
 ;;
