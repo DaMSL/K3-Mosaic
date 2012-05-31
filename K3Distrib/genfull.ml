@@ -250,7 +250,7 @@ List.fold_left
  * at the switch anyway.
  * The assumption is that the "stmts_and_map_names" data is not large.
  *)
-on_insert_T_fetch(stmts_and_map_names, QUERY_1_1_pR1_pS1T_T__C, QUERY_1_1_pR1_pS1T_D, vid) {
+on_insert_T_fetch(stmts_and_map_ids, QUERY_1_1_pR1_pS1T_T__C, QUERY_1_1_pR1_pS1T_D, vid) {
 
    let bound = tuple(QUERY_1_1_pR1_pS1T_T__C, QUERY_1_1_pR1_pS1T_D) in
    let bound_with_v = tuple(QUERY_1_1_pR1_pS1T_T__C, QUERY_1_1_pR1_pS1T_D, vid) in  
@@ -264,7 +264,7 @@ on_insert_T_fetch(stmts_and_map_names, QUERY_1_1_pR1_pS1T_T__C, QUERY_1_1_pR1_pS
            (* this send is not polymorphic. every fetch trigger expects
             * the same set of bound variables. *)
             send(fetch_map_triggers["T", stmt_id, map_id], bound, vid),
-                stmt_id, map_names)
+                stmts_and_map_ids)
 }
 >.
 
@@ -277,22 +277,19 @@ on_insert_T_fetch(stmts_and_map_names, QUERY_1_1_pR1_pS1T_T__C, QUERY_1_1_pR1_pS
  * A later optimization could be lumping maps between statements in a trigger *)
  
 List.fold_left
-  (fun acc_code (stmt_id, rhs_map_name) ->
-     let push_stmt_map_trigger_name = trigger_name^"_push_"^stmt_id^"_"^rhs_map_name  in
+  (fun acc_code (stmt_id, read_map_name) ->
+     let push_stmt_map_trigger_name = trigger_name^"_push_"^stmt_id^"_"^read_map_name  in
      let do_complete_name = trigger_name^"_do_complete_"^stmt_id in
-     let buffer_fn = "add_"^rhs_map_name in
+     let buffer_fn = "add_"^read_map_name in
     .<
       .~push_stmt_map_trigger_name(tuples, bound, vid) {
-          let stmts = get_completed_stmts(.~trigger_name, .~stmt_id,
-              .~rhs_map_name, vid) in
           (* write to buffer *)
           foreign(buffer_fn, tuples, vid);
           
           (* check statment counters to see if we can process *)
-          if stmt_counters[vid, trigger_id, stmt_id]?  then 
-              (stmt_counters[vid, trigger_id, stmt_id] := stmt_counters[vid, trigger_id,
-                      stmt_id]-1;
-                  if stmt_counters[vid, trigger_id, stmt_id] = 0 then 
+          if stmt_counters[vid, stmt_id]?  then 
+              (stmt_counters[vid, stmt_id] := stmt_counters[vid, stmt_id]-1;
+                  if stmt_counters[vid, stmt_id] = 0 then 
                       (* Send to local do_complete *)
                       send (do_complete_name, bound, vid)
                   

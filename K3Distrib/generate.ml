@@ -168,6 +168,7 @@ let send_fetches_rhs =
       (List.fold_left
         (fun acc_code (stmt_id, rhs_map_id) ->
           let route_fn = route_for rhs_map_id in 
+          (* note: assumes max one instance of a map per statement *)
           let key, pat = key_and_pat_from_bound stmt_id rhs_map_id trig_args in
             (mk_combine
               (mk_map 
@@ -402,10 +403,13 @@ let t_fetch_stmt_map_funcs =
  * This could be done entirely at the node, but would repeat work done
  * at the switch anyway.
  * The assumption is that the "stmts_and_map_names" data is not large.
+ * We have this as a multiplexer to the different fetch functions, because we
+ * need to record only one trigger in the log, and because it reduces messages
+ * between nodes.
  *)
 let t_fetch =
   let fetch_trigger_name = trig_name^"_Fetch" in
-  Trigger(fetch_trigger_name, ATuple("stmts_and_map_names",
+  Trigger(fetch_trigger_name, ATuple("stmts_and_map_ids",
     BaseT(TCollection(TList, TTuple([BaseT(TInt); BaseT(TInt)])))
     ::trig_args@("vid", BaseT(TInt)),
     [], (* locals *)
@@ -431,12 +435,137 @@ let t_fetch =
             (mk_var "bound_with_v")
           )
         )
+        (mk_var "stmts_and _map_ids")
       )]
     )
               
+(* on_insert_trigger_push_stmt_map
+ * --------------------------------------
+ * Receive a push at a node
+ * Also called for virtual pushes: local data transfers to allow tracking of 
+ * present data w/ counters params can be moved to the put statement, but it's
+ * a good reminder to have it here 
+ * A later optimization could be lumping maps between statements in a trigger *)
 
+let on_push = 
+List.fold_left
+  (fun acc_code (stmt_id, read_map_id) ->
+     let read_map_name = map_name_of read_map_id in
+     let push_stmt_map_trigger_name =
+         trigger_name^"_push_"^stmt_id^"_"^read_map_name in
+     let do_complete_name = trigger_name^"_do_complete_"^stmt_id in
+     let buffer_fn = "add_"^read_map_name in
+     Trigger(push_stmt_map_trigger_name,
+         ATuple(("tuples", map_types_for read_map_id)::
+             trig_args@("vid", BaseT(TInt))),
+         [], (* locals *)
 
+        (mk_block
+          [mk_apply (* write to buffer *) 
+            (mk_var buffer_fn)
+            (mk_var "tuples")
+            (mk_var "vid")
+          ;
+          (* check statment counters to see if we can process *)
+          let stmt_counters_pattern =
+              (mk_tuple [mk_var "vid"; mk_var "stmt_id"; mk_val "_"]) in
+          let stmt_cntrs = (mk_var "stmt_counters") in
+          let stmt_counters_slice = mk_slice stmt_counters stmt_counters_pattern
+          in
+          mk_ifthenelse
+            (mk_has_member (* check if the counter exists *)
+              stmt_cntrs
+              stmt_counters_pattern
+              (BaseT(TTuple[BaseT(TInt)]))
+            )
+            (mk_block
+              [mk_update
+                stmt_cntrs
+                stmt_counters_slice
+                (mk_add
+                  stmt_counters_slice
+                  (mk_const CInt(-1))
+                )
+              ;mk_ifthenelse
+                (mk_eq
+                  stmt_counters_slice
+                  (mk_const CInt(0))
+                ) 
+                (* Send to local do_complete *)
+                (mk_send
+                  (mk_var do_complete_name)
+                  (mk_var "bound_with_v")
+                )
+                (mk_const CUnit)
+              ]
+            )
+            (mk_update (* else *)
+              stmt_counters_slice
+              (* Initialize if the push arrives before the put. *)
+              mk_const CInt(-1)
+            )
+          ]
+        )
+     )
+  )
+  [] (* empty code *)
+  (over_stmts_in_t read_maps_in_stmt T_trigger)
     
+(* on_insert_T_do_complete_stmt_id
+ * --------------------------------------
+ * Functions that perform the actual calculations of the statement
+ * And are called mostly by pushes. 
+ * We generate them per statement so they can handle the data types *)
+
+(* Generate code to send data for all possible correctives *)
+(* We send the new lhs_map results to any statement that could be affected *)
+let send_correctives map_id delta_var =
+  List.fold_left (* loop over all possible write maps in this trigger *)
+    (fun acc_code stmt_id
+      List.fold_left 
+            (fun acc_code trigger_id ->
+                let stmts = stmts_of_trigger trigger_id in
+                List.fold_left 
+                    (fun acc_code stmt_id ->
+                        let corrective_addr = trigger_id^"_corrective_"^stmt_id^"_d"^map_id in
+                        (* Our lhs_map is now our rhs_map *)
+                        if stmt_has_rhs_map stmt_id map_id then
+                            let shuffle_fn =
+                              shuffle_for map_id (lhs_map stmt_id)
+                            in
+                            .< ~.acc_code 
+                            if corrective_list[.~stmt_id]? then do {
+                                iter(\(ip,delta_tuples) ->
+                                    send(promote_address(~.corrective_addr, ip), delta_tuples),
+                                    .~shuffle_fn(.~key_and_pat_from_bound(stmt_id,
+                                        map_id, bound), delta_tuples, false)
+                                )
+                            }
+                            >.
+                        else acc_code
+                    )
+                    acc_code
+                    stmts
+            )
+            .< let corrective_list = get_corrective_list(.~lhs_map_id, vid) in >.
+            triggers
+    (List.map 
+      (fun stmt_id -> lhs_maps_in_stmt stmt_id) 
+      (stmts_in_trigger trigger_id))
+
+let do_complete_name = trigger_name^"_do_complete_"^stmt_id in
+Trigger
+  (do_complete_name, ATuple(trig_args_with_v), [] (* locals *),
+    (* in terms of substitution, we need to 
+     * a. switch read maps for buffers
+     * b. inject a send to the send_correctives trigger by either sending a
+     * single delta or sending a cse representing a slice of calculated data *)
+    let ast_stmt2 = subst_buffers (ast_of_stmt stmt_id) (read_maps_of_stmt stmt_id)
+    in
+    let delta_in_lhs_map = to_lhs_map_form (ast_stmt2) (delta_var_of_stmt stmt_id)
+    in
+    inject_send_to_send_correctives (ast_stmt2 delta_in_lhs_map)
+  )
 
 
     

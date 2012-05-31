@@ -179,7 +179,7 @@ let mk_peek collection =
 ;;
 
 (* left: TRef, right: T/TRef *)
-let mk_assigntoref left right =
+let mk_assign left right =
     recompose_tree ((meta, AssignToRef), [left; right])
 ;;
 
@@ -187,5 +187,12 @@ let mk_assigntoref left right =
 let mk_send target args =
     recompose_tree ((meta, Send), [target; args])
 ;;
+
+(* function to test the existance of a member *)
+(* pattern is a slice list, while pat_type is the type of the slice *)
+let mk_has_member collection pattern slice_type = 
+    mk_neg (mk_eq (mk_slice collection pattern) (mk_empty slice_type));;
+;;
+
 
 

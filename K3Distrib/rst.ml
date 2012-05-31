@@ -72,24 +72,24 @@ mk_block
 							(mk_var "pR1")
 							(mk_slice 
 								(mk_var "pR1") 
-                                (mk_tuple ([mk_var "B"]))
+                (mk_tuple [mk_var "B"])
 							)
 							(mk_add
 								(mk_slice 
 									(mk_var "pR1") 
-                                    (mk_tuple ([mk_var "B"]))
-								)
+                  (mk_tuple ([mk_var "B"]))
+							  )
 								(mk_var "dv")
 							)
 						)
-                        (mk_update
-                            (mk_var "pR1")
-                            (mk_slice
-                                (mk_var "pR1")
-                                (mk_tuple ([mk_var "B"]))
-                            )
-                            (mk_var "dv")
-                        )
+            (mk_update
+              (mk_var "pR1")
+              (mk_slice
+                (mk_var "pR1")
+                (mk_tuple ([mk_var "B"]))
+              )
+              (mk_var "dv")
+            )
 					)
 				)
 				(mk_var "__cse1")
@@ -97,7 +97,9 @@ mk_block
 		)
 		(mk_groupbyaggregate
 			(mk_lambda
-                (ATuple(["B",BaseT(TFloat);"__t1",BaseT(TFloat);"v2",BaseT(TFloat);"accv_3",BaseT(TFloat)]))
+        (ATuple(["B",BaseT(TFloat);"__t1",BaseT(TFloat);
+          "v2",BaseT(TFloat);"accv_3",BaseT(TFloat)])
+        )
 				(mk_add
 					(mk_mult
 						(mk_var "D")
