@@ -14,123 +14,123 @@ Global(ValueT("pR1pT1",TCollection(TSet, RefT(TTuple([TFloat; TFloat])))))
 Global(ValueT("Q1", TValueT(TRef(TFloat)))
 *)
 
-let a = ();;
-let mk_has_member a col pat = mk_neg a (mk_eq a (mk_slice a col pat) (mk_empty a (BaseT(TFloat))));;
+let = ();;
+let mk_has_member col pat = mk_neg (mk_eq (mk_slice col pat) (mk_empty (BaseT(TFloat))));;
 
 let t = Trigger("On_Insert_T", ATuple([("pR1_pS1T_C", BaseT(TFloat));("pR1_pS1T_D", BaseT(TFloat))]), [], 
-mk_block a  
-	[(mk_ifthenelse a 
-		(mk_has_member a 
-			(mk_var a "pT1") (mk_tuple a [(mk_var a "C")]) 
+mk_block  
+	[(mk_ifthenelse 
+		(mk_has_member 
+			(mk_var "pT1") (mk_tuple [(mk_var "C")]) 
 		)
-		(mk_assigntoref a 
-			(mk_var a "Q1") 
-			(mk_add a 
-				(mk_var a "Q1") 
-				(mk_mult a 
-					(mk_slice a
-						(mk_var a "pT1") 
-						(mk_tuple a [(mk_var a "C")])
+		(mk_assigntoref 
+			(mk_var "Q1") 
+			(mk_add 
+				(mk_var "Q1") 
+				(mk_mult 
+					(mk_slice
+						(mk_var "pT1") 
+						(mk_tuple [(mk_var "C")])
 					)
-					(mk_var a "D")
+					(mk_var "D")
 				)
 			)
 		)
-		(mk_block a
-			[mk_update a 
-				(mk_var a "pT1") 
-				(mk_slice a 
-					(mk_var a "pT1") 
-					(mk_tuple a [(mk_var a "C")])
+		(mk_block
+			[mk_update 
+				(mk_var "pT1") 
+				(mk_slice 
+					(mk_var "pT1") 
+					(mk_tuple [(mk_var "C")])
 				)
-				(mk_const a (CFloat(0.)))
+				(mk_const (CFloat(0.)))
 			;
-			mk_assigntoref a (mk_var a "Q1") 
-				(mk_add a 
-					(mk_var a "Q1") 
-					(mk_mult a 
-						(mk_const a (CFloat(0.)))
-						(mk_var a "D")
+			mk_assigntoref (mk_var "Q1") 
+				(mk_add 
+					(mk_var "Q1") 
+					(mk_mult 
+						(mk_const (CFloat(0.)))
+						(mk_var "D")
 					)
 				)
 			]
 		)
 	)
     ;	
-	mk_apply a
-		(mk_lambda a
+	mk_apply
+		(mk_lambda
 			(AVar("__cse1", TRef(TCollection(TList, BaseT(TTuple([TRef(TFloat);
                 TRef(TFloat)]))))))
-			(mk_iterate a
-				(mk_lambda a
+			(mk_iterate
+				(mk_lambda
 					(ATuple(["B", BaseT(TFloat); "dv", BaseT(TFloat)]))
-					(mk_ifthenelse a
-						(mk_has_member a 
-							(mk_var a "pR1") (mk_tuple a [(mk_var a "B")]) 
+					(mk_ifthenelse
+						(mk_has_member 
+							(mk_var "pR1") (mk_tuple [(mk_var "B")]) 
 						)
-						(mk_update a
-							(mk_var a "pR1")
-							(mk_slice a 
-								(mk_var a "pR1") 
-                                (mk_tuple a ([mk_var a "B"]))
+						(mk_update
+							(mk_var "pR1")
+							(mk_slice 
+								(mk_var "pR1") 
+                                (mk_tuple ([mk_var "B"]))
 							)
-							(mk_add a
-								(mk_slice a 
-									(mk_var a "pR1") 
-                                    (mk_tuple a ([mk_var a "B"]))
+							(mk_add
+								(mk_slice 
+									(mk_var "pR1") 
+                                    (mk_tuple ([mk_var "B"]))
 								)
-								(mk_var a "dv")
+								(mk_var "dv")
 							)
 						)
-                        (mk_update a
-                            (mk_var a "pR1")
-                            (mk_slice a
-                                (mk_var a "pR1")
-                                (mk_tuple a ([mk_var a "B"]))
+                        (mk_update
+                            (mk_var "pR1")
+                            (mk_slice
+                                (mk_var "pR1")
+                                (mk_tuple ([mk_var "B"]))
                             )
-                            (mk_var a "dv")
+                            (mk_var "dv")
                         )
 					)
 				)
-				(mk_var a "__cse1")
+				(mk_var "__cse1")
 			)
 		)
-		(mk_groupbyaggregate a
-			(mk_lambda a
+		(mk_groupbyaggregate
+			(mk_lambda
                 (ATuple(["B",BaseT(TFloat);"__t1",BaseT(TFloat);"v2",BaseT(TFloat);"accv_3",BaseT(TFloat)]))
-				(mk_add a
-					(mk_mult a
-						(mk_var a "D")
-						(mk_var a "v2")
+				(mk_add
+					(mk_mult
+						(mk_var "D")
+						(mk_var "v2")
 					)
-					(mk_var a "accv_3")
+					(mk_var "accv_3")
 				)
 			)
-			(mk_lambda a
+			(mk_lambda
 				(ATuple(["QUERY_1_1R_R__B",BaseT(TFloat);"__t1",BaseT(TFloat);"v2",BaseT(TFloat)]))
-                (mk_tuple a [mk_var a "B"])
+                (mk_tuple [mk_var "B"])
 			)
-			(mk_const a (CFloat(0.)))
-			(mk_slice a
-				(mk_var a "pT1")
-				(mk_tuple a [mk_var a "_"; mk_var a "C"])
+			(mk_const (CFloat(0.)))
+			(mk_slice
+				(mk_var "pT1")
+				(mk_tuple [mk_var "_"; mk_var "C"])
 			)
 		)
 	;
-	mk_ifthenelse a 
-		(mk_has_member a (mk_var a "pR1pS1") (mk_tuple a [mk_var a "C"]))
-		(mk_update a 
-			(mk_var a "pR1pS1")
-			(mk_slice a (mk_var a "pR1pS1") (mk_tuple a [mk_var a "C"]))
-			(mk_add a
-				(mk_slice a (mk_var a "pR1pS1") (mk_tuple a [mk_var a "C"]))
-				(mk_var a "D")
+	mk_ifthenelse 
+		(mk_has_member (mk_var "pR1pS1") (mk_tuple [mk_var "C"]))
+		(mk_update 
+			(mk_var "pR1pS1")
+			(mk_slice (mk_var "pR1pS1") (mk_tuple [mk_var "C"]))
+			(mk_add
+				(mk_slice (mk_var "pR1pS1") (mk_tuple [mk_var "C"]))
+				(mk_var "D")
 			)
 		)
-		(mk_update a
-			(mk_var a "pR1pS1")
-			(mk_slice a (mk_var a "pR1pS1") (mk_tuple a [mk_var a "C"]))
-			(mk_var a "D")
+		(mk_update
+			(mk_var "pR1pS1")
+			(mk_slice (mk_var "pR1pS1") (mk_tuple [mk_var "C"]))
+			(mk_var "D")
 		)
 	]
 )
