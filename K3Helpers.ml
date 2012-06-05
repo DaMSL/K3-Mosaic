@@ -41,14 +41,17 @@ let mk_range ctype start stride steps =
 let mk_add x y =
     recompose_tree ((meta, Add), [x; y])
 ;;
+let mk_or = mk_add;
 
 let mk_mult x y =
     recompose_tree ((meta, Mult), [x; y])
 ;;
+let mk_and = mk_mult;
 
 let mk_neg x =
     recompose_tree ((meta, Neg), [x])
 ;;
+let mk_not = mk_neg;;
 
 let mk_eq x y =
     recompose_tree ((meta, Eq), [x; y])
@@ -65,6 +68,10 @@ let mk_neq left right =
 let mk_leq left right =
     recompose_tree ((meta, Leq), [left;right])
 ;;
+
+let mk_gt = mk_not mk_leq;;
+
+let mk_geq = mk_not mk_lt;;
 
 let mk_lambda argt expr =
     recompose_tree ((meta, Lambda(argt)), [expr])
@@ -120,7 +127,18 @@ let mk_let var_name var_type var_value expr =
         )
         (var_value)
 ;;
-    
+
+(* A let that assigns multiple variables simultaneously. 
+ * For breaking up tuples and passing multiple values out of functions.
+ * var_name_type_list must be a (string, type) list, and the var_values must
+ * evaluate to the same types *)
+let mk_let_many var_name_and_type_list var_values expr =
+    mk_apply
+        (mk_lambda (ATuple(var_name_and_type_list))
+            (expr)
+        )
+        (var_values)
+;;
 
 let mk_block statements =
     recompose_tree ((meta, Block), statements)
@@ -179,7 +197,7 @@ let mk_peek collection =
 ;;
 
 (* left: TRef, right: T/TRef *)
-let mk_assign left right =
+let mk_assigntoref left right =
     recompose_tree ((meta, AssignToRef), [left; right])
 ;;
 
@@ -188,10 +206,19 @@ let mk_send target args =
     recompose_tree ((meta, Send), [target; args])
 ;;
 
-(* function to test the existance of a member *)
-(* pattern is a slice list, while pat_type is the type of the slice *)
-let mk_has_member collection pattern slice_type = 
-    mk_neg (mk_eq (mk_slice collection pattern) (mk_empty slice_type));;
+(* function to declare and define a global function. Assumes the global
+ * construct allows for an expr_t as well.
+ * The types are expected in list format (always!) *)
+let mk_global_fn name input_names_and_types output_types =
+    let wrap_args args = match args with
+      [head] -> AVar(head)
+      [] -> invalid_arg "Can't have 0 length args"
+       _ -> ATuple(args)
+    in
+    let get_types_of_args args = List.Map (fun (name, typ) -> typ) args in
+    Global(name, 
+      TFunction(get_types_of_args input_names_and_types, output_types),
+      mk_lambda (wrap_args input_names_and_args) expr
 ;;
 
 

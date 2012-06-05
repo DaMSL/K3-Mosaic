@@ -320,11 +320,12 @@ let send_correctives map_id delta_tuples bound =
                     let corrective_addr = trigger_id^"_corrective_"^stmt_id^"_d"^map_id in
                     (* Our lhs_map is now our rhs_map *)
                     if stmt_has_rhs_map stmt_id map_id then
-                        let shuffle_fn =
-                          shuffle_for map_id (lhs_map stmt_id)
-                        in
                         .< ~.acc_code 
                         if corrective_list[.~stmt_id]? then do {
+                            let bound = log_get_bound(.~stmt_id) in
+                            let shuffle_fn =
+                              shuffle_for map_id (lhs_map stmt_id)
+                            in
                             iter(\(ip,delta_tuples) ->
                                 send(promote_address(~.corrective_addr, ip), delta_tuples),
                                 .~shuffle_fn(.~key_and_pat_from_bound(stmt_id,
@@ -372,21 +373,24 @@ let completion_name = trigger_name^"_do_complete_"^stmt_id in
  * Optimization TODO: check also by ranges within the map.
  *)
 .<
-get_corrective_list(map_id, vid) -> int list    // statement list
-   filtermap( 
-       \stmt -> stmt_has_rhs_map(stmt, map_id),  (* filter out irrelevant triggers *)
-       \vid, stmt -> stmt,         (* get the list of numbers of statements *)
-       sort            (* sort so we start with lowest vid first *)
-         (flatten(flatten(
-               map(\trigger, vid -> 
-                   map(\stmt -> (vid, stmt),
-                       stmts_of_trigger(trigger)),
-                   foreign(log_read_geq(vid))             // produces triggers >= vid 
-               )
-           ))
-           (\((vid1, stmt1), (vid2, stmt2)) -> vid1 < vid2)
-         )
-   )
+get_corrective_list(map_id, vid) -> int, int list    // statement, vid list
+  filtermap( 
+    \stmt, vid -> stmt_has_rhs_map(stmt, map_id),  (* filter out irrelevant triggers *)
+    \stmt, vid -> stmt, vid         (* get the list of numbers of statements *)
+      sort            (* sort so we start with lowest vid first *)
+        (flatten
+          (map 
+            (\(trigger, vid) -> 
+              (map 
+                (\stmt -> (stmt, vid))
+                (stmts_of_trigger(trigger)) 
+              )
+            )
+            foreign(log_read_geq(vid))             // produces triggers >= vid 
+           )
+        )
+        (\((vid1, stmt1), (vid2, stmt2)) -> vid1 < vid2)
+  )
 >.
 
 (* On_corrective:
@@ -414,6 +418,7 @@ List.fold_left
                  (* accumulate delta for this vid and all following vids *)
                  foreign(.~add_delta_to_buffer_fn(delta_tuples, vid))     
 
+                 (* TODO: stmt_counters no longer have trigger_id *)
                  let corrected_updates : vid list =
                    filtermap(
                      \(vid2,tid2,stid2,cnt) -> vid <= vid2 && c == 0,

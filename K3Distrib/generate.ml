@@ -47,7 +47,7 @@
 
 (* stmt_cnt is a list of counters for each statement keeping track of msgs received. 
  * It's initialized to 0 whenever a statement starts executing (via a put). 
- * let stmt_counters : (vid : int, trigger_id: int, stmt_id : int, count : int)
+ * let stmt_counters : (vid : int, stmt_id : int, count : int)
  *)
 
 (* 
@@ -114,6 +114,7 @@ build_switch
  * The switch starts the process
  *)
 (* we assume at this point that we receive the trigger *)
+(* TODO: declare local buffers for node *)
 
 Exception ProcessingFailed of string;;
 
@@ -447,15 +448,15 @@ let t_fetch =
  * a good reminder to have it here 
  * A later optimization could be lumping maps between statements in a trigger *)
 
-let on_push = 
+let rcv_push = 
 List.fold_left
   (fun acc_code (stmt_id, read_map_id) ->
      let read_map_name = map_name_of read_map_id in
-     let push_stmt_map_trigger_name =
+     let rcv_push_stmt_map_trigger_name =
          trigger_name^"_push_"^stmt_id^"_"^read_map_name in
      let do_complete_name = trigger_name^"_do_complete_"^stmt_id in
      let buffer_fn = "add_"^read_map_name in
-     Trigger(push_stmt_map_trigger_name,
+     Trigger(rcv_push_stmt_map_trigger_name,
          ATuple(("tuples", map_types_for read_map_id)::
              trig_args@("vid", BaseT(TInt))),
          [], (* locals *)
@@ -519,39 +520,105 @@ List.fold_left
 
 (* Generate code to send data for all possible correctives *)
 (* We send the new lhs_map results to any statement that could be affected *)
-let send_correctives map_id delta_var =
-  List.fold_left (* loop over all possible write maps in this trigger *)
-    (fun acc_code stmt_id
-      List.fold_left 
-            (fun acc_code trigger_id ->
-                let stmts = stmts_of_trigger trigger_id in
-                List.fold_left 
-                    (fun acc_code stmt_id ->
-                        let corrective_addr = trigger_id^"_corrective_"^stmt_id^"_d"^map_id in
-                        (* Our lhs_map is now our rhs_map *)
-                        if stmt_has_rhs_map stmt_id map_id then
-                            let shuffle_fn =
-                              shuffle_for map_id (lhs_map stmt_id)
-                            in
-                            .< ~.acc_code 
-                            if corrective_list[.~stmt_id]? then do {
-                                iter(\(ip,delta_tuples) ->
-                                    send(promote_address(~.corrective_addr, ip), delta_tuples),
-                                    .~shuffle_fn(.~key_and_pat_from_bound(stmt_id,
-                                        map_id, bound), delta_tuples, false)
-                                )
-                            }
-                            >.
-                        else acc_code
+(* TODO: just generate this all over the code without connection to a stmt but
+ * to maps *)
+(* delta_tuples is in the format of the lhs_map *)
+
+let trigger_stmt_and_rhs_map_list rhs_map_id =
+  (List.map (* lhs_maps of stmts with given rhs_map *)
+    (fun (trigger, stmt_id) -> (trigger, stmt_id, lhs_map_of_stmt stmt_id))
+    (List.filter
+      (fun (trigger, stmt_id) -> stmt_has_rhs_map stmt_id rhs_map_id)
+      (List.map
+        (fun trigger -> (triggers_stmts_in_trigger trigger))
+        (triggers)
+      )
+    )
+  )
+in
+let lhs_maps_in_trigger trigger_id =
+    List.map 
+      (fun stmt_id -> lhs_map_of_stmt stmt_id) 
+      (stmts_in_trigger trigger_id)
+in
+let forward_correctives_lambda map_id tuple_types = 
+  let forward_name = "forward_correctives_"^(map_name_of map_id) in
+  mk_global forward_name  
+    [("delta_tuples", map_types_of map_id); ("vid", BaseT(TInt))]
+    [TUnit] (* return type *)
+    (mk_let "corrective_list" (* (stmt_id * vid) list *)
+      (BaseT(TCollection(TList, BaseT(TTuple([BaseT(TInt); BaseT(TInt)]))))) 
+      (mk_apply
+        (mk_var "get_corrective_list")
+        (mk_tuple [mk_const CInt(map_id); mk_var "vid"])
+      )
+      (mk_iter  (* loop over corrective list *)
+        (mk_lambda
+          (ATuple(["stmt_id", BaseT(TInt); "vid", BaseT(TInt)])) 
+          (List.fold_left  (* loop over all possible read map matches *)
+            (fun acc_code (target_trigger, target_stmt, rhs_map_id) ->
+              let corrective_addr = 
+                target_trigger^"_corrective_"^target_stmt^"_"^rhs_map_id 
+              in
+              let target_bound = bound_vars_for_t target_trigger in
+              let key, pat = 
+                key_and_pat_from_bound stmt_id rhs_map_id target_bound in
+              let shuffle_fn = 
+                shuffle_for rhs_map_id (lhs_map_of_stmt stmt_id) in
+              let log_get_bound_fn = "log_get_bound"^target_trigger 
+              in
+              mk_if
+                (mk_eq
+                  (mk_var "stmt_id")
+                  (mk_const CInt(stmt_id))
+                )
+                (mk_iter (* if match, send data *)
+                  (mk_lambda 
+                    (ATuple(["ip", BaseT(TInt); "delta_tuples", tuple_types]))
+                    (mk_send
+                      (mk_apply
+                        (mk_var promote_address)
+                        (mk_tuple
+                          [mk_var corrective_addr; mk_var "ip"]
+                        )
+                      )
+                      (mk_var "delta_tuples")
                     )
-                    acc_code
-                    stmts
+                  )
+                  (mk_let_many (target_bound)
+                    (mk_apply (* get bound vars from log *)
+                      (mk_var log_get_bound_fn)
+                      (mk_var "vid")
+                    )
+                    (mk_apply
+                      (mk_var shuffle_fn
+                        (mk_tuple
+                          (key_and_pat_from_bound stmt_id map_id bound)@
+                          (mk_var "delta_tuples")@
+                          (mk_const CBool(false))
+                        )
+                      )
+                    )
+                  )
+                )
+                (acc_code) (* just another branch on the if *)
             )
-            .< let corrective_list = get_corrective_list(.~lhs_map_id, vid) in >.
-            triggers
-    (List.map 
-      (fun stmt_id -> lhs_maps_in_stmt stmt_id) 
-      (stmts_in_trigger trigger_id))
+            (mk_const CUnit) (* base case *)
+            (trigger_stmt_and_rhs_map_list map_id)
+          )
+        )
+        (mk_var "corrective_list")
+      )
+    )
+in
+let forward_correctives =
+  List.fold_left (* loop over all possible write maps in this trigger(program) *)
+    (fun acc_code map_id ->
+      let tuple_types = types_for_map map_id in
+        forward_correctives_lambda map_id tuple_types
+    )
+    (lhs_maps_in_trigger trigger_id)
+;;
 
 let do_complete_name = trigger_name^"_do_complete_"^stmt_id in
 Trigger
@@ -559,14 +626,159 @@ Trigger
     (* in terms of substitution, we need to 
      * a. switch read maps for buffers
      * b. inject a send to the send_correctives trigger by either sending a
-     * single delta or sending a cse representing a slice of calculated data *)
+     * single delta or sending a cse representing a slice of calculated data. We
+     * need to take the variable in K3 and transform it by adding in the bound
+     * variables so it matches the format of the lhs map *)
     let ast_stmt2 = subst_buffers (ast_of_stmt stmt_id) (read_maps_of_stmt stmt_id)
     in
-    let delta_in_lhs_map = to_lhs_map_form (ast_stmt2) (delta_var_of_stmt stmt_id)
+    let delta_in_lhs_map = to_lhs_map_form (delta_var_of_stmt stmt_id)
+      (key_and_pat_from_bound stmt_id map_id trig_args)
     in
-    inject_send_to_send_correctives (ast_stmt2 delta_in_lhs_map)
+    inject_call_forward_correctives ast_stmt2 delta_in_lhs_map
   )
 
+(* get_corrective_list: 
+ * ---------------------------------------
+ * Return list of corrective statements we need to execute by checking
+ * which statements were performed after time x that used a particular map 
+ * The only reason for this function is that we may have the same stmt
+ * needing to execute with different vids
+ * Optimization TODO: check also by ranges within the map.
+ *)
+let get_corrective_list = mk_global "get_corrective_list"
+  [("map_id", BaseT(TInt)); ("vid", BaseT(TInt))]
+  [(BaseT(TCollection(TList, TTuple([BaseT(TInt); BaseT(TInt)]))))] 
+  (* (stmt_id, vid) list *)
+  (mk_sort (* sort so that early vids are first for performance *)
+    (mk_filtermap (* filter out irrelevant statements *)
+      (mk_lambda (* filter func *)
+        (ATuple(["stmt_id", BaseT(TInt); "vid", BaseT(TInt)]))
+        (mk_apply
+          (mk_var "stmt_has_rhs_map") (* TODO *)
+          (mk_tuple
+            [mk_var "stmt_id"; mk_var "map_id"]
+          )
+        )
+      )
+      (mk_lambda (* identify map func *)
+        (ATuple(["stmt_id", BaseT(TInt); "vid", BaseT(TInt)]))
+        (mk_tuple
+          [mk_var "stmt_id"; mk_var "vid"]
+        )
+      )
+      (mk_flatten
+        (mk_map
+          (mk_lambda
+            (ATuple(["trigger_id", BaseT(TInt); "vid", BaseT(TInt)]))
+            (mk_map
+              (mk_lambda
+                (AVar("stmt_id", BaseT(TInt)))
+                (mk_tuple
+                  [mk_var "stmt_id"; mk_var "vid"]
+                )
+              )
+              (mk_apply
+                (mk_var "stmts_of_trigger") (* TODO *)
+                (mk_var "trigger_id")
+              )
+            )
+          )
+          (mk_apply
+            (mk_var "log_read_geq") (* TODO *)
+            (mk_var "vid")  (* produces triggers >= vid *)
+          )
+        )
+      )
+    )
+    (mk_assoc_lambda (* compare func *)
+      (ATuple(["vid1", BaseT(TInt); "stmt1", BaseT(TInt)]))
+      (ATuple(["vid2", BaseT(TInt); "stmt2", BaseT(TInt)]))
+      (mk_lt
+        (mk_var "vid1")
+        (mk_var "vid2")
+      )
+    )
+  )
 
     
+(* receive_correctives:
+ * ---------------------------------------
+ * Function that gets called when a corrective message is received.
+ * Receives bound variables and delta tuples for one map.  *)
+
+let receive_correctives = 
+List.fold_left 
+  (fun acc_code (stmt_id, map_id) ->
+    let map_name = map_name_of map_id in
+    let rcv_corrective_name =
+      trigger_name^"_rcv_corrective_"^stmt_id^"_"^map_name in
+    let do_corrective_name =
+      trigger_name^"_do_corrective_"^stmt_id^"_"^map_name in
+    let add_delta_to_buffer_fn = "add_delta_to_buffer_"^map_name in
+
+    Trigger(rcv_corrective_name,
+      ATuple(["delta_tuples", map_types_of map_id; "vid", BaseT(TInt)]),
+      [], (* locals *)
+      (let bound_vars = bound_vars_for_t trigger_id in (* TODO *)
+        bound_types = bound_types_for_t trigger_id in (* TODO *)
+        let log_get_bound_fn = "log_get_bound"^trigger_id in
+
+      mk_block
+        (* accumulate delta for this vid and all following vids *)
+        (* NOTE: this is one thing we can't do efficiently with local collections *)
+        [mk_apply
+          (mk_var add_delta_to_buffer_fn)
+          (mk_tuple
+            [mk_var "delta_tuples"; mk_var "vid"]
+          )
+        ;
+         
+        mk_let "corrected_updates"
+          (BaseT(TCollection(TList, BaseT(TInt)))) (* vid list *)
+          (mk_filtermap
+            (mk_lambda  (* find newer vids with counter=0 *)
+              (ATuple(["vid2", BaseT(TInt); "stmt2", BaseT(TInt); 
+                "cnt", BaseT(TInt)]))
+              (mk_and
+                (mk_leq
+                  (mk_var "vid")
+                  (mk_var "vid2")
+                )
+                (mk_eq
+                  (mk_var "cnt")
+                  (mk_const CInt(0))
+                )
+              )
+            )
+            (mk_lambda 
+              (ATuple(["vid2", BaseT(TInt); "stmt2", BaseT(TInt); 
+                "cnt", BaseT(TInt)]))
+              (mk_var "vid")
+            )
+            (mk_slice
+              (mk_var "stmt_counters")
+              (mk_tuple
+                [mk_var "_"; mk_const CInt(stmt_id); mk_var "_"]
+              )
+            )
+          )
+          (mk_let_many bound_vars
+            bound_types
+            (mk_apply
+              log_get_bound_fn
+              (mk_var "vid")
+            )
+            (* Send messages to do_complete_correctives: we might have several
+             * vids to send to *)
+            (mk_iter
+              (mk_lambda
+                (AVar("vid", BaseT(TInt)))
+                (mk_apply
+                  (mk_var do_corrective_addr)
+                  (delta_tuples@bound_var_names@(mk_var "vid"))
+                )
+              )
+              (mk_var "corrective_updates")
+            )
+
 
