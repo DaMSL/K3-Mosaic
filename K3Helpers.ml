@@ -209,7 +209,7 @@ let mk_send target args =
 (* function to declare and define a global function. Assumes the global
  * construct allows for an expr_t as well.
  * The types are expected in list format (always!) *)
-let mk_global_fn name input_names_and_types output_types =
+let mk_global_fn name input_names_and_types output_types expr =
     let wrap_args args = match args with
       [head] -> AVar(head)
       [] -> invalid_arg "Can't have 0 length args"
