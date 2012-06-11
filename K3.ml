@@ -10,14 +10,12 @@ type address_t
     = Local     of id_t
     | Remote    of id_t * id_t * int
 
-(* Collection Types *)
-type collection_type_t
+type container_type_t
     = TSet
     | TBag
     | TList
 
-(* Basic Types *)
-type base_type_t
+type atomic_type_t
     = TUnknown
     | TUnit
     | TBool
@@ -25,18 +23,26 @@ type base_type_t
     | TInt
     | TFloat
     | TString
+    | TMaybe        of value_type_t
     | TTuple        of value_type_t list
-    | TCollection   of collection_type_t * value_type_t
     | TTarget       of address_t * base_type_t
-    | TMaybe        of base_type_t
+
+and primitive_type_t
+    = TAtomic       of atomic_type_t
+    | TCollection   of container_type_t * value_type_t
+
+and base_type_t
+    = TRef          of primitive_type_t
+    | TStatic       of primitive_type_t
 
 and value_type_t
-    = TRef  of base_type_t
-    | BaseT of base_type_t
+    = TArgument     of value_type_t list
+    | TIsolated     of base_type_t
+    | TContained    of base_type_t
 
 type type_t
     = TFunction of value_type_t * value_type_t
-    | ValueT    of value_type_t
+    | TValue    of value_type_t
 
 (* Arguments *)
 type arg_t
@@ -64,7 +70,8 @@ type expr_tag_t
     | Empty of value_type_t
     | Singleton of value_type_t
     | Combine
-    | Range of collection_type_t
+
+    | Range     of container_type_t
 
     | Add
     | Mult
@@ -146,12 +153,12 @@ let string_of_address a = match a with
     | Local(i) -> "Local("^i^")"
     | Remote(i, h, p) -> "Remote("^i^"@"^h^":"^string_of_int p^")"
 
-let string_of_collection_type t_c = match t_c with
+let string_of_container_type t_c = match t_c with
     | TSet  -> "TSet"
     | TBag  -> "TBag"
     | TList -> "TList"
 
-let rec string_of_base_type t = match t with
+let rec string_of_atomic_type t = match t with
     | TUnknown  -> "TUnknown"
     | TUnit     -> "TUnit"
     | TBool     -> "TBool"
@@ -160,30 +167,34 @@ let rec string_of_base_type t = match t with
     | TFloat    -> "TFloat"
     | TString   -> "TString"
 
-    | TTuple(t_l)
-        -> "TTuple("^(String.concat ", " (List.map string_of_value_type t_l))^")"
+    | TMaybe(t) -> "TMaybe("^string_of_value_type(t)^")"
 
-    | TCollection(t_c, t_e)
-        -> "TCollection("
-            ^string_of_collection_type(t_c)^", "
-            ^string_of_value_type(t_e)
-        ^")"
+    | TTuple(t_l) -> "TTuple("^(String.concat ", " (List.map string_of_value_type t_l))^")"
 
     | TTarget(a, t)
         -> "TTarget("^string_of_address(a)^", "^string_of_base_type(t)^")"
 
-    | TMaybe(t)
-        -> "TMaybe("^string_of_base_type(t)^")"
+and string_of_primitive_type pt = match pt with
+    | TAtomic(at) -> "TAtomic("^string_of_atomic_type at^")"
+    | TCollection(t_c, t_e)
+        -> "TCollection("
+            ^string_of_container_type(t_c)^", "
+            ^string_of_value_type(t_e)
+        ^")"
 
-and string_of_value_type t = match t with
-    | TRef(t)
-        -> "TRef("^string_of_base_type(t)^")"
-    | BaseT(t) -> string_of_base_type(t)
+and string_of_base_type bt = match bt with
+    | TRef(pt) -> "TRef("^string_of_primitive_type pt^")"
+    | TStatic(pt) -> "TStatic("^string_of_primitive_type pt^")"
+
+and string_of_value_type vt = match vt with
+    | TArgument(vts) -> "TArgument("^String.concat ", " (List.map string_of_value_type vts)^")"
+    | TIsolated(bt) -> "TIsolated("^string_of_base_type bt^")"
+    | TContained(bt) -> "TContained("^string_of_base_type bt^")"
 
 let string_of_type t = match t with
     | TFunction(t_a, t_r)
         -> "TFunction("^string_of_value_type t_a ^", "^ string_of_value_type t_r ^")"
-    | ValueT(t) -> string_of_value_type(t)
+    | TValue(t) -> string_of_value_type(t)
 
 let string_of_const c = match c with
     | CUnit      -> "CUnit"
@@ -195,10 +206,10 @@ let string_of_const c = match c with
     | CNothing   -> "CNothing"
 
 let string_of_arg a = match a with
-    | AVar(i, t) -> "AVar("^i^": "^string_of_type(ValueT(t))^")"
+    | AVar(i, t) -> "AVar("^i^": "^string_of_type(TValue(t))^")"
     | ATuple(its)
         -> "ATuple("^(String.concat ", "
-                (List.map (function (i, t) -> i^": "^string_of_type(ValueT(t))) its))
+                (List.map (function (i, t) -> i^": "^string_of_type(TValue(t))) its))
         ^")"
 
 let string_of_expr_tag tag children = match tag with
@@ -218,7 +229,7 @@ let string_of_expr_tag tag children = match tag with
         ^")"
     | Range(ct)
         -> "Range("
-            ^string_of_collection_type(ct)^", "
+            ^string_of_container_type(ct)^", "
             ^(List.nth children 0)^", "
             ^(List.nth children 1)^", "
             ^(List.nth children 2)
