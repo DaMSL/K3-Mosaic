@@ -124,10 +124,13 @@ build_switch
  *       - make sure shuffle only deals with RHS types (it's just splitting
  *       them)
  *       - may need some types that are subsets of the maps rather than whole
- *       map types. need functions to deal with this.
+ *       map types. need sub-functions to deal with this!!
+ *        - Possibly split up the data into a bunch of maybe's in tuples
+ *        (present, not-present)
  *)
 
 Exception ProcessingFailed of string;;
+
 
 (* set type of vid here. Currently it's TInt, but we may need something better
  * *)
@@ -140,8 +143,8 @@ let route_for map_id = ;;
 let shuffle_for rhs_map_id lhs_map_id = ;;
 let over_stmts_in_t stmt_func trig_name = ;; (* output (stmt_id, stmt) list *)
 let read_maps_of_stmt stmt_id = ;; 
-let key_and_pat_from_bound stmt_id map_id bound_k3_var_names 
-  -> map_tuple, pat_list;;
+(* returns a tuple of maybes that has the relevant map pattern *)
+let map_pat_from_bound stmt_id map_id bound_k3_var_names = ;;
 let stmts_without_rhs_maps_of_t trig_name = ;;
 let lhs_rhs_of_stmt stmt_id = ;; 
 let map_name_of map_id = ;;
@@ -229,6 +232,9 @@ let do_complete_arg_types_of_t = extract_arg_types do_complete_args_of_t
 ;;
 
 (* k3 functions needed *)
+"route_to_map_"^map_id returns ip
+"shuffle_map_"^map_id^"_to_map_"map_id takes maybe tuples and a pattern maybe
+  tuple and returns a tuple
 "promote_address" -> Local() -> ip -> address_t
 
 
@@ -273,8 +279,8 @@ let send_fetch_trigger trigger_name =
         (List.fold_left
           (fun acc_code (stmt_id, rhs_map_id) ->
             let route_fn = route_for rhs_map_id in 
-            let key, pat = 
-              key_and_pat_from_bound stmt_id rhs_map_id (arg_names_of_t trigger_name) 
+            let pat = 
+              map_pat_from_bound stmt_id rhs_map_id (arg_names_of_t trigger_name) 
             in
               (mk_combine
                 (mk_map 
