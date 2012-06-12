@@ -10,13 +10,11 @@ type address_t
     = Local     of id_t
     | Remote    of id_t * id_t * int
 
-(* Collection Types *)
-type collection_type_t
+type container_type_t
     = TSet
     | TBag
     | TList
 
-(* Basic Types *)
 type base_type_t
     = TUnknown
     | TUnit
@@ -25,18 +23,22 @@ type base_type_t
     | TInt
     | TFloat
     | TString
+    | TMaybe        of value_type_t
     | TTuple        of value_type_t list
-    | TCollection   of collection_type_t * value_type_t
+    | TCollection   of container_type_t * mutable_type_t
     | TTarget       of address_t * base_type_t
-    | TMaybe        of base_type_t
+
+and mutable_type_t
+    = TMutable         of base_type_t
+    | TImmutable       of base_type_t
 
 and value_type_t
-    = TRef  of base_type_t
-    | BaseT of base_type_t
+    = TIsolated     of mutable_type_t
+    | TContained    of mutable_type_t
 
 type type_t
     = TFunction of value_type_t * value_type_t
-    | ValueT    of value_type_t
+    | TValue    of value_type_t
 
 (* Arguments *)
 type arg_t
@@ -69,7 +71,7 @@ type expr_tag_t
      * Creates a new collection of length (`steps' + 1) of integers starting at
      * `start' at intervals of `stride'.
      *)
-    | Range     of collection_type_t
+    | Range     of container_type_t
 
     (* Add(x:T, y:T') -> T'': Overloaded disjunction; acts as addition for
      * numeric types and logical disjunction for booleans. `TInt' is promoted to
@@ -218,8 +220,9 @@ type 'a program_t = 'a statement_t list
 (* Utilities *)
 
 val string_of_address: address_t -> string
-val string_of_collection_type: collection_type_t -> string
+val string_of_container_type: container_type_t -> string
 val string_of_base_type: base_type_t -> string
+val string_of_mutable_type: mutable_type_t -> string
 val string_of_value_type: value_type_t -> string
 val string_of_type: type_t -> string
 val string_of_const: constant_t -> string

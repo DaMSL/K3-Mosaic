@@ -10,13 +10,11 @@ type address_t
     = Local     of id_t
     | Remote    of id_t * id_t * int
 
-(* Collection Types *)
-type collection_type_t
+type container_type_t
     = TSet
     | TBag
     | TList
 
-(* Basic Types *)
 type base_type_t
     = TUnknown
     | TUnit
@@ -25,18 +23,22 @@ type base_type_t
     | TInt
     | TFloat
     | TString
+    | TMaybe        of value_type_t
     | TTuple        of value_type_t list
-    | TCollection   of collection_type_t * value_type_t
+    | TCollection   of container_type_t * mutable_type_t
     | TTarget       of address_t * base_type_t
-    | TMaybe        of base_type_t
+
+and mutable_type_t
+    = TMutable      of base_type_t
+    | TImmutable    of base_type_t
 
 and value_type_t
-    = TRef  of base_type_t
-    | BaseT of base_type_t
+    = TIsolated     of mutable_type_t
+    | TContained    of mutable_type_t
 
-type type_t
+and type_t
     = TFunction of value_type_t * value_type_t
-    | ValueT    of value_type_t
+    | TValue    of value_type_t
 
 (* Arguments *)
 type arg_t
@@ -64,7 +66,8 @@ type expr_tag_t
     | Empty of value_type_t
     | Singleton of value_type_t
     | Combine
-    | Range of collection_type_t
+
+    | Range of container_type_t
 
     | Add
     | Mult
@@ -146,7 +149,7 @@ let string_of_address a = match a with
     | Local(i) -> "Local("^i^")"
     | Remote(i, h, p) -> "Remote("^i^"@"^h^":"^string_of_int p^")"
 
-let string_of_collection_type t_c = match t_c with
+let string_of_container_type t_c = match t_c with
     | TSet  -> "TSet"
     | TBag  -> "TBag"
     | TList -> "TList"
@@ -160,30 +163,30 @@ let rec string_of_base_type t = match t with
     | TFloat    -> "TFloat"
     | TString   -> "TString"
 
-    | TTuple(t_l)
-        -> "TTuple("^(String.concat ", " (List.map string_of_value_type t_l))^")"
+    | TMaybe(t) -> "TMaybe("^string_of_value_type(t)^")"
+
+    | TTuple(t_l) -> "TTuple("^(String.concat ", " (List.map string_of_value_type t_l))^")"
 
     | TCollection(t_c, t_e)
         -> "TCollection("
-            ^string_of_collection_type(t_c)^", "
-            ^string_of_value_type(t_e)
-        ^")"
+            ^string_of_container_type t_c^", "
+            ^string_of_mutable_type t_e
+            ^")"
 
-    | TTarget(a, t)
-        -> "TTarget("^string_of_address(a)^", "^string_of_base_type(t)^")"
+    | TTarget(a, t) -> "TTarget("^string_of_address(a)^", "^string_of_base_type(t)^")"
 
-    | TMaybe(t)
-        -> "TMaybe("^string_of_base_type(t)^")"
+and string_of_mutable_type mt = match mt with
+    | TMutable(bt) -> "TMutable("^string_of_base_type bt^")"
+    | TImmutable(bt) -> "TImmutable("^string_of_base_type bt^")"
 
-and string_of_value_type t = match t with
-    | TRef(t)
-        -> "TRef("^string_of_base_type(t)^")"
-    | BaseT(t) -> string_of_base_type(t)
+and string_of_value_type vt = match vt with
+    | TIsolated(mt) -> "TIsolated("^string_of_mutable_type mt^")"
+    | TContained(mt) -> "TContained("^string_of_mutable_type mt^")"
 
-let string_of_type t = match t with
+and string_of_type t = match t with
     | TFunction(t_a, t_r)
         -> "TFunction("^string_of_value_type t_a ^", "^ string_of_value_type t_r ^")"
-    | ValueT(t) -> string_of_value_type(t)
+    | TValue(t) -> string_of_value_type(t)
 
 let string_of_const c = match c with
     | CUnit      -> "CUnit"
@@ -195,10 +198,10 @@ let string_of_const c = match c with
     | CNothing   -> "CNothing"
 
 let string_of_arg a = match a with
-    | AVar(i, t) -> "AVar("^i^": "^string_of_type(ValueT(t))^")"
+    | AVar(i, t) -> "AVar("^i^": "^string_of_type(TValue(t))^")"
     | ATuple(its)
         -> "ATuple("^(String.concat ", "
-                (List.map (function (i, t) -> i^": "^string_of_type(ValueT(t))) its))
+                (List.map (function (i, t) -> i^": "^string_of_type(TValue(t))) its))
         ^")"
 
 let string_of_expr_tag tag children = match tag with
@@ -218,7 +221,7 @@ let string_of_expr_tag tag children = match tag with
         ^")"
     | Range(ct)
         -> "Range("
-            ^string_of_collection_type(ct)^", "
+            ^string_of_container_type(ct)^", "
             ^(List.nth children 0)^", "
             ^(List.nth children 1)^", "
             ^(List.nth children 2)
