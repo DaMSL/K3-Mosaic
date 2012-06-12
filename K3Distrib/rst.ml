@@ -15,7 +15,7 @@ Global(ValueT("Q1", TValueT(TRef(TFloat)))
 *)
 
 let = ();;
-let mk_has_member col pat = mk_neg (mk_eq (mk_slice col pat) (mk_empty (BaseT(TFloat))));;
+let mk_has_member_float col pat = mk_has_member col pat BaseT(TFloat)
 
 let t = Trigger("On_Insert_T", ATuple([("pR1_pS1T_C", BaseT(TFloat));("pR1_pS1T_D", BaseT(TFloat))]), [], 
 mk_block  

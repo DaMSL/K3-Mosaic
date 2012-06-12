@@ -180,6 +180,11 @@ let mk_slice collection pattern =
     recompose_tree ((meta, Slice), [collection; pattern])
 ;;
 
+(* checks if a member of a collection is present *)
+let mk_has_member collection pattern member_type = 
+    mk_neg (mk_eq (mk_slice collection pattern) (mk_empty (member_type)))
+;;
+
 let mk_insert collection x =
     recompose_tree ((meta, Insert), [collection; x])
 ;;
