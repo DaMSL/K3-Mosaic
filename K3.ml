@@ -15,7 +15,7 @@ type container_type_t
     | TBag
     | TList
 
-type atomic_type_t
+type base_type_t
     = TUnknown
     | TUnit
     | TBool
@@ -25,22 +25,18 @@ type atomic_type_t
     | TString
     | TMaybe        of value_type_t
     | TTuple        of value_type_t list
+    | TCollection   of container_type_t * mutable_type_t
     | TTarget       of address_t * base_type_t
 
-and primitive_type_t
-    = TAtomic       of atomic_type_t
-    | TCollection   of container_type_t * value_type_t
-
-and base_type_t
-    = TRef          of primitive_type_t
-    | TStatic       of primitive_type_t
+and mutable_type_t
+    = TMutable      of base_type_t
+    | TImmutable    of base_type_t
 
 and value_type_t
-    = TArgument     of value_type_t list
-    | TIsolated     of base_type_t
-    | TContained    of base_type_t
+    = TIsolated     of mutable_type_t
+    | TContained    of mutable_type_t
 
-type type_t
+and type_t
     = TFunction of value_type_t * value_type_t
     | TValue    of value_type_t
 
@@ -71,7 +67,7 @@ type expr_tag_t
     | Singleton of value_type_t
     | Combine
 
-    | Range     of container_type_t
+    | Range of container_type_t
 
     | Add
     | Mult
@@ -158,7 +154,7 @@ let string_of_container_type t_c = match t_c with
     | TBag  -> "TBag"
     | TList -> "TList"
 
-let rec string_of_atomic_type t = match t with
+let rec string_of_base_type t = match t with
     | TUnknown  -> "TUnknown"
     | TUnit     -> "TUnit"
     | TBool     -> "TBool"
@@ -171,27 +167,23 @@ let rec string_of_atomic_type t = match t with
 
     | TTuple(t_l) -> "TTuple("^(String.concat ", " (List.map string_of_value_type t_l))^")"
 
-    | TTarget(a, t)
-        -> "TTarget("^string_of_address(a)^", "^string_of_base_type(t)^")"
-
-and string_of_primitive_type pt = match pt with
-    | TAtomic(at) -> "TAtomic("^string_of_atomic_type at^")"
     | TCollection(t_c, t_e)
         -> "TCollection("
-            ^string_of_container_type(t_c)^", "
-            ^string_of_value_type(t_e)
-        ^")"
+            ^string_of_container_type t_c^", "
+            ^string_of_mutable_type t_e
+            ^")"
 
-and string_of_base_type bt = match bt with
-    | TRef(pt) -> "TRef("^string_of_primitive_type pt^")"
-    | TStatic(pt) -> "TStatic("^string_of_primitive_type pt^")"
+    | TTarget(a, t) -> "TTarget("^string_of_address(a)^", "^string_of_base_type(t)^")"
+
+and string_of_mutable_type mt = match mt with
+    | TMutable(bt) -> "TMutable("^string_of_base_type bt^")"
+    | TImmutable(bt) -> "TImmutable("^string_of_base_type bt^")"
 
 and string_of_value_type vt = match vt with
-    | TArgument(vts) -> "TArgument("^String.concat ", " (List.map string_of_value_type vts)^")"
-    | TIsolated(bt) -> "TIsolated("^string_of_base_type bt^")"
-    | TContained(bt) -> "TContained("^string_of_base_type bt^")"
+    | TIsolated(mt) -> "TIsolated("^string_of_mutable_type mt^")"
+    | TContained(mt) -> "TContained("^string_of_mutable_type mt^")"
 
-let string_of_type t = match t with
+and string_of_type t = match t with
     | TFunction(t_a, t_r)
         -> "TFunction("^string_of_value_type t_a ^", "^ string_of_value_type t_r ^")"
     | TValue(t) -> string_of_value_type(t)

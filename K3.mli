@@ -15,7 +15,7 @@ type container_type_t
     | TBag
     | TList
 
-type atomic_type_t
+type base_type_t
     = TUnknown
     | TUnit
     | TBool
@@ -25,20 +25,16 @@ type atomic_type_t
     | TString
     | TMaybe        of value_type_t
     | TTuple        of value_type_t list
+    | TCollection   of container_type_t * mutable_type_t
     | TTarget       of address_t * base_type_t
 
-and primitive_type_t
-    = TAtomic       of atomic_type_t
-    | TCollection   of container_type_t * value_type_t
-
-and base_type_t
-    = TRef          of primitive_type_t
-    | TStatic       of primitive_type_t
+and mutable_type_t
+    = TMutable         of base_type_t
+    | TImmutable       of base_type_t
 
 and value_type_t
-    = TArgument     of value_type_t list
-    | TIsolated     of base_type_t
-    | TContained    of base_type_t
+    = TIsolated     of mutable_type_t
+    | TContained    of mutable_type_t
 
 type type_t
     = TFunction of value_type_t * value_type_t
@@ -225,9 +221,8 @@ type 'a program_t = 'a statement_t list
 
 val string_of_address: address_t -> string
 val string_of_container_type: container_type_t -> string
-val string_of_atomic_type: atomic_type_t -> string
-val string_of_primitive_type: primitive_type_t -> string
 val string_of_base_type: base_type_t -> string
+val string_of_mutable_type: mutable_type_t -> string
 val string_of_value_type: value_type_t -> string
 val string_of_type: type_t -> string
 val string_of_const: constant_t -> string
