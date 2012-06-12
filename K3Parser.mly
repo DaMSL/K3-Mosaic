@@ -11,8 +11,8 @@
     let globals = ref []
 
     let mkexpr tag children = match children with
-        | [] -> Leaf(get_uuid(), tag)
-        | _  -> Node(get_uuid(), tag, children)
+        | [] -> Leaf((get_uuid(), tag))
+        | _  -> Node((get_uuid(), tag), children)
 
     let rec build_collection exprs ctype = match exprs with
         | [] -> mkexpr (Empty(ctype)) []
@@ -267,7 +267,7 @@ mutation:
     | INSERT LPAREN expr COMMA expr RPAREN { mkexpr Insert [$3; $5] }
     | UPDATE LPAREN expr COMMA expr, COMMA expr RPAREN { mkexpr Update [$3; $5; $7] }
     | DELETE LPAREN expr COMMA expr RPAREN { mkexpr Delete [$3; $5] }
-    | expr COLONGETS expr { mkexpr AssignToRef [$1; $3] }
+    | expr COLONGETS expr { mkexpr Assign [$1; $3] }
 ;
 
 transformers:
