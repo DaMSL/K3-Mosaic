@@ -55,17 +55,16 @@ type constant_t
 
 (* Expressions *)
 type expr_tag_t
-
     = Const of constant_t
     | Var   of id_t
     | Tuple
 
     | Just
 
-    | Empty     of value_type_t
+    | Empty of value_type_t
     | Singleton of value_type_t
     | Combine
-    | Range     of collection_type_t
+    | Range of collection_type_t
 
     | Add
     | Mult
@@ -76,8 +75,7 @@ type expr_tag_t
     | Neq
     | Leq
 
-    | Lambda        of arg_t
-    | AssocLambda   of arg_t * arg_t
+    | Lambda of arg_t
     | Apply
 
     | Block
@@ -99,12 +97,13 @@ type expr_tag_t
 
     | Peek
 
-    | AssignToRef
+    | Assign
+    | Deref
 
     | Send
 
 (* Expression Tree *)
-type 'a expr_t = ('a, expr_tag_t) tree_t
+type 'a expr_t = ('a * expr_tag_t) tree_t
 
 type stop_behavior_t
     = UntilCurrent
@@ -235,12 +234,6 @@ let string_of_expr_tag tag children = match tag with
 
     | Lambda(a)
         -> "Lambda("^string_of_arg(a)^", "^(List.nth children 0)^")"
-    | AssocLambda(a, b)
-        -> "AssocLambda("
-            ^string_of_arg(a)^", "
-            ^string_of_arg(b)^", "
-            ^(List.nth children 0)
-        ^")"
     | Apply
         -> "Apply("^(List.nth children 0)^", "^(List.nth children 1)^")"
 
@@ -308,11 +301,13 @@ let string_of_expr_tag tag children = match tag with
 
     | Peek -> "Peek("^List.nth children 0^")"
 
-    | AssignToRef
-        -> "AssignToRef("
+    | Assign
+        -> "Assign("
             ^List.nth children 0^", "
             ^List.nth children 1
         ^")"
+
+    | Deref -> "Deref("^List.nth children 0^")"
 
     | Send
         -> "Send("
@@ -320,10 +315,8 @@ let string_of_expr_tag tag children = match tag with
             ^(List.nth children 1)
         ^")"
 
-let string_of_expr_meta string_of_meta =
-  string_of_tree string_of_meta string_of_expr_tag
-
-let string_of_expr e = string_of_tree (fun _ _ -> "") string_of_expr_tag e
+(* TODO: Why can't this function be point-free? *)
+let string_of_expr expr = string_of_tree (function (_, tag) -> string_of_expr_tag tag) expr
 
 let string_of_stop_behavior_t s = match s with
     | UntilCurrent -> "UntilCurrent"

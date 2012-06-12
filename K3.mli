@@ -55,7 +55,6 @@ type constant_t
 
 (* Expressions *)
 type expr_tag_t
-
     = Const of constant_t
     | Var   of id_t
     | Tuple
@@ -95,11 +94,6 @@ type expr_tag_t
 
     | Lambda        of arg_t
 
-    (* A lambda defined to be associative in its two arguments.
-     * TODO: Kill this and put the associativity property in an annotation,
-     * along with commutativity and idempotance, and other nice things.
-     *)
-    | AssocLambda   of arg_t * arg_t
     | Apply
 
     (* Block(e_1:TUnit, e_2:TUnit, ... , e_n:TUnit, e:T) -> T: Execute
@@ -177,16 +171,14 @@ type expr_tag_t
     (* Peek(c:TCollection(C, T)) -> T: Get one element from collection `c'. *)
     | Peek
 
-    (* AssignToRef(left:TRef(T), right:T/TRef(T)) -> TUnit: Store a value in a
-     * ref. Right-Side refs will be dereferenced.
-     *)
-    | AssignToRef
+    | Assign
+    | Deref
 
     (* Send(a:TTarget(N, T), args:T): Send a message of type `T' to target `a'. *)
     | Send
 
 (* Expression Tree *)
-type 'a expr_t = ('a, expr_tag_t) tree_t
+type 'a expr_t = ('a * expr_tag_t) tree_t
 
 type stop_behavior_t
     = UntilCurrent
@@ -233,7 +225,6 @@ val string_of_type: type_t -> string
 val string_of_const: constant_t -> string
 val string_of_arg: arg_t -> string
 val string_of_expr_tag: expr_tag_t -> string list -> string
-val string_of_expr_meta: ('a -> string list -> string) -> 'a expr_t -> string
 val string_of_expr: 'a expr_t -> string
 
 val string_of_declaration: 'a declaration_t -> string

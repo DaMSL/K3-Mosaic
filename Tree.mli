@@ -1,23 +1,18 @@
-(* A generic tree *)
-type ('a, 'tag) tree_t
-    = Leaf of 'a * 'tag
-    | Node of 'a * 'tag * ('a, 'tag) tree_t list
+type 'a tree_t
+    = Leaf of 'a
+    | Node of 'a * 'a tree_t list
 
-(* Tree decomposition *)
-val decompose_tree : ('a, 'tag) tree_t -> ('a * 'tag) * (('a, 'tag) tree_t list)
-val recompose_tree : ('a * 'tag) * (('a, 'tag) tree_t list) -> ('a, 'tag) tree_t
+val decompose_tree : 'a tree_t -> 'a * 'a tree_t list
+val recompose_tree : 'a * 'a tree_t list -> 'a tree_t
 
-val data_of_tree : ('a, 'tag) tree_t -> ('a * 'tag)
-val sub_of_tree : ('a, 'tag) tree_t -> ('a, 'tag) tree_t list
+val data_of_tree : 'a tree_t -> 'a
+val sub_of_tree : 'a tree_t -> 'a tree_t list
 
-val sub_tree     : ('a, 'tag) tree_t -> ('a, 'tag) tree_t list
-val rebuild_tree : ('a, 'tag) tree_t list -> ('a, 'tag) tree_t -> ('a, 'tag) tree_t 
+val sub_tree     : 'a tree_t -> 'a tree_t list
+val rebuild_tree : 'a tree_t list -> 'a tree_t -> 'a tree_t
 val fold_tree    : 
-  ('td -> ('a, 'tag) tree_t -> 'td) -> 
-  ('td -> 'bu list -> ('a, 'tag) tree_t -> 'bu) ->
-  'td -> 'bu -> ('a, 'tag) tree_t -> 'bu
+  ('td -> 'a tree_t -> 'td) ->
+  ('td -> 'bu list -> 'a tree_t -> 'bu) ->
+  'td -> 'bu -> 'a tree_t -> 'bu
 
-val string_of_tree :
-  ('a -> string list -> string)
-  -> ('tag -> string list -> string)
-  -> ('a, 'tag) tree_t -> string
+val string_of_tree : ('a -> string list -> string) -> 'a tree_t -> string
