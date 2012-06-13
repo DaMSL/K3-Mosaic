@@ -114,7 +114,7 @@ let rec deduce_expr_type env expr =
     let typed_children = List.map (deduce_expr_type new_env) untyped_children in
 
     (* Define some helpers. *)
-    let attach_type t = recompose_tree (((meta, t), tag), typed_children) in
+    let attach_type t = mk_tree (((meta, t), tag), typed_children) in
     let get_child n = List.nth typed_children n in
 
     (* An assertion that the given type is a function. *)

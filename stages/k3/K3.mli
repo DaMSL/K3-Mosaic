@@ -180,7 +180,7 @@ type expr_tag_t
     | Send
 
 (* Expression Tree *)
-type 'a expr_t = ('a * expr_tag_t) tree_t
+type 'a expr_t = ((int * expr_tag_t) * 'a) tree_t
 
 type stop_behavior_t
     = UntilCurrent
@@ -199,7 +199,7 @@ type consumable_t
 
 (* Top-Level Declarations *)
 type 'a declaration_t
-    = Global        of id_t * type_t
+    = Global        of id_t * type_t  * 'a expr_t option
     | Foreign       of id_t * type_t
     | Trigger       of id_t * arg_t * (id_t * value_type_t) list * 'a expr_t
     | Bind          of id_t * id_t
@@ -216,21 +216,3 @@ type 'a statement_t
 
 (* K3 Programs *)
 type 'a program_t = 'a statement_t list
-
-(* Utilities *)
-
-val string_of_address: address_t -> string
-val string_of_container_type: container_type_t -> string
-val string_of_base_type: base_type_t -> string
-val string_of_mutable_type: mutable_type_t -> string
-val string_of_value_type: value_type_t -> string
-val string_of_type: type_t -> string
-val string_of_const: constant_t -> string
-val string_of_arg: arg_t -> string
-val string_of_expr_tag: expr_tag_t -> string list -> string
-val string_of_expr: 'a expr_t -> string
-
-val string_of_declaration: 'a declaration_t -> string
-val string_of_instruction: instruction_t -> string
-val string_of_statement: 'a statement_t -> string
-val string_of_program: 'a program_t -> string
