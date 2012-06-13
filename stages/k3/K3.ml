@@ -106,7 +106,7 @@ type expr_tag_t
     | Send
 
 (* Expression Tree *)
-type 'a expr_t = ('a * expr_tag_t) tree_t
+type 'a expr_t = ((int * expr_tag_t) * 'a) tree_t
 
 type stop_behavior_t
     = UntilCurrent
@@ -125,7 +125,7 @@ type consumable_t
 
 (* Top-Level Declarations *)
 type 'a declaration_t
-    = Global        of id_t * type_t
+    = Global        of id_t * type_t  * 'a expr_t option
     | Foreign       of id_t * type_t
     | Trigger       of id_t * arg_t * (id_t * value_type_t) list * 'a expr_t
     | Bind          of id_t * id_t
