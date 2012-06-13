@@ -13,9 +13,12 @@ let real = digit+ '.' digit+
 
 let identifier = ['_''a'-'z''A'-'Z']['_''a'-'z''A'-'Z''0'-'9']*
 
+let comment = '#' [^ '\n']* '\n'
+
 rule tokenize = parse
     | whitespace { tokenize lexbuf }
     | eof { EOF }
+    | comment { tokenize lexbuf }
 
     | "declare" { DECLARE }
     | "foreign" { FOREIGN }

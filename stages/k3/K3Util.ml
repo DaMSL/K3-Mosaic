@@ -29,7 +29,7 @@ let rec string_of_base_type t = match t with
     | TCollection(t_c, t_e)
         -> "TCollection("
             ^string_of_container_type t_c^", "
-            ^string_of_mutable_type t_e
+            ^string_of_value_type t_e
             ^")"
 
     | TTarget(a, t) -> "TTarget("^string_of_address(a)^", "^string_of_base_type(t)^")"
@@ -143,7 +143,11 @@ let rec string_of_consumable c = match c with
         -> "Repeat("^string_of_consumable c^", "^string_of_stop_behavior_t s^")"
 
 let string_of_declaration d = match d with
-    | Global(i, t)  -> "Global("^i^", "^string_of_type(t)^")"
+    | Global(i, t, init)  -> "Global("^i^", "^string_of_type(t)^(
+        match init with
+        | Some e -> ", "^string_of_expr e
+        | None -> ""
+    )^")"
     | Foreign(i, t) -> "Foreign("^i^", "^string_of_type(t)^")"
 
     | Trigger(i, arg, ds, e)

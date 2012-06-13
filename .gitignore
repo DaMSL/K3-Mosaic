@@ -2,14 +2,20 @@
 
 *.cmi
 *.cmo
+*.cmx
 
 *.annot
 *.output
 
-K3Parser.mli
-K3Parser.ml
+*.o
 
-K3Lexer.mli
-K3Lexer.ml
+Makefile.deps
+Makefile.local
 
-driver
+bin/
+
+stages/k3/K3Parser.mli
+stages/k3/K3Parser.ml
+
+stages/k3/K3Lexer.mli
+stages/k3/K3Lexer.ml

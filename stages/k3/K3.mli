@@ -25,7 +25,7 @@ type base_type_t
     | TString
     | TMaybe        of value_type_t
     | TTuple        of value_type_t list
-    | TCollection   of container_type_t * mutable_type_t
+    | TCollection   of container_type_t * value_type_t
     | TTarget       of address_t * base_type_t
 
 and mutable_type_t
@@ -180,7 +180,7 @@ type expr_tag_t
     | Send
 
 (* Expression Tree *)
-type 'a expr_t = ((int * expr_tag_t) * 'a) tree_t
+type 'a expr_t = ('a * expr_tag_t) tree_t
 
 type stop_behavior_t
     = UntilCurrent

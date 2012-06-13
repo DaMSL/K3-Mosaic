@@ -1,6 +1,7 @@
 (* Driver for the K3 programming language. Reads K3 syntax, outputs AST *)
 
 open K3
+open K3Util
 
 let main () =
     let lexbuf = Lexing.from_channel stdin in
