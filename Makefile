@@ -53,9 +53,6 @@ versioncheck:
 	  echo "Your OCaml version is too low.  OCaml 3.12.1 is required, you have"\
 	       $(shell ocaml -version); exit -1; fi
 
-k3c: Tree.cmo K3.cmo K3Util.cmo K3Parser.cmo K3Lexer.cmo driver.cmo
-	ocamlc -annot -o driver Tree.cmo K3.cmo K3Util.cmo K3Parser.cmo K3Lexer.cmo driver.cmo
-
 bin/k3: $(NC_FILES) Driver.ml
 	@echo "Linking K3 (Optimized)"
 	@$(OCAMLOPT) $(OCAMLOPT_FLAGS) -o $@ $(NC_FILES) Driver.ml
