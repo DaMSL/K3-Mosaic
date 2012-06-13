@@ -118,7 +118,7 @@ let string_of_expr_tag tag children =
 
 (* TODO: Why can't this function be point-free? *)
 let string_of_expr expr =
-  string_of_tree (function (_, tag) -> string_of_expr_tag tag) expr
+  string_of_tree (fun ((id, tag), _) -> string_of_expr_tag tag) expr
 
 let string_of_stop_behavior_t s = match s with
     | UntilCurrent -> "UntilCurrent"
@@ -175,12 +175,9 @@ let string_of_program ss
 
 (* AST accessors *)
 
-let meta_of_expr e = fst_data e
-let tag_of_expr e = snd_data e
-
-(* Predicates *)
-let is_const e = match tag_of_expr e with | Const _ -> true | _ -> false
-let is_var e = match tag_of_expr e with | Var _ -> true | _ -> false
+let id_of_expr e = fst (fst_data e) 
+let tag_of_expr e = snd (fst_data e)
+let meta_of_expr e = snd_data e
 
 (* Variable id extraction *)
 let vars_of_arg =
@@ -191,6 +188,11 @@ let typed_vars_of_arg =
 
 let id_of_var e = match tag_of_expr e with
   | Var id -> id | _ -> failwith "invalid variable"
+
+(* Predicates *)
+let is_const e = match tag_of_expr e with | Const _ -> true | _ -> false
+let is_var e = match tag_of_expr e with | Var _ -> true | _ -> false
+let is_var_match id e = is_var e && (id_of_var e) = id
 
 (* Bindings *)
 let lambda_bindings f tag = match tag with | Lambda x -> f x | _ -> []
@@ -233,18 +235,21 @@ let contains_expr e1 e2 =
  *)
 let substitute_expr subs e =
   let remove_var subs e =
-    let vars = List.map (fun id ->
-      mk_tree ((meta_of_expr e, Var id), [])) (vars_of_lambda e) in
+    let vars = vars_of_lambda e in
     if vars = [] then subs
-    else List.fold_left (fun acc v -> List.remove_assoc v acc) subs vars
+    else
+      List.fold_left (fun acc (src, dest) -> 
+        if is_var src && List.mem (id_of_var src) vars then acc
+        else acc@[src,dest]) [] subs
   in
   let sub_aux subs parts_w_sub_ids e =
     let parts, sub_ids =
       let x,y = List.split parts_w_sub_ids in x, List.flatten y
     in
     let new_e = recompose_tree e parts in
-    if List.mem_assoc new_e subs
-    then (List.assoc new_e subs, sub_ids@[0,0])
+    if List.mem_assoc new_e subs then
+      let sub_e = List.assoc new_e subs 
+      in (sub_e, sub_ids@[id_of_expr new_e, id_of_expr sub_e])
     else (new_e, sub_ids)
   in fold_tree remove_var sub_aux subs (e, []) e
   

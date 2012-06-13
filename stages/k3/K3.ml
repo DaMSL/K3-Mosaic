@@ -106,7 +106,7 @@ type expr_tag_t
     | Send
 
 (* Expression Tree *)
-type 'a expr_t = ('a * expr_tag_t) tree_t
+type 'a expr_t = ((int * expr_tag_t) * 'a) tree_t
 
 type stop_behavior_t
     = UntilCurrent
