@@ -11,8 +11,8 @@
     let globals = ref []
 
     let mkexpr tag children = match children with
-        | [] -> Leaf((get_uuid(), tag))
-        | _  -> Node((get_uuid(), tag), children)
+        | [] -> Leaf(((get_uuid(), tag), 0))
+        | _  -> Node(((get_uuid(), tag), 0), children)
 
     let rec build_collection exprs ctype = match exprs with
         | [] -> mkexpr (Empty(ctype)) []
