@@ -38,7 +38,8 @@
 
 (* TODO: - slice needs CUnknown, not "_"
  *       - Problem: don't think shuffle handles map[b] = map[c; b] ie. b->b
- *       mapping when b is unbound
+ *       mapping when b is unbound. Need to make it fully stmt_id specific.
+ *       - Change data structure p to remove map arg names, and add loop vars.
         * - declare local buffers for node 
  *       - add rcv_put trigger
  *       - key, pat -> just pat
@@ -167,7 +168,7 @@ let send_fetch_trigger p trig_name =
           )
           (mk_empty (BaseT(TCollection(TList, BaseT(TTuple([BaseT(TInt);
             BaseT(TInt)]))))))
-          (over_stmts_in_t p read_maps_of_stmt trig_name) (* TODO *)
+          (over_stmts_in_t p read_maps_of_stmt trig_name) 
         ) 
       )
     )
@@ -323,7 +324,6 @@ Trigger(
   )
 )
    
-(* Debug -----
 
 (* Trigger_send_push_stmt_map
  * ----------------------------------------
@@ -331,28 +331,27 @@ Trigger(
  * Circumvents polymorphism.
  * Produces a list of triggers.
  *)
-let send_push_stmt_map_funcs trig_name = 
+let send_push_stmt_map_funcs p trig_name = 
   (List.fold_left
     (fun acc_code (stmt_id, (lhs_map_id, rhs_map_id)) ->
-      let rhs_map_types = map_types_for rhs_map_id in (* todo *)
-      let shuffle_fn = shuffle_for rhs_map_id lhs_map_id in
-      let rkey = 
-        partial_key_from_bound stmt_id rhs_map_id (arg_names_of_t trig_name) 
-      in
+      let rhs_map_types = wrap_tlist (wrap_ttuple 
+        (map_types_for p rhs_map_id)) in 
+      let shuffle_fn = shuffle_for p stmt_id rhs_map_id lhs_map_id in
+      let rkey = partial_key_from_bound p stmt_id rhs_map_id in
       acc_code@
-      (Trigger (send_push_name_of_t trig_name stmt_id rhs_map_id, 
-        Atuple(trig_args_with_v_of trig_nm),
+      [Trigger (send_push_name_of_t p trig_name stmt_id rhs_map_id, 
+        ATuple(args_of_t_with_v p trig_name),
         [] (* locals *),
           (mk_iter
-            (mk_lambda ATuple(["ip", BaseT(TInt); "tuples", rhs_map_types])
+            (mk_lambda (ATuple(["ip", BaseT(TInt); "tuples", rhs_map_types]))
               (mk_send
                 (mk_apply
                   (mk_var "promote_address")
-                  (mk_tuple [Local(rcv_push_name_of_t trig_name stmt_id
+                  (mk_tuple [mk_var (rcv_push_name_of_t p trig_name stmt_id
                     rhs_map_id); mk_var "ip"]
                   )
                 )
-                (mk_tuple (mk_var "tuples")::(args_of_t_as_vars trig_name))
+                (mk_tuple ((mk_var "tuples")::(args_of_t_as_vars p trig_name)))
               )
             )
             (mk_apply
@@ -363,14 +362,14 @@ let send_push_stmt_map_funcs trig_name =
             )
           ) (* mk_iter *)
         )
-      ) (* Trigger *)
+      ] (* Trigger *)
     ) (* fun *)
     []
-    (over_stmts_in_t lhs_rhs_of_stmts trig_name)
+    (over_stmts_in_t p lhs_rhs_of_stmts trig_name)
   ) 
 
 
-(* on_insert_trigger_rcv_fetch
+(* trigger_rcv_fetch
  * -----------------------------------------
  * Receive a fetch at a node.
  * Reuses switch-side computation of which maps this node should read.
@@ -381,12 +380,12 @@ let send_push_stmt_map_funcs trig_name =
  * need to record only one trigger in the log, and because it reduces messages
  * between nodes.
  *)
-let t_rcv_fetch trig_name =
+let t_rcv_fetch p trig_name =
   Trigger(
-    rcv_fetch_name_of_t trig_name, 
+    rcv_fetch_name_of_t p trig_name, 
     ATuple(("stmts_and_map_ids", 
       BaseT(TCollection(TList, TTuple([BaseT(TInt); BaseT(TInt)]))))::
-      (args_of_t_with_v trig_name))
+      (args_of_t_with_v p trig_name)),
     [], (* locals *)
     (let log_fn = "log_write_"^trig_name in (* varies by bound vars *)
       (mk_block
@@ -411,7 +410,10 @@ let t_rcv_fetch trig_name =
         )]
       )
     )
+  )
               
+(* Debug -----
+ 
 (* on_insert_trigger_push_stmt_map
  * --------------------------------------
  * Receive a push at a node

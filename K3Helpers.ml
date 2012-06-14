@@ -188,3 +188,10 @@ let mk_let_many var_name_and_type_list var_values expr =
         )
         (var_values)
 
+(* Type manipulation functions ------------- *)
+
+(* Add a generic list wrapper around a type *)
+let wrap_tlist typ = BaseT(TCollection(TList, typ))
+
+let wrap_ttuple typ = BaseT(TTuple(typ))
+

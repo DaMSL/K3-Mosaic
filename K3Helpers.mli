@@ -130,3 +130,5 @@ val mk_let_many :
   (K3.id_t * K3.value_type_t) list ->
   (int, K3.expr_tag_t) Tree.tree_t ->
   (int, K3.expr_tag_t) Tree.tree_t -> (int, K3.expr_tag_t) Tree.tree_t
+val wrap_tlist : K3.value_type_t -> K3.value_type_t
+val wrap_ttuple : K3.value_type_t list -> K3.value_type_t
