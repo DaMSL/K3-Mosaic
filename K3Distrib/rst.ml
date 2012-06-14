@@ -14,13 +14,12 @@ Global(ValueT("pR1pT1",TCollection(TSet, RefT(TTuple([TFloat; TFloat])))))
 Global(ValueT("Q1", TValueT(TRef(TFloat)))
 *)
 
-let = ();;
-let mk_has_member_float col pat = mk_has_member col pat BaseT(TFloat)
+let mk_has_member_float col pat = mk_has_member col pat (BaseT(TFloat))
 
 let t = Trigger("On_Insert_T", ATuple([("pR1_pS1T_C", BaseT(TFloat));("pR1_pS1T_D", BaseT(TFloat))]), [], 
 mk_block  
 	[(mk_ifthenelse 
-		(mk_has_member 
+		(mk_has_member_float 
 			(mk_var "pT1") (mk_tuple [(mk_var "C")]) 
 		)
 		(mk_assigntoref 
@@ -61,11 +60,11 @@ mk_block
 		(mk_lambda
 			(AVar("__cse1", TRef(TCollection(TList, BaseT(TTuple([TRef(TFloat);
                 TRef(TFloat)]))))))
-			(mk_iterate
+			(mk_iter
 				(mk_lambda
 					(ATuple(["B", BaseT(TFloat); "dv", BaseT(TFloat)]))
 					(mk_ifthenelse
-						(mk_has_member 
+						(mk_has_member_float 
 							(mk_var "pR1") (mk_tuple [(mk_var "B")]) 
 						)
 						(mk_update
@@ -120,7 +119,7 @@ mk_block
 		)
 	;
 	mk_ifthenelse 
-		(mk_has_member (mk_var "pR1pS1") (mk_tuple [mk_var "C"]))
+		(mk_has_member_float (mk_var "pR1pS1") (mk_tuple [mk_var "C"]))
 		(mk_update 
 			(mk_var "pR1pS1")
 			(mk_slice (mk_var "pR1pS1") (mk_tuple [mk_var "C"]))
