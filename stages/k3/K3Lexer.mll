@@ -65,6 +65,7 @@ rule tokenize = parse
     | ">=" { GEQ }
 
     | "->" { RARROW }
+    | "<-" { LARROW }
     | "<->" { LRARROW }
     | ':' { COLON }
     | '\\' { BACKSLASH }

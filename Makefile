@@ -81,7 +81,7 @@ $(patsubst %,%.ml,$(LEXERS)) : %.ml : %.mll
 
 $(patsubst %,%.ml,$(PARSERS)) : %.ml : %.mly
 	@echo Building Parser $(*)
-	@$(OCAMLYACC) $< 2>&1 | sed 's/^/  /'
+	@$(OCAMLYACC) -v $< 2>&1 | sed 's/^/  /'
 
 # Ignore generated CMI dependencies.  They get autocompiled along with the
 # object files

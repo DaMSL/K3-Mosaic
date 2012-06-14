@@ -64,12 +64,10 @@ let string_of_arg a = match a with
         ^")"
 
 let string_of_expr_tag tag children =
-  let append_str delim s1 s2 = s1^(if s1 = "" then "" else delim)^s2 in
-  let tag_str ?(extra="") n t =
-    let rec aux extra n t acc = match n with
-      | 0 -> t^"("^extra^","^acc^")"
-      | _ -> aux extra (n-1) t (append_str "," acc (List.nth children n))
-    in aux extra n t ""
+  let tag_str ?(extra="") _ t = t ^ "("
+        ^(if extra = "" then "" else extra ^ ", ")
+        ^ String.concat ", " children
+        ^ ")"
   in
   match tag with
     | Const(c)  -> "Const("^string_of_const(c)^")"
@@ -92,7 +90,7 @@ let string_of_expr_tag tag children =
     | Leq   -> tag_str 2 "Leq"
 
     | Lambda a -> tag_str 1 "Lambda" ~extra:(string_of_arg a)
-    | Apply    -> tag_str 2 "Apply"
+    | Apply    -> tag_str 1 "Apply"
 
     | Block      -> tag_str (List.length children) "Block"
     | IfThenElse -> tag_str 3 "IfThenElse"

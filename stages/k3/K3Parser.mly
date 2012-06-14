@@ -19,7 +19,7 @@
         | [e] -> mkexpr (Singleton(ctype)) [e]
         | e :: es -> mkexpr Combine [mkexpr (Singleton(ctype)) [e]; build_collection es ctype]
 
-    let unknown_type = TIsolated(TImmutable(TUnknown))
+    let contained_unknown_type = TContained(TImmutable(TUnknown))
 
 %}
 
@@ -48,7 +48,7 @@
 
 %token AND OR NOT LT EQ LEQ NEQ GT GEQ
 
-%token BACKSLASH LRARROW RARROW
+%token BACKSLASH LRARROW RARROW LARROW
 
 %token COLON
 
@@ -161,7 +161,7 @@ contained_base_type_expr:
 ;
 
 isolated_base_type_tuple:
-    | isolated_value_type_expr COMMA contained_value_type_expr_list {
+    | isolated_value_type_expr COMMA isolated_value_type_expr_list {
         TTuple($1 :: $3)
     }
 ;
@@ -253,13 +253,13 @@ range:
 ;
 
 collection:
-    | LBRACE RBRACE { mkexpr (Empty(TIsolated(TImmutable(TCollection(TSet, unknown_type))))) [] }
-    | LBRACEBAR RBRACEBAR { mkexpr (Empty(TIsolated(TImmutable(TCollection(TBag, unknown_type))))) [] }
-    | LBRACKET RBRACKET { mkexpr (Empty(TIsolated(TImmutable(TCollection(TList, unknown_type))))) [] }
+    | LBRACE RBRACE { mkexpr (Empty(TIsolated(TImmutable(TCollection(TSet, contained_unknown_type))))) [] }
+    | LBRACEBAR RBRACEBAR { mkexpr (Empty(TIsolated(TImmutable(TCollection(TBag, contained_unknown_type))))) [] }
+    | LBRACKET RBRACKET { mkexpr (Empty(TIsolated(TImmutable(TCollection(TList, contained_unknown_type))))) [] }
 
-    /* | LBRACE expr_seq RBRACE { build_collection $2 (BaseT(TCollection(TSet, BaseT(TUnknown)))) } */
-    /* | LBRACEBAR expr_seq RBRACEBAR { build_collection $2 (BaseT(TCollection(TBag, BaseT(TUnknown)))) } */
-    /* | LBRACKET expr_seq RBRACKET { build_collection $2 (BaseT(TCollection(TList, BaseT(TUnknown)))) } */
+    | LBRACE expr_seq RBRACE { build_collection $2 contained_unknown_type }
+    | LBRACEBAR expr_seq RBRACEBAR { build_collection $2 contained_unknown_type }
+    | LBRACKET expr_seq RBRACKET { build_collection $2 contained_unknown_type }
 ;
 
 variable:
@@ -301,7 +301,8 @@ mutation:
     | INSERT LPAREN expr COMMA expr RPAREN { mkexpr Insert [$3; $5] }
     | UPDATE LPAREN expr COMMA expr, COMMA expr RPAREN { mkexpr Update [$3; $5; $7] }
     | DELETE LPAREN expr COMMA expr RPAREN { mkexpr Delete [$3; $5] }
-    | expr COLONGETS expr { mkexpr Assign [$1; $3] }
+    | expr LARROW expr { mkexpr Assign [$1; $3] }
+    | expr GETS expr { mkexpr Assign [$1; $3] }
 ;
 
 transformers:
