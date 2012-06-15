@@ -83,6 +83,7 @@ let rec deduce_expr_type cur_env utexpr =
     (* Check Tag Arity *)
     if not (check_tag_arity tag untyped_children) then raise MalformedTree else
 
+    (* Determine if the environment to be passed down to child typechecking needs to be augmented. *)
     let env =
         match tag with
         | Lambda(AVar(i, t)) -> (i, TValue(t)) :: cur_env
@@ -95,5 +96,6 @@ let rec deduce_expr_type cur_env utexpr =
 
     let current_type =
         match tag with
+        | Const(c) -> TValue(deduce_constant_type c)
         | _ -> TValue(deduce_constant_type CUnknown)
     in attach_type current_type
