@@ -21,6 +21,8 @@
 
     let contained_unknown_type = TContained(TImmutable(TUnknown))
 
+    let mk_unknown_collection t_c = TIsolated(TImmutable(TCollection(t_c, contained_unknown_type)))
+
 %}
 
 %token DECLARE FOREIGN TRIGGER CONSUME
@@ -254,13 +256,13 @@ range:
 ;
 
 collection:
-    | LBRACE RBRACE { mkexpr (Empty(TIsolated(TImmutable(TCollection(TSet, contained_unknown_type))))) [] }
-    | LBRACEBAR RBRACEBAR { mkexpr (Empty(TIsolated(TImmutable(TCollection(TBag, contained_unknown_type))))) [] }
-    | LBRACKET RBRACKET { mkexpr (Empty(TIsolated(TImmutable(TCollection(TList, contained_unknown_type))))) [] }
+    | LBRACE RBRACE { mkexpr (Empty(mk_unknown_collection TSet)) [] }
+    | LBRACEBAR RBRACEBAR { mkexpr (Empty(mk_unknown_collection TBag)) [] }
+    | LBRACKET RBRACKET { mkexpr (Empty(mk_unknown_collection TList)) [] }
 
-    | LBRACE expr_seq RBRACE { build_collection $2 contained_unknown_type }
-    | LBRACEBAR expr_seq RBRACEBAR { build_collection $2 contained_unknown_type }
-    | LBRACKET expr_seq RBRACKET { build_collection $2 contained_unknown_type }
+    | LBRACE expr_seq RBRACE { build_collection $2 (mk_unknown_collection TSet) }
+    | LBRACEBAR expr_seq RBRACEBAR { build_collection $2 (mk_unknown_collection TBag) }
+    | LBRACKET expr_seq RBRACKET { build_collection $2 (mk_unknown_collection TList) }
 ;
 
 variable:
