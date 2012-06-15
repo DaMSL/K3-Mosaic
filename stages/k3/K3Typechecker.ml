@@ -71,3 +71,8 @@ let deduce_constant_type c =
         | CString(_) -> TString
         | CNothing -> TMaybe(TIsolated(TImmutable(TUnknown)))
     in TIsolated(TImmutable(constant_type))
+
+let deduce_arg_type a =
+    match a with
+    | AVar(i, t) -> t
+    | ATuple(its) -> TIsolated(TImmutable(TTuple(snd(List.split its))))
