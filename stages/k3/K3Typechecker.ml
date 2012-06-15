@@ -154,5 +154,27 @@ let rec deduce_expr_type cur_env utexpr =
         | Just ->
             let inner_type = bind 0 <| is_value |> TypeError in
             TValue(TIsolated(TImmutable(TMaybe(inner_type))))
+
+        | Empty(t) -> TValue(t)
+        | Singleton(t) ->
+            let t_c, t_e = t <| is_collection ++% base_of |> TypeError in
+            let t_ne = bind 0 <| is_value |> TypeError
+            in TValue(TIsolated(TImmutable(TCollection(t_c, contained_of t_ne))))
+        | Combine ->
+            let t_c0, t_e0 = bind 0 <| is_collection +++ base_of %++ is_value |> TypeError in
+            let t_c1, t_e1 = bind 1 <| is_collection +++ base_of %++ is_value |> TypeError in
+
+            (* Only collections of matching element types can be combined. *)
+            if t_e0 <> t_e1 then raise TypeError else
+
+            (* Determine combined collection type. *)
+            let t_cr = (
+                match (t_c0, t_c1) with
+                    | (TList, _)    -> TList
+                    | (_, TList)    -> TList
+                    | (TBag, _)     -> TBag
+                    | (_, TBag)     -> TBag
+                    | (TSet, TSet)  -> TSet
+            ) in TValue(TIsolated(TImmutable(TCollection(t_cr, contained_of t_e0))))
         | _ -> TValue(deduce_constant_type CUnknown)
     in attach_type current_type

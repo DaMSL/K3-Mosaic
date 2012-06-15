@@ -23,6 +23,9 @@ val is_collection: base_type_t -> exn -> container_type_t * value_type_t
 val is_mutable: mutable_type_t -> exn -> base_type_t
 val is_immutable: mutable_type_t -> exn -> base_type_t
 
+val base_of: value_type_t -> base_type_t
+val contained_of: value_type_t -> value_type_t
+
 val check_tag_arity: expr_tag_t -> 'child list -> bool
 
 val deduce_constant_type: constant_t -> value_type_t
