@@ -72,6 +72,7 @@
 %token <string> IDENTIFIER
 
 %start program
+%start expr
 %type <int K3.program_t> program
 %type <int K3.expr_t> expr
 
