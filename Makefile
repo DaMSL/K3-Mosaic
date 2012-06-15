@@ -36,6 +36,12 @@ BC_INCLUDES =$(patsubst %,%.cmi,$(FILES))
 NC_FILES    =$(patsubst %,%.cmx,$(FILES))
 NC_INCLUDES =$(patsubst %,%.cmxi,$(FILES))
 
+EXTRA_FILES        := $(TOPLEVEL_FILES)
+BC_EXTRA_FILES      =$(patsubst %,%.cmo, $(EXTRA_FILES))
+BC_EXTRA_INCLUDES   =$(patsubst %,%.cmi, $(EXTRA_FILES))
+NC_EXTRA_FILES      =$(patsubst %,%.cmx, $(EXTRA_FILES))
+NC_EXTRA_INCLUDES   =$(patsubst %,%.cmxi,$(EXTRA_FILES))
+
 OCAML_FLAGS +=\
 	$(patsubst %, -I %,$(DIRS))
 
@@ -53,13 +59,13 @@ versioncheck:
 	  echo "Your OCaml version is too low.  OCaml 3.12.1 is required, you have"\
 	       $(shell ocaml -version); exit -1; fi
 
-bin/k3: $(NC_FILES) Driver.ml
+bin/k3: $(NC_FILES) $(NC_EXTRA_FILES)
 	@echo "Linking K3 (Optimized)"
-	@$(OCAMLOPT) $(OCAMLOPT_FLAGS) -o $@ $(NC_FILES) Driver.ml
+	@$(OCAMLOPT) $(OCAMLOPT_FLAGS) -o $@ $(NC_FILES) $(NC_EXTRA_FILES)
 
 #################################################
 
-$(BC_FILES) : %.cmo : %.ml
+$(BC_FILES) $(BC_EXTRA_FILES) : %.cmo : %.ml
 	@if [ -f $(*).mli ] ; then \
 		echo Compiling Header $(*);\
 		$(OCAMLCC) $(OCAML_FLAGS) -c $(*).mli;\
@@ -67,7 +73,7 @@ $(BC_FILES) : %.cmo : %.ml
 	@echo Compiling $(*)
 	@$(OCAMLCC) $(OCAML_FLAGS) -c $<
 
-$(NC_FILES) : %.cmx : %.ml
+$(NC_FILES) $(NC_EXTRA_FILES) : %.cmx : %.ml
 	@if [ -f $(*).mli ] ; then \
 		echo Compiling Optimized Header $(*);\
 		$(OCAMLOPT) $(OCAMLOPT_FLAGS) -c $(*).mli;\
@@ -81,7 +87,7 @@ $(patsubst %,%.ml,$(LEXERS)) : %.ml : %.mll
 
 $(patsubst %,%.ml,$(PARSERS)) : %.ml : %.mly
 	@echo Building Parser $(*)
-	@$(OCAMLYACC) -v $< 2>&1 | sed 's/^/  /'
+	@$(OCAMLYACC) $< 2>&1 | sed 's/^/  /'
 
 # Ignore generated CMI dependencies.  They get autocompiled along with the
 # object files
@@ -108,9 +114,9 @@ clean:
 	rm -f $(patsubst %,%.ml,$(GENERATED_FILES))
 	rm -f $(patsubst %,%.mli,$(PARSERS))
 	rm -f $(patsubst %,%.output,$(PARSERS))
-	rm -f $(BC_FILES) $(BC_INCLUDES)
-	rm -f $(NC_FILES) $(NC_INCLUDES)
-	rm -f $(patsubst %,%.o,$(FILES))
+	rm -f $(BC_FILES) $(BC_INCLUDES) $(BC_EXTRA_FILES) $(BC_EXTRA_INCLUDES)
+	rm -f $(NC_FILES) $(NC_INCLUDES) $(NC_EXTRA_FILES) $(NC_EXTRA_INCLUDES)
+	rm -f $(patsubst %,%.o,$(FILES)) $(patsubst %,%.o,$(EXTRA_FILES))
 	rm -f $(patsubst %,%.annot,$(FILES))
 	rm -f bin/k3
 
