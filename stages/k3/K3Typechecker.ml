@@ -97,5 +97,6 @@ let rec deduce_expr_type cur_env utexpr =
     let current_type =
         match tag with
         | Const(c) -> TValue(deduce_constant_type c)
+        | Var(id) -> (try List.assoc id env with Not_found -> raise TypeError)
         | _ -> TValue(deduce_constant_type CUnknown)
     in attach_type current_type
