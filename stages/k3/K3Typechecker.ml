@@ -67,27 +67,27 @@ let (+++) f g = fun t x -> f (g t x) x
 let (++%) f g = fun t x -> f (g t) x
 let (%++) f g = fun t x -> f (g t x)
 
-let is_value t x =
+let value_of t x =
     match t with
     | TValue(vt) -> vt
     | _ -> raise x
 
-let is_function t x =
+let function_of t x =
     match t with
     | TFunction(t_a, t_r) -> (t_a, t_r)
     | _ -> raise x
 
-let is_mutable vt x =
+let mutable_of vt x =
     match vt with
     | TMutable(bt) -> bt
     | _ -> raise x
 
-let is_immutable vt x =
+let immutable_of vt x =
     match vt with
     | TImmutable(bt) -> bt
     | _ -> raise x
 
-let is_collection bt x =
+let collection_of bt x =
     match bt with
     | TCollection(t_c, t_e) -> (t_c, t_e)
     | _ -> raise x
@@ -109,6 +109,8 @@ let rec contained_of vt =
         | _ -> inner_base_type
     ) in TContained(TImmutable(convertable_type))
 
+let canonical bt = TIsolated(TImmutable(bt))
+
 let deduce_constant_type c =
     let constant_type =
         match c with
@@ -119,12 +121,12 @@ let deduce_constant_type c =
         | CFloat(_) -> TFloat
         | CString(_) -> TString
         | CNothing -> TMaybe(TIsolated(TImmutable(TUnknown)))
-    in TIsolated(TImmutable(constant_type))
+    in canonical constant_type
 
 let deduce_arg_type a =
     match a with
     | AVar(i, t) -> t
-    | ATuple(its) -> TIsolated(TImmutable(TTuple(snd(List.split its))))
+    | ATuple(its) -> canonical (TTuple(snd(List.split its)))
 
 let rec deduce_expr_type cur_env utexpr =
     let ((uuid, tag), aux), untyped_children = decompose_tree utexpr in
@@ -149,20 +151,20 @@ let rec deduce_expr_type cur_env utexpr =
         | Const(c) -> TValue(deduce_constant_type c)
         | Var(id) -> (try List.assoc id env with Not_found -> raise TypeError)
         | Tuple ->
-            let child_types = List.map (fun e -> type_of e <| is_value |> TypeError) typed_children
-            in TValue(TIsolated(TImmutable(TTuple(child_types))))
+            let child_types = List.map (fun e -> type_of e <| value_of |> TypeError) typed_children
+            in TValue(canonical (TTuple(child_types)))
         | Just ->
-            let inner_type = bind 0 <| is_value |> TypeError in
-            TValue(TIsolated(TImmutable(TMaybe(inner_type))))
+            let inner_type = bind 0 <| value_of |> TypeError in
+            TValue(canonical (TMaybe(inner_type)))
 
         | Empty(t) -> TValue(t)
         | Singleton(t) ->
-            let t_c, t_e = t <| is_collection ++% base_of |> TypeError in
-            let t_ne = bind 0 <| is_value |> TypeError
-            in TValue(TIsolated(TImmutable(TCollection(t_c, contained_of t_ne))))
+            let t_c, t_e = t <| collection_of ++% base_of |> TypeError in
+            let t_ne = bind 0 <| value_of |> TypeError
+            in TValue(canonical (TCollection(t_c, contained_of t_ne)))
         | Combine ->
-            let t_c0, t_e0 = bind 0 <| is_collection +++ base_of %++ is_value |> TypeError in
-            let t_c1, t_e1 = bind 1 <| is_collection +++ base_of %++ is_value |> TypeError in
+            let t_c0, t_e0 = bind 0 <| collection_of +++ base_of %++ value_of |> TypeError in
+            let t_c1, t_e1 = bind 1 <| collection_of +++ base_of %++ value_of |> TypeError in
 
             (* Only collections of matching element types can be combined. *)
             if t_e0 <> t_e1 then raise TypeError else
@@ -175,12 +177,12 @@ let rec deduce_expr_type cur_env utexpr =
                     | (TBag, _)     -> TBag
                     | (_, TBag)     -> TBag
                     | (TSet, TSet)  -> TSet
-            ) in TValue(TIsolated(TImmutable(TCollection(t_cr, contained_of t_e0))))
+            ) in TValue(canonical (TCollection(t_cr, contained_of t_e0)))
 
         | Range(t_c) ->
-            let start = bind 0 <| base_of %++ is_value |> TypeError in
-            let stride = bind 1 <| base_of %++ is_value |> TypeError in
-            let steps = bind 2 <| base_of %++ is_value |> TypeError in
+            let start = bind 0 <| base_of %++ value_of |> TypeError in
+            let stride = bind 1 <| base_of %++ value_of |> TypeError in
+            let steps = bind 2 <| base_of %++ value_of |> TypeError in
             if not(steps = TInt) then raise TypeError else
             let t_e = (
                 match (start, stride) with
@@ -189,6 +191,6 @@ let rec deduce_expr_type cur_env utexpr =
                 | (TInt, TFloat)
                 | (TFloat, TFloat) -> TFloat
                 | _ -> raise TypeError
-            ) in TValue(TIsolated(TImmutable(TCollection(t_c, TContained(TImmutable(t_e))))))
+            ) in TValue(canonical (TCollection(t_c, TContained(TImmutable(t_e)))))
         | _ -> TValue(deduce_constant_type CUnknown)
     in attach_type current_type

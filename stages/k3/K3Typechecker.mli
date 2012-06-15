@@ -17,11 +17,11 @@ val (%++): ('b -> 'c) -> ('a -> 'x -> 'b) -> 'a -> 'x -> 'c
 
 val type_of: 'a texpr_t -> type_t
 
-val is_value: type_t -> exn -> value_type_t
-val is_function: type_t -> exn -> value_type_t * value_type_t
-val is_collection: base_type_t -> exn -> container_type_t * value_type_t
-val is_mutable: mutable_type_t -> exn -> base_type_t
-val is_immutable: mutable_type_t -> exn -> base_type_t
+val value_of: type_t -> exn -> value_type_t
+val function_of: type_t -> exn -> value_type_t * value_type_t
+val collection_of: base_type_t -> exn -> container_type_t * value_type_t
+val mutable_of: mutable_type_t -> exn -> base_type_t
+val immutable_of: mutable_type_t -> exn -> base_type_t
 
 val base_of: value_type_t -> base_type_t
 val contained_of: value_type_t -> value_type_t
