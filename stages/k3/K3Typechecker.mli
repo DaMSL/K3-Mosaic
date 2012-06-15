@@ -25,6 +25,10 @@ val immutable_of: mutable_type_t -> exn -> base_type_t
 
 val base_of: value_type_t -> base_type_t
 val contained_of: value_type_t -> value_type_t
+val canonical: base_type_t -> value_type_t
+
+val assignable: value_type_t -> value_type_t -> bool
+val passable: value_type_t -> value_type_t -> bool
 
 val check_tag_arity: expr_tag_t -> 'child list -> bool
 

@@ -111,6 +111,22 @@ let rec contained_of vt =
 
 let canonical bt = TIsolated(TImmutable(bt))
 
+let rec assignable t_l t_r =
+    let t_lb = base_of t_l in
+    let t_rb = base_of t_r in
+    match (t_lb, t_rb) with
+    | TMaybe(t_lm), TMaybe(t_rm) when assignable t_lm t_rm -> true
+    | TTuple(t_ls), TTuple(t_rs) when List.for_all2 assignable t_ls t_rs -> true
+    | TCollection(t_lc, t_le), TCollection(t_rc, t_re) when assignable t_le t_re -> true
+    | _ when t_lb = t_rb -> true
+    | _ -> false
+
+let rec passable t_l t_r =
+    match t_l, t_r with
+    | TContained(TMutable(_)), TContained(TMutable(_)) -> assignable t_l t_r
+    | TContained(TMutable(_)), _ -> false
+    | _ -> assignable t_l t_r
+
 let deduce_constant_type c =
     let constant_type =
         match c with
