@@ -237,6 +237,23 @@ let rec deduce_expr_type cur_env utexpr =
             (* are comparable, regardless of if either of them are refs. *)
             if t_0 = t_1 then TValue(canonical TBool) else raise TypeError
 
+        | Insert ->
+            let t_c, t_e = bind 0 <| collection_of +++ base_of %++ value_of |> TypeError in
+            let t_n = bind 1 <| value_of |> TypeError in
+            if assignable t_e t_n then TValue(canonical TUnit) else raise TypeError
+
+        | Update ->
+            let t_c, t_e = bind 0 <| collection_of +++ base_of %++ value_of |> TypeError in
+            let t_o = bind 1 <| value_of |> TypeError in
+            let t_n = bind 2 <| value_of |> TypeError in
+            if assignable t_e t_o && assignable t_e t_n then TValue(canonical TUnit)
+            else raise TypeError
+
+        | Delete ->
+            let t_c, t_e = bind 0 <| collection_of +++ base_of %++ value_of |> TypeError in
+            let t_n = bind 1 <| value_of |> TypeError in
+            if assignable t_e t_n then TValue(canonical TUnit) else raise TypeError
+
         | Peek ->
             let t_c, t_e = bind 0 <| collection_of +++ base_of %++ value_of |> TypeError in TValue(t_e)
 
