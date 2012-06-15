@@ -237,5 +237,21 @@ let rec deduce_expr_type cur_env utexpr =
             (* are comparable, regardless of if either of them are refs. *)
             if t_0 = t_1 then TValue(canonical TBool) else raise TypeError
 
+        | Peek ->
+            let t_c, t_e = bind 0 <| collection_of +++ base_of %++ value_of |> TypeError in TValue(t_e)
+
+        | Assign ->
+            let t_l = bind 0 <| value_of |> TypeError in
+            let t_r = bind 1 <| value_of |> TypeError in
+            if assignable t_l t_r then TValue(canonical TUnit) else raise TypeError
+
+        | Deref ->
+            let t_r = bind 0 <| value_of |> TypeError in
+            let t_u = (
+                match t_r with
+                | TIsolated(mt) -> TIsolated(TImmutable(mt <| mutable_of |> TypeError))
+                | TContained(mt) -> TContained(TImmutable(mt <| mutable_of |> TypeError))
+            ) in TValue(t_u)
+
         | _ -> TValue(deduce_constant_type CUnknown)
     in attach_type current_type
