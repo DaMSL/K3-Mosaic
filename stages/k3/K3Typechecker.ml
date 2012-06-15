@@ -63,10 +63,51 @@ let type_of texpr = let (((id, tag), t), _), children = decompose_tree texpr in 
 let (<|) x f = f x
 and (|>) f y = f y
 
+let (+++) f g = fun t x -> f (g t x) x
+let (++%) f g = fun t x -> f (g t) x
+let (%++) f g = fun t x -> f (g t x)
+
 let is_value t x =
     match t with
     | TValue(vt) -> vt
     | _ -> raise x
+
+let is_function t x =
+    match t with
+    | TFunction(t_a, t_r) -> (t_a, t_r)
+    | _ -> raise x
+
+let is_mutable vt x =
+    match vt with
+    | TMutable(bt) -> bt
+    | _ -> raise x
+
+let is_immutable vt x =
+    match vt with
+    | TImmutable(bt) -> bt
+    | _ -> raise x
+
+let is_collection bt x =
+    match bt with
+    | TCollection(t_c, t_e) -> (t_c, t_e)
+    | _ -> raise x
+
+let base_of vt =
+    match vt with
+    | TIsolated(TImmutable(bt))
+    | TIsolated(TMutable(bt))
+    | TContained(TImmutable(bt))
+    | TContained(TMutable(bt)) -> bt
+
+let rec contained_of vt =
+    let inner_base_type = base_of vt in
+    let convertable_type = (
+        match inner_base_type with
+        | TTuple(ts) -> TTuple(List.map contained_of ts)
+        | TCollection(t_c, t_e) -> TCollection(t_c, contained_of t_e)
+        | TMaybe(t_m) -> TMaybe(contained_of t_m)
+        | _ -> inner_base_type
+    ) in TContained(TImmutable(convertable_type))
 
 let deduce_constant_type c =
     let constant_type =
