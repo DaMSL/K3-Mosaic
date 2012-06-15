@@ -56,6 +56,9 @@ versioncheck:
 
 dist_test: $(BC_FILES) $(BC_EXTRA_FILES)
 	@echo "Building dist_test"
+	@if [ ! -d bin ] ; then \
+		mkdir bin;\
+	fi
 	@$(OCAMLCC) $(OCAML_FLAGS) -o bin/$@ $(BC_FILES) $(BC_EXTRA_FILES)
 
 #################################################

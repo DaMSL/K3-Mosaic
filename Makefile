@@ -72,6 +72,9 @@ k3_opt: $(NC_FILES) $(NC_EXTRA_FILES)
 
 k3: $(BC_FILES) $(BC_EXTRA_FILES)
 	@echo "Linking K3"
+	@if [ ! -d bin ] ; then \
+		mkdir bin;\
+	fi
 	@$(OCAMLCC) $(OCAML_FLAGS) -o bin/$@ $(BC_FILES) $(BC_EXTRA_FILES)
 
 #################################################
