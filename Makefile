@@ -1,61 +1,126 @@
 # Makefile for the K3 programming language lexer/parser/driver.
+# -- Based off DBToaster Makefiles. (Yanif) 
 
-all: driver
+include Makefile.inc
 
-Tree.cmi: Tree.mli
-	ocamlc -annot -c Tree.mli
+FILES=\
+	util/ListAsSet \
+	util/Symbols \
+	util/Tree \
+	stages/k3/K3 \
+	stages/k3/K3Util \
+	#stages/k3/K3Typechecker \
+	#stages/k3/K3Interpreter \
 
-Tree.cmo: Tree.ml Tree.cmi
-	ocamlc -annot -c Tree.ml
+TOPLEVEL_FILES=\
+	Driver \
 
-K3.cmi: K3.mli Tree.cmi
-	ocamlc -annot -c K3.mli
+LEXERS=\
+	stages/k3/K3Lexer \
 
-K3.cmo: K3.ml K3.cmi Tree.cmi
-	ocamlc -annot -c K3.ml
+PARSERS=\
+	stages/k3/K3Parser \
 
-K3Helpers.cmi: K3Helpers.mli K3.cmi Tree.cmi
-	ocamlc -annot -c K3Helpers.mli
+DIRS=\
+	util\
+	stages/k3 \
 
-K3Helpers.cmo: K3Helpers.ml K3Helpers.cmi K3.cmi Tree.cmi
-	ocamlc -annot -c K3Helpers.ml
+#################################################
 
-K3Typechecker.cmi: K3Typechecker.mli K3.cmi Tree.cmi
-	ocamlc -annot -c K3Typechecker.mli
+BASE_FILES     := $(FILES)
+GENERATED_FILES = $(PARSERS) $(LEXERS) 
+FILES += $(GENERATED_FILES)
 
-K3Typechecker.cmo: K3Typechecker.ml K3Typechecker.cmi K3.cmi Tree.cmi
-	ocamlc -annot -c K3Typechecker.ml
+BC_FILES    =$(patsubst %,%.cmo,$(FILES))
+BC_INCLUDES =$(patsubst %,%.cmi,$(FILES))
+NC_FILES    =$(patsubst %,%.cmx,$(FILES))
+NC_INCLUDES =$(patsubst %,%.cmxi,$(FILES))
 
-K3Interpreter.cmi: K3Interpreter.mli K3.cmi Tree.cmi
-	ocamlc -annot -c K3Interpreter.mli
+EXTRA_FILES        := $(TOPLEVEL_FILES)
+BC_EXTRA_FILES      =$(patsubst %,%.cmo, $(EXTRA_FILES))
+BC_EXTRA_INCLUDES   =$(patsubst %,%.cmi, $(EXTRA_FILES))
+NC_EXTRA_FILES      =$(patsubst %,%.cmx, $(EXTRA_FILES))
+NC_EXTRA_INCLUDES   =$(patsubst %,%.cmxi,$(EXTRA_FILES))
 
-K3Interpreter.cmo: K3Interpreter.ml K3Interpreter.cmi K3.cmi Tree.cmi
-	ocamlc -annot -c K3Interpreter.ml
+OCAML_FLAGS +=\
+	$(patsubst %, -I %,$(DIRS))
 
-K3Parser.mli K3Parser.ml: K3Parser.mly
-	ocamlyacc -v K3Parser.mly
+OCAMLOPT_FLAGS +=\
+	$(patsubst %, -I %,$(DIRS))
 
-K3Parser.cmi: K3Parser.mli K3.cmo Tree.cmo
-	ocamlc -annot -c K3Parser.mli
+#################################################
 
-K3Lexer.ml: K3Lexer.mll
-	ocamllex K3Lexer.mll
+all: Makefile.local versioncheck bin/k3
 
-K3Lexer.cmi K3Lexer.cmo: K3Lexer.ml K3Parser.cmi
-	ocamlc -annot -c K3Lexer.ml
+versioncheck:
+	@if [ $(shell ocaml -version | sed 's/.*version \(.*\)$$/\1/' | \
+	                  awk -F. '{print ($$1+1000) ($$2+1000) ($$3+1000)}')\
+	     -lt 100310121001 ] ; then \
+	  echo "Your OCaml version is too low.  OCaml 3.12.1 is required, you have"\
+	       $(shell ocaml -version); exit -1; fi
 
-K3Parser.cmo: K3Lexer.cmo K3Parser.ml
-	ocamlc -annot -c K3Parser.ml
+bin/k3: $(NC_FILES) $(NC_EXTRA_FILES)
+	@echo "Linking K3 (Optimized)"
+	@$(OCAMLOPT) $(OCAMLOPT_FLAGS) -o $@ $(NC_FILES) $(NC_EXTRA_FILES)
 
-driver.cmo: driver.ml K3Parser.cmo 
-	ocamlc -annot -c driver.ml
+#################################################
 
-driver: Tree.cmo K3.cmo K3Helpers.cmo K3Parser.cmo K3Lexer.cmo driver.cmo 
-	ocamlc -annot -o driver Tree.cmo K3.cmo K3Parser.cmo K3Lexer.cmo driver.cmo
+$(BC_FILES) $(BC_EXTRA_FILES) : %.cmo : %.ml
+	@if [ -f $(*).mli ] ; then \
+		echo Compiling Header $(*);\
+		$(OCAMLCC) $(OCAML_FLAGS) -c $(*).mli;\
+	fi	
+	@echo Compiling $(*)
+	@$(OCAMLCC) $(OCAML_FLAGS) -c $<
+
+$(NC_FILES) $(NC_EXTRA_FILES) : %.cmx : %.ml
+	@if [ -f $(*).mli ] ; then \
+		echo Compiling Optimized Header $(*);\
+		$(OCAMLOPT) $(OCAMLOPT_FLAGS) -c $(*).mli;\
+	fi	
+	@echo Compiling Optimized $(*)
+	@$(OCAMLOPT) $(OCAMLOPT_FLAGS) -c $<
+
+$(patsubst %,%.ml,$(LEXERS)) : %.ml : %.mll
+	@echo Building Lexer $(*)
+	@$(OCAMLLEX) $< 2>&1 | sed 's/^/  /'
+
+$(patsubst %,%.ml,$(PARSERS)) : %.ml : %.mly
+	@echo Building Parser $(*)
+	@$(OCAMLYACC) $< 2>&1 | sed 's/^/  /'
+
+# Ignore generated CMI dependencies.  They get autocompiled along with the
+# object files
+$(patsubst %,%.cmi,$(FILES)) : 
+$(patsubst %,%.cmxi,$(FILES)) : 
+
+#################################################
+
+Makefile.deps: Makefile $(patsubst %,%.ml,$(BASE_FILES))
+	@echo Computing Dependency Graph
+	@$(OCAMLDEP) $(patsubst %, -I %,$(DIRS)) \
+			$(patsubst %,%.ml,$(BASE_FILES)) > $@
+
+Makefile.local:
+	@echo Initializing local configuration file
+	@cp config/Makefile.local.default Makefile.local
+
+include Makefile.deps
+include Makefile.local
+
+#################################################
 
 clean:
-	-rm *.cm*
-	-rm *.annot
-	-rm K3Lexer.ml K3Parser.ml
-	-rm K3Parser.mli K3Parser.output
-	-rm driver
+	rm -f $(patsubst %,%.ml,$(GENERATED_FILES))
+	rm -f $(patsubst %,%.mli,$(PARSERS))
+	rm -f $(patsubst %,%.output,$(PARSERS))
+	rm -f $(BC_FILES) $(BC_INCLUDES) $(BC_EXTRA_FILES) $(BC_EXTRA_INCLUDES)
+	rm -f $(NC_FILES) $(NC_INCLUDES) $(NC_EXTRA_FILES) $(NC_EXTRA_INCLUDES)
+	rm -f $(patsubst %,%.o,$(FILES)) $(patsubst %,%.o,$(EXTRA_FILES))
+	rm -f $(patsubst %,%.annot,$(FILES))
+	rm -f bin/k3
+
+#################################################
+
+.PHONY: all versioncheck
+	

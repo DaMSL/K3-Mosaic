@@ -10,13 +10,11 @@ type address_t
     = Local     of id_t
     | Remote    of id_t * id_t * int
 
-(* Collection Types *)
-type collection_type_t
+type container_type_t
     = TSet
     | TBag
     | TList
 
-(* Basic Types *)
 type base_type_t
     = TUnknown
     | TUnit
@@ -25,18 +23,22 @@ type base_type_t
     | TInt
     | TFloat
     | TString
+    | TMaybe        of value_type_t
     | TTuple        of value_type_t list
-    | TCollection   of collection_type_t * value_type_t
+    | TCollection   of container_type_t * value_type_t
     | TTarget       of address_t * base_type_t
-    | TMaybe        of base_type_t
+
+and mutable_type_t
+    = TMutable         of base_type_t
+    | TImmutable       of base_type_t
 
 and value_type_t
-    = TRef  of base_type_t
-    | BaseT of base_type_t
+    = TIsolated     of mutable_type_t
+    | TContained    of mutable_type_t
 
 type type_t
     = TFunction of value_type_t * value_type_t
-    | ValueT    of value_type_t
+    | TValue    of value_type_t
 
 (* Arguments *)
 type arg_t
@@ -55,7 +57,6 @@ type constant_t
 
 (* Expressions *)
 type expr_tag_t
-
     = Const of constant_t
     | Var   of id_t
     | Tuple
@@ -70,7 +71,7 @@ type expr_tag_t
      * Creates a new collection of length (`steps' + 1) of integers starting at
      * `start' at intervals of `stride'.
      *)
-    | Range     of collection_type_t
+    | Range     of container_type_t
 
     (* Add(x:T, y:T') -> T'': Overloaded disjunction; acts as addition for
      * numeric types and logical disjunction for booleans. `TInt' is promoted to
@@ -95,11 +96,6 @@ type expr_tag_t
 
     | Lambda        of arg_t
 
-    (* A lambda defined to be associative in its two arguments.
-     * TODO: Kill this and put the associativity property in an annotation,
-     * along with commutativity and idempotance, and other nice things.
-     *)
-    | AssocLambda   of arg_t * arg_t
     | Apply
 
     (* Block(e_1:TUnit, e_2:TUnit, ... , e_n:TUnit, e:T) -> T: Execute
@@ -177,16 +173,14 @@ type expr_tag_t
     (* Peek(c:TCollection(C, T)) -> T: Get one element from collection `c'. *)
     | Peek
 
-    (* AssignToRef(left:TRef(T), right:T/TRef(T)) -> TUnit: Store a value in a
-     * ref. Right-Side refs will be dereferenced.
-     *)
-    | AssignToRef
+    | Assign
+    | Deref
 
     (* Send(a:TTarget(N, T), args:T): Send a message of type `T' to target `a'. *)
     | Send
 
 (* Expression Tree *)
-type 'a expr_t = ('a, expr_tag_t) tree_t
+type 'a expr_t = ((int * expr_tag_t) * 'a) tree_t
 
 type stop_behavior_t
     = UntilCurrent
@@ -205,7 +199,7 @@ type consumable_t
 
 (* Top-Level Declarations *)
 type 'a declaration_t
-    = Global        of id_t * type_t
+    = Global        of id_t * type_t  * 'a expr_t option
     | Foreign       of id_t * type_t
     | Trigger       of id_t * arg_t * (id_t * value_type_t) list * 'a expr_t
     | Bind          of id_t * id_t
@@ -222,21 +216,3 @@ type 'a statement_t
 
 (* K3 Programs *)
 type 'a program_t = 'a statement_t list
-
-(* Utilities *)
-
-val string_of_address: address_t -> string
-val string_of_collection_type: collection_type_t -> string
-val string_of_base_type: base_type_t -> string
-val string_of_value_type: value_type_t -> string
-val string_of_type: type_t -> string
-val string_of_const: constant_t -> string
-val string_of_arg: arg_t -> string
-val string_of_expr_tag: expr_tag_t -> string list -> string
-val string_of_expr_meta: ('a -> string list -> string) -> 'a expr_t -> string
-val string_of_expr: 'a expr_t -> string
-
-val string_of_declaration: 'a declaration_t -> string
-val string_of_instruction: instruction_t -> string
-val string_of_statement: 'a statement_t -> string
-val string_of_program: 'a program_t -> string

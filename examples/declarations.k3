@@ -1,0 +1,6 @@
+declare a : {int} = {1; 2; 3}
+declare b : {int} = {1; 2; 3}
+declare c : {int} = {1; 2; 3}
+declare d : {int} = {1; 2; 3}
+declare e : {int} = {1; 2; 3}
+declare f : {int} = {1; 2; 3}

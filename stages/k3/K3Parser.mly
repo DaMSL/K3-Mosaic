@@ -11,13 +11,16 @@
     let globals = ref []
 
     let mkexpr tag children = match children with
-        | [] -> Leaf(get_uuid(), tag)
-        | _  -> Node(get_uuid(), tag, children)
+        | [] -> Leaf(((get_uuid(), tag), 0))
+        | _  -> Node(((get_uuid(), tag), 0), children)
 
     let rec build_collection exprs ctype = match exprs with
         | [] -> mkexpr (Empty(ctype)) []
         | [e] -> mkexpr (Singleton(ctype)) [e]
         | e :: es -> mkexpr Combine [mkexpr (Singleton(ctype)) [e]; build_collection es ctype]
+
+    let contained_unknown_type = TContained(TImmutable(TUnknown))
+
 %}
 
 %token DECLARE FOREIGN TRIGGER CONSUME
@@ -45,7 +48,7 @@
 
 %token AND OR NOT LT EQ LEQ NEQ GT GEQ
 
-%token BACKSLASH LRARROW RARROW
+%token BACKSLASH LRARROW RARROW LARROW
 
 %token COLON
 
@@ -106,8 +109,8 @@ statement:
 ;
 
 declaration:
-    | DECLARE IDENTIFIER COLON type_expr { Global($2, $4) }
-    | DECLARE IDENTIFIER COLON type_expr GETS expr { Global($2, $4) }
+    | DECLARE IDENTIFIER COLON type_expr { Global($2, $4, None) }
+    | DECLARE IDENTIFIER COLON type_expr GETS expr { Global($2, $4, Some $6) }
     | FOREIGN IDENTIFIER COLON type_expr { Foreign($2, $4) }
 
     | TRIGGER IDENTIFIER arg LBRACE RBRACE GETS expr { Trigger($2, $3, [], $7) }
@@ -119,33 +122,64 @@ instruction:
 ;
 
 type_expr:
-    | value_type_expr { ValueT($1) }
-    | LPAREN value_type_expr RARROW value_type_expr RPAREN { TFunction($2, $4) }
+    | function_type_expr { TFunction(fst $1, snd $1) }
+    | isolated_value_type_expr { TValue($1) }
+    | LPAREN type_expr RPAREN { $2 }
 ;
 
-value_type_expr:
-    | base_type_expr { BaseT($1) }
-    | LPAREN base_type_expr REF RPAREN { TRef($2) }
+function_type_expr: isolated_value_type_expr RARROW isolated_value_type_expr { ($1, $3) };
+
+isolated_value_type_expr: isolated_mutable_type_expr { TIsolated($1) };
+contained_value_type_expr: contained_mutable_type_expr { TContained($1) };
+
+isolated_mutable_type_expr:
+    | isolated_base_type_expr { TImmutable($1) }
+    | REF isolated_base_type_expr { TMutable($2) }
 ;
 
-base_type_expr:
+contained_mutable_type_expr:
+    | contained_base_type_expr { TImmutable($1) }
+    | REF contained_base_type_expr { TMutable($2) }
+;
+
+isolated_base_type_expr:
     | TYPE { $1 }
-    | LPAREN base_type_tuple RPAREN { $2 }
-    | LBRACE value_type_expr RBRACE { TCollection(TSet, $2) }
-    | LBRACEBAR value_type_expr RBRACEBAR { TCollection(TBag, $2) }
-    | LBRACKET value_type_expr RBRACKET { TCollection(TList, $2) }
-    | LPAREN MAYBE base_type_expr RPAREN { TMaybe($3) }
+    | LPAREN isolated_base_type_tuple RPAREN { $2 }
+    | LBRACE contained_value_type_expr RBRACE { TCollection(TSet, $2) }
+    | LBRACEBAR contained_value_type_expr RBRACEBAR { TCollection(TBag, $2) }
+    | LBRACKET contained_value_type_expr RBRACKET { TCollection(TList, $2) }
+    | MAYBE isolated_value_type_expr { TMaybe($2) }
 ;
 
-base_type_tuple:
-    | value_type_expr COMMA value_type_expr_list {
+contained_base_type_expr:
+    | TYPE { $1 }
+    | LPAREN contained_base_type_tuple RPAREN { $2 }
+    | LBRACE contained_value_type_expr RBRACE { TCollection(TSet, $2) }
+    | LBRACEBAR contained_value_type_expr RBRACEBAR { TCollection(TBag, $2) }
+    | LBRACKET contained_value_type_expr RBRACKET { TCollection(TList, $2) }
+    | MAYBE contained_value_type_expr { TMaybe($2) }
+;
+
+isolated_base_type_tuple:
+    | isolated_value_type_expr COMMA isolated_value_type_expr_list {
         TTuple($1 :: $3)
     }
 ;
 
-value_type_expr_list:
-    | value_type_expr { [$1] }
-    | value_type_expr COMMA value_type_expr_list { $1 :: $3 }
+contained_base_type_tuple:
+    | contained_value_type_expr COMMA contained_value_type_expr_list {
+        TTuple($1 :: $3)
+    }
+;
+
+isolated_value_type_expr_list:
+    | isolated_value_type_expr { [$1] }
+    | isolated_value_type_expr COMMA isolated_value_type_expr_list { $1 :: $3 }
+;
+
+contained_value_type_expr_list:
+    | contained_value_type_expr { [$1] }
+    | contained_value_type_expr COMMA contained_value_type_expr_list { $1 :: $3 }
 ;
 
 expr:
@@ -186,7 +220,7 @@ tuple:
 ;
 
 value_typed_identifier:
-    | IDENTIFIER COLON value_type_expr { ($1, $3) }
+    | IDENTIFIER COLON isolated_value_type_expr { ($1, $3) }
 ;
 
 value_typed_identifier_list:
@@ -219,13 +253,13 @@ range:
 ;
 
 collection:
-    | LBRACE RBRACE { mkexpr (Empty(BaseT(TCollection(TSet, BaseT(TUnknown))))) [] }
-    | LBRACEBAR RBRACEBAR { mkexpr (Empty(BaseT(TCollection(TBag, BaseT(TUnknown))))) [] }
-    | LBRACKET RBRACKET { mkexpr (Empty(BaseT(TCollection(TList, BaseT(TUnknown))))) [] }
+    | LBRACE RBRACE { mkexpr (Empty(TIsolated(TImmutable(TCollection(TSet, contained_unknown_type))))) [] }
+    | LBRACEBAR RBRACEBAR { mkexpr (Empty(TIsolated(TImmutable(TCollection(TBag, contained_unknown_type))))) [] }
+    | LBRACKET RBRACKET { mkexpr (Empty(TIsolated(TImmutable(TCollection(TList, contained_unknown_type))))) [] }
 
-    | LBRACE expr_seq RBRACE { build_collection $2 (BaseT(TCollection(TSet, BaseT(TUnknown)))) }
-    | LBRACEBAR expr_seq RBRACEBAR { build_collection $2 (BaseT(TCollection(TBag, BaseT(TUnknown)))) }
-    | LBRACKET expr_seq RBRACKET { build_collection $2 (BaseT(TCollection(TList, BaseT(TUnknown)))) }
+    | LBRACE expr_seq RBRACE { build_collection $2 contained_unknown_type }
+    | LBRACEBAR expr_seq RBRACEBAR { build_collection $2 contained_unknown_type }
+    | LBRACKET expr_seq RBRACKET { build_collection $2 contained_unknown_type }
 ;
 
 variable:
@@ -267,7 +301,8 @@ mutation:
     | INSERT LPAREN expr COMMA expr RPAREN { mkexpr Insert [$3; $5] }
     | UPDATE LPAREN expr COMMA expr, COMMA expr RPAREN { mkexpr Update [$3; $5; $7] }
     | DELETE LPAREN expr COMMA expr RPAREN { mkexpr Delete [$3; $5] }
-    | expr COLONGETS expr { mkexpr AssignToRef [$1; $3] }
+    | expr LARROW expr { mkexpr Assign [$1; $3] }
+    | expr GETS expr { mkexpr Assign [$1; $3] }
 ;
 
 transformers:
