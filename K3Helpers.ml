@@ -195,3 +195,5 @@ let wrap_tlist typ = BaseT(TCollection(TList, typ))
 
 let wrap_ttuple typ = BaseT(TTuple(typ))
 
+let t_int = BaseT(TInt)
+

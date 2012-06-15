@@ -40,6 +40,7 @@
  *       - Problem: don't think shuffle handles map[b] = map[c; b] ie. b->b
  *       mapping when b is unbound. Need to make it fully stmt_id specific.
  *       - Change data structure p to remove map arg names, and add loop vars.
+ *       - declare global maps that have vid as a first attribute
         * - declare local buffers for node 
  *       - add rcv_put trigger
  *       - key, pat -> just pat
@@ -63,7 +64,8 @@ exception ProcessingFailed of string;;
 
 (* set type of vid here. Currently it's TInt, but we may need something better
  * *)
-let vid_type = BaseT(TInt)
+let vid_type = t_int
+let ip_type = t_int
 
 (* argument manipulation convenience functions *)
 let arg_types_of_t p trig_nm = extract_arg_types (args_of_t p trig_nm)
@@ -82,9 +84,9 @@ let send_push_name_of_t p trig_nm stmt_id map_id =
       trig_nm^"_send_push_"^(string_of_int stmt_id)^"_"^(map_name_of p map_id)
 let rcv_put_name_of_t p trig_nm = trig_nm^"_rcv_put"
 let rcv_put_args_of_t p trig_nm = 
-  ATuple(("stmt_id_cnt_list", 
-    BaseT(TCollection(TList, BaseT(TTuple([BaseT(TInt); BaseT(TInt)])))))::
-    (args_of_t_with_v p trig_nm))
+  ATuple((("stmt_id_cnt_list", 
+    (wrap_tlist (wrap_ttuple [t_int; t_int])))::
+    (args_of_t_with_v p trig_nm)))
 let rcv_push_name_of_t p trig_nm stmt_id map_id =
       trig_nm^"_rcv_push_"^(string_of_int stmt_id)^"_"^(map_name_of p map_id)
 let do_complete_name_of_t p trig_nm stmt_id =
@@ -108,8 +110,9 @@ let send_fetch_trigger p trig_name =
   let send_fetches_of_rhs_maps  =
     (mk_iter
       (mk_lambda 
-        (ATuple["ip", BaseT(TInt);"stmt_map_ids", BaseT(TCollection(TList,
-          BaseT(TTuple([BaseT(TInt); BaseT(TInt)]))))])
+        (ATuple["ip", t_int;
+          "stmt_map_ids", wrap_tlist (wrap_ttuple [t_int; t_int])]
+        )
         (mk_send 
           (mk_apply 
             (mk_var "promote_address")
@@ -124,26 +127,23 @@ let send_fetch_trigger p trig_name =
       )
       (mk_groupbyaggregate
         (mk_assoc_lambda (* Agg function *)
-          (ATuple(["stmt_id", BaseT(TInt); "map_id", BaseT(TInt); 
-            "ip",BaseT(TInt)])
+          (ATuple(["stmt_id", t_int; "map_id", t_int; 
+            "ip", ip_type])
           )
-          (AVar("acc", BaseT(TCollection(TList, BaseT(TTuple([BaseT(TInt);
-            BaseT(TInt)])))))
-          )
+          (AVar("acc", wrap_tlist (wrap_ttuple [t_int; t_int])))
           (mk_combine
             (mk_var "acc")
             (mk_singleton 
-              (BaseT(TTuple([BaseT(TInt);BaseT(TInt)])))
+              (wrap_ttuple [t_int; t_int])
               (mk_tuple [mk_var "stmt_id";mk_var "map_id"])
             )
           )
         ) 
         (mk_lambda (* Grouping function *)
-          (ATuple(["stmt_id", BaseT(TInt); "map_id", BaseT(TInt); 
-            "ip", BaseT(TInt)]))
+          (ATuple(["stmt_id", t_int; "map_id", t_int; "ip", ip_type]))
           (mk_var "ip")
         )
-        (mk_empty (BaseT(TCollection(TList, BaseT(TTuple([BaseT(TInt);BaseT(TInt)])))))) 
+        (mk_empty (wrap_tlist (wrap_ttuple [t_int; t_int])))
         (* [] *)
         (List.fold_left
           (fun acc_code (stmt_id, rhs_map_id) ->
@@ -151,7 +151,7 @@ let send_fetch_trigger p trig_name =
             let key = partial_key_from_bound p stmt_id rhs_map_id in
             (mk_combine
               (mk_map 
-                (mk_lambda (AVar("ip", BaseT(TInt)))
+                (mk_lambda (AVar("ip", t_int))
                   (mk_tuple 
                     [mk_const (CInt(stmt_id)); mk_const (CInt(rhs_map_id)); 
                       mk_var "ip"
@@ -166,8 +166,7 @@ let send_fetch_trigger p trig_name =
               acc_code
             )
           )
-          (mk_empty (BaseT(TCollection(TList, BaseT(TTuple([BaseT(TInt);
-            BaseT(TInt)]))))))
+          (mk_empty (wrap_tlist (wrap_ttuple [t_int; t_int])))
           (over_stmts_in_t p read_maps_of_stmt trig_name) 
         ) 
       )
@@ -180,7 +179,7 @@ let send_completes_for_stmts_with_no_fetch =
       let key = partial_key_from_bound p stmt_id lhs_map_id in
         acc_code@
         [mk_iter 
-          (mk_lambda (AVar("ip", BaseT(TInt)))
+          (mk_lambda (AVar("ip", ip_type))
             (mk_send
               (mk_apply 
                 (mk_var "promote_address")
@@ -213,8 +212,8 @@ let send_puts =
    * specific IP *)
   mk_iter
     (mk_lambda 
-      (ATuple(["ip", BaseT(TInt); "stmt_id_cnt_list", BaseT(TCollection(TList,
-        BaseT(TTuple([BaseT(TInt); BaseT(TInt)]))))]))
+      (ATuple(["ip", ip_type; "stmt_id_cnt_list", wrap_tlist (wrap_ttuple
+        [t_int; t_int])]))
       (mk_send
         (mk_apply
           (mk_var "promote_address")
@@ -229,41 +228,34 @@ let send_puts =
     )
     (mk_groupbyaggregate
       (mk_assoc_lambda (* agg func *)
-        (ATuple(["ip", BaseT(TInt); "stmt_id", BaseT(TInt); "count",
-          BaseT(TInt)])
-        )
-        (AVar("acc", BaseT(TCollection(TList, BaseT(TTuple([BaseT(TInt); 
-           BaseT(TInt)]))))) 
-        )
+        (ATuple(["ip", ip_type; "stmt_id", t_int; "count", t_int]))
+        (AVar("acc", wrap_tlist (wrap_ttuple [t_int; t_int])))
         (mk_combine
           (mk_var "acc")
           (mk_singleton
-            (BaseT(TTuple([BaseT(TInt);BaseT(TInt)])))
+            (wrap_ttuple [t_int; t_int])
             (mk_tuple [mk_var "stmt_id"; mk_var "count"])
           )
         )
       )
       (mk_lambda (* grouping func *)
-        (ATuple(["ip", BaseT(TInt); "stmt_id", BaseT(TInt); "count",
-          BaseT(TInt)])
-        )
+        (ATuple(["ip", ip_type; "stmt_id", t_int; "count", t_int]))
         (mk_var "ip")
       )
       (mk_empty
-        (BaseT(TCollection(TList, BaseT(TTuple([BaseT(TInt); 
-          BaseT(TInt)])))))
+        (wrap_tlist (wrap_ttuple [t_int; t_int]))
       )
       (mk_groupbyaggregate (* inner gba *)
         (mk_assoc_lambda (* agg func *)
-          (ATuple(["ip", BaseT(TInt); "stmt_id", BaseT(TInt)]))
-          (AVar("acc", BaseT(TInt))) 
+          (ATuple(["ip", ip_type; "stmt_id", t_int]))
+          (AVar("acc", t_int)) 
           (mk_add
             (mk_var "acc")
             (mk_const (CInt(1)))
           )
         )
         (mk_lambda (* group func *)
-          (ATuple(["ip", BaseT(TInt); "stmt_id", BaseT(TInt)]))
+          (ATuple(["ip", ip_type; "stmt_id", t_int]))
           (mk_tuple
             [mk_var "ip"; mk_var "stmt_id"]
           )
@@ -280,8 +272,8 @@ let send_puts =
               acc_code
               (mk_map
                 (mk_lambda
-                  (ATuple(["ip", BaseT(TInt); 
-                    "tuples", BaseT(TTuple(lhs_map_types))])
+                  (ATuple(["ip", t_int; 
+                    "tuples", wrap_ttuple lhs_map_types])
                   )
                   (mk_tuple
                     [mk_var "ip"; mk_const (CInt(stmt_id))]
@@ -292,8 +284,7 @@ let send_puts =
                   (mk_tuple 
                     (key@
                       [mk_empty 
-                        (BaseT(TCollection(TList,
-                          BaseT(TTuple(rhs_map_types)))))
+                        (wrap_tlist (wrap_ttuple rhs_map_types))
                       ]@
                       [mk_const (CBool(true))]
                     )
@@ -303,8 +294,7 @@ let send_puts =
             ) (* mk_combine *)
           ) (* fun *)
           (mk_empty (* [] *)
-            (BaseT(TCollection(TList, BaseT(TTuple([BaseT(TInt);
-                BaseT(TInt)])))))
+            (wrap_tlist (wrap_ttuple [t_int; t_int]))
           )
           (over_stmts_in_t p lhs_rhs_of_stmt trig_name)
         )
@@ -333,9 +323,10 @@ Trigger(
  *)
 let send_push_stmt_map_funcs p trig_name = 
   (List.fold_left
-    (fun acc_code (stmt_id, (lhs_map_id, rhs_map_id)) ->
+    (fun acc_code (stmt_id, (lhs_map_id, (rhs_map_id:map_id_t))) ->
       let rhs_map_types = wrap_tlist (wrap_ttuple 
         (map_types_for p rhs_map_id)) in 
+      let rhs_map_name = map_name_of p rhs_map_id in
       let shuffle_fn = shuffle_for p stmt_id rhs_map_id lhs_map_id in
       let rkey = partial_key_from_bound p stmt_id rhs_map_id in
       acc_code@
@@ -343,7 +334,7 @@ let send_push_stmt_map_funcs p trig_name =
         ATuple(args_of_t_with_v p trig_name),
         [] (* locals *),
           (mk_iter
-            (mk_lambda (ATuple(["ip", BaseT(TInt); "tuples", rhs_map_types]))
+            (mk_lambda (ATuple(["ip", t_int; "tuples", rhs_map_types]))
               (mk_send
                 (mk_apply
                   (mk_var "promote_address")
@@ -357,7 +348,13 @@ let send_push_stmt_map_funcs p trig_name =
             (mk_apply
               (mk_var shuffle_fn)
               (mk_tuple
-                (rkey@(mk_slice rhs_map_id rkey)@[mk_const CBool(false)])
+                (rkey@
+                  [mk_slice 
+                    (mk_var rhs_map_name) 
+                    (mk_tuple ((mk_var "vid")::rkey))
+                  ]@
+                  [mk_const (CBool(false))]
+                )
               )
             )
           ) (* mk_iter *)
@@ -365,10 +362,11 @@ let send_push_stmt_map_funcs p trig_name =
       ] (* Trigger *)
     ) (* fun *)
     []
-    (over_stmts_in_t p lhs_rhs_of_stmts trig_name)
+    (over_stmts_in_t p lhs_rhs_of_stmt trig_name)
   ) 
 
 
+(* Debug -----
 (* trigger_rcv_fetch
  * -----------------------------------------
  * Receive a fetch at a node.
@@ -383,9 +381,9 @@ let send_push_stmt_map_funcs p trig_name =
 let t_rcv_fetch p trig_name =
   Trigger(
     rcv_fetch_name_of_t p trig_name, 
-    ATuple(("stmts_and_map_ids", 
-      BaseT(TCollection(TList, TTuple([BaseT(TInt); BaseT(TInt)]))))::
-      (args_of_t_with_v p trig_name)),
+    ATuple((("stmts_and_map_ids", 
+      wrap_tlist (wrap_ttuple [t_int; t_int]))::
+      (args_of_t_with_v p trig_name))),
     [], (* locals *)
     (let log_fn = "log_write_"^trig_name in (* varies by bound vars *)
       (mk_block
@@ -412,7 +410,6 @@ let t_rcv_fetch p trig_name =
     )
   )
               
-(* Debug -----
  
 (* on_insert_trigger_push_stmt_map
  * --------------------------------------
