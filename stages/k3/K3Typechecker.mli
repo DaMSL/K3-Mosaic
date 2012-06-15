@@ -14,3 +14,4 @@ val check_tag_arity: expr_tag_t -> 'child list -> bool
 
 val deduce_constant_type: constant_t -> value_type_t
 val deduce_arg_type: arg_t -> value_type_t
+val deduce_expr_type: (id_t * type_t) list -> 'a expr_t -> 'a texpr_t

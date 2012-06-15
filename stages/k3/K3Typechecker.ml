@@ -76,3 +76,24 @@ let deduce_arg_type a =
     match a with
     | AVar(i, t) -> t
     | ATuple(its) -> TIsolated(TImmutable(TTuple(snd(List.split its))))
+
+let rec deduce_expr_type cur_env utexpr =
+    let ((uuid, tag), aux), untyped_children = decompose_tree utexpr in
+
+    (* Check Tag Arity *)
+    if not (check_tag_arity tag untyped_children) then raise MalformedTree else
+
+    let env =
+        match tag with
+        | Lambda(AVar(i, t)) -> (i, TValue(t)) :: cur_env
+        | Lambda(ATuple(its)) -> (List.map (fun (i, t) -> (i, TValue(t))) its) @ cur_env
+        | _ -> cur_env
+    in
+
+    let typed_children = List.map (deduce_expr_type env) untyped_children in
+    let attach_type t = mk_tree ((((uuid, tag), t), aux), typed_children) in
+
+    let current_type =
+        match tag with
+        | _ -> TValue(deduce_constant_type CUnknown)
+    in attach_type current_type
