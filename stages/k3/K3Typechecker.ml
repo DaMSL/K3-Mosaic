@@ -121,11 +121,15 @@ let rec assignable t_l t_r =
     | _ when t_lb = t_rb -> true
     | _ -> false
 
+let (===) = assignable
+
 let rec passable t_l t_r =
     match t_l, t_r with
     | TContained(TMutable(_)), TContained(TMutable(_)) -> assignable t_l t_r
     | TContained(TMutable(_)), _ -> false
     | _ -> assignable t_l t_r
+
+let (<~) = passable
 
 let deduce_constant_type c =
     let constant_type =
@@ -237,22 +241,116 @@ let rec deduce_expr_type cur_env utexpr =
             (* are comparable, regardless of if either of them are refs. *)
             if t_0 = t_1 then TValue(canonical TBool) else raise TypeError
 
+        | IfThenElse ->
+            let t_p = bind 0 <| value_of |> TypeError in
+            let t_t = bind 1 <| value_of |> TypeError in
+            let t_e = bind 2 <| value_of |> TypeError in
+            if canonical TBool === t_p && t_t === t_e then TValue(t_t) else raise TypeError
+
+        | Block ->
+            let rec validate_block components = (
+                match components with
+                | e :: [] -> type_of e
+                | h :: t when type_of h <| value_of |> TypeError === canonical TUnit
+                    -> validate_block t
+                | _ -> raise TypeError
+            ) in validate_block typed_children
+
+        | Lambda(t_a) ->
+            let t_r = bind 0 <| value_of |> TypeError
+            in TFunction(deduce_arg_type t_a, t_r)
+
+        | Apply ->
+            let t_e, t_r = bind 0 <| function_of |> TypeError in
+            let t_a = bind 1 <| value_of |> TypeError in
+            if t_e <~ t_a then TValue(t_r) else raise TypeError
+
+        | Iterate ->
+            let t_a, t_r = bind 0 <| function_of |> TypeError in
+            let t_c, t_e = bind 1 <| collection_of +++ base_of %++ value_of |> TypeError in
+            if not (t_r === canonical TUnit) then raise TypeError else
+            if t_a <~ t_e then TValue(canonical TUnit) else raise TypeError
+
+        | Map ->
+            let t_a, t_r = bind 0 <| function_of |> TypeError in
+            let t_c, t_e = bind 1 <| collection_of +++ base_of %++ value_of |> TypeError in
+            if t_a <~ t_e then TValue(canonical (TCollection(t_c, contained_of t_r)))
+            else raise TypeError
+
+        | FilterMap ->
+            let t_pa, t_pr = bind 0 <| function_of |> TypeError in
+            let t_ma, t_mr = bind 1 <| function_of |> TypeError in
+            let t_c, t_e = bind 2 <| collection_of +++ base_of %++ value_of |> TypeError in
+
+            if not (t_pa <~ t_e) then raise TypeError else
+            if not (canonical TBool === t_pr) then raise TypeError else
+            if not (t_ma <~ t_e) then raise TypeError else
+            TValue(canonical (TCollection(t_c, contained_of t_mr)))
+
+        | Flatten ->
+            let t_c0, t_e0 = bind 0 <| collection_of +++ base_of %++ value_of |> TypeError in
+            let t_c1, t_e1 = t_e0 <| collection_of ++% base_of |> TypeError in
+            TValue(canonical (TCollection(t_c0, t_e1)))
+
+        | Aggregate ->
+            let t_a, t_r = bind 0 <| function_of |> TypeError in
+            let t_z = bind 1 <| value_of |> TypeError in
+            let t_c, t_e = bind 2 <| collection_of +++ base_of %++ value_of |> TypeError in
+            if not (t_a <~ canonical (TTuple([t_z; t_e]))) then raise TypeError else
+            if not (t_a <~ canonical (TTuple([t_a; t_r]))) then raise TypeError else
+            TValue(t_z)
+
+        | GroupByAggregate ->
+            let t_ga, t_gr = bind 0 <| function_of |> TypeError in
+            let t_aa, t_ar = bind 1 <| function_of |> TypeError in
+            let t_z = bind 2 <| value_of |> TypeError in
+            let t_c, t_e = bind 3 <| collection_of +++ base_of %++ value_of |> TypeError in
+            if not (t_ga <~ t_e) then raise TypeError else
+            if not (t_aa <~ canonical (TTuple([t_z; t_e]))) then raise TypeError else
+            if not (t_aa <~ canonical (TTuple([t_ar; t_e]))) then raise TypeError else
+            TValue(canonical (TCollection(t_c, contained_of (canonical (TTuple([t_gr; t_ar]))))))
+
+        | Sort ->
+            let t_c, t_e = bind 0 <| collection_of +++ base_of %++ value_of |> TypeError in
+            let t_ca, t_cr = bind 1 <| function_of |> TypeError in
+
+            if not (t_ca <~ canonical (TTuple([t_e; t_e]))) then raise TypeError else
+            if not (canonical (TBool) === t_cr) then raise TypeError else
+            TValue(canonical (TCollection(TList, t_e)))
+
+        | Slice ->
+            let t_c, t_e = bind 0 <| collection_of +++ base_of %++ value_of |> TypeError in
+            let t_p = bind 1 <| value_of |> TypeError in
+            if t_e === t_p then TValue(t_e) else (
+                match base_of t_p, base_of t_e with
+                | TTuple(t_ps), TTuple(t_es) ->
+                    if List.for_all2 (
+                        fun tp te
+                            -> (canonical TUnknown) === tp
+                            || te === tp
+                        ) t_ps t_es
+                    then (bind 0)
+                    else raise TypeError
+                | TUnknown, _ -> TValue(canonical (TCollection(t_c, t_e)))
+                | _ -> raise TypeError
+            )
+
         | Insert ->
             let t_c, t_e = bind 0 <| collection_of +++ base_of %++ value_of |> TypeError in
             let t_n = bind 1 <| value_of |> TypeError in
-            if assignable t_e t_n then TValue(canonical TUnit) else raise TypeError
+            if t_e === t_n then TValue(canonical TUnit) else raise TypeError
 
         | Update ->
             let t_c, t_e = bind 0 <| collection_of +++ base_of %++ value_of |> TypeError in
             let t_o = bind 1 <| value_of |> TypeError in
             let t_n = bind 2 <| value_of |> TypeError in
-            if assignable t_e t_o && assignable t_e t_n then TValue(canonical TUnit)
+            if t_e === t_o && t_e === t_n then TValue(canonical TUnit)
             else raise TypeError
 
         | Delete ->
             let t_c, t_e = bind 0 <| collection_of +++ base_of %++ value_of |> TypeError in
             let t_n = bind 1 <| value_of |> TypeError in
-            if assignable t_e t_n then TValue(canonical TUnit) else raise TypeError
+            if t_e === t_n then TValue(canonical TUnit) else raise TypeError
 
         | Peek ->
             let t_c, t_e = bind 0 <| collection_of +++ base_of %++ value_of |> TypeError in TValue(t_e)
@@ -260,7 +358,7 @@ let rec deduce_expr_type cur_env utexpr =
         | Assign ->
             let t_l = bind 0 <| dereft +++ mutable_of %++ value_of |> TypeError in
             let t_r = bind 1 <| value_of |> TypeError in
-            if assignable (canonical t_l) t_r then TValue(canonical TUnit) else raise TypeError
+            if canonical t_l === t_r then TValue(canonical TUnit) else raise TypeError
 
         | Deref ->
             let t_r = bind 0 <| value_of |> TypeError in
@@ -270,5 +368,12 @@ let rec deduce_expr_type cur_env utexpr =
                 | TContained(mt) -> TContained(TImmutable(mt <| dereft |> TypeError))
             ) in TValue(t_u)
 
-        | _ -> TValue(deduce_constant_type CUnknown)
+        | Send ->
+            let t_t = bind 0 <| base_of %++ value_of |> TypeError in
+            let t_a = bind 1 <| value_of |> TypeError in
+            let t_b = (
+                match t_t with
+                | TTarget(t_addr, t_arg) -> t_arg
+                | _ -> raise TypeError
+            ) in if canonical t_b === t_a then TValue(canonical TUnit) else raise TypeError
     in attach_type current_type
