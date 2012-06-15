@@ -176,5 +176,19 @@ let rec deduce_expr_type cur_env utexpr =
                     | (_, TBag)     -> TBag
                     | (TSet, TSet)  -> TSet
             ) in TValue(TIsolated(TImmutable(TCollection(t_cr, contained_of t_e0))))
+
+        | Range(t_c) ->
+            let start = bind 0 <| base_of %++ is_value |> TypeError in
+            let stride = bind 1 <| base_of %++ is_value |> TypeError in
+            let steps = bind 2 <| base_of %++ is_value |> TypeError in
+            if not(steps = TInt) then raise TypeError else
+            let t_e = (
+                match (start, stride) with
+                | (TInt, TInt) -> TInt
+                | (TFloat, TInt)
+                | (TInt, TFloat)
+                | (TFloat, TFloat) -> TFloat
+                | _ -> raise TypeError
+            ) in TValue(TIsolated(TImmutable(TCollection(t_c, TContained(TImmutable(t_e))))))
         | _ -> TValue(deduce_constant_type CUnknown)
     in attach_type current_type
