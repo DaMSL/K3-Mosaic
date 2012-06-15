@@ -2,101 +2,120 @@
 open K3
 open Tree
 
+(* Type manipulation functions ------------- *)
+
+(* A type for simple immutable integers *)
+let t_int = TIsolated(TImmutable(TInt))
+
+(* wrap a type in an immutable list *)
+let wrap_tlist typ = 
+    let i = match typ with
+    | TIsolated(x)  -> TContained(x)
+    | TContained(_) -> typ
+    in TIsolated(TImmutable(TCollection(TList, i)))
+
+(* wrap a type in an immutable tuple *)
+let wrap_ttuple typ = TIsolated(TImmutable(TTuple(typ)))
+
 (* Helper functions to create K3 AST nodes more easily *)
 
 let meta = 0    (* we fill meta with a default value *)
+let num = 0
+
+(* function to make a simple tree with no meta or numbering *)
+let mk_stree tag children = mk_tree (((num, tag), meta), children)
 
 (* Standard AST nodes *)
-let mk_const constant = recompose_tree ((meta, Const(constant)), [])
+let mk_const constant = mk_stree (Const(constant)) []
 
-let mk_var id = recompose_tree ((meta, Var(id)), [])
+let mk_var id = mk_stree (Var(id)) []
 
-let mk_tuple items = recompose_tree ((meta, Tuple), items)
+let mk_tuple items = mk_stree Tuple items
 
-let mk_just x = recompose_tree ((meta, Just), [x])
+let mk_just x = mk_stree Just [x]
 
-let mk_empty val_type = recompose_tree ((meta, Empty(val_type)), [])
+let mk_empty val_type = mk_stree (Empty(val_type)) []
 
-let mk_singleton val_type x = recompose_tree ((meta, Singleton(val_type)), [x])
+let mk_singleton val_type x = mk_stree (Singleton(val_type)) [x]
 
-let mk_combine x y = recompose_tree ((meta, Combine), [x;y])
+let mk_combine x y = mk_stree Combine [x;y]
 
 let mk_range ctype start stride steps =
-    recompose_tree ((meta, Range(ctype)), [start; stride; steps])
+    mk_stree (Range(ctype)) [start; stride; steps]
 
-let mk_add x y = recompose_tree ((meta, Add), [x; y])
+let mk_add x y = mk_stree Add [x; y]
 
 let mk_or = mk_add
 
-let mk_mult x y = recompose_tree ((meta, Mult), [x; y])
+let mk_mult x y = mk_stree Mult [x; y]
 
 let mk_and = mk_mult
 
-let mk_neg x = recompose_tree ((meta, Neg), [x])
+let mk_neg x = mk_stree Neg [x]
 
 let mk_not = mk_neg
 
-let mk_eq x y = recompose_tree ((meta, Eq), [x; y])
+let mk_eq x y = mk_stree Eq [x; y]
 
-let mk_lt x y = recompose_tree ((meta, Lt), [x; y])
+let mk_lt x y = mk_stree Lt [x; y]
 
-let mk_neq left right = recompose_tree ((meta, Neq), [left;right])
+let mk_neq left right = mk_stree Neq [left;right]
 
-let mk_leq left right = recompose_tree ((meta, Leq), [left;right])
+let mk_leq left right = mk_stree Leq [left;right]
 
 let mk_geq left right = mk_not (mk_lt left right)
 
 let mk_gt left right = mk_not (mk_leq left right)
 
-let mk_lambda argt expr = recompose_tree ((meta, Lambda(argt)), [expr])
+let mk_lambda argt expr = mk_stree (Lambda(argt)) [expr]
 
-let mk_apply lambda input = recompose_tree ((meta, Apply), [lambda; input])
+let mk_apply lambda input = mk_stree Apply [lambda; input]
 
-let mk_block statements = recompose_tree ((meta, Block), statements)
+let mk_block statements = mk_stree Block statements
 
 let mk_iter collection iter_fun = 
-    recompose_tree ((meta, Iterate), [collection; iter_fun])
+    mk_stree Iterate [collection; iter_fun]
 
-let mk_ifthenelse pred true_exp false_exp =
-    recompose_tree ((meta, IfThenElse), [pred; true_exp; false_exp])
+let mk_if pred true_exp false_exp =
+    mk_stree IfThenElse [pred; true_exp; false_exp]
 
 let mk_map map_fun collection =
-    recompose_tree ((meta, Map), [map_fun; collection])
+    mk_stree Map [map_fun; collection]
 
 let mk_filtermap pred_fun map_fun collection = 
-    recompose_tree ((meta, FilterMap), [pred_fun; map_fun; collection])
+    mk_stree FilterMap [pred_fun; map_fun; collection]
 
-let mk_flatten collection = recompose_tree ((meta, Flatten), [collection])
+let mk_flatten collection = mk_stree Flatten [collection]
 
-let mk_aggregate agg_fun init collection =
-    recompose_tree ((meta, Aggregate), [agg_fun; init; collection])
+let mk_agg agg_fun init collection =
+    mk_stree Aggregate [agg_fun; init; collection]
 
-let mk_groupbyaggregate agg_fun group_fun init collection =
-    recompose_tree ((meta, GroupByAggregate), [agg_fun; group_fun; init; collection])
+let mk_gbagg agg_fun group_fun init collection =
+    mk_stree GroupByAggregate [agg_fun; group_fun; init; collection]
 
 let mk_sort collection compare_fun =
-    recompose_tree ((meta, Sort), [collection; compare_fun])
+    mk_stree Sort [collection; compare_fun]
 
 let mk_slice collection pattern =
-    recompose_tree ((meta, Slice), [collection; pattern])
+    mk_stree Slice [collection; pattern]
 
-let mk_insert collection x = recompose_tree ((meta, Insert), [collection; x])
+let mk_insert collection x = mk_stree Insert [collection; x]
 
-let mk_delete collection x = recompose_tree ((meta, Delete), [collection;x])
+let mk_delete collection x = mk_stree Delete [collection;x]
 
 let mk_update collection old_val new_val =
-    recompose_tree ((meta, Update), [collection; old_val; new_val])
+    mk_stree Update [collection; old_val; new_val]
 
-let mk_peek collection = recompose_tree ((meta, Peek), [collection])
+let mk_peek collection = mk_stree Peek [collection]
 
 (* left: TRef, right: T/TRef *)
-let mk_assigntoref left right =
-    recompose_tree ((meta, AssignToRef), [left; right])
+let mk_assign left right =
+    mk_stree Assign [left; right]
 ;;
 
 (* target:TTarget(N,T) args:T *)
 let mk_send target args =
-    recompose_tree ((meta, Send), [target; args])
+    mk_stree Send [target; args]
 ;;
 
 (* Macros to do more complex tasks ---- *)
@@ -130,8 +149,8 @@ let mk_global_fn name input_names_and_types output_types expr =
       | _       -> ATuple(args)
     in
     Global(name, 
-      TFunction(BaseT(TTuple(extract_arg_types input_names_and_types)),
-          BaseT(TTuple(output_types))),
+      TFunction(wrap_ttuple (extract_arg_types input_names_and_types)),
+          wrap_ttuple (output_types))),
       mk_lambda (wrap_args input_names_and_types) expr
     )
 ;;
@@ -156,7 +175,7 @@ let mk_assoc_lambda arg1 arg2 expr =
     in
     let subst_args args name =
       if is_a_tuple args then 
-        [(name, (BaseT(TTuple(extract_arg_types (strip_args args)))))]
+        [(name, (wrap_ttuple (extract_arg_types (strip_args args))))]
       else strip_args args
     in
     mk_lambda
@@ -188,12 +207,4 @@ let mk_let_many var_name_and_type_list var_values expr =
         )
         (var_values)
 
-(* Type manipulation functions ------------- *)
-
-(* Add a generic list wrapper around a type *)
-let wrap_tlist typ = BaseT(TCollection(TList, typ))
-
-let wrap_ttuple typ = BaseT(TTuple(typ))
-
-let t_int = BaseT(TInt)
 

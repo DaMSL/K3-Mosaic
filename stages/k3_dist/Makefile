@@ -1,29 +1,30 @@
 # Makefile for the K3 distributed programming language.
 
-k3_dist =./K3Distrib
+k3_dist = stages/k3_dist
+k3 = ../k3
 
 all: GenDist.cmi GenDist.cmo rst.cmi rst.cmo 
 
 rst.cmi rst.cmo: rst.ml K3Helpers.cmi K3.cmi 
 	ocamlc -g -annot -c rst.ml
 
-Tree.cmi: ../Tree.mli
-	cd ..; ocamlc -g -annot -c Tree.mli; cp Tree.cmi $(k3_dist); cd $(k3_dist)
+Tree.cmi: $(k3)/Tree.mli
+	cd ../../Utils; ocamlc -g -annot -c Tree.mli; cp Tree.cmi ../$(k3_dist); cd ../$(k3_dist)
 
-Tree.cmo: ../Tree.ml Tree.cmi
-	cd ..; ocamlc -g -annot -c Tree.ml; cp Tree.cmo $(k3_dist); cd $(k3_dist)
+Tree.cmo: $(k3)/Tree.ml Tree.cmi
+	cd ../../Utils; ocamlc -g -annot -c Tree.ml; cp Tree.cmo ../$(k3_dist); cd ../$(k3_dist)
 
-K3.cmi: ../K3.mli Tree.cmi
-	cd ..; ocamlc -g -annot -c K3.mli; cp K3.cmi $(k3_dist); cd $(k3_dist)
+K3.cmi: $(k3)/K3.mli Tree.cmi
+	cd $(k3); ocamlc -g -annot -c K3.mli; cp K3.cmi ../../$(k3_dist); cd ../../$(k3_dist)
 
-K3.cmo: ../K3.ml K3.cmi Tree.cmi
-	cd ..; ocamlc -g -annot -c K3.ml; cp K3.cmo $(k3_dist); cd $(k3_dist)
+K3.cmo: $(k3)/K3.ml K3.cmi Tree.cmi
+	cd $(k3); ocamlc -g -annot -c K3.ml; cp K3.cmo ../../$(k3_dist); cd ../../$(k3_dist)
 
-K3Helpers.cmi: ../K3Helpers.mli K3.cmi Tree.cmi
-	cd ..; ocamlc -g -annot -c K3Helpers.mli; cp K3Helpers.cmi $(k3_dist); cd $(k3_dist)
+K3Helpers.cmi: $(k3)/K3Helpers.mli K3.cmi Tree.cmi
+	cd $(k3); ocamlc -g -annot -c K3Helpers.mli; cp K3Helpers.cmi ../../$(k3_dist); cd ../../$(k3_dist)
 
-K3Helpers.cmo: ../K3Helpers.ml K3Helpers.cmi K3.cmi Tree.cmi
-	cd ..; ocamlc -g -annot -c K3Helpers.ml; cp K3Helpers.cmo $(k3_dist); cd $(k3_dist)
+K3Helpers.cmo: $(k3)/K3Helpers.ml K3Helpers.cmi K3.cmi Tree.cmi
+	cd $(k3); ocamlc -g -annot -c K3Helpers.ml; cp K3Helpers.cmo ../../$(k3_dist); cd ../../$(k3_dist)
 
 ProgInfo.cmi: ProgInfo.mli K3Helpers.cmi K3.cmi Utils.cmi
 	ocamlc -annot -g -c ProgInfo.mli

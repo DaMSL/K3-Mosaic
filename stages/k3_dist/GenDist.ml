@@ -125,7 +125,7 @@ let send_fetch_trigger p trig_name =
           )
         )
       )
-      (mk_groupbyaggregate
+      (mk_gbagg
         (mk_assoc_lambda (* Agg function *)
           (ATuple(["stmt_id", t_int; "map_id", t_int; 
             "ip", ip_type])
@@ -160,7 +160,7 @@ let send_fetch_trigger p trig_name =
                 )
                 (mk_apply 
                   (mk_var route_fn)
-                  (mk_tuple key)
+                  (mk_tuple (key))
                 )
               )
               acc_code
@@ -226,7 +226,7 @@ let send_puts =
         )
       )
     )
-    (mk_groupbyaggregate
+    (mk_gbagg
       (mk_assoc_lambda (* agg func *)
         (ATuple(["ip", ip_type; "stmt_id", t_int; "count", t_int]))
         (AVar("acc", wrap_tlist (wrap_ttuple [t_int; t_int])))
@@ -245,7 +245,7 @@ let send_puts =
       (mk_empty
         (wrap_tlist (wrap_ttuple [t_int; t_int]))
       )
-      (mk_groupbyaggregate (* inner gba *)
+      (mk_gbagg (* inner gba *)
         (mk_assoc_lambda (* agg func *)
           (ATuple(["ip", ip_type; "stmt_id", t_int]))
           (AVar("acc", t_int)) 
