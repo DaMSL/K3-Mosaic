@@ -20,9 +20,10 @@ val type_of: 'a texpr_t -> type_t
 val value_of: type_t -> exn -> value_type_t
 val function_of: type_t -> exn -> value_type_t * value_type_t
 val collection_of: base_type_t -> exn -> container_type_t * value_type_t
-val mutable_of: mutable_type_t -> exn -> base_type_t
-val immutable_of: mutable_type_t -> exn -> base_type_t
 
+val dereft: mutable_type_t -> exn -> base_type_t
+
+val mutable_of: value_type_t -> mutable_type_t
 val base_of: value_type_t -> base_type_t
 val contained_of: value_type_t -> value_type_t
 val canonical: base_type_t -> value_type_t

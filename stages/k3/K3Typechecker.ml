@@ -77,19 +77,19 @@ let function_of t x =
     | TFunction(t_a, t_r) -> (t_a, t_r)
     | _ -> raise x
 
-let mutable_of vt x =
+let mutable_of vt =
     match vt with
-    | TMutable(bt) -> bt
-    | _ -> raise x
-
-let immutable_of vt x =
-    match vt with
-    | TImmutable(bt) -> bt
-    | _ -> raise x
+    | TIsolated(mt)
+    | TContained(mt) -> mt
 
 let collection_of bt x =
     match bt with
     | TCollection(t_c, t_e) -> (t_c, t_e)
+    | _ -> raise x
+
+let dereft mt x =
+    match mt with
+    | TMutable(bt) -> bt
     | _ -> raise x
 
 let base_of vt =
@@ -241,16 +241,16 @@ let rec deduce_expr_type cur_env utexpr =
             let t_c, t_e = bind 0 <| collection_of +++ base_of %++ value_of |> TypeError in TValue(t_e)
 
         | Assign ->
-            let t_l = bind 0 <| value_of |> TypeError in
+            let t_l = bind 0 <| dereft +++ mutable_of %++ value_of |> TypeError in
             let t_r = bind 1 <| value_of |> TypeError in
-            if assignable t_l t_r then TValue(canonical TUnit) else raise TypeError
+            if assignable (canonical t_l) t_r then TValue(canonical TUnit) else raise TypeError
 
         | Deref ->
             let t_r = bind 0 <| value_of |> TypeError in
             let t_u = (
                 match t_r with
-                | TIsolated(mt) -> TIsolated(TImmutable(mt <| mutable_of |> TypeError))
-                | TContained(mt) -> TContained(TImmutable(mt <| mutable_of |> TypeError))
+                | TIsolated(mt) -> TIsolated(TImmutable(mt <| dereft |> TypeError))
+                | TContained(mt) -> TContained(TImmutable(mt <| dereft |> TypeError))
             ) in TValue(t_u)
 
         | _ -> TValue(deduce_constant_type CUnknown)
