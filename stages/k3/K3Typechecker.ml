@@ -192,5 +192,34 @@ let rec deduce_expr_type cur_env utexpr =
                 | (TFloat, TFloat) -> TFloat
                 | _ -> raise TypeError
             ) in TValue(canonical (TCollection(t_c, TContained(TImmutable(t_e)))))
+
+        | (Add|Mult) ->
+            let t_0 = bind 0 <| base_of %++ value_of |> TypeError in
+            let t_1 = bind 1 <| base_of %++ value_of |> TypeError in
+            let result_type = (
+                match (t_0, t_1) with
+                | (TFloat, TFloat) -> TFloat
+                | (TInt, TFloat) -> TFloat
+                | (TFloat, TInt) -> TFloat
+                | (TInt, TInt) -> TInt
+                | (TBool, TBool) -> TBool
+                | _ -> raise TypeError
+            ) in TValue(canonical (result_type))
+
+        | Neg ->
+            let t_0 = bind 0 <| base_of %++ value_of |> TypeError in (
+                match t_0 with
+                | (TBool|TInt|TFloat) as t -> TValue(canonical (t))
+                | _ -> raise TypeError
+            )
+
+        | (Eq|Lt|Neq|Leq) ->
+            let t_0 = bind 0 <| base_of %++ value_of |> TypeError in
+            let t_1 = bind 1 <| base_of %++ value_of |> TypeError in
+
+            (* We can compare any two values whose base types are the same, and *)
+            (* are comparable, regardless of if either of them are refs. *)
+            if t_0 = t_1 then TValue(canonical TBool) else raise TypeError
+
         | _ -> TValue(deduce_constant_type CUnknown)
     in attach_type current_type
