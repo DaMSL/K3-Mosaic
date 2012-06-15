@@ -60,6 +60,14 @@ type 'a texpr_t = (((int * expr_tag_t) * type_t) * 'a) tree_t
 
 let type_of texpr = let (((id, tag), t), _), children = decompose_tree texpr in t
 
+let (<|) x f = f x
+and (|>) f y = f y
+
+let is_value t x =
+    match t with
+    | TValue(vt) -> vt
+    | _ -> raise x
+
 let deduce_constant_type c =
     let constant_type =
         match c with
@@ -93,10 +101,17 @@ let rec deduce_expr_type cur_env utexpr =
 
     let typed_children = List.map (deduce_expr_type env) untyped_children in
     let attach_type t = mk_tree ((((uuid, tag), t), aux), typed_children) in
+    let bind n = type_of (List.nth typed_children n) in
 
     let current_type =
         match tag with
         | Const(c) -> TValue(deduce_constant_type c)
         | Var(id) -> (try List.assoc id env with Not_found -> raise TypeError)
+        | Tuple ->
+            let child_types = List.map (fun e -> type_of e <| is_value |> TypeError) typed_children
+            in TValue(TIsolated(TImmutable(TTuple(child_types))))
+        | Just ->
+            let inner_type = bind 0 <| is_value |> TypeError in
+            TValue(TIsolated(TImmutable(TMaybe(inner_type))))
         | _ -> TValue(deduce_constant_type CUnknown)
     in attach_type current_type
