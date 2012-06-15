@@ -377,3 +377,28 @@ let rec deduce_expr_type cur_env utexpr =
                 | _ -> raise TypeError
             ) in if canonical t_b === t_a then TValue(canonical TUnit) else raise TypeError
     in attach_type current_type
+
+let rec deduce_program_type env program = match program with [] -> [] | s :: ss -> (
+    match s with
+    | Instruction(i) -> deduce_program_type env ss
+    | Declaration(d) ->
+        let nd, nenv = (
+            match d with
+            | Global(i, t, Some init) -> (Global(i, t, Some init), (i, type_of (deduce_expr_type env init)) :: env)
+            | Global(i, t, None) -> (Global(i, t, None), (i, t) :: env)
+            | Foreign(i, t) -> (Foreign(i, t), (i, t) :: env)
+            | Trigger(id, args, locals, body) ->
+                let self_bindings = (id, TValue(canonical (TTarget(Local(id), base_of
+                (deduce_arg_type args))))) in
+                let arg_bindings = (
+                    match args with
+                    | AVar(i, t) -> [(i, TValue(t))]
+                    | ATuple(its) -> List.map (fun (i, t) -> (i, TValue(t))) its
+                ) in
+                let local_bindings = List.map (fun (i, vt) -> (i, TValue(vt))) locals in
+                let inner_env = self_bindings :: arg_bindings @ local_bindings @ env in
+                let typed_body = deduce_expr_type inner_env body in
+                (Trigger(id, args, locals, typed_body), self_bindings :: env)
+        ) in
+        nd :: deduce_program_type nenv ss
+    )
