@@ -400,6 +400,7 @@ let rec deduce_program_type env program = match program with [] -> [] | s :: ss 
                 let local_bindings = List.map (fun (i, vt) -> (i, TValue(vt))) locals in
                 let inner_env = self_bindings :: arg_bindings @ local_bindings @ env in
                 let typed_body = deduce_expr_type inner_env body in
+                if not(type_of typed_body === canonical TUnit) then raise TypeError else
                 (Trigger(id, args, locals, typed_body), self_bindings :: env)
         ) in
         Declaration(nd) :: deduce_program_type nenv ss
