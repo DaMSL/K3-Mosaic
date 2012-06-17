@@ -6,7 +6,7 @@ open K3
 exception MalformedTree
 exception TypeError
 
-type 'a texpr_t = (((int * expr_tag_t) * type_t) * 'a) tree_t
+type 'a texpr_t = (type_t * 'a) expr_t
 
 val (<|): 'a -> ('a -> 'b) -> 'b
 val (|>): ('a -> 'b) -> 'a -> 'b
@@ -37,4 +37,4 @@ val deduce_constant_type: constant_t -> value_type_t
 val deduce_arg_type: arg_t -> value_type_t
 val deduce_expr_type: (id_t * type_t) list -> 'a expr_t -> 'a texpr_t
 
-(* val deduce_program_type: (id_t * type_t) list -> ? *)
+val deduce_program_type: (id_t * type_t) list -> 'a program_t -> (type_t * 'a) program_t

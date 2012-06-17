@@ -56,9 +56,9 @@ let check_tag_arity tag children =
         | Send -> 2
     in length = correct_arity
 
-type 'a texpr_t = (((int * expr_tag_t) * type_t) * 'a) tree_t
+type 'a texpr_t = (type_t * 'a) expr_t
 
-let type_of texpr = let (((id, tag), t), _), children = decompose_tree texpr in t
+let type_of texpr = let (_, (t, _)), _ = decompose_tree texpr in t
 
 let (<|) x f = f x
 and (|>) f y = f y
@@ -163,7 +163,7 @@ let rec deduce_expr_type cur_env utexpr =
     in
 
     let typed_children = List.map (deduce_expr_type env) untyped_children in
-    let attach_type t = mk_tree ((((uuid, tag), t), aux), typed_children) in
+    let attach_type t = mk_tree (((uuid, tag), (t, aux)), typed_children) in
     let bind n = type_of (List.nth typed_children n) in
 
     let current_type =
@@ -384,7 +384,9 @@ let rec deduce_program_type env program = match program with [] -> [] | s :: ss 
     | Declaration(d) ->
         let nd, nenv = (
             match d with
-            | Global(i, t, Some init) -> (Global(i, t, Some init), (i, type_of (deduce_expr_type env init)) :: env)
+            | Global(i, t, Some init) ->
+                let typed_init = deduce_expr_type env init
+                in (Global(i, t, Some typed_init), (i, type_of typed_init) :: env)
             | Global(i, t, None) -> (Global(i, t, None), (i, t) :: env)
             | Foreign(i, t) -> (Foreign(i, t), (i, t) :: env)
             | Trigger(id, args, locals, body) ->
@@ -400,5 +402,5 @@ let rec deduce_program_type env program = match program with [] -> [] | s :: ss 
                 let typed_body = deduce_expr_type inner_env body in
                 (Trigger(id, args, locals, typed_body), self_bindings :: env)
         ) in
-        nd :: deduce_program_type nenv ss
+        Declaration(nd) :: deduce_program_type nenv ss
     )
