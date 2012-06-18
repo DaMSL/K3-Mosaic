@@ -37,6 +37,8 @@
  *)
 
 (* TODO: - slice needs CUnknown, not "_"
+ *      - Need to make names clearer (S_ for statement)
+ *      - Wrapping in a list should recursively change all contained stuff.
  *       - Problem: don't think shuffle handles map[b] = map[c; b] ie. b->b
  *       mapping when b is unbound. Need to make it fully stmt_id specific.
  *       - Change data structure p to remove map arg names, and add loop vars.
@@ -81,22 +83,25 @@ let args_of_t_as_vars_with_v p trig_nm =
 let send_fetch_name_of_t p trig_nm = trig_nm^"_send_fetch"
 let rcv_fetch_name_of_t p trig_nm = trig_nm^"_rcv_fetch"
 let send_push_name_of_t p trig_nm stmt_id map_id =
-      trig_nm^"_send_push_"^(string_of_int stmt_id)^"_"^(map_name_of p map_id)
+      trig_nm^"_send_push_s"^(string_of_int stmt_id)^"_"^(map_name_of p map_id)
 let rcv_put_name_of_t p trig_nm = trig_nm^"_rcv_put"
 let rcv_put_args_of_t p trig_nm = 
   ATuple((("stmt_id_cnt_list", 
     (wrap_tlist (wrap_ttuple [t_int; t_int])))::
     (args_of_t_with_v p trig_nm)))
 let rcv_push_name_of_t p trig_nm stmt_id map_id =
-      trig_nm^"_rcv_push_"^(string_of_int stmt_id)^"_"^(map_name_of p map_id)
+      trig_nm^"_rcv_push_s"^(string_of_int stmt_id)^"_"^(map_name_of p map_id)
 let do_complete_name_of_t p trig_nm stmt_id =
-  trig_nm^"_do_complete_"^(string_of_int stmt_id)
+  trig_nm^"_do_complete_s"^(string_of_int stmt_id)
 
 (* route and shuffle function names *)
 let route_for p map_id = "route_to_"^(map_name_of p map_id)
 let shuffle_for p stmt_id rhs_map_id lhs_map_id = 
-  "shuffle_"^(string_of_int stmt_id)^(map_name_of p rhs_map_id)^
+  "shuffle_s"^(string_of_int stmt_id)^"_"^(map_name_of p rhs_map_id)^
   (map_name_of p lhs_map_id)
+
+(* foreign function names *)
+let log_write_for trig_nm = "log_write_"^trig_nm (* varies with bound *)
 
 (* k3 functions needed *)
 (*
@@ -104,9 +109,11 @@ let shuffle_for p stmt_id rhs_map_id lhs_map_id =
 "shuffle_map_"^map_id^"_to_map_"map_id takes maybe tuples and a pattern maybe
   tuple and returns a tuple
 "promote_address" -> Local() -> ip -> address_t
+"addr_for_send_push": takes stmt_id, map_id and returns addr of send_push
+  trigger
  *)
 
-let send_fetch_trigger p trig_name =
+let send_fetch_trig p trig_name =
   let send_fetches_of_rhs_maps  =
     (mk_iter
       (mk_lambda 
@@ -321,7 +328,7 @@ Trigger(
  * Circumvents polymorphism.
  * Produces a list of triggers.
  *)
-let send_push_stmt_map_funcs p trig_name = 
+let send_push_stmt_map_trig p trig_name = 
   (List.fold_left
     (fun acc_code (stmt_id, (lhs_map_id, (rhs_map_id:map_id_t))) ->
       let rhs_map_types = wrap_tlist (wrap_ttuple 
@@ -366,7 +373,6 @@ let send_push_stmt_map_funcs p trig_name =
   ) 
 
 
-(* Debug -----
 (* trigger_rcv_fetch
  * -----------------------------------------
  * Receive a fetch at a node.
@@ -378,38 +384,44 @@ let send_push_stmt_map_funcs p trig_name =
  * need to record only one trigger in the log, and because it reduces messages
  * between nodes.
  *)
-let t_rcv_fetch p trig_name =
+let rcv_fetch_trig p trig_name =
   Trigger(
     rcv_fetch_name_of_t p trig_name, 
     ATuple((("stmts_and_map_ids", 
       wrap_tlist (wrap_ttuple [t_int; t_int]))::
       (args_of_t_with_v p trig_name))),
     [], (* locals *)
-    (let log_fn = "log_write_"^trig_name in (* varies by bound vars *)
-      (mk_block
-        [mk_apply
-          (mk_var log_fn)
-          (mk_tuple
-            (mk_const CString(trig_name))::(args_of_t_as_vars_with_v trig_name)
-          )
-        ;
-        (* invoke generated fetch triggers, which in turn send pushes. *)
-        (mk_iter
-          (mk_lambda
-            (ATuple(["stmt_id", BaseT(TInt); "map_id", BaseT(TInt)]))
-            (* this send is not polymorphic. every fetch trigger expects
-             * the same set of bound variables. *)
-            (mk_send
-              (send_push_name_of_t trig_name stmt_id map_id)
-              (args_of_t_as_vars_with_v trig_name)
+    (mk_block
+      [mk_apply
+        (mk_var (log_write_for trig_name))
+        (mk_tuple
+          (mk_const (CString(trig_name))::args_of_t_as_vars_with_v p trig_name)
+        )
+      ;
+      (* invoke generated fetch triggers, which in turn send pushes. *)
+      (mk_iter
+        (mk_lambda
+          (ATuple(["stmt_id", t_int; "map_id", t_int]))
+          (* this send is not polymorphic. every fetch trigger expects
+           * the same set of bound variables. *)
+          (mk_send
+            (mk_apply
+              (mk_var "addr_for_send_push") (* global func *)
+              (mk_tuple
+                [mk_var "stmt_id"; mk_var "map_id"]
+              )
+            )
+            (mk_tuple
+              (args_of_t_as_vars_with_v p trig_name)
             )
           )
-          (mk_var "stmts_and_map_ids")
-        )]
-      )
+        )
+        (mk_var "stmts_and_map_ids")
+      )]
     )
   )
               
+(* Debug -----
  
 (* on_insert_trigger_push_stmt_map
  * --------------------------------------
@@ -783,11 +795,19 @@ mk_global_fn do_corrective_name
 
   *)
 
+(* Generate all the code for a specific trigger *)
+let gen_dist_for_t p trig =
+    send_fetch_trig p trig::
+    (rcv_fetch_trig p trig::
+    (send_push_stmt_map_trig p trig))
+
 (* Function to generate the whole distributed program *)
 let gen_dist p ast =
   let triggers = get_trig_list p in
-  List.map
-  (fun trig_nm -> send_fetch_trigger p trig_nm)
-  triggers
+  List.flatten
+    (List.map
+      (fun trig -> gen_dist_for_t p trig)
+      triggers
+    )
 
 

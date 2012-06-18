@@ -1,3 +1,6 @@
+(* Utility functions to get data out of the specialized K3 program data
+ * structure *)
+
 exception Bad_data of string
 type stmt_id_t = int
 type trig_id_t = int
@@ -10,9 +13,6 @@ type trig_data_t =
     trig_id_t * string * (K3.id_t * K3.value_type_t) list * stmt_id_t list
 type map_data_t = map_id_t * string * (K3.id_t * K3.value_type_t) list
 type prog_data_t = trig_data_t list * stmt_data_t list * map_data_t list
-val get_trig_data : 'a * 'b * 'c -> 'a
-val get_stmt_data : prog_data_t -> stmt_data_t list
-val get_map_data : 'a * 'b * 'c -> 'c
 val get_trig_list : ('a * 'b * 'c * 'd) list * 'e * 'f -> 'b list
 val find_trigger : prog_data_t -> string -> trig_data_t
 val find_map : prog_data_t -> map_id_t -> map_data_t
