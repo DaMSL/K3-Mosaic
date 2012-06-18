@@ -82,13 +82,9 @@ let args_of_t_as_vars_with_v p trig_nm =
 (* global trigger info needed for generated triggers and sends *)
 let send_fetch_name_of_t p trig_nm = trig_nm^"_send_fetch"
 let rcv_fetch_name_of_t p trig_nm = trig_nm^"_rcv_fetch"
+let rcv_put_name_of_t p trig_nm = trig_nm^"_rcv_put"
 let send_push_name_of_t p trig_nm stmt_id map_id =
       trig_nm^"_send_push_s"^(string_of_int stmt_id)^"_"^(map_name_of p map_id)
-let rcv_put_name_of_t p trig_nm = trig_nm^"_rcv_put"
-let rcv_put_args_of_t p trig_nm = 
-  ATuple((("stmt_id_cnt_list", 
-    (wrap_tlist (wrap_ttuple [t_int; t_int])))::
-    (args_of_t_with_v p trig_nm)))
 let rcv_push_name_of_t p trig_nm stmt_id map_id =
       trig_nm^"_rcv_push_s"^(string_of_int stmt_id)^"_"^(map_name_of p map_id)
 let do_complete_name_of_t p trig_nm stmt_id =
@@ -321,6 +317,79 @@ Trigger(
   )
 )
    
+(* trigger_rcv_fetch
+ * -----------------------------------------
+ * Receive a fetch at a node.
+ * Reuses switch-side computation of which maps this node should read.
+ * This could be done entirely at the node, but would repeat work done
+ * at the switch anyway.
+ * The assumption is that the "stmts_and_map_names" data is not large.
+ * We have this as a multiplexer to the different fetch functions, because we
+ * need to record only one trigger in the log, and because it reduces messages
+ * between nodes.
+ *)
+let rcv_fetch_trig p trig_name =
+  Trigger(
+    rcv_fetch_name_of_t p trig_name, 
+    ATuple((("stmts_and_map_ids", 
+      wrap_tlist (wrap_ttuple [t_int; t_int]))::
+      (args_of_t_with_v p trig_name))),
+    [], (* locals *)
+    (mk_block
+      [mk_apply
+        (mk_var (log_write_for trig_name))
+        (mk_tuple
+          (mk_const (CString(trig_name))::args_of_t_as_vars_with_v p trig_name)
+        )
+      ;
+      (* invoke generated fetch triggers, which in turn send pushes. *)
+      (mk_iter
+        (mk_lambda
+          (ATuple(["stmt_id", t_int; "map_id", t_int]))
+          (* this send is not polymorphic. every fetch trigger expects
+           * the same set of bound variables. *)
+          (mk_send
+            (mk_apply
+              (mk_var "addr_for_send_push") (* global func *)
+              (mk_tuple
+                [mk_var "stmt_id"; mk_var "map_id"]
+              )
+            )
+            (mk_tuple
+              (args_of_t_as_vars_with_v p trig_name)
+            )
+          )
+        )
+        (mk_var "stmts_and_map_ids")
+      )]
+    )
+  )
+
+(* Receive Put trigger
+ * --------------------------------------- *
+ * Update the statement counters with the received values
+ *)
+let rcv_put_trig p trig_name =
+Trigger(
+  (rcv_put_name_of_t p trig_name),
+  ATuple((("stmt_id_cnt_list", (wrap_tlist (wrap_ttuple [t_int; t_int])))::
+    (args_of_t_with_v p trig_name))),
+  [],
+  mk_iter
+    (mk_lambda
+      (ATuple(["stmt_id", t_int; "count", t_int]))
+      (mk_update
+        (mk_var "stmt_counters")
+        (mk_slice
+          (mk_var "stmt_counters")
+          (mk_tuple [mk_var "vid"; mk_var "stmt_id"; mk_const CUnknown])
+        )
+        (mk_tuple [mk_var "vid"; mk_var "stmt_id"; mk_var "count"])
+      )
+    )
+    (mk_var "stmt_id_cnt_list")
+)
+
 
 (* Trigger_send_push_stmt_map
  * ----------------------------------------
@@ -373,53 +442,6 @@ let send_push_stmt_map_trig p trig_name =
   ) 
 
 
-(* trigger_rcv_fetch
- * -----------------------------------------
- * Receive a fetch at a node.
- * Reuses switch-side computation of which maps this node should read.
- * This could be done entirely at the node, but would repeat work done
- * at the switch anyway.
- * The assumption is that the "stmts_and_map_names" data is not large.
- * We have this as a multiplexer to the different fetch functions, because we
- * need to record only one trigger in the log, and because it reduces messages
- * between nodes.
- *)
-let rcv_fetch_trig p trig_name =
-  Trigger(
-    rcv_fetch_name_of_t p trig_name, 
-    ATuple((("stmts_and_map_ids", 
-      wrap_tlist (wrap_ttuple [t_int; t_int]))::
-      (args_of_t_with_v p trig_name))),
-    [], (* locals *)
-    (mk_block
-      [mk_apply
-        (mk_var (log_write_for trig_name))
-        (mk_tuple
-          (mk_const (CString(trig_name))::args_of_t_as_vars_with_v p trig_name)
-        )
-      ;
-      (* invoke generated fetch triggers, which in turn send pushes. *)
-      (mk_iter
-        (mk_lambda
-          (ATuple(["stmt_id", t_int; "map_id", t_int]))
-          (* this send is not polymorphic. every fetch trigger expects
-           * the same set of bound variables. *)
-          (mk_send
-            (mk_apply
-              (mk_var "addr_for_send_push") (* global func *)
-              (mk_tuple
-                [mk_var "stmt_id"; mk_var "map_id"]
-              )
-            )
-            (mk_tuple
-              (args_of_t_as_vars_with_v p trig_name)
-            )
-          )
-        )
-        (mk_var "stmts_and_map_ids")
-      )]
-    )
-  )
               
 (* Debug -----
  
@@ -798,8 +820,9 @@ mk_global_fn do_corrective_name
 (* Generate all the code for a specific trigger *)
 let gen_dist_for_t p trig =
     send_fetch_trig p trig::
+    (rcv_put_trig p trig::
     (rcv_fetch_trig p trig::
-    (send_push_stmt_map_trig p trig))
+    (send_push_stmt_map_trig p trig)))
 
 (* Function to generate the whole distributed program *)
 let gen_dist p ast =
