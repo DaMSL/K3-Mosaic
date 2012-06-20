@@ -547,7 +547,6 @@ List.fold_left
   [] (* empty code *)
   (over_stmts_in_t p read_maps_of_stmt trig_name)
     
-(* Debug -----
  
 (* do_complete_stmt_id
  * --------------------------------------
@@ -561,6 +560,8 @@ List.fold_left
  * to maps *)
 (* delta_tuples is in the format of the lhs_map *)
 
+(* Debug -----
+ *
 let trigger_stmt_and_rhs_map_list rhs_map_id =
   (List.map (* lhs_maps of stmts with given rhs_map *)
     (fun (trigger, stmt_id) -> (trigger, stmt_id, lhs_map_of_stmt stmt_id))
@@ -658,6 +659,7 @@ let forward_correctives =
     (lhs_maps_in_trigger trigger_id)
 ;;
 
+ 
 let do_complete_name = trig_name^"_do_complete_"^stmt_id in
 Trigger
   (do_complete_name, ATuple(trig_args_with_v), [] (* locals *),
