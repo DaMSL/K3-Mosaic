@@ -4,13 +4,13 @@
 include Makefile.inc
 
 FILES=\
+	util/Util \
 	util/ListAsSet \
 	util/Symbols \
 	util/Tree \
 	stages/k3/K3 \
 	stages/k3/K3Util \
 	stages/k3/K3Helpers \
-	stages/k3_dist/Utils \
 	stages/k3_dist/ProgInfo \
 	stages/k3_dist/GenDist \
 	#stages/k3/K3Typechecker \

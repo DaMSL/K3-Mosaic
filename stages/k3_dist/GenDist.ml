@@ -36,7 +36,12 @@
  * The switch starts the process
  *)
 
-(* TODO: - slice needs CUnknown, not "_"
+(* TODO:
+  *     - How does update work? After the slice, do I need to give the full
+  *     tuple or just the remaining value?
+  *     - Worry about map values vs keys
+  *     - Rcv_put needs to add, not save, counters
+  * - slice needs CUnknown, not "_"
  *      - Need to make names clearer (S_ for statement)
  *      - Wrapping in a list should recursively change all contained stuff.
  *       - Problem: don't think shuffle handles map[b] = map[c; b] ie. b->b
@@ -98,6 +103,7 @@ let shuffle_for p stmt_id rhs_map_id lhs_map_id =
 
 (* foreign function names *)
 let log_write_for trig_nm = "log_write_"^trig_nm (* varies with bound *)
+let buffer_write_for p map_id = "add_"^(map_name_of p map_id)
 
 (* k3 functions needed *)
 (*
@@ -442,10 +448,7 @@ let send_push_stmt_map_trig p trig_name =
   ) 
 
 
-              
-(* Debug -----
- 
-(* on_insert_trigger_push_stmt_map
+(* rcv_push_trig
  * --------------------------------------
  * Receive a push at a node
  * Also called for virtual pushes: local data transfers to allow tracking of 
@@ -453,67 +456,99 @@ let send_push_stmt_map_trig p trig_name =
  * a good reminder to have it here 
  * A later optimization could be lumping maps between statements in a trigger *)
 
-let rcv_push trig_name = 
+let rcv_push_trig p trig_name = 
 List.fold_left
   (fun acc_code (stmt_id, read_map_id) ->
-     let read_map_name = map_name_of read_map_id in
-     let buffer_fn = "add_"^read_map_name in
-     acc_code@
-     Trigger(rcv_push_name_of_t trig_name,
-       ATuple(("tuples", map_types_for read_map_id)::
-         (args_of_t_with_v trig_name)), 
-       [], (* locals *)
-       (mk_block
-          [mk_apply (* write to buffer *) 
-            (mk_var buffer_fn)
-            (mk_var "tuples")
-            (mk_var "vid")
-          ;
-          (* check statment counters to see if we can process *)
-          let stmt_counters_pattern =
-              (mk_tuple [mk_var "vid"; mk_var "stmt_id"; mk_val "_"]) in
-          let stmt_cntrs = mk_var "stmt_counters" in
-          let stmt_counters_slice = mk_slice stmt_counters stmt_counters_pattern
-          in
-          mk_ifthenelse
-            (mk_has_member (* check if the counter exists *)
-              stmt_cntrs
-              stmt_counters_pattern
-              (BaseT(TTuple[BaseT(TInt)]))
-            )
-            (mk_block
-              [mk_update
-                stmt_cntrs
-                stmt_counters_slice
-                (mk_add
-                  stmt_counters_slice
-                  (mk_const CInt(-1))
+    let map_name = map_name_of p read_map_id in
+    let tuple_types = map_types_for p read_map_id in
+    let value_type = List.nth tuple_types (List.length tuple_types - 1) in
+    (* remove value from tuple, add vid *)
+    let reduced_tuple_with_v = mk_reduced_tuple "tuples" 
+      tuple_types (List.length tuple_types -1) ["vid", vid_type] in
+    let tuples_with_v = mk_reduced_tuple "tuples"
+      tuple_types (List.length tuple_types) ["vid", vid_type] 
+    in
+    acc_code@
+    [Trigger(rcv_push_name_of_t p trig_name stmt_id read_map_id,
+      ATuple(("tuples", wrap_tlist (wrap_ttuple (tuple_types)))::
+        (args_of_t_with_v p trig_name)), 
+      [], (* locals *)
+      (mk_block
+        [mk_iter
+          (mk_lambda
+            (ATuple ["tuple", wrap_ttuple (tuple_types)])
+            (mk_if
+              (mk_has_member 
+                (mk_var map_name)
+                reduced_tuple_with_v
+                value_type
+              )
+              (mk_update
+                (mk_var map_name)
+                (mk_slice
+                  (mk_var map_name)
+                  reduced_tuple_with_v
                 )
-              ;mk_ifthenelse
-                (mk_eq
-                  stmt_counters_slice
-                  (mk_const CInt(0))
-                ) 
-                (* Send to local do_complete *)
-                (mk_send
-                  (Local(do_complete_name_of_t trig_name))
-                  (args_of_t_with_v trig_name)
-                )
-                (mk_const CUnit)
-              ]
+                tuples_with_v
+              )
+              (mk_insert
+                (mk_var map_name)
+                tuples_with_v
+              )
             )
-            (mk_update (* else *)
-              stmt_counters_slice
-              (* Initialize if the push arrives before the put. *)
-              mk_const CInt(-1)
-            )
-          ]
-        )
-     )
+          )
+          (mk_var "tuples")
+         ;
+         (* check statment counters to see if we can process *)
+         let stmt_cntrs_pattern =
+             (mk_tuple [mk_var "vid"; mk_var "stmt_id"; mk_const CUnknown]) in
+         let stmt_cntrs = mk_var "stmt_cntrs" in
+         let stmt_cntrs_slice = mk_slice stmt_cntrs stmt_cntrs_pattern
+         in
+         mk_if (* check if the counter exists *)
+           (mk_has_member 
+             stmt_cntrs
+             stmt_cntrs_pattern
+             t_int
+           )
+           (mk_block
+             [mk_update
+               stmt_cntrs
+               stmt_cntrs_slice
+               (mk_add
+                 stmt_cntrs_slice
+                 (mk_const (CInt(-1)))
+               )
+             ;mk_if (* check if the counter is 0 *)
+               (mk_eq
+                 stmt_cntrs_slice
+                 (mk_const (CInt(0)))
+               ) 
+               (* Send to local do_complete *)
+               (mk_send
+                 (mk_var (do_complete_name_of_t p trig_name stmt_id))
+                 (mk_tuple 
+                   (args_of_t_as_vars_with_v p trig_name)
+                 )
+               )
+               (mk_const CUnit) (* do nothing *)
+             ]
+           )
+           (mk_update (* else: no value in the counter *)
+             stmt_cntrs
+             stmt_cntrs_slice
+             (* Initialize if the push arrives before the put. *)
+             (mk_const (CInt(-1))) (* TODO: not sure if correct *)
+           )
+         ]
+       )
+    )]
   )
   [] (* empty code *)
-  (over_stmts_in_t read_maps_in_stmt trig_name)
+  (over_stmts_in_t p read_maps_of_stmt trig_name)
     
+(* Debug -----
+ 
 (* do_complete_stmt_id
  * --------------------------------------
  * Functions that perform the actual calculations of the statement
@@ -822,7 +857,8 @@ let gen_dist_for_t p trig =
     send_fetch_trig p trig::
     (rcv_put_trig p trig::
     (rcv_fetch_trig p trig::
-    (send_push_stmt_map_trig p trig)))
+    (send_push_stmt_map_trig p trig@
+    (rcv_push_trig p trig))))
 
 (* Function to generate the whole distributed program *)
 let gen_dist p ast =

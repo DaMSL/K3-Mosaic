@@ -1,6 +1,7 @@
 
 open K3
 open Tree
+open Util
 
 (* Type manipulation functions ------------- *)
 
@@ -206,5 +207,28 @@ let mk_let_many var_name_and_type_list var_values expr =
             (expr)
         )
         (var_values)
+
+(* returns code for a tuple where only the first new_size entries are taken *)
+(* allows adding to start_ids_types which contains ids and types *)
+let mk_reduced_tuple tup_name types new_size start_ids_types =
+    let start_vars = convert_names_to_vars (extract_arg_names start_ids_types)
+    in
+    let list_size = List.length types in
+    let size = if new_size > list_size then list_size else new_size in
+    let range = create_range 1 size in
+    let reduced_types = list_take types size in
+    let ids = List.map (fun num -> "temp_"^string_of_int num) range in
+    let ids_and_types = list_zip ids reduced_types in
+    mk_apply
+      (mk_lambda 
+        (ATuple(start_ids_types@ids_and_types))    
+        (mk_tuple
+          (start_vars@(convert_names_to_vars ids))
+        )
+      )
+      (mk_var tup_name)
+
+
+
 
 

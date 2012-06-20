@@ -192,3 +192,12 @@ val mk_let_many :
   ((int * K3.expr_tag_t) * int) Tree.tree_t ->
   ((int * K3.expr_tag_t) * int) Tree.tree_t
 
+(* macro to destruct a tuple, take only the first members, and add to other ids
+ * and types *)
+val mk_reduced_tuple :
+  K3.id_t ->
+  K3.value_type_t list ->
+  int ->
+  (K3.id_t * K3.value_type_t) list ->
+  ((int * K3.expr_tag_t) * int) Tree.tree_t
+
