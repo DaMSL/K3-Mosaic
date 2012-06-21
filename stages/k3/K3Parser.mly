@@ -65,6 +65,8 @@
 %token AGGREGATE GROUPBYAGGREGATE
 %token SORT RANK
 
+%token PEEK
+
 %token IF THEN ELSE
 
 %token SEND
@@ -298,6 +300,7 @@ lambda:
 
 access:
     | expr LBRACKET tuple RBRACKET { mkexpr Slice [$1; $3] }
+    | PEEK LPAREN expr RPAREN { mkexpr Peek [$3] }
 ;
 
 mutation:
