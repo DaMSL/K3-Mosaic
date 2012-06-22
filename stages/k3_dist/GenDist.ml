@@ -41,7 +41,7 @@ let (@:) f x = f x;;
 (* TODO:
   *     - How does update work? After the slice, do I need to give the full
   *     tuple or just the remaining value?
-  *     - Worry about map values vs keys
+  *     - Worry about map values vs keys: need whole tuples
   *     - Rcv_put needs to add, not save, counters
   * - slice needs CUnknown, not "_"
  *      - Need to make names clearer (S_ for statement)
@@ -81,10 +81,10 @@ let arg_types_of_t p trig_nm = extract_arg_types (args_of_t p trig_nm)
 let arg_names_of_t p trig_nm = extract_arg_names (args_of_t p trig_nm)
 let args_of_t_as_vars p trig_nm = convert_names_to_vars (arg_names_of_t p trig_nm)
 
-let args_of_t_with_v p trig_nm = (args_of_t p trig_nm)@["vid", vid_type]
-let arg_types_of_t_with_v p trig_nm = (arg_types_of_t p trig_nm)@[vid_type]
+let args_of_t_with_v p trig_nm = args_of_t p trig_nm@["vid", vid_type]
+let arg_types_of_t_with_v p trig_nm = arg_types_of_t p trig_nm@[vid_type]
 let args_of_t_as_vars_with_v p trig_nm = 
-  (args_of_t_as_vars p trig_nm)@[mk_var "vid"]
+  args_of_t_as_vars p trig_nm@[mk_var "vid"]
 
 (* global trigger names needed for generated triggers and sends *)
 let send_fetch_name_of_t p trig_nm = trig_nm^"_send_fetch"
@@ -129,26 +129,23 @@ let send_fetch_trig p trig_name =
     (mk_iter
       (mk_lambda 
         (ATuple["ip", t_int;
-          "stmt_map_ids", wrap_tlist (wrap_ttuple [t_int; t_int])]
+          "stmt_map_ids", wrap_tlist @: wrap_ttuple [t_int; t_int]]
         )
         (mk_send 
           (mk_apply 
             (mk_var "promote_address")
-            (mk_tuple [mk_var (rcv_fetch_name_of_t p trig_name); mk_var "ip"])
+            (mk_tuple [mk_var @: rcv_fetch_name_of_t p trig_name; mk_var "ip"])
           ) 
-          (mk_tuple 
-            ((args_of_t_as_vars_with_v p trig_name)@
-              [mk_var "stmt_map_ids"]
-            )
+          (mk_tuple @:
+            args_of_t_as_vars_with_v p trig_name@ 
+            [mk_var "stmt_map_ids"]
           )
         )
       )
       (mk_gbagg
         (mk_assoc_lambda (* Agg function *)
-          (ATuple["stmt_id", t_int; "map_id", t_int; 
-            "ip", ip_type]
-          )
-          (AVar("acc", wrap_tlist (wrap_ttuple [t_int; t_int])))
+          (ATuple["stmt_id", t_int; "map_id", t_int; "ip", ip_type])
+          (AVar("acc", wrap_tlist @: wrap_ttuple [t_int; t_int]))
           (mk_combine
             (mk_var "acc")
             (mk_singleton 
@@ -161,7 +158,7 @@ let send_fetch_trig p trig_name =
           (ATuple["stmt_id", t_int; "map_id", t_int; "ip", ip_type])
           (mk_var "ip")
         )
-        (mk_empty (wrap_tlist (wrap_ttuple [t_int; t_int])))
+        (mk_empty (wrap_tlist @: wrap_ttuple [t_int; t_int]))
         (* [] *)
         (List.fold_left
           (fun acc_code (stmt_id, rhs_map_id) ->
@@ -171,20 +168,20 @@ let send_fetch_trig p trig_name =
               (mk_map 
                 (mk_lambda (AVar("ip", t_int))
                   (mk_tuple 
-                    [mk_const (CInt(stmt_id)); mk_const (CInt(rhs_map_id)); 
+                    [mk_const @: CInt stmt_id; mk_const @: CInt rhs_map_id; 
                       mk_var "ip"
                     ]
                   )
                 )
                 (mk_apply 
                   (mk_var route_fn)
-                  (mk_tuple (key))
+                  (mk_tuple key)
                 )
               )
               acc_code
             )
           )
-          (mk_empty (wrap_tlist (wrap_ttuple [t_int; t_int])))
+          (mk_empty @: wrap_tlist @: wrap_ttuple [t_int; t_int])
           (s_and_over_stmts_in_t p read_maps_of_stmt trig_name) 
         ) 
       )
@@ -205,19 +202,17 @@ let send_completes_for_stmts_with_no_fetch =
                   [mk_var complete_trig_name; mk_var "ip"]
                 )
               )
-              (mk_tuple
-                (args_of_t_as_vars p trig_name)
+              (mk_tuple @:
+                args_of_t_as_vars p trig_name
               )
             )
           )
-          (mk_apply (mk_var route_fn)
-            (mk_tuple key)
-          )
+          (mk_apply (mk_var route_fn) (mk_tuple key))
         ]
     ) 
     []
     (List.map 
-      (fun (stmt_id:stmt_id_t) -> 
+      (fun stmt_id -> 
         (stmt_id, lhs_map_of_stmt p stmt_id, 
         do_complete_name_of_t p trig_name stmt_id)
       )
@@ -230,24 +225,24 @@ let send_puts =
    * specific IP *)
   mk_iter
     (mk_lambda 
-      (ATuple["ip", ip_type; "stmt_id_cnt_list", wrap_tlist (wrap_ttuple
-        [t_int; t_int])])
+      (ATuple["ip", ip_type; 
+        "stmt_id_cnt_list", wrap_tlist @: wrap_ttuple [t_int; t_int]])
       (mk_send
         (mk_apply
           (mk_var "promote_address")
           (mk_tuple
-            [mk_var (rcv_put_name_of_t p trig_name); mk_var "ip"]
+            [mk_var @: rcv_put_name_of_t p trig_name; mk_var "ip"]
           )
         )
-        (mk_tuple ((mk_var "stmt_id_cnt_list")::
-          (args_of_t_as_vars_with_v p trig_name))
+        (mk_tuple @: mk_var "stmt_id_cnt_list"::
+          args_of_t_as_vars_with_v p trig_name
         )
       )
     )
     (mk_gbagg
       (mk_assoc_lambda (* agg func *)
         (ATuple["ip", ip_type; "stmt_id", t_int; "count", t_int])
-        (AVar("acc", wrap_tlist (wrap_ttuple [t_int; t_int])))
+        (AVar("acc", wrap_tlist @: wrap_ttuple [t_int; t_int]))
         (mk_combine
           (mk_var "acc")
           (mk_singleton
@@ -260,27 +255,23 @@ let send_puts =
         (ATuple["ip", ip_type; "stmt_id", t_int; "count", t_int])
         (mk_var "ip")
       )
-      (mk_empty
-        (wrap_tlist (wrap_ttuple [t_int; t_int]))
-      )
+      (mk_empty @: wrap_tlist @: wrap_ttuple [t_int; t_int])
       (mk_gbagg (* inner gba *)
         (mk_assoc_lambda (* agg func *)
           (ATuple["ip", ip_type; "stmt_id", t_int])
           (AVar("acc", t_int)) 
           (mk_add
             (mk_var "acc")
-            (mk_const (CInt(1)))
+            (mk_const @: CInt 1)
           )
         )
         (mk_lambda (* group func *)
           (ATuple["ip", ip_type; "stmt_id", t_int])
-          (mk_tuple
-            [mk_var "ip"; mk_var "stmt_id"]
-          )
+          (mk_tuple [mk_var "ip"; mk_var "stmt_id"])
         )
-        (mk_const (CInt(0))) (* [] *)
+        (mk_const @: CInt 0) (* [] *)
         (List.fold_left
-          (fun acc_code (stmt_id, ((rhs_map_id:map_id_t), (lhs_map_id:map_id_t))) ->
+          (fun acc_code (stmt_id, (rhs_map_id, lhs_map_id)) ->
             let shuffle_fn = shuffle_for p stmt_id rhs_map_id lhs_map_id in
             let key = partial_key_from_bound p stmt_id lhs_map_id in
             (* we need the types for creating empty rhs tuples *)
@@ -290,46 +281,36 @@ let send_puts =
               acc_code
               (mk_map
                 (mk_lambda
-                  (ATuple["ip", t_int; 
-                    "tuples", wrap_ttuple lhs_map_types]
-                  )
-                  (mk_tuple
-                    [mk_var "ip"; mk_const (CInt(stmt_id))]
-                  )
+                  (ATuple["ip", t_int; "tuples", wrap_ttuple lhs_map_types])
+                  (mk_tuple [mk_var "ip"; mk_const @: CInt stmt_id])
                 )
                 (mk_apply
                   (mk_var shuffle_fn)
-                  (mk_tuple 
-                    (mk_tuple key::
-                      [mk_empty 
-                        (wrap_tlist (wrap_ttuple rhs_map_types))
-                      ]@
-                      [mk_const (CBool(true))]
-                    )
-                  ) (* mk_tuple *)
-                ) (* mk_apply *)
-              ) (* mk_map *)
+                  (mk_tuple @:
+                    mk_tuple key::
+                      [mk_empty @: wrap_tlist @: wrap_ttuple rhs_map_types]@
+                      [mk_const @: CBool true]
+                  ) 
+                )
+              ) 
             ) (* mk_combine *)
           ) (* fun *)
-          (mk_empty (* [] *)
-            (wrap_tlist (wrap_ttuple [t_int; t_int]))
-          )
+          (mk_empty @: wrap_tlist @: wrap_ttuple [t_int; t_int])
           (s_and_over_stmts_in_t p lhs_rhs_of_stmt trig_name)
         )
-      )
-    )
+      ) (* gbagg *)
+    ) (* gbagg *)
 in
 (* Actual SendFetch function *)
 Trigger(
   send_fetch_name_of_t p trig_name,
   ATuple(args_of_t_with_v p trig_name),
   [], (* locals *)
-  (mk_block
-    (send_fetches_of_rhs_maps::
-      (send_completes_for_stmts_with_no_fetch@
-      [send_puts])
-    )
-  )
+  mk_block @:
+    send_fetches_of_rhs_maps::
+    send_completes_for_stmts_with_no_fetch@ 
+    [send_puts]
+  
 )
    
 (* trigger_rcv_fetch
@@ -347,18 +328,18 @@ let rcv_fetch_trig p trig_name =
   Trigger(
     rcv_fetch_name_of_t p trig_name, 
     ATuple(("stmts_and_map_ids", 
-      wrap_tlist (wrap_ttuple [t_int; t_int]))::
-      (args_of_t_with_v p trig_name)),
+      wrap_tlist @: wrap_ttuple [t_int; t_int])::
+      args_of_t_with_v p trig_name),
     [], (* locals *)
     (mk_block
       [mk_apply
-        (mk_var (log_write_for p trig_name))
-        (mk_tuple
-          (mk_const (CString(trig_name))::args_of_t_as_vars_with_v p trig_name)
+        (mk_var @: log_write_for p trig_name)
+        (mk_tuple @:
+          (mk_const @: CString trig_name)::args_of_t_as_vars_with_v p trig_name
         )
       ;
       (* invoke generated fetch triggers, which in turn send pushes. *)
-      (mk_iter
+      mk_iter
         (mk_lambda
           (ATuple["stmt_id", t_int; "map_id", t_int])
           (* this send is not polymorphic. every fetch trigger expects
@@ -366,17 +347,13 @@ let rcv_fetch_trig p trig_name =
           (mk_send
             (mk_apply
               (mk_var "addr_for_send_push") (* global func *)
-              (mk_tuple
-                [mk_var "stmt_id"; mk_var "map_id"]
-              )
+              (mk_tuple [mk_var "stmt_id"; mk_var "map_id"])
             )
-            (mk_tuple
-              (args_of_t_as_vars_with_v p trig_name)
-            )
+            (mk_tuple @: args_of_t_as_vars_with_v p trig_name)
           )
         )
         (mk_var "stmts_and_map_ids")
-      )]
+      ]
     )
   )
 
@@ -387,8 +364,8 @@ let rcv_fetch_trig p trig_name =
 let rcv_put_trig p trig_name =
 Trigger(
   (rcv_put_name_of_t p trig_name),
-  ATuple(("stmt_id_cnt_list", (wrap_tlist (wrap_ttuple [t_int; t_int])))::
-    (args_of_t_with_v p trig_name)),
+  ATuple(("stmt_id_cnt_list", wrap_tlist @: wrap_ttuple [t_int; t_int])::
+    args_of_t_with_v p trig_name),
   [],
   mk_iter
     (mk_lambda
@@ -414,9 +391,9 @@ Trigger(
  *)
 let send_push_stmt_map_trig p trig_name = 
   (List.fold_left
-    (fun acc_code (stmt_id, (lhs_map_id, (rhs_map_id:map_id_t))) ->
-      let rhs_map_types = wrap_tlist (wrap_ttuple 
-        (map_types_for p rhs_map_id)) in 
+    (fun acc_code (stmt_id, (lhs_map_id, rhs_map_id)) ->
+      let rhs_map_types = wrap_tlist @: wrap_ttuple @:
+        map_types_for p rhs_map_id in 
       let rhs_map_name = map_name_of p rhs_map_id in
       let shuffle_fn = shuffle_for p stmt_id rhs_map_id lhs_map_id in
       let rkey = partial_key_from_bound p stmt_id rhs_map_id in
@@ -429,22 +406,22 @@ let send_push_stmt_map_trig p trig_name =
               (mk_send
                 (mk_apply
                   (mk_var "promote_address")
-                  (mk_tuple [mk_var (rcv_push_name_of_t p trig_name stmt_id
-                    rhs_map_id); mk_var "ip"]
+                  (mk_tuple [mk_var @: rcv_push_name_of_t p trig_name stmt_id
+                    rhs_map_id; mk_var "ip"]
                   )
                 )
-                (mk_tuple ((mk_var "tuples")::(args_of_t_as_vars p trig_name)))
+                (mk_tuple @: mk_var "tuples"::args_of_t_as_vars p trig_name)
               )
             )
             (mk_apply
               (mk_var shuffle_fn)
               (mk_tuple
-                (mk_tuple rkey::
-                  [mk_slice 
+                (mk_tuple 
+                  rkey::
+                  (mk_slice 
                     (mk_var rhs_map_name) 
-                    (mk_tuple ((mk_var "vid")::rkey))
-                  ]@
-                  [mk_const (CBool(false))]
+                    (mk_tuple @: mk_var "vid"::rkey)
+                  )::[mk_const @: CBool false]
                 )
               )
             )
@@ -475,17 +452,16 @@ List.fold_left
     let reduced_tuple_with_v = mk_reduced_tuple "tuples" 
       tuple_types (List.length tuple_types -1) ["vid", vid_type] in
     let tuples_with_v = mk_reduced_tuple "tuples"
-      tuple_types (List.length tuple_types) ["vid", vid_type] 
-    in
+      tuple_types (List.length tuple_types) ["vid", vid_type] in
     acc_code@
     [Trigger(rcv_push_name_of_t p trig_name stmt_id read_map_id,
-      ATuple(("tuples", wrap_tlist (wrap_ttuple (tuple_types)))::
-        (args_of_t_with_v p trig_name)), 
+      ATuple(("tuples", wrap_tlist @: wrap_ttuple @: tuple_types)::
+        args_of_t_with_v p trig_name), 
       [], (* locals *)
       (mk_block
         [mk_iter
           (mk_lambda
-            (ATuple["tuple", wrap_ttuple (tuple_types)])
+            (ATuple["tuple", wrap_ttuple tuple_types])
             (mk_if
               (mk_has_member 
                 (mk_var map_name)
@@ -510,7 +486,7 @@ List.fold_left
          ;
          (* check statment counters to see if we can process *)
          let stmt_cntrs_pattern =
-             (mk_tuple [mk_var "vid"; mk_var "stmt_id"; mk_const CUnknown]) in
+             mk_tuple [mk_var "vid"; mk_var "stmt_id"; mk_const CUnknown] in
          let stmt_cntrs = mk_var "stmt_cntrs" in
          let stmt_cntrs_slice = mk_slice stmt_cntrs stmt_cntrs_pattern
          in
@@ -526,19 +502,17 @@ List.fold_left
                stmt_cntrs_slice
                (mk_add
                  stmt_cntrs_slice
-                 (mk_const (CInt(-1)))
+                 (mk_const @: CInt(-1))
                )
              ;mk_if (* check if the counter is 0 *)
                (mk_eq
                  stmt_cntrs_slice
-                 (mk_const (CInt(0)))
+                 (mk_const @: CInt 0)
                ) 
                (* Send to local do_complete *)
                (mk_send
-                 (mk_var (do_complete_name_of_t p trig_name stmt_id))
-                 (mk_tuple 
-                   (args_of_t_as_vars_with_v p trig_name)
-                 )
+                 (mk_var @: do_complete_name_of_t p trig_name stmt_id)
+                 (mk_tuple @: args_of_t_as_vars_with_v p trig_name)
                )
                (mk_const CUnit) (* do nothing *)
              ]
@@ -547,7 +521,7 @@ List.fold_left
              stmt_cntrs
              stmt_cntrs_slice
              (* Initialize if the push arrives before the put. *)
-             (mk_const (CInt(-1))) (* TODO: incorrect. need tuple *)
+             (mk_const @: CInt(-1)) (* TODO: incorrect. need tuple *)
            )
          ]
        )
@@ -557,14 +531,10 @@ List.fold_left
   (s_and_over_stmts_in_t p read_maps_of_stmt trig_name)
     
  
-(* do_complete_stmt_id
+(* send_corrective_trigs
  * --------------------------------------
- * Functions that perform the actual calculations of the statement
- * And are called mostly by pushes. 
- * We generate them per statement so they can handle the data types *)
-
-(* Generate code to send data for all possible correctives *)
-(* When we compute, we produce lhs results. These might be used in other
+ * Generate code to send data for all possible correctives.
+ * When we compute, we produce lhs results. These might be used in other
  * statements as rhs inputs. We need to find those places, and then carry out
  * the shuffling of the changed data for those statements ie from rhs to lhs 
  *)
@@ -574,25 +544,24 @@ let send_corrective_trigs p =
 let trig_stmt_has_rhs_map map_id =
     List.filter
       (fun (trig, stmt_id) -> stmt_has_rhs_map p stmt_id map_id)
-      (List.flatten 
-        (List.map
+      (List.flatten @:
+        List.map
           (fun trig -> 
-            List.map
-              (fun stmt -> (trig, stmt))
-              (stmts_of_t p trig))
-          (get_trig_list p)))
+            List.map (fun stmt -> (trig, stmt)) (stmts_of_t p trig))
+          (get_trig_list p)
+      )
 in
 let send_correctives map_id = 
-  let tuple_types = wrap_ttuple (map_types_for p map_id) in
+  let tuple_types = wrap_ttuple @: map_types_for p map_id in
   Trigger(send_corrective_name_of_t p map_id,
     ATuple["delta_tuples", wrap_tlist tuple_types; "vid", vid_type],
     [],
     (* the corrective list tells us which statements were really executed *)
     (mk_let "corrective_list" (* (vid * stmt_id) list *)
-      (wrap_tlist (wrap_ttuple [vid_type; t_int]))
+      (wrap_tlist @: wrap_ttuple [vid_type; t_int])
       (mk_apply
         (mk_var "get_corrective_list")
-        (mk_tuple [mk_var "vid"; mk_const (CInt map_id)])
+        (mk_tuple [mk_var "vid"; mk_const @: CInt map_id])
       )
       (mk_iter  (* loop over corrective list *)
         (mk_lambda
@@ -606,7 +575,7 @@ let send_correctives map_id =
               mk_if (* if match, send data *)
                 (mk_eq
                   (mk_var "stmt_id")
-                  (mk_const (CInt target_stmt))
+                  (mk_const @: CInt target_stmt)
                 )
                 (mk_iter 
                   (mk_lambda 
@@ -615,8 +584,8 @@ let send_correctives map_id =
                       (mk_apply
                         (mk_var "promote_address")
                         (mk_tuple
-                          [mk_var (rcv_corrective_name_of_t p target_trig
-                            target_stmt target_map); mk_var "ip"]
+                          [mk_var @: rcv_corrective_name_of_t p target_trig
+                            target_stmt target_map; mk_var "ip"]
                         )
                       )
                       (mk_var "delta_tuples")
@@ -634,7 +603,7 @@ let send_correctives map_id =
                       (mk_tuple @:
                         mk_tuple key::
                         mk_var "delta_tuples"::
-                        [mk_const (CBool false)]
+                        [mk_const @: CBool false]
                       )
                     )
                   )
