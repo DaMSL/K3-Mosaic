@@ -41,6 +41,11 @@ let get_trig_list p =
   List.map
   (fun (_, name, _, _) -> name)
   (get_trig_data p)
+
+let get_stmt_list p =
+    List.map
+    (fun (id,_,_,_,_) -> id)
+    (get_stmt_data p)
  
 let find_trigger (p:prog_data_t) (tname:string) = 
   try
@@ -75,17 +80,25 @@ let args_of_t (p:prog_data_t) (trig_name:string) =
   let (_, _, args, _) = find_trigger p trig_name in
   args
 
-(* output (stmt_id, x) list *)
-let over_stmts_in_t (p:prog_data_t) func trig_name = 
+let stmts_of_t (p:prog_data_t) trig_name =
   let (_, _, _, stmts) = find_trigger p trig_name in
+  stmts
+
+(* map a function over stmts in a trigger in a specific way *)
+let map_over_stmts_in_t (p:prog_data_t) func map_func trig_name = 
+  let stmts = stmts_of_t p trig_name in
   List.flatten
     (List.map 
       (fun stmt -> 
-        List.map (fun x -> (stmt, x))
+        List.map (map_func trig_name stmt)
         (func p stmt)
       )
       stmts
     )
+
+(* output (stmt_id, x) list *)
+let s_and_over_stmts_in_t (p:prog_data_t) func trig_name = 
+    map_over_stmts_in_t p func (fun _ stmt x -> (stmt, x)) trig_name
 
 let read_maps_of_stmt (p:prog_data_t) (stmt_id:stmt_id_t) = 
   let (_, _, _, _, maplist) = find_stmt p stmt_id in
@@ -144,10 +157,6 @@ let map_name_of p map_id =
   let (_, name, _) = find_map p map_id in
   name
 
-let stmts_of_trigger p trig_name = 
-  let (_, _, _, stmts) = find_trigger p trig_name in
-  stmts
-
 let trigger_of_stmt p stmt_id =
   let (_, trig, _, _, _) = find_stmt p stmt_id in
   trig
@@ -156,7 +165,7 @@ let map_types_for p map_id =
   let (_, _, vars) = find_map p map_id in
   extract_arg_types vars
 
-(* returns a k3 tuple of maybes that has the relevant map pattern *)
+(* returns a k3 list of maybes that has the relevant map pattern *)
 let partial_key_from_bound (p:prog_data_t) (stmt_id:stmt_id_t) (map_id:map_id_t) = 
   let map_binds = find_map_bindings_in_stmt p stmt_id map_id in
   let (_, _, map_params) = find_map p map_id in
