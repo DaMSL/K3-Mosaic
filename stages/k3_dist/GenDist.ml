@@ -114,6 +114,9 @@ let log_write_for p trig_nm = "log_write_"^trig_nm (* varies with bound *)
 let log_get_bound_for p trig_nm = "log_get_bound_"^trig_nm 
 let buffer_write_for p map_id = "add_"^map_name_of p map_id
 
+(* data structures *)
+let stmt_cntrs = mk_var "stmt_cntrs"
+
 (* k3 functions needed *)
 (*
 "route_to_map_"^map_id returns ip
@@ -367,16 +370,28 @@ Trigger(
   ATuple(("stmt_id_cnt_list", wrap_tlist @: wrap_ttuple [t_int; t_int])::
     args_of_t_with_v p trig_name),
   [],
+  let part_pat = ["vid", vid_type; "stmt_id", t_int] in
+  let counter_pat = ["count", t_int] in
+  let full_pat = part_pat @ counter_pat in
+  let full_types = wrap_ttuple @: extract_arg_types full_pat in
+  let part_pat_as_vars = convert_names_to_vars @: extract_arg_names
+    part_pat in
+  let query_pat = mk_tuple @: part_pat_as_vars @ [mk_const CUnknown] in
+  let stmt_cntrs_slice = mk_slice stmt_cntrs query_pat in
   mk_iter
     (mk_lambda
       (ATuple["stmt_id", t_int; "count", t_int])
-      (mk_update
-        (mk_var "stmt_counters")
-        (mk_slice
-          (mk_var "stmt_counters")
-          (mk_tuple [mk_var "vid"; mk_var "stmt_id"; mk_const CUnknown])
+      (mk_if (* do we already have a tuple for this? *)
+        (mk_has_member stmt_cntrs query_pat full_types)
+        (mk_update (* really an error -- shouldn't happen. Raise exception? *)
+          stmt_cntrs
+          stmt_cntrs_slice
+          (mk_tuple @: part_pat_as_vars@[mk_var "count"])
         )
-        (mk_tuple [mk_var "vid"; mk_var "stmt_id"; mk_var "count"])
+        (mk_insert
+          stmt_cntrs
+          (mk_tuple @: part_pat_as_vars@[mk_var "count"])
+        )
       )
     )
     (mk_var "stmt_id_cnt_list")
@@ -485,29 +500,33 @@ List.fold_left
           (mk_var "tuples")
          ;
          (* check statment counters to see if we can process *)
-         let stmt_cntrs_pattern =
-             mk_tuple [mk_var "vid"; mk_var "stmt_id"; mk_const CUnknown] in
+         let part_pat = ["vid", vid_type; "stmt_id", t_int] in
+         let counter_pat = ["count", t_int] in
+         let full_pat = part_pat @ counter_pat in
+         let full_types = wrap_ttuple @: extract_arg_types full_pat in
+         let part_pat_as_vars = convert_names_to_vars @: extract_arg_names
+           part_pat in
+         let query_pat = mk_tuple @: part_pat_as_vars @ [mk_const CUnknown] in
          let stmt_cntrs = mk_var "stmt_cntrs" in
-         let stmt_cntrs_slice = mk_slice stmt_cntrs stmt_cntrs_pattern
-         in
+         let stmt_cntrs_slice = mk_slice stmt_cntrs query_pat in
          mk_if (* check if the counter exists *)
-           (mk_has_member 
-             stmt_cntrs
-             stmt_cntrs_pattern
-             t_int
-           )
+           (mk_has_member stmt_cntrs query_pat full_types)
            (mk_block
              [mk_update
                stmt_cntrs
                stmt_cntrs_slice
-               (mk_add
+               (mk_let_many full_pat
                  stmt_cntrs_slice
-                 (mk_const @: CInt(-1))
+                 (mk_tuple @:
+                   part_pat_as_vars @ 
+                   [mk_sub (mk_var "count") (mk_const @: CInt 1)]
+                 )
                )
+               
              ;mk_if (* check if the counter is 0 *)
                (mk_eq
                  stmt_cntrs_slice
-                 (mk_const @: CInt 0)
+                 (mk_tuple @: part_pat_as_vars @ [mk_const @: CInt 0])
                ) 
                (* Send to local do_complete *)
                (mk_send
@@ -521,7 +540,7 @@ List.fold_left
              stmt_cntrs
              stmt_cntrs_slice
              (* Initialize if the push arrives before the put. *)
-             (mk_const @: CInt(-1)) (* TODO: incorrect. need tuple *)
+             (mk_tuple @: part_pat_as_vars @ [mk_const @: CInt(-1)])
            )
          ]
        )
