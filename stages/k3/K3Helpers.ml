@@ -56,6 +56,8 @@ let mk_neg x = mk_stree Neg [x]
 
 let mk_not = mk_neg
 
+let mk_sub x y = mk_add x (mk_neg y)
+
 let mk_eq x y = mk_stree Eq [x; y]
 
 let mk_lt x y = mk_stree Lt [x; y]

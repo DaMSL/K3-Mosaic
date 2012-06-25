@@ -35,6 +35,10 @@ val mk_add :
   ((int * K3.expr_tag_t) * int) Tree.tree_t ->
   ((int * K3.expr_tag_t) * int) Tree.tree_t ->
   ((int * K3.expr_tag_t) * int) Tree.tree_t
+val mk_sub :
+  ((int * K3.expr_tag_t) * int) Tree.tree_t ->
+  ((int * K3.expr_tag_t) * int) Tree.tree_t ->
+  ((int * K3.expr_tag_t) * int) Tree.tree_t
 val mk_or :
   ((int * K3.expr_tag_t) * int) Tree.tree_t ->
   ((int * K3.expr_tag_t) * int) Tree.tree_t ->
