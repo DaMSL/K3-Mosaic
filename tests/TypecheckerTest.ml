@@ -29,6 +29,46 @@ let tests = group "all" [
             case "Multiplication" @: give_type (iparse "1.0 * 1") @=? TValue(canonical TFloat);
         ]
     ];
+    group "Collection Construction" [
+        group "Empty" [
+            case "Set" @: give_type (iparse "{}") @=?
+                TValue(canonical (TCollection(TSet, contained_of (canonical TUnknown))));
+            case "Bag" @: give_type (iparse "{||}") @=?
+                TValue(canonical (TCollection(TBag, contained_of (canonical TUnknown))));
+            case "List" @: give_type (iparse "[]") @=?
+                TValue(canonical (TCollection(TList, contained_of (canonical TUnknown))));
+        ];
+        group "Singleton" [
+            case "Set" @: give_type (iparse "{0}") @=?
+                TValue(canonical (TCollection(TSet, contained_of (canonical TInt))));
+            case "Bag" @: give_type (iparse "{|0|}") @=?
+                TValue(canonical (TCollection(TBag, contained_of (canonical TInt))));
+            case "List" @: give_type (iparse "[0]") @=?
+                TValue(canonical (TCollection(TList, contained_of (canonical TInt))));
+        ];
+        group "Combine" [
+            case "Set ++ Set" @: give_type (iparse "{0} ++ {1}") @=?
+                TValue(canonical (TCollection(TSet, contained_of (canonical TInt))));
+            case "Set ++ Bag" @: give_type (iparse "{0} ++ {|1|}") @=?
+                TValue(canonical (TCollection(TBag, contained_of (canonical TInt))));
+            case "Set ++ List" @: give_type (iparse "{0} ++ [1]") @=?
+                TValue(canonical (TCollection(TList, contained_of (canonical TInt))));
+            case "Bag ++ Bag" @: give_type (iparse "{|0|} ++ {|1|}") @=?
+                TValue(canonical (TCollection(TBag, contained_of (canonical TInt))));
+            case "Bag ++ List" @: give_type (iparse "{|0|} ++ [1]") @=?
+                TValue(canonical (TCollection(TList, contained_of (canonical TInt))));
+            case "List ++ List" @: give_type (iparse "[0] ++ [1]") @=?
+                TValue(canonical (TCollection(TList, contained_of (canonical TInt))));
+        ];
+        group "Range" [
+            case "IntSet" @: give_type (iparse "{0:1:20}") @=?
+                TValue(canonical (TCollection(TSet, contained_of (canonical TInt))));
+            case "FloatBag" @: give_type (iparse "{|2.5:1:20|}") @=?
+                TValue(canonical (TCollection(TBag, contained_of (canonical TFloat))));
+            case "FloatList" @: give_type (iparse "[1:2.5:100]") @=?
+                TValue(canonical (TCollection(TList, contained_of (canonical TFloat))));
+        ];
+    ];
 ]
 
 let _ = run_tests tests
