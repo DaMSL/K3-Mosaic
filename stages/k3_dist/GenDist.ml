@@ -96,11 +96,13 @@ let rcv_push_name_of_t p trig_nm stmt_id map_id =
   trig_nm^"_rcv_push_s"^string_of_int stmt_id^"_"^map_name_of p map_id
 let send_corrective_name_of_t p map_id = 
   map_name_of p map_id^"_send_correctives"
-let rcv_corrective_name_of_t p trig_nm stmt_id map_id =
-  trig_nm^"_rcv_corrective_s"^string_of_int stmt_id^"_"^map_name_of p map_id
 let do_complete_name_of_t p trig_nm stmt_id =
   trig_nm^"_do_complete_s"^string_of_int stmt_id
 let filter_corrective_list_name = "filter_corrective_list"
+let rcv_corrective_name_of_t p trig_nm stmt_id map_id =
+  trig_nm^"_rcv_corrective_s"^string_of_int stmt_id^"_"^map_name_of p map_id
+let do_corrective_name_of_t p trig_nm stmt_id =
+  trig_nm^"_do_corrective_s"^string_of_int stmt_id
 
 (* route and shuffle function names *)
 let route_for p map_id = "route_to_"^map_name_of p map_id
@@ -111,10 +113,15 @@ let shuffle_for p stmt_id rhs_map_id lhs_map_id =
   map_name_of p lhs_map_id
 
 (* foreign function names *)
+(* note: most buffer and storage functions are done using native accesses *)
 let log_write_for p trig_nm = "log_write_"^trig_nm (* varies with bound *)
 let log_get_bound_for p trig_nm = "log_get_bound_"^trig_nm 
 let log_read_geq = "log_read_geq" (* takes vid, returns (trig, vid)list >= vid *)
-let buffer_write_for p map_id = "add_"^map_name_of p map_id
+(* adds the delta to all subsequent vids following in the buffer so that non
+ * delta computations will be correct. Must be atomic ie. no other reads of the
+ * wrong buffer value can happen *)
+let add_delta_to_buffer_for_map p map_id = 
+  "add_delta_to_buffer_"^map_name_of p map_id
 
 (* data structures *)
 let stmt_cntrs = mk_var "stmt_cntrs"
@@ -721,98 +728,64 @@ let filter_corrective_list = mk_global_fn filter_corrective_list_name
     )
   )
 
- (* debug
     
 (* receive_correctives:
  * ---------------------------------------
  * Function that gets called when a corrective message is received.
- * Receives bound variables and delta tuples for one map.  *)
-
-let receive_correctives = 
+ * Receives bound variables and delta tuples for one map.  
+ *
+ * Analogous to rcv_push for non-correctives
+ * Note: this can be rolled into the do_corrective function
+ *)
+let rcv_correctives_trig p trig_name = 
 List.fold_left 
   (fun acc_code (stmt_id, map_id) ->
-    let map_name = map_name_of map_id in
-    let rcv_corrective_name =
-      trig_name^"_rcv_corrective_"^stmt_id^"_"^map_name in
-    let do_corrective_name =
-      trig_name^"_do_corrective_"^stmt_id^"_"^map_name in
-    let add_delta_to_buffer_fn = "add_delta_to_buffer_"^map_name in
-
-    acc_code@ (* TODO : do this properly *)
-
-    Trigger(rcv_corrective_name,
-      ATuple(["delta_tuples", map_types_of map_id; "vid", BaseT(TInt)]), (* TODO *)
+    acc_code@ 
+    [Trigger(rcv_corrective_name_of_t p trig_name stmt_id map_id,
+      ATuple[
+        "delta_tuples", wrap_tlist @: wrap_ttuple @: map_types_for p map_id; 
+        "vid", vid_type], 
       [], (* locals *)
-      (let bound_names_types = bound_names_types_for_t trigger_id in (* TODO *)
-        let bound_vars = to_vars bound_type_names in (* TODO *)
-        let log_get_bound_fn = "log_get_bound"^trigger_id in
-
-        mk_block
-          (* accumulate delta for this vid and all following vids *)
-          (* NOTE: this is one thing we can't do efficiently with local collections *)
-          [mk_apply
-            (mk_var add_delta_to_buffer_fn)
-            (mk_tuple
-              [mk_var "delta_tuples"; mk_var "vid"]
-            )
+      mk_block
+        (* accumulate delta for this vid and all following vids *)
+        [mk_apply
+          (mk_var @: add_delta_to_buffer_for_map p map_id)
+          (mk_tuple [mk_var "vid"; mk_var "delta_tuples"])
           ;
-           
-          mk_let "corrected_updates"
-            (BaseT(TCollection(TList, BaseT(TInt)))) (* vid list *)
-            (mk_filtermap
-              (mk_lambda  (* find newer vids with counter=0 *)
-                (ATuple(["vid2", BaseT(TInt); "stmt2", BaseT(TInt); 
-                  "cnt", BaseT(TInt)]))
-                (mk_and
-                  (mk_leq
-                    (mk_var "vid")
-                    (mk_var "vid2")
-                  )
-                  (mk_eq
-                    (mk_var "cnt")
-                    (mk_const CInt(0))
-                  )
-                )
+          (* only execute if we have all the updates *)
+          mk_if
+            (mk_eq
+              (mk_slice stmt_cntrs @:
+                mk_tuple
+                  [mk_var "vid"; mk_const @: CInt stmt_id; mk_const CUnknown]
               )
-              (mk_lambda 
-                (ATuple(["vid2", BaseT(TInt); "stmt2", BaseT(TInt); 
-                  "cnt", BaseT(TInt)]))
-                (mk_var "vid")
-              )
-              (mk_slice
-                (mk_var "stmt_counters")
-                (mk_tuple
-                  [mk_var "_"; mk_const CInt(stmt_id); mk_var "_"]
-                )
+              (mk_tuple
+                [mk_var "vid"; mk_const @: CInt stmt_id; mk_const @: CInt 0]
               )
             )
-            (mk_let_many bound_names_types
-              (mk_apply
-                log_get_bound_fn
+            (* get bound vars from log *)
+            (mk_let_many 
+              (args_of_t p trig_name)
+              (mk_apply 
+                (mk_var @: log_get_bound_for p trig_name)
                 (mk_var "vid")
               )
-              (* Send messages to do_complete_correctives: we might have several
-               * vids to send to *)
-              (mk_iter
-                (mk_lambda
-                  (AVar("vid", BaseT(TInt)))
-                  (mk_apply (* NOTE: instead of send *)
-                    (mk_var "do_corrective_addr")
-                    (mk_tuple
-                      (mk_var "delta_tuples"@bound_vars@[mk_var "vid"])
-                    )
-                  )
-                )
-                (mk_var "corrected_updates")
+              (mk_send
+                (mk_var @: do_corrective_name_of_t p trig_name stmt_id) @:
+                mk_tuple @:
+                  args_of_t_as_vars_with_v p trig_name @
+                  [mk_var "delta_tuples"]
               )
             )
-          ]
-      )
-    )
+            (mk_const CUnit) (* else *)
+        ]
+    )]
   )
-  [] (* TODO: do this properly *)
-  (over_stmts_in_t rhs_maps_of_stmt trigger_id)
+  []
+  (s_and_over_stmts_in_t p read_maps_of_stmt trig_name)
 ;;
+
+ (* debug
 
 (* NOTE: note sure if this function will be much different from regular
  * do_completes once we have the right generated K3 "shadow functions" *)
@@ -839,10 +812,11 @@ mk_global_fn do_corrective_name
 (* Generate all the code for a specific trigger *)
 let gen_dist_for_t p trig =
     send_fetch_trig p trig::
-    (rcv_put_trig p trig::
-    (rcv_fetch_trig p trig::
-    (send_push_stmt_map_trig p trig@
-    (rcv_push_trig p trig))))
+    rcv_put_trig p trig::
+    rcv_fetch_trig p trig::
+    send_push_stmt_map_trig p trig@
+    rcv_push_trig p trig@
+    rcv_correctives_trig p trig
 
 (* Function to generate the whole distributed program *)
 let gen_dist p ast =
@@ -856,7 +830,8 @@ let gen_dist p ast =
     (fun x -> Declaration x)
     (filter_corrective_list :: 
       regular_trigs@
-      send_corrective_trigs p)
+      send_corrective_trigs p (* per-map basis *)
+    )
   
 
 
