@@ -1,5 +1,9 @@
 (* Utilities that are useful *)
 
+(* low precedence function application allows us to remove 
+ * many () from our code *)
+let (@:) f x = f x;;
+
 (* make a range from first to last. Tail recursive *)
 let create_range first length =
     let rec range_inner index acc =
