@@ -21,10 +21,13 @@ let wrap_ttuple typ = TIsolated(TImmutable(TTuple(typ)))
 (* Helper functions to create K3 AST nodes more easily *)
 
 let meta = 0    (* we fill meta with a default value *)
-let num = 0
+let num = ref 0
+
+let class_id = "K3" (* used for symbol generation *)
+let new_num () = Symbols.gen_int_sym class_id 
 
 (* function to make a simple tree with no meta or numbering *)
-let mk_stree tag children = mk_tree (((num, tag), meta), children)
+let mk_stree tag children = mk_tree @: (((new_num (), tag), meta), children)
 
 (* Standard AST nodes *)
 let mk_const constant = mk_stree (Const(constant)) []
@@ -139,25 +142,28 @@ let strip_args arg = match arg with
 
 (* checks if a member of a collection is present *)
 let mk_has_member collection pattern member_type = 
-    mk_neg (mk_eq (mk_slice collection pattern) (mk_empty (member_type)))
+    mk_neg @: mk_eq (mk_slice collection pattern) (mk_empty member_type)
 
 (* function to declare and define a global function. Assumes the global
  * construct allows for an expr_t as well.
  * The types are expected in list format (always!) *)
-(*
 let mk_global_fn name input_names_and_types output_types expr =
     let wrap_args args = match args with
       | [id, typ]  -> AVar(id, typ)
       | []      -> invalid_arg "Can't have 0 length args"
       | _       -> ATuple(args)
     in
+    let wrap_optional args = match args with
+      | []     -> invalid_arg "Can't have 0 length args"
+      | [head] -> head
+      | x -> wrap_ttuple(x)
+    in
     Global(name, 
-      TFunction(wrap_ttuple (extract_arg_types input_names_and_types)),
-          wrap_ttuple (output_types))),
-      mk_lambda (wrap_args input_names_and_types) expr
+      TFunction(wrap_optional @: extract_arg_types input_names_and_types,
+          wrap_optional output_types),
+      Some (mk_lambda (wrap_args input_names_and_types) expr)
     )
 ;;
-*)
 
 (* a lambda with 2 arguments for things like aggregation functions *)
 let mk_assoc_lambda arg1 arg2 expr =
@@ -178,13 +184,13 @@ let mk_assoc_lambda arg1 arg2 expr =
     in
     let subst_args args name =
       if is_a_tuple args then 
-        [(name, (wrap_ttuple (extract_arg_types (strip_args args))))]
+        [name, wrap_ttuple @: extract_arg_types @: strip_args args]
       else strip_args args
     in
     mk_lambda
       (ATuple(
-            (subst_args arg1 "__temp1")@ 
-            (subst_args arg2 "__temp2"))
+            subst_args arg1 "__temp1"@ 
+            subst_args arg2 "__temp2")
       )
       (destruct_tuple_if_needed "__temp1" arg1 
             (destruct_tuple_if_needed "__temp2" arg2 expr)
@@ -226,9 +232,7 @@ let mk_reduced_tuple tup_name types new_size start_ids_types =
     mk_apply
       (mk_lambda 
         (ATuple(start_ids_types@ids_and_types))    
-        (mk_tuple
-          (start_vars@(convert_names_to_vars ids)@filler)
-        )
+        (mk_tuple @: start_vars@ convert_names_to_vars ids@ filler)
       )
       (mk_var tup_name)
 

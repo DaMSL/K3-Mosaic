@@ -174,6 +174,13 @@ val mk_has_member :
   ((int * K3.expr_tag_t) * int) Tree.tree_t ->
   K3.value_type_t -> ((int * K3.expr_tag_t) * int) Tree.tree_t
 
+(* macro to create a global function *)
+val mk_global_fn : 
+  K3.id_t ->
+  (K3.id_t * K3.value_type_t) list ->
+  K3.value_type_t list ->
+  ((int * K3.expr_tag_t) * int) Tree.tree_t -> int K3.declaration_t
+
 (* macro to create an associative lambda ie a lambda with 2 args *)
 val mk_assoc_lambda :
   K3.arg_t ->

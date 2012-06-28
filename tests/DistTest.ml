@@ -21,8 +21,7 @@ let (rst_p:ProgInfo.prog_data_t) =
 
 let main() =
   let dist = gen_dist rst_p 0 in
-  let prog = List.map (fun x -> Declaration(x)) dist in
-  print_endline(string_of_program prog)
+  print_endline(string_of_program dist)
 
 let _ = Printexc.print main;;
 

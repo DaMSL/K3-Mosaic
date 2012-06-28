@@ -1,6 +1,5 @@
 (* Functions that take K3 code and generate distributed K3 code *)
 
-let (@:) f x = f x;;
 
 (* Basic types *
  * map_id is an int referring to a specific map
@@ -64,6 +63,7 @@ let (@:) f x = f x;;
  *          - will only have tuples with fields not in the bound pattern
  *)
 
+open Util
 open K3
 open K3Helpers
 open ProgInfo
@@ -100,6 +100,7 @@ let rcv_corrective_name_of_t p trig_nm stmt_id map_id =
   trig_nm^"_rcv_corrective_s"^string_of_int stmt_id^"_"^map_name_of p map_id
 let do_complete_name_of_t p trig_nm stmt_id =
   trig_nm^"_do_complete_s"^string_of_int stmt_id
+let filter_corrective_list_name = "filter_corrective_list"
 
 (* route and shuffle function names *)
 let route_for p map_id = "route_to_"^map_name_of p map_id
@@ -112,6 +113,7 @@ let shuffle_for p stmt_id rhs_map_id lhs_map_id =
 (* foreign function names *)
 let log_write_for p trig_nm = "log_write_"^trig_nm (* varies with bound *)
 let log_get_bound_for p trig_nm = "log_get_bound_"^trig_nm 
+let log_read_geq = "log_read_geq" (* takes vid, returns (trig, vid)list >= vid *)
 let buffer_write_for p map_id = "add_"^map_name_of p map_id
 
 (* data structures *)
@@ -560,7 +562,7 @@ List.fold_left
 let send_corrective_trigs p =
 (* for a given lhs map which we just changed, find all statements containing the
  * same map on the rhs *)
-let trig_stmt_has_rhs_map map_id =
+let trigs_stmts_with_rhs_map map_id =
     List.filter
       (fun (trig, stmt_id) -> stmt_has_rhs_map p stmt_id map_id)
       (List.flatten @:
@@ -569,6 +571,20 @@ let trig_stmt_has_rhs_map map_id =
             List.map (fun stmt -> (trig, stmt)) (stmts_of_t p trig))
           (get_trig_list p)
       )
+in
+let trig_stmt_k3_list map_id = 
+  List.fold_left 
+  (fun acc_code (trig, stmt_id) -> 
+    (mk_combine 
+      (mk_tuple @:
+        [mk_const @: CInt (trigger_id_for_name p trig); 
+         mk_const @: CInt stmt_id]
+      )
+      acc_code
+    )
+  )
+  (mk_empty @: wrap_tlist @: wrap_ttuple [t_int; t_int])
+  (trigs_stmts_with_rhs_map map_id)
 in
 let send_correctives map_id = 
   let tuple_types = wrap_ttuple @: map_types_for p map_id in
@@ -579,8 +595,8 @@ let send_correctives map_id =
     (mk_let "corrective_list" (* (vid * stmt_id) list *)
       (wrap_tlist @: wrap_ttuple [vid_type; t_int])
       (mk_apply
-        (mk_var "get_corrective_list")
-        (mk_tuple [mk_var "vid"; mk_const @: CInt map_id])
+        (mk_var filter_corrective_list_name)
+        (trig_stmt_k3_list map_id) (* feed in list of possible stmts *)
       )
       (mk_iter  (* loop over corrective list *)
         (mk_lambda
@@ -630,7 +646,7 @@ let send_correctives map_id =
                 acc_code (* just another branch on the if *)
             )
             (mk_const CUnit) (* base case *)
-            (trig_stmt_has_rhs_map map_id)
+            (trigs_stmts_with_rhs_map map_id)
           )
         )
         (mk_var "corrective_list")
@@ -666,6 +682,8 @@ Trigger
     inject_call_forward_correctives ast_stmt2 delta_in_lhs_map
   )
 
+*)
+
 (* get_corrective_list: 
  * ---------------------------------------
  * Return list of corrective statements we need to execute by checking
@@ -674,61 +692,36 @@ Trigger
  * needing to execute with different vids
  * Optimization TODO: check also by ranges within the map.
  *)
-let get_corrective_list = mk_global "get_corrective_list"
-  [("map_id", BaseT(TInt)); ("vid", BaseT(TInt))]
-  [(BaseT(TCollection(TList, TTuple([BaseT(TInt); BaseT(TInt)]))))] 
-  (* (stmt_id, vid) list *)
+let filter_corrective_list = mk_global_fn filter_corrective_list_name
+  (* (trigger_id, stmt_id) list *)
+  ["trig_stmt_list", wrap_tlist @: wrap_ttuple @: [t_int; t_int]] 
+  [wrap_tlist @: wrap_ttuple @: [t_int; t_int]] (* (vid, stmt_id) list *)
   (mk_sort (* sort so that early vids are first for performance *)
-    (mk_filtermap (* filter out irrelevant statements *)
-      (mk_lambda (* filter func *)
-        (ATuple(["stmt_id", BaseT(TInt); "vid", BaseT(TInt)]))
-        (mk_apply
-          (mk_var "stmt_has_rhs_map") (* TODO *)
-          (mk_tuple
-            [mk_var "stmt_id"; mk_var "map_id"]
+    (mk_map
+      (mk_lambda (ATuple["trig_id", t_int; "stmt_id", t_int])
+        (mk_filtermap
+          (mk_lambda (ATuple["vid", vid_type; "trig_id2", t_int])
+            (mk_eq (mk_var "trig_id2") (mk_var "trig_id"))
+          )
+          (mk_lambda (ATuple["trig_id2", t_int; "vid", vid_type])
+            (mk_tuple [mk_var "vid"; mk_var "stmt_id"])
+          )
+          (mk_apply  (* list of triggers >= vid *)
+            (mk_var log_read_geq) (* TODO *)
+            (mk_var "vid")  
           )
         )
       )
-      (mk_lambda (* identify map func *)
-        (ATuple(["stmt_id", BaseT(TInt); "vid", BaseT(TInt)]))
-        (mk_tuple
-          [mk_var "stmt_id"; mk_var "vid"]
-        )
-      )
-      (mk_flatten
-        (mk_map
-          (mk_lambda
-            (ATuple(["trigger_id", BaseT(TInt); "vid", BaseT(TInt)]))
-            (mk_map
-              (mk_lambda
-                (AVar("stmt_id", BaseT(TInt)))
-                (mk_tuple
-                  [mk_var "stmt_id"; mk_var "vid"]
-                )
-              )
-              (mk_apply
-                (mk_var "stmts_of_trigger") (* TODO *)
-                (mk_var "trigger_id")
-              )
-            )
-          )
-          (mk_apply
-            (mk_var "log_read_geq") (* TODO *)
-            (mk_var "vid")  (* produces triggers >= vid *)
-          )
-        )
-      )
+      (mk_var "trig_stmt_list")
     )
     (mk_assoc_lambda (* compare func *)
-      (ATuple(["vid1", BaseT(TInt); "stmt1", BaseT(TInt)]))
-      (ATuple(["vid2", BaseT(TInt); "stmt2", BaseT(TInt)]))
-      (mk_lt
-        (mk_var "vid1")
-        (mk_var "vid2")
-      )
+      (ATuple["vid1", vid_type; "stmt1", t_int])
+      (ATuple["vid2", vid_type; "stmt2", t_int])
+      (mk_lt (mk_var "vid1") (mk_var "vid2"))
     )
   )
 
+ (* debug
     
 (* receive_correctives:
  * ---------------------------------------
@@ -858,9 +851,12 @@ let gen_dist p ast =
     List.map
       (fun trig -> gen_dist_for_t p trig)
       triggers
-    
   in
-  regular_trigs@(send_corrective_trigs p)
+  List.map
+    (fun x -> Declaration x)
+    (filter_corrective_list :: 
+      regular_trigs@
+      send_corrective_trigs p)
   
 
 
