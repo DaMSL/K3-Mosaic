@@ -569,7 +569,9 @@ List.fold_left
 let send_corrective_trigs p =
 (* for a given lhs map which we just changed, find all statements containing the
  * same map on the rhs *)
-let trigs_stmts_with_rhs_map map_id =
+let send_correctives map_id = 
+
+let trigs_stmts_with_rhs_map =
     List.filter
       (fun (trig, stmt_id) -> stmt_has_rhs_map p stmt_id map_id)
       (List.flatten @:
@@ -579,23 +581,24 @@ let trigs_stmts_with_rhs_map map_id =
           (get_trig_list p)
       )
 in
-let trig_stmt_k3_list map_id = 
+(* predefined K3 list of stmts with rhs maps *)
+let trig_stmt_k3_list = 
   List.fold_left 
-  (fun acc_code (trig, stmt_id) -> 
-    (mk_combine 
-      (mk_tuple @:
-        [mk_const @: CInt (trigger_id_for_name p trig); 
-         mk_const @: CInt stmt_id]
+    (fun acc_code (trig, stmt_id) -> 
+      (mk_combine 
+        (mk_tuple @:
+          [mk_const @: CInt (trigger_id_for_name p trig); 
+           mk_const @: CInt stmt_id]
+        )
+        acc_code
       )
-      acc_code
     )
-  )
-  (mk_empty @: wrap_tlist @: wrap_ttuple [t_int; t_int])
-  (trigs_stmts_with_rhs_map map_id)
+    (mk_empty @: wrap_tlist @: wrap_ttuple [t_int; t_int])
+    trigs_stmts_with_rhs_map
 in
-let send_correctives map_id = 
+match trigs_stmts_with_rhs_map with [] -> [] | _ ->
   let tuple_types = wrap_ttuple @: map_types_for p map_id in
-  Trigger(send_corrective_name_of_t p map_id,
+  [Trigger(send_corrective_name_of_t p map_id,
     ATuple["delta_tuples", wrap_tlist tuple_types; "vid", vid_type],
     [],
     (* the corrective list tells us which statements were really executed *)
@@ -603,7 +606,7 @@ let send_correctives map_id =
       (wrap_tlist @: wrap_ttuple [vid_type; t_int])
       (mk_apply
         (mk_var filter_corrective_list_name)
-        (trig_stmt_k3_list map_id) (* feed in list of possible stmts *)
+        trig_stmt_k3_list (* feed in list of possible stmts *)
       )
       (mk_iter  (* loop over corrective list *)
         (mk_lambda
@@ -653,20 +656,20 @@ let send_correctives map_id =
                 acc_code (* just another branch on the if *)
             )
             (mk_const CUnit) (* base case *)
-            (trigs_stmts_with_rhs_map map_id)
+            trigs_stmts_with_rhs_map 
           )
         )
         (mk_var "corrective_list")
       )
     )
-  )
+  )]
 in
 let unique_lhs_maps = 
   ListAsSet.uniq @:
   List.fold_left 
     (fun acc stmt -> lhs_map_of_stmt p stmt::acc) [] (get_stmt_list p)
 in
-List.map send_correctives unique_lhs_maps
+List.flatten @: List.map send_correctives unique_lhs_maps
 
 
 (* Debug -----
