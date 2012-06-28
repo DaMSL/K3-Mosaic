@@ -98,6 +98,8 @@ rule tokenize = parse
     | "groupby" { GROUPBYAGGREGATE }
     | "sort" { SORT }
 
+    | "peek" { PEEK }
+
     | "if" { IF }
     | "then" { THEN }
     | "else" { ELSE }

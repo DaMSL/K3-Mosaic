@@ -7,11 +7,13 @@ open K3
 exception MalformedTree
 exception TypeError
 
-let check_tag_arity tag children = let length = List.length children in
-    let correct_arity = match tag with
+let check_tag_arity tag children =
+    let length = List.length children in
+    let correct_arity =
+        match tag with
         | Const(_)  -> 0
         | Var(_) -> 0
-        | Tuple     -> length
+        | Tuple -> length
         | Just -> 1
 
         | Empty(_)      -> 0
@@ -28,12 +30,11 @@ let check_tag_arity tag children = let length = List.length children in
         | Neq   -> 2
         | Leq   -> 2
 
-        | Lambda(_)         -> 1
-        | AssocLambda(_)    -> 1
-        | Apply             -> 2
+        | Lambda(_) -> 1
+        | Apply     -> 2
 
         | Block         -> length
-        | Iterate       -> length
+        | Iterate       -> 2
         | IfThenElse    -> 3
 
         | Map               -> 2
@@ -49,444 +50,358 @@ let check_tag_arity tag children = let length = List.length children in
         | Update    -> 3
         | Peek      -> 1
 
-        | AssignToRef   -> 2
+        | Assign -> 2
+        | Deref -> 1
 
-        | Send -> 1
+        | Send -> 2
     in length = correct_arity
 
-let type_of expr = let ((id, t), tag), children = decompose_tree expr in t
+type 'a texpr_t = (type_t * 'a) expr_t
 
-let deduce_constant_type c = let constant_type = match c with
+let type_of texpr = let (_, (t, _)), _ = decompose_tree texpr in t
+
+let (<|) x f = f x
+and (|>) f y = f y
+
+let (+++) f g = fun t x -> f (g t x) x
+let (++%) f g = fun t x -> f (g t) x
+let (%++) f g = fun t x -> f (g t x)
+
+let value_of t x =
+    match t with
+    | TValue(vt) -> vt
+    | _ -> raise x
+
+let function_of t x =
+    match t with
+    | TFunction(t_a, t_r) -> (t_a, t_r)
+    | _ -> raise x
+
+let mutable_of vt =
+    match vt with
+    | TIsolated(mt)
+    | TContained(mt) -> mt
+
+let collection_of bt x =
+    match bt with
+    | TCollection(t_c, t_e) -> (t_c, t_e)
+    | _ -> raise x
+
+let dereft mt x =
+    match mt with
+    | TMutable(bt) -> bt
+    | _ -> raise x
+
+let base_of vt =
+    match vt with
+    | TIsolated(TImmutable(bt))
+    | TIsolated(TMutable(bt))
+    | TContained(TImmutable(bt))
+    | TContained(TMutable(bt)) -> bt
+
+let rec contained_of vt =
+    let inner_base_type = base_of vt in
+    let convertable_type = (
+        match inner_base_type with
+        | TTuple(ts) -> TTuple(List.map contained_of ts)
+        | TCollection(t_c, t_e) -> TCollection(t_c, contained_of t_e)
+        | TMaybe(t_m) -> TMaybe(contained_of t_m)
+        | _ -> inner_base_type
+    ) in TContained(TImmutable(convertable_type))
+
+let canonical bt = TIsolated(TImmutable(bt))
+
+let rec assignable t_l t_r =
+    let t_lb = base_of t_l in
+    let t_rb = base_of t_r in
+    match (t_lb, t_rb) with
+    | TMaybe(t_lm), TMaybe(t_rm) when assignable t_lm t_rm -> true
+    | TTuple(t_ls), TTuple(t_rs) when List.for_all2 assignable t_ls t_rs -> true
+    | TCollection(t_lc, t_le), TCollection(t_rc, t_re) when assignable t_le t_re -> true
+    | _ when t_lb = t_rb -> true
+    | _ -> false
+
+let (===) = assignable
+
+let rec passable t_l t_r =
+    match t_l, t_r with
+    | TContained(TMutable(_)), TContained(TMutable(_)) -> assignable t_l t_r
+    | TContained(TMutable(_)), _ -> false
+    | _ -> assignable t_l t_r
+
+let (<~) = passable
+
+let deduce_constant_type c =
+    let constant_type =
+        match c with
         | CUnit -> TUnit
         | CUnknown -> TUnknown
         | CBool(_) -> TBool
         | CInt(_) -> TInt
         | CFloat(_) -> TFloat
         | CString(_) -> TString
-        | CNothing -> TMaybe(TUnknown)
-    in ValueT(BaseT(constant_type))
+        | CNothing -> TMaybe(TIsolated(TImmutable(TUnknown)))
+    in canonical constant_type
 
-let deduce_arg_type a = match a with
+let deduce_arg_type a =
+    match a with
     | AVar(i, t) -> t
-    | ATuple(its) -> BaseT(TTuple(snd(List.split its)))
+    | ATuple(its) -> canonical (TTuple(snd(List.split its)))
 
-let get_base_type t =
-    match t with
-        | ValueT(TRef(bt)) -> bt
-        | ValueT(BaseT(bt)) -> bt
-        | _ -> raise TypeError
-
-let base_of_value_type t =
-    match t with
-        | TRef(bt) -> bt
-        | BaseT(bt) -> bt
-
-let (!:) = base_of_value_type
-
-let equivalent_upto_base_type t1 t2 = base_of_value_type t1 = base_of_value_type t2
-
-let (=~) = equivalent_upto_base_type
-
-let ref_value_coerceable t1 t2 =
-  match t2 with
-    | TRef(bt) -> t2 = t1
-    | BaseT(bt) -> t2 =~ t1
-
-let (=~>) = ref_value_coerceable
-
-let (@:) f x = f x
-let (>>) f g = function x -> f (g x)
-
-let rec deduce_expr_type env expr =
-    let (meta, tag), untyped_children = decompose_tree expr in
+let rec deduce_expr_type cur_env utexpr =
+    let ((uuid, tag), aux), untyped_children = decompose_tree utexpr in
 
     (* Check Tag Arity *)
     if not (check_tag_arity tag untyped_children) then raise MalformedTree else
 
-    (* Determine if we need to augment the type environment. *)
-    let new_env = match tag with
-            | Lambda(AVar(i, t)) -> (i, ValueT(t)) :: env
-            | Lambda(ATuple(xs)) -> (List.map (fun (i, t) -> (i, ValueT(t))) xs) @ env
-            | _ -> env
-        in
+    (* Determine if the environment to be passed down to child typechecking needs to be augmented. *)
+    let env =
+        match tag with
+        | Lambda(AVar(i, t)) -> (i, TValue(t)) :: cur_env
+        | Lambda(ATuple(its)) -> (List.map (fun (i, t) -> (i, TValue(t))) its) @ cur_env
+        | _ -> cur_env
+    in
 
-    (* Deduce the types of all children nodes. *)
-    let typed_children = List.map (deduce_expr_type new_env) untyped_children in
+    let typed_children = List.map (deduce_expr_type env) untyped_children in
+    let attach_type t = mk_tree (((uuid, tag), (t, aux)), typed_children) in
+    let bind n = type_of (List.nth typed_children n) in
 
-    (* Define some helpers. *)
-    let attach_type t = mk_tree (((meta, t), tag), typed_children) in
-    let get_child n = List.nth typed_children n in
-
-    (* An assertion that the given type is a function. *)
-    let function_or_raise t x =
-        match t with
-            | TFunction(a_t, r_t) -> (a_t, r_t)
-            | ValueT(_) -> raise x
-    in let (/=>) = function_or_raise in
-
-    (* An assertion that the given type is a value. *)
-    let value_or_raise t x =
-        match t with
-            | ValueT(vt) -> vt
-            | TFunction(_, _) -> raise x
-    in let (/=.) = value_or_raise in
-
-    (* An assertion that the given type is a collection. *)
-    let collection_or_raise bt x =
-        match bt with
-            | TCollection(c_t, e_t) -> (c_t, e_t)
-            | _ -> raise x
-    in let (/=@) = collection_or_raise in
-
-    let bind = (type_of >> get_child) in
-
-    (* Deduce the type of the current node. *)
-    let current_type = match tag with
-        | Const(c) -> deduce_constant_type c
-        | Var(id) ->
-            (try List.assoc id new_env with | Not_found -> raise TypeError)
-
+    let current_type =
+        match tag with
+        | Const(c) -> TValue(deduce_constant_type c)
+        | Var(id) -> (try List.assoc id env with Not_found -> raise TypeError)
         | Tuple ->
-            let child_types = List.map (fun e -> type_of e /=. TypeError) typed_children in
-                ValueT(BaseT(TTuple(child_types)))
+            let child_types = List.map (fun e -> type_of e <| value_of |> TypeError) typed_children
+            in TValue(canonical (TTuple(child_types)))
+        | Just ->
+            let inner_type = bind 0 <| value_of |> TypeError in
+            TValue(canonical (TMaybe(inner_type)))
 
-        | Just -> let inner_type = bind 0 /=. TypeError in
-            ValueT(BaseT(TMaybe(!:inner_type)))
-
-        | Empty(t)      -> ValueT(t)
-        | Singleton(t)  -> ValueT(t)
-
+        | Empty(t) -> TValue(t)
+        | Singleton(t) ->
+            let t_c, t_e = t <| collection_of ++% base_of |> TypeError in
+            let t_ne = bind 0 <| value_of |> TypeError
+            in TValue(canonical (TCollection(t_c, contained_of t_ne)))
         | Combine ->
-            let a = bind 0 /=. TypeError in
-            let b = bind 1 /=. TypeError in
-            let (a_ct, a_et) = !: a /=@ TypeError in
-            let (b_ct, b_et) = !: b /=@ TypeError in
+            let t_c0, t_e0 = bind 0 <| collection_of +++ base_of %++ value_of |> TypeError in
+            let t_c1, t_e1 = bind 1 <| collection_of +++ base_of %++ value_of |> TypeError in
 
             (* Only collections of matching element types can be combined. *)
-            if a_et <> b_et then raise TypeError else
+            if t_e0 <> t_e1 then raise TypeError else
 
             (* Determine combined collection type. *)
-            let new_ct = (
-                match (a_ct, b_ct) with
+            let t_cr = (
+                match (t_c0, t_c1) with
                     | (TList, _)    -> TList
                     | (_, TList)    -> TList
                     | (TBag, _)     -> TBag
                     | (_, TBag)     -> TBag
                     | (TSet, TSet)  -> TSet
-            ) in ValueT(BaseT(TCollection(new_ct, a_et)))
+            ) in TValue(canonical (TCollection(t_cr, contained_of t_e0)))
 
-        | Range(ct) ->
-            let start = bind 0 /=. TypeError in
-            let stride = bind 1 /=. TypeError in
-            let steps = bind 2 /=. TypeError in (
-
-                (* We can compute a range if `stride' can be added to `start', and
-                 * `steps' is TInt. *)
-                match !: start, !: stride, !: steps with
-                    | (TInt|TFloat), (TInt|TFloat), TInt
-                        -> ValueT(BaseT(TCollection(ct, start)))
-                    | _ -> raise TypeError
-            )
-
+        | Range(t_c) ->
+            let start = bind 0 <| base_of %++ value_of |> TypeError in
+            let stride = bind 1 <| base_of %++ value_of |> TypeError in
+            let steps = bind 2 <| base_of %++ value_of |> TypeError in
+            if not(steps = TInt) then raise TypeError else
+            let t_e = (
+                match (start, stride) with
+                | (TInt, TInt) -> TInt
+                | (TFloat, TInt)
+                | (TInt, TFloat)
+                | (TFloat, TFloat) -> TFloat
+                | _ -> raise TypeError
+            ) in TValue(canonical (TCollection(t_c, TContained(TImmutable(t_e)))))
 
         | (Add|Mult) ->
-            let a = bind 0 /=. TypeError in
-            let b = bind 1 /=. TypeError in
+            let t_0 = bind 0 <| base_of %++ value_of |> TypeError in
+            let t_1 = bind 1 <| base_of %++ value_of |> TypeError in
             let result_type = (
-                match (!:a, !:b) with
-                    | (TFloat, TFloat) -> TFloat
-                    | (TInt, TFloat) -> TFloat
-                    | (TFloat, TInt) -> TFloat
-                    | (TInt, TInt) -> TInt
-                    | (TBool, TBool) -> TBool
-                    | _ -> raise TypeError
-            ) in ValueT(BaseT(result_type))
+                match (t_0, t_1) with
+                | (TFloat, TFloat) -> TFloat
+                | (TInt, TFloat) -> TFloat
+                | (TFloat, TInt) -> TFloat
+                | (TInt, TInt) -> TInt
+                | (TBool, TBool) -> TBool
+                | _ -> raise TypeError
+            ) in TValue(canonical (result_type))
 
         | Neg ->
-            let a = bind 0 /=. TypeError in (
-                match !:a with
-                    | (TBool|TInt|TFloat) as t -> ValueT(BaseT(t))
-                    | _ -> raise TypeError
+            let t_0 = bind 0 <| base_of %++ value_of |> TypeError in (
+                match t_0 with
+                | (TBool|TInt|TFloat) as t -> TValue(canonical (t))
+                | _ -> raise TypeError
             )
 
-        (* TODO: Define comparable, equatable types. *)
         | (Eq|Lt|Neq|Leq) ->
-            let t_a = bind 0 /=. TypeError in
-            let t_b = bind 1 /=. TypeError in
+            let t_0 = bind 0 <| base_of %++ value_of |> TypeError in
+            let t_1 = bind 1 <| base_of %++ value_of |> TypeError in
 
-            (* We can compare any two values whose base types are the same, and
-             * are comparable, regardless of if either of them are refs.
-             *)
-            if t_a =~ t_b then ValueT(BaseT(TBool)) else raise TypeError
-
-        | Lambda(a) ->
-            let return_type = bind 0 /=. TypeError
-            in TFunction(deduce_arg_type a, return_type)
-
-        | AssocLambda(a1, a2) ->
-            let return_type = bind 0 /=. TypeError
-            in TFunction(
-                BaseT(TTuple([deduce_arg_type a1; deduce_arg_type a2])),
-                return_type
-            )
-
-        | Apply ->
-            let a_t, r_t = bind 0 /=> TypeError in
-            let arg_type = bind 1 /=. TypeError in
-            if arg_type =~> a_t then ValueT(r_t) else raise TypeError
-
-        | Block ->
-            let rec validate_block_type components = (
-                match components with
-                    | e :: [] -> type_of e
-                    | h :: t when (type_of h) = (ValueT(BaseT(TUnit)))
-                        -> validate_block_type t
-                    | _ -> raise TypeError
-            ) in validate_block_type typed_children
-
-        | Iterate ->
-            let a_t, r_t = bind 0 /=> TypeError in
-            let collection = bind 1 /=. TypeError in
-            let c_t, e_t = !: collection /=@ TypeError in
-
-            (* Iterate function argument type must match collection element type. *)
-            if not(e_t =~> a_t) then raise TypeError else
-
-            (* Iterate function must return TUnit. *)
-            if not(r_t = BaseT(TUnit)) then raise TypeError else
-
-            (* Iteration does not return a value. *)
-            ValueT(BaseT(TUnit))
+            (* We can compare any two values whose base types are the same, and *)
+            (* are comparable, regardless of if either of them are refs. *)
+            if t_0 = t_1 then TValue(canonical TBool) else raise TypeError
 
         | IfThenElse ->
-            let predicate = bind 0 /=. TypeError in
-            let then_clause = bind 1 in
-            let else_clause = bind 2 in
+            let t_p = bind 0 <| value_of |> TypeError in
+            let t_t = bind 1 <| value_of |> TypeError in
+            let t_e = bind 2 <| value_of |> TypeError in
+            if canonical TBool === t_p && t_t === t_e then TValue(t_t) else raise TypeError
 
-            (* The predicate must be Boolean. *)
-            if not (predicate =~ BaseT(TBool)) then raise TypeError else
+        | Block ->
+            let rec validate_block components = (
+                match components with
+                | e :: [] -> type_of e
+                | h :: t when type_of h <| value_of |> TypeError === canonical TUnit
+                    -> validate_block t
+                | _ -> raise TypeError
+            ) in validate_block typed_children
 
-            (* And both branches of the expression must be the same type. *)
-            if not (then_clause = else_clause) then raise TypeError else
+        | Lambda(t_a) ->
+            let t_r = bind 0 <| value_of |> TypeError
+            in TFunction(deduce_arg_type t_a, t_r)
 
-            (* Return the branch type, not necessarily a value type. *)
-            then_clause
+        | Apply ->
+            let t_e, t_r = bind 0 <| function_of |> TypeError in
+            let t_a = bind 1 <| value_of |> TypeError in
+            if t_e <~ t_a then TValue(t_r) else raise TypeError
+
+        | Iterate ->
+            let t_a, t_r = bind 0 <| function_of |> TypeError in
+            let t_c, t_e = bind 1 <| collection_of +++ base_of %++ value_of |> TypeError in
+            if not (t_r === canonical TUnit) then raise TypeError else
+            if t_a <~ t_e then TValue(canonical TUnit) else raise TypeError
 
         | Map ->
-            let a_t, r_t = bind 0 /=> TypeError in
-            let collection = bind 1 /=. TypeError in
-            let c_t, e_t = !: collection /=@ TypeError  in
-
-            (* Element type should be coerceable to argument type. *)
-            if not(e_t =~> a_t) then raise TypeError else
-
-            (* Mapped collection. *)
-            ValueT(BaseT(TCollection(c_t, r_t)))
+            let t_a, t_r = bind 0 <| function_of |> TypeError in
+            let t_c, t_e = bind 1 <| collection_of +++ base_of %++ value_of |> TypeError in
+            if t_a <~ t_e then TValue(canonical (TCollection(t_c, contained_of t_r)))
+            else raise TypeError
 
         | FilterMap ->
-            let pa_t, pr_t = bind 0 /=> TypeError in
-            let a_t, r_t = bind 1 /=> TypeError in
-            let collection = bind 2 /=. TypeError in
-            let c_t, e_t = !: collection /=@ TypeError in
+            let t_pa, t_pr = bind 0 <| function_of |> TypeError in
+            let t_ma, t_mr = bind 1 <| function_of |> TypeError in
+            let t_c, t_e = bind 2 <| collection_of +++ base_of %++ value_of |> TypeError in
 
-            (* Element type should be coerceable to argument type. *)
-            if not(e_t =~> a_t) then raise TypeError else
-
-            (* Result of map should be coerceable to filter argument. *)
-            if not(r_t =~> pa_t) then raise TypeError else
-
-            (* Mapped, filtered collection. *)
-            ValueT(BaseT(TCollection(c_t, r_t)))
+            if not (t_pa <~ t_e) then raise TypeError else
+            if not (canonical TBool === t_pr) then raise TypeError else
+            if not (t_ma <~ t_e) then raise TypeError else
+            TValue(canonical (TCollection(t_c, contained_of t_mr)))
 
         | Flatten ->
-            let collection = bind 0 /=. TypeError in
-            let (c_t1, e_t1) = !: collection /=@ TypeError in
-            let (c_t2, e_t2) = !: e_t1 /=@ TypeError in
-
-            (* Outer collection type, inner element type. *)
-            ValueT(BaseT(TCollection(c_t1, e_t2)))
+            let t_c0, t_e0 = bind 0 <| collection_of +++ base_of %++ value_of |> TypeError in
+            let t_c1, t_e1 = t_e0 <| collection_of ++% base_of |> TypeError in
+            TValue(canonical (TCollection(t_c0, t_e1)))
 
         | Aggregate ->
-            let agg_a_t, r_t = bind 0 /=> TypeError in
-            let z_t = bind 1 /=. TypeError in
-            let collection = bind 2 /=. TypeError in
-            let c_t, e_t = !: collection /=@ TypeError in (
-
-                (* Ensure that the aggregator has the correct form, function of
-                 * tuple consisting of zero type and element type.
-                 *)
-                match !: agg_a_t with
-                    | TTuple([a_t1; a_t2])
-                        when
-                            z_t =~> a_t1 &&
-                            e_t =~> a_t2 &&
-                            r_t =~> a_t1 ->
-                            ValueT(z_t)
-
-                    | _ -> raise TypeError
-            )
+            let t_a, t_r = bind 0 <| function_of |> TypeError in
+            let t_z = bind 1 <| value_of |> TypeError in
+            let t_c, t_e = bind 2 <| collection_of +++ base_of %++ value_of |> TypeError in
+            if not (t_a <~ canonical (TTuple([t_z; t_e]))) then raise TypeError else
+            if not (t_a <~ canonical (TTuple([t_a; t_r]))) then raise TypeError else
+            TValue(t_z)
 
         | GroupByAggregate ->
-            let a_t, k_t = bind 0 /=> TypeError in
-            let agg_a_t, r_t = bind 1 /=> TypeError in
-            let z_t = bind 2 /=. TypeError in
-            let collection = bind 3 /=. TypeError in
-            let c_t, e_t = !: collection /=@ TypeError in
-
-            (* Ensure that the grouper acts on the element type. *)
-            if not(e_t =~> a_t) then raise TypeError else (
-
-                (* Ensure that the aggregator has the correct form, function of
-                 * tuple consisting of zero type and element type.
-                 *)
-                match !: agg_a_t with
-                    | TTuple([a_t1; a_t2])
-                        when
-                            z_t =~> a_t1 &&
-                            e_t =~> a_t2 &&
-                            r_t =~> a_t1 ->
-                            ValueT(BaseT(
-                                TCollection(c_t, (BaseT(TTuple([k_t; r_t]))))
-                            ))
-
-                    | _ -> raise TypeError
-            )
+            let t_ga, t_gr = bind 0 <| function_of |> TypeError in
+            let t_aa, t_ar = bind 1 <| function_of |> TypeError in
+            let t_z = bind 2 <| value_of |> TypeError in
+            let t_c, t_e = bind 3 <| collection_of +++ base_of %++ value_of |> TypeError in
+            if not (t_ga <~ t_e) then raise TypeError else
+            if not (t_aa <~ canonical (TTuple([t_z; t_e]))) then raise TypeError else
+            if not (t_aa <~ canonical (TTuple([t_ar; t_e]))) then raise TypeError else
+            TValue(canonical (TCollection(t_c, contained_of (canonical (TTuple([t_gr; t_ar]))))))
 
         | Sort ->
-            let collection = bind 0 /=. TypeError in
-            let cmp_a, cmp_r = bind 1 /=> TypeError in
-            let c_t, e_t = !: collection /=@ TypeError in (
+            let t_c, t_e = bind 0 <| collection_of +++ base_of %++ value_of |> TypeError in
+            let t_ca, t_cr = bind 1 <| function_of |> TypeError in
 
-                (* Ensure that the comparator is well-formed. *)
-                match cmp_a, cmp_r with
-                    | BaseT(TTuple([arg_lt; arg_rt])), BaseT(TBool)
-                        when e_t =~> arg_lt &&
-                             e_t =~> arg_rt ->
-                                 ValueT(BaseT(TCollection(TList, e_t)))
-                    | _ -> raise TypeError
-            )
+            if not (t_ca <~ canonical (TTuple([t_e; t_e]))) then raise TypeError else
+            if not (canonical (TBool) === t_cr) then raise TypeError else
+            TValue(canonical (TCollection(TList, t_e)))
 
         | Slice ->
-            let collection = bind 0 /=. TypeError in
-            let pattern = bind 1 /=. TypeError in
-            let c_t, e_t = !: collection /=@ TypeError in
-
-            let rec match_slice_pattern = (
-                function
-                    | ([], []) -> true
-                    | (p_h :: p_ts), (e_h :: e_ts) when p_h =~> e_h ->
-                        match_slice_pattern (p_ts, e_ts)
-                    | (BaseT(TUnknown) :: p_ts), (e_h :: e_ts) ->
-                        match_slice_pattern (p_ts, e_ts)
-                    | _ -> raise TypeError
-            ) in (
-
-                (* Handle single-element vs. tuples separately. *)
-                match !: pattern, !: e_t with
-                    | TTuple(p_ts), TTuple(e_ts)
-                        when match_slice_pattern (p_ts, e_ts) ->
-                            ValueT(collection)
-                    | p_t, e_bt when p_t = e_bt || p_t = TUnknown -> ValueT(collection)
-                    | _ -> raise TypeError
+            let t_c, t_e = bind 0 <| collection_of +++ base_of %++ value_of |> TypeError in
+            let t_p = bind 1 <| value_of |> TypeError in
+            if t_e === t_p then TValue(t_e) else (
+                match base_of t_p, base_of t_e with
+                | TTuple(t_ps), TTuple(t_es) ->
+                    if List.for_all2 (
+                        fun tp te
+                            -> (canonical TUnknown) === tp
+                            || te === tp
+                        ) t_ps t_es
+                    then (bind 0)
+                    else raise TypeError
+                | TUnknown, _ -> TValue(canonical (TCollection(t_c, t_e)))
+                | _ -> raise TypeError
             )
 
         | Insert ->
-            let collection = bind 0 /=. TypeError in
-            let n_t = bind 1 /=. TypeError in (
-
-                (* Insert is only possible into ref collections. *)
-                match collection with
-                    | TRef(TCollection(c_t, e_t)) when n_t =~ e_t ->
-                        ValueT(BaseT(TUnit))
-                    | _ -> raise TypeError
-            )
+            let t_c, t_e = bind 0 <| collection_of +++ base_of %++ value_of |> TypeError in
+            let t_n = bind 1 <| value_of |> TypeError in
+            if t_e === t_n then TValue(canonical TUnit) else raise TypeError
 
         | Update ->
-            let collection = bind 0 /=. TypeError in
-            let o_t = bind 1 /=. TypeError in
-            let n_t = bind 2 /=. TypeError in (
-
-                (* Update is only possible into collections of ref elements *)
-                match !: collection with
-                    | TCollection(c_t, TRef(e_t)) when !: o_t = e_t && !: n_t = e_t ->
-                        ValueT(BaseT(TUnit))
-                    | _ -> raise TypeError
-            )
+            let t_c, t_e = bind 0 <| collection_of +++ base_of %++ value_of |> TypeError in
+            let t_o = bind 1 <| value_of |> TypeError in
+            let t_n = bind 2 <| value_of |> TypeError in
+            if t_e === t_o && t_e === t_n then TValue(canonical TUnit)
+            else raise TypeError
 
         | Delete ->
-            let collection = bind 0 /=. TypeError in
-            let o_t = bind 1 /=. TypeError in (
-
-                (* Delete is only possible from a ref collection. *)
-                match collection with
-                    | TRef(TCollection(c_t, e_t)) when o_t =~ e_t ->
-                        ValueT(BaseT(TUnit))
-                    | _ -> raise TypeError
-            )
+            let t_c, t_e = bind 0 <| collection_of +++ base_of %++ value_of |> TypeError in
+            let t_n = bind 1 <| value_of |> TypeError in
+            if t_e === t_n then TValue(canonical TUnit) else raise TypeError
 
         | Peek ->
-            let collection = bind 0 /=. TypeError in (
-                match !: collection with
-                    | TCollection(c_t, e_t) -> ValueT(e_t)
-                    | _ -> raise TypeError
-            )
+            let t_c, t_e = bind 0 <| collection_of +++ base_of %++ value_of |> TypeError in TValue(t_e)
 
-        | AssignToRef ->
-            let left = bind 0 /=. TypeError in
-            let right = bind 1 /=. TypeError in (
+        | Assign ->
+            let t_l = bind 0 <| dereft +++ mutable_of %++ value_of |> TypeError in
+            let t_r = bind 1 <| value_of |> TypeError in
+            if canonical t_l === t_r then TValue(canonical TUnit) else raise TypeError
 
-            (* AssignToRef must assign to a ref. *)
-                match left with
-                    | TRef(_) when right =~> left -> ValueT(BaseT(TUnit))
-                    | _ -> raise TypeError
-            )
+        | Deref ->
+            let t_r = bind 0 <| value_of |> TypeError in
+            let t_u = (
+                match t_r with
+                | TIsolated(mt) -> TIsolated(TImmutable(mt <| dereft |> TypeError))
+                | TContained(mt) -> TContained(TImmutable(mt <| dereft |> TypeError))
+            ) in TValue(t_u)
 
         | Send ->
-            let target = bind 0 /=. TypeError in
-            let arg = bind 1 /=. TypeError in
-
-            let expected_arg = (
-                match !: target with
-                    | TTarget(_, t) -> t
-                    | _ -> raise TypeError
-            ) in
-
-            (* If a ref is passed into a send, its values are copied. *)
-            if !: arg = expected_arg then ValueT(BaseT(TUnit))
-            else raise TypeError
+            let t_t = bind 0 <| base_of %++ value_of |> TypeError in
+            let t_a = bind 1 <| value_of |> TypeError in
+            let t_b = (
+                match t_t with
+                | TTarget(t_addr, t_arg) -> t_arg
+                | _ -> raise TypeError
+            ) in if canonical t_b === t_a then TValue(canonical TUnit) else raise TypeError
     in attach_type current_type
 
-let rec deduce_type env p = match p with [] -> [] | s :: ss -> (
-        match s with
-            | Instruction(i) -> deduce_type env ss
-            | Declaration(d) -> let new_d, new_env = (
-                match d with
-                    | Global(i, t) -> (Global(i, t), ((i, t) :: env))
-                    | Foreign(i, t) -> (Foreign(i, t), ((i, t) :: env))
-                    | Trigger(i, a, its, e) ->
-                        let self_type = ValueT(BaseT(TTarget((Local(i)), !: (deduce_arg_type a)))) in
-                        let new_bindings = (
-                            match a with
-                                | AVar(i', t') -> [(i', ValueT(t'))]
-                                | ATuple(xs) -> (List.map (fun (i', t') -> (i', ValueT(t'))) xs)
-                        ) in
-                        let e' = deduce_expr_type ((i, self_type) :: new_bindings @ env) e in
-                        let its' = List.map (
-                            function
-                                | (i', t', Some init) -> (i', t', Some (deduce_expr_type [] init))
-                                | (i', t', None) -> (i', t', None)
-                        ) its in
-                        (Trigger(i, a, its', e'), ((i, self_type) :: env))
-                    | Bind(a, b) ->
-                        let source_type = (try List.assoc a env with Not_found -> raise TypeError) in
-                        let target_type = (try List.assoc b env with Not_found -> raise TypeError) in
-                        if source_type <> target_type then raise TypeError else
-                        (Bind(a, b), env)
-                    | Consumable(c) -> (
-                            match c with
-                                | Source(i, t) -> (Consumable(Source(i, t)), ((i, t) :: env))
-                                | _ -> (Consumable(c), env)
-                        )
-                )
-            in Declaration(new_d) :: deduce_type new_env ss
-        )
+let rec deduce_program_type env program = match program with [] -> [] | s :: ss -> (
+    match s with
+    | Instruction(i) -> deduce_program_type env ss
+    | Declaration(d) ->
+        let nd, nenv = (
+            match d with
+            | Global(i, t, Some init) ->
+                let typed_init = deduce_expr_type env init
+                in (Global(i, t, Some typed_init), (i, type_of typed_init) :: env)
+            | Global(i, t, None) -> (Global(i, t, None), (i, t) :: env)
+            | Foreign(i, t) -> (Foreign(i, t), (i, t) :: env)
+            | Trigger(id, args, locals, body) ->
+                let self_bindings = (id, TValue(canonical (TTarget(Local(id), base_of
+                (deduce_arg_type args))))) in
+                let arg_bindings = (
+                    match args with
+                    | AVar(i, t) -> [(i, TValue(t))]
+                    | ATuple(its) -> List.map (fun (i, t) -> (i, TValue(t))) its
+                ) in
+                let local_bindings = List.map (fun (i, vt) -> (i, TValue(vt))) locals in
+                let inner_env = self_bindings :: arg_bindings @ local_bindings @ env in
+                let typed_body = deduce_expr_type inner_env body in
+                if not(type_of typed_body <| value_of |> TypeError === canonical TUnit) then raise TypeError else
+                (Trigger(id, args, locals, typed_body), self_bindings :: env)
+        ) in
+        Declaration(nd) :: deduce_program_type nenv ss
+    )

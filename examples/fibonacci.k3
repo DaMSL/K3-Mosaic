@@ -1,0 +1,7 @@
+foreign print_integer:(int -> unit)
+
+trigger start(n:int) {} = send(fibonacci, n, 0, 1)
+
+trigger fibonacci(n:int, a:int, b:int) {} = if n == 0 then send(sink, b) else send(fibonacci, n - 1, b, a + b)
+
+trigger sink(n:int) {} = print(n)

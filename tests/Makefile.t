@@ -1,37 +1,32 @@
 # Makefile for the K3 programming language lexer/parser/driver.
 # -- Based off DBToaster Makefiles. (Yanif) 
 
-include Makefile.inc
+include ../Makefile.inc
 
 FILES=\
-	util/Util \
-	util/ListAsSet \
-	util/Symbols \
-	util/Tree \
-	stages/k3/K3 \
-	stages/k3/K3Util \
-	stages/k3/K3Typechecker \
-	#stages/k3/K3Interpreter \
+	../util/ListAsSet \
+	../util/Symbols \
+	../util/Tree \
+	../stages/k3/K3 \
+	../stages/k3/K3Util \
+	../stages/k3/K3Helpers \
+	../stages/k3/K3Parser \
+	../stages/k3/K3Lexer \
+	../stages/k3/K3Typechecker \
+	Testing \
 
 TOPLEVEL_FILES=\
-	Driver \
-
-LEXERS=\
-	stages/k3/K3Lexer \
-
-PARSERS=\
-	stages/k3/K3Parser \
+	TypecheckerTest \
 
 DIRS=\
-	util\
-	stages/k3 \
-	stages/k3_dist \
+	. \
+	../util\
+	../stages/k3 \
+	../stages/k3_dist \
 
 #################################################
 
 BASE_FILES     := $(FILES)
-GENERATED_FILES = $(PARSERS) $(LEXERS) 
-FILES += $(GENERATED_FILES)
 
 BC_FILES    =$(patsubst %,%.cmo,$(FILES))
 BC_INCLUDES =$(patsubst %,%.cmi,$(FILES))
@@ -52,9 +47,7 @@ OCAMLOPT_FLAGS +=\
 
 #################################################
 
-all: Makefile.local versioncheck k3
-
-opt: Makefile.local versioncheck k3_opt
+all: Makefile.local versioncheck typechecker_test
 
 versioncheck:
 	@if [ $(shell ocaml -version | sed 's/.*version \(.*\)$$/\1/' | \
@@ -63,12 +56,8 @@ versioncheck:
 	  echo "Your OCaml version is too low.  OCaml 3.12.1 is required, you have"\
 	       $(shell ocaml -version); exit -1; fi
 
-k3_opt: $(NC_FILES) $(NC_EXTRA_FILES)
-	@echo "Linking K3 (Optimized)"
-	@$(OCAMLOPT) $(OCAMLOPT_FLAGS) -o bin/$@ $(NC_FILES) $(NC_EXTRA_FILES)
-
-k3: $(BC_FILES) $(BC_EXTRA_FILES)
-	@echo "Linking K3"
+typechecker_test: $(BC_FILES) $(BC_EXTRA_FILES)
+	@echo "Building typechecker_test"
 	@if [ ! -d bin ] ; then \
 		mkdir bin;\
 	fi
@@ -92,14 +81,6 @@ $(NC_FILES) $(NC_EXTRA_FILES) : %.cmx : %.ml
 	@echo Compiling Optimized $(*)
 	@$(OCAMLOPT) $(OCAMLOPT_FLAGS) -c $<
 
-$(patsubst %,%.ml,$(LEXERS)) : %.ml : %.mll
-	@echo Building Lexer $(*)
-	@$(OCAMLLEX) $< 2>&1 | sed 's/^/  /'
-
-$(patsubst %,%.ml,$(PARSERS)) : %.ml : %.mly
-	@echo Building Parser $(*)
-	@$(OCAMLYACC) $< 2>&1 | sed 's/^/  /'
-
 # Ignore generated CMI dependencies.  They get autocompiled along with the
 # object files
 $(patsubst %,%.cmi,$(FILES)) : 
@@ -114,10 +95,10 @@ Makefile.deps: Makefile $(patsubst %,%.ml,$(BASE_FILES))
 
 Makefile.local:
 	@echo Initializing local configuration file
-	@cp config/Makefile.local.default Makefile.local
+	@cp ../config/Makefile.local.default Makefile.local
 
-include Makefile.deps
-include Makefile.local
+include ../Makefile.deps
+include ../Makefile.local
 
 #################################################
 
@@ -129,8 +110,9 @@ clean:
 	rm -f $(NC_FILES) $(NC_INCLUDES) $(NC_EXTRA_FILES) $(NC_EXTRA_INCLUDES)
 	rm -f $(patsubst %,%.o,$(FILES)) $(patsubst %,%.o,$(EXTRA_FILES))
 	rm -f $(patsubst %,%.annot,$(FILES))
-	rm -f bin/k3
+	rm -f bin/dist_test
 
 #################################################
 
 .PHONY: all versioncheck
+	
