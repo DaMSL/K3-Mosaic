@@ -19,7 +19,9 @@ let get_symbol_prefix class_id =
   with Not_found -> raise (SymbolNotFound class_id) 
   
 let get_symbol_counter class_id =
-  try Hashtbl.find sym_counters class_id
+  try let current = Hashtbl.find sym_counters class_id in
+    Hashtbl.replace sym_counters class_id (current+1);
+    current
   with Not_found -> raise (SymbolNotFound class_id) 
 
 let register_symbol class_id prefix =
