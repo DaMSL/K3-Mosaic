@@ -13,6 +13,7 @@ FILES=\
 	../stages/k3/K3Helpers \
 	../stages/k3_dist/ProgInfo \
 	../stages/k3_dist/GenDist \
+	../stages/k3/K3Typechecker \
 
 TOPLEVEL_FILES=\
 	DistTest \

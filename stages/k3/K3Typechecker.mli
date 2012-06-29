@@ -4,24 +4,11 @@ open Tree
 open K3
 
 exception MalformedTree
-exception TypeError
+exception TypeError of int * int
 
 type 'a texpr_t = (type_t * 'a) expr_t
 
-val (<|): 'a -> ('a -> 'b) -> 'b
-val (|>): ('a -> 'b) -> 'a -> 'b
-
-val (+++): ('b -> 'x -> 'c) -> ('a -> 'x -> 'b) -> 'a -> 'x -> 'c
-val (++%): ('b -> 'x -> 'c) -> ('a -> 'b) -> 'a -> 'x -> 'c
-val (%++): ('b -> 'c) -> ('a -> 'x -> 'b) -> 'a -> 'x -> 'c
-
 val type_of: 'a texpr_t -> type_t
-
-val value_of: type_t -> exn -> value_type_t
-val function_of: type_t -> exn -> value_type_t * value_type_t
-val collection_of: base_type_t -> exn -> container_type_t * value_type_t
-
-val dereft: mutable_type_t -> exn -> base_type_t
 
 val mutable_of: value_type_t -> mutable_type_t
 val base_of: value_type_t -> base_type_t
