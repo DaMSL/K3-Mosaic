@@ -21,7 +21,7 @@ let (rst_p:ProgInfo.prog_data_t) =
 
 let main() =
   let dist = gen_dist rst_p [] in
-  print_endline(string_of_program dist);
+  print_endline(string_of_program dist ~print_id:true);
   K3Typechecker.deduce_program_type [] dist
 
 let _ = Printexc.print main;;

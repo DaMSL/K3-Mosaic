@@ -1,3 +1,4 @@
+open Util
 open Format
 open Lazy
 open ListAsSet
@@ -8,9 +9,9 @@ open K3
 
 
 (* AST accessors *)
-let id_of_expr e = fst (fst_data e) 
-let tag_of_expr e = snd (fst_data e)
-let meta_of_expr e = snd_data e
+let id_of_expr (e:'a expr_t) = fst (fst_data e) 
+let tag_of_expr (e:'a expr_t) = snd (fst_data e)
+let meta_of_expr (e:'a expr_t) = snd_data e
 
 (* Variable id extraction *)
 let vars_of_arg =
@@ -266,12 +267,14 @@ let lps s = lazy (ps s)
 let lazy_string_opt string_f a = match a with
   | Some b -> [lazy (string_f b)]
   | None -> []
+
+let print_expr_id id = ps ("<"^string_of_int id^"> ")
   
 let rec lazy_base_type bt  = lazy (print_base_type bt)
 and     lazy_value_type vt = lazy (print_value_type vt)
 and     lazy_type t        = lazy (print_type t)
 and     lazy_arg a         = lazy (print_arg a)
-and     lazy_expr e        = lazy (print_expr e)
+and     lazy_expr ?(print_id=false) e = lazy (print_expr e ~print_id:print_id)
 
 and print_base_type t =
   let my_tag t lazy_ch_t = pretty_tag_str Hint "" t lazy_ch_t in
@@ -375,11 +378,13 @@ and print_expr_tag tag lazy_children =
 
     | Send    -> my_tag "Send"
 
-and print_expr expr =
+
+and print_expr ?(print_id=false) expr =
+  let id_pr e = if print_id then print_expr_id @: id_of_expr e else () in
   let lazy_e = 
     fold_tree (fun _ _ -> ())
       (fun _ lazy_ch e ->
-        [lazy (print_expr_tag (tag_of_expr e) (List.flatten lazy_ch))])
+        [lazy (id_pr e; print_expr_tag (tag_of_expr e) (List.flatten lazy_ch))])
       () [] expr
   in force (List.hd lazy_e)
 
@@ -397,7 +402,7 @@ let rec print_consumable c =
     | Repeat(c, s) ->
         my_tag "Repeat" [lazy_rcr c; lps (string_of_stop_behavior_t s)]
 
-let print_declaration d =
+let print_declaration ?(print_id=false) d =
   let my_tag = pretty_tag_str Line "" in
   let lazy_list l = [lps "["]@l@[lps "]"] in
   let print_id_vt (id,vt) =
@@ -406,7 +411,8 @@ let print_declaration d =
   match d with
     | Global(i, t, init) ->
       my_tag "Global"
-        ([lps (quote i); lazy_type t]@(lazy_string_opt print_expr init))
+        ([lps (quote i); lazy_type t]@
+        (lazy_string_opt (print_expr ~print_id:print_id) init))
 
     | Foreign(i, t) -> my_tag "Foreign" [lps (quote i); lazy_type t]
 
@@ -414,7 +420,8 @@ let print_declaration d =
       let trig_decls = lazy (
         ps_list Line force (lazy_list (List.map print_id_vt ds)))
       in
-      my_tag "Trigger" [lps (quote i); lazy_arg arg; trig_decls; lazy_expr e]
+      my_tag "Trigger" 
+        [lps (quote i); lazy_arg arg; trig_decls; lazy_expr e ~print_id:print_id]
 
     | Bind(i, i2) -> my_tag "Bind" [lps i; lps i2]
     | Consumable(c) -> my_tag "Consumable" [lazy (print_consumable c)]
@@ -422,10 +429,11 @@ let print_declaration d =
 let print_instruction i = match i with
     | Consume(id) -> pretty_tag_str Line "" "Consume" [lps id]
 
-let print_statement s =
+let print_statement ?(print_id=false) s =
   let my_tag = pretty_tag_str Line "" in
   match s with
-    | Declaration d -> my_tag "Declaration" [lazy (print_declaration d)]
+    | Declaration d -> 
+        my_tag "Declaration" [lazy (print_declaration d ~print_id:print_id)]
     | Instruction i -> my_tag "Instruction" [lazy (print_instruction i)]
 
 let wrap_formatter print_fn =
@@ -446,10 +454,10 @@ let string_of_declaration d = wrap_formatter (fun () -> print_declaration d)
 let string_of_instruction i = wrap_formatter (fun () -> print_instruction i)
 let string_of_statement s   = wrap_formatter (fun () -> print_statement s)
 
-let string_of_program ss =
+let string_of_program ?(print_id=false) ss =
   wrap_formatter (fun () ->
     ps "[";
-    ps_list ~sep:";" Line print_statement ss;
+    ps_list ~sep:";" Line (print_statement ~print_id:print_id) ss;
     ps "]")
   
 
