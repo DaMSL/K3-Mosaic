@@ -31,6 +31,12 @@ let tests = group "all" [
             case "Multiplication" @: give_type (iparse "1.0 * 1") @=? TValue(canonical TFloat);
         ]
     ];
+    group "Comparisons" [
+        case "Eq" @: give_type (iparse "0 == 1") @=? TValue(canonical TBool);
+        case "Lt" @: give_type (iparse "0 < 1") @=? TValue(canonical TBool);
+        case "Neq" @: give_type (iparse "0 != 1") @=? TValue(canonical TBool);
+        case "Leq" @: give_type (iparse "0 <= 1") @=? TValue(canonical TBool);
+    ];
     group "Collection Construction" [
         group "Empty" [
             case "Set" @: give_type (iparse "{}") @=?
@@ -90,7 +96,10 @@ let tests = group "all" [
         group "IfThenElse" [
             case "Simple IfThenElse" @: give_type (iparse "if true then () else ()") @=?
                 TValue(canonical TUnit);
-        ]
+        ];
+        group "Block" [
+            case "Simple Block" @: give_type (iparse "do {(); (); 1}") @=? TValue(canonical TInt)
+        ];
     ];
     group "Collection Transformers" [
         group "Map" [
@@ -143,6 +152,20 @@ let tests = group "all" [
         group "Sort" [
             case "Simple Sort" @: give_type (iparse "sort([2; 3; 1], \\(a:int, b:int) -> (a < b))") @=?
                 TValue(canonical (TCollection(TList, contained_of @: canonical TInt)))
+        ];
+        group "Access" [
+            case "Single Element Slice" @: give_type (iparse "[1; 2; 3][_]") @=?
+                TValue(canonical (TCollection(TList, contained_of @: canonical TInt)));
+            case "Multi Element Slice" @: give_type (iparse "[(1, 2); (3, 4); (5, 6)][1, _]") @=?
+                TValue(canonical (TCollection(TList,
+                    contained_of (canonical (TTuple([canonical TInt; canonical TInt])))
+                )));
+            case "Peek" @: give_type (iparse "peek([1; 2; 3])") @=? TValue(contained_of @: canonical TInt)
+        ];
+        group "Collection Mutation" [
+            case "Insert" @: give_type (iparse "insert([1; 2; 3], 5)") @=? TValue(canonical TUnit);
+            case "Update" @: give_type (iparse "update([1; 2; 3], 1, 5)") @=? TValue(canonical TUnit);
+            case "Delete" @: give_type (iparse "delete([1; 2; 3], 1)") @=? TValue(canonical TUnit);
         ];
     ];
 ]
