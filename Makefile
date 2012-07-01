@@ -13,7 +13,7 @@ FILES=\
 	stages/k3/K3Helpers \
 	stages/k3_dist/ProgInfo \
 	stages/k3_dist/GenDist \
-	#stages/k3/K3Typechecker \
+	stages/k3/K3Typechecker \
 	#stages/k3/K3Interpreter \
 
 TOPLEVEL_FILES=\
@@ -79,6 +79,21 @@ k3: $(BC_FILES) $(BC_EXTRA_FILES)
 
 #################################################
 
+# Test Suites
+
+test/typechecker: k3
+	@if [ ! -d bin/test ] ; then \
+		mkdir -p bin/test;\
+	fi
+	@echo "Building Common Test Library"
+	@$(OCAMLCC) $(OCAML_FLAGS) -I tests -c tests/Testing.ml
+	@echo "Building Typechecker Test-Suite"
+	@$(OCAMLCC) $(OCAML_FLAGS) -I tests -c tests/TypecheckerTest.ml
+	@$(OCAMLCC) $(OCAML_FLAGS) -I tests -o bin/test/typechecker $(BC_FILES) Testing.cmo TypecheckerTest.cmo
+	@echo "Typechecker Test-Suite is at bin/test/typechecker."
+
+#################################################
+
 $(BC_FILES) $(BC_EXTRA_FILES) : %.cmo : %.ml
 	@if [ -f $(*).mli ] ; then \
 		echo Compiling Header $(*);\
@@ -137,4 +152,3 @@ clean:
 #################################################
 
 .PHONY: all versioncheck
-	
