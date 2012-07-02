@@ -5,23 +5,45 @@ open Util
 
 (* Type manipulation functions ------------- *)
 
+
+(* convert an isolated value to a contained value all the way down *)
+let iso_to_contained typ =
+  let rec handle_base_type b = match b with
+    | TMaybe(v) -> TMaybe(handle_value_type v)
+    | TTuple(vl) -> TTuple(List.map (fun v -> handle_value_type v) vl)
+    | TCollection(c, v) -> TCollection(c, handle_value_type v)
+    | TTarget(a, b) -> TTarget(a, handle_base_type b)
+    | x -> x
+  and handle_mutable_type m = match m with
+    | TMutable(b) -> TMutable(handle_base_type b)
+    | TImmutable(b) -> TImmutable(handle_base_type b)
+  and handle_value_type t = match t with
+    | TIsolated(m) -> TContained(handle_mutable_type m)
+    | TContained(m) -> TContained(handle_mutable_type m)
+  in
+  handle_value_type typ
+    
 (* A type for simple immutable integers *)
 let t_int = TIsolated(TImmutable(TInt))
+let t_int_mut = TIsolated(TMutable(TInt))
 
-(* wrap a type in an immutable list *)
+(* wrap a type in a list *)
 let wrap_tlist typ = 
-    let i = match typ with
-    | TIsolated(x)  -> TContained(x)
-    | TContained(_) -> typ
-    in TIsolated(TImmutable(TCollection(TList, i)))
+  let c = iso_to_contained typ in
+  TIsolated(TImmutable(TCollection(TList, c)))
+
+(* wrap a type in a mutable list *)
+let wrap_tlist_mut typ = 
+  let c = iso_to_contained typ in
+  TIsolated(TMutable(TCollection(TList, c)))
 
 (* wrap a type in an immutable tuple *)
 let wrap_ttuple typ = TIsolated(TImmutable(TTuple(typ)))
+let wrap_ttuple_mut typ = TIsolated(TMutable(TTuple(typ)))
 
 (* Helper functions to create K3 AST nodes more easily *)
 
 let meta = 0    (* we fill meta with a default value *)
-let num = ref 0
 
 let class_id = "K3" (* used for symbol generation *)
 let new_num () = Symbols.gen_int_sym class_id 

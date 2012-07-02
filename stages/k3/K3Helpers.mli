@@ -2,10 +2,13 @@
 
 (* easy access to the int type *)
 val t_int : K3.value_type_t
+val t_int_mut : K3.value_type_t
 
 (* wrap in a list *)
 val wrap_tlist : K3.value_type_t -> K3.value_type_t
+val wrap_tlist_mut : K3.value_type_t -> K3.value_type_t
 val wrap_ttuple : K3.value_type_t list -> K3.value_type_t
+val wrap_ttuple_mut : K3.value_type_t list -> K3.value_type_t
 
 (* simple functions that enable easy construction of AST trees *)
 val mk_const : K3.constant_t -> ((int * K3.expr_tag_t) * int) Tree.tree_t

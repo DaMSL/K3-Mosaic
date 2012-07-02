@@ -74,6 +74,7 @@ exception ProcessingFailed of string;;
 (* set type of vid here. Currently it's TInt, but we may need something better
  * *)
 let vid_type = t_int
+let vid_type_mut = t_int_mut
 let ip_type = t_int
 
 (* argument manipulation convenience functions *)
@@ -123,8 +124,14 @@ let log_read_geq = "log_read_geq" (* takes vid, returns (trig, vid)list >= vid *
 let add_delta_to_buffer_for_map p map_id = 
   "add_delta_to_buffer_"^map_name_of p map_id
 
-(* data structures *)
-let stmt_cntrs = mk_var "stmt_cntrs"
+(* data structures ---- *)
+  (* stmt_cntrs - (vid, stmt_id, counter) *)
+let stmt_cntrs_name = "stmt_cntrs"
+let stmt_cntrs = mk_var stmt_cntrs_name
+let stmt_cntrs_type = wrap_tlist_mut @: wrap_ttuple_mut @: 
+    [vid_type_mut; t_int_mut; t_int_mut]
+let stmt_cntrs_code = Global (stmt_cntrs_name, TValue(stmt_cntrs_type), None)  
+
 
 (* k3 functions needed *)
 (*
@@ -516,7 +523,6 @@ List.fold_left
          let part_pat_as_vars = convert_names_to_vars @: extract_arg_names
            part_pat in
          let query_pat = mk_tuple @: part_pat_as_vars @ [mk_const CUnknown] in
-         let stmt_cntrs = mk_var "stmt_cntrs" in
          let stmt_cntrs_slice = mk_slice stmt_cntrs query_pat in
          mk_if (* check if the counter exists *)
            (mk_has_member stmt_cntrs query_pat full_types)
@@ -823,6 +829,7 @@ let gen_dist_for_t p trig =
 
 (* Function to generate the whole distributed program *)
 let gen_dist p ast =
+  (* we'll start by defining everything as foreign functions so we typecheck *) 
   let triggers = get_trig_list p in
   let regular_trigs = List.flatten @:
     List.map
@@ -831,7 +838,8 @@ let gen_dist p ast =
   in
   List.map
     (fun x -> Declaration x)
-    (filter_corrective_list :: 
+    ( stmt_cntrs_code ::         (* global data struct *)
+      filter_corrective_list ::  (* global func *)
       regular_trigs@
       send_corrective_trigs p (* per-map basis *)
     )
