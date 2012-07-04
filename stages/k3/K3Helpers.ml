@@ -41,6 +41,12 @@ let wrap_tlist_mut typ =
 let wrap_ttuple typ = TIsolated(TImmutable(TTuple(typ)))
 let wrap_ttuple_mut typ = TIsolated(TMutable(TTuple(typ)))
 
+(* local address *)
+let local_addr id trig_types = 
+    TIsolated(TImmutable(TTarget(Local(id), trig_types)))
+let remote_addr id ip port trig_types =
+    TIsolated(TImmutable(TTarget(Remote(id, ip, port), trig_types)))
+
 (* Helper functions to create K3 AST nodes more easily *)
 
 let meta = 0    (* we fill meta with a default value *)

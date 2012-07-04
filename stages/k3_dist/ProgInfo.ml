@@ -21,7 +21,7 @@ type trig_data_t
   = trig_id_t * string * (id_t * value_type_t) list * stmt_id_t list
 
   (* map_id, map_name, parameters *)
-type map_data_t = map_id_t * string * (id_t * value_type_t) list
+type map_data_t = map_id_t * string * value_type_t list
 
 type prog_data_t = trig_data_t list * stmt_data_t list * map_data_t list
 
@@ -154,16 +154,13 @@ let find_map_bindings_in_stmt (p:prog_data_t) (stmt_id:stmt_id_t) (map_id:map_id
     end
 
 let map_name_of p map_id = 
-  let (_, name, _) = find_map p map_id in
-  name
+  let (_, name, _) = find_map p map_id in name
 
 let trigger_of_stmt p stmt_id =
-  let (_, trig, _, _, _) = find_stmt p stmt_id in
-  trig
+  let (_, trig, _, _, _) = find_stmt p stmt_id in trig
 
 let map_types_for p map_id = 
-  let (_, _, vars) = find_map p map_id in
-  extract_arg_types vars
+  let (_, _, vars) = find_map p map_id in vars
 
 (* returns a k3 list of maybes that has the relevant map pattern *)
 let partial_key_from_bound (p:prog_data_t) (stmt_id:stmt_id_t) (map_id:map_id_t) = 

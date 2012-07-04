@@ -13,7 +13,7 @@ type stmt_data_t =
     (map_id_t * map_var_binding_t list) list
 type trig_data_t =
     trig_id_t * string * (K3.id_t * K3.value_type_t) list * stmt_id_t list
-type map_data_t = map_id_t * string * (K3.id_t * K3.value_type_t) list
+type map_data_t = map_id_t * string * K3.value_type_t list
 type prog_data_t = trig_data_t list * stmt_data_t list * map_data_t list
 
 (* Utility functions using this data structure *)

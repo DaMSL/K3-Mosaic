@@ -128,10 +128,12 @@ let add_delta_to_buffer_for_map p map_id =
   (* stmt_cntrs - (vid, stmt_id, counter) *)
 let stmt_cntrs_name = "stmt_cntrs"
 let stmt_cntrs = mk_var stmt_cntrs_name
-let stmt_cntrs_type = wrap_tlist_mut @: wrap_ttuple_mut @: 
+let stmt_cntrs_type = wrap_tlist_mut @: wrap_ttuple_mut 
     [vid_type_mut; t_int_mut; t_int_mut]
 let stmt_cntrs_code = Global (stmt_cntrs_name, TValue(stmt_cntrs_type), None)  
 
+(* Just so we can typecheck, we make all of these K3 functions foreign for now
+ *)
 
 (* k3 functions needed *)
 (*
@@ -142,6 +144,7 @@ let stmt_cntrs_code = Global (stmt_cntrs_name, TValue(stmt_cntrs_type), None)
 "addr_for_send_push": takes stmt_id, map_id and returns addr of send_push
   trigger
  *)
+
 
 let send_fetch_trig p trig_name =
   let send_fetches_of_rhs_maps  =
