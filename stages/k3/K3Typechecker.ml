@@ -122,9 +122,9 @@ let rec assignable t_l t_r =
     let t_lb = base_of t_l in
     let t_rb = base_of t_r in
     match (t_lb, t_rb) with
-    | TMaybe(t_lm), TMaybe(t_rm) when assignable t_lm t_rm -> true
-    | TTuple(t_ls), TTuple(t_rs) when List.for_all2 assignable t_ls t_rs -> true
-    | TCollection(t_lc, t_le), TCollection(t_rc, t_re) when assignable t_le t_re -> true
+    | TMaybe(t_lm), TMaybe(t_rm) -> assignable t_lm t_rm
+    | TTuple(t_ls), TTuple(t_rs) -> List.for_all2 assignable t_ls t_rs
+    | TCollection(t_lc, t_le), TCollection(t_rc, t_re) -> assignable t_le t_re
     | _ when t_lb = t_rb -> true
     | _ -> false
 
@@ -311,13 +311,12 @@ let rec deduce_expr_type cur_env utexpr =
         | Aggregate ->
             let t_a, t_r = bind 0 <| function_of |> type_erroru 46 in
             let t_z = bind 1 <| value_of |> type_erroru 47 in
-            let t_c, t_e = 
-              bind 2 <| collection_of +++ base_of %++ value_of |> type_erroru 48 in
+            let t_c, t_e = bind 2 <| collection_of +++ base_of %++ value_of |>
+                type_erroru 48 in
             if not (t_a <~ canonical (TTuple([t_z; t_e]))) 
-              then type_erroru 49 () 
-            else if not (t_a <~ canonical (TTuple([t_a; t_r]))) 
-              then type_erroru 50 () 
-            else TValue(t_z)
+            then type_erroru 49 () else
+            if not (t_a <~ canonical (TTuple([t_r; t_e]))) 
+            then type_erroru 50 () else TValue(t_z)
 
         | GroupByAggregate ->
             let t_ga, t_gr = bind 0 <| function_of |> type_erroru 51 in

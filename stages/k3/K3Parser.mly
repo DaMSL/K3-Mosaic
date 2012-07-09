@@ -207,7 +207,7 @@ expr:
     | annotation { $1 }
 
     | SEND LPAREN variable COMMA tuple RPAREN { mkexpr Send [mkexpr (Var($3)) []; $5] }
-    | expr LPAREN expr RPAREN { mkexpr Apply [$1; $3] }
+    | expr LPAREN tuple RPAREN { mkexpr Apply [$1; $3] }
 ;
 
 expr_list:
