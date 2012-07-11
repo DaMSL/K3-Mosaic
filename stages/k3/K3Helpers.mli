@@ -158,6 +158,7 @@ val mk_assign :
 val mk_send :
   ((int * K3.expr_tag_t) * int) Tree.tree_t ->
   ((int * K3.expr_tag_t) * int) Tree.tree_t ->
+  ((int * K3.expr_tag_t) * int) Tree.tree_t ->
   ((int * K3.expr_tag_t) * int) Tree.tree_t
 
 (* extract only the types from a list of (id, type) *)

@@ -5,11 +5,6 @@ open Tree
 (* Identifiers *)
 type id_t = string
 
-(* Addresses *)
-type address_t
-    = Local     of id_t
-    | Remote    of id_t * id_t * int
-
 type container_type_t
     = TSet
     | TBag
@@ -26,7 +21,8 @@ type base_type_t
     | TMaybe        of value_type_t
     | TTuple        of value_type_t list
     | TCollection   of container_type_t * value_type_t
-    | TTarget       of address_t * base_type_t
+    | TAddress
+    | TTarget       of base_type_t
 
 and mutable_type_t
     = TMutable         of base_type_t
@@ -45,6 +41,8 @@ type arg_t
     = AVar      of id_t * value_type_t
     | ATuple    of (id_t * value_type_t) list
 
+type c_address = string * int (* IP * port *)
+
 (* Constants *)
 type constant_t
     = CUnit
@@ -53,6 +51,8 @@ type constant_t
     | CInt      of int
     | CFloat    of float
     | CString   of string
+    | CAddress of c_address
+    | CTarget of id_t             (* trigger name *)
     | CNothing
 
 (* Expressions *)
@@ -176,7 +176,7 @@ type expr_tag_t
     | Assign
     | Deref
 
-    (* Send(a:TTarget(N, T), args:T): Send a message of type `T' to target `a'. *)
+    (* Send(a:TTarget(T), b:TAddress, args:T): Send a message of type `T' to target `a'. *)
     | Send
 
 (* Expression Tree *)

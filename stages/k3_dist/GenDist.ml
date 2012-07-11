@@ -132,16 +132,20 @@ let stmt_cntrs_type = wrap_tlist_mut @: wrap_ttuple_mut
     [vid_type_mut; t_int_mut; t_int_mut]
 let stmt_cntrs_code = Global (stmt_cntrs_name, TValue(stmt_cntrs_type), None)  
 
+let local_address = mk_var "local_address" (* for type checking *)
+
 (* Just so we can typecheck, we make all of these K3 functions foreign for now
  *)
 
+
 (* k3 functions needed *)
 (*
+"local_address" : TAddress
+"peer_list" : (TInt * TAddress) list
 "route_to_map_"^map_id returns ip
 "shuffle_map_"^map_id^"_to_map_"map_id takes maybe tuples and a pattern maybe
   tuple and returns a tuple
-"promote_address" -> Local() -> ip -> address_t
-"addr_for_send_push": takes stmt_id, map_id and returns addr of send_push
+"trig_for_send_push": takes stmt_id, map_id and returns addr of send_push
   trigger
  *)
 
@@ -154,10 +158,8 @@ let send_fetch_trig p trig_name =
           "stmt_map_ids", wrap_tlist @: wrap_ttuple [t_int; t_int]]
         )
         (mk_send 
-          (mk_apply 
-            (mk_var "promote_address")
-            (mk_tuple [mk_var @: rcv_fetch_name_of_t p trig_name; mk_var "ip"])
-          ) 
+          (mk_var @: rcv_fetch_name_of_t p trig_name)
+          (mk_var "ip")
           (mk_tuple @:
             args_of_t_as_vars_with_v p trig_name@ 
             [mk_var "stmt_map_ids"]
@@ -218,15 +220,9 @@ let send_completes_for_stmts_with_no_fetch =
         [mk_iter 
           (mk_lambda (AVar("ip", ip_type))
             (mk_send
-              (mk_apply 
-                (mk_var "promote_address")
-                (mk_tuple 
-                  [mk_var complete_trig_name; mk_var "ip"]
-                )
-              )
-              (mk_tuple @:
-                args_of_t_as_vars p trig_name
-              )
+              (mk_var complete_trig_name)
+              (mk_var "ip")
+              (mk_tuple @: args_of_t_as_vars p trig_name)
             )
           )
           (mk_apply (mk_var route_fn) (mk_tuple key))
@@ -250,12 +246,8 @@ let send_puts =
       (ATuple["ip", ip_type; 
         "stmt_id_cnt_list", wrap_tlist @: wrap_ttuple [t_int; t_int]])
       (mk_send
-        (mk_apply
-          (mk_var "promote_address")
-          (mk_tuple
-            [mk_var @: rcv_put_name_of_t p trig_name; mk_var "ip"]
-          )
-        )
+        (mk_var @: rcv_put_name_of_t p trig_name)
+        (mk_var "ip")
         (mk_tuple @: mk_var "stmt_id_cnt_list"::
           args_of_t_as_vars_with_v p trig_name
         )
@@ -368,9 +360,10 @@ let rcv_fetch_trig p trig_name =
            * the same set of bound variables. *)
           (mk_send
             (mk_apply
-              (mk_var "addr_for_send_push") (* global func *)
+              (mk_var "trig_for_send_push") (* global func *)
               (mk_tuple [mk_var "stmt_id"; mk_var "map_id"])
             )
+            local_address
             (mk_tuple @: args_of_t_as_vars_with_v p trig_name)
           )
         )
@@ -438,12 +431,8 @@ let send_push_stmt_map_trig p trig_name =
           (mk_iter
             (mk_lambda (ATuple["ip", t_int; "tuples", rhs_map_types])
               (mk_send
-                (mk_apply
-                  (mk_var "promote_address")
-                  (mk_tuple [mk_var @: rcv_push_name_of_t p trig_name stmt_id
-                    rhs_map_id; mk_var "ip"]
-                  )
-                )
+                (mk_var @: rcv_push_name_of_t p trig_name stmt_id rhs_map_id)
+                (mk_var "ip")
                 (mk_tuple @: mk_var "tuples"::args_of_t_as_vars p trig_name)
               )
             )
@@ -549,6 +538,7 @@ List.fold_left
                (* Send to local do_complete *)
                (mk_send
                  (mk_var @: do_complete_name_of_t p trig_name stmt_id)
+                 local_address
                  (mk_tuple @: args_of_t_as_vars_with_v p trig_name)
                )
                (mk_const CUnit) (* do nothing *)
@@ -635,13 +625,9 @@ match trigs_stmts_with_rhs_map with [] -> [] | _ ->
                   (mk_lambda 
                     (ATuple["ip", ip_type; "delta_tuples", tuple_types])
                     (mk_send
-                      (mk_apply
-                        (mk_var "promote_address")
-                        (mk_tuple
-                          [mk_var @: rcv_corrective_name_of_t p target_trig
-                            target_stmt target_map; mk_var "ip"]
-                        )
-                      )
+                      (mk_var @: rcv_corrective_name_of_t p target_trig
+                        target_stmt target_map) 
+                      (mk_var "ip")
                       (mk_var "delta_tuples")
                     )
                   )
@@ -783,10 +769,11 @@ List.fold_left
                 (mk_var "vid")
               )
               (mk_send
-                (mk_var @: do_corrective_name_of_t p trig_name stmt_id) @:
-                mk_tuple @:
-                  args_of_t_as_vars_with_v p trig_name @
+                (mk_var @: do_corrective_name_of_t p trig_name stmt_id) 
+                local_address
+                (mk_tuple @: args_of_t_as_vars_with_v p trig_name @
                   [mk_var "delta_tuples"]
+                )
               )
             )
             (mk_const CUnit) (* else *)

@@ -12,7 +12,7 @@ let iso_to_contained typ =
     | TMaybe(v) -> TMaybe(handle_value_type v)
     | TTuple(vl) -> TTuple(List.map (fun v -> handle_value_type v) vl)
     | TCollection(c, v) -> TCollection(c, handle_value_type v)
-    | TTarget(a, b) -> TTarget(a, handle_base_type b)
+    | TTarget(b) -> TTarget(handle_base_type b)
     | x -> x
   and handle_mutable_type m = match m with
     | TMutable(b) -> TMutable(handle_base_type b)
@@ -40,12 +40,6 @@ let wrap_tlist_mut typ =
 (* wrap a type in an immutable tuple *)
 let wrap_ttuple typ = TIsolated(TImmutable(TTuple(typ)))
 let wrap_ttuple_mut typ = TIsolated(TMutable(TTuple(typ)))
-
-(* local address *)
-let local_addr id trig_types = 
-    TIsolated(TImmutable(TTarget(Local(id), trig_types)))
-let remote_addr id ip port trig_types =
-    TIsolated(TImmutable(TTarget(Remote(id, ip, port), trig_types)))
 
 (* Helper functions to create K3 AST nodes more easily *)
 
@@ -147,9 +141,9 @@ let mk_assign left right =
     mk_stree Assign [left; right]
 ;;
 
-(* target:TTarget(N,T) args:T *)
-let mk_send target args =
-    mk_stree Send [target; args]
+(* target:TTarget(T) address:TAdress args:T *)
+let mk_send target address args =
+    mk_stree Send [target; address; args]
 ;;
 
 (* Macros to do more complex tasks ---- *)
