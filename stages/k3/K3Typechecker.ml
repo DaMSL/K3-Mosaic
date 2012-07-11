@@ -57,6 +57,7 @@ let check_tag_arity tag children =
         | Deref -> 1
 
         | Send -> 2
+        | BindTarget -> 2
     in length = correct_arity
 
 type 'a texpr_t = (type_t * 'a) expr_t
@@ -148,6 +149,8 @@ let deduce_constant_type c =
         | CFloat(_) -> TFloat
         | CString(_) -> TString
         | CNothing -> TMaybe(TIsolated(TImmutable(TUnknown)))
+        | CAddress(_, typ) -> TAddress(typ)
+        | CTarget(_, _, typ) -> TTarget(typ)
     in canonical constant_type
 
 let deduce_arg_type a =
@@ -406,11 +409,20 @@ let rec deduce_expr_type cur_env utexpr =
             let t_a = bind 1 <| value_of |> type_erroru 83 in
             let t_b = (
                 match t_t with
-                | TTarget(t_addr, t_arg) -> t_arg
+                | TTarget(t_arg) -> t_arg
                 | _ -> type_erroru 84 ()
             ) in 
             if canonical t_b === t_a then TValue(canonical TUnit) 
             else type_erroru 85 ()
+
+        | BindTarget ->
+            let t_t = bind 0 <| base_of %++ value_of |> type_erroru 86 in
+            let t_a = bind 1 <| base_of %++ value_of |> type_erroru 87 in
+            if t_a <> TString then type_erroru 88 ()
+            else match t_t with
+                | TAddress(t_arg) -> TValue(canonical @: TTarget(t_arg))
+                | _ -> type_erroru 88 ()
+
     in attach_type current_type
 
 let rec deduce_program_type env program = match program with [] -> [] | s :: ss -> (
@@ -426,7 +438,7 @@ let rec deduce_program_type env program = match program with [] -> [] | s :: ss 
             | Foreign(i, t) -> (Foreign(i, t), (i, t) :: env)
             | Trigger(id, args, locals, body) ->
                 let self_bindings = 
-                  (id, TValue(canonical (TTarget(Local(id), base_of (deduce_arg_type args))))) in
+                  (id, TValue(canonical (TAddress(base_of (deduce_arg_type args))))) in
                 let arg_bindings = (
                     match args with
                     | AVar(i, t) -> [(i, TValue(t))]

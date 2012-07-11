@@ -58,29 +58,10 @@ let tag_str ?(extra="") t ch_t =
     ^ String.concat ", " ch_t
     ^ ")"
 
-(* Limited length primitives *)
-let string_of_address a = match a with
-    | Local(i) -> "Local("^i^")"
-    | Remote(i, h, p) -> "Remote("^i^"@"^h^":"^string_of_int p^")"
-
 let string_of_container_type t_c = match t_c with
     | TSet  -> "TSet"
     | TBag  -> "TBag"
     | TList -> "TList"
-
-let string_of_const c = match c with
-    | CUnit      -> "CUnit"
-    | CUnknown   -> "CUnknown"
-    | CBool(b)   -> "CBool("^string_of_bool(b)^")"
-    | CInt(i)    -> "CInt("^string_of_int(i)^")"
-    | CFloat(f)  -> "CFloat("^string_of_float(f)^")"
-    | CString(s) -> "CString(\""^s^"\")"
-    | CNothing   -> "CNothing"
-
-let string_of_stop_behavior_t s = match s with
-    | UntilCurrent -> "UntilCurrent"
-    | UntilEmpty -> "UntilEmpty"
-    | UntilEOF -> "UntilEOF"
 
 (* Flat stringification *)
 let rec flat_string_of_base_type t = match t with
@@ -100,8 +81,11 @@ let rec flat_string_of_base_type t = match t with
         tag_str "TCollection"
           [string_of_container_type t_c; flat_string_of_value_type t_e]
 
-    | TTarget(a, t) ->
-        tag_str "TTarget" [string_of_address a; flat_string_of_base_type t]
+    | TAddress(t) ->
+        tag_str "TAddress" [flat_string_of_base_type t]
+
+    | TTarget(t) ->
+        tag_str "TTarget" [flat_string_of_base_type t]
 
 and flat_string_of_mutable_type mt = match mt with
     | TMutable(bt) -> "TMutable("^flat_string_of_base_type bt^")"
@@ -117,6 +101,23 @@ and flat_string_of_type t = match t with
           [flat_string_of_value_type t_a; flat_string_of_value_type t_r]
     
     | TValue(t) -> flat_string_of_value_type t
+
+let string_of_const c = match c with
+    | CUnit        -> "CUnit"
+    | CUnknown     -> "CUnknown"
+    | CBool(b)     -> "CBool("^string_of_bool(b)^")"
+    | CInt(i)      -> "CInt("^string_of_int(i)^")"
+    | CFloat(f)    -> "CFloat("^string_of_float(f)^")"
+    | CString(s)   -> "CString(\""^s^"\")"
+    | CNothing     -> "CNothing"
+    (* add pretty support for types here *)
+    | CAddress(i,t)  -> "CAddress("^i^","^flat_string_of_base_type t^")"
+    | CTarget(i,s,t) -> "CTarget("^i^" @ "^s^","^flat_string_of_base_type t^")"
+
+let string_of_stop_behavior_t s = match s with
+    | UntilCurrent -> "UntilCurrent"
+    | UntilEmpty -> "UntilEmpty"
+    | UntilEOF -> "UntilEOF"
 
 let flat_string_of_arg a = match a with
     | AVar(i, t) -> tag_str "AVar" [i; flat_string_of_type (TValue t)]
@@ -160,16 +161,17 @@ let flat_string_of_expr_tag tag children =
     | GroupByAggregate -> my_tag "GroupByAggregate"
     | Sort             -> my_tag "Sort"
     
-    | Slice   -> my_tag "Slice"
-    | Insert  -> my_tag "Insert"
-    | Update  -> my_tag "Update"
-    | Delete  -> my_tag "Delete"
-    | Peek    -> my_tag "Peek"
+    | Slice      -> my_tag "Slice"
+    | Insert     -> my_tag "Insert"
+    | Update     -> my_tag "Update"
+    | Delete     -> my_tag "Delete"
+    | Peek       -> my_tag "Peek"
 
-    | Assign  -> my_tag "Assign"
-    | Deref   -> my_tag "Deref"
+    | Assign     -> my_tag "Assign"
+    | Deref      -> my_tag "Deref"
 
-    | Send    -> my_tag "Send"
+    | Send       -> my_tag "Send"
+    | BindTarget -> my_tag "BindTarget"
 
 (* TODO: Why can't this function be point-free? *)
 let flat_string_of_expr expr =
@@ -296,8 +298,11 @@ and print_base_type t =
         my_tag "TCollection"
           [lps (string_of_container_type t_c); lazy_value_type t_e]
 
-    | TTarget(a, t) ->
-        my_tag "TTarget" [lps (string_of_address a); lazy_base_type t]
+    | TAddress(t) ->
+        my_tag "TAddress" [lazy_base_type t]
+
+    | TTarget(t) ->
+        my_tag "TTarget" [lazy_base_type t]
 
 and print_mutable_type mt =
   let my_tag t bt = pretty_tag_str Hint "" t [lazy_base_type bt]
@@ -367,16 +372,17 @@ and print_expr_tag tag lazy_children =
     | GroupByAggregate -> my_tag "GroupByAggregate"
     | Sort             -> my_tag "Sort"
     
-    | Slice   -> my_tag "Slice"
-    | Insert  -> my_tag "Insert"
-    | Update  -> my_tag "Update"
-    | Delete  -> my_tag "Delete"
-    | Peek    -> my_tag "Peek"
+    | Slice      -> my_tag "Slice"
+    | Insert     -> my_tag "Insert"
+    | Update     -> my_tag "Update"
+    | Delete     -> my_tag "Delete"
+    | Peek       -> my_tag "Peek"
 
-    | Assign  -> my_tag "Assign"
-    | Deref   -> my_tag "Deref"
+    | Assign     -> my_tag "Assign"
+    | Deref      -> my_tag "Deref"
 
-    | Send    -> my_tag "Send"
+    | Send       -> my_tag "Send"
+    | BindTarget -> my_tag "BindTarget"
 
 
 and print_expr ?(print_id=false) expr =
