@@ -141,9 +141,9 @@ let mk_assign left right =
     mk_stree Assign [left; right]
 ;;
 
-(* target:TTarget(N,T) args:T *)
-let mk_send target args =
-    mk_stree Send [target; args]
+(* target:TTarget(T) address:TAdress args:T *)
+let mk_send target address args =
+    mk_stree Send [target; address; args]
 ;;
 
 (* Macros to do more complex tasks ---- *)
