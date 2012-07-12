@@ -81,8 +81,8 @@ let rec flat_string_of_base_type t = match t with
         tag_str "TCollection"
           [string_of_container_type t_c; flat_string_of_value_type t_e]
 
-    | TAddress(t) ->
-        tag_str "TAddress" [flat_string_of_base_type t]
+    | TAddress(s) ->
+        tag_str "TAddress" [s]
 
     | TTarget(t) ->
         tag_str "TTarget" [flat_string_of_base_type t]
@@ -110,9 +110,6 @@ let string_of_const c = match c with
     | CFloat(f)    -> "CFloat("^string_of_float(f)^")"
     | CString(s)   -> "CString(\""^s^"\")"
     | CNothing     -> "CNothing"
-    (* add pretty support for types here *)
-    | CAddress(i,t)  -> "CAddress("^i^","^flat_string_of_base_type t^")"
-    | CTarget(i,s,t) -> "CTarget("^i^" @ "^s^","^flat_string_of_base_type t^")"
 
 let string_of_stop_behavior_t s = match s with
     | UntilCurrent -> "UntilCurrent"
@@ -171,7 +168,6 @@ let flat_string_of_expr_tag tag children =
     | Deref      -> my_tag "Deref"
 
     | Send       -> my_tag "Send"
-    | BindTarget -> my_tag "BindTarget"
 
 (* TODO: Why can't this function be point-free? *)
 let flat_string_of_expr expr =
@@ -298,8 +294,8 @@ and print_base_type t =
         my_tag "TCollection"
           [lps (string_of_container_type t_c); lazy_value_type t_e]
 
-    | TAddress(t) ->
-        my_tag "TAddress" [lazy_base_type t]
+    | TAddress(s) ->
+        my_tag "TAddress" [lps s]
 
     | TTarget(t) ->
         my_tag "TTarget" [lazy_base_type t]
@@ -382,8 +378,6 @@ and print_expr_tag tag lazy_children =
     | Deref      -> my_tag "Deref"
 
     | Send       -> my_tag "Send"
-    | BindTarget -> my_tag "BindTarget"
-
 
 and print_expr ?(print_id=false) expr =
   let id_pr e = if print_id then print_expr_id @: id_of_expr e else () in

@@ -12,7 +12,6 @@ let iso_to_contained typ =
     | TMaybe(v) -> TMaybe(handle_value_type v)
     | TTuple(vl) -> TTuple(List.map (fun v -> handle_value_type v) vl)
     | TCollection(c, v) -> TCollection(c, handle_value_type v)
-    | TAddress(b) -> TAddress(handle_base_type b)
     | TTarget(b) -> TTarget(handle_base_type b)
     | x -> x
   and handle_mutable_type m = match m with
