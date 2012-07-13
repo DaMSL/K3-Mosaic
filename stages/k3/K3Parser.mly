@@ -206,7 +206,9 @@ expr:
     | mutation { $1 }
     | annotation { $1 }
 
-    | SEND LPAREN variable COMMA tuple RPAREN { mkexpr Send [mkexpr (Var($3)) []; $5] }
+    | SEND LPAREN variable COMMA address COMMA tuple RPAREN {
+        mkexpr Send [mkexpr (Var($3)) []; mkexpr (Const($5)) []; $7]
+      }
     | expr LPAREN tuple RPAREN { mkexpr Apply [$1; $3] }
 ;
 
@@ -269,6 +271,10 @@ collection:
 
 variable:
     | IDENTIFIER { $1 }
+;
+
+address:
+    | IDENTIFIER COLON INTEGER { CAddress($1,$3) }
 ;
 
 arithmetic:
