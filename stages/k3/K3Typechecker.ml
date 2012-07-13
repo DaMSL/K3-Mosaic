@@ -138,19 +138,22 @@ let rec passable t_l t_r =
 
 let (<~) = passable
 
-let deduce_constant_type trig_env c =
-    let constant_type =
-        match c with
-        | CUnit -> TUnit
-        | CUnknown -> TUnknown
-        | CBool(_) -> TBool
-        | CInt(_) -> TInt
-        | CFloat(_) -> TFloat
-        | CString(_) -> TString
-        | CAddress(_) -> TAddress
-        | CTarget(id) -> TTarget(List.assoc id trig_env) (* retrieve type from trig env *)
-        | CNothing -> TMaybe(TIsolated(TImmutable(TUnknown)))
-    in canonical constant_type
+let deduce_constant_type id trig_env c =
+  let type_erroru = type_error id in (* pre-curry the type error *)
+  let constant_type =
+      match c with
+      | CUnit -> TUnit
+      | CUnknown -> TUnknown
+      | CBool(_) -> TBool
+      | CInt(_) -> TInt
+      | CFloat(_) -> TFloat
+      | CString(_) -> TString
+      | CAddress(_) -> TAddress
+      | CTarget(id) ->
+          (* retrieve type from trig env *)
+          TTarget((List.assoc id trig_env) <| base_of %++ value_of |> type_erroru 1000)
+      | CNothing -> TMaybe(TIsolated(TImmutable(TUnknown)))
+  in canonical constant_type
 
 let deduce_arg_type a =
     match a with
@@ -178,7 +181,7 @@ let rec deduce_expr_type trig_env cur_env utexpr =
 
     let current_type =
         match tag with
-        | Const(c) -> TValue(deduce_constant_type trig_env c)
+        | Const(c) -> TValue(deduce_constant_type uuid trig_env c)
         | Var(id) -> (try List.assoc id env with Not_found -> type_erroru 1 ())
         | Tuple ->
             let child_types = List.map (fun e -> type_of e <| value_of |> type_erroru 2) 
@@ -420,13 +423,14 @@ let rec deduce_expr_type trig_env cur_env utexpr =
     in attach_type current_type
 
 let deduce_program_type program = 
-let rec build_trig_env trig_env prog = match prog with
-    [] -> []
-    | Declaration (Trigger(id, args, locals, body)) :: ss -> 
-        build_trig_env ((id, TTarget(base_of @: deduce_arg_type args))::trig_env) ss
+  let rec build_trig_env trig_env prog = match prog with
+    [] -> trig_env
+    | Declaration (Trigger(id, args, locals, body)) :: ss ->
+        let t = TValue(canonical @: TTarget(base_of @: deduce_arg_type args))
+        in build_trig_env ((id, t)::trig_env) ss
     | _ :: ss -> build_trig_env trig_env ss
-in
-let rec deduce_prog_t trig_env env prog = match prog with 
+  in
+  let rec deduce_prog_t trig_env env prog = match prog with 
     [] -> [] 
     | Instruction(i) :: ss -> deduce_prog_t trig_env env ss
     | Declaration(d) :: ss -> 
@@ -453,7 +457,7 @@ let rec deduce_prog_t trig_env env prog = match prog with
         end 
         in
         Declaration(nd) :: deduce_prog_t trig_env nenv ss
-in
-(* do a first pass, collecting trigger types *)
-let trig_env = build_trig_env [] program in
-deduce_prog_t [] trig_env program
+  in
+  (* do a first pass, collecting trigger types *)
+  let trig_env = build_trig_env [] program in
+  deduce_prog_t [] trig_env program
