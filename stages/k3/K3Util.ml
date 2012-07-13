@@ -81,8 +81,7 @@ let rec flat_string_of_base_type t = match t with
         tag_str "TCollection"
           [string_of_container_type t_c; flat_string_of_value_type t_e]
 
-    | TAddress(s) ->
-        tag_str "TAddress" [s]
+    | TAddress -> "TAddress"
 
     | TTarget(t) ->
         tag_str "TTarget" [flat_string_of_base_type t]
@@ -109,6 +108,8 @@ let string_of_const c = match c with
     | CInt(i)      -> "CInt("^string_of_int(i)^")"
     | CFloat(f)    -> "CFloat("^string_of_float(f)^")"
     | CString(s)   -> "CString(\""^s^"\")"
+    | CAddress(ip,p) -> "CAddress("^ip^":"^string_of_int p^")"
+    | CTarget(id)  -> "CTarget("^id^")"
     | CNothing     -> "CNothing"
 
 let string_of_stop_behavior_t s = match s with
@@ -294,8 +295,7 @@ and print_base_type t =
         my_tag "TCollection"
           [lps (string_of_container_type t_c); lazy_value_type t_e]
 
-    | TAddress(s) ->
-        my_tag "TAddress" [lps s]
+    | TAddress -> term_tag "TAddress"
 
     | TTarget(t) ->
         my_tag "TTarget" [lazy_base_type t]

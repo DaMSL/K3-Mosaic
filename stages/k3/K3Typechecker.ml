@@ -138,7 +138,7 @@ let rec passable t_l t_r =
 
 let (<~) = passable
 
-let deduce_constant_type c =
+let deduce_constant_type trig_env c =
     let constant_type =
         match c with
         | CUnit -> TUnit
@@ -147,6 +147,8 @@ let deduce_constant_type c =
         | CInt(_) -> TInt
         | CFloat(_) -> TFloat
         | CString(_) -> TString
+        | CAddress(_) -> TAddress
+        | CTarget(id) -> TTarget(List.assoc id trig_env) (* retrieve type from trig env *)
         | CNothing -> TMaybe(TIsolated(TImmutable(TUnknown)))
     in canonical constant_type
 
@@ -155,7 +157,7 @@ let deduce_arg_type a =
     | AVar(i, t) -> t
     | ATuple(its) -> canonical (TTuple(snd(List.split its)))
 
-let rec deduce_expr_type cur_env utexpr =
+let rec deduce_expr_type trig_env cur_env utexpr =
     let ((uuid, tag), aux), untyped_children = decompose_tree utexpr in
     let type_erroru = type_error uuid in (* pre-curry the type error *)
 
@@ -170,13 +172,13 @@ let rec deduce_expr_type cur_env utexpr =
         | _ -> cur_env
     in
 
-    let typed_children = List.map (deduce_expr_type env) untyped_children in
+    let typed_children = List.map (deduce_expr_type trig_env env) untyped_children in
     let attach_type t = mk_tree (((uuid, tag), (t, aux)), typed_children) in
     let bind n = type_of (List.nth typed_children n) in
 
     let current_type =
         match tag with
-        | Const(c) -> TValue(deduce_constant_type c)
+        | Const(c) -> TValue(deduce_constant_type trig_env c)
         | Var(id) -> (try List.assoc id env with Not_found -> type_erroru 1 ())
         | Tuple ->
             let child_types = List.map (fun e -> type_of e <| value_of |> type_erroru 2) 
@@ -417,31 +419,41 @@ let rec deduce_expr_type cur_env utexpr =
 
     in attach_type current_type
 
-let rec deduce_program_type env program = match program with [] -> [] | s :: ss -> (
-    match s with
-    | Instruction(i) -> deduce_program_type env ss
-    | Declaration(d) ->
-        let nd, nenv = (
-            match d with
-            | Global(i, t, Some init) ->
-                let typed_init = deduce_expr_type env init
-                in (Global(i, t, Some typed_init), (i, type_of typed_init) :: env)
-            | Global(i, t, None) -> (Global(i, t, None), (i, t) :: env)
-            | Foreign(i, t) -> (Foreign(i, t), (i, t) :: env)
-            | Trigger(id, args, locals, body) ->
-                let self_bindings = 
-                  (id, TValue(canonical (TTarget(base_of (deduce_arg_type args))))) in
-                let arg_bindings = (
-                    match args with
-                    | AVar(i, t) -> [(i, TValue(t))]
-                    | ATuple(its) -> List.map (fun (i, t) -> (i, TValue(t))) its
-                ) in
-                let local_bindings = List.map (fun (i, vt) -> (i, TValue(vt))) locals in
-                let inner_env = self_bindings :: arg_bindings @ local_bindings @ env in
-                let typed_body = deduce_expr_type inner_env body in
-                if not (type_of typed_body <| value_of |> type_error (-1) 90 === 
-                  canonical TUnit) then type_error (-1) 91 () else
-                (Trigger(id, args, locals, typed_body), self_bindings :: env)
-        ) in
-        Declaration(nd) :: deduce_program_type nenv ss
-    )
+let deduce_program_type program = 
+let rec build_trig_env trig_env prog = match prog with
+    [] -> []
+    | Declaration (Trigger(id, args, locals, body)) :: ss -> 
+        build_trig_env ((id, TTarget(base_of @: deduce_arg_type args))::trig_env) ss
+    | _ :: ss -> build_trig_env trig_env ss
+in
+let rec deduce_prog_t trig_env env prog = match prog with 
+    [] -> [] 
+    | Instruction(i) :: ss -> deduce_prog_t trig_env env ss
+    | Declaration(d) :: ss -> 
+        let nd, nenv = begin match d with
+        | Global(i, t, Some init) ->
+            let typed_init = deduce_expr_type trig_env env init
+            in (Global(i, t, Some typed_init), (i, type_of typed_init) :: env)
+        | Global(i, t, None) -> (Global(i, t, None), (i, t) :: env)
+        | Foreign(i, t) -> (Foreign(i, t), (i, t) :: env)
+        | Trigger(id, args, locals, body) ->
+            let self_bindings = (id, 
+            TValue(canonical @: TTarget(base_of @: deduce_arg_type args))) in
+            let arg_bindings = (
+                match args with
+                | AVar(i, t) -> [(i, TValue(t))]
+                | ATuple(its) -> List.map (fun (i, t) -> (i, TValue(t))) its
+            ) in
+            let local_bindings = List.map (fun (i, vt) -> (i, TValue(vt))) locals in
+            let inner_env = self_bindings :: arg_bindings @ local_bindings @ env in
+            let typed_body = deduce_expr_type trig_env inner_env body in
+            if not (type_of typed_body <| value_of |> type_error (-1) 90 === 
+              canonical TUnit) then type_error (-1) 91 () else
+            (Trigger(id, args, locals, typed_body), self_bindings :: env)
+        end 
+        in
+        Declaration(nd) :: deduce_prog_t trig_env nenv ss
+in
+(* do a first pass, collecting trigger types *)
+let trig_env = build_trig_env [] program in
+deduce_prog_t [] trig_env program

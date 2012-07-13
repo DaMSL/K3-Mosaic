@@ -21,7 +21,7 @@ type base_type_t
     | TMaybe        of value_type_t
     | TTuple        of value_type_t list
     | TCollection   of container_type_t * value_type_t
-    | TAddress      of string
+    | TAddress
     | TTarget       of base_type_t
 
 and mutable_type_t
@@ -41,6 +41,8 @@ type arg_t
     = AVar      of id_t * value_type_t
     | ATuple    of (id_t * value_type_t) list
 
+type c_address = string * int (* IP * port *)
+
 (* Constants *)
 type constant_t
     = CUnit
@@ -49,6 +51,8 @@ type constant_t
     | CInt      of int
     | CFloat    of float
     | CString   of string
+    | CAddress of c_address
+    | CTarget of id_t
     | CNothing
 
 (* Expressions *)
