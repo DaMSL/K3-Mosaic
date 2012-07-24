@@ -3,8 +3,7 @@
 open Tree
 open K3
 
-exception MalformedTree
-exception TypeError of int * int (* uuid, location in program *)
+exception TypeError of int * string
 
 val mutable_of: value_type_t -> mutable_type_t
 val base_of: value_type_t -> base_type_t

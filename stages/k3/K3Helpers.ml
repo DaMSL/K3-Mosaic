@@ -23,14 +23,17 @@ let iso_to_contained typ =
   in
   handle_value_type typ
     
+(* the default type *)
+let canonical typ = TIsolated(TImmutable(typ))
+
 (* A type for simple immutable integers *)
-let t_int = TIsolated(TImmutable(TInt))
+let t_int = canonical TInt
 let t_int_mut = TIsolated(TMutable(TInt))
 
 (* wrap a type in a list *)
 let wrap_tlist typ = 
   let c = iso_to_contained typ in
-  TIsolated(TImmutable(TCollection(TList, c)))
+  canonical @: TCollection(TList, c)
 
 (* wrap a type in a mutable list *)
 let wrap_tlist_mut typ = 
@@ -38,7 +41,7 @@ let wrap_tlist_mut typ =
   TIsolated(TMutable(TCollection(TList, c)))
 
 (* wrap a type in an immutable tuple *)
-let wrap_ttuple typ = TIsolated(TImmutable(TTuple(typ)))
+let wrap_ttuple typ = canonical @: TTuple(typ)
 let wrap_ttuple_mut typ = TIsolated(TMutable(TTuple(typ)))
 
 (* Helper functions to create K3 AST nodes more easily *)
@@ -154,8 +157,7 @@ let extract_arg_types l = List.map (fun (_,typ) -> typ) l
 let extract_arg_names l = List.map (fun (nam,_) -> nam) l
 
 (* function to take a list of names and convert to K3 variables *)
-let convert_names_to_vars = 
-  List.map (fun x -> if x = "_" then mk_const CUnknown else mk_var x)
+let ids_to_vars = List.map (fun x -> mk_var x)
 
 (* strip the AVar or ATuple from a list of arguments *)
 let strip_args arg = match arg with
@@ -186,6 +188,12 @@ let mk_global_fn name input_names_and_types output_types expr =
       Some (mk_lambda (wrap_args input_names_and_types) expr)
     )
 ;;
+
+let mk_global_val name val_type = Global(name, TValue(val_type), None)
+
+let mk_foreign_fn name input_types output_types =
+  Foreign(name, TFunction(input_types, output_types))
+
 
 (* a lambda with 2 arguments for things like aggregation functions *)
 let mk_assoc_lambda arg1 arg2 expr =
@@ -241,7 +249,7 @@ let mk_let_many var_name_and_type_list var_values expr =
 (* returns code for a tuple where only the first new_size entries are taken *)
 (* allows adding to start_ids_types which contains ids and types *)
 let mk_reduced_tuple tup_name types new_size start_ids_types =
-    let start_vars = convert_names_to_vars (extract_arg_names start_ids_types)
+    let start_vars = ids_to_vars (extract_arg_names start_ids_types)
     in
     let list_size = List.length types in
     let size = if new_size > list_size then list_size else new_size in
@@ -254,7 +262,7 @@ let mk_reduced_tuple tup_name types new_size start_ids_types =
     mk_apply
       (mk_lambda 
         (ATuple(start_ids_types@ids_and_types))    
-        (mk_tuple @: start_vars@ convert_names_to_vars ids@ filler)
+        (mk_tuple @: start_vars@ ids_to_vars ids@ filler)
       )
       (mk_var tup_name)
 

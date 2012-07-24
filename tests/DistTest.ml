@@ -2,6 +2,7 @@ open K3
 open K3Util
 open K3Helpers
 open GenDist
+open K3Typechecker
 
 let (rst_p:ProgInfo.prog_data_t) =
   (* trigger data *)
@@ -22,7 +23,8 @@ let (rst_p:ProgInfo.prog_data_t) =
 let main() =
   let dist = gen_dist rst_p [] in
   print_endline(string_of_program dist ~print_id:true);
-  K3Typechecker.deduce_program_type dist
+  try K3Typechecker.deduce_program_type dist; ()
+  with TypeError(id, str) -> print_endline("\nType error:\n"^string_of_int id^",\n"^str)
 
 let _ = Printexc.print main;;
 

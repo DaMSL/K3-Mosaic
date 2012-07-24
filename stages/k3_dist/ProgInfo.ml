@@ -28,24 +28,29 @@ type prog_data_t = trig_data_t list * stmt_data_t list * map_data_t list
 
 
 (* --- helper functions to get information from the data structure --- *)
-let get_trig_data p = match p with
+let get_trig_data (p:prog_data_t) = match p with
   (trig, _, _) -> trig
 
 let get_stmt_data (p:prog_data_t) = match p with
   (_, stmt, _) -> stmt 
 
-let get_map_data p = match p with
+let get_map_data (p:prog_data_t) = match p with
   (_, _, map) -> map
  
-let get_trig_list p = 
+let get_trig_list (p:prog_data_t) = 
   List.map
   (fun (_, name, _, _) -> name)
   (get_trig_data p)
 
-let get_stmt_list p =
+let get_stmt_list (p:prog_data_t) =
     List.map
     (fun (id,_,_,_,_) -> id)
     (get_stmt_data p)
+
+let get_map_list (p:prog_data_t) =
+    List.map
+    (fun (id, _, _) -> id)
+    (get_map_data p)
  
 let find_trigger (p:prog_data_t) (tname:string) = 
   try
@@ -177,5 +182,6 @@ let partial_key_from_bound (p:prog_data_t) (stmt_id:stmt_id_t) (map_id:map_id_t)
       with Not_found -> "_"
     )
     range
-  in convert_names_to_vars names
+  in 
+  List.map (fun x -> if x = "_" then mk_const CNothing else mk_just @: mk_var x) names
                   
