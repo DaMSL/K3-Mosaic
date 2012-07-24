@@ -50,7 +50,7 @@
 
 %token AND OR NOT LT EQ LEQ NEQ GT GEQ
 
-%token BACKSLASH LRARROW RARROW LARROW
+%token BACKSLASH LRARROW RARROW LARROW MAPSTO
 
 %token COLON
 
@@ -151,6 +151,9 @@ isolated_base_type_expr:
     | TYPE { $1 }
     | LPAREN isolated_base_type_tuple RPAREN { $2 }
     | LBRACE contained_value_type_expr RBRACE { TCollection(TSet, $2) }
+    | LBRACE contained_value_type_expr MAPSTO contained_value_type_expr RBRACE {
+        TCollection(TMap, (TContained(TImmutable(TTuple([$2; $4])))))
+    }
     | LBRACEBAR contained_value_type_expr RBRACEBAR { TCollection(TBag, $2) }
     | LBRACKET contained_value_type_expr RBRACKET { TCollection(TList, $2) }
     | MAYBE isolated_value_type_expr { TMaybe($2) }
@@ -160,6 +163,9 @@ contained_base_type_expr:
     | TYPE { $1 }
     | LPAREN contained_base_type_tuple RPAREN { $2 }
     | LBRACE contained_value_type_expr RBRACE { TCollection(TSet, $2) }
+    | LBRACE contained_value_type_expr MAPSTO contained_value_type_expr RBRACE {
+        TCollection(TMap, (TContained(TImmutable(TTuple([$2; $4])))))
+    }
     | LBRACEBAR contained_value_type_expr RBRACEBAR { TCollection(TBag, $2) }
     | LBRACKET contained_value_type_expr RBRACKET { TCollection(TList, $2) }
     | MAYBE contained_value_type_expr { TMaybe($2) }
@@ -263,6 +269,7 @@ collection:
     | LBRACE RBRACE { mkexpr (Empty(mk_unknown_collection TSet)) [] }
     | LBRACEBAR RBRACEBAR { mkexpr (Empty(mk_unknown_collection TBag)) [] }
     | LBRACKET RBRACKET { mkexpr (Empty(mk_unknown_collection TList)) [] }
+    | LBRACE MAPSTO RBRACE { mkexpr (Empty(mk_unknown_collection TMap)) }
 
     | LBRACE expr_seq RBRACE { build_collection $2 (mk_unknown_collection TSet) }
     | LBRACEBAR expr_seq RBRACEBAR { build_collection $2 (mk_unknown_collection TBag) }
