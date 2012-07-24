@@ -36,7 +36,7 @@ let t_error uuid name msg () =
         | MTBad(t)          -> "Bad type "^flat_string_of_mutable_type t
         | TMsg(s)           -> s
     in
-    raise (TypeError(uuid, name^": "^extra^")" ))
+    raise (TypeError(uuid, name^": "^extra))
 
 let check_tag_arity tag children =
     let length = List.length children in
