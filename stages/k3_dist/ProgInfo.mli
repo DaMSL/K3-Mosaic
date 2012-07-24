@@ -17,8 +17,9 @@ type map_data_t = map_id_t * string * K3.value_type_t list
 type prog_data_t = trig_data_t list * stmt_data_t list * map_data_t list
 
 (* Utility functions using this data structure *)
-val get_trig_list : ('a * 'b * 'c * 'd) list * 'e * 'f -> 'b list
+val get_trig_list : prog_data_t -> string list
 val get_stmt_list : prog_data_t -> stmt_id_t list
+val get_map_list : prog_data_t -> map_id_t list
 val find_trigger : prog_data_t -> string -> trig_data_t
 val find_map : prog_data_t -> map_id_t -> map_data_t
 val find_stmt : prog_data_t -> stmt_id_t -> stmt_data_t

@@ -1,6 +1,7 @@
 (* Utility functions to enable easy manipulation of K3 AST trees *)
 
 (* easy access to the int type *)
+val canonical : K3.base_type_t -> K3.value_type_t
 val t_int : K3.value_type_t
 val t_int_mut : K3.value_type_t
 
@@ -168,7 +169,7 @@ val extract_arg_types : ('a * 'b) list -> 'b list
 val extract_arg_names : ('a * 'b) list -> 'a list
 
 (* take a list of ids and convert it to a list of vars *)
-val convert_names_to_vars :
+val ids_to_vars :
   K3.id_t list -> ((int * K3.expr_tag_t) * int) Tree.tree_t list
 val strip_args : K3.arg_t -> (K3.id_t * K3.value_type_t) list
 
@@ -178,12 +179,19 @@ val mk_has_member :
   ((int * K3.expr_tag_t) * int) Tree.tree_t ->
   K3.value_type_t -> ((int * K3.expr_tag_t) * int) Tree.tree_t
 
+(* macro to create a global value *)
+val mk_global_val : K3.id_t -> K3.value_type_t -> 'a K3.declaration_t
+
 (* macro to create a global function *)
 val mk_global_fn : 
   K3.id_t ->
   (K3.id_t * K3.value_type_t) list ->
   K3.value_type_t list ->
   ((int * K3.expr_tag_t) * int) Tree.tree_t -> int K3.declaration_t
+
+(* macro to declare a foreign function *)
+val mk_foreign_fn :
+  K3.id_t -> K3.value_type_t -> K3.value_type_t -> 'a K3.declaration_t
 
 (* macro to create an associative lambda ie a lambda with 2 args *)
 val mk_assoc_lambda :
