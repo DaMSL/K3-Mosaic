@@ -62,6 +62,7 @@ let string_of_container_type t_c = match t_c with
     | TSet  -> "TSet"
     | TBag  -> "TBag"
     | TList -> "TList"
+    | TMap  -> "TMap"
 
 (* Flat stringification *)
 let rec flat_string_of_base_type t = match t with
