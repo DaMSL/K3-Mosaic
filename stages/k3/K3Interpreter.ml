@@ -1,317 +1,272 @@
 open Tree
 open K3
 open K3Typechecker
+open K3Util
 
+exception RuntimeError of int
+
+(* TODO: remaining constant types, byte, string, addresses and targets *)
 type value_t
-    = VUnit
-    | VUnknown
+    = VUnknown
+    | VUnit
     | VBool of bool
-    | VByte of int
     | VInt of int
     | VFloat of float
-    | VString of string
     | VTuple of value_t list
-    | VRef of value_t ref
-    | VMaybe of value_t option
     | VSet of value_t list
     | VBag of value_t list
     | VList of value_t list
-    | VFunction of ((id_t * value_t) list -> value_t -> (id_t * value_t) list * value_t)
+    | VFunction of arg_t * int texpr_t
 
-exception RuntimeError
+(* Value stringification *)
+let rec string_of_value v =
+    match v with
+    | VUnknown -> "VUnknown"
+    | VUnit -> "VUnit"
+    | VBool(b) -> "VBool("^ string_of_bool b^")"
+    | VInt(i) -> "VInt("^ string_of_int i^")"
+    | VFloat(f) -> "VFloat("^ string_of_float f^")"
+    | VTuple(vs) -> "VTuple("^ String.concat ", " (List.map string_of_value vs)^")"
+    | VSet(vs) -> "VSet("^ String.concat ", " (List.map string_of_value vs)^")"
+    | VBag(vs) -> "VBag("^ String.concat ", " (List.map string_of_value vs)^")"
+    | VList(vs) -> "VList("^ String.concat ", " (List.map string_of_value vs)^")"
+    | VFunction(a, b) -> "VFunction("^ string_of_arg a ^" -> "^ string_of_expr b^")"
 
-let deref = function
-    | VRef(v) -> !v
-    | v -> v
+(* Value environment helpers *)
 
-let bind_args a v =
-    match a with
-    | AVar(i, t) -> [(i, v)]
-    | ATuple(its) -> (
-        match v with
-        | VTuple(vs) when List.length vs = List.length its ->
-            List.combine (fst (List.split its)) vs
-        | _ -> raise RuntimeError
+type frame_t = (id_t * value_t) list
+type env_t = frame_t list
+
+let rec lookup id env =
+    match env with
+    | [] -> raise Not_found
+    | h :: t -> (
+        try List.assoc id h
+        with Not_found -> lookup id t
     )
 
-let collection_of_type_as v vl =
-    match v with
-    | VSet(_) -> VSet(vl)
-    | VBag(_) -> VBag(vl)
-    | VList(_) -> VList(vl)
-    | _ -> raise RuntimeError
+let nub xs =
+    let blank = Hashtbl.create (List.length xs) in
+        List.iter (fun x -> Hashtbl.replace blank x ()) xs;
+        Hashtbl.fold (fun h () t -> h :: t) blank []
 
-let rec mkrange start stride steps =
-    if steps = 0 then []
-    else start :: (mkrange (start + stride) stride (steps - 1))
+let value_of_const c =
+    match c with
+    | CUnknown -> VUnknown
+    | CUnit -> VUnit
+    | CBool(b) -> VBool(b)
+    | CInt(i) -> VInt(i)
+    | CFloat(f) -> VFloat(f)
+    | _ -> VUnknown
 
-let rec eval env e = let ((_, t), tag), children = decompose_tree e in
-    let eval' cenv n = eval cenv (List.nth children n) in
+let rec eval_expr cenv texpr =
+    let ((uuid, tag), (t, _)), children = decompose_tree texpr in
+    let extract_value_list x = (
+        match x with
+        | VSet(cl)
+        | VBag(cl)
+        | VList(cl) -> cl
+        | _ -> raise (RuntimeError uuid)
+    ) in
+    let mkvfunc f = (
+        match f with
+        | VFunction(arg, body) -> (
+            match arg with
+            | AVar(i, t) ->
+                    fun env -> fun a ->
+                        let renv, result = eval_expr ([(i, a)] :: env) body in
+                        (List.tl renv, result)
+            | ATuple(its) ->
+                fun env -> fun a ->
+                let bindings = (
+                    match a with
+                    | VTuple(vs) -> List.combine (fst (List.split its)) vs
+                    | _ -> raise (RuntimeError uuid)
+                ) in
+                let renv, result = eval_expr (bindings :: env) body in
+                (List.tl renv, result)
+        )
+        | _ -> raise (RuntimeError uuid)
+    ) in
+    let withVCType f v = (
+        match v with
+        | VSet(cl) -> VSet(List.sort compare (nub (f cl)))
+        | VBag(cl) -> VBag(List.sort compare (f cl))
+        | VList(cl) -> VList(f cl)
+        | _ -> raise (RuntimeError uuid)
+    ) in
     match tag with
-        | Const(c) -> env, (
+    | Const(c) -> (cenv, value_of_const c)
+    | Var(id) -> (try cenv, lookup id cenv with Not_found -> raise (RuntimeError uuid))
+    | Tuple -> let fenv, vals = threaded_eval cenv children in (fenv, VTuple(vals))
+    | Empty(ct) ->
+        let ctype, _ = ct <| collection_of ++% base_of |> TypeError in cenv, (
+            match ctype with
+            | TSet -> VSet([])
+            | TBag -> VBag([])
+            | TList -> VList([])
+        )
+    | Singleton(ct) ->
+        let nenv, element = eval_expr cenv (List.nth children 0) in
+        let ctype, _ = ct <| collection_of ++% base_of |> TypeError in cenv, (
+            match ctype with
+            | TSet -> VSet([element])
+            | TBag -> VBag([element])
+            | TList -> VList([element])
+        )
+    | Combine ->
+        let nenv, components = threaded_eval cenv children in
+        let left, right = (
+            match components with
+            | [x; y] -> (x, y)
+            | _ -> raise (RuntimeError uuid)
+        ) in nenv, (
+            match left, right with
+            | VSet(vs1), VSet(vs2) -> VSet(List.sort compare (nub (vs1 @ vs2)))
+            | VBag(vb1), VBag(vb2) -> VBag(List.sort compare (vb1 @ vb2))
+            | VList(vl1), VList(vl2) -> VList(vl1 @ vl2)
+            | _ -> raise (RuntimeError uuid)
+        )
+    | Add ->
+        let fenv, vals = threaded_eval cenv children in fenv, (
+            match vals with
+            | [VBool(b1); VBool(b2)] -> VBool(b1 || b2)
+            | [VInt(i1); VInt(i2)] -> VInt(i1 + i2)
+            | [VInt(i1); VFloat(f2)] -> VFloat(float_of_int i1 +. f2)
+            | [VFloat(f1); VInt(i2)] -> VFloat(f1 +. float_of_int i2)
+            | [VFloat(f1); VFloat(f2)] -> VFloat(f1 +. f2)
+            | _ -> raise (RuntimeError uuid)
+        )
+    | Mult ->
+        let fenv, vals = threaded_eval cenv children in fenv, (
+            match vals with
+            | [VBool(b1); VBool(b2)] -> VBool(b1 && b2)
+            | [VInt(i1); VInt(i2)] -> VInt(i1 * i2)
+            | [VInt(i1); VFloat(f2)] -> VFloat(float_of_int i1 *. f2)
+            | [VFloat(f1); VInt(i2)] -> VFloat(f1 *. float_of_int i2)
+            | [VFloat(f1); VFloat(f2)] -> VFloat(f1 *. f2)
+            | _ -> raise (RuntimeError uuid)
+        )
+    | Neg ->
+        let fenv, vals = threaded_eval cenv children in fenv, (
+            match vals with
+            | [VBool(b)] -> VBool(not b)
+            | [VInt(i)] -> VInt(-i)
+            | [VFloat(f)] -> VFloat(-. f)
+            | _ -> raise (RuntimeError uuid)
+        )
+    | Eq ->
+        let fenv, vals = threaded_eval cenv children in fenv, (
+            match vals with
+            | [v1; v2] -> VBool(v1 = v2)
+            | _ -> raise (RuntimeError uuid)
+        )
+    | Lt ->
+        let fenv, vals = threaded_eval cenv children in fenv, (
+            match vals with
+            | [v1; v2] -> VBool(v1 < v2)
+            | _ -> raise (RuntimeError uuid)
+        )
+    | Neq ->
+        let fenv, vals = threaded_eval cenv children in fenv, (
+            match vals with
+            | [v1; v2] -> VBool(v1 <> v2)
+            | _ -> raise (RuntimeError uuid)
+        )
+    | Leq ->
+        let fenv, vals = threaded_eval cenv children in fenv, (
+            match vals with
+            | [v1; v2] -> VBool(v1 <= v2)
+            | _ -> raise (RuntimeError uuid)
+        )
+    | Lambda(a) -> let body = List.nth children 0 in cenv, VFunction(a, body)
+    | Apply ->
+        let fenv, f = eval_expr cenv (List.nth children 0) in
+        let aenv, a = eval_expr fenv (List.nth children 1) in
+        (mkvfunc f) aenv a
+    | Block ->
+        let fenv, vals = threaded_eval cenv children in fenv, (List.nth vals (List.length vals - 1))
+    | IfThenElse ->
+        let penv, pred = eval_expr cenv (List.nth children 0) in (
+            match pred with
+            | VBool(b) when b -> eval_expr penv (List.nth children 1)
+            | VBool(b) when not b -> eval_expr penv (List.nth children 2)
+            | _ -> raise (RuntimeError uuid)
+        )
+    | Map ->
+        let fenv, f = eval_expr cenv (List.nth children 0) in
+        let nenv, c = eval_expr fenv (List.nth children 1) in
+        let g = mkvfunc f in
+        let folder = fun cl -> List.fold_left (
+            fun (e, r) -> fun x ->
+                let ienv, i = g e x in
+                (ienv, r @ [i])
+        ) (nenv, []) cl in (
             match c with
-                | CUnit -> VUnit
-                | CUnknown -> VUnknown
-                | CInt(n) -> VInt(n)
-                | CFloat(n) -> VFloat(n)
-                | CString(s) -> VString(s)
-                | CBool(b) -> VBool(b)
-                | CNothing -> VMaybe(None)
-            )
+            | VSet(cl)
+            | VBag(cl)
+            | VList(cl) -> let renv, r =  folder cl in renv, (withVCType (fun _ -> r) c)
+            | _ -> raise (RuntimeError uuid)
+        )
+    | FilterMap ->
+        let penv, p = eval_expr cenv (List.nth children 0) in
+        let fenv, f = eval_expr penv (List.nth children 1) in
+        let nenv, c = eval_expr fenv (List.nth children 2) in
+        let p' = mkvfunc p in
+        let f' = mkvfunc f in
+        let folder = fun cl -> List.fold_left (
+            fun (e, r) -> fun x ->
+                let p'env, inc = p' e x in
+                match inc with
+                | VBool(true) ->
+                    let ienv, i = f' e x in
+                    (ienv, r @ [i])
+                | VBool(false) -> (p'env, r)
+                | _ -> raise (RuntimeError uuid)
+        ) (nenv, []) cl in (
+            match c with
+            | VSet(cl)
+            | VBag(cl)
+            | VList(cl) -> let renv, r =  folder cl in renv, (withVCType (fun _ -> r) c)
+            | _ -> raise (RuntimeError uuid)
+        )
+    | Flatten ->
+        let nenv, c = eval_expr cenv (List.nth children 0) in
+        nenv, (withVCType (fun vs -> List.concat (List.map extract_value_list vs)) c)
+    | Aggregate ->
+        let fenv, f = eval_expr cenv (List.nth children 0) in
+        let zenv, z = eval_expr fenv (List.nth children 1) in
+        let nenv, c = eval_expr zenv (List.nth children 2) in
+        let f' = mkvfunc f in
+        List.fold_left (
+            fun (e, v) a -> f' e (VTuple([v; a]))
+        ) (nenv, z) (extract_value_list c)
+    | GroupByAggregate ->
+        let genv, g = eval_expr cenv (List.nth children 0) in
+        let fenv, f = eval_expr genv (List.nth children 1) in
+        let zenv, z = eval_expr fenv (List.nth children 2) in
+        let nenv, c = eval_expr zenv (List.nth children 3) in
+        let g' = mkvfunc g in
+        let f' = mkvfunc f in
+        let cl = extract_value_list c in
+        let h = Hashtbl.create (List.length cl) in
+        let renv = List.fold_left (
+            fun e a ->
+                let kenv, key = g' e a in
+                let v = (try Hashtbl.find h key with Not_found -> z) in
+                let aenv, agg = f' kenv (VTuple([v; a])) in
+                Hashtbl.replace h key agg; aenv
+        ) nenv (extract_value_list c)
+        in renv, withVCType (fun _ -> (Hashtbl.fold (fun k v kvs -> (VTuple([k; v]) :: kvs)) h [])) c
+        
+    (* TODO: range, collection modifiers, send *)
 
-        | Var(id) -> env, (try List.assoc id env with Not_found -> raise RuntimeError)
+    | _ -> raise (RuntimeError uuid)
 
-        | Tuple -> let env', res' = eval_chain env children in env', VTuple(res')
-        | Just -> let env', res' = eval' env 0 in env', VMaybe(Some (res'))
+and threaded_eval ienv texprs =
+    match texprs with
+    | [] -> (ienv, [])
+    | h :: t ->
+        let nenv, nval = eval_expr ienv h in
+        let lenv, vals = threaded_eval nenv t in (lenv, nval :: vals)
 
-        | Empty(vt) ->
-            let c_t, e_t = (
-                match !: vt with
-                | TCollection(c_t, e_t) -> (c_t, e_t)
-                | _ -> raise RuntimeError
-            ) in let collection = (
-                match c_t with
-                | TSet -> VSet([])
-                | TBag -> VBag([])
-                | TList -> VList([])
-            ) in env, (
-                match vt with
-                | TRef(_) -> VRef(ref collection)
-                | BaseT(_) -> collection
-            )
-
-        | Singleton(vt) ->
-            let env', element = eval' env 0 in
-            let c_t, e_t = (
-                match !: vt with
-                | TCollection(c_t, e_t) -> (c_t, e_t)
-                | _ -> raise RuntimeError
-            ) in let collection = (
-                match c_t with
-                | TSet -> VSet([element])
-                | TBag -> VBag([element])
-                | TList -> VList([element])
-            ) in env, (
-                match vt with
-                | TRef(_) -> VRef(ref collection)
-                | BaseT(_) -> collection
-            )
-
-        | Combine ->
-            let enva, a = eval' env 0 in
-            let envb, b = eval' enva 1 in envb, (
-                match deref a, deref b with
-                | VList(xs), VList(ys) -> VList(xs @ ys)
-                | _ -> raise RuntimeError
-            )
-
-        | Range(ct) ->
-            let enva, start = eval' env 0 in
-            let envb, stride = eval' enva 1 in
-            let envc, steps = eval' envb 2 in envc, (
-                match ct with
-                | TList -> (
-                    match deref start, deref stride, deref steps with
-                    | VInt(a), VInt(b), VInt(c) when c >= 0 -> VList(
-                            List.map (fun x -> VInt(x)) (mkrange a b c)
-                        )
-                    | _ -> raise RuntimeError
-                )
-                | _ -> print_endline "ha"; raise RuntimeError
-            )
-
-        | Add ->
-            let enva, a' = eval' env 0 in
-            let envb, b' = eval' enva 1 in
-            let a, b = deref a', deref b' in envb, (
-                match a, b with
-                    | VFloat(f1), VFloat(f2) -> VFloat(f1 +. f2)
-                    | VFloat(f1), VInt(i2) -> VFloat(f1 +. float_of_int i2)
-                    | VInt(i1), VFloat(f2) -> VFloat(float_of_int i1 +. f2)
-                    | VInt(i1), VInt(i2) -> VInt(i1 + i2)
-                    | _ -> raise RuntimeError
-            )
-        | Mult ->
-            let enva, a' = eval' env 0 in
-            let envb, b' = eval' enva 1 in
-            let a, b = deref a', deref b' in envb, (
-                match a, b with
-                    | VFloat(f1), VFloat(f2) -> VFloat(f1 *. f2)
-                    | VFloat(f1), VInt(i2) -> VFloat(f1 *. float_of_int i2)
-                    | VInt(i1), VFloat(f2) -> VFloat(float_of_int i1 *. f2)
-                    | VInt(i1), VInt(i2) -> VInt(i1 * i2)
-                    | _ -> raise RuntimeError
-            )
-        | Neg ->
-            let enva, a' = eval' env 0 in
-            let a = deref a' in enva, (
-                match a with
-                    | VBool(b) -> VBool(not b)
-                    | VInt(i) -> VInt(-i)
-                    | VFloat(f) -> VFloat(-.f)
-                    | _ -> raise RuntimeError
-            )
-
-        | (Eq|Neq) as cmp ->
-            let enva, a' = eval' env 0 in
-            let envb, b' = eval' enva 1 in
-            let a, b = deref a', deref b' in envb, (
-                let (===) = if cmp = Eq then (=) else (<>) in (
-                    match a, b with
-                        | VBool(b1), VBool(b2) -> VBool(b1 === b2)
-                        | VByte(y1), VByte(y2) -> VBool(y1 === y2)
-                        | VInt(i1), VInt(i2) -> VBool(i1 === i2)
-                        | VFloat(f1), VFloat(f2) -> VBool(f1 === f2)
-                        | VString(s1), VString(s2) -> VBool(s1 === s2)
-                        | VTuple(t1), VTuple(t2) -> VBool(List.for_all2 (===) t1 t2)
-                        | VMaybe(m1), VMaybe(m2) -> VBool(m1 === m2)
-                        | _ -> raise RuntimeError
-                )
-            )
-
-        | (Lt|Leq) as cmp ->
-            let enva, a' = eval' env 0 in
-            let envb, b' = eval' enva 1 in
-            let a, b = deref a', deref b' in envb, (
-                let (===) = if cmp = Lt then (<) else (<=) in (
-                    match a, b with
-                        | VBool(b1), VBool(b2) -> VBool(b1 === b2)
-                        | VByte(y1), VByte(y2) -> VBool(y1 === y2)
-                        | VInt(i1), VInt(i2) -> VBool(i1 === i2)
-                        | VFloat(f1), VFloat(f2) -> VBool(f1 === f2)
-                        | VString(s1), VString(s2) -> VBool(s1 === s2)
-                        | VTuple(t1), VTuple(t2) -> VBool(List.for_all2 (===) t1 t2)
-                        | VMaybe(m1), VMaybe(m2) -> VBool(m1 === m2)
-                        | _ -> raise RuntimeError
-                )
-            )
-
-        | AssignToRef ->
-            let envl, left = eval' env 0 in
-            let envr, right' = eval' envl 1 in
-            let right = deref right' in envr, (
-                match left with
-                    | VRef(r) -> r := right; VUnit
-                    | _ -> raise RuntimeError
-            )
-
-        | Lambda(arg) ->
-            let apply_function old_env input_args =
-                let bindings = bind_args arg input_args in
-                eval (bindings @ old_env) (List.hd children)
-            in env, VFunction(apply_function)
-
-        | Apply ->
-            let envf, f = eval' env 0 in
-            let enva, a = eval' envf 1 in (
-                match f with
-                | VFunction(inner_func) -> inner_func envf a
-                | _ -> raise RuntimeError
-            )
-
-        | Block ->
-            let env', res' = eval_chain env children in env', List.hd (List.rev res')
-
-        | IfThenElse ->
-            let envp, p = eval' env 0 in
-            let condition = (
-                match deref p with
-                    | VBool(b) -> b
-                    | _ -> raise RuntimeError
-            ) in
-            if condition then eval' envp 1 else eval' envp 2
-
-        | Map ->
-            let envf, f = eval' env 0 in
-            let envc, c = eval' envf 1 in
-            let inner_func = (
-                match f with
-                | VFunction(f') -> f'
-                | _ -> raise RuntimeError
-            ) in
-            let inner_c = (
-                match c with
-                | VSet(vl) -> vl
-                | VBag(vl) -> vl
-                | VList(vl) -> vl
-                | _ -> raise RuntimeError
-            ) in
-            let final_env, map_results = List.fold_left (
-                fun (cenv, vl) v ->
-                    let nenv, mv = inner_func cenv v
-                    in nenv, vl @ [mv]
-            ) (envc, []) inner_c in
-            final_env, collection_of_type_as c map_results
-
-        | FilterMap ->
-            let envp, p = eval' env 0 in
-            let envf, f = eval' envp 1 in
-            let envc, c = eval' envf 2 in
-            let inner_pred = (
-                match p with
-                | VFunction(p') -> p'
-                | _ -> raise RuntimeError
-            ) in
-            let inner_func = (
-                match f with
-                | VFunction(f') -> f'
-                | _ -> raise RuntimeError
-            ) in
-            let inner_c = (
-                match c with
-                | VSet(vl) -> vl
-                | VBag(vl) -> vl
-                | VList(vl) -> vl
-                | _ -> raise RuntimeError
-            ) in
-            let final_env, filtermap_results = List.fold_left (
-                fun (cenv, vl) v ->
-                    let penv, fv = inner_pred cenv v in
-                    if fv = VBool(true) then
-                        let nenv, mv = inner_func cenv v
-                        in nenv, vl @ [mv]
-                    else penv, vl
-            ) (envc, []) inner_c in
-            final_env, collection_of_type_as c filtermap_results
-
-        | Peek ->
-            let envc, c = eval' env 0 in envc, (
-                match c with
-                | VList(inner_c) -> (
-                    match inner_c with
-                    | h :: t -> h
-                    | [] -> raise RuntimeError
-                )
-                | _ -> raise RuntimeError
-            )
-
-        | Slice ->
-            let envc, c = eval' env 0 in
-            let envp, p = eval' envc 1 in
-            let predicates = (
-                match p with
-                | VTuple(vs) ->
-                    fun v -> (
-                        match v with
-                        | VTuple(vs') ->
-                            List.for_all2 (fun x -> fun y -> x = VUnknown || x = y) vs vs'
-                        | _ -> raise RuntimeError
-                    )
-                | VUnknown -> (fun v -> true)
-                | value -> fun v -> v == value
-            ) in
-            let inner_c = (
-                match c with
-                | VList(vs) -> vs
-                | _ -> raise RuntimeError
-            ) in envp, collection_of_type_as c (List.filter predicates inner_c)
-
-        | _ -> raise RuntimeError
-
-and eval_chain env exprs =
-    match exprs with
-        | [] -> env, []
-        | h :: t ->
-            let new_env, now_val = eval env h in
-            let last_env, last_vals = eval_chain new_env t in
-            last_env, now_val :: last_vals
