@@ -23,12 +23,12 @@ type error_type =
 let t_error uuid name msg () = 
     let extra = match msg with
         | TMismatch(t1,t2)  -> "This expression has type "^string_of_type t1^
-            "\nBut an expression was expected of type"^string_of_type t2
+            "\nBut an expression was expected of type "^string_of_type t2
         | VTMismatch(t1, t2) -> "This expression has type "^
-            string_of_value_type t1^"\nBut an expression was expected of type"^
+            string_of_value_type t1^"\nBut an expression was expected of type "^
             string_of_value_type t2
         | BTMismatch(t1, t2) -> "This expression has type "^
-            string_of_base_type t1^"\nBut an expression was expected of type"^
+            string_of_base_type t1^"\nBut an expression was expected of type "^
             string_of_base_type t2
         | TBad(t)           -> "Bad type "^string_of_type t
         | VTBad(t)          -> "Bad type "^string_of_value_type t
@@ -151,7 +151,8 @@ let rec assignable t_l t_r =
     match (t_lb, t_rb) with
     | TMaybe(_), TMaybe(TIsolated(TImmutable(TUnknown)))-> true
     | TMaybe(t_lm), TMaybe(t_rm) -> assignable t_lm t_rm
-    | TTuple(t_ls), TTuple(t_rs) -> List.for_all2 assignable t_ls t_rs
+    | TTuple(t_ls), TTuple(t_rs) -> List.length t_ls = List.length t_rs && 
+        List.for_all2 assignable t_ls t_rs
     | TCollection(t_lc, t_le), TCollection(t_rc, t_re) -> assignable t_le t_re
     | _ when t_lb = t_rb -> true
     | _ -> false
