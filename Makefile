@@ -13,9 +13,9 @@ FILES=\
 	stages/k3/K3Helpers \
 	stages/k3/K3Typechecker \
 	stages/k3/K3Values \
-	stages/k3/K3Runtime \
-	stages/k3/K3Interpreter \
-	stages/k3/K3Consumption \
+	stages/k3/interpreter/K3Runtime \
+	stages/k3/interpreter/K3Interpreter \
+	stages/k3/interpreter/K3Consumption \
 	stages/k3_dist/ProgInfo \
 	stages/k3_dist/GenDist \
 
@@ -31,8 +31,9 @@ PARSERS=\
 DIRS=\
 	util\
 	stages/k3 \
+	stages/k3/interpreter \
 	stages/k3_dist \
-        tests \
+  tests \
 
 #################################################
 

@@ -1,5 +1,6 @@
 (* Dealing with Sources and Consumption. *)
 open K3
+open K3Values
 open K3Interpreter
 
 type source_t
