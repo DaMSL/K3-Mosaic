@@ -269,7 +269,7 @@ collection:
     | LBRACE RBRACE { mkexpr (Empty(mk_unknown_collection TSet)) [] }
     | LBRACEBAR RBRACEBAR { mkexpr (Empty(mk_unknown_collection TBag)) [] }
     | LBRACKET RBRACKET { mkexpr (Empty(mk_unknown_collection TList)) [] }
-    | LBRACE MAPSTO RBRACE { mkexpr (Empty(mk_unknown_collection TMap)) }
+    | LBRACE MAPSTO RBRACE { mkexpr (Empty(mk_unknown_collection TMap)) [] }
 
     | LBRACE expr_seq RBRACE { build_collection $2 (mk_unknown_collection TSet) }
     | LBRACEBAR expr_seq RBRACEBAR { build_collection $2 (mk_unknown_collection TBag) }

@@ -28,6 +28,8 @@ type env_t = (id_t * value_t ref) list * (frame_t list)
 
 val string_of_value: value_t -> string
 
+val value_of_eval : eval_t -> value_t
+
 val eval_expr : env_t -> int texpr_t -> env_t * eval_t
 
 val eval_program : int tprogram_t -> unit
