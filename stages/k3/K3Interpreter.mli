@@ -1,30 +1,9 @@
 open Tree
 open K3
 open K3Typechecker
-
-exception RuntimeError of int
-
-type value_t
-    = VUnknown
-    | VUnit
-    | VBool of bool
-    | VInt of int
-    | VFloat of float
-    | VByte of char
-    | VString of string
-    | VTuple of value_t list
-    | VOption of value_t option
-    | VSet of value_t list
-    | VBag of value_t list
-    | VList of value_t list
-    | VFunction of arg_t * int texpr_t
-    | VAddress of string * int (* ip, port *)
-    | VTarget of id_t
+open K3Values
 
 type eval_t = VDeclared of value_t ref | VTemp of value_t
-
-type frame_t = (id_t * value_t) list
-type env_t = (id_t * value_t ref) list * (frame_t list)
 
 val string_of_value: value_t -> string
 

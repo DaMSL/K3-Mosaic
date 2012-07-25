@@ -12,9 +12,11 @@ FILES=\
 	stages/k3/K3Util \
 	stages/k3/K3Helpers \
 	stages/k3/K3Typechecker \
+	stages/k3/K3Values \
+	stages/k3/K3Runtime \
+	stages/k3/K3Interpreter \
 	stages/k3_dist/ProgInfo \
 	stages/k3_dist/GenDist \
-	stages/k3/K3Interpreter \
 
 TOPLEVEL_FILES=\
 	Driver \
