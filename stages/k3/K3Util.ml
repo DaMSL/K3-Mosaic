@@ -404,7 +404,6 @@ let rec print_consumable c =
 
 let print_declaration ?(print_id=false) d =
   let my_tag = pretty_tag_str Line "" in
-  let lazy_list l = [lps "["]@l@[lps "]"] in
   let print_id_vt (id,vt) =
     lazy (ps ("("^id^", "); print_value_type vt; ps ")")
   in
@@ -417,8 +416,8 @@ let print_declaration ?(print_id=false) d =
     | Foreign(i, t) -> my_tag "Foreign" [lps (quote i); lazy_type t]
 
     | Trigger(i, arg, ds, e) ->
-      let trig_decls = lazy (
-        ps_list Line force (lazy_list (List.map print_id_vt ds)))
+      let trig_decls = 
+        lazy(ps "["; ps_list Line force (List.map print_id_vt ds); ps "]")
       in
       my_tag "Trigger" 
         [lps (quote i); lazy_arg arg; trig_decls; lazy_expr e ~print_id:print_id]

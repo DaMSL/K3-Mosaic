@@ -189,6 +189,7 @@ and eval_expr cenv texpr =
       end
     in
 
+    (* TODO: byte and string types for binary and comparison operations *)
     let eval_binop bool_op int_op float_op = 
       let fenv, vals = child_values cenv in fenv, VTemp(
         match vals with
@@ -250,7 +251,6 @@ and eval_expr cenv texpr =
             | _ -> raise (RuntimeError uuid)
         )
 
-    (* TODO: byte and string types for binary operations *)
     | Add  -> eval_binop (||) (+) (+.)
     | Mult -> eval_binop (&&) ( * ) ( *. ) 
     
