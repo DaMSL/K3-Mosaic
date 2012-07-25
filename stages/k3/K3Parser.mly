@@ -206,8 +206,8 @@ expr:
     | mutation { $1 }
     | annotation { $1 }
 
-    | SEND LPAREN variable COMMA address COMMA tuple RPAREN {
-        mkexpr Send [mkexpr (Var($3)) []; mkexpr (Const($5)) []; $7]
+    | SEND LPAREN IDENTIFIER COMMA address COMMA tuple RPAREN {
+        mkexpr Send [mkexpr (Const(CTarget($3))) []; mkexpr (Const($5)) []; $7]
       }
     | expr LPAREN tuple RPAREN { mkexpr Apply [$1; $3] }
 ;
