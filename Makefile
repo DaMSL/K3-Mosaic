@@ -146,7 +146,7 @@ clean:
 	rm -f $(BC_FILES) $(BC_INCLUDES) $(BC_EXTRA_FILES) $(BC_EXTRA_INCLUDES)
 	rm -f $(NC_FILES) $(NC_INCLUDES) $(NC_EXTRA_FILES) $(NC_EXTRA_INCLUDES)
 	rm -f $(patsubst %,%.o,$(FILES)) $(patsubst %,%.o,$(EXTRA_FILES))
-	rm -f $(patsubst %,%.annot,$(FILES))
+	rm -f $(patsubst %,%.annot,$(FILES)) $(patsubst %,%.annot,$(EXTRA_FILES))
 	rm -f bin/k3
 
 #################################################
