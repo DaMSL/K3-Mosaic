@@ -88,6 +88,7 @@ let check_tag_arity tag children =
     in length = correct_arity
 
 type 'a texpr_t = (type_t * 'a) expr_t
+type 'a tprogram_t = (type_t * 'a) program_t
 
 let type_of texpr = let (_, (t, _)), _ = decompose_tree texpr in t
 
