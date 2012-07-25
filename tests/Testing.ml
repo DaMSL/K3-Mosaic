@@ -23,7 +23,7 @@ let iparse s = K3Parser.expr K3Lexer.tokenize (Lexing.from_string s)
 
 let equals_assertion expected actual string_fn =
   if expected = actual then "PASSED."
-  else "FAILED: Expected " ^ string_fn actual ^ ", but got " ^ string_fn expected ^ "."
+  else "FAILED: Expected " ^ string_fn expected ^ ", but got " ^ string_fn actual ^ "."
 
 let ensure assertion = match assertion with
   | AssertTypeEquals(expected, actual) -> equals_assertion expected actual string_of_type
