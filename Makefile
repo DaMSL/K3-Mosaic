@@ -15,6 +15,7 @@ FILES=\
 	stages/k3_dist/ProgInfo \
 	stages/k3_dist/GenDist \
 	stages/k3/K3Interpreter \
+	stages/k3/K3Consumption \
 
 TOPLEVEL_FILES=\
 	Driver \
