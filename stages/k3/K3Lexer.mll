@@ -45,7 +45,6 @@ rule tokenize = parse
     | "|}" { RBRACEBAR }
     | '[' { LBRACKET }
     | ']' { RBRACKET }
-    | "=>" { MAPSTO }
 
     | '-' { NEG }
     | '+' { PLUS }
