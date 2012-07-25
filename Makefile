@@ -29,6 +29,7 @@ DIRS=\
 	util\
 	stages/k3 \
 	stages/k3_dist \
+        tests \
 
 #################################################
 
@@ -53,9 +54,35 @@ OCAML_FLAGS +=\
 OCAMLOPT_FLAGS +=\
 	$(patsubst %, -I %,$(DIRS))
 
+COMMON_GARBAGE := $(patsubst %,%.o,$(FILES)) $(patsubst %,%.o,$(EXTRA_FILES)) \
+		  $(patsubst %,%.annot,$(FILES)) $(patsubst %,%.annot,$(EXTRA_FILES))
+
+BC_GARBAGE     := $(BC_FILES) $(BC_INCLUDES) $(BC_EXTRA_FILES) $(BC_EXTRA_INCLUDES)
+NC_GARBAGE     := $(NC_FILES) $(NC_INCLUDES) $(NC_EXTRA_FILES) $(NC_EXTRA_INCLUDES)
+
 #################################################
 
-all: Makefile.local versioncheck k3
+TEST_BASE=\
+	tests/Testing \
+
+TESTS=\
+	tests/TypecheckerTest \
+	#tests/InterpreterTest \
+
+TEST_BASE_FILES    := $(patsubst %,%.cmo, $(TEST_BASE))
+TEST_BASE_INCLUDES := $(patsubst %,%.cmi, $(TEST_BASE))
+TEST_FILES      := $(patsubst %,%.cmo, $(TESTS))
+TEST_INCLUDES   := $(patsubst %,%.cmi, $(TESTS))
+
+TEST_BINARIES   := $(patsubst %, bin/%, $(TESTS))
+
+TEST_GARBAGE    := $(TEST_BASE_FILES) $(TEST_BASE_INCLUDES) $(TEST_FILES) $(TEST_INCLUDES) \
+		   $(patsubst %,%.o,$(TEST_BASE)) $(patsubst %,%.o,$(TESTS)) \
+		   $(patsubst %,%.annot,$(TEST_BASE)) $(patsubst %,%.annot,$(TESTS))
+
+#################################################
+
+all: Makefile.local versioncheck k3 tests
 
 opt: Makefile.local versioncheck k3_opt
 
@@ -81,20 +108,12 @@ k3: $(BC_FILES) $(BC_EXTRA_FILES)
 
 # Test Suites
 
-test/typechecker: k3
-	@if [ ! -d bin/test ] ; then \
-		mkdir -p bin/test;\
-	fi
-	@echo "Building Common Test Library"
-	@$(OCAMLCC) $(OCAML_FLAGS) -I tests -c tests/Testing.ml
-	@echo "Building Typechecker Test-Suite"
-	@$(OCAMLCC) $(OCAML_FLAGS) -I tests -c tests/TypecheckerTest.ml
-	@$(OCAMLCC) $(OCAML_FLAGS) -I tests -o bin/test/typechecker $(BC_FILES) Testing.cmo TypecheckerTest.cmo
-	@echo "Typechecker Test-Suite is at bin/test/typechecker."
+tests: k3 $(TEST_BASE_FILES) $(TEST_FILES) $(TEST_BINARIES)
+	@echo "Built tests"
 
 #################################################
 
-$(BC_FILES) $(BC_EXTRA_FILES) : %.cmo : %.ml
+$(BC_FILES) $(BC_EXTRA_FILES) $(TEST_BASE_FILES) $(TEST_FILES): %.cmo : %.ml
 	@if [ -f $(*).mli ] ; then \
 		echo Compiling Header $(*);\
 		$(OCAMLCC) $(OCAML_FLAGS) -c $(*).mli;\
@@ -118,10 +137,19 @@ $(patsubst %,%.ml,$(PARSERS)) : %.ml : %.mly
 	@echo Building Parser $(*)
 	@$(OCAMLYACC) $< 2>&1 | sed 's/^/  /'
 
+$(TEST_BINARIES) : bin/% : %.ml
+	@if [ ! -d bin/tests ] ; then \
+		mkdir -p bin/tests;\
+	fi
+	@echo Building $(*) test
+	@$(OCAMLCC) $(OCAML_FLAGS) -o bin/$(*) $(BC_FILES) $(TEST_BASE_FILES) $<
+
 # Ignore generated CMI dependencies.  They get autocompiled along with the
 # object files
-$(patsubst %,%.cmi,$(FILES)) : 
-$(patsubst %,%.cmxi,$(FILES)) : 
+$(BC_INCLUDES) :
+$(NC_INCLUDES) : 
+
+$(TEST_INCLUDES) :
 
 #################################################
 
@@ -143,11 +171,8 @@ clean:
 	rm -f $(patsubst %,%.ml,$(GENERATED_FILES))
 	rm -f $(patsubst %,%.mli,$(PARSERS))
 	rm -f $(patsubst %,%.output,$(PARSERS))
-	rm -f $(BC_FILES) $(BC_INCLUDES) $(BC_EXTRA_FILES) $(BC_EXTRA_INCLUDES)
-	rm -f $(NC_FILES) $(NC_INCLUDES) $(NC_EXTRA_FILES) $(NC_EXTRA_INCLUDES)
-	rm -f $(patsubst %,%.o,$(FILES)) $(patsubst %,%.o,$(EXTRA_FILES))
-	rm -f $(patsubst %,%.annot,$(FILES)) $(patsubst %,%.annot,$(EXTRA_FILES))
-	rm -f bin/k3
+	rm -f $(COMMON_GARBAGE) $(BC_GARBAGE) $(NC_GARBAGE) $(TEST_GARBAGE)
+	rm -f bin/k3 $(TEST_BINARIES)
 
 #################################################
 
