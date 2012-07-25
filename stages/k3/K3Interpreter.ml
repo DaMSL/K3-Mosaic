@@ -501,8 +501,6 @@ let eval_instructions env source_program k3_program =
 
 
 (* Program interpretation *)
-
-(* TODO: simulate scheduling, peers, and state per peer *)
 let eval_program k3_program =
   let env, source_program = env_of_program k3_program
   in eval_instructions env source_program k3_program

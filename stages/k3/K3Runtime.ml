@@ -50,6 +50,7 @@ let unregister_trigger trigger_id force =
         Hashtbl.remove trigger_queues trigger_id
   with Not_found -> () 
 
+
 (* Scheduling methods *)
 let schedule_task task = Queue.push task global_queue
 
@@ -73,6 +74,7 @@ let schedule_event source_bindings source_id events =
     in List.iter (fun trig_id ->
         List.iter (schedule_local_trigger trig_id) events) trigger_ids
   with Not_found -> () 
+
 
 (* Scheduler execution *)
 
