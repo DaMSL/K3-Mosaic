@@ -314,19 +314,25 @@ let send_puts =
       )
     )
     (mk_gbagg
-      (mk_lambda (* grouping func *)
-        (ATuple["ip", t_ip; "stmt_id", t_stmt_id; "count", t_int])
+      (mk_assoc_lambda (* grouping func -- assoc because of gbagg tuple *)
+        (ATuple["ip", t_ip; "stmt_id", t_stmt_id])
+        (AVar("count", t_int))
         (mk_var "ip")
       )
       (mk_assoc_lambda (* agg func *)
         (AVar("acc", wrap_tlist @: wrap_ttuple [t_int; t_int]))
-        (ATuple["ip", t_ip; "stmt_id", t_int; "count", t_int])
-        (mk_combine
-          (mk_var "acc")
-          (mk_singleton
-            (wrap_tlist @: wrap_ttuple [t_int; t_int])
-            (mk_tuple [mk_var "stmt_id"; mk_var "count"])
+        (ATuple["ip_and_stmt_id", wrap_ttuple [t_ip; t_stmt_id]; "count", t_int])
+        (mk_apply (* break up because of the way inner gbagg forms tuples *)
+          (mk_lambda (ATuple["ip", t_ip; "stmt_id", t_stmt_id])
+            (mk_combine
+              (mk_var "acc")
+              (mk_singleton
+                (wrap_tlist @: wrap_ttuple [t_int; t_int])
+                (mk_tuple [mk_var "stmt_id"; mk_var "count"])
+              )
+            )
           )
+          (mk_var "ip_and_stmt_id")
         )
       )
       (mk_empty @: wrap_tlist @: wrap_ttuple [t_int; t_int])
