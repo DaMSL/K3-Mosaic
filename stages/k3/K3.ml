@@ -9,6 +9,7 @@ type container_type_t
     = TSet
     | TBag
     | TList
+    | TMap
 
 type base_type_t
     = TUnknown
