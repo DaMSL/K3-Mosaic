@@ -11,9 +11,9 @@ type 'a texpr_t = (type_t * 'a) expr_t
 type 'a tprogram_t = (type_t * 'a) program_t
 
 type error_type =
-    | TMismatch of type_t * type_t
-    | VTMismatch of value_type_t * value_type_t
-    | BTMismatch of base_type_t * base_type_t
+    | TMismatch of type_t * type_t * string
+    | VTMismatch of value_type_t * value_type_t * string
+    | BTMismatch of base_type_t * base_type_t * string
     | TBad of type_t
     | VTBad of value_type_t
     | BTBad of base_type_t
