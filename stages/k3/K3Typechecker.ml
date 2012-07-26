@@ -11,9 +11,9 @@ exception MalformedTree
 exception TypeError of int * string
 
 type error_type =
-    | TMismatch of type_t * type_t
-    | VTMismatch of value_type_t * value_type_t
-    | BTMismatch of base_type_t * base_type_t
+    | TMismatch of type_t * type_t * string
+    | VTMismatch of value_type_t * value_type_t * string
+    | BTMismatch of base_type_t * base_type_t * string
     | TBad of type_t
     | VTBad of value_type_t
     | BTBad of base_type_t
@@ -22,12 +22,12 @@ type error_type =
 
 let t_error uuid name msg () = 
     let extra = match msg with
-        | TMismatch(t1,t2)  -> "This expression has type "^string_of_type t1^
+        | TMismatch(t1,t2,s)  -> s^": This expression has type "^string_of_type t1^
             "\nBut an expression was expected of type "^string_of_type t2
-        | VTMismatch(t1, t2) -> "This expression has type "^
+        | VTMismatch(t1,t2,s) -> s^": This expression has type "^
             string_of_value_type t1^"\nBut an expression was expected of type "^
             string_of_value_type t2
-        | BTMismatch(t1, t2) -> "This expression has type "^
+        | BTMismatch(t1,t2,s) -> s^": This expression has type "^
             string_of_base_type t1^"\nBut an expression was expected of type "^
             string_of_base_type t2
         | TBad(t)           -> "Bad type "^string_of_type t
@@ -248,7 +248,7 @@ let rec deduce_expr_type trig_env cur_env utexpr =
                 t_erroru name @: TBad(t1) in
 
             (* Only collections of matching element types can be combined. *)
-            if t_e0 <> t_e1 then t_erroru name (VTMismatch(t_e0, t_e1)) () else
+            if t_e0 <> t_e1 then t_erroru name (VTMismatch(t_e0, t_e1,"")) () else
 
             (* Determine combined collection type. *)
             let t_cr = (
@@ -267,7 +267,7 @@ let rec deduce_expr_type trig_env cur_env utexpr =
             let stride = t1 <| base_of %++ value_of |> t_erroru name @: TBad(t1) in
             let steps = t2 <| base_of %++ value_of |> t_erroru name @: TBad(t2) in
             if not(steps = TInt) 
-                then t_erroru name (BTMismatch(TInt, steps)) () else
+                then t_erroru name (BTMismatch(TInt, steps,"steps:")) () else
             let t_e = begin
                 match (start, stride) with
                 | (TInt, TInt) -> TInt
@@ -311,7 +311,7 @@ let rec deduce_expr_type trig_env cur_env utexpr =
             (* We can compare any two values whose base types are the same, and *)
             (* are comparable, regardless of if either of them are refs. *)
             if t_l = t_r then TValue(canonical TBool) 
-            else t_erroru name (BTMismatch(t_l, t_r)) ()
+            else t_erroru name (BTMismatch(t_l, t_r, "")) ()
 
         | IfThenElse ->
             let name = "IfThenElse" in
@@ -321,8 +321,8 @@ let rec deduce_expr_type trig_env cur_env utexpr =
             let t_e = t2 <| value_of |> t_erroru name @: TBad(t2) in
             if canonical TBool === t_p then 
                 if t_t === t_e then TValue(t_t) 
-                else t_erroru name (VTMismatch(t_t, t_e)) ()
-            else t_erroru name (VTMismatch(canonical TBool, t_p)) ()
+                else t_erroru name (VTMismatch(t_t, t_e,"")) ()
+            else t_erroru name (VTMismatch(canonical TBool, t_p,"")) ()
 
         | Block ->
             let name = "Block" in
@@ -345,7 +345,7 @@ let rec deduce_expr_type trig_env cur_env utexpr =
             let t_e, t_r = t0 <| function_of |> t_erroru name @: TBad(t0) in
             let t_a = t1 <| value_of |> t_erroru name @: TBad(t0) in
             if t_e <~ t_a then TValue(t_r) 
-            else t_erroru name (VTMismatch(t_e, t_a)) ()
+            else t_erroru name (VTMismatch(t_e, t_a,"")) ()
 
         | Iterate ->
             let name = "Iterate" in
@@ -355,9 +355,9 @@ let rec deduce_expr_type trig_env cur_env utexpr =
               t1 <| collection_of +++ base_of %++ value_of |> t_erroru name @:
                   TBad(t1) in
             if not (t_r === canonical TUnit) 
-                then t_erroru name (VTMismatch(canonical TUnit, t_r)) () else
+                then t_erroru name (VTMismatch(canonical TUnit, t_r,"return val")) () else
             if t_a <~ t_e then TValue(canonical TUnit) 
-            else t_erroru name (VTMismatch(t_a, t_e)) ()
+            else t_erroru name (VTMismatch(t_a, t_e, "element")) ()
 
         | Map ->
             let name = "Map" in
@@ -367,7 +367,7 @@ let rec deduce_expr_type trig_env cur_env utexpr =
               t1 <| collection_of +++ base_of %++ value_of |> t_erroru name @:
                   TBad(t1) in
             if t_a <~ t_e then TValue(canonical (TCollection(t_c, contained_of t_r)))
-            else t_erroru name (VTMismatch(t_a, t_e)) ()
+            else t_erroru name (VTMismatch(t_a, t_e, "element")) ()
 
         | FilterMap ->
             let name = "FilterMap" in
@@ -377,10 +377,11 @@ let rec deduce_expr_type trig_env cur_env utexpr =
             let t_c, t_e = t2 <| collection_of +++ base_of %++ value_of |>
               t_erroru name @: TBad t2 in
 
-            if not (t_pa <~ t_e) then t_erroru name (VTMismatch(t_pa, t_e)) () else
+            if not (t_pa <~ t_e) 
+                then t_erroru name (VTMismatch(t_pa, t_e,"predicate")) () else
             if not (canonical TBool === t_pr) 
-                then t_erroru name (VTMismatch(canonical TBool, t_pr)) () else
-            if not (t_ma <~ t_e) then t_erroru name (VTMismatch(t_ma, t_e)) () else
+                then t_erroru name (VTMismatch(canonical TBool, t_pr, "")) () else
+            if not (t_ma <~ t_e) then t_erroru name (VTMismatch(t_ma, t_e, "map")) () else
             TValue(canonical @: TCollection(t_c, contained_of t_mr))
 
         | Flatten ->
@@ -402,10 +403,10 @@ let rec deduce_expr_type trig_env cur_env utexpr =
                 t_erroru name @: TBad(t2) in
             let expected1 = canonical @: TTuple[t_z; t_e] in
             if not (t_a <~ expected1)
-                then t_erroru name (VTMismatch(t_a, expected1)) () else
+                then t_erroru name (VTMismatch(t_a, expected1, "")) () else
             let expected2 = canonical @: TTuple[t_r; t_e] in
             if not (t_a <~ expected2) 
-                then t_erroru name (VTMismatch(t_a, expected2)) () else 
+                then t_erroru name (VTMismatch(t_a, expected2, "")) () else 
             TValue(t_z)
 
         | GroupByAggregate ->
@@ -417,13 +418,14 @@ let rec deduce_expr_type trig_env cur_env utexpr =
             let t_z = t2 <| value_of |> t_erroru name @: TBad t2 in
             let t_c, t_e = t3 <| collection_of +++ base_of %++ value_of |> 
                 t_erroru name @: TBad t3 in
-            if not (t_ga <~ t_e) then t_erroru name (VTMismatch(t_ga, t_e)) () else
+            if not (t_ga <~ t_e) then t_erroru name (VTMismatch(t_ga, t_e,
+                "grouping func")) () else
             let expected1 = canonical @: TTuple[t_z; t_e] in
             if not (t_aa <~ expected1) 
-                then t_erroru name (VTMismatch(t_aa, expected1)) () else 
+                then t_erroru name (VTMismatch(t_aa, expected1, "agg func")) () else 
             let expected2 = canonical @: TTuple[t_ar; t_e] in
             if not (t_aa <~ expected2) 
-                then t_erroru name (VTMismatch(t_aa, expected2)) () 
+                then t_erroru name (VTMismatch(t_aa, expected2, "agg func")) () 
             else TValue(canonical @: 
                 TCollection(t_c, contained_of @: canonical @: TTuple[t_gr; t_ar]))
 
@@ -436,9 +438,9 @@ let rec deduce_expr_type trig_env cur_env utexpr =
 
             let expected1 = canonical @: TTuple[t_e; t_e] in
             if not (t_ca <~ expected1) then 
-                t_erroru name (VTMismatch(t_ca, expected1)) () else
+                t_erroru name (VTMismatch(t_ca, expected1, "")) () else
             if not (canonical TBool === t_cr) 
-                then t_erroru name (VTMismatch(canonical TBool, t_cr)) () else
+                then t_erroru name (VTMismatch(canonical TBool, t_cr, "")) () else
             TValue(canonical @: TCollection(TList, t_e))
 
         | Slice ->
@@ -455,7 +457,7 @@ let rec deduce_expr_type trig_env cur_env utexpr =
                         fun tp te -> (canonical TUnknown) === tp || te === tp
                         ) t_ps t_es
                     then t0
-                    else t_erroru name (BTMismatch(TTuple(t_ps), TTuple(t_es))) ()
+                    else t_erroru name (BTMismatch(TTuple(t_ps), TTuple(t_es), "")) ()
                 | TUnknown, _ -> TValue (canonical @: TCollection(t_c, t_e))
                 | _ -> t_erroru name (VTBad(t_p)) ()
             end
@@ -468,7 +470,7 @@ let rec deduce_expr_type trig_env cur_env utexpr =
                   t_erroru name @: TBad t0 in
             let t_n = t1 <| value_of |> t_erroru name @: TBad t1 in
             if t_e === t_n then TValue (canonical TUnit) 
-            else t_erroru name (VTMismatch(t_e, t_n)) ()
+            else t_erroru name (VTMismatch(t_e, t_n, "")) ()
 
         | Update ->
             let name = "Update" in
@@ -479,8 +481,8 @@ let rec deduce_expr_type trig_env cur_env utexpr =
             let t_n = t2 <| value_of |> t_erroru name @: TBad t2 in
             if t_e === t_o then 
                 if t_e === t_n then TValue(canonical TUnit)
-                else t_erroru name (VTMismatch(t_e, t_n)) ()
-            else t_erroru name (VTMismatch(t_e, t_o)) ()
+                else t_erroru name (VTMismatch(t_e, t_n, "")) ()
+            else t_erroru name (VTMismatch(t_e, t_o, "")) ()
 
         | Delete ->
             let name = "Delete" in
@@ -490,7 +492,7 @@ let rec deduce_expr_type trig_env cur_env utexpr =
               t_erroru name @: TBad t0 in
             let t_n = t1 <| value_of |> t_erroru name @: TBad t1 in
             if t_e === t_n then TValue(canonical TUnit) 
-            else t_erroru name (VTMismatch(t_e, t_n)) ()
+            else t_erroru name (VTMismatch(t_e, t_n, "")) ()
 
         | Peek ->
             let name = "Peek" in
@@ -508,7 +510,7 @@ let rec deduce_expr_type trig_env cur_env utexpr =
                   t_erroru name @: TBad t0 in
             let t_r = t1 <| value_of |> t_erroru name @: TBad t1 in
             if canonical t_l === t_r then TValue(canonical TUnit) else
-              t_erroru name (VTMismatch(canonical t_l, t_r)) ()
+              t_erroru name (VTMismatch(canonical t_l, t_r, "")) ()
 
         | Deref ->
             let name = "Deref" in
@@ -539,7 +541,7 @@ let rec deduce_expr_type trig_env cur_env utexpr =
             match t_address with TAddress -> 
                 let expected = canonical t_target_args in
                 if expected === t_args then TValue(canonical TUnit) 
-                else t_erroru name (VTMismatch(expected, t_args)) ()
+                else t_erroru name (VTMismatch(expected, t_args, "")) ()
             | _ -> t_erroru name (BTBad(t_address)) ()
 
     in attach_type current_type
@@ -558,27 +560,34 @@ let deduce_program_type program =
     | Declaration(d) :: ss -> 
         let nd, nenv = begin match d with
         | Global(i, t, Some init) ->
-            let typed_init = deduce_expr_type trig_env env init
+            let typed_init = try deduce_expr_type trig_env env init
+                with
+                | TypeError(ast_id, msg) -> 
+                    raise (TypeError(ast_id, "In Global "^i^": "^msg))
             in (Global(i, t, Some typed_init), (i, type_of_texpr typed_init) :: env)
         | Global(i, t, None) -> (Global(i, t, None), (i, t) :: env)
         | Foreign(i, t) -> (Foreign(i, t), (i, t) :: env)
         | Trigger(id, args, locals, body) ->
-            let name = "Trigger("^id^")" in
-            let self_bindings = (id, 
-            TValue(canonical @: TTarget(base_of @: deduce_arg_type args))) in
-            let arg_bindings = (
-                match args with
-                | AVar(i, t) -> [(i, TValue(t))]
-                | ATuple(its) -> List.map (fun (i, t) -> (i, TValue(t))) its
-            ) in
-            let local_bindings = List.map (fun (i, vt) -> (i, TValue(vt))) locals in
-            let inner_env = self_bindings :: arg_bindings @ local_bindings @ env in
-            let typed_body = deduce_expr_type trig_env inner_env body in
-            let t_b = type_of_texpr typed_body <| value_of |> t_error (-1) name @:
-                TBad(type_of_texpr typed_body) in
-            if not (t_b === canonical TUnit)
-                then t_error (-1) name (VTMismatch(canonical TUnit, t_b)) () 
-            else (Trigger(id, args, locals, typed_body), self_bindings :: env)
+            try
+                let name = "Trigger("^id^")" in
+                let self_bindings = (id, 
+                TValue(canonical @: TTarget(base_of @: deduce_arg_type args))) in
+                let arg_bindings = (
+                    match args with
+                    | AVar(i, t) -> [(i, TValue(t))]
+                    | ATuple(its) -> List.map (fun (i, t) -> (i, TValue(t))) its
+                ) in
+                let local_bindings = List.map (fun (i, vt) -> (i, TValue(vt))) locals in
+                let inner_env = self_bindings :: arg_bindings @ local_bindings @ env in
+                let typed_body = deduce_expr_type trig_env inner_env body in
+                let t_b = type_of_texpr typed_body <| value_of |> t_error (-1) name @:
+                    TBad(type_of_texpr typed_body) in
+                if not (t_b === canonical TUnit)
+                    then t_error (-1) name (VTMismatch(canonical TUnit, t_b,"")) () 
+                else (Trigger(id, args, locals, typed_body), self_bindings :: env)
+            with
+            | TypeError(ast_id, msg) -> 
+                    raise (TypeError(ast_id, "In Trigger "^id^": "^msg))
         end in
         Declaration(nd) :: deduce_prog_t trig_env nenv ss
   in
