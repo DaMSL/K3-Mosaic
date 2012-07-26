@@ -22,6 +22,7 @@ val vars_of_lambda : 'a expr_t -> id_t list
 val typed_vars_of_lambda : 'a expr_t -> (id_t * value_type_t) list
 
 (* Stringification *)
+val string_of_address: address -> string
 val string_of_container_type: container_type_t -> string
 val string_of_const: constant_t -> string
 

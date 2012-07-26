@@ -441,7 +441,7 @@ type source_automata_t = int list
 
 type source_prog_t = source_bindings_t * source_automata_t
 
-let env_of_program k3_program =
+let env_and_sources_of_program k3_program =
   let ierror = interpreter_error in
   let env_of_declaration
         ((trig_env, (m_env, f_env)) as env)
@@ -480,6 +480,7 @@ let env_of_program k3_program =
   let init_source_prog = ([], []) in
   List.fold_left env_of_stmt (init_env, init_source_prog) k3_program
 
+let env_of_program k3_program = fst (env_and_sources_of_program k3_program)
 
 (* Instruction interpretation *)
 
@@ -487,20 +488,32 @@ let env_of_program k3_program =
 let can_consume id = false
 let consume id = []
 
-let eval_instructions env source_program k3_program =
+let eval_instructions env address source_program k3_program =
   let run_instruction stmt = match stmt with
     | Declaration _ -> ()
     | Instruction (Consume id) ->
       (* Poll consumeables *) 
       while can_consume id do
         let events = consume id in
-          List.iter (schedule_event (fst source_program) id) events;
-          run_scheduler env 
+        let event_fn = schedule_event (fst source_program) id address in
+          List.iter event_fn events;
+          run_scheduler address env 
       done
   in List.iter run_instruction k3_program
 
 
 (* Program interpretation *)
-let eval_program k3_program =
-  let env, source_program = env_of_program k3_program
-  in eval_instructions env source_program k3_program
+let eval_program address k3_program =
+  let env, source_program = env_and_sources_of_program k3_program
+  in eval_instructions env address source_program k3_program
+
+
+(* Distributed program interpretation *)
+
+(* TODO: peer multiplexing *)
+let eval_networked_program peer_list k3_program =
+  let env, source_program = env_and_sources_of_program k3_program in
+  let peer_envs = List.map (fun addr -> addr, env) peer_list in
+  List.iter (fun (addr,env) ->
+      eval_instructions env addr source_program k3_program
+    ) peer_envs

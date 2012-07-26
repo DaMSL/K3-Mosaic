@@ -58,6 +58,8 @@ let tag_str ?(extra="") t ch_t =
     ^ String.concat ", " ch_t
     ^ ")"
 
+let string_of_address (ip,p) = ip^":"^string_of_int p
+
 let string_of_container_type t_c = match t_c with
     | TSet  -> "TSet"
     | TBag  -> "TBag"
@@ -102,15 +104,15 @@ and flat_string_of_type t = match t with
     | TValue(t) -> flat_string_of_value_type t
 
 let string_of_const c = match c with
-    | CUnit        -> "CUnit"
-    | CUnknown     -> "CUnknown"
-    | CBool(b)     -> "CBool("^string_of_bool(b)^")"
-    | CInt(i)      -> "CInt("^string_of_int(i)^")"
-    | CFloat(f)    -> "CFloat("^string_of_float(f)^")"
-    | CString(s)   -> "CString(\""^s^"\")"
-    | CAddress(ip,p) -> "CAddress("^ip^":"^string_of_int p^")"
-    | CTarget(id)  -> "CTarget("^id^")"
-    | CNothing     -> "CNothing"
+    | CUnit          -> "CUnit"
+    | CUnknown       -> "CUnknown"
+    | CBool(b)       -> "CBool("^string_of_bool(b)^")"
+    | CInt(i)        -> "CInt("^string_of_int(i)^")"
+    | CFloat(f)      -> "CFloat("^string_of_float(f)^")"
+    | CString(s)     -> "CString(\""^s^"\")"
+    | CAddress(addr) -> "CAddress("^string_of_address addr^")"
+    | CTarget(id)    -> "CTarget("^id^")"
+    | CNothing       -> "CNothing"
 
 let string_of_stop_behavior_t s = match s with
     | UntilCurrent -> "UntilCurrent"

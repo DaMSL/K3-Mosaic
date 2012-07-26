@@ -22,9 +22,17 @@ let (@:) f x = f x
 let (@=:?) actual expected = AssertTypeEquals(expected, actual)
 let (@=?)  actual expected = AssertValueEquals(expected, actual)
 
-let give_type expr = type_of_texpr (deduce_expr_type [] [] expr)
-let iparse s = K3Parser.expr K3Lexer.tokenize (Lexing.from_string s)
+(* Parsing *)
+let parse_expr s = K3Parser.expr K3Lexer.tokenize (Lexing.from_string s)
+let parse_expression_test s = K3Parser.expression_test K3Lexer.tokenize (Lexing.from_string s)
 
+(* Evaluation *)
+let eval_test_expr (decl_prog, e) = 
+  let tdecl_prog = deduce_program_type decl_prog in
+  let _, val_env = env_of_program tdecl_prog in  
+  value_of_eval (snd (eval_expr val_env (deduce_expr_type [] [] e)))
+
+(* Tests *)
 let equals_assertion expected actual string_fn =
   if expected = actual then "PASSED."
   else "FAILED: Expected " ^ string_fn expected ^ ", but got " ^ string_fn actual ^ "."

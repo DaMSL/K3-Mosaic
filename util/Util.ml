@@ -25,3 +25,14 @@ let list_take li len =
 let list_zip list1 list2 = List.map2 (fun i j -> (i,j)) list1 list2
 
 let compose_fn f g x = f(g x)
+
+(* I/O helpers *)
+let read_file f = 
+  let lines, in_chan = ref [], (open_in f) in
+  let all_lines =
+    try while true do
+          lines := (!lines @ [input_line in_chan])
+        done;
+        []
+    with End_of_file -> !lines
+  in close_in in_chan; String.concat "\n" all_lines 

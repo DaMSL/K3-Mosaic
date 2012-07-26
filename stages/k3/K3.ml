@@ -41,7 +41,7 @@ type arg_t
     = AVar      of id_t * value_type_t
     | ATuple    of (id_t * value_type_t) list
 
-type c_address = string * int (* IP * port *)
+type address = string * int (* IP * port *)
 
 (* Constants *)
 type constant_t
@@ -51,8 +51,8 @@ type constant_t
     | CInt      of int
     | CFloat    of float
     | CString   of string
-    | CAddress of c_address
-    | CTarget of id_t
+    | CAddress  of address
+    | CTarget   of id_t
     | CNothing
 
 (* Expressions *)

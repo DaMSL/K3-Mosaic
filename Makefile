@@ -20,6 +20,7 @@ FILES=\
 	stages/k3_dist/GenDist \
 
 TOPLEVEL_FILES=\
+	tests/Testing \
 	Driver \
 
 LEXERS=\
@@ -33,7 +34,12 @@ DIRS=\
 	stages/k3 \
 	stages/k3/interpreter \
 	stages/k3_dist \
-  tests \
+	tests \
+
+INCLUDE_OBJ=\
+        str.cma\
+        unix.cma
+
 
 #################################################
 
@@ -53,10 +59,13 @@ NC_EXTRA_FILES      =$(patsubst %,%.cmx, $(EXTRA_FILES))
 NC_EXTRA_INCLUDES   =$(patsubst %,%.cmxi,$(EXTRA_FILES))
 
 OCAML_FLAGS +=\
-	$(patsubst %, -I %,$(DIRS))
+        $(patsubst %, -I %,$(DIRS)) \
+        $(INCLUDE_OBJ)
 
 OCAMLOPT_FLAGS +=\
-	$(patsubst %, -I %,$(DIRS))
+        $(patsubst %, -I %,$(DIRS))\
+        $(patsubst %.cma,%.cmxa,$(INCLUDE_OBJ))
+
 
 COMMON_GARBAGE := $(patsubst %,%.o,$(FILES)) $(patsubst %,%.o,$(EXTRA_FILES)) \
 		  $(patsubst %,%.annot,$(FILES)) $(patsubst %,%.annot,$(EXTRA_FILES))
@@ -81,8 +90,8 @@ TEST_INCLUDES   := $(patsubst %,%.cmi, $(TESTS))
 TEST_BINARIES   := $(patsubst %, bin/%, $(TESTS))
 
 TEST_GARBAGE    := $(TEST_BASE_FILES) $(TEST_BASE_INCLUDES) $(TEST_FILES) $(TEST_INCLUDES) \
-		   $(patsubst %,%.o,$(TEST_BASE)) $(patsubst %,%.o,$(TESTS)) \
-		   $(patsubst %,%.annot,$(TEST_BASE)) $(patsubst %,%.annot,$(TESTS))
+                   $(patsubst %,%.o,$(TEST_BASE)) $(patsubst %,%.o,$(TESTS)) \
+                   $(patsubst %,%.annot,$(TEST_BASE)) $(patsubst %,%.annot,$(TESTS))
 
 #################################################
 
@@ -112,12 +121,12 @@ k3: $(BC_FILES) $(BC_EXTRA_FILES)
 
 # Test Suites
 
-tests: k3 $(TEST_BASE_FILES) $(TEST_FILES) $(TEST_BINARIES)
+tests: k3 $(TEST_FILES) $(TEST_BINARIES)
 	@echo "Built tests"
 
 #################################################
 
-$(BC_FILES) $(BC_EXTRA_FILES) $(TEST_BASE_FILES) $(TEST_FILES): %.cmo : %.ml
+$(BC_FILES) $(BC_EXTRA_FILES) $(TEST_FILES): %.cmo : %.ml
 	@if [ -f $(*).mli ] ; then \
 		echo Compiling Header $(*);\
 		$(OCAMLCC) $(OCAML_FLAGS) -c $(*).mli;\
@@ -167,6 +176,7 @@ Makefile.local:
 	@cp config/Makefile.local.default Makefile.local
 
 include Makefile.deps
+include Makefile.parserdeps
 include Makefile.local
 
 #################################################

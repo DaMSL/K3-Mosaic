@@ -1,10 +1,13 @@
 (* Driver for the K3 programming language. *)
 
 open Arg
+open Util
 open K3
+open K3Values
 open K3Util
 open K3Typechecker
 open K3Interpreter
+open Testing
 
 (* Helpers *)
 let error s = prerr_endline s; exit 1
@@ -31,12 +34,13 @@ let parse_language s = match String.lowercase s with
   | _ -> error ("Invalid output language: "^s)
 
 (* Actions *)
-type action_t = Compile | Interpret | Print
+type action_t = Compile | Interpret | Print | ExpressionTest
 
 let action_descriptions = [
     Compile,          "-c",    "Compile to specified language";
     Interpret,        "-r",    "Interpret with specified language";
     Print,            "-p",    "Print program as specified language";
+    ExpressionTest,   "-t",    "Unit test for expressions"
   ]
 
 let action_specs action_param = List.map (fun (act, flag, desc) -> 
@@ -49,6 +53,8 @@ type parameters = {
     mutable language : language_t;
     mutable search_paths : string list;
     mutable input_files : string list;
+    mutable node_address : address;
+    mutable peers : address list;
   }
 
 let cmd_line_params : parameters = {
@@ -56,8 +62,11 @@ let cmd_line_params : parameters = {
     language = K3;
     search_paths = ["."];
     input_files = [];
-  }  
+    node_address = ("127.0.0.1", 10000);
+    peers = [];
+  }
 
+(* General parameters *)
 let set_output_language l =
   cmd_line_params.language <- parse_language l
 
@@ -66,13 +75,29 @@ let append_search_path p =
 
 let append_input_file f = 
   cmd_line_params.input_files <- cmd_line_params.input_files @ [f]
+  
+(* Address parameters *)
+let parse_ip ip_str = match Str.split (Str.regexp (Str.quote ":")) ip_str with
+  | [ip; port] -> ip, (int_of_string port)
+  | _ -> invalid_arg "invalid ip string format"
 
-let param_specs = Arg.align [
+let set_node_address ip_str =
+  cmd_line_params.node_address <- parse_ip ip_str
+  
+let append_peers ip_str_list =
+  let ips = Str.split (Str.regexp (Str.quote ",")) ip_str_list in
+  cmd_line_params.peers <- cmd_line_params.peers @ (List.map parse_ip ips)
+
+let param_specs = Arg.align ((action_specs cmd_line_params.action)@[
   ("-l", (Arg.String set_output_language), 
       "lang   Set the compiler's output language");
   ("-I", (Arg.String append_search_path), 
-      "dir    Include a directory in the module search path")
-  ]@(action_specs cmd_line_params.action)
+      "dir    Include a directory in the module search path");
+  ("-h", (Arg.String set_node_address), 
+      "addr   Set the current node address for evaluation");
+  ("-n", (Arg.String append_peers), 
+      "[addr] Append addresses to the peer list");
+  ])
 
 let usage_msg =
   ("k3 [opts] sourcefile1 [sourcefile2 [...]]"^
@@ -85,7 +110,7 @@ let parse_cmd_line () =
   Arg.parse param_specs append_input_file usage_msg
 
 (* Driver execution *)
-let parse_program f = 
+let parse_program f =
   let in_chan = try open_in f
                 with Sys_error _ -> error ("failed to open file: "^f) in
   let lexbuf = Lexing.from_channel in_chan in
@@ -99,14 +124,14 @@ let print_k3_program f =
 (* TODO *)
 let compile params = ()
 
-(* TODO *)
 let interpret params =
   let eval_fn = match params.language with
-    | K3 -> (fun f -> eval_program (deduce_program_type (parse_program f)))
+    | K3 -> (fun f -> 
+      let typed_program = deduce_program_type (parse_program f)
+      in eval_program params.node_address typed_program)
     | _ -> error "Output language not yet implemented"
   in
   List.iter eval_fn params.input_files
-
 
 let print params =
   let print_fn = match params.language with
@@ -114,11 +139,30 @@ let print params =
     | _ -> error "Output language not yet implemented"
   in
   List.iter print_fn params.input_files
- 
+
+let test params =
+  let test_fn = match params.language with
+    | K3 -> (fun f -> 
+      let expr, expected =
+        let decls, e, x_opt = parse_expression_test (read_file f) in
+        let x = match x_opt with
+          | Some y -> y
+          | None -> error "No expected value given for unit test"
+        in (decls, e), (decls, x)
+      in
+      let test_case =
+        case f @: eval_test_expr expr @=? eval_test_expr expected  
+      in run_tests test_case)
+    | _ -> error "Testing language not yet implemented"
+  in List.iter test_fn params.input_files
+
+
+(* Top level *)
 let process_parameters params = match !(params.action) with
   | Compile -> compile params
   | Interpret -> interpret params
   | Print -> print params
+  | ExpressionTest -> test params
 
 let main () =
     parse_cmd_line();

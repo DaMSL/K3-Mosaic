@@ -25,6 +25,7 @@
 
 %}
 
+%token EXPECTED
 %token DECLARE FOREIGN TRIGGER CONSUME
 
 %token UNIT UNKNOWN NOTHING
@@ -76,8 +77,11 @@
 %token <string> IDENTIFIER
 
 %start program
+%start expression_test
 %start expr
+
 %type <int K3.program_t> program
+%type <int K3.program_t * int K3.expr_t * (int K3.expr_t option)> expression_test
 %type <int K3.expr_t> expr
 
 %right RARROW
@@ -107,6 +111,11 @@ program:
     | statement { [$1] }
     | statement program { $1 :: $2 }
 ;
+
+expression_test:
+    | declaration expression_test  { let x,y,z = $2 in (Declaration($1)::x), y, z }
+    | expr EXPECTED expr           { [], $1, Some($3) }
+    | expr                         { [], $1, None }
 
 statement:
     | declaration { Declaration($1) }

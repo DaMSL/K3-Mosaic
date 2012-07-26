@@ -1,15 +1,20 @@
+open Util
 open Testing
 open K3
 open K3Typechecker
 open K3Values
 open K3Interpreter
 
-let eval e = 
-  value_of_eval (snd (eval_expr ([],[]) (deduce_expr_type [] [] e)));;
+let parse = parse_expression_test
 
 let case_list l = List.map (fun (id, expr_str, expected_val) ->
-    case id @: eval (iparse expr_str) @=? expected_val
+    let decls, e, _ = parse expr_str in
+    case id @: eval_test_expr (decls, e) @=? expected_val
   ) l
+
+let case_files l = case_list (List.map (fun (id, test_f, expected_val) ->
+    id, (read_file test_f), expected_val
+  ) l)
   
 let tests = group "all" [
     group "Constants" (case_list [

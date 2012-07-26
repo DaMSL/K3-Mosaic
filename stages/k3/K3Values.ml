@@ -19,7 +19,7 @@ type value_t
     | VBag of value_t list
     | VList of value_t list
     | VFunction of arg_t * int texpr_t
-    | VAddress of string * int (* ip, port *)
+    | VAddress of address
     | VTarget of id_t
 
 type frame_t = (id_t * value_t) list
