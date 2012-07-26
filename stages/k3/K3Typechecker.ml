@@ -20,16 +20,14 @@ type error_type =
     | MTBad of mutable_type_t
     | TMsg of string
 
-(* uuid identifies the node in the AST while text_id identifies the trigger or
- * function *)
-let t_error uuid text_id name msg () = 
+let t_error uuid name msg () = 
     let extra = match msg with
-        | TMismatch(t1,t2,s)  -> s^": This expression has type "^string_of_type t1^
+        | TMismatch(t1,t2)  -> "This expression has type "^string_of_type t1^
             "\nBut an expression was expected of type "^string_of_type t2
-        | VTMismatch(t1,t2,s) -> s^": This expression has type "^
+        | VTMismatch(t1, t2) -> "This expression has type "^
             string_of_value_type t1^"\nBut an expression was expected of type "^
             string_of_value_type t2
-        | BTMismatch(t1,t2,s) -> s^": This expression has type "^
+        | BTMismatch(t1, t2) -> "This expression has type "^
             string_of_base_type t1^"\nBut an expression was expected of type "^
             string_of_base_type t2
         | TBad(t)           -> "Bad type "^string_of_type t
@@ -38,7 +36,7 @@ let t_error uuid text_id name msg () =
         | MTBad(t)          -> "Bad type "^flat_string_of_mutable_type t
         | TMsg(s)           -> s
     in
-    raise (TypeError(uuid, "In "^text_id^", "^name^": "^extra))
+    raise (TypeError(uuid, name^": "^extra^")" ))
 
 let check_tag_arity tag children =
     let length = List.length children in
@@ -90,8 +88,10 @@ let check_tag_arity tag children =
     in length = correct_arity
 
 type 'a texpr_t = (type_t * 'a) expr_t
+type 'a tprogram_t = (type_t * 'a) program_t
 
-let type_of texpr = let (_, (t, _)), _ = decompose_tree texpr in t
+let type_of_texpr texpr = fst (snd_data texpr)
+let meta_of_texpr e = snd (snd_data e)
 
 let (<|) x f = f x
 and (|>) f y = f y
@@ -169,9 +169,9 @@ let rec passable t_l t_r =
 
 let (<~) = passable
 
-let deduce_constant_type uuid text_id trig_env c =
+let deduce_constant_type id trig_env c =
   (* pre-curry the type error *)
-  let t_erroru = t_error uuid text_id in 
+  let t_erroru = t_error id in 
   let constant_type =
       match c with
       | CUnit -> TUnit
@@ -194,9 +194,9 @@ let deduce_arg_type a =
     | AVar(i, t) -> t
     | ATuple(its) -> canonical (TTuple(snd(List.split its)))
 
-let rec deduce_expr_type id trig_env cur_env utexpr =
+let rec deduce_expr_type trig_env cur_env utexpr =
     let ((uuid, tag), aux), untyped_children = decompose_tree utexpr in
-    let t_erroru = t_error uuid id in (* pre-curry the type error *)
+    let t_erroru = t_error uuid in (* pre-curry the type error *)
 
     (* Check Tag Arity *)
     if not (check_tag_arity tag untyped_children) then raise MalformedTree else
@@ -209,19 +209,19 @@ let rec deduce_expr_type id trig_env cur_env utexpr =
         | _ -> cur_env
     in
 
-    let typed_children = List.map (deduce_expr_type id trig_env env) untyped_children in
+    let typed_children = List.map (deduce_expr_type trig_env env) untyped_children in
     let attach_type t = mk_tree (((uuid, tag), (t, aux)), typed_children) in
-    let bind n = type_of (List.nth typed_children n) in
+    let bind n = type_of_texpr (List.nth typed_children n) in
 
     let current_type =
         match tag with
-        | Const(c) -> TValue(deduce_constant_type uuid id trig_env c)
+        | Const(c) -> TValue(deduce_constant_type uuid trig_env c)
         | Var(id) -> begin try List.assoc id env 
             with Not_found -> t_erroru "Var" (TMsg(id^" not found")) () end
         | Tuple ->
             let child_types = List.map 
             (fun e -> 
-                type_of e <| value_of |> t_erroru "Tuple" (TBad(type_of e)))
+                type_of_texpr e <| value_of |> t_erroru "Tuple" (TBad(type_of_texpr e)))
                 typed_children 
             in 
             TValue(canonical (TTuple(child_types)))
@@ -328,9 +328,9 @@ let rec deduce_expr_type id trig_env cur_env utexpr =
             let name = "Block" in
             let rec validate_block components = (
                 match components with
-                | e :: [] -> type_of e
-                | h :: t when type_of h <| value_of |> 
-                    t_erroru name @: TBad(type_of h) === canonical TUnit -> validate_block t
+                | e :: [] -> type_of_texpr e
+                | h :: t when type_of_texpr h <| value_of |> 
+                    t_erroru name @: TBad(type_of_texpr h) === canonical TUnit -> validate_block t
                 | _ -> t_erroru name (TMsg("Bad or non-TUnit expression")) ()
             ) in validate_block typed_children
 
@@ -560,8 +560,8 @@ let deduce_program_type program =
     | Declaration(d) :: ss -> 
         let nd, nenv = begin match d with
         | Global(i, t, Some init) ->
-            let typed_init = deduce_expr_type i trig_env env init
-            in (Global(i, t, Some typed_init), (i, type_of typed_init) :: env)
+            let typed_init = deduce_expr_type trig_env env init
+            in (Global(i, t, Some typed_init), (i, type_of_texpr typed_init) :: env)
         | Global(i, t, None) -> (Global(i, t, None), (i, t) :: env)
         | Foreign(i, t) -> (Foreign(i, t), (i, t) :: env)
         | Trigger(id, args, locals, body) ->
@@ -575,11 +575,11 @@ let deduce_program_type program =
             ) in
             let local_bindings = List.map (fun (i, vt) -> (i, TValue(vt))) locals in
             let inner_env = self_bindings :: arg_bindings @ local_bindings @ env in
-            let typed_body = deduce_expr_type id trig_env inner_env body in
-            let t_b = type_of typed_body <| value_of |> t_error (-1) id name @:
-                TBad(type_of typed_body) in
+            let typed_body = deduce_expr_type trig_env inner_env body in
+            let t_b = type_of_texpr typed_body <| value_of |> t_error (-1) name @:
+                TBad(type_of_texpr typed_body) in
             if not (t_b === canonical TUnit)
-                then t_error (-1) id name (VTMismatch(canonical TUnit, t_b, "")) () 
+                then t_error (-1) name (VTMismatch(canonical TUnit, t_b)) () 
             else (Trigger(id, args, locals, typed_body), self_bindings :: env)
         end in
         Declaration(nd) :: deduce_prog_t trig_env nenv ss
