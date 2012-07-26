@@ -166,7 +166,8 @@ let strip_args arg = match arg with
 
 (* checks if a member of a collection is present *)
 let mk_has_member collection pattern member_type = 
-    mk_neg @: mk_eq (mk_slice collection pattern) (mk_empty member_type)
+    mk_neg @: mk_eq (mk_slice collection pattern) 
+      (mk_empty @: wrap_tlist member_type)
 
 (* function to declare and define a global function. Assumes the global
  * construct allows for an expr_t as well.
