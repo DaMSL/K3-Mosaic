@@ -1,6 +1,7 @@
 open Testing
 open K3
 open K3Typechecker
+open K3Values
 open K3Interpreter
 
 let eval e = 

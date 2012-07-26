@@ -3,25 +3,8 @@ open Tree
 open K3
 open K3Typechecker
 open K3Util
-
-exception RuntimeError of int
-
-type value_t
-    = VUnknown
-    | VUnit
-    | VBool of bool
-    | VInt of int
-    | VFloat of float
-    | VByte of char
-    | VString of string
-    | VTuple of value_t list
-    | VOption of value_t option
-    | VSet of value_t list
-    | VBag of value_t list
-    | VList of value_t list
-    | VFunction of arg_t * int texpr_t
-    | VAddress of string * int (* ip, port *)
-    | VTarget of id_t
+open K3Values
+open K3Runtime
 
 type eval_t = VDeclared of value_t ref | VTemp of value_t
 
@@ -69,10 +52,6 @@ let interpreter_error s = failwith ("interpreter: "^s)
 
 
 (* Environment helpers *)
-type frame_t = (id_t * value_t) list
-type env_t = (id_t * value_t ref) list * frame_t list
-
-type trigger_env_t = id_t * (env_t -> value_t -> unit) list
 
 let lookup id (mutable_env, frame_env) =
   let rec match_in_frames frame_env =
@@ -88,12 +67,6 @@ let lookup id (mutable_env, frame_env) =
      then VDeclared(List.assoc id mutable_env)
      else raise Not_found)
 
-
-(* Scheduling helpers *)
-
-(* TODO: add a trigger to the global scheduling data structure, according
- * to a policy *)
-let schedule target addr args = () 
 
 (* Expression interpretation *)
 
@@ -399,7 +372,7 @@ and eval_expr cenv texpr =
     | Send ->
       let renv, parts = child_values cenv in
       begin match parts with
-        | [target;addr;arg] -> (schedule target addr arg; renv, VTemp VUnit)
+        | [target;addr;arg] -> (schedule_trigger target addr arg; renv, VTemp VUnit)
         | _ -> raise (RuntimeError uuid)
       end
 
@@ -455,44 +428,79 @@ let dispatch_foreign id = interpreter_error "foreign functions not implemented"
 let trigger_eval id arg local_decls body =
   fun (m_env, f_env) -> fun a ->
     let default (id,t) = id, ref (default_isolated_value t) in
-    let local_env = (List.map default local_decls)@m_env, f_env
-    in (eval_fun (-1) (VFunction(arg,body))) local_env a
+    let local_env = (List.map default local_decls)@m_env, f_env in 
+    let _, reval = (eval_fun (-1) (VFunction(arg,body))) local_env a in
+    match value_of_eval reval with
+      | VUnit -> ()
+      | _ -> raise (RuntimeError (-1))
+
+(* Source automata interpretation *)
+
+(* TODO: Shyam *)
+type source_automata_t = int list
+
+type source_prog_t = source_bindings_t * source_automata_t
 
 let env_of_program k3_program =
   let ierror = interpreter_error in
-  let env_of_declaration (trig_env, (m_env, f_env)) d = match d with
-      Global     (id,t,init_opt) ->
+  let env_of_declaration
+        ((trig_env, (m_env, f_env)) as env)
+        ((source_bindings, source_automata) as source_prog) d
+  = match d with
+      K3.Global (id,t,init_opt) ->
         let (rm_env, rf_env), init_val = match init_opt with
           | Some e ->
             let renv, reval = eval_expr (m_env, f_env) e
             in renv, value_of_eval reval
 
           | None -> (m_env, f_env), default_value t 
-        in trig_env, (((id, ref init_val) :: rm_env), rf_env)
+        in
+        let renv = trig_env, (((id, ref init_val) :: rm_env), rf_env)
+        in renv, source_prog
 
-    | Foreign    (id,t) -> trig_env, (m_env, [id, dispatch_foreign id] :: f_env)
+    | Foreign (id,t) -> 
+      let renv = trig_env, (m_env, [id, dispatch_foreign id] :: f_env)
+      in renv, source_prog
 
-    | Trigger    (id,arg,local_decls,body) ->
-      (id, trigger_eval id arg local_decls body) :: trig_env, (m_env, f_env)
+    | Trigger (id,arg,local_decls,body) ->
+      let renv =
+        (id, trigger_eval id arg local_decls body) :: trig_env, (m_env, f_env)
+      in renv, source_prog
 
-    | Bind       (src_id, trig_id) -> ierror "not yet implemented"
+    | Bind (src_id, trig_id) ->
+      env, ((src_id, trig_id)::source_bindings, source_automata)
+
     | Consumable c -> ierror "not yet implemented"
   in
-  let env_of_stmt (trig_env, (m_env, f_env)) k3_stmt = match k3_stmt with
-    | Declaration d -> env_of_declaration (trig_env, (m_env, f_env)) d 
-    | _ -> trig_env, (m_env, f_env)
-  in List.fold_left env_of_stmt ([],([],[])) k3_program
+  let env_of_stmt (env, source_prog) k3_stmt = match k3_stmt with
+    | Declaration d -> env_of_declaration env source_prog d 
+    | _ -> env, source_prog
+  in 
+  let init_env = ([], ([],[])) in
+  let init_source_prog = ([], []) in
+  List.fold_left env_of_stmt (init_env, init_source_prog) k3_program
 
 
 (* Instruction interpretation *)
 
 (* TODO: Shyam's sources and loop code *)
-let eval_instructions (trig_env, prog_env) k3_program = ()
+let can_consume id = false
+let consume id = []
+
+let eval_instructions env source_program k3_program =
+  let run_instruction stmt = match stmt with
+    | Declaration _ -> ()
+    | Instruction (Consume id) ->
+      (* Poll consumeables *) 
+      while can_consume id do
+        let events = consume id in
+          List.iter (schedule_event (fst source_program) id) events;
+          run_scheduler env 
+      done
+  in List.iter run_instruction k3_program
 
 
 (* Program interpretation *)
-
-(* TODO: simulate scheduling, peers, and state per peer *)
 let eval_program k3_program =
-  let trig_env, env = env_of_program k3_program
-  in eval_instructions (trig_env, env) k3_program
+  let env, source_program = env_of_program k3_program
+  in eval_instructions env source_program k3_program

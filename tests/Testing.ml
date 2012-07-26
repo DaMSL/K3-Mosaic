@@ -3,6 +3,7 @@ open Tree
 open K3
 open K3Util
 open K3Typechecker
+open K3Values
 open K3Interpreter
 
 type assertion_t =

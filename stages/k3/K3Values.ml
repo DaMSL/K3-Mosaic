@@ -1,8 +1,9 @@
-open Tree
 open K3
 open K3Typechecker
 
 exception RuntimeError of int
+
+(* Interpreter representation of values *)
 
 type value_t
     = VUnknown
@@ -21,15 +22,10 @@ type value_t
     | VAddress of string * int (* ip, port *)
     | VTarget of id_t
 
-type eval_t = VDeclared of value_t ref | VTemp of value_t
-
 type frame_t = (id_t * value_t) list
 type env_t = (id_t * value_t ref) list * (frame_t list)
+type trigger_env_t = (id_t * (env_t -> value_t -> unit)) list
+type program_env_t = trigger_env_t * env_t
 
-val string_of_value: value_t -> string
-
-val value_of_eval : eval_t -> value_t
-
-val eval_expr : env_t -> int texpr_t -> env_t * eval_t
-
-val eval_program : int tprogram_t -> unit
+(* consumeable id -> trigger id *)
+type source_bindings_t = (id_t * id_t) list
