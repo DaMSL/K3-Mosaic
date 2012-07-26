@@ -305,13 +305,13 @@ let rec deduce_expr_type trig_env cur_env utexpr =
             let name = match tag with Eq -> "Eq" | Lt -> "Lt" | Neq -> "Neq" 
                 | Leq -> "Leq" | _ -> "" in
             let t0 = bind 0 in let t1 = bind 1 in
-            let t_l = t0 <| base_of %++ value_of |> t_erroru name @: TBad(t0) in
-            let t_r = t1 <| base_of %++ value_of |> t_erroru name @: TBad(t1) in
+            let t_l = t0 <| value_of |> t_erroru name @: TBad(t0) in
+            let t_r = t1 <| value_of |> t_erroru name @: TBad(t1) in
 
             (* We can compare any two values whose base types are the same, and *)
             (* are comparable, regardless of if either of them are refs. *)
-            if t_l = t_r then TValue(canonical TBool) 
-            else t_erroru name (BTMismatch(t_l, t_r, "")) ()
+            if t_l === t_r then TValue(canonical TBool) 
+            else t_erroru name (VTMismatch(t_l, t_r, "")) ()
 
         | IfThenElse ->
             let name = "IfThenElse" in
