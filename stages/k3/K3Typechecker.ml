@@ -481,8 +481,8 @@ let rec deduce_expr_type trig_env cur_env utexpr =
             let t_n = t2 <| value_of |> t_erroru name @: TBad t2 in
             if t_e === t_o then 
                 if t_e === t_n then TValue(canonical TUnit)
-                else t_erroru name (VTMismatch(t_e, t_n, "new value:")) ()
-            else t_erroru name (VTMismatch(t_e, t_o, "old value:")) ()
+                else t_erroru name (VTMismatch(t_n, t_e, "new value:")) ()
+            else t_erroru name (VTMismatch(t_o, t_e, "old value:")) ()
 
         | Delete ->
             let name = "Delete" in
