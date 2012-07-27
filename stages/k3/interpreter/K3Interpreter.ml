@@ -1,15 +1,14 @@
 open Util
 open Tree
 open K3
+open K3Values
 open K3Typechecker
 open K3Util
-open K3Values
 open K3Runtime
 
 type eval_t = VDeclared of value_t ref | VTemp of value_t
 
 (* Generic helpers *)
-let unwrap opt = match opt with Some v -> v | _ -> failwith "invalid option unwrap"
 
 let (<|) x f = f x
 and (|>) f y = f y
@@ -23,29 +22,6 @@ let nub xs =
         List.iter (fun x -> Hashtbl.replace blank x ()) xs;
         Hashtbl.fold (fun h () t -> h :: t) blank []
 
-
-(* Value stringification *)
-let rec string_of_value v =
-    match v with
-    | VUnknown  -> "VUnknown"
-    | VUnit     -> "VUnit"
-    | VBool b   -> "VBool("^ string_of_bool b^")"
-    | VInt i    -> "VInt("^ string_of_int i^")"
-    | VFloat f  -> "VFloat("^ string_of_float f^")"
-    | VByte c   -> "VByte("^ string_of_int (Char.code c)^")"
-    | VString s -> "VString("^s^")"
-    | VTuple vs -> "VTuple("^ String.concat ", " (List.map string_of_value vs)^")"
-    
-    | VOption vopt ->
-      "VOption("^(if vopt = None then "None" else string_of_value (unwrap vopt))^")"
-    
-    | VSet vs  -> "VSet("^ String.concat ", " (List.map string_of_value vs)^")"
-    | VBag vs  -> "VBag("^ String.concat ", " (List.map string_of_value vs)^")"
-    | VList vs -> "VList("^ String.concat ", " (List.map string_of_value vs)^")"
-    
-    | VFunction (a, b) -> "VFunction("^ string_of_arg a ^" -> "^ string_of_expr b^")"
-    | VAddress (ip,port) -> "VAddress("^ip^":"^ string_of_int port^")"
-    | VTarget id -> "VTarget("^id^")"
 
 (* Prettified error handling *)
 let interpreter_error s = failwith ("interpreter: "^s)
@@ -183,6 +159,7 @@ and eval_expr cenv texpr =
         )
     in
 
+    (* Start of evaluator *)
     match tag with
     | Const(c) -> (cenv, VTemp(value_of_const c))
     | Var(id) -> (try cenv, lookup id cenv with Not_found -> raise (RuntimeError uuid))
@@ -191,6 +168,7 @@ and eval_expr cenv texpr =
       let renv, rval = child_value cenv 0
       in (renv, VTemp(VOption (Some rval)))
 
+    (* Collection constructors *)
     | Empty(ct) ->
         let name = "Empty" in
         let ctype, _ = ct <| collection_of ++% base_of |> t_erroru name @: VTBad(ct) in
@@ -224,6 +202,29 @@ and eval_expr cenv texpr =
             | _ -> raise (RuntimeError uuid)
         )
 
+    | Range c_t ->
+      let renv, parts = child_values cenv in
+      begin match parts with
+        | [start; stride; VInt(steps)] ->
+          let init_fn =
+            let f = float_of_int in
+            match start, stride with
+            | VInt(x),   VInt(y)   -> (fun i -> VInt(x+(i*y)))
+            | VInt(x),   VFloat(y) -> (fun i -> VFloat((f x) +. ((f i) *. y)))
+            | VFloat(x), VInt(y)   -> (fun i -> VFloat(x +. ((f i) *. (f y))))
+            | VFloat(x), VFloat(y) -> (fun i -> VFloat(x +. ((f i) *. y)))
+            | _, _ -> raise (RuntimeError uuid)
+          in 
+          let l = Array.to_list (Array.init steps init_fn) in
+          let reval = VTemp(match c_t with
+                | TSet -> VSet(l) 
+                | TBag -> VBag(l)
+                | TList -> VList(l))
+          in renv, reval
+        | _ -> raise (RuntimeError uuid)
+      end
+
+    (* Arithmetic and comparators *)
     | Add  -> eval_binop (||) (+) (+.)
     | Mult -> eval_binop (&&) ( * ) ( *. ) 
     
@@ -241,6 +242,7 @@ and eval_expr cenv texpr =
     | Neq -> eval_cmpop (<>)
     | Leq -> eval_cmpop (<=)
 
+    (* Control flow *)
     | Lambda(a) ->
       let body = List.nth children 0
       in cenv, VTemp(VFunction(a, body))
@@ -262,6 +264,8 @@ and eval_expr cenv texpr =
             | VBool(b) when not b -> eval_expr penv (List.nth children 2)
             | _ -> raise (RuntimeError uuid)
         )
+        
+    (* Collection transformers *)  
     | Map ->
         let fenv, f = child_value cenv 0 in
         let nenv, c = child_value cenv 1 in
@@ -324,20 +328,66 @@ and eval_expr cenv texpr =
         let g' = eval_fn g in
         let f' = eval_fn f in
         let cl = extract_value_list c in
-        let h = Hashtbl.create (List.length cl) in
-        let renv = List.fold_left (
-            fun e a ->
-                let kenv, key = 
-                  let e,k = g' e a in e, value_of_eval k
-                in
-                let v = (try Hashtbl.find h key with Not_found -> z) in
-                let aenv, agg = f' kenv (VTuple([v; a])) in
-                Hashtbl.replace h key (value_of_eval agg); aenv
-        ) nenv (extract_value_list c)
-        in renv, preserve_collection (fun _ -> (Hashtbl.fold (fun k v kvs -> (VTuple([k; v]) :: kvs)) h [])) c
+        let gb_agg_fn find_fn replace_fn = fun e a ->
+            let kenv, key = 
+              let e,k = g' e a in e, value_of_eval k
+            in
+            let v = (try find_fn key with Not_found -> z) in
+            let aenv, agg = f' kenv (VTuple([v; a])) in
+            replace_fn key (value_of_eval agg); aenv
+        in
         
-    (* TODO: range, collection modifiers, send *)
-    
+		    (* We use two different group by aggregation methods to preserve the
+         * order of group=by entries in the result collection based on their
+         * order in the input collection *)
+		    let hash_gb_agg_method = lazy(
+		      let h = Hashtbl.create 10 in
+		      let agg_fn = gb_agg_fn (Hashtbl.find h) (Hashtbl.replace h) in
+		      let build_fn () = Hashtbl.fold (fun k v kvs -> (VTuple([k; v]) :: kvs)) h []
+		      in agg_fn, build_fn)
+		    in
+		
+		    let order_preserving_gb_agg_method = lazy(
+		      let l = ref [] in
+		      let agg_fn =
+		        gb_agg_fn (fun k -> List.assoc k !l)
+		          (fun k v ->
+		            let found,nl = List.fold_left (fun (f_acc,l_acc) (k2,v2) ->
+		                if k = k2 then (true, l_acc@[k,v]) else (f_acc, l_acc@[k2,v2])
+		              ) (false,[]) !l
+		            in l := if found then nl else nl@[k,v])
+		      in
+		      let build_fn () = List.map (fun (k,v) -> VTuple([k;v])) !l
+		      in agg_fn, build_fn)
+		    in
+
+        let agg_fn, build_fn = Lazy.force (match c with
+          | VSet _ | VBag _ -> hash_gb_agg_method
+          | VList _ -> order_preserving_gb_agg_method
+          | _ ->  raise (RuntimeError uuid))
+        in
+        let renv = List.fold_left agg_fn nenv cl
+        in renv, preserve_collection (fun _ -> build_fn ()) c
+
+    | Sort ->
+      let renv, parts = child_values cenv in
+      begin match parts with
+        | [c;f] ->
+          let env, l, f_val = (ref renv), (extract_value_list c), (eval_fn f) in
+          let sort_fn v1 v2 =
+            (* Comparator application propagates an environment since it could be stateful *) 
+            let nenv, r = f_val !env (VTuple([v1; v2])) in
+              env := nenv;
+              match v1 = v2, value_of_eval r with
+              | true, _ -> 0
+              | false, VBool(true) -> -1
+              | false, VBool(false) -> 1
+              | _, _ -> raise (RuntimeError uuid) 
+          in !env, VTemp(VList(List.sort sort_fn l))
+        | _ -> raise (RuntimeError uuid)
+      end      
+
+    (* Collection accessors and modifiers *)
     | Slice ->
       let renv, parts = child_values cenv in
       begin match parts with
@@ -369,12 +419,15 @@ and eval_expr cenv texpr =
             List.filter ((=) (value_of_eval oldv)) l) !c_ref)
         | _ -> None)
       
+    (* Messaging *)
     | Send ->
       let renv, parts = child_values cenv in
       begin match parts with
         | [target;addr;arg] -> (schedule_trigger target addr arg; renv, VTemp VUnit)
         | _ -> raise (RuntimeError uuid)
       end
+
+    (* TODO: mutation and deref *)
 
     | _ -> raise (RuntimeError uuid)
 
@@ -505,7 +558,8 @@ let eval_instructions env address source_program k3_program =
 (* Program interpretation *)
 let eval_program address k3_program =
   let env, source_program = env_and_sources_of_program k3_program
-  in eval_instructions env address source_program k3_program
+  in eval_instructions env address source_program k3_program;
+     print_program_env env
 
 
 (* Distributed program interpretation *)

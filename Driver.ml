@@ -143,16 +143,13 @@ let print params =
 let test params =
   let test_fn = match params.language with
     | K3 -> (fun f -> 
-      let expr, expected =
-        let decls, e, x_opt = parse_expression_test (read_file f) in
-        let x = match x_opt with
-          | Some y -> y
-          | None -> error "No expected value given for unit test"
-        in (decls, e), (decls, x)
-      in
-      let test_case =
-        case f @: eval_test_expr expr @=? eval_test_expr expected  
-      in run_tests test_case)
+      let test_triples = parse_expression_test (read_file f) in
+      let test_cases = snd (List.fold_left (fun (i, test_acc) (decls, e, x) ->
+          let name = f^" "^(string_of_int i) in
+          let test_case = case name @: eval_test_expr (decls, e) @=? eval_test_expr (decls, x) 
+          in i+1, test_acc@[test_case]
+        ) (0, []) test_triples)
+      in List.iter run_tests test_cases)
     | _ -> error "Testing language not yet implemented"
   in List.iter test_fn params.input_files
 

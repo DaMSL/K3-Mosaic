@@ -1,5 +1,4 @@
 # Makefile for the K3 programming language lexer/parser/driver.
-# -- Based off DBToaster Makefiles. (Yanif) 
 
 include Makefile.inc
 
@@ -7,6 +6,7 @@ FILES=\
 	util/Util \
 	util/ListAsSet \
 	util/Symbols \
+	util/Printing \
 	util/Tree \
 	stages/k3/K3 \
 	stages/k3/K3Util \
@@ -15,7 +15,7 @@ FILES=\
 	stages/k3/K3Values \
 	stages/k3/interpreter/K3Runtime \
 	stages/k3/interpreter/K3Interpreter \
-	stages/k3/interpreter/K3Consumption \
+	#stages/k3/interpreter/K3Consumption \
 	stages/k3_dist/ProgInfo \
 	stages/k3_dist/GenDist \
 

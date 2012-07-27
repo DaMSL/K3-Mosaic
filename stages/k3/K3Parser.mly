@@ -81,7 +81,7 @@
 %start expr
 
 %type <int K3.program_t> program
-%type <int K3.program_t * int K3.expr_t * (int K3.expr_t option)> expression_test
+%type <(int K3.program_t * int K3.expr_t * int K3.expr_t) list> expression_test
 %type <int K3.expr_t> expr
 
 %right RARROW
@@ -113,9 +113,13 @@ program:
 ;
 
 expression_test:
-    | declaration expression_test  { let x,y,z = $2 in (Declaration($1)::x), y, z }
-    | expr EXPECTED expr           { [], $1, Some($3) }
-    | expr                         { [], $1, None }
+    | declaration expression_test  { 
+        let l = $2 in
+        let x,y,z = List.hd l in
+        ((Declaration($1)::x), y, z)::(List.tl l)
+      }
+    | expr EXPECTED expr                   { [[], $1, $3] }
+    | expression_test expr EXPECTED expr   { $1@[[], $2, $4] }
 
 statement:
     | declaration { Declaration($1) }

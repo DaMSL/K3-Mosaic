@@ -1,9 +1,11 @@
-open Util
 open Format
 open Lazy
 open ListAsSet
+open Util
+open Printing
 open Tree
 open K3
+
 
 (* TODO: AST constructors *)
 
@@ -225,43 +227,6 @@ let flat_string_of_program ss =
  * Pretty stringification
  *****************************)
 
-(* Pretty printing helpers *)
-type cut_type = NoCut | Hint | Line
- 
-let ob () = pp_open_hovbox str_formatter 2
-let cb () = pp_close_box str_formatter ()
-let pc () = pp_print_cut str_formatter ()
-let ps s = pp_print_string str_formatter s
-let psp () = pp_print_space str_formatter ()
-let fnl () = pp_force_newline str_formatter ()
-
-let cut c = match c with
-  | NoCut -> ()
-  | Hint -> pc ()
-  | Line -> fnl ()
-
-let ps_list ?(sep=", ") cut_t f l =
-  let n = List.length l in
-  ignore(List.fold_left
-    (fun cnt e ->
-      f e;
-      (if cnt < n then ps sep);
-      cut cut_t;
-      cnt+1)
-    1 l)
-
-let pretty_tag_term_str t = ob(); ps t; cb()
-
-let pretty_tag_str cut_t extra t ch_lazy_t =
-  begin
-    ob();
-    ps (t ^ "("); cut cut_t;
-    if extra = "" then () else (ps (extra ^ ", "); cut cut_t);
-    ps_list cut_t force ch_lazy_t;
-    ps ")";
-    cb()
-  end
-
 (* Lazy variants *)
 let lps s = lazy (ps s)
 
@@ -436,11 +401,6 @@ let print_statement ?(print_id=false) s =
     | Declaration d -> 
         my_tag "Declaration" [lazy (print_declaration d ~print_id:print_id)]
     | Instruction i -> my_tag "Instruction" [lazy (print_instruction i)]
-
-let wrap_formatter print_fn =
-  pp_set_margin str_formatter 120;
-  print_fn ();
-  flush_str_formatter ()
 
 
 let string_of_base_type bt  = wrap_formatter (fun () -> print_base_type bt)

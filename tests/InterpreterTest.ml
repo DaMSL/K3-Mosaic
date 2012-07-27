@@ -5,11 +5,10 @@ open K3Typechecker
 open K3Values
 open K3Interpreter
 
-let parse = parse_expression_test
+let parse = parse_expr
 
 let case_list l = List.map (fun (id, expr_str, expected_val) ->
-    let decls, e, _ = parse expr_str in
-    case id @: eval_test_expr (decls, e) @=? expected_val
+    case id @: eval_test_expr ([], parse_expr expr_str) @=? expected_val
   ) l
 
 let case_files l = case_list (List.map (fun (id, test_f, expected_val) ->
