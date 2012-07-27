@@ -453,9 +453,9 @@ let rec deduce_expr_type trig_env cur_env utexpr =
             if t_e === t_p then TValue t_e else begin
                 match base_of t_p, base_of t_e with
                 | TTuple(t_ps), TTuple(t_es) ->
-                    if List.for_all2 (
-                        fun tp te -> (canonical TUnknown) === tp || te === tp
-                        ) t_ps t_es
+                    if List.length t_ps = List.length t_es && List.for_all2 
+                        (fun tp te -> (canonical TUnknown) === tp || te === tp) 
+                        t_ps t_es
                     then t0
                     else t_erroru name (BTMismatch(TTuple(t_ps), TTuple(t_es), "")) ()
                 | TUnknown, _ -> TValue (canonical @: TCollection(t_c, t_e))
