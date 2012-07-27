@@ -147,7 +147,7 @@ let declare_foreign_functions p =
   (* right now it's easier to call a shuffle wrapper by statement *)
   let shuffle_foreign stmt rmap lmap = mk_foreign_fn
     (shuffle_for p stmt rmap lmap)
-    (wrap_ttuple @: (* key *)
+    (wrap_ttuple @: (* key, bound vars in lmap *)
       (List.map (fun t -> canonical @: TMaybe t) (map_types_for p lmap))@
       (wrap_tlist @: wrap_ttuple @: map_types_for p rmap):: (* tuples *)
       [canonical TBool]) (* shuffle_on_empty *)
@@ -168,8 +168,10 @@ let declare_foreign_functions p =
   (* takes tuple of maybes of the map types, returns ip list *)
   let route_to_map_foreign p map_id = mk_foreign_fn 
     (route_for p map_id) 
-    (wrap_ttuple @: 
-      List.map (fun t -> canonical @: TMaybe t) (map_types_for p map_id))
+    (if List.length @: map_types_for p map_id > 0 then
+      wrap_ttuple @: 
+        List.map (fun t -> canonical @: TMaybe t) (map_types_for p map_id)
+     else canonical TUnit)
     (wrap_tlist t_ip)
   in
   let map_related =
@@ -515,7 +517,8 @@ let send_push_stmt_map_trig p trig_name =
         map_types_for p rhs_map_id in 
       let rhs_map_name = map_name_of p rhs_map_id in
       let shuffle_fn = shuffle_for p stmt_id rhs_map_id lhs_map_id in
-      let rkey = partial_key_from_bound p stmt_id rhs_map_id in
+      let partial_key = partial_key_from_bound p stmt_id lhs_map_id in
+      let slice_key = slice_key_from_bound p stmt_id rhs_map_id in
       acc_code@
       [Trigger (send_push_name_of_t p trig_name stmt_id rhs_map_id, 
         ATuple(args_of_t_with_v p trig_name),
@@ -531,10 +534,10 @@ let send_push_stmt_map_trig p trig_name =
             (mk_apply
               (mk_var shuffle_fn)
               (mk_tuple
-                (rkey@
+                (partial_key@
                   (mk_slice 
                     (mk_var rhs_map_name) 
-                    (mk_tuple @: mk_var "vid"::rkey)
+                    (mk_tuple @: mk_var "vid"::slice_key)
                   )::[mk_const @: CBool false]
                 )
               )
