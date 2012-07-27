@@ -75,7 +75,7 @@ let check_tag_arity tag children =
         | GroupByAggregate  -> 4
         | Sort              -> 2
 
-        | Slice(_)  -> 2
+        | Slice     -> 2
         | Insert    -> 2
         | Delete    -> 2
         | Update    -> 3
