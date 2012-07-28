@@ -3,9 +3,5 @@ open K3
 open K3Values
 open K3Interpreter
 
-type source_t
-    = CSV of string
-
-type senv_t = (id_t * source_t) list
-
-val construct: senv_t -> (consumable_t -> value_t option * consumable_t option)
+val pull: consumable_t -> value_t option * consumable_t option
+val pull_source: id_t -> type_t -> source_t -> value_t option
