@@ -29,10 +29,12 @@ let rec pull loop =
     match loop with
 
     | Source(i, t, s) -> pull_source i t s, None
+    | Loop(i, c) -> pull c
 
     (* Pulling on a choice will pull each source in turn, and return the first
      * successful pull.
      *)
+    | Choice([]) -> None, None
     | Choice(h :: t) -> (
         match pull h with
         | Some v, _ -> Some v, None
@@ -42,12 +44,14 @@ let rec pull loop =
     (* Pulling on a sequence will pull each source in turn, but will skip the
      * remaining sources if one fails.
      *)
+    | Sequence([]) -> None, None
     | Sequence(h :: t) -> (
         match pull h with
 
         | Some v, _ -> Some v, Some (Sequence t)
         | None, _ -> None, None
     )
+    | Optional(c) -> fst (pull c), None
     | Repeat(c, _) -> (
         match pull c with
         | Some v, _ -> Some v, Some c
