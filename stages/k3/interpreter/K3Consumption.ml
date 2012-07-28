@@ -22,8 +22,8 @@ let construct_machine senv =
         (* Pulling on a choice will pull each source in turn, and return the first
          * successful pull.
          *)
-        | Choice(first, second) -> (
-            match pull senv first with
+        | Choice(h :: t) -> (
+            match pull senv h with
             | Some v, _ -> Some v, None
             | None, _ -> pull (Choice(t))
         )
