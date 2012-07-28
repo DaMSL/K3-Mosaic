@@ -187,8 +187,15 @@ type stop_behavior_t
     | UntilEmpty
     | UntilEOF
 
+(* The types of sources we can have, along with the information to uniquely
+ * identify them. Technically they should be hierarchical in terms of
+ * capabilities, etc. but let's leave them be flat for now.
+ *)
+type source_t
+    = CSV of in_channel
+
 type consumable_t
-    = Source        of id_t * type_t
+    = Source        of id_t * type_t * source_t
     | Loop          of id_t * consumable_t
 
     | Choice        of consumable_t list

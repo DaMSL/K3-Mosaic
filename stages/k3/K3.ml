@@ -113,8 +113,11 @@ type stop_behavior_t
     | UntilEmpty
     | UntilEOF
 
+type source_t
+    = CSV of in_channel
+
 type consumable_t
-    = Source        of id_t * type_t
+    = Source        of id_t * type_t * source_t
     | Loop          of id_t * consumable_t
 
     | Choice        of consumable_t list
