@@ -8,15 +8,17 @@ open K3Util
 open K3Typechecker
 open K3Interpreter
 open Testing
+open ReifiedK3
 
 (* Helpers *)
 let error s = prerr_endline s; exit 1
 
 (* Compilation languages *)
-type language_t = K3 | Imperative
+type language_t = K3 | ReifiedK3 | Imperative
 
 let language_descriptions = [
     K3,         "k3",  "K3";
+    ReifiedK3,  "rk3", "Reified K3";
     Imperative, "imp", "Imperative"
   ]
 
@@ -30,13 +32,15 @@ let format_language_description (lang_t, short_desc, long_desc) =
 
 let parse_language s = match String.lowercase s with
   | "k3" -> K3
+  | "rk3" -> ReifiedK3
   | "imp" -> Imperative
   | _ -> error ("Invalid output language: "^s)
 
 (* Actions *)
-type action_t = Compile | Interpret | Print | ExpressionTest
+type action_t = REPL | Compile | Interpret | Print | ExpressionTest
 
 let action_descriptions = [
+    REPL,             "-i",    "Interactive toplevel";
     Compile,          "-c",    "Compile to specified language";
     Interpret,        "-r",    "Interpret with specified language";
     Print,            "-p",    "Print program as specified language";
@@ -66,7 +70,7 @@ let cmd_line_params : parameters = {
     peers = [];
   }
 
-(* General parameters *)
+(* General parameter setters *)
 let set_output_language l =
   cmd_line_params.language <- parse_language l
 
@@ -76,7 +80,7 @@ let append_search_path p =
 let append_input_file f = 
   cmd_line_params.input_files <- cmd_line_params.input_files @ [f]
   
-(* Address parameters *)
+(* Address parameter setters *)
 let parse_ip ip_str = match Str.split (Str.regexp (Str.quote ":")) ip_str with
   | [ip; port] -> ip, (int_of_string port)
   | _ -> invalid_arg "invalid ip string format"
@@ -118,12 +122,14 @@ let parse_program f =
     close_in in_chan;
     prog
 
-let print_k3_program f =
-  print_endline (string_of_program (parse_program f))
+
+(* TODO *) 
+let repl params = ()
 
 (* TODO *)
 let compile params = ()
 
+(* Interpret actions *)
 let interpret params =
   let eval_fn = match params.language with
     | K3 -> (fun f -> 
@@ -133,13 +139,33 @@ let interpret params =
   in
   List.iter eval_fn params.input_files
 
+(* Print actions *)
+let handle_type_error p (uuid,error) =
+  print_endline "----Type error----";
+  print_endline ("Error("^(string_of_int uuid)^"): "^error);
+  print_endline (string_of_program ~print_id:true p);
+  exit 1
+
+let print_k3_program f =
+  print_endline (string_of_program (parse_program f))
+
+let print_reified_k3_program f =
+  let print_expr_fn ?(print_id=false) e = lazy (print_reified_expr (reify_expr e)) in
+  let p = parse_program f in
+  let tp = 
+    try deduce_program_type p
+    with TypeError (uuid, error) -> handle_type_error p (uuid, error)
+  in print_endline (string_of_program ~print_expr_fn:print_expr_fn tp)
+
 let print params =
   let print_fn = match params.language with
     | K3 -> print_k3_program
+    | ReifiedK3 -> print_reified_k3_program
     | _ -> error "Output language not yet implemented"
   in
   List.iter print_fn params.input_files
 
+(* Test actions *)
 let test params =
   let test_fn = match params.language with
     | K3 -> (fun f -> 
@@ -156,6 +182,7 @@ let test params =
 
 (* Top level *)
 let process_parameters params = match !(params.action) with
+  | REPL -> repl params
   | Compile -> compile params
   | Interpret -> interpret params
   | Print -> print params

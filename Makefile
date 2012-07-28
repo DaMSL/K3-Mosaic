@@ -18,6 +18,10 @@ FILES=\
 	stages/k3/interpreter/K3Consumption \
 	stages/k3_dist/ProgInfo \
 	stages/k3_dist/GenDist \
+	stages/imperative/ReifiedK3 \
+	stages/imperative/Imperative \
+	stages/imperative/ImperativeUtil \
+	stages/imperative/RK3ToImperative \
 
 TOPLEVEL_FILES=\
 	tests/Testing \
@@ -34,6 +38,7 @@ DIRS=\
 	stages/k3 \
 	stages/k3/interpreter \
 	stages/k3_dist \
+	stages/imperative \
 	tests \
 
 INCLUDE_OBJ=\
@@ -108,6 +113,9 @@ versioncheck:
 
 k3_opt: $(NC_FILES) $(NC_EXTRA_FILES)
 	@echo "Linking K3 (Optimized)"
+	@if [ ! -d bin ] ; then \
+		mkdir bin;\
+	fi
 	@$(OCAMLOPT) $(OCAMLOPT_FLAGS) -o bin/$@ $(NC_FILES) $(NC_EXTRA_FILES)
 
 k3: $(BC_FILES) $(BC_EXTRA_FILES)

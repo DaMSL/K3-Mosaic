@@ -2,8 +2,6 @@ type 'a tree_t
     = Leaf of 'a
     | Node of 'a * 'a tree_t list
 
-val string_of_tree : ('a -> string list -> string) -> 'a tree_t -> string
-
 (* Tree constructors, destructors *)
 
 val mk_tree : 'a * 'a tree_t list -> 'a tree_t
@@ -28,6 +26,12 @@ val fold_tree_thread :
   ('td * 'bu list -> 'a tree_t -> 'td * 'bu) ->
   'td -> 'bu -> 'a tree_t -> 'td * 'bu
 
+val fold_tree_lazy : 
+  ('td Lazy.t -> 'a tree_t -> 'td) ->
+  ('td Lazy.t -> ('bu Lazy.t) list -> 'a tree_t -> 'bu) ->
+  'td -> 'bu -> 'a tree_t -> 'bu
+
+
 (* Trees with tuple metadata *)
 val prepend_tree : ('a -> 'b) -> 'a tree_t -> ('b * 'a) tree_t
 val append_tree  : ('a -> 'b) -> 'a tree_t -> ('a * 'b) tree_t
@@ -42,3 +46,9 @@ val label_tree : 'a tree_t -> (int * 'a) tree_t
 val unlabel_tree : (int * 'a) tree_t -> 'a tree_t
 val label_of_node : (int * 'a) tree_t -> int
 val label_of_tree : (int * 'a) tree_t -> int list
+
+(* Generic tree pretty printing *)
+val flat_string_of_tree : ('a -> string list -> string) -> 'a tree_t -> string
+
+val print_tree : ((unit Lazy.t) list -> 'a tree_t -> unit) -> 'a tree_t -> unit
+val string_of_tree : ((unit Lazy.t) list -> 'a  tree_t -> unit) -> 'a tree_t -> string
