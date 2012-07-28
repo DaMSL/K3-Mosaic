@@ -60,12 +60,74 @@ let tag_str ?(extra="") t ch_t =
     ^ String.concat ", " ch_t
     ^ ")"
 
+(* Terminals *)
 let string_of_address (ip,p) = ip^":"^string_of_int p
 
 let string_of_container_type t_c = match t_c with
     | TSet  -> "TSet"
     | TBag  -> "TBag"
     | TList -> "TList"
+
+let string_of_const c = match c with
+    | CUnit          -> "CUnit"
+    | CUnknown       -> "CUnknown"
+    | CBool(b)       -> "CBool("^string_of_bool(b)^")"
+    | CInt(i)        -> "CInt("^string_of_int(i)^")"
+    | CFloat(f)      -> "CFloat("^string_of_float(f)^")"
+    | CString(s)     -> "CString(\""^s^"\")"
+    | CAddress(addr) -> "CAddress("^string_of_address addr^")"
+    | CTarget(id)    -> "CTarget("^id^")"
+    | CNothing       -> "CNothing"
+
+let string_of_stop_behavior_t s = match s with
+    | UntilCurrent -> "UntilCurrent"
+    | UntilEmpty -> "UntilEmpty"
+    | UntilEOF -> "UntilEOF"
+
+let string_of_tag_type tag = match tag with
+    | Const(c)  -> "Const"
+    | Var(i)    -> "Var"
+    | Tuple     -> "Tuple"
+    | Just      -> "Just"
+
+    | Empty t     -> "Empty"
+    | Singleton t -> "Singleton"
+    | Combine     -> "Combine"
+    | Range(ct)   -> "Range"
+
+    | Add   -> "Add"
+    | Mult  -> "Mult"
+    | Neg   -> "Neg"
+    | Eq    -> "Eq"
+    | Neq   -> "Neq"
+    | Lt    -> "Lt"
+    | Leq   -> "Leq"
+
+    | Lambda a -> "Lambda"
+    | Apply    -> "Apply"
+
+    | Block      -> "Block"
+    | IfThenElse -> "IfThenElse"
+
+    | Map              -> "Map"
+    | Iterate          -> "Iterate"
+    | FilterMap        -> "FilterMap"
+    | Flatten          -> "Flatten"
+    | Aggregate        -> "Aggregate"
+    | GroupByAggregate -> "GroupByAggregate"
+    | Sort             -> "Sort"
+    
+    | Slice   -> "Slice"
+    | Insert  -> "Insert"
+    | Update  -> "Update"
+    | Delete  -> "Delete"
+    | Peek    -> "Peek"
+
+    | Assign  -> "Assign"
+    | Deref   -> "Deref"
+
+    | Send    -> "Send"
+
 
 (* Flat stringification *)
 let rec flat_string_of_base_type t = match t with
@@ -86,9 +148,7 @@ let rec flat_string_of_base_type t = match t with
           [string_of_container_type t_c; flat_string_of_value_type t_e]
 
     | TAddress -> "TAddress"
-
-    | TTarget(t) ->
-        tag_str "TTarget" [flat_string_of_base_type t]
+    | TTarget(t) -> tag_str "TTarget" [flat_string_of_base_type t]
 
 and flat_string_of_mutable_type mt = match mt with
     | TMutable(bt) -> "TMutable("^flat_string_of_base_type bt^")"
@@ -104,22 +164,6 @@ and flat_string_of_type t = match t with
           [flat_string_of_value_type t_a; flat_string_of_value_type t_r]
     
     | TValue(t) -> flat_string_of_value_type t
-
-let string_of_const c = match c with
-    | CUnit          -> "CUnit"
-    | CUnknown       -> "CUnknown"
-    | CBool(b)       -> "CBool("^string_of_bool(b)^")"
-    | CInt(i)        -> "CInt("^string_of_int(i)^")"
-    | CFloat(f)      -> "CFloat("^string_of_float(f)^")"
-    | CString(s)     -> "CString(\""^s^"\")"
-    | CAddress(addr) -> "CAddress("^string_of_address addr^")"
-    | CTarget(id)    -> "CTarget("^id^")"
-    | CNothing       -> "CNothing"
-
-let string_of_stop_behavior_t s = match s with
-    | UntilCurrent -> "UntilCurrent"
-    | UntilEmpty -> "UntilEmpty"
-    | UntilEOF -> "UntilEOF"
 
 let flat_string_of_arg a = match a with
     | AVar(i, t) -> tag_str "AVar" [i; flat_string_of_type (TValue t)]
@@ -176,7 +220,7 @@ let flat_string_of_expr_tag tag children =
 
 (* TODO: Why can't this function be point-free? *)
 let flat_string_of_expr expr =
-  string_of_tree (fun ((id, tag), _) -> flat_string_of_expr_tag tag) expr
+  flat_string_of_tree (fun ((id, tag), _) -> flat_string_of_expr_tag tag) expr
 
 let rec flat_string_of_consumable c =
   let rcr_list l = List.map flat_string_of_consumable l in
@@ -264,8 +308,7 @@ and print_base_type t =
 
     | TAddress -> term_tag "TAddress"
 
-    | TTarget(t) ->
-        my_tag "TTarget" [lazy_base_type t]
+    | TTarget(t) -> my_tag "TTarget" [lazy_base_type t]
 
 and print_mutable_type mt =
   let my_tag t bt = pretty_tag_str Hint "" t [lazy_base_type bt]
@@ -369,7 +412,7 @@ let rec print_consumable c =
     | Repeat(c, s) ->
         my_tag "Repeat" [lazy_rcr c; lps (string_of_stop_behavior_t s)]
 
-let print_declaration ?(print_id=false) d =
+let print_declaration ?(print_id=false) ?(print_expr_fn=lazy_expr) d =
   let my_tag = pretty_tag_str Line "" in
   let print_id_vt (id,vt) =
     lazy (ps ("("^id^", "); print_value_type vt; ps ")")
@@ -387,7 +430,7 @@ let print_declaration ?(print_id=false) d =
         lazy(ps "["; ps_list Line force (List.map print_id_vt ds); ps "]")
       in
       my_tag "Trigger" 
-        [lps (quote i); lazy_arg arg; trig_decls; lazy_expr e ~print_id:print_id]
+        [lps (quote i); lazy_arg arg; trig_decls; print_expr_fn ~print_id:print_id e]
 
     | Bind(i, i2) -> my_tag "Bind" [lps i; lps i2]
     | Consumable(c) -> my_tag "Consumable" [lazy (print_consumable c)]
@@ -395,11 +438,12 @@ let print_declaration ?(print_id=false) d =
 let print_instruction i = match i with
     | Consume(id) -> pretty_tag_str Line "" "Consume" [lps id]
 
-let print_statement ?(print_id=false) s =
+let print_statement ?(print_id=false) ?(print_expr_fn=lazy_expr) s =
   let my_tag = pretty_tag_str Line "" in
-  match s with
-    | Declaration d -> 
-        my_tag "Declaration" [lazy (print_declaration d ~print_id:print_id)]
+  let print_decl d =
+    print_declaration ~print_id:print_id ~print_expr_fn:print_expr_fn d
+  in match s with
+    | Declaration d -> my_tag "Declaration" [lazy (print_decl d)]
     | Instruction i -> my_tag "Instruction" [lazy (print_instruction i)]
 
 
@@ -415,18 +459,29 @@ let string_of_declaration d = wrap_formatter (fun () -> print_declaration d)
 let string_of_instruction i = wrap_formatter (fun () -> print_instruction i)
 let string_of_statement s   = wrap_formatter (fun () -> print_statement s)
 
-let string_of_program ?(print_id=false) ss =
-  wrap_formatter (fun () ->
-    ps "[";
-    ps_list ~sep:";" Line (print_statement ~print_id:print_id) ss;
-    ps "]")
+let string_of_program ?(print_id=false) ?(print_expr_fn=lazy_expr) ss =
+  let print_fn =
+    print_statement ~print_id:print_id ~print_expr_fn:print_expr_fn
+  in wrap_formatter (fun () ->
+    ps "["; ps_list ~sep:";" Line print_fn ss; ps "]")
   
 
 (* AST constructors / destructors *)
+let decompose_lambda e = List.nth (sub_tree e) 0
+
 let decompose_apply e =
   let n i = List.nth (sub_tree e) i in (n 0, n 1)
 
 let decompose_ifthenelse e =
+  let n i = List.nth (sub_tree e) i in (n 0, n 1, n 2)
+
+let decompose_iterate e =
+  let n i = List.nth (sub_tree e) i in (n 0, n 1)
+
+let decompose_map e =
+  let n i = List.nth (sub_tree e) i in (n 0, n 1)
+
+let decompose_filter_map e =
   let n i = List.nth (sub_tree e) i in (n 0, n 1, n 2)
 
 let decompose_aggregate e =

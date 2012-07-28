@@ -1,14 +1,9 @@
 open Symbols
+open Printing
 
 type 'a tree_t
     = Leaf of 'a
     | Node of 'a * 'a tree_t list
-
-let rec string_of_tree string_of_data t =
-  let rcr = string_of_tree string_of_data in
-  match t with
-    | Node(data, children) -> string_of_data data (List.map rcr children)
-    | Leaf(data) -> string_of_data data []
 
 (* Tree constructors, destructors *)
 
@@ -61,6 +56,15 @@ let fold_tree_thread td_f bu_f td_init bu_init t =
       end
   in ft_aux td_init t
 
+(* Lazy tree folding *)
+let fold_tree_lazy td_f bu_f td_init bu_init t =
+  let rec ft_aux td t =
+    let n_td = lazy (td_f td t)
+    in begin match snd (decompose_tree t) with 
+        | [] -> bu_f n_td [lazy bu_init] t
+        | c -> bu_f n_td (List.map (fun c_t -> lazy (ft_aux n_td c_t)) c) t
+      end
+  in ft_aux (lazy td_init) t
 
 (* Trees with tuple metadata *)
 
@@ -86,3 +90,16 @@ let unlabel_tree t = project_tree t
 let label_of_node t = fst_data t
 let label_of_tree t = List.map fst (tree_data t)
 
+(* Generic tree pretty printing *)
+
+let rec flat_string_of_tree string_of_data t =
+  let rcr = flat_string_of_tree string_of_data in
+  match t with
+    | Node(data, children) -> string_of_data data (List.map rcr children)
+    | Leaf(data) -> string_of_data data []
+
+let print_tree print_data t =
+  fold_tree_lazy (fun _ _ -> ()) (fun _ x y -> print_data x y) () () t
+  
+let string_of_tree print_data t =
+  wrap_formatter (fun () -> print_tree print_data t)

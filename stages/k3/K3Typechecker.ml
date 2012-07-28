@@ -103,9 +103,10 @@ let (%++) f g = fun t x -> f (g t x)
 let canonical bt = TIsolated(TImmutable(bt))
 
 let value_of t x =
+  let dummy = canonical TUnknown in
     match t with
     | TValue(vt) -> vt
-    | _ -> x ()
+    | _ -> x (); dummy (* raise exception *)
 
 let function_of t x =
     let dummy = (canonical TUnknown, canonical TUnknown) 
@@ -560,8 +561,11 @@ let deduce_program_type program =
         | Global(i, t, Some init) ->
             let typed_init = deduce_expr_type trig_env env init
             in (Global(i, t, Some typed_init), (i, type_of_texpr typed_init) :: env)
+        
         | Global(i, t, None) -> (Global(i, t, None), (i, t) :: env)
+        
         | Foreign(i, t) -> (Foreign(i, t), (i, t) :: env)
+        
         | Trigger(id, args, locals, body) ->
             let name = "Trigger("^id^")" in
             let self_bindings = (id, 
@@ -579,6 +583,16 @@ let deduce_program_type program =
             if not (t_b === canonical TUnit)
                 then t_error (-1) name (VTMismatch(canonical TUnit, t_b)) () 
             else (Trigger(id, args, locals, typed_body), self_bindings :: env)
+
+        | Bind (src_id, trig_id) -> 
+          (* TODO: check that the source event has the same type as the
+           * trigger's argument type *)
+          (Bind (src_id, trig_id), env)
+
+        | Consumable c_t -> 
+          (* TODO: any internal checking needed for the consumeable *)
+          (Consumable c_t, env)
+
         end in
         Declaration(nd) :: deduce_prog_t trig_env nenv ss
   in

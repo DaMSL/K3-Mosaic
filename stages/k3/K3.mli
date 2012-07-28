@@ -41,9 +41,9 @@ type arg_t
     = AVar      of id_t * value_type_t
     | ATuple    of (id_t * value_type_t) list
 
+(* Constants *)
 type address = string * int (* IP * port *)
 
-(* Constants *)
 type constant_t
     = CUnit
     | CUnknown
