@@ -181,7 +181,7 @@ let flat_string_of_expr expr =
 let rec flat_string_of_consumable c =
   let rcr_list l = List.map flat_string_of_consumable l in
   match c with
-    | Source(i, t) -> tag_str "Source" [i; flat_string_of_type t]
+    | Source(i, t, _) -> tag_str "Source" [i; flat_string_of_type t]
     | Loop(id, c)  -> tag_str "Loop" [id; flat_string_of_consumable c]
     | Choice(cs)   -> tag_str "Choice" (rcr_list cs)
     | Sequence(cs) -> tag_str "Sequence" (rcr_list cs)
@@ -360,7 +360,7 @@ let rec print_consumable c =
   let lazy_rcr c = lazy (print_consumable c) in 
   let rcr_list l = List.map lazy_rcr l in
   match c with
-    | Source(i, t) -> my_tag "Source" [lps i; lazy_type t]
+    | Source(i, t, _) -> my_tag "Source" [lps i; lazy_type t]
     | Loop(id, c)  -> my_tag "Loop" [lps id; lazy_rcr c]
     | Choice(cs)   -> my_tag "Choice" (rcr_list cs)
     | Sequence(cs) -> my_tag "Sequence" (rcr_list cs)
