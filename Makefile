@@ -15,7 +15,7 @@ FILES=\
 	stages/k3/K3Values \
 	stages/k3/interpreter/K3Runtime \
 	stages/k3/interpreter/K3Interpreter \
-	#stages/k3/interpreter/K3Consumption \
+	stages/k3/interpreter/K3Consumption \
 	stages/k3_dist/ProgInfo \
 	stages/k3_dist/GenDist \
 
