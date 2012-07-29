@@ -41,8 +41,16 @@ let wrap_tlist_mut typ =
   TIsolated(TMutable(TCollection(TList, c)))
 
 (* wrap a type in an immutable tuple *)
-let wrap_ttuple typ = canonical @: TTuple(typ)
-let wrap_ttuple_mut typ = TIsolated(TMutable(TTuple(typ)))
+let wrap_ttuple typ = match typ with 
+  | [h]    -> h
+  | h::t   -> canonical @: TTuple(typ) 
+  | _      -> invalid_arg "No tuple to wrap"
+
+(* wrap a type in a mutable tuple *)
+let wrap_ttuple_mut typ = match typ with 
+  | [h]    -> h
+  | h::t   -> TIsolated(TMutable(TTuple(typ)))
+  | _      -> invalid_arg "No mutable tuple to wrap"
 
 (* Helper functions to create K3 AST nodes more easily *)
 
@@ -59,7 +67,10 @@ let mk_const constant = mk_stree (Const(constant)) []
 
 let mk_var id = mk_stree (Var(id)) []
 
-let mk_tuple items = mk_stree Tuple items
+let mk_tuple items = match items with
+  | [i]   -> i
+  | i::is -> mk_stree Tuple items
+  | _     -> invalid_arg "Nothing to use mk_tuple on"
 
 let mk_just x = mk_stree Just [x]
 
@@ -247,27 +258,24 @@ let mk_let_many var_name_and_type_list var_values expr =
         )
         (var_values)
 
-(* returns code for a tuple where only the first new_size entries are taken *)
-(* allows adding to start_ids_types which contains ids and types *)
-let mk_reduced_tuple tup_name types new_size start_ids_types =
-    let start_vars = ids_to_vars (extract_arg_names start_ids_types)
-    in
-    let list_size = List.length types in
-    let size = if new_size > list_size then list_size else new_size in
-    let var_range = create_range 1 size in
-    let reduced_types = list_take types size in
-    let ids = List.map (fun num -> "temp_"^string_of_int num) var_range in
-    let ids_and_types = list_zip ids reduced_types in
-    let filler_range = create_range 1 (list_size - size) in
-    let filler = List.map (fun x -> mk_const CUnknown) filler_range in
-    mk_apply
-      (mk_lambda 
-        (ATuple(start_ids_types@ids_and_types))    
-        (mk_tuple @: start_vars@ ids_to_vars ids@ filler)
-      )
-      (mk_var tup_name)
+(* Functions to manipulate tuples in K3 code *)
 
+let tuple_make_pattern length = 
+    List.map (fun x -> "__temp_"^string_of_int x) (create_range 1 @: length)
 
+(* rebuild a tuple based on the types of the tuple and a pattern of temporaries
+ * or external variables
+ *)
+let mk_rebuild_tuple_lambda types pattern =
+  let range = create_range 1 @: List.length types in
+  let temp_ids = List.map (fun num -> "__temp_"^string_of_int num) range in
+  let temp_ids_and_types = list_zip temp_ids types in
+  mk_lambda 
+    (ATuple(temp_ids_and_types))    
+    (mk_tuple @: ids_to_vars pattern)
 
-
+let mk_rebuild_tuple name types pattern =
+  mk_apply
+    (mk_rebuild_tuple_lambda types pattern)
+    (mk_var name)
 

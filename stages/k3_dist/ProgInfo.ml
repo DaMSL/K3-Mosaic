@@ -101,11 +101,11 @@ let map_over_stmts_in_t (p:prog_data_t) func map_func trig_name =
       stmts
     )
 
-(* output (stmt_id, x) list *)
+(* output (stmt_id, x) list. Guaranteed to be in stmt order *)
 let s_and_over_stmts_in_t (p:prog_data_t) func trig_name = 
     map_over_stmts_in_t p func (fun _ stmt x -> (stmt, x)) trig_name
 
-let read_maps_of_stmt (p:prog_data_t) (stmt_id:stmt_id_t) = 
+let rhs_maps_of_stmt (p:prog_data_t) (stmt_id:stmt_id_t) = 
   let (_, _, _, _, maplist) = find_stmt p stmt_id in
   List.map
     (fun (map_id, _) -> map_id)
@@ -168,11 +168,11 @@ let map_types_for p map_id =
   let (_, _, vars) = find_map p map_id in vars
 
 (* returns a k3 list of maybes that has the relevant map pattern *)
-let partial_key_from_bound (p:prog_data_t) (stmt_id:stmt_id_t) (map_id:map_id_t) = 
+let var_list_from_bound (p:prog_data_t) (stmt_id:stmt_id_t) (map_id:map_id_t) = 
   let map_binds = find_map_bindings_in_stmt p stmt_id map_id in
   let (_, _, map_params) = find_map p map_id in
   let range = create_range 0 (List.length map_params) in
-  let names = List.map
+  List.map
     (fun x -> 
       try 
         let (name, _) = List.find
@@ -182,6 +182,16 @@ let partial_key_from_bound (p:prog_data_t) (stmt_id:stmt_id_t) (map_id:map_id_t)
       with Not_found -> "_"
     )
     range
-  in 
-  List.map (fun x -> if x = "_" then mk_const CNothing else mk_just @: mk_var x) names
+
+(* returns a k3 list of maybes that has the relevant map pattern *)
+let partial_key_from_bound (p:prog_data_t) (stmt_id:stmt_id_t) (map_id:map_id_t) = 
+  List.map 
+  (fun x -> if x = "_" then mk_const CNothing else mk_just @: mk_var x) 
+  (var_list_from_bound p stmt_id map_id)
                   
+(* returns a k3 list of variables or CUnknown. Can't use same types as
+ * partial_key *)
+let slice_key_from_bound (p:prog_data_t) (stmt_id:stmt_id_t) (map_id:map_id_t) = 
+  List.map 
+  (fun x -> if x = "_" then mk_const CUnknown else mk_var x) 
+  (var_list_from_bound p stmt_id map_id)
