@@ -215,12 +215,18 @@ val mk_let_many :
   ((int * K3.expr_tag_t) * int) Tree.tree_t ->
   ((int * K3.expr_tag_t) * int) Tree.tree_t
 
-(* macro to destruct a tuple, take only the first members, and add to other ids
- * and types *)
-val mk_reduced_tuple :
-  K3.id_t ->
-  K3.value_type_t list ->
-  int ->
-  (K3.id_t * K3.value_type_t) list ->
+(* create a string pattern of a tuple, for manipulation
+ * specify the length of the pattern *)
+val tuple_make_pattern: int -> K3.id_t list
+
+(* create K3 code to build a tuple using a pattern containing portions of the
+ * old tuple and ids of new variables. The pattern is produced by
+ * tuple_make_pattern
+ * tuple name -> type list -> pattern
+ * *)
+val mk_rebuild_tuple_lambda: K3.value_type_t list -> K3.id_t list -> 
+  ((int * K3.expr_tag_t) * int) Tree.tree_t
+
+val mk_rebuild_tuple: K3.id_t -> K3.value_type_t list -> K3.id_t list -> 
   ((int * K3.expr_tag_t) * int) Tree.tree_t
 
