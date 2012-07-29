@@ -27,18 +27,25 @@ let pull_source i t s =
 
 (* Go through a consumable tree, and open all generic file sources. *)
 let rec open_file_sources loop =
-    match loop with
-    | Source(i, t, s) -> (
-        match s with
-        | FileSource(tag, filename) when tag = "csv" ->
-            Source(i, t, (CSV(open_in filename)))
-        | _ -> raise (SourceError i)
-    )
-    | Loop(i, c) -> Loop(i, open_file_sources c)
-    | Choice(cs) -> Choice(List.map open_file_sources cs)
-    | Sequence(cs) -> Sequence(List.map open_file_sources cs)
-    | Optional(c) -> Optional(open_file_sources c)
-    | Repeat(c, s) -> Repeat(open_file_sources c, s)
+    let senv = ref [] in
+    let rec go loop =
+        match loop with
+        | Source(i, t, s) -> (
+            match s with
+            | FileSource(tag, filename) when tag = "csv" -> (
+                try List.assoc i !senv with Not_found ->
+                    let opened_source = Source(i, t, (CSV(open_in filename))) in
+                    senv := (i, opened_source) :: !senv; opened_source
+            )
+            | FileSource(_) -> raise (SourceError i)
+            | _ -> (try List.assoc i !senv with Not_found -> raise (SourceError i))
+        )
+        | Loop(i, c) -> Loop(i, open_file_sources c)
+        | Choice(cs) -> Choice(List.map open_file_sources cs)
+        | Sequence(cs) -> Sequence(List.map open_file_sources cs)
+        | Optional(c) -> Optional(open_file_sources c)
+        | Repeat(c, s) -> Repeat(open_file_sources c, s)
+    in go loop
 
 (* Given a source environment, construct a function which can be polled for values. *)
 let rec pull loop =
