@@ -192,7 +192,8 @@ type stop_behavior_t
  * capabilities, etc. but let's leave them be flat for now.
  *)
 type source_t
-    = CSV of in_channel
+    = FileSource of string * string
+    | CSV of in_channel
 
 type consumable_t
     = Source        of id_t * type_t * source_t

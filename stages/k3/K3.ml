@@ -114,7 +114,8 @@ type stop_behavior_t
     | UntilEOF
 
 type source_t
-    = CSV of in_channel
+    = FileSource of string * string
+    | CSV of in_channel
 
 type consumable_t
     = Source        of id_t * type_t * source_t

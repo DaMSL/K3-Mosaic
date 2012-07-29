@@ -23,6 +23,22 @@ let pull_source i t s =
     | CSV(channel) ->
         let next_record = Str.split (Str.regexp ",") (input_line channel) in
         Some (VTuple(List.map2 convert_type signature next_record))
+    | _ -> raise (SourceError i)
+
+(* Go through a consumable tree, and open all generic file sources. *)
+let rec open_file_sources loop =
+    match loop with
+    | Source(i, t, s) -> (
+        match s with
+        | FileSource(tag, filename) when tag = "csv" ->
+            Source(i, t, (CSV(open_in filename)))
+        | _ -> raise (SourceError i)
+    )
+    | Loop(i, c) -> Loop(i, open_file_sources c)
+    | Choice(cs) -> Choice(List.map open_file_sources cs)
+    | Sequence(cs) -> Sequence(List.map open_file_sources cs)
+    | Optional(c) -> Optional(open_file_sources c)
+    | Repeat(c, s) -> Repeat(open_file_sources c, s)
 
 (* Given a source environment, construct a function which can be polled for values. *)
 let rec pull loop =
