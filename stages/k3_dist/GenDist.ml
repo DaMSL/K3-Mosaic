@@ -137,7 +137,7 @@ let declare_foreign_functions p =
     (wrap_ttuple @: extract_arg_types @: args_of_t_with_v p trig)
     (canonical TUnit)
   in
-    (* for_trig: vid -> args *)
+    (* get the bound variables for a trigger in the log *)
   let log_get_bound_foreign p trig = mk_foreign_fn
     (log_get_bound_for p trig) t_vid 
     (wrap_ttuple @: extract_arg_types @: args_of_t p trig)
@@ -568,8 +568,8 @@ List.fold_left
     let map_name = map_name_of p read_map_id in
     let tuple_types = map_types_with_v_for p read_map_id in
     (* remove value from tuple so we can do a slice *)
-    let tuple_pat = tuple_make_pattern @: List.length tuple_types in
-    let reduced_pat = list_take (List.length tuple_pat - 1) tuple_pat in
+    let tuple_pat = tuple_make_pattern tuple_types in
+    let reduced_pat = slice_pat_take (List.length tuple_pat - 1) tuple_pat in
     let reduced_code = mk_rebuild_tuple "tuple" tuple_types reduced_pat in
     acc_code@
     [Trigger(rcv_push_name_of_t p trig_name stmt_id read_map_id,
