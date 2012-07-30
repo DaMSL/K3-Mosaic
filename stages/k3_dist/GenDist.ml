@@ -137,7 +137,7 @@ let declare_foreign_functions p =
     (wrap_ttuple @: extract_arg_types @: args_of_t_with_v p trig)
     (canonical TUnit)
   in
-    (* for_trig: vid -> args *)
+    (* get the bound variables for a trigger in the log *)
   let log_get_bound_foreign p trig = mk_foreign_fn
     (log_get_bound_for p trig) t_vid 
     (wrap_ttuple @: extract_arg_types @: args_of_t p trig)
@@ -226,7 +226,7 @@ let send_fetch_trig p trig_name =
   let send_fetches_of_rhs_maps  =
     (mk_iter
       (mk_lambda 
-        (ATuple["ip", t_ip;
+        (ATuple["ip", t_ip; 
           "stmt_map_ids", wrap_tlist @: wrap_ttuple [t_stmt_id; t_map_id]]
         )
         (mk_send 
@@ -568,8 +568,8 @@ List.fold_left
     let map_name = map_name_of p read_map_id in
     let tuple_types = map_types_with_v_for p read_map_id in
     (* remove value from tuple so we can do a slice *)
-    let tuple_pat = tuple_make_pattern @: List.length tuple_types in
-    let reduced_pat = list_take (List.length tuple_pat - 1) tuple_pat in
+    let tuple_pat = tuple_make_pattern tuple_types in
+    let reduced_pat = slice_pat_take (List.length tuple_pat - 1) tuple_pat in
     let reduced_code = mk_rebuild_tuple "tuple" tuple_types reduced_pat in
     acc_code@
     [Trigger(rcv_push_name_of_t p trig_name stmt_id read_map_id,
@@ -580,7 +580,7 @@ List.fold_left
       (mk_block
         [mk_iter
           (mk_lambda
-            (ATuple["tuple", wrap_ttuple tuple_types])
+            (AVar("tuple", wrap_ttuple tuple_types))
             (mk_if
               (mk_has_member 
                 (mk_var map_name)
@@ -608,7 +608,7 @@ List.fold_left
          let counter_pat = ["count", t_int] in
          let full_pat = part_pat @ counter_pat in
          let full_types = wrap_ttuple @: extract_arg_types full_pat in
-         let part_pat_as_vars = ids_to_vars @: extract_arg_names part_pat in
+         let part_pat_as_vars = [mk_var "vid"; mk_const @: CInt stmt_id] in
          let query_pat = mk_tuple @: part_pat_as_vars @ [mk_const CUnknown] in
          let stmt_cntrs_slice = mk_slice stmt_cntrs query_pat in
          mk_if (* check if the counter exists *)

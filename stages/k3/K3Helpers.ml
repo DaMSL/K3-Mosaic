@@ -168,7 +168,10 @@ let extract_arg_types l = List.map (fun (_,typ) -> typ) l
 let extract_arg_names l = List.map (fun (nam,_) -> nam) l
 
 (* function to take a list of names and convert to K3 variables *)
-let ids_to_vars = List.map (fun x -> mk_var x)
+(* "_" translates to CUnknown *)
+let ids_to_vars = List.map (fun x -> match x with 
+  | "_" -> mk_const @: CUnknown 
+  | x   -> mk_var x)
 
 (* strip the AVar or ATuple from a list of arguments *)
 let strip_args arg = match arg with
@@ -259,20 +262,46 @@ let mk_let_many var_name_and_type_list var_values expr =
         (var_values)
 
 (* Functions to manipulate tuples in K3 code *)
+type tuple_pat = Position of int | ExternVar of id_t | Unknown
 
-let tuple_make_pattern length = 
-    List.map (fun x -> "__temp_"^string_of_int x) (create_range 1 @: length)
+let mk_tuple_range types = create_range 1 @: List.length types
+
+let tuple_make_pattern (types:K3.value_type_t list) = 
+    List.map (fun x -> Position x) (mk_tuple_range types)
+
+(* functions to take and drop from the pattern, filling in unknowns for the
+ * values you drop. list_drop and list_take can be used for non-slice operations
+ *)
+let slice_pat_take num pat =
+    let range = create_range 1 (List.length pat - num) in
+    let unknowns = List.map (fun _ -> Unknown) range in
+    list_take num pat @unknowns
+
+let slice_pat_drop num pat =
+    let range = create_range 1 (List.length pat - num) in
+    let unknowns = List.map (fun _ -> Unknown) range in
+    unknowns@list_drop num pat
+
+let mk_temp_string i = "__temp_"^string_of_int i
+
+let tuple_pat_to_ids pat =
+    List.map 
+    (fun x -> match x with 
+      | Position y -> mk_temp_string y 
+      | ExternVar y -> y
+      | Unknown -> "_")
+    pat
 
 (* rebuild a tuple based on the types of the tuple and a pattern of temporaries
  * or external variables
  *)
 let mk_rebuild_tuple_lambda types pattern =
-  let range = create_range 1 @: List.length types in
-  let temp_ids = List.map (fun num -> "__temp_"^string_of_int num) range in
+  let range = mk_tuple_range types in
+  let temp_ids = List.map mk_temp_string range in
   let temp_ids_and_types = list_zip temp_ids types in
   mk_lambda 
     (ATuple(temp_ids_and_types))    
-    (mk_tuple @: ids_to_vars pattern)
+    (mk_tuple @: ids_to_vars @: tuple_pat_to_ids pattern)
 
 let mk_rebuild_tuple name types pattern =
   mk_apply

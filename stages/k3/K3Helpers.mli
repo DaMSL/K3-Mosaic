@@ -215,18 +215,27 @@ val mk_let_many :
   ((int * K3.expr_tag_t) * int) Tree.tree_t ->
   ((int * K3.expr_tag_t) * int) Tree.tree_t
 
+(* data type to manipulate tuples *)
+type tuple_pat = Position of int | ExternVar of K3.id_t | Unknown
+
 (* create a string pattern of a tuple, for manipulation
  * specify the length of the pattern *)
-val tuple_make_pattern: int -> K3.id_t list
+val tuple_make_pattern: K3.value_type_t list -> tuple_pat list
+
+(* take and drop from a pattern, replacing the values taken/dropped with
+ * unknowns for slices *)
+val slice_pat_take: int -> tuple_pat list -> tuple_pat list
+
+val slice_pat_drop: int -> tuple_pat list -> tuple_pat list
 
 (* create K3 code to build a tuple using a pattern containing portions of the
  * old tuple and ids of new variables. The pattern is produced by
  * tuple_make_pattern
  * tuple name -> type list -> pattern
  * *)
-val mk_rebuild_tuple_lambda: K3.value_type_t list -> K3.id_t list -> 
+val mk_rebuild_tuple_lambda: K3.value_type_t list -> tuple_pat list -> 
   ((int * K3.expr_tag_t) * int) Tree.tree_t
 
-val mk_rebuild_tuple: K3.id_t -> K3.value_type_t list -> K3.id_t list -> 
+val mk_rebuild_tuple: K3.id_t -> K3.value_type_t list -> tuple_pat list -> 
   ((int * K3.expr_tag_t) * int) Tree.tree_t
 

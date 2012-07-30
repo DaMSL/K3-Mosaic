@@ -12,11 +12,11 @@ let (rst_p:ProgInfo.prog_data_t) =
    2, 1, 2,  [], [4, ["C", 1]];
    3, 1, 3, ["C", 0], []]
   , (* map data *)
-  [1, "Q", [];
-   2, "QpR1", [t_int];
-   3, "QpR1pS1", [t_int];
-   4, "QpR1pT1", [t_int; t_int];
-   5, "QpT1", [t_int]
+  [1, "Q", [canonical TFloat];
+    2, "QpR1", [t_int; canonical TFloat ];
+    3, "QpR1pS1", [t_int; canonical TFloat];
+    4, "QpR1pT1", [t_int; t_int; canonical TFloat];
+    5, "QpT1", [t_int; canonical TFloat]
    ]
   )
 
