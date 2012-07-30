@@ -41,9 +41,9 @@ type arg_t
     = AVar      of id_t * value_type_t
     | ATuple    of (id_t * value_type_t) list
 
-type c_address = string * int (* IP * port *)
-
 (* Constants *)
+type address = string * int (* IP * port *)
+
 type constant_t
     = CUnit
     | CUnknown
@@ -51,8 +51,8 @@ type constant_t
     | CInt      of int
     | CFloat    of float
     | CString   of string
-    | CAddress of c_address
-    | CTarget of id_t
+    | CAddress  of address
+    | CTarget   of id_t
     | CNothing
 
 (* Expressions *)
@@ -113,8 +113,12 @@ type stop_behavior_t
     | UntilEmpty
     | UntilEOF
 
+type source_t
+    = FileSource of string * string
+    | CSV of in_channel
+
 type consumable_t
-    = Source        of id_t * type_t
+    = Source        of id_t * type_t * source_t
     | Loop          of id_t * consumable_t
 
     | Choice        of consumable_t list

@@ -20,6 +20,8 @@ rule tokenize = parse
     | eof { EOF }
     | comment { tokenize lexbuf }
 
+    | "expected" { EXPECTED }
+
     | "declare" { DECLARE }
     | "foreign" { FOREIGN }
     | "trigger" { TRIGGER }

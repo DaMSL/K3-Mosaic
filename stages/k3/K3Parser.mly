@@ -25,6 +25,7 @@
 
 %}
 
+%token EXPECTED
 %token DECLARE FOREIGN TRIGGER CONSUME
 
 %token UNIT UNKNOWN NOTHING
@@ -76,8 +77,11 @@
 %token <string> IDENTIFIER
 
 %start program
+%start expression_test
 %start expr
+
 %type <int K3.program_t> program
+%type <(int K3.program_t * int K3.expr_t * int K3.expr_t) list> expression_test
 %type <int K3.expr_t> expr
 
 %right RARROW
@@ -107,6 +111,15 @@ program:
     | statement { [$1] }
     | statement program { $1 :: $2 }
 ;
+
+expression_test:
+    | declaration expression_test  { 
+        let l = $2 in
+        let x,y,z = List.hd l in
+        ((Declaration($1)::x), y, z)::(List.tl l)
+      }
+    | expr EXPECTED expr                   { [[], $1, $3] }
+    | expression_test expr EXPECTED expr   { $1@[[], $2, $4] }
 
 statement:
     | declaration { Declaration($1) }
@@ -218,7 +231,7 @@ expr_list:
 ;
 
 expr_seq:
-    | expr { [$1] }
+    | expr                    { [$1] }
     | expr SEMICOLON expr_seq { $1 :: $3 }
 ;
 

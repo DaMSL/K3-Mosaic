@@ -22,8 +22,10 @@ val vars_of_lambda : 'a expr_t -> id_t list
 val typed_vars_of_lambda : 'a expr_t -> (id_t * value_type_t) list
 
 (* Stringification *)
+val string_of_address: address -> string
 val string_of_container_type: container_type_t -> string
 val string_of_const: constant_t -> string
+val string_of_tag_type: expr_tag_t -> string
 
 (* Compact stringification *)
 val flat_string_of_base_type: base_type_t -> string
@@ -40,6 +42,10 @@ val flat_string_of_statement: 'a statement_t -> string
 val flat_string_of_program: 'a program_t -> string
 
 (* Pretty stringification, used as the default. *)
+val print_type : type_t -> unit
+val print_arg : arg_t -> unit
+val print_expr : ?print_id:bool -> 'a expr_t -> unit
+
 val string_of_base_type: base_type_t -> string
 val string_of_value_type: value_type_t -> string
 val string_of_type: type_t -> string
@@ -50,11 +56,19 @@ val string_of_declaration: 'a declaration_t -> string
 val string_of_instruction: instruction_t -> string
 val string_of_statement: 'a statement_t -> string
 
-val string_of_program: ?print_id:bool -> 'a program_t -> string
+val string_of_program:
+  ?print_id:bool ->
+  ?print_expr_fn:(?print_id:bool -> 'a expr_t -> unit Lazy.t)
+  -> 'a program_t -> string
+
 
 (* AST constructors / destructors *)
+val decompose_lambda : 'a expr_t -> 'a expr_t
 val decompose_apply : 'a expr_t -> 'a expr_t * 'a expr_t
 val decompose_ifthenelse : 'a expr_t -> 'a expr_t * 'a expr_t * 'a expr_t
+val decompose_iterate : 'a expr_t -> 'a expr_t * 'a expr_t
+val decompose_map : 'a expr_t -> 'a expr_t * 'a expr_t
+val decompose_filter_map : 'a expr_t -> 'a expr_t * 'a expr_t * 'a expr_t
 val decompose_aggregate : 'a expr_t -> 'a expr_t * 'a expr_t * 'a expr_t
 val decompose_gbagg : 'a expr_t -> 'a expr_t * 'a expr_t * 'a expr_t * 'a expr_t
 

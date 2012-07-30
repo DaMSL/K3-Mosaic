@@ -1,0 +1,14 @@
+declare a_events : {|int|}
+declare a_times_b_events : {|int|}
+declare a_join_ab : {|int|}
+declare a_join_ap1 : {|int|}
+declare a_join_sumb_by_a : {|(int, int)|}
+
+trigger on_event(a:int, b:int) {} = do {
+  insert(a_events, a);
+  insert(a_times_b_events, a*b);
+  insert(a_join_ab, fold(\(i:int, past_a:int) -> i+(past_a*a*b), 1, a_events));
+  insert(a_join_ab, fold(\(i:int, j:int) -> i+j, 0, map(\past_a:int -> (past_a+1)*a, a_events)));
+  iterate(\(na:int,nb:int) -> insert(a_join_sumb_by_a, (na,nb)), groupby(\(a:int,sum_b:int) -> a, \(sum:int,pair:(int,int)) -> (\(pa:int,psumb:int) -> psumb)(pair), 0, a_join_sumb_by_a));
+  iterate(\(na:int,nb:int) -> insert(a_join_sumb_by_a, (na,nb)), map(\x:(int,int) -> (a,(\(pa:int,pb:int) -> pa*pb)(x)), a_join_sumb_by_a))
+}
