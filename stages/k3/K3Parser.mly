@@ -231,7 +231,7 @@ expr_list:
 ;
 
 expr_seq:
-    | expr { [$1] }
+    | expr                    { [$1] }
     | expr SEMICOLON expr_seq { $1 :: $3 }
 ;
 

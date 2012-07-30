@@ -1,5 +1,6 @@
 open Format
 open Lazy
+open Printing
 open Tree
 open K3Util
 open Imperative
@@ -17,42 +18,6 @@ let meta_of_cmd c = snd_data c
 (* Pretty printing helpers *)
 let option_as_list f opt = match opt with | Some x -> [f x] | _ -> []
 
-type cut_type = NoCut | Hint | Line
- 
-let ob () = pp_open_hovbox str_formatter 2
-let cb () = pp_close_box str_formatter ()
-let pc () = pp_print_cut str_formatter ()
-let ps s = pp_print_string str_formatter s
-let psp () = pp_print_space str_formatter ()
-let fnl () = pp_force_newline str_formatter ()
-
-let cut c = match c with
-  | NoCut -> ()
-  | Hint -> pc ()
-  | Line -> fnl ()
-
-let ps_list ?(sep=", ") cut_t f l =
-  let n = List.length l in
-  ignore(List.fold_left
-    (fun cnt e ->
-      f e;
-      (if cnt < n then ps sep);
-      cut cut_t;
-      cnt+1)
-    1 l)
-
-let pretty_tag_term_str t = ob(); ps t; cb()
-
-let pretty_tag_str cut_t extra t ch_lazy_t =
-  begin
-    ob();
-    ps (t ^ "("); cut cut_t;
-    if extra = "" then () else (ps (extra ^ ", "); cut cut_t);
-    ps_list cut_t force ch_lazy_t;
-    ps ")";
-    cb()
-  end
-
 let lps s = lazy (ps s)
 
 let lazy_string_opt string_f a = match a with
@@ -62,16 +27,16 @@ let lazy_string_opt string_f a = match a with
 (* Type and program grammar pretty printing *)
 
 let string_of_collection_fn_tag coll_fn = match coll_fn with
-  | Peek -> "peek" | Slice -> "slice"
-  | Insert -> "insert" | Update -> "update" | Delete -> "delete" 
-  | Combine -> "combine"
-  | Sort -> "sort"
-  | Contains -> "contains"
-  | Find -> "find"
+  | Peek -> "Peek" | Slice -> "Slice"
+  | Insert -> "Insert" | Update -> "Update" | Delete -> "Delete" 
+  | Combine -> "Combine"
+  | Sort -> "Sort"
+  | Contains -> "Contains"
+  | Find -> "Find"
 
 let string_of_composite_fn_tag comp_fn = match comp_fn with
-  | Position i -> "position("^(string_of_int i)^")"
-  | Field id -> "field("^id^")"
+  | Position i -> "Position("^(string_of_int i)^")"
+  | Field id -> "Field("^id^")"
 
 let print_tree print_node tree =
   let lazy_root = 
@@ -142,23 +107,29 @@ and print_expr_tag tag lazy_children =
   | Tuple     -> my_tag "Tuple"
   | Just      -> my_tag "Just"
   | Op     op -> ch_tag "Op" ([lazy_op op]@lazy_children)
-  | Fn     fn_tag -> ch_tag "FnCall" ([lazy (print_fn_tag fn_tag)]@lazy_children)
+  | Fn     fn_tag -> ch_tag "Fn" ([lazy (print_fn_tag fn_tag)]@lazy_children)
 
 and print_expr e =
   print_tree (fun lazy_ch e ->
     print_expr_tag (tag_of_expr e) (List.flatten lazy_ch)) e
 
 and print_cmd_tag tag lazy_children =
-  let my_tag t = pretty_tag_str Hint "" t lazy_children in
-  let ch_tag t ch = pretty_tag_str Hint "" t ch in
+  let my_tag ?(lb="(") ?(rb=")") ?(sep=", ") ?(cut=Hint) t =
+    pretty_tag_str ~lb:lb ~rb:rb ~sep:sep cut "" t lazy_children
+  in
+  let my_tag_list = my_tag ~lb:"([" ~rb:"])" ~sep:"; " ~cut:Line in
+  let ch_tag ?(cut=Hint) t ch = pretty_tag_str cut "" t ch in
   match tag with
     Assign (id, e)  -> ch_tag "Assign" [lps id; lazy_expr e] 
   | Decl   d        -> ch_tag "Decl" [lazy_decl d]
   | Expr   e        -> ch_tag "Expr" [lazy_expr e]
-  | Block           -> my_tag "Block"
+  | Block           -> my_tag_list "Block"
   
   | For    (id,t,e) ->
-      ch_tag "For" ([lps id; lazy_type t; lazy_expr e]@lazy_children)
+      let lazy_for_args = lazy (
+        ps "("; ps id; ps " : "; print_type t;
+        pc(); ps " in "; pc(); print_expr e; ps ")")
+      in ch_tag ~cut:Line "For" (lazy_for_args :: lazy_children)
   
   | IfThenElse pred ->
       ch_tag "IfThenElse" ([lazy_expr pred]@lazy_children)
@@ -168,7 +139,9 @@ and print_cmd c =
     print_cmd_tag (tag_of_cmd c) (List.flatten lazy_ch)) c
 
 let print_program p =
-  ob(); ps "["; List.iter print_decl p; ps "]"; cb()
+  ob(); ps "["; fnl();
+  List.iter (fun d -> print_decl d; ps ";"; fnl()) p;
+  ps "]"; cb()
 
 let wrap_formatter print_fn =
   pp_set_margin str_formatter 120;
@@ -180,3 +153,28 @@ let string_of_decl d    = wrap_formatter (fun () -> print_decl d)
 let string_of_expr e    = wrap_formatter (fun () -> print_expr e)
 let string_of_cmd c     = wrap_formatter (fun () -> print_cmd c)
 let string_of_program p = wrap_formatter (fun () -> print_program p)
+
+
+let var_ids_of_expr e =
+  let add_var _ subvars e = (List.flatten subvars)@(match tag_of_expr e with
+    | Var id -> [id]
+    | _ -> [])
+  in ListAsSet.no_duplicates (fold_tree (fun _ _ -> None) add_var None [] e) 
+
+let rec var_ids_of_decl d = match d with
+  | DVar   (id,_,da_opt) ->
+    id::(match da_opt with
+         | Some(Constructor e) -> List.flatten (List.map var_ids_of_expr e)
+         | Some(Init e) -> var_ids_of_expr e
+         | _ -> [])
+  | DFn    (id,_,_,body) -> id::(List.flatten (List.map var_ids_of_cmd body))
+  | _ -> []
+
+and var_ids_of_cmd c =
+  let add_var _ subvars c = (List.flatten subvars)@(match tag_of_cmd c with
+    | Decl d -> var_ids_of_decl d
+    | Block -> []
+    | Assign (id, e) | For (id,_,e) -> id::(var_ids_of_expr e)
+    | Expr e | IfThenElse e -> var_ids_of_expr e)
+  in ListAsSet.no_duplicates  (fold_tree (fun _ _ -> None) add_var None [] c)
+  

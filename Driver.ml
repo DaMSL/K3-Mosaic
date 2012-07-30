@@ -114,6 +114,8 @@ let parse_cmd_line () =
   Arg.parse param_specs append_input_file usage_msg
 
 (* Driver execution *)
+
+(* Program constructors *)
 let parse_program f =
   let in_chan = try open_in f
                 with Sys_error _ -> error ("failed to open file: "^f) in
@@ -122,6 +124,19 @@ let parse_program f =
     close_in in_chan;
     prog
 
+let handle_type_error p (uuid,error) =
+  print_endline "----Type error----";
+  print_endline ("Error("^(string_of_int uuid)^"): "^error);
+  print_endline (string_of_program ~print_id:true p);
+  exit 1
+
+let typed_program f =
+  let p = parse_program f in
+  try deduce_program_type p
+  with TypeError (uuid, error) -> handle_type_error p (uuid, error)
+
+let imperative_program f =
+  RK3ToImperative.imperative_of_program (fun () -> -1) (typed_program f)
 
 (* TODO *) 
 let repl params = ()
@@ -140,28 +155,21 @@ let interpret params =
   List.iter eval_fn params.input_files
 
 (* Print actions *)
-let handle_type_error p (uuid,error) =
-  print_endline "----Type error----";
-  print_endline ("Error("^(string_of_int uuid)^"): "^error);
-  print_endline (string_of_program ~print_id:true p);
-  exit 1
-
-let print_k3_program f =
-  print_endline (string_of_program (parse_program f))
+let print_k3_program f = print_endline (string_of_program (parse_program f))
 
 let print_reified_k3_program f =
   let print_expr_fn ?(print_id=false) e = lazy (print_reified_expr (reify_expr e)) in
-  let p = parse_program f in
-  let tp = 
-    try deduce_program_type p
-    with TypeError (uuid, error) -> handle_type_error p (uuid, error)
+  let tp = typed_program f
   in print_endline (string_of_program ~print_expr_fn:print_expr_fn tp)
+
+let print_imperative_program f =
+  print_endline (ImperativeUtil.string_of_program (imperative_program f))
 
 let print params =
   let print_fn = match params.language with
     | K3 -> print_k3_program
     | ReifiedK3 -> print_reified_k3_program
-    | _ -> error "Output language not yet implemented"
+    | Imperative -> print_imperative_program
   in
   List.iter print_fn params.input_files
 

@@ -341,13 +341,16 @@ and print_arg a =
     | ATuple(its) -> my_tag "ATuple" (List.map print_id_t its)
 
 and print_expr_tag tag lazy_children =
-  let my_tag ?(extra="") t = pretty_tag_str Hint extra t lazy_children in
+  let my_tag ?(lb="(") ?(rb=")") ?(sep=", ") ?(extra="") t =
+    pretty_tag_str ~lb:lb ~rb:rb ~sep:sep Hint extra t lazy_children
+  in
+  let my_tag_list = my_tag ~lb:"([" ~rb:"])" ~sep:"; " in
   let ch_tag cut_t t ch = pretty_tag_str cut_t "" t ch in
   let extra_tag t extra = pretty_tag_str Hint "" t (extra@lazy_children) in
   match tag with
     | Const(c)  -> ch_tag NoCut "Const" [lps (string_of_const c)]
     | Var(i)    -> ch_tag NoCut "Var" [lps i]
-    | Tuple     -> my_tag "Tuple"
+    | Tuple     -> my_tag_list "Tuple"
 
     | Just      -> my_tag "Just"
 
@@ -367,7 +370,7 @@ and print_expr_tag tag lazy_children =
     | Lambda a -> extra_tag "Lambda" [lazy_arg a]
     | Apply    -> my_tag "Apply"
 
-    | Block      -> my_tag "Block"
+    | Block      -> my_tag_list "Block"
     | IfThenElse -> my_tag "IfThenElse"
 
     | Map              -> my_tag "Map"

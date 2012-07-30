@@ -22,7 +22,7 @@ let ps_list ?(sep=", ") cut_t f l =
     (fun cnt e ->
       f e;
       (if cnt < n then ps sep);
-      cut cut_t;
+      (if cnt < n then cut cut_t);
       cnt+1)
     1 l)
 

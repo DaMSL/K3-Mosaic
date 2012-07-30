@@ -30,6 +30,7 @@ let print_reified_expr t =
           begin
             ps ("declare "^decl_id^" : "^(flat_string_of_type decl_t)^"\n");
             ps_list Line force lazy_ch;
+            fnl();
             ps ("reified "^" "^decl_id^" = ");
             print_expr expr
           end
@@ -37,6 +38,7 @@ let print_reified_expr t =
         | false, false ->
           begin
             ps_list Line force lazy_ch;
+            fnl();
             print_expr expr
           end)
     t
@@ -86,6 +88,9 @@ let name_of_reification (reified_ancestors : (int * (id_t * type_t * bool * bool
   in
   
   (* Handles reifications of expressions that are dependent on their parent *)
+  (* TODO: handle more general subexpressions at reification points, specifically
+   * lambdas returned from conditionals and blocks, and reification for 
+   * global function invocations *)
   let reify_from_parent e =
     let e_name =
       if List.mem_assoc (id_of_expr e) reified_ancestors
@@ -104,11 +109,23 @@ let name_of_reification (reified_ancestors : (int * (id_t * type_t * bool * bool
         | _, _, _ -> []
       in
       let reify_arg =
-        let arg_name = match arg_of_lambda fn_e with
-          | Some(AVar (id,t)) -> (id, TValue(t), true, true)   
-          | Some(ATuple(vt_l)) -> unwrap (new_name "apply" true true arg_e)
-          | _ -> unwrap (new_name "apply" true true arg_e)
-        in [id_of_expr arg_e, arg_name]
+        let reify_expr e name = id_of_expr e, name in
+        match arg_of_lambda fn_e with
+          | Some(AVar (id,t)) -> [reify_expr arg_e (id, TValue(t), true, true)]   
+          | Some(ATuple(vt_l)) -> 
+            (* Directly reify to tuple bindings if the arg is a tuple value *)
+            begin match K3Util.tag_of_expr arg_e with
+              | Tuple ->
+                List.map2 (fun (id,t) e ->
+                  reify_expr e (id, TValue(t), true, true)) vt_l (sub_tree arg_e)
+              | Var _ -> []
+              | _ -> [reify_expr arg_e (unwrap (new_name "apply" true true arg_e))]
+            end
+
+          | _ ->
+            (* TODO: retrieve global fn arg from declaration, and directly
+             * reify to tuple bindings if the arg is a tuple value *)
+            [reify_expr arg_e (unwrap (new_name "apply" true true arg_e))]
       in reify_lambda@reify_arg
 
     | Block ->
@@ -133,8 +150,9 @@ let name_of_reification (reified_ancestors : (int * (id_t * type_t * bool * bool
       let fn_e, init_e, _ = decompose_aggregate e in
       begin
         let children_to_reify =
-          (match tag_of_expr fn_e with
-            | Lambda _ -> [decompose_lambda fn_e] | _ -> [])@[init_e]
+          let fn_reifications = match tag_of_expr fn_e with
+            | Lambda _ -> [decompose_lambda fn_e] | _ -> []
+          in fn_reifications@[init_e]
         in
         match e_name with
         | None -> declare_and_reify "agg" e children_to_reify

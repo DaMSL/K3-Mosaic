@@ -1,3 +1,4 @@
+open K3
 open Imperative
 
 (* AST accessors *)
@@ -17,3 +18,7 @@ val string_of_expr: 'a expr_t -> string
 val string_of_cmd: 'a cmd_t -> string
 
 val string_of_program: 'a program_t -> string
+
+val var_ids_of_expr : 'a expr_t -> id_t list
+val var_ids_of_decl : 'a decl_t -> id_t list
+val var_ids_of_cmd : 'a cmd_t -> id_t list
