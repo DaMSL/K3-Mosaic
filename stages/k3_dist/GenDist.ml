@@ -226,7 +226,7 @@ let send_fetch_trig p trig_name =
   let send_fetches_of_rhs_maps  =
     (mk_iter
       (mk_lambda 
-        (ATuple["ip", t_ip;
+        (ATuple["ip", t_ip; 
           "stmt_map_ids", wrap_tlist @: wrap_ttuple [t_stmt_id; t_map_id]]
         )
         (mk_send 
@@ -580,7 +580,7 @@ List.fold_left
       (mk_block
         [mk_iter
           (mk_lambda
-            (ATuple["tuple", wrap_ttuple tuple_types])
+            (AVar("tuple", wrap_ttuple tuple_types))
             (mk_if
               (mk_has_member 
                 (mk_var map_name)
@@ -608,7 +608,7 @@ List.fold_left
          let counter_pat = ["count", t_int] in
          let full_pat = part_pat @ counter_pat in
          let full_types = wrap_ttuple @: extract_arg_types full_pat in
-         let part_pat_as_vars = ids_to_vars @: extract_arg_names part_pat in
+         let part_pat_as_vars = [mk_var "vid"; mk_const @: CInt stmt_id] in
          let query_pat = mk_tuple @: part_pat_as_vars @ [mk_const CUnknown] in
          let stmt_cntrs_slice = mk_slice stmt_cntrs query_pat in
          mk_if (* check if the counter exists *)
