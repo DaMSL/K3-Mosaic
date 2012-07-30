@@ -57,7 +57,8 @@ let get_type e =
 let mk_typed_var id t meta = mk_tree (((0, Var id), meta), []) 
   
 (* Top-down folder for expression reification *)
-let name_of_reification (reified_ancestors : (int * (id_t * type_t * bool * bool)) list)
+let name_of_reification (fn_arg_env : (id_t * arg_t) list)
+                        (reified_ancestors : (int * (id_t * type_t * bool * bool)) list)
                         (e : 'a texpr_t)
                         : (int * (id_t * type_t * bool * bool)) list =
   let unwrap opt = match opt with
@@ -99,6 +100,12 @@ let name_of_reification (reified_ancestors : (int * (id_t * type_t * bool * bool
     match tag_of_expr e with
     | Apply ->
       let fn_e, arg_e = decompose_apply e in
+      let fn_arg = match tag_of_expr fn_e with
+        | Lambda arg -> arg 
+        | Var id -> (try List.assoc id fn_arg_env 
+                     with Not_found -> failwith ("unknown function id "^id))
+        | _ -> failwith "invalid function application"
+      in
       let reify_lambda =
         match is_unit (get_type e), (tag_of_expr fn_e), e_name with
         | false, Lambda _, None ->
@@ -110,9 +117,9 @@ let name_of_reification (reified_ancestors : (int * (id_t * type_t * bool * bool
       in
       let reify_arg =
         let reify_expr e name = id_of_expr e, name in
-        match arg_of_lambda fn_e with
-          | Some(AVar (id,t)) -> [reify_expr arg_e (id, TValue(t), true, true)]   
-          | Some(ATuple(vt_l)) -> 
+        match fn_arg with
+          | AVar (id,t) -> [reify_expr arg_e (id, TValue(t), true, true)]   
+          | ATuple(vt_l) -> 
             (* Directly reify to tuple bindings if the arg is a tuple value *)
             begin match K3Util.tag_of_expr arg_e with
               | Tuple ->
@@ -121,11 +128,6 @@ let name_of_reification (reified_ancestors : (int * (id_t * type_t * bool * bool
               | Var _ -> []
               | _ -> [reify_expr arg_e (unwrap (new_name "apply" true true arg_e))]
             end
-
-          | _ ->
-            (* TODO: retrieve global fn arg from declaration, and directly
-             * reify to tuple bindings if the arg is a tuple value *)
-            [reify_expr arg_e (unwrap (new_name "apply" true true arg_e))]
       in reify_lambda@reify_arg
 
     | Block ->
@@ -218,8 +220,8 @@ let reify_node (reified_ancestors : (int * (id_t * type_t * bool * bool)) list)
   in 
      [mk_tree ((e_name, recompose_tree e c_exprs), c_nodes), e_used]  
 
-let reify_expr e =
-  let r = fold_tree name_of_reification reify_node [] [] e
+let reify_expr fn_arg_env e =
+  let r = fold_tree (name_of_reification fn_arg_env) reify_node [] [] e
   in match r with
     | [rt,_] -> rt 
     | _ -> failwith "invalid reified root"

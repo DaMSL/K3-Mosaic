@@ -158,7 +158,7 @@ let interpret params =
 let print_k3_program f = print_endline (string_of_program (parse_program f))
 
 let print_reified_k3_program f =
-  let print_expr_fn ?(print_id=false) e = lazy (print_reified_expr (reify_expr e)) in
+  let print_expr_fn ?(print_id=false) e = lazy (print_reified_expr (reify_expr [] e)) in
   let tp = typed_program f
   in print_endline (string_of_program ~print_expr_fn:print_expr_fn tp)
 

@@ -377,10 +377,12 @@ let imperative_of_expr_node mk_meta fn_arg_env
         match ImperativeUtil.tag_of_expr e with | Var id -> [id] | _ -> []
         ) arg_exprs)
       in
-      (* TODO: what about partial matches here *)
-      List.exists (fun (id,t) -> not(List.mem id arg_ids)) tvars
+      let arg_matches = List.length (List.filter (fun (id,t) -> List.mem id arg_ids) tvars) in
+      if arg_matches > 0 && arg_matches <> (List.length tvars) then
+        failwith "unexpected partial matches for function application bindings"
+      else arg_matches = 0
     in
-    let get_arg_cmds arg_pair =
+    let get_arg_cmds is_global_fn arg_pair =
       let unwrap_if_tuple e = match ImperativeUtil.tag_of_expr e with
         | Tuple -> sub_tree e
         | _ -> [e]
@@ -388,9 +390,11 @@ let imperative_of_expr_node mk_meta fn_arg_env
       let mk_bindings da =
         let tvars = get_fn_app_typed_vars fn_e in
         let arg_exprs = unwrap_if_tuple (expr_of_decl_args da) in
-        let add_bindings = needs_bindings tvars arg_exprs in   
-        if add_bindings then mk_app_fn_bindings tvars arg_exprs
-        else [], []
+        let add_bindings =
+          if is_global_fn then List.length tvars > List.length arg_exprs 
+          else needs_bindings tvars arg_exprs
+        in 
+        if add_bindings then mk_app_fn_bindings tvars arg_exprs else [], []
       in
         unwrap_pair
           (fun da -> mk_bindings da)
@@ -416,25 +420,26 @@ let imperative_of_expr_node mk_meta fn_arg_env
       (* Pure lambda functions. These do not need to propagate their expression
        * bodies, since they are guaranteed to be reified. *)
       | [(Some(Constructor([e])), None); arg_pair] ->
-          apply_result None (fst (get_arg_cmds arg_pair)) []
+          apply_result None (fst (get_arg_cmds false arg_pair)) []
       
       (* Global function calls *)
       | [(Some(Init(e)), None); arg_pair] ->
         begin match ImperativeUtil.tag_of_expr e with
           | Var fn ->
-            (* TODO: explicit bindings of function args will become redundant when
-             * global function args are directly reified *) 
-            (* let fn_args = List.map (mk_var (mk_meta())) (List.map snd reify_cmds_and_ids) in *)
-            let arg_cmds, fn_args = get_arg_cmds arg_pair in
+            let arg_cmds, possible_args = get_arg_cmds true arg_pair in 
+            let fn_args = match possible_args with
+              | [] -> List.map (mk_var (mk_meta())) (List.map snd reify_cmds_and_ids)
+              | a -> a
+            in
             let fn_call = mk_fn (mk_meta()) (Named fn) fn_args
             in apply_result (Some(Init(fn_call))) arg_cmds []
 
-          | _ -> apply_result (Some(Init(e))) (fst (get_arg_cmds arg_pair)) []
+          | _ -> apply_result (Some(Init(e))) (fst (get_arg_cmds false arg_pair)) []
         end
 
       (* Everything else *)
       | [(fn_da_opt, Some fn_cmds); arg_pair] ->
-          apply_result fn_da_opt (fst (get_arg_cmds arg_pair)) fn_cmds
+          apply_result fn_da_opt (fst (get_arg_cmds false arg_pair)) fn_cmds
 
       | _ -> failwith "invalid apply reification"
     end
@@ -748,6 +753,9 @@ let imperative_of_declaration mk_meta fn_arg_env d =
     | TFunction (arg,ret) -> arg, ret
     | _ -> failwith "invalid function type" 
   in
+  let cmds_of_reified_expr e = 
+    imperative_of_reified_expr mk_meta fn_arg_env (reify_expr fn_arg_env e)
+  in
   match d with
   | Global  (id, t, init) ->
       if is_function t then
@@ -758,14 +766,14 @@ let imperative_of_declaration mk_meta fn_arg_env d =
               | Some(a) -> a 
               | None -> failwith "invalid global function declaration" 
             in
-            let cmds = imperative_of_reified_expr mk_meta fn_arg_env (reify_expr e) in
+            let cmds = cmds_of_reified_expr e in
             let fn_body = [mk_block (mk_meta()) cmds]
             in Some(DFn(id, arg, TInternal(TValue ret_t), fn_body)), [], [id,arg]
           | _ -> failwith "invalid function body"
         end
       else
         let cmds = match init with
-          | Some(e) -> imperative_of_reified_expr mk_meta fn_arg_env (reify_expr e)
+          | Some(e) -> cmds_of_reified_expr e
           | _ -> [] 
         in Some(DVar(id, TInternal(t), None)), cmds, []
         
@@ -777,7 +785,7 @@ let imperative_of_declaration mk_meta fn_arg_env d =
     end
 
   | Trigger (id,a,decls,body) ->
-    let cmds = imperative_of_reified_expr mk_meta fn_arg_env (reify_expr body) in
+    let cmds = cmds_of_reified_expr body in
     let trig_body = [mk_block (mk_meta()) cmds]
     in Some(DFn(id, a, TInternal(TValue(canonical TUnit)), trig_body)), [], [id,a]
   

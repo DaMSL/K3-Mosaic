@@ -16,7 +16,8 @@ val string_of_reified_expr : 'a reified_expr_t -> string
  *          all children.
  *)
 val name_of_reification :
-  (int * (id_t * type_t * bool * bool)) list   
+  (id_t * arg_t) list
+  -> (int * (id_t * type_t * bool * bool)) list   
   -> 'a texpr_t
   -> (int * (id_t * type_t * bool * bool)) list  
 
@@ -30,5 +31,5 @@ val reify_node :
   -> ('a reified_expr_t * bool) list
 
 (* reifies/reverses a whole expression *)
-val reify_expr : 'a texpr_t -> 'a reified_expr_t
+val reify_expr : (id_t * arg_t) list -> 'a texpr_t -> 'a reified_expr_t
 val unreify_expr : 'a reified_expr_t -> 'a texpr_t
