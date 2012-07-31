@@ -97,83 +97,95 @@ let name_of_reification (fn_arg_env : (id_t * arg_t) list)
       if List.mem_assoc (id_of_expr e) reified_ancestors
       then Some(List.assoc (id_of_expr e) reified_ancestors) else None
     in
-    match tag_of_expr e with
-    | Apply ->
-      let fn_e, arg_e = decompose_apply e in
-      let fn_arg = match tag_of_expr fn_e with
-        | Lambda arg -> arg 
-        | Var id -> (try List.assoc id fn_arg_env 
-                     with Not_found -> failwith ("unknown function id "^id))
-        | _ -> failwith "invalid function application"
-      in
-      let reify_lambda =
-        match is_unit (get_type e), (tag_of_expr fn_e), e_name with
-        | false, Lambda _, None ->
-            declare_and_reify "apply" e [decompose_lambda fn_e] 
-        | false, Lambda _, Some (e_id, e_t, _, _) ->
-            reify_list (e_id, e_t) [decompose_lambda fn_e]
-        | false, _, None -> declare_and_reify "apply" e []
-        | _, _, _ -> []
-      in
-      let reify_arg =
-        let reify_expr e name = id_of_expr e, name in
-        match fn_arg with
-          | AVar (id,t) -> [reify_expr arg_e (id, TValue(t), true, true)]   
-          | ATuple(vt_l) -> 
-            (* Directly reify to tuple bindings if the arg is a tuple value *)
-            begin match K3Util.tag_of_expr arg_e with
-              | Tuple ->
-                List.map2 (fun (id,t) e ->
-                  reify_expr e (id, TValue(t), true, true)) vt_l (sub_tree arg_e)
-              | Var _ -> []
-              | _ -> [reify_expr arg_e (unwrap (new_name "apply" true true arg_e))]
-            end
-      in reify_lambda@reify_arg
-
-    | Block ->
-      let child_e =
-        let c = sub_tree e in List.nth c (List.length c - 1)
-      in
-      if is_unit (get_type e) then []
-      else begin match e_name with
-           | None -> declare_and_reify "block" e [child_e]
-           | Some (e_id, e_t, _, _) -> reify_list (e_id, e_t) [child_e]
-           end
-      
-    | IfThenElse ->
-      let _, then_e, else_e = decompose_ifthenelse e in
-      if is_unit (get_type e) then []
-      else begin match e_name with
-           | None -> declare_and_reify "ifelse" e [then_e; else_e]
-           | Some (e_id, e_t, _, _) -> reify_list (e_id, e_t) [then_e; else_e]
-           end
-      
-    | Aggregate ->
-      let fn_e, init_e, _ = decompose_aggregate e in
-      begin
-        let children_to_reify =
-          let fn_reifications = match tag_of_expr fn_e with
-            | Lambda _ -> [decompose_lambda fn_e] | _ -> []
-          in fn_reifications@[init_e]
-        in
-        match e_name with
-        | None -> declare_and_reify "agg" e children_to_reify
-        | Some (e_id, e_t, _, _) -> reify_list (e_id, e_t) children_to_reify
-      end
-    
-    | _ -> []
+    let r = match tag_of_expr e with
+	    | Apply ->
+	      let fn_e, arg_e = decompose_apply e in
+	      let fn_arg = match tag_of_expr fn_e with
+	        | Lambda arg -> arg 
+	        | Var id -> (try List.assoc id fn_arg_env 
+	                     with Not_found -> failwith ("unknown function id "^id))
+	        | _ -> failwith "invalid function application"
+	      in
+	      let reify_lambda =
+	        match is_unit (get_type e), (tag_of_expr fn_e), e_name with
+	        | false, Lambda _, None ->
+	            declare_and_reify "apply" e [decompose_lambda fn_e] 
+	        | false, Lambda _, Some (e_id, e_t, _, _) ->
+	            reify_list (e_id, e_t) [decompose_lambda fn_e]
+	        | false, _, None -> declare_and_reify "apply" e []
+	        | _, _, _ -> []
+	      in
+	      let reify_arg =
+	        let reify_expr e name = id_of_expr e, name in
+	        match fn_arg with
+	          | AVar (id,t) -> [reify_expr arg_e (id, TValue(t), true, true)]   
+	          | ATuple(vt_l) -> 
+	            (* Directly reify to tuple bindings if the arg is a tuple value *)
+	            begin match K3Util.tag_of_expr arg_e with
+	              | Tuple ->
+	                List.map2 (fun (id,t) e ->
+	                  reify_expr e (id, TValue(t), true, true)) vt_l (sub_tree arg_e)
+	              | Var _ -> []
+	              | _ -> [reify_expr arg_e (unwrap (new_name "apply" true true arg_e))]
+	            end
+	      in reify_lambda@reify_arg
+	
+	    | Block ->
+	      let child_e =
+	        let c = sub_tree e in List.nth c (List.length c - 1)
+	      in
+	      if is_unit (get_type e) then []
+	      else begin match e_name with
+	           | None -> declare_and_reify "block" e [child_e]
+	           | Some (e_id, e_t, _, _) -> reify_list (e_id, e_t) [child_e]
+	           end
+	      
+	    | IfThenElse ->
+	      let _, then_e, else_e = decompose_ifthenelse e in
+	      if is_unit (get_type e) then []
+	      else begin match e_name with
+	           | None -> declare_and_reify "ifelse" e [then_e; else_e]
+	           | Some (e_id, e_t, _, _) -> reify_list (e_id, e_t) [then_e; else_e]
+	           end
+	      
+	    | Aggregate ->
+	      let fn_e, init_e, _ = decompose_aggregate e in
+	      begin
+	        let children_to_reify =
+	          let fn_reifications = match tag_of_expr fn_e with
+	            | Lambda _ -> [decompose_lambda fn_e] | _ -> []
+	          in fn_reifications@[init_e]
+	        in
+	        match e_name with
+	        | None -> declare_and_reify "agg" e children_to_reify
+	        | Some (e_id, e_t, _, _) -> reify_list (e_id, e_t) children_to_reify
+	      end
+	    
+	    | _ -> []
+    in
+    let skip = 
+      let check_if_range = match tag_of_expr e with
+        | Iterate | Map -> [List.nth (sub_tree e) 1]
+        | FilterMap | Aggregate -> [List.nth (sub_tree e) 2]
+        | GroupByAggregate -> [List.nth (sub_tree e) 3]
+        | _ -> []
+      in List.flatten (List.map (fun e -> match tag_of_expr e with
+        | Range _ -> [id_of_expr e]
+        | _ -> []) check_if_range)
+    in
+      r, skip
   in
-  let reify_child reifications e =
-    if List.mem_assoc (id_of_expr e) reifications then reifications
+  let reify_child (reifications, skipped) e =
+    if List.mem_assoc (id_of_expr e) reifications
+         || List.mem (id_of_expr e) skipped
+    then reifications, skipped
     else
     let child_name = match tag_of_expr e with
       | Empty     c_t -> new_name "empty" true false e
       | Singleton c_t -> new_name "singleton" true false e
       | Combine       -> new_name "combine" true false e
 
-      (* TODO: combining ranges needs to explicitly materialize the range,
-       * that is we need to pass down when we need copied collections *)
-      | Range     c_t -> failwith "range reification not yet implemented"
+      | Range     c_t      -> new_name "range" true false e
 
       | Map                -> new_name "map" true false e 
       | FilterMap          -> new_name "filtermap" true false e
@@ -188,17 +200,19 @@ let name_of_reification (fn_arg_env : (id_t * arg_t) list)
       | _ -> None
     in
     match child_name with
-      | None -> reifications
+      | None -> reifications, skipped
       | Some(c_id, c_t, c_decl, c_assign) ->
-        reifications@[id_of_expr e, (c_id, c_t, c_decl, c_assign)] 
+        reifications@[id_of_expr e, (c_id, c_t, c_decl, c_assign)], skipped 
   in
-  let parent_reifications = reified_ancestors@(reify_from_parent e)
-  in List.fold_left reify_child parent_reifications (sub_tree e)
+  let reified_at_parent =
+    let x,y = reify_from_parent e in (reified_ancestors@x), y
+  in fst (List.fold_left reify_child reified_at_parent (sub_tree e))
 
 (* Bottom-up folder for expression reification *)
 let reify_node (reified_ancestors : (int * (id_t * type_t * bool * bool)) list)
                (reified_subtrees : ('a reified_expr_t * bool) list list)
-               (e : 'a texpr_t) =
+               (e : 'a texpr_t)
+=
   let extract_expr_and_nodes (e_acc,n_acc) 
                              ((rs, used) : ('a reified_expr_t * bool)) 
                              : 'a texpr_t list * 'a reified_expr_t list =

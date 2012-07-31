@@ -29,7 +29,7 @@ and collection_fn_t =
     Peek | Slice | Insert | Update | Delete 
     
     (* Extra builtins *) 
-  | Combine | Sort
+  | Combine | Range | Sort
 
     (* Map primitives *)
   | Contains | Find

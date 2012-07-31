@@ -7,8 +7,23 @@ declare a_join_sumb_by_a : {|(int, int)|}
 trigger on_event(a:int, b:int) {} = do {
   insert(a_events, a);
   insert(a_times_b_events, a*b);
+
+  // test collection transformation
   insert(a_join_ab, fold(\(i:int, past_a:int) -> i+(past_a*a*b), 1, a_events));
+
+  // test successive collection transformation
   insert(a_join_ab, fold(\(i:int, j:int) -> i+j, 0, map(\past_a:int -> (past_a+1)*a, a_events)));
+
+  // test group by aggregation
   iterate(\(na:int,nb:int) -> insert(a_join_sumb_by_a, (na,nb)), groupby(\(a:int,sum_b:int) -> a, \(sum:int,pair:(int,int)) -> (\(pa:int,psumb:int) -> psumb)(pair), 0, a_join_sumb_by_a));
-  iterate(\(na:int,nb:int) -> insert(a_join_sumb_by_a, (na,nb)), map(\x:(int,int) -> (a,(\(pa:int,pb:int) -> pa*pb)(x)), a_join_sumb_by_a))
+
+  // test function application on pairs
+  iterate(\(na:int,nb:int) -> insert(a_join_sumb_by_a, (na,nb)), map(\x:(int,int) -> (a,(\(pa:int,pb:int) -> pa*pb)(x)), a_join_sumb_by_a));
+
+  // test range iteration without materialization
+  iterate(\i:int -> insert(a_events,i), [0:1:10]);
+
+  // test range iteration with materialization
+  // TODO: fix function application over ranges
+  iterate(\i:int -> insert(a_events,i), (\x:[int] -> x)([0:1:10]))
 }

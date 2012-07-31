@@ -69,6 +69,8 @@ let mk_var meta id = mk_iexpr (Var id) meta []
  
 let mk_tuple meta fields = mk_iexpr Tuple meta fields
 
+let mk_op meta op_tag args = mk_iexpr (Op op_tag) meta args
+
 let mk_fn meta fn_tag args = mk_iexpr (Fn fn_tag) meta args
  
 (* Command constructors *)
@@ -95,8 +97,7 @@ let mk_ifelse meta pred branches = mk_cmd (IfThenElse pred) meta branches
 
 (* Conversion methods *)
 
-(* TODO: ensure apply and collection transformer functions are normalized
- * (i.e. either directly lambdas or global function vars). *)
+(* TODO: this relies on range and lambda normalization. *)
 let imperative_of_expr_node mk_meta fn_arg_env 
                             (reify_cmds_and_ids, (id,t,_,_)) children e
 =
@@ -242,15 +243,10 @@ let imperative_of_expr_node mk_meta fn_arg_env
   (* Expression and command construction *)
   let assign_da id da = mk_assign (mk_meta()) id (expr_of_decl_args da) in
   let assign_expr id e = mk_assign (mk_meta()) id e in 
-  let append_expr id e =
-    (* TODO: is this really append?
-     * Shouldn't this depend on the return type of the collection? *)
-    let ae = mk_fn (mk_meta()) (Named "append") [mk_var (mk_meta()) id; e]
-    in mk_expr (mk_meta()) ae
-  in
   let cond_expr pred branches = mk_ifelse (mk_meta()) pred branches in
-  let coll_expr coll_fn_tag children = mk_fn (mk_meta()) (Collection coll_fn_tag) children in
   let expr_cmd e = mk_expr (mk_meta()) e in
+  let coll_expr coll_fn_tag children = mk_fn (mk_meta()) (Collection coll_fn_tag) children in
+  let insert_expr id e = expr_cmd (coll_expr Insert [mk_var (mk_meta()) id; e]) in
 
   (* Loop body construction *)
   let collection_loop c_type c_pair c_reify_cmds body_cmd_fn =
@@ -286,11 +282,11 @@ let imperative_of_expr_node mk_meta fn_arg_env
     bindings@fn_reify_cmds@(unwrap_pair
       (fun da ->
         let applied_expr = apply_if_function da bound_vars in 
-        if is_map then [append_expr result_id applied_expr] 
+        if is_map then [insert_expr result_id applied_expr] 
         else [expr_cmd applied_expr])
       (fun cmds -> if is_map then failwith "invalid reified map function result"
                    else cmds)
-      (fun da cmds -> if is_map then cmds@[append_expr result_id (expr_of_decl_args da)]
+      (fun da cmds -> if is_map then cmds@[insert_expr result_id (expr_of_decl_args da)]
                       else failwith "invalid reified iterate function result")
       fn_pair)
   in 
@@ -334,17 +330,35 @@ let imperative_of_expr_node mk_meta fn_arg_env
           ) exprs)
         in None, Some(cmds))
 
-  | K3.Range c_t -> 
-    (* TODO pipelined for loop, unless this range is marked to be materialized.
-     *
-     * When we generate a loop, we must indicate the reified symbol should be
-     * lifted outside the loop scope to ensure its liveness afterwards.
-     *
-     * Also, the functional expression containing the loop must be evaluated
-     * inside the loop's body, that is we must invert control flow when
-     * generating the outer expression.
-     *)
-    failwith "imperative range not yet implemented"
+  | K3.Range c_t ->
+    if reify_cmds = [] then ret_expr e (Fn (Collection Range))
+    else
+    begin match children with
+      | [start_pair; stride_pair; steps_pair] ->
+        let exprs, pre_cmds = List.fold_left (fun (e_acc,cmd_acc) pair ->
+            unwrap_pair
+              (fun da -> e_acc@[expr_of_decl_args da], cmd_acc)
+              (fun cmds -> failwith "invalid sub expression for range")
+              (fun da cmds -> e_acc@[expr_of_decl_args da], cmd_acc@cmds)
+              pair
+          ) ([],[]) children
+        in
+        let body_fn loop_id loop_t =
+          (* TODO: this code should be generated when handling the Range function.
+          let start_e, stride_e = (List.nth exprs 0), (List.nth exprs 1) in
+          let val_expr =
+            mk_op (mk_meta()) Add
+              [start_e; (mk_op (mk_meta()) Mult [mk_var loop_id; stride_e])]
+          in
+          *)
+          [insert_expr id (mk_var (mk_meta()) loop_id)]
+        in
+        let c_pair = Some(Init(coll_expr Range exprs)), Some(pre_cmds) in
+        let cmds = collection_loop (type_of_texpr e) c_pair reify_cmds body_fn
+        in None, Some(cmds)
+
+      | _ -> failwith "invalid range reification"
+    end
 
   | K3.Add  -> ret_binop e Add
   | K3.Mult -> ret_binop e Mult

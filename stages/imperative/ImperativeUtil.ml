@@ -30,6 +30,7 @@ let string_of_collection_fn_tag coll_fn = match coll_fn with
   | Peek -> "Peek" | Slice -> "Slice"
   | Insert -> "Insert" | Update -> "Update" | Delete -> "Delete" 
   | Combine -> "Combine"
+  | Range -> "Range"
   | Sort -> "Sort"
   | Contains -> "Contains"
   | Find -> "Find"
