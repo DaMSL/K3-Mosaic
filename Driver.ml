@@ -114,21 +114,34 @@ let parse_cmd_line () =
   Arg.parse param_specs append_input_file usage_msg
 
 (* Driver execution *)
+let handle_lexer_error () =
+  print_endline ("Lexer failure");
+  exit 1
 
-(* Program constructors *)
-let parse_program f =
-  let in_chan = try open_in f
-                with Sys_error _ -> error ("failed to open file: "^f) in
-  let lexbuf = Lexing.from_channel in_chan in
-  let prog = K3Parser.program K3Lexer.tokenize lexbuf in
-    close_in in_chan;
-    prog
+let handle_parse_error lexbuf =
+  print_endline ("Lexer reached: "^(Lexing.lexeme lexbuf));
+  exit 1
 
 let handle_type_error p (uuid,error) =
   print_endline "----Type error----";
   print_endline ("Error("^(string_of_int uuid)^"): "^error);
   print_endline (string_of_program ~print_id:true p);
   exit 1
+
+(* Program constructors *)
+let parse_program f =
+  let in_chan = try open_in f
+                with Sys_error _ -> error ("failed to open file: "^f) in
+  let lexbuf =
+    try Lexing.from_channel in_chan
+    with Failure _ -> handle_lexer_error ()
+  in
+  let prog =
+    try K3Parser.program K3Lexer.tokenize lexbuf
+    with Failure _ -> handle_parse_error lexbuf
+  in
+    close_in in_chan;
+    prog
 
 let typed_program f =
   let p = parse_program f in

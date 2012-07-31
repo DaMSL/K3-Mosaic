@@ -3,9 +3,24 @@
 {
     open K3Parser
     open K3
+
+		let init_line lexbuf =
+		  let pos = lexbuf.Lexing.lex_curr_p in
+		  lexbuf.Lexing.lex_curr_p <- { pos with
+		    Lexing.pos_lnum = 1;
+		    Lexing.pos_bol = 0;
+		  }
+
+		let advance_line lexbuf =
+		  let pos = lexbuf.Lexing.lex_curr_p in
+		  lexbuf.Lexing.lex_curr_p <- { pos with
+		    Lexing.pos_lnum = pos.Lexing.pos_lnum + 1;
+		    Lexing.pos_bol = pos.Lexing.pos_cnum;
+		  }
 }
 
-let whitespace = [' ' '\t' '\n']
+let whitespace = [' ' '\t']
+let newline    = "\n\r" | '\n' | '\r'
 
 let digit = ['0'-'9']
 let integer = digit+
@@ -13,27 +28,35 @@ let real = digit+ '.' digit+
 
 let identifier = ['_''a'-'z''A'-'Z']['_''a'-'z''A'-'Z''0'-'9']*
 
-let comment = '#' [^ '\n']* '\n'
+let sl_comment     = "//"[^'\n' '\r']*
+let ml_comment_st  = "/*"
+let ml_comment_end = "*/"
 
 rule tokenize = parse
-    | whitespace { tokenize lexbuf }
-    | eof { EOF }
-    | comment { tokenize lexbuf }
+    | whitespace    { tokenize lexbuf }
+    | newline       { advance_line lexbuf; tokenize lexbuf }
+    | eof           { EOF }
+
+    | sl_comment    { tokenize lexbuf }
+    | ml_comment_st { comment 1 lexbuf }
 
     | "expected" { EXPECTED }
 
-    | "declare" { DECLARE }
-    | "foreign" { FOREIGN }
-    | "trigger" { TRIGGER }
-    | "consume" { CONSUME }
+    | "declare"  { DECLARE }
+    | "foreign"  { FOREIGN }
+    | "trigger"  { TRIGGER }
+    | "consume"  { CONSUME }
 
-    | "()" { UNIT }
-    | '_' { UNKNOWN }
+    | "()"      { UNIT }
+    | '_'       { UNKNOWN }
     | "nothing" { NOTHING }
-    | "true" { BOOL true }
+    
+    | "true"  { BOOL true }
     | "false" { BOOL false }
+    
     | integer as value { INTEGER (int_of_string value) }
-    | real as value { FLOAT (float_of_string value) }
+    | real as value    { FLOAT (float_of_string value) }
+    
     | '"' (([^'"']|"\\\"")* as s) '"'  { STRING s }
 
     | '(' { LPAREN }
@@ -41,12 +64,12 @@ rule tokenize = parse
     | ',' { COMMA }
     | ';' { SEMICOLON }
 
-    | '{' { LBRACE }
-    | '}' { RBRACE }
+    | '{'  { LBRACE }
+    | '}'  { RBRACE }
     | "{|" { LBRACEBAR }
     | "|}" { RBRACEBAR }
-    | '[' { LBRACKET }
-    | ']' { RBRACKET }
+    | '['  { LBRACKET }
+    | ']'  { RBRACKET }
 
     | '-' { NEG }
     | '+' { PLUS }
@@ -58,51 +81,51 @@ rule tokenize = parse
     | '|' { OR }
     | '!' { NOT }
 
-    | '<' { LT }
+    | '<'  { LT }
     | "==" { EQ }
     | "<=" { LEQ }
     | "!=" { NEQ }
 
-    | '>' { GT }
+    | '>'  { GT }
     | ">=" { GEQ }
 
-    | "->" { RARROW }
-    | "<-" { LARROW }
+    | "->"  { RARROW }
+    | "<-"  { LARROW }
     | "<->" { LRARROW }
-    | ':' { COLON }
-    | '\\' { BACKSLASH }
+    | ':'   { COLON }
+    | '\\'  { BACKSLASH }
 
-    | '?' { QUESTION }
-    | '=' { GETS }
+    | '?'  { QUESTION }
+    | '='  { GETS }
     | ":=" { COLONGETS }
 
     | "++" { CONCAT }
 
     | "do" { DO }
 
-    | "unit" { TYPE TUnit }
-    | "bool" { TYPE TBool }
-    | "byte" { TYPE TByte }
-    | "int" { TYPE TInt }
-    | "float" { TYPE TFloat }
+    | "unit"   { TYPE TUnit }
+    | "bool"   { TYPE TBool }
+    | "byte"   { TYPE TByte }
+    | "int"    { TYPE TInt }
+    | "float"  { TYPE TFloat }
     | "string" { TYPE TString }
-    | "maybe" { MAYBE }
-    | "ref" { REF }
-    | "just" { JUST }
+    | "maybe"  { MAYBE }
+    | "ref"    { REF }
+    | "just"   { JUST }
 
-    | "range" { RANGE }
+    | "range"  { RANGE }
 
-    | "map" { MAP }
-    | "iterate" { ITERATE }
+    | "map"       { MAP }
+    | "iterate"   { ITERATE }
     | "filtermap" { FILTERMAP }
-    | "flatten" { FLATTEN }
-    | "fold" { AGGREGATE }
-    | "groupby" { GROUPBYAGGREGATE }
-    | "sort" { SORT }
+    | "flatten"   { FLATTEN }
+    | "fold"      { AGGREGATE }
+    | "groupby"   { GROUPBYAGGREGATE }
+    | "sort"      { SORT }
 
     | "peek" { PEEK }
 
-    | "if" { IF }
+    | "if"   { IF }
     | "then" { THEN }
     | "else" { ELSE }
 
@@ -114,6 +137,10 @@ rule tokenize = parse
 
     | '@' { ANNOTATE }
 
-    | identifier as name {
-        IDENTIFIER (name)
-    }
+    | identifier as name { IDENTIFIER (name) }
+
+and comment depth = parse
+| ml_comment_st  { raise (Failure ("nested comments are invalid")) }
+| ml_comment_end { tokenize lexbuf }
+| eof            { raise (Failure ("hit end of file in a comment")) }
+| _              { comment depth lexbuf }
