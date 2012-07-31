@@ -7,6 +7,7 @@ FILES=\
 	../util/Util \
 	../util/ListAsSet \
 	../util/Symbols \
+	../util/Printing \
 	../util/Tree \
 	../stages/k3/K3 \
 	../stages/k3/K3Util \

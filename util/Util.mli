@@ -14,3 +14,4 @@ val list_drop : int -> 'a list -> 'a list
 val list_zip : 'a list -> 'b list -> ('a * 'b) list
 
 val compose_fn : ('a -> 'b) -> ('c -> 'a) -> 'c -> 'b
+val read_file : string -> string

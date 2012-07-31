@@ -1,5 +1,4 @@
 # Makefile for the K3 programming language lexer/parser/driver.
-# -- Based off DBToaster Makefiles. (Yanif) 
 
 include Makefile.inc
 
@@ -7,16 +6,25 @@ FILES=\
 	util/Util \
 	util/ListAsSet \
 	util/Symbols \
+	util/Printing \
 	util/Tree \
 	stages/k3/K3 \
 	stages/k3/K3Util \
 	stages/k3/K3Helpers \
 	stages/k3/K3Typechecker \
+	stages/k3/K3Values \
+	stages/k3/interpreter/K3Runtime \
+	stages/k3/interpreter/K3Interpreter \
+	stages/k3/interpreter/K3Consumption \
 	stages/k3_dist/ProgInfo \
 	stages/k3_dist/GenDist \
-	#stages/k3/K3Interpreter \
+	stages/imperative/ReifiedK3 \
+	stages/imperative/Imperative \
+	stages/imperative/ImperativeUtil \
+	stages/imperative/RK3ToImperative \
 
 TOPLEVEL_FILES=\
+	tests/Testing \
 	Driver \
 
 LEXERS=\
@@ -28,8 +36,15 @@ PARSERS=\
 DIRS=\
 	util\
 	stages/k3 \
+	stages/k3/interpreter \
 	stages/k3_dist \
-        tests \
+	stages/imperative \
+	tests \
+
+INCLUDE_OBJ=\
+        str.cma\
+        unix.cma
+
 
 #################################################
 
@@ -49,10 +64,13 @@ NC_EXTRA_FILES      =$(patsubst %,%.cmx, $(EXTRA_FILES))
 NC_EXTRA_INCLUDES   =$(patsubst %,%.cmxi,$(EXTRA_FILES))
 
 OCAML_FLAGS +=\
-	$(patsubst %, -I %,$(DIRS))
+        $(patsubst %, -I %,$(DIRS)) \
+        $(INCLUDE_OBJ)
 
 OCAMLOPT_FLAGS +=\
-	$(patsubst %, -I %,$(DIRS))
+        $(patsubst %, -I %,$(DIRS))\
+        $(patsubst %.cma,%.cmxa,$(INCLUDE_OBJ))
+
 
 COMMON_GARBAGE := $(patsubst %,%.o,$(FILES)) $(patsubst %,%.o,$(EXTRA_FILES)) \
 		  $(patsubst %,%.annot,$(FILES)) $(patsubst %,%.annot,$(EXTRA_FILES))
@@ -67,7 +85,7 @@ TEST_BASE=\
 
 TESTS=\
 	tests/TypecheckerTest \
-	#tests/InterpreterTest \
+	tests/InterpreterTest \
 
 TEST_BASE_FILES    := $(patsubst %,%.cmo, $(TEST_BASE))
 TEST_BASE_INCLUDES := $(patsubst %,%.cmi, $(TEST_BASE))
@@ -77,8 +95,8 @@ TEST_INCLUDES   := $(patsubst %,%.cmi, $(TESTS))
 TEST_BINARIES   := $(patsubst %, bin/%, $(TESTS))
 
 TEST_GARBAGE    := $(TEST_BASE_FILES) $(TEST_BASE_INCLUDES) $(TEST_FILES) $(TEST_INCLUDES) \
-		   $(patsubst %,%.o,$(TEST_BASE)) $(patsubst %,%.o,$(TESTS)) \
-		   $(patsubst %,%.annot,$(TEST_BASE)) $(patsubst %,%.annot,$(TESTS))
+                   $(patsubst %,%.o,$(TEST_BASE)) $(patsubst %,%.o,$(TESTS)) \
+                   $(patsubst %,%.annot,$(TEST_BASE)) $(patsubst %,%.annot,$(TESTS))
 
 #################################################
 
@@ -95,6 +113,9 @@ versioncheck:
 
 k3_opt: $(NC_FILES) $(NC_EXTRA_FILES)
 	@echo "Linking K3 (Optimized)"
+	@if [ ! -d bin ] ; then \
+		mkdir bin;\
+	fi
 	@$(OCAMLOPT) $(OCAMLOPT_FLAGS) -o bin/$@ $(NC_FILES) $(NC_EXTRA_FILES)
 
 k3: $(BC_FILES) $(BC_EXTRA_FILES)
@@ -108,12 +129,12 @@ k3: $(BC_FILES) $(BC_EXTRA_FILES)
 
 # Test Suites
 
-tests: k3 $(TEST_BASE_FILES) $(TEST_FILES) $(TEST_BINARIES)
+tests: k3 $(TEST_FILES) $(TEST_BINARIES)
 	@echo "Built tests"
 
 #################################################
 
-$(BC_FILES) $(BC_EXTRA_FILES) $(TEST_BASE_FILES) $(TEST_FILES): %.cmo : %.ml
+$(BC_FILES) $(BC_EXTRA_FILES) $(TEST_FILES): %.cmo : %.ml
 	@if [ -f $(*).mli ] ; then \
 		echo Compiling Header $(*);\
 		$(OCAMLCC) $(OCAML_FLAGS) -c $(*).mli;\
@@ -163,6 +184,7 @@ Makefile.local:
 	@cp config/Makefile.local.default Makefile.local
 
 include Makefile.deps
+include Makefile.parserdeps
 include Makefile.local
 
 #################################################

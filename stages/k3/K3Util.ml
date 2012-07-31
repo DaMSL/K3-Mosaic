@@ -1,9 +1,11 @@
-open Util
 open Format
 open Lazy
 open ListAsSet
+open Util
+open Printing
 open Tree
 open K3
+
 
 (* TODO: AST constructors *)
 
@@ -58,10 +60,74 @@ let tag_str ?(extra="") t ch_t =
     ^ String.concat ", " ch_t
     ^ ")"
 
+(* Terminals *)
+let string_of_address (ip,p) = ip^":"^string_of_int p
+
 let string_of_container_type t_c = match t_c with
     | TSet  -> "TSet"
     | TBag  -> "TBag"
     | TList -> "TList"
+
+let string_of_const c = match c with
+    | CUnit          -> "CUnit"
+    | CUnknown       -> "CUnknown"
+    | CBool(b)       -> "CBool("^string_of_bool(b)^")"
+    | CInt(i)        -> "CInt("^string_of_int(i)^")"
+    | CFloat(f)      -> "CFloat("^string_of_float(f)^")"
+    | CString(s)     -> "CString(\""^s^"\")"
+    | CAddress(addr) -> "CAddress("^string_of_address addr^")"
+    | CTarget(id)    -> "CTarget("^id^")"
+    | CNothing       -> "CNothing"
+
+let string_of_stop_behavior_t s = match s with
+    | UntilCurrent -> "UntilCurrent"
+    | UntilEmpty -> "UntilEmpty"
+    | UntilEOF -> "UntilEOF"
+
+let string_of_tag_type tag = match tag with
+    | Const(c)  -> "Const"
+    | Var(i)    -> "Var"
+    | Tuple     -> "Tuple"
+    | Just      -> "Just"
+
+    | Empty t     -> "Empty"
+    | Singleton t -> "Singleton"
+    | Combine     -> "Combine"
+    | Range(ct)   -> "Range"
+
+    | Add   -> "Add"
+    | Mult  -> "Mult"
+    | Neg   -> "Neg"
+    | Eq    -> "Eq"
+    | Neq   -> "Neq"
+    | Lt    -> "Lt"
+    | Leq   -> "Leq"
+
+    | Lambda a -> "Lambda"
+    | Apply    -> "Apply"
+
+    | Block      -> "Block"
+    | IfThenElse -> "IfThenElse"
+
+    | Map              -> "Map"
+    | Iterate          -> "Iterate"
+    | FilterMap        -> "FilterMap"
+    | Flatten          -> "Flatten"
+    | Aggregate        -> "Aggregate"
+    | GroupByAggregate -> "GroupByAggregate"
+    | Sort             -> "Sort"
+    
+    | Slice   -> "Slice"
+    | Insert  -> "Insert"
+    | Update  -> "Update"
+    | Delete  -> "Delete"
+    | Peek    -> "Peek"
+
+    | Assign  -> "Assign"
+    | Deref   -> "Deref"
+
+    | Send    -> "Send"
+
 
 (* Flat stringification *)
 let rec flat_string_of_base_type t = match t with
@@ -82,9 +148,7 @@ let rec flat_string_of_base_type t = match t with
           [string_of_container_type t_c; flat_string_of_value_type t_e]
 
     | TAddress -> "TAddress"
-
-    | TTarget(t) ->
-        tag_str "TTarget" [flat_string_of_base_type t]
+    | TTarget(t) -> tag_str "TTarget" [flat_string_of_base_type t]
 
 and flat_string_of_mutable_type mt = match mt with
     | TMutable(bt) -> "TMutable("^flat_string_of_base_type bt^")"
@@ -100,22 +164,6 @@ and flat_string_of_type t = match t with
           [flat_string_of_value_type t_a; flat_string_of_value_type t_r]
     
     | TValue(t) -> flat_string_of_value_type t
-
-let string_of_const c = match c with
-    | CUnit        -> "CUnit"
-    | CUnknown     -> "CUnknown"
-    | CBool(b)     -> "CBool("^string_of_bool(b)^")"
-    | CInt(i)      -> "CInt("^string_of_int(i)^")"
-    | CFloat(f)    -> "CFloat("^string_of_float(f)^")"
-    | CString(s)   -> "CString(\""^s^"\")"
-    | CAddress(ip,p) -> "CAddress("^ip^":"^string_of_int p^")"
-    | CTarget(id)  -> "CTarget("^id^")"
-    | CNothing     -> "CNothing"
-
-let string_of_stop_behavior_t s = match s with
-    | UntilCurrent -> "UntilCurrent"
-    | UntilEmpty -> "UntilEmpty"
-    | UntilEOF -> "UntilEOF"
 
 let flat_string_of_arg a = match a with
     | AVar(i, t) -> tag_str "AVar" [i; flat_string_of_type (TValue t)]
@@ -172,12 +220,12 @@ let flat_string_of_expr_tag tag children =
 
 (* TODO: Why can't this function be point-free? *)
 let flat_string_of_expr expr =
-  string_of_tree (fun ((id, tag), _) -> flat_string_of_expr_tag tag) expr
+  flat_string_of_tree (fun ((id, tag), _) -> flat_string_of_expr_tag tag) expr
 
 let rec flat_string_of_consumable c =
   let rcr_list l = List.map flat_string_of_consumable l in
   match c with
-    | Source(i, t) -> tag_str "Source" [i; flat_string_of_type t]
+    | Source(i, t, _) -> tag_str "Source" [i; flat_string_of_type t]
     | Loop(id, c)  -> tag_str "Loop" [id; flat_string_of_consumable c]
     | Choice(cs)   -> tag_str "Choice" (rcr_list cs)
     | Sequence(cs) -> tag_str "Sequence" (rcr_list cs)
@@ -223,43 +271,6 @@ let flat_string_of_program ss =
  * Pretty stringification
  *****************************)
 
-(* Pretty printing helpers *)
-type cut_type = NoCut | Hint | Line
- 
-let ob () = pp_open_hovbox str_formatter 2
-let cb () = pp_close_box str_formatter ()
-let pc () = pp_print_cut str_formatter ()
-let ps s = pp_print_string str_formatter s
-let psp () = pp_print_space str_formatter ()
-let fnl () = pp_force_newline str_formatter ()
-
-let cut c = match c with
-  | NoCut -> ()
-  | Hint -> pc ()
-  | Line -> fnl ()
-
-let ps_list ?(sep=", ") cut_t f l =
-  let n = List.length l in
-  ignore(List.fold_left
-    (fun cnt e ->
-      f e;
-      (if cnt < n then ps sep);
-      cut cut_t;
-      cnt+1)
-    1 l)
-
-let pretty_tag_term_str t = ob(); ps t; cb()
-
-let pretty_tag_str cut_t extra t ch_lazy_t =
-  begin
-    ob();
-    ps (t ^ "("); cut cut_t;
-    if extra = "" then () else (ps (extra ^ ", "); cut cut_t);
-    ps_list cut_t force ch_lazy_t;
-    ps ")";
-    cb()
-  end
-
 (* Lazy variants *)
 let lps s = lazy (ps s)
 
@@ -297,8 +308,7 @@ and print_base_type t =
 
     | TAddress -> term_tag "TAddress"
 
-    | TTarget(t) ->
-        my_tag "TTarget" [lazy_base_type t]
+    | TTarget(t) -> my_tag "TTarget" [lazy_base_type t]
 
 and print_mutable_type mt =
   let my_tag t bt = pretty_tag_str Hint "" t [lazy_base_type bt]
@@ -331,13 +341,16 @@ and print_arg a =
     | ATuple(its) -> my_tag "ATuple" (List.map print_id_t its)
 
 and print_expr_tag tag lazy_children =
-  let my_tag ?(extra="") t = pretty_tag_str Hint extra t lazy_children in
+  let my_tag ?(lb="(") ?(rb=")") ?(sep=", ") ?(extra="") t =
+    pretty_tag_str ~lb:lb ~rb:rb ~sep:sep Hint extra t lazy_children
+  in
+  let my_tag_list = my_tag ~lb:"([" ~rb:"])" ~sep:"; " in
   let ch_tag cut_t t ch = pretty_tag_str cut_t "" t ch in
   let extra_tag t extra = pretty_tag_str Hint "" t (extra@lazy_children) in
   match tag with
     | Const(c)  -> ch_tag NoCut "Const" [lps (string_of_const c)]
     | Var(i)    -> ch_tag NoCut "Var" [lps i]
-    | Tuple     -> my_tag "Tuple"
+    | Tuple     -> my_tag_list "Tuple"
 
     | Just      -> my_tag "Just"
 
@@ -357,7 +370,7 @@ and print_expr_tag tag lazy_children =
     | Lambda a -> extra_tag "Lambda" [lazy_arg a]
     | Apply    -> my_tag "Apply"
 
-    | Block      -> my_tag "Block"
+    | Block      -> my_tag_list "Block"
     | IfThenElse -> my_tag "IfThenElse"
 
     | Map              -> my_tag "Map"
@@ -393,7 +406,7 @@ let rec print_consumable c =
   let lazy_rcr c = lazy (print_consumable c) in 
   let rcr_list l = List.map lazy_rcr l in
   match c with
-    | Source(i, t) -> my_tag "Source" [lps i; lazy_type t]
+    | Source(i, t, _) -> my_tag "Source" [lps i; lazy_type t]
     | Loop(id, c)  -> my_tag "Loop" [lps id; lazy_rcr c]
     | Choice(cs)   -> my_tag "Choice" (rcr_list cs)
     | Sequence(cs) -> my_tag "Sequence" (rcr_list cs)
@@ -402,9 +415,8 @@ let rec print_consumable c =
     | Repeat(c, s) ->
         my_tag "Repeat" [lazy_rcr c; lps (string_of_stop_behavior_t s)]
 
-let print_declaration ?(print_id=false) d =
+let print_declaration ?(print_id=false) ?(print_expr_fn=lazy_expr) d =
   let my_tag = pretty_tag_str Line "" in
-  let lazy_list l = [lps "["]@l@[lps "]"] in
   let print_id_vt (id,vt) =
     lazy (ps ("("^id^", "); print_value_type vt; ps ")")
   in
@@ -417,11 +429,11 @@ let print_declaration ?(print_id=false) d =
     | Foreign(i, t) -> my_tag "Foreign" [lps (quote i); lazy_type t]
 
     | Trigger(i, arg, ds, e) ->
-      let trig_decls = lazy (
-        ps_list Line force (lazy_list (List.map print_id_vt ds)))
+      let trig_decls = 
+        lazy(ps "["; ps_list Line force (List.map print_id_vt ds); ps "]")
       in
       my_tag "Trigger" 
-        [lps (quote i); lazy_arg arg; trig_decls; lazy_expr e ~print_id:print_id]
+        [lps (quote i); lazy_arg arg; trig_decls; print_expr_fn ~print_id:print_id e]
 
     | Bind(i, i2) -> my_tag "Bind" [lps i; lps i2]
     | Consumable(c) -> my_tag "Consumable" [lazy (print_consumable c)]
@@ -429,17 +441,13 @@ let print_declaration ?(print_id=false) d =
 let print_instruction i = match i with
     | Consume(id) -> pretty_tag_str Line "" "Consume" [lps id]
 
-let print_statement ?(print_id=false) s =
+let print_statement ?(print_id=false) ?(print_expr_fn=lazy_expr) s =
   let my_tag = pretty_tag_str Line "" in
-  match s with
-    | Declaration d -> 
-        my_tag "Declaration" [lazy (print_declaration d ~print_id:print_id)]
+  let print_decl d =
+    print_declaration ~print_id:print_id ~print_expr_fn:print_expr_fn d
+  in match s with
+    | Declaration d -> my_tag "Declaration" [lazy (print_decl d)]
     | Instruction i -> my_tag "Instruction" [lazy (print_instruction i)]
-
-let wrap_formatter print_fn =
-  pp_set_margin str_formatter 120;
-  print_fn ();
-  flush_str_formatter ()
 
 
 let string_of_base_type bt  = wrap_formatter (fun () -> print_base_type bt)
@@ -454,18 +462,29 @@ let string_of_declaration d = wrap_formatter (fun () -> print_declaration d)
 let string_of_instruction i = wrap_formatter (fun () -> print_instruction i)
 let string_of_statement s   = wrap_formatter (fun () -> print_statement s)
 
-let string_of_program ?(print_id=false) ss =
-  wrap_formatter (fun () ->
-    ps "[";
-    ps_list ~sep:";" Line (print_statement ~print_id:print_id) ss;
-    ps "]")
+let string_of_program ?(print_id=false) ?(print_expr_fn=lazy_expr) ss =
+  let print_fn =
+    print_statement ~print_id:print_id ~print_expr_fn:print_expr_fn
+  in wrap_formatter (fun () ->
+    ps "["; ps_list ~sep:";" Line print_fn ss; ps "]")
   
 
 (* AST constructors / destructors *)
+let decompose_lambda e = List.nth (sub_tree e) 0
+
 let decompose_apply e =
   let n i = List.nth (sub_tree e) i in (n 0, n 1)
 
 let decompose_ifthenelse e =
+  let n i = List.nth (sub_tree e) i in (n 0, n 1, n 2)
+
+let decompose_iterate e =
+  let n i = List.nth (sub_tree e) i in (n 0, n 1)
+
+let decompose_map e =
+  let n i = List.nth (sub_tree e) i in (n 0, n 1)
+
+let decompose_filter_map e =
   let n i = List.nth (sub_tree e) i in (n 0, n 1, n 2)
 
 let decompose_aggregate e =
