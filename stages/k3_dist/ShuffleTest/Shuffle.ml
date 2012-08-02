@@ -1,8 +1,10 @@
+open Util
+
 (*
  * m_to_n_pat = positions of m's keys in n's schema (pregenerated for each mn)
  * node_to_ip: translate node number to IP
- * bmod = (int * int) list = (index * bucket modulo factor) list (pre-generated per
- * map)
+ * bmod = (int * int) list = (index * bucket modulo factor) list 
+ * (pre-generated per map), order determines order of bucketing
 *)
 
 (* for each binding pattern, keep a subspace of buckets corresponding to
@@ -51,154 +53,131 @@ let group_by_aggregate (agg_fn:'a->'b->'a) (init:'a) (group_fn:'b->'c)
 (* Example node_to_ip. Would normally look up in a table *)
 (* For now, we just use an identity function *)
 let node_to_ip node = node
-;;
+
+(*
+ * Pre-calculate the contribution of every dimension to the total linear
+ * function. Each dimension contributes the product of all previous
+ * dimension buckets. This calculation does not depend on anything but bmod
+ * and can be taken outside of the function.
+ * Like bmod, dims are ordered by their position in the list
+ *)
+let calc_dim_bounds bmod =
+  let calc = List.fold_left 
+    (fun (xs,acc) (pos, bin_size) -> (xs@[pos, acc], bin_size * acc)) 
+    ([],1) 
+    bmod
+  in fst calc
+ 
+  (* run over the m_key input and calculate the value that the bound variables contribute
+  * the bound values serve as our constant. We can pre-calculate their contribution 
+  * to the node location and use that for every possible node that results from 
+  * unbound values, so this calculation should only be done once.
+  * For each bound value, we multiply it by the bucket of every previous dimension
+  * obtained in dim_boundaries *)
+let calc_bound_bucket bmod dim_bounds key = 
+  let calc = List.fold_left 
+    (fun (acc,index) v -> match v with
+      | Some x -> (try 
+            let value = x mod (List.assoc index bmod) in
+            let bucket_size = List.assoc index dim_bounds in
+            (acc + value * bucket_size, index + 1)
+          with Not_found -> (acc, index+1)) (* unpartitioned *)
+      | None   -> (acc, index+1) (* no key value ie. unbound *)
+    )
+    (0,0)
+    key
+  in fst calc
+
+
+(* make a list of lists of ranges 0...b_i for each unbound_dim.
+* This is every possible value in each unbound dimension
+*)
+let calc_unbound_domains bmod key : (int * int list) list = 
+  (* find which dimensions and buckets are not specified in the pattern
+   * (unbound) but are used for partitioning *)
+  let unbound_dims bmod key = 
+    try
+      List.filter
+        (fun (i,_) -> match List.nth key i with None -> true | _ -> false) bmod
+    with Failure(_) -> invalid_arg "key too short"
+  in
+  List.map (fun (i, b_i) -> (i, range 0 @: b_i-1)) (unbound_dims bmod key)
+
+(* This is a cartesian product over every one of the unbound dimensions
+ * The result is a list of lists of [dim, val, dim, val...]
+ * We're enumerating all possible combinations of values for all unbound
+ * dimensions, which will gives us the resulting slice.
+ * The way to do this is to accumulate a cartesian product with every step
+ * of the fold_left loop.
+ *
+ * This should be precomputed once per pattern, rather than repeated
+ * per invocation of route.
+ *)
+let calc_unbound_cart_prod (unbound_domains:(int * int list) list) : (int * int) list list = 
+  List.fold_left
+    (fun prev_cart_prod (i, (domain:int list)) -> List.flatten
+      (List.map 
+        (* for every domain element in the domain *)
+        (fun (domain_element:int) -> match prev_cart_prod with
+          | [] -> [[(i,domain_element)]]
+          | _  -> List.map 
+                   (* add current element to every previous sublist *)
+                   (fun rest_tup -> rest_tup@[i,domain_element])
+                   prev_cart_prod
+        )
+        domain
+      )
+    )
+    [] 
+    unbound_domains
+
+(* function to calculate the full value of a possible bucket *)
+let full_bucket_calc dim_bounds unbound_bucket bound_bucket : int = 
+  List.fold_left
+    (fun acc (i,v) -> acc + v * List.assoc i dim_bounds)
+    bound_bucket (* start with this const *)
+    unbound_bucket
+
+(* We now add in the value of the bound variables as a constant
+ * and calculate the result for every possibility
+ *)
+let calc_unbound_ip_list bound_bucket unbound_cart_prod dim_bounds num_of_nodes = 
+  (* calculate a single bucket using the whole key. Our unbound values
+   * don't need to be hashed because they just take all possibilities *)
+  let ip_list = 
+    group_by_aggregate (fun acc ip -> ip::acc) [] (fun ip -> ip) @:
+      List.map
+        (fun (unbound_bucket:(int * int) list) -> 
+          node_to_ip @: 
+            (full_bucket_calc dim_bounds unbound_bucket bound_bucket) 
+            mod num_of_nodes
+        )
+        (unbound_cart_prod:((int * int) list list))
+  in
+  match ip_list with
+  | [] -> [node_to_ip (bound_bucket mod num_of_nodes)] 
+  | _ -> List.map fst ip_list (* we only want ips ie the group tag *)
 
 (* Returns a list of ips *)                        
 (* Route is specialized for a specific bmod *)
-let route bmod num_of_nodes m_key m_pat   =
-    (* m_key = m's parameters
-     *     e.g. [10; 15; 3.4]
-     * m_pat = position of each parameter in m_s schema
-     *     e.g. [0; 2; 1] refers to the m_key values' position in m's pattern.
-     *     NOTE: should -1 be no position? ***
-     *
-     * bmod = (int * int) list
-     *   = (index * bucket modulo factor) list
-     *   (pre-generated per map)
-     *   TODO: lookup must be by reading the first number
-     *)
-		if List.length m_key <> List.length m_pat then invalid_arg "m_pat doesn't match m_key"
-		else
-    
-    (*
-     * Combine the pattern and key lists into one list
-     * this isn't the cleanest/fastest way of doing it, but it works
-     * and this duplicates the way we do it in K3 which doesn't have map2
-     *)
-    let bound_info = 
-        fst(List.fold_left
-            (fun (acclist, accnum) x -> 
-                (acclist @ [(x, List.nth m_pat accnum)], accnum+1))
-            ([],0)
-            m_key
-        )
-    in
-    
-    (*
-     * Pre-calculate the contribution of every dimension to the total linear
-     * function. Each dimension contributes the product of all previous
-     * dimension buckets. This calculation does not depend on anything but bmod
-		 * and can be taken outside of the function.
-     *)
-    let dim_boundaries =
-			(0,1)::(                 (* amend the first dimension (always 1) to the list *)
-	      List.map 
-	        (fun i -> 
-						(i, 
-	            List.fold_left
-	                (fun acc x -> acc * (List.assoc x bmod)) 
-	                1 
-	                (range 0 (i-1))
-					  )
-	        )
-	        (range 1 ((List.length bmod)-1))  (* start from 1 because the first dimension has no contribution *)
-			)
-    in
+(* m_key = m's parameters
+ *     e.g. [Some 10; None] (in reality, this has to be a tuple since it
+ *     supports different types
+ *
+ * bmod = (int * int) list = (dim_index * bucket_size) list
+ *   each location in the list represents an order of partitioning
+ *   (pre-generated per map)
+ *)
+let route (bmod:(int * int) list) (num_of_nodes:int) (key:int option list) =
+  let dim_bounds = calc_dim_bounds bmod in
+  let bound_bucket = calc_bound_bucket bmod dim_bounds key in
+  let unbound_domains = calc_unbound_domains bmod key in
+  let unbound_cart_prod = calc_unbound_cart_prod unbound_domains in
+  calc_unbound_ip_list bound_bucket unbound_cart_prod dim_bounds num_of_nodes
 
-    (* run over the m_key input and calculate the value that the bound variables contribute
-     * the bound values serve as our constant. We can pre-calculate their contribution 
-     * to the node location and use that for every possible node that results from 
-     * unbound values, so this calculation should only be done once.
-     * For each value, we multiply it by the bucket of every previous dimension
-     * obtained in dim_boundaries
-     *)
-    let bound_bucket = 
-        List.fold_left 
-            (fun acc (x, pat) -> 
-                acc + ((x mod (List.assoc pat bmod)) * List.assoc pat dim_boundaries))
-            0
-            bound_info
-    in
-    
-    (* find which dimensions and buckets are not specified in the pattern (unbound) *)
-    let unbound_dims = 
-        List.filter
-            (fun (i, b_i) -> not(List.mem i m_pat))
-            bmod
-    in
-    
-    (* make a list of lists of ranges 0...b_i for each unbound_dim.
-     * This is every possible value in each unbound dimension
-     *)
-    let unbound_domains = 
-        List.map
-            (fun (i, b_i) -> (i, range 0 (b_i-1)))
-            unbound_dims
-    in
-
-    (* This is a cartesian product over every one of the unbound dimensions
-     * The result is a list of lists of [dim, val, dim, val...]
-     * We're enumerating all possible combinations of values for all unbound
-     * dimensions, which will gives us the resulting slice.
-     * The way to do this is to accumulate a cartesian product with every step
-     * of the fold_left loop.
-     *
-     * This should be precomputed once per pattern, rather than repeated
-     * per invocation of route.
-     *)
-    let unbound_cart_prod = 
-        (* prev_cart_prod : (index * value) list list *)
-        List.fold_left
-            (fun prev_cart_prod (i, domain) ->
-                List.flatten
-                    (List.map 
-                        (* for every domain element in the domain *)
-                        (fun domain_element -> 
-														if prev_cart_prod = [] then [[(i,domain_element)]]
-														else List.map 
-		                               (* slap on the list of the previous stuff *)
-		                               (fun rest_tup -> rest_tup@[(i,domain_element)])
-		                               prev_cart_prod
-                        )
-                        domain
-                    )
-            )
-            [] 
-            unbound_domains
-    in
-		
-    
-    (* We now add in the value of the bound variables as a constant
-     * and calculate the result for every possibility
-     *)
-		let unbound_ip_list = 
-			List.map  (* clean up the list of tuples. we just want ips *)
-				(fun (ip1, ip2) -> ip1)
-		    (group_by_aggregate (* use just to group ips *)
-		        (fun acc ip -> ip::acc)
-		        []
-		        (fun ip -> ip)
-			        (List.map
-			            (fun unbound_bucket -> 
-			                node_to_ip
-			                    ((List.fold_left
-			                        (fun acc (i, v) -> 
-			                            acc + v * List.assoc i dim_boundaries
-			                        )
-			                        bound_bucket  (* start with this const *)
-			                        unbound_bucket) 
-			                        mod num_of_nodes
-			                    )
-			            )
-			            unbound_cart_prod
-							)
-			  )
-		in
-		(* handle the case of no unbound stuff *)
-		if unbound_ip_list <> [] then unbound_ip_list
-		else [node_to_ip (bound_bucket mod num_of_nodes)]
-;;
-
+(*
+ * example values:
+ *
 	let num_of_nodes = 16
 	let n_bmod = [(0,2);(1,2)]
 	let m_to_n_pat = [(0,-1);(1,1);(2,-1);(3,0);(4,-1)]
@@ -206,98 +185,78 @@ let route bmod num_of_nodes m_key m_pat   =
 	let n_pat = []
 	let n_key = [] 
 	let tuples = [[101;203;305;404;501;2];[450;383;214;563;321;5]]
-	
-(* note: always need to add the data to the end !!! *)
+  *)
 	
 (* Returns a list of ip, tuple pairs.
  *
  * To handle empty messages, we create all possible empty messages up front
  * and fill in with the tuples given. *)
 
-let shuffle_m_to_n n_bmod num_of_nodes m_to_n_pat n_key n_pat tuples shuffle_on_empty =
+(* shuffle_on_empty = boolean flag to indicate whether a shuffle
+ *   should be sent out to empty tuple destinations
+ *
+ * m = m1, n = m2,
+ *
+ * n_key = bound variables used to access n
+ *         e.g. [10; 5; 3.4]
+ * n_pat = positions of bound vars (i.e., b_n) in n's schema.
+ *         (pregenerated per statement)
+ *         e.g. [1; 0; 2] referring back to the example in n_key and their
+ *         positions within n's schema
+ *
+ * m_to_n_pat = positions of m's keys in n's schema except
+ *              for common bound variables. that is m's bound variables
+ *              does not override n's (they would be the same).
+ *              pregenerated at each call site for shuffle,
+ *              i.e. per statement.
+ *              e.g. [(0,3);(1,5);(2,1)...] for each index of m, we get the
+ *              index of n.
+ *
+ * tuples = tuples of m. Consists of a list of keys, and a final value.
+ *         e.g. [10; 5; 3.4; 200], where the final 200 is the value.
+ *)
 
-    (* shuffle_on_empty = boolean flag to indicate whether a shuffle
-     *   should be sent out to empty tuple destinations
-     *
-     * m = m1, n = m2,
-     *
-     * n_key = bound variables used to access n
-     *         e.g. [10; 5; 3.4]
-     * n_pat = positions of bound vars (i.e., b_n) in n's schema.
-     *         (pregenerated per statement)
-     *         e.g. [1; 0; 2] referring back to the example in n_key and their
-     *         positions within n's schema
-     *
-     * m_to_n_pat = positions of m's keys in n's schema except
-     *              for common bound variables. that is m's bound variables
-     *              does not override n's (they would be the same).
-     *              pregenerated at each call site for shuffle,
-     *              i.e. per statement.
-     *              e.g. [(0,3);(1,5);(2,1)...] for each index of m, we get the
-     *              index of n.
-     *
-     * tuples = tuples of m. Consists of a list of keys, and a final value.
-     *         e.g. [10; 5; 3.4; 200], where the final 200 is the value.
-     *)
+(* start with n_key and build up an n_key that can be used to
+ * route with *)
+(* In K3, this function will have to be part of the code per binding *)
+let full_n_key (n_key:int option list) n_to_m_pat m_tuple : int option list =
+  snd @: List.fold_left
+    (fun (index,acc_tup) k -> 
+      if List.exists (fun (x,_) -> x = index) n_to_m_pat then 
+        let m_place = List.assoc index n_to_m_pat in
+        let m_val = try List.nth m_tuple m_place with
+        | Invalid_argument "List.nth" -> invalid_arg "Bad n_to_m_pat or tuple"
+        in
+        (index+1, acc_tup@ [Some m_val]) (* take from the tuple *)
+      else
+        (index+1, acc_tup@ [k])
+    )
+    (0,[])
+    n_key
 
-    let route_to_n = route n_bmod num_of_nodes 
-		in
+let get_all_targets shuffle_on_empty route_to_n n_key =
+  (* in shuffle on empty case, we prepare all the routing that must
+   * be done for empty packets
+   *)
+  if shuffle_on_empty then
+    List.map
+        (fun ip -> (ip,[]))
+        (route_to_n n_key)
+  else []               (* just an empty set to begin with *)
 
-    let all_ips =
-      (* in shuffle on empty case, we prepare all the routing that must
-       * be done for empty packets
-       *)
-    	if shuffle_on_empty then
-      	List.map
-       	  	(fun ip -> (ip,[]))
-        		(route_to_n n_key n_pat)
-    	else []               (* just an empty set to begin with *)
-    in
-    let final_n_pat = 
-      List.fold_left
-          (fun acc_pat (m_idx, n_idx) -> 
-              if m_idx >= 0 && n_idx >= 0 && 
-							not (List.exists (fun x -> x = n_idx) n_pat) then 
-                  acc_pat @ [n_idx]
-              else acc_pat
-          )
-          n_pat
-          m_to_n_pat
-    in
-    group_by_aggregate
-    	(fun acc (ip, tuple) -> tuple::acc)
+let shuffle_m_to_n n_bmod num_of_nodes n_to_m_pat n_key tuples shuffle_on_empty =
+    let route_to_n = route n_bmod num_of_nodes in
+    let all_targets = get_all_targets shuffle_on_empty route_to_n n_key in
+    group_by_aggregate (* sort by IPs *)
+    	(fun acc (ip, tuple) -> acc@ tuple)
       [] 
       (fun (ip, tuple) -> ip)
-      (all_ips@
-          (List.flatten
-              (List.map
-                  (fun t_m ->
-                      (* t_m are tuples in map m 
-                       * t1i is a tuple in map m
-                       * t2i and pat2 is the partial tuple and pattern of map n,
-                       * whose fields are present in m.
-                       *
-                       * we need m_to_n_pat here to detangle which variables in
-                       * t1i (from the read map) already used bound vars
-                       *)
-                      let final_t_n = 
-                          List.fold_left
-                              (fun acc_tup (m_idx, n_idx) -> 
-                                  if m_idx >= 0 && n_idx >= 0 && 
-																		not (List.exists (fun x -> x = n_idx) n_pat) then 
-                                      acc_tup @ [List.nth t_m m_idx]
-                                  else acc_tup
-                              )
-                              n_key
-                              m_to_n_pat
-                      in
-                      List.map
-                          (fun ip -> (ip, final_t_n))
-                          (route_to_n final_t_n final_n_pat)
-                  )
-                  tuples
-              )
+      (all_targets@ List.flatten @: 
+        List.map (fun m_tuple -> 
+          List.map
+            (fun ip -> (ip, m_tuple))
+            (route_to_n @: full_n_key n_key n_to_m_pat m_tuple)
           )
-      )
-;;
-    
+          tuples
+        )
+
