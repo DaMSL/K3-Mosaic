@@ -1,3 +1,5 @@
+(* Shuffle with Consistent Hashing *)
+
 open Util
 
 (*
@@ -78,7 +80,7 @@ let calc_bound_bucket bmod dim_bounds key =
   fst @: List.fold_left 
     (fun (acc,index) v -> match v with
       | Some x -> (try 
-            let value = x mod (List.assoc index bmod) in
+            let value = (Hashtbl.hash x) mod (List.assoc index bmod) in
             let bucket_size = List.assoc index dim_bounds in
             (acc + value * bucket_size, index + 1)
           with Not_found -> (acc, index+1)) (* unpartitioned *)
@@ -146,14 +148,13 @@ let calc_unbound_ip_list bound_bucket unbound_cart_prod dim_bounds num_of_nodes 
     group_by_aggregate (fun acc ip -> ip::acc) [] (fun ip -> ip) @:
       List.map
         (fun (unbound_bucket:(int * int) list) -> 
-          node_to_ip @: 
+          Ring.get_node_for 
             (full_bucket_calc dim_bounds unbound_bucket bound_bucket) 
-            mod num_of_nodes
         )
         (unbound_cart_prod:((int * int) list list))
   in
   match ip_list with
-  | [] -> [node_to_ip (bound_bucket mod num_of_nodes)] 
+  | [] -> [node_to_ip (Ring.get_node_for bound_bucket)] 
   | _ -> List.map fst ip_list (* we only want ips ie the group tag *)
 
 (* Returns a list of ips *)                        
@@ -172,18 +173,6 @@ let route (bmod:(int * int) list) (num_of_nodes:int) (key:int option list) =
   let unbound_domains = calc_unbound_domains bmod key in
   let unbound_cart_prod = calc_unbound_cart_prod unbound_domains in
   calc_unbound_ip_list bound_bucket unbound_cart_prod dim_bounds num_of_nodes
-
-(*
- * example values:
- *
-	let num_of_nodes = 16
-	let n_bmod = [(0,2);(1,2)]
-	let m_to_n_pat = [(0,-1);(1,1);(2,-1);(3,0);(4,-1)]
-	let shuffle_on_empty = false
-	let n_pat = []
-	let n_key = [] 
-	let tuples = [[101;203;305;404;501;2];[450;383;214;563;321;5]]
-  *)
 	
 (* Returns a list of ip, tuple pairs.
  *

@@ -5,10 +5,15 @@ include ../../../Makefile.inc
 
 FILES=\
 	../../../util/Util \
-	Shuffle \
+	Ring \
+	ShuffleHash \
+  ShuffleHashTest \
 
-TOPLEVEL_FILES=\
-   ShuffleTest \
+ALT_FILES=\
+	../../../util/Util \
+	Ring \
+	Shuffle \
+	ShuffleTest \
 
 DIRS=\
 	. \
@@ -23,7 +28,7 @@ BC_INCLUDES =$(patsubst %,%.cmi,$(FILES))
 NC_FILES    =$(patsubst %,%.cmx,$(FILES))
 NC_INCLUDES =$(patsubst %,%.cmxi,$(FILES))
 
-EXTRA_FILES        := $(TOPLEVEL_FILES)
+EXTRA_FILES        := $(ALT_FILES)
 BC_EXTRA_FILES      =$(patsubst %,%.cmo, $(EXTRA_FILES))
 BC_EXTRA_INCLUDES   =$(patsubst %,%.cmi, $(EXTRA_FILES))
 NC_EXTRA_FILES      =$(patsubst %,%.cmx, $(EXTRA_FILES))
@@ -37,7 +42,7 @@ OCAMLOPT_FLAGS +=\
 
 #################################################
 
-all: Makefile.local versioncheck ShuffleTest
+all: Makefile.local versioncheck ShuffleHashTest
 
 versioncheck:
 	@if [ $(shell ocaml -version | sed 's/.*version \(.*\)$$/\1/' | \
@@ -46,16 +51,23 @@ versioncheck:
 	  echo "Your OCaml version is too low.  OCaml 3.12.1 is required, you have"\
 	       $(shell ocaml -version); exit -1; fi
 
-ShuffleTest: $(BC_FILES) $(BC_EXTRA_FILES)
+ShuffleHashTest: $(BC_FILES)
+	@echo "Building shuffle_hash_test"
+	@if [ ! -d bin ] ; then \
+		mkdir bin;\
+	fi
+	$(OCAMLCC) $(OCAML_FLAGS) -o bin/$@ $(BC_FILES)
+
+ShuffleTest: $(BC_EXTRA_FILES)
 	@echo "Building shuffle_test"
 	@if [ ! -d bin ] ; then \
 		mkdir bin;\
 	fi
-	$(OCAMLCC) $(OCAML_FLAGS) -o bin/$@ $(BC_FILES) $(BC_EXTRA_FILES)
+	$(OCAMLCC) $(OCAML_FLAGS) -o bin/$@ $(BC_EXTRA_FILES)
 
 #################################################
 
-$(BC_FILES) $(BC_EXTRA_FILES) : %.cmo : %.ml
+$(sort $(BC_FILES) $(BC_EXTRA_FILES)) : %.cmo : %.ml
 	@if [ -f $(*).mli ] ; then \
 		echo Compiling Header $(*);\
 		$(OCAMLCC) $(OCAML_FLAGS) -c $(*).mli;\
@@ -63,7 +75,7 @@ $(BC_FILES) $(BC_EXTRA_FILES) : %.cmo : %.ml
 	@echo Compiling $(*)
 	$(OCAMLCC) $(OCAML_FLAGS) -c $<
 
-$(NC_FILES) $(NC_EXTRA_FILES) : %.cmx : %.ml
+$(sort $(NC_FILES) $(NC_EXTRA_FILES)) : %.cmx : %.ml
 	@if [ -f $(*).mli ] ; then \
 		echo Compiling Optimized Header $(*);\
 		$(OCAMLOPT) $(OCAMLOPT_FLAGS) -c $(*).mli;\
