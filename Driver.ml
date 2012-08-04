@@ -6,6 +6,7 @@ open K3
 open K3Values
 open K3Util
 open K3Typechecker
+open K3Consumption
 open K3Interpreter
 open Testing
 open ReifiedK3
@@ -168,7 +169,14 @@ let interpret params =
   List.iter eval_fn params.input_files
 
 (* Print actions *)
-let print_k3_program f = print_endline (string_of_program (parse_program f))
+let print_k3_program f =
+  let tp = typed_program f in
+  let (stream_env, fsm_env, source_bindings) = event_loop_of_program tp in
+    print_endline (string_of_program tp);
+    print_endline "----Stream Program----";
+    print_string (string_of_stream_env stream_env);
+    print_string (string_of_fsm_env fsm_env);
+    print_string (string_of_source_bindings source_bindings)
 
 let print_reified_k3_program f =
   let print_expr_fn ?(print_id=false) e = lazy (print_reified_expr (reify_expr [] e)) in

@@ -27,7 +27,7 @@ type env_t = (id_t * value_t ref) list * (frame_t list)
 type trigger_env_t = (id_t * (env_t -> value_t -> unit)) list
 type program_env_t = trigger_env_t * env_t
 
-(* consumeable id -> trigger id *)
+(* stream id -> trigger id *)
 type source_bindings_t = (id_t * id_t) list
 
 (* Value stringification *)
@@ -40,3 +40,4 @@ val print_program_env : program_env_t -> unit
 
 val string_of_env : env_t -> string
 val string_of_program_env : program_env_t -> string
+val string_of_source_bindings : source_bindings_t -> string

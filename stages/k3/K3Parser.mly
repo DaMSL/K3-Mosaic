@@ -27,6 +27,7 @@
 
 %token EXPECTED
 %token DECLARE FOREIGN TRIGGER CONSUME
+%token BIND SOURCE PATTERN FILE 
 
 %token UNIT UNKNOWN NOTHING
 %token <int> INTEGER
@@ -133,10 +134,46 @@ declaration:
 
     | TRIGGER IDENTIFIER arg LBRACE RBRACE GETS expr { Trigger($2, $3, [], $7) }
     | TRIGGER IDENTIFIER arg LBRACE value_typed_identifier_list RBRACE GETS expr { Trigger($2, $3, $5, $8) }
+
+    | stream { Stream($1) }
+
+    | BIND IDENTIFIER RARROW IDENTIFIER                   { Bind($2, $4) }
+    | BIND SOURCE IDENTIFIER RARROW TRIGGER IDENTIFIER    { Bind($3, $6) }
 ;
 
 instruction:
     | CONSUME IDENTIFIER { Consume($2) }
+;
+
+stream :
+    | SOURCE IDENTIFIER COLON type_expr
+        GETS FILE LPAREN IDENTIFIER COMMA STRING RPAREN    {
+          let format =
+            match String.lowercase($8) with
+              | "csv" -> CSV | "json" -> JSON
+              | _ -> raise Parsing.Parse_error
+          in Source($2, $4, File(format, $10))
+      }
+
+    | PATTERN IDENTIFIER GETS stream_pattern { Derived($2, $4) }
+;
+
+stream_pattern:
+    | IDENTIFIER                       { Terminal($1) }
+    | LPAREN stream_pattern RPAREN     { $2 }
+
+    | stream_pattern QUESTION          { Optional($1) }
+    | stream_pattern TIMES             { Repeat($1, UntilEOF) }
+    
+    | stream_pattern OR stream_pattern {
+        let unwrap_choice x = match x with Choice(l) -> l | _ -> [x]
+        in Choice((unwrap_choice $1)@(unwrap_choice $3))
+      }
+    
+    | stream_pattern stream_pattern {
+        let unwrap_seq x = match x with Sequence(l) -> l | _ -> [x]
+        in Sequence((unwrap_seq $1)@(unwrap_seq $2))
+      }
 ;
 
 type_expr:

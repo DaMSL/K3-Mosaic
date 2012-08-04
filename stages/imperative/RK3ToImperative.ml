@@ -803,8 +803,8 @@ let imperative_of_declaration mk_meta fn_arg_env d =
     let trig_body = [mk_block (mk_meta()) cmds]
     in Some(DFn(id, a, TInternal(TValue(canonical TUnit)), trig_body)), [], [id,a]
   
-  | Bind    (src,dest) -> failwith "bind declarations not implemented"
-  | Consumable c -> failwith "consumable declaration not implemented"
+  | Stream s -> failwith "stream declaration not implemented"
+  | Bind (src,dest) -> failwith "bind declarations not implemented"
 
 let imperative_of_instruction mk_meta i = match i with
   | Consume id ->

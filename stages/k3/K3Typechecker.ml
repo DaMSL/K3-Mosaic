@@ -547,6 +547,76 @@ let rec deduce_expr_type trig_env cur_env utexpr =
 
     in attach_type current_type
 
+
+(* Stream program typing *)
+let rec stream_types_of_pattern stream_env p = 
+  let rcr = stream_types_of_pattern stream_env in
+  let rcr_list l = ListAsSet.no_duplicates (List.flatten (List.map rcr l)) in
+  match p with
+  | Terminal (id) ->
+    (try List.assoc id stream_env
+     with Not_found -> raise (TypeError(-1, "No stream "^id^" found in pattern")))
+
+  | Choice (l)    -> rcr_list l
+  | Sequence (l)  -> rcr_list l
+  | Optional (p)  -> rcr p
+  | Repeat (p,_)  -> rcr p 
+
+let id_and_type_of_stream stream_env s = match s with
+  | Source(id,t,_) -> id, [t]
+  | Sink(id,t,_) -> id, [t]
+  | Derived(id,p) ->
+    let t = stream_types_of_pattern stream_env p in 
+    print_endline ("Derived "^id^" #types "^(string_of_int (List.length t)));  
+    id, t
+
+(* Returns a stream type environment as a stream name and a list of all
+ * possible types emanating from this stream *)
+let rec build_stream_env stream_env prog = match prog with
+	| [] -> stream_env
+	| Declaration (Stream(s)) :: rest ->
+	  build_stream_env ((id_and_type_of_stream stream_env s)::stream_env) rest
+	| h :: t -> build_stream_env stream_env t
+
+let typecheck_bind src_types trig_arg_types =
+  match src_types, trig_arg_types with
+	| [], [] -> 
+	  Some(TMsg("Neither source event nor trigger argument has valid types."))
+	
+	| [x], [y] when x <> y ->
+	  Some(TMismatch(x,y,"Stream binding type mismatch."))
+	  
+	| x, _ when List.length x > 1 ->
+	  Some(TMsg("Multiple stream event types found for dispatch to trigger."))
+	
+	| _, x when List.length x > 1 ->
+	  Some(TMsg("Multiple trigger arg types found during bind."))
+	
+	| [x], [y] when x = y -> None
+	
+	| x, y -> Some(TMsg("Invalid types."))
+
+
+(* Toplevel helpers *)
+let event_type_of_stream error_prefix stream_env src_id =
+	try List.assoc src_id stream_env
+  with Not_found ->
+	  t_error (-1) error_prefix (TMsg("Could not find stream named "^src_id)) () 
+
+let arg_type_of_trigger error_prefix trig_env trig_id =
+	try
+	  let t = (List.assoc trig_id trig_env) <| base_of %++ value_of |>
+	    t_error (-1) error_prefix @: (TMsg("Invalid trigger argument type"))
+	  in
+	  begin match t with
+	    | TTarget(arg_t) -> [TValue(canonical arg_t)]
+	    | _ -> t_error (-1) error_prefix (TMsg("Invalid trigger argument type")) ()
+	  end
+	with Not_found ->
+	  t_error (-1) error_prefix (TMsg("Could not find trigger named "^trig_id)) ()
+
+
+(* Typechecking toplevel API *)
 let deduce_program_type program = 
   let rec build_trig_env trig_env prog = match prog with
     [] -> trig_env
@@ -555,9 +625,11 @@ let deduce_program_type program =
         in build_trig_env ((id, t)::trig_env) ss
     | _ :: ss -> build_trig_env trig_env ss
   in
-  let rec deduce_prog_t trig_env env prog = match prog with 
+  let rec deduce_prog_t trig_env stream_env env prog =
+    let rcr env l = deduce_prog_t trig_env stream_env env l in 
+    match prog with 
     [] -> [] 
-    | Instruction(i) :: ss -> deduce_prog_t trig_env env ss
+    | Instruction(i) :: ss -> rcr env ss
     | Declaration(d) :: ss -> 
         let nd, nenv = begin match d with
         | Global(i, t, Some init) ->
@@ -592,19 +664,24 @@ let deduce_program_type program =
             with
             | TypeError(ast_id, msg) -> 
                     raise (TypeError(ast_id, "In Trigger "^id^": "^msg)))
-        | Bind (src_id, trig_id) -> 
-          (* TODO: check that the source event has the same type as the
-           * trigger's argument type *)
-          (Bind (src_id, trig_id), env)
 
-        | Consumable c_t -> 
-          (* TODO: any internal checking needed for the consumeable *)
-          (Consumable c_t, env)
+        | Stream s -> (Stream s, env)
+
+        | Bind (src_id, trig_id) ->
+          let error_preamble = "Invalid binding of "^src_id^" -> "^trig_id in
+          let src_types = event_type_of_stream error_preamble stream_env src_id in
+          let trig_arg_type = arg_type_of_trigger error_preamble trig_env trig_id in
+          let error_msg = typecheck_bind src_types trig_arg_type in
+          begin match error_msg with
+            | None -> (Bind(src_id, trig_id), env)
+            | Some(msg) -> t_error (-1) error_preamble msg ()
+          end
 
         end in
-        Declaration(nd) :: deduce_prog_t trig_env nenv ss
+        Declaration(nd) :: (rcr nenv ss)
   in
   (* do a first pass, collecting trigger types *)
   let trig_env = build_trig_env [] program in
-  deduce_prog_t trig_env [] program
+  let stream_env = build_stream_env [] program in
+  deduce_prog_t trig_env stream_env [] program
 

@@ -4,9 +4,13 @@ open K3
 open K3Values
 open K3Typechecker
 open K3Util
+open K3Consumption
 open K3Runtime
 
 type eval_t = VDeclared of value_t ref | VTemp of value_t
+
+type stream_program_t = stream_env_t * fsm_env_t * source_bindings_t
+
 
 (* Generic helpers *)
 
@@ -478,7 +482,7 @@ and default_isolated_value vt = match vt with
 let dispatch_foreign id = interpreter_error "foreign functions not implemented"
 
 (* Returns a trigger evaluator *)
-let trigger_eval id arg local_decls body =
+let prepare_trigger id arg local_decls body =
   fun (m_env, f_env) -> fun a ->
     let default (id,t) = id, ref (default_isolated_value t) in
     let local_env = (List.map default local_decls)@m_env, f_env in 
@@ -487,18 +491,9 @@ let trigger_eval id arg local_decls body =
       | VUnit -> ()
       | _ -> raise (RuntimeError (-1))
 
-(* Source automata interpretation *)
-
-(* TODO: Shyam *)
-type source_automata_t = int list
-
-type source_prog_t = source_bindings_t * source_automata_t
-
-let env_and_sources_of_program k3_program =
-  let ierror = interpreter_error in
-  let env_of_declaration
-        ((trig_env, (m_env, f_env)) as env)
-        ((source_bindings, source_automata) as source_prog) d
+(* Builds a trigger, global value and function environment *)
+let env_of_program k3_program =
+  let env_of_declaration ((trig_env, (m_env, f_env)) as env) d
   = match d with
       K3.Global (id,t,init_opt) ->
         let (rm_env, rf_env), init_val = match init_opt with
@@ -508,66 +503,69 @@ let env_and_sources_of_program k3_program =
 
           | None -> (m_env, f_env), default_value t 
         in
-        let renv = trig_env, (((id, ref init_val) :: rm_env), rf_env)
-        in renv, source_prog
+        trig_env, (((id, ref init_val) :: rm_env), rf_env)
 
     | Foreign (id,t) -> 
-      let renv = trig_env, (m_env, [id, dispatch_foreign id] :: f_env)
-      in renv, source_prog
+      trig_env, (m_env, [id, dispatch_foreign id] :: f_env)
 
     | Trigger (id,arg,local_decls,body) ->
-      let renv =
-        (id, trigger_eval id arg local_decls body) :: trig_env, (m_env, f_env)
-      in renv, source_prog
+      (id, prepare_trigger id arg local_decls body) :: trig_env, (m_env, f_env)
 
-    | Bind (src_id, trig_id) ->
-      env, ((src_id, trig_id)::source_bindings, source_automata)
-
-    | Consumable c -> ierror "not yet implemented"
+    | _ -> env
   in
-  let env_of_stmt (env, source_prog) k3_stmt = match k3_stmt with
-    | Declaration d -> env_of_declaration env source_prog d 
-    | _ -> env, source_prog
+  let env_of_stmt env k3_stmt = match k3_stmt with
+    | Declaration d -> env_of_declaration env d 
+    | _ -> env
   in 
   let init_env = ([], ([],[])) in
-  let init_source_prog = ([], []) in
-  List.fold_left env_of_stmt (init_env, init_source_prog) k3_program
+  List.fold_left env_of_stmt init_env k3_program
 
-let env_of_program k3_program = fst (env_and_sources_of_program k3_program)
 
 (* Instruction interpretation *)
-
-(* TODO: Shyam's sources and loop code *)
-let can_consume id = false
-let consume id = []
-
-let eval_instructions env address source_program k3_program =
+let eval_instructions env address (stream_env, fsm_env, src_bindings) k3_program =
   let run_instruction stmt = match stmt with
     | Declaration _ -> ()
     | Instruction (Consume id) ->
-      (* Poll consumeables *) 
-      while can_consume id do
-        let events = consume id in
-        let event_fn = schedule_event (fst source_program) id address in
-          List.iter event_fn events;
-          run_scheduler address env 
-      done
+      try
+        let fsm = List.assoc id fsm_env in
+        let first, next_state = ref true, (ref None) in
+        while !first || !next_state <> None do
+          first := false;
+          (* Per-event scheduling, that is, we run the scheduling policy
+           * for each individual external event *)
+          match run fsm_env fsm !next_state with
+            | Some(v), ns -> 
+              (schedule_event src_bindings id address [v];
+               run_scheduler address env;
+               next_state := ns)
+            | None, ns -> next_state := ns
+        done
+      with Not_found -> interpreter_error ("no stream program found for "^id)
   in List.iter run_instruction k3_program
 
 
 (* Program interpretation *)
+let interpreter_event_loop k3_program = 
+	let (s,f,b) = event_loop_of_program k3_program in
+	let nf = List.map (fun (id,fsm) -> id, (initialize fsm)) f
+	in (s,nf,b)
+
 let eval_program address k3_program =
-  let env, source_program = env_and_sources_of_program k3_program
-  in eval_instructions env address source_program k3_program;
-     print_program_env env
+  let env = env_of_program k3_program in
+  let event_loop = interpreter_event_loop k3_program in 
+		initialize_scheduler address env;
+		eval_instructions env address event_loop k3_program;
+		print_program_env env
 
 
 (* Distributed program interpretation *)
 
 (* TODO: peer multiplexing *)
 let eval_networked_program peer_list k3_program =
-  let env, source_program = env_and_sources_of_program k3_program in
+  let env = env_of_program k3_program in
+  let event_loop = interpreter_event_loop k3_program in
   let peer_envs = List.map (fun addr -> addr, env) peer_list in
   List.iter (fun (addr,env) ->
-      eval_instructions env addr source_program k3_program
+      initialize_scheduler addr env;
+      eval_instructions env addr event_loop k3_program
     ) peer_envs

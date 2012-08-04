@@ -13,9 +13,9 @@ FILES=\
 	stages/k3/K3Helpers \
 	stages/k3/K3Typechecker \
 	stages/k3/K3Values \
+	stages/k3/interpreter/K3Consumption \
 	stages/k3/interpreter/K3Runtime \
 	stages/k3/interpreter/K3Interpreter \
-	stages/k3/interpreter/K3Consumption \
 	stages/k3_dist/ProgInfo \
 	stages/k3_dist/GenDist \
 	stages/imperative/ReifiedK3 \

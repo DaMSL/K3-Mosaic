@@ -45,6 +45,11 @@ rule tokenize = parse
     | "declare"  { DECLARE }
     | "foreign"  { FOREIGN }
     | "trigger"  { TRIGGER }
+    
+    | "source"   { SOURCE }
+    | "file"     { FILE }
+    | "bind"     { BIND }
+    | "pattern"  { PATTERN }
     | "consume"  { CONSUME }
 
     | "()"      { UNIT }

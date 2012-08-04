@@ -109,3 +109,5 @@ let string_of_env env = wrap_formatter (fun () -> print_env env)
 
 let string_of_program_env env = wrap_formatter (fun () -> print_program_env env)
 
+let string_of_source_bindings bindings = wrap_formatter (fun () ->
+  List.iter (fun (src,trig) -> ps (src^" -> "^trig); fnl()) bindings)

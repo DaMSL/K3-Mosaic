@@ -46,6 +46,9 @@ val print_type : type_t -> unit
 val print_arg : arg_t -> unit
 val print_expr : ?print_id:bool -> 'a expr_t -> unit
 
+val print_stream : stream_t -> unit
+val print_stream_pattern : stream_pattern_t -> unit
+
 val string_of_base_type: base_type_t -> string
 val string_of_value_type: value_type_t -> string
 val string_of_type: type_t -> string

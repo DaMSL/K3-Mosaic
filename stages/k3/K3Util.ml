@@ -222,18 +222,21 @@ let flat_string_of_expr_tag tag children =
 let flat_string_of_expr expr =
   flat_string_of_tree (fun ((id, tag), _) -> flat_string_of_expr_tag tag) expr
 
-let rec flat_string_of_consumable c =
-  let rcr_list l = List.map flat_string_of_consumable l in
-  match c with
-    | Source(i, t, _) -> tag_str "Source" [i; flat_string_of_type t]
-    | Loop(id, c)  -> tag_str "Loop" [id; flat_string_of_consumable c]
-    | Choice(cs)   -> tag_str "Choice" (rcr_list cs)
-    | Sequence(cs) -> tag_str "Sequence" (rcr_list cs)
+let rec flat_string_of_stream_pattern p =
+  let rcr = flat_string_of_stream_pattern in
+  let rcr_list l = List.map rcr l in
+  match p with
+    | Terminal(id)  -> tag_str "Terminal" [id]
+    | Choice(ps)    -> tag_str "Choice" (rcr_list ps)
+    | Sequence(ps)  -> tag_str "Sequence" (rcr_list ps)
+    | Optional(p)   -> tag_str "Optional" [rcr p]
+    | Repeat(p, s) -> tag_str "Repeat" [rcr p; string_of_stop_behavior_t s]
 
-    | Optional(c) -> tag_str "Optional" [flat_string_of_consumable c]
-    | Repeat(c, s) ->
-        tag_str "Repeat" 
-          [flat_string_of_consumable c; string_of_stop_behavior_t s]
+let flat_string_of_stream s =
+  match s with
+    | Source(i, t, _)    -> tag_str "Source" [i; flat_string_of_type t]
+    | Sink(i, t, _)      -> tag_str "Sink" [i; flat_string_of_type t]
+    | Derived(id, p)     -> tag_str "Derived" [id; flat_string_of_stream_pattern p]
 
 let flat_string_of_declaration d =
   let string_of_id_and_vtype (id,vt) =
@@ -253,8 +256,8 @@ let flat_string_of_declaration d =
       tag_str "Trigger"
         [i; flat_string_of_arg arg; trig_decls; flat_string_of_expr e]
 
-    | Bind(i, i2) -> tag_str "Bind" [i; i2]
-    | Consumable(c) -> tag_str "Consumable" [flat_string_of_consumable c]
+    | Stream(s)     -> tag_str "Stream" [flat_string_of_stream s]
+    | Bind(i, i2)   -> tag_str "Bind" [i; i2]
 
 let flat_string_of_instruction i = match i with
     | Consume(id) -> tag_str "Consume" [id]
@@ -401,19 +404,23 @@ and print_expr ?(print_id=false) expr =
       () [] expr
   in force (List.hd lazy_e)
 
-let rec print_consumable c =
+let rec print_stream_pattern p =
   let my_tag = pretty_tag_str Hint "" in
-  let lazy_rcr c = lazy (print_consumable c) in 
+  let lazy_rcr p = lazy (print_stream_pattern p) in 
   let rcr_list l = List.map lazy_rcr l in
-  match c with
-    | Source(i, t, _) -> my_tag "Source" [lps i; lazy_type t]
-    | Loop(id, c)  -> my_tag "Loop" [lps id; lazy_rcr c]
-    | Choice(cs)   -> my_tag "Choice" (rcr_list cs)
-    | Sequence(cs) -> my_tag "Sequence" (rcr_list cs)
+  match p with
+    | Terminal(id)  -> my_tag "Terminal" [lps id]
+    | Choice(ps)    -> my_tag "Choice" (rcr_list ps)
+    | Sequence(ps)  -> my_tag "Sequence" (rcr_list ps)
+    | Optional(p)   -> my_tag "Optional" [lazy_rcr p]
+    | Repeat(p, s)  -> my_tag "Repeat" [lazy_rcr p; lps (string_of_stop_behavior_t s)]
 
-    | Optional(c) -> my_tag "Optional" [lazy_rcr c]
-    | Repeat(c, s) ->
-        my_tag "Repeat" [lazy_rcr c; lps (string_of_stop_behavior_t s)]
+let print_stream s =
+  let my_tag = pretty_tag_str Hint "" in
+  match s with
+    | Source(i, t, _) -> my_tag "Source" [lps i; lazy_type t]
+    | Sink(i, t, _)   -> my_tag "Sink" [lps i; lazy_type t]
+    | Derived(id, p)  -> my_tag "Derived" [lps id; lazy (print_stream_pattern p)]
 
 let print_declaration ?(print_id=false) ?(print_expr_fn=lazy_expr) d =
   let my_tag = pretty_tag_str Line "" in
@@ -435,8 +442,8 @@ let print_declaration ?(print_id=false) ?(print_expr_fn=lazy_expr) d =
       my_tag "Trigger" 
         [lps (quote i); lazy_arg arg; trig_decls; print_expr_fn ~print_id:print_id e]
 
-    | Bind(i, i2) -> my_tag "Bind" [lps i; lps i2]
-    | Consumable(c) -> my_tag "Consumable" [lazy (print_consumable c)]
+    | Stream(s) -> my_tag "Stream" [lazy (print_stream s)]
+    | Bind(i, i2)   -> my_tag "Bind" [lps i; lps i2]
 
 let print_instruction i = match i with
     | Consume(id) -> pretty_tag_str Line "" "Consume" [lps id]
@@ -457,7 +464,8 @@ let string_of_type t        = wrap_formatter (fun () -> print_type t)
 let string_of_arg a         = wrap_formatter (fun () -> print_arg a)
 let string_of_expr e        = wrap_formatter (fun () -> print_expr e)
 
-let string_of_consumable c  = wrap_formatter (fun () -> print_consumable c)
+let string_of_stream_pattern p  = wrap_formatter (fun () -> print_stream_pattern p)
+let string_of_stream s      = wrap_formatter (fun () -> print_stream s)
 let string_of_declaration d = wrap_formatter (fun () -> print_declaration d)
 let string_of_instruction i = wrap_formatter (fun () -> print_instruction i)
 let string_of_statement s   = wrap_formatter (fun () -> print_statement s)

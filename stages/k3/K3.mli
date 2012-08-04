@@ -188,32 +188,36 @@ type stop_behavior_t
     | UntilEOF
 
 (* The types of sources we can have, along with the information to uniquely
- * identify them. Technically they should be hierarchical in terms of
- * capabilities, etc. but let's leave them be flat for now.
+ * identify them. 
  *)
-type source_t
-    = FileSource of string * string
-    | CSV of in_channel
+type stream_format_t = CSV | JSON
 
-type consumable_t
-    = Source        of id_t * type_t * source_t
-    | Loop          of id_t * consumable_t
+type stream_channel_t
+    = File       of stream_format_t * string
+    | Network    of stream_format_t * address
 
-    | Choice        of consumable_t list
-    | Sequence      of consumable_t list
-    | Optional      of consumable_t
+type stream_pattern_t =
+    | Terminal      of id_t
+    | Choice        of stream_pattern_t list
+    | Sequence      of stream_pattern_t list
+    | Optional      of stream_pattern_t
+    | Repeat        of stream_pattern_t * stop_behavior_t
 
-    | Repeat        of consumable_t * stop_behavior_t
+type stream_t
+    = Source        of id_t * type_t * stream_channel_t
+    | Sink          of id_t * type_t * stream_channel_t
+    | Derived       of id_t * stream_pattern_t
 
 (* Top-Level Declarations *)
 type 'a declaration_t
     = Global        of id_t * type_t  * 'a expr_t option
     | Foreign       of id_t * type_t
     | Trigger       of id_t * arg_t * (id_t * value_type_t) list * 'a expr_t
+    | Stream        of stream_t
     | Bind          of id_t * id_t
-    | Consumable    of consumable_t
 
 (* Top-Level Instructions *)
+(* TODO: produce instruction *)
 type instruction_t
     = Consume of id_t
 

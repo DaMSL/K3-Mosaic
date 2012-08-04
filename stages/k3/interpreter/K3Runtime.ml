@@ -57,13 +57,11 @@ let use_global_queueing () = scheduler_params.mode = Global
 let dispatch_block_size () = scheduler_params.interleave_period  
 let events_processed = ref Int64.zero
 
-(* node address -> task queue * per trigger queues *)
+(* node address -> task queue * per trigger input queues *)
 let node_queues = Hashtbl.create 10
 
-(* trigger id -> ref queue of tasks *)
-let trigger_queues = Hashtbl.create 10
-
 (* Node helpers *)
+let is_node address = Hashtbl.mem node_queues address
 
 let get_node_queues address = Hashtbl.find node_queues address
 
@@ -84,7 +82,7 @@ let get_trigger_queues address =
   try snd (get_node_queues address)
   with Not_found -> failwith ("unknown node "^(string_of_address address))
 
-let get_trigger_queue address trigger_id =
+let get_trigger_input_queue address trigger_id =
   Hashtbl.find (get_trigger_queues address) trigger_id
 
 let register_trigger address trigger_id =
@@ -94,7 +92,7 @@ let register_trigger address trigger_id =
   else invalid_arg ("duplicate trigger registration for "^trigger_id)
 
 let unregister_trigger address trigger_id force =
-  try let q = get_trigger_queue address trigger_id in
+  try let q = get_trigger_input_queue address trigger_id in
       if (Queue.is_empty q) || force then
         let trigger_queues = get_trigger_queues address in
         Hashtbl.remove trigger_queues trigger_id
@@ -109,7 +107,7 @@ let schedule_trigger v_target v_address args = match v_target, v_address with
     if use_global_queueing()
     then schedule_task address (NamedDispatch (trigger_id, args))
     else
-      let q = get_trigger_queue address trigger_id
+      let q = get_trigger_input_queue address trigger_id
       in Queue.push args q;
          schedule_task address (BlockDispatch (trigger_id, dispatch_block_size()))
 
@@ -138,7 +136,7 @@ let invoke_trigger address (trigger_env, val_env) trigger_id arg =
   events_processed := Int64.succ !events_processed
 
 let process_trigger_queue address env trigger_id max_to_process =
-  let q = get_trigger_queue address trigger_id in
+  let q = get_trigger_input_queue address trigger_id in
   let processed = ref max_to_process in
   while not (Queue.is_empty q) && !processed > 0 do
     try invoke_trigger address env trigger_id (Queue.take q);
@@ -159,6 +157,12 @@ let process_task address env =
       else process_trigger_queue address env id max_to_process
 
   with Queue.Empty -> raise (RuntimeError (error INVALID_GLOBAL_QUEUE))
+
+let initialize_scheduler address (trig_env,_) =
+  List.iter (fun (id, _) ->
+      if not(is_node address) then register_node address; 
+      register_trigger address id
+    ) trig_env
 
 let run_scheduler address env =
   while continue_processing address do

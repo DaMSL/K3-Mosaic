@@ -7,6 +7,7 @@ type cut_type = NoCut | Hint | Line
 let ob () = pp_open_hovbox str_formatter 2
 let cb () = pp_close_box str_formatter ()
 let pc () = pp_print_cut str_formatter ()
+let pb i = pp_print_break str_formatter 0 i
 let ps s = pp_print_string str_formatter s
 let psp () = pp_print_space str_formatter ()
 let fnl () = pp_force_newline str_formatter ()
