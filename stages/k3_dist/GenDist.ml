@@ -108,8 +108,8 @@ let do_complete_name_of_t p trig_nm stmt_id =
 let filter_corrective_list_name = "filter_corrective_list"
 let rcv_corrective_name_of_t p trig_nm stmt_id map_id =
   trig_nm^"_rcv_corrective_s"^string_of_int stmt_id^"_"^map_name_of p map_id
-let do_corrective_name_of_t p trig_nm stmt_id =
-  trig_nm^"_do_corrective_s"^string_of_int stmt_id
+let do_corrective_name_of_t p trig_nm stmt_id map_id =
+  trig_nm^"_do_corrective_s"^string_of_int stmt_id^"_"^map_name_of p map_id
 
 (* route and shuffle function names *)
 let route_for p map_id = "route_to_"^map_name_of p map_id
@@ -177,10 +177,16 @@ let declare_foreign_functions p =
      else canonical TUnit)
     (wrap_tlist t_ip)
   in
+  (* function to add delta tuples to a map *)
+  (* NOTE: currently we assume vid is not in the tuples *)
+  let add_delta_foreign p map_id = mk_foreign_fn
+    (add_delta_to_buffer_for_map p map_id)
+    (wrap_ttuple [t_vid; wrap_tlist @: wrap_ttuple @: map_types_for p map_id])
+    (canonical TUnit)
+  in
   let map_related =
-    List.map 
-      (fun map -> route_to_map_foreign p map) 
-      (get_map_list p)
+    (List.map (fun map -> route_to_map_foreign p map) (get_map_list p))@
+    (List.map (fun map -> add_delta_foreign p map) (get_map_list p))
   in
   log_read_geq_foreign::trig_related@map_related
 
@@ -284,14 +290,14 @@ let send_fetch_trig p trig_name =
 in
 let send_completes_for_stmts_with_no_fetch =
   List.fold_left
-    (fun acc_code (stmt_id, lhs_map_id, complete_trig_name) -> 
+    (fun acc_code (stmt_id, lhs_map_id, do_complete_trig_name) -> 
       let route_fn = route_for p lhs_map_id in
       let key = partial_key_from_bound p stmt_id lhs_map_id in
         acc_code@
         [mk_iter 
           (mk_lambda (AVar("ip", t_ip))
             (mk_send
-              (mk_const @: CTarget(complete_trig_name))
+              (mk_const @: CTarget(do_complete_trig_name))
               (mk_var "ip")
               (mk_tuple @: args_of_t_as_vars_with_v p trig_name)
             )
@@ -618,7 +624,7 @@ List.fold_left
                stmt_cntrs
                (mk_peek stmt_cntrs_slice)
                (mk_let_many full_pat
-                 stmt_cntrs_slice
+                 (mk_peek stmt_cntrs_slice)
                  (mk_tuple @:
                    part_pat_as_vars @ 
                    [mk_sub (mk_var "count") (mk_const @: CInt 1)]
@@ -627,7 +633,7 @@ List.fold_left
                
              ;mk_if (* check if the counter is 0 *)
                (mk_eq
-                 stmt_cntrs_slice
+                 (mk_peek stmt_cntrs_slice)
                  (mk_tuple @: part_pat_as_vars @ [mk_const @: CInt 0])
                ) 
                (* Send to local do_complete *)
@@ -690,6 +696,9 @@ let trig_stmt_k3_list =
     (mk_empty @: wrap_tlist @: wrap_ttuple [t_int; t_int])
     trigs_stmts_with_rhs_map
 in
+(* Note: what happens when we send the data here? Does it include vids in the
+ * tuples like the data in pushes?
+ *)
 match trigs_stmts_with_rhs_map with [] -> [] | _ ->
   let tuple_types = wrap_ttuple @: map_types_for p map_id in
   [Trigger(send_corrective_name_of_t p map_id,
@@ -837,10 +846,9 @@ let filter_corrective_list = mk_global_fn filter_corrective_list_name
  * Note: this can be rolled into the do_corrective function
  *)
 let rcv_correctives_trig p trig_name = 
-List.fold_left 
-  (fun acc_code (stmt_id, map_id) ->
-    acc_code@ 
-    [Trigger(rcv_corrective_name_of_t p trig_name stmt_id map_id,
+List.map
+  (fun (stmt_id, map_id) ->
+    Trigger(rcv_corrective_name_of_t p trig_name stmt_id map_id,
       ATuple[
         "delta_tuples", wrap_tlist @: wrap_ttuple @: map_types_for p map_id; 
         "vid", t_vid], 
@@ -854,10 +862,10 @@ List.fold_left
           (* only execute if we have all the updates *)
           mk_if
             (mk_eq
-              (mk_slice stmt_cntrs @:
+              (mk_peek @: mk_slice stmt_cntrs @:
                 mk_tuple
                   [mk_var "vid"; mk_const @: CInt stmt_id; mk_const CUnknown]
-              )
+              ) (* error if we get more than one result *)
               (mk_tuple
                 [mk_var "vid"; mk_const @: CInt stmt_id; mk_const @: CInt 0]
               )
@@ -870,7 +878,8 @@ List.fold_left
                 (mk_var "vid")
               )
               (mk_send
-                (mk_const @: CTarget (do_corrective_name_of_t p trig_name stmt_id))
+                (mk_const @: 
+                  CTarget (do_corrective_name_of_t p trig_name stmt_id map_id))
                 loopback
                 (mk_tuple @: args_of_t_as_vars_with_v p trig_name @
                   [mk_var "delta_tuples"]
@@ -879,35 +888,35 @@ List.fold_left
             )
             (mk_const CUnit) (* else *)
         ]
-    )]
+    )
   )
-  []
   (s_and_over_stmts_in_t p rhs_maps_of_stmt trig_name)
 ;;
 
- (* debug
-
-(* NOTE: note sure if this function will be much different from regular
- * do_completes once we have the right generated K3 "shadow functions" *)
-let do_corrective_name = trig_name^"_do_complete_"^stmt_id in
-mk_global_fn do_corrective_name
-  (trig_args_with_v)
-  TUnit (* output *)
-  (* in terms of substitution, we need to 
-   * a. switch read maps for buffers
-   * b. inject a send to the send_correctives trigger by either sending a
-   * single delta or sending a cse representing a slice of calculated data. We
-   * need to take the variable in K3 and transform it by adding in the bound
-   * variables so it matches the format of the lhs map *)
-  (let ast_stmt2 = subst_buffers (ast_of_stmt stmt_id) (rhs_maps_of_stmt stmt_id)
-    in
-    let delta_in_lhs_map = to_lhs_map_form (delta_var_of_stmt stmt_id)
-      (partial_key_from_bound stmt_id map_id trig_args)
-    in
-    inject_call_forward_correctives ast_stmt2 delta_in_lhs_map
+(* do corrective triggers *)
+(* NOTE: we assume we're not sending the vid in the tuples *)
+let do_corrective_trigs p trig_name =
+List.map
+  (fun (stmt_id, map_id) ->
+    Trigger (do_corrective_name_of_t p trig_name stmt_id map_id, 
+      ATuple(args_of_t_with_v p trig_name@
+      ["delta_tuples", wrap_tlist @: wrap_ttuple @: map_types_for p map_id]),
+      [], (* locals *)
+    (* NOTE: note sure if this function will be much different from regular
+     * do_completes once we have the right generated K3 "shadow functions" *)
+        mk_const CUnit
+      (* for now, we have dummy functions so we type-check
+      (*let ast_stmt2 = subst_buffers (ast_of_stmt stmt_id) (rhs_maps_of_stmt stmt_id)
+        in
+        let delta_in_lhs_map = to_lhs_map_form (delta_var_of_stmt stmt_id)
+          (partial_key_from_bound stmt_id map_id trig_args)
+        in
+        inject_call_forward_correctives ast_stmt2 delta_in_lhs_map
+      *)
+      *)
+     )
   )
-
-  *)
+(s_and_over_stmts_in_t p rhs_maps_of_stmt trig_name)
 
 (* Generate all the code for a specific trigger *)
 let gen_dist_for_t p trig =
@@ -917,7 +926,8 @@ let gen_dist_for_t p trig =
     send_push_stmt_map_trig p trig@
     rcv_push_trig p trig@
     do_complete_trigs p trig@
-    rcv_correctives_trig p trig
+    rcv_correctives_trig p trig@
+     do_corrective_trigs p trig
 
 (* Function to generate the whole distributed program *)
 let gen_dist p ast =
