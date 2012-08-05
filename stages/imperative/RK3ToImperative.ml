@@ -760,6 +760,16 @@ let imperative_of_reified_expr mk_meta fn_arg_env rt =
   fst (fold_tree (fun _ _ -> None)
         (imperative_of_reified_node mk_meta fn_arg_env) None ([],"") rt)
 
+let imperative_of_instruction mk_meta i = match i with
+  | Consume id ->
+      (* TODO: named function for consume *)
+      mk_expr (mk_meta()) (mk_fn (mk_meta()) (Named ("consume_"^id))[])
+
+let imperative_of_stream_statement mk_meta ss = match ss with
+  | Stream s -> failwith "stream declaration not implemented"
+  | Bind (src,dest) -> failwith "bind declarations not implemented"
+  | Instruction i -> imperative_of_instruction mk_meta i
+
 
 let imperative_of_declaration mk_meta fn_arg_env d =
   let is_function t = match t with | TFunction _ -> true | _ -> false in
@@ -802,28 +812,18 @@ let imperative_of_declaration mk_meta fn_arg_env d =
     let cmds = cmds_of_reified_expr body in
     let trig_body = [mk_block (mk_meta()) cmds]
     in Some(DFn(id, a, TInternal(TValue(canonical TUnit)), trig_body)), [], [id,a]
+
+  | Role (id, sp) -> failwith "stream programs not implemented"
+  | DefaultRole(id) -> failwith "stream programs not implemented"
   
-  | Stream s -> failwith "stream declaration not implemented"
-  | Bind (src,dest) -> failwith "bind declarations not implemented"
-
-let imperative_of_instruction mk_meta i = match i with
-  | Consume id ->
-      (* TODO: named function for consume *)
-      mk_expr (mk_meta()) (mk_fn (mk_meta()) (Named ("consume_"^id))[])
-
 let imperative_of_program mk_meta p =
   let main_body, decls, _ =
-    List.fold_left (fun (main_cmd_acc, decl_acc, fn_arg_env) stmt ->
-      match stmt with
-      | Declaration d -> 
-        let d_opt, init_cmds, fn_args = imperative_of_declaration mk_meta fn_arg_env d in
-        (main_cmd_acc@init_cmds),
-        (match d_opt with | Some c -> decl_acc@[c] | None -> decl_acc),
-        (fn_arg_env@fn_args)
-
-      | Instruction i -> 
-          (main_cmd_acc@[imperative_of_instruction mk_meta i]), decl_acc, fn_arg_env)
-      ([],[],[]) p
+    List.fold_left (fun (main_cmd_acc, decl_acc, fn_arg_env) d ->
+	    let d_opt, init_cmds, fn_args = imperative_of_declaration mk_meta fn_arg_env d in
+	    (main_cmd_acc@init_cmds),
+	    (match d_opt with | Some c -> decl_acc@[c] | None -> decl_acc),
+	    (fn_arg_env@fn_args)
+    ) ([],[],[]) p
   in
   let int_t = TInternal (TValue (canonical TInt)) in
   let main_fn = DFn("main", AVar("argc", (canonical TInt)), int_t, main_body) 

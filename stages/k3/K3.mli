@@ -187,9 +187,10 @@ type stop_behavior_t
     | UntilEmpty
     | UntilEOF
 
+(* Stream and program role AST *)
+
 (* The types of sources we can have, along with the information to uniquely
- * identify them. 
- *)
+ * identify them. *)
 type stream_format_t = CSV | JSON
 
 type stream_channel_t
@@ -208,23 +209,24 @@ type stream_t
     | Sink          of id_t * type_t * stream_channel_t
     | Derived       of id_t * stream_pattern_t
 
+(* TODO: produce, listen instructions *)
+type instruction_t
+    = Consume of id_t
+
+type stream_statement_t =
+    | Stream        of stream_t
+    | Bind          of id_t * id_t
+    | Instruction   of instruction_t
+
+type stream_program_t = stream_statement_t list
+
 (* Top-Level Declarations *)
 type 'a declaration_t
     = Global        of id_t * type_t  * 'a expr_t option
     | Foreign       of id_t * type_t
     | Trigger       of id_t * arg_t * (id_t * value_type_t) list * 'a expr_t
-    | Stream        of stream_t
-    | Bind          of id_t * id_t
-
-(* Top-Level Instructions *)
-(* TODO: produce instruction *)
-type instruction_t
-    = Consume of id_t
-
-(* All Top-Level Statements *)
-type 'a statement_t
-    = Declaration   of 'a declaration_t
-    | Instruction   of instruction_t
+    | Role          of id_t * stream_program_t
+    | DefaultRole   of id_t
 
 (* K3 Programs *)
-type 'a program_t = 'a statement_t list
+type 'a program_t = 'a declaration_t list

@@ -28,6 +28,7 @@ trigger on_event(a:int, b:int) {} = do {
   iterate(\i:int -> insert(a_events,i), (\x:[int] -> x)([0:1:10]))
 }
 
+role client {
 source s1: (int,int) = file(csv, "s1.csv")
 source s2: (int,int) = file(csv, "s2.csv")
 source s3: (int,int) = file(csv, "s3.csv")
@@ -41,5 +42,6 @@ bind s1 -> on_event
 bind one_of_all_s -> on_event
 
 bind repeat_one_s -> on_event
+}
 
-
+default role client

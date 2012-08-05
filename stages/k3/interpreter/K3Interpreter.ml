@@ -513,19 +513,14 @@ let env_of_program k3_program =
 
     | _ -> env
   in
-  let env_of_stmt env k3_stmt = match k3_stmt with
-    | Declaration d -> env_of_declaration env d 
-    | _ -> env
-  in 
   let init_env = ([], ([],[])) in
-  List.fold_left env_of_stmt init_env k3_program
+  List.fold_left env_of_declaration init_env k3_program
 
 
 (* Instruction interpretation *)
-let eval_instructions env address (stream_env, fsm_env, src_bindings) k3_program =
-  let run_instruction stmt = match stmt with
-    | Declaration _ -> ()
-    | Instruction (Consume id) ->
+let eval_instructions env address (stream_env, fsm_env, src_bindings, instructions) =
+  let run_instruction i = match i with
+    | Consume id ->
       try
         let fsm = List.assoc id fsm_env in
         let first, next_state = ref true, (ref None) in
@@ -541,20 +536,29 @@ let eval_instructions env address (stream_env, fsm_env, src_bindings) k3_program
             | None, ns -> next_state := ns
         done
       with Not_found -> interpreter_error ("no stream program found for "^id)
-  in List.iter run_instruction k3_program
+  in List.iter run_instruction instructions
 
 
 (* Program interpretation *)
-let interpreter_event_loop k3_program = 
-	let (s,f,b) = event_loop_of_program k3_program in
+let interpreter_event_loop role_opt k3_program = 
+  let error () = interpreter_error ("No role found for K3 program") in
+	let roles, default_role = roles_of_program k3_program in
+  let get_role role fail_f = try List.assoc role roles with Not_found -> fail_f () in
+  let s,f,b,i =
+    match role_opt, default_role with
+      | Some x, Some y -> get_role x (fun () -> y)
+      | Some x, None -> get_role x error 
+      | None, Some y -> y
+      | None, None -> error ()
+  in
 	let nf = List.map (fun (id,fsm) -> id, (initialize fsm)) f
-	in (s,nf,b)
+	in (s,nf,b,i)
 
-let eval_program address k3_program =
+let eval_program address role_opt k3_program =
   let env = env_of_program k3_program in
-  let event_loop = interpreter_event_loop k3_program in 
+  let event_loop = interpreter_event_loop role_opt k3_program in 
 		initialize_scheduler address env;
-		eval_instructions env address event_loop k3_program;
+		eval_instructions env address event_loop;
 		print_program_env env
 
 
@@ -563,9 +567,8 @@ let eval_program address k3_program =
 (* TODO: peer multiplexing *)
 let eval_networked_program peer_list k3_program =
   let env = env_of_program k3_program in
-  let event_loop = interpreter_event_loop k3_program in
-  let peer_envs = List.map (fun addr -> addr, env) peer_list in
-  List.iter (fun (addr,env) ->
-      initialize_scheduler addr env;
-      eval_instructions env addr event_loop k3_program
-    ) peer_envs
+  List.iter (fun (addr,role_opt) ->
+      let event_loop = interpreter_event_loop role_opt k3_program in
+        initialize_scheduler addr env;
+        eval_instructions env addr event_loop
+    ) peer_list

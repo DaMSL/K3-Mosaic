@@ -36,9 +36,11 @@ val flat_string_of_arg: arg_t -> string
 val flat_string_of_expr_tag: expr_tag_t -> string list -> string
 val flat_string_of_expr: 'a expr_t -> string
 
-val flat_string_of_declaration: 'a declaration_t -> string
 val flat_string_of_instruction: instruction_t -> string
-val flat_string_of_statement: 'a statement_t -> string
+val flat_string_of_stream_statement : stream_statement_t -> string
+val flat_string_of_stream_program : stream_program_t -> string
+val flat_string_of_declaration: 'a declaration_t -> string
+
 val flat_string_of_program: 'a program_t -> string
 
 (* Pretty stringification, used as the default. *)
@@ -55,9 +57,10 @@ val string_of_type: type_t -> string
 val string_of_arg: arg_t -> string
 val string_of_expr: 'a expr_t -> string
 
-val string_of_declaration: 'a declaration_t -> string
 val string_of_instruction: instruction_t -> string
-val string_of_statement: 'a statement_t -> string
+val string_of_stream_statement : stream_statement_t -> string
+val string_of_stream_program : stream_program_t -> string
+val string_of_declaration: 'a declaration_t -> string
 
 val string_of_program:
   ?print_id:bool ->

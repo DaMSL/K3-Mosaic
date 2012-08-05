@@ -928,8 +928,6 @@ let gen_dist p ast =
       (fun trig -> gen_dist_for_t p trig)
       triggers
   in
-  List.map
-    (fun x -> Declaration x)
     ( declare_global_vars p @
       declare_foreign_functions p @
       filter_corrective_list ::  (* global func *)

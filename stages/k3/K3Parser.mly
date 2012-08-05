@@ -26,8 +26,8 @@
 %}
 
 %token EXPECTED
-%token DECLARE FOREIGN TRIGGER CONSUME
-%token BIND SOURCE PATTERN FILE 
+%token DECLARE FOREIGN TRIGGER ROLE DEFAULT
+%token CONSUME BIND SOURCE PATTERN FILE 
 
 %token UNIT UNKNOWN NOTHING
 %token <int> INTEGER
@@ -109,23 +109,18 @@
 %%
 
 program:
-    | statement { [$1] }
-    | statement program { $1 :: $2 }
+    | declaration { [$1] }
+    | declaration program { $1 :: $2 }
 ;
 
 expression_test:
     | declaration expression_test  { 
         let l = $2 in
         let x,y,z = List.hd l in
-        ((Declaration($1)::x), y, z)::(List.tl l)
+        (($1::x), y, z)::(List.tl l)
       }
     | expr EXPECTED expr                   { [[], $1, $3] }
     | expression_test expr EXPECTED expr   { $1@[[], $2, $4] }
-
-statement:
-    | declaration { Declaration($1) }
-    | instruction { Instruction($1) }
-;
 
 declaration:
     | DECLARE IDENTIFIER COLON type_expr { Global($2, $4, None) }
@@ -135,7 +130,18 @@ declaration:
     | TRIGGER IDENTIFIER arg LBRACE RBRACE GETS expr { Trigger($2, $3, [], $7) }
     | TRIGGER IDENTIFIER arg LBRACE value_typed_identifier_list RBRACE GETS expr { Trigger($2, $3, $5, $8) }
 
-    | stream { Stream($1) }
+    | ROLE IDENTIFIER LBRACE stream_program RBRACE { Role($2, $4) }
+    | DEFAULT ROLE IDENTIFIER                      { DefaultRole($3) }
+;
+
+stream_program:
+    | stream_statement { [$1] }
+    | stream_statement stream_program { $1 :: $2 }
+;
+
+stream_statement:
+    | stream      { Stream($1) }
+    | instruction { Instruction($1) }
 
     | BIND IDENTIFIER RARROW IDENTIFIER                   { Bind($2, $4) }
     | BIND SOURCE IDENTIFIER RARROW TRIGGER IDENTIFIER    { Bind($3, $6) }

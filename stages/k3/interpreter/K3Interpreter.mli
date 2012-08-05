@@ -11,6 +11,6 @@ val env_of_program : int tprogram_t -> program_env_t
 
 val eval_expr : env_t -> int texpr_t -> env_t * eval_t
 
-val eval_program : address -> int tprogram_t -> unit
+val eval_program : address -> id_t option -> int tprogram_t -> unit
 
-val eval_networked_program : address list -> int tprogram_t -> unit
+val eval_networked_program : (address * id_t option) list -> int tprogram_t -> unit

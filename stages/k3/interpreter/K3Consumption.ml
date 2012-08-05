@@ -24,6 +24,8 @@ and stream_fsm_t = (state_id * (action_t * state_id * state_id)) list
 type stream_env_t = (id_t * stream_t) list
 type fsm_env_t = (id_t * stream_fsm_t) list
 
+type event_loop_t =
+  stream_env_t * fsm_env_t * source_bindings_t * (instruction_t list)
 
 (* State identifier generation *)
 let state_sym_class = "FSM"
@@ -189,25 +191,26 @@ let prepare_stream stream_env fsm_env s = match s with
   | Derived (id, p) -> id, None, Some(compile stream_env fsm_env p)
 
 
-(* Returns a stream and FSM environment, as well as source bindings
- * from a K3 program *)
-let event_loop_of_program k3_program =
-  let env_of_declaration (stream_env, fsm_env, source_bindings) d
-  = match d with
+(* For each role in a K3 program, returns a stream and FSM environment,
+ * and source bindings *)
+let roles_of_program k3_program =
+  let event_loop_of_stream_stmt (stream_env, fsm_env, source_bindings, instructions) ss
+  = match ss with
     | Stream s ->
       let id, ns, nfsm = prepare_stream stream_env fsm_env s in
       let nstream_env = match ns with None -> stream_env | Some(x) -> stream_env@[id,x] in
       let nfsm_env = match nfsm with None -> fsm_env | Some(x) -> fsm_env@[id,x]
-      in (nstream_env, nfsm_env, source_bindings)
+      in (nstream_env, nfsm_env, source_bindings, instructions)
 
     | Bind (src_id, trig_id) ->
-      (stream_env, fsm_env, (src_id, trig_id)::source_bindings)
+      (stream_env, fsm_env, (src_id, trig_id)::source_bindings, instructions)
       
-    | _ -> stream_env, fsm_env, source_bindings 
+    | Instruction i -> stream_env, fsm_env, source_bindings, (instructions@[i]) 
   in
-  let env_of_stmt env k3_stmt = match k3_stmt with
-    | Declaration d -> env_of_declaration env d 
-    | _ -> env
+  let event_loop_of_role (env, default) d = match d with
+    | Role(id, sp) -> (env@[id, List.fold_left event_loop_of_stream_stmt ([],[],[],[]) sp], default)
+    | DefaultRole(id) -> 
+      (try env, Some(List.assoc id env) with Not_found -> (env, default))  
+    | _ -> env, default
   in 
-  let init_env = ([], [], []) in
-  List.fold_left env_of_stmt init_env k3_program
+  List.fold_left event_loop_of_role ([], None) k3_program

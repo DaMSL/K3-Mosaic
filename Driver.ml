@@ -159,24 +159,29 @@ let repl params = ()
 let compile params = ()
 
 (* Interpret actions *)
+(* TODO: accept role from command line *)
 let interpret params =
   let eval_fn = match params.language with
     | K3 -> (fun f -> 
       let typed_program = deduce_program_type (parse_program f)
-      in eval_program params.node_address typed_program)
+      in eval_program params.node_address None typed_program)
     | _ -> error "Output language not yet implemented"
   in
   List.iter eval_fn params.input_files
 
 (* Print actions *)
+let print_event_loop (id, (senv, fenv, sbind, instrs)) = 
+	print_endline ("----Role "^id^" Stream Program----");
+	print_string (string_of_stream_env senv);
+	print_string (string_of_fsm_env fenv);
+	print_string (string_of_source_bindings sbind)
+
 let print_k3_program f =
   let tp = typed_program f in
-  let (stream_env, fsm_env, source_bindings) = event_loop_of_program tp in
+  let event_loops, default = roles_of_program tp in
     print_endline (string_of_program tp);
-    print_endline "----Stream Program----";
-    print_string (string_of_stream_env stream_env);
-    print_string (string_of_fsm_env fsm_env);
-    print_string (string_of_source_bindings source_bindings)
+    List.iter print_event_loop event_loops;
+    (match default with None -> () | Some x -> print_event_loop ("DEFAULT", x))
 
 let print_reified_k3_program f =
   let print_expr_fn ?(print_id=false) e = lazy (print_reified_expr (reify_expr [] e)) in

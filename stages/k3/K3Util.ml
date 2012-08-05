@@ -238,6 +238,17 @@ let flat_string_of_stream s =
     | Sink(i, t, _)      -> tag_str "Sink" [i; flat_string_of_type t]
     | Derived(id, p)     -> tag_str "Derived" [id; flat_string_of_stream_pattern p]
 
+let flat_string_of_instruction i = match i with
+    | Consume(id) -> tag_str "Consume" [id]
+
+let flat_string_of_stream_statement ss = match ss with
+    | Stream(s)      -> tag_str "Stream" [flat_string_of_stream s]
+    | Bind(i, i2)    -> tag_str "Bind" [i; i2]
+    | Instruction(i) -> tag_str "Instruction" [flat_string_of_instruction i]
+
+let flat_string_of_stream_program sp =
+  "[ "^(String.concat "," (List.map flat_string_of_stream_statement sp))^" ]"
+
 let flat_string_of_declaration d =
   let string_of_id_and_vtype (id,vt) =
     "("^id^", "^flat_string_of_value_type vt^")"
@@ -255,19 +266,13 @@ let flat_string_of_declaration d =
       in
       tag_str "Trigger"
         [i; flat_string_of_arg arg; trig_decls; flat_string_of_expr e]
-
-    | Stream(s)     -> tag_str "Stream" [flat_string_of_stream s]
-    | Bind(i, i2)   -> tag_str "Bind" [i; i2]
-
-let flat_string_of_instruction i = match i with
-    | Consume(id) -> tag_str "Consume" [id]
-
-let flat_string_of_statement s = match s with
-    | Declaration(d) -> flat_string_of_declaration d
-    | Instruction(i) -> flat_string_of_instruction i
+        
+    | Role (id, sp)    -> tag_str "Role" [id; flat_string_of_stream_program sp]
+    
+    | DefaultRole (id) -> tag_str "DefaultRole" [id]
 
 let flat_string_of_program ss =
-  tag_str "K3" (List.map flat_string_of_statement ss)
+  tag_str "K3" (List.map flat_string_of_declaration ss)
 
 
 (****************************
@@ -422,6 +427,18 @@ let print_stream s =
     | Sink(i, t, _)   -> my_tag "Sink" [lps i; lazy_type t]
     | Derived(id, p)  -> my_tag "Derived" [lps id; lazy (print_stream_pattern p)]
 
+let print_instruction i = match i with
+    | Consume(id) -> pretty_tag_str Line "" "Consume" [lps id]
+
+let print_stream_statement ss =
+  let my_tag = pretty_tag_str Line "" in
+  match ss with
+    | Stream(s) -> my_tag "Stream" [lazy (print_stream s)]
+    | Bind(i, i2)   -> my_tag "Bind" [lps i; lps i2]
+    | Instruction i -> my_tag "Instruction" [lazy (print_instruction i)]
+ 
+let print_stream_program sp = List.iter print_stream_statement sp
+
 let print_declaration ?(print_id=false) ?(print_expr_fn=lazy_expr) d =
   let my_tag = pretty_tag_str Line "" in
   let print_id_vt (id,vt) =
@@ -441,20 +458,10 @@ let print_declaration ?(print_id=false) ?(print_expr_fn=lazy_expr) d =
       in
       my_tag "Trigger" 
         [lps (quote i); lazy_arg arg; trig_decls; print_expr_fn ~print_id:print_id e]
+        
+    | Role (id, sp)   -> my_tag "Role" [lps (quote id); lazy(print_stream_program sp)]
 
-    | Stream(s) -> my_tag "Stream" [lazy (print_stream s)]
-    | Bind(i, i2)   -> my_tag "Bind" [lps i; lps i2]
-
-let print_instruction i = match i with
-    | Consume(id) -> pretty_tag_str Line "" "Consume" [lps id]
-
-let print_statement ?(print_id=false) ?(print_expr_fn=lazy_expr) s =
-  let my_tag = pretty_tag_str Line "" in
-  let print_decl d =
-    print_declaration ~print_id:print_id ~print_expr_fn:print_expr_fn d
-  in match s with
-    | Declaration d -> my_tag "Declaration" [lazy (print_decl d)]
-    | Instruction i -> my_tag "Instruction" [lazy (print_instruction i)]
+    | DefaultRole id  -> my_tag "DefaultRole" [lps (quote id)] 
 
 
 let string_of_base_type bt  = wrap_formatter (fun () -> print_base_type bt)
@@ -465,14 +472,17 @@ let string_of_arg a         = wrap_formatter (fun () -> print_arg a)
 let string_of_expr e        = wrap_formatter (fun () -> print_expr e)
 
 let string_of_stream_pattern p  = wrap_formatter (fun () -> print_stream_pattern p)
-let string_of_stream s      = wrap_formatter (fun () -> print_stream s)
+let string_of_stream s          = wrap_formatter (fun () -> print_stream s)
+
+let string_of_instruction i       = wrap_formatter (fun () -> print_instruction i)
+let string_of_stream_statement ss = wrap_formatter (fun () -> print_stream_statement ss) 
+let string_of_stream_program sp   = wrap_formatter (fun () -> print_stream_program sp)
+
 let string_of_declaration d = wrap_formatter (fun () -> print_declaration d)
-let string_of_instruction i = wrap_formatter (fun () -> print_instruction i)
-let string_of_statement s   = wrap_formatter (fun () -> print_statement s)
 
 let string_of_program ?(print_id=false) ?(print_expr_fn=lazy_expr) ss =
   let print_fn =
-    print_statement ~print_id:print_id ~print_expr_fn:print_expr_fn
+    print_declaration ~print_id:print_id ~print_expr_fn:print_expr_fn
   in wrap_formatter (fun () ->
     ps "["; ps_list ~sep:";" Line print_fn ss; ps "]")
   
