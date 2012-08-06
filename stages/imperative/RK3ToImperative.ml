@@ -698,8 +698,11 @@ let imperative_of_expr_node mk_meta fn_arg_env
   | K3.Delete -> ret_cmd_expr (coll_expr Delete)
   | K3.Update -> ret_cmd_expr (coll_expr Update)
 
-  (* TODO: serialize and use side-effecting send primitive *)
-  | K3.Send -> failwith "imperative send not yet implemented"
+  | K3.Send ->
+    let _, _, send_args_e = decompose_send e in
+    let type_tag = String.concat "_"
+      (List.map (fun e -> signature_of_type (type_of_texpr e)) send_args_e)
+    in ret_cmd_expr (mk_fn (mk_meta()) (Send type_tag))
 
   (* TODO: generates a side-effecting assignment command *) 
   | K3.Assign -> failwith "imperative assign not yet implemented"

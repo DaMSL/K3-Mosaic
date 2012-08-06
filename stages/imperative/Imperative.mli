@@ -40,7 +40,7 @@ and fn_t =
     Collection of collection_fn_t
   | Composite of composite_fn_t
   | Named of id_t
-  | Send
+  | Send  of id_t (* type tag *)
 
 (* Expression types *)
 and expr_tag_t =

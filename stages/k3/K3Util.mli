@@ -70,6 +70,9 @@ val string_of_program:
   ?print_expr_fn:(?print_id:bool -> ('a -> string) -> 'a expr_t -> unit Lazy.t) ->
   ('a -> string) -> 'a program_t -> string
 
+(* Type tags *)
+val signature_of_type : type_t -> string
+val type_of_signature : string -> type_t
 
 (* AST constructors / destructors *)
 val decompose_lambda : 'a expr_t -> 'a expr_t
@@ -80,6 +83,7 @@ val decompose_map : 'a expr_t -> 'a expr_t * 'a expr_t
 val decompose_filter_map : 'a expr_t -> 'a expr_t * 'a expr_t * 'a expr_t
 val decompose_aggregate : 'a expr_t -> 'a expr_t * 'a expr_t * 'a expr_t
 val decompose_gbagg : 'a expr_t -> 'a expr_t * 'a expr_t * 'a expr_t * 'a expr_t
+val decompose_send : 'a expr_t -> 'a expr_t * 'a expr_t * ('a expr_t list)
 
 (* Returns all variables in an expression *)
 val vars_of_expr      : 'a expr_t -> 'a expr_t list

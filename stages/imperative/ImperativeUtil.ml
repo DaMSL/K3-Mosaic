@@ -97,7 +97,7 @@ and print_fn_tag fn_tag = match fn_tag with
   | Collection coll_fn -> ps (string_of_collection_fn_tag coll_fn)
   | Composite comp_fn -> ps (string_of_composite_fn_tag comp_fn)
   | Named id -> ps id
-  | Send -> ps "send"
+  | Send id -> ps ("send_"^id)
  
 and print_expr_tag tag lazy_children =
   let my_tag t = pretty_tag_str CutHint "" t lazy_children in

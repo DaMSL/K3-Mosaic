@@ -1,0 +1,13 @@
+declare events : {|(int,int)|}
+
+trigger on_event(a:int, b:int) {} = do {
+  insert(events, (a,b))
+}
+
+role client {
+  source s1 : (int, int) = file(csv, "test.csv")
+  bind s1 -> on_event
+  consume s1
+}
+
+default role client

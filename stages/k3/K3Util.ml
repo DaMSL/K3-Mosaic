@@ -506,6 +506,95 @@ let string_of_program ?(print_id=false) ?(print_expr_fn=lazy_expr) string_of_met
     ps "["; ps_list ~sep:";" CutLine print_fn ss; ps "]")
   
 
+(***************
+ * Type tags
+ ***************)
+
+let signature_of_type t =
+  let tag d s l = (*(string_of_int d)^*)s^(String.concat "" l) in
+  let tag_t d s l = tag d s ((string_of_int (List.length l))::l) in
+  let rec sig_ct d ct = match ct with
+    | TSet  -> tag d "S" []
+    | TBag  -> tag d "B" []
+    | TList -> tag d "L" []
+  and sig_bt d bt = match bt with
+    | TUnknown              -> tag   d "k" []
+    | TUnit                 -> tag   d "n" []
+    | TBool                 -> tag   d "b" []
+    | TByte                 -> tag   d "y" []
+    | TInt                  -> tag   d "i" []
+    | TFloat                -> tag   d "d" []
+    | TString               -> tag   d "s" []
+    | TMaybe vt             -> tag   d "o" [sig_vt (d+1) vt]
+    | TTuple vtl            -> tag_t d "t" (List.map (sig_vt (d+1)) vtl)
+    | TCollection (ct,et)   -> tag   d "c" [sig_ct (d+1) ct; sig_vt (d+1) et]
+    | TAddress              -> tag   d "a" []
+    | TTarget arg_t         -> tag   d "h" [sig_bt (d+1) arg_t]
+  and sig_mt d mt = match mt with
+    | TMutable    bt -> tag d "M" [sig_bt (d+1) bt]
+    | TImmutable  bt -> tag d "U" [sig_bt (d+1) bt]
+  and sig_vt d vt = match vt with
+    | TIsolated   mt -> tag d "I" [sig_mt (d+1) mt]
+    | TContained  mt -> tag d "C" [sig_mt (d+1) mt]
+  and sig_t d t = match t with
+	  | TFunction (arg_t,ret_t) -> tag d "F" [sig_vt (d+1) arg_t; sig_vt (d+1) ret_t] 
+	  | TValue vt -> tag d "V" [sig_vt (d+1) vt]
+  in sig_t 0 t
+
+let type_of_signature s =
+  let string_of_char c = String.make 1 c in
+  let (>>) f g = fun a -> g (f a) in 
+  let (>>=) f g = fun a -> let b,c = f a in b, (g c) in
+  let (>>>) f g = fun h a -> let b,c = f a in let d,e = g b in d, (h c e) in
+  let n i t = i+1, t in
+  let rec ct_sig s i = match s.[i] with
+    | 'S' -> n i TSet
+    | 'B' -> n i TBag
+    | 'L' -> n i TList
+    | _ -> failwith "invalid tag for collection type"
+
+  and bt_sig s i =
+    match s.[i] with
+    | 'k' -> n i TUnknown
+    | 'n' -> n i TUnit
+    | 'b' -> n i TBool
+    | 'y' -> n i TByte
+    | 'i' -> n i TInt
+    | 'd' -> n i TFloat
+    | 's' -> n i TString
+    | 'o' -> ((vt_sig s) >>= (fun vt -> TMaybe(vt))) (i+1)
+    | 't' -> 
+      let nf = int_of_string (string_of_char s.[i+1])
+      in ((vt_sig_l s (i+2) nf) >> (fun (i,vtl) -> i, TTuple(vtl))) []
+
+    | 'c' -> ((ct_sig s) >>> (vt_sig s)) (fun ct et -> TCollection(ct,et)) (i+1)
+    | 'a' -> n i TAddress
+    | 'h' -> ((bt_sig s) >>= (fun bt -> TTarget(bt))) (i+1) 
+    | _ -> failwith "invalid tag for base type"
+
+  and mt_sig s i = match s.[i] with
+    | 'M' -> ((bt_sig s) >>= (fun bt -> TMutable(bt))) (i+1)
+    | 'U' -> ((bt_sig s) >>= (fun bt -> TImmutable(bt))) (i+1)
+    | _ -> failwith "invalid tag for mutable type"
+
+  and vt_sig s i = match s.[i] with
+    | 'I' -> ((mt_sig s) >>= (fun mt -> TIsolated(mt))) (i+1)
+    | 'C' -> ((mt_sig s) >>= (fun mt -> TContained(mt))) (i+1)
+    | _ -> failwith "invalid tag for value type"
+
+  and vt_sig_l s i n acc = 
+    if n = 0 then i, acc
+    else ((vt_sig s) >> (fun (ni,nt) -> vt_sig_l s (n-1) ni (acc@[nt]))) i 
+  
+  and t_sig s i = match s.[i] with
+    | 'F' -> 
+      ((vt_sig s) >>> (vt_sig s)) (fun arg_t ret_t -> TFunction(arg_t,ret_t)) (i+1)
+
+    | 'V' -> ((vt_sig s) >>= (fun vt -> TValue(vt))) (i+1)
+    | _ -> failwith "invalid tag for type"
+  in snd (t_sig s 0)
+
+
 (* AST constructors / destructors *)
 let decompose_lambda e = List.nth (sub_tree e) 0
 
@@ -532,6 +621,11 @@ let decompose_gbagg e =
 
 let decompose_ifthenelse e =
   let n i = List.nth (sub_tree e) i in (n 0, n 1, n 2)
+
+let decompose_send e = 
+  let n i = List.nth (sub_tree e) i in
+  let rec rest i acc = if i = 1 then acc else rest (i-1) ((n i)::acc)
+  in (n 0, n 1, rest ((List.length (sub_tree e))-1) [])
 
 (* Expression extraction *)
 

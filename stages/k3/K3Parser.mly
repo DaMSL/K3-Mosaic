@@ -116,13 +116,10 @@ program:
 ;
 
 expression_test:
-    | declaration expression_test  { 
-        let l = $2 in
-        let x,y,z = List.hd l in
-        (($1::x), y, z)::(List.tl l)
-      }
     | expr EXPECTED expr                   { [[], $1, $3] }
-    | expr EXPECTED expr expression_test   { [[], $1, $3]@$4 }
+    | program expr EXPECTED expr           { [$1, $2, $4] }
+    | expression_test expression_test      { $1@$2 }
+;
 
 declaration:
     | DECLARE IDENTIFIER COLON type_expr { Global($2, $4, None), [] }
