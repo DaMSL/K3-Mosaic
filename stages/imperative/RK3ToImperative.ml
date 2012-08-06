@@ -103,7 +103,7 @@ let imperative_of_expr_node mk_meta fn_arg_env
 =
   let error s =
     print_endline ("Error building imperative AST: "^s);
-    print_endline (string_of_expr e);
+    print_endline (string_of_expr (fun _ -> "") e);
     failwith ("Error building imperative AST: "^s)
   in
 
@@ -818,7 +818,7 @@ let imperative_of_declaration mk_meta fn_arg_env d =
   
 let imperative_of_program mk_meta p =
   let main_body, decls, _ =
-    List.fold_left (fun (main_cmd_acc, decl_acc, fn_arg_env) d ->
+    List.fold_left (fun (main_cmd_acc, decl_acc, fn_arg_env) (d,_) ->
 	    let d_opt, init_cmds, fn_args = imperative_of_declaration mk_meta fn_arg_env d in
 	    (main_cmd_acc@init_cmds),
 	    (match d_opt with | Some c -> decl_acc@[c] | None -> decl_acc),

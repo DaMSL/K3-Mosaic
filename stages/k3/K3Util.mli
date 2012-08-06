@@ -1,5 +1,8 @@
 open K3
 
+(* Extra type definitions for the parser *)
+type 'a expression_test = 'a program_t * 'a expr_t * 'a expr_t
+
 (* AST accessors *)
 
 val id_of_expr : 'a expr_t -> int 
@@ -46,7 +49,7 @@ val flat_string_of_program: 'a program_t -> string
 (* Pretty stringification, used as the default. *)
 val print_type : type_t -> unit
 val print_arg : arg_t -> unit
-val print_expr : ?print_id:bool -> 'a expr_t -> unit
+val print_expr : ?print_id:bool -> ('a -> string) -> 'a expr_t -> unit
 
 val print_stream : stream_t -> unit
 val print_stream_pattern : stream_pattern_t -> unit
@@ -55,17 +58,17 @@ val string_of_base_type: base_type_t -> string
 val string_of_value_type: value_type_t -> string
 val string_of_type: type_t -> string
 val string_of_arg: arg_t -> string
-val string_of_expr: 'a expr_t -> string
+val string_of_expr: ('a -> string) -> 'a expr_t -> string
 
 val string_of_instruction: instruction_t -> string
 val string_of_stream_statement : stream_statement_t -> string
 val string_of_stream_program : stream_program_t -> string
-val string_of_declaration: 'a declaration_t -> string
+val string_of_declaration: ('a -> string) -> 'a declaration_t -> string
 
 val string_of_program:
   ?print_id:bool ->
-  ?print_expr_fn:(?print_id:bool -> 'a expr_t -> unit Lazy.t)
-  -> 'a program_t -> string
+  ?print_expr_fn:(?print_id:bool -> ('a -> string) -> 'a expr_t -> unit Lazy.t) ->
+  ('a -> string) -> 'a program_t -> string
 
 
 (* AST constructors / destructors *)

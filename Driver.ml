@@ -3,6 +3,7 @@
 open Arg
 open Util
 open K3
+open K3Annotations
 open K3Values
 open K3Util
 open K3Typechecker
@@ -126,7 +127,7 @@ let handle_parse_error lexbuf =
 let handle_type_error p (uuid,error) =
   print_endline "----Type error----";
   print_endline ("Error("^(string_of_int uuid)^"): "^error);
-  print_endline (string_of_program ~print_id:true p);
+  print_endline (string_of_program ~print_id:true (fun _ -> "") p);
   exit 1
 
 (* Program constructors *)
@@ -150,7 +151,7 @@ let typed_program f =
   with TypeError (uuid, error) -> handle_type_error p (uuid, error)
 
 let imperative_program f =
-  RK3ToImperative.imperative_of_program (fun () -> -1) (typed_program f)
+  RK3ToImperative.imperative_of_program (fun () -> []) (typed_program f)
 
 (* TODO *) 
 let repl params = ()
@@ -176,17 +177,19 @@ let print_event_loop (id, (senv, fenv, sbind, instrs)) =
 	print_string (string_of_fsm_env fenv);
 	print_string (string_of_source_bindings sbind)
 
+let string_of_typed_meta (t,a) = string_of_annotations a
+
 let print_k3_program f =
   let tp = typed_program f in
   let event_loops, default = roles_of_program tp in
-    print_endline (string_of_program tp);
+    print_endline (string_of_program string_of_typed_meta tp);
     List.iter print_event_loop event_loops;
     (match default with None -> () | Some x -> print_event_loop ("DEFAULT", x))
 
 let print_reified_k3_program f =
-  let print_expr_fn ?(print_id=false) e = lazy (print_reified_expr (reify_expr [] e)) in
-  let tp = typed_program f
-  in print_endline (string_of_program ~print_expr_fn:print_expr_fn tp)
+  let print_expr_fn ?(print_id=false) string_of_meta e = lazy (print_reified_expr (reify_expr [] e)) in
+  let tp = typed_program f in 
+  print_endline (string_of_program ~print_expr_fn:print_expr_fn string_of_typed_meta tp)
 
 let print_imperative_program f =
   print_endline (ImperativeUtil.string_of_program (imperative_program f))

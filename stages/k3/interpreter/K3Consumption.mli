@@ -29,4 +29,4 @@ val run :
 
 (* Returns a list of K3 roles and a default role if available *)
 val roles_of_program :
-  int tprogram_t -> (id_t * event_loop_t) list * event_loop_t option
+  'a tprogram_t -> (id_t * event_loop_t) list * event_loop_t option

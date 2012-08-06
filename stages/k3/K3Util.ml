@@ -7,6 +7,10 @@ open Tree
 open K3
 
 
+(* Extra type definitions for the parser *)
+type 'a expression_test = 'a program_t * 'a expr_t * 'a expr_t
+
+
 (* TODO: AST constructors *)
 
 
@@ -49,6 +53,8 @@ let typed_vars_of_lambda e =
  * Stringification
  **************************)
 let quote s = "\""^s^"\""
+
+let wrap_unless_empty lb rb s = if s = "" then s else (lb^s^rb)
 
 let string_opt string_f a = match a with
   | Some b -> [string_f b]
@@ -250,7 +256,7 @@ let flat_string_of_stream_program sp =
   "[ "^(String.concat "," (List.map flat_string_of_stream_statement sp))^" ]"
 
 let flat_string_of_declaration d =
-  let string_of_id_and_vtype (id,vt) =
+  let string_of_id_and_vtype (id,vt,_) =
     "("^id^", "^flat_string_of_value_type vt^")"
   in
   match d with
@@ -272,7 +278,7 @@ let flat_string_of_declaration d =
     | DefaultRole (id) -> tag_str "DefaultRole" [id]
 
 let flat_string_of_program ss =
-  tag_str "K3" (List.map flat_string_of_declaration ss)
+  tag_str "K3" (List.map (fun (d,_) -> flat_string_of_declaration d) ss)
 
 
 (****************************
@@ -292,10 +298,12 @@ let rec lazy_base_type bt  = lazy (print_base_type bt)
 and     lazy_value_type vt = lazy (print_value_type vt)
 and     lazy_type t        = lazy (print_type t)
 and     lazy_arg a         = lazy (print_arg a)
-and     lazy_expr ?(print_id=false) e = lazy (print_expr e ~print_id:print_id)
+
+and     lazy_expr ?(print_id=false) string_of_meta e =
+            lazy (print_expr ~print_id:print_id string_of_meta e)
 
 and print_base_type t =
-  let my_tag t lazy_ch_t = pretty_tag_str Hint "" t lazy_ch_t in
+  let my_tag t lazy_ch_t = pretty_tag_str CutHint "" t lazy_ch_t in
   let term_tag t = pretty_tag_term_str t in
   match t with
     | TUnknown  -> term_tag "TUnknown"
@@ -319,20 +327,20 @@ and print_base_type t =
     | TTarget(t) -> my_tag "TTarget" [lazy_base_type t]
 
 and print_mutable_type mt =
-  let my_tag t bt = pretty_tag_str Hint "" t [lazy_base_type bt]
+  let my_tag t bt = pretty_tag_str CutHint "" t [lazy_base_type bt]
   in match mt with
     | TMutable(bt) -> my_tag "TMutable" bt
     | TImmutable(bt) -> my_tag "TImmutable" bt
 
 and print_value_type vt =
   let my_tag t mt =
-    pretty_tag_str Hint "" t [lazy (print_mutable_type mt)]
+    pretty_tag_str CutHint "" t [lazy (print_mutable_type mt)]
   in match vt with
     | TIsolated(mt) -> my_tag "TIsolated" mt
     | TContained(mt) -> my_tag "TContained" mt
 
 and print_type t =
-  let my_tag t lazy_ch_t = pretty_tag_str Hint "" t lazy_ch_t in
+  let my_tag t lazy_ch_t = pretty_tag_str CutHint "" t lazy_ch_t in
   match t with
     | TFunction(t_a, t_r) ->
         my_tag "TFunction" (List.map lazy_value_type [t_a; t_r])
@@ -340,7 +348,7 @@ and print_type t =
     | TValue(t) -> my_tag "TValue" [lazy_value_type t]
 
 and print_arg a =
-  let my_tag t lazy_ch_t = pretty_tag_str Hint "" t lazy_ch_t in
+  let my_tag t lazy_ch_t = pretty_tag_str CutHint "" t lazy_ch_t in
   let print_id_t (id,vt) =
     lazy (ps (id^": "); print_type (TValue vt))
   in
@@ -350,11 +358,11 @@ and print_arg a =
 
 and print_expr_tag tag lazy_children =
   let my_tag ?(lb="(") ?(rb=")") ?(sep=", ") ?(extra="") t =
-    pretty_tag_str ~lb:lb ~rb:rb ~sep:sep Hint extra t lazy_children
+    pretty_tag_str ~lb:lb ~rb:rb ~sep:sep CutHint extra t lazy_children
   in
   let my_tag_list = my_tag ~lb:"([" ~rb:"])" ~sep:"; " in
   let ch_tag cut_t t ch = pretty_tag_str cut_t "" t ch in
-  let extra_tag t extra = pretty_tag_str Hint "" t (extra@lazy_children) in
+  let extra_tag t extra = pretty_tag_str CutHint "" t (extra@lazy_children) in
   match tag with
     | Const(c)  -> ch_tag NoCut "Const" [lps (string_of_const c)]
     | Var(i)    -> ch_tag NoCut "Var" [lps i]
@@ -400,17 +408,23 @@ and print_expr_tag tag lazy_children =
 
     | Send       -> my_tag "Send"
 
-and print_expr ?(print_id=false) expr =
+and print_expr ?(print_id=false) string_of_meta expr =
   let id_pr e = if print_id then print_expr_id @: id_of_expr e else () in
+  let print_meta e =  
+    let m_str = wrap_unless_empty "<" ">" (string_of_meta (meta_of_expr e))
+    in pc(); ps m_str; pc()
+  in
+  let print lazy_ch e =
+    id_pr e;
+    print_expr_tag (tag_of_expr e) (List.flatten lazy_ch);
+    print_meta e
+  in
   let lazy_e = 
-    fold_tree (fun _ _ -> ())
-      (fun _ lazy_ch e ->
-        [lazy (id_pr e; print_expr_tag (tag_of_expr e) (List.flatten lazy_ch))])
-      () [] expr
+    fold_tree (fun _ _ -> ()) (fun _ lazy_ch e -> [lazy (print lazy_ch e)]) () [] expr
   in force (List.hd lazy_e)
 
 let rec print_stream_pattern p =
-  let my_tag = pretty_tag_str Hint "" in
+  let my_tag = pretty_tag_str CutHint "" in
   let lazy_rcr p = lazy (print_stream_pattern p) in 
   let rcr_list l = List.map lazy_rcr l in
   match p with
@@ -421,17 +435,17 @@ let rec print_stream_pattern p =
     | Repeat(p, s)  -> my_tag "Repeat" [lazy_rcr p; lps (string_of_stop_behavior_t s)]
 
 let print_stream s =
-  let my_tag = pretty_tag_str Hint "" in
+  let my_tag = pretty_tag_str CutHint "" in
   match s with
     | Source(i, t, _) -> my_tag "Source" [lps i; lazy_type t]
     | Sink(i, t, _)   -> my_tag "Sink" [lps i; lazy_type t]
     | Derived(id, p)  -> my_tag "Derived" [lps id; lazy (print_stream_pattern p)]
 
 let print_instruction i = match i with
-    | Consume(id) -> pretty_tag_str Line "" "Consume" [lps id]
+    | Consume(id) -> pretty_tag_str CutLine "" "Consume" [lps id]
 
 let print_stream_statement ss =
-  let my_tag = pretty_tag_str Line "" in
+  let my_tag = pretty_tag_str CutLine "" in
   match ss with
     | Stream(s) -> my_tag "Stream" [lazy (print_stream s)]
     | Bind(i, i2)   -> my_tag "Bind" [lps i; lps i2]
@@ -439,25 +453,25 @@ let print_stream_statement ss =
  
 let print_stream_program sp = List.iter print_stream_statement sp
 
-let print_declaration ?(print_id=false) ?(print_expr_fn=lazy_expr) d =
-  let my_tag = pretty_tag_str Line "" in
-  let print_id_vt (id,vt) =
+let print_declaration ?(print_id=false) ?(print_expr_fn=lazy_expr) string_of_meta d =
+  let my_tag = pretty_tag_str CutLine "" in
+  let print_id_vt (id,vt,_) =
     lazy (ps ("("^id^", "); print_value_type vt; ps ")")
   in
   match d with
     | Global(i, t, init) ->
       my_tag "Global"
         ([lps (quote i); lazy_type t]@
-        (lazy_string_opt (print_expr ~print_id:print_id) init))
+        (lazy_string_opt (print_expr ~print_id:print_id string_of_meta) init))
 
     | Foreign(i, t) -> my_tag "Foreign" [lps (quote i); lazy_type t]
 
     | Trigger(i, arg, ds, e) ->
       let trig_decls = 
-        lazy(ps "["; ps_list Line force (List.map print_id_vt ds); ps "]")
+        lazy(ps "["; ps_list CutLine force (List.map print_id_vt ds); ps "]")
       in
       my_tag "Trigger" 
-        [lps (quote i); lazy_arg arg; trig_decls; print_expr_fn ~print_id:print_id e]
+        [lps (quote i); lazy_arg arg; trig_decls; print_expr_fn ~print_id:print_id string_of_meta e]
         
     | Role (id, sp)   -> my_tag "Role" [lps (quote id); lazy(print_stream_program sp)]
 
@@ -469,22 +483,27 @@ let string_of_value_type vt = wrap_formatter (fun () -> print_value_type vt)
 let string_of_type t        = wrap_formatter (fun () -> print_type t)
 
 let string_of_arg a         = wrap_formatter (fun () -> print_arg a)
-let string_of_expr e        = wrap_formatter (fun () -> print_expr e)
 
-let string_of_stream_pattern p  = wrap_formatter (fun () -> print_stream_pattern p)
-let string_of_stream s          = wrap_formatter (fun () -> print_stream s)
+let string_of_expr string_of_meta e =
+  wrap_formatter (fun () -> print_expr string_of_meta e)
 
+let string_of_stream_pattern p    = wrap_formatter (fun () -> print_stream_pattern p)
+let string_of_stream s            = wrap_formatter (fun () -> print_stream s)
 let string_of_instruction i       = wrap_formatter (fun () -> print_instruction i)
 let string_of_stream_statement ss = wrap_formatter (fun () -> print_stream_statement ss) 
 let string_of_stream_program sp   = wrap_formatter (fun () -> print_stream_program sp)
 
-let string_of_declaration d = wrap_formatter (fun () -> print_declaration d)
+let string_of_declaration string_of_meta d =
+  wrap_formatter (fun () -> print_declaration string_of_meta d)
 
-let string_of_program ?(print_id=false) ?(print_expr_fn=lazy_expr) ss =
-  let print_fn =
-    print_declaration ~print_id:print_id ~print_expr_fn:print_expr_fn
+let string_of_program ?(print_id=false) ?(print_expr_fn=lazy_expr) string_of_meta ss =
+  let print_fn (d, meta) =
+    let m_str = wrap_unless_empty "<" ">" (string_of_meta meta) in
+    print_declaration 
+      ~print_id:print_id ~print_expr_fn:print_expr_fn string_of_meta d;
+    (if m_str <> "" then (pc (); ps m_str; pc ()))
   in wrap_formatter (fun () ->
-    ps "["; ps_list ~sep:";" Line print_fn ss; ps "]")
+    ps "["; ps_list ~sep:";" CutLine print_fn ss; ps "]")
   
 
 (* AST constructors / destructors *)

@@ -115,9 +115,11 @@ type stop_behavior_t
 
 type stream_format_t = CSV | JSON
 
-type stream_channel_t
-    = File of stream_format_t * string
-    | Network of stream_format_t * address
+type stream_type_t
+    = File       of string
+    | Network    of address
+
+type stream_channel_t = stream_type_t * stream_format_t
 
 type stream_pattern_t =
     | Terminal      of id_t
@@ -146,9 +148,9 @@ type stream_program_t = stream_statement_t list
 type 'a declaration_t
     = Global        of id_t * type_t  * 'a expr_t option
     | Foreign       of id_t * type_t
-    | Trigger       of id_t * arg_t * (id_t * value_type_t) list * 'a expr_t
+    | Trigger       of id_t * arg_t * (id_t * value_type_t * 'a) list * 'a expr_t
     | Role          of id_t * stream_program_t
     | DefaultRole   of id_t
 
 (* K3 Programs *)
-type 'a program_t = 'a declaration_t list
+type 'a program_t = ('a declaration_t * 'a) list

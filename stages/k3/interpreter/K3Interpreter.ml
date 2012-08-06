@@ -1,6 +1,7 @@
 open Util
 open Tree
 open K3
+open K3Annotations
 open K3Values
 open K3Typechecker
 open K3Util
@@ -88,7 +89,7 @@ let rec eval_fun uuid f =
     )
     | _ -> raise (RuntimeError uuid)
     
-and eval_expr cenv texpr =
+and eval_expr cenv (texpr : annotations_t texpr_t) =
     let ((uuid, tag), (t, _)), children = decompose_tree texpr in
     let t_erroru = t_error uuid in (* pre-curry the type error *)
     let eval_fn = eval_fun uuid in
@@ -484,7 +485,7 @@ let dispatch_foreign id = interpreter_error "foreign functions not implemented"
 (* Returns a trigger evaluator *)
 let prepare_trigger id arg local_decls body =
   fun (m_env, f_env) -> fun a ->
-    let default (id,t) = id, ref (default_isolated_value t) in
+    let default (id,t,_) = id, ref (default_isolated_value t) in
     let local_env = (List.map default local_decls)@m_env, f_env in 
     let _, reval = (eval_fun (-1) (VFunction(arg,body))) local_env a in
     match value_of_eval reval with
@@ -493,7 +494,7 @@ let prepare_trigger id arg local_decls body =
 
 (* Builds a trigger, global value and function environment *)
 let env_of_program k3_program =
-  let env_of_declaration ((trig_env, (m_env, f_env)) as env) d
+  let env_of_declaration ((trig_env, (m_env, f_env)) as env) (d,_)
   = match d with
       K3.Global (id,t,init_opt) ->
         let (rm_env, rf_env), init_val = match init_opt with

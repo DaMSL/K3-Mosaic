@@ -20,26 +20,26 @@ let print_reified_expr t =
         | true, true
         | false, true ->
           begin
-            ps_list Line force lazy_ch;
+            ps_list CutLine force lazy_ch;
             ps ((if decl then "declare" else "assign")^
                 " "^decl_id^" : "^(flat_string_of_type decl_t)^" = ");
-            print_expr expr
+            print_expr (fun _ -> "") expr
           end
          
         | true, false ->
           begin
             ps ("declare "^decl_id^" : "^(flat_string_of_type decl_t)^"\n");
-            ps_list Line force lazy_ch;
+            ps_list CutLine force lazy_ch;
             fnl();
             ps ("reified "^" "^decl_id^" = ");
-            print_expr expr
+            print_expr (fun _ -> "") expr
           end
 
         | false, false ->
           begin
-            ps_list Line force lazy_ch;
+            ps_list CutLine force lazy_ch;
             fnl();
-            print_expr expr
+            print_expr (fun _ -> "") expr
           end)
     t
 
@@ -52,7 +52,7 @@ let is_unit t = match t with
 
 let get_type e =
   try type_of_texpr e 
-  with TypeError _ -> failwith ("type error: "^(string_of_expr e))
+  with TypeError _ -> failwith ("type error: "^(string_of_expr (fun _ -> "") e))
 
 let mk_typed_var id t meta = mk_tree (((0, Var id), meta), []) 
   

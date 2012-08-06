@@ -39,13 +39,13 @@ let string_of_action a = match a with
   | VEOF -> "EOF"
 
 let print_transition (i, (a,n,f)) =
-  ps (string_of_int i); psp(); ps ": "; pc();
+  ps (string_of_int i); ps " : ";
   ps (String.concat ", " [string_of_action a; string_of_int n; string_of_int f])
 
 let print_fsm fsm =
-  ps "[ "; fnl();
-  List.iter (fun t -> pb 2; print_transition t; fnl()) fsm;
-  ps " ]"; fnl()
+  ps "[ ";
+  List.iter (fun t -> ob(); print_transition t; ps "; "; cb()) fsm;
+  ps " ]"
 
 let string_of_fsm fsm = wrap_formatter (fun () -> print_fsm fsm)
 
@@ -73,7 +73,7 @@ let pull_source i t s in_chan =
 		| _ -> raise (StreamError i)
 	in
 	match s with
-	  | File(CSV, _) -> 
+	  | (File _), CSV -> 
 	    (try 
          let next_record = Str.split (Str.regexp ",") (input_line in_chan) in
 	       Some (VTuple(List.map2 value_of_string signature next_record))
@@ -143,13 +143,13 @@ let initialize fsm =
 	    match a with
 	      | VEndpoint(id, t, s, impl) ->
 	        let nsenv, na = match s with
-	          | File(_, filename) ->
+	          | File (filename), _ ->
 	            (try senv, (List.assoc id senv)
 	             with Not_found ->
 	               let ne = VEndpoint(id, t, s, init_file_impl filename impl)
 	               in ((id,ne)::senv), ne)
 	
-	          | _ -> raise (StreamError id) 
+	          | _, _ -> raise (StreamError id) 
 	        in nsenv, (nfsm@[i, (na,n,p)])
 
 	      | _ -> senv, (nfsm@[i, (a,n,p)])
@@ -207,7 +207,7 @@ let roles_of_program k3_program =
       
     | Instruction i -> stream_env, fsm_env, source_bindings, (instructions@[i]) 
   in
-  let event_loop_of_role (env, default) d = match d with
+  let event_loop_of_role (env, default) (d,_) = match d with
     | Role(id, sp) -> (env@[id, List.fold_left event_loop_of_stream_stmt ([],[],[],[]) sp], default)
     | DefaultRole(id) -> 
       (try env, Some(List.assoc id env) with Not_found -> (env, default))  

@@ -607,7 +607,7 @@ let arg_type_of_trigger error_prefix trig_env trig_id =
 
 
 (* Typechecking toplevel API *)
-let triggers_of_program prog = List.fold_left (fun trig_env d -> match d with
+let triggers_of_program prog = List.fold_left (fun trig_env (d,_) -> match d with
 		| Trigger(id, args, locals, body) ->
 		    let t = TValue(canonical @: TTarget(base_of @: deduce_arg_type args))
 		    in (id, t)::trig_env
@@ -621,7 +621,7 @@ let streams_of_roles prog =
   let env_of_statement stream_env ss = match ss with
     | Stream(s) -> (id_and_type_of_stream stream_env s)::stream_env
     | _ -> stream_env
-  in List.fold_left (fun stream_env d -> match d with
+  in List.fold_left (fun stream_env (d,_) -> match d with
     | Role(id,sp) -> (id, List.fold_left env_of_statement [] sp)::stream_env
     | _ -> stream_env
     ) [] prog
@@ -642,7 +642,7 @@ let validate_stream_program_t trig_env stream_env sp =
 
 let deduce_program_type program = 
   let deduce_prog_t trig_env rstream_env prog =
-    fst (List.fold_left (fun (nprog, env) d ->
+    fst (List.fold_left (fun (nprog, env) (d, meta) ->
       let nd, nenv = match d with 
 		    | Global(i, t, Some init) ->
 					let typed_init = try deduce_expr_type trig_env env init
@@ -665,14 +665,17 @@ let deduce_program_type program =
 			            | AVar(i, t) -> [(i, TValue(t))]
 			            | ATuple(its) -> List.map (fun (i, t) -> (i, TValue(t))) its
 			        ) in
-			        let local_bindings = List.map (fun (i, vt) -> (i, TValue(vt))) locals in
+			        let local_bindings = List.map (fun (i, vt, _) -> (i, TValue(vt))) locals in
 			        let inner_env = self_bindings :: arg_bindings @ local_bindings @ env in
 			        let typed_body = deduce_expr_type trig_env inner_env body in
 			        let t_b = type_of_texpr typed_body <| value_of |> t_error (-1) name @:
 			            TBad(type_of_texpr typed_body) in
 			        if not (t_b === canonical TUnit)
 			            then t_error (-1) name (VTMismatch(canonical TUnit, t_b,"")) () 
-			        else (Trigger(id, args, locals, typed_body), self_bindings :: env)
+			        else 
+                let new_locals =
+                  List.map (fun (i,vt,meta) -> (i, vt, (TValue(vt), meta))) locals
+                in (Trigger(id, args, new_locals, typed_body), self_bindings :: env)
 			    with
 			    | TypeError(ast_id, msg) -> 
 			            raise (TypeError(ast_id, "In Trigger "^id^": "^msg)))
@@ -689,7 +692,7 @@ let deduce_program_type program =
           if List.mem_assoc id rstream_env then (DefaultRole(id), env)
           else t_error (-1) "Invalid default role" (TMsg("No role named "^id^" found")) ()
 
-      in (nprog@[nd]), nenv
+      in (nprog@[nd, (TValue(canonical TUnit), meta)]), nenv
     ) ([], []) prog)
   in
 

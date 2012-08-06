@@ -3,6 +3,7 @@
 {
     open K3Parser
     open K3
+    open K3Annotations
 
 		let init_line lexbuf =
 		  let pos = lexbuf.Lexing.lex_curr_p in
@@ -143,6 +144,13 @@ rule tokenize = parse
     | "delete" { DELETE }
 
     | '@' { ANNOTATE }
+
+    | "index"    { INDEX }
+    | "unique"   { UNIQUE }
+    | "ordered"  { ORDERED }
+    | "sorted"   { SORTED }
+    | "effect"   { EFFECT }
+    | "parallel" { PARALLEL }
 
     | identifier as name { IDENTIFIER (name) }
 

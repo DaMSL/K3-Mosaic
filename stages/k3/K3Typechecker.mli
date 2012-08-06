@@ -25,6 +25,14 @@ val t_error : int -> string -> error_type -> unit -> unit
 val type_of_texpr: 'a texpr_t -> type_t
 val meta_of_texpr : 'a texpr_t -> 'a
 
+(* Operators *)
+val (<|): 'a -> ('a -> 'b) -> 'b
+val (|>): ('a -> 'b) -> 'a -> 'b
+
+val (+++): ('b -> 'x -> 'c) -> ('a -> 'x -> 'b) -> 'a -> 'x -> 'c
+val (++%): ('b -> 'x -> 'c) -> ('a -> 'b) -> 'a -> 'x -> 'c
+val (%++): ('b -> 'c) -> ('a -> 'x -> 'b) -> 'a -> 'x -> 'c
+
 (* Type extractors *)
 val collection_of : base_type_t -> (unit -> unit) -> container_type_t * value_type_t
 val mutable_of: value_type_t -> mutable_type_t
@@ -47,9 +55,3 @@ val deduce_expr_type: (id_t * type_t) list -> (id_t * type_t) list -> 'a expr_t 
 
 val deduce_program_type: 'a program_t -> 'a tprogram_t
 
-val (<|): 'a -> ('a -> 'b) -> 'b
-val (|>): ('a -> 'b) -> 'a -> 'b
-
-val (+++): ('b -> 'x -> 'c) -> ('a -> 'x -> 'b) -> 'a -> 'x -> 'c
-val (++%): ('b -> 'x -> 'c) -> ('a -> 'b) -> 'a -> 'x -> 'c
-val (%++): ('b -> 'c) -> ('a -> 'x -> 'b) -> 'a -> 'x -> 'c

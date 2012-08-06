@@ -2,7 +2,7 @@ open Format
 open Lazy
 
 (* Pretty printing helpers *)
-type cut_type = NoCut | Hint | Line
+type cut_type = NoCut | CutHint | CutLine
  
 let ob () = pp_open_hovbox str_formatter 2
 let cb () = pp_close_box str_formatter ()
@@ -14,8 +14,8 @@ let fnl () = pp_force_newline str_formatter ()
 
 let cut c = match c with
   | NoCut -> ()
-  | Hint -> pc ()
-  | Line -> fnl ()
+  | CutHint -> pc ()
+  | CutLine -> fnl ()
 
 let ps_list ?(sep=", ") cut_t f l =
   let n = List.length l in

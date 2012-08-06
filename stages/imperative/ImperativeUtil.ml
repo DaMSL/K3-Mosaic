@@ -56,13 +56,13 @@ and     lazy_cmd c         = lazy (print_cmd c)
 
 and print_type t = match t with
   | TInternal it ->
-    pretty_tag_str Hint "" "TInternal" [lazy (K3Util.print_type it)]
+    pretty_tag_str CutHint "" "TInternal" [lazy (K3Util.print_type it)]
 
   | TNamed id -> pretty_tag_str NoCut "" "TNamed" [lps id]
 
 and print_type_env env =
   ob(); ps "[";
-  ps_list ~sep:";" Hint (fun (id,t) -> ps (id^", "); print_type t) env;
+  ps_list ~sep:";" CutHint (fun (id,t) -> ps (id^", "); print_type t) env;
   ps "]"; cb()
 
 and print_op op =
@@ -78,13 +78,13 @@ and print_op op =
   | Ternary  -> pop "Ternary"
 
 and print_decl_arg da = 
-  let my_tag = pretty_tag_str Hint "" in
+  let my_tag = pretty_tag_str CutHint "" in
   match da with
     Constructor expr_args -> my_tag "Constructor" (List.map lazy_expr expr_args) 
   | Init expr -> my_tag "Init" [lazy_expr expr]
 
 and print_decl d =
-  let my_tag = pretty_tag_str Hint "" in
+  let my_tag = pretty_tag_str CutHint "" in
   match d with
   | DType  (id,t) -> my_tag "DType" [lps id; lazy_type t]
   | DVar (id,t,da_opt) ->
@@ -100,8 +100,8 @@ and print_fn_tag fn_tag = match fn_tag with
   | Send -> ps "send"
  
 and print_expr_tag tag lazy_children =
-  let my_tag t = pretty_tag_str Hint "" t lazy_children in
-  let ch_tag t ch = pretty_tag_str Hint "" t ch in
+  let my_tag t = pretty_tag_str CutHint "" t lazy_children in
+  let ch_tag t ch = pretty_tag_str CutHint "" t ch in
   match tag with
     Const  c  -> ch_tag "Const" [lps (string_of_const c)]
   | Var    id -> ch_tag "Var" [lps id]
@@ -115,11 +115,11 @@ and print_expr e =
     print_expr_tag (tag_of_expr e) (List.flatten lazy_ch)) e
 
 and print_cmd_tag tag lazy_children =
-  let my_tag ?(lb="(") ?(rb=")") ?(sep=", ") ?(cut=Hint) t =
+  let my_tag ?(lb="(") ?(rb=")") ?(sep=", ") ?(cut=CutHint) t =
     pretty_tag_str ~lb:lb ~rb:rb ~sep:sep cut "" t lazy_children
   in
-  let my_tag_list = my_tag ~lb:"([" ~rb:"])" ~sep:"; " ~cut:Line in
-  let ch_tag ?(cut=Hint) t ch = pretty_tag_str cut "" t ch in
+  let my_tag_list = my_tag ~lb:"([" ~rb:"])" ~sep:"; " ~cut:CutLine in
+  let ch_tag ?(cut=CutHint) t ch = pretty_tag_str cut "" t ch in
   match tag with
     Assign (id, e)  -> ch_tag "Assign" [lps id; lazy_expr e] 
   | Decl   d        -> ch_tag "Decl" [lazy_decl d]
@@ -130,7 +130,7 @@ and print_cmd_tag tag lazy_children =
       let lazy_for_args = lazy (
         ps "("; ps id; ps " : "; print_type t;
         pc(); ps " in "; pc(); print_expr e; ps ")")
-      in ch_tag ~cut:Line "For" (lazy_for_args :: lazy_children)
+      in ch_tag ~cut:CutLine "For" (lazy_for_args :: lazy_children)
   
   | IfThenElse pred ->
       ch_tag "IfThenElse" ([lazy_expr pred]@lazy_children)

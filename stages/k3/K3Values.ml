@@ -1,6 +1,7 @@
 open Util
 open Printing
 open K3
+open K3Annotations
 open K3Util
 open K3Typechecker
 
@@ -21,7 +22,7 @@ type value_t
     | VSet of value_t list
     | VBag of value_t list
     | VList of value_t list
-    | VFunction of arg_t * int texpr_t
+    | VFunction of arg_t * annotations_t texpr_t
     | VAddress of address
     | VTarget of id_t
 
@@ -37,6 +38,7 @@ type source_bindings_t = (id_t * id_t) list
 let unwrap opt = match opt with Some v -> v | _ -> failwith "invalid option unwrap"
 
 let rec repr_of_value v =
+  let expr_str = string_of_expr (fun _ -> "") in
     match v with
     | VUnknown  -> "VUnknown"
     | VUnit     -> "VUnit"
@@ -54,7 +56,7 @@ let rec repr_of_value v =
     | VBag vs  -> "VBag(["^ String.concat "; " (List.map repr_of_value vs)^"])"
     | VList vs -> "VList(["^ String.concat "; " (List.map repr_of_value vs)^"])"
     
-    | VFunction (a, b) -> "VFunction("^ string_of_arg a ^" -> "^ string_of_expr b^")"
+    | VFunction (a, b) -> "VFunction("^ string_of_arg a ^" -> "^ expr_str b^")"
     | VAddress (ip,port) -> "VAddress("^ip^":"^ string_of_int port^")"
     | VTarget id -> "VTarget("^id^")"
 
@@ -62,7 +64,7 @@ let rec repr_of_value v =
 let rec print_value v =
   let lazy_value v = lazy(print_value v) in
   let print_collection lb rb vs =
-    pretty_tag_str ~lb:lb ~rb:rb ~sep:"; " Hint "" "" (List.map lazy_value vs)
+    pretty_tag_str ~lb:lb ~rb:rb ~sep:"; " CutHint "" "" (List.map lazy_value vs)
   in
   match v with
   | VUnknown  -> ps "??"
@@ -72,11 +74,11 @@ let rec print_value v =
   | VFloat f  -> ps @: string_of_float f
   | VByte c   -> ps @: string_of_int (Char.code c)
   | VString s -> ps @: String.escaped s
-  | VTuple vs -> pretty_tag_str Hint "" "" (List.map lazy_value vs)
+  | VTuple vs -> pretty_tag_str CutHint "" "" (List.map lazy_value vs)
 
   | VOption vopt ->
     if vopt = None then ps "None"
-    else pretty_tag_str Hint "" "Some" [lazy_value (unwrap vopt)]
+    else pretty_tag_str CutHint "" "Some" [lazy_value (unwrap vopt)]
 
   | VSet vs  -> print_collection "{" "}" vs
   | VBag vs  -> print_collection "{|" "|}" vs
