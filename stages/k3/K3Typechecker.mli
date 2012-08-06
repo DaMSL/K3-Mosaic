@@ -11,6 +11,9 @@ exception TypeError of int * string
 type 'a texpr_t = (type_t * 'a) expr_t
 type 'a tprogram_t = (type_t * 'a) program_t
 
+type type_bindings_t = (id_t * type_t) list
+type event_type_bindings_t = (id_t * (id_t * (type_t list)) list) list
+
 type error_type =
     | TMismatch of type_t * type_t * string
     | VTMismatch of value_type_t * value_type_t * string
@@ -52,6 +55,10 @@ val check_tag_arity: expr_tag_t -> 'child list -> bool
 val deduce_constant_type: int -> (id_t * type_t) list -> constant_t -> value_type_t
 val deduce_arg_type: arg_t -> value_type_t
 val deduce_expr_type: (id_t * type_t) list -> (id_t * type_t) list -> 'a expr_t -> 'a texpr_t
+
+val type_bindings_of_program :
+  'a program_t
+  -> 'a tprogram_t * type_bindings_t * type_bindings_t * event_type_bindings_t
 
 val deduce_program_type: 'a program_t -> 'a tprogram_t
 

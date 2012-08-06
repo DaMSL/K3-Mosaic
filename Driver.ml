@@ -203,11 +203,20 @@ let print params =
   List.iter print_fn params.input_files
 
 (* Test actions *)
+let print_test_case (decls,e,x) =
+  print_endline "----Decls----";
+  print_endline (string_of_program string_of_annotations decls);
+  print_endline "----Expression----";
+  print_endline (string_of_expr string_of_annotations e);
+  print_endline "----Expected----";
+  print_endline (string_of_expr string_of_annotations x)
+
 let test params =
   let test_fn = match params.language with
     | K3 -> (fun f -> 
       let test_triples = parse_expression_test (read_file f) in
       let test_cases = snd (List.fold_left (fun (i, test_acc) (decls, e, x) ->
+          (* print_test_case (decls,e,x); *)
           let name = f^" "^(string_of_int i) in
           let test_case = case name @: eval_test_expr (decls, e) @=? eval_test_expr (decls, x) 
           in i+1, test_acc@[test_case]

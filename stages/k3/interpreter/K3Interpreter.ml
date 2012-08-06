@@ -142,6 +142,12 @@ and eval_expr cenv (texpr : annotations_t texpr_t) =
         | None -> raise (RuntimeError uuid)
       end
     in
+    
+    let remove_from_collection v l =
+      snd (List.fold_left (fun (found, acc) el -> 
+              if (not found) && v = el then (true, acc) else (found, acc@[el])
+           ) (false, []) l)
+    in
 
     (* TODO: byte and string types for binary and comparison operations *)
     let eval_binop bool_op int_op float_op = 
@@ -414,14 +420,15 @@ and eval_expr cenv (texpr : annotations_t texpr_t) =
       modify_collection (fun env parts -> match parts with
         | [VDeclared(c_ref);oldv;newv] ->
           Some(c_ref, preserve_collection (fun l ->
-            (value_of_eval newv)::(List.filter ((=) (value_of_eval oldv)) l)) !c_ref)
+            (value_of_eval newv)::
+              (remove_from_collection (value_of_eval oldv) l)) !c_ref)
         | _ -> None)
 
     | Delete ->
       modify_collection (fun env parts -> match parts with
         | [VDeclared(c_ref);oldv] ->
           Some(c_ref, preserve_collection (fun l ->
-            List.filter ((=) (value_of_eval oldv)) l) !c_ref)
+            remove_from_collection (value_of_eval oldv) l) !c_ref)
         | _ -> None)
       
     (* Messaging *)
@@ -522,6 +529,7 @@ let env_of_program k3_program =
 let eval_instructions env address (stream_env, fsm_env, src_bindings, instructions) =
   let run_instruction i = match i with
     | Consume id ->
+      print_endline ("Consuming from event loop: "^id);
       try
         let fsm = List.assoc id fsm_env in
         let first, next_state = ref true, (ref None) in
@@ -560,7 +568,7 @@ let eval_program address role_opt k3_program =
   let event_loop = interpreter_event_loop role_opt k3_program in 
 		initialize_scheduler address env;
 		eval_instructions env address event_loop;
-		print_program_env env
+    print_endline (string_of_program_env env)
 
 
 (* Distributed program interpretation *)
@@ -571,5 +579,6 @@ let eval_networked_program peer_list k3_program =
   List.iter (fun (addr,role_opt) ->
       let event_loop = interpreter_event_loop role_opt k3_program in
         initialize_scheduler addr env;
-        eval_instructions env addr event_loop
+        eval_instructions env addr event_loop;
+        print_endline (string_of_program_env env)
     ) peer_list

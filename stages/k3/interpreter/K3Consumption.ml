@@ -72,14 +72,16 @@ let pull_source i t s in_chan =
 		| TTuple(ts) -> List.map base_of ts
 		| _ -> raise (StreamError i)
 	in
-	match s with
+  begin 
+    print_endline ("Pulling from source "^i);
+	  match s with
 	  | (File _), CSV -> 
 	    (try 
          let next_record = Str.split (Str.regexp ",") (input_line in_chan) in
 	       Some (VTuple(List.map2 value_of_string signature next_record))
        with End_of_file -> None)
 	  | _ -> raise (StreamError i)
-
+  end
 
 (* Given a source and FSM environment, construct a FSM which can be polled for values. *)
 let compile stream_env fsm_env p =

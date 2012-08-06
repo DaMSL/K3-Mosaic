@@ -95,10 +95,12 @@ let print_binding (id,v) = pc(); ps "id="; ps id; pc(); print_value v
 let print_frame frame = List.iter print_binding frame
   
 let print_env (globals, frames) =
-  ps "----Globals----"; fnl();
-  List.iter print_binding (List.map (fun (id,ref_v) -> id,!ref_v) globals);
-  ps "----Frames----"; fnl();
-  List.iter print_frame frames
+  let len l = string_of_int (List.length l) in
+    ps ("----Globals("^(len globals)^")----"); fnl();
+    List.iter print_binding (List.map (fun (id,ref_v) -> id,!ref_v) globals);
+    fnl();
+    ps ("----Frames("^(len frames)^")----"); fnl();
+    List.iter print_frame frames
 
 let print_trigger_env env =
   List.iter (fun (id,_) -> ps id; fnl()) env
