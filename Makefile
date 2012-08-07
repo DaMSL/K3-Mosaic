@@ -23,6 +23,8 @@ FILES=\
 	stages/imperative/Imperative \
 	stages/imperative/ImperativeUtil \
 	stages/imperative/RK3ToImperative \
+	stages/imperative/CPP \
+	stages/imperative/ImperativeToCPP
 
 TOPLEVEL_FILES=\
 	tests/Testing \
@@ -49,9 +51,16 @@ INCLUDE_OBJ=\
 
 #################################################
 
+#ML_FILES     := $(foreach f,$(FILES),$(wildcard $(f).ml))
+#MLI_FILES    := $(foreach f,$(FILES),$(wildcard $(f).mli))
+#BASE_FILES   := $(patsubst %.ml,%,$(ML_FILES))
+
 BASE_FILES     := $(FILES)
 GENERATED_FILES = $(PARSERS) $(LEXERS) 
 FILES += $(GENERATED_FILES)
+
+#ML_FILES  += $(patsubst %,%.ml,$(GENERATED_FILES))
+#MLI_FILES += $(patsubst %,%.mli,$(GENERATED_FILES))
 
 BC_FILES    =$(patsubst %,%.cmo,$(FILES))
 BC_INCLUDES =$(patsubst %,%.cmi,$(FILES))
@@ -170,7 +179,6 @@ $(TEST_BINARIES) : bin/% : %.ml
 # object files
 $(BC_INCLUDES) :
 $(NC_INCLUDES) : 
-
 $(TEST_INCLUDES) :
 
 #################################################
