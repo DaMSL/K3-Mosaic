@@ -64,11 +64,10 @@ let node_to_ip node = node
  * Like bmod, dims are ordered by their position in the list
  *)
 let calc_dim_bounds bmod =
-  let calc = List.fold_left 
+  fst @: List.fold_left 
     (fun (xs,acc) (pos, bin_size) -> (xs@[pos, acc], bin_size * acc)) 
     ([],1) 
     bmod
-  in fst calc
  
   (* run over the m_key input and calculate the value that the bound variables contribute
   * the bound values serve as our constant. We can pre-calculate their contribution 
@@ -141,7 +140,7 @@ let full_bucket_calc dim_bounds unbound_bucket bound_bucket : int =
 (* We now add in the value of the bound variables as a constant
  * and calculate the result for every possibility
  *)
-let calc_unbound_ip_list bound_bucket unbound_cart_prod dim_bounds num_of_nodes = 
+let calc_unbound_ip_list bound_bucket unbound_cart_prod dim_bounds = 
   (* calculate a single bucket using the whole key. Our unbound values
    * don't need to be hashed because they just take all possibilities *)
   let ip_list = 
@@ -172,7 +171,7 @@ let route (bmod:(int * int) list) (num_of_nodes:int) (key:int option list) =
   let bound_bucket = calc_bound_bucket bmod dim_bounds key in
   let unbound_domains = calc_unbound_domains bmod key in
   let unbound_cart_prod = calc_unbound_cart_prod unbound_domains in
-  calc_unbound_ip_list bound_bucket unbound_cart_prod dim_bounds num_of_nodes
+  calc_unbound_ip_list bound_bucket unbound_cart_prod dim_bounds 
 	
 (* Returns a list of ip, tuple pairs.
  *

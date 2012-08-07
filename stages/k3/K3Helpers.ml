@@ -132,8 +132,8 @@ let mk_flatten collection = mk_stree Flatten [collection]
 let mk_agg agg_fun init collection =
     mk_stree Aggregate [agg_fun; init; collection]
 
-let mk_gbagg agg_fun group_fun init collection =
-    mk_stree GroupByAggregate [agg_fun; group_fun; init; collection]
+let mk_gbagg group_fun agg_fun init collection =
+    mk_stree GroupByAggregate [group_fun; agg_fun; init; collection]
 
 let mk_sort collection compare_fun =
     mk_stree Sort [collection; compare_fun]
@@ -260,6 +260,13 @@ let mk_let_many var_name_and_type_list var_values expr =
             (expr)
         )
         (var_values)
+
+let mk_fst tuple_types tuple =
+    mk_let_many (list_zip ["__fst";"__snd"] tuple_types) tuple (mk_var "__fst")
+
+let mk_snd tuple_types tuple =
+    mk_let_many (list_zip ["__fst";"__snd"] tuple_types) tuple (mk_var "__snd")
+
 
 (* Functions to manipulate tuples in K3 code *)
 type tuple_pat = Position of int | ExternVar of id_t | Unknown
