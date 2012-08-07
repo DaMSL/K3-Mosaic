@@ -7,6 +7,15 @@ open K3Typechecker
 open ReifiedK3
 open Imperative
 
+module Make = functor (Lang : TargetLanguage) ->
+struct
+
+(* Import AST and utilities *)
+module ASTImport = struct module AST = Imperative.AST(Lang) end
+open ASTImport.AST
+
+module U = ImperativeUtil.Util(Lang)
+
 (* Helpers *)
 
 let init l = List.rev (List.tl (List.rev l))
@@ -89,7 +98,7 @@ let mk_block meta sub = match sub with
   | [x] -> x
   | _ -> mk_cmd Block meta sub
  
-let mk_for meta id t e body = mk_cmd (For (id,t,e)) meta body
+let mk_for meta id t e body = mk_cmd (Foreach (id,t,e)) meta body
 
 let mk_ifelse meta pred branches = mk_cmd (IfThenElse pred) meta branches
 
@@ -106,18 +115,18 @@ let imperative_of_expr_node mk_meta fn_arg_env
     print_endline (string_of_expr (fun _ -> "") e);
     failwith ("Error building imperative AST: "^s)
   in
-
-  let e_meta = meta_of_texpr e in
   
+  let e_meta = meta_of_texpr e in
+
   (* TODO: unify with typechecker errors *)
   let type_failure () = failwith "invalid type" in
 
   let vars_of_pair ec_pair =
     let vars_of_da da = match da with
-      | Init(e) -> ImperativeUtil.var_ids_of_expr e
-      | Constructor exprs -> List.flatten (List.map ImperativeUtil.var_ids_of_expr exprs)
+      | Init(e) -> U.var_ids_of_expr e
+      | Constructor exprs -> List.flatten (List.map U.var_ids_of_expr exprs)
     in
-    let vars_of_cmds cmds = List.flatten (List.map ImperativeUtil.var_ids_of_cmd cmds)
+    let vars_of_cmds cmds = List.flatten (List.map U.var_ids_of_cmd cmds)
     in unwrap_pair
          (fun da -> vars_of_da da)
          (fun cmds -> vars_of_cmds cmds)
@@ -269,7 +278,7 @@ let imperative_of_expr_node mk_meta fn_arg_env
     
     (* Global functions yield vars *)
     | Init(e) ->
-      begin match ImperativeUtil.tag_of_expr e with
+      begin match U.tag_of_expr e with
         | Var fn -> Init(mk_fn (mk_meta()) (Named fn) fn_args)
         | _ -> Init(e)
       end
@@ -304,7 +313,7 @@ let imperative_of_expr_node mk_meta fn_arg_env
     let acc_cmds = unwrap_pair 
       (fun da -> 
         let applied_expr = apply_if_function da bound_vars in
-        match ImperativeUtil.tag_of_expr applied_expr with
+        match U.tag_of_expr applied_expr with
           | Fn _ -> [expr_cmd applied_expr] (* Global function invocation *)
           | _ -> [] (* Everything else *)
       )
@@ -388,7 +397,7 @@ let imperative_of_expr_node mk_meta fn_arg_env
     (* Bindings helpers *) 
     let needs_bindings tvars arg_exprs =
       let arg_ids = List.flatten (List.map (fun e ->
-        match ImperativeUtil.tag_of_expr e with | Var id -> [id] | _ -> []
+        match U.tag_of_expr e with | Var id -> [id] | _ -> []
         ) arg_exprs)
       in
       let arg_matches = List.length (List.filter (fun (id,t) -> List.mem id arg_ids) tvars) in
@@ -397,7 +406,7 @@ let imperative_of_expr_node mk_meta fn_arg_env
       else arg_matches = 0
     in
     let get_arg_cmds is_global_fn arg_pair =
-      let unwrap_if_tuple e = match ImperativeUtil.tag_of_expr e with
+      let unwrap_if_tuple e = match U.tag_of_expr e with
         | Tuple -> sub_tree e
         | _ -> [e]
       in  
@@ -438,7 +447,7 @@ let imperative_of_expr_node mk_meta fn_arg_env
       
       (* Global function calls *)
       | [(Some(Init(e)), None); arg_pair] ->
-        begin match ImperativeUtil.tag_of_expr e with
+        begin match U.tag_of_expr e with
           | Var fn ->
             let arg_cmds, possible_args = get_arg_cmds true arg_pair in 
             let fn_args = match possible_args with
@@ -723,18 +732,18 @@ let imperative_of_expr mk_meta fn_arg_env
         if not assign then (d_f (Some da))@cmds
         else
           let e = expr_of_decl_args da
-          in (d_f None)@cmds@[mk_assign (ImperativeUtil.meta_of_expr e) id e])
+          in (d_f None)@cmds@[mk_assign (U.meta_of_expr e) id e])
       node_pair
   in
   let assign_if_expr id t node_pair =
     unwrap_pair
       (fun da ->
         let e = expr_of_decl_args da
-        in [mk_assign (ImperativeUtil.meta_of_expr e) id e])
+        in [mk_assign (U.meta_of_expr e) id e])
       (fun cmds -> cmds)
       (fun da cmds ->
         let e = expr_of_decl_args da
-        in cmds@[mk_assign (ImperativeUtil.meta_of_expr e) id e])
+        in cmds@[mk_assign (U.meta_of_expr e) id e])
       node_pair
   in
   let ensure_cmd node_pair = match node_pair with
@@ -774,7 +783,7 @@ let imperative_of_stream_statement mk_meta ss = match ss with
   | Instruction i -> imperative_of_instruction mk_meta i
 
 
-let imperative_of_declaration mk_meta fn_arg_env d =
+let imperative_of_declaration mk_meta fn_arg_env (d,m) =
   let is_function t = match t with | TFunction _ -> true | _ -> false in
   let decompose_function_type t = match t with 
     | TFunction (arg,ret) -> arg, ret
@@ -795,14 +804,14 @@ let imperative_of_declaration mk_meta fn_arg_env d =
             in
             let cmds = cmds_of_reified_expr e in
             let fn_body = [mk_block (mk_meta()) cmds]
-            in Some(DFn(id, arg, TInternal(TValue ret_t), fn_body)), [], [id,arg]
+            in Some(DFn(id, arg, TInternal(TValue ret_t), fn_body), m), [], [id,arg]
           | _ -> failwith "invalid function body"
         end
       else
         let cmds = match init with
           | Some(e) -> cmds_of_reified_expr e
           | _ -> [] 
-        in Some(DVar(id, TInternal(t), None)), cmds, []
+        in Some(DVar(id, TInternal(t), None), m), cmds, []
         
   | Foreign (id,t) ->
     (* TODO: special handling for fixed foreign functions *) 
@@ -814,15 +823,15 @@ let imperative_of_declaration mk_meta fn_arg_env d =
   | Trigger (id,a,decls,body) ->
     let cmds = cmds_of_reified_expr body in
     let trig_body = [mk_block (mk_meta()) cmds]
-    in Some(DFn(id, a, TInternal(TValue(canonical TUnit)), trig_body)), [], [id,a]
+    in Some(DFn(id, a, TInternal(TValue(canonical TUnit)), trig_body), m), [], [id,a]
 
   | Role (id, sp) -> failwith "stream programs not implemented"
   | DefaultRole(id) -> failwith "stream programs not implemented"
   
 let imperative_of_program mk_meta p =
   let main_body, decls, _ =
-    List.fold_left (fun (main_cmd_acc, decl_acc, fn_arg_env) (d,_) ->
-	    let d_opt, init_cmds, fn_args = imperative_of_declaration mk_meta fn_arg_env d in
+    List.fold_left (fun (main_cmd_acc, decl_acc, fn_arg_env) (d,m) ->
+	    let d_opt, init_cmds, fn_args = imperative_of_declaration mk_meta fn_arg_env (d, snd m) in
 	    (main_cmd_acc@init_cmds),
 	    (match d_opt with | Some c -> decl_acc@[c] | None -> decl_acc),
 	    (fn_arg_env@fn_args)
@@ -830,4 +839,6 @@ let imperative_of_program mk_meta p =
   in
   let int_t = TInternal (TValue (canonical TInt)) in
   let main_fn = DFn("main", AVar("argc", (canonical TInt)), int_t, main_body) 
-  in decls@[main_fn]
+  in decls@[main_fn, mk_meta()]
+
+end

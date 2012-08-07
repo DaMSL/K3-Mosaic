@@ -34,13 +34,10 @@ role client {
   source s3: (int,int) = file(csv, "s3.csv")
   
   pattern one_of_all_s = s1 s2 s3
-  
   pattern repeat_one_s = ( s1 | s2 | s3 ) *
   
   bind s1 -> on_event
-  
   bind one_of_all_s -> on_event
-  
   bind repeat_one_s -> on_event
 }
 

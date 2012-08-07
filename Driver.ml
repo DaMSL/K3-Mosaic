@@ -12,6 +12,11 @@ open K3Interpreter
 open Testing
 open ReifiedK3
 
+(* Note these override module names *)
+module Imperative = Imperative.AST(CPP.CPPTarget)
+module ImperativeUtil = ImperativeUtil.Util(CPP.CPPTarget)
+module RK3ToImperative = RK3ToImperative.Make(CPP.CPPTarget)
+
 (* Helpers *)
 let error s = prerr_endline s; exit 1
 
@@ -187,12 +192,13 @@ let print_k3_program f =
     (match default with None -> () | Some x -> print_event_loop ("DEFAULT", x))
 
 let print_reified_k3_program f =
-  let print_expr_fn ?(print_id=false) string_of_meta e = lazy (print_reified_expr (reify_expr [] e)) in
+  let print_expr_fn ?(print_id=false) string_of_meta e =
+    lazy (print_reified_expr (reify_expr [] e)) in
   let tp = typed_program f in 
   print_endline (string_of_program ~print_expr_fn:print_expr_fn string_of_typed_meta tp)
 
 let print_imperative_program f =
-  print_endline (ImperativeUtil.string_of_program (imperative_program f))
+  print_endline (ImperativeUtil.string_of_program string_of_annotations (imperative_program f))
 
 let print params =
   let print_fn = match params.language with
