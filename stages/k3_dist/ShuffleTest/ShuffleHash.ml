@@ -141,8 +141,6 @@ let full_bucket_calc dim_bounds unbound_bucket bound_bucket : int =
  * and calculate the result for every possibility
  *)
 let calc_unbound_ip_list bound_bucket unbound_cart_prod dim_bounds = 
-  (* calculate a single bucket using the whole key. Our unbound values
-   * don't need to be hashed because they just take all possibilities *)
   let ip_list = 
     group_by_aggregate (fun acc ip -> ip::acc) [] (fun ip -> ip) @:
       List.map

@@ -178,6 +178,10 @@ let strip_args arg = match arg with
     | ATuple(list_x) -> list_x
     | AVar(id, typ) -> [(id, typ)]
 
+(* check if a collection is empty *)
+let mk_is_empty collection typ =
+  mk_eq collection @: mk_empty typ
+
 (* checks if a member of a collection is present *)
 let mk_has_member collection pattern member_type = 
     mk_neg @: mk_eq (mk_slice collection pattern) 
