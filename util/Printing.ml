@@ -3,14 +3,16 @@ open Lazy
 
 (* Pretty printing helpers *)
 type cut_type = NoCut | CutHint | CutLine
+
+let formatter = ref (stdbuf, str_formatter);;
  
-let ob () = pp_open_hovbox str_formatter 2
-let cb () = pp_close_box str_formatter ()
-let pc () = pp_print_cut str_formatter ()
-let pb i = pp_print_break str_formatter 0 i
-let ps s = pp_print_string str_formatter s
-let psp () = pp_print_space str_formatter ()
-let fnl () = pp_force_newline str_formatter ()
+let ob () = pp_open_hovbox (snd !formatter) 2
+let cb () = pp_close_box (snd !formatter) ()
+let pc () = pp_print_cut (snd !formatter) ()
+let pb i = pp_print_break (snd !formatter) 0 i
+let ps s = pp_print_string (snd !formatter) s
+let psp () = pp_print_space (snd !formatter) ()
+let fnl () = pp_force_newline (snd !formatter) ()
 
 let cut c = match c with
   | NoCut -> ()
@@ -39,7 +41,19 @@ let pretty_tag_str ?(lb="(") ?(rb=")") ?(sep=", ") cut_t extra t ch_lazy_t =
     cb()
   end
 
-let wrap_formatter print_fn =
-  pp_set_margin str_formatter 120;
-  print_fn ();
-  flush_str_formatter ()
+let wrap_formatter ?(fresh=false) print_fn =
+  let print () =
+	  pp_set_margin (snd !formatter) 120;
+	  print_fn ();
+	  pp_print_flush (snd !formatter) ();
+    let r = Buffer.contents (fst !formatter)
+    in Buffer.clear (fst !formatter); r
+  in
+  if fresh then
+    let buffer = Buffer.create 120 in
+    let saved_formatter = !formatter in
+    formatter := (buffer, formatter_of_buffer buffer);
+    let r = print ()
+    in formatter := saved_formatter; r
+  
+  else print()

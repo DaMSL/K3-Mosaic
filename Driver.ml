@@ -17,16 +17,22 @@ module Imperative = Imperative.AST(CPP.CPPTarget)
 module ImperativeUtil = ImperativeUtil.Util(CPP.CPPTarget)
 module RK3ToImperative = RK3ToImperative.Make(CPP.CPPTarget)
 
+module CPPExt = CPP.CPPTarget
+module CPPAST = CPP.CPPTarget.ASTImport
+open ImperativeToCPP
+
+
 (* Helpers *)
 let error s = prerr_endline s; exit 1
 
 (* Compilation languages *)
-type language_t = K3 | ReifiedK3 | Imperative
+type language_t = K3 | ReifiedK3 | Imperative | CPP
 
 let language_descriptions = [
     K3,         "k3",  "K3";
     ReifiedK3,  "rk3", "Reified K3";
-    Imperative, "imp", "Imperative"
+    Imperative, "imp", "Imperative";
+    CPP,        "cpp", "C++";
   ]
 
 let format_language_description (lang_t, short_desc, long_desc) =
@@ -41,6 +47,7 @@ let parse_language s = match String.lowercase s with
   | "k3" -> K3
   | "rk3" -> ReifiedK3
   | "imp" -> Imperative
+  | "cpp" -> CPP
   | _ -> error ("Invalid output language: "^s)
 
 (* Actions *)
@@ -157,6 +164,11 @@ let typed_program f =
 
 let imperative_program f =
   RK3ToImperative.imperative_of_program (fun () -> []) (typed_program f)
+  
+let cpp_program f = 
+  let mk_meta() = [] in
+  cpp_of_imperative
+    (RK3ToImperative.imperative_of_program mk_meta (typed_program f))
 
 (* TODO *) 
 let repl params = ()
@@ -198,13 +210,21 @@ let print_reified_k3_program f =
   print_endline (string_of_program ~print_expr_fn:print_expr_fn string_of_typed_meta tp)
 
 let print_imperative_program f =
-  print_endline (ImperativeUtil.string_of_program string_of_annotations (imperative_program f))
+  let string_of_meta m = (ImperativeUtil.string_of_type ~fresh:true (fst m))^";"^
+                         (string_of_annotations (snd m))
+  in print_endline (ImperativeUtil.string_of_program string_of_meta (imperative_program f))
+
+let print_cpp_program f = 
+  let string_of_meta m = (ImperativeUtil.string_of_type ~fresh:true (fst m))^";"^
+                         (string_of_annotations (snd m))
+  in print_endline (ImperativeUtil.string_of_program string_of_meta (cpp_program f))
 
 let print params =
   let print_fn = match params.language with
     | K3 -> print_k3_program
     | ReifiedK3 -> print_reified_k3_program
     | Imperative -> print_imperative_program
+    | CPP -> print_cpp_program
   in
   List.iter print_fn params.input_files
 

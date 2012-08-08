@@ -20,7 +20,8 @@ struct
 	type type_t =
 	    TInternal of K3.type_t
 	  | TNamed    of id_t
-	  | TExt of T.ext_type_t
+    | TMap      of type_t * type_t
+	  | TExt      of T.ext_type_t
 	
 	type type_decl_t =
 	    TExpr      of type_t
@@ -59,11 +60,11 @@ struct
 
     | CFExt of T.ext_collection_fn_t
 	
-	and composite_fn_t = Position of int | Field of id_t
+	and member_access_fn_t = Position of int | Field of id_t
 	
 	and fn_t =
 	    Collection of collection_fn_t
-	  | Composite  of composite_fn_t
+	  | Member     of member_access_fn_t
 	  | Named      of id_t
 	  | Send       of id_t (* type tag *)
     | FExt  of T.ext_fn_t
@@ -104,7 +105,7 @@ module type IAST = sig
   type 'a decl_t
   type    op_t
   type    collection_fn_t
-  type    composite_fn_t
+  type    member_access_fn_t
   type    fn_t
   type    expr_tag_t
   type 'a expr_t

@@ -2,14 +2,70 @@
 open Printing
 open K3
 
+(* A CPP AST with exposed constructors.
+ * This must be a subtype of Imperative.TargetLanguage *)
+module type CPPAST = sig
+  
+  (* Local module definition to allow AST types to be used in exposed extensions *)
+  module ASTImport : Imperative.IAST
+  open ASTImport
+
+	type ext_type_t =
+	  | TIterator of type_t
+	  | TPair     of type_t * type_t
+	
+	type bmi_extractor_t =
+	  | BMIMember of type_t * id_t
+	  | BMIComposite of bmi_extractor_t list
+	
+	type ext_type_decl_t =
+	    (* Element type id * (index tag type ids * unique * sorted * extractor) list *)
+	  | TBoostMultiIndex of id_t * (id_t * bool * bool * bmi_extractor_t) list 
+	
+	type ext_collection_fn_t =
+	  | GetIndex  of id_t     (* index tag type id *)
+	  | BeginIterator
+	  | EndIterator
+	  | Copy
+	  | Clear
+	
+	type ext_fn_t =
+	  | IteratorElement
+	  | IteratorIncrement
+	  | IteratorDecrement
+	  | PairFirst
+	  | PairSecond
+	
+	type 'a ext_cmd_t = 
+	    (* Three place for loop, with init, test and advance expressions.
+	     * The loop body is an imperative child of this command. *) 
+	  | For of 'a expr_t option * 'a expr_t option * 'a expr_t option
+	
+	    (* A do-while loop with a post-test predicate. The loop body is a child
+	     * of this imperative command. *)
+	  | DoWhile of 'a expr_t
+
+  val print_ext_type            : ext_type_t -> unit
+  val print_ext_type_decl       : ext_type_decl_t -> unit
+  val print_ext_collection_fn   : ext_collection_fn_t -> unit
+  val print_ext_fn              : ext_fn_t -> unit
+  val print_ext_cmd             : ('a -> string) -> 'a ext_cmd_t -> unit
+
+end
+
 (* Using mutually recursive modules allows us to extend the imperative
  * AST and simultaneously use its types as part of our extension *) 
 module rec CPPImpl : Imperative.Export with module AST = Imperative.AST(CPPTarget)
  = struct module AST = Imperative.AST(CPPTarget) end 
 
-and CPPTarget : Imperative.TargetLanguage = struct
+(* A CPP AST implementation, with base AST types exposed as an imperative AST *)
+and CPPTarget : CPPAST with module ASTImport = CPPImpl.AST = struct
 
-open CPPImpl.AST
+(* Open AST types for use internally in this module *)
+module ASTImport = CPPImpl.AST
+open ASTImport
+
+(* Open AST utility functions for use internally in this module *)
 module U = ImperativeUtil.Util(CPPTarget)
 open U
   
@@ -22,8 +78,8 @@ type bmi_extractor_t =
   | BMIComposite of bmi_extractor_t list
 
 type ext_type_decl_t =
-    (* Type id * list of index tag type ids, and extractors *)
-  | TBoostMultiIndex of id_t * (id_t * bmi_extractor_t) list 
+    (* Element type id * (index tag type ids * unique * sorted * extractor) list *)
+  | TBoostMultiIndex of id_t * (id_t * bool * bool * bmi_extractor_t) list 
 
 type ext_collection_fn_t =
   | GetIndex  of id_t     (* index tag type id *)

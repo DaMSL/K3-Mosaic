@@ -45,7 +45,7 @@ let string_of_collection_fn_tag coll_fn = match coll_fn with
   | Find -> "Find"
   | CFExt _ -> "CFExt"
 
-let string_of_composite_fn_tag comp_fn = match comp_fn with
+let string_of_member_access_fn_tag comp_fn = match comp_fn with
   | Position i -> "Position("^(string_of_int i)^")"
   | Field id -> "Field("^id^")"
 
@@ -71,6 +71,7 @@ and print_type t =
   match t with
   | TInternal it -> ptag "TInternal" [lazy (K3Util.print_type it)]
   | TNamed id    -> ptag ~cut:NoCut "TNamed" [lps id]
+  | TMap (k_t,v_t) -> ptag "TMap" [lazy (print_type k_t); lazy (print_type v_t)]
   | TExt e  -> ptag "TExt" [lazy (print_ext_type e)]
 
 and print_type_env env =
@@ -98,7 +99,7 @@ and print_decl_arg string_of_meta da =
 
 and print_type_decl td =
   let my_tag = pretty_tag_str CutHint "" in
-  let print_fields l = List.iter (fun (id,t) -> ps id; ps " : "; print_type t) l in
+  let print_fields l = List.iter (fun (id,t) -> psp(); ps id; ps " : "; print_type t; ps ";") l in
   match td with
     | TExpr t -> my_tag "TExpr" [lazy_type t]
     | TComposite t_fields -> my_tag "TComposite" [lazy (print_fields t_fields)]
@@ -120,7 +121,7 @@ and print_fn_tag fn_tag =
   let my_tag = pretty_tag_str CutHint "" in
   match fn_tag with
   | Collection coll_fn -> ps (string_of_collection_fn_tag coll_fn)
-  | Composite comp_fn -> ps (string_of_composite_fn_tag comp_fn)
+  | Member macc_fn -> ps (string_of_member_access_fn_tag macc_fn)
   | Named id -> ps id
   | Send id -> ps ("send_"^id)
   | FExt f -> my_tag "FExt" [lazy (print_ext_fn f)]
@@ -137,8 +138,10 @@ and print_expr_tag string_of_meta tag lazy_children =
   | Fn     fn_tag -> ch_tag "Fn" ([lazy (print_fn_tag fn_tag)]@lazy_children)
 
 and print_expr string_of_meta e =
+  let m_str m = wrap_unless_empty "<" ">" (string_of_meta m) in
   print_tree (fun lazy_ch e ->
-    print_expr_tag string_of_meta (tag_of_expr e) (List.flatten lazy_ch)) e
+    print_expr_tag string_of_meta (tag_of_expr e) (List.flatten lazy_ch);
+    ps ";"; pc(); ps (m_str (meta_of_expr e))) e
 
 and print_cmd_tag string_of_meta tag lazy_children =
   let my_tag ?(lb="(") ?(rb=")") ?(sep=", ") ?(cut=CutHint) t =
@@ -164,22 +167,21 @@ and print_cmd_tag string_of_meta tag lazy_children =
   | CExt c -> ch_tag "CExt" [lazy (print_ext_cmd string_of_meta c)]
 
 and print_cmd string_of_meta c =
+  let m_str m = wrap_unless_empty "<" ">" (string_of_meta m) in
   print_tree (fun lazy_ch c ->
-    print_cmd_tag string_of_meta (tag_of_cmd c) (List.flatten lazy_ch)) c
+    print_cmd_tag string_of_meta (tag_of_cmd c) (List.flatten lazy_ch);
+    ps ";"; pc(); ps (m_str (meta_of_cmd c))) c
 
 let print_program string_of_meta p =
   let m_str m = wrap_unless_empty "<" ">" (string_of_meta m) in
   ob(); ps "["; fnl();
   List.iter (fun (d,m) ->
-    print_decl string_of_meta d; ps ";"; ps (m_str m); fnl()) p;
+    print_decl string_of_meta d; ps ";"; pc(); ps (m_str m); fnl()) p;
   ps "]"; cb()
 
-let wrap_formatter print_fn =
-  pp_set_margin str_formatter 120;
-  print_fn ();
-  flush_str_formatter ()
 
-let string_of_type t = wrap_formatter (fun () -> print_type t)
+let string_of_type ?(fresh=false) t =
+  wrap_formatter ~fresh:fresh (fun () -> print_type t)
 
 let string_of_decl string_of_meta d =
   wrap_formatter (fun () -> print_decl string_of_meta d)
