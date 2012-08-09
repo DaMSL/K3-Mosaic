@@ -14,6 +14,7 @@ FILES=\
 	stages/k3/K3Helpers \
 	stages/k3/K3Typechecker \
 	stages/k3/K3Values \
+	stages/k3/K3Streams \
 	stages/k3/interpreter/K3Consumption \
 	stages/k3/interpreter/K3Runtime \
 	stages/k3/interpreter/K3Interpreter \

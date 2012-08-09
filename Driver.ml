@@ -7,6 +7,7 @@ open K3Annotations
 open K3Values
 open K3Util
 open K3Typechecker
+open K3Streams
 open K3Consumption
 open K3Interpreter
 open Testing
