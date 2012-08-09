@@ -85,6 +85,8 @@ sig
 	and 'a expr_t = ((int * expr_tag_t) * 'a) tree_t 
 	
 	(* Command types *)
+  (* TODO: add a return command, or our functions cannot safely return a value *)
+  (* TODO: add a general unbounded loop for stream programs *)
 	and 'a cmd_tag_t =
 	    Assign     of id_t * 'a expr_t 
 	  | Decl       of 'a decl_t

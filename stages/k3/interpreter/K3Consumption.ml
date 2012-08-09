@@ -72,6 +72,13 @@ let rec run fsm_env fsm state_opt =
         v, (if v = None then Some fail else Some next)
 
       | ADerived (id) -> 
+        (* TODO: this may yield a next state in the derived FSM. We should try
+         * to use that state id in this FSM, thus we should also return the FSM
+         * id associated with the returned next state.
+         *
+         * Also, on success (i.e., Some(v), None) jump to the success state,
+         * and on fail (i.e., None, None) jump to the fail state
+         *)
         (try run fsm_env (List.assoc id fsm_env) None
          with Not_found -> failwith ("invalid derived state "^id)) 
 

@@ -138,9 +138,12 @@ let roles_of_program k3_program =
     | Instruction i -> stream_env, fsm_env, source_bindings, (instructions@[i]) 
   in
   let event_loop_of_role (env, default) (d,_) = match d with
-    | Role(id, sp) -> (env@[id, List.fold_left event_loop_of_stream_stmt ([],[],[],[]) sp], default)
+    | Role(id, sp) -> 
+      (env@[id, List.fold_left event_loop_of_stream_stmt ([],[],[],[]) sp], default)
+    
     | DefaultRole(id) -> 
-      (try env, Some(List.assoc id env) with Not_found -> (env, default))  
+      (try env, Some(id, List.assoc id env) with Not_found -> (env, default))  
+    
     | _ -> env, default
   in 
   List.fold_left event_loop_of_role ([], None) k3_program

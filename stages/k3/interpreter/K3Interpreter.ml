@@ -556,9 +556,9 @@ let interpreter_event_loop role_opt k3_program =
   let get_role role fail_f = try List.assoc role roles with Not_found -> fail_f () in
   let s,f,b,i =
     match role_opt, default_role with
-      | Some x, Some y -> get_role x (fun () -> y)
+      | Some x, Some (_,y) -> get_role x (fun () -> y)
       | Some x, None -> get_role x error 
-      | None, Some y -> y
+      | None, Some (_,y) -> y
       | None, None -> error ()
   in
 	let nf = List.map (fun (id,fsm) -> id, (initialize fsm)) f

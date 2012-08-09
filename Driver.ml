@@ -210,7 +210,7 @@ let print_k3_program f =
   let event_loops, default = roles_of_program tp in
     print_endline (string_of_program string_of_typed_meta tp);
     List.iter print_event_loop event_loops;
-    (match default with None -> () | Some x -> print_event_loop ("DEFAULT", x))
+    (match default with None -> () | Some (_,x) -> print_event_loop ("DEFAULT", x))
 
 let print_reified_k3_program f =
   let print_expr_fn ?(print_id=false) string_of_meta e =
