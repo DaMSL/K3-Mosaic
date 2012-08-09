@@ -58,7 +58,7 @@ let action_descriptions = [
     Compile,          "-c",    "Compile to specified language";
     Interpret,        "-r",    "Interpret with specified language";
     Print,            "-p",    "Print program as specified language";
-    ExpressionTest,   "-t",    "Unit test for expressions"
+    ExpressionTest,   "-test", "Unit test for expressions"
   ]
 
 let action_specs action_param = List.map (fun (act, flag, desc) -> 
@@ -73,6 +73,7 @@ type parameters = {
     mutable input_files : string list;
     mutable node_address : address;
     mutable peers : address list;
+    mutable print_types : bool; (* TODO: change to a debug flag *)
   }
 
 let cmd_line_params : parameters = {
@@ -82,11 +83,15 @@ let cmd_line_params : parameters = {
     input_files = [];
     node_address = ("127.0.0.1", 10000);
     peers = [];
+    print_types = false;
   }
 
 (* General parameter setters *)
 let set_output_language l =
   cmd_line_params.language <- parse_language l
+
+let set_print_types () =
+  cmd_line_params.print_types <- true
 
 let append_search_path p = 
   cmd_line_params.search_paths <- cmd_line_params.search_paths @ [p]
@@ -115,6 +120,8 @@ let param_specs = Arg.align ((action_specs cmd_line_params.action)@[
       "addr   Set the current node address for evaluation");
   ("-n", (Arg.String append_peers), 
       "[addr] Append addresses to the peer list");
+  ("-t", (Arg.Unit set_print_types),
+      "       Print types as part of output");
   ])
 
 let usage_msg =
@@ -167,8 +174,9 @@ let imperative_program f =
   
 let cpp_program f = 
   let mk_meta() = [] in
-  cpp_of_imperative
-    (RK3ToImperative.imperative_of_program mk_meta (typed_program f))
+  CPPTyping.deduce_program_type
+    (cpp_of_imperative
+      (RK3ToImperative.imperative_of_program mk_meta (typed_program f)))
 
 (* TODO *) 
 let repl params = ()
@@ -209,22 +217,24 @@ let print_reified_k3_program f =
   let tp = typed_program f in 
   print_endline (string_of_program ~print_expr_fn:print_expr_fn string_of_typed_meta tp)
 
-let print_imperative_program f =
-  let string_of_meta m = (ImperativeUtil.string_of_type ~fresh:true (fst m))^";"^
-                         (string_of_annotations (snd m))
+let print_imperative_program print_types f =
+  let string_of_meta m =
+    (if print_types then (ImperativeUtil.string_of_type ~fresh:true (fst m))^";" else "")^
+    (string_of_annotations (snd m))
   in print_endline (ImperativeUtil.string_of_program string_of_meta (imperative_program f))
 
-let print_cpp_program f = 
-  let string_of_meta m = (ImperativeUtil.string_of_type ~fresh:true (fst m))^";"^
-                         (string_of_annotations (snd m))
+let print_cpp_program print_types f = 
+  let string_of_meta m =
+    (if print_types then (ImperativeUtil.string_of_type ~fresh:true (fst m))^";" else "")^
+    (string_of_annotations (snd m))
   in print_endline (ImperativeUtil.string_of_program string_of_meta (cpp_program f))
 
 let print params =
   let print_fn = match params.language with
     | K3 -> print_k3_program
     | ReifiedK3 -> print_reified_k3_program
-    | Imperative -> print_imperative_program
-    | CPP -> print_cpp_program
+    | Imperative -> print_imperative_program params.print_types
+    | CPP -> print_cpp_program params.print_types
   in
   List.iter print_fn params.input_files
 

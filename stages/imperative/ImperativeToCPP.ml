@@ -103,8 +103,8 @@ let optimize_datastructures program =
     | _ -> None
   in
   let bmi_of_decl (nprog,bindings) (d,(t,m)) = match d with
-    | DVar (id,t,da_opt) ->
-      begin match element_of_collection t with
+    | DVar (id,dt,da_opt) ->
+      begin match element_of_collection dt with
         | Some (c_t, e_bt) ->
           datastructure_of_collection (nprog,bindings) (t,m) id da_opt c_t e_bt
         | _ -> (nprog@[d,(t,m)],bindings)

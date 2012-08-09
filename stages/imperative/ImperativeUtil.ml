@@ -1,9 +1,16 @@
 open Format
 open Lazy
 open Printing
+open Symbols
 open Tree
 open K3Util
 open Imperative
+
+let expr_sym_class = "IEXPR"
+let cmd_sym_class = "ICMD"
+let _ =
+  register_symbol expr_sym_class "__";
+  register_symbol cmd_sym_class "__";;
 
 module Util = functor (Lang : TargetLanguage) ->
 struct
@@ -26,6 +33,7 @@ let meta_of_cmd c = snd_data c
 let option_as_list f opt = match opt with | Some x -> [f x] | _ -> []
 
 let wrap_unless_empty lb rb s = if s = "" then s else (lb^s^rb)
+let print_extra ?(sep=";") s = if s = "" then () else (ps ";"; pc(); ps s)
 
 let lps s = lazy (ps s)
 
@@ -141,7 +149,7 @@ and print_expr string_of_meta e =
   let m_str m = wrap_unless_empty "<" ">" (string_of_meta m) in
   print_tree (fun lazy_ch e ->
     print_expr_tag string_of_meta (tag_of_expr e) (List.flatten lazy_ch);
-    ps ";"; pc(); ps (m_str (meta_of_expr e))) e
+    print_extra (m_str (meta_of_expr e))) e
 
 and print_cmd_tag string_of_meta tag lazy_children =
   let my_tag ?(lb="(") ?(rb=")") ?(sep=", ") ?(cut=CutHint) t =
@@ -170,13 +178,13 @@ and print_cmd string_of_meta c =
   let m_str m = wrap_unless_empty "<" ">" (string_of_meta m) in
   print_tree (fun lazy_ch c ->
     print_cmd_tag string_of_meta (tag_of_cmd c) (List.flatten lazy_ch);
-    ps ";"; pc(); ps (m_str (meta_of_cmd c))) c
+    print_extra (m_str (meta_of_cmd c))) c
 
 let print_program string_of_meta p =
   let m_str m = wrap_unless_empty "<" ">" (string_of_meta m) in
   ob(); ps "["; fnl();
   List.iter (fun (d,m) ->
-    print_decl string_of_meta d; ps ";"; pc(); ps (m_str m); fnl()) p;
+    print_decl string_of_meta d; print_extra (m_str m); fnl()) p;
   ps "]"; cb()
 
 
@@ -219,5 +227,55 @@ and var_ids_of_cmd c =
     | Expr e | IfThenElse e -> var_ids_of_expr e
     | CExt _ -> [])
   in ListAsSet.no_duplicates  (fold_tree (fun _ _ -> None) add_var None [] c)
-  
+
+
+(* Symbol helpers *)
+let gen_expr_sym () = gen_int_sym expr_sym_class
+let gen_cmd_sym () = gen_int_sym cmd_sym_class   
+let gen_expr_name class_name = gen_string_sym expr_sym_class class_name
+let gen_cmd_name class_name = gen_string_sym cmd_sym_class class_name   
+
+(* AST constructors *)
+
+(* Declaration constructors *)
+let mk_var_decl id t e_opt = DVar(id, t, e_opt)
+
+
+(* TODO: this should validate expected #children against tag *)
+let mk_iexpr e_tag e_meta children =
+  mk_tree (((gen_expr_sym (), e_tag), e_meta), children)
+
+(* TODO: this should validate expected #children against tag *)
+let mk_cmd c_tag c_meta children =
+  mk_tree (((gen_cmd_sym (), c_tag), c_meta), children)
+
+(* Expression constructors *)
+
+let mk_const meta const = mk_iexpr (Const const) meta []
+
+let mk_var meta id = mk_iexpr (Var id) meta []
+ 
+let mk_tuple meta fields = mk_iexpr Tuple meta fields
+
+let mk_op meta op_tag args = mk_iexpr (Op op_tag) meta args
+
+let mk_fn meta fn_tag args = mk_iexpr (Fn fn_tag) meta args
+ 
+(* Command constructors *)
+
+let mk_assign meta id e = mk_cmd (Assign (id, e)) meta []
+
+let mk_decl meta decl = mk_cmd (Decl decl) meta []
+
+let mk_expr meta e = mk_cmd (Expr e) meta []
+
+let mk_block meta sub = match sub with
+  | [] -> failwith "invalid block body"
+  | [x] -> x
+  | _ -> mk_cmd Block meta sub
+ 
+let mk_for meta id t e body = mk_cmd (Foreach (id,t,e)) meta body
+
+let mk_ifelse meta pred branches = mk_cmd (IfThenElse pred) meta branches
+
 end

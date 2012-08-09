@@ -1,5 +1,4 @@
 open Util
-open Symbols
 open Tree
 open K3
 open K3Util
@@ -49,63 +48,17 @@ let unwrap_expr_and_cmds da_cmd_pair = unwrap_pair
     (fun da cmds -> expr_of_decl_args da, cmds)
   da_cmd_pair
 
-(* Symbol helpers *)
-let expr_sym_class = "IEXPR"
-let cmd_sym_class = "ICMD"
-let gen_expr_sym () = gen_int_sym expr_sym_class
-let gen_cmd_sym () = gen_int_sym cmd_sym_class   
-let _ =
-  register_symbol expr_sym_class "__";
-  register_symbol cmd_sym_class "__";;
 
 (* Symbol constructors *)
-let mk_bind_sym () = gen_string_sym expr_sym_class "bind"
-let mk_loop_sym () = gen_string_sym expr_sym_class "elem"
-let mk_gb_key_sym () = gen_string_sym expr_sym_class "gbkey"
-let mk_gb_val_sym () = gen_string_sym expr_sym_class "gbagg"
+let mk_bind_sym () = U.gen_expr_name "bind"
+let mk_loop_sym () = U.gen_expr_name "elem"
+let mk_gb_key_sym () = U.gen_expr_name "gbkey"
+let mk_gb_val_sym () = U.gen_expr_name "gbagg"
 
 (* Basic types *)
 let unit_t = TInternal(TValue(canonical TUnit))
 let int_t  = TInternal (TValue (canonical TInt))
 let bool_t = TInternal (TValue (canonical TBool))
-
-(* Declaration constructors *)
-let mk_var_decl id t e_opt = DVar(id, t, e_opt)
-
-(* Expression constructors *)
-(* TODO: this should validate expected #children against tag *)
-let mk_iexpr e_tag e_meta children =
-  mk_tree (((gen_expr_sym (), e_tag), e_meta), children)
-
-let mk_const meta const = mk_iexpr (Const const) meta []
-
-let mk_var meta id = mk_iexpr (Var id) meta []
- 
-let mk_tuple meta fields = mk_iexpr Tuple meta fields
-
-let mk_op meta op_tag args = mk_iexpr (Op op_tag) meta args
-
-let mk_fn meta fn_tag args = mk_iexpr (Fn fn_tag) meta args
- 
-(* Command constructors *)
-(* TODO: this should validate expected #children against tag *)
-let mk_cmd c_tag c_meta children =
-  mk_tree (((gen_cmd_sym (), c_tag), c_meta), children)
-
-let mk_assign meta id e = mk_cmd (Assign (id, e)) meta []
-
-let mk_decl meta decl = mk_cmd (Decl decl) meta []
-
-let mk_expr meta e = mk_cmd (Expr e) meta []
-
-let mk_block meta sub = match sub with
-  | [] -> failwith "invalid block body"
-  | [x] -> x
-  | _ -> mk_cmd Block meta sub
- 
-let mk_for meta id t e body = mk_cmd (Foreach (id,t,e)) meta body
-
-let mk_ifelse meta pred branches = mk_cmd (IfThenElse pred) meta branches
 
 
 (* Conversion methods *)
@@ -127,7 +80,7 @@ let imperative_of_expr_node mk_meta fn_arg_env
   let i_type t = TInternal t in
   let i_meta e = (i_type (type_of_texpr e)), meta_of_texpr e in
   
-  let result_var = mk_var ((i_type t), mk_meta()) id in
+  let result_var = U.mk_var ((i_type t), mk_meta()) id in
 
   let e_meta = i_meta e in
 
@@ -171,10 +124,10 @@ let imperative_of_expr_node mk_meta fn_arg_env
         error "invalid pure expression reification"
       else
       let cmd_opt = match reify_cmds@pre_cmds with [] -> None | x -> Some(x) in
-      Some(Init(mk_iexpr tag (i_meta e) exprs)), cmd_opt)
+      Some(Init(U.mk_iexpr tag (i_meta e) exprs)), cmd_opt)
   in
   let ret_cmd_expr expr_f = ret_common (fun exprs pre_cmds ->
-    None, Some(reify_cmds@pre_cmds@[mk_expr (unit_t, mk_meta()) (expr_f exprs)]))
+    None, Some(reify_cmds@pre_cmds@[U.mk_expr (unit_t, mk_meta()) (expr_f exprs)]))
   in 
   let ret_cstr () =
     ret_common (fun exprs pre_cmds -> 
@@ -187,12 +140,12 @@ let imperative_of_expr_node mk_meta fn_arg_env
   (* Lambda binding declarations *)
   let mk_bind_decl id t var =
     let dmeta = unit_t, mk_meta() in
-    mk_decl dmeta (mk_var_decl id t (Some (Init var)))
+    U.mk_decl dmeta (U.mk_var_decl id t (Some (Init var)))
   in
   let mk_position_decl id t pos src_v =
     let meta = t, mk_meta() in
-    let init = Init (mk_fn meta (Member (Position pos)) [src_v])
-    in mk_var_decl id t (Some init)
+    let init = Init (U.mk_fn meta (Member (Position pos)) [src_v])
+    in U.mk_var_decl id t (Some init)
   in
   
   let get_fn_app_typed_vars fn_e = match K3Util.tag_of_expr fn_e with
@@ -211,8 +164,8 @@ let imperative_of_expr_node mk_meta fn_arg_env
     snd (List.fold_left (fun (i,(decl_acc, var_acc)) (v,vt) ->
         let t = iv_type vt in 
         let decl = mk_position_decl v t i e
-        in i+1, ((decl_acc@[mk_decl (unit_t, mk_meta()) decl]),
-                 (var_acc@[mk_var (t, mk_meta()) v]))
+        in i+1, ((decl_acc@[U.mk_decl (unit_t, mk_meta()) decl]),
+                 (var_acc@[U.mk_var (t, mk_meta()) v]))
       ) (0,([],[])) tvars)
   in
 
@@ -224,11 +177,11 @@ let imperative_of_expr_node mk_meta fn_arg_env
 
       | [v,vt] ->
         let t = iv_type vt in 
-        let bound = [mk_var (t, mk_meta()) v] in
+        let bound = [U.mk_var (t, mk_meta()) v] in
         begin match exprs with
           | [] -> failwith "invalid function args"
           | [e] -> [mk_bind_decl v t e], bound
-          | _ -> [mk_bind_decl v t (mk_tuple (t, mk_meta()) exprs)], bound
+          | _ -> [mk_bind_decl v t (U.mk_tuple (t, mk_meta()) exprs)], bound
         end
 
       | _ ->
@@ -238,7 +191,7 @@ let imperative_of_expr_node mk_meta fn_arg_env
           | args when List.length exprs = List.length tvars ->
             List.split (List.map2 (fun (id,t) e -> 
               let t = iv_type t in 
-              (mk_bind_decl id t e), (mk_var (t, mk_meta()) id)) tvars exprs)
+              (mk_bind_decl id t e), (U.mk_var (t, mk_meta()) id)) tvars exprs)
 
           | _ -> failwith "mismatched function args" 
         end
@@ -247,7 +200,7 @@ let imperative_of_expr_node mk_meta fn_arg_env
   let mk_elem_bindings fn_e elem_id elem_t =
     let tvars = get_fn_app_typed_vars fn_e in
     let elem_meta = (iv_type elem_t), mk_meta() in
-    let elem_v = mk_var elem_meta elem_id
+    let elem_v = U.mk_var elem_meta elem_id
     in mk_app_fn_bindings tvars [elem_v]
   in
 
@@ -255,25 +208,25 @@ let imperative_of_expr_node mk_meta fn_arg_env
     let tvars = get_fn_app_typed_vars fn_e in
     let agg_meta = agg_t, mk_meta() in
     let elem_meta = elem_t, mk_meta() in
-    let agg_v = Init(mk_var agg_meta agg_id) in
-    let elem_v = Init(mk_var elem_meta elem_id) in
+    let agg_v = Init(U.mk_var agg_meta agg_id) in
+    let elem_v = Init(U.mk_var elem_meta elem_id) in
     match tvars with
       | [(aid,at); (eid,et)] ->
         let dmeta = unit_t, mk_meta() in
-        let agg_decl = mk_var_decl aid (iv_type at) (Some agg_v) in
-        let elem_decl = mk_var_decl eid (iv_type et) (Some elem_v)
-        in [mk_decl dmeta agg_decl; mk_decl dmeta elem_decl],
-           [mk_var agg_meta aid; mk_var elem_meta eid]
+        let agg_decl = U.mk_var_decl aid (iv_type at) (Some agg_v) in
+        let elem_decl = U.mk_var_decl eid (iv_type et) (Some elem_v)
+        in [U.mk_decl dmeta agg_decl; U.mk_decl dmeta elem_decl],
+           [U.mk_var agg_meta aid; U.mk_var elem_meta eid]
       | _ -> failwith "invalid aggregate bindings"
   in
 
   (* Expression and command construction *)
-  let assign_da id da = mk_assign (unit_t, mk_meta()) id (expr_of_decl_args da) in
-  let assign_expr id e = mk_assign (unit_t, mk_meta()) id e in 
-  let cond_expr pred branches = mk_ifelse (unit_t, mk_meta()) pred branches in
-  let expr_cmd e = mk_expr (unit_t, mk_meta()) e in
-  let coll_expr t coll_fn_tag children = mk_fn (t, mk_meta()) (Collection coll_fn_tag) children in
-  let insert_expr id t e = expr_cmd (coll_expr unit_t Insert [mk_var ((i_type t), mk_meta()) id; e]) in
+  let assign_da id da = U.mk_assign (unit_t, mk_meta()) id (expr_of_decl_args da) in
+  let assign_expr id e = U.mk_assign (unit_t, mk_meta()) id e in 
+  let cond_expr pred branches = U.mk_ifelse (unit_t, mk_meta()) pred branches in
+  let expr_cmd e = U.mk_expr (unit_t, mk_meta()) e in
+  let coll_expr t coll_fn_tag children = U.mk_fn (t, mk_meta()) (Collection coll_fn_tag) children in
+  let insert_expr id t e = expr_cmd (coll_expr unit_t Insert [U.mk_var ((i_type t), mk_meta()) id; e]) in
 
   (* Loop body construction *)
   let collection_loop c_type c_pair c_reify_cmds body_cmd_fn =
@@ -285,7 +238,7 @@ let imperative_of_expr_node mk_meta fn_arg_env
       (fun cmds -> failwith "invalid reified map collection")
       (fun da cmds -> (expr_of_decl_args da), cmds)
       c_pair
-    in c_reify_cmds@pre_cmds@[mk_for e_meta loop_id (iv_type loop_t) loop_target loop_body]
+    in c_reify_cmds@pre_cmds@[U.mk_for e_meta loop_id (iv_type loop_t) loop_target loop_body]
   in
 
   (* Handles application of both pure lambda and global functions for
@@ -297,7 +250,7 @@ let imperative_of_expr_node mk_meta fn_arg_env
     (* Global functions yield vars *)
     | Init(e) ->
       begin match U.tag_of_expr e with
-        | Var fn -> Init(mk_fn (U.meta_of_expr e) (Named fn) fn_args)
+        | Var fn -> Init(U.mk_fn (U.meta_of_expr e) (Named fn) fn_args)
         | _ -> Init(e)
       end
 
@@ -378,11 +331,11 @@ let imperative_of_expr_node mk_meta fn_arg_env
           (* TODO: this code should be generated when handling the Range function.
           let start_e, stride_e = (List.nth exprs 0), (List.nth exprs 1) in
           let val_expr =
-            mk_op (U.meta_of_expr start_e) Add
-              [start_e; (mk_op (U.meta_of_expr stride_e) Mult [mk_var loop_id; stride_e])]
+            U.mk_op (U.meta_of_expr start_e) Add
+              [start_e; (U.mk_op (U.meta_of_expr stride_e) Mult [U.mk_var loop_id; stride_e])]
           in
           *)
-          let loop_var = mk_var ((iv_type loop_t), mk_meta()) loop_id
+          let loop_var = U.mk_var ((iv_type loop_t), mk_meta()) loop_id
           in [insert_expr id t loop_var]
         in
         let e_t = type_of_texpr e in
@@ -478,12 +431,12 @@ let imperative_of_expr_node mk_meta fn_arg_env
             let (arg_cmds, possible_args), arg_types = get_arg_cmds true arg_pair in 
             let fn_args = match possible_args with
               | [] -> 
-                (try List.map2 (fun id t -> mk_var (t, mk_meta()) id)
+                (try List.map2 (fun id t -> U.mk_var (t, mk_meta()) id)
                                (List.map snd reify_cmds_and_ids) arg_types
                  with Invalid_argument _ -> failwith "invalid global function application")
               | a -> a
             in
-            let fn_call = mk_fn (U.meta_of_expr e) (Named fn) fn_args
+            let fn_call = U.mk_fn (U.meta_of_expr e) (Named fn) fn_args
             in apply_result (Some(Init(fn_call))) arg_cmds []
 
           | _ -> apply_result (Some(Init(e))) (fst (fst (get_arg_cmds false arg_pair))) []
@@ -534,15 +487,15 @@ let imperative_of_expr_node mk_meta fn_arg_env
           | [], [] -> ret_expr e (Op Ternary)
           | a, b ->
 		        let pred_expr = expr_of_decl_args (unwrap x) in
-            let branches = [mk_block (unit_t, mk_meta()) (a@[assign_da id (unwrap y)]);
-                            mk_block (unit_t, mk_meta()) (b@[assign_da id (unwrap z)])]
+            let branches = [U.mk_block (unit_t, mk_meta()) (a@[assign_da id (unwrap y)]);
+                            U.mk_block (unit_t, mk_meta()) (b@[assign_da id (unwrap z)])]
             in None, Some([cond_expr pred_expr branches])
         end
 
       | [pred_pair; then_pair; else_pair] -> 
         let pred_expr, pre_cmds = unwrap_expr_and_cmds pred_pair in
         let branches = List.map (fun (ec_pair, reify_cmds) ->
-            mk_block (unit_t, mk_meta()) (unwrap_pair
+            U.mk_block (unit_t, mk_meta()) (unwrap_pair
               (fun da -> reify_cmds@[assign_da id da])
               (fun cmds -> reify_cmds@cmds)
               (fun da cmds -> reify_cmds@cmds@[assign_da id da])
@@ -583,8 +536,8 @@ let imperative_of_expr_node mk_meta fn_arg_env
         let filter_body_cmds loop_id loop_t =
           let filter_bindings, filter_bound_vars = mk_elem_bindings f_fn_e loop_id loop_t in
           let map_body = mk_appfn_loop_body_cmds true id t m_fn_e map_fn_pair map_fn_reify_cmds loop_id loop_t in
-          let map_branches = [mk_block (unit_t, mk_meta()) map_body;
-                              expr_cmd (mk_const (unit_t, mk_meta()) CUnit)] in
+          let map_branches = [U.mk_block (unit_t, mk_meta()) map_body;
+                              expr_cmd (U.mk_const (unit_t, mk_meta()) CUnit)] in
           let pred_expr apply da =
             (* Global function application for filter function *)
             if apply then apply_if_function da filter_bound_vars
@@ -608,7 +561,7 @@ let imperative_of_expr_node mk_meta fn_arg_env
     let c_e = List.hd (sub_tree e) in
     let c_pair = List.hd children in
     let flatten_body_cmds loop_id loop_t =
-      let loop_var = mk_var ((iv_type loop_t), mk_meta()) loop_id
+      let loop_var = U.mk_var ((iv_type loop_t), mk_meta()) loop_id
       in [expr_cmd (coll_expr (i_type t) Combine [result_var; loop_var])]
     in
     let flatten_body = collection_loop (type_of_texpr c_e) c_pair reify_cmds flatten_body_cmds
@@ -667,13 +620,13 @@ let imperative_of_expr_node mk_meta fn_arg_env
 
           let tuple_meta = gb_tuple_t, mk_meta() in
           let key_meta, key_var =
-            let x = gb_key_t, mk_meta() in x, (mk_var x gb_key_id)
+            let x = gb_key_t, mk_meta() in x, (U.mk_var x gb_key_id)
           in
           let val_meta, val_var =
-            let x = gb_val_t, mk_meta() in x, (mk_var x gb_val_id)
+            let x = gb_val_t, mk_meta() in x, (U.mk_var x gb_val_id)
           in
-          let old_val = mk_tuple tuple_meta [key_var; val_var] in
-          let new_val e = mk_tuple tuple_meta [key_var; e] in
+          let old_val = U.mk_tuple tuple_meta [key_var; val_var] in
+          let new_val e = U.mk_tuple tuple_meta [key_var; e] in
           
           let find_expr = coll_expr gb_val_t Find [result_var; key_var] in
           let contains_expr = coll_expr bool_t Contains [result_var; key_var] in
@@ -689,7 +642,7 @@ let imperative_of_expr_node mk_meta fn_arg_env
 
           (* Declarations *)
           let decls = List.map (fun (id,t) -> 
-              mk_decl (unit_t, mk_meta()) (mk_var_decl id t None)
+              U.mk_decl (unit_t, mk_meta()) (U.mk_var_decl id t None)
             ) [gb_key_id, gb_key_t; gb_val_id, gb_val_t]
           in
 
@@ -751,7 +704,7 @@ let imperative_of_expr_node mk_meta fn_arg_env
     let _, _, send_args_e = decompose_send e in
     let type_tag = String.concat "_"
       (List.map (fun e -> signature_of_type (type_of_texpr e)) send_args_e)
-    in ret_cmd_expr (mk_fn (unit_t, mk_meta()) (Send type_tag))
+    in ret_cmd_expr (U.mk_fn (unit_t, mk_meta()) (Send type_tag))
 
   (* TODO: generates a side-effecting assignment command *) 
   | K3.Assign -> failwith "imperative assign not yet implemented"
@@ -764,7 +717,7 @@ let imperative_of_expr mk_meta fn_arg_env
                        reify_cmds_and_ids ((id,t,decl,assign) as reified_sym) e
 =
   let declare assign id t node_pair =
-    let d_f da_opt = [mk_decl (unit_t, mk_meta()) (mk_var_decl id (TInternal t) da_opt)] in
+    let d_f da_opt = [U.mk_decl (unit_t, mk_meta()) (U.mk_var_decl id (TInternal t) da_opt)] in
     unwrap_pair
       (fun da -> d_f (Some da))
       (fun cmds -> (d_f None)@cmds)
@@ -772,18 +725,18 @@ let imperative_of_expr mk_meta fn_arg_env
         if not assign then (d_f (Some da))@cmds
         else
           let e = expr_of_decl_args da
-          in (d_f None)@cmds@[mk_assign (U.meta_of_expr e) id e])
+          in (d_f None)@cmds@[U.mk_assign (U.meta_of_expr e) id e])
       node_pair
   in
   let assign_if_expr id t node_pair =
     unwrap_pair
       (fun da ->
         let e = expr_of_decl_args da
-        in [mk_assign (U.meta_of_expr e) id e])
+        in [U.mk_assign (U.meta_of_expr e) id e])
       (fun cmds -> cmds)
       (fun da cmds ->
         let e = expr_of_decl_args da
-        in cmds@[mk_assign (U.meta_of_expr e) id e])
+        in cmds@[U.mk_assign (U.meta_of_expr e) id e])
       node_pair
   in
   let ensure_cmd node_pair = match node_pair with
@@ -816,7 +769,7 @@ let imperative_of_reified_expr mk_meta fn_arg_env rt =
 let imperative_of_instruction mk_meta i = match i with
   | Consume id ->
       (* TODO: named function for consume *)
-      mk_expr (unit_t, mk_meta()) (mk_fn (unit_t, mk_meta()) (Named ("consume_"^id))[])
+      U.mk_expr (unit_t, mk_meta()) (U.mk_fn (unit_t, mk_meta()) (Named ("consume_"^id))[])
 
 let imperative_of_stream_statement mk_meta ss = match ss with
   | Stream s -> failwith "stream declaration not implemented"
@@ -845,7 +798,7 @@ let imperative_of_declaration mk_meta fn_arg_env (d,m) =
               | None -> failwith "invalid global function declaration" 
             in
             let cmds = cmds_of_reified_expr e in
-            let fn_body = [mk_block (iret_t, mk_meta()) cmds]
+            let fn_body = [U.mk_block (iret_t, mk_meta()) cmds]
             in Some(DFn(id, arg, iret_t, fn_body), (unit_t,m)), [], [id,arg]
           | _ -> failwith "invalid function body"
         end
@@ -865,7 +818,7 @@ let imperative_of_declaration mk_meta fn_arg_env (d,m) =
   | Trigger (id,a,decls,body) ->
     (* TODO: local declarations *)
     let cmds = cmds_of_reified_expr body in
-    let trig_body = [mk_block (unit_t, mk_meta()) cmds]
+    let trig_body = [U.mk_block (unit_t, mk_meta()) cmds]
     in Some(DFn(id, a, unit_t, trig_body), (unit_t,m)), [], [id,a]
 
   | Role (id, sp) -> failwith "stream programs not implemented"

@@ -24,7 +24,8 @@ FILES=\
 	stages/imperative/ImperativeUtil \
 	stages/imperative/RK3ToImperative \
 	stages/imperative/CPP \
-	stages/imperative/ImperativeToCPP
+	stages/imperative/ImperativeToCPP \
+	stages/imperative/CPPTyping
 
 TOPLEVEL_FILES=\
 	tests/Testing \
