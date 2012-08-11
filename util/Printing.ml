@@ -41,7 +41,7 @@ let pretty_tag_str ?(lb="(") ?(rb=")") ?(sep=", ") cut_t extra t ch_lazy_t =
     cb()
   end
 
-let wrap_formatter ?(fresh=false) print_fn =
+let wrap_formatter ?(fresh=true) print_fn =
   let print () =
 	  pp_set_margin (snd !formatter) 120;
 	  print_fn ();

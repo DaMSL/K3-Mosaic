@@ -528,13 +528,15 @@ let string_of_control_annotation ca = match ca with
   | Effect ids -> "Effect("^(String.concat "," ids)^")"
   | Parallel deg -> "Parallel("^string_of_int deg^")" 
 
-let string_of_annotation a = match a with
+(* TODO: expose controls for printing type annotations on expressions *)
+let string_of_ast_annotation ?(print_type = false) a = match a with
   | Data (r,da) -> (string_of_rigidity r)^"("^(string_of_data_annotation da)^")"
   | Control (r,ca) -> (string_of_rigidity r)^"("^(string_of_control_annotation ca)^")"
-  | Type t ->  "" (*"Type("^(string_of_type t)^")"*)
+  | Type t when print_type -> "Type("^(string_of_type t)^")"
+  | _ -> ""
 
 let string_of_annotation ann =
-  String.concat ", " (List.map string_of_annotation ann)
+  String.concat ", " (List.map string_of_ast_annotation ann)
 
 end
 

@@ -1,7 +1,5 @@
 (* K3 stream patterns. *)
 open K3.AST
-open K3Values
-open K3Typechecker
 
 type state_id = int
 
@@ -19,13 +17,17 @@ and stream_fsm_t = (state_id * (action_t * state_id * state_id)) list
 type stream_env_t = (id_t * stream_t) list
 type fsm_env_t = (id_t * stream_fsm_t) list
 
+(* stream id -> trigger id *)
+type source_bindings_t = (id_t * id_t) list
+
 type event_loop_t =
   stream_env_t * fsm_env_t * source_bindings_t * (instruction_t list)
 
+(* Stringification *)
 val string_of_fsm : stream_fsm_t -> string
-
 val string_of_stream_env : stream_env_t -> string
 val string_of_fsm_env : fsm_env_t -> string
+val string_of_source_bindings : source_bindings_t -> string
 
 val compile : stream_env_t -> fsm_env_t -> stream_pattern_t -> stream_fsm_t
 

@@ -8,15 +8,15 @@ FILES=\
 	util/Symbols \
 	util/Printing \
 	util/Tree \
-	stages/k3/K3AST \
-	stages/k3/K3Annotations \
+	stages/k3/core/K3AST \
+	stages/k3/core/K3Annotations \
 	stages/k3/K3 \
-	stages/k3/K3Util \
-	stages/k3/K3Printing \
-	stages/k3/K3Helpers \
+	stages/k3/utils/K3Util \
+	stages/k3/utils/K3Printing \
+	stages/k3/utils/K3Helpers \
+	stages/k3/core/K3Streams \
 	stages/k3/K3Typechecker \
-	stages/k3/K3Values \
-	stages/k3/K3Streams \
+	stages/k3/interpreter/K3Values \
 	stages/k3/interpreter/K3Consumption \
 	stages/k3/interpreter/K3Runtime \
 	stages/k3/interpreter/K3Interpreter \
@@ -35,14 +35,17 @@ TOPLEVEL_FILES=\
 	Driver \
 
 LEXERS=\
-	stages/k3/K3Lexer \
+	stages/k3/parser/K3Lexer \
 
 PARSERS=\
-	stages/k3/K3Parser \
+	stages/k3/parser/K3Parser \
 
 DIRS=\
 	util\
 	stages/k3 \
+	stages/k3/core \
+	stages/k3/utils \
+	stages/k3/parser \
 	stages/k3/interpreter \
 	stages/k3_dist \
 	stages/imperative \

@@ -1,5 +1,4 @@
 open K3.AST
-open K3Typechecker
 
 exception RuntimeError of int
 
@@ -27,9 +26,6 @@ type env_t = (id_t * value_t ref) list * (frame_t list)
 type trigger_env_t = (id_t * (env_t -> value_t -> unit)) list
 type program_env_t = trigger_env_t * env_t
 
-(* stream id -> trigger id *)
-type source_bindings_t = (id_t * id_t) list
-
 (* Value stringification *)
 val repr_of_value : value_t -> string
 val string_of_value : value_t -> string
@@ -40,4 +36,3 @@ val print_program_env : program_env_t -> unit
 
 val string_of_env : env_t -> string
 val string_of_program_env : program_env_t -> string
-val string_of_source_bindings : source_bindings_t -> string

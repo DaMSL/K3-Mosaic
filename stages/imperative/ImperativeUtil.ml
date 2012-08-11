@@ -189,8 +189,8 @@ let print_program string_of_meta p =
   ps "]"; cb()
 
 
-let string_of_type ?(fresh=false) t =
-  wrap_formatter ~fresh:fresh (fun () -> print_type t)
+let string_of_type t =
+  wrap_formatter (fun () -> print_type t)
 
 let string_of_decl string_of_meta d =
   wrap_formatter (fun () -> print_decl string_of_meta d)

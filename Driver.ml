@@ -220,13 +220,13 @@ let print_reified_k3_program f =
 
 let print_imperative_program print_types f =
   let string_of_meta m =
-    (if print_types then (ImperativeUtil.string_of_type ~fresh:true (fst m))^";" else "")^
+    (if print_types then (ImperativeUtil.string_of_type (fst m))^";" else "")^
     (string_of_annotation (snd m))
   in print_endline (ImperativeUtil.string_of_program string_of_meta (imperative_program f))
 
 let print_cpp_program print_types f = 
   let string_of_meta m =
-    (if print_types then (ImperativeUtil.string_of_type ~fresh:true (fst m))^";" else "")^
+    (if print_types then (ImperativeUtil.string_of_type (fst m))^";" else "")^
     (string_of_annotation (snd m))
   in print_endline (ImperativeUtil.string_of_program string_of_meta (cpp_program f))
 

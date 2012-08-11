@@ -22,7 +22,7 @@ sig
   val print_cmd  : ('a -> string) -> 'a cmd_t -> unit
   val print_program : ('a -> string) -> 'a program_t -> unit
 
-	val string_of_type: ?fresh:bool -> type_t -> string
+	val string_of_type: type_t -> string
 	val string_of_decl: ('a -> string) -> 'a decl_t -> string
 	val string_of_expr: ('a -> string) -> 'a expr_t -> string
 	val string_of_cmd: ('a -> string) -> 'a cmd_t -> string

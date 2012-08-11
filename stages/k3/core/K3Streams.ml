@@ -3,8 +3,6 @@ open Printing
 open K3.AST
 open K3Util
 open K3Printing
-open K3Values
-open K3Typechecker
 
 exception StreamError of id_t
 
@@ -23,6 +21,9 @@ and stream_fsm_t = (state_id * (action_t * state_id * state_id)) list
 
 type stream_env_t = (id_t * stream_t) list
 type fsm_env_t = (id_t * stream_fsm_t) list
+
+(* consumeable id -> trigger id *)
+type source_bindings_t = (id_t * id_t) list
 
 type event_loop_t =
   stream_env_t * fsm_env_t * source_bindings_t * (instruction_t list)
@@ -59,6 +60,9 @@ let print_fsm_env fsm_env =
   List.iter (fun (id, fsm) -> ps id; ps " = "; pc(); print_fsm fsm; fnl()) fsm_env
 
 let string_of_fsm_env fsm_env = wrap_formatter (fun () -> print_fsm_env fsm_env)
+
+let string_of_source_bindings bindings = wrap_formatter (fun () ->
+  List.iter (fun (src,trig) -> ps (src^" -> "^trig); fnl()) bindings)
 
 (* Given a source and FSM environment, construct a FSM which can be polled for values. *)
 let compile stream_env fsm_env p =
