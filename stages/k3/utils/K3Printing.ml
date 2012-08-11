@@ -22,6 +22,12 @@ let tag_str ?(extra="") t ch_t =
     ^ String.concat ", " ch_t
     ^ ")"
 
+let lps s = lazy (ps s)
+
+let lazy_string_opt string_f a = match a with
+  | Some b -> [lazy (string_f b)]
+  | None -> []
+
 (* Terminals *)
 let string_of_address (ip,p) = ip^":"^string_of_int p
 
@@ -112,8 +118,8 @@ let rec flat_string_of_base_type t = match t with
     | TTarget(t) -> tag_str "TTarget" [flat_string_of_base_type t]
 
 and flat_string_of_mutable_type mt = match mt with
-    | TMutable(bt) -> "TMutable("^flat_string_of_base_type bt^")"
-    | TImmutable(bt) -> "TImmutable("^flat_string_of_base_type bt^")"
+    | TMutable(bt,_) -> "TMutable("^flat_string_of_base_type bt^")"
+    | TImmutable(bt,_) -> "TImmutable("^flat_string_of_base_type bt^")"
 
 and flat_string_of_value_type vt = match vt with
     | TIsolated(mt) -> "TIsolated("^flat_string_of_mutable_type mt^")"
@@ -282,6 +288,7 @@ module type StringifyAST = sig
 end
 
 module type StringifyAnnotations = sig
+  val print_annotation : annotation_t -> unit
   val string_of_annotation : annotation_t -> string
 end
 
@@ -292,15 +299,10 @@ module rec ASTStrings : StringifyAST = struct
 open AnnotationStrings
 
 (* Lazy variants *)
-let lps s = lazy (ps s)
-
-let lazy_string_opt string_f a = match a with
-  | Some b -> [lazy (string_f b)]
-  | None -> []
-
 let print_expr_id id = ps ("<"^string_of_int id^"> ")
   
-let rec lazy_base_type bt  = lazy (print_base_type bt)
+let rec lazy_annotation a  = lazy (print_annotation a)
+and     lazy_base_type bt  = lazy (print_base_type bt)
 and     lazy_value_type vt = lazy (print_value_type vt)
 and     lazy_type t        = lazy (print_type t)
 and     lazy_arg a         = lazy (print_arg a)
@@ -332,10 +334,12 @@ and print_base_type t =
     | TTarget(t) -> my_tag "TTarget" [lazy_base_type t]
 
 and print_mutable_type mt =
-  let my_tag t bt = pretty_tag_str CutHint "" t [lazy_base_type bt]
+  let my_tag t bt a =
+    pretty_tag_str CutHint "" t
+      ([lazy_base_type bt]@(if a = [] then [] else [lazy_annotation a]))
   in match mt with
-    | TMutable(bt) -> my_tag "TMutable" bt
-    | TImmutable(bt) -> my_tag "TImmutable" bt
+    | TMutable(bt,a) -> my_tag "TMutable" bt a
+    | TImmutable(bt,a) -> my_tag "TImmutable" bt a
 
 and print_value_type vt =
   let my_tag t mt =
@@ -529,14 +533,17 @@ let string_of_control_annotation ca = match ca with
   | Parallel deg -> "Parallel("^string_of_int deg^")" 
 
 (* TODO: expose controls for printing type annotations on expressions *)
-let string_of_ast_annotation ?(print_type = false) a = match a with
-  | Data (r,da) -> (string_of_rigidity r)^"("^(string_of_data_annotation da)^")"
-  | Control (r,ca) -> (string_of_rigidity r)^"("^(string_of_control_annotation ca)^")"
-  | Type t when print_type -> "Type("^(string_of_type t)^")"
-  | _ -> ""
+let print_ast_annotation ?(show_type=false) a =
+  let my_tag = pretty_tag_str CutHint "" in
+  match a with
+  | Data (r,da) -> my_tag "Data" [lps (string_of_rigidity r); lps (string_of_data_annotation da)]
+  | Control (r,ca) -> my_tag "Control" [lps (string_of_rigidity r); lps (string_of_control_annotation ca)]
+  | Type t when show_type -> my_tag "Type" [lazy (print_type t)]
+  | _ -> ()
 
-let string_of_annotation ann =
-  String.concat ", " (List.map string_of_ast_annotation ann)
+let print_annotation ann = ps_list CutHint print_ast_annotation ann
+
+let string_of_annotation ann = wrap_formatter (fun () -> print_annotation ann)
 
 end
 

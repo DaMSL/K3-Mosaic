@@ -482,8 +482,8 @@ and default_base_value bt =
     | TTarget bt          -> ierror "targets are not implemented" 
 
 and default_isolated_value vt = match vt with
-    | TIsolated (TMutable bt) -> default_base_value bt
-    | TIsolated (TImmutable bt) -> default_base_value bt
+    | TIsolated (TMutable (bt,_)) -> default_base_value bt
+    | TIsolated (TImmutable (bt,_)) -> default_base_value bt
     | TContained _ -> interpreter_error "invalid default contained value"
 
 

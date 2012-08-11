@@ -15,8 +15,8 @@ let iso_to_contained typ =
     | TTarget(b) -> TTarget(handle_base_type b)
     | x -> x
   and handle_mutable_type m = match m with
-    | TMutable(b) -> TMutable(handle_base_type b)
-    | TImmutable(b) -> TImmutable(handle_base_type b)
+    | TMutable(b,a) -> TMutable(handle_base_type b, a)
+    | TImmutable(b,a) -> TImmutable(handle_base_type b, a)
   and handle_value_type t = match t with
     | TIsolated(m) -> TContained(handle_mutable_type m)
     | TContained(m) -> TContained(handle_mutable_type m)
@@ -24,11 +24,11 @@ let iso_to_contained typ =
   handle_value_type typ
     
 (* the default type *)
-let canonical typ = TIsolated(TImmutable(typ))
+let canonical typ = TIsolated(TImmutable(typ,[]))
 
 (* A type for simple immutable integers *)
 let t_int = canonical TInt
-let t_int_mut = TIsolated(TMutable(TInt))
+let t_int_mut = TIsolated(TMutable(TInt,[]))
 
 (* wrap a type in a list *)
 let wrap_tlist typ = 
@@ -38,7 +38,7 @@ let wrap_tlist typ =
 (* wrap a type in a mutable list *)
 let wrap_tlist_mut typ = 
   let c = iso_to_contained typ in
-  TIsolated(TMutable(TCollection(TList, c)))
+  TIsolated(TMutable(TCollection(TList, c),[]))
 
 (* wrap a type in an immutable tuple *)
 let wrap_ttuple typ = match typ with 
@@ -49,7 +49,7 @@ let wrap_ttuple typ = match typ with
 (* wrap a type in a mutable tuple *)
 let wrap_ttuple_mut typ = match typ with 
   | [h]    -> h
-  | h::t   -> TIsolated(TMutable(TTuple(typ)))
+  | h::t   -> TIsolated(TMutable(TTuple(typ),[]))
   | _      -> invalid_arg "No mutable tuple to wrap"
 
 (* Helper functions to create K3 AST nodes more easily *)

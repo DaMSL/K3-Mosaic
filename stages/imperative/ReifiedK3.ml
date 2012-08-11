@@ -48,7 +48,7 @@ let string_of_reified_expr t = wrap_formatter (fun () -> print_reified_expr t)
 
 (* Type helpers. Should be moved elsewhere *)
 let is_unit t = match t with
-  | TValue(TIsolated(TImmutable(TUnit))) -> true
+  | TValue(TIsolated(TImmutable(TUnit,_))) -> true
   | _ -> false
 
 let get_type e =

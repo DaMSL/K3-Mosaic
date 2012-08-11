@@ -35,8 +35,8 @@ type base_type_t
     | TTarget       of base_type_t
 
 and mutable_type_t
-    = TMutable      of base_type_t
-    | TImmutable    of base_type_t
+    = TMutable      of base_type_t * annotation_t
+    | TImmutable    of base_type_t * annotation_t
 
 and value_type_t
     = TIsolated     of mutable_type_t

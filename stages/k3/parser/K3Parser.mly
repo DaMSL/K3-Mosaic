@@ -20,9 +20,9 @@
         | [e] -> mkexpr (Singleton(ctype)) [e]
         | e :: es -> mkexpr Combine [mkexpr (Singleton(ctype)) [e]; build_collection es ctype]
 
-    let contained_unknown_type = TContained(TImmutable(TUnknown))
+    let contained_unknown_type = TContained(TImmutable(TUnknown,[]))
 
-    let mk_unknown_collection t_c = TIsolated(TImmutable(TCollection(t_c, contained_unknown_type)))
+    let mk_unknown_collection t_c = TIsolated(TImmutable(TCollection(t_c, contained_unknown_type),[]))
 
 %}
 
@@ -111,8 +111,8 @@
 %%
 
 program:
-    | declaration { [$1] }
-    | declaration program { $1 :: $2 }
+    | declaration { [$1, []] }
+    | declaration program { ($1, []) :: $2 }
 ;
 
 expression_test:
@@ -122,28 +122,19 @@ expression_test:
 ;
 
 declaration:
-    | DECLARE IDENTIFIER COLON type_expr { Global($2, $4, None), [] }
-    | DECLARE IDENTIFIER COLON type_expr GETS expr { Global($2, $4, Some $6), [] }
-
-    | DECLARE IDENTIFIER COLON type_expr
-        ANNOTATE LBRACE annotations RBRACE
-      { Global($2, $4, None), $7 }
-        
-    | DECLARE IDENTIFIER COLON type_expr
-        ANNOTATE LBRACE annotations RBRACE
-        GETS expr
-      { Global($2, $4, Some $10), $7 }
+    | DECLARE IDENTIFIER COLON type_expr { Global($2, $4, None) }
+    | DECLARE IDENTIFIER COLON type_expr GETS expr { Global($2, $4, Some $6) }
     
-    | FOREIGN IDENTIFIER COLON type_expr { Foreign($2, $4), [] }
+    | FOREIGN IDENTIFIER COLON type_expr { Foreign($2, $4) }
 
-    | TRIGGER IDENTIFIER arg LBRACE RBRACE GETS expr { Trigger($2, $3, [], $7), [] }
+    | TRIGGER IDENTIFIER arg LBRACE RBRACE GETS expr { Trigger($2, $3, [], $7) }
     | TRIGGER IDENTIFIER arg LBRACE value_typed_identifier_list RBRACE GETS expr {
       let locals = List.map (fun (id,t) -> (id,t,[])) $5
-      in Trigger($2, $3, locals, $8), []
+      in Trigger($2, $3, locals, $8)
     }
 
-    | ROLE IDENTIFIER LBRACE stream_program RBRACE { Role($2, $4), [] }
-    | DEFAULT ROLE IDENTIFIER                      { DefaultRole($3), [] }
+    | ROLE IDENTIFIER LBRACE stream_program RBRACE { Role($2, $4) }
+    | DEFAULT ROLE IDENTIFIER                      { DefaultRole($3) }
 ;
 
 /* Annotations */
@@ -235,31 +226,32 @@ isolated_value_type_expr: isolated_mutable_type_expr { TIsolated($1) };
 contained_value_type_expr: contained_mutable_type_expr { TContained($1) };
 
 isolated_mutable_type_expr:
-    | isolated_base_type_expr { TImmutable($1) }
-    | REF isolated_base_type_expr { TMutable($2) }
+    | isolated_base_type_expr { let a,b = $1 in TImmutable(a,b) }
+    | REF isolated_base_type_expr { let a,b = $2 in TMutable(a,b) }
 ;
 
 contained_mutable_type_expr:
-    | contained_base_type_expr { TImmutable($1) }
-    | REF contained_base_type_expr { TMutable($2) }
+    | contained_base_type_expr { let a,b = $1 in TImmutable(a,b) }
+    | REF contained_base_type_expr { let a,b = $2 in TMutable(a,b) }
 ;
 
 isolated_base_type_expr:
-    | TYPE { $1 }
-    | LPAREN isolated_base_type_tuple RPAREN { $2 }
+    | TYPE { $1, [] }
+    | LPAREN isolated_base_type_tuple RPAREN { $2, [] }
+    /*
     | LBRACE contained_value_type_expr RBRACE { TCollection(TSet, $2) }
     | LBRACEBAR contained_value_type_expr RBRACEBAR { TCollection(TBag, $2) }
     | LBRACKET contained_value_type_expr RBRACKET { TCollection(TList, $2) }
-    | MAYBE isolated_value_type_expr { TMaybe($2) }
+    */
+    | annotated_collection_type      { $1 }
+    | MAYBE isolated_value_type_expr { TMaybe($2), [] }
 ;
 
 contained_base_type_expr:
-    | TYPE { $1 }
-    | LPAREN contained_base_type_tuple RPAREN { $2 }
-    | LBRACE contained_value_type_expr RBRACE { TCollection(TSet, $2) }
-    | LBRACEBAR contained_value_type_expr RBRACEBAR { TCollection(TBag, $2) }
-    | LBRACKET contained_value_type_expr RBRACKET { TCollection(TList, $2) }
-    | MAYBE contained_value_type_expr { TMaybe($2) }
+    | TYPE { $1, [] }
+    | LPAREN contained_base_type_tuple RPAREN { $2, [] }
+    | annotated_collection_type       { $1 }
+    | MAYBE contained_value_type_expr { TMaybe($2), [] }
 ;
 
 isolated_base_type_tuple:
@@ -282,6 +274,17 @@ isolated_value_type_expr_list:
 contained_value_type_expr_list:
     | contained_value_type_expr { [$1] }
     | contained_value_type_expr COMMA contained_value_type_expr_list { $1 :: $3 }
+;
+
+annotated_collection_type:
+    | collection_type                         { $1,[] }
+    | collection_type ANNOTATE LBRACE annotations RBRACE  { $1, $4 }
+;
+
+collection_type:
+    | LBRACE contained_value_type_expr RBRACE { TCollection(TSet, $2) }
+    | LBRACEBAR contained_value_type_expr RBRACEBAR { TCollection(TBag, $2) }
+    | LBRACKET contained_value_type_expr RBRACKET { TCollection(TList, $2) }
 ;
 
 /* Expressions */

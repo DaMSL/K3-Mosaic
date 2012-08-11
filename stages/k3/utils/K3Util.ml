@@ -48,6 +48,8 @@ let typed_vars_of_lambda e =
  * Type tags
  ***************)
 
+(* Compute a readable type signature for a K3 type.
+ * Type signatures do not preserve annotations. *)
 let signature_of_type t =
   let tag d s l = (*(string_of_int d)^*)s^(String.concat "" l) in
   let tag_t d s l = tag d s ((string_of_int (List.length l))::l) in
@@ -69,8 +71,8 @@ let signature_of_type t =
     | TAddress              -> tag   d "a" []
     | TTarget arg_t         -> tag   d "h" [sig_bt (d+1) arg_t]
   and sig_mt d mt = match mt with
-    | TMutable    bt -> tag d "M" [sig_bt (d+1) bt]
-    | TImmutable  bt -> tag d "U" [sig_bt (d+1) bt]
+    | TMutable    (bt,_) -> tag d "M" [sig_bt (d+1) bt]
+    | TImmutable  (bt,_) -> tag d "U" [sig_bt (d+1) bt]
   and sig_vt d vt = match vt with
     | TIsolated   mt -> tag d "I" [sig_mt (d+1) mt]
     | TContained  mt -> tag d "C" [sig_mt (d+1) mt]
@@ -79,6 +81,7 @@ let signature_of_type t =
 	  | TValue vt -> tag d "V" [sig_vt (d+1) vt]
   in sig_t 0 t
 
+(* Reconstruct a type from a signature, with empty annotations. *)
 let type_of_signature s =
   let string_of_char c = String.make 1 c in
   let (>>) f g = fun a -> g (f a) in 
@@ -111,8 +114,8 @@ let type_of_signature s =
     | _ -> failwith "invalid tag for base type"
 
   and mt_sig s i = match s.[i] with
-    | 'M' -> ((bt_sig s) >>= (fun bt -> TMutable(bt))) (i+1)
-    | 'U' -> ((bt_sig s) >>= (fun bt -> TImmutable(bt))) (i+1)
+    | 'M' -> ((bt_sig s) >>= (fun bt -> TMutable(bt,[]))) (i+1)
+    | 'U' -> ((bt_sig s) >>= (fun bt -> TImmutable(bt,[]))) (i+1)
     | _ -> failwith "invalid tag for mutable type"
 
   and vt_sig s i = match s.[i] with

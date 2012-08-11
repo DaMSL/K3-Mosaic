@@ -117,7 +117,7 @@ let type_of_expr e =
 
 (* Type composition/decomposition primitives *)
 
-let canonical bt = TIsolated(TImmutable(bt))
+let canonical bt = TIsolated(TImmutable(bt,[]))
 
 let value_of t x =
   let dummy = canonical TUnknown in
@@ -145,25 +145,33 @@ let collection_of bt x =
 let dereft mt x =
     let dummy = TUnknown in 
     match mt with
-    | TMutable(bt) -> bt
+    | TMutable(bt,_) -> bt
     | _ -> x (); dummy
 
 let base_of vt =
     match vt with
-    | TIsolated(TImmutable(bt))
-    | TIsolated(TMutable(bt))
-    | TContained(TImmutable(bt))
-    | TContained(TMutable(bt)) -> bt
+    | TIsolated(TImmutable(bt,_))
+    | TIsolated(TMutable(bt,_))
+    | TContained(TImmutable(bt,_))
+    | TContained(TMutable(bt,_)) -> bt
 
+let annotated_base_of vt =
+    match vt with
+    | TIsolated(TImmutable(bt,a))
+    | TIsolated(TMutable(bt,a))
+    | TContained(TImmutable(bt,a))
+    | TContained(TMutable(bt,a)) -> (bt,a)
+
+(* This copies all annotations from the base type *)
 let rec contained_of vt =
-    let inner_base_type = base_of vt in
+    let inner_base_type, inner_ann = annotated_base_of vt in
     let convertable_type = (
         match inner_base_type with
         | TTuple(ts) -> TTuple(List.map contained_of ts)
         | TCollection(t_c, t_e) -> TCollection(t_c, contained_of t_e)
         | TMaybe(t_m) -> TMaybe(contained_of t_m)
         | _ -> inner_base_type
-    ) in TContained(TImmutable(convertable_type))
+    ) in TContained(TImmutable(convertable_type, inner_ann))
 
 
 (* Type comparison primitives *)
@@ -172,7 +180,7 @@ let rec assignable t_l t_r =
     let t_lb = base_of t_l in
     let t_rb = base_of t_r in
     match (t_lb, t_rb) with
-    | TMaybe(_), TMaybe(TIsolated(TImmutable(TUnknown)))-> true
+    | TMaybe(_), TMaybe(TIsolated(TImmutable(TUnknown,_)))-> true
     | TMaybe(t_lm), TMaybe(t_rm) -> assignable t_lm t_rm
     | TTuple(t_ls), TTuple(t_rs) -> List.length t_ls = List.length t_rs && 
         List.for_all2 assignable t_ls t_rs
@@ -299,7 +307,7 @@ let rec deduce_expr_type trig_env cur_env utexpr =
                 | (TInt, TFloat)
                 | (TFloat, TFloat) -> TFloat
                 | _ -> t_erroru name (TMsg("start and stride types are bad")) ()
-            end in TValue(canonical @: TCollection(t_c, TContained(TImmutable t_e)))
+            end in TValue(canonical @: TCollection(t_c, TContained(TImmutable (t_e,[]))))
 
         | (Add|Mult) ->
             let name = match tag with Add -> "Add" | Mult -> "Mult" | _ -> "" in
@@ -540,13 +548,11 @@ let rec deduce_expr_type trig_env cur_env utexpr =
             let name = "Deref" in
             let t0 = bind 0 in
             let t_r = t0 <| value_of |> t_erroru name @: TBad t0 in
-            let t_u = begin match t_r with
-                | TIsolated mt -> 
-                    TIsolated(TImmutable(mt <| dereft |> 
-                    t_erroru name @: MTBad mt))
-                | TContained mt -> 
-                    TContained(TImmutable(mt <| dereft |> 
-                    t_erroru name @: MTBad mt))
+            let t_u = 
+              let d_t mt = mt <| dereft |> t_erroru name @: MTBad mt in
+              begin match t_r with
+                | TIsolated mt -> TIsolated(TImmutable(d_t mt, []))
+                | TContained mt -> TContained(TImmutable(d_t mt, []))
             end in TValue t_u
 
         | Send ->
