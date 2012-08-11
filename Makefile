@@ -8,9 +8,11 @@ FILES=\
 	util/Symbols \
 	util/Printing \
 	util/Tree \
-	stages/k3/K3 \
+	stages/k3/K3AST \
 	stages/k3/K3Annotations \
+	stages/k3/K3 \
 	stages/k3/K3Util \
+	stages/k3/K3Printing \
 	stages/k3/K3Helpers \
 	stages/k3/K3Typechecker \
 	stages/k3/K3Values \

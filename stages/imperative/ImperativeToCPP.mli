@@ -1,7 +1,7 @@
-open K3Annotations
+open K3.Annotation
 open CPP
 open CPP.CPPImpl.AST
 open CPP.CPPTarget
 
 val cpp_of_imperative :
-  (type_t * annotations_t) program_t -> (type_t * annotations_t) program_t
+  (type_t * annotation_t) program_t -> (type_t * annotation_t) program_t

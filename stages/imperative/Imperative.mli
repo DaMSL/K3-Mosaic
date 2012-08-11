@@ -1,7 +1,7 @@
 (* A simplified imperative programming language *)
 
 open Tree
-open K3
+open K3.AST
 
 (* The interface required of backend implementation languages *)
 module type TargetLanguage = sig
@@ -22,7 +22,7 @@ end
 module AST(T : TargetLanguage) :
 sig
 	type type_t =
-	    TInternal of K3.type_t
+	    TInternal of K3.AST.type_t
 	  | TNamed    of id_t
     | TMap      of type_t * type_t
 	  | TExt      of T.ext_type_t

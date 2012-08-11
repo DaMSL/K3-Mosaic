@@ -1,4 +1,4 @@
-open K3
+open K3.AST
 open K3Values
 
 type queue_granularity_t = Global | PerTrigger

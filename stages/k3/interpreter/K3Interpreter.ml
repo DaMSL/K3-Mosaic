@@ -1,7 +1,7 @@
 open Util
 open Tree
-open K3
-open K3Annotations
+
+open K3.AST
 open K3Util
 open K3Values
 open K3Typechecker
@@ -90,8 +90,8 @@ let rec eval_fun uuid f =
     )
     | _ -> raise (RuntimeError uuid)
     
-and eval_expr cenv (texpr : annotations_t texpr_t) =
-    let ((uuid, tag), (t, _)), children = decompose_tree texpr in
+and eval_expr cenv texpr =
+    let ((uuid, tag), _), children = decompose_tree texpr in
     let t_erroru = t_error uuid in (* pre-curry the type error *)
     let eval_fn = eval_fun uuid in
     
@@ -504,7 +504,7 @@ let prepare_trigger id arg local_decls body =
 let env_of_program k3_program =
   let env_of_declaration ((trig_env, (m_env, f_env)) as env) (d,_)
   = match d with
-      K3.Global (id,t,init_opt) ->
+    | K3.AST.Global (id,t,init_opt) ->
         let (rm_env, rf_env), init_val = match init_opt with
           | Some e ->
             let renv, reval = eval_expr (m_env, f_env) e

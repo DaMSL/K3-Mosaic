@@ -4,6 +4,7 @@ open Printing
 open Symbols
 open Tree
 open K3Util
+open K3Printing
 open Imperative
 
 let expr_sym_class = "IEXPR"
@@ -67,7 +68,7 @@ let print_tree print_node tree =
 let rec lazy_type t        = lazy (print_type t)
 and     lazy_type_decl td  = lazy (print_type_decl td)
 and     lazy_op o          = lazy (print_op o)
-and     lazy_arg a         = lazy (K3Util.print_arg a)
+and     lazy_arg a         = lazy (K3Printing.print_arg a)
 
 and     lazy_decl string_of_meta d      = lazy (print_decl string_of_meta d)
 and     lazy_decl_arg string_of_meta da = lazy (print_decl_arg string_of_meta da)
@@ -77,7 +78,7 @@ and     lazy_cmd string_of_meta c       = lazy (print_cmd string_of_meta c)
 and print_type t = 
   let ptag ?(cut=CutHint) t ch = pretty_tag_str CutHint "" t ch in
   match t with
-  | TInternal it -> ptag "TInternal" [lazy (K3Util.print_type it)]
+  | TInternal it -> ptag "TInternal" [lazy (K3Printing.print_type it)]
   | TNamed id    -> ptag ~cut:NoCut "TNamed" [lps id]
   | TMap (k_t,v_t) -> ptag "TMap" [lazy (print_type k_t); lazy (print_type v_t)]
   | TExt e  -> ptag "TExt" [lazy (print_ext_type e)]

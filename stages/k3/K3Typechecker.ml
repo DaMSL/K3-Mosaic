@@ -2,101 +2,101 @@
 
 open Util
 open Tree
-open K3
+
+open K3.AST
+open K3.Annotation
+
 open K3Util
+open K3Printing
 
 (* TODO: Make exceptions more informative for error reporting. *)
 exception MalformedTree
+
 (* uuid, location in typechecker, compared types *)
 exception TypeError of int * string
-
-(* External type declarations *)
-type 'a texpr_t = (type_t * 'a) expr_t
-type 'a tprogram_t = (type_t * 'a) program_t
 
 type type_bindings_t = (id_t * type_t) list
 type event_type_bindings_t = (id_t * (id_t * (type_t list)) list) list
 
 (* Internal type declarations *)
 type error_type =
-    | TMismatch of type_t * type_t * string
-    | VTMismatch of value_type_t * value_type_t * string
-    | BTMismatch of base_type_t * base_type_t * string
-    | TBad of type_t
-    | VTBad of value_type_t
-    | BTBad of base_type_t
-    | MTBad of mutable_type_t
-    | TMsg of string
+	| TMismatch of type_t * type_t * string
+	| VTMismatch of value_type_t * value_type_t * string
+	| BTMismatch of base_type_t * base_type_t * string
+	| TBad of type_t
+	| VTBad of value_type_t
+	| BTBad of base_type_t
+	| MTBad of mutable_type_t
+	| TMsg of string
 
 let t_error uuid name msg () = 
-    let extra = match msg with
-        | TMismatch(t1,t2,s)  -> s^" This expression has type "^string_of_type t1^
-            "\nBut an expression was expected of type "^string_of_type t2
-        | VTMismatch(t1,t2,s) -> s^" This expression has type "^
-            string_of_value_type t1^"\nBut an expression was expected of type "^
-            string_of_value_type t2
-        | BTMismatch(t1,t2,s) -> s^" This expression has type "^
-            string_of_base_type t1^"\nBut an expression was expected of type "^
-            string_of_base_type t2
-        | TBad(t)           -> "Bad type "^string_of_type t
-        | VTBad(t)          -> "Bad type "^string_of_value_type t
-        | BTBad(t)          -> "Bad type "^string_of_base_type t
-        | MTBad(t)          -> "Bad type "^flat_string_of_mutable_type t
-        | TMsg(s)           -> s
-    in
-    raise (TypeError(uuid, name^": "^extra^")" ))
+	let extra = match msg with
+    | TMismatch(t1,t2,s)  -> s^" This expression has type "^string_of_type t1^
+        "\nBut an expression was expected of type "^string_of_type t2
+    
+    | VTMismatch(t1,t2,s) -> s^" This expression has type "^
+        string_of_value_type t1^"\nBut an expression was expected of type "^
+        string_of_value_type t2
+    
+    | BTMismatch(t1,t2,s) -> s^" This expression has type "^
+        string_of_base_type t1^"\nBut an expression was expected of type "^
+        string_of_base_type t2
+    
+    | TBad(t)           -> "Bad type "^string_of_type t
+    | VTBad(t)          -> "Bad type "^string_of_value_type t
+    | BTBad(t)          -> "Bad type "^string_of_base_type t
+    | MTBad(t)          -> "Bad type "^flat_string_of_mutable_type t
+    | TMsg(s)           -> s
+	in
+	raise (TypeError(uuid, name^": "^extra^")" ))
 
 let check_tag_arity tag children =
-    let length = List.length children in
-    let correct_arity =
-        match tag with
-        | Const(_)  -> 0
-        | Var(_) -> 0
-        | Tuple -> length
-        | Just -> 1
+	let length = List.length children in
+	let correct_arity = match tag with
+    | Const(_)  -> 0
+    | Var(_) -> 0
+    | Tuple -> length
+    | Just -> 1
 
-        | Empty(_)      -> 0
-        | Singleton(_)  -> 1
-        | Combine       -> 2
-        | Range(_)      -> 3
+    | Empty(_)      -> 0
+    | Singleton(_)  -> 1
+    | Combine       -> 2
+    | Range(_)      -> 3
 
-        | Add   -> 2
-        | Mult  -> 2
-        | Neg   -> 1
+    | Add   -> 2
+    | Mult  -> 2
+    | Neg   -> 1
 
-        | Eq    -> 2
-        | Lt    -> 2
-        | Neq   -> 2
-        | Leq   -> 2
+    | Eq    -> 2
+    | Lt    -> 2
+    | Neq   -> 2
+    | Leq   -> 2
 
-        | Lambda(_) -> 1
-        | Apply     -> 2
+    | Lambda(_) -> 1
+    | Apply     -> 2
 
-        | Block         -> length
-        | Iterate       -> 2
-        | IfThenElse    -> 3
+    | Block         -> length
+    | Iterate       -> 2
+    | IfThenElse    -> 3
 
-        | Map               -> 2
-        | FilterMap         -> 3
-        | Flatten           -> 1
-        | Aggregate         -> 3
-        | GroupByAggregate  -> 4
-        | Sort              -> 2
+    | Map               -> 2
+    | FilterMap         -> 3
+    | Flatten           -> 1
+    | Aggregate         -> 3
+    | GroupByAggregate  -> 4
+    | Sort              -> 2
 
-        | Slice     -> 2
-        | Insert    -> 2
-        | Delete    -> 2
-        | Update    -> 3
-        | Peek      -> 1
+    | Slice     -> 2
+    | Insert    -> 2
+    | Delete    -> 2
+    | Update    -> 3
+    | Peek      -> 1
 
-        | Assign -> 2
-        | Deref -> 1
+    | Assign -> 2
+    | Deref -> 1
 
-        | Send -> 3
-    in length = correct_arity
-
-let type_of_texpr texpr = fst (snd_data texpr)
-let meta_of_texpr e = snd (snd_data e)
+    | Send -> 3
+	in length = correct_arity
 
 let (<|) x f = f x
 and (|>) f y = f y
@@ -104,6 +104,18 @@ and (|>) f y = f y
 let (+++) f g = fun t x -> f (g t x) x
 let (++%) f g = fun t x -> f (g t) x
 let (%++) f g = fun t x -> f (g t x)
+
+(* Type extraction primitives *)
+let type_of_expr e =
+  let error s = t_error (id_of_expr e) "ExprType" (TMsg s) () in
+  let is_type_annotation a = match a with Type _ -> true | _ -> false in
+  let type_annotations = List.filter is_type_annotation (meta_of_expr e) in
+  match type_annotations with
+    | [] -> error "found untyped expression"
+    | [x] -> (match x with Type t -> t | _ -> error "invalid type annotation")
+    | _ -> error "multiple possible types found"
+
+(* Type composition/decomposition primitives *)
 
 let canonical bt = TIsolated(TImmutable(bt))
 
@@ -153,6 +165,9 @@ let rec contained_of vt =
         | _ -> inner_base_type
     ) in TContained(TImmutable(convertable_type))
 
+
+(* Type comparison primitives *)
+
 let rec assignable t_l t_r =
     let t_lb = base_of t_l in
     let t_rb = base_of t_r in
@@ -174,6 +189,9 @@ let rec passable t_l t_r =
     | _ -> assignable t_l t_r
 
 let (<~) = passable
+
+
+(* Type deduction *)
 
 let deduce_constant_type id trig_env c =
   (* pre-curry the type error *)
@@ -216,8 +234,8 @@ let rec deduce_expr_type trig_env cur_env utexpr =
     in
 
     let typed_children = List.map (deduce_expr_type trig_env env) untyped_children in
-    let attach_type t = mk_tree (((uuid, tag), (t, aux)), typed_children) in
-    let bind n = type_of_texpr (List.nth typed_children n) in
+    let attach_type t = mk_tree (((uuid, tag), ((Type t)::aux)), typed_children) in
+    let bind n = type_of_expr (List.nth typed_children n) in
 
     let current_type =
         match tag with
@@ -227,7 +245,7 @@ let rec deduce_expr_type trig_env cur_env utexpr =
         | Tuple ->
             let child_types = List.map 
             (fun e -> 
-                type_of_texpr e <| value_of |> t_erroru "Tuple" (TBad(type_of_texpr e)))
+                type_of_expr e <| value_of |> t_erroru "Tuple" (TBad(type_of_expr e)))
                 typed_children 
             in 
             TValue(canonical (TTuple(child_types)))
@@ -334,9 +352,9 @@ let rec deduce_expr_type trig_env cur_env utexpr =
             let name = "Block" in
             let rec validate_block components = (
                 match components with
-                | e :: [] -> type_of_texpr e
-                | h :: t when type_of_texpr h <| value_of |> 
-                    t_erroru name @: TBad(type_of_texpr h) === canonical TUnit -> validate_block t
+                | e :: [] -> type_of_expr e
+                | h :: t when type_of_expr h <| value_of |> 
+                    t_erroru name @: TBad(type_of_expr h) === canonical TUnit -> validate_block t
                 | _ -> t_erroru name (TMsg("Bad or non-TUnit expression")) ()
             ) in validate_block typed_children
 
@@ -552,8 +570,30 @@ let rec deduce_expr_type trig_env cur_env utexpr =
 
     in attach_type current_type
 
+let check_trigger_type trig_env env id args locals body =
+  let name = "Trigger("^id^")" in
+	let self_bindings = (id, TValue(canonical @: TTarget(base_of @: deduce_arg_type args))) in
+	let arg_bindings = match args with
+    | AVar(i, t) -> [(i, TValue(t))]
+    | ATuple(its) -> List.map (fun (i, t) -> (i, TValue(t))) its
+	in
+	let local_bindings = List.map (fun (i, vt, _) -> (i, TValue(vt))) locals in
+	let inner_env = self_bindings :: arg_bindings @ local_bindings @ env in
+	let typed_body = deduce_expr_type trig_env inner_env body in
+	let t_b =
+	  type_of_expr typed_body <| value_of |>
+	    t_error (-1) name @: TBad(type_of_expr typed_body)
+	in
+	if not (t_b === canonical TUnit) then
+	  t_error (-1) name (VTMismatch(canonical TUnit, t_b,"")) () 
+	else 
+			let new_locals =
+			  List.map (fun (i,vt,meta) -> (i, vt, (Type(TValue(vt))::meta))) locals
+			in (Trigger(id, args, new_locals, typed_body), self_bindings :: env)
 
-(* Stream program typing *)
+
+(* Stream program type deduction *)
+
 let rec stream_types_of_pattern stream_env p = 
   let rcr = stream_types_of_pattern stream_env in
   let rcr_list l = ListAsSet.no_duplicates (List.flatten (List.map rcr l)) in
@@ -645,7 +685,9 @@ let streams_of_roles prog =
     | _ -> stream_env
     ) [] prog
 
-(* Typechecking toplevel API *)
+
+(* Typechecking API *)
+
 let type_bindings_of_program prog =
   (* do a first pass, collecting trigger types and streams *)
   let trig_env = triggers_of_program prog in
@@ -656,51 +698,31 @@ let type_bindings_of_program prog =
 	      | Global(i, t, Some init) ->
 	        let typed_init =
 	          try deduce_expr_type trig_env env init
-	          with | TypeError(ast_id, msg) -> raise (TypeError(ast_id, "In Global "^i^": "^msg))
-	        in (Global(i, t, Some typed_init), (i, type_of_texpr typed_init) :: env)
+	          with TypeError(ast_id, msg) -> raise (TypeError(ast_id, "In Global "^i^": "^msg))
+	        in (Global(i, t, Some typed_init), (i, type_of_expr typed_init) :: env)
 	
 				| Global(i, t, None) -> (Global(i, t, None), (i, t) :: env)
 				
 				| Foreign(i, t) -> (Foreign(i, t), (i, t) :: env)
 				    
 				| Trigger(id, args, locals, body) ->
-				    (try
-				        let name = "Trigger("^id^")" in
-				        let self_bindings =
-                  (id, TValue(canonical @: TTarget(base_of @: deduce_arg_type args))) in
-				        let arg_bindings = (
-				            match args with
-				            | AVar(i, t) -> [(i, TValue(t))]
-				            | ATuple(its) -> List.map (fun (i, t) -> (i, TValue(t))) its
-				        ) in
-				        let local_bindings = List.map (fun (i, vt, _) -> (i, TValue(vt))) locals in
-				        let inner_env = self_bindings :: arg_bindings @ local_bindings @ env in
-				        let typed_body = deduce_expr_type trig_env inner_env body in
-				        let t_b = type_of_texpr typed_body <| value_of |> t_error (-1) name @:
-				            TBad(type_of_texpr typed_body) in
-				        if not (t_b === canonical TUnit)
-				            then t_error (-1) name (VTMismatch(canonical TUnit, t_b,"")) () 
-				        else 
-				    let new_locals =
-				      List.map (fun (i,vt,meta) -> (i, vt, (TValue(vt), meta))) locals
-				    in (Trigger(id, args, new_locals, typed_body), self_bindings :: env)
-				    with
-				    | TypeError(ast_id, msg) -> 
-				            raise (TypeError(ast_id, "In Trigger "^id^": "^msg)))
-				
-				  | Role(id,sp) ->
-			      let stream_env =
-			        try List.assoc id rstream_env with Not_found ->
-			          t_error (-1) "Invalid role" (TMsg("No role named "^id^" found")) ()
-			      in
-	          let nsp = validate_stream_program_t trig_env stream_env sp
-	          in (Role(id, nsp), env)
-	          
-	        | DefaultRole id ->
-			      if List.mem_assoc id rstream_env then (DefaultRole(id), env)
-			      else t_error (-1) "Invalid default role" (TMsg("No role named "^id^" found")) ()
+				    (try check_trigger_type trig_env env id args locals body
+				     with TypeError(ast_id, msg) -> 
+				        raise (TypeError(ast_id, "In Trigger "^id^": "^msg)))
+
+			  | Role(id,sp) ->
+		      let stream_env =
+		        try List.assoc id rstream_env with Not_found ->
+		          t_error (-1) "Invalid role" (TMsg("No role named "^id^" found")) ()
+		      in
+          let nsp = validate_stream_program_t trig_env stream_env sp
+          in (Role(id, nsp), env)
+          
+        | DefaultRole id ->
+		      if List.mem_assoc id rstream_env then (DefaultRole(id), env)
+		      else t_error (-1) "Invalid default role" (TMsg("No role named "^id^" found")) ()
 	
-		  in (nprog@[nd, (TValue(canonical TUnit), meta)]), nenv
+		  in (nprog@[nd, (Type(TValue(canonical TUnit))::meta)]), nenv
 		) ([], []) prog
  in prog, env, trig_env, rstream_env
 

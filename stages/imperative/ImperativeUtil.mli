@@ -1,4 +1,4 @@
-open K3
+open K3.AST
 open Imperative
 
 module Util : functor (Lang : TargetLanguage) ->

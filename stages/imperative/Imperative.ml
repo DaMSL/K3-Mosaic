@@ -1,5 +1,5 @@
 open Tree
-open K3
+open K3.AST
 
 module type TargetLanguage = sig
   type ext_type_t
@@ -18,7 +18,7 @@ end
 module AST = functor(T : TargetLanguage) ->
 struct
 	type type_t =
-	    TInternal of K3.type_t
+	    TInternal of K3.AST.type_t
 	  | TNamed    of id_t
     | TMap      of type_t * type_t
 	  | TExt      of T.ext_type_t

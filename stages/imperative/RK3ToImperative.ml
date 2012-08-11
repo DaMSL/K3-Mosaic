@@ -1,7 +1,9 @@
 open Util
 open Tree
-open K3
+open K3.AST
+open K3.Annotation
 open K3Util
+open K3Printing
 open K3Typechecker
 open K3Streams
 open ReifiedK3
@@ -70,7 +72,7 @@ let imperative_of_expr_node mk_meta fn_arg_env
 =
   let error s =
     print_endline ("Error building imperative AST: "^s);
-    print_endline (string_of_expr (fun _ -> "") e);
+    print_endline (string_of_expr e);
     failwith ("Error building imperative AST: "^s)
   in
   
@@ -79,7 +81,7 @@ let imperative_of_expr_node mk_meta fn_arg_env
   
   let iv_type vt = TInternal(TValue vt) in
   let i_type t = TInternal t in
-  let i_meta e = (i_type (type_of_texpr e)), meta_of_texpr e in
+  let i_meta e = (i_type (type_of_expr e)), meta_of_expr e in
   
   let result_var = U.mk_var ((i_type t), mk_meta()) id in
 
@@ -151,7 +153,7 @@ let imperative_of_expr_node mk_meta fn_arg_env
   
   let get_fn_app_typed_vars fn_e = match K3Util.tag_of_expr fn_e with
     | Lambda _ -> typed_vars_of_lambda fn_e
-    | K3.Var fn_id -> 
+    | K3.AST.Var fn_id -> 
       (* Replace global declaration args with new symbols before function call *)
       (try List.map (fun (id,t) -> mk_bind_sym(),t) 
              (typed_vars_of_arg (List.assoc fn_id fn_arg_env))
@@ -276,7 +278,7 @@ let imperative_of_expr_node mk_meta fn_arg_env
     let fn_reify_cmds = List.flatten (List.assoc fn_pair reify_cmds_by_children) in
     let c_reify_cmds = List.flatten (List.assoc c_pair reify_cmds_by_children) in
     let body_fn = mk_appfn_loop_body_cmds is_map id t fn_e fn_pair fn_reify_cmds in
-    let body = collection_loop (type_of_texpr c_e) c_pair c_reify_cmds body_fn
+    let body = collection_loop (type_of_expr c_e) c_pair c_reify_cmds body_fn
     in None, Some(body)
   in
 
@@ -301,21 +303,21 @@ let imperative_of_expr_node mk_meta fn_arg_env
 
   (* Start of conversion method *)
   match K3Util.tag_of_expr e with
-  | K3.Const c -> ret_term e (Const c)
-  | K3.Var id  -> ret_term e (Var id)
-  | K3.Tuple   -> ret_expr e Tuple
-  | K3.Just    -> ret_expr e Just
+  | K3.AST.Const c -> ret_term e (Const c)
+  | K3.AST.Var id  -> ret_term e (Var id)
+  | K3.AST.Tuple   -> ret_expr e Tuple
+  | K3.AST.Just    -> ret_expr e Just
 
-  | K3.Empty v_t     -> ret_cmds []
-  | K3.Singleton v_t -> ret_cstr ()
-  | K3.Combine       ->
+  | K3.AST.Empty v_t     -> ret_cmds []
+  | K3.AST.Singleton v_t -> ret_cstr ()
+  | K3.AST.Combine       ->
       ret_common (fun exprs pre_cmds ->
         let cmds = reify_cmds@pre_cmds@(List.map (fun e ->
             expr_cmd (coll_expr (i_type t) Combine [result_var; e])
           ) exprs)
         in None, Some(cmds))
 
-  | K3.Range c_t ->
+  | K3.AST.Range c_t ->
     if reify_cmds = [] then ret_expr e (Fn (Collection Range))
     else
     begin match children with
@@ -339,7 +341,7 @@ let imperative_of_expr_node mk_meta fn_arg_env
           let loop_var = U.mk_var ((iv_type loop_t), mk_meta()) loop_id
           in [insert_expr id t loop_var]
         in
-        let e_t = type_of_texpr e in
+        let e_t = type_of_expr e in
         let c_pair = Some(Init(coll_expr (TInternal e_t) Range exprs)), Some(pre_cmds) in
         let cmds = collection_loop e_t c_pair reify_cmds body_fn
         in None, Some(cmds)
@@ -347,14 +349,14 @@ let imperative_of_expr_node mk_meta fn_arg_env
       | _ -> failwith "invalid range reification"
     end
 
-  | K3.Add  -> ret_binop e Add
-  | K3.Mult -> ret_binop e Mult
-  | K3.Neg  -> ret_binop e Neg
+  | K3.AST.Add  -> ret_binop e Add
+  | K3.AST.Mult -> ret_binop e Mult
+  | K3.AST.Neg  -> ret_binop e Neg
 
-  | K3.Eq  -> ret_binop e Eq
-  | K3.Neq -> ret_binop e Neq
-  | K3.Lt  -> ret_binop e Lt
-  | K3.Leq -> ret_binop e Leq
+  | K3.AST.Eq  -> ret_binop e Eq
+  | K3.AST.Neq -> ret_binop e Neq
+  | K3.AST.Lt  -> ret_binop e Lt
+  | K3.AST.Leq -> ret_binop e Leq
 
   | Lambda arg -> 
     let ch_pair = List.hd children in
@@ -450,7 +452,7 @@ let imperative_of_expr_node mk_meta fn_arg_env
       | _ -> failwith "invalid apply reification"
     end
 
-  | K3.Block ->
+  | K3.AST.Block ->
     let init, back = split_last children in
     let block_init_cmds =
       (List.fold_left
@@ -468,7 +470,7 @@ let imperative_of_expr_node mk_meta fn_arg_env
         (fun da cmds -> (Some da, Some(block_init_cmds@cmds)))
         back
 
-  | K3.IfThenElse ->
+  | K3.AST.IfThenElse ->
     (* Note this blindly assumes every ifelse is materialized, and thus the
      * reified sym is always associated with the ifelse expression.
      *
@@ -552,7 +554,7 @@ let imperative_of_expr_node mk_meta fn_arg_env
               filter_fn_pair
           in filter_bindings@filter_fn_reify_cmds@filter_cmds
         in
-        let filter_body = collection_loop (type_of_texpr c_e) c_pair c_reify_cmds filter_body_cmds
+        let filter_body = collection_loop (type_of_expr c_e) c_pair c_reify_cmds filter_body_cmds
         in None, Some(filter_body) 
       | _ -> failwith "invalid reified filter-map children"
     end
@@ -565,7 +567,7 @@ let imperative_of_expr_node mk_meta fn_arg_env
       let loop_var = U.mk_var ((iv_type loop_t), mk_meta()) loop_id
       in [expr_cmd (coll_expr (i_type t) Combine [result_var; loop_var])]
     in
-    let flatten_body = collection_loop (type_of_texpr c_e) c_pair reify_cmds flatten_body_cmds
+    let flatten_body = collection_loop (type_of_expr c_e) c_pair reify_cmds flatten_body_cmds
     in None, Some(flatten_body)
   
   | Aggregate ->
@@ -592,7 +594,7 @@ let imperative_of_expr_node mk_meta fn_arg_env
         
         let mk_agg_body_fn = mk_agg_loop_body_cmds id t agg_fn_e fn_pair fn_reify_cmds in
         let cmds = init_reify_cmds@init_cmds@(
-          collection_loop (type_of_texpr c_e) c_pair c_reify_cmds mk_agg_body_fn)
+          collection_loop (type_of_expr c_e) c_pair c_reify_cmds mk_agg_body_fn)
         in None, Some(cmds)
       | _ -> failwith "invalid reified aggregate children"
     end
@@ -613,7 +615,7 @@ let imperative_of_expr_node mk_meta fn_arg_env
 
           let gb_key_id, gb_val_id = mk_gb_key_sym (), mk_gb_val_sym () in
           let gb_tuple_t, gb_key_t, gb_val_t =
-            let result_type = base_of (value_of (type_of_texpr e) type_failure) in
+            let result_type = base_of (value_of (type_of_expr e) type_failure) in
             match base_of (snd (collection_of result_type type_failure)) with
               | TTuple([gb_t; a_t]) as t -> (TInternal (TValue(canonical t))), (TInternal (TValue gb_t)), (TInternal (TValue a_t)) 
               | _ -> failwith "invalid groupby collection element type"
@@ -687,28 +689,28 @@ let imperative_of_expr_node mk_meta fn_arg_env
             
         in
         let cmds = init_reify_cmds@init_cmds@(
-          collection_loop (type_of_texpr c_e) c_pair c_reify_cmds gbagg_body_cmd_fn)
+          collection_loop (type_of_expr c_e) c_pair c_reify_cmds gbagg_body_cmd_fn)
         in None, Some(cmds)
 
       | _ -> failwith "invalid reified group-by children"
     end
 
-  | K3.Sort -> ret_cmd_expr (coll_expr (TInternal (type_of_texpr e)) Sort)
+  | K3.AST.Sort -> ret_cmd_expr (coll_expr (TInternal (type_of_expr e)) Sort)
 
-  | K3.Peek -> ret_expr e (Fn (Collection Peek))
-  | K3.Slice -> ret_expr e (Fn (Collection Slice))
-  | K3.Insert -> ret_cmd_expr (coll_expr unit_t Insert)
-  | K3.Delete -> ret_cmd_expr (coll_expr unit_t Delete)
-  | K3.Update -> ret_cmd_expr (coll_expr unit_t Update)
+  | K3.AST.Peek -> ret_expr e (Fn (Collection Peek))
+  | K3.AST.Slice -> ret_expr e (Fn (Collection Slice))
+  | K3.AST.Insert -> ret_cmd_expr (coll_expr unit_t Insert)
+  | K3.AST.Delete -> ret_cmd_expr (coll_expr unit_t Delete)
+  | K3.AST.Update -> ret_cmd_expr (coll_expr unit_t Update)
 
-  | K3.Send ->
+  | K3.AST.Send ->
     let _, _, send_args_e = decompose_send e in
     let type_tag = String.concat "_"
-      (List.map (fun e -> signature_of_type (type_of_texpr e)) send_args_e)
+      (List.map (fun e -> signature_of_type (type_of_expr e)) send_args_e)
     in ret_cmd_expr (U.mk_fn (unit_t, mk_meta()) (Send type_tag))
 
   (* TODO: generates a side-effecting assignment command *) 
-  | K3.Assign -> failwith "imperative assign not yet implemented"
+  | K3.AST.Assign -> failwith "imperative assign not yet implemented"
 
   (* TODO: primitive target language operation *)
   | Deref -> failwith "imperative deref not yet implemented"
@@ -954,7 +956,7 @@ let imperative_of_roles mk_meta prog =
 let imperative_of_program mk_meta p =
   let main_body, decls, _ =
     List.fold_left (fun (main_cmd_acc, decl_acc, fn_arg_env) (d,m) ->
-	    let d_opt, init_cmds, fn_args = imperative_of_declaration mk_meta fn_arg_env (d,snd m) in
+	    let d_opt, init_cmds, fn_args = imperative_of_declaration mk_meta fn_arg_env (d,m) in
 	    (main_cmd_acc@init_cmds),
 	    (match d_opt with | Some c -> decl_acc@[c] | None -> decl_acc),
 	    (fn_arg_env@fn_args)

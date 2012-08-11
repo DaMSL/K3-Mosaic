@@ -3,13 +3,14 @@ open Util
 open Printing
 open Symbols
 open Tree
-open K3
+open K3.AST
 open K3Util
+open K3Printing
 open K3Typechecker
 
 (* Two bools are declared and assigned respectively *)
-type 'a reified_node_t = (id_t * type_t * bool * bool) * ('a texpr_t)
-type 'a reified_expr_t = ('a reified_node_t) tree_t
+type reified_node_t = (id_t * type_t * bool * bool) * expr_t
+type reified_expr_t = reified_node_t tree_t
 
 (* Reified expression stringification *)
 let print_reified_expr t =
@@ -23,7 +24,7 @@ let print_reified_expr t =
             ps_list CutLine force lazy_ch;
             ps ((if decl then "declare" else "assign")^
                 " "^decl_id^" : "^(flat_string_of_type decl_t)^" = ");
-            print_expr (fun _ -> "") expr
+            print_expr expr
           end
          
         | true, false ->
@@ -32,14 +33,14 @@ let print_reified_expr t =
             ps_list CutLine force lazy_ch;
             fnl();
             ps ("reified "^" "^decl_id^" = ");
-            print_expr (fun _ -> "") expr
+            print_expr expr
           end
 
         | false, false ->
           begin
             ps_list CutLine force lazy_ch;
             fnl();
-            print_expr (fun _ -> "") expr
+            print_expr expr
           end)
     t
 
@@ -51,15 +52,15 @@ let is_unit t = match t with
   | _ -> false
 
 let get_type e =
-  try type_of_texpr e 
-  with TypeError _ -> failwith ("type error: "^(string_of_expr (fun _ -> "") e))
+  try type_of_expr e 
+  with TypeError _ -> failwith ("type error: "^(string_of_expr e))
 
 let mk_typed_var id t meta = mk_tree (((0, Var id), meta), []) 
   
 (* Top-down folder for expression reification *)
 let name_of_reification (fn_arg_env : (id_t * arg_t) list)
                         (reified_ancestors : (int * (id_t * type_t * bool * bool)) list)
-                        (e : 'a texpr_t)
+                        (e : expr_t)
                         : (int * (id_t * type_t * bool * bool)) list =
   let unwrap opt = match opt with
     | Some x -> x | _ -> failwith "invalid option"
@@ -210,12 +211,12 @@ let name_of_reification (fn_arg_env : (id_t * arg_t) list)
 
 (* Bottom-up folder for expression reification *)
 let reify_node (reified_ancestors : (int * (id_t * type_t * bool * bool)) list)
-               (reified_subtrees : ('a reified_expr_t * bool) list list)
-               (e : 'a texpr_t)
+               (reified_subtrees : (reified_expr_t * bool) list list)
+               (e : expr_t)
 =
   let extract_expr_and_nodes (e_acc,n_acc) 
-                             ((rs, used) : ('a reified_expr_t * bool)) 
-                             : 'a texpr_t list * 'a reified_expr_t list =
+                             ((rs, used) : (reified_expr_t * bool)) 
+                             : expr_t list * reified_expr_t list =
     let rs_data, rs_ch = decompose_tree rs in
     let rs_expr, rs_nodes = 
       let (id, t, _, _), e = rs_data in

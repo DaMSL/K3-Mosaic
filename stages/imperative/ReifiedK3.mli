@@ -1,12 +1,11 @@
 open Tree
-open K3
-open K3Typechecker
+open K3.AST
 
-type 'a reified_node_t = (id_t * type_t * bool * bool) * ('a texpr_t)
-type 'a reified_expr_t = ('a reified_node_t) tree_t
+type reified_node_t = (id_t * type_t * bool * bool) * expr_t
+type reified_expr_t = reified_node_t tree_t
 
-val print_reified_expr : 'a reified_expr_t -> unit
-val string_of_reified_expr : 'a reified_expr_t -> string
+val print_reified_expr : reified_expr_t -> unit
+val string_of_reified_expr : reified_expr_t -> string
   
 (* Top-down name generation for reification
  * Arguments:
@@ -18,7 +17,7 @@ val string_of_reified_expr : 'a reified_expr_t -> string
 val name_of_reification :
   (id_t * arg_t) list
   -> (int * (id_t * type_t * bool * bool)) list   
-  -> 'a texpr_t
+  -> expr_t
   -> (int * (id_t * type_t * bool * bool)) list  
 
 (* bottom-up reification of an expression, given a target variable, and
@@ -26,10 +25,10 @@ val name_of_reification :
  *)
 val reify_node :
   (int * (id_t * type_t * bool * bool)) list
-  -> ('a reified_expr_t * bool) list list
-  -> 'a texpr_t
-  -> ('a reified_expr_t * bool) list
+  -> (reified_expr_t * bool) list list
+  -> expr_t
+  -> (reified_expr_t * bool) list
 
 (* reifies/reverses a whole expression *)
-val reify_expr : (id_t * arg_t) list -> 'a texpr_t -> 'a reified_expr_t
-val unreify_expr : 'a reified_expr_t -> 'a texpr_t
+val reify_expr : (id_t * arg_t) list -> expr_t -> reified_expr_t
+val unreify_expr : reified_expr_t -> expr_t

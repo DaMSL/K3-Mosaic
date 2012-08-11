@@ -1,8 +1,9 @@
 open Util
 open Printing
-open K3
-open K3Annotations
+
+open K3.AST
 open K3Util
+open K3Printing
 open K3Typechecker
 
 exception RuntimeError of int
@@ -22,7 +23,7 @@ type value_t
     | VSet of value_t list
     | VBag of value_t list
     | VList of value_t list
-    | VFunction of arg_t * annotations_t texpr_t
+    | VFunction of arg_t * expr_t
     | VAddress of address
     | VTarget of id_t
 
@@ -37,28 +38,26 @@ type source_bindings_t = (id_t * id_t) list
 (* Value stringification *)
 let unwrap opt = match opt with Some v -> v | _ -> failwith "invalid option unwrap"
 
-let rec repr_of_value v =
-  let expr_str = string_of_expr (fun _ -> "") in
-    match v with
-    | VUnknown  -> "VUnknown"
-    | VUnit     -> "VUnit"
-    | VBool b   -> "VBool("^ string_of_bool b^")"
-    | VInt i    -> "VInt("^ string_of_int i^")"
-    | VFloat f  -> "VFloat("^ string_of_float f^")"
-    | VByte c   -> "VByte("^ string_of_int (Char.code c)^")"
-    | VString s -> "VString("^s^")"
-    | VTuple vs -> "VTuple("^ String.concat ", " (List.map repr_of_value vs)^")"
-    
-    | VOption vopt ->
-      "VOption("^(if vopt = None then "None" else repr_of_value (unwrap vopt))^")"
-    
-    | VSet vs  -> "VSet(["^ String.concat "; " (List.map repr_of_value vs)^"])"
-    | VBag vs  -> "VBag(["^ String.concat "; " (List.map repr_of_value vs)^"])"
-    | VList vs -> "VList(["^ String.concat "; " (List.map repr_of_value vs)^"])"
-    
-    | VFunction (a, b) -> "VFunction("^ string_of_arg a ^" -> "^ expr_str b^")"
-    | VAddress (ip,port) -> "VAddress("^ip^":"^ string_of_int port^")"
-    | VTarget id -> "VTarget("^id^")"
+let rec repr_of_value v = match v with
+	| VUnknown  -> "VUnknown"
+	| VUnit     -> "VUnit"
+	| VBool b   -> "VBool("^ string_of_bool b^")"
+	| VInt i    -> "VInt("^ string_of_int i^")"
+	| VFloat f  -> "VFloat("^ string_of_float f^")"
+	| VByte c   -> "VByte("^ string_of_int (Char.code c)^")"
+	| VString s -> "VString("^s^")"
+	| VTuple vs -> "VTuple("^ String.concat ", " (List.map repr_of_value vs)^")"
+	
+	| VOption vopt ->
+	  "VOption("^(if vopt = None then "None" else repr_of_value (unwrap vopt))^")"
+	
+	| VSet vs  -> "VSet(["^ String.concat "; " (List.map repr_of_value vs)^"])"
+	| VBag vs  -> "VBag(["^ String.concat "; " (List.map repr_of_value vs)^"])"
+	| VList vs -> "VList(["^ String.concat "; " (List.map repr_of_value vs)^"])"
+	
+	| VFunction (a, b) -> "VFunction("^ string_of_arg a ^" -> "^(string_of_expr b)^")"
+	| VAddress (ip,port) -> "VAddress("^ip^":"^ string_of_int port^")"
+	| VTarget id -> "VTarget("^id^")"
 
 
 let rec print_value v =

@@ -1,5 +1,5 @@
 open Util
-open K3
+open K3.AST
 open K3Helpers
 
 exception Bad_data of string;;

@@ -2,10 +2,11 @@
 
 open Arg
 open Util
-open K3
-open K3Annotations
+open K3.AST
+open K3.Annotation
 open K3Values
 open K3Util
+open K3Printing
 open K3Typechecker
 open K3Streams
 open K3Consumption
@@ -147,7 +148,7 @@ let handle_parse_error lexbuf =
 let handle_type_error p (uuid,error) =
   print_endline "----Type error----";
   print_endline ("Error("^(string_of_int uuid)^"): "^error);
-  print_endline (string_of_program ~print_id:true (fun _ -> "") p);
+  print_endline (string_of_program ~print_id:true p);
   exit 1
 
 (* Program constructors *)
@@ -203,31 +204,30 @@ let print_event_loop (id, (senv, fenv, sbind, instrs)) =
 	print_string (string_of_fsm_env fenv);
 	print_string (string_of_source_bindings sbind)
 
-let string_of_typed_meta (t,a) = string_of_annotations a
+let string_of_typed_meta (t,a) = string_of_annotation a
 
 let print_k3_program f =
   let tp = typed_program f in
   let event_loops, default = roles_of_program tp in
-    print_endline (string_of_program string_of_typed_meta tp);
+    print_endline (string_of_program tp);
     List.iter print_event_loop event_loops;
     (match default with None -> () | Some (_,x) -> print_event_loop ("DEFAULT", x))
 
 let print_reified_k3_program f =
-  let print_expr_fn ?(print_id=false) string_of_meta e =
-    lazy (print_reified_expr (reify_expr [] e)) in
+  let print_expr_fn ?(print_id=false) e = lazy (print_reified_expr (reify_expr [] e)) in
   let tp = typed_program f in 
-  print_endline (string_of_program ~print_expr_fn:print_expr_fn string_of_typed_meta tp)
+  print_endline (string_of_program ~print_expr_fn:print_expr_fn tp)
 
 let print_imperative_program print_types f =
   let string_of_meta m =
     (if print_types then (ImperativeUtil.string_of_type ~fresh:true (fst m))^";" else "")^
-    (string_of_annotations (snd m))
+    (string_of_annotation (snd m))
   in print_endline (ImperativeUtil.string_of_program string_of_meta (imperative_program f))
 
 let print_cpp_program print_types f = 
   let string_of_meta m =
     (if print_types then (ImperativeUtil.string_of_type ~fresh:true (fst m))^";" else "")^
-    (string_of_annotations (snd m))
+    (string_of_annotation (snd m))
   in print_endline (ImperativeUtil.string_of_program string_of_meta (cpp_program f))
 
 let print params =
@@ -242,11 +242,11 @@ let print params =
 (* Test actions *)
 let print_test_case (decls,e,x) =
   print_endline "----Decls----";
-  print_endline (string_of_program string_of_annotations decls);
+  print_endline (string_of_program decls);
   print_endline "----Expression----";
-  print_endline (string_of_expr string_of_annotations e);
+  print_endline (string_of_expr e);
   print_endline "----Expected----";
-  print_endline (string_of_expr string_of_annotations x)
+  print_endline (string_of_expr x)
 
 let test params =
   let test_fn = match params.language with

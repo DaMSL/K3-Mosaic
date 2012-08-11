@@ -1,8 +1,8 @@
 open Testing
-open K3
+open K3.AST
 open K3Typechecker
 
-let give_type expr = type_of_texpr (deduce_expr_type [] [] expr)
+let give_type expr = type_of_expr (deduce_expr_type [] [] expr)
 
 let tests = group "all" [
     group "Constants" [

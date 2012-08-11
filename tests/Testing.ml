@@ -1,7 +1,8 @@
 open Symbols
 open Tree
-open K3
+open K3.AST
 open K3Util
+open K3Printing
 open K3Typechecker
 open K3Values
 open K3Interpreter

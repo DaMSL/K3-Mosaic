@@ -1,7 +1,7 @@
-
-open K3
 open Tree
 open Util
+
+open K3.AST
 
 (* Type manipulation functions ------------- *)
 
@@ -54,7 +54,7 @@ let wrap_ttuple_mut typ = match typ with
 
 (* Helper functions to create K3 AST nodes more easily *)
 
-let meta = 0    (* we fill meta with a default value *)
+let meta = []   (* we fill meta with a default value *)
 
 let class_id = "K3" (* used for symbol generation *)
 let new_num () = Symbols.gen_int_sym class_id 
@@ -266,7 +266,7 @@ type tuple_pat = Position of int | ExternVar of id_t | Unknown
 
 let mk_tuple_range types = create_range 1 @: List.length types
 
-let tuple_make_pattern (types:K3.value_type_t list) = 
+let tuple_make_pattern (types:value_type_t list) = 
     List.map (fun x -> Position x) (mk_tuple_range types)
 
 (* functions to take and drop from the pattern, filling in unknowns for the

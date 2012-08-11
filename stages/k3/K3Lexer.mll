@@ -2,8 +2,7 @@
 
 {
     open K3Parser
-    open K3
-    open K3Annotations
+    open K3.AST
 
 		let init_line lexbuf =
 		  let pos = lexbuf.Lexing.lex_curr_p in

@@ -1,8 +1,9 @@
 (* A single-threaded scheduler and single-site peer simulator *)
 
-open K3
+open K3.AST
 open K3Values
 open K3Util
+open K3Printing
 
 (* consumeable id -> trigger id *)
 type source_bindings_t = (id_t * id_t) list

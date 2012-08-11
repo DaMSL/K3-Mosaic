@@ -1,5 +1,5 @@
 (* K3 stream patterns. *)
-open K3
+open K3.AST
 open K3Values
 open K3Typechecker
 
@@ -31,4 +31,4 @@ val compile : stream_env_t -> fsm_env_t -> stream_pattern_t -> stream_fsm_t
 
 (* Returns a list of K3 roles and a default role if available *)
 val roles_of_program :
-  'a tprogram_t -> (id_t * event_loop_t) list * (id_t * event_loop_t) option
+  program_t -> (id_t * event_loop_t) list * (id_t * event_loop_t) option

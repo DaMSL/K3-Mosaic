@@ -1,8 +1,8 @@
 /* Parser for the K3 Programming Language */
 
 %{
-    open K3
-    open K3Annotations
+    open K3.AST
+    open K3.Annotation
     open Tree
 
     let uuid = ref 1
@@ -41,7 +41,7 @@
 
 %token EOF
 
-%token <K3.base_type_t> TYPE
+%token <K3.AST.base_type_t> TYPE
 
 %token LPAREN RPAREN COMMA SEMICOLON
 
@@ -83,9 +83,9 @@
 %start expression_test
 %start expr
 
-%type <K3Annotations.annotations_t K3.program_t> program
-%type <K3Annotations.annotations_t K3Util.expression_test list> expression_test
-%type <K3Annotations.annotations_t K3.expr_t> expr
+%type <K3.AST.program_t> program
+%type <K3Util.expression_test list> expression_test
+%type <K3.AST.expr_t> expr
 
 %right RARROW
 %right LRARROW
@@ -168,8 +168,9 @@ data_annotation:
 control_annotation:
     | EFFECT LPAREN identifier_list RPAREN   { Constraint, Effect($3) }
     | PARALLEL LPAREN INTEGER RPAREN         { Hint,       Parallel($3) }
+;
 
-positions: integer_list { $1 }
+positions: integer_list { $1 };
 
 
 /* Stream programs */
@@ -338,6 +339,7 @@ arg:
             let arg = List.hd $2 in AVar(fst arg, snd arg)
         else ATuple($2)
     }
+;
 
 constant:
     | UNKNOWN { CUnknown }

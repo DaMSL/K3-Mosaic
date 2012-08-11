@@ -1,5 +1,5 @@
 (* Dealing with Sources and Consumption. *)
-open K3
+open K3.AST
 open K3Util
 open K3Values
 open K3Typechecker

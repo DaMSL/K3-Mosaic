@@ -1,5 +1,4 @@
-open K3
-open K3Annotations
+open K3.AST
 open K3Typechecker
 
 exception RuntimeError of int
@@ -19,7 +18,7 @@ type value_t
     | VSet of value_t list
     | VBag of value_t list
     | VList of value_t list
-    | VFunction of arg_t * annotations_t texpr_t
+    | VFunction of arg_t * expr_t
     | VAddress of address
     | VTarget of id_t
 

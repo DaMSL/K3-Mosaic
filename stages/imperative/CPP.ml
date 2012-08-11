@@ -1,6 +1,6 @@
 (* An extended AST for K3's C++ backend *)
 open Printing
-open K3
+open K3.AST
 
 (* A CPP AST with exposed constructors.
  * This must be a subtype of Imperative.TargetLanguage *)

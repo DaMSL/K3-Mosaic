@@ -1,6 +1,6 @@
 open Tree
-open K3
-open K3Annotations
+open K3.AST
+open K3.Annotation
 open K3Util
 open K3Typechecker
 
