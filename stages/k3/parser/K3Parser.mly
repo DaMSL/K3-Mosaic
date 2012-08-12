@@ -238,11 +238,6 @@ contained_mutable_type_expr:
 isolated_base_type_expr:
     | TYPE { $1, [] }
     | LPAREN isolated_base_type_tuple RPAREN { $2, [] }
-    /*
-    | LBRACE contained_value_type_expr RBRACE { TCollection(TSet, $2) }
-    | LBRACEBAR contained_value_type_expr RBRACEBAR { TCollection(TBag, $2) }
-    | LBRACKET contained_value_type_expr RBRACKET { TCollection(TList, $2) }
-    */
     | annotated_collection_type      { $1 }
     | MAYBE isolated_value_type_expr { TMaybe($2), [] }
 ;

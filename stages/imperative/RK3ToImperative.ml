@@ -819,14 +819,18 @@ let imperative_of_declaration mk_meta fn_arg_env (d,m) =
     end
 
   | Trigger (id,a,decls,body) ->
-    (* TODO: local declarations *)
+    let local_decl_cmds = List.map (fun (id, t, ann) ->
+        U.mk_decl (unit_t,ann) (DVar (id, TInternal(TValue t), None)) 
+      ) decls
+    in
     let cmds = cmds_of_reified_expr body in
-    let trig_body = [U.mk_block (unit_t, mk_meta()) cmds]
+    let trig_body = [U.mk_block (unit_t, mk_meta()) (local_decl_cmds@cmds)]
     in Some(DFn(id, a, unit_t, trig_body), (unit_t,m)), [], [id,a]
 
   (* Roles are handled separately and compiled to functions *)
   | Role (id, sp) -> None, [], []
   | DefaultRole(id) -> None, [], []
+
 
 (* TODO: file_stream and network_stream objects in backend runtime, or
  * add these as required types in the target language *)

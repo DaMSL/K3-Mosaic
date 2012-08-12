@@ -148,19 +148,24 @@ let dereft mt x =
     | TMutable(bt,_) -> bt
     | _ -> x (); dummy
 
-let base_of vt =
+let annotation_of vt = 
     match vt with
-    | TIsolated(TImmutable(bt,_))
-    | TIsolated(TMutable(bt,_))
-    | TContained(TImmutable(bt,_))
-    | TContained(TMutable(bt,_)) -> bt
+    | TIsolated(TImmutable(_,a))
+    | TIsolated(TMutable(_,a))
+    | TContained(TImmutable(_,a))
+    | TContained(TMutable(_,a)) -> a
 
-let annotated_base_of vt =
+let apply_to_base_of f vt =
     match vt with
     | TIsolated(TImmutable(bt,a))
     | TIsolated(TMutable(bt,a))
     | TContained(TImmutable(bt,a))
-    | TContained(TMutable(bt,a)) -> (bt,a)
+    | TContained(TMutable(bt,a)) -> f (bt, a)
+
+let base_of vt           = apply_to_base_of fst vt 
+let annotated_base_of vt = apply_to_base_of (fun x -> x) vt
+let annotation_of vt     = apply_to_base_of snd vt
+
 
 (* This copies all annotations from the base type *)
 let rec contained_of vt =
@@ -617,9 +622,7 @@ let id_and_type_of_stream stream_env s = match s with
   | Source(id,t,_) -> id, [t]
   | Sink(id,t,_) -> id, [t]
   | Derived(id,p) ->
-    let t = stream_types_of_pattern stream_env p in 
-    print_endline ("Derived "^id^" #types "^(string_of_int (List.length t)));  
-    id, t
+    let t = stream_types_of_pattern stream_env p in id, t
 
 let typecheck_bind src_types trig_arg_types =
   match src_types, trig_arg_types with

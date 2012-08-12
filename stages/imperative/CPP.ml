@@ -15,6 +15,7 @@ module type CPPAST = sig
 	  | TPair     of type_t * type_t
 	
 	type bmi_extractor_t =
+    | BMIIdentity of type_t
 	  | BMIMember of type_t * id_t
 	  | BMIComposite of bmi_extractor_t list
 	
@@ -74,6 +75,7 @@ type ext_type_t =
   | TPair     of type_t * type_t
 
 type bmi_extractor_t =
+  | BMIIdentity of type_t
   | BMIMember of type_t * id_t
   | BMIComposite of bmi_extractor_t list
 
@@ -104,18 +106,32 @@ type 'a ext_cmd_t =
      * of this imperative command. *)
   | DoWhile of 'a expr_t
 
+let lps s = lazy (ps s)
+
 let print_ext_type t =
   let ptag ?(cut=CutHint) t ch = pretty_tag_str CutHint "" t ch in
   match t with
   | TIterator t -> ptag "TIterator" [lazy (print_type t)]
   | TPair (l,r) -> ptag "TPair" [lazy (print_type l); lazy (print_type r)]
 
+let rec print_extractor e = match e with
+  | BMIIdentity t -> pretty_tag_str CutHint "" "Identity" [lazy (print_type t)]
+  | BMIMember (t,id) -> pretty_tag_str CutHint "" "Member" [lps id]
+  | BMIComposite l -> pretty_tag_str CutHint "" "Composite" [lazy (ps_list CutHint print_extractor l)]
+
+let print_index (id, uniq, sorted, extractor) =
+  let ptag ?(cut=CutHint) t ch = pretty_tag_str CutHint "" t ch in
+  ptag "Index" [lps id;
+                lps ("uniq="^string_of_bool uniq);
+                lps ("sort="^string_of_bool sorted);
+                lazy(print_extractor extractor)]
+
 let print_ext_type_decl d =
   let ptag ?(cut=CutHint) t ch = pretty_tag_str CutHint "" t ch in
   match d with
   | TBoostMultiIndex (id, indexes) ->
     (* TODO: indexes *)
-    ptag "TBoostMultiIndex" [lazy (ps id)]
+    ptag "TBoostMultiIndex" ([lazy (ps id)]@(List.map (fun e -> lazy (print_index e)) indexes))
 
 let print_ext_collection_fn f =
   let ptag ?(cut=CutHint) ?(ch=[]) t = pretty_tag_str CutHint "" t ch in

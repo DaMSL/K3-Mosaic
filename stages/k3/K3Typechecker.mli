@@ -36,6 +36,7 @@ val (%++): ('b -> 'c) -> ('a -> 'x -> 'b) -> 'a -> 'x -> 'c
 val collection_of : base_type_t -> (unit -> unit) -> container_type_t * value_type_t
 val mutable_of: value_type_t -> mutable_type_t
 val base_of: value_type_t -> base_type_t
+val annotation_of : value_type_t -> annotation_t
 val contained_of: value_type_t -> value_type_t
 val value_of: type_t -> (unit -> unit) -> value_type_t
 val canonical: base_type_t -> value_type_t
