@@ -173,6 +173,15 @@ let optimize_datastructures program =
       let var_decls, rest_decls = split_decls ndecls in
         (decls@rest_decls), (cmds@var_decls), nb
    
+    | IfThenElse p ->
+      let block_unless_single l =
+        if List.length l = 1 then List.hd l
+        else mk_block (meta_of_cmd (List.nth (sub_tree cmd) 1)) l
+      in 
+      rebuild_cmd (fun cmds_per_sub ->
+          [mk_ifelse (meta_of_cmd cmd) p (List.map block_unless_single cmds_per_sub)]
+        ) (sub_tree cmd)
+
     | Block ->
       rebuild_cmd (fun cmds_per_sub ->
           [mk_block (meta_of_cmd cmd) (List.flatten cmds_per_sub)]
@@ -182,14 +191,10 @@ let optimize_datastructures program =
       rebuild_cmd (fun cmds_per_sub ->
           [mk_for (meta_of_cmd cmd) id t e (List.flatten cmds_per_sub)]
         ) (sub_tree cmd)
-
-    | IfThenElse p ->
-      let block_unless_single l =
-        if List.length l = 1 then List.hd l
-        else mk_block (meta_of_cmd (List.nth (sub_tree cmd) 1)) l
-      in 
+        
+    | While e ->
       rebuild_cmd (fun cmds_per_sub ->
-          [mk_ifelse (meta_of_cmd cmd) p (List.map block_unless_single cmds_per_sub)]
+          [mk_while (meta_of_cmd cmd) e (List.flatten cmds_per_sub)]
         ) (sub_tree cmd)
 
     | _ -> decls, (cmds@[cmd]), bindings

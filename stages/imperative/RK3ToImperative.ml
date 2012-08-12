@@ -856,106 +856,153 @@ let imperative_of_stream mk_meta (id, stream) =
     | _ -> failwith "cannot generate code for a derived stream"
   in DVar(id, t, da_opt)
 
+(* FSM variable construction helpers *)
+let mk_fsm_id_var fsm_id meta suffix = 
+  let x = "fsm_"^fsm_id^suffix in x, U.mk_var meta x
+
+let mk_state_var_pair fsm_meta fsm_id = mk_fsm_id_var fsm_id fsm_meta "_current_state"
+let mk_event_var_pair event_meta fsm_id = mk_fsm_id_var fsm_id event_meta "_event" 
+  
+
+(* Function declaration to run an FSM.
+ * The function accepts an argument of a state to run, and is implemented as a
+ * sequenced conditional that testing whether to apply the actions of each state.
+ * For action, we check whether the operation succeeds and then return the
+ * next state according to the FSM's transition table.
+ *)  
 (* TODO: state transition body generation, and trigger dispatch on value generation *)
-(* TODO: reset, read, write, invalid functions *)
-let imperative_of_fsm mk_meta stream_bindings (id,fsm) =
-  let fsm_meta = int_t, mk_meta() in
-  let unit_meta = unit_t, mk_meta() in
-  let pred_meta = bool_t, mk_meta() in
-  let event_meta = TNamed("any"), mk_meta() in
+(* TODO: reset, read, write, invalid, schedule functions *)
+let imperative_of_fsm mk_meta fsm_env stream_bindings (id,fsm) =
+  let unit_meta, fsm_meta, pred_meta, event_meta =
+    (unit_t, mk_meta()), (int_t, mk_meta()), (bool_t, mk_meta()),
+    (TNamed("any"), mk_meta()) 
+  in
   
-  let mk_id_var fsm_id meta suffix = 
-    let x = "fsm_"^fsm_id^suffix in x, U.mk_var meta x in
-  let mk_state_var_pair fsm_id = mk_id_var fsm_id fsm_meta "_current_state" in
-  let mk_event_var_pair fsm_id = mk_id_var fsm_id event_meta "_event" in 
+  let state_var_id, state_var = mk_state_var_pair fsm_meta id in
+  let state_event_id, state_event_var = mk_event_var_pair event_meta id in
+
+  let return state_id = U.mk_return unit_meta (U.mk_const fsm_meta (CInt state_id)) in
+  let error = return (-1) in
   
-  let state_var_id, state_var = mk_state_var_pair id in
-  let state_event_id, state_event_var = mk_event_var_pair id in
+  let decl_event e =
+    U.mk_decl unit_meta 
+      (U.mk_var_decl state_event_id (TNamed "any") (Some (Init e)))
+  in
   
-  let assign_state nid =
-    U.mk_assign unit_meta state_var_id (U.mk_const fsm_meta (CInt nid)) in
-  let error_state = assign_state (-1) in
+  let event_access_fn endpoint_meta id ch =
+	  let fn_tag = match ch with In(_) -> Named "read" | Out(_) -> Named "write"
+	  in decl_event (U.mk_fn event_meta fn_tag [U.mk_var endpoint_meta id])
+  in
+
+  let invalid_fn = U.mk_fn event_meta (Named "invalid") [] in
   
-  let assign_event e = U.mk_assign unit_meta state_event_id e in
-  let clear_event = assign_event (U.mk_fn event_meta (Named "reset") []) in
-   
-  let fsm_decls = [DVar(state_var_id, int_t, None);
-                   DVar(state_event_id, TNamed("any"), None)] in
+  let schedule_exprs = 
+    let triggers = List.map snd (List.filter (fun (x,y) -> x = id) stream_bindings) in 
+    let str_meta = TInternal (TValue (canonical TString)), mk_meta() in
+    let expr trig_id = U.mk_expr unit_meta
+      (U.mk_fn unit_meta (Named "schedule") [U.mk_const str_meta (CString trig_id); state_event_var])
+    in List.map expr triggers 
+  in
+
   let fsm_body =
     List.fold_left (fun else_branch (sid, (a,nid,fid)) ->
       let fsm_pred = U.mk_op pred_meta Eq [state_var; U.mk_const fsm_meta (CInt sid)] in
       let action_cmd =
         let cmds = match a with
-          | AEndpoint (id,_,sc,ch) ->
-            let endpoint_meta = (fst (type_and_constructor_of_channel mk_meta sc)), mk_meta() in 
-            let endpoint_cmd = 
-              let fn_tag = match ch with In(_) -> Named "read" | Out(_) -> Named "write"
-              in assign_event (U.mk_fn event_meta fn_tag [U.mk_var endpoint_meta id])
-            in
-            let succeed_or_fail_cmd =
-              let valid_pred =
-                U.mk_op pred_meta Neq
-                  [state_event_var; U.mk_fn event_meta (Named "invalid") []]
-              in
-              (* TODO: schedule triggers on successful read by looking up
-               * associated triggers in bindings *)
-              let succeed_cmd = assign_state nid in
-              let fail_cmd = U.mk_block unit_meta [assign_state fid; clear_event] in
-              U.mk_ifelse pred_meta valid_pred [succeed_cmd; fail_cmd] 
-            in [endpoint_cmd; succeed_or_fail_cmd]
-
-          | ADerived fsm_id -> 
-            (*
-            let derived_var_id, derived_var = mk_state_var_pair fsm_id in
-            let assign_cmds = [] in
-            [U.mk_expr unit_meta (U.mk_fn unit_meta (Named ("fsm_"^fsm_id)))]@assign_cmds
-            *)
-            failwith "derived FSM execution not supported without return statements"
-
-          | AEOF -> [error_state; clear_event]
+	      | AEndpoint (id,_,sc,ch) ->
+	        let endpoint_meta = (fst (type_and_constructor_of_channel mk_meta sc)), mk_meta() in 
+	        let endpoint_cmd = event_access_fn endpoint_meta id ch in
+	        let succeed_or_fail_cmd =
+	          let valid_pred = U.mk_op pred_meta Neq [state_event_var; invalid_fn] in
+	          let succeed_cmd = U.mk_block unit_meta (schedule_exprs@[return nid]) in
+	          U.mk_ifelse pred_meta valid_pred [succeed_cmd; return fid] 
+	        in [endpoint_cmd; succeed_or_fail_cmd]
+	
+	      | ADerived fsm_id ->
+          (* TODO: handle change of executing FSM *) 
+			    let fsm = try List.assoc fsm_id fsm_env with Not_found -> 
+			      failwith ("no fsm named "^fsm_id^" found when compiling consume instruction")
+			    in
+          let init = U.mk_const fsm_meta (CInt (fst (List.hd fsm))) in
+	        [U.mk_return unit_meta (U.mk_fn unit_meta (Named ("fsm_"^fsm_id)) [init])]
+	
+	      | AEOF -> [error]
         in U.mk_block unit_meta cmds
       in
       U.mk_ifelse unit_meta fsm_pred [action_cmd; else_branch]
-    ) error_state fsm
+    ) error fsm
   in
-  let fsm_arg = AVar("iteration", canonical TInt) in
-  let fsm_ret_t = TInternal(TValue(canonical TUnit))
-  in fsm_decls@[DFn("fsm_"^id, fsm_arg, fsm_ret_t, [fsm_body])]
+  let fsm_arg = AVar(state_var_id, canonical TInt) in
+  let fsm_ret_t = TInternal(TValue(canonical TInt))
+  in [DFn("fsm_"^id, fsm_arg, fsm_ret_t, [fsm_body])]
 
-(* TODO: initial fsm invocation *)
-let imperative_of_instruction mk_meta instr = match instr with
+
+(* Generates a role body for the given instructions *)
+let imperative_of_instruction mk_meta fsm_env instr = match instr with
   | Consume id ->
-    (* TODO: wrap in a loop until next state is error state *)
-    let unit_meta = unit_t, mk_meta() in
-    let consume_fn =
-      U.mk_fn unit_meta (Named ("fsm_"^id)) [U.mk_var (int_t, mk_meta()) "iteration"]
-    in U.mk_expr unit_meta consume_fn
+    let unit_meta, int_meta, bool_meta = (unit_t, mk_meta()), (int_t, mk_meta()), (bool_t, mk_meta()) in
+    let fsm = try List.assoc id fsm_env with Not_found -> 
+      failwith ("no fsm named "^id^" found when compiling consume instruction")
+    in
+    let state_var_id, state_var = mk_state_var_pair int_meta id in
+    let decl = 
+      let init_e = U.mk_const int_meta (CInt (fst (List.hd fsm)))
+      in U.mk_decl unit_meta (DVar(state_var_id, int_t, Some(Init(init_e))))
+    in
+    let body =
+      let consume_expr = 
+        U.mk_assign unit_meta state_var_id
+          (U.mk_fn unit_meta (Named ("fsm_"^id)) [state_var])
+      in
+      let valid_state_pred = U.mk_op bool_meta Leq [U.mk_const int_meta (CInt 0); state_var]
+      in U.mk_while unit_meta valid_state_pred [consume_expr]
+    in
+    U.mk_block unit_meta [decl; body]
 
+
+(* Generates imperative code for an event loop, including its stream declarations,
+ * functions for FSMs, and a role body for the given instructions *)
 let imperative_of_event_loop mk_meta (senv, fsm_env, bindings, instrs) =
   let stream_decls = List.map (imperative_of_stream mk_meta) senv in
-  let fsm_decls = List.flatten (List.map (imperative_of_fsm mk_meta bindings) fsm_env) in
-  let r = List.map (imperative_of_instruction mk_meta) instrs in
+  let fsm_decls = List.flatten (List.map (imperative_of_fsm mk_meta fsm_env bindings) fsm_env) in
+  let r = List.map (imperative_of_instruction mk_meta fsm_env) instrs in
   (stream_decls@fsm_decls), r  
 
+
+(* Imperative AST generation for all roles in an imperative program.
+ * This function returns the necessary declarations for a role, and a role
+ * dispatch body for the query engine's entry point. *)
 let imperative_of_roles mk_meta prog =
+  let unit_meta, int_meta, bool_meta, str_meta =
+    (unit_t, mk_meta()), (int_t, mk_meta()), (bool_t, mk_meta()),
+    (TInternal (TValue (canonical TString)), mk_meta())
+  in
   let roles, default_role = roles_of_program prog in
   let role_decls = List.fold_left (fun acc (id,evt_loop) ->
       let loop_decls, role_body = imperative_of_event_loop mk_meta evt_loop in
-      let role_arg = AVar("iteration", canonical TInt)
+      (* TODO: change this to AIgnored when Shyam has implemented it *)
+      let role_arg = AVar("_", canonical TUnit)
       in acc@loop_decls@[DFn("role_"^id, role_arg, unit_t, role_body)]
     ) [] roles
   in
   let dispatch_body =
     (* TODO: check command line argument to dispatch role *)
-    match default_role with 
-      | None -> []
-      | Some(id,_) -> 
-        let role_fn = 
-          U.mk_fn (unit_t, mk_meta())
-            (Named ("role_"^id)) [U.mk_const (int_t, mk_meta()) (CInt 0)]
-        in [U.mk_expr (unit_t, mk_meta()) role_fn] 
+    let role_var = U.mk_var str_meta "user_role" in 
+    let default =
+	    match default_role with 
+	      | None -> U.mk_return unit_meta (U.mk_const int_meta (CInt 1))
+	      | Some(id,_) -> 
+	        let role_fn = 
+	          U.mk_fn unit_meta (Named ("role_"^id)) [U.mk_const unit_meta CUnit]
+	        in U.mk_expr unit_meta role_fn
+    in
+    List.fold_left (fun case_acc (id,_) ->
+	    let role_fn = U.mk_fn unit_meta (Named ("role_"^id)) [U.mk_const unit_meta CUnit] in
+      let pred_e = U.mk_op bool_meta Eq [role_var; U.mk_const str_meta (CString id)]
+      in U.mk_ifelse unit_meta pred_e [U.mk_expr unit_meta role_fn; case_acc]
+      ) default roles  
   in
-    role_decls, dispatch_body
+    role_decls, [dispatch_body; U.mk_return unit_meta (U.mk_const int_meta (CInt 0))]
   
 let imperative_of_program mk_meta p =
   let main_body, decls, _ =

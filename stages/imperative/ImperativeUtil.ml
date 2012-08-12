@@ -115,7 +115,7 @@ and print_type_decl td =
     | TExtDecl d -> my_tag "TExtDecl" [lazy (print_ext_type_decl d)]
   
 and print_decl string_of_meta d =
-  let my_tag = pretty_tag_str CutHint "" in
+  let my_tag ?(cut=CutHint) = pretty_tag_str cut "" in
   match d with
   | DType  (id,t) -> my_tag "DType" [lps id; lazy_type_decl t]
   | DVar (id,t,da_opt) ->
@@ -123,8 +123,8 @@ and print_decl string_of_meta d =
                     (option_as_list (lazy_decl_arg string_of_meta) da_opt))
 
   | DFn (id,a,rt,body) ->
-    my_tag "DFn" ([lps id; lazy_arg a; lazy_type rt]@
-                    (List.map (lazy_cmd string_of_meta) body))
+    my_tag ~cut:CutLine "DFn"
+      ([lps id; lazy_arg a; lazy_type rt]@(List.map (lazy_cmd string_of_meta) body))
 
 and print_fn_tag fn_tag =
   let my_tag = pretty_tag_str CutHint "" in
@@ -162,6 +162,10 @@ and print_cmd_tag string_of_meta tag lazy_children =
     Assign (id, e)  -> ch_tag "Assign" [lps id; lazy_expr string_of_meta e] 
   | Decl   d        -> ch_tag "Decl" [lazy_decl string_of_meta d]
   | Expr   e        -> ch_tag "Expr" [lazy_expr string_of_meta e]
+
+	| IfThenElse pred ->
+	  ch_tag ~cut:CutLine "IfThenElse" ([lazy_expr string_of_meta pred]@lazy_children)
+
   | Block           -> my_tag_list "Block"
   
   | Foreach (id,t,e) ->
@@ -169,9 +173,10 @@ and print_cmd_tag string_of_meta tag lazy_children =
         ps "("; ps id; ps " : "; print_type t;
         pc(); ps " in "; pc(); print_expr string_of_meta e; ps ")")
       in ch_tag ~cut:CutLine "Foreach" (lazy_for_args :: lazy_children)
+
+  | While e  -> ch_tag ~cut:CutLine "While" ((lazy_expr string_of_meta e)::lazy_children)
   
-  | IfThenElse pred ->
-      ch_tag "IfThenElse" ([lazy_expr string_of_meta pred]@lazy_children)
+  | Return e -> ch_tag "Return" [lazy_expr string_of_meta e]
 
   | CExt c -> ch_tag "CExt" [lazy (print_ext_cmd string_of_meta c)]
 
@@ -185,7 +190,7 @@ let print_program string_of_meta p =
   let m_str m = wrap_unless_empty "<" ">" (string_of_meta m) in
   ob(); ps "["; fnl();
   List.iter (fun (d,m) ->
-    print_decl string_of_meta d; print_extra (m_str m); fnl()) p;
+    print_decl string_of_meta d; print_extra (m_str m); fnl(); fnl()) p;
   ps "]"; cb()
 
 
@@ -225,9 +230,9 @@ and var_ids_of_cmd c =
     | Decl d -> var_ids_of_decl d
     | Block -> []
     | Assign (id, e) | Foreach (id,_,e) -> id::(var_ids_of_expr e)
-    | Expr e | IfThenElse e -> var_ids_of_expr e
+    | Expr e | IfThenElse e | While e | Return e -> var_ids_of_expr e
     | CExt _ -> [])
-  in ListAsSet.no_duplicates  (fold_tree (fun _ _ -> None) add_var None [] c)
+  in ListAsSet.no_duplicates (fold_tree (fun _ _ -> None) add_var None [] c)
 
 
 (* Symbol helpers *)
@@ -270,6 +275,8 @@ let mk_decl meta decl = mk_cmd (Decl decl) meta []
 
 let mk_expr meta e = mk_cmd (Expr e) meta []
 
+let mk_ifelse meta pred branches = mk_cmd (IfThenElse pred) meta branches
+
 let mk_block meta sub = match sub with
   | [] -> failwith "invalid block body"
   | [x] -> x
@@ -277,6 +284,8 @@ let mk_block meta sub = match sub with
  
 let mk_for meta id t e body = mk_cmd (Foreach (id,t,e)) meta body
 
-let mk_ifelse meta pred branches = mk_cmd (IfThenElse pred) meta branches
+let mk_while meta e body = mk_cmd (While e) meta body
+
+let mk_return meta e = mk_cmd (Return e) meta []
 
 end

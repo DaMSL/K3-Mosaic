@@ -102,6 +102,10 @@ let deduce_program_type program =
         let nc = U.mk_expr (U.meta_of_cmd cmd) (deduce_cpp_expr type_env tdecl_env e) 
         in env, nc
 
+      | IfThenElse pred ->
+        let npred = deduce_cpp_expr type_env tdecl_env pred 
+        in env, (U.mk_ifelse (U.meta_of_cmd cmd) npred ch)
+
       | Block -> env, U.mk_block (U.meta_of_cmd cmd) ch
       
       | Foreach (id,t,e) -> 
@@ -110,10 +114,14 @@ let deduce_program_type program =
         let nenv = (filter_first_assoc id type_env), tdecl_env
         in nenv, (U.mk_for (U.meta_of_cmd cmd) id nt ne ch) 
       
-      | IfThenElse pred ->
-        let npred = deduce_cpp_expr type_env tdecl_env pred 
-        in env, (U.mk_ifelse (U.meta_of_cmd cmd) npred ch)
+      | While e ->
+        let nc = U.mk_while (U.meta_of_cmd cmd) (deduce_cpp_expr type_env tdecl_env e) ch
+        in env, nc
 
+      | Return e ->
+        let nc = U.mk_return (U.meta_of_cmd cmd) (deduce_cpp_expr type_env tdecl_env e)
+        in env, nc
+      
       | CExt ec -> typecheck_external_cmd type_env tdecl_env (U.meta_of_cmd cmd) ch ec 
     in
     let dummy = 

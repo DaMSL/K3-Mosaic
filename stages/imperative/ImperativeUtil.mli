@@ -55,8 +55,10 @@ sig
   val mk_assign : 'a -> id_t -> 'a expr_t -> 'a cmd_t
   val mk_decl   : 'a -> 'a decl_t -> 'a cmd_t
   val mk_expr   : 'a -> 'a expr_t -> 'a cmd_t
+  val mk_ifelse : 'a -> 'a expr_t -> 'a cmd_t list -> 'a cmd_t
   val mk_block  : 'a -> 'a cmd_t list -> 'a cmd_t
   val mk_for    : 'a -> id_t -> type_t -> 'a expr_t -> 'a cmd_t list -> 'a cmd_t
-  val mk_ifelse : 'a -> 'a expr_t -> 'a cmd_t list -> 'a cmd_t
+  val mk_while  : 'a -> 'a expr_t -> 'a cmd_t list -> 'a cmd_t
+  val mk_return : 'a -> 'a expr_t -> 'a cmd_t
 
 end

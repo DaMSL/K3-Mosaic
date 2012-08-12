@@ -85,15 +85,15 @@ sig
 	and 'a expr_t = ((int * expr_tag_t) * 'a) tree_t 
 	
 	(* Command types *)
-  (* TODO: add a return command, or our functions cannot safely return a value *)
-  (* TODO: add a general unbounded loop for stream programs *)
 	and 'a cmd_tag_t =
 	    Assign     of id_t * 'a expr_t 
 	  | Decl       of 'a decl_t
 	  | Expr       of 'a expr_t
-	  | Block
+    | IfThenElse of 'a expr_t
+    | Block
 	  | Foreach    of id_t * type_t * 'a expr_t
-	  | IfThenElse of 'a expr_t
+    | While      of 'a expr_t 
+    | Return     of 'a expr_t
     | CExt       of 'a T.ext_cmd_t
 	
 	and 'a cmd_t = ((int * 'a cmd_tag_t) * 'a) tree_t
