@@ -66,30 +66,34 @@ let value_of_const c =
     | CTarget id -> VTarget id
     | CNothing -> VOption None
 
+(* Given an arg_t and a value_t, bind the values to their corresponding argument names. *)
+let rec bind_args uuid a v =
+    match a with
+    | AIgnored -> []
+    | AVar(i, _) -> [(i, v)]
+    | AMaybe(a') -> (
+        match v with
+        | VOption(Some v') -> bind_args uuid a' v'
+        | VOption(None) -> raise (RuntimeError uuid)
+        | _ -> raise (RuntimeError uuid)
+    )
+    | ATuple(args) -> (
+        match v with
+        | VTuple(vs) -> List.concat (List.map2 (bind_args uuid) args vs)
+        | _ -> raise (RuntimeError uuid)
+    )
+
 let rec eval_fun uuid f = 
   let strip_frame (m_env, f_env) = (m_env, List.tl f_env) in
   match f with
     | VFunction(arg, body) -> (
-        match arg with
-        | AVar(i, t) ->
-            fun (m_env, f_env) -> fun a ->
-              let new_env = m_env, ([(i, a)] :: f_env) in
-              let renv, result = eval_expr new_env body in
-              (strip_frame renv, result)
-
-        | ATuple(its) ->
-            fun (m_env,f_env) -> fun a ->
-            let bindings = (
-                match a with
-                | VTuple(vs) -> List.combine (fst (List.split its)) vs
-                | _ -> raise (RuntimeError uuid)
-            ) in
-            let new_env = m_env, (bindings :: f_env) in
+        fun (m_env, f_env) -> fun a ->
+            let new_env = m_env, (bind_args uuid arg a :: f_env) in
             let renv, result = eval_expr new_env body in
             (strip_frame renv, result)
     )
     | _ -> raise (RuntimeError uuid)
-    
+
 and eval_expr cenv texpr =
     let ((uuid, tag), _), children = decompose_tree texpr in
     let t_erroru = t_error uuid in (* pre-curry the type error *)
