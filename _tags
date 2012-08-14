@@ -1,0 +1,7 @@
+<util>: include
+<tests>: include
+<stages/k3>: include
+<stages/k3/{core,parser,interpreter,utils}>: include
+<stages/imperative>: include
+
+true: use_str

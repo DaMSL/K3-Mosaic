@@ -9,6 +9,9 @@
 
 *.o
 
+*.byte
+_build
+
 Makefile.deps
 Makefile.local
 
