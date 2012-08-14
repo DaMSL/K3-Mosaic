@@ -331,13 +331,18 @@ value_typed_identifier_list:
 ;
 
 arg:
+    | UNKNOWN { AIgnored } 
     | value_typed_identifier { AVar(fst $1, snd $1) }
-    | LPAREN value_typed_identifier_list RPAREN  {
-        if List.length $2 == 1 then
-            let arg = List.hd $2 in AVar(fst arg, snd arg)
+    | JUST arg { AMaybe($2) }
+    | LPAREN arg_list RPAREN  {
+        if List.length $2 == 1 then List.hd $2
         else ATuple($2)
     }
 ;
+
+arg_list:
+    | arg { [($1)] } 
+    | arg COMMA arg_list { $1 :: $3 }
 
 constant:
     | UNKNOWN { CUnknown }
