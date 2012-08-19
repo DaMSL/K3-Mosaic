@@ -170,6 +170,33 @@ let decompose_send e =
   let rec rest i acc = if i = 1 then acc else rest (i-1) ((n i)::acc)
   in (n 0, n 1, rest ((List.length (sub_tree e))-1) [])
 
+(* Declaration accessors *)
+let is_global (d,a) = match d with Global _ -> true | _ -> false
+let is_trigger (d,a) = match d with Trigger _ -> true | _ -> false
+
+let globals_of_program p = List.filter is_global p
+let triggers_of_program p = List.filter is_trigger p
+
+let match_declaration id match_f l =
+  let m = List.filter match_f l
+  in match m with
+    | [] -> raise Not_found
+    | [x] -> x
+    | _ -> failwith ("Multiple matches found for "^id)
+
+let global_of_program id p = 
+  match_declaration id (fun (d,a) -> match d with
+      | Global (n,_,_) when n = id -> true
+      | _ -> false 
+    ) (globals_of_program p)
+    
+let trigger_of_program id p =
+  match_declaration id (fun (d,a) -> match d with
+      | Trigger (n,_,_,_) when n = id -> true
+      | _ -> false 
+    ) (triggers_of_program p)
+
+
 (* Expression extraction *)
 
 (* Returns all subexpressions matching a given predicate *)

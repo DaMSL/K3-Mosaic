@@ -871,11 +871,23 @@ let mk_event_var_pair event_meta fsm_id = mk_fsm_id_var fsm_id event_meta "_even
  * next state according to the FSM's transition table.
  *)  
 (* TODO: state transition body generation, and trigger dispatch on value generation *)
-(* TODO: reset, read, write, invalid, schedule functions *)
-let imperative_of_fsm mk_meta fsm_env stream_bindings (id,fsm) =
+(* TODO: reset, read, write, schedule functions *)
+let imperative_of_fsm mk_meta prog fsm_env stream_bindings (id,fsm) =
+  let triggers = List.map snd (List.filter (fun (x,y) -> x = id) stream_bindings) in
+  let event_type = 
+    match triggers with
+    | [] -> TInternal (TValue (canonical TUnknown))
+    | h::t ->
+      let error() = failwith ("invalid trigger declaration for "^h) in
+      try begin match fst (trigger_of_program h prog) with
+        | Trigger(_,arg,_,_) -> TInternal (TValue (canonical (TMaybe (deduce_arg_type arg))))
+        | _ -> error()
+      end
+      with Not_found -> error()
+  in 
+
   let unit_meta, fsm_meta, pred_meta, event_meta =
-    (unit_t, mk_meta()), (int_t, mk_meta()), (bool_t, mk_meta()),
-    (TNamed("any"), mk_meta()) 
+    (unit_t, mk_meta()), (int_t, mk_meta()), (bool_t, mk_meta()), (event_type, mk_meta()) 
   in
   
   let state_var_id, state_var = mk_state_var_pair fsm_meta id in
@@ -886,7 +898,7 @@ let imperative_of_fsm mk_meta fsm_env stream_bindings (id,fsm) =
   
   let decl_event e =
     U.mk_decl unit_meta 
-      (U.mk_var_decl state_event_id (TNamed "any") (Some (Init e)))
+      (U.mk_var_decl state_event_id event_type (Some (Init e)))
   in
   
   let event_access_fn endpoint_meta id ch =
@@ -894,10 +906,7 @@ let imperative_of_fsm mk_meta fsm_env stream_bindings (id,fsm) =
 	  in decl_event (U.mk_fn event_meta fn_tag [U.mk_var endpoint_meta id])
   in
 
-  let invalid_fn = U.mk_fn event_meta (Named "invalid") [] in
-  
   let schedule_exprs = 
-    let triggers = List.map snd (List.filter (fun (x,y) -> x = id) stream_bindings) in 
     let str_meta = TInternal (TValue (canonical TString)), mk_meta() in
     let expr trig_id = U.mk_expr unit_meta
       (U.mk_fn unit_meta (Named "schedule") [U.mk_const str_meta (CString trig_id); state_event_var])
@@ -913,7 +922,7 @@ let imperative_of_fsm mk_meta fsm_env stream_bindings (id,fsm) =
 	        let endpoint_meta = (fst (type_and_constructor_of_channel mk_meta sc)), mk_meta() in 
 	        let endpoint_cmd = event_access_fn endpoint_meta id ch in
 	        let succeed_or_fail_cmd =
-	          let valid_pred = U.mk_op pred_meta Neq [state_event_var; invalid_fn] in
+	          let valid_pred = U.mk_op pred_meta Neq [state_event_var; U.mk_const event_meta CNothing] in
 	          let succeed_cmd = U.mk_block unit_meta (schedule_exprs@[return nid]) in
 	          U.mk_ifelse pred_meta valid_pred [succeed_cmd; return fid] 
 	        in [endpoint_cmd; succeed_or_fail_cmd]
@@ -962,9 +971,12 @@ let imperative_of_instruction mk_meta fsm_env instr = match instr with
 
 (* Generates imperative code for an event loop, including its stream declarations,
  * functions for FSMs, and a role body for the given instructions *)
-let imperative_of_event_loop mk_meta (senv, fsm_env, bindings, instrs) =
+let imperative_of_event_loop mk_meta prog (senv, fsm_env, bindings, instrs) =
   let stream_decls = List.map (imperative_of_stream mk_meta) senv in
-  let fsm_decls = List.flatten (List.map (imperative_of_fsm mk_meta fsm_env bindings) fsm_env) in
+  let fsm_decls = 
+    let fsm_gen = imperative_of_fsm mk_meta prog fsm_env bindings
+    in List.flatten (List.map fsm_gen fsm_env)
+  in
   let r = List.map (imperative_of_instruction mk_meta fsm_env) instrs in
   (stream_decls@fsm_decls), r  
 
@@ -979,7 +991,7 @@ let imperative_of_roles mk_meta prog =
   in
   let roles, default_role = roles_of_program prog in
   let role_decls = List.fold_left (fun acc (id,evt_loop) ->
-      let loop_decls, role_body = imperative_of_event_loop mk_meta evt_loop in
+      let loop_decls, role_body = imperative_of_event_loop mk_meta prog evt_loop in
       (* TODO: change this to AIgnored when Shyam has implemented it *)
       let role_arg = AVar("_", canonical TUnit)
       in acc@loop_decls@[DFn("role_"^id, role_arg, unit_t, role_body)]
@@ -1017,7 +1029,8 @@ let imperative_of_program mk_meta p =
     let x, y = imperative_of_roles mk_meta p in
     (List.map (fun d -> d, (unit_t, mk_meta())) x), y
   in
-  let main_fn = DFn("main", AVar("argc", (canonical TInt)), int_t, main_body@dispatch_body) 
+  let main_arg = ATuple(["argc", canonical TInt; "argv", canonical TString]) in
+  let main_fn = DFn("main", main_arg, int_t, main_body@dispatch_body) 
   in decls@role_decls@[main_fn, (unit_t,mk_meta())]
 
 end
