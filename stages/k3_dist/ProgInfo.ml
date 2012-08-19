@@ -142,6 +142,27 @@ let lhs_rhs_of_stmt (p:prog_data_t) stmt_id =
     (fun (rhs_map, _) -> (lhs_map, rhs_map))
     rhs_maps
 
+let find_lhs_map_bindings_in_stmt (p:prog_data_t) (stmt:stmt_id_t) (map:map_id_t)
+=
+  let (_, _, lmap, lmapbind, _) = find_stmt p stmt_id in
+  if lmap = map then lmapbind 
+  else raise (Bad_data ("find_lhs_map_binding_in_stmt: No "^
+          (string_of_int map)^" lhs map_id found"))
+
+let find_rhs_map_bindings_in_stmt (p:prog_data_t) (stmt:stmt_id_t) (map:map_id_t)
+=
+  let (_, _, _, _, rmaps) = find_stmt p stmt_id in
+  let (_, binding) = 
+    try
+      List.find 
+        (fun (rmap, _) -> map = rmap)
+        rmaps
+    with
+      Not_found -> raise (Bad_data ("find_rhs_map_bindings_in_stmt: No "^
+        (string_of_int map)^" map_id found"))
+  in
+  binding
+
 let find_map_bindings_in_stmt (p:prog_data_t) (stmt_id:stmt_id_t) (map_id:map_id_t) =
   let (_, _, lmap, lmapbind, rmaps) = find_stmt p stmt_id in
   if lmap = map_id then lmapbind
@@ -154,9 +175,8 @@ let find_map_bindings_in_stmt (p:prog_data_t) (stmt_id:stmt_id_t) (map_id:map_id
       with
         Not_found -> raise (Bad_data ("find_map_bindings_in_stmt: No "^
           (string_of_int map_id)^" map_id found"))
-      in
-      binding
-    end
+    in
+    binding end
 
 let map_name_of p map_id = 
   let (_, name, _) = find_map p map_id in name
@@ -195,3 +215,20 @@ let slice_key_from_bound (p:prog_data_t) (stmt_id:stmt_id_t) (map_id:map_id_t) =
   List.map 
   (fun x -> if x = "_" then mk_const CUnknown else mk_var x) 
   (var_list_from_bound p stmt_id map_id)
+
+(* return a binding pattern for a stmt of (left_index, right_index) list
+ * showing how a lhs map variable corresponds to a rhs variable
+ * starting at 0 index *)
+let get_map_bindings_in_stmt (p:prog_data_t) (stmt_id:stmt_id_t) 
+  (lmap:map_id_t) (rmap:map_id_t) =
+  let lmap_bindings = find_lmap_bindings_in_stmt stmt_id lmap in
+  let rmap_bindings = find_rmap_bindings_in_stmt stmt_id rmap in
+  List.fold_left
+    (fun acc (id, index) -> 
+      try acc@(index, List.assoc id rmap_bindings)
+      with Not_found -> acc
+    )
+    []
+    lmap_bindings
+
+

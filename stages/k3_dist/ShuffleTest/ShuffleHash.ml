@@ -220,8 +220,7 @@ let full_n_key (n_key:int option list) n_to_m_pat m_tuple : int option list =
 
 let get_all_targets shuffle_on_empty route_to_n n_key =
   (* in shuffle on empty case, we prepare all the routing that must
-   * be done for empty packets
-   *)
+   * be done for empty packets *)
   if shuffle_on_empty then
     List.map
       (fun ip -> (ip,[]))

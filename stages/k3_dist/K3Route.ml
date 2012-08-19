@@ -6,11 +6,6 @@ open ProgInfo
 
 (* route and shuffle function names *)
 let route_for p map_id = "route_to_"^map_name_of p map_id
-(* we don't really need the lhs_map to the shuffle but it makes things a little
- * clearer in the code *)
-let shuffle_for p stmt_id rhs_map_id lhs_map_id = 
-  "shuffle_s"^string_of_int stmt_id^"_"^map_name_of p rhs_map_id^"_"^
-  map_name_of p lhs_map_id
 
 let dim_bounds_type = wrap_tlist @: wrap_ttuple [t_int, t_int]
 let bmod_types = wrap_tlist @: wrap_ttuple [t_int, t_int]
@@ -36,16 +31,15 @@ let calc_dim_bounds_code = mk_global_fn "calc_dim_bounds"
     )
     (mk_var "bmod")
 
-
 let route_fn p map_id = 
   let map_types = map_types_for p map_id in
-  let map_range = create_range 1 @: List.length map_types in
-  let to_id x = "__id_"^string_for_int x in
+  let map_range = create_range 0 @: List.length map_types in
+  let to_id x = "__id_"^string_of_int x in
   let map_ids = List.map to_id map_range in
   let map_ids_types = list_zip map_ids map_types in
   in
   mk_global_fn (route_for p map_id)
-    ["bmod", bmod_types; "key", wrap_ttuple map_types]
+    ["bmod", bmod_types; "key", wrap_ttuple @: wrap_tmaybe map_types]
     [wrap_tlist t_ip] (* return *)
     (mk_let "dim_bounds" dim_bounds_type 
       (mk_apply "calc_dim_bounds" @: mk_var "bmod")
@@ -158,8 +152,6 @@ let route_fn p map_id =
         (mk_fst sorted_ip_list_type) @:
         mk_var "sorted_ip_list"
         
-
-
 
 
 

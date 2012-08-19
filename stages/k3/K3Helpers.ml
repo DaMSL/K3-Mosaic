@@ -52,6 +52,8 @@ let wrap_ttuple_mut typ = match typ with
   | h::t   -> TIsolated(TMutable(TTuple(typ)))
   | _      -> invalid_arg "No mutable tuple to wrap"
 
+let wrap_tmaybe ts = List.map (fun t -> TMaybe t) ts
+
 (* Helper functions to create K3 AST nodes more easily *)
 
 let meta = 0    (* we fill meta with a default value *)
@@ -271,11 +273,12 @@ let mk_fst tuple_types tuple =
 let mk_snd tuple_types tuple =
     mk_let_many (list_zip ["__fst";"__snd"] tuple_types) tuple (mk_var "__snd")
 
-
 (* Functions to manipulate tuples in K3 code *)
 type tuple_pat = Position of int | ExternVar of id_t | Unknown
 
-let mk_tuple_range types = create_range 1 @: List.length types
+let def_tup_prefix = "__temp_"
+
+let mk_tuple_range types = create_range 0 @: List.length types
 
 let tuple_make_pattern (types:K3.value_type_t list) = 
     List.map (fun x -> Position x) (mk_tuple_range types)
@@ -284,38 +287,37 @@ let tuple_make_pattern (types:K3.value_type_t list) =
  * values you drop. list_drop and list_take can be used for non-slice operations
  *)
 let slice_pat_take num pat =
-    let range = create_range 1 (List.length pat - num) in
+    let range = create_range 0 (List.length pat - num) in
     let unknowns = List.map (fun _ -> Unknown) range in
     list_take num pat @unknowns
 
 let slice_pat_drop num pat =
-    let range = create_range 1 (List.length pat - num) in
+    let range = create_range 0 (List.length pat - num) in
     let unknowns = List.map (fun _ -> Unknown) range in
     unknowns@list_drop num pat
 
-let mk_temp_string i = "__temp_"^string_of_int i
+(* convert a number to an id used for breaking apart tuples *)
+let int_to_temp_id i prefix = prefix^string_of_int i
 
 let tuple_pat_to_ids pat =
     List.map 
     (fun x -> match x with 
-      | Position y -> mk_temp_string y 
+      | Position y -> int_to_temp_id y def_tup_prefix
       | ExternVar y -> y
       | Unknown -> "_")
     pat
 
+(* break down a tuple into its components, creating ids with a certain prefix *)
+let mk_destruct_tuple tup_name types prefix expr =
+  let range = mk_tuple_range types in
+  let ids = List.map (fun i -> int_to_temp_id i prefix) in
+  let ids_types = list_zip ids types in
+  mk_let_many ids_types (mk_var tup_name) expr
+
 (* rebuild a tuple based on the types of the tuple and a pattern of temporaries
  * or external variables
  *)
-let mk_rebuild_tuple_lambda types pattern =
-  let range = mk_tuple_range types in
-  let temp_ids = List.map mk_temp_string range in
-  let temp_ids_and_types = list_zip temp_ids types in
-  mk_lambda 
-    (ATuple(temp_ids_and_types))    
+let mk_rebuild_tuple tup_name types pattern =
+  mk_destruct_tuple tup_name types def_tup_prefix
     (mk_tuple @: ids_to_vars @: tuple_pat_to_ids pattern)
-
-let mk_rebuild_tuple name types pattern =
-  mk_apply
-    (mk_rebuild_tuple_lambda types pattern)
-    (mk_var name)
 
