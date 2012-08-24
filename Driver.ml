@@ -162,16 +162,16 @@ let parse_program f =
   let prog =
     try K3Parser.program K3Lexer.tokenize lexbuf
     with 
-			| Parsing.Parse_error -> 
-															 let curpos = lexbuf.Lexing.lex_curr_p in
-															 let curr = curpos.Lexing.pos_cnum in 
-															 let bol = curpos.Lexing.pos_bol in
-															 let diff = curr-bol in
-															 let line = curpos.Lexing.pos_lnum in
-															 let tok = Lexing.lexeme lexbuf in  
-															 Printf.printf "\nError on line %d , character %d , token %s\n" line diff tok; raise Parsing.Parse_error
-			| Failure _ -> handle_parse_error lexbuf
-			| Pervasives.Exit -> raise Parsing.Parse_error
+    | Parsing.Parse_error -> 
+        let curpos = lexbuf.Lexing.lex_curr_p in
+        let curr = curpos.Lexing.pos_cnum in 
+        let bol = curpos.Lexing.pos_bol in
+        let diff = curr-bol in
+        let line = curpos.Lexing.pos_lnum in
+        let tok = Lexing.lexeme lexbuf in  
+        Printf.printf "\nError on line %d , character %d , token %s\n" line diff tok; raise Parsing.Parse_error
+    | Failure _ -> handle_parse_error lexbuf
+    | Pervasives.Exit -> raise Parsing.Parse_error
   in
     close_in in_chan;
     prog
