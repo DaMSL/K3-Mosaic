@@ -29,7 +29,7 @@ declare getSecond:(string,int)->int = \(a:string,b:int)->b
 
 declare getAddress:int->(string,int) = \id:int -> do { iterate(\(a:int,b:string,c:int) -> do { if a==id then addr=(b,c) else () },bindings); addr }
 							      
-declare scatter:(bool,[int])->int = \(f:bool,e:[int])-> if f==true then do { iterate(\a:int->do { addr=getAddress(a); address=getFirst(addr); send(runPageRank,address:1,a) },e) } else ()
+declare scatter:([int])->int = \(f:bool,e:[int])-> if f==true then do { iterate(\a:int->do { addr=getAddress(a); address=getFirst(addr); send(runPageRank,address:1,a) },e) } else ()
 
 trigger on_event(a:int) {address:ref string} = do {
   insert(sourcevertex,a);
@@ -45,7 +45,7 @@ role client {
 
 default role client
 
-trigger runPageRank(id:int) {outEdges:ref [int],inEdges:ref [int],name: ref string,oldPR:ref float,newPR:ref float,tuple:ref (int,string,float,[int],[int]),doscatter:ref bool} = do { 
+trigger runPageRank(id:int) {outEdges:ref [int],inEdges:ref [int],name: ref string,oldPR:ref float,newPR:ref float,tuple:ref (int,string,float,[int],[int])} = do { 
   //gather
   tuple=getTuple(id);
   oldPR=getPageRank(tuple);
@@ -53,10 +53,9 @@ trigger runPageRank(id:int) {outEdges:ref [int],inEdges:ref [int],name: ref stri
   outEdges=getOutEdges(tuple);
   name=getName(tuple);
   //apply
-  //newPR=apply(inEdges);
-  if newPR-oldPR>0.0001 then doscatter=true else doscatter=false;
+  newPR=apply(inEdges);
   //update newPR
   update(vertices,tuple,(id,name,newPR,inEdges,outEdges));
   //scatter
-  if newPR-oldPR>0.001 then scatter(doscatter,outEdges) else ()
+  if newPR-oldPR>0.001 then scatter(outEdges) else ()
 }
