@@ -29,7 +29,7 @@ declare getSecond:(string,int)->int = \(a:string,b:int)->b
 
 declare getAddress:int->(string,int) = \id:int -> do { iterate(\(a:int,b:string,c:int) -> do { if a==id then addr=(b,c) else () },bindings); addr }
 							      
-declare scatter:([int])->int = \(f:bool,e:[int])-> if f==true then do { iterate(\a:int->do { addr=getAddress(a); address=getFirst(addr); send(runPageRank,address:1,a) },e) } else ()
+declare scatter:[int]->int = \(e:[int])-> do { iterate(\a:int->do { addr=getAddress(a); address=getFirst(addr); send(runPageRank,address:1,a) },e) } 
 
 trigger on_event(a:int) {address:ref string} = do {
   insert(sourcevertex,a);
