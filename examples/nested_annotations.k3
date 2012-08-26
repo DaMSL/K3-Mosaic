@@ -1,0 +1,16 @@
+declare events : {|( int, {|(int, int)|} @ { 1->0; index(0) } )|} @ { 0->1; index(1) }
+declare events2 : {( int, {|(int, int)|} @ { 1->0; index(0) } )}
+
+trigger on_event(a:int, b:int) {
+  events3 : {|(int,int)|} @ { 0->1 }
+} = do {
+  insert(events, (a, {|(a,b)|}) );
+  insert(events2, (a, {|(a,b)|}) )
+}
+
+role client {
+  source s1: (int,int) = file(csv, "s1.csv")
+  bind s1 -> on_event
+}
+
+default role client

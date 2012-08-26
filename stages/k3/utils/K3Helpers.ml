@@ -1,7 +1,7 @@
-
-open K3
 open Tree
 open Util
+
+open K3.AST
 
 (* Type manipulation functions ------------- *)
 
@@ -15,8 +15,8 @@ let iso_to_contained typ =
     | TTarget(b) -> TTarget(handle_base_type b)
     | x -> x
   and handle_mutable_type m = match m with
-    | TMutable(b) -> TMutable(handle_base_type b)
-    | TImmutable(b) -> TImmutable(handle_base_type b)
+    | TMutable(b,a) -> TMutable(handle_base_type b, a)
+    | TImmutable(b,a) -> TImmutable(handle_base_type b, a)
   and handle_value_type t = match t with
     | TIsolated(m) -> TContained(handle_mutable_type m)
     | TContained(m) -> TContained(handle_mutable_type m)
@@ -24,11 +24,11 @@ let iso_to_contained typ =
   handle_value_type typ
     
 (* the default type *)
-let canonical typ = TIsolated(TImmutable(typ))
+let canonical typ = TIsolated(TImmutable(typ,[]))
 
 (* A type for simple immutable integers *)
 let t_int = canonical TInt
-let t_int_mut = TIsolated(TMutable(TInt))
+let t_int_mut = TIsolated(TMutable(TInt,[]))
 
 (* wrap a type in a list *)
 let wrap_tlist typ = 
@@ -38,7 +38,7 @@ let wrap_tlist typ =
 (* wrap a type in a mutable list *)
 let wrap_tlist_mut typ = 
   let c = iso_to_contained typ in
-  TIsolated(TMutable(TCollection(TList, c)))
+  TIsolated(TMutable(TCollection(TList, c),[]))
 
 (* wrap a type in an immutable tuple *)
 let wrap_ttuple typ = match typ with 
@@ -49,14 +49,14 @@ let wrap_ttuple typ = match typ with
 (* wrap a type in a mutable tuple *)
 let wrap_ttuple_mut typ = match typ with 
   | [h]    -> h
-  | h::t   -> TIsolated(TMutable(TTuple(typ)))
+  | h::t   -> TIsolated(TMutable(TTuple(typ),[]))
   | _      -> invalid_arg "No mutable tuple to wrap"
 
 let wrap_tmaybe ts = List.map (fun t -> TMaybe t) ts
 
 (* Helper functions to create K3 AST nodes more easily *)
 
-let meta = 0    (* we fill meta with a default value *)
+let meta = []   (* we fill meta with a default value *)
 
 let class_id = "K3" (* used for symbol generation *)
 let new_num () = Symbols.gen_int_sym class_id 
@@ -280,7 +280,7 @@ let def_tup_prefix = "__temp_"
 
 let mk_tuple_range types = create_range 0 @: List.length types
 
-let tuple_make_pattern (types:K3.value_type_t list) = 
+let tuple_make_pattern (types:value_type_t list) = 
     List.map (fun x -> Position x) (mk_tuple_range types)
 
 (* functions to take and drop from the pattern, filling in unknowns for the

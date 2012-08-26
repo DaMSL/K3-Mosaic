@@ -1,4 +1,5 @@
-open K3
+open K3.AST
+open K3Streams
 open K3Values
 
 type queue_granularity_t = Global | PerTrigger
@@ -14,5 +15,7 @@ val scheduler_params : scheduler_spec
 val schedule_trigger : value_t -> value_t -> value_t -> unit
 
 val schedule_event : source_bindings_t -> id_t -> address -> value_t list -> unit
+
+val initialize_scheduler : address -> program_env_t -> unit
 
 val run_scheduler : address -> program_env_t -> unit

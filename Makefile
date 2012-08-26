@@ -8,34 +8,44 @@ FILES=\
 	util/Symbols \
 	util/Printing \
 	util/Tree \
+	stages/k3/core/K3AST \
+	stages/k3/core/K3Annotations \
 	stages/k3/K3 \
-	stages/k3/K3Util \
-	stages/k3/K3Helpers \
+	stages/k3/utils/K3Util \
+	stages/k3/utils/K3Printing \
+	stages/k3/utils/K3Helpers \
+	stages/k3/core/K3Streams \
 	stages/k3/K3Typechecker \
-	stages/k3/K3Values \
+	stages/k3/interpreter/K3Values \
+	stages/k3/interpreter/K3Consumption \
 	stages/k3/interpreter/K3Runtime \
 	stages/k3/interpreter/K3Interpreter \
-	stages/k3/interpreter/K3Consumption \
 	stages/k3_dist/ProgInfo \
 	stages/k3_dist/GenDist \
 	stages/imperative/ReifiedK3 \
 	stages/imperative/Imperative \
 	stages/imperative/ImperativeUtil \
 	stages/imperative/RK3ToImperative \
+	stages/imperative/CPP \
+	stages/imperative/CPPTyping \
+	stages/imperative/ImperativeToCPP 
 
 TOPLEVEL_FILES=\
 	tests/Testing \
 	Driver \
 
 LEXERS=\
-	stages/k3/K3Lexer \
+	stages/k3/parser/K3Lexer \
 
 PARSERS=\
-	stages/k3/K3Parser \
+	stages/k3/parser/K3Parser \
 
 DIRS=\
 	util\
 	stages/k3 \
+	stages/k3/core \
+	stages/k3/utils \
+	stages/k3/parser \
 	stages/k3/interpreter \
 	stages/k3_dist \
 	stages/imperative \
@@ -48,9 +58,16 @@ INCLUDE_OBJ=\
 
 #################################################
 
+#ML_FILES     := $(foreach f,$(FILES),$(wildcard $(f).ml))
+#MLI_FILES    := $(foreach f,$(FILES),$(wildcard $(f).mli))
+#BASE_FILES   := $(patsubst %.ml,%,$(ML_FILES))
+
 BASE_FILES     := $(FILES)
 GENERATED_FILES = $(PARSERS) $(LEXERS) 
 FILES += $(GENERATED_FILES)
+
+#ML_FILES  += $(patsubst %,%.ml,$(GENERATED_FILES))
+#MLI_FILES += $(patsubst %,%.mli,$(GENERATED_FILES))
 
 BC_FILES    =$(patsubst %,%.cmo,$(FILES))
 BC_INCLUDES =$(patsubst %,%.cmi,$(FILES))
@@ -169,7 +186,6 @@ $(TEST_BINARIES) : bin/% : %.ml
 # object files
 $(BC_INCLUDES) :
 $(NC_INCLUDES) : 
-
 $(TEST_INCLUDES) :
 
 #################################################

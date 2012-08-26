@@ -2,3 +2,4 @@ declare a : {int} = {1; 2; 3}
 declare b : {int} = {1; 2; 3}
 declare c : {(int,int,int)}
 declare d : {(int,float,string,byte)}
+declare e : (int -> int) = \x:int -> x+1

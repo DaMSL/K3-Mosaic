@@ -1,82 +1,86 @@
 (* Dealing with Sources and Consumption. *)
-open K3
+open K3.AST
+open K3Util
 open K3Values
-open K3Interpreter
 open K3Typechecker
+open K3Streams
 
-exception SourceError of id_t
+exception StreamError of id_t
 
-let convert_type t =
-    match t with
-    | TInt -> fun v -> VInt(int_of_string v)
-    | TFloat -> fun v -> VFloat(float_of_string v)
-    | _ -> fun v -> VString(v)
+(* Evaluation methods *)
+let value_of_string t = match t with
+  | TInt -> fun v -> VInt(int_of_string v)
+  | TFloat -> fun v -> VFloat(float_of_string v)
+  | _ -> fun v -> VString(v)
 
-let pull_source i t s =
-    let signature = 
-        match t <| base_of %++ value_of |> (fun () -> raise (SourceError i)) with
-        | TTuple(ts) ->
-            List.map base_of ts
-        | _ -> raise (SourceError i)
-    in
-    match s with
-    | CSV(channel) ->
-        let next_record = Str.split (Str.regexp ",") (input_line channel) in
-        Some (VTuple(List.map2 convert_type signature next_record))
-    | _ -> raise (SourceError i)
+let pull_source i t s in_chan =
+	let signature = 
+		match t <| base_of %++ value_of |> (fun () -> raise (StreamError i)) with
+		| TTuple(ts) -> List.map base_of ts
+		| _ -> raise (StreamError i)
+	in
+  begin 
+    print_endline ("Pulling from source "^i);
+	  match s with
+	  | (File _), CSV -> 
+	    (try 
+         let next_record = Str.split (Str.regexp ",") (input_line in_chan) in
+	       Some (VTuple(List.map2 value_of_string signature next_record))
+       with End_of_file -> None)
+	  | _ -> raise (StreamError i)
+  end
 
-(* Go through a consumable tree, and open all generic file sources. *)
-let rec open_file_sources loop =
-    let senv = ref [] in
-    let rec go loop =
-        match loop with
-        | Source(i, t, s) -> (
-            match s with
-            | FileSource(tag, filename) when tag = "csv" -> (
-                try List.assoc i !senv with Not_found ->
-                    let opened_source = Source(i, t, (CSV(open_in filename))) in
-                    senv := (i, opened_source) :: !senv; opened_source
-            )
-            | FileSource(_) -> raise (SourceError i)
-            | _ -> (try List.assoc i !senv with Not_found -> raise (SourceError i))
-        )
-        | Loop(i, c) -> Loop(i, open_file_sources c)
-        | Choice(cs) -> Choice(List.map open_file_sources cs)
-        | Sequence(cs) -> Sequence(List.map open_file_sources cs)
-        | Optional(c) -> Optional(open_file_sources c)
-        | Repeat(c, s) -> Repeat(open_file_sources c, s)
-    in go loop
 
-(* Given a source environment, construct a function which can be polled for values. *)
-let rec pull loop =
-    match loop with
+(* Go through all actions of an FSM, and initialize its channel implementations. *)
+let initialize fsm =
+  let init_file_impl filename i = match i with
+    | In(None) -> In(Some(open_in filename))
+    | Out(None) -> Out(Some(open_out filename))
+    | _ -> i
+  in
+  let rec init_aux senv fsm = 
+	  List.fold_left (fun (senv, nfsm) (i, (a,n,p)) ->
+	    match a with
+	      | AEndpoint(id, t, s, impl) ->
+	        let nsenv, na = match s with
+	          | File (filename), _ ->
+	            (try senv, (List.assoc id senv)
+	             with Not_found ->
+	               let ne = AEndpoint(id, t, s, init_file_impl filename impl)
+	               in ((id,ne)::senv), ne)
+	
+	          | _, _ -> raise (StreamError id) 
+	        in nsenv, (nfsm@[i, (na,n,p)])
 
-    | Source(i, t, s) -> pull_source i t s, None
-    | Loop(i, c) -> pull c
+	      | _ -> senv, (nfsm@[i, (a,n,p)])
+	    ) (senv, []) fsm
+  in snd (init_aux [] fsm)
 
-    (* Pulling on a choice will pull each source in turn, and return the first
-     * successful pull.
-     *)
-    | Choice([]) -> None, None
-    | Choice(h :: t) -> (
-        match pull h with
-        | Some v, _ -> Some v, None
-        | None, _ -> pull (Choice(t))
-    )
 
-    (* Pulling on a sequence will pull each source in turn, but will skip the
-     * remaining sources if one fails.
-     *)
-    | Sequence([]) -> None, None
-    | Sequence(h :: t) -> (
-        match pull h with
+(* Run an FSM for a single event *)
+let rec run fsm_env fsm state_opt =
+  let run_endpoint id t s impl = match impl with
+    | In(Some(c)) -> pull_source id t s c
+    | _ -> raise (StreamError id)
+  in
+  let state = match state_opt with None -> (fst (List.hd fsm)) | Some (x) -> x in
+  try
+    let action, next, fail = List.assoc state fsm in
+    match action with
+      | AEndpoint (id, t, s, impl) ->
+        let v = run_endpoint id t s impl in
+        v, (if v = None then Some fail else Some next)
 
-        | Some v, _ -> Some v, Some (Sequence t)
-        | None, _ -> None, None
-    )
-    | Optional(c) -> fst (pull c), None
-    | Repeat(c, _) -> (
-        match pull c with
-        | Some v, _ -> Some v, Some c
-        | None, _ -> None, None
-    )
+      | ADerived (id) -> 
+        (* TODO: this may yield a next state in the derived FSM. We should try
+         * to use that state id in this FSM, thus we should also return the FSM
+         * id associated with the returned next state.
+         *
+         * Also, on success (i.e., Some(v), None) jump to the success state,
+         * and on fail (i.e., None, None) jump to the fail state
+         *)
+        (try run fsm_env (List.assoc id fsm_env) None
+         with Not_found -> failwith ("invalid derived state "^id)) 
+
+      | AEOF -> None, None
+  with Not_found -> failwith ("invalid state "^(string_of_int state))

@@ -1,19 +1,27 @@
-(* The K3 Programming Language *)
+(* The K3 AST type signature *)
 
 open Tree
-open K3AST
-open K3Annotations
 
-(****************************
- * Functors
- ****************************)
-module GenericAST(Annotation : ASTAnnotationType) = 
-struct
+module type ASTCommon = sig
+  (* Identifiers *)
+  type id_t = string
+  type address = string * int (* IP * port *)
+end
 
-include ASTCommonImpl
+module ASTCommonImpl : ASTCommon = struct
+  (* Identifiers *)
+  type id_t = string
+  type address = string * int (* IP * port *)
+end
+
+
+(* Start of AST signature *)
+module type ASTType = sig 
+
+include ASTCommon
 
 (* Annotations *)
-type annotation_t = Annotation.annotation_t
+type annotation_t
 
 type container_type_t
     = TSet
@@ -53,7 +61,6 @@ type arg_t
     | AMaybe    of arg_t
     | ATuple    of arg_t list
 
-
 (* Constants *)
 type constant_t
     = CUnit
@@ -83,6 +90,7 @@ type expr_tag_t
     | Add
     | Mult
     | Neg
+
     | Eq
     | Lt
     | Neq
@@ -166,50 +174,5 @@ type declaration_t
 
 (* K3 Programs *)
 type program_t = (declaration_t * annotation_t) list
-
-end
-
-
-(****************************
- * K3 AST implementation
- ****************************)
-
-module rec AST : ( ASTType with type annotation_t = Annotation.annotation_t )
-= GenericAST(Annotation)
-
-and Annotation : ( AnnotationType with type type_t = AST.type_t 
-                                   and type expr_t = AST.expr_t )
-= struct
-
-include ASTCommonImpl
-
-(* Language components *)
-type type_t = AST.type_t
-type expr_t = AST.expr_t
-
-(* Unnamed tuple descriptor *)
-type positions = int list
-
-type rigidity_t =
-  | Constraint
-  | Hint
-
-type data_annotation_t = 
-  | FunDep  of positions * positions
-  | Index   of positions
-  | Unique  of positions
-  | Ordered of positions
-  | Sorted  of positions
-
-type control_annotation_t =
-  | Effect of id_t list (* Variables ranged over by the effect *)
-  | Parallel of int     (* Degree of parallelism *)
-
-type k3_annotation_t =
-  | Data    of rigidity_t * data_annotation_t
-  | Control of rigidity_t * control_annotation_t
-  | Type    of type_t
-
-type annotation_t = k3_annotation_t list
 
 end

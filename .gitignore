@@ -9,13 +9,16 @@
 
 *.o
 
+*.byte
+_build
+
 Makefile.deps
 Makefile.local
 
 bin/
 
-stages/k3/K3Parser.mli
-stages/k3/K3Parser.ml
+stages/k3/parser/K3Parser.mli
+stages/k3/parser/K3Parser.ml
 
-stages/k3/K3Lexer.mli
-stages/k3/K3Lexer.ml
+stages/k3/parser/K3Lexer.mli
+stages/k3/parser/K3Lexer.ml

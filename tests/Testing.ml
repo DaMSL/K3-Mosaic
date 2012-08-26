@@ -1,7 +1,8 @@
 open Symbols
 open Tree
-open K3
+open K3.AST
 open K3Util
+open K3Printing
 open K3Typechecker
 open K3Values
 open K3Interpreter
@@ -28,9 +29,9 @@ let parse_expression_test s = K3Parser.expression_test K3Lexer.tokenize (Lexing.
 
 (* Evaluation *)
 let eval_test_expr (decl_prog, e) = 
-  let tdecl_prog = deduce_program_type decl_prog in
+  let tdecl_prog, env, trig_env, _ = type_bindings_of_program decl_prog in
   let _, val_env = env_of_program tdecl_prog in  
-  value_of_eval (snd (eval_expr val_env (deduce_expr_type [] [] e)))
+  value_of_eval (snd (eval_expr val_env (deduce_expr_type trig_env env e)))
 
 (* Tests *)
 let equals_assertion expected actual string_fn =

@@ -64,7 +64,7 @@
  *)
 
 open Util
-open K3
+open K3.AST
 open K3Helpers
 open ProgInfo
 
@@ -938,8 +938,6 @@ let gen_dist p ast =
       (fun trig -> gen_dist_for_t p trig)
       triggers
   in
-  List.map
-    (fun x -> Declaration x)
     ( declare_global_vars p @
       declare_foreign_functions p @
       filter_corrective_list ::  (* global func *)

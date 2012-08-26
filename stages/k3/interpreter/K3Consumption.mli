@@ -1,8 +1,9 @@
-(* Dealing with Sources and Consumption. *)
-open K3
+(* K3 Stream FSM interpretation. *)
 open K3Values
-open K3Interpreter
+open K3Streams
 
-val pull: consumable_t -> value_t option * consumable_t option
-val pull_source: id_t -> type_t -> source_t -> value_t option
-val open_file_sources: consumable_t -> consumable_t
+val initialize : stream_fsm_t -> stream_fsm_t
+
+val run :
+  fsm_env_t -> stream_fsm_t -> state_id option
+  -> value_t option * state_id option
