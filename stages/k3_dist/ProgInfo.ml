@@ -142,16 +142,16 @@ let lhs_rhs_of_stmt (p:prog_data_t) stmt_id =
     (fun (rhs_map, _) -> (lhs_map, rhs_map))
     rhs_maps
 
-let find_lhs_map_bindings_in_stmt (p:prog_data_t) (stmt:stmt_id_t) (map:map_id_t)
+let find_lmap_bindings_in_stmt (p:prog_data_t) (stmt:stmt_id_t) (map:map_id_t)
 =
-  let (_, _, lmap, lmapbind, _) = find_stmt p stmt_id in
+  let (_, _, lmap, lmapbind, _) = find_stmt p stmt in
   if lmap = map then lmapbind 
   else raise (Bad_data ("find_lhs_map_binding_in_stmt: No "^
           (string_of_int map)^" lhs map_id found"))
 
-let find_rhs_map_bindings_in_stmt (p:prog_data_t) (stmt:stmt_id_t) (map:map_id_t)
+let find_rmap_bindings_in_stmt (p:prog_data_t) (stmt:stmt_id_t) (map:map_id_t)
 =
-  let (_, _, _, _, rmaps) = find_stmt p stmt_id in
+  let (_, _, _, _, rmaps) = find_stmt p stmt in
   let (_, binding) = 
     try
       List.find 
@@ -221,11 +221,11 @@ let slice_key_from_bound (p:prog_data_t) (stmt_id:stmt_id_t) (map_id:map_id_t) =
  * starting at 0 index *)
 let get_map_bindings_in_stmt (p:prog_data_t) (stmt_id:stmt_id_t) 
   (lmap:map_id_t) (rmap:map_id_t) =
-  let lmap_bindings = find_lmap_bindings_in_stmt stmt_id lmap in
-  let rmap_bindings = find_rmap_bindings_in_stmt stmt_id rmap in
+  let lmap_bindings = find_lmap_bindings_in_stmt p stmt_id lmap in
+  let rmap_bindings = find_rmap_bindings_in_stmt p stmt_id rmap in
   List.fold_left
     (fun acc (id, index) -> 
-      try acc@(index, List.assoc id rmap_bindings)
+      try acc@[index, List.assoc id rmap_bindings]
       with Not_found -> acc
     )
     []

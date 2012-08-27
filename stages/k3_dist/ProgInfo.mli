@@ -35,6 +35,10 @@ val stmts_without_rhs_maps_in_t : prog_data_t -> string -> stmt_id_t list
 val rhs_maps_of_stmt : prog_data_t -> stmt_id_t -> map_id_t list
 val lhs_map_of_stmt : prog_data_t -> stmt_id_t -> map_id_t
 val lhs_rhs_of_stmt : prog_data_t -> stmt_id_t -> (map_id_t * map_id_t) list
+val find_lmap_bindings_in_stmt :
+  prog_data_t -> stmt_id_t -> map_id_t -> map_var_binding_t list
+val find_rmap_bindings_in_stmt :
+  prog_data_t -> stmt_id_t -> map_id_t -> map_var_binding_t list
 val find_map_bindings_in_stmt :
   prog_data_t -> stmt_id_t -> map_id_t -> map_var_binding_t list
 val map_name_of : prog_data_t -> map_id_t -> string
@@ -50,3 +54,9 @@ val partial_key_from_bound : prog_data_t ->
  * partial_key *)
 val slice_key_from_bound : prog_data_t ->
   stmt_id_t -> map_id_t -> expr_t list
+
+(* return a binding pattern for a stmt of (left_index, right_index) list
+ * showing how a lhs map variable corresponds to a rhs variable
+ * starting at 0 index *)
+val get_map_bindings_in_stmt : prog_data_t -> stmt_id_t -> map_id_t -> map_id_t
+-> (int * int) list
