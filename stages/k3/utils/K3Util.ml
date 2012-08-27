@@ -15,11 +15,19 @@ let tag_of_expr e = snd (fst_data e)
 let meta_of_expr e = snd_data e
 
 (* Variable id extraction *)
-let vars_of_arg =
-  function | AVar(v,_) -> [v] | ATuple(vt_l) -> List.map fst vt_l
+let rec vars_of_arg arg =
+    match arg with
+    | AIgnored -> []
+    | AVar(v,_) -> [v]
+    | AMaybe(a') -> vars_of_arg a'
+    | ATuple(vt_l) -> List.concat (List.map vars_of_arg vt_l)
   
-let typed_vars_of_arg =
-  function | AVar(v,t) -> [v,t] | ATuple(vt_l) -> vt_l
+let rec typed_vars_of_arg arg =
+    match arg with
+    | AIgnored -> []
+    | AVar(v,t) -> [v,t]
+    | AMaybe(a') -> typed_vars_of_arg a'
+    | ATuple(vt_l) -> List.concat (List.map typed_vars_of_arg vt_l)
 
 let id_of_var e = match tag_of_expr e with
   | Var id -> id | _ -> failwith "invalid variable"

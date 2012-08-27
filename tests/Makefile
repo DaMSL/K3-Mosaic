@@ -9,12 +9,16 @@ FILES=\
 	../util/Symbols \
 	../util/Printing \
 	../util/Tree \
+	../stages/k3/core/K3AST \
+	../stages/k3/core/K3Annotations \
 	../stages/k3/K3 \
-	../stages/k3/K3Util \
-	../stages/k3/K3Helpers \
+	../stages/k3/utils/K3Util \
+	../stages/k3/utils/K3Printing \
+	../stages/k3/utils/K3Helpers \
+	../stages/k3/core/K3Streams \
+	../stages/k3/K3Typechecker \
 	../stages/k3_dist/ProgInfo \
 	../stages/k3_dist/GenDist \
-	../stages/k3/K3Typechecker \
 
 TOPLEVEL_FILES=\
 	DistTest \
@@ -22,6 +26,8 @@ TOPLEVEL_FILES=\
 DIRS=\
 	../util\
 	../stages/k3 \
+	../stages/k3/core \
+	../stages/k3/utils \
 	../stages/k3_dist \
 
 #################################################
@@ -104,8 +110,6 @@ include Makefile.local
 
 clean:
 	rm -f $(patsubst %,%.ml,$(GENERATED_FILES))
-	rm -f $(patsubst %,%.mli,$(PARSERS))
-	rm -f $(patsubst %,%.output,$(PARSERS))
 	rm -f $(BC_FILES) $(BC_INCLUDES) $(BC_EXTRA_FILES) $(BC_EXTRA_INCLUDES)
 	rm -f $(NC_FILES) $(NC_INCLUDES) $(NC_EXTRA_FILES) $(NC_EXTRA_INCLUDES)
 	rm -f $(patsubst %,%.o,$(FILES)) $(patsubst %,%.o,$(EXTRA_FILES))

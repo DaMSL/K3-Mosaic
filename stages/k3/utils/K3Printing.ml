@@ -132,11 +132,11 @@ and flat_string_of_type t = match t with
     
     | TValue(t) -> flat_string_of_value_type t
 
-let flat_string_of_arg a = match a with
+let rec flat_string_of_arg a = match a with
+    | AIgnored -> tag_str "AIgnored" []
     | AVar(i, t) -> tag_str "AVar" [i; flat_string_of_type (TValue t)]
-    | ATuple(its) ->
-        tag_str "ATuple"
-          (List.map (fun (i, t) -> i^": "^flat_string_of_type(TValue t)) its)
+    | AMaybe(a') -> tag_str "AMaybe" [flat_string_of_arg a']
+    | ATuple(args) -> tag_str "ATuple" (List.map flat_string_of_arg args)
 
 let flat_string_of_expr_tag tag children =
   let my_tag ?(extra="") t = tag_str ~extra:extra t children
@@ -358,12 +358,11 @@ and print_type t =
 
 and print_arg a =
   let my_tag t lazy_ch_t = pretty_tag_str CutHint "" t lazy_ch_t in
-  let print_id_t (id,vt) =
-    lazy (ps (id^": "); print_type (TValue vt))
-  in
   match a with
+    | AIgnored -> my_tag "AIgnored" []
     | AVar(i, t)  -> my_tag "AVar" [lps i; lazy_type (TValue t)]
-    | ATuple(its) -> my_tag "ATuple" (List.map print_id_t its)
+    | AMaybe(a') -> my_tag "AMaybe" [lazy_arg a']
+    | ATuple(args) -> my_tag "ATuple" (List.map lazy_arg args)
 
 and print_expr_tag tag lazy_children =
   let my_tag ?(lb="(") ?(rb=")") ?(sep=", ") ?(extra="") t =

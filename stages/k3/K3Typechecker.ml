@@ -190,6 +190,7 @@ let rec assignable t_l t_r =
     | TTuple(t_ls), TTuple(t_rs) -> List.length t_ls = List.length t_rs && 
         List.for_all2 assignable t_ls t_rs
     | TCollection(t_lc, t_le), TCollection(t_rc, t_re) -> assignable t_le t_re
+    | TUnknown, _ -> true
     | _ when t_lb = t_rb -> true
     | _ -> false
 
@@ -226,10 +227,19 @@ let deduce_constant_type id trig_env c =
       | CNothing -> TMaybe(canonical TUnknown)
   in canonical constant_type
 
-let deduce_arg_type a =
+let rec deduce_arg_type a =
     match a with
+    | AIgnored -> canonical TUnknown
     | AVar(i, t) -> t
-    | ATuple(its) -> canonical (TTuple(snd(List.split its)))
+    | AMaybe(a') -> canonical (TMaybe(deduce_arg_type a'))
+    | ATuple(args) -> canonical (TTuple(List.map deduce_arg_type args))
+
+let rec gen_arg_bindings a =
+    match a with
+    | AIgnored -> []
+    | AVar(i, t) -> [(i, TValue(t))]
+    | AMaybe(a') -> gen_arg_bindings a'
+    | ATuple(args) -> List.concat (List.map gen_arg_bindings args)
 
 let rec deduce_expr_type trig_env cur_env utexpr =
     let ((uuid, tag), aux), untyped_children = decompose_tree utexpr in
@@ -241,8 +251,7 @@ let rec deduce_expr_type trig_env cur_env utexpr =
     (* Determine if the environment to be passed down to child typechecking needs to be augmented. *)
     let env =
         match tag with
-        | Lambda(AVar(i, t)) -> (i, TValue(t)) :: cur_env
-        | Lambda(ATuple(its)) -> (List.map (fun (i, t) -> (i, TValue(t))) its) @ cur_env
+        | Lambda(a) -> gen_arg_bindings a @ cur_env
         | _ -> cur_env
     in
 
@@ -253,8 +262,10 @@ let rec deduce_expr_type trig_env cur_env utexpr =
     let current_type =
         match tag with
         | Const(c) -> TValue(deduce_constant_type uuid trig_env c)
-        | Var(id) -> begin try List.assoc id env 
-            with Not_found -> t_erroru "Var" (TMsg(id^" not found")) () end
+        | Var(id) -> (
+            try List.assoc id env
+            with Not_found -> t_erroru "Var" (TMsg(id^" not found")) ()
+        )
         | Tuple ->
             let child_types = List.map 
             (fun e -> 
@@ -584,11 +595,8 @@ let rec deduce_expr_type trig_env cur_env utexpr =
 let check_trigger_type trig_env env id args locals body =
   let name = "Trigger("^id^")" in
 	let self_bindings = (id, TValue(canonical @: TTarget(base_of @: deduce_arg_type args))) in
-	let arg_bindings = match args with
-    | AVar(i, t) -> [(i, TValue(t))]
-    | ATuple(its) -> List.map (fun (i, t) -> (i, TValue(t))) its
-	in
-	let local_bindings = List.map (fun (i, vt, _) -> (i, TValue(vt))) locals in
+	let arg_bindings = gen_arg_bindings  args in
+    let local_bindings = List.map (fun (i, vt, _) -> (i, TValue(vt))) locals in
 	let inner_env = self_bindings :: arg_bindings @ local_bindings @ env in
 	let typed_body = deduce_expr_type trig_env inner_env body in
 	let t_b =

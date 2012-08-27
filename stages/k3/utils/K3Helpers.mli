@@ -11,6 +11,8 @@ val wrap_tlist : value_type_t -> value_type_t
 val wrap_tlist_mut : value_type_t -> value_type_t
 val wrap_ttuple : value_type_t list -> value_type_t
 val wrap_ttuple_mut : value_type_t list -> value_type_t
+val wrap_args : (id_t * value_type_t) list -> arg_t
+val wrap_args_maybe : (id_t * value_type_t) list -> arg_t
 
 (* simple functions that enable easy construction of AST trees *)
 val mk_const : constant_t -> expr_t
@@ -69,7 +71,6 @@ val extract_arg_names : ('a * 'b) list -> 'a list
 (* take a list of ids and convert it to a list of vars *)
 val ids_to_vars :
   id_t list -> expr_t list
-val strip_args : arg_t -> (id_t * value_type_t) list
 
 (* macro to check if a collection has a specific member *)
 val mk_has_member :
@@ -126,12 +127,17 @@ val slice_pat_take: int -> tuple_pat list -> tuple_pat list
 
 val slice_pat_drop: int -> tuple_pat list -> tuple_pat list
 
+(* given an integer and a prefix, create an id for the internals of a tuple *)
+val int_to_temp_id: int -> string -> id_t
+
+(* destruct a tuple, at which point parts are available via ids made by
+ * int_to_temp_id *)
+val mk_destruct_tuple: id_t -> value_type_t list -> string -> expr_t -> expr_t
+
 (* create K3 code to build a tuple using a pattern containing portions of the
  * old tuple and ids of new variables. The pattern is produced by
  * tuple_make_pattern
  * tuple name -> type list -> pattern
  * *)
-val mk_rebuild_tuple_lambda: value_type_t list -> tuple_pat list -> expr_t
-
 val mk_rebuild_tuple: id_t -> value_type_t list -> tuple_pat list -> expr_t
 

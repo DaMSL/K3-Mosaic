@@ -52,6 +52,32 @@ let wrap_ttuple_mut typ = match typ with
   | h::t   -> TIsolated(TMutable(TTuple(typ),[]))
   | _      -> invalid_arg "No mutable tuple to wrap"
 
+let wrap_tmaybe ts = List.map (fun t -> TMaybe t) ts
+
+(* wrap a function argument *)
+let wrap_args id_typ = 
+  let wrap_args_inner = function
+    | ("_",_) -> AIgnored
+    | (i,t) -> AVar(i,t)
+  in match id_typ with
+    | [x]   -> wrap_args_inner x
+    | x::xs -> ATuple(List.map wrap_args_inner id_typ)
+    | _     -> invalid_arg "No ids, types for wrap_args"
+
+(* wrap function arguments, turning tmaybes to amaybes *)
+let wrap_args_maybe id_typ = 
+  let wrap_args_inner = function
+    | ("_",_) -> AIgnored
+    | (i, TIsolated(TImmutable(TMaybe(t), _))) -> AMaybe(AVar(i,t))
+    | (i, TIsolated(TMutable(TMaybe(t), _))) -> AMaybe(AVar(i,t))
+    | (i, TContained(TImmutable(TMaybe(t), _))) -> AMaybe(AVar(i,t))
+    | (i, TContained(TMutable(TMaybe(t), _))) -> AMaybe(AVar(i,t))
+    | (i,t) -> AVar(i,t)
+  in match id_typ with
+    | [x]   -> wrap_args_inner x
+    | x::xs -> ATuple(List.map wrap_args_inner id_typ)
+    | _     -> invalid_arg "No ids, types for wrap_args_maybe"
+
 (* Helper functions to create K3 AST nodes more easily *)
 
 let meta = []   (* we fill meta with a default value *)
@@ -132,8 +158,8 @@ let mk_flatten collection = mk_stree Flatten [collection]
 let mk_agg agg_fun init collection =
     mk_stree Aggregate [agg_fun; init; collection]
 
-let mk_gbagg agg_fun group_fun init collection =
-    mk_stree GroupByAggregate [agg_fun; group_fun; init; collection]
+let mk_gbagg group_fun agg_fun init collection =
+    mk_stree GroupByAggregate [group_fun; agg_fun; init; collection]
 
 let mk_sort collection compare_fun =
     mk_stree Sort [collection; compare_fun]
@@ -173,10 +199,9 @@ let ids_to_vars = List.map (fun x -> match x with
   | "_" -> mk_const @: CUnknown 
   | x   -> mk_var x)
 
-(* strip the AVar or ATuple from a list of arguments *)
-let strip_args arg = match arg with
-    | ATuple(list_x) -> list_x
-    | AVar(id, typ) -> [(id, typ)]
+(* check if a collection is empty *)
+let mk_is_empty collection typ =
+  mk_eq collection @: mk_empty typ
 
 (* checks if a member of a collection is present *)
 let mk_has_member collection pattern member_type = 
@@ -187,19 +212,9 @@ let mk_has_member collection pattern member_type =
  * construct allows for an expr_t as well.
  * The types are expected in list format (always!) *)
 let mk_global_fn name input_names_and_types output_types expr =
-    let wrap_args args = match args with
-      | [id, typ]  -> AVar(id, typ)
-      | []      -> invalid_arg "Can't have 0 length args"
-      | _       -> ATuple(args)
-    in
-    let wrap_optional args = match args with
-      | []     -> invalid_arg "Can't have 0 length args"
-      | [head] -> head
-      | x -> wrap_ttuple(x)
-    in
     Global(name, 
-      TFunction(wrap_optional @: extract_arg_types input_names_and_types,
-          wrap_optional output_types),
+      TFunction(wrap_ttuple @: extract_arg_types input_names_and_types,
+          wrap_ttuple output_types),
       Some (mk_lambda (wrap_args input_names_and_types) expr)
     )
 ;;
@@ -211,41 +226,12 @@ let mk_foreign_fn name input_types output_types =
 
 
 (* a lambda with 2 arguments for things like aggregation functions *)
-let mk_assoc_lambda arg1 arg2 expr =
-    let is_a_tuple arg = match arg with
-        | ATuple(_) -> true
-        | AVar(_, _) -> false
-    in
-    let destruct_tuple_if_needed tuple_name args expr = 
-        if is_a_tuple args then
-            (mk_apply
-                (mk_lambda
-                    (ATuple(strip_args args))
-                    (expr)
-                )
-                (mk_var tuple_name)
-            )
-        else expr
-    in
-    let subst_args args name =
-      if is_a_tuple args then 
-        [name, wrap_ttuple @: extract_arg_types @: strip_args args]
-      else strip_args args
-    in
-    mk_lambda
-      (ATuple(
-            subst_args arg1 "__temp1"@ 
-            subst_args arg2 "__temp2")
-      )
-      (destruct_tuple_if_needed "__temp1" arg1 
-            (destruct_tuple_if_needed "__temp2" arg2 expr)
-      )
-      
+let mk_assoc_lambda arg1 arg2 expr = mk_lambda (ATuple[arg1;arg2]) expr
 
 (* a classic let x = e1 in e2 construct *)
 let mk_let var_name var_type var_value expr =
     mk_apply
-        (mk_lambda (AVar(var_name, var_type))
+        (mk_lambda (wrap_args [var_name, var_type])
             (expr)
         )
         (var_value)
@@ -256,15 +242,23 @@ let mk_let var_name var_type var_value expr =
  * evaluate to the same types *)
 let mk_let_many var_name_and_type_list var_values expr =
     mk_apply
-        (mk_lambda (ATuple(var_name_and_type_list))
+        (mk_lambda (wrap_args @: var_name_and_type_list)
             (expr)
         )
         (var_values)
 
+let mk_fst tuple_types tuple =
+    mk_let_many (list_zip ["__fst";"__snd"] tuple_types) tuple (mk_var "__fst")
+
+let mk_snd tuple_types tuple =
+    mk_let_many (list_zip ["__fst";"__snd"] tuple_types) tuple (mk_var "__snd")
+
 (* Functions to manipulate tuples in K3 code *)
 type tuple_pat = Position of int | ExternVar of id_t | Unknown
 
-let mk_tuple_range types = create_range 1 @: List.length types
+let def_tup_prefix = "__temp_"
+
+let mk_tuple_range types = create_range 0 @: List.length types
 
 let tuple_make_pattern (types:value_type_t list) = 
     List.map (fun x -> Position x) (mk_tuple_range types)
@@ -273,38 +267,37 @@ let tuple_make_pattern (types:value_type_t list) =
  * values you drop. list_drop and list_take can be used for non-slice operations
  *)
 let slice_pat_take num pat =
-    let range = create_range 1 (List.length pat - num) in
+    let range = create_range 0 (List.length pat - num) in
     let unknowns = List.map (fun _ -> Unknown) range in
     list_take num pat @unknowns
 
 let slice_pat_drop num pat =
-    let range = create_range 1 (List.length pat - num) in
+    let range = create_range 0 (List.length pat - num) in
     let unknowns = List.map (fun _ -> Unknown) range in
     unknowns@list_drop num pat
 
-let mk_temp_string i = "__temp_"^string_of_int i
+(* convert a number to an id used for breaking apart tuples *)
+let int_to_temp_id i prefix = prefix^string_of_int i
 
 let tuple_pat_to_ids pat =
     List.map 
     (fun x -> match x with 
-      | Position y -> mk_temp_string y 
+      | Position y -> int_to_temp_id y def_tup_prefix
       | ExternVar y -> y
       | Unknown -> "_")
     pat
 
+(* break down a tuple into its components, creating ids with a certain prefix *)
+let mk_destruct_tuple tup_name types prefix expr =
+  let range = mk_tuple_range types in
+  let ids = List.map (fun i -> int_to_temp_id i prefix) range in
+  let ids_types = list_zip ids types in
+  mk_let_many ids_types (mk_var tup_name) expr
+
 (* rebuild a tuple based on the types of the tuple and a pattern of temporaries
  * or external variables
  *)
-let mk_rebuild_tuple_lambda types pattern =
-  let range = mk_tuple_range types in
-  let temp_ids = List.map mk_temp_string range in
-  let temp_ids_and_types = list_zip temp_ids types in
-  mk_lambda 
-    (ATuple(temp_ids_and_types))    
+let mk_rebuild_tuple tup_name types pattern =
+  mk_destruct_tuple tup_name types def_tup_prefix
     (mk_tuple @: ids_to_vars @: tuple_pat_to_ids pattern)
-
-let mk_rebuild_tuple name types pattern =
-  mk_apply
-    (mk_rebuild_tuple_lambda types pattern)
-    (mk_var name)
 

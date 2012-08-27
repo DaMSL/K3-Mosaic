@@ -1,8 +1,10 @@
+open K3.AST
 open K3
 open K3Util
 open K3Helpers
 open GenDist
 open K3Typechecker
+open K3Printing
 
 let (rst_p:ProgInfo.prog_data_t) =
   (* trigger data *)

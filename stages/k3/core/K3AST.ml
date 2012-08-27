@@ -56,8 +56,10 @@ type type_t
 
 (* Arguments *)
 type arg_t
-    = AVar      of id_t * value_type_t
-    | ATuple    of (id_t * value_type_t) list
+    = AIgnored
+    | AVar      of id_t * value_type_t
+    | AMaybe    of arg_t
+    | ATuple    of arg_t list
 
 (* Constants *)
 type constant_t
