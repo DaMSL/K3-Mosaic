@@ -71,7 +71,8 @@ sig
 	  | Member     of member_access_fn_t
 	  | Named      of id_t
 	  | Send       of id_t (* type tag *)
-    | FExt       of T.ext_fn_t
+		| Schedule   of id_t (* trigger id *)
+		| FExt       of T.ext_fn_t
 	
 	(* Expression types *)
 	and expr_tag_t =

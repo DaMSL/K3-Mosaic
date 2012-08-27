@@ -124,7 +124,7 @@ let name_of_reification (fn_arg_env : (id_t * arg_t) list)
 	            (* Directly reify to tuple bindings if the arg is a tuple value *)
 	            begin match K3Util.tag_of_expr arg_e with
 	              | Tuple ->
-	                List.map2 (fun (id,t) e ->
+	                List.map2 (fun (AVar(id,t)) e ->
 	                  reify_expr e (id, TValue(t), true, true)) vt_l (sub_tree arg_e)
 	              | Var _ -> []
 	              | _ -> [reify_expr arg_e (unwrap (new_name "apply" true true arg_e))]

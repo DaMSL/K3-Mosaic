@@ -133,6 +133,7 @@ and print_fn_tag fn_tag =
   | Member macc_fn -> ps (string_of_member_access_fn_tag macc_fn)
   | Named id -> ps id
   | Send id -> ps ("send_"^id)
+  | Schedule id -> ps ("schedule_"^id)
   | FExt f -> my_tag "FExt" [lazy (print_ext_fn f)]
  
 and print_expr_tag string_of_meta tag lazy_children =

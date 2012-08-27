@@ -40,6 +40,14 @@ val decompose_aggregate : expr_t -> expr_t * expr_t * expr_t
 val decompose_gbagg : expr_t -> expr_t * expr_t * expr_t * expr_t
 val decompose_send : expr_t -> expr_t * expr_t * (expr_t list)
 
+(* Declaration accessors *)
+val globals_of_program : program_t -> program_t
+val triggers_of_program : program_t -> program_t
+
+val global_of_program : id_t -> program_t -> declaration_t * annotation_t
+val trigger_of_program : id_t -> program_t -> declaration_t * annotation_t
+
+
 (* Returns all variables in an expression *)
 val vars_of_expr      : expr_t -> expr_t list
 

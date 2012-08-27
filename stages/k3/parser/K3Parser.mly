@@ -23,7 +23,16 @@
     let contained_unknown_type = TContained(TImmutable(TUnknown,[]))
 
     let mk_unknown_collection t_c = TIsolated(TImmutable(TCollection(t_c, contained_unknown_type),[]))
-
+    let numerrors = ref 0
+    let print_error msg = 
+        incr numerrors; 
+        let pos = Parsing.symbol_start_pos() in 
+        let linenum = pos.Lexing.pos_lnum in 
+        let column = pos.Lexing.pos_cnum - pos.Lexing.pos_bol in 
+        Printf.printf "Error on line %d character %d : " linenum column;
+        print_endline msg;
+        if !numerrors > 20 then raise Exit else()
+					
 %}
 
 %token EXPECTED
@@ -111,7 +120,7 @@
 %%
 
 program:
-    | declaration { [$1, []] }
+    | declaration { if !numerrors>=1 then raise Exit else [$1, []] }
     | declaration program { ($1, []) :: $2 }
 ;
 
@@ -124,6 +133,10 @@ expression_test:
 declaration:
     | DECLARE IDENTIFIER COLON type_expr { Global($2, $4, None) }
     | DECLARE IDENTIFIER COLON type_expr GETS expr { Global($2, $4, Some $6) }
+    | DECLARE error COLON type_expr { print_error("Expected Identifier"); raise Parsing.Parse_error }
+    | DECLARE IDENTIFIER COLON error { print_error("Expected type expression"); raise Parsing.Parse_error }
+    | DECLARE IDENTIFIER COLON type_expr GETS error { print_error("Expected expression"); raise Parsing.Parse_error }
+
     
     | FOREIGN IDENTIFIER COLON type_expr { Foreign($2, $4) }
 
@@ -132,6 +145,10 @@ declaration:
       let locals = List.map (fun (id,t) -> (id,t,[])) $5
       in Trigger($2, $3, locals, $8)
     }
+    | TRIGGER IDENTIFIER arg LBRACE value_typed_identifier_list RBRACE GETS error { print_error("Error in trigger body"); raise Parsing.Parse_error }
+    | TRIGGER IDENTIFIER arg LBRACE RBRACE GETS error { print_error("Error in trigger body"); raise Parsing.Parse_error }
+    | TRIGGER IDENTIFIER arg LBRACE error { print_error("Expected list of local declarations"); raise Parsing.Parse_error }
+    | TRIGGER error { print_error("Invalid trigger"); raise Parsing.Parse_error }
 
     | ROLE IDENTIFIER LBRACE stream_program RBRACE { Role($2, $4) }
     | DEFAULT ROLE IDENTIFIER                      { DefaultRole($3) }
@@ -305,6 +322,8 @@ expr:
         mkexpr Send [mkexpr (Const(CTarget($3))) []; mkexpr (Const($5)) []; $7]
       }
     | expr LPAREN tuple RPAREN { mkexpr Apply [$1; $3] }
+    | SEND error { print_error("Invalid SEND syntax"); raise Parsing.Parse_error }
+    | expr LPAREN error { print_error("Expression syntax error"); raise Parsing.Parse_error }
 ;
 
 expr_list:
@@ -323,6 +342,8 @@ tuple:
 
 value_typed_identifier:
     | IDENTIFIER COLON isolated_value_type_expr { ($1, $3) }
+    | IDENTIFIER COLON error { print_error("Expected type expression"); raise Parsing.Parse_error }
+
 ;
 
 value_typed_identifier_list:
@@ -380,29 +401,44 @@ address:
 
 arithmetic:
     | NEG expr { mkexpr Neg [$2] }
+    | NEG error { print_error("Expected expression following arithmetic operator"); raise Parsing.Parse_error }
     | expr PLUS expr { mkexpr Add [$1; $3] }
+    | expr PLUS error { print_error("Expected expression following arithmetic operator"); raise Parsing.Parse_error }
     | expr NEG expr %prec MINUS { mkexpr Add [$1; mkexpr Neg [$3]] }
     | expr TIMES expr { mkexpr Mult [$1; $3] }
+    | expr TIMES error { print_error("Expected expression following arithmetic operator"); raise Parsing.Parse_error}
     | expr DIVIDE expr { mkexpr Apply [mkexpr (Var("/")) []; mkexpr Tuple [$1; $3]] }
+    | expr DIVIDE error { print_error("Expected expression following arithmetic operator"); raise Parsing.Parse_error }
     | expr MODULO expr { mkexpr Apply [mkexpr (Var("%")) []; mkexpr Tuple [$1; $3]] }
+    | expr MODULO error { print_error("Expected expression following arithmetic operator"); raise Parsing.Parse_error }
 ;
 
 predicate:
     | expr LT expr { mkexpr Lt [$1; $3] }
+    | expr LT error { print_error("Expected expression following inequality"); raise Parsing.Parse_error }
     | expr EQ expr { mkexpr Eq [$1; $3] }
+    | expr EQ error { print_error("Expected expression following inequality"); raise Parsing.Parse_error}
     | expr LEQ expr { mkexpr Leq [$1; $3] }
+    | expr LEQ error { print_error("Expected expression following inequality"); raise Parsing.Parse_error }
     | expr NEQ expr { mkexpr Neq [$1; $3] }
-
+    | expr NEQ error { print_error("Expected expression following inequality"); raise Parsing.Parse_error }
     | expr GT expr { mkexpr Neg [mkexpr Leq [$1; $3]] }
+    | expr GT { print_error("Expected expression following inequality"); raise Parsing.Parse_error }
     | expr GEQ expr { mkexpr Neg [mkexpr Lt [$1; $3]] }
+    | expr GEQ { print_error("Expected expression following inequality"); raise Parsing.Parse_error }
 ;
 
 conditional:
     | IF expr THEN expr ELSE expr { mkexpr IfThenElse [$2; $4; $6] }
+    | IF error { print_error("Expected valid predicate following 'if'"); raise Parsing.Parse_error }
+    | IF expr THEN error{ print_error("Expected valid expression following 'then'"); raise Parsing.Parse_error }
+    | IF expr THEN expr ELSE error { print_error("Expected valid expression following 'else'"); raise Parsing.Parse_error }
 ;
 
 lambda:
-    | BACKSLASH arg RARROW expr { mkexpr (Lambda($2)) [$4] }
+     | BACKSLASH arg RARROW expr { mkexpr (Lambda($2)) [$4] }
+     | BACKSLASH error { print_error("Expected valid argument for function"); raise Parsing.Parse_error }
+     | BACKSLASH arg RARROW error { print_error("Expected valid expression for function definition"); raise Parsing.Parse_error }
 ;
 
 access:
@@ -412,22 +448,53 @@ access:
 
 mutation:
     | INSERT LPAREN expr COMMA expr RPAREN { mkexpr Insert [$3; $5] }
+    | INSERT LPAREN error { print_error("Expected a value as first argument"); raise Parsing.Parse_error }
+    | INSERT LPAREN expr error { print_error("Expected value,collection as arguments"); raise Parsing.Parse_error }
     | UPDATE LPAREN expr COMMA expr, COMMA expr RPAREN { mkexpr Update [$3; $5; $7] }
+    | UPDATE LPAREN expr error { print_error("Expected a collection as second argument"); raise Parsing.Parse_error }
+    | UPDATE LPAREN error { print_error("Expected a value as first argument"); raise Parsing.Parse_error }
     | DELETE LPAREN expr COMMA expr RPAREN { mkexpr Delete [$3; $5] }
+    | DELETE LPAREN error { print_error("Expected a value as first argument"); raise Parsing.Parse_error }
+    | DELETE LPAREN expr error { print_error("Expected value,collection as arguments"); raise Parsing.Parse_error }
     | expr LARROW expr { mkexpr Assign [$1; $3] }
+    | expr LARROW error { print_error("Expected expression"); raise Parsing.Parse_error}
     | expr GETS expr { mkexpr Assign [$1; $3] }
+    | expr COLONGETS expr { mkexpr Assign [$1;$3] }
+    | expr GETS error { print_error("Expected expression"); raise Parsing.Parse_error}
+
 ;
 
 transformers:
     | expr CONCAT expr { mkexpr Combine [$1; $3] }
+    | expr CONCAT error { print_error("Expected expression for combine"); raise Parsing.Parse_error }
     | MAP LPAREN expr COMMA expr RPAREN { mkexpr Map [$3; $5] }
+    | MAP LPAREN expr error { print_error("Expected a collection as second argument"); raise Parsing.Parse_error }
+    | MAP LPAREN error { print_error("Expected mapping function, collection as arguments"); raise Parsing.Parse_error }
+    | MAP error { print_error("Invalid map syntax"); raise Parsing.Parse_error }
     | ITERATE LPAREN expr COMMA expr RPAREN { mkexpr Iterate [$3; $5] }
+    | ITERATE LPAREN expr error { print_error("Expected a collection as second argument"); raise Parsing.Parse_error }
+    | ITERATE LPAREN error { print_error("Expected iteration function, collection as arguments"); raise Parsing.Parse_error }
+    | ITERATE error { print_error("Invalid iterate syntax"); mkexpr (Const(CInt(1))) [] }
     | FILTERMAP LPAREN expr COMMA expr COMMA expr RPAREN { mkexpr FilterMap [$3; $5; $7] }
+    | FILTERMAP LPAREN expr COMMA expr error { print_error("Expected a collection as third argument"); raise Parsing.Parse_error }
+    | FILTERMAP LPAREN expr error { print_error("Expected a mapping function as second argument"); raise Parsing.Parse_error }
+    | FILTERMAP LPAREN error { print_error("Expected predicate function, mapping function, collection as arguments"); raise Parsing.Parse_error }
+    | FILTERMAP error { print_error("Invalid filtermap syntax"); raise Parsing.Parse_error }
     | FLATTEN LPAREN expr RPAREN { mkexpr Flatten [$3] }
+    | FLATTEN LPAREN error { print_error("Expected list (of lists) structure"); raise Parsing.Parse_error }
     | AGGREGATE LPAREN expr COMMA expr COMMA expr RPAREN { mkexpr Aggregate [$3; $5; $7] }
+    | AGGREGATE LPAREN expr COMMA expr error { print_error("Expected a collection as third argument"); raise Parsing.Parse_error }
+    | AGGREGATE LPAREN expr error { print_error("Expected an initializer as second argument"); raise Parsing.Parse_error }
+    | AGGREGATE LPAREN error { print_error("Expected aggregation function, initializer and collection as arguments"); raise Parsing.Parse_error }
+    | AGGREGATE error { print_error("Invalid fold syntax"); raise Parsing.Parse_error }
     | GROUPBYAGGREGATE LPAREN expr COMMA expr COMMA expr COMMA expr RPAREN {
         mkexpr GroupByAggregate [$3; $5; $7; $9]
     }
+    | GROUPBYAGGREGATE LPAREN expr COMMA expr COMMA expr error { print_error("Expected a collection as fourth argument"); raise Parsing.Parse_error }
+    | GROUPBYAGGREGATE LPAREN expr COMMA expr error { print_error("Expected an initializer as third argument"); raise Parsing.Parse_error }
+    | GROUPBYAGGREGATE LPAREN expr error { print_error("Expected an aggregation function as second argument"); raise Parsing.Parse_error }
+    | GROUPBYAGGREGATE LPAREN error { print_error("Expected grouping function, aggregation function, initailizer and collection as arguments"); raise Parsing.Parse_error }
+    | GROUPBYAGGREGATE error { print_error("Invalid groupby syntax"); raise Parsing.Parse_error }
     | SORT LPAREN expr COMMA expr RPAREN { mkexpr Sort [$3; $5] }
 ;
 
