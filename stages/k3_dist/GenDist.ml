@@ -67,14 +67,13 @@ open Util
 open K3.AST
 open K3Helpers
 open ProgInfo
+open K3Route
 
 exception ProcessingFailed of string;;
-
 
 (* K3 types for various things *)
 let t_vid = wrap_ttuple @: [t_int; t_int] (* so we can distinguish *)
 let t_vid_mut = wrap_ttuple @: [t_int_mut; t_int_mut]
-let t_ip = canonical TAddress 
 let t_trig_id = t_int (* In K3, triggers are always handled by numerical id *)
 let t_stmt_id = t_int
 let t_map_id = t_int
@@ -154,7 +153,7 @@ let declare_foreign_functions p =
       (List.map (fun t -> canonical @: TMaybe t) (map_types_for p lmap))@
       (wrap_tlist @: wrap_ttuple @: map_types_with_v_for p rmap):: (* tuples *)
       [canonical TBool]) (* shuffle_on_empty *)
-    (wrap_tlist @: wrap_ttuple @: t_ip::[wrap_tlist @: 
+    (wrap_tlist @: wrap_ttuple @: t_addr::[wrap_tlist @: 
       wrap_ttuple @: map_types_with_v_for p rmap]) (* results *)
   in
   let shuffles trig =
@@ -167,16 +166,6 @@ let declare_foreign_functions p =
         shuffles trig)
       (get_trig_list p)
   in
-  (* make foreign func for now, for type checking *)
-  (* takes tuple of maybes of the map types, returns ip list *)
-  let route_to_map_foreign p map_id = mk_foreign_fn 
-    (route_for p map_id) 
-    (if List.length @: map_types_for p map_id > 0 then
-      wrap_ttuple @: 
-        List.map (fun t -> canonical @: TMaybe t) (map_types_for p map_id)
-     else canonical TUnit)
-    (wrap_tlist t_ip)
-  in
   (* function to add delta tuples to a map *)
   (* NOTE: currently we assume vid is not in the tuples *)
   let add_delta_foreign p map_id = mk_foreign_fn
@@ -185,7 +174,6 @@ let declare_foreign_functions p =
     (canonical TUnit)
   in
   let map_related =
-    (List.map (fun map -> route_to_map_foreign p map) (get_map_list p))@
     (List.map (fun map -> add_delta_foreign p map) (get_map_list p))
   in
   log_read_geq_foreign::trig_related@map_related
@@ -214,6 +202,12 @@ let declare_global_vars p =
   in
   loopback_code :: stmt_cntrs_code :: global_maps
 
+let declare_global_funcs p =
+  route_foreign_funcs @ 
+  calc_dim_bounds_code ::
+  List.map (route_fn p) (get_map_list p)
+
+
 (* Just so we can typecheck, we make all of these K3 functions foreign for now
  *)
 
@@ -227,12 +221,11 @@ let declare_global_vars p =
   trigger
  *)
 
-
 let send_fetch_trig p trig_name =
   let send_fetches_of_rhs_maps  =
     (mk_iter
       (mk_lambda 
-        (wrap_args ["ip", t_ip; 
+        (wrap_args ["ip", t_addr; 
           "stmt_map_ids", wrap_tlist @: wrap_ttuple [t_stmt_id; t_map_id]]
         )
         (mk_send 
@@ -246,12 +239,12 @@ let send_fetch_trig p trig_name =
       )
       (mk_gbagg
         (mk_lambda (* Grouping function *)
-          (wrap_args ["stmt_id", t_int; "map_id", t_int; "ip", t_ip])
+          (wrap_args ["stmt_id", t_int; "map_id", t_int; "ip", t_addr])
           (mk_var "ip")
         )
         (mk_assoc_lambda (* Agg function *)
           (wrap_args ["acc", wrap_tlist @: wrap_ttuple [t_stmt_id; t_map_id]])
-          (wrap_args ["stmt_id", t_stmt_id; "map_id", t_map_id; "ip", t_ip])
+          (wrap_args ["stmt_id", t_stmt_id; "map_id", t_map_id; "ip", t_addr])
           (mk_combine
             (mk_var "acc")
             (mk_singleton 
@@ -268,7 +261,7 @@ let send_fetch_trig p trig_name =
             let key = partial_key_from_bound p stmt_id rhs_map_id in
             (mk_combine
               (mk_map 
-                (mk_lambda (wrap_args["ip", t_ip])
+                (mk_lambda (wrap_args["ip", t_addr])
                   (mk_tuple 
                     [mk_const @: CInt stmt_id; mk_const @: CInt rhs_map_id; 
                       mk_var "ip"]
@@ -282,7 +275,7 @@ let send_fetch_trig p trig_name =
               acc_code
             )
           )
-          (mk_empty @: wrap_tlist @: wrap_ttuple [t_stmt_id; t_map_id; t_ip])
+          (mk_empty @: wrap_tlist @: wrap_ttuple [t_stmt_id; t_map_id; t_addr])
           (s_and_over_stmts_in_t p rhs_maps_of_stmt trig_name) 
         ) 
       )
@@ -295,7 +288,7 @@ let send_completes_for_stmts_with_no_fetch =
       let key = partial_key_from_bound p stmt_id lhs_map_id in
         acc_code@
         [mk_iter 
-          (mk_lambda (wrap_args["ip", t_ip])
+          (mk_lambda (wrap_args["ip", t_addr])
             (mk_send
               (mk_const @: CTarget(do_complete_trig_name))
               (mk_var "ip")
@@ -320,7 +313,7 @@ let send_puts =
    * specific IP *)
   mk_iter
     (mk_lambda 
-      (wrap_args ["ip", t_ip; 
+      (wrap_args ["ip", t_addr; 
         "stmt_id_cnt_list", wrap_tlist @: wrap_ttuple [t_int; t_int]])
       (mk_send
         (mk_const @: CTarget(rcv_put_name_of_t p trig_name))
@@ -332,15 +325,15 @@ let send_puts =
     )
     (mk_gbagg
       (mk_assoc_lambda (* grouping func -- assoc because of gbagg tuple *)
-        (wrap_args ["ip", t_ip; "stmt_id", t_stmt_id])
+        (wrap_args ["ip", t_addr; "stmt_id", t_stmt_id])
         (wrap_args["count", t_int])
         (mk_var "ip")
       )
       (mk_assoc_lambda (* agg func *)
         (wrap_args ["acc", wrap_tlist @: wrap_ttuple [t_int; t_int]])
-        (wrap_args ["ip_and_stmt_id", wrap_ttuple [t_ip; t_stmt_id]; "count", t_int])
+        (wrap_args ["ip_and_stmt_id", wrap_ttuple [t_addr; t_stmt_id]; "count", t_int])
         (mk_apply (* break up because of the way inner gbagg forms tuples *)
-          (mk_lambda (wrap_args ["ip", t_ip; "stmt_id", t_stmt_id])
+          (mk_lambda (wrap_args ["ip", t_addr; "stmt_id", t_stmt_id])
             (mk_combine
               (mk_var "acc")
               (mk_singleton
@@ -355,12 +348,12 @@ let send_puts =
       (mk_empty @: wrap_tlist @: wrap_ttuple [t_int; t_int])
       (mk_gbagg (* inner gba *)
         (mk_lambda (* group func *)
-          (wrap_args ["ip", t_ip; "stmt_id", t_int])
+          (wrap_args ["ip", t_addr; "stmt_id", t_int])
           (mk_tuple [mk_var "ip"; mk_var "stmt_id"])
         )
         (mk_assoc_lambda (* agg func *)
           (wrap_args ["acc", t_int]) 
-          (wrap_args ["ip", t_ip; "stmt_id", t_int])
+          (wrap_args ["ip", t_addr; "stmt_id", t_int])
           (mk_add
             (mk_var "acc")
             (mk_const @: CInt 1)
@@ -377,7 +370,7 @@ let send_puts =
               acc_code
               (mk_map
                 (mk_lambda
-                  (wrap_args  ["ip", t_ip;
+                  (wrap_args  ["ip", t_addr;
                     "tuples", wrap_tlist @: wrap_ttuple rhs_map_types]
                   )
                   (mk_tuple [mk_var "ip"; mk_const @: CInt stmt_id])
@@ -393,7 +386,7 @@ let send_puts =
               ) 
             ) (* mk_combine *)
           ) (* fun *)
-          (mk_empty @: wrap_tlist @: wrap_ttuple [t_ip; t_stmt_id])
+          (mk_empty @: wrap_tlist @: wrap_ttuple [t_addr; t_stmt_id])
           (s_and_over_stmts_in_t p lhs_rhs_of_stmt trig_name)
         )
       ) (* gbagg *)
@@ -533,7 +526,7 @@ let send_push_stmt_map_trig p trig_name =
         [] (* locals *),
           (mk_iter
             (mk_lambda 
-            (wrap_args ["ip",t_ip;"tuples",wrap_tlist @: wrap_ttuple rhs_map_types])
+            (wrap_args ["ip",t_addr;"tuples",wrap_tlist @: wrap_ttuple rhs_map_types])
               (mk_send
                 (mk_const @: CTarget (rcv_push_name_of_t p trig_name stmt_id rhs_map_id))
                 (mk_var "ip")
@@ -729,7 +722,7 @@ match trigs_stmts_with_rhs_map with [] -> [] | _ ->
                 )
                 (mk_iter 
                   (mk_lambda 
-                    (wrap_args ["ip", t_ip; "delta_tuples", tuple_types])
+                    (wrap_args ["ip", t_addr; "delta_tuples", tuple_types])
                     (mk_send
                       (mk_const @: CTarget (rcv_corrective_name_of_t p target_trig
                         target_stmt target_map)) 
@@ -927,7 +920,7 @@ let gen_dist_for_t p trig =
     rcv_push_trig p trig@
     do_complete_trigs p trig@
     rcv_correctives_trig p trig@
-     do_corrective_trigs p trig
+    do_corrective_trigs p trig
 
 (* Function to generate the whole distributed program *)
 let gen_dist p ast =
@@ -941,6 +934,7 @@ let gen_dist p ast =
   let prog =
     ( declare_global_vars p @
       declare_foreign_functions p @
+      declare_global_funcs p @
       filter_corrective_list ::  (* global func *)
       regular_trigs@
       send_corrective_trigs p    (* per-map basis *)

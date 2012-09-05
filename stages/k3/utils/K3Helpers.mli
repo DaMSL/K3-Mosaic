@@ -1,16 +1,23 @@
 (* Utility functions to enable easy manipulation of K3 AST trees *)
 open K3.AST
 
-(* easy access to the int type *)
+(* easy access to K3 types *)
 val canonical : base_type_t -> value_type_t
 val t_int : value_type_t
 val t_int_mut : value_type_t
+val t_float : value_type_t
+val t_float_mut : value_type_t
+
+(* easy type for addresses *)
+val t_addr : value_type_t
 
 (* wrap in a list *)
 val wrap_tlist : value_type_t -> value_type_t
 val wrap_tlist_mut : value_type_t -> value_type_t
 val wrap_ttuple : value_type_t list -> value_type_t
 val wrap_ttuple_mut : value_type_t list -> value_type_t
+val wrap_tmaybe : value_type_t -> value_type_t 
+val wrap_tmaybes : value_type_t list -> value_type_t list
 val wrap_args : (id_t * value_type_t) list -> arg_t
 val wrap_args_maybe : (id_t * value_type_t) list -> arg_t
 
@@ -72,6 +79,9 @@ val extract_arg_names : ('a * 'b) list -> 'a list
 val ids_to_vars :
   id_t list -> expr_t list
 
+(* check if a collection is empty *)
+val mk_is_empty : expr_t -> value_type_t -> expr_t
+
 (* macro to check if a collection has a specific member *)
 val mk_has_member :
   expr_t ->
@@ -114,6 +124,12 @@ val mk_let_many :
   expr_t ->
   expr_t
 
+(* macro similar to fst *)
+val mk_fst: value_type_t list -> expr_t -> expr_t
+
+(* macro similar to snd *)
+val mk_snd: value_type_t list -> expr_t -> expr_t
+
 (* data type to manipulate tuples *)
 type tuple_pat = Position of int | ExternVar of id_t | Unknown
 
@@ -141,3 +157,5 @@ val mk_destruct_tuple: id_t -> value_type_t list -> string -> expr_t -> expr_t
  * *)
 val mk_rebuild_tuple: id_t -> value_type_t list -> tuple_pat list -> expr_t
 
+(* unwrap maybe values by creating an inner values with postfix "_unwrap" *)
+val mk_unwrap_maybe: (id_t * value_type_t) list -> expr_t -> expr_t

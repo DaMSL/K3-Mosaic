@@ -26,9 +26,14 @@ let iso_to_contained typ =
 (* the default type *)
 let canonical typ = TIsolated(TImmutable(typ,[]))
 
-(* A type for simple immutable integers *)
+(* A type for simple K3 types *)
 let t_int = canonical TInt
 let t_int_mut = TIsolated(TMutable(TInt,[]))
+let t_float = canonical TFloat
+let t_float_mut = TIsolated(TMutable(TFloat,[]))
+
+(* A type for addresses *)
+let t_addr = canonical TAddress
 
 (* wrap a type in a list *)
 let wrap_tlist typ = 
@@ -52,7 +57,8 @@ let wrap_ttuple_mut typ = match typ with
   | h::t   -> TIsolated(TMutable(TTuple(typ),[]))
   | _      -> invalid_arg "No mutable tuple to wrap"
 
-let wrap_tmaybe ts = List.map (fun t -> TMaybe t) ts
+let wrap_tmaybe t = canonical @: TMaybe t
+let wrap_tmaybes ts = List.map wrap_tmaybe ts
 
 (* wrap a function argument *)
 let wrap_args id_typ = 
@@ -242,10 +248,8 @@ let mk_let var_name var_type var_value expr =
  * evaluate to the same types *)
 let mk_let_many var_name_and_type_list var_values expr =
     mk_apply
-        (mk_lambda (wrap_args @: var_name_and_type_list)
-            (expr)
-        )
-        (var_values)
+        (mk_lambda (wrap_args var_name_and_type_list) expr)
+        var_values
 
 let mk_fst tuple_types tuple =
     mk_let_many (list_zip ["__fst";"__snd"] tuple_types) tuple (mk_var "__fst")
@@ -300,4 +304,14 @@ let mk_destruct_tuple tup_name types prefix expr =
 let mk_rebuild_tuple tup_name types pattern =
   mk_destruct_tuple tup_name types def_tup_prefix
     (mk_tuple @: ids_to_vars @: tuple_pat_to_ids pattern)
+
+(* unwrap maybe values by creating an inner values with postfix "_unwrap" *)
+let mk_unwrap_maybe var_names_and_types expr =
+  let unwrap_n_t = 
+    List.map (fun (n,t) -> (n^"_unwrap",t)) var_names_and_types in
+  let names = fst @: List.split var_names_and_types in
+  let vars = ids_to_vars names in
+  mk_apply
+    (mk_lambda (wrap_args_maybe unwrap_n_t) expr) @:
+    mk_tuple vars
 
