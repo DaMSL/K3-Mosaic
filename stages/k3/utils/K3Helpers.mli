@@ -11,9 +11,18 @@ val t_float_mut : value_type_t
 (* easy type for addresses *)
 val t_addr : value_type_t
 
+(* K3 types for various things *)
+val t_vid : value_type_t
+val t_vid_mut : value_type_t
+val t_trig_id : value_type_t
+val t_stmt_id : value_type_t
+val t_map_id : value_type_t
+
 (* wrap in a list *)
 val wrap_tlist : value_type_t -> value_type_t
 val wrap_tlist_mut : value_type_t -> value_type_t
+val wrap_tset : value_type_t -> value_type_t
+val wrap_tset_mut : value_type_t -> value_type_t
 val wrap_ttuple : value_type_t list -> value_type_t
 val wrap_ttuple_mut : value_type_t list -> value_type_t
 val wrap_tmaybe : value_type_t -> value_type_t 

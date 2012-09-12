@@ -28,6 +28,10 @@ let rec list_drop len li = match li with
   | x::xs when len = 0 -> li
   | x::xs -> list_drop (len-1) xs
 
+(* drop from the end of a list *)
+let list_drop_end len li =
+  list_take (List.length li - len) li
+
 let list_zip list1 list2 = List.map2 (fun i j -> (i,j)) list1 list2
 
 let compose_fn f g x = f(g x)

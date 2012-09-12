@@ -26,23 +26,30 @@ let route_foreign_funcs =
   mk_foreign_fn "hash_float" t_float t_int ::
   mk_foreign_fn "get_ring_node" t_int t_addr ::
   []
+
+let bmod_data = "bmod_data"
+let bmod_per_map_types = [t_map_id; bmod_types]
+let global_bmods =
+  mk_global_val bmod_data @: 
+    wrap_tset_mut @: wrap_ttuple bmod_per_map_types
   
 let calc_dim_bounds_code = mk_global_fn "calc_dim_bounds" 
   ["bmod", bmod_types] (*args*) [dim_bounds_type] (* return *) @:
-  mk_agg 
-    (mk_assoc_lambda 
-      (wrap_args ["xs", wrap_tlist @: wrap_ttuple [t_int; t_int];
-        "acc_size", t_int])
-      (wrap_args ["pos", t_int; "bin_size", t_int]) @:
-      mk_tuple [mk_combine (mk_var "xs") @: 
-        mk_singleton t_list_two_ints @: 
-          mk_tuple [mk_var "pos"; mk_var "acc_size"];
-        mk_mult (mk_var "bin_size") (mk_var "acc_size")]
-    )
-    (mk_tuple [mk_empty @: wrap_tlist @: wrap_ttuple [t_int; t_int];
-      mk_const @: CInt(1)]
-    )
-    (mk_var "bmod")
+  mk_fst [dim_bounds_type; t_int] @:
+    mk_agg 
+      (mk_assoc_lambda 
+        (wrap_args ["xs", wrap_tlist @: wrap_ttuple [t_int; t_int];
+          "acc_size", t_int])
+        (wrap_args ["pos", t_int; "bin_size", t_int]) @:
+        mk_tuple [mk_combine (mk_var "xs") @: 
+          mk_singleton t_list_two_ints @: 
+            mk_tuple [mk_var "pos"; mk_var "acc_size"];
+          mk_mult (mk_var "bin_size") (mk_var "acc_size")]
+      )
+      (mk_tuple [mk_empty @: wrap_tlist @: wrap_ttuple [t_int; t_int];
+        mk_const @: CInt(1)]
+      )
+      (mk_var "bmod")
 
 let hash_func_for typ = "hash_"^match typ with
   | TIsolated(TImmutable(TInt,_)) -> "int"
@@ -51,7 +58,7 @@ let hash_func_for typ = "hash_"^match typ with
 
 let route_fn p map_id = 
   let map_types_full = map_types_for p map_id in
-  let map_types = list_take (List.length map_types_full - 1) map_types_full in
+  let map_types = list_drop_end 1 map_types_full in
   let map_range = create_range 0 (List.length map_types) in
   let key_types = wrap_tmaybes map_types in
   let prefix = "key_id_" in
@@ -59,14 +66,19 @@ let route_fn p map_id =
   match map_types with 
   | [] -> (* if no keys, for now we just route to one place *)
   mk_global_fn (route_for p map_id)
-    ["bmod", bmod_types]
+    ["_", canonical TUnit]
     [wrap_tlist t_addr] @: (* return *)
-      mk_apply (mk_var "get_ring_node") @:
-        mk_const @: CInt 1
+      mk_singleton (wrap_tlist t_addr) @:
+        mk_apply (mk_var "get_ring_node") @: mk_const @: CInt 1
   | _  -> (* we have keys *)
   mk_global_fn (route_for p map_id)
-    ["bmod", bmod_types; "key", wrap_ttuple key_types]
+    ["key", wrap_ttuple key_types]
     [wrap_tlist t_addr] @: (* return *)
+    mk_let "bmod" bmod_types
+      (mk_snd bmod_per_map_types @:
+        mk_peek @: mk_slice (mk_var bmod_data) @:
+          mk_tuple [mk_const @: CInt map_id; mk_const CUnknown]
+      ) @:
     mk_let "dim_bounds" dim_bounds_type 
       (mk_apply (mk_var "calc_dim_bounds") @: mk_var "bmod") @:
     mk_destruct_tuple "key" key_types prefix

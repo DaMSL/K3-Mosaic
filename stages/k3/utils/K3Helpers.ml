@@ -1,10 +1,9 @@
 open Tree
 open Util
-
 open K3.AST
 
-(* Type manipulation functions ------------- *)
 
+(* Type manipulation functions ------------- *)
 
 (* convert an isolated value to a contained value all the way down *)
 let iso_to_contained typ =
@@ -44,6 +43,16 @@ let wrap_tlist typ =
 let wrap_tlist_mut typ = 
   let c = iso_to_contained typ in
   TIsolated(TMutable(TCollection(TList, c),[]))
+
+(* wrap a type in a set *)
+let wrap_tset typ =
+  let c = iso_to_contained typ in
+  canonical @: TCollection(TSet, c)
+
+(* wrap a type in a mutable set *)
+let wrap_tset_mut typ = 
+  let c = iso_to_contained typ in
+  TIsolated(TMutable(TCollection(TSet, c),[]))
 
 (* wrap a type in an immutable tuple *)
 let wrap_ttuple typ = match typ with 
@@ -315,3 +324,9 @@ let mk_unwrap_maybe var_names_and_types expr =
     (mk_lambda (wrap_args_maybe unwrap_n_t) expr) @:
     mk_tuple vars
 
+(* K3 types for various elements of a k3 program *)
+let t_vid = wrap_ttuple @: [t_int; t_int] (* so we can distinguish *)
+let t_vid_mut = wrap_ttuple @: [t_int_mut; t_int_mut]
+let t_trig_id = t_int (* In K3, triggers are always handled by numerical id *)
+let t_stmt_id = t_int
+let t_map_id = t_int

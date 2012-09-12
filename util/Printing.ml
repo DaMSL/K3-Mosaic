@@ -43,14 +43,14 @@ let pretty_tag_str ?(lb="(") ?(rb=")") ?(sep=", ") cut_t extra t ch_lazy_t =
 
 let wrap_formatter ?(fresh=true) print_fn =
   let print () =
-	  pp_set_margin (snd !formatter) 120;
+	  pp_set_margin (snd !formatter) 300;
 	  print_fn ();
 	  pp_print_flush (snd !formatter) ();
     let r = Buffer.contents (fst !formatter)
     in Buffer.clear (fst !formatter); r
   in
   if fresh then
-    let buffer = Buffer.create 120 in
+    let buffer = Buffer.create 300 in
     let saved_formatter = !formatter in
     formatter := (buffer, formatter_of_buffer buffer);
     let r = print ()

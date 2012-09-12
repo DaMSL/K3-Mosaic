@@ -191,7 +191,7 @@ let map_types_for p map_id =
 let var_list_from_bound (p:prog_data_t) (stmt_id:stmt_id_t) (map_id:map_id_t) = 
   let map_binds = find_map_bindings_in_stmt p stmt_id map_id in
   let (_, _, map_params) = find_map p map_id in
-  let range = create_range 0 (List.length map_params) in
+  let range = create_range 0 @: List.length map_params in
   List.map
     (fun x -> 
       try 
@@ -204,10 +204,10 @@ let var_list_from_bound (p:prog_data_t) (stmt_id:stmt_id_t) (map_id:map_id_t) =
     range
 
 (* returns a k3 list of maybes that has the relevant map pattern *)
-let partial_key_from_bound (p:prog_data_t) (stmt_id:stmt_id_t) (map_id:map_id_t) = 
+let partial_key_from_bound (p:prog_data_t) stmt_id map_id = 
   List.map 
   (fun x -> if x = "_" then mk_const CNothing else mk_just @: mk_var x) 
-  (var_list_from_bound p stmt_id map_id)
+  (list_drop_end 1 @: var_list_from_bound p stmt_id map_id)
                   
 (* returns a k3 list of variables or CUnknown. Can't use same types as
  * partial_key *)
