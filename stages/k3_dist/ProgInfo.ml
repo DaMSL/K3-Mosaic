@@ -187,6 +187,13 @@ let trigger_of_stmt p stmt_id =
 let map_types_for p map_id = 
   let (_, _, vars) = find_map p map_id in vars
 
+(* useful for adding vid to maps *)
+let map_types_with_v_for p map_id = t_vid::map_types_for p map_id
+
+(* because we add the vid first, we need to modify the numbering of arguments in
+* the key. It's easier to control this in one place *)
+let adjust_key_id_for_v i = i + 1
+
 (* returns a k3 list of maybes that has the relevant map pattern *)
 let var_list_from_bound (p:prog_data_t) (stmt_id:stmt_id_t) (map_id:map_id_t) = 
   let map_binds = find_map_bindings_in_stmt p stmt_id map_id in

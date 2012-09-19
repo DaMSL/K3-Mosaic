@@ -19,6 +19,7 @@ FILES=\
 	../stages/k3/K3Typechecker \
 	../stages/k3_dist/ProgInfo \
 	../stages/k3_dist/K3Route \
+	../stages/k3_dist/K3Shuffle \
 	../stages/k3_dist/GenDist \
 
 TOPLEVEL_FILES=\

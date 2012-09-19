@@ -43,6 +43,12 @@ val find_map_bindings_in_stmt :
   prog_data_t -> stmt_id_t -> map_id_t -> map_var_binding_t list
 val map_name_of : prog_data_t -> map_id_t -> string
 val map_types_for : prog_data_t -> map_id_t -> value_type_t list
+
+(* useful for adding vid to maps *)
+val map_types_with_v_for : prog_data_t -> map_id_t -> value_type_t list
+(* because we add the vid first, we need to modify the numbering of arguments in
+* the key. It's easier to control this in one place *)
+val adjust_key_id_for_v : int -> int
 val stmts_of_t : prog_data_t -> string -> stmt_id_t list
 val trigger_of_stmt : prog_data_t -> stmt_id_t -> trig_id_t
 

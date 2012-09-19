@@ -56,7 +56,10 @@ let hash_func_for typ = "hash_"^match typ with
   | TIsolated(TImmutable(TFloat,_)) -> "float"
   | _ -> invalid_arg "No hash function for this type"
 
-let route_fn p map_id = 
+let key_map_types_for p map_id =
+  list_drop_end 1 @: map_types_for p map_id
+
+let gen_route_fn p map_id = 
   let map_types_full = map_types_for p map_id in
   let map_types = list_drop_end 1 map_types_full in
   let map_range = create_range 0 (List.length map_types) in

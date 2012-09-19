@@ -155,6 +155,10 @@ val slice_pat_drop: int -> tuple_pat list -> tuple_pat list
 (* given an integer and a prefix, create an id for the internals of a tuple *)
 val int_to_temp_id: int -> string -> id_t
 
+(* create a consistent range with which to refer to tuple ids when destructing
+ * tuples *)
+val mk_tuple_range: 'a list -> int list
+
 (* destruct a tuple, at which point parts are available via ids made by
  * int_to_temp_id *)
 val mk_destruct_tuple: id_t -> value_type_t list -> string -> expr_t -> expr_t

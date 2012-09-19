@@ -68,9 +68,9 @@ open K3.AST
 open K3Helpers
 open ProgInfo
 open K3Route
+open K3Shuffle
 
 exception ProcessingFailed of string;;
-
 
 (* argument manipulation convenience functions *)
 let arg_types_of_t p trig_nm = extract_arg_types (args_of_t p trig_nm)
@@ -81,10 +81,6 @@ let args_of_t_with_v p trig_nm = ("vid", t_vid)::args_of_t p trig_nm
 let arg_types_of_t_with_v p trig_nm = t_vid::arg_types_of_t p trig_nm
 let args_of_t_as_vars_with_v p trig_nm = 
   mk_var "vid"::args_of_t_as_vars p trig_nm
-
-(* local util functions ------ *)
-(* include vid for our map manipulation functions *)
-let map_types_with_v_for p map_id = t_vid::map_types_for p map_id
 
 (* global trigger names needed for generated triggers and sends *)
 let send_fetch_name_of_t p trig_nm = trig_nm^"_send_fetch"
@@ -197,8 +193,8 @@ let declare_global_vars p =
 let declare_global_funcs p =
   route_foreign_funcs @ 
   calc_dim_bounds_code ::
-  List.map (route_fn p) (get_map_list p)
-
+  List.map (gen_route_fn p) (get_map_list p) @
+  List.flatten @: List.map (gen_shuffle_functions p) (get_trig_list p)
 
 (* Just so we can typecheck, we make all of these K3 functions foreign for now
  *)
