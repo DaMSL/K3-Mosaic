@@ -42,6 +42,16 @@ let wrap_tlist_mut typ =
   let c = iso_to_contained typ in
   TIsolated(TMutable(TCollection(TList, c),[]))
 
+(* wrap a type in a set *)
+let wrap_tset typ = 
+  let c = iso_to_contained typ in
+  canonical @: TCollection(TSet, c)
+
+(* wrap a type in a mutable set *)
+let wrap_tset_mut typ = 
+  let c = iso_to_contained typ in
+  TIsolated(TMutable(TCollection(TSet, c),[]))
+
 (* wrap a type in an immutable tuple *)
 let wrap_ttuple typ = match typ with 
   | [h]    -> h

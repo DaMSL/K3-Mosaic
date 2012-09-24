@@ -8,9 +8,11 @@ val t_int_mut : value_type_t
 val t_float : value_type_t
 val t_float_mut : value_type_t
 
-(* wrap in a list *)
+(* wrap in a specific type *)
 val wrap_tlist : value_type_t -> value_type_t
 val wrap_tlist_mut : value_type_t -> value_type_t
+val wrap_tset : value_type_t -> value_type_t
+val wrap_tset_mut : value_type_t -> value_type_t
 val wrap_ttuple : value_type_t list -> value_type_t
 val wrap_ttuple_mut : value_type_t list -> value_type_t
 val wrap_args : (id_t * value_type_t) list -> arg_t
