@@ -1,6 +1,8 @@
 (* low-precedence function application. Saves ( ) *)
 val (@:) : ('a -> 'b) -> 'a -> 'b
 
+val compose :('b -> 'c) -> ('a -> 'b) -> ('a -> 'c)
+
 (* create a numerical range from a to b *)
 val create_range : int -> int -> int list
 

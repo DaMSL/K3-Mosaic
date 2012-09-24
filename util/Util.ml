@@ -4,6 +4,8 @@
  * many () from our code *)
 let (@:) f x = f x;;
 
+let compose f g = fun x -> f (g x)
+
 (* make a range from first to last. Tail recursive *)
 let create_range first length =
     let rec range_inner index acc =
