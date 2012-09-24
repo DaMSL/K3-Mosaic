@@ -5,35 +5,52 @@ open K3Helpers
 open ProgInfo
 open K3Route
 
+
 (* type for searching for shuffle functions and their bindings *)
-(* stmt list * l_map * r_map * (l_map index * r_map index) list * func_name *)
+(* stmt list * r_map * l_map * (r_map index * l_map index) list * func_name *)
 type shuffle_fn_entry = int list * int * int * (int * int) list * string
 let shuffle_fn_entries = ref []
 
-let shuffle_for p lhs_map_id rhs_map_id bindings = 
+exception NoShuffle of string
+
+let string_of_stmts = List.fold_left (fun acc i -> acc^string_of_int i^" ") ""
+let string_of_binds = 
+  List.fold_left (fun acc (r,l) -> acc^"r:"^string_of_int r^" l:"^string_of_int
+  l) "" 
+let string_of_shuffles () = 
+  List.fold_left 
+    (fun acc (ss,r,l,bb,nm) -> acc^"ss:("^string_of_stmts ss^") r:"^
+    string_of_int r^" l:"^string_of_int l^" bb:("^string_of_binds bb^
+    ") nm:"^nm^"\n") "" !shuffle_fn_entries
+
+let shuffle_for p rhs_map_id lhs_map_id bindings = 
   "shuffle_"^map_name_of p rhs_map_id^"_"^map_name_of p lhs_map_id^
   List.fold_left (fun acc (r,l) -> acc^"_"^string_of_int r^"t"^string_of_int l)
     "" bindings
 
 let get_fn_name ((_,_,_,_,name):shuffle_fn_entry) = name
 
-let find_shuffle stmt_id lhs_id rhs_id = 
+let find_shuffle stmt_id rhs_id lhs_id = 
   get_fn_name @: 
-    List.find 
-      (fun (ss,lmap,rmap,_,_) -> rmap = rhs_id && lmap == lhs_id &&
+    try List.find 
+      (fun (ss,rmap,lmap,_,_) -> rmap = rhs_id && lmap == lhs_id &&
         List.exists (fun x -> x = stmt_id) ss
       ) !shuffle_fn_entries
+    with
+    Not_found -> raise (NoShuffle ("Couldn't find shuffle for stmt "^
+      string_of_int stmt_id^ " rhs_map "^ string_of_int rhs_id^" lhs_map "^
+      string_of_int lhs_id^"\n\n"^string_of_shuffles ()))
 
-let find_shuffle_by_binding lhs_id rhs_id binding =
+let find_shuffle_by_binding rhs_id lhs_id binding =
   get_fn_name @: 
     List.find
-      (fun (_,lmap,rmap,bind,_) -> rmap = rhs_id && lmap == lhs_id &&
+      (fun (_,rmap,lmap,bind,_) -> rmap = rhs_id && lmap == lhs_id &&
         bind = binding
       ) !shuffle_fn_entries
 
-let add_shuffle_fn stmt_id lmap rmap binding name =
+let add_shuffle_fn stmt_id rmap lmap binding name =
   shuffle_fn_entries := 
-    ([stmt_id],lmap,rmap,binding,name)::(!shuffle_fn_entries)
+    ([stmt_id],rmap,lmap,binding,name)::(!shuffle_fn_entries)
 
 let add_stmt_to_shuffle_fn stmt_id fn_name =
   let match_l, mismatch_l = List.partition 
@@ -42,11 +59,11 @@ let add_stmt_to_shuffle_fn stmt_id fn_name =
   in 
   match match_l with
     | [] -> raise Not_found
-    | [ss,lmap,rmap,bind,nm] ->
-        shuffle_fn_entries := (ss@[stmt_id],lmap,rmap,bind,nm)::mismatch_l
+    | [ss,rmap,lmap,bind,nm] ->
+        shuffle_fn_entries := (ss@[stmt_id],rmap,lmap,bind,nm)::mismatch_l
     | _ -> invalid_arg "Bad input to add_stmt_to_shuffle_fn" 
 
-let gen_shuffle_fn p lmap rmap bindings fn_name =
+let gen_shuffle_fn p rmap lmap bindings fn_name =
   let tuple_types_unwrap = map_types_with_v_for p rmap in
   let tuple_types = wrap_ttuple tuple_types_unwrap in
   let list_of_tuples = wrap_tlist tuple_types in
@@ -123,17 +140,17 @@ let gen_shuffle_fn p lmap rmap bindings fn_name =
               mk_var "tuples"
 
 let gen_shuffle_functions p trig =
-  let trig_data = s_and_over_stmts_in_t p lhs_rhs_of_stmt trig in
+  let trig_data = s_and_over_stmts_in_t p rhs_lhs_of_stmt trig in
   List.fold_left
-    (fun acc (s, (lmap, rmap)) ->
-      let bindings = get_map_bindings_in_stmt p s lmap rmap in
-      try let shuffle_fn = find_shuffle_by_binding lmap rmap bindings in
+    (fun acc (s, (rmap, lmap)) ->
+      let bindings = get_map_bindings_in_stmt p s rmap lmap in
+      try let shuffle_fn = find_shuffle_by_binding rmap lmap bindings in
         add_stmt_to_shuffle_fn s shuffle_fn; (* increment in list *)
         acc (* don't add *)
       with Not_found -> 
-        let name = shuffle_for p lmap rmap bindings in
-        add_shuffle_fn s lmap rmap bindings name;
-        acc@[gen_shuffle_fn p lmap rmap bindings name] (* add to list *)
+        let name = shuffle_for p rmap lmap bindings in
+        add_shuffle_fn s rmap lmap bindings name;
+        acc@[gen_shuffle_fn p rmap lmap bindings name] (* add to list *)
     )
     []
     trig_data

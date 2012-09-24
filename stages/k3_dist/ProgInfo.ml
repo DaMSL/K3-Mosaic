@@ -136,10 +136,10 @@ let lhs_map_of_stmt p stmt_id =
   let (_, _, lhs_map, _, _) = find_stmt p stmt_id in
   lhs_map
 
-let lhs_rhs_of_stmt (p:prog_data_t) stmt_id =
+let rhs_lhs_of_stmt (p:prog_data_t) stmt_id =
   let (_, _, lhs_map, _, rhs_maps) = find_stmt p stmt_id in
   List.map
-    (fun (rhs_map, _) -> (lhs_map, rhs_map))
+    (fun (rhs_map, _) -> (rhs_map, lhs_map))
     rhs_maps
 
 let find_lmap_bindings_in_stmt (p:prog_data_t) (stmt:stmt_id_t) (map:map_id_t)
@@ -227,7 +227,7 @@ let slice_key_from_bound (p:prog_data_t) (stmt_id:stmt_id_t) (map_id:map_id_t) =
  * showing how a lhs map variable corresponds to a rhs variable
  * starting at 0 index *)
 let get_map_bindings_in_stmt (p:prog_data_t) (stmt_id:stmt_id_t) 
-  (lmap:map_id_t) (rmap:map_id_t) =
+  (rmap:map_id_t) (lmap:map_id_t) =
   let lmap_bindings = find_lmap_bindings_in_stmt p stmt_id lmap in
   let rmap_bindings = find_rmap_bindings_in_stmt p stmt_id rmap in
   List.fold_left

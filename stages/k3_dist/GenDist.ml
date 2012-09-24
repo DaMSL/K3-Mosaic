@@ -100,11 +100,6 @@ let rcv_corrective_name_of_t p trig_nm stmt_id map_id =
 let do_corrective_name_of_t p trig_nm stmt_id map_id =
   trig_nm^"_do_corrective_s"^string_of_int stmt_id^"_"^map_name_of p map_id
 
-(* route and shuffle function names *)
-let shuffle_for p stmt_id rhs_map_id lhs_map_id = 
-  "shuffle_s"^string_of_int stmt_id^"_"^map_name_of p rhs_map_id^"_"^
-  map_name_of p lhs_map_id
-
 (* foreign function names *)
 (* note: most buffer and storage functions are done using native accesses *)
 let log_write_for p trig_nm = "log_write_"^trig_nm (* varies with bound *)
@@ -132,26 +127,9 @@ let declare_foreign_functions p =
   let log_read_geq_foreign = mk_foreign_fn
     log_read_geq t_vid (wrap_tlist @: wrap_ttuple [t_vid; t_trig_id])
   in
-  (* right now it's easier to call a shuffle wrapper by statement *)
-  (* we include vid in shuffle tuples so we don't have to strip it all the time *)
-  let shuffle_foreign stmt rmap lmap = mk_foreign_fn
-    (shuffle_for p stmt rmap lmap)
-    (wrap_ttuple @: (* key, bound vars in lmap *)
-      (List.map (fun t -> canonical @: TMaybe t) 
-        (list_drop_end 1 @: map_types_for p lmap))@
-      (wrap_tlist @: wrap_ttuple @: map_types_with_v_for p rmap):: (* tuples *)
-      [canonical TBool]) (* shuffle_on_empty *)
-    (wrap_tlist @: wrap_ttuple @: t_addr::[wrap_tlist @: 
-      wrap_ttuple @: map_types_with_v_for p rmap]) (* results *)
-  in
-  let shuffles trig =
-    let s_and_maps = s_and_over_stmts_in_t p lhs_rhs_of_stmt trig in
-    List.map (fun (s, (lmap, rmap)) -> shuffle_foreign s rmap lmap) s_and_maps
-  in
   let trig_related = 
     List.flatten @: List.map
-      (fun trig -> log_write_foreign p trig :: log_get_bound_foreign p trig::
-        shuffles trig)
+      (fun trig -> log_write_foreign p trig:: log_get_bound_foreign p trig:: [])
       (get_trig_list p)
   in
   (* function to add delta tuples to a map *)
@@ -349,8 +327,8 @@ let send_puts =
         )
         (mk_const @: CInt 0) (* [] *)
         (List.fold_left
-          (fun acc_code (stmt_id, (lhs_map_id, rhs_map_id)) ->
-            let shuffle_fn = shuffle_for p stmt_id rhs_map_id lhs_map_id in
+          (fun acc_code (stmt_id, (rhs_map_id, lhs_map_id)) ->
+            let shuffle_fn = find_shuffle stmt_id rhs_map_id lhs_map_id in
             let key = partial_key_from_bound p stmt_id lhs_map_id in
             (* we need the types for creating empty rhs tuples *)
             let rhs_map_types = map_types_with_v_for p rhs_map_id in
@@ -375,7 +353,7 @@ let send_puts =
             ) (* mk_combine *)
           ) (* fun *)
           (mk_empty @: wrap_tlist @: wrap_ttuple [t_addr; t_stmt_id])
-          (s_and_over_stmts_in_t p lhs_rhs_of_stmt trig_name)
+          (s_and_over_stmts_in_t p rhs_lhs_of_stmt trig_name)
         )
       ) (* gbagg *)
     ) (* gbagg *)
@@ -502,10 +480,10 @@ Trigger(
  *)
 let send_push_stmt_map_trig p trig_name = 
   (List.fold_left
-    (fun acc_code (stmt_id, (lhs_map_id, rhs_map_id)) ->
+    (fun acc_code (stmt_id, (rhs_map_id, lhs_map_id)) ->
       let rhs_map_types = map_types_with_v_for p rhs_map_id in 
       let rhs_map_name = map_name_of p rhs_map_id in
-      let shuffle_fn = shuffle_for p stmt_id rhs_map_id lhs_map_id in
+      let shuffle_fn = find_shuffle stmt_id rhs_map_id lhs_map_id in
       let partial_key = partial_key_from_bound p stmt_id lhs_map_id in
       let slice_key = mk_var "vid" :: slice_key_from_bound p stmt_id rhs_map_id in
       acc_code@
@@ -537,7 +515,7 @@ let send_push_stmt_map_trig p trig_name =
       ] (* Trigger *)
     ) (* fun *)
     []
-    (s_and_over_stmts_in_t p lhs_rhs_of_stmt trig_name)
+    (s_and_over_stmts_in_t p rhs_lhs_of_stmt trig_name)
   ) 
 
 
@@ -702,7 +680,7 @@ match trigs_stmts_with_rhs_map with [] -> [] | _ ->
             (fun acc_code (target_trig, target_stmt) ->
               let target_map = lhs_map_of_stmt p target_stmt in
               let key = partial_key_from_bound p target_stmt map_id in
-              let shuffle_fn = shuffle_for p target_stmt map_id target_map in
+              let shuffle_fn = find_shuffle target_stmt map_id target_map in
               mk_if (* if match, send data *)
                 (mk_eq
                   (mk_var "stmt_id")
@@ -914,6 +892,7 @@ let gen_dist_for_t p trig =
 let gen_dist p ast =
   (* we'll start by defining everything as foreign functions so we typecheck *) 
   let triggers = get_trig_list p in
+  let global_funcs = declare_global_funcs p in (* init shuffles *)
   let regular_trigs = List.flatten @:
     List.map
       (fun trig -> gen_dist_for_t p trig)
@@ -922,7 +901,7 @@ let gen_dist p ast =
   let prog =
     ( declare_global_vars p @
       declare_foreign_functions p @
-      declare_global_funcs p @
+      global_funcs @ (* maybe make this not order-dependent *)
       filter_corrective_list ::  (* global func *)
       regular_trigs@
       send_corrective_trigs p    (* per-map basis *)
