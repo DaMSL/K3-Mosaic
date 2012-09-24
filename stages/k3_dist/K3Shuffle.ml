@@ -47,16 +47,16 @@ let add_stmt_to_shuffle_fn stmt_id fn_name =
     | _ -> invalid_arg "Bad input to add_stmt_to_shuffle_fn" 
 
 let gen_shuffle_fn p lmap rmap bindings fn_name =
-  let lmap_types = map_types_for p lmap in
-  let rmap_types_with_v = map_types_with_v_for p rmap in
-  let tuple_types_unwrap = rmap_types_with_v in
-  let tuple_types = wrap_ttuple rmap_types_with_v in
-  let result_types = wrap_tlist @: wrap_ttuple [t_addr; tuple_types] in
+  let tuple_types_unwrap = map_types_with_v_for p rmap in
+  let tuple_types = wrap_ttuple tuple_types_unwrap in
+  let list_of_tuples = wrap_tlist tuple_types in
+  let result_types = wrap_tlist @: wrap_ttuple [t_addr; list_of_tuples] in
+  (* deducts the last map type which is the value *)
   let lkey_types = wrap_tmaybes @: key_map_types_for p lmap in
   let id_l = "__id_l" in let id_r = "__id_r" in
   let to_rkey i = int_to_temp_id i id_r in
   let to_lkey i = int_to_temp_id i id_l in
-  let lmap_range = mk_tuple_range lmap_types in
+  let lmap_range = mk_tuple_range lkey_types in
   let full_lkey = List.map (* use bindings to construct lkey *)
     (fun x -> try mk_var @: to_rkey @: adjust_key_id_for_v 
         (List.assoc x bindings)
@@ -66,8 +66,8 @@ let gen_shuffle_fn p lmap rmap bindings fn_name =
   let pred = List.length lkey_types > 0 in
   let if_lkey f g = if pred then force f @: g else g in 
   mk_global_fn fn_name
-    (if pred then ["l_key", wrap_ttuple lkey_types] else [] @
-    ["tuples", wrap_tlist tuple_types; 
+    ((if pred then ["l_key", wrap_ttuple lkey_types] else []) @
+    ["tuples", list_of_tuples; 
     "shuffle_on_empty", canonical TBool])
     [result_types] @: (* return *)
     if_lkey (* only destruct lkey if we have lkey *)
@@ -89,19 +89,18 @@ let gen_shuffle_fn p lmap rmap bindings fn_name =
           mk_empty result_types
         ) @:
       mk_gbagg (* sort by IPs *)
-        (mk_lambda (wrap_args ["ip", t_addr; "tuple", tuple_types]) @: 
+        (mk_lambda (wrap_args ["ip", t_addr; "tuple", list_of_tuples]) @: 
           mk_var "ip" (* grouping func *)
         )
         (mk_assoc_lambda (wrap_args ["acc", wrap_tlist tuple_types]) 
-          (wrap_args ["ip", t_addr; "tuple", tuple_types]) @:
-          mk_combine 
-            (mk_singleton (wrap_tlist tuple_types) @: mk_var "tuple") @: 
-            mk_var "acc"
+          (wrap_args ["ip", t_addr; "tuple", list_of_tuples]) @:
+          mk_combine (mk_var "tuple") @: mk_var "acc"
         )
         (mk_empty @: wrap_tlist tuple_types) @: (* [] *)
         mk_combine 
           (mk_var "all_targets") @:
-          mk_flatten @: mk_map
+          mk_flatten @: 
+          mk_map
             (mk_lambda (wrap_args ["r_tuple", tuple_types]) @:
               (* start with partial l_key and build up an l_key using data
                * from the tuple, that can be used for routing *)
@@ -112,7 +111,8 @@ let gen_shuffle_fn p lmap rmap bindings fn_name =
                 ))
                 (mk_map
                   (mk_lambda (wrap_args ["ip", t_addr]) @:
-                    mk_tuple [mk_var "ip"; mk_var "r_tuple"]
+                    mk_tuple [mk_var "ip"; 
+                      mk_singleton list_of_tuples @: mk_var "r_tuple"]
                   ) @:
                   mk_apply (* route each full l_key *)
                     (mk_var @: route_for p lmap) @:
