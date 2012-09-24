@@ -45,7 +45,7 @@ let wrap_tlist_mut typ =
   TIsolated(TMutable(TCollection(TList, c),[]))
 
 (* wrap a type in a set *)
-let wrap_tset typ =
+let wrap_tset typ = 
   let c = iso_to_contained typ in
   canonical @: TCollection(TSet, c)
 

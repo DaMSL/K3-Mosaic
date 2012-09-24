@@ -6,6 +6,7 @@ open K3Util
 open K3Printing
 open K3Typechecker
 open K3Streams
+open K3Helpers
 open ReifiedK3
 open Imperative
 
@@ -1029,7 +1030,7 @@ let imperative_of_program mk_meta p =
     let x, y = imperative_of_roles mk_meta p in
     (List.map (fun d -> d, (unit_t, mk_meta())) x), y
   in
-  let main_arg = ATuple(["argc", canonical TInt; "argv", canonical TString]) in
+  let main_arg = wrap_args ["argc", canonical TInt; "argv", canonical TString] in
   let main_fn = DFn("main", main_arg, int_t, main_body@dispatch_body) 
   in decls@role_decls@[main_fn, (unit_t,mk_meta())]
 
