@@ -5,6 +5,8 @@ open K3.AST
 val canonical : base_type_t -> value_type_t
 val t_int : value_type_t
 val t_int_mut : value_type_t
+val t_float : value_type_t
+val t_float_mut : value_type_t
 
 (* wrap in a list *)
 val wrap_tlist : value_type_t -> value_type_t

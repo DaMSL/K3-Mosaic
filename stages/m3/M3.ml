@@ -14,7 +14,7 @@
 
 open Ring
 open Arithmetic
-open Type
+open M3Type
 open Calculus
 open Plan
 

@@ -27,8 +27,8 @@
    module.
 *)
 
-open Type
-open Constants
+open M3Type
+open M3Constants
 ;;
 
 type decl_t = {
@@ -147,7 +147,7 @@ let implementation (fn:string) (argtypes:type_t list):string =
 
 (**/**)
 let escalate (argtypes:type_t list) = 
-   try Type.escalate_type_list argtypes
+   try M3Type.escalate_type_list argtypes
    with Failure(msg) -> raise (InvalidFunctionArguments(msg))
 
 let inference_error (): type_t =

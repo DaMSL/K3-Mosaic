@@ -29,6 +29,8 @@ let canonical typ = TIsolated(TImmutable(typ,[]))
 (* A type for simple immutable integers *)
 let t_int = canonical TInt
 let t_int_mut = TIsolated(TMutable(TInt,[]))
+let t_float = canonical TFloat
+let t_float_mut = TIsolated(TMutable(TFloat,[]))
 
 (* wrap a type in a list *)
 let wrap_tlist typ = 

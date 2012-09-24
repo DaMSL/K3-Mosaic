@@ -2,7 +2,7 @@
    Global system for wrapping typed primitive constants throughout DBToaster
 *)
 
-open Type
+open M3Type
 ;;
 
 (** Basic Constants *)

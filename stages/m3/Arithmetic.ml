@@ -12,8 +12,8 @@
    to be deterministic and to have no side effects.
 *)
 
-open Type
-open Constants
+open M3Type
+open M3Constants
 
 (**
    Template for the base type for the Arithmetic ring
@@ -248,7 +248,9 @@ let rec sign_of_value (a_value:value_t): value_t =
                   maintained set of [standard_functions].
 *)
 let rec eval ?(scope=StringMap.empty) (v:value_t): const_t = 
-   ValueRing.fold Constants.Math.suml Constants.Math.prodl Constants.Math.neg 
+   ValueRing.fold M3Constants.Math.suml 
+                  M3Constants.Math.prodl 
+                  M3Constants.Math.neg 
                   (fun lf ->
       match lf with 
          | AConst(c) -> c
@@ -256,7 +258,7 @@ let rec eval ?(scope=StringMap.empty) (v:value_t): const_t =
             if StringMap.mem v scope then StringMap.find v scope
             else failwith 
                     ("Variable "^v^" not found while evaluating arithmetic")
-         | AFn(fn,fargs,ftype) -> Functions.invoke fn
+         | AFn(fn,fargs,ftype) -> M3Functions.invoke fn
                                      (List.map (eval ~scope:scope) fargs)
                                      ftype
    ) v
@@ -282,9 +284,9 @@ let rec eval_partial ?(scope=[]) (v:value_t): value_t =
       ) @ v)
    in
    ValueRing.fold 
-      (merge ValueRing.mk_sum Constants.Math.sum)
-      (merge ValueRing.mk_prod Constants.Math.prod)
-      (fun x -> merge ValueRing.mk_prod Constants.Math.prod [mk_int (-1); x])
+      (merge ValueRing.mk_sum M3Constants.Math.sum)
+      (merge ValueRing.mk_prod M3Constants.Math.prod)
+      (fun x -> merge ValueRing.mk_prod M3Constants.Math.prod [mk_int (-1); x])
       (fun lf -> match lf with
          | AFn(fname, fargs_unevaled, ftype) -> 
             let fargs = List.map (eval_partial ~scope:scope) fargs_unevaled in
@@ -294,10 +296,10 @@ let rec eval_partial ?(scope=[]) (v:value_t): value_t =
                                       | ValueRing.Val(AConst(c)) -> c
                                       | _ -> raise Not_found) fargs)
                in
-                  mk_const (Functions.invoke fname farg_vals ftype)
+                  mk_const (M3Functions.invoke fname farg_vals ftype)
             with 
                | Not_found
-               | Functions.InvalidInvocation(_) ->
+               | M3Functions.InvalidInvocation(_) ->
                   ValueRing.mk_val (AFn(fname, fargs, ftype))
             end
          | AVar(vn, vt) ->

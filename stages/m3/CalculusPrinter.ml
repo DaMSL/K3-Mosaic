@@ -5,7 +5,7 @@
    using it at any given time.
 *)
 
-open Type
+open M3Type
 open Arithmetic
 open Calculus
 open Format

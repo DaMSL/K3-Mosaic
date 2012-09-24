@@ -12,7 +12,7 @@
    in any way.
 *)
 
-open Type
+open M3Type
 open Arithmetic
 
 (**

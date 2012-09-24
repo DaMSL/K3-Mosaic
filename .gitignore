@@ -22,3 +22,6 @@ stages/k3/parser/K3Parser.ml
 
 stages/k3/parser/K3Lexer.mli
 stages/k3/parser/K3Lexer.ml
+stages/m3/Calculuslexer.ml
+stages/m3/Calculusparser.ml
+stages/m3/Calculusparser.mli

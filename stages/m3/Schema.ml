@@ -2,7 +2,7 @@
    Global definitions for the schema of a database/set of streams
 *)
 
-open Type
+open M3Type
 
 (**
    Typing metadata for relations
