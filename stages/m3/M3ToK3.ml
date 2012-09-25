@@ -389,8 +389,23 @@ let mk_slice collection all_keys bound_keys =
               else KH.mk_const K.CUnknown) all_keys)@[KH.mk_const K.CUnknown]))
 
 let mk_lookup collection keys =
-  mk_project ~id:"proj_value" ((List.length keys)+1) (List.length keys) 
-             (KH.mk_peek (mk_slice collection keys keys))
+  let wrapped_value = KH.mk_var "wrapped_lookup_value" in
+  KH.mk_let (KU.id_of_var wrapped_value)
+            (K3Typechecker.canonical K.TUnknown)
+            (mk_slice collection keys keys)
+            (KH.mk_if (
+                KH.mk_eq wrapped_value 
+                         (KH.mk_empty (K3Typechecker.canonical 
+                                        (K.TCollection(K.TBag, 
+                                          K3Typechecker.canonical
+                                            K.TUnknown))))
+              ) (
+                KH.mk_const (K.CInt(0))
+              ) (
+                mk_project ((List.length keys)+1) (List.length keys) 
+                           (KH.mk_peek wrapped_value)
+              )
+            )
 
 let mk_test_member collection keys key_types val_type =
   KH.mk_has_member collection (KH.mk_tuple ((List.map KH.mk_var keys)@
@@ -410,33 +425,41 @@ let mk_val_tuple keys v = KH.mk_tuple ((List.map KH.mk_var keys)@[v]);;
 let mk_iter = KH.mk_map
 
 let mk_update collection ivars ovars new_val =
-  if ivars = [] then
-    if ovars = [] then 
-      KH.mk_block [
-        KH.mk_delete collection (KH.mk_peek collection);
-        KH.mk_insert collection new_val 
-      ]
+  (* new_val might (and in fact, usually will) depend on the collection, so 
+     we need to evaluate it and save it to a variable before clearing the
+     existing elements out of the collection *)
+  let new_val_var = KH.mk_var "update_value" in
+  let update_block = 
+    if ivars = [] then
+      if ovars = [] then 
+        KH.mk_block [
+          KH.mk_delete collection (KH.mk_peek collection);
+          KH.mk_insert collection new_val_var 
+        ]
+      else
+        KH.mk_block [
+          mk_iter
+            (mk_lambda ovars "value" (
+              KH.mk_delete collection (mk_var_tuple ovars "value")
+            ))
+            (mk_slice collection ovars ovars);
+          KH.mk_insert collection (mk_val_tuple ovars new_val_var)
+        ]
     else
-      KH.mk_block [
-        mk_iter
-          (mk_lambda ovars "value" (
-            KH.mk_delete collection (mk_var_tuple ovars "value")
-          ))
-          (mk_slice collection ovars ovars);
-        KH.mk_insert collection (mk_val_tuple ovars new_val)
-      ]
-  else
-    if ovars = [] then
-      KH.mk_block [
-        mk_iter
-          (mk_lambda ivars "value" (
-            KH.mk_delete collection (mk_var_tuple ivars "value")
-          ))
-          (mk_slice collection ivars ivars);
-        KH.mk_insert collection (mk_val_tuple ivars new_val)
-      ]
-    else
-      failwith "FullPC unsupported"
+      if ovars = [] then
+        KH.mk_block [
+          mk_iter
+            (mk_lambda ivars "value" (
+              KH.mk_delete collection (mk_var_tuple ivars "value")
+            ))
+            (mk_slice collection ivars ivars);
+          KH.mk_insert collection (mk_val_tuple ivars new_val_var)
+        ]
+      else
+        failwith "FullPC unsupported"
+  in
+    KH.mk_apply (KH.mk_lambda (mk_arg (KU.id_of_var new_val_var)) update_block)
+                (new_val)
 
 (**********************************************************************)
 (**/**)
@@ -1239,7 +1262,7 @@ let m3_stmt_to_k3_stmt (meta: meta_t) ?(generate_init = false)
       if update_type = Plan.ReplaceStmt then 
          (init_val_from_type (K.TValue(m3_type_to_k3_type map_type)))
       else if lhs_outs_el = [] then 
-         existing_out_tier
+         KH.mk_peek (existing_out_tier)
       else
          let init_expr_opt = 
             if not generate_init then None
