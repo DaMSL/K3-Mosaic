@@ -397,27 +397,46 @@ let mk_test_member collection keys key_types val_type =
                                             [KH.mk_const K.CUnknown]))
                    (KH.wrap_ttuple_mut (key_types @ [val_type]))
 
+let mk_arg x = K.AVar(x, K3Typechecker.canonical K.TUnknown);;
+
+let mk_tuple_arg keys v = K.ATuple( (List.map mk_arg keys) @ [mk_arg v] );;
+
+let mk_lambda keys v body = KH.mk_lambda (mk_tuple_arg keys v) body;;
+
+let mk_var_tuple keys v = KH.mk_tuple (List.map KH.mk_var (keys@[v]));;
+
+let mk_val_tuple keys v = KH.mk_tuple ((List.map KH.mk_var keys)@[v]);;
+
+let mk_iter = KH.mk_map
+
 let mk_update collection ivars ovars new_val =
   if ivars = [] then
     if ovars = [] then 
-      KH.mk_update collection (KH.mk_const K.CUnknown) new_val
+      KH.mk_block [
+        KH.mk_delete collection (KH.mk_peek collection);
+        KH.mk_insert collection new_val 
+      ]
     else
-      KH.mk_update collection (KH.mk_tuple ((List.map KH.mk_var ovars)@
-                                            [KH.mk_const K.CUnknown]))
-                              (KH.mk_tuple ((List.map KH.mk_var ovars)@
-                                            [new_val]))
+      KH.mk_block [
+        mk_iter
+          (mk_lambda ovars "value" (
+            KH.mk_delete collection (mk_var_tuple ovars "value")
+          ))
+          (mk_slice collection ovars ovars);
+        KH.mk_insert collection (mk_val_tuple ovars new_val)
+      ]
   else
     if ovars = [] then
-      KH.mk_update collection (KH.mk_tuple ((List.map KH.mk_var ivars)@
-                                            [KH.mk_const K.CUnknown]))
-                              (KH.mk_tuple ((List.map KH.mk_var ivars)@
-                                            [new_val]))
+      KH.mk_block [
+        mk_iter
+          (mk_lambda ivars "value" (
+            KH.mk_delete collection (mk_var_tuple ivars "value")
+          ))
+          (mk_slice collection ivars ivars);
+        KH.mk_insert collection (mk_val_tuple ivars new_val)
+      ]
     else
-      KH.mk_update (mk_lookup collection ivars)
-                   (KH.mk_tuple ((List.map KH.mk_var ovars)@
-                                 [KH.mk_const K.CUnknown]))
-                   (KH.mk_tuple ((List.map KH.mk_var ovars)@
-                                 [new_val]))
+      failwith "FullPC unsupported"
 
 (**********************************************************************)
 (**/**)
@@ -1296,7 +1315,7 @@ let m3_stmt_to_k3_stmt (meta: meta_t) ?(generate_init = false)
       in
       let update_body =
         if rhs_outs_el = [] then KH.mk_apply inner_loop_body incr_expr
-        else                     KH.mk_map (*XXX*)  inner_loop_body incr_expr
+        else                     mk_iter inner_loop_body incr_expr
       in
           
       if ( update_type = Plan.UpdateStmt || 
@@ -1308,17 +1327,15 @@ let m3_stmt_to_k3_stmt (meta: meta_t) ?(generate_init = false)
           if ListAsSet.seteq lhs_outs_el free_lhs_outs_el
           then existing_out_tier
           else (
-            let free_out_names = var_ids free_lhs_outs_el in
-            KH.mk_slice existing_out_tier
-                        (KH.mk_tuple (List.map (fun x ->
-                                        if List.mem (KU.id_of_var x)
-                                                    (free_out_names)
-                                        then KH.mk_const (K.CUnknown)
-                                        else x) lhs_outs_el))
+            let bound_out_names = 
+              ListAsSet.diff (var_ids lhs_outs_el) 
+                             (var_ids free_lhs_outs_el)
+            in
+              mk_slice existing_out_tier (var_ids lhs_outs_el) bound_out_names
           )
         ) in
           KH.mk_block [
-            KH.mk_map (*XXX*) 
+            mk_iter
               (lambda ((List.combine (List.map KU.id_of_var lhs_outs_el)
                                      (List.map mk_k3_type lhs_outs_kt))@
                        [KU.id_of_var rhs_ret_ve, 
@@ -1343,7 +1360,7 @@ let m3_stmt_to_k3_stmt (meta: meta_t) ?(generate_init = false)
       in
       if lhs_ins_el = [] 
       then KH.mk_apply outer_loop_body lhs_collection
-      else KH.mk_map (*XXX*)  outer_loop_body lhs_collection
+      else mk_iter outer_loop_body lhs_collection
    in
       (statement_expr, nm)
 ;;
