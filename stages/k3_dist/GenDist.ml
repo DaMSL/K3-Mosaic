@@ -1,6 +1,5 @@
 (* Functions that take K3 code and generate distributed K3 code *)
 
-
 (* Basic types *
  * map_id is an int referring to a specific map
  * map_name is another way to refer to a map
@@ -30,37 +29,6 @@
  *                        do_complete_corrective_<trigger>_<stmt>_<delta_rhs_map>
  *                            On_corrective_<trigger>_<delta_rhs_map>
  *                            ...
- *)
-
-(* on_insert_<trigger>_switch:
- * -----------------------------------------------
- * The switch starts the process
- *)
-
-(* TODO:
-  *     - How does update work? After the slice, do I need to give the full
-  *     tuple or just the remaining value?
-  *     - Worry about map values vs keys: need whole tuples
-  *     - Rcv_put needs to add, not save, counters
-  * - slice needs CUnknown, not "_"
- *      - Need to make names clearer (S_ for statement)
- *      - Wrapping in a list should recursively change all contained stuff.
- *       - Problem: don't think shuffle handles map[b] = map[c; b] ie. b->b
- *       mapping when b is unbound. Need to make it fully stmt_id specific.
- *       - Change data structure p to remove map arg names, and add loop vars.
- *       - declare global maps that have vid as a first attribute
-        * - declare local buffers for node 
- *       - add rcv_put trigger
- *       - key, pat -> just pat
- *       - make sure shuffle only deals with RHS types (it's just splitting
- *       them)
- *       - may need some types that are subsets of the maps rather than whole
- *       map types. need sub-functions to deal with this!!
- *        - Possibly split up the data into a bunch of maybe's in tuples
- *        (present, not-present)
- *          - shuffle needs to have a version for each binding (ie each trigger)
- *            - Will have a tuple of maybes
- *          - will only have tuples with fields not in the bound pattern
  *)
 
 open Util
@@ -189,21 +157,19 @@ let declare_global_funcs p =
 
 let send_fetch_trig p trig_name =
   let send_fetches_of_rhs_maps  =
-    (mk_iter
+    mk_iter
       (mk_lambda 
         (wrap_args ["ip", t_addr; 
           "stmt_map_ids", wrap_tlist @: wrap_ttuple [t_stmt_id; t_map_id]]
-        )
-        (mk_send 
+        ) @:
+        mk_send 
           (mk_const @: CTarget (rcv_fetch_name_of_t p trig_name))
-          (mk_var "ip")
-          (mk_tuple @:
+          (mk_var "ip") @:
+          mk_tuple @:
             mk_var "stmt_map_ids"::
             args_of_t_as_vars_with_v p trig_name
-          )
-        )
-      )
-      (mk_gbagg
+      ) @:
+      mk_gbagg
         (mk_lambda (* Grouping function *)
           (wrap_args ["stmt_id", t_stmt_id; "map_id", t_map_id; "ip", t_addr])
           (mk_var "ip")
@@ -212,40 +178,34 @@ let send_fetch_trig p trig_name =
           (wrap_args ["acc", wrap_tlist @: wrap_ttuple [t_stmt_id; t_map_id]])
           (wrap_args ["stmt_id", t_stmt_id; "map_id", t_map_id; "ip", t_addr])
           (mk_combine
-            (mk_var "acc")
-            (mk_singleton 
-              (wrap_tlist @: wrap_ttuple [t_stmt_id; t_map_id])
-              (mk_tuple [mk_var "stmt_id";mk_var "map_id"])
-            )
+            (mk_var "acc") @:
+            mk_singleton 
+              (wrap_tlist @: wrap_ttuple [t_stmt_id; t_map_id]) @:
+              mk_tuple [mk_var "stmt_id";mk_var "map_id"]
           )
         ) 
         (mk_empty (wrap_tlist @: wrap_ttuple [t_stmt_id; t_map_id]))
-        (* [] *)
-        (List.fold_left
+        (* [] *) @:
+        List.fold_left
           (fun acc_code (stmt_id, rhs_map_id) ->
             let route_fn = route_for p rhs_map_id in
             let key = partial_key_from_bound p stmt_id rhs_map_id in
             (mk_combine
               (mk_map 
-                (mk_lambda (wrap_args["ip", t_addr])
-                  (mk_tuple 
+                (mk_lambda (wrap_args["ip", t_addr]) @:
+                  mk_tuple @:
                     [mk_const @: CInt stmt_id; mk_const @: CInt rhs_map_id; 
                       mk_var "ip"]
-                  )
-                )
-                (mk_apply 
-                  (mk_var route_fn)
-                  (mk_tuple key)
-                )
+                ) @:
+                mk_apply 
+                  (mk_var route_fn) @:
+                  mk_tuple key
               )
               acc_code
             )
           )
           (mk_empty @: wrap_tlist @: wrap_ttuple [t_stmt_id; t_map_id; t_addr])
           (s_and_over_stmts_in_t p rhs_maps_of_stmt trig_name) 
-        ) 
-      )
-    )
 in
 let send_completes_for_stmts_with_no_fetch =
   List.fold_left
