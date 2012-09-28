@@ -32,6 +32,25 @@ let bmod_per_map_types = [t_map_id; bmod_types]
 let global_bmods =
   mk_global_val bmod_data @: 
     wrap_tset_mut @: wrap_ttuple bmod_per_map_types
+
+(* Node ring stuff, for consistent hashing *)
+let node_t = [canonical TString; t_addr; t_int]
+let ring_t = wrap_tset_mut @: wrap_ttuple node_t
+let node_ring_nm = "node_ring"
+let node_ring_code = mk_global_val node_ring_nm ring_t
+let replicas_nm = "replicas"
+let replicas_code = mk_global_val replicas_nm t_int_mut
+
+let set_replicas_code = mk_global_fn "set_replicas"
+  ["n", t_int] [canonical TUnit]
+  mk_assign (mk_var replicas_nm) (mk_var "n")
+
+let add_node_code = mk_global_fn "add_node"
+  ["name", canonical TString; "address", t_addr] [canonical TUnit]
+
+  
+let get_ring_node = mk_global_fn "get_ring_node"
+
   
 let calc_dim_bounds_code = mk_global_fn "calc_dim_bounds" 
   ["bmod", bmod_types] (*args*) [dim_bounds_type] (* return *) @:
@@ -210,7 +229,11 @@ let gen_route_fn p map_id =
         ) @:
         mk_var "sorted_ip_list"
         
-
+(* create all code needed for route functions, including foreign funcs*)
+let gen_route_functions p =
+  route_foreign_funcs @ 
+  calc_dim_bounds_code ::
+  List.map (gen_route_fn p) (get_map_list p)
 
 
 

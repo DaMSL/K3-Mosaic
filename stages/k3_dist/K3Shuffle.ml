@@ -155,3 +155,8 @@ let gen_shuffle_functions p trig =
     []
     trig_data
 
+(* function to generate all needed shuffle/route stuff *)
+let gen_shuffle_route_code p =
+  gen_route_functions p @
+  List.flatten @: List.map (gen_shuffle_functions p) (get_trig_list p)
+

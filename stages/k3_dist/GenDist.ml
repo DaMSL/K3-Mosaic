@@ -136,11 +136,7 @@ let declare_global_vars p =
   in
   global_bmods:: loopback_code:: stmt_cntrs_code:: global_maps
 
-let declare_global_funcs p =
-  route_foreign_funcs @ 
-  calc_dim_bounds_code ::
-  List.map (gen_route_fn p) (get_map_list p) @
-  List.flatten @: List.map (gen_shuffle_functions p) (get_trig_list p)
+let declare_global_funcs p = gen_shuffle_route_code p
 
 (* Just so we can typecheck, we make all of these K3 functions foreign for now
  *)
