@@ -21,6 +21,8 @@ FILES=\
 	stages/k3/interpreter/K3Runtime \
 	stages/k3/interpreter/K3Interpreter \
 	stages/k3_dist/ProgInfo \
+	stages/k3_dist/K3Route \
+	stages/k3_dist/K3Shuffle \
 	stages/k3_dist/GenDist \
 	stages/imperative/ReifiedK3 \
 	stages/imperative/Imperative \
