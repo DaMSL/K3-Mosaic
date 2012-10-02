@@ -44,6 +44,7 @@ FILES=\
 	stages/m3/Plan \
 	stages/m3/M3 \
 	stages/m3/M3ToK3 \
+	stages/m3/M3ProgInfo \
 
 TOPLEVEL_FILES=\
 	tests/Testing \
