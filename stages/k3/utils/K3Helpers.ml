@@ -1,7 +1,12 @@
 open Tree
 open Util
 open K3.AST
+open K3.Annotation
 
+(* Annotation manipulation *)
+let mk_no_anno a = (a, [])
+
+let mk_anno_sort (a,annos) xs = (a, annos@[Data(Constraint, Sorted xs)])
 
 (* Type manipulation functions ------------- *)
 
@@ -30,6 +35,8 @@ let t_int = canonical TInt
 let t_int_mut = TIsolated(TMutable(TInt,[]))
 let t_float = canonical TFloat
 let t_float_mut = TIsolated(TMutable(TFloat,[]))
+let t_string = canonical TString
+let t_unit = canonical TUnit
 
 (* A type for addresses *)
 let t_addr = canonical TAddress
@@ -156,8 +163,8 @@ let mk_apply lambda input = mk_stree Apply [lambda; input]
 
 let mk_block statements = mk_stree Block statements
 
-let mk_iter collection iter_fun = 
-    mk_stree Iterate [collection; iter_fun]
+let mk_iter iter_fun collection = 
+    mk_stree Iterate [iter_fun; collection]
 
 let mk_if pred true_exp false_exp =
     mk_stree IfThenElse [pred; true_exp; false_exp]
@@ -223,10 +230,15 @@ let mk_has_member collection pattern member_type =
     mk_neg @: mk_eq (mk_slice collection pattern) 
       (mk_empty @: wrap_tlist member_type)
 
+let mk_trigger name args locals code =
+  mk_no_anno @:
+    Trigger(name, args, locals, code)
+
 (* function to declare and define a global function. Assumes the global
  * construct allows for an expr_t as well.
  * The types are expected in list format (always!) *)
 let mk_global_fn name input_names_and_types output_types expr =
+  mk_no_anno @:
     Global(name, 
       TFunction(wrap_ttuple @: extract_arg_types input_names_and_types,
           wrap_ttuple output_types),
@@ -234,10 +246,11 @@ let mk_global_fn name input_names_and_types output_types expr =
     )
 ;;
 
-let mk_global_val name val_type = Global(name, TValue(val_type), None)
+let mk_global_val name val_type = 
+  mk_no_anno @: Global(name, TValue(val_type), None)
 
 let mk_foreign_fn name input_types output_types =
-  Foreign(name, TFunction(input_types, output_types))
+  mk_no_anno @: Foreign(name, TFunction(input_types, output_types))
 
 
 (* a lambda with 2 arguments for things like aggregation functions *)
@@ -330,3 +343,4 @@ let t_vid_mut = wrap_ttuple @: [t_int_mut; t_int_mut]
 let t_trig_id = t_int (* In K3, triggers are always handled by numerical id *)
 let t_stmt_id = t_int
 let t_map_id = t_int
+

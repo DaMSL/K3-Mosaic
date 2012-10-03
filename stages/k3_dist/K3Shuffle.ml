@@ -5,7 +5,6 @@ open K3Helpers
 open ProgInfo
 open K3Route
 
-
 (* type for searching for shuffle functions and their bindings *)
 (* stmt list * r_map * l_map * (r_map index * l_map index) list * func_name *)
 type shuffle_fn_entry = int list * int * int * (int * int) list * string
@@ -157,6 +156,6 @@ let gen_shuffle_functions p trig =
 
 (* function to generate all needed shuffle/route stuff *)
 let gen_shuffle_route_code p =
-  gen_route_functions p @
+  K3Route.gen_route_code p @
   List.flatten @: List.map (gen_shuffle_functions p) (get_trig_list p)
 

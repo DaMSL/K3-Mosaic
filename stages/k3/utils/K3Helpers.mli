@@ -1,5 +1,9 @@
 (* Utility functions to enable easy manipulation of K3 AST trees *)
 open K3.AST
+open K3.Annotation
+
+(* Wrap with sorted annotation. Give int list of positions to sort by *)
+val mk_anno_sort : 'a * annotation_t -> int list -> 'a * annotation_t
 
 (* easy access to K3 types *)
 val canonical : base_type_t -> value_type_t
@@ -7,6 +11,8 @@ val t_int : value_type_t
 val t_int_mut : value_type_t
 val t_float : value_type_t
 val t_float_mut : value_type_t
+val t_string : value_type_t
+val t_unit : value_type_t
 
 (* easy type for addresses *)
 val t_addr : value_type_t
@@ -97,19 +103,23 @@ val mk_has_member :
   expr_t ->
   value_type_t -> expr_t
 
+(* macro to create a trigger *)
+val mk_trigger : id_t -> arg_t -> (id_t * value_type_t * annotation_t) list 
+  -> expr_t -> declaration_t * annotation_t
+
 (* macro to create a global value *)
-val mk_global_val : id_t -> value_type_t -> declaration_t
+val mk_global_val : id_t -> value_type_t -> declaration_t * annotation_t
 
 (* macro to create a global function *)
 val mk_global_fn : 
   id_t ->
   (id_t * value_type_t) list ->
   value_type_t list ->
-  expr_t -> declaration_t
+  expr_t -> declaration_t * annotation_t
 
 (* macro to declare a foreign function *)
 val mk_foreign_fn :
-  id_t -> value_type_t -> value_type_t -> declaration_t
+  id_t -> value_type_t -> value_type_t -> declaration_t * annotation_t
 
 (* macro to create an associative lambda ie a lambda with 2 args *)
 val mk_assoc_lambda :

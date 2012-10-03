@@ -134,7 +134,9 @@ let declare_global_vars p =
     in
     List.map global_map_code_for (get_map_list p)
   in
-  global_bmods:: loopback_code:: stmt_cntrs_code:: global_maps
+  loopback_code:: 
+  stmt_cntrs_code:: 
+  global_maps
 
 let declare_global_funcs p = gen_shuffle_route_code p
 
@@ -315,16 +317,14 @@ let send_puts =
     ) (* gbagg *)
 in
 (* Actual SendFetch function *)
-Trigger(
-  send_fetch_name_of_t p trig_name,
-  wrap_args (args_of_t_with_v p trig_name),
-  [], (* locals *)
+mk_trigger
+  (send_fetch_name_of_t p trig_name)
+  (wrap_args (args_of_t_with_v p trig_name))
+  [] @: (* locals *)
   mk_block @:
     send_fetches_of_rhs_maps::
     send_completes_for_stmts_with_no_fetch@ 
     [send_puts]
-  
-)
    
 (* trigger_rcv_fetch
  * -----------------------------------------
@@ -338,13 +338,14 @@ Trigger(
  * between nodes.
  *)
 let rcv_fetch_trig p trig =
-  Trigger(
-    rcv_fetch_name_of_t p trig, 
-    wrap_args (("stmts_and_map_ids", 
+  mk_trigger
+    (rcv_fetch_name_of_t p trig)
+    (wrap_args @: ("stmts_and_map_ids", 
       wrap_tlist @: wrap_ttuple [t_stmt_id; t_map_id])::
-      args_of_t_with_v p trig),
-    [], (* locals *)
-    (mk_block
+      args_of_t_with_v p trig
+    )
+    [] @: (* locals *)
+    mk_block
       [mk_apply
         (mk_var @: log_write_for p trig)
         (mk_tuple @: args_of_t_as_vars_with_v p trig)
@@ -386,19 +387,19 @@ let rcv_fetch_trig p trig =
         )
         (mk_var "stmts_and_map_ids")
       ]
-    )
-  )
 
 (* Receive Put trigger
  * --------------------------------------- *
  * Update the statement counters with the received values
  *)
 let rcv_put_trig p trig_name =
-Trigger(
-  (rcv_put_name_of_t p trig_name),
-  wrap_args (("stmt_id_cnt_list", wrap_tlist @: wrap_ttuple [t_stmt_id; t_int])::
-    args_of_t_with_v p trig_name),
-  [],
+mk_trigger
+  (rcv_put_name_of_t p trig_name)
+  (wrap_args 
+    (("stmt_id_cnt_list", wrap_tlist @: wrap_ttuple [t_stmt_id; t_int])::
+    args_of_t_with_v p trig_name)
+  )
+  [] @:
   let part_pat = ["vid", t_vid; "stmt_id", t_stmt_id] in
   let counter_pat = ["count", t_int] in
   let full_pat = part_pat @ counter_pat in
@@ -422,7 +423,6 @@ Trigger(
       )
     )
     (mk_var "stmt_id_cnt_list")
-)
 
 
 (* Trigger_send_push_stmt_map
@@ -443,10 +443,11 @@ let send_push_stmt_map_trig p trig_name =
       let partial_key = partial_key_from_bound p stmt_id lhs_map_id in
       let slice_key = mk_var "vid" :: slice_key_from_bound p stmt_id rhs_map_id in
       acc_code@
-      [Trigger (send_push_name_of_t p trig_name stmt_id rhs_map_id, 
-        wrap_args (args_of_t_with_v p trig_name),
-        [] (* locals *),
-          (mk_iter
+      [mk_trigger 
+        (send_push_name_of_t p trig_name stmt_id rhs_map_id)
+        (wrap_args @: args_of_t_with_v p trig_name)
+        [] @: (* locals *)
+          mk_iter
             (mk_lambda 
             (wrap_args ["ip",t_addr;"tuples",wrap_tlist @: wrap_ttuple rhs_map_types])
               (mk_send
@@ -466,9 +467,7 @@ let send_push_stmt_map_trig p trig_name =
                 )
               )
             )
-          ) (* mk_iter *)
-        )
-      ] (* Trigger *)
+      ] (* trigger *)
     ) (* fun *)
     []
     (s_and_over_stmts_in_t p rhs_lhs_of_stmt trig_name)
@@ -493,12 +492,14 @@ List.fold_left
     let reduced_pat = slice_pat_take (List.length tuple_pat - 1) tuple_pat in
     let reduced_code = mk_rebuild_tuple "tuple" tuple_types reduced_pat in
     acc_code@
-    [Trigger(rcv_push_name_of_t p trig_name stmt_id read_map_id,
-      wrap_args (("tuples", wrap_tlist @: wrap_ttuple @: tuple_types)::
-        args_of_t_with_v p trig_name), 
-      [], (* locals *)
+    [mk_trigger 
+      (rcv_push_name_of_t p trig_name stmt_id read_map_id)
+      (wrap_args (("tuples", wrap_tlist @: wrap_ttuple @: tuple_types)::
+        args_of_t_with_v p trig_name)
+      )
+      [] @: (* locals *)
       (* save the tuples *)
-      (mk_block
+      mk_block
         [mk_iter
           (mk_lambda
             (wrap_args ["tuple", wrap_ttuple tuple_types])
@@ -567,8 +568,7 @@ List.fold_left
              (mk_tuple @: part_pat_as_vars @ [mk_const @: CInt(-1)])
            )
          ]
-       )
-    )]
+    ]
   )
   [] (* empty code *)
   (s_and_over_stmts_in_t p rhs_maps_of_stmt trig_name)
@@ -616,11 +616,11 @@ in
  *)
 match trigs_stmts_with_rhs_map with [] -> [] | _ ->
   let tuple_types = wrap_ttuple @: map_types_for p map_id in
-  [Trigger(send_corrective_name_of_t p map_id,
-    wrap_args ["delta_tuples", wrap_tlist tuple_types; "vid", t_vid],
-    [],
+  [mk_trigger (send_corrective_name_of_t p map_id)
+    (wrap_args ["delta_tuples", wrap_tlist tuple_types; "vid", t_vid])
+    [] @:
     (* the corrective list tells us which statements were really executed *)
-    (mk_let "corrective_list" (* (vid * stmt_id) list *)
+    mk_let "corrective_list" (* (vid * stmt_id) list *)
       (wrap_tlist @: wrap_ttuple [t_vid; t_stmt_id])
       (mk_apply
         (mk_var filter_corrective_list_name)
@@ -677,8 +677,7 @@ match trigs_stmts_with_rhs_map with [] -> [] | _ ->
         )
         (mk_var "corrective_list")
       )
-    )
-  )]
+  ]
 in
 let unique_lhs_maps = 
   ListAsSet.uniq @:
@@ -690,9 +689,9 @@ List.flatten @: List.map send_correctives unique_lhs_maps
  
 let do_complete_trigs p trig_name =
 let do_complete_trig stmt_id =
-Trigger (do_complete_name_of_t p trig_name stmt_id, 
-  wrap_args (args_of_t_with_v p trig_name),
-  [], (* locals *)
+mk_trigger (do_complete_name_of_t p trig_name stmt_id)
+  (wrap_args @: args_of_t_with_v p trig_name)
+  [] @: (* locals *)
     (* in terms of substitution, we need to 
      * a. switch read maps for buffers
      * b. inject a send to the send_correctives trigger by either sending a
@@ -708,7 +707,6 @@ Trigger (do_complete_name_of_t p trig_name stmt_id,
     in
     inject_call_forward_correctives ast_stmt2 delta_in_lhs_map
     *)
-  )
 in
 List.map (fun stmt -> do_complete_trig stmt) (stmts_of_t p trig_name)
 
@@ -763,11 +761,12 @@ let filter_corrective_list = mk_global_fn filter_corrective_list_name
 let rcv_correctives_trig p trig_name = 
 List.map
   (fun (stmt_id, map_id) ->
-    Trigger(rcv_corrective_name_of_t p trig_name stmt_id map_id,
-      wrap_args [
+    mk_trigger (rcv_corrective_name_of_t p trig_name stmt_id map_id)
+      (wrap_args [
         "delta_tuples", wrap_tlist @: wrap_ttuple @: map_types_for p map_id; 
-        "vid", t_vid], 
-      [], (* locals *)
+        "vid", t_vid]
+      )
+      [] @: (* locals *)
       mk_block
         (* accumulate delta for this vid and all following vids *)
         [mk_apply
@@ -804,7 +803,6 @@ List.map
             (mk_const CUnit) (* else *)
         ]
     )
-  )
   (s_and_over_stmts_in_t p rhs_maps_of_stmt trig_name)
 ;;
 
@@ -813,10 +811,11 @@ List.map
 let do_corrective_trigs p trig_name =
 List.map
   (fun (stmt_id, map_id) ->
-    Trigger (do_corrective_name_of_t p trig_name stmt_id map_id, 
-      wrap_args (args_of_t_with_v p trig_name@
-      ["delta_tuples", wrap_tlist @: wrap_ttuple @: map_types_for p map_id]),
-      [], (* locals *)
+    mk_trigger (do_corrective_name_of_t p trig_name stmt_id map_id)
+      (wrap_args (args_of_t_with_v p trig_name@
+        ["delta_tuples", wrap_tlist @: wrap_ttuple @: map_types_for p map_id])
+      )
+      [] @: (* locals *)
     (* NOTE: note sure if this function will be much different from regular
      * do_completes once we have the right generated K3 "shadow functions" *)
         mk_const CUnit
@@ -830,7 +829,6 @@ List.map
       *)
       *)
      )
-  )
 (s_and_over_stmts_in_t p rhs_maps_of_stmt trig_name)
 
 (* Generate all the code for a specific trigger *)
@@ -846,24 +844,19 @@ let gen_dist_for_t p trig =
 
 (* Function to generate the whole distributed program *)
 let gen_dist p ast =
-  (* we'll start by defining everything as foreign functions so we typecheck *) 
-  let triggers = get_trig_list p in
+  (* because this uses state, need it initialized here *)
   let global_funcs = declare_global_funcs p in (* init shuffles *)
+  let triggers = get_trig_list p in
   let regular_trigs = List.flatten @:
     List.map
       (fun trig -> gen_dist_for_t p trig)
       triggers
   in
-  let prog =
-    ( declare_global_vars p @
-      declare_foreign_functions p @
-      global_funcs @ (* maybe make this not order-dependent *)
-      filter_corrective_list ::  (* global func *)
-      regular_trigs@
-      send_corrective_trigs p    (* per-map basis *)
-    )
-  in
-  List.map (fun x -> (x,[])) prog (* dummy annotations *)
-  
+  global_funcs @ (* maybe make this not order-dependent *)
+  declare_global_vars p @
+  declare_foreign_functions p @
+  filter_corrective_list ::  (* global func *)
+  regular_trigs@
+  send_corrective_trigs p    (* per-map basis *)
 
 
