@@ -45,12 +45,11 @@ let format_language_description (lang_t, short_desc, long_desc) =
   in
   "  "^(pad_or_truncate_str short_desc 10)^long_desc
 
-let parse_language s = match String.lowercase s with
-  | "k3" -> K3
-  | "rk3" -> ReifiedK3
-  | "imp" -> Imperative
-  | "cpp" -> CPP
-  | _ -> error ("Invalid output language: "^s)
+let parse_language s = 
+    try
+        let (x,_,_) = List.find (fun (_,s2,_) -> s = s2) language_descriptions
+        in x
+    with Not_found -> error ("Invalid output language: "^s)
 
 (* Actions *)
 type action_t = REPL | Compile | Interpret | Print | ExpressionTest
