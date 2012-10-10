@@ -1,10 +1,14 @@
 open Tree
 open Util
-
 open K3.AST
+open K3.Annotation
+
+(* Annotation manipulation *)
+let mk_no_anno a = (a, [])
+
+let mk_anno_sort (a,annos) xs = (a, annos@[Data(Constraint, Sorted xs)])
 
 (* Type manipulation functions ------------- *)
-
 
 (* convert an isolated value to a contained value all the way down *)
 let iso_to_contained typ =
@@ -26,11 +30,16 @@ let iso_to_contained typ =
 (* the default type *)
 let canonical typ = TIsolated(TImmutable(typ,[]))
 
-(* A type for simple immutable integers *)
+(* A type for simple K3 types *)
 let t_int = canonical TInt
 let t_int_mut = TIsolated(TMutable(TInt,[]))
 let t_float = canonical TFloat
 let t_float_mut = TIsolated(TMutable(TFloat,[]))
+let t_string = canonical TString
+let t_unit = canonical TUnit
+
+(* A type for addresses *)
+let t_addr = canonical TAddress
 
 (* wrap a type in a list *)
 let wrap_tlist typ = 
@@ -64,7 +73,8 @@ let wrap_ttuple_mut typ = match typ with
   | h::t   -> TIsolated(TMutable(TTuple(typ),[]))
   | _      -> invalid_arg "No mutable tuple to wrap"
 
-let wrap_tmaybe ts = List.map (fun t -> TMaybe t) ts
+let wrap_tmaybe t = canonical @: TMaybe t
+let wrap_tmaybes ts = List.map wrap_tmaybe ts
 
 (* wrap a function argument *)
 let wrap_args id_typ = 
@@ -153,8 +163,8 @@ let mk_apply lambda input = mk_stree Apply [lambda; input]
 
 let mk_block statements = mk_stree Block statements
 
-let mk_iter collection iter_fun = 
-    mk_stree Iterate [collection; iter_fun]
+let mk_iter iter_fun collection = 
+    mk_stree Iterate [iter_fun; collection]
 
 let mk_if pred true_exp false_exp =
     mk_stree IfThenElse [pred; true_exp; false_exp]
@@ -220,10 +230,15 @@ let mk_has_member collection pattern member_type =
     mk_neg @: mk_eq (mk_slice collection pattern) 
       (mk_empty @: wrap_tlist member_type)
 
+let mk_trigger name args locals code =
+  mk_no_anno @:
+    Trigger(name, args, locals, code)
+
 (* function to declare and define a global function. Assumes the global
  * construct allows for an expr_t as well.
  * The types are expected in list format (always!) *)
 let mk_global_fn name input_names_and_types output_types expr =
+  mk_no_anno @:
     Global(name, 
       TFunction(wrap_ttuple @: extract_arg_types input_names_and_types,
           wrap_ttuple output_types),
@@ -231,10 +246,11 @@ let mk_global_fn name input_names_and_types output_types expr =
     )
 ;;
 
-let mk_global_val name val_type = Global(name, TValue(val_type), None)
+let mk_global_val name val_type = 
+  mk_no_anno @: Global(name, TValue(val_type), None)
 
 let mk_foreign_fn name input_types output_types =
-  Foreign(name, TFunction(input_types, output_types))
+  mk_no_anno @: Foreign(name, TFunction(input_types, output_types))
 
 
 (* a lambda with 2 arguments for things like aggregation functions *)
@@ -254,10 +270,8 @@ let mk_let var_name var_type var_value expr =
  * evaluate to the same types *)
 let mk_let_many var_name_and_type_list var_values expr =
     mk_apply
-        (mk_lambda (wrap_args @: var_name_and_type_list)
-            (expr)
-        )
-        (var_values)
+        (mk_lambda (wrap_args var_name_and_type_list) expr)
+        var_values
 
 let mk_fst tuple_types tuple =
     mk_let_many (list_zip ["__fst";"__snd"] tuple_types) tuple (mk_var "__fst")
@@ -312,4 +326,21 @@ let mk_destruct_tuple tup_name types prefix expr =
 let mk_rebuild_tuple tup_name types pattern =
   mk_destruct_tuple tup_name types def_tup_prefix
     (mk_tuple @: ids_to_vars @: tuple_pat_to_ids pattern)
+
+(* unwrap maybe values by creating an inner values with postfix "_unwrap" *)
+let mk_unwrap_maybe var_names_and_types expr =
+  let unwrap_n_t = 
+    List.map (fun (n,t) -> (n^"_unwrap",t)) var_names_and_types in
+  let names = fst @: List.split var_names_and_types in
+  let vars = ids_to_vars names in
+  mk_apply
+    (mk_lambda (wrap_args_maybe unwrap_n_t) expr) @:
+    mk_tuple vars
+
+(* K3 types for various elements of a k3 program *)
+let t_vid = wrap_ttuple @: [t_int; t_int] (* so we can distinguish *)
+let t_vid_mut = wrap_ttuple @: [t_int_mut; t_int_mut]
+let t_trig_id = t_int (* In K3, triggers are always handled by numerical id *)
+let t_stmt_id = t_int
+let t_map_id = t_int
 

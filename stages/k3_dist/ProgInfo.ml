@@ -136,10 +136,10 @@ let lhs_map_of_stmt p stmt_id =
   let (_, _, lhs_map, _, _) = find_stmt p stmt_id in
   lhs_map
 
-let lhs_rhs_of_stmt (p:prog_data_t) stmt_id =
+let rhs_lhs_of_stmt (p:prog_data_t) stmt_id =
   let (_, _, lhs_map, _, rhs_maps) = find_stmt p stmt_id in
   List.map
-    (fun (rhs_map, _) -> (lhs_map, rhs_map))
+    (fun (rhs_map, _) -> (rhs_map, lhs_map))
     rhs_maps
 
 let find_lmap_bindings_in_stmt (p:prog_data_t) (stmt:stmt_id_t) (map:map_id_t)
@@ -187,11 +187,18 @@ let trigger_of_stmt p stmt_id =
 let map_types_for p map_id = 
   let (_, _, vars) = find_map p map_id in vars
 
+(* useful for adding vid to maps *)
+let map_types_with_v_for p map_id = t_vid::map_types_for p map_id
+
+(* because we add the vid first, we need to modify the numbering of arguments in
+* the key. It's easier to control this in one place *)
+let adjust_key_id_for_v i = i + 1
+
 (* returns a k3 list of maybes that has the relevant map pattern *)
 let var_list_from_bound (p:prog_data_t) (stmt_id:stmt_id_t) (map_id:map_id_t) = 
   let map_binds = find_map_bindings_in_stmt p stmt_id map_id in
   let (_, _, map_params) = find_map p map_id in
-  let range = create_range 0 (List.length map_params) in
+  let range = create_range 0 @: List.length map_params in
   List.map
     (fun x -> 
       try 
@@ -204,10 +211,10 @@ let var_list_from_bound (p:prog_data_t) (stmt_id:stmt_id_t) (map_id:map_id_t) =
     range
 
 (* returns a k3 list of maybes that has the relevant map pattern *)
-let partial_key_from_bound (p:prog_data_t) (stmt_id:stmt_id_t) (map_id:map_id_t) = 
+let partial_key_from_bound (p:prog_data_t) stmt_id map_id = 
   List.map 
   (fun x -> if x = "_" then mk_const CNothing else mk_just @: mk_var x) 
-  (var_list_from_bound p stmt_id map_id)
+  (list_drop_end 1 @: var_list_from_bound p stmt_id map_id)
                   
 (* returns a k3 list of variables or CUnknown. Can't use same types as
  * partial_key *)
@@ -220,7 +227,7 @@ let slice_key_from_bound (p:prog_data_t) (stmt_id:stmt_id_t) (map_id:map_id_t) =
  * showing how a lhs map variable corresponds to a rhs variable
  * starting at 0 index *)
 let get_map_bindings_in_stmt (p:prog_data_t) (stmt_id:stmt_id_t) 
-  (lmap:map_id_t) (rmap:map_id_t) =
+  (rmap:map_id_t) (lmap:map_id_t) =
   let lmap_bindings = find_lmap_bindings_in_stmt p stmt_id lmap in
   let rmap_bindings = find_rmap_bindings_in_stmt p stmt_id rmap in
   List.fold_left

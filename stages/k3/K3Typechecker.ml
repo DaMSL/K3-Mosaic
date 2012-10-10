@@ -196,6 +196,12 @@ let rec assignable t_l t_r =
 
 let (===) = assignable
 
+let compare_type_ts t_l t_r = match t_l, t_r with
+    | TFunction(in_l,out_l), TFunction(in_r, out_r) -> 
+            in_l === in_r && out_l === out_r
+    | TValue(v_l), TValue(v_r) -> v_l === v_r
+    | _ -> false
+
 let rec passable t_l t_r =
     match t_l, t_r with
     | TContained(TMutable(_)), TContained(TMutable(_)) -> assignable t_l t_r
@@ -715,19 +721,26 @@ let type_bindings_of_program prog =
 	      | Global(i, t, Some init) ->
 	        let typed_init =
 	          try deduce_expr_type trig_env env init
-	          with TypeError(ast_id, msg) -> raise (TypeError(ast_id, "In Global "^i^": "^msg))
-	        in (Global(i, t, Some typed_init), (i, type_of_expr typed_init) :: env)
+	          with TypeError(ast_id, msg) -> 
+                  raise (TypeError(ast_id, "In Global "^i^": "^msg))
+            in 
+            let expr_type = type_of_expr typed_init in
+            if not (compare_type_ts expr_type t) then t_error (-1) i
+                (TMismatch(expr_type, t, 
+                    "Mismatch in global type declaration.")) ()
+            else 
+            Global(i, t, Some typed_init), (i, expr_type) :: env
 	
-				| Global(i, t, None) -> (Global(i, t, None), (i, t) :: env)
+          | Global(i, t, None) -> (Global(i, t, None), (i, t) :: env)
 				
-				| Foreign(i, t) -> (Foreign(i, t), (i, t) :: env)
+          | Foreign(i, t) -> (Foreign(i, t), (i, t) :: env)
 				    
-				| Trigger(id, args, locals, body) ->
-				    (try check_trigger_type trig_env env id args locals body
-				     with TypeError(ast_id, msg) -> 
-				        raise (TypeError(ast_id, "In Trigger "^id^": "^msg)))
+          | Trigger(id, args, locals, body) ->
+            (try check_trigger_type trig_env env id args locals body
+             with TypeError(ast_id, msg) -> 
+                raise (TypeError(ast_id, "In Trigger "^id^": "^msg)))
 
-			  | Role(id,sp) ->
+		  | Role(id,sp) ->
 		      let stream_env =
 		        try List.assoc id rstream_env with Not_found ->
 		          t_error (-1) "Invalid role" (TMsg("No role named "^id^" found")) ()

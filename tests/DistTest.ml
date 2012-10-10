@@ -9,7 +9,7 @@ open K3Printing
 let (rst_p:ProgInfo.prog_data_t) =
   (* trigger data *)
   ([1, "On_Insert_T", ["C", t_int; "D", t_int], [1;2;3]]
-  , (* stmt data *)
+  , (* stmt data: s, t, lhs, lhs_bind, rhs_maps_bind *)
   [1, 1, 1,  [], [5, ["C", 0]];
    2, 1, 2,  [], [4, ["C", 1]];
    3, 1, 3, ["C", 0], []]

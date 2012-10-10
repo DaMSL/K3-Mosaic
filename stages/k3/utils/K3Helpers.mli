@@ -1,12 +1,28 @@
 (* Utility functions to enable easy manipulation of K3 AST trees *)
 open K3.AST
+open K3.Annotation
 
-(* easy access to the int type *)
+(* Wrap with sorted annotation. Give int list of positions to sort by *)
+val mk_anno_sort : 'a * annotation_t -> int list -> 'a * annotation_t
+
+(* easy access to K3 types *)
 val canonical : base_type_t -> value_type_t
 val t_int : value_type_t
 val t_int_mut : value_type_t
 val t_float : value_type_t
 val t_float_mut : value_type_t
+val t_string : value_type_t
+val t_unit : value_type_t
+
+(* easy type for addresses *)
+val t_addr : value_type_t
+
+(* K3 types for various things *)
+val t_vid : value_type_t
+val t_vid_mut : value_type_t
+val t_trig_id : value_type_t
+val t_stmt_id : value_type_t
+val t_map_id : value_type_t
 
 (* wrap in a specific type *)
 val wrap_tlist : value_type_t -> value_type_t
@@ -15,6 +31,8 @@ val wrap_tset : value_type_t -> value_type_t
 val wrap_tset_mut : value_type_t -> value_type_t
 val wrap_ttuple : value_type_t list -> value_type_t
 val wrap_ttuple_mut : value_type_t list -> value_type_t
+val wrap_tmaybe : value_type_t -> value_type_t 
+val wrap_tmaybes : value_type_t list -> value_type_t list
 val wrap_args : (id_t * value_type_t) list -> arg_t
 val wrap_args_maybe : (id_t * value_type_t) list -> arg_t
 
@@ -76,25 +94,32 @@ val extract_arg_names : ('a * 'b) list -> 'a list
 val ids_to_vars :
   id_t list -> expr_t list
 
+(* check if a collection is empty *)
+val mk_is_empty : expr_t -> value_type_t -> expr_t
+
 (* macro to check if a collection has a specific member *)
 val mk_has_member :
   expr_t ->
   expr_t ->
   value_type_t -> expr_t
 
+(* macro to create a trigger *)
+val mk_trigger : id_t -> arg_t -> (id_t * value_type_t * annotation_t) list 
+  -> expr_t -> declaration_t * annotation_t
+
 (* macro to create a global value *)
-val mk_global_val : id_t -> value_type_t -> declaration_t
+val mk_global_val : id_t -> value_type_t -> declaration_t * annotation_t
 
 (* macro to create a global function *)
 val mk_global_fn : 
   id_t ->
   (id_t * value_type_t) list ->
   value_type_t list ->
-  expr_t -> declaration_t
+  expr_t -> declaration_t * annotation_t
 
 (* macro to declare a foreign function *)
 val mk_foreign_fn :
-  id_t -> value_type_t -> value_type_t -> declaration_t
+  id_t -> value_type_t -> value_type_t -> declaration_t * annotation_t
 
 (* macro to create an associative lambda ie a lambda with 2 args *)
 val mk_assoc_lambda :
@@ -118,6 +143,12 @@ val mk_let_many :
   expr_t ->
   expr_t
 
+(* macro similar to fst *)
+val mk_fst: value_type_t list -> expr_t -> expr_t
+
+(* macro similar to snd *)
+val mk_snd: value_type_t list -> expr_t -> expr_t
+
 (* data type to manipulate tuples *)
 type tuple_pat = Position of int | ExternVar of id_t | Unknown
 
@@ -134,6 +165,10 @@ val slice_pat_drop: int -> tuple_pat list -> tuple_pat list
 (* given an integer and a prefix, create an id for the internals of a tuple *)
 val int_to_temp_id: int -> string -> id_t
 
+(* create a consistent range with which to refer to tuple ids when destructing
+ * tuples *)
+val mk_tuple_range: 'a list -> int list
+
 (* destruct a tuple, at which point parts are available via ids made by
  * int_to_temp_id *)
 val mk_destruct_tuple: id_t -> value_type_t list -> string -> expr_t -> expr_t
@@ -145,3 +180,5 @@ val mk_destruct_tuple: id_t -> value_type_t list -> string -> expr_t -> expr_t
  * *)
 val mk_rebuild_tuple: id_t -> value_type_t list -> tuple_pat list -> expr_t
 
+(* unwrap maybe values by creating an inner values with postfix "_unwrap" *)
+val mk_unwrap_maybe: (id_t * value_type_t) list -> expr_t -> expr_t
