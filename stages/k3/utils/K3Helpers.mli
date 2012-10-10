@@ -11,8 +11,6 @@ val t_int : value_type_t
 val t_int_mut : value_type_t
 val t_float : value_type_t
 val t_float_mut : value_type_t
-val t_string : value_type_t
-val t_unit : value_type_t
 
 (* easy type for addresses *)
 val t_addr : value_type_t

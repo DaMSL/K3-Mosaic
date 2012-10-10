@@ -31,7 +31,23 @@ FILES=\
 	stages/imperative/RK3ToImperative \
 	stages/imperative/CPP \
 	stages/imperative/CPPTyping \
-	stages/imperative/ImperativeToCPP 
+	stages/imperative/ImperativeToCPP \
+	stages/m3/Debug \
+	stages/m3/ListExtras \
+	stages/m3/ListAsFunction \
+	stages/m3/FreshVariable \
+	stages/m3/M3Type \
+	stages/m3/M3Constants \
+	stages/m3/M3Functions \
+	stages/m3/Schema \
+	stages/m3/Ring \
+	stages/m3/Arithmetic \
+	stages/m3/Calculus \
+	stages/m3/CalculusPrinter \
+	stages/m3/Plan \
+	stages/m3/M3 \
+	stages/m3/M3ToK3 \
+	stages/m3/M3ProgInfo \
 
 TOPLEVEL_FILES=\
 	tests/Testing \
@@ -39,9 +55,11 @@ TOPLEVEL_FILES=\
 
 LEXERS=\
 	stages/k3/parser/K3Lexer \
+	stages/m3/Calculuslexer \
 
 PARSERS=\
 	stages/k3/parser/K3Parser \
+	stages/m3/Calculusparser \
 
 DIRS=\
 	util\
@@ -51,6 +69,7 @@ DIRS=\
 	stages/k3/parser \
 	stages/k3/interpreter \
 	stages/k3_dist \
+	stages/m3 \
 	stages/imperative \
 	tests \
 
@@ -106,6 +125,7 @@ TEST_BASE=\
 TESTS=\
 	tests/TypecheckerTest \
 	tests/InterpreterTest \
+	tests/M3ToK3Test \
 
 TEST_BASE_FILES    := $(patsubst %,%.cmo, $(TEST_BASE))
 TEST_BASE_INCLUDES := $(patsubst %,%.cmi, $(TEST_BASE))

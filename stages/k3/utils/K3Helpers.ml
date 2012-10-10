@@ -35,8 +35,6 @@ let t_int = canonical TInt
 let t_int_mut = TIsolated(TMutable(TInt,[]))
 let t_float = canonical TFloat
 let t_float_mut = TIsolated(TMutable(TFloat,[]))
-let t_string = canonical TString
-let t_unit = canonical TUnit
 
 (* A type for addresses *)
 let t_addr = canonical TAddress

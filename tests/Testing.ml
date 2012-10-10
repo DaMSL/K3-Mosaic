@@ -42,12 +42,13 @@ let ensure assertion = match assertion with
   | AssertTypeEquals(expected, actual) -> equals_assertion expected actual string_of_type
   | AssertValueEquals(expected, actual) -> equals_assertion expected actual string_of_value
 
-let rec run_tests test =
+let rec run_tests ?(indent="") test =
     match test with
     | TestCase(name, assertion) -> (
         let result_string = ensure assertion
-        in print_endline (name ^ ": " ^ result_string);
+        in print_endline (indent ^ name ^ ": " ^ result_string);
     )
     | TestGroup(name, tests) -> (
-        print_endline(name ^ ":"); ignore @: List.map run_tests tests; ()
+        print_endline(indent ^ name ^ ":"); 
+        List.iter (run_tests ~indent:("  "^indent)) tests; ()
     )
