@@ -28,10 +28,18 @@ open ImperativeToCPP
 let error s = prerr_endline s; exit 1
 
 (* Compilation languages *)
-type language_t = K3 | ReifiedK3 | Imperative | CPP
+type in_lang_t = K3in | M3in
 
-let language_descriptions = [
+let in_lang_descs = [
+    K3in,     "k3",  "K3";
+    M3in,     "m3",  "M3";
+  ]
+
+type out_lang_t = K3 | K3Dist | ReifiedK3 | Imperative | CPP
+
+let out_lang_descs = [
     K3,         "k3",  "K3";
+    K3Dist,     "k3dist", "Distributed K3";
     ReifiedK3,  "rk3", "Reified K3";
     Imperative, "imp", "Imperative";
     CPP,        "cpp", "C++";
@@ -45,11 +53,14 @@ let format_language_description (lang_t, short_desc, long_desc) =
   in
   "  "^(pad_or_truncate_str short_desc 10)^long_desc
 
-let parse_language s = 
+let parse_lang data str s = 
     try
-        let (x,_,_) = List.find (fun (_,s2,_) -> s = s2) language_descriptions
+        let (x,_,_) = List.find (fun (_,s2,_) -> s = s2) data
         in x
-    with Not_found -> error ("Invalid output language: "^s)
+    with Not_found -> error ("Invalid "^str^": "^s)
+
+let parse_in_lang = parse_lang in_lang_descs "input language"
+let parse_out_lang = parse_lang out_lang_descs "output language"
 
 (* Actions *)
 type action_t = REPL | Compile | Interpret | Print | ExpressionTest
@@ -69,7 +80,8 @@ let action_specs action_param = List.map (fun (act, flag, desc) ->
 (* Driver parameters *)
 type parameters = {
     action : action_t ref;
-    mutable language : language_t;
+    mutable in_lang : in_lang_t;
+    mutable out_lang : out_lang_t;
     mutable search_paths : string list;
     mutable input_files : string list;
     mutable node_address : address;
@@ -79,7 +91,8 @@ type parameters = {
 
 let cmd_line_params : parameters = {
     action = ref Print;
-    language = K3;
+    in_lang = K3in;
+    out_lang = K3;
     search_paths = ["."];
     input_files = [];
     node_address = ("127.0.0.1", 10000);
@@ -89,7 +102,10 @@ let cmd_line_params : parameters = {
 
 (* General parameter setters *)
 let set_output_language l =
-  cmd_line_params.language <- parse_language l
+  cmd_line_params.out_lang <- parse_out_lang l
+
+let set_input_language l =
+  cmd_line_params.in_lang <- parse_in_lang l
 
 let set_print_types () =
   cmd_line_params.print_types <- true
@@ -112,24 +128,29 @@ let append_peers ip_str_list =
   let ips = Str.split (Str.regexp (Str.quote ",")) ip_str_list in
   cmd_line_params.peers <- cmd_line_params.peers @ (List.map parse_ip ips)
 
-let param_specs = Arg.align ((action_specs cmd_line_params.action)@[
-  ("-l", (Arg.String set_output_language), 
-      "lang   Set the compiler's output language");
-  ("-I", (Arg.String append_search_path), 
-      "dir    Include a directory in the module search path");
-  ("-h", (Arg.String set_node_address), 
-      "addr   Set the current node address for evaluation");
-  ("-n", (Arg.String append_peers), 
-      "[addr] Append addresses to the peer list");
-  ("-t", (Arg.Unit set_print_types),
-      "       Print types as part of output");
+let param_specs = Arg.align (action_specs cmd_line_params.action@[
+  "-e", Arg.String set_input_language, 
+      "lang   Set the compiler's input language";
+  "-l", Arg.String set_output_language, 
+      "lang   Set the compiler's output language";
+  "-i", Arg.String append_search_path, 
+      "dir    Include a directory in the module search path";
+  "-h", Arg.String set_node_address, 
+      "addr   Set the current node address for evaluation";
+  "-n", Arg.String append_peers, 
+      "[addr] Append addresses to the peer list";
+  "-t", Arg.Unit set_print_types,
+      "       Print types as part of output";
   ])
 
 let usage_msg =
   ("k3 [opts] sourcefile1 [sourcefile2 [...]]"^
+     "\n---- Input languages ----\n"^
+     (String.concat "\n"
+       (List.map format_language_description in_lang_descs))^
      "\n---- Output languages ----\n"^
      (String.concat "\n"
-       (List.map format_language_description language_descriptions))^
+       (List.map format_language_description out_lang_descs))^
      "\n---- Options ----")
 
 let parse_cmd_line () =
@@ -151,15 +172,15 @@ let handle_type_error p (uuid,error) =
   exit 1
 
 (* Program constructors *)
-let parse_program f =
-  let in_chan = try open_in f
-                with Sys_error _ -> error ("failed to open file: "^f) in
+let parse_program parsefn lexfn file =
+  let in_chan = try open_in file
+    with Sys_error _ -> error ("failed to open file: "^file) in
   let lexbuf =
     try Lexing.from_channel in_chan
     with Failure _ -> handle_lexer_error ()
   in
   let prog =
-    try K3Parser.program K3Lexer.tokenize lexbuf
+    try parsefn lexfn lexbuf
     with 
     | Parsing.Parse_error -> 
         let curpos = lexbuf.Lexing.lex_curr_p in
@@ -168,26 +189,31 @@ let parse_program f =
         let diff = curr-bol in
         let line = curpos.Lexing.pos_lnum in
         let tok = Lexing.lexeme lexbuf in  
-        Printf.printf "\nError on line %d , character %d , token %s\n" line diff tok; raise Parsing.Parse_error
+        Printf.printf "\nError on line %d , character %d , token %s\n" 
+            line diff tok; raise Parsing.Parse_error
     | Failure _ -> handle_parse_error lexbuf
     | Pervasives.Exit -> raise Parsing.Parse_error
   in
     close_in in_chan;
     prog
 
-let typed_program f =
-  let p = parse_program f in
+let parse_program_k3 = parse_program K3Parser.program K3Lexer.tokenize
+
+let parse_program_m3 = 
+    parse_program Calculusparser.mapProgram Calculuslexer.tokenize
+
+let typed_program p =
   try deduce_program_type p
   with TypeError (uuid, error) -> handle_type_error p (uuid, error)
 
-let imperative_program f =
-  RK3ToImperative.imperative_of_program (fun () -> []) (typed_program f)
+let imperative_program p =
+  RK3ToImperative.imperative_of_program (fun () -> []) (typed_program p)
   
-let cpp_program f = 
+let cpp_program p = 
   let mk_meta() = [] in
-  CPPTyping.deduce_program_type
-    (cpp_of_imperative
-      (RK3ToImperative.imperative_of_program mk_meta (typed_program f)))
+  CPPTyping.deduce_program_type @:
+    cpp_of_imperative @:
+      RK3ToImperative.imperative_of_program mk_meta @: typed_program p
 
 (* TODO *) 
 let repl params = ()
@@ -198,9 +224,9 @@ let compile params = ()
 (* Interpret actions *)
 (* TODO: accept role from command line *)
 let interpret params =
-  let eval_fn = match params.language with
+  let eval_fn = match params.out_lang with
     | K3 -> (fun f -> 
-      let typed_program = deduce_program_type (parse_program f)
+      let typed_program = deduce_program_type @: parse_program_k3 f
       in eval_program params.node_address None typed_program)
     | _ -> error "Output language not yet implemented"
   in
@@ -215,38 +241,46 @@ let print_event_loop (id, (senv, fenv, sbind, instrs)) =
 
 let string_of_typed_meta (t,a) = string_of_annotation a
 
-let print_k3_program f =
-  let tp = typed_program f in
+let print_k3_program p =
+  let tp = typed_program p in
   let event_loops, default = roles_of_program tp in
     print_endline (string_of_program tp);
     List.iter print_event_loop event_loops;
-    (match default with None -> () | Some (_,x) -> print_event_loop ("DEFAULT", x))
+    match default with None -> () 
+        | Some (_,x) -> print_event_loop ("DEFAULT", x)
 
-let print_reified_k3_program f =
-  let print_expr_fn ?(print_id=false) e = lazy (print_reified_expr (reify_expr [] e)) in
-  let tp = typed_program f in 
+let print_reified_k3_program p =
+  let print_expr_fn ?(print_id=false) e = 
+      lazy (print_reified_expr (reify_expr [] e)) in
+  let tp = typed_program p in 
   print_endline (string_of_program ~print_expr_fn:print_expr_fn tp)
 
 let print_imperative_program print_types f =
   let string_of_meta m =
     (if print_types then (ImperativeUtil.string_of_type (fst m))^";" else "")^
     (string_of_annotation (snd m))
-  in print_endline (ImperativeUtil.string_of_program string_of_meta (imperative_program f))
+  in print_endline @: 
+    ImperativeUtil.string_of_program string_of_meta (imperative_program f)
 
 let print_cpp_program print_types f = 
   let string_of_meta m =
     (if print_types then (ImperativeUtil.string_of_type (fst m))^";" else "")^
     (string_of_annotation (snd m))
-  in print_endline (ImperativeUtil.string_of_program string_of_meta (cpp_program f))
+  in print_endline @:
+    ImperativeUtil.string_of_program string_of_meta (cpp_program f)
 
 let print params =
-  let print_fn = match params.language with
+  let print_fn = match params.out_lang with
     | K3 -> print_k3_program
     | ReifiedK3 -> print_reified_k3_program
     | Imperative -> print_imperative_program params.print_types
     | CPP -> print_cpp_program params.print_types
   in
-  List.iter print_fn params.input_files
+  let read_fn = match params.in_lang with
+    | K3in -> parse_program_k3
+    | M3in -> compose M3ToK3.m3_to_k3 parse_program_m3
+  in
+  List.iter (compose print_fn read_fn) params.input_files
 
 (* Test actions *)
 let print_test_case (decls,e,x) =
@@ -258,7 +292,7 @@ let print_test_case (decls,e,x) =
   print_endline (string_of_expr x)
 
 let test params =
-  let test_fn = match params.language with
+  let test_fn = match params.out_lang with
     | K3 -> (fun f -> 
       let test_triples = parse_expression_test (read_file f) in
       let test_cases = snd (List.fold_left (fun (i, test_acc) (decls, e, x) ->
