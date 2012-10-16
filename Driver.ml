@@ -249,38 +249,48 @@ let print_k3_program p =
     match default with None -> () 
         | Some (_,x) -> print_event_loop ("DEFAULT", x)
 
+let print_k3_dist_prog (p, m) = match m with
+  | None -> error "Cannot construct distributed K3 without ProgInfo metadata"
+  | Some meta ->
+  let tp = typed_program p in
+  let dist = GenDist.gen_dist meta tp in
+  let dist_tp = typed_program dist in
+  let event_loops, default = roles_of_program dist_tp in 
+    print_endline (string_of_program tp);
+    List.iter print_event_loop event_loops;
+    match default with None -> () 
+        | Some (_,x) -> print_event_loop ("DEFAULT", x)
+
 let print_reified_k3_program p =
   let print_expr_fn ?(print_id=false) e = 
       lazy (print_reified_expr (reify_expr [] e)) in
   let tp = typed_program p in 
   print_endline (string_of_program ~print_expr_fn:print_expr_fn tp)
 
-let print_imperative_program print_types f =
+let print_imp func print_types f =
   let string_of_meta m =
     (if print_types then (ImperativeUtil.string_of_type (fst m))^";" else "")^
     (string_of_annotation (snd m))
   in print_endline @: 
-    ImperativeUtil.string_of_program string_of_meta (imperative_program f)
+    ImperativeUtil.string_of_program string_of_meta (func f)
 
-let print_cpp_program print_types f = 
-  let string_of_meta m =
-    (if print_types then (ImperativeUtil.string_of_type (fst m))^";" else "")^
-    (string_of_annotation (snd m))
-  in print_endline @:
-    ImperativeUtil.string_of_program string_of_meta (cpp_program f)
+let print_cpp_program = print_imp cpp_program
+let print_imperative_program = print_imp imperative_program
 
 let print params =
   let print_fn = match params.out_lang with
-    | K3 -> print_k3_program
-    | ReifiedK3 -> print_reified_k3_program
-    | Imperative -> print_imperative_program params.print_types
-    | CPP -> print_cpp_program params.print_types
+    | K3 -> print_k3_program |- fst
+    | K3Dist -> params.in_lang <- M3in; print_k3_dist_prog
+    | ReifiedK3 -> print_reified_k3_program |- fst
+    | Imperative -> (print_imperative_program params.print_types) |- fst
+    | CPP -> (print_cpp_program params.print_types) |- fst
   in
   let read_fn = match params.in_lang with
-    | K3in -> parse_program_k3
-    | M3in -> compose M3ToK3.m3_to_k3 parse_program_m3
+    | K3in -> fun f -> (parse_program_k3 f, None)
+    | M3in -> fun f -> let m3prog = parse_program_m3 f in
+        (M3ToK3.m3_to_k3 m3prog, Some (M3ProgInfo.prog_data_of_m3 m3prog))
   in
-  List.iter (compose print_fn read_fn) params.input_files
+  List.iter (print_fn |- read_fn) params.input_files
 
 (* Test actions *)
 let print_test_case (decls,e,x) =
