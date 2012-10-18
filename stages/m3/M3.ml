@@ -260,8 +260,14 @@ let add_stmt (prog:prog_t) (event:Schema.event_t)
          update_type = stmt.update_type;
          update_expr  = rename_vars safe_mapping stmt.update_expr
       }]
-   with Not_found -> 
-      failwith "Adding statement for an event that has not been established"
+   with Not_found -> (
+      prog.triggers := !(prog.triggers) @ [
+        {
+          event = event;
+          statements = ref [stmt];
+        }
+      ]
+    )
 ;;
 
 (************************* Initializers *************************)

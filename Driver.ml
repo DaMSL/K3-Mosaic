@@ -161,8 +161,8 @@ let handle_lexer_error () =
   print_endline ("Lexer failure");
   exit 1
 
-let handle_parse_error lexbuf =
-  print_endline ("Lexer reached: "^(Lexing.lexeme lexbuf));
+let handle_parse_error ?(msg = "")lexbuf =
+  print_endline ("Lexer reached: '"^(Lexing.lexeme lexbuf)^"'; "^msg);
   exit 1
 
 let handle_type_error p (uuid,error) =
@@ -191,7 +191,7 @@ let parse_program parsefn lexfn file =
         let tok = Lexing.lexeme lexbuf in  
         Printf.printf "\nError on line %d , character %d , token %s\n" 
             line diff tok; raise Parsing.Parse_error
-    | Failure _ -> handle_parse_error lexbuf
+    | Failure(msg) -> handle_parse_error ~msg:msg lexbuf
     | Pervasives.Exit -> raise Parsing.Parse_error
   in
     close_in in_chan;
@@ -287,8 +287,10 @@ let print params =
   in
   let read_fn = match params.in_lang with
     | K3in -> fun f -> (parse_program_k3 f, None)
-    | M3in -> fun f -> let m3prog = parse_program_m3 f in
-        (M3ToK3.m3_to_k3 m3prog, Some (M3ProgInfo.prog_data_of_m3 m3prog))
+    | M3in -> fun f -> (
+        let m3prog = parse_program_m3 f in
+          (M3ToK3.m3_to_k3 m3prog, Some (M3ProgInfo.prog_data_of_m3 m3prog))
+      )
   in
   List.iter (print_fn |- read_fn) params.input_files
 

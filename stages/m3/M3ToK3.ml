@@ -12,6 +12,7 @@ module K = K3.AST
 module KP = K3Printing
 module KH = K3Helpers
 module KU = K3Util
+module KT = K3Typechecker
 
 exception M3ToK3Failure of 
    Calculus.expr_t option * 
@@ -28,7 +29,12 @@ let m3_type_to_k3_base_type = (function
    | T.TInt             -> K.TInt
    | T.TFloat           -> K.TFloat
    | T.TString          -> K.TString
-   | T.TDate            -> failwith "Can not convert date type"
+   | T.TDate            -> 
+      K.TTuple [
+        KT.canonical K.TInt;
+        KT.canonical K.TInt;
+        KT.canonical K.TInt;
+      ]
    | T.TAny             -> K.TUnknown
    | T.TExternal(ext_t) -> K.TUnknown
 )
