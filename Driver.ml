@@ -66,7 +66,7 @@ let parse_out_lang = parse_lang out_lang_descs "output language"
 type action_t = REPL | Compile | Interpret | Print | ExpressionTest
 
 let action_descriptions = [
-    REPL,             "-i",    "Interactive toplevel";
+    REPL,             "-top",    "Interactive toplevel";
     Compile,          "-c",    "Compile to specified language";
     Interpret,        "-r",    "Interpret with specified language";
     Print,            "-p",    "Print program as specified language";
@@ -129,11 +129,11 @@ let append_peers ip_str_list =
   cmd_line_params.peers <- cmd_line_params.peers @ (List.map parse_ip ips)
 
 let param_specs = Arg.align (action_specs cmd_line_params.action@[
-  "-e", Arg.String set_input_language, 
+  "-i", Arg.String set_input_language, 
       "lang   Set the compiler's input language";
   "-l", Arg.String set_output_language, 
       "lang   Set the compiler's output language";
-  "-i", Arg.String append_search_path, 
+  "-I", Arg.String append_search_path, 
       "dir    Include a directory in the module search path";
   "-h", Arg.String set_node_address, 
       "addr   Set the current node address for evaluation";
