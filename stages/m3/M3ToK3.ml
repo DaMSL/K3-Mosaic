@@ -1421,12 +1421,11 @@ let m3_trig_to_k3_trig ?(generate_init = false)
                                   trig_args m3_stmt 
             in 
             print_endline ("KK:"^(KP.string_of_expr k3_stmt));
-            let typed_k3_stmt = 
-              K3Typechecker.deduce_expr_type trig_types
-                                             schema_env
-                                             k3_stmt
-            in
-              (old_stms@[typed_k3_stmt], nm) )
+            (*let typed_k3_stmt = *)
+              (*KT.deduce_expr_type trig_types schema_env k3_stmt*)
+            (*in*)
+              (*(old_stms@[typed_k3_stmt], nm) )*)
+              (old_stms@[k3_stmt], nm) )
          ([],[])
       !(m3_trig.M3.statements) 
    in
