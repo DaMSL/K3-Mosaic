@@ -212,7 +212,7 @@ variableList:
 
 variable: 
 | ID COLON dbtType { ($1, $3) }
-| ID               { ($1, TFloat) }
+| ID               { ($1, TAny) }
 
 functionDefn:
 | LBRACKET ID COLON dbtType RBRACKET LPAREN emptyValueExprList RPAREN

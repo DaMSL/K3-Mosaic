@@ -167,6 +167,9 @@ let numerical_type t =
 
 let arithmetic_return_types ?(expr=None) t1 t2 = 
    begin match (extract_base_type t1), (extract_base_type t2) with
+      | Some(K.TUnknown), _ when numerical_type t2 -> t2
+      | _, Some(K.TUnknown) when numerical_type t1 -> t1
+      
       | Some(K.TBool),  Some(K.TBool) 
       | Some(K.TBool),  Some(K.TInt)
       | Some(K.TInt),   Some(K.TInt)
@@ -1189,7 +1192,12 @@ let rec calc_to_k3_expr meta ?(generate_init = false) theta_vars_k calc :
          rcr (CalcRing.mk_prod( [ Calculus.mk_value (Arithmetic.mk_int(-1));
                                   neg_arg] ))
    end 
-   in
+   in (*
+     print_endline ("Converting: " ^ (Calculus.string_of_expr calc));
+     print_string ("Into: " ^ (KP.string_of_expr k3_expr));
+     print_endline ("Type: " ^ (KP.string_of_type (snd k3_ret_v)));
+     print_endline "\n\n";
+   *)
      (k3_out_el, k3_ret_v, k3_expr), k3_meta
    
 
@@ -1409,10 +1417,9 @@ let m3_trig_to_k3_trig ?(generate_init = false)
                        (m3_trig: M3.trigger_t): 
                        K.declaration_t =
    let trig_args = Schema.event_vars m3_trig.M3.event in
-   let trig_types = List.map (fun (vn,vt) -> 
+(*   let trig_types = List.map (fun (vn,vt) -> 
                                     (vn, K.TValue(m3_type_to_k3_type vt)))
-                             trig_args in
-   print_endline "Hello!";
+                             trig_args in*)
    let k3_trig_stmts, new_meta = 
       List.fold_left 
          (fun (old_stms,om) m3_stmt -> 
@@ -1420,7 +1427,6 @@ let m3_trig_to_k3_trig ?(generate_init = false)
                m3_stmt_to_k3_stmt om ~generate_init:generate_init 
                                   trig_args m3_stmt 
             in 
-            print_endline ("KK:"^(KP.string_of_expr k3_stmt));
             (*let typed_k3_stmt = *)
               (*KT.deduce_expr_type trig_types schema_env k3_stmt*)
             (*in*)
