@@ -183,7 +183,8 @@ let arithmetic_return_types ?(expr=None) t1 t2 =
 
 let escalate_type ?(expr=None) from_t to_t = 
    begin match extract_base_type from_t, extract_base_type to_t with
-      | Some(K.TBool), Some(K.TInt) -> 
+      | Some(K.TBool), Some(K.TInt)
+      | Some(K.TInt),  Some(K.TInt) ->
                       K.TValue(K.TIsolated(K.TImmutable(K.TInt, [])))
       | Some(K.TBool), Some(K.TFloat) 
       | Some(K.TInt),  Some(K.TFloat) 
