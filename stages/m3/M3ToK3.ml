@@ -35,8 +35,8 @@ let m3_type_to_k3_base_type = (function
         KT.canonical K.TInt;
         KT.canonical K.TInt;
       ]
-   | T.TAny             -> K.TUnknown
-   | T.TExternal(ext_t) -> K.TUnknown
+   | T.TAny             -> failwith "Expecting M3 to be fully typed"
+   | T.TExternal(ext_t) -> failwith "External types unsupported"
 )
 
 let var_ids = List.map KU.id_of_var
@@ -167,9 +167,6 @@ let numerical_type t =
 
 let arithmetic_return_types ?(expr=None) t1 t2 = 
    begin match (extract_base_type t1), (extract_base_type t2) with
-      | Some(K.TUnknown), _ when numerical_type t2 -> t2
-      | _, Some(K.TUnknown) when numerical_type t1 -> t1
-      
       | Some(K.TBool),  Some(K.TBool) 
       | Some(K.TBool),  Some(K.TInt)
       | Some(K.TInt),   Some(K.TInt)
@@ -304,10 +301,10 @@ let apply_lambda v_el el body =
    (ie. a mapping from keys to values, no collection with just values 
    are allowed). If [expr] is singleton and lambda_e outputs a tuple the 
    result is wrapped in a Singleton collection. *)
-let apply_lambda_to_expr lambda_e expr =
+let apply_lambda_to_expr lambda_e lambda_t expr =
    let lambda_body = (KU.decompose_lambda (lambda_e)) in
    let lambda_rett = 
-      (mk_k3_type (K.TCollection(K.TBag, mk_k3_type K.TUnknown))) in
+      (mk_k3_type (K.TCollection(K.TBag, mk_k3_type lambda_t))) in
    begin match (KU.arg_of_lambda (lambda_e), 
                 KU.tag_of_expr lambda_body) with
       | ((Some(K.AVar(_))), K.Tuple) -> 
@@ -381,11 +378,11 @@ let external_lambda fn t_l ftype =
 let apply_external_lambda fn te_l ftype =
    failwith "TODO: Add support for external lambdas"
 
-let mk_project ?(id="projected_field") width idx expr =
+let mk_project ?(id="projected_field") width idx ret_t expr =
   let rec build_tuple w =
     if w >= width then []
     else (
-      if w = idx then K.AVar(id, mk_k3_type K.TUnknown)
+      if w = idx then K.AVar(id, mk_k3_type ret_t)
                  else K.AIgnored
     ) :: (build_tuple (w+1))
   in
@@ -398,21 +395,25 @@ let mk_slice collection all_keys bound_keys =
               then KH.mk_var x
               else KH.mk_const K.CUnknown) all_keys)@[KH.mk_const K.CUnknown]))
 
-let mk_lookup collection keys =
+let mk_lookup collection bag_t keys key_types =
+  let coll_type = 
+    (KT.canonical (K.TCollection(K.TBag, 
+      (KT.canonical (K.TTuple(
+        List.map mk_k3_type (key_types@[bag_t])
+      )))
+    )))
+  in
   let wrapped_value = KH.mk_var "wrapped_lookup_value" in
   KH.mk_let (KU.id_of_var wrapped_value)
-            (K3Typechecker.canonical K.TUnknown)
+            coll_type
             (mk_slice collection keys keys)
             (KH.mk_if (
-                KH.mk_eq wrapped_value 
-                         (KH.mk_empty (K3Typechecker.canonical 
-                                        (K.TCollection(K.TBag, 
-                                          K3Typechecker.canonical
-                                            K.TUnknown))))
+                KH.mk_eq wrapped_value (KH.mk_empty coll_type)
               ) (
                 KH.mk_const (K.CInt(0))
               ) (
-                mk_project ((List.length keys)+1) (List.length keys) 
+                mk_project ((List.length keys)+1) (List.length keys)
+                           bag_t 
                            (KH.mk_peek wrapped_value)
               )
             )
@@ -422,11 +423,11 @@ let mk_test_member collection keys key_types val_type =
                                             [KH.mk_const K.CUnknown]))
                    (KH.wrap_ttuple_mut (key_types @ [val_type]))
 
-let mk_arg x = K.AVar(x, K3Typechecker.canonical K.TUnknown);;
+let mk_arg x xt = K.AVar(x, K3Typechecker.canonical xt);;
 
-let mk_tuple_arg keys v = K.ATuple( (List.map mk_arg keys) @ [mk_arg v] );;
+let mk_tuple_arg keys keys_tl v vt = K.ATuple( (List.map2 mk_arg keys keys_tl) @ [mk_arg v vt] );;
 
-let mk_lambda keys v body = KH.mk_lambda (mk_tuple_arg keys v) body;;
+let mk_lambda keys keys_tl v vt body = KH.mk_lambda (mk_tuple_arg keys keys_tl v vt) body;;
 
 let mk_var_tuple keys v = KH.mk_tuple (List.map KH.mk_var (keys@[v]));;
 
@@ -434,7 +435,7 @@ let mk_val_tuple keys v = KH.mk_tuple ((List.map KH.mk_var keys)@[v]);;
 
 let mk_iter = KH.mk_map
 
-let mk_update collection ivars ovars new_val =
+let mk_update collection bag_t ivars ivar_t ovars ovar_t new_val =
   (* new_val might (and in fact, usually will) depend on the collection, so 
      we need to evaluate it and save it to a variable before clearing the
      existing elements out of the collection *)
@@ -449,7 +450,7 @@ let mk_update collection ivars ovars new_val =
       else
         KH.mk_block [
           mk_iter
-            (mk_lambda ovars "value" (
+            (mk_lambda ovars ovar_t "value" bag_t (
               KH.mk_delete collection (mk_var_tuple ovars "value")
             ))
             (mk_slice collection ovars ovars);
@@ -459,7 +460,7 @@ let mk_update collection ivars ovars new_val =
       if ovars = [] then
         KH.mk_block [
           mk_iter
-            (mk_lambda ivars "value" (
+            (mk_lambda ivars ivar_t "value" bag_t (
               KH.mk_delete collection (mk_var_tuple ivars "value")
             ))
             (mk_slice collection ivars ivars);
@@ -468,7 +469,7 @@ let mk_update collection ivars ovars new_val =
       else
         failwith "FullPC unsupported"
   in
-    KH.mk_apply (KH.mk_lambda (mk_arg (KU.id_of_var new_val_var)) update_block)
+    KH.mk_apply (KH.mk_lambda (mk_arg (KU.id_of_var new_val_var) bag_t) update_block)
                 (new_val)
 
 (**********************************************************************)
@@ -582,7 +583,8 @@ let map_access_to_expr mapn ins outs map_ret_t theta_vars_k init_expr_opt =
         | ([], y) ->       
             let map_expr = KH.mk_var mapn in
             if free_vars_k = [] then 
-               if init_expr_opt = None then mk_lookup map_expr outs_k
+               if init_expr_opt = None 
+               then mk_lookup map_expr (KT.base_of map_ret_kt) outs_k outs_tl
                else 
                   let _,init_expr = extract_opt init_expr_opt in
                     KH.mk_if (mk_test_member map_expr outs_k 
@@ -590,14 +592,14 @@ let map_access_to_expr mapn ins outs map_ret_t theta_vars_k init_expr_opt =
                                                                    ~m:true)
                                                        outs_tl)
                                              map_ret_kt)
-                             (mk_lookup map_expr outs_k)
+                             (mk_lookup map_expr (KT.base_of map_ret_kt) outs_k outs_tl)
                              init_expr
             else
                slice_and_project map_expr
                      
         | ( x,[]) -> 
             let map_expr = KH.mk_var mapn in
-            if init_expr_opt = None then mk_lookup map_expr outs_k
+            if init_expr_opt = None then mk_lookup map_expr (KT.base_of map_ret_kt) outs_k outs_tl
             else 
                let iv_e = KH.mk_var (gen_init_val_sym ()) in
                let _,init_expr = extract_opt init_expr_opt in   
@@ -606,7 +608,7 @@ let map_access_to_expr mapn ins outs map_ret_t theta_vars_k init_expr_opt =
                                                               ~m:true)
                                                   ins_tl)
                                         map_ret_kt)
-                        (mk_lookup map_expr ins_k)
+                        (mk_lookup map_expr (KT.base_of map_out_t) ins_k ins_tl)
                         (apply_lambda [KU.id_of_var iv_e, map_ret_kt] 
                                       [init_expr] iv_e)
                                  
@@ -615,14 +617,14 @@ let map_access_to_expr mapn ins outs map_ret_t theta_vars_k init_expr_opt =
                                     
             let out_access_expr coll_ve =   
                if free_vars_k = [] then  
-                  (mk_lookup coll_ve outs_k)
+                  (mk_lookup coll_ve (KT.base_of map_ret_kt) outs_k outs_tl)
                else
                   slice_and_project coll_ve
             in
             
             if init_expr_opt = None then 
                apply_lambda [KU.id_of_var map_out_ve, map_out_t] 
-                            [mk_lookup map_expr ins_k]
+                            [mk_lookup map_expr (KT.base_of map_out_t) ins_k ins_tl]
                             (out_access_expr map_out_ve)
             else 
                let init_outs_el,ie = extract_opt init_expr_opt in
@@ -644,7 +646,7 @@ let map_access_to_expr mapn ins outs map_ret_t theta_vars_k init_expr_opt =
                             ) ie
                      ),(
                                KH.mk_block [ 
-                                  mk_update map_expr ins_k [] iv_e;
+                                  mk_update map_expr (KT.base_of map_ret_kt) ins_k ins_tl [] [] iv_e;
                                   out_access_expr iv_e
                                ]
                             )
@@ -664,7 +666,7 @@ let map_access_to_expr mapn ins outs map_ret_t theta_vars_k init_expr_opt =
                                                      ins_tl)
                                            (map_out_t))
                            (apply_lambda [KU.id_of_var map_out_ve, map_out_t]
-                                         [mk_lookup map_expr ins_k]
+                                         [mk_lookup map_expr (KT.base_of map_out_t) ins_k ins_tl]
                                          (out_access_expr map_out_ve))
                            (apply_lambda [KU.id_of_var iv_e, map_out_t]
                                          [init_expr]
@@ -1014,7 +1016,7 @@ let rec calc_to_k3_expr meta ?(generate_init = false) theta_vars_k calc :
                                 [KU.id_of_var (fst lift_ret_ve),
                                 (snd lift_ret_ve)])) lift_body
             in
-            let expr = apply_lambda_to_expr lift_lambda lift_e   
+            let expr = apply_lambda_to_expr lift_lambda K.TInt lift_e   
             in   
                ((lift_outs_el@extra_ve, (ret_ve,K.TValue(KH.t_int)), expr), nm)
             
@@ -1037,7 +1039,7 @@ let rec calc_to_k3_expr meta ?(generate_init = false) theta_vars_k calc :
                                      (snd exists_ret_ve)]))
                          exists_body
             in
-            let expr = apply_lambda_to_expr exists_lambda exists_e in   
+            let expr = apply_lambda_to_expr exists_lambda K.TInt exists_e in   
                ((exists_outs_el, (ret_ve, K.TValue(KH.t_int)), expr), nm)
             
          (***** END EXISTS HACK *****)
@@ -1295,10 +1297,10 @@ let m3_stmt_to_k3_stmt (meta: meta_t) ?(generate_init = false)
                               (var_ids lhs_outs_el)
                               (List.map mk_k3_type lhs_outs_kt)
                               (mk_k3_type map_k3_type))
-              (mk_lookup existing_out_tier (var_ids lhs_outs_el))
+              (mk_lookup existing_out_tier map_k3_type (var_ids lhs_outs_el) lhs_outs_kt)
               (extract_opt init_expr_opt)
          else 
-           (mk_lookup existing_out_tier (var_ids lhs_outs_el))
+           (mk_lookup existing_out_tier map_k3_type (var_ids lhs_outs_el) lhs_outs_kt)
    in
    
    (* Translate the rhs calculus expression into a k3 expression and its *)
@@ -1343,7 +1345,7 @@ let m3_stmt_to_k3_stmt (meta: meta_t) ?(generate_init = false)
    (* the lhs_collection accordingly. *)
    let coll_update_expr =   
       let single_update_expr = 
-        mk_update lhs_collection (var_ids lhs_ins_el) (var_ids lhs_outs_el) 
+        mk_update lhs_collection map_k3_type (var_ids lhs_ins_el) (lhs_ins_kt) (var_ids lhs_outs_el) lhs_outs_kt 
                   (KH.mk_add existing_v rhs_ret_ve)
       in
       let inner_loop_body = 
