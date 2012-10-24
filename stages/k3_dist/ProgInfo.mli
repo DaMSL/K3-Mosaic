@@ -8,6 +8,7 @@ exception Bad_data of string
 (* Data structure describing the original K3 program *)
 type stmt_id_t = int
 type trig_id_t = int
+type trig_name_t = string
 type map_id_t = int
 type map_var_binding_t = id_t * int
 type stmt_data_t =
@@ -19,19 +20,20 @@ type map_data_t = map_id_t * string * value_type_t list
 type prog_data_t = trig_data_t list * stmt_data_t list * map_data_t list
 
 (* Utility functions using this data structure *)
-val get_trig_list : prog_data_t -> string list
+val get_trig_list : prog_data_t -> trig_name_t list
+val map_all_trigs : prog_data_t -> (trig_name_t -> 'a) -> 'a list
 val get_stmt_list : prog_data_t -> stmt_id_t list
 val get_map_list : prog_data_t -> map_id_t list
-val find_trigger : prog_data_t -> string -> trig_data_t
+val find_trigger : prog_data_t -> trig_name_t -> trig_data_t
 val find_map : prog_data_t -> map_id_t -> map_data_t
 val find_stmt : prog_data_t -> stmt_id_t -> stmt_data_t
-val trigger_id_for_name : prog_data_t -> string -> trig_id_t
-val args_of_t : prog_data_t -> string -> (id_t * value_type_t) list
+val trigger_id_for_name : prog_data_t -> trig_name_t -> trig_id_t
+val args_of_t : prog_data_t -> trig_name_t -> (id_t * value_type_t) list
 val s_and_over_stmts_in_t :
   prog_data_t ->
-  (prog_data_t -> stmt_id_t -> 'a list) -> string -> (stmt_id_t * 'a) list
+  (prog_data_t -> stmt_id_t -> 'a list) -> trig_name_t -> (stmt_id_t * 'a) list
 val stmt_has_rhs_map : prog_data_t -> stmt_id_t -> map_id_t -> bool
-val stmts_without_rhs_maps_in_t : prog_data_t -> string -> stmt_id_t list
+val stmts_without_rhs_maps_in_t : prog_data_t -> trig_name_t -> stmt_id_t list
 val rhs_maps_of_stmt : prog_data_t -> stmt_id_t -> map_id_t list
 val lhs_map_of_stmt : prog_data_t -> stmt_id_t -> map_id_t
 val rhs_lhs_of_stmt : prog_data_t -> stmt_id_t -> (map_id_t * map_id_t) list
@@ -49,7 +51,7 @@ val map_types_with_v_for : prog_data_t -> map_id_t -> value_type_t list
 (* because we add the vid first, we need to modify the numbering of arguments in
 * the key. It's easier to control this in one place *)
 val adjust_key_id_for_v : int -> int
-val stmts_of_t : prog_data_t -> string -> stmt_id_t list
+val stmts_of_t : prog_data_t -> trig_name_t -> stmt_id_t list
 val trigger_of_stmt : prog_data_t -> stmt_id_t -> trig_id_t
 
 (* returns a k3 list of maybes that has the relevant map pattern *)

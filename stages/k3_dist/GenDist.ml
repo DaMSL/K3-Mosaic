@@ -1,15 +1,5 @@
 (* Functions that take K3 code and generate distributed K3 code *)
 
-(* Basic types *
- * map_id is an int referring to a specific map
- * map_name is another way to refer to a map
- * stmt_id is a unique id:int for each statement in the program
- * trig_name is the name of a trigger and is what we usually use to refer to
- *   triggers.
- * trigger_id is a unique id:int for each trigger. We need it only inside K3
- *   code for efficiency. 
- *)
-
 (* Assumptions:
  * We assume a rhs map can only occur once per statement 
  *)
@@ -69,7 +59,6 @@ let do_corrective_name_of_t p trig_nm stmt_id map_id =
   trig_nm^"_do_corrective_s"^string_of_int stmt_id^"_"^map_name_of p map_id
 
 (* foreign function names *)
-(* note: most buffer and storage functions are done using native accesses *)
 let log_write_for p trig_nm = "log_write_"^trig_nm (* varies with bound *)
 let log_get_bound_for p trig_nm = "log_get_bound_"^trig_nm 
 let log_read_geq = "log_read_geq" (* takes vid, returns (trig, vid)list >= vid *)
@@ -80,26 +69,6 @@ let add_delta_to_buffer_for_map p map_id =
   "add_delta_to_buffer_"^map_name_of p map_id
 
 let declare_foreign_functions p =
-  (* args@vid -> () *)
-  let log_write_foreign p trig = mk_foreign_fn 
-    (log_write_for p trig) 
-    (wrap_ttuple @: extract_arg_types @: args_of_t_with_v p trig)
-    (canonical TUnit)
-  in
-    (* get the bound variables for a trigger in the log *)
-  let log_get_bound_foreign p trig = mk_foreign_fn
-    (log_get_bound_for p trig) t_vid 
-    (wrap_ttuple @: extract_arg_types @: args_of_t p trig)
-  in
-    (* shows list of triggers >= vid *)
-  let log_read_geq_foreign = mk_foreign_fn
-    log_read_geq t_vid (wrap_tlist @: wrap_ttuple [t_vid; t_trig_id])
-  in
-  let trig_related = 
-    List.flatten @: List.map
-      (fun trig -> log_write_foreign p trig:: log_get_bound_foreign p trig:: [])
-      (get_trig_list p)
-  in
   (* function to add delta tuples to a map *)
   (* NOTE: currently we assume vid is not in the tuples *)
   let add_delta_foreign p map_id = mk_foreign_fn
@@ -110,7 +79,7 @@ let declare_foreign_functions p =
   let map_related =
     (List.map (fun map -> add_delta_foreign p map) (get_map_list p))
   in
-  log_read_geq_foreign::trig_related@map_related
+  map_related
 
 
 (* global data structures ---- *)
@@ -122,36 +91,92 @@ let stmt_cntrs = mk_var stmt_cntrs_name
 let loopback_name = "loopback"
 let loopback = mk_var loopback_name (* for type checking *)
 
+(* names for log *)
+let log_for_t t = "log_"^t
+let log_master = "log__master"
+
 let declare_global_vars p =
+  (* stmt counters, used to make sure we've received all msgs *)
   let stmt_cntrs_type = wrap_tlist_mut @: wrap_ttuple_mut 
       [t_vid_mut; t_int_mut; t_int_mut] in
   let stmt_cntrs_code = mk_global_val stmt_cntrs_name stmt_cntrs_type in
+  (* loopback address of the local node *)
   let loopback_code = mk_global_val loopback_name (canonical TAddress) in
+  (* global maps with vids *)
   let global_maps = 
     let global_map_code_for map_id = mk_global_val
       (map_name_of p map_id)
       (wrap_tlist @: wrap_ttuple @: map_types_with_v_for p map_id)
-    in
-    List.map global_map_code_for (get_map_list p)
+    in 
+    List.map global_map_code_for @: get_map_list p in
+  (* structures used for logs *)
+  let log_structs_code =
+    let log_master_code = mk_global_val
+      log_master @:
+      wrap_tset @: wrap_ttuple [t_vid; t_trig_id] in
+    let log_struct_code_for t = mk_global_val
+      (log_for_t t) @:
+      wrap_tset @: wrap_ttuple @: extract_arg_types @: args_of_t_with_v p t
+    in 
+    let log_structs = map_all_trigs p log_struct_code_for in
+    log_master_code::log_structs
   in
   loopback_code:: 
   stmt_cntrs_code:: 
-  global_maps
+  global_maps@
+  log_structs_code
 
-let declare_global_funcs p = gen_shuffle_route_code p
+(* global functions *)
+(* most of our global functions come from the shuffle/route code *)
+let declare_global_funcs p = 
+  (* log_write *)
+  let log_write_code t = mk_global_fn 
+    (log_write_for p t)
+    (args_of_t_with_v p t)
+    [t_unit] @:
+    mk_block
+      [mk_insert (mk_var log_master) @: (* write to master log *)
+        mk_tuple [mk_var "vid"; mk_const @: CInt (trigger_id_for_name p t)]
+      ;
+      mk_insert (mk_var @: log_for_t t) @: (* write to trigger_specific log *)
+        mk_tuple @: args_of_t_as_vars_with_v p t
+      ]
+  in
+  (* log_get_bound -- necessary since each trigger has different args *)
+  let log_get_bound_code t = 
+    let pat_tuple = args_of_t_with_v p t in
+    let pat_unknown = List.map (fun (id,_) -> match id with
+                                  | "vid" -> mk_var "vid"
+                                  | _     -> mk_const CUnknown
+                               ) pat_tuple
+    in mk_global_fn
+      (log_get_bound_for p t)
+      ["vid", t_vid]
+      (arg_types_of_t_with_v p t) @:
+      mk_peek @: mk_slice (mk_var @: log_for_t t) @: mk_tuple pat_unknown
+  in
+  (* log_read_geq -- get list of (t,vid) >= vid *)
+  let log_read_geq_code = mk_global_fn
+    log_read_geq
+    ["vid", t_vid]
+    [wrap_tset @: wrap_ttuple [t_vid; t_trig_id]] @:
+    mk_filtermap
+      (mk_lambda 
+        (wrap_args ["vid2", t_vid; "trig", t_trig_id]) @:
+        mk_geq (mk_var "vid2") @: mk_var "vid"
+      )
+      (mk_lambda
+        (wrap_args ["vid2", t_vid; "trig", t_trig_id]) @:
+        mk_tuple [mk_var "vid2"; mk_var "trig"]
+      ) @:
+      mk_var log_master
+  in
+  log_read_geq_code ::
+  map_all_trigs p log_write_code @
+  map_all_trigs p log_get_bound_code @
+  gen_shuffle_route_code p
 
-(* Just so we can typecheck, we make all of these K3 functions foreign for now
- *)
-
-(* k3 functions needed *)
-(*
-"peer_list" : (TInt * TAddress) list
-"route_to_map_"^map_id returns ip
-"shuffle_map_"^map_id^"_to_map_"map_id takes maybe tuples and a pattern maybe
-  tuple and returns a tuple
-"trig_for_send_push": takes stmt_id, map_id and returns addr of send_push
-  trigger
- *)
+(* ---- start of protocol code ---- *)
 
 let send_fetch_trig p trig_name =
   let send_fetches_of_rhs_maps  =
@@ -337,7 +362,7 @@ let rcv_fetch_trig p trig =
         (mk_var @: log_write_for p trig) @:
         mk_tuple @: args_of_t_as_vars_with_v p trig
       ;
-      (* invoke generated send pushes. *)
+      (* invoke generated send pushes.$ *)
       mk_iter
         (mk_lambda
           (wrap_args ["stmt_id", t_stmt_id; "map_id", t_map_id]) @:
@@ -571,10 +596,9 @@ let trigs_stmts_with_rhs_map =
     List.filter
       (fun (trig, stmt_id) -> stmt_has_rhs_map p stmt_id map_id) @:
       List.flatten @:
-        List.map
+        map_all_trigs p 
           (fun trig -> 
-            List.map (fun stmt -> (trig, stmt)) @: stmts_of_t p trig) @:
-          get_trig_list p
+            List.map (fun stmt -> (trig, stmt)) @: stmts_of_t p trig)
 in
 (* predefined K3 list of stmts with rhs maps *)
 let trig_stmt_k3_list = 
@@ -632,7 +656,7 @@ match trigs_stmts_with_rhs_map with [] -> [] | _ ->
                   ) @:
                   (* get bound vars from log *)
                   mk_let_many 
-                    (args_of_t p target_trig)
+                    (args_of_t_with_v p target_trig)
                     (mk_apply 
                       (mk_var @: log_get_bound_for p target_trig) @:
                       mk_var "vid"
@@ -757,7 +781,7 @@ List.map
             )
             (* get bound vars from log *)
             (mk_let_many 
-              (args_of_t p trig_name)
+              (args_of_t_with_v p trig_name)
               (mk_apply 
                 (mk_var @: log_get_bound_for p trig_name)
                 (mk_var "vid")
@@ -817,14 +841,11 @@ let gen_dist_for_t p trig =
 let gen_dist p ast =
   (* because this uses state, need it initialized here *)
   let global_funcs = declare_global_funcs p in (* init shuffles *)
-  let triggers = get_trig_list p in
   let regular_trigs = List.flatten @:
-    List.map
-      (fun trig -> gen_dist_for_t p trig)
-      triggers
+    map_all_trigs p (fun t -> gen_dist_for_t p t)
   in
-  global_funcs @ (* maybe make this not order-dependent *)
   declare_global_vars p @
+  global_funcs @ (* maybe make this not order-dependent *)
   declare_foreign_functions p @
   filter_corrective_list ::  (* global func *)
   regular_trigs@

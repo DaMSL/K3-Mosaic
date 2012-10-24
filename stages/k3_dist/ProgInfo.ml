@@ -7,6 +7,7 @@ exception Bad_data of string;;
 (* data structure needed after extraction from the k3 program *)
 type stmt_id_t = int
 type trig_id_t = int
+type trig_name_t = string
 type map_id_t = int
 (* id, position in map's args *)
 type map_var_binding_t = id_t * int 
@@ -41,6 +42,9 @@ let get_trig_list (p:prog_data_t) =
   List.map
   (fun (_, name, _, _) -> name)
   (get_trig_data p)
+
+let map_all_trigs (p:prog_data_t) f =
+  List.map (fun t -> f t) @: get_trig_list p
 
 let get_stmt_list (p:prog_data_t) =
     List.map
