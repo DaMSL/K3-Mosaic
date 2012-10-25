@@ -433,7 +433,7 @@ let mk_var_tuple keys v = KH.mk_tuple (List.map KH.mk_var (keys@[v]));;
 
 let mk_val_tuple keys v = KH.mk_tuple ((List.map KH.mk_var keys)@[v]);;
 
-let mk_iter = KH.mk_map
+let mk_iter = KH.mk_iter
 
 let mk_update collection bag_t ivars ivar_t ovars ovar_t new_val =
   (* new_val might (and in fact, usually will) depend on the collection, so 
@@ -1417,7 +1417,8 @@ let m3_stmt_to_k3_stmt (meta: meta_t) ?(generate_init = false)
 let m3_trig_to_k3_trig ?(generate_init = false) 
                        (schema_env:(K.id_t * K.type_t) list)
                        (m3_trig: M3.trigger_t): 
-                       K.declaration_t =
+                       K.declaration_t list =
+   if !(m3_trig.M3.statements) = [] then [] else
    let trig_args = Schema.event_vars m3_trig.M3.event in
 (*   let trig_types = List.map (fun (vn,vt) -> 
                                     (vn, K.TValue(m3_type_to_k3_type vt)))
@@ -1437,14 +1438,14 @@ let m3_trig_to_k3_trig ?(generate_init = false)
          ([],[])
       !(m3_trig.M3.statements) 
    in
-    (K.Trigger(
+    [K.Trigger(
       Schema.name_of_event m3_trig.M3.event,
       (K.ATuple(
         List.map (fun (vn,vt) -> K.AVar(vn, m3_type_to_k3_type vt)) trig_args
       )),
       [],
       KH.mk_block k3_trig_stmts
-    ))
+    )]
 
 (**[m3_to_k3 generate_init m3_program]
 
@@ -1464,8 +1465,10 @@ let m3_to_k3 ?(generate_init = false) (m3_program: M3.prog_t): (K.program_t) =
     ) k3_prog_schema
   in
   let k3_prog_trigs = 
+     List.flatten (
         List.map (m3_trig_to_k3_trig ~generate_init:generate_init k3_prog_env)
                  !m3_prog_trigs
+     )
   in
   let _  = List.map (fun (qname,qexpr) -> 
                         match qexpr with 
