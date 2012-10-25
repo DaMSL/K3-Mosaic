@@ -19,6 +19,16 @@ type trig_data_t =
 type map_data_t = map_id_t * string * value_type_t list
 type prog_data_t = trig_data_t list * stmt_data_t list * map_data_t list
 
+(* Stringification *)
+val string_of_binding: map_var_binding_t -> string
+val string_of_bindings: map_var_binding_t list -> string
+val string_of_map: (map_id_t * map_var_binding_t list) -> string
+
+val string_of_map_data: map_data_t -> string
+val string_of_stmt_data: stmt_data_t -> string
+val string_of_trig_data: trig_data_t -> string
+val string_of_prog_data: prog_data_t -> string 
+
 (* Utility functions using this data structure *)
 val get_trig_list : prog_data_t -> trig_name_t list
 val map_all_trigs : prog_data_t -> (trig_name_t -> 'a) -> 'a list

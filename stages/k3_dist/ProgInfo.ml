@@ -1,6 +1,7 @@
 open Util
 open K3.AST
 open K3Helpers
+open K3Printing
 
 exception Bad_data of string;;
 
@@ -26,7 +27,42 @@ type map_data_t = map_id_t * string * value_type_t list
 
 type prog_data_t = trig_data_t list * stmt_data_t list * map_data_t list
 
+let string_of_var (vn, vt) = vn^":"^(string_of_value_type vt)
 
+let string_of_binding (vn, idx) = vn^":"^(string_of_int idx)
+let string_of_bindings bl = 
+  (String.concat ", " (List.map string_of_binding bl))
+let string_of_map (map, bl) = 
+  (string_of_int map) ^ "[" ^ (string_of_bindings bl) ^ "]"
+
+let string_of_map_data ((map_id, map_name, tl):map_data_t):string =
+  map_name ^ "(" ^ (string_of_int map_id) ^ ")[" ^
+  (String.concat ", " (List.map string_of_value_type tl))^"]"
+
+
+let string_of_stmt_data ((stmt_id, trig_id, lhs_map, lhs_map_binding, 
+                         rhs_maps_with_bindings):stmt_data_t):string =
+  ( (string_of_int trig_id)^"::"^(string_of_int stmt_id)^" : "^
+    (string_of_map (lhs_map, lhs_map_binding))^" <<== "^
+    (String.concat "; " (List.map string_of_map rhs_maps_with_bindings))
+  )
+
+let string_of_trig_data ((trig_id, name, bound_args, stmts):trig_data_t):string=
+  ( name^"("^(string_of_int trig_id)^") ["^
+    (String.concat ", " (List.map string_of_var bound_args))^
+    "] : "^
+    (String.concat ", " (List.map string_of_int stmts))
+  )
+
+let string_of_prog_data ((trig_data, stmt_data, map_data):prog_data_t): string = 
+  ( "--- Triggers ---\n"^
+    (String.concat "\n" (List.map string_of_trig_data trig_data))^
+    "\n\n--- Statements ---\n"^
+    (String.concat "\n" (List.map string_of_stmt_data stmt_data))^
+    "\n\n--- Maps ---\n"^
+    (String.concat "\n" (List.map string_of_map_data map_data))^
+    "\n" )
+    
 
 (* --- helper functions to get information from the data structure --- *)
 let get_trig_data (p:prog_data_t) = match p with

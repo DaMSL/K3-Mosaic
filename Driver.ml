@@ -253,7 +253,13 @@ let print_k3_dist_prog (p, m) = match m with
   | None -> error "Cannot construct distributed K3 without ProgInfo metadata"
   | Some meta ->
   let tp = typed_program p in
-  let dist = GenDist.gen_dist meta tp in
+  let dist = try 
+      GenDist.gen_dist meta tp
+    with Invalid_argument(msg) -> 
+      print_endline ("ERROR: " ^msg);
+      print_endline (ProgInfo.string_of_prog_data meta);
+      exit (-1)
+  in
   let dist_tp = typed_program dist in
   let event_loops, default = roles_of_program dist_tp in 
     print_endline (string_of_program tp);
