@@ -5,7 +5,7 @@ let translate_vars = List.map (fun (x, t) -> (x, M3ToK3.m3_type_to_k3_type t))
 let translate_external (map_id:string -> map_id_t) (mapn, iv, ov, mt, _) = 
   let i = ref (-1) in
     (map_id mapn, List.map (fun (x,_) -> i := !i + 1; (x, !i)) 
-                  (iv @ ov (*@ ["value", M3Type.TInt]*)))
+                  (iv @ ov @ ["value", M3Type.TInt]))
 
 let rec get_externals expr = 
   Calculus.CalcRing.fold (List.flatten) (List.flatten) (fun x->x) (function 
