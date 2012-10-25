@@ -2,19 +2,21 @@ open ProgInfo
 
 let translate_vars = List.map (fun (x, t) -> (x, M3ToK3.m3_type_to_k3_type t))
 
-let translate_external (map_id:string -> map_id_t) (mapn, iv, ov, _, _) = 
+let translate_external (map_id:string -> map_id_t) (mapn, iv, ov, mt, _) = 
   let i = ref (-1) in
-    (map_id mapn, List.map (fun (x,_) -> i := !i + 1; (x, !i)) (iv @ ov))
+    (map_id mapn, List.map (fun (x,_) -> i := !i + 1; (x, !i)) 
+                  (iv @ ov (*@ ["value", M3Type.TInt]*)))
 
 let rec get_externals expr = 
   Calculus.CalcRing.fold (List.flatten) (List.flatten) (fun x->x) (function 
     | Calculus.Value _
-    | Calculus.Rel _
     | Calculus.Cmp _ -> []
        
     | Calculus.AggSum(_, subexp)
     | Calculus.Lift(_, subexp)
     | Calculus.Exists(subexp) -> get_externals subexp
+    
+    | Calculus.Rel(rn, rv) -> [rn, [], rv, M3Type.TInt, None]
     
     | Calculus.External(edata) -> [edata]
   ) expr
@@ -25,10 +27,10 @@ let prog_data_of_m3 (prog:M3.prog_t): prog_data_t =
       let (map_name, map_vars) = begin match map with 
         | M3.DSView({Plan.ds_name = name}) ->
           ( List.hd (Calculus.externals_of_expr name), 
-            Calculus.all_vars name )
+            (Calculus.all_vars name)@["value", Calculus.type_of_expr name] )
         
         | M3.DSTable(name, vars, _) ->
-          ( name, vars )
+          ( name, vars@["value", M3Type.TInt] )
       end in
         ( i - 1, 
           ( (i, map_name, List.map snd (translate_vars map_vars))::map_data,
@@ -45,6 +47,7 @@ let prog_data_of_m3 (prog:M3.prog_t): prog_data_t =
   let (trig_data, stmt_data) = 
     List.fold_left (fun (trig_data, stmt_data) 
                         ({M3.event = event; M3.statements = stmts}) ->
+      if !stmts = [] then (trig_data, stmt_data) else
       let trig_id = List.length trig_data in
       let first_stmt_id = List.length stmt_data in
       let (_, new_stmt_data, trig_stmts) = 
