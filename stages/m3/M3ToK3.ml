@@ -221,6 +221,16 @@ let m3_const_to_k3_const c =
                                           KH.mk_const (K.CInt(m));
                                           KH.mk_const (K.CInt(d)) ]
   end
+
+let zero_of_type t =
+  begin match t with
+    | K.TInt   -> (K.CInt(0))
+    | K.TFloat -> (K.CFloat(0.))
+    | _ -> failwith ("Can not generate zero for type: "^
+                        (KP.string_of_base_type t))
+  end
+    
+  
   
 let extract_opt opt =  
    begin match opt with
@@ -410,7 +420,7 @@ let mk_lookup collection bag_t keys key_types =
             (KH.mk_if (
                 KH.mk_eq wrapped_value (KH.mk_empty coll_type)
               ) (
-                KH.mk_const (K.CInt(0))
+                KH.mk_const (zero_of_type bag_t)
               ) (
                 mk_project ((List.length keys)+1) (List.length keys)
                            bag_t 
@@ -810,7 +820,7 @@ let rec calc_to_k3_expr meta ?(generate_init = false) theta_vars_k calc :
    
    let cmp_fn op_fn c1 c2 =
       let ((ret1_t, e1),(ret2_t, e2)) = pair_map value_to_k3_expr (c1,c2) in
-      let out_type = K.TValue(mk_k3_type K.TInt) in
+      let out_type = K.TValue(KT.canonical K.TInt) in
       let correct_type = escalate_expr out_type in
       if not (compatible_types ret1_t ret2_t) then
          error ("M3ToK3: Error: Incompatible argument types for " ^
