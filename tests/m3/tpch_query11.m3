@@ -110,7 +110,7 @@ DECLARE QUERY QUERY11 := QUERY11(float)[][P_PARTKEY:int];
 
 ------------------- TRIGGERS --------------------
 ON + SUPPLIER(SUPPLIER_SUPPKEY:int, SUPPLIER_NAME:string, SUPPLIER_ADDRESS:string, SUPPLIER_NATIONKEY:int, SUPPLIER_PHONE:string, SUPPLIER_ACCTBAL:float, SUPPLIER_COMMENT:string) {
-   QUERY11(float)[][P_PARTKEY:int]:((Exists(QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) |><| AggSum([P_PARTKEY:int],(((P_VALUE:float ^= QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) |><| (__sql_inline_agg_1:float ^= (QUERY11_mPARTSUPP1_L1_1(float)[][] |><| 0.001)) |><| {P_VALUE:float > __sql_inline_agg_1:float} |><| P_VALUE:float))))) += 
+   QUERY11(float)[][P_PARTKEY:int]:((Exists(QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) * AggSum([P_PARTKEY:int],(((P_VALUE:float ^= QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) * (__sql_inline_agg_1:float ^= (QUERY11_mPARTSUPP1_L1_1(float)[][] * 0.001)) * {P_VALUE:float > __sql_inline_agg_1:float} * P_VALUE:float))))) += 
   ((EXISTS(
     (QUERY11_mPARTSUPP1_E2_1[][P_PARTKEY:int] +
       (QUERY11_mSUPPLIER1_E2_2(int)[][SUPPLIER_NATIONKEY:int] *
@@ -170,7 +170,7 @@ ON + SUPPLIER(SUPPLIER_SUPPKEY:int, SUPPLIER_NAME:string, SUPPLIER_ADDRESS:strin
 }
 
 ON - SUPPLIER(SUPPLIER_SUPPKEY:int, SUPPLIER_NAME:string, SUPPLIER_ADDRESS:string, SUPPLIER_NATIONKEY:int, SUPPLIER_PHONE:string, SUPPLIER_ACCTBAL:float, SUPPLIER_COMMENT:string) {
-   QUERY11(float)[][P_PARTKEY:int]:((Exists(QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) |><| AggSum([P_PARTKEY:int],(((P_VALUE:float ^= QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) |><| (__sql_inline_agg_1:float ^= (QUERY11_mPARTSUPP1_L1_1(float)[][] |><| 0.001)) |><| {P_VALUE:float > __sql_inline_agg_1:float} |><| P_VALUE:float))))) += 
+   QUERY11(float)[][P_PARTKEY:int]:((Exists(QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) * AggSum([P_PARTKEY:int],(((P_VALUE:float ^= QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) * (__sql_inline_agg_1:float ^= (QUERY11_mPARTSUPP1_L1_1(float)[][] * 0.001)) * {P_VALUE:float > __sql_inline_agg_1:float} * P_VALUE:float))))) += 
   ((EXISTS(
     (QUERY11_mPARTSUPP1_E2_1[][P_PARTKEY:int] +
       (QUERY11_mSUPPLIER1_E2_2(int)[][SUPPLIER_NATIONKEY:int] *
@@ -233,7 +233,7 @@ ON - SUPPLIER(SUPPLIER_SUPPKEY:int, SUPPLIER_NAME:string, SUPPLIER_ADDRESS:strin
 }
 
 ON + PARTSUPP(PARTSUPP_PARTKEY:int, PARTSUPP_SUPPKEY:int, PARTSUPP_AVAILQTY:int, PARTSUPP_SUPPLYCOST:float, PARTSUPP_COMMENT:string) {
-   QUERY11(float)[][P_PARTKEY:int]:((Exists(QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) |><| AggSum([P_PARTKEY:int],(((P_VALUE:float ^= QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) |><| (__sql_inline_agg_1:float ^= (QUERY11_mPARTSUPP1_L1_1(float)[][] |><| 0.001)) |><| {P_VALUE:float > __sql_inline_agg_1:float} |><| P_VALUE:float))))) += 
+   QUERY11(float)[][P_PARTKEY:int]:((Exists(QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) * AggSum([P_PARTKEY:int],(((P_VALUE:float ^= QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) * (__sql_inline_agg_1:float ^= (QUERY11_mPARTSUPP1_L1_1(float)[][] * 0.001)) * {P_VALUE:float > __sql_inline_agg_1:float} * P_VALUE:float))))) += 
   ((EXISTS(
     (QUERY11_mPARTSUPP1_E2_1[][P_PARTKEY:int] +
       ((P_PARTKEY:int ^= PARTSUPP_PARTKEY:int) *
@@ -298,7 +298,7 @@ ON + PARTSUPP(PARTSUPP_PARTKEY:int, PARTSUPP_SUPPKEY:int, PARTSUPP_AVAILQTY:int,
 }
 
 ON - PARTSUPP(PARTSUPP_PARTKEY:int, PARTSUPP_SUPPKEY:int, PARTSUPP_AVAILQTY:int, PARTSUPP_SUPPLYCOST:float, PARTSUPP_COMMENT:string) {
-   QUERY11(float)[][P_PARTKEY:int]:((Exists(QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) |><| AggSum([P_PARTKEY:int],(((P_VALUE:float ^= QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) |><| (__sql_inline_agg_1:float ^= (QUERY11_mPARTSUPP1_L1_1(float)[][] |><| 0.001)) |><| {P_VALUE:float > __sql_inline_agg_1:float} |><| P_VALUE:float))))) += 
+   QUERY11(float)[][P_PARTKEY:int]:((Exists(QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) * AggSum([P_PARTKEY:int],(((P_VALUE:float ^= QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) * (__sql_inline_agg_1:float ^= (QUERY11_mPARTSUPP1_L1_1(float)[][] * 0.001)) * {P_VALUE:float > __sql_inline_agg_1:float} * P_VALUE:float))))) += 
   ((EXISTS(
     (QUERY11_mPARTSUPP1_E2_1[][P_PARTKEY:int] +
       ((P_PARTKEY:int ^= PARTSUPP_PARTKEY:int) *
@@ -370,7 +370,7 @@ ON SYSTEM READY {
 }
 
 CORRECT QUERY11_mPARTSUPP1_E2_1[][delta_P_PARTKEY:int] += delta_QUERY11_mPARTSUPP1_E2_1:float FOR ON + SUPPLIER(SUPPLIER_SUPPKEY:int, SUPPLIER_NAME:string, SUPPLIER_ADDRESS:string, SUPPLIER_NATIONKEY:int, SUPPLIER_PHONE:string, SUPPLIER_ACCTBAL:float, SUPPLIER_COMMENT:string) {
-   QUERY11(float)[][delta_P_PARTKEY:int]:((Exists(QUERY11_mPARTSUPP1_E2_1(float)[][delta_P_PARTKEY:int]) |><| AggSum([delta_P_PARTKEY:int],(((P_VALUE:float ^= QUERY11_mPARTSUPP1_E2_1(float)[][delta_P_PARTKEY:int]) |><| (__sql_inline_agg_1:float ^= (QUERY11_mPARTSUPP1_L1_1(float)[][] |><| 0.001)) |><| {P_VALUE:float > __sql_inline_agg_1:float} |><| P_VALUE:float))))) += 
+   QUERY11(float)[][delta_P_PARTKEY:int]:((Exists(QUERY11_mPARTSUPP1_E2_1(float)[][delta_P_PARTKEY:int]) * AggSum([delta_P_PARTKEY:int],(((P_VALUE:float ^= QUERY11_mPARTSUPP1_E2_1(float)[][delta_P_PARTKEY:int]) * (__sql_inline_agg_1:float ^= (QUERY11_mPARTSUPP1_L1_1(float)[][] * 0.001)) * {P_VALUE:float > __sql_inline_agg_1:float} * P_VALUE:float))))) += 
   (((EXISTS(
      (QUERY11_mPARTSUPP1_E2_1[][delta_P_PARTKEY:int] +
        (QUERY11_mSUPPLIER1_E2_2(int)[][SUPPLIER_NATIONKEY:int] *
@@ -559,7 +559,7 @@ CORRECT QUERY11_mPARTSUPP1_E2_1[][delta_P_PARTKEY:int] += delta_QUERY11_mPARTSUP
 }
 
 CORRECT QUERY11_mSUPPLIER1_E2_2[][delta_QUERY11_mSUPPLIERSUPPLIER_NATIONKEY:int] += delta_QUERY11_mSUPPLIER1_E2_2:int FOR ON + SUPPLIER(SUPPLIER_SUPPKEY:int, SUPPLIER_NAME:string, SUPPLIER_ADDRESS:string, SUPPLIER_NATIONKEY:int, SUPPLIER_PHONE:string, SUPPLIER_ACCTBAL:float, SUPPLIER_COMMENT:string) {
-   QUERY11(float)[][P_PARTKEY:int]:((Exists(QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) |><| AggSum([P_PARTKEY:int],(((P_VALUE:float ^= QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) |><| (__sql_inline_agg_1:float ^= (QUERY11_mPARTSUPP1_L1_1(float)[][] |><| 0.001)) |><| {P_VALUE:float > __sql_inline_agg_1:float} |><| P_VALUE:float))))) += 
+   QUERY11(float)[][P_PARTKEY:int]:((Exists(QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) * AggSum([P_PARTKEY:int],(((P_VALUE:float ^= QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) * (__sql_inline_agg_1:float ^= (QUERY11_mPARTSUPP1_L1_1(float)[][] * 0.001)) * {P_VALUE:float > __sql_inline_agg_1:float} * P_VALUE:float))))) += 
   (((SUPPLIER_NATIONKEY:int ^= delta_QUERY11_mSUPPLIERSUPPLIER_NATIONKEY:int) *
    (EXISTS(
       ((QUERY11_mSUPPLIER1_E2_3[][P_PARTKEY:int, SUPPLIER_SUPPKEY:int] *
@@ -754,7 +754,7 @@ CORRECT QUERY11_mSUPPLIER1_E2_2[][delta_QUERY11_mSUPPLIERSUPPLIER_NATIONKEY:int]
 }
 
 CORRECT QUERY11_mSUPPLIER1_E2_3[][delta_P_PARTKEY:int,delta_QUERY11_mSUPPLIERSUPPLIER_SUPPKEY:int] += delta_QUERY11_mSUPPLIER1_E2_3:float FOR ON + SUPPLIER(SUPPLIER_SUPPKEY:int, SUPPLIER_NAME:string, SUPPLIER_ADDRESS:string, SUPPLIER_NATIONKEY:int, SUPPLIER_PHONE:string, SUPPLIER_ACCTBAL:float, SUPPLIER_COMMENT:string) {
-   QUERY11(float)[][delta_P_PARTKEY:int]:((Exists(QUERY11_mPARTSUPP1_E2_1(float)[][delta_P_PARTKEY:int]) |><| AggSum([delta_P_PARTKEY:int],(((P_VALUE:float ^= QUERY11_mPARTSUPP1_E2_1(float)[][delta_P_PARTKEY:int]) |><| (__sql_inline_agg_1:float ^= (QUERY11_mPARTSUPP1_L1_1(float)[][] |><| 0.001)) |><| {P_VALUE:float > __sql_inline_agg_1:float} |><| P_VALUE:float))))) += 
+   QUERY11(float)[][delta_P_PARTKEY:int]:((Exists(QUERY11_mPARTSUPP1_E2_1(float)[][delta_P_PARTKEY:int]) * AggSum([delta_P_PARTKEY:int],(((P_VALUE:float ^= QUERY11_mPARTSUPP1_E2_1(float)[][delta_P_PARTKEY:int]) * (__sql_inline_agg_1:float ^= (QUERY11_mPARTSUPP1_L1_1(float)[][] * 0.001)) * {P_VALUE:float > __sql_inline_agg_1:float} * P_VALUE:float))))) += 
   (((SUPPLIER_SUPPKEY:int ^= delta_QUERY11_mSUPPLIERSUPPLIER_SUPPKEY:int) *
    (EXISTS(
       ((QUERY11_mSUPPLIER1_E2_2(int)[][SUPPLIER_NATIONKEY:int] *
@@ -918,7 +918,7 @@ CORRECT QUERY11_mSUPPLIER1_E2_3[][delta_P_PARTKEY:int,delta_QUERY11_mSUPPLIERSUP
 }
 
 CORRECT QUERY11_mPARTSUPP1_L1_1[][] += delta_QUERY11_mPARTSUPP1_L1_1:float FOR ON + SUPPLIER(SUPPLIER_SUPPKEY:int, SUPPLIER_NAME:string, SUPPLIER_ADDRESS:string, SUPPLIER_NATIONKEY:int, SUPPLIER_PHONE:string, SUPPLIER_ACCTBAL:float, SUPPLIER_COMMENT:string) {
-   QUERY11(float)[][P_PARTKEY:int]:((Exists(QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) |><| AggSum([P_PARTKEY:int],(((P_VALUE:float ^= QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) |><| (__sql_inline_agg_1:float ^= (QUERY11_mPARTSUPP1_L1_1(float)[][] |><| 0.001)) |><| {P_VALUE:float > __sql_inline_agg_1:float} |><| P_VALUE:float))))) += 
+   QUERY11(float)[][P_PARTKEY:int]:((Exists(QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) * AggSum([P_PARTKEY:int],(((P_VALUE:float ^= QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) * (__sql_inline_agg_1:float ^= (QUERY11_mPARTSUPP1_L1_1(float)[][] * 0.001)) * {P_VALUE:float > __sql_inline_agg_1:float} * P_VALUE:float))))) += 
   ((EXISTS(
     (QUERY11_mPARTSUPP1_E2_1[][P_PARTKEY:int] +
       (QUERY11_mSUPPLIER1_E2_2(int)[][SUPPLIER_NATIONKEY:int] *
@@ -1007,7 +1007,7 @@ CORRECT QUERY11_mPARTSUPP1_L1_1[][] += delta_QUERY11_mPARTSUPP1_L1_1:float FOR O
 }
 
 CORRECT QUERY11_mSUPPLIER7_L1_4[][delta_QUERY11_mSUPPLIERSUPPLIER_SUPPKEY:int] += delta_QUERY11_mSUPPLIER7_L1_4:float FOR ON + SUPPLIER(SUPPLIER_SUPPKEY:int, SUPPLIER_NAME:string, SUPPLIER_ADDRESS:string, SUPPLIER_NATIONKEY:int, SUPPLIER_PHONE:string, SUPPLIER_ACCTBAL:float, SUPPLIER_COMMENT:string) {
-   QUERY11(float)[][P_PARTKEY:int]:((Exists(QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) |><| AggSum([P_PARTKEY:int],(((P_VALUE:float ^= QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) |><| (__sql_inline_agg_1:float ^= (QUERY11_mPARTSUPP1_L1_1(float)[][] |><| 0.001)) |><| {P_VALUE:float > __sql_inline_agg_1:float} |><| P_VALUE:float))))) += 
+   QUERY11(float)[][P_PARTKEY:int]:((Exists(QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) * AggSum([P_PARTKEY:int],(((P_VALUE:float ^= QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) * (__sql_inline_agg_1:float ^= (QUERY11_mPARTSUPP1_L1_1(float)[][] * 0.001)) * {P_VALUE:float > __sql_inline_agg_1:float} * P_VALUE:float))))) += 
   (EXISTS(
    (QUERY11_mPARTSUPP1_E2_1[][P_PARTKEY:int] +
      (QUERY11_mSUPPLIER1_E2_2(int)[][SUPPLIER_NATIONKEY:int] *
@@ -1038,7 +1038,7 @@ CORRECT QUERY11_mSUPPLIER7_L1_4[][delta_QUERY11_mSUPPLIERSUPPLIER_SUPPKEY:int] +
 }
 
 CORRECT QUERY11_mSUPPLIER1_E2_2[][delta_QUERY11_mSUPPLIERSUPPLIER_NATIONKEY:int] += delta_QUERY11_mSUPPLIER1_E2_2:int FOR ON + SUPPLIER(SUPPLIER_SUPPKEY:int, SUPPLIER_NAME:string, SUPPLIER_ADDRESS:string, SUPPLIER_NATIONKEY:int, SUPPLIER_PHONE:string, SUPPLIER_ACCTBAL:float, SUPPLIER_COMMENT:string) {
-   QUERY11(float)[][P_PARTKEY:int]:((Exists(QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) |><| AggSum([P_PARTKEY:int],(((P_VALUE:float ^= QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) |><| (__sql_inline_agg_1:float ^= (QUERY11_mPARTSUPP1_L1_1(float)[][] |><| 0.001)) |><| {P_VALUE:float > __sql_inline_agg_1:float} |><| P_VALUE:float))))) += 
+   QUERY11(float)[][P_PARTKEY:int]:((Exists(QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) * AggSum([P_PARTKEY:int],(((P_VALUE:float ^= QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) * (__sql_inline_agg_1:float ^= (QUERY11_mPARTSUPP1_L1_1(float)[][] * 0.001)) * {P_VALUE:float > __sql_inline_agg_1:float} * P_VALUE:float))))) += 
   (((SUPPLIER_NATIONKEY:int ^= delta_QUERY11_mSUPPLIERSUPPLIER_NATIONKEY:int) *
    (EXISTS(
       ((QUERY11_mSUPPLIER1_E2_3[][P_PARTKEY:int, SUPPLIER_SUPPKEY:int] *
@@ -1233,7 +1233,7 @@ CORRECT QUERY11_mSUPPLIER1_E2_2[][delta_QUERY11_mSUPPLIERSUPPLIER_NATIONKEY:int]
 }
 
 CORRECT QUERY11_mSUPPLIER7_L1_4[][delta_QUERY11_mSUPPLIERSUPPLIER_SUPPKEY:int] += delta_QUERY11_mSUPPLIER7_L1_4:float FOR ON + SUPPLIER(SUPPLIER_SUPPKEY:int, SUPPLIER_NAME:string, SUPPLIER_ADDRESS:string, SUPPLIER_NATIONKEY:int, SUPPLIER_PHONE:string, SUPPLIER_ACCTBAL:float, SUPPLIER_COMMENT:string) {
-   QUERY11(float)[][P_PARTKEY:int]:((Exists(QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) |><| AggSum([P_PARTKEY:int],(((P_VALUE:float ^= QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) |><| (__sql_inline_agg_1:float ^= (QUERY11_mPARTSUPP1_L1_1(float)[][] |><| 0.001)) |><| {P_VALUE:float > __sql_inline_agg_1:float} |><| P_VALUE:float))))) += 
+   QUERY11(float)[][P_PARTKEY:int]:((Exists(QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) * AggSum([P_PARTKEY:int],(((P_VALUE:float ^= QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) * (__sql_inline_agg_1:float ^= (QUERY11_mPARTSUPP1_L1_1(float)[][] * 0.001)) * {P_VALUE:float > __sql_inline_agg_1:float} * P_VALUE:float))))) += 
   (EXISTS(
    (QUERY11_mPARTSUPP1_E2_1[][P_PARTKEY:int] +
      (QUERY11_mSUPPLIER1_E2_2(int)[][SUPPLIER_NATIONKEY:int] *
@@ -1264,7 +1264,7 @@ CORRECT QUERY11_mSUPPLIER7_L1_4[][delta_QUERY11_mSUPPLIERSUPPLIER_SUPPKEY:int] +
 }
 
 CORRECT QUERY11_mSUPPLIER1_E2_2[][delta_QUERY11_mSUPPLIERSUPPLIER_NATIONKEY:int] += delta_QUERY11_mSUPPLIER1_E2_2:int FOR ON + SUPPLIER(SUPPLIER_SUPPKEY:int, SUPPLIER_NAME:string, SUPPLIER_ADDRESS:string, SUPPLIER_NATIONKEY:int, SUPPLIER_PHONE:string, SUPPLIER_ACCTBAL:float, SUPPLIER_COMMENT:string) {
-   QUERY11(float)[][P_PARTKEY:int]:((Exists(QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) |><| AggSum([P_PARTKEY:int],(((P_VALUE:float ^= QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) |><| (__sql_inline_agg_1:float ^= (QUERY11_mPARTSUPP1_L1_1(float)[][] |><| 0.001)) |><| {P_VALUE:float > __sql_inline_agg_1:float} |><| P_VALUE:float))))) += 
+   QUERY11(float)[][P_PARTKEY:int]:((Exists(QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) * AggSum([P_PARTKEY:int],(((P_VALUE:float ^= QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) * (__sql_inline_agg_1:float ^= (QUERY11_mPARTSUPP1_L1_1(float)[][] * 0.001)) * {P_VALUE:float > __sql_inline_agg_1:float} * P_VALUE:float))))) += 
   (((SUPPLIER_NATIONKEY:int ^= delta_QUERY11_mSUPPLIERSUPPLIER_NATIONKEY:int) *
    (EXISTS(
       ((QUERY11_mSUPPLIER1_E2_3[][P_PARTKEY:int, SUPPLIER_SUPPKEY:int] *
@@ -1459,7 +1459,7 @@ CORRECT QUERY11_mSUPPLIER1_E2_2[][delta_QUERY11_mSUPPLIERSUPPLIER_NATIONKEY:int]
 }
 
 CORRECT QUERY11_mSUPPLIER1_E2_3[][delta_P_PARTKEY:int,delta_QUERY11_mSUPPLIERSUPPLIER_SUPPKEY:int] += delta_QUERY11_mSUPPLIER1_E2_3:float FOR ON + SUPPLIER(SUPPLIER_SUPPKEY:int, SUPPLIER_NAME:string, SUPPLIER_ADDRESS:string, SUPPLIER_NATIONKEY:int, SUPPLIER_PHONE:string, SUPPLIER_ACCTBAL:float, SUPPLIER_COMMENT:string) {
-   QUERY11(float)[][delta_P_PARTKEY:int]:((Exists(QUERY11_mPARTSUPP1_E2_1(float)[][delta_P_PARTKEY:int]) |><| AggSum([delta_P_PARTKEY:int],(((P_VALUE:float ^= QUERY11_mPARTSUPP1_E2_1(float)[][delta_P_PARTKEY:int]) |><| (__sql_inline_agg_1:float ^= (QUERY11_mPARTSUPP1_L1_1(float)[][] |><| 0.001)) |><| {P_VALUE:float > __sql_inline_agg_1:float} |><| P_VALUE:float))))) += 
+   QUERY11(float)[][delta_P_PARTKEY:int]:((Exists(QUERY11_mPARTSUPP1_E2_1(float)[][delta_P_PARTKEY:int]) * AggSum([delta_P_PARTKEY:int],(((P_VALUE:float ^= QUERY11_mPARTSUPP1_E2_1(float)[][delta_P_PARTKEY:int]) * (__sql_inline_agg_1:float ^= (QUERY11_mPARTSUPP1_L1_1(float)[][] * 0.001)) * {P_VALUE:float > __sql_inline_agg_1:float} * P_VALUE:float))))) += 
   (((SUPPLIER_SUPPKEY:int ^= delta_QUERY11_mSUPPLIERSUPPLIER_SUPPKEY:int) *
    (EXISTS(
       ((QUERY11_mSUPPLIER1_E2_2(int)[][SUPPLIER_NATIONKEY:int] *
@@ -1623,7 +1623,7 @@ CORRECT QUERY11_mSUPPLIER1_E2_3[][delta_P_PARTKEY:int,delta_QUERY11_mSUPPLIERSUP
 }
 
 CORRECT QUERY11_mSUPPLIER1_E2_2[][delta_QUERY11_mSUPPLIERSUPPLIER_NATIONKEY:int] += delta_QUERY11_mSUPPLIER1_E2_2:int FOR ON + SUPPLIER(SUPPLIER_SUPPKEY:int, SUPPLIER_NAME:string, SUPPLIER_ADDRESS:string, SUPPLIER_NATIONKEY:int, SUPPLIER_PHONE:string, SUPPLIER_ACCTBAL:float, SUPPLIER_COMMENT:string) {
-   QUERY11(float)[][P_PARTKEY:int]:((Exists(QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) |><| AggSum([P_PARTKEY:int],(((P_VALUE:float ^= QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) |><| (__sql_inline_agg_1:float ^= (QUERY11_mPARTSUPP1_L1_1(float)[][] |><| 0.001)) |><| {P_VALUE:float > __sql_inline_agg_1:float} |><| P_VALUE:float))))) += 
+   QUERY11(float)[][P_PARTKEY:int]:((Exists(QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) * AggSum([P_PARTKEY:int],(((P_VALUE:float ^= QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) * (__sql_inline_agg_1:float ^= (QUERY11_mPARTSUPP1_L1_1(float)[][] * 0.001)) * {P_VALUE:float > __sql_inline_agg_1:float} * P_VALUE:float))))) += 
   (((SUPPLIER_NATIONKEY:int ^= delta_QUERY11_mSUPPLIERSUPPLIER_NATIONKEY:int) *
    (EXISTS(
       ((QUERY11_mSUPPLIER1_E2_3[][P_PARTKEY:int, SUPPLIER_SUPPKEY:int] *
@@ -1818,7 +1818,7 @@ CORRECT QUERY11_mSUPPLIER1_E2_2[][delta_QUERY11_mSUPPLIERSUPPLIER_NATIONKEY:int]
 }
 
 CORRECT QUERY11_mPARTSUPP1_E2_1[][delta_P_PARTKEY:int] += delta_QUERY11_mPARTSUPP1_E2_1:float FOR ON - SUPPLIER(SUPPLIER_SUPPKEY:int, SUPPLIER_NAME:string, SUPPLIER_ADDRESS:string, SUPPLIER_NATIONKEY:int, SUPPLIER_PHONE:string, SUPPLIER_ACCTBAL:float, SUPPLIER_COMMENT:string) {
-   QUERY11(float)[][delta_P_PARTKEY:int]:((Exists(QUERY11_mPARTSUPP1_E2_1(float)[][delta_P_PARTKEY:int]) |><| AggSum([delta_P_PARTKEY:int],(((P_VALUE:float ^= QUERY11_mPARTSUPP1_E2_1(float)[][delta_P_PARTKEY:int]) |><| (__sql_inline_agg_1:float ^= (QUERY11_mPARTSUPP1_L1_1(float)[][] |><| 0.001)) |><| {P_VALUE:float > __sql_inline_agg_1:float} |><| P_VALUE:float))))) += 
+   QUERY11(float)[][delta_P_PARTKEY:int]:((Exists(QUERY11_mPARTSUPP1_E2_1(float)[][delta_P_PARTKEY:int]) * AggSum([delta_P_PARTKEY:int],(((P_VALUE:float ^= QUERY11_mPARTSUPP1_E2_1(float)[][delta_P_PARTKEY:int]) * (__sql_inline_agg_1:float ^= (QUERY11_mPARTSUPP1_L1_1(float)[][] * 0.001)) * {P_VALUE:float > __sql_inline_agg_1:float} * P_VALUE:float))))) += 
   (((EXISTS(
      (QUERY11_mPARTSUPP1_E2_1[][delta_P_PARTKEY:int] +
        (QUERY11_mSUPPLIER1_E2_2(int)[][SUPPLIER_NATIONKEY:int] *
@@ -2006,7 +2006,7 @@ CORRECT QUERY11_mPARTSUPP1_E2_1[][delta_P_PARTKEY:int] += delta_QUERY11_mPARTSUP
 }
 
 CORRECT QUERY11_mSUPPLIER1_E2_2[][delta_QUERY11_mSUPPLIERSUPPLIER_NATIONKEY:int] += delta_QUERY11_mSUPPLIER1_E2_2:int FOR ON - SUPPLIER(SUPPLIER_SUPPKEY:int, SUPPLIER_NAME:string, SUPPLIER_ADDRESS:string, SUPPLIER_NATIONKEY:int, SUPPLIER_PHONE:string, SUPPLIER_ACCTBAL:float, SUPPLIER_COMMENT:string) {
-   QUERY11(float)[][P_PARTKEY:int]:((Exists(QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) |><| AggSum([P_PARTKEY:int],(((P_VALUE:float ^= QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) |><| (__sql_inline_agg_1:float ^= (QUERY11_mPARTSUPP1_L1_1(float)[][] |><| 0.001)) |><| {P_VALUE:float > __sql_inline_agg_1:float} |><| P_VALUE:float))))) += 
+   QUERY11(float)[][P_PARTKEY:int]:((Exists(QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) * AggSum([P_PARTKEY:int],(((P_VALUE:float ^= QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) * (__sql_inline_agg_1:float ^= (QUERY11_mPARTSUPP1_L1_1(float)[][] * 0.001)) * {P_VALUE:float > __sql_inline_agg_1:float} * P_VALUE:float))))) += 
   (((SUPPLIER_NATIONKEY:int ^= delta_QUERY11_mSUPPLIERSUPPLIER_NATIONKEY:int) *
    (EXISTS(
       ((QUERY11_mSUPPLIER1_E2_3[][P_PARTKEY:int, SUPPLIER_SUPPKEY:int] *
@@ -2213,7 +2213,7 @@ CORRECT QUERY11_mSUPPLIER1_E2_2[][delta_QUERY11_mSUPPLIERSUPPLIER_NATIONKEY:int]
 }
 
 CORRECT QUERY11_mSUPPLIER1_E2_3[][delta_P_PARTKEY:int,delta_QUERY11_mSUPPLIERSUPPLIER_SUPPKEY:int] += delta_QUERY11_mSUPPLIER1_E2_3:float FOR ON - SUPPLIER(SUPPLIER_SUPPKEY:int, SUPPLIER_NAME:string, SUPPLIER_ADDRESS:string, SUPPLIER_NATIONKEY:int, SUPPLIER_PHONE:string, SUPPLIER_ACCTBAL:float, SUPPLIER_COMMENT:string) {
-   QUERY11(float)[][delta_P_PARTKEY:int]:((Exists(QUERY11_mPARTSUPP1_E2_1(float)[][delta_P_PARTKEY:int]) |><| AggSum([delta_P_PARTKEY:int],(((P_VALUE:float ^= QUERY11_mPARTSUPP1_E2_1(float)[][delta_P_PARTKEY:int]) |><| (__sql_inline_agg_1:float ^= (QUERY11_mPARTSUPP1_L1_1(float)[][] |><| 0.001)) |><| {P_VALUE:float > __sql_inline_agg_1:float} |><| P_VALUE:float))))) += 
+   QUERY11(float)[][delta_P_PARTKEY:int]:((Exists(QUERY11_mPARTSUPP1_E2_1(float)[][delta_P_PARTKEY:int]) * AggSum([delta_P_PARTKEY:int],(((P_VALUE:float ^= QUERY11_mPARTSUPP1_E2_1(float)[][delta_P_PARTKEY:int]) * (__sql_inline_agg_1:float ^= (QUERY11_mPARTSUPP1_L1_1(float)[][] * 0.001)) * {P_VALUE:float > __sql_inline_agg_1:float} * P_VALUE:float))))) += 
   (((SUPPLIER_SUPPKEY:int ^= delta_QUERY11_mSUPPLIERSUPPLIER_SUPPKEY:int) *
    (EXISTS(
       ((QUERY11_mSUPPLIER1_E2_2(int)[][SUPPLIER_NATIONKEY:int] *
@@ -2382,7 +2382,7 @@ CORRECT QUERY11_mSUPPLIER1_E2_3[][delta_P_PARTKEY:int,delta_QUERY11_mSUPPLIERSUP
 }
 
 CORRECT QUERY11_mPARTSUPP1_L1_1[][] += delta_QUERY11_mPARTSUPP1_L1_1:float FOR ON - SUPPLIER(SUPPLIER_SUPPKEY:int, SUPPLIER_NAME:string, SUPPLIER_ADDRESS:string, SUPPLIER_NATIONKEY:int, SUPPLIER_PHONE:string, SUPPLIER_ACCTBAL:float, SUPPLIER_COMMENT:string) {
-   QUERY11(float)[][P_PARTKEY:int]:((Exists(QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) |><| AggSum([P_PARTKEY:int],(((P_VALUE:float ^= QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) |><| (__sql_inline_agg_1:float ^= (QUERY11_mPARTSUPP1_L1_1(float)[][] |><| 0.001)) |><| {P_VALUE:float > __sql_inline_agg_1:float} |><| P_VALUE:float))))) += 
+   QUERY11(float)[][P_PARTKEY:int]:((Exists(QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) * AggSum([P_PARTKEY:int],(((P_VALUE:float ^= QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) * (__sql_inline_agg_1:float ^= (QUERY11_mPARTSUPP1_L1_1(float)[][] * 0.001)) * {P_VALUE:float > __sql_inline_agg_1:float} * P_VALUE:float))))) += 
   ((EXISTS(
     (QUERY11_mPARTSUPP1_E2_1[][P_PARTKEY:int] +
       (QUERY11_mSUPPLIER1_E2_2(int)[][SUPPLIER_NATIONKEY:int] *
@@ -2474,7 +2474,7 @@ CORRECT QUERY11_mPARTSUPP1_L1_1[][] += delta_QUERY11_mPARTSUPP1_L1_1:float FOR O
 }
 
 CORRECT QUERY11_mSUPPLIER7_L1_4[][delta_QUERY11_mSUPPLIERSUPPLIER_SUPPKEY:int] += delta_QUERY11_mSUPPLIER7_L1_4:float FOR ON - SUPPLIER(SUPPLIER_SUPPKEY:int, SUPPLIER_NAME:string, SUPPLIER_ADDRESS:string, SUPPLIER_NATIONKEY:int, SUPPLIER_PHONE:string, SUPPLIER_ACCTBAL:float, SUPPLIER_COMMENT:string) {
-   QUERY11(float)[][P_PARTKEY:int]:((Exists(QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) |><| AggSum([P_PARTKEY:int],(((P_VALUE:float ^= QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) |><| (__sql_inline_agg_1:float ^= (QUERY11_mPARTSUPP1_L1_1(float)[][] |><| 0.001)) |><| {P_VALUE:float > __sql_inline_agg_1:float} |><| P_VALUE:float))))) += 
+   QUERY11(float)[][P_PARTKEY:int]:((Exists(QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) * AggSum([P_PARTKEY:int],(((P_VALUE:float ^= QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) * (__sql_inline_agg_1:float ^= (QUERY11_mPARTSUPP1_L1_1(float)[][] * 0.001)) * {P_VALUE:float > __sql_inline_agg_1:float} * P_VALUE:float))))) += 
   (EXISTS(
    (QUERY11_mPARTSUPP1_E2_1[][P_PARTKEY:int] +
      (QUERY11_mSUPPLIER1_E2_2(int)[][SUPPLIER_NATIONKEY:int] *
@@ -2506,7 +2506,7 @@ CORRECT QUERY11_mSUPPLIER7_L1_4[][delta_QUERY11_mSUPPLIERSUPPLIER_SUPPKEY:int] +
 }
 
 CORRECT QUERY11_mSUPPLIER1_E2_2[][delta_QUERY11_mSUPPLIERSUPPLIER_NATIONKEY:int] += delta_QUERY11_mSUPPLIER1_E2_2:int FOR ON - SUPPLIER(SUPPLIER_SUPPKEY:int, SUPPLIER_NAME:string, SUPPLIER_ADDRESS:string, SUPPLIER_NATIONKEY:int, SUPPLIER_PHONE:string, SUPPLIER_ACCTBAL:float, SUPPLIER_COMMENT:string) {
-   QUERY11(float)[][P_PARTKEY:int]:((Exists(QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) |><| AggSum([P_PARTKEY:int],(((P_VALUE:float ^= QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) |><| (__sql_inline_agg_1:float ^= (QUERY11_mPARTSUPP1_L1_1(float)[][] |><| 0.001)) |><| {P_VALUE:float > __sql_inline_agg_1:float} |><| P_VALUE:float))))) += 
+   QUERY11(float)[][P_PARTKEY:int]:((Exists(QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) * AggSum([P_PARTKEY:int],(((P_VALUE:float ^= QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) * (__sql_inline_agg_1:float ^= (QUERY11_mPARTSUPP1_L1_1(float)[][] * 0.001)) * {P_VALUE:float > __sql_inline_agg_1:float} * P_VALUE:float))))) += 
   (((SUPPLIER_NATIONKEY:int ^= delta_QUERY11_mSUPPLIERSUPPLIER_NATIONKEY:int) *
    (EXISTS(
       ((QUERY11_mSUPPLIER1_E2_3[][P_PARTKEY:int, SUPPLIER_SUPPKEY:int] *
@@ -2713,7 +2713,7 @@ CORRECT QUERY11_mSUPPLIER1_E2_2[][delta_QUERY11_mSUPPLIERSUPPLIER_NATIONKEY:int]
 }
 
 CORRECT QUERY11_mSUPPLIER7_L1_4[][delta_QUERY11_mSUPPLIERSUPPLIER_SUPPKEY:int] += delta_QUERY11_mSUPPLIER7_L1_4:float FOR ON - SUPPLIER(SUPPLIER_SUPPKEY:int, SUPPLIER_NAME:string, SUPPLIER_ADDRESS:string, SUPPLIER_NATIONKEY:int, SUPPLIER_PHONE:string, SUPPLIER_ACCTBAL:float, SUPPLIER_COMMENT:string) {
-   QUERY11(float)[][P_PARTKEY:int]:((Exists(QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) |><| AggSum([P_PARTKEY:int],(((P_VALUE:float ^= QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) |><| (__sql_inline_agg_1:float ^= (QUERY11_mPARTSUPP1_L1_1(float)[][] |><| 0.001)) |><| {P_VALUE:float > __sql_inline_agg_1:float} |><| P_VALUE:float))))) += 
+   QUERY11(float)[][P_PARTKEY:int]:((Exists(QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) * AggSum([P_PARTKEY:int],(((P_VALUE:float ^= QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) * (__sql_inline_agg_1:float ^= (QUERY11_mPARTSUPP1_L1_1(float)[][] * 0.001)) * {P_VALUE:float > __sql_inline_agg_1:float} * P_VALUE:float))))) += 
   (EXISTS(
    (QUERY11_mPARTSUPP1_E2_1[][P_PARTKEY:int] +
      (QUERY11_mSUPPLIER1_E2_2(int)[][SUPPLIER_NATIONKEY:int] *
@@ -2745,7 +2745,7 @@ CORRECT QUERY11_mSUPPLIER7_L1_4[][delta_QUERY11_mSUPPLIERSUPPLIER_SUPPKEY:int] +
 }
 
 CORRECT QUERY11_mSUPPLIER1_E2_2[][delta_QUERY11_mSUPPLIERSUPPLIER_NATIONKEY:int] += delta_QUERY11_mSUPPLIER1_E2_2:int FOR ON - SUPPLIER(SUPPLIER_SUPPKEY:int, SUPPLIER_NAME:string, SUPPLIER_ADDRESS:string, SUPPLIER_NATIONKEY:int, SUPPLIER_PHONE:string, SUPPLIER_ACCTBAL:float, SUPPLIER_COMMENT:string) {
-   QUERY11(float)[][P_PARTKEY:int]:((Exists(QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) |><| AggSum([P_PARTKEY:int],(((P_VALUE:float ^= QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) |><| (__sql_inline_agg_1:float ^= (QUERY11_mPARTSUPP1_L1_1(float)[][] |><| 0.001)) |><| {P_VALUE:float > __sql_inline_agg_1:float} |><| P_VALUE:float))))) += 
+   QUERY11(float)[][P_PARTKEY:int]:((Exists(QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) * AggSum([P_PARTKEY:int],(((P_VALUE:float ^= QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) * (__sql_inline_agg_1:float ^= (QUERY11_mPARTSUPP1_L1_1(float)[][] * 0.001)) * {P_VALUE:float > __sql_inline_agg_1:float} * P_VALUE:float))))) += 
   (((SUPPLIER_NATIONKEY:int ^= delta_QUERY11_mSUPPLIERSUPPLIER_NATIONKEY:int) *
    (EXISTS(
       ((QUERY11_mSUPPLIER1_E2_3[][P_PARTKEY:int, SUPPLIER_SUPPKEY:int] *
@@ -2952,7 +2952,7 @@ CORRECT QUERY11_mSUPPLIER1_E2_2[][delta_QUERY11_mSUPPLIERSUPPLIER_NATIONKEY:int]
 }
 
 CORRECT QUERY11_mSUPPLIER1_E2_3[][delta_P_PARTKEY:int,delta_QUERY11_mSUPPLIERSUPPLIER_SUPPKEY:int] += delta_QUERY11_mSUPPLIER1_E2_3:float FOR ON - SUPPLIER(SUPPLIER_SUPPKEY:int, SUPPLIER_NAME:string, SUPPLIER_ADDRESS:string, SUPPLIER_NATIONKEY:int, SUPPLIER_PHONE:string, SUPPLIER_ACCTBAL:float, SUPPLIER_COMMENT:string) {
-   QUERY11(float)[][delta_P_PARTKEY:int]:((Exists(QUERY11_mPARTSUPP1_E2_1(float)[][delta_P_PARTKEY:int]) |><| AggSum([delta_P_PARTKEY:int],(((P_VALUE:float ^= QUERY11_mPARTSUPP1_E2_1(float)[][delta_P_PARTKEY:int]) |><| (__sql_inline_agg_1:float ^= (QUERY11_mPARTSUPP1_L1_1(float)[][] |><| 0.001)) |><| {P_VALUE:float > __sql_inline_agg_1:float} |><| P_VALUE:float))))) += 
+   QUERY11(float)[][delta_P_PARTKEY:int]:((Exists(QUERY11_mPARTSUPP1_E2_1(float)[][delta_P_PARTKEY:int]) * AggSum([delta_P_PARTKEY:int],(((P_VALUE:float ^= QUERY11_mPARTSUPP1_E2_1(float)[][delta_P_PARTKEY:int]) * (__sql_inline_agg_1:float ^= (QUERY11_mPARTSUPP1_L1_1(float)[][] * 0.001)) * {P_VALUE:float > __sql_inline_agg_1:float} * P_VALUE:float))))) += 
   (((SUPPLIER_SUPPKEY:int ^= delta_QUERY11_mSUPPLIERSUPPLIER_SUPPKEY:int) *
    (EXISTS(
       ((QUERY11_mSUPPLIER1_E2_2(int)[][SUPPLIER_NATIONKEY:int] *
@@ -3121,7 +3121,7 @@ CORRECT QUERY11_mSUPPLIER1_E2_3[][delta_P_PARTKEY:int,delta_QUERY11_mSUPPLIERSUP
 }
 
 CORRECT QUERY11_mSUPPLIER1_E2_2[][delta_QUERY11_mSUPPLIERSUPPLIER_NATIONKEY:int] += delta_QUERY11_mSUPPLIER1_E2_2:int FOR ON - SUPPLIER(SUPPLIER_SUPPKEY:int, SUPPLIER_NAME:string, SUPPLIER_ADDRESS:string, SUPPLIER_NATIONKEY:int, SUPPLIER_PHONE:string, SUPPLIER_ACCTBAL:float, SUPPLIER_COMMENT:string) {
-   QUERY11(float)[][P_PARTKEY:int]:((Exists(QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) |><| AggSum([P_PARTKEY:int],(((P_VALUE:float ^= QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) |><| (__sql_inline_agg_1:float ^= (QUERY11_mPARTSUPP1_L1_1(float)[][] |><| 0.001)) |><| {P_VALUE:float > __sql_inline_agg_1:float} |><| P_VALUE:float))))) += 
+   QUERY11(float)[][P_PARTKEY:int]:((Exists(QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) * AggSum([P_PARTKEY:int],(((P_VALUE:float ^= QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) * (__sql_inline_agg_1:float ^= (QUERY11_mPARTSUPP1_L1_1(float)[][] * 0.001)) * {P_VALUE:float > __sql_inline_agg_1:float} * P_VALUE:float))))) += 
   (((SUPPLIER_NATIONKEY:int ^= delta_QUERY11_mSUPPLIERSUPPLIER_NATIONKEY:int) *
    (EXISTS(
       ((QUERY11_mSUPPLIER1_E2_3[][P_PARTKEY:int, SUPPLIER_SUPPKEY:int] *
@@ -3328,7 +3328,7 @@ CORRECT QUERY11_mSUPPLIER1_E2_2[][delta_QUERY11_mSUPPLIERSUPPLIER_NATIONKEY:int]
 }
 
 CORRECT QUERY11_mPARTSUPP1_E2_1[][delta_P_PARTKEY:int] += delta_QUERY11_mPARTSUPP1_E2_1:float FOR ON + PARTSUPP(PARTSUPP_PARTKEY:int, PARTSUPP_SUPPKEY:int, PARTSUPP_AVAILQTY:int, PARTSUPP_SUPPLYCOST:float, PARTSUPP_COMMENT:string) {
-   QUERY11(float)[][delta_P_PARTKEY:int]:((Exists(QUERY11_mPARTSUPP1_E2_1(float)[][delta_P_PARTKEY:int]) |><| AggSum([delta_P_PARTKEY:int],(((P_VALUE:float ^= QUERY11_mPARTSUPP1_E2_1(float)[][delta_P_PARTKEY:int]) |><| (__sql_inline_agg_1:float ^= (QUERY11_mPARTSUPP1_L1_1(float)[][] |><| 0.001)) |><| {P_VALUE:float > __sql_inline_agg_1:float} |><| P_VALUE:float))))) += 
+   QUERY11(float)[][delta_P_PARTKEY:int]:((Exists(QUERY11_mPARTSUPP1_E2_1(float)[][delta_P_PARTKEY:int]) * AggSum([delta_P_PARTKEY:int],(((P_VALUE:float ^= QUERY11_mPARTSUPP1_E2_1(float)[][delta_P_PARTKEY:int]) * (__sql_inline_agg_1:float ^= (QUERY11_mPARTSUPP1_L1_1(float)[][] * 0.001)) * {P_VALUE:float > __sql_inline_agg_1:float} * P_VALUE:float))))) += 
   (((EXISTS(
      (QUERY11_mPARTSUPP1_E2_1[][delta_P_PARTKEY:int] +
        ((delta_P_PARTKEY:int ^= PARTSUPP_PARTKEY:int) *
@@ -3518,7 +3518,7 @@ CORRECT QUERY11_mPARTSUPP1_E2_1[][delta_P_PARTKEY:int] += delta_QUERY11_mPARTSUP
 }
 
 CORRECT QUERY11_mPARTSUPP1_E2_3[][delta_QUERY11_mPARTSUPPPARTSUPP_SUPPKEY:int] += delta_QUERY11_mPARTSUPP1_E2_3:int FOR ON + PARTSUPP(PARTSUPP_PARTKEY:int, PARTSUPP_SUPPKEY:int, PARTSUPP_AVAILQTY:int, PARTSUPP_SUPPLYCOST:float, PARTSUPP_COMMENT:string) {
-   QUERY11(float)[][P_PARTKEY:int]:((Exists(QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) |><| AggSum([P_PARTKEY:int],(((P_VALUE:float ^= QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) |><| (__sql_inline_agg_1:float ^= (QUERY11_mPARTSUPP1_L1_1(float)[][] |><| 0.001)) |><| {P_VALUE:float > __sql_inline_agg_1:float} |><| P_VALUE:float))))) += 
+   QUERY11(float)[][P_PARTKEY:int]:((Exists(QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) * AggSum([P_PARTKEY:int],(((P_VALUE:float ^= QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) * (__sql_inline_agg_1:float ^= (QUERY11_mPARTSUPP1_L1_1(float)[][] * 0.001)) * {P_VALUE:float > __sql_inline_agg_1:float} * P_VALUE:float))))) += 
   (((P_PARTKEY:int ^= PARTSUPP_PARTKEY:int) *
    (((PARTSUPP_SUPPKEY:int ^= delta_QUERY11_mPARTSUPPPARTSUPP_SUPPKEY:int) *
       (EXISTS(
@@ -3729,7 +3729,7 @@ CORRECT QUERY11_mPARTSUPP1_E2_3[][delta_QUERY11_mPARTSUPPPARTSUPP_SUPPKEY:int] +
 }
 
 CORRECT QUERY11_mPARTSUPP1_L1_1[][] += delta_QUERY11_mPARTSUPP1_L1_1:float FOR ON + PARTSUPP(PARTSUPP_PARTKEY:int, PARTSUPP_SUPPKEY:int, PARTSUPP_AVAILQTY:int, PARTSUPP_SUPPLYCOST:float, PARTSUPP_COMMENT:string) {
-   QUERY11(float)[][P_PARTKEY:int]:((Exists(QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) |><| AggSum([P_PARTKEY:int],(((P_VALUE:float ^= QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) |><| (__sql_inline_agg_1:float ^= (QUERY11_mPARTSUPP1_L1_1(float)[][] |><| 0.001)) |><| {P_VALUE:float > __sql_inline_agg_1:float} |><| P_VALUE:float))))) += 
+   QUERY11(float)[][P_PARTKEY:int]:((Exists(QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) * AggSum([P_PARTKEY:int],(((P_VALUE:float ^= QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) * (__sql_inline_agg_1:float ^= (QUERY11_mPARTSUPP1_L1_1(float)[][] * 0.001)) * {P_VALUE:float > __sql_inline_agg_1:float} * P_VALUE:float))))) += 
   ((EXISTS(
     (QUERY11_mPARTSUPP1_E2_1[][P_PARTKEY:int] +
       ((P_PARTKEY:int ^= PARTSUPP_PARTKEY:int) *
@@ -3822,7 +3822,7 @@ CORRECT QUERY11_mPARTSUPP1_L1_1[][] += delta_QUERY11_mPARTSUPP1_L1_1:float FOR O
 }
 
 CORRECT QUERY11_mPARTSUPP1_E2_3[][delta_QUERY11_mPARTSUPPPARTSUPP_SUPPKEY:int] += delta_QUERY11_mPARTSUPP1_E2_3:int FOR ON + PARTSUPP(PARTSUPP_PARTKEY:int, PARTSUPP_SUPPKEY:int, PARTSUPP_AVAILQTY:int, PARTSUPP_SUPPLYCOST:float, PARTSUPP_COMMENT:string) {
-   QUERY11(float)[][P_PARTKEY:int]:((Exists(QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) |><| AggSum([P_PARTKEY:int],(((P_VALUE:float ^= QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) |><| (__sql_inline_agg_1:float ^= (QUERY11_mPARTSUPP1_L1_1(float)[][] |><| 0.001)) |><| {P_VALUE:float > __sql_inline_agg_1:float} |><| P_VALUE:float))))) += 
+   QUERY11(float)[][P_PARTKEY:int]:((Exists(QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) * AggSum([P_PARTKEY:int],(((P_VALUE:float ^= QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) * (__sql_inline_agg_1:float ^= (QUERY11_mPARTSUPP1_L1_1(float)[][] * 0.001)) * {P_VALUE:float > __sql_inline_agg_1:float} * P_VALUE:float))))) += 
   (((P_PARTKEY:int ^= PARTSUPP_PARTKEY:int) *
    (((PARTSUPP_SUPPKEY:int ^= delta_QUERY11_mPARTSUPPPARTSUPP_SUPPKEY:int) *
       (EXISTS(
@@ -4033,7 +4033,7 @@ CORRECT QUERY11_mPARTSUPP1_E2_3[][delta_QUERY11_mPARTSUPPPARTSUPP_SUPPKEY:int] +
 }
 
 CORRECT QUERY11_mPARTSUPP1_E2_3[][delta_QUERY11_mPARTSUPPPARTSUPP_SUPPKEY:int] += delta_QUERY11_mPARTSUPP1_E2_3:int FOR ON + PARTSUPP(PARTSUPP_PARTKEY:int, PARTSUPP_SUPPKEY:int, PARTSUPP_AVAILQTY:int, PARTSUPP_SUPPLYCOST:float, PARTSUPP_COMMENT:string) {
-   QUERY11(float)[][P_PARTKEY:int]:((Exists(QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) |><| AggSum([P_PARTKEY:int],(((P_VALUE:float ^= QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) |><| (__sql_inline_agg_1:float ^= (QUERY11_mPARTSUPP1_L1_1(float)[][] |><| 0.001)) |><| {P_VALUE:float > __sql_inline_agg_1:float} |><| P_VALUE:float))))) += 
+   QUERY11(float)[][P_PARTKEY:int]:((Exists(QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) * AggSum([P_PARTKEY:int],(((P_VALUE:float ^= QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) * (__sql_inline_agg_1:float ^= (QUERY11_mPARTSUPP1_L1_1(float)[][] * 0.001)) * {P_VALUE:float > __sql_inline_agg_1:float} * P_VALUE:float))))) += 
   (((P_PARTKEY:int ^= PARTSUPP_PARTKEY:int) *
    (((PARTSUPP_SUPPKEY:int ^= delta_QUERY11_mPARTSUPPPARTSUPP_SUPPKEY:int) *
       (EXISTS(
@@ -4244,7 +4244,7 @@ CORRECT QUERY11_mPARTSUPP1_E2_3[][delta_QUERY11_mPARTSUPPPARTSUPP_SUPPKEY:int] +
 }
 
 CORRECT QUERY11_mPARTSUPP1_E2_1[][delta_P_PARTKEY:int] += delta_QUERY11_mPARTSUPP1_E2_1:float FOR ON - PARTSUPP(PARTSUPP_PARTKEY:int, PARTSUPP_SUPPKEY:int, PARTSUPP_AVAILQTY:int, PARTSUPP_SUPPLYCOST:float, PARTSUPP_COMMENT:string) {
-   QUERY11(float)[][delta_P_PARTKEY:int]:((Exists(QUERY11_mPARTSUPP1_E2_1(float)[][delta_P_PARTKEY:int]) |><| AggSum([delta_P_PARTKEY:int],(((P_VALUE:float ^= QUERY11_mPARTSUPP1_E2_1(float)[][delta_P_PARTKEY:int]) |><| (__sql_inline_agg_1:float ^= (QUERY11_mPARTSUPP1_L1_1(float)[][] |><| 0.001)) |><| {P_VALUE:float > __sql_inline_agg_1:float} |><| P_VALUE:float))))) += 
+   QUERY11(float)[][delta_P_PARTKEY:int]:((Exists(QUERY11_mPARTSUPP1_E2_1(float)[][delta_P_PARTKEY:int]) * AggSum([delta_P_PARTKEY:int],(((P_VALUE:float ^= QUERY11_mPARTSUPP1_E2_1(float)[][delta_P_PARTKEY:int]) * (__sql_inline_agg_1:float ^= (QUERY11_mPARTSUPP1_L1_1(float)[][] * 0.001)) * {P_VALUE:float > __sql_inline_agg_1:float} * P_VALUE:float))))) += 
   (((EXISTS(
      (QUERY11_mPARTSUPP1_E2_1[][delta_P_PARTKEY:int] +
        ((delta_P_PARTKEY:int ^= PARTSUPP_PARTKEY:int) *
@@ -4432,7 +4432,7 @@ CORRECT QUERY11_mPARTSUPP1_E2_1[][delta_P_PARTKEY:int] += delta_QUERY11_mPARTSUP
 }
 
 CORRECT QUERY11_mPARTSUPP1_E2_3[][delta_QUERY11_mPARTSUPPPARTSUPP_SUPPKEY:int] += delta_QUERY11_mPARTSUPP1_E2_3:int FOR ON - PARTSUPP(PARTSUPP_PARTKEY:int, PARTSUPP_SUPPKEY:int, PARTSUPP_AVAILQTY:int, PARTSUPP_SUPPLYCOST:float, PARTSUPP_COMMENT:string) {
-   QUERY11(float)[][P_PARTKEY:int]:((Exists(QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) |><| AggSum([P_PARTKEY:int],(((P_VALUE:float ^= QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) |><| (__sql_inline_agg_1:float ^= (QUERY11_mPARTSUPP1_L1_1(float)[][] |><| 0.001)) |><| {P_VALUE:float > __sql_inline_agg_1:float} |><| P_VALUE:float))))) += 
+   QUERY11(float)[][P_PARTKEY:int]:((Exists(QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) * AggSum([P_PARTKEY:int],(((P_VALUE:float ^= QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) * (__sql_inline_agg_1:float ^= (QUERY11_mPARTSUPP1_L1_1(float)[][] * 0.001)) * {P_VALUE:float > __sql_inline_agg_1:float} * P_VALUE:float))))) += 
   (((P_PARTKEY:int ^= PARTSUPP_PARTKEY:int) *
    (((PARTSUPP_SUPPKEY:int ^= delta_QUERY11_mPARTSUPPPARTSUPP_SUPPKEY:int) *
       (EXISTS(
@@ -4640,7 +4640,7 @@ CORRECT QUERY11_mPARTSUPP1_E2_3[][delta_QUERY11_mPARTSUPPPARTSUPP_SUPPKEY:int] +
 }
 
 CORRECT QUERY11_mPARTSUPP1_L1_1[][] += delta_QUERY11_mPARTSUPP1_L1_1:float FOR ON - PARTSUPP(PARTSUPP_PARTKEY:int, PARTSUPP_SUPPKEY:int, PARTSUPP_AVAILQTY:int, PARTSUPP_SUPPLYCOST:float, PARTSUPP_COMMENT:string) {
-   QUERY11(float)[][P_PARTKEY:int]:((Exists(QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) |><| AggSum([P_PARTKEY:int],(((P_VALUE:float ^= QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) |><| (__sql_inline_agg_1:float ^= (QUERY11_mPARTSUPP1_L1_1(float)[][] |><| 0.001)) |><| {P_VALUE:float > __sql_inline_agg_1:float} |><| P_VALUE:float))))) += 
+   QUERY11(float)[][P_PARTKEY:int]:((Exists(QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) * AggSum([P_PARTKEY:int],(((P_VALUE:float ^= QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) * (__sql_inline_agg_1:float ^= (QUERY11_mPARTSUPP1_L1_1(float)[][] * 0.001)) * {P_VALUE:float > __sql_inline_agg_1:float} * P_VALUE:float))))) += 
   ((EXISTS(
     (QUERY11_mPARTSUPP1_E2_1[][P_PARTKEY:int] +
       ((P_PARTKEY:int ^= PARTSUPP_PARTKEY:int) *
@@ -4732,7 +4732,7 @@ CORRECT QUERY11_mPARTSUPP1_L1_1[][] += delta_QUERY11_mPARTSUPP1_L1_1:float FOR O
 }
 
 CORRECT QUERY11_mPARTSUPP1_E2_3[][delta_QUERY11_mPARTSUPPPARTSUPP_SUPPKEY:int] += delta_QUERY11_mPARTSUPP1_E2_3:int FOR ON - PARTSUPP(PARTSUPP_PARTKEY:int, PARTSUPP_SUPPKEY:int, PARTSUPP_AVAILQTY:int, PARTSUPP_SUPPLYCOST:float, PARTSUPP_COMMENT:string) {
-   QUERY11(float)[][P_PARTKEY:int]:((Exists(QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) |><| AggSum([P_PARTKEY:int],(((P_VALUE:float ^= QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) |><| (__sql_inline_agg_1:float ^= (QUERY11_mPARTSUPP1_L1_1(float)[][] |><| 0.001)) |><| {P_VALUE:float > __sql_inline_agg_1:float} |><| P_VALUE:float))))) += 
+   QUERY11(float)[][P_PARTKEY:int]:((Exists(QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) * AggSum([P_PARTKEY:int],(((P_VALUE:float ^= QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) * (__sql_inline_agg_1:float ^= (QUERY11_mPARTSUPP1_L1_1(float)[][] * 0.001)) * {P_VALUE:float > __sql_inline_agg_1:float} * P_VALUE:float))))) += 
   (((P_PARTKEY:int ^= PARTSUPP_PARTKEY:int) *
    (((PARTSUPP_SUPPKEY:int ^= delta_QUERY11_mPARTSUPPPARTSUPP_SUPPKEY:int) *
       (EXISTS(
@@ -4940,7 +4940,7 @@ CORRECT QUERY11_mPARTSUPP1_E2_3[][delta_QUERY11_mPARTSUPPPARTSUPP_SUPPKEY:int] +
 }
 
 CORRECT QUERY11_mPARTSUPP1_E2_3[][delta_QUERY11_mPARTSUPPPARTSUPP_SUPPKEY:int] += delta_QUERY11_mPARTSUPP1_E2_3:int FOR ON - PARTSUPP(PARTSUPP_PARTKEY:int, PARTSUPP_SUPPKEY:int, PARTSUPP_AVAILQTY:int, PARTSUPP_SUPPLYCOST:float, PARTSUPP_COMMENT:string) {
-   QUERY11(float)[][P_PARTKEY:int]:((Exists(QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) |><| AggSum([P_PARTKEY:int],(((P_VALUE:float ^= QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) |><| (__sql_inline_agg_1:float ^= (QUERY11_mPARTSUPP1_L1_1(float)[][] |><| 0.001)) |><| {P_VALUE:float > __sql_inline_agg_1:float} |><| P_VALUE:float))))) += 
+   QUERY11(float)[][P_PARTKEY:int]:((Exists(QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) * AggSum([P_PARTKEY:int],(((P_VALUE:float ^= QUERY11_mPARTSUPP1_E2_1(float)[][P_PARTKEY:int]) * (__sql_inline_agg_1:float ^= (QUERY11_mPARTSUPP1_L1_1(float)[][] * 0.001)) * {P_VALUE:float > __sql_inline_agg_1:float} * P_VALUE:float))))) += 
   (((P_PARTKEY:int ^= PARTSUPP_PARTKEY:int) *
    (((PARTSUPP_SUPPKEY:int ^= delta_QUERY11_mPARTSUPPPARTSUPP_SUPPKEY:int) *
       (EXISTS(
