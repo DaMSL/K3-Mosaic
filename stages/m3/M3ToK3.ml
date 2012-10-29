@@ -983,10 +983,24 @@ let rec calc_to_k3_expr meta ?(generate_init = false) theta_vars_k calc :
                 *)
                    aggsum_e
                 in
+                let agg_expr = 
                   KH.mk_gbagg gb_fn
                               agg_fn 
                               (init_val_from_type (snd ret_ve))
                               gb_aggsum_e
+                in
+                let flatten_fn = 
+                  KH.mk_lambda (K.ATuple [
+                    KH.wrap_args (mk_val_type_pair agg_vars_el);
+                    K.AVar(KU.id_of_var (fst ret_ve), 
+                           extract_value_type (snd ret_ve));
+                  ])
+                  (KH.mk_tuple (
+                    (List.map (fun (x,_) -> KH.mk_var x) agg_vars_el) @
+                    [fst ret_ve]
+                  ))
+                in
+                  KH.mk_map flatten_fn agg_expr
             in
             ((agg_vars_el, ret_ve, expr), nm)
             
