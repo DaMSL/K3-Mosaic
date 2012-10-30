@@ -117,11 +117,20 @@ let find_stmt (p:prog_data_t) (stmt_id:stmt_id_t) =
   with
     Not_found -> raise (Bad_data ("No "^(string_of_int stmt_id)^" stmt_id found"))
   
-let trigger_id_for_name p trig_name = 
+let trigger_id_for_name p (trig_name:trig_name_t) = 
   let (id, _, _, _) = find_trigger p trig_name in
   id
 
-let args_of_t (p:prog_data_t) (trig_name:string) =
+let trigger_name_for_id p (trig_id:trig_id_t) = 
+  try
+    let (_, name, _, _) = 
+      List.find (fun (id, _, _, _) -> id = trig_id) @: get_trig_data p
+    in name
+  with
+    Not_found -> raise (Bad_data ("No trigger "^string_of_int trig_id^" found"))
+
+
+let args_of_t (p:prog_data_t) (trig_name:trig_name_t) =
   let (_, _, args, _) = find_trigger p trig_name in
   args
 
@@ -221,8 +230,9 @@ let find_map_bindings_in_stmt (p:prog_data_t) (stmt_id:stmt_id_t) (map_id:map_id
 let map_name_of p map_id = 
   let (_, name, _) = find_map p map_id in name
 
-let trigger_of_stmt p stmt_id =
-  let (_, trig, _, _, _) = find_stmt p stmt_id in trig
+let trigger_of_stmt p stmt_id : trig_name_t =
+  let (_, trig, _, _, _) = find_stmt p stmt_id in
+  trigger_name_for_id p trig
 
 let map_types_for p map_id = 
   let (_, _, vars) = find_map p map_id in vars
@@ -237,15 +247,16 @@ let adjust_key_id_for_v i = i + 1
 (* returns a k3 list of maybes that has the relevant map pattern *)
 let var_list_from_bound (p:prog_data_t) (stmt_id:stmt_id_t) (map_id:map_id_t) = 
   let map_binds = find_map_bindings_in_stmt p stmt_id map_id in
+  let trig_args = args_of_t p @: trigger_of_stmt p stmt_id in
   let (_, _, map_params) = find_map p map_id in
   let range = create_range 0 @: List.length map_params in
   List.map
-    (fun x -> 
-      try 
-        let (name, _) = List.find
-          (fun (id, loc) -> loc = x)
-          map_binds
-        in name
+    (fun i -> try 
+        (* Look for var name with this binding, then check it's part of trig
+         * args. If not, it's a loop var, and shouldn't be used *)
+        let id = fst @: List.find (fun (_, loc) -> loc = i) map_binds in
+        let id  = fst @: List.find (fun (n, _) -> n = id) trig_args in
+        id
       with Not_found -> "_"
     )
     range

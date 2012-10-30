@@ -38,6 +38,7 @@ val find_trigger : prog_data_t -> trig_name_t -> trig_data_t
 val find_map : prog_data_t -> map_id_t -> map_data_t
 val find_stmt : prog_data_t -> stmt_id_t -> stmt_data_t
 val trigger_id_for_name : prog_data_t -> trig_name_t -> trig_id_t
+val trigger_name_for_id : prog_data_t -> trig_id_t -> trig_name_t 
 val args_of_t : prog_data_t -> trig_name_t -> (id_t * value_type_t) list
 val s_and_over_stmts_in_t :
   prog_data_t ->
@@ -62,7 +63,7 @@ val map_types_with_v_for : prog_data_t -> map_id_t -> value_type_t list
 * the key. It's easier to control this in one place *)
 val adjust_key_id_for_v : int -> int
 val stmts_of_t : prog_data_t -> trig_name_t -> stmt_id_t list
-val trigger_of_stmt : prog_data_t -> stmt_id_t -> trig_id_t
+val trigger_of_stmt : prog_data_t -> stmt_id_t -> trig_name_t
 
 (* returns a k3 list of maybes that has the relevant map pattern *)
 val partial_key_from_bound : prog_data_t ->
