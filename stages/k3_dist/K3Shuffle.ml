@@ -84,7 +84,7 @@ let gen_shuffle_fn p rmap lmap bindings fn_name =
   let pred = List.length lkey_types > 0 in
   let if_lkey f g = if pred then force f @: g else g in 
   mk_global_fn fn_name
-    ((if pred then ["l_key", wrap_ttuple lkey_types] else []) @
+  ((if pred then ["l_key", wrap_ttuple lkey_types] else ["_", t_unit]) @
     ["tuples", list_of_tuples; 
     "shuffle_on_empty", canonical TBool])
     [result_types] @: (* return *)
