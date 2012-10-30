@@ -66,7 +66,7 @@ let parse_out_lang = parse_lang out_lang_descs "output language"
 type action_t = REPL | Compile | Interpret | Print | ExpressionTest
 
 let action_descriptions = [
-    REPL,             "-top",    "Interactive toplevel";
+    REPL,             "-top",  "Interactive toplevel";
     Compile,          "-c",    "Compile to specified language";
     Interpret,        "-r",    "Interpret with specified language";
     Print,            "-p",    "Print program as specified language";
@@ -87,6 +87,7 @@ type parameters = {
     mutable node_address : address;
     mutable peers : address list;
     mutable print_types : bool; (* TODO: change to a debug flag *)
+    mutable debug_info : bool;
   }
 
 let cmd_line_params : parameters = {
@@ -98,6 +99,7 @@ let cmd_line_params : parameters = {
     node_address = ("127.0.0.1", 10000);
     peers = [];
     print_types = false;
+    debug_info = false;
   }
 
 (* General parameter setters *)
@@ -109,6 +111,9 @@ let set_input_language l =
 
 let set_print_types () =
   cmd_line_params.print_types <- true
+
+let set_debug_info () =
+  cmd_line_params.debug_info <- true
 
 let append_search_path p = 
   cmd_line_params.search_paths <- cmd_line_params.search_paths @ [p]
@@ -141,6 +146,8 @@ let param_specs = Arg.align (action_specs cmd_line_params.action@[
       "[addr] Append addresses to the peer list";
   "-t", Arg.Unit set_print_types,
       "       Print types as part of output";
+  "-d", Arg.Unit set_debug_info,
+      "       Print debug info (context specific)";
   ])
 
 let usage_msg =
@@ -253,7 +260,7 @@ let print_k3_dist_prog (p, m) = match m with
   | None -> error "Cannot construct distributed K3 without ProgInfo metadata"
   | Some meta ->
   let tp = typed_program p in
-  let dist = try 
+  let dist = try
       GenDist.gen_dist meta tp
     with Invalid_argument(msg) -> 
       print_endline ("ERROR: " ^msg);
@@ -295,7 +302,10 @@ let print params =
     | K3in -> fun f -> (parse_program_k3 f, None)
     | M3in -> fun f -> (
         let m3prog = parse_program_m3 f in
-          (M3ToK3.m3_to_k3 m3prog, Some (M3ProgInfo.prog_data_of_m3 m3prog))
+        let proginfo = M3ProgInfo.prog_data_of_m3 m3prog in
+        if params.debug_info then 
+            print_endline (ProgInfo.string_of_prog_data proginfo);
+        (M3ToK3.m3_to_k3 m3prog, Some proginfo)
       )
   in
   List.iter (print_fn |- read_fn) params.input_files

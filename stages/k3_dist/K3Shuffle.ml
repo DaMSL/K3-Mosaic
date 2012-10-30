@@ -73,10 +73,12 @@ let gen_shuffle_fn p rmap lmap bindings fn_name =
   let to_rkey i = int_to_temp_id i id_r in
   let to_lkey i = int_to_temp_id i id_l in
   let lmap_range = mk_tuple_range lkey_types in
-  let full_lkey = List.map (* use bindings to construct lkey *)
-    (fun x -> try mk_var @: to_rkey @: adjust_key_id_for_v 
-        (List.assoc x bindings)
-      with Not_found -> mk_var @: to_lkey x) lmap_range
+  let full_lkey = 
+    List.map (* use bindings to construct lkey. Also tuple -> just var *)
+      (fun x -> try mk_just @: mk_var @: to_rkey @: adjust_key_id_for_v 
+          (List.assoc x bindings)
+        with Not_found -> mk_var @: to_lkey x) 
+      lmap_range
   in
   (* functions to change behavior for non-key routes *)
   let pred = List.length lkey_types > 0 in
@@ -122,8 +124,8 @@ let gen_shuffle_fn p rmap lmap bindings fn_name =
                * from the tuple, that can be used for routing *)
               mk_destruct_tuple "r_tuple" tuple_types_unwrap id_r @:
               if_lkey (* only evaluate full lkey if we have lkey *)
-                (lazy (mk_let "full_lkey" (wrap_ttuple lkey_types)
-                  (mk_tuple full_lkey)
+                (lazy (mk_let "full_lkey" (wrap_ttuple lkey_types) @:
+                  mk_tuple full_lkey
                 ))
                 (mk_map
                   (mk_lambda (wrap_args ["ip", t_addr]) @:
