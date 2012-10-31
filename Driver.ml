@@ -269,7 +269,7 @@ let print_k3_dist_prog (p, m) = match m with
   in
   let dist_tp = typed_program dist in
   let event_loops, default = roles_of_program dist_tp in 
-    print_endline (string_of_program tp);
+    print_endline (string_of_program dist_tp);
     List.iter print_event_loop event_loops;
     match default with None -> () 
         | Some (_,x) -> print_event_loop ("DEFAULT", x)
