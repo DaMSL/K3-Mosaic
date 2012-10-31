@@ -45,18 +45,18 @@ let send_fetch_name_of_t p trig_nm = trig_nm^"_send_fetch"
 let rcv_fetch_name_of_t p trig_nm = trig_nm^"_rcv_fetch"
 let rcv_put_name_of_t p trig_nm = trig_nm^"_rcv_put"
 let send_push_name_of_t p trig_nm stmt_id map_id =
-  trig_nm^"_send_push_s"^string_of_int stmt_id^"_"^map_name_of p map_id
+  trig_nm^"_send_push_s"^string_of_int stmt_id^"_m_"^map_name_of p map_id
 let rcv_push_name_of_t p trig_nm stmt_id map_id =
-  trig_nm^"_rcv_push_s"^string_of_int stmt_id^"_"^map_name_of p map_id
+  trig_nm^"_rcv_push_s"^string_of_int stmt_id^"_m_"^map_name_of p map_id
 let send_corrective_name_of_t p map_id = 
   map_name_of p map_id^"_send_correctives"
 let do_complete_name_of_t p trig_nm stmt_id =
   trig_nm^"_do_complete_s"^string_of_int stmt_id
 let filter_corrective_list_name = "filter_corrective_list"
 let rcv_corrective_name_of_t p trig_nm stmt_id map_id =
-  trig_nm^"_rcv_corrective_s"^string_of_int stmt_id^"_"^map_name_of p map_id
+  trig_nm^"_rcv_corrective_s"^string_of_int stmt_id^"_m_"^map_name_of p map_id
 let do_corrective_name_of_t p trig_nm stmt_id map_id =
-  trig_nm^"_do_corrective_s"^string_of_int stmt_id^"_"^map_name_of p map_id
+  trig_nm^"_do_corrective_s"^string_of_int stmt_id^"_m_"^map_name_of p map_id
 
 (* foreign function names *)
 let log_write_for p trig_nm = "log_write_"^trig_nm (* varies with bound *)
@@ -118,7 +118,7 @@ let declare_global_vars p =
       (log_for_t t) @:
       wrap_tset @: wrap_ttuple @: extract_arg_types @: args_of_t_with_v p t
     in 
-    let log_structs = map_all_trigs p log_struct_code_for in
+    let log_structs = for_all_trigs p log_struct_code_for in
     log_master_code::log_structs
   in
   loopback_code:: 
@@ -172,9 +172,10 @@ let declare_global_funcs p =
       mk_var log_master
   in
   log_read_geq_code ::
-  map_all_trigs p log_write_code @
-  map_all_trigs p log_get_bound_code @
+  for_all_trigs p log_write_code @
+  for_all_trigs p log_get_bound_code @
   gen_shuffle_route_code p
+
 
 (* ---- start of protocol code ---- *)
 
@@ -580,6 +581,14 @@ List.fold_left
   s_and_over_stmts_in_t p rhs_maps_of_stmt trig_name
     
  
+(* list of trig, stmt with a map on the rhs that's also on the lhs. These are
+ * the potential corrective maps *)
+let maps_potential_corrective p =
+  let lhs_maps = for_all_stmts p @: lhs_map_of_stmt p in
+  let rhs_maps = ListAsSet.uniq @: List.flatten @: 
+    for_all_stmts p @: rhs_maps_of_stmt p in
+  ListAsSet.inter lhs_maps rhs_maps
+
 (* send_corrective_trigs
  * --------------------------------------
  * Generate code to send data for all possible correctives.
@@ -588,100 +597,91 @@ List.fold_left
  * the shuffling of the changed data for those statements ie from rhs to lhs 
  *)
 let send_corrective_trigs p =
-(* for a given lhs map which we just changed, find all statements containing the
- * same map on the rhs *)
-let send_correctives map_id = 
-
-let trigs_stmts_with_rhs_map =
-    List.filter
-      (fun (trig, stmt_id) -> stmt_has_rhs_map p stmt_id map_id) @:
-      List.flatten @:
-        map_all_trigs p 
-          (fun trig -> 
-            List.map (fun stmt -> (trig, stmt)) @: stmts_of_t p trig)
-in
-(* predefined K3 list of stmts with rhs maps *)
-let trig_stmt_k3_list = 
-  List.fold_left 
-    (fun acc_code (trig, stmt_id) -> 
-      mk_combine 
-        (mk_tuple @:
-          [mk_const @: CInt (trigger_id_for_name p trig); 
-           mk_const @: CInt stmt_id]
-        )
-        acc_code
-    )
-    (mk_empty @: wrap_tlist @: wrap_ttuple [t_trig_id; t_stmt_id])
-    trigs_stmts_with_rhs_map
-in
-(* Note: what happens when we send the data here? Does it include vids in the
- * tuples like the data in pushes?
- *)
-match trigs_stmts_with_rhs_map with [] -> [] | _ ->
-  let tuple_types = wrap_ttuple @: map_types_for p map_id in
-  [mk_trigger 
-    (send_corrective_name_of_t p map_id)
-    (wrap_args ["delta_tuples", wrap_tlist tuple_types; "vid", t_vid])
-    [] @:
-    (* the corrective list tells us which statements were really executed *)
-    mk_let "corrective_list" (* (vid * stmt_id) list *)
-      (wrap_tlist @: wrap_ttuple [t_vid; t_stmt_id])
-      (mk_apply
-        (mk_var filter_corrective_list_name) @:
-        mk_tuple @:
-          mk_var "vid"::[trig_stmt_k3_list] (* feed in list of possible stmts *)
-      ) @:
-      mk_iter  (* loop over corrective list *)
-        (mk_lambda
-          (wrap_args ["vid", t_vid; "stmt_id", t_stmt_id]) @:
-          List.fold_left  
-            (* loop over all possible read map matches *)
-            (fun acc_code (target_trig, target_stmt) ->
-              let target_map = lhs_map_of_stmt p target_stmt in
-              let key = partial_key_from_bound p target_stmt map_id in
-              let shuffle_fn = find_shuffle target_stmt map_id target_map in
-              mk_if (* if match, send data *)
-                (mk_eq
-                  (mk_var "stmt_id") @:
-                  mk_const @: CInt target_stmt
-                )
-                (mk_iter 
-                  (mk_lambda 
-                    (wrap_args ["ip", t_addr; "delta_tuples", tuple_types]) @:
-                    mk_send
-                      (mk_const @: CTarget (rcv_corrective_name_of_t p target_trig
-                        target_stmt target_map)) 
-                      (mk_var "ip") @:
-                      mk_var "delta_tuples"
-                  ) @:
-                  (* get bound vars from log *)
-                  mk_let_many 
-                    (args_of_t_with_v p target_trig)
-                    (mk_apply 
-                      (mk_var @: log_get_bound_for p target_trig) @:
-                      mk_var "vid"
-                    ) @:
-                    mk_apply
-                      (mk_var shuffle_fn) @:
-                      mk_tuple @:
-                        key@
-                        mk_var "delta_tuples"::
-                        [mk_const @: CBool false]
-                )
-                acc_code (* just another branch on the if *)
+  (* for a given lhs map which we just changed, find all statements containing the
+   * same map on the rhs *)
+  let send_correctives map_id = 
+    (* list of (trig,stmt) that have this map_id on the rhs *)
+    let trigs_stmts_with_matching_rhs_map =
+        List.filter
+          (fun (trig, stmt_id) -> stmt_has_rhs_map p stmt_id map_id) @:
+          List.flatten @:
+            for_all_trigs p 
+              (fun trig -> 
+                List.map (fun stmt -> (trig, stmt)) @: stmts_of_t p trig) in
+    (* predefined K3 list of stmts with rhs maps (ie. the above) *)
+    let trig_stmt_k3_list = 
+      List.fold_left 
+        (fun acc_code (trig, stmt_id) -> 
+          mk_combine 
+            (mk_tuple @:
+              [mk_const @: CInt (trigger_id_for_name p trig); 
+               mk_const @: CInt stmt_id]
             )
-            (mk_const CUnit) (* base case *)
-            trigs_stmts_with_rhs_map 
+            acc_code
+        )
+        (mk_empty @: wrap_tlist @: wrap_ttuple [t_trig_id; t_stmt_id])
+        trigs_stmts_with_matching_rhs_map
+    in
+    match trigs_stmts_with_matching_rhs_map with [] -> [] | _ ->
+    let tuple_types = wrap_ttuple @: map_types_for p map_id in
+    [mk_trigger 
+      (send_corrective_name_of_t p map_id)
+      (wrap_args ["delta_tuples", wrap_tlist tuple_types; "vid", t_vid])
+      [] @:
+      (* the corrective list tells us which statements were really executed *)
+      mk_let "corrective_list" (* (vid * stmt_id) list *)
+        (wrap_tlist @: wrap_ttuple [t_vid; t_stmt_id])
+        (mk_apply
+          (mk_var filter_corrective_list_name) @:
+          mk_tuple @:
+            mk_var "vid"::[trig_stmt_k3_list] (* feed in list of possible stmts *)
         ) @:
-        mk_var "corrective_list"
-  ]
-in
-let unique_lhs_maps = 
-  ListAsSet.uniq @:
-  List.fold_left 
-    (fun acc stmt -> lhs_map_of_stmt p stmt::acc) [] @: get_stmt_list p
-in
-List.flatten @: List.map send_correctives unique_lhs_maps
+        mk_iter  (* loop over corrective list *)
+          (mk_lambda
+            (wrap_args ["vid", t_vid; "stmt_id", t_stmt_id]) @:
+            List.fold_left  
+              (* loop over all possible read map matches *)
+              (fun acc_code (target_trig, target_stmt) ->
+                let target_map = lhs_map_of_stmt p target_stmt in
+                let key = partial_key_from_bound p target_stmt map_id in
+                let shuffle_fn = find_shuffle target_stmt map_id target_map in
+                mk_if (* if match, send data *)
+                  (mk_eq
+                    (mk_var "stmt_id") @:
+                    mk_const @: CInt target_stmt
+                  )
+                  (mk_iter 
+                    (mk_lambda 
+                      (wrap_args ["ip", t_addr; "delta_tuples", tuple_types]) @:
+                      mk_send
+                        (mk_const @: CTarget (rcv_corrective_name_of_t p target_trig
+                          target_stmt target_map)) 
+                        (mk_var "ip") @:
+                        mk_var "delta_tuples"
+                    ) @:
+                    (* get bound vars from log *)
+                    mk_let_many 
+                      (args_of_t_with_v p target_trig)
+                      (mk_apply 
+                        (mk_var @: log_get_bound_for p target_trig) @:
+                        mk_var "vid"
+                      ) @:
+                      mk_apply
+                        (mk_var shuffle_fn) @:
+                        mk_tuple @:
+                          key@
+                          mk_var "delta_tuples"::
+                          [mk_const @: CBool false]
+                  )
+                  acc_code (* just another branch on the if *)
+              )
+              (mk_const CUnit) (* base case *)
+              trigs_stmts_with_matching_rhs_map 
+          ) @:
+          mk_var "corrective_list"
+    ]
+  in
+  List.flatten @: List.map send_correctives @: maps_potential_corrective p
 
  
 let do_complete_trigs p trig_name =
@@ -842,7 +842,7 @@ let gen_dist p ast =
   (* because this uses state, need it initialized here *)
   let global_funcs = declare_global_funcs p in (* init shuffles *)
   let regular_trigs = List.flatten @:
-    map_all_trigs p (fun t -> gen_dist_for_t p t)
+    for_all_trigs p (fun t -> gen_dist_for_t p t)
   in
   declare_global_vars p @
   global_funcs @ (* maybe make this not order-dependent *)

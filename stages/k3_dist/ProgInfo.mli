@@ -31,8 +31,9 @@ val string_of_prog_data: prog_data_t -> string
 
 (* Utility functions using this data structure *)
 val get_trig_list : prog_data_t -> trig_name_t list
-val map_all_trigs : prog_data_t -> (trig_name_t -> 'a) -> 'a list
+val for_all_trigs : prog_data_t -> (trig_name_t -> 'a) -> 'a list
 val get_stmt_list : prog_data_t -> stmt_id_t list
+val for_all_stmts : prog_data_t -> (stmt_id_t -> 'a) -> 'a list
 val get_map_list : prog_data_t -> map_id_t list
 val find_trigger : prog_data_t -> trig_name_t -> trig_data_t
 val find_map : prog_data_t -> map_id_t -> map_data_t

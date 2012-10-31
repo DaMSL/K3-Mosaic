@@ -75,17 +75,18 @@ let get_map_data (p:prog_data_t) = match p with
   (_, _, map) -> map
  
 let get_trig_list (p:prog_data_t) = 
-  List.map
-  (fun (_, name, _, _) -> name)
-  (get_trig_data p)
+  List.map (fun (_, name, _, _) -> name) @: get_trig_data p
 
-let map_all_trigs (p:prog_data_t) f =
+let for_all_trigs (p:prog_data_t) f =
   List.map (fun t -> f t) @: get_trig_list p
 
 let get_stmt_list (p:prog_data_t) =
     List.map
     (fun (id,_,_,_,_) -> id)
     (get_stmt_data p)
+
+let for_all_stmts (p:prog_data_t) f =
+  List.map (fun s -> f s) @: get_stmt_list p
 
 let get_map_list (p:prog_data_t) =
     List.map
@@ -198,8 +199,7 @@ let find_lmap_bindings_in_stmt (p:prog_data_t) (stmt:stmt_id_t) (map:map_id_t)
   else raise (Bad_data ("find_lhs_map_binding_in_stmt: No "^
           (string_of_int map)^" lhs map_id found"))
 
-let find_rmap_bindings_in_stmt (p:prog_data_t) (stmt:stmt_id_t) (map:map_id_t)
-=
+let find_rmap_bindings_in_stmt (p:prog_data_t) (stmt:stmt_id_t) (map:map_id_t) =
   let (_, _, _, _, rmaps) = find_stmt p stmt in
   let (_, binding) = 
     try
@@ -223,7 +223,7 @@ let find_map_bindings_in_stmt (p:prog_data_t) (stmt_id:stmt_id_t) (map_id:map_id
           rmaps
       with
         Not_found -> raise (Bad_data ("find_map_bindings_in_stmt: No "^
-          (string_of_int map_id)^" map_id found"))
+          (string_of_int map_id)^" map_id found in stmt "^(string_of_int stmt_id)))
     in
     binding end
 
