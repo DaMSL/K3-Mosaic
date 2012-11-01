@@ -29,6 +29,8 @@ val wrap_tlist : value_type_t -> value_type_t
 val wrap_tlist_mut : value_type_t -> value_type_t
 val wrap_tset : value_type_t -> value_type_t
 val wrap_tset_mut : value_type_t -> value_type_t
+val wrap_tbag : value_type_t -> value_type_t
+val wrap_tbag_mut : value_type_t -> value_type_t
 val wrap_ttuple : value_type_t list -> value_type_t
 val wrap_ttuple_mut : value_type_t list -> value_type_t
 val wrap_tmaybe : value_type_t -> value_type_t 

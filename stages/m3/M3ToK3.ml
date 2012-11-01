@@ -57,15 +57,13 @@ let mk_k3_collection (base_ivars:K.base_type_t list)
    let v = KT.canonical base_v in
    if ivars = []
      then if ovars = [] 
-        then KT.canonical (K.TCollection(K.TBag, v))
-        else KT.canonical (K.TCollection(K.TBag, mk_k3_tuple (ovars @ [v])))
+        then KH.wrap_tbag v
+        else KH.wrap_tbag (mk_k3_tuple (ovars @ [v]))
      else if ovars = []
-        then KT.canonical (K.TCollection(K.TBag, mk_k3_tuple (ivars @ [v])))
-        else KT.canonical (K.TCollection(K.TBag, mk_k3_tuple (
-                              ivars @ [KT.canonical (
-                                K.TCollection(K.TBag, mk_k3_tuple (ovars@[v]))
-                              )
-                          ])))
+        then KH.wrap_tbag (mk_k3_tuple (ivars @ [v]))
+        else KH.wrap_tbag (mk_k3_tuple (ivars @ [KH.wrap_tbag (
+                                                  mk_k3_tuple (ovars@[v])
+                                                )]))
 
 let name_of_kvar kvar = 
    begin match kvar with
