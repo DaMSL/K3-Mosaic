@@ -3,5 +3,8 @@
 <stages/k3>: include
 <stages/k3/{core,parser,interpreter,utils}>: include
 <stages/imperative>: include
+<stages/m3>: include
+<stages/k3_dist>: include
 
 true: use_str
+true: use_unix
