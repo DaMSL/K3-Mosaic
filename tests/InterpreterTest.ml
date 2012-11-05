@@ -49,6 +49,13 @@ let tests = group "all" [
         "Neq" , "0 != 1", VBool(true);
         "Leq" , "0 <= 1", VBool(true);
     ]);
+    group "Iterate" (case_list [
+        "Iteration Always Returns Unit", "(
+            \\c:{int} -> do {
+                iterate(\\x:int -> insert(c, x), {0; 1; 2});
+                {0; 1; 2}
+            })({3})", VSet([VInt(0); VInt(1); VInt(2)]);
+    ]);
 ]
 
 let _ = run_tests tests

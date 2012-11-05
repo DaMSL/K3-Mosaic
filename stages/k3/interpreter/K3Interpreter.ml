@@ -273,6 +273,20 @@ and eval_expr cenv texpr =
         let fenv, vals = threaded_eval cenv children
         in fenv, (List.nth vals (List.length vals - 1))
 
+    | Iterate ->
+        let fenv, f = child_value cenv 0 in
+        let nenv, c = child_value cenv 1 in
+        let g = eval_fn f in
+        let folder = fun cl -> List.fold_left (
+            fun e x -> let ienv, _ = g e x in ienv
+        ) nenv cl in (
+            match c with
+            | VSet(cl)
+            | VBag(cl)
+            | VList(cl) -> folder cl, VTemp(VUnit)
+            | _ -> raise (RuntimeError uuid)
+        )
+
     | IfThenElse ->
         let penv, pred = child_value cenv 0 in (
             match pred with
