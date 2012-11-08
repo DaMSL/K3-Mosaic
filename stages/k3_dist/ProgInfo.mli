@@ -35,6 +35,7 @@ val for_all_trigs : prog_data_t -> (trig_name_t -> 'a) -> 'a list
 val get_stmt_list : prog_data_t -> stmt_id_t list
 val for_all_stmts : prog_data_t -> (stmt_id_t -> 'a) -> 'a list
 val get_map_list : prog_data_t -> map_id_t list
+val for_all_maps : prog_data_t -> (map_id_t -> 'a) -> 'a list
 val find_trigger : prog_data_t -> trig_name_t -> trig_data_t
 val find_map : prog_data_t -> map_id_t -> map_data_t
 val find_stmt : prog_data_t -> stmt_id_t -> stmt_data_t
@@ -57,9 +58,32 @@ val find_map_bindings_in_stmt :
   prog_data_t -> stmt_id_t -> map_id_t -> map_var_binding_t list
 val map_name_of : prog_data_t -> map_id_t -> string
 val map_types_for : prog_data_t -> map_id_t -> value_type_t list
+val map_types_no_val_for : prog_data_t -> map_id_t -> value_type_t list
 
-(* useful for adding vid to maps *)
+(* add a vid to the types *)
+val map_types_add_v : value_type_t list -> value_type_t list
+
+(* map types invluding the vid *)
 val map_types_with_v_for : prog_data_t -> map_id_t -> value_type_t list
+
+(* construct a representation of ids and types for a map *)
+val map_ids_types_for : ?prefix:string -> prog_data_t -> map_id_t -> 
+    (string * value_type_t) list
+
+(* get ids and types with no value *)
+val map_ids_types_no_val_for : ?prefix:string -> prog_data_t -> map_id_t -> 
+    (string * value_type_t) list
+
+val map_ids_add_v : ?vid:string -> string list -> string list
+
+(*add a vid to the ids,types*)
+val map_ids_types_add_v : ?vid:string -> (string * value_type_t) list -> 
+    (string * value_type_t) list
+
+(* construct a list of ids, types including the vid *)
+val map_ids_types_with_v_for : ?prefix:string -> ?vid:string -> prog_data_t -> 
+    map_id_t -> (string * value_type_t) list
+
 (* because we add the vid first, we need to modify the numbering of arguments in
 * the key. It's easier to control this in one place *)
 val adjust_key_id_for_v : int -> int

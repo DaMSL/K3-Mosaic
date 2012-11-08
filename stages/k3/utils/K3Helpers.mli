@@ -165,7 +165,7 @@ val slice_pat_take: int -> tuple_pat list -> tuple_pat list
 val slice_pat_drop: int -> tuple_pat list -> tuple_pat list
 
 (* given an integer and a prefix, create an id for the internals of a tuple *)
-val int_to_temp_id: int -> string -> id_t
+val int_to_temp_id: string -> int -> id_t
 
 (* create a consistent range with which to refer to tuple ids when destructing
  * tuples *)
@@ -184,3 +184,6 @@ val mk_rebuild_tuple: id_t -> value_type_t list -> tuple_pat list -> expr_t
 
 (* unwrap maybe values by creating an inner values with postfix "_unwrap" *)
 val mk_unwrap_maybe: (id_t * value_type_t) list -> expr_t -> expr_t
+
+(* id function for maps. No need fill in a tuple creation *)
+val mk_id: value_type_t list -> expr_t

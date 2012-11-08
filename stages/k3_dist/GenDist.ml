@@ -71,19 +71,7 @@ let log_read_geq = "log_read_geq" (* takes vid, returns (trig, vid)list >= vid *
 let add_delta_to_buffer_for_map p map_id = 
   "add_delta_to_buffer_"^map_name_of p map_id
 
-let declare_foreign_functions p =
-  (* function to add delta tuples to a map *)
-  (* NOTE: we assume vid is in the tuples and needs to be stripped/changed here *)
-  let add_delta_foreign p map_id = mk_foreign_fn
-    (add_delta_to_buffer_for_map p map_id)
-    (wrap_ttuple [t_vid; wrap_tlist @: wrap_ttuple @: map_types_with_v_for p map_id])
-    (canonical TUnit)
-  in
-  let map_related =
-    (List.map (fun map -> add_delta_foreign p map) (get_map_list p))
-  in
-  map_related
-
+let declare_foreign_functions p = []
 
 (* global data structures ---- *)
   (* stmt_cntrs - (vid, stmt_id, counter) *)
@@ -174,7 +162,52 @@ let declare_global_funcs p =
       ) @:
       mk_var log_master
   in
+  (* add_delta_to_buffer -- add delta to vid and all future vids
+   * Useful to have this in a function because we may want it to be foreign
+   * NOTE: this function assumes VID is first in the maps *)
+  let add_delta_to_buffer_code map =
+    let map_name = map_name_of p map in
+    let val_type = list_last @: map_types_for p map in
+    let val_name = list_last @: extract_arg_names @: map_ids_types_for p map in
+    let types_v = map_types_with_v_for p map in
+    let ids_types_v = map_ids_types_with_v_for p map in
+    (* make ids and type list for arguments *)
+    let ids_types_arg = map_ids_types_for ~prefix:"__arg_" p map in
+    let arg_val_id = list_last @: extract_arg_names @: ids_types_arg in
+    let ids_types_arg_v = map_ids_types_add_v ~vid:"vid_arg" ids_types_arg in
+    let ids_types_v2 = map_ids_types_with_v_for ~vid:"vid2" p map in
+    let ids_no_val = extract_arg_names @: map_ids_types_no_val_for p map in
+    let val_result_id = "val_result" in
+
+    mk_global_fn (add_delta_to_buffer_for_map p map)
+      ["vid", t_vid; "delta_tuples", wrap_tlist @: wrap_ttuple types_v]
+      [t_unit] @:
+      mk_iter (* loop over vids >= in the map *)
+        (mk_lambda (wrap_args ids_types_v) @:
+          mk_iter (* loop over entries in the delta_tuples arg *)
+            (mk_lambda (wrap_args ids_types_arg_v) @:
+              mk_let val_result_id val_type
+                (mk_add
+                  (mk_var arg_val_id) @:
+                  mk_var val_name
+                ) @:
+              mk_update
+                (mk_var map_name)
+                (mk_tuple @: ids_to_vars @: extract_arg_names @: ids_types_v) @:
+                mk_tuple @: ids_to_vars @: map_ids_add_v @:
+                  ids_no_val@[val_result_id]
+            ) @:
+            mk_var "delta_tuples"
+        ) @:
+        mk_filtermap (* filter all vids >= given vid *)
+          (mk_lambda (wrap_args ids_types_v2) @:
+            mk_geq (mk_var "vid2") (mk_var "vid")
+          )
+          (mk_id types_v) @:
+          mk_var map_name
+  in
   log_read_geq_code ::
+  for_all_maps p add_delta_to_buffer_code @
   for_all_trigs p log_write_code @
   for_all_trigs p log_get_bound_code @
   gen_shuffle_route_code p

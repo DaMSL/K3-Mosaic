@@ -32,11 +32,19 @@ let rec list_drop len li = match li with
   | x::xs when len = 0 -> li
   | x::xs -> list_drop (len-1) xs
 
+(* take the last x elements of a list *)
+let list_take_end len li = list_drop (List.length li - len) li
+
 (* drop from the end of a list *)
-let list_drop_end len li =
-  list_take (List.length li - len) li
+let list_drop_end len li = list_take (List.length li - len) li
 
 let list_zip list1 list2 = List.map2 (fun i j -> (i,j)) list1 list2
+
+let list_head l = match l with 
+  | x::_ -> x 
+  | _ -> invalid_arg "empty list"
+
+let list_last xs = list_head @: list_take_end 1 xs
 
 let compose_fn f g x = f(g x)
 

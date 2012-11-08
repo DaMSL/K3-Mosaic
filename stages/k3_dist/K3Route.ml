@@ -55,16 +55,13 @@ let hash_func_for typ = "hash_"^match typ with
   | TIsolated(TImmutable(TFloat,_)) -> "float"
   | _ -> invalid_arg "No hash function for this type"
 
-let key_map_types_for p map_id =
-  list_drop_end 1 @: map_types_for p map_id
-
 let gen_route_fn p map_id = 
   let map_types_full = map_types_for p map_id in
   let map_types = list_drop_end 1 map_types_full in
   let map_range = create_range 0 (List.length map_types) in
   let key_types = wrap_tmaybes map_types in
   let prefix = "key_id_" in
-  let to_id i = int_to_temp_id i prefix in
+  let to_id i = int_to_temp_id prefix i in
   match map_types with 
   | [] -> (* if no keys, for now we just route to one place *)
   mk_global_fn (route_for p map_id)

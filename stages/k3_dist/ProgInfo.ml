@@ -117,6 +117,9 @@ let for_all_stmts (p:prog_data_t) f =
 
 let get_map_list (p:prog_data_t) =
   List.map (fun (id, _, _) -> id) @: get_map_data p
+
+let for_all_maps (p:prog_data_t) f =
+  List.map (fun m -> f m) @: get_map_list p
  
 let find_map (p:prog_data_t) (map_id:map_id_t) =
   try List.find (fun (id, _, _) -> id = map_id) @: get_map_data p
@@ -190,6 +193,33 @@ let map_types_for p map_id =
   let (_, _, vars) = find_map p map_id in 
   vars
 
+let map_types_no_val_for p map = list_drop 1 @: map_types_for p map
+let map_types_add_v ts = t_vid::ts
+let map_types_with_v_for p map = map_types_add_v @: map_types_for p map
+
+let def_map = "__map_"
+let def_vid = "vid"
+
+(* create ids to reference the map vars *)
+let map_ids_types_for ?(prefix=def_map) p map_id =
+  let ts = map_types_for p map_id in
+  let r = mk_tuple_range @: ts in
+  let ids = list_drop 1 @: List.map (int_to_temp_id prefix) r in
+  let full_ids = ids@[prefix^"val"] in
+  list_zip full_ids ts
+
+(* ids to reference the map vars, with vid *)
+let map_ids_types_no_val_for ?(prefix=def_map) p map_id = list_drop 1 @: 
+  map_ids_types_for ~prefix:prefix p map_id
+let map_ids_add_v ?(vid=def_vid) ts = vid::ts
+let map_ids_types_add_v ?(vid=def_vid) ts = (vid, t_vid)::ts
+let map_ids_types_with_v_for ?(prefix=def_map) ?(vid=def_vid) p map_id =
+   map_ids_types_add_v ~vid:vid @: map_ids_types_for ~prefix:prefix p map_id
+
+(* because we add the vid first, we need to modify the numbering of arguments in
+* the key. It's easier to control this in one place *)
+let adjust_key_id_for_v i = i + 1
+
 
 let reduce_l_to_map_size p map l =
   let map_size = (List.length @: map_types_for p map) - 1 in
@@ -217,13 +247,6 @@ let find_map_bindings_in_stmt (p:prog_data_t) (stmt:stmt_id_t) (map:map_id_t) =
   try find_lmap_bindings_in_stmt p stmt map
   with Bad_data(_) ->
       find_rmap_bindings_in_stmt p stmt map
-
-(* useful for adding vid to maps *)
-let map_types_with_v_for p map_id = t_vid::map_types_for p map_id
-
-(* because we add the vid first, we need to modify the numbering of arguments in
-* the key. It's easier to control this in one place *)
-let adjust_key_id_for_v i = i + 1
 
 (* returns a k3 list of maybes that has the relevant map pattern *)
 let var_list_from_bound (p:prog_data_t) (stmt_id:stmt_id_t) (map_id:map_id_t) = 
