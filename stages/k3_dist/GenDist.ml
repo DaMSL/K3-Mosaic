@@ -162,9 +162,7 @@ let declare_global_funcs p =
       ) @:
       mk_var log_master
   in
-  (* add_delta_to_buffer -- add delta to vid and all future vids
-   * Useful to have this in a function because we may want it to be foreign
-   * NOTE: this function assumes VID is first in the maps *)
+  (* add_delta_to_buffer -- add delta to vid and all future vids *)
   let add_delta_to_buffer_code map =
     let map_name = map_name_of p map in
     let val_type = list_last @: map_types_for p map in
