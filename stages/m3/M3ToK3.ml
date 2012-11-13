@@ -29,12 +29,13 @@ let m3_type_to_k3_base_type = (function
    | T.TInt             -> K.TInt
    | T.TFloat           -> K.TFloat
    | T.TString          -> K.TString
-   | T.TDate            -> 
-      K.TTuple [
+   | T.TDate            -> K.TInt
+(*      K.TTuple [
         KT.canonical K.TInt;
         KT.canonical K.TInt;
         KT.canonical K.TInt;
       ]
+*)
    | T.TAny             -> failwith "Expecting M3 to be fully typed"
    | T.TExternal(ext_t) -> failwith "External types unsupported"
 )
@@ -190,9 +191,13 @@ let m3_const_to_k3_const c =
     | Const.CFloat(f) -> KH.mk_const (K.CFloat(f))
     | Const.CString(s) -> KH.mk_const (K.CString(s))
     | Const.CBool(b) -> KH.mk_const (K.CBool(b))
-    | Const.CDate(y,m,d) -> KH.mk_tuple [ KH.mk_const (K.CInt(y));
-                                          KH.mk_const (K.CInt(m));
-                                          KH.mk_const (K.CInt(d)) ]
+    | Const.CDate(y,m,d) -> 
+        KH.mk_const (K.CInt(y * 10000 + m * 100 + d))
+(*        KH.mk_tuple [ KH.mk_const (K.CInt(y));
+                      KH.mk_const (K.CInt(m));
+                      KH.mk_const (K.CInt(d)) ]
+*)
+
   end
 
 let zero_of_type t =
@@ -1453,6 +1458,63 @@ let m3_trig_to_k3_trig ?(generate_init = false)
       KH.mk_block k3_trig_stmts
     )]
 
+
+let csv_adaptor_to_k3 (name_prefix: string)
+                      (rel: Schema.rel_t) 
+                      (params: (string * string) list): 
+                        (K.declaration_t * K.type_t) =
+  let del_var = "__m3_is_deletion" in
+  let param p d = 
+    if List.mem_assoc p params then List.assoc p params else d
+  in
+  let (reln, relv, _) = rel in
+  let with_deletions = (param "deletions" "false") = "true" in
+  let args = 
+    List.map 
+      (fun (vn,vt) -> (vn, 
+        let input_type = match vt with T.TDate -> T.TString | _ -> vt in
+          m3_type_to_k3_type input_type
+      ))
+      (if with_deletions then (del_var, T.TInt) :: relv else relv)
+  in
+  let child_params = 
+    KH.mk_tuple 
+      (List.map (fun (vn, vt) -> 
+        match vt with
+          | T.TDate -> KH.mk_apply (KH.mk_var "parse_sql_date") (KH.mk_var vn)
+          | _ -> (KH.mk_var vn)
+      ) relv)
+  in
+  let send_to_event evt = 
+    KH.mk_send (KH.mk_const (K.CTarget(Schema.name_of_event evt)))
+               (KH.mk_empty KH.t_addr)
+               (child_params)
+  in
+  let k3_code =
+    if with_deletions then
+      KH.mk_if 
+        (KH.mk_eq (KH.mk_var "__m3_is_deletion") (KH.mk_const (K.CInt(0))))
+        (send_to_event (Schema.InsertEvent(rel)))
+        (send_to_event (Schema.DeleteEvent(rel)))
+    else
+      (send_to_event (Schema.InsertEvent(rel)))
+  in
+    ( (K.Trigger(
+        name_prefix ^ reln,
+        lambda_args args,
+        [],
+        k3_code
+      )),
+      K.TValue(KT.deduce_arg_type (lambda_args args))
+    )
+;;
+
+let known_adaptors = ref [
+  "csv", csv_adaptor_to_k3
+];;
+
+let add_adaptor adaptor = known_adaptors := adaptor :: !known_adaptors;;
+
 (**[m3_to_k3 generate_init m3_program]
 
    Transforms a M3 program into a K3 program. 
@@ -1461,9 +1523,10 @@ let m3_trig_to_k3_trig ?(generate_init = false)
    @param  m3_program The M3 program being translated.
    @return The [m3_program] translated into K3.
 *)
-let m3_to_k3 ?(generate_init = false) (m3_program: M3.prog_t): (K.program_t) =
+let m3_to_k3 ?(generate_init = false) ?(role = "client") 
+             (m3_program: M3.prog_t): (K.program_t) =
   let {M3.maps = m3_prog_schema; M3.triggers = m3_prog_trigs;
-       M3.queries = m3_prog_tlqs; M3.db = k3_database } = m3_program in
+       M3.queries = m3_prog_tlqs; M3.db = m3_database } = m3_program in
   let k3_prog_schema = List.map m3_map_to_k3_map !m3_prog_schema in
   let k3_prog_env = List.map (function 
       | K.Global(id, ty, _) -> (id, ty)
@@ -1482,7 +1545,69 @@ let m3_to_k3 ?(generate_init = false) (m3_program: M3.prog_t): (K.program_t) =
                           | _ -> failwith "Complex TLQs presently unsupported"
                       ) !m3_prog_tlqs
   in
+  let (table_rels, stream_rels) = 
+    Schema.partition_sources_by_type m3_database
+  in
+  if table_rels <> []
+    then failwith "Table relations presently unsupported"
+  else
+  let source_id = ref 0 in
+  let next_source () = 
+    source_id := !source_id + 1; ("s"^(string_of_int !source_id))
+  in
+  let (k3_prog_demux_calls, k3_prog_demux_deep) = 
+    List.split (List.map (fun (source, adaptors) ->
+      let (demuxes, demux_types) = 
+        List.split (List.map (fun ((adaptor, params), rel) ->
+          if not (List.mem_assoc adaptor !known_adaptors)
+          then failwith ("Unknown adaptor "^adaptor)
+          else ((List.assoc adaptor !known_adaptors) "demux_" rel params)
+        ) adaptors)
+      in
+      let source_type = 
+        match (List.fold_left (function
+          | None -> (fun x -> Some(x))
+          | Some(s) -> (fun x ->
+            if x <> s then failwith "Mismatched adaptor schemas" else Some(x)
+          )
+        ) None demux_types) with
+          | None -> failwith "Each source must have an adaptor"
+          | Some(s) -> s
+      in
+      let source_id = next_source() in
+      let source_channel = 
+        match source with
+          | Schema.NoSource -> failwith "All streams must have a source"
+          | Schema.PipeSource _ -> failwith "pipe sources unsupported"
+          | Schema.SocketSource _ -> failwith "socket sources unsupported"
+          | Schema.FileSource(fname, Schema.Delimited("\n")) ->
+              (K.File(fname), K.CSV)
+          | Schema.FileSource _ -> failwith "Unsupported file source framing"
+      in
+      ( ( K.Stream(K.Source(source_id, source_type, source_channel)),
+          List.map (fun (_, (reln, _, _)) ->
+            K.Bind(source_id, "demux_"^reln)
+          ) adaptors,
+          K.Instruction(K.Consume(source_id))
+        ),
+        demuxes
+      )
+    ) stream_rels)
+  in
+  let k3_prog_demux = List.flatten k3_prog_demux_deep in
+  let (k3_prog_sources, k3_prog_bindings, k3_prog_consumes) = 
+    List.fold_right (fun (s,b,c) (sources,bindings,consumes) ->
+      (s :: sources, b @ bindings, c :: consumes)
+    ) k3_prog_demux_calls ([],[],[])
+  in
+  let k3_prog_client_role = 
+    k3_prog_sources @ k3_prog_bindings @ k3_prog_consumes
+  in
     List.map (fun x -> x, []) (
       k3_prog_schema @
-      k3_prog_trigs
+      k3_prog_trigs @ 
+      k3_prog_demux @
+      [ K.Role(role, k3_prog_client_role);
+        K.DefaultRole(role);
+      ]
     )
