@@ -289,6 +289,7 @@ let mk_fst tuple_types tuple =
 let mk_snd tuple_types tuple =
     mk_let_many (list_zip ["__fst";"__snd"] tuple_types) tuple (mk_var "__snd")
 
+
 (* Functions to manipulate tuples in K3 code *)
 type tuple_pat = Position of int | ExternVar of id_t | Unknown
 
@@ -313,12 +314,12 @@ let slice_pat_drop num pat =
     unknowns@list_drop num pat
 
 (* convert a number to an id used for breaking apart tuples *)
-let int_to_temp_id i prefix = prefix^string_of_int i
+let int_to_temp_id prefix i = prefix^string_of_int i
 
 let tuple_pat_to_ids pat =
     List.map 
     (fun x -> match x with 
-      | Position y -> int_to_temp_id y def_tup_prefix
+      | Position y -> int_to_temp_id def_tup_prefix y
       | ExternVar y -> y
       | Unknown -> "_")
     pat
@@ -326,7 +327,7 @@ let tuple_pat_to_ids pat =
 (* break down a tuple into its components, creating ids with a certain prefix *)
 let mk_destruct_tuple tup_name types prefix expr =
   let range = mk_tuple_range types in
-  let ids = List.map (fun i -> int_to_temp_id i prefix) range in
+  let ids = List.map (fun i -> int_to_temp_id prefix i) range in
   let ids_types = list_zip ids types in
   mk_let_many ids_types (mk_var tup_name) expr
 
@@ -353,4 +354,13 @@ let t_vid_mut = wrap_ttuple @: [t_int_mut; t_int_mut]
 let t_trig_id = t_int (* In K3, triggers are always handled by numerical id *)
 let t_stmt_id = t_int
 let t_map_id = t_int
+
+(* id function for maps *)
+let mk_id tuple_types = 
+    let prefix = "__id_" in
+    let r = mk_tuple_range @: tuple_types in
+    let ids = List.map (int_to_temp_id prefix) r in
+    let ids_types = list_zip ids tuple_types in
+    mk_lambda (wrap_args ids_types) @:
+      mk_tuple @: ids_to_vars @: extract_arg_names @: ids_types
 

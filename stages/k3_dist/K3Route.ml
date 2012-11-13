@@ -20,11 +20,35 @@ let free_bucket_type = wrap_tlist @: wrap_ttuple t_two_ints
 let sorted_ip_inner_type = [t_addr; wrap_tlist t_addr]
 let sorted_ip_list_type = wrap_tlist @: wrap_ttuple sorted_ip_inner_type
 
-let route_foreign_funcs = 
+exception NoHashFunction of K3.AST.base_type_t
+
+let unwrap_base_type t = match t with
+  | TIsolated(TMutable(x,_))    -> x
+  | TContained(TMutable(x,_))   -> x
+  | TIsolated(TImmutable(x,_))  -> x
+  | TContained(TImmutable(x,_)) -> x
+
+let hash_func_for typ =
+  let rec inner t = match unwrap_base_type t with
+    | TInt     -> "int"
+    | TFloat   -> "float"
+    | TBool    -> "bool"
+    | TString  -> "str"
+    | TAddress -> "addr"
+    | TCollection(_, v) -> "C_"^inner v^"_c"
+    | TTuple(vs) -> "T_"^ String.concat "_" (List.map inner vs) ^"_t"
+    | x -> raise (NoHashFunction x)
+  in "hash_"^inner typ
+
+let hash_funcs_foreign p : (declaration_t * annotation_t) list =
+  let map_types = (* all the map types we have *)
+    ListAsSet.uniq @: List.flatten @: for_all_maps p @: (map_types_for p) in
+  let names_types = List.map (fun t -> (t, hash_func_for t)) map_types in
+  List.map (fun (t, name) -> mk_foreign_fn name t t_int) names_types
+
+let route_foreign_funcs p = 
   mk_foreign_fn "mod" (wrap_ttuple [t_int; t_int]) t_int ::
-  mk_foreign_fn "hash_int" t_int t_int ::
-  mk_foreign_fn "hash_float" t_float t_int ::
-  []
+  (hash_funcs_foreign p)
 
 let bmod_data = "bmod_data"
 let bmod_per_map_types = [t_map_id; bmod_types]
@@ -50,21 +74,13 @@ let calc_dim_bounds_code = mk_global_fn "calc_dim_bounds"
       )
       (mk_var "bmod")
 
-let hash_func_for typ = "hash_"^match typ with
-  | TIsolated(TImmutable(TInt,_)) -> "int"
-  | TIsolated(TImmutable(TFloat,_)) -> "float"
-  | _ -> invalid_arg "No hash function for this type"
-
-let key_map_types_for p map_id =
-  list_drop_end 1 @: map_types_for p map_id
-
 let gen_route_fn p map_id = 
   let map_types_full = map_types_for p map_id in
   let map_types = list_drop_end 1 map_types_full in
   let map_range = create_range 0 (List.length map_types) in
   let key_types = wrap_tmaybes map_types in
   let prefix = "key_id_" in
-  let to_id i = int_to_temp_id i prefix in
+  let to_id i = int_to_temp_id prefix i in
   match map_types with 
   | [] -> (* if no keys, for now we just route to one place *)
   mk_global_fn (route_for p map_id)
@@ -213,7 +229,7 @@ let gen_route_fn p map_id =
 let gen_route_code p =
   K3Ring.gen_ring_code @
   global_bmods ::
-  route_foreign_funcs @ 
+  route_foreign_funcs p @ 
   calc_dim_bounds_code ::
   List.map (gen_route_fn p) (get_map_list p)
 

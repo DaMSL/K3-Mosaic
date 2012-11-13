@@ -68,11 +68,11 @@ let gen_shuffle_fn p rmap lmap bindings fn_name =
   let list_of_tuples = wrap_tlist tuple_types in
   let result_types = wrap_tlist @: wrap_ttuple [t_addr; list_of_tuples] in
   (* deducts the last map type which is the value *)
-  let lkey_types = wrap_tmaybes @: key_map_types_for p lmap in
+  let lkey_types = wrap_tmaybes @: map_types_no_val_for p lmap in
   (* lkey refers to the access pattern from trig args. rkey is from the tuples*)
   let id_l = "__id_l" in let id_r = "__id_r" in
-  let to_rkey i = int_to_temp_id i id_r in
-  let to_lkey i = int_to_temp_id i id_l in
+  let to_rkey i = int_to_temp_id id_r i in
+  let to_lkey i = int_to_temp_id id_l i in
   let lmap_range = mk_tuple_range lkey_types in
   let full_lkey = 
     List.map (* use bindings to construct lkey. Also tuple -> just var *)
