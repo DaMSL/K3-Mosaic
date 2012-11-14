@@ -74,18 +74,18 @@ let get_stmt_data (p:prog_data_t) = match p with
 let get_map_data (p:prog_data_t) = match p with
   (_, _, map) -> map
 
-(* function to check if a trigger is corrective *)
-let corr_trig t = 
-  let prefix = "correct_" in
-  let len = String.length prefix in
-  if String.sub t 0 len = prefix then true else false
+(* function to check if a trigger is a delete/insert trigger *)
+let check_prefix name prefix =
+  let len = String.length prefix in 
+  if String.sub name 0 len = prefix then true else false
 
-let not_corr_trig t = not (corr_trig t)
+let relevant_trig t = 
+  check_prefix t "insert_" || check_prefix t "delete_"
  
 (* only non-corrective triggers *)
 let get_trig_list (p:prog_data_t) = 
   let l = List.map (fun (_, name, _, _) -> name) @: get_trig_data p in
-  List.filter not_corr_trig l
+  List.filter relevant_trig l
 
 let for_all_trigs (p:prog_data_t) f =
   List.map (fun t -> f t) @: get_trig_list p
@@ -110,7 +110,7 @@ let trigger_name_for_id p (trig_id:trig_id_t) =
 (* only non-corrective triggers *)
 let get_stmt_list (p:prog_data_t) =
   let l = List.map (fun (s,t,_,_,_) -> (s,trigger_name_for_id p t)) @: get_stmt_data p in
-  fst @: List.split @: List.filter (fun (_,t) -> not_corr_trig t) l
+  fst @: List.split @: List.filter (relevant_trig |- snd) l
 
 let for_all_stmts (p:prog_data_t) f =
   List.map (fun s -> f s) @: get_stmt_list p
