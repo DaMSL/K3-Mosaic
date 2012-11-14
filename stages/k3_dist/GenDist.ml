@@ -161,7 +161,7 @@ let declare_global_funcs p =
         mk_tuple [mk_var "vid2"; mk_var "trig"]
       ) @:
       mk_var log_master
-  in
+ in
   (* add_delta_to_buffer -- add delta to vid and all future vids *)
   let add_delta_to_buffer_code map =
     let map_name = map_name_of p map in
@@ -356,7 +356,7 @@ let send_puts =
                 mk_apply
                   (mk_var shuffle_fn) @:
                   mk_tuple @:
-                      key@
+                      (mk_tuple key)::
                       [mk_empty @: wrap_tlist @: wrap_ttuple rhs_map_types]@
                       [mk_const @: CBool true]
           )
@@ -506,7 +506,7 @@ let send_push_stmt_map_trig p trig_name =
             mk_apply
               (mk_var shuffle_fn) @:
               mk_tuple
-                (partial_key@
+                (mk_tuple partial_key::
                   (mk_slice 
                     (mk_var rhs_map_name) @:
                     mk_tuple @: slice_key
@@ -709,7 +709,7 @@ let send_corrective_trigs p =
                       mk_apply
                         (mk_var shuffle_fn) @:
                         mk_tuple @:
-                          key@
+                          mk_tuple key::
                           mk_var "delta_tuples"::
                           [mk_const @: CBool false]
                   )

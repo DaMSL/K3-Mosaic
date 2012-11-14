@@ -193,7 +193,7 @@ let map_types_for p map_id =
   let (_, _, vars) = find_map p map_id in 
   vars
 
-let map_types_no_val_for p map = list_drop 1 @: map_types_for p map
+let map_types_no_val_for p map = list_drop_end 1 @: map_types_for p map
 let map_types_add_v ts = t_vid::ts
 let map_types_with_v_for p map = map_types_add_v @: map_types_for p map
 
