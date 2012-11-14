@@ -5,7 +5,7 @@ trigger on_event(a:int, b:int) {} = do {
 }
 
 role client {
-  source s1: (int,int) = file(csv, "s1.csv")
+  source s1: (int,int) = file("s1.csv", csv)
   bind s1 -> on_event
 }
 

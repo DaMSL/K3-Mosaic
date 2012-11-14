@@ -121,47 +121,48 @@ type stop_behavior_t
     | UntilEmpty
     | UntilEOF
 
-(* Stream and program role AST *)
+(* Flow program AST *)
 
 (* The types of sources we can have, along with the information to uniquely
  * identify them. *)
-type stream_format_t = CSV | JSON
+type channel_format_t = CSV | JSON
 
-type stream_type_t
+type channel_type_t
     = File       of string
     | Network    of address
 
-type stream_channel_t = stream_type_t * stream_format_t
-
-type stream_pattern_t =
+type resource_pattern_t =
     | Terminal      of id_t
-    | Choice        of stream_pattern_t list
-    | Sequence      of stream_pattern_t list
-    | Optional      of stream_pattern_t
-    | Repeat        of stream_pattern_t * stop_behavior_t
-
-type stream_t
-    = Source        of id_t * type_t * stream_channel_t
-    | Sink          of id_t * type_t * stream_channel_t
-    | Derived       of id_t * stream_pattern_t
+    | Choice        of resource_pattern_t list
+    | Sequence      of resource_pattern_t list
+    | Optional      of resource_pattern_t
+    | Repeat        of resource_pattern_t * stop_behavior_t
 
 (* TODO: produce, listen instructions *)
-type instruction_t
-    = Consume of id_t
+type instruction_t = Consume of id_t
 
-type stream_statement_t =
-    | Stream        of stream_t
-    | Bind          of id_t * id_t
-    | Instruction   of instruction_t
+type flow_resource_t = 
+  | Handle  of type_t * channel_type_t * channel_format_t
+  | Pattern of resource_pattern_t
 
-type stream_program_t = stream_statement_t list
+type flow_endpoint_t =
+  | Resource   of id_t * flow_resource_t
+  | Code       of id_t * arg_t * (id_t * value_type_t * annotation_t) list * expr_t
+
+type flow_statement_t =
+  | Source      of flow_endpoint_t
+  | Sink        of flow_endpoint_t
+  | Bind        of id_t * id_t
+  | Instruction of instruction_t
+
+type flow_program_t = (flow_statement_t * annotation_t) list
 
 (* Top-Level Declarations *)
 type declaration_t
     = Global        of id_t * type_t  * expr_t option
     | Foreign       of id_t * type_t
-    | Trigger       of id_t * arg_t * (id_t * value_type_t * annotation_t) list * expr_t
-    | Role          of id_t * stream_program_t
+    | Flow          of flow_program_t
+    | Role          of id_t * flow_program_t
     | DefaultRole   of id_t
 
 (* K3 Programs *)

@@ -21,6 +21,7 @@ module RK3ToImperative = RK3ToImperative.Make(CPP.CPPTarget)
 
 module CPPExt = CPP.CPPTarget
 module CPPAST = CPP.CPPTarget.ASTImport
+module CPPGen = CPP.CPPGenerator
 open ImperativeToCPP
 
 
@@ -35,14 +36,15 @@ let in_lang_descs = [
     M3in,     "m3",  "M3";
   ]
 
-type out_lang_t = K3 | K3Dist | ReifiedK3 | Imperative | CPP
+type out_lang_t = K3 | K3Dist | ReifiedK3 | Imperative | CPPInternal | CPP
 
 let out_lang_descs = [
-    K3,         "k3",  "K3";
-    K3Dist,     "k3dist", "Distributed K3";
-    ReifiedK3,  "rk3", "Reified K3";
-    Imperative, "imp", "Imperative";
-    CPP,        "cpp", "C++";
+    K3,          "k3",     "K3";
+    K3Dist,      "k3dist", "Distributed K3";
+    ReifiedK3,   "rk3",    "Reified K3";
+    Imperative,  "imp",    "Imperative";
+    CPPInternal, "cppi",   "C++-internal";
+    CPP,         "cpp",    "C++";
   ]
 
 let format_language_description (lang_t, short_desc, long_desc) =
@@ -240,11 +242,11 @@ let interpret params =
   List.iter eval_fn params.input_files
 
 (* Print actions *)
-let print_event_loop (id, (senv, fenv, sbind, instrs)) = 
-	print_endline ("----Role "^id^" Stream Program----");
-	print_string (string_of_stream_env senv);
-	print_string (string_of_fsm_env fenv);
-	print_string (string_of_source_bindings sbind)
+let print_event_loop (id, (res_env, res_bindings, ds_env, instrs)) = 
+    print_endline ("----Role "^id^" Flow Program----");
+    print_string (string_of_resource_bindings res_bindings);
+    print_string (string_of_resource_env res_env);
+    print_string (string_of_dispatcher_env ds_env)
 
 let string_of_typed_meta (t,a) = string_of_annotation a
 
@@ -254,7 +256,7 @@ let print_k3_program p =
     print_endline (string_of_program tp);
     List.iter print_event_loop event_loops;
     match default with None -> () 
-        | Some (_,x) -> print_event_loop ("DEFAULT", x)
+      | Some (_,x) -> print_event_loop ("DEFAULT", x)
 
 let print_k3_dist_prog (p, m) = match m with
   | None -> error "Cannot construct distributed K3 without ProgInfo metadata"
@@ -287,8 +289,17 @@ let print_imp func print_types f =
   in print_endline @: 
     ImperativeUtil.string_of_program string_of_meta (func f)
 
-let print_cpp_program = print_imp cpp_program
+let print_cppi_program = print_imp cpp_program
 let print_imperative_program = print_imp imperative_program
+
+let print_cpp_program f = 
+  let files_and_content = CPPGen.generate_program (cpp_program f) in
+  let mk_filename id = (String.make 40 '=')^" "^id in 
+  let print_content (f,c) =
+    print_endline (mk_filename f); print_endline c; print_endline "\n\n"
+  in
+  List.iter print_content files_and_content
+  
 
 let print params =
   let print_fn = match params.out_lang with
@@ -296,7 +307,8 @@ let print params =
     | K3Dist -> params.in_lang <- M3in; print_k3_dist_prog
     | ReifiedK3 -> print_reified_k3_program |- fst
     | Imperative -> (print_imperative_program params.print_types) |- fst
-    | CPP -> (print_cpp_program params.print_types) |- fst
+    | CPPInternal -> (print_cppi_program params.print_types) |- fst
+    | CPP -> print_cpp_program |- fst
   in
   let read_fn = match params.in_lang with
     | K3in -> fun f -> (parse_program_k3 f, None)

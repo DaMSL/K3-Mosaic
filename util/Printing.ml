@@ -7,12 +7,18 @@ type cut_type = NoCut | CutHint | CutLine
 let formatter = ref (stdbuf, str_formatter);;
  
 let ob () = pp_open_hovbox (snd !formatter) 2
+let obn () = pp_open_hbox (snd !formatter) ()
+let obx i = pp_open_vbox (snd !formatter) i
+let obc i = pp_open_hvbox (snd !formatter) i
 let cb () = pp_close_box (snd !formatter) ()
 let pc () = pp_print_cut (snd !formatter) ()
 let pb i = pp_print_break (snd !formatter) 0 i
+let pbs i = pp_print_break (snd !formatter) i 0
 let ps s = pp_print_string (snd !formatter) s
 let psp () = pp_print_space (snd !formatter) ()
+let pnl() = pp_print_newline (snd !formatter) ()
 let fnl () = pp_force_newline (snd !formatter) ()
+  
 
 let cut c = match c with
   | NoCut -> ()

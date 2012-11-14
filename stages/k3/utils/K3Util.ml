@@ -32,6 +32,14 @@ let rec typed_vars_of_arg arg =
 let id_of_var e = match tag_of_expr e with
   | Var id -> id | _ -> failwith "invalid variable"
 
+let tuple_type_of_args args_t =
+	if List.length args_t = 1 then TValue (List.hd args_t) 
+	else TValue (TIsolated(TImmutable(TTuple(args_t),[])))
+
+let tuple_type_of_arg arg =
+  tuple_type_of_args (List.map snd (typed_vars_of_arg arg)) 
+   
+
 (* Predicates *)
 let is_const e = match tag_of_expr e with | Const _ -> true | _ -> false
 let is_var e = match tag_of_expr e with | Var _ -> true | _ -> false
@@ -178,12 +186,6 @@ let decompose_send e =
   let rec rest i acc = if i = 1 then acc else rest (i-1) ((n i)::acc)
   in (n 0, n 1, rest ((List.length (sub_tree e))-1) [])
 
-(* Declaration accessors *)
-let is_global (d,a) = match d with Global _ -> true | _ -> false
-let is_trigger (d,a) = match d with Trigger _ -> true | _ -> false
-
-let globals_of_program p = List.filter is_global p
-let triggers_of_program p = List.filter is_trigger p
 
 let match_declaration id match_f l =
   let m = List.filter match_f l
@@ -192,15 +194,48 @@ let match_declaration id match_f l =
     | [x] -> x
     | _ -> failwith ("Multiple matches found for "^id)
 
+(* Declaration accessors *)
+let is_global (d,a) = match d with Global _ -> true | _ -> false
+let is_flow (d,a)   = match d with Flow _ -> true | _ -> false
+
+let globals_of_program p = List.filter is_global p
+let flows_of_program p   = List.filter is_flow p
+
 let global_of_program id p = 
   match_declaration id (fun (d,a) -> match d with
       | Global (n,_,_) when n = id -> true
       | _ -> false 
     ) (globals_of_program p)
-    
+
+(* Flow program accesors *)
+let is_source (fs,_)    = match fs with Source _ -> true | _ -> false
+let is_sink (fs,_)      = match fs with Sink _ -> true | _ -> false
+let is_generator (fs,_) = match fs with Source(Code _) -> true | _ -> false
+let is_trigger (fs,_)   = match fs with Sink(Code _) -> true | _ -> false
+
+let endpoints_of_flow match_f fp = 
+  let endpoints = List.filter match_f fp in 
+  let unwrap (fs,_) = match fs with Source ep -> [ep] | Sink ep -> [ep] | _ -> []
+  in List.flatten (List.map unwrap endpoints) 
+
+let endpoints_of_program match_f p = 
+  let flow_program (d,_) = match d with Flow p -> p | _ -> [] in
+  let flow_statements = List.flatten (List.map flow_program (flows_of_program p))
+  in endpoints_of_flow match_f flow_statements
+
+let sources_of_flow p    = endpoints_of_flow is_source p
+let sinks_of_flow p      = endpoints_of_flow is_sink p 
+let generators_of_flow p = endpoints_of_flow is_generator p
+let triggers_of_flow p   = endpoints_of_flow is_trigger p 
+
+let sources_of_program p    = endpoints_of_program is_source p
+let sinks_of_program p      = endpoints_of_program is_sink p 
+let generators_of_program p = endpoints_of_program is_generator p
+let triggers_of_program p   = endpoints_of_program is_trigger p 
+
 let trigger_of_program id p =
-  match_declaration id (fun (d,a) -> match d with
-      | Trigger (n,_,_,_) when n = id -> true
+  match_declaration id (fun fs -> match fs with
+      | Code (n,_,_,_) when n = id -> true
       | _ -> false 
     ) (triggers_of_program p)
 

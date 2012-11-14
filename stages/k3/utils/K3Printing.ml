@@ -189,8 +189,16 @@ let flat_string_of_expr_tag tag children =
 let flat_string_of_expr expr =
   flat_string_of_tree (fun ((id, tag), _) -> flat_string_of_expr_tag tag) expr
 
-let rec flat_string_of_stream_pattern p =
-  let rcr = flat_string_of_stream_pattern in
+let flat_string_of_channel_type ct = match ct with
+  | File fp -> tag_str "File" [fp]
+  | Network addr -> tag_str "Network" [string_of_address addr]
+
+let flat_string_of_channel_format cf = match cf with
+  | CSV -> "CSV"
+  | JSON -> "JSON"
+ 
+let rec flat_string_of_resource_pattern p =
+  let rcr = flat_string_of_resource_pattern in
   let rcr_list l = List.map rcr l in
   match p with
     | Terminal(id)  -> tag_str "Terminal" [id]
@@ -199,27 +207,37 @@ let rec flat_string_of_stream_pattern p =
     | Optional(p)   -> tag_str "Optional" [rcr p]
     | Repeat(p, s) -> tag_str "Repeat" [rcr p; string_of_stop_behavior_t s]
 
-let flat_string_of_stream s =
-  match s with
-    | Source(i, t, _)    -> tag_str "Source" [i; flat_string_of_type t]
-    | Sink(i, t, _)      -> tag_str "Sink" [i; flat_string_of_type t]
-    | Derived(id, p)     -> tag_str "Derived" [id; flat_string_of_stream_pattern p]
-
 let flat_string_of_instruction i = match i with
     | Consume(id) -> tag_str "Consume" [id]
 
-let flat_string_of_stream_statement ss = match ss with
-    | Stream(s)      -> tag_str "Stream" [flat_string_of_stream s]
+let flat_string_of_flow_resource r = match r with
+    | Handle(t,ct,cf)  ->
+        tag_str "Handle" [flat_string_of_type t; 
+                          flat_string_of_channel_type ct;
+                          flat_string_of_channel_format cf]
+
+    | Pattern(p)       -> tag_str "Pattern" [flat_string_of_resource_pattern p]
+
+let flat_string_of_flow_endpoint e =
+  let string_of_id_and_vtype (id,vt,_) = "("^id^", "^flat_string_of_value_type vt^")" in
+  match e with
+  | Resource (id,r) -> tag_str "Resource" [id; flat_string_of_flow_resource r]
+  | Code(i, arg, ds, e) ->  
+	  let decls = "["^(String.concat ", " (List.map string_of_id_and_vtype ds))^"]" in
+	  tag_str "Code"
+	    [i; flat_string_of_arg arg; decls; flat_string_of_expr e]
+
+let flat_string_of_flow_statement fs = match fs with
+    | Source ep      -> tag_str "Source" [flat_string_of_flow_endpoint ep]
+    | Sink ep        -> tag_str "Sink" [flat_string_of_flow_endpoint ep]
     | Bind(i, i2)    -> tag_str "Bind" [i; i2]
     | Instruction(i) -> tag_str "Instruction" [flat_string_of_instruction i]
 
-let flat_string_of_stream_program sp =
-  "[ "^(String.concat "," (List.map flat_string_of_stream_statement sp))^" ]"
+let flat_string_of_flow_program sp =
+  "[ "^(String.concat ","
+         (List.map (fun (fs,_) -> flat_string_of_flow_statement fs) sp))^" ]"
 
 let flat_string_of_declaration d =
-  let string_of_id_and_vtype (id,vt,_) =
-    "("^id^", "^flat_string_of_value_type vt^")"
-  in
   match d with
     | Global(i, t, init) ->
       tag_str "Global"
@@ -227,14 +245,9 @@ let flat_string_of_declaration d =
       
     | Foreign(i, t) -> tag_str "Foreign" [i; flat_string_of_type t]
 
-    | Trigger(i, arg, ds, e) ->
-      let trig_decls = "["^
-        (String.concat ", " (List.map string_of_id_and_vtype ds))^"]"
-      in
-      tag_str "Trigger"
-        [i; flat_string_of_arg arg; trig_decls; flat_string_of_expr e]
+    | Flow fp -> tag_str "Flow" [flat_string_of_flow_program fp]
         
-    | Role (id, sp)    -> tag_str "Role" [id; flat_string_of_stream_program sp]
+    | Role (id, sp)    -> tag_str "Role" [id; flat_string_of_flow_program sp]
     
     | DefaultRole (id) -> tag_str "DefaultRole" [id]
 
@@ -256,12 +269,19 @@ module type StringifyAST = sig
 	val print_arg : arg_t -> unit
 	val print_expr : ?print_id:bool -> expr_t -> unit
 	
-	val print_stream : stream_t -> unit
-	val print_stream_pattern : stream_pattern_t -> unit
-  val print_instruction : instruction_t -> unit
-  val print_stream_statement : stream_statement_t -> unit
-  val print_stream_program : stream_statement_t list -> unit
-  
+	val print_resource_pattern : resource_pattern_t -> unit
+	val print_flow_resource    : flow_resource_t -> unit
+
+  val print_flow_statement :
+    ?print_id:bool ->
+    ?print_expr_fn:(?print_id:bool -> expr_t -> unit Lazy.t)
+    -> flow_statement_t -> unit
+
+  val print_flow_program :
+    ?print_id:bool ->
+    ?print_expr_fn:(?print_id:bool -> expr_t -> unit Lazy.t)
+    -> flow_program_t -> unit
+    
   val print_declaration :
     ?print_id:bool ->
     ?print_expr_fn:(?print_id:bool -> expr_t -> unit Lazy.t)
@@ -274,11 +294,10 @@ module type StringifyAST = sig
   val string_of_arg: arg_t -> string
 	val string_of_expr: expr_t -> string
 	
-  val string_of_stream : stream_t -> string
-  val string_of_stream_pattern : stream_pattern_t -> string
-	val string_of_instruction: instruction_t -> string
-	val string_of_stream_statement : stream_statement_t -> string
-	val string_of_stream_program : stream_program_t -> string
+	val string_of_resource_pattern : resource_pattern_t -> string
+	val string_of_flow_resource    : flow_resource_t -> string
+	val string_of_flow_statement   : flow_statement_t -> string
+	val string_of_flow_program     : flow_program_t -> string
 	val string_of_declaration: declaration_t -> string
 	
 	val string_of_program:
@@ -431,16 +450,12 @@ and print_expr ?(print_id=false) expr =
     fold_tree (fun _ _ -> ()) (fun _ lazy_ch e -> [lazy (print lazy_ch e)]) () [] expr
   in force (List.hd lazy_e)
 
-let rec print_stream s =
-  let my_tag = pretty_tag_str CutHint "" in
-  match s with
-    | Source(i, t, _) -> my_tag "Source" [lps i; lazy_type t]
-    | Sink(i, t, _)   -> my_tag "Sink" [lps i; lazy_type t]
-    | Derived(id, p)  -> my_tag "Derived" [lps id; lazy (print_stream_pattern p)]
+let print_instruction i = match i with
+    | Consume(id) -> pretty_tag_str CutHint "" "Consume" [lps id]
 
-and print_stream_pattern p =
+let rec print_resource_pattern p =
   let my_tag = pretty_tag_str CutHint "" in
-  let lazy_rcr p = lazy (print_stream_pattern p) in 
+  let lazy_rcr p = lazy (print_resource_pattern p) in 
   let rcr_list l = List.map lazy_rcr l in
   match p with
     | Terminal(id)  -> my_tag "Terminal" [lps id]
@@ -449,23 +464,43 @@ and print_stream_pattern p =
     | Optional(p)   -> my_tag "Optional" [lazy_rcr p]
     | Repeat(p, s)  -> my_tag "Repeat" [lazy_rcr p; lps (string_of_stop_behavior_t s)]
 
-let print_instruction i = match i with
-    | Consume(id) -> pretty_tag_str CutLine "" "Consume" [lps id]
+let print_flow_resource r =
+  let my_tag = pretty_tag_str CutHint "" in
+  match r with
+    | Handle (t,ct,cf) ->
+      my_tag "Handle" [lazy_type t;
+                       lps (flat_string_of_channel_type ct);
+                       lps (flat_string_of_channel_format cf)]
 
-let print_stream_statement ss =
-  let my_tag = pretty_tag_str CutLine "" in
-  match ss with
-    | Stream(s) -> my_tag "Stream" [lazy (print_stream s)]
+    | Pattern p        -> my_tag "Pattern" [lazy (print_resource_pattern p)]
+
+let print_flow_endpoint ?(print_id=false) ?(print_expr_fn=lazy_expr) ep =
+	let my_tag = pretty_tag_str CutHint "" in
+  let print_id_vt (id,vt,_) = lazy (ps ("("^id^", "); print_value_type vt; ps ")") in
+	match ep with
+  | Resource (id,r) -> my_tag "Resource" [lps id; lazy (print_flow_resource r)]
+  | Code(i, arg, ds, e) ->
+	  let decls = lazy(ps "["; ps_list CutLine force (List.map print_id_vt ds); ps "]") in
+	  my_tag "Code" 
+	    [lps (quote i); lazy_arg arg; decls; print_expr_fn ~print_id:print_id e]
+
+let print_flow_statement ?(print_id=false) ?(print_expr_fn=lazy_expr) fs =
+  let my_tag = pretty_tag_str CutHint "" in
+  let print_endpoint = print_flow_endpoint ~print_id:print_id ~print_expr_fn:print_expr_fn in
+  match fs with
+    | Source ep     -> my_tag "Source" [lazy (print_endpoint ep)]
+    | Sink ep       -> my_tag "Sink" [lazy (print_endpoint ep)]
     | Bind(i, i2)   -> my_tag "Bind" [lps i; lps i2]
     | Instruction i -> my_tag "Instruction" [lazy (print_instruction i)]
  
-let print_stream_program sp = List.iter print_stream_statement sp
+let print_flow_program ?(print_id=false) ?(print_expr_fn=lazy_expr) fp =
+  let print_fn (fs, _) =
+    print_flow_statement ~print_id:print_id ~print_expr_fn:print_expr_fn fs
+  in
+    ps "["; ps_list ~sep:";" CutLine print_fn fp; ps "]"
 
 let print_declaration ?(print_id=false) ?(print_expr_fn=lazy_expr) d =
-  let my_tag = pretty_tag_str CutLine "" in
-  let print_id_vt (id,vt,_) =
-    lazy (ps ("("^id^", "); print_value_type vt; ps ")")
-  in
+  let my_tag ?(cut=CutLine) = pretty_tag_str cut "" in
   match d with
     | Global(i, t, init) ->
       my_tag "Global"
@@ -474,26 +509,20 @@ let print_declaration ?(print_id=false) ?(print_expr_fn=lazy_expr) d =
 
     | Foreign(i, t) -> my_tag "Foreign" [lps (quote i); lazy_type t]
 
-    | Trigger(i, arg, ds, e) ->
-      let trig_decls = 
-        lazy(ps "["; ps_list CutLine force (List.map print_id_vt ds); ps "]")
-      in
-      my_tag "Trigger" 
-        [lps (quote i); lazy_arg arg; trig_decls; print_expr_fn ~print_id:print_id e]
+    | Flow fp -> my_tag "Flow" [lazy (print_flow_program fp)]
         
-    | Role (id, sp)   -> my_tag "Role" [lps (quote id); lazy(print_stream_program sp)]
+    | Role (id, sp)   -> my_tag "Role" [lps (quote id); lazy(print_flow_program sp)]
 
-    | DefaultRole id  -> my_tag "DefaultRole" [lps (quote id)] 
+    | DefaultRole id  -> my_tag ~cut:CutHint "DefaultRole" [lps (quote id)] 
 
 let string_of_base_type bt  = wrap_formatter (fun () -> print_base_type bt)
 let string_of_value_type vt = wrap_formatter (fun () -> print_value_type vt)
 let string_of_type t        = wrap_formatter (fun () -> print_type t)
 
-let string_of_stream_pattern p    = wrap_formatter (fun () -> print_stream_pattern p)
-let string_of_stream s            = wrap_formatter (fun () -> print_stream s)
-let string_of_instruction i       = wrap_formatter (fun () -> print_instruction i)
-let string_of_stream_statement ss = wrap_formatter (fun () -> print_stream_statement ss) 
-let string_of_stream_program sp   = wrap_formatter (fun () -> print_stream_program sp)
+let string_of_resource_pattern p = wrap_formatter (fun () -> print_resource_pattern p)
+let string_of_flow_resource r    = wrap_formatter (fun () -> print_flow_resource r)
+let string_of_flow_statement fs  = wrap_formatter (fun () -> print_flow_statement fs) 
+let string_of_flow_program fp    = wrap_formatter (fun () -> print_flow_program fp)
 
 let string_of_arg a         = wrap_formatter (fun () -> print_arg a)
 let string_of_expr e        = wrap_formatter (fun () -> print_expr e)

@@ -364,7 +364,7 @@ let send_puts =
           s_and_over_stmts_in_t p rhs_lhs_of_stmt trig_name
 in
 (* Actual SendFetch function *)
-mk_trigger
+mk_code_sink
   (send_fetch_name_of_t p trig_name)
   (wrap_args (args_of_t_with_v p trig_name))
   [] @: (* locals *)
@@ -385,7 +385,7 @@ mk_trigger
  * between nodes.
  *)
 let rcv_fetch_trig p trig =
-  mk_trigger
+  mk_code_sink
     (rcv_fetch_name_of_t p trig)
     (wrap_args @: ("stmts_and_map_ids", 
       wrap_tlist @: wrap_ttuple [t_stmt_id; t_map_id])::
@@ -439,7 +439,7 @@ let rcv_fetch_trig p trig =
  * Update the statement counters with the received values
  *)
 let rcv_put_trig p trig_name =
-mk_trigger
+mk_code_sink
   (rcv_put_name_of_t p trig_name)
   (wrap_args @:
     ("stmt_id_cnt_list", wrap_tlist @: wrap_ttuple [t_stmt_id; t_int])::
@@ -488,7 +488,7 @@ let send_push_stmt_map_trig p trig_name =
       let slice_key = 
         mk_var "vid" :: slice_key_from_bound p stmt_id rhs_map_id in
       acc_code@
-      [mk_trigger 
+      [mk_code_sink 
         (send_push_name_of_t p trig_name stmt_id rhs_map_id)
         (wrap_args @: args_of_t_with_v p trig_name)
         [] @: (* locals *)
@@ -536,7 +536,7 @@ List.fold_left
     let reduced_pat = slice_pat_take (List.length tuple_pat - 1) tuple_pat in
     let reduced_code = mk_rebuild_tuple "tuple" tuple_types reduced_pat in
     acc_code@
-    [mk_trigger 
+    [mk_code_sink 
       (rcv_push_name_of_t p trig_name stmt_id read_map_id)
       (wrap_args @: ("tuples", wrap_tlist @: wrap_ttuple @: tuple_types)::
         args_of_t_with_v p trig_name
@@ -660,7 +660,7 @@ let send_corrective_trigs p =
     match trigs_stmts_with_matching_rhs_map with [] -> [] | _ ->
     (* we transfer with vid so we don't need to strip *)
     let tuple_types = wrap_ttuple @: map_types_with_v_for p map_id in
-    [mk_trigger 
+    [mk_code_sink 
       (send_corrective_name_of_t p map_id)
       (wrap_args ["vid", t_vid; "delta_tuples", wrap_tlist tuple_types])
       [] @:
@@ -726,7 +726,7 @@ let send_corrective_trigs p =
  
 let do_complete_trigs p trig_name =
 let do_complete_trig stmt_id =
-mk_trigger (do_complete_name_of_t p trig_name stmt_id)
+mk_code_sink (do_complete_name_of_t p trig_name stmt_id)
   (wrap_args @: args_of_t_with_v p trig_name)
   [] @: (* locals *)
     (* in terms of substitution, we need to 
@@ -797,7 +797,7 @@ let filter_corrective_list = mk_global_fn filter_corrective_list_name
 let rcv_correctives_trig p trig_name = 
 List.map
   (fun (stmt_id, map_id) ->
-    mk_trigger (rcv_corrective_name_of_t p trig_name stmt_id map_id)
+    mk_code_sink (rcv_corrective_name_of_t p trig_name stmt_id map_id)
       (wrap_args 
         ["vid", t_vid; 
         "delta_tuples", wrap_tlist @: wrap_ttuple @: map_types_with_v_for p map_id]
@@ -845,7 +845,7 @@ List.map
 let do_corrective_trigs p trig_name =
 List.map
   (fun (stmt_id, map_id) ->
-    mk_trigger 
+    mk_code_sink 
       (do_corrective_name_of_t p trig_name stmt_id map_id)
       (wrap_args @: args_of_t_with_v p trig_name@
         ["delta_tuples", wrap_tlist @: wrap_ttuple @: map_types_with_v_for p map_id]
@@ -887,6 +887,7 @@ let gen_dist p ast =
   global_funcs @ (* maybe make this not order-dependent *)
   declare_foreign_functions p @
   filter_corrective_list ::  (* global func *)
-  regular_trigs@
-  send_corrective_trigs p    (* per-map basis *)
+  mk_flow @: 
+    regular_trigs@
+    send_corrective_trigs p    (* per-map basis *)
 

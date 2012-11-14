@@ -17,8 +17,8 @@ FILES=\
 	stages/k3/core/K3Streams \
 	stages/k3/K3Typechecker \
 	stages/k3/interpreter/K3Values \
-	stages/k3/interpreter/K3Consumption \
 	stages/k3/interpreter/K3Runtime \
+	stages/k3/interpreter/K3Consumption \
 	stages/k3/interpreter/K3Interpreter \
 	stages/k3_dist/ProgInfo \
 	stages/k3_dist/K3Ring \
@@ -28,6 +28,8 @@ FILES=\
 	stages/imperative/ReifiedK3 \
 	stages/imperative/Imperative \
 	stages/imperative/ImperativeUtil \
+	stages/imperative/Runtime \
+	stages/imperative/Remoting \
 	stages/imperative/RK3ToImperative \
 	stages/imperative/CPP \
 	stages/imperative/CPPTyping \

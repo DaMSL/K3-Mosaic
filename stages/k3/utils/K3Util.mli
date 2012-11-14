@@ -15,6 +15,9 @@ val vars_of_arg : arg_t -> id_t list
 val typed_vars_of_arg : arg_t -> (id_t * value_type_t) list
 val id_of_var : expr_t -> id_t
 
+val tuple_type_of_args : value_type_t list -> type_t
+val tuple_type_of_arg : arg_t -> type_t
+
 (* Predicates *)
 val is_const : expr_t -> bool
 val is_var : expr_t -> bool
@@ -41,11 +44,23 @@ val decompose_gbagg : expr_t -> expr_t * expr_t * expr_t * expr_t
 val decompose_send : expr_t -> expr_t * expr_t * (expr_t list)
 
 (* Declaration accessors *)
-val globals_of_program : program_t -> program_t
-val triggers_of_program : program_t -> program_t
+val globals_of_program  : program_t -> program_t
+val flows_of_program    : program_t -> program_t
 
-val global_of_program : id_t -> program_t -> declaration_t * annotation_t
-val trigger_of_program : id_t -> program_t -> declaration_t * annotation_t
+val global_of_program   : id_t -> program_t -> declaration_t * annotation_t
+
+(* Flow program accessors *)
+val sources_of_flow    : flow_program_t -> flow_endpoint_t list
+val sinks_of_flow      : flow_program_t -> flow_endpoint_t list
+val generators_of_flow : flow_program_t -> flow_endpoint_t list
+val triggers_of_flow   : flow_program_t -> flow_endpoint_t list
+
+val sources_of_program    : program_t -> flow_endpoint_t list
+val sinks_of_program      : program_t -> flow_endpoint_t list
+val generators_of_program : program_t -> flow_endpoint_t list
+val triggers_of_program   : program_t -> flow_endpoint_t list
+
+val trigger_of_program  : id_t -> program_t -> flow_endpoint_t
 
 
 (* Returns all variables in an expression *)

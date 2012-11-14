@@ -18,10 +18,9 @@ val flat_string_of_arg: arg_t -> string
 val flat_string_of_expr_tag: expr_tag_t -> string list -> string
 val flat_string_of_expr: expr_t -> string
 
-val flat_string_of_instruction: instruction_t -> string
-val flat_string_of_stream_statement : stream_statement_t -> string
-val flat_string_of_stream_program : stream_program_t -> string
-val flat_string_of_declaration: declaration_t -> string
+val flat_string_of_flow_statement : flow_statement_t -> string
+val flat_string_of_flow_program   : flow_program_t -> string
+val flat_string_of_declaration    : declaration_t -> string
 
 val flat_string_of_program: program_t -> string
 
@@ -34,11 +33,18 @@ val print_type         : type_t -> unit
 val print_arg : arg_t -> unit
 val print_expr : ?print_id:bool -> expr_t -> unit
     
-val print_stream : stream_t -> unit
-val print_stream_pattern : stream_pattern_t -> unit
-val print_instruction : instruction_t -> unit
-val print_stream_statement : stream_statement_t -> unit
-val print_stream_program : stream_statement_t list -> unit
+val print_resource_pattern : resource_pattern_t -> unit
+val print_flow_resource    : flow_resource_t -> unit
+
+val print_flow_statement :
+	?print_id:bool ->
+	?print_expr_fn:(?print_id:bool -> expr_t -> unit Lazy.t)
+  -> flow_statement_t -> unit
+
+val print_flow_program :
+	?print_id:bool ->
+	?print_expr_fn:(?print_id:bool -> expr_t -> unit Lazy.t)
+	-> flow_program_t -> unit
   
 val print_declaration :
 	?print_id:bool ->
@@ -52,12 +58,11 @@ val string_of_type: type_t -> string
 val string_of_arg: arg_t -> string
 val string_of_expr: expr_t -> string
     
-val string_of_stream : stream_t -> string
-val string_of_stream_pattern : stream_pattern_t -> string
-val string_of_instruction: instruction_t -> string
-val string_of_stream_statement : stream_statement_t -> string
-val string_of_stream_program : stream_program_t -> string
-val string_of_declaration: declaration_t -> string
+val string_of_resource_pattern : resource_pattern_t -> string
+val string_of_flow_resource    : flow_resource_t -> string
+val string_of_flow_statement   : flow_statement_t -> string
+val string_of_flow_program     : flow_program_t -> string
+val string_of_declaration      : declaration_t -> string
 
 val string_of_program:
   ?print_id:bool ->

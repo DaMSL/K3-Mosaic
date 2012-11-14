@@ -240,9 +240,9 @@ let mk_has_member collection pattern member_type =
     mk_neg @: mk_eq (mk_slice collection pattern) 
       (mk_empty @: wrap_tlist member_type)
 
-let mk_trigger name args locals code =
+let mk_code_sink name args locals code =
   mk_no_anno @:
-    Trigger(name, args, locals, code)
+    Sink(Code(name, args, locals, code))
 
 (* function to declare and define a global function. Assumes the global
  * construct allows for an expr_t as well.
@@ -262,6 +262,7 @@ let mk_global_val name val_type =
 let mk_foreign_fn name input_types output_types =
   mk_no_anno @: Foreign(name, TFunction(input_types, output_types))
 
+let mk_flow stmt_list = mk_no_anno @: Flow(stmt_list)
 
 (* a lambda with 2 arguments for things like aggregation functions *)
 let mk_assoc_lambda arg1 arg2 expr = mk_lambda (ATuple[arg1;arg2]) expr

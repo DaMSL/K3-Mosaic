@@ -1,6 +1,11 @@
 (* An extended AST for K3's C++ backend *)
+open Format
+open Lazy
 open Printing
+open Tree
 open K3.AST
+open K3Typechecker
+open Imperative
 
 (* A CPP AST with exposed constructors.
  * This must be a subtype of Imperative.TargetLanguage *)
@@ -56,7 +61,8 @@ end
 
 (* Using mutually recursive modules allows us to extend the imperative
  * AST and simultaneously use its types as part of our extension *) 
-module rec CPPImpl : Imperative.Export with module AST = Imperative.AST(CPPTarget)
+module rec CPPImpl : Imperative.Export
+     with module AST = Imperative.AST(CPPTarget)
  = struct module AST = Imperative.AST(CPPTarget) end 
 
 (* A CPP AST implementation, with base AST types exposed as an imperative AST *)
@@ -162,5 +168,419 @@ let print_ext_cmd string_of_meta c =
       ptag "For" (List.map lazy_expr_opt [init_e_opt; test_e_opt; adv_e_opt])
 
   | DoWhile test_e -> ptag "DoWhile" [lazy (print_expr string_of_meta test_e)] 
+
+end
+
+type type_t = CPPTarget.ASTImport.type_t
+type 'a program_t = 'a CPPTarget.ASTImport.program_t 
+
+module CPPGenerator : Imperative.Generator
+       with type program_t = (type_t * annotation_t) program_t
+= struct
+  open CPPTarget
+  open CPPTarget.ASTImport
+
+  module S = Runtime.Make(CPPTarget)
+  module U = ImperativeUtil.Util(CPPTarget)
+  
+  open S
+  open U
+
+  type format_box_type = HBox | VBox | HVBox | HOVBox
+  type program_t = (type_t * annotation_t) CPPTarget.ASTImport.program_t
+
+  let print_tree print_node tree =
+	  let lazy_root = 
+	    fold_tree (fun _ _ -> ())
+	      (fun _ lazy_ch e -> [lazy (print_node lazy_ch e)])
+	      () [] tree
+	  in force (List.hd lazy_root)
+  
+  let print_list ?(hint=NoCut) ?(sep=", ") print_fn l =
+    if l = [] then () else
+    let last = List.nth l ((List.length l)-1) in
+    List.iter (fun e -> print_fn e; if e <> last then (ps sep; cut hint) else ()) l
+
+  let print_lazy_list ?(hint=NoCut) ?(sep=", ") l =
+    print_list ~hint:hint ~sep:sep force l
+
+  (* Stringification helpers *)
+  let escape s = Str.global_replace (Str.regexp_string "\"") "\\\"" s 
+  let mk_string s = "\""^(escape s)^"\""
+
+  let wrap ?(hint = NoCut) ?(box = false) ?(hvbox=false)
+           ?(cut_before=true) ?(cut_after=false) ?(cut_last=true)
+           ?(space = true) l lazy_fn r =
+    let o () = if box then (if hvbox then obc 2 else obx 2) else () in
+    let c () = if box then cb() else () in
+    let cb () = if not cut_before then () else cut hint in
+    let ca () = if cut_after then cut hint else () in
+    let cl () = if cut_last then cut hint else () in
+    let s = if space then " " else "" in 
+    cb(); o(); ps (l^s); ca(); force lazy_fn; c(); cl(); ps (s^r)
+
+  let concat_template tid1 tid2 =
+    tid1^"<"^tid2^(if tid2.[(String.length tid2)-1] = '>' then " " else "")^">"
+
+  let sep_type_list ?(sep=",") string_fn l =
+    String.concat sep (List.map string_fn l)
+  
+  let sep_id_type_list ?(sep_elem=";") ?(sep_id=" ") string_fn l =
+    String.concat sep_elem (List.map (fun (id,t) -> (string_fn t)^sep_id^id) l)
+	
+	let call_fn lazy_id args =
+    force lazy_id; wrap ~space:false "(" (lazy (print_lazy_list args)) ")"
+
+  (* Typing and AST helpers *)
+  let type_of_expr e = fst (meta_of_expr e)
+
+  let is_internal t = match t with TInternal _ -> true | _ -> false
+
+  (* TODO: add references here when they are implemented *)
+  let is_ptr t = match t with TNamed _ -> true | _ -> false
+  
+  let pointed_type t = match t with
+    | TNamed id -> id
+    | _ -> failwith ("invalid pointer type "^(string_of_type t)) 
+
+  let is_func_or_class d = match d with DFn _ | DClass _ -> true | _ -> false 
+
+  let is_leaf_expr e =
+    match tag_of_expr e with | Const _ | Var _ -> true | _ -> false
+
+  let is_block_cmd c = match tag_of_cmd c with Block _ -> true | _ -> false
+
+  let extract_option_type string_fn t =
+    let error = "invalid option type" in
+    if is_internal t then match bi_type t with 
+	    | TMaybe(e_t) -> string_fn (iv_type e_t)
+	    | _ -> failwith error
+    else failwith error
+
+  (* Control flow and failure helpers *)
+  let check_with_pred tag pred n l =
+	  if (pred (List.length l) n) then ()
+	  else failwith ("invalid "^tag^", expected "^(string_of_int n)^" children")
+
+	let check_length ?(tag="operation") n l = check_with_pred tag (=) n l
+  let check_at_least n l = check_with_pred "operation" (>=) n l
+  let check_leaf tag l = check_length ~tag:tag 0 l
+	let check_unary l = check_length 1 l
+	let check_binary l = check_length 2 l
+	let check_ternary l = check_length 3 l
+
+  (* Start of stringification *)
+  
+  (* K3-CPP printing *)
+  (* TODO: for now, ignore TImmutable and TMutable. Think about whether these
+   * should be implement as const types and shared_ptrs *) 
+  let rec print_k3_value_type vt = match base_of vt with
+    | TBool  -> ps "bool"
+    | TByte  -> ps "char"
+    | TInt   -> ps "int"
+    | TFloat -> ps "double"
+    | TString -> ps "string"
+    | TMaybe vt -> ps (concat_template "shared_ptr" (string_of_k3_value_type vt))
+    | TTuple vt_fields -> 
+      let field_types = sep_type_list string_of_k3_value_type vt_fields
+      in ps (concat_template "tuple" field_types)
+
+    | TCollection (ct, et) ->
+      let ct_str = match ct with
+        | TSet -> "set"
+        | TBag -> "multiset"
+        | TList -> "list"
+      in ps (concat_template ct_str (string_of_k3_value_type et))
+
+    | TAddress -> ps "address"
+     
+      (* Print target types directly as integers *)
+    | TTarget target_bt -> ps "int"
+
+    | TUnit -> ps "void" 
+    | TUnknown -> failwith "no C++ repr for TUnknown"
+
+  and print_k3_type t =
+    let error = "invalid function type, expected a value" in
+    print_k3_value_type (value_of t (fun () -> failwith error))
+    
+  and string_of_k3_value_type vt = wrap_formatter (fun () -> print_k3_value_type vt)
+
+  let rec print_const c_type c =
+    let string_of_address a = (fst a)^", "^(string_of_int (snd a)) in
+    match c with
+    | CBool b    -> ps (if b then "true" else "false")
+    | CInt i     -> ps (string_of_int i)
+    | CFloat f   -> ps (string_of_float f)
+    | CString s  -> ps (mk_string s) 
+    | CAddress a -> ps ("make_address("^(string_of_address a)^")")
+    | CTarget id -> ps (mk_target_var_id id)
+    | CNothing   -> ps ((concat_template "shared_ptr" (string_of_type c_type))^"()")
+    | CUnit      -> failwith "unit constant unsupported in C++"
+    | CUnknown   -> failwith "unknown constant unsupported in C++"
+
+  (* Imperative-CPP printing *)
+  and print_type t =
+    let comma_types = sep_type_list string_of_type in 
+	  match t with
+	  | TInternal it -> print_k3_type it
+	  | TTop         -> ps "shared_ptr<boost::any>"
+	  | TNamed id    -> ps (concat_template "shared_ptr" id) 
+	  
+	  | TImpFunction (args_t, rt) ->
+	    let fn_type = (string_of_type rt)^" ("^(comma_types args_t)^")"
+	    in ps (concat_template "boost::function" fn_type)
+	    
+	  | TMap (k_t,v_t) -> ps (concat_template "map" (comma_types [k_t; v_t]))
+	  | TExt e  -> print_ext_type e
+
+  and print_decl_args da = match da with
+    | Constructor(cstr_args) -> wrap "(" (lazy (print_list print_expr cstr_args)) ")"
+    | Init(expr) -> ps " = "; print_expr expr
+  
+  and print_decl ?(init_ptrs=false) decl =
+    let pad_decl ?(after=false) lazy_fn =
+      pc(); force lazy_fn; if after then pc() else () in
+    let finish_decl() = ps ";" in
+    let print_typedef id lazy_fn = wrap "typedef" lazy_fn id in
+    let print_struct id_t_l = 
+      let sep_struct_fields = sep_id_type_list string_of_type in
+        ps "struct";
+        wrap ~hint:CutHint ~cut_after:true "{" (lazy (ps (sep_struct_fields id_t_l))) "}"
+    in
+    match decl with
+    | DType (id, type_decl) ->
+      print_typedef id (match type_decl with
+        | TExpr t -> lazy (print_type t)  
+        | TComposite id_t_l -> lazy (print_struct id_t_l)
+        | TExtDecl e -> lazy (print_ext_type_decl e));
+      finish_decl()
+
+    | DVar (id, t, dargs) ->
+      let print_var lazy_init = print_type t; ps (" "^id); force lazy_init in
+      let default_init dargs = match dargs with
+        | None -> ()
+        | Some a -> print_decl_args a
+      in
+      let print_init t dargs =
+        if is_ptr t && init_ptrs then
+          let f args =
+	          let base_t = pointed_type t in
+	          let constructor = lazy (ps (concat_template "make_shared" base_t))
+	          in (ps " = "; call_fn constructor args)
+          in
+            match dargs with
+            | None -> f []
+            | Some (Constructor(args)) -> f (List.map (fun e -> lazy(print_expr e)) args)
+            | Some(Init e) -> print_decl_args (Init e)
+        else default_init dargs
+      in
+      print_var (lazy (print_init t dargs));
+      finish_decl()
+
+    | DFn (id, args, ret_t, body) ->
+      let sep_arg_decls = sep_id_type_list ~sep_elem:", " string_of_type in
+      pad_decl ~after:true (lazy (
+      print_type ret_t; ps (" "^id);
+      wrap ~space:false "(" (lazy (ps (sep_arg_decls args))) ") ";
+      wrap ~hint:CutHint ~cut_after:true ~box:true
+        "{" (lazy (print_list ~hint:CutHint ~sep:"" (print_cmd ~tlb:true) body)) "}"))
+
+    | DClass (id, parent_opt, members_with_meta) ->
+      let parent_str = match parent_opt with None -> "" | Some id -> " : public "^id in
+      let m = List.map fst members_with_meta in 
+      pad_decl (lazy (
+      ps ("struct "^id^parent_str);
+      wrap ~hint:CutHint ~cut_after:true ~box:true
+        "{" (lazy (print_list ~hint:CutHint ~sep:"" (print_decl ~init_ptrs:false) m)) "}"))
+
+  and print_op op e ch =
+    let e_ch = sub_tree e in
+    let wrap_unless_leaf i =
+      if is_leaf_expr (List.nth e_ch i) then force (List.nth ch i)
+      else wrap "(" (List.nth ch i) ")" 
+    in
+    let pb op_str = 
+      check_binary ch;
+      wrap_unless_leaf 0; ps (" "^op_str^" "); wrap_unless_leaf 1
+    in  
+    match op with
+	  | Add  -> pb "+" 
+	  | Mult -> pb "*"
+	  | And  -> pb "&&"
+	  | Or   -> pb "||"
+	  | Not  -> pb "!"
+	  | Eq   -> pb "=="
+	  | Neq  -> pb "!="
+	  | Lt   -> pb "<"
+	  | Leq  -> pb "<="
+    | Neg  -> check_unary ch; ps "-"; wrap_unless_leaf 0
+	  | Ternary  ->
+      begin
+	      check_ternary ch;
+	      let predicate () = wrap_unless_leaf 0; ps " ?" in
+	      let branches () = wrap_unless_leaf 1; ps " : "; wrap_unless_leaf 2
+	      in wrap "(" (lazy (predicate(); branches ())) ")"
+      end
+  
+  and print_collection_fn (e_type, e) coll_fn ch =
+    let desugar_error tag =
+      failwith ("invalid collection operation ("^
+                    tag^"), expected it to be desugared") 
+    in
+    let call_w_coll_arg lazy_id_fn args =
+      check_at_least 1 args;
+      let coll, fn_args = List.hd args, List.tl args in
+      call_fn (lazy_id_fn (coll)) fn_args
+    in
+    match coll_fn with
+	  | Peek ->
+      let id_fn lazy_coll = lazy (ps "*"; force lazy_coll; ps ".begin")
+      in call_w_coll_arg id_fn ch
+
+	  | Insert -> call_w_coll_arg (fun lazy_c -> lazy (force lazy_c; ps ".insert")) ch
+    | Delete -> call_w_coll_arg (fun lazy_c -> lazy (force lazy_c; ps ".erase")) ch 
+	  | Find -> (call_w_coll_arg (fun lazy_c -> lazy (force lazy_c; ps ".find")) ch)
+	  
+    | CFExt f ->
+      let id_fn lazy_c = lazy (force lazy_c; ps "."; print_ext_collection_fn f)
+      in call_w_coll_arg id_fn ch
+
+    | Update   -> desugar_error "Update" 
+    | Contains -> desugar_error "Contains"
+    | Slice    -> desugar_error "Slice"
+	  | Combine  -> desugar_error "Combine"
+	  | Range    -> desugar_error "Range"
+	  | Sort     -> desugar_error "Sort"
+
+  and print_fn (e_type, e) fn_tag ch =
+    let ch_e, ch_types = let x = sub_tree e in x, List.map type_of_expr x in
+    let ce i = List.nth ch_e i in
+    let ct i = List.nth ch_types i in
+	  match fn_tag with
+	  | Collection coll_fn -> print_collection_fn (e_type, e) coll_fn ch
+
+      (* Tuple field access *)
+	  | Member (Position i) -> 
+      check_unary ch; wrap ("get<"^(string_of_int i)^">(") (List.hd ch) ")"
+	  
+    | Member (Field f) ->
+      check_unary ch; 
+      let accessor = if is_ptr (ct 0) then "->" else "." in
+      if is_leaf_expr (ce 0) then force (List.hd ch) else wrap "(" (List.hd ch) ")";
+      ps accessor; ps f
+      
+	  | Member (Method id)  ->
+      check_at_least 1 ch;
+      let obj, args = List.hd ch, List.tl ch in
+      let accessor = if is_ptr (ct 0) then "->" else "." in
+      begin force obj; ps accessor; call_fn (lazy (ps id)) args end
+
+	  | Named id -> call_fn (lazy (ps id)) ch
+	  
+    | Cast to_type -> 
+      check_unary ch;
+      let from_type = ct 0 in
+      let cast_op =
+        let as_internal t = if is_internal t then bi_type t else TUnknown in 
+        match as_internal from_type, as_internal to_type with
+        | TString, _ | _, TString -> 
+          concat_template "boost::lexical_cast" (string_of_type to_type)
+        | _, _ -> concat_template "static_cast" (string_of_type to_type)
+      in wrap ~space:false (cast_op^"(") (List.hd ch) ")"
+
+	  | Send type_tag  -> call_fn (lazy (ps ("send_"^type_tag))) ch 
+	  | FExt f         -> call_fn (lazy (print_ext_fn f)) ch 
+  
+  and print_expr_tag ch e =
+    let check_leaf() = check_leaf "expression" ch in
+    let e_type, e_tag = type_of_expr e, tag_of_expr e in
+    match e_tag with
+	  | Const  c  -> check_leaf(); print_const e_type c
+	  | Var    id -> check_leaf(); ps id
+	  | Tuple     -> wrap ~space:false "make_tuple(" (lazy (print_lazy_list ch)) ")"
+	  | Just      -> 
+      let extract_fn = extract_option_type string_of_type in
+      let value_type = extract_fn e_type
+      in wrap ((concat_template "make_shared" value_type)^"(") (List.hd ch) ")"
+
+	  | Op     op -> print_op op e ch
+	  | Fn     fn_tag -> print_fn (e_type, e) fn_tag ch
+
+  and print_expr e =
+    print_tree (fun cll e -> print_expr_tag (List.flatten cll) e) e
+  
+  and print_cmd_tag ?(tlb=false) ch c =
+    let check_leaf() = check_leaf "command" ch in
+    let desugar_error tag = failwith ("invalid command ("^tag^"), expected it to be desugared") in
+    let sep() = ps ";" in
+    let cc i = let s = sub_tree c in List.nth s i in
+    let print_as_block i =
+      if is_block_cmd (cc i) then force (List.nth ch i)
+      else 
+        wrap ~hint:CutHint ~cut_after:true ~box:true "{" (List.nth ch i) "}"
+    in
+    let c_tag = tag_of_cmd c in
+    match c_tag with
+	  | Assign (id, e)  -> check_leaf(); ps (id^" = "); print_expr e; sep()
+	  | Decl   d        -> check_leaf(); print_decl ~init_ptrs:true d
+	  | Expr   e        -> check_leaf(); print_expr e; sep()
+	
+      (* TODO: improve stringification based on whether subchildren are blocks *)
+    | IfThenElse pred ->
+      ps "if "; wrap "(" (lazy (print_expr pred)) ") ";
+      print_as_block 0; pc(); ps "else "; print_as_block 1
+	
+	  | Block ->
+      wrap ~hint:CutHint ~cut_before:(not tlb) ~cut_after:true ~box:true
+        "{" (lazy (print_lazy_list ~hint:CutHint ~sep:"" ch)) "}"
+	  
+	  | While e  ->
+      ps "while "; wrap "(" (lazy (print_expr e)) ")";
+      wrap ~hint:CutHint "{" (List.hd ch) "}"
+	  
+	  | Return e -> ps "return "; print_expr e; sep()
+	
+	  | CExt c -> let string_of_meta m = "" in print_ext_cmd string_of_meta c
+    
+    | Foreach (id,t,e) -> desugar_error "Foreach"
+    
+  and print_cmd ?(tlb=false) c =
+    print_tree (fun cll c2 -> 
+      let b = if c2 = c then tlb else false
+      in print_cmd_tag ~tlb:b (List.flatten cll) c2) c
+  
+  and string_of_type t = wrap_formatter (fun () -> print_type t)
+  and string_of_decl d = 
+    wrap_formatter (fun () -> obx 0; print_decl ~init_ptrs:true d; cb())
+  
+  let rec generate_component prog_file c = match c with
+    | Include (id, None, None, _) | Include (id, _, _, true) ->
+      [prog_file, "#include <"^id^">"]
+
+    | Include (id, None, Some(c), false) -> [id, c]
+
+    | Include (id, Some(prog), None, false) -> 
+      [prog_file, "#include <"^id^">"]@(generate_named_program id prog)
+
+    | Include (_, Some(_), Some(_), _) ->
+      failwith "invalid module, modules cannot contain both programs and raw code"
+
+    | Component decls_with_meta ->
+      [prog_file, 
+       (String.concat "\n"
+         (List.map string_of_decl (List.map fst decls_with_meta)))]
+
+  and generate_named_program prog_file p =
+    let append a b = a^"\n"^b in
+    List.fold_left (fun acc c ->
+      List.fold_left (fun acc (fn,fc) -> 
+          if not (List.mem_assoc fn acc) then acc@[fn,fc]
+          else [fn, append (List.assoc fn acc) fc]@(List.remove_assoc fn acc))
+        acc (generate_component prog_file c)) [] p
+      
+  let generate_program p =
+    let prog_file = "k3_program.cpp"
+    in generate_named_program prog_file p
 
 end

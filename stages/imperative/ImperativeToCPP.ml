@@ -213,11 +213,99 @@ let optimize_datastructures program =
 
     | _ -> (nprog@[d,(dt,da)], bindings)
   in 
-  let nprog, bindings = List.fold_left bmi_of_decl ([],[]) program in
+  let rec optimize_ds_program prog =
+    List.fold_left (fun (cacc, bacc) c -> match c with
+      | Include (name, None, _, _) -> cacc@[c], bacc
+      | Include (name, Some(p), code, expected) ->
+        let x,y = optimize_ds_program p in
+        cacc@[Include (name, Some(x), code, expected)], bacc@y
+      | Component decls -> 
+        let x,y = List.fold_left bmi_of_decl ([], bacc) decls
+        in cacc@[Component x], y
+    ) ([],[]) prog
+  in
+  let nprog, bindings = optimize_ds_program program in
   (* Redo type inference on nprog *)
   (deduce_program_type nprog), bindings 
 
-let substitute_loops program = program
+(* TODO:
+ * CPP transforms:
+ * -- Foreach => Iterator; For
+ *
+ * -- Collection operations:
+ *   ++ Update(Set|Bag|List) => x.erase(); x.insert()
+ *   ++ Update(Map) => x[k] = v
+ *
+ * The following need additional constructs in our CPP AST:
+ * -- Collection operations:
+ *   ++ Foreach(Slice) => GetIndex;
+ *                        IteratorPair = Index.EqualRange;
+ *                        For ...
+ *
+ *    ** Note that slices are always reified for now, thus we may never have the
+ *       above situation. This will be inefficient since the slice will explicitly
+ *       materialize, and we should optimize.
+ *
+ *    ** This could be implemented by adding Slice detection as well as Range
+ *       detection to the 'skipped' list in ReifiedK3.reify_from_parent
+ *
+ *   ++ Slice => Declare; GetIndex;
+ *               IteratorPair = Index.EqualRange;
+ *               Copy(IteratorPair, Back(Declared))
+ *
+ *     ** Since all Slice nodes are reified, this would cause a double-copy
+ *        if we use a fresh declaration here. We want to obtain the target of
+ *        the reification, and use the same approach without explicitly
+ *        declaring at this point.
+ *        TODO: how do we pass in the target for copying at this point of CG?
+ *
+ *
+ * -- Late reification of collection operations. That is, these "builtins" are
+ *    never provided as direct methods in CPP, and when requested as direct
+ *    methods, must be reified here. Alternatively, we can throw an error or
+ *    check if the implementation language supports these builtins prior to
+ *    their construction upstream.
+ *
+ *   ++ Combine => Declare;
+ *                 LeftIteratorPair; Copy(LeftIteratorPair, Back(Declared));
+ *                 RightIteratorPair; Copy(RightIteratorPair, Back(Declared))
+ *
+ *   ++ Range   => Declare; For(Insert(Declared))
+ *
+ *   ++ Sort(Set|Bag) => Declare(List);
+ *                       Copy(Begin, End, Back(Declared));
+ *                       sort(DeclaredBegin, DeclaredEnd)
+ *   ++ Sort(List)    => sort(Begin, End)
+ *
+ * -- Collection w/ single index annotation => TMap
+ *   ++ Peek(Slice) => Find
+ *   ++ Slice == Empty => Contains 
+ *
+ * Our general strategy should be to perform minimal transformations. Thus
+ * AST nodes that have a clear direct translation in stringification need not
+ * be translated. This includes the following below.
+ *
+ * -- CTarget => target var
+ * -- CAddress => make_address fn
+ * -- Member(Position i) => tuple get
+ *
+ * -- Collection operations:
+ *   ++ Peek => *x.begin()
+ *   ++ Insert => x.insert()
+ *   ++ Delete => x.erase()
+ *   ++ Contains => x.find() == x.end()
+ *   ++ Find => *x.find()
+ *
+ * -- Casting:
+ *   ++ Cast(T) => lexical_cast<T> when TString -> T or T -> TString
+ *   ++ Cast(T) => static_cast<T> otherwise
+ *
+ * Type transformations
+ * -- TTarget => TInt
+ *
+ *
+ *) 
+let cpp_rewrite program = program
 
 let cpp_of_imperative program = 
   fst (optimize_datastructures program) 

@@ -11,8 +11,6 @@ open K3Runtime
 
 type eval_t = VDeclared of value_t ref | VTemp of value_t
 
-type stream_program_t = stream_env_t * fsm_env_t * source_bindings_t
-
 
 (* Generic helpers *)
 
@@ -518,6 +516,16 @@ let prepare_trigger id arg local_decls body =
       | VUnit -> ()
       | _ -> raise (RuntimeError (-1))
 
+let prepare_sinks env fp =
+  List.fold_left (fun ((trig_env, (m_env, f_env)) as env) (fs,a) -> match fs with
+    | Sink(Resource _) ->
+      failwith "sink resource interpretation not supported"
+      
+    | Sink(Code(id, arg, locals, body)) ->
+      (id, prepare_trigger id arg locals body) :: trig_env, (m_env, f_env)
+
+    | _ -> env) env fp
+
 (* Builds a trigger, global value and function environment *)
 let env_of_program k3_program =
   let env_of_declaration ((trig_env, (m_env, f_env)) as env) (d,_)
@@ -535,8 +543,7 @@ let env_of_program k3_program =
     | Foreign (id,t) -> 
       trig_env, (m_env, [id, dispatch_foreign id] :: f_env)
 
-    | Trigger (id,arg,local_decls,body) ->
-      (id, prepare_trigger id arg local_decls body) :: trig_env, (m_env, f_env)
+    | Flow fp -> prepare_sinks env fp
 
     | _ -> env
   in
@@ -545,42 +552,28 @@ let env_of_program k3_program =
 
 
 (* Instruction interpretation *)
-let eval_instructions env address (stream_env, fsm_env, src_bindings, instructions) =
-  let run_instruction i = match i with
+let eval_instructions env address (res_env, res_bindings, d_env, instrs) =
+  let run_instruction ri_env i = match i with
     | Consume id ->
       print_endline ("Consuming from event loop: "^id);
-      try
-        let fsm = List.assoc id fsm_env in
-        let first, next_state = ref true, (ref None) in
-        while !first || !next_state <> None do
-          first := false;
-          (* Per-event scheduling, that is, we run the scheduling policy
-           * for each individual external event *)
-          match run fsm_env fsm !next_state with
-            | Some(v), ns -> 
-              (schedule_event src_bindings id address [v];
-               run_scheduler address env;
-               next_state := ns)
-            | None, ns -> next_state := ns
-        done
-      with Not_found -> interpreter_error ("no stream program found for "^id)
-  in List.iter run_instruction instructions
+      try let i = List.assoc id d_env
+          in run_dispatcher address res_env ri_env i
+      with Not_found -> interpreter_error ("no event loop found for "^id)
+  in 
+  let init_ri_env = [] 
+  in ignore(List.fold_left run_instruction init_ri_env instrs)
 
 
-(* Program interpretation *)
+(* Program interpretation *) 
 let interpreter_event_loop role_opt k3_program = 
   let error () = interpreter_error ("No role found for K3 program") in
-	let roles, default_role = roles_of_program k3_program in
-  let get_role role fail_f = try List.assoc role roles with Not_found -> fail_f () in
-  let s,f,b,i =
-    match role_opt, default_role with
-      | Some x, Some (_,y) -> get_role x (fun () -> y)
-      | Some x, None -> get_role x error 
-      | None, Some (_,y) -> y
-      | None, None -> error ()
-  in
-	let nf = List.map (fun (id,fsm) -> id, (initialize fsm)) f
-	in (s,nf,b,i)
+	let roles, default_role = extended_roles_of_program k3_program in
+  let get_role role fail_f = try List.assoc role roles with Not_found -> fail_f ()
+  in match role_opt, default_role with
+	  | Some x, Some (_,y) -> get_role x (fun () -> y)
+	  | Some x, None -> get_role x error 
+	  | None, Some (_,y) -> y
+	  | None, None -> error ()
 
 let eval_program address role_opt k3_program =
   let env = env_of_program k3_program in

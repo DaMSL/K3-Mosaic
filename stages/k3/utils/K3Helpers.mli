@@ -106,7 +106,7 @@ val mk_has_member :
   value_type_t -> expr_t
 
 (* macro to create a trigger *)
-val mk_trigger : id_t -> arg_t -> (id_t * value_type_t * annotation_t) list 
+val mk_code_sink : id_t -> arg_t -> (id_t * value_type_t * annotation_t) list 
   -> expr_t -> declaration_t * annotation_t
 
 (* macro to create a global value *)
@@ -122,6 +122,9 @@ val mk_global_fn :
 (* macro to declare a foreign function *)
 val mk_foreign_fn :
   id_t -> value_type_t -> value_type_t -> declaration_t * annotation_t
+
+(* macro to declare a flow *)
+val mk_flow : flow_program_t -> declaration_t * annotation_t
 
 (* macro to create an associative lambda ie a lambda with 2 args *)
 val mk_assoc_lambda :

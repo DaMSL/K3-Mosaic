@@ -49,7 +49,9 @@ rule tokenize = parse
     | "default"  { DEFAULT }
     
     | "source"   { SOURCE }
+    | "sink"     { SINK }
     | "file"     { FILE }
+    | "socket"   { SOCKET }
     | "bind"     { BIND }
     | "pattern"  { PATTERN }
     | "consume"  { CONSUME }
