@@ -107,7 +107,7 @@ val mk_has_member :
 
 (* macro to create a trigger *)
 val mk_code_sink : id_t -> arg_t -> (id_t * value_type_t * annotation_t) list 
-  -> expr_t -> declaration_t * annotation_t
+  -> expr_t -> flow_statement_t * annotation_t
 
 (* macro to create a global value *)
 val mk_global_val : id_t -> value_type_t -> declaration_t * annotation_t

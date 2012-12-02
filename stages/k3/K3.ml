@@ -200,7 +200,8 @@ type data_annotation_t =
   | Index   of positions
   | Unique  of positions
   | Ordered of positions
-  | Sorted  of positions
+  | Sequential
+  | RandomAccess
 
 type control_annotation_t =
   | Effect of id_t list (* Variables ranged over by the effect *)

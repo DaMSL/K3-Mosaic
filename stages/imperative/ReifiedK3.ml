@@ -118,14 +118,22 @@ let name_of_reification (fn_arg_env : (id_t * arg_t) list)
 	      in
 	      let reify_arg =
 	        let reify_expr e name = id_of_expr e, name in
+          (* TODO: complete support for argument patterns *)
 	        match fn_arg with
+            | AIgnored -> []
 	          | AVar (id,t) -> [reify_expr arg_e (id, TValue(t), true, true)]   
+            | AMaybe _ -> failwith "cannot handle optional bindings for now"
 	          | ATuple(vt_l) -> 
 	            (* Directly reify to tuple bindings if the arg is a tuple value *)
 	            begin match K3Util.tag_of_expr arg_e with
 	              | Tuple ->
-	                List.map2 (fun (AVar(id,t)) e ->
-	                  reify_expr e (id, TValue(t), true, true)) vt_l (sub_tree arg_e)
+                  let reify_arg_field arg_field e = match arg_field with
+                    | AIgnored -> []
+                    | AVar(id,t) -> [reify_expr e (id, TValue(t), true, true)]
+                    | AMaybe _ -> failwith "cannot handle optional bindings for now"
+                    | ATuple _ -> failwith "cannot handle nested tuple bindings for now"
+                  in List.flatten (List.map2 reify_arg_field vt_l (sub_tree arg_e))
+
 	              | Var _ -> []
 	              | _ -> [reify_expr arg_e (unwrap (new_name "apply" true true arg_e))]
 	            end

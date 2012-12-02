@@ -273,7 +273,7 @@ and eval_expr cenv texpr =
 
     | Iterate ->
         let fenv, f = child_value cenv 0 in
-        let nenv, c = child_value cenv 1 in
+        let nenv, c = child_value fenv 1 in
         let g = eval_fn f in
         let folder = fun cl -> List.fold_left (
             fun e x -> let ienv, _ = g e x in ienv
@@ -296,7 +296,7 @@ and eval_expr cenv texpr =
     (* Collection transformers *)  
     | Map ->
         let fenv, f = child_value cenv 0 in
-        let nenv, c = child_value cenv 1 in
+        let nenv, c = child_value fenv 1 in
         let g = eval_fn f in
         let folder = fun cl -> List.fold_left (
             fun (e, r) x -> let ienv, i = g e x in (ienv, r @ [value_of_eval i])

@@ -1428,7 +1428,7 @@ let m3_stmt_to_k3_stmt (meta: meta_t) ?(generate_init = false)
 let m3_trig_to_k3_trig ?(generate_init = false) 
                        (schema_env:(K.id_t * K.type_t) list)
                        (m3_trig: M3.trigger_t): 
-                       K.declaration_t list =
+                       K.flow_program_t =
    if !(m3_trig.M3.statements) = [] then [] else
    let trig_args = Schema.event_vars m3_trig.M3.event in
 (*   let trig_types = List.map (fun (vn,vt) -> 
@@ -1449,20 +1449,20 @@ let m3_trig_to_k3_trig ?(generate_init = false)
          ([],[])
       !(m3_trig.M3.statements) 
    in
-    [K.Trigger(
-      Schema.name_of_event m3_trig.M3.event,
-      (K.ATuple(
-        List.map (fun (vn,vt) -> K.AVar(vn, m3_type_to_k3_type vt)) trig_args
-      )),
-      [],
-      KH.mk_block k3_trig_stmts
-    )]
+    [K.Sink(K.Code(
+        Schema.name_of_event m3_trig.M3.event,
+        (K.ATuple(
+          List.map (fun (vn,vt) -> K.AVar(vn, m3_type_to_k3_type vt)) trig_args
+        )),
+        [],
+        KH.mk_block k3_trig_stmts
+      )), []]
 
 
 let csv_adaptor_to_k3 (name_prefix: string)
                       (rel: Schema.rel_t) 
                       (params: (string * string) list): 
-                        (K.declaration_t * K.type_t) =
+                        (K.flow_statement_t * K.type_t) =
   let del_var = "__m3_is_deletion" in
   let param p d = 
     if List.mem_assoc p params then List.assoc p params else d
@@ -1499,12 +1499,12 @@ let csv_adaptor_to_k3 (name_prefix: string)
     else
       (send_to_event (Schema.InsertEvent(rel)))
   in
-    ( (K.Trigger(
+    ( (K.Sink(K.Code(
         name_prefix ^ reln,
         lambda_args args,
         [],
         k3_code
-      )),
+      ))),
       K.TValue(KT.deduce_arg_type (lambda_args args))
     )
 ;;
@@ -1534,9 +1534,9 @@ let m3_to_k3 ?(generate_init = false) ?(role = "client")
     ) k3_prog_schema
   in
   let k3_prog_trigs = 
-     List.flatten (
-        List.map (m3_trig_to_k3_trig ~generate_init:generate_init k3_prog_env)
-                 !m3_prog_trigs
+    List.flatten (
+      List.map (m3_trig_to_k3_trig ~generate_init:generate_init k3_prog_env)
+                  !m3_prog_trigs
      )
   in
   let _  = List.map (fun (qname,qexpr) -> 
@@ -1575,7 +1575,7 @@ let m3_to_k3 ?(generate_init = false) ?(role = "client")
           | Some(s) -> s
       in
       let source_id = next_source() in
-      let source_channel = 
+      let source_channel_type, source_channel_format = 
         match source with
           | Schema.NoSource -> failwith "All streams must have a source"
           | Schema.PipeSource _ -> failwith "pipe sources unsupported"
@@ -1584,7 +1584,10 @@ let m3_to_k3 ?(generate_init = false) ?(role = "client")
               (K.File(fname), K.CSV)
           | Schema.FileSource _ -> failwith "Unsupported file source framing"
       in
-      ( ( K.Stream(K.Source(source_id, source_type, source_channel)),
+      let source = K.Source(K.Resource(source_id,
+                      K.Handle(source_type, source_channel_type, source_channel_format)))
+      in
+      ( ( source,
           List.map (fun (_, (reln, _, _)) ->
             K.Bind(source_id, "demux_"^reln)
           ) adaptors,
@@ -1594,19 +1597,18 @@ let m3_to_k3 ?(generate_init = false) ?(role = "client")
       )
     ) stream_rels)
   in
-  let k3_prog_demux = List.flatten k3_prog_demux_deep in
+  let k3_prog_demux = List.map (fun x -> x, []) (List.flatten k3_prog_demux_deep) in
   let (k3_prog_sources, k3_prog_bindings, k3_prog_consumes) = 
     List.fold_right (fun (s,b,c) (sources,bindings,consumes) ->
       (s :: sources, b @ bindings, c :: consumes)
     ) k3_prog_demux_calls ([],[],[])
   in
   let k3_prog_client_role = 
-    k3_prog_sources @ k3_prog_bindings @ k3_prog_consumes
+    List.map (fun x -> x, []) (k3_prog_sources @ k3_prog_bindings @ k3_prog_consumes)
   in
     List.map (fun x -> x, []) (
       k3_prog_schema @
-      k3_prog_trigs @ 
-      k3_prog_demux @
+      [ K.Flow(k3_prog_trigs @  k3_prog_demux) ] @
       [ K.Role(role, k3_prog_client_role);
         K.DefaultRole(role);
       ]

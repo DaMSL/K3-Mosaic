@@ -6,7 +6,7 @@ open K3.Annotation
 (* Annotation manipulation *)
 let mk_no_anno a = (a, [])
 
-let mk_anno_sort (a,annos) xs = (a, annos@[Data(Constraint, Sorted xs)])
+let mk_anno_sort (a,annos) xs = (a, annos@[Data(Constraint, Ordered xs)])
 
 (* Type manipulation functions ------------- *)
 
@@ -241,8 +241,7 @@ let mk_has_member collection pattern member_type =
       (mk_empty @: wrap_tlist member_type)
 
 let mk_code_sink name args locals code =
-  mk_no_anno @:
-    Sink(Code(name, args, locals, code))
+  mk_no_anno @: Sink(Code(name, args, locals, code))
 
 (* function to declare and define a global function. Assumes the global
  * construct allows for an expr_t as well.

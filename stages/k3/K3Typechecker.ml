@@ -20,17 +20,17 @@ type event_type_bindings_t = (id_t * (id_t * (type_t list)) list) list
 
 (* Internal type declarations *)
 type error_type =
-	| TMismatch of type_t * type_t * string
-	| VTMismatch of value_type_t * value_type_t * string
-	| BTMismatch of base_type_t * base_type_t * string
-	| TBad of type_t
-	| VTBad of value_type_t
-	| BTBad of base_type_t
-	| MTBad of mutable_type_t
-	| TMsg of string
+  | TMismatch of type_t * type_t * string
+  | VTMismatch of value_type_t * value_type_t * string
+  | BTMismatch of base_type_t * base_type_t * string
+  | TBad of type_t
+  | VTBad of value_type_t
+  | BTBad of base_type_t
+  | MTBad of mutable_type_t
+  | TMsg of string
 
 let t_error uuid name msg () = 
-	let extra = match msg with
+  let extra = match msg with
     | TMismatch(t1,t2,s)  -> s^" This expression has type "^string_of_type t1^
         "\nBut an expression was expected of type "^string_of_type t2
     
@@ -47,12 +47,12 @@ let t_error uuid name msg () =
     | BTBad(t)          -> "Bad type "^string_of_base_type t
     | MTBad(t)          -> "Bad type "^flat_string_of_mutable_type t
     | TMsg(s)           -> s
-	in
-	raise (TypeError(uuid, name^": "^extra^")" ))
+  in
+  raise (TypeError(uuid, name^": "^extra^")" ))
 
 let check_tag_arity tag children =
-	let length = List.length children in
-	let correct_arity = match tag with
+  let length = List.length children in
+  let correct_arity = match tag with
     | Const(_)  -> 0
     | Var(_) -> 0
     | Tuple -> length
@@ -96,7 +96,7 @@ let check_tag_arity tag children =
     | Deref -> 1
 
     | Send -> 3
-	in length = correct_arity
+  in length = correct_arity
 
 let (<|) x f = f x
 and (|>) f y = f y
@@ -598,165 +598,192 @@ let rec deduce_expr_type trig_env cur_env utexpr =
 
     in attach_type current_type
 
-let check_trigger_type trig_env env id args locals body =
+let check_trigger_type trig_env env id args locals body rebuild_f =
   let name = "Trigger("^id^")" in
-	let self_bindings = (id, TValue(canonical @: TTarget(base_of @: deduce_arg_type args))) in
-	let arg_bindings = gen_arg_bindings  args in
-    let local_bindings = List.map (fun (i, vt, _) -> (i, TValue(vt))) locals in
-	let inner_env = self_bindings :: arg_bindings @ local_bindings @ env in
-	let typed_body = deduce_expr_type trig_env inner_env body in
-	let t_b =
-	  type_of_expr typed_body <| value_of |>
-	    t_error (-1) name @: TBad(type_of_expr typed_body)
-	in
-	if not (t_b === canonical TUnit) then
-	  t_error (-1) name (VTMismatch(canonical TUnit, t_b,"")) () 
-	else 
-			let new_locals =
-			  List.map (fun (i,vt,meta) -> (i, vt, (Type(TValue(vt))::meta))) locals
-			in (Trigger(id, args, new_locals, typed_body), self_bindings :: env)
+  let self_bindings = (id, TValue(canonical @: TTarget(base_of @: deduce_arg_type args))) in
+  let arg_bindings = gen_arg_bindings args in
+  let local_bindings = List.map (fun (i, vt, _) -> (i, TValue(vt))) locals in
+  let inner_env = self_bindings :: arg_bindings @ local_bindings @ env in
+  let typed_body = deduce_expr_type trig_env inner_env body in
+  let t_b =
+    type_of_expr typed_body <| value_of |>
+      t_error (-1) name @: TBad(type_of_expr typed_body)
+  in
+  if not (t_b === canonical TUnit) then
+    t_error (-1) name (VTMismatch(canonical TUnit, t_b,"")) () 
+  else 
+    let new_locals = List.map (fun (i,vt,meta) -> (i, vt, (Type(TValue(vt))::meta))) locals
+    in ((rebuild_f id args new_locals typed_body), self_bindings :: env)
 
 
-(* Stream program type deduction *)
+(* Flow program type deduction *)
 
-let rec stream_types_of_pattern stream_env p = 
-  let rcr = stream_types_of_pattern stream_env in
+let rec types_of_pattern env p = 
+  let rcr = types_of_pattern env in
   let rcr_list l = ListAsSet.no_duplicates (List.flatten (List.map rcr l)) in
   match p with
   | Terminal (id) ->
-    (try List.assoc id stream_env
-     with Not_found -> raise (TypeError(-1, "No stream "^id^" found in pattern")))
+    (try List.assoc id env
+     with Not_found -> raise (TypeError(-1, "No resource "^id^" found in pattern")))
 
   | Choice (l)    -> rcr_list l
   | Sequence (l)  -> rcr_list l
   | Optional (p)  -> rcr p
   | Repeat (p,_)  -> rcr p 
 
-let id_and_type_of_stream stream_env s = match s with
-  | Source(id,t,_) -> id, [t]
-  | Sink(id,t,_) -> id, [t]
-  | Derived(id,p) ->
-    let t = stream_types_of_pattern stream_env p in id, t
+let type_of_resource env r = match r with
+  | Handle(t,_,_) -> [t]
+  | Pattern p -> types_of_pattern env p
 
 let typecheck_bind src_types trig_arg_types =
   match src_types, trig_arg_types with
-	| [], [] -> 
-	  Some(TMsg("Neither source event nor trigger argument has valid types."))
-	
-	| [x], [y] when x <> y ->
-	  Some(TMismatch(x,y,"Stream binding type mismatch."))
-	  
-	| x, _ when List.length x > 1 ->
-	  Some(TMsg("Multiple stream event types found for dispatch to trigger."))
-	
-	| _, x when List.length x > 1 ->
-	  Some(TMsg("Multiple trigger arg types found during bind."))
-	
-	| [x], [y] when x = y -> None
-	
-	| x, y -> Some(TMsg("Invalid types."))
+  | [], [] -> 
+    Some(TMsg("Neither source event nor trigger argument has valid types."))
+  
+  | [x], [y] when x <> y ->
+    Some(TMismatch(x,y,"Resource binding type mismatch."))
+    
+  | x, _ when List.length x > 1 ->
+    Some(TMsg("Multiple resource event types found for dispatch to trigger."))
+  
+  | _, x when List.length x > 1 ->
+    Some(TMsg("Multiple trigger arg types found during bind."))
+  
+  | [x], [y] when x = y -> None
+  
+  | x, y -> Some(TMsg("Invalid types."))
 
-let event_type_of_stream error_prefix stream_env src_id =
-	try List.assoc src_id stream_env
+let bound_resource_type error_prefix resource_env src_id =
+  try List.assoc src_id resource_env
   with Not_found ->
-	  t_error (-1) error_prefix (TMsg("Could not find stream named "^src_id)) () 
+    t_error (-1) error_prefix (TMsg("Could not find resource named "^src_id)) () 
 
 let arg_type_of_trigger error_prefix trig_env trig_id =
-	try
-	  let t = (List.assoc trig_id trig_env) <| base_of %++ value_of |>
-	    t_error (-1) error_prefix @: (TMsg("Invalid trigger argument type"))
-	  in
-	  begin match t with
-	    | TTarget(arg_t) -> [TValue(canonical arg_t)]
-	    | _ -> t_error (-1) error_prefix (TMsg("Invalid trigger argument type")) ()
-	  end
-	with Not_found ->
-	  t_error (-1) error_prefix (TMsg("Could not find trigger named "^trig_id)) ()
+  try
+    let t = (List.assoc trig_id trig_env) <| base_of %++ value_of |>
+      t_error (-1) error_prefix @: (TMsg("Invalid trigger argument type"))
+    in
+    begin match t with
+      | TTarget(arg_t) -> [TValue(canonical arg_t)]
+      | _ -> t_error (-1) error_prefix (TMsg("Invalid trigger argument type")) ()
+    end
+  with Not_found ->
+    t_error (-1) error_prefix (TMsg("Could not find trigger named "^trig_id)) ()
 
-let validate_stream_program_t trig_env stream_env sp =
-  List.fold_left (fun nsp ss -> match ss with
-        | Bind (src_id, trig_id) ->
-          let error_preamble = "Invalid binding of "^src_id^" -> "^trig_id in
-          let src_types = event_type_of_stream error_preamble stream_env src_id in
-          let trig_arg_type = arg_type_of_trigger error_preamble trig_env trig_id in
-          let error_msg = typecheck_bind src_types trig_arg_type in
-          begin match error_msg with
-            | None -> nsp@[ss]
-            | Some(msg) -> t_error (-1) error_preamble msg ()
-          end
-        | _ -> nsp@[ss]
-    ) [] sp
+let typecheck_flow env trig_env resource_env fp =
+  let check_code_type name id args locals body rebuild_f =
+    try check_trigger_type trig_env env id args locals body rebuild_f
+    with TypeError(ast_id, msg) -> 
+      raise (TypeError(ast_id, "In "^name^" "^id^": "^msg))
+  in
+  List.fold_left (fun (nfp, env) (fs,a) ->
+      let nfs, nenv = match fs with
+      | Source(Code(id, args, locals, body)) ->
+        check_code_type "Generator" id args locals body
+          (fun id args locals body -> Source(Code(id, args, locals, body)))
+
+      | Sink(Code(id, args, locals, body)) ->
+        check_code_type "Trigger" id args locals body
+          (fun id args locals body -> Sink(Code(id, args, locals, body)))
+  
+      | Bind (src_id, trig_id) ->
+        let error_preamble = "Invalid binding of "^src_id^" -> "^trig_id in
+        let src_types = bound_resource_type error_preamble resource_env src_id in
+        let trig_arg_type = arg_type_of_trigger error_preamble trig_env trig_id in
+        let error_msg = typecheck_bind src_types trig_arg_type in
+        begin match error_msg with
+          | None -> fs, env
+          | Some(msg) -> t_error (-1) error_preamble msg ()
+        end
+
+      | _ -> fs, env
+      in (nfp@[nfs,a]), nenv
+    ) ([], env) fp
 
 
 (* Environment constructors *)
-let triggers_of_program prog = List.fold_left (fun trig_env (d,_) -> match d with
-        | Trigger(id, args, locals, body) ->
-            let t = TValue(canonical @: TTarget(base_of @: deduce_arg_type args))
-            in (id, t)::trig_env
-        | _ -> trig_env
-  ) [] prog
+let types_of_endpoints endpoint_l =
+  let error_if_dup k v l =
+    if not(List.mem_assoc k l) then (k,v)::l
+    else t_error (-1) ("Endpoint("^k^")") (TMsg("Found duplicate endpoint named "^k)) ()
+  in 
+  List.fold_left (fun env ep -> match ep with
+      | Resource(id,r) -> error_if_dup id (type_of_resource env r) env
+      | Code(id, args, locals, body) ->
+        let t = TValue(canonical @: TTarget(base_of @: deduce_arg_type args))
+        in error_if_dup id [t] env
+    ) [] endpoint_l
 
-(* Returns a list of role ids, and streams defined in that role.
- * For each stream in a role, we track a list of all possible types emanating
- * from the stream *)
-let streams_of_roles prog = 
-  let env_of_statement stream_env ss = match ss with
-    | Stream(s) -> (id_and_type_of_stream stream_env s)::stream_env
-    | _ -> stream_env
-  in List.fold_left (fun stream_env (d,_) -> match d with
-    | Role(id,sp) -> (id, List.fold_left env_of_statement [] sp)::stream_env
-    | _ -> stream_env
+let source_types_of_program p = types_of_endpoints (sources_of_program p)
+let sink_types_of_program p   = types_of_endpoints (sinks_of_program p)
+
+(* Returns a trigger environment for the program *)
+let trigger_types_of_program p =
+  let env = types_of_endpoints (triggers_of_program p) in
+  List.map (fun (id, tl) -> match tl with
+      | [x] -> (id,x)
+      | _ -> t_error (-1) ("Endpoint("^id^")") (TMsg("Multiple types resolved")) ()
+    ) env
+
+(* Returns a list of role ids, and source resources defined in that role.
+ * For each resource, we track a list of possible types to address patterns.
+ * Each role is prepended with resources defined in top-level flows. *)
+let source_types_of_roles prog =
+  let init = source_types_of_program prog in 
+  List.fold_left (fun env (d,_) -> match d with
+    | Role(id,fp) -> 
+      let resources = List.filter 
+        (function Resource _ -> true | Code _ -> false) (sources_of_flow fp)
+      in (id, init@(types_of_endpoints resources))::env 
+    | _ -> env
     ) [] prog
 
 
 (* Typechecking API *)
 
 let type_bindings_of_program prog =
-  (* do a first pass, collecting trigger types and streams *)
-  let trig_env = triggers_of_program prog in
-  let rstream_env = streams_of_roles prog in
+  (* do a first pass, collecting trigger types and resources *)
+  let trig_env = trigger_types_of_program prog in
+  let resource_env = source_types_of_program prog in
+  let rresource_env = source_types_of_roles prog in
   let prog, env = 
-	  List.fold_left (fun (nprog, env) (d, meta) ->
-	    let nd, nenv = match d with 
-	      | Global(i, t, Some init) ->
-	        let typed_init =
-	          try deduce_expr_type trig_env env init
-	          with TypeError(ast_id, msg) -> 
-                  raise (TypeError(ast_id, "In Global "^i^": "^msg))
-            in 
-            let expr_type = type_of_expr typed_init in
-            if not (compare_type_ts expr_type t) then t_error (-1) i
-                (TMismatch(expr_type, t, 
-                    "Mismatch in global type declaration.")) ()
-            else 
-            Global(i, t, Some typed_init), (i, expr_type) :: env
-	
-          | Global(i, t, None) -> (Global(i, t, None), (i, t) :: env)
-				
-          | Foreign(i, t) -> (Foreign(i, t), (i, t) :: env)
-				    
-          | Trigger(id, args, locals, body) ->
-            (try check_trigger_type trig_env env id args locals body
-             with TypeError(ast_id, msg) -> 
-                raise (TypeError(ast_id, "In Trigger "^id^": "^msg)))
+    List.fold_left (fun (nprog, env) (d, meta) ->
+      let nd, nenv = match d with 
+        | Global(i, t, Some init) ->
+          let typed_init =
+            try deduce_expr_type trig_env env init
+            with TypeError(ast_id, msg) -> raise (TypeError(ast_id, "In Global "^i^": "^msg))
+          in
+          let expr_type = type_of_expr typed_init in
+          if not (compare_type_ts expr_type t) then t_error (-1) i
+              (TMismatch(expr_type, t, 
+                  "Mismatch in global type declaration.")) ()
+          else 
+          Global(i, t, Some typed_init), (i, expr_type) :: env
 
-		  | Role(id,sp) ->
-		      let stream_env =
-		        try List.assoc id rstream_env with Not_found ->
-		          t_error (-1) "Invalid role" (TMsg("No role named "^id^" found")) ()
-		      in
-          let nsp = validate_stream_program_t trig_env stream_env sp
-          in (Role(id, nsp), env)
+        | Global(i, t, None) -> (Global(i, t, None), (i, t) :: env)
+        
+        | Foreign(i, t) -> (Foreign(i, t), (i, t) :: env)
+            
+        | Flow fp ->
+          let nfp, nenv = typecheck_flow env trig_env resource_env fp
+          in (Flow nfp), nenv
+
+        | Role(id,fp) ->
+          let role_resource_env =
+            try List.assoc id rresource_env with Not_found ->
+              t_error (-1) "Invalid role" (TMsg("No role named "^id^" found")) ()
+          in
+          let nfp,nenv = typecheck_flow env trig_env role_resource_env fp
+          in (Role(id, nfp), nenv)
           
         | DefaultRole id ->
-		      if List.mem_assoc id rstream_env then (DefaultRole(id), env)
-		      else t_error (-1) "Invalid default role" (TMsg("No role named "^id^" found")) ()
-	
-		  in (nprog@[nd, (Type(TValue(canonical TUnit))::meta)]), nenv
-		) ([], []) prog
- in prog, env, trig_env, rstream_env
-
+          if List.mem_assoc id rresource_env then (DefaultRole(id), env)
+          else t_error (-1) "Invalid default role" (TMsg("No role named "^id^" found")) ()
   
+      in (nprog@[nd, (Type(TValue(canonical TUnit))::meta)]), nenv
+    ) ([], []) prog
+ in prog, env, trig_env, rresource_env
+
 let deduce_program_type program = 
   ((fun (prog,_,_,_) -> prog) (type_bindings_of_program program))
-

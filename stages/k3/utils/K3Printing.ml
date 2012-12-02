@@ -551,10 +551,11 @@ let string_of_data_annotation da =
   let my_tag tag p = tag^"("^(string_of_positions p)^")" in
   match da with
   | FunDep  (s,d) -> (string_of_positions s)^"->"^(string_of_positions d)
-  | Index   p -> my_tag "Index" p
-  | Unique  p -> my_tag "Unique" p
-  | Ordered p -> my_tag "Ordered" p
-  | Sorted  p -> my_tag "Sorted" p
+  | Index   p     -> my_tag "Index" p
+  | Unique  p     -> my_tag "Unique" p
+  | Ordered p     -> my_tag "Ordered" p
+  | Sequential    -> "Sequential"
+  | RandomAccess  -> "RandomAccess"
 
 let string_of_control_annotation ca = match ca with
   | Effect ids -> "Effect("^(String.concat "," ids)^")"

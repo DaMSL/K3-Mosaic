@@ -887,7 +887,7 @@ let gen_dist p ast =
   global_funcs @ (* maybe make this not order-dependent *)
   declare_foreign_functions p @
   filter_corrective_list ::  (* global func *)
-  mk_flow @: 
+  [mk_flow @: 
     regular_trigs@
-    send_corrective_trigs p    (* per-map basis *)
+    send_corrective_trigs p]    (* per-map basis *)
 

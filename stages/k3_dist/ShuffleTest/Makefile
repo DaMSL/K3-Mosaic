@@ -1,5 +1,4 @@
-# Makefile for the K3 programming language lexer/parser/driver.
-# -- Based off DBToaster Makefiles. (Yanif) 
+# Makefile for Cumulus Shuffle and Route
 
 include ../../../Makefile.inc
 
@@ -7,7 +6,7 @@ FILES=\
 	../../../util/Util \
 	Ring \
 	ShuffleHash \
-  ShuffleHashTest \
+    ShuffleHashTest \
 
 ALT_FILES=\
 	../../../util/Util \

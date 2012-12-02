@@ -56,10 +56,10 @@ let format_language_description (lang_t, short_desc, long_desc) =
   "  "^(pad_or_truncate_str short_desc 10)^long_desc
 
 let parse_lang data str s = 
-    try
-        let (x,_,_) = List.find (fun (_,s2,_) -> s = s2) data
-        in x
-    with Not_found -> error ("Invalid "^str^": "^s)
+  try
+    let (x,_,_) = List.find (fun (_,s2,_) -> s = s2) data
+    in x
+  with Not_found -> error ("Invalid "^str^": "^s)
 
 let parse_in_lang = parse_lang in_lang_descs "input language"
 let parse_out_lang = parse_lang out_lang_descs "output language"
@@ -93,15 +93,15 @@ type parameters = {
   }
 
 let cmd_line_params : parameters = {
-    action = ref Print;
-    in_lang = K3in;
-    out_lang = K3;
+    action       = ref Print;
+    in_lang      = K3in;
+    out_lang     = K3;
     search_paths = ["."];
-    input_files = [];
+    input_files  = [];
     node_address = ("127.0.0.1", 10000);
-    peers = [];
-    print_types = false;
-    debug_info = false;
+    peers        = [];
+    print_types  = false;
+    debug_info   = false;
   }
 
 (* General parameter setters *)
@@ -165,12 +165,13 @@ let usage_msg =
 let parse_cmd_line () =
   Arg.parse param_specs append_input_file usage_msg
 
-(* Driver execution *)
+
+(* Error handlers *)
 let handle_lexer_error () =
   print_endline ("Lexer failure");
   exit 1
 
-let handle_parse_error ?(msg = "")lexbuf =
+let handle_parse_error ?(msg = "") lexbuf =
   print_endline ("Lexer reached: '"^(Lexing.lexeme lexbuf)^"'; "^msg);
   exit 1
 
@@ -180,7 +181,8 @@ let handle_type_error p (uuid,error) =
   print_endline (string_of_program ~print_id:true p);
   exit 1
 
-(* Program constructors *)
+
+(* Program parsers *)
 let parse_program parsefn lexfn file =
   let in_chan = try open_in file
     with Sys_error _ -> error ("failed to open file: "^file) in
@@ -211,6 +213,8 @@ let parse_program_k3 = parse_program K3Parser.program K3Lexer.tokenize
 let parse_program_m3 = 
     parse_program Calculusparser.mapProgram Calculuslexer.tokenize
 
+
+(* Program transformers *)
 let typed_program p =
   try deduce_program_type p
   with TypeError (uuid, error) -> handle_type_error p (uuid, error)
@@ -224,6 +228,8 @@ let cpp_program p =
     cpp_of_imperative @:
       RK3ToImperative.imperative_of_program mk_meta @: typed_program p
 
+
+(* Action handlers *)
 (* TODO *) 
 let repl params = ()
 
@@ -300,7 +306,7 @@ let print_cpp_program f =
   in
   List.iter print_content files_and_content
   
-
+(* Top-level print handler *)
 let print params =
   let print_fn = match params.out_lang with
     | K3 -> print_k3_program |- fst
@@ -346,7 +352,7 @@ let test params =
   in List.iter test_fn params.input_files
 
 
-(* Top level *)
+(* Driver execution *)
 let process_parameters params = match !(params.action) with
   | REPL -> repl params
   | Compile -> compile params

@@ -146,12 +146,13 @@ rule tokenize = parse
 
     | '@' { ANNOTATE }
 
-    | "index"    { INDEX }
-    | "unique"   { UNIQUE }
-    | "ordered"  { ORDERED }
-    | "sorted"   { SORTED }
-    | "effect"   { EFFECT }
-    | "parallel" { PARALLEL }
+    | "index"         { INDEX }
+    | "unique"        { UNIQUE }
+    | "ordered"       { ORDERED }
+    | "sequential"    { SEQUENTIAL }
+    | "randomaccess"  { RANDOMACCESS }
+    | "effect"        { EFFECT }
+    | "parallel"      { PARALLEL }
 
     | identifier as name { IDENTIFIER (name) }
 
