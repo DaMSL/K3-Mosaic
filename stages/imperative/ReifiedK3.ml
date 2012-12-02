@@ -99,34 +99,34 @@ let name_of_reification (fn_arg_env : (id_t * arg_t) list)
       then Some(List.assoc (id_of_expr e) reified_ancestors) else None
     in
     let r = match tag_of_expr e with
-	    | Apply ->
-	      let fn_e, arg_e = decompose_apply e in
-	      let fn_arg = match tag_of_expr fn_e with
-	        | Lambda arg -> arg 
-	        | Var id -> (try List.assoc id fn_arg_env 
-	                     with Not_found -> failwith ("unknown function id "^id))
-	        | _ -> failwith "invalid function application"
-	      in
-	      let reify_lambda =
-	        match is_unit (get_type e), (tag_of_expr fn_e), e_name with
-	        | false, Lambda _, None ->
-	            declare_and_reify "apply" e [decompose_lambda fn_e] 
-	        | false, Lambda _, Some (e_id, e_t, _, _) ->
-	            reify_list (e_id, e_t) [decompose_lambda fn_e]
-	        | false, _, None -> declare_and_reify "apply" e []
-	        | _, _, _ -> []
-	      in
-	      let reify_arg =
-	        let reify_expr e name = id_of_expr e, name in
+      | Apply ->
+        let fn_e, arg_e = decompose_apply e in
+        let fn_arg = match tag_of_expr fn_e with
+          | Lambda arg -> arg 
+          | Var id -> (try List.assoc id fn_arg_env 
+                       with Not_found -> failwith ("unknown function id "^id))
+          | _ -> failwith "invalid function application"
+        in
+        let reify_lambda =
+          match is_unit (get_type e), (tag_of_expr fn_e), e_name with
+          | false, Lambda _, None ->
+              declare_and_reify "apply" e [decompose_lambda fn_e] 
+          | false, Lambda _, Some (e_id, e_t, _, _) ->
+              reify_list (e_id, e_t) [decompose_lambda fn_e]
+          | false, _, None -> declare_and_reify "apply" e []
+          | _, _, _ -> []
+        in
+        let reify_arg =
+          let reify_expr e name = id_of_expr e, name in
           (* TODO: complete support for argument patterns *)
-	        match fn_arg with
+          match fn_arg with
             | AIgnored -> []
-	          | AVar (id,t) -> [reify_expr arg_e (id, TValue(t), true, true)]   
+            | AVar (id,t) -> [reify_expr arg_e (id, TValue(t), true, true)]   
             | AMaybe _ -> failwith "cannot handle optional bindings for now"
-	          | ATuple(vt_l) -> 
-	            (* Directly reify to tuple bindings if the arg is a tuple value *)
-	            begin match K3Util.tag_of_expr arg_e with
-	              | Tuple ->
+            | ATuple(vt_l) -> 
+              (* Directly reify to tuple bindings if the arg is a tuple value *)
+              begin match K3Util.tag_of_expr arg_e with
+                | Tuple ->
                   let reify_arg_field arg_field e = match arg_field with
                     | AIgnored -> []
                     | AVar(id,t) -> [reify_expr e (id, TValue(t), true, true)]
@@ -134,43 +134,43 @@ let name_of_reification (fn_arg_env : (id_t * arg_t) list)
                     | ATuple _ -> failwith "cannot handle nested tuple bindings for now"
                   in List.flatten (List.map2 reify_arg_field vt_l (sub_tree arg_e))
 
-	              | Var _ -> []
-	              | _ -> [reify_expr arg_e (unwrap (new_name "apply" true true arg_e))]
-	            end
-	      in reify_lambda@reify_arg
-	
-	    | Block ->
-	      let child_e =
-	        let c = sub_tree e in List.nth c (List.length c - 1)
-	      in
-	      if is_unit (get_type e) then []
-	      else begin match e_name with
-	           | None -> declare_and_reify "block" e [child_e]
-	           | Some (e_id, e_t, _, _) -> reify_list (e_id, e_t) [child_e]
-	           end
-	      
-	    | IfThenElse ->
-	      let _, then_e, else_e = decompose_ifthenelse e in
-	      if is_unit (get_type e) then []
-	      else begin match e_name with
-	           | None -> declare_and_reify "ifelse" e [then_e; else_e]
-	           | Some (e_id, e_t, _, _) -> reify_list (e_id, e_t) [then_e; else_e]
-	           end
-	      
-	    | Aggregate ->
-	      let fn_e, init_e, _ = decompose_aggregate e in
-	      begin
-	        let children_to_reify =
-	          let fn_reifications = match tag_of_expr fn_e with
-	            | Lambda _ -> [decompose_lambda fn_e] | _ -> []
-	          in fn_reifications@[init_e]
-	        in
-	        match e_name with
-	        | None -> declare_and_reify "agg" e children_to_reify
-	        | Some (e_id, e_t, _, _) -> reify_list (e_id, e_t) children_to_reify
-	      end
-	    
-	    | _ -> []
+                | Var _ -> []
+                | _ -> [reify_expr arg_e (unwrap (new_name "apply" true true arg_e))]
+              end
+        in reify_lambda@reify_arg
+  
+      | Block ->
+        let child_e =
+          let c = sub_tree e in List.nth c (List.length c - 1)
+        in
+        if is_unit (get_type e) then []
+        else begin match e_name with
+             | None -> declare_and_reify "block" e [child_e]
+             | Some (e_id, e_t, _, _) -> reify_list (e_id, e_t) [child_e]
+             end
+        
+      | IfThenElse ->
+        let _, then_e, else_e = decompose_ifthenelse e in
+        if is_unit (get_type e) then []
+        else begin match e_name with
+             | None -> declare_and_reify "ifelse" e [then_e; else_e]
+             | Some (e_id, e_t, _, _) -> reify_list (e_id, e_t) [then_e; else_e]
+             end
+        
+      | Aggregate ->
+        let fn_e, init_e, _ = decompose_aggregate e in
+        begin
+          let children_to_reify =
+            let fn_reifications = match tag_of_expr fn_e with
+              | Lambda _ -> [decompose_lambda fn_e] | _ -> []
+            in fn_reifications@[init_e]
+          in
+          match e_name with
+          | None -> declare_and_reify "agg" e children_to_reify
+          | Some (e_id, e_t, _, _) -> reify_list (e_id, e_t) children_to_reify
+        end
+      
+      | _ -> []
     in
     let skip = 
       let check_if_range = match tag_of_expr e with
