@@ -25,7 +25,7 @@ module type CPPAST = sig
 	  | BMIComposite of bmi_extractor_t list
 	
 	type ext_type_decl_t =
-	    (* Element type id * (index tag type ids * unique * sorted * extractor) list *)
+	    (* Element type id * (index tag type ids * unique * ordered * extractor) list *)
 	  | TBoostMultiIndex of id_t * (id_t * bool * bool * bmi_extractor_t) list 
 	
 	type ext_collection_fn_t =
@@ -53,9 +53,9 @@ module type CPPAST = sig
 
   val print_ext_type            : ext_type_t -> unit
   val print_ext_type_decl       : ext_type_decl_t -> unit
-  val print_ext_collection_fn   : ext_collection_fn_t -> unit
-  val print_ext_fn              : ext_fn_t -> unit
-  val print_ext_cmd             : ('a -> string) -> 'a ext_cmd_t -> unit
+  val print_ext_collection_fn   : ext_collection_fn_t -> (unit lazy_t) list -> unit
+  val print_ext_fn              : ext_fn_t -> (unit lazy_t) list -> unit
+  val print_ext_cmd             : ('a -> string) -> 'a ext_cmd_t -> (unit lazy_t) list -> unit
 
 end
 
@@ -86,7 +86,7 @@ type bmi_extractor_t =
   | BMIComposite of bmi_extractor_t list
 
 type ext_type_decl_t =
-    (* Element type id * (index tag type ids * unique * sorted * extractor) list *)
+    (* Element type id * (index tag type ids * unique * ordered * extractor) list *)
   | TBoostMultiIndex of id_t * (id_t * bool * bool * bmi_extractor_t) list 
 
 type ext_collection_fn_t =
@@ -125,11 +125,11 @@ let rec print_extractor e = match e with
   | BMIMember (t,id) -> pretty_tag_str CutHint "" "Member" [lps id]
   | BMIComposite l -> pretty_tag_str CutHint "" "Composite" [lazy (ps_list CutHint print_extractor l)]
 
-let print_index (id, uniq, sorted, extractor) =
+let print_index (id, uniq, ordered, extractor) =
   let ptag ?(cut=CutHint) t ch = pretty_tag_str CutHint "" t ch in
   ptag "Index" [lps id;
                 lps ("uniq="^string_of_bool uniq);
-                lps ("sort="^string_of_bool sorted);
+                lps ("ordr="^string_of_bool ordered);
                 lazy(print_extractor extractor)]
 
 let print_ext_type_decl d =
@@ -139,7 +139,7 @@ let print_ext_type_decl d =
     (* TODO: indexes *)
     ptag "TBoostMultiIndex" ([lazy (ps id)]@(List.map (fun e -> lazy (print_index e)) indexes))
 
-let print_ext_collection_fn f =
+let print_ext_collection_fn f lazy_children =
   let ptag ?(cut=CutHint) ?(ch=[]) t = pretty_tag_str CutHint "" t ch in
   match f with
   | GetIndex tag_id_t -> ptag "GetIndex" ~ch:[lazy (ps tag_id_t)] 
@@ -148,7 +148,7 @@ let print_ext_collection_fn f =
   | Copy -> ptag "Copy"
   | Clear -> ptag "Clear"
 
-let print_ext_fn f = 
+let print_ext_fn f lazy_children = 
   let ptag ?(cut=CutHint) t = pretty_tag_str CutHint "" t [] in
   match f with
   | IteratorElement -> ptag "IteratorElement"
@@ -157,7 +157,7 @@ let print_ext_fn f =
   | PairFirst -> ptag "PairFirst"
   | PairSecond -> ptag "PairSecond"
 
-let print_ext_cmd string_of_meta c =
+let print_ext_cmd string_of_meta c lazy_children =
   let ptag ?(cut=CutHint) t ch = pretty_tag_str CutHint "" t ch in
   let lazy_expr_opt e_opt = lazy (match e_opt with 
     | None -> ptag "None" []
@@ -165,14 +165,17 @@ let print_ext_cmd string_of_meta c =
   in
   match c with
   | For (init_e_opt, test_e_opt, adv_e_opt) ->
-      ptag "For" (List.map lazy_expr_opt [init_e_opt; test_e_opt; adv_e_opt])
+      ptag "For" ((List.map lazy_expr_opt [init_e_opt; test_e_opt; adv_e_opt]))
 
-  | DoWhile test_e -> ptag "DoWhile" [lazy (print_expr string_of_meta test_e)] 
+  | DoWhile test_e -> ptag "DoWhile" ([lazy (print_expr string_of_meta test_e)])
 
 end
 
 type type_t = CPPTarget.ASTImport.type_t
 type 'a program_t = 'a CPPTarget.ASTImport.program_t 
+
+
+(* C++ source code generation *)
 
 module CPPGenerator : Imperative.Generator
        with type program_t = (type_t * annotation_t) program_t
@@ -225,11 +228,13 @@ module CPPGenerator : Imperative.Generator
   let sep_type_list ?(sep=",") string_fn l =
     String.concat sep (List.map string_fn l)
   
-  let sep_id_type_list ?(sep_elem=";") ?(sep_id=" ") string_fn l =
+  let sep_id_type_list ?(sep_elem="; ") ?(sep_id=" ") string_fn l =
     String.concat sep_elem (List.map (fun (id,t) -> (string_fn t)^sep_id^id) l)
 	
 	let call_fn lazy_id args =
     force lazy_id; wrap ~space:false "(" (lazy (print_lazy_list args)) ")"
+
+  let comma_types types = sep_type_list string_of_type types
 
   (* Typing and AST helpers *)
   let type_of_expr e = fst (meta_of_expr e)
@@ -320,8 +325,96 @@ module CPPGenerator : Imperative.Generator
     | CUnknown   -> failwith "unknown constant unsupported in C++"
 
   (* Imperative-CPP printing *)
+  and print_ext_type t =
+    match t with
+    | TIterator t -> ps ((string_of_type t)^"::iterator")
+    | TPair (l,r) -> ps (concat_template "pair" (comma_types [l; r]))
+
+  and print_ext_type_decl d =
+    let lazy_list ?(hint=NoCut) l = lazy (print_lazy_list ~hint:hint l) in
+    let wrap_template tag lazy_f = wrap ~space:false (tag^"<") lazy_f " >" in
+    let wrap_template_box ?(cut_before=true) ?(cut_last=false) tag lazy_f =
+      wrap ~hint:CutHint ~box:true ~cut_before:false ~cut_after:true ~cut_last:true
+        ~space:false (tag^"<") lazy_f " >"
+    in
+    let rec print_extractor element_id e = 
+      let rcr = print_extractor element_id in
+      match e with
+      | BMIIdentity t -> ps (concat_template "identity" (string_of_type t))
+      
+      | BMIMember (t,id) ->
+        wrap_template "member" (lazy_list [lazy (ps element_id); lazy(print_type t); lazy(ps id)])
+      
+      | BMIComposite e_l ->
+        let l = List.map (fun e -> lazy (rcr e)) e_l
+        in wrap_template "composite" (lazy (print_lazy_list l))
+    in
+    match d with
+    | TBoostMultiIndex (element_id, indexes) ->
+      let print_index indexes =
+        let l = List.map (fun (id, uniq, ordered, extractor) -> 
+            let t = match uniq, ordered with
+              | true, true -> "ordered_unique"
+              | true, false -> "hashed_unique"
+              | false, true -> "ordered_non_unique"
+              | false, false -> "hashed_non_unique"
+            in
+            let body = [lazy(ps (concat_template "tag" id));
+                        lazy(print_extractor element_id extractor)]
+            in lazy (wrap_template t (lazy_list body))
+          ) indexes
+        in wrap_template_box  "indexed_by" (lazy_list ~hint:CutHint l)
+      in 
+      let container_body = lazy_list ~hint:CutHint [lazy(ps element_id); lazy(print_index indexes)]
+      in wrap_template_box "multi_index_container" container_body
+
+  and print_ext_collection_fn cf lazy_children =
+    let p_fn fn_tag =
+      check_at_least 1 lazy_children;
+      call_fn (lazy (force (List.hd lazy_children); ps "."; ps fn_tag)) (List.tl lazy_children)
+    in
+    match cf with
+    | GetIndex(id) -> p_fn (concat_template "get" id)
+    | BeginIterator -> p_fn "begin"
+    | EndIterator -> p_fn "end"
+    | Copy -> p_fn "copy"
+    | Clear -> p_fn "clear"
+
+  and print_ext_fn f lazy_children =
+    let print tag = call_fn (lazy (ps tag)) lazy_children in
+    let p_pair tag =
+      check_unary lazy_children;
+      wrap ~space:false "(" (List.hd lazy_children) (")."^tag)
+    in 
+    match f with
+    | IteratorElement -> print "*"
+    | IteratorIncrement -> print "++"
+    | IteratorDecrement -> print "--"
+    | PairFirst -> p_pair "first"
+    | PairSecond -> p_pair "second"
+
+  and print_ext_cmd string_of_meta c lazy_children =
+    match c with
+    | For (init_e_opt, test_e_opt, advance_e_opt) ->
+      let local_children = 
+        let p_opt e_opt = match e_opt with
+          | None -> [lazy ()]
+          | Some(e) -> [lazy (print_expr e)]
+        in
+        List.flatten (List.map p_opt [init_e_opt; test_e_opt; advance_e_opt])
+      in
+      wrap "for(" (lazy (print_lazy_list ~sep:"; " local_children)) ")";
+      wrap ~hint:CutHint ~cut_after:true "{" 
+        (lazy (print_lazy_list ~hint:CutHint ~sep:"" lazy_children))
+      "}"
+
+    | DoWhile (cond_expr) ->
+      wrap ~hint:CutHint ~cut_after:true "do {"
+        (lazy (print_lazy_list ~hint:CutHint ~sep:"" lazy_children))
+      "}";
+      wrap ~hint:CutHint ~cut_after:true" while (" (lazy (print_expr cond_expr)) ")"
+
   and print_type t =
-    let comma_types = sep_type_list string_of_type in 
 	  match t with
 	  | TInternal it -> print_k3_type it
 	  | TTop         -> ps "shared_ptr<boost::any>"
@@ -344,9 +437,10 @@ module CPPGenerator : Imperative.Generator
     let finish_decl() = ps ";" in
     let print_typedef id lazy_fn = wrap "typedef" lazy_fn id in
     let print_struct id_t_l = 
-      let sep_struct_fields = sep_id_type_list string_of_type in
-        ps "struct";
-        wrap ~hint:CutHint ~cut_after:true "{" (lazy (ps (sep_struct_fields id_t_l))) "}"
+      let l = List.map (fun (id,t) -> lazy (print_type t; ps (" "^id))) id_t_l in
+      ps "struct";
+      wrap ~box:true ~hint:CutHint ~cut_after:true ~cut_last:true
+        "{" (lazy (print_lazy_list ~hint:CutHint ~sep:"; " l)) "}"
     in
     match decl with
     | DType (id, type_decl) ->
@@ -442,9 +536,7 @@ module CPPGenerator : Imperative.Generator
     | Delete -> call_w_coll_arg (fun lazy_c -> lazy (force lazy_c; ps ".erase")) ch 
 	  | Find -> (call_w_coll_arg (fun lazy_c -> lazy (force lazy_c; ps ".find")) ch)
 	  
-    | CFExt f ->
-      let id_fn lazy_c = lazy (force lazy_c; ps "."; print_ext_collection_fn f)
-      in call_w_coll_arg id_fn ch
+    | CFExt f -> print_ext_collection_fn f ch
 
     | Update   -> desugar_error "Update" 
     | Contains -> desugar_error "Contains"
@@ -490,7 +582,7 @@ module CPPGenerator : Imperative.Generator
       in wrap ~space:false (cast_op^"(") (List.hd ch) ")"
 
 	  | Send type_tag  -> call_fn (lazy (ps ("send_"^type_tag))) ch 
-	  | FExt f         -> call_fn (lazy (print_ext_fn f)) ch 
+	  | FExt f         -> print_ext_fn f ch
   
   and print_expr_tag ch e =
     let check_leaf() = check_leaf "expression" ch in
@@ -541,7 +633,7 @@ module CPPGenerator : Imperative.Generator
 	  
 	  | Return e -> ps "return "; print_expr e; sep()
 	
-	  | CExt c -> let string_of_meta m = "" in print_ext_cmd string_of_meta c
+	  | CExt c -> let string_of_meta m = "" in print_ext_cmd string_of_meta c ch
     
     | Foreach (id,t,e) -> desugar_error "Foreach"
     

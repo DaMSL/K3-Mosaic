@@ -501,6 +501,7 @@ let print_flow_program ?(print_id=false) ?(print_expr_fn=lazy_expr) fp =
 
 let print_declaration ?(print_id=false) ?(print_expr_fn=lazy_expr) d =
   let my_tag ?(cut=CutLine) = pretty_tag_str cut "" in
+  let print_flow_fn p = print_flow_program ~print_expr_fn:print_expr_fn p in
   match d with
     | Global(i, t, init) ->
       my_tag "Global"
@@ -509,9 +510,9 @@ let print_declaration ?(print_id=false) ?(print_expr_fn=lazy_expr) d =
 
     | Foreign(i, t) -> my_tag "Foreign" [lps (quote i); lazy_type t]
 
-    | Flow fp -> my_tag "Flow" [lazy (print_flow_program fp)]
+    | Flow fp -> my_tag "Flow" [lazy (print_flow_fn fp)]
         
-    | Role (id, sp)   -> my_tag "Role" [lps (quote id); lazy(print_flow_program sp)]
+    | Role (id, sp)   -> my_tag "Role" [lps (quote id); lazy(print_flow_fn sp)]
 
     | DefaultRole id  -> my_tag ~cut:CutHint "DefaultRole" [lps (quote id)] 
 

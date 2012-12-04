@@ -2,6 +2,7 @@ declare events : {|(int,int)|}
 
 trigger on_event(a:int, b:int) {} = do {
   insert(events, (a,b));
+  iterate(\(na:int, nb:int) -> insert(events,(na,nb)), map(\(a:int, b:int) -> (a, b+1), events));
   send(on_event, localhost:10000, a,b)
 }
 

@@ -78,9 +78,9 @@ let rec composite_decl_of_type id counter vt =
   in
   let fields_of_list l = 
     let x, y, z = snd (List.fold_left (fun (i,(counter,acc,decl_acc)) vt ->
-	    let n_counter, nt, n_decls = rcr_on_collection i vt in
+      let n_counter, nt, n_decls = rcr_on_collection i vt in
         i+1, (n_counter,
-	            acc@[composite_field_prefix^(string_of_int i), nt],
+              acc@[composite_field_prefix^(string_of_int i), nt],
               (decl_acc@n_decls))
       ) (0,(counter,[],[])) l)
     in if y = [] then failwith "invalid field types for composite"
@@ -102,44 +102,44 @@ and type_declarations_of_collection id counter t =
   let is_external_type t = match t with TInternal _ -> false | _ -> true in
   let unit_t = TInternal(TValue(canonical TUnit)) in 
   match element_of_collection t with
-	| Some (collection_t, element_vt) ->
-	  let indexes = match t with
-	    | TInternal(TValue vt) -> indexes_of_annotations (annotation_of vt)
-	    | _ -> None, []
-	  in
-	  let nt_id, nt_elem_id = 
-	    let prefix = id^"__"^(string_of_int counter) in
-	    prefix^"_bmi", prefix^"_bmi_elem"
-    in	  
-	  let c, t_decl, decl_cmds = composite_decl_of_type id (counter+1) element_vt in
-	  begin match t_decl with
-	  | TComposite(tl) ->
+  | Some (collection_t, element_vt) ->
+    let indexes = match t with
+      | TInternal(TValue vt) -> indexes_of_annotations (annotation_of vt)
+      | _ -> None, []
+    in
+    let nt_id, nt_elem_id = 
+      let prefix = id^"__"^(string_of_int counter) in
+      prefix^"_bmi", prefix^"_bmi_elem"
+    in    
+    let c, t_decl, decl_cmds = composite_decl_of_type id (counter+1) element_vt in
+    begin match t_decl with
+    | TComposite(tl) ->
       let convert =
         (match indexes with None, [] -> false | _,_ -> true)
         || List.exists is_external_type (List.map snd tl)
       in 
-	    if convert then
-	      let n_decl_cmds = (decl_cmds@[DType(nt_elem_id, t_decl), (unit_t,[])]) in
-	      let bmi_idx = bmi_indexes collection_t t_decl (TNamed nt_elem_id) indexes in
-	      let c_t_decl_cmd =
-	        [DType(nt_id, TExtDecl(TBoostMultiIndex(nt_elem_id, bmi_idx))), (unit_t, [])]
-	      in
-	        c, TNamed(nt_id), (n_decl_cmds@c_t_decl_cmd)
-	    else c, t, decl_cmds
-	
-	  | _ -> c, t, decl_cmds
-	  end
+      if convert then
+        let n_decl_cmds = (decl_cmds@[DType(nt_elem_id, t_decl), (unit_t,[])]) in
+        let bmi_idx = bmi_indexes collection_t t_decl (TNamed nt_elem_id) indexes in
+        let c_t_decl_cmd =
+          [DType(nt_id, TExtDecl(TBoostMultiIndex(nt_elem_id, bmi_idx))), (unit_t, [])]
+        in
+          c, TNamed(nt_id), (n_decl_cmds@c_t_decl_cmd)
+      else c, t, decl_cmds
+  
+    | _ -> c, t, decl_cmds
+    end
 
-	| _ -> counter, t, []
+  | _ -> counter, t, []
   
 (* Declares a collection as a Boost Multi-Index.
  * We assume annotation checking has been performed. *)
 let datastructure_of_collection id t da_opt (dt, da) =
   match type_declarations_of_collection id 0 t with
-	| _, TNamed(nt_id), t_decls -> 
-	  let nc_decl = DVar(id, TNamed(nt_id), da_opt) in
-	  let nbmi_bindings = [id, TNamed(nt_id)] in
-	  (t_decls@[nc_decl, (dt,da)]), nbmi_bindings
+  | _, TNamed(nt_id), t_decls -> 
+    let nc_decl = DVar(id, TNamed(nt_id), da_opt) in
+    let nbmi_bindings = [id, TNamed(nt_id)] in
+    (t_decls@[nc_decl, (dt,da)]), nbmi_bindings
   
   | _, _, t_decls ->  t_decls, []
   
@@ -154,18 +154,18 @@ let datastructure_of_collection id t da_opt (dt, da) =
 let optimize_datastructures program =
   let is_var_decl (d,_) = match d with DVar _ -> true | _ -> false in
   let split_decls decls = 
-	  let x,y = List.partition is_var_decl decls in
-	  (List.map (fun (d,(t,a)) -> mk_decl (t,a) d) x), y
+    let x,y = List.partition is_var_decl decls in
+    (List.map (fun (d,(t,a)) -> mk_decl (t,a) d) x), y
   in
   let rec bmi_of_cmd (decls, cmds, bindings) cmd =
     let rebuild_cmd cmd_f cmd_l =
-		  let sub_decls, cmds_per_sub, nb =
-		    List.fold_left (fun (decl_acc, cmds_per_sub, b) sub_cmd ->
+      let sub_decls, cmds_per_sub, nb =
+        List.fold_left (fun (decl_acc, cmds_per_sub, b) sub_cmd ->
             let ndecls, nsub_cmds, nb = bmi_of_cmd ([], [], b) sub_cmd in
             let var_decls, rest_decls = split_decls ndecls in
             (decl_acc@rest_decls), cmds_per_sub@[var_decls@nsub_cmds], nb
           ) ([], [], bindings) cmd_l
-		  in (decls@sub_decls), (cmds@(cmd_f cmds_per_sub)), nb
+      in (decls@sub_decls), (cmds@(cmd_f cmds_per_sub)), nb
     in
     match tag_of_cmd cmd with
     | Decl d -> 
@@ -305,7 +305,73 @@ let optimize_datastructures program =
  *
  *
  *) 
-let cpp_rewrite program = program
 
-let cpp_of_imperative program = 
-  fst (optimize_datastructures program) 
+let rewrite_cmd_node mk_meta td child_l c =
+  let type_of_expr e = fst (meta_of_expr e) in
+  let meta t = t, mk_meta() in
+  let unit_meta, int_meta, bool_meta = meta unit_t, meta int_t, meta bool_t in
+  match tag_of_cmd c with
+  | Foreach (loop_var, loop_var_t, coll_expr) ->
+    let children = List.flatten child_l in
+    let decl_and_loop_cmds =
+      let iterator_decls, iterator, end_iterator = match tag_of_expr coll_expr with
+        | Var(id) ->
+          let iterator_id = "it_"^id in
+          let end_iterator_id = "end_"^id in
+          let it_type, it_meta = 
+            let t = TExt (TIterator (type_of_expr coll_expr)) in t, meta t
+          in
+          let it_init, end_init =
+            Some(Init(U.mk_fn it_meta (Collection (CFExt BeginIterator)) [coll_expr])),
+            Some(Init(U.mk_fn it_meta (Collection (CFExt EndIterator)) [coll_expr]))
+          in
+          let iterator_decl = U.mk_var_decl iterator_id it_type it_init in
+          let end_iterator_decl = U.mk_var_decl end_iterator_id it_type end_init in
+            [U.mk_decl unit_meta iterator_decl; 
+             U.mk_decl unit_meta end_iterator_decl],
+            U.mk_var it_meta iterator_id, U.mk_var it_meta end_iterator_id
+
+        | _ -> failwith "non-reified loops are currently unsupported"
+      in
+      let test_expr = U.mk_op bool_meta Neq [iterator; end_iterator] in
+      let advance_expr = U.mk_fn unit_meta (FExt IteratorIncrement) [iterator] in
+      let for_tag = CExt (For (None, Some(test_expr), Some(advance_expr)))
+      in iterator_decls@[U.mk_cmd for_tag unit_meta children]
+    in
+    [U.mk_block unit_meta decl_and_loop_cmds]
+
+  | _ -> [recompose_tree c (List.flatten child_l)]
+
+let rewrite_cmd mk_meta c =
+  List.hd (fold_tree (fun _ _ -> None) (rewrite_cmd_node mk_meta) None [] c)
+
+let rec rewrite_declaration mk_meta (d,meta) = match d with
+  | DType (id, t_decl) -> (d, meta)
+  
+  | DVar (id, t, da_opt) -> (d, meta)
+  
+  | DFn (id, t_arg, t_ret, body) -> 
+    let new_cmds = List.map (rewrite_cmd mk_meta) body
+    in (DFn(id, t_arg, t_ret, new_cmds), meta)
+
+  | DClass (id, parent_opt, class_decls) ->
+    let new_decls = List.map (rewrite_declaration mk_meta) class_decls
+    in (DClass(id, parent_opt, new_decls), meta)
+
+let rec rewrite_component mk_meta c = match c with
+  | Include (id, Some(prog), None, false) ->  
+    Include(id, Some(cpp_rewrite mk_meta prog), None, false)
+
+  | Include (id, None, None, _)
+  | Include (id, _, _, true)
+  | Include (id, None, Some(_), false) -> c
+
+  | Include (_, Some(_), Some(_), _) ->
+    failwith "invalid module, modules cannot contain both programs and raw code"
+
+  | Component decls_with_meta -> Component (List.map (rewrite_declaration mk_meta) decls_with_meta)
+
+and cpp_rewrite mk_meta program = List.map (rewrite_component mk_meta) program
+
+let cpp_of_imperative mk_meta program = 
+  cpp_rewrite mk_meta (fst (optimize_datastructures program))

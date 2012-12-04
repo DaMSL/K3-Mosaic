@@ -225,7 +225,7 @@ let imperative_program p =
 let cpp_program p = 
   let mk_meta() = [] in
   CPPTyping.deduce_program_type @:
-    cpp_of_imperative @:
+    cpp_of_imperative mk_meta @:
       RK3ToImperative.imperative_of_program mk_meta @: typed_program p
 
 

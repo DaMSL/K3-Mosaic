@@ -37,8 +37,46 @@
       let column = pos.Lexing.pos_cnum - pos.Lexing.pos_bol in 
       Printf.printf "Error on line %d character %d : " linenum column;
       print_endline msg;
-      if !numerrors > 20 then raise Exit else()
+      if !numerrors > 20 then raise Exit else raise Parsing.Parse_error
         
+  (* Predefined errors *)
+  let missing_paren ?(side="left") = print_error ("Missing "^side^" parenthesis")
+
+  let id_error () = print_error("Expected identifier")
+  let type_error () = print_error("Expected type expression")
+  
+  let op_error op_class i = 
+    let op_type = match i with 1 -> " unary" | 2 -> " binary" | 3 -> " ternary" | _ -> ""
+    in print_error("Invalid"^op_type^" "^op_class^" operator syntax")
+
+  let arith_error i = op_error "arithmetic" i
+  let comp_error () = op_error "comparison" 2
+  
+  let cond_error cond_class =
+    print_error ("Invalid conditional "^cond_class^" error")
+
+  let lambda_error error_class = 
+    print_error ("Invalid lambda "^error_class^" expression")
+
+  let assign_error assign_class =
+    print_error ("Invalid "^assign_class^" assignment RHS expression")
+
+  let positional_error value_class i =
+    let i_str = match i with 
+        | 1 -> "first"   | 2 -> "second" | 3 -> "third"
+        | 4 -> "fourth"  | 5 -> "second" | 6 -> "third"
+        | 7 -> "seventh" | 8 -> "eighth" | 9 -> "ninth"
+        | _ -> string_of_int i
+    in print_error ("Expected "^value_class^" as "^i_str^" argument")
+  
+  let coll_error i = positional_error "collection" i
+  let coll_lambda_error fn_class i = positional_error (fn_class^" function") i
+  let value_error i = positional_error "value" i
+
+  let expr_error () = print_error("Expected expression")
+  
+  let flow_program_error () = print_error("Expected flow program")
+
 %}
 
 %token EXPECTED
@@ -148,18 +186,18 @@ declaration:
     | DEFAULT ROLE IDENTIFIER                      { DefaultRole($3) }
 
     /* Error handling */
-    | DECLARE IDENTIFIER COLON type_expr GETS error { print_error("Expected expression"); raise Parsing.Parse_error }
-    | DECLARE IDENTIFIER COLON error { print_error("Expected type expression"); raise Parsing.Parse_error }
-    | DECLARE error { print_error("Expected identifier"); raise Parsing.Parse_error }
+    | DECLARE IDENTIFIER COLON type_expr GETS error { expr_error() }
+    | DECLARE IDENTIFIER COLON error                { type_error() }
+    | DECLARE error                                 { id_error() }
     
-    | FOREIGN IDENTIFIER COLON error { print_error("Expected type expression"); raise Parsing.Parse_error }
-    | FOREIGN error { print_error("Expected identifier"); raise Parsing.Parse_error }
+    | FOREIGN IDENTIFIER COLON error { type_error() }
+    | FOREIGN error                  { id_error() }
 
-    | ROLE IDENTIFIER LBRACE error { print_error("Expected flow program"); raise Parsing.Parse_error }
-    | ROLE IDENTIFIER error { print_error("Expected flow program"); raise Parsing.Parse_error }
-    | ROLE error { print_error("Expected identifier"); raise Parsing.Parse_error }
+    | ROLE IDENTIFIER LBRACE error { flow_program_error() }
+    | ROLE IDENTIFIER error        { flow_program_error() }
+    | ROLE error                   { id_error() }
 
-    | DEFAULT ROLE error { print_error("Expected identifier"); raise Parsing.Parse_error }
+    | DEFAULT ROLE error           { id_error() }
 ;
 
 /* Flow programs */
@@ -183,27 +221,21 @@ flow_statement:
 
     /* Error handling */
 
-    | TRIGGER IDENTIFIER arg LBRACE RBRACE GETS error { 
-        print_error("Error in trigger body"); raise Parsing.Parse_error 
-      }
+    | TRIGGER IDENTIFIER arg LBRACE RBRACE GETS error { print_error("Error in trigger body") }
 
     | TRIGGER IDENTIFIER arg LBRACE value_typed_identifier_list RBRACE GETS error {
-        print_error("Error in trigger body"); raise Parsing.Parse_error
+        print_error("Error in trigger body")
       }
 
-    | TRIGGER IDENTIFIER arg LBRACE error {
-        print_error("Expected list of local declarations"); raise Parsing.Parse_error
-      }
+    | TRIGGER IDENTIFIER arg LBRACE error { print_error("Expected list of local declarations") }
 
-    | TRIGGER error { print_error("Invalid trigger"); raise Parsing.Parse_error }
+    | TRIGGER error { print_error("Invalid trigger") }
 
-    | BIND IDENTIFIER RARROW error { print_error("Invalid bind target"); raise Parsing.Parse_error }
+    | BIND IDENTIFIER RARROW error { print_error("Invalid bind target") }
 
-    | BIND SOURCE IDENTIFIER RARROW TRIGGER error {
-        print_error("Invalid bind target"); raise Parsing.Parse_error
-      }
+    | BIND SOURCE IDENTIFIER RARROW TRIGGER error { print_error("Invalid bind target") }
 
-    | BIND error { print_error("Invalid bind source"); raise Parsing.Parse_error }
+    | BIND error { print_error("Invalid bind source") }
 ;
 
 instruction:
@@ -379,8 +411,8 @@ expr:
     | expr LPAREN tuple RPAREN { mkexpr Apply [$1; $3] }
 
     /* TODO: more error handling */
-    | SEND error { print_error("Invalid SEND syntax"); raise Parsing.Parse_error }
-    | expr LPAREN error { print_error("Expression syntax error"); raise Parsing.Parse_error }
+    | SEND error { print_error("Invalid send syntax") }
+    | expr LPAREN error { print_error("Function application error") }
 ;
 
 expr_list:
@@ -399,7 +431,7 @@ tuple:
 
 value_typed_identifier:
     | IDENTIFIER COLON isolated_value_type_expr { ($1, $3) }
-    | IDENTIFIER COLON error { print_error("Expected type expression"); raise Parsing.Parse_error }
+    | IDENTIFIER COLON error { type_error() }
 
 ;
 
@@ -463,11 +495,13 @@ arithmetic:
     | expr TIMES expr { mkexpr Mult [$1; $3] }
     | expr DIVIDE expr { mkexpr Apply [mkexpr (Var("/")) []; mkexpr Tuple [$1; $3]] }
     | expr MODULO expr { mkexpr Apply [mkexpr (Var("%")) []; mkexpr Tuple [$1; $3]] }
-    | NEG error { print_error("Invalid arithmetic operand"); raise Parsing.Parse_error }
-    | expr PLUS error { print_error("Invalid arithmetic operand"); raise Parsing.Parse_error }
-    | expr TIMES error { print_error("Invalid arithmetic operand"); raise Parsing.Parse_error}
-    | expr DIVIDE error { print_error("Invalid arithmetic operand"); raise Parsing.Parse_error }
-    | expr MODULO error { print_error("Invalid arithmetic operand"); raise Parsing.Parse_error }
+
+    /* Error handling */
+    | NEG error         { arith_error 1 }
+    | expr PLUS error   { arith_error 2 }
+    | expr TIMES error  { arith_error 2 }
+    | expr DIVIDE error { arith_error 2 }
+    | expr MODULO error { arith_error 2 }
 ;
 
 predicate:
@@ -477,25 +511,31 @@ predicate:
     | expr NEQ expr { mkexpr Neq [$1; $3] }
     | expr GT expr { mkexpr Neg [mkexpr Leq [$1; $3]] }
     | expr GEQ expr { mkexpr Neg [mkexpr Lt [$1; $3]] }
-    | expr LT error { print_error("Invalid comparison operand"); raise Parsing.Parse_error }
-    | expr EQ error { print_error("Invalid comparison operand"); raise Parsing.Parse_error}
-    | expr LEQ error { print_error("Invalid comparison operand"); raise Parsing.Parse_error }
-    | expr NEQ error { print_error("Invalid comparison operand"); raise Parsing.Parse_error }
-    | expr GT { print_error("Invalid comparison operand"); raise Parsing.Parse_error }
-    | expr GEQ { print_error("Invalid comparison operand"); raise Parsing.Parse_error }
+
+    /* Error handling */
+    | expr LT error  { comp_error() }
+    | expr EQ error  { comp_error() }
+    | expr LEQ error { comp_error() }
+    | expr NEQ error { comp_error() }
+    | expr GT error  { comp_error() }
+    | expr GEQ error { comp_error() }
 ;
 
 conditional:
     | IF expr THEN expr ELSE expr { mkexpr IfThenElse [$2; $4; $6] }
-    | IF error { print_error("Expected valid predicate following 'if'"); raise Parsing.Parse_error }
-    | IF expr THEN error{ print_error("Expected valid expression following 'then'"); raise Parsing.Parse_error }
-    | IF expr THEN expr ELSE error { print_error("Expected valid expression following 'else'"); raise Parsing.Parse_error }
+
+    /* Error handling */
+    | IF expr THEN expr ELSE error { cond_error "else branch" }
+    | IF expr THEN error           { cond_error "then branch" }
+    | IF error                     { cond_error "predicate" }
 ;
 
 lambda:
      | BACKSLASH arg RARROW expr { mkexpr (Lambda($2)) [$4] }
-     | BACKSLASH error { print_error("Expected valid argument for function"); raise Parsing.Parse_error }
-     | BACKSLASH arg RARROW error { print_error("Expected valid expression for function definition"); raise Parsing.Parse_error }
+
+     /* Error handling */
+     | BACKSLASH arg RARROW error { lambda_error "body" }
+     | BACKSLASH error            { lambda_error "argument" }
 ;
 
 access:
@@ -512,15 +552,15 @@ mutation:
     | expr COLONGETS expr { mkexpr Assign [$1;$3] }
 
     /* Error handling */
-    | INSERT LPAREN error { print_error("Expected a value as first argument"); raise Parsing.Parse_error }
-    | INSERT LPAREN expr error { print_error("Expected collection as second argument"); raise Parsing.Parse_error }
-    | UPDATE LPAREN expr error { print_error("Expected a collection as second argument"); raise Parsing.Parse_error }
-    | UPDATE LPAREN error { print_error("Expected a value as first argument"); raise Parsing.Parse_error }
-    | DELETE LPAREN error { print_error("Expected a value as first argument"); raise Parsing.Parse_error }
-    | DELETE LPAREN expr error { print_error("Expected value,collection as arguments"); raise Parsing.Parse_error }
-    | expr LARROW error { print_error("Expected expression"); raise Parsing.Parse_error}
-    | expr GETS error { print_error("Expected expression"); raise Parsing.Parse_error}
-    | expr COLONGETS error { print_error("Expected expression"); raise Parsing.Parse_error}
+    | INSERT LPAREN expr error { value_error 2 }
+    | INSERT LPAREN error      { coll_error 1 }
+    | UPDATE LPAREN expr error { value_error 2 }
+    | UPDATE LPAREN error      { coll_error 1 }
+    | DELETE LPAREN expr error { value_error 2 }
+    | DELETE LPAREN error      { coll_error 1 }
+    | expr LARROW error        { assign_error "reference" }
+    | expr GETS error          { assign_error "copy" }
+    | expr COLONGETS error     { assign_error "refcopy" }
 ;
 
 transformers:
@@ -536,27 +576,33 @@ transformers:
     | SORT LPAREN expr COMMA expr RPAREN { mkexpr Sort [$3; $5] }
 
     /* Error handling */
-    | expr CONCAT error { print_error("Expected expression for combine"); raise Parsing.Parse_error }
-    | MAP LPAREN expr error { print_error("Expected a collection as second argument"); raise Parsing.Parse_error }
-    | MAP LPAREN error { print_error("Expected mapping function, collection as arguments"); raise Parsing.Parse_error }
-    | MAP error { print_error("Invalid map syntax"); raise Parsing.Parse_error }
-    | ITERATE LPAREN expr error { print_error("Expected a collection as second argument"); raise Parsing.Parse_error }
-    | ITERATE LPAREN error { print_error("Expected iteration function, collection as arguments"); raise Parsing.Parse_error }
-    | ITERATE error { print_error("Invalid iterate syntax"); raise Parsing.Parse_error }
-    | FILTERMAP LPAREN expr COMMA expr error { print_error("Expected a collection as third argument"); raise Parsing.Parse_error }
-    | FILTERMAP LPAREN expr error { print_error("Expected a mapping function as second argument"); raise Parsing.Parse_error }
-    | FILTERMAP LPAREN error { print_error("Expected predicate function, mapping function, collection as arguments"); raise Parsing.Parse_error }
-    | FILTERMAP error { print_error("Invalid filtermap syntax"); raise Parsing.Parse_error }
-    | FLATTEN LPAREN error { print_error("Expected list (of lists) structure"); raise Parsing.Parse_error }
-    | AGGREGATE LPAREN expr COMMA expr error { print_error("Expected a collection as third argument"); raise Parsing.Parse_error }
-    | AGGREGATE LPAREN expr error { print_error("Expected an initializer as second argument"); raise Parsing.Parse_error }
-    | AGGREGATE LPAREN error { print_error("Expected aggregation function, initializer and collection as arguments"); raise Parsing.Parse_error }
-    | AGGREGATE error { print_error("Invalid fold syntax"); raise Parsing.Parse_error }
-    | GROUPBYAGGREGATE LPAREN expr COMMA expr COMMA expr error { print_error("Expected a collection as fourth argument"); raise Parsing.Parse_error }
-    | GROUPBYAGGREGATE LPAREN expr COMMA expr error { print_error("Expected an initializer as third argument"); raise Parsing.Parse_error }
-    | GROUPBYAGGREGATE LPAREN expr error { print_error("Expected an aggregation function as second argument"); raise Parsing.Parse_error }
-    | GROUPBYAGGREGATE LPAREN error { print_error("Expected grouping function, aggregation function, initailizer and collection as arguments"); raise Parsing.Parse_error }
-    | GROUPBYAGGREGATE error { print_error("Invalid groupby syntax"); raise Parsing.Parse_error }
+    | expr CONCAT error { print_error("Expected expression for combine") }
+    
+    | MAP LPAREN expr error { coll_error 2 }
+    | MAP LPAREN error      { coll_lambda_error "map" 1 }
+    | MAP error             { print_error("Invalid map syntax") }
+    
+    | ITERATE LPAREN expr error { coll_error 2 }
+    | ITERATE LPAREN error      { coll_lambda_error "iterate" 1 }
+    | ITERATE error             { print_error("Invalid iterate syntax") }
+    
+    | FILTERMAP LPAREN expr COMMA expr error { coll_error 3 }
+    | FILTERMAP LPAREN expr error            { coll_lambda_error "filtermap map" 2 }
+    | FILTERMAP LPAREN error                 { coll_lambda_error "filtermap filter" 1 }
+    | FILTERMAP error                        { print_error("Invalid filtermap syntax") }
+    
+    | FLATTEN LPAREN error { print_error("Expected a nested collection") }
+    
+    | AGGREGATE LPAREN expr COMMA expr error { coll_error 3 }
+    | AGGREGATE LPAREN expr error            { value_error 2 }
+    | AGGREGATE LPAREN error                 { coll_lambda_error "aggregate" 1 }
+    | AGGREGATE error                        { print_error("Invalid fold syntax") }
+    
+    | GROUPBYAGGREGATE LPAREN expr COMMA expr COMMA expr error { coll_error 4 }
+    | GROUPBYAGGREGATE LPAREN expr COMMA expr error            { value_error 3 }
+    | GROUPBYAGGREGATE LPAREN expr error                       { coll_lambda_error "group-by aggregate" 2 }
+    | GROUPBYAGGREGATE LPAREN error                            { coll_lambda_error "grouping" 1 }
+    | GROUPBYAGGREGATE error                                   { print_error("Invalid groupby syntax") }
 ;
 
 block:

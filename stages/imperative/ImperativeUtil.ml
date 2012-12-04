@@ -48,16 +48,6 @@ let lazy_string_opt string_f a = match a with
   
 (* Type and program grammar pretty printing *)
 
-let string_of_collection_fn_tag coll_fn = match coll_fn with
-  | Peek -> "Peek" | Slice -> "Slice"
-  | Insert -> "Insert" | Update -> "Update" | Delete -> "Delete" 
-  | Combine -> "Combine"
-  | Range -> "Range"
-  | Sort -> "Sort"
-  | Contains -> "Contains"
-  | Find -> "Find"
-  | CFExt _ -> "CFExt"
-
 let print_tree print_node tree =
   let lazy_root = 
     fold_tree (fun _ _ -> ())
@@ -148,6 +138,22 @@ and print_decl string_of_meta d =
     my_tag ~cut:(if members = [] then CutHint else CutLine)
       "DClass" ([lazy_id]@(List.map lazy_decl_pair members))
 
+(* TODO: print out external collection functions *)
+and print_collection_fn_tag coll_fn lazy_children =
+  let my_tag = pretty_tag_str CutHint "" in
+  match coll_fn with
+  | Peek -> my_tag "Peek" []
+  | Slice -> my_tag "Slice" []
+  | Insert -> my_tag "Insert" []
+  | Update -> my_tag "Update" []
+  | Delete -> my_tag "Delete" []
+  | Combine -> my_tag "Combine" []
+  | Range -> my_tag "Range" []
+  | Sort -> my_tag "Sort" []
+  | Contains -> my_tag "Contains" []
+  | Find -> my_tag "Find" []
+  | CFExt ext_tag -> my_tag "CFExt" [lazy (print_ext_collection_fn ext_tag lazy_children)]
+
 and print_member_access_fn_tag comp_fn =
   let my_tag = pretty_tag_str CutHint "" in
   match comp_fn with
@@ -155,15 +161,15 @@ and print_member_access_fn_tag comp_fn =
   | Field id   -> my_tag "Field" [lps id]
   | Method id  -> my_tag "Method" [lps id]
 
-and print_fn_tag fn_tag =
+and print_fn_tag fn_tag lazy_children =
   let my_tag = pretty_tag_str CutHint "" in
   match fn_tag with
-  | Collection coll_fn -> my_tag "Collection" [lps (string_of_collection_fn_tag coll_fn)]
+  | Collection coll_fn -> my_tag "Collection" [lazy (print_collection_fn_tag coll_fn lazy_children)]
   | Member macc_fn -> my_tag "Member" [lazy (print_member_access_fn_tag macc_fn)]
   | Named id       -> my_tag "Named" [lps id]
   | Cast t         -> my_tag "Cast" [lazy_type t]
   | Send id        -> my_tag "Send" [lps id]
-  | FExt f         -> my_tag "FExt" [lazy (print_ext_fn f)]
+  | FExt f         -> my_tag "FExt" [lazy (print_ext_fn f lazy_children)]
  
 and print_expr_tag string_of_meta tag lazy_children =
   let my_tag t = pretty_tag_str CutHint "" t lazy_children in
@@ -174,7 +180,7 @@ and print_expr_tag string_of_meta tag lazy_children =
   | Tuple     -> my_tag "Tuple"
   | Just      -> my_tag "Just"
   | Op     op -> ch_tag "Op" ([lazy_op op]@lazy_children)
-  | Fn     fn_tag -> ch_tag "Fn" ([lazy (print_fn_tag fn_tag)]@lazy_children)
+  | Fn     fn_tag -> ch_tag "Fn" ([lazy (print_fn_tag fn_tag lazy_children)]@lazy_children)
 
 and print_expr string_of_meta e =
   let m_str m = wrap_unless_empty "<" ">" (string_of_meta m) in
@@ -208,7 +214,7 @@ and print_cmd_tag string_of_meta tag lazy_children =
   
   | Return e -> ch_tag "Return" [lazy_expr string_of_meta e]
 
-  | CExt c -> ch_tag "CExt" [lazy (print_ext_cmd string_of_meta c)]
+  | CExt c -> ch_tag "CExt" ([lazy (print_ext_cmd string_of_meta c lazy_children)]@lazy_children)
 
 and print_cmd string_of_meta c =
   let m_str m = wrap_unless_empty "<" ">" (string_of_meta m) in

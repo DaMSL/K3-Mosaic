@@ -12,6 +12,8 @@
 *.byte
 _build
 
+*.sublime-*
+
 Makefile.deps
 Makefile.local
 

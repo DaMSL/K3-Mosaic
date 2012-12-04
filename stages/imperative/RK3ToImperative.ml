@@ -490,21 +490,27 @@ let imperative_of_expr_node mk_meta fn_arg_env
     in ret_with_proto apply_pair
 
   | K3.AST.Block ->
+    (* Imperative construction inlines reifications in the order in
+     * which they are used by children *)
+    let pre_cmds ec_pair =
+      try List.flatten (List.assoc ec_pair reify_cmds_by_children)
+      with Not_found -> []
+    in
     let init, back = split_last children in
     let block_init_cmds =
-      (List.fold_left
+      List.fold_left
         (fun cmd_acc dac_pair ->
-          unwrap_pair
+          cmd_acc@(pre_cmds dac_pair)@(unwrap_pair
             (fun da -> failwith "invalid block expression element")
-            (fun cmds -> cmd_acc@cmds)
+            (fun cmds -> cmds)
             (fun da cmds -> failwith "invalid block expression element")
-            dac_pair)
-        [] init)@reify_cmds
+            dac_pair))
+        [] init
     in
       ret_with_proto (unwrap_pair
-        (fun da -> (Some da, Some (block_init_cmds))) 
-        (fun cmds -> (None, Some (block_init_cmds@cmds)))
-        (fun da cmds -> (Some da, Some(block_init_cmds@cmds)))
+        (fun da -> (Some da, Some (block_init_cmds@(pre_cmds back)))) 
+        (fun cmds -> (None, Some (block_init_cmds@(pre_cmds back)@cmds)))
+        (fun da cmds -> (Some da, Some(block_init_cmds@(pre_cmds back)@cmds)))
         back)
 
   | K3.AST.IfThenElse ->
@@ -526,7 +532,7 @@ let imperative_of_expr_node mk_meta fn_arg_env
         begin match then_reify_cmds, else_reify_cmds with
           | [], [] -> ret_expr e (Op Ternary)
           | a, b ->
-		        let pred_expr = expr_of_decl_args (unwrap x) in
+            let pred_expr = expr_of_decl_args (unwrap x) in
             let branches = [U.mk_block (U.unit_t, mk_meta()) (a@[assign_da id (unwrap y)]);
                             U.mk_block (U.unit_t, mk_meta()) (b@[assign_da id (unwrap z)])]
             in ret_with_proto (None, Some([cond_expr pred_expr branches]))
@@ -714,13 +720,13 @@ let imperative_of_expr_node mk_meta fn_arg_env
               let branches = [update_cmd e; new_cmd e]
               in cond_expr contains_expr branches
             in
-				    let acc_cmds = unwrap_pair
+            let acc_cmds = unwrap_pair
               (* Global function application for aggregate function *) 
-				      (fun da -> [replace_group_cmd (apply_if_function da agg_bound_vars)])
-				      (fun cmds -> failwith "invalid reified groupby aggregation function result")
-				      (fun da cmds -> cmds@[replace_group_cmd (expr_of_decl_args da)])
-				      agg_fn_pair
-				    in bindings@agg_fn_reify_cmds@acc_cmds
+              (fun da -> [replace_group_cmd (apply_if_function da agg_bound_vars)])
+              (fun cmds -> failwith "invalid reified groupby aggregation function result")
+              (fun da cmds -> cmds@[replace_group_cmd (expr_of_decl_args da)])
+              agg_fn_pair
+            in bindings@agg_fn_reify_cmds@acc_cmds
           in
           
           (* Loop body *)
@@ -807,10 +813,10 @@ let imperative_of_expr mk_meta fn_arg_env
   in
   let node_pair = fst node_pair_with_proto in
   let result_pair =
-	  match decl, assign with
-	  | true, _ -> declare assign id t node_pair
-	  | false, true -> assign_if_expr id t node_pair
-	  | false, false -> ensure_cmd node_pair
+    match decl, assign with
+    | true, _ -> declare assign id t node_pair
+    | false, true -> assign_if_expr id t node_pair
+    | false, false -> ensure_cmd node_pair
   in result_pair, snd node_pair_with_proto
 
 
@@ -879,9 +885,9 @@ let imperative_of_csv_parser mk_meta output_t =
     | TString -> field_expr TString
     | _ -> failwith "unsupported type from csv input"
   in
-	let tokenized_t, tok_meta = 
-	  let t = TCollection(TList, canonical TString) in U.ib_type t, meta t
-	in
+  let tokenized_t, tok_meta = 
+    let t = TCollection(TList, canonical TString) in U.ib_type t, meta t
+  in
   let tokenized_id, tokenized_var =
     let id = "tokenized" in id, (U.mk_var tok_meta id)
   in
@@ -918,20 +924,20 @@ let type_and_constructor_of_channel mk_meta id (t, ct, cf) =
          (TNamed(rt)), Some(Constructor(cstr@[parser_var])) 
   in 
   match ct,cf with
-	| File(f), CSV -> 
-	  let meta = U.string_t, mk_meta() in
+  | File(f), CSV -> 
+    let meta = U.string_t, mk_meta() in
     ret "k3_file_source" [U.mk_const meta (CString f)]
-	
-	| Network(addr), CSV -> 
-	  let cstr_args = 
-	    let ip,port = addr in
-	    let ip_meta = U.string_t, mk_meta() in
-	    let port_meta = U.int_t, mk_meta() in
-	    [U.mk_const ip_meta (CString ip); U.mk_const port_meta (CInt port)]
-	  in
+  
+  | Network(addr), CSV -> 
+    let cstr_args = 
+      let ip,port = addr in
+      let ip_meta = U.string_t, mk_meta() in
+      let port_meta = U.int_t, mk_meta() in
+      [U.mk_const ip_meta (CString ip); U.mk_const port_meta (CInt port)]
+    in
     ret "k3_network_source" cstr_args
-	
-	| _, _ -> failwith "unsupported stream channel"
+  
+  | _, _ -> failwith "unsupported stream channel"
 
 let imperative_of_resource mk_meta (id, (source,resource)) =
   let parser_class_decl, parser_decl, t, da_opt = match resource with
@@ -971,13 +977,13 @@ let imperative_of_dispatcher_state mk_meta role_id dispatch
     in List.map expr dispatch_ids 
   in
   
-	let valid_pred = 
-	  let valid_event = U.mk_op pred_meta Neq [event_var; U.mk_const event_meta CNothing] in
-	  let resource_var = mk_resource_var mk_meta role_id resource_id in
-	  let match_source = U.mk_op pred_meta Eq [source_var; resource_var] in
-	  U.mk_op pred_meta And [match_source; valid_event]
-	in
-	let succeed_cmd = U.mk_block unit_meta ((schedule_exprs dispatch)@[return next_state_id])
+  let valid_pred = 
+    let valid_event = U.mk_op pred_meta Neq [event_var; U.mk_const event_meta CNothing] in
+    let resource_var = mk_resource_var mk_meta role_id resource_id in
+    let match_source = U.mk_op pred_meta Eq [source_var; resource_var] in
+    U.mk_op pred_meta And [match_source; valid_event]
+  in
+  let succeed_cmd = U.mk_block unit_meta ((schedule_exprs dispatch)@[return next_state_id])
   in [U.mk_ifelse pred_meta valid_pred [succeed_cmd; return fail_state_id]] 
 
 
@@ -989,9 +995,9 @@ let imperative_of_dispatcher_state mk_meta role_id dispatch
  *)  
 let imperative_of_dispatcher mk_meta role_id resource_env prior_resources (id,dispatcher) =
  
-	(* Type and meta constructor helpers *)
-	let meta t = (t, mk_meta()) in
-	let type_and_meta bt = let t = U.ib_type bt in t, meta t in
+  (* Type and meta constructor helpers *)
+  let meta t = (t, mk_meta()) in
+  let type_and_meta bt = let t = U.ib_type bt in t, meta t in
 
   let unit_meta, int_meta, pred_meta = meta U.unit_t, meta U.int_t, meta U.bool_t in
   let fsm_meta, event_meta, source_meta = int_meta, meta TTop, meta U.int_t in
@@ -1008,8 +1014,8 @@ let imperative_of_dispatcher mk_meta role_id resource_env prior_resources (id,di
 
   let error = U.mk_return unit_meta (U.mk_const fsm_meta (CInt (-1))) in
   
-	let module A = ResourceActions in 
-	let module F = ResourceFSM in
+  let module A = ResourceActions in 
+  let module F = ResourceFSM in
   let fsm_step_body =
     List.fold_left (fun else_branch (sid, ((rid, (ma,nid)), (fa,fid))) ->
       let fsm_pred = U.mk_op pred_meta Eq [state_var; U.mk_const fsm_meta (CInt sid)] in
@@ -1018,13 +1024,13 @@ let imperative_of_dispatcher mk_meta role_id resource_env prior_resources (id,di
           | F.Output (A.Source(A.Dispatch(dispatch),p)) ->
             
             (* Get resource-specific event type *)
-				    let event_t, event_meta =
-				      match handle_of_resource resource_env rid with
-				      | Some(source, event_t, ct, cf) -> 
+            let event_t, event_meta =
+              match handle_of_resource resource_env rid with
+              | Some(source, event_t, ct, cf) -> 
                 let t = U.i_type event_t in t, (t,mk_meta())
-				      | _ -> failwith ("invalid resource "^rid)
-				    in
-				    let typed_event_id, typed_event_var = mk_event_var_pair event_meta id in
+              | _ -> failwith ("invalid resource "^rid)
+            in
+            let typed_event_id, typed_event_var = mk_event_var_pair event_meta id in
             imperative_of_dispatcher_state mk_meta role_id dispatch rid nid fid
               ((typed_event_var, event_meta), (source_var, source_meta))
             
@@ -1041,9 +1047,9 @@ let imperative_of_dispatcher mk_meta role_id resource_env prior_resources (id,di
     ) error dispatcher
   in
   let fsm_step_decl =
-	  let fsm_step_arg =
+    let fsm_step_arg =
       [state_var_id, fst fsm_meta; source_id, fst source_meta; event_id, fst event_meta]
-	  in DFn("run_step", fsm_step_arg, fsm_ret_t, [fsm_step_body])
+    in DFn("run_step", fsm_step_arg, fsm_ret_t, [fsm_step_body])
   in
   
   let renv_id, renv_var =
@@ -1082,7 +1088,7 @@ let imperative_of_dispatcher mk_meta role_id resource_env prior_resources (id,di
     in
     (* Initialize resource delta. This leaves network sockets open from prior
      * instructions, but reloads files. *)
-		let initialize_resources =
+    let initialize_resources =
       let mk_renv_method method_id args = U.mk_expr unit_meta (
         U.mk_fn unit_meta (Member (Method method_id)) ([renv_var]@args)) 
       in
@@ -1091,17 +1097,17 @@ let imperative_of_dispatcher mk_meta role_id resource_env prior_resources (id,di
       let partition_net l = List.partition (is_net_handle resource_env) l in
       let opened_net, opened_files = partition_net prior_resources in
       let net_resources, file_resources = partition_net (resources_of_dispatcher dispatcher) in
-		  let pass_net, open_net, close_net =
-		    ListAsSet.inter opened_net net_resources,
-		    ListAsSet.diff net_resources opened_net,
-		    ListAsSet.diff opened_net net_resources 
-		  in
-		  let open_files, close_files = file_resources, opened_files in
+      let pass_net, open_net, close_net =
+        ListAsSet.inter opened_net net_resources,
+        ListAsSet.diff net_resources opened_net,
+        ListAsSet.diff opened_net net_resources 
+      in
+      let open_files, close_files = file_resources, opened_files in
       let open_cmds = List.map open_cmd (open_net@open_files) in
       let close_cmds = List.map close_cmd (close_net@close_files) in
       open_cmds@close_cmds
-		in
-		initialize_fsm@initialize_resources
+    in
+    initialize_fsm@initialize_resources
   in
   let init_decl = DFn("init", [], U.unit_t, init_body) in
 
@@ -1118,14 +1124,14 @@ let imperative_of_instruction mk_meta ds_env instr =
   | Consume id ->
     let unit_meta, int_meta, bool_meta = meta U.unit_t, meta U.int_t, meta U.bool_t in
     if List.mem_assoc id ds_env then
-	    let instr_id = "instr_"^id in 
-	    let decl, decl_meta = 
-	      let t = TNamed ("instruction_"^id) in
-	      U.mk_decl unit_meta (U.mk_var_decl instr_id t None), meta t
-	    in
-	    let add = U.mk_expr unit_meta (
-	      U.mk_fn unit_meta (Named "add_instruction") [U.mk_var decl_meta instr_id])
-	    in U.mk_block unit_meta [decl; add]
+      let instr_id = "instr_"^id in 
+      let decl, decl_meta = 
+        let t = TNamed ("instruction_"^id) in
+        U.mk_decl unit_meta (U.mk_var_decl instr_id t None), meta t
+      in
+      let add = U.mk_expr unit_meta (
+        U.mk_fn unit_meta (Named "add_instruction") [U.mk_var decl_meta instr_id])
+      in U.mk_block unit_meta [decl; add]
     else failwith ("could not find instruction named "^id)
 
 
@@ -1139,10 +1145,10 @@ let imperative_of_event_loop mk_meta role_id (res_env, res_bindings, ds_env, ins
   let mk_decl_pair l = List.map (fun d -> (d, unit_meta)) l in
   
   let resource_id_decls =
-	  mk_decl_pair (List.map (fun (id, _) ->
-	    U.mk_var_decl (mk_resource_id id) U.int_t
-	     (Some(Init(U.mk_const int_meta (CInt (Hashtbl.hash id)))))
-	  ) res_env)
+    mk_decl_pair (List.map (fun (id, _) ->
+      U.mk_var_decl (mk_resource_id id) U.int_t
+       (Some(Init(U.mk_const int_meta (CInt (Hashtbl.hash id)))))
+    ) res_env)
   in
 
   let source_ids_class_id = mk_source_ids_class_id role_id in
@@ -1163,35 +1169,35 @@ let imperative_of_event_loop mk_meta role_id (res_env, res_bindings, ds_env, ins
       ) ([],[]) ds_env)
   in
 
-	let register_resource_cmds, parser_decls = 
+  let register_resource_cmds, parser_decls = 
     let regs, parsers =
       List.split (List.map (fun ((id, (source, resource)) as r) ->
-	      let id_decl, id_var =
+        let id_decl, id_var =
           let rid = mk_resource_id id in
-	        (U.mk_var_decl rid U.int_t
-	          (Some(Init(U.mk_const int_meta (CInt (Hashtbl.hash id)))))),
+          (U.mk_var_decl rid U.int_t
+            (Some(Init(U.mk_const int_meta (CInt (Hashtbl.hash id)))))),
           (U.mk_fn int_meta (Member (Field rid)) [source_ids_var])
-	      in
-			  let parser_decl, resource_decl, resource_t, resource_var =
+        in
+        let parser_decl, resource_decl, resource_t, resource_var =
           imperative_of_resource mk_meta r
         in
         let mk_register_fn fn = 
           U.mk_fn unit_meta fn
             [U.mk_var (meta (TNamed "resource_env")) "resources"; id_var; resource_var]
         in
-	      let register_fn = match resource_t with 
-	        | TNamed("k3_file_source") -> mk_register_fn (Member (Method "add_file"))
-	        | TNamed("k3_network_source") -> mk_register_fn (Member (Method "add_network"))
-	        | _ -> failwith "invalid resource type"
-	      in
-			  let register_cmd =
-	        U.mk_block unit_meta (resource_decl@[U.mk_expr unit_meta register_fn])
-	      in
-	        register_cmd, parser_decl
+        let register_fn = match resource_t with 
+          | TNamed("k3_file_source") -> mk_register_fn (Member (Method "add_file"))
+          | TNamed("k3_network_source") -> mk_register_fn (Member (Method "add_network"))
+          | _ -> failwith "invalid resource type"
+        in
+        let register_cmd =
+          U.mk_block unit_meta (resource_decl@[U.mk_expr unit_meta register_fn])
+        in
+          register_cmd, parser_decl
       ) res_env)
     in
     regs, mk_decl_pair (ListAsSet.no_duplicates parsers) 
-	in
+  in
 
   let flow_class_decl =
     let flow_class_name = mk_role_class_id role_id in
@@ -1332,15 +1338,15 @@ let imperative_of_roles mk_meta prog =
       U.mk_fn str_meta (Member (Method "get_role")) [mk_options_var mk_meta]
     in 
     let valid_default, default =
-	    match default_role with 
-	      | None -> false, U.mk_return unit_meta (U.mk_const int_meta (CInt 1))
-	      | Some(id,_) ->  true, mk_run_role id
+      match default_role with 
+        | None -> false, U.mk_return unit_meta (U.mk_const int_meta (CInt 1))
+        | Some(id,_) ->  true, mk_run_role id
     in
     let match_role_cmds =
-	    List.fold_left (fun case_acc (id,_) ->
-	      let pred_e = U.mk_op bool_meta Eq [role_var; U.mk_const str_meta (CString id)]
-	      in U.mk_ifelse unit_meta pred_e [mk_run_role id; case_acc]
-	      ) default roles
+      List.fold_left (fun case_acc (id,_) ->
+        let pred_e = U.mk_op bool_meta Eq [role_var; U.mk_const str_meta (CString id)]
+        in U.mk_ifelse unit_meta pred_e [mk_run_role id; case_acc]
+        ) default roles
     in 
     [match_role_cmds]@
     (if not valid_default then [] 
@@ -1377,7 +1383,7 @@ let imperative_of_program mk_meta p =
   let unit_meta, int_meta, string_meta = meta U.unit_t, meta U.int_t, meta U.string_t in
   let main_body, decls, _, protospec =
     List.fold_left (fun (main_cmd_acc, decl_acc, fn_arg_env, (psacc,ptacc)) (d,m) ->
-	    let decls, init_cmds, fn_args, (ps,pt) =
+      let decls, init_cmds, fn_args, (ps,pt) =
         imperative_of_declaration mk_meta fn_arg_env (d,m)
       in main_cmd_acc@init_cmds, decl_acc@decls, fn_arg_env@fn_args, (psacc@ps, ptacc@pt)
     ) ([],[],[],([],[])) p
@@ -1412,10 +1418,10 @@ let imperative_of_program mk_meta p =
   in
 
   let mk_component d = Component (List.map (fun d -> d, unit_meta) d) in
-	let type_of_class_decl d = match d with
-	  | DClass(id,_,_) -> TNamed id
-	  | _ -> failwith "invalid class declaration"
-	in
+  let type_of_class_decl d = match d with
+    | DClass(id,_,_) -> TNamed id
+    | _ -> failwith "invalid class declaration"
+  in
   
   let decls_types_and_vars =
     let skip_decl d id init = match d with 
@@ -1438,6 +1444,13 @@ let imperative_of_program mk_meta p =
   let dd i = fst (snd (List.nth decls_types_and_vars i)) in
   let dv i = snd (snd (List.nth decls_types_and_vars i)) in  
 
+  let ensure_decl_and_type f i = if List.length decls_types_and_vars > i then [f i] else [] in
+  let mk_runtime () = ensure_decl_and_type (fun i -> mk_component [dd i]) 1  in
+  
+  let mk_communicators () = 
+    mk_component (List.concat (List.map (ensure_decl_and_type dd) [2; 3]))
+  in
+
   let runtime_components =
     [Include (target_include, None, None, false); mk_component [runtime_class_decl]]
   in 
@@ -1459,15 +1472,15 @@ let imperative_of_program mk_meta p =
     in 
     DFn("main", main_arg, U.int_t, body) 
   in 
-     [Include(protocol_spec_file, None, Some(MGen.generate_serializer_specs protospec), false);
-      Include (k3_include, Some([Component k3_decls]), None, true);
-      Include(target_include, Some([mk_component [target_class_decl]]), None, false);
-      Component ([dd 0, unit_meta]@decls);
-      Include(runtime_include, Some(runtime_components), None, false);
-      mk_component [dd 1];
-      Include(protocol_include, Some(protocol_components), None, false);
-      mk_component [dd 2; dd 3];
-      Include("k3_roles.h", Some([Component role_decls]), None, false);
-      Component [main_fn, unit_meta]]
+      [Include(protocol_spec_file, None, Some(MGen.generate_serializer_specs protospec), false);
+       Include (k3_include, Some([Component k3_decls]), None, true);
+       Include(target_include, Some([mk_component [target_class_decl]]), None, false);
+       Component ([dd 0, unit_meta]@decls);
+       Include(runtime_include, Some(runtime_components), None, false)]
+      @(mk_runtime ())@
+      [Include(protocol_include, Some(protocol_components), None, false);
+       mk_communicators ();
+       Include("k3_roles.h", Some([Component role_decls]), None, false);
+       Component [main_fn, unit_meta]]
 
 end
