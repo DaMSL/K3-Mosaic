@@ -4,8 +4,14 @@ open K3Streams
 open Imperative
 
 val k3_include : string
+
+(* Trigger target CG data *)
+val target_var_id    : id_t
 val target_class_id  : id_t
 val target_include   : string
+
+(* Runtime CG data *)
+val runtime_var_id   : id_t
 val runtime_class_id : id_t
 val runtime_include  : string
 val options_class_id : id_t

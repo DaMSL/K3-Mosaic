@@ -17,10 +17,10 @@ struct
 module ASTImport = struct module AST = Imperative.AST(Lang) end
 open ASTImport.AST
 
-module S = Runtime.Make(Lang)
+module R = Runtime.Make(Lang)
 module U = ImperativeUtil.Util(Lang)
 
-open S
+open R
 open U
 
 let meta mk_meta t = t, mk_meta()
@@ -291,7 +291,7 @@ struct
       m unit_t, m int_t, m S.serialized_type in
 
     let trig_specs = ListAsSet.no_duplicates (snd protospec) in
-    let scheduler_var = mk_var (m runtime_type) "scheduler" in
+    let scheduler_var = mk_var (m runtime_type) runtime_var_id in
 
 	  let recvrs_by_type =
 	    List.fold_left (fun acc (id,arg,asig) ->

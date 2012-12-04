@@ -1,3 +1,4 @@
+open Util
 open Tree
 
 open K3.AST
@@ -8,6 +9,9 @@ open CPP
 open CPP.CPPTarget
 open CPP.CPPTarget.ASTImport
 open CPPTyping
+
+module R = Runtime.Make(CPPTarget)
+open R
 
 module U = ImperativeUtil.Util(CPPTarget)
 open U
@@ -230,10 +234,8 @@ let optimize_datastructures program =
 
 (* TODO:
  * CPP transforms:
- * -- Foreach => Iterator; For
  *
  * -- Collection operations:
- *   ++ Update(Set|Bag|List) => x.erase(); x.insert()
  *   ++ Update(Map) => x[k] = v
  *
  * The following need additional constructs in our CPP AST:
@@ -281,38 +283,60 @@ let optimize_datastructures program =
  *   ++ Peek(Slice) => Find
  *   ++ Slice == Empty => Contains 
  *
- * Our general strategy should be to perform minimal transformations. Thus
- * AST nodes that have a clear direct translation in stringification need not
- * be translated. This includes the following below.
- *
- * -- CTarget => target var
- * -- CAddress => make_address fn
- * -- Member(Position i) => tuple get
- *
- * -- Collection operations:
- *   ++ Peek => *x.begin()
- *   ++ Insert => x.insert()
- *   ++ Delete => x.erase()
- *   ++ Contains => x.find() == x.end()
- *   ++ Find => *x.find()
- *
- * -- Casting:
- *   ++ Cast(T) => lexical_cast<T> when TString -> T or T -> TString
- *   ++ Cast(T) => static_cast<T> otherwise
- *
- * Type transformations
- * -- TTarget => TInt
- *
- *
  *) 
 
-let rewrite_cmd_node mk_meta td child_l c =
+let rewrite_expr_node mk_meta td child_l e =
+  let type_of_expr e = fst (meta_of_expr e) in
+  let meta t = t, mk_meta() in
+  let unit_meta, str_meta, int_meta, bool_meta, addr_meta = 
+    meta unit_t, meta string_t, meta int_t, meta bool_t, meta addr_t
+  in
+  let e_meta, children = meta_of_expr e, List.flatten child_l in
+  let ret e = [e] in
+  match tag_of_expr e with
+    | Const  (CTarget t)  -> ret @: mk_target_var mk_meta t
+
+    | Const  (CAddress (host, port)) ->
+      ret @: U.mk_fn addr_meta (Named "make_address")
+        [U.mk_const str_meta (CString host); U.mk_const int_meta (CInt port)]
+
+    (* TODO: this should only apply for sets, bags and lists *)
+    | Fn (Collection Update) ->
+      let c_expr = List.hd children in
+      let old_expr, new_expr = List.nth children 1, List.nth children 2 in
+      [U.mk_fn unit_meta (Collection Delete) [c_expr; old_expr];
+       U.mk_fn unit_meta (Collection Insert) [c_expr; new_expr]]
+
+    | Fn (Collection Find) -> 
+      let c_expr = List.hd children in
+      let it_meta = meta @: TExt (TIterator (type_of_expr c_expr))
+      in ret @: (U.mk_fn it_meta (Collection Find) children)
+
+    | Fn (Collection Contains) ->
+      let c_expr = List.hd children in
+      let it_meta = meta @: TExt (TIterator (type_of_expr c_expr)) in
+      let new_children = [U.mk_fn it_meta (Collection Find) children;
+                          U.mk_fn it_meta (Collection (CFExt EndIterator)) [c_expr]]
+      in ret @: U.mk_op bool_meta Eq new_children
+    
+    | _ -> ret @: recompose_tree e children
+
+let rewrite_expr mk_meta e =
+  List.hd (fold_tree (fun _ _ -> None) (rewrite_expr_node mk_meta) None [] e)
+
+let rec rewrite_cmd_node mk_meta td child_l c =
   let type_of_expr e = fst (meta_of_expr e) in
   let meta t = t, mk_meta() in
   let unit_meta, int_meta, bool_meta = meta unit_t, meta int_t, meta bool_t in
+  let c_meta, children = meta_of_cmd c, List.flatten child_l in
+  let ret c = [c] in
   match tag_of_cmd c with
+  | Assign (id, e) -> ret @: U.mk_assign c_meta id (rewrite_expr mk_meta e)
+  | Decl d -> ret @: U.mk_decl c_meta (rewrite_declaration mk_meta d)
+  | Expr e -> ret @: U.mk_expr c_meta (rewrite_expr mk_meta e)
+  | IfThenElse pred -> [U.mk_ifelse c_meta (rewrite_expr mk_meta pred) children]
+
   | Foreach (loop_var, loop_var_t, coll_expr) ->
-    let children = List.flatten child_l in
     let decl_and_loop_cmds =
       let iterator_decls, iterator, end_iterator = match tag_of_expr coll_expr with
         | Var(id) ->
@@ -338,25 +362,30 @@ let rewrite_cmd_node mk_meta td child_l c =
       let for_tag = CExt (For (None, Some(test_expr), Some(advance_expr)))
       in iterator_decls@[U.mk_cmd for_tag unit_meta children]
     in
-    [U.mk_block unit_meta decl_and_loop_cmds]
+    ret @: U.mk_block unit_meta decl_and_loop_cmds
 
-  | _ -> [recompose_tree c (List.flatten child_l)]
+  | While cond -> ret @: U.mk_while c_meta (rewrite_expr mk_meta cond) children
+  | Return retval -> ret @: U.mk_return c_meta (rewrite_expr mk_meta retval)
 
-let rewrite_cmd mk_meta c =
+  | _ -> ret @: recompose_tree c children
+
+and rewrite_cmd mk_meta c =
   List.hd (fold_tree (fun _ _ -> None) (rewrite_cmd_node mk_meta) None [] c)
 
-let rec rewrite_declaration mk_meta (d,meta) = match d with
-  | DType (id, t_decl) -> (d, meta)
+and rewrite_declaration mk_meta d = match d with
+  | DType (id, t_decl) -> d
   
-  | DVar (id, t, da_opt) -> (d, meta)
+  | DVar (id, t, da_opt) -> d
   
   | DFn (id, t_arg, t_ret, body) -> 
     let new_cmds = List.map (rewrite_cmd mk_meta) body
-    in (DFn(id, t_arg, t_ret, new_cmds), meta)
+    in DFn(id, t_arg, t_ret, new_cmds)
 
   | DClass (id, parent_opt, class_decls) ->
-    let new_decls = List.map (rewrite_declaration mk_meta) class_decls
-    in (DClass(id, parent_opt, new_decls), meta)
+    let new_decls = List.map (rewrite_declaration_w_meta mk_meta) class_decls
+    in DClass(id, parent_opt, new_decls)
+
+and rewrite_declaration_w_meta mk_meta (d,meta) = (rewrite_declaration mk_meta d, meta)
 
 let rec rewrite_component mk_meta c = match c with
   | Include (id, Some(prog), None, false) ->  
@@ -369,7 +398,7 @@ let rec rewrite_component mk_meta c = match c with
   | Include (_, Some(_), Some(_), _) ->
     failwith "invalid module, modules cannot contain both programs and raw code"
 
-  | Component decls_with_meta -> Component (List.map (rewrite_declaration mk_meta) decls_with_meta)
+  | Component decls_with_meta -> Component (List.map (rewrite_declaration_w_meta mk_meta) decls_with_meta)
 
 and cpp_rewrite mk_meta program = List.map (rewrite_component mk_meta) program
 

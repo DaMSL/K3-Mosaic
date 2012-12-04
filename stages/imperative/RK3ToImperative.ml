@@ -19,12 +19,12 @@ struct
 module ASTImport = struct module AST = Imperative.AST(Lang) end
 open ASTImport.AST
 
-module S = Runtime.Make(Lang)
-module R = Remoting.Make(Lang)
+module R = Runtime.Make(Lang)
+module C = Remoting.Make(Lang)
 module U = ImperativeUtil.Util(Lang)
 
-open S
 open R
+open C
 
 (* Helpers *)
 let init l = List.rev (List.tl (List.rev l))
@@ -1411,7 +1411,6 @@ let imperative_of_program mk_meta p =
     ]
   in
   
-  let target_id, runtime_id = "targets", "scheduler" in
   let target_class_decl, runtime_class_decl,
         (proto_decls, serializer_decl, sender_decl, recvr_decl)
      = imperative_of_protospec mk_meta protospec
@@ -1432,11 +1431,11 @@ let imperative_of_program mk_meta p =
     List.map (fun (d, id, args) ->
       let t = type_of_class_decl d
       in t, (U.mk_var_decl id t args, U.mk_var (meta t) id))
-      ([target_class_decl, target_id, None;
-       runtime_class_decl, runtime_id, None]
+      ([target_class_decl, target_var_id, None;
+       runtime_class_decl, runtime_var_id, None]
        @(skip_decl sender_decl "sender" None)
        @(skip_decl recvr_decl "receiver"
-          (Some(Constructor[U.mk_var runtime_meta runtime_id])))
+          (Some(Constructor[U.mk_var runtime_meta runtime_var_id])))
        @(skip_decl serializer_decl "serializer" None))
   in
   

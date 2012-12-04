@@ -7,8 +7,8 @@ open Imperative
 open ImperativeUtil
 
 let k3_include = "k3.hpp"
-let target_class_id, target_include = "k3_target", "k3_targets.hpp"
-let runtime_class_id, runtime_include = "k3_runtime", "k3_runtime.hpp"
+let target_var_id, target_class_id, target_include = "targets", "k3_target", "k3_targets.hpp"
+let runtime_var_id, runtime_class_id, runtime_include = "scheduler", "k3_runtime", "k3_runtime.hpp"
 let options_class_id = "k3_options"
 
 module Make = functor (Lang : TargetLanguage) ->
@@ -26,10 +26,9 @@ let mk_target_var_id id = "target_"^id
 let mk_target_var mk_meta id =
   let meta t = t, mk_meta() in  
   let int_meta = meta int_t in
-    (*U.mk_var int_meta (mk_target_var_id id)*)
     U.mk_fn int_meta
       (Member (Field (mk_target_var_id id)))
-      [U.mk_var (meta (TNamed target_class_id)) "targets"]
+      [U.mk_var (meta (TNamed target_class_id)) target_var_id]
 
 let mk_trigger_dispatch_id id = "dispatch_"^id
 let mk_trigger_dispatch_var_id id = "dispatch_obj_"^id

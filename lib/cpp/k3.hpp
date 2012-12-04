@@ -33,6 +33,8 @@ typedef pair<string, int> address;
 typedef pair<int, shared_ptr<boost::any> > flow_event;
 
 // Utility functions
+address make_address(string host, int port) { return make_pair(host, port); }
+
 string address_as_string(address& addr) {
   return addr.first + ":" + boost::lexical_cast<string>(addr.second);
 }

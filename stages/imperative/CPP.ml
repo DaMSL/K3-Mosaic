@@ -183,10 +183,10 @@ module CPPGenerator : Imperative.Generator
   open CPPTarget
   open CPPTarget.ASTImport
 
-  module S = Runtime.Make(CPPTarget)
+  module R = Runtime.Make(CPPTarget)
   module U = ImperativeUtil.Util(CPPTarget)
   
-  open S
+  open R
   open U
 
   type format_box_type = HBox | VBox | HVBox | HOVBox
@@ -312,15 +312,17 @@ module CPPGenerator : Imperative.Generator
   and string_of_k3_value_type vt = wrap_formatter (fun () -> print_k3_value_type vt)
 
   let rec print_const c_type c =
-    let string_of_address a = (fst a)^", "^(string_of_int (snd a)) in
     match c with
     | CBool b    -> ps (if b then "true" else "false")
     | CInt i     -> ps (string_of_int i)
     | CFloat f   -> ps (string_of_float f)
     | CString s  -> ps (mk_string s) 
-    | CAddress a -> ps ("make_address("^(string_of_address a)^")")
-    | CTarget id -> ps (mk_target_var_id id)
     | CNothing   -> ps ((concat_template "shared_ptr" (string_of_type c_type))^"()")
+
+    (* Targets and address should be desugared *)
+    | CTarget _  -> failwith "invalid sugared target constant in C++"
+    | CAddress _ -> failwith "invalid sugared address constant in C++"
+
     | CUnit      -> failwith "unit constant unsupported in C++"
     | CUnknown   -> failwith "unknown constant unsupported in C++"
 
