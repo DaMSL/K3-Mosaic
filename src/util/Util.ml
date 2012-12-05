@@ -48,6 +48,12 @@ let list_last xs = list_head @: list_take_end 1 xs
 
 let compose_fn f g x = f(g x)
 
+(* function that folds until a predicate is true *)
+let rec foldl_until f p acc = function
+    | x::xs when p acc x -> acc 
+    | x::xs -> foldl_until f p (f acc x) xs 
+    | []    -> acc
+
 (* I/O helpers *)
 let read_file f = 
   let lines, in_chan = ref [], (open_in f) in

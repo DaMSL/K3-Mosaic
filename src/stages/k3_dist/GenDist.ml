@@ -31,6 +31,8 @@ open ProgInfo
 open K3Route
 open K3Shuffle
 
+module M = ModifyAst
+
 exception ProcessingFailed of string;;
 
 (* argument manipulation convenience functions *)
@@ -724,7 +726,7 @@ let send_corrective_trigs p =
   List.flatten @: List.map send_correctives @: maps_potential_corrective p
 
  
-let do_complete_trigs p trig_name =
+let do_complete_trigs p ast trig_name =
 let do_complete_trig stmt_id =
 mk_code_sink (do_complete_name_of_t p trig_name stmt_id)
   (wrap_args @: args_of_t_with_v p trig_name)
@@ -735,7 +737,8 @@ mk_code_sink (do_complete_name_of_t p trig_name stmt_id)
      * single delta or sending a cse representing a slice of calculated data. We
      * need to take the variable in K3 and transform it by adding in the bound
      * variables so it matches the format of the lhs map *)
-    mk_const CUnit
+    (*mk_const CUnit*)
+    M.ast_for_s p ast stmt_id trig_name
     (* for now, we have dummy functions so we type-check
     let ast_stmt2 = subst_buffers (ast_of_stmt stmt_id) (rhs_maps_of_stmt stmt_id)
     in
@@ -867,22 +870,23 @@ List.map
   s_and_over_stmts_in_t p rhs_maps_of_stmt trig_name
 
 (* Generate all the code for a specific trigger *)
-let gen_dist_for_t p trig =
+let gen_dist_for_t p ast trig =
     send_fetch_trig p trig::
     rcv_put_trig p trig::
     rcv_fetch_trig p trig::
     send_push_stmt_map_trig p trig@
     rcv_push_trig p trig@
-    do_complete_trigs p trig@
+    do_complete_trigs p ast trig@
     rcv_correctives_trig p trig@
     do_corrective_trigs p trig
 
 (* Function to generate the whole distributed program *)
-let gen_dist p ast =
+let gen_dist p (ast:K3.AST.program_t) =
   (* because this uses state, need it initialized here *)
+  (* TODO: change to not require state *)
   let global_funcs = declare_global_funcs p in (* init shuffles *)
   let regular_trigs = List.flatten @:
-    for_all_trigs p @: fun t -> gen_dist_for_t p t in
+    for_all_trigs p @: fun t -> gen_dist_for_t p ast t in
   declare_global_vars p @
   global_funcs @ (* maybe make this not order-dependent *)
   declare_foreign_functions p @

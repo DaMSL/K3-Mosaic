@@ -24,6 +24,7 @@ FILES=\
 	src/stages/k3_dist/K3Ring \
 	src/stages/k3_dist/K3Route \
 	src/stages/k3_dist/K3Shuffle \
+	src/stages/k3_dist/ModifyAst \
 	src/stages/k3_dist/GenDist \
 	src/stages/imperative/ReifiedK3 \
 	src/stages/imperative/Imperative \

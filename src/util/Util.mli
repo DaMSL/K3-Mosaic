@@ -29,4 +29,8 @@ val list_head : 'a list -> 'a
 val list_last : 'a list -> 'a
 
 val compose_fn : ('a -> 'b) -> ('c -> 'a) -> 'c -> 'b
+
+(* fold left until the predicate (2nd arg) is true *)
+val foldl_until : ('a -> 'b -> 'a) -> ('a -> 'b -> bool) -> 'a -> 'b list -> 'a
+
 val read_file : string -> string
