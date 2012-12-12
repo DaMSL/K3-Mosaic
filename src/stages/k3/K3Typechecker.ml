@@ -109,11 +109,15 @@ let (%++) f g = fun t x -> f (g t x)
 let type_of_expr e =
   let error s = t_error (id_of_expr e) "ExprType" (TMsg s) () in
   let is_type_annotation a = match a with Type _ -> true | _ -> false in
+  let extract_type = function
+    Type t -> t | _ -> error "invalid type annotation" in
   let type_annotations = List.filter is_type_annotation (meta_of_expr e) in
   match type_annotations with
-    | [] -> error "found untyped expression"
-    | [x] -> (match x with Type t -> t | _ -> error "invalid type annotation")
-    | _ -> error "multiple possible types found"
+    | []  -> error "found untyped expression"
+    | [x] -> extract_type x
+    | l   -> error @: "multiple possible types found: "^
+      List.fold_left (fun acc x -> 
+        acc^" "^string_of_type @: extract_type x) "" l
 
 (* Type composition/decomposition primitives *)
 
