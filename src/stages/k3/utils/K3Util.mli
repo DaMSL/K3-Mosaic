@@ -39,11 +39,13 @@ val decompose_block : expr_t -> expr_t list
 val decompose_filter_map : expr_t -> expr_t * expr_t * expr_t
 val decompose_gbagg : expr_t -> expr_t * expr_t * expr_t * expr_t
 val decompose_ifthenelse : expr_t -> expr_t * expr_t * expr_t
+val decompose_insert : expr_t -> expr_t * expr_t
 val decompose_iterate : expr_t -> expr_t * expr_t
 val decompose_lambda : expr_t -> expr_t
 val decompose_map : expr_t -> expr_t * expr_t
 val decompose_peek : expr_t -> expr_t
 val decompose_send : expr_t -> expr_t * expr_t * (expr_t list)
+val decompose_tuple : expr_t -> expr_t list
 
 (* Declaration accessors *)
 val globals_of_program  : program_t -> program_t

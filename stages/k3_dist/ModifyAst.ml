@@ -5,6 +5,7 @@ open K3Helpers
 module U = K3Util
 module P = ProgInfo
 module T = Tree
+module PR = K3Printing
 
 exception InvalidAst of string
 
@@ -65,8 +66,43 @@ let modify_0d_map_access p ast stmt =
     T.modify_tree_bu tree modify in
   List.fold_left modify_0d_map ast maps
 
+exception UnhandledModification of string
+
+(* add vid to all map accesses *)
+let modify_map_access p ast stmt =
+  let lmap = P.lhs_map_of_stmt p stmt in
+  let lmap_name = P.map_name_of p lmap in
+  let lmap_types = P.map_types_with_v_for p lmap in
+  let modify e = match U.tag_of_expr e with
+    | Insert -> let (col, elem) = U.decompose_insert e in
+       mk_insert col @:
+         begin match U.tag_of_expr elem with
+           | Tuple  -> let xs = U.decompose_tuple e in
+                       mk_tuple @: (mk_var "vid")::xs
+           | Var id -> mk_tuple [mk_var "vid"; mk_var id]
+           | x      -> raise (UnhandledModification(PR.string_of_expr e))
+         end
+    (* handle a case when the map is applied to a lambda *)
+    | Apply  -> let (l, arg) = U.decompose_apply e in
+      begin match U.tag_of_expr arg with
+        | Var id when id = lmap_name -> 
+          begin match (U.typed_vars_of_lambda l, U.decompose_lambda l) with
+            | ([id, t],b) -> 
+              mk_apply 
+                (mk_lambda 
+                  (wrap_args [id, wrap_tset @: wrap_ttuple lmap_types]) b)
+                arg
+            | _ -> raise (UnhandledModification(PR.string_of_expr e))
+          end
+        | _ -> mk_apply l arg
+      end
+    | _ -> e
+  in T.modify_tree_bu ast modify
+
 (* return a modified version of the original ast for s *)
 let modify_ast_for_s p ast stmt trig = 
   let ast = ast_for_s p ast stmt trig in
-  modify_0d_map_access p ast stmt
+  let ast = modify_0d_map_access p ast stmt in
+  modify_map_access p ast stmt
+  (*ast*)
 
