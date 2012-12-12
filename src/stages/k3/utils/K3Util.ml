@@ -54,6 +54,8 @@ let vars_of_lambda e = lambda_bindings vars_of_arg (tag_of_expr e)
 let typed_vars_of_lambda e =
   lambda_bindings typed_vars_of_arg (tag_of_expr e)
 
+let is_peek e = match tag_of_expr e with Peek -> true | _ -> false
+
 
 (***************
  * Type tags
@@ -152,25 +154,25 @@ let type_of_signature s =
 (* AST destructors *)
 let nth e i = List.nth (sub_tree e) i
 
-let decompose_lambda e = nth e 0
+let decompose_aggregate e = (nth e 0, nth e 1, nth e 2)
 
 let decompose_apply e = (nth e 0, nth e 1)
+
+let decompose_block e = sub_tree e
+
+let decompose_filter_map e = (nth e 0, nth e 1, nth e 2)
 
 let decompose_ifthenelse e = (nth e 0, nth e 1, nth e 2)
 
 let decompose_iterate e = (nth e 0, nth e 1)
 
-let decompose_map e = (nth e 0, nth e 1)
-
-let decompose_filter_map e = (nth e 0, nth e 1, nth e 2)
-
-let decompose_aggregate e = (nth e 0, nth e 1, nth e 2)
-
 let decompose_gbagg e = (nth e 0, nth e 1, nth e 2, nth e 3)
 
-let decompose_block e = sub_tree e
+let decompose_lambda e = nth e 0
 
-let decompose_ifthenelse e = (nth e 0, nth e 1, nth e 2)
+let decompose_map e = (nth e 0, nth e 1)
+
+let decompose_peek e = nth e 0
 
 let decompose_send e = 
   let rec rest i acc = if i = 1 then acc else rest (i-1) ((nth e i)::acc)
@@ -289,3 +291,4 @@ let linearize_expr f e = fold_tree (fun x _ -> x) (fun _ -> f) None [] e
 (* Common linearizations *)
 let pre_order_linearization children node = node::(List.flatten children)
 let post_order_linearization children node = (List.flatten children)@[node]
+

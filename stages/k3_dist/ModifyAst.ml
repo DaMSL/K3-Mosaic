@@ -4,6 +4,7 @@ open K3Helpers
 
 module KU = K3Util
 module P = ProgInfo
+module T = Tree
 
 exception InvalidAst of string
 
@@ -40,8 +41,22 @@ let ast_for_s p ast stmt (trig:P.trig_name_t) =
   let trig_ast = expr_of_trig trig_decl in
   let s_idx = stmt_idx_in_t p trig stmt in
   block_nth trig_ast s_idx
-   
 
+(* check for a non-map (a variable) in a stmt *)
+let get_stmt_0d_maps p stmt =
+  let lmap = P.lhs_map_of_stmt p stmt in
+  let rmaps = P.rhs_maps_of_stmt p stmt in
+  let maps = ListAsSet.uniq @: lmap::rmaps in
+  List.filter (fun m -> P.map_types_no_val_for p m = []) maps
 
+let modify_0d_map_access p ast stmt =
+  let maps = get_stmt_0d_maps p stmt in
+  let map_name m = P.map_name_of p m in
+  let modify e = e in
+  T.modify_tree_bu ast modify 
 
+(* return a modified version of the original ast for s *)
+let modify_ast_for_s p ast stmt trig = 
+  let ast = ast_for_s p ast stmt trig in
+  modify_0d_map_access p ast stmt
 

@@ -38,8 +38,18 @@ let sub_tree t = snd (decompose_tree t)
 let fold_tree td_f bu_f td_init bu_init t =
   let rec ft_aux td t =
     let n_td = td_f td t
-    in begin match snd (decompose_tree t) with 
+    in begin match sub_tree t with 
         | [] -> bu_f n_td [bu_init] t
+        | c -> bu_f n_td (List.map (ft_aux n_td) c) t
+      end
+  in ft_aux td_init t
+
+(* for tree modifications, bottom-up direction starts with no init *)
+let fold_tree1 td_f bu_f td_init t =
+  let rec ft_aux td t =
+    let n_td = td_f td t
+    in begin match sub_tree t with 
+        | [] -> bu_f n_td [] t
         | c -> bu_f n_td (List.map (ft_aux n_td) c) t
       end
   in ft_aux td_init t
@@ -65,6 +75,15 @@ let fold_tree_lazy td_f bu_f td_init bu_init t =
         | c -> bu_f n_td (List.map (fun c_t -> lazy (ft_aux n_td c_t)) c) t
       end
   in ft_aux (lazy td_init) t
+
+(* Modify a tree by running a function over it, bottom up *)
+let modify_tree_bu e fn =
+  (* first, make the node and attach its children *)
+  let rebuild_tree _ acc_children t =
+     let data = node_data t in
+     let tree = mk_tree (data, acc_children) in
+     fn tree in  (* run the function only on the created tree *)
+  fold_tree1 (fun _ _ -> None) rebuild_tree None e
 
 (* Trees with tuple metadata *)
 
