@@ -53,18 +53,23 @@ let get_stmt_0d_maps p stmt =
 (* Change maps with no input dimensions to access by vid *)
 let modify_0d_map_access p ast stmt =
   let maps = get_stmt_0d_maps p stmt in
+  let lmap = P.lhs_map_of_stmt p stmt in
+  let map_names_types2 = 
+    List.map (fun m -> (P.map_name_of p m, P.map_types_for p m)) maps in
+  (* add existing_out_tier if lmap is 0 dim *)
+  let map_names_types = if List.exists (fun m -> m = lmap) maps
+    then ("existing_out_tier", P.map_types_for p lmap)::map_names_types2
+    else map_names_types2 in
   let modify_0d_map tree m =
-    let map_name = P.map_name_of p m in
-    let map_types = P.map_types_with_v_for p m in
     let modify e = 
-      if U.is_peek e && U.is_var_match map_name @: U.decompose_peek e 
-      then mk_fst map_types @: 
+      if U.is_peek e && U.is_var_match (fst m) @: U.decompose_peek e 
+      then (* mk_fst @: snd m @: (* debug *) *)
              mk_peek @: mk_slice 
-               (mk_var map_name) @:
+               (mk_var @: fst m) @:
                  mk_tuple [mk_var "vid"; mk_const CUnknown]
       else e in
     T.modify_tree_bu tree modify in
-  List.fold_left modify_0d_map ast maps
+  List.fold_left modify_0d_map ast map_names_types
 
 exception UnhandledModification of string
 
