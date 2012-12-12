@@ -32,6 +32,7 @@ open K3Route
 open K3Shuffle
 
 module M = ModifyAst
+module U = K3Util
 
 exception ProcessingFailed of string;;
 
@@ -887,11 +888,13 @@ let gen_dist p (ast:K3.AST.program_t) =
   let global_funcs = declare_global_funcs p in (* init shuffles *)
   let regular_trigs = List.flatten @:
     for_all_trigs p @: fun t -> gen_dist_for_t p ast t in
-  declare_global_vars p @
-  global_funcs @ (* maybe make this not order-dependent *)
-  declare_foreign_functions p @
-  filter_corrective_list ::  (* global func *)
-  [mk_flow @: 
-    regular_trigs@
-    send_corrective_trigs p]    (* per-map basis *)
+  let prog =
+    declare_global_vars p @
+    global_funcs @ (* maybe make this not order-dependent *)
+    declare_foreign_functions p @
+    filter_corrective_list ::  (* global func *)
+    [mk_flow
+      regular_trigs@
+      send_corrective_trigs p]    (* per-map basis *)
+  in U.renumber_program_ids prog
 

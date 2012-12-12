@@ -1,3 +1,4 @@
+open Util
 open ListAsSet
 open Tree
 
@@ -53,9 +54,6 @@ let vars_of_lambda e = lambda_bindings vars_of_arg (tag_of_expr e)
 
 let typed_vars_of_lambda e =
   lambda_bindings typed_vars_of_arg (tag_of_expr e)
-
-let is_peek e = match tag_of_expr e with Peek -> true | _ -> false
-
 
 (***************
  * Type tags
@@ -150,6 +148,9 @@ let type_of_signature s =
 
 
 (* TODO: AST constructors from Yotam *)
+
+(* AST testers *)
+let is_peek e = match tag_of_expr e with Peek -> true | _ -> false
 
 (* AST destructors *)
 let nth e i = List.nth (sub_tree e) i
@@ -292,3 +293,23 @@ let linearize_expr f e = fold_tree (fun x _ -> x) (fun _ -> f) None [] e
 let pre_order_linearization children node = node::(List.flatten children)
 let post_order_linearization children node = (List.flatten children)@[node]
 
+(* Produce the same tree with new ids top down *)
+let renumber_ast_ids (exp:K3.AST.expr_t) num_ref =
+  let modify i acc_children t =
+    mk_tree @: (((i, tag_of_expr t), meta_of_expr t), acc_children)
+  in
+  fold_tree1 (fun _ _ -> num_ref := !num_ref + 1; !num_ref) modify 0 exp
+
+(* renumber ids for a whole program *)
+let renumber_program_ids prog =
+  let num = ref 0 in
+  let handle_dec acc = function
+    | (Global(x, y, Some e),a) -> 
+        (Global(x, y, Some (renumber_ast_ids e num)),a)::acc
+    | (Trigger(x, y, z, e),a) -> 
+        (Trigger(x, y, z, renumber_ast_ids e num),a)::acc
+    | x -> x::acc
+  in List.rev @: List.fold_left handle_dec [] prog
+
+
+    

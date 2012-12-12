@@ -2,7 +2,7 @@ open Util
 open K3.AST
 open K3Helpers
 
-module KU = K3Util
+module U = K3Util
 module P = ProgInfo
 module T = Tree
 
@@ -27,9 +27,9 @@ let stmt_idx_in_t p trig stmt =
 
 (* get the nth member in a block. If it's not a block and we only ask for the
  * first item, return the not-a-block *)
-let block_nth exp i = match KU.tag_of_expr exp with
+let block_nth exp i = match U.tag_of_expr exp with
   | Block        -> begin
-          try List.nth (KU.decompose_block exp) i
+          try List.nth (U.decompose_block exp) i
           with Failure "nth" -> raise (InvalidAst("block_nth: Block has no "^
                                 string_of_int i^"th member")) end
   | _ when i = 0 -> exp
@@ -49,11 +49,21 @@ let get_stmt_0d_maps p stmt =
   let maps = ListAsSet.uniq @: lmap::rmaps in
   List.filter (fun m -> P.map_types_no_val_for p m = []) maps
 
+(* Change maps with no input dimensions to access by vid *)
 let modify_0d_map_access p ast stmt =
   let maps = get_stmt_0d_maps p stmt in
-  let map_name m = P.map_name_of p m in
-  let modify e = e in
-  T.modify_tree_bu ast modify 
+  let modify_0d_map tree m =
+    let map_name = P.map_name_of p m in
+    let map_types = P.map_types_with_v_for p m in
+    let modify e = 
+      if U.is_peek e && U.is_var_match map_name @: U.decompose_peek e 
+      then mk_fst map_types @: 
+             mk_peek @: mk_slice 
+               (mk_var map_name) @:
+                 mk_tuple [mk_var "vid"; mk_const CUnknown]
+      else e in
+    T.modify_tree_bu tree modify in
+  List.fold_left modify_0d_map ast maps
 
 (* return a modified version of the original ast for s *)
 let modify_ast_for_s p ast stmt trig = 
