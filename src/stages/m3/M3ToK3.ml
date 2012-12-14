@@ -432,8 +432,12 @@ let mk_update collection set_t ivars ivar_t ovars ovar_t new_val =
     if ivars = [] then
       if ovars = [] then 
         KH.mk_block [
-          KH.mk_delete collection (KH.mk_peek collection);
-          KH.mk_insert collection new_val_var 
+          mk_iter
+            (KH.mk_lambda (mk_arg "value" set_t) 
+              (KH.mk_delete collection (KH.mk_var "value"))
+            )
+            (KH.mk_slice collection (KH.mk_tuple [KH.mk_const K.CUnknown]));
+          KH.mk_insert collection (mk_val_tuple [] new_val_var)
         ]
       else
         KH.mk_block [
