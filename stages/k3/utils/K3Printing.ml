@@ -549,10 +549,14 @@ let string_of_rigidity r = match r with Constraint -> "Constraint" | _ -> "Hint"
 
 let string_of_data_annotation da =
   let string_of_positions p = "["^(String.concat ";" (List.map string_of_int p))^"]" in
+  let string_of_dependency d = match d with
+    | Element -> "*"
+    | Positions p -> string_of_positions p
+  in
   let my_tag tag p = tag^"("^(string_of_positions p)^")" in
   match da with
-  | FunDep  (s,d) -> (string_of_positions s)^"->"^(string_of_positions d)
-  | Index   p     -> my_tag "Index" p
+  | FunDep    (s,d) -> (string_of_positions s)^"->"^(string_of_dependency d)
+  | MVFunDep  (s,d) -> (string_of_positions s)^"=>"^(string_of_dependency d)
   | Unique  p     -> my_tag "Unique" p
   | Ordered p     -> my_tag "Ordered" p
   | Sequential    -> "Sequential"

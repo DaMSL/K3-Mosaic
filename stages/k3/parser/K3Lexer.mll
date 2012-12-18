@@ -101,6 +101,7 @@ rule tokenize = parse
     | "->"  { RARROW }
     | "<-"  { LARROW }
     | "<->" { LRARROW }
+    | "=>"  { RASSOC }
     | ':'   { COLON }
     | '\\'  { BACKSLASH }
 
@@ -146,6 +147,7 @@ rule tokenize = parse
 
     | '@' { ANNOTATE }
 
+    | "key"           { KEY }
     | "index"         { INDEX }
     | "unique"        { UNIQUE }
     | "ordered"       { ORDERED }

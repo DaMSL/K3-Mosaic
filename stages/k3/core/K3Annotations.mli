@@ -20,15 +20,15 @@ module type AnnotationType = sig
 	(* Unnamed tuple descriptor *)
 	type positions = int list
 	
-	type rigidity_t =
-	  | Constraint
-	  | Hint
+	type dependency = Element | Positions of positions
+	
+	type rigidity_t = Constraint | Hint
 	
 	type data_annotation_t = 
-	  | FunDep  of positions * positions
-	  | Index   of positions
-	  | Unique  of positions
-	  | Ordered of positions
+	  | FunDep   of positions * dependency
+	  | MVFunDep of positions * dependency
+	  | Unique   of positions
+	  | Ordered  of positions
 	  | Sequential
 	  | RandomAccess
 	

@@ -76,7 +76,6 @@ and print_type t =
   | TImpFunction (args_t, rt) ->
     ptag "TImpFunction" ((List.map lazy_type args_t)@[lazy_type rt])
     
-  | TMap (k_t,v_t) -> ptag "TMap" [lazy (print_type k_t); lazy (print_type v_t)]
   | TExt e  -> ptag "TExt" [lazy (print_ext_type e)]
 
 and print_type_env env =
@@ -130,13 +129,15 @@ and print_decl string_of_meta d =
       ([lps id; lazy_arg a; lazy_type rt]@(List.map (lazy_cmd string_of_meta) body))
       
   | DClass (id, parent_opt, members) ->
-    let lazy_id = match parent_opt with None -> lps id | Some(pid) -> lps (id^" : "^pid) in
+    let lazy_id = match parent_opt with 
+      | None -> [lps id] | Some(p_type) -> [lps (id^" : "); lazy_type p_type]
+    in
     let m_str m = wrap_unless_empty "<" ">" (string_of_meta m) in
     let lazy_decl_pair (d,m) =
       lazy (print_decl string_of_meta d; print_extra (m_str m))
     in
     my_tag ~cut:(if members = [] then CutHint else CutLine)
-      "DClass" ([lazy_id]@(List.map lazy_decl_pair members))
+      "DClass" (lazy_id@(List.map lazy_decl_pair members))
 
 (* TODO: print out external collection functions *)
 and print_collection_fn_tag coll_fn lazy_children =
@@ -276,7 +277,7 @@ let rec var_ids_of_decl d = match d with
          | Some(Init e) -> var_ids_of_expr e
          | _ -> [])
   | DFn    (id,_,_,body) -> id::(List.flatten (List.map var_ids_of_cmd body))
-  | DClass (id, parent_opt, members) ->
+  | DClass (id, _, members) ->
     List.map (fun mem_id -> id^"::"^mem_id)
       (List.flatten (List.map (fun (d,m) -> var_ids_of_decl d) members))
   | _ -> []
@@ -317,6 +318,13 @@ let bool_t = ib_type TBool
 let string_t = ib_type TString
 let addr_t = ib_type (TTuple [canonical TString; canonical TInt])
 
+let rec named_types t = match t with
+  | TInternal _ -> []
+  | TTop -> []
+  | TNamed id -> [id]
+  | TImpFunction (args_t, rt) -> (List.flatten (List.map named_types args_t))@(named_types rt)
+  | TExt et -> named_ext_types et
+
 
 (* AST constructors *)
 
@@ -355,10 +363,9 @@ let mk_expr meta e = mk_cmd (Expr e) meta []
 let mk_ifelse meta pred branches = mk_cmd (IfThenElse pred) meta branches
 
 let mk_block meta sub = match sub with
-  | [] -> failwith "invalid block body"
   | [x] -> x
   | _ -> mk_cmd Block meta sub
- 
+
 let mk_for meta id t e body = mk_cmd (Foreach (id,t,e)) meta body
 
 let mk_while meta e body = mk_cmd (While e) meta body

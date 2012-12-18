@@ -37,7 +37,7 @@ let rec bindings_of_decl ?(allow_function=true) type_env tdecl_env d =
   | DFn (id, arg_t, ret_t, body) when allow_function ->
     (id, TImpFunction(List.map snd arg_t, ret_t))::type_env, tdecl_env
    
-  | DClass (id, parent_opt, members) ->
+  | DClass (id, _, members) ->
     (* Only the nested type env, and not the nested type decl env is exposed.
      * Thus nested class declarations are not visible. *) 
     let class_type_env = 
@@ -181,15 +181,22 @@ let deduce_program_type program =
 
     | DClass (id, parent_opt, members) ->
       (* Add bindings based on parent declarations *)
+      let check_named t =  List.iter (fun tid -> 
+            fail_if_undefined_type tdecl_env (TNamed tid)
+          ) (U.named_types t)
+      in
       let ptype_env, ptdecl_env = match parent_opt with
         | None -> type_env, tdecl_env
-        | Some(pid) ->
-          fail_if_undefined_type tdecl_env (TNamed pid);
+        | Some(TNamed pid) ->
+          check_named (TNamed pid);
           let ptype = List.assoc pid tdecl_env in
           begin match ptype with 
             | TComposite fields -> (type_env@fields), tdecl_env
             | _ -> type_env, tdecl_env
           end
+        | Some(t) ->
+          (* A predefined type does not expose any fields or methods. *)
+          (check_named t; type_env, tdecl_env)
       in
       let _,_,rmembers =
         List.fold_left deduce_cpp_decl (ptype_env,ptdecl_env,[]) members

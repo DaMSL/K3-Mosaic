@@ -906,7 +906,7 @@ let imperative_of_csv_parser mk_meta output_t =
     in DFn("parse", [input_id, U.ib_type TString], U.i_type output_t, body)
   in
     (TNamed(class_id)),
-    DClass(class_id, Some("parser"), [parse_method_decl, unit_meta])
+    DClass(class_id, Some(TNamed "parser"), [parse_method_decl, unit_meta])
 
 
 (* Returns a parser declaration, the implementation type of the channel, and
@@ -1113,7 +1113,7 @@ let imperative_of_dispatcher mk_meta role_id resource_env prior_resources (id,di
 
   let dispatcher_decls = [init_decl, unit_meta; fsm_step_decl, unit_meta]
   in
-  [DClass("instruction_"^id, Some("flow_instruction"), dispatcher_decls), unit_meta]
+  [DClass("instruction_"^id, Some(TNamed "flow_instruction"), dispatcher_decls), unit_meta]
   
 
 
@@ -1209,7 +1209,7 @@ let imperative_of_event_loop mk_meta role_id (res_env, res_bindings, ds_env, ins
     else
       let init_decl = DFn("init", [], U.unit_t, init_body), unit_meta in 
       let class_decls = parser_decls@[init_decl]
-      in [DClass(flow_class_name, Some("flow_role"), class_decls), unit_meta]
+      in [DClass(flow_class_name, Some(TNamed "flow_role"), class_decls), unit_meta]
   in
   source_ids_decls@fsm_decls@flow_class_decl
 

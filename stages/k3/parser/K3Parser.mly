@@ -128,7 +128,7 @@
 %token SEND
 
 %token ANNOTATE
-%token INDEX UNIQUE ORDERED SEQUENTIAL RANDOMACCESS EFFECT PARALLEL
+%token RASSOC KEY INDEX UNIQUE ORDERED SEQUENTIAL RANDOMACCESS EFFECT PARALLEL
 
 %token <string> IDENTIFIER
 
@@ -301,8 +301,12 @@ annotation:
 ;
 
 data_annotation:
-    | positions RARROW positions       { Constraint,  FunDep($1, $3) }
-    | INDEX LPAREN positions RPAREN    { Hint,        Index($3) }
+    | positions RARROW positions       { Constraint,  FunDep($1, Positions($3)) }
+    | positions RARROW TIMES           { Constraint,  FunDep($1, Element) }
+    | positions RASSOC positions       { Constraint,  MVFunDep($1, Positions($3)) }
+    | positions RASSOC TIMES           { Constraint,  MVFunDep($1, Element) }
+    | KEY LPAREN positions RPAREN      { Constraint,  FunDep($3, Element) }
+    | INDEX LPAREN positions RPAREN    { Constraint,  MVFunDep($3, Element) }
     | UNIQUE LPAREN positions RPAREN   { Constraint,  Unique($3) }
     | ORDERED LPAREN positions RPAREN  { Constraint,  Ordered($3) }
     | SEQUENTIAL                       { Hint,        Sequential }

@@ -15,19 +15,30 @@ module type CPPAST = sig
   module ASTImport : Imperative.IAST
   open ASTImport
 
+  type stl_variants_t =
+    | TAllocator of id_t option
+    | TMulti
+    | TOrdered   of id_t option
+      (* hash fnobject id * predicate fnobject id *)
+    | TUnordered of id_t option * id_t option
+
+  type stl_collection_t = TSTLSet of type_t | TSTLMap of type_t * type_t
+
 	type ext_type_t =
 	  | TIterator of type_t
 	  | TPair     of type_t * type_t
+      (* STL collection type * variant description *)
+    | TSTLCollection of stl_collection_t * stl_variants_t list
 	
 	type bmi_extractor_t =
-    | BMIIdentity of type_t
-	  | BMIMember of type_t * id_t
+    | BMIIdentity  of type_t
+	  | BMIMember    of type_t * id_t
 	  | BMIComposite of bmi_extractor_t list
 	
 	type ext_type_decl_t =
-	    (* Element type id * (index tag type ids * unique * ordered * extractor) list *)
-	  | TBoostMultiIndex of id_t * (id_t * bool * bool * bmi_extractor_t) list 
-	
+	    (* Element type * (index tag type ids * unique * ordered * extractor) list *)
+	  | TBoostMultiIndex of type_t * (id_t * bool * bool * bmi_extractor_t) list 
+
 	type ext_collection_fn_t =
 	  | GetIndex  of id_t     (* index tag type id *)
 	  | BeginIterator
@@ -39,6 +50,7 @@ module type CPPAST = sig
 	  | IteratorElement
 	  | IteratorIncrement
 	  | IteratorDecrement
+    | MakePair
 	  | PairFirst
 	  | PairSecond
 	
@@ -50,6 +62,8 @@ module type CPPAST = sig
 	    (* A do-while loop with a post-test predicate. The loop body is a child
 	     * of this imperative command. *)
 	  | DoWhile of 'a expr_t
+
+  val named_ext_types : ext_type_t -> id_t list
 
   val print_ext_type            : ext_type_t -> unit
   val print_ext_type_decl       : ext_type_decl_t -> unit
@@ -76,9 +90,20 @@ open ASTImport
 module U = ImperativeUtil.Util(CPPTarget)
 open U
   
+type stl_variants_t =
+  | TAllocator of id_t option
+  | TMulti
+  | TOrdered   of id_t option
+    (* hash fnobject id * predicate fnobject id *)
+  | TUnordered of id_t option * id_t option
+
+type stl_collection_t = TSTLSet of type_t | TSTLMap of type_t * type_t
+
 type ext_type_t =
   | TIterator of type_t
   | TPair     of type_t * type_t
+    (* STL collection type * variant description *)
+  | TSTLCollection of stl_collection_t * stl_variants_t list
 
 type bmi_extractor_t =
   | BMIIdentity of type_t
@@ -86,8 +111,8 @@ type bmi_extractor_t =
   | BMIComposite of bmi_extractor_t list
 
 type ext_type_decl_t =
-    (* Element type id * (index tag type ids * unique * ordered * extractor) list *)
-  | TBoostMultiIndex of id_t * (id_t * bool * bool * bmi_extractor_t) list 
+    (* Element type * (index tag type ids * unique * ordered * extractor) list *)
+  | TBoostMultiIndex of type_t * (id_t * bool * bool * bmi_extractor_t) list 
 
 type ext_collection_fn_t =
   | GetIndex  of id_t     (* index tag type id *)
@@ -100,6 +125,7 @@ type ext_fn_t =
   | IteratorElement
   | IteratorIncrement
   | IteratorDecrement
+  | MakePair
   | PairFirst
   | PairSecond
 
@@ -112,13 +138,36 @@ type 'a ext_cmd_t =
      * of this imperative command. *)
   | DoWhile of 'a expr_t
 
+let rec named_ext_types ext_type = match ext_type with
+  | TIterator ct -> named_types ct
+  | TPair (l,r) -> (named_types l)@(named_types r)
+  | TSTLCollection (TSTLSet t, _) -> named_types t
+  | TSTLCollection (TSTLMap (k,v), _) -> (named_types k)@(named_types v)
+
 let lps s = lazy (ps s)
+
+let print_stl_collection c =
+  let ptag ?(cut=CutHint) t ch = pretty_tag_str CutHint "" t ch in
+  match c with
+  | TSTLSet e_t -> ptag "TSTLSet" [lazy (print_type e_t)]
+  | TSTLMap (k_t, v_t) -> ptag "TSTLMap" [lazy (ps_list NoCut print_type [k_t; v_t])]
+
+let print_variant v =
+  let unwrap o = match o with Some id -> id | None -> "" in
+  let ptag ?(cut=CutHint) t ch = pretty_tag_str CutHint "" t ch in
+  match v with
+  | TAllocator alloc -> ptag "TAllocator" [lps (unwrap alloc)]
+  | TMulti -> ptag "TMulti" []
+  | TOrdered cmp -> ptag "TOrdered" [lps (unwrap cmp)]
+  | TUnordered (hash,eq) -> ptag "TUnordered" [lps (unwrap hash); lps (unwrap eq)]
 
 let print_ext_type t =
   let ptag ?(cut=CutHint) t ch = pretty_tag_str CutHint "" t ch in
   match t with
   | TIterator t -> ptag "TIterator" [lazy (print_type t)]
   | TPair (l,r) -> ptag "TPair" [lazy (print_type l); lazy (print_type r)]
+  | TSTLCollection (c,v) ->
+    ptag "TSTLCollection" [lazy (print_stl_collection c); lazy (ps_list NoCut print_variant v)]
 
 let rec print_extractor e = match e with
   | BMIIdentity t -> pretty_tag_str CutHint "" "Identity" [lazy (print_type t)]
@@ -135,9 +184,8 @@ let print_index (id, uniq, ordered, extractor) =
 let print_ext_type_decl d =
   let ptag ?(cut=CutHint) t ch = pretty_tag_str CutHint "" t ch in
   match d with
-  | TBoostMultiIndex (id, indexes) ->
-    (* TODO: indexes *)
-    ptag "TBoostMultiIndex" ([lazy (ps id)]@(List.map (fun e -> lazy (print_index e)) indexes))
+  | TBoostMultiIndex (elem_t, indexes) ->
+    ptag "TBoostMultiIndex" ([lazy (print_type elem_t)]@(List.map (fun e -> lazy (print_index e)) indexes))
 
 let print_ext_collection_fn f lazy_children =
   let ptag ?(cut=CutHint) ?(ch=[]) t = pretty_tag_str CutHint "" t ch in
@@ -154,6 +202,7 @@ let print_ext_fn f lazy_children =
   | IteratorElement -> ptag "IteratorElement"
   | IteratorIncrement -> ptag "IteratorIncrement"
   | IteratorDecrement -> ptag "IteratorDecrement"
+  | MakePair -> ptag "MakePair"
   | PairFirst -> ptag "PairFirst"
   | PairSecond -> ptag "PairSecond"
 
@@ -192,6 +241,32 @@ module CPPGenerator : Imperative.Generator
   type format_box_type = HBox | VBox | HVBox | HOVBox
   type program_t = (type_t * annotation_t) CPPTarget.ASTImport.program_t
 
+  (* Typing and AST helpers *)
+  let type_of_expr e = fst (meta_of_expr e)
+
+  let is_internal t = match t with TInternal _ -> true | _ -> false
+
+  (* TODO: add references here when they are implemented *)
+  let is_ptr t = match t with TNamed _ -> true | _ -> false
+  
+  let pointed_type t = match t with
+    | TNamed id -> id
+    | _ -> failwith ("invalid pointer type "^(string_of_type t)) 
+
+  let is_func_or_class d = match d with DFn _ | DClass _ -> true | _ -> false 
+
+  let is_leaf_expr e =
+    match tag_of_expr e with | Const _ | Var _ -> true | _ -> false
+
+  let is_block_cmd c = match tag_of_cmd c with Block _ -> true | _ -> false
+
+  let extract_option_type string_fn t =
+    let error = "invalid option type" in
+    if is_internal t then match bi_type t with 
+      | TMaybe(e_t) -> string_fn (iv_type e_t)
+      | _ -> failwith error
+    else failwith error
+
   let print_tree print_node tree =
 	  let lazy_root = 
 	    fold_tree (fun _ _ -> ())
@@ -222,6 +297,10 @@ module CPPGenerator : Imperative.Generator
     let s = if space then " " else "" in 
     cb(); o(); ps (l^s); ca(); force lazy_fn; c(); cl(); ps (s^r)
 
+  let wrap_child_unless_leaf ?(space=false) f ch i =
+    if is_leaf_expr (f i) then force (List.nth ch i)
+    else wrap ~space:space "(" (List.nth ch i) ")" 
+
   let concat_template tid1 tid2 =
     tid1^"<"^tid2^(if tid2.[(String.length tid2)-1] = '>' then " " else "")^">"
 
@@ -233,34 +312,6 @@ module CPPGenerator : Imperative.Generator
 	
 	let call_fn lazy_id args =
     force lazy_id; wrap ~space:false "(" (lazy (print_lazy_list args)) ")"
-
-  let comma_types types = sep_type_list string_of_type types
-
-  (* Typing and AST helpers *)
-  let type_of_expr e = fst (meta_of_expr e)
-
-  let is_internal t = match t with TInternal _ -> true | _ -> false
-
-  (* TODO: add references here when they are implemented *)
-  let is_ptr t = match t with TNamed _ -> true | _ -> false
-  
-  let pointed_type t = match t with
-    | TNamed id -> id
-    | _ -> failwith ("invalid pointer type "^(string_of_type t)) 
-
-  let is_func_or_class d = match d with DFn _ | DClass _ -> true | _ -> false 
-
-  let is_leaf_expr e =
-    match tag_of_expr e with | Const _ | Var _ -> true | _ -> false
-
-  let is_block_cmd c = match tag_of_cmd c with Block _ -> true | _ -> false
-
-  let extract_option_type string_fn t =
-    let error = "invalid option type" in
-    if is_internal t then match bi_type t with 
-	    | TMaybe(e_t) -> string_fn (iv_type e_t)
-	    | _ -> failwith error
-    else failwith error
 
   (* Control flow and failure helpers *)
   let check_with_pred tag pred n l =
@@ -277,9 +328,11 @@ module CPPGenerator : Imperative.Generator
   (* Start of stringification *)
   
   (* K3-CPP printing *)
+  let rec comma_types types = sep_type_list string_of_type types
+
   (* TODO: for now, ignore TImmutable and TMutable. Think about whether these
    * should be implement as const types and shared_ptrs *) 
-  let rec print_k3_value_type vt = match base_of vt with
+  and print_k3_value_type vt = match base_of vt with
     | TBool  -> ps "bool"
     | TByte  -> ps "char"
     | TInt   -> ps "int"
@@ -311,7 +364,7 @@ module CPPGenerator : Imperative.Generator
     
   and string_of_k3_value_type vt = wrap_formatter (fun () -> print_k3_value_type vt)
 
-  let rec print_const c_type c =
+  and print_const c_type c =
     match c with
     | CBool b    -> ps (if b then "true" else "false")
     | CInt i     -> ps (string_of_int i)
@@ -327,10 +380,36 @@ module CPPGenerator : Imperative.Generator
     | CUnknown   -> failwith "unknown constant unsupported in C++"
 
   (* Imperative-CPP printing *)
+  and print_stl_collection c vl =
+    let unwrap o = match o with Some(id) -> id | _ -> "" in
+    let wrap_type t = 
+      let a, (h, e), c, m = List.fold_left (fun (aid,uid,oid,m) v -> match v with
+          | TAllocator a -> unwrap a, uid, oid, m
+          | TOrdered c -> aid, uid, unwrap c, m
+          | TUnordered (h,e) -> aid, (unwrap h, unwrap e), oid, m
+          | TMulti -> aid, uid, oid, true
+        ) ("", ("", ""), "", false) vl
+      in
+      let t = 
+        if h <> "" && e <> "" && c <> "" then 
+          failwith "invalid collection variant (both ordered and unordered)"
+        else (if h <> "" && e <> "" then "unordered_" else "")^(if m then "multi" else "")^t
+      in 
+      let template_args = String.concat "," (List.filter ((<>) "") [c; h; e; a])
+      in t, template_args
+    in
+    let print_template t_id arg_t_l = 
+      let t, template_args = wrap_type t_id
+      in ps (concat_template t (String.concat "," [comma_types arg_t_l; template_args]))
+    in match c with
+      | TSTLSet e_t -> print_template "set" [e_t]
+      | TSTLMap (k_t, v_t) -> print_template "map" [k_t; v_t]
+
   and print_ext_type t =
     match t with
-    | TIterator t -> ps ((string_of_type t)^"::iterator")
+    | TIterator t -> ps ((string_of_type ~named_as_shared:false t)^"::iterator")
     | TPair (l,r) -> ps (concat_template "pair" (comma_types [l; r]))
+    | TSTLCollection (c, v) -> print_stl_collection c v
 
   and print_ext_type_decl d =
     let lazy_list ?(hint=NoCut) l = lazy (print_lazy_list ~hint:hint l) in
@@ -339,20 +418,20 @@ module CPPGenerator : Imperative.Generator
       wrap ~hint:CutHint ~box:true ~cut_before:false ~cut_after:true ~cut_last:true
         ~space:false (tag^"<") lazy_f " >"
     in
-    let rec print_extractor element_id e = 
-      let rcr = print_extractor element_id in
+    let rec print_extractor elem_t e = 
+      let rcr = print_extractor elem_t in
       match e with
       | BMIIdentity t -> ps (concat_template "identity" (string_of_type t))
       
       | BMIMember (t,id) ->
-        wrap_template "member" (lazy_list [lazy (ps element_id); lazy(print_type t); lazy(ps id)])
+        wrap_template "member" (lazy_list [lazy (print_type elem_t); lazy(print_type t); lazy(ps id)])
       
       | BMIComposite e_l ->
         let l = List.map (fun e -> lazy (rcr e)) e_l
         in wrap_template "composite" (lazy (print_lazy_list l))
     in
     match d with
-    | TBoostMultiIndex (element_id, indexes) ->
+    | TBoostMultiIndex (elem_t, indexes) ->
       let print_index indexes =
         let l = List.map (fun (id, uniq, ordered, extractor) -> 
             let t = match uniq, ordered with
@@ -362,12 +441,14 @@ module CPPGenerator : Imperative.Generator
               | false, false -> "hashed_non_unique"
             in
             let body = [lazy(ps (concat_template "tag" id));
-                        lazy(print_extractor element_id extractor)]
+                        lazy(print_extractor elem_t extractor)]
             in lazy (wrap_template t (lazy_list body))
           ) indexes
         in wrap_template_box  "indexed_by" (lazy_list ~hint:CutHint l)
       in 
-      let container_body = lazy_list ~hint:CutHint [lazy(ps element_id); lazy(print_index indexes)]
+      let container_body =
+        let l = [lazy(print_type elem_t)]@(if indexes <> [] then [lazy(print_index indexes)] else [])
+        in lazy_list ~hint:CutHint l
       in wrap_template_box "multi_index_container" container_body
 
   and print_ext_collection_fn cf lazy_children =
@@ -386,12 +467,14 @@ module CPPGenerator : Imperative.Generator
     let print tag = call_fn (lazy (ps tag)) lazy_children in
     let p_pair tag =
       check_unary lazy_children;
+      (* TODO: wrap only if this is not a leaf *)
       wrap ~space:false "(" (List.hd lazy_children) (")."^tag)
     in 
     match f with
     | IteratorElement -> print "*"
     | IteratorIncrement -> print "++"
     | IteratorDecrement -> print "--"
+    | MakePair -> print "make_pair"
     | PairFirst -> p_pair "first"
     | PairSecond -> p_pair "second"
 
@@ -400,13 +483,13 @@ module CPPGenerator : Imperative.Generator
     | For (init_e_opt, test_e_opt, advance_e_opt) ->
       let local_children = 
         let p_opt e_opt = match e_opt with
-          | None -> [lazy ()]
+          | None -> [lazy (ps "")]
           | Some(e) -> [lazy (print_expr e)]
         in
         List.flatten (List.map p_opt [init_e_opt; test_e_opt; advance_e_opt])
       in
       wrap "for(" (lazy (print_lazy_list ~sep:"; " local_children)) ")";
-      wrap ~hint:CutHint ~cut_after:true "{" 
+      wrap ~hint:CutHint ~cut_after:true ~box:true "{" 
         (lazy (print_lazy_list ~hint:CutHint ~sep:"" lazy_children))
       "}"
 
@@ -416,17 +499,16 @@ module CPPGenerator : Imperative.Generator
       "}";
       wrap ~hint:CutHint ~cut_after:true" while (" (lazy (print_expr cond_expr)) ")"
 
-  and print_type t =
+  and print_type ?(named_as_shared=true) t =
 	  match t with
 	  | TInternal it -> print_k3_type it
 	  | TTop         -> ps "shared_ptr<boost::any>"
-	  | TNamed id    -> ps (concat_template "shared_ptr" id) 
+	  | TNamed id    -> ps (if named_as_shared then (concat_template "shared_ptr" id) else id)
 	  
 	  | TImpFunction (args_t, rt) ->
 	    let fn_type = (string_of_type rt)^" ("^(comma_types args_t)^")"
 	    in ps (concat_template "boost::function" fn_type)
 	    
-	  | TMap (k_t,v_t) -> ps (concat_template "map" (comma_types [k_t; v_t]))
 	  | TExt e  -> print_ext_type e
 
   and print_decl_args da = match da with
@@ -483,7 +565,9 @@ module CPPGenerator : Imperative.Generator
         "{" (lazy (print_list ~hint:CutHint ~sep:"" (print_cmd ~tlb:true) body)) "}"))
 
     | DClass (id, parent_opt, members_with_meta) ->
-      let parent_str = match parent_opt with None -> "" | Some id -> " : public "^id in
+      let parent_str = match parent_opt with
+        | None -> ""
+        | Some t -> " : public "^(string_of_type ~named_as_shared:false t) in
       let m = List.map fst members_with_meta in 
       pad_decl (lazy (
       ps ("struct "^id^parent_str);
@@ -492,10 +576,7 @@ module CPPGenerator : Imperative.Generator
 
   and print_op op e ch =
     let e_ch = sub_tree e in
-    let wrap_unless_leaf i =
-      if is_leaf_expr (List.nth e_ch i) then force (List.nth ch i)
-      else wrap "(" (List.nth ch i) ")" 
-    in
+    let wrap_unless_leaf i = wrap_child_unless_leaf (List.nth e_ch) ch i in
     let pb op_str = 
       check_binary ch;
       wrap_unless_leaf 0; ps (" "^op_str^" "); wrap_unless_leaf 1
@@ -620,12 +701,16 @@ module CPPGenerator : Imperative.Generator
 	  | Decl   d        -> check_leaf(); print_decl ~init_ptrs:true d
 	  | Expr   e        -> check_leaf(); print_expr e; sep()
 	
-      (* TODO: improve stringification based on whether subchildren are blocks *)
     | IfThenElse pred ->
+      let skip_else =
+        let else_branch = List.nth (sub_tree c) 1
+        in match tag_of_cmd else_branch with Block -> sub_tree else_branch = [] | _ -> false
+      in
       ps "if "; wrap "(" (lazy (print_expr pred)) ") ";
-      print_as_block 0; pc(); ps "else "; print_as_block 1
+      print_as_block 0; if not skip_else then (pc(); ps "else "; print_as_block 1)
 	
 	  | Block ->
+      if ch = [] then ps "{}" else
       wrap ~hint:CutHint ~cut_before:(not tlb) ~cut_after:true ~box:true
         "{" (lazy (print_lazy_list ~hint:CutHint ~sep:"" ch)) "}"
 	  
@@ -644,7 +729,9 @@ module CPPGenerator : Imperative.Generator
       let b = if c2 = c then tlb else false
       in print_cmd_tag ~tlb:b (List.flatten cll) c2) c
   
-  and string_of_type t = wrap_formatter (fun () -> print_type t)
+  and string_of_type ?(named_as_shared=true) t =
+    wrap_formatter (fun () -> print_type ~named_as_shared:named_as_shared t)
+
   and string_of_decl d = 
     wrap_formatter (fun () -> obx 0; print_decl ~init_ptrs:true d; cb())
   

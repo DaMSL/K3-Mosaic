@@ -8,6 +8,8 @@ module type TargetLanguage = sig
   type ext_fn_t
   type 'a ext_cmd_t
 
+  val named_ext_types : ext_type_t -> id_t list
+
   val print_ext_type            : ext_type_t -> unit
   val print_ext_type_decl       : ext_type_decl_t -> unit
   val print_ext_collection_fn   : ext_collection_fn_t -> (unit lazy_t) list -> unit
@@ -22,7 +24,6 @@ struct
     | TTop
     | TNamed       of id_t
     | TImpFunction of type_t list * type_t
-    | TMap         of type_t * type_t
     | TExt         of T.ext_type_t
   
   type type_decl_t =
@@ -50,7 +51,7 @@ struct
     | DFn    of id_t * arg_t * type_t * 'a cmd_t list
 
       (* Class name, optional parent class, and class declarations *)
-    | DClass of id_t * id_t option * ('a decl_t * 'a) list
+    | DClass of id_t * type_t option * ('a decl_t * 'a) list
   
   (* Primitive operations *)
   and op_t = Add | Mult | Neg | And | Or | Not | Eq | Neq | Lt | Leq | Ternary

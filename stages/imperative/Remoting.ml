@@ -221,6 +221,7 @@ struct
       let x,y = List.hd specs, List.tl specs in
       S.string_of_spec (List.fold_left S.merge_spec x y)
 
+  (* TODO: handle the gamut of collection types, e.g., SBL, BMI, Maps *)
   let generate_sender mk_meta class_id parent_class_id protospec =
     let m = meta mk_meta in
     let unit_meta, int_meta = m unit_t, m int_t in
@@ -267,6 +268,8 @@ struct
 	            ((List.map (fun (id,t) -> mk_var (m t) id)
 	               [List.nth args 0; List.nth args 1])@[s_expr])
 	        in
+          (* TODO: handle setting collection values, protocol buffers cannot simply
+           * assign a repeated field *)
 	        let set_cmds =
 	          let bt = base_of (value_of arg_t 
 	            (fun _ -> failwith "invalid value type in serialization"))
@@ -282,9 +285,10 @@ struct
 	  in
     if sender_decls = [] then None
     else
-    let parent = if parent_class_id = "" then None else Some(parent_class_id)
+    let parent = if parent_class_id = "" then None else Some(TNamed (parent_class_id))
     in Some(DClass(class_id, parent, sender_decls))
   
+  (* TODO: improve support for collections *)
   let generate_receiver mk_meta class_id parent_class_id resource_env protospec =
     let m = meta mk_meta in
     let unit_meta, int_meta, serialized_meta =
@@ -310,6 +314,8 @@ struct
 	        let args, event_var = [event_id, message_t], mk_var (m message_t) event_id in
           let serialized_t = S.serializer_type asig (i_type t) in
 	        List.flatten (List.map (fun (id,arg) ->
+            (* TODO: protocol buffer repeated fields will not simply return the
+             * desired collection, but must be rebuilt element by element. *)
 	          let dispatch_args serialized_var =
 	            fst (List.fold_left (fun (acc,i) (_,vt) ->
                   let field_expr = invoke_method
@@ -336,7 +342,7 @@ struct
             in 
             let fn = DFn("recv", args, unit_t, body)
             in [DClass(mk_recvr_class_id id, 
-                       Some("recv_dispatch"), [fn, unit_meta]), unit_meta]
+                       Some(TNamed "recv_dispatch"), [fn, unit_meta]), unit_meta]
 	        ) trigs)
 	      ) recvrs_by_type)
 	  in
@@ -357,7 +363,7 @@ struct
     let decls = recvr_decls@recvr_init_decl in
     if decls = [] then None
     else
-    let parent = if parent_class_id = "" then None else Some(parent_class_id)
+    let parent = if parent_class_id = "" then None else Some(TNamed parent_class_id)
     in Some(DClass(class_id, parent, decls))
   
   let generate_send mk_meta sender_var target_const addr_const msg_var msg_type =

@@ -66,7 +66,7 @@ let generate_targets mk_meta protospec =
       ) trig_specs) 
   in
   let init_decl = [DFn("init", [], unit_t, init_body_decls), unit_meta]
-  in DClass(target_class_id, Some("symbol_table"), target_decls@init_decl)
+  in DClass(target_class_id, Some(TNamed "symbol_table"), target_decls@init_decl)
 
 let generate_runtime mk_meta protospec =
   let meta t = t, mk_meta() in
@@ -87,7 +87,7 @@ let generate_runtime mk_meta protospec =
 	  in
 	  let dispatch_class =
 	    let dispatch_fn = [DFn("dispatch", generic_arg, unit_t, dispatch_body), unit_meta]
-	    in DClass(dispatch_id, Some("trigger_dispatch"), dispatch_fn) 
+	    in DClass(dispatch_id, Some(TNamed "trigger_dispatch"), dispatch_fn) 
 	  in
     let dispatch_var_decl, dispatch_var =
       let var_id = mk_trigger_dispatch_var_id id
@@ -124,6 +124,6 @@ let generate_runtime mk_meta protospec =
       ) dispatch_decls_and_vars)
     in [DFn("init", [], unit_t, body), unit_meta] 
   in
-    DClass(runtime_class_id, Some("runtime"), runtime_decls@runtime_init_decl)
+    DClass(runtime_class_id, Some(TNamed "runtime"), runtime_decls@runtime_init_decl)
 
 end

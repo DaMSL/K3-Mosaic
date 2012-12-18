@@ -55,6 +55,8 @@ sig
 	val string_t : type_t
 	val addr_t   : type_t
 
+  val named_types : type_t -> id_t list
+
   (* AST construction *)
   val mk_iexpr : expr_tag_t -> 'a -> 'a expr_t list -> 'a expr_t
   val mk_cmd : 'a cmd_tag_t -> 'a -> 'a cmd_t list -> 'a cmd_t

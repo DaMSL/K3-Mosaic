@@ -3,6 +3,7 @@ open Tree
 
 open K3.AST
 open K3.Annotation
+open K3Util
 open K3Typechecker
 
 open CPP
@@ -17,9 +18,142 @@ module U = ImperativeUtil.Util(CPPTarget)
 open U
 
 let composite_field_prefix = "__a"
+let bmi_tag_prefix = "idx"
+
+let is_external_type t = match t with TInternal _ -> false | _ -> true
+
+let positions_of_deps d = match d with Element -> [] | Positions p -> p
+
+let tuple_type_fields vt = match base_of vt with
+  | TTuple fields -> fields
+  | _ -> failwith "invalid tuple type"
+
+let tuple_arity vt = List.length (tuple_type_fields vt)
+
+let project_tuple_type_fields vt pos = 
+  List.map (List.nth (tuple_type_fields vt)) pos 
+
+let project_tuple_type vt pos = 
+  let t =  match project_tuple_type_fields vt pos with 
+    | [] -> failwith "invalid tuple projection"
+    | [x] -> base_of x | x -> TTuple x
+  in ib_type t
+
+let element_of_collection t = match t with
+  | TInternal(TValue(vt)) -> 
+    begin match base_of vt with TCollection (ct,et) -> Some(ct, et) | _ -> None end
+  | _ -> None
+
+
+(* Projecting function objects *)
+let type_projection_id prefix vt pos =
+  let element_sig = signature_of_type (TValue vt) in
+  let pos_str = String.concat "" (List.map string_of_int pos)
+  in prefix^"_"^element_sig^"_"^pos_str
+
+let project_fn_id vt pos = type_projection_id "project" vt pos
+
+let projection_of_positions vt pos = 
+  let mk_meta () = [] in
+  let arg_id, arg_t, ret_t, arg_meta, ret_meta, unit_meta = 
+    let a_t, r_t = iv_type vt, project_tuple_type vt pos
+    in "a", a_t, r_t, (a_t, mk_meta()), (r_t, mk_meta()), (unit_t, mk_meta())
+  in
+  let op_body =
+    let pos_fields = 
+      let fields_t = project_tuple_type_fields vt pos in
+      List.map2 (fun i t -> 
+          mk_fn (iv_type t, mk_meta()) (Member (Position i)) [mk_var arg_meta arg_id]
+        ) pos fields_t
+    in [mk_return unit_meta (mk_tuple ret_meta pos_fields)]
+  in [DFn(project_fn_id vt pos, [arg_id, arg_t], ret_t, op_body), (unit_t, [])]
+
+(* TODO: inherity CPP unary/binary function *)
+let function_object_of_positions prefix mk_body vt pos =
+  let mk_meta () = [] in
+  let class_id, pfn_id = type_projection_id prefix vt pos, project_fn_id vt pos in
+  let arg_t, pos_t, unit_meta = iv_type vt, project_tuple_type vt pos, (unit_t, mk_meta()) in
+  let op_args, ret_t, op_body = mk_body pfn_id arg_t pos_t in
+  let body = (projection_of_positions vt pos)@
+             [DFn("operator()", op_args, ret_t, op_body), (unit_t, [])] 
+  in DClass(class_id, None, body), (unit_t, mk_meta())
+
+let unary_function_object_of_positions prefix mk_body vt pos =
+  let unary_body f_id arg_t pos_t =
+    let arg_id, op_args = "a", ["a", arg_t] in
+    let t, e = mk_body arg_id f_id arg_t pos_t
+    in op_args, t, e
+  in function_object_of_positions prefix unary_body vt pos
+
+let binary_function_object_of_positions prefix mk_body vt pos =
+  let binary_body f_id arg_t pos_t =
+    let arg1_id, arg2_id, op_args = "a", "b", ["a", arg_t; "b", arg_t] in
+    let t, e = mk_body arg1_id arg2_id f_id arg_t pos_t
+    in op_args, t, e
+  in function_object_of_positions prefix binary_body vt pos
+
+let comparator_of_positions prefix cmp_op vt pos =
+  let mk_meta () = [] in
+  let cmp_fun arg1_id arg2_id proj_fn_id arg_t pos_t =
+    let arg_meta, pos_meta, unit_meta, bool_meta = 
+      let f t = t, mk_meta() in f arg_t, f pos_t, f unit_t, f bool_t
+    in
+    let mk_project arg_id = mk_fn pos_meta (Named proj_fn_id) [mk_var arg_meta arg_id] in
+    let cmp_expr = mk_op bool_meta cmp_op [mk_project arg1_id; mk_project arg2_id]
+    in bool_t, [mk_return unit_meta cmp_expr]
+  in binary_function_object_of_positions prefix cmp_fun vt pos
+
+let inequality_of_positions vt pos = comparator_of_positions "less" Lt vt pos
+let equality_of_positions vt pos = comparator_of_positions "equal" Eq vt pos
+
+let hash_of_positions vt pos = 
+  let mk_meta () = [] in
+  let hash_fn arg_id proj_fn_id arg_t key_t =
+    let ret_t, ret_meta, arg_meta, pos_meta, unit_meta = 
+      let f t = t, mk_meta() in int_t, f int_t, f arg_t, f key_t, f unit_t
+    in 
+    let mk_project arg_id = mk_fn pos_meta (Named proj_fn_id) [mk_var arg_meta arg_id] in
+    let body = [mk_return unit_meta (mk_fn ret_meta (Named "boost::hash_value") [mk_project arg_id])]
+    in ret_t, body
+  in unary_function_object_of_positions "hash" hash_fn vt pos
+
+
+(* Annotation-based collection specialization *)
+
+(* Retrieves a single primary, and possibly multiple secondary index positions
+ * from a list of annotations *)
+let indexes_of_annotations anns =
+  let extract_indexes acc a = match a with
+    | Data(_, FunDep(_, Positions _))
+    | Data(_, MVFunDep(_, Positions _)) ->
+      failwith "all dependencies must currently range over the whole tuple"
+
+    | Data(Constraint, FunDep(pos, dep)) -> acc@[true, false, pos, Some(dep)]
+    | Data(Constraint, MVFunDep(pos, dep)) -> acc@[false, false, pos, Some(dep)]
+    | Data(Constraint, Unique(pos)) -> acc@[true, false, pos, None]
+    | Data(Constraint, Ordered(pos)) -> acc@[false, true, pos, None]
+
+    | Data(Hint, FunDep(_, _))
+    | Data(Hint, MVFunDep(_,_)) ->
+      failwith "soft dependencies not supported"
+
+    | _ -> acc
+  in 
+  let indexes = List.fold_left extract_indexes [] anns in
+  if indexes = [] then None, indexes
+  else 
+    (* For now, pick the fun dep with the minimal head as the primary *)
+    (* TODO: should only match with those indexes that cover the full element *)
+    let primary = List.fold_left (fun ((cu,co,cp,cd) as current) ((u,o,p,d) as idx) -> 
+        match u, d with
+        | true, Some _ -> if List.length p < List.length cp then idx else current
+        | _ -> current
+      ) (List.hd indexes) (List.tl indexes)
+    in Some(primary), List.filter ((<>) primary) indexes
+
 
 (* Creates Boost Multi-Index extractors for index positions *)
-let bmi_indexes collection_t element_decl_t element_t (pidx_pos, sidx_pos) =
+let bmi_indexes collection_t element_decl_t element_t (primary_opt, secondaries) =
   let extractor_of_position element_decl_t i = 
     let id,t = match element_decl_t with
       | TComposite fields_t -> List.nth fields_t i 
@@ -31,48 +165,20 @@ let bmi_indexes collection_t element_decl_t element_t (pidx_pos, sidx_pos) =
     | [i] -> extractor_of_position element_decl_t i
     | _ -> BMIComposite (List.map (extractor_of_position element_decl_t) pos)
   in
-  let mk_bmi_index unique sorted pos = 
-    let idx_id = 
-      if pos = [] then "primary"
-      else String.concat "" (List.map string_of_int pos)
-    in
-    idx_id, unique, sorted, extractor_of_positions element_decl_t element_t pos
+  let mk_bmi_index (unique, ordered, pos, dep) = 
+    let idx_id = if pos = [] then "primary"
+                 else bmi_tag_prefix^(String.concat "" (List.map string_of_int pos))
+    in idx_id, unique, ordered, extractor_of_positions element_decl_t element_t pos
   in
-  
-  (* TODO: uniqueness and ordering for secondaries *)
-  let secondary = List.map (mk_bmi_index false false) sidx_pos in
-  
-  let primary =
-    (* TODO: ordered primaries *)
-    match pidx_pos with
-    | Some(pos) -> [mk_bmi_index (collection_t = TSet) false pos]
+  let p =
+    match primary_opt with
+    | Some(uniq, ord, pos, dep) -> [mk_bmi_index ((collection_t = TSet || uniq), ord, pos, dep)]
     | None ->
-      (* Bags need a non-unique primary index over the whole element *)
-      if collection_t = TBag then [mk_bmi_index false false []] else [] 
-  
-  in primary@secondary
+      (* BMIs default to an ordered set when no indexes are specified.
+       * Thus bags explicitly need a non-unique primary index over the whole element. *)
+      if collection_t = TBag then [mk_bmi_index (false, false, [], [])] else []   
+  in p@(List.map mk_bmi_index secondaries)
 
-(* Retrieves a single primary, and possibly multiple secondary index positions
- * from a list of annotations *)
-let indexes_of_annotations anns =
-  let extract_index (pidx_pos, sidx_pos) a = match a with
-    | Data(Constraint, FunDep(arg_pos, dep_pos)) ->
-      begin match pidx_pos with
-      | None -> Some(arg_pos), sidx_pos
-      | _ -> failwith "found multiple primary indexes"
-      end
-
-    | Data(Hint, FunDep(arg_pos, dep_pos)) ->
-      failwith "soft functional deps not supported"
-
-    | Data(_, Index(k_pos)) -> pidx_pos, sidx_pos@[k_pos]
-    | _ -> (pidx_pos, sidx_pos)
-  in List.fold_left extract_index (None, []) anns
-
-let element_of_collection t = match t with
-  | TInternal(TValue(vt)) -> 
-    begin match base_of vt with TCollection (ct,et) -> Some(ct, et) | _ -> None end
-  | _ -> None
 
 (* Creates a composite type declaration from a K3 base type, e.g. for element
  * types of Boost Multi-Indexes *)
@@ -100,62 +206,645 @@ let rec composite_decl_of_type id counter vt =
   (* Create a direct composite for any other element type *)
   | _ -> fields_of_list [vt]
 
-(* TODO: handle if the current collection does not have indexes, but some
- * collection child field does *)
+
+(* CPP/STL collection type generation for basic annotations *)
+and type_of_collection vt uniq ord pos deps = 
+  let t = iv_type vt in
+  let eq_class, eq_class_id = equality_of_positions vt pos, type_projection_id "eq" vt pos in
+  let less_class, less_class_id = inequality_of_positions vt pos, type_projection_id "less" vt pos in
+  let hash_class, hash_class_id = hash_of_positions vt pos, type_projection_id "hash" vt pos in
+  let reto, retu = (fun t -> t, [less_class]), (fun t -> t, [eq_class; hash_class]) in
+  match uniq, ord, deps with 
+    | true, true, None ->
+      (* STL set *)
+      reto @: TExt(TSTLCollection(TSTLSet t, [TOrdered (Some less_class_id)]))
+
+    | false, true, None ->
+      (* STL multiset *)
+      reto @: TExt(TSTLCollection(TSTLSet t, [TOrdered (Some less_class_id); TMulti]))
+    
+    | true, false, None ->
+      (* STL unordered_set *)
+      retu @: TExt(TSTLCollection(TSTLSet t, [TUnordered (Some(hash_class_id), Some(eq_class_id))]))
+
+    | false, false, None ->
+      (* STL unordered_multiset *)
+      retu @: TExt(TSTLCollection(TSTLSet t, [TUnordered (Some(hash_class_id), Some(eq_class_id)); TMulti]))
+    
+    | _, _, Some(d) ->
+      let ret key_t value_t = 
+        (* TODO: address interface violation by wrapping collection operations
+         * (i.e. insert, delete, peek, etc) for generated types *)
+        (* The associative containers here do not need projection function objects
+         * since they split the element type into key and value parts. *)
+        let t = match uniq, ord with
+          | true, true -> TExt(TSTLCollection(TSTLMap (key_t, value_t), [TOrdered None]))
+          | false, true -> TExt(TSTLCollection(TSTLMap (key_t, value_t), [TOrdered None; TMulti]))
+          | true, false -> TExt(TSTLCollection(TSTLMap (key_t, value_t), [TUnordered (None, None)]))
+          | false, false -> TExt(TSTLCollection(TSTLMap (key_t, value_t), [TUnordered (None, None); TMulti]))
+        in t, []
+      in
+      let key_t = project_tuple_type vt pos in
+      let value_t = match d with
+        | Element ->    
+          let rec diff_pos pos acc i = 
+            let nacc = if List.mem i pos then acc else i::acc
+            in match i with 0 -> nacc | _ -> diff_pos pos nacc (i-1)
+          in project_tuple_type vt (diff_pos pos [] ((tuple_arity vt)-1))
+        | Positions(dep_pos) -> project_tuple_type vt dep_pos
+      in ret key_t value_t
+
+
+and wrap_collection primary ct (vt, vt_decl_opt) (uniq, ord, pos, deps) =
+  let mk_meta () = [] in
+  let meta t = t, mk_meta() in
+  let mk_itmv id t = id, t, meta t, mk_var (meta t) id in
+  let unit_meta, bool_meta = let f t = t, mk_meta() in f unit_t, f bool_t in
+
+  let mk_pos_str p = String.concat "" (List.map string_of_int p) in    
+  let pos_str = mk_pos_str pos in
+
+  let element_error () = failwith "invalid element type and declaration" in
+  let native_error () = failwith "cannot convert element type and declaration to a native type" in
+  let stl_collection_error () = failwith "invalid STL collection" in
+
+  (* AST constructor helpers *)
+  let mk_empty_decl id t = mk_decl unit_meta (mk_var_decl id t None) in
+  let mk_init_decl id t init_expr = mk_decl unit_meta (mk_var_decl id t (Some(Init init_expr))) in
+  let mk_build_decl id t c_args = mk_decl unit_meta (mk_var_decl id t (Some(Constructor c_args))) in
+  let mk_effect_expr f args = mk_expr unit_meta (mk_fn unit_meta f args) in
+  let mk_fn_call_expr m id args = mk_expr m (mk_fn m (Named id) args) in
+  let mk_assign_from_fn m id fn args = mk_assign unit_meta id (mk_fn m fn args) in
+  let mk_if pred then_branch = mk_ifelse unit_meta pred [then_branch; mk_block unit_meta []] in
+
+  let mk_idx_fn m id args = 
+    let idx_tag, idx_t, idx_method = 
+      let x = bmi_tag_prefix^pos_str in x, TNamed ("index<"^x^">"), "get<"^x^">()."^id
+    in mk_fn m (Named idx_method) args
+  in
+  let mk_idx_effect_expr m id args = mk_expr unit_meta (mk_idx_fn m id args) in
+
+  let project_elem tuple_t pos = project_tuple_type (vi_type tuple_t) pos in
+  let tuple_of_pos tuple_t tuple_expr pos = 
+    let fields_t = project_tuple_type_fields (vi_type tuple_t) pos 
+    in mk_tuple (meta (project_tuple_type (vi_type tuple_t) pos))
+        (List.map2 (fun i t -> mk_fn (meta (iv_type t)) (Member (Position i)) [tuple_expr]) pos fields_t)
+  in
+
+  let mk_apply_first_match cit_t match_expr f =
+    let it_id, _, cit_meta, it_var = mk_itmv "c_it" cit_t in
+    let end_id, _, _, end_var = mk_itmv "c_end" cit_t in
+    let valid_pred = mk_op bool_meta Neq [it_var; end_var] in
+      [mk_init_decl it_id cit_t (mk_fn cit_meta (Named "find") [match_expr]);
+       mk_init_decl end_id cit_t (mk_fn cit_meta (Named "end") []);
+       mk_if valid_pred (mk_block unit_meta (f it_var))]
+  in
+
+  let mk_apply_match_range cit_t match_expr f =
+    let it_id, _, cit_meta, it_var = mk_itmv "c_it" cit_t in
+    let end_id, _, _, end_var = mk_itmv "c_end" cit_t in
+    let range_id, range_t, range_meta, range_var = mk_itmv "key_range" (TExt (TPair (cit_t, cit_t))) in
+    let pair_expr pair_op = mk_fn cit_meta (FExt pair_op) [range_var] in 
+    let range_pred = mk_op bool_meta Neq [pair_expr PairFirst; pair_expr PairSecond] in
+    let range_body = mk_block unit_meta
+      ([mk_init_decl it_id cit_t (pair_expr PairFirst);
+        mk_init_decl end_id cit_t (pair_expr PairSecond)]
+       @(f it_var end_var))
+    in
+    let match_fn = if primary then mk_fn range_meta (Named "equal_range") [match_expr] 
+                   else mk_idx_fn range_meta "equal_range" [match_expr]
+    in
+    [mk_init_decl range_id range_t match_fn;
+     mk_if range_pred range_body]
+  in
+
+  let mk_apply_match_for_loop cit_t match_expr loop_cmds =
+    let loop_gen it_var end_var = 
+      let test_expr = mk_op bool_meta Neq [it_var; end_var] in
+      let adv_expr = mk_fn unit_meta (FExt IteratorIncrement) [it_var] in
+      [mk_cmd (CExt (For (None, Some test_expr, Some adv_expr))) unit_meta (loop_cmds it_var)]
+    in mk_apply_match_range cit_t match_expr loop_gen
+  in
+
+  let mk_apply_match_while_loop cit_t match_expr while_fn =
+    let loop_gen it_var end_var = 
+      let init_cmds, test_expr, cmds = while_fn it_var end_var
+      in init_cmds@[mk_cmd (CExt (For (None, Some test_expr, None))) unit_meta cmds]
+    in mk_apply_match_range cit_t match_expr loop_gen
+  in
+
+  let mk_insert_fn mk_elem arg_id arg_t arg_var = 
+    let e, cmds = mk_elem "insert_elem" arg_var in
+    let body = cmds@[mk_fn_call_expr unit_meta "insert" [e]]
+    in [DFn("insert", [arg_id, arg_t], unit_t, body)]
+  in
+
+  let diff_pos n pos =
+    let rec aux pos acc i = 
+      let nacc = if List.mem i pos then acc else i::acc
+      in match i with 0 -> nacc | _ -> aux pos nacc (i-1)
+    in aux pos [] n
+  in
+
+  let rec native_of_type_and_decl (x,y) = match x, y with
+    | TNamed _, Some (TExpr t) -> native_of_type_and_decl (t, None)
+    | TNamed _, Some (TComposite fields) -> 
+      begin try let t_fields = List.map (fun (id,t) -> vi_type t) fields
+                in Some(ib_type (TTuple t_fields))
+            with Failure _ -> None
+      end
+    | TInternal(TValue vt), None -> Some(x)
+    | _, _ -> None
+  in
+
+  let element_as_native_type () =
+    match native_of_type_and_decl (vt, vt_decl_opt) with Some(t) -> t | _ -> native_error()
+  in
+
+  let element_arity () =
+    match bi_type @: element_as_native_type () with
+    | TTuple fields -> List.length fields
+    | _ -> 1
+  in
+
+  let check_valid_element_positions pos = 
+    let all_greater = List.for_all ((>) (element_arity ())) pos in
+    if pos = [] || not all_greater then element_error () else ()
+  in 
+
+  let is_native_collection = match ct with
+    | TInternal (TValue vt) -> 
+      begin try (let _ = collection_of (base_of vt) (fun () -> raise Not_found) in true)
+            with Not_found -> false
+      end
+    | _ -> false
+  in
+  let is_stl_collection, is_stl_map = 
+    let x,y = match ct with
+      | TExt (TSTLCollection (x, _)) -> true, (match x with TSTLMap _ -> true | _ -> false)
+      | _ -> false, false
+    in if x && not primary then stl_collection_error() else x,y
+  in
+  let is_boost_collection = not (is_native_collection || is_stl_collection) in
+
+  let is_dependence_free = pos = [] || (match ct, deps with 
+      | TExt (TSTLCollection (TSTLMap _, _)), _ -> false
+      | _, Some(Element) -> false
+      | _, Some(Positions x) -> x = []
+      | _, _ -> true)
+  in
+
+  let decomposed_value, has_tuple_generators = is_stl_map, is_boost_collection in
+
+  (* Check vt is compatible with pos, i.e., 
+     -- vt can be converted to a native type and pos is well-defined over that type
+     -- vt is an external type and pos is empty *)
+
+  match native_of_type_and_decl (vt, vt_decl_opt), deps, is_dependence_free with
+  | None, _, _ ->
+    (* TODO: generate interface over a collection of external elements *)
+    failwith "cannot wrap collections of external elements"
+
+  | Some native_t, _, true ->
+    (* Generate a dependence-free collection interface containing the following functions:
+        -- insert(new)
+        -- erase(existing)
+        -- update(existing,new)
+        -- slice(existing)
+     *)
+
+    let ce_t, cit_t, te_t = vt, TExt(TIterator ct), native_t in
+    let ce_meta, cit_meta = meta ce_t, meta cit_t in
+    
+    let arg_id, arg_t, arg_meta, arg_var = mk_itmv "elem" native_t in
+    let old_arg_id, _, _, old_arg_var = mk_itmv "existing" arg_t in
+
+    (* Conversion expression construction *)
+    let rec mk_elem id te_expr = match ce_t with
+      | TNamed tid -> mk_var ce_meta id, [mk_build_decl id ce_t [te_expr]]
+      | _ -> te_expr, []
+    in
+
+    let insert_fn = if ce_t = te_t then []
+                    else mk_insert_fn mk_elem arg_id arg_t arg_var  in
+
+    let delete_fn =
+      if ce_t = te_t then [] else
+      let existing_id, (existing_expr, existing_decls) = old_arg_id, mk_elem old_arg_id arg_var in
+      let erase_cmds it_var end_var = 
+        let pred = mk_op bool_meta Neq [it_var; end_var]
+        in [mk_if pred (mk_fn_call_expr unit_meta "erase" [it_var; end_var])]
+      in
+      let erase_body = existing_decls
+                      @(mk_apply_match_range cit_t existing_expr erase_cmds)
+      in [DFn("erase", [arg_id, arg_t], unit_t, erase_body)]
+    in
+
+    let update_fn = 
+      let existing_id, (existing_expr, existing_decls) = let x = "old_elem" in x, mk_elem x old_arg_var in
+      let new_id, (new_expr, new_decls) = let x = "new_elem" in x, mk_elem x arg_var in
+      let update_cmds it_var = 
+        if is_boost_collection then [mk_fn_call_expr unit_meta "replace" [it_var; new_expr]]
+        else
+          let cur_id, _, _, cur_var = mk_itmv "cur_it" cit_t in
+          [mk_init_decl cur_id cit_t it_var;
+           mk_effect_expr (FExt IteratorIncrement) [it_var];
+           mk_fn_call_expr unit_meta "erase" [cur_var];
+           mk_fn_call_expr unit_meta "insert" [it_var; new_expr]]
+      in
+      let update_body = existing_decls@new_decls
+                       @(mk_apply_match_for_loop cit_t existing_expr update_cmds)
+      in [DFn("update", [old_arg_id, arg_t; arg_id, arg_t], unit_t, update_body)]
+    in
+
+    let slice_fn =
+      let existing_id, (existing_expr, existing_decls) = old_arg_id, mk_elem old_arg_id arg_var in
+      let ret_id, ret_t, ret_meta, ret_var = mk_itmv "r" ct in
+      let slice_cmds it_var =
+        let elem_expr = mk_fn arg_meta (FExt IteratorElement) [it_var] in
+        let pred = mk_op bool_meta Eq [existing_expr; elem_expr]
+        in [mk_if pred (mk_effect_expr (Collection Insert) [ret_var; elem_expr])]
+      in
+      let body = existing_decls
+                @[mk_empty_decl ret_id ret_t]
+                @(mk_apply_match_for_loop cit_t existing_expr slice_cmds)
+                @[mk_return unit_meta ret_var]
+      in [DFn("slice", [arg_id, arg_t], ct, body)]
+    in
+
+    List.map (fun d -> d, unit_meta)
+      (List.flatten [insert_fn; delete_fn; update_fn; slice_fn])
+
+
+  | Some native_t, Some(d), false ->
+
+    let dep_pos = match d with
+      | Element -> diff_pos (element_arity()-1) pos
+      | Positions(dep_pos) -> dep_pos
+    in
+    
+    check_valid_element_positions pos;
+    check_valid_element_positions dep_pos;
+
+    (* Notes:
+      Wrapping a collection provides transparency over the specialized container's 
+      actual element and key type.
+
+      We expose a collection interface based on tuples, and the specialization
+      module will let us interact with the specialized container type.
+
+      Our code generator exposes the following methods as a wrapper:
+      -- insert              : tuple element -> unit
+      -- erase               : tuple element -> unit
+      -- update              : tuple element -> tuple element -> unit
+      -- slice               : tuple element -> collection
+      -- erase_<key pos>     : tuple key -> unit
+      -- update_<key pos>    : tuple key -> unit
+      -- slice_<key pos>     : tuple key -> collection
+
+      The container must provide iterators, and be aware of the following types:
+      -- element type
+      -- container iterator type, as a handle to full elements
+      -- index key type (regardless of decomposition)
+      -- index value type and whether this differs from elements (i.e. for 
+         elements decomposed into key/values)
+
+      The container must provide the following methods:
+      -- insert              : element -> unit
+      -- insert_with_hint    : iterator -> element -> unit
+      
+      -- erase_iterator      : iterator -> unit
+      
+      -- find                : key -> iterator
+      -- equal_range         : key -> iterator pair
+      -- find                : iterator pair -> element -> iterator
+
+      -- element_of_iterator : iterator -> element  
+      -- key_of_iterator     : iterator -> key    
+      -- value_of_iterator   : iterator -> value
+
+      -- optional: replace   : iterator -> element -> unit
+
+      A code generation API for specialized data structures must provide methods to
+      produce expressions for all of the above.
+      We can implement our tuple-based container wrapper with these methods and
+      the following:
+      -- tuple element -> element
+      -- tuple element -> key
+      -- tuple element -> index value
+      -- tuple key     -> index key
+
+      Note that these conversion methods are not needed if all of the container's 
+      methods can directly accept tuples.
+      
+      Boost multi_index_containers can achieve this through the appropriate
+      specialization of extractors, e.g. by inheriting from the member extractor
+      and overloading its operator() method to accept tuple-based key types
+
+      Thus our CG method expects the following information:
+      
+      1. type information: (type_t, type_t, type_t, type_t option)
+         -- element, iterator, key, value if decomposed.
+
+      2. method information:
+        (specialized generator functions * converters) option
+        * (tuple generator functions) option
+
+     *)
+
+    let (ce_t, cit_t, ck_t, cv_t), (te_t, tk_t, tv_t) = 
+      let key_t, val_t = project_elem native_t pos, project_elem native_t dep_pos in
+      let a, b = if not decomposed_value then vt, vt
+                 else TExt (TPair (key_t, val_t)), val_t
+      in (a, TExt(TIterator ct), key_t, b), (native_t, key_t, val_t)
+    in
+
+    let ce_meta, cit_meta = meta ce_t, meta cit_t in
+    
+    let arg_id, arg_t, arg_meta, arg_var = mk_itmv "elem" native_t in
+    let old_arg_id, _, _, old_arg_var = mk_itmv "existing" arg_t in
+    let key_arg_id, _, key_meta, key_var = mk_itmv "key" tk_t in
+    let val_id, _, val_meta, val_var = mk_itmv "val" tv_t in
+
+    (* Conversion expression construction *)
+    let rec mk_elem id te_expr = match ce_t with
+      | TNamed tid -> mk_var ce_meta id, [mk_build_decl id ce_t [te_expr]]
+      | TExt(TPair (k_t, v_t)) ->
+        let (ke, kd), (ve, vd) = mk_key_of_tuple te_expr, mk_val_of_tuple te_expr
+        in mk_fn ce_meta (FExt MakePair) [ke; ve], kd@vd
+      | _ -> te_expr, []
+
+    and mk_val_of_elem elem_expr = match ce_t with
+      | TExt (TPair (k_t, v_t)) when v_t = cv_t ->
+        mk_fn val_meta (FExt PairSecond) [elem_expr], []
+      | _ -> elem_expr, []
+
+    and mk_key_of_tuple te_expr = if ck_t = tk_t then tuple_of_pos te_t te_expr pos, [] 
+                                  else mk_elem key_arg_id te_expr
+
+    and mk_key_of_index_tuple tk_expr = tk_expr, []
+    
+    and mk_val_of_tuple te_expr = if cv_t = ce_t then mk_elem val_id te_expr
+                                  else tuple_of_pos te_t te_expr dep_pos, []
+    in
+
+    let (key_expr, key_decls), (val_expr_opt, val_decls) =
+      mk_key_of_tuple arg_var, mk_val_of_tuple arg_var in
+
+    (* Context generators for erase and update methods. *)
+    let mk_remove_modifier_common use_new fn_id body_fn =
+      let existing_id, (existing_expr, existing_decls) =
+        let x = "old_elem" in x, mk_elem x (if use_new then old_arg_var else arg_var) in
+      let new_id, (new_expr, new_decls) = let x = "new_elem" in x, mk_elem x arg_var in
+      let args = (if use_new then [old_arg_id, arg_t] else [])@[arg_id, arg_t] in
+      let body = body_fn (existing_id, (existing_expr, existing_decls)) (new_id, (new_expr, new_decls))
+      in [DFn(fn_id, args, unit_t, body)]
+    in
+
+    let mk_remove_modifier use_new fn_id match_expr_f modifier_cmds =
+      let body_f (existing_id, (existing_expr, existing_decls)) (new_id, (new_expr, new_decls)) =
+        let id_of_var e = List.hd @: var_ids_of_expr e in
+        let cur_id, _, _, cur_var = mk_itmv "cur_it" cit_t in
+        let cmds_f it_var = modifier_cmds (id_of_var it_var) it_var cur_id cur_var
+                              (if use_new then Some(new_expr) else None) in
+        let match_expr, match_decls = match_expr_f ()
+        in existing_decls@(if use_new then new_decls else [])@match_decls
+           @(mk_apply_first_match cit_t match_expr cmds_f)
+      in mk_remove_modifier_common use_new fn_id body_f
+    in
+
+    let mk_remove_many_modifier use_new fn_id modifier_cmds =
+      let body_f (existing_id, (existing_expr, existing_decls)) (new_id, (new_expr, new_decls)) =
+        let cmds it_var end_var =
+          let id_of_var e = List.hd @: var_ids_of_expr e in
+          let cur_id, _, _, cur_var = mk_itmv "cur_it" cit_t in
+          let a = [mk_assign_from_fn cit_meta (id_of_var it_var) (Named "find") [it_var; end_var; existing_expr]] in
+          let t = mk_op bool_meta Neq [it_var; end_var]
+          in a, t, modifier_cmds a (id_of_var it_var) it_var cur_id cur_var 
+                    (if use_new then Some(new_expr) else None)
+        in
+        let key_expr, key_decls = if use_new then mk_key_of_tuple old_arg_var
+                                  else key_expr, key_decls
+        in existing_decls@(if use_new then new_decls else [])@key_decls
+          @(mk_apply_match_while_loop cit_t key_expr cmds)
+      in mk_remove_modifier_common use_new fn_id body_f
+    in
+
+    (* An insert function that accepts a full tuple, and inserts as a key-value pair *)
+    let insert_fn = if ce_t = te_t || not primary then []
+                    else mk_insert_fn mk_elem arg_id arg_t arg_var  in
+    
+    (* A delete function that accepts a full tuple and erases any complete matches,
+     * that is, matches over both key attributes and non-key attributes.
+     * For multi-containers (e.g., multisets or multimaps), this is a bulk operation.
+     * Body implementation notes:
+     * 1. first statement constructs an element type. Change to use tuple->element constructor.
+     * 2. second statement constructs a matching loop. This makes a key, and iterates.
+     *    The iterator element should be the element type of the specialization.
+     * 3. Requires underlying collection to provide an erase method that returns an iterator
+     *    to the next valid element after the deletion.
+     *)
+    (* TODO: check hint position of iterator *)
+    let mk_delete_first_fn fn_id = 
+      let match_expr_f () = if primary then key_expr, key_decls else mk_key_of_index_tuple key_var in
+      let erase_modifier_cmds _ it_var _ _ _ = [mk_fn_call_expr unit_meta "erase" [it_var]] in
+         (mk_remove_modifier false fn_id match_expr_f erase_modifier_cmds)
+    in
+    let primary_delete_fn =
+      if ce_t = te_t || not primary then [] else
+      let erase_all_modifier_cmds step_cmd it_id it_var cur_id cur_var _ =
+        let id_of_var e = List.hd @: var_ids_of_expr e in
+        if is_boost_collection then
+          [mk_assign_from_fn cit_meta (id_of_var it_var) (Named "erase") [it_var]]@step_cmd
+        else
+          [mk_init_decl cur_id cit_t it_var;
+           mk_effect_expr (FExt IteratorIncrement) [it_var];
+           mk_fn_call_expr unit_meta "erase" [cur_var]]@step_cmd
+      in 
+         (mk_delete_first_fn "erase")
+        @(mk_remove_many_modifier false "erase_all" erase_all_modifier_cmds)
+    in
+
+    (* A delete function that erases a key (i.e., a supertype of the value type)
+     * For multi-containers (e.g., multisets or multimaps), this is a bulk operation. *)
+    let index_delete_fn =
+      if primary then [] else
+      let key_expr, key_decls = mk_key_of_index_tuple key_var in
+      let erase_body = key_decls@[mk_idx_effect_expr unit_meta "erase" [key_expr]] in
+      let all_fn = [DFn("erase_"^pos_str^"_all", [key_arg_id, tk_t], unit_t, erase_body)]
+      in (mk_delete_first_fn ("erase_"^pos_str))@all_fn
+    in
+
+    (* An update function that accepts a full new tuple, and updates the entry 
+     * matching the complete value, that is, matches over both key attributes and
+     * non-key attributes, to the new value. 
+     * For multi-containers (e.g., multisets or multimaps), this is a bulk operation. 
+     * Body implementation notes. 
+     * Similar to the delete function, with additional requirements on 
+     * either a replace method, or a pair of insert and erase methods.
+     * 1. The declarations below construct element types, one for the old element,
+     *    and one for the new.
+     * 2. The replace method takes an iterator indicating the element to replace
+     *    and the new element var.
+     * 3. The erase method takes an iterator indicating the element to remove, and the
+     *    insert method takes an iterator as a position hint and the new element var.
+     *)
+    (* TODO: check hint position of iterator *)
+    let update_modifier_common _ it_var cur_id cur_var new_expr_opt = 
+      let new_expr = match new_expr_opt with Some(e) -> e
+        | None -> failwith "invalid new expression in update modifier"
+      in
+      if is_boost_collection then [mk_fn_call_expr unit_meta "replace" [it_var; new_expr]]
+      else [mk_init_decl cur_id cit_t it_var;
+            mk_effect_expr (FExt IteratorIncrement) [it_var];
+            mk_fn_call_expr unit_meta "erase" [cur_var];
+            mk_fn_call_expr unit_meta "insert" [it_var; new_expr]]
+    in
+    let primary_update_fn = 
+      if not primary then [] else
+      let match_expr_f () = mk_key_of_tuple old_arg_var in
+      let update_all_modifier_cmds step_cmd it_id it_var cur_id cur_var new_expr_opt =
+        (update_modifier_common it_id it_var cur_id cur_var new_expr_opt)@step_cmd
+      in
+         (mk_remove_modifier true "update" match_expr_f update_modifier_common)
+        @(mk_remove_many_modifier true "update_all" update_all_modifier_cmds)
+    in
+    
+    (* An update function that accepts a full new tuple, and updates the entry 
+     * with the given key to the new value. This does not need the old value.
+     * For multi-containers (e.g., multisets or multimaps), this is a bulk operation. *)
+    let index_update_fn = 
+      let elem_expr, elem_decls = mk_elem "replace_elem" arg_var in
+      let update_cmds it_var = 
+        let f = if primary then mk_fn_call_expr else mk_idx_effect_expr
+        in [f unit_meta "replace" [it_var; elem_expr]]
+      in
+      let update_body_f cmds_f = elem_decls@key_decls@(cmds_f cit_t key_expr update_cmds) in
+        [DFn("update_"^pos_str, [arg_id, arg_t], unit_t, (update_body_f mk_apply_first_match));
+         DFn("update_"^pos_str^"_all", [arg_id, arg_t], unit_t, (update_body_f mk_apply_match_for_loop))]
+    in
+
+    (* A slice function that accepts a full or partial tuple and returns a collection. *)
+    (* Body implementation notes:
+     * 1. Declares an index value initialized from the argument tuple for comparisons.
+     * 2. Declares an empty slice collection for the return value.
+     * 3. Populates the return value by looping and matching.
+     *)
+    (* TODO: handle singleton return values. *)
+    let slice_fn =
+      let ret_id, ret_t, ret_meta, ret_var = mk_itmv "r" ct in
+      if primary then
+        let slice_cmds it_var =
+          (* Element equality should compare value part first for short-circuting. *)
+          let elem_expr = mk_fn arg_meta (FExt IteratorElement) [it_var] in
+          let pred, pred_decls =
+            let elem_val_expr, elem_val_decls = mk_val_of_elem elem_expr
+            in mk_op bool_meta Eq [val_var; elem_val_expr], elem_val_decls
+          in
+          pred_decls@[mk_if pred (mk_effect_expr (Collection Insert) [ret_var; elem_expr])]
+        in
+        let body = key_decls@val_decls
+                  @[mk_empty_decl ret_id ret_t]
+                  @(mk_apply_match_for_loop cit_t key_expr slice_cmds)
+                  @[mk_return unit_meta ret_var]
+        in [DFn("slice", [arg_id, arg_t], ct, body)]
+      else
+        let key_expr, key_decls = mk_key_of_index_tuple key_var in
+        let slice_cmds it_var end_var =
+          [mk_effect_expr (Named "copy")
+            [it_var; end_var; U.mk_fn cit_meta (Collection (CFExt EndIterator)) [ret_var]]] 
+        in
+        let body = key_decls
+                  @[mk_empty_decl ret_id ret_t]
+                  @(mk_apply_match_range cit_t key_expr slice_cmds)
+                  @[mk_return unit_meta ret_var]
+        in [DFn("slice_"^pos_str, [key_arg_id, tk_t], ct, body)]
+    in
+    List.map (fun d -> d, unit_meta)
+      (List.flatten [insert_fn; primary_delete_fn; index_delete_fn;
+                                primary_update_fn; index_update_fn; slice_fn])
+
+  | _ -> failwith "internal error on wrapping collection"
+
+(* Generic collection type specialization.
+ * Handles nested annotated collections by extracting annotations directly
+ * associated with collection types *)
 and type_declarations_of_collection id counter t =
-  let is_external_type t = match t with TInternal _ -> false | _ -> true in
-  let unit_t = TInternal(TValue(canonical TUnit)) in 
+  let unit_meta = unit_t, [] in
   match element_of_collection t with
   | Some (collection_t, element_vt) ->
     let indexes = match t with
       | TInternal(TValue vt) -> indexes_of_annotations (annotation_of vt)
       | _ -> None, []
     in
-    let nt_id, nt_elem_id = 
-      let prefix = id^"__"^(string_of_int counter) in
-      prefix^"_bmi", prefix^"_bmi_elem"
-    in    
-    let c, t_decl, decl_cmds = composite_decl_of_type id (counter+1) element_vt in
-    begin match t_decl with
-    | TComposite(tl) ->
-      let convert =
-        (match indexes with None, [] -> false | _,_ -> true)
-        || List.exists is_external_type (List.map snd tl)
-      in 
-      if convert then
-        let n_decl_cmds = (decl_cmds@[DType(nt_elem_id, t_decl), (unit_t,[])]) in
-        let bmi_idx = bmi_indexes collection_t t_decl (TNamed nt_elem_id) indexes in
-        let c_t_decl_cmd =
-          [DType(nt_id, TExtDecl(TBoostMultiIndex(nt_elem_id, bmi_idx))), (unit_t, [])]
-        in
-          c, TNamed(nt_id), (n_decl_cmds@c_t_decl_cmd)
-      else c, t, decl_cmds
-  
-    | _ -> c, t, decl_cmds
+    let nested, c, t_decl, aux_decls = 
+      match composite_decl_of_type id (counter+1) element_vt with
+      | x, (TComposite(tl) as y), z ->
+        List.exists is_external_type (List.map snd tl), x, y, z
+      | x, y, z -> false, x, y, z
+    in 
+    begin match nested, indexes with
+    | false, (None, []) -> counter, t, []
+    
+    (* Directly specialize a single index request to the appropriate data structure *)
+    | false, (Some(uniq, ord, pos, dep), []) ->
+      let ct, decls = type_of_collection element_vt uniq ord pos dep in
+      let rt, rdecls = 
+        let tid = "c_"^id in 
+        let members = wrap_collection true ct (iv_type element_vt, None) (uniq, ord, pos, dep) in
+        TNamed tid, decls@[DClass(tid, Some(ct), members), unit_meta]
+      in counter, rt, rdecls
+    
+    (* Data structures with multiple index requirements, or with nested specialized
+     * collections are specialized as Boost multi_indexes *)
+    | _, _ ->
+      let ct_id, ct_elem_id, ct, c_elem_t, wct_id = 
+        let prefix = id^"__"^(string_of_int counter) in 
+        let x,y = prefix^"_bmi", prefix^"_bmi_elem"
+        in x, y, TNamed x, TNamed y, "c_"^id
+      in
+      begin match t_decl with
+      | TComposite(tl) ->
+        let elem_and_decl = c_elem_t, Some(t_decl) in
+        let bmi_idx = bmi_indexes collection_t t_decl c_elem_t indexes in
+        let ct_decl = TExtDecl(TBoostMultiIndex(c_elem_t, bmi_idx)) in
+        let decls = aux_decls@[DType(ct_elem_id, t_decl), unit_meta; DType(ct_id, ct_decl), unit_meta] in
+        let rt, rdecls = 
+          let p_members = match fst indexes with
+            | None -> []
+            | Some(uniq,ord,pos,dep) -> wrap_collection true ct elem_and_decl (uniq, ord, pos, dep) 
+          in
+          let members = p_members@(List.flatten (List.map (wrap_collection false ct elem_and_decl) (snd indexes)))
+          in TNamed wct_id, decls@[DClass(wct_id, Some(ct), members), unit_meta]
+        in c, rt, rdecls
+    
+      | _ -> c, t, aux_decls
+      end
     end
 
   | _ -> counter, t, []
-  
-(* Declares a collection as a Boost Multi-Index.
+
+
+(* Declares a collection as a Boost Multi-Index or an associative map.
  * We assume annotation checking has been performed. *)
+(* TODO: we should also convert constructors or initalizers as appropriate here *)
 let datastructure_of_collection id t da_opt (dt, da) =
   match type_declarations_of_collection id 0 t with
   | _, TNamed(nt_id), t_decls -> 
     let nc_decl = DVar(id, TNamed(nt_id), da_opt) in
     let nbmi_bindings = [id, TNamed(nt_id)] in
-    (t_decls@[nc_decl, (dt,da)]), nbmi_bindings
+    t_decls, [nc_decl, (dt,da)], nbmi_bindings
   
-  | _, _, t_decls ->  t_decls, []
+  | _, nt, t_decls when nt <> t -> 
+    t_decls, [DVar(id, nt, da_opt), (dt,da)], [id, nt]
+
+  | _, _, t_decls ->  [], t_decls, []
   
 
 (* Substitutes global variable definitions annotated with indexing
  * requirements to be Boost Multi-Indexes. 
  * Returns a new program, as well as bindings for substituted data structures *)
-
-(* TODO:
- * i. local declarations
- *)
-let optimize_datastructures program =
+let specialize_datastructures program =
   let is_var_decl (d,_) = match d with DVar _ -> true | _ -> false in
   let split_decls decls = 
     let x,y = List.partition is_var_decl decls in
@@ -173,9 +862,9 @@ let optimize_datastructures program =
     in
     match tag_of_cmd cmd with
     | Decl d -> 
-      let ndecls, nb = bmi_of_decl ([], bindings) (d, meta_of_cmd cmd) in
+      let ntdecls, ndecls, nb = bmi_of_decl ([], [], bindings) (d, meta_of_cmd cmd) in
       let var_decls, rest_decls = split_decls ndecls in
-        (decls@rest_decls), (cmds@var_decls), nb
+        (decls@ntdecls@rest_decls), (cmds@var_decls), nb
    
     | IfThenElse p ->
       let block_unless_single l =
@@ -203,32 +892,37 @@ let optimize_datastructures program =
 
     | _ -> decls, (cmds@[cmd]), bindings
 
-  and bmi_of_decl (nprog,bindings) (d,(dt,da)) = match d with
+  (* TODO: prune duplicate BMI type declarations *)
+  and bmi_of_decl (tdecls,nprog,bindings) (d,(dt,da)) = match d with
     | DVar (id,t,da_opt) ->
       begin match datastructure_of_collection id t da_opt (dt,da) with
-        | [], [] -> (nprog@[d,(dt,da)],bindings)
-        | x,y -> (nprog@x, bindings@y)
+        | x, [], [] -> tdecls@x, nprog@[d,(dt,da)], bindings
+        | x,y,z -> tdecls@x, nprog@y, bindings@z
       end
 
     | DFn (id,arg,ret_t,body) -> 
-      let ndecls, nbody, nbindings =
-        List.fold_left bmi_of_cmd ([], [], bindings) body 
-      in nprog@ndecls@[DFn (id,arg,ret_t,nbody), (dt,da)], nbindings
+      let ntdecls, nbody, nbindings = List.fold_left bmi_of_cmd ([], [], bindings) body 
+      in tdecls@ntdecls, nprog@[DFn (id,arg,ret_t,nbody), (dt,da)], nbindings
 
-    | _ -> (nprog@[d,(dt,da)], bindings)
+    | DClass (id, parent_opt, decls) ->
+      let ntdecls, nbody, nbindings = List.fold_left bmi_of_decl ([], [], bindings) decls 
+      in tdecls@ntdecls, nprog@[DClass (id, parent_opt, nbody), (dt,da)], nbindings
+
+    | _ -> tdecls, nprog@[d,(dt,da)], bindings
   in 
-  let rec optimize_ds_program prog =
+  let rec specialize_program_datastructures prog =
+    let rcr = specialize_program_datastructures in
     List.fold_left (fun (cacc, bacc) c -> match c with
       | Include (name, None, _, _) -> cacc@[c], bacc
       | Include (name, Some(p), code, expected) ->
-        let x,y = optimize_ds_program p in
-        cacc@[Include (name, Some(x), code, expected)], bacc@y
-      | Component decls -> 
-        let x,y = List.fold_left bmi_of_decl ([], bacc) decls
-        in cacc@[Component x], y
+        let x,y = rcr p in cacc@[Include (name, Some(x), code, expected)], bacc@y
+      | Component decls ->
+        let x,y,z = List.fold_left bmi_of_decl ([], [], bacc) decls in 
+        let decl_prog = if x = [] then [] else [Include("k3_decls.hpp", Some([Component x]), None, false)]
+        in cacc@decl_prog@[Component y], z
     ) ([],[]) prog
   in
-  let nprog, bindings = optimize_ds_program program in
+  let nprog, bindings = specialize_program_datastructures program in
   (* Redo type inference on nprog *)
   (deduce_program_type nprog), bindings 
 
@@ -403,4 +1097,4 @@ let rec rewrite_component mk_meta c = match c with
 and cpp_rewrite mk_meta program = List.map (rewrite_component mk_meta) program
 
 let cpp_of_imperative mk_meta program = 
-  cpp_rewrite mk_meta (fst (optimize_datastructures program))
+  cpp_rewrite mk_meta (fst (specialize_datastructures program))
