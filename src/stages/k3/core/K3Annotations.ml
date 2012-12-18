@@ -38,6 +38,7 @@ module type AnnotationType = sig
 	  | Data    of rigidity_t * data_annotation_t
 	  | Control of rigidity_t * control_annotation_t
 	  | Type    of type_t
+    | Modification of bool
 	
 	type annotation_t = k3_annotation_t list
 
