@@ -211,7 +211,8 @@ let map_ids_types_for ?(prefix=def_map) p map_id =
 (* ids to reference the map vars, with vid *)
 let map_ids_types_no_val_for ?(prefix=def_map) p map_id = list_drop_end 1 @: 
   map_ids_types_for ~prefix:prefix p map_id
-let map_ids_add_v ?(vid=def_vid) ts = vid::ts
+let map_add_v v xs = v::xs
+let map_ids_add_v ?(vid=def_vid) xs = map_add_v vid xs
 let map_ids_types_add_v ?(vid=def_vid) ts = (vid, t_vid)::ts
 let map_ids_types_with_v_for ?(prefix=def_map) ?(vid=def_vid) p map_id =
    map_ids_types_add_v ~vid:vid @: map_ids_types_for ~prefix:prefix p map_id

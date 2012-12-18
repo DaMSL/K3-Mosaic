@@ -55,18 +55,21 @@ let modify_0d_map_access p ast stmt =
   let maps = get_stmt_0d_maps p stmt in
   let lmap = P.lhs_map_of_stmt p stmt in
   let map_names_types2 = 
-    List.map (fun m -> (P.map_name_of p m, P.map_types_for p m)) maps in
+    List.map (fun m -> (P.map_name_of p m, P.map_types_with_v_for p m)) maps in
   (* add existing_out_tier if lmap is 0 dim *)
   let map_names_types = if List.exists (fun m -> m = lmap) maps
-    then ("existing_out_tier", P.map_types_for p lmap)::map_names_types2
+    then ("existing_out_tier", P.map_types_with_v_for p lmap)::map_names_types2
     else map_names_types2 in
-  let modify_0d_map tree m =
+  let modify_0d_map tree m_nm_tp =
+    let m = fst m_nm_tp in
+    let m_t = snd m_nm_tp in
+    (* note: our second pass will add vid to the map lookup *)
+    (*let map_lookup = ids_to_vars @: P.map_ids_add_v ["_"] in*)
     let modify e = 
-      if U.is_peek e && U.is_var_match (fst m) @: U.decompose_peek e 
-      then (* mk_fst @: snd m @: (* debug *) *)
-             mk_peek @: mk_slice 
-               (mk_var @: fst m) @:
-                 mk_tuple [mk_var "vid"; mk_const CUnknown]
+      if U.is_peek e && U.is_var_match m @: U.decompose_peek e 
+      then mk_snd m_t @:
+             mk_peek @: mk_slice (mk_var m) @:
+               mk_tuple [mk_const CUnknown] (* map_lookup *)
       else e in
     T.modify_tree_bu tree modify in
   List.fold_left modify_0d_map ast map_names_types
@@ -78,15 +81,22 @@ let modify_map_access p ast stmt =
   let lmap = P.lhs_map_of_stmt p stmt in
   let lmap_name = P.map_name_of p lmap in
   let lmap_types = P.map_types_with_v_for p lmap in
+  let var_vid = mk_var "vid" in
   let modify e = match U.tag_of_expr e with
     | Insert -> let (col, elem) = U.decompose_insert e in
-       mk_insert col @:
-         begin match U.tag_of_expr elem with
-           | Tuple  -> let xs = U.decompose_tuple e in
-                       mk_tuple @: (mk_var "vid")::xs
-           | Var id -> mk_tuple [mk_var "vid"; mk_var id]
-           | x      -> raise (UnhandledModification(PR.string_of_expr e))
-         end
+      mk_insert col @:
+        begin match U.tag_of_expr elem with
+          | Tuple  -> let xs = U.decompose_tuple e in
+                      mk_tuple @: P.map_add_v var_vid xs
+          | x      -> mk_tuple @: P.map_add_v var_vid [elem]
+        end
+    | Slice -> let (col, pat) = U.decompose_slice e in
+      mk_slice col @:
+        begin match U.tag_of_expr pat with
+          | Tuple -> let xs = U.decompose_tuple e in
+                     mk_tuple @: P.map_add_v var_vid xs
+          | x     -> mk_tuple @: P.map_add_v var_vid [pat]
+        end
     (* handle a case when the map is applied to a lambda *)
     | Apply  -> let (l, arg) = U.decompose_apply e in
       begin match U.tag_of_expr arg with

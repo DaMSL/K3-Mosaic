@@ -169,6 +169,7 @@ let decompose_peek e = nth e 0
 let decompose_send e = 
   let rec rest i acc = if i = 1 then acc else rest (i-1) ((nth e i)::acc)
   in (nth e 0, nth e 1, rest ((List.length (sub_tree e))-1) [])
+let decompose_slice e = (nth e 0, nth e 1)
 let decompose_tuple e = sub_tree e
 
 

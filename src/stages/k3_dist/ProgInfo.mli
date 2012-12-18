@@ -74,6 +74,12 @@ val map_ids_types_for : ?prefix:string -> prog_data_t -> map_id_t ->
 val map_ids_types_no_val_for : ?prefix:string -> prog_data_t -> map_id_t -> 
     (string * value_type_t) list
 
+(* add a vid of any kind (var, whatever) to a list. Allows consistent placement
+ *)
+val map_add_v : 'a -> 'a list -> 'a list
+
+(* add a vid to map ids. This allows consistent placement of vids in the
+ * strucutres *)
 val map_ids_add_v : ?vid:string -> string list -> string list
 
 (*add a vid to the ids,types*)

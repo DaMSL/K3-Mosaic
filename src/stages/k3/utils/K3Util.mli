@@ -45,6 +45,7 @@ val decompose_lambda : expr_t -> expr_t
 val decompose_map : expr_t -> expr_t * expr_t
 val decompose_peek : expr_t -> expr_t
 val decompose_send : expr_t -> expr_t * expr_t * (expr_t list)
+val decompose_slice : expr_t -> expr_t * expr_t
 val decompose_tuple : expr_t -> expr_t list
 
 (* Declaration accessors *)
