@@ -42,6 +42,10 @@ val fold_tree_lazy :
 val modify_tree_bu :
   'a tree_t -> ('a tree_t -> 'a tree_t) -> 'a tree_t
 
+(* modify a tree using a single modification function, that also receives the path to the tree *)
+val modify_tree_bu_with_path :
+  'a tree_t -> ('a tree_t -> 'a tree_t list -> 'a tree_t) -> 'a tree_t
+
 
 (* Trees with tuple metadata *)
 val prepend_tree : ('a -> 'b) -> 'a tree_t -> ('b * 'a) tree_t

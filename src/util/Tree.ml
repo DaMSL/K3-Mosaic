@@ -1,5 +1,6 @@
 open Symbols
 open Printing
+open Util
 
 type 'a tree_t
     = Leaf of 'a
@@ -84,6 +85,15 @@ let modify_tree_bu e fn =
      let tree = mk_tree (data, acc_children) in
      fn tree in  (* run the function only on the created tree *)
   fold_tree1 (fun _ _ -> None) rebuild_tree None e
+
+(* Modify a tree by running a function over it, bottom up *)
+let modify_tree_bu_with_path e fn =
+  (* first, make the node and attach its children *)
+  let rebuild_tree path acc_children t =
+     let data = node_data t in
+     let tree = mk_tree (data, acc_children) in
+     fn tree (list_drop 1 path) in 
+  fold_tree1 (fun n_td t -> t::n_td) rebuild_tree [] e
 
 (* Trees with tuple metadata *)
 
