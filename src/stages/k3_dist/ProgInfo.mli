@@ -66,6 +66,9 @@ val map_types_add_v : value_type_t list -> value_type_t list
 (* map types invluding the vid *)
 val map_types_with_v_for : prog_data_t -> map_id_t -> value_type_t list
 
+(* get map names with map ids *)
+val map_names_ids_of_stmt : prog_data_t -> stmt_id_t -> (string * map_id_t) list
+
 (* construct a representation of ids and types for a map *)
 val map_ids_types_for : ?prefix:string -> prog_data_t -> map_id_t -> 
     (string * value_type_t) list
