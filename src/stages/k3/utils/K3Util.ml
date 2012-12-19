@@ -155,22 +155,40 @@ let is_peek e = match tag_of_expr e with Peek -> true | _ -> false
 (* AST destructors *)
 let nth e i = List.nth (sub_tree e) i
 
-let decompose_aggregate e = (nth e 0, nth e 1, nth e 2)
-let decompose_apply e = (nth e 0, nth e 1)
-let decompose_block e = sub_tree e
-let decompose_filter_map e = (nth e 0, nth e 1, nth e 2)
-let decompose_ifthenelse e = (nth e 0, nth e 1, nth e 2)
-let decompose_insert e = (nth e 0, nth e 1)
-let decompose_iterate e = (nth e 0, nth e 1)
-let decompose_gbagg e = (nth e 0, nth e 1, nth e 2, nth e 3)
-let decompose_lambda e = nth e 0
-let decompose_map e = (nth e 0, nth e 1)
-let decompose_peek e = nth e 0
+let decompose_aggregate e = match tag_of_expr e with 
+  Aggregate -> (nth e 0, nth e 1, nth e 2) | _ -> failwith "not Aggregate"
+let decompose_apply e = match tag_of_expr e with
+  Apply -> (nth e 0, nth e 1) | _ -> failwith "not Apply"
+let decompose_block e = match tag_of_expr e with 
+  Block -> sub_tree e | _ -> failwith "not a Block"
+let decompose_delete e = match tag_of_expr e with 
+  Delete -> (nth e 0, nth e 1) | _ -> failwith "not a Delete"
+let decompose_filter_map e = match tag_of_expr e with 
+  FilterMap -> (nth e 0, nth e 1, nth e 2) | _ -> failwith "not a FilterMap"
+let decompose_ifthenelse e = match tag_of_expr e with 
+  IfThenElse -> (nth e 0, nth e 1, nth e 2) | _ -> failwith "not a IfThenElse"
+let decompose_insert e = match tag_of_expr e with 
+  Insert -> (nth e 0, nth e 1) | _ -> failwith "not a Insert"
+let decompose_iterate e = match tag_of_expr e with 
+  Iterate -> (nth e 0, nth e 1) | _ -> failwith "not a Iterate"
+let decompose_gbagg e = match tag_of_expr e with 
+  GroupByAggregate -> (nth e 0, nth e 1, nth e 2, nth e 3) 
+  | _ -> failwith "not a GroupByAggregte"
+let decompose_lambda e = match tag_of_expr e with 
+  Lambda(_) -> nth e 0 | _ -> failwith "not a Lambda"
+let decompose_map e = match tag_of_expr e with 
+  Map -> (nth e 0, nth e 1) | _ -> failwith "not a Map"
+let decompose_peek e = match tag_of_expr e with 
+  Peek -> nth e 0 | _ -> failwith "not a Peek"
 let decompose_send e = 
   let rec rest i acc = if i = 1 then acc else rest (i-1) ((nth e i)::acc)
-  in (nth e 0, nth e 1, rest ((List.length (sub_tree e))-1) [])
-let decompose_slice e = (nth e 0, nth e 1)
-let decompose_tuple e = sub_tree e
+  in match tag_of_expr e with 
+  Send -> (nth e 0, nth e 1, rest ((List.length (sub_tree e))-1) []) 
+  | _ -> failwith "not a Send"
+let decompose_slice e = match tag_of_expr e with 
+  Slice -> (nth e 0, nth e 1) | _ -> failwith "not a Slice"
+let decompose_tuple e = match tag_of_expr e with 
+  Tuple -> sub_tree e  | _ -> failwith "not a Tuple"
 
 
 let match_declaration id match_f l =
@@ -304,5 +322,3 @@ let renumber_program_ids prog =
     | x -> x::acc
   in List.rev @: List.fold_left handle_dec [] prog
 
-
-    
