@@ -413,7 +413,7 @@ let rec deduce_expr_type trig_env cur_env utexpr =
               t1 <| collection_of +++ base_of %++ value_of |> t_erroru name @:
                   TBad(t1) in
             if not (t_r === canonical TUnit) 
-                then t_erroru name (VTMismatch(canonical TUnit, t_r,"return val:")) () else
+                then t_erroru name (VTMismatch(t_r, canonical TUnit, "return val:")) () else
             if t_a <~ t_e then TValue(canonical TUnit) 
             else t_erroru name (VTMismatch(t_a, t_e, "element:")) ()
 
