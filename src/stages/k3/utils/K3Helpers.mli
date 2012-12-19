@@ -174,6 +174,9 @@ val int_to_temp_id: string -> int -> id_t
  * tuples *)
 val mk_tuple_range: 'a list -> int list
 
+(* turn a list of types to a list of made up ids and corresponding types *)
+val types_to_ids_types : string -> value_type_t list -> (string * value_type_t) list
+
 (* destruct a tuple, at which point parts are available via ids made by
  * int_to_temp_id *)
 val mk_destruct_tuple: id_t -> value_type_t list -> string -> expr_t -> expr_t
