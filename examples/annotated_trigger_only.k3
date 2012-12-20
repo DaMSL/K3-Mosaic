@@ -1,4 +1,4 @@
-declare events : {|(int,int)|} @ { 0->1; index(1) }
+declare events : {|(int,int)|} @ { 0->*; index(1) }
 
 trigger on_event(a:int, b:int) {} = do {
   insert(events, (a,b))

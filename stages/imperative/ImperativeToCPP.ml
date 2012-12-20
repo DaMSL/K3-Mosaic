@@ -1032,29 +1032,35 @@ let rec rewrite_cmd_node mk_meta td child_l c =
 
   | Foreach (loop_var, loop_var_t, coll_expr) ->
     let decl_and_loop_cmds =
+      let mk_it_dv iterator_id end_iterator_id expr = 
+        let it_type, it_meta = let t = TExt (TIterator (type_of_expr expr)) in t, meta t in
+        let it_init, end_init =
+          Some(Init(U.mk_fn it_meta (Collection (CFExt BeginIterator)) [expr])),
+          Some(Init(U.mk_fn it_meta (Collection (CFExt EndIterator)) [expr]))
+        in
+        let iterator_decl = U.mk_var_decl iterator_id it_type it_init in
+        let end_iterator_decl = U.mk_var_decl end_iterator_id it_type end_init in
+          [U.mk_decl unit_meta iterator_decl; 
+           U.mk_decl unit_meta end_iterator_decl],
+          U.mk_var it_meta iterator_id, U.mk_var it_meta end_iterator_id
+      in
       let iterator_decls, iterator, end_iterator = match tag_of_expr coll_expr with
         | Var(id) ->
-          let iterator_id = "it_"^id in
-          let end_iterator_id = "end_"^id in
-          let it_type, it_meta = 
-            let t = TExt (TIterator (type_of_expr coll_expr)) in t, meta t
-          in
-          let it_init, end_init =
-            Some(Init(U.mk_fn it_meta (Collection (CFExt BeginIterator)) [coll_expr])),
-            Some(Init(U.mk_fn it_meta (Collection (CFExt EndIterator)) [coll_expr]))
-          in
-          let iterator_decl = U.mk_var_decl iterator_id it_type it_init in
-          let end_iterator_decl = U.mk_var_decl end_iterator_id it_type end_init in
-            [U.mk_decl unit_meta iterator_decl; 
-             U.mk_decl unit_meta end_iterator_decl],
-            U.mk_var it_meta iterator_id, U.mk_var it_meta end_iterator_id
+          let iterator_id, end_iterator_id = "it_"^id, "end_"^id
+          in mk_it_dv iterator_id end_iterator_id coll_expr
 
-        | _ -> failwith "non-reified loops are currently unsupported"
+        (* TODO: this causes repeated evaluation of coll_expr while declaraing
+         * iterators. This should be lifted and reified. *)
+        | _ -> mk_it_dv "c_it" "c_end" coll_expr
       in
       let test_expr = U.mk_op bool_meta Neq [iterator; end_iterator] in
       let advance_expr = U.mk_fn unit_meta (FExt IteratorIncrement) [iterator] in
+      let loop_body_decls =
+        let lv_init_expr = mk_fn (meta loop_var_t) (FExt IteratorElement) [iterator]
+        in [U.mk_decl unit_meta (U.mk_var_decl loop_var loop_var_t (Some (Init lv_init_expr)))]
+      in
       let for_tag = CExt (For (None, Some(test_expr), Some(advance_expr)))
-      in iterator_decls@[U.mk_cmd for_tag unit_meta children]
+      in iterator_decls@[U.mk_cmd for_tag unit_meta (loop_body_decls@children)]
     in
     ret @: U.mk_block unit_meta decl_and_loop_cmds
 
