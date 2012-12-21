@@ -206,35 +206,48 @@ let modify_delta p ast stmt target_trigger =
   let body = U.decompose_lambda lambda in
   let params = match U.tag_of_expr lambda with Lambda a -> a 
     | _ -> raise(UnhandledModification("No lambda")) in
-  let (lambda2, arg2) = U.decompose_apply body in
-  let body2 = U.decompose_lambda lambda2 in
-  let params2 = match U.tag_of_expr lambda2 with Lambda a -> a
-    | _ -> raise(UnhandledModification("No inner lambda")) in
-  let delta_name = list_head @: U.vars_of_lambda lambda2 in
-  mk_apply
-    (mk_lambda params @:
-        mk_apply 
-          (mk_lambda params2 @:
-              mk_block @:
-                body2 ::
-                [mk_send 
-                  (mk_const @: CTarget target_trigger)
-                  (mk_var "loopback") @:
-                  mk_var delta_name
-                ]
-          ) arg2
-    ) arg
-
-  (*let delta_calc =  in*)
-  (*mk_apply *)
-    (*(mk_lambda args @:*)
-      (*mk_let delta_calc arg2*)
-      (*mk_apply *)
-        (*lambda2 @:*)
-        (*mk_var delta_calc*)
-    (* arg*)
-
-
+  match U.tag_of_expr body with
+  | Apply -> (* simple modification *)
+    let (lambda2, arg2) = U.decompose_apply body in
+    let body2 = U.decompose_lambda lambda2 in
+    let params2 = begin match U.tag_of_expr lambda2 with 
+      | Lambda a -> a
+      | _ -> raise(UnhandledModification("No inner lambda")) end in
+    let delta_name = list_head @: U.vars_of_lambda lambda2 in
+    mk_apply
+      (mk_lambda params @:
+          mk_apply 
+            (mk_lambda params2 @:
+                mk_block @:
+                  body2 ::
+                  [mk_send 
+                    (mk_const @: CTarget target_trigger)
+                    (mk_var "loopback") @:
+                    mk_var delta_name
+                  ]
+            ) arg2
+      ) arg
+  | Iterate -> (* more complex modification *)
+    let (lambda2, col) = U.decompose_iterate body in
+    let params2 = begin match U.tag_of_expr lambda2 with 
+      | Lambda a -> a
+      | _ -> raise(UnhandledModification("No inner lambda")) end in
+    let delta_name = "__delta_values__" in
+    let delta_types = extract_arg_types @: U.typed_vars_of_arg params2 in
+    mk_apply
+      (mk_lambda params @:
+          mk_let delta_name (wrap_ttuple delta_types) col @:
+          mk_block @:
+            (mk_iter lambda2 @: 
+              mk_var delta_name)::
+            [mk_send
+              (mk_const @: CTarget target_trigger)
+              (mk_var "loopback") @:
+              mk_var delta_name
+            ]
+      ) 
+      arg
+  | _ -> raise (UnhandledModification(PR.string_of_expr ast))
 
 (* return a modified version of the original ast for s *)
 let modify_ast_for_s p ast stmt trig target_trig = 
