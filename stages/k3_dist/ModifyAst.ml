@@ -199,10 +199,48 @@ let modify_map_access p ast stmt =
     | _ -> e
   in T.modify_tree_bu_with_path ast modify
 
+(* this delta extraction is very brittle, since it's tailored to the way the K3
+ * calculations are written *)
+let modify_delta p ast stmt target_trigger =
+  let (lambda, arg) = U.decompose_apply ast in
+  let body = U.decompose_lambda lambda in
+  let params = match U.tag_of_expr lambda with Lambda a -> a 
+    | _ -> raise(UnhandledModification("No lambda")) in
+  let (lambda2, arg2) = U.decompose_apply body in
+  let body2 = U.decompose_lambda lambda2 in
+  let params2 = match U.tag_of_expr lambda2 with Lambda a -> a
+    | _ -> raise(UnhandledModification("No inner lambda")) in
+  let delta_name = list_head @: U.vars_of_lambda lambda2 in
+  mk_apply
+    (mk_lambda params @:
+        mk_apply 
+          (mk_lambda params2 @:
+              mk_block @:
+                body2 ::
+                [mk_send 
+                  (mk_const @: CTarget target_trigger)
+                  (mk_var "loopback") @:
+                  mk_var delta_name
+                ]
+          ) arg2
+    ) arg
+
+  (*let delta_calc =  in*)
+  (*mk_apply *)
+    (*(mk_lambda args @:*)
+      (*mk_let delta_calc arg2*)
+      (*mk_apply *)
+        (*lambda2 @:*)
+        (*mk_var delta_calc*)
+    (* arg*)
+
+
+
 (* return a modified version of the original ast for s *)
-let modify_ast_for_s p ast stmt trig = 
+let modify_ast_for_s p ast stmt trig target_trig = 
   let ast = ast_for_s p ast stmt trig in
   let ast = modify_map_access p ast stmt in
   let ast = modify_0d_map_access p ast stmt in
+  let ast = modify_delta p ast stmt target_trig in
   clean_ast_meta ast (* remove the meta info we used *)
 
