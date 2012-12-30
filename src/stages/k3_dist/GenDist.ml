@@ -739,8 +739,14 @@ mk_code_sink (do_complete_name_of_t p trig_name stmt_id)
      * need to take the variable in K3 and transform it by adding in the bound
      * variables so it matches the format of the lhs map *)
     (*mk_const CUnit*)
-    M.modify_ast_for_s p ast stmt_id trig_name @: 
-        send_corrective_name_of_t p @: lhs_map_of_stmt p stmt_id 
+    let lmap = lhs_map_of_stmt p stmt_id in
+    let send_to = 
+        if List.exists (fun m -> m = lmap) @: maps_potential_corrective p
+        then Some(send_corrective_name_of_t p lmap)
+        else None
+    in
+    M.modify_ast_for_s p ast stmt_id trig_name send_to
+        
     (* for now, we have dummy functions so we type-check
     let ast_stmt2 = subst_buffers (ast_of_stmt stmt_id) (rhs_maps_of_stmt stmt_id)
     in
