@@ -156,7 +156,7 @@ let modify_map_access p ast stmt =
       begin match U.tag_of_expr parent with
        (* if we have delete above us, we need the full structure of the map. If
         * not, we can project onto a collection without the vid *)
-        | Delete -> modify_slice e
+        | Delete -> modify_slice e  (* doesn't exist **** TODO *)
         | Iterate -> let (lambda, _) = U.decompose_iterate parent in
           let body = U.decompose_lambda lambda in
           begin match U.tag_of_expr body with
@@ -202,6 +202,9 @@ let modify_map_access p ast stmt =
 (* this delta extraction is very brittle, since it's tailored to the way the K3
  * calculations are written *)
 let modify_delta p ast stmt target_trigger =
+  let lmap = P.lhs_map_of_stmt p stmt in
+  let lmap_name = P.map_name_of p lmap in
+  let lmap_types = P.map_types_with_v_for p lmap in
   let (lambda, arg) = U.decompose_apply ast in
   let body = U.decompose_lambda lambda in
   let params = match U.tag_of_expr lambda with Lambda a -> a 
@@ -214,6 +217,18 @@ let modify_delta p ast stmt target_trigger =
       | Lambda a -> a
       | _ -> raise(UnhandledModification("No inner lambda")) end in
     let delta_name = list_head @: U.vars_of_lambda lambda2 in
+    let delta_types = extract_arg_types @: U.typed_vars_of_arg params2 in
+    let full_vars_code = 
+      let bindings = P.find_lmap_bindings_in_stmt p stmt lmap in
+      let full_types = P.map_add_v t_vid @: lmap_types @ delta_types in
+      let full_names = P.map_ids_add_v @: 
+         (fst @: List.split bindings) @ [delta_name] in
+      mk_tuple @:
+        P.map_add_v (mk_var "vid") @:
+          [mk_singleton 
+            (wrap_tset @: wrap_ttuple full_types) @:
+            mk_tuple @: ids_to_vars full_names 
+          ] in
     mk_apply
       (mk_lambda params @:
           mk_apply 
@@ -223,7 +238,7 @@ let modify_delta p ast stmt target_trigger =
                   [mk_send 
                     (mk_const @: CTarget target_trigger)
                     (mk_var "loopback") @:
-                    mk_var delta_name
+                    full_vars_code
                   ]
             ) arg2
       ) arg
@@ -233,17 +248,30 @@ let modify_delta p ast stmt target_trigger =
       | Lambda a -> a
       | _ -> raise(UnhandledModification("No inner lambda")) end in
     let delta_name = "__delta_values__" in
-    let delta_types = extract_arg_types @: U.typed_vars_of_arg params2 in
+    let delta_ids_types = U.typed_vars_of_arg params2 in
+    let delta_types = extract_arg_types delta_ids_types in
+    let delta_col_type = wrap_tset @: wrap_ttuple delta_types in
+    let delta_ids_types_with_v = P.map_ids_types_add_v delta_ids_types in
+    let delta_ids = extract_arg_names delta_ids_types in
+    let delta_ids_with_v = P.map_ids_add_v delta_ids in
     mk_apply
       (mk_lambda params @:
-          mk_let delta_name (wrap_ttuple delta_types) col @:
+          mk_let delta_name (delta_col_type) col @:
           mk_block @:
             (mk_iter lambda2 @: 
               mk_var delta_name)::
             [mk_send
               (mk_const @: CTarget target_trigger)
               (mk_var "loopback") @:
-              mk_var delta_name
+              mk_tuple @:
+                (mk_var "vid"):: (* project vid into collection *)
+                  [mk_map
+                    (mk_lambda 
+                      (wrap_args delta_ids_types) @:
+                      mk_tuple @: ids_to_vars delta_ids_with_v
+                    ) @:
+                    mk_var delta_name
+                  ]
             ]
       ) 
       arg
@@ -254,6 +282,8 @@ let modify_ast_for_s p ast stmt trig target_trig =
   let ast = ast_for_s p ast stmt trig in
   let ast = modify_map_access p ast stmt in
   let ast = modify_0d_map_access p ast stmt in
-  let ast = modify_delta p ast stmt target_trig in
-  clean_ast_meta ast (* remove the meta info we used *)
+  let ast = match target_trig with
+    | Some t -> modify_delta p ast stmt t
+    | None -> ast
+  in clean_ast_meta ast (* remove the meta info we used *)
 
