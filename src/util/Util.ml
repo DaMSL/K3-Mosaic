@@ -8,14 +8,6 @@ let compose f g = fun x -> f (g x)
 
 let (|-) = compose
 
-(* make a range from first to last. Tail recursive *)
-let create_range first length =
-    let rec range_inner index acc =
-        if index >= first+length then acc
-        else range_inner (index+1) (index::acc)
-    in
-    List.rev(range_inner first [])
-
 (* take the first x elements of a list *)
 let list_take len li =
   let rec take len2 li2 acc_list =
@@ -64,3 +56,23 @@ let read_file f =
         []
     with End_of_file -> !lines
   in close_in in_chan; String.concat "\n" all_lines 
+
+(* make a range from first to last. Tail recursive *)
+let create_range first length =
+    let rec range_inner index acc =
+        if index >= first+length then acc
+        else range_inner (index+1) (index::acc)
+    in
+    List.rev(range_inner first [])
+
+(* make a range that corresponds to a given list *)
+let create_corr_range first xs = create_range 0 @: List.length xs
+
+let insert_index_fst first xs = 
+    let is = create_corr_range first xs in
+    list_zip is xs
+
+let insert_index_snd first xs = 
+    let is = create_corr_range first xs in
+    list_zip xs is
+
