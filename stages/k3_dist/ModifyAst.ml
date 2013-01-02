@@ -6,6 +6,7 @@ module U = K3Util
 module P = ProgInfo
 module T = Tree
 module PR = K3Printing
+module Set = ListAsSet
 
 exception InvalidAst of string
 
@@ -36,6 +37,10 @@ let expr_of_trig = function
   Trigger (_, _, _, e) -> e
   | _ -> invalid_arg "expr_of_trig: not a trigger"
 
+let args_of_trig = function
+  Trigger (_, a, _, _) -> a
+  | _ -> invalid_arg "args_of_trig: not a trigger"
+
 let decl_for_t ast trig = 
   fst @: List.find (fun d -> try (id_of_trig |- fst) d = trig 
                       with Invalid_argument _ -> false) ast
@@ -61,6 +66,23 @@ let ast_for_s p ast stmt (trig:P.trig_name_t) =
   let trig_ast = expr_of_trig trig_decl in
   let s_idx = stmt_idx_in_t p trig stmt in
   block_nth trig_ast s_idx
+
+(* return the corrective args and AST for a given stmt, map, trig *)
+let corr_ast_for_m_s p ast map stmt trig =
+  let map_name = P.map_name_of p map in
+  let s_with_m = P.s_and_over_stmts_in_t p P.rhs_maps_of_stmt trig in
+  let s_with_m_filter = List.filter (fun (_,m) -> m = map) s_with_m in
+  let s_i = insert_index_snd 0 @: fst @: List.split s_with_m_filter in
+  let stmt_idx = List.assoc stmt s_i in
+
+  let trig_name = "correct_"^map_name^"_for_"^trig in
+  let trig_decl = decl_for_t ast trig_name in
+  let trig_ast = expr_of_trig trig_decl in
+  let args = U.typed_vars_of_arg @: args_of_trig trig_decl in
+  let trig_args = P.args_of_t p trig in 
+  (* remove the trigger args from the list of args in the corrective trigger *)
+  let args2 = Set.diff args trig_args
+  in (args2, block_nth trig_ast stmt_idx)
 
 let maps_with_existing_out_tier p stmt =
   let maps = P.map_names_ids_of_stmt p stmt in
@@ -141,7 +163,9 @@ let modify_map_access p ast stmt =
         let (col, pat) = U.decompose_slice e in
         begin match U.tag_of_expr col with 
           | Var id -> 
-            let m = List.assoc id maps_n_id in
+            let m = try List.assoc id maps_n_id 
+              with Not_found -> raise(UnhandledModification("No "^id^
+                " map found in stmt "^string_of_int stmt)) in
             let m_id_t = P.map_ids_types_for p m in
             let m_ids = extract_arg_names m_id_t in
             let m_id_t_v = P.map_ids_types_with_v_for p m in 
@@ -286,4 +310,12 @@ let modify_ast_for_s p ast stmt trig target_trig =
     | Some t -> modify_delta p ast stmt t
     | None -> ast
   in clean_ast_meta ast (* remove the meta info we used *)
+
+(* return a modified version of the corrective update *)
+let modify_corr_ast p ast map stmt trig =
+  let (args, ast) = corr_ast_for_m_s p ast map stmt trig in
+  let ast = modify_map_access p ast stmt in
+  let ast = modify_0d_map_access p ast stmt in
+  (args, clean_ast_meta ast)
+
 

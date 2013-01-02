@@ -732,13 +732,6 @@ let do_complete_trig stmt_id =
 mk_code_sink (do_complete_name_of_t p trig_name stmt_id)
   (wrap_args @: args_of_t_with_v p trig_name)
   [] @: (* locals *)
-    (* in terms of substitution, we need to 
-     * a. switch read maps for buffers
-     * b. inject a send to the send_correctives trigger by either sending a
-     * single delta or sending a cse representing a slice of calculated data. We
-     * need to take the variable in K3 and transform it by adding in the bound
-     * variables so it matches the format of the lhs map *)
-    (*mk_const CUnit*)
     let lmap = lhs_map_of_stmt p stmt_id in
     let send_to = 
         if List.exists (fun m -> m = lmap) @: maps_potential_corrective p
@@ -746,15 +739,6 @@ mk_code_sink (do_complete_name_of_t p trig_name stmt_id)
         else None
     in
     M.modify_ast_for_s p ast stmt_id trig_name send_to
-        
-    (* for now, we have dummy functions so we type-check
-    let ast_stmt2 = subst_buffers (ast_of_stmt stmt_id) (rhs_maps_of_stmt stmt_id)
-    in
-    let delta_in_lhs_map = to_lhs_map_form (delta_var_of_stmt stmt_id)
-      (partial_key_from_bound stmt_id map_id trig_args)
-    in
-    inject_call_forward_correctives ast_stmt2 delta_in_lhs_map
-    *)
 in
 List.map (fun stmt -> do_complete_trig stmt) @: stmts_of_t p trig_name
 
@@ -852,8 +836,7 @@ List.map
 ;;
 
 (* do corrective triggers *)
-(* NOTE: we assume we're not sending the vid in the tuples *)
-let do_corrective_trigs p trig_name =
+let do_corrective_trigs p ast trig_name =
 List.map
   (fun (stmt_id, map_id) ->
     mk_code_sink 
@@ -862,18 +845,11 @@ List.map
         ["delta_tuples", wrap_tset @: wrap_ttuple @: map_types_with_v_for p map_id]
       )
       [] @: (* locals *)
-    (* NOTE: note sure if this function will be much different from regular
-     * do_completes once we have the right generated K3 "shadow functions" *)
-        mk_const CUnit
-      (* for now, we have dummy functions so we type-check
-      (*let ast_stmt2 = subst_buffers (ast_of_stmt stmt_id) (rhs_maps_of_stmt stmt_id)
-        in
-        let delta_in_lhs_map = to_lhs_map_form (delta_var_of_stmt stmt_id)
-          (partial_key_from_bound stmt_id map_id trig_args)
-        in
-        inject_call_forward_correctives ast_stmt2 delta_in_lhs_map
-      *)
-      *)
+        (*mk_const CUnit*)
+        let (args, ast) = M.modify_corr_ast p ast map_id stmt_id trig_name in
+        let args_v = map_ids_types_add_v args in
+        mk_iter (mk_lambda (wrap_args args_v) ast) @:
+          mk_var "delta_tuples"
   ) @:
   s_and_over_stmts_in_t p rhs_maps_of_stmt trig_name
 
@@ -886,7 +862,7 @@ let gen_dist_for_t p ast trig =
     rcv_push_trig p trig@
     do_complete_trigs p ast trig@
     rcv_correctives_trig p trig@
-    do_corrective_trigs p trig
+    do_corrective_trigs p ast trig
 
 (* Function to generate the whole distributed program *)
 let gen_dist p (ast:K3.AST.program_t) =
