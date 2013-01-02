@@ -15,15 +15,18 @@ type channel_impl_t =
 type resource_impl_env_t = (id_t * channel_impl_t) list
 
 (* Evaluation methods *)
-let value_of_string t = match t with
-  | TInt -> fun v -> VInt(int_of_string v)
-  | TFloat -> fun v -> VFloat(float_of_string v)
-  | _ -> fun v -> VString(v)
+let value_of_string t v = match t with
+  | TInt -> VInt(int_of_string v)
+  | TFloat -> VFloat(float_of_string v)
+  | _ -> VString(v)
 
 let pull_source i t s in_chan =
-	let signature = 
+	let tuple_val, signature = 
 		match t <| base_of %++ value_of |> (fun () -> raise (ResourceError i)) with
-		| TTuple(ts) -> List.map base_of ts
+    | TBool -> false, [TBool]
+    | TInt -> false, [TInt]
+    | TFloat -> false, [TFloat]
+		| TTuple(ts) -> true, List.map base_of ts
 		| _ -> raise (ResourceError i)
 	in
   begin 
@@ -32,8 +35,12 @@ let pull_source i t s in_chan =
 	  | (File _), CSV -> 
 	    (try 
          let next_record = Str.split (Str.regexp ",") (input_line in_chan) in
-	       Some (VTuple(List.map2 value_of_string signature next_record))
-       with End_of_file -> None)
+         let fields = List.map2 value_of_string signature next_record in
+         let r = if tuple_val then VTuple(fields) else List.hd fields
+         in Some (r)
+       with 
+        | Invalid_argument _ -> raise (ResourceError i)
+        | End_of_file -> None)
 	  | _ -> raise (ResourceError i)
   end
 

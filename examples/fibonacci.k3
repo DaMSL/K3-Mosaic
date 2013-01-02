@@ -1,7 +1,18 @@
-foreign print_integer:(int -> unit)
+declare final : {|int|}
 
-trigger start(n:int) {} = send(fibonacci, localhost:10000, n, 0, 1)
+trigger start(n:int) {} = send(fibonacci, localhost:10000, (n, 0, 1))
 
-trigger fibonacci(n:int, a:int, b:int) {} = if n == 0 then send(sink, localhost:10000, b) else send(fibonacci, localhost:10000, n - 1, b, a + b)
+trigger fibonacci(n:int, a:int, b:int) {} =
+  if n == 0
+  then send(result, localhost:10000, (b))
+  else send(fibonacci, localhost:10000, (n - 1, b, a + b))
 
-trigger sink(n:int) {} = print_integer(n)
+trigger result(n:int) {} = insert(final,n)
+
+role client {
+  source  s1 : int = file("data/a1.csv", csv)
+  bind    s1 -> start
+  consume s1
+}
+
+default role client

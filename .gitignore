@@ -12,6 +12,7 @@
 *.byte
 _build
 
+.project
 *.sublime-*
 
 Makefile.deps
