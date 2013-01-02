@@ -68,8 +68,7 @@ type dispatcher_t = fsm_t
 type dispatcher_env_t = fsm_env_t 
 
 type event_loop_t =
-  resource_env_t * resource_bindings_t *
-  dispatcher_env_t * (instruction_t list)
+  resource_env_t * dispatcher_env_t * (instruction_t list)
 
 (* Stringification *)
 val string_of_resource_bindings : resource_bindings_t -> string

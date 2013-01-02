@@ -121,8 +121,7 @@ type dispatcher_t = ResourceFSM.fsm_t
 type dispatcher_env_t = ResourceFSM.fsm_env_t 
 
 type event_loop_t =
-  resource_env_t * resource_bindings_t *
-  dispatcher_env_t * (instruction_t list)
+  resource_env_t * dispatcher_env_t * (instruction_t list)
 
 (* State identifier generation *)
 let state_sym_class = "FSM"
@@ -212,7 +211,7 @@ let compile_pattern resource_env resource_bindings fsm_env
     match p with 
 	  | Terminal id -> 
 	    if List.mem_assoc id resource_env then
-        let bindings = List.map fst (List.filter (fun (x,y) -> x=id) resource_bindings) in
+        let bindings = List.map snd (List.filter (fun (x,y) -> x=id) resource_bindings) in
         let resource = List.assoc id resource_env
         in terminal_f id on_success on_fail bindings resource  
 	    
@@ -287,43 +286,40 @@ let initial_resources_of_dispatcher d =
 
 (* Constructs an event loop for a flow program *)
 let event_loop_of_flow fp : event_loop_t =
-  let event_loop_of_flow_stmt (res_env, res_bind, d_env, instrs) (fs,_) =
+  let event_loop_of_flow_stmt ((pat_acc, bind_acc), (res_env, d_env, instrs)) (fs,_) =
     (* Binds a flow resource in the given resource and FSM environment.
      * For sources, we also include a self-repetition pattern in the FSM environment. *)
     match fs with
     | Source (Resource (id,r)) ->
-      let compile_fsm renv p = compile_dispatcher renv res_bind d_env p in
-      let nrenv, nd_env = match r with 
-	      | Handle (t,ct,cf) ->
-		      let self_p = Repeat(Terminal(id), UntilEOF) in
-          let nrenv = res_env@[id, (true,r)]
-	        in nrenv, d_env@[id, compile_fsm nrenv self_p]
-	    
-	      | Pattern p -> res_env, d_env@[id, compile_fsm res_env p]
-      in nrenv, res_bind, nd_env, instrs
+      let npats, nrenv, nd_env = match r with 
+	      | Handle (t,ct,cf) -> [id, Repeat(Terminal(id), UntilEOF)], res_env@[id, (true,r)], d_env
+	      | Pattern p -> [id, p], res_env, d_env
+      in (pat_acc@npats, bind_acc), (nrenv, nd_env, instrs)
 
     | Sink (Resource (id,r)) ->
-      let nrenv, nd_env = match r with 
-	      | Handle (t,ct,cf) -> res_env@[id, (false,r)], d_env
-	      | Pattern p -> 
-	        let p_fsm = compile_dispatcher res_env res_bind d_env p
-	        in res_env, d_env@[id, p_fsm]
-      in nrenv, res_bind, nd_env, instrs
+      let npats, nrenv, nd_env = match r with 
+	      | Handle (t,ct,cf) -> [], res_env@[id, (false,r)], d_env
+	      | Pattern p -> [id, p], res_env, d_env
+      in (pat_acc@npats, bind_acc), (nrenv, nd_env, instrs)
 
     | Bind (src_id, trig_id) ->
-      (res_env, (src_id, trig_id)::res_bind, d_env, instrs)
+      (pat_acc, (src_id, trig_id)::bind_acc), (res_env, d_env, instrs)
     
-    | Instruction i -> res_env, res_bind, d_env, (instrs@[i])
-    | _ ->  res_env, res_bind, d_env, instrs
+    | Instruction i ->
+      let compile_fsm (id,p) = id, compile_dispatcher res_env bind_acc d_env p in
+      let nd = List.map compile_fsm pat_acc
+      in ([], []), (res_env, d_env@nd, (instrs@[i]))
+
+    | _ ->  (pat_acc, bind_acc), (res_env, d_env, instrs)
   in
-  List.fold_left event_loop_of_flow_stmt ([],[],[],[]) fp
+  snd (List.fold_left event_loop_of_flow_stmt (([],[]), ([],[],[])) fp)
 
 
 (* Role environment constructor *)
-let event_loop_of_role (pr,pb,pde,pi) (role_env, default) (d,_) = match d with
+let event_loop_of_role (pr,pde,pi) (role_env, default) (d,_) = match d with
 	| Role(id, fp) -> 
-	  let r,b,de,i = event_loop_of_flow fp in
-	  (role_env@[id, (pr@r, pb@b, pde@de,pi@i)], default)
+	  let r,de,i = event_loop_of_flow fp in
+	  (role_env@[id, (pr@r,pde@de,pi@i)], default)
 	
 	| DefaultRole(id) -> 
 	  (try role_env, Some(id, List.assoc id role_env)
@@ -332,18 +328,18 @@ let event_loop_of_role (pr,pb,pde,pi) (role_env, default) (d,_) = match d with
 	| _ -> role_env, default
 
 (* Accumulates event loops based on all flow programs in a K3 program *)
-let event_loop_of_program (racc,bacc,dacc,iacc) (d,_) = match d with
+let event_loop_of_program (racc,dacc,iacc) (d,_) = match d with
   | Flow fp -> 
-  let r,b,dp,i = event_loop_of_flow fp in racc@r, bacc@b, dacc@dp, iacc@i 
-  | _ -> racc,bacc,dacc,iacc
+  let r,dp,i = event_loop_of_flow fp in racc@r, dacc@dp, iacc@i 
+  | _ -> racc,dacc,iacc
 
 (* For each role in a K3 program, returns a stream and FSM environment,
  * and source bindings. *)
 let roles_of_program k3_program =
-  List.fold_left (event_loop_of_role ([],[],[],[])) ([], None) k3_program
+  List.fold_left (event_loop_of_role ([],[],[])) ([], None) k3_program
 
 (* Same as roles_of_program, except with each role prepended with top-level
  * flows defined in the K3 program, making these act as global, common roles. *) 
 let extended_roles_of_program k3_program =
-  let init = List.fold_left event_loop_of_program ([],[],[],[]) k3_program
+  let init = List.fold_left event_loop_of_program ([],[],[]) k3_program
   in List.fold_left (event_loop_of_role init) ([], None) k3_program

@@ -87,18 +87,18 @@ let initialize_resources resource_env resource_impl_env d =
 let next_value resource_env resource_impl_env resource_ids =
   let random_element l = List.nth l (Random.int (List.length l)) in
   let channel_of_impl id = match List.assoc id resource_impl_env with
-      | In(Some(c)) -> c
-      | _ -> failwith "invalid channel for access"
+    | In(Some(c)) -> c
+    | _ -> failwith "invalid channel for access"
   in
   let access_resource id = match handle_of_resource resource_env id with
-    | Some (true, t, ct, cf) -> 
-      (try Some(id, (pull_source id t (ct,cf) (channel_of_impl id)))
-       with Not_found -> None) 
+    | Some (true, t, ct, cf) ->
+      (try pull_source id t (ct,cf) (channel_of_impl id)
+       with Not_found -> None)
     | _ -> None
   in
   let track_failed_access result_none_f finished id = match access_resource id with
 	  | None -> result_none_f (id::finished) 
-	  | x -> finished, x
+	  | x -> finished, Some(id,x)
   in
   let rec randomize_access failed resource_ids = match resource_ids with
 	  | [] -> failed, None
@@ -113,7 +113,7 @@ let next_value resource_env resource_impl_env resource_ids =
 let rec run_dispatcher_step address d state_opt origin value =
   let module A = ResourceActions in
   let module F = ResourceFSM in 
-    let next_access state_id = pre_entry_of_state (state_id, (List.assoc state_id d)) in
+  let next_access state_id = pre_entry_of_state (state_id, (List.assoc state_id d)) in
   let state = match state_opt with None -> (fst (List.hd d)) | Some (x) -> x in
   try
     let (id, (match_action, next)), (fail_action, fail) = List.assoc state d in
@@ -137,23 +137,29 @@ let rec run_dispatcher_step address d state_opt origin value =
  * from the list of resources *)
 let run_dispatcher address resource_env resource_impl_env d =
   let init_value o v = ref o, ref v in
+  let init_finished () = failwith "no value found during initialization" in
   let assign_value origin value o v = origin := o; value := v in
   let ri_env, rids =
     let x = initialize_resources resource_env resource_impl_env d 
     in x, List.map fst x
-  in
+  in  
   let finished_resources, resources_remain = ref [], ref true in
-  let get_value value_f resources =
-    match next_value resource_env resource_impl_env resources with
+  let get_value value_f finished_f resources =
+    match next_value resource_env ri_env resources with
     | f, Some(o,Some(v)) ->
       finished_resources := ListAsSet.union !finished_resources f;
       resources_remain := ListAsSet.diff rids !finished_resources <> [];
       value_f o v
-    | _, _ -> failwith "no value available from resources"
+    
+    | f, _ ->
+      finished_resources := ListAsSet.union !finished_resources f;
+      resources_remain := ListAsSet.diff rids !finished_resources <> [];
+      finished_f ()
+
   in
   let state, (origin, value) =
     let s, rids = initial_resources_of_dispatcher d
-    in ref(Some(s)), get_value init_value rids
+    in ref(Some(s)), get_value init_value init_finished rids
   in
   while !state <> None && !resources_remain do 
     match run_dispatcher_step address d !state !origin !value with
@@ -166,7 +172,7 @@ let run_dispatcher address resource_env resource_impl_env d =
     | rejected, next_state, next_access ->
         (* TODO: buffer rejected as desired *)
         state := next_state;
-        get_value (assign_value origin value)
+        get_value (assign_value origin value) (fun () -> ())
           (ListAsSet.diff next_access !finished_resources)
   done;
   ri_env

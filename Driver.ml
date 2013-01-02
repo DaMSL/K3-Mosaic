@@ -248,9 +248,8 @@ let interpret params =
   List.iter eval_fn params.input_files
 
 (* Print actions *)
-let print_event_loop (id, (res_env, res_bindings, ds_env, instrs)) = 
+let print_event_loop (id, (res_env, ds_env, instrs)) = 
     print_endline ("----Role "^id^" Flow Program----");
-    print_string (string_of_resource_bindings res_bindings);
     print_string (string_of_resource_env res_env);
     print_string (string_of_dispatcher_env ds_env)
 

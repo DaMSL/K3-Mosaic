@@ -27,6 +27,7 @@ let integer = digit+
 let real = digit+ '.' digit+
 
 let identifier = ['_''a'-'z''A'-'Z']['_''a'-'z''A'-'Z''0'-'9']*
+let ip4 = digit+ '.' digit+ '.' digit+ '.' digit+
 
 let sl_comment     = "//"[^'\n' '\r']*
 let ml_comment_st  = "/*"
@@ -157,6 +158,7 @@ rule tokenize = parse
     | "parallel"      { PARALLEL }
 
     | identifier as name { IDENTIFIER (name) }
+    | ip4 as ip { IP(ip) }
 
 and comment depth = parse
 | ml_comment_st  { raise (Failure ("nested comments are invalid")) }

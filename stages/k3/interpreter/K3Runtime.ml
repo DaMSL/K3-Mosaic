@@ -116,22 +116,22 @@ let schedule_trigger v_target v_address args = match v_target, v_address with
   | _, _ -> raise (RuntimeError (error INVALID_TRIGGER_TARGET))
 
 let schedule_event source_bindings source_id source_address events =
-  try 
-    let trigger_ids = List.map snd
-      (List.filter (fun (x,y) -> x = source_id) source_bindings)
-    in List.iter (fun trigger_id ->
-          let schedule_fn =
-            schedule_trigger (VTarget trigger_id) (VAddress source_address)
-          in List.iter schedule_fn events
-        ) trigger_ids
+  let schedule_fn trig_id = schedule_trigger (VTarget trig_id) (VAddress source_address) in 
+  try
+    let trigger_ids = List.map snd (List.filter (fun (x,y) -> x = source_id) source_bindings) in 
+    List.iter (fun trigger_id -> List.iter (schedule_fn trigger_id) events) trigger_ids
   with Not_found -> () 
 
 
 (* Scheduler execution *)
 
 let continue_processing address =
-  not (Queue.is_empty (get_global_queue address))
-  && !events_processed < scheduler_params.events_to_process
+  let has_messages = not (Queue.is_empty (get_global_queue address)) in 
+  let events_remain = 
+    scheduler_params.events_to_process < Int64.zero ||
+    !events_processed < scheduler_params.events_to_process
+  in
+  has_messages && events_remain
 
 let invoke_trigger address (trigger_env, val_env) trigger_id arg =
   (List.assoc trigger_id trigger_env) val_env arg;
@@ -144,7 +144,9 @@ let process_trigger_queue address env trigger_id max_to_process =
     try invoke_trigger address env trigger_id (Queue.take q);
         decr processed
     with Not_found -> raise (RuntimeError (error INVALID_TRIGGER_QUEUE))
-  done
+  done;
+  if not (Queue.is_empty q) then 
+    schedule_task address (BlockDispatch (trigger_id, dispatch_block_size()))
 
 let process_task address env =
   try
@@ -161,12 +163,10 @@ let process_task address env =
   with Queue.Empty -> raise (RuntimeError (error INVALID_GLOBAL_QUEUE))
 
 let initialize_scheduler address (trig_env,_) =
-  List.iter (fun (id, _) ->
-      if not(is_node address) then register_node address; 
-      register_trigger address id
-    ) trig_env
+  if not(is_node address) then register_node address; 
+  List.iter (fun (id, _) -> register_trigger address id) trig_env
 
 let run_scheduler address env =
   while continue_processing address do
-    process_task address env
+    process_task address env;
   done

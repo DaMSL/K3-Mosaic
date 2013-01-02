@@ -552,12 +552,13 @@ let env_of_program k3_program =
 
 
 (* Instruction interpretation *)
-let eval_instructions env address (res_env, res_bindings, d_env, instrs) =
+let eval_instructions env address (res_env, d_env, instrs) =
   let run_instruction ri_env i = match i with
     | Consume id ->
       print_endline ("Consuming from event loop: "^id);
-      try let i = List.assoc id d_env
-          in run_dispatcher address res_env ri_env i
+      try let i = List.assoc id d_env in 
+          let r = run_dispatcher address res_env ri_env i
+          in run_scheduler address env; r
       with Not_found -> interpreter_error ("no event loop found for "^id)
   in 
   let init_ri_env = [] 

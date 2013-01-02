@@ -1,7 +1,13 @@
 declare events : {|(int,int)|}
+declare events2 : {|(int,int)|}
 
 trigger on_event(a:int, b:int) {} = do {
-  insert(events, (a,b))
+  insert(events, (a,b));
+  send(duplicate, 127.0.0.1:10000, (a, b))
+}
+
+trigger duplicate(a:int, b:int) {} = do {
+  insert(events2, (a,b))
 }
 
 role client {

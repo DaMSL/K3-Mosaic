@@ -45,6 +45,8 @@
   let id_error () = print_error("Expected identifier")
   let type_error () = print_error("Expected type expression")
   
+  let address_error ip port = print_error("Invalid address "^ip^":"^(string_of_int port))
+
   let op_error op_class i = 
     let op_type = match i with 1 -> " unary" | 2 -> " binary" | 3 -> " ternary" | _ -> ""
     in print_error("Invalid"^op_type^" "^op_class^" operator syntax")
@@ -130,7 +132,7 @@
 %token ANNOTATE
 %token RASSOC KEY INDEX UNIQUE ORDERED SEQUENTIAL RANDOMACCESS EFFECT PARALLEL
 
-%token <string> IDENTIFIER
+%token <string> IDENTIFIER IP
 
 %start program
 %start expression_test
@@ -415,7 +417,11 @@ expr:
     | expr LPAREN tuple RPAREN { mkexpr Apply [$1; $3] }
 
     /* TODO: more error handling */
+    | SEND LPAREN IDENTIFIER COMMA address COMMA error { print_error("Invalid send argument") }
+    | SEND LPAREN IDENTIFIER COMMA error { print_error("Invalid send address") }
+    | SEND LPAREN error { print_error("Invalid send target") }
     | SEND error { print_error("Invalid send syntax") }
+
     | expr LPAREN error { print_error("Function application error") }
 ;
 
@@ -490,6 +496,12 @@ variable:
 
 address:
     | IDENTIFIER COLON INTEGER { CAddress($1,$3) }
+    | IP COLON INTEGER { 
+        let parts = Str.split (Str.regexp_string ".") $1 in
+        let valid = List.for_all (fun x -> (int_of_string x) < 256) parts in
+        if valid then CAddress(String.concat "." parts, $3)
+        else address_error $1 $3
+      }
 ;
 
 arithmetic:

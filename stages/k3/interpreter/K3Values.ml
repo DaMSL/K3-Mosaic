@@ -85,7 +85,7 @@ let rec print_value v =
 let string_of_value v = wrap_formatter (fun () -> print_value v)
 
 (* Environment stringification *)
-let print_binding (id,v) = pc(); ps "id="; ps id; pc(); print_value v
+let print_binding (id,v) = pc(); ob(); ps (id^" = "); pc(); print_value v; cb()
  
 let print_frame frame = List.iter print_binding frame
   
@@ -98,6 +98,7 @@ let print_env (globals, frames) =
     List.iter print_frame frames
 
 let print_trigger_env env =
+  ps ("----Triggers("^(string_of_int @: List.length env)^")----"); fnl();
   List.iter (fun (id,_) -> ps id; fnl()) env
 
 let print_program_env (trigger_env,val_env) =

@@ -343,15 +343,13 @@ struct
     let parent = if parent_class_id = "" then None else Some(TNamed (parent_class_id))
     in Some(DClass(class_id, parent, sender_decls))
   
-  (* TODO: improve support for collections *)
+
   let generate_receiver mk_meta class_id parent_class_id resource_env protospec =
     let m = meta mk_meta in
     let unit_meta, int_meta, serialized_meta = m unit_t, m int_t, m S.serialized_type in
     let call_method = call_method_proc mk_meta in
-
     let trig_specs = ListAsSet.no_duplicates (snd protospec) in
     let scheduler_var = mk_var (m runtime_type) runtime_var_id in
-
 	  let recvrs_by_type =
 	    List.fold_left (fun acc (id,arg,asig) ->
 	      let t = tuple_type_of_arg arg in
@@ -360,13 +358,11 @@ struct
              in (List.remove_assoc (asig,t) acc)@[(asig,t), existing@[id,arg]]
 	    ) [] trig_specs 
 	  in
-
     let mk_recvr_class_id id = "recv_dispatch_"^id in 
     let decompose_tuple_expr e = match tag_of_expr e with 
       | Tuple -> sub_tree e
       | _ -> failwith "invalid tuple deserialization"
     in
-
     let deserialize_msg_cmds event_var arg_t serialized_t = 
       let ds_cmds, ds_expr =
         S.generate_deserialize mk_meta

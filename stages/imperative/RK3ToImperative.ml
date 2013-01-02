@@ -1138,7 +1138,7 @@ let imperative_of_instruction mk_meta ds_env instr =
 (* Generates a role implementation class, which includes handles for resources
  * used in the role, as well as instruction objects for each specialized
  * instruction used by the role. *)
-let imperative_of_event_loop mk_meta role_id (res_env, res_bindings, ds_env, instrs) =
+let imperative_of_event_loop mk_meta role_id (res_env, ds_env, instrs) =
   let meta t = t, mk_meta() in
   let unit_meta, int_meta = meta U.unit_t, meta U.int_t in
 
@@ -1311,7 +1311,7 @@ let imperative_of_roles mk_meta prog =
   let roles, default_role = roles_of_program prog in
   let role_decls = List.fold_left (fun acc (id,evt_loop) ->
       let role_recvr_decl =
-        let renv, _, _, _ = evt_loop in
+        let renv, _, _ = evt_loop in
         let d =
           MGen.generate_receiver
             mk_meta ("role_"^id^"_receiver") "k3_receiver" renv ([],[])
