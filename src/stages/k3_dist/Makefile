@@ -1,6 +1,6 @@
 # Makefile for the K3 distributed programming language.
 
-k3_dist = stages/k3_dist
+k3_dist = src/stages/k3_dist
 k3 = ../k3
 
 all: GenDist.cmi GenDist.cmo rst.cmi rst.cmo 

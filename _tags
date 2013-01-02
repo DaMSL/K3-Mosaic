@@ -1,10 +1,10 @@
 <util>: include
 <tests>: include
-<stages/k3>: include
-<stages/k3/{core,parser,interpreter,utils}>: include
-<stages/imperative>: include
-<stages/m3>: include
-<stages/k3_dist>: include
+<src/stages/k3>: include
+<src/stages/k3/{core,parser,interpreter,utils}>: include
+<src/stages/imperative>: include
+<src/stages/m3>: include
+<src/stages/k3_dist>: include
 
 true: use_str
 true: use_unix

@@ -9,29 +9,29 @@ FILES=\
 	../util/Symbols \
 	../util/Printing \
 	../util/Tree \
-	../stages/k3/core/K3AST \
-	../stages/k3/core/K3Annotations \
-	../stages/k3/K3 \
-	../stages/k3/utils/K3Util \
-	../stages/k3/utils/K3Printing \
-	../stages/k3/utils/K3Helpers \
-	../stages/k3/core/K3Streams \
-	../stages/k3/K3Typechecker \
-	../stages/k3_dist/ProgInfo \
-	../stages/k3_dist/K3Ring \
-	../stages/k3_dist/K3Route \
-	../stages/k3_dist/K3Shuffle \
-	../stages/k3_dist/GenDist \
+	../src/stages/k3/core/K3AST \
+	../src/stages/k3/core/K3Annotations \
+	../src/stages/k3/K3 \
+	../src/stages/k3/utils/K3Util \
+	../src/stages/k3/utils/K3Printing \
+	../src/stages/k3/utils/K3Helpers \
+	../src/stages/k3/core/K3Streams \
+	../src/stages/k3/K3Typechecker \
+	../src/stages/k3_dist/ProgInfo \
+	../src/stages/k3_dist/K3Ring \
+	../src/stages/k3_dist/K3Route \
+	../src/stages/k3_dist/K3Shuffle \
+	../src/stages/k3_dist/GenDist \
 
 TOPLEVEL_FILES=\
 	DistTest \
 
 DIRS=\
 	../util\
-	../stages/k3 \
-	../stages/k3/core \
-	../stages/k3/utils \
-	../stages/k3_dist \
+	../src/stages/k3 \
+	../src/stages/k3/core \
+	../src/stages/k3/utils \
+	../src/stages/k3_dist \
 
 #################################################
 

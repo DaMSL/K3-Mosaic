@@ -3,76 +3,76 @@
 include Makefile.inc
 
 FILES=\
-	util/Util \
-	util/ListAsSet \
-	util/Symbols \
-	util/Printing \
-	util/Tree \
-	stages/k3/core/K3AST \
-	stages/k3/core/K3Annotations \
-	stages/k3/K3 \
-	stages/k3/utils/K3Util \
-	stages/k3/utils/K3Printing \
-	stages/k3/utils/K3Helpers \
-	stages/k3/core/K3Streams \
-	stages/k3/K3Typechecker \
-	stages/k3/interpreter/K3Values \
-	stages/k3/interpreter/K3Runtime \
-	stages/k3/interpreter/K3Consumption \
-	stages/k3/interpreter/K3Interpreter \
-	stages/k3_dist/ProgInfo \
-	stages/k3_dist/K3Ring \
-	stages/k3_dist/K3Route \
-	stages/k3_dist/K3Shuffle \
-	stages/k3_dist/GenDist \
-	stages/imperative/ReifiedK3 \
-	stages/imperative/Imperative \
-	stages/imperative/ImperativeUtil \
-	stages/imperative/Runtime \
-	stages/imperative/Remoting \
-	stages/imperative/RK3ToImperative \
-	stages/imperative/CPP \
-	stages/imperative/CPPTyping \
-	stages/imperative/ImperativeToCPP \
-	stages/m3/Debug \
-	stages/m3/ListExtras \
-	stages/m3/ListAsFunction \
-	stages/m3/FreshVariable \
-	stages/m3/M3Type \
-	stages/m3/M3Constants \
-	stages/m3/M3Functions \
-	stages/m3/Schema \
-	stages/m3/Ring \
-	stages/m3/Arithmetic \
-	stages/m3/Calculus \
-	stages/m3/CalculusPrinter \
-	stages/m3/Plan \
-	stages/m3/M3 \
-	stages/m3/M3ToK3 \
-	stages/m3/M3ProgInfo \
+	src/util/Util \
+	src/util/ListAsSet \
+	src/util/Symbols \
+	src/util/Printing \
+	src/util/Tree \
+	src/stages/k3/core/K3AST \
+	src/stages/k3/core/K3Annotations \
+	src/stages/k3/K3 \
+	src/stages/k3/utils/K3Util \
+	src/stages/k3/utils/K3Printing \
+	src/stages/k3/utils/K3Helpers \
+	src/stages/k3/core/K3Streams \
+	src/stages/k3/K3Typechecker \
+	src/stages/k3/interpreter/K3Values \
+	src/stages/k3/interpreter/K3Runtime \
+	src/stages/k3/interpreter/K3Consumption \
+	src/stages/k3/interpreter/K3Interpreter \
+	src/stages/k3_dist/ProgInfo \
+	src/stages/k3_dist/K3Ring \
+	src/stages/k3_dist/K3Route \
+	src/stages/k3_dist/K3Shuffle \
+	src/stages/k3_dist/GenDist \
+	src/stages/imperative/ReifiedK3 \
+	src/stages/imperative/Imperative \
+	src/stages/imperative/ImperativeUtil \
+	src/stages/imperative/Runtime \
+	src/stages/imperative/Remoting \
+	src/stages/imperative/RK3ToImperative \
+	src/stages/imperative/CPP \
+	src/stages/imperative/CPPTyping \
+	src/stages/imperative/ImperativeToCPP \
+	src/stages/m3/Debug \
+	src/stages/m3/ListExtras \
+	src/stages/m3/ListAsFunction \
+	src/stages/m3/FreshVariable \
+	src/stages/m3/M3Type \
+	src/stages/m3/M3Constants \
+	src/stages/m3/M3Functions \
+	src/stages/m3/Schema \
+	src/stages/m3/Ring \
+	src/stages/m3/Arithmetic \
+	src/stages/m3/Calculus \
+	src/stages/m3/CalculusPrinter \
+	src/stages/m3/Plan \
+	src/stages/m3/M3 \
+	src/stages/m3/M3ToK3 \
+	src/stages/m3/M3ProgInfo \
 
 TOPLEVEL_FILES=\
 	tests/Testing \
-	Driver \
+	src/Driver \
 
 LEXERS=\
-	stages/k3/parser/K3Lexer \
-	stages/m3/Calculuslexer \
+	src/stages/k3/parser/K3Lexer \
+	src/stages/m3/Calculuslexer \
 
 PARSERS=\
-	stages/k3/parser/K3Parser \
-	stages/m3/Calculusparser \
+	src/stages/k3/parser/K3Parser \
+	src/stages/m3/Calculusparser \
 
 DIRS=\
-	util\
-	stages/k3 \
-	stages/k3/core \
-	stages/k3/utils \
-	stages/k3/parser \
-	stages/k3/interpreter \
-	stages/k3_dist \
-	stages/m3 \
-	stages/imperative \
+	src/util\
+	src/stages/k3 \
+	src/stages/k3/core \
+	src/stages/k3/utils \
+	src/stages/k3/parser \
+	src/stages/k3/interpreter \
+	src/stages/k3_dist \
+	src/stages/m3 \
+	src/stages/imperative \
 	tests \
 
 INCLUDE_OBJ=\

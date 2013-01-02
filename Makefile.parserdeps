@@ -3,12 +3,12 @@
 # for the generated parser files.
 
 K3_PARSER_DEPS =\
-  stages/k3/K3
+  src/stages/k3/K3
 
-stages/k3/K3Parser.cmo: $(patsubst %,%.cmo,$(K3_PARSER_DEPS))
-stages/k3/K3Parser.cmx: $(patsubst %,%.cmx,$(K3_PARSER_DEPS))
-stages/k3/K3Lexer.cmo: stages/k3/K3Parser.cmo
-stages/k3/K3Lexer.cmx: stages/k3/K3Parser.cmx
+src/stages/k3/K3Parser.cmo: $(patsubst %,%.cmo,$(K3_PARSER_DEPS))
+src/stages/k3/K3Parser.cmx: $(patsubst %,%.cmx,$(K3_PARSER_DEPS))
+src/stages/k3/K3Lexer.cmo: src/stages/k3/K3Parser.cmo
+src/stages/k3/K3Lexer.cmx: src/stages/k3/K3Parser.cmx
 
-tests/Testing.cmo: stages/k3/K3Parser.cmo stages/k3/K3Lexer.cmo
-tests/Testing.cmx: stages/k3/K3Parser.cmx stages/k3/K3Lexer.cmx
+tests/Testing.cmo: src/stages/k3/K3Parser.cmo src/stages/k3/K3Lexer.cmo
+tests/Testing.cmx: src/stages/k3/K3Parser.cmx src/stages/k3/K3Lexer.cmx
