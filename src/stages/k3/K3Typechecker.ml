@@ -597,7 +597,7 @@ let rec deduce_expr_type trig_env cur_env utexpr =
             match t_address with TAddress -> 
                 let expected = canonical t_target_args in
                 if expected === t_args then TValue(canonical TUnit) 
-                else t_erroru name (VTMismatch(expected, t_args, "")) ()
+                else t_erroru name (VTMismatch(t_args, expected, "")) ()
             | _ -> t_erroru name (BTBad(t_address)) ()
 
     in attach_type current_type
