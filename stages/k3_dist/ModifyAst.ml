@@ -180,7 +180,6 @@ let modify_map_access p ast stmt =
       begin match U.tag_of_expr parent with
        (* if we have delete above us, we need the full structure of the map. If
         * not, we can project onto a collection without the vid *)
-        | Delete -> modify_slice e  (* doesn't exist **** TODO *)
         | Iterate -> let (lambda, _) = U.decompose_iterate parent in
           let body = U.decompose_lambda lambda in
           begin match U.tag_of_expr body with
@@ -190,22 +189,23 @@ let modify_map_access p ast stmt =
         | _      -> project_modify_slice e
       end
      (* handle a case where we're iterating over a collection that's modified *)
+     (* In the current code, that only happens when we iterate over a slice *)
     | Iterate -> let (lambda, col) = U.decompose_iterate e in
-      if is_modified col then
-        let body = U.decompose_lambda lambda in
-        let vid_avar = AVar("vid", t_vid) in
-        let args = U.arg_of_lambda lambda in
-        let mod_fn typ orig_typ = match typ with
-          | TTuple(ts) -> TTuple(P.map_add_v t_vid ts)
-          | t -> TTuple(P.map_add_v t_vid [orig_typ])
-        in let new_args = begin match args with
-          | Some(ATuple(vs)) -> ATuple(P.map_add_v vid_avar vs)
-          | Some(v) -> ATuple(P.map_add_v vid_avar [v])
-          (*| Some(AVar(v, t)) -> AVar(v, modify_tuple_type mod_fn t)*)
-          | _ -> raise(UnhandledModification("lambda not found"))
-        end
-        in set_modified @: mk_iter (mk_lambda new_args body) col
-      else e
+      begin match U.tag_of_expr col with
+        | Slice -> 
+          let body = U.decompose_lambda lambda in
+          let vid_avar = AVar("vid", t_vid) in
+          let args = U.arg_of_lambda lambda in
+          let mod_fn typ orig_typ = match typ with
+            | TTuple(ts) -> TTuple(P.map_add_v t_vid ts)
+            | t -> TTuple(P.map_add_v t_vid [orig_typ])
+          in let new_args = begin match args with
+            | Some(ATuple(vs)) -> ATuple(P.map_add_v vid_avar vs)
+            | Some(v) -> ATuple(P.map_add_v vid_avar [v])
+            | _ -> raise(UnhandledModification("lambda not found"))
+          end
+          in set_modified @: mk_iter (mk_lambda new_args body) col
+        | _ -> e end
     (* handle a case when the map is applied to a lambda *)
     | Apply  -> let (l, arg) = U.decompose_apply e in
       begin match U.tag_of_expr arg with
@@ -216,10 +216,8 @@ let modify_map_access p ast stmt =
                 (mk_lambda 
                   (wrap_args [id, wrap_tset @: wrap_ttuple lmap_types]) b)
                 arg
-            | _ -> raise (UnhandledModification(PR.string_of_expr e))
-          end
-        | _ -> mk_apply l arg
-      end
+            | _ -> raise (UnhandledModification(PR.string_of_expr e)) end
+        | _ -> mk_apply l arg end
     | _ -> e
   in T.modify_tree_bu_with_path ast modify
 
