@@ -131,7 +131,7 @@ let modify_map_access p ast stmt =
        * map, such as when deleting *)
       let modify_slice e = 
         let (col, pat) = U.decompose_slice e in
-          set_modified @: mk_slice col @:
+          mk_slice col @:
             begin match U.tag_of_expr pat with
               | Tuple -> let xs = U.decompose_tuple pat in
                          mk_tuple @: P.map_add_v var_vid xs
@@ -177,15 +177,12 @@ let modify_map_access p ast stmt =
           let body = U.decompose_lambda lambda in
           let vid_avar = AVar("vid", t_vid) in
           let args = U.arg_of_lambda lambda in
-          let mod_fn typ orig_typ = match typ with
-            | TTuple(ts) -> TTuple(P.map_add_v t_vid ts)
-            | t -> TTuple(P.map_add_v t_vid [orig_typ])
-          in let new_args = begin match args with
+          let new_args = begin match args with
             | Some(ATuple(vs)) -> ATuple(P.map_add_v vid_avar vs)
             | Some(v) -> ATuple(P.map_add_v vid_avar [v])
             | _ -> raise(UnhandledModification("lambda not found"))
           end
-          in set_modified @: mk_iter (mk_lambda new_args body) col
+          in mk_iter (mk_lambda new_args body) col
         | _ -> e end
     (* handle a case when the map is applied to a lambda *)
     | Apply  -> let (l, arg) = U.decompose_apply e in
@@ -206,7 +203,6 @@ let modify_map_access p ast stmt =
  * calculations are written *)
 let modify_delta p ast stmt target_trigger =
   let lmap = P.lhs_map_of_stmt p stmt in
-  let lmap_name = P.map_name_of p lmap in
   let lmap_types = P.map_types_with_v_for p lmap in
   let (lambda, arg) = U.decompose_apply ast in
   let body = U.decompose_lambda lambda in
@@ -254,7 +250,6 @@ let modify_delta p ast stmt target_trigger =
     let delta_ids_types = U.typed_vars_of_arg params2 in
     let delta_types = extract_arg_types delta_ids_types in
     let delta_col_type = wrap_tset @: wrap_ttuple delta_types in
-    let delta_ids_types_with_v = P.map_ids_types_add_v delta_ids_types in
     let delta_ids = extract_arg_names delta_ids_types in
     let delta_ids_with_v = P.map_ids_add_v delta_ids in
     mk_apply
