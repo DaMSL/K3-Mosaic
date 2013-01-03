@@ -4,11 +4,6 @@ open Tree
 open K3.AST
 open K3.Annotation
 
-(* AST *)
-
-(* Extra type definitions for the parser *)
-type expression_test = program_t * expr_t * expr_t
-
 (* AST accessors *)
 let id_of_expr e = fst (fst_data e) 
 let tag_of_expr e = snd (fst_data e)

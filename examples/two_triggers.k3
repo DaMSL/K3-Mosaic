@@ -17,3 +17,11 @@ role client {
 }
 
 default role client
+
+// Uncomment when running in -test -prog mode
+/*
+expected 
+
+events  = {| (1,2); (3,4); (5,6) |},
+events2 = {| (1,2); (3,4); (5,6) |}
+*/

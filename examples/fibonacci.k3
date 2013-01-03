@@ -9,10 +9,27 @@ trigger fibonacci(n:int, a:int, b:int) {} =
 
 trigger result(n:int) {} = insert(final,n)
 
-role client {
+role client1 {
   source  s1 : int = file("data/a1.csv", csv)
   bind    s1 -> start
   consume s1
 }
 
-default role client
+role client2 {
+  source  s1 : int = file("data/a1-b.csv", csv)
+  bind    s1 -> start
+  consume s1
+}
+
+default role client1
+
+// Uncomment when running in -test -prog mode
+/*
+expected 
+
+// File 'a1.csv' contains '7'
+final = {| 21 |}
+
+// File 'a1-b.csv' contains '10'
+//final = {| 89 |}
+*/

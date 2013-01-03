@@ -581,7 +581,8 @@ let eval_program address role_opt k3_program =
   let event_loop = interpreter_event_loop role_opt k3_program in 
 		initialize_scheduler address env;
 		eval_instructions env address event_loop;
-    print_endline (string_of_program_env env)
+    print_endline (string_of_program_env env);
+    env
 
 
 (* Distributed program interpretation *)
@@ -589,9 +590,5 @@ let eval_program address role_opt k3_program =
 (* TODO: peer multiplexing *)
 let eval_networked_program peer_list k3_program =
   let env = env_of_program k3_program in
-  List.iter (fun (addr,role_opt) ->
-      let event_loop = interpreter_event_loop role_opt k3_program in
-        initialize_scheduler addr env;
-        eval_instructions env addr event_loop;
-        print_endline (string_of_program_env env)
-    ) peer_list
+  List.map (fun (addr,role_opt) ->
+    addr, eval_program addr role_opt k3_program) peer_list

@@ -168,6 +168,11 @@ type declaration_t
 (* K3 Programs *)
 type program_t = (declaration_t * annotation_t) list
 
+(* Testing *)
+type expression_test = program_t * expr_t * expr_t
+
+type program_test = program_t * (id_t * expr_t) list
+
 end
 
 

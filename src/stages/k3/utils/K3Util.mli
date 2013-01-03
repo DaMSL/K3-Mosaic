@@ -3,9 +3,6 @@ open K3.Annotation
 
 (* AST *)
 
-(* Extra type definitions for the parser *)
-type expression_test = program_t * expr_t * expr_t
-
 val id_of_expr : expr_t -> int 
 val tag_of_expr : expr_t -> expr_tag_t
 val meta_of_expr : expr_t -> annotation_t

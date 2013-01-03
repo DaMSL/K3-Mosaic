@@ -1,5 +1,5 @@
 declare data : {|int|} = {| 1; 2; 3; 4; 5 |}
-declare final : {| int |}
+declare final : {int}
 
 declare length : {| int |} -> int =
   \c : {| int |} -> fold(\(acc:int,i:int) -> acc+1, 0, c)
@@ -15,3 +15,10 @@ role client {
 }
 
 default role client
+
+expected
+
+// Uncomment when running in -test -prog mode
+/*
+final = { 5 }
+*/

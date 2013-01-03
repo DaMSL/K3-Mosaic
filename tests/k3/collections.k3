@@ -8,13 +8,13 @@
 // Map
 
 map(\x:int -> x+1, [1;2;3])
-expected [2;3;4]
+expected [2;3;4];
 
 map(\x:[int] -> map(\y:int -> y+1, x), [[1;2;3]; [5;6;7]])
-expected [[2;3;4]; [6;7;8]]
+expected [[2;3;4]; [6;7;8]];
 
 map(\x:{int} -> map(\y:int -> y+1, x), {{1;2;3}; {2;3;4}})
-expected {{2;3;4}; {3;4;5}}
+expected {{2;3;4}; {3;4;5}};
 
 ////////////////////////////
 // Filtermap
@@ -24,27 +24,27 @@ expected {{2;3;4}; {3;4;5}}
 // Fold
 
 fold(\(x:int,y:int) -> x+y, 0, map(\x:int -> x+1, [1;2;3]))
-expected 9
+expected 9;
 
 fold(\(x:int,y:int) -> x+y, 0, map(\x:int -> x*2, {1;2;3}))
-expected 12
+expected 12;
 
 // Error: the initializer element is typed as TUnknown
 //fold(\(x:{int},y:int) -> x++{y}, {}, map(\x:int -> x*2, {1;2;3}))
-//expected {2;4;6}
+//expected {2;4;6};
 
 // Set fold
 fold(\(x:{int},y:int) -> x++{y}, {1}, map(\x:int -> x*2, {1;2;3}))
-expected {1;2;4;6}
+expected {1;2;4;6};
 
 // Unique elements
 fold(\(x:{int},y:int) -> x++{y}, {1}, [1;1;1;1;2])
-expected {1;2}
+expected {1;2};
 
 // Set to list
 fold(\(x:[int],y:int) -> x++[y], [0],
      fold(\(x:{int},y:int) -> x++{y}, {1}, [1;1;1;1;2]))
-expected [0;1;2]
+expected [0;1;2];
 
 
 ///////////////
@@ -54,36 +54,36 @@ groupby(\(x:int,y:int) -> x,
         \(x:int,y:(int,int)) -> x+(\(a:int,b:int) -> b)(y), 0,
         [(1,1); (1,2); (1,3); (2,1); (2,2); (2,3)])
 
-expected [(1,6); (2,6)]
+expected [(1,6); (2,6)];
 
 
 groupby(\(x:int,y:int) -> x,
         \(x:{int},y:(int,int)) -> x++(\(a:int,b:int) -> {b})(y), {0},
         [(1,1); (1,2); (1,0); (2,1); (2,2); (2,2); (1,1); (2,0)])
 
-expected [(1,{0;1;2}); (2,{0;1;2})]
+expected [(1,{0;1;2}); (2,{0;1;2})];
 
 
 /////////////
 // Flatten
 
 flatten([[]; []])
-expected []
+expected [];
 
 // Error: the second expression is typed as TUnknown
 //flatten([[1]; []])
-//expected [1]
+//expected [1];
 
 // List flatten
 flatten([[1;2;3]; [3;2;1]])
-expected [1;2;3;3;2;1]
+expected [1;2;3;3;2;1];
 
 // Set flatten with duplicate elimination
 flatten({{1;2;3}; {3;2;1}})
-expected {1;2;3}
+expected {1;2;3};
 
 flatten(map(\x:{int} -> map(\y:int -> y+1, x), {{1;2;3}; {2;3;4}}))
-expected {2;3;4;5}
+expected {2;3;4;5};
 
 
 ////////////
@@ -91,42 +91,42 @@ expected {2;3;4;5}
 
 // Parse error
 //[0:1:10]
-//expected [0;1;2;3;4;5;6;7;8;9]
+//expected [0;1;2;3;4;5;6;7;8;9];
 
 map(\x:int -> x+1, [0:1:10])
-expected [1;2;3;4;5;6;7;8;9;10]
+expected [1;2;3;4;5;6;7;8;9;10];
 
 map(\x:float -> x, [0.0:0.5:10])
-expected [0.0; 0.5; 1.0; 1.5; 2.0; 2.5; 3.0; 3.5; 4.0; 4.5]
+expected [0.0; 0.5; 1.0; 1.5; 2.0; 2.5; 3.0; 3.5; 4.0; 4.5];
 
 map(\x:float -> x, [0.0:-0.5:10])
-expected [0.0; -0.5; -1.0; -1.5; -2.0; -2.5; -3.0; -3.5; -4.0; -4.5]
+expected [0.0; -0.5; -1.0; -1.5; -2.0; -2.5; -3.0; -3.5; -4.0; -4.5];
 
 
 ///////////
 // Sort
 
 sort([3;1;2], \(x:int,y:int) -> x < y)
-expected [1;2;3]
+expected [1;2;3];
 
 sort({3;1;2}, \(x:int,y:int) -> x >= y)
-expected [3;2;1]
+expected [3;2;1];
 
 sort({(3,2);(1,3);(2,1)},
      \(x:(int,int),y:(int,int)) ->
        (\(a:int,b:int) -> b)(x) >= (\(a:int,b:int) -> b)(y))
-expected [(1,3);(3,2);(2,1)]
+expected [(1,3);(3,2);(2,1)];
 
 
 //////////////
 // Iterate
 
 iterate(\i:int -> (), {0})
-expected ()
+expected ();
 
 declare c : {int}
 do { iterate(\i:int -> insert(c, i), {0; 1; 2}); c }
-expected {0; 1; 2}
+expected {0; 1; 2};
 
 //////////////
 // Peek
@@ -139,15 +139,15 @@ expected {0; 1; 2}
 
 declare x : {int}
 do { insert(x, 5); x }
-expected { 5 }
+expected { 5 };
 
 declare x : {int}
 do { insert(x, 5); insert(x, 5); x }
-expected { 5 }
+expected { 5 };
 
 declare x : {int}
 do { insert(x, 5); update(x, 5, 6); x }
-expected { 6 }
+expected { 6 };
 
 declare x : {int}
 do { insert(x, 5); delete(x, 5); x }

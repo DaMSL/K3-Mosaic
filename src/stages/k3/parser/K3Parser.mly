@@ -135,12 +135,14 @@
 %token <string> IDENTIFIER IP
 
 %start program
+%start program_test
 %start expression_test
 %start expr
 
-%type <K3.AST.program_t> program
-%type <K3Util.expression_test list> expression_test
-%type <K3.AST.expr_t> expr
+%type <K3.AST.program_t>            program
+%type <K3.AST.program_test>         program_test
+%type <K3.AST.expression_test list> expression_test
+%type <K3.AST.expr_t>               expr
 
 %right RARROW
 %right LRARROW
@@ -166,14 +168,25 @@
 %%
 
 program:
-    | declaration { if !numerrors>=1 then raise Exit else [$1, []] }
+    | declaration         { if !numerrors>=1 then raise Exit else [$1, []] }
     | declaration program { ($1, []) :: $2 }
 ;
 
+program_test:
+    | program EXPECTED named_expr_list     { ($1, $3) }
+    | program EXPECTED error               { print_error "invalid expected value list" }
+    | program error                        { print_error "no expected values specified for program test" }
+;
+
 expression_test:
-    | expr EXPECTED expr                   { [[], $1, $3] }
-    | program expr EXPECTED expr           { [$1, $2, $4] }
-    | expression_test expression_test      { $1@$2 }
+    | expr EXPECTED expr                             { [[], $1, $3] }
+    | program expr EXPECTED expr                     { [$1, $2, $4] }
+    | expression_test SEMICOLON expression_test      { $1@$3 }
+;
+
+named_expr_list:
+    | IDENTIFIER GETS expr                          { [$1, $3] }           
+    | IDENTIFIER GETS expr COMMA named_expr_list    { $5@[$1, $3] }
 ;
 
 declaration:
@@ -230,14 +243,11 @@ flow_statement:
       }
 
     | TRIGGER IDENTIFIER arg LBRACE error { print_error("Expected list of local declarations") }
+    | TRIGGER error                       { print_error("Invalid trigger") }
 
-    | TRIGGER error { print_error("Invalid trigger") }
-
-    | BIND IDENTIFIER RARROW error { print_error("Invalid bind target") }
-
-    | BIND SOURCE IDENTIFIER RARROW TRIGGER error { print_error("Invalid bind target") }
-
-    | BIND error { print_error("Invalid bind source") }
+    | BIND IDENTIFIER RARROW error                 { print_error("Invalid bind target") }
+    | BIND SOURCE IDENTIFIER RARROW TRIGGER error  { print_error("Invalid bind target") }
+    | BIND error                                   { print_error("Invalid bind source") }
 ;
 
 instruction:
@@ -382,7 +392,7 @@ contained_value_type_expr_list:
 ;
 
 annotated_collection_type:
-    | collection_type                         { $1,[] }
+    | collection_type                                     { $1,[] }
     | collection_type ANNOTATE LBRACE annotations RBRACE  { $1, $4 }
 ;
 
@@ -426,7 +436,7 @@ expr:
 ;
 
 expr_list:
-    | expr { [$1] }
+    | expr                 { [$1] }
     | expr COMMA expr_list { $1 :: $3 }
 ;
 
@@ -441,37 +451,34 @@ tuple:
 
 value_typed_identifier:
     | IDENTIFIER COLON isolated_value_type_expr { ($1, $3) }
-    | IDENTIFIER COLON error { type_error() }
+    | IDENTIFIER COLON error                    { type_error() }
 
 ;
 
 value_typed_identifier_list:
-    | value_typed_identifier { [($1)] }
+    | value_typed_identifier                                   { [($1)] }
     | value_typed_identifier COMMA value_typed_identifier_list { $1 :: $3 }
 ;
 
 arg:
     | UNKNOWN { AIgnored } 
-    | value_typed_identifier { AVar(fst $1, snd $1) }
-    | JUST arg { AMaybe($2) }
-    | LPAREN arg_list RPAREN  {
-        if List.length $2 == 1 then List.hd $2
-        else ATuple($2)
-    }
+    | value_typed_identifier  { AVar(fst $1, snd $1) }
+    | JUST arg                { AMaybe($2) }
+    | LPAREN arg_list RPAREN  { if List.length $2 == 1 then List.hd $2 else ATuple($2) }
 ;
 
 arg_list:
-    | arg { [($1)] } 
+    | arg                { [($1)] } 
     | arg COMMA arg_list { $1 :: $3 }
 
 constant:
-    | UNKNOWN { CUnknown }
-    | UNIT { CUnit }
-    | NOTHING { CNothing }
-    | BOOL { CBool($1) }
-    | INTEGER { CInt($1) }
-    | FLOAT { CFloat($1) }
-    | STRING { CString($1) }
+    | UNKNOWN   { CUnknown }
+    | UNIT      { CUnit }
+    | NOTHING   { CNothing }
+    | BOOL      { CBool($1) }
+    | INTEGER   { CInt($1) }
+    | FLOAT     { CFloat($1) }
+    | STRING    { CString($1) }
 ;
 
 range:
@@ -580,12 +587,12 @@ mutation:
 ;
 
 transformers:
-    | expr CONCAT expr { mkexpr Combine [$1; $3] }
-    | MAP LPAREN expr COMMA expr RPAREN { mkexpr Map [$3; $5] }
-    | ITERATE LPAREN expr COMMA expr RPAREN { mkexpr Iterate [$3; $5] }
-    | FILTERMAP LPAREN expr COMMA expr COMMA expr RPAREN { mkexpr FilterMap [$3; $5; $7] }
-    | FLATTEN LPAREN expr RPAREN { mkexpr Flatten [$3] }
-    | AGGREGATE LPAREN expr COMMA expr COMMA expr RPAREN { mkexpr Aggregate [$3; $5; $7] }
+    | expr CONCAT expr                                    { mkexpr Combine [$1; $3] }
+    | MAP LPAREN expr COMMA expr RPAREN                   { mkexpr Map [$3; $5] }
+    | ITERATE LPAREN expr COMMA expr RPAREN               { mkexpr Iterate [$3; $5] }
+    | FILTERMAP LPAREN expr COMMA expr COMMA expr RPAREN  { mkexpr FilterMap [$3; $5; $7] }
+    | FLATTEN LPAREN expr RPAREN                          { mkexpr Flatten [$3] }
+    | AGGREGATE LPAREN expr COMMA expr COMMA expr RPAREN  { mkexpr Aggregate [$3; $5; $7] }
     | GROUPBYAGGREGATE LPAREN expr COMMA expr COMMA expr COMMA expr RPAREN {
         mkexpr GroupByAggregate [$3; $5; $7; $9]
     }
