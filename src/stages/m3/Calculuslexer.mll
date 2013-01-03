@@ -48,14 +48,14 @@ let keywords =
       "SYSTEM",     SYSTEM;
       "READY",      READY;
       "CORRECT",    CORRECT;
-      "WITH",       WITH;
+      "WITH",       WITH_;
       "FOR",        FOR;
-      "INT",        TYPE(TInt);
-      "INTEGER",    TYPE(TInt);
-      "FLOAT",      TYPE(TFloat);
-      "DOUBLE",     TYPE(TFloat);
-      "DECIMAL",    TYPE(TFloat);
-      "STRING",     TYPE(TString);
+      "INT",        M3TYPE(TInt);
+      "INTEGER",    M3TYPE(TInt);
+      "FLOAT",      M3TYPE(TFloat);
+      "DOUBLE",     M3TYPE(TFloat);
+      "DECIMAL",    M3TYPE(TFloat);
+      "STRING",     M3TYPE(TString);
       "TRUE",       BOOL(true);
       "FALSE",      BOOL(false);
 (***** BEGIN EXISTS HACK *****)

@@ -360,11 +360,11 @@ let process_parameters params = match !(params.action) with
   | ExpressionTest -> test params
 
 let main () =
-    parse_cmd_line();
-    if (List.length cmd_line_params.input_files) < 1 then
-      (Arg.usage param_specs usage_msg;
-       error "\nNo input files specified");
-    
-    process_parameters cmd_line_params
+  parse_cmd_line();
+  if (List.length cmd_line_params.input_files) < 1 then
+    (Arg.usage param_specs usage_msg;
+     error "\nNo input files specified");
+  
+  process_parameters cmd_line_params
 
 let _ = Printexc.print main ()

@@ -1,4 +1,4 @@
-/* Parser for the K3 Programming Language */
+/* K3 Programming Language Parser  */
 
 %{
   open K3.AST
@@ -145,14 +145,14 @@
 %right RARROW
 %right LRARROW
 
-%right CONCAT
-
 %right IF THEN ELSE
 
-%left LT EQ LEQ NEQ GT GEQ
+%right CONCAT
 
 %left OR
 %left AND
+
+%left LT EQ LEQ NEQ GT GEQ
 
 %left PLUS MINUS
 %left TIMES DIVIDE MODULO

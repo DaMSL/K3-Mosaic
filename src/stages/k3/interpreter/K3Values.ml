@@ -85,7 +85,7 @@ let rec print_value v =
 let string_of_value v = wrap_formatter (fun () -> print_value v)
 
 (* Environment stringification *)
-let print_binding (id,v) = pc(); ob(); ps (id^" = "); pc(); print_value v; cb()
+let print_binding (id,v) = ob(); ps (id^" = "); pc(); print_value v; cb(); fnl()
  
 let print_frame frame = List.iter print_binding frame
   

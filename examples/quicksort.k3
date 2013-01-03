@@ -1,0 +1,79 @@
+declare data : [ int ] = [ 3; 7; 4; 1; 8; 6; 2; 5 ] // Input to sort
+declare final : { [int] } // Output datastructure
+
+// Merge tree symbol counter
+declare counter : {int} = { 0 }
+
+declare incr : unit -> unit = \_ -> 
+  (\i:int -> do { delete(counter, i); insert(counter,i+1) })( peek(counter) )
+
+declare gensym : unit -> int = \_ -> do { incr(()); peek(counter) }
+
+// Asynchronous (i.e. non-blocking) quicksort state.
+declare partials : [ (int, [int]) ]  // Pending merges
+declare parents  : [ (int, int, bool) ]  // Merge tree
+
+// Debugging datastructures
+/*
+declare pivots : [ (int, int) ]
+declare qsort_in : [ (int, bool, [int]) ]
+declare merge_in  : [ (int, bool, [int]) ]
+*/
+
+// Divide phase
+
+trigger qsort( parent : int, left : bool, c : [int] ) {
+  empty : [ int ], // TODO: hack for incomplete TUnknown type inference
+  lhs : [ int ],
+  rhs : [ int ]
+} = do {
+  //insert(qsort_in, (parent, left, c)); // Log qsort arguments
+	(\len:int ->
+	  if len <= 1 then
+	    send(merge, localhost:10000, (parent, left, if len == 0 then empty else [peek(c)]))
+
+	  else do {
+	  	(\(id:int, pivot:int) -> do {
+	  	  //insert(pivots, (parent, pivot));
+		    insert(parents, (parent, id, left));
+		    iterate(\x:int -> if x <= pivot then insert(lhs, x) else insert(rhs, x), c);
+		  	send(qsort, localhost:10000, (id, true, lhs));
+		  	send(qsort, localhost:10000, (id, false, rhs))
+	  	}
+	  	)( gensym(()), peek(c) ) // TODO: pick a better pivot.
+	  }
+	)( fold(\(acc:int,_) -> acc+1, 0, c) )
+}
+
+
+// Merge phase
+
+trigger merge( id : int, left : bool, c : [int] ) {} = do {
+	//insert(merge_in, (id, left, c)); // Log merge arguments
+	(\p:[(int, [int])] ->
+		if fold(\(acc:int,_) -> acc+1, 0, p) == 0 then insert(partials, (id, c))
+		else 
+		  // Proceed on binary barrier completion.
+			(\((parent:int, _, pleft:bool), merged:[int]) -> do {
+			    // Manual garbage collection. Comment to see partials and parents.
+			    /**/
+			    iterate(\x:(int,[int]) -> delete(partials,x), p);
+			    delete(parents, (parent, id, pleft));
+			    /**/
+			  	if parent == 0 then insert(final, merged)
+			  	else send(merge, localhost:10000, (parent, pleft, merged))
+			  }
+			) ( ( peek(parents[_,id,_]), (\(_,x:[int]) -> if left then c++x else x++c) (peek(p)) ) )
+	)( partials[id,_] )
+}
+
+trigger go(n:int) {} = send(qsort, localhost:10000, (0,true,data))
+
+role client {
+	// Kickstart with dummy value.
+  source  s1 : int = file("data/a1.csv", csv)
+  bind    s1 -> go
+  consume s1
+}
+
+default role client

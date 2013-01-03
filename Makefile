@@ -64,7 +64,8 @@ PARSERS=\
 	src/stages/m3/Calculusparser \
 
 DIRS=\
-	src/util\
+	lib/bolt \
+	src/util \
 	src/stages/k3 \
 	src/stages/k3/core \
 	src/stages/k3/utils \
@@ -76,22 +77,17 @@ DIRS=\
 	tests \
 
 INCLUDE_OBJ=\
-        str.cma\
-        unix.cma
+        str.cma \
+        unix.cma \
+        dynlink.cma \
+        bolt.cma
 
 
 #################################################
 
-#ML_FILES     := $(foreach f,$(FILES),$(wildcard $(f).ml))
-#MLI_FILES    := $(foreach f,$(FILES),$(wildcard $(f).mli))
-#BASE_FILES   := $(patsubst %.ml,%,$(ML_FILES))
-
 BASE_FILES     := $(FILES)
 GENERATED_FILES = $(PARSERS) $(LEXERS) 
 FILES += $(GENERATED_FILES)
-
-#ML_FILES  += $(patsubst %,%.ml,$(GENERATED_FILES))
-#MLI_FILES += $(patsubst %,%.mli,$(GENERATED_FILES))
 
 BC_FILES    =$(patsubst %,%.cmo,$(FILES))
 BC_INCLUDES =$(patsubst %,%.cmi,$(FILES))

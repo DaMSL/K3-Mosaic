@@ -1,0 +1,17 @@
+declare data : {|int|} = {| 1; 2; 3; 4; 5 |}
+declare final : {| int |}
+
+declare length : {| int |} -> int =
+  \c : {| int |} -> fold(\(acc:int,i:int) -> acc+1, 0, c)
+
+trigger track_length( n : int ) {} = do {
+  insert(final, length(data)) 
+}
+
+role client {
+  source  s1 : int = file("data/a1.csv", csv)
+  bind    s1 -> track_length
+  consume s1
+}
+
+default role client

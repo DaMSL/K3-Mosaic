@@ -1,3 +1,5 @@
+/* M3 Parser */
+
 %{
 open M3Type
 open M3Constants
@@ -21,7 +23,7 @@ type map_metadata =
 
 %}
 
-%token <M3Type.type_t> TYPE
+%token <M3Type.type_t> M3TYPE
 %token <string> ID STRING
 %token <int> INT
 %token <float> FLOAT
@@ -37,7 +39,7 @@ type map_metadata =
 %token FILE SOCKET FIXEDWIDTH LINE DELIMITED
 %token AGGSUM
 %token LIFT SETVALUE INCREMENT EXISTS
-%token CORRECT WITH FOR
+%token CORRECT WITH_ FOR
 
 // start
 %start statementList calculusExpr mapProgram mapTriggerStmt
@@ -102,7 +104,7 @@ adaptorParams:
 |   ID SETVALUE STRING COMMA adaptorParams { (String.lowercase $1,$3)::$5 }
 
 dbtType:
-| TYPE                      { $1 }
+| M3TYPE                    { $1 }
 | CHAR LPAREN INT RPAREN    { TString }
 | VARCHAR LPAREN INT RPAREN { TString }
 | VARCHAR                   { TString }
