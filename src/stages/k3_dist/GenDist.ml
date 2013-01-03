@@ -621,7 +621,7 @@ List.fold_left
 (* list of trig, stmt with a map on the rhs that's also on the lhs. These are
  * the potential corrective maps *)
 let maps_potential_corrective p =
-  let lhs_maps = for_all_stmts p @: lhs_map_of_stmt p in
+  let lhs_maps = ListAsSet.uniq @: for_all_stmts p @: lhs_map_of_stmt p in
   let rhs_maps = ListAsSet.uniq @: List.flatten @: 
     for_all_stmts p @: rhs_maps_of_stmt p in
   ListAsSet.inter lhs_maps rhs_maps
@@ -876,7 +876,7 @@ let gen_dist p (ast:K3.AST.program_t) =
     global_funcs @ (* maybe make this not order-dependent *)
     declare_foreign_functions p @
     filter_corrective_list ::  (* global func *)
-    [mk_flow
+    [mk_flow @:
       regular_trigs@
       send_corrective_trigs p]    (* per-map basis *)
   in U.renumber_program_ids prog
