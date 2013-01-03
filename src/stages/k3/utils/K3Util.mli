@@ -68,6 +68,9 @@ val triggers_of_program   : program_t -> flow_endpoint_t list
 
 val trigger_of_program  : id_t -> program_t -> flow_endpoint_t
 
+val id_of_code : flow_endpoint_t -> id_t
+val expr_of_code : flow_endpoint_t -> expr_t
+val args_of_code : flow_endpoint_t -> arg_t
 
 (* Returns all variables in an expression *)
 val vars_of_expr      : expr_t -> expr_t list

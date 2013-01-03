@@ -243,6 +243,19 @@ let trigger_of_program id p =
       | _ -> false 
     ) (triggers_of_program p)
 
+let id_of_code = function
+  Code (id, _, _, _) -> id
+  | _ -> invalid_arg "id_of_trig: not a trigger"
+
+let expr_of_code = function
+  Code (_, _, _, e) -> e
+  | _ -> invalid_arg "expr_of_trig: not a trigger"
+
+let args_of_code = function
+  Code (_, a, _, _) -> a
+  | _ -> invalid_arg "args_of_trig: not a trigger"
+
+
 
 (* Expression extraction *)
 
@@ -314,11 +327,19 @@ let renumber_ast_ids (exp:K3.AST.expr_t) num_ref =
 (* renumber ids for a whole program *)
 let renumber_program_ids prog =
   let num = ref 0 in
+  let handle_code x y z e = Code(x,y,z,renumber_ast_ids e num) in
+  let handle_flow acc = function
+    | (Source(Code(x,y,z,e)),a) -> (Source(handle_code x y z e),a)::acc
+    | (Sink(Code(x,y,z,e)),a)   ->   (Sink(handle_code x y z e),a)::acc
+    | x -> x::acc
+  in 
   let handle_dec acc = function
     | (Global(x, y, Some e),a) -> 
         (Global(x, y, Some (renumber_ast_ids e num)),a)::acc
-    | (Trigger(x, y, z, e),a) -> 
-        (Trigger(x, y, z, renumber_ast_ids e num),a)::acc
+    | (Flow(fs),a) -> 
+        (Flow(List.rev @: List.fold_left handle_flow [] fs),a)::acc
+    | (Role(id, fs),a) -> 
+        (Role(id, List.rev @: List.fold_left handle_flow [] fs),a)::acc
     | x -> x::acc
   in List.rev @: List.fold_left handle_dec [] prog
 
