@@ -1,6 +1,6 @@
-# Makefile for the K3 programming language lexer/parser/driver.
+# Makefile for the K3 programming language.
 
-include Makefile.inc
+include config/Makefile.inc
 
 FILES=\
 	src/util/Util \
@@ -125,9 +125,9 @@ TEST_BASE=\
 	tests/Testing \
 
 TESTS=\
-	tests/TypecheckerTest \
-	tests/InterpreterTest \
-	tests/M3ToK3Test \
+	tests/unit/TypecheckerTest \
+	tests/unit/InterpreterTest \
+	tests/unit/M3ToK3Test \
 
 TEST_BASE_FILES    := $(patsubst %,%.cmo, $(TEST_BASE))
 TEST_BASE_INCLUDES := $(patsubst %,%.cmi, $(TEST_BASE))
@@ -142,9 +142,9 @@ TEST_GARBAGE    := $(TEST_BASE_FILES) $(TEST_BASE_INCLUDES) $(TEST_FILES) $(TEST
 
 #################################################
 
-all: Makefile.local versioncheck k3 tests
+all: config/Makefile.local versioncheck k3 tests
 
-opt: Makefile.local versioncheck k3_opt
+opt: config/Makefile.local versioncheck k3_opt
 
 versioncheck:
 	@if [ $(shell ocaml -version | sed 's/.*version \(.*\)$$/\1/' | \
@@ -201,8 +201,8 @@ $(patsubst %,%.ml,$(PARSERS)) : %.ml : %.mly
 	@$(OCAMLYACC) $< 2>&1 | sed 's/^/  /'
 
 $(TEST_BINARIES) : bin/% : %.ml
-	@if [ ! -d bin/tests ] ; then \
-		mkdir -p bin/tests;\
+	@if [ ! -d bin/tests/unit ] ; then \
+		mkdir -p bin/tests/unit;\
 	fi
 	@echo Building $(*) test
 	@$(OCAMLCC) $(OCAML_FLAGS) -o bin/$(*) $(BC_FILES) $(TEST_BASE_FILES) $<
@@ -215,18 +215,18 @@ $(TEST_INCLUDES) :
 
 #################################################
 
-Makefile.deps: Makefile $(patsubst %,%.ml,$(BASE_FILES))
+config/Makefile.deps: Makefile $(patsubst %,%.ml,$(BASE_FILES))
 	@echo Computing Dependency Graph
 	@$(OCAMLDEP) $(patsubst %, -I %,$(DIRS)) \
 			$(patsubst %,%.ml,$(BASE_FILES)) > $@
 
-Makefile.local:
+config/Makefile.local:
 	@echo Initializing local configuration file
-	@cp config/Makefile.local.default Makefile.local
+	@cp $@.default $@
 
-include Makefile.deps
-include Makefile.parserdeps
-include Makefile.local
+include config/Makefile.deps
+include config/Makefile.parserdeps
+include config/Makefile.local
 
 #################################################
 

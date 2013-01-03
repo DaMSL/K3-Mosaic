@@ -1,14 +1,13 @@
-# Makefile for the K3 programming language lexer/parser/driver.
-# -- Based off DBToaster Makefiles. (Yanif) 
+# Makefile for the K3 programming language tests.
 
-include ../Makefile.inc
+include ../config/Makefile.inc
 
 FILES=\
-	../util/Util \
-	../util/ListAsSet \
-	../util/Symbols \
-	../util/Printing \
-	../util/Tree \
+	../src/util/Util \
+	../src/util/ListAsSet \
+	../src/util/Symbols \
+	../src/util/Printing \
+	../src/util/Tree \
 	../src/stages/k3/core/K3AST \
 	../src/stages/k3/core/K3Annotations \
 	../src/stages/k3/K3 \
@@ -27,7 +26,7 @@ TOPLEVEL_FILES=\
 	DistTest \
 
 DIRS=\
-	../util\
+	../src/util\
 	../src/stages/k3 \
 	../src/stages/k3/core \
 	../src/stages/k3/utils \
@@ -56,7 +55,7 @@ OCAMLOPT_FLAGS +=\
 
 #################################################
 
-all: Makefile.local versioncheck dist_test
+all: config/Makefile.local versioncheck dist_test
 
 versioncheck:
 	@if [ $(shell ocaml -version | sed 's/.*version \(.*\)$$/\1/' | \
@@ -97,17 +96,17 @@ $(patsubst %,%.cmxi,$(FILES)) :
 
 #################################################
 
-Makefile.deps: Makefile $(patsubst %,%.ml,$(BASE_FILES))
+config/Makefile.deps: Makefile $(patsubst %,%.ml,$(BASE_FILES))
 	@echo Computing Dependency Graph
 	@$(OCAMLDEP) $(patsubst %, -I %,$(DIRS)) \
 			$(patsubst %,%.ml,$(BASE_FILES)) > $@
 
-Makefile.local:
+config/Makefile.local:
 	@echo Initializing local configuration file
-	@cp ../config/Makefile.local.default Makefile.local
+	@cp ../config/Makefile.local.default $@
 
-include Makefile.deps
-include Makefile.local
+include config/Makefile.deps
+include config/Makefile.local
 
 #################################################
 
@@ -116,7 +115,7 @@ clean:
 	rm -f $(BC_FILES) $(BC_INCLUDES) $(BC_EXTRA_FILES) $(BC_EXTRA_INCLUDES)
 	rm -f $(NC_FILES) $(NC_INCLUDES) $(NC_EXTRA_FILES) $(NC_EXTRA_INCLUDES)
 	rm -f $(patsubst %,%.o,$(FILES)) $(patsubst %,%.o,$(EXTRA_FILES))
-	rm -f $(patsubst %,%.annot,$(FILES))
+	rm -f $(patsubst %,%.annot,$(FILES)) $(patsubst %,%.annot,$(EXTRA_FILES))
 	rm -f bin/dist_test
 
 #################################################

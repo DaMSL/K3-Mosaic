@@ -258,7 +258,7 @@ module CPPGenerator : Imperative.Generator
   let is_leaf_expr e =
     match tag_of_expr e with | Const _ | Var _ -> true | _ -> false
 
-  let is_block_cmd c = match tag_of_cmd c with Block _ -> true | _ -> false
+  let is_block_cmd c = match tag_of_cmd c with Block -> true | _ -> false
 
   let extract_option_type string_fn t =
     let error = "invalid option type" in

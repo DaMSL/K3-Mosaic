@@ -20,11 +20,11 @@ Makefile.local
 
 bin/
 
-stages/k3/parser/K3Parser.mli
-stages/k3/parser/K3Parser.ml
+src/stages/k3/parser/K3Parser.mli
+src/stages/k3/parser/K3Parser.ml
 
-stages/k3/parser/K3Lexer.mli
-stages/k3/parser/K3Lexer.ml
-stages/m3/Calculuslexer.ml
-stages/m3/Calculusparser.ml
-stages/m3/Calculusparser.mli
+src/stages/k3/parser/K3Lexer.mli
+src/stages/k3/parser/K3Lexer.ml
+src/stages/m3/Calculuslexer.ml
+src/stages/m3/Calculusparser.ml
+src/stages/m3/Calculusparser.mli

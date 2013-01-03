@@ -1,6 +1,6 @@
 # Makefile for Cumulus Shuffle and Route
 
-include ../../../Makefile.inc
+include ../../../../config/Makefile.inc
 
 FILES=\
 	../../../util/Util \
@@ -96,7 +96,7 @@ Makefile.deps: Makefile $(patsubst %,%.ml,$(BASE_FILES))
 
 Makefile.local:
 	@echo Initializing local configuration file
-	@cp ../../../config/Makefile.local.default Makefile.local
+	@cp ../../../../config/Makefile.local.default Makefile.local
 
 include Makefile.deps
 include Makefile.local
