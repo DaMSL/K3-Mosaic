@@ -10,25 +10,6 @@ module Set = ListAsSet
 
 exception InvalidAst of string
 
-let subst_meta m e =
-  T.mk_tree (((U.id_of_expr e, U.tag_of_expr e), m), T.sub_tree e)
-
-let add_meta v e = subst_meta (v::U.meta_of_expr e) e
-
-let remove_meta e =
-  let meta = U.meta_of_expr e in
-  let new_meta = List.filter 
-    (function K3.Annotation.Modification _ -> false | _ -> true) meta
-  in subst_meta new_meta e
-
-(* insert a clean meta into the given tree *)
-let clean_ast_meta ast = T.modify_tree_bu ast remove_meta
-let set_modified e = add_meta 
-  (K3.Annotation.Modification true) e
-let is_modified e = List.exists 
-  (function K3.Annotation.Modification _ -> true | _ -> false) 
-  @: U.meta_of_expr e
-
 let id_of_trig = function
   Trigger (id, _, _, _) -> id
   | _ -> invalid_arg "id_of_trig: not a trigger"
@@ -132,14 +113,14 @@ let modify_map_access p ast stmt =
   let var_vid = mk_var "vid" in
   let modify e path = match U.tag_of_expr e with
     | Insert -> let (col, elem) = U.decompose_insert e in
-      set_modified @: mk_insert col @:
+      mk_insert col @:
         begin match U.tag_of_expr elem with
           | Tuple  -> let xs = U.decompose_tuple elem in
                       mk_tuple @: P.map_add_v var_vid xs
           | x      -> mk_tuple @: P.map_add_v var_vid [elem]
         end
     | Delete -> let (col, elem) = U.decompose_delete e in
-      set_modified @: mk_delete col @:
+      mk_delete col @:
         begin match U.tag_of_expr elem with
           | Tuple  -> let xs = U.decompose_tuple elem in
                       mk_tuple @: P.map_add_v var_vid xs
@@ -212,7 +193,7 @@ let modify_map_access p ast stmt =
         | Var id when id = lmap_name -> 
           begin match (U.typed_vars_of_lambda l, U.decompose_lambda l) with
             | ([id, t],b) -> 
-              set_modified @: mk_apply 
+              mk_apply 
                 (mk_lambda 
                   (wrap_args [id, wrap_tset @: wrap_ttuple lmap_types]) b)
                 arg
@@ -304,16 +285,15 @@ let modify_ast_for_s p ast stmt trig target_trig =
   let ast = ast_for_s p ast stmt trig in
   let ast = modify_map_access p ast stmt in
   let ast = modify_0d_map_access p ast stmt in
-  let ast = match target_trig with
+  match target_trig with
     | Some t -> modify_delta p ast stmt t
     | None -> ast
-  in clean_ast_meta ast (* remove the meta info we used *)
 
 (* return a modified version of the corrective update *)
 let modify_corr_ast p ast map stmt trig =
   let (args, ast) = corr_ast_for_m_s p ast map stmt trig in
   let ast = modify_map_access p ast stmt in
   let ast = modify_0d_map_access p ast stmt in
-  (args, clean_ast_meta ast)
+  (args, ast)
 
 
