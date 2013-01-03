@@ -20,6 +20,10 @@ Makefile.local
 
 bin/
 
+deps/bolt-1.4/Makefile.config
+deps/bolt-1.4/bolt.*
+lib/bolt
+
 src/stages/k3/parser/K3Parser.mli
 src/stages/k3/parser/K3Parser.ml
 

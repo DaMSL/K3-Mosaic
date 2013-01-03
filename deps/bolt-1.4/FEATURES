@@ -1,0 +1,7 @@
+- logging tool for OCaml
+- configuration of filters, layouts, and outputs at run-time
+- syntax extension to remove log statements at compile-time
+- fully customizable (filters, layouts, and outputs)
+- support for log4j, Paje, and Daikon formats
+- support for threads
+- support for ocamlfind

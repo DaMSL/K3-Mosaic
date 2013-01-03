@@ -142,16 +142,13 @@ TEST_GARBAGE    := $(TEST_BASE_FILES) $(TEST_BASE_INCLUDES) $(TEST_FILES) $(TEST
 
 #################################################
 
-all: config/Makefile.local versioncheck k3 tests
+all: config/Makefile.local versioncheck deps k3 tests
 
-opt: config/Makefile.local versioncheck k3_opt
+opt: config/Makefile.local versioncheck deps k3_opt
 
-versioncheck:
-	@if [ $(shell ocaml -version | sed 's/.*version \(.*\)$$/\1/' | \
-	                  awk -F. '{print ($$1+1000) ($$2+1000) ($$3+1000)}')\
-	     -lt 100310121001 ] ; then \
-	  echo "Your OCaml version is too low.  OCaml 3.12.1 is required, you have"\
-	       $(shell ocaml -version); exit -1; fi
+#################################################
+
+# Compiler binaries
 
 k3_opt: $(NC_FILES) $(NC_EXTRA_FILES)
 	@echo "Linking K3 (Optimized)"
@@ -166,6 +163,49 @@ k3: $(BC_FILES) $(BC_EXTRA_FILES)
 		mkdir bin;\
 	fi
 	@$(OCAMLCC) $(OCAML_FLAGS) -o bin/$@ $(BC_FILES) $(BC_EXTRA_FILES)
+
+#################################################
+
+# Utility targets
+
+versioncheck:
+	@if [ $(shell ocaml -version | sed 's/.*version \(.*\)$$/\1/' | \
+	                  awk -F. '{print ($$1+1000) ($$2+1000) ($$3+1000)}')\
+	     -lt 100310121001 ] ; then \
+	  echo "Your OCaml version is too low.  OCaml 3.12.1 is required, you have"\
+	       $(shell ocaml -version); exit -1; fi
+
+#################################################
+
+# Library dependencies
+
+deps: lib/bolt
+
+BASE_DIR=$(shell pwd)
+BOLT_SRC_DIR = deps/bolt-1.4
+BOLT_BUILD_DIR = deps/bolt-1.4/_build
+BOLT_INSTALL_DIR = lib/bolt/
+
+lib/bolt:
+	@if [ ! \( -f $(BOLT_INSTALL_DIR)/bolt.cma -a -f $(BOLT_INSTALL_DIR)/bolt.cmxa \) ]; then \
+		echo "Bolt Logging library" \
+		&& cd $(BOLT_SRC_DIR) && /bin/bash ./configure -ocaml-prefix `which ocaml | sed 's/\/bin\/ocaml//'` \
+		&& make all \
+		&& cd $(BASE_DIR) \
+		&& (if [ ! -d $(BOLT_INSTALL_DIR) ]; then mkdir -p $(BOLT_INSTALL_DIR); fi) \
+		&& (cp $(BOLT_BUILD_DIR)/src/syntax/bolt_pp.cmo $(BOLT_INSTALL_DIR); \
+	  		for ext in cmi cmo cmx o cmj jo; do \
+	    		test -f $(BOLT_BUILD_DIR)/src/threads/boltThread.$$ext \
+	    		&& cp $(BOLT_BUILD_DIR)/src/threads/boltThread.$$ext $(BOLT_INSTALL_DIR) || true; \
+	  		done; \
+	  		for ext in a cma cmi cmo cmxa cmja ja; do \
+	    		test -f $(BOLT_BUILD_DIR)/bolt.$$ext \
+	    		&& cp $(BOLT_BUILD_DIR)/bolt.$$ext $(BOLT_INSTALL_DIR) || true; \
+	  		done; \
+	  		cd $(BOLT_SRC_DIR) && make veryclean) \
+	fi
+
+
 
 #################################################
 

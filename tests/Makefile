@@ -103,6 +103,9 @@ config/Makefile.deps: Makefile $(patsubst %,%.ml,$(BASE_FILES))
 
 config/Makefile.local:
 	@echo Initializing local configuration file
+	@if [ ! -d config ] ; then \
+		mkdir config;\
+	fi
 	@cp ../config/Makefile.local.default $@
 
 include config/Makefile.deps
