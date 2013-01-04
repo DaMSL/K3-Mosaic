@@ -109,11 +109,15 @@ let (%++) f g = fun t x -> f (g t x)
 let type_of_expr e =
   let error s = t_error (id_of_expr e) "ExprType" (TMsg s) () in
   let is_type_annotation a = match a with Type _ -> true | _ -> false in
+  let extract_type = function
+    Type t -> t | _ -> error "invalid type annotation" in
   let type_annotations = List.filter is_type_annotation (meta_of_expr e) in
   match type_annotations with
-    | [] -> error "found untyped expression"
-    | [x] -> (match x with Type t -> t | _ -> error "invalid type annotation")
-    | _ -> error "multiple possible types found"
+    | []  -> error "found untyped expression"
+    | [x] -> extract_type x
+    | l   -> error @: "multiple possible types found: "^
+      List.fold_left (fun acc x -> 
+        acc^" "^string_of_type @: extract_type x) "" l
 
 (* Type composition/decomposition primitives *)
 
@@ -409,7 +413,7 @@ let rec deduce_expr_type trig_env cur_env utexpr =
               t1 <| collection_of +++ base_of %++ value_of |> t_erroru name @:
                   TBad(t1) in
             if not (t_r === canonical TUnit) 
-                then t_erroru name (VTMismatch(canonical TUnit, t_r,"return val:")) () else
+                then t_erroru name (VTMismatch(t_r, canonical TUnit, "return val:")) () else
             if t_a <~ t_e then TValue(canonical TUnit) 
             else t_erroru name (VTMismatch(t_a, t_e, "element:")) ()
 
@@ -593,7 +597,7 @@ let rec deduce_expr_type trig_env cur_env utexpr =
             match t_address with TAddress -> 
                 let expected = canonical t_target_args in
                 if expected === t_args then TValue(canonical TUnit) 
-                else t_erroru name (VTMismatch(expected, t_args, "")) ()
+                else t_erroru name (VTMismatch(t_args, expected, "")) ()
             | _ -> t_erroru name (BTBad(t_address)) ()
 
     in attach_type current_type

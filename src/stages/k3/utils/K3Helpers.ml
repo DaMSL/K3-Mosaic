@@ -304,12 +304,12 @@ let tuple_make_pattern (types:value_type_t list) =
  * values you drop. list_drop and list_take can be used for non-slice operations
  *)
 let slice_pat_take num pat =
-    let range = create_range 0 (List.length pat - num) in
+    let range = create_range 1 (List.length pat - num) in
     let unknowns = List.map (fun _ -> Unknown) range in
     list_take num pat @unknowns
 
 let slice_pat_drop num pat =
-    let range = create_range 0 (List.length pat - num) in
+    let range = create_range 1 (List.length pat - num) in
     let unknowns = List.map (fun _ -> Unknown) range in
     unknowns@list_drop num pat
 
@@ -324,11 +324,14 @@ let tuple_pat_to_ids pat =
       | Unknown -> "_")
     pat
 
+let types_to_ids_types prefix types =
+  let range = mk_tuple_range types in
+  let ids = List.map (int_to_temp_id prefix) range in
+  list_zip ids types
+
 (* break down a tuple into its components, creating ids with a certain prefix *)
 let mk_destruct_tuple tup_name types prefix expr =
-  let range = mk_tuple_range types in
-  let ids = List.map (fun i -> int_to_temp_id prefix i) range in
-  let ids_types = list_zip ids types in
+  let ids_types = types_to_ids_types prefix types in
   mk_let_many ids_types (mk_var tup_name) expr
 
 (* rebuild a tuple based on the types of the tuple and a pattern of temporaries

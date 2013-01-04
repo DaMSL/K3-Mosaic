@@ -1,3 +1,4 @@
+open Util
 open ListAsSet
 open Tree
 
@@ -53,7 +54,6 @@ let vars_of_lambda e = lambda_bindings vars_of_arg (tag_of_expr e)
 
 let typed_vars_of_lambda e =
   lambda_bindings typed_vars_of_arg (tag_of_expr e)
-
 
 (***************
  * Type tags
@@ -149,37 +149,46 @@ let type_of_signature s =
 
 (* TODO: AST constructors from Yotam *)
 
+(* AST testers *)
+let is_peek e = match tag_of_expr e with Peek -> true | _ -> false
+
 (* AST destructors *)
-let decompose_lambda e = List.nth (sub_tree e) 0
+let nth e i = List.nth (sub_tree e) i
 
-let decompose_apply e =
-  let n i = List.nth (sub_tree e) i in (n 0, n 1)
-
-let decompose_ifthenelse e =
-  let n i = List.nth (sub_tree e) i in (n 0, n 1, n 2)
-
-let decompose_iterate e =
-  let n i = List.nth (sub_tree e) i in (n 0, n 1)
-
-let decompose_map e =
-  let n i = List.nth (sub_tree e) i in (n 0, n 1)
-
-let decompose_filter_map e =
-  let n i = List.nth (sub_tree e) i in (n 0, n 1, n 2)
-
-let decompose_aggregate e =
-  let n i = List.nth (sub_tree e) i in (n 0, n 1, n 2)
-
-let decompose_gbagg e =
-  let n i = List.nth (sub_tree e) i in (n 0, n 1, n 2, n 3)
-
-let decompose_ifthenelse e =
-  let n i = List.nth (sub_tree e) i in (n 0, n 1, n 2)
-
+let decompose_aggregate e = match tag_of_expr e with 
+  Aggregate -> (nth e 0, nth e 1, nth e 2) | _ -> failwith "not Aggregate"
+let decompose_apply e = match tag_of_expr e with
+  Apply -> (nth e 0, nth e 1) | _ -> failwith "not Apply"
+let decompose_block e = match tag_of_expr e with 
+  Block -> sub_tree e | _ -> failwith "not a Block"
+let decompose_delete e = match tag_of_expr e with 
+  Delete -> (nth e 0, nth e 1) | _ -> failwith "not a Delete"
+let decompose_filter_map e = match tag_of_expr e with 
+  FilterMap -> (nth e 0, nth e 1, nth e 2) | _ -> failwith "not a FilterMap"
+let decompose_ifthenelse e = match tag_of_expr e with 
+  IfThenElse -> (nth e 0, nth e 1, nth e 2) | _ -> failwith "not a IfThenElse"
+let decompose_insert e = match tag_of_expr e with 
+  Insert -> (nth e 0, nth e 1) | _ -> failwith "not a Insert"
+let decompose_iterate e = match tag_of_expr e with 
+  Iterate -> (nth e 0, nth e 1) | _ -> failwith "not a Iterate"
+let decompose_gbagg e = match tag_of_expr e with 
+  GroupByAggregate -> (nth e 0, nth e 1, nth e 2, nth e 3) 
+  | _ -> failwith "not a GroupByAggregte"
+let decompose_lambda e = match tag_of_expr e with 
+  Lambda(_) -> nth e 0 | _ -> failwith "not a Lambda"
+let decompose_map e = match tag_of_expr e with 
+  Map -> (nth e 0, nth e 1) | _ -> failwith "not a Map"
+let decompose_peek e = match tag_of_expr e with 
+  Peek -> nth e 0 | _ -> failwith "not a Peek"
 let decompose_send e = 
-  let n i = List.nth (sub_tree e) i in
-  let rec rest i acc = if i = 1 then acc else rest (i-1) ((n i)::acc)
-  in (n 0, n 1, rest ((List.length (sub_tree e))-1) [])
+  let rec rest i acc = if i = 1 then acc else rest (i-1) ((nth e i)::acc)
+  in match tag_of_expr e with 
+  Send -> (nth e 0, nth e 1, rest ((List.length (sub_tree e))-1) []) 
+  | _ -> failwith "not a Send"
+let decompose_slice e = match tag_of_expr e with 
+  Slice -> (nth e 0, nth e 1) | _ -> failwith "not a Slice"
+let decompose_tuple e = match tag_of_expr e with 
+  Tuple -> sub_tree e  | _ -> failwith "not a Tuple"
 
 
 let match_declaration id match_f l =
@@ -233,6 +242,19 @@ let trigger_of_program id p =
       | Code (n,_,_,_) when n = id -> true
       | _ -> false 
     ) (triggers_of_program p)
+
+let id_of_code = function
+  Code (id, _, _, _) -> id
+  | _ -> invalid_arg "id_of_trig: not a trigger"
+
+let expr_of_code = function
+  Code (_, _, _, e) -> e
+  | _ -> invalid_arg "expr_of_trig: not a trigger"
+
+let args_of_code = function
+  Code (_, a, _, _) -> a
+  | _ -> invalid_arg "args_of_trig: not a trigger"
+
 
 
 (* Expression extraction *)
@@ -294,3 +316,30 @@ let linearize_expr f e = fold_tree (fun x _ -> x) (fun _ -> f) None [] e
 (* Common linearizations *)
 let pre_order_linearization children node = node::(List.flatten children)
 let post_order_linearization children node = (List.flatten children)@[node]
+
+(* Produce the same tree with new ids top down *)
+let renumber_ast_ids (exp:K3.AST.expr_t) num_ref =
+  let modify i acc_children t =
+    mk_tree @: (((i, tag_of_expr t), meta_of_expr t), acc_children)
+  in
+  fold_tree1 (fun _ _ -> num_ref := !num_ref + 1; !num_ref) modify 0 exp
+
+(* renumber ids for a whole program *)
+let renumber_program_ids prog =
+  let num = ref 0 in
+  let handle_code x y z e = Code(x,y,z,renumber_ast_ids e num) in
+  let handle_flow acc = function
+    | (Source(Code(x,y,z,e)),a) -> (Source(handle_code x y z e),a)::acc
+    | (Sink(Code(x,y,z,e)),a)   ->   (Sink(handle_code x y z e),a)::acc
+    | x -> x::acc
+  in 
+  let handle_dec acc = function
+    | (Global(x, y, Some e),a) -> 
+        (Global(x, y, Some (renumber_ast_ids e num)),a)::acc
+    | (Flow(fs),a) -> 
+        (Flow(List.rev @: List.fold_left handle_flow [] fs),a)::acc
+    | (Role(id, fs),a) -> 
+        (Role(id, List.rev @: List.fold_left handle_flow [] fs),a)::acc
+    | x -> x::acc
+  in List.rev @: List.fold_left handle_dec [] prog
+

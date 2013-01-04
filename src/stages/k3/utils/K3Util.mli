@@ -29,16 +29,25 @@ val typed_vars_of_lambda : expr_t -> (id_t * value_type_t) list
 val signature_of_type : type_t -> string
 val type_of_signature : string -> type_t
 
+(* AST testers *)
+val is_peek : expr_t -> bool
+
 (* AST constructors / destructors *)
-val decompose_lambda : expr_t -> expr_t
-val decompose_apply : expr_t -> expr_t * expr_t
-val decompose_ifthenelse : expr_t -> expr_t * expr_t * expr_t
-val decompose_iterate : expr_t -> expr_t * expr_t
-val decompose_map : expr_t -> expr_t * expr_t
-val decompose_filter_map : expr_t -> expr_t * expr_t * expr_t
 val decompose_aggregate : expr_t -> expr_t * expr_t * expr_t
+val decompose_apply : expr_t -> expr_t * expr_t
+val decompose_block : expr_t -> expr_t list
+val decompose_delete : expr_t -> expr_t * expr_t
+val decompose_filter_map : expr_t -> expr_t * expr_t * expr_t
 val decompose_gbagg : expr_t -> expr_t * expr_t * expr_t * expr_t
+val decompose_ifthenelse : expr_t -> expr_t * expr_t * expr_t
+val decompose_insert : expr_t -> expr_t * expr_t
+val decompose_iterate : expr_t -> expr_t * expr_t
+val decompose_lambda : expr_t -> expr_t
+val decompose_map : expr_t -> expr_t * expr_t
+val decompose_peek : expr_t -> expr_t
 val decompose_send : expr_t -> expr_t * expr_t * (expr_t list)
+val decompose_slice : expr_t -> expr_t * expr_t
+val decompose_tuple : expr_t -> expr_t list
 
 (* Declaration accessors *)
 val globals_of_program  : program_t -> program_t
@@ -59,6 +68,9 @@ val triggers_of_program   : program_t -> flow_endpoint_t list
 
 val trigger_of_program  : id_t -> program_t -> flow_endpoint_t
 
+val id_of_code : flow_endpoint_t -> id_t
+val expr_of_code : flow_endpoint_t -> expr_t
+val args_of_code : flow_endpoint_t -> arg_t
 
 (* Returns all variables in an expression *)
 val vars_of_expr      : expr_t -> expr_t list
@@ -91,3 +103,6 @@ val linearize_expr :
 
 val pre_order_linearization : expr_t list list -> expr_t -> expr_t list
 val post_order_linearization : expr_t list list -> expr_t -> expr_t list
+
+val renumber_ast_ids : expr_t -> int ref -> expr_t
+val renumber_program_ids : program_t -> program_t

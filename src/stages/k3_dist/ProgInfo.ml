@@ -203,15 +203,14 @@ let def_vid = "vid"
 (* create ids to reference the map vars *)
 let map_ids_types_for ?(prefix=def_map) p map_id =
   let ts = map_types_for p map_id in
-  let r = mk_tuple_range @: ts in
-  let ids = list_drop 1 @: List.map (int_to_temp_id prefix) r in
-  let full_ids = ids@[prefix^"val"] in
-  list_zip full_ids ts
+  let id_ts = types_to_ids_types prefix ts in
+  (list_drop_end 1 id_ts)@[prefix^"val", list_head @: list_take_end 1 ts]
 
 (* ids to reference the map vars, with vid *)
 let map_ids_types_no_val_for ?(prefix=def_map) p map_id = list_drop_end 1 @: 
   map_ids_types_for ~prefix:prefix p map_id
-let map_ids_add_v ?(vid=def_vid) ts = vid::ts
+let map_add_v v xs = v::xs
+let map_ids_add_v ?(vid=def_vid) xs = map_add_v vid xs
 let map_ids_types_add_v ?(vid=def_vid) ts = (vid, t_vid)::ts
 let map_ids_types_with_v_for ?(prefix=def_map) ?(vid=def_vid) p map_id =
    map_ids_types_add_v ~vid:vid @: map_ids_types_for ~prefix:prefix p map_id
@@ -220,6 +219,11 @@ let map_ids_types_with_v_for ?(prefix=def_map) ?(vid=def_vid) p map_id =
 * the key. It's easier to control this in one place *)
 let adjust_key_id_for_v i = i + 1
 
+let map_names_ids_of_stmt p stmt =
+  let lmap = lhs_map_of_stmt p stmt in
+  let rmaps = rhs_maps_of_stmt p stmt in
+  let maps = ListAsSet.uniq @: lmap::rmaps in
+  List.map (fun m -> (map_name_of p m, m)) maps
 
 let reduce_l_to_map_size p map l =
   let map_size = (List.length @: map_types_for p map) - 1 in

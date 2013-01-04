@@ -5,6 +5,10 @@ open K3.AST
 open K3Helpers
 open ProgInfo
 
+(* TODO: the code here uses an index to refer to the right map id. This means
+ * that in K3Helpers, the base for ranges cannot be changed from 0. This should
+ * be sorted out in the future *)
+
 (* route and shuffle function names *)
 let route_for p map_id = "route_to_"^map_name_of p map_id
 
@@ -75,9 +79,8 @@ let calc_dim_bounds_code = mk_global_fn "calc_dim_bounds"
       (mk_var "bmod")
 
 let gen_route_fn p map_id = 
-  let map_types_full = map_types_for p map_id in
-  let map_types = list_drop_end 1 map_types_full in
-  let map_range = create_range 0 (List.length map_types) in
+  let map_types = map_types_no_val_for p map_id in
+  let map_range = mk_tuple_range map_types in
   let key_types = wrap_tmaybes map_types in
   let prefix = "key_id_" in
   let to_id i = int_to_temp_id prefix i in

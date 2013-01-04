@@ -21,6 +21,13 @@ val fold_tree :
   ('td -> 'bu list -> 'a tree_t -> 'bu) ->
   'td -> 'bu -> 'a tree_t -> 'bu
 
+(* takes no init value for bottom up *)
+val fold_tree1 : 
+  ('td -> 'a tree_t -> 'td) ->
+  ('td -> 'bu list -> 'a tree_t -> 'bu) ->
+  'td -> 'a tree_t -> 'bu
+
+
 val fold_tree_thread : 
   ('td -> 'a tree_t -> 'td) ->
   ('td * 'bu list -> 'a tree_t -> 'td * 'bu) ->
@@ -30,6 +37,14 @@ val fold_tree_lazy :
   ('td Lazy.t -> 'a tree_t -> 'td) ->
   ('td Lazy.t -> ('bu Lazy.t) list -> 'a tree_t -> 'bu) ->
   'td -> 'bu -> 'a tree_t -> 'bu
+
+(* modify a tree using a single modification function *)
+val modify_tree_bu :
+  'a tree_t -> ('a tree_t -> 'a tree_t) -> 'a tree_t
+
+(* modify a tree using a single modification function, that also receives the path to the tree *)
+val modify_tree_bu_with_path :
+  'a tree_t -> ('a tree_t -> 'a tree_t list -> 'a tree_t) -> 'a tree_t
 
 
 (* Trees with tuple metadata *)
