@@ -162,11 +162,25 @@ let process_task address env =
 
   with Queue.Empty -> raise (RuntimeError (error INVALID_GLOBAL_QUEUE))
 
+(* Scheduler toplevel methods *)
+let configure_scheduler program_events = 
+  scheduler_params.events_to_process <- program_events
+
 let initialize_scheduler address (trig_env,_) =
   if not(is_node address) then register_node address; 
   List.iter (fun (id, _) -> register_trigger address id) trig_env
 
-let run_scheduler address env =
-  while continue_processing address do
-    process_task address env;
-  done
+let node_has_work address =
+  if not(is_node address) then false else 
+  let node_queues = get_node_queues address in
+  let empty_global_q = Queue.is_empty (fst node_queues) in
+  let empty_trigger_q = Hashtbl.fold (fun _ q acc -> acc && Queue.is_empty q) (snd node_queues) true in
+  not ( empty_global_q && empty_trigger_q)
+
+let network_has_work () = 
+  Hashtbl.fold (fun addr _ acc -> acc || node_has_work addr) node_queues false
+
+let run_scheduler ?(slice = max_int) address env =
+  let i = ref slice in
+  while !i > 0 && continue_processing address
+  do process_task address env; decr i done

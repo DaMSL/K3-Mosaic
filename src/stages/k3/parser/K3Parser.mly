@@ -125,7 +125,7 @@
 
 %token PEEK
 
-%token IF THEN ELSE
+%token IF THEN ELSE LET IN
 
 %token SEND
 
@@ -167,29 +167,12 @@
 
 %%
 
-program:
+program :
     | declaration         { if !numerrors>=1 then raise Exit else [$1, []] }
     | declaration program { ($1, []) :: $2 }
 ;
 
-program_test:
-    | program EXPECTED named_expr_list     { ($1, $3) }
-    | program EXPECTED error               { print_error "invalid expected value list" }
-    | program error                        { print_error "no expected values specified for program test" }
-;
-
-expression_test:
-    | expr EXPECTED expr                             { [[], $1, $3] }
-    | program expr EXPECTED expr                     { [$1, $2, $4] }
-    | expression_test SEMICOLON expression_test      { $1@$3 }
-;
-
-named_expr_list:
-    | IDENTIFIER GETS expr                          { [$1, $3] }           
-    | IDENTIFIER GETS expr COMMA named_expr_list    { $5@[$1, $3] }
-;
-
-declaration:
+declaration :
     | DECLARE IDENTIFIER COLON type_expr { Global($2, $4, None) }
     | DECLARE IDENTIFIER COLON type_expr GETS expr { Global($2, $4, Some $6) }
 
@@ -216,12 +199,12 @@ declaration:
 ;
 
 /* Flow programs */
-flow_program:
+flow_program :
     | flow_statement { [$1, []] }
     | flow_statement flow_program { ($1,[]) :: $2 }
 ;
 
-flow_statement:
+flow_statement :
     | resource      { $1 }
     | instruction   { Instruction($1) }
 
@@ -250,7 +233,7 @@ flow_statement:
     | BIND error                                   { print_error("Invalid bind source") }
 ;
 
-instruction:
+instruction :
     | CONSUME IDENTIFIER { Consume($2) }
 ;
 
@@ -282,7 +265,7 @@ handle :
       { Network($3, $5), parse_format $7 }
 ;
 
-resource_pattern:
+resource_pattern :
     | IDENTIFIER                       { Terminal($1) }
     | LPAREN resource_pattern RPAREN     { $2 }
 
@@ -302,17 +285,17 @@ resource_pattern:
 
 
 /* Annotations */
-annotations:
+annotations :
     | annotation                   { [$1] }
     | annotation SEMICOLON annotations { $1::$3 }
 ;
 
-annotation:
+annotation :
     | data_annotation      { ((fun (r, a) -> Data(r,a)) $1) }
     | control_annotation   { ((fun (r, a) -> Control(r,a)) $1) }
 ;
 
-data_annotation:
+data_annotation :
     | positions RARROW positions       { Constraint,  FunDep($1, Positions($3)) }
     | positions RARROW TIMES           { Constraint,  FunDep($1, Element) }
     | positions RASSOC positions       { Constraint,  MVFunDep($1, Positions($3)) }
@@ -325,85 +308,85 @@ data_annotation:
     | RANDOMACCESS                     { Hint,        RandomAccess }
 ;
 
-control_annotation:
+control_annotation :
     | EFFECT LPAREN identifier_list RPAREN   { Constraint, Effect($3) }
     | PARALLEL LPAREN INTEGER RPAREN         { Hint,       Parallel($3) }
 ;
 
-positions: integer_list { $1 };
+positions : integer_list { $1 };
 
 
 /* Types */
-type_expr:
+type_expr :
     | function_type_expr { TFunction(fst $1, snd $1) }
     | isolated_value_type_expr { TValue($1) }
     | LPAREN type_expr RPAREN { $2 }
 ;
 
-function_type_expr: isolated_value_type_expr RARROW isolated_value_type_expr { ($1, $3) };
+function_type_expr : isolated_value_type_expr RARROW isolated_value_type_expr { ($1, $3) };
 
-isolated_value_type_expr: isolated_mutable_type_expr { TIsolated($1) };
-contained_value_type_expr: contained_mutable_type_expr { TContained($1) };
+isolated_value_type_expr  : isolated_mutable_type_expr  { TIsolated($1) };
+contained_value_type_expr : contained_mutable_type_expr { TContained($1) };
 
-isolated_mutable_type_expr:
+isolated_mutable_type_expr :
     | isolated_base_type_expr { let a,b = $1 in TImmutable(a,b) }
     | REF isolated_base_type_expr { let a,b = $2 in TMutable(a,b) }
 ;
 
-contained_mutable_type_expr:
+contained_mutable_type_expr :
     | contained_base_type_expr { let a,b = $1 in TImmutable(a,b) }
     | REF contained_base_type_expr { let a,b = $2 in TMutable(a,b) }
 ;
 
-isolated_base_type_expr:
+isolated_base_type_expr :
     | TYPE { $1, [] }
     | LPAREN isolated_base_type_tuple RPAREN { $2, [] }
     | annotated_collection_type      { $1 }
     | MAYBE isolated_value_type_expr { TMaybe($2), [] }
 ;
 
-contained_base_type_expr:
+contained_base_type_expr :
     | TYPE { $1, [] }
     | LPAREN contained_base_type_tuple RPAREN { $2, [] }
     | annotated_collection_type       { $1 }
     | MAYBE contained_value_type_expr { TMaybe($2), [] }
 ;
 
-isolated_base_type_tuple:
+isolated_base_type_tuple :
     | isolated_value_type_expr COMMA isolated_value_type_expr_list {
         TTuple($1 :: $3)
     }
 ;
 
-contained_base_type_tuple:
+contained_base_type_tuple :
     | contained_value_type_expr COMMA contained_value_type_expr_list {
         TTuple($1 :: $3)
     }
 ;
 
-isolated_value_type_expr_list:
+isolated_value_type_expr_list :
     | isolated_value_type_expr { [$1] }
     | isolated_value_type_expr COMMA isolated_value_type_expr_list { $1 :: $3 }
 ;
 
-contained_value_type_expr_list:
+contained_value_type_expr_list :
     | contained_value_type_expr { [$1] }
     | contained_value_type_expr COMMA contained_value_type_expr_list { $1 :: $3 }
 ;
 
-annotated_collection_type:
+annotated_collection_type :
     | collection_type                                     { $1,[] }
     | collection_type ANNOTATE LBRACE annotations RBRACE  { $1, $4 }
 ;
 
-collection_type:
+collection_type :
     | LBRACE contained_value_type_expr RBRACE { TCollection(TSet, $2) }
     | LBRACEBAR contained_value_type_expr RBRACEBAR { TCollection(TBag, $2) }
     | LBRACKET contained_value_type_expr RBRACKET { TCollection(TList, $2) }
 ;
 
 /* Expressions */
-expr:
+expr :
     | LPAREN tuple RPAREN { $2 }
     | block { $1 }
 
@@ -424,7 +407,10 @@ expr:
     | SEND LPAREN IDENTIFIER COMMA address COMMA tuple RPAREN {
         mkexpr Send [mkexpr (Const(CTarget($3))) []; mkexpr (Const($5)) []; $7]
       }
-    | expr LPAREN tuple RPAREN { mkexpr Apply [$1; $3] }
+
+    /* Function application and let notation */
+    | expr LPAREN tuple RPAREN    { mkexpr Apply [$1; $3] }
+    | LET arg GETS expr IN expr   { mkexpr Apply [mkexpr (Lambda $2) [$6]; $4] }
 
     /* TODO: more error handling */
     | SEND LPAREN IDENTIFIER COMMA address COMMA error { print_error("Invalid send argument") }
@@ -433,45 +419,49 @@ expr:
     | SEND error { print_error("Invalid send syntax") }
 
     | expr LPAREN error { print_error("Function application error") }
+    
+    | LET arg GETS expr IN error   { print_error "Let body error" }
+    | LET arg GETS error           { print_error "Let binding target error" }
+    | LET error                    { print_error "Let binding error" }
 ;
 
-expr_list:
+expr_list :
     | expr                 { [$1] }
     | expr COMMA expr_list { $1 :: $3 }
 ;
 
-expr_seq:
+expr_seq :
     | expr                    { [$1] }
     | expr SEMICOLON expr_seq { $1 :: $3 }
 ;
 
-tuple:
+tuple :
     | expr_list { if List.length $1 == 1 then List.hd $1 else mkexpr Tuple $1 }
 ;
 
-value_typed_identifier:
+value_typed_identifier :
     | IDENTIFIER COLON isolated_value_type_expr { ($1, $3) }
     | IDENTIFIER COLON error                    { type_error() }
 
 ;
 
-value_typed_identifier_list:
+value_typed_identifier_list :
     | value_typed_identifier                                   { [($1)] }
     | value_typed_identifier COMMA value_typed_identifier_list { $1 :: $3 }
 ;
 
-arg:
+arg :
     | UNKNOWN { AIgnored } 
     | value_typed_identifier  { AVar(fst $1, snd $1) }
     | JUST arg                { AMaybe($2) }
     | LPAREN arg_list RPAREN  { if List.length $2 == 1 then List.hd $2 else ATuple($2) }
 ;
 
-arg_list:
+arg_list :
     | arg                { [($1)] } 
     | arg COMMA arg_list { $1 :: $3 }
 
-constant:
+constant :
     | UNKNOWN   { CUnknown }
     | UNIT      { CUnit }
     | NOTHING   { CNothing }
@@ -481,13 +471,13 @@ constant:
     | STRING    { CString($1) }
 ;
 
-range:
+range :
     | LBRACE expr COLON expr COLON expr RBRACE { mkexpr (Range(TSet)) [$2; $4; $6] }
     | LBRACEBAR expr COLON expr COLON expr RBRACEBAR { mkexpr (Range(TBag)) [$2; $4; $6] }
     | LBRACKET expr COLON expr COLON expr RBRACKET { mkexpr (Range(TList)) [$2; $4; $6] }
 ;
 
-collection:
+collection :
     | LBRACE RBRACE { mkexpr (Empty(mk_unknown_collection TSet)) [] }
     | LBRACEBAR RBRACEBAR { mkexpr (Empty(mk_unknown_collection TBag)) [] }
     | LBRACKET RBRACKET { mkexpr (Empty(mk_unknown_collection TList)) [] }
@@ -497,11 +487,11 @@ collection:
     | LBRACKET expr_seq RBRACKET { build_collection $2 (mk_unknown_collection TList) }
 ;
 
-variable:
+variable :
     | IDENTIFIER { $1 }
 ;
 
-address:
+address :
     | IDENTIFIER COLON INTEGER { CAddress($1,$3) }
     | IP COLON INTEGER { 
         let parts = Str.split (Str.regexp_string ".") $1 in
@@ -511,7 +501,7 @@ address:
       }
 ;
 
-arithmetic:
+arithmetic :
     | NEG expr { mkexpr Neg [$2] }
     | expr PLUS expr { mkexpr Add [$1; $3] }
     | expr NEG expr %prec MINUS { mkexpr Add [$1; mkexpr Neg [$3]] }
@@ -527,7 +517,7 @@ arithmetic:
     | expr MODULO error { arith_error 2 }
 ;
 
-predicate:
+predicate :
     | expr LT expr { mkexpr Lt [$1; $3] }
     | expr EQ expr { mkexpr Eq [$1; $3] }
     | expr LEQ expr { mkexpr Leq [$1; $3] }
@@ -544,7 +534,7 @@ predicate:
     | expr GEQ error { comp_error() }
 ;
 
-conditional:
+conditional :
     | IF expr THEN expr ELSE expr { mkexpr IfThenElse [$2; $4; $6] }
 
     /* Error handling */
@@ -553,7 +543,7 @@ conditional:
     | IF error                     { cond_error "predicate" }
 ;
 
-lambda:
+lambda :
      | BACKSLASH arg RARROW expr { mkexpr (Lambda($2)) [$4] }
 
      /* Error handling */
@@ -561,12 +551,12 @@ lambda:
      | BACKSLASH error            { lambda_error "argument" }
 ;
 
-access:
+access :
     | expr LBRACKET tuple RBRACKET { mkexpr Slice [$1; $3] }
     | PEEK LPAREN expr RPAREN { mkexpr Peek [$3] }
 ;
 
-mutation:
+mutation :
     | INSERT LPAREN expr COMMA expr RPAREN { mkexpr Insert [$3; $5] }
     | UPDATE LPAREN expr COMMA expr COMMA expr RPAREN { mkexpr Update [$3; $5; $7] }
     | DELETE LPAREN expr COMMA expr RPAREN { mkexpr Delete [$3; $5] }
@@ -586,7 +576,7 @@ mutation:
     | expr COLONGETS error     { assign_error "refcopy" }
 ;
 
-transformers:
+transformers :
     | expr CONCAT expr                                    { mkexpr Combine [$1; $3] }
     | MAP LPAREN expr COMMA expr RPAREN                   { mkexpr Map [$3; $5] }
     | ITERATE LPAREN expr COMMA expr RPAREN               { mkexpr Iterate [$3; $5] }
@@ -628,17 +618,42 @@ transformers:
     | GROUPBYAGGREGATE error                                   { print_error("Invalid groupby syntax") }
 ;
 
-block:
+block :
     | DO LBRACE expr_seq RBRACE { mkexpr Block $3 }
 ;
 
 /* Sequence primitives */
-integer_list:
+integer_list :
     | INTEGER                       { [$1] }
     | INTEGER COMMA integer_list    { $1::$3 }
 ;
 
-identifier_list:
+identifier_list :
     | IDENTIFIER                       { [$1] }
     | IDENTIFIER COMMA identifier_list { $1::$3 } 
 ;
+
+
+/* Testing */
+program_test :
+    | program EXPECTED named_expr_list     { ($1, $3) }
+    | program EXPECTED error               { print_error "invalid expected value list" }
+    | program error                        { print_error "no expected values specified for program test" }
+;
+
+expression_test :
+    | expr EXPECTED check_expr                       { [[], $1, $3] }
+    | program expr EXPECTED check_expr               { [$1, $2, $4] }
+    | expression_test SEMICOLON expression_test      { $1@$3 }
+;
+
+named_expr_list :
+    | IDENTIFIER GETS check_expr                          { [$1, $3] }           
+    | IDENTIFIER GETS check_expr COMMA named_expr_list    { $5@[$1, $3] }
+;
+
+check_expr :
+    | expr          { InlineExpr($1) }
+    | FILE STRING   { FileExpr($2) }
+;
+

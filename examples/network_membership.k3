@@ -1,0 +1,31 @@
+declare nodes : { int } = { 0 }
+
+declare set_nodes : int -> unit = \i:int -> 
+  let existing:int = peek(nodes) in do
+  { delete(nodes, existing); insert(nodes,i) }
+
+// TODO: send self address instead of 0
+trigger node_join( x:int ) {} = send(register, localhost:10000, (0))
+
+// TODO: use an address as an argument, and send a refresh to the message's source.
+trigger register( id : int ) {} = set_nodes(peek(nodes)+1)
+
+// Synchronizes the network size between the clients and the coordinator 
+trigger network_refresh ( n: int ) {} = set_nodes(n)
+
+role client {
+  // TODO: kickstart with a send, rather than this dummy value
+  source  s1 : int = file("data/a1.csv", csv)
+  bind    s1 -> node_join
+  consume s1
+}
+
+role coordinator {
+  // TODO: a dummy source that is never used, because for now roles must be non-empty
+  source  s1 : int = file("data/a1-b.csv", csv)
+}
+
+default role client
+
+// Execute with:
+// -eval network_membership.k3 -n localhost:10000/coordinator,localhost:10001/client,localhost:10002/client

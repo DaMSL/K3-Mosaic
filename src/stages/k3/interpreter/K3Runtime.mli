@@ -16,6 +16,14 @@ val schedule_trigger : value_t -> value_t -> value_t -> unit
 
 val schedule_event : resource_bindings_t -> id_t -> address -> value_t list -> unit
 
+val configure_scheduler : int64 -> unit
+
 val initialize_scheduler : address -> program_env_t -> unit
 
-val run_scheduler : address -> program_env_t -> unit
+(* Runtime control helpers *)
+
+val node_has_work : address -> bool
+
+val network_has_work : unit -> bool
+
+val run_scheduler : ?slice:int -> address -> program_env_t -> unit

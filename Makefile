@@ -3,6 +3,7 @@
 include config/Makefile.inc
 
 FILES=\
+	src/Constants \
 	src/util/Util \
 	src/util/ListAsSet \
 	src/util/Symbols \
@@ -65,6 +66,7 @@ PARSERS=\
 
 DIRS=\
 	lib/bolt \
+	src \
 	src/util \
 	src/stages/k3 \
 	src/stages/k3/core \

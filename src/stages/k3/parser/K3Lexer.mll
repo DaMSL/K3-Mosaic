@@ -140,6 +140,9 @@ rule tokenize = parse
     | "then" { THEN }
     | "else" { ELSE }
 
+    | "let"  { LET }
+    | "in"   { IN }
+
     | "send" { SEND }
 
     | "insert" { INSERT }

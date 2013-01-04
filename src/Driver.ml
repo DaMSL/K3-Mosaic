@@ -1,6 +1,8 @@
 (* Driver for the K3 programming language. *)
 
 open Arg
+open Str
+open Constants
 open Util
 open K3.AST
 open K3.Annotation
@@ -11,6 +13,7 @@ open K3Typechecker
 open K3Streams
 open K3Consumption
 open K3Interpreter
+open K3Runtime
 open Testing
 open ReifiedK3
 
@@ -74,7 +77,7 @@ let parse_out_lang = parse_lang out_lang_descs "output language"
 (* Spec helpers *)
 let setter_specs param spec_desc = List.map (fun (param_val, flag, desc) -> 
   let fn () = param := param_val
-  in (flag, Arg.Unit fn, "       "^desc)) spec_desc
+  in (flag, Arg.Unit fn, "         "^desc)) spec_desc
 
 (* Testing modes *)
 type test_mode_t = ExpressionTest | ProgramTest
@@ -111,7 +114,8 @@ type parameters = {
     mutable input_files  : string list;
     mutable node_address : address;
     mutable role         : id_t option;
-    mutable peers        : address list;
+    mutable peers        : (address * id_t option) list;
+    mutable run_length   : int64;
     mutable print_types  : bool; (* TODO: change to a debug flag *)
     mutable debug_info   : bool;
   }
@@ -121,13 +125,14 @@ let cmd_line_params : parameters = {
     test_mode    = ref ProgramTest;
     in_lang      = K3in;
     out_lang     = K3;
-    search_paths = ["."];
+    search_paths = default_search_paths;
     input_files  = [];
-    node_address = ("127.0.0.1", 10000);
-    role         = None;
-    peers        = [];
-    print_types  = false;
-    debug_info   = false;
+    node_address = default_node_address;
+    role         = default_role;
+    peers        = default_peers;
+    run_length   = default_run_length;
+    print_types  = default_print_types;
+    debug_info   = default_debug_info;
   }
 
 (* General parameter setters *)
@@ -150,40 +155,68 @@ let append_input_file f =
   cmd_line_params.input_files <- cmd_line_params.input_files @ [f]
   
 (* Evaluation option setters *)
-let parse_ip ip_str = match Str.split (Str.regexp (Str.quote ":")) ip_str with
-  | [ip; port] -> ip, (int_of_string port)
+let parse_port p = 
+  let error () = invalid_arg ("invalid port: "^p) in
+  try let r = int_of_string p in if r > 65535 then error() else r
+  with Failure _ -> error()
+
+let parse_ip_role ipr_str =
+  match Str.full_split (Str.regexp "[:/]") ipr_str with
+  | [Text ip; Delim ":"; Text port; Delim "/"; Text role] -> (ip, (parse_port port)), Some(role)
+  | [Text ip; Delim ":"; Text port] -> (ip, (parse_port port)), None
+  | [Text ip_or_port; Delim "/"; Text role] -> 
+    if String.contains ip_or_port '.' then (ip_or_port, default_port), Some(role)
+    else (default_ip, (parse_port ip_or_port)), Some(role)
   | _ -> invalid_arg "invalid ip string format"
 
-let set_node_address ip_str =
-  cmd_line_params.node_address <- parse_ip ip_str
+let string_of_address_and_role (addr, role_opt) =
+  (string_of_address addr)^(match role_opt with None -> "" | Some r -> "/"^r)
+
+let set_node_address ipr_str =
+  let addr, role_opt = parse_ip_role ipr_str in
+  cmd_line_params.node_address <- addr;
+  cmd_line_params.role <- role_opt
 
 let set_role role_id = 
   cmd_line_params.role <- (if role_id = "" then None else Some role_id)
 
-let append_peers ip_str_list =
-  let ips = Str.split (Str.regexp (Str.quote ",")) ip_str_list in
-  cmd_line_params.peers <- cmd_line_params.peers @ (List.map parse_ip ips)
+let append_peers ipr_str_list =
+  let ip_roles = Str.split (Str.regexp (Str.quote ",")) ipr_str_list in
+  cmd_line_params.peers <- cmd_line_params.peers @ (List.map parse_ip_role ip_roles)
+
+let set_run_length len =
+  cmd_line_params.run_length <- Int64.of_string len
 
 (* Argument descriptions *)
-let param_specs = Arg.align 
+let param_specs = Arg.align
+
+  (* Actions *) 
   (action_specs cmd_line_params.action@
    test_specs cmd_line_params.test_mode@[
+  
+  (* Compilation parameters *)
   "-i", Arg.String set_input_language, 
-      "lang   Set the compiler's input language";
+      "lang     Set the compiler's input language";
   "-l", Arg.String set_output_language, 
-      "lang   Set the compiler's output language";
+      "lang     Set the compiler's output language";
   "-I", Arg.String append_search_path, 
-      "dir    Include a directory in the module search path";
+      "dir      Include a directory in the module search path";
+  
+  (* Interpreter and evaluation parameters *)
   "-h", Arg.String set_node_address, 
-      "addr   Set the current node address for evaluation";
+      "addr     Set the current node address for evaluation";
   "-r", Arg.String set_role, 
-      "role   Set this node's role during evaluation";
+      "role     Set this node's role during evaluation";
   "-n", Arg.String append_peers, 
-      "[addr] Append addresses to the peer list";
+      "[addr]   Append addresses to the peer list";
+  "-steps", Arg.String set_run_length, 
+      "int64    Set program run length in # of messages";
+  
+  (* Debugging parameters *)
   "-t", Arg.Unit set_print_types,
-      "       Print types as part of output";
+      "         Print types as part of output";
   "-d", Arg.Unit set_debug_info,
-      "       Print debug info (context specific)";
+      "         Print debug info (context specific)";
   ])
 
 let usage_msg =
@@ -272,12 +305,24 @@ let compile params = ()
 
 (* Interpret actions *)
 let interpret_k3_program params p = 
-  let typed_program = deduce_program_type p
-  in eval_program params.node_address params.role typed_program
+  let typed_program = deduce_program_type p in 
+  configure_scheduler params.run_length;
+  match params.peers with
+  | [] -> ignore(eval_program params.node_address params.role typed_program)
+  | nodes -> 
+    let peers = 
+      let skip_primary = List.exists (fun (addr,_) -> addr = params.node_address) nodes in
+      let ipr = params.node_address, params.role in
+      (if skip_primary then [] else [ipr])@nodes
+    in 
+      List.iter (fun ipr -> 
+        print_endline @: "Starting node "^(string_of_address_and_role ipr)
+      ) peers;
+      ignore(eval_networked_program peers typed_program)
 
 let interpret params =
   let eval_fn = match params.out_lang with
-    | K3 -> (fun f -> ignore(interpret_k3_program params @: parse_program_k3 f))
+    | K3 -> (fun f -> interpret_k3_program params @: parse_program_k3 f)
     | _ -> error "Output language not yet implemented"
   in
   List.iter eval_fn params.input_files

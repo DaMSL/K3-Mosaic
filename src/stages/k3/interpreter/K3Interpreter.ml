@@ -1,8 +1,10 @@
+open Lazy
 open Util
 open Tree
 
 open K3.AST
 open K3Util
+open K3Printing
 open K3Values
 open K3Typechecker
 open K3Streams
@@ -552,18 +554,20 @@ let env_of_program k3_program =
 
 
 (* Instruction interpretation *)
-let eval_instructions env address (res_env, d_env, instrs) =
-  let run_instruction ri_env i = match i with
-    | Consume id ->
-      print_endline ("Consuming from event loop: "^id);
-      try let i = List.assoc id d_env in 
-          let r = run_dispatcher address res_env ri_env i
-          in run_scheduler address env; r
-      with Not_found -> interpreter_error ("no event loop found for "^id)
-  in 
-  let init_ri_env = [] 
-  in ignore(List.fold_left run_instruction init_ri_env instrs)
+let eval_instructions env address (res_env, d_env) (ri_env, instrs) =
+  let log_node s = print_endline @: "Node "^(string_of_address address)^" "^s in
+  match instrs with
+  | [] -> 
+    if node_has_work address
+    then (log_node @: "consuming messages"; run_scheduler address env);
+    ri_env, []
 
+  | (Consume id)::t ->
+    log_node @: "consuming from event loop: "^id;
+    try let i = List.assoc id d_env in 
+        let r = run_dispatcher address res_env ri_env i
+        in run_scheduler address env; r, t
+    with Not_found -> interpreter_error @: "no event loop found for "^id
 
 (* Program interpretation *) 
 let interpreter_event_loop role_opt k3_program = 
@@ -576,19 +580,53 @@ let interpreter_event_loop role_opt k3_program =
 	  | None, Some (_,y) -> y
 	  | None, None -> error ()
 
-let eval_program address role_opt k3_program =
+let initialize_peer address role_opt k3_program =
   let env = env_of_program k3_program in
-  let event_loop = interpreter_event_loop role_opt k3_program in 
-		initialize_scheduler address env;
-		eval_instructions env address event_loop;
-    print_endline (string_of_program_env env);
+    initialize_scheduler address env;
+    address, (interpreter_event_loop role_opt k3_program, env)
+
+let eval_program address role_opt k3_program =
+  let rec run_until_empty f (x,y) = 
+    let a,b = f (x,y) in if b = [] then () else run_until_empty f (x, y)
+  in
+  let _, ((res_env, d_env, instrs), env) = initialize_peer address role_opt k3_program in
+		run_until_empty (eval_instructions env address (res_env, d_env)) ([],instrs);
+    print_endline @: string_of_program_env env;
     env
 
 
 (* Distributed program interpretation *)
-
-(* TODO: peer multiplexing *)
 let eval_networked_program peer_list k3_program =
-  let env = env_of_program k3_program in
-  List.map (fun (addr,role_opt) ->
-    addr, eval_program addr role_opt k3_program) peer_list
+  let eval_error addr =
+    print_endline @: "Network evaluation error for peer "^(string_of_address addr) in
+
+  (* Initialize an environment for each peer *)
+  let peer_meta = Hashtbl.create (List.length peer_list) in
+  let envs = List.map (fun (addr, role_opt) ->  
+      let _, ((res_env, d_env, instrs), env) = initialize_peer addr role_opt k3_program
+      in Hashtbl.replace peer_meta addr ([], instrs);
+         addr, (res_env, d_env, env)
+    ) peer_list
+  in
+
+  (* Continue running until all peers have finished their instructions,
+   * and all messages have been processed *)
+  let run_network () = 
+    (Hashtbl.fold (fun _ (_,i) acc -> acc || i <> []) peer_meta false) || network_has_work() 
+  in
+  let step_peer (addr, role_opt) = 
+    try let (rese, de, env), (rie, i) = List.assoc addr envs, Hashtbl.find peer_meta addr in
+        (* Both branches invoke eval_instructions to process pending messages,
+         * even if there are no sources on which to consume events *)
+        if i = [] then ignore(eval_instructions env addr (rese, de) (rie, i))
+        else Hashtbl.replace peer_meta addr @: eval_instructions env addr (rese, de) (rie, i)
+    with Not_found -> eval_error addr
+  in
+  while run_network () do List.iter step_peer peer_list done;
+
+  (* Log and return program state *)
+  List.map (fun (addr, (_,_,e)) -> 
+      print_endline @: ">>>> Peer "^(string_of_address addr);
+      print_endline @: string_of_program_env e;
+      addr, e
+    ) envs

@@ -1,5 +1,6 @@
 open Symbols
 open Tree
+open Util
 open K3.AST
 open K3Util
 open K3Printing
@@ -54,11 +55,16 @@ let rec run_tests ?(indent="") test =
         List.iter (run_tests ~indent:("  "^indent)) tests; ()
     )
 
+
 (* Driver methods *)
+let check_as_expr ce = match ce with
+  | InlineExpr e -> e
+  | FileExpr (fp) -> parse_expr @: read_file fp
+
 let test_expressions test_file_name expr_tests = 
   let test_cases = snd (List.fold_left (fun (i, test_acc) (decls, e, x) ->
       let name = test_file_name^" "^(string_of_int i) in
-      let test_case = case name @: eval_test_expr (decls, e) @=? eval_test_expr (decls, x) 
+      let test_case = case name @: eval_test_expr (decls, e) @=? eval_test_expr (decls, check_as_expr x) 
       in i+1, test_acc@[test_case]
     ) (0, []) expr_tests)
   in List.iter run_tests test_cases
@@ -68,7 +74,7 @@ let test_program test_file_name address role_opt (program,expected) =
   let test_cases = List.fold_left (fun test_acc (id, x) -> 
       let name = test_file_name^" "^id in
       let evaluated = try !(List.assoc id env) with Not_found -> VUnknown in
-      let test_case = case name @: evaluated @=? eval_test_expr ([], x)
+      let test_case = case name @: evaluated @=? eval_test_expr ([], check_as_expr x)
       in test_acc@[test_case]
     ) [] expected
   in List.iter run_tests test_cases

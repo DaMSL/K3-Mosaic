@@ -169,9 +169,11 @@ type declaration_t
 type program_t = (declaration_t * annotation_t) list
 
 (* Testing *)
-type expression_test = program_t * expr_t * expr_t
+type check_expr_t = FileExpr of string | InlineExpr of expr_t
 
-type program_test = program_t * (id_t * expr_t) list
+type expression_test = program_t * expr_t * check_expr_t
+
+type program_test = program_t * (id_t * check_expr_t) list
 
 end
 

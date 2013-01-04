@@ -1,3 +1,9 @@
+/*
+This example demonstrates K3's ability to test global state
+at the end of execution against a constant expression specified in a file.
+The program used here is quicksort, and is the same as 'examples/quicksort.k3'
+*/
+
 declare data : [ int ] = [ 3; 7; 4; 1; 8; 6; 2; 5 ] // Input to sort
 declare final : { [int] } // Output datastructure
 
@@ -80,10 +86,7 @@ role client {
 
 default role client
 
-// Uncomment when running in -test -prog mode
-/*
 expected 
 
-data = [ 3; 7; 4; 1; 8; 6; 2; 5 ],
+data = file "data/quicksort.data.test",
 final = { [ 1; 2; 3; 4; 5; 6; 7; 8 ] }
-*/
