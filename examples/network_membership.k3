@@ -5,7 +5,7 @@ declare set_nodes : int -> unit = \i:int ->
   { delete(nodes, existing); insert(nodes,i) }
 
 // TODO: send self address instead of 0
-trigger node_join( x:int ) {} = send(register, localhost:10000, (0))
+trigger node_join( x:int ) {} = send(register, localhost:10000, 0)
 
 // TODO: use an address as an argument, and send a refresh to the message's source.
 trigger register( id : int ) {} = set_nodes(peek(nodes)+1)

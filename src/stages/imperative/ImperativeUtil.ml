@@ -302,12 +302,8 @@ let gen_flow_name class_name = gen_string_sym flow_sym_class class_name
 
 
 (* Basic types *)
-let vi_type t = 
-  let internal_type t = match t with
-    | TInternal x -> x
-    | _ -> failwith "invalid internal type" 
-  in value_of (internal_type t) (fun () -> failwith "invalid value_type")
-
+let k3_type t = match t with | TInternal x -> x | _ -> failwith "invalid internal type" 
+let vi_type t = value_of (k3_type t) (fun () -> failwith "invalid value_type")
 let bi_type t = base_of (vi_type t)
 let ib_type bt = TInternal(TValue(canonical bt)) 
 let iv_type vt = TInternal(TValue vt)
@@ -346,7 +342,9 @@ let mk_const meta const = mk_iexpr (Const const) meta []
 
 let mk_var meta id = mk_iexpr (Var id) meta []
  
-let mk_tuple meta fields = mk_iexpr Tuple meta fields
+let mk_tuple meta fields = 
+  if List.length fields = 1 then List.hd fields
+  else mk_iexpr Tuple meta fields
 
 let mk_op meta op_tag args = mk_iexpr (Op op_tag) meta args
 

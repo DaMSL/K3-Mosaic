@@ -557,9 +557,13 @@ access :
 ;
 
 mutation :
-    | INSERT LPAREN expr COMMA expr RPAREN { mkexpr Insert [$3; $5] }
+    /* Inserts, deletes and sends use a vararg function syntax for their value/payload */
+    | INSERT LPAREN expr COMMA tuple RPAREN { mkexpr Insert [$3; $5] }
+    | DELETE LPAREN expr COMMA tuple RPAREN { mkexpr Delete [$3; $5] }
+
+    /* Updates must explicitly specify their new/old value as a tuple */
     | UPDATE LPAREN expr COMMA expr COMMA expr RPAREN { mkexpr Update [$3; $5; $7] }
-    | DELETE LPAREN expr COMMA expr RPAREN { mkexpr Delete [$3; $5] }
+
     | expr LARROW expr { mkexpr Assign [$1; $3] }
     | expr GETS expr { mkexpr Assign [$1; $3] }
     | expr COLONGETS expr { mkexpr Assign [$1;$3] }

@@ -208,54 +208,52 @@ let rec composite_decl_of_type id counter vt =
 
 
 (* CPP/STL collection type generation for basic annotations *)
-and type_of_collection vt uniq ord pos deps = 
-  let t = iv_type vt in
-  let eq_class, eq_class_id = equality_of_positions vt pos, type_projection_id "eq" vt pos in
-  let less_class, less_class_id = inequality_of_positions vt pos, type_projection_id "less" vt pos in
-  let hash_class, hash_class_id = hash_of_positions vt pos, type_projection_id "hash" vt pos in
-  let reto, retu = (fun t -> t, [less_class]), (fun t -> t, [eq_class; hash_class]) in
+and type_of_single_dependency_collection elem_vt uniq ord pos deps = 
+  let elem_t = iv_type elem_vt in
+  let eq_class, eq_class_id = equality_of_positions elem_vt pos, type_projection_id "eq" elem_vt pos in
+  let less_class, less_class_id = inequality_of_positions elem_vt pos, type_projection_id "less" elem_vt pos in
+  let hash_class, hash_class_id = hash_of_positions elem_vt pos, type_projection_id "hash" elem_vt pos in
+  let reto, retu = (fun ct -> ct, elem_t, [less_class]), (fun ct -> ct, elem_t, [eq_class; hash_class]) in
   match uniq, ord, deps with 
     | true, true, None ->
       (* STL set *)
-      reto @: TExt(TSTLCollection(TSTLSet t, [TOrdered (Some less_class_id)]))
+      reto @: TExt(TSTLCollection(TSTLSet elem_t, [TOrdered (Some less_class_id)]))
 
     | false, true, None ->
       (* STL multiset *)
-      reto @: TExt(TSTLCollection(TSTLSet t, [TOrdered (Some less_class_id); TMulti]))
+      reto @: TExt(TSTLCollection(TSTLSet elem_t, [TOrdered (Some less_class_id); TMulti]))
     
     | true, false, None ->
       (* STL unordered_set *)
-      retu @: TExt(TSTLCollection(TSTLSet t, [TUnordered (Some(hash_class_id), Some(eq_class_id))]))
+      retu @: TExt(TSTLCollection(TSTLSet elem_t, [TUnordered (Some(hash_class_id), Some(eq_class_id))]))
 
     | false, false, None ->
       (* STL unordered_multiset *)
-      retu @: TExt(TSTLCollection(TSTLSet t, [TUnordered (Some(hash_class_id), Some(eq_class_id)); TMulti]))
+      retu @: TExt(TSTLCollection(TSTLSet elem_t, [TUnordered (Some(hash_class_id), Some(eq_class_id)); TMulti]))
     
     | _, _, Some(d) ->
       let ret key_t value_t = 
-        (* TODO: address interface violation by wrapping collection operations
-         * (i.e. insert, delete, peek, etc) for generated types *)
         (* The associative containers here do not need projection function objects
          * since they split the element type into key and value parts. *)
-        let t = match uniq, ord with
+        let ct = match uniq, ord with
           | true, true -> TExt(TSTLCollection(TSTLMap (key_t, value_t), [TOrdered None]))
           | false, true -> TExt(TSTLCollection(TSTLMap (key_t, value_t), [TOrdered None; TMulti]))
           | true, false -> TExt(TSTLCollection(TSTLMap (key_t, value_t), [TUnordered (None, None)]))
           | false, false -> TExt(TSTLCollection(TSTLMap (key_t, value_t), [TUnordered (None, None); TMulti]))
-        in t, []
+        in ct, TExt(TPair (key_t, value_t)), []
       in
-      let key_t = project_tuple_type vt pos in
+      let key_t = project_tuple_type elem_vt pos in
       let value_t = match d with
         | Element ->    
           let rec diff_pos pos acc i = 
             let nacc = if List.mem i pos then acc else i::acc
             in match i with 0 -> nacc | _ -> diff_pos pos nacc (i-1)
-          in project_tuple_type vt (diff_pos pos [] ((tuple_arity vt)-1))
-        | Positions(dep_pos) -> project_tuple_type vt dep_pos
+          in project_tuple_type elem_vt (diff_pos pos [] ((tuple_arity elem_vt)-1))
+        | Positions(dep_pos) -> project_tuple_type elem_vt dep_pos
       in ret key_t value_t
 
 
-and wrap_collection primary ct (vt, vt_decl_opt) (uniq, ord, pos, deps) =
+and wrap_collection primary (orig_ct, orig_elem_t) (ct, elem_t, elem_t_decl_opt) (uniq, ord, pos, deps) =
   let mk_meta () = [] in
   let meta t = t, mk_meta() in
   let mk_itmv id t = id, t, meta t, mk_var (meta t) id in
@@ -265,7 +263,6 @@ and wrap_collection primary ct (vt, vt_decl_opt) (uniq, ord, pos, deps) =
   let pos_str = mk_pos_str pos in
 
   let element_error () = failwith "invalid element type and declaration" in
-  let native_error () = failwith "cannot convert element type and declaration to a native type" in
   let stl_collection_error () = failwith "invalid STL collection" in
 
   (* AST constructor helpers *)
@@ -346,23 +343,7 @@ and wrap_collection primary ct (vt, vt_decl_opt) (uniq, ord, pos, deps) =
     in aux pos [] n
   in
 
-  let rec native_of_type_and_decl (x,y) = match x, y with
-    | TNamed _, Some (TExpr t) -> native_of_type_and_decl (t, None)
-    | TNamed _, Some (TComposite fields) -> 
-      begin try let t_fields = List.map (fun (id,t) -> vi_type t) fields
-                in Some(ib_type (TTuple t_fields))
-            with Failure _ -> None
-      end
-    | TInternal(TValue vt), None -> Some(x)
-    | _, _ -> None
-  in
-
-  let element_as_native_type () =
-    match native_of_type_and_decl (vt, vt_decl_opt) with Some(t) -> t | _ -> native_error()
-  in
-
-  let element_arity () =
-    match bi_type @: element_as_native_type () with
+  let element_arity () = match bi_type orig_elem_t with
     | TTuple fields -> List.length fields
     | _ -> 1
   in
@@ -394,29 +375,17 @@ and wrap_collection primary ct (vt, vt_decl_opt) (uniq, ord, pos, deps) =
       | _, _ -> true)
   in
 
-  let decomposed_value, has_tuple_generators = is_stl_map, is_boost_collection in
-
-  (* Check vt is compatible with pos, i.e., 
-     -- vt can be converted to a native type and pos is well-defined over that type
-     -- vt is an external type and pos is empty *)
-
-  match native_of_type_and_decl (vt, vt_decl_opt), deps, is_dependence_free with
-  | None, _, _ ->
-    (* TODO: generate interface over a collection of external elements *)
-    failwith "cannot wrap collections of external elements"
-
-  | Some native_t, _, true ->
-    (* Generate a dependence-free collection interface containing the following functions:
-        -- insert(new)
-        -- erase(existing)
-        -- update(existing,new)
-        -- slice(existing)
-     *)
-
-    let ce_t, cit_t, te_t = vt, TExt(TIterator ct), native_t in
+  (* Generate a dependence-free collection interface containing the following functions:
+      -- insert(new)
+      -- erase(existing)
+      -- update(existing,new)
+      -- slice(existing)
+   *)
+  let generate_dependence_free_methods () =
+    let ce_t, cit_t, te_t = elem_t, TExt(TIterator ct), orig_elem_t in
     let ce_meta, cit_meta = meta ce_t, meta cit_t in
     
-    let arg_id, arg_t, arg_meta, arg_var = mk_itmv "elem" native_t in
+    let arg_id, arg_t, arg_meta, arg_var = mk_itmv "elem" orig_elem_t in
     let old_arg_id, _, _, old_arg_var = mk_itmv "existing" arg_t in
 
     (* Conversion expression construction *)
@@ -474,10 +443,9 @@ and wrap_collection primary ct (vt, vt_decl_opt) (uniq, ord, pos, deps) =
 
     List.map (fun d -> d, unit_meta)
       (List.flatten [insert_fn; delete_fn; update_fn; slice_fn])
+  in
 
-
-  | Some native_t, Some(d), false ->
-
+  let generate_dependency_methods d =
     let dep_pos = match d with
       | Element -> diff_pos (element_arity()-1) pos
       | Positions(dep_pos) -> dep_pos
@@ -553,15 +521,15 @@ and wrap_collection primary ct (vt, vt_decl_opt) (uniq, ord, pos, deps) =
      *)
 
     let (ce_t, cit_t, ck_t, cv_t), (te_t, tk_t, tv_t) = 
-      let key_t, val_t = project_elem native_t pos, project_elem native_t dep_pos in
-      let a, b = if not decomposed_value then vt, vt
-                 else TExt (TPair (key_t, val_t)), val_t
-      in (a, TExt(TIterator ct), key_t, b), (native_t, key_t, val_t)
+      let a,b, key_t, val_t = match elem_t with
+        | TExt (TPair (k, v)) -> elem_t, v, k, v
+        | _ -> elem_t, elem_t, project_elem orig_elem_t pos, project_elem orig_elem_t dep_pos
+      in (a, TExt(TIterator ct), key_t, b), (orig_elem_t, key_t, val_t)
     in
 
     let ce_meta, cit_meta = meta ce_t, meta cit_t in
     
-    let arg_id, arg_t, arg_meta, arg_var = mk_itmv "elem" native_t in
+    let arg_id, arg_t, arg_meta, arg_var = mk_itmv "elem" orig_elem_t in
     let old_arg_id, _, _, old_arg_var = mk_itmv "existing" arg_t in
     let key_arg_id, _, key_meta, key_var = mk_itmv "key" tk_t in
     let val_id, _, val_meta, val_var = mk_itmv "val" tv_t in
@@ -588,7 +556,7 @@ and wrap_collection primary ct (vt, vt_decl_opt) (uniq, ord, pos, deps) =
                                   else tuple_of_pos te_t te_expr dep_pos, []
     in
 
-    let (key_expr, key_decls), (val_expr_opt, val_decls) =
+    let (key_expr, key_decls), (val_expr, val_decls) =
       mk_key_of_tuple arg_var, mk_val_of_tuple arg_var in
 
     (* Context generators for erase and update methods. *)
@@ -629,6 +597,10 @@ and wrap_collection primary ct (vt, vt_decl_opt) (uniq, ord, pos, deps) =
           @(mk_apply_match_while_loop cit_t key_expr cmds)
       in mk_remove_modifier_common use_new fn_id body_f
     in
+
+    (* TODO: for fun deps (i.e. 1-1 deps):
+     * -- skip bulk operations (i.e. "all" version of methods)
+     * -- return singletons from slice method *)
 
     (* An insert function that accepts a full tuple, and inserts as a key-value pair *)
     let insert_fn = if ce_t = te_t || not primary then []
@@ -730,7 +702,6 @@ and wrap_collection primary ct (vt, vt_decl_opt) (uniq, ord, pos, deps) =
      * 2. Declares an empty slice collection for the return value.
      * 3. Populates the return value by looping and matching.
      *)
-    (* TODO: handle singleton return values. *)
     let slice_fn =
       let ret_id, ret_t, ret_meta, ret_var = mk_itmv "r" ct in
       if primary then
@@ -739,7 +710,7 @@ and wrap_collection primary ct (vt, vt_decl_opt) (uniq, ord, pos, deps) =
           let elem_expr = mk_fn arg_meta (FExt IteratorElement) [it_var] in
           let pred, pred_decls =
             let elem_val_expr, elem_val_decls = mk_val_of_elem elem_expr
-            in mk_op bool_meta Eq [val_var; elem_val_expr], elem_val_decls
+            in mk_op bool_meta Eq [val_expr; elem_val_expr], elem_val_decls
           in
           pred_decls@[mk_if pred (mk_effect_expr (Collection Insert) [ret_var; elem_expr])]
         in
@@ -763,8 +734,13 @@ and wrap_collection primary ct (vt, vt_decl_opt) (uniq, ord, pos, deps) =
     List.map (fun d -> d, unit_meta)
       (List.flatten [insert_fn; primary_delete_fn; index_delete_fn;
                                 primary_update_fn; index_update_fn; slice_fn])
+  in
 
-  | _ -> failwith "internal error on wrapping collection"
+  match deps, is_dependence_free with
+  | _, true -> generate_dependence_free_methods ()
+  | Some(d), false -> generate_dependency_methods d
+  | _, _ -> failwith "internal error on wrapping collection"
+
 
 (* Generic collection type specialization.
  * Handles nested annotated collections by extracting annotations directly
@@ -777,7 +753,9 @@ and type_declarations_of_collection id counter t =
       | TInternal(TValue vt) -> indexes_of_annotations (annotation_of vt)
       | _ -> None, []
     in
-    let nested, c, t_decl, aux_decls = 
+    (* Call to composite_decl_of_type can recursively enter this
+     * function to deeply specialize a nested collection. *)
+    let nested, new_counter, t_decl, aux_decls = 
       match composite_decl_of_type id (counter+1) element_vt with
       | x, (TComposite(tl) as y), z ->
         List.exists is_external_type (List.map snd tl), x, y, z
@@ -788,10 +766,10 @@ and type_declarations_of_collection id counter t =
     
     (* Directly specialize a single index request to the appropriate data structure *)
     | false, (Some(uniq, ord, pos, dep), []) ->
-      let ct, decls = type_of_collection element_vt uniq ord pos dep in
+      let ct, et, decls = type_of_single_dependency_collection element_vt uniq ord pos dep in
       let rt, rdecls = 
         let tid = "c_"^id in 
-        let members = wrap_collection true ct (iv_type element_vt, None) (uniq, ord, pos, dep) in
+        let members = wrap_collection true (t, iv_type element_vt) (ct, et, None) (uniq, ord, pos, dep) in
         TNamed tid, decls@[DClass(tid, Some(ct), members), unit_meta]
       in counter, rt, rdecls
     
@@ -799,26 +777,29 @@ and type_declarations_of_collection id counter t =
      * collections are specialized as Boost multi_indexes *)
     | _, _ ->
       let ct_id, ct_elem_id, ct, c_elem_t, wct_id = 
-        let prefix = id^"__"^(string_of_int counter) in 
-        let x,y = prefix^"_bmi", prefix^"_bmi_elem"
-        in x, y, TNamed x, TNamed y, "c_"^id
+        let prefix = id^"__d"^(string_of_int counter) in 
+        let x,y = prefix^"_bmi", prefix^"_bmi_elem" in
+        let nid = "c_"^id^(if counter > 0 then "_d"^(string_of_int counter) else "")
+        in x, y, TNamed x, TNamed y, nid
       in
       begin match t_decl with
       | TComposite(tl) ->
-        let elem_and_decl = c_elem_t, Some(t_decl) in
+        let coll_elem_and_decl = ct, c_elem_t, Some(t_decl) in
         let bmi_idx = bmi_indexes collection_t t_decl c_elem_t indexes in
         let ct_decl = TExtDecl(TBoostMultiIndex(c_elem_t, bmi_idx)) in
         let decls = aux_decls@[DType(ct_elem_id, t_decl), unit_meta; DType(ct_id, ct_decl), unit_meta] in
+        let wrap_f primary = wrap_collection primary (t, iv_type element_vt) coll_elem_and_decl in
         let rt, rdecls = 
           let p_members = match fst indexes with
-            | None -> []
-            | Some(uniq,ord,pos,dep) -> wrap_collection true ct elem_and_decl (uniq, ord, pos, dep) 
+            | None -> [] (* TODO: non-annotated collections with a nested and annotated collection
+                            must still generate a wrapper interface *)
+            | Some(uniq,ord,pos,dep) -> wrap_f true (uniq, ord, pos, dep) 
           in
-          let members = p_members@(List.flatten (List.map (wrap_collection false ct elem_and_decl) (snd indexes)))
+          let members = p_members@(List.flatten (List.map (wrap_f false) (snd indexes)))
           in TNamed wct_id, decls@[DClass(wct_id, Some(ct), members), unit_meta]
-        in c, rt, rdecls
+        in new_counter, rt, rdecls
     
-      | _ -> c, t, aux_decls
+      | _ -> new_counter, t, aux_decls
       end
     end
 
@@ -850,11 +831,11 @@ let specialize_datastructures program =
     let x,y = List.partition is_var_decl decls in
     (List.map (fun (d,(t,a)) -> mk_decl (t,a) d) x), y
   in
-  let rec bmi_of_cmd (decls, cmds, bindings) cmd =
+  let rec specialize_cmd (decls, cmds, bindings) cmd =
     let rebuild_cmd cmd_f cmd_l =
       let sub_decls, cmds_per_sub, nb =
         List.fold_left (fun (decl_acc, cmds_per_sub, b) sub_cmd ->
-            let ndecls, nsub_cmds, nb = bmi_of_cmd ([], [], b) sub_cmd in
+            let ndecls, nsub_cmds, nb = specialize_cmd ([], [], b) sub_cmd in
             let var_decls, rest_decls = split_decls ndecls in
             (decl_acc@rest_decls), cmds_per_sub@[var_decls@nsub_cmds], nb
           ) ([], [], bindings) cmd_l
@@ -862,7 +843,7 @@ let specialize_datastructures program =
     in
     match tag_of_cmd cmd with
     | Decl d -> 
-      let ntdecls, ndecls, nb = bmi_of_decl ([], [], bindings) (d, meta_of_cmd cmd) in
+      let ntdecls, ndecls, nb = specialize_decl ([], [], bindings) (d, meta_of_cmd cmd) in
       let var_decls, rest_decls = split_decls ndecls in
         (decls@ntdecls@rest_decls), (cmds@var_decls), nb
    
@@ -893,36 +874,39 @@ let specialize_datastructures program =
     | _ -> decls, (cmds@[cmd]), bindings
 
   (* TODO: prune duplicate BMI type declarations *)
-  and bmi_of_decl (tdecls,nprog,bindings) (d,(dt,da)) = match d with
+  and specialize_decl (tdecls,nprog,bindings) (d,(dt,da)) = match d with
     | DVar (id,t,da_opt) ->
       begin match datastructure_of_collection id t da_opt (dt,da) with
         | x, [], [] -> tdecls@x, nprog@[d,(dt,da)], bindings
         | x,y,z -> tdecls@x, nprog@y, bindings@z
       end
 
+    (* TODO: specialize argument data structures based on their annotations *)
     | DFn (id,arg,ret_t,body) -> 
-      let ntdecls, nbody, nbindings = List.fold_left bmi_of_cmd ([], [], bindings) body 
+      let ntdecls, nbody, nbindings = List.fold_left specialize_cmd ([], [], bindings) body 
       in tdecls@ntdecls, nprog@[DFn (id,arg,ret_t,nbody), (dt,da)], nbindings
 
     | DClass (id, parent_opt, decls) ->
-      let ntdecls, nbody, nbindings = List.fold_left bmi_of_decl ([], [], bindings) decls 
+      let ntdecls, nbody, nbindings = List.fold_left specialize_decl ([], [], bindings) decls 
       in tdecls@ntdecls, nprog@[DClass (id, parent_opt, nbody), (dt,da)], nbindings
 
     | _ -> tdecls, nprog@[d,(dt,da)], bindings
   in 
-  let rec specialize_program_datastructures prog =
-    let rcr = specialize_program_datastructures in
+  let rec specialize_program prog =
+    let rcr = specialize_program in
     List.fold_left (fun (cacc, bacc) c -> match c with
       | Include (name, None, _, _) -> cacc@[c], bacc
       | Include (name, Some(p), code, expected) ->
         let x,y = rcr p in cacc@[Include (name, Some(x), code, expected)], bacc@y
       | Component decls ->
-        let x,y,z = List.fold_left bmi_of_decl ([], [], bacc) decls in 
-        let decl_prog = if x = [] then [] else [Include("k3_decls.hpp", Some([Component x]), None, false)]
+        let x,y,z = List.fold_left specialize_decl ([], [], bacc) decls in 
+        let decl_prog =
+          if x = [] then []
+          else [Include("k3_decls.hpp", Some([Component x]), None, false)]
         in cacc@decl_prog@[Component y], z
     ) ([],[]) prog
   in
-  let nprog, bindings = specialize_program_datastructures program in
+  let nprog, bindings = specialize_program program in
   (* Redo type inference on nprog *)
   (deduce_program_type nprog), bindings 
 

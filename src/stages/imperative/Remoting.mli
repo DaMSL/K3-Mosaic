@@ -34,13 +34,13 @@ sig
     (* Generates an internal structure for the serialization of the given type *)
     val generate_spec : string -> type_t -> spec_t
 
-	  val generate_serialize :
-	    (unit -> annotation_t) -> (type_t * annotation_t) expr_t -> type_t
-	    -> (type_t * annotation_t) cmd_t list * (type_t * annotation_t) expr_t
-	  
-	  val generate_deserialize :
-	    (unit -> annotation_t) -> (type_t * annotation_t) expr_t -> type_t
-	    -> (type_t * annotation_t) cmd_t list * (type_t * annotation_t) expr_t
+    val serialize_expr :
+      (unit -> annotation_t) -> (type_t * annotation_t) expr_t -> type_t
+      -> (type_t * annotation_t) cmd_t list * (type_t * annotation_t) expr_t
+    
+    val deserialize_expr :
+      (unit -> annotation_t) -> (type_t * annotation_t) expr_t -> type_t
+      -> (type_t * annotation_t) cmd_t list * (type_t * annotation_t) expr_t
 	end
 
 	module type MessagingGenerator = sig

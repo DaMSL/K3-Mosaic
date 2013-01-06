@@ -34,19 +34,19 @@ trigger qsort( parent : int, left : bool, c : [int] ) {
   lhs : [ int ],
   rhs : [ int ]
 } = do {
-  //insert(qsort_in, (parent, left, c)); // Log qsort arguments
+  //insert(qsort_in, parent, left, c); // Log qsort arguments
   let len:int = fold(\(acc:int,_) -> acc+1, 0, c) in
     if len <= 1 then
-      send(merge, localhost:10000, (parent, left, if len == 0 then empty else [peek(c)]))
+      send(merge, localhost:10000, parent, left, if len == 0 then empty else [peek(c)])
 
     else 
     // TODO: pick a better pivot.
     let (id:int, pivot:int) = (gensym(()), peek(c)) in do {
-      //insert(pivots, (parent, pivot));
-      insert(parents, (parent, id, left));
+      //insert(pivots, parent, pivot);
+      insert(parents, parent, id, left);
       iterate(\x:int -> if x <= pivot then insert(lhs, x) else insert(rhs, x), c);
-      send(qsort, localhost:10000, (id, true, lhs));
-      send(qsort, localhost:10000, (id, false, rhs))
+      send(qsort, localhost:10000, id, true, lhs);
+      send(qsort, localhost:10000, id, false, rhs)
     }
 }
 
@@ -54,11 +54,11 @@ trigger qsort( parent : int, left : bool, c : [int] ) {
 // Merge phase
 
 trigger merge( id : int, left : bool, c : [int] ) {} = do {
-  //insert(merge_in, (id, left, c)); // Log merge arguments
+  //insert(merge_in, id, left, c); // Log merge arguments
   
   let p : [(int, [int])] = partials[id,_] in
   
-  if fold(\(acc:int,_) -> acc+1, 0, p) == 0 then insert(partials, (id, c))
+  if fold(\(acc:int,_) -> acc+1, 0, p) == 0 then insert(partials, id, c)
   else 
     // Proceed on binary barrier completion.      
     let merged:[int] = 
@@ -68,14 +68,14 @@ trigger merge( id : int, left : bool, c : [int] ) {} = do {
       // Manual garbage collection. Comment to see partials and parents.
       /**/
       iterate(\x:(int,[int]) -> delete(partials,x), p);
-      delete(parents, (parent, id, pleft));
+      delete(parents, parent, id, pleft);
       /**/
       if parent == 0 then insert(final, merged)
-      else send(merge, localhost:10000, (parent, pleft, merged))
+      else send(merge, localhost:10000, parent, pleft, merged)
     }
 }
 
-trigger go(n:int) {} = send(qsort, localhost:10000, (0,true,data))
+trigger go(n:int) {} = send(qsort, localhost:10000, 0, true, data)
 
 role client {
   // Kickstart with dummy value.

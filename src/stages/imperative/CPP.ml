@@ -304,11 +304,12 @@ module CPPGenerator : Imperative.Generator
   let concat_template tid1 tid2 =
     tid1^"<"^tid2^(if tid2.[(String.length tid2)-1] = '>' then " " else "")^">"
 
-  let sep_type_list ?(sep=",") string_fn l =
-    String.concat sep (List.map string_fn l)
+  let sep_list ?(sep=",") l = String.concat sep (List.filter ((<>) "") l)
+
+  let sep_type_list ?(sep=",") string_fn l = sep_list ~sep:sep (List.map string_fn l)
   
   let sep_id_type_list ?(sep_elem="; ") ?(sep_id=" ") string_fn l =
-    String.concat sep_elem (List.map (fun (id,t) -> (string_fn t)^sep_id^id) l)
+    sep_list ~sep:sep_elem (List.map (fun (id,t) -> (string_fn t)^sep_id^id) l)
 	
 	let call_fn lazy_id args =
     force lazy_id; wrap ~space:false "(" (lazy (print_lazy_list args)) ")"
@@ -395,12 +396,11 @@ module CPPGenerator : Imperative.Generator
           failwith "invalid collection variant (both ordered and unordered)"
         else (if h <> "" && e <> "" then "unordered_" else "")^(if m then "multi" else "")^t
       in 
-      let template_args = String.concat "," (List.filter ((<>) "") [c; h; e; a])
-      in t, template_args
+      t, sep_list [c; h; e; a]
     in
     let print_template t_id arg_t_l = 
       let t, template_args = wrap_type t_id
-      in ps (concat_template t (String.concat "," [comma_types arg_t_l; template_args]))
+      in ps (concat_template t (sep_list [comma_types arg_t_l; template_args]))
     in match c with
       | TSTLSet e_t -> print_template "set" [e_t]
       | TSTLMap (k_t, v_t) -> print_template "map" [k_t; v_t]

@@ -44,11 +44,12 @@ sig
   val gen_flow_name : string -> string
 
   (* Typing helpers *)
-  val vi_type : type_t -> K3.AST.value_type_t
-  val bi_type : type_t -> K3.AST.base_type_t
+  val k3_type  : type_t -> K3.AST.type_t
+  val vi_type  : type_t -> K3.AST.value_type_t
+  val bi_type  : type_t -> K3.AST.base_type_t
   val ib_type  : K3.AST.base_type_t -> type_t 
 	val iv_type  : K3.AST.value_type_t -> type_t
-	val i_type   : K3.AST.type_t -> type_t
+  val i_type   : K3.AST.type_t -> type_t
 	val unit_t   : type_t
 	val int_t    : type_t
 	val bool_t   : type_t

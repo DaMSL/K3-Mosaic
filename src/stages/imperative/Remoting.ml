@@ -40,11 +40,11 @@ module type SerializerGenerator = sig
 
 	val generate_spec : string -> type_t -> spec_t
 
-	val generate_serialize :
+	val serialize_expr :
     (unit -> annotation_t) -> (type_t * annotation_t) expr_t -> type_t
     -> (type_t * annotation_t) cmd_t list * (type_t * annotation_t) expr_t
 	  
-	val generate_deserialize :
+	val deserialize_expr :
 	  (unit -> annotation_t) -> (type_t * annotation_t) expr_t -> type_t
 	  -> (type_t * annotation_t) cmd_t list * (type_t * annotation_t) expr_t
 end
@@ -185,14 +185,117 @@ module Protobuf : SerializerGenerator = struct
   let string_of_spec s =
     String.concat "\n" (List.map string_of_spec_type_decl s)
 
-  let generate_serialize mk_meta arg_var arg_type =
-    [], mk_fn (meta mk_meta string_t) (Member (Method "SerializeAsString")) [arg_var]
-  
-  let generate_deserialize mk_meta msg_var msg_type =
-    let k3_t = match msg_type with TInternal t -> t | _ -> failwith "invalid K3 msg type" in
-    let s_t = serializer_type (signature_of_type k3_t) k3_t in
-    let s_m = meta mk_meta s_t in
-    [], mk_fn s_m (Named "ParseFromString") [msg_var]  
+  (* Generates protobuf set/add method calls for deep K3 value serialization,
+   * including nested collection values. *)
+  (* TODO: handle external collection types, e.g., STL/BMI collections *)
+  let rec serialize_value_cmds mk_meta src_expr src_vt dest_expr dest_id =
+    let rcr = serialize_value_cmds mk_meta in
+    let m = meta mk_meta in
+    let unit_meta, int_meta, string_meta = m unit_t, m int_t, m string_t in
+    let call_method = call_method_proc mk_meta in
+    match base_of src_vt with
+    | TTuple fields ->
+      fst (List.fold_left (fun (acc,i) t -> 
+        let field_expr = mk_fn (m (iv_type t)) (Member (Position i)) [src_expr] in
+        acc@(rcr field_expr t dest_expr ("field"^(string_of_int i))), i+1
+      ) ([], 0) fields)
+
+    | TCollection (c_t, e_t) ->
+      let ct_str = match c_t with TSet -> "TSet" | TBag -> "TBag" | TList -> "TList" in
+      let mk_imvd id vt init_expr_f = 
+        let ks, kt = signature_of_type (TValue vt), iv_type vt in
+        let n, t = id, serializer_type ks kt
+        in n, m t, mk_var (m t) n, mk_var_decl n t (Some(Init (init_expr_f (m t))))
+      in
+      let loop_id, loop_sig, loop_t, loop_var =
+        let n, t, it = "elem", TValue e_t, iv_type e_t
+        in n, signature_of_type t, it, mk_var (m it) n
+      in
+      let c_obj_id, c_obj_meta, c_obj_var, c_obj_decl = 
+        mk_imvd "s_coll" src_vt (fun m -> invoke_method m ("mutable_"^dest_id) dest_expr [])
+      in
+      let s_obj_id, s_obj_meta, s_obj_var, s_obj_decl = 
+        mk_imvd "s_elem" e_t (fun m -> invoke_method m ("add_field1") c_obj_var [])
+      in
+      let loop_body = [mk_decl unit_meta s_obj_decl]@(rcr loop_var e_t s_obj_var "field0")
+      in [mk_decl unit_meta c_obj_decl;
+          call_method "set_field0" c_obj_var [mk_const string_meta (CString ct_str)];
+          mk_for unit_meta loop_id loop_t src_expr loop_body]
+    
+    | _ -> [call_method ("set_"^dest_id) dest_expr [src_expr]]
+
+  let serialize_expr mk_meta expr expr_t = 
+    let m = meta mk_meta in
+    let unit_meta = m unit_t in
+    let expr_sig, expr_vt = signature_of_type (k3_type expr_t), vi_type expr_t in
+    let s_obj_decl, s_obj_var =
+      let s_id, s_t = "serialized", serializer_type expr_sig expr_t
+      in mk_var_decl s_id s_t None, mk_var (m s_t) s_id
+    in
+    let s_cmds = serialize_value_cmds mk_meta expr expr_vt s_obj_var "field0" in
+    let s_expr = mk_fn (m string_t) (Member (Method "SerializeAsString")) [s_obj_var]
+    in [mk_decl unit_meta s_obj_decl]@s_cmds, s_expr
+
+  (* Helper counter for unique deserialization symbols *)
+  let deserialize_id = ref 0
+  let get_deserialize_id () =
+    let r = "coll"^(string_of_int !deserialize_id) in incr deserialize_id; r
+
+  (* TODO: handle external collection types, e.g., STL/BMI collections *)
+  let rec deserialize_value_cmds mk_meta src_expr src_id dest_vt =
+    let rcr = deserialize_value_cmds mk_meta in  
+    let m = meta mk_meta in
+    let unit_meta, int_meta, string_meta = m unit_t, m int_t, m string_t in
+    match base_of dest_vt with
+    | TTuple fields ->
+      let field_exprs, field_cmds, _ = List.fold_left (fun (eacc,cmdacc,i) t -> 
+          let e,cmds = rcr src_expr ("field"^(string_of_int i)) t
+          in eacc@[e], cmdacc@cmds, i+1
+        ) ([], [], 0) fields
+      in mk_tuple (m (iv_type dest_vt)) field_exprs, field_cmds
+
+    | TCollection (c_t, e_t) ->
+      let mk_itv id vt = 
+        let it = serializer_type (signature_of_type (TValue vt)) (iv_type vt)
+        in id, it, mk_var (m it) id
+      in
+      let sc_id, sc_t, sc_var = mk_itv "s_coll" dest_vt in
+      let se_id, se_t, se_var = mk_itv "s_elem" e_t in
+      let c_decl, c_var = 
+        let id, t = get_deserialize_id (), (iv_type dest_vt)
+        in mk_var_decl id t None, mk_var (m t) id
+      in
+      let loop_src = 
+        (* TODO: generalize from this C++ specific codegen *)
+        let t = match se_t with
+          | TNamed (x) -> TNamed ("RepeatedField<"^x^">")
+          | _ -> failwith "invalid protobuf element type"
+        in invoke_method (m t) "field1" (invoke_method (m sc_t) src_id src_expr []) [] in
+      let loop_body = 
+        let e, cmds = rcr se_var "field0" e_t in
+        cmds@[mk_expr unit_meta (mk_fn unit_meta (Collection Insert) [c_var; e])]
+      in
+      c_var, [mk_decl unit_meta c_decl; mk_for unit_meta se_id se_t loop_src loop_body]
+
+    | _ -> invoke_method (m (iv_type dest_vt)) src_id src_expr [], []
+
+  let deserialize_expr mk_meta serialized_expr deserialize_t =
+    let m = meta mk_meta in
+    let unit_meta = m unit_t in
+    let id = "serialized" in
+    let k3_t = k3_type deserialize_t in
+    let serialized_t, serialized_meta = 
+      let s_t = serializer_type (signature_of_type k3_t) k3_t
+      in s_t, m s_t
+    in
+    let serialized_decl, serialized_var =
+      let s_init_expr = mk_fn serialized_meta (Named "ParseFromString") [serialized_expr]
+      in mk_var_decl id serialized_t (Some(Init(s_init_expr))), mk_var serialized_meta id
+    in
+    let rc_expr, rc_cmds =
+      deserialize_value_cmds
+        mk_meta serialized_var "field0" (vi_type deserialize_t)
+    in [mk_decl unit_meta serialized_decl]@rc_cmds, rc_expr
 end
 
 
@@ -213,99 +316,21 @@ struct
   let generate_serializer_include protospec = "k3_messages.h"
 
   let generate_serializer_specs protospec =
-    let specs =
-      List.map (fun (s,t) -> S.generate_spec s t) 
-        (ListAsSet.no_duplicates
-          (List.map (fun (s,_,_,t,_) -> s, i_type t) (fst protospec)))
+    (* Use both sender and receiver signatures to handle all message
+     * types expected for triggers defined in the current program, and 
+     * triggers used in other programs *)
+    let proto_sigs_and_types =
+      ListAsSet.no_duplicates 
+      (List.map (fun (s,_,_,t,_) -> s, i_type t) (fst protospec))@
+      (List.map (fun (id,arg,asig) -> asig, i_type (tuple_type_of_arg arg)) (snd protospec))
     in
-    if specs = [] then ""
-    else 
-      let x,y = List.hd specs, List.tl specs in
-      S.string_of_spec (List.fold_left S.merge_spec x y)
+    let specs = List.map (fun (s,t) -> S.generate_spec s t) proto_sigs_and_types in
+    if specs = [] then "" else 
+    let x,y = List.hd specs, List.tl specs in
+    S.string_of_spec (List.fold_left S.merge_spec x y)
 
-  (* Generates protobuf set/add method calls for deep K3 value serialization,
-   * including nested collection values. *)
-  (* TODO: handle external collection types, e.g., STL/BMI collections *)
-  let rec serialize_value_cmds mk_meta dest_id src_vt src_expr dest_expr =
-    let rcr = serialize_value_cmds mk_meta in
-    let m = meta mk_meta in
-    let unit_meta, int_meta, string_meta = m unit_t, m int_t, m string_t in
-    let call_method = call_method_proc mk_meta in
-    match base_of src_vt with
-    | TTuple fields ->
-      fst (List.fold_left (fun (acc,i) t -> 
-        let field_expr = mk_fn (m (iv_type t)) (Member (Position i)) [src_expr] in
-        acc@(rcr ("field"^(string_of_int i)) t field_expr dest_expr), i+1
-      ) ([], 0) fields)
-
-    | TCollection (c_t, e_t) ->
-      let ct_str = match c_t with TSet -> "TSet" | TBag -> "TBag" | TList -> "TList" in
-      let mk_imvd id vt init_expr_f = 
-        let ks, kt = signature_of_type (TValue vt), iv_type vt in
-        let n, t = id, S.serializer_type ks kt
-        in n, m t, mk_var (m t) n, mk_var_decl n t (Some(Init (init_expr_f (m t))))
-      in
-      let loop_id, loop_sig, loop_t, loop_var =
-        let n, t, it = "elem", TValue e_t, iv_type e_t
-        in n, signature_of_type t, it, mk_var (m it) n
-      in
-      let c_obj_id, c_obj_meta, c_obj_var, c_obj_decl = 
-        mk_imvd "s_coll" src_vt (fun m -> invoke_method m ("mutable_"^dest_id) dest_expr [])
-      in
-      let s_obj_id, s_obj_meta, s_obj_var, s_obj_decl = 
-        mk_imvd "s_elem" e_t (fun m -> invoke_method m ("add_field1") c_obj_var [])
-      in
-      let loop_body = [mk_decl unit_meta s_obj_decl]@(rcr "field0" e_t loop_var s_obj_var)
-      in [mk_decl unit_meta c_obj_decl;
-          call_method "set_field0" c_obj_var [mk_const string_meta (CString ct_str)];
-          mk_for unit_meta loop_id loop_t src_expr loop_body]
-    
-    | _ -> [call_method ("set_"^dest_id) dest_expr [src_expr]]
-
-
-  (* Helper counter for unique deserialization symbols *)
-  let deserialize_id = ref 0
-  let get_deserialize_id () =
-    let r = "coll"^(string_of_int !deserialize_id) in incr deserialize_id; r
-
-  let rec deserialize_value_cmds mk_meta src_id dest_vt src_expr =
-    let rcr = deserialize_value_cmds mk_meta in  
-    let m = meta mk_meta in
-    let unit_meta, int_meta, string_meta = m unit_t, m int_t, m string_t in
-    match base_of dest_vt with
-    | TTuple fields ->
-      let field_exprs, field_cmds, _ = List.fold_left (fun (eacc,cmdacc,i) t -> 
-          let e,cmds = rcr ("field"^(string_of_int i)) t src_expr
-          in eacc@[e], cmdacc@cmds, i+1
-        ) ([], [], 0) fields
-      in mk_tuple (m (iv_type dest_vt)) field_exprs, field_cmds
-
-    | TCollection (c_t, e_t) ->
-      let mk_itv id vt = 
-        let it = S.serializer_type (signature_of_type (TValue vt)) (iv_type vt)
-        in id, it, mk_var (m it) id
-      in
-      let sc_id, sc_t, sc_var = mk_itv "s_coll" dest_vt in
-      let se_id, se_t, se_var = mk_itv "s_elem" e_t in
-      let c_decl, c_var = 
-        let id, t = get_deserialize_id (), (iv_type dest_vt)
-        in mk_var_decl id t None, mk_var (m t) id
-      in
-      let loop_src = 
-        (* TODO: generalize from this C++ specific codegen *)
-        let t = match se_t with
-          | TNamed (x) -> TNamed ("RepeatedField<"^x^">")
-          | _ -> failwith "invalid protobuf element type"
-        in invoke_method (m t) "field1" (invoke_method (m sc_t) src_id src_expr []) [] in
-      let loop_body = 
-        let e, cmds = rcr "field0" e_t se_var in
-        cmds@[mk_expr unit_meta (mk_fn unit_meta (Collection Insert) [c_var; e])]
-      in
-      c_var, [mk_decl unit_meta c_decl; mk_for unit_meta se_id se_t loop_src loop_body]
-
-    | _ -> invoke_method (m (iv_type dest_vt)) src_id src_expr [], []
-
-
+  (* TODO: send-bypass and serialization-bypass as appropriate for 
+   * public/private triggers *)
   let generate_sender mk_meta class_id parent_class_id protospec =
     let m = meta mk_meta in
     let unit_meta, int_meta, string_meta = m unit_t, m int_t, m string_t in
@@ -318,22 +343,17 @@ struct
 	    ) [] (fst protospec)
 	  in
 	  let sender_decls =
+      (* TODO: do we really need msg_sig, or can this be computed from expr/expr_type? *)
       List.map (fun ((msg_sig, target_t, arg_t), ids_and_addrs) ->
         let msg_t, msg_var = let t = i_type arg_t in t, mk_var (m t) "payload" in
         let args = ["target", i_type target_t; "address", ib_type TAddress; "payload", msg_t] in
         let body =
-          let s_obj_decl, s_obj_var =
-            let id, t = "serialized", S.serializer_type msg_sig msg_t 
-            in mk_var_decl id t None, mk_var (m t) id
-          in
-          let s_cmds, s_expr = S.generate_serialize mk_meta s_obj_var msg_t in
+          let s_cmds, s_expr = S.serialize_expr mk_meta msg_var msg_t in
           let send_fn =
             mk_fn unit_meta (Named "send")
               ((List.map (fun (id,t) -> mk_var (m t) id)
                  [List.nth args 0; List.nth args 1])@[s_expr])
-          in
-          let set_cmds = serialize_value_cmds mk_meta "field0" (vi_type msg_t) msg_var s_obj_var
-          in s_cmds@[mk_decl unit_meta s_obj_decl]@set_cmds@[mk_expr unit_meta send_fn]
+          in s_cmds@[mk_expr unit_meta send_fn]
         in 
         DFn("send_"^msg_sig, args, unit_t, body), unit_meta
       ) senders_by_type 
@@ -342,8 +362,8 @@ struct
     else
     let parent = if parent_class_id = "" then None else Some(TNamed (parent_class_id))
     in Some(DClass(class_id, parent, sender_decls))
-  
 
+  (* TODO: serialization-bypass as appropriate for native senders *)
   let generate_receiver mk_meta class_id parent_class_id resource_env protospec =
     let m = meta mk_meta in
     let unit_meta, int_meta, serialized_meta = m unit_t, m int_t, m S.serialized_type in
@@ -363,30 +383,19 @@ struct
       | Tuple -> sub_tree e
       | _ -> failwith "invalid tuple deserialization"
     in
-    let deserialize_msg_cmds event_var arg_t serialized_t = 
-      let ds_cmds, ds_expr =
-        S.generate_deserialize mk_meta
-          (mk_fn serialized_meta (Member (Field msg_payload_id)) [event_var]) arg_t
-      in
-      let serialized_decl, serialized_var =
-        let id = "serialized" in
-        mk_var_decl id serialized_t (Some(Init(ds_expr))), mk_var (m serialized_t) id
-      in ds_cmds, serialized_decl, serialized_var
-    in
-
 	  let recvr_decls = List.flatten (List.map (fun ((asig,t), trigs) ->
         let event_id = "event" in 
         let recv_args, event_var = [event_id, message_t], mk_var (m message_t) event_id in
         let arg_t, serialized_t = let x = i_type t in x, S.serializer_type asig x in
+        let payload_expr = mk_fn serialized_meta (Member (Field msg_payload_id)) [event_var] in
         List.flatten (List.map (fun (id,arg) ->
           let decompose_f = if List.length (typed_vars_of_arg arg) > 1
                             then decompose_tuple_expr else (fun e -> [e]) in
           let body =
-	          let ds_cmds, serialized_decl, serialized_var = deserialize_msg_cmds event_var arg_t serialized_t in
-            let rc_expr, rc_cmds = deserialize_value_cmds mk_meta "field0" (vi_type arg_t) serialized_var in
+            let ds_cmds, ds_expr = S.deserialize_expr mk_meta payload_expr arg_t in
             let queue_cmds = [call_method (mk_queue_trigger_internal_id id)
-                                scheduler_var (decompose_f rc_expr)]
-            in ds_cmds@[mk_decl unit_meta serialized_decl]@rc_cmds@queue_cmds
+                                scheduler_var (decompose_f ds_expr)]
+            in ds_cmds@queue_cmds
           in 
           let members = [DFn("recv", recv_args, unit_t, body), unit_meta]
           in [DClass(mk_recvr_class_id id, Some(TNamed "recv_dispatch"), members), unit_meta]
