@@ -24,13 +24,6 @@ let cut c = match c with
   | CutHint -> pc ()
   | CutLine -> fnl ()
 
-let lobx i = lazy (obx i)
-let lobc i = lazy (obc i)
-let lcb () = lazy (cb ())
-let lps s = lazy (ps s)
-let lpnl () = lazy (pnl ())
-let lcut c = lazy (cut c)
-
 let ps_list ?(sep=", ") cut_t f l =
   let n = List.length l in
   ignore(List.fold_left
@@ -40,8 +33,6 @@ let ps_list ?(sep=", ") cut_t f l =
       (if cnt < n then cut cut_t);
       cnt+1)
     1 l)
-
-let lps_list ?(sep=", ") cut_t f l = lazy (ps_list ~sep:sep cut_t f l)
 
 let pretty_tag_term_str t = ob(); ps t; cb()
 

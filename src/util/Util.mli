@@ -2,6 +2,7 @@
 val (@:) : ('a -> 'b) -> 'a -> 'b
 
 val compose :('b -> 'c) -> ('a -> 'b) -> ('a -> 'c)
+val id_fn : 'a -> 'a
 val (|-) : ('b -> 'c) -> ('a -> 'b) -> ('a -> 'c)
 
 (* take the first x values of a list *)

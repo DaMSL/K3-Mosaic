@@ -45,9 +45,9 @@ type out_lang_t = K3 | AstK3| K3Dist | AstK3Dist | ReifiedK3 | Imperative | CPPI
 
 let out_lang_descs = [
     K3,          "k3",        "K3";
-    AstK3,       "astk3t",    "K3 AST";
+    AstK3,       "k3ast",    "K3 AST";
     K3Dist,      "k3dist",    "Distributed K3";
-    AstK3Dist,   "astk3dist", "Distributed K3 AST";
+    AstK3Dist,   "k3distast", "Distributed K3 AST";
     ReifiedK3,   "rk3",       "Reified K3";
     Imperative,  "imp",       "Imperative";
     CPPInternal, "cppi",      "C++-internal";
@@ -249,7 +249,7 @@ let handle_parse_error ?(msg = "") lexbuf =
 let handle_type_error p (uuid,error) =
   print_endline "----Type error----";
   print_endline ("Error("^(string_of_int uuid)^"): "^error);
-  print_endline (string_of_program ~print_id:true p);
+  print_endline (PA.string_of_program ~print_id:true p);
   exit 1
 
 
@@ -337,7 +337,7 @@ let print_event_loop (id, (res_env, ds_env, instrs)) =
     print_string (string_of_resource_env res_env);
     print_string (string_of_dispatcher_env ds_env)
 
-let string_of_typed_meta (t,a) = string_of_annotation a
+let string_of_typed_meta (t,a) = PA.string_of_annotation a
 
 let print_k3_program f p =
   let tp = typed_program p in
@@ -370,12 +370,12 @@ let print_reified_k3_program p =
   let print_expr_fn ?(print_id=false) e = 
       lazy (print_reified_expr (reify_expr [] e)) in
   let tp = typed_program p in 
-  print_endline (string_of_program ~print_expr_fn:print_expr_fn tp)
+  print_endline (PA.string_of_program ~print_expr_fn:print_expr_fn tp)
 
 let print_imp func print_types f =
   let string_of_meta m =
     (if print_types then (ImperativeUtil.string_of_type (fst m))^";" else "")^
-    (string_of_annotation (snd m))
+    (PA.string_of_annotation (snd m))
   in print_endline @: 
     ImperativeUtil.string_of_program string_of_meta (func f)
 
@@ -393,8 +393,8 @@ let print_cpp_program f =
 (* Top-level print handler *)
 let print params =
   let print_fn = match params.out_lang with
-    | K3Ast -> (print_k3_program PA.string_of_program) |- fst
-    | K3DistAst -> params.in_lang <- M3in; 
+    | AstK3 -> (print_k3_program PA.string_of_program) |- fst
+    | AstK3Dist -> params.in_lang <- M3in; 
         (print_k3_dist_prog PA.string_of_program)
     | K3 -> (print_k3_program PS.string_of_program) |- fst
     | K3Dist -> params.in_lang <- M3in; 
@@ -419,11 +419,11 @@ let print params =
 (* Test actions *)
 let print_test_case (decls,e,x) =
   print_endline "----Decls----";
-  print_endline (string_of_program decls);
+  print_endline (PA.string_of_program decls);
   print_endline "----Expression----";
-  print_endline (string_of_expr e);
+  print_endline (PA.string_of_expr e);
   print_endline "----Expected----";
-  print_endline (string_of_expr x)
+  print_endline (PA.string_of_expr x)
 
 let test params =
   let test_fn = match !(params.test_mode), params.out_lang with

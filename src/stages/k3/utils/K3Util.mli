@@ -63,7 +63,7 @@ val decompose_singleton : expr_t -> expr_t
 val decompose_slice : expr_t -> expr_t * expr_t
 val decompose_sort : expr_t -> expr_t * expr_t
 val decompose_tuple : expr_t -> expr_t list
-val decompose_update : expr_t -> expr_t * expr_t
+val decompose_update : expr_t -> expr_t * expr_t * expr_t
 
 (* Declaration accessors *)
 val globals_of_program  : program_t -> program_t

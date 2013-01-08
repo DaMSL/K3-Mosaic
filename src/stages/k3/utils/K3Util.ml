@@ -220,7 +220,7 @@ let decompose_sort e = match tag_of_expr e with
 let decompose_tuple e = match tag_of_expr e with 
   Tuple -> sub_tree e  | _ -> failwith "not a Tuple"
 let decompose_update e = match tag_of_expr e with 
-  Update -> (nth e 0, nth e 1) | _ -> failwith "not an Update"
+  Update -> (nth e 0, nth e 1, nth e 2) | _ -> failwith "not an Update"
 
 
 let match_declaration id match_f l =
