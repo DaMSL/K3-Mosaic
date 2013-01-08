@@ -33,21 +33,37 @@ val type_of_signature : string -> type_t
 val is_peek : expr_t -> bool
 
 (* AST constructors / destructors *)
+val decompose_add : expr_t -> expr_t * expr_t
 val decompose_aggregate : expr_t -> expr_t * expr_t * expr_t
 val decompose_apply : expr_t -> expr_t * expr_t
+val decompose_assign : expr_t -> expr_t * expr_t
 val decompose_block : expr_t -> expr_t list
+val decompose_combine : expr_t -> expr_t * expr_t
 val decompose_delete : expr_t -> expr_t * expr_t
+val decompose_deref : expr_t -> expr_t
+val decompose_eq : expr_t -> expr_t * expr_t
 val decompose_filter_map : expr_t -> expr_t * expr_t * expr_t
+val decompose_flatten : expr_t -> expr_t
 val decompose_gbagg : expr_t -> expr_t * expr_t * expr_t * expr_t
 val decompose_ifthenelse : expr_t -> expr_t * expr_t * expr_t
 val decompose_insert : expr_t -> expr_t * expr_t
 val decompose_iterate : expr_t -> expr_t * expr_t
+val decompose_just : expr_t -> expr_t
 val decompose_lambda : expr_t -> expr_t
+val decompose_leq : expr_t -> expr_t * expr_t
+val decompose_lt : expr_t -> expr_t * expr_t
 val decompose_map : expr_t -> expr_t * expr_t
+val decompose_mult : expr_t -> expr_t * expr_t
+val decompose_neg : expr_t -> expr_t
+val decompose_neq : expr_t -> expr_t * expr_t
 val decompose_peek : expr_t -> expr_t
+val decompose_range : expr_t -> expr_t * expr_t * expr_t
 val decompose_send : expr_t -> expr_t * expr_t * (expr_t list)
+val decompose_singleton : expr_t -> expr_t
 val decompose_slice : expr_t -> expr_t * expr_t
+val decompose_sort : expr_t -> expr_t * expr_t
 val decompose_tuple : expr_t -> expr_t list
+val decompose_update : expr_t -> expr_t * expr_t
 
 (* Declaration accessors *)
 val globals_of_program  : program_t -> program_t

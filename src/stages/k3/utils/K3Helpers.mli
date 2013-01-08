@@ -84,6 +84,7 @@ val mk_delete : expr_t -> expr_t -> expr_t
 val mk_update : expr_t -> expr_t -> expr_t -> expr_t
 
 val mk_assign : expr_t -> expr_t -> expr_t
+val mk_deref : expr_t -> expr_t
 val mk_send : expr_t -> expr_t -> expr_t -> expr_t
 
 (* extract only the types from a list of (id, type) *)

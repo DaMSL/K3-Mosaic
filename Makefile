@@ -15,6 +15,7 @@ FILES=\
 	src/stages/k3/utils/K3Util \
 	src/stages/k3/utils/K3Printing \
 	src/stages/k3/utils/K3Helpers \
+	src/stages/k3/utils/PrintSyntax \
 	src/stages/k3/core/K3Streams \
 	src/stages/k3/K3Typechecker \
 	src/stages/k3/interpreter/K3Values \

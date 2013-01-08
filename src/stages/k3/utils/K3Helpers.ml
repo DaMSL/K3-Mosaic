@@ -213,6 +213,10 @@ let mk_assign left right =
     mk_stree Assign [left; right]
 ;;
 
+let mk_deref ref =
+    mk_stree Deref [ref]
+;;
+
 (* target:TTarget(T) address:TAdress args:T *)
 let mk_send target address args =
     mk_stree Send [target; address; args]

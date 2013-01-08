@@ -8,7 +8,6 @@ open K3.AST
 open K3.Annotation
 open K3Values
 open K3Util
-open K3Printing
 open K3Typechecker
 open K3Streams
 open K3Consumption
@@ -27,6 +26,9 @@ module CPPAST = CPP.CPPTarget.ASTImport
 module CPPGen = CPP.CPPGenerator
 open ImperativeToCPP
 
+module PA = K3Printing
+module PS = PrintSyntax
+
 
 (* Helpers *)
 let error s = prerr_endline s; exit 1
@@ -39,15 +41,17 @@ let in_lang_descs = [
     M3in,     "m3",  "M3";
   ]
 
-type out_lang_t = K3 | K3Dist | ReifiedK3 | Imperative | CPPInternal | CPP
+type out_lang_t = K3 | AstK3| K3Dist | AstK3Dist | ReifiedK3 | Imperative | CPPInternal | CPP
 
 let out_lang_descs = [
-    K3,          "k3",     "K3";
-    K3Dist,      "k3dist", "Distributed K3";
-    ReifiedK3,   "rk3",    "Reified K3";
-    Imperative,  "imp",    "Imperative";
-    CPPInternal, "cppi",   "C++-internal";
-    CPP,         "cpp",    "C++";
+    K3,          "k3",        "K3";
+    AstK3,       "astk3t",    "K3 AST";
+    K3Dist,      "k3dist",    "Distributed K3";
+    AstK3Dist,   "astk3dist", "Distributed K3 AST";
+    ReifiedK3,   "rk3",       "Reified K3";
+    Imperative,  "imp",       "Imperative";
+    CPPInternal, "cppi",      "C++-internal";
+    CPP,         "cpp",       "C++";
   ]
 
 let string_of_lang_descs descs i = 
@@ -335,15 +339,15 @@ let print_event_loop (id, (res_env, ds_env, instrs)) =
 
 let string_of_typed_meta (t,a) = string_of_annotation a
 
-let print_k3_program p =
+let print_k3_program f p =
   let tp = typed_program p in
   let event_loops, default = roles_of_program tp in
-    print_endline (string_of_program tp);
+    print_endline (f tp);
     List.iter print_event_loop event_loops;
     match default with None -> () 
       | Some (_,x) -> print_event_loop ("DEFAULT", x)
 
-let print_k3_dist_prog (p, m) = match m with
+let print_k3_dist_prog f (p, m) = match m with
   | None -> error "Cannot construct distributed K3 without ProgInfo metadata"
   | Some meta ->
   (* do not use. Simply for type checking original program *)
@@ -357,7 +361,7 @@ let print_k3_dist_prog (p, m) = match m with
   in
   let dist_tp = typed_program dist in
   let event_loops, default = roles_of_program dist_tp in 
-    print_endline (string_of_program dist_tp);
+    print_endline (f dist_tp);
     List.iter print_event_loop event_loops;
     match default with None -> () 
         | Some (_,x) -> print_event_loop ("DEFAULT", x)
@@ -389,8 +393,12 @@ let print_cpp_program f =
 (* Top-level print handler *)
 let print params =
   let print_fn = match params.out_lang with
-    | K3 -> print_k3_program |- fst
-    | K3Dist -> params.in_lang <- M3in; print_k3_dist_prog
+    | K3Ast -> (print_k3_program PA.string_of_program) |- fst
+    | K3DistAst -> params.in_lang <- M3in; 
+        (print_k3_dist_prog PA.string_of_program)
+    | K3 -> (print_k3_program PS.string_of_program) |- fst
+    | K3Dist -> params.in_lang <- M3in; 
+        (print_k3_dist_prog PS.string_of_program)
     | ReifiedK3 -> print_reified_k3_program |- fst
     | Imperative -> (print_imperative_program params.print_types) |- fst
     | CPPInternal -> (print_cppi_program params.print_types) |- fst

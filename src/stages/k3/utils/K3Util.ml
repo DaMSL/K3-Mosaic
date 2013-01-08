@@ -155,40 +155,72 @@ let is_peek e = match tag_of_expr e with Peek -> true | _ -> false
 (* AST destructors *)
 let nth e i = List.nth (sub_tree e) i
 
+let decompose_add e = match tag_of_expr e with 
+  Add -> (nth e 0, nth e 1) | _ -> failwith "not Add"
 let decompose_aggregate e = match tag_of_expr e with 
   Aggregate -> (nth e 0, nth e 1, nth e 2) | _ -> failwith "not Aggregate"
 let decompose_apply e = match tag_of_expr e with
   Apply -> (nth e 0, nth e 1) | _ -> failwith "not Apply"
+let decompose_assign e = match tag_of_expr e with 
+  Assign -> (nth e 0, nth e 1) | _ -> failwith "not Assign"
 let decompose_block e = match tag_of_expr e with 
   Block -> sub_tree e | _ -> failwith "not a Block"
+let decompose_combine e = match tag_of_expr e with 
+  Combine -> (nth e 0, nth e 1) | _ -> failwith "not a Combine"
 let decompose_delete e = match tag_of_expr e with 
   Delete -> (nth e 0, nth e 1) | _ -> failwith "not a Delete"
+let decompose_deref e = match tag_of_expr e with 
+  Deref -> (nth e 0) | _ -> failwith "not a Deref"
+let decompose_eq e = match tag_of_expr e with 
+  Eq -> (nth e 0, nth e 1) | _ -> failwith "not an Equals"
 let decompose_filter_map e = match tag_of_expr e with 
   FilterMap -> (nth e 0, nth e 1, nth e 2) | _ -> failwith "not a FilterMap"
+let decompose_flatten e = match tag_of_expr e with 
+  Flatten -> nth e 0 | _ -> failwith "not a Flatten"
+let decompose_gbagg e = match tag_of_expr e with 
+  GroupByAggregate -> (nth e 0, nth e 1, nth e 2, nth e 3) 
+  | _ -> failwith "not a GroupByAggregte"
 let decompose_ifthenelse e = match tag_of_expr e with 
   IfThenElse -> (nth e 0, nth e 1, nth e 2) | _ -> failwith "not a IfThenElse"
 let decompose_insert e = match tag_of_expr e with 
   Insert -> (nth e 0, nth e 1) | _ -> failwith "not a Insert"
 let decompose_iterate e = match tag_of_expr e with 
   Iterate -> (nth e 0, nth e 1) | _ -> failwith "not a Iterate"
-let decompose_gbagg e = match tag_of_expr e with 
-  GroupByAggregate -> (nth e 0, nth e 1, nth e 2, nth e 3) 
-  | _ -> failwith "not a GroupByAggregte"
+let decompose_just e = match tag_of_expr e with
+  Just -> nth e 0 | _ -> failwith "not a Just"
 let decompose_lambda e = match tag_of_expr e with 
   Lambda(_) -> nth e 0 | _ -> failwith "not a Lambda"
+let decompose_leq e = match tag_of_expr e with 
+  Leq -> (nth e 0, nth e 1) | _ -> failwith "not a Leq"
+let decompose_lt e = match tag_of_expr e with 
+  Lt -> (nth e 0, nth e 1) | _ -> failwith "not a Lt"
 let decompose_map e = match tag_of_expr e with 
   Map -> (nth e 0, nth e 1) | _ -> failwith "not a Map"
+let decompose_mult e = match tag_of_expr e with 
+  Mult -> (nth e 0, nth e 1) | _ -> failwith "not a Mult"
+let decompose_neg e = match tag_of_expr e with 
+  Neg -> nth e 0 | _ -> failwith "not a Neg"
+let decompose_neq e = match tag_of_expr e with 
+  Neq -> (nth e 0, nth e 1) | _ -> failwith "not a Neq"
 let decompose_peek e = match tag_of_expr e with 
   Peek -> nth e 0 | _ -> failwith "not a Peek"
+let decompose_range e = match tag_of_expr e with
+  Range _ -> (nth e 0, nth e 1, nth e 2) | _ -> failwith "not a Range"
 let decompose_send e = 
   let rec rest i acc = if i = 1 then acc else rest (i-1) ((nth e i)::acc)
   in match tag_of_expr e with 
   Send -> (nth e 0, nth e 1, rest ((List.length (sub_tree e))-1) []) 
   | _ -> failwith "not a Send"
+let decompose_singleton e = match tag_of_expr e with
+  Singleton vt -> nth e 0 | _ -> failwith "not a Singleton"
 let decompose_slice e = match tag_of_expr e with 
   Slice -> (nth e 0, nth e 1) | _ -> failwith "not a Slice"
+let decompose_sort e = match tag_of_expr e with 
+  Sort -> (nth e 0, nth e 1) | _ -> failwith "not a Sort"
 let decompose_tuple e = match tag_of_expr e with 
   Tuple -> sub_tree e  | _ -> failwith "not a Tuple"
+let decompose_update e = match tag_of_expr e with 
+  Update -> (nth e 0, nth e 1) | _ -> failwith "not an Update"
 
 
 let match_declaration id match_f l =
