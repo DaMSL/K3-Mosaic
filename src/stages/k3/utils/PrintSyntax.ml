@@ -168,9 +168,21 @@ let rec lazy_expr c expr =
         wrap_left (lazy_expr c e1) <| lps " + " <| wrap_right (lazy_expr c e2)
     end 
   | Mult -> let (e1, e2) = U.decompose_mult expr in
-    let wrap_left = arith_paren e1 in
-    let wrap_right = arith_paren e2 in
-    wrap_left (lazy_expr c e1) <| lps " * " <| wrap_right (lazy_expr c e2)
+    let is_neg = begin match U.tag_of_expr e1 with
+      | Neg -> let e = U.decompose_neg e1 in
+        begin match U.tag_of_expr e with 
+        | Const(CInt(1)) -> true 
+        | _ -> false
+        end
+      | Const(CInt(-1)) -> true
+      | _ -> false
+    end in
+    if is_neg then
+      lps "-" <| lazy_expr c e2
+    else
+      let wrap_left = arith_paren e1 in
+      let wrap_right = arith_paren e2 in
+      wrap_left (lazy_expr c e1) <| lps " * " <| wrap_right (lazy_expr c e2)
   | Neg -> let e = U.decompose_neg expr in
     begin match U.tag_of_expr e with
       | Var _ 
