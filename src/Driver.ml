@@ -28,6 +28,7 @@ module CPPGen = CPP.CPPGenerator
 open ImperativeToCPP
 
 module PS = PrintSyntax
+module G = K3Global
 
 
 (* Helpers *)
@@ -404,15 +405,15 @@ let print params =
     | CPPInternal -> (print_cppi_program params.print_types) |- fst
     | CPP -> print_cpp_program |- fst
   in
-  let read_fn = match params.in_lang with
-    | K3in -> fun f -> (parse_program_k3 f, None)
-    | M3in -> fun f -> (
-        let m3prog = parse_program_m3 f in
+  let read_fn f = match params.in_lang with
+    | K3in -> (G.add_globals @: parse_program_k3 f, None)
+    | M3in -> let m3prog = parse_program_m3 f in
         let proginfo = M3ProgInfo.prog_data_of_m3 m3prog in
         if params.debug_info then 
             print_endline (ProgInfo.string_of_prog_data proginfo);
-        (M3ToK3.m3_to_k3 m3prog, Some proginfo)
-      )
+        let prog = M3ToK3.m3_to_k3 m3prog in
+        (G.add_globals prog, Some proginfo)
+      
   in
   List.iter (print_fn |- read_fn) params.input_files
 
