@@ -1,12 +1,42 @@
 #!/usr/bin/env ruby
 
+#
+# Usage: 
+#   ./slicer.rb [commands] [instruction files]
+#     --connect (optional)   Establish a connection to a target node without 
+#                            doing anything else
+#     --log [host:]{logpath} Log all program output to the file 
+#                            logpath_{`hostname`}.log
+#     --start [host:]{cmd}   Execute command and allow it to keep running.  The
+#                            command will be terminated forcibly when the slicer
+#                            exits normally.
+#     --exec [host:]{cmd}    Execute command and wait for it to complete.
+#
+#   For all commands with an optional [host:] field in their arguments, if the
+#   target host is not explicitly specified, the operation will be performed on 
+#   all currently connected hosts.  If a target host is specified, a connection
+#   will be established if necessary.
+#
+#   One or more files containing commands (as above, but without the -- prefix)
+#   may be specified.  Commands will be executed as if they were provided on the
+#   command line.  For example, a file containing.
+#
+#     connect localhost
+#     log ~/Desktop/foo
+#     exec ps
+#
+#   ... will connect to localhost, start a slicer, run PS and append the output
+#   to the logfile ~/Desktop/foo_{localhost's host name}.log
+#
+#   Lines prefixed with a hash mark ('#') will be ignored.
+
 require 'getoptlong';
 require 'thread';
 require 'logger';
 
 $slicer_log = Logger.new(STDOUT);
-$slicer_log.level = Logger::DEBUG;
-$default_slicer_path = "~/Dropbox/CodeSnippets";
+$slicer_log.level = Logger::WARN;
+$default_slicer_path = "~/";
 $remote_slicers = Hash.new { |h,k| h[k] = RemoteSlicer.new(k) }
 
 module LoggerMixins
@@ -119,13 +149,13 @@ def leaf_command_loop()
         logfile = "#{$1}_#{host}.log";
       when /START (.*)/ then
         pid = Process.fork do
-          Process.exec("#{$1} 2>&1 > #{logfile}");
+          Process.exec("#{$1} 2>&1 >> #{logfile}");
         end
         Process.detach(pid);
         at_exit { Process.kill("HUP", pid); }
       when /EXEC (.*)/ then
         pid = Process.fork do
-          Process.exec("#{$1} 2>&1 > #{logfile}");
+          Process.exec("#{$1} 2>&1 >> #{logfile}");
         end
         at_exit { Process.wait(pid); }
       else 
