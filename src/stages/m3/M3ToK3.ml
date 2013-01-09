@@ -1454,7 +1454,10 @@ let m3_trig_to_k3_trig ?(generate_init = false)
       !(m3_trig.M3.statements) 
    in
     [K.Sink(K.Code(
-        Schema.name_of_event m3_trig.M3.event,
+         begin match m3_trig.M3.event with
+(*           | Schema.SystemInitializedEvent -> "at_init"*)
+           | _ -> Schema.name_of_event m3_trig.M3.event
+         end,
         (K.ATuple(
           List.map (fun (vn,vt) -> K.AVar(vn, m3_type_to_k3_type vt)) trig_args
         )),
@@ -1491,7 +1494,7 @@ let csv_adaptor_to_k3 (name_prefix: string)
   in
   let send_to_event evt = 
     KH.mk_send (KH.mk_const (K.CTarget(Schema.name_of_event evt)))
-               (KH.mk_empty KH.t_addr)
+               (KH.mk_var "self")
                (child_params)
   in
   let k3_code =
