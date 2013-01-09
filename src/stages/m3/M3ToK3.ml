@@ -1494,7 +1494,7 @@ let csv_adaptor_to_k3 (name_prefix: string)
   in
   let send_to_event evt = 
     KH.mk_send (KH.mk_const (K.CTarget(Schema.name_of_event evt)))
-               (KH.mk_var "self")
+               (KH.mk_var "me")
                (child_params)
   in
   let k3_code =
