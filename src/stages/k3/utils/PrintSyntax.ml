@@ -12,13 +12,14 @@ let force_list = List.iter force
 (* lazy functions *)
 let lobx i = [lazy (obx i)]
 let lobc i = [lazy (obc i)]
+let lob () = [lazy (ob ())]
 let lcb () = [lazy (cb ())]
-let lps s = [lazy (ps s)]
+let lps s = [lazy (ps s)]    (* print string *)
+let lsp () = [lazy (psp ())] (* print space *)
 let lpnl () = [lazy (pnl ())]
 let lfnl () = [lazy (fnl ())]
 let lcut c = [lazy (cut c)]
 let lps_list ?(sep=", ") cut_t f l = [lazy (ps_list ~sep:sep cut_t (force_list |- f) l)]
-let lbox () = lobc 2 (* default box tab *)
 
 (* type we pass all the way down for configuring behaviors *)
 type config = {dummy:int}
@@ -28,7 +29,7 @@ let (<|) a b = a @ b
 
 let lazy_paren f = lps "(" <| f <| lps ")"
 let lazy_bracket f = lps "[" <| f <| lps "]"
-let lazy_box_brace f = lps "{" <| lbox () <| lpnl () <| f <| lcb () <| lpnl () <| lps "}"
+let lazy_box_brace f = lps "{" <| lob () <| lpnl () <| f <| lcb () <| lpnl () <| lps "}"
 
 let rec lazy_base_type c = function
   | TUnit -> lps "()"
@@ -107,13 +108,15 @@ let rec lazy_expr c expr =
   let expr_quad ?(sep=", ") (e1,e2,e3,e4) = 
     lazy_expr c e1 <| lps sep <| lazy_expr c e2 <| lps sep <| lazy_expr c e3 <|
     lps sep <| lazy_expr c e4 in
-  match U.tag_of_expr expr with
+  let arith_paren e = match U.tag_of_expr e with
+    | Var _ -> id_fn
+    | Const _ -> id_fn
+    | _ -> lazy_paren
+  in match U.tag_of_expr expr with
   | Const con -> lazy_const c con
   | Var id -> lps id
   | Tuple -> let es = U.decompose_tuple expr in
-    lps "(" <| 
-    lps_list CutHint (lazy_expr c) es <|
-    lps ")"
+    lazy_paren @: lps_list CutHint (lazy_expr c) es 
   | Just -> let e = U.decompose_just expr in
     lps "just " <| lazy_expr c e
   | Empty vt -> lazy_collection_vt c vt [] 
@@ -124,13 +127,18 @@ let rec lazy_expr c expr =
   | Range ct -> let t = U.decompose_range expr in
     lazy_collection c ct @: expr_triple ~sep:":" t
   | Add -> let (e1, e2) = U.decompose_add expr in
+    let wrap_left = arith_paren e1 in
     begin match U.tag_of_expr e2 with
       | Neg -> let e3 = U.decompose_neg e2 in
-        expr_pair ~sep:" - " (e1, e3)
-      | _   -> lazy_paren @: expr_pair ~sep:" + " (e1, e2) 
+        let wrap_right = arith_paren e3 in
+        wrap_left (lazy_expr c e1) <| lps " - " <| wrap_right (lazy_expr c e3)
+      | _   -> let wrap_right = arith_paren e2 in
+        wrap_left (lazy_expr c e1) <| lps " + " <| wrap_right (lazy_expr c e2)
     end 
-  | Mult -> let p = U.decompose_mult expr in
-    expr_pair ~sep:" * " p
+  | Mult -> let (e1, e2) = U.decompose_mult expr in
+    let wrap_left = arith_paren e1 in
+    let wrap_right = arith_paren e2 in
+    wrap_left (lazy_expr c e1) <| lps " * " <| wrap_right (lazy_expr c e2)
   | Neg -> let e = U.decompose_neg expr in
     begin match U.tag_of_expr e with
       | Var _ 
@@ -160,7 +168,7 @@ let rec lazy_expr c expr =
       | _ -> [] (* type error *)
     end
   | Block -> let es = U.decompose_block expr in
-    lps "do {" <| lbox () <| lpnl () <|
+    lps "do {" <| lob () <| lpnl () <|
     lps_list ~sep:";" CutLine (lazy_expr c) es <|
     lcb () <| lpnl () <| lps "}" <| lpnl ()
   | Iterate -> let (e, col) = U.decompose_iterate expr in
@@ -168,8 +176,8 @@ let rec lazy_expr c expr =
     lazy_paren @: lazy_expr c e <| lps ", " <| lcut CutHint <| lazy_expr c col
   | IfThenElse -> let (e1, e2, e3) = U.decompose_ifthenelse expr in
     lps "if " <| lazy_expr c e1 <| lps " " <| lcut CutLine <|
-    lps "then " <| lbox () <| lazy_expr c e2 <| lcb () <| lfnl () <|
-    lps "else " <| lbox () <| lazy_expr c e3 <| lcb () <| lfnl ()
+    lps "then " <| lob () <| lazy_expr c e2 <| lcb () <| lfnl () <|
+    lps "else " <| lob () <| lazy_expr c e3 <| lcb () <| lfnl ()
   | Map -> let p = U.decompose_map expr in
     lps "map" <| lazy_paren @: expr_pair p
   | FilterMap -> let t = U.decompose_filter_map expr in
@@ -197,14 +205,19 @@ let rec lazy_expr c expr =
   | Deref -> let e = U.decompose_deref expr in
     lps "!" <| lazy_expr c e
   | Send -> let (e1, e2, es) = U.decompose_send expr in
+    let tuple_no_paren c e = begin match U.tag_of_expr e with
+      | Tuple -> let es = U.decompose_tuple e in
+        lps_list CutHint (lazy_expr c) es
+      | _ -> lazy_expr c e
+      end in
     lps "send" <| lazy_paren (expr_pair (e1, e2) <| lps ", " <| 
-      lps_list CutHint (lazy_expr c) es)
+      lps_list CutHint (tuple_no_paren c) es)
 
 let lazy_trigger c id arg vars expr = 
   lps ("trigger "^id) <|
   lazy_paren @: lazy_arg c true arg <| lps " " <|
   lazy_trig_vars c vars <|
-  lps "= " <| lbox () <| lpnl () <|
+  lps "=" <| lob () <| lsp () <|
   lazy_expr c expr <|
   lcb () <| lfnl ()
 
@@ -213,7 +226,7 @@ let channel_format c = function
   | JSON -> "json"
 
 let lazy_channel c chan_t chan_f = match chan_t with
-  | File s -> lps @: "file(\""^s^"\", "^channel_format c chan_f
+  | File s -> lps @: "file(\""^s^"\", "^channel_format c chan_f^")"
   | Network(str, port) -> lps @: "socket(\""^str^"\":"^string_of_int port^")"
 
 let rec lazy_resource_pattern c = function
@@ -249,8 +262,8 @@ let lazy_declaration c = function
   | Role(id, fprog) -> 
       lps ("role "^id^" ") <| lazy_box_brace (lazy_flow_program c fprog) <| lpnl ()
   | Flow fprog -> lazy_flow_program c fprog <| lpnl ()
-  | DefaultRole id -> lps ("default "^id) <| lpnl ()
-  | Foreign(id, t) -> lps ("foreign "^id^" : ") <| lazy_type c t <| lpnl ()
+  | DefaultRole id -> lps ("default role "^id) <| lpnl ()
+  | Foreign(id, t) -> lps ("foreign "^id^" :") <| lsp () <| lazy_type c t <| lpnl ()
 
 (* print a K3 program in syntax *)
 let string_of_program prog = 
