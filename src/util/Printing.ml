@@ -7,6 +7,7 @@ type cut_type = NoCut | CutHint | CutLine
 let formatter = ref (stdbuf, str_formatter);;
  
 let ob () = pp_open_hovbox (snd !formatter) 2
+let obv i = pp_open_hovbox (snd !formatter) i
 let obn () = pp_open_hbox (snd !formatter) ()
 let obx i = pp_open_vbox (snd !formatter) i
 let obc i = pp_open_hvbox (snd !formatter) i
@@ -14,6 +15,7 @@ let cb () = pp_close_box (snd !formatter) ()
 let pc () = pp_print_cut (snd !formatter) ()
 let pb i = pp_print_break (snd !formatter) 0 i
 let pbs i = pp_print_break (snd !formatter) i 0
+let pbsi s i = pp_print_break (snd !formatter) s i
 let ps s = pp_print_string (snd !formatter) s
 let psp () = pp_print_space (snd !formatter) ()
 let pnl() = pp_print_newline (snd !formatter) ()
@@ -46,9 +48,9 @@ let pretty_tag_str ?(lb="(") ?(rb=")") ?(sep=", ") cut_t extra t ch_lazy_t =
     cb()
   end
 
-let wrap_formatter ?(fresh=true) print_fn =
+let wrap_formatter ?(fresh=true) ?(margin=300) print_fn =
   let print () =
-	  pp_set_margin (snd !formatter) 300;
+	  pp_set_margin (snd !formatter) margin;
 	  print_fn ();
 	  pp_print_flush (snd !formatter) ();
     let r = Buffer.contents (fst !formatter)
