@@ -354,7 +354,7 @@ let print_k3_dist_prog f (p, m) = match m with
   (* do not use. Simply for type checking original program *)
   (*tp = typed_program p in *)
   let dist = try
-      GenDist.gen_dist meta p
+      G.add_globals @: GenDist.gen_dist meta p
     with Invalid_argument(msg) -> 
       print_endline ("ERROR: " ^msg);
       print_endline (ProgInfo.string_of_prog_data meta);

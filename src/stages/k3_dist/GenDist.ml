@@ -31,6 +31,7 @@ open ProgInfo
 open K3Route
 open K3Shuffle
 
+module G = K3Global
 module M = ModifyAst
 module U = K3Util
 
@@ -81,10 +82,6 @@ let declare_foreign_functions p = []
 let stmt_cntrs_name = "stmt_cntrs"
 let stmt_cntrs = mk_var stmt_cntrs_name
 
-(* loopback contains the local address of the node *)
-let loopback_name = "loopback"
-let loopback = mk_var loopback_name (* for type checking *)
-
 (* names for log *)
 let log_for_t t = "log_"^t
 let log_master = "log__master"
@@ -94,8 +91,6 @@ let declare_global_vars p =
   let stmt_cntrs_type = wrap_tset_mut @: wrap_ttuple_mut 
       [t_vid_mut; t_int_mut; t_int_mut] in
   let stmt_cntrs_code = mk_global_val stmt_cntrs_name stmt_cntrs_type in
-  (* loopback address of the local node *)
-  let loopback_code = mk_global_val loopback_name (canonical TAddress) in
   (* global maps with vids *)
   let global_maps = 
     let global_map_code_for map_id = mk_global_val
@@ -115,7 +110,6 @@ let declare_global_vars p =
     let log_structs = for_all_trigs p log_struct_code_for in
     log_master_code::log_structs
   in
-  loopback_code:: 
   stmt_cntrs_code:: 
   global_maps@
   log_structs_code
@@ -421,7 +415,7 @@ let rcv_fetch_trig p trig =
                   (mk_send (* send to local send push trigger *)
                     (mk_const @:
                       CTarget(send_push_name_of_t p trig stmt map_id))
-                    loopback @:
+                    G.me_var @:
                     mk_tuple @: args_of_t_as_vars_with_v p trig
                   )
                   acc_code2
@@ -600,7 +594,7 @@ List.fold_left
                (mk_send
                  (mk_const @: 
                    CTarget (do_complete_name_of_t p trig_name stmt_id))
-                 loopback @:
+                 G.me_var @:
                  mk_tuple @: args_of_t_as_vars_with_v p trig_name
                ) @:
                mk_const CUnit (* do nothing *)
@@ -825,7 +819,7 @@ List.map
                 (mk_const @: 
                   CTarget (do_corrective_name_of_t p trig_name stmt_id map_id)
                 )
-                loopback @:
+                G.me_var @:
                 mk_tuple @: args_of_t_as_vars_with_v p trig_name @
                   [mk_var "delta_tuples"]
             ) @:

@@ -7,6 +7,7 @@ module P = ProgInfo
 module T = Tree
 module PR = K3Printing
 module Set = ListAsSet
+module G = K3Global
 
 exception InvalidAst of string
 
@@ -220,7 +221,7 @@ let modify_delta p ast stmt target_trigger =
                   body2 ::
                   [mk_send 
                     (mk_const @: CTarget target_trigger)
-                    (mk_var "loopback") @:
+                    G.me_var @:
                     full_vars_code
                   ]
             ) arg2
@@ -244,7 +245,7 @@ let modify_delta p ast stmt target_trigger =
               mk_var delta_name)::
             [mk_send
               (mk_const @: CTarget target_trigger)
-              (mk_var "loopback") @:
+              G.me_var @:
               mk_tuple @:
                 (mk_var "vid"):: (* project vid into collection *)
                   [mk_map

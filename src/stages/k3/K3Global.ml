@@ -9,7 +9,8 @@ module U = K3Util
 
 let me_name = "me"
 
-let me = mk_global_val me_name t_addr
+let me_code = mk_global_val me_name t_addr
+let me_var = mk_var me_name
 
-let add_globals ds = me::ds
+let add_globals ds = me_code::ds
 
