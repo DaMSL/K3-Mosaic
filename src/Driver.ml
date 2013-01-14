@@ -27,7 +27,7 @@ module CPT = CPP.CPPTarget.ASTImport
 module CPPGen = CPP.CPPGenerator
 open ImperativeToCPP
 
-module PS = PrintSyntax
+module PS = K3PrintSyntax
 module G = K3Global
 
 
