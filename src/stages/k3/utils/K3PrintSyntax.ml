@@ -113,11 +113,16 @@ let lazy_collection_vt c vt eval = match vt with
 let rec lazy_expr c expr = 
   let expr_pair ?(sep=lps "," <| lsp ()) ?(wl=id_fn) ?(wr=id_fn) (e1, e2) =
     wl(lazy_expr c e1) <| sep <| wr(lazy_expr c e2) in
+  let expr_sub ?(sep=lps "," <| lsp ()) p =
+    expr_pair ~sep:sep ~wl:wrap_indent ~wr:(wrap_hov 0) p in
   let expr_triple ?(sep=fun () -> lps "," <| lsp ()) (e1,e2,e3) = 
-    lazy_expr c e1 <| sep () <| lazy_expr c e2 <| sep () <| lazy_expr c e3 in
+    let w = wrap_indent in
+    w(lazy_expr c e1) <| sep () <| w(lazy_expr c e2) <| sep () <| w(lazy_expr c
+    e3) in
   let expr_quad ?(sep=fun () -> lps "," <| lsp ()) (e1,e2,e3,e4) = 
-    lazy_expr c e1 <| sep () <| lazy_expr c e2 <| sep () <| lazy_expr c e3 <|
-    sep () <| lazy_expr c e4 in
+    let w = wrap_indent in
+    w(lazy_expr c e1) <| sep () <| w(lazy_expr c e2) <| sep () <| w(lazy_expr c
+    e3) <| sep () <| w(lazy_expr c e4) in
   let arith_paren e = match U.tag_of_expr e with
     | Mult | Add -> lazy_paren
     | _ -> id_fn
@@ -128,7 +133,8 @@ let rec lazy_expr c expr =
   (* many instructions need to wrap the same way *)
   in let wrap e = match U.tag_of_expr expr with
     Insert | Iterate | Map | FilterMap | Flatten | Send | Delete | Update |
-    Aggregate | GroupByAggregate -> wrap_indent e
+    Aggregate | GroupByAggregate -> wrap_hv 2 e
+    | IfThenElse -> wrap_hv 0 e
     | _ -> id_fn e
   in let out = match U.tag_of_expr expr with
   | Const con -> lazy_const c con
@@ -213,15 +219,15 @@ let rec lazy_expr c expr =
   | Leq -> let p = U.decompose_leq expr in
     expr_pair ~sep:(lsp () <| lps "<=" <| lsp ()) p
   | Lambda arg -> let e = U.decompose_lambda expr in
-    wrap_indent (lps "\\" <| lazy_arg c false arg <| lps " ->") <| lsp () <| 
-    wrap_indent (lazy_expr c e)
+    wrap_indent (lps "\\" <| lazy_arg c false arg <| lps " ->") <| lind () <| 
+    wrap_hov 0 (lazy_expr c e)
   | Apply -> let (e1, e2) = U.decompose_apply expr in
     let modify_arg = begin match U.tag_of_expr e2 with
       | Tuple -> id_fn
       | _ -> lazy_paren end
     in begin match U.tag_of_expr e1 with (* can be let *)
       | Var _ -> wrap_indent (lazy_expr c e1 <|
-          modify_arg @: lazy_expr c e2)
+          lcut () <| modify_arg @: lazy_expr c e2)
       | Lambda arg -> let body = U.decompose_lambda e1 in
         wrap_hov 2 (lps "let " <| lazy_arg c false arg <|
           lps " =" <| lsp () <| lazy_expr c e2 <| lsp () ) <| lps "in"
@@ -230,29 +236,26 @@ let rec lazy_expr c expr =
     end
   | Block -> let es = U.decompose_block expr in
     lps "do {" <| lind () <| 
-    wrap_hv 0 (lps_list ~sep:";" CutLine (lazy_expr c) es <| lsp ()) 
+    wrap_hv 0 (lps_list ~sep:";" CutHint (lazy_expr c) es <| lsp ()) 
       <| lps "}"
-  | Iterate -> let (e, col) = U.decompose_iterate expr in
-    lps "iterate" <|
-      lazy_paren (lazy_expr c e <| lps ", " <| lcut () <| lazy_expr c col)
+  | Iterate -> let p = U.decompose_iterate expr in
+    lps "iterate" <| lcut () <| lazy_paren @: expr_sub p
   | IfThenElse -> let (e1, e2, e3) = U.decompose_ifthenelse expr in
-    lhov 0 <| 
-    lps "if " <| lazy_expr c e1 <| lsp () <|
+    wrap_indent (lps "if " <| lazy_expr c e1) <| lsp () <|
     wrap_indent (lps "then" <| lsp () <| lazy_expr c e2) <| lsp () <|
-    wrap_indent (lps "else" <| lsp () <| lazy_expr c e3) <| lcut () <|
-    lcb ()
+    wrap_indent (lps "else" <| lsp () <| lazy_expr c e3)
   | Map -> let p = U.decompose_map expr in
-    lps "map" <| lazy_paren @: expr_pair p
+    lps "map" <| lcut () <| lazy_paren @: expr_sub p
   | FilterMap -> let t = U.decompose_filter_map expr in
     lps "filtermap" <| lazy_paren @: expr_triple t
   | Flatten -> let e = U.decompose_flatten expr in
     lps "flatten" <| lcut () <| lazy_paren @: lazy_expr c e
   | Aggregate -> let t = U.decompose_aggregate expr in
-    lps "fold" <| lazy_paren @: expr_triple t
+    lps "fold" <| lcut () <| lazy_paren @: expr_triple t
   | GroupByAggregate -> let q = U.decompose_gbagg expr in
-    lps "groupby" <| lcut () <| lazy_paren @: expr_quad q
+    lps "groupby" <| lazy_paren @: expr_quad q
   | Sort -> let p = U.decompose_sort expr in
-    lps "sort" <| lazy_paren @: expr_pair p
+    lps "sort" <| lazy_paren @: expr_sub p
   | Peek -> let col = U.decompose_peek expr in
     lps "peek" <| lazy_paren @: lazy_expr c col
   | Slice -> let (col, pat) = U.decompose_slice expr in
@@ -261,7 +264,7 @@ let rec lazy_expr c expr =
     lps "insert" <| lazy_paren  
       (lazy_expr c e1 <| lps "," <| lsp () <| tuple_no_paren c e2)
   | Delete -> let p = U.decompose_delete expr in
-    lps "delete" <| lazy_paren @: expr_pair p
+    lps "delete" <| lazy_paren @: expr_sub p
   | Update -> let t = U.decompose_update expr in
     lps "update" <| lazy_paren @: expr_triple t
   | Assign -> let (l, r) = U.decompose_assign expr in
@@ -269,8 +272,8 @@ let rec lazy_expr c expr =
   | Deref -> let e = U.decompose_deref expr in
     lps "!" <| lazy_expr c e
   | Send -> let (e1, e2, es) = U.decompose_send expr in
-    lps "send" <| lazy_paren (expr_pair (e1, e2) <| lps ", " <| 
-      lps_list CutHint (tuple_no_paren c) es)
+    wrap_indent (lps "send" <| lazy_paren (expr_pair (e1, e2) <| lps ", " <| 
+      lps_list CutHint (tuple_no_paren c) es))
   in
   wrap out
 
