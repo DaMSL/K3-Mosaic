@@ -124,7 +124,7 @@ let rec lazy_expr c expr =
     w(lazy_expr c e1) <| sep () <| w(lazy_expr c e2) <| sep () <| w(lazy_expr c
     e3) <| sep () <| w(lazy_expr c e4) in
   let arith_paren e = match U.tag_of_expr e with
-    | Mult | Add -> lazy_paren
+    | Mult | Add | IfThenElse -> lazy_paren
     | _ -> id_fn
   in let tuple_no_paren c e = match U.tag_of_expr e with
     | Tuple -> let es = U.decompose_tuple e in
