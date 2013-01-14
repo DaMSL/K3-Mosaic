@@ -155,6 +155,8 @@ let rec lazy_expr c expr =
         | Singleton _, Singleton _ -> let l2 = U.decompose_singleton l in
           let r2 = U.decompose_singleton r in
           expr_pair ~sep:(lps ";" <| lsp ()) (l2, r2)
+        | Singleton _, Empty _ -> let l2 = U.decompose_singleton l in 
+          lazy_expr c l2
         | _ -> error () (* type error *)
       end in
     let (e1, e2) = U.decompose_combine expr in
