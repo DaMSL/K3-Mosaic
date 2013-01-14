@@ -6,6 +6,7 @@ open Lazy
 open K3.AST
 
 module U = K3Util
+module T = K3Typechecker
 
 let force_list = List.iter force 
 
@@ -47,7 +48,7 @@ let rec lazy_base_type c = function
   | TFloat -> lps "float"
   | TString -> lps "string"
   | TMaybe(vt) -> lps "maybe " <| lazy_value_type c vt
-  | TTuple(vts) -> lps "(" <| lps_list CutHint (lazy_value_type c) vts <| lps ")"
+  | TTuple(vts) -> lps "(" <| lps_list NoCut (lazy_value_type c) vts <| lps ")"
   | TCollection(TSet, vt) -> lps "{" <| lazy_value_type c vt <| lps "}"
   | TCollection(TBag, vt) -> lps "{|" <| lazy_value_type c vt <| lps "|}"
   | TCollection(TList, vt) -> lps "[" <| lazy_value_type c vt <| lps "]"
@@ -184,10 +185,21 @@ let rec lazy_expr c expr =
       let wrap_right = arith_paren e2 in
       wrap_left (lazy_expr c e1) <| lps " * " <| wrap_right (lazy_expr c e2)
   | Neg -> let e = U.decompose_neg expr in
+    let sym = begin match T.type_of_expr e with
+      | TValue x -> begin match T.base_of x with
+        | TBool -> "~"
+        | _ -> "-"
+      end
+      | _ -> "-"
+    end in
     begin match U.tag_of_expr e with
       | Var _ 
-      | Const _ -> lps "-" <| lazy_expr c e
-      | _ -> lps "-" <| lazy_paren @: lazy_expr c e
+      | Const _ -> lps sym <| lazy_expr c e
+      | Lt -> let p = U.decompose_lt e in
+        expr_pair ~sep:" >= " p
+      | Leq -> let p = U.decompose_leq e in
+        expr_pair ~sep:" > " p
+      | _ -> lps sym <| lazy_paren @: lazy_expr c e
     end
   | Eq -> let p = U.decompose_eq expr in
     expr_pair ~sep:" == " p
@@ -198,8 +210,8 @@ let rec lazy_expr c expr =
   | Leq -> let p = U.decompose_leq expr in
     expr_pair ~sep:" <= " p
   | Lambda arg -> let e = U.decompose_lambda expr in
-    lps "\\" <| lazy_arg c false arg <| lps " ->" <| lind () <| 
-    lhv 0 <| lazy_expr c e <| lcb ()
+    lps "\\" <| lazy_arg c false arg <| lps " ->" <| lsp () <| 
+    wrap_hv 0 (lazy_expr c e)
   | Apply -> let (e1, e2) = U.decompose_apply expr in
     let modify_arg = begin match U.tag_of_expr e2 with
       | Tuple -> id_fn
@@ -306,11 +318,11 @@ let lazy_flow_program c fas = lps_list ~sep:"" CutHint (lazy_flow c |- fst) fas
 
 let lazy_declaration c d = 
   let out = match d with
-  | Global(id, t, expr) -> lps ("declare "^id^" : ") <| lazy_type c t <|
-    begin match expr with 
+  | Global(id, t, expr) -> let end_part = begin match expr with 
       | None -> []
-      | Some e -> lps " = " <| lazy_expr c e
-    end
+      | Some e -> lps " =" <| lsp () <| lazy_expr c e
+    end in
+    wrap_hov 2 (lps @: "declare "^id^" :" <| lsp () <| lazy_type c t <| end_part)
   | Role(id, fprog) -> 
       lps ("role "^id^" ") <| lazy_box_brace (lazy_flow_program c fprog)
   | Flow fprog -> lazy_flow_program c fprog
