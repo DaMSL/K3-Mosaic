@@ -586,10 +586,11 @@ let initialize_peer address role_opt k3_program =
     address, (interpreter_event_loop role_opt k3_program, env)
 
 let eval_program address role_opt k3_program =
+  let prog = K3Global.add_globals k3_program in
   let rec run_until_empty f (x,y) = 
     let a,b = f (x,y) in if b = [] then () else run_until_empty f (x, y)
   in
-  let _, ((res_env, d_env, instrs), env) = initialize_peer address role_opt k3_program in
+  let _, ((res_env, d_env, instrs), env) = initialize_peer address role_opt prog in
 		run_until_empty (eval_instructions env address (res_env, d_env)) ([],instrs);
     print_endline @: string_of_program_env env;
     env
@@ -597,13 +598,14 @@ let eval_program address role_opt k3_program =
 
 (* Distributed program interpretation *)
 let eval_networked_program peer_list k3_program =
+  let prog = K3Global.add_globals k3_program in
   let eval_error addr =
     print_endline @: "Network evaluation error for peer "^(string_of_address addr) in
 
   (* Initialize an environment for each peer *)
   let peer_meta = Hashtbl.create (List.length peer_list) in
   let envs = List.map (fun (addr, role_opt) ->  
-      let _, ((res_env, d_env, instrs), env) = initialize_peer addr role_opt k3_program
+      let _, ((res_env, d_env, instrs), env) = initialize_peer addr role_opt prog
       in Hashtbl.replace peer_meta addr ([], instrs);
          addr, (res_env, d_env, env)
     ) peer_list

@@ -28,8 +28,6 @@ module CPPGen = CPP.CPPGenerator
 open ImperativeToCPP
 
 module PS = K3PrintSyntax
-module G = K3Global
-
 
 (* Helpers *)
 let error s = prerr_endline s; exit 1
@@ -354,7 +352,7 @@ let print_k3_dist_prog f (p, m) = match m with
   (* do not use. Simply for type checking original program *)
   (*tp = typed_program p in *)
   let dist = try
-      G.add_globals @: GenDist.gen_dist meta p
+      GenDist.gen_dist meta p
     with Invalid_argument(msg) -> 
       print_endline ("ERROR: " ^msg);
       print_endline (ProgInfo.string_of_prog_data meta);
@@ -430,13 +428,13 @@ let test params =
 
 let process_inputs params =
   let proc_fn f = match params.in_lang with
-    | K3in -> (G.add_globals @: parse_program_k3 f, None)
+    | K3in -> (parse_program_k3 f, None)
     | M3in -> let m3prog = parse_program_m3 f in
         let proginfo = M3ProgInfo.prog_data_of_m3 m3prog in
         if params.debug_info then 
             print_endline (ProgInfo.string_of_prog_data proginfo);
         let prog = M3ToK3.m3_to_k3 m3prog in
-        (G.add_globals prog, Some proginfo)
+        (prog, Some proginfo)
   in List.map proc_fn params.input_files
 
 (* Driver execution *)

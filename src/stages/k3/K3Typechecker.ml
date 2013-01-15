@@ -746,10 +746,11 @@ let source_types_of_roles prog =
 (* Typechecking API *)
 
 let type_bindings_of_program prog =
+  let prog_global = K3Global.add_globals prog in
   (* do a first pass, collecting trigger types and resources *)
-  let trig_env = trigger_types_of_program prog in
-  let resource_env = source_types_of_program prog in
-  let rresource_env = source_types_of_roles prog in
+  let trig_env = trigger_types_of_program prog_global in
+  let resource_env = source_types_of_program prog_global in
+  let rresource_env = source_types_of_roles prog_global in
   let prog, env = 
     List.fold_left (fun (nprog, env) (d, meta) ->
       let nd, nenv = match d with 
@@ -786,8 +787,8 @@ let type_bindings_of_program prog =
           else t_error (-1) "Invalid default role" (TMsg("No role named "^id^" found")) ()
   
       in (nprog@[nd, (Type(TValue(canonical TUnit))::meta)]), nenv
-    ) ([], []) prog
- in prog, env, trig_env, rresource_env
+    ) ([], []) prog_global
+ in (K3Global.remove_globals prog), env, trig_env, rresource_env
 
 let deduce_program_type program = 
   ((fun (prog,_,_,_) -> prog) (type_bindings_of_program program))

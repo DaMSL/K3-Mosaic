@@ -12,5 +12,8 @@ let me_name = "me"
 let me_code = mk_global_val me_name t_addr
 let me_var = mk_var me_name
 
-let add_globals ds = me_code::ds
+let globals = [me_code]
+
+let add_globals ds = globals@ds
+let remove_globals ds = list_drop (List.length globals) ds
 
