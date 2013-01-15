@@ -306,7 +306,7 @@ let cpp_program p =
 let repl params = ()
 
 (* TODO *)
-let compile params = ()
+let compile params inputs = ()
 
 (* Interpret actions *)
 let interpret_k3_program params p = 
@@ -325,12 +325,12 @@ let interpret_k3_program params p =
       ) peers;
       ignore(eval_networked_program peers typed_program)
 
-let interpret params =
+let interpret params inputs =
   let eval_fn = match params.out_lang with
-    | K3 -> (fun f -> interpret_k3_program params @: parse_program_k3 f)
+    | K3 -> interpret_k3_program params |- fst
     | _ -> error "Output language not yet implemented"
   in
-  List.iter eval_fn params.input_files
+  List.iter eval_fn inputs
 
 (* Print actions *)
 let print_event_loop (id, (res_env, ds_env, instrs)) = 
@@ -392,7 +392,7 @@ let print_cpp_program f =
   List.iter print_content files_and_content
   
 (* Top-level print handler *)
-let print params =
+let print params inputs =
   let print_fn = match params.out_lang with
     | AstK3 -> (print_k3_program string_of_program) |- fst
     | AstK3Dist -> params.in_lang <- M3in; 
@@ -404,18 +404,7 @@ let print params =
     | Imperative -> (print_imperative_program params.print_types) |- fst
     | CPPInternal -> (print_cppi_program params.print_types) |- fst
     | CPP -> print_cpp_program |- fst
-  in
-  let read_fn f = match params.in_lang with
-    | K3in -> (G.add_globals @: parse_program_k3 f, None)
-    | M3in -> let m3prog = parse_program_m3 f in
-        let proginfo = M3ProgInfo.prog_data_of_m3 m3prog in
-        if params.debug_info then 
-            print_endline (ProgInfo.string_of_prog_data proginfo);
-        let prog = M3ToK3.m3_to_k3 m3prog in
-        (G.add_globals prog, Some proginfo)
-      
-  in
-  List.iter (print_fn |- read_fn) params.input_files
+  in List.iter print_fn inputs
 
 (* Test actions *)
 let print_test_case (decls,e,x) =
@@ -439,14 +428,30 @@ let test params =
       in error (mode^" testing not yet implemented for "^lang)
   in List.iter test_fn params.input_files
 
+let process_inputs params =
+  let proc_fn f = match params.in_lang with
+    | K3in -> (G.add_globals @: parse_program_k3 f, None)
+    | M3in -> let m3prog = parse_program_m3 f in
+        let proginfo = M3ProgInfo.prog_data_of_m3 m3prog in
+        if params.debug_info then 
+            print_endline (ProgInfo.string_of_prog_data proginfo);
+        let prog = M3ToK3.m3_to_k3 m3prog in
+        (G.add_globals prog, Some proginfo)
+  in List.map proc_fn params.input_files
 
 (* Driver execution *)
-let process_parameters params = match !(params.action) with
-  | REPL      -> repl params
-  | Compile   -> compile params
-  | Interpret -> interpret params
-  | Print     -> print params
-  | Test      -> test params
+let process_parameters params = 
+  let a = !(params.action) in
+  match a with
+  | Compile | Interpret | Print -> let inputs = process_inputs params in
+    begin match a with
+    | Compile -> compile params inputs
+    | Interpret -> interpret params inputs
+    | Print -> print params inputs
+    | _ -> ()
+    end
+  | REPL -> repl params
+  | Test -> test params
 
 let main () =
   parse_cmd_line();
