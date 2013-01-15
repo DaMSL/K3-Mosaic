@@ -120,6 +120,7 @@ rule tokenize = parse
     | "int"    { TYPE TInt }
     | "float"  { TYPE TFloat }
     | "string" { TYPE TString }
+    | "address" { TYPE TAddress }
     | "maybe"  { MAYBE }
     | "ref"    { REF }
     | "just"   { JUST }

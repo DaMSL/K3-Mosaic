@@ -52,7 +52,7 @@ let rec lazy_base_type c = function
   | TCollection(TSet, vt) -> lps "{" <| lazy_value_type c vt <| lps "}"
   | TCollection(TBag, vt) -> lps "{|" <| lazy_value_type c vt <| lps "|}"
   | TCollection(TList, vt) -> lps "[" <| lazy_value_type c vt <| lps "]"
-  | TAddress -> lps "socket" (* ? *)
+  | TAddress -> lps "address" (* ? *)
   | TTarget bt -> lps "target" <| lazy_base_type c bt
   | TUnknown -> lps "unknown"
 
