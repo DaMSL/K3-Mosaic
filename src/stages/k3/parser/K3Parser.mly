@@ -407,6 +407,12 @@ expr :
     | SEND LPAREN IDENTIFIER COMMA address COMMA tuple RPAREN {
         mkexpr Send [mkexpr (Const(CTarget($3))) []; mkexpr (Const($5)) []; $7]
       }
+    | SEND LPAREN IDENTIFIER COMMA access COMMA tuple RPAREN {
+        mkexpr Send [mkexpr (Const(CTarget($3))) []; $5; $7]
+      }
+    | SEND LPAREN IDENTIFIER COMMA variable COMMA tuple RPAREN {
+        mkexpr Send [mkexpr (Const(CTarget($3))) []; mkexpr (Var $5) []; $7]
+      }
 
     /* Function application and let notation */
     | expr LPAREN tuple RPAREN    { mkexpr Apply [$1; $3] }
