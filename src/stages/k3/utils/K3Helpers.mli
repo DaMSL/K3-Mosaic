@@ -113,6 +113,9 @@ val mk_code_sink : id_t -> arg_t -> (id_t * value_type_t * annotation_t) list
 (* macro to create a global value *)
 val mk_global_val : id_t -> value_type_t -> declaration_t * annotation_t
 
+val mk_global_val_init : 
+  id_t -> value_type_t -> expr_t -> declaration_t * annotation_t
+
 (* macro to create a global function *)
 val mk_global_fn : 
   id_t ->

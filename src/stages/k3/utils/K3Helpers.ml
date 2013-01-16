@@ -262,6 +262,9 @@ let mk_global_fn name input_names_and_types output_types expr =
 let mk_global_val name val_type = 
   mk_no_anno @: Global(name, TValue(val_type), None)
 
+let mk_global_val_init name val_type e = 
+  mk_no_anno @: Global(name, TValue(val_type), Some e)
+
 let mk_foreign_fn name input_types output_types =
   mk_no_anno @: Foreign(name, TFunction(input_types, output_types))
 
