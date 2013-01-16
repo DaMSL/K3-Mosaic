@@ -1,6 +1,11 @@
 open K3.AST
 open K3.Annotation
 
+type config_t = {print_id : bool;
+                 print_expr_fn : config_t -> expr_t -> unit Lazy.t }
+
+val def_c : config_t
+
 (* Annotations *)
 val string_of_annotation : annotation_t -> string
 
@@ -25,31 +30,22 @@ val flat_string_of_declaration    : declaration_t -> string
 val flat_string_of_program: program_t -> string
 
 (* Pretty stringification, used as the default. *)
-val print_base_type    : base_type_t -> unit
-val print_mutable_type : mutable_type_t -> unit
-val print_value_type   : value_type_t -> unit
-val print_type         : type_t -> unit
+val print_base_type    : config_t -> base_type_t -> unit
+val print_mutable_type : config_t -> mutable_type_t -> unit
+val print_value_type   : config_t -> value_type_t -> unit
+val print_type         : config_t -> type_t -> unit
   
-val print_arg : arg_t -> unit
-val print_expr : ?print_id:bool -> expr_t -> unit
+val print_arg : config_t -> arg_t -> unit
+val print_expr : config_t -> expr_t -> unit
     
-val print_resource_pattern : resource_pattern_t -> unit
-val print_flow_resource    : flow_resource_t -> unit
+val print_resource_pattern : config_t -> resource_pattern_t -> unit
+val print_flow_resource    :  config_t -> flow_resource_t -> unit
 
-val print_flow_statement :
-	?print_id:bool ->
-	?print_expr_fn:(?print_id:bool -> expr_t -> unit Lazy.t)
-  -> flow_statement_t -> unit
+val print_flow_statement : config_t -> flow_statement_t -> unit
 
-val print_flow_program :
-	?print_id:bool ->
-	?print_expr_fn:(?print_id:bool -> expr_t -> unit Lazy.t)
-	-> flow_program_t -> unit
+val print_flow_program : config_t -> flow_program_t -> unit
   
-val print_declaration :
-	?print_id:bool ->
-	?print_expr_fn:(?print_id:bool -> expr_t -> unit Lazy.t)
-	-> declaration_t -> unit
+val print_declaration : config_t -> declaration_t -> unit
 
 val string_of_base_type: base_type_t -> string
 val string_of_value_type: value_type_t -> string
@@ -64,7 +60,6 @@ val string_of_flow_statement   : flow_statement_t -> string
 val string_of_flow_program     : flow_program_t -> string
 val string_of_declaration      : declaration_t -> string
 
-val string_of_program:
-  ?print_id:bool ->
-  ?print_expr_fn:(?print_id:bool -> expr_t -> unit Lazy.t)
-  -> program_t -> string
+val string_of_program: ?print_id:bool -> 
+    ?print_expr_fn:(config_t -> expr_t -> unit Lazy.t) -> 
+    program_t -> string

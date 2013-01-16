@@ -132,7 +132,8 @@ let _ = register_symbol state_sym_class "__";;
 let print_resource_env resource_env =
   let my_tag = pretty_tag_str CutHint "" in
   List.iter (fun (id, (source,r)) -> 
-      my_tag (if source then "Source" else "Sink") [lazy (print_flow_resource r)];
+      my_tag (if source then "Source" else "Sink") 
+        [lazy (print_flow_resource def_c r)];
       fnl()
     ) resource_env
 

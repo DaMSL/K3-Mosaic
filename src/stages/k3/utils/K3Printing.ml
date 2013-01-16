@@ -8,6 +8,9 @@ open K3.AST
 open K3.Annotation
 open K3Util
 
+type config_t = {print_id : bool;
+                 print_expr_fn : config_t -> expr_t -> unit Lazy.t }
+
 let quote s = "\""^s^"\""
 
 let wrap_unless_empty lb rb s = if s = "" then s else (lb^s^rb)
@@ -36,7 +39,7 @@ let string_of_container_type t_c = match t_c with
     | TBag  -> "TBag"
     | TList -> "TList"
 
-let string_of_const c = match c with
+let string_of_const cn = match cn with
     | CUnit          -> "CUnit"
     | CUnknown       -> "CUnknown"
     | CBool(b)       -> "CBool("^string_of_bool(b)^")"
@@ -141,7 +144,7 @@ let rec flat_string_of_arg a = match a with
 let flat_string_of_expr_tag tag children =
   let my_tag ?(extra="") t = tag_str ~extra:extra t children
   in match tag with
-    | Const(c)  -> tag_str "Const" [string_of_const c]
+    | Const(cns)  -> tag_str "Const" [string_of_const cns]
     | Var(i)    -> tag_str "Var" [i]
     | Tuple     -> my_tag "Tuple"
 
@@ -243,7 +246,7 @@ let flat_string_of_declaration d =
       tag_str "Global"
         ([i; flat_string_of_type t]@(string_opt flat_string_of_expr init))
       
-    | Foreign(i, t) -> tag_str "Foreign" [i; flat_string_of_type t]
+    | Foreign(i, t) -> tag_str "Foreign" [i; flat_string_of_type  t]
 
     | Flow fp -> tag_str "Flow" [flat_string_of_flow_program fp]
         
@@ -252,7 +255,8 @@ let flat_string_of_declaration d =
     | DefaultRole (id) -> tag_str "DefaultRole" [id]
 
 let flat_string_of_program ss =
-  tag_str "K3" (List.map (fun (d,_) -> flat_string_of_declaration d) ss)
+  tag_str "K3" (List.map (fun (d,_) -> 
+    flat_string_of_declaration d) ss)
 
 
 (*************************
@@ -261,31 +265,23 @@ let flat_string_of_program ss =
 
 (* Module types *)
 module type StringifyAST = sig
-  val print_base_type    : base_type_t -> unit
-  val print_mutable_type : mutable_type_t -> unit
-  val print_value_type   : value_type_t -> unit
-  val print_type         : type_t -> unit
+  val def_c : config_t
+  val print_base_type    : config_t -> base_type_t -> unit
+  val print_mutable_type : config_t -> mutable_type_t -> unit
+  val print_value_type   : config_t -> value_type_t -> unit
+  val print_type         : config_t -> type_t -> unit
   
-	val print_arg : arg_t -> unit
-	val print_expr : ?print_id:bool -> expr_t -> unit
+	val print_arg : config_t -> arg_t -> unit
+	val print_expr : config_t -> expr_t -> unit
 	
-	val print_resource_pattern : resource_pattern_t -> unit
-	val print_flow_resource    : flow_resource_t -> unit
+	val print_resource_pattern : config_t -> resource_pattern_t -> unit
+	val print_flow_resource    : config_t -> flow_resource_t -> unit
 
-  val print_flow_statement :
-    ?print_id:bool ->
-    ?print_expr_fn:(?print_id:bool -> expr_t -> unit Lazy.t)
-    -> flow_statement_t -> unit
+  val print_flow_statement : config_t -> flow_statement_t -> unit
 
-  val print_flow_program :
-    ?print_id:bool ->
-    ?print_expr_fn:(?print_id:bool -> expr_t -> unit Lazy.t)
-    -> flow_program_t -> unit
+  val print_flow_program : config_t -> flow_program_t -> unit
     
-  val print_declaration :
-    ?print_id:bool ->
-    ?print_expr_fn:(?print_id:bool -> expr_t -> unit Lazy.t)
-    -> declaration_t -> unit
+  val print_declaration : config_t -> declaration_t -> unit
 
 	val string_of_base_type: base_type_t -> string
 	val string_of_value_type: value_type_t -> string
@@ -300,10 +296,9 @@ module type StringifyAST = sig
 	val string_of_flow_program     : flow_program_t -> string
 	val string_of_declaration: declaration_t -> string
 	
-	val string_of_program:
-	  ?print_id:bool ->
-	  ?print_expr_fn:(?print_id:bool -> expr_t -> unit Lazy.t)
-    -> program_t -> string
+	val string_of_program: ?print_id:bool -> 
+    ?print_expr_fn:(config_t -> expr_t -> unit Lazy.t) -> 
+    program_t -> string
 end
 
 module type StringifyAnnotations = sig
@@ -318,17 +313,17 @@ module rec ASTStrings : StringifyAST = struct
 open AnnotationStrings
 
 (* Lazy variants *)
-let print_expr_id id = ps ("<"^string_of_int id^"> ")
+let print_expr_id c id = ps ("<"^string_of_int id^"> ")
   
 let rec lazy_annotation a  = lazy (print_annotation a)
-and     lazy_base_type bt  = lazy (print_base_type bt)
-and     lazy_value_type vt = lazy (print_value_type vt)
-and     lazy_type t        = lazy (print_type t)
-and     lazy_arg a         = lazy (print_arg a)
+and     lazy_base_type c bt  = lazy (print_base_type c bt)
+and     lazy_value_type c vt = lazy (print_value_type c vt)
+and     lazy_type c t        = lazy (print_type c t)
+and     lazy_arg c a         = lazy (print_arg c a)
 
-and     lazy_expr ?(print_id=false) e = lazy (print_expr ~print_id:print_id e)
+and     lazy_expr c e = lazy (print_expr c e)
 
-and print_base_type t =
+and print_base_type c t =
   let my_tag t lazy_ch_t = pretty_tag_str CutHint "" t lazy_ch_t in
   let term_tag t = pretty_tag_term_str t in
   match t with
@@ -340,50 +335,50 @@ and print_base_type t =
     | TFloat    -> term_tag "TFloat"
     | TString   -> term_tag "TString"
 
-    | TMaybe(t) -> my_tag "TMaybe" [lazy_value_type t]
+    | TMaybe(t) -> my_tag "TMaybe" [lazy_value_type c t]
 
-    | TTuple(t_l) -> my_tag "TTuple" (List.map lazy_value_type t_l)
+    | TTuple(t_l) -> my_tag "TTuple" @: List.map (lazy_value_type c) t_l
 
     | TCollection(t_c, t_e) ->
         my_tag "TCollection"
-          [lps (string_of_container_type t_c); lazy_value_type t_e]
+          [lps (string_of_container_type t_c); lazy_value_type c t_e]
 
     | TAddress -> term_tag "TAddress"
 
-    | TTarget(t) -> my_tag "TTarget" [lazy_base_type t]
+    | TTarget(t) -> my_tag "TTarget" [lazy_base_type c t]
 
-and print_mutable_type mt =
+and print_mutable_type c mt =
   let my_tag t bt a =
     pretty_tag_str CutHint "" t
-      ([lazy_base_type bt]@(if a = [] then [] else [lazy_annotation a]))
+      ([lazy_base_type c bt]@(if a = [] then [] else [lazy_annotation a]))
   in match mt with
     | TMutable(bt,a) -> my_tag "TMutable" bt a
     | TImmutable(bt,a) -> my_tag "TImmutable" bt a
 
-and print_value_type vt =
+and print_value_type c vt =
   let my_tag t mt =
-    pretty_tag_str CutHint "" t [lazy (print_mutable_type mt)]
+    pretty_tag_str CutHint "" t [lazy (print_mutable_type c mt)]
   in match vt with
     | TIsolated(mt) -> my_tag "TIsolated" mt
     | TContained(mt) -> my_tag "TContained" mt
 
-and print_type t =
+and print_type c t =
   let my_tag t lazy_ch_t = pretty_tag_str CutHint "" t lazy_ch_t in
   match t with
     | TFunction(t_a, t_r) ->
-        my_tag "TFunction" (List.map lazy_value_type [t_a; t_r])
+        my_tag "TFunction" (List.map (lazy_value_type c) [t_a; t_r])
     
-    | TValue(t) -> my_tag "TValue" [lazy_value_type t]
+    | TValue(t) -> my_tag "TValue" [lazy_value_type c t]
 
-and print_arg a =
+and print_arg c a =
   let my_tag t lazy_ch_t = pretty_tag_str CutHint "" t lazy_ch_t in
   match a with
     | AIgnored -> my_tag "AIgnored" []
-    | AVar(i, t)  -> my_tag "AVar" [lps i; lazy_type (TValue t)]
-    | AMaybe(a') -> my_tag "AMaybe" [lazy_arg a']
-    | ATuple(args) -> my_tag "ATuple" (List.map lazy_arg args)
+    | AVar(i, t)  -> my_tag "AVar" [lps i; lazy_type c (TValue t)]
+    | AMaybe(a') -> my_tag "AMaybe" [lazy_arg c a']
+    | ATuple(args) -> my_tag "ATuple" (List.map (lazy_arg c) args)
 
-and print_expr_tag tag lazy_children =
+and print_expr_tag c tag lazy_children =
   let my_tag ?(lb="(") ?(rb=")") ?(sep=", ") ?(extra="") t =
     pretty_tag_str ~lb:lb ~rb:rb ~sep:sep CutHint extra t lazy_children
   in
@@ -391,14 +386,14 @@ and print_expr_tag tag lazy_children =
   let ch_tag cut_t t ch = pretty_tag_str cut_t "" t ch in
   let extra_tag t extra = pretty_tag_str CutHint "" t (extra@lazy_children) in
   match tag with
-    | Const(c)  -> ch_tag NoCut "Const" [lps (string_of_const c)]
+    | Const(ct)  -> ch_tag NoCut "Const" [lps (string_of_const ct)]
     | Var(i)    -> ch_tag NoCut "Var" [lps i]
     | Tuple     -> my_tag_list "Tuple"
 
     | Just      -> my_tag "Just"
 
-    | Empty t     -> extra_tag "Empty" [lazy_value_type t]
-    | Singleton t -> extra_tag "Singleton" [lazy_value_type t]
+    | Empty t     -> extra_tag "Empty" [lazy_value_type c t]
+    | Singleton t -> extra_tag "Singleton" [lazy_value_type c t]
     | Combine     -> my_tag "Combine"
     | Range(ct)   -> my_tag "Range" ~extra:(string_of_container_type ct)
 
@@ -410,7 +405,7 @@ and print_expr_tag tag lazy_children =
     | Lt    -> my_tag "Lt"
     | Leq   -> my_tag "Leq"
 
-    | Lambda a -> extra_tag "Lambda" [lazy_arg a]
+    | Lambda a -> extra_tag "Lambda" [lazy_arg c a]
     | Apply    -> my_tag "Apply"
 
     | Block      -> my_tag_list "Block"
@@ -435,80 +430,85 @@ and print_expr_tag tag lazy_children =
 
     | Send       -> my_tag "Send"
 
-and print_expr ?(print_id=false) expr =
-  let id_pr e = if print_id then print_expr_id @: id_of_expr e else () in
+and print_expr c expr =
+  let id_pr e = if c.print_id then print_expr_id c @: id_of_expr e else () in
   let print_meta e =  
     let m_str = wrap_unless_empty "<" ">" (string_of_annotation (meta_of_expr e))
     in pc(); ps m_str; pc()
   in
   let print lazy_ch e =
     id_pr e;
-    print_expr_tag (tag_of_expr e) (List.flatten lazy_ch);
+    print_expr_tag c (tag_of_expr e) (List.flatten lazy_ch);
     print_meta e
   in
   let lazy_e = 
     fold_tree (fun _ _ -> ()) (fun _ lazy_ch e -> [lazy (print lazy_ch e)]) () [] expr
   in force (List.hd lazy_e)
 
-let print_instruction i = match i with
+let print_instruction c i = match i with
     | Consume(id) -> pretty_tag_str CutHint "" "Consume" [lps id]
 
-let rec print_resource_pattern p =
+let rec print_resource_pattern c p =
   let my_tag = pretty_tag_str CutHint "" in
-  let lazy_rcr p = lazy (print_resource_pattern p) in 
+  let lazy_rcr p = lazy (print_resource_pattern c p) in 
   let rcr_list l = List.map lazy_rcr l in
   match p with
     | Terminal(id)  -> my_tag "Terminal" [lps id]
     | Choice(ps)    -> my_tag "Choice" (rcr_list ps)
     | Sequence(ps)  -> my_tag "Sequence" (rcr_list ps)
     | Optional(p)   -> my_tag "Optional" [lazy_rcr p]
-    | Repeat(p, s)  -> my_tag "Repeat" [lazy_rcr p; lps (string_of_stop_behavior_t s)]
+    | Repeat(p, s)  -> my_tag "Repeat" [lazy_rcr p; 
+      lps (string_of_stop_behavior_t s)]
 
-let print_flow_resource r =
+let print_flow_resource c r =
   let my_tag = pretty_tag_str CutHint "" in
   match r with
     | Handle (t,ct,cf) ->
-      my_tag "Handle" [lazy_type t;
+      my_tag "Handle" [lazy_type c t;
                        lps (flat_string_of_channel_type ct);
                        lps (flat_string_of_channel_format cf)]
 
-    | Pattern p        -> my_tag "Pattern" [lazy (print_resource_pattern p)]
+    | Pattern p        -> my_tag "Pattern" [lazy (print_resource_pattern c p)]
 
-let print_flow_endpoint ?(print_id=false) ?(print_expr_fn=lazy_expr) ep =
-	let my_tag = pretty_tag_str CutHint "" in
-  let print_id_vt (id,vt,_) = lazy (ps ("("^id^", "); print_value_type vt; ps ")") in
-	match ep with
-  | Resource (id,r) -> my_tag "Resource" [lps id; lazy (print_flow_resource r)]
-  | Code(i, arg, ds, e) ->
-	  let decls = lazy(ps "["; ps_list CutLine force (List.map print_id_vt ds); ps "]") in
-	  my_tag "Code" 
-	    [lps (quote i); lazy_arg arg; decls; print_expr_fn ~print_id:print_id e]
-
-let print_flow_statement ?(print_id=false) ?(print_expr_fn=lazy_expr) fs =
+let print_flow_endpoint c ep =
   let my_tag = pretty_tag_str CutHint "" in
-  let print_endpoint = print_flow_endpoint ~print_id:print_id ~print_expr_fn:print_expr_fn in
+  let print_id_vt (id,vt,_) = lazy (ps ("("^id^", "); print_value_type c vt; 
+      ps ")")  in
+  match ep with
+  | Resource (id,r) -> my_tag "Resource" [lps id; lazy (print_flow_resource c r)]
+  | Code(i, arg, ds, e) ->
+	  let decls = lazy(ps "["; 
+          ps_list CutLine force (List.map print_id_vt ds); ps "]") in
+	  my_tag "Code" 
+	    [lps (quote i); lazy_arg c arg; decls; c.print_expr_fn c e]
+
+let print_flow_statement c fs =
+  let my_tag = pretty_tag_str CutHint "" in
+  let print_endpoint = print_flow_endpoint c in
   match fs with
     | Source ep     -> my_tag "Source" [lazy (print_endpoint ep)]
     | Sink ep       -> my_tag "Sink" [lazy (print_endpoint ep)]
     | Bind(i, i2)   -> my_tag "Bind" [lps i; lps i2]
-    | Instruction i -> my_tag "Instruction" [lazy (print_instruction i)]
+    | Instruction i -> my_tag "Instruction" [lazy (print_instruction c i)]
  
-let print_flow_program ?(print_id=false) ?(print_expr_fn=lazy_expr) fp =
+let print_flow_program c fp =
   let print_fn (fs, _) =
-    print_flow_statement ~print_id:print_id ~print_expr_fn:print_expr_fn fs
+    print_flow_statement c fs
   in
     ps "["; ps_list ~sep:";" CutLine print_fn fp; ps "]"
 
-let print_declaration ?(print_id=false) ?(print_expr_fn=lazy_expr) d =
+let def_c = {print_id=false; print_expr_fn=lazy_expr}
+
+let print_declaration c d =
   let my_tag ?(cut=CutLine) = pretty_tag_str cut "" in
-  let print_flow_fn p = print_flow_program ~print_expr_fn:print_expr_fn p in
+  let print_flow_fn p = print_flow_program c p in
   match d with
     | Global(i, t, init) ->
       my_tag "Global"
-        ([lps (quote i); lazy_type t]@
-        (lazy_string_opt (print_expr ~print_id:print_id) init))
+        ([lps (quote i); lazy_type c t]@
+        (lazy_string_opt (print_expr c) init))
 
-    | Foreign(i, t) -> my_tag "Foreign" [lps (quote i); lazy_type t]
+    | Foreign(i, t) -> my_tag "Foreign" [lps (quote i); lazy_type c t]
 
     | Flow fp -> my_tag "Flow" [lazy (print_flow_fn fp)]
         
@@ -516,24 +516,28 @@ let print_declaration ?(print_id=false) ?(print_expr_fn=lazy_expr) d =
 
     | DefaultRole id  -> my_tag ~cut:CutHint "DefaultRole" [lps (quote id)] 
 
-let string_of_base_type bt  = wrap_formatter (fun () -> print_base_type bt)
-let string_of_value_type vt = wrap_formatter (fun () -> print_value_type vt)
-let string_of_type t        = wrap_formatter (fun () -> print_type t)
+let string_of_base_type bt  = wrap_formatter (fun () -> print_base_type def_c bt)
+let string_of_value_type vt = wrap_formatter (fun () -> print_value_type def_c vt)
+let string_of_type t        = wrap_formatter (fun () -> print_type def_c t)
 
-let string_of_resource_pattern p = wrap_formatter (fun () -> print_resource_pattern p)
-let string_of_flow_resource r    = wrap_formatter (fun () -> print_flow_resource r)
-let string_of_flow_statement fs  = wrap_formatter (fun () -> print_flow_statement fs) 
-let string_of_flow_program fp    = wrap_formatter (fun () -> print_flow_program fp)
+let string_of_resource_pattern p = 
+  wrap_formatter (fun () -> print_resource_pattern def_c p)
+let string_of_flow_resource r = 
+    wrap_formatter (fun () -> print_flow_resource def_c r)
+let string_of_flow_statement fs = 
+    wrap_formatter (fun () -> print_flow_statement def_c fs) 
+let string_of_flow_program fp  = 
+    wrap_formatter (fun () -> print_flow_program def_c fp)
 
-let string_of_arg a         = wrap_formatter (fun () -> print_arg a)
-let string_of_expr e        = wrap_formatter (fun () -> print_expr e)
-let string_of_declaration d = wrap_formatter (fun () -> print_declaration d)
+let string_of_arg a         = wrap_formatter (fun () -> print_arg def_c a)
+let string_of_expr e        = wrap_formatter (fun () -> print_expr def_c e)
+let string_of_declaration d = wrap_formatter (fun () -> print_declaration def_c d)
 
 let string_of_program ?(print_id=false) ?(print_expr_fn=lazy_expr) ss =
+  let c = {print_id=print_id; print_expr_fn=print_expr_fn} in
   let print_fn (d, meta) =
     let m_str = wrap_unless_empty "<" ">" (string_of_annotation meta) in
-    print_declaration 
-      ~print_id:print_id ~print_expr_fn:print_expr_fn d;
+    print_declaration c d;
     (if m_str <> "" then (pc (); ps m_str; pc ()))
   in wrap_formatter (fun () ->
     ps "["; ps_list ~sep:";" CutLine print_fn ss; ps "]")
@@ -572,7 +576,7 @@ let print_ast_annotation ?(show_type=false) a =
   match a with
   | Data (r,da) -> my_tag "Data" [lps (string_of_rigidity r); lps (string_of_data_annotation da)]
   | Control (r,ca) -> my_tag "Control" [lps (string_of_rigidity r); lps (string_of_control_annotation ca)]
-  | Type t when show_type -> my_tag "Type" [lazy (print_type t)]
+  | Type t when show_type -> my_tag "Type" [lazy (print_type def_c t)]
   | _ -> ()
 
 let print_annotation ann = ps_list CutHint print_ast_annotation ann

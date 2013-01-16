@@ -69,7 +69,7 @@ and     lazy_program string_of_meta p   = lazy (print_program string_of_meta p)
 and print_type t = 
   let ptag ?(cut=CutHint) t ch = pretty_tag_str CutHint "" t ch in
   match t with
-  | TInternal it -> ptag "TInternal" [lazy (K3Printing.print_type it)]
+  | TInternal it -> ptag "TInternal" [lazy (K3Printing.print_type def_c it)]
   | TTop         -> ps "TTop"
   | TNamed id    -> ptag ~cut:NoCut "TNamed" [lps id]
   

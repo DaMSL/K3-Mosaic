@@ -308,10 +308,10 @@ let compile params inputs = ()
 
 (* Interpret actions *)
 let interpret_k3_program params p = 
-  let typed_program = deduce_program_type p in 
+  let tp = typed_program p in 
   configure_scheduler params.run_length;
   match params.peers with
-  | [] -> ignore(eval_program params.node_address params.role typed_program)
+  | [] -> ignore(eval_program params.node_address params.role tp)
   | nodes -> 
     let peers = 
       let skip_primary = List.exists (fun (addr,_) -> addr = params.node_address) nodes in
@@ -321,7 +321,7 @@ let interpret_k3_program params p =
       List.iter (fun ipr -> 
         print_endline @: "Starting node "^(string_of_address_and_role ipr)
       ) peers;
-      ignore(eval_networked_program peers typed_program)
+      ignore(eval_networked_program peers tp)
 
 let interpret params inputs =
   let eval_fn = match params.out_lang with
@@ -366,7 +366,7 @@ let print_k3_dist_prog f (p, m) = match m with
         | Some (_,x) -> print_event_loop ("DEFAULT", x)
 
 let print_reified_k3_program p =
-  let print_expr_fn ?(print_id=false) e = 
+  let print_expr_fn c e = 
       lazy (print_reified_expr (reify_expr [] e)) in
   let tp = typed_program p in 
   print_endline (string_of_program ~print_expr_fn:print_expr_fn tp)

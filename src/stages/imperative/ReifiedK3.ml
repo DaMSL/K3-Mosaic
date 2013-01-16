@@ -24,7 +24,7 @@ let print_reified_expr t =
             ps_list CutLine force lazy_ch;
             ps ((if decl then "declare" else "assign")^
                 " "^decl_id^" : "^(flat_string_of_type decl_t)^" = ");
-            print_expr expr
+            print_expr def_c expr
           end
          
         | true, false ->
@@ -33,14 +33,14 @@ let print_reified_expr t =
             ps_list CutLine force lazy_ch;
             fnl();
             ps ("reified "^" "^decl_id^" = ");
-            print_expr expr
+            print_expr def_c expr
           end
 
         | false, false ->
           begin
             ps_list CutLine force lazy_ch;
             fnl();
-            print_expr expr
+            print_expr def_c expr
           end)
     t
 
