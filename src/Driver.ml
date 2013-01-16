@@ -121,6 +121,7 @@ type parameters = {
     mutable run_length   : int64;
     mutable print_types  : bool; (* TODO: change to a debug flag *)
     mutable debug_info   : bool;
+    mutable verbose      : bool;
   }
 
 let cmd_line_params : parameters = {
@@ -136,6 +137,7 @@ let cmd_line_params : parameters = {
     run_length   = default_run_length;
     print_types  = default_print_types;
     debug_info   = default_debug_info;
+    verbose      = default_verbose;
   }
 
 (* General parameter setters *)
@@ -150,6 +152,9 @@ let set_print_types () =
 
 let set_debug_info () =
   cmd_line_params.debug_info <- true
+
+let set_verbose () =
+  cmd_line_params.verbose <- true
 
 let append_search_path p = 
   cmd_line_params.search_paths <- cmd_line_params.search_paths @ [p]
@@ -220,6 +225,8 @@ let param_specs = Arg.align
       "         Print types as part of output";
   "-d", Arg.Unit set_debug_info,
       "         Print debug info (context specific)";
+  "-v", Arg.Unit set_verbose,
+      "         Print verbose output (context specific)";
   ])
 
 let usage_msg =
@@ -391,10 +398,10 @@ let print_cpp_program f =
   
 (* Top-level print handler *)
 let print params inputs =
+  let sofp = string_of_program ~verbose:cmd_line_params.verbose in
   let print_fn = match params.out_lang with
-    | AstK3 -> (print_k3_program string_of_program) |- fst
-    | AstK3Dist -> params.in_lang <- M3in; 
-        (print_k3_dist_prog string_of_program)
+    | AstK3 -> print_k3_program sofp |- fst
+    | AstK3Dist -> params.in_lang <- M3in; print_k3_dist_prog sofp
     | K3 -> (print_k3_program PS.string_of_program) |- fst
     | K3Dist -> params.in_lang <- M3in; 
         (print_k3_dist_prog PS.string_of_program)

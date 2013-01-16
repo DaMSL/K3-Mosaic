@@ -9,6 +9,7 @@ open K3.Annotation
 open K3Util
 
 type config_t = {print_id : bool;
+                 verbose : bool;
                  print_expr_fn : config_t -> expr_t -> unit Lazy.t }
 
 let quote s = "\""^s^"\""
@@ -296,7 +297,7 @@ module type StringifyAST = sig
 	val string_of_flow_program     : flow_program_t -> string
 	val string_of_declaration: declaration_t -> string
 	
-	val string_of_program: ?print_id:bool -> 
+	val string_of_program: ?verbose:bool -> ?print_id:bool -> 
     ?print_expr_fn:(config_t -> expr_t -> unit Lazy.t) -> 
     program_t -> string
 end
@@ -348,19 +349,25 @@ and print_base_type c t =
     | TTarget(t) -> my_tag "TTarget" [lazy_base_type c t]
 
 and print_mutable_type c mt =
-  let my_tag t bt a =
-    pretty_tag_str CutHint "" t
-      ([lazy_base_type c bt]@(if a = [] then [] else [lazy_annotation a]))
-  in match mt with
-    | TMutable(bt,a) -> my_tag "TMutable" bt a
-    | TImmutable(bt,a) -> my_tag "TImmutable" bt a
+  if c.verbose then
+    let my_tag t bt a =
+      pretty_tag_str CutHint "" t
+        ([lazy_base_type c bt]@(if a = [] then [] else [lazy_annotation a]))
+    in match mt with
+      | TMutable(bt,a) -> my_tag "TMutable" bt a
+      | TImmutable(bt,a) -> my_tag "TImmutable" bt a
+  else match mt with
+    | TMutable(bt,_) | TImmutable(bt,_) -> print_base_type c bt
 
 and print_value_type c vt =
-  let my_tag t mt =
-    pretty_tag_str CutHint "" t [lazy (print_mutable_type c mt)]
-  in match vt with
-    | TIsolated(mt) -> my_tag "TIsolated" mt
-    | TContained(mt) -> my_tag "TContained" mt
+  if c.verbose then
+    let my_tag t mt =
+      pretty_tag_str CutHint "" t [lazy (print_mutable_type c mt)]
+    in match vt with
+      | TIsolated(mt) -> my_tag "TIsolated" mt
+      | TContained(mt) -> my_tag "TContained" mt
+  else match vt with
+      | TIsolated(mt) | TContained(mt) -> print_mutable_type c mt
 
 and print_type c t =
   let my_tag t lazy_ch_t = pretty_tag_str CutHint "" t lazy_ch_t in
@@ -497,7 +504,7 @@ let print_flow_program c fp =
   in
     ps "["; ps_list ~sep:";" CutLine print_fn fp; ps "]"
 
-let def_c = {print_id=false; print_expr_fn=lazy_expr}
+let def_c = {print_id=false; verbose=true; print_expr_fn=lazy_expr}
 
 let print_declaration c d =
   let my_tag ?(cut=CutLine) = pretty_tag_str cut "" in
@@ -533,8 +540,8 @@ let string_of_arg a         = wrap_formatter (fun () -> print_arg def_c a)
 let string_of_expr e        = wrap_formatter (fun () -> print_expr def_c e)
 let string_of_declaration d = wrap_formatter (fun () -> print_declaration def_c d)
 
-let string_of_program ?(print_id=false) ?(print_expr_fn=lazy_expr) ss =
-  let c = {print_id=print_id; print_expr_fn=print_expr_fn} in
+let string_of_program ?(verbose=true) ?(print_id=false) ?(print_expr_fn=lazy_expr) ss =
+  let c = {print_id=print_id; print_expr_fn=print_expr_fn; verbose=verbose} in
   let print_fn (d, meta) =
     let m_str = wrap_unless_empty "<" ">" (string_of_annotation meta) in
     print_declaration c d;

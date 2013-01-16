@@ -1,8 +1,7 @@
 open K3.AST
 open K3.Annotation
 
-type config_t = {print_id : bool;
-                 print_expr_fn : config_t -> expr_t -> unit Lazy.t }
+type config_t  
 
 val def_c : config_t
 
@@ -60,6 +59,6 @@ val string_of_flow_statement   : flow_statement_t -> string
 val string_of_flow_program     : flow_program_t -> string
 val string_of_declaration      : declaration_t -> string
 
-val string_of_program: ?print_id:bool -> 
+val string_of_program: ?verbose:bool -> ?print_id:bool -> 
     ?print_expr_fn:(config_t -> expr_t -> unit Lazy.t) -> 
     program_t -> string

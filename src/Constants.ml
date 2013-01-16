@@ -10,3 +10,4 @@ let default_peers        = []
 let default_run_length   = Int64.minus_one
 let default_print_types  = false
 let default_debug_info   = false
+let default_verbose      = false
