@@ -585,8 +585,7 @@ let initialize_peer address role_opt k3_program =
     initialize_scheduler address env;
     address, (interpreter_event_loop role_opt k3_program, env)
 
-let eval_program address role_opt k3_program =
-  let prog = K3Global.add_globals k3_program in
+let eval_program address role_opt prog =
   let rec run_until_empty f (x,y) = 
     let a,b = f (x,y) in if b = [] then () else run_until_empty f (x, y)
   in
@@ -597,8 +596,7 @@ let eval_program address role_opt k3_program =
 
 
 (* Distributed program interpretation *)
-let eval_networked_program peer_list k3_program =
-  let prog = K3Global.add_globals k3_program in
+let eval_networked_program peer_list prog =
   let eval_error addr =
     print_endline @: "Network evaluation error for peer "^(string_of_address addr) in
 

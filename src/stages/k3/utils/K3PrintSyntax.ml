@@ -161,8 +161,8 @@ let rec lazy_expr c expr =
       end in
     let (e1, e2) = U.decompose_combine expr in
     begin match U.tag_of_expr e1, U.tag_of_expr e2 with
-      | Singleton vt, Combine 
-      | Singleton vt, Singleton _ -> 
+      | Singleton vt, Combine | Singleton vt, Singleton _ 
+      | Singleton vt, Empty _ -> 
         lazy_collection_vt c vt @: assemble_list c expr
       | _ -> expr_pair ~sep:(lcut() <| lps "++" <| lcut()) (e1, e2) 
     end

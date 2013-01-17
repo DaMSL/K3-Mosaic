@@ -292,9 +292,15 @@ let parse_program_m3 =
 
 
 (* Program transformers *)
-let typed_program p =
-  try deduce_program_type p
+let typed_program_with_globals p =
+  try deduce_program_type @: 
+      K3Global.add_globals cmd_line_params.node_address cmd_line_params.peers p
   with TypeError (uuid, error) -> handle_type_error p (uuid, error)
+
+(* for most functions, we don't need the globals included *)
+let typed_program p =
+  K3Global.remove_globals cmd_line_params.node_address cmd_line_params.peers @: 
+      typed_program_with_globals p
 
 let imperative_program p =
   RK3ToImperative.imperative_of_program (fun () -> []) (typed_program p)
@@ -315,7 +321,7 @@ let compile params inputs = ()
 
 (* Interpret actions *)
 let interpret_k3_program params p = 
-  let tp = typed_program p in 
+  let tp = typed_program_with_globals p in 
   configure_scheduler params.run_length;
   match params.peers with
   | [] -> ignore(eval_program params.node_address params.role tp)

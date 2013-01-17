@@ -186,11 +186,14 @@ let rec contained_of vt =
 (* Type comparison primitives *)
 
 let rec assignable t_l t_r =
-    let t_lb = base_of t_l in
-    let t_rb = base_of t_r in
+    let t_lb = base_of t_l in let t_rb = base_of t_r in
     match (t_lb, t_rb) with
-    | TMaybe(_), TMaybe(TIsolated(TImmutable(TUnknown,_)))-> true
-    | TMaybe(t_lm), TMaybe(t_rm) -> assignable t_lm t_rm
+    | TMaybe(t_lm), TMaybe(t_rm) -> 
+      begin match base_of t_lm, base_of t_rm with
+      | _, TUnknown -> true
+      | TUnknown, _ -> true
+      | _ -> assignable t_lm t_rm
+      end
     | TTuple(t_ls), TTuple(t_rs) -> List.length t_ls = List.length t_rs && 
         List.for_all2 assignable t_ls t_rs
     | TCollection(t_lc, _), TCollection(t_rc, TContained(TImmutable(TUnknown,_)))
@@ -204,6 +207,14 @@ let rec assignable t_l t_r =
     | _ -> false
 
 let (===) = assignable
+
+(* Whether a type contains TUnknown somewhere ie. it's not a fully known type *)
+let rec is_unknown_t t = match base_of t with
+    | TMaybe t_m -> is_unknown_t t_m
+    | TTuple(t_s) -> if List.for_all (not |- is_unknown_t) t_s then false else true
+    | TCollection(_, t_e) -> is_unknown_t t_e
+    | TUnknown -> true
+    | _ -> false
 
 let compare_type_ts t_l t_r = match t_l, t_r with
     | TFunction(in_l,out_l), TFunction(in_r, out_r) -> 
@@ -311,17 +322,22 @@ let rec deduce_expr_type trig_env cur_env utexpr =
                 t_erroru name @: TBad(t1) in
 
             (* Only collections of matching element types can be combined. *)
-            if t_e0 <> t_e1 then t_erroru name (VTMismatch(t_e0, t_e1,"")) () else
+            (* Note: strictly speaking this isn't true, e.g. [nothing]++[Just 1]
+             * we'll use assignable here even though it's not a perfect match *)
+            if not (t_e0 === t_e1) then t_erroru name (VTMismatch(t_e0, t_e1,"")) () else
 
             (* Determine combined collection type. *)
-            let t_cr = (
-                match (t_c0, t_c1) with
-                    | (TList, _)    -> TList
-                    | (_, TList)    -> TList
-                    | (TBag, _)     -> TBag
-                    | (_, TBag)     -> TBag
-                    | (TSet, TSet)  -> TSet
-            ) in TValue(canonical (TCollection(t_cr, contained_of t_e0)))
+            let t_cr = begin match (t_c0, t_c1) with
+              | (TList, _)    -> TList
+              | (_, TList)    -> TList
+              | (TBag, _)     -> TBag
+              | (_, TBag)     -> TBag
+              | (TSet, TSet)  -> TSet
+            end in let t_e = begin match is_unknown_t t_e0, is_unknown_t t_e1 with
+              | false, _ -> t_e0
+              | _, false -> t_e1
+              | _        -> t_e0
+            end in TValue(canonical (TCollection(t_cr, contained_of t_e)))
 
         | Range(t_c) ->
             let name = "Range" in
@@ -751,11 +767,10 @@ let source_types_of_roles prog =
 (* Typechecking API *)
 
 let type_bindings_of_program prog =
-  let prog_global = K3Global.add_globals prog in
   (* do a first pass, collecting trigger types and resources *)
-  let trig_env = trigger_types_of_program prog_global in
-  let resource_env = source_types_of_program prog_global in
-  let rresource_env = source_types_of_roles prog_global in
+  let trig_env = trigger_types_of_program prog in
+  let resource_env = source_types_of_program prog in
+  let rresource_env = source_types_of_roles prog in
   let prog, env = 
     List.fold_left (fun (nprog, env) (d, meta) ->
       let nd, nenv = match d with 
@@ -792,8 +807,8 @@ let type_bindings_of_program prog =
           else t_error (-1) "Invalid default role" (TMsg("No role named "^id^" found")) ()
   
       in (nprog@[nd, (Type(TValue(canonical TUnit))::meta)]), nenv
-    ) ([], []) prog_global
- in (K3Global.remove_globals prog), env, trig_env, rresource_env
+    ) ([], []) prog
+ in prog, env, trig_env, rresource_env
 
 let deduce_program_type program = 
   ((fun (prog,_,_,_) -> prog) (type_bindings_of_program program))
