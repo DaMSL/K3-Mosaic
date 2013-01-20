@@ -18,11 +18,15 @@ val t_unit : value_type_t
 val t_addr : value_type_t
 
 (* K3 types for various things *)
-val t_vid : value_type_t
-val t_vid_mut : value_type_t
 val t_trig_id : value_type_t
 val t_stmt_id : value_type_t
 val t_map_id : value_type_t
+val t_vid : value_type_t
+val t_vid_mut : value_type_t
+
+(* create a global vid comparison function *)
+type vid_op = VEq | VNeq | VGt | VLt | VGeq | VLeq
+val mk_global_vid_op : id_t -> vid_op -> declaration_t * annotation_t
 
 (* wrap in a specific type *)
 val wrap_tlist : value_type_t -> value_type_t
@@ -116,11 +120,14 @@ val mk_global_val : id_t -> value_type_t -> declaration_t * annotation_t
 val mk_global_val_init : 
   id_t -> value_type_t -> expr_t -> declaration_t * annotation_t
 
+(* macro to generate a global function with more control over args *)
+val mk_global_fn_raw:
+  id_t -> arg_t -> value_type_t -> value_type_t -> expr_t -> 
+    declaration_t * annotation_t
+
 (* macro to create a global function *)
 val mk_global_fn : 
-  id_t ->
-  (id_t * value_type_t) list ->
-  value_type_t list ->
+  id_t -> (id_t * value_type_t) list -> value_type_t list ->
   expr_t -> declaration_t * annotation_t
 
 (* macro to declare a foreign function *)

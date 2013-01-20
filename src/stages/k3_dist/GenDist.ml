@@ -114,9 +114,32 @@ let declare_global_vars p =
   global_maps@
   log_structs_code
 
+(* vid comparison names and code *)
+let v_op op l r = mk_apply (mk_var op) @: mk_tuple [l;r]
+let vid_eq = "vid_eq"
+let v_eq = v_op vid_eq
+let vid_neq = "vid_neq"
+let v_neq = v_op vid_neq
+let vid_lt = "vid_lt"
+let v_lt = v_op vid_lt
+let vid_gt = "vid_gt"
+let v_gt = v_op vid_gt
+let vid_geq = "vid_geq"
+let v_geq = v_op vid_geq
+let vid_leq = "vid_leq"
+let v_leq = v_op vid_leq
+
 (* global functions *)
 (* most of our global functions come from the shuffle/route code *)
 let declare_global_funcs p = 
+  let global_vid_ops = 
+      mk_global_vid_op vid_eq VEq ::
+      mk_global_vid_op vid_neq VNeq ::
+      mk_global_vid_op vid_lt VLt ::
+      mk_global_vid_op vid_gt VGt ::
+      mk_global_vid_op vid_leq VLeq ::
+      mk_global_vid_op vid_geq VGeq ::
+      [] in
   (* log_write *)
   let log_write_code t = mk_global_fn 
     (log_write_for p t)
@@ -151,7 +174,7 @@ let declare_global_funcs p =
     mk_filtermap
       (mk_lambda 
         (wrap_args ["vid2", t_vid; "trig", t_trig_id]) @:
-        mk_geq (mk_var "vid2") @: mk_var "vid"
+        v_geq (mk_var "vid2") @: mk_var "vid"
       )
       (mk_lambda
         (wrap_args ["vid2", t_vid; "trig", t_trig_id]) @:
@@ -196,12 +219,13 @@ let declare_global_funcs p =
         ) @:
         mk_filtermap (* filter all vids >= given vid *)
           (mk_lambda (wrap_args ids_types_v2) @:
-            mk_geq (mk_var "vid2") (mk_var "vid")
+            v_geq (mk_var "vid2") (mk_var "vid")
           )
           (mk_id types_v) @:
           mk_var map_name
   in
-  log_read_geq_code ::
+  global_vid_ops @
+  [log_read_geq_code] @
   for_all_maps p add_delta_to_buffer_code @
   for_all_trigs p log_write_code @
   for_all_trigs p log_get_bound_code @
@@ -771,7 +795,7 @@ let filter_corrective_list = mk_global_fn filter_corrective_list_name
     mk_assoc_lambda (* compare func *)
       (wrap_args ["vid1", t_vid; "stmt1", t_stmt_id])
       (wrap_args ["vid2", t_vid; "stmt2", t_stmt_id]) @:
-      mk_lt (mk_var "vid1") @: mk_var "vid2"
+      v_lt (mk_var "vid1") @: mk_var "vid2"
   )
 
     

@@ -31,6 +31,7 @@ let iso_to_contained typ =
 let canonical typ = TIsolated(TImmutable(typ,[]))
 
 (* A type for simple K3 types *)
+let t_bool = canonical TBool
 let t_int = canonical TInt
 let t_int_mut = TIsolated(TMutable(TInt,[]))
 let t_float = canonical TFloat
@@ -95,6 +96,13 @@ let wrap_args id_typ =
     | [x]   -> wrap_args_inner x
     | x::xs -> ATuple(List.map wrap_args_inner id_typ)
     | _     -> invalid_arg "No ids, types for wrap_args"
+
+(* for deep arguments (using ATuple) *)
+let wrap_a2 id_arg =
+  match id_arg with
+  | []  -> invalid_arg "Nothing to wrap in wrap_a2"
+  | [x] -> invalid_arg "No need for wrap_a2: single argument"
+  | xs  -> ATuple xs
 
 (* wrap function arguments, turning tmaybes to amaybes *)
 let wrap_args_maybe id_typ = 
@@ -247,17 +255,22 @@ let mk_has_member collection pattern member_type =
 let mk_code_sink name args locals code =
   mk_no_anno @: Sink(Code(name, args, locals, code))
 
+let mk_global_fn_raw name input_arg input_types output_types expr =
+  mk_no_anno @:
+    Global(name, 
+      TFunction(input_types, output_types),
+      Some (mk_lambda (input_arg) expr)
+    )
+
 (* function to declare and define a global function. Assumes the global
  * construct allows for an expr_t as well.
  * The types are expected in list format (always!) *)
 let mk_global_fn name input_names_and_types output_types expr =
-  mk_no_anno @:
-    Global(name, 
-      TFunction(wrap_ttuple @: extract_arg_types input_names_and_types,
-          wrap_ttuple output_types),
-      Some (mk_lambda (wrap_args input_names_and_types) expr)
-    )
-;;
+  mk_global_fn_raw name 
+    (wrap_args input_names_and_types)
+    (wrap_ttuple @: extract_arg_types input_names_and_types)
+    (wrap_ttuple output_types) 
+    expr
 
 let mk_global_val name val_type = 
   mk_no_anno @: Global(name, TValue(val_type), None)
@@ -359,11 +372,42 @@ let mk_unwrap_maybe var_names_and_types expr =
     mk_tuple vars
 
 (* K3 types for various elements of a k3 program *)
-let t_vid = wrap_ttuple @: [t_int; t_int] (* so we can distinguish *)
-let t_vid_mut = wrap_ttuple @: [t_int_mut; t_int_mut]
 let t_trig_id = t_int (* In K3, triggers are always handled by numerical id *)
 let t_stmt_id = t_int
 let t_map_id = t_int
+
+(* for vids *)
+let vid_types = [t_int; t_int; t_int]
+let vid_mut_types = [t_int_mut; t_int_mut; t_int_mut]
+let t_vid = wrap_ttuple vid_types
+let t_vid_mut = wrap_ttuple vid_mut_types
+
+(* functions for comparing vids *)
+type vid_op = VEq | VNeq | VGt | VLt | VGeq | VLeq
+let mk_global_vid_op name tag = 
+  let lvid_id_t = types_to_ids_types "l" vid_types in
+  let lvid_id = fst @: List.split lvid_id_t in
+  let rvid_id_t = types_to_ids_types "r" vid_types in
+  let rvid_id = fst @: List.split rvid_id_t in
+  let arg_pair = wrap_a2 [wrap_args lvid_id_t; wrap_args rvid_id_t] in
+  let arg_types = wrap_ttuple [wrap_ttuple vid_types; wrap_ttuple vid_types] in
+  let op f i = 
+    let nth_l = List.nth lvid_id in let nth_r = List.nth rvid_id in
+    f (mk_var @: nth_l i) (mk_var @: nth_r i) in
+  let mk_vid_eq = mk_and (op mk_eq 0) @: mk_and (op mk_eq 1) (op mk_eq 2) in
+  let mk_vid_neq = mk_not mk_vid_eq in
+  let mk_vid_lt = mk_and (op mk_lt 0) @: mk_and (op mk_lt 1) (op mk_lt 2) in
+  let mk_vid_geq = mk_not mk_vid_lt in
+  let mk_vid_gt = mk_and (op mk_gt 0) @: mk_and (op mk_gt 1) (op mk_gt 2) in
+  let mk_vid_leq = mk_not mk_vid_gt in
+  mk_global_fn_raw name arg_pair arg_types t_bool @: 
+    match tag with
+    | VEq -> mk_vid_eq
+    | VNeq -> mk_vid_neq
+    | VGt -> mk_vid_gt
+    | VGeq -> mk_vid_geq
+    | VLt -> mk_vid_lt
+    | VLeq -> mk_vid_leq
 
 (* id function for maps *)
 let mk_id tuple_types = 
