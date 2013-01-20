@@ -125,8 +125,13 @@ let rec lazy_expr c expr =
     e3) <| sep () <| w(lazy_expr c e4) in
   let arith_paren e = match U.tag_of_expr e with
     | Mult | Add | IfThenElse -> lazy_paren
-    | _ -> id_fn
-  in let tuple_no_paren c e = match U.tag_of_expr e with
+    | _ -> id_fn in
+  let expr_type_is_bool e = match T.type_of_expr e with
+    | TValue x | TFunction(_,x) -> begin match T.base_of x with
+      | TBool -> true
+      | _ -> false
+      end in
+  let tuple_no_paren c e = match U.tag_of_expr e with
     | Tuple -> let es = U.decompose_tuple e in
       lps_list CutHint (lazy_expr c) es
     | _ -> lazy_expr c e
@@ -168,41 +173,40 @@ let rec lazy_expr c expr =
     end
   | Range ct -> let t = U.decompose_range expr in
     lazy_collection c ct @: expr_triple ~sep:(fun () -> lps ":") t
-  | Add -> let (e1, e2) = U.decompose_add expr in
-    let wrapl = arith_paren e1 in
-    begin match U.tag_of_expr e2 with
-      | Neg -> let e3 = U.decompose_neg e2 in
-        let wrapr = arith_paren e3 in
-        expr_pair ~sep:(lsp () <| lps "-" <| lsp ()) ~wl:wrapl ~wr:wrapr 
-          (e1, e3)
-      | _   -> let wrapr = arith_paren e2 in
-        expr_pair ~sep:(lsp () <| lps "+" <| lsp ()) ~wl:wrapl ~wr:wrapr 
-          (e1, e2)
+  | Add -> let paren_pair sym el er = 
+      let wrapl = arith_paren el in
+      let wrapr = arith_paren er in
+      expr_pair ~sep:(lsp () <| lps sym <| lsp ()) ~wl:wrapl ~wr:wrapr 
+        (el, er) in
+    let (e1, e2) = U.decompose_add expr in
+    begin match U.tag_of_expr e2, expr_type_is_bool e1 with
+      | Neg, false -> let e3 = U.decompose_neg e2 in
+        paren_pair "-" e1 e3
+      | _, false -> paren_pair "+" e1 e2 
+      | _, true -> paren_pair "|" e1 e2
     end 
   | Mult -> let (e1, e2) = U.decompose_mult expr in
     let is_neg = begin match U.tag_of_expr e1 with
       | Neg -> let e = U.decompose_neg e1 in
         begin match U.tag_of_expr e with 
-        | Const(CInt(1)) -> true 
-        | _ -> false
+          | Const(CInt(1)) -> true 
+          | _ -> false
         end
       | Const(CInt(-1)) -> true
       | _ -> false
     end in
-    if is_neg then
-      lps "-" <| lazy_expr c e2
-    else
+    let paren_pair sym = 
       let wrapl = arith_paren e1 in
       let wrapr = arith_paren e2 in
-      expr_pair ~sep:(lsp () <| lps "*" <| lsp ()) ~wl:wrapl ~wr:wrapr (e1,e2)
+      expr_pair ~sep:(lsp () <| lps sym <| lsp ()) ~wl:wrapl ~wr:wrapr (e1,e2)
+    in 
+    begin match expr_type_is_bool e1, is_neg with
+      | true, _ -> paren_pair "&"
+      | false, true -> lps "-" <| lazy_expr c e2 (* just a minus *)
+      | _ -> paren_pair "*"
+    end 
   | Neg -> let e = U.decompose_neg expr in
-    let sym = begin match T.type_of_expr e with
-      | TValue x -> begin match T.base_of x with
-        | TBool -> "~"
-        | _ -> "-"
-      end
-      | _ -> "-"
-    end in
+    let sym = if expr_type_is_bool e then "!" else "-" in
     begin match U.tag_of_expr e with
       | Var _ 
       | Const _ -> lps sym <| lazy_expr c e
