@@ -66,6 +66,13 @@ val decompose_tuple : expr_t -> expr_t list
 val decompose_update : expr_t -> expr_t * expr_t * expr_t
 
 (* Declaration accessors *)
+val is_global : declaration_t * 'a -> bool
+val is_foreign : declaration_t * 'a -> bool
+val is_flow : declaration_t * 'a -> bool
+val is_role : declaration_t * 'a -> bool
+val is_def_role : declaration_t * 'a -> bool
+
+(* Declaration accessors *)
 val globals_of_program  : program_t -> program_t
 val flows_of_program    : program_t -> program_t
 

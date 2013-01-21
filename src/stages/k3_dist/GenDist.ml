@@ -65,7 +65,7 @@ let rcv_corrective_name_of_t p trig_nm stmt_id map_id =
 let do_corrective_name_of_t p trig_nm stmt_id map_id =
   trig_nm^"_do_corrective_s"^string_of_int stmt_id^"_m_"^map_name_of p map_id
 
-(* foreign function names *)
+(* log, buffer names *)
 let log_write_for p trig_nm = "log_write_"^trig_nm (* varies with bound *)
 let log_get_bound_for p trig_nm = "log_get_bound_"^trig_nm 
 let log_read_geq = "log_read_geq" (* takes vid, returns (trig, vid)list >= vid *)
@@ -75,11 +75,20 @@ let log_read_geq = "log_read_geq" (* takes vid, returns (trig, vid)list >= vid *
 let add_delta_to_buffer_for_map p map_id = 
   "add_delta_to_buffer_"^map_name_of p map_id
 
-let declare_foreign_functions p = []
+(* foreign functions *)
+let hash_addr = "hash_address"
+let foreign_hash_addr = mk_foreign_fn hash_addr t_addr t_int
+let declare_foreign_functions p = foreign_hash_addr::[]
 
-(* global data structures ---- *)
-  (* stmt_cntrs - (vid, stmt_id, counter) *)
-let stmt_cntrs_name = "stmt_cntrs"
+(* global data structures --------- *)
+
+(* vid counter used to assign vids *)
+let vid_counter_name = "__vid_counter__"
+let vid_counter = mk_var vid_counter_name
+let vid_counter_t = wrap_tset @: t_int_mut
+
+(* stmt_cntrs - (vid, stmt_id, counter) *)
+let stmt_cntrs_name = "__stmt_cntrs__"
 let stmt_cntrs = mk_var stmt_cntrs_name
 
 (* names for log *)
@@ -87,6 +96,11 @@ let log_for_t t = "log_"^t
 let log_master = "log__master"
 
 let declare_global_vars p =
+  (* vid_counter to generate vids. We use a singleton because refs aren't ready
+   *)
+  let vid_counter_code = mk_global_val_init vid_counter_name vid_counter_t @:
+    mk_singleton vid_counter_t @: mk_const @: CInt 0 in
+
   (* stmt counters, used to make sure we've received all msgs *)
   let stmt_cntrs_type = wrap_tset_mut @: wrap_ttuple_mut 
       [t_vid_mut; t_int_mut; t_int_mut] in
@@ -110,7 +124,8 @@ let declare_global_vars p =
     let log_structs = for_all_trigs p log_struct_code_for in
     log_master_code::log_structs
   in
-  stmt_cntrs_code:: 
+  vid_counter_code ::
+  stmt_cntrs_code :: 
   global_maps@
   log_structs_code
 
@@ -233,6 +248,21 @@ let declare_global_funcs p =
 
 
 (* ---- start of protocol code ---- *)
+
+let start_trig p t =
+  mk_code_sink t (wrap_args @: args_of_t p t) [] @:
+    mk_let "vid" t_vid
+      (mk_tuple [
+        mk_apply (mk_var hash_addr) G.me_var;
+        mk_const @: CInt 0; (* epoch not implemented yet *)
+        mk_peek vid_counter]) @:
+      mk_block [
+         mk_send 
+           (mk_const @: CTarget(send_fetch_name_of_t p t)) G.me_var @: 
+           mk_tuple @: args_of_t_as_vars_with_v p t;
+         mk_update vid_counter (mk_peek vid_counter) @:
+           mk_add (mk_const @: CInt 1) (mk_peek vid_counter)
+        ]
 
 let send_fetch_trig p trig_name =
   let send_fetches_of_rhs_maps  =
@@ -871,8 +901,22 @@ List.map
   ) @:
   s_and_over_stmts_in_t p rhs_maps_of_stmt trig_name
 
+(* this is hardwired for the m3tok3 module, which produces demux triggers *)
+let demux_trigs ast =
+  let trigs = U.triggers_of_program ast in
+  let demux_s = "demux_" in
+  let demux_ts = 
+    List.filter (fun c -> 
+      String.sub (U.id_of_code c) 0 (String.length demux_s) = demux_s)
+      trigs
+  (* assume all demux are flow sinks too *)
+  in List.map (fun c -> mk_no_anno @: Sink(c)) demux_ts
+
+let orig_roles_of_ast ast = List.filter (fun d -> U.is_role d || U.is_def_role d) ast
+
 (* Generate all the code for a specific trigger *)
 let gen_dist_for_t p ast trig =
+    start_trig p trig::
     send_fetch_trig p trig::
     rcv_put_trig p trig::
     rcv_fetch_trig p trig::
@@ -880,7 +924,8 @@ let gen_dist_for_t p ast trig =
     rcv_push_trig p trig@
     do_complete_trigs p ast trig@
     rcv_correctives_trig p trig@
-    do_corrective_trigs p ast trig
+    do_corrective_trigs p ast trig@
+    []
 
 (* Function to generate the whole distributed program *)
 let gen_dist p (ast:K3.AST.program_t) =
@@ -894,8 +939,10 @@ let gen_dist p (ast:K3.AST.program_t) =
     global_funcs @ (* maybe make this not order-dependent *)
     declare_foreign_functions p @
     filter_corrective_list ::  (* global func *)
-    [mk_flow @:
+    (mk_flow @:
       regular_trigs@
-      send_corrective_trigs p]    (* per-map basis *)
+      send_corrective_trigs p@
+      demux_trigs ast)::    (* per-map basis *)
+    orig_roles_of_ast ast
   in U.renumber_program_ids prog
 

@@ -2,6 +2,7 @@
 open K3.AST
 open K3.Annotation
 
+val mk_no_anno : 'a -> 'a * annotation_t
 (* Wrap with sorted annotation. Give int list of positions to sort by *)
 val mk_anno_sort : 'a * annotation_t -> int list -> 'a * annotation_t
 
