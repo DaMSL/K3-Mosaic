@@ -2,7 +2,6 @@
 module Stages.K3.Core.K3AST where
 
 import Util.Tree
-import Stages.K3.Core.K3Annotations (K3Annotation)
 
 type Id = String
 type Address = (String, Int) -- IP, port
@@ -15,7 +14,7 @@ data ContainerType
     | TList
     deriving Show
 
-data BaseType
+data BaseType a
     = TUnknown
     | TUnit
     | TBool
@@ -23,34 +22,34 @@ data BaseType
     | TInt
     | TFloat
     | TString
-    | TMaybe ValueType
-    | TTuple [ValueType]
-    | TCollection ContainerType ValueType
+    | TMaybe (ValueType a)
+    | TTuple [(ValueType a)]
+    | TCollection ContainerType (ValueType a)
     | TAddress
-    | TTarget BaseType
+    | TTarget (BaseType a)
     deriving Show
 
-data MutableType
-    = TMutable BaseType Annotation
-    | TImmutable BaseType Annotation
+data MutableType a
+    = TMutable (BaseType a) a
+    | TImmutable (BaseType a) a
     deriving Show
 
-data ValueType
-    = TIsolated MutableType
-    | TContained MutableType
+data ValueType a
+    = TIsolated (MutableType a)
+    | TContained (MutableType a)
     deriving Show
 
-data Type
-    = TFunction ValueType ValueType
-    | TValue ValueType
+data Type a
+    = TFunction (ValueType a) (ValueType a)
+    | TValue (ValueType a)
     deriving Show
 
 -- Arguments
-data Arg
+data Arg a
     = AIgnored
-    | AVar Id ValueType
-    | AMaybe Arg
-    | ATuple [Arg]
+    | AVar Id (ValueType a)
+    | AMaybe (Arg a)
+    | ATuple [(Arg a)]
     deriving Show
 
 -- Constants
@@ -67,15 +66,15 @@ data Constant
     deriving Show
 
 -- Expressions
-data ExprTag
+data ExprTag a
     = Const Constant
     | Var Id
     | Tuple
 
     | Just
 
-    | Empty ValueType
-    | Singleton ValueType
+    | Empty (ValueType a)
+    | Singleton (ValueType a)
     | Combine
 
     | Range ContainerType
@@ -89,7 +88,7 @@ data ExprTag
     | Neq
     | Leq
 
-    | Lambda Arg
+    | Lambda (Arg a)
     | Apply
 
     | Block
@@ -116,7 +115,7 @@ data ExprTag
     deriving Show
 
 -- Expression Tree
-type Expr = Tree ((Int, ExprTag), Annotation)
+type Expr a = Tree ((Int, (ExprTag a)), a)
 
 data StopBehavior
     = UntilCurrent
@@ -149,44 +148,43 @@ data ResourcePattern
 newtype Instruction = Consume Id
                       deriving Show
 
-data FlowResource
-  = Handle Type ChannelType ChannelFormat
+data FlowResource a
+  = Handle (Type a) ChannelType ChannelFormat
   | Pattern ResourcePattern
   deriving Show
 
-data FlowEndpoint
-  = Resource Id FlowResource
-  | Code Id Arg [(Id, ValueType, Annotation)] Expr
+data FlowEndpoint a
+  = Resource Id (FlowResource a)
+  | Code Id (Arg a) [(Id, (ValueType a), a)] (Expr a)
   deriving Show
 
-data FlowStatement
-  = Source FlowEndpoint
-  | Sink FlowEndpoint
+data FlowStatement a
+  = Source (FlowEndpoint a)
+  | Sink (FlowEndpoint a)
   | Bind Id Id
   | Instruction Instruction
   deriving Show
 
-type FlowProgram = [(FlowStatement, Annotation)]
+type FlowProgram a = [((FlowStatement a), a)]
 
 -- Top-Level Declarations
-data Declaration
-    = Global      Id Type (Maybe Expr)
-    | Foreign     Id Type
-    | Flow        FlowProgram
-    | Role        Id FlowProgram
+data Declaration a
+    = Global      Id (Type a) (Maybe (Expr a))
+    | Foreign     Id (Type a)
+    | Flow        (FlowProgram a)
+    | Role        Id (FlowProgram a)
     | DefaultRole Id
     deriving Show
 
 -- K3 Programs
-type Program = [(Declaration, Annotation)]
+type Program a = [((Declaration a), a)]
 
-type Annotation = [(K3Annotation Type)]
 
 -- Testing
-data CheckExpr = FileExpr String | InlineExpr Expr
+data CheckExpr a = FileExpr String | InlineExpr (Expr a)
                  deriving Show
 
-type ExpressionTest = (Program, Expr, CheckExpr)
+type ExpressionTest a = ((Program a), (Expr a), (CheckExpr a))
 
-type ProgramTest = (Program, [(Id, CheckExpr)])
+type ProgramTest a = ((Program a), [(Id, (CheckExpr a))])
 

@@ -1,11 +1,9 @@
-module K3.Utils.K3Helpers where
+module K3.Utils.K3Builders where
 
 import Util.Util
 import Util.Tree
-{-import Util.-}
-import Stages.K3.Core.K3AST hiding (Just) 
-import qualified Stages.K3.Core.K3AST as K3AST
-import Stages.K3.Core.K3Annotations hiding (Id)
+import Stages.K3 hiding (Just) 
+import qualified Stages.K3 as K3AST
 
 -- Annotation manipulation
 mk_no_anno a = (a, [])
@@ -287,7 +285,7 @@ def_tup_prefix = "__temp_"
 
 mk_tuple_range types = create_range 0 $ length types
 
-tuple_make_pattern :: [ValueType] -> [TuplePat]
+tuple_make_pattern :: [ValueType a] -> [TuplePat]
 tuple_make_pattern types = 
     map Position $ mk_tuple_range types
 
