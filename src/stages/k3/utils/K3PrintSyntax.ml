@@ -4,6 +4,7 @@ open Util
 open Printing
 open Lazy
 open K3.AST
+open K3.Annotation
 
 module U = K3Util
 module T = K3Typechecker
@@ -30,6 +31,7 @@ let (<|) a b = a @ b
 
 let lazy_paren f = lps "(" <| f <| lps ")"
 let lazy_bracket f = lps "[" <| f <| lps "]"
+let lazy_brace f = lps "{" <| f <| lps "}"
 let lazy_box_brace f = 
   lps "{" <| lind () <| lv 0 <| f <| 
   lcb () <| lcut () <| lps "}"
@@ -39,6 +41,32 @@ let wrap_hov i f = lbox (lhov i) f
 let wrap_indent f = wrap_hov 2 f
 
 let error () = lps "???"
+
+let lazy_control_anno c = function
+  | Effect ids -> lps "effect " <| lazy_paren @: 
+      lps_list NoCut lps ids
+  | Parallel i -> lps "parallel " <| lazy_paren (lps @: string_of_int i)
+
+let lazy_data_anno c a = 
+  let positions ps = lps_list NoCut (lps |- string_of_int) ps in
+  match a with
+  | FunDep (ps, Element) -> lps "key " <| lazy_paren (positions ps)
+  | FunDep (ps, Positions ps2) -> positions ps <| lps "->" <| positions ps2
+  | MVFunDep (ps, Element) -> lps "index " <| lazy_paren (positions ps)
+  | MVFunDep (ps, Positions ps2) -> positions ps <| lps "=>" <| positions ps2
+  | Unique ps -> lps "unique " <| lazy_paren (positions ps)
+  | Ordered ps -> lps "ordered " <| lazy_paren (positions ps)
+  | Sequential -> lps "sequential"
+  | RandomAccess -> lps "randomaccess"
+
+let lazy_anno c = function
+  | Data(r,a)    -> lazy_data_anno c a
+  | Control(r,a) -> lazy_control_anno c a
+  | _ -> []
+
+let lazy_annos c = function 
+  | [] -> [] 
+  | annos -> lps "@ " <| lazy_brace @: lps_list ~sep:"; " NoCut (lazy_anno c) annos
 
 let rec lazy_base_type c = function
   | TUnit -> lps "unit"
