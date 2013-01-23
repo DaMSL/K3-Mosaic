@@ -253,9 +253,10 @@ let start_trig p t =
   mk_code_sink t (wrap_args @: args_of_t p t) [] @:
     mk_let "vid" t_vid
       (mk_tuple [
-        mk_apply (mk_var hash_addr) G.me_var;
         mk_const @: CInt 0; (* epoch not implemented yet *)
-        mk_peek vid_counter]) @:
+        mk_peek vid_counter;
+        mk_apply (mk_var hash_addr) G.me_var
+      ]) @:
       mk_block [
          mk_send 
            (mk_const @: CTarget(send_fetch_name_of_t p t)) G.me_var @: 
