@@ -129,3 +129,7 @@ val post_order_linearization : expr_t list list -> expr_t -> expr_t list
 
 val renumber_ast_ids : expr_t -> int ref -> expr_t
 val renumber_program_ids : program_t -> program_t
+
+(* Convert between k3 representation and ocaml representation of containers *)
+val list_of_k3_container : expr_t -> expr_t list
+val k3_container_of_list : value_type_t -> expr_t list -> expr_t

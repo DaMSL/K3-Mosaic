@@ -53,6 +53,24 @@ let out_lang_descs = [
     CPP,         "cpp",       "C++";
   ]
 
+(* Evaluation option setters *)
+let parse_port p = 
+  let error () = invalid_arg ("invalid port: "^p) in
+  try let r = int_of_string p in if r > 65535 then error() else r
+  with Failure _ -> error()
+
+let parse_ip_role ipr_str =
+  match Str.full_split (Str.regexp "[:/]") ipr_str with
+  | [Text ip; Delim ":"; Text port; Delim "/"; Text role] -> (ip, (parse_port port)), Some(role)
+  | [Text ip; Delim ":"; Text port] -> (ip, (parse_port port)), None
+  | [Text ip_or_port; Delim "/"; Text role] -> 
+    if String.contains ip_or_port '.' then (ip_or_port, default_port), Some(role)
+    else (default_ip, (parse_port ip_or_port)), Some(role)
+  | _ -> invalid_arg "invalid ip string format"
+
+let string_of_address_and_role (addr, role_opt) =
+  (string_of_address addr)^(match role_opt with None -> "" | Some r -> "/"^r)
+
 let string_of_lang_descs descs i = 
   let l = List.filter (fun (x,_,_) -> x = i) descs in
   if l = [] then "unknown" else let _,_,r = List.hd l in r
@@ -118,6 +136,7 @@ type parameters = {
     mutable node_address : address;
     mutable role         : id_t option;
     mutable peers        : (address * id_t option) list;
+    mutable partition_map : K3Route.part_map_t;
     mutable run_length   : int64;
     mutable print_types  : bool; (* TODO: change to a debug flag *)
     mutable debug_info   : bool;
@@ -134,119 +153,27 @@ let cmd_line_params : parameters = {
     node_address = default_node_address;
     role         = default_role;
     peers        = default_peers;
+    partition_map = [];
     run_length   = default_run_length;
     print_types  = default_print_types;
     debug_info   = default_debug_info;
     verbose      = default_verbose;
   }
 
-(* General parameter setters *)
-let set_output_language l =
-  cmd_line_params.out_lang <- parse_out_lang l
-
-let set_input_language l =
-  cmd_line_params.in_lang <- parse_in_lang l
-
-let set_print_types () =
-  cmd_line_params.print_types <- true
-
-let set_debug_info () =
-  cmd_line_params.debug_info <- true
-
-let set_verbose () =
-  cmd_line_params.verbose <- true
-
-let append_search_path p = 
-  cmd_line_params.search_paths <- cmd_line_params.search_paths @ [p]
-
-let append_input_file f = 
-  cmd_line_params.input_files <- cmd_line_params.input_files @ [f]
-  
-(* Evaluation option setters *)
-let parse_port p = 
-  let error () = invalid_arg ("invalid port: "^p) in
-  try let r = int_of_string p in if r > 65535 then error() else r
-  with Failure _ -> error()
-
-let parse_ip_role ipr_str =
-  match Str.full_split (Str.regexp "[:/]") ipr_str with
-  | [Text ip; Delim ":"; Text port; Delim "/"; Text role] -> (ip, (parse_port port)), Some(role)
-  | [Text ip; Delim ":"; Text port] -> (ip, (parse_port port)), None
-  | [Text ip_or_port; Delim "/"; Text role] -> 
-    if String.contains ip_or_port '.' then (ip_or_port, default_port), Some(role)
-    else (default_ip, (parse_port ip_or_port)), Some(role)
-  | _ -> invalid_arg "invalid ip string format"
-
-let string_of_address_and_role (addr, role_opt) =
-  (string_of_address addr)^(match role_opt with None -> "" | Some r -> "/"^r)
-
-let set_node_address ipr_str =
-  let addr, role_opt = parse_ip_role ipr_str in
-  cmd_line_params.node_address <- addr;
-  cmd_line_params.role <- role_opt
-
-let set_role role_id = 
-  cmd_line_params.role <- (if role_id = "" then None else Some role_id)
-
-let append_peers ipr_str_list =
-  let ip_roles = Str.split (Str.regexp (Str.quote ",")) ipr_str_list in
-  cmd_line_params.peers <- cmd_line_params.peers @ (List.map parse_ip_role ip_roles)
-
-let set_run_length len =
-  cmd_line_params.run_length <- Int64.of_string len
-
-(* Argument descriptions *)
-let param_specs = Arg.align
-
-  (* Actions *) 
-  (action_specs cmd_line_params.action@
-   test_specs cmd_line_params.test_mode@[
-  
-  (* Compilation parameters *)
-  "-i", Arg.String set_input_language, 
-      "lang     Set the compiler's input language";
-  "-l", Arg.String set_output_language, 
-      "lang     Set the compiler's output language";
-  "-I", Arg.String append_search_path, 
-      "dir      Include a directory in the module search path";
-  
-  (* Interpreter and evaluation parameters *)
-  "-h", Arg.String set_node_address, 
-      "addr     Set the current node address for evaluation";
-  "-r", Arg.String set_role, 
-      "role     Set this node's role during evaluation";
-  "-n", Arg.String append_peers, 
-      "[addr]   Append addresses to the peer list";
-  "-steps", Arg.String set_run_length, 
-      "int64    Set program run length in # of messages";
-  
-  (* Debugging parameters *)
-  "-t", Arg.Unit set_print_types,
-      "         Print types as part of output";
-  "-d", Arg.Unit set_debug_info,
-      "         Print debug info (context specific)";
-  "-v", Arg.Unit set_verbose,
-      "         Print verbose output (context specific)";
-  ])
-
-let usage_msg =
-  ("k3 [opts] sourcefile1 [sourcefile2 [...]]"^
-     "\n---- Input languages ----\n"^
-     (String.concat "\n"
-       (List.map format_language_description in_lang_descs))^
-     "\n---- Output languages ----\n"^
-     (String.concat "\n"
-       (List.map format_language_description out_lang_descs))^
-     "\n---- Options ----")
-
-let parse_cmd_line () =
-  Arg.parse param_specs append_input_file usage_msg
-
-
 (* Error handlers *)
 let handle_lexer_error () =
   print_endline ("Lexer failure");
   exit 1
+
+let handle_local_parse_error lexbuf =
+  let curpos = lexbuf.Lexing.lex_curr_p in
+  let curr = curpos.Lexing.pos_cnum in 
+  let bol = curpos.Lexing.pos_bol in
+  let diff = curr-bol in
+  let line = curpos.Lexing.pos_lnum in
+  let tok = Lexing.lexeme lexbuf in  
+  Printf.printf "\nError on line %d , character %d , token %s\n" 
+      line diff tok; raise Parsing.Parse_error
 
 let handle_parse_error ?(msg = "") lexbuf =
   print_endline ("Lexer reached: '"^(Lexing.lexeme lexbuf)^"'; "^msg);
@@ -260,6 +187,17 @@ let handle_type_error p (uuid,error) =
 
 
 (* Program parsers *)
+let parse_program_from_string parsefn lexfn str =
+  let lexbuf =
+    try Lexing.from_string str
+    with Failure _ -> handle_lexer_error ()
+  in
+    try parsefn lexfn lexbuf
+    with 
+    | Parsing.Parse_error -> handle_local_parse_error lexbuf
+    | Failure(msg) -> handle_parse_error ~msg:msg lexbuf
+    | Pervasives.Exit -> raise Parsing.Parse_error
+
 let parse_program parsefn lexfn file =
   let in_chan = try open_in file
     with Sys_error _ -> error ("failed to open file: "^file) in
@@ -270,15 +208,7 @@ let parse_program parsefn lexfn file =
   let prog =
     try parsefn lexfn lexbuf
     with 
-    | Parsing.Parse_error -> 
-        let curpos = lexbuf.Lexing.lex_curr_p in
-        let curr = curpos.Lexing.pos_cnum in 
-        let bol = curpos.Lexing.pos_bol in
-        let diff = curr-bol in
-        let line = curpos.Lexing.pos_lnum in
-        let tok = Lexing.lexeme lexbuf in  
-        Printf.printf "\nError on line %d , character %d , token %s\n" 
-            line diff tok; raise Parsing.Parse_error
+    | Parsing.Parse_error -> handle_local_parse_error lexbuf
     | Failure(msg) -> handle_parse_error ~msg:msg lexbuf
     | Pervasives.Exit -> raise Parsing.Parse_error
   in
@@ -359,13 +289,13 @@ let print_k3_program f p =
     match default with None -> () 
       | Some (_,x) -> print_event_loop ("DEFAULT", x)
 
-let print_k3_dist_prog f (p, m) = match m with
+let print_k3_dist_prog partmap f (p, m) = match m with
   | None -> error "Cannot construct distributed K3 without ProgInfo metadata"
   | Some meta ->
   (* do not use. Simply for type checking original program *)
   (*tp = typed_program p in *)
   let dist = try
-      GenDist.gen_dist meta p
+      GenDist.gen_dist meta partmap p
     with Invalid_argument(msg) -> 
       print_endline ("ERROR: " ^msg);
       print_endline (ProgInfo.string_of_prog_data meta);
@@ -407,10 +337,11 @@ let print params inputs =
   let sofp = string_of_program ~verbose:cmd_line_params.verbose in
   let print_fn = match params.out_lang with
     | AstK3 -> print_k3_program sofp |- fst
-    | AstK3Dist -> params.in_lang <- M3in; print_k3_dist_prog sofp
+    | AstK3Dist -> params.in_lang <- M3in; print_k3_dist_prog
+      params.partition_map sofp
     | K3 -> (print_k3_program PS.string_of_program) |- fst
     | K3Dist -> params.in_lang <- M3in; 
-        (print_k3_dist_prog PS.string_of_program)
+        (print_k3_dist_prog params.partition_map PS.string_of_program)
     | ReifiedK3 -> print_reified_k3_program |- fst
     | Imperative -> (print_imperative_program params.print_types) |- fst
     | CPPInternal -> (print_cppi_program params.print_types) |- fst
@@ -464,6 +395,100 @@ let process_parameters params =
   | REPL -> repl params
   | Test -> test params
 
+(* General parameter setters *)
+let set_output_language l =
+  cmd_line_params.out_lang <- parse_out_lang l
+
+let set_input_language l =
+  cmd_line_params.in_lang <- parse_in_lang l
+
+let set_print_types () =
+  cmd_line_params.print_types <- true
+
+let set_debug_info () =
+  cmd_line_params.debug_info <- true
+
+let set_verbose () =
+  cmd_line_params.verbose <- true
+
+let append_search_path p = 
+  cmd_line_params.search_paths <- cmd_line_params.search_paths @ [p]
+
+let append_input_file f = 
+  cmd_line_params.input_files <- cmd_line_params.input_files @ [f]
+  
+let set_node_address ipr_str =
+  let addr, role_opt = parse_ip_role ipr_str in
+  cmd_line_params.node_address <- addr;
+  cmd_line_params.role <- role_opt
+
+let set_role role_id = 
+  cmd_line_params.role <- (if role_id = "" then None else Some role_id)
+
+let append_peers ipr_str_list =
+  let ip_roles = Str.split (Str.regexp (Str.quote ",")) ipr_str_list in
+  cmd_line_params.peers <- cmd_line_params.peers @ (List.map parse_ip_role ip_roles)
+
+let load_partition_map file = 
+  let str = read_file file in
+  let str_full = "declare pmap : [(string, [(int, int)])] = "^str in
+  let prog = parse_program_from_string K3Parser.program K3Lexer.tokenize str_full 
+  in cmd_line_params.partition_map <- K3Route.list_of_k3_partition_map prog
+  
+let set_run_length len =
+  cmd_line_params.run_length <- Int64.of_string len
+
+
+(* Argument descriptions *)
+let param_specs = Arg.align
+
+  (* Actions *) 
+  (action_specs cmd_line_params.action@
+   test_specs cmd_line_params.test_mode@[
+  
+  (* Compilation parameters *)
+  "-i", Arg.String set_input_language, 
+      "lang     Set the compiler's input language";
+  "-l", Arg.String set_output_language, 
+      "lang     Set the compiler's output language";
+  "-I", Arg.String append_search_path, 
+      "dir      Include a directory in the module search path";
+  
+  (* Interpreter and evaluation parameters *)
+  "-h", Arg.String set_node_address, 
+      "addr     Set the current node address for evaluation";
+  "-r", Arg.String set_role, 
+      "role     Set this node's role during evaluation";
+  "-n", Arg.String append_peers, 
+      "[addr]   Append addresses to the peer list";
+  "-steps", Arg.String set_run_length, 
+      "int64    Set program run length in # of messages";
+  "-m", Arg.String load_partition_map,
+      "file     Load a partition map from a file";
+  
+  (* Debugging parameters *)
+  "-t", Arg.Unit set_print_types,
+      "         Print types as part of output";
+  "-d", Arg.Unit set_debug_info,
+      "         Print debug info (context specific)";
+  "-v", Arg.Unit set_verbose,
+      "         Print verbose output (context specific)";
+  ])
+
+let usage_msg =
+  ("k3 [opts] sourcefile1 [sourcefile2 [...]]"^
+     "\n---- Input languages ----\n"^
+     (String.concat "\n"
+       (List.map format_language_description in_lang_descs))^
+     "\n---- Output languages ----\n"^
+     (String.concat "\n"
+       (List.map format_language_description out_lang_descs))^
+     "\n---- Options ----")
+
+let parse_cmd_line () =
+  Arg.parse param_specs append_input_file usage_msg
+
+(* --- Start --- *)
 let main () =
   parse_cmd_line();
   if (List.length cmd_line_params.input_files) < 1 then

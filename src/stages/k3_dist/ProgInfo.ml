@@ -125,6 +125,11 @@ let find_map (p:prog_data_t) (map_id:map_id_t) =
   try List.find (fun (id, _, _) -> id = map_id) @: get_map_data p
   with
     Not_found -> raise (Bad_data ("No "^(string_of_int map_id)^" map_id found"))
+
+let find_map_by_name (p:prog_data_t) str =
+  try List.find (fun (_, s, _) -> s = str) @: get_map_data p
+  with
+    Not_found -> raise (Bad_data ("No "^str^" map name found"))
     
 let find_stmt (p:prog_data_t) (stmt_id:stmt_id_t) =
   try List.find (fun (id, _, _, _, _) -> id = stmt_id) @: get_stmt_data p
@@ -184,6 +189,10 @@ let rhs_lhs_of_stmt (p:prog_data_t) stmt_id =
 let map_name_of p map_id = 
   let (_, name, _) = find_map p map_id in 
   name
+
+let map_id_of_name p str =
+  let (id, _, _) = find_map_by_name p str in
+  id
 
 let trigger_of_stmt p stmt_id : trig_name_t =
   let (_, trig, _, _, _) = find_stmt p stmt_id in

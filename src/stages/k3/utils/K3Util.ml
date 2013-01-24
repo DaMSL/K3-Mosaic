@@ -4,6 +4,7 @@ open Tree
 
 open K3.AST
 open K3.Annotation
+open K3Helpers
 
 (* AST accessors *)
 let id_of_expr e = fst (fst_data e) 
@@ -377,4 +378,19 @@ let renumber_program_ids prog =
         (Role(id, List.rev @: List.fold_left handle_flow [] fs),a)::acc
     | x -> x::acc
   in List.rev @: List.fold_left handle_dec [] prog
+
+let rec list_of_k3_container e = 
+  match tag_of_expr e with
+  | Combine -> let l, r = decompose_combine e in
+      list_of_k3_container l @ list_of_k3_container r
+  | Empty _ -> []
+  | Singleton _ -> [decompose_singleton e]
+  | _ -> invalid_arg "not a k3 list"
+
+let rec k3_container_of_list typ = function
+  | [] -> mk_empty typ
+  | [x] -> mk_singleton typ x
+  | x::xs -> mk_combine (k3_container_of_list typ [x]) @: 
+    k3_container_of_list typ xs
+
 

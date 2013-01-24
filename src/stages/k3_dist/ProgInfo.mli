@@ -38,6 +38,7 @@ val get_map_list : prog_data_t -> map_id_t list
 val for_all_maps : prog_data_t -> (map_id_t -> 'a) -> 'a list
 val find_trigger : prog_data_t -> trig_name_t -> trig_data_t
 val find_map : prog_data_t -> map_id_t -> map_data_t
+val find_map_by_name : prog_data_t -> string -> map_data_t
 val find_stmt : prog_data_t -> stmt_id_t -> stmt_data_t
 val trigger_id_for_name : prog_data_t -> trig_name_t -> trig_id_t
 val trigger_name_for_id : prog_data_t -> trig_id_t -> trig_name_t 
@@ -57,6 +58,7 @@ val find_rmap_bindings_in_stmt :
 val find_map_bindings_in_stmt :
   prog_data_t -> stmt_id_t -> map_id_t -> map_var_binding_t list
 val map_name_of : prog_data_t -> map_id_t -> string
+val map_id_of_name : prog_data_t -> string -> map_id_t
 val map_types_for : prog_data_t -> map_id_t -> value_type_t list
 val map_types_no_val_for : prog_data_t -> map_id_t -> value_type_t list
 

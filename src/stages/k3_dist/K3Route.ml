@@ -4,18 +4,21 @@ open Util
 open K3.AST
 open K3Helpers
 open ProgInfo
+module U = K3Util
 
 (* TODO: the code here uses an index to refer to the right map id. This means
  * that in K3Helpers, the base for ranges cannot be changed from 0. This should
  * be sorted out in the future *)
 
-(* route and shuffle function names *)
+(* route function name *)
 let route_for p map_id = "route_to_"^map_name_of p map_id
 
 let t_two_ints = [t_int; t_int]
 let t_list_two_ints = wrap_tlist @: wrap_ttuple t_two_ints
 let dim_bounds_type = wrap_tlist @: wrap_ttuple t_two_ints
-let bmod_types = wrap_tlist @: wrap_ttuple t_two_ints
+let pmap_types = wrap_tset @: wrap_ttuple t_two_ints
+let pmap_per_map_types = [t_map_id; pmap_types]
+let full_pmap_types = wrap_tset @: wrap_ttuple pmap_per_map_types
 let free_dims_type = wrap_tlist @: wrap_ttuple t_two_ints
 let free_domains_type = wrap_tlist @: wrap_ttuple [t_int; wrap_tlist t_int]
 let inner_cart_prod_type = wrap_tlist @: wrap_ttuple t_two_ints
@@ -23,6 +26,44 @@ let free_cart_prod_type = wrap_tlist @: wrap_tlist @: wrap_ttuple t_two_ints
 let free_bucket_type = wrap_tlist @: wrap_ttuple t_two_ints
 let sorted_ip_inner_type = [t_addr; wrap_tlist t_addr]
 let sorted_ip_list_type = wrap_tlist @: wrap_ttuple sorted_ip_inner_type
+
+type part_map_t = (id_t * (int * int) list) list
+
+(* convert a k3 data structure with partition map data to an ocaml list with the
+ * same data for easy manipulation *)
+let list_of_k3_partition_map k3maps = 
+  let error str = invalid_arg @: "Invalid partition map: "^str in
+  let parse_map e = let map_tup = U.decompose_tuple e in
+    let parse_int e = match U.tag_of_expr e with
+      | Const(CInt(i)) -> i
+      | _ -> error "no integer found" in 
+    let name = match U.tag_of_expr @: List.hd map_tup with 
+     | Const(CString(s)) -> s
+     | Var(s) -> s
+     | _ -> error "no map name found" in
+    let parse_tup e = let l = U.decompose_tuple e in
+      let i = parse_int @: List.nth l 0 in
+      let d = parse_int @: List.nth l 1 in
+      (i, d) in
+    let tuple_list = U.list_of_k3_container @: List.nth map_tup 1 in
+    let mdata = List.map parse_tup tuple_list in
+    (name, mdata) in
+  let maps_with_data = match List.hd k3maps with 
+    | (Global(_,_,Some e), _) -> U.list_of_k3_container e
+    | _ -> error "no global variable found" in
+  List.map parse_map maps_with_data
+
+(* convert a list defining a partition map with map names to an equivalent k3
+ * structure except using the map_ids *)
+let k3_partition_map_of_list p l =
+  let mk_int i = mk_const @: CInt i in
+  let one_map_to_k3 (m, ds) = 
+    let id = mk_int @: map_id_of_name p m in
+    let k3tuplize (a, b) = mk_tuple [mk_int a; mk_int b] in
+    let newdata = List.map k3tuplize ds in
+    mk_tuple [id; U.k3_container_of_list pmap_types newdata] in
+  let new_l = List.map one_map_to_k3 l in
+  U.k3_container_of_list full_pmap_types new_l
 
 exception NoHashFunction of K3.AST.base_type_t
 
@@ -54,14 +95,13 @@ let route_foreign_funcs p =
   mk_foreign_fn "mod" (wrap_ttuple [t_int; t_int]) t_int ::
   (hash_funcs_foreign p)
 
-let bmod_data = "bmod_data"
-let bmod_per_map_types = [t_map_id; bmod_types]
-let global_bmods =
-  mk_global_val bmod_data @: 
-    wrap_tset_mut @: wrap_ttuple bmod_per_map_types
+let pmap_data = "pmap_data"
+let global_pmaps p partmap =
+  mk_global_val_init (pmap_data) full_pmap_types @:
+    k3_partition_map_of_list p partmap
 
 let calc_dim_bounds_code = mk_global_fn "calc_dim_bounds" 
-  ["bmod", bmod_types] (*args*) [dim_bounds_type] (* return *) @:
+  ["pmap", pmap_types] (*args*) [dim_bounds_type] (* return *) @:
   mk_fst [dim_bounds_type; t_int] @:
     mk_agg 
       (mk_assoc_lambda 
@@ -76,7 +116,7 @@ let calc_dim_bounds_code = mk_global_fn "calc_dim_bounds"
       (mk_tuple [mk_empty @: wrap_tlist @: wrap_ttuple [t_int; t_int];
         mk_const @: CInt(1)]
       )
-      (mk_var "bmod")
+      (mk_var "pmap")
 
 let gen_route_fn p map_id = 
   let map_types = map_types_no_val_for p map_id in
@@ -95,13 +135,13 @@ let gen_route_fn p map_id =
   mk_global_fn (route_for p map_id)
     ["key", wrap_ttuple key_types]
     [wrap_tlist t_addr] @: (* return *)
-    mk_let "bmod" bmod_types
-      (mk_snd bmod_per_map_types @:
-        mk_peek @: mk_slice (mk_var bmod_data) @:
+    mk_let "pmap" pmap_types
+      (mk_snd pmap_per_map_types @:
+        mk_peek @: mk_slice (mk_var pmap_data) @:
           mk_tuple [mk_const @: CInt map_id; mk_const CUnknown]
       ) @:
     mk_let "dim_bounds" dim_bounds_type 
-      (mk_apply (mk_var "calc_dim_bounds") @: mk_var "bmod") @:
+      (mk_apply (mk_var "calc_dim_bounds") @: mk_var "pmap") @:
     mk_destruct_tuple "key" key_types prefix
     @:
     (* calc_bound_bucket *)
@@ -122,7 +162,7 @@ let gen_route_fn p map_id =
                 mk_tuple
                   [mk_apply (mk_var hash_func) @: mk_var id_unwrap;
                    mk_fst t_two_ints @: mk_peek @:
-                     mk_slice (mk_var "bmod") @:
+                     mk_slice (mk_var "pmap") @:
                        mk_tuple [mk_const @: CInt index; mk_const CUnknown]]
               ) @:
             mk_mult
@@ -143,7 +183,7 @@ let gen_route_fn p map_id =
           (mk_if 
             (mk_eq (mk_var @: to_id x) @: mk_const CNothing)
             (mk_empty free_dims_type) @:
-            mk_slice (mk_var "bmod") @: 
+            mk_slice (mk_var "pmap") @: 
               mk_tuple [mk_var @: to_id x; mk_const CUnknown]
           ) acc_code
         )
@@ -227,19 +267,12 @@ let gen_route_fn p map_id =
           mk_var "__fst"
         ) @:
         mk_var "sorted_ip_list"
-        
+    
 (* create all code needed for route functions, including foreign funcs*)
-let gen_route_code p =
+let gen_route_code p partmap =
   K3Ring.gen_ring_code @
-  global_bmods ::
+  global_pmaps p partmap ::
   route_foreign_funcs p @ 
   calc_dim_bounds_code ::
   List.map (gen_route_fn p) (get_map_list p)
-
-
-
-
-    
-
-  
 

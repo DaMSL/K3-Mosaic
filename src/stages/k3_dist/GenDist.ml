@@ -146,7 +146,7 @@ let v_leq = v_op vid_leq
 
 (* global functions *)
 (* most of our global functions come from the shuffle/route code *)
-let declare_global_funcs p = 
+let declare_global_funcs partmap p = 
   let global_vid_ops = 
       mk_global_vid_op vid_eq VEq ::
       mk_global_vid_op vid_neq VNeq ::
@@ -244,7 +244,7 @@ let declare_global_funcs p =
   for_all_maps p add_delta_to_buffer_code @
   for_all_trigs p log_write_code @
   for_all_trigs p log_get_bound_code @
-  gen_shuffle_route_code p
+  gen_shuffle_route_code p partmap
 
 
 (* ---- start of protocol code ---- *)
@@ -929,10 +929,10 @@ let gen_dist_for_t p ast trig =
     []
 
 (* Function to generate the whole distributed program *)
-let gen_dist p (ast:K3.AST.program_t) =
+let gen_dist p partmap ast =
   (* because this uses state, need it initialized here *)
   (* TODO: change to not require state *)
-  let global_funcs = declare_global_funcs p in (* init shuffles *)
+  let global_funcs = declare_global_funcs partmap p in (* init shuffles *)
   let regular_trigs = List.flatten @:
     for_all_trigs p @: fun t -> gen_dist_for_t p ast t in
   let prog =

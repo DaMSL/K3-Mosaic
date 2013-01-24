@@ -12,9 +12,9 @@ FILES=\
 	src/stages/k3/core/K3AST \
 	src/stages/k3/core/K3Annotations \
 	src/stages/k3/K3 \
+	src/stages/k3/utils/K3Helpers \
 	src/stages/k3/utils/K3Util \
 	src/stages/k3/utils/K3Printing \
-	src/stages/k3/utils/K3Helpers \
 	src/stages/k3/K3Global \
 	src/stages/k3/core/K3Streams \
 	src/stages/k3/K3Typechecker \

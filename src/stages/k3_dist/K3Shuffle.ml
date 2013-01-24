@@ -158,7 +158,7 @@ let gen_shuffle_functions p trig =
     trig_data
 
 (* function to generate all needed shuffle/route stuff *)
-let gen_shuffle_route_code p =
-  K3Route.gen_route_code p @
-  List.flatten @: List.map (gen_shuffle_functions p) (get_trig_list p)
+let gen_shuffle_route_code p partmap =
+  K3Route.gen_route_code p partmap @
+    List.flatten @: for_all_trigs p @: gen_shuffle_functions p
 
