@@ -59,9 +59,14 @@ let k3_partition_map_of_list p l =
   let mk_int i = mk_const @: CInt i in
   let one_map_to_k3 (m, ds) = 
     let id = mk_int @: map_id_of_name p m in
+    let check_index i = let ts = map_types_for p @: map_id_of_name p m
+      in try ignore(List.nth ts i); true with Failure _ -> false in
     let k3tuplize (a, b) = mk_tuple [mk_int a; mk_int b] in
-    let newdata = List.map k3tuplize ds in
-    mk_tuple [id; U.k3_container_of_list pmap_types newdata] in
+    let newdata = List.map 
+      (fun (i, d) -> if check_index i then k3tuplize (i,d) 
+        else invalid_arg @: "index "^string_of_int i^" out of range in map "^m)
+      ds
+    in mk_tuple [id; U.k3_container_of_list pmap_types newdata] in
   let new_l = List.map one_map_to_k3 l in
   U.k3_container_of_list full_pmap_types new_l
 
