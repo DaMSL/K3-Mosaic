@@ -1,4 +1,4 @@
-module K3.Utils.K3Builders where
+module Stages.K3.Utils.K3Builders where
 
 import Util.Util
 import Util.Tree

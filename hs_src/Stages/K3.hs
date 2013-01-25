@@ -7,8 +7,10 @@ module Stages.K3 (module Stages.K3.Core.K3AST
 import Stages.K3.Core.K3AST 
 import Stages.K3.Core.K3Annotations hiding (Id)
 
-newtype Annotation = Annotation {getAnno::[K3Annotation (Type Annotation)]}
+newtype Anno = Anno {getAnno::[K3Annotation (Type Anno)]}
 
-instance Show Annotation where
+anno_empty = Anno []
+
+instance Show Anno where
   show = show . getAnno
 

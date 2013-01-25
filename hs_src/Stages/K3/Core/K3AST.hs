@@ -177,7 +177,7 @@ data Declaration a
     deriving Show
 
 -- K3 Programs
-type Program a = [((Declaration a), a)]
+type Program a = [(Declaration a, a)]
 
 
 -- Testing
