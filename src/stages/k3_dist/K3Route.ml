@@ -125,10 +125,12 @@ let calc_dim_bounds_code = mk_global_fn "calc_dim_bounds"
 
 let gen_route_fn p map_id = 
   let map_types = map_types_no_val_for p map_id in
-  let map_range = mk_tuple_range map_types in
+  (* it's very important that the index for ranges start with 0 *)
+  let map_range = create_range 0 @: List.length map_types in
   let key_types = wrap_tmaybes map_types in
   let prefix = "key_id_" in
-  let to_id i = int_to_temp_id prefix i in
+  let key_ids = fst @: List.split @: map_ids_types_no_val_for ~prefix:prefix p map_id in
+  let to_id i = List.nth key_ids i in
   match map_types with 
   | [] -> (* if no keys, for now we just route to one place *)
   mk_global_fn (route_for p map_id)
