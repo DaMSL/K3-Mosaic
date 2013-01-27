@@ -6,9 +6,10 @@ import Stages.K3 hiding (Just)
 import qualified Stages.K3 as K3AST
 
 -- Annotation manipulation
-mk_no_anno a = (a, [])
+mk_no_anno x = (x, [])
 
-mk_anno_sort (a, annos) xs = (a, annos++[Data Constraint $ Ordered xs])
+mk_anno_sort (x, annos) ys = 
+  (x, annos++[Annotation $ Data Constraint $ Ordered ys])
 
 -- Type manipulation functions -------------
 

@@ -99,7 +99,7 @@ signature_of_type t = sig_t 0 t
         tag d s l = {-(show d)++-} s++concat l
 
 -- Reconstruct a type from a signature, with empty annotations.
-type_of_signature :: String -> Type Anno
+type_of_signature :: String -> Type [a]
 type_of_signature s = evalState t_sig s
   where 
     inc = get >>= put . tail
@@ -133,8 +133,8 @@ type_of_signature s = evalState t_sig s
     mt_sig = do 
       c <- getCharInc 
       case c of
-        'M' -> do {b <- bt_sig; return $ TMutable b anno_empty}
-        'U' -> do {b <- bt_sig; return $ TImmutable b anno_empty}
+        'M' -> do {b <- bt_sig; return $ TMutable b []}
+        'U' -> do {b <- bt_sig; return $ TImmutable b []}
         _   -> error "invalid tag for mutable type"
     bt_sig = do 
       c <- getCharInc
@@ -405,11 +405,9 @@ pre_order_linearization children node = node:concat children
 post_order_linearization children node = concat children++[node]
 
 -- renumber ids for a whole program *)
-renumber_program_ids :: [(Declaration a,a)] -> [(Declaration a,a)]
 renumber_program_ids prog = evalState get_prog 0
   where 
     get_prog = reverse <$> foldlM handle_dec [] prog
-    handle_dec :: K3.Program a -> (Declaration a, a) -> State Int (K3.Program a)
     handle_dec acc d = case d of
       (Global x y (Just e),a) -> do
         ast <- renumber_ast_ids e
@@ -434,11 +432,11 @@ renumber_program_ids prog = evalState get_prog 0
 -- Produce the same tree of new ids top down
 renumber_ast_ids :: Expr a -> State Int (Expr a)
 renumber_ast_ids exp =
-  fold_tree1 <$> getNext <*> return modify <*> return 0 <*> return exp
+  foldTree1M getNext modify 0 exp
   where 
     modify i acc_children t =
-      mk_tree $ (((i, tag_of_expr t), meta_of_expr t), acc_children)
-    getNext = do {i <- get; put $ i+1; return (\_ _ -> i)}
+      return $ mk_tree $ (((i, tag_of_expr t), meta_of_expr t), acc_children)
+    getNext _ _ = do {i <- get; put $ i+1; return i}
 
 list_of_k3_container e = 
   case tag_of_expr e of

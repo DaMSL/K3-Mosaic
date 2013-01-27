@@ -5,6 +5,7 @@ module Util.Tree where
 {-open Util-}
 
 import Data.List (foldl')
+import Control.Monad
 
 data Tree a = Leaf a
             | Node a [Tree a]
@@ -46,6 +47,18 @@ fold_tree1 td_f bu_f td_init tree = ft_aux td_init tree
           in case sub_tree t of
             [] -> bu_f n_td [] t
             c  -> bu_f n_td (map (ft_aux n_td) c) t
+
+-- Same function but for monads
+foldTree1M :: Monad m => (td -> Tree a -> m td) ->
+                         (td -> [bu] -> Tree a -> m bu) -> 
+                         td -> Tree a -> m bu
+foldTree1M td_f bu_f td_init tree = ft_aux td_init tree
+  where ft_aux td t = do 
+          n_td <- td_f td t
+          case sub_tree t of
+            [] -> bu_f n_td [] t
+            c  -> do subTrees <- mapM (ft_aux n_td) c
+                     bu_f n_td subTrees t
     
 fold_tree_thread td_f bu_f td_init bu_init tree = ft_aux td_init tree
   where ft_aux td t = let n_td = td_f td t
