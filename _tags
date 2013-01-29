@@ -1,10 +1,13 @@
-<util>: include
-<tests>: include
+<**/*.ml> : pp(camlp4o ../lib/bolt/bolt_pp.cmo), ocaml
+<tests> : include
+<src/util>: include
+<src>: include
 <src/stages/k3>: include
 <src/stages/k3/{core,parser,interpreter,utils}>: include
 <src/stages/imperative>: include
 <src/stages/m3>: include
 <src/stages/k3_dist>: include
+<lib/bolt>: include, not_hygienic
 
 true: use_str
 true: use_unix
