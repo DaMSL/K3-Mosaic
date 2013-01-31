@@ -4,6 +4,7 @@ open Tree
 
 open K3.AST
 open K3Util
+open K3Helpers
 open K3Printing
 open K3Values
 open K3Typechecker
@@ -30,7 +31,8 @@ let nub xs =
 
 
 (* Prettified error handling *)
-let interpreter_error s = failwith ("interpreter: "^s)
+let interpreter_error s = let rs = "interpreter: "^s in
+  LOG rs LEVEL ERROR; failwith rs
 
 
 (* Environment helpers *)
@@ -54,17 +56,54 @@ let lookup id (mutable_env, frame_env) =
 
 let value_of_eval ev = match ev with VDeclared v_ref -> !v_ref | VTemp v -> v
 
-let value_of_const c =
-    match c with
-    | CUnknown -> VUnknown
-    | CUnit -> VUnit
-    | CBool b -> VBool b
-    | CInt i -> VInt i
-    | CFloat f -> VFloat f
-    | CString s -> VString s
-    | CAddress (ip,port) -> VAddress (ip,port)
-    | CTarget id -> VTarget id
-    | CNothing -> VOption None
+let value_of_const = function
+  | CUnknown -> VUnknown
+  | CUnit -> VUnit
+  | CBool b -> VBool b
+  | CInt i -> VInt i
+  | CFloat f -> VFloat f
+  | CString s -> VString s
+  | CAddress (ip,port) -> VAddress (ip,port)
+  | CTarget id -> VTarget id
+  | CNothing -> VOption None
+
+let rec type_of_value uuid value = 
+  let typ_fst vs = type_of_value uuid @: List.hd vs in
+  match value with
+  | VUnknown -> canonical TUnknown
+  | VUnit -> t_unit
+  | VBool b -> t_bool
+  | VInt _ -> t_int
+  | VFloat _ -> t_float
+  | VByte _ -> t_string
+  | VString _ -> t_string
+  | VAddress (_,_) -> t_addr
+  | VTarget id -> canonical @: TTarget(TUnknown) (* We don't have the ids *)
+  | VOption None -> wrap_tmaybe @: canonical TUnknown
+  | VOption (Some v) -> wrap_tmaybe @: type_of_value uuid v
+  | VTuple vs -> wrap_ttuple @: List.map (type_of_value uuid ) vs
+  | VSet vs -> wrap_tset @: typ_fst vs
+  | VList vs -> wrap_tlist @: typ_fst vs
+  | VBag vs -> wrap_tbag @: typ_fst vs
+  | VFunction _ -> raise (RuntimeError uuid)
+
+let rec expr_of_value uuid value = match value with
+  | VUnknown -> mk_const CUnknown
+  | VUnit -> mk_const CUnit
+  | VBool b -> mk_const @: CBool b
+  | VInt i -> mk_const @: CInt i
+  | VFloat f -> mk_const @: CFloat f
+  | VByte b -> mk_const @: CString(string_of_int @: Char.code b)
+  | VString s -> mk_const @: CString s
+  | VAddress (ip,port) -> mk_const @: CAddress (ip,port)
+  | VTarget id -> mk_const @: CTarget id
+  | VOption(None) -> mk_const @: CNothing
+  | VOption(Some v) -> mk_just @: expr_of_value uuid v
+  | VTuple vs -> mk_tuple @: List.map (expr_of_value uuid) vs
+  | VSet vs | VList vs | VBag vs -> 
+     let l = List.map (expr_of_value uuid) vs in
+     k3_container_of_list (type_of_value uuid value) l
+  | VFunction _ -> raise (RuntimeError uuid)
 
 (* Given an arg_t and a value_t, bind the values to their corresponding argument names. *)
 let rec bind_args uuid a v =
@@ -454,7 +493,13 @@ and eval_expr cenv texpr =
     | Send ->
       let renv, parts = child_values cenv in
       begin match parts with
-        | [target;addr;arg] -> (schedule_trigger target addr arg; renv, VTemp VUnit)
+        | [target;addr;arg] -> 
+            let e = expr_of_value uuid in
+            let send_code = K3Helpers.mk_send (e target) (e addr) (e arg) in
+            let send_str = K3PrintSyntax.string_of_expr send_code in
+            LOG send_str NAME "K3Interpreter.Msg" LEVEL DEBUG;
+            (schedule_trigger target addr arg; renv, VTemp VUnit)
+          
         | _ -> raise (RuntimeError uuid)
       end
 
@@ -535,7 +580,7 @@ let env_of_program k3_program =
     | K3.AST.Global (id,t,init_opt) ->
         let (rm_env, rf_env), init_val = match init_opt with
           | Some e ->
-            let renv, reval = eval_expr (m_env, f_env) e
+            let renv, reval = eval_expr (m_env, f_env) e 
             in renv, value_of_eval reval
 
           | None -> (m_env, f_env), default_value t 
@@ -555,7 +600,7 @@ let env_of_program k3_program =
 
 (* Instruction interpretation *)
 let eval_instructions env address (res_env, d_env) (ri_env, instrs) =
-  let log_node s = print_endline @: "Node "^(string_of_address address)^" "^s in
+  let log_node s = LOG "Node %s: %s" (string_of_address address) s LEVEL TRACE in
   match instrs with
   | [] -> 
     if node_has_work address
@@ -571,7 +616,7 @@ let eval_instructions env address (res_env, d_env) (ri_env, instrs) =
 
 (* Program interpretation *) 
 let interpreter_event_loop role_opt k3_program = 
-  let error () = interpreter_error ("No role found for K3 program") in
+  let error () = interpreter_error "No role found for K3 program" in
 	let roles, default_role = extended_roles_of_program k3_program in
   let get_role role fail_f = try List.assoc role roles with Not_found -> fail_f ()
   in match role_opt, default_role with
@@ -597,9 +642,6 @@ let eval_program address role_opt prog =
 
 (* Distributed program interpretation *)
 let eval_networked_program peer_list prog =
-  let eval_error addr =
-    print_endline @: "Network evaluation error for peer "^(string_of_address addr) in
-
   (* Initialize an environment for each peer *)
   let peer_meta = Hashtbl.create (List.length peer_list) in
   let envs = List.map (fun (addr, role_opt) ->  
@@ -620,13 +662,14 @@ let eval_networked_program peer_list prog =
          * even if there are no sources on which to consume events *)
         if i = [] then ignore(eval_instructions env addr (rese, de) (rie, i))
         else Hashtbl.replace peer_meta addr @: eval_instructions env addr (rese, de) (rie, i)
-    with Not_found -> eval_error addr
+    with Not_found -> 
+      LOG "Network evaluation for peer %s" (string_of_address addr) LEVEL ERROR
   in
   while run_network () do List.iter step_peer peer_list done;
 
   (* Log and return program state *)
   List.map (fun (addr, (_,_,e)) -> 
-      print_endline @: ">>>> Peer "^(string_of_address addr);
-      print_endline @: string_of_program_env e;
+      LOG ">>>> Peer %s" (string_of_address addr) LEVEL TRACE;
+      LOG "%s" (string_of_program_env e) LEVEL TRACE;
       addr, e
     ) envs

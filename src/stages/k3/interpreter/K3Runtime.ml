@@ -1,5 +1,6 @@
 (* A single-threaded scheduler and single-site peer simulator *)
 
+open Util
 open K3.AST
 open K3Streams
 open K3Values

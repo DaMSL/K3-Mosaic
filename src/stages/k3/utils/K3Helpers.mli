@@ -8,6 +8,7 @@ val mk_anno_sort : 'a * annotation_t -> int list -> 'a * annotation_t
 
 (* easy access to K3 types *)
 val canonical : base_type_t -> value_type_t
+val t_bool : value_type_t
 val t_int : value_type_t
 val t_int_mut : value_type_t
 val t_float : value_type_t

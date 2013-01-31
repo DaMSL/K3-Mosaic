@@ -25,6 +25,7 @@ let lps_list ?(sep=", ") cut_t f l = [lazy (ps_list ~sep:sep cut_t (force_list |
 
 (* type we pass all the way down for configuring behaviors *)
 type config = {dummy:int}
+let default_config = {dummy=0}
 
 (* low precedence joining of lists *)
 let (<|) a b = a @ b
@@ -371,13 +372,16 @@ let lazy_declaration c d =
   in
   wrap_hv 0 out <| lcut ()
 
+let wrap_f = wrap_formatter ~margin:80
+
+(* print a K3 expression in syntax *)
+let string_of_expr e = wrap_f @: fun () -> force_list @: lazy_expr default_config e
+
 (* print a K3 program in syntax *)
 let string_of_program prog = 
-  let c = {dummy=0} in
-  let print_fn () =
-    let l = lps_list ~sep:"" CutHint (lazy_declaration c |- fst) prog in
+  wrap_f @: fun () -> 
+    let l = lps_list ~sep:"" CutHint (lazy_declaration default_config |- fst) prog in
     obx 0;  (* vertical box *)
     force_list l;
     cb
-  in wrap_formatter ~margin:80 (fun () -> print_fn ())
 

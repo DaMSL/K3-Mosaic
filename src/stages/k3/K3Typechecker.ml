@@ -253,13 +253,6 @@ let deduce_constant_type id trig_env c =
       | CNothing -> TMaybe(canonical TUnknown)
   in canonical constant_type
 
-let rec deduce_arg_type a =
-    match a with
-    | AIgnored -> canonical TUnknown
-    | AVar(i, t) -> t
-    | AMaybe(a') -> canonical (TMaybe(deduce_arg_type a'))
-    | ATuple(args) -> canonical (TTuple(List.map deduce_arg_type args))
-
 let rec gen_arg_bindings a =
     match a with
     | AIgnored -> []
@@ -416,7 +409,7 @@ let rec deduce_expr_type trig_env cur_env utexpr =
         | Lambda(t_a) ->
             let t0 = bind 0 in
             let t_r = t0 <| value_of |> t_erroru "Lambda" @: TBad(t0)
-            in TFunction(deduce_arg_type t_a, t_r)
+            in TFunction(value_type_of_arg t_a, t_r)
 
         | Apply ->
             let name = "Apply" in
@@ -625,7 +618,7 @@ let rec deduce_expr_type trig_env cur_env utexpr =
 
 let check_trigger_type trig_env env id args locals body rebuild_f =
   let name = "Trigger("^id^")" in
-  let self_bindings = (id, TValue(canonical @: TTarget(base_of @: deduce_arg_type args))) in
+  let self_bindings = (id, TValue(canonical @: TTarget(base_of @: value_type_of_arg args))) in
   let arg_bindings = gen_arg_bindings args in
   let local_bindings = List.map (fun (i, vt, _) -> (i, TValue(vt))) locals in
   let inner_env = self_bindings :: arg_bindings @ local_bindings @ env in
@@ -735,7 +728,7 @@ let types_of_endpoints endpoint_l =
   List.fold_left (fun env ep -> match ep with
       | Resource(id,r) -> error_if_dup id (type_of_resource env r) env
       | Code(id, args, locals, body) ->
-        let t = TValue(canonical @: TTarget(base_of @: deduce_arg_type args))
+        let t = TValue(canonical @: TTarget(base_of @: value_type_of_arg args))
         in error_if_dup id [t] env
     ) [] endpoint_l
 

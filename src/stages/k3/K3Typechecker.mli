@@ -50,7 +50,6 @@ val check_tag_arity: expr_tag_t -> 'child list -> bool
 
 (* Type deduction for parts of a K3 program *)
 val deduce_constant_type: int -> (id_t * type_t) list -> constant_t -> value_type_t
-val deduce_arg_type: arg_t -> value_type_t
 val deduce_expr_type: (id_t * type_t) list -> (id_t * type_t) list -> expr_t -> expr_t
 
 val type_bindings_of_program :
