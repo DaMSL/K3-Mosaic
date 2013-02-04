@@ -3,8 +3,8 @@ module Stages.M3.Type where
 --   Global typesystem for use by all of DBToaster's compilation stages.
 
 import Data.List as L
-
-import ListExtras as LE
+import Stages.M3.ListExtras as LE
+import Stages.M3.Debug as Debug
 --
 {-module StringMap = Map.Make(String)-}
 --
@@ -16,23 +16,26 @@ data Cmp = Eq  | Lt  | Leq | Gt  | Geq  | Neq
 
 -- Basic Types
 data Type = 
-   | TBool | TInt | TFloat | TDate
+   TBool | TInt | TFloat | TDate
    | TString               -- A string of bounded length n (0 is infinite)
    | TAny                  -- An unspecified type
    | TExternal String      -- An externally defined type
    deriving (Show, Eq)
 
 -- Basic (typed) variables
-type Var = String * Type
+type Var = (String, Type)
 
 -- Equality over variables
-var_eq ((a,_)::Var) ((b,_)::Var) = (a = b)
+var_eq :: Var -> Var -> Bool
+var_eq (a,_) (b,_) = (a == b)
 
 -- Inequality over variables
-var_neq ((a,_)::Var) ((b,_)::Var) = (a /= b)
+var_neq :: Var -> Var -> Bool
+var_neq (a,_) (b,_) = (a /= b)
 
 -- Membership testing
-mem_var ((a,_)::Var) = L.find $ \(b,_) -> a = b
+mem_var :: Var -> [Var] -> Bool
+mem_var (a,_) = L.find $ \(b,_) -> a == b
 
 --
 --   Identify the inverse of a comparison operation (Eq -> Neq, etc...)
@@ -109,8 +112,7 @@ string_of_var d v =
 
 string_of_var_verbose :: Var -> String
 string_of_var_verbose (name, vt) =
-   if Debug.verbose d then
-   then name++"::"++(string_of_type vt)
+   if Debug.verbose d then name++"::"++(string_of_type vt)
    else name
 
 {-
@@ -147,16 +149,16 @@ escalate_type_opname opname a b =
                  opname++" "++string_of_type b)
 
 escalate_type_maybe opname a b = case (a,b) of
-  (at, bt) | at = bt -> Just at
-  (TAny,t)
-  (t, TAny -> Just t
-  (TInt, TBool)
-  (TBool, TInt) -> Just TInt
-  (TFloat, TBool)
-  (TBool, TFloat) -> Just TFloat
-  (TInt, TFloat)
-  (TFloat, TInt) -> Just TFloat
-  _ -> Nothing
+  (at, bt) | at == bt -> Just at
+  (TAny,t)            -> Just t
+  (t, TAny)           -> Just t
+  (TInt, TBool)       -> Just TInt
+  (TBool, TInt)       -> Just TInt
+  (TFloat, TBool)     -> Just TFloat
+  (TBool, TFloat)     -> Just TFloat
+  (TInt, TFloat)      -> Just TFloat
+  (TFloat, TInt)      -> Just TFloat
+  _                   -> Nothing
   
 {-
    Given two types, determine if the first may be escalated into the second
