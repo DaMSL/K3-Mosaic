@@ -1,7 +1,11 @@
+module Stages.M3.ListExtras where
+-- Typechecks
 {-
    Additional functionality for manipulating and working with lists, meant to 
    supplement the core functionality in Ocaml's List module.
 -}
+
+import Data.List (foldl', intersperse, intercalate, elemIndex)
 
 {- 
    Scan through elements of a list.  Similar to List.iter, but the elements
@@ -22,13 +26,13 @@
                reconstructed by concatenating f's three inputs in order.
    ++param l    The list to scan over
 -}
-scan :: ([a] -> a -> [a] -> ()) -> [a] -> ()
-scan f l =
-    let iterate prev curr_next =
-        case curr_next of
-            []        -> ()
-            curr:next -> (f prev curr next); (iterate (prev++[curr]) next)
-    in iterate [] l
+{-scan :: ([a] -> a -> [a] -> ()) -> [a] -> ()-}
+{-scan f l =-}
+    {-let iterate prev curr_next =-}
+          {-case curr_next of-}
+            {-[]        -> ()-}
+            {-curr:next -> (f prev curr next); (iterate (prev++[curr]) next)-}
+    {-in iterate [] l-}
    
 {- 
    Map the elements of a list in the same manner as scan.  Like 
@@ -39,10 +43,10 @@ scan f l =
    ++param l    The list to map over
    ++return     The re-mapped list
 -}
-scan_map :: ([a] -> a -> [a] -> [b]) -> [a] -> [b] 
+scan_map :: ([a] -> a -> [a] -> b) -> [a] -> [b] 
 scan_map f l =
    let iterate prev curr_next =
-      case curr_next of
+        case curr_next of
           []        -> []
           curr:next -> (f prev curr next) : (iterate (prev++[curr]) next)
    in iterate [] l
@@ -61,9 +65,9 @@ scan_map f l =
 scan_fold :: (b -> [a] -> a -> [a] -> b) -> b -> [a] -> b
 scan_fold f init l =
    let iterate curr_val prev curr_next =
-      case curr_next of
-         []        -> curr_val
-         curr:next -> iterate (f curr_val prev curr next) (prev++[curr]) next
+        case curr_next of
+          []        -> curr_val
+          curr:next -> iterate (f curr_val prev curr next) (prev++[curr]) next
    in iterate init [] l
 
 -- test if an item is member of an assoc list
@@ -85,11 +89,12 @@ remove_assoc x l = concat $ map remove l
    ++param l  The list of [(a,b)] elements to reduce
    ++return   Tuples in [l] grouped by [a]
 -}
-reduce_assoc :: [(a,b)] -> [(a, [b])]
+reduce_assoc :: Eq a => [(a,b)] -> [(a, [b])]
 reduce_assoc l =
    foldr (\(a,b) ret ->
       if a `elem_assoc` ret
-      then ((a, b) : (lookup a ret)) : (remove_assoc a ret)
+      then (a, b : (maybe (error "value not found") id $ lookup a ret)) : 
+        (remove_assoc a ret)
       else (a, [b]) : ret
    ) [] l
 
@@ -114,13 +119,12 @@ flatten_list_pair l =
              remaining fields are populated by the result of {[List.assoc a c]}
              and {[List.assoc b c]}.
 -}
-outer_join_assoc :: [(c,a)] -> [(c,b)] -> [(c, (Maybe a, Maybe b))] 
+outer_join_assoc :: Eq c => [(c,a)] -> [(c,b)] -> [(c, (Maybe a, Maybe b))] 
 outer_join_assoc a b =
    let (outer_b, join) = 
-      foldl' (\(b, join) (c, a_v) ->
-                (remove_assoc c b, join ++ [(c, (Just a_v, lookup c b))])) 
-        (b, []) 
-        a
+         foldl' (\(b, join) (c, a_v) ->
+                  (remove_assoc c b, join ++ [(c, (Just a_v, lookup c b))])) 
+                (b, []) a
    in join ++ map (\(c, b_v) -> (c, (Nothing, Just b_v))) outer_b
 
 {-
@@ -131,11 +135,12 @@ outer_join_assoc a b =
    ++param l              The list to stringify
    ++return               The stringified form of the list
 -}
+string_of_list :: (a -> String) -> [a] -> String
 string_of_list = string_of_list_sep "; "
 
 string_of_list_sep :: String -> (a -> String) -> [a] -> String
 string_of_list_sep sep string_of_elem l =
-  intersperse sep $ map string_of_elem l
+  intercalate sep $ map string_of_elem l
 
 {-
    Translate a list into an ocaml-style string list
@@ -144,9 +149,9 @@ string_of_list_sep sep string_of_elem l =
    ++param l              The list to stringify
    ++return               The stringified form of the list
 -}
-string_of_list :: String -> (a -> String) -> [a] -> String
+ocaml_of_list:: (a -> String) -> [a] -> String
 ocaml_of_list string_of_elem l =
-   "[" ++ (string_of_list string_of_elem l) ++ "]"
+  "[" ++ (string_of_list string_of_elem l) ++ "]"
 
 {-
    Find and return the index of the indicated element (testing for equality 
@@ -157,8 +162,8 @@ ocaml_of_list string_of_elem l =
    ++param l   The list to look for the element in
    ++return    The index of the element in the list 
 -}
-index_of :: a -> [a] -> Int
-index_of a l = a `elemIndex` l
+index_of :: Eq a => a -> [a] -> Int
+index_of a l = maybe (error "not found") id $ a `elemIndex` l
 
 {-
    Return the sublist of the passed list starting at the indicated index and 
@@ -172,7 +177,7 @@ index_of a l = a `elemIndex` l
 sublist start cnt l =
    snd (foldl' (\(i, r) e ->
       if i <= 0 then
-         if (length r < cnt) or (cnt < 0) then (i, r ++ [e])
+         if (length r < cnt) || (cnt < 0) then (i, r ++ [e])
                                                else (i, r)
       else (i-1,r)
    ) (start,[]) l)
@@ -189,7 +194,7 @@ sublist start cnt l =
              occur after.
 -}
 split_at_pivot a l =
-   let idx = a `elemIndex` l in
+   let idx = maybe (error "index not found") id $ a `elemIndex` l in
       (sublist 0 (idx) l, sublist (idx+1) (-1) l)
 
 {-
@@ -226,24 +231,8 @@ split_at_last l =
    ++param l     The list to fold over
    ++return      The final fold value
 -}
-assoc_fold :: (a -> b -> c -> c) -> c -> [(a, b)] -> c =
+assoc_fold :: (a -> b -> c -> c) -> c -> [(a, b)] -> c
 assoc_fold fn init l = foldl' (\c (a, b) -> fn a b c) init l
-
-{-
-   Compute the maximal element of a list (according to [Pervasives.max]).
-   
-   ++param l   The list
-   ++return    The maximal element of [l]
--}
-max  = maximum
-
-{-
-   Compute the minimal element of a list (according to [Pervasives.min]).
-   
-   ++param l   The list
-   ++return    The minimal element of [l]
--}
-min = minimum
 
 {-
    Convert a 2-element list into a 2-tuple
@@ -267,7 +256,7 @@ list_to_pair l = (head l, head $ tail l)
    ++param src  The set of possible elements in each returned list
    ++return     A list of the returned lists
 -}
-k_tuple :: Int -> [a] -> [[a]]
+k_tuples :: Int -> [a] -> [[a]]
 k_tuples k src =
    if (k <= 0) then [[]]
    else concat $ map (\t -> map (\x -> x:t) src) $ k_tuples (k-1) src
@@ -290,18 +279,19 @@ k_tuples k src =
    ++param start_node The root node of the graph
    ++return           A list of topologically sorted elements 
 -}
+toposort_from_node :: Eq a => [(a,[a])] -> [a] -> a -> [a] 
 toposort_from_node graph visited start_node =
    let explore path node visited =
-      if node `elem` path then Nothing 
-      else if node `elem` visited then visited 
-      else                    
-         let new_path = node:path in
-             child_nodes = case lookup node graph of 
-                 Nothing -> []
-                 Just x  -> x
-             visited = foldr (explore new_path) child_nodes visited 
-         in node : visited
-   in explore [] start_node visited
+         let visited' = maybe [] id visited
+         in if node `elem` path then Nothing  -- Cycle found
+            else if node `elem` visited' then visited
+            else                    
+              let new_path = node:path
+                  child_nodes = maybe [] id $ lookup node graph
+                  visited = foldr (explore new_path) visited child_nodes 
+                  visited' = maybe [] id $ visited
+              in Just $ node : visited'
+   in maybe [] id $ explore [] start_node (Just visited)
 
 {- 
    Perform topological sort on a given graph which may contain 
@@ -320,5 +310,5 @@ toposort_from_node graph visited start_node =
    ++return           A list of topologically sorted elements 
 -}
 toposort graph =
-   foldr (\(node, _) visited -> toposort_from_node graph visited node) graph []
+   foldr (\(node, _) visited -> toposort_from_node graph visited node) [] graph
                                                             
