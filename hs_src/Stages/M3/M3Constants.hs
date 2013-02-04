@@ -1,4 +1,5 @@
 module Stages.M3.M3Constants where
+-- Typechecks
 --
 --   Global system for wrapping typed primitive constants throughout DBToaster
 --
@@ -8,11 +9,12 @@ import Stages.M3.M3Type
 
 -- Basic Constants --
 data Const = 
-   | CBool   Bool
+     CBool   Bool
    | CInt    Int
    | CFloat  Float
    | CString String
    | CDate   Int Int Int -- Date
+     deriving (Show, Eq)
 
 ---- Basic Operations ----
 {-
@@ -21,11 +23,11 @@ data Const =
    ++return    The type of [a]
 -}
 type_of_const a = case a of
-  CBool _   -> TBool
-  CInt _    -> TInt
-  CFloat _  -> TFloat
-  CString s -> TString
-  CDate _   -> TDate
+  CBool _     -> TBool
+  CInt _      -> TInt
+  CFloat _    -> TFloat
+  CString s   -> TString
+  CDate _ _ _ -> TDate
 
 {-
    Cast a constant to an integer.  Floats are truncated, and booleans are 
@@ -38,9 +40,9 @@ int_of_const a = case a of
   CBool True  -> 1
   CBool False -> 0
   CInt av     -> av
-  CFloat av   -> realToFrac av
+  CFloat av   -> truncate av
   CString av  -> read av
-  CDate _     -> error "Cannot produce integer of date"
+  CDate _ _ _ -> error "Cannot produce integer of date"
 
 {-
    Cast a constant to a float. Integers are promoted, booleans are converted to
@@ -50,12 +52,12 @@ int_of_const a = case a of
    ++raise Failure If the constant can not be cast to a float
 -}
 float_of_const a = case a of
-  CBool True  -> 1.
-  CBool False -> 0.
+  CBool True  -> 1.0
+  CBool False -> 0.0
   CInt av     -> realToFrac av
   CFloat av   -> av
   CString av  -> read av
-  CDate _      -> error "Cannot produce float of date"
+  CDate _ _ _ -> error "Cannot produce float of date"
 
 
 {-
@@ -65,19 +67,21 @@ float_of_const a = case a of
    ++raise Failure If the string does not correspond to any date
 -}
 parse_date str = 
-  let regtest = Regex.matchRegex
-    (Regex.mkRegex "\\([0-9]+\\)-\\([0-9]+\\)-\\([0-9]+\\)") str
-  case regtest of
-  Just(s1:s2:s3:[]) ->
-    let y = read s1
-    let m = read s2
-    let d = read s3
-    if (m > 12) then error $ "Invalid month ("++(show m)++") in date:: "++str
-    else if (d > 31) then error $
-        "Invalid day ("++(string_of_int d)++") in date:: "++str
-    else CDate y m d
-  Just _ 
-  Nothing -> error $ "Improperly formatted date:: "++str
+  let err () = error $ "Improperly formatted date:: "++str
+      regtest = Regex.matchRegex
+        (Regex.mkRegex "\\([0-9]+\\)-\\([0-9]+\\)-\\([0-9]+\\)") str
+  in case regtest of
+    Just(s1:s2:s3:[]) ->
+      let y = read s1
+          m = read s2
+          d = read s3
+      in if m > 12 
+      then error $ "Invalid month ("++show m++") in date:: "++str
+      else if (d > 31) then error $
+          "Invalid day ("++show d++") in date:: "++str
+      else CDate y m d
+    Just _  -> err ()
+    Nothing -> err ()
       
       
 ---- Conversion to Strings ----
@@ -139,13 +143,16 @@ zero_of_type zt = case zt of
    ++param a  A constant
    ++return   [a] cast to [t]
 -}
-type_cast t a = case (t,a) of
-  (TInt, CInt _)
-  (TInt, CBool _)               -> CInt $ int_of_const a
-  (TFloat, CInt)
-  (TFloat, CBool _)
-  (TFloat, CFloat _)            -> CFloat $ float_of_const a
-  (_, _) | t == type_of_const a -> a
-  (_, _)                        -> error $
-    "Cannot cast "++ string_of_const a ++" to "++ string_of_type t
+type_cast t a = 
+  let int () = CInt $ int_of_const a
+      float () = CFloat $ float_of_const a
+  in case (t,a) of
+    (TInt, CInt _)     -> int ()
+    (TInt, CBool _)    -> int ()
+    (TFloat, CInt _)   -> float ()
+    (TFloat, CBool _)  -> float ()
+    (TFloat, CFloat _) -> float ()
+    (_, _) | t == type_of_const a -> a
+    (_, _)             -> error $
+      "Cannot cast "++ string_of_const a ++" to "++ string_of_type t
 
