@@ -1,25 +1,28 @@
 module Stages.M3.Schema where
+-- Typechecks
 -- Global definitions for the schema of a database/set of streams
 
 import Network.Socket as Net
 import Data.Char (toUpper)
+import Data.List as L
 
 import Stages.M3.M3Type
-import ListExtras (elem_assoc)
-import qualified ListExtras as LE
+import Stages.M3.ListExtras (elem_assoc, remove_assoc)
+import qualified Stages.M3.ListExtras as LE
+import qualified Stages.M3.Debug as Debug
 
 --- Typing metadata for relations
-data RelType = 
-     StreamRel           -- Dynamic relation.  The standard for DBT
+data RelType = StreamRel           -- Dynamic relation.  The standard for DBT
    | TableRel            -- Static relation; DBT does not generate update 
                          --    triggers for Tables
+     deriving (Show, Eq)
+                
 
 -- A Relation definition:: Consists of [name] x [schema] x [typing metadata]
 type Rel = (String, [Var], RelType)
 
 -- A triggered event --
-data Event =
- | InsertEvent Rel    -- An insertion into the specified relation
+data Event = InsertEvent Rel    -- An insertion into the specified relation
  | DeleteEvent Rel    -- A deletion from the specified relation
  | CorrectiveUpdate String [Var] [Var] Var Event
                     {- (For distributed execution) A correction to a
@@ -33,20 +36,21 @@ data Event =
                         event) -}
  | SystemInitializedEvent  -- Invoked when the system has been initialized, 
                            --   once all static tables have been loaded.
+   deriving (Show, Eq)
 
 -- Tuple framing constructs for data sources. --
-data Framing =
-   | Delimited String -- Tuple frames are delimited by this string
+data Framing = Delimited String -- Tuple frames are delimited by this string
    | FixedSize Int    -- Tuple frames are of fixed size
+     deriving (Show, Eq)
 
 -- Data source constructs
-data Source = 
-   | NoSource                         -- The nullary data source.
+data Source =  NoSource               -- The nullary data source.
    | FileSource String Framing        -- Read data from a file with the 
                                       -- specified framing construct
    | PipeSource String Framing        -- Read data from a UNIX pipe with the
                                       -- specified framing construct
    | SocketSource Net.HostAddress Int Framing 
+     deriving (Show, Eq)
                                       -- Create a server on the specified 
                                       -- address and port, and read data from
                                       -- client sockets on that port with the
@@ -90,11 +94,12 @@ empty_db () = []
 
 add_rel = add_rel_full NoSource ("",[])
 
-add_rel_full :: Source -> Asaptor -> T -> Rel -> Rel
+add_rel_full :: Source -> Adaptor -> T -> Rel -> T
 add_rel_full source adaptor db rel = 
    case lookup source db of
-     Nothing -> (source, [adaptor, rel]) : db
-     Some source_rels -> (source, (adaptor, rel):source_rels) : (remove_assoc source db)
+     Nothing          -> (source, [(adaptor, rel)]) : db
+     Just source_rels -> 
+       (source, (adaptor, rel):source_rels) : (remove_assoc source db)
 
 {-
    Obtain the relations appearing in the indicated database schema.
@@ -102,7 +107,7 @@ add_rel_full source adaptor db rel =
    ++return     A list of all relations appearing in [db]
 -}
 rels :: T -> [Rel]
-rels db = foldl' (\old (_, rels) -> old++map snd rels) [] db
+rels db = L.foldl' (\old (_, rels) -> old++map snd rels) [] db
 
 {-
    Obtain the static (table) relations appearing in the indicated database 
@@ -111,7 +116,7 @@ rels db = foldl' (\old (_, rels) -> old++map snd rels) [] db
    ++return     A list of all static (table) relations appearing in [db]
 -}
 table_rels :: T -> [Rel]
-table_rels db = filter (\(_,_,rt) -> rt == TableRel $ rels db)
+table_rels db = L.filter (\(_,_,rt) -> rt == TableRel) $ rels db
 
 {-
    Obtain the dynamic (stream) relations appearing in the indicated database 
@@ -120,7 +125,7 @@ table_rels db = filter (\(_,_,rt) -> rt == TableRel $ rels db)
    ++return     A list of all dynamic (stream) relations appearing in [db]
 -}
 stream_rels :: T -> [Rel]
-stream_rels db = filter (\(_,_,rt) -> rt == StreamRel) $ rels db
+stream_rels db = L.filter (\(_,_,rt) -> rt == StreamRel) $ rels db
 
 {-
    Obtain the full relation object for a given relation name in the indicated
@@ -130,8 +135,8 @@ stream_rels db = filter (\(_,_,rt) -> rt == StreamRel) $ rels db
    ++return     The [rel_t] object for the relation named [reln] in [db]
    ++raise Not_found If no relation named [reln] appears in [db]
 -}
-rel :: T -> String -> Rel
-rel db reln = find (\(cmpn,_,_) -> reln == cmpn) $ rels db
+rel :: T -> String -> Maybe Rel
+rel db reln = L.find (\(cmpn,_,_) -> reln == cmpn) $ rels db
 
 {-
    Partition the sources in a database schema by type of relation they 
@@ -148,10 +153,10 @@ partition_sources_by_type :: T -> ([SourceInfo], [SourceInfo])
 partition_sources_by_type db = LE.flatten_list_pair $ map part db
    where 
      part (source, all_rels) =
-       let (table_rels, stream_rels) = partition 
+       let (table_rels, stream_rels) = L.partition 
              (\(_,(_,_,t)) -> t == TableRel) all_rels
            f rel = if null rel then [] else [(source, rel)]
-       in (f table_rels, f steam_rels)
+       in (f table_rels, f stream_rels)
 
 {-
    Obtain the parameter list for the indicated event
@@ -160,9 +165,9 @@ partition_sources_by_type db = LE.flatten_list_pair $ map part db
 -}
 event_vars :: Event -> [Var]
 event_vars event = case event of
-  InsertEvent(_,relv,_) -> relv
-  DeleteEvent(_,relv,_) -> relv
-  CorrectiveUpdate(_,ivars,ovars,vvar,updated_evt) -> 
+  InsertEvent(_, relv, _) -> relv
+  DeleteEvent(_, relv, _) -> relv
+  CorrectiveUpdate _ ivars ovars vvar updated_evt -> 
                      ivars ++ ovars ++ [vvar] ++ (event_vars updated_evt)
   SystemInitializedEvent -> []
 
@@ -176,10 +181,10 @@ event_vars event = case event of
 events_equal :: Event -> Event -> Bool
 events_equal a b = case (a,b) of
   (SystemInitializedEvent, SystemInitializedEvent) -> True
-  (InsertEvent an _ _,  InsertEvent bn _ _)
-  (DeleteEvent an _ _, DeleteEvent bn _ _)         -> an = bn
+  (InsertEvent (an, _, _),  InsertEvent (bn, _, _))     -> an == bn
+  (DeleteEvent (an, _, _), DeleteEvent (bn, _, _))      -> an == bn
   (CorrectiveUpdate aen _ _ _ aue, CorrectiveUpdate ben _ _ _ bue) -> 
-          aen = ben && events_equal aue bue
+          aen == ben && events_equal aue bue
   _ -> False
 
 {-
@@ -206,8 +211,8 @@ name_of_rel (reln,_,_) = reln
 -}
 name_of_event :: Event -> String
 name_of_event event = case event of
-  InsertEvent reln _ _   -> "insert_" ++ reln
-  DeleteEvent reln _ _   -> "delete_" ++ reln
+  InsertEvent (reln, _, _)   -> "insert_" ++ reln
+  DeleteEvent (reln, _, _)   -> "delete_" ++ reln
   CorrectiveUpdate en _ _ _ updated_evt -> "correct_" ++ en ++ "_for_" ++ 
       name_of_event updated_evt
   SystemInitializedEvent -> "system_ready_event"
@@ -218,8 +223,8 @@ name_of_event event = case event of
 -}
 class_name_of_event :: Event -> String
 class_name_of_event event = case event of
-  InsertEvent _ _ _ -> "insert_tuple"
-  DeleteEvent _ _ _ -> "delete_tuple"
+  InsertEvent (_, _, _) -> "insert_tuple"
+  DeleteEvent (_, _, _) -> "delete_tuple"
   CorrectiveUpdate en _ _ _ updated_evt -> "corrective_update"
   SystemInitializedEvent -> "system_ready_event"
 
@@ -229,10 +234,10 @@ class_name_of_event event = case event of
 -}
 rel_name_of_event :: Event -> String
 rel_name_of_event event = case event of
-  InsertEvent reln _ _ 
-  DeleteEvent reln _ _ -> reln
+  InsertEvent (reln, _, _)    -> reln
+  DeleteEvent (reln, _, _)    -> reln
   CorrectiveUpdate en _ _ _ _ -> en
-  SystemInitializedEvent -> "NULL_RELATION"
+  SystemInitializedEvent      -> "NULL_RELATION"
 
 {-
    Obtain the human-readable representation of an event.  The output of this 
@@ -259,9 +264,9 @@ string_of_event event = case event of
                    [framing] (to be used in a relation constructor)
                    
 -}
-code_of_framing Delimited("\n") = "LINE DELIMITED"
-code_of_framing Delimited(x)    = "'"++x++"' DELIMITED"
-code_of_framing FixedSize(i)    = "FIXEDWIDTH "++ show i
+code_of_framing (Delimited "\n") = "LINE DELIMITED"
+code_of_framing (Delimited x)    = "'"++x++"' DELIMITED"
+code_of_framing (FixedSize i)    = "FIXEDWIDTH "++ show i
 
 {-
    Obtain a string representation of a source construct constructor compatible 
@@ -272,10 +277,12 @@ code_of_framing FixedSize(i)    = "FIXEDWIDTH "++ show i
                    constructor)
 -}
 code_of_source NoSource = ""
-code_of_source FileSource(file, framing) = "FROM FILE '"++file++"' "++code_of_framing framing
-code_of_source PipeSource(file, framing) = "FROM PIPE '"++file++"' "++code_of_framing framing
-code_of_source SocketSource(addr, port, framing) =
-         "FROM SOCKET '"++ show addr ++ "'" ++ show port++" "++code_of_framing framing
+code_of_source (FileSource file framing) = 
+  "FROM FILE '"++file++"' "++code_of_framing framing
+code_of_source (PipeSource file framing) = 
+  "FROM PIPE '"++file++"' "++code_of_framing framing
+code_of_source (SocketSource addr port framing) =
+  "FROM SOCKET '"++ show addr ++ "'" ++ show port++" "++code_of_framing framing
 
 {-
    Obtain a string representation of an adaptor construct constructor 
@@ -289,7 +296,7 @@ code_of_adaptor :: Adaptor -> String
 code_of_adaptor (aname, aparams) =
    map toUpper aname ++
       if null aparams
-      then if aname \= "" then "()" else ""
+      then if aname /= "" then "()" else ""
       else "("++ LE.string_of_list_sep ", " (\(k,v) -> k ++" ::= '"++ v ++"'") aparams ++")"
 
 {-
@@ -339,9 +346,9 @@ string_of_schema sch =
        FileSource file  _ -> file
        PipeSource file  _ -> "| " ++ file
        SocketSource bindaddr port _ -> 
-         if bindaddr = Net.iNADDR_ANY then
+         if bindaddr == Net.iNADDR_ANY then
              "*::"++show port
-         else show bindaddr ++ "::" ++ string_of_int port
+         else show bindaddr ++ "::" ++ show port
    ++"\n"++
    LE.string_of_list_sep "\n" 
      (\((aname, aparams), (reln, relsch, relt)) ->

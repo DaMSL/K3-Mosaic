@@ -81,7 +81,7 @@ active mode = unsafePerformIO $ do
     r <- readIORef debug_modes
     return $ Set.member mode r
 
-verbose = active "PRINT-VERBOSE"
+verbose () = active "PRINT-VERBOSE"
 
 {-
    Determine the operating system on which we are running

@@ -1,4 +1,5 @@
-module Stages.M3.Type where
+module Stages.M3.M3Type where
+-- Typechecks
 --
 --   Global typesystem for use by all of DBToaster's compilation stages.
 
@@ -35,7 +36,7 @@ var_neq (a,_) (b,_) = (a /= b)
 
 -- Membership testing
 mem_var :: Var -> [Var] -> Bool
-mem_var (a,_) = L.find $ \(b,_) -> a == b
+mem_var (a,_) = LE.elem_assoc a
 
 --
 --   Identify the inverse of a comparison operation (Eq -> Neq, etc...)
@@ -58,8 +59,8 @@ string_of_cmp Eq  = "="
 string_of_cmp Neq = "!="
 string_of_cmp Lt  = "<"
 string_of_cmp Gt  = ">"
-string_of_cmp Lte = "<="
-string_of_cmp Gte = ">="
+string_of_cmp Leq = "<="
+string_of_cmp Geq = ">="
 
 {-
    Get the string representation (corresponding to the OCaml defined above) of
@@ -75,14 +76,13 @@ ocaml_of_type t = show t
    @param ty   A type
    @return     The human-readable representation of [ty]
 -}
-string_of_type TAny             = "?"
-string_of_type TAny             = "?"
-string_of_type TBool            = "bool"
-string_of_type TInt             = "int"
-string_of_type TFloat           = "float"
-string_of_type TString          = "string"
-string_of_type TDate            = "date"
-string_of_type TExternal(etype) = etype
+string_of_type TAny              = "?"
+string_of_type TBool             = "bool"
+string_of_type TInt              = "int"
+string_of_type TFloat            = "float"
+string_of_type TString           = "string"
+string_of_type TDate             = "date"
+string_of_type (TExternal etype) = etype
 
 {-
    Get the human-readable string representation of a type.  (Corresponds to
@@ -90,13 +90,13 @@ string_of_type TExternal(etype) = etype
    @param ty   A type
    @return     The human-readable representation of [ty]
 -}
-cpp_of_type TAny             = "?"
-cpp_of_type TBool            = "bool"
-cpp_of_type TInt             = "long"
-cpp_of_type TFloat           = "double"
-cpp_of_type TString          = "string"
-cpp_of_type TDate            = "date"
-cpp_of_type TExternal(etype) = etype
+cpp_of_type TAny              = "?"
+cpp_of_type TBool             = "bool"
+cpp_of_type TInt              = "long"
+cpp_of_type TFloat            = "double"
+cpp_of_type TString           = "string"
+cpp_of_type TDate             = "date"
+cpp_of_type (TExternal etype) = etype
 
 {-
    Get the string representation of a variable.  If the PRINT-VERBOSE debug mode
@@ -106,13 +106,11 @@ cpp_of_type TExternal(etype) = etype
    @return      The string representation of [var]
 -}
 {-?(verbose = Debug.active "PRINT-VERBOSE")-}
-string_of_var d v =
-   if Debug.verbose () then string_of_var_verbose True v
-   else string_of_var_verbose False v
+string_of_var = string_of_var_verbose False
 
-string_of_var_verbose :: Var -> String
-string_of_var_verbose (name, vt) =
-   if Debug.verbose d then name++"::"++(string_of_type vt)
+string_of_var_verbose :: Bool -> Var -> String
+string_of_var_verbose verbose (name, vt) =
+   if verbose || Debug.verbose () then name++"::"++(string_of_type vt)
    else name
 
 {-
@@ -122,8 +120,7 @@ string_of_var_verbose (name, vt) =
    @param vars  A list of variables
    @return      The string representation of [vars]
 -}
-string_of_vars d vars =
-   LE.string_of_list (string_of_var d) vars
+string_of_vars d vars = LE.string_of_list string_of_var vars
 
 
 
@@ -142,6 +139,7 @@ string_of_vars d vars =
    @return        A type that both [a] and [b] escalate to.
 -}
 escalate_type = escalate_type_opname "<op>"
+
 escalate_type_opname opname a b = 
   case escalate_type_maybe opname a b of
     Just x  -> x
@@ -178,7 +176,10 @@ can_escalate_type from_type to_type =
    @return        A type that every element of [tlist] escalates to
 -}
 escalate_type_list = escalate_type_list_opname "<op>"
+
+escalate_type_list_opname :: String -> [Type] -> Type 
 escalate_type_list_opname opname tlist = 
    if null tlist then TInt
    else 
-      foldl' (escalate_type_opname) (head tlist) (tail tlist)
+      foldl' (escalate_type_opname opname) (head tlist) (tail tlist)
+
