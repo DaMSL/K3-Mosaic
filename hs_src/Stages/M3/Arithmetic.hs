@@ -13,27 +13,31 @@ module Stages.M3.Arithmetic where
    to be deterministic and to have no side effects.
 -}
 
-import qualified ListAsSet as LAS
-import qualified ListExtras as LE
-import qualified ListAsFunction as LAF
-import qualified M3Functions as M3Func
-import qualified M3Constants.Math as M3Math
-import qualified Data.List as List
+import qualified Util.ListAsSet as LAS
+import qualified Stages.M3.ListExtras as LE
+import qualified Stages.M3.ListAsFunction as LAF
+import qualified Stages.M3.M3Functions as M3Func
+import qualified Stages.M3.M3ConstMath as M3Math
 import Stages.M3.M3Type
 import Stages.M3.M3Constants
 import Stages.M3.Ring as Ring
+
+import Data.List (intercalate)
+import qualified Data.List as List
+import Data.Map (Map)
+import qualified Data.Map as Map
 
 {-
    Template for the base type for the Arithmetic ring
 -}
 data ArithmeticLeaf t =
-   | AConst Const                       -- A constant value
+     AConst Const                       -- A constant value
    | AVar Var                           -- A variable
    | AFn String [t] Type             -- A function application
 
 instance Ringable (ArithmeticLeaf t) where
-  zero = AConst $ CInt 0
-  one  = AConst $ CInt 1
+  ring_zero = AConst $ CInt 0
+  ring_one  = AConst $ CInt 1
 
 {-
    The value ring
@@ -45,13 +49,14 @@ instance Ringable (ArithmeticLeaf t) where
    {-The base type for the Arithmetic ring (see [arithmetic_leaf_t] above)-}
 {--}-}
 {-type value_leaf_t = ValueRing.leaf_t-}
-type ValueLeaf t = ArithmeticLeaf t
+newtype ValueLeaf = ValueLeaf { getLeaf :: ArithmeticLeaf (Expr ValueLeaf) }
+newtype Value = Value { getVal :: Expr (
 
 {-(**-}
    {-Values, or elements of the Arithmetic ring-}
 {-*)-}
 {-type value_t      = ValueRing.expr_t-}
-type Value t = Expr (ArithmeticLeaf t)
+type Value = Expr (ArithmeticLeaf Expr)
 
 ---- Constructors ----
 -- Produce the value equivalent of a boolean
@@ -80,7 +85,7 @@ mk_fn n a t = mk_val $ AFn n a t
    ++param leaf   A base (leaf) element of the Arithmetic ring
    ++return       The string representation of [leaf]
 -}
-string_of_value_leaf :: ValueLeaf t -> String =
+string_of_value_leaf :: ValueLeaf t -> String
 string_of_value_leaf leaf =
    case leaf of
       AConst c -> sql_of_const c
@@ -94,11 +99,11 @@ string_of_value_leaf leaf =
    ++param v       A value (Arithmetic ring expression)
    ++return        The string representation of [v]
 -}
-string_of_value :: Value -> String
+string_of_value :: Value t -> String
 string_of_value a_value =
    Ring.fold
-      (\sum_list -> "("++(intersperse " + " sum_list )++")")
-      (\prod_list -> "("++(intersperse " * " prod_list)++")")
+      (\sum_list -> "("++(intercalate " + " sum_list )++")")
+      (\prod_list -> "("++(intercalate " * " prod_list)++")")
       (\neg_term  -> "(-1*"++neg_term++")")
       string_of_value_leaf
       a_value
@@ -109,7 +114,7 @@ string_of_value a_value =
    ++param v    A value
    ++return     The set of variables that appear in [v] as a list
 -}
-vars_of_value :: Value -> [Var]
+vars_of_value :: Value t -> [Var]
 vars_of_value v =
    Ring.fold
       LAS.multiunion
@@ -127,7 +132,7 @@ vars_of_value v =
    ++param v       A value
    ++return        [v] with [mapping] applied to all of its variables
 -}
-rename_vars :: LAF.TableFn Var Var -> Value -> Value
+rename_vars :: LAF.TableFn Var Var -> Value t -> Value t
 rename_vars mapping v =
    Ring.fold
       mk_sum
@@ -146,13 +151,13 @@ rename_vars mapping v =
    ++param v   A value
    ++return    The type of [v]
 -}
-type_of_value Value -> Type =
+type_of_value :: Value t -> Type
 type_of_value a_value =
    Ring.fold
       (escalate_type_list_opname "+")
       (escalate_type_list_opname "*")
       (\t -> case t of 
-               TInt
+               TInt   -> t
                TFloat -> t 
                _ -> error $ "Can not compute type of -1 * "++string_of_type t)
       (\leaf -> case leaf of
@@ -176,7 +181,7 @@ type_of_value a_value =
 -}
 cmp_values = cmp_values_opts Ring.default_cmp_opts
 
-cmp_values_opts :: Ring.[CmpOpt] -> Value -> Value -> Maybe [(Var, Var)]
+cmp_values_opts :: [CmpOpt] -> Value t -> Value t -> Maybe [(Var, Var)]
 cmp_values_opts cmp_opts val1 val2 =
   let rcr = cmp_values_opts cmp_opts in
 
@@ -185,12 +190,12 @@ cmp_values_opts cmp_opts val1 val2 =
     LAF.multimerge 
     (\lf1 lf2 ->
       case (lf1, lf2) of 
-             (AConst c1, AConst c2) | c1 /= c2 -> Nothing
-                                    | _ -> Just []
+             (AConst c1, AConst c2) | c1 /= c2  -> Nothing
+                                    | otherwise -> Just []
              (AVar v1, AVar v2) -> Just [v1, v2]
-             (AFn fn1 subt1 ft1, AFn fn2 subt2 ft2) | fn1 /= fn2
+             (AFn fn1 subt1 ft1, AFn fn2 subt2 ft2) | fn1 /= fn2 -> Nothing
                                                     | ft1 /= ft2 -> Nothing
-                                                    | _ -> do
+                                                    | otherwise  -> do
                res <- mapM (\(a, b) -> rcr a b) $ zip subt1 subt2
                return $ LAF.multimerge res
              (_,_) -> Nothing
@@ -201,20 +206,20 @@ cmp_values_opts cmp_opts val1 val2 =
    ++param a_value       A value (Arithmetic ring expression)
    ++return              Sign of [a_value]
 -}
-sign_of_value :: Value ->  Value
+sign_of_value :: Value t -> Value t
 sign_of_value a_value =
-  let one_expr = Ring.Val $ Base.one
-      zero_expr = Ring.Val $ Base.zero
+  let one_expr = one
+      zero_expr = zero
       sign_of_leaf a_leaf =
         case a_leaf of
           AConst c ->
             case c of
-              CInt n | n > 0 -> one_expr 
-                     | n < 0 -> Ring.Neg one_expr 
-                     | _ -> zero_expr
-              CFloat n | n > 0 -> one_expr 
-                       | n < 0 -> Ring.Neg one_expr
-                       | _ -> zero_expr
+              CInt n | n > 0        -> one_expr
+                     | n < 0        -> Ring.Neg one_expr
+                     | otherwise    -> zero_expr
+              CFloat n | n > 0      -> one_expr
+                       | n < 0      -> Ring.Neg one_expr
+                       | otherwise  -> zero_expr
               _ -> one_expr
           AVar v    -> a_value
           AFn _ _ _ -> one_expr
@@ -241,12 +246,12 @@ sign_of_value a_value =
 -}
 eval = eval_scope Map.empty
 
-eval_scope :: Map String a -> Value -> Const
+eval_scope :: Map String a -> Value t -> Const
 eval_scope scope v =
   Ring.fold 
-    M3Constants.Math.suml 
-    M3Constants.Math.prodl 
-    M3Constants.Math.neg 
+    M3Math.suml 
+    M3Math.prodl 
+    M3Math.neg 
     (\lf -> 
       case lf of
         AConst c -> c
@@ -267,36 +272,36 @@ eval_scope scope v =
 -}
 eval_partial = eval_partial []
 
-eval_partial scope v =
+eval_partial_scope scope v =
    let merge v_op c_op term_list =
-      let (v, c) = foldr (\term (v,c) ->
-         case (term, c) of
-           (Ring.Val(AConst c2), Nothing) -> (v, Just c2)
-           (Ring.Val(AConst c2), Just c1) -> (v, Just $ c_op c1 c2)
-           (_,_) -> (term : v, c)
-      ) term_list ([], Nothing) 
-      in v_op $ case c of
-                  Nothing -> [] 
-                  Just c - > [mk_const c]
-                ++ v
+        let (v, c) = foldr f term_list ([], Nothing)
+             where f term (v,c) = case (term, c) of
+                    (Ring.Val(AConst c2), Nothing) -> (v, Just c2)
+                    (Ring.Val(AConst c2), Just c1) -> (v, Just $ c_op c1 c2)
+                    (_,_) -> (term : v, c)
+        in v_op $ case c of
+                     Nothing -> [] 
+                     Just c  -> [mk_const c]
+                  ++ v
    in
    Ring.fold 
       (merge Ring.mk_sum M3Math.sum)
       (merge Ring.mk_prod M3Math.prod)
-      (\x -> merge Ring.mk_prod M3Math.prod [mk_int (-1); x])
+      (\x -> merge Ring.mk_prod M3Math.prod [mk_int (-1), x])
       (\lf -> 
         case lf of
           AFn fname fargs_unevaled ftype -> 
-            let f = do
-              let fargs = map (eval_partial_scope scope) fargs_unevaled
-              farg_vals <- mapM (\x -> case x of
-                                  Ring.Val(AConst c) -> return c
-                                  _ -> return Nothing) -- Not found
-                                fargs
-              M3Func.invoke fname farg_vals ftype
+            let fargs = map (eval_partial_scope scope) fargs_unevaled
+                f = do
+                  farg_vals <- mapM (\x -> case x of
+                                   Ring.Val(AConst c) -> return c
+                                   _ -> return Nothing) -- Not found
+                                 fargs
+                  return $ mk_const $ M3Func.invoke fname farg_vals ftype
             in maybe (Ring.mk_val $ AFn fname fargs ftype) id f
 
           AVar vn vt -> maybe (Ring.mk_val lf) id $ List.lookup (vn,vt) scope 
           AConst c   -> Ring.mk_val lf
       )
       v
+
