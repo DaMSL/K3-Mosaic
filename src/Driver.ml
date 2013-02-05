@@ -268,7 +268,7 @@ let interpret_k3_program params p =
 
 let interpret params inputs =
   let eval_fn = match params.out_lang with
-    | K3 -> interpret_k3_program params |- fst
+    | K3 | AstK3 | K3Dist | AstK3Dist -> interpret_k3_program params
     | _ -> error "Output language not yet implemented"
   in
   List.iter eval_fn inputs
@@ -288,25 +288,6 @@ let print_k3_program f p =
     List.iter print_event_loop event_loops;
     match default with None -> () 
       | Some (_,x) -> print_event_loop ("DEFAULT", x)
-
-let print_k3_dist_prog partmap f (p, m) = match m with
-  | None -> error "Cannot construct distributed K3 without ProgInfo metadata"
-  | Some meta ->
-  (* do not use. Simply for type checking original program *)
-  (*tp = typed_program p in *)
-  let dist = try
-      GenDist.gen_dist meta partmap p
-    with Invalid_argument(msg) -> 
-      print_endline ("ERROR: " ^msg);
-      print_endline (ProgInfo.string_of_prog_data meta);
-      exit (-1)
-  in
-  let dist_tp = typed_program dist in
-  let event_loops, default = roles_of_program dist_tp in 
-    print_endline (f dist_tp);
-    List.iter print_event_loop event_loops;
-    match default with None -> () 
-        | Some (_,x) -> print_event_loop ("DEFAULT", x)
 
 let print_reified_k3_program p =
   let print_expr_fn c e = 
@@ -336,16 +317,12 @@ let print_cpp_program f =
 let print params inputs =
   let sofp = string_of_program ~verbose:cmd_line_params.verbose in
   let print_fn = match params.out_lang with
-    | AstK3 -> print_k3_program sofp |- fst
-    | AstK3Dist -> params.in_lang <- M3in; print_k3_dist_prog
-      params.partition_map sofp
-    | K3 -> (print_k3_program PS.string_of_program) |- fst
-    | K3Dist -> params.in_lang <- M3in; 
-        (print_k3_dist_prog params.partition_map PS.string_of_program)
-    | ReifiedK3 -> print_reified_k3_program |- fst
-    | Imperative -> (print_imperative_program params.print_types) |- fst
-    | CPPInternal -> (print_cppi_program params.print_types) |- fst
-    | CPP -> print_cpp_program |- fst
+    | AstK3 | AstK3Dist -> print_k3_program sofp
+    | K3 | K3Dist -> print_k3_program PS.string_of_program
+    | ReifiedK3 -> print_reified_k3_program
+    | Imperative -> print_imperative_program params.print_types 
+    | CPPInternal -> print_cppi_program params.print_types
+    | CPP -> print_cpp_program
   in List.iter print_fn inputs
 
 (* Test actions *)
@@ -370,6 +347,18 @@ let test params =
       in error (mode^" testing not yet implemented for "^lang)
   in List.iter test_fn params.input_files
 
+let transform_to_k3_dist partmap p mproginfo = match mproginfo with
+  | None -> error "Cannot construct distributed K3 without ProgInfo metadata"
+  | Some meta ->
+    (* do not use. Simply for type checking original program *)
+    (*tp = typed_program p in *)
+    try
+      GenDist.gen_dist meta partmap p
+    with Invalid_argument(msg) -> 
+      print_endline ("ERROR: " ^msg);
+      print_endline (ProgInfo.string_of_prog_data meta);
+      exit (-1)
+
 let process_inputs params =
   let proc_fn f = match params.in_lang with
     | K3in -> (parse_program_k3 f, None)
@@ -381,11 +370,22 @@ let process_inputs params =
         (prog, Some proginfo)
   in List.map proc_fn params.input_files
 
+(* this function can only transform to another k3 format *)
+let transform params ds =
+  let proc_fn (d, mproginfo) = match params.out_lang with
+   | K3Dist
+   | AstK3Dist -> transform_to_k3_dist params.partition_map d mproginfo
+   | _         -> d
+  in List.map proc_fn ds
+
 (* Driver execution *)
 let process_parameters params = 
+  (* preprocess params *)
+  if params.out_lang = K3Dist or params.out_lang = AstK3Dist then params.in_lang <- M3in;
   let a = !(params.action) in
   match a with
-  | Compile | Interpret | Print -> let inputs = process_inputs params in
+  | Compile | Interpret | Print -> 
+    let inputs = transform params @: process_inputs params in
     begin match a with
     | Compile -> compile params inputs
     | Interpret -> interpret params inputs
