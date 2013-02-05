@@ -1,7 +1,11 @@
+module Stages.M3.M3ConstMath where
+-- Typechecks
 -- Math operations over constants ----
-module Stages.M3.M3Constants.Math where
 
+import Prelude hiding (sum)
+import Stages.M3.M3Constants
 import Stages.M3.M3Type
+import Data.List (foldl')
 
 {-
     Perform a type-escalating binary arithmetic operation over two constants
@@ -19,34 +23,36 @@ binary_op :: (Bool -> Bool -> Bool) -> (Int -> Int -> Int) ->
              (Float -> Float -> Float) -> 
              Type -> Const -> Const -> Const
 
-binary_op b_op i_op f_op op_type a b = case (a, b, op_type) of
-  (CBool av, CBool bv, TBool) 
-  (CBool av, CBool bv, TAny)   -> CBool $ b_op av bv
-  (CBool _,  CBool _,  TInt)
-  (CBool _,  CInt _,   TInt)
-  (CBool _,  CInt _,   TAny)
-  (CInt _,   CBool _,  TInt) 
-  (CInt _,   CBool _,  TAny) 
-  (CInt _,   CInt _,   TInt)
-  (CInt _,   CInt _,   TAny)   -> CInt $ i_op (int_of_const a) $ int_of_const b
-  (CBool _,  CBool _,  TFloat)
-  (CInt _,   CInt _,   TFloat)      
-  (CFloat _, CBool _,  TAny)
-  (CFloat _, CInt _,   TAny)
-  (CFloat _, CFloat _, TAny)
-  (CFloat _, CBool _,  TFloat)
-  (CFloat _, CInt _,   TFloat)
-  (CFloat _, CFloat _, TFloat) -> CFloat $ f_op (float_of_const a) $ 
-    float_of_const b
-  (CString _, _, _) 
-  (_, CString _, _)
-  (CString _, _, _) 
-  (_, CString _, _) -> error "Binary math op over a string"
-  (CDate _, _, _) 
-  (_, CDate _, _) -> error "Binary math op over a date"
-  (_, _, _) -> error $ "Binary math op with incompatible return type:: "++
-    string_of_const a ++" "++ string_of_const b ++
-    " -> "++ string_of_type op_type
+binary_op b_op i_op f_op op_type a b = 
+  let i () = CInt $ i_op (int_of_const a) $ int_of_const b
+      f () = CFloat $ f_op (float_of_const a) $ float_of_const b
+      err_s () = error "Binary math op over a string"
+      err_d () = error "Binary math op over a date"
+  in case (a, b, op_type) of
+    (CBool av, CBool bv, TBool)  -> CBool $ b_op av bv
+    (CBool av, CBool bv, TAny)   -> CBool $ b_op av bv
+    (CBool _,  CBool _,  TInt)   -> i ()
+    (CBool _,  CInt _,   TInt)   -> i ()
+    (CBool _,  CInt _,   TAny)   -> i ()
+    (CInt _,   CBool _,  TInt)   -> i ()
+    (CInt _,   CBool _,  TAny)   -> i ()
+    (CInt _,   CInt _,   TInt)   -> i ()
+    (CInt _,   CInt _,   TAny)   -> i ()
+    (CBool _,  CBool _,  TFloat) -> f ()
+    (CInt _,   CInt _,   TFloat) -> f ()
+    (CFloat _, CBool _,  TAny)   -> f ()
+    (CFloat _, CInt _,   TAny)   -> f ()
+    (CFloat _, CFloat _, TAny)   -> f ()
+    (CFloat _, CBool _,  TFloat) -> f ()
+    (CFloat _, CInt _,   TFloat) -> f ()
+    (CFloat _, CFloat _, TFloat) -> f ()
+    (CString _, _, _)            -> err_s ()
+    (_, CString _, _)            -> err_s ()
+    (CDate _ _ _, _, _)          -> err_d ()
+    (_, CDate _ _ _, _)          -> err_d ()
+    (_, _, _) -> error $ "Binary math op with incompatible return type:: "++
+        string_of_const a ++" "++ string_of_const b ++
+        " -> "++ string_of_type op_type
    
 -- Perform type-escalating addition over two constants
 sum = binary_op (\x -> error "sum of booleans" ) (+) (+) TAny
@@ -94,24 +100,25 @@ cmp_geq = comparison_op ">=" (>=) (>=)
 cmp_eq a b = CBool $
   case (a, b) of
     (CBool av, CBool bv)             -> av == bv
-    (CBool _, _)
+    (CBool _, _)                     -> error "= of boolean and other"
     (_, CBool _)                     -> error "= of boolean and other"
     (CString av, CString bv)         -> av == bv
-    (CString _, _)
+    (CString _, _)                   -> error "= of string and other"
     (_, CString _)                   -> error "= of string and other"
     (CDate y1 m1 d1, CDate y2 m2 d2) -> y1==y2 && m1==m2 && d1==d2
-    (CDate _, _)
-    (_, CDate _)                     -> error "= of date and other"
-    (CFloat _, _)
+    (CDate _ _ _, _)                 -> error "= of date and other"
+    (_, CDate _ _ _)                 -> error "= of date and other"
+    (CFloat _, _)                    -> float_of_const a == float_of_const b
     (_, CFloat _)                    -> float_of_const a == float_of_const b
-    (CInt av, CInt bv)               -> av = bv
+    (CInt av, CInt bv)               -> av == bv
 -- Perform a type-escalating not-equals comparison
 cmp_neq a b = CBool $ cmp_eq a b == CBool False
 -- Find the type-escalating comparison operation for a Type.cmp_t
 cmp op = case op of
   Lt  -> cmp_lt
-  Lte -> cmp_leq
+  Leq -> cmp_leq
   Gt  -> cmp_gt
-  Gte -> cmp_geq
+  Geq -> cmp_geq
   Eq  -> cmp_eq
   Neq -> cmp_neq
+
