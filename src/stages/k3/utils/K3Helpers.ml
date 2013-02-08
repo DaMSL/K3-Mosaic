@@ -130,6 +130,7 @@ let mk_stree tag children = mk_tree @: (((new_num (), tag), meta), children)
 
 (* Standard AST nodes *)
 let mk_const constant = mk_stree (Const(constant)) []
+let mk_const_int i = mk_const @: CInt i
 
 let mk_var id = mk_stree (Var(id)) []
 

@@ -46,6 +46,7 @@ val wrap_args_maybe : (id_t * value_type_t) list -> arg_t
 
 (* simple functions that enable easy construction of AST trees *)
 val mk_const : constant_t -> expr_t
+val mk_const_int : int -> expr_t
 val mk_var : id_t -> expr_t
 val mk_tuple : expr_t list -> expr_t
 val mk_just : expr_t -> expr_t
