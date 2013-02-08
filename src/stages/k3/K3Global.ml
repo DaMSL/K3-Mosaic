@@ -13,7 +13,10 @@ let peers_name = "peers"
 let me_code addr = mk_global_val_init me_name t_addr @: mk_const @: CAddress addr
 let me_var = mk_var me_name
 
-let peers_type = wrap_tset @: wrap_ttuple [t_addr; wrap_tmaybe t_string]
+(* peers is in a [(TAddress, Maybe String)] format *)
+let peers_id_type = ["address", t_addr; "name", wrap_tmaybe t_string]
+let peers_type = wrap_tset @: wrap_ttuple @: snd @: List.split peers_id_type
+let peers_ids = fst @: List.split peers_id_type
 let peers_empty = mk_global_val peers_name peers_type 
 let peers_code = function 
      | [] -> peers_empty

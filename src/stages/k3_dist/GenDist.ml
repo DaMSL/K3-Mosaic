@@ -4,8 +4,8 @@
  * We assume a rhs map can only occur once per statement *)
 
 (* Notes:
- * We currently carry the vid inside tuples all the way, including the delta
- * completions. This may change once the completions are actually filled in *)
+ * We currently carry the vid inside tuples all the way *)
+  
 
 (* Call Graph * 
  * on_insert_<trigger>_switch  
@@ -249,6 +249,19 @@ let declare_global_funcs partmap p =
 
 (* ---- start of protocol code ---- *)
 
+(* Trigger that's called once, on system init *)
+let on_init_trig p =
+  mk_code_sink "on_init" (wrap_args ["_", t_unit]) [] @:
+    mk_block
+      [mk_iter 
+        (mk_lambda 
+          (wrap_args K3Global.peers_id_type) @:
+          mk_apply (mk_var K3Ring.add_node_name) @: 
+            mk_tuple @: ids_to_vars K3Global.peers_ids
+        ) @:
+          mk_var K3Global.peers_name]
+
+(* The start trigger inserts a vid into each message *)
 let start_trig p t =
   mk_code_sink t (wrap_args @: args_of_t p t) [] @:
     mk_let "vid" t_vid
@@ -941,6 +954,7 @@ let gen_dist p partmap ast =
     declare_foreign_functions p @
     filter_corrective_list ::  (* global func *)
     (mk_flow @:
+      on_init_trig p::
       regular_trigs@
       send_corrective_trigs p@
       demux_trigs ast)::    (* per-map basis *)
