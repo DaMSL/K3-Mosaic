@@ -774,7 +774,7 @@ let type_bindings_of_program prog =
           in
           let expr_type = type_of_expr typed_init in
           if not (compare_type_ts expr_type t) then t_error (-1) i
-              (TMismatch(expr_type, t, 
+              (TMismatch(t, expr_type,
                   "Mismatch in global type declaration.")) ()
           else 
           Global(i, t, Some typed_init), (i, expr_type) :: env
