@@ -636,21 +636,31 @@ let check_trigger_type trig_env env id args locals body rebuild_f =
 
 (* Flow program type deduction *)
 
-let rec types_of_pattern env p = 
+let rec types_of_pattern (env:(id_t * type_t list) list) p : type_t list= 
   let rcr = types_of_pattern env in
   let rcr_list l = ListAsSet.no_duplicates (List.flatten (List.map rcr l)) in
   match p with
-  | Terminal (id) ->
-    (try List.assoc id env
-     with Not_found -> raise (TypeError(-1, "No resource "^id^" found in pattern")))
+  | Terminal id  ->
+     (try List.assoc id env
+      with Not_found -> 
+        raise (TypeError(-1, "No resource "^id^" found in pattern")))
 
-  | Choice (l)    -> rcr_list l
-  | Sequence (l)  -> rcr_list l
-  | Optional (p)  -> rcr p
-  | Repeat (p,_)  -> rcr p 
+  | Choice l     -> rcr_list l
+  | Sequence l   -> rcr_list l
+  | Optional p   -> rcr p
+  | Repeat (p,_) -> rcr p 
 
-let type_of_resource env r = match r with
+let type_of_resource (env:(id_t * type_t list) list) r = match r with
   | Handle(t,_,_) -> [t]
+  | Stream(t, ConstStream e) -> 
+    let t' = t <| value_of |> t_error (-1) "stream" @: TBad(t) in
+    let tcol = type_of_expr @: deduce_expr_type [] [] e in
+    let t_c, t_e = tcol <| collection_of +++ base_of %++ value_of |> t_error
+      (-1) "stream" @: TBad(t) in
+    if not (t' === t_e) 
+      then t_error (-1) "stream" (VTMismatch(t', t_e, "resource type")) ()
+      else [t]
+  | Stream(t, _) -> [t]
   | Pattern p -> types_of_pattern env p
 
 let typecheck_bind src_types trig_arg_types =

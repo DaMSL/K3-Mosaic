@@ -7,6 +7,8 @@ open K3Streams.ResourceFSM
 type channel_impl_t =
   | In  of in_channel option
   | Out of out_channel option
+  | InConst of expr_t list ref
+  | InRand of int ref
 
 type resource_impl_env_t = (id_t * channel_impl_t) list 
 

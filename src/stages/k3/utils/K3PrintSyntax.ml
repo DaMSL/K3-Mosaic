@@ -340,9 +340,15 @@ let rec lazy_resource_pattern c = function
   | Optional rp -> lazy_resource_pattern c rp <| lps "?"
   | Repeat(rp, _) -> lazy_resource_pattern c rp <| lps "*"
 
-let lazy_resource c = function
-  | Handle(t, chan_t, chan_f) -> 
-    lazy_type c t <| lps " = " <| lazy_channel c chan_t chan_f
+let lazy_stream c = function
+  | RandomStream i -> lps "random" <| lazy_paren (lps @: string_of_int i)
+  | ConstStream e  -> lps "stream" <| lazy_paren (lazy_expr c e)
+
+let lazy_resource c r = 
+  let common t = lazy_type c t <| lps " = " in
+  match r with
+  | Handle(t, chan_t, chan_f) -> common t <| lazy_channel c chan_t chan_f
+  | Stream(t, st) -> common t <| lazy_stream c st
   | Pattern(pat) -> lps "pattern " <| lazy_resource_pattern c pat
 
 let lazy_flow c = function

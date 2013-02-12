@@ -84,8 +84,7 @@ val fail_action_of_state : state_id * fsm_state -> action_t
 val pre_entry_of_state : state_id * fsm_state -> id_t list
   
 val handle_of_resource :
-  resource_env_t -> id_t
-  -> (bool * type_t * channel_type_t * channel_format_t) option
+  resource_env_t -> id_t -> (bool * flow_resource_t) option
 
 val is_net_handle  : resource_env_t -> id_t -> bool  
 val is_file_handle : resource_env_t -> id_t -> bool

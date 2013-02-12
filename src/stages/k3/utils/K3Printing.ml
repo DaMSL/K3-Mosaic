@@ -197,6 +197,10 @@ let flat_string_of_channel_type ct = match ct with
   | File fp -> tag_str "File" [fp]
   | Network addr -> tag_str "Network" [string_of_address addr]
 
+let flat_string_of_stream_type = function
+  | RandomStream i -> tag_str "RandomStream" [string_of_int i]
+  | ConstStream e -> tag_str "ConstStream" [flat_string_of_expr e]
+
 let flat_string_of_channel_format cf = match cf with
   | CSV -> "CSV"
   | JSON -> "JSON"
@@ -219,6 +223,9 @@ let flat_string_of_flow_resource r = match r with
         tag_str "Handle" [flat_string_of_type t; 
                           flat_string_of_channel_type ct;
                           flat_string_of_channel_format cf]
+    | Stream(t,st)  ->
+        tag_str "Stream" [flat_string_of_type t; 
+                          flat_string_of_stream_type st]
 
     | Pattern(p)       -> tag_str "Pattern" [flat_string_of_resource_pattern p]
 
@@ -474,6 +481,10 @@ let print_flow_resource c r =
       my_tag "Handle" [lazy_type c t;
                        lps (flat_string_of_channel_type ct);
                        lps (flat_string_of_channel_format cf)]
+
+    | Stream (t,st) ->
+      my_tag "Stream" [lazy_type c t; lps @: flat_string_of_stream_type st]
+
 
     | Pattern p        -> my_tag "Pattern" [lazy (print_resource_pattern c p)]
 

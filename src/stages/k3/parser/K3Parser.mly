@@ -83,7 +83,7 @@
 
 %token EXPECTED
 %token DECLARE FOREIGN TRIGGER ROLE DEFAULT
-%token CONSUME BIND SOURCE SINK PATTERN FILE SOCKET 
+%token CONSUME BIND SOURCE SINK PATTERN FILE SOCKET RANDOM STREAM
 
 %token UNIT UNKNOWN NOTHING
 %token <int> INTEGER
@@ -243,6 +243,10 @@ resource :
         in Source(Resource($2, Handle($4, channel_type, channel_format)))
       }
 
+    | SOURCE IDENTIFIER COLON type_expr GETS stream {
+        Source(Resource($2, Stream($4, $6)))
+      }
+
     | SOURCE PATTERN IDENTIFIER GETS resource_pattern { 
         Source(Resource($3, Pattern($5)))
       }
@@ -264,6 +268,12 @@ handle :
     | SOCKET LPAREN STRING COMMA INTEGER COMMA IDENTIFIER RPAREN
       { Network($3, $5), parse_format $7 }
 ;
+
+stream :
+    | STREAM LPAREN expr RPAREN  { ConstStream($3) }
+
+    | RANDOM LPAREN INTEGER RPAREN { RandomStream($3) }
+
 
 resource_pattern :
     | IDENTIFIER                       { Terminal($1) }

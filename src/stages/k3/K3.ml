@@ -131,6 +131,10 @@ type channel_type_t
     = File       of string
     | Network    of address
 
+type stream_type_t
+    = RandomStream of int
+    | ConstStream  of expr_t (* constants only *)
+
 type resource_pattern_t =
     | Terminal      of id_t
     | Choice        of resource_pattern_t list
@@ -143,6 +147,7 @@ type instruction_t = Consume of id_t
 
 type flow_resource_t = 
   | Handle  of type_t * channel_type_t * channel_format_t
+  | Stream of type_t * stream_type_t
   | Pattern of resource_pattern_t
 
 type flow_endpoint_t =

@@ -161,21 +161,17 @@ let pre_entry_of_state state =
 (* Accessors *)
 let handle_of_resource resource_env id =
     try 
-    let resource = List.assoc id resource_env in
-    begin match snd resource with
-      | Handle (t,ct,cf) -> Some(fst resource, t,ct,cf)
-      | _ -> None
-      end
+      let resource = List.assoc id resource_env in Some resource
     with Not_found -> None 
 
 let is_net_handle resource_env id = 
   match handle_of_resource resource_env id with
-    | Some(_, _, Network _, _) -> true
+    | Some(_, Handle(_, Network _, _)) -> true
     | _ -> false
 
 let is_file_handle resource_env id = 
   match handle_of_resource resource_env id with
-    | Some(_, _, File _, _) -> true
+    | Some(_, Handle(_, File _, _)) -> true
     | _ -> false
 
 (* Given a source and FSM environment, construct an FSM continuation. *)
@@ -293,7 +289,8 @@ let event_loop_of_flow fp : event_loop_t =
     match fs with
     | Source (Resource (id,r)) ->
       let npats, nrenv, nd_env = match r with 
-	      | Handle (t,ct,cf) -> [id, Repeat(Terminal(id), UntilEOF)], res_env@[id, (true,r)], d_env
+	      | Handle _ | Stream _ -> 
+            [id, Repeat(Terminal(id), UntilEOF)], res_env@[id, (true,r)], d_env
 	      | Pattern p -> [id, p], res_env, d_env
       in (pat_acc@npats, bind_acc), (nrenv, nd_env, instrs)
 
@@ -301,6 +298,7 @@ let event_loop_of_flow fp : event_loop_t =
       let npats, nrenv, nd_env = match r with 
 	      | Handle (t,ct,cf) -> [], res_env@[id, (false,r)], d_env
 	      | Pattern p -> [id, p], res_env, d_env
+        | Stream _ -> failwith "Streams not supported as sinks"
       in (pat_acc@npats, bind_acc), (nrenv, nd_env, instrs)
 
     | Bind (src_id, trig_id) ->

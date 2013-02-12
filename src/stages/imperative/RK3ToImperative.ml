@@ -1026,7 +1026,7 @@ let imperative_of_dispatcher mk_meta role_id resource_env prior_resources (id,di
             (* Get resource-specific event type *)
             let event_t, event_meta =
               match handle_of_resource resource_env rid with
-              | Some(source, event_t, ct, cf) -> 
+              | Some(source, Handle(event_t, ct, cf)) -> 
                 let t = U.i_type event_t in t, (t,mk_meta())
               | _ -> failwith ("invalid resource "^rid)
             in

@@ -1,4 +1,5 @@
 (* Dealing with Sources and Consumption. *)
+open Util
 open K3.AST
 open K3Util
 open K3Values
@@ -11,6 +12,8 @@ exception ResourceError of id_t
 type channel_impl_t =
   | In  of in_channel option
   | Out of out_channel option
+  | InConst of expr_t list ref
+  | InRand of int ref
 
 type resource_impl_env_t = (id_t * channel_impl_t) list
 
@@ -20,28 +23,51 @@ let value_of_string t v = match t with
   | TFloat -> VFloat(float_of_string v)
   | _ -> VString(v)
 
-let pull_source i t s in_chan =
+let pull_source id t res in_chan =
 	let tuple_val, signature = 
-		match t <| base_of %++ value_of |> (fun () -> raise (ResourceError i)) with
+		match t <| base_of %++ value_of |> (fun () -> raise (ResourceError id)) with
     | TBool -> false, [TBool]
     | TInt -> false, [TInt]
     | TFloat -> false, [TFloat]
 		| TTuple(ts) -> true, List.map base_of ts
-		| _ -> raise (ResourceError i)
+		| _ -> raise (ResourceError id)
 	in
   begin 
-    print_endline ("Pulling from source "^i);
-	  match s with
-	  | (File _), CSV -> 
+    print_endline ("Pulling from source "^id);
+	  match res, in_chan with
+	  | Handle(t, File _, CSV), In(Some chan) -> 
 	    (try 
-         let next_record = Str.split (Str.regexp ",") (input_line in_chan) in
+         let next_record = Str.split (Str.regexp ",") (input_line chan) in
          let fields = List.map2 value_of_string signature next_record in
          let r = if tuple_val then VTuple(fields) else List.hd fields
          in Some (r)
        with 
-        | Invalid_argument _ -> raise (ResourceError i)
+        | Invalid_argument _ -> raise (ResourceError id)
         | End_of_file -> None)
-	  | _ -> raise (ResourceError i)
+
+    | Stream(t, RandomStream _), InRand index ->
+        if !index <= 0 then None
+        else let rec random_val t = 
+               match base_of t with
+               | TBool -> VBool(Random.bool ())
+               | TInt  -> VInt(Random.int max_int)
+               | TFloat -> VFloat(Random.float max_float)
+               | TTuple(ts) -> VTuple(List.map random_val ts)
+               | _ -> raise (ResourceError id)
+             in index := !index - 1; 
+             Some(random_val @: value_of t @: fun () -> raise (ResourceError id))
+
+     (* a constant stream *)
+     | Stream(t, ConstStream _), InConst exp_l_ref ->
+         begin match !exp_l_ref with
+          | [] -> None
+          | e::es -> begin match K3Util.tag_of_expr e with
+                      | Const c -> exp_l_ref := es; Some (value_of_const c)
+                      | _ -> raise (ResourceError id)
+                    end
+         end
+
+	  | _ -> raise (ResourceError id)
   end
 
 (* Determines resources to be opened and closed between two instructions.
@@ -64,16 +90,20 @@ let resource_delta resource_env resource_impl_env d =
 (* Initialize all resources used by a multiplexer given existing resources. *)
 let initialize_resources resource_env resource_impl_env d =
   let open_channel_impl id =
-    try match (handle_of_resource resource_env id) with
-      | Some(source, _, File (filename), _) ->
+    match (handle_of_resource resource_env id) with
+      | Some(source, Handle (_, File (filename), _)) ->
         if source then [id, In(Some(open_in filename))]
         else [id, Out(Some(open_out filename))]
       
-      | Some(source, _, Network addr, _) ->
+      | Some(_, Stream(_, ConstStream e)) -> 
+          [id, InConst(ref @: K3Util.list_of_k3_container e)]
+
+      | Some(_, Stream(_, RandomStream i)) -> [id, InRand(ref i)]
+
+      | Some(_, Handle(_, Network addr, _)) ->
         failwith "network handles not supported in the K3 interpreter"
-      
+
       | _ -> []
-    with Not_found -> []
   in
   let close_channel_impl id =
     try match List.assoc id resource_impl_env with
@@ -93,14 +123,16 @@ let initialize_resources resource_env resource_impl_env d =
  * and a list of failed resources *)
 let next_value resource_env resource_impl_env resource_ids =
   let random_element l = List.nth l (Random.int (List.length l)) in
-  let channel_of_impl id = match List.assoc id resource_impl_env with
-    | In(Some(c)) -> c
+  let channel_of_impl id = let chan = List.assoc id resource_impl_env in
+    match chan with
+    | In _ | InConst _  | InRand _ -> chan
     | _ -> failwith "invalid channel for access"
   in
   let access_resource id = match handle_of_resource resource_env id with
-    | Some (true, t, ct, cf) ->
-      (try pull_source id t (ct,cf) (channel_of_impl id)
-       with Not_found -> None)
+    | Some (true, ((Handle (t, _, _) | Stream (t, _)) as x)) ->
+       begin try pull_source id t x (channel_of_impl id)
+             with Not_found -> None
+       end
     | _ -> None
   in
   let track_failed_access result_none_f finished id = match access_resource id with

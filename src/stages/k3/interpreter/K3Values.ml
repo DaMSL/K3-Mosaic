@@ -4,6 +4,7 @@ open Printing
 open K3.AST
 open K3Util
 open K3Printing
+open K3Helpers
 
 exception RuntimeError of int
 
@@ -109,3 +110,54 @@ let print_program_env (trigger_env,val_env) =
 let string_of_env env = wrap_formatter (fun () -> print_env env)
 
 let string_of_program_env env = wrap_formatter (fun () -> print_program_env env)
+
+(* conversion of things to values *)
+let value_of_const = function
+  | CUnknown -> VUnknown
+  | CUnit -> VUnit
+  | CBool b -> VBool b
+  | CInt i -> VInt i
+  | CFloat f -> VFloat f
+  | CString s -> VString s
+  | CAddress (ip,port) -> VAddress (ip,port)
+  | CTarget id -> VTarget id
+  | CNothing -> VOption None
+
+let rec type_of_value uuid value = 
+  let typ_fst vs = type_of_value uuid @: List.hd vs in
+  match value with
+  | VUnknown -> canonical TUnknown
+  | VUnit -> t_unit
+  | VBool b -> t_bool
+  | VInt _ -> t_int
+  | VFloat _ -> t_float
+  | VByte _ -> t_string
+  | VString _ -> t_string
+  | VAddress (_,_) -> t_addr
+  | VTarget id -> canonical @: TTarget(TUnknown) (* We don't have the ids *)
+  | VOption None -> wrap_tmaybe @: canonical TUnknown
+  | VOption (Some v) -> wrap_tmaybe @: type_of_value uuid v
+  | VTuple vs -> wrap_ttuple @: List.map (type_of_value uuid ) vs
+  | VSet vs -> wrap_tset @: typ_fst vs
+  | VList vs -> wrap_tlist @: typ_fst vs
+  | VBag vs -> wrap_tbag @: typ_fst vs
+  | VFunction _ -> raise (RuntimeError uuid)
+
+let rec expr_of_value uuid value = match value with
+  | VUnknown -> mk_const CUnknown
+  | VUnit -> mk_const CUnit
+  | VBool b -> mk_const @: CBool b
+  | VInt i -> mk_const @: CInt i
+  | VFloat f -> mk_const @: CFloat f
+  | VByte b -> mk_const @: CString(string_of_int @: Char.code b)
+  | VString s -> mk_const @: CString s
+  | VAddress (ip,port) -> mk_const @: CAddress (ip,port)
+  | VTarget id -> mk_const @: CTarget id
+  | VOption(None) -> mk_const @: CNothing
+  | VOption(Some v) -> mk_just @: expr_of_value uuid v
+  | VTuple vs -> mk_tuple @: List.map (expr_of_value uuid) vs
+  | VSet vs | VList vs | VBag vs -> 
+     let l = List.map (expr_of_value uuid) vs in
+     k3_container_of_list (type_of_value uuid value) l
+  | VFunction _ -> raise (RuntimeError uuid)
+
