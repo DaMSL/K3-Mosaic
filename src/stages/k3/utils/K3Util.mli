@@ -65,6 +65,8 @@ val decompose_sort : expr_t -> expr_t * expr_t
 val decompose_tuple : expr_t -> expr_t list
 val decompose_update : expr_t -> expr_t * expr_t * expr_t
 
+val decompose_role : declaration_t * 'a -> id_t * flow_program_t
+
 (* Declaration accessors *)
 val is_global : declaration_t * 'a -> bool
 val is_foreign : declaration_t * 'a -> bool
@@ -94,6 +96,8 @@ val trigger_of_program  : id_t -> program_t -> flow_endpoint_t
 val id_of_code : flow_endpoint_t -> id_t
 val expr_of_code : flow_endpoint_t -> expr_t
 val args_of_code : flow_endpoint_t -> arg_t
+
+val id_of_role : declaration_t * 'a -> id_t
 
 (* Returns all variables in an expression *)
 val vars_of_expr      : expr_t -> expr_t list

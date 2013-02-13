@@ -251,7 +251,7 @@ let declare_global_funcs partmap p =
 
 (* Trigger that's called once, on system init *)
 let on_init_trig p =
-  mk_code_sink "on_init" (wrap_args ["_", t_unit]) [] @:
+  mk_code_sink "on_init" (wrap_args ["x", t_int]) [] @:
     mk_block
       [mk_iter 
         (mk_lambda 
@@ -926,7 +926,19 @@ let demux_trigs ast =
   (* assume all demux are flow sinks too *)
   in List.map (fun c -> mk_no_anno @: Sink(c)) demux_ts
 
-let orig_roles_of_ast ast = List.filter (fun d -> U.is_role d || U.is_def_role d) ast
+(* we take the existing default role and prepend it with a one-shot to
+ * call out on-init function *)
+let modified_roles ast = 
+  let roles = List.filter (fun d -> U.is_role d || U.is_def_role d) ast in
+  let def_role_id = U.id_of_role @: List.find U.is_def_role roles in
+  let pred = fun d -> U.is_role d && U.id_of_role d = def_role_id in
+  let def_role = List.find pred roles in 
+  let other_roles = List.filter (not |- pred) roles in
+  let (_, flow_prog) = U.decompose_role def_role in
+  (mk_role def_role_id @:
+    mk_const_stream "s_on_init" t_int [mk_const (CInt 1)] ::
+    mk_bind "s_on_init" "on_init" ::
+    mk_consume "s_on_init" :: flow_prog) :: other_roles
 
 (* Generate all the code for a specific trigger *)
 let gen_dist_for_t p ast trig =
@@ -958,6 +970,6 @@ let gen_dist p partmap ast =
       regular_trigs@
       send_corrective_trigs p@
       demux_trigs ast)::    (* per-map basis *)
-    orig_roles_of_ast ast
+      modified_roles ast
   in U.renumber_program_ids prog
 

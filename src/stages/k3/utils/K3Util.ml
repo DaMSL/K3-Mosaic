@@ -223,6 +223,8 @@ let decompose_tuple e = match tag_of_expr e with
 let decompose_update e = match tag_of_expr e with 
   Update -> (nth e 0, nth e 1, nth e 2) | _ -> failwith "not an Update"
 
+let decompose_role (d,_) = match d with
+  Role (id, fp) -> (id, fp) | _ -> failwith "not a role"
 
 let match_declaration id match_f l =
   let m = List.filter match_f l
@@ -290,6 +292,10 @@ let expr_of_code = function
 let args_of_code = function
   Code (_, a, _, _) -> a
   | _ -> invalid_arg "args_of_trig: not a trigger"
+
+let id_of_role (d, _) = match d with
+  Role (id, _) | DefaultRole id -> id
+  | _ -> failwith "not a role or defaultrole"
 
 
 

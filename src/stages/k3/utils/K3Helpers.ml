@@ -218,18 +218,46 @@ let mk_update collection old_val new_val =
 let mk_peek collection = mk_stree Peek [collection]
 
 (* left: TRef, right: T/TRef *)
-let mk_assign left right =
-    mk_stree Assign [left; right]
-;;
+let mk_assign left right = mk_stree Assign [left; right]
 
-let mk_deref ref =
-    mk_stree Deref [ref]
-;;
+let mk_deref ref = mk_stree Deref [ref]
 
 (* target:TTarget(T) address:TAdress args:T *)
-let mk_send target address args =
-    mk_stree Send [target; address; args]
-;;
+let mk_send target address args = mk_stree Send [target; address; args]
+
+(* Macros to make role related stuff *)
+let mk_const_stream id typ l = 
+    (* copy from K3Util to prevent circularity *)
+    let rec k3_container_of_list typ = function
+    | [] -> mk_empty typ
+    | [x] -> mk_singleton typ x
+    | x::xs -> mk_combine (k3_container_of_list typ [x]) @: 
+        k3_container_of_list typ xs
+    in
+    mk_no_anno @:
+    Source(Resource(id, Stream(TValue(typ),
+        ConstStream(k3_container_of_list (wrap_tlist typ) l))))
+
+let mk_random_stream id typ len = mk_no_anno @:
+    Source(Resource(id, Stream(TValue(typ), RandomStream len)))
+
+let mk_file_handle id typ path ?(is_json=false) is_sink =
+    let t = Resource(id, Handle(TValue(typ), File path, 
+                if is_json then JSON else CSV))
+    in if is_sink then mk_no_anno @: Sink t
+       else mk_no_anno @: Source t
+
+let mk_net_handle id typ addr ?(is_json=false) is_sink =
+    let t = Resource(id, Handle(TValue(typ), Network addr, if is_json then JSON else CSV))
+    in if is_sink then mk_no_anno @: Sink t
+       else mk_no_anno @: Source t
+
+let mk_bind id1 id2 = mk_no_anno @: Bind(id1, id2)
+
+let mk_consume id = mk_no_anno @: Instruction(Consume id)
+
+let mk_role id flowprog = mk_no_anno @: Role (id, flowprog)
+    
 
 (* Macros to do more complex tasks ---- *)
 

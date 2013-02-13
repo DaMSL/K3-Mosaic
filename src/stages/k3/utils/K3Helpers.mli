@@ -94,6 +94,18 @@ val mk_assign : expr_t -> expr_t -> expr_t
 val mk_deref : expr_t -> expr_t
 val mk_send : expr_t -> expr_t -> expr_t -> expr_t
 
+(* smart role constructors *)
+val mk_const_stream : id_t -> value_type_t -> expr_t list -> flow_statement_t *
+    annotation_t
+val mk_random_stream : id_t -> value_type_t -> int -> flow_statement_t * annotation_t
+val mk_file_handle : id_t -> value_type_t -> string -> ?is_json:bool -> bool ->
+    flow_statement_t * annotation_t
+val mk_net_handle : id_t -> value_type_t -> address -> ?is_json:bool -> bool ->
+    flow_statement_t * annotation_t
+val mk_bind : id_t -> id_t -> flow_statement_t * annotation_t
+val mk_consume : id_t -> flow_statement_t * annotation_t
+val mk_role : id_t -> flow_program_t -> declaration_t * annotation_t
+
 (* extract only the types from a list of (id, type) *)
 val extract_arg_types : ('a * 'b) list -> 'b list
 
@@ -207,3 +219,4 @@ val mk_unwrap_maybe: (id_t * value_type_t) list -> expr_t -> expr_t
 
 (* id function for maps. No need fill in a tuple creation *)
 val mk_id: value_type_t list -> expr_t
+

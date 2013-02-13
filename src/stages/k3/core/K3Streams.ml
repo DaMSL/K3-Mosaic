@@ -248,7 +248,7 @@ let compile_dispatcher resource_env resource_bindings fsm_env p =
 	  states, pre_entry_of_state (List.hd states)
   in
   let terminal_f id on_success on_fail bindings r = match r with
-    | (true, Handle _) ->
+    | (true, Handle _) | (true, Stream _) ->
       let match_action = F.Output (A.Source(A.Dispatch(bindings), [id])) in
       let fail_action = F.Output (A.Source(A.Fail,[id])) in 
       [gen_state_sym(),
