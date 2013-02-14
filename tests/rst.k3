@@ -1,0 +1,1092 @@
+declare ATIMESD : {int} = {0}
+
+declare ATIMESD_mT1 : {(int, int)}
+
+declare ATIMESD_mT1_mR1 : {(int, int, int)}
+
+declare ATIMESD_mS1 : {(int, int)}
+
+declare ATIMESD_mS2 : {(int, int)}
+
+declare ATIMESD_mR1 : {(int, int)}
+
+trigger insert_T(T_C:int, T_D:int) {} = do {
+  let existing_out_tier:{int} = ATIMESD in
+  let __prod_ret__1:int =
+    let wrapped_lookup_value:{(int, int)} = ATIMESD_mT1[(T_C, _)] in
+    if wrapped_lookup_value == {}
+    then 0
+    else let (_, projected_field:int) = peek(wrapped_lookup_value) in
+      projected_field * T_D in
+  let update_value:int = peek(existing_out_tier) + __prod_ret__1 in
+  do {
+    iterate(\value:int -> delete(ATIMESD, value), ATIMESD[_]);
+    insert(ATIMESD, update_value)
+    };
+  let existing_out_tier:{(int, int)} = ATIMESD_mS2 in
+  let __val_ret__2:int = T_D in
+  let update_value:int =
+    let wrapped_lookup_value:{(int, int)} = existing_out_tier[(T_C, _)] in
+    if wrapped_lookup_value == {}
+    then 0
+    else let (_, projected_field:int) = peek(wrapped_lookup_value) in
+      projected_field + __val_ret__2 in
+  do {
+    iterate
+      (\(T_C:int, value:int) -> delete(ATIMESD_mS2, (T_C, value)),
+      ATIMESD_mS2[(T_C, _)]);
+    insert(ATIMESD_mS2, T_C, update_value)
+    };
+  let existing_out_tier:{(int, int)} = ATIMESD_mR1 in
+  iterate
+    (\(ATIMESD_mRR_B:int, __prod_ret__2:int) ->
+         let update_value:int =
+           let wrapped_lookup_value:{(int, int)} =
+             existing_out_tier[(ATIMESD_mRR_B, _)] in
+           if wrapped_lookup_value == {}
+           then 0
+           else let (_, projected_field:int) = peek(wrapped_lookup_value) in
+             projected_field + __prod_ret__2 in do {
+           iterate
+             (\(ATIMESD_mRR_B:int, value:int) ->
+                  delete(ATIMESD_mR1, (ATIMESD_mRR_B, value)),
+             ATIMESD_mR1[(ATIMESD_mRR_B, _)]);
+           insert(ATIMESD_mR1, ATIMESD_mRR_B, update_value)
+           },
+    map
+      (\(ATIMESD_mRR_B:int, __map_ret__2:int) ->
+           (ATIMESD_mRR_B, __map_ret__2 * T_D),
+      map
+        (\(ATIMESD_mRR_B:int, T_C:int, __map_ret__2:int) ->
+             (ATIMESD_mRR_B, __map_ret__2),
+        ATIMESD_mT1_mR1[(_, T_C, _)])))
+  }
+
+trigger delete_T(T_C:int, T_D:int) {} = do {
+  let existing_out_tier:{int} = ATIMESD in
+  let __prod_ret__4:int =
+    let wrapped_lookup_value:{(int, int)} = ATIMESD_mT1[(T_C, _)] in
+    if wrapped_lookup_value == {}
+    then 0
+    else let (_, projected_field:int) = peek(wrapped_lookup_value) in
+      projected_field * (-T_D) in
+  let update_value:int = peek(existing_out_tier) + __prod_ret__4 in
+  do {
+    iterate(\value:int -> delete(ATIMESD, value), ATIMESD[_]);
+    insert(ATIMESD, update_value)
+    };
+  let existing_out_tier:{(int, int)} = ATIMESD_mS2 in
+  let __prod_ret__5:int = -T_D in
+  let update_value:int =
+    let wrapped_lookup_value:{(int, int)} = existing_out_tier[(T_C, _)] in
+    if wrapped_lookup_value == {}
+    then 0
+    else let (_, projected_field:int) = peek(wrapped_lookup_value) in
+      projected_field + __prod_ret__5 in
+  do {
+    iterate
+      (\(T_C:int, value:int) -> delete(ATIMESD_mS2, (T_C, value)),
+      ATIMESD_mS2[(T_C, _)]);
+    insert(ATIMESD_mS2, T_C, update_value)
+    };
+  let existing_out_tier:{(int, int)} = ATIMESD_mR1 in
+  iterate
+    (\(ATIMESD_mRR_B:int, __prod_ret__7:int) ->
+         let update_value:int =
+           let wrapped_lookup_value:{(int, int)} =
+             existing_out_tier[(ATIMESD_mRR_B, _)] in
+           if wrapped_lookup_value == {}
+           then 0
+           else let (_, projected_field:int) = peek(wrapped_lookup_value) in
+             projected_field + __prod_ret__7 in do {
+           iterate
+             (\(ATIMESD_mRR_B:int, value:int) ->
+                  delete(ATIMESD_mR1, (ATIMESD_mRR_B, value)),
+             ATIMESD_mR1[(ATIMESD_mRR_B, _)]);
+           insert(ATIMESD_mR1, ATIMESD_mRR_B, update_value)
+           },
+    map
+      (\(ATIMESD_mRR_B:int, __map_ret__4:int) ->
+           (ATIMESD_mRR_B, __map_ret__4 * (-T_D)),
+      map
+        (\(ATIMESD_mRR_B:int, T_C:int, __map_ret__4:int) ->
+             (ATIMESD_mRR_B, __map_ret__4),
+        ATIMESD_mT1_mR1[(_, T_C, _)])))
+  }
+
+trigger insert_S(S_B:int, S_C:int) {} = do {
+  let existing_out_tier:{int} = ATIMESD in
+  let __prod_ret__8:int =
+    let wrapped_lookup_value:{(int, int)} = ATIMESD_mS1[(S_B, _)] in
+    if wrapped_lookup_value == {}
+    then 0
+    else let (_, projected_field:int) = peek(wrapped_lookup_value) in
+      projected_field *
+    let wrapped_lookup_value:{(int, int)} = ATIMESD_mS2[(S_C, _)] in
+    if wrapped_lookup_value == {}
+    then 0
+    else let (_, projected_field:int) = peek(wrapped_lookup_value) in
+      projected_field in
+  let update_value:int = peek(existing_out_tier) + __prod_ret__8 in
+  do {
+    iterate(\value:int -> delete(ATIMESD, value), ATIMESD[_]);
+    insert(ATIMESD, update_value)
+    };
+  let existing_out_tier:{(int, int)} = ATIMESD_mT1 in
+  let __map_ret__7:int =
+    let wrapped_lookup_value:{(int, int)} = ATIMESD_mS1[(S_B, _)] in
+    if wrapped_lookup_value == {}
+    then 0
+    else let (_, projected_field:int) = peek(wrapped_lookup_value) in
+      projected_field in
+  let update_value:int =
+    let wrapped_lookup_value:{(int, int)} = existing_out_tier[(S_C, _)] in
+    if wrapped_lookup_value == {}
+    then 0
+    else let (_, projected_field:int) = peek(wrapped_lookup_value) in
+      projected_field + __map_ret__7 in
+  do {
+    iterate
+      (\(S_C:int, value:int) -> delete(ATIMESD_mT1, (S_C, value)),
+      ATIMESD_mT1[(S_C, _)]);
+    insert(ATIMESD_mT1, S_C, update_value)
+    };
+  let existing_out_tier:{(int, int, int)} = ATIMESD_mT1_mR1 in
+  let __val_ret__10:int = 1 in
+  let update_value:int =
+    let wrapped_lookup_value:{(int, int, int)} = existing_out_tier[(S_B, S_C, 
+      _)] in
+    if wrapped_lookup_value == {}
+    then 0
+    else let (_, _, projected_field:int) = peek(wrapped_lookup_value) in
+      projected_field + __val_ret__10 in
+  do {
+    iterate
+      (\(S_B:int, S_C:int, value:int) ->
+           delete(ATIMESD_mT1_mR1, (S_B, S_C, value)),
+      ATIMESD_mT1_mR1[(S_B, S_C, _)]);
+    insert(ATIMESD_mT1_mR1, S_B, S_C, update_value)
+    };
+  let existing_out_tier:{(int, int)} = ATIMESD_mR1 in
+  let __map_ret__8:int =
+    let wrapped_lookup_value:{(int, int)} = ATIMESD_mS2[(S_C, _)] in
+    if wrapped_lookup_value == {}
+    then 0
+    else let (_, projected_field:int) = peek(wrapped_lookup_value) in
+      projected_field in
+  let update_value:int =
+    let wrapped_lookup_value:{(int, int)} = existing_out_tier[(S_B, _)] in
+    if wrapped_lookup_value == {}
+    then 0
+    else let (_, projected_field:int) = peek(wrapped_lookup_value) in
+      projected_field + __map_ret__8 in
+  do {
+    iterate
+      (\(S_B:int, value:int) -> delete(ATIMESD_mR1, (S_B, value)),
+      ATIMESD_mR1[(S_B, _)]);
+    insert(ATIMESD_mR1, S_B, update_value)
+    }
+  }
+
+trigger delete_S(S_B:int, S_C:int) {} = do {
+  let existing_out_tier:{int} = ATIMESD in
+  let __prod_ret__10:int =
+    (let wrapped_lookup_value:{(int, int)} = ATIMESD_mS1[(S_B, _)] in
+    if wrapped_lookup_value == {}
+    then 0
+    else let (_, projected_field:int) = peek(wrapped_lookup_value) in
+      projected_field *
+    let wrapped_lookup_value:{(int, int)} = ATIMESD_mS2[(S_C, _)] in
+    if wrapped_lookup_value == {}
+    then 0
+    else let (_, projected_field:int) = peek(wrapped_lookup_value) in
+      projected_field) * -1 in
+  let update_value:int = peek(existing_out_tier) + __prod_ret__10 in
+  do {
+    iterate(\value:int -> delete(ATIMESD, value), ATIMESD[_]);
+    insert(ATIMESD, update_value)
+    };
+  let existing_out_tier:{(int, int)} = ATIMESD_mT1 in
+  let __prod_ret__11:int =
+    let wrapped_lookup_value:{(int, int)} = ATIMESD_mS1[(S_B, _)] in
+    if wrapped_lookup_value == {}
+    then 0
+    else let (_, projected_field:int) = peek(wrapped_lookup_value) in
+      projected_field * -1 in
+  let update_value:int =
+    let wrapped_lookup_value:{(int, int)} = existing_out_tier[(S_C, _)] in
+    if wrapped_lookup_value == {}
+    then 0
+    else let (_, projected_field:int) = peek(wrapped_lookup_value) in
+      projected_field + __prod_ret__11 in
+  do {
+    iterate
+      (\(S_C:int, value:int) -> delete(ATIMESD_mT1, (S_C, value)),
+      ATIMESD_mT1[(S_C, _)]);
+    insert(ATIMESD_mT1, S_C, update_value)
+    };
+  let existing_out_tier:{(int, int, int)} = ATIMESD_mT1_mR1 in
+  let __val_ret__13:int = -1 in
+  let update_value:int =
+    let wrapped_lookup_value:{(int, int, int)} = existing_out_tier[(S_B, S_C, 
+      _)] in
+    if wrapped_lookup_value == {}
+    then 0
+    else let (_, _, projected_field:int) = peek(wrapped_lookup_value) in
+      projected_field + __val_ret__13 in
+  do {
+    iterate
+      (\(S_B:int, S_C:int, value:int) ->
+           delete(ATIMESD_mT1_mR1, (S_B, S_C, value)),
+      ATIMESD_mT1_mR1[(S_B, S_C, _)]);
+    insert(ATIMESD_mT1_mR1, S_B, S_C, update_value)
+    };
+  let existing_out_tier:{(int, int)} = ATIMESD_mR1 in
+  let __prod_ret__12:int =
+    let wrapped_lookup_value:{(int, int)} = ATIMESD_mS2[(S_C, _)] in
+    if wrapped_lookup_value == {}
+    then 0
+    else let (_, projected_field:int) = peek(wrapped_lookup_value) in
+      projected_field * -1 in
+  let update_value:int =
+    let wrapped_lookup_value:{(int, int)} = existing_out_tier[(S_B, _)] in
+    if wrapped_lookup_value == {}
+    then 0
+    else let (_, projected_field:int) = peek(wrapped_lookup_value) in
+      projected_field + __prod_ret__12 in
+  do {
+    iterate
+      (\(S_B:int, value:int) -> delete(ATIMESD_mR1, (S_B, value)),
+      ATIMESD_mR1[(S_B, _)]);
+    insert(ATIMESD_mR1, S_B, update_value)
+    }
+  }
+
+trigger insert_R(R_A:int, R_B:int) {} = do {
+  let existing_out_tier:{int} = ATIMESD in
+  let __prod_ret__13:int =
+    let wrapped_lookup_value:{(int, int)} = ATIMESD_mR1[(R_B, _)] in
+    if wrapped_lookup_value == {}
+    then 0
+    else let (_, projected_field:int) = peek(wrapped_lookup_value) in
+      projected_field * R_A in
+  let update_value:int = peek(existing_out_tier) + __prod_ret__13 in
+  do {
+    iterate(\value:int -> delete(ATIMESD, value), ATIMESD[_]);
+    insert(ATIMESD, update_value)
+    };
+  let existing_out_tier:{(int, int)} = ATIMESD_mT1 in
+  iterate
+    (\(ATIMESD_mTT_C:int, __prod_ret__14:int) ->
+         let update_value:int =
+           let wrapped_lookup_value:{(int, int)} =
+             existing_out_tier[(ATIMESD_mTT_C, _)] in
+           if wrapped_lookup_value == {}
+           then 0
+           else let (_, projected_field:int) = peek(wrapped_lookup_value) in
+             projected_field + __prod_ret__14 in do {
+           iterate
+             (\(ATIMESD_mTT_C:int, value:int) ->
+                  delete(ATIMESD_mT1, (ATIMESD_mTT_C, value)),
+             ATIMESD_mT1[(ATIMESD_mTT_C, _)]);
+           insert(ATIMESD_mT1, ATIMESD_mTT_C, update_value)
+           },
+    map
+      (\(ATIMESD_mTT_C:int, __map_ret__14:int) ->
+           (ATIMESD_mTT_C, __map_ret__14 * R_A),
+      map
+        (\(R_B:int, ATIMESD_mTT_C:int, __map_ret__14:int) ->
+             (ATIMESD_mTT_C, __map_ret__14),
+        ATIMESD_mT1_mR1[(R_B, _, _)])));
+  let existing_out_tier:{(int, int)} = ATIMESD_mS1 in
+  let __val_ret__17:int = R_A in
+  let update_value:int =
+    let wrapped_lookup_value:{(int, int)} = existing_out_tier[(R_B, _)] in
+    if wrapped_lookup_value == {}
+    then 0
+    else let (_, projected_field:int) = peek(wrapped_lookup_value) in
+      projected_field + __val_ret__17 in
+  do {
+    iterate
+      (\(R_B:int, value:int) -> delete(ATIMESD_mS1, (R_B, value)),
+      ATIMESD_mS1[(R_B, _)]);
+    insert(ATIMESD_mS1, R_B, update_value)
+    }
+  }
+
+trigger delete_R(R_A:int, R_B:int) {} = do {
+  let existing_out_tier:{int} = ATIMESD in
+  let __prod_ret__16:int =
+    let wrapped_lookup_value:{(int, int)} = ATIMESD_mR1[(R_B, _)] in
+    if wrapped_lookup_value == {}
+    then 0
+    else let (_, projected_field:int) = peek(wrapped_lookup_value) in
+      projected_field * (-R_A) in
+  let update_value:int = peek(existing_out_tier) + __prod_ret__16 in
+  do {
+    iterate(\value:int -> delete(ATIMESD, value), ATIMESD[_]);
+    insert(ATIMESD, update_value)
+    };
+  let existing_out_tier:{(int, int)} = ATIMESD_mT1 in
+  iterate
+    (\(ATIMESD_mTT_C:int, __prod_ret__18:int) ->
+         let update_value:int =
+           let wrapped_lookup_value:{(int, int)} =
+             existing_out_tier[(ATIMESD_mTT_C, _)] in
+           if wrapped_lookup_value == {}
+           then 0
+           else let (_, projected_field:int) = peek(wrapped_lookup_value) in
+             projected_field + __prod_ret__18 in do {
+           iterate
+             (\(ATIMESD_mTT_C:int, value:int) ->
+                  delete(ATIMESD_mT1, (ATIMESD_mTT_C, value)),
+             ATIMESD_mT1[(ATIMESD_mTT_C, _)]);
+           insert(ATIMESD_mT1, ATIMESD_mTT_C, update_value)
+           },
+    map
+      (\(ATIMESD_mTT_C:int, __map_ret__16:int) ->
+           (ATIMESD_mTT_C, __map_ret__16 * (-R_A)),
+      map
+        (\(R_B:int, ATIMESD_mTT_C:int, __map_ret__16:int) ->
+             (ATIMESD_mTT_C, __map_ret__16),
+        ATIMESD_mT1_mR1[(R_B, _, _)])));
+  let existing_out_tier:{(int, int)} = ATIMESD_mS1 in
+  let __prod_ret__19:int = -R_A in
+  let update_value:int =
+    let wrapped_lookup_value:{(int, int)} = existing_out_tier[(R_B, _)] in
+    if wrapped_lookup_value == {}
+    then 0
+    else let (_, projected_field:int) = peek(wrapped_lookup_value) in
+      projected_field + __prod_ret__19 in
+  do {
+    iterate
+      (\(R_B:int, value:int) -> delete(ATIMESD_mS1, (R_B, value)),
+      ATIMESD_mS1[(R_B, _)]);
+    insert(ATIMESD_mS1, R_B, update_value)
+    }
+  }
+
+trigger correct_ATIMESD_mR1_for_insert_R(delta_ATIMESD_mRR_B:int, 
+                                         delta_ATIMESD_mR1:int, R_A:int, 
+                                         R_B:int) {} = do {
+  let existing_out_tier:{int} = ATIMESD in
+  let __prod_ret__21:int = ((if R_B == delta_ATIMESD_mRR_B then 1 else 0) *
+    delta_ATIMESD_mR1) * R_A in
+  let update_value:int = peek(existing_out_tier) + __prod_ret__21 in
+  do {
+    iterate(\value:int -> delete(ATIMESD, value), ATIMESD[_]);
+    insert(ATIMESD, update_value)
+    }
+  }
+
+trigger correct_ATIMESD_mT1_mR1_for_insert_R(delta_ATIMESD_mT1_mRR_B:int, 
+                                             delta_ATIMESD_mTT_C:int, 
+                                             delta_ATIMESD_mT1_mR1:int, 
+                                             R_A:int, R_B:int) {} = do {
+  let existing_out_tier:{(int, int)} = ATIMESD_mT1 in
+  let __prod_ret__23:int = ((if R_B == delta_ATIMESD_mT1_mRR_B then 1 else 0) *
+    delta_ATIMESD_mT1_mR1) * R_A in
+  let update_value:int =
+    let wrapped_lookup_value:{(int, int)} =
+      existing_out_tier[(delta_ATIMESD_mTT_C, _)] in
+    if wrapped_lookup_value == {}
+    then 0
+    else let (_, projected_field:int) = peek(wrapped_lookup_value) in
+      projected_field + __prod_ret__23 in
+  do {
+    iterate
+      (\(delta_ATIMESD_mTT_C:int, value:int) ->
+           delete(ATIMESD_mT1, (delta_ATIMESD_mTT_C, value)),
+      ATIMESD_mT1[(delta_ATIMESD_mTT_C, _)]);
+    insert(ATIMESD_mT1, delta_ATIMESD_mTT_C, update_value)
+    }
+  }
+
+trigger correct_ATIMESD_mR1_for_delete_R(delta_ATIMESD_mRR_B:int, 
+                                         delta_ATIMESD_mR1:int, R_A:int, 
+                                         R_B:int) {} = do {
+  let existing_out_tier:{int} = ATIMESD in
+  let __prod_ret__26:int = (if R_B == delta_ATIMESD_mRR_B then 1 else 0) *
+    ((-delta_ATIMESD_mR1) * R_A) in
+  let update_value:int = peek(existing_out_tier) + __prod_ret__26 in
+  do {
+    iterate(\value:int -> delete(ATIMESD, value), ATIMESD[_]);
+    insert(ATIMESD, update_value)
+    }
+  }
+
+trigger correct_ATIMESD_mT1_mR1_for_delete_R(delta_ATIMESD_mT1_mRR_B:int, 
+                                             delta_ATIMESD_mTT_C:int, 
+                                             delta_ATIMESD_mT1_mR1:int, 
+                                             R_A:int, R_B:int) {} = do {
+  let existing_out_tier:{(int, int)} = ATIMESD_mT1 in
+  let __prod_ret__29:int = (if R_B == delta_ATIMESD_mT1_mRR_B then 1 else 0) *
+    ((-delta_ATIMESD_mT1_mR1) * R_A) in
+  let update_value:int =
+    let wrapped_lookup_value:{(int, int)} =
+      existing_out_tier[(delta_ATIMESD_mTT_C, _)] in
+    if wrapped_lookup_value == {}
+    then 0
+    else let (_, projected_field:int) = peek(wrapped_lookup_value) in
+      projected_field + __prod_ret__29 in
+  do {
+    iterate
+      (\(delta_ATIMESD_mTT_C:int, value:int) ->
+           delete(ATIMESD_mT1, (delta_ATIMESD_mTT_C, value)),
+      ATIMESD_mT1[(delta_ATIMESD_mTT_C, _)]);
+    insert(ATIMESD_mT1, delta_ATIMESD_mTT_C, update_value)
+    }
+  }
+
+trigger correct_ATIMESD_mS1_for_insert_S(delta_ATIMESD_mSS_B:int, 
+                                         delta_ATIMESD_mS1:int, S_B:int, 
+                                         S_C:int) {} = do {
+  let existing_out_tier:{int} = ATIMESD in
+  let __prod_ret__31:int = ((if S_B == delta_ATIMESD_mSS_B then 1 else 0) *
+    let wrapped_lookup_value:{(int, int)} = ATIMESD_mS2[(S_C, _)] in
+    if wrapped_lookup_value == {}
+    then 0
+    else let (_, projected_field:int) = peek(wrapped_lookup_value) in
+      projected_field) * delta_ATIMESD_mS1 in
+  let update_value:int = peek(existing_out_tier) + __prod_ret__31 in
+  do {
+    iterate(\value:int -> delete(ATIMESD, value), ATIMESD[_]);
+    insert(ATIMESD, update_value)
+    };
+  let existing_out_tier:{(int, int)} = ATIMESD_mT1 in
+  let __prod_ret__32:int = (if S_B == delta_ATIMESD_mSS_B then 1 else 0) *
+    delta_ATIMESD_mS1 in
+  let update_value:int =
+    let wrapped_lookup_value:{(int, int)} = existing_out_tier[(S_C, _)] in
+    if wrapped_lookup_value == {}
+    then 0
+    else let (_, projected_field:int) = peek(wrapped_lookup_value) in
+      projected_field + __prod_ret__32 in
+  do {
+    iterate
+      (\(S_C:int, value:int) -> delete(ATIMESD_mT1, (S_C, value)),
+      ATIMESD_mT1[(S_C, _)]);
+    insert(ATIMESD_mT1, S_C, update_value)
+    };
+  let existing_out_tier:{int} = ATIMESD in
+  let __prod_ret__34:int = ((if S_B == delta_ATIMESD_mSS_B then 1 else 0) *
+    let wrapped_lookup_value:{(int, int)} = ATIMESD_mS2[(S_C, _)] in
+    if wrapped_lookup_value == {}
+    then 0
+    else let (_, projected_field:int) = peek(wrapped_lookup_value) in
+      projected_field) * delta_ATIMESD_mS1 in
+  let update_value:int = peek(existing_out_tier) + __prod_ret__34 in
+  do {
+    iterate(\value:int -> delete(ATIMESD, value), ATIMESD[_]);
+    insert(ATIMESD, update_value)
+    };
+  let existing_out_tier:{(int, int)} = ATIMESD_mT1 in
+  let __prod_ret__35:int = (if S_B == delta_ATIMESD_mSS_B then 1 else 0) *
+    delta_ATIMESD_mS1 in
+  let update_value:int =
+    let wrapped_lookup_value:{(int, int)} = existing_out_tier[(S_C, _)] in
+    if wrapped_lookup_value == {}
+    then 0
+    else let (_, projected_field:int) = peek(wrapped_lookup_value) in
+      projected_field + __prod_ret__35 in
+  do {
+    iterate
+      (\(S_C:int, value:int) -> delete(ATIMESD_mT1, (S_C, value)),
+      ATIMESD_mT1[(S_C, _)]);
+    insert(ATIMESD_mT1, S_C, update_value)
+    }
+  }
+
+trigger correct_ATIMESD_mS2_for_insert_S(delta_ATIMESD_mSS_C:int, 
+                                         delta_ATIMESD_mS2:int, S_B:int, 
+                                         S_C:int) {} = do {
+  let existing_out_tier:{int} = ATIMESD in
+  let __prod_ret__37:int = ((if S_C == delta_ATIMESD_mSS_C then 1 else 0) *
+    let wrapped_lookup_value:{(int, int)} = ATIMESD_mS1[(S_B, _)] in
+    if wrapped_lookup_value == {}
+    then 0
+    else let (_, projected_field:int) = peek(wrapped_lookup_value) in
+      projected_field) * delta_ATIMESD_mS2 in
+  let update_value:int = peek(existing_out_tier) + __prod_ret__37 in
+  do {
+    iterate(\value:int -> delete(ATIMESD, value), ATIMESD[_]);
+    insert(ATIMESD, update_value)
+    };
+  let existing_out_tier:{(int, int)} = ATIMESD_mR1 in
+  let __prod_ret__38:int = (if S_C == delta_ATIMESD_mSS_C then 1 else 0) *
+    delta_ATIMESD_mS2 in
+  let update_value:int =
+    let wrapped_lookup_value:{(int, int)} = existing_out_tier[(S_B, _)] in
+    if wrapped_lookup_value == {}
+    then 0
+    else let (_, projected_field:int) = peek(wrapped_lookup_value) in
+      projected_field + __prod_ret__38 in
+  do {
+    iterate
+      (\(S_B:int, value:int) -> delete(ATIMESD_mR1, (S_B, value)),
+      ATIMESD_mR1[(S_B, _)]);
+    insert(ATIMESD_mR1, S_B, update_value)
+    };
+  let existing_out_tier:{int} = ATIMESD in
+  let __prod_ret__40:int = ((if S_C == delta_ATIMESD_mSS_C then 1 else 0) *
+    let wrapped_lookup_value:{(int, int)} = ATIMESD_mS1[(S_B, _)] in
+    if wrapped_lookup_value == {}
+    then 0
+    else let (_, projected_field:int) = peek(wrapped_lookup_value) in
+      projected_field) * delta_ATIMESD_mS2 in
+  let update_value:int = peek(existing_out_tier) + __prod_ret__40 in
+  do {
+    iterate(\value:int -> delete(ATIMESD, value), ATIMESD[_]);
+    insert(ATIMESD, update_value)
+    };
+  let existing_out_tier:{(int, int)} = ATIMESD_mR1 in
+  let __prod_ret__41:int = (if S_C == delta_ATIMESD_mSS_C then 1 else 0) *
+    delta_ATIMESD_mS2 in
+  let update_value:int =
+    let wrapped_lookup_value:{(int, int)} = existing_out_tier[(S_B, _)] in
+    if wrapped_lookup_value == {}
+    then 0
+    else let (_, projected_field:int) = peek(wrapped_lookup_value) in
+      projected_field + __prod_ret__41 in
+  do {
+    iterate
+      (\(S_B:int, value:int) -> delete(ATIMESD_mR1, (S_B, value)),
+      ATIMESD_mR1[(S_B, _)]);
+    insert(ATIMESD_mR1, S_B, update_value)
+    }
+  }
+
+trigger correct_ATIMESD_mS1_for_delete_S(delta_ATIMESD_mSS_B:int, 
+                                         delta_ATIMESD_mS1:int, S_B:int, 
+                                         S_C:int) {} = do {
+  let existing_out_tier:{int} = ATIMESD in
+  let __prod_ret__44:int = ((if S_B == delta_ATIMESD_mSS_B then 1 else 0) *
+    let wrapped_lookup_value:{(int, int)} = ATIMESD_mS2[(S_C, _)] in
+    if wrapped_lookup_value == {}
+    then 0
+    else let (_, projected_field:int) = peek(wrapped_lookup_value) in
+      projected_field) * (-delta_ATIMESD_mS1) in
+  let update_value:int = peek(existing_out_tier) + __prod_ret__44 in
+  do {
+    iterate(\value:int -> delete(ATIMESD, value), ATIMESD[_]);
+    insert(ATIMESD, update_value)
+    };
+  let existing_out_tier:{(int, int)} = ATIMESD_mT1 in
+  let __prod_ret__46:int = (if S_B == delta_ATIMESD_mSS_B then 1 else 0) *
+    (-delta_ATIMESD_mS1) in
+  let update_value:int =
+    let wrapped_lookup_value:{(int, int)} = existing_out_tier[(S_C, _)] in
+    if wrapped_lookup_value == {}
+    then 0
+    else let (_, projected_field:int) = peek(wrapped_lookup_value) in
+      projected_field + __prod_ret__46 in
+  do {
+    iterate
+      (\(S_C:int, value:int) -> delete(ATIMESD_mT1, (S_C, value)),
+      ATIMESD_mT1[(S_C, _)]);
+    insert(ATIMESD_mT1, S_C, update_value)
+    };
+  let existing_out_tier:{int} = ATIMESD in
+  let __prod_ret__49:int = ((if S_B == delta_ATIMESD_mSS_B then 1 else 0) *
+    let wrapped_lookup_value:{(int, int)} = ATIMESD_mS2[(S_C, _)] in
+    if wrapped_lookup_value == {}
+    then 0
+    else let (_, projected_field:int) = peek(wrapped_lookup_value) in
+      projected_field) * (-delta_ATIMESD_mS1) in
+  let update_value:int = peek(existing_out_tier) + __prod_ret__49 in
+  do {
+    iterate(\value:int -> delete(ATIMESD, value), ATIMESD[_]);
+    insert(ATIMESD, update_value)
+    };
+  let existing_out_tier:{(int, int)} = ATIMESD_mT1 in
+  let __prod_ret__51:int = (if S_B == delta_ATIMESD_mSS_B then 1 else 0) *
+    (-delta_ATIMESD_mS1) in
+  let update_value:int =
+    let wrapped_lookup_value:{(int, int)} = existing_out_tier[(S_C, _)] in
+    if wrapped_lookup_value == {}
+    then 0
+    else let (_, projected_field:int) = peek(wrapped_lookup_value) in
+      projected_field + __prod_ret__51 in
+  do {
+    iterate
+      (\(S_C:int, value:int) -> delete(ATIMESD_mT1, (S_C, value)),
+      ATIMESD_mT1[(S_C, _)]);
+    insert(ATIMESD_mT1, S_C, update_value)
+    }
+  }
+
+trigger correct_ATIMESD_mS2_for_delete_S(delta_ATIMESD_mSS_C:int, 
+                                         delta_ATIMESD_mS2:int, S_B:int, 
+                                         S_C:int) {} = do {
+  let existing_out_tier:{int} = ATIMESD in
+  let __prod_ret__54:int = ((if S_C == delta_ATIMESD_mSS_C then 1 else 0) *
+    let wrapped_lookup_value:{(int, int)} = ATIMESD_mS1[(S_B, _)] in
+    if wrapped_lookup_value == {}
+    then 0
+    else let (_, projected_field:int) = peek(wrapped_lookup_value) in
+      projected_field) * (-delta_ATIMESD_mS2) in
+  let update_value:int = peek(existing_out_tier) + __prod_ret__54 in
+  do {
+    iterate(\value:int -> delete(ATIMESD, value), ATIMESD[_]);
+    insert(ATIMESD, update_value)
+    };
+  let existing_out_tier:{(int, int)} = ATIMESD_mR1 in
+  let __prod_ret__56:int = (if S_C == delta_ATIMESD_mSS_C then 1 else 0) *
+    (-delta_ATIMESD_mS2) in
+  let update_value:int =
+    let wrapped_lookup_value:{(int, int)} = existing_out_tier[(S_B, _)] in
+    if wrapped_lookup_value == {}
+    then 0
+    else let (_, projected_field:int) = peek(wrapped_lookup_value) in
+      projected_field + __prod_ret__56 in
+  do {
+    iterate
+      (\(S_B:int, value:int) -> delete(ATIMESD_mR1, (S_B, value)),
+      ATIMESD_mR1[(S_B, _)]);
+    insert(ATIMESD_mR1, S_B, update_value)
+    };
+  let existing_out_tier:{int} = ATIMESD in
+  let __prod_ret__59:int = ((if S_C == delta_ATIMESD_mSS_C then 1 else 0) *
+    let wrapped_lookup_value:{(int, int)} = ATIMESD_mS1[(S_B, _)] in
+    if wrapped_lookup_value == {}
+    then 0
+    else let (_, projected_field:int) = peek(wrapped_lookup_value) in
+      projected_field) * (-delta_ATIMESD_mS2) in
+  let update_value:int = peek(existing_out_tier) + __prod_ret__59 in
+  do {
+    iterate(\value:int -> delete(ATIMESD, value), ATIMESD[_]);
+    insert(ATIMESD, update_value)
+    };
+  let existing_out_tier:{(int, int)} = ATIMESD_mR1 in
+  let __prod_ret__61:int = (if S_C == delta_ATIMESD_mSS_C then 1 else 0) *
+    (-delta_ATIMESD_mS2) in
+  let update_value:int =
+    let wrapped_lookup_value:{(int, int)} = existing_out_tier[(S_B, _)] in
+    if wrapped_lookup_value == {}
+    then 0
+    else let (_, projected_field:int) = peek(wrapped_lookup_value) in
+      projected_field + __prod_ret__61 in
+  do {
+    iterate
+      (\(S_B:int, value:int) -> delete(ATIMESD_mR1, (S_B, value)),
+      ATIMESD_mR1[(S_B, _)]);
+    insert(ATIMESD_mR1, S_B, update_value)
+    }
+  }
+
+trigger correct_ATIMESD_mT1_for_insert_T(delta_ATIMESD_mTT_C:int, 
+                                         delta_ATIMESD_mT1:int, T_C:int, 
+                                         T_D:int) {} = do {
+  let existing_out_tier:{int} = ATIMESD in
+  let __prod_ret__63:int = ((if T_C == delta_ATIMESD_mTT_C then 1 else 0) *
+    delta_ATIMESD_mT1) * T_D in
+  let update_value:int = peek(existing_out_tier) + __prod_ret__63 in
+  do {
+    iterate(\value:int -> delete(ATIMESD, value), ATIMESD[_]);
+    insert(ATIMESD, update_value)
+    }
+  }
+
+trigger correct_ATIMESD_mT1_mR1_for_insert_T(delta_ATIMESD_mT1_mRR_B:int, 
+                                             delta_ATIMESD_mTT_C:int, 
+                                             delta_ATIMESD_mT1_mR1:int, 
+                                             T_C:int, T_D:int) {} = do {
+  let existing_out_tier:{(int, int)} = ATIMESD_mR1 in
+  let __prod_ret__65:int = ((if T_C == delta_ATIMESD_mTT_C then 1 else 0) *
+    delta_ATIMESD_mT1_mR1) * T_D in
+  let update_value:int =
+    let wrapped_lookup_value:{(int, int)} =
+      existing_out_tier[(delta_ATIMESD_mT1_mRR_B, _)] in
+    if wrapped_lookup_value == {}
+    then 0
+    else let (_, projected_field:int) = peek(wrapped_lookup_value) in
+      projected_field + __prod_ret__65 in
+  do {
+    iterate
+      (\(delta_ATIMESD_mT1_mRR_B:int, value:int) ->
+           delete(ATIMESD_mR1, (delta_ATIMESD_mT1_mRR_B, value)),
+      ATIMESD_mR1[(delta_ATIMESD_mT1_mRR_B, _)]);
+    insert(ATIMESD_mR1, delta_ATIMESD_mT1_mRR_B, update_value)
+    }
+  }
+
+trigger correct_ATIMESD_mT1_for_delete_T(delta_ATIMESD_mTT_C:int, 
+                                         delta_ATIMESD_mT1:int, T_C:int, 
+                                         T_D:int) {} = do {
+  let existing_out_tier:{int} = ATIMESD in
+  let __prod_ret__68:int = (if T_C == delta_ATIMESD_mTT_C then 1 else 0) *
+    ((-delta_ATIMESD_mT1) * T_D) in
+  let update_value:int = peek(existing_out_tier) + __prod_ret__68 in
+  do {
+    iterate(\value:int -> delete(ATIMESD, value), ATIMESD[_]);
+    insert(ATIMESD, update_value)
+    }
+  }
+
+trigger correct_ATIMESD_mT1_mR1_for_delete_T(delta_ATIMESD_mT1_mRR_B:int, 
+                                             delta_ATIMESD_mTT_C:int, 
+                                             delta_ATIMESD_mT1_mR1:int, 
+                                             T_C:int, T_D:int) {} = do {
+  let existing_out_tier:{(int, int)} = ATIMESD_mR1 in
+  let __prod_ret__71:int = (if T_C == delta_ATIMESD_mTT_C then 1 else 0) *
+    ((-delta_ATIMESD_mT1_mR1) * T_D) in
+  let update_value:int =
+    let wrapped_lookup_value:{(int, int)} =
+      existing_out_tier[(delta_ATIMESD_mT1_mRR_B, _)] in
+    if wrapped_lookup_value == {}
+    then 0
+    else let (_, projected_field:int) = peek(wrapped_lookup_value) in
+      projected_field + __prod_ret__71 in
+  do {
+    iterate
+      (\(delta_ATIMESD_mT1_mRR_B:int, value:int) ->
+           delete(ATIMESD_mR1, (delta_ATIMESD_mT1_mRR_B, value)),
+      ATIMESD_mR1[(delta_ATIMESD_mT1_mRR_B, _)]);
+    insert(ATIMESD_mR1, delta_ATIMESD_mT1_mRR_B, update_value)
+    }
+  }
+
+trigger demux_T(T_C:int, T_D:int) {} =
+  send(insert_T, me, T_C, T_D)
+
+trigger demux_S(S_B:int, S_C:int) {} =
+  send(insert_S, me, S_B, S_C)
+
+trigger demux_R(R_A:int, R_B:int) {} =
+  send(insert_R, me, R_A, R_B)
+
+trigger go(id:int) {} = do {
+  send(insert_S, me, 85261, 386732);
+  send(insert_S, me, 266242, 534);
+  send(insert_S, me, 129861, 388652);
+  send(insert_S, me, 255847, 509713);
+  send(insert_R, me, 348801, 275113);
+  send(insert_T, me, 534, 460242);
+  send(insert_T, me, 33267, 6731);
+  send(insert_T, me, 85539, 59470);
+  send(insert_R, me, 951237, 309219);
+  send(insert_R, me, 48553, 825085);
+  send(insert_S, me, 275113, 867793);
+  send(insert_T, me, 11535, 135737);
+  send(insert_T, me, 11535, 184770);
+  send(insert_R, me, 983294, 962065);
+  send(insert_R, me, 77485, 411660);
+  send(insert_T, me, 11535, 526884);
+  send(insert_T, me, 19980, 309839);
+  send(insert_R, me, 747015, 830427);
+  send(insert_R, me, 499983, 109103);
+  send(insert_T, me, 22289, 432033);
+  send(insert_T, me, 22300, 791800);
+  send(insert_T, me, 25321, 303012);
+  send(insert_R, me, 418099, 93179);
+  send(insert_T, me, 25321, 841635);
+  send(insert_T, me, 25321, 951657);
+  send(insert_S, me, 898049, 25321);
+  send(insert_R, me, 399532, 412673);
+  send(insert_R, me, 503267, 978306);
+  send(insert_R, me, 290570, 822804);
+  send(insert_R, me, 763258, 539327);
+  send(insert_S, me, 217581, 126580);
+  send(insert_R, me, 816263, 957346);
+  send(insert_S, me, 411660, 566410);
+  send(insert_R, me, 355046, 861476);
+  send(insert_T, me, 28359, 274232);
+  send(insert_S, me, 723, 337850);
+  send(insert_R, me, 725546, 129861);
+  send(insert_T, me, 28359, 369840);
+  send(insert_S, me, 22667, 136360);
+  send(insert_T, me, 33267, 190927);
+  send(insert_R, me, 635750, 454093);
+  send(insert_R, me, 920947, 902431);
+  send(insert_R, me, 645938, 69253);
+  send(insert_S, me, 122039, 246916);
+  send(insert_S, me, 89934, 109810);
+  send(insert_T, me, 337850, 16826);
+  send(insert_S, me, 632591, 980550);
+  send(insert_T, me, 337850, 63589);
+  send(insert_S, me, 532970, 835080);
+  send(insert_S, me, 526145, 289422);
+  send(insert_T, me, 53059, 261644);
+  send(insert_R, me, 969615, 131567);
+  send(insert_S, me, 957346, 743851);
+  send(insert_S, me, 416460, 449383);
+  send(insert_R, me, 907190, 794129);
+  send(insert_T, me, 55136, 253506);
+  send(insert_S, me, 267288, 996944);
+  send(insert_S, me, 159222, 244954);
+  send(insert_R, me, 579359, 526145);
+  send(insert_S, me, 84706, 239238);
+  send(insert_T, me, 55136, 430159);
+  send(insert_R, me, 424682, 210118);
+  send(insert_R, me, 482903, 939659);
+  send(insert_T, me, 55136, 584123);
+  send(insert_T, me, 563257, 90920);
+  send(insert_S, me, 89934, 563257);
+  send(insert_T, me, 725893, 94732);
+  send(insert_T, me, 743851, 86692);
+  send(insert_R, me, 385657, 461079);
+  send(insert_R, me, 944343, 281578);
+  send(insert_S, me, 281578, 562236);
+  send(insert_R, me, 684179, 267288);
+  send(insert_T, me, 83184, 192304);
+  send(insert_S, me, 999338, 235370);
+  send(insert_R, me, 582053, 999338);
+  send(insert_T, me, 91975, 638823);
+  send(insert_R, me, 732105, 941445);
+  send(insert_T, me, 91975, 784332);
+  send(insert_T, me, 988983, 65747);
+  send(insert_S, me, 174397, 139481);
+  send(insert_S, me, 504903, 697149);
+  send(insert_T, me, 136360, 511668);
+  send(insert_S, me, 794129, 105863);
+  send(insert_R, me, 110898, 297729);
+  send(insert_S, me, 354689, 691693);
+  send(insert_S, me, 335334, 758056);
+  send(insert_R, me, 849600, 174397);
+  send(insert_T, me, 136360, 850718);
+  send(insert_S, me, 354689, 84150);
+  send(insert_S, me, 377394, 311688);
+  send(insert_R, me, 211404, 22667);
+  send(insert_S, me, 723, 57389);
+  send(insert_R, me, 341545, 13760);
+  send(insert_R, me, 262366, 354689);
+  send(insert_S, me, 22667, 35496);
+  send(insert_T, me, 152964, 309930);
+  send(insert_S, me, 898049, 85539);
+  send(insert_S, me, 238878, 369501);
+  send(insert_R, me, 250689, 630054);
+  send(insert_R, me, 216274, 72548);
+  send(insert_R, me, 247330, 319995);
+  send(insert_T, me, 152964, 404864);
+  send(insert_S, me, 977014, 22289);
+  send(insert_S, me, 238878, 698414);
+  send(insert_S, me, 319995, 91975);
+  send(insert_T, me, 152964, 429087);
+  send(insert_R, me, 416581, 313489);
+  send(insert_T, me, 152964, 441856);
+  send(insert_R, me, 89529, 519065);
+  send(insert_S, me, 733710, 105128);
+  send(insert_S, me, 830427, 780325);
+  send(insert_T, me, 176195, 783286);
+  send(insert_T, me, 224511, 173808);
+  send(insert_R, me, 191040, 733710);
+  send(insert_R, me, 198481, 977014);
+  send(insert_R, me, 940025, 723);
+  send(insert_R, me, 125368, 851060);
+  send(insert_T, me, 224511, 218046);
+  send(insert_R, me, 962355, 753587);
+  send(insert_R, me, 565875, 312248);
+  send(insert_T, me, 224511, 239068);
+  send(insert_S, me, 335334, 453717);
+  send(insert_S, me, 47077, 83184);
+  send(insert_T, me, 235370, 329362);
+  send(insert_T, me, 235370, 467053);
+  send(insert_T, me, 239238, 382331);
+  send(insert_S, me, 861476, 841977);
+  send(insert_T, me, 244954, 737468);
+  send(insert_R, me, 186278, 447076);
+  send(insert_T, me, 246916, 902636);
+  send(insert_T, me, 260144, 345449);
+  send(insert_T, me, 281179, 549857);
+  send(insert_S, me, 297729, 691049);
+  send(insert_R, me, 543691, 51939);
+  send(insert_T, me, 298428, 166631);
+  send(insert_S, me, 990773, 152964);
+  send(insert_R, me, 106118, 208577);
+  send(insert_T, me, 319103, 164361);
+  send(insert_S, me, 461079, 452858);
+  send(insert_T, me, 337368, 252532);
+  send(insert_T, me, 345695, 251015);
+  send(insert_T, me, 369501, 230854);
+  send(insert_S, me, 13760, 319103);
+  send(insert_T, me, 375055, 169477);
+  send(insert_R, me, 809629, 238878);
+  send(insert_T, me, 375055, 228745);
+  send(insert_S, me, 122039, 606302);
+  send(insert_T, me, 375055, 870527);
+  send(insert_S, me, 319995, 53059);
+  send(insert_R, me, 577815, 898049);
+  send(insert_R, me, 136708, 516106);
+  send(insert_S, me, 319995, 721836);
+  send(insert_T, me, 386732, 975124);
+  send(insert_T, me, 452858, 147400);
+  send(insert_T, me, 452858, 329425);
+  send(insert_S, me, 267288, 597490);
+  send(insert_T, me, 453717, 803736);
+  send(insert_R, me, 306233, 552634);
+  send(insert_R, me, 45337, 122039);
+  send(insert_T, me, 500647, 818038);
+  send(insert_T, me, 503147, 874539);
+  send(insert_R, me, 521664, 683083);
+  send(insert_T, me, 503147, 907854);
+  send(insert_R, me, 320069, 504903);
+  send(insert_S, me, 238878, 811560);
+  send(insert_T, me, 562236, 728297);
+  send(insert_R, me, 397412, 532970);
+  send(insert_S, me, 354689, 224511);
+  send(insert_S, me, 939659, 108644);
+  send(insert_T, me, 566410, 127303);
+  send(insert_S, me, 93179, 758203);
+  send(insert_S, me, 119611, 493369);
+  send(insert_R, me, 991772, 583886);
+  send(insert_R, me, 94990, 632471);
+  send(insert_T, me, 589150, 730508);
+  send(insert_S, me, 93179, 988983);
+  send(insert_R, me, 53521, 876203);
+  send(insert_S, me, 411660, 503147);
+  send(insert_T, me, 597490, 922172);
+  send(insert_T, me, 599375, 689096);
+  send(insert_S, me, 461079, 644488);
+  send(insert_T, me, 644488, 377339);
+  send(insert_T, me, 644488, 602940);
+  send(insert_S, me, 281578, 738241);
+  send(insert_S, me, 588389, 11535);
+  send(insert_T, me, 679748, 519154);
+  send(insert_R, me, 370242, 335334);
+  send(insert_T, me, 691049, 892431);
+  send(insert_T, me, 691049, 949001);
+  send(insert_S, me, 902431, 500647);
+  send(insert_T, me, 691693, 435742);
+  send(insert_R, me, 597770, 986286);
+  send(insert_R, me, 535587, 990773);
+  send(insert_R, me, 90930, 699373);
+  send(insert_T, me, 691693, 501406);
+  send(insert_S, me, 535867, 33267);
+  send(insert_T, me, 697149, 320136);
+  send(insert_T, me, 698414, 644598);
+  send(insert_R, me, 813090, 966743);
+  send(insert_S, me, 962065, 981518);
+  send(insert_R, me, 975974, 255847);
+  send(insert_R, me, 292646, 377394);
+  send(insert_T, me, 707231, 142400);
+  send(insert_S, me, 275113, 694152);
+  send(insert_T, me, 707231, 609932);
+  send(insert_S, me, 321795, 55136);
+  send(insert_S, me, 266242, 337368);
+  send(insert_T, me, 738241, 184394);
+  send(insert_T, me, 743743, 841478);
+  send(insert_R, me, 482280, 496874);
+  send(insert_T, me, 743851, 897938);
+  send(insert_R, me, 548375, 926052);
+  send(insert_S, me, 926052, 345695);
+  send(insert_T, me, 758056, 796671);
+  send(insert_S, me, 377394, 583285);
+  send(insert_T, me, 758203, 514903);
+  send(insert_R, me, 487449, 416460);
+  send(insert_R, me, 289117, 159222);
+  send(insert_T, me, 758203, 627054);
+  send(insert_T, me, 758203, 674930);
+  send(insert_T, me, 785649, 223089);
+  send(insert_R, me, 107912, 664385);
+  send(insert_T, me, 785649, 373441);
+  send(insert_R, me, 369284, 720656);
+  send(insert_T, me, 785649, 815439);
+  send(insert_T, me, 811560, 312188);
+  send(insert_T, me, 811560, 752213);
+  send(insert_S, me, 583886, 739663);
+  send(insert_S, me, 501356, 815354);
+  send(insert_T, me, 825726, 242519);
+  send(insert_R, me, 283460, 97578);
+  send(insert_S, me, 535867, 456322);
+  send(insert_R, me, 566895, 588389);
+  send(insert_R, me, 559328, 385185);
+  send(insert_S, me, 588389, 311085);
+  send(insert_R, me, 128176, 47077);
+  send(insert_R, me, 206365, 910167);
+  send(insert_T, me, 835080, 205295);
+  send(insert_R, me, 175839, 904654);
+  send(insert_T, me, 841977, 260271);
+  send(insert_R, me, 468629, 89934);
+  send(insert_T, me, 841977, 859541);
+  send(insert_T, me, 863488, 775822);
+  send(insert_R, me, 719066, 822800);
+  send(insert_T, me, 867793, 305019);
+  send(insert_T, me, 980550, 970705);
+  send(insert_R, me, 315639, 119611);
+  send(insert_T, me, 987034, 243134);
+  send(insert_T, me, 987034, 709744);
+  send(insert_T, me, 987034, 957950);
+  send(insert_R, me, 424663, 268160);
+  send(insert_S, me, 297729, 138286);
+  send(insert_S, me, 851060, 260144);
+  send(insert_S, me, 876203, 424644);
+  send(insert_S, me, 632471, 28359);
+  send(insert_R, me, 553949, 465991);
+  send(insert_R, me, 623274, 632591);
+  send(insert_T, me, 988983, 422341);
+  send(insert_R, me, 654825, 217581);
+  send(insert_R, me, 579966, 85261);
+  send(insert_R, me, 930141, 953028);
+  send(insert_R, me, 105538, 86617);
+  send(insert_R, me, 239620, 535867);
+  send(insert_S, me, 720656, 725893);
+  send(insert_T, me, 988983, 586633);
+  send(insert_S, me, 416460, 679748);
+  send(insert_S, me, 319995, 22300);
+  send(insert_S, me, 122039, 599375);
+  send(insert_S, me, 977014, 987034);
+  send(insert_R, me, 802027, 266242);
+  send(insert_S, me, 275113, 707231);
+  send(insert_S, me, 953028, 667521);
+  send(insert_S, me, 86617, 176195);
+  send(insert_R, me, 376538, 121072);
+  send(insert_S, me, 794129, 863488);
+  send(insert_R, me, 231684, 191043);
+  send(insert_R, me, 275096, 321795);
+  send(insert_S, me, 910167, 342546);
+  send(insert_S, me, 526145, 526459);
+  send(insert_R, me, 799617, 747352);
+  send(insert_S, me, 532970, 611492);
+  send(insert_S, me, 385185, 440696);
+  send(insert_S, me, 519065, 19980);
+  send(insert_R, me, 206060, 84706);
+  send(insert_R, me, 148964, 63738);
+  send(insert_S, me, 876203, 785649);
+  send(insert_S, me, 454093, 298428);
+  send(insert_R, me, 557578, 501356);
+  send(insert_R, me, 726895, 338096);
+  send(insert_S, me, 131567, 456353);
+  send(insert_S, me, 978306, 825726);
+  send(insert_S, me, 957346, 589150);
+  send(insert_S, me, 208577, 375055);
+  send(insert_R, me, 240656, 91631);
+  send(insert_S, me, 926052, 743743);
+  send(insert_R, me, 123954, 301702);
+  send(insert_S, me, 301702, 878209);
+  send(insert_R, me, 688667, 892551);
+  send(insert_S, me, 210118, 734088);
+  send(insert_S, me, 977014, 281179)
+}
+role test {
+  source s1 : int = stream([1])
+  bind s1 -> go
+  consume s1
+}
+
+default role test
+
+expected
+
+ATIMESD_mR1 = {
+(301702, 0); (385185, 0); (535867, 197658); (990773, 1585737); (354689, 1568070); (84706, 382331); (159222, 737468); (267288, 922172); (122039, 1591732); (275113, 1057351); (85261, 975124); (86617, 783286); (876203, 1411969); (321795, 1267788); (297729, 1841432); (830427, 0); (733710, 0); (794129, 775822); (281578, 912691); (89934, 90920); (723, 80415); (411660, 1909696); (210118, 0); (953028, 0); (902431, 818038); (861476, 1119812); (174397, 0); (999338, 796415); (962065, 0); (632471, 644072); (319995, 2476599); (377394, 0); (335334, 1600407); (532970, 205295); (720656, 94732); (851060, 345449); (238878, 1939853); (208577, 1268749); (977014, 2892718); (526145, 0); (255847, 0); (519065, 309839); (910167, 0); (957346, 1715138); (898049, 2155774); (266242, 712774); (583886, 0); (926052, 1092493); (588389, 847391); (93179, 2891608); (939659, 0); (416460, 519154); (129861, 0); (978306, 242519); (131567, 0); (13760, 164361); (461079, 1457104); (504903, 320136); (632591, 970705); (22667, 1362386); (454093, 166631); (501356, 0); (119611, 0); (47077, 192304); (217581, 0)
+}
+, 
+ATIMESD_mT1 = {
+(878209, 123954); (679748, 487449); (337850, 940025); (449383, 487449); (988983, 418099); (694152, 348801); (509713, 975974); (25321, 577815); (136360, 211404); (785649, 53521); (526459, 579359); (260144, 125368); (386732, 579966); (697149, 320069); (83184, 128176); (33267, 239620); (57389, 940025); (841977, 355046); (239238, 206060); (375055, 106118); (19980, 89529); (500647, 920947); (289422, 579359); (780325, 747015); (235370, 582053); (311688, 292646); (85539, 577815); (691049, 110898); (589150, 816263); (597490, 684179); (758203, 418099); (825726, 503267); (440696, 559328); (152964, 535587); (53059, 247330); (562236, 944343); (337368, 802027); (981518, 983294); (109810, 468629); (319103, 341545); (980550, 623274); (369501, 809629); (281179, 198481); (22300, 247330); (84150, 262366); (246916, 45337); (298428, 635750); (342546, 206365); (815354, 557578); (583285, 292646); (224511, 262366); (758056, 370242); (867793, 348801); (176195, 105538); (987034, 198481); (599375, 45337); (139481, 849600); (244954, 289117); (91975, 247330); (388652, 725546); (22289, 198481); (739663, 991772); (721836, 247330); (691693, 262366); (566410, 77485); (563257, 468629); (743851, 816263); (456353, 969615); (311085, 566895); (503147, 77485); (108644, 482903); (11535, 566895); (345695, 548375); (606302, 45337); (835080, 397412); (738241, 944343); (734088, 424682); (707231, 348801); (725893, 369284); (28359, 94990); (138286, 110898); (105128, 191040); (644488, 385657); (611492, 397412); (863488, 907190); (667521, 930141); (452858, 385657); (534, 802027); (996944, 684179); (743743, 548375); (424644, 53521); (456322, 239620); (105863, 907190); (698414, 809629); (126580, 654825); (35496, 211404); (811560, 809629); (493369, 315639); (453717, 370242); (55136, 275096)
+}
+, 
+ATIMESD = {
+(18753367048934)
+}
+, 
+ATIMESD_mT1_mR1 = {
+(977014, 22289, 1); (319995, 91975, 1); (910167, 342546, 1); (876203, 424644, 1); (297729, 138286, 1); (321795, 55136, 1); (266242, 337368, 1); (238878, 811560, 1); (723, 57389, 1); (297729, 691049, 1); (977014, 281179, 1); (301702, 878209, 1); (385185, 440696, 1); (319995, 22300, 1); (411660, 503147, 1); (723, 337850, 1); (411660, 566410, 1); (22667, 136360, 1); (122039, 599375, 1); (377394, 311688, 1); (159222, 244954, 1); (583886, 739663, 1); (281578, 738241, 1); (926052, 743743, 1); (957346, 589150, 1); (319995, 53059, 1); (266242, 534, 1); (22667, 35496, 1); (504903, 697149, 1); (89934, 563257, 1); (535867, 33267, 1); (526145, 526459, 1); (416460, 679748, 1); (461079, 452858, 1); (13760, 319103, 1); (794129, 105863, 1); (990773, 152964, 1); (461079, 644488, 1); (267288, 597490, 1); (876203, 785649, 1); (794129, 863488, 1); (851060, 260144, 1); (174397, 139481, 1); (588389, 11535, 1); (999338, 235370, 1); (733710, 105128, 1); (275113, 694152, 1); (238878, 369501, 1); (210118, 734088, 1); (532970, 611492, 1); (281578, 562236, 1); (632591, 980550, 1); (238878, 698414, 1); (208577, 375055, 1); (519065, 19980, 1); (86617, 176195, 1); (255847, 509713, 1); (978306, 825726, 1); (977014, 987034, 1); (377394, 583285, 1); (939659, 108644, 1); (902431, 500647, 1); (335334, 453717, 1); (957346, 743851, 1); (93179, 988983, 1); (89934, 109810, 1); (275113, 707231, 1); (267288, 996944, 1); (84706, 239238, 1); (898049, 25321, 1); (962065, 981518, 1); (454093, 298428, 1); (953028, 667521, 1); (632471, 28359, 1); (354689, 691693, 1); (319995, 721836, 1); (861476, 841977, 1); (354689, 84150, 1); (898049, 85539, 1); (122039, 606302, 1); (416460, 449383, 1); (535867, 456322, 1); (926052, 345695, 1); (532970, 835080, 1); (526145, 289422, 1); (131567, 456353, 1); (720656, 725893, 1); (588389, 311085, 1); (335334, 758056, 1); (275113, 867793, 1); (47077, 83184, 1); (119611, 493369, 1); (129861, 388652, 1); (830427, 780325, 1); (501356, 815354, 1); (122039, 246916, 1); (85261, 386732, 1); (354689, 224511, 1); (217581, 126580, 1); (93179, 758203, 1)
+}
+, 
+ATIMESD_mS2 = {
+(369501, 230854); (281179, 549857); (239238, 382331); (136360, 1362386); (55136, 1267788); (25321, 2096304); (22289, 432033); (867793, 305019); (691049, 1841432); (679748, 519154); (589150, 730508); (244954, 737468); (91975, 1423155); (743851, 984630); (835080, 205295); (738241, 184394); (298428, 166631); (83184, 192304); (19980, 309839); (85539, 59470); (987034, 1910828); (758203, 1816887); (644488, 980279); (453717, 803736); (235370, 796415); (563257, 90920); (28359, 644072); (11535, 847391); (841977, 1119812); (758056, 796671); (566410, 127303); (246916, 902636); (725893, 94732); (863488, 775822); (811560, 1064401); (743743, 841478); (707231, 752332); (698414, 644598); (697149, 320136); (562236, 728297); (345695, 251015); (337368, 252532); (260144, 345449); (980550, 970705); (825726, 242519); (386732, 975124); (224511, 630922); (988983, 1074721); (785649, 1411969); (176195, 783286); (33267, 197658); (597490, 922172); (503147, 1782393); (375055, 1268749); (53059, 261644); (534, 460242); (691693, 937148); (599375, 689096); (500647, 818038); (319103, 164361); (452858, 476825); (152964, 1585737); (337850, 80415); (22300, 791800)
+}
+, 
+ATIMESD_mS1 = {
+(321795, 275096); (910167, 206365); (519065, 89529); (822804, 290570); (210118, 424682); (301702, 123954); (217581, 654825); (97578, 283460); (720656, 369284); (461079, 385657); (22667, 211404); (129861, 725546); (723, 940025); (91631, 240656); (953028, 930141); (904654, 175839); (385185, 559328); (312248, 565875); (266242, 802027); (516106, 136708); (941445, 732105); (861476, 355046); (999338, 582053); (957346, 816263); (898049, 577815); (72548, 216274); (377394, 292646); (825085, 48553); (354689, 262366); (121072, 376538); (504903, 320069); (977014, 198481); (496874, 482280); (255847, 975974); (309219, 951237); (990773, 535587); (535867, 239620); (85261, 579966); (13760, 341545); (51939, 543691); (966743, 813090); (412673, 399532); (794129, 907190); (539327, 763258); (174397, 849600); (84706, 206060); (822800, 719066); (416460, 487449); (939659, 482903); (313489, 416581); (89934, 468629); (69253, 645938); (962065, 983294); (338096, 726895); (465991, 553949); (454093, 635750); (683083, 521664); (208577, 106118); (319995, 247330); (532970, 397412); (902431, 920947); (892551, 688667); (630054, 250689); (978306, 503267); (526145, 579359); (281578, 944343); (753587, 962355); (191043, 231684); (109103, 499983); (411660, 77485); (733710, 191040); (501356, 557578); (47077, 128176); (159222, 289117); (632471, 94990); (876203, 53521); (986286, 597770); (588389, 566895); (926052, 548375); (275113, 348801); (122039, 45337); (86617, 105538); (552634, 306233); (93179, 418099); (583886, 991772); (851060, 125368); (335334, 370242); (63738, 148964); (747352, 799617); (268160, 424663); (131567, 969615); (830427, 747015); (297729, 110898); (267288, 684179); (632591, 623274); (119611, 315639); (664385, 107912); (447076, 186278); (699373, 90930); (238878, 809629)
+}
