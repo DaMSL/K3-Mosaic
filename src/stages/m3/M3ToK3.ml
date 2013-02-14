@@ -50,6 +50,13 @@ let m3_type_to_k3_type (t:T.type_t) =
 let mk_k3_tuple (elems:K.value_type_t list) =
    KT.canonical (K.TTuple(elems))
 
+let init_val_from_type t =
+  begin match KT.base_of t with
+    | K.TInt   -> KH.mk_const (K.CInt(0))
+    | K.TFloat -> KH.mk_const (K.CFloat(0.))
+    | _ -> failwith "Map type with no initial value"
+  end
+
 let mk_k3_collection (base_ivars:K.base_type_t list) 
                      (base_ovars:K.base_type_t list) 
                      (base_v:K.base_type_t) =
@@ -73,7 +80,7 @@ let name_of_kvar kvar =
    end
 
 let m3_map_to_k3_map (m3_map: M3.map_t) : K.declaration_t = 
-   let (coll_name, coll_type) = 
+   let (coll_name, coll_type, coll_ivc) = 
      match m3_map with
         | M3.DSView(ds)                    -> 
            let (map_name, input_vars, output_vars, map_type, _) = 
@@ -82,16 +89,26 @@ let m3_map_to_k3_map (m3_map: M3.map_t) : K.declaration_t =
               let element_type = m3_type_to_k3_base_type map_type in
               let ivar_types = mvar_btypes input_vars in
               let ovar_types = mvar_btypes output_vars in
+              let ivc = if (ivar_types = []) && (ovar_types = [])
+                then Some(
+                    KH.mk_singleton 
+                              (KH.wrap_tset (KT.canonical element_type))
+                              (init_val_from_type (KT.canonical element_type))
+                  )
+                else None
+              in
                 ( map_name,
-                  mk_k3_collection ivar_types ovar_types element_type
+                  mk_k3_collection ivar_types ovar_types element_type,
+                  ivc                  
                 )
   
         | M3.DSTable(rel_name, rel_schema,_) -> 
                 ( rel_name,
-                  mk_k3_collection [] (mvar_btypes rel_schema) K.TInt
+                  mk_k3_collection [] (mvar_btypes rel_schema) K.TInt,
+                  None
                 )
    in
-      K.Global(coll_name, (K.TValue(coll_type)), None)
+      K.Global(coll_name, (K.TValue(coll_type)), coll_ivc)
 (**/**)
 
 (**********************************************************************)
@@ -108,13 +125,6 @@ let extract_value_type t =
 
 let tvar_to_vtvar (v,vt) =
   (v, extract_value_type vt)
-
-let init_val_from_type t =
-  begin match KT.base_of t with
-    | K.TInt   -> KH.mk_const (K.CInt(0))
-    | K.TFloat -> KH.mk_const (K.CFloat(0.))
-    | _ -> failwith "Map type with no initial value"
-  end
 
 let init_val_from_full_type t = init_val_from_type (extract_value_type t)
 
