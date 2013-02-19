@@ -6,7 +6,7 @@ open K3Util
 open K3Printing
 open K3Helpers
 
-exception RuntimeError of int
+exception RuntimeError of int * string
 
 (* Interpreter representation of values *)
 
@@ -141,7 +141,8 @@ let rec type_of_value uuid value =
   | VSet vs -> wrap_tset @: typ_fst vs
   | VList vs -> wrap_tlist @: typ_fst vs
   | VBag vs -> wrap_tbag @: typ_fst vs
-  | VFunction _ -> raise (RuntimeError uuid)
+  | VFunction _ -> raise (RuntimeError (uuid, 
+      "type_of_value: cannot apply to function"))
 
 let rec expr_of_value uuid value = match value with
   | VUnknown -> mk_const CUnknown
@@ -159,5 +160,7 @@ let rec expr_of_value uuid value = match value with
   | VSet vs | VList vs | VBag vs -> 
      let l = List.map (expr_of_value uuid) vs in
      k3_container_of_list (type_of_value uuid value) l
-  | VFunction _ -> raise (RuntimeError uuid)
+  | VFunction _ -> raise (RuntimeError (uuid, 
+      "expr_of_value: cannot apply to
+  function"))
 

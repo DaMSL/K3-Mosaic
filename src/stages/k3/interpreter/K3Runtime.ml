@@ -23,9 +23,9 @@ let runtime_errors = [
   ]
   
 let error t =
-  try fst (List.assoc t runtime_errors)
-  with Not_found -> -1
-  
+  let (i, s) = try (List.assoc t runtime_errors)
+               with Not_found -> (-1, "K3Runtime: unknown error code")
+  in raise (RuntimeError(i, s))
 
 (* Event queues and scheduling *)
 
@@ -114,7 +114,7 @@ let schedule_trigger v_target v_address args = match v_target, v_address with
       in Queue.push args q;
          schedule_task address (BlockDispatch (trigger_id, dispatch_block_size()))
 
-  | _, _ -> raise (RuntimeError (error INVALID_TRIGGER_TARGET))
+  | _, _ -> error INVALID_TRIGGER_TARGET
 
 let schedule_event source_bindings source_id source_address events =
   let schedule_fn trig_id = schedule_trigger (VTarget trig_id) (VAddress source_address) in 
@@ -144,7 +144,7 @@ let process_trigger_queue address env trigger_id max_to_process =
   while not (Queue.is_empty q) && !processed > 0 do
     try invoke_trigger address env trigger_id (Queue.take q);
         decr processed
-    with Not_found -> raise (RuntimeError (error INVALID_TRIGGER_QUEUE))
+    with Not_found -> error INVALID_TRIGGER_QUEUE
   done;
   if not (Queue.is_empty q) then 
     schedule_task address (BlockDispatch (trigger_id, dispatch_block_size()))
@@ -161,7 +161,7 @@ let process_task address env =
       if use_global_queueing() then ()
       else process_trigger_queue address env id max_to_process
 
-  with Queue.Empty -> raise (RuntimeError (error INVALID_GLOBAL_QUEUE))
+  with Queue.Empty -> error INVALID_GLOBAL_QUEUE
 
 (* Scheduler toplevel methods *)
 let configure_scheduler program_events = 
