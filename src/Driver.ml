@@ -349,9 +349,10 @@ let test params =
       (fun f -> test_expressions f @: parse_expression_test @: read_file f)
     
     | ProgramTest, K3 ->
-      fun f -> let p_test = parse_program_test @: read_file f in
-                begin try test_program f params.node_address params.role p_test
-                with RuntimeError (uuid, str) -> 
+      fun f -> let (p, cond) = parse_program_test @: read_file f in
+               let p_test = (typed_program_with_globals p, cond) in
+               begin try test_program f params.node_address params.role p_test
+               with RuntimeError (uuid, str) -> 
                     handle_interpret_error (fst p_test) (uuid, str) end
     | x,y -> 
       let mode, lang = string_of_test_mode x, string_of_out_lang y
