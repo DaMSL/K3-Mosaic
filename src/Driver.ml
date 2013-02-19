@@ -181,10 +181,15 @@ let handle_parse_error ?(msg = "") lexbuf =
 
 let handle_type_error p (uuid,error) =
   print_endline "----Type error----";
-  print_endline ("Error("^(string_of_int uuid)^"): "^error);
-  print_endline (string_of_program ~print_id:true p);
+  print_endline @: "Error("^(string_of_int uuid)^"): "^error;
+  print_endline @: string_of_program ~print_id:true p;
   exit 1
 
+let handle_interpret_error p uuid =
+  print_endline "----Interpreter error----";
+  print_endline @: "Error("^(string_of_int uuid)^")";
+  print_endline @: string_of_program ~print_id:true p;
+  exit 1
 
 (* Program parsers *)
 let parse_program_from_string parsefn lexfn str =
@@ -254,17 +259,20 @@ let interpret_k3_program params p =
   let tp = typed_program_with_globals p in 
   configure_scheduler params.run_length;
   match params.peers with
-  | [] -> ignore(eval_program params.node_address params.role tp)
+  | []    -> begin try ignore(eval_program params.node_address params.role tp)
+             with RuntimeError uuid -> handle_interpret_error p uuid end
   | nodes -> 
     let peers = 
-      let skip_primary = List.exists (fun (addr,_) -> addr = params.node_address) nodes in
+      let skip_primary = 
+          List.exists (fun (addr,_) -> addr = params.node_address) nodes in
       let ipr = params.node_address, params.role in
       (if skip_primary then [] else [ipr])@nodes
     in 
       List.iter (fun ipr -> 
         print_endline @: "Starting node "^(string_of_address_and_role ipr)
       ) peers;
-      ignore(eval_networked_program peers tp)
+      begin try ignore(eval_networked_program peers tp)
+      with RuntimeError uuid -> handle_interpret_error p uuid end
 
 let interpret params inputs =
   let eval_fn = match params.out_lang with
@@ -340,11 +348,13 @@ let test params =
       (fun f -> test_expressions f @: parse_expression_test @: read_file f)
     
     | ProgramTest, K3 ->
-      (fun f -> test_program f params.node_address params.role @: parse_program_test @: read_file f)
-
+      fun f -> let p_test = parse_program_test @: read_file f in
+                begin try test_program f params.node_address params.role p_test
+                with RuntimeError uuid -> 
+                    handle_interpret_error (fst p_test) uuid end
     | x,y -> 
       let mode, lang = string_of_test_mode x, string_of_out_lang y
-      in error (mode^" testing not yet implemented for "^lang)
+      in error @: mode^" testing not yet implemented for "^lang
   in List.iter test_fn params.input_files
 
 let transform_to_k3_dist partmap p mproginfo = match mproginfo with
