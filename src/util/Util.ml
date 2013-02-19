@@ -68,7 +68,7 @@ let create_range first length =
     List.rev(range_inner first [])
 
 (* make a range that corresponds to a given list *)
-let create_corr_range first xs = create_range 0 @: List.length xs
+let create_corr_range first xs = create_range first @: List.length xs
 
 let insert_index_fst first xs = 
     let is = create_corr_range first xs in
@@ -77,4 +77,3 @@ let insert_index_fst first xs =
 let insert_index_snd first xs = 
     let is = create_corr_range first xs in
     list_zip xs is
-
