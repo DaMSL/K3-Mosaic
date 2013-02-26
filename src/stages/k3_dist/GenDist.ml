@@ -76,7 +76,7 @@ let add_delta_to_buffer_for_map p map_id =
   "add_delta_to_buffer_"^map_name_of p map_id
 
 (* foreign functions *)
-let hash_addr = "hash_address"
+let hash_addr = "hash_addr"
 let foreign_hash_addr = mk_foreign_fn hash_addr t_addr t_int
 let declare_foreign_functions p = foreign_hash_addr::[]
 
@@ -970,6 +970,8 @@ let gen_dist p partmap ast =
       regular_trigs@
       send_corrective_trigs p@
       demux_trigs ast)::    (* per-map basis *)
-      modified_roles ast
-  in U.renumber_program_ids prog
+      modified_roles ast in
+  let foreign = List.filter (fun d -> U.is_foreign d) prog in
+  let rest = List.filter (fun d -> not @: U.is_foreign d) prog in
+  U.renumber_program_ids (foreign @ rest)
 

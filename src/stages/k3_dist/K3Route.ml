@@ -105,9 +105,9 @@ let global_pmaps p partmap =
   mk_global_val_init (pmap_data) full_pmap_types @:
     k3_partition_map_of_list p partmap
 
-let calc_dim_bounds_code = mk_global_fn "calc_dim_bounds" 
-  ["pmap", pmap_types] (*args*) [dim_bounds_type] (* return *) @:
-  mk_fst [dim_bounds_type; t_int] @:
+let calc_dim_bounds_code = 
+  mk_global_fn "calc_dim_bounds" 
+  ["pmap", pmap_types] (*args*) [dim_bounds_type; t_int] (* return *) @:
     mk_agg 
       (mk_assoc_lambda 
         (wrap_args ["xs", wrap_tlist @: wrap_ttuple [t_int; t_int];
@@ -137,7 +137,8 @@ let gen_route_fn p map_id =
     ["_", canonical TUnit]
     [wrap_tlist t_addr] @: (* return *)
       mk_singleton (wrap_tlist t_addr) @:
-        mk_apply (mk_var "get_ring_node") @: mk_const @: CInt 1
+        mk_apply (mk_var "get_ring_node") @:
+          mk_tuple [mk_const @: CInt 1; mk_const @: CInt 1]
   | _  -> (* we have keys *)
   mk_global_fn (route_for p map_id)
     ["key", wrap_ttuple key_types]
@@ -147,7 +148,7 @@ let gen_route_fn p map_id =
         mk_peek @: mk_slice (mk_var pmap_data) @:
           mk_tuple [mk_const @: CInt map_id; mk_const CUnknown]
       ) @:
-    mk_let "dim_bounds" dim_bounds_type 
+    mk_let_many ["dim_bounds", dim_bounds_type; "max_val", t_int]
       (mk_apply (mk_var "calc_dim_bounds") @: mk_var "pmap") @:
     mk_destruct_tuple "key" key_types prefix
     @:
@@ -247,8 +248,8 @@ let gen_route_fn p map_id =
         (mk_empty @: wrap_tlist t_addr) @:
         mk_map
           (mk_lambda (wrap_args ["free_bucket", free_bucket_type]) @:
-            mk_apply (mk_var "get_ring_node") @:
-              mk_agg
+            mk_apply (mk_var "get_ring_node") @: mk_tuple
+              [mk_agg
                 (mk_assoc_lambda (wrap_args ["acc", t_int])
                   (wrap_args ["i", t_int; "val", t_int]) @:
                   mk_add (mk_var "acc") @:
@@ -258,15 +259,16 @@ let gen_route_fn p map_id =
                           mk_tuple [mk_var "i"; mk_const CUnknown]
                 )
                 (mk_var "bound_bucket") @: (* start with this const *)
-                mk_var "free_bucket"
+                mk_var "free_bucket";
+              mk_var "max_val"]
           ) @:
           mk_var "free_cart_prod" 
       ) @:
     mk_if
       (mk_is_empty (mk_var "sorted_ip_list") @: sorted_ip_list_type)
       (mk_singleton (wrap_tlist t_addr) @:
-        mk_apply (mk_var "get_ring_node") @: (* empty ip list *)
-        mk_var "bound_bucket"
+        mk_apply (mk_var "get_ring_node") @: mk_tuple (* empty ip list *)
+          [mk_var "bound_bucket"; mk_var "max_val"]
       ) @:
       mk_map
         (mk_lambda 

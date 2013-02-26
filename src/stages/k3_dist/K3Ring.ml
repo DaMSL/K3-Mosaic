@@ -22,9 +22,13 @@ let replicas_code = mk_global_val replicas_nm t_int_mut
 
 let ring_foreign_funcs = 
   mk_foreign_fn "hash_string" t_string t_int ::
-  mk_foreign_fn "string_concat" (wrap_ttuple @: [t_string;t_string]) t_string ::
+  mk_foreign_fn "string_concat" (wrap_ttuple [t_string;t_string]) t_string ::
   mk_foreign_fn "string_of_int" t_int t_string ::
   mk_foreign_fn "string_of_address" t_addr t_string ::
+  mk_foreign_fn "int_of_float" t_float t_int::
+  mk_foreign_fn "float_of_int" t_int t_float ::
+  mk_foreign_fn "div_float" (wrap_ttuple [t_float;t_float]) t_float ::
+  mk_foreign_fn "get_max_int" t_unit t_int ::
   []
 
 (* function to set the number of replicas *)
@@ -79,15 +83,28 @@ let remove_node_code =
         ) @:
         mk_var "nodes_to_delete"
 
-(* function to get the node for a hashed value. Returns the node's address *)
+(* function to get the node for an int. Returns the node's address *)
 let get_ring_node_code = 
   mk_global_fn "get_ring_node"
-  ["data", t_int] [t_addr] @:
+  ["data", t_int; "max_val", t_int] [t_addr] @:
+  mk_let "scaled" t_int
+    (mk_apply (mk_var "int_of_float") @: 
+      mk_mult
+        (mk_apply (mk_var "float_of_int") @: 
+          mk_apply (mk_var "get_max_int") @: mk_const CUnit) @:
+        mk_sub 
+          (mk_apply (mk_var "div_float") @: mk_tuple
+             [mk_apply (mk_var "float_of_int") @:
+                 mk_mult (mk_const @: CInt 2) @: mk_var "data";
+             mk_apply (mk_var "float_of_int") @: mk_var "max_val"]
+          )
+          (mk_const @: CFloat 1.0)
+    ) @:
   mk_let "results" t_ring 
     (mk_filtermap (* filter to only hashes greater than data *)
       (mk_lambda
         (wrap_args @: id_t_node) @:
-        mk_geq (mk_var "hash") (mk_var "data")
+        mk_geq (mk_var "hash") (mk_var "scaled")
       )
       (mk_id t_node) @:
       mk_var node_ring_nm
@@ -101,9 +118,9 @@ let get_ring_node_code =
     mk_var "address"
 
 let gen_ring_code =
+  ring_foreign_funcs @
   node_ring_code ::
   replicas_code ::
-  ring_foreign_funcs @
   set_replicas_code ::
   add_node_code ::
   remove_node_code ::
