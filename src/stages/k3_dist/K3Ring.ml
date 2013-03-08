@@ -21,13 +21,11 @@ let replicas_nm = "replicas"
 let replicas_code = mk_global_val replicas_nm t_int_mut
 
 let ring_foreign_funcs = 
-  mk_foreign_fn "hash_string" t_string t_int ::
-  mk_foreign_fn "string_concat" (wrap_ttuple [t_string;t_string]) t_string ::
-  mk_foreign_fn "string_of_int" t_int t_string ::
-  mk_foreign_fn "string_of_address" t_addr t_string ::
+  mk_foreign_fn "hash_int" t_int t_int ::
+  mk_foreign_fn "hash_addr" t_addr t_int ::
   mk_foreign_fn "int_of_float" t_float t_int::
   mk_foreign_fn "float_of_int" t_int t_float ::
-  mk_foreign_fn "div_float" (wrap_ttuple [t_float;t_float]) t_float ::
+  mk_foreign_fn "divf" (wrap_ttuple [t_float;t_float]) t_float ::
   mk_foreign_fn "get_max_int" t_unit t_int ::
   []
 
@@ -51,12 +49,9 @@ let add_node_code =
       (mk_lambda (wrap_args ["i", t_int]) @:
         mk_tuple @:
           ids_to_vars id_node_no_hash @
-            [mk_apply (mk_var "hash_string") @: 
-              mk_apply (mk_var "string_concat") @:
-                mk_tuple
-                  [mk_apply (mk_var "string_of_address") @: mk_var "address";
-                    mk_apply (mk_var "string_of_int") @: mk_var "i"
-                  ]
+            [mk_apply (mk_var "hash_int") @:
+                mk_add (mk_var "i") @:
+                    (mk_apply (mk_var "hash_addr") @: mk_var "address")
             ]
       ) @:
       mk_var "range"
@@ -84,6 +79,7 @@ let remove_node_code =
         mk_var "nodes_to_delete"
 
 (* function to get the node for an int. Returns the node's address *)
+(* note about scaling: ocaml's hash function's range is 0 to max_int *)
 let get_ring_node_code = 
   mk_global_fn "get_ring_node"
   ["data", t_int; "max_val", t_int] [t_addr] @:
@@ -92,13 +88,9 @@ let get_ring_node_code =
       mk_mult
         (mk_apply (mk_var "float_of_int") @: 
           mk_apply (mk_var "get_max_int") @: mk_const CUnit) @:
-        mk_sub 
-          (mk_apply (mk_var "div_float") @: mk_tuple
-             [mk_apply (mk_var "float_of_int") @:
-                 mk_mult (mk_const @: CInt 2) @: mk_var "data";
-             mk_apply (mk_var "float_of_int") @: mk_var "max_val"]
-          )
-          (mk_const @: CFloat 1.0)
+        mk_apply (mk_var "divf") @: mk_tuple
+          [mk_apply (mk_var "float_of_int") @: mk_var "data";
+          mk_apply (mk_var "float_of_int") @: mk_var "max_val"]
     ) @:
   mk_let "results" t_ring 
     (mk_filtermap (* filter to only hashes greater than data *)

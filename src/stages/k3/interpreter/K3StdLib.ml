@@ -59,7 +59,7 @@ let hash_string_fn e =
   | _ -> invalid_arg "hash_string"
 
 let hash_string_name = "hash_string"
-let hash_string_decl = wrap_tfunc t_string t_string
+let hash_string_decl = wrap_tfunc t_string t_int
 let hash_string_args = wrap_args ["s", t_string]
 let _ = Hashtbl.add func_table 
   hash_string_name (hash_string_decl, hash_string_args, hash_string_fn)
@@ -88,10 +88,9 @@ let divf_fn e =
   | _ -> invalid_arg "divf"
 
 let divf_name = "divf"
-let divf_decl = wrap_tfunc t_float t_float
+let divf_decl = wrap_tfunc (wrap_ttuple [t_float;t_float]) t_float
 let divf_args = wrap_args ["x", t_float; "y", t_float]
-let _ = Hashtbl.add func_table 
-  divf_name (divf_decl, divf_args, divf_fn)
+let _ = Hashtbl.add func_table divf_name (divf_decl, divf_args, divf_fn)
 
 (* int (truncated) division *)
 let divi_fn e = 
@@ -99,7 +98,7 @@ let divi_fn e =
   | [_,VInt x;_,VInt y] -> e, int_temp @: x / y
   | _ -> invalid_arg "divi"
 
-let divi_name = "divf"
+let divi_name = "divi"
 let divi_decl = wrap_tfunc t_int t_int
 let divi_args = wrap_args ["x", t_int; "y", t_int]
 let _ = Hashtbl.add func_table 

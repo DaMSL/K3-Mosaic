@@ -791,7 +791,14 @@ let type_bindings_of_program prog =
 
         | Global(i, t, None) -> (Global(i, t, None), (i, t) :: env)
         
-        | Foreign(i, t) -> (Foreign(i, t), (i, t) :: env)
+        | Foreign(i, t) -> 
+            begin try let t_f = K3StdLib.lookup_type i in
+              if not (t = t_f) then t_error (-1) i
+                (TMismatch(t, t_f, "Mismatch in foreign function type.")) ()
+              else 
+                (Foreign(i, t), (i, t) :: env)
+            with Not_found -> 
+              t_error (-1) i (TMsg "Foreign function not found") () end
             
         | Flow fp ->
           let nfp, nenv = typecheck_flow env trig_env resource_env fp
