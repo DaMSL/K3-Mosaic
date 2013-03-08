@@ -13,6 +13,7 @@ val t_int : value_type_t
 val t_int_mut : value_type_t
 val t_float : value_type_t
 val t_float_mut : value_type_t
+val t_byte : value_type_t
 val t_string : value_type_t
 val t_unit : value_type_t
 
@@ -41,6 +42,7 @@ val wrap_ttuple : value_type_t list -> value_type_t
 val wrap_ttuple_mut : value_type_t list -> value_type_t
 val wrap_tmaybe : value_type_t -> value_type_t 
 val wrap_tmaybes : value_type_t list -> value_type_t list
+val wrap_tfunc : value_type_t -> value_type_t -> type_t
 val wrap_args : (id_t * value_type_t) list -> arg_t
 val wrap_args_maybe : (id_t * value_type_t) list -> arg_t
 

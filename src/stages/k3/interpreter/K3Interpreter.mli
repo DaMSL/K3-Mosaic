@@ -1,8 +1,6 @@
 open K3.AST
 open K3Values
 
-type eval_t = VDeclared of value_t ref | VTemp of value_t
-
 val value_of_eval : eval_t -> value_t
 
 val env_of_program : program_t -> program_env_t

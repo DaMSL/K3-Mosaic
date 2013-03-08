@@ -4,7 +4,10 @@ exception RuntimeError of int * string
 
 (* Interpreter representation of values *)
 
-type value_t
+type eval_t = VDeclared of value_t ref | VTemp of value_t
+and foreign_func_t = env_t -> env_t * eval_t
+
+and value_t
     = VUnknown
     | VUnit
     | VBool of bool
@@ -18,11 +21,12 @@ type value_t
     | VBag of value_t list
     | VList of value_t list
     | VFunction of arg_t * expr_t
+    | VForeignFunction of arg_t * foreign_func_t
     | VAddress of address
     | VTarget of id_t
 
-type frame_t = (id_t * value_t) list
-type env_t = (id_t * value_t ref) list * (frame_t list)
+and frame_t = (id_t * value_t) list
+and env_t = (id_t * value_t ref) list * (frame_t list)
 type trigger_env_t = (id_t * (env_t -> value_t -> unit)) list
 type program_env_t = trigger_env_t * env_t
 

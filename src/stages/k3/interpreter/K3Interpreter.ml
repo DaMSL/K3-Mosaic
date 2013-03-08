@@ -12,9 +12,6 @@ open K3Streams
 open K3Consumption
 open K3Runtime
 
-type eval_t = VDeclared of value_t ref | VTemp of value_t
-
-
 (* Generic helpers *)
 
 let (<|) x f = f x
@@ -24,16 +21,9 @@ let (+++) f g = fun t x -> f (g t x) x
 let (++%) f g = fun t x -> f (g t) x
 let (%++) f g = fun t x -> f (g t x)
 
-let nub xs =
-    let blank = Hashtbl.create (List.length xs) in
-        List.iter (fun x -> Hashtbl.replace blank x ()) xs;
-        Hashtbl.fold (fun h () t -> h :: t) blank []
-
-
 (* Prettified error handling *)
 let interpreter_error s = let rs = "interpreter: "^s in
   LOG rs LEVEL ERROR; failwith rs
-
 
 (* Environment helpers *)
 
@@ -78,12 +68,18 @@ let rec bind_args uuid a v =
 let rec eval_fun uuid f = 
   let strip_frame (m_env, f_env) = (m_env, List.tl f_env) in
   match f with
-    | VFunction(arg, body) -> (
-        fun (m_env, f_env) -> fun a ->
+    | VFunction(arg, body) -> 
+        fun (m_env, f_env) a ->
             let new_env = m_env, (bind_args uuid arg a :: f_env) in
             let renv, result = eval_expr new_env body in
             (strip_frame renv, result)
-    )
+    
+    | VForeignFunction(arg, f) -> 
+        fun (m_env, f_env) a ->
+            let new_env = m_env, (bind_args uuid arg a :: f_env) in
+            let renv, result = f new_env in
+            (strip_frame renv, result)
+
     | _ -> raise (RuntimeError (uuid, "eval_fun: Non-function value"))
 
 and eval_expr cenv texpr =
@@ -109,10 +105,11 @@ and eval_expr cenv texpr =
     in
 
     let preserve_collection f v = VTemp(match v with
-        | VSet(cl) -> VSet(List.sort compare (nub (f cl)))
-        | VBag(cl) -> VBag(List.sort compare (f cl))
+        | VSet(cl) -> VSet(List.sort compare @: nub @: f cl)
+        | VBag(cl) -> VBag(List.sort compare @: f cl)
         | VList(cl) -> VList(f cl)
-        | _ -> raise (RuntimeError (uuid, "preserve_collection: non-collection"))
+        | _ -> 
+            raise (RuntimeError (uuid, "preserve_collection: non-collection"))
         )
     in
 
@@ -513,9 +510,8 @@ and default_isolated_value vt = match vt with
     | TIsolated (TImmutable (bt,_)) -> default_base_value bt
     | TContained _ -> interpreter_error "invalid default contained value"
 
-
 (* Returns a foreign function evaluator *)
-let dispatch_foreign id = interpreter_error "foreign functions not implemented"
+let dispatch_foreign id = K3StdLib.lookup_value id
 
 (* Returns a trigger evaluator *)
 let prepare_trigger id arg local_decls body =
@@ -552,8 +548,7 @@ let env_of_program k3_program =
         in
         trig_env, (((id, ref init_val) :: rm_env), rf_env)
 
-    | Foreign (id,t) -> 
-      trig_env, (m_env, [id, dispatch_foreign id] :: f_env)
+    | Foreign (id,t) -> trig_env, (m_env, [id, dispatch_foreign id]::f_env)
 
     | Flow fp -> prepare_sinks env fp
 

@@ -36,6 +36,7 @@ let t_int = canonical TInt
 let t_int_mut = TIsolated(TMutable(TInt,[]))
 let t_float = canonical TFloat
 let t_float_mut = TIsolated(TMutable(TFloat,[]))
+let t_byte = canonical TByte
 let t_string = canonical TString
 let t_unit = canonical TUnit
 
@@ -86,6 +87,8 @@ let wrap_ttuple_mut typ = match typ with
 
 let wrap_tmaybe t = canonical @: TMaybe t
 let wrap_tmaybes ts = List.map wrap_tmaybe ts
+
+let wrap_tfunc tin tout = TFunction(tin, tout)
 
 (* wrap a function argument *)
 let wrap_args id_typ = 
@@ -287,7 +290,7 @@ let mk_code_sink name args locals code =
 let mk_global_fn_raw name input_arg input_types output_types expr =
   mk_no_anno @:
     Global(name, 
-      TFunction(input_types, output_types),
+      wrap_tfunc input_types output_types,
       Some (mk_lambda (input_arg) expr)
     )
 
@@ -308,7 +311,7 @@ let mk_global_val_init name val_type e =
   mk_no_anno @: Global(name, TValue(val_type), Some e)
 
 let mk_foreign_fn name input_types output_types =
-  mk_no_anno @: Foreign(name, TFunction(input_types, output_types))
+  mk_no_anno @: Foreign(name, wrap_tfunc input_types output_types)
 
 let mk_flow stmt_list = mk_no_anno @: Flow(stmt_list)
 

@@ -77,3 +77,10 @@ let insert_index_fst first xs =
 let insert_index_snd first xs = 
     let is = create_corr_range first xs in
     list_zip xs is
+
+(* efficient function to get unique entities *)
+let nub xs =
+    let blank = Hashtbl.create (List.length xs) in
+        List.iter (fun x -> Hashtbl.replace blank x ()) xs;
+        Hashtbl.fold (fun h () t -> h :: t) blank []
+

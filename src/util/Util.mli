@@ -44,3 +44,6 @@ val insert_index_fst : int -> 'a list -> (int * 'a) list
 
 (* insert an index for each member of a list, in snd place *)
 val insert_index_snd : int -> 'a list -> ('a * int) list
+
+(* unique members of a list *)
+val nub : 'a list -> 'a list
