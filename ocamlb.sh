@@ -1,1 +1,1 @@
-ocamlbuild $1 -libs dynlink 
+ocamlbuild -libs dynlink $@

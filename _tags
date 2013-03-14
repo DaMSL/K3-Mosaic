@@ -1,5 +1,6 @@
 <**/*.ml> : pp(camlp4o ../lib/bolt/bolt_pp.cmo), ocaml
 <tests> : include
+<tests/unit> : include
 <src/util>: include
 <src>: include
 <src/stages/k3>: include
