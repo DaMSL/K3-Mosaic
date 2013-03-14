@@ -96,8 +96,12 @@ class RelEvent
     "#{@op}_#{@relname}"
   end
   
-  def dispatch_s
-    "send(#{to_s}, me, #{@vals.join(", ")});"
+  def dispatch_s(last)
+		send = "send(#{to_s}, me, #{@vals.join(", ")})"
+		semi = ";"
+		if last then send
+		else send + semi
+		end
   end
 end
 
@@ -107,7 +111,9 @@ $last_event = nil;
 $use_timestamps = false;
 $partition_map = nil;
 
-File.open("rst.trace") do |f|
+raise "Missing input file" unless ARGV.length == 1;
+
+File.open(ARGV[0]) do |f|
   f.each do |l|
     case l
       when /DECLARE MAP ([^(]+)\((int|float)\)\[([^\]]*)\]\[([^\]]*)\]/ then
@@ -133,16 +139,24 @@ File.open("rst.trace") do |f|
 end
 
 puts "trigger go(id : int) {} = do {"
-$events.each do |evt|
-  puts "  #{evt.dispatch_s}";
+len = $events.length
+
+$events.each_index do |i|
+	if i >= len-1 then puts "  #{$events[i].dispatch_s(true)}";
+	else puts "  #{$events[i].dispatch_s(false)}"
+  end
 end
 puts "}"
 
+puts ""
 puts "role test {"
 puts "  source s1 : int = stream([1])"
 puts "  bind s1 -> go"
 puts "  consume s1"
 puts "}"
+puts ""
+puts "default role test"
+puts ""
 
 def dump_map(mapn)
   map = $maps[mapn]
