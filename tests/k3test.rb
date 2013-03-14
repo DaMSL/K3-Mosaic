@@ -15,7 +15,7 @@ OptionParser.new do |opts|
 end.parse!
 
 raise "No input file" unless ARGV.length >= 1
-options[:file]=ARGV[0]
+options[:file]=File.expand_path(ARGV[0])
 
 p1 = Pathname.new(options[:k3_path])
 raise "Can't find k3 file" unless p1.exist?
