@@ -5,7 +5,7 @@ require 'pathname'
 
 options = {:k3_path=>"../k3", :dbt_path=>"./dbtoaster"}
 OptionParser.new do |opts|
-	opts.banner = "Usage: k3test.rb sql_file [-k k3_path] [-d db_toaster_path]"
+	opts.banner = "Usage: k3test.rb sql_file [-k k3_path_prog] [-d db_toaster_path]"
 	opts.on("-k", "--k3_path [K3PATH]", "Path to k3") do |p|
 		options[:k3_path]=p
   end
