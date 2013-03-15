@@ -270,16 +270,16 @@ and eval_expr cenv texpr =
         let fenv, f = child_value cenv 0 in
         let nenv, c = child_value fenv 1 in
         let g = eval_fn f in
-        let folder = fun cl -> List.fold_left (
+        let folder l = List.fold_left (
             fun e x -> let ienv, _ = g e x in ienv
-        ) nenv cl in (
-            match c with
-            | VSet(cl)
-            | VBag(cl)
-            | VList(cl) -> folder cl, VTemp(VUnit)
+        ) nenv l in 
+          begin match c with
+            | VSet cl
+            | VBag cl
+            | VList cl -> folder cl, VTemp(VUnit)
             | _ -> raise (RuntimeError (uuid, 
               "eval_expr(Iterate): non-collection value"))
-        )
+          end
 
     | IfThenElse ->
         let penv, pred = child_value cenv 0 in (
