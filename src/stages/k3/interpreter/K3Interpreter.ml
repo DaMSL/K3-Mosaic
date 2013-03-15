@@ -124,7 +124,7 @@ and eval_expr cenv texpr =
       | VTuple pat_f, VTuple v_f -> 
         (try List.for_all2 match_or_unknown pat_f v_f
          with Invalid_argument _ -> false)  
-      | _, _ -> pat_v = v
+      | _, _ -> match_or_unknown pat_v v
     in
 
     (* Collection modifications are all side-effects, and must replace any
@@ -421,7 +421,9 @@ and eval_expr cenv texpr =
     | Slice ->
       let renv, parts = child_values cenv in
       begin match parts with
-        | [c;pat] -> renv, (preserve_collection (fun els -> List.filter (match_pattern pat) els) c)
+        | [c;pat] -> 
+            renv, (preserve_collection (fun els -> 
+                List.filter (match_pattern pat) els) c)
         | _ -> raise (RuntimeError (uuid, "eval_expr(Slice): bad values"))
       end
       

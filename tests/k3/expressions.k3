@@ -128,11 +128,28 @@ declare c : {int}
 do { iterate(\i:int -> insert(c, i), {0; 1; 2}); c }
 expected {0; 1; 2};
 
+declare d : {int} = {0; 1; 2; 3}
+do { iterate(\i:int -> delete(d, i), {0; 1; 2}); d }
+expected {3};
+
+declare e : {int} = {0; 1; 2; 3}
+do { iterate(\i:int -> delete(e, i), e[_]); e }
+expected {}; 
+
+
 //////////////
 // Peek
 
 //////////////
 // Slice
+
+declare c : [int] = [0; 1; 2; 5]
+do { c[_] }
+expected [0; 1; 2; 5];
+
+declare f : [(int, int)] = [(0, 1); (2, 3); (0, 5)]
+do { f[(0, _)]}
+expected [(0, 1); (0, 5)];
 
 //////////////
 // Modifiers
