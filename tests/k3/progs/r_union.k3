@@ -1,0 +1,45 @@
+declare __SQL_SUM_AGGREGATE_1 : {(int, int)}
+
+trigger insert_R(R_A:int, R_B:int) {} = do {
+  let existing_out_tier:{(int, int)} = __SQL_SUM_AGGREGATE_1 in
+  let __val_ret__1:int = R_B in
+  let update_value:int =
+    let wrapped_lookup_value:{(int, int)} = existing_out_tier[(R_A, _)] in
+    if wrapped_lookup_value == {}
+    then 0
+    else let (_, projected_field:int) = peek(wrapped_lookup_value) in
+      projected_field + __val_ret__1 in
+  do {
+    iterate
+      (\(R_A:int, value:int) -> delete(__SQL_SUM_AGGREGATE_1, (R_A, value)),
+      __SQL_SUM_AGGREGATE_1[(R_A, _)]);
+    insert(__SQL_SUM_AGGREGATE_1, R_A, update_value)
+    }
+  }
+
+trigger go(id : int) {} = do {
+  send(insert_R, me, 1, 3);
+  send(insert_R, me, 4, 2);
+  send(insert_R, me, 2, 1);
+  send(insert_R, me, 5, 3);
+  send(insert_R, me, 3, 4);
+  send(insert_R, me, 2, 3);
+  send(insert_R, me, 5, 5);
+  send(insert_R, me, 4, 5);
+  send(insert_R, me, 2, 3);
+  send(insert_R, me, 4, 2)
+}
+
+role test {
+  source s1 : int = stream([1])
+  bind s1 -> go
+  consume s1
+}
+
+default role test
+
+expected
+
+__SQL_SUM_AGGREGATE_1 = {
+(3, 4); (5, 8); (2, 7); (4, 9); (1, 3)
+}

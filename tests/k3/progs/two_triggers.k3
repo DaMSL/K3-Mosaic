@@ -1,0 +1,27 @@
+declare events : {|(int,int)|}
+declare events2 : {|(int,int)|}
+
+trigger on_event(a:int, b:int) {} = do {
+  insert(events, a, b);
+  send(duplicate, localhost:10000, a, b)
+}
+
+trigger duplicate(a:int, b:int) {} = do {
+  insert(events2, a, b)
+}
+
+role client {
+  source  s1 : (int, int) = file("data/test.csv", csv)
+  bind    s1 -> on_event
+  consume s1
+}
+
+default role client
+
+// Uncomment when running in -test -prog mode
+/*
+expected 
+
+events  = {| (1,2); (3,4); (5,6) |},
+events2 = {| (1,2); (3,4); (5,6) |}
+*/

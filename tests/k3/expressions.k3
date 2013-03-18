@@ -117,6 +117,12 @@ sort({(3,2);(1,3);(2,1)},
        (\(a:int,b:int) -> b)(x) >= (\(a:int,b:int) -> b)(y))
 expected [(1,3);(3,2);(2,1)];
 
+//////////////
+// Insert
+
+declare c : {(int, int)}
+do { insert(c, 0, 1); c }
+expected {(0, 1)};
 
 //////////////
 // Iterate
@@ -132,6 +138,7 @@ declare d : {int} = {0; 1; 2; 3}
 do { iterate(\i:int -> delete(d, i), {0; 1; 2}); d }
 expected {3};
 
+// Combination of slice, delete, iterate
 declare e : {int} = {0; 1; 2; 3}
 do { iterate(\i:int -> delete(e, i), e[_]); e }
 expected {}; 
@@ -139,6 +146,13 @@ expected {};
 
 //////////////
 // Peek
+declare a : [int] = [1; 2; 3; 4; 5]
+do { peek(a) }
+expected 1;
+
+declare a : [(int, int)] = [(1,5); (2,4); (3,3); (4,2); (5,1)]
+do { peek(a) }
+expected (1,5);
 
 //////////////
 // Slice

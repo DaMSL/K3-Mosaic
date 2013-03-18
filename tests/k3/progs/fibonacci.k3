@@ -1,0 +1,29 @@
+declare final : {int}
+
+trigger start(n:int) {} = send(fibonacci, localhost:10000, n, 0, 1)
+
+trigger fibonacci(n:int, a:int, b:int) {} =
+  if n == 0
+  then send(result, localhost:10000, b)
+  else send(fibonacci, localhost:10000, n - 1, b, a + b)
+
+trigger result(b:int) {} = insert(final, b)
+
+role client1 {
+  source  s1 : int = stream([7])
+  bind    s1 -> start
+  consume s1
+}
+
+role client2 {
+  source  s1 : int = stream([10])
+  bind    s1 -> start
+  consume s1
+}
+
+default role client1
+
+expected 
+
+final = { 21 }
+
