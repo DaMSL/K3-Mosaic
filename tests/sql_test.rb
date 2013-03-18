@@ -1,26 +1,31 @@
 #!/usr/bin/ruby
+# Compare the output of an SQL test using dbtoaster to K3 execution
 
 require 'optparse'
 require 'pathname'
 
-options = {:k3_path=>"../k3", :dbt_path=>"./dbtoaster"}
-OptionParser.new do |opts|
-	opts.banner = "Usage: k3test.rb sql_file [-k k3_path_prog] [-d db_toaster_path]"
-	opts.on("-k", "--k3_path [K3PATH]", "Path to k3") do |p|
-		options[:k3_path]=p
-  end
-	opts.on("-d", "--dbtoaster [DBTPATH]", "Path to dbtoaster") do |p|
-		options[:dbt_path]=p
-  end
-end.parse!
-
 raise "No input file" unless ARGV.length >= 1
-options[:file]=File.expand_path(ARGV[0])
+file=File.expand_path(ARGV[0])
 
-p1 = Pathname.new(options[:k3_path])
-raise "Can't find k3 file" unless p1.exist?
-p2 = Pathname.new(File.join(options[:dbt_path], "/bin/dbtoaster"))
-raise "Can't find dbtoaster file" unless p2.exist?
+dbtoaster_path = "../external/dbtoaster"
+dbtoaster_exe_path = File.join(dbtoaster_path, "/bin/dbtoaster")
+
+p = Pathname.new(dbtoaster_exe_path)
+raise "Can't find dbtoaster executable" unless p.exist?
+
+path = "../bin/k3"
+p = Pathname.new(path)
+if not p.exist? then 
+	path = "../Driver.byte"
+	p = Pathname.new(path)
+		if not p.exist? then
+			path = "../Driver.native"
+			p = Pathname.new(path)
+				raise "Can't find dbtoaster file" unless p.exist?
+		end
+end
+
+k3_path = path
 
 def test_file(file, dbt_path, k3_path)
 	curdir = Dir.pwd
@@ -46,5 +51,5 @@ def test_file(file, dbt_path, k3_path)
 	puts output
 end
 
-test_file(options[:file], options[:dbt_path], options[:k3_path])
+test_file(file, dbtoaster_path, k3_path)
 
