@@ -9,6 +9,7 @@
 <src/stages/m3>: include
 <src/stages/k3_dist>: include
 <lib/bolt>: include, not_hygienic
+<external>: not_hygienic
 
 true: use_str
 true: use_unix
