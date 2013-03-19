@@ -6,7 +6,9 @@ open K3Helpers
 open K3.AST
 
 let float_temp x = VTemp(VFloat(x))
+let string_temp x = VTemp(VString(x))
 let int_temp x = VTemp(VInt(x))
+let unit_temp = VTemp(VUnit)
 
 (* static hashtable for storing functions efficiently *)
 type entry_t = type_t * arg_t * foreign_func_t
@@ -77,9 +79,6 @@ let _ = Hashtbl.add func_table
   hash_addr_name (hash_addr_decl, hash_addr_args, hash_addr_fn)
 
 
-
-
-
 (* ------------ Math functions ------------- *)
 (* float division *)
 let divf_fn e = 
@@ -128,6 +127,7 @@ let get_max_int_args = wrap_args ["_", t_unit]
 let _ = Hashtbl.add func_table 
   get_max_int_name (get_max_int_decl, get_max_int_args, get_max_int_fn)
 
+
 (* -------- casting -------- *)
 
 (* float_of_int *)
@@ -138,7 +138,7 @@ let float_of_int_fn e =
 
 let float_of_int_name = "float_of_int"
 let float_of_int_decl = wrap_tfunc t_int t_float
-let float_of_int_args = wrap_args ["x", t_int]
+let float_of_int_args = wrap_args ["i", t_int]
 let _ = Hashtbl.add func_table 
   float_of_int_name (float_of_int_decl, float_of_int_args, float_of_int_fn)
 
@@ -150,9 +150,44 @@ let int_of_float_fn e =
 
 let int_of_float_name = "int_of_float"
 let int_of_float_decl = wrap_tfunc t_float t_int
-let int_of_float_args = wrap_args ["x", t_float]
+let int_of_float_args = wrap_args ["f", t_float]
 let _ = Hashtbl.add func_table 
   int_of_float_name (int_of_float_decl, int_of_float_args, int_of_float_fn)
+
+(* string_of_int *)
+let string_of_int_fn e = 
+  match arg_of_env e with 
+  | [_,VInt x] -> e, string_temp @: string_of_int x
+  | _ -> invalid_arg "string_of_int_fn"
+
+let string_of_int_name = "string_of_int"
+let string_of_int_decl = wrap_tfunc t_int t_string
+let string_of_int_args = wrap_args ["i", t_int]
+let _ = Hashtbl.add func_table 
+  string_of_int_name (string_of_int_decl, string_of_int_args, string_of_int_fn)
+
+(* string_of_float *)
+let string_of_float_fn e = 
+  match arg_of_env e with 
+  | [_,VFloat x] -> e, string_temp @: string_of_float x
+  | _ -> invalid_arg "string_of_float_fn"
+
+let string_of_float_name = "string_of_float"
+let string_of_float_decl = wrap_tfunc t_float t_string
+let string_of_float_args = wrap_args ["f", t_float]
+let _ = Hashtbl.add func_table 
+  string_of_float_name (string_of_float_decl, string_of_float_args, string_of_float_fn)
+
+(* -------- print functions -------- *)
+let print_fn e =
+  match arg_of_env e with
+  | [_,VString s] -> print_string s; e, unit_temp
+  | _ -> invalid_arg "print_fn"
+let print_name = "print"
+let print_decl = wrap_tfunc t_string t_unit
+let print_args = wrap_args ["s", t_string]
+let _ = Hashtbl.add func_table 
+  print_name (print_decl, print_args, print_fn)
 
 (* function-lookup functions *)
 let lookup id = Hashtbl.find func_table id 
