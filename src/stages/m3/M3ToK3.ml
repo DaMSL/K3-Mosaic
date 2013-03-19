@@ -1,6 +1,7 @@
 (** Module for translating a M3 program into a K3 program. *)
 
 (**/**)
+open Util
 open Arithmetic
 open Calculus
 
@@ -404,17 +405,14 @@ let mk_lookup collection set_t keys key_types =
   let wrapped_value = KH.mk_var "wrapped_lookup_value" in
   KH.mk_let (KU.id_of_var wrapped_value)
             coll_type
-            (mk_slice collection keys keys)
-            (KH.mk_if (
-                KH.mk_eq wrapped_value (KH.mk_empty coll_type)
-              ) (
-                KH.mk_const (zero_of_type set_t)
-              ) (
-                mk_project ((List.length keys)+1) (List.length keys)
-                           set_t 
-                           (KH.mk_peek wrapped_value)
-              )
-            )
+            (mk_slice collection keys keys) @:
+            KH.mk_if 
+              (KH.mk_eq wrapped_value @: KH.mk_empty coll_type) 
+              (KH.mk_const @: zero_of_type set_t) @:
+              mk_project (List.length keys+1) 
+                         (List.length keys)
+                         set_t @:
+                         KH.mk_peek wrapped_value
 
 let mk_test_member collection keys key_types val_type =
   KH.mk_has_member collection (KH.mk_tuple ((List.map KH.mk_var keys)@
@@ -471,8 +469,9 @@ let mk_update collection set_t ivars ivar_t ovars ovar_t new_val =
       else
         failwith "FullPC unsupported"
   in
-    KH.mk_apply (KH.mk_lambda (mk_arg (KU.id_of_var new_val_var) set_t) update_block)
-                (new_val)
+    KH.mk_apply 
+      (KH.mk_lambda (mk_arg (KU.id_of_var new_val_var) set_t) update_block)
+      (new_val)
 
 (**********************************************************************)
 (**/**)
@@ -1325,7 +1324,8 @@ let m3_stmt_to_k3_stmt (meta: meta_t) ?(generate_init = false)
               (mk_lookup existing_out_tier map_k3_type (var_ids lhs_outs_el) lhs_outs_kt)
               (extract_opt init_expr_opt)
          else 
-           (mk_lookup existing_out_tier map_k3_type (var_ids lhs_outs_el) lhs_outs_kt)
+           mk_lookup existing_out_tier map_k3_type 
+            (var_ids lhs_outs_el) lhs_outs_kt
    in
    
    (* Translate the rhs calculus expression into a k3 expression and its *)
@@ -1370,8 +1370,9 @@ let m3_stmt_to_k3_stmt (meta: meta_t) ?(generate_init = false)
    (* the lhs_collection accordingly. *)
    let coll_update_expr =   
       let single_update_expr = 
-        mk_update lhs_collection map_k3_type (var_ids lhs_ins_el) (lhs_ins_kt) (var_ids lhs_outs_el) lhs_outs_kt 
-                  (KH.mk_add existing_v rhs_ret_ve)
+          mk_update lhs_collection map_k3_type 
+            (var_ids lhs_ins_el) (lhs_ins_kt) (var_ids lhs_outs_el) 
+            lhs_outs_kt (KH.mk_add existing_v rhs_ret_ve)
       in
       let inner_loop_body = 
         lambda (vart_to_idvt ((List.combine rhs_outs_el rhs_outs_t) @ 
