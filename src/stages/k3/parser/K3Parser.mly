@@ -665,6 +665,7 @@ expression_test :
     | expr EXPECTED check_expr                       { [[], $1, $3] }
     | program expr EXPECTED check_expr               { [$1, $2, $4] }
     | expression_test SEMICOLON expression_test      { $1@$3 }
+    | expr EXPECTED error                  { print_error "invalid expected expression"}
 ;
 
 named_expr_list :
