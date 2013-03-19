@@ -152,15 +152,42 @@ let rec lazy_expr c expr =
     let w = wrap_indent in
     w(lazy_expr c e1) <| sep () <| w(lazy_expr c e2) <| sep () <| w(lazy_expr c
     e3) <| sep () <| w(lazy_expr c e4) in
+  (* TODO: do comparisons also *)
+  let is_apply_let e = let e1, e2 = U.decompose_apply e in
+    match U.tag_of_expr e1 with 
+      | Var _ -> false | Lambda _ -> true | _ -> invalid_arg "bad apply input"
+  in
+  (* handle parentheses:
+     - If a sub-element is mult or add, we wrap it.
+     - If a left sub-element is 'ifthenelse' or a 'let', we wrap it.
+     - For a == or !=, we also wrap sub- ==/!= *)
   let arith_paren e = match U.tag_of_expr e with
-    | Mult | Add | IfThenElse -> lazy_paren
-    | _ -> id_fn in
-  let expr_type_is_bool e = match T.type_of_expr e with
-    | TValue x | TFunction(_,x) -> begin match T.base_of x with
-      | TBool -> true
-      | _ -> false
-      end in
-  let tuple_no_paren c e = match U.tag_of_expr e with
+    | Mult | Add -> lazy_paren
+    | _ -> id_fn
+  (* we're more sensitive for left side *)
+  in let arith_paren_l e = match U.tag_of_expr e with
+    | IfThenElse | Apply when is_apply_let e -> lazy_paren
+    | _ -> arith_paren e
+  (* for == and != *)
+  in let logic_paren e = match U.tag_of_expr e with
+    | Eq | Neq -> lazy_paren 
+    | _ -> arith_paren e
+  in let logic_paren_l e = match U.tag_of_expr e with
+    | Eq | Neq -> lazy_paren
+    | _ -> arith_paren_l e
+  in let arith_paren_pair sym (el, er) = 
+    let wrapl = arith_paren_l el in
+    let wrapr = arith_paren er in
+    expr_pair ~sep:(lsp () <| lps sym <| lsp ()) ~wl:wrapl ~wr:wrapr (el, er) 
+  in let logic_paren_pair sym (el, er) = 
+    let wrapl = logic_paren_l el in
+    let wrapr = logic_paren er in
+    expr_pair ~sep:(lsp () <| lps sym <| lsp ()) ~wl:wrapl ~wr:wrapr (el, er) 
+  in let expr_type_is_bool e = match T.type_of_expr e with
+    | TValue x | TFunction(_,x) -> match T.base_of x with
+        | TBool -> true
+        | _ -> false
+  in let tuple_no_paren c e = match U.tag_of_expr e with
     | Tuple -> let es = U.decompose_tuple e in
       lps_list CutHint (lazy_expr c) es
     | _ -> lazy_expr c e
@@ -202,17 +229,12 @@ let rec lazy_expr c expr =
     end
   | Range ct -> let t = U.decompose_range expr in
     lazy_collection c ct @: expr_triple ~sep:(fun () -> lps ":") t
-  | Add -> let paren_pair sym el er = 
-      let wrapl = arith_paren el in
-      let wrapr = arith_paren er in
-      expr_pair ~sep:(lsp () <| lps sym <| lsp ()) ~wl:wrapl ~wr:wrapr 
-        (el, er) in
-    let (e1, e2) = U.decompose_add expr in
+  | Add -> let (e1, e2) = U.decompose_add expr in
     begin match U.tag_of_expr e2, expr_type_is_bool e1 with
       | Neg, false -> let e3 = U.decompose_neg e2 in
-        paren_pair "-" e1 e3
-      | _, false -> paren_pair "+" e1 e2 
-      | _, true -> paren_pair "|" e1 e2
+        arith_paren_pair "-" (e1, e3)
+      | _, false -> arith_paren_pair "+" (e1, e2)
+      | _, true -> arith_paren_pair "|" (e1, e2)
     end 
   | Mult -> let (e1, e2) = U.decompose_mult expr in
     let is_neg = begin match U.tag_of_expr e1 with
@@ -224,15 +246,10 @@ let rec lazy_expr c expr =
       | Const(CInt(-1)) -> true
       | _ -> false
     end in
-    let paren_pair sym = 
-      let wrapl = arith_paren e1 in
-      let wrapr = arith_paren e2 in
-      expr_pair ~sep:(lsp () <| lps sym <| lsp ()) ~wl:wrapl ~wr:wrapr (e1,e2)
-    in 
     begin match expr_type_is_bool e1, is_neg with
-      | true, _ -> paren_pair "&"
+      | true, _ -> arith_paren_pair "&" (e1, e2)
       | false, true -> lps "-" <| lazy_expr c e2 (* just a minus *)
-      | _ -> paren_pair "*"
+      | _ -> arith_paren_pair "*" (e1, e2)
     end 
   | Neg -> let e = U.decompose_neg expr in
     let sym = if expr_type_is_bool e then "!" else "-" in
@@ -240,19 +257,19 @@ let rec lazy_expr c expr =
       | Var _ 
       | Const _ -> lps sym <| lazy_expr c e
       | Lt -> let p = U.decompose_lt e in
-        expr_pair ~sep:(lps " >= ") p
+        arith_paren_pair ">=" p
       | Leq -> let p = U.decompose_leq e in
-        expr_pair ~sep:(lps " > ") p
+        arith_paren_pair ">" p
       | _ -> lps sym <| lazy_paren @: lazy_expr c e
     end
   | Eq -> let p = U.decompose_eq expr in
-    expr_pair ~sep:(lsp () <| lps "==" <| lsp ()) p
+    logic_paren_pair "==" p
   | Lt -> let p = U.decompose_lt expr in
-    expr_pair ~sep:(lsp () <| lps "<" <| lsp ()) p
+    arith_paren_pair "<" p
   | Neq -> let p = U.decompose_neq expr in
-    expr_pair ~sep:(lsp () <| lps "!=" <| lsp ()) p
+    logic_paren_pair "!=" p
   | Leq -> let p = U.decompose_leq expr in
-    expr_pair ~sep:(lsp () <| lps "<=" <| lsp ()) p
+    arith_paren_pair "<=" p
   | Lambda arg -> let e = U.decompose_lambda expr in
     wrap_indent (lps "\\" <| lazy_arg c false arg <| lps " ->") <| lind () <| 
     wrap_hov 0 (lazy_expr c e)
