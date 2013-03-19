@@ -1,6 +1,17 @@
 /////////////////
 // Apply/lambda
 
+
+////////////////
+// Let
+declare a : {int} = {1;2;3}
+let b : {int} = a in b
+expected {1;2;3};
+
+let a : (int, int) = (1, 2) in
+let (_, b: int ) = a in b
+expected 2;
+
 /////////////
 // Block
 
