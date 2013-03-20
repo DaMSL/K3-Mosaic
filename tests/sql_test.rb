@@ -39,13 +39,27 @@ def test_file(file, dbt_path, k3_path)
 	`./bin/dbtoaster -l M3 #{file} > #{m3_file}`
 	puts "cd #{curdir}"
 	Dir.chdir "#{curdir}"
+
 	puts "#{k3_path} -p -i m3 -l k3 temp.m3 > temp2.k3"
-	`#{k3_path} -p -i m3 -l k3 temp.m3 > temp2.k3`
+	`#{k3_path} -p -i m3 -l k3 temp.m3 > temp2.k3 2>temp.err`
+
+	# Check for error
+	s = File.size?("./temp.err")
+	if s != nil && s > 0  then 
+		buf = IO.read("./temp.err")
+		raise "ERROR: #{buf}"
+	end
+
+	# remove everything after "role client" from temp.k3
 	File.open("temp.k3", 'w') do |out|
 		out << File.open("temp2.k3").read.gsub(/role client.*/m, "")
 	end
+
+	# append the test from genmaps.rb
 	puts "./genmaps.rb temp.trace >> temp.k3"
 	`./genmaps.rb temp.trace >> temp.k3`
+
+	# run the k3 driver on the input
 	puts "#{k3_path} -test temp.k3"
 	output = `#{k3_path} -test temp.k3`
 	puts output
