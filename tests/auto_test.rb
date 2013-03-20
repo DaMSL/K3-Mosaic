@@ -8,6 +8,7 @@ examples_path = "../external/dbtoaster/examples/queries/"
 simple_dir = "simple"
 
 simple_flag = false
+test_num = nil
 
 # option parser
 opt_parser = OptionParser.new do |opts|
@@ -16,6 +17,10 @@ opt_parser = OptionParser.new do |opts|
 	opts.separator "Specific options:"
 	opts.on("-s", "--[no-]simple", "Do only simple tests") do |s|
 			simple_flag = s
+		end
+	opts.on("-n", "--testnum [NUMBER]", Integer, 
+					"Choose a specific test") do |n|
+		  test_num = n
 		end
 end
 
@@ -27,7 +32,6 @@ raise "Can't find path #{examples_path}" unless p.exist?
 
 # start off with simple dir
 simple_path = File.join(examples_path, simple_dir)
-puts simple_path
 simple_p = Pathname.new(simple_path)
 raise "Can't find path #{simple_path}" unless simple_p.exist?
 all_files = simple_p.children
@@ -41,25 +45,33 @@ if not simple_flag then
 	end
 end
 
-index = 1
 
 # for debugging
 #for file in all_files
 	#puts file.relative_path_from(p)
 #end
 
-for file in all_files
-	puts("Test #{index} (#{file.to_s}):")
-  `./sql_test.rb #{file.to_s}` 
-	index = index + 1
+def short_name_of(long_name)
+		dir, file = File.split(long_name)
+		dir1, dir2 = File.split(dir)
+		return File.join(dir2, file)
 end
 
+if test_num == nil then
+	index = 1
+	for file in all_files
+		long_name = file.to_s
+		print "Test #{index} (#{short_name_of(long_name)}): "
+		output = `./sql_test.rb #{long_name}` 
 
-
-
-
-
-
-
-
+		if (/ERROR/ =~ output) != nil then puts "ERROR"
+		else puts "PASSED" end
+		index = index + 1
+	end
+else 
+	test_file = all_files[(test_num-1)]
+	puts("Test #{test_num} (#{test_file.to_s}):")
+	output =  `./sql_test.rb #{test_file.to_s}`
+	puts output
+end
 

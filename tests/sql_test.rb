@@ -47,7 +47,8 @@ def test_file(file, dbt_path, k3_path)
 	s = File.size?("./temp.err")
 	if s != nil && s > 0  then 
 		buf = IO.read("./temp.err")
-		raise "ERROR: #{buf}"
+		puts "ERROR: #{buf}"
+		exit
 	end
 
 	# remove everything after "role client" from temp.k3
