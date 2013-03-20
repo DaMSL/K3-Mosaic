@@ -34,15 +34,24 @@ raise "Can't find path #{examples_path}" unless p.exist?
 simple_path = File.join(examples_path, simple_dir)
 simple_p = Pathname.new(simple_path)
 raise "Can't find path #{simple_path}" unless simple_p.exist?
-all_files = simple_p.children
+
+all_files = []
+
+# add all simple files
+simple_p.children.each do |f|
+	if f.extname == ".sql" then all_files << f end
+end
 
 # add all the other children if we're not in simple mode
 if not simple_flag then
 	p.children.each do |d|
 		dir, last = d.split
 		if last.to_s != simple_dir 
-		then all_files = all_files + d.children end
-	end
+		then d.children.each do |f|
+			if f.extname == ".sql" then all_files << f end
+		  end 
+		end
+  end
 end
 
 
