@@ -133,7 +133,8 @@ File.open(ARGV[0]) do |f|
         mapname = $1; ivars = $2; ovars = $3; val = $4;
         ivars = (ivars == "-" ? [] : ivars.split(/; /));
         ovars = (ovars == "-" ? [] : ovars.split(/; /));
-        $last_event.add_effect(mapname, ivars, ovars, val);
+        if $last_event != nil 
+				then $last_event.add_effect(mapname, ivars, ovars, val) end
     end
   end
 end
