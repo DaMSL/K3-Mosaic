@@ -41,8 +41,8 @@ def test_file(file, dbt_path, k3_path)
 	m3_file = File.join(curdir, "temp.m3")
 	puts "./bin/dbtoaster -d LOG-INTERPRETER-UPDATES -d LOG-INTERPRETER-TRIGGERS -d LOG-M3 #{file} > #{temp_file}"
 	`./bin/dbtoaster -d LOG-INTERPRETER-UPDATES -d LOG-INTERPRETER-TRIGGERS -d LOG-M3 #{file} > #{temp_file}`
-	puts "./bin/dbtoaster -l M3 #{file} > #{m3_file}"
-	`./bin/dbtoaster -l M3 #{file} > #{m3_file}`
+	puts "./bin/dbtoaster -l M3 -d PRINT-VERBOSE #{file} > #{m3_file}"
+	`./bin/dbtoaster -l M3 -d PRINT-VERBOSE #{file} > #{m3_file}`
 	puts "cd #{curdir}"
 	Dir.chdir "#{curdir}"
 
