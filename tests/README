@@ -1,0 +1,13 @@
+K3 Test Suite
+
+auto_test.rb : Run a series of SQL tests of K3 using dbtoaster.
+sql_test.rb  : Use genmaps.rb to run a complete test on a specific SQL query.
+genmaps.rb   : Generate map final values in K3 syntax
+
+Instructions
+------------
+For most purposes, you'll want to run auto_test.rb. To run tests using only simple queries, use the '-s' argument. To run a specific test with more detailed output, add '-n num' where num is the number of a test.
+
+To run sql_test.rb, you provide the path of an SQL file. auto_test.rb can reference each SQL file in the dbtoaster/examples/ directory using only numbers, so it's generally easier to use.
+
+Conversion leaves many files behind to be examined, including temp.k3 (the k3 version of the query), temp.m3 (the m3 version of the query), and temp.err in case of errors.

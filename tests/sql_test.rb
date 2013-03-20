@@ -1,5 +1,11 @@
 #!/usr/bin/ruby
+
+#
 # Compare the output of an SQL test using dbtoaster to K3 execution
+#
+# Usage:
+#    ./sql_test.rb SQL_query
+#
 
 require 'optparse'
 require 'pathname'

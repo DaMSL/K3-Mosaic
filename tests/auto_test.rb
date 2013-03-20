@@ -1,5 +1,15 @@
 #!/usr/bin/ruby
-# Automatically run a test on every SQL file we have
+
+#
+# Unit test K3 single-site execution.
+# Automatically run a test on every SQL file in the DBToaster example directory
+#
+# Usage:
+#    ./auto_test.rb [options]
+#      -s (optional)        Test with only simple queries
+#
+#      -n NUMBER (optional) Test only a specific test number
+# 
 
 require 'optparse'
 require 'pathname'
