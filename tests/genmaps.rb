@@ -110,6 +110,7 @@ $events = Array.new;
 $last_event = nil;
 $use_timestamps = false;
 $partition_map = nil;
+$sys_ready = false;
 
 raise "Missing input file" unless ARGV.length == 1;
 
@@ -125,6 +126,8 @@ File.open(ARGV[0]) do |f|
           ovars,otypes = ovars.split(/, */).map { |v| v.split(/:/) }.unzip
           $maps[mapname] = OutputMap.new(mapname, maptype, ovars, otypes);
         end
+			when /ON SYSTEM READY \{\n[^\}]*\}/ then
+				$sys_ready = true
       when /ON (\+|-) ([^(]+)\([^)]*\) <- \[([^\]]*)\]/ then
         op = $1; relname = $2; vals = $3.split(/; */);
         $last_event = RelEvent.new(op, relname, vals);
@@ -140,6 +143,8 @@ File.open(ARGV[0]) do |f|
 end
 
 puts "trigger go(id : int) {} = do {"
+if $sys_ready then puts "  send(system_ready_event, me, 1);" end
+
 len = $events.length
 
 $events.each_index do |i|
