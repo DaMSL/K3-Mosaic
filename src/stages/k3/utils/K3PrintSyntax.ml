@@ -166,7 +166,8 @@ let rec lazy_expr c expr =
     | _ -> id_fn
   (* we're more sensitive for left side *)
   in let arith_paren_l e = match U.tag_of_expr e with
-    | IfThenElse | Apply when is_apply_let e -> lazy_paren
+    | IfThenElse -> lazy_paren
+    | Apply when is_apply_let e -> lazy_paren
     | _ -> arith_paren e
   (* for == and != *)
   in let logic_paren e = match U.tag_of_expr e with
