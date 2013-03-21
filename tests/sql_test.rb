@@ -33,29 +33,46 @@ end
 
 k3_path = path
 
+def check_error(dir, err_file)
+	# Check for error
+	s = File.size?(err_file)
+	if s != nil && s > 0  then 
+		buf = IO.read(err_file)
+		puts "ERROR: #{buf}"
+		Dir.chdir dir
+		exit
+	end
+end
+
 def test_file(file, dbt_path, k3_path)
 	curdir = Dir.pwd
+
+	#change to dbtoaster path (dbtoaster needs it)
 	puts "cd #{dbt_path}"
-	Dir.chdir "#{dbt_path}"
+	Dir.chdir dbt_path
+
 	temp_file = File.join(curdir, "temp.trace")
 	m3_file = File.join(curdir, "temp.m3")
+	err_file = File.join(curdir, "temp.err")
+
+	# run dbtoaster to get interpreted updates
 	puts "./bin/dbtoaster -d LOG-INTERPRETER-UPDATES -d LOG-INTERPRETER-TRIGGERS -d LOG-M3 #{file} > #{temp_file}"
-	`./bin/dbtoaster -d LOG-INTERPRETER-UPDATES -d LOG-INTERPRETER-TRIGGERS -d LOG-M3 #{file} > #{temp_file}`
+	`./bin/dbtoaster -d LOG-INTERPRETER-UPDATES -d LOG-INTERPRETER-TRIGGERS -d LOG-M3 #{file} > #{temp_file} 2> #{err_file}`
+	check_error(curdir, err_file)
+
+	# run dbtoaster to get m3 file
 	puts "./bin/dbtoaster -l M3 -d PRINT-VERBOSE #{file} > #{m3_file}"
-	`./bin/dbtoaster -l M3 -d PRINT-VERBOSE #{file} > #{m3_file}`
+	`./bin/dbtoaster -l M3 -d PRINT-VERBOSE #{file} > #{m3_file} 2> #{err_file}`
+	check_error(curdir, err_file)
+
+	# change directory back
 	puts "cd #{curdir}"
 	Dir.chdir "#{curdir}"
 
 	puts "#{k3_path} -p -i m3 -l k3 temp.m3 > temp2.k3"
-	`#{k3_path} -p -i m3 -l k3 temp.m3 > temp2.k3 2>temp.err`
+	`#{k3_path} -p -i m3 -l k3 temp.m3 > temp2.k3 2> #{err_file}`
 
-	# Check for error
-	s = File.size?("./temp.err")
-	if s != nil && s > 0  then 
-		buf = IO.read("./temp.err")
-		puts "ERROR: #{buf}"
-		exit
-	end
+	check_error(curdir, err_file)
 
 	# remove everything after "role client" from temp.k3
 	File.open("temp.k3", 'w') do |out|
@@ -68,7 +85,8 @@ def test_file(file, dbt_path, k3_path)
 
 	# run the k3 driver on the input
 	puts "#{k3_path} -test temp.k3"
-	output = `#{k3_path} -test temp.k3`
+	output = `#{k3_path} -test temp.k3 2> #{err_file}`
+	check_error(curdir, err_file)
 	puts output
 end
 
