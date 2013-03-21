@@ -1464,17 +1464,19 @@ let m3_trig_to_k3_trig ?(generate_init = false)
          ([],[])
       !(m3_trig.M3.statements) 
    in
-    [K.Sink(K.Code(
-         begin match m3_trig.M3.event with
+    [KH.mk_code_sink
+         (match m3_trig.M3.event with
 (*           | Schema.SystemInitializedEvent -> "at_init"*)
            | _ -> Schema.name_of_event m3_trig.M3.event
-         end,
-        (K.ATuple(
-          List.map (fun (vn,vt) -> K.AVar(vn, m3_type_to_k3_type vt)) trig_args
-        )),
-        [],
-        KH.mk_block k3_trig_stmts
-      )), []]
+         )
+         (let k3_args = List.map 
+            (fun (vn, vt) -> vn, m3_type_to_k3_type vt) trig_args in
+          (* K3 triggers must have args *)
+          if null k3_args then KH.wrap_args ["_", KH.t_int]
+          else KH.wrap_args k3_args
+        )
+        [] @:
+        KH.mk_block k3_trig_stmts]
 
 
 let csv_adaptor_to_k3 (name_prefix: string)
