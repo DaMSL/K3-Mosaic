@@ -10,6 +10,8 @@ let id_fn a = a
 
 let (|-) = compose
 
+let null l = match l with [] -> true | _ -> false
+
 (* take the first x elements of a list *)
 let list_take len li =
   let rec take len2 li2 acc_list =

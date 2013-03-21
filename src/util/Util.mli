@@ -5,6 +5,9 @@ val compose :('b -> 'c) -> ('a -> 'b) -> ('a -> 'c)
 val id_fn : 'a -> 'a
 val (|-) : ('b -> 'c) -> ('a -> 'b) -> ('a -> 'c)
 
+(* whether a list is empty *)
+val null : 'a list -> bool
+
 (* take the first x values of a list *)
 val list_take : int -> 'a list -> 'a list
 
