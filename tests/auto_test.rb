@@ -76,14 +76,24 @@ def short_name_of(long_name)
 		return File.join(dir2, file)
 end
 
+err_file = "./err_log.txt"
+
+# run either one test or many tests
 if test_num == nil then
+	if File.exist?(err_file) then File.delete(err_file) end
 	index = 1
 	for file in all_files
 		long_name = file.to_s
-		print "Test #{index} (#{short_name_of(long_name)}): "
+		short_name = short_name_of(long_name)
+		print "Test #{index} (#{short_name}): "
 		output = `./sql_test.rb #{long_name}` 
 
-		if (/ERROR|FAILED/ =~ output) != nil then puts "ERROR"
+		if (/ERROR|FAILED/ =~ output) != nil then 
+			puts "ERROR"
+			# record the error in one big file
+			File.open(err_file, "a") do |out|
+				out << "Test #{index} #{short_name}: ERROR\n#{output}\n\n"
+			end
 		else puts "PASSED" end
 		index = index + 1
 	end
