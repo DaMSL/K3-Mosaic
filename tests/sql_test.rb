@@ -57,7 +57,7 @@ def test_file(file, dbt_path, k3_path)
 
 	# run dbtoaster to get interpreted updates
 	puts "./bin/dbtoaster -d LOG-INTERPRETER-UPDATES -d LOG-INTERPRETER-TRIGGERS -d LOG-M3 #{file} > #{temp_file}"
-	`./bin/dbtoaster -d LOG-INTERPRETER-UPDATES -d LOG-INTERPRETER-TRIGGERS -d LOG-M3 #{file} > #{temp_file} 2> #{err_file}`
+	`./bin/dbtoaster -d PRINT-VERBOSE -d LOG-INTERPRETER-UPDATES -d LOG-INTERPRETER-TRIGGERS -d LOG-M3 #{file} > #{temp_file} 2> #{err_file}`
 	check_error(curdir, err_file)
 
 	# run dbtoaster to get m3 file

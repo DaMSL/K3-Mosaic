@@ -83,7 +83,7 @@ if test_num == nil then
 		print "Test #{index} (#{short_name_of(long_name)}): "
 		output = `./sql_test.rb #{long_name}` 
 
-		if (/ERROR/ =~ output) != nil then puts "ERROR"
+		if (/ERROR|FAILED/ =~ output) != nil then puts "ERROR"
 		else puts "PASSED" end
 		index = index + 1
 	end
