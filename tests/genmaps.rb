@@ -34,6 +34,10 @@ class SingletonMap
   def set(ivars, ovars, val)
     @val = val;
   end
+
+	def del(ivars, ovars)
+		@val = 0
+	end
   
   def to_s
     "#{@name}-Singleton"
@@ -63,6 +67,10 @@ class OutputMap
   def set(ivars, ovars, val)
     @val[ovars] = val;
   end
+
+	def del(ivars, ovars)
+		@val.delete(ovars)
+	end
   
   def to_s
     "#{@name}[#{@ovars.join(", ")}]"
@@ -89,9 +97,13 @@ class RelEvent
   end
 
   def add_effect(mapn, ivars, ovars, val)
-    @effects[mapn].push([ivars, ovars, val]);
+    @effects[mapn].push([:add, ivars, ovars, val]);
   end
-  
+
+	def del_effect(mapn, ivars, ovars)
+		@effects[mapn].push([:del, ivars, ovars, 0]);
+	end
+
   def to_s
     "#{@op}_#{@relname}"
   end
@@ -138,6 +150,12 @@ File.open(ARGV[0]) do |f|
         ovars = (ovars == "-" ? [] : ovars.split(/; /));
         if $last_event != nil 
 				then $last_event.add_effect(mapname, ivars, ovars, val) end
+      when /REMOVE '([^']*)'\[([^\]]*)\]\[([^\]]*)\]/ then
+        mapname = $1; ivars = $2; ovars = $3;
+        ivars = (ivars == "-" ? [] : ivars.split(/; /));
+        ovars = (ovars == "-" ? [] : ovars.split(/; /));
+        if $last_event != nil 
+				then $last_event.del_effect(mapname, ivars, ovars) end
     end
   end
 end
@@ -169,7 +187,14 @@ def dump_map(mapn)
   sep = "";
   puts "#{mapn} = {"
   $events.each do |evt|
-    evt.effects.fetch(mapn, []).each { |u| map.set(*u); }
+    evt.effects.fetch(mapn, []).each do |action,a,b,c| 
+			case action
+			when :add then
+				map.set(a,b,c)
+			when :del then
+				map.del(a,b)
+			end
+		end
     if $use_timestamps then
       puts(sep + map.val_s([0, 0, evt.id]));
       sep = "; ";
