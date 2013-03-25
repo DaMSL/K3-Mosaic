@@ -82,6 +82,7 @@ err_file = "./err_log.txt"
 if test_num == nil then
 	if File.exist?(err_file) then File.delete(err_file) end
 	index = 1
+	passed = 0
 	for file in all_files
 		long_name = file.to_s
 		short_name = short_name_of(long_name)
@@ -94,9 +95,11 @@ if test_num == nil then
 			File.open(err_file, "a") do |out|
 				out << "Test #{index} #{short_name}: ERROR\n#{output}\n\n"
 			end
-		else puts "PASSED" end
-		index = index + 1
+		else puts "PASSED"; passed += 1 end
+
+		index += 1
 	end
+	puts "Passed #{passed} out of #{index-1} tests"
 else 
 	test_file = all_files[(test_num-1)]
 	puts("Test #{test_num} (#{test_file.to_s}):")
