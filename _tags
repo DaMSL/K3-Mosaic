@@ -10,6 +10,7 @@
 <src/stages/k3_dist>: include
 <lib/bolt>: include, not_hygienic
 <external>: not_hygienic
+<bin>: not_hygienic
 
 true: use_str
 true: use_unix
