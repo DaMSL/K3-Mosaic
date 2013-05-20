@@ -83,6 +83,6 @@ let insert_index_snd first xs =
 (* efficient function to get unique entities *)
 let nub xs =
     let blank = Hashtbl.create (List.length xs) in
-        List.iter (fun x -> Hashtbl.replace blank x ()) xs;
-        Hashtbl.fold (fun h () t -> h :: t) blank []
+    List.iter (fun x -> Hashtbl.replace blank x ()) xs;
+    Hashtbl.fold (fun h () t -> h :: t) blank []
 
