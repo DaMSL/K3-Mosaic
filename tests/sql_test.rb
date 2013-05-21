@@ -13,23 +13,16 @@ require 'pathname'
 raise "No input file" unless ARGV.length >= 1
 file=File.expand_path(ARGV[0])
 
-dbtoaster_path = "../external/dbtoaster"
+$cur_path = File.expand_path(File.dirname(__FILE__))
+dbtoaster_path = File.join($cur_path, "../external/dbtoaster")
 dbtoaster_exe_path = File.join(dbtoaster_path, "/bin/dbtoaster")
 
 p = Pathname.new(dbtoaster_exe_path)
 raise "Can't find dbtoaster executable" unless p.exist?
 
-path = "../bin/k3"
+path = File.join($cur_path, "../bin/k3")
 p = Pathname.new(path)
-if not p.exist? then 
-	path = "../Driver.byte"
-	p = Pathname.new(path)
-		if not p.exist? then
-			path = "../Driver.native"
-			p = Pathname.new(path)
-				raise "Can't find dbtoaster file" unless p.exist?
-		end
-end
+raise "Can't find dbtoaster file" unless p.exist?
 
 k3_path = path
 
@@ -80,8 +73,9 @@ def test_file(file, dbt_path, k3_path)
 	end
 
 	# append the test from genmaps.rb
-	puts "./genmaps.rb temp.trace >> temp.k3"
-	`./genmaps.rb temp.trace >> temp.k3`
+    genmaps = File.join($cur_path, "./genmaps.rb")
+	puts "#{genmaps} temp.trace >> temp.k3"
+	`#{genmaps} temp.trace >> temp.k3`
 
 	# run the k3 driver on the input
 	puts "#{k3_path} -test temp.k3"

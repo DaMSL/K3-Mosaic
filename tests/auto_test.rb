@@ -14,7 +14,8 @@
 require 'optparse'
 require 'pathname'
 
-examples_path = "../external/dbtoaster/examples/queries/"
+cur_path = File.expand_path(File.dirname(__FILE__))
+examples_path = File.join(cur_path, "../external/dbtoaster/examples/queries/")
 simple_dir = "simple"
 
 simple_flag = false
@@ -87,7 +88,8 @@ if test_num == nil then
 		long_name = file.to_s
 		short_name = short_name_of(long_name)
 		print "Test #{index} (#{short_name}): "
-		output = `./sql_test.rb #{long_name}` 
+        sql_test = File.join(cur_path, "./sql_test.rb")
+		output = `#{sql_test} #{long_name}` 
 
 		if (/ERROR|FAILED/ =~ output) != nil then 
 			puts "ERROR"
@@ -103,7 +105,7 @@ if test_num == nil then
 else 
 	test_file = all_files[(test_num-1)]
 	puts("Test #{test_num} (#{test_file.to_s}):")
-	output =  `./sql_test.rb #{test_file.to_s}`
+	output =  `#{cur_path}/sql_test.rb #{test_file.to_s}`
 	puts output
 end
 
