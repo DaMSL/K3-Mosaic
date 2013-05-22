@@ -14,7 +14,7 @@ exception InvalidAst of string
 (* get the relative offset of the stmt in the trigger *)
 let stmt_idx_in_t p trig stmt = 
   let ss = P.stmts_of_t p trig in
-  foldl_until (fun acc _ -> acc + 1) (fun acc s -> s = stmt) 0 ss
+  foldl_until (fun acc s -> if s = stmt then Left acc else Right (acc+1)) 0 ss
 
 (* get the nth member in a block. If it's not a block and we only ask for the
  * first item, return the not-a-block *)

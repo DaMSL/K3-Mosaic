@@ -1,5 +1,18 @@
 (* Utilities that are useful *)
 
+(* abbreviations for annoyingly long functions *)
+let foi = float_of_int
+let iof = int_of_float
+let soi = string_of_int
+let sof = string_of_float
+let ios = int_of_string
+let fos = float_of_string
+let bos = bool_of_string
+let sob = string_of_bool
+
+(* Either type *)
+type ('a, 'b) either_t = Left of 'a | Right of 'b
+
 (* low precedence function application allows us to remove 
  * many () from our code *)
 let (@:) f x = f x;;
@@ -40,32 +53,56 @@ let list_head l = match l with
   | x::_ -> x 
   | _ -> invalid_arg "empty list"
 
+let list_tail l = match l with 
+  | _::x -> x 
+  | _ -> invalid_arg "empty list or singleton"
+
 let list_last xs = list_head @: list_take_end 1 xs
+
+(* will only remove one instance of x in xs (as opposed to filter) *)
+let list_remove r l = 
+  let rec loop acc = function
+    | x::xs when x = r -> (List.rev acc)@xs
+    | x::xs -> loop (x::acc) xs
+    | []    -> List.rev acc
+  in loop [] l
 
 let compose_fn f g x = f(g x)
 
 (* function that folds until a predicate is true *)
-let rec foldl_until f p acc = function
-    | x::xs when p acc x -> acc 
-    | x::xs -> foldl_until f p (f acc x) xs 
-    | []    -> acc
+let rec foldl_until f acc = function
+    | x::xs -> 
+        begin match f acc x with
+        | Left a -> a
+        | Right acc' -> foldl_until f acc' xs
+        end
+    | [] -> acc
 
 (* I/O helpers *)
-let read_file f = 
-  let lines, in_chan = ref [], (open_in f) in
-  let all_lines =
-    try while true do
-          lines := (!lines @ [input_line in_chan])
-        done;
-        []
-    with End_of_file -> !lines
-  in close_in in_chan; String.concat "\n" all_lines 
+(* read a file and convert it into lines *)
+let read_file_lines file = 
+  let in_chan = open_in file in
+  let rec read_lines acc = 
+      try 
+        let acc' = input_line in_chan :: acc
+        in read_lines acc'
+      with End_of_file -> acc in
+  let ls = List.rev @: read_lines [] in
+  close_in in_chan; ls 
+
+let read_file file = String.concat "\n" @: read_file_lines file
+
+let write_file file s =
+  let out_chan = open_out file in
+  output_string out_chan s;
+  close_out out_chan
 
 (* make a range from first to last. Tail recursive *)
-let create_range first length =
+let create_range ?(step=1) first length =
+    let last = first + ((length-1) * step) in
     let rec range_inner index acc =
-        if index >= first+length then acc
-        else range_inner (index+1) (index::acc)
+        if index > last then acc
+        else range_inner (index+step) (index::acc)
     in
     List.rev(range_inner first [])
 
@@ -80,9 +117,100 @@ let insert_index_snd first xs =
     let is = create_corr_range first xs in
     list_zip xs is
 
+(* tail recursive, so more efficient than mapping alone *)
+let list_map f l = List.rev @: List.rev_map f l
+
+(* get an index with every item in a map *)
+let list_mapi f l = List.rev @: snd @: List.fold_left
+  (fun (i,acc) x -> i+1, (f (i,x))::acc) (0,[]) l
+
+(* calls f on its output over and over, num times *)
+let iterate f init num = 
+  let rec loop acc = function
+    | i when i <= 0 -> acc
+    | i -> loop (f acc) (i-1)
+  in loop init num
+
+(* calls f on its output over and over again until p is true *)
+let iterate_until f init =
+  let rec loop acc = 
+    match f acc with 
+    | Left  a -> a
+    | Right b -> loop b
+  in loop init
+
+(* repeat a function many times, building a list from indices *)
+(* do this without instantiating the index list *)
+let list_populate f init num = 
+  List.rev @: snd @: iterate 
+    (fun (i, acc) -> i+1, (f i)::acc)
+    (init, [])
+    num
+
+(* transform a list into a list of lists of i elements *)
+(* if there aren't enough elements to fill the last list, it's filled as much as
+ * possible *)
+let list_bunch i l = 
+  let rec loop acc l = 
+    match l with
+    | [] -> acc
+    | _  -> let taken = list_take i l in
+      match list_drop i l with
+      | []    -> taken::acc
+      | xs    -> loop (taken::acc) xs
+  in List.rev @: loop [] l
+
+(* intersperse 2 lists together. When one runs out, continue with the other *)
+let list_intersperse la lb =
+  let rec loop acc l1 l2 = match l1, l2 with
+    | x::xs, y::ys -> loop (y::x::acc) xs ys
+    | x::xs, []    -> loop (x::acc) xs []
+    | [],    y::ys -> loop (y::acc) [] ys
+    | [], []       -> acc
+  in List.rev @: loop [] la lb
+
+(* functions without exceptions *)
+let list_find f l = try Some(List.find f l) with Not_found -> None
+let find fn k m = try Some(fn k m) with Not_found -> None
+
+(* modify/add to an association list generically *)
+let assoc_modify f item l =
+  try
+    let a = List.assoc item l in
+    let rest = List.remove_assoc item l in
+    (item, f (Some a))::rest
+  with 
+    Not_found -> (item, f None)::l
+
+(* perform a cross-product on 2 lists. Doesn't preserve order *)
+let cartesian_product l1 l2 =
+  List.fold_left (fun acc x ->
+      List.fold_left (fun acc' y -> (x,y)::acc')
+        acc
+        l2
+    )
+    []
+    l1
+
 (* efficient function to get unique entities *)
 let nub xs =
     let blank = Hashtbl.create (List.length xs) in
     List.iter (fun x -> Hashtbl.replace blank x ()) xs;
     Hashtbl.fold (fun h () t -> h :: t) blank []
+
+(* --- Array function --- *)
+
+let array_find pred arr =
+    let l = Array.length arr and index = ref 0 and found = ref false in
+    while not !found && !index < l do
+        found := pred arr.(!index);
+        index := !index + 1;
+    done;
+    index := !index - 1;
+    if not !found then raise Not_found
+    else !index, arr.(!index)
+
+(* map an array to a list *)
+let array_map f arr = 
+  List.rev @: Array.fold_left (fun acc x -> (f x)::acc) [] arr
 
