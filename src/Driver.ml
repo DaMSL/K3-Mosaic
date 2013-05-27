@@ -509,4 +509,5 @@ let main () =
   
   process_parameters cmd_line_params
 
-let _ = Printexc.print main ()
+let _ = if not !Sys.interactive then Printexc.print main ()
+
