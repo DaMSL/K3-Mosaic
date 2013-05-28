@@ -1,10 +1,10 @@
 #!/usr/bin/ruby
 
 #
-# Compare the output of an SQL test using dbtoaster to K3 execution
+# Test a distributed SQL query
 #
 # Usage:
-#    ./sql_test.rb SQL_query
+#    ./dist_test.rb SQL_query
 #
 
 require 'optparse'
@@ -63,20 +63,20 @@ def test_file(file, dbt_path, k3_path)
     `./bin/dbtoaster -d PRINT-VERBOSE -d LOG-INTERPRETER-UPDATES -d LOG-INTERPRETER-TRIGGERS -d LOG-M3 #{file} > #{temp_file} 2> #{err_file}`
     check_error(curdir, err_file)
 
-	# run dbtoaster to get m3 file
-    puts "./bin/dbtoaster -l M3 -d PRINT-VERBOSE #{file} > #{m3_file}"
-    `./bin/dbtoaster -l M3 -d PRINT-VERBOSE #{file} > #{m3_file} 2> #{err_file}`
+	# run dbtoaster to get m3 file with distributed portion
+    puts "./bin/dbtoaster -l distm3 -d PRINT-VERBOSE #{file} > #{m3_file}"
+    `./bin/dbtoaster -l distm3 -d PRINT-VERBOSE #{file} > #{m3_file} 2> #{err_file}`
     check_error(curdir, err_file)
 
 	# change directory back
 	puts "cd #{curdir}"
 	Dir.chdir "#{curdir}"
 
-	puts "#{k3_path} -p -i m3 -l k3 temp.m3 > temp2.k3"
-	`#{k3_path} -p -i m3 -l k3 temp.m3 > temp2.k3 2> #{err_file}`
-
+	puts "#{k3_path} -p -i m3 -l k3dist temp.m3 > temp2.k3dist"
+	`#{k3_path} -p -i m3 -l k3dist temp.m3 > temp2.k3dist 2> #{err_file}`
 	check_error(curdir, err_file)
-    check_type_error(curdir, 'temp2.k3')
+    check_type_error(curdir, 'temp2.k3dist')
+    exit
 
 	# remove everything after "role client" from temp.k3
 	File.open("temp.k3", 'w') do |out|

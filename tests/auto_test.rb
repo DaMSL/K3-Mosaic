@@ -20,6 +20,7 @@ simple_dir = "simple"
 
 simple_flag = false
 test_num = nil
+distributed = false
 
 # option parser
 opt_parser = OptionParser.new do |opts|
@@ -32,6 +33,9 @@ opt_parser = OptionParser.new do |opts|
 	opts.on("-n", "--testnum [NUMBER]", Integer, 
 					"Choose a specific test") do |n|
 		  test_num = n
+		end
+	opts.on("-d", "--dist", "Perform a distributed test") do |n|
+		  distributed = true
 		end
 end
 
@@ -105,7 +109,11 @@ if test_num == nil then
 else 
 	test_file = all_files[(test_num-1)]
 	puts("Test #{test_num} (#{test_file.to_s}):")
-	output =  `#{cur_path}/sql_test.rb #{test_file.to_s}`
+    if distributed then
+	    output =  `#{cur_path}/dist_test.rb #{test_file.to_s}`
+    else
+        output =  `#{cur_path}/sql_test.rb #{test_file.to_s}`
+    end
 	puts output
 end
 
