@@ -42,7 +42,9 @@ let corr_ast_for_m_s p ast map stmt trig =
   let stmt_idx = List.assoc stmt s_i in
 
   let trig_name = "correct_"^map_name^"_for_"^trig in
-  let trig_decl = U.trigger_of_program trig_name ast in
+  let trig_decl = 
+    try U.trigger_of_program trig_name ast 
+    with Not_found -> failwith @: "Missing corrective for "^trig_name in
   let trig_ast = U.expr_of_code trig_decl in
   let args = U.typed_vars_of_arg @: U.args_of_code trig_decl in
   let trig_args = P.args_of_t p trig in 
@@ -89,11 +91,23 @@ let modify_tuple_type fn typ =
     | TIsolated(m)  -> TIsolated(unwrap_m m)
     | TContained(m) -> TContained(unwrap_m m)
 
+(* modify a lambda to have a vid included in its arguments *)
+let add_vid_to_lambda_args lambda =
+  let body = U.decompose_lambda lambda in
+  let vid_avar = AVar("vid", t_vid) in
+  let args = U.arg_of_lambda lambda in
+  let new_args = match args with
+    | Some(ATuple(vs)) -> ATuple(P.map_add_v vid_avar vs)
+    | Some(v) -> ATuple(P.map_add_v vid_avar [v])
+    | _ -> raise(UnhandledModification("lambda not found")) in
+  mk_lambda new_args body
+
 (* add vid to all map accesses *)
 let modify_map_access p ast stmt =
   let lmap = P.lhs_map_of_stmt p stmt in
   let lmap_name = P.map_name_of p lmap in
   let lmap_types = P.map_types_with_v_for p lmap in
+  let lr_map_names = fst @: List.split @: P.map_names_ids_of_stmt p stmt in
   let maps_n_id = maps_with_existing_out_tier p stmt in
   let var_vid = mk_var "vid" in
   let modify e path = match U.tag_of_expr e with
@@ -159,28 +173,32 @@ let modify_map_access p ast stmt =
     | Iterate -> let (lambda, col) = U.decompose_iterate e in
       begin match U.tag_of_expr col with
         | Slice -> 
-          let body = U.decompose_lambda lambda in
-          let vid_avar = AVar("vid", t_vid) in
-          let args = U.arg_of_lambda lambda in
-          let new_args = begin match args with
-            | Some(ATuple(vs)) -> ATuple(P.map_add_v vid_avar vs)
-            | Some(v) -> ATuple(P.map_add_v vid_avar [v])
-            | _ -> raise(UnhandledModification("lambda not found"))
-          end
-          in mk_iter (mk_lambda new_args body) col
-        | _ -> e end
-    (* handle a case when the map is applied to a lambda *)
-    | Apply  -> let (l, arg) = U.decompose_apply e in
+          let mod_lambda = add_vid_to_lambda_args lambda in
+          mk_iter mod_lambda col
+        | _ -> e 
+      end
+    (* handle the case of map, which appears in some files *)
+    | Map -> let (lambda, col) = U.decompose_map e in
+      begin match U.tag_of_expr col with
+        | Var id when List.mem id lr_map_names ->
+          let mod_lambda = add_vid_to_lambda_args lambda in
+          mk_map mod_lambda col
+        | _ -> e 
+      end
+    (* handle a case when the a lambda is applied to a lmap *)
+    (* in this case, we modify the types of the lambda vars themselves *)
+    | Apply  -> let (lambda, arg) = U.decompose_apply e in
       begin match U.tag_of_expr arg with
         | Var id when id = lmap_name -> 
-          begin match (U.typed_vars_of_lambda l, U.decompose_lambda l) with
+          begin match (U.typed_vars_of_lambda lambda, U.decompose_lambda lambda) with
             | ([id, t],b) -> 
               mk_apply 
                 (mk_lambda 
                   (wrap_args [id, wrap_tset @: wrap_ttuple lmap_types]) b)
                 arg
             | _ -> raise (UnhandledModification(PR.string_of_expr e)) end
-        | _ -> mk_apply l arg end
+        | _ -> e
+      end
     | _ -> e
   in T.modify_tree_bu_with_path ast modify
 
