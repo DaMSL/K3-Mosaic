@@ -9,7 +9,8 @@
 #      -s (optional)        Test with only simple queries
 #
 #      -n NUMBER (optional) Test only a specific test number
-# 
+#      -d Run distributed tests 
+#      -l FILE run only a list of selected tests from a file
 
 require 'optparse'
 require 'pathname'
@@ -29,24 +30,24 @@ opt_parser = OptionParser.new do |opts|
 	opts.banner = "Usage: auto_test.rb [options]"
 	opts.separator ""
 	opts.separator "Specific options:"
-	opts.on("-s", "--[no-]simple", "Do only simple tests") do |s|
-			simple_flag = s
+	opts.on("-s", "--simple", "Do only simple tests") do
+			simple_flag = true 
 		end
 	opts.on("-n", "--testnum [NUMBER]", Integer, 
 		  	"Choose a specific test") do |n|
 		  test_num = n
 		end
-	opts.on("-d", "--dist", "Perform a distributed test") do |n|
+	opts.on("-d", "--dist", "Perform a distributed test") do
 		  distributed = true
 		end
-  opts.on("-l", "--list [FILE]", "Execute tests from a list in a file") do |file|
+  opts.on("-l", "--list [FILE]", String, 
+          "Execute tests from a list in a file") do |file|
       test_list_name = file
     end
 end
 
-
 # now parse the options
-options = opt_parser.parse!(ARGV)
+opt_parser.parse!(ARGV)
 
 # handle a test list
 if test_list_name != nil then
@@ -98,6 +99,12 @@ end
 
 err_file = "./err_log.txt"
 
+if distributed then
+  test_cmd = File.join(cur_path, "./dist_test.rb")
+else
+  test_cmd = File.join(cur_path, "./sql_test.rb")
+end
+
 # run either one test or many tests
 if test_num == nil then
 	if File.exist?(err_file) then File.delete(err_file) end
@@ -110,8 +117,7 @@ if test_num == nil then
       long_name = file.to_s
       short_name = short_name_of(long_name)
       print "Test #{index} (#{short_name}): "
-          sql_test = File.join(cur_path, "./sql_test.rb")
-      output = `#{sql_test} #{long_name}` 
+      output = `#{test_cmd} #{long_name}` 
 
       if (/ERROR|FAILED/ =~ output) != nil then 
         puts "ERROR"
@@ -131,11 +137,6 @@ if test_num == nil then
 else # one test
 	test_file = all_files[(test_num-1)]
 	puts("Test #{test_num} (#{test_file.to_s}):")
-    if distributed then
-	    output =  `#{cur_path}/dist_test.rb #{test_file.to_s}`
-    else
-        output =  `#{cur_path}/sql_test.rb #{test_file.to_s}`
-    end
-	puts output
+  puts `#{test_cmd} #{test_file.to_s}`
 end
 
