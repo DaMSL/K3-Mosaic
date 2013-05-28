@@ -24,8 +24,9 @@ let lps s = [lazy (ps s)]      (* print string *)
 let lps_list ?(sep=", ") cut_t f l = [lazy (ps_list ~sep:sep cut_t (force_list |- f) l)]
 
 (* type we pass all the way down for configuring behaviors *)
-type config = {dummy:int}
-let default_config = {dummy=0}
+type config = {verbose_types:bool}
+let default_config = {verbose_types=false}
+let verbose_types_config = {verbose_types=true}
 
 (* low precedence joining of lists *)
 let (<|) a b = a @ b
@@ -87,12 +88,16 @@ let rec lazy_base_type c = function
 
 (* TODO: annotations *)
 and lazy_mutable_type c = function
-  | TMutable (bt, a) -> lazy_base_type c bt
+  | TMutable (bt, a) -> 
+      if c.verbose_types then lps "m:" <| lazy_base_type c bt
+      else lazy_base_type c bt
   | TImmutable (bt, a) -> lazy_base_type c bt
 
 and lazy_value_type c = function
   | TIsolated mt -> lazy_mutable_type c mt
-  | TContained mt -> lazy_mutable_type c mt
+  | TContained mt -> 
+      if c.verbose_types then lps "c:" <| lazy_mutable_type c mt
+      else lazy_mutable_type c mt
 
 let lazy_type c = function
   | TFunction(f,t) -> lazy_value_type c f <| lps " -> " <| lazy_value_type c t
@@ -397,6 +402,22 @@ let lazy_declaration c d =
   wrap_hv 0 out <| lcut ()
 
 let wrap_f = wrap_formatter ~margin:80
+
+(* print a K3 type in syntax *)
+let string_of_base_type t = wrap_f @: fun () -> 
+  force_list @: lazy_base_type verbose_types_config t
+
+(* print a K3 type in syntax *)
+let string_of_value_type t = wrap_f @: fun () ->
+  force_list @: lazy_value_type verbose_types_config t
+
+(* print a K3 type in syntax *)
+let string_of_mutable_type t = wrap_f @: fun () ->
+  force_list @: lazy_mutable_type verbose_types_config t
+
+(* print a K3 type in syntax *)
+let string_of_type t = wrap_f @: fun () ->
+  force_list @: lazy_type verbose_types_config t
 
 (* print a K3 expression in syntax *)
 let string_of_expr e = wrap_f @: fun () -> force_list @: lazy_expr default_config e

@@ -12,9 +12,6 @@ open K3Printing
 (* TODO: Make exceptions more informative for error reporting. *)
 exception MalformedTree
 
-(* uuid, location in typechecker, compared types *)
-exception TypeError of int * string
-
 type type_bindings_t = (id_t * type_t) list
 type event_type_bindings_t = (id_t * (id_t * (type_t list)) list) list
 
@@ -29,26 +26,10 @@ type error_type =
   | MTBad of mutable_type_t
   | TMsg of string
 
-let t_error uuid name msg () = 
-  let extra = match msg with
-    | TMismatch(t1,t2,s)  -> s^" This expression has type "^string_of_type t1^
-        "\nBut an expression was expected of type "^string_of_type t2
-    
-    | VTMismatch(t1,t2,s) -> s^" This expression has type "^
-        string_of_value_type t1^"\nBut an expression was expected of type "^
-        string_of_value_type t2
-    
-    | BTMismatch(t1,t2,s) -> s^" This expression has type "^
-        string_of_base_type t1^"\nBut an expression was expected of type "^
-        string_of_base_type t2
-    
-    | TBad(t)           -> "Bad type "^string_of_type t
-    | VTBad(t)          -> "Bad type "^string_of_value_type t
-    | BTBad(t)          -> "Bad type "^string_of_base_type t
-    | MTBad(t)          -> "Bad type "^flat_string_of_mutable_type t
-    | TMsg(s)           -> s
-  in
-  raise (TypeError(uuid, name^": "^extra^")" ))
+(* uuid, location in typechecker, compared types *)
+exception TypeError of int * string * error_type
+
+let t_error uuid name msg () = raise @: TypeError(uuid, name, msg)
 
 let check_tag_arity tag children =
   let length = List.length children in
@@ -643,7 +624,7 @@ let rec types_of_pattern (env:(id_t * type_t list) list) p : type_t list=
   | Terminal id  ->
      (try List.assoc id env
       with Not_found -> 
-        raise (TypeError(-1, "No resource "^id^" found in pattern")))
+        raise @: TypeError(-1, "", TMsg("No resource "^id^" found in pattern")))
 
   | Choice l     -> rcr_list l
   | Sequence l   -> rcr_list l
@@ -701,8 +682,8 @@ let arg_type_of_trigger error_prefix trig_env trig_id =
 let typecheck_flow env trig_env resource_env fp =
   let check_code_type name id args locals body rebuild_f =
     try check_trigger_type trig_env env id args locals body rebuild_f
-    with TypeError(ast_id, msg) -> 
-      raise (TypeError(ast_id, "In "^name^" "^id^": "^msg))
+    with TypeError(ast_id, inner_name, msg) -> 
+      raise @: TypeError(ast_id, name^":"^inner_name, msg)
   in
   List.fold_left (fun (nfp, env) (fs,a) ->
       let nfs, nenv = match fs with
@@ -780,7 +761,8 @@ let type_bindings_of_program prog =
         | Global(i, t, Some init) ->
           let typed_init =
             try deduce_expr_type trig_env env init
-            with TypeError(ast_id, msg) -> raise (TypeError(ast_id, "In Global "^i^": "^msg))
+            with TypeError(ast_id, inner, msg) -> 
+              raise (TypeError(ast_id, "Global "^i^":"^inner, msg))
           in
           let expr_type = type_of_expr typed_init in
           if not (compare_type_ts expr_type t) then t_error (-1) i

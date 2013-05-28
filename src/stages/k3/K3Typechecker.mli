@@ -6,7 +6,6 @@ open K3.AST
 open K3.Annotation
 
 exception MalformedTree
-exception TypeError of int * string
 
 type type_bindings_t = (id_t * type_t) list
 type event_type_bindings_t = (id_t * (id_t * (type_t list)) list) list
@@ -20,6 +19,8 @@ type error_type =
     | BTBad of base_type_t
     | MTBad of mutable_type_t
     | TMsg of string
+
+exception TypeError of int * string * error_type
 
 val t_error : int -> string -> error_type -> unit -> unit
 val type_of_expr: expr_t -> type_t

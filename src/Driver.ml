@@ -179,9 +179,10 @@ let handle_parse_error ?(msg = "") lexbuf =
   print_endline ("Lexer reached: '"^(Lexing.lexeme lexbuf)^"'; "^msg);
   exit 1
 
-let handle_type_error p (uuid,error) =
+let handle_type_error p (uuid, name, msg) =
+  let s = K3TypeError.string_of_error msg in
   print_endline "----Type error----";
-  print_endline @: "Error("^(string_of_int uuid)^"): "^error;
+  print_endline @: "Error("^(string_of_int uuid)^"): "^name^": "^s;
   print_endline @: string_of_program ~print_id:true p;
   exit 1
 
@@ -230,7 +231,7 @@ let parse_program_m3 =
 let typed_program_with_globals p =
   try deduce_program_type @: 
       K3Global.add_globals cmd_line_params.node_address cmd_line_params.peers p
-  with TypeError (uuid, error) -> handle_type_error p (uuid, error)
+  with TypeError (a,b,c) -> handle_type_error p (a,b,c) 
 
 (* for most functions, we don't need the globals included *)
 let typed_program p =
@@ -510,4 +511,3 @@ let main () =
   process_parameters cmd_line_params
 
 let _ = if not !Sys.interactive then Printexc.print main ()
-
