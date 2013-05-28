@@ -24,9 +24,13 @@ let lps s = [lazy (ps s)]      (* print string *)
 let lps_list ?(sep=", ") cut_t f l = [lazy (ps_list ~sep:sep cut_t (force_list |- f) l)]
 
 (* type we pass all the way down for configuring behaviors *)
-type config = {verbose_types:bool}
-let default_config = {verbose_types=false}
-let verbose_types_config = {verbose_types=true}
+type config = {verbose_types:bool;
+               uuid:int option}
+
+let default_config = {verbose_types=false;
+                      uuid=None}
+
+let verbose_types_config = {default_config with verbose_types=true}
 
 (* low precedence joining of lists *)
 let (<|) a b = a @ b
@@ -335,7 +339,10 @@ let rec lazy_expr c expr =
     wrap_indent (lps "send" <| lazy_paren (expr_pair (e1, e2) <| lps ", " <| 
       lps_list CutHint (tuple_no_paren c) es))
   in
-  wrap out
+  (* if we asked to highlight a uuid, do so now *)
+  match c.uuid with 
+  | Some i when i = U.id_of_expr expr -> lps "%" <| wrap out
+  | _ -> wrap out
 
 let lazy_trigger c id arg vars expr = 
   let is_block expr = match U.tag_of_expr expr with
@@ -425,9 +432,13 @@ let string_of_type t = wrap_f @: fun () ->
 let string_of_expr e = wrap_f @: fun () -> force_list @: lazy_expr default_config e
 
 (* print a K3 program in syntax *)
-let string_of_program prog = 
+let string_of_program ?(uuid_highlight=None) prog = 
+  let config = match uuid_highlight with 
+    | None -> default_config
+    | _ -> {default_config with uuid=uuid_highlight}
+  in
   wrap_f @: fun () -> 
-    let l = lps_list ~sep:"" CutHint (lazy_declaration default_config |- fst) prog in
+    let l = lps_list ~sep:"" CutHint (lazy_declaration config |- fst) prog in
     obx 0;  (* vertical box *)
     force_list l;
     cb

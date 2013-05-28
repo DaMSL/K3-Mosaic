@@ -11,4 +11,4 @@ val string_of_type : type_t -> string
 
 val string_of_expr : expr_t -> string
 
-val string_of_program : program_t -> string
+val string_of_program : ?uuid_highlight: int option -> program_t -> string
