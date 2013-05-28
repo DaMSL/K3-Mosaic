@@ -189,10 +189,12 @@ let rec lazy_expr c expr =
     let wrapl = logic_paren_l el in
     let wrapr = logic_paren er in
     expr_pair ~sep:(lsp () <| lps sym <| lsp ()) ~wl:wrapl ~wr:wrapr (el, er) 
-  in let expr_type_is_bool e = match T.type_of_expr e with
+  in let expr_type_is_bool e = 
+    try (match T.type_of_expr e with
     | TValue x | TFunction(_,x) -> match T.base_of x with
         | TBool -> true
-        | _ -> false
+        | _ -> false)
+    with T.TypeError(_,_,_) -> false (* assume additive *)
   in let tuple_no_paren c e = match U.tag_of_expr e with
     | Tuple -> let es = U.decompose_tuple e in
       lps_list CutHint (lazy_expr c) es
