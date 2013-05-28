@@ -21,6 +21,8 @@ simple_dir = "simple"
 simple_flag = false
 test_num = nil
 distributed = false
+test_list_name = nil
+test_list = []
 
 # option parser
 opt_parser = OptionParser.new do |opts|
@@ -31,16 +33,30 @@ opt_parser = OptionParser.new do |opts|
 			simple_flag = s
 		end
 	opts.on("-n", "--testnum [NUMBER]", Integer, 
-					"Choose a specific test") do |n|
+		  	"Choose a specific test") do |n|
 		  test_num = n
 		end
 	opts.on("-d", "--dist", "Perform a distributed test") do |n|
 		  distributed = true
 		end
+  opts.on("-l", "--list [FILE]", "Execute tests from a list in a file") do |file|
+      test_list_name = file
+    end
 end
+
 
 # now parse the options
 options = opt_parser.parse!(ARGV)
+
+# handle a test list
+if test_list_name != nil then
+    p = Pathname.new(test_list_name)
+    (puts "Can't find list file #{test_list_name}"; exit) unless p.exist?
+    File.open(test_list_name, "r").each_line do |line|
+      s = /\d+/.match(line).to_s
+      test_list << s.to_i
+    end
+end
 
 p = Pathname.new(examples_path)
 raise "Can't find path #{examples_path}" unless p.exist?
@@ -69,7 +85,6 @@ if not simple_flag then
   end
 end
 
-
 # for debugging
 #for file in all_files
 	#puts file.relative_path_from(p)
@@ -88,25 +103,32 @@ if test_num == nil then
 	if File.exist?(err_file) then File.delete(err_file) end
 	index = 1
 	passed = 0
+  tested = 0
+
 	for file in all_files
-		long_name = file.to_s
-		short_name = short_name_of(long_name)
-		print "Test #{index} (#{short_name}): "
-        sql_test = File.join(cur_path, "./sql_test.rb")
-		output = `#{sql_test} #{long_name}` 
+    if test_list != [] and test_list.find_index(index) != nil then
+      long_name = file.to_s
+      short_name = short_name_of(long_name)
+      print "Test #{index} (#{short_name}): "
+          sql_test = File.join(cur_path, "./sql_test.rb")
+      output = `#{sql_test} #{long_name}` 
 
-		if (/ERROR|FAILED/ =~ output) != nil then 
-			puts "ERROR"
-			# record the error in one big file
-			File.open(err_file, "a") do |out|
-				out << "Test #{index} #{short_name}: ERROR\n#{output}\n\n"
-			end
-		else puts "PASSED"; passed += 1 end
+      if (/ERROR|FAILED/ =~ output) != nil then 
+        puts "ERROR"
+        # record the error in one big file
+        File.open(err_file, "a") do |out|
+          out << "Test #{index} #{short_name}: ERROR\n#{output}\n\n"
+        end
+      else puts "PASSED"; passed += 1 
+      end
 
-		index += 1
+      tested += 1
+    end
+
+      index += 1
 	end
-	puts "Passed #{passed} out of #{index-1} tests"
-else 
+	puts "Passed #{passed} out of #{tested} tests"
+else # one test
 	test_file = all_files[(test_num-1)]
 	puts("Test #{test_num} (#{test_file.to_s}):")
     if distributed then
