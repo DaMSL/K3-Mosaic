@@ -193,7 +193,7 @@ let handle_type_error p (uuid, name, msg) =
 let handle_interpret_error p (uuid,error) =
   print_endline "----Interpreter error----";
   print_endline @: "Error("^(string_of_int uuid)^"): "^error;
-  print_endline @: string_of_program ~print_id:true p;
+  print_endline @: PS.string_of_program ~uuid_highlight:(Some uuid) p;
   exit 1
 
 (* Program parsers *)
