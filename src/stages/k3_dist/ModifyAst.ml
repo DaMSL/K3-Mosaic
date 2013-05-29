@@ -185,7 +185,7 @@ let modify_map_access p ast stmt =
           mk_map mod_lambda col
         | _ -> e 
       end
-    (* handle a case when the a lambda is applied to a lmap *)
+    (* handle a case of a lambda applied to an lmap *)
     (* in this case, we modify the types of the lambda vars themselves *)
     | Apply  -> let (lambda, arg) = U.decompose_apply e in
       begin match U.tag_of_expr arg with
@@ -202,17 +202,19 @@ let modify_map_access p ast stmt =
     | _ -> e
   in T.modify_tree_bu_with_path ast modify
 
-(* this delta extraction is very brittle, since it's tailored to the way the K3
- * calculations are written *)
+(* this delta extraction is very brittle, since it's tailored to the way the M3
+ * to K3 calculations are written *)
 let modify_delta p ast stmt target_trigger =
   let lmap = P.lhs_map_of_stmt p stmt in
   let lmap_types = P.map_types_with_v_for p lmap in
+  let lmap_bindings = P.find_lmap_bindings_in_stmt p stmt lmap in
+  let lmap_bind_ids_v = P.map_ids_add_v @: fst @: List.split lmap_bindings in
   let (lambda, arg) = U.decompose_apply ast in
   let body = U.decompose_lambda lambda in
   let params = match U.tag_of_expr lambda with Lambda a -> a 
     | _ -> raise(UnhandledModification("No lambda")) in
   match U.tag_of_expr body with
-  | Apply -> (* simple modification *)
+  | Apply -> (* simple modification - sending a single piece of data *)
     let (lambda2, arg2) = U.decompose_apply body in
     let body2 = U.decompose_lambda lambda2 in
     let params2 = begin match U.tag_of_expr lambda2 with 
@@ -221,10 +223,8 @@ let modify_delta p ast stmt target_trigger =
     let delta_name = list_head @: U.vars_of_lambda lambda2 in
     let delta_types = extract_arg_types @: U.typed_vars_of_arg params2 in
     let full_vars_code = 
-      let bindings = P.find_lmap_bindings_in_stmt p stmt lmap in
       let full_types = P.map_add_v t_vid @: lmap_types @ delta_types in
-      let full_names = P.map_ids_add_v @: 
-         (fst @: List.split bindings) @ [delta_name] in
+      let full_names = lmap_bind_ids_v @ [delta_name] in
       mk_tuple @:
         P.map_add_v (mk_var "vid") @:
           [mk_singleton 
@@ -254,6 +254,7 @@ let modify_delta p ast stmt target_trigger =
     let delta_types = extract_arg_types delta_ids_types in
     let delta_col_type = wrap_tset @: wrap_ttuple delta_types in
     let delta_ids = extract_arg_names delta_ids_types in
+    let delta_last_id = list_take_end 1 delta_ids in
     let delta_ids_with_v = P.map_ids_add_v delta_ids in
     mk_apply
       (mk_lambda params @:
@@ -269,7 +270,8 @@ let modify_delta p ast stmt target_trigger =
                   [mk_map
                     (mk_lambda 
                       (wrap_args delta_ids_types) @:
-                      mk_tuple @: ids_to_vars delta_ids_with_v
+                        mk_tuple @: 
+                          ids_to_vars @: lmap_bind_ids_v@delta_last_id
                     ) @:
                     mk_var delta_name
                   ]
@@ -283,6 +285,7 @@ let modify_ast_for_s p ast stmt trig target_trig =
   let ast = ast_for_s p ast stmt trig in
   let ast = modify_map_access p ast stmt in
   let ast = modify_0d_map_access p ast stmt in
+  (* do we need to send a delta to another trigger *)
   match target_trig with
     | Some t -> modify_delta p ast stmt t
     | None -> ast
