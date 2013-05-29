@@ -169,10 +169,12 @@ let modify_map_access p ast stmt =
         | _      -> project_modify_slice e
       end
      (* handle a case where we're iterating over a collection that's modified *)
-     (* In the current code, that only happens when we iterate over a slice *)
     | Iterate -> let (lambda, col) = U.decompose_iterate e in
       begin match U.tag_of_expr col with
-        | Slice -> 
+        | Slice ->
+          let mod_lambda = add_vid_to_lambda_args lambda in
+           mk_iter mod_lambda col
+        | Var id when List.mem id lr_map_names ->
           let mod_lambda = add_vid_to_lambda_args lambda in
           mk_iter mod_lambda col
         | _ -> e 
@@ -255,7 +257,6 @@ let modify_delta p ast stmt target_trigger =
     let delta_col_type = wrap_tset @: wrap_ttuple delta_types in
     let delta_ids = extract_arg_names delta_ids_types in
     let delta_last_id = list_take_end 1 delta_ids in
-    let delta_ids_with_v = P.map_ids_add_v delta_ids in
     mk_apply
       (mk_lambda params @:
           mk_let delta_name (delta_col_type) col @:
