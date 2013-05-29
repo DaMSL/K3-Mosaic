@@ -86,11 +86,6 @@ if not simple_flag then
   end
 end
 
-# for debugging
-#for file in all_files
-	#puts file.relative_path_from(p)
-#end
-
 def short_name_of(long_name)
 		dir, file = File.split(long_name)
 		dir1, dir2 = File.split(dir)
@@ -113,7 +108,7 @@ if test_num == nil then
   tested = 0
 
 	for file in all_files
-    if test_list != [] and test_list.find_index(index) != nil then
+    if test_list == [] or (test_list.find_index(index) != nil) then
       long_name = file.to_s
       short_name = short_name_of(long_name)
       print "Test #{index} (#{short_name}): "
