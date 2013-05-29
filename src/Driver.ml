@@ -183,11 +183,7 @@ let handle_type_error p (uuid, name, msg) =
   let s = K3TypeError.string_of_error msg in
   print_endline "----Type error----";
   print_endline @: "Error("^(string_of_int uuid)^"): "^name^": "^s;
-  if cmd_line_params.debug_info then
-    (print_endline @: 
-      string_of_program ~print_id:true ~verbose:cmd_line_params.verbose p;)
-  else 
-    print_endline @: PS.string_of_program ~uuid_highlight:(Some uuid) p;
+  print_endline @: PS.string_of_program ~uuid_highlight:(Some uuid) p;
   exit 1
 
 let handle_interpret_error p (uuid,error) =
