@@ -110,3 +110,5 @@ val array_find : ('a -> bool) -> 'a array -> int * 'a
 (* map an array to a list *)
 val array_map : ('a -> 'b) -> 'a array -> 'b list
 
+(* unwrap a some. Fail if not a Some *)
+val unwrap_some : 'a option -> 'a

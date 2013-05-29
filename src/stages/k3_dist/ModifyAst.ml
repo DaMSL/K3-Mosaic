@@ -116,11 +116,30 @@ let modify_map_access p ast stmt =
                   mk_tuple @: P.map_add_v var_vid xs
       | x      -> mk_tuple @: P.map_add_v var_vid [t] 
   in
-  (* some nodes respond to a force_add by adding a vid even if they don't find
-   * a reason for it themselves *)
+  (* Sometimes we only find out that a node needs to have a vid from a higher
+   * vid. An example is combine *)
+  let rec add_vid_from_above e =
+    match U.tag_of_expr e with
+    | Flatten ->
+        let body = U.decompose_flatten e in
+        mk_flatten @: add_vid_from_above body
+    | Lambda args ->
+        let body = U.decompose_lambda e in
+        mk_lambda args @: add_vid_from_above body 
+    | Map -> let lambda, col = U.decompose_map e in
+        mk_map
+          (add_vid_from_above lambda) col
+    | Combine -> let x, y = U.decompose_combine e in
+        mk_combine (add_vid_from_above x) (add_vid_from_above y)
+    | _ -> modify_tuple e
+    (* TODO: handle combining more variables *)
+  in
+
   (* we return whether the higher level needs to be aware of the vid addition,
    * and the new tree node *)
-  let modify force e msgs path = match U.tag_of_expr e with
+  let rec modify e msgs path = 
+    let get_msg i = if null msgs then false else List.nth msgs i in
+    match U.tag_of_expr e with
     | Insert -> let (col, elem) = U.decompose_insert e in
       false, mk_insert col @: modify_tuple elem
     | Delete -> let (col, elem) = U.decompose_delete e in
@@ -166,16 +185,19 @@ let modify_map_access p ast stmt =
       end
      (* handle a case where we're iterating over a collection that's modified *)
     | Iterate -> let (lambda, col) = U.decompose_iterate e in
-      if List.nth msgs 1 = true then 
+      if get_msg 1 then 
         let mod_lambda = add_vid_to_lambda_args lambda in
         false, mk_iter mod_lambda col
       else false, e
 
     (* handle the case of map, which appears in some files *)
     | Map -> let (lambda, col) = U.decompose_map e in
-      if List.nth msgs 1 = true then 
+      if get_msg 1 then 
+        (* a lower level collection has a vid, so we must include it in our
+        * arguments *)
         let mod_lambda = add_vid_to_lambda_args lambda in
         false, mk_map mod_lambda col
+
       else false, e
 
     (* handle a case of a lambda applied to an lmap (i.e. a let statement *)
@@ -192,9 +214,18 @@ let modify_map_access p ast stmt =
             | _ -> raise (UnhandledModification(PR.string_of_expr e)) end
         | _ -> false, e
       end
+    | Combine -> let x, y = U.decompose_combine e in
+      begin match get_msg 0, get_msg 1 with
+      | true, true -> true, e
+      | true, _    -> true, mk_combine x @: add_vid_from_above y
+      | _, true    -> true, mk_combine (add_vid_from_above x) y
+      | _, _       -> false, e
+      end
+
     | Var id when List.mem id lr_map_names -> true, e
+
     | _ -> false, e
-  in T.modify_tree_bu_with_path_and_msgs ast (modify false)
+  in T.modify_tree_bu_with_path_and_msgs ast modify
 
 (* this delta extraction is very brittle, since it's tailored to the way the M3
  * to K3 calculations are written *)

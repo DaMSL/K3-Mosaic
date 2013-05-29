@@ -214,3 +214,5 @@ let array_find pred arr =
 let array_map f arr = 
   List.rev @: Array.fold_left (fun acc x -> (f x)::acc) [] arr
 
+(* unwrap a some. Fail if not a Some *)
+let unwrap_some = function None -> failwith "Not a Some" | Some x -> x
