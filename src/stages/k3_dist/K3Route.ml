@@ -83,7 +83,7 @@ let hash_func_for typ =
     | TInt     -> "int"
     | TFloat   -> "float"
     | TBool    -> "bool"
-    | TString  -> "str"
+    | TString  -> "string"
     | TAddress -> "addr"
     | TCollection(_, v) -> "C_"^inner v^"_c"
     | TTuple(vs) -> "T_"^ String.concat "_" (List.map inner vs) ^"_t"
