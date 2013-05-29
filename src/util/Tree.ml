@@ -95,6 +95,16 @@ let modify_tree_bu_with_path e fn =
      fn tree (list_drop 1 path) in 
   fold_tree1 (fun n_td t -> t::n_td) rebuild_tree [] e
 
+(* Modify a tree by running a function over it, bottom up *)
+let modify_tree_bu_with_path_and_msgs e fn =
+  (* first, make the node and attach its children *)
+  let rebuild_tree path msg_children t =
+     let data = node_data t in
+     let msg_children = List.split msg_children in
+     let tree = mk_tree (data, snd msg_children) in
+     fn tree (fst msg_children) (list_drop 1 path)  in 
+  snd @: fold_tree1 (fun n_td t -> t::n_td) rebuild_tree [] e
+
 (* Trees with tuple metadata *)
 
 let rec decorate_tree f t =

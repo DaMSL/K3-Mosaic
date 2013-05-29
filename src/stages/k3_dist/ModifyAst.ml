@@ -110,35 +110,30 @@ let modify_map_access p ast stmt =
   let lr_map_names = fst @: List.split @: P.map_names_ids_of_stmt p stmt in
   let maps_n_id = maps_with_existing_out_tier p stmt in
   let var_vid = mk_var "vid" in
-  let modify e path = match U.tag_of_expr e with
+  let modify_tuple t =
+    match U.tag_of_expr t with
+      | Tuple  -> let xs = U.decompose_tuple t in
+                  mk_tuple @: P.map_add_v var_vid xs
+      | x      -> mk_tuple @: P.map_add_v var_vid [t] 
+  in
+  (* some nodes respond to a force_add by adding a vid even if they don't find
+   * a reason for it themselves *)
+  (* we return whether the higher level needs to be aware of the vid addition,
+   * and the new tree node *)
+  let modify force e msgs path = match U.tag_of_expr e with
     | Insert -> let (col, elem) = U.decompose_insert e in
-      mk_insert col @:
-        begin match U.tag_of_expr elem with
-          | Tuple  -> let xs = U.decompose_tuple elem in
-                      mk_tuple @: P.map_add_v var_vid xs
-          | x      -> mk_tuple @: P.map_add_v var_vid [elem]
-        end
+      false, mk_insert col @: modify_tuple elem
     | Delete -> let (col, elem) = U.decompose_delete e in
-      mk_delete col @:
-        begin match U.tag_of_expr elem with
-          | Tuple  -> let xs = U.decompose_tuple elem in
-                      mk_tuple @: P.map_add_v var_vid xs
-          | x      -> mk_tuple @: P.map_add_v var_vid [elem]
-        end
+      false, mk_delete col @: modify_tuple elem
     | Slice -> (* first check what's our parent *)
       (* a simple modification of a slice. Useful for structural access to the
        * map, such as when deleting *)
       let modify_slice e = 
         let (col, pat) = U.decompose_slice e in
-          mk_slice col @:
-            begin match U.tag_of_expr pat with
-              | Tuple -> let xs = U.decompose_tuple pat in
-                         mk_tuple @: P.map_add_v var_vid xs
-              | x     -> mk_tuple @: P.map_add_v var_vid [pat]
-            end
+        mk_slice col @: modify_tuple pat 
       in 
-      (* a projected slice modification. Useful for access to the data of the
-       * map *)
+      (* a projected slice modification. 
+       * Removes the vid from the slice. In most cases this is what we want *)
       let project_modify_slice e = 
         let (col, pat) = U.decompose_slice e in
         begin match U.tag_of_expr col with 
@@ -155,7 +150,8 @@ let modify_map_access p ast stmt =
                 mk_tuple @: ids_to_vars @: m_ids
               ) @: modify_slice e
           | _ -> raise (UnhandledModification ("Cannot handle non-var in slice"))
-        end in
+        end 
+      in
       let parent = list_head path in
       begin match U.tag_of_expr parent with
        (* if we have delete above us, we need the full structure of the map. If
@@ -163,46 +159,42 @@ let modify_map_access p ast stmt =
         | Iterate -> let (lambda, _) = U.decompose_iterate parent in
           let body = U.decompose_lambda lambda in
           begin match U.tag_of_expr body with
-            | Delete -> modify_slice e
-            | _ -> project_modify_slice e
+            | Delete -> true, modify_slice e
+            | _  -> false, project_modify_slice e
           end
-        | _      -> project_modify_slice e
+        | _      -> false, project_modify_slice e (* the default *)
       end
      (* handle a case where we're iterating over a collection that's modified *)
     | Iterate -> let (lambda, col) = U.decompose_iterate e in
-      begin match U.tag_of_expr col with
-        | Slice ->
-          let mod_lambda = add_vid_to_lambda_args lambda in
-           mk_iter mod_lambda col
-        | Var id when List.mem id lr_map_names ->
-          let mod_lambda = add_vid_to_lambda_args lambda in
-          mk_iter mod_lambda col
-        | _ -> e 
-      end
+      if List.nth msgs 1 = true then 
+        let mod_lambda = add_vid_to_lambda_args lambda in
+        false, mk_iter mod_lambda col
+      else false, e
+
     (* handle the case of map, which appears in some files *)
     | Map -> let (lambda, col) = U.decompose_map e in
-      begin match U.tag_of_expr col with
-        | Var id when List.mem id lr_map_names ->
-          let mod_lambda = add_vid_to_lambda_args lambda in
-          mk_map mod_lambda col
-        | _ -> e 
-      end
-    (* handle a case of a lambda applied to an lmap *)
+      if List.nth msgs 1 = true then 
+        let mod_lambda = add_vid_to_lambda_args lambda in
+        false, mk_map mod_lambda col
+      else false, e
+
+    (* handle a case of a lambda applied to an lmap (i.e. a let statement *)
     (* in this case, we modify the types of the lambda vars themselves *)
     | Apply  -> let (lambda, arg) = U.decompose_apply e in
       begin match U.tag_of_expr arg with
         | Var id when id = lmap_name -> 
           begin match (U.typed_vars_of_lambda lambda, U.decompose_lambda lambda) with
-            | ([id, t],b) -> 
+            | ([id, t],b) -> false,
               mk_apply 
                 (mk_lambda 
                   (wrap_args [id, wrap_tset @: wrap_ttuple lmap_types]) b)
                 arg
             | _ -> raise (UnhandledModification(PR.string_of_expr e)) end
-        | _ -> e
+        | _ -> false, e
       end
-    | _ -> e
-  in T.modify_tree_bu_with_path ast modify
+    | Var id when List.mem id lr_map_names -> true, e
+    | _ -> false, e
+  in T.modify_tree_bu_with_path_and_msgs ast (modify false)
 
 (* this delta extraction is very brittle, since it's tailored to the way the M3
  * to K3 calculations are written *)
