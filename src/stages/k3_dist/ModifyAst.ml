@@ -117,7 +117,7 @@ let modify_map_access p ast stmt =
       | x      -> mk_tuple @: P.map_add_v var_vid [t] 
   in
   (* Sometimes we only find out that a node needs to have a vid from a higher
-   * vid. An example is combine *)
+   * vid. The main use for this right now is for combine *)
   let rec add_vid_from_above e =
     match U.tag_of_expr e with
     | Flatten ->
@@ -131,6 +131,11 @@ let modify_map_access p ast stmt =
           (add_vid_from_above lambda) col
     | Combine -> let x, y = U.decompose_combine e in
         mk_combine (add_vid_from_above x) (add_vid_from_above y)
+    | Singleton t -> let x = U.decompose_singleton e in
+        mk_singleton t @: add_vid_from_above x
+    | Apply -> (* this should be a let *)
+        let lambda, input = U.decompose_apply e in
+        mk_apply (add_vid_from_above lambda) input
     | _ -> modify_tuple e
     (* TODO: handle combining more variables *)
   in
