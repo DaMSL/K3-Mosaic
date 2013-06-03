@@ -1,0 +1,1 @@
+[("192.168.0.1:10000", nothing); ("localhost:10000", just "rolename")]
