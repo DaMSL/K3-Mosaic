@@ -81,7 +81,7 @@
 
 %}
 
-%token EXPECTED
+%token NETWORK EXPECTED
 %token DECLARE FOREIGN TRIGGER ROLE DEFAULT
 %token CONSUME BIND SOURCE SINK PATTERN FILE SOCKET RANDOM STREAM
 
@@ -656,7 +656,8 @@ identifier_list :
 
 /* Testing */
 program_test :
-    | program EXPECTED named_expr_list     { ($1, $3) }
+    | program EXPECTED named_expr_list     { ProgTest ($1, $3) }
+    | program NETWORK EXPECTED named_expr_list { NetworkTest ($1, $4) }
     | program EXPECTED error               { print_error "invalid expected value list" }
     | program error                        { print_error "no expected values specified for program test" }
 ;

@@ -61,20 +61,36 @@ let check_as_expr ce = match ce with
   | InlineExpr e -> e
   | FileExpr (fp) -> parse_expr @: read_file fp
 
-let test_expressions test_file_name expr_tests = 
+let test_expressions file_name = 
+  let expr_tests = parse_expression_test @: read_file file_name in
   let test_cases = snd (List.fold_left (fun (i, test_acc) (decls, e, x) ->
-      let name = test_file_name^" "^(string_of_int i) in
+      let name = file_name^" "^(string_of_int i) in
       let test_case = case name @: eval_test_expr (decls, e) @=? eval_test_expr (decls, check_as_expr x) 
       in i+1, test_acc@[test_case]
     ) (0, []) expr_tests)
   in List.iter run_tests test_cases
 
-let test_program test_file_name address role_opt (program,expected) =
-  let _,(env,_) = eval_program address role_opt program in
+let extract_first_env = function
+  | (addr, (_, (env, _)))::_ -> env
+  | [] -> invalid_arg "no environment"
+
+(* test a program and comare it to the expected output. Takes an interpretation
+ * function that expects an untyped AST (this takes care of handling any extra
+ * information needed by the interpreter) also takes a program_test data
+ * structure indicating the kind of test desired *)
+let test_program interpret_fn file_name =
+  let test_type = parse_program_test @: read_file file_name in
+  let op_fn, program, check = match test_type with
+    | ProgTest (prog, checkl) -> extract_first_env, prog, checkl
+    | NetworkTest (prog, checkl) -> extract_first_env, prog, checkl
+  in
+  let node_envs = interpret_fn program in
+  let env = op_fn node_envs in
   let test_cases = List.fold_left (fun test_acc (id, x) -> 
-      let name = test_file_name^" "^id in
-      let evaluated = try !(List.assoc id env) with Not_found -> VUnknown in
-      let test_case = case name @: evaluated @=? eval_test_expr ([], check_as_expr x)
-      in test_acc@[test_case]
-    ) [] expected
+    let name = file_name^" "^id in
+    let evaluated = try !(List.assoc id env) with Not_found -> VUnknown in
+    let test_case = case name @: evaluated @=? eval_test_expr ([], check_as_expr x)
+    in test_acc@[test_case]
+  ) [] check
   in List.iter run_tests test_cases
+

@@ -42,6 +42,7 @@ rule tokenize = parse
     | ml_comment_st { comment 1 lexbuf }
 
     | "expected" { EXPECTED }
+    | "network"  { NETWORK }
 
     | "declare"  { DECLARE }
     | "foreign"  { FOREIGN }

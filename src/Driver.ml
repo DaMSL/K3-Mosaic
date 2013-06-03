@@ -14,7 +14,7 @@ open K3Streams
 open K3Consumption
 open K3Interpreter
 open K3Runtime
-open Testing
+open K3Testing
 open ReifiedK3
 
 (* Note these override module names *)
@@ -67,9 +67,6 @@ let parse_ip_role ipr_str =
     if String.contains ip_or_port '.' then (ip_or_port, default_port), Some(role)
     else (default_ip, (parse_port ip_or_port)), Some(role)
   | _ -> invalid_arg "invalid ip string format"
-
-let string_of_address_and_role (addr, role_opt) =
-  (string_of_address addr)^(match role_opt with None -> "" | Some r -> "/"^r)
 
 let string_of_lang_descs descs i = 
   let l = List.filter (fun (x,_,_) -> x = i) descs in
@@ -256,32 +253,20 @@ let repl params = ()
 let compile params inputs = ()
 
 (* Interpret actions *)
-let interpret_k3_program params p = 
-  let tp = typed_program_with_globals p in 
-  configure_scheduler params.run_length;
-  try
-    begin match params.peers with
-    | []    -> ignore(eval_program params.node_address params.role tp)
-    | nodes -> 
-        let peers = 
-        let skip_primary = 
-            List.exists (fun (addr,_) -> addr = params.node_address) nodes in
-        let ipr = params.node_address, params.role in
-        (if skip_primary then [] else [ipr])@nodes
-        in 
-        List.iter (fun ipr -> 
-            print_endline @: "Starting node "^(string_of_address_and_role ipr)
-        ) peers;
-        ignore(eval_networked_program peers tp)
+let interpret_one params prog = let p = params in
+  match p.out_lang with
+  | K3 | AstK3 | K3Dist | AstK3Dist -> 
+    (* this not only adds type info, it adds the globals which are crucial
+     * for interpretation *)
+    let tp = typed_program_with_globals prog in 
+    begin 
+      try 
+        interpret_k3_program p.run_length p.peers p.node_address p.role tp
+      with RuntimeError (uuid,str) -> handle_interpret_error tp (uuid,str)
     end
-  with RuntimeError (uuid,str) -> handle_interpret_error p (uuid,str)
+  | _ -> error "Output language not yet implemented"
 
-let interpret params inputs =
-  let eval_fn = match params.out_lang with
-    | K3 | AstK3 | K3Dist | AstK3Dist -> interpret_k3_program params
-    | _ -> error "Output language not yet implemented"
-  in
-  List.iter eval_fn inputs
+let interpret params inputs = List.iter (ignore |- interpret_one params) inputs
 
 (* Print actions *)
 let print_event_loop (id, (res_env, ds_env, instrs)) = 
@@ -345,16 +330,9 @@ let print_test_case (decls,e,x) =
   print_endline (string_of_expr x)
 
 let test params =
-  let test_fn = match !(params.test_mode), params.out_lang with
-    | ExpressionTest, K3 ->
-      (fun f -> test_expressions f @: parse_expression_test @: read_file f)
-    
-    | ProgramTest, K3 ->
-      fun f -> let (p, cond) = parse_program_test @: read_file f in
-               let p_test = (typed_program_with_globals p, cond) in
-               begin try test_program f params.node_address params.role p_test
-               with RuntimeError (uuid, str) -> 
-                    handle_interpret_error (fst p_test) (uuid, str) end
+  let test_fn fname = match !(params.test_mode), params.out_lang with
+    | ExpressionTest, K3 -> test_expressions fname 
+    | ProgramTest, K3 -> test_program (interpret_one params) fname
     | x,y -> 
       let mode, lang = string_of_test_mode x, string_of_out_lang y
       in error @: mode^" testing not yet implemented for "^lang

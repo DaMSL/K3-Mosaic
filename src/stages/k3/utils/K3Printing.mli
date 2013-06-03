@@ -9,6 +9,7 @@ val def_c : config_t
 val string_of_annotation : annotation_t -> string
 
 val string_of_address: address -> string
+val string_of_address_and_role: address * id_t option -> string
 val string_of_container_type: container_type_t -> string
 val string_of_const: constant_t -> string
 val string_of_tag_type: expr_tag_t -> string

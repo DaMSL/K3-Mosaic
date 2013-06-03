@@ -83,6 +83,9 @@ let rec eval_fun uuid f =
     | _ -> raise (RuntimeError (uuid, "eval_fun: Non-function value"))
 
 and eval_expr cenv texpr =
+    LOG "%s" (string_of_env cenv) NAME "K3Interpreter.DetailedState" 
+      LEVEL DEBUG;
+    
     let ((uuid, tag), _), children = decompose_tree texpr in
     let t_erroru = t_error uuid in (* pre-curry the type error *)
     let eval_fn = eval_fun uuid in
@@ -580,7 +583,8 @@ let eval_instructions env address (res_env, d_env) (ri_env, instrs) =
 let interpreter_event_loop role_opt k3_program = 
   let error () = interpreter_error "No role found for K3 program" in
 	let roles, default_role = extended_roles_of_program k3_program in
-  let get_role role fail_f = try List.assoc role roles with Not_found -> fail_f ()
+  let get_role role fail_f = try List.assoc role roles with Not_found -> 
+    fail_f ()
   in match role_opt, default_role with
 	  | Some x, Some (_,y) -> get_role x (fun () -> y)
 	  | Some x, None -> get_role x error 
@@ -616,14 +620,17 @@ let eval_networked_program peer_list prog =
   (* Continue running until all peers have finished their instructions,
    * and all messages have been processed *)
   let run_network () = 
-    (Hashtbl.fold (fun _ (_,i) acc -> acc || i <> []) peer_meta false) || network_has_work() 
+    (Hashtbl.fold (fun _ (_,i) acc ->
+      acc || i <> []) peer_meta false) || network_has_work() 
   in
   let step_peer (addr, role_opt) = 
-    try let (rese, de, env), (rie, i) = List.assoc addr envs, Hashtbl.find peer_meta addr in
+    try let (rese, de, env), (rie, i) = 
+      List.assoc addr envs, Hashtbl.find peer_meta addr in
         (* Both branches invoke eval_instructions to process pending messages,
          * even if there are no sources on which to consume events *)
         if i = [] then ignore(eval_instructions env addr (rese, de) (rie, i))
-        else Hashtbl.replace peer_meta addr @: eval_instructions env addr (rese, de) (rie, i)
+        else Hashtbl.replace 
+          peer_meta addr @: eval_instructions env addr (rese, de) (rie, i)
     with Not_found -> 
       LOG "Network evaluation for peer %s" (string_of_address addr) LEVEL ERROR
   in
@@ -635,3 +642,23 @@ let eval_networked_program peer_list prog =
       LOG "%s" (string_of_program_env e) LEVEL TRACE;
       addr, e
     ) envs
+
+(* Interpret actions *)
+let interpret_k3_program run_length peers node_address role typed_prog = 
+  configure_scheduler run_length;
+  match peers with
+  | [] -> 
+    [Constants.default_node_address, eval_program node_address role typed_prog]
+  | [a,_] -> [a, eval_program node_address role typed_prog]
+  | nodes -> (* networked version *)
+    let peers = 
+      let skip_primary = 
+        List.exists (fun (addr,_) -> addr = node_address) nodes in
+      let ipr = node_address, role in
+      (if skip_primary then [] else [ipr])@nodes
+    in 
+    List.iter (fun ipr -> 
+      print_endline @: "Starting node "^K3Printing.string_of_address_and_role ipr
+    ) peers;
+    eval_networked_program peers typed_prog
+
