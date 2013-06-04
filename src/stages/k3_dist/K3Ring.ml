@@ -41,7 +41,7 @@ let add_node_name = "add_node"
 let add_node_code = 
   mk_global_fn add_node_name
   id_t_node_no_hash [t_unit] @:
-  mk_let "range" (wrap_tlist t_int)
+  mk_let "rng" (wrap_tlist t_int)
     (mk_range TList 
       (mk_const_int 1) (mk_const_int 1) @: mk_var replicas_nm) @:
   mk_let "new_elems" t_ring
@@ -54,7 +54,7 @@ let add_node_code =
                     (mk_apply (mk_var "hash_addr") @: mk_var "addr")
             ]
       ) @:
-      mk_var "range"
+      mk_var "rng"
     ) @:
   mk_iter (* insert each new element *)
     (mk_lambda

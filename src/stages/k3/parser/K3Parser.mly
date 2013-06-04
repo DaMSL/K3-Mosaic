@@ -534,6 +534,9 @@ arithmetic :
 ;
 
 predicate :
+    | NOT expr { mkexpr Neg [$2] }
+    | expr AND expr { mkexpr Mult [$1; $3] }
+    | expr OR expr { mkexpr Add [$1; $3] }
     | expr LT expr { mkexpr Lt [$1; $3] }
     | expr EQ expr { mkexpr Eq [$1; $3] }
     | expr LEQ expr { mkexpr Leq [$1; $3] }
