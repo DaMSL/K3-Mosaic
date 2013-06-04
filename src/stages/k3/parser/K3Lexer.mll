@@ -155,12 +155,6 @@ rule tokenize = parse
 
     | '@' { ANNOTATE }
 
-    | "key"           { KEY }
-    | "index"         { INDEX }
-    | "unique"        { UNIQUE }
-    | "ordered"       { ORDERED }
-    | "sequential"    { SEQUENTIAL }
-    | "randomaccess"  { RANDOMACCESS }
     | "effect"        { EFFECT }
     | "parallel"      { PARALLEL }
 
