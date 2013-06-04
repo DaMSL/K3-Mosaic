@@ -112,7 +112,7 @@ let rec lazy_arg c drop_tuple_paren a =
   match a with
   | AIgnored -> lps "_"
   | AVar (id, vt) -> lps (id^":") <| lazy_value_type c vt
-  | AMaybe(arg) -> lps "maybe " <| lazy_arg c false arg
+  | AMaybe(arg) -> lps "just " <| lazy_arg c false arg
   | ATuple(args) -> 
       lhov 0 <| paren (lps_list CutHint (lazy_arg c false) args) <| lcb ()
 
