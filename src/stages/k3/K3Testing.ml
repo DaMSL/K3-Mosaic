@@ -7,6 +7,7 @@ open K3Printing
 open K3Typechecker
 open K3Values
 open K3Interpreter
+module LAS = ListAsSet
 
 type assertion_t =
     AssertTypeEquals of type_t * type_t
@@ -70,9 +71,54 @@ let test_expressions file_name =
     ) (0, []) expr_tests)
   in List.iter run_tests test_cases
 
+let env_remove_refs env = List.rev_map (fun (id, v) -> (id, !v)) env
+
 let extract_first_env = function
-  | (addr, (_, (env, _)))::_ -> env
+  | (addr, (_, (env, _)))::_ -> env_remove_refs env
   | [] -> invalid_arg "no environment"
+
+let unify_tuple_lists l1 l2 =
+  let tuple_remove_value = function
+    | VTuple tuplist -> VTuple(list_drop_end 1 tuplist)
+    | _ -> failwith "not a tuple!" 
+  in
+  (* check that our lists are disjoint *)
+  let l1' = List.rev_map tuple_remove_value l1 in
+  let l2' = List.rev_map tuple_remove_value l2 in
+  if LAS.diff l1' l2' != []
+  then failwith "Lists not disjoint!"
+  else LAS.union l1 l2
+
+(* unify the values of the same ids in different environments *)
+let unify_values newval = function
+  | None -> Some newval
+  | Some oldval ->
+    let is_tup_list = function
+      | [] -> true
+      | (VTuple(_))::_ -> true
+      | _ -> false
+    in
+    let both_tup_list l1 l2 = is_tup_list l1 && is_tup_list l2 in
+    match oldval, newval with
+    | VSet l1, VSet l2 when both_tup_list l1 l2 -> 
+        Some(VSet(unify_tuple_lists l1 l2))
+    | VSet l1, VSet l2 -> Some(VSet(LAS.union l1 l2))
+    | VBag l1, VBag l2 when both_tup_list l1 l2 -> 
+        Some(VBag(unify_tuple_lists l1 l2))
+    | VBag l1, VBag l2 -> Some(VBag(LAS.union l1 l2))
+    | VList l1, VList l2 when both_tup_list l1 l2 -> 
+        Some(VList(unify_tuple_lists l1 l2))
+    | VList l1, VList l2 -> Some(VList(LAS.union l1 l2))
+    | _,_ -> None (* any other value is not relevant *)
+
+(* unify the environments of different nodes *)
+let unify_envs envs = 
+  List.fold_left (fun acc (addr, (_, (env,_))) ->
+    let env = env_remove_refs env in
+    List.fold_left (fun acc' (id, newval) ->
+      assoc_modify (unify_values newval) id acc'
+    ) acc env
+  ) [] envs
 
 (* test a program and comare it to the expected output. Takes an interpretation
  * function that expects an untyped AST (this takes care of handling any extra
@@ -82,13 +128,13 @@ let test_program interpret_fn file_name =
   let test_type = parse_program_test @: read_file file_name in
   let op_fn, program, check = match test_type with
     | ProgTest (prog, checkl) -> extract_first_env, prog, checkl
-    | NetworkTest (prog, checkl) -> extract_first_env, prog, checkl
+    | NetworkTest (prog, checkl) -> unify_envs, prog, checkl
   in
   let node_envs = interpret_fn program in
   let env = op_fn node_envs in
   let test_cases = List.fold_left (fun test_acc (id, x) -> 
     let name = file_name^" "^id in
-    let evaluated = try !(List.assoc id env) with Not_found -> VUnknown in
+    let evaluated = try List.assoc id env with Not_found -> VUnknown in
     let test_case = case name @: evaluated @=? eval_test_expr ([], check_as_expr x)
     in test_acc@[test_case]
   ) [] check
