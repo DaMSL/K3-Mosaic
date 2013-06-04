@@ -10,10 +10,14 @@
    @return   The difference l1 - l2
 *)
 let diff l1 l2 =
-   let eq x y = x = y in
-   let f x = if List.exists (eq x) l2 then [] else [x] in
-   List.flatten (List.map f l1)
-
+  let hash = Hashtbl.create (List.length l2) in
+  List.iter (fun x -> Hashtbl.replace hash x ()) l2;
+  List.fold_left (fun acc x ->
+    try 
+      Hashtbl.find hash x; acc 
+    with Not_found -> x::acc
+  ) [] l1
+   
 (** 
    Determines if one list is a subset of the other.
    @param l1 The first list set
@@ -36,7 +40,14 @@ let seteq l1 l2 = ((subset l1 l2) && (subset l2 l1))
    @param l2 The second list set
    @return   The set intersection of l1 and l2 
 *)
-let inter l1 l2 = diff l1 (diff l1 l2)
+let inter l1 l2 = 
+  let hash = Hashtbl.create (List.length l2) in
+  List.iter (fun x -> Hashtbl.replace hash x ()) l2;
+  List.fold_left (fun acc x ->
+    try 
+      Hashtbl.find hash x; x::acc 
+    with Not_found -> acc
+  ) [] l1
 
 (** 
    Compute the union of two sets
