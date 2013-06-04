@@ -98,7 +98,7 @@ val list_find : ('a -> bool) -> 'a list -> 'a option
 val find : ('a -> 'b -> 'c) -> 'a -> 'b -> 'c option
 
 (* modify/add to an association list generically *)
-val assoc_modify : ('b option -> 'b) -> 'a -> ('a * 'b) list -> ('a * 'b) list
+val assoc_modify : ('b option -> 'b option) -> 'a -> ('a * 'b) list -> ('a * 'b) list
 
 val cartesian_product : 'a list -> 'b list -> ('a * 'b) list
 

@@ -173,14 +173,18 @@ let list_intersperse la lb =
 let list_find f l = try Some(List.find f l) with Not_found -> None
 let find fn k m = try Some(fn k m) with Not_found -> None
 
-(* modify/add to an association list generically *)
+(* modify/add to/remove_from an association list generically *)
 let assoc_modify f item l =
+  let get_result m_value reduced_l =
+    match f m_value with
+    | None   -> reduced_l
+    | Some x -> (item, x)::reduced_l in
   try
     let a = List.assoc item l in
     let rest = List.remove_assoc item l in
-    (item, f (Some a))::rest
+    get_result (Some a) rest
   with 
-    Not_found -> (item, f None)::l
+    Not_found -> get_result None l
 
 (* perform a cross-product on 2 lists. Doesn't preserve order *)
 let cartesian_product l1 l2 =
