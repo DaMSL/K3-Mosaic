@@ -51,7 +51,7 @@ let add_node_code =
           ids_to_vars id_node_no_hash @
             [mk_apply (mk_var "hash_int") @:
                 mk_add (mk_var "i") @:
-                    (mk_apply (mk_var "hash_addr") @: mk_var "address")
+                    (mk_apply (mk_var "hash_addr") @: mk_var "addr")
             ]
       ) @:
       mk_var "range"
@@ -101,13 +101,13 @@ let get_ring_node_code =
       (mk_id t_node) @:
       mk_var node_ring_nm
     ) @:
-  mk_let_many (List.map (function ("address",_) as x -> x | _,t -> "_",t) id_t_node)
+  mk_let_many (List.map (function ("addr",_) as x -> x | _,t -> "_",t) id_t_node)
     (mk_if (* if we have results, peek. otherwise, take the first node *)
       (mk_is_empty (mk_var "results") t_ring)
       (mk_peek @: mk_var node_ring_nm) @:
       mk_peek @: mk_var "results"
     ) @:
-    mk_var "address"
+    mk_var "addr"
 
 let gen_ring_code =
   ring_foreign_funcs @
