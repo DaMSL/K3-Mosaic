@@ -162,7 +162,7 @@ let gen_route_fn p map_id =
         let maybe_type = wrap_tmaybe temp_type in
         let hash_func = hash_func_for temp_type in
         mk_add 
-          (mk_if (mk_eq (mk_var temp_id) @: mk_nothing temp_type) 
+          (mk_if (mk_eq (mk_var temp_id) @: mk_nothing maybe_type) 
             (mk_const @: CInt 0) (* no contribution *)
             (mk_unwrap_maybe [temp_id, maybe_type] @:
               mk_let "value" t_int
