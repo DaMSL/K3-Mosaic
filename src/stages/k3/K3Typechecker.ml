@@ -35,9 +35,10 @@ let check_tag_arity tag children =
   let length = List.length children in
   let correct_arity = match tag with
     | Const(_)  -> 0
-    | Var(_) -> 0
-    | Tuple -> length
-    | Just -> 1
+    | Var(_)    -> 0
+    | Tuple     -> length
+    | Just      -> 1
+    | Nothing _ -> 0
 
     | Empty(_)      -> 0
     | Singleton(_)  -> 1
@@ -166,26 +167,15 @@ let rec contained_of vt =
 
 (* Type comparison primitives *)
 
-let rec assignable ?(pass=false) t_l t_r =
+let rec assignable t_l t_r =
     let t_lb = base_of t_l in let t_rb = base_of t_r in
     match (t_lb, t_rb) with
-    (* handle none *)
-    | TMaybe(t_lm), TMaybe(t_rm) -> 
-      begin match base_of t_lm, base_of t_rm with
-      | _, TUnknown -> true
-      | TUnknown, _ -> true
-      | _ -> assignable ~pass:pass t_lm t_rm
-      end
+    | TMaybe(t_lm), TMaybe(t_rm) -> assignable t_lm t_rm
     | TTuple(t_ls), TTuple(t_rs) -> List.length t_ls = List.length t_rs && 
-        List.for_all2 (assignable ~pass:pass) t_ls t_rs
-    (* handle empty collections *)
-    | TCollection(t_lc, _), TCollection(t_rc, TContained(TImmutable(TUnknown,_)))
-      when t_lc = t_rc -> true
-    | TCollection(t_lc, TContained(TImmutable(TUnknown,_))), TCollection(t_rc, _)
-      when t_lc = t_rc -> true
-    | TCollection(t_lc, t_le), TCollection(t_rc, t_re) -> assignable ~pass:pass t_le t_re
+        List.for_all2 assignable t_ls t_rs
+    | TCollection(t_lc, t_le), TCollection(t_rc, t_re) -> assignable t_le t_re
     (* handle lambdas with _ arguments *)
-    | TUnknown, _ when pass -> true
+    | TUnknown, _ -> true
     | _ when t_lb = t_rb -> true
     | _ -> false
 
@@ -202,9 +192,9 @@ let rec is_unknown_t t = match base_of t with
 let rec passable t_l t_r =
     match t_l, t_r with
     | TContained(TMutable(_)), TContained(TMutable(_)) -> 
-        assignable ~pass:true t_l t_r
+        assignable t_l t_r
     | TContained(TMutable(_)), _ -> false
-    | _ -> assignable ~pass:true t_l t_r
+    | _ -> assignable t_l t_r
 
 let (<~) = passable
 
