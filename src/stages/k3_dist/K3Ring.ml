@@ -18,7 +18,7 @@ let node_ring_code =
   in mk_anno_sort c [2] (* sort by 3rd field *)
 
 let replicas_nm = "replicas"
-let replicas_code = mk_global_val replicas_nm t_int_mut
+let replicas_code = mk_global_val replicas_nm (wrap_tset_mut t_int) 
 
 let ring_foreign_funcs = 
   mk_foreign_fn "hash_int" t_int t_int ::
@@ -31,9 +31,18 @@ let ring_foreign_funcs =
 
 (* function to set the number of replicas *)
 let set_replicas_code = 
+  let var_replicas = mk_var replicas_nm in
   mk_global_fn "set_replicas"
   ["n", t_int] [t_unit] @:
-  mk_assign (mk_var replicas_nm) (mk_var "n")
+  mk_block 
+    [
+      mk_iter 
+      (mk_lambda (wrap_args ["x", t_int]) @:
+        mk_delete var_replicas @: mk_var "x") @:
+      (mk_slice var_replicas (mk_const CUnknown))
+      ;
+      mk_insert var_replicas (mk_var "n")
+    ]
 
 let add_node_name = "add_node"
 
@@ -43,7 +52,9 @@ let add_node_code =
   id_t_node_no_hash [t_unit] @:
   mk_let "rng" (wrap_tlist t_int)
     (mk_range TList 
-      (mk_const_int 1) (mk_const_int 1) @: mk_var replicas_nm) @:
+      (mk_const_int 1) (mk_const_int 1) @: 
+        mk_peek @: 
+          mk_slice (mk_var replicas_nm) (mk_const CUnknown)) @:
   mk_let "new_elems" t_ring
     (mk_map
       (mk_lambda (wrap_args ["i", t_int]) @:

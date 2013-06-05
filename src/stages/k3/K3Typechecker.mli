@@ -42,10 +42,6 @@ val contained_of: value_type_t -> value_type_t
 val value_of: type_t -> (unit -> unit) -> value_type_t
 val canonical: base_type_t -> value_type_t
 
-(* Type comparators *)
-val assignable: value_type_t -> value_type_t -> bool
-val passable: value_type_t -> value_type_t -> bool
-
 (* AST integrity *)
 val check_tag_arity: expr_tag_t -> 'child list -> bool
 

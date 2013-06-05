@@ -166,24 +166,26 @@ let rec contained_of vt =
 
 (* Type comparison primitives *)
 
-let rec assignable t_l t_r =
+let rec assignable ?(pass=false) t_l t_r =
     let t_lb = base_of t_l in let t_rb = base_of t_r in
     match (t_lb, t_rb) with
+    (* handle none *)
     | TMaybe(t_lm), TMaybe(t_rm) -> 
       begin match base_of t_lm, base_of t_rm with
       | _, TUnknown -> true
       | TUnknown, _ -> true
-      | _ -> assignable t_lm t_rm
+      | _ -> assignable ~pass:pass t_lm t_rm
       end
     | TTuple(t_ls), TTuple(t_rs) -> List.length t_ls = List.length t_rs && 
-        List.for_all2 assignable t_ls t_rs
+        List.for_all2 (assignable ~pass:pass) t_ls t_rs
+    (* handle empty collections *)
     | TCollection(t_lc, _), TCollection(t_rc, TContained(TImmutable(TUnknown,_)))
       when t_lc = t_rc -> true
     | TCollection(t_lc, TContained(TImmutable(TUnknown,_))), TCollection(t_rc, _)
       when t_lc = t_rc -> true
-    | TCollection(t_lc, t_le), TCollection(t_rc, t_re) -> assignable t_le t_re
-      (* For the case of an empty collection *)
-    | TUnknown, _ -> true
+    | TCollection(t_lc, t_le), TCollection(t_rc, t_re) -> assignable ~pass:pass t_le t_re
+    (* handle lambdas with _ arguments *)
+    | TUnknown, _ when pass -> true
     | _ when t_lb = t_rb -> true
     | _ -> false
 
@@ -205,9 +207,10 @@ let compare_type_ts t_l t_r = match t_l, t_r with
 
 let rec passable t_l t_r =
     match t_l, t_r with
-    | TContained(TMutable(_)), TContained(TMutable(_)) -> assignable t_l t_r
+    | TContained(TMutable(_)), TContained(TMutable(_)) -> 
+        assignable ~pass:true t_l t_r
     | TContained(TMutable(_)), _ -> false
-    | _ -> assignable t_l t_r
+    | _ -> assignable ~pass:true t_l t_r
 
 let (<~) = passable
 
@@ -291,14 +294,16 @@ let rec deduce_expr_type trig_env cur_env utexpr =
             let t0 = bind 0 in
             let t_c0, t_e0 = t0 <| collection_of +++ base_of %++ value_of |> 
                 t_erroru name @: TBad(t0) in
+            let t_v0 = t0 <| value_of |> t_erroru name @: TBad(t0) in
             let t1 = bind 1 in
             let t_c1, t_e1 = t1 <| collection_of +++ base_of %++ value_of |> 
                 t_erroru name @: TBad(t1) in
+            let t_v1 = t1 <| value_of |> t_erroru name @: TBad(t1) in
 
             (* Only collections of matching element types can be combined. *)
             (* Note: strictly speaking this isn't true, e.g. [nothing]++[Just 1]
              * we'll use assignable here even though it's not a perfect match *)
-            if not (t_e0 === t_e1) then t_erroru name (VTMismatch(t_e0, t_e1,"")) () else
+            if not (t_v0 === t_v1) then t_erroru name (VTMismatch(t_v0, t_v1,"")) () else
 
             (* Determine combined collection type. *)
             let t_cr = begin match (t_c0, t_c1) with
@@ -498,22 +503,15 @@ let rec deduce_expr_type trig_env cur_env utexpr =
 
         | Slice ->
             let name = "Slice" in
-            let t0 = bind 0 in let t1 = bind 1 in
+            let t0, t1 = bind 0, bind 1 in
             let t_c, t_e = 
               t0 <| collection_of +++ base_of %++ value_of |> 
                   t_erroru name @: TBad(t0) in
             let t_p = t1 <| value_of |> t_erroru name @: TBad(t1) in
-            if t_e === t_p then TValue t_e else begin
-                match base_of t_p, base_of t_e with
-                | TTuple(t_ps), TTuple(t_es) ->
-                    if List.length t_ps = List.length t_es && List.for_all2 
-                        (fun tp te -> (canonical TUnknown) === tp || te === tp) 
-                        t_ps t_es
-                    then t0
-                    else t_erroru name (BTMismatch(TTuple(t_ps), TTuple(t_es), "")) ()
-                | TUnknown, _ -> TValue (canonical @: TCollection(t_c, t_e))
-                | _ -> t_erroru name (VTBad(t_p)) ()
-            end
+            if t_e === t_p then TValue t_e 
+            (* take care of possible unknowns in pattern *)
+            else if t_p <~ t_e then t0 
+            else t_erroru name (VTMismatch(t_p, t_e, "")) ()
 
         | Insert ->
             let name = "Insert" in
@@ -769,7 +767,7 @@ let type_bindings_of_program prog =
               (TMismatch(t, expr_type,
                   "Mismatch in global type declaration.")) ()
           else 
-          Global(i, t, Some typed_init), (i, expr_type) :: env
+          Global(i, t, Some typed_init), (i, t) :: env
 
         | Global(i, t, None) -> (Global(i, t, None), (i, t) :: env)
         
