@@ -281,8 +281,8 @@ let mk_is_empty collection typ =
 
 (* checks if a member of a collection is present *)
 let mk_has_member collection pattern member_type = 
-    mk_neg @: mk_eq (mk_slice collection pattern) 
-      (mk_empty @: wrap_tlist member_type)
+  mk_neg @: mk_eq (mk_slice collection pattern) 
+    (mk_empty @: wrap_tset member_type)
 
 let mk_code_sink name args locals code =
   mk_no_anno @: Sink(Code(name, args, locals, code))
