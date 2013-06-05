@@ -191,8 +191,9 @@ let gen_route_fn p map_id =
           (mk_if 
             (mk_eq (mk_var @: to_id x) @: mk_const CNothing)
             (mk_empty free_dims_type) @:
+            mk_unwrap_maybe [to_id x, List.nth key_types x] @:
             mk_slice (mk_var "pmap") @: 
-              mk_tuple [mk_var @: to_id x; mk_const CUnknown]
+              mk_tuple [mk_var @: (to_id x)^"_unwrap"; mk_const CUnknown]
           ) acc_code
         )
         (mk_empty free_dims_type)
