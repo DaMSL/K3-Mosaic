@@ -16,6 +16,7 @@ val t_float_mut : value_type_t
 val t_byte : value_type_t
 val t_string : value_type_t
 val t_unit : value_type_t
+val t_unknown : value_type_t
 
 (* easy type for addresses *)
 val t_addr : value_type_t
@@ -52,6 +53,7 @@ val mk_const_int : int -> expr_t
 val mk_var : id_t -> expr_t
 val mk_tuple : expr_t list -> expr_t
 val mk_just : expr_t -> expr_t
+val mk_nothing : value_type_t -> expr_t
 
 val mk_empty : value_type_t -> expr_t
 val mk_singleton : value_type_t -> expr_t -> expr_t

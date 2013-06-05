@@ -199,12 +199,6 @@ let rec is_unknown_t t = match base_of t with
     | TUnknown -> true
     | _ -> false
 
-let compare_type_ts t_l t_r = match t_l, t_r with
-    | TFunction(in_l,out_l), TFunction(in_r, out_r) -> 
-            in_l === in_r && out_l === out_r
-    | TValue(v_l), TValue(v_r) -> v_l === v_r
-    | _ -> false
-
 let rec passable t_l t_r =
     match t_l, t_r with
     | TContained(TMutable(_)), TContained(TMutable(_)) -> 
@@ -214,6 +208,11 @@ let rec passable t_l t_r =
 
 let (<~) = passable
 
+let compare_type_ts t_l t_r = match t_l, t_r with
+    | TFunction(in_l, out_l), TFunction(in_r, out_r) -> 
+            in_r <~ in_l && out_l === out_r
+    | TValue(v_l), TValue(v_r) -> v_l === v_r
+    | _ -> false
 
 (* Type deduction *)
 
@@ -234,7 +233,6 @@ let deduce_constant_type id trig_env c =
           begin try let typ = List.assoc id trig_env in
               typ <| base_of %++ value_of |> t_erroru name @: TBad(typ)
           with Not_found -> t_erroru name (TMsg("Trigger "^id^" not found")) () end
-      | CNothing -> TMaybe(canonical TUnknown)
   in canonical constant_type
 
 let rec gen_arg_bindings a =
@@ -280,7 +278,7 @@ let rec deduce_expr_type trig_env cur_env utexpr =
             let inner = bind 0 in
             let inner_type = inner <| value_of |> t_erroru "Just" (TBad(inner)) in
             TValue(canonical (TMaybe(inner_type)))
-
+        | Nothing(t) -> TValue(t)
         | Empty(t) -> TValue(t)
         | Singleton(t) ->
             let name = "Singleton" in
@@ -763,7 +761,7 @@ let type_bindings_of_program prog =
               raise (TypeError(ast_id, "Global "^i^":"^inner, msg))
           in
           let expr_type = type_of_expr typed_init in
-          if not (compare_type_ts expr_type t) then t_error (-1) i
+          if not (compare_type_ts t expr_type) then t_error (-1) i
               (TMismatch(t, expr_type,
                   "Mismatch in global type declaration.")) ()
           else 

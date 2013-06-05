@@ -66,7 +66,6 @@ type constant_t
     | CString   of string
     | CAddress  of address
     | CTarget   of id_t             (* trigger name *)
-    | CNothing
 
 (* Expressions *)
 type expr_tag_t
@@ -75,6 +74,7 @@ type expr_tag_t
     | Tuple
 
     | Just
+    | Nothing   of value_type_t
 
     | Empty     of value_type_t
     | Singleton of value_type_t

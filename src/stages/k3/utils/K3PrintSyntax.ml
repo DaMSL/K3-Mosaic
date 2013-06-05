@@ -133,7 +133,6 @@ let lazy_const c = function
   | CString(s) -> lps s
   | CAddress(s, i) -> lps @: s^":"^string_of_int i
   | CTarget(id) -> lps id
-  | CNothing -> lps "nothing"
 
 let lazy_collection c ct eval = match ct with
     | TSet -> lps "{" <| eval <| lps "}"
@@ -216,7 +215,9 @@ let rec lazy_expr c expr =
     lazy_paren @: lps_list CutHint (lazy_expr c) es 
   | Just -> let e = U.decompose_just expr in
     lps "just " <| lazy_expr c e
-  | Empty vt -> lazy_collection_vt c vt [] 
+  | Nothing vt -> lps "nothing:" <| lsp () <| lazy_value_type c vt
+  | Empty vt -> lazy_collection_vt c vt [] <| lsp () <| lps ":" <| lsp () <|
+    lazy_value_type c vt
   | Singleton vt -> let e = U.decompose_singleton expr in
     lazy_collection_vt c vt @: lazy_expr c e
   | Combine -> 

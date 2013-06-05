@@ -401,6 +401,7 @@ expr :
     | block { $1 }
 
     | JUST expr { mkexpr Just [$2] }
+    | NOTHING COLON isolated_value_type_expr { mkexpr (Nothing($3)) [] }
 
     | constant { mkexpr (Const($1)) [] }
     | collection { $1 }
@@ -480,7 +481,6 @@ arg_list :
 constant :
     | UNKNOWN   { CUnknown }
     | UNIT      { CUnit }
-    | NOTHING   { CNothing }
     | BOOL      { CBool($1) }
     | INTEGER   { CInt($1) }
     | FLOAT     { CFloat($1) }
@@ -494,9 +494,9 @@ range :
 ;
 
 collection :
-    | LBRACE RBRACE { mkexpr (Empty(mk_unknown_collection TSet)) [] }
-    | LBRACEBAR RBRACEBAR { mkexpr (Empty(mk_unknown_collection TBag)) [] }
-    | LBRACKET RBRACKET { mkexpr (Empty(mk_unknown_collection TList)) [] }
+    | LBRACE RBRACE COLON isolated_value_type_expr { build_collection [] $4 }
+    | LBRACEBAR RBRACEBAR COLON isolated_value_type_expr { build_collection [] $4 }
+    | LBRACKET RBRACKET COLON isolated_value_type_expr{ build_collection [] $4 }
 
     | LBRACE expr_seq RBRACE { build_collection $2 (mk_unknown_collection TSet) }
     | LBRACEBAR expr_seq RBRACEBAR { build_collection $2 (mk_unknown_collection TBag) }

@@ -101,6 +101,7 @@ sig
     | Var    of id_t
     | Tuple
     | Just
+    | Nothing
     | Op     of op_t
     | Fn     of fn_t
   

@@ -39,6 +39,7 @@ let t_float_mut = TIsolated(TMutable(TFloat,[]))
 let t_byte = canonical TByte
 let t_string = canonical TString
 let t_unit = canonical TUnit
+let t_unknown = canonical TUnknown
 
 (* A type for addresses *)
 let t_addr = canonical TAddress
@@ -144,9 +145,11 @@ let mk_tuple items = match items with
 
 let mk_just x = mk_stree Just [x]
 
-let mk_empty val_type = mk_stree (Empty(val_type)) []
+let mk_nothing typ = mk_stree (Nothing typ) []
 
-let mk_singleton val_type x = mk_stree (Singleton(val_type)) [x]
+let mk_empty val_type = mk_stree (Empty val_type) []
+
+let mk_singleton val_type x = mk_stree (Singleton val_type) [x]
 
 let mk_combine x y = mk_stree Combine [x;y]
 

@@ -162,7 +162,7 @@ let gen_route_fn p map_id =
         let maybe_type = wrap_tmaybe temp_type in
         let hash_func = hash_func_for temp_type in
         mk_add 
-          (mk_if (mk_eq (mk_var temp_id) @: mk_const CNothing) 
+          (mk_if (mk_eq (mk_var temp_id) @: mk_nothing temp_type) 
             (mk_const @: CInt 0) (* no contribution *)
             (mk_unwrap_maybe [temp_id, maybe_type] @:
               mk_let "value" t_int
@@ -187,13 +187,15 @@ let gen_route_fn p map_id =
     mk_let "free_dims" free_dims_type
       (List.fold_left
         (fun acc_code x -> 
+          let type_x = List.nth key_types x in
+          let id_x = to_id x in
           mk_combine 
           (mk_if 
-            (mk_eq (mk_var @: to_id x) @: mk_const CNothing)
+            (mk_eq (mk_var @: id_x) @: mk_nothing type_x)
             (mk_empty free_dims_type) @:
-            mk_unwrap_maybe [to_id x, List.nth key_types x] @:
+            mk_unwrap_maybe [id_x, type_x] @:
             mk_slice (mk_var "pmap") @: 
-              mk_tuple [mk_var @: (to_id x)^"_unwrap"; mk_const CUnknown]
+              mk_tuple [mk_var @: id_x^"_unwrap"; mk_const CUnknown]
           ) acc_code
         )
         (mk_empty free_dims_type)

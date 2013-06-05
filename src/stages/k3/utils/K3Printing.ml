@@ -52,7 +52,6 @@ let string_of_const cn = match cn with
     | CString(s)     -> "CString(\""^s^"\")"
     | CAddress(addr) -> "CAddress("^string_of_address addr^")"
     | CTarget(id)    -> "CTarget("^id^")"
-    | CNothing       -> "CNothing"
 
 let string_of_stop_behavior_t s = match s with
     | UntilCurrent -> "UntilCurrent"
@@ -60,10 +59,11 @@ let string_of_stop_behavior_t s = match s with
     | UntilEOF -> "UntilEOF"
 
 let string_of_tag_type tag = match tag with
-    | Const(c)  -> "Const"
-    | Var(i)    -> "Var"
+    | Const c  -> "Const"
+    | Var i    -> "Var"
     | Tuple     -> "Tuple"
     | Just      -> "Just"
+    | Nothing t -> "Nothing"
 
     | Empty t     -> "Empty"
     | Singleton t -> "Singleton"
@@ -153,6 +153,7 @@ let flat_string_of_expr_tag tag children =
     | Tuple     -> my_tag "Tuple"
 
     | Just      -> my_tag "Just"
+    | Nothing t -> my_tag "Nothing" ~extra:(flat_string_of_value_type t)
 
     | Empty t     -> my_tag "Empty" ~extra:(flat_string_of_value_type t)
     | Singleton t -> my_tag "Singleton" ~extra:(flat_string_of_value_type t)
@@ -408,6 +409,7 @@ and print_expr_tag c tag lazy_children =
     | Tuple     -> my_tag_list "Tuple"
 
     | Just      -> my_tag "Just"
+    | Nothing t -> extra_tag "Nothing" [lazy_value_type c t]
 
     | Empty t     -> extra_tag "Empty" [lazy_value_type c t]
     | Singleton t -> extra_tag "Singleton" [lazy_value_type c t]

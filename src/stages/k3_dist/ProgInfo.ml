@@ -266,22 +266,23 @@ let var_list_from_bound (p:prog_data_t) (stmt_id:stmt_id_t) (map_id:map_id_t) =
   let map_binds = reduce_l_to_map_size p map_id @: 
     find_map_bindings_in_stmt p stmt_id map_id in
   let trig_args = args_of_t p @: trigger_of_stmt p stmt_id in
-  let range = create_range 0 @: List.length @: map_types_for p map_id in
+  let map_types = map_types_for p map_id in
+  let idx_types = insert_index_fst 0 map_types in
   List.map
-    (fun i -> try 
+    (fun (i,typ) -> try 
         (* Look for var name with this binding, then check it's part of trig
          * args. If not, it's a loop var, and shouldn't be used *)
         let id = fst @: List.find (fun (_, loc) -> loc = i) map_binds in
         let id2  = fst @: List.find (fun (n, _) -> n = id) trig_args in
-        id2
-      with Not_found -> "_"
+        id2, typ
+      with Not_found -> "_", typ
     )
-    range
+    idx_types
 
 (* returns a k3 list of maybes that has the relevant map pattern *)
 let partial_key_from_bound (p:prog_data_t) stmt_id map_id = 
   let result = List.map 
-    (fun x -> if x = "_" then mk_const CNothing else mk_just @: mk_var x) @:
+    (fun (x, typ) -> if x = "_" then mk_nothing typ else mk_just @: mk_var x) @:
     list_drop_end 1 @: var_list_from_bound p stmt_id map_id
   in match result with [] -> [mk_const CUnit] | _ -> result
                   
@@ -289,7 +290,7 @@ let partial_key_from_bound (p:prog_data_t) stmt_id map_id =
  * partial_key *)
 let slice_key_from_bound (p:prog_data_t) (stmt_id:stmt_id_t) (map_id:map_id_t) = 
   let result = List.map 
-    (fun x -> if x = "_" then mk_const CUnknown else mk_var x) @:
+    (fun (x,_) -> if x = "_" then mk_const CUnknown else mk_var x) @:
     var_list_from_bound p stmt_id map_id
   in match result with [] -> [mk_const CUnit] | _ -> result
 

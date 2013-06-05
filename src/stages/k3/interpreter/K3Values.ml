@@ -127,7 +127,6 @@ let value_of_const = function
   | CString s -> VString s
   | CAddress (ip,port) -> VAddress (ip,port)
   | CTarget id -> VTarget id
-  | CNothing -> VOption None
 
 let rec type_of_value uuid value = 
   let typ_fst vs = type_of_value uuid @: List.hd vs in
@@ -160,7 +159,7 @@ let rec expr_of_value uuid value = match value with
   | VString s -> mk_const @: CString s
   | VAddress (ip,port) -> mk_const @: CAddress (ip,port)
   | VTarget id -> mk_const @: CTarget id
-  | VOption(None) -> mk_const @: CNothing
+  | VOption(None) -> mk_nothing t_unknown
   | VOption(Some v) -> mk_just @: expr_of_value uuid v
   | VTuple vs -> mk_tuple @: List.map (expr_of_value uuid) vs
   | VSet vs | VList vs | VBag vs -> 

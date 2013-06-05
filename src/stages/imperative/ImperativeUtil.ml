@@ -180,6 +180,7 @@ and print_expr_tag string_of_meta tag lazy_children =
   | Var    id -> ch_tag "Var" [lps id]
   | Tuple     -> my_tag "Tuple"
   | Just      -> my_tag "Just"
+  | Nothing   -> my_tag "Nothing"
   | Op     op -> ch_tag "Op" ([lazy_op op]@lazy_children)
   | Fn     fn_tag -> ch_tag "Fn" ([lazy (print_fn_tag fn_tag lazy_children)]@lazy_children)
 
@@ -339,6 +340,8 @@ let mk_cmd c_tag c_meta children =
 (* Expression constructors *)
 
 let mk_const meta const = mk_iexpr (Const const) meta []
+
+let mk_nothing meta = mk_iexpr (Nothing) meta []
 
 let mk_var meta id = mk_iexpr (Var id) meta []
  

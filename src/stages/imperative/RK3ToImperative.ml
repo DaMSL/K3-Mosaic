@@ -339,10 +339,11 @@ let imperative_of_expr_node mk_meta fn_arg_env
 
   (* Start of conversion method *)
   match K3Util.tag_of_expr e with
-  | K3.AST.Const c -> ret_term e (Const c)
-  | K3.AST.Var id  -> ret_term e (Var id)
-  | K3.AST.Tuple   -> ret_expr e Tuple
-  | K3.AST.Just    -> ret_expr e Just
+  | K3.AST.Const c     -> ret_term e (Const c)
+  | K3.AST.Var id      -> ret_term e (Var id)
+  | K3.AST.Tuple       -> ret_expr e Tuple
+  | K3.AST.Just        -> ret_expr e Just
+  | K3.AST.Nothing v_t -> ret_expr e Nothing
 
   | K3.AST.Empty v_t     -> ret_cmds []
   | K3.AST.Singleton v_t -> ret_cstr ()
@@ -978,7 +979,8 @@ let imperative_of_dispatcher_state mk_meta role_id dispatch
   in
   
   let valid_pred = 
-    let valid_event = U.mk_op pred_meta Neq [event_var; U.mk_const event_meta CNothing] in
+    (* TODO: fix this up after transition from CNothing *)
+    let valid_event = U.mk_op pred_meta Neq [event_var; U.mk_nothing event_meta] in
     let resource_var = mk_resource_var mk_meta role_id resource_id in
     let match_source = U.mk_op pred_meta Eq [source_var; resource_var] in
     U.mk_op pred_meta And [match_source; valid_event]

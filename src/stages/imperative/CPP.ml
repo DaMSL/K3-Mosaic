@@ -371,7 +371,8 @@ module CPPGenerator : Imperative.Generator
     | CInt i     -> ps (string_of_int i)
     | CFloat f   -> ps (string_of_float f)
     | CString s  -> ps (mk_string s) 
-    | CNothing   -> ps ((concat_template "shared_ptr" (string_of_type c_type))^"()")
+    (*| CNothing   -> ps ((concat_template "shared_ptr" (string_of_type
+     * c_type))^"()")*) (*TODO: fix this *)
 
     (* Targets and address should be desugared *)
     | CTarget _  -> failwith "invalid sugared target constant in C++"

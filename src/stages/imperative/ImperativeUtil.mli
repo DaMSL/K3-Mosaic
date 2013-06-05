@@ -67,6 +67,7 @@ sig
 
   (* Expression constructors *)
   val mk_const : 'a -> constant_t -> 'a expr_t
+  val mk_nothing : 'a -> 'a expr_t
   val mk_var   : 'a -> id_t -> 'a expr_t
   val mk_tuple : 'a -> 'a expr_t list -> 'a expr_t
   val mk_op    : 'a -> op_t -> 'a expr_t list -> 'a expr_t
