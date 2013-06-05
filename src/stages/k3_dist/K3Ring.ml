@@ -18,7 +18,8 @@ let node_ring_code =
   in mk_anno_sort c [2] (* sort by 3rd field *)
 
 let replicas_nm = "replicas"
-let replicas_code = mk_global_val replicas_nm (wrap_tset_mut t_int) 
+let replicas_code = mk_global_val_init replicas_nm (wrap_tset_mut t_int) @:
+  mk_singleton (wrap_tset_mut t_int) (mk_const @: CInt 1)
 
 let ring_foreign_funcs = 
   mk_foreign_fn "hash_int" t_int t_int ::
@@ -34,15 +35,7 @@ let set_replicas_code =
   let var_replicas = mk_var replicas_nm in
   mk_global_fn "set_replicas"
   ["n", t_int] [t_unit] @:
-  mk_block 
-    [
-      mk_iter 
-      (mk_lambda (wrap_args ["x", t_int]) @:
-        mk_delete var_replicas @: mk_var "x") @:
-      (mk_slice var_replicas (mk_const CUnknown))
-      ;
-      mk_insert var_replicas (mk_var "n")
-    ]
+    mk_update var_replicas (mk_peek var_replicas) (mk_var "n")
 
 let add_node_name = "add_node"
 
