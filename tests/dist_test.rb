@@ -47,6 +47,17 @@ def check_type_error(dir, data_file)
     end
 end
 
+def check_file_match(dir, file1, file2)
+    out = `cmp #{file1} #{file2}`
+    if out == "" then 
+        puts "PASSED AST comparison"
+    else
+        puts "ERROR: AST mismatch while generating files"
+        Dir.chdir dir
+        exit
+    end
+end
+
 def test_file(file, dbt_path, k3_path)
 	curdir = Dir.pwd
 
@@ -72,10 +83,30 @@ def test_file(file, dbt_path, k3_path)
 	puts "cd #{curdir}"
 	Dir.chdir "#{curdir}"
 
+    # create a k3 distributed file
 	puts "#{k3_path} -p -i m3 -l k3dist temp.m3 > temp2.k3dist"
 	`#{k3_path} -p -i m3 -l k3dist temp.m3 > temp2.k3dist 2> #{err_file}`
 	check_error(curdir, err_file)
     check_type_error(curdir, 'temp2.k3dist')
+
+    # parse the distributed file
+	puts "#{k3_path} -p -i k3 temp2.k3dist > temp3.k3dist"
+	`#{k3_path} -p -i k3 -l k3 temp2.k3dist > temp3.k3dist 2> #{err_file}`
+	check_error(curdir, err_file)
+    check_type_error(curdir, 'temp3.k3dist')
+
+    # compare the parsed file to the original file via AST
+	puts "#{k3_path} -p -i k3 -l k3ast temp2.k3dist > temp2.k3ast"
+	`#{k3_path} -p -i k3 -l k3ast temp2.k3dist > temp2.k3ast 2> #{err_file}`
+	check_error(curdir, err_file)
+    check_type_error(curdir, 'temp2.k3ast')
+	puts "#{k3_path} -p -i k3 -l k3ast temp3.k3dist > temp3.k3ast"
+	`#{k3_path} -p -i k3 -l k3ast temp3.k3dist > temp3.k3ast 2> #{err_file}`
+	check_error(curdir, err_file)
+    check_type_error(curdir, 'temp3.k3ast')
+    check_file_match(curdir, 'temp2.k3ast', 'temp3.k3ast')
+    File.unlink('temp2.k3ast')
+    File.unlink('temp3.k3ast')
     exit
 
 	# remove everything after "role client" from temp.k3
