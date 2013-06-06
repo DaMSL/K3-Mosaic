@@ -107,17 +107,18 @@ def test_file(file, dbt_path, k3_path)
     check_file_match(curdir, 'temp2.k3ast', 'temp3.k3ast')
     File.unlink('temp2.k3ast')
     File.unlink('temp3.k3ast')
-    exit
+    File.unlink('temp3.k3dist')
 
 	# remove everything after "role client" from temp.k3
-	File.open("temp.k3", 'w') do |out|
-		out << File.open("temp2.k3").read.gsub(/role client.*/m, "")
+	File.open("temp.k3dist", 'w') do |out|
+		out << File.open("temp2.k3dist").read.gsub(/role client.*/m, "")
 	end
 
 	# append the test from genmaps.rb
     genmaps = File.join($cur_path, "./genmaps.rb")
-	puts "#{genmaps} temp.trace >> temp.k3"
-	`#{genmaps} temp.trace >> temp.k3`
+	puts "#{genmaps} --distrib temp.trace >> temp.k3dist"
+	`#{genmaps} --distrib temp.trace >> temp.k3dist`
+    exit
 
 	# run the k3 driver on the input
 	puts "#{k3_path} -test temp.k3"

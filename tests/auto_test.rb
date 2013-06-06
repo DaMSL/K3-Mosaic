@@ -40,7 +40,7 @@ opt_parser = OptionParser.new do |opts|
 	opts.on("-d", "--dist", "Perform a distributed test") do
 		  distributed = true
 		end
-  opts.on("-l", "--list [FILE]", String, 
+    opts.on("-l", "--list [FILE]", String, 
           "Execute tests from a list in a file") do |file|
       test_list_name = file
     end

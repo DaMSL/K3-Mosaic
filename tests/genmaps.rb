@@ -2,6 +2,19 @@
 # ./bin/dbtoaster -d LOG-INTERPRETER-UPDATES -d LOG-INTERPRETER-TRIGGERS -d LOG-M3
 
 #K3Route, K3Ring
+require 'optparse'
+
+$options = {}
+opt_parser = OptionParser.new do |opts|
+    opts.banner = "Usage: genmaps.rb [options] file"
+    opts.separator ""
+    opts.separator "Specific options:"
+    opts.on("-d", "--distrib", "Create output for distributed files") do
+        $options[:distributed] = true
+    end
+end
+
+opt_parser.parse!(ARGV)
 
 class Array
   def to_h
@@ -174,6 +187,13 @@ puts "}"
 
 puts ""
 puts "role test {"
+
+if $options[:distributed] then
+  puts "  source s_on_init : int = stream([1])"
+  puts "  bind s_on_init -> on_init"
+  puts "  consume s_on_init"
+end
+
 puts "  source s1 : int = stream([1])"
 puts "  bind s1 -> go"
 puts "  consume s1"
@@ -207,7 +227,7 @@ def dump_map(mapn)
 end
 
 if $partition_map.nil? then
-  puts "expected"
+  if $options[:distributed] then puts "network expected" else puts "expected" end
   sep = ""
   $maps.each { |mapn,m| puts sep; dump_map(mapn); sep = ", "; }
 else
