@@ -1,0 +1,21 @@
+declare final : {int}
+
+trigger print( n : int ) {} = do {
+  insert(final, n) 
+}
+
+role client {
+  source  s1 : int = stream([1;2;3;4])
+  bind    s1 -> print
+  consume s1
+  consume s1
+}
+
+default role client
+
+expected
+
+// Uncomment when running in -test -prog mode
+/*
+final = { 5 }
+*/
