@@ -93,8 +93,7 @@ let rec lazy_base_type c = function
 (* TODO: annotations *)
 and lazy_mutable_type c = function
   | TMutable (bt, a) -> 
-      if c.verbose_types then lps "m:" <| lazy_base_type c bt
-      else lazy_base_type c bt
+      lps "ref " <| lazy_base_type c bt
   | TImmutable (bt, a) -> lazy_base_type c bt
 
 and lazy_value_type c = function
