@@ -26,6 +26,7 @@ and value_t
     | VTarget of id_t
 
 and frame_t = (id_t * value_t) list
+(* an env_t is global values and frames (functional environment) *)
 and env_t = (id_t * value_t ref) list * (frame_t list)
 type trigger_env_t = (id_t * (env_t -> value_t -> unit)) list
 type program_env_t = trigger_env_t * env_t

@@ -518,7 +518,7 @@ and default_isolated_value vt = match vt with
 (* Returns a foreign function evaluator *)
 let dispatch_foreign id = K3StdLib.lookup_value id
 
-(* Returns a trigger evaluator *)
+(* Returns a trigger evaluator function to serve as a simulation of the trigger *)
 let prepare_trigger id arg local_decls body =
   fun (m_env, f_env) -> fun a ->
     let default (id,t,_) = id, ref (default_isolated_value t) in
@@ -529,6 +529,7 @@ let prepare_trigger id arg local_decls body =
       | _ -> raise (RuntimeError (-1, 
         "prepare_trigger: trigger "^id^" returns non-unit"))
 
+(* add code sinks to the trigger environment *)
 let prepare_sinks env fp =
   List.fold_left (fun ((trig_env, (m_env, f_env)) as env) (fs,a) -> match fs with
     | Sink(Resource _) ->
@@ -539,11 +540,11 @@ let prepare_sinks env fp =
 
     | _ -> env) env fp
 
-(* Builds a trigger, global value and function environment *)
+(* Builds a trigger, global value and function environment (ie frames) *)
 let env_of_program k3_program =
   let env_of_declaration ((trig_env, (m_env, f_env)) as env) (d,_)
   = match d with
-    | K3.AST.Global (id,t,init_opt) ->
+    | K3.AST.Global (id, t, init_opt) ->
         let (rm_env, rf_env), init_val = match init_opt with
           | Some e ->
             let renv, reval = eval_expr (m_env, f_env) e 
@@ -577,7 +578,8 @@ let eval_instructions env address (res_env, d_env) (ri_env, instrs) =
     try let i = List.assoc id d_env in 
         let r = run_dispatcher address res_env ri_env i
         in run_scheduler address env; r, t
-    with Not_found -> interpreter_error @: "no event loop found for "^id
+    with Not_found -> 
+      interpreter_error @: "no event loop found for "^id
 
 (* Program interpretation *) 
 let interpreter_event_loop role_opt k3_program = 
@@ -591,6 +593,7 @@ let interpreter_event_loop role_opt k3_program =
 	  | None, Some (_,y) -> y
 	  | None, None -> error ()
 
+(* returns address, event_loop_t, environment *)
 let initialize_peer address role_opt k3_program =
   let env = env_of_program k3_program in
     initialize_scheduler address env;
@@ -598,12 +601,17 @@ let initialize_peer address role_opt k3_program =
 
 let eval_program address role_opt prog =
   let rec run_until_empty f (x,y) = 
-    let a,b = f (x,y) in if b = [] then () else run_until_empty f (x, y)
+    match f (x,y) with
+    | _, [] -> ()
+    | x', y' -> run_until_empty f (x',y')
   in
-  let _, ((res_env, d_env, instrs), env) = initialize_peer address role_opt prog in
-		run_until_empty (eval_instructions env address (res_env, d_env)) ([],instrs);
-    print_endline @: string_of_program_env env;
-    env
+  let _, ((res_env, d_env, instrs), env) = 
+    initialize_peer address role_opt prog in
+  run_until_empty
+    (eval_instructions env address (res_env, d_env)) 
+    ([], instrs);
+  print_endline @: string_of_program_env env;
+  env
 
 
 (* Distributed program interpretation *)

@@ -189,7 +189,9 @@ let compile_pattern resource_env resource_bindings fsm_env
 	  in
 	  let replace_placeholder oid nid l =
 	    let sub i = if i = oid then nid else i in
-	    List.map (fun (i, ((inp, (ma,n)), (fa,f))) -> (sub i, ((inp, (ma, sub n)), (fa, sub f)))) l 
+	    List.map 
+        (fun (i, ((inp, (ma,n)), (fa,f))) ->
+          (sub i, ((inp, (ma, sub n)), (fa, sub f)))) l 
 	  in
 	  let choice_states good bad l = 
 	    rcr_list bad l
@@ -227,6 +229,7 @@ let compile_pattern resource_env resource_bindings fsm_env
   end_state, compile_aux resource_env fsm_env end_state end_state p 
 
 (* Dispatcher FSM compilation *)
+(* p is a resource pattern *)
 let compile_dispatcher resource_env resource_bindings fsm_env p =
   let module A = ResourceActions in
   let module F = ResourceFSM in

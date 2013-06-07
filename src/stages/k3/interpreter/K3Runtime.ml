@@ -167,6 +167,7 @@ let process_task address env =
 let configure_scheduler program_events = 
   scheduler_params.events_to_process <- program_events
 
+(* register the node and its triggers *)
 let initialize_scheduler address (trig_env,_) =
   if not(is_node address) then register_node address; 
   List.iter (fun (id, _) -> register_trigger address id) trig_env

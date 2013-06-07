@@ -61,10 +61,11 @@ let pull_source id t res in_chan =
      | Stream(t, ConstStream _), InConst exp_l_ref ->
          begin match !exp_l_ref with
           | [] -> None
-          | e::es -> begin match K3Util.tag_of_expr e with
-                      | Const c -> exp_l_ref := es; Some (value_of_const c)
-                      | _ -> raise (ResourceError id)
-                    end
+          | e::es -> 
+              begin match K3Util.tag_of_expr e with
+                | Const c -> exp_l_ref := es; Some (value_of_const c)
+                | _ -> raise (ResourceError id)
+              end
          end
 
 	  | _ -> raise (ResourceError id)
@@ -73,9 +74,11 @@ let pull_source id t res in_chan =
 (* Determines resources to be opened and closed between two instructions.
  * All file handles are reset between instructions.
  * Network handles remain open, thereby preserving their connections. *)
+(* resource_impl has our implementation ie. open stuff *)
 let resource_delta resource_env resource_impl_env d =
-  let partition_net l = List.partition (is_net_handle resource_env)  l in 
-  let opened_net, opened_files = partition_net (fst (List.split resource_impl_env)) in
+  let partition_net l = List.partition (is_net_handle resource_env) l in 
+  (* ids of network and file resources *)
+  let opened_net, opened_files = partition_net @: List.map fst resource_impl_env in
   let net_resources, file_resources = partition_net (resources_of_dispatcher d) in
   let pass_net, open_net, close_net =
     List.map
@@ -115,8 +118,10 @@ let initialize_resources resource_env resource_impl_env d =
   let pass_net, open_net, open_files, close_net, close_files =
     resource_delta resource_env resource_impl_env d
   in
+    (* close all resources that should be closed *)
 	  List.iter close_channel_impl (close_net@close_files);
-	  let opened_resources = List.flatten (List.map open_channel_impl (open_net@open_files))
+	  let opened_resources = List.flatten (List.map open_channel_impl 
+      (open_net@open_files))
 	  in pass_net@opened_resources
 
 (* Accesses a resource from the given list of resource ids, returning a value
@@ -152,8 +157,10 @@ let next_value resource_env resource_impl_env resource_ids =
 let rec run_dispatcher_step address d state_opt origin value =
   let module A = ResourceActions in
   let module F = ResourceFSM in 
-  let next_access state_id = pre_entry_of_state (state_id, (List.assoc state_id d)) in
-  let state = match state_opt with None -> (fst (List.hd d)) | Some (x) -> x in
+  let next_access state_id = 
+    pre_entry_of_state (state_id, List.assoc state_id d) in
+  (* if we're given a state, use that. Otherwise, go to first state *)
+  let state = match state_opt with None -> fst (List.hd d) | Some x -> x in
   try
     let (id, (match_action, next)), (fail_action, fail) = List.assoc state d in
     match id = origin, match_action with
@@ -174,6 +181,8 @@ let rec run_dispatcher_step address d state_opt origin value =
  * dispatcher. At each step the dispatcher indicates the resources to be accessed
  * next, and it is the responsibility of this executor to pull the next value 
  * from the list of resources *)
+(* resource_impl_env is the implementation of a resource, and d is a dispatcher
+ * fsm *)
 let run_dispatcher address resource_env resource_impl_env d =
   let init_value o v = ref o, ref v in
   let init_finished () = failwith "no value found during initialization" in
@@ -198,12 +207,12 @@ let run_dispatcher address resource_env resource_impl_env d =
   in
   let state, (origin, value) =
     let s, rids = initial_resources_of_dispatcher d
-    in ref(Some(s)), get_value init_value init_finished rids
+    in ref(Some s), get_value init_value init_finished rids
   in
   while !state <> None && !resources_remain do 
     match run_dispatcher_step address d !state !origin !value with
     (* Retry value at next state *)
-    | Some(v), Some(s), [] when v = !value -> state := Some(s)
+    | Some v, Some s, [] when v = !value -> state := Some(s)
 
     (* Terminal state *)
     | Some(v), None, [] -> state := None
