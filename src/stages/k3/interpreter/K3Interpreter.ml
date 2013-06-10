@@ -22,8 +22,13 @@ let (++%) f g = fun t x -> f (g t) x
 let (%++) f g = fun t x -> f (g t x)
 
 (* Prettified error handling *)
-let interpreter_error s = let rs = "interpreter: "^s in
-  LOG rs LEVEL ERROR; failwith rs
+let int_erroru uuid fn_name s = 
+  let msg = fn_name^": "^s in
+  let rs = "interpreter: "^msg in 
+  LOG rs LEVEL ERROR; 
+  raise @: RuntimeError(uuid, msg)
+
+let int_error = int_erroru (-1)
 
 (* Environment helpers *)
 
@@ -49,23 +54,25 @@ let value_of_eval ev = match ev with VDeclared v_ref -> !v_ref | VTemp v -> v
 
 (* Given an arg_t and a value_t, bind the values to their corresponding argument names. *)
 let rec bind_args uuid a v =
-    match a with
-    | AIgnored -> []
-    | AVar(i, _) -> [(i, v)]
-    | AMaybe(a') -> (
-        match v with
-        | VOption(Some v') -> bind_args uuid a' v'
-        | VOption(None) -> 
-            raise (RuntimeError (uuid, "bind_args: missing VOption value"))
-        | _ -> raise (RuntimeError (uuid, "bind_args: improper maybe value"))
-    )
-    | ATuple(args) -> (
-        match v with
-        | VTuple(vs) -> List.concat (List.map2 (bind_args uuid) args vs)
-        | _ -> raise (RuntimeError (uuid, "bind_args: bad tuple value"))
-    )
+  let error = int_erroru uuid "bind_args" in
+  match a with
+  | AIgnored -> []
+  | AVar(i, _) -> [(i, v)]
+  | AMaybe(a') -> (
+      match v with
+      | VOption(Some v') -> bind_args uuid a' v'
+      | VOption(None) -> 
+          error "bind_args: missing VOption value"
+      | _ -> error "bind_args: improper maybe value"
+  )
+  | ATuple(args) -> (
+      match v with
+      | VTuple(vs) -> List.concat (List.map2 (bind_args uuid) args vs)
+      | _ -> error "bind_args: bad tuple value"
+  )
 
 let rec eval_fun uuid f = 
+  let error = int_erroru uuid "eval_fun" in
   let strip_frame (m_env, f_env) = (m_env, List.tl f_env) in
   match f with
     | VFunction(arg, body) -> 
@@ -80,13 +87,14 @@ let rec eval_fun uuid f =
             let renv, result = f new_env in
             (strip_frame renv, result)
 
-    | _ -> raise (RuntimeError (uuid, "eval_fun: Non-function value"))
+   | _ -> error "eval_fun: Non-function value"
 
 and eval_expr cenv texpr =
-    LOG "%s" (string_of_env cenv) NAME "K3Interpreter.DetailedState" 
-      LEVEL DEBUG;
+    LOG "%s" 
+      (string_of_env cenv) NAME "K3Interpreter.DetailedState" LEVEL DEBUG;
     
     let ((uuid, tag), _), children = decompose_tree texpr in
+    let error = int_erroru uuid "eval_expr" in
     let t_erroru = t_error uuid in (* pre-curry the type error *)
     let eval_fn = eval_fun uuid in
     
@@ -100,20 +108,23 @@ and eval_expr cenv texpr =
       in renv, List.map value_of_eval revals
     in
 
-    let extract_value_list x = match x with
+    let extract_value_list x = 
+      let error = int_erroru uuid "extract_value_list" in
+      match x with
         | VSet cl
         | VBag cl
         | VList cl -> cl
-        | _ -> raise (RuntimeError (uuid, "extract_value_list: non-collection"))
+        | _ -> error "non-collection"
     in
 
-    let preserve_collection f v = VTemp(match v with
+    let preserve_collection f v = VTemp(
+      let error = int_erroru uuid "preserve_collection" in
+      match v with
         | VSet(cl) -> VSet(List.sort compare @: nub @: f cl)
         | VBag(cl) -> VBag(List.sort compare @: f cl)
         | VList(cl) -> VList(f cl)
-        | _ -> 
-            raise (RuntimeError (uuid, "preserve_collection: non-collection"))
-        )
+        | _ -> error "non-collection"
+      )
     in
 
     (* Slices use simple single-level tuple matching, rather than
@@ -133,10 +144,11 @@ and eval_expr cenv texpr =
     (* Collection modifications are all side-effects, and must replace any
      * existing binding of the named entity in the environment *)
     let modify_collection modify_f =
+      let error = int_erroru uuid "modify_collection" in
       let renv, parts = threaded_eval cenv children in
       begin match modify_f renv parts with
         | Some (v_ref,v) -> (v_ref := value_of_eval v; renv, VTemp VUnit)
-        | None -> raise (RuntimeError (uuid, "modify_collection: no ref found"))
+        | None -> error "no ref found"
       end
     in
     
@@ -148,6 +160,7 @@ and eval_expr cenv texpr =
 
     (* TODO: byte and string types for binary and comparison operations *)
     let eval_binop bool_op int_op float_op = 
+      let error = int_erroru uuid "eval_binop" in
       let fenv, vals = child_values cenv in fenv, VTemp(
         match vals with
         | [VBool(b1); VBool(b2)] -> VBool(bool_op b1 b2)
@@ -155,23 +168,24 @@ and eval_expr cenv texpr =
         | [VInt(i1); VFloat(f2)] -> VFloat(float_op (float_of_int i1) f2)
         | [VFloat(f1); VInt(i2)] -> VFloat(float_op f1 (float_of_int i2))
         | [VFloat(f1); VFloat(f2)] -> VFloat(float_op f1 f2)
-        | _ -> raise (RuntimeError (uuid, "eval_binop: non-matching values"))
+        | _ -> error "non-matching values"
         )
     in
 
     let eval_cmpop cmp_op =
-        let fenv, vals = child_values cenv in fenv, VTemp(
-            match vals with
-            | [v1; v2] -> VBool(cmp_op v1 v2)
-            | _ -> raise (RuntimeError (uuid, "eval_cmpop: missing values"))
-        )
+      let error = int_erroru uuid "eval_cmpop" in
+      let fenv, vals = child_values cenv in fenv, VTemp(
+          match vals with
+          | [v1; v2] -> VBool(cmp_op v1 v2)
+          | _ -> error "eval_cmpop: missing values"
+      )
     in
 
     (* Start of evaluator *)
     match tag with
     | Const(c) -> (cenv, VTemp(value_of_const c))
     | Var(id) -> begin try cenv, lookup id cenv with Not_found -> 
-        raise (RuntimeError (uuid, "eval_expr(Var): id "^id^" not found")) end
+        error @: "(Var): id "^id^" not found" end
     | Tuple -> let fenv, vals = child_values cenv in (fenv, VTemp(VTuple(vals)))
     | Just  ->
       let renv, rval = child_value cenv 0
@@ -201,17 +215,17 @@ and eval_expr cenv texpr =
     | Combine ->
         let nenv, components = child_values cenv in
         let left, right = (
-            match components with
-            | [x; y] -> (x, y)
-            | _ -> raise (RuntimeError (uuid, 
-              "eval_expr(combine): missing sub-components"))
+          match components with
+          | [x; y] -> (x, y)
+          | _ -> error "(combine): missing sub-components"
         ) in nenv, VTemp(
             match left, right with
-            | VSet(vs1), VSet(vs2) -> VSet(List.sort compare (nub (vs1 @ vs2)))
-            | VBag(vb1), VBag(vb2) -> VBag(List.sort compare (vb1 @ vb2))
-            | VList(vl1), VList(vl2) -> VList(vl1 @ vl2)
-            | _ -> raise (RuntimeError (uuid, 
-              "eval_expr(combine): mismatching collections"))
+            | VList v1, (VList v2 | VSet v2 | VBag v2) -> VList(v1 @ v2)
+            | (VSet v1 | VBag v1), VList v2            -> VList(v1 @ v2)
+            | VBag v1, (VSet v2 | VBag v2)             -> VBag(v1 @ v2)
+            | VSet v1, VBag v2                         -> VBag(v1 @ v2)
+            | VSet v1, VSet v2                         -> VSet(ListAsSet.union v1 v2)
+            | _ -> error "(combine): non-collection"
         )
 
     | Range c_t ->
@@ -225,8 +239,7 @@ and eval_expr cenv texpr =
             | VInt(x),   VFloat(y) -> (fun i -> VFloat((f x) +. ((f i) *. y)))
             | VFloat(x), VInt(y)   -> (fun i -> VFloat(x +. ((f i) *. (f y))))
             | VFloat(x), VFloat(y) -> (fun i -> VFloat(x +. ((f i) *. y)))
-            | _, _ -> raise (RuntimeError (uuid, 
-              "eval_expr(Range): mismatching start and stride"))
+            | _, _ -> error "(Range): mismatching start and stride"
           in 
           let l = Array.to_list (Array.init steps init_fn) in
           let reval = VTemp(match c_t with
@@ -234,7 +247,7 @@ and eval_expr cenv texpr =
                 | TBag -> VBag(l)
                 | TList -> VList(l))
           in renv, reval
-        | _ -> raise (RuntimeError (uuid, "eval_expr(Range): invalid format"))
+        | _ -> error "(Range): invalid format"
       end
 
     (* Arithmetic and comparators *)
@@ -243,11 +256,11 @@ and eval_expr cenv texpr =
     
     | Neg ->
         let fenv, vals = child_values cenv in fenv, VTemp(
-            match vals with
-            | [VBool(b)] -> VBool(not b)
-            | [VInt(i)] -> VInt(-i)
-            | [VFloat(f)] -> VFloat(-. f)
-            | _ -> raise (RuntimeError (uuid, "eval_expr(Neg): invalid value"))
+          match vals with
+          | [VBool(b)] -> VBool(not b)
+          | [VInt(i)] -> VInt(-i)
+          | [VFloat(f)] -> VFloat(-. f)
+          | _ -> error "(Neg): invalid value"
         )
 
     | Eq -> eval_cmpop (=)
@@ -281,8 +294,7 @@ and eval_expr cenv texpr =
             | VSet cl
             | VBag cl
             | VList cl -> folder cl, VTemp(VUnit)
-            | _ -> raise (RuntimeError (uuid, 
-              "eval_expr(Iterate): non-collection value"))
+            | _ -> error "(Iterate): non-collection value"
           end
 
     | IfThenElse ->
@@ -290,8 +302,7 @@ and eval_expr cenv texpr =
             match pred with
             | VBool(b) when b -> eval_expr penv (List.nth children 1)
             | VBool(b) when not b -> eval_expr penv (List.nth children 2)
-            | _ -> raise (RuntimeError (uuid, 
-              "eval_expr(IfThenElse): non-boolean predicate"))
+            | _ -> error "(IfThenElse): non-boolean predicate"
         )
         
     (* Collection transformers *)  
@@ -308,8 +319,7 @@ and eval_expr cenv texpr =
             | VList(cl) ->
               let renv, r =  folder cl
               in renv, (preserve_collection (fun _ -> r) c)
-            | _ -> raise (RuntimeError (uuid, 
-              "eval_expr(Map): non-collection value"))
+            | _ -> error "(Map): non-collection value"
         )
     | FilterMap ->
         let penv, p = child_value cenv 0 in
@@ -325,8 +335,7 @@ and eval_expr cenv texpr =
                     let ienv, i = f' e x in
                     (ienv, r @ [value_of_eval i])
                 | VBool(false) -> (p'env, r)
-                | _ -> raise (RuntimeError (uuid, 
-                  "eval_expr(FilterMap): non boolean predicate"))
+                | _ -> error "(FilterMap): non boolean predicate"
         ) (nenv, []) cl in (
             match c with
             | VSet(cl)
@@ -334,8 +343,7 @@ and eval_expr cenv texpr =
             | VList(cl) ->
               let renv, r =  folder cl
               in renv, (preserve_collection (fun _ -> r) c)
-            | _ -> raise (RuntimeError (uuid, "eval_expr(FilterMap):
-                non-collection value"))
+            | _ -> error "(FilterMap): non-collection value"
         )
     | Flatten ->
         let nenv, c = child_value cenv 0 in
@@ -395,10 +403,9 @@ and eval_expr cenv texpr =
 
         let agg_fn, build_fn = Lazy.force (match c with
           | VSet _ | VBag _ -> hash_gb_agg_method
-          | VList _ -> order_preserving_gb_agg_method
-          | _ ->  raise (RuntimeError (uuid, 
-            "eval_expr(GroupBy): non-collection value")))
-        in
+          | VList _         -> order_preserving_gb_agg_method
+          | _               -> error "(GroupBy): non-collection value"
+        ) in
         let renv = List.fold_left agg_fn nenv cl
         in renv, preserve_collection (fun _ -> build_fn ()) c
 
@@ -415,10 +422,9 @@ and eval_expr cenv texpr =
               | true, _ -> 0
               | false, VBool(true) -> -1
               | false, VBool(false) -> 1
-              | _, _ -> raise (RuntimeError (uuid, 
-                "eval_expr(Sort): non-boolean sort result")) 
+              | _, _ -> error "(Sort): non-boolean sort result"
           in !env, VTemp(VList(List.sort sort_fn l))
-        | _ -> raise (RuntimeError (uuid, "eval_expr(Sort): bad values"))
+        | _ -> error "(Sort): bad values"
       end      
 
     (* Collection accessors and modifiers *)
@@ -428,14 +434,14 @@ and eval_expr cenv texpr =
         | [c;pat] -> 
             renv, (preserve_collection (fun els -> 
                 List.filter (match_pattern pat) els) c)
-        | _ -> raise (RuntimeError (uuid, "eval_expr(Slice): bad values"))
+        | _ -> error "(Slice): bad values"
       end
       
     | Peek -> 
       let renv, c = child_value cenv 0 in
       begin match extract_value_list c with
         | x::_ -> renv, VTemp(x)
-        | _ -> raise (RuntimeError (uuid, "eval_expr(Peek): empty container"))
+        | _ -> error "(Peek): empty container"
       end
 
     | Insert ->
@@ -469,13 +475,12 @@ and eval_expr cenv texpr =
             let send_str = K3PrintSyntax.string_of_expr send_code in
             LOG send_str NAME "K3Interpreter.Msg" LEVEL DEBUG;
             (schedule_trigger target addr arg; renv, VTemp VUnit)
-          
-        | _ -> raise (RuntimeError (uuid, "eval_expr(Sort): bad values"))
+        | _ -> error "(Sort): bad values"
       end
 
     (* TODO: mutation and deref *)
 
-    | _ -> raise (RuntimeError (uuid, "eval_expr: unhandled expression"))
+    | _ -> error "unhandled expression"
 
 and threaded_eval ienv texprs =
     match texprs with
@@ -487,37 +492,40 @@ and threaded_eval ienv texprs =
 (* Declaration interpretation *)
 
 (* Returns a default value for every type in the language *)
-let rec default_value ty = match ty with
-    | TFunction _ -> interpreter_error "no default value avaialble for function types"
-    | TValue vt -> default_isolated_value vt
+let rec default_value = function
+  | TFunction _ -> 
+      int_error "default_value" "no default value available for function types"
+  | TValue vt -> default_isolated_value vt
 
-and default_collection_value ct et = match ct with
-    | TSet -> VSet []
-    | TBag -> VBag []
-    | TList -> VList []
+and default_collection_value ct et = 
+  match ct with
+  | TSet -> VSet []
+  | TBag -> VBag []
+  | TList -> VList []
 
 and default_base_value bt = 
-  let ierror = interpreter_error in
+  let error = int_error "default_base_value" in
   match bt with
-      TUnknown -> VUnknown
-    | TUnit    -> VUnit 
-    | TBool    -> VBool false
-    | TByte    -> ierror "bytes are not implemented"
-    | TInt     -> VInt 0
-    | TFloat   -> VFloat 0.0
-    | TString  -> ierror "strings are not implemented"
+  | TUnknown -> VUnknown
+  | TUnit    -> VUnit 
+  | TBool    -> VBool false
+  | TByte    -> error "bytes are not implemented"
+  | TInt     -> VInt 0
+  | TFloat   -> VFloat 0.0
+  | TString  -> error "strings are not implemented"
 
-    | TMaybe   vt -> ierror "options are not implemented"
-    | TTuple   ft -> VTuple (List.map default_isolated_value ft)
-    
-    | TCollection (ct,et) -> default_collection_value ct et
-    | TAddress            -> ierror "addresses are not implemented"
-    | TTarget bt          -> ierror "targets are not implemented" 
+  | TMaybe   vt -> error "options are not implemented"
+  | TTuple   ft -> VTuple (List.map default_isolated_value ft)
+  
+  | TCollection (ct,et) -> default_collection_value ct et
+  | TAddress            -> error "addresses are not implemented"
+  | TTarget bt          -> error "targets are not implemented" 
 
-and default_isolated_value vt = match vt with
-    | TIsolated (TMutable (bt,_)) -> default_base_value bt
-    | TIsolated (TImmutable (bt,_)) -> default_base_value bt
-    | TContained _ -> interpreter_error "invalid default contained value"
+and default_isolated_value = function
+  | TIsolated (TMutable (bt,_)) -> default_base_value bt
+  | TIsolated (TImmutable (bt,_)) -> default_base_value bt
+  | TContained _ -> 
+      int_error "default_isolated_value" "invalid default contained value"
 
 (* Returns a foreign function evaluator *)
 let dispatch_foreign id = K3StdLib.lookup_value id
@@ -530,8 +538,7 @@ let prepare_trigger id arg local_decls body =
     let _, reval = (eval_fun (-1) (VFunction(arg,body))) local_env a in
     match value_of_eval reval with
       | VUnit -> ()
-      | _ -> raise (RuntimeError (-1, 
-        "prepare_trigger: trigger "^id^" returns non-unit"))
+      | _ -> int_error "prepare_trigger" @: "trigger "^id^" returns non-unit"
 
 (* add code sinks to the trigger environment *)
 let prepare_sinks env fp =
@@ -583,11 +590,12 @@ let eval_instructions env address (res_env, d_env) (ri_env, instrs) =
         let r = run_dispatcher address res_env ri_env i
         in run_scheduler address env; r, t
     with Not_found -> 
-      interpreter_error @: "no event loop found for "^id
+      int_error "eval_instructions" @: "no event loop found for "^id
 
 (* Program interpretation *) 
 let interpreter_event_loop role_opt k3_program = 
-  let error () = interpreter_error "No role found for K3 program" in
+  let error () =
+    int_error "interpreter_event_loop" "No role found for K3 program" in
 	let roles, default_role = extended_roles_of_program k3_program in
   let get_role role fail_f = try List.assoc role roles with Not_found -> 
     fail_f ()
