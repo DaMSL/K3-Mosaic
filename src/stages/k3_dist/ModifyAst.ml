@@ -74,7 +74,7 @@ let modify_0d_map_access p ast stmt =
       if U.is_peek e && U.is_var_match m @: U.decompose_peek e 
       then mk_snd m_t @:
              mk_peek @: mk_slice (mk_var m) @:
-               mk_tuple [mk_const CUnknown] (* map_lookup *)
+               mk_tuple [mk_var "vid"; mk_const CUnknown] (* map_lookup *)
       else e in
     T.modify_tree_bu tree modify in
   List.fold_left modify_0d_map ast maps_n_id
