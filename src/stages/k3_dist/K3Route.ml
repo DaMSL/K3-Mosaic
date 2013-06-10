@@ -56,19 +56,29 @@ let list_of_k3_partition_map k3maps =
 (* convert a list defining a partition map with map names to an equivalent k3
  * structure except using the map_ids *)
 let k3_partition_map_of_list p l =
-  let mk_int i = mk_const @: CInt i in
-  let one_map_to_k3 (m, ds) = 
-    let id = mk_int @: map_id_of_name p m in
-    let check_index i = let ts = map_types_for p @: map_id_of_name p m
-      in try ignore(List.nth ts i); true with Failure _ -> false in
-    let k3tuplize (a, b) = mk_tuple [mk_int a; mk_int b] in
-    let newdata = List.map 
-      (fun (i, d) -> if check_index i then k3tuplize (i,d) 
-        else invalid_arg @: "index "^string_of_int i^" out of range in map "^m)
-      ds
-    in mk_tuple [id; U.k3_container_of_list pmap_types newdata] in
-  let new_l = List.map one_map_to_k3 l in
-  U.k3_container_of_list full_pmap_types new_l
+  (* handle the case of no input partition map ie. a default partition map *)
+  (* we just create an empty partition map for all possible map ids *)
+  if null l then
+    let max_map_id =
+      snd @: list_max id_fn @: get_map_list p in
+    let r = create_range 0 (max_map_id + 1) in
+    let k3_pmap = list_map (fun id -> 
+      mk_tuple [mk_cint id; mk_empty pmap_types]
+    ) r in
+    U.k3_container_of_list full_pmap_types k3_pmap
+  else
+    let one_map_to_k3 (m, ds) = 
+      let id = mk_cint @: map_id_of_name p m in
+      let check_index i = let ts = map_types_for p @: map_id_of_name p m
+        in try ignore(List.nth ts i); true with Failure _ -> false in
+      let k3tuplize (a, b) = mk_tuple [mk_cint a; mk_cint b] in
+      let newdata = List.map 
+        (fun (i, d) -> if check_index i then k3tuplize (i,d) 
+          else invalid_arg @: "index "^string_of_int i^" out of range in map "^m)
+        ds
+      in mk_tuple [id; U.k3_container_of_list pmap_types newdata] in
+    let new_l = List.map one_map_to_k3 l in
+    U.k3_container_of_list full_pmap_types new_l
 
 exception NoHashFunction of K3.AST.base_type_t
 
@@ -119,8 +129,7 @@ let calc_dim_bounds_code =
           mk_mult (mk_var "bin_size") (mk_var "acc_size")]
       )
       (mk_tuple [mk_empty @: wrap_tlist @: wrap_ttuple [t_int; t_int];
-        mk_const @: CInt(1)]
-      )
+        mk_cint 1])
       (mk_var "pmap")
 
 let gen_route_fn p map_id = 
@@ -138,7 +147,7 @@ let gen_route_fn p map_id =
     [wrap_tset t_addr] @: (* return *)
       mk_singleton (wrap_tset t_addr) @:
         mk_apply (mk_var "get_ring_node") @:
-          mk_tuple [mk_const @: CInt 1; mk_const @: CInt 1]
+          mk_tuple [mk_cint 1; mk_cint 1]
   | _  -> (* we have keys *)
   mk_global_fn (route_for p map_id)
     ["key", wrap_ttuple key_types]
@@ -146,7 +155,7 @@ let gen_route_fn p map_id =
     mk_let "pmap" pmap_types
       (mk_snd pmap_per_map_types @:
         mk_peek @: mk_slice (mk_var pmap_data) @:
-          mk_tuple [mk_const @: CInt map_id; mk_const CUnknown]
+          mk_tuple [mk_cint @: map_id; mk_cunknown]
       ) @:
     mk_let_many ["dim_bounds", dim_bounds_type; "max_val", t_int]
       (mk_apply (mk_var "calc_dim_bounds") @: mk_var "pmap") @:
@@ -163,7 +172,7 @@ let gen_route_fn p map_id =
         let hash_func = hash_func_for temp_type in
         mk_add 
           (mk_if (mk_eq (mk_var temp_id) @: mk_nothing maybe_type) 
-            (mk_const @: CInt 0) (* no contribution *)
+            (mk_cint 0) (* no contribution *)
             (mk_unwrap_maybe [temp_id, maybe_type] @:
               mk_let "value" t_int
               (mk_apply (mk_var "mod") @:
@@ -171,17 +180,17 @@ let gen_route_fn p map_id =
                   [mk_apply (mk_var hash_func) @: mk_var id_unwrap;
                    mk_fst t_two_ints @: mk_peek @:
                      mk_slice (mk_var "pmap") @:
-                       mk_tuple [mk_const @: CInt index; mk_const CUnknown]]
+                       mk_tuple [mk_cint index; mk_cunknown]]
               ) @:
             mk_mult
               (mk_var "value") @:
                mk_snd t_two_ints @:
                  mk_peek @: mk_slice (mk_var "dim_bounds") @:
-                  mk_tuple [mk_const @: CInt index; mk_const CUnknown]
+                  mk_tuple [mk_cint index; mk_cunknown]
             )
           ) acc_code
       )
-      (mk_const @: CInt 0)
+      (mk_cint 0)
       map_range
     ) @:
     mk_let "free_dims" free_dims_type
@@ -195,7 +204,7 @@ let gen_route_fn p map_id =
             (mk_empty free_dims_type) @:
             mk_unwrap_maybe [id_x, type_x] @:
             mk_slice (mk_var "pmap") @: 
-              mk_tuple [mk_var @: id_x^"_unwrap"; mk_const CUnknown]
+              mk_tuple [mk_var @: id_x^"_unwrap"; mk_cunknown]
           ) acc_code
         )
         (mk_empty free_dims_type)
@@ -205,8 +214,8 @@ let gen_route_fn p map_id =
       (mk_map
         (mk_lambda (wrap_args ["i", t_int; "b_i", t_int]) @:
           mk_tuple [mk_var "i"; mk_range TList 
-            (mk_const @: CInt 0) (mk_const @: CInt 1) @: 
-            mk_add (mk_var "b_i") @: mk_const @: CInt (-1)]
+            (mk_cint 0) (mk_cint 1) @: 
+            mk_add (mk_var "b_i") @: mk_cint (-1)]
         ) @:
         mk_var "free_dims"
       ) @:
@@ -259,7 +268,7 @@ let gen_route_fn p map_id =
                     mk_mult (mk_var "val") @:
                       mk_fst t_two_ints @:
                         mk_peek @: mk_slice (mk_var "dim_bounds") @:
-                          mk_tuple [mk_var "i"; mk_const CUnknown]
+                          mk_tuple [mk_var "i"; mk_cunknown]
                 )
                 (mk_var "bound_bucket") @: (* start with this const *)
                 mk_var "free_bucket";

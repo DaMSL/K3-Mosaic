@@ -97,6 +97,10 @@ val list_intersperse : 'a list -> 'a list -> 'a list
 val list_find : ('a -> bool) -> 'a list -> 'a option
 val find : ('a -> 'b -> 'c) -> 'a -> 'b -> 'c option
 
+(* find the maximum of a list after it's been modified by a function *)
+val list_max : ('a -> 'b) -> 'a list -> 'a * 'b
+val list_min : ('a -> 'b) -> 'a list -> 'a * 'b
+
 (* modify/add to an association list generically *)
 val assoc_modify : ('b option -> 'b option) -> 'a -> ('a * 'b) list -> ('a * 'b) list
 

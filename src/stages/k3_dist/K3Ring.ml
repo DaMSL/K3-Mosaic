@@ -19,7 +19,7 @@ let node_ring_code =
 
 let replicas_nm = "replicas"
 let replicas_code = mk_global_val_init replicas_nm (wrap_tset_mut t_int) @:
-  mk_singleton (wrap_tset_mut t_int) (mk_const @: CInt 1)
+  mk_singleton (wrap_tset_mut t_int) (mk_cint 1)
 
 let ring_foreign_funcs = 
   mk_foreign_fn "hash_int" t_int t_int ::
@@ -45,9 +45,9 @@ let add_node_code =
   id_t_node_no_hash [t_unit] @:
   mk_let "rng" (wrap_tlist t_int)
     (mk_range TList 
-      (mk_const_int 1) (mk_const_int 1) @: 
+      (mk_cint 1) (mk_cint 1) @: 
         mk_peek @: 
-          mk_slice (mk_var replicas_nm) (mk_const CUnknown)) @:
+          mk_slice (mk_var replicas_nm) mk_cunknown) @:
   mk_let "new_elems" t_ring
     (mk_map
       (mk_lambda (wrap_args ["i", t_int]) @:
@@ -74,7 +74,7 @@ let remove_node_code =
   id_t_node_no_hash [t_unit] @:
     mk_let "nodes_to_delete" t_ring
         (mk_slice (mk_var node_ring_nm) @:
-        mk_tuple @: ids_to_vars id_node_no_hash @ [mk_const CUnknown]
+        mk_tuple @: ids_to_vars id_node_no_hash @ [mk_cunknown]
         ) @:
     mk_iter
         (mk_lambda (wrap_args ["x", wrap_ttuple t_node]) @:
@@ -91,7 +91,7 @@ let get_ring_node_code =
     (mk_apply (mk_var "int_of_float") @: 
       mk_mult
         (mk_apply (mk_var "float_of_int") @: 
-          mk_apply (mk_var "get_max_int") @: mk_const CUnit) @:
+          mk_apply (mk_var "get_max_int") mk_cunit) @:
         mk_apply (mk_var "divf") @: mk_tuple
           [mk_apply (mk_var "float_of_int") @: mk_var "data";
           mk_apply (mk_var "float_of_int") @: mk_var "max_val"]

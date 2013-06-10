@@ -99,7 +99,7 @@ let declare_global_vars p =
   (* vid_counter to generate vids. We use a singleton because refs aren't ready
    *)
   let vid_counter_code = mk_global_val_init vid_counter_name vid_counter_t @:
-    mk_singleton vid_counter_t @: mk_const @: CInt 0 in
+    mk_singleton vid_counter_t @: mk_cint 0 in
 
   (* stmt counters, used to make sure we've received all msgs *)
   let stmt_cntrs_type = wrap_tset_mut @: wrap_ttuple_mut 
@@ -162,7 +162,7 @@ let declare_global_funcs partmap p =
     [t_unit] @:
     mk_block
       [mk_insert (mk_var log_master) @: (* write to master log *)
-        mk_tuple [mk_var "vid"; mk_const @: CInt (trigger_id_for_name p t)]
+        mk_tuple [mk_var "vid"; mk_cint (trigger_id_for_name p t)]
       ;
       mk_insert (mk_var @: log_for_t t) @: (* write to trigger_specific log *)
         mk_tuple @: args_of_t_as_vars_with_v p t
@@ -173,7 +173,7 @@ let declare_global_funcs partmap p =
     let pat_tuple = args_of_t_with_v p t in
     let pat_unknown = List.map (fun (id,_) -> match id with
                                   | "vid" -> mk_var "vid"
-                                  | _     -> mk_const CUnknown
+                                  | _     -> mk_cunknown
                                ) pat_tuple
     in mk_global_fn
       (log_get_bound_for p t)
@@ -266,16 +266,16 @@ let start_trig p t =
   mk_code_sink t (wrap_args @: args_of_t p t) [] @:
     mk_let "vid" t_vid
       (mk_tuple [
-        mk_const @: CInt 0; (* epoch not implemented yet *)
+        mk_cint 0; (* epoch not implemented yet *)
         mk_peek vid_counter;
         mk_apply (mk_var hash_addr) G.me_var
       ]) @:
       mk_block [
          mk_send 
-           (mk_const @: CTarget(send_fetch_name_of_t p t)) G.me_var @: 
+           (mk_ctarget(send_fetch_name_of_t p t)) G.me_var @: 
            mk_tuple @: args_of_t_as_vars_with_v p t;
          mk_update vid_counter (mk_peek vid_counter) @:
-           mk_add (mk_const @: CInt 1) (mk_peek vid_counter)
+           mk_add (mk_cint 1) (mk_peek vid_counter)
         ]
 
 let send_fetch_trig p trig_name =
@@ -286,7 +286,7 @@ let send_fetch_trig p trig_name =
           "stmt_map_ids", wrap_tset @: wrap_ttuple [t_stmt_id; t_map_id]]
         ) @:
         mk_send 
-          (mk_const @: CTarget (rcv_fetch_name_of_t p trig_name))
+          (mk_ctarget (rcv_fetch_name_of_t p trig_name))
           (mk_var "ip") @:
           mk_tuple @:
             mk_var "stmt_map_ids"::
@@ -318,7 +318,7 @@ let send_fetch_trig p trig_name =
               (mk_map 
                 (mk_lambda (wrap_args["ip", t_addr]) @:
                   mk_tuple @:
-                    [mk_const @: CInt stmt_id; mk_const @: CInt rhs_map_id; 
+                    [mk_cint stmt_id; mk_cint rhs_map_id; 
                       mk_var "ip"]
                 ) @:
                 mk_apply 
@@ -339,7 +339,7 @@ let send_completes_for_stmts_with_no_fetch =
         [mk_iter 
           (mk_lambda (wrap_args["ip", t_addr]) @:
             mk_send
-              (mk_const @: CTarget(do_complete_trig_name))
+              (mk_ctarget(do_complete_trig_name))
               (mk_var "ip") @:
               mk_tuple @: args_of_t_as_vars_with_v p trig_name
           ) @:
@@ -363,7 +363,7 @@ let send_puts =
       (wrap_args ["ip", t_addr; 
         "stmt_id_cnt_list", wrap_tset @: wrap_ttuple [t_stmt_id; t_int]]) @:
       mk_send
-        (mk_const @: CTarget(rcv_put_name_of_t p trig_name))
+        (mk_ctarget(rcv_put_name_of_t p trig_name))
         (mk_var "ip") @:
         mk_tuple @: mk_var "stmt_id_cnt_list"::
           args_of_t_as_vars_with_v p trig_name
@@ -400,9 +400,9 @@ let send_puts =
           (wrap_args ["ip", t_addr; "stmt_id", t_stmt_id]) @:
           mk_add
             (mk_var "acc") @:
-            mk_const @: CInt 1
+            mk_cint 1
         )
-        (mk_const @: CInt 0) @: (* [] *)
+        (mk_cint 0) @: (* [] *)
         List.fold_left
           (fun acc_code (stmt_id, (rhs_map_id, lhs_map_id)) ->
             let shuffle_fn = find_shuffle stmt_id rhs_map_id lhs_map_id in
@@ -416,14 +416,14 @@ let send_puts =
                   (wrap_args  ["ip", t_addr;
                     "tuples", wrap_tset @: wrap_ttuple rhs_map_types]
                   ) @:
-                  mk_tuple [mk_var "ip"; mk_const @: CInt stmt_id]
+                  mk_tuple [mk_var "ip"; mk_cint stmt_id]
                 ) @:
                 mk_apply
                   (mk_var shuffle_fn) @:
                   mk_tuple @:
                       (mk_tuple key)::
                       [mk_empty @: wrap_tset @: wrap_ttuple rhs_map_types]@
-                      [mk_const @: CBool true]
+                      [mk_cbool true]
           )
           (mk_empty @: wrap_tset @: wrap_ttuple [t_addr; t_stmt_id]) @:
           s_and_over_stmts_in_t p rhs_lhs_of_stmt trig_name
@@ -472,29 +472,29 @@ let rcv_fetch_trig p trig =
             (fun stmt acc_code -> mk_if
               (mk_eq
                 (mk_var "stmt_id") @:
-                mk_const @: CInt stmt
+                mk_cint stmt
               )
               (List.fold_right 
                 (fun map_id acc_code2 -> mk_if
                   (mk_eq
                     (mk_var "map_id") @:
-                    mk_const @: CInt map_id
+                    mk_cint map_id
                   )
                   (mk_send (* send to local send push trigger *)
-                    (mk_const @:
-                      CTarget(send_push_name_of_t p trig stmt map_id))
+                    (mk_ctarget @:
+                      send_push_name_of_t p trig stmt map_id)
                     G.me_var @:
                     mk_tuple @: args_of_t_as_vars_with_v p trig
                   )
                   acc_code2
                 )
                 (rhs_maps_of_stmt p stmt) @:
-                mk_const CUnit (* zero: do nothing but really exception *)
+                mk_cunit (* zero: do nothing but really exception *)
               )
               acc_code
             )
             (stmts_of_t p trig) @:
-            mk_const CUnit (* really want exception here *)
+            mk_cunit (* really want exception here *)
         ) @:
         mk_var "stmts_and_map_ids"
       ]
@@ -516,7 +516,7 @@ mk_code_sink
   let full_pat = part_pat @ counter_pat in
   let full_types = wrap_ttuple @: extract_arg_types full_pat in
   let part_pat_as_vars = ids_to_vars @: extract_arg_names part_pat in
-  let query_pat = mk_tuple @: part_pat_as_vars @ [mk_const CUnknown] in
+  let query_pat = mk_tuple @: part_pat_as_vars @ [mk_cunknown] in
   mk_iter
     (mk_lambda
       (wrap_args ["stmt_id", t_stmt_id; "count", t_int]) @:
@@ -563,8 +563,8 @@ let send_push_stmt_map_trig p trig_name =
                 ["ip",t_addr;"tuples",wrap_tset @: wrap_ttuple rhs_map_types]
               ) @:
               mk_send
-                (mk_const @: 
-                  CTarget (rcv_push_name_of_t p trig_name stmt_id rhs_map_id))
+                (mk_ctarget @:
+                  rcv_push_name_of_t p trig_name stmt_id rhs_map_id)
                 (mk_var "ip") @:
                 mk_tuple @: mk_var "tuples"::args_of_t_as_vars_with_v p trig_name
             ) @:
@@ -575,7 +575,7 @@ let send_push_stmt_map_trig p trig_name =
                   (mk_slice 
                     (mk_var rhs_map_name) @:
                     mk_tuple @: slice_key
-                  )::[mk_const @: CBool false]
+                  )::[mk_cbool false]
                 )
       ] (* trigger *)
     ) (* fun *)
@@ -637,8 +637,8 @@ List.fold_left
          let counter_pat = ["count", t_int] in
          let full_pat = part_pat @ counter_pat in
          let full_types = wrap_ttuple @: extract_arg_types full_pat in
-         let part_pat_as_vars = [mk_var "vid"; mk_const @: CInt stmt_id] in
-         let query_pat = mk_tuple @: part_pat_as_vars @ [mk_const CUnknown] in
+         let part_pat_as_vars = [mk_var "vid"; mk_cint stmt_id] in
+         let query_pat = mk_tuple @: part_pat_as_vars @ [mk_cunknown] in
          let stmt_cntrs_slice = mk_slice stmt_cntrs query_pat in
          mk_if (* check if the counter exists *)
            (mk_has_member stmt_cntrs query_pat full_types)
@@ -651,28 +651,28 @@ List.fold_left
                  (mk_peek stmt_cntrs_slice) @:
                  mk_tuple @:
                    part_pat_as_vars @ 
-                   [mk_sub (mk_var "count") (mk_const @: CInt 1)]
+                   [mk_sub (mk_var "count") (mk_cint 1)]
                
              ;mk_if (* check if the counter is 0 *)
                (mk_eq
                  (mk_peek stmt_cntrs_slice) @:
-                 mk_tuple @: part_pat_as_vars @ [mk_const @: CInt 0]
+                 mk_tuple @: part_pat_as_vars @ [mk_cint 0]
                ) 
                (* Send to local do_complete *)
                (mk_send
-                 (mk_const @: 
-                   CTarget (do_complete_name_of_t p trig_name stmt_id))
+                 (mk_ctarget @: 
+                   do_complete_name_of_t p trig_name stmt_id)
                  G.me_var @:
                  mk_tuple @: args_of_t_as_vars_with_v p trig_name
                ) @:
-               mk_const CUnit (* do nothing *)
+               mk_cunit (* do nothing *)
              ]
            ) @:
            mk_update (* else: no value in the counter *)
              stmt_cntrs
              (mk_peek stmt_cntrs_slice) @:
              (* Initialize if the push arrives before the put. *)
-             mk_tuple @: part_pat_as_vars @ [mk_const @: CInt(-1)]
+             mk_tuple @: part_pat_as_vars @ [mk_cint(-1)]
          ]
     ]
   )
@@ -714,8 +714,8 @@ let send_corrective_trigs p =
         (fun acc_code (trig, stmt_id) -> 
           mk_combine 
             (mk_singleton types @:
-              mk_tuple @: [mk_const @: CInt (trigger_id_for_name p trig); 
-               mk_const @: CInt stmt_id]
+              mk_tuple @: [mk_cint (trigger_id_for_name p trig); 
+               mk_cint stmt_id]
             )
             acc_code
         )
@@ -751,7 +751,7 @@ let send_corrective_trigs p =
                 mk_if (* if match, send data *)
                   (mk_eq
                     (mk_var "stmt_id") @:
-                    mk_const @: CInt target_stmt
+                    mk_cint target_stmt
                   )
                   (mk_iter 
                     (mk_lambda 
@@ -759,7 +759,7 @@ let send_corrective_trigs p =
                       mk_send
                         (* we always send to the same map_id ie. the remote
                          * buffer of the same map we just calculated *)
-                        (mk_const @: CTarget (rcv_corrective_name_of_t p target_trig
+                        (mk_ctarget (rcv_corrective_name_of_t p target_trig
                           target_stmt map_id)) 
                         (mk_var "ip") @:
                         mk_tuple [mk_var "vid"; mk_var "tuples"]
@@ -776,11 +776,11 @@ let send_corrective_trigs p =
                         mk_tuple @:
                           mk_tuple key::
                           mk_var "delta_tuples"::
-                          [mk_const @: CBool false]
+                          [mk_cbool false]
                   )
                   acc_code (* just another branch on the if *)
               )
-              (mk_const CUnit) (* base case *)
+              mk_cunit (* base case *)
               trigs_stmts_with_matching_rhs_map 
           ) @:
           mk_var "corrective_list"
@@ -871,10 +871,10 @@ List.map
             (mk_eq
               (mk_peek @: mk_slice stmt_cntrs @:
                 mk_tuple
-                  [mk_var "vid"; mk_const @: CInt stmt_id; mk_const CUnknown]
+                  [mk_var "vid"; mk_cint stmt_id; mk_cunknown]
               ) @: (* error if we get more than one result *)
               mk_tuple
-                [mk_var "vid"; mk_const @: CInt stmt_id; mk_const @: CInt 0]
+                [mk_var "vid"; mk_cint stmt_id; mk_cint 0]
             )
             (* get bound vars from log *)
             (mk_let_many 
@@ -884,14 +884,14 @@ List.map
                 (mk_var "vid")
               ) @:
               mk_send
-                (mk_const @: 
-                  CTarget (do_corrective_name_of_t p trig_name stmt_id map_id)
+                (mk_ctarget @: 
+                  do_corrective_name_of_t p trig_name stmt_id map_id
                 )
                 G.me_var @:
                 mk_tuple @: args_of_t_as_vars_with_v p trig_name @
                   [mk_var "delta_tuples"]
             ) @:
-            mk_const CUnit (* else *)
+            mk_cunit (* else *)
         ]
   ) @:
   s_and_over_stmts_in_t p rhs_maps_of_stmt trig_name
@@ -907,7 +907,7 @@ List.map
         ["delta_tuples", wrap_tset @: wrap_ttuple @: map_types_with_v_for p map_id]
       )
       [] @: (* locals *)
-        (*mk_const CUnit*)
+        (*mk_cunit*)
         let (args, ast) = M.modify_corr_ast p ast map_id stmt_id trig_name in
         let args_v = map_ids_types_add_v args in
         mk_iter (mk_lambda (wrap_args args_v) ast) @:
@@ -936,7 +936,7 @@ let modified_roles ast =
   let other_roles = List.filter (not |- pred) roles in
   let (_, flow_prog) = U.decompose_role def_role in
   (mk_role def_role_id @:
-    mk_const_stream "s_on_init" t_int [mk_const (CInt 1)] ::
+    mk_const_stream "s_on_init" t_int [mk_cint 1] ::
     mk_bind "s_on_init" "on_init" ::
     mk_consume "s_on_init" :: flow_prog) :: other_roles
 

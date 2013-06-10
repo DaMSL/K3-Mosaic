@@ -94,7 +94,7 @@ let gen_shuffle_fn p rmap lmap bindings fn_name =
       (lazy (mk_destruct_tuple "l_key" lkey_types id_l)) @: 
       mk_let "all_targets" result_types
         (mk_if 
-          (mk_eq (mk_var "shuffle_on_empty") @: mk_const @: CBool(true))
+          (mk_eq (mk_var "shuffle_on_empty") @: mk_cbool true)
           (* in shuffle on empty case, we prepare all the routing that must
            * be done for empty packets *)
           (mk_map
@@ -103,7 +103,7 @@ let gen_shuffle_fn p rmap lmap bindings fn_name =
             ) @:
             mk_apply
               (mk_var @: route_for p lmap) @:
-              if pred then mk_var "l_key" else mk_const CUnit
+              if pred then mk_var "l_key" else mk_cunit
           ) @:
           mk_empty result_types
         ) @:
@@ -136,7 +136,7 @@ let gen_shuffle_fn p rmap lmap bindings fn_name =
                   mk_apply (* route each full l_key *)
                     (mk_var @: route_for p lmap) @:
                       mk_tuple 
-                        [if pred then mk_var "full_lkey" else mk_const CUnit] 
+                        [if pred then mk_var "full_lkey" else mk_cunit] 
                 )
               ) @:
               mk_var "tuples"

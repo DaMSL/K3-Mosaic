@@ -173,6 +173,19 @@ let list_intersperse la lb =
 let list_find f l = try Some(List.find f l) with Not_found -> None
 let find fn k m = try Some(fn k m) with Not_found -> None
 
+(* find the maximum element of a list according to a transformation function *)
+let list_minmax op f l = match l with
+  | [x]   -> (x, f x)
+  | x::xs -> 
+    List.fold_left 
+      (fun acc m -> let n = f m in 
+                    if op n (snd acc) then (m,n) else acc) 
+      (x, f x) xs
+  | _     -> invalid_arg "Empty list"
+
+let list_max f l = list_minmax (>) f l
+let list_min f l = list_minmax (<) f l
+
 (* modify/add to/remove_from an association list generically *)
 let assoc_modify f item l =
   let get_result m_value reduced_l =
