@@ -76,7 +76,7 @@ let multiinter l = List.fold_left inter (List.hd l) (List.tl l)
    @param l  A list
    @return   The set of all distinct elements in l
 *)
-let no_duplicates l = multiunion (List.map (fun x -> [x]) l)
+let no_duplicates l = Util.nub l
 
 (** 
    Eliminate all duplicates in a list (identical to no_duplicates)
