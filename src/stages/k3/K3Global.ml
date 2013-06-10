@@ -18,21 +18,23 @@ let peers_id_type = ["addr", t_addr; "name", wrap_tmaybe t_string]
 let peers_type = wrap_tset @: wrap_ttuple @: snd @: List.split peers_id_type
 let peers_ids = fst @: List.split peers_id_type
 let peers_empty = mk_global_val peers_name peers_type 
-let peers_code = function 
-     | [] -> peers_empty
-     | ps -> mk_global_val_init peers_name peers_type @: 
-       List.fold_right
-         (fun (addr, mname) acc -> let n = match mname with
-           | None   -> mk_nothing t_string 
-           | Some s -> mk_just @: mk_const @: CString s
-           in mk_combine 
-             (mk_singleton peers_type @: mk_tuple [mk_const @: CAddress addr; n]) 
-             acc
-         )
-         ps
-         (mk_empty peers_type)
+let rec peers_code addr = function 
+  (* if we have no peers, just add ourselves in *)
+  | [] -> peers_code addr [addr, None]
+  | ps -> mk_global_val_init peers_name peers_type @: 
+    List.fold_right
+      (fun (addr, mname) acc -> let n = match mname with
+        | None   -> mk_nothing t_string 
+        | Some s -> mk_just @: mk_const @: CString s
+        in mk_combine 
+          (mk_singleton peers_type @: mk_tuple [mk_const @: CAddress addr; n]) 
+          acc
+      )
+      ps
+      (mk_empty peers_type)
 
-let globals addr ps = me_code addr::[peers_code ps]
+(* create k3 globals for the address and peers *)
+let globals addr ps = me_code addr::[peers_code addr ps]
 
 let add_globals addr peers ds = globals addr peers@ds
 let remove_globals addr peers ds = list_drop (List.length @: globals addr peers) ds
