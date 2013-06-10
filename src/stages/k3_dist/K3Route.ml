@@ -115,6 +115,8 @@ let global_pmaps p partmap =
   mk_global_val_init (pmap_data) full_pmap_types @:
     k3_partition_map_of_list p partmap
 
+(* calculate the size of the bucket of each dimensioned we're partitioned on
+ * This is order-dependent in pmap *)
 let calc_dim_bounds_code = 
   mk_global_fn "calc_dim_bounds" 
   ["pmap", pmap_types] (*args*) [dim_bounds_type; t_int] (* return *) @:
@@ -134,13 +136,16 @@ let calc_dim_bounds_code =
 
 let gen_route_fn p map_id = 
   let map_types = map_types_no_val_for p map_id in
-  (* it's very important that the index for ranges start with 0 *)
+  (* it's very important that the index for ranges start with 0, since we use
+   * them for indexing *)
   let map_range = create_range 0 @: List.length map_types in
   let key_types = wrap_tmaybes map_types in
   let prefix = "key_id_" in
-  let key_ids = fst @: List.split @: map_ids_types_no_val_for ~prefix:prefix p map_id in
+  let key_ids =
+    fst @: List.split @: map_ids_types_no_val_for ~prefix:prefix p map_id in
   let to_id i = List.nth key_ids i in
   match map_types with 
+
   | [] -> (* if no keys, for now we just route to one place *)
   mk_global_fn (route_for p map_id)
     ["_", canonical TUnit]
@@ -148,20 +153,29 @@ let gen_route_fn p map_id =
       mk_singleton (wrap_tset t_addr) @:
         mk_apply (mk_var "get_ring_node") @:
           mk_tuple [mk_cint 1; mk_cint 1]
+
   | _  -> (* we have keys *)
   mk_global_fn (route_for p map_id)
     ["key", wrap_ttuple key_types]
     [wrap_tset t_addr] @: (* return *)
+    (* get the info for the current map and bind it to "pmap" *)
     mk_let "pmap" pmap_types
       (mk_snd pmap_per_map_types @:
         mk_peek @: mk_slice (mk_var pmap_data) @:
           mk_tuple [mk_cint @: map_id; mk_cunknown]
       ) @:
+
+    (* handle the case of no partitioning at all *)
+    mk_if (mk_eq (mk_var "pmap") (mk_empty pmap_types))
+      (mk_apply (mk_var "get_all_nodes") mk_cunit) @:
+      
+    (* calculate the dim bounds ie. the bucket sizes when linearizing *)
     mk_let_many ["dim_bounds", dim_bounds_type; "max_val", t_int]
       (mk_apply (mk_var "calc_dim_bounds") @: mk_var "pmap") @:
     mk_destruct_tuple "key" key_types prefix
     @:
     (* calc_bound_bucket *)
+    (* we calculate the contribution of the bound components *)
     mk_let "bound_bucket" t_int 
     (List.fold_left
       (fun acc_code index -> 
@@ -171,28 +185,38 @@ let gen_route_fn p map_id =
         let maybe_type = wrap_tmaybe temp_type in
         let hash_func = hash_func_for temp_type in
         mk_add 
+          (* check if we have a binding in this index *)
           (mk_if (mk_eq (mk_var temp_id) @: mk_nothing maybe_type) 
-            (mk_cint 0) (* no contribution *)
-            (mk_unwrap_maybe [temp_id, maybe_type] @:
-              mk_let "value" t_int
-              (mk_apply (mk_var "mod") @:
-                mk_tuple
-                  [mk_apply (mk_var hash_func) @: mk_var id_unwrap;
-                   mk_fst t_two_ints @: mk_peek @:
-                     mk_slice (mk_var "pmap") @:
-                       mk_tuple [mk_cint index; mk_cunknown]]
-              ) @:
-            mk_mult
-              (mk_var "value") @:
-               mk_snd t_two_ints @:
-                 mk_peek @: mk_slice (mk_var "dim_bounds") @:
-                  mk_tuple [mk_cint index; mk_cunknown]
-            )
+            (mk_cint 0) @: (* no contribution *)
+            (* bind the slice for this index *)
+            mk_let "pmap_slice" pmap_types
+              (mk_slice (mk_var "pmap") @:
+                mk_tuple [mk_cint index; mk_cunknown]) @:
+            (* check if we don't partition by this index *)
+            (mk_if (mk_eq (mk_var "pmap_slice") @: mk_empty pmap_types)
+              (mk_cint 0) @:
+              mk_unwrap_maybe [temp_id, maybe_type] @:
+                mk_let "value" t_int
+                (mk_apply (mk_var "mod") @:
+                  mk_tuple
+                    (* we hash first. This could seem like it destroys locality,
+                     * but it really doesn't, since we're only concerned about
+                     * point locality *)
+                    [mk_apply (mk_var hash_func) @: mk_var id_unwrap;
+                    mk_fst t_two_ints @: mk_peek @: mk_var "pmap_slice"]
+                ) @:
+                mk_mult
+                  (mk_var "value") @:
+                  mk_snd t_two_ints @:
+                    mk_peek @: mk_slice (mk_var "dim_bounds") @:
+                      mk_tuple [mk_cint index; mk_cunknown]
+              )
           ) acc_code
       )
       (mk_cint 0)
       map_range
     ) @:
+    (* now calculate the free parameters' contribution *)
     mk_let "free_dims" free_dims_type
       (List.fold_left
         (fun acc_code x -> 
@@ -200,16 +224,17 @@ let gen_route_fn p map_id =
           let id_x = to_id x in
           mk_combine 
           (mk_if 
-            (mk_eq (mk_var @: id_x) @: mk_nothing type_x)
+            (* we only care about indices that are nothing *)
+            (mk_neq (mk_var @: id_x) @: mk_nothing type_x)
             (mk_empty free_dims_type) @:
-            mk_unwrap_maybe [id_x, type_x] @:
             mk_slice (mk_var "pmap") @: 
-              mk_tuple [mk_var @: id_x^"_unwrap"; mk_cunknown]
+              mk_tuple [mk_cint x; mk_cunknown]
           ) acc_code
         )
         (mk_empty free_dims_type)
         (map_range)
       ) @:
+    (* a list of ranges from 0 to the bucket size, for every free variable *)
     mk_let "free_domains" free_domains_type
       (mk_map
         (mk_lambda (wrap_args ["i", t_int; "b_i", t_int]) @:
@@ -219,6 +244,7 @@ let gen_route_fn p map_id =
         ) @:
         mk_var "free_dims"
       ) @:
+    (* calculate the cartesian product to get every possible bucket *)
     mk_let "free_cart_prod" free_cart_prod_type
       (mk_agg
         (mk_assoc_lambda (wrap_args ["prev_cart_prod", free_cart_prod_type])
@@ -247,9 +273,9 @@ let gen_route_fn p map_id =
         (mk_empty free_cart_prod_type)
         (mk_var "free_domains")
       ) @:
+    (* We now add in the value of the bound variables as a constant
+     * and calculate the result for every possibility *)
     mk_let "sorted_ip_list" (sorted_ip_list_type)
-      (* We now add in the value of the bound variables as a constant
-       * and calculate the result for every possibility *)
       (mk_gbagg
         (mk_lambda (wrap_args ["ip", t_addr]) @: mk_var "ip")
         (mk_lambda (wrap_args ["acc", wrap_tlist t_addr; "ip", t_addr]) @:

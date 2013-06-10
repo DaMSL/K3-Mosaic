@@ -113,6 +113,15 @@ let get_ring_node_code =
     ) @:
     mk_var "addr"
 
+(* k3 function to get all of the nodes in the node ring *)
+let get_all_nodes_code =
+  mk_global_fn "get_all_nodes"
+  ["_", t_unit] [wrap_tlist t_addr] @:
+  mk_map
+    (mk_lambda (wrap_args ["addr", t_addr; "_", t_unit; "_", t_unit]) @:
+      mk_var "addr") @:
+    (mk_var node_ring_nm)
+
 let gen_ring_code =
   ring_foreign_funcs @
   node_ring_code ::
@@ -121,6 +130,7 @@ let gen_ring_code =
   add_node_code ::
   remove_node_code ::
   get_ring_node_code ::
+  get_all_nodes_code ::
   []
 
 
