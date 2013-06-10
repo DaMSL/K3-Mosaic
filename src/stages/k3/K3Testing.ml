@@ -37,13 +37,15 @@ let eval_test_expr (decl_prog, e) =
   value_of_eval (snd (eval_expr val_env (deduce_expr_type trig_env env e)))
 
 (* Tests *)
-let equals_assertion expected actual string_fn =
-  if expected = actual then "PASSED."
+let equals_assertion comp_fn expected actual string_fn =
+  if comp_fn expected actual then "PASSED."
   else "FAILED: Expected " ^ string_fn expected ^ ", but got " ^ string_fn actual ^ "."
 
 let ensure assertion = match assertion with
-  | AssertTypeEquals(expected, actual) -> equals_assertion expected actual string_of_type
-  | AssertValueEquals(expected, actual) -> equals_assertion expected actual string_of_value
+  | AssertTypeEquals(expected, actual) -> 
+      equals_assertion (=) expected actual string_of_type
+  | AssertValueEquals(expected, actual) -> 
+      equals_assertion equal_values expected actual string_of_value
 
 let rec run_tests ?(indent="") test =
     match test with
@@ -126,7 +128,7 @@ let unify_envs envs =
  * structure indicating the kind of test desired *)
 let test_program interpret_fn file_name =
   let test_type = parse_program_test @: read_file file_name in
-  let op_fn, program, check = match test_type with
+  let op_fn, program, tests = match test_type with
     | ProgTest (prog, checkl) -> extract_first_env, prog, checkl
     | NetworkTest (prog, checkl) -> unify_envs, prog, checkl
   in
@@ -137,6 +139,6 @@ let test_program interpret_fn file_name =
     let evaluated = try List.assoc id env with Not_found -> VUnknown in
     let test_case = case name @: evaluated @=? eval_test_expr ([], check_as_expr x)
     in test_acc@[test_case]
-  ) [] check
+  ) [] tests
   in List.iter run_tests test_cases
 

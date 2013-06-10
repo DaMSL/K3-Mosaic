@@ -40,6 +40,15 @@ type program_env_t = trigger_env_t * env_t
 (* Value stringification *)
 let unwrap opt = match opt with Some v -> v | _ -> failwith "invalid option unwrap"
 
+(* Value comparison *)
+let rec equal_values a b = 
+  let sort x = List.sort compare x in
+  match a,b with
+  | (VSet l | VBag l), (VSet r | VBag r) ->
+      (try List.for_all2 equal_values (sort l) (sort r)
+       with Invalid_argument _ -> false)
+  | a,b -> a = b
+
 let rec repr_of_value v = match v with
 	| VUnknown  -> "VUnknown"
 	| VUnit     -> "VUnit"
