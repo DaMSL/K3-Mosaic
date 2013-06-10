@@ -223,12 +223,12 @@ let parse_program_k3 = parse_program K3Parser.program K3Lexer.tokenize
 let parse_program_m3 = 
     parse_program Calculusparser.mapProgram Calculuslexer.tokenize
 
-
 (* Program transformers *)
 let typed_program_with_globals p =
-  try deduce_program_type @: 
-      K3Global.add_globals cmd_line_params.node_address cmd_line_params.peers p
-  with TypeError (a,b,c) -> handle_type_error p (a,b,c) 
+  let p' =
+    K3Global.add_globals cmd_line_params.node_address cmd_line_params.peers p in
+  try deduce_program_type p'
+  with TypeError (a,b,c) -> handle_type_error p' (a,b,c) 
 
 (* for most functions, we don't need the globals included *)
 let typed_program p =
@@ -243,7 +243,6 @@ let cpp_program p =
   CPPTyping.deduce_program_type @:
     cpp_of_imperative mk_meta @:
       RK3ToImperative.imperative_of_program mk_meta @: typed_program p
-
 
 (* Action handlers *)
 (* TODO *) 
