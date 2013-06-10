@@ -60,6 +60,7 @@ val mk_var : id_t -> expr_t
 val mk_tuple : expr_t list -> expr_t
 val mk_just : expr_t -> expr_t
 val mk_nothing : value_type_t -> expr_t
+val mk_nothing_m : value_type_t -> expr_t
 
 val mk_empty : value_type_t -> expr_t
 val mk_singleton : value_type_t -> expr_t -> expr_t

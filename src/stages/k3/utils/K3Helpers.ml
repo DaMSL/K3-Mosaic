@@ -152,6 +152,9 @@ let mk_just x = mk_stree Just [x]
 
 let mk_nothing typ = mk_stree (Nothing typ) []
 
+(* a nothing that wraps in a maybe type *)
+let mk_nothing_m typ = mk_nothing @: wrap_tmaybe typ
+
 let mk_empty val_type = mk_stree (Empty val_type) []
 
 let mk_singleton val_type x = mk_stree (Singleton val_type) [x]

@@ -24,7 +24,7 @@ let rec peers_code addr = function
   | ps -> mk_global_val_init peers_name peers_type @: 
     List.fold_right
       (fun (addr, mname) acc -> let n = match mname with
-        | None   -> mk_nothing t_string 
+        | None   -> mk_nothing_m t_string 
         | Some s -> mk_just @: mk_const @: CString s
         in mk_combine 
           (mk_singleton peers_type @: mk_tuple [mk_const @: CAddress addr; n]) 
