@@ -170,16 +170,20 @@ let rec lazy_expr c expr =
      - For a == or !=, we also wrap sub- ==/!= *)
   let arith_paren e = match U.tag_of_expr e with
     | Mult | Add -> lazy_paren
-    | _ -> id_fn
+    | _ -> id_fn in
   (* we're more sensitive for left side *)
-  in let arith_paren_l e = match U.tag_of_expr e with
+ let paren_l e = match U.tag_of_expr e with
+    | IfThenElse -> lazy_paren
+    | Apply when is_apply_let e -> lazy_paren
+    | _ -> id_fn in
+ let arith_paren_l e = match U.tag_of_expr e with
     | IfThenElse -> lazy_paren
     | Apply when is_apply_let e -> lazy_paren
     | _ -> arith_paren e
   (* for == and != *)
   in let logic_paren e = match U.tag_of_expr e with
     | Eq | Neq -> lazy_paren 
-    | _ -> arith_paren e
+    | _ -> arith_paren e (* arith ast is used for logic *)
   in let logic_paren_l e = match U.tag_of_expr e with
     | Eq | Neq -> lazy_paren
     | _ -> arith_paren_l e
@@ -233,11 +237,13 @@ let rec lazy_expr c expr =
         | _ -> error () (* type error *)
       end in
     let (e1, e2) = U.decompose_combine expr in
+    (* wrap the left side of the combine if it's needed *)
+    let wrapl = paren_l e1 in
     begin match U.tag_of_expr e1, U.tag_of_expr e2 with
       | Singleton vt, Combine | Singleton vt, Singleton _ 
       | Singleton vt, Empty _ -> 
         lazy_collection_vt c vt @: assemble_list c expr
-      | _ -> expr_pair ~sep:(lcut() <| lps "++" <| lcut()) (e1, e2) 
+      | _ -> expr_pair ~sep:(lcut() <| lps "++" <| lcut()) ~wl:wrapl (e1, e2) 
     end
   | Range ct -> let t = U.decompose_range expr in
     lazy_collection c ct @: expr_triple ~sep:(fun () -> lps ":") t
