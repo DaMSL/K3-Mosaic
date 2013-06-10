@@ -116,10 +116,7 @@ let _ = Hashtbl.add func_table
   mod_name (mod_decl, mod_args, mod_fn)
 
 (* maximum integer *)
-let get_max_int_fn e = 
-  match arg_of_env e with 
-  | [_,VUnit] -> e, int_temp max_int
-  | _ -> invalid_arg "get_max_int"
+let get_max_int_fn e = e, int_temp max_int
 
 let get_max_int_name = "get_max_int"
 let get_max_int_decl = wrap_tfunc t_unit t_int

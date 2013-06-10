@@ -176,6 +176,7 @@ and eval_expr cenv texpr =
     | Just  ->
       let renv, rval = child_value cenv 0
       in (renv, VTemp(VOption (Some rval)))
+    | Nothing _ -> cenv, VTemp(VOption(None))
 
     (* Collection constructors *)
     | Empty(ct) ->
@@ -431,8 +432,11 @@ and eval_expr cenv texpr =
       end
       
     | Peek -> 
-      let renv, c = child_value cenv 0
-      in renv, VTemp(List.hd (extract_value_list c))
+      let renv, c = child_value cenv 0 in
+      begin match extract_value_list c with
+        | x::_ -> renv, VTemp(x)
+        | _ -> raise (RuntimeError (uuid, "eval_expr(Peek): empty container"))
+      end
 
     | Insert ->
       modify_collection (fun env parts -> match parts with
