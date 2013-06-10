@@ -120,10 +120,10 @@ and eval_expr cenv texpr =
     let preserve_collection f v = VTemp(
       let error = int_erroru uuid "preserve_collection" in
       match v with
-        | VSet(cl) -> VSet(List.sort compare @: nub @: f cl)
-        | VBag(cl) -> VBag(List.sort compare @: f cl)
-        | VList(cl) -> VList(f cl)
-        | _ -> error "non-collection"
+        | VSet cl  -> VSet(nub @: f cl)
+        | VBag cl  -> VBag(f cl)
+        | VList cl -> VList(f cl)
+        | _        -> error "non-collection"
       )
     in
 
@@ -224,7 +224,7 @@ and eval_expr cenv texpr =
             | (VSet v1 | VBag v1), VList v2            -> VList(v1 @ v2)
             | VBag v1, (VSet v2 | VBag v2)             -> VBag(v1 @ v2)
             | VSet v1, VBag v2                         -> VBag(v1 @ v2)
-            | VSet v1, VSet v2                         -> VSet(ListAsSet.union v1 v2)
+            | VSet v1, VSet v2                         -> VSet(nub @: v1 @ v2)
             | _ -> error "(combine): non-collection"
         )
 
@@ -314,9 +314,7 @@ and eval_expr cenv texpr =
             fun (e, r) x -> let ienv, i = g e x in (ienv, r @ [value_of_eval i])
         ) (nenv, []) cl in (
             match c with
-            | VSet(cl)
-            | VBag(cl)
-            | VList(cl) ->
+            | VSet(cl) | VBag(cl) | VList(cl) ->
               let renv, r =  folder cl
               in renv, (preserve_collection (fun _ -> r) c)
             | _ -> error "(Map): non-collection value"
@@ -338,9 +336,7 @@ and eval_expr cenv texpr =
                 | _ -> error "(FilterMap): non boolean predicate"
         ) (nenv, []) cl in (
             match c with
-            | VSet(cl)
-            | VBag(cl)
-            | VList(cl) ->
+            | VSet(cl) | VBag(cl) | VList(cl) ->
               let renv, r =  folder cl
               in renv, (preserve_collection (fun _ -> r) c)
             | _ -> error "(FilterMap): non-collection value"
@@ -351,13 +347,15 @@ and eval_expr cenv texpr =
 
     | Aggregate ->
         let fenv, f = child_value cenv 0 in
-        let zenv, z = child_value fenv 1 in
-        let nenv, c = child_value zenv 2 in
+        let zenv, zero = child_value fenv 1 in
+        let nenv, col = child_value zenv 2 in
         let f' = eval_fn f in
         let renv, rval = List.fold_left (
             fun (e, v) a -> 
               let renv, reval = f' e (VTuple([v; a])) in renv, value_of_eval reval
-          ) (nenv, z) (extract_value_list c)
+          ) 
+          (nenv, zero) 
+          (extract_value_list col)
         in renv, VTemp rval
 
     | GroupByAggregate ->
@@ -434,14 +432,14 @@ and eval_expr cenv texpr =
         | [c;pat] -> 
             renv, (preserve_collection (fun els -> 
                 List.filter (match_pattern pat) els) c)
-        | _ -> error "(Slice): bad values"
+        | _       -> error "(Slice): bad values"
       end
       
     | Peek -> 
       let renv, c = child_value cenv 0 in
       begin match extract_value_list c with
         | x::_ -> renv, VTemp(x)
-        | _ -> error "(Peek): empty container"
+        | _    -> error "(Peek): empty container"
       end
 
     | Insert ->
