@@ -83,6 +83,10 @@ def test_file(file, dbt_path, k3_path)
 	puts "cd #{curdir}"
 	Dir.chdir "#{curdir}"
 
+    # create a k3 file for comparison's sake
+	puts "#{k3_path} -p -i m3 -l k3 temp.m3 > temp.k3"
+	`#{k3_path} -p -i m3 -l k3 temp.m3 > temp.k3 2> #{err_file}`
+
     # create a k3 distributed file
 	puts "#{k3_path} -p -i m3 -l k3dist temp.m3 > temp2.k3dist"
 	`#{k3_path} -p -i m3 -l k3dist temp.m3 > temp2.k3dist 2> #{err_file}`
@@ -118,13 +122,13 @@ def test_file(file, dbt_path, k3_path)
     genmaps = File.join($cur_path, "./genmaps.rb")
 	puts "#{genmaps} --distrib temp.trace >> temp.k3dist"
 	`#{genmaps} --distrib temp.trace >> temp.k3dist`
-    exit
 
 	# run the k3 driver on the input
-	puts "#{k3_path} -test temp.k3"
-	output = `#{k3_path} -test temp.k3 2> #{err_file}`
+	puts "#{k3_path} -eval temp.k3dist"
+	output = `#{k3_path} -eval temp.k3dist 2> #{err_file}`
 	check_error(curdir, err_file)
 	puts output
+    exit
 end
 
 test_file(file, dbtoaster_path, k3_path)
