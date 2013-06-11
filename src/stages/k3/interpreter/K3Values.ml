@@ -106,13 +106,23 @@ let print_binding (id,v) = ob(); ps (id^" = "); pc(); print_value v; cb(); fnl()
  
 let print_frame frame = List.iter print_binding frame
   
-let print_env (globals, frames) =
+let print_env skip_functions (globals, frames) =
+  let filter_env l = List.filter 
+    (function 
+      | _, VFunction _        -> false
+      | _, VForeignFunction _ -> false
+      | _                     -> true) 
+    l in
   let len l = string_of_int (List.length l) in
     ps ("----Globals("^(len globals)^")----"); fnl();
-    List.iter print_binding (List.map (fun (id,ref_v) -> id,!ref_v) globals);
+    let global_l = List.map (fun (id, ref_v) -> id, !ref_v) globals in
+    let global_l' = if not skip_functions then global_l
+                    else filter_env global_l in
+    List.iter print_binding global_l';
     fnl();
     ps ("----Frames("^(len frames)^")----"); fnl();
-    List.iter print_frame frames
+    let frames' = List.map filter_env frames in
+    List.iter print_frame frames'
 
 let print_trigger_env env =
   ps ("----Triggers("^(string_of_int @: List.length env)^")----"); fnl();
@@ -120,9 +130,11 @@ let print_trigger_env env =
 
 let print_program_env (trigger_env,val_env) =
   print_trigger_env trigger_env;
-  print_env val_env
-  
-let string_of_env env = wrap_formatter (fun () -> print_env env)
+  print_env false val_env
+
+let old_trig_env, old_val_env = ref [], ref []
+
+let string_of_env (env:env_t) = wrap_formatter (fun () -> print_env true env)
 
 let string_of_program_env env = wrap_formatter (fun () -> print_program_env env)
 

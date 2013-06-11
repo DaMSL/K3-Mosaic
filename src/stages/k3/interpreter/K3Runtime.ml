@@ -136,6 +136,9 @@ let continue_processing address =
 
 let invoke_trigger address (trigger_env, val_env) trigger_id arg =
   (List.assoc trigger_id trigger_env) val_env arg;
+  (* log the state for this trigger *)
+  LOG "trigger %s: %s" trigger_id (string_of_env val_env) 
+    NAME "K3Runtime.TriggerState" LEVEL DEBUG;
   events_processed := Int64.succ !events_processed
 
 let process_trigger_queue address env trigger_id max_to_process =

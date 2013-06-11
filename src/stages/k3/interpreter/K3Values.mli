@@ -39,7 +39,7 @@ val repr_of_value : value_t -> string
 val string_of_value : value_t -> string
 
 (* Environment stringification *)
-val print_env : env_t -> unit
+val print_env : bool -> env_t -> unit
 val print_program_env : program_env_t -> unit
 
 val string_of_env : env_t -> string

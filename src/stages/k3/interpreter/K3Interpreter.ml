@@ -90,8 +90,8 @@ let rec eval_fun uuid f =
    | _ -> error "eval_fun: Non-function value"
 
 and eval_expr cenv texpr =
-    LOG "%s" 
-      (string_of_env cenv) NAME "K3Interpreter.DetailedState" LEVEL DEBUG;
+    (*LOG "%s" *)
+      (*(string_of_env cenv) NAME "K3Interpreter.DetailedState" LEVEL DEBUG;*)
     
     let ((uuid, tag), _), children = decompose_tree texpr in
     let error = int_erroru uuid "eval_expr" in
