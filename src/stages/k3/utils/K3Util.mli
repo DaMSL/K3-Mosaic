@@ -76,6 +76,8 @@ val is_def_role : declaration_t * 'a -> bool
 
 (* Declaration accessors *)
 val globals_of_program  : program_t -> program_t
+val global_values_of_program  : program_t -> program_t
+val global_functions_of_program  : program_t -> program_t
 val flows_of_program    : program_t -> program_t
 
 val global_of_program   : id_t -> program_t -> declaration_t * annotation_t

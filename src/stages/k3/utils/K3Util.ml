@@ -235,12 +235,16 @@ let match_declaration id match_f l =
 
 (* Declaration accessors *)
 let is_global (d,_) = match d with Global _ -> true | _ -> false
+let is_global_fn (d,_) = match d with Global(_,TFunction _,_) -> true | _ -> false
+let is_global_val (d,_) = match d with Global(_,TValue _,_) -> true | _ -> false
 let is_foreign (d,_) = match d with Foreign _ -> true | _ -> false
 let is_flow (d,_)   = match d with Flow _ -> true | _ -> false
 let is_role (d,_)   = match d with Role _ -> true | _ -> false
 let is_def_role (d,_)   = match d with DefaultRole _ -> true | _ -> false
 
 let globals_of_program p = List.filter is_global p
+let global_values_of_program p = List.filter is_global_val p
+let global_functions_of_program p = List.filter is_global_fn p
 let flows_of_program p   = List.filter is_flow p
 
 let global_of_program id p = 

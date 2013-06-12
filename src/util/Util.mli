@@ -114,5 +114,11 @@ val array_find : ('a -> bool) -> 'a array -> int * 'a
 (* map an array to a list *)
 val array_map : ('a -> 'b) -> 'a array -> 'b list
 
+(* wrap an expression in some *)
+val some : 'a -> 'a option
+
 (* unwrap a some. Fail if not a Some *)
 val unwrap_some : 'a option -> 'a
+
+(* flatten a list of maybes into a list *)
+val flatten_some : 'a option list -> 'a list

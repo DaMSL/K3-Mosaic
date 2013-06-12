@@ -231,5 +231,18 @@ let array_find pred arr =
 let array_map f arr = 
   List.rev @: Array.fold_left (fun acc x -> (f x)::acc) [] arr
 
+(* wrap with some *)
+let some x = Some(x)
+
 (* unwrap a some. Fail if not a Some *)
 let unwrap_some = function None -> failwith "Not a Some" | Some x -> x
+
+(* flatten a list of maybes into a list *)
+let flatten_some l = List.rev @: 
+  List.fold_left (fun acc -> function
+    | Some x -> x::acc
+    | None   -> acc
+  ) [] l
+
+
+

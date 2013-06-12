@@ -95,23 +95,20 @@ let stmt_cntrs = mk_var stmt_cntrs_name
 let log_for_t t = "log_"^t
 let log_master = "log__master"
 
-let declare_global_vars p =
-  (* vid_counter to generate vids. We use a singleton because refs aren't ready
-   *)
-  let vid_counter_code = mk_global_val_init vid_counter_name vid_counter_t @:
+let declare_global_vars p ast =
+  (* vid_counter to generate vids. 
+   * We use a singleton because refs aren't ready *)
+  let vid_counter_code = 
+    mk_global_val_init vid_counter_name vid_counter_t @:
     mk_singleton vid_counter_t @: mk_cint 0 in
+
+  let global_map_decl_code =
+    M.modify_map_decl_ast p ast in
 
   (* stmt counters, used to make sure we've received all msgs *)
   let stmt_cntrs_type = wrap_tset_mut @: wrap_ttuple_mut 
       [t_vid_mut; t_int_mut; t_int_mut] in
   let stmt_cntrs_code = mk_global_val stmt_cntrs_name stmt_cntrs_type in
-  (* global maps with vids *)
-  let global_maps = 
-    let global_map_code_for map_id = mk_global_val
-      (map_name_of p map_id)
-      (wrap_tset @: wrap_ttuple @: map_types_with_v_for p map_id)
-    in 
-    List.map global_map_code_for @: get_map_list p in
   (* structures used for logs *)
   let log_structs_code =
     let log_master_code = mk_global_val
@@ -119,14 +116,15 @@ let declare_global_vars p =
       wrap_tset @: wrap_ttuple [t_vid; t_trig_id] in
     let log_struct_code_for t = mk_global_val
       (log_for_t t) @:
-      wrap_tset @: wrap_ttuple @: extract_arg_types @: args_of_t_with_v p t
+      wrap_tset @: 
+        wrap_ttuple @: extract_arg_types @: args_of_t_with_v p t
     in 
     let log_structs = for_all_trigs p log_struct_code_for in
     log_master_code::log_structs
   in
   vid_counter_code ::
+  global_map_decl_code @
   stmt_cntrs_code :: 
-  global_maps@
   log_structs_code
 
 (* vid comparison names and code *)
@@ -961,7 +959,7 @@ let gen_dist p partmap ast =
   let regular_trigs = List.flatten @:
     for_all_trigs p @: fun t -> gen_dist_for_t p ast t in
   let prog =
-    declare_global_vars p @
+    declare_global_vars p ast @
     global_funcs @ (* maybe make this not order-dependent *)
     declare_foreign_functions p @
     filter_corrective_list ::  (* global func *)

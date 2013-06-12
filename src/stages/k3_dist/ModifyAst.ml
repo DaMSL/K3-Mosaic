@@ -326,4 +326,55 @@ let modify_corr_ast p ast map stmt trig =
   let ast = modify_0d_map_access p ast stmt in
   (args, ast)
 
+(* --- Map declarations --- *)
+
+(* initial vid to put in initialization statements *) 
+let init_vid = "__init_vid__"
+
+(* global declaration of default vid to put into every map *)
+let init_vid_k3 = 
+  mk_global_val_init init_vid t_vid @:
+    (* epoch, counter=0, node hash *)
+    mk_tuple [mk_cint 0; mk_cint 0; mk_apply (mk_var "hash_addr") G.me_var]
+
+(* change the initialization values of global maps to have the vid as well *)
+(* receives the new types to put in and the starting expression to change *)
+(* inserts a reference to the default vid var for that node *)
+let rec add_vid_to_init_val types e = 
+  let add = add_vid_to_init_val types in
+  let vid_var = mk_var init_vid in
+  match U.tag_of_expr e with
+  | Combine -> let x, y = U.decompose_combine e in
+      mk_combine (add x) (add y)
+  | Empty t -> mk_empty types
+  | Singleton t -> let x = U.decompose_singleton e in
+      mk_singleton types (add x)
+  | Tuple -> let xs = U.decompose_tuple e in
+      mk_tuple (P.map_add_v vid_var xs)
+  (* this should only be encountered if there's no tuple *)
+  | Const _ | Var _ -> mk_tuple (P.map_add_v vid_var [e])
+  | _ -> failwith "add_vid_to_init_val: unhandled modification"
+
+(* add a vid to global value map declarations *)
+let modify_global_map p = function
+  (* filter to have only map declarations *)
+  | Global(name, TValue typ, m_expr),_ ->
+    begin try
+      let map_id = P.map_id_of_name p name in
+      let types = wrap_tset @: wrap_ttuple @: P.map_types_with_v_for p map_id in
+      begin match m_expr with
+        | None   -> None
+        | Some e -> (* add a vid *)
+          let e' = add_vid_to_init_val types e in
+          some @: mk_global_val_init
+            name types e'
+      end
+    with Not_found -> None end
+  | _ -> None
+
+(* return ast for map declarations, adding the vid *)
+let modify_map_decl_ast p ast =
+  let decls = U.globals_of_program ast in
+  init_vid_k3 :: 
+    (flatten_some @: list_map (modify_global_map p) decls)
 
