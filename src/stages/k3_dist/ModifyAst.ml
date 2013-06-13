@@ -102,6 +102,10 @@ let add_vid_to_lambda_args lambda =
     | _ -> raise(UnhandledModification("lambda not found")) in
   mk_lambda new_args body
 
+(* messages about possible modifications to the ast for map accesses *)
+(* these are passed around while folding over the tree *)
+type msg_t = AddVidMsg | NopMsg | DelMsg
+
 (* add vid to all map accesses *)
 let modify_map_access p ast stmt =
   let lmap = P.lhs_map_of_stmt p stmt in
@@ -117,7 +121,8 @@ let modify_map_access p ast stmt =
       | x      -> mk_tuple @: P.map_add_v var_vid [t] 
   in
   (* Sometimes we only find out that a node needs to have a vid from a higher
-   * vid. The main use for this right now is for combine *)
+   * vid in the tree, and we need to add it top-down. The main use for this 
+   * right now is for combine *)
   let rec add_vid_from_above e =
     match U.tag_of_expr e with
     | Flatten ->
@@ -140,15 +145,24 @@ let modify_map_access p ast stmt =
     (* TODO: handle combining more variables *)
   in
 
-  (* we return whether the higher level needs to be aware of the vid addition,
+  (* we return a message to the higher levels in the tree,
    * and the new tree node *)
   let rec modify e msgs path = 
-    let get_msg i = if null msgs then false else List.nth msgs i in
+    let get_msg i = at msgs i in
+    let msg_vid i = if null msgs then false else at msgs i = AddVidMsg in
+    let msg_del i = if null msgs then false else at msgs i = DelMsg in
     match U.tag_of_expr e with
-    | Insert -> let (col, elem) = U.decompose_insert e in
-      false, mk_insert col @: modify_tuple elem
-    | Delete -> let (col, elem) = U.decompose_delete e in
-      false, mk_delete col @: modify_tuple elem
+
+    (* a lambda simply passes through a message *)
+    | Lambda _ -> get_msg 0, e
+
+    | Insert   -> let (col, elem) = U.decompose_insert e in
+        NopMsg, mk_insert col @: modify_tuple elem
+
+    (* deletes need to be removed, since we have versioning ie. we don't delete
+     * anything *)
+    | Delete -> DelMsg, e
+
     | Slice -> (* first check what's our parent *)
       (* a simple modification of a slice. Useful for structural access to the
        * map, such as when deleting *)
@@ -183,27 +197,29 @@ let modify_map_access p ast stmt =
         | Iterate -> let (lambda, _) = U.decompose_iterate parent in
           let body = U.decompose_lambda lambda in
           begin match U.tag_of_expr body with
-            | Delete -> true, modify_slice e
-            | _  -> false, project_modify_slice e
+            | Delete -> AddVidMsg, modify_slice e
+            | _  -> NopMsg, project_modify_slice e
           end
-        | _      -> false, project_modify_slice e (* the default *)
+        | _      -> NopMsg, project_modify_slice e (* the default *)
       end
-     (* handle a case where we're iterating over a collection that's modified *)
-    | Iterate -> let (lambda, col) = U.decompose_iterate e in
-      if get_msg 1 then 
-        let mod_lambda = add_vid_to_lambda_args lambda in
-        false, mk_iter mod_lambda col
-      else false, e
+
+    | Iterate -> 
+      let (lambda, col) = U.decompose_iterate e in
+      (* if our lambda requests a deletion, we delete *)
+      if msg_del 0 then DelMsg, e
+      (* if our collection added a vid, we need to do it in the lambda *)
+      else if msg_vid 1 then
+        let lambda' = add_vid_to_lambda_args lambda in
+        NopMsg, mk_iter lambda' col
+      else NopMsg, e
 
     (* handle the case of map, which appears in some files *)
     | Map -> let (lambda, col) = U.decompose_map e in
-      if get_msg 1 then 
-        (* a lower level collection has a vid, so we must include it in our
-        * arguments *)
+      if msg_vid 1 then 
+        (* if our collection added a vid, we need to do it in the lambda *)
         let mod_lambda = add_vid_to_lambda_args lambda in
-        false, mk_map mod_lambda col
-
-      else false, e
+        NopMsg, mk_map mod_lambda col
+      else NopMsg, e
 
     (* handle a case of a lambda applied to an lmap (i.e. a let statement *)
     (* in this case, we modify the types of the lambda vars themselves *)
@@ -211,25 +227,33 @@ let modify_map_access p ast stmt =
       begin match U.tag_of_expr arg with
         | Var id when id = lmap_name -> 
           begin match (U.typed_vars_of_lambda lambda, U.decompose_lambda lambda) with
-            | ([id, t],b) -> false,
+            | ([id, t],b) -> NopMsg,
               mk_apply 
                 (mk_lambda 
                   (wrap_args [id, wrap_tset @: wrap_ttuple lmap_types]) b)
                 arg
             | _ -> raise (UnhandledModification(PR.string_of_expr e)) end
-        | _ -> false, e
+        | _ -> NopMsg, e
       end
     | Combine -> let x, y = U.decompose_combine e in
-      begin match get_msg 0, get_msg 1 with
-      | true, true -> true, e
-      | true, _    -> true, mk_combine x @: add_vid_from_above y
-      | _, true    -> true, mk_combine (add_vid_from_above x) y
-      | _, _       -> false, e
+      begin match msg_vid 0, msg_vid 1 with
+      | true, true -> AddVidMsg, e
+      | true, _    -> AddVidMsg, mk_combine x @: add_vid_from_above y
+      | _, true    -> AddVidMsg, mk_combine (add_vid_from_above x) y
+      | _, _       -> NopMsg, e
       end
 
-    | Var id when List.mem id lr_map_names -> true, e
+    | Var id when List.mem id lr_map_names -> AddVidMsg, e
 
-    | _ -> false, e
+    (* if any statements in a block requested deletion, delete 
+     * those statements *)
+    | Block -> let ss = U.decompose_block e in
+      let s_msg = list_zip ss msgs in
+      let ss' = fst @: List.split @: 
+        List.filter (fun (_, msg) -> msg <> DelMsg) s_msg in
+      NopMsg, mk_block ss'
+
+    | _ -> NopMsg, e
   in T.modify_tree_bu_with_path_and_msgs ast modify
 
 (* this delta extraction is very brittle, since it's tailored to the way the M3
