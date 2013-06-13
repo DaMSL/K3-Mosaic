@@ -7,6 +7,8 @@ open K3Typechecker
 open K3Streams
 open K3Runtime
 
+(* TODO: add more descriptive resource errors *)
+
 exception ResourceError of id_t
 
 type channel_impl_t =
@@ -29,6 +31,7 @@ let pull_source id t res in_chan =
     | TBool -> false, [TBool]
     | TInt -> false, [TInt]
     | TFloat -> false, [TFloat]
+    | TString -> false, [TString]
 		| TTuple(ts) -> true, List.map base_of ts
 		| _ -> raise (ResourceError id)
 	in
