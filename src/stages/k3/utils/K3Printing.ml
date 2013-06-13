@@ -35,8 +35,10 @@ let lazy_string_opt string_f a = match a with
 (* Terminals *)
 let string_of_address (ip,p) = ip^":"^string_of_int p
 
-let string_of_address_and_role (addr, role_opt) =
-  string_of_address addr^(match role_opt with None -> "" | Some r -> "/"^r)
+let string_of_address_and_role (addr, role_opt, alias_opt) =
+  (match alias_opt with None -> "" | Some a -> a^":")^
+    string_of_address addr^
+    (match role_opt with None -> "" | Some r -> "/"^r)
 
 let string_of_container_type t_c = match t_c with
     | TSet  -> "TSet"

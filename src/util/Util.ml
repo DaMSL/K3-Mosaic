@@ -25,6 +25,8 @@ let (|-) = compose
 
 let null l = match l with [] -> true | _ -> false
 
+let at l i = List.nth l i
+
 (* take the first x elements of a list *)
 let list_take len li =
   let rec take len2 li2 acc_list =
@@ -49,15 +51,15 @@ let list_drop_end len li = list_take (List.length li - len) li
 
 let list_zip list1 list2 = List.map2 (fun i j -> (i,j)) list1 list2
 
-let list_head l = match l with 
+let hd l = match l with 
   | x::_ -> x 
   | _ -> invalid_arg "empty list"
 
-let list_tail l = match l with 
+let tl l = match l with 
   | _::x -> x 
   | _ -> invalid_arg "empty list or singleton"
 
-let list_last xs = list_head @: list_take_end 1 xs
+let list_last xs = hd @: list_take_end 1 xs
 
 (* will only remove one instance of x in xs (as opposed to filter) *)
 let list_remove r l = 
@@ -244,5 +246,29 @@ let flatten_some l = List.rev @:
     | None   -> acc
   ) [] l
 
+(* --- String functions --- *)
+(* split a string into lines *)
+let lines s = Str.split (Str.regexp "\\(\n\\|\n\r\\)+") s
 
+let unlines l = String.concat "\n" l
+
+let words s = Str.split (Str.regexp "[\t ]+") s
+
+let unwords l = String.concat " " l
+
+let str_take i s = let l = String.length s in
+  let i' = if i > l then l else i in
+  Str.first_chars s i'
+
+let str_drop i s = let l = String.length s in
+  let i' = if i > l then l else i in
+  Str.string_after s i'
+
+let str_drop_end i s = let l = String.length s in
+  let i' = if i > l then 0 else (l-i) in
+  Str.first_chars s i'
+
+let str_take_end i s = let l = String.length s in
+  let i' = if i > l then l else i in
+  Str.last_chars s i'
 

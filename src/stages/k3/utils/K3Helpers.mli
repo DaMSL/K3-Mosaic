@@ -51,10 +51,12 @@ val wrap_args_maybe : (id_t * value_type_t) list -> arg_t
 val mk_const : constant_t -> expr_t
 val mk_cint : int -> expr_t
 val mk_cfloat : float -> expr_t
+val mk_cstring : string -> expr_t
 val mk_cbool : bool -> expr_t
 val mk_ctarget : id_t -> expr_t
 val mk_cunknown : expr_t
 val mk_cunit : expr_t
+val mk_caddress : address -> expr_t
 
 val mk_var : id_t -> expr_t
 val mk_tuple : expr_t list -> expr_t

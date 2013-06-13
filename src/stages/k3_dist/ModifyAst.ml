@@ -176,7 +176,7 @@ let modify_map_access p ast stmt =
           | _ -> raise (UnhandledModification ("Cannot handle non-var in slice"))
         end 
       in
-      let parent = list_head path in
+      let parent = hd path in
       begin match U.tag_of_expr parent with
        (* if we have delete above us, we need the full structure of the map. If
         * not, we can project onto a collection without the vid *)
@@ -250,7 +250,7 @@ let modify_delta p ast stmt target_trigger =
     let params2 = begin match U.tag_of_expr lambda2 with 
       | Lambda a -> a
       | _ -> raise(UnhandledModification("No inner lambda")) end in
-    let delta_name = list_head @: U.vars_of_lambda lambda2 in
+    let delta_name = hd @: U.vars_of_lambda lambda2 in
     let delta_types = extract_arg_types @: U.typed_vars_of_arg params2 in
     let full_vars_code = 
       let full_types = P.map_add_v t_vid @: lmap_types @ delta_types in

@@ -25,6 +25,7 @@ module RK3ToImperative = RK3ToImperative.Make(CPP.CPPTarget)
 module CPPExt = CPP.CPPTarget
 module CPT = CPP.CPPTarget.ASTImport
 module CPPGen = CPP.CPPGenerator
+module P = Printf
 open ImperativeToCPP
 
 module PS = K3PrintSyntax
@@ -44,7 +45,7 @@ type out_lang_t = K3 | AstK3| K3Dist | AstK3Dist | ReifiedK3 | Imperative | CPPI
 
 let out_lang_descs = [
     K3,          "k3",        "K3";
-    AstK3,       "k3ast",    "K3 AST";
+    AstK3,       "k3ast",     "K3 AST";
     K3Dist,      "k3dist",    "Distributed K3";
     AstK3Dist,   "k3distast", "Distributed K3 AST";
     ReifiedK3,   "rk3",       "Reified K3";
@@ -59,14 +60,35 @@ let parse_port p =
   try let r = int_of_string p in if r > 65535 then error() else r
   with Failure _ -> error()
 
+(* ip-role format is 'alias=ip:port/role' *)
 let parse_ip_role ipr_str =
-  match Str.full_split (Str.regexp "[:/]") ipr_str with
-  | [Text ip; Delim ":"; Text port; Delim "/"; Text role] -> (ip, (parse_port port)), Some(role)
-  | [Text ip; Delim ":"; Text port] -> (ip, (parse_port port)), None
-  | [Text ip_or_port; Delim "/"; Text role] -> 
-    if String.contains ip_or_port '.' then (ip_or_port, default_port), Some(role)
-    else (default_ip, (parse_port ip_or_port)), Some(role)
-  | _ -> invalid_arg "invalid ip string format"
+  let ident = "[a-zA-Z_][a-zA-Z0-9_]*" in (* legal identifier *)
+  let num = "[0-9]+" in
+  let ip = num^"\\."^num^"\\."^num^"\\."^num in
+  let r = Str.regexp @:
+    "\\("^ident^"=\\)?\\("^ip^"\\|localhost\\)\\(:"^num^"\\)?\\(/"^ident^"\\)?" 
+  in
+  let error () = invalid_arg "invalid ip string format" in
+  if Str.string_match r ipr_str 0 then
+    let ms = List.map (fun i -> 
+        try some @: matched_group i ipr_str
+        with Not_found -> None
+      ) [1;2;3;4] 
+    in
+    let alias = match at ms 0 with
+    | None   -> None
+    | Some x -> some @: str_drop_end 1 x (* get rid of extra char *)
+    in
+    let role = match at ms 3 with
+    | None   -> None
+    | Some x -> some @: str_drop 1 x (* get rid of extra char *)
+    in
+    match at ms 1, at ms 2 with (* ip, port *)
+    | None, None         -> error ()
+    | Some ip, None      -> (ip, default_port), role, alias
+    | None, Some port    -> (default_ip, parse_port @: str_drop 1 port), role, alias
+    | Some ip, Some port -> (ip, parse_port @: str_drop 1 port), role, alias
+  else error ()
 
 let string_of_lang_descs descs i = 
   let l = List.filter (fun (x,_,_) -> x = i) descs in
@@ -132,7 +154,8 @@ type parameters = {
     mutable input_files  : string list;
     mutable node_address : address;
     mutable role         : id_t option;
-    mutable peers        : (address * id_t option) list;
+                           (* ip,     role,         alias *)
+    mutable peers        : (address * id_t option * string option) list;
     mutable partition_map : K3Route.part_map_t;
     mutable run_length   : int64;
     mutable print_types  : bool; (* TODO: change to a debug flag *)
@@ -371,6 +394,11 @@ let transform params ds =
 (* Driver execution *)
 let process_parameters params = 
   (* preprocess params *)
+  (* add node_address to the peer list if it's not included *)
+  params.peers <- 
+    (if List.exists (fun (addr,_,_) -> addr = params.node_address) params.peers 
+    then [] 
+    else [params.node_address, params.role, None])@params.peers;
   if params.out_lang = K3Dist or params.out_lang = AstK3Dist then params.in_lang <- M3in;
   let a = !(params.action) in
   match a with
@@ -408,7 +436,7 @@ let append_input_file f =
   cmd_line_params.input_files <- cmd_line_params.input_files @ [f]
   
 let set_node_address ipr_str =
-  let addr, role_opt = parse_ip_role ipr_str in
+  let addr, role_opt, _ = parse_ip_role ipr_str in
   cmd_line_params.node_address <- addr;
   cmd_line_params.role <- role_opt
 

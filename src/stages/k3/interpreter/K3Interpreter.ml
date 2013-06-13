@@ -628,7 +628,7 @@ let eval_program address role_opt prog =
 let eval_networked_program peer_list prog =
   (* Initialize an environment for each peer *)
   let peer_meta = Hashtbl.create (List.length peer_list) in
-  let envs = List.map (fun (addr, role_opt) ->  
+  let envs = List.map (fun (addr, role_opt, _) ->  
       let _, ((res_env, d_env, instrs), env) = initialize_peer addr role_opt prog
       in Hashtbl.replace peer_meta addr ([], instrs);
          addr, (res_env, d_env, env)
@@ -641,7 +641,7 @@ let eval_networked_program peer_list prog =
     (Hashtbl.fold (fun _ (_,i) acc ->
       acc || i <> []) peer_meta false) || network_has_work() 
   in
-  let step_peer (addr, role_opt) = 
+  let step_peer (addr, role_opt, _) = 
     try let (rese, de, env), (rie, i) = 
       List.assoc addr envs, Hashtbl.find peer_meta addr in
         (* Both branches invoke eval_instructions to process pending messages,
@@ -665,18 +665,12 @@ let eval_networked_program peer_list prog =
 let interpret_k3_program run_length peers node_address role typed_prog = 
   configure_scheduler run_length;
   match peers with
-  | [] -> 
-    [Constants.default_node_address, eval_program node_address role typed_prog]
-  | [a,_] -> [a, eval_program node_address role typed_prog]
-  | nodes -> (* networked version *)
-    let peers = 
-      let skip_primary = 
-        List.exists (fun (addr,_) -> addr = node_address) nodes in
-      let ipr = node_address, role in
-      (if skip_primary then [] else [ipr])@nodes
-    in 
+  (* single-site version *)
+  | []      -> failwith "interpret_k3_program: Peers list is empty!"
+  | [a,_,_] -> [a, eval_program node_address role typed_prog]
+  | nodes   -> (* networked version *)
     List.iter (fun ipr -> 
       print_endline @: "Starting node "^K3Printing.string_of_address_and_role ipr
-    ) peers;
+    ) nodes;
     eval_networked_program peers typed_prog
 

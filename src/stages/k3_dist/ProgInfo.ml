@@ -213,7 +213,7 @@ let def_vid = "vid"
 let map_ids_types_for ?(prefix=def_map) p map_id =
   let ts = map_types_for p map_id in
   let id_ts = types_to_ids_types prefix ts in
-  (list_drop_end 1 id_ts)@[prefix^"val", list_head @: list_take_end 1 ts]
+  (list_drop_end 1 id_ts)@[prefix^"val", hd @: list_take_end 1 ts]
 
 (* ids to reference the map vars, with vid *)
 let map_ids_types_no_val_for ?(prefix=def_map) p map_id = list_drop_end 1 @: 

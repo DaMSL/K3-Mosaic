@@ -19,6 +19,9 @@ val (|-) : ('b -> 'c) -> ('a -> 'b) -> ('a -> 'c)
 (* whether a list is empty *)
 val null : 'a list -> bool
 
+(* like List.nth *)
+val at : 'a list -> int -> 'a
+
 (* take the first x values of a list *)
 val list_take : int -> 'a list -> 'a list
 
@@ -35,10 +38,10 @@ val list_drop_end : int -> 'a list -> 'a list
 val list_zip : 'a list -> 'b list -> ('a * 'b) list
 
 (* take the head of a list *)
-val list_head : 'a list -> 'a
+val hd : 'a list -> 'a
 
 (* take the tail of a list *)
-val list_tail : 'a list -> 'a list
+val tl : 'a list -> 'a list
 
 (* take the last member of a list *)
 val list_last : 'a list -> 'a
@@ -122,3 +125,20 @@ val unwrap_some : 'a option -> 'a
 
 (* flatten a list of maybes into a list *)
 val flatten_some : 'a option list -> 'a list
+
+(* --- String functions --- *)
+val lines : string -> string list
+
+val unlines : string list -> string
+
+val words : string -> string list
+
+val unwords : string list -> string
+
+val str_take : int -> string -> string
+
+val str_drop : int -> string -> string
+
+val str_take_end : int -> string -> string
+
+val str_drop_end : int -> string -> string
