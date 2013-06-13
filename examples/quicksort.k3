@@ -31,7 +31,7 @@ trigger qsort( parent : int, left : bool, c : [int] ) {
   //insert(qsort_in, parent, left, c); // Log qsort arguments
   let len:int = fold(\(acc:int,_) -> acc+1, 0, c) in
     if len <= 1 then
-      send(merge, localhost:10000, parent, left, if len == 0 then empty else [peek(c)])
+      send(merge, me, parent, left, if len == 0 then empty else [peek(c)])
 
     else 
     // TODO: pick a better pivot.
@@ -39,8 +39,8 @@ trigger qsort( parent : int, left : bool, c : [int] ) {
       //insert(pivots, parent, pivot);
       insert(parents, parent, id, left);
       iterate(\x:int -> if x <= pivot then insert(lhs, x) else insert(rhs, x), c);
-      send(qsort, localhost:10000, id, true, lhs);
-      send(qsort, localhost:10000, id, false, rhs)
+      send(qsort, me, id, true, lhs);
+      send(qsort, me, id, false, rhs)
     }
 }
 
@@ -65,11 +65,11 @@ trigger merge( id : int, left : bool, c : [int] ) {} = do {
       delete(parents, parent, id, pleft);
       /**/
       if parent == 0 then insert(final, merged)
-      else send(merge, localhost:10000, parent, pleft, merged)
+      else send(merge, me, parent, pleft, merged)
     }
 }
 
-trigger go(n:int) {} = send(qsort, localhost:10000, 0, true, data)
+trigger go(n:int) {} = send(qsort, me, 0, true, data)
 
 role client {
   // Kickstart with dummy value.
