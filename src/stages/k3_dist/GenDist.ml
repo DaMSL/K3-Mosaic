@@ -91,7 +91,7 @@ let declare_global_vars p ast =
    * We use a singleton because refs aren't ready *)
   let vid_counter_code = 
     mk_global_val_init vid_counter_name vid_counter_t @:
-    mk_singleton vid_counter_t @: mk_cint 0 in
+    mk_singleton vid_counter_t @: mk_cint 1 in
 
   let global_map_decl_code =
     M.modify_map_decl_ast p ast in
@@ -254,7 +254,10 @@ let start_trig p t =
 
 let send_fetch_trig p trig_name =
   let send_fetches_of_rhs_maps  =
-    mk_iter
+    let s_rhs_maps = s_and_over_stmts_in_t p rhs_maps_of_stmt trig_name in
+    if null s_rhs_maps then []
+    else
+    [mk_iter
       (mk_lambda 
         (wrap_args ["ip", t_addr; 
           "stmt_map_ids", wrap_tset @: wrap_ttuple [t_stmt_id; t_map_id]]
@@ -302,31 +305,35 @@ let send_fetch_trig p trig_name =
               acc_code
           )
           (mk_empty @: wrap_tset @: wrap_ttuple [t_stmt_id; t_map_id; t_addr])
-          (s_and_over_stmts_in_t p rhs_maps_of_stmt trig_name) 
+          s_rhs_maps
+    ]
 in
 let send_completes_for_stmts_with_no_fetch =
-  List.fold_left
-    (fun acc_code (stmt_id, lhs_map_id, do_complete_trig_name) -> 
-      let route_fn = route_for p lhs_map_id in
-      let key = partial_key_from_bound p stmt_id lhs_map_id in
-        acc_code@
-        [mk_iter 
-          (mk_lambda (wrap_args["ip", t_addr]) @:
-            mk_send
-              (mk_ctarget(do_complete_trig_name))
-              (mk_var "ip") @:
-              mk_tuple @: args_of_t_as_vars_with_v p trig_name
-          ) @:
-          mk_apply (mk_var route_fn) @: mk_tuple key
-        ]
-    ) 
-    [] @:
-    List.map 
-      (fun stmt_id -> 
-        (stmt_id, lhs_map_of_stmt p stmt_id, 
-        do_complete_name_of_t p trig_name stmt_id)
-      ) @:
-      stmts_without_rhs_maps_in_t p trig_name
+  let s_no_rhs = stmts_without_rhs_maps_in_t p trig_name in
+  if null s_no_rhs then []
+  else
+    List.fold_left
+      (fun acc_code (stmt_id, lhs_map_id, do_complete_trig_name) -> 
+        let route_fn = route_for p lhs_map_id in
+        let key = partial_key_from_bound p stmt_id lhs_map_id in
+          acc_code@
+          [mk_iter 
+            (mk_lambda (wrap_args["ip", t_addr]) @:
+              mk_send
+                (mk_ctarget(do_complete_trig_name))
+                (mk_var "ip") @:
+                mk_tuple @: args_of_t_as_vars_with_v p trig_name
+            ) @:
+            mk_apply (mk_var route_fn) @: mk_tuple key
+          ]
+      ) 
+      [] @:
+      List.map 
+        (fun stmt_id -> 
+          (stmt_id, lhs_map_of_stmt p stmt_id, 
+          do_complete_name_of_t p trig_name stmt_id)
+        )
+        s_no_rhs
 in
 let send_puts =
   (* send puts
@@ -408,7 +415,7 @@ mk_code_sink
   (wrap_args (args_of_t_with_v p trig_name))
   [] @: (* locals *)
   mk_block @:
-    send_fetches_of_rhs_maps::
+    send_fetches_of_rhs_maps@
     send_completes_for_stmts_with_no_fetch@ 
     [send_puts]
    
