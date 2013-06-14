@@ -1,6 +1,7 @@
 open Util
 open K3.AST
 open K3Helpers
+open K3Dist
 
 module U = K3Util
 module P = ProgInfo
@@ -10,6 +11,62 @@ module Set = ListAsSet
 module G = K3Global
 
 exception InvalidAst of string
+
+(* --- Map declarations --- *)
+
+(* initial vid to put in initialization statements *) 
+let init_vid = "__init_vid__"
+
+(* global declaration of default vid to put into every map *)
+let init_vid_k3 = 
+  mk_global_val_init init_vid t_vid @:
+    (* epoch, counter=0, node hash *)
+    mk_tuple [mk_cint 0; mk_cint 0; mk_apply (mk_var "hash_addr") G.me_var]
+
+let min_vid_k3 = mk_tuple [mk_cint 0; mk_cint 0; mk_cint 0]
+
+(* change the initialization values of global maps to have the vid as well *)
+(* receives the new types to put in and the starting expression to change *)
+(* inserts a reference to the default vid var for that node *)
+let rec add_vid_to_init_val types e = 
+  let add = add_vid_to_init_val types in
+  let vid_var = mk_var init_vid in
+  match U.tag_of_expr e with
+  | Combine -> let x, y = U.decompose_combine e in
+      mk_combine (add x) (add y)
+  | Empty t -> mk_empty types
+  | Singleton t -> let x = U.decompose_singleton e in
+      mk_singleton types (add x)
+  | Tuple -> let xs = U.decompose_tuple e in
+      mk_tuple (P.map_add_v vid_var xs)
+  (* this should only be encountered if there's no tuple *)
+  | Const _ | Var _ -> mk_tuple (P.map_add_v vid_var [e])
+  | _ -> failwith "add_vid_to_init_val: unhandled modification"
+
+(* add a vid to global value map declarations *)
+let modify_global_map p = function
+  (* filter to have only map declarations *)
+  | Global(name, TValue typ, m_expr),_ ->
+    begin try
+      let map_id = P.map_id_of_name p name in
+      let types = wrap_tset @: wrap_ttuple @: P.map_types_with_v_for p map_id in
+      begin match m_expr with
+        | None   -> some @: mk_global_val name types
+        | Some e -> (* add a vid *)
+          let e' = add_vid_to_init_val types e in
+          some @: mk_global_val_init
+            name types e'
+      end
+    with Not_found -> None end
+  | _ -> None
+
+(* return ast for map declarations, adding the vid *)
+let modify_map_decl_ast p ast =
+  let decls = U.globals_of_program ast in
+  init_vid_k3 :: 
+    (flatten_some @: list_map (modify_global_map p) decls)
+
+(* --- Trigger modification --- *)
 
 (* get the relative offset of the stmt in the trigger *)
 let stmt_idx_in_t p trig stmt = 
@@ -57,28 +114,6 @@ let maps_with_existing_out_tier p stmt =
   let lmap = P.lhs_map_of_stmt p stmt in
   ("existing_out_tier", lmap) :: maps
 
-(* check for a non-map (a variable) in a stmt *)
-let get_stmt_0d_maps p stmt =
-  let maps = maps_with_existing_out_tier p stmt in
-  List.filter (fun (_,m) -> P.map_types_no_val_for p m = []) maps
-  
-(* Change maps with no input dimensions to access by vid *)
-let modify_0d_map_access p ast stmt =
-  let maps_n_id = get_stmt_0d_maps p stmt in
-  let modify_0d_map tree m_nm_id =
-    let m = fst m_nm_id in
-    let m_t = P.map_types_with_v_for p @: snd m_nm_id in
-    (* note: our second pass will add vid to the map lookup *)
-    (*let map_lookup = ids_to_vars @: P.map_ids_add_v ["_"] in*)
-    let modify e = 
-      if U.is_peek e && U.is_var_match m @: U.decompose_peek e 
-      then mk_snd m_t @:
-             mk_peek @: mk_slice (mk_var m) @:
-               mk_tuple [mk_var "vid"; mk_const CUnknown] (* map_lookup *)
-      else e in
-    T.modify_tree_bu tree modify in
-  List.fold_left modify_0d_map ast maps_n_id
-
 exception UnhandledModification of string
 
 (* modify the internals of a type. A function gets both the unwrapped type and
@@ -111,14 +146,15 @@ let modify_map_access p ast stmt =
   let lmap = P.lhs_map_of_stmt p stmt in
   let lmap_name = P.map_name_of p lmap in
   let lmap_types = P.map_types_with_v_for p lmap in
-  let lr_map_names = fst @: List.split @: P.map_names_ids_of_stmt p stmt in
   let maps_n_id = maps_with_existing_out_tier p stmt in
+  let map_names = fst_many maps_n_id in
+  (* names of maps with one dimension in this statement *)
+  let maps_n_1d = fst_many @: List.filter 
+    (fun (_,m) -> null @: P.map_types_no_val_for p m) maps_n_id in
   let var_vid = mk_var "vid" in
-  let modify_tuple t =
-    match U.tag_of_expr t with
-      | Tuple  -> let xs = U.decompose_tuple t in
-                  mk_tuple @: P.map_add_v var_vid xs
-      | x      -> mk_tuple @: P.map_add_v var_vid [t] 
+  (* add a vid to a tuple *)
+  let modify_tuple e =
+    mk_tuple @: P.map_add_v var_vid @: U.extract_if_tuple e
   in
   (* Sometimes we only find out that a node needs to have a vid from a higher
    * vid in the tree, and we need to add it top-down. The main use for this 
@@ -144,6 +180,68 @@ let modify_map_access p ast stmt =
     | _ -> modify_tuple e
     (* TODO: handle combining more variables *)
   in
+  (* modify a direct map read, such as in a slice or a peek. col is the
+   * collection, pat_m is an option pattern (for slice) *)
+  let modify_map_read p col pat_m =
+  match U.tag_of_expr col with
+    | Var id ->
+      let m = try List.assoc id maps_n_id (* includes existing_out_tier *)
+              with Not_found -> raise @: UnhandledModification(
+                "No "^id^ " map found in stmt "^string_of_int stmt)
+      in
+      let m_id_t = P.map_ids_types_for p m in
+      let m_ids = fst_many m_id_t in
+      let m_ts = snd_many m_id_t in
+      let m_t_set = wrap_tset @: wrap_ttuple @: m_ts in
+      let m_id_t_v = P.map_ids_types_with_v_for ~vid:"map_vid" p m in 
+      (* if we have bound variables, we need to slice first. Otherwise, 
+          we don't need a slice *)
+      let access_k3 = begin match pat_m with
+        | Some pat ->
+            (* slice with an unknown for the vid so we only get the effect of
+            * any bound variables *)
+            mk_slice col @: 
+              mk_tuple @: P.map_add_v mk_cunknown pat
+        | None     -> col
+        end in 
+      (* get the maximum vid that's less than our current vid *)
+      mk_fst [m_t_set; t_vid] @:
+        mk_agg 
+          (mk_assoc_lambda 
+            (* we project out the vid at the same time *)
+            (wrap_args ["acc", m_t_set; "max_vid", t_vid])
+            (wrap_args m_id_t_v)
+            (mk_if 
+              (* if the map vid is less than current vid *)
+              (v_lt (mk_var "map_vid") (mk_var "vid"))
+              (* if the map vid is equal to the max_vid, we add add it to our
+              * accumulator and use the same max_vid *)
+              (mk_if
+                (v_eq (mk_var "map_vid") (mk_var "max_vid"))
+                (mk_tuple
+                  [mk_combine
+                    (mk_singleton m_t_set (mk_tuple @: ids_to_vars m_ids)) @:
+                        mk_var "acc";
+                  mk_var "max_vid"])
+                (* else if map vid is greater than max_vid, make a new
+                * collection and set a new max_vid *)
+                (mk_if
+                  (v_gt (mk_var "map_vid") (mk_var "max_vid"))
+                  (mk_tuple
+                    [mk_singleton m_t_set (mk_tuple @: ids_to_vars m_ids); 
+                    mk_var "map_vid"])
+                  (* else keep the same accumulator and max_vid *)
+                  (mk_tuple [mk_var "acc"; mk_var "max_vid"])
+                )
+              )
+              (* else keep the same acc and max_vid *)
+              (mk_tuple [mk_var "acc"; mk_var "max_vid"])
+            )
+          )
+          (mk_tuple [mk_empty m_t_set; min_vid_k3])
+          access_k3
+    | _ -> raise (UnhandledModification ("Cannot handle non-var in slice"))
+  in
 
   (* we return a message to the higher levels in the tree,
    * and the new tree node *)
@@ -163,45 +261,17 @@ let modify_map_access p ast stmt =
      * anything *)
     | Delete -> DelMsg, e
 
-    | Slice -> (* first check what's our parent *)
-      (* a simple modification of a slice. Useful for structural access to the
-       * map, such as when deleting *)
-      let modify_slice e = 
-        let (col, pat) = U.decompose_slice e in
-        mk_slice col @: modify_tuple pat 
-      in 
-      (* a projected slice modification. 
-       * Removes the vid from the slice. In most cases this is what we want *)
-      let project_modify_slice e = 
-        let (col, pat) = U.decompose_slice e in
-        begin match U.tag_of_expr col with 
-          | Var id -> 
-            let m = try List.assoc id maps_n_id 
-              with Not_found -> raise(UnhandledModification("No "^id^
-                " map found in stmt "^string_of_int stmt)) in
-            let m_id_t = P.map_ids_types_for p m in
-            let m_ids = extract_arg_names m_id_t in
-            let m_id_t_v = P.map_ids_types_with_v_for p m in 
-            (* don't set modified -- looks unmodified because projected *)
-            mk_map  
-              (mk_lambda (wrap_args m_id_t_v) @:
-                mk_tuple @: ids_to_vars @: m_ids
-              ) @: modify_slice e
-          | _ -> raise (UnhandledModification ("Cannot handle non-var in slice"))
-        end 
+    | Slice -> 
+      (* If we have any bound variable, we should slice on those *)
+      let col, pat = U.decompose_slice e in
+      let pat = U.extract_if_tuple pat in
+      let has_bound = List.exists (fun e -> match U.tag_of_expr e with 
+          | Const(CUnknown) -> false
+          | _ -> true) 
+        pat in
+      let pat_m = if has_bound then Some pat else None
       in
-      let parent = hd path in
-      begin match U.tag_of_expr parent with
-       (* if we have delete above us, we need the full structure of the map. If
-        * not, we can project onto a collection without the vid *)
-        | Iterate -> let (lambda, _) = U.decompose_iterate parent in
-          let body = U.decompose_lambda lambda in
-          begin match U.tag_of_expr body with
-            | Delete -> AddVidMsg, modify_slice e
-            | _  -> NopMsg, project_modify_slice e
-          end
-        | _      -> NopMsg, project_modify_slice e (* the default *)
-      end
+      NopMsg, modify_map_read p col pat_m
 
     | Iterate -> 
       let (lambda, col) = U.decompose_iterate e in
@@ -243,7 +313,7 @@ let modify_map_access p ast stmt =
       | _, _       -> NopMsg, e
       end
 
-    | Var id when List.mem id lr_map_names -> AddVidMsg, e
+    | Var name when List.mem name map_names -> AddVidMsg, e
 
     (* if any statements in a block requested deletion, delete 
      * those statements *)
@@ -252,6 +322,16 @@ let modify_map_access p ast stmt =
       let ss' = fst @: List.split @: 
         List.filter (fun (_, msg) -> msg <> DelMsg) s_msg in
       NopMsg, mk_block ss'
+
+    | Peek -> let col = U.decompose_peek e in
+      begin match U.tag_of_expr col with
+      (* match only for maps with one dimension *)
+      | Var name when List.mem name maps_n_1d ->
+          (* we use the same function as Seek, except we don't supply a pattern 
+          * (no bound vars) *)
+          NopMsg, mk_peek @: modify_map_read p col None
+      | _ -> NopMsg, e
+      end
 
     | _ -> NopMsg, e
   in T.modify_tree_bu_with_path_and_msgs ast modify
@@ -337,7 +417,6 @@ let modify_delta p ast stmt target_trigger =
 let modify_ast_for_s p ast stmt trig target_trig = 
   let ast = ast_for_s p ast stmt trig in
   let ast = modify_map_access p ast stmt in
-  let ast = modify_0d_map_access p ast stmt in
   (* do we need to send a delta to another trigger *)
   match target_trig with
     | Some t -> modify_delta p ast stmt t
@@ -347,58 +426,5 @@ let modify_ast_for_s p ast stmt trig target_trig =
 let modify_corr_ast p ast map stmt trig =
   let (args, ast) = corr_ast_for_m_s p ast map stmt trig in
   let ast = modify_map_access p ast stmt in
-  let ast = modify_0d_map_access p ast stmt in
   (args, ast)
-
-(* --- Map declarations --- *)
-
-(* initial vid to put in initialization statements *) 
-let init_vid = "__init_vid__"
-
-(* global declaration of default vid to put into every map *)
-let init_vid_k3 = 
-  mk_global_val_init init_vid t_vid @:
-    (* epoch, counter=0, node hash *)
-    mk_tuple [mk_cint 0; mk_cint 0; mk_apply (mk_var "hash_addr") G.me_var]
-
-(* change the initialization values of global maps to have the vid as well *)
-(* receives the new types to put in and the starting expression to change *)
-(* inserts a reference to the default vid var for that node *)
-let rec add_vid_to_init_val types e = 
-  let add = add_vid_to_init_val types in
-  let vid_var = mk_var init_vid in
-  match U.tag_of_expr e with
-  | Combine -> let x, y = U.decompose_combine e in
-      mk_combine (add x) (add y)
-  | Empty t -> mk_empty types
-  | Singleton t -> let x = U.decompose_singleton e in
-      mk_singleton types (add x)
-  | Tuple -> let xs = U.decompose_tuple e in
-      mk_tuple (P.map_add_v vid_var xs)
-  (* this should only be encountered if there's no tuple *)
-  | Const _ | Var _ -> mk_tuple (P.map_add_v vid_var [e])
-  | _ -> failwith "add_vid_to_init_val: unhandled modification"
-
-(* add a vid to global value map declarations *)
-let modify_global_map p = function
-  (* filter to have only map declarations *)
-  | Global(name, TValue typ, m_expr),_ ->
-    begin try
-      let map_id = P.map_id_of_name p name in
-      let types = wrap_tset @: wrap_ttuple @: P.map_types_with_v_for p map_id in
-      begin match m_expr with
-        | None   -> some @: mk_global_val name types
-        | Some e -> (* add a vid *)
-          let e' = add_vid_to_init_val types e in
-          some @: mk_global_val_init
-            name types e'
-      end
-    with Not_found -> None end
-  | _ -> None
-
-(* return ast for map declarations, adding the vid *)
-let modify_map_decl_ast p ast =
-  let decls = U.globals_of_program ast in
-  init_vid_k3 :: 
-    (flatten_some @: list_map (modify_global_map p) decls)
 

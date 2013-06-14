@@ -226,6 +226,9 @@ let decompose_update e = match tag_of_expr e with
 let decompose_role (d,_) = match d with
   Role (id, fp) -> (id, fp) | _ -> failwith "not a role"
 
+(* decompose if we have a tuple, otherwise return e *)
+let extract_if_tuple e = try decompose_tuple e with Failure _ -> [e]
+
 let match_declaration id match_f l =
   let m = List.filter match_f l
   in match m with

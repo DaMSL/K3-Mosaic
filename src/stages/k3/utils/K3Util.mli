@@ -67,6 +67,9 @@ val decompose_update : expr_t -> expr_t * expr_t * expr_t
 
 val decompose_role : declaration_t * 'a -> id_t * flow_program_t
 
+(* decompose if we have a tuple, otherwise return e *)
+val extract_if_tuple : expr_t -> expr_t list
+
 (* Declaration accessors *)
 val is_global : declaration_t * 'a -> bool
 val is_foreign : declaration_t * 'a -> bool

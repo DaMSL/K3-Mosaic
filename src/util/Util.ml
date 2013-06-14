@@ -27,6 +27,10 @@ let null l = match l with [] -> true | _ -> false
 
 let at l i = List.nth l i
 
+let fst_many l = fst @: List.split l
+
+let snd_many l = snd @: List.split l
+
 (* take the first x elements of a list *)
 let list_take len li =
   let rec take len2 li2 acc_list =
