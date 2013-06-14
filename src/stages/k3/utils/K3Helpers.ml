@@ -422,12 +422,14 @@ let t_stmt_id = t_int
 let t_map_id = t_int
 
 (* for vids *)
+              (* epoch, count, switch hash *) 
 let vid_types = [t_int; t_int; t_int]
 let vid_mut_types = [t_int_mut; t_int_mut; t_int_mut]
 let t_vid = wrap_ttuple vid_types
 let t_vid_mut = wrap_ttuple vid_mut_types
 
 (* functions for comparing vids *)
+(* vid format: (epoch, counter, switch hash) *)
 type vid_op = VEq | VNeq | VGt | VLt | VGeq | VLeq
 let mk_global_vid_op name tag = 
   let lvid_id_t = types_to_ids_types "l" vid_types in
@@ -441,9 +443,15 @@ let mk_global_vid_op name tag =
     f (mk_var @: nth_l i) (mk_var @: nth_r i) in
   let mk_vid_eq = mk_and (op mk_eq 0) @: mk_and (op mk_eq 1) (op mk_eq 2) in
   let mk_vid_neq = mk_not mk_vid_eq in
-  let mk_vid_lt = mk_and (op mk_lt 0) @: mk_and (op mk_lt 1) (op mk_lt 2) in
+  let mk_vid_lt = mk_or (op mk_lt 0) @: 
+                    mk_and (op mk_eq 0) @:
+                      mk_or (op mk_lt 1) @: 
+                        mk_and (op mk_eq 1) (op mk_lt 2) in
   let mk_vid_geq = mk_not mk_vid_lt in
-  let mk_vid_gt = mk_and (op mk_gt 0) @: mk_and (op mk_gt 1) (op mk_gt 2) in
+  let mk_vid_gt = mk_or (op mk_gt 0) @: 
+                    mk_and (op mk_eq 0) @:
+                      mk_or (op mk_gt 1) @: 
+                        mk_and (op mk_eq 1) (op mk_gt 2) in
   let mk_vid_leq = mk_not mk_vid_gt in
   mk_global_fn_raw name arg_pair arg_types t_bool @: 
     match tag with
