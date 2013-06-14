@@ -1,0 +1,59 @@
+
+declare vid_eq : ((int, int, int), (int, int, int)) -> bool =
+  \((l0:int, l1:int, l2:int), (r0:int, r1:int, r2:int)) ->
+    l0 == r0 & (l1 == r1 & l2 == r2)
+
+declare vid_neq : ((int, int, int), (int, int, int)) -> bool =
+  \((l0:int, l1:int, l2:int), (r0:int, r1:int, r2:int)) ->
+    !(l0 == r0 & (l1 == r1 & l2 == r2))
+
+declare vid_lt : ((int, int, int), (int, int, int)) -> bool =
+  \((l0:int, l1:int, l2:int), (r0:int, r1:int, r2:int)) ->
+    l0 < r0 | (l0 == r0 & (l1 < r1 | (l1 == r1 & l2 < r2)))
+
+declare vid_gt : ((int, int, int), (int, int, int)) -> bool =
+  \((l0:int, l1:int, l2:int), (r0:int, r1:int, r2:int)) ->
+    l0 > r0 | (l0 == r0 & (l1 > r1 | (l1 == r1 & l2 > r2)))
+
+declare vid_leq : ((int, int, int), (int, int, int)) -> bool =
+  \((l0:int, l1:int, l2:int), (r0:int, r1:int, r2:int)) ->
+    !(l0 > r0 | (l0 == r0 & (l1 > r1 | (l1 == r1 & l2 > r2))))
+
+declare vid_geq : ((int, int, int), (int, int, int)) -> bool =
+  \((l0:int, l1:int, l2:int), (r0:int, r1:int, r2:int)) ->
+    !(l0 < r0 | (l0 == r0 & (l1 < r1 | (l1 == r1 & l2 < r2))))
+declare __SQL_SUM_AGGREGATE_1 : {((int, int, int), int)} = {((0, 0, 701187881), 0)}
+
+trigger insert_R_do_complete_s0(vid:(int, int, int), R_A:int, R_B:int) {} =
+  let existing_out_tier:{((int, int, int), int)} = __SQL_SUM_AGGREGATE_1 in
+  let __val_ret__1:int = 1 in
+  let update_value:int =
+    peek(let (__fst:{int}, __snd:(int, int, int)) =
+            fold
+              (\((acc:{int}, max_vid:(int, int, int)), 
+                (map_vid:(int, int, int), __map_val:int)) ->
+                   if vid_lt(map_vid, vid)
+                   then
+                     if vid_eq(map_vid, max_vid)
+                     then ({__map_val}++acc, max_vid)
+                     else
+                       if vid_gt(map_vid, max_vid)
+                       then ({__map_val}, map_vid)
+                       else (acc, max_vid)
+                   else (acc, max_vid),
+              ({} : {int}, (0, 0, 0)),
+              existing_out_tier) in __fst) + __val_ret__1 in do {
+    insert(__SQL_SUM_AGGREGATE_1, vid, update_value) }
+
+trigger go(dummy:int) {} = do {
+    send(insert_R_do_complete_s0, me, ((0,1,0),3,4))
+}
+
+role test {
+  source s1 : int = stream([1])
+  bind s1 -> go
+  consume s1
+}
+
+default role test
+
