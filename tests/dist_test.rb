@@ -10,6 +10,22 @@
 require 'optparse'
 require 'pathname'
 
+$num_peers = 1
+
+# option parser
+opt_parser = OptionParser.new do |opts|
+	opts.banner = "Usage: dist_test.rb [options]"
+	opts.separator ""
+	opts.separator "Specific options:"
+    opts.on("-p", "--peers [NUMBER]", Integer,
+            "Choose a number of peers") do |n|
+        $num_peers = n
+        end
+end
+
+# now parse the options
+opt_parser.parse!(ARGV)
+
 raise "No input file" unless ARGV.length >= 1
 file=File.expand_path(ARGV[0])
 
@@ -123,9 +139,19 @@ def test_file(file, dbt_path, k3_path)
 	puts "#{genmaps} --distrib temp.trace >> temp.k3dist"
 	`#{genmaps} --distrib temp.trace >> temp.k3dist`
 
+    # create peer list
+    peer_list = Array.new($num_peers - 1) do |i|
+        "#{i}.#{i}.#{i}.#{i}:10"
+    end
+
+    peer_str = "-n localhost:10000"
+    peer_list.each do |ip|
+        peer_str += ",#{ip}"
+    end
+
 	# run the k3 driver on the input
-	puts "#{k3_path} -eval temp.k3dist"
-	output = `#{k3_path} -eval temp.k3dist 2> #{err_file}`
+	puts "#{k3_path} -eval #{peer_str} temp.k3dist"
+	output = `#{k3_path} -eval #{peer_str} temp.k3dist 2> #{err_file}`
 	check_error(curdir, err_file)
 	puts output
     exit

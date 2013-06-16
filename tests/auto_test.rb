@@ -24,6 +24,7 @@ test_num = nil
 distributed = false
 test_list_name = nil
 test_list = []
+$num_peers = 1
 
 # option parser
 opt_parser = OptionParser.new do |opts|
@@ -44,6 +45,10 @@ opt_parser = OptionParser.new do |opts|
           "Execute tests from a list in a file") do |file|
       test_list_name = file
     end
+    opts.on("-p", "--peers [NUMBER]", Integer,
+            "Choose a number of peers") do |n|
+        $num_peers = n
+        end
 end
 
 # now parse the options
@@ -93,9 +98,11 @@ def short_name_of(long_name)
 end
 
 err_file = "./err_log.txt"
+peer_cmd = ""
 
 if distributed then
   test_cmd = File.join(cur_path, "./dist_test.rb")
+  peer_cmd = "-p #{$num_peers}"
 else
   test_cmd = File.join(cur_path, "./sql_test.rb")
 end
@@ -105,14 +112,15 @@ if test_num == nil then
 	if File.exist?(err_file) then File.delete(err_file) end
 	index = 1
 	passed = 0
-  tested = 0
+    tested = 0
 
 	for file in all_files
     if test_list == [] or (test_list.find_index(index) != nil) then
       long_name = file.to_s
       short_name = short_name_of(long_name)
       print "Test #{index} (#{short_name}): "
-      output = `#{test_cmd} #{long_name}` 
+
+      output = `#{test_cmd} #{peer_cmd} #{long_name}` 
 
       if (/ERROR|FAILED/ =~ output) != nil then 
         puts "ERROR"
@@ -132,6 +140,6 @@ if test_num == nil then
 else # one test
 	test_file = all_files[(test_num-1)]
 	puts("Test #{test_num} (#{test_file.to_s}):")
-  puts `#{test_cmd} #{test_file.to_s}`
+    puts `#{test_cmd} #{peer_cmd} #{test_file.to_s}`
 end
 
