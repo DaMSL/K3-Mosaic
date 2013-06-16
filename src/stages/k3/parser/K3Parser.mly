@@ -1,6 +1,7 @@
 /* K3 Programming Language Parser  */
 
 %{
+  open Util
   open K3.AST
   open K3.Annotation
   open Tree
@@ -374,6 +375,11 @@ contained_base_type_tuple :
     }
 ;
 
+contained_value_type_tuple :
+    | contained_value_type_expr COMMA contained_value_type_expr_list {
+        TContained(TImmutable(TTuple($1 :: $3), []))
+    }
+
 isolated_value_type_expr_list :
     | isolated_value_type_expr { [$1] }
     | isolated_value_type_expr COMMA isolated_value_type_expr_list { $1 :: $3 }
@@ -390,6 +396,9 @@ annotated_collection_type :
 ;
 
 collection_type :
+    | LBRACE contained_value_type_tuple RBRACE { TCollection(TSet, $2) }
+    | LBRACEBAR contained_value_type_tuple RBRACEBAR { TCollection(TBag, $2) }
+    | LBRACKET contained_value_type_tuple RBRACKET { TCollection(TList, $2) }
     | LBRACE contained_value_type_expr RBRACE { TCollection(TSet, $2) }
     | LBRACEBAR contained_value_type_expr RBRACEBAR { TCollection(TBag, $2) }
     | LBRACKET contained_value_type_expr RBRACKET { TCollection(TList, $2) }
@@ -448,8 +457,8 @@ expr_list :
 ;
 
 expr_seq :
-    | expr                    { [$1] }
-    | expr SEMICOLON expr_seq { $1 :: $3 }
+    | tuple                    { [$1] }
+    | tuple SEMICOLON expr_seq { $1 :: $3 }
 ;
 
 tuple :

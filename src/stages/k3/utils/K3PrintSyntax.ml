@@ -74,48 +74,58 @@ let lazy_annos c = function
   | [] -> [] 
   | annos -> lps "@ " <| lazy_brace @: lps_list ~sep:"; " NoCut (lazy_anno c) annos
 
-let rec lazy_base_type c = function
+let rec lazy_base_type c in_col = function
   | TUnit -> lps "unit"
   | TBool -> lps "bool"
   | TByte -> lps "byte"
   | TInt -> lps "int"
   | TFloat -> lps "float"
   | TString -> lps "string"
-  | TMaybe(vt) -> lps "maybe " <| lazy_value_type c vt
-  | TTuple(vts) -> lps "(" <| lps_list NoCut (lazy_value_type c) vts <| lps ")"
-  | TCollection(TSet, vt) -> lps "{" <| lazy_value_type c vt <| lps "}"
-  | TCollection(TBag, vt) -> lps "{|" <| lazy_value_type c vt <| lps "|}"
-  | TCollection(TList, vt) -> lps "[" <| lazy_value_type c vt <| lps "]"
+  | TMaybe(vt) -> lps "maybe " <| lazy_value_type c false vt
+  | TTuple(vts) -> 
+      (* if we're top level of a collection, drop the parentheses *)
+      let inner () = lps_list NoCut (lazy_value_type c false) vts in
+      if in_col then inner ()
+      else lps "(" <| inner () <| lps ")"
+  | TCollection(TSet, vt) -> 
+      lps "{" <| lazy_value_type c true vt <| lps "}"
+  | TCollection(TBag, vt) -> 
+      lps "{|" <| lazy_value_type c true vt <| lps "|}"
+  | TCollection(TList, vt) -> 
+      lps "[" <| lazy_value_type c true vt <| lps "]"
   | TAddress -> lps "address" (* ? *)
-  | TTarget bt -> lps "target" <| lazy_base_type c bt
+  | TTarget bt -> lps "target" <| lazy_base_type c false bt
   | TUnknown -> lps "unknown"
 
 (* TODO: annotations *)
-and lazy_mutable_type c = function
+and lazy_mutable_type c in_col = function
   | TMutable (bt, a) -> 
-      lps "ref " <| lazy_base_type c bt
-  | TImmutable (bt, a) -> lazy_base_type c bt
+      lps "ref " <| lazy_base_type c in_col bt
+  | TImmutable (bt, a) -> lazy_base_type c in_col bt
 
-and lazy_value_type c = function
-  | TIsolated mt -> lazy_mutable_type c mt
+and lazy_value_type c in_col = function
+  | TIsolated mt -> lazy_mutable_type c in_col mt
   | TContained mt -> 
-      if c.verbose_types then lps "c:" <| lazy_mutable_type c mt
-      else lazy_mutable_type c mt
+      if c.verbose_types then lps "c:" <| 
+        lazy_mutable_type c in_col mt
+      else lazy_mutable_type c in_col mt
 
 let lazy_type c = function
-  | TFunction(f,t) -> lazy_value_type c f <| lps " -> " <| lazy_value_type c t
-  | TValue vt -> lazy_value_type c vt
+  | TFunction(f,t) ->
+      lazy_value_type c false f <| lps " -> " <| 
+      lazy_value_type c false t
+  | TValue vt -> lazy_value_type c false vt
 
 let rec lazy_arg c drop_tuple_paren a = 
   let paren = if drop_tuple_paren then id_fn else lazy_paren in
   match a with
   | AIgnored -> lps "_"
-  | AVar (id, vt) -> lps (id^":") <| lazy_value_type c vt
+  | AVar (id, vt) -> lps (id^":") <| lazy_value_type c false vt
   | AMaybe(arg) -> lps "just " <| lazy_arg c false arg
   | ATuple(args) -> 
       lhov 0 <| paren (lps_list CutHint (lazy_arg c false) args) <| lcb ()
 
-let lazy_id_type c (id,t) = lps @: id^" : " <| lazy_value_type c t
+let lazy_id_type c (id,t) = lps (id^" : ") <| lazy_value_type c false t
 
 let lazy_trig_vars c = function
   | [] -> lps "{}"
@@ -218,22 +228,25 @@ let rec lazy_expr c expr =
     lazy_paren @: lps_list CutHint (lazy_expr c) es 
   | Just -> let e = U.decompose_just expr in
     lps "just " <| lazy_expr c e
-  | Nothing vt -> lps "nothing:" <| lsp () <| lazy_value_type c vt
-  | Empty vt -> lazy_collection_vt c vt [] <| lsp () <| lps ":" <| lsp () <|
-    lazy_value_type c vt
+  | Nothing vt -> lps "nothing:" <| lsp () <| lazy_value_type c false vt
+  | Empty vt -> 
+      lazy_collection_vt c vt [] <| lsp () <| lps ":" <| lsp () <|
+        lazy_value_type c false vt
   | Singleton vt -> let e = U.decompose_singleton expr in
-    lazy_collection_vt c vt @: lazy_expr c e
+    lazy_collection_vt c vt @: tuple_no_paren c e
   | Combine -> 
     let rec assemble_list c e =  (* print out in list format *)
       let (l, r) = U.decompose_combine e in
       begin match U.tag_of_expr l, U.tag_of_expr r with
         | Singleton _, Combine -> let l2 = U.decompose_singleton l in
-            lazy_expr c l2 <| lps ";" <| lsp () <| assemble_list c r
+            tuple_no_paren c l2 <| lps ";" <| lsp () <| 
+            assemble_list c r
         | Singleton _, Singleton _ -> let l2 = U.decompose_singleton l in
           let r2 = U.decompose_singleton r in
-          expr_pair ~sep:(lps ";" <| lsp ()) (l2, r2)
+          tuple_no_paren c l2 <| lps ";" <| lsp () <| 
+            tuple_no_paren c r2
         | Singleton _, Empty _ -> let l2 = U.decompose_singleton l in 
-          lazy_expr c l2
+          tuple_no_paren c l2
         | _ -> error () (* type error *)
       end in
     let (e1, e2) = U.decompose_combine expr in
@@ -329,7 +342,7 @@ let rec lazy_expr c expr =
   | Peek -> let col = U.decompose_peek expr in
     lps "peek" <| lazy_paren @: lazy_expr c col
   | Slice -> let (col, pat) = U.decompose_slice expr in
-    lazy_expr c col <| lazy_bracket @: lazy_expr c pat
+    lazy_expr c col <| lazy_bracket @: tuple_no_paren c pat
   | Insert -> let (e1, e2) = U.decompose_insert expr in
     lps "insert" <| lazy_paren  
       (lazy_expr c e1 <| lps "," <| lsp () <| tuple_no_paren c e2)
@@ -420,15 +433,15 @@ let wrap_f = wrap_formatter ~margin:80
 
 (* print a K3 type in syntax *)
 let string_of_base_type t = wrap_f @: fun () -> 
-  force_list @: lazy_base_type verbose_types_config t
+  force_list @: lazy_base_type verbose_types_config false t
 
 (* print a K3 type in syntax *)
 let string_of_value_type t = wrap_f @: fun () ->
-  force_list @: lazy_value_type verbose_types_config t
+  force_list @: lazy_value_type verbose_types_config false t
 
 (* print a K3 type in syntax *)
 let string_of_mutable_type t = wrap_f @: fun () ->
-  force_list @: lazy_mutable_type verbose_types_config t
+  force_list @: lazy_mutable_type verbose_types_config false t
 
 (* print a K3 type in syntax *)
 let string_of_type t = wrap_f @: fun () ->
