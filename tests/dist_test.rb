@@ -144,7 +144,7 @@ def test_file(file, dbt_path, k3_path)
         "#{i}.#{i}.#{i}.#{i}:10"
     end
 
-    peer_str = "-n localhost:10000"
+    peer_str = "-n localhost:10000/switch"
     peer_list.each do |ip|
         peer_str += ",#{ip}"
     end

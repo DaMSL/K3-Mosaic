@@ -185,22 +185,36 @@ $events.each_index do |i|
 end
 puts "}"
 
-puts ""
-puts "role test {"
-
 if $options[:distributed] then
+  puts ""
+  puts "role switch {"
   puts "  source s_on_init : int = stream([1])"
   puts "  bind s_on_init -> on_init"
   puts "  consume s_on_init"
+  puts "  source s1 : int = stream([1])"
+  puts "  bind s1 -> go"
+  puts "  consume s1"
+  puts "}"
+  puts ""
+  puts "role node {"
+  puts "  source s_on_init : int = stream([1])"
+  puts "  bind s_on_init -> on_init"
+  puts "  consume s_on_init"
+  puts "}"
+  puts ""
+  puts "default role node"
+  puts ""
+else # single-site
+  puts ""
+  puts "role test {"
+  puts "  source s1 : int = stream([1])"
+  puts "  bind s1 -> go"
+  puts "  consume s1"
+  puts "}"
+  puts ""
+  puts "default role test"
+  puts ""
 end
-
-puts "  source s1 : int = stream([1])"
-puts "  bind s1 -> go"
-puts "  consume s1"
-puts "}"
-puts ""
-puts "default role test"
-puts ""
 
 def dump_map(mapn)
   map = $maps[mapn]
