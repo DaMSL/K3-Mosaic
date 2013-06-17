@@ -1,11 +1,15 @@
-#!/bin/bash
+#get directory of script
+pushd `dirname $0` > /dev/null
+SCRIPTPATH=`pwd -P`
+popd > /dev/null
 
+cd $SCRIPTPATH
 if [ ! -d "./bin" ]; then mkdir bin; fi
-ocamlbuild Driver.native -build-dir ./bin $@
+ocamlbuild Driver.byte -build-dir ./bin -tag debug $@
 if [ -f "./bin/src/Driver.native" ]
-then CURDIR=`pwd` 
-     echo "#!/bin/bash" > ./bin/k3
-     echo "export BOLT_CONFIG=$CURDIR/bolt.cfg" >> ./bin/k3
-     echo "$CURDIR/bin/src/Driver.native \$@" >> ./bin/k3
+then echo "#!/bin/bash" > ./bin/k3
+     echo "export BOLT_CONFIG=$SCRIPTPATH/bolt.cfg" >> ./bin/k3
+     echo "ocamlrun -b $SCRIPTPATH/bin/src/Driver.native \$@" >> ./bin/k3
      chmod +x ./bin/k3
 fi
+cd -

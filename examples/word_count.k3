@@ -1,0 +1,155 @@
+// Word count example. 
+// Run as ../bin/k3 -eval -n 192.168.1.1:12/dummy -n 192.168.1.2:12/dummy simple_trigger.k3
+
+
+/*foreign function defined in K3StdLib*/
+foreign print : string -> unit
+foreign mod : (int,int)->int
+
+//declare g_p : {ref int}
+declare peer_node_num : {int}
+declare peer_nodes_lst : {(int,(address, maybe string))}
+
+declare counter : {int} = { 0 }          // count used to distribute word in round robin
+declare word_tmp_lst : [(string,int)]    // a list of (string,int) tuple
+declare tmp_results : [(string,int)]     // intermediate result of each node
+declare all_tmp : [[(string,int)]]    
+declare final : {[(string,int)]}           // final word count result
+
+//test only
+declare test_tmp : {[(string,int)]}
+declare data : [int] = [1;2;3;4;5]
+
+declare incr_count : unit -> unit = \_ ->  
+  let i:int = peek(counter) in do
+  { delete(counter, i); insert(counter,i+1) }
+       
+declare get_next_count : unit -> int = \_ -> do { incr_count(()); peek(counter) }
+
+
+/* 
+ * distribute word in round robin 
+ * TODO use hash
+ */
+trigger word_mapper (word:string){} = do {
+ let node_id : int = mod(get_next_count(()),peek(peer_node_num)) in
+ let (_,p : (address, maybe string)) = peek (peer_nodes_lst[node_id,_]) in /* k3 slice */
+ let (addr : address,_) = p in 
+ send(store_word,addr,word,1)
+}
+
+
+trigger init_all (dummy : int) {} = do {
+  iterate(\(peer_add:address,_) -> 
+      send(init,peer_add,1),peers) 
+
+}
+/*
+ * Init peer_nodes_lst, and peer_node_num
+ * NOTE: it now contain the localhost
+ */
+trigger init (dummy : int) {} = do {
+  //TODO not use the temp list new_p
+  let 
+    (new_p : {(int,(address,maybe string))},peer_num : int) = 
+       fold(\((acc:{(int, (address, maybe string))},num:int),p:(address, maybe string)) ->
+          (acc++[(num,p)],num+1), ([] : {(int,(address,maybe string))}, 0), peers)
+  in do {
+  iterate(\x:(int,(address,maybe string)) -> insert(peer_nodes_lst,x), new_p); 
+  insert(peer_node_num,peer_num)
+  }
+} 
+
+/*
+ * TODO other way to get around 
+ */
+trigger dummy_trigger (dummy : int) {} = do {()}
+
+/* 
+ * store word in a list 
+ */
+trigger store_word (word : string, count : int) {} = do {
+  insert(word_tmp_lst,word,count)  
+}
+
+/*
+ * Iterate peer list and send start_count trigger to tell
+ * all the node to count word
+ */
+trigger start_all_count (dummy : int) {} = do {
+   iterate(\(peer_add:address,_) -> 
+      send(start_count,peer_add,1),peers) 
+}
+
+/*
+ * Start count word in word_tmp_lst
+ */
+trigger start_count (dummy : int) {} = do {
+  let count_pair : [(string, int)] = 
+      groupby( (\(word:string,_)->word),  //group function 
+               (\(acc:int,(_,count:int))->acc+count), //fold function
+               0, 
+               word_tmp_lst
+             )
+  in do {
+    insert (test_tmp,count_pair); //TODO debug only
+    let (_,(fst_node : address,_)) = peek(peer_nodes_lst[0,_]) in
+    /* send intermidate result to the first node*/
+    send(store_result,fst_node,count_pair)
+  }
+}
+
+/*
+ * Store intermediate result from other nodes
+ */
+trigger store_result (tmp_r : [(string,int)]) {} = do {
+ //tmp_results++tmp_r ;
+ insert(all_tmp,tmp_r)
+}
+ 
+/*
+ * Count the final resuly
+ */
+trigger count_final (dummy:int) {} =do {
+  //TODO use lst ; = flatten all_tmp  
+  let lst : [(string,int)] = 
+    fold(\(acc:[(string,int)],x : [(string,int)]) -> acc++x, [] : [(string,int)], all_tmp) 
+  in
+  let count_pair : [(string, int)] = 
+    groupby( (\(word:string,_)->word),  //group function 
+               (\(acc:int,(_,count:int))->acc+count), //fold function
+               0, 
+               lst
+             )
+  in 
+  insert(final,count_pair)
+
+}
+
+//The local host bound to word_source role to read words from file
+role word_source {
+  source  dummy1 : int = stream ([1])
+  source  dummy2 : int = stream ([1])
+  source  dummy3 : int = stream ([1])
+  source  words  : string = file("data/sample.csv", csv)
+
+  bind    dummy1 -> init_all //TODO  bind to peer node
+  bind    words  -> word_mapper
+  bind    dummy2 -> start_all_count
+  bind    dummy3 -> count_final
+  
+  consume dummy1
+  consume words
+  consume dummy2
+  consume dummy3
+}
+
+//peer nodes bound to dummy role
+role dummy {
+  source s1 :(int) = stream ([2])
+  bind s1 -> dummy_trigger
+  consume s1
+}
+
+default role word_source 
+
