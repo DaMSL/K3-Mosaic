@@ -71,7 +71,7 @@ let parse_ip_role ipr_str =
   let error () = invalid_arg "invalid ip string format" in
   if Str.string_match r ipr_str 0 then
     let ms = List.map (fun i -> 
-        try some @: matched_group i ipr_str
+        try some @: Str.matched_group i ipr_str
         with Not_found -> None
       ) [1;2;3;4] 
     in
@@ -447,6 +447,13 @@ let append_peers ipr_str_list =
   let ip_roles = Str.split (Str.regexp (Str.quote ",")) ipr_str_list in
   cmd_line_params.peers <- cmd_line_params.peers @ (List.map parse_ip_role ip_roles)
 
+(* Load peer address from file*)
+let load_peer file = 
+  let line_lst = read_file_lines file in
+  cmd_line_params.peers 
+    <- cmd_line_params.peers @ (List.map parse_ip_role line_lst)
+
+
 let load_partition_map file = 
   let str = read_file file in
   let str_full = "declare pmap : [(string, [(int, int)])] = "^str in
@@ -483,7 +490,9 @@ let param_specs = Arg.align
       "int64    Set program run length in # of messages";
   "-m", Arg.String load_partition_map,
       "file     Load a partition map from a file";
-  
+  "-peers", Arg.String load_peer,
+      "file     Load peer address from a file";
+
   (* Debugging parameters *)
   "-t", Arg.Unit set_print_types,
       "         Print types as part of output";

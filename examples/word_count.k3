@@ -1,5 +1,5 @@
 // Word count example. 
-// Run as ../bin/k3 -eval -n 192.168.1.1:12/dummy -n 192.168.1.2:12/dummy simple_trigger.k3
+// Run as ../bin/k3 -eval -n 192.168.1.1:12/dummy -n 192.168.1.2:12/dummy word_count.k3
 
 
 /*foreign function defined in K3StdLib*/
@@ -131,7 +131,7 @@ role word_source {
   source  dummy1 : int = stream ([1])
   source  dummy2 : int = stream ([1])
   source  dummy3 : int = stream ([1])
-  source  words  : string = file("data/sample.csv", csv)
+  source  words  : string = file("data/100.csv", csv)
 
   bind    dummy1 -> init_all //TODO  bind to peer node
   bind    words  -> word_mapper
