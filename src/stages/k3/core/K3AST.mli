@@ -260,7 +260,7 @@ type check_expr_t = FileExpr of string | InlineExpr of expr_t
 type expression_test = program_t * expr_t * check_expr_t
 
 (* Program, expected global values *)
-type program_test = ProgTest    of program_t * (id_t * check_expr_t) list
-                  | NetworkTest of program_t * (id_t * check_expr_t) list
+type program_test = ProgTest    of program_t * (expr_t * check_expr_t) list
+                  | NetworkTest of program_t * (expr_t * check_expr_t) list
 
 end

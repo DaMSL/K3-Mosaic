@@ -36,6 +36,7 @@ let rec peers_code addr = function
 (* create k3 globals for the address and peers *)
 let globals addr ps = me_code addr::[peers_code addr ps]
 
-let add_globals addr peers ds = globals addr peers@ds
+let add_globals_k3 k3_globals ds = k3_globals@ds
+let add_globals addr peers ds = add_globals_k3 (globals addr peers) ds
 let remove_globals addr peers ds = list_drop (List.length @: globals addr peers) ds
 

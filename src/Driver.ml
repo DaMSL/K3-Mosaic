@@ -354,7 +354,9 @@ let print_test_case (decls,e,x) =
 let test params =
   let test_fn fname = match !(params.test_mode), params.out_lang with
     | ExpressionTest, K3 -> test_expressions fname 
-    | ProgramTest, K3 -> test_program (interpret_one params) fname
+    | ProgramTest, K3 -> 
+        let globals_k3 = K3Global.globals params.node_address params.peers in
+        test_program globals_k3 (interpret_one params) fname
     | x,y -> 
       let mode, lang = string_of_test_mode x, string_of_out_lang y
       in error @: mode^" testing not yet implemented for "^lang
@@ -399,7 +401,8 @@ let process_parameters params =
     (if List.exists (fun (addr,_,_) -> addr = params.node_address) params.peers 
     then [] 
     else [params.node_address, params.role, None])@params.peers;
-  if params.out_lang = K3Dist or params.out_lang = AstK3Dist then params.in_lang <- M3in;
+  if params.out_lang = K3Dist or params.out_lang = AstK3Dist then 
+    params.in_lang <- M3in;
   let a = !(params.action) in
   match a with
   | Compile | Interpret | Print -> 

@@ -202,7 +202,7 @@ if $options[:distributed] then
   puts "  consume s_on_init"
   puts "}"
   puts ""
-  puts "default role node"
+  puts "default role switch"
   puts ""
 else # single-site
   puts ""

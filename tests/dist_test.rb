@@ -141,7 +141,7 @@ def test_file(file, dbt_path, k3_path)
 
     # create peer list
     peer_list = Array.new($num_peers - 1) do |i|
-        "#{i}.#{i}.#{i}.#{i}:10"
+        "#{i}.#{i}.#{i}.#{i}:10/node"
     end
 
     peer_str = "-n localhost:10000/switch"
@@ -150,8 +150,8 @@ def test_file(file, dbt_path, k3_path)
     end
 
 	# run the k3 driver on the input
-	puts "#{k3_path} -eval #{peer_str} temp.k3dist"
-	output = `#{k3_path} -eval #{peer_str} temp.k3dist 2> #{err_file}`
+	puts "#{k3_path} -test #{peer_str} temp.k3dist"
+	output = `#{k3_path} -test #{peer_str} temp.k3dist 2> #{err_file}`
 	check_error(curdir, err_file)
 	puts output
     exit

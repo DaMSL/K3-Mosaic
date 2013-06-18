@@ -682,8 +682,8 @@ expression_test :
 ;
 
 named_expr_list :
-    | IDENTIFIER GETS check_expr                          { [$1, $3] }           
-    | IDENTIFIER GETS check_expr COMMA named_expr_list    { $5@[$1, $3] }
+    | expr GETS check_expr                          { [$1, $3] }           
+    | expr GETS check_expr COMMA named_expr_list    { $5@[$1, $3] }
 ;
 
 check_expr :
