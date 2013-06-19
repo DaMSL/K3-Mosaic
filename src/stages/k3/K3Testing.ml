@@ -78,15 +78,17 @@ let check_as_expr ce = match ce with
   | InlineExpr e -> e
   | FileExpr (fp) -> parse_expr @: read_file fp
 
-let test_expressions file_name = 
-  let expr_tests = parse_expression_test @: read_file file_name in
-  let test_cases = snd (List.fold_left (fun (i, test_acc) (decls, e, x) ->
-      let name = file_name^" "^(string_of_int i) in
-      let test_case = case name @: 
-        eval_test_expr decls e @=? eval_test_expr decls @: check_as_expr x
-      in i+1, test_acc@[test_case]
-    ) (0, []) expr_tests)
-  in List.iter run_tests test_cases
+let test_expressions file_name = function
+  | ExprTest expr_tests ->
+    let test_cases = snd @:
+      List.fold_left (fun (i, test_acc) (decls, e, x) ->
+        let name = file_name^" "^(string_of_int i) in
+        let test_case = case name @: 
+          eval_test_expr decls e @=? eval_test_expr decls @: check_as_expr x
+        in i+1, test_acc@[test_case]
+      ) (0, []) expr_tests
+    in List.iter run_tests test_cases
+  | _ -> failwith "not expression tests"
 
 let env_deref_refs env = List.rev_map (fun (id, v) -> (id, !v)) env
 
@@ -145,13 +147,13 @@ let unify_envs (envs : (address * program_env_t) list) =
  * function that expects an untyped AST (this takes care of handling any extra
  * information needed by the interpreter) also takes a program_test data
  * structure indicating the kind of test desired *)
-let test_program globals_k3 interpret_fn file_name =
-  let test_type = parse_program_test @: read_file file_name in
-  let op_fn, program, tests = match test_type with
+let test_program globals_k3 interpret_fn file_name test = 
+  let op_fn, program, tests = match test with
     (* for a single-site test, we just extract the env. For multi-site, we unify
      * the environments, and rename all node variables to be node_var (TODO) *)
     | ProgTest (prog, checkl)    -> extract_first_env, prog, checkl
     | NetworkTest (prog, checkl) -> unify_envs, prog, checkl
+    | _ -> failwith "unsupported test"
   in
   let node_envs = interpret_fn program in
   (* unify the node value environments *)

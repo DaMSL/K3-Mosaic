@@ -176,10 +176,11 @@ type program_t = (declaration_t * annotation_t) list
 (* Testing *)
 type check_expr_t = FileExpr of string | InlineExpr of expr_t
 
-type expression_test = program_t * expr_t * check_expr_t
-
-type program_test = ProgTest    of program_t * (expr_t * check_expr_t) list
-                  | NetworkTest of program_t * (expr_t * check_expr_t) list
+type program_test_t =
+    | ProgTest    of program_t * (expr_t * check_expr_t) list
+    | NetworkTest of program_t * (expr_t * check_expr_t) list
+      (* Declarations, expression to evaluate, expected value *)
+    | ExprTest    of (program_t * expr_t * check_expr_t) list
 
 end
 

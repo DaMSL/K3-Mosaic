@@ -256,11 +256,12 @@ type program_t = (declaration_t * annotation_t) list
 (* Expressions to be tested may come from files or may be directly specified *)
 type check_expr_t = FileExpr of string | InlineExpr of expr_t
 
-(* Declarations, expression to evaluate, expected value *)
-type expression_test = program_t * expr_t * check_expr_t
-
 (* Program, expected global values *)
-type program_test = ProgTest    of program_t * (expr_t * check_expr_t) list
-                  | NetworkTest of program_t * (expr_t * check_expr_t) list
+type program_test_t =
+    | ProgTest    of program_t * (expr_t * check_expr_t) list
+    | NetworkTest of program_t * (expr_t * check_expr_t) list
+      (* Declarations, expression to evaluate, expected value *)
+    | ExprTest    of (program_t * expr_t * check_expr_t) list
+
 
 end

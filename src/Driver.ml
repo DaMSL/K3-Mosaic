@@ -41,18 +41,32 @@ let in_lang_descs = [
     M3in,     "m3",  "M3";
   ]
 
-type out_lang_t = K3 | AstK3| K3Dist | AstK3Dist | ReifiedK3 | Imperative | CPPInternal | CPP
+type out_lang_t =
+  | K3 | AstK3 
+  | K3Dist 
+  | K3DistTest (* distributed k3 with some test code *)
+  | AstK3Dist 
+  | ReifiedK3 
+  | Imperative | CPPInternal | CPP
 
 let out_lang_descs = [
     K3,          "k3",        "K3";
     AstK3,       "k3ast",     "K3 AST";
     K3Dist,      "k3dist",    "Distributed K3";
+    K3DistTest,  "k3disttest","Distributed K3 with test code";
     AstK3Dist,   "k3distast", "Distributed K3 AST";
     ReifiedK3,   "rk3",       "Reified K3";
     Imperative,  "imp",       "Imperative";
     CPPInternal, "cppi",      "C++-internal";
     CPP,         "cpp",       "C++";
   ]
+
+(* types of data carried around  by the driver *)
+type data_t = 
+  | K3Data of program_t
+  (* for distributed programs, we also need the metadata of the maps *)
+  | K3DistData of program_t * ProgInfo.prog_data_t
+  | K3TestData of program_test_t
 
 (* Evaluation option setters *)
 let parse_port p = 
@@ -246,6 +260,10 @@ let parse_program_k3 = parse_program K3Parser.program K3Lexer.tokenize
 let parse_program_m3 = 
     parse_program Calculusparser.mapProgram Calculuslexer.tokenize
 
+let parse_test params s = match !(params.test_mode) with
+  | ExpressionTest -> parse_expression_test s
+  | ProgramTest    -> parse_program_test s
+
 (* Program transformers *)
 let typed_program_with_globals p =
   let p' =
@@ -269,26 +287,29 @@ let cpp_program p =
 
 (* Action handlers *)
 (* TODO *) 
-let repl params = ()
+let repl params inputs = ()
 
 (* TODO *)
 let compile params inputs = ()
 
 (* Interpret actions *)
-let interpret_one params prog = let p = params in
-  match p.out_lang with
-  | K3 | AstK3 | K3Dist | AstK3Dist -> 
-    (* this not only adds type info, it adds the globals which are crucial
-     * for interpretation *)
-    let tp = typed_program_with_globals prog in 
-    begin 
-      try 
-        interpret_k3_program p.run_length p.peers p.node_address p.role tp
-      with RuntimeError (uuid,str) -> handle_interpret_error tp (uuid,str)
-    end
-  | _ -> error "Output language not yet implemented"
+let interpret_k3 params prog = let p = params in
+  (* this not only adds type info, it adds the globals which are crucial
+    * for interpretation *)
+  let tp = typed_program_with_globals prog in 
+  try 
+    interpret_k3_program p.run_length p.peers p.node_address p.role tp
+  with RuntimeError (uuid,str) -> handle_interpret_error tp (uuid,str)
 
-let interpret params inputs = List.iter (ignore |- interpret_one params) inputs
+let interpret params inputs = 
+  let f = function
+    | K3Data p 
+    | K3DistData(p, _) 
+    | K3TestData(ProgTest(p, _))
+    | K3TestData(NetworkTest(p, _)) -> ignore @: interpret_k3 params p
+    | _ -> failwith "data type not supported for interpretation"
+  in 
+  List.iter f inputs
 
 (* Print actions *)
 let print_event_loop (id, (res_env, ds_env, instrs)) = 
@@ -298,123 +319,132 @@ let print_event_loop (id, (res_env, ds_env, instrs)) =
 
 let string_of_typed_meta (t,a) = string_of_annotation a
 
-let print_k3_program f p =
-  let tp = typed_program p in
-  let event_loops, default = roles_of_program tp in
-    print_endline (f tp);
-    List.iter print_event_loop event_loops;
-    match default with None -> () 
-      | Some (_,x) -> print_event_loop ("DEFAULT", x)
+let print_k3_program f = function
+  | K3Data p | K3DistData (p,_) ->
+    let tp = typed_program p in
+    let event_loops, default = roles_of_program tp in
+      print_endline (f tp);
+      List.iter print_event_loop event_loops;
+      (match default with None -> () 
+        | Some (_,x) -> print_event_loop ("DEFAULT", x))
+  | _ -> error "Cannot print this type of data"
 
-let print_reified_k3_program p =
-  let print_expr_fn c e = 
-      lazy (print_reified_expr (reify_expr [] e)) in
-  let tp = typed_program p in 
-  print_endline (string_of_program ~print_expr_fn:print_expr_fn tp)
+(* print a k3 program with a special expected section *)
+let print_k3_dist_test_program f p = ()
 
-let print_imp func print_types f =
-  let string_of_meta m =
-    (if print_types then (ImperativeUtil.string_of_type (fst m))^";" else "")^
-    (string_of_annotation (snd m))
-  in print_endline @: 
-    ImperativeUtil.string_of_program string_of_meta (func f)
+
+let print_reified_k3_program = function
+  | K3Data p | K3DistData(p, _) ->
+    let print_expr_fn c e = 
+        lazy (print_reified_expr @: reify_expr [] e) in
+    let tp = typed_program p in 
+    print_endline @: string_of_program ~print_expr_fn:print_expr_fn tp
+  | _ -> error "Cannot print this type of data"
+
+let print_imp func print_types = function
+  | K3Data p | K3DistData(p, _) ->
+    let string_of_meta m =
+      (if print_types then (ImperativeUtil.string_of_type @: fst m)^";" 
+       else "")^
+      (string_of_annotation @: snd m)
+    in print_endline @: 
+      ImperativeUtil.string_of_program string_of_meta @: func p
+  | _ -> error "Cannot print this type of data"
 
 let print_cppi_program = print_imp cpp_program
 let print_imperative_program = print_imp imperative_program
 
-let print_cpp_program f = 
-  let files_and_content = CPPGen.generate_program (cpp_program f) in
-  let mk_filename id = (String.make 40 '=')^" "^id in 
-  let print_content (f,c) =
-    print_endline (mk_filename f); print_endline c; print_endline "\n\n"
-  in
-  List.iter print_content files_and_content
+let print_cpp_program = function
+  | K3Data p | K3DistData(p, _) ->
+    let files_and_content = CPPGen.generate_program @: cpp_program p in
+    let mk_filename id = (String.make 40 '=')^" "^id in 
+    let print_content (f,c) =
+      print_endline @: mk_filename f; print_endline c; print_endline "\n\n"
+    in
+    List.iter print_content files_and_content
+  | _ -> error "Cannot print this type of data"
   
 (* Top-level print handler *)
 let print params inputs =
   let sofp = string_of_program ~verbose:cmd_line_params.verbose in
   let print_fn = match params.out_lang with
     | AstK3 | AstK3Dist -> print_k3_program sofp
-    | K3 | K3Dist -> print_k3_program PS.string_of_program
-    | ReifiedK3 -> print_reified_k3_program
-    | Imperative -> print_imperative_program params.print_types 
-    | CPPInternal -> print_cppi_program params.print_types
-    | CPP -> print_cpp_program
+    | K3 | K3Dist       -> print_k3_program PS.string_of_program
+    | K3DistTest        -> print_k3_dist_test_program PS.string_of_program
+    | ReifiedK3         -> print_reified_k3_program
+    | Imperative        -> print_imperative_program params.print_types
+    | CPPInternal       -> print_cppi_program params.print_types
+    | CPP               -> print_cpp_program
   in List.iter print_fn inputs
 
 (* Test actions *)
-let print_test_case (decls,e,x) =
-  print_endline "----Decls----";
-  print_endline (string_of_program decls);
-  print_endline "----Expression----";
-  print_endline (string_of_expr e);
-  print_endline "----Expected----";
-  print_endline (string_of_expr x)
-
-let test params =
-  let test_fn fname = match !(params.test_mode), params.out_lang with
-    | ExpressionTest, K3 -> test_expressions fname 
-    | ProgramTest, K3 -> 
+let test params inputs =
+  let test_fn fname input = 
+    match input with
+    | K3TestData(ExprTest _ as x) -> test_expressions fname x 
+    | K3TestData(ProgTest _ as x) -> 
         let globals_k3 = K3Global.globals params.node_address params.peers in
-        test_program globals_k3 (interpret_one params) fname
-    | x,y -> 
-      let mode, lang = string_of_test_mode x, string_of_out_lang y
-      in error @: mode^" testing not yet implemented for "^lang
-  in List.iter test_fn params.input_files
+        test_program globals_k3 (interpret_k3 params) fname x
+    | _ -> error @: "testing not yet implemented for this language"
+  in List.iter2 test_fn params.input_files inputs
 
-let transform_to_k3_dist partmap p mproginfo = match mproginfo with
-  | None -> error "Cannot construct distributed K3 without ProgInfo metadata"
-  | Some meta ->
-    (* do not use. Simply for type checking original program *)
-    (*tp = typed_program p in *)
-    try
-      GenDist.gen_dist meta partmap p
-    with Invalid_argument(msg) -> 
-      print_endline ("ERROR: " ^msg);
-      print_endline (ProgInfo.string_of_prog_data meta);
-      exit (-1)
+let transform_to_k3_dist partmap p proginfo = 
+  (* do not use. Simply for type checking original program *)
+  (*tp = typed_program p in *)
+  try
+    GenDist.gen_dist proginfo partmap p
+  with Invalid_argument(msg) -> 
+    print_endline ("ERROR: " ^msg);
+    print_endline (ProgInfo.string_of_prog_data proginfo);
+    exit (-1)
 
 let process_inputs params =
-  let proc_fn f = match params.in_lang with
-    | K3in -> (parse_program_k3 f, None)
-    | M3in -> let m3prog = parse_program_m3 f in
+  let proc_fn f = match params.in_lang, !(params.action) with
+    | K3in, Test -> K3TestData(parse_test params f)
+    | K3in, _    -> K3Data(parse_program_k3 f)
+    | M3in, _ -> 
+        let m3prog = parse_program_m3 f in
         let proginfo = M3ProgInfo.prog_data_of_m3 m3prog in
         if params.debug_info then 
             print_endline (ProgInfo.string_of_prog_data proginfo);
         let prog = M3ToK3.m3_to_k3 m3prog in
-        (prog, Some proginfo)
+        K3DistData(prog, proginfo)
   in List.map proc_fn params.input_files
 
 (* this function can only transform to another k3 format *)
 let transform params ds =
-  let proc_fn (d, mproginfo) = match params.out_lang with
-   | K3Dist
-   | AstK3Dist -> transform_to_k3_dist params.partition_map d mproginfo
-   | _         -> d
+  let proc_fn input = match params.out_lang, input with
+   | (AstK3Dist | K3Dist | K3DistTest), K3DistData(p, proginfo) -> 
+       let p' = transform_to_k3_dist params.partition_map p proginfo in
+       K3DistData(p', proginfo)
+   | (AstK3Dist | K3Dist | K3DistTest), _ -> 
+       failwith "Missing metadata for distributed version"
+   | _, data -> data
   in List.map proc_fn ds
 
 (* Driver execution *)
 let process_parameters params = 
   (* preprocess params *)
+
   (* add node_address to the peer list if it's not included *)
   params.peers <- 
     (if List.exists (fun (addr,_,_) -> addr = params.node_address) params.peers 
     then [] 
     else [params.node_address, params.role, None])@params.peers;
-  if params.out_lang = K3Dist or params.out_lang = AstK3Dist then 
-    params.in_lang <- M3in;
-  let a = !(params.action) in
-  match a with
-  | Compile | Interpret | Print -> 
-    let inputs = transform params @: process_inputs params in
-    begin match a with
-    | Compile -> compile params inputs
-    | Interpret -> interpret params inputs
-    | Print -> print params inputs
-    | _ -> ()
-    end
-  | REPL -> repl params
-  | Test -> test params
+
+  (* distributed programs must have M3 as their input language *)
+  match params.out_lang with
+    | K3Dist | AstK3Dist | K3DistTest -> params.in_lang <- M3in
+    | _ -> ();
+
+  let inputs = process_inputs params in
+  let inputs = transform params inputs in
+  match !(params.action) with
+  | Compile   -> compile params inputs
+  | Interpret -> interpret params inputs
+  | Print     -> print params inputs
+  | REPL      -> repl params inputs
+  | Test      -> test params inputs
 
 (* General parameter setters *)
 let set_output_language l =
