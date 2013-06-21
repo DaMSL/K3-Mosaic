@@ -84,6 +84,11 @@ val list_map : ('a -> 'b) -> 'a list -> 'b list
 (* get an index with every item in a map *)
 val list_mapi : (int * 'a -> 'b) -> 'a list -> 'b list
 
+(* a cross between a map and a fold. Can only map the current list, but also
+ * gets another value to play with, and no need to project out the temporary
+ * value *)
+val mapfold : ('b -> 'a -> 'b * 'c) -> 'b -> 'a list -> 'b * 'c list
+
 (* calls f on its output over and over, num times *)
 val iterate : ('a -> 'a) -> 'a -> int -> 'a
 

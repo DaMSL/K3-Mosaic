@@ -143,38 +143,32 @@ let compatible_types t1 t2 =
   end
 
 let numerical_type t = 
-  begin match base_of_any t with
+  match base_of_any t with
     | K.TBool
     | K.TInt   -> true
     | K.TFloat -> true
     | _ -> false
-  end
 
 let arithmetic_return_types ?(expr=None) t1 t2 = 
-   begin match (base_of_any t1), (base_of_any t2) with
+   match (base_of_any t1), (base_of_any t2) with
       | K.TBool,  K.TBool
       | K.TBool,  K.TInt
       | K.TInt,   K.TInt
-      | K.TInt,   K.TBool -> 
-                      K.TValue(K.TIsolated(K.TImmutable(K.TInt, [])))
+      | K.TInt,   K.TBool -> K.TValue KH.t_int
       | K.TBool,  K.TFloat
       | K.TInt,   K.TFloat
       | K.TFloat, K.TFloat
       | K.TFloat, K.TBool
-      | K.TFloat, K.TInt -> 
-                      K.TValue(K.TIsolated(K.TImmutable(K.TFloat, [])))
+      | K.TFloat, K.TInt -> K.TValue KH.t_float
       | _,_ -> error ~m3:expr "M3ToK3: arguments must be of numerical type."
-   end
 
 let escalate_type ?(expr=None) from_t to_t = 
    begin match base_of_any from_t, base_of_any to_t with
       | K.TBool, K.TInt
-      | K.TInt,  K.TInt ->
-                      K.TValue(K.TIsolated(K.TImmutable(K.TInt, [])))
+      | K.TInt,  K.TInt -> K.TValue KH.t_int
       | K.TBool, K.TFloat 
       | K.TInt,  K.TFloat 
-      | K.TFloat,K.TFloat ->
-                      K.TValue(K.TIsolated(K.TImmutable(K.TFloat, [])))
+      | K.TFloat,K.TFloat -> K.TValue KH.t_float
       | _,_ -> 
          if from_t = to_t then to_t
          else error ~m3:expr ("M3ToK3: Unable to escalate type " ^
@@ -198,10 +192,10 @@ let escalate_expr to_t expr = expr
 
 let m3_const_to_k3_const c =
   begin match c with 
-    | Const.CInt(i) -> KH.mk_const (K.CInt(i))
-    | Const.CFloat(f) -> KH.mk_const (K.CFloat(f))
-    | Const.CString(s) -> KH.mk_const (K.CString(s))
-    | Const.CBool(b) -> KH.mk_const (K.CBool(b))
+    | Const.CInt(i) -> KH.mk_const (K.CInt i)
+    | Const.CFloat(f) -> KH.mk_const (K.CFloat f)
+    | Const.CString(s) -> KH.mk_const (K.CString s)
+    | Const.CBool(b) -> KH.mk_const (K.CBool b)
     | Const.CDate(y,m,d) -> 
         KH.mk_const (K.CInt(y * 10000 + m * 100 + d))
 (*        KH.mk_tuple [ KH.mk_const (K.CInt(y));
@@ -213,14 +207,12 @@ let m3_const_to_k3_const c =
 
 let zero_of_type t =
   begin match t with
-    | K.TInt   -> (K.CInt(0))
-    | K.TFloat -> (K.CFloat(0.))
-    | _ -> failwith ("Can not generate zero for type: "^
-                        (KP.string_of_base_type t))
+    | K.TInt   -> K.CInt(0)
+    | K.TFloat -> K.CFloat(0.)
+    | _ -> failwith @: "Can not generate zero for type: "^
+                        (KP.string_of_base_type t)
   end
     
-  
-  
 let extract_opt opt =  
    begin match opt with
       | None -> error "M3ToK3: Trying to extract some from None"

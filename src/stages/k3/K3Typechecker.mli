@@ -47,11 +47,17 @@ val check_tag_arity: expr_tag_t -> 'child list -> bool
 
 (* Type deduction for parts of a K3 program *)
 val deduce_constant_type: int -> (id_t * type_t) list -> constant_t -> value_type_t
-val deduce_expr_type: (id_t * type_t) list -> (id_t * type_t) list -> expr_t -> expr_t
 
+(* takes trigger environment, environment and expression and returns a typed
+ * expression *)
+val deduce_expr_type: type_bindings_t -> type_bindings_t -> expr_t -> expr_t
+
+(* given a program, returns the typechecked program, its environment, trigger
+ * environment, and resource environment *)
 val type_bindings_of_program :
-  program_t
-  -> program_t * type_bindings_t * type_bindings_t * event_type_bindings_t
+  program_t -> 
+  program_t * type_bindings_t * type_bindings_t * event_type_bindings_t
 
-val deduce_program_type: program_t -> program_t
+val deduce_program_type : program_t -> program_t
 
+val deduce_program_test_type : program_test_t -> program_test_t

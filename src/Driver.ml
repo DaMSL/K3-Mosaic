@@ -68,6 +68,11 @@ type data_t =
   | K3DistData of program_t * ProgInfo.prog_data_t
   | K3TestData of program_test_t
 
+let string_of_data = function
+  | K3Data _ -> "k3data"
+  | K3DistData _ -> "k3distdata"
+  | K3TestData _ -> "k3testdata"
+
 (* Evaluation option setters *)
 let parse_port p = 
   let error () = invalid_arg ("invalid port: "^p) in
@@ -217,13 +222,21 @@ let handle_type_error p (uuid, name, msg) =
   let s = K3TypeError.string_of_error msg in
   print_endline "----Type error----";
   print_endline @: "Error("^(string_of_int uuid)^"): "^name^": "^s;
-  print_endline @: PS.string_of_program ~uuid_highlight:(Some uuid) p;
+  (match p with 
+  | K3Data p | K3DistData(p,_)-> 
+    print_endline @: PS.string_of_program ~uuid_highlight:uuid p
+  | K3TestData p_test -> print_endline @: 
+    PS.string_of_program_test ~uuid_highlight:uuid p_test);
   exit 1
 
 let handle_interpret_error p (uuid,error) =
   print_endline "----Interpreter error----";
   print_endline @: "Error("^(string_of_int uuid)^"): "^error;
-  print_endline @: PS.string_of_program ~uuid_highlight:(Some uuid) p;
+  (match p with 
+  | K3Data p | K3DistData(p,_)-> 
+      print_endline @: PS.string_of_program ~uuid_highlight:uuid p
+  | K3TestData p_test -> print_endline @: 
+    PS.string_of_program_test ~uuid_highlight:uuid p_test);
   exit 1
 
 (* Program parsers *)
@@ -260,16 +273,37 @@ let parse_program_k3 = parse_program K3Parser.program K3Lexer.tokenize
 let parse_program_m3 = 
     parse_program Calculusparser.mapProgram Calculuslexer.tokenize
 
-let parse_test params s = match !(params.test_mode) with
-  | ExpressionTest -> parse_expression_test s
-  | ProgramTest    -> parse_program_test s
+let parse_test params = match !(params.test_mode) with
+  | ExpressionTest -> parse_program K3Parser.expression_test K3Lexer.tokenize
+  | ProgramTest    -> parse_program K3Parser.program_test K3Lexer.tokenize
 
 (* Program transformers *)
 let typed_program_with_globals p =
   let p' =
     K3Global.add_globals cmd_line_params.node_address cmd_line_params.peers p in
   try deduce_program_type p'
-  with TypeError (a,b,c) -> handle_type_error p' (a,b,c) 
+  with TypeError (a,b,c) -> handle_type_error (K3Data p') (a,b,c) 
+
+let typed_program_test_with_globals prog_test =
+  let add_g p = 
+    K3Global.add_globals cmd_line_params.node_address cmd_line_params.peers p
+  in
+  match prog_test with
+  | ProgTest(p, testl)    -> 
+      let p' = add_g p in
+      let p_t = ProgTest(p', testl) in
+      begin 
+        try deduce_program_test_type p_t
+        with TypeError (a,b,c) -> handle_type_error (K3TestData p_t) (a,b,c)
+      end
+  | NetworkTest(p, testl) ->
+      let p' = add_g p in
+      let p_t = NetworkTest(p', testl) in
+      begin
+        try deduce_program_test_type p_t
+        with TypeError (a,b,c) -> handle_type_error (K3TestData p_t) (a,b,c) 
+      end
+  | ExprTest(p_ts) -> failwith "expr_test unhandled"
 
 (* for most functions, we don't need the globals included *)
 let typed_program p =
@@ -299,7 +333,7 @@ let interpret_k3 params prog = let p = params in
   let tp = typed_program_with_globals prog in 
   try 
     interpret_k3_program p.run_length p.peers p.node_address p.role tp
-  with RuntimeError (uuid,str) -> handle_interpret_error tp (uuid,str)
+  with RuntimeError (uuid,str) -> handle_interpret_error (K3Data tp) (uuid,str)
 
 let interpret params inputs = 
   let f = function
@@ -329,9 +363,17 @@ let print_k3_program f = function
         | Some (_,x) -> print_event_loop ("DEFAULT", x))
   | _ -> error "Cannot print this type of data"
 
-(* print a k3 program with a special expected section *)
-let print_k3_dist_test_program f p = ()
-
+(* create and print a k3 program with an expected section *)
+let print_k3_dist_test_program = function
+  | K3DistData (p, meta) -> 
+      let tests = GenTest.expected_code_all_maps meta in
+      (* fill the check_exprs with dummy values to be replaced *)
+      let tests_vals = list_map (fun e -> e, FileExpr "dummy") tests in
+      let prog_test = NetworkTest(p, tests_vals) in
+      let _, prog_test = renumber_test_program_ids prog_test in
+      let prog_test = typed_program_test_with_globals prog_test in
+      print_endline @: PS.string_of_program_test prog_test
+  | _ -> error "Cannot print this type of data"
 
 let print_reified_k3_program = function
   | K3Data p | K3DistData(p, _) ->
@@ -370,7 +412,7 @@ let print params inputs =
   let print_fn = match params.out_lang with
     | AstK3 | AstK3Dist -> print_k3_program sofp
     | K3 | K3Dist       -> print_k3_program PS.string_of_program
-    | K3DistTest        -> print_k3_dist_test_program PS.string_of_program
+    | K3DistTest        -> print_k3_dist_test_program
     | ReifiedK3         -> print_reified_k3_program
     | Imperative        -> print_imperative_program params.print_types
     | CPPInternal       -> print_cppi_program params.print_types
@@ -382,10 +424,10 @@ let test params inputs =
   let test_fn fname input = 
     match input with
     | K3TestData(ExprTest _ as x) -> test_expressions fname x 
-    | K3TestData(ProgTest _ as x) -> 
+    | K3TestData((ProgTest _ | NetworkTest _) as x) -> 
         let globals_k3 = K3Global.globals params.node_address params.peers in
         test_program globals_k3 (interpret_k3 params) fname x
-    | _ -> error @: "testing not yet implemented for this language"
+    | x -> error @: "testing not yet implemented for "^string_of_data x
   in List.iter2 test_fn params.input_files inputs
 
 let transform_to_k3_dist partmap p proginfo = 
@@ -402,7 +444,7 @@ let process_inputs params =
   let proc_fn f = match params.in_lang, !(params.action) with
     | K3in, Test -> K3TestData(parse_test params f)
     | K3in, _    -> K3Data(parse_program_k3 f)
-    | M3in, _ -> 
+    | M3in, _    -> 
         let m3prog = parse_program_m3 f in
         let proginfo = M3ProgInfo.prog_data_of_m3 m3prog in
         if params.debug_info then 
@@ -427,15 +469,15 @@ let process_parameters params =
   (* preprocess params *)
 
   (* add node_address to the peer list if it's not included *)
-  params.peers <- 
+  (params.peers <- 
     (if List.exists (fun (addr,_,_) -> addr = params.node_address) params.peers 
     then [] 
-    else [params.node_address, params.role, None])@params.peers;
+    else [params.node_address, params.role, None])@params.peers);
 
   (* distributed programs must have M3 as their input language *)
-  match params.out_lang with
+  (match params.out_lang with
     | K3Dist | AstK3Dist | K3DistTest -> params.in_lang <- M3in
-    | _ -> ();
+    | _ -> ());
 
   let inputs = process_inputs params in
   let inputs = transform params inputs in

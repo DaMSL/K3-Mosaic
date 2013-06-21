@@ -9,6 +9,8 @@ open K3.Annotation
 open K3Util
 open K3Printing
 
+module H = K3Helpers
+
 (* TODO: Make exceptions more informative for error reporting. *)
 exception MalformedTree
 
@@ -789,4 +791,41 @@ let type_bindings_of_program prog =
  in prog, env, trig_env, rresource_env
 
 let deduce_program_type program = 
-  ((fun (prog,_,_,_) -> prog) (type_bindings_of_program program))
+  let prog,_,_,_ = type_bindings_of_program program
+  in prog
+
+let deduce_program_test_type prog_test = 
+  let proc p testl = 
+    let p', env, trig_env, _ = type_bindings_of_program p in
+    let testl' = list_map (fun (expr, check_expr) -> 
+      match check_expr with
+      | FileExpr s -> 
+          (* can't check if it's a file *)
+          let expr_t = deduce_expr_type trig_env env expr in
+          expr_t, check_expr
+      | InlineExpr e -> 
+          (* create a dummy equals to check both expressions *)
+          let e_test = H.mk_eq expr e in
+          let e_test_t = deduce_expr_type trig_env env e_test in
+          let e_l, e_r = decompose_eq e_test_t in
+          e_l, InlineExpr e_r
+      ) testl
+    in p', testl'
+  in
+  match prog_test with
+  | ProgTest(p, testl) -> 
+      let p', tl' = proc p testl in
+      ProgTest(p', tl')
+  | NetworkTest(p, testl) -> 
+      let p', tl' = proc p testl in
+      NetworkTest(p', tl')
+  | ExprTest p_t_l ->
+      (* change format so we can still use proc *)
+      let p_t_l' = list_map (fun (p, e, check) ->
+        let p', testl = proc p [e, check] in
+        let e', check' = hd testl in
+        p', e', check'
+      ) p_t_l
+      in 
+      ExprTest p_t_l'
+

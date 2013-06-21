@@ -963,5 +963,5 @@ let gen_dist p partmap ast =
       modified_roles ast in
   let foreign = List.filter (fun d -> U.is_foreign d) prog in
   let rest = List.filter (fun d -> not @: U.is_foreign d) prog in
-  U.renumber_program_ids (foreign @ rest)
+  snd @: U.renumber_program_ids (foreign @ rest)
 

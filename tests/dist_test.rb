@@ -135,7 +135,7 @@ def test_file(file, dbt_path, k3_path)
 	end
 
 	# append the test from genmaps.rb
-    genmaps = File.join($cur_path, "./genmaps.rb")
+  genmaps = File.join($cur_path, "./genmaps.rb")
 	puts "#{genmaps} --distrib temp.trace >> temp.k3dist"
 	`#{genmaps} --distrib temp.trace >> temp.k3dist`
 

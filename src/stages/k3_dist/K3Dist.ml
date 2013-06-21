@@ -2,6 +2,19 @@
 open Util
 open ProgInfo
 open K3Helpers
+module G = K3Global
+
+(* initial vid to put in initialization statements *) 
+let init_vid = "__init_vid__"
+
+(* global declaration of default vid to put into every map *)
+let init_vid_k3 = 
+  mk_global_val_init init_vid t_vid @:
+    (* epoch, counter=0, node hash *)
+    mk_tuple [mk_cint 0; mk_cint 0; mk_apply (mk_var "hash_addr") G.me_var]
+
+let min_vid_k3 = mk_tuple [mk_cint 0; mk_cint 0; mk_cint 0]
+
 
 (* trigger argument manipulation convenience functions *)
 let arg_types_of_t p trig_nm = extract_arg_types (args_of_t p trig_nm)

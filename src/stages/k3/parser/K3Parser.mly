@@ -671,6 +671,7 @@ program_test :
     | program EXPECTED named_expr_list     { ProgTest ($1, $3) }
     | program NETWORK EXPECTED named_expr_list { NetworkTest ($1, $4) }
     | program EXPECTED error               { print_error "invalid expected value list" }
+    | program NETWORK EXPECTED error       { print_error "invalid expected value list" }
     | program error                        { print_error "no expected values specified for program test" }
 ;
 
@@ -687,6 +688,7 @@ expression_test :
 named_expr_list :
     | expr GETS check_expr                          { [$1, $3] }           
     | expr GETS check_expr COMMA named_expr_list    { $5@[$1, $3] }
+    | expr GETS error { print_error "invalid check expression"}
 ;
 
 check_expr :

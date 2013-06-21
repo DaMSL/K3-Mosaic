@@ -21,7 +21,8 @@ let lcut () = [lazy (pbsi 0 0)] (* print nothing or split line *)
 let lind () = [lazy (pbsi 1 2)] (* print break with indent or space *)
 let lsp () = [lazy (pbsi 1 0)] (* print space or split line *)
 let lps s = [lazy (ps s)]      (* print string *)
-let lps_list ?(sep=", ") cut_t f l = [lazy (ps_list ~sep:sep cut_t (force_list |- f) l)]
+let lps_list ?(sep=", ") cut_t f l = 
+  [lazy (ps_list ~sep:sep cut_t (force_list |- f) l)]
 
 (* type we pass all the way down for configuring behaviors *)
 type config = {verbose_types:bool;
@@ -448,17 +449,46 @@ let string_of_type t = wrap_f @: fun () ->
   force_list @: lazy_type verbose_types_config t
 
 (* print a K3 expression in syntax *)
-let string_of_expr e = wrap_f @: fun () -> force_list @: lazy_expr default_config e
+let string_of_expr ?uuid_highlight e = 
+  let config = match uuid_highlight with 
+    | None   -> default_config
+    | _      -> {default_config with uuid=uuid_highlight}
+  in
+  wrap_f @: fun () -> force_list @: lazy_expr config e
 
 (* print a K3 program in syntax *)
-let string_of_program ?(uuid_highlight=None) prog = 
+let string_of_program ?uuid_highlight prog = 
   let config = match uuid_highlight with 
     | None -> default_config
-    | _ -> {default_config with uuid=uuid_highlight}
+    | _    -> {default_config with uuid=uuid_highlight}
   in
   wrap_f @: fun () -> 
     let l = lps_list ~sep:"" CutHint (lazy_declaration config |- fst) prog in
     obx 0;  (* vertical box *)
     force_list l;
     cb
+
+(* print a k3 program with test expressions *)
+let string_of_program_test ?uuid_highlight ptest = 
+  (* print a check_expr *)
+  let string_of_check_expr = function
+      | FileExpr s -> "file "^s
+      | InlineExpr e -> string_of_expr ?uuid_highlight e
+  in
+  (* print a test expression *)
+  let string_of_test_expr (e, check_e) =
+    Printf.sprintf "%s = %s"
+      (string_of_expr ?uuid_highlight e)
+      (string_of_check_expr check_e)
+  in
+  match ptest with
+  | NetworkTest(p, checklist) -> 
+      Printf.sprintf "%s\n\nnetwork expected\n\n%s"
+        (string_of_program ?uuid_highlight p)
+        (String.concat "\n\n" @: list_map string_of_test_expr checklist)
+  | ProgTest(p, checklist) -> 
+      Printf.sprintf "%s\n\nexpected\n\n%s"
+        (string_of_program ?uuid_highlight p)
+        (String.concat "\n\n" @: list_map string_of_test_expr checklist)
+  | ExprTest _ -> failwith "can't print an expression test"
 

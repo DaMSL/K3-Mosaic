@@ -367,30 +367,68 @@ let pre_order_linearization children node = node::(List.flatten children)
 let post_order_linearization children node = (List.flatten children)@[node]
 
 (* Produce the same tree with new ids top down *)
-let renumber_ast_ids (exp:K3.AST.expr_t) num_ref =
+let renumber_expr_ids ~start (exp:K3.AST.expr_t) =
+  let num_ref = ref start in
   let modify i acc_children t =
     mk_tree @: (((i, tag_of_expr t), meta_of_expr t), acc_children)
   in
-  fold_tree1 (fun _ _ -> num_ref := !num_ref + 1; !num_ref) modify 0 exp
-
+  !num_ref, fold_tree1 (fun _ _ -> num_ref := !num_ref + 1; !num_ref) modify 0 exp
+  
 (* renumber ids for a whole program *)
-let renumber_program_ids prog =
-  let num = ref 0 in
-  let handle_code x y z e = Code(x,y,z,renumber_ast_ids e num) in
-  let handle_flow acc = function
-    | (Source(Code(x,y,z,e)),a) -> (Source(handle_code x y z e),a)::acc
-    | (Sink(Code(x,y,z,e)),a)   ->   (Sink(handle_code x y z e),a)::acc
-    | x -> x::acc
+let renumber_program_ids ?(start=0) prog =
+  let handle_code num x y z e = 
+    let num', e' = renumber_expr_ids e ~start:num in
+    num', Code(x,y,z,e') 
+  in
+  let handle_flow num = function
+    | Source(Code(x,y,z,e)),a -> 
+        let num', code = handle_code num x y z e in
+        num', (Source code, a)
+    | Sink(Code(x,y,z,e)), a -> 
+        let num', code = handle_code num x y z e in
+        num', (Sink code, a)
+    | x -> num, x
   in 
-  let handle_dec acc = function
-    | (Global(x, y, Some e),a) -> 
-        (Global(x, y, Some (renumber_ast_ids e num)),a)::acc
-    | (Flow(fs),a) -> 
-        (Flow(List.rev @: List.fold_left handle_flow [] fs),a)::acc
-    | (Role(id, fs),a) -> 
-        (Role(id, List.rev @: List.fold_left handle_flow [] fs),a)::acc
-    | x -> x::acc
-  in List.rev @: List.fold_left handle_dec [] prog
+  let handle_dec num = function
+    | Global(x, y, Some e), a -> 
+        let num', e' = renumber_expr_ids e ~start:num in
+        num', (Global(x, y, Some e'), a)
+    | Flow(fs), a -> 
+        let num', fs' = mapfold handle_flow num fs in
+        num', (Flow(fs'), a)
+    | Role(id, fs),a -> 
+        let num', fs' = mapfold handle_flow num fs in
+        num', (Role(id, fs'), a)
+    | x -> num, x
+  in 
+  mapfold handle_dec start prog
+
+let renumber_test_program_ids ?(start=0) test_p = 
+  let renumber_test_list start_num l =
+    mapfold (fun num (e, check_e) ->
+      match check_e with
+      | FileExpr _ -> 
+          let n, e' = renumber_expr_ids ~start:num e in
+          n, (e', check_e)
+      | InlineExpr e2 ->
+          let n, e'  = renumber_expr_ids ~start:num e in
+          let n, e2' = renumber_expr_ids ~start:n e2 in
+          n, (e', InlineExpr e2')
+    ) start_num l
+  in
+  let proc p testl = 
+    let num, p' = renumber_program_ids ~start:start p in
+    let num, t_l  = renumber_test_list num testl in
+    num, (p', t_l)
+  in 
+  match test_p with
+  | ProgTest(p, testl) -> 
+      let n, (p', t_l) = proc p testl in
+      n, ProgTest(p', t_l)
+  | NetworkTest(p, testl) -> 
+      let n, (p', t_l) = proc p testl in
+      n, NetworkTest(p', t_l)
+  | _ -> failwith "can't renumber expression test"
 
 let rec list_of_k3_container e = 
   match tag_of_expr e with

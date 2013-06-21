@@ -27,8 +27,6 @@ let (@=?)  actual expected = AssertValueEquals(expected, actual)
 
 (* Parsing *)
 let parse_expr s = K3Parser.expr K3Lexer.tokenize (Lexing.from_string s)
-let parse_expression_test s = K3Parser.expression_test K3Lexer.tokenize (Lexing.from_string s)
-let parse_program_test s = K3Parser.program_test K3Lexer.tokenize (Lexing.from_string s)
 
 (* --- Evaluation --- *)
 (* we pass in an optional interpreter environment, a program for type bindings,

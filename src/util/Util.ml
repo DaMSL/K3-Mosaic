@@ -130,6 +130,17 @@ let list_map f l = List.rev @: List.rev_map f l
 let list_mapi f l = List.rev @: snd @: List.fold_left
   (fun (i,acc) x -> i+1, (f (i,x))::acc) (0,[]) l
 
+(* a cross between a map and a fold. Can only map the current list, but also
+ * gets another value to play with, and no need to project out the temporary
+ * value *)
+let mapfold fn init l = 
+  let a, b = 
+    List.fold_left (fun (v, acc) x ->
+      let v', x' = fn v x in
+      v', x'::acc
+    ) (init, []) l
+  in a, List.rev b
+
 (* calls f on its output over and over, num times *)
 let iterate f init num = 
   let rec loop acc = function
