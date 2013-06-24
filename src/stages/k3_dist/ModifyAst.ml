@@ -14,17 +14,6 @@ exception InvalidAst of string
 
 (* --- Map declarations --- *)
 
-(* initial vid to put in initialization statements *) 
-let init_vid = "__init_vid__"
-
-(* global declaration of default vid to put into every map *)
-let init_vid_k3 = 
-  mk_global_val_init init_vid t_vid @:
-    (* epoch, counter=0, node hash *)
-    mk_tuple [mk_cint 0; mk_cint 0; mk_apply (mk_var "hash_addr") G.me_var]
-
-let min_vid_k3 = mk_tuple [mk_cint 0; mk_cint 0; mk_cint 0]
-
 (* change the initialization values of global maps to have the vid as well *)
 (* receives the new types to put in and the starting expression to change *)
 (* inserts a reference to the default vid var for that node *)
