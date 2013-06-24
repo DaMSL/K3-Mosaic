@@ -15,7 +15,7 @@ let map_latest_val_code p map_id =
   let inner_assoc = 
     (* find the max vid *)
     mk_assoc_lambda
-      (wrap_args ["_max_vid_", t_vid; "_acc_", wrap_ttuple map_types])
+      (wrap_args ["_max_vid_", t_vid; "_acc_", set_type])
       (wrap_args map_ids_types_vid) @:
       mk_if
         (* if the vid is greater than the max, we use only the new tuple *)
@@ -37,18 +37,18 @@ let map_latest_val_code p map_id =
   (* if the map is a singleton, we need to use just a fold. Otherwise, we need a
    * groupby. In either case, we need to project out what we don't need *)
   if null map_ids_no_val then
-    mk_map
-      (mk_lambda (wrap_args ["_", t_unit; "_project_", wrap_ttuple map_types]) @:
-        mk_var "_project_") @:
-      mk_agg
+    mk_let_many
+      ["_", t_unit; "_project_", set_type] 
+      (mk_agg
         inner_assoc
         (mk_tuple [min_vid_k3; mk_empty set_type]) @:
-        mk_var @: P.map_name_of p map_id
+        mk_var @: P.map_name_of p map_id) @:
+      mk_var "_project_"
   else
     mk_map
       (mk_assoc_lambda 
         (wrap_args ["_", t_unit])
-        (wrap_args ["_", t_unit; "_project_", wrap_ttuple map_types]) @:
+        (wrap_args ["_", t_unit; "_project_", set_type]) @:
         mk_var "_project_") @:
       mk_gbagg 
         (* group by the keys excluding the vid *)
