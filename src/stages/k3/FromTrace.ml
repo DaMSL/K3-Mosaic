@@ -132,6 +132,8 @@ let update_maps (maps:(string, map_t) Hashtbl.t) events =
     Hashtbl.iter (fun mapname eff_list ->
       let map = Hashtbl.find maps mapname in
       List.iter (fun (op, ivars, ovars, v) ->
+        (* debug *)
+        print_endline @: mapname^" "^concat_f "," ovars^":= "^sof v;
         let m' = match map, op with
         | SingletonMap m, RelEvent.Insert -> 
             SingletonMap(SingletonMap.set m ivars ovars v)
@@ -231,6 +233,7 @@ let parse_trace file ~dist =
         line+1, sys_ready, events 
     ) (1, false, []) lines
   in
+  let events = List.rev events in (* reverse events *)
   let s = ["trigger go(id : int) {} = do {\n"] in
   let s = if sys_ready then s@["  send(system_ready_event, mem 1);\n"] else s
   in
