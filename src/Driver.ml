@@ -308,10 +308,22 @@ let typed_program_test_with_globals prog_test =
       end
   | ExprTest(p_ts) -> failwith "expr_test unhandled"
 
+
 (* for most functions, we don't need the globals included *)
 let typed_program p =
   K3Global.remove_globals cmd_line_params.node_address cmd_line_params.peers @: 
       typed_program_with_globals p
+
+(* don't include globals *)
+let typed_program_test prog_test =
+  let prog_test' = typed_program_test_with_globals prog_test in
+  let remove_g p = 
+    K3Global.remove_globals cmd_line_params.node_address cmd_line_params.peers p
+  in
+  match prog_test' with
+  | ProgTest(p, tl)    -> ProgTest(remove_g p, tl)
+  | NetworkTest(p, tl) -> NetworkTest(remove_g p, tl)
+  | ExprTest(p_ts)     -> failwith "expr_test unhandled"
 
 let imperative_program p =
   RK3ToImperative.imperative_of_program (fun () -> []) (typed_program p)
@@ -374,7 +386,7 @@ let print_k3_dist_test_program = function
       let tests_vals = list_map (fun e -> e, FileExpr "dummy") tests in
       let prog_test = NetworkTest(p, tests_vals) in
       let _, prog_test = renumber_test_program_ids prog_test in
-      let prog_test = typed_program_test_with_globals prog_test in
+      let prog_test = typed_program_test prog_test in
       (* print out expected values *)
       let trace_files = cmd_line_params.trace_files in
       let trace_s = 
