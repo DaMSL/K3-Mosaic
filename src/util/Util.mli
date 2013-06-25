@@ -89,6 +89,8 @@ val list_mapi : (int * 'a -> 'b) -> 'a list -> 'b list
  * value *)
 val mapfold : ('b -> 'a -> 'b * 'c) -> 'b -> 'a list -> 'b * 'c list
 
+val filter_map : ('a -> 'b option) -> 'a list -> 'b list
+
 (* calls f on its output over and over, num times *)
 val iterate : ('a -> 'a) -> 'a -> int -> 'a
 
@@ -131,6 +133,8 @@ val array_map : ('a -> 'b) -> 'a array -> 'b list
 (* wrap an expression in some *)
 val some : 'a -> 'a option
 
+val is_some : 'a option -> bool
+
 (* unwrap a some. Fail if not a Some *)
 val unwrap_some : 'a option -> 'a
 
@@ -153,3 +157,14 @@ val str_drop : int -> string -> string
 val str_take_end : int -> string -> string
 
 val str_drop_end : int -> string -> string
+
+(* --- regexp helpers --- *)
+
+(* returns a list of groups of a regexp *)
+val r_groups : string -> r:string -> n:int -> string option list
+
+(* takes regexp, str *)
+val r_split : string -> string -> string list
+
+(* regexp -> str -> bool *)
+val r_match : string -> string -> bool

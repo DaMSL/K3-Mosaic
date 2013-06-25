@@ -27,6 +27,7 @@ module CPT = CPP.CPPTarget.ASTImport
 module CPPGen = CPP.CPPGenerator
 module P = Printf
 open ImperativeToCPP
+open FromDBToaster
 
 module PS = K3PrintSyntax
 
@@ -180,23 +181,25 @@ type parameters = {
     mutable print_types  : bool; (* TODO: change to a debug flag *)
     mutable debug_info   : bool;
     mutable verbose      : bool;
+    mutable trace_files  : string list;
   }
 
 let cmd_line_params : parameters = {
-    action       = ref Print;
-    test_mode    = ref ProgramTest;
-    in_lang      = K3in;
-    out_lang     = K3;
-    search_paths = default_search_paths;
-    input_files  = [];
-    node_address = default_node_address;
-    role         = default_role;
-    peers        = default_peers;
+    action        = ref Print;
+    test_mode     = ref ProgramTest;
+    in_lang       = K3in;
+    out_lang      = K3;
+    search_paths  = default_search_paths;
+    input_files   = [];
+    node_address  = default_node_address;
+    role          = default_role;
+    peers         = default_peers;
     partition_map = [];
-    run_length   = default_run_length;
-    print_types  = default_print_types;
-    debug_info   = default_debug_info;
-    verbose      = default_verbose;
+    run_length    = default_run_length;
+    print_types   = default_print_types;
+    debug_info    = default_debug_info;
+    verbose       = default_verbose;
+    trace_files   = [];
   }
 
 (* Error handlers *)
@@ -365,14 +368,23 @@ let print_k3_program f = function
 
 (* create and print a k3 program with an expected section *)
 let print_k3_dist_test_program = function
-  | K3DistData (p, meta) -> 
+  | idx, K3DistData (p, meta) -> 
       let tests = GenTest.expected_code_all_maps meta in
       (* fill the check_exprs with dummy values to be replaced *)
       let tests_vals = list_map (fun e -> e, FileExpr "dummy") tests in
       let prog_test = NetworkTest(p, tests_vals) in
       let _, prog_test = renumber_test_program_ids prog_test in
       let prog_test = typed_program_test_with_globals prog_test in
-      print_endline @: PS.string_of_program_test prog_test
+      (* print out expected values *)
+      let trace_files = cmd_line_params.trace_files in
+      let trace_s = 
+        if not @: null cmd_line_params.trace_files then
+          let trace_file = at trace_files idx in
+          FromTrace.parse_trace trace_file ~dist:true
+        else ""
+      in
+      print_endline @: PS.string_of_program_test prog_test ^ trace_s
+
   | _ -> error "Cannot print this type of data"
 
 let print_reified_k3_program = function
@@ -408,16 +420,17 @@ let print_cpp_program = function
   
 (* Top-level print handler *)
 let print params inputs =
+  let idx_inputs = insert_index_fst 0 inputs in
   let sofp = string_of_program ~verbose:cmd_line_params.verbose in
   let print_fn = match params.out_lang with
-    | AstK3 | AstK3Dist -> print_k3_program sofp
-    | K3 | K3Dist       -> print_k3_program PS.string_of_program
+    | AstK3 | AstK3Dist -> print_k3_program sofp |- snd
+    | K3 | K3Dist       -> print_k3_program PS.string_of_program |- snd
     | K3DistTest        -> print_k3_dist_test_program
-    | ReifiedK3         -> print_reified_k3_program
-    | Imperative        -> print_imperative_program params.print_types
-    | CPPInternal       -> print_cppi_program params.print_types
-    | CPP               -> print_cpp_program
-  in List.iter print_fn inputs
+    | ReifiedK3         -> print_reified_k3_program |- snd
+    | Imperative        -> print_imperative_program params.print_types |- snd
+    | CPPInternal       -> print_cppi_program params.print_types |- snd
+    | CPP               -> print_cpp_program |- snd
+  in List.iter print_fn idx_inputs
 
 (* Test actions *)
 let test params inputs =
@@ -528,6 +541,8 @@ let load_peer file =
   cmd_line_params.peers 
     <- cmd_line_params.peers @ (List.map parse_ip_role line_lst)
 
+let add_dbt_trace file = 
+  cmd_line_params.trace_files <- cmd_line_params.trace_files @ [file]
 
 let load_partition_map file = 
   let str = read_file file in
@@ -567,6 +582,8 @@ let param_specs = Arg.align
       "file     Load a partition map from a file";
   "-peers", Arg.String load_peer,
       "file     Load peer address from a file";
+  "-trace", Arg.String add_dbt_trace,
+      "file     Load a DBToaster trace file";
 
   (* Debugging parameters *)
   "-t", Arg.Unit set_print_types,

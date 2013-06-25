@@ -141,6 +141,14 @@ let mapfold fn init l =
     ) (init, []) l
   in a, List.rev b
 
+let filter_map fn l =
+  List.rev @: 
+    List.fold_left (fun acc x ->
+      match fn x with
+      | None   -> acc
+      | Some y -> y::acc
+    ) [] l
+
 (* calls f on its output over and over, num times *)
 let iterate f init num = 
   let rec loop acc = function
@@ -251,6 +259,8 @@ let array_map f arr =
 (* wrap with some *)
 let some x = Some(x)
 
+let is_some = function None -> false | Some _ -> true
+
 (* unwrap a some. Fail if not a Some *)
 let unwrap_some = function None -> failwith "Not a Some" | Some x -> x
 
@@ -286,4 +296,22 @@ let str_drop_end i s = let l = String.length s in
 let str_take_end i s = let l = String.length s in
   let i' = if i > l then l else i in
   Str.last_chars s i'
+
+(* --- regexp helpers --- *)
+
+(* returns a list of groups of a regexp *)
+let r_groups str ~r ~n =
+  if Str.string_match (Str.regexp r) str 0 then
+    list_map (fun i ->
+      try some @: Str.matched_group i str
+      with Not_found -> None
+    ) @: create_range 1 n
+  else []
+
+let r_split r str = Str.split (Str.regexp r) str
+
+let r_match r str = Str.string_match (Str.regexp r) str 0
+
+
+
 
