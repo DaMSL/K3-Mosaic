@@ -1,6 +1,12 @@
 (* Convert a file from a DBToaster trace to a test of values *)
 open Util
 
+(* redefine sof (string_of_float) to write integers if possible *)
+let sof f = 
+  let i = iof f in
+  if foi i = f then soi i
+  else sof f
+
 (* concat a list of floats into a string *)
 let concat_f str f_list =
   let s_list = list_map (fun f -> sof f) f_list in
@@ -100,11 +106,11 @@ module RelEvent = struct
     Hashtbl.replace evt.effects mapn eff';
     evt
 
-  let del_effect evt mapn ivars ovars v =
+  let del_effect evt mapn ivars ovars =
     let eff_list = 
       try Hashtbl.find evt.effects mapn
       with Not_found -> [] in
-    let eff' = (Delete, ivars, ovars, v):: eff_list in
+    let eff' = (Delete, ivars, ovars, 0.):: eff_list in
     Hashtbl.replace evt.effects mapn eff';
     evt
 
@@ -121,6 +127,7 @@ type map_t = SingletonMap of SingletonMap.t | OutputMap of OutputMap.t
 
 (* update map values to match events *)
 let update_maps (maps:(string, map_t) Hashtbl.t) events =
+  if Hashtbl.length maps = 0 then failwith "empty maps";
   List.iter (fun evt ->
     Hashtbl.iter (fun mapname eff_list ->
       let map = Hashtbl.find maps mapname in
@@ -155,15 +162,15 @@ let parse_trace file ~dist =
   let (maps : (string, map_t) Hashtbl.t) = Hashtbl.create 0 in
   let lines = read_file_lines file in
 
-  let sys_ready, events =
-    List.fold_left (fun (sys_ready, events) str ->
+  let _, sys_ready, events =
+    List.fold_left (fun (line, sys_ready, events) str ->
       let m = r_groups str ~n:4
-        ~r:"DECLARE MAP\
-        \\([^(]+\\)\\((int\\|float)\\)\\[\\([^\\]]*\\)\\]\\[\\([^\\]]*\\)\\]"
+        ~r:"DECLARE MAP \\([^(]+\\)(\\(int\\|float\\))\\[\\([^]]*\\)\\]\\[\\([^]]*\\)\\]"
       in
-      if not (null m) then
-        let mapname, maptype, ivars, ovars = at m 0, at m 1, at m 2, at m 4 in
-        if is_some ivars then failwith "Input Vars Unsupported";
+      if not @: null m then
+        let mapname, maptype, ivars, ovars = at m 0, at m 1, at m 2, at m 3 in
+        if is_some ivars && ivars <> Some "" then 
+          failwith @: "input vars unsupported at line "^soi line;
         let new_map = match ovars, mapname, maptype with
           | None, Some mapname, Some maptype ->
               SingletonMap(SingletonMap.init mapname maptype)
@@ -175,47 +182,54 @@ let parse_trace file ~dist =
                   hd l, at l 1) ovars_s in
               OutputMap(OutputMap.init mapname maptype ovars otypes)
 
-          | _ -> failwith "missing values"
+          | _ -> failwith @: "missing values at line "^soi line
         in Hashtbl.add maps (unwrap_some mapname) new_map;
-        sys_ready, events
+        line+1, sys_ready, events
       else
-      if r_match "ON SYSTEM READY {\n[^}]*}" str then true, events else
+      if r_match "ON SYSTEM READY {\n[^}]*}" str then 
+        line+1, true, events else
       let m = r_groups str ~n:3
-        ~r:"ON \\(\\+\\|-\\) \\([^(]+\\)\\([^)]*\\) <- \\[\\([^\\]]*\\)\\]" in
+        ~r:"ON \\(\\+\\|-\\) \\([^(]+\\)([^)]*) <- \\[\\([^]]*\\)\\]" in
       if not @: null m then
         match at m 0, at m 1, at m 2 with
         | Some op, Some relname, Some vals ->
             let vals = foss @: r_split "; *" vals in
             let evt = RelEvent.init op relname vals in
-            sys_ready, evt::events
-        | _ -> failwith "invalid input for ON"
+            line+1, sys_ready, evt::events
+        | _ -> failwith @: "invalid input for ON at line "^soi line
       else
-      let modify_effect fn = function
-        | (Some mapname)::(Some ivars)::(Some ovars)::(Some v)::_ ->
-          let ivars_f = if ivars = "-" then [] else foss @: r_split "; " ivars in
-          let ovars_f = if ovars = "-" then [] else foss @: r_split "; " ovars in
-          let v_f = fos v in
-          begin match events with
-          | []    -> failwith "No event to update!"
-          | e::es -> 
-              let e' = fn e mapname ivars_f ovars_f v_f in
-              sys_ready, e'::es
-          end
-
-        | _ -> failwith "error in modify_effect!"
-      in
       let m = r_groups str ~n:4
-        ~r:"UPDATE '\\([^']*\\)'\\[\\([^\\]]*\\)\\]\\[\\([^\\]]*\\)\\]" in
-      if not @: null m then
-        modify_effect RelEvent.add_effect m 
+        ~r:"UPDATE '\\([^']*\\)'\\[\\([^]]*\\)\\]\\[\\([^]]*\\)\\] := \
+          \\(.*\\)$" in
+      if not @: null m then match m with
+          | (Some mapname)::(Some ivars)::(Some ovars)::(Some v)::_ ->
+            let ivars_f = if ivars = "-" then [] else foss @: r_split "; " ivars in
+            let ovars_f = if ovars = "-" then [] else foss @: r_split "; " ovars in
+            let v_f = fos v in
+            begin match events with
+            | []    -> failwith @: "No event to update at line "^soi line
+            | e::es -> 
+                let e' = RelEvent.add_effect e mapname ivars_f ovars_f v_f in
+                line+1, sys_ready, e'::es
+            end
+          | _ -> failwith @: "error in update at line "^soi line
       else
       let m = r_groups str ~n:3
-        ~r:"REMOVE '\\([^']*\\)'\\[\\([^\\]]*\\)\\]\\[\\([^\\]]*\\)\\]" in
-      if not @: null m then
-        modify_effect RelEvent.del_effect m 
+        ~r:"REMOVE '\\([^']*\\)'\\[\\([^]]*\\)\\]\\[\\([^]]*\\)\\]" in
+      if not @: null m then match m with
+          | (Some mapname)::(Some ivars)::(Some ovars)::_ ->
+            let ivars_f = if ivars = "-" then [] else foss @: r_split "; " ivars in
+            let ovars_f = if ovars = "-" then [] else foss @: r_split "; " ovars in
+            begin match events with
+            | []    -> failwith @: "No event to update at line "^soi line
+            | e::es -> 
+                let e' = RelEvent.del_effect e mapname ivars_f ovars_f in
+                line+1, sys_ready, e'::es
+            end
+          | _ -> failwith @: "error in update at line "^soi line
       else 
-        sys_ready, events 
-    ) (false, []) lines
+        line+1, sys_ready, events 
+    ) (1, false, []) lines
   in
   let s = ["trigger go(id : int) {} = do {\n"] in
   let s = if sys_ready then s@["  send(system_ready_event, mem 1);\n"] else s
