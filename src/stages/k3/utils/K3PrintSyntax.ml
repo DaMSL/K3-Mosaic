@@ -75,7 +75,8 @@ let lazy_annos c = function
   | [] -> [] 
   | annos -> lps "@ " <| lazy_brace @: lps_list ~sep:"; " NoCut (lazy_anno c) annos
 
-let rec lazy_base_type c in_col = function
+let rec lazy_base_type c in_col t = 
+  let proc () = match t with
   | TUnit -> lps "unit"
   | TBool -> lps "bool"
   | TByte -> lps "byte"
@@ -85,7 +86,7 @@ let rec lazy_base_type c in_col = function
   | TMaybe(vt) -> lps "maybe " <| lazy_value_type c false vt
   | TTuple(vts) -> 
       (* if we're top level of a collection, drop the parentheses *)
-      let inner () = lps_list NoCut (lazy_value_type c false) vts in
+      let inner () = lps_list NoCut (lazy_value_type c in_col) vts in
       if in_col then inner ()
       else lps "(" <| inner () <| lps ")"
   | TCollection(TSet, vt) -> 
@@ -97,6 +98,9 @@ let rec lazy_base_type c in_col = function
   | TAddress -> lps "address" (* ? *)
   | TTarget bt -> lps "target" <| lazy_base_type c false bt
   | TUnknown -> lps "unknown"
+  in
+  if c.verbose_types && in_col then lps "c:" <| proc () 
+  else proc ()
 
 (* TODO: annotations *)
 and lazy_mutable_type c in_col = function
@@ -106,10 +110,7 @@ and lazy_mutable_type c in_col = function
 
 and lazy_value_type c in_col = function
   | TIsolated mt -> lazy_mutable_type c in_col mt
-  | TContained mt -> 
-      if c.verbose_types then lps "c:" <| 
-        lazy_mutable_type c in_col mt
-      else lazy_mutable_type c in_col mt
+  | TContained mt -> lazy_mutable_type c in_col mt
 
 let lazy_type c = function
   | TFunction(f,t) ->
