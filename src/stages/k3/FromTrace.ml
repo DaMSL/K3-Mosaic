@@ -133,7 +133,7 @@ let update_maps (maps:(string, map_t) Hashtbl.t) events =
       let map = Hashtbl.find maps mapname in
       List.iter (fun (op, ivars, ovars, v) ->
         (* debug *)
-        print_endline @: mapname^" "^concat_f "," ovars^":= "^sof v;
+        (*print_endline @: mapname^" "^concat_f "," ovars^":= "^sof v;*)
         let m' = match map, op with
         | SingletonMap m, RelEvent.Insert -> 
             SingletonMap(SingletonMap.set m ivars ovars v)
@@ -152,8 +152,7 @@ let update_maps (maps:(string, map_t) Hashtbl.t) events =
 (* dump a map into a string *)
 let dump_map mapname mapdata =
   String.concat "" @: 
-    "\n"::
-    mapname::" = {\n"::
+    "{\n"::
     (match mapdata with
     | SingletonMap m -> SingletonMap.val_s m
     | OutputMap m    -> OutputMap.val_s m)::"\n"::
@@ -234,59 +233,67 @@ let parse_trace file ~dist =
     ) (1, false, []) lines
   in
   let events = List.rev events in (* reverse events *)
-  let s = ["trigger go(id : int) {} = do {\n"] in
-  let s = if sys_ready then s@["  send(system_ready_event, mem 1);\n"] else s
-  in
-  let len = List.length events in
-  let s2 = list_mapi (fun (i, x) ->
-    let last = if i >= len - 1 then true else false in
-    Printf.sprintf "  %s\n" @: RelEvent.dispatch_s x ~last
-  ) events
-  in
-  let s2 = s2@["}"] in
 
-  let s3 = 
-    if dist then
-      "\n"::
-      "role switch {\n"::
-      "  source s_on_init : int = stream([1])\n"::
-      "  bind s_on_init -> on_init\n"::
-      "  consume s_on_init\n"::
-      "  source s1 : int = stream([1])\n"::
-      "  bind s1 -> go\n"::
-      "  consume s1\n"::
-      "}\n"::
-      "\n"::
-      "role node {\n"::
-      "  source s_on_init : int = stream([1])\n"::
-      "  bind s_on_init -> on_init\n"::
-      "  consume s_on_init\n"::
-      "}\n"::
-      "\n"::
-      "default role switch\n"::
-      "\n"::
-      "network expected\n"::
-      []
-    else (* single-site *)
-      "\n"::
-      "role test {\n"::
-      "  source s1 : int = stream([1])\n"::
-      "  bind s1 -> go\n"::
-      "  consume s1\n"::
-      "}\n"::
-      "\n"::
-      "default role test\n"::
-      "\n"::
-      "expected\n"::
-      []
+  (* the extra input trigger *) 
+  let trig_s =
+    let s = ["trigger go(id : int) {} = do {\n"] in
+    let s = if sys_ready then s@["  send(system_ready_event, me, 1);\n"] else s
+    in
+    let len = List.length events in
+    let s2 = list_mapi (fun (i, x) ->
+      let last = if i >= len - 1 then true else false in
+      Printf.sprintf "  %s\n" @: RelEvent.dispatch_s x ~last
+    ) events
+    in
+    let s2 = s2@["}\n"] in
+    String.concat "" @: s@s2
   in
+  let str_make = String.concat "\n" in
+  let role_s = if dist then
+    (str_make @:
+      "role switch {"::
+      "  source s_on_init : int = stream([1])"::
+      "  bind s_on_init -> on_init"::
+      "  consume s_on_init"::
+      "  source s1 : int = stream([1])"::
+      "  bind s1 -> go"::
+      "  consume s1"::
+      "}"::
+      "role node {"::
+      "  source s_on_init : int = stream([1])"::
+      "  bind s_on_init -> on_init"::
+      "  consume s_on_init"::
+      "}"::[])::
+      "default role switch"::
+      []
+  else (* single-site *)
+    (str_make @:
+    "role test {"::
+    "  source s1 : int = stream([1])"::
+    "  bind s1 -> go"::
+    "  consume s1"::
+    "}"::[])::
+    "default role test\n"::
+    []
+  in
+  (* update all maps with the event data *)
   update_maps maps events;
   (* list of all maps and their data *)
   let mapl = 
     Hashtbl.fold (fun name mapdata acc ->
-      (dump_map name mapdata)::acc
+      (name, dump_map name mapdata)::acc
     ) maps [] 
   in
-  let map_s = String.concat ", " mapl in
-  let s' = s@s2@s3@[map_s] in
-  String.concat "" s'
+  (* return the tree components we have to add *)
+  str_make (trig_s::role_s), mapl
+
+(* combine the map strings (left string, right string) into their final form *)
+let dump_map_strings maps =
+  let maps' = list_map (fun (left_s, right_s) ->
+    String.concat "" @: left_s::" = "::[right_s]
+  ) maps 
+  in
+  String.concat ", " maps'
+
+
+

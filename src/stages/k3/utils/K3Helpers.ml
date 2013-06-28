@@ -102,10 +102,10 @@ let wrap_args id_typ =
     | _     -> invalid_arg "No ids, types for wrap_args"
 
 (* for deep arguments (using ATuple) *)
-let wrap_a2 id_arg =
+let wrap_args_deep id_arg =
   match id_arg with
-  | []  -> invalid_arg "Nothing to wrap in wrap_a2"
-  | [x] -> invalid_arg "No need for wrap_a2: single argument"
+  | []  -> invalid_arg "Nothing to wrap in wrap_args_deep"
+  | [x] -> invalid_arg "No need for wrap_args_deep: single argument"
   | xs  -> ATuple xs
 
 (* wrap function arguments, turning tmaybes to amaybes *)
@@ -348,6 +348,10 @@ let mk_let_many var_name_and_type_list var_values expr =
         (mk_lambda (wrap_args var_name_and_type_list) expr)
         var_values
 
+(* a let statement with deep argument matching *)
+let mk_let_deep args var_values expr =
+  mk_apply (mk_lambda args expr) var_values
+
 let mk_fst tuple_types tuple =
     mk_let_many (list_zip ["__fst";"__snd"] tuple_types) tuple (mk_var "__fst")
 
@@ -436,7 +440,7 @@ let mk_global_vid_op name tag =
   let lvid_id = fst @: List.split lvid_id_t in
   let rvid_id_t = types_to_ids_types "r" vid_types in
   let rvid_id = fst @: List.split rvid_id_t in
-  let arg_pair = wrap_a2 [wrap_args lvid_id_t; wrap_args rvid_id_t] in
+  let arg_pair = wrap_args_deep [wrap_args lvid_id_t; wrap_args rvid_id_t] in
   let arg_types = wrap_ttuple [wrap_ttuple vid_types; wrap_ttuple vid_types] in
   let op f i = 
     let nth_l = List.nth lvid_id in let nth_r = List.nth rvid_id in

@@ -45,7 +45,7 @@ let map_latest_val_code p map_id =
         mk_var @: P.map_name_of p map_id) @:
       mk_var "_project_"
   else
-    mk_map
+    mk_flatten @: mk_map
       (mk_assoc_lambda 
         (wrap_args ["_", t_unit])
         (wrap_args ["_", t_unit; "_project_", set_type]) @:
@@ -62,7 +62,7 @@ let map_latest_val_code p map_id =
 (* code for every map *)
 let expected_code_all_maps p =
   let mapl = P.get_map_list p in
-  list_map (map_latest_val_code p) mapl
+  list_map (fun m -> P.map_name_of p m, map_latest_val_code p m) mapl
   
       
 

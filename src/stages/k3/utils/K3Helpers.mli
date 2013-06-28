@@ -44,7 +44,14 @@ val wrap_ttuple_mut : value_type_t list -> value_type_t
 val wrap_tmaybe : value_type_t -> value_type_t 
 val wrap_tmaybes : value_type_t list -> value_type_t list
 val wrap_tfunc : value_type_t -> value_type_t -> type_t
+
+(* wrap a single layer of arguments *)
 val wrap_args : (id_t * value_type_t) list -> arg_t
+
+(* wrap multiple layers of arguments *)
+val wrap_args_deep : arg_t list -> arg_t
+
+(* wrap arguments, turning maybe types to maybe argument types *)
 val wrap_args_maybe : (id_t * value_type_t) list -> arg_t
 
 (* simple functions that enable easy construction of AST trees *)
@@ -182,10 +189,10 @@ val mk_let :
 
 (* macro to make a 'let many', where many values are assigned simultaneously *)
 val mk_let_many :
-  (id_t * value_type_t) list ->
-  expr_t ->
-  expr_t ->
-  expr_t
+  (id_t * value_type_t) list -> expr_t -> expr_t -> expr_t
+
+(* macro to make a deep-matching let statement *)
+val mk_let_deep : arg_t -> expr_t -> expr_t -> expr_t
 
 (* macro similar to fst *)
 val mk_fst: value_type_t list -> expr_t -> expr_t

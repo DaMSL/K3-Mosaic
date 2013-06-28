@@ -86,8 +86,9 @@ let rec lazy_base_type c in_col t =
   | TMaybe(vt) -> lps "maybe " <| lazy_value_type c false vt
   | TTuple(vts) -> 
       (* if we're top level of a collection, drop the parentheses *)
+      (* for verbose types, we leave them in *)
       let inner () = lps_list NoCut (lazy_value_type c in_col) vts in
-      if in_col then inner ()
+      if in_col && not c.verbose_types then inner ()
       else lps "(" <| inner () <| lps ")"
   | TCollection(TSet, vt) -> 
       lps "{" <| lazy_value_type c true vt <| lps "}"

@@ -27,7 +27,6 @@ module CPT = CPP.CPPTarget.ASTImport
 module CPPGen = CPP.CPPGenerator
 module P = Printf
 open ImperativeToCPP
-open FromDBToaster
 
 module PS = K3PrintSyntax
 
@@ -271,12 +270,15 @@ let parse_program parsefn lexfn file =
     close_in in_chan;
     prog
 
-let parse_program_k3 = parse_program K3Parser.program K3Lexer.tokenize
+let parse_k3_file = parse_program K3Parser.program K3Lexer.tokenize
 
-let parse_program_m3 = 
+let parse_m3_file = 
     parse_program Calculusparser.mapProgram Calculuslexer.tokenize
 
-let parse_test params = match !(params.test_mode) with
+let parse_k3_prog s = K3Parser.program K3Lexer.tokenize @: Lexing.from_string s
+let parse_k3_expr s = K3Parser.expr K3Lexer.tokenize @: Lexing.from_string s
+
+let parse_test_file params = match !(params.test_mode) with
   | ExpressionTest -> parse_program K3Parser.expression_test K3Lexer.tokenize
   | ProgramTest    -> parse_program K3Parser.program_test K3Lexer.tokenize
 
@@ -381,21 +383,37 @@ let print_k3_program f = function
 (* create and print a k3 program with an expected section *)
 let print_k3_dist_test_program = function
   | idx, K3DistData (p, meta) -> 
-      let tests = GenTest.expected_code_all_maps meta in
-      (* fill the check_exprs with dummy values to be replaced *)
-      let tests_vals = list_map (fun e -> e, FileExpr "dummy") tests in
-      let prog_test = NetworkTest(p, tests_vals) in
+      (* get the folded expressions for latest vid *)
+      let tests_by_map = GenTest.expected_code_all_maps meta in
+      (* get the test values from the dbtoaster trace if available *)
+      let p', test_vals =
+        if not @: null cmd_line_params.trace_files then
+          let code_s, maplist = 
+            let trace_file = at cmd_line_params.trace_files idx in
+            FromTrace.parse_trace trace_file ~dist:true
+          in
+          let map_final_l = 
+            list_map (fun (nm, code) -> nm, parse_k3_expr code) maplist in
+          (* join according to map name *)
+          let map_tests_join = assoc_join tests_by_map map_final_l in
+          let tests_vals = 
+            list_map (fun (_, (e, final)) -> e, InlineExpr final) 
+              map_tests_join
+          in
+          (* filter our all role stuff in the original generated ast *)
+          let filter_p = List.filter 
+            (fun d -> not @: is_role d || is_def_role d) p in
+          (* add the produced test roles and trigger *)
+          let new_p = filter_p @ parse_k3_prog code_s in
+          new_p, tests_vals
+        else 
+          (* we don't have a trace file for final value tests *)
+          p, list_map (fun (_, e) -> e, FileExpr "dummy") tests_by_map
+      in
+      let prog_test = NetworkTest(p, test_vals) in
       let _, prog_test = renumber_test_program_ids prog_test in
       let prog_test = typed_program_test prog_test in
-      (* print out expected values *)
-      let trace_files = cmd_line_params.trace_files in
-      let trace_s = 
-        if not @: null cmd_line_params.trace_files then
-          let trace_file = at trace_files idx in
-          FromTrace.parse_trace trace_file ~dist:true
-        else ""
-      in
-      print_endline @: PS.string_of_program_test prog_test ^ trace_s
+      print_endline @: PS.string_of_program_test prog_test
 
   | _ -> error "Cannot print this type of data"
 
@@ -467,10 +485,10 @@ let transform_to_k3_dist partmap p proginfo =
 
 let process_inputs params =
   let proc_fn f = match params.in_lang, !(params.action) with
-    | K3in, Test -> K3TestData(parse_test params f)
-    | K3in, _    -> K3Data(parse_program_k3 f)
+    | K3in, Test -> K3TestData(parse_test_file params f)
+    | K3in, _    -> K3Data(parse_k3_file f)
     | M3in, _    -> 
-        let m3prog = parse_program_m3 f in
+        let m3prog = parse_m3_file f in
         let proginfo = M3ProgInfo.prog_data_of_m3 m3prog in
         if params.debug_info then 
             print_endline (ProgInfo.string_of_prog_data proginfo);

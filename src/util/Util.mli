@@ -120,6 +120,8 @@ val list_min : ('a -> 'b) -> 'a list -> 'a * 'b
 (* modify/add to an association list generically *)
 val assoc_modify : ('b option -> 'b option) -> 'a -> ('a * 'b) list -> ('a * 'b) list
 
+val assoc_join : ('a * 'b) list -> ('a * 'c) list -> ('a * ('b * 'c)) list
+
 val cartesian_product : 'a list -> 'b list -> ('a * 'b) list
 
 (* unique members of a list *)

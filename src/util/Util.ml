@@ -224,6 +224,16 @@ let assoc_modify f item l =
   with 
     Not_found -> get_result None l
 
+(* perform a join on 2 association lists. Assumes uniqueness in the keys *)
+let assoc_join l1 l2 =
+  let hash = Hashtbl.create (List.length l2) in
+  List.iter (fun (k, v) -> Hashtbl.replace hash k v) l2;
+  filter_map (fun (k, v) -> 
+    try
+      Some (k, (v, Hashtbl.find hash k))
+    with Not_found -> None
+  ) l1
+
 (* perform a cross-product on 2 lists. Doesn't preserve order *)
 let cartesian_product l1 l2 =
   List.fold_left (fun acc x ->
