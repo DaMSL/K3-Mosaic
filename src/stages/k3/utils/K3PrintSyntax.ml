@@ -487,10 +487,10 @@ let string_of_program_test ?uuid_highlight ptest =
   | NetworkTest(p, checklist) -> 
       Printf.sprintf "%s\n\nnetwork expected\n\n%s"
         (string_of_program ?uuid_highlight p)
-        (String.concat "\n\n" @: list_map string_of_test_expr checklist)
+        (String.concat ",\n\n" @: list_map string_of_test_expr checklist)
   | ProgTest(p, checklist) -> 
       Printf.sprintf "%s\n\nexpected\n\n%s"
         (string_of_program ?uuid_highlight p)
-        (String.concat "\n\n" @: list_map string_of_test_expr checklist)
+        (String.concat ",\n\n" @: list_map string_of_test_expr checklist)
   | ExprTest _ -> failwith "can't print an expression test"
 
