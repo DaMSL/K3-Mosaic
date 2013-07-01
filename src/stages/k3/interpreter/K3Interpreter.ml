@@ -662,15 +662,16 @@ let eval_networked_program peer_list prog =
     ) envs
 
 (* Interpret actions *)
-let interpret_k3_program run_length peers node_address role typed_prog = 
+let interpret_k3_program run_length peers typed_prog = 
   configure_scheduler run_length;
   match peers with
   (* single-site version *)
   | []      -> failwith "interpret_k3_program: Peers list is empty!"
-  | [a,_,_] -> [a, eval_program node_address role typed_prog]
+  | [addr,role,_] -> [addr, eval_program addr role typed_prog]
   | nodes   -> (* networked version *)
     List.iter (fun ipr -> 
-      print_endline @: "Starting node "^K3Printing.string_of_address_and_role ipr
+      print_endline @:
+        "Starting node "^K3Printing.string_of_address_and_role ipr
     ) nodes;
     eval_networked_program peers typed_prog
 

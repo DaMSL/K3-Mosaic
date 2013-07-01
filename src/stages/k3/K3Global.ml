@@ -10,7 +10,8 @@ module U = K3Util
 let me_name = "me"
 let peers_name = "peers"
 
-let me_code addr = mk_global_val_init me_name t_addr @: mk_caddress addr
+let me_code = mk_global_val me_name t_addr
+(*@: mk_caddress addr *)
 let me_var = mk_var me_name
 
 (* peers is in a [(TAddress, Maybe String)] format, representing an address and
@@ -19,7 +20,7 @@ let peers_id_type = ["addr", t_addr; "name", wrap_tmaybe t_string]
 let peers_type = wrap_tset @: wrap_ttuple @: snd @: List.split peers_id_type
 let peers_ids = fst @: List.split peers_id_type
 let peers_empty = mk_global_val peers_name peers_type 
-let rec peers_code addr = function 
+let rec peers_code = function 
   | [] -> failwith "peers_code: empty peer list!"
   | ps -> mk_global_val_init peers_name peers_type @: 
     List.fold_right
@@ -34,9 +35,9 @@ let rec peers_code addr = function
       (mk_empty peers_type)
 
 (* create k3 globals for the address and peers *)
-let globals addr ps = me_code addr::[peers_code addr ps]
+let globals ps = me_code::[peers_code ps]
 
 let add_globals_k3 k3_globals ds = k3_globals@ds
-let add_globals addr peers ds = add_globals_k3 (globals addr peers) ds
-let remove_globals addr peers ds = list_drop (List.length @: globals addr peers) ds
+let add_globals peers ds = add_globals_k3 (globals peers) ds
+let remove_globals peers ds = list_drop (List.length @: globals peers) ds
 

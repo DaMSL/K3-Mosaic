@@ -171,8 +171,6 @@ type parameters = {
     mutable out_lang     : out_lang_t;
     mutable search_paths : string list;
     mutable input_files  : string list;
-    mutable node_address : address;
-    mutable role         : id_t option;
                            (* ip,     role,         alias *)
     mutable peers        : (address * id_t option * string option) list;
     mutable partition_map : K3Route.part_map_t;
@@ -190,8 +188,6 @@ let cmd_line_params : parameters = {
     out_lang      = K3;
     search_paths  = default_search_paths;
     input_files   = [];
-    node_address  = default_node_address;
-    role          = default_role;
     peers         = default_peers;
     partition_map = [];
     run_length    = default_run_length;
@@ -285,13 +281,13 @@ let parse_test_file params = match !(params.test_mode) with
 (* Program transformers *)
 let typed_program_with_globals p =
   let p' =
-    K3Global.add_globals cmd_line_params.node_address cmd_line_params.peers p in
+    K3Global.add_globals cmd_line_params.peers p in
   try deduce_program_type p'
   with TypeError (a,b,c) -> handle_type_error (K3Data p') (a,b,c) 
 
 let typed_program_test_with_globals prog_test =
   let add_g p = 
-    K3Global.add_globals cmd_line_params.node_address cmd_line_params.peers p
+    K3Global.add_globals cmd_line_params.peers p
   in
   match prog_test with
   | ProgTest(p, testl)    -> 
@@ -313,14 +309,14 @@ let typed_program_test_with_globals prog_test =
 
 (* for most functions, we don't need the globals included *)
 let typed_program p =
-  K3Global.remove_globals cmd_line_params.node_address cmd_line_params.peers @: 
+  K3Global.remove_globals cmd_line_params.peers @: 
       typed_program_with_globals p
 
 (* don't include globals *)
 let typed_program_test prog_test =
   let prog_test' = typed_program_test_with_globals prog_test in
   let remove_g p = 
-    K3Global.remove_globals cmd_line_params.node_address cmd_line_params.peers p
+    K3Global.remove_globals cmd_line_params.peers p
   in
   match prog_test' with
   | ProgTest(p, tl)    -> ProgTest(remove_g p, tl)
@@ -349,7 +345,7 @@ let interpret_k3 params prog = let p = params in
     * for interpretation *)
   let tp = typed_program_with_globals prog in 
   try 
-    interpret_k3_program p.run_length p.peers p.node_address p.role tp
+    interpret_k3_program p.run_length p.peers tp
   with RuntimeError (uuid,str) -> handle_interpret_error (K3Data tp) (uuid,str)
 
 let interpret params inputs = 
@@ -468,7 +464,7 @@ let test params inputs =
     match input with
     | K3TestData(ExprTest _ as x) -> test_expressions fname x 
     | K3TestData((ProgTest _ | NetworkTest _) as x) -> 
-        let globals_k3 = K3Global.globals params.node_address params.peers in
+        let globals_k3 = K3Global.globals params.peers in
         test_program globals_k3 (interpret_k3 params) fname x
     | x -> error @: "testing not yet implemented for "^string_of_data x
   in List.iter2 test_fn params.input_files inputs
@@ -511,12 +507,6 @@ let transform params ds =
 let process_parameters params = 
   (* preprocess params *)
 
-  (* add node_address to the peer list if it's not included *)
-  (params.peers <- 
-    (if List.exists (fun (addr,_,_) -> addr = params.node_address) params.peers 
-    then [] 
-    else [params.node_address, params.role, None])@params.peers);
-
   (* distributed programs must have M3 as their input language *)
   (match params.out_lang with
     | K3Dist | AstK3Dist | K3DistTest -> params.in_lang <- M3in
@@ -553,14 +543,6 @@ let append_search_path p =
 let append_input_file f = 
   cmd_line_params.input_files <- cmd_line_params.input_files @ [f]
   
-let set_node_address ipr_str =
-  let addr, role_opt, _ = parse_ip_role ipr_str in
-  cmd_line_params.node_address <- addr;
-  cmd_line_params.role <- role_opt
-
-let set_role role_id = 
-  cmd_line_params.role <- (if role_id = "" then None else Some role_id)
-
 let append_peers ipr_str_list =
   let ip_roles = Str.split (Str.regexp (Str.quote ",")) ipr_str_list in
   cmd_line_params.peers <- cmd_line_params.peers @ (List.map parse_ip_role ip_roles)
@@ -600,10 +582,6 @@ let param_specs = Arg.align
       "dir      Include a directory in the module search path";
   
   (* Interpreter and evaluation parameters *)
-  "-h", Arg.String set_node_address, 
-      "addr     Set the current node address for evaluation";
-  "-r", Arg.String set_role, 
-      "role     Set this node's role during evaluation";
   "-n", Arg.String append_peers, 
       "[addr]   Append addresses to the peer list";
   "-steps", Arg.String set_run_length, 
