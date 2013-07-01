@@ -550,16 +550,24 @@ let prepare_sinks env fp =
     | _ -> env) env fp
 
 (* Builds a trigger, global value and function environment (ie frames) *)
-let env_of_program k3_program =
+let env_of_program ?address k3_program =
+  let me_addr = match address with
+    | None   -> Constants.default_address
+    | Some a -> a in
   let env_of_declaration ((trig_env, (m_env, f_env)) as env) (d,_)
   = match d with
     | K3.AST.Global (id, t, init_opt) ->
-        let (rm_env, rf_env), init_val = match init_opt with
-          | Some e ->
+        let (rm_env, rf_env), init_val = match id, init_opt with
+          | _, Some e ->
             let renv, reval = eval_expr (m_env, f_env) e 
             in renv, value_of_eval reval
 
-          | None -> (m_env, f_env), default_value t 
+          (* substitute the proper address expression for 'me' *)
+          | id, _ when id = K3Global.me_name -> 
+              let renv, reval = eval_expr (m_env, f_env) @: mk_caddress me_addr
+              in renv, value_of_eval reval
+
+          | _, None -> (m_env, f_env), default_value t 
         in
         trig_env, (((id, ref init_val) :: rm_env), rf_env)
 
@@ -605,7 +613,7 @@ let interpreter_event_loop role_opt k3_program =
 
 (* returns address, event_loop_t, environment *)
 let initialize_peer address role_opt k3_program =
-  let env = env_of_program k3_program in
+  let env = env_of_program k3_program ~address in
     initialize_scheduler address env;
     address, (interpreter_event_loop role_opt k3_program, env)
 
@@ -666,9 +674,9 @@ let interpret_k3_program run_length peers typed_prog =
   configure_scheduler run_length;
   match peers with
   (* single-site version *)
-  | []      -> failwith "interpret_k3_program: Peers list is empty!"
+  | []            -> failwith "interpret_k3_program: Peers list is empty!"
   | [addr,role,_] -> [addr, eval_program addr role typed_prog]
-  | nodes   -> (* networked version *)
+  | nodes         -> (* networked version *)
     List.iter (fun ipr -> 
       print_endline @:
         "Starting node "^K3Printing.string_of_address_and_role ipr

@@ -3,7 +3,7 @@ open K3Values
 
 val value_of_eval : eval_t -> value_t
 
-val env_of_program : program_t -> program_env_t
+val env_of_program : ?address:address -> program_t -> program_env_t
 
 val eval_expr : env_t -> expr_t -> env_t * eval_t
 

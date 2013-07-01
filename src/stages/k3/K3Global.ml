@@ -11,7 +11,6 @@ let me_name = "me"
 let peers_name = "peers"
 
 let me_code = mk_global_val me_name t_addr
-(*@: mk_caddress addr *)
 let me_var = mk_var me_name
 
 (* peers is in a [(TAddress, Maybe String)] format, representing an address and
