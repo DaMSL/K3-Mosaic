@@ -75,7 +75,7 @@ let lazy_annos c = function
   | [] -> [] 
   | annos -> lps "@ " <| lazy_brace @: lps_list ~sep:"; " NoCut (lazy_anno c) annos
 
-let rec lazy_base_type c in_col ?(mut=false) t = 
+let rec lazy_base_type c ~in_col ?(no_paren=false) t = 
   let proc () = match t with
   | TUnit -> lps "unit"
   | TBool -> lps "bool"
@@ -83,40 +83,40 @@ let rec lazy_base_type c in_col ?(mut=false) t =
   | TInt -> lps "int"
   | TFloat -> lps "float"
   | TString -> lps "string"
-  | TMaybe(vt) -> lps "maybe " <| lazy_value_type c false vt
+  | TMaybe(vt) -> lps "maybe " <| lazy_value_type c ~in_col vt
   | TTuple(vts) -> 
       (* if we're top level of a collection, drop the parentheses *)
       (* for verbose types, we leave them in. We also leave them for refs *)
-      let inner () = lps_list NoCut (lazy_value_type c in_col) vts in
-      if in_col && not c.verbose_types && not mut then inner ()
+      let inner () = lps_list NoCut (lazy_value_type c ~in_col) vts in
+      if not c.verbose_types && no_paren then inner ()
       else lps "(" <| inner () <| lps ")"
   | TCollection(TSet, vt) -> 
-      lps "{" <| lazy_value_type c true vt <| lps "}"
+      lps "{" <| lazy_value_type c ~in_col:true ~no_paren:true vt <| lps "}"
   | TCollection(TBag, vt) -> 
-      lps "{|" <| lazy_value_type c true vt <| lps "|}"
+      lps "{|" <| lazy_value_type c ~in_col:true ~no_paren:true vt <| lps "|}"
   | TCollection(TList, vt) -> 
-      lps "[" <| lazy_value_type c true vt <| lps "]"
+      lps "[" <| lazy_value_type c ~in_col:true ~no_paren:true vt <| lps "]"
   | TAddress -> lps "address" (* ? *)
-  | TTarget bt -> lps "target" <| lazy_base_type c false bt
+  | TTarget bt -> lps "target" <| lazy_base_type c ~in_col bt
   | TUnknown -> lps "unknown"
   in
   if c.verbose_types && in_col then lps "c:" <| proc () 
   else proc ()
 
 (* TODO: annotations *)
-and lazy_mutable_type c in_col = function
+and lazy_mutable_type c ~in_col ?(no_paren=false) = function
   | TMutable (bt, a) -> 
-      lps "ref " <| lazy_base_type c in_col ~mut:true bt
-  | TImmutable (bt, a) -> lazy_base_type c in_col bt
+      lps "ref " <| lazy_base_type c ~in_col:true ~no_paren:false bt
+  | TImmutable (bt, a) -> lazy_base_type c ~in_col ~no_paren bt
 
-and lazy_value_type c in_col = function
-  | TIsolated mt -> lazy_mutable_type c in_col mt
-  | TContained mt -> lazy_mutable_type c in_col mt
+and lazy_value_type c ~in_col ?(no_paren=false) = function
+  | TIsolated mt -> lazy_mutable_type c ~in_col ~no_paren mt
+  | TContained mt -> lazy_mutable_type c ~in_col ~no_paren mt
 
 let lazy_type c = function
   | TFunction(f,t) ->
-      lazy_value_type c false f <| lps " -> " <| 
-      lazy_value_type c false t
+      lazy_value_type c ~in_col:false f <| lps " -> " <| 
+      lazy_value_type c ~in_col:false t
   | TValue vt -> lazy_value_type c false vt
 
 let rec lazy_arg c drop_tuple_paren a = 
