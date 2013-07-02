@@ -75,7 +75,7 @@ let lazy_annos c = function
   | [] -> [] 
   | annos -> lps "@ " <| lazy_brace @: lps_list ~sep:"; " NoCut (lazy_anno c) annos
 
-let rec lazy_base_type c in_col t = 
+let rec lazy_base_type c in_col ?(mut=false) t = 
   let proc () = match t with
   | TUnit -> lps "unit"
   | TBool -> lps "bool"
@@ -86,9 +86,9 @@ let rec lazy_base_type c in_col t =
   | TMaybe(vt) -> lps "maybe " <| lazy_value_type c false vt
   | TTuple(vts) -> 
       (* if we're top level of a collection, drop the parentheses *)
-      (* for verbose types, we leave them in *)
+      (* for verbose types, we leave them in. We also leave them for refs *)
       let inner () = lps_list NoCut (lazy_value_type c in_col) vts in
-      if in_col && not c.verbose_types then inner ()
+      if in_col && not c.verbose_types && not mut then inner ()
       else lps "(" <| inner () <| lps ")"
   | TCollection(TSet, vt) -> 
       lps "{" <| lazy_value_type c true vt <| lps "}"
@@ -106,7 +106,7 @@ let rec lazy_base_type c in_col t =
 (* TODO: annotations *)
 and lazy_mutable_type c in_col = function
   | TMutable (bt, a) -> 
-      lps "ref " <| lazy_base_type c in_col bt
+      lps "ref " <| lazy_base_type c in_col ~mut:true bt
   | TImmutable (bt, a) -> lazy_base_type c in_col bt
 
 and lazy_value_type c in_col = function
