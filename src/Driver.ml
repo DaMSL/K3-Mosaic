@@ -173,6 +173,7 @@ type parameters = {
     mutable input_files  : string list;
                            (* ip,     role,         alias *)
     mutable peers        : (address * id_t option * string option) list;
+    mutable default_peer : bool; (* whether we're using the default peer *)
     mutable partition_map : K3Route.part_map_t;
     mutable run_length   : int64;
     mutable print_types  : bool; (* TODO: change to a debug flag *)
@@ -189,6 +190,7 @@ let cmd_line_params : parameters = {
     search_paths  = default_search_paths;
     input_files   = [];
     peers         = default_peers;
+    default_peer  = true;
     partition_map = [];
     run_length    = default_run_length;
     print_types   = default_print_types;
@@ -544,8 +546,12 @@ let append_input_file f =
   cmd_line_params.input_files <- cmd_line_params.input_files @ [f]
   
 let append_peers ipr_str_list =
-  let ip_roles = Str.split (Str.regexp (Str.quote ",")) ipr_str_list in
-  cmd_line_params.peers <- cmd_line_params.peers @ (List.map parse_ip_role ip_roles)
+  let ip_roles = Str.split (Str.regexp @: Str.quote ",") ipr_str_list in
+  let new_peers = List.map parse_ip_role ip_roles in
+  if cmd_line_params.default_peer then 
+    cmd_line_params.peers <- new_peers
+  else
+    cmd_line_params.peers <- cmd_line_params.peers @ new_peers
 
 (* Load peer address from file*)
 let load_peer file = 
