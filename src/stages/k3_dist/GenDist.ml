@@ -536,8 +536,7 @@ let send_push_stmt_map_trig p s_rhs_lhs trig_name =
       let rhs_map_name = map_name_of p rhs_map_id in
       let shuffle_fn = find_shuffle stmt_id rhs_map_id lhs_map_id in
       let partial_key = partial_key_from_bound p stmt_id lhs_map_id in
-      let slice_key = 
-        mk_var "vid" :: slice_key_from_bound p stmt_id rhs_map_id in
+      let slice_key = slice_key_from_bound p stmt_id rhs_map_id in
       acc_code@
       [mk_code_sink 
         (send_push_name_of_t p trig_name stmt_id rhs_map_id)
@@ -557,12 +556,11 @@ let send_push_stmt_map_trig p s_rhs_lhs trig_name =
             mk_apply
               (mk_var shuffle_fn) @:
               mk_tuple
-                (mk_tuple partial_key::
-                  (mk_slice 
-                    (mk_var rhs_map_name) @:
-                    mk_tuple @: slice_key
-                  )::[mk_cbool false]
-                )
+                [mk_tuple partial_key;
+                 (* we need the latest vid data that's less than the current vid *)
+                 map_latest_vid_vals p (mk_var rhs_map_name) 
+                   (some slice_key) rhs_map_id ~keep_vid:true;
+                 mk_cbool false]
       ] (* trigger *)
     ) (* fun *)
     []
