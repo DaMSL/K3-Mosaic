@@ -393,9 +393,9 @@ let print_k3_dist_test_program = function
           let map_final_l = 
             list_map (fun (nm, code) -> nm, parse_k3_expr code) maplist in
           (* join according to map name *)
-          let map_tests_join = assoc_join tests_by_map map_final_l in
+          let map_tests_join = assoc_join map_final_l tests_by_map in
           let tests_vals = 
-            list_map (fun (_, (e, final)) -> e, InlineExpr final) 
+            list_map (fun (_, (final, e)) -> e, InlineExpr final) 
               map_tests_join
           in
           (* filter our all role stuff in the original generated ast *)
