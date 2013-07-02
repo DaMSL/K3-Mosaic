@@ -479,9 +479,9 @@ let string_of_program_test ?uuid_highlight ptest =
   in
   (* print a test expression *)
   let string_of_test_expr (e, check_e) =
-    Printf.sprintf "%s = %s"
-      (string_of_expr ?uuid_highlight e)
-      (string_of_check_expr check_e)
+    Printf.sprintf "(%s) = %s"
+      (string_of_expr ?uuid_highlight e) @:
+      string_of_check_expr check_e
   in
   match ptest with
   | NetworkTest(p, checklist) -> 
