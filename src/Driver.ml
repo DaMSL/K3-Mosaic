@@ -398,7 +398,7 @@ let print_k3_dist_test_program = function
           in
           (* filter our all role stuff in the original generated ast *)
           let filter_p = List.filter 
-            (fun d -> not @: is_role d || is_def_role d) p in
+            (fun d -> not (is_role d || is_def_role d)) p in
           (* add the produced test roles and trigger *)
           let new_p = filter_p @ parse_k3_prog code_s in
           new_p, tests_vals
@@ -406,7 +406,7 @@ let print_k3_dist_test_program = function
           (* we don't have a trace file for final value tests *)
           p, list_map (fun (_, e) -> e, FileExpr "dummy") tests_by_map
       in
-      let prog_test = NetworkTest(p, test_vals) in
+      let prog_test = NetworkTest(p', test_vals) in
       let _, prog_test = renumber_test_program_ids prog_test in
       let prog_test = typed_program_test prog_test in
       print_endline @: PS.string_of_program_test prog_test
