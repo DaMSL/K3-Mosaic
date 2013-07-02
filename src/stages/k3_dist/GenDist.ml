@@ -498,17 +498,20 @@ mk_code_sink
   let counter_pat = ["count", t_int] in
   let full_pat = part_pat @ counter_pat in
   let full_types = wrap_ttuple @: extract_arg_types full_pat in
-  let part_pat_as_vars = ids_to_vars @: extract_arg_names part_pat in
+  let part_pat_as_vars = ids_to_vars @: fst_many part_pat in
   let query_pat = mk_tuple @: part_pat_as_vars @ [mk_cunknown] in
   mk_iter
     (mk_lambda
       (wrap_args ["stmt_id", t_stmt_id; "count", t_int]) @:
       mk_if (* do we already have a tuple for this? *)
         (mk_has_member stmt_cntrs query_pat full_types)
-        (mk_update (* really an error -- shouldn't happen. Raise exception? *)
-          stmt_cntrs
+        (mk_let_deep (wrap_args ["_", t_unit; "_", t_unit; "old_count", t_int])
           (mk_peek @: mk_slice stmt_cntrs query_pat) @:
-          mk_tuple @: part_pat_as_vars@[mk_var "count"]
+          mk_update (* really an error -- shouldn't happen. Raise exception? *)
+            stmt_cntrs
+            (mk_peek @: mk_slice stmt_cntrs query_pat) @:
+            mk_tuple @: 
+              part_pat_as_vars@[mk_add (mk_var "old_count") @: mk_var "count"]
         ) @:
         mk_insert
           stmt_cntrs @:
