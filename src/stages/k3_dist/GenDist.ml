@@ -476,7 +476,7 @@ let rcv_fetch_trig p trig =
               )
               acc_code
             )
-            (stmts_of_t p trig) @:
+            (stmts_with_rhs_maps_in_t p trig) @:
             mk_cunit (* really want exception here *)
         ) @:
         mk_var "stmts_and_map_ids"
