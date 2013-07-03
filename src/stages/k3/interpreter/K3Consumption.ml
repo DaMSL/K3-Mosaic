@@ -157,7 +157,7 @@ let next_value resource_env resource_impl_env resource_ids =
   in randomize_access [] resource_ids
 
 (* Run a pattern dispatcher for a single step *)
-let rec run_dispatcher_step address d state_opt origin value =
+let rec run_dispatcher_step sched_st address d state_opt origin value =
   let module A = ResourceActions in
   let module F = ResourceFSM in 
   let next_access state_id = 
@@ -167,9 +167,9 @@ let rec run_dispatcher_step address d state_opt origin value =
   try
     let (id, (match_action, next)), (fail_action, fail) = List.assoc state d in
     match id = origin, match_action with
-      | true, F.Output (A.Source(A.Dispatch(b), _)) ->
-        schedule_event (List.map (fun t -> id, t) b) id address [value];  
-        None, Some(next), next_access next
+      | true, F.Output (A.Source(A.Dispatch(b), _)) -> schedule_event 
+          sched_st (List.map (fun t -> id, t) b) id address [value];
+        None, Some next, next_access next
 
       (* TODO: egress pattern dispatching *)        
       | true, F.Output (A.Sink(A.Dispatch b)) -> 
@@ -186,7 +186,7 @@ let rec run_dispatcher_step address d state_opt origin value =
  * from the list of resources *)
 (* resource_impl_env is the implementation of a resource, and d is a dispatcher
  * fsm *)
-let run_dispatcher address resource_env resource_impl_env d =
+let run_dispatcher sched_st address resource_env resource_impl_env d =
   let init_value o v = ref o, ref v in
   let init_finished () = failwith "no value found during initialization" in
   let assign_value origin value o v = origin := o; value := v in
@@ -213,7 +213,7 @@ let run_dispatcher address resource_env resource_impl_env d =
     in ref(Some s), get_value init_value init_finished rids
   in
   while !state <> None && !resources_remain do 
-    match run_dispatcher_step address d !state !origin !value with
+    match run_dispatcher_step sched_st address d !state !origin !value with
     (* Retry value at next state *)
     | Some v, Some s, [] when v = !value -> state := Some(s)
 

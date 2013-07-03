@@ -34,7 +34,7 @@ let parse_expr s = K3Parser.expr K3Lexer.tokenize (Lexing.from_string s)
 let eval_test_expr_env tdecl_prog t_env trig_env val_env expr = 
   let typed_expr = deduce_expr_type trig_env t_env expr in
   value_of_eval @: snd @: 
-    eval_expr val_env typed_expr
+    eval_expr None val_env typed_expr
 
 (* we pass in an optional interpreter environment, a program for type bindings,
  * and an expression *)
@@ -44,7 +44,7 @@ let eval_test_expr decl_prog expr =
   let tdecl_prog, t_env, trig_env, _ = type_bindings_of_program decl_prog in
   (* get the value environment from the interpreter, excluding the trigger
    * functions. if we pass an environment, use that *)
-  let _, val_env = env_of_program tdecl_prog in
+  let _, val_env = env_of_program (K3Runtime.init_scheduler_state ()) tdecl_prog in
   eval_test_expr_env tdecl_prog t_env trig_env val_env expr
 
 (* Tests *)

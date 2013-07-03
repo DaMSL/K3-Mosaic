@@ -2,34 +2,23 @@ open K3.AST
 open K3Streams
 open K3Values
 
+type scheduler_state
 
-type queue_granularity_t = Global | PerTrigger
+val schedule_trigger : scheduler_state -> value_t -> value_t -> value_t -> unit
 
-type scheduler_spec = {
-    mutable mode : queue_granularity_t;
-    mutable events_to_process : int64;
-    mutable interleave_period : int;
-    mutable shuffle_tasks     : bool;
-  }
+val schedule_event : scheduler_state -> resource_bindings_t -> id_t -> address -> value_t list -> unit
 
-val scheduler_params : scheduler_spec
+val configure_scheduler : scheduler_state -> int64 -> unit
 
-val schedule_trigger : value_t -> value_t -> value_t -> unit
-
-val schedule_event : resource_bindings_t -> id_t -> address -> value_t list -> unit
-
-val buffer_trigger : value_t -> value_t -> value_t -> address -> unit
-
-val schedule_trigger_random : address -> unit  
-
-val configure_scheduler : int64 -> unit
-
-val initialize_scheduler : address -> program_env_t -> unit
+val initialize_scheduler : scheduler_state -> address -> program_env_t -> unit
 
 (* Runtime control helpers *)
 
-val node_has_work : address -> bool
+val node_has_work : scheduler_state -> address -> bool
 
-val network_has_work : unit -> bool
+val network_has_work : scheduler_state ->  bool
 
-val run_scheduler : ?slice:int -> address -> program_env_t -> bool -> unit
+val run_scheduler : ?slice:int -> scheduler_state -> address -> program_env_t -> bool -> unit
+
+val init_scheduler_state : unit -> scheduler_state
+

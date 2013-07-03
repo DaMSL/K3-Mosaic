@@ -51,19 +51,34 @@ type scheduler_spec = {
     mutable shuffle_tasks     : bool;
   }
 
-let scheduler_params = {
+let default_params = {
     mode = PerTrigger;
     events_to_process = Int64.minus_one;
     interleave_period = 10;
     shuffle_tasks = false;
   }
-    
-let use_global_queueing () = scheduler_params.mode = Global
-let dispatch_block_size () = scheduler_params.interleave_period  
-let events_processed = ref Int64.zero
+
+type scheduler_state = {
+  params : scheduler_spec;
+  mutable events_processed : Int64.t;
+  node_queues : 
+    (* node,  (general queue,   (trigger, trig queue of args) *)
+    (address, (task_t Queue.t * (id_t, value_t Queue.t) Hashtbl.t)) Hashtbl.t;
+ }
+
+let init_scheduler_state () = {
+  params = default_params;
+  events_processed = Int64.zero;
+  node_queues = Hashtbl.create 10;
+}
+
+let use_global_queueing s = s.params.mode = Global
+let dispatch_block_size s = s.params.interleave_period  
+(*let events_processed = ref Int64.zero*)
 
 (* node address -> task queue * per trigger input queues *)
-let node_queues = Hashtbl.create 10
+(*let node_queues = Hashtbl.create 10*)
+let trigger_buffer = Hashtbl.create 10
 
 (* 
  * receive_address -> (Hashtbl: (sender_address -> trigger_queue))
@@ -74,61 +89,61 @@ let node_queues = Hashtbl.create 10
 let trigger_buffer = Hashtbl.create 10
 
 (* Node helpers *)
-let is_node address = Hashtbl.mem node_queues address
+let is_node s address = Hashtbl.mem s.node_queues address
 
-let get_node_queues address = Hashtbl.find node_queues address
+let get_node_queues s address = Hashtbl.find s.node_queues address
 
-let register_node address = 
-  if not (Hashtbl.mem node_queues address) then
-    Hashtbl.add node_queues address (Queue.create (), Hashtbl.create 10)
-  else invalid_arg ("duplicate node at "^(string_of_address address))
+let register_node s address = 
+  if not @: is_node s address then
+    Hashtbl.add s.node_queues address (Queue.create (), Hashtbl.create 10)
+  else invalid_arg @: "duplicate node at "^string_of_address address
 
-let unregister_node address = Hashtbl.remove node_queues address
+let unregister_node s address = Hashtbl.remove s.node_queues address
 
 (* Global queueing helpers *)
-let get_global_queue address = 
-  try fst (get_node_queues address)
-  with Not_found -> failwith ("unknown node "^(string_of_address address))
+let get_global_queue s address = 
+  try fst @: get_node_queues s address
+  with Not_found -> failwith @: "unknown node "^string_of_address address
 
 (* Per trigger queueing helpers *)
-let get_trigger_queues address = 
-  try snd (get_node_queues address)
-  with Not_found -> failwith ("unknown node "^(string_of_address address))
+let get_trigger_queues s address = 
+  try snd @: get_node_queues s address
+  with Not_found -> failwith @: "unknown node "^string_of_address address
 
-let get_trigger_input_queue address trigger_id =
-  Hashtbl.find (get_trigger_queues address) trigger_id
+let get_trigger_input_queue s address trigger_id =
+  Hashtbl.find (get_trigger_queues s address) trigger_id
 
-let register_trigger address trigger_id =
-  let trigger_queues = get_trigger_queues address in
-  if not (Hashtbl.mem trigger_queues trigger_id) then
-    Hashtbl.add trigger_queues trigger_id (Queue.create ())
+let register_trigger s address trigger_id =
+  let trigger_queues = get_trigger_queues s address in
+  if not @: Hashtbl.mem trigger_queues trigger_id then
+    Hashtbl.add trigger_queues trigger_id @: Queue.create ()
   else invalid_arg @: "duplicate trigger registration for "^trigger_id
 
-let unregister_trigger address trigger_id force =
-  try let q = get_trigger_input_queue address trigger_id in
+let unregister_trigger s address trigger_id force =
+  try let q = get_trigger_input_queue s address trigger_id in
       if (Queue.is_empty q) || force then
-        let trigger_queues = get_trigger_queues address in
+        let trigger_queues = get_trigger_queues s address in
         Hashtbl.remove trigger_queues trigger_id
   with Not_found -> () 
 
-
 (* Scheduling methods *)
-let schedule_task address task = Queue.push task @: get_global_queue address
+let schedule_task s address task = Queue.push task @: get_global_queue s address
 
-let schedule_trigger v_target v_address args = match v_target, v_address with
+let schedule_trigger s v_target v_address args = match v_target, v_address with
   | VTarget trigger_id, VAddress address ->
-    if use_global_queueing()
-    then schedule_task address @: NamedDispatch (trigger_id, args)
+    if use_global_queueing s then 
+      schedule_task s address @: NamedDispatch (trigger_id, args)
     else
-      let q = get_trigger_input_queue address trigger_id
-      in Queue.push args q;
-      schedule_task address @: BlockDispatch (trigger_id, dispatch_block_size())
+      let q = get_trigger_input_queue s address trigger_id in
+      Queue.push args q;
+      schedule_task s address @: 
+        BlockDispatch (trigger_id, dispatch_block_size s)
 
   | _, _ -> error INVALID_TRIGGER_TARGET
 
-let schedule_event source_bindings source_id source_address events =
+let schedule_event s source_bindings source_id source_address events =
   let schedule_fn trig_id =
-    schedule_trigger (VTarget trig_id) (VAddress source_address) in 
+    schedule_trigger s (VTarget trig_id) (VAddress source_address) in 
   try
     let trigger_ids = snd_many @: 
       List.filter (fun (x,_) -> x = source_id) source_bindings in 
@@ -198,78 +213,80 @@ let schedule_trigger_random receive_address =
 
 (* Scheduler execution *)
 
-let continue_processing address =
+let continue_processing s address =
   (* shedule buffered trigger if the shuffle flag is on*)
   if scheduler_params.shuffle_tasks && Hashtbl.mem trigger_buffer address
   then schedule_trigger_random address;
-  
-  let has_messages = not (Queue.is_empty (get_global_queue address)) in 
+  let has_messages = not @: Queue.is_empty @: get_global_queue s address in 
   let events_remain = 
-    scheduler_params.events_to_process < Int64.zero ||
-    !events_processed < scheduler_params.events_to_process
+    s.params.events_to_process < Int64.zero ||
+    s.events_processed < s.params.events_to_process
   in
   has_messages && events_remain
 
-let invoke_trigger address (trigger_env, val_env) trigger_id arg =
+let invoke_trigger s address (trigger_env, val_env) trigger_id arg =
+  (* get the frozen function for the trigger and apply it to the env and args *)
   (List.assoc trigger_id trigger_env) val_env arg;
   (* log the state for this trigger *)
   LOG "Trigger %s@%s:\n%s" trigger_id (string_of_address address) (string_of_env val_env) 
     NAME "K3Runtime.TriggerState" LEVEL DEBUG;
-  events_processed := Int64.succ !events_processed
+  s.events_processed <- Int64.succ s.events_processed
 
-let process_trigger_queue address env trigger_id max_to_process =
-  let q = get_trigger_input_queue address trigger_id in
+(* process the events for a particular trigger queue *)
+let process_trigger_queue s address env trigger_id max_to_process =
+  let q = get_trigger_input_queue s address trigger_id in
   let processed = ref max_to_process in
   while not (Queue.is_empty q) && !processed > 0 do
-    try invoke_trigger address env trigger_id (Queue.take q);
+    try invoke_trigger s address env trigger_id @: Queue.take q;
         decr processed
     with Not_found -> error INVALID_TRIGGER_QUEUE
   done;
-  if not (Queue.is_empty q) then 
-    schedule_task address (BlockDispatch (trigger_id, dispatch_block_size()))
+  (* the block we were assigned wasn't enough for this trigger *)
+  if not @: Queue.is_empty q then 
+    schedule_task s address @: BlockDispatch (trigger_id, dispatch_block_size s)
 
-let process_task address env =
+let process_task s address prog_env =
   try
-    match Queue.take (get_global_queue address) with
-    | Background fn -> fn env
+    match Queue.take @: get_global_queue s address with
+    | Background fn -> fn prog_env
 
-    | NamedDispatch (id,arg) ->
-      if use_global_queueing() then invoke_trigger address env id arg else ()
+    | NamedDispatch (id, arg) ->
+      if use_global_queueing s then invoke_trigger s address prog_env id arg else ()
 
     | BlockDispatch (id, max_to_process) ->
-      if use_global_queueing() then ()
-      else
-        process_trigger_queue address env id max_to_process
+      if use_global_queueing s then ()
+      else process_trigger_queue s address prog_env id max_to_process
 
   with Queue.Empty -> error INVALID_GLOBAL_QUEUE
 
 (* Scheduler toplevel methods *)
-let configure_scheduler program_events = 
-  scheduler_params.events_to_process <- program_events
+let configure_scheduler s program_events = 
+  s.params.events_to_process <- program_events
 
 (* register the node and its triggers *)
-let initialize_scheduler address (trig_env,_) =
-  if not @: is_node address then register_node address; 
-  List.iter (fun (id, _) -> register_trigger address id) trig_env
+let initialize_scheduler s address (trig_env,_) =
+  if not @: is_node s address then register_node s address; 
+  List.iter (fun (id, _) -> register_trigger s address id) trig_env
 
-let node_has_work address =
-  if not @: is_node address then false else 
-  let node_queues = get_node_queues address in
+let node_has_work s address =
+  if not @: is_node s address then false else 
+  let node_queues = get_node_queues s address in
   let empty_global_q = Queue.is_empty @: fst node_queues in
-  let empty_trigger_q = Hashtbl.fold (fun _ q acc -> acc && Queue.is_empty q) (snd node_queues) true in
+  let empty_trigger_q = 
+    Hashtbl.fold (fun _ q acc -> acc && Queue.is_empty q) (snd node_queues) true in
   let empty_shuffle_buffer = 
     if scheduler_params.shuffle_tasks then 
       (( Hashtbl.length (Hashtbl.find trigger_buffer address)) = 0) 
     else true
   in
-  not ( empty_global_q && empty_trigger_q && empty_shuffle_buffer)
+  not (empty_global_q && empty_trigger_q && empty_shuffle_buffer)
 
-let network_has_work () = 
-  Hashtbl.fold (fun addr _ acc -> acc || node_has_work addr) node_queues false
+let network_has_work s = 
+  Hashtbl.fold (fun addr _ acc -> acc || node_has_work s addr) s.node_queues false
 
- 
-let run_scheduler ?(slice = max_int) address env shuffle_tasks =
+let run_scheduler ?(slice = max_int) s address env shuffle_tasks =
   let i = ref slice in
   scheduler_params.shuffle_tasks <- shuffle_tasks;
-  while !i > 0 && continue_processing address
-  do process_task address env; decr i done
+  while !i > 0 && continue_processing s address
+  do process_task s address env; decr i done
+

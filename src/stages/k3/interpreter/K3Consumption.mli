@@ -13,7 +13,7 @@ type channel_impl_t =
 type resource_impl_env_t = (id_t * channel_impl_t) list 
 
 val run_dispatcher :
-  address
+  K3Runtime.scheduler_state -> address
   -> resource_env_t -> resource_impl_env_t -> dispatcher_t
   -> resource_impl_env_t  
 
