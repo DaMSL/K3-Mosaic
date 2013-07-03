@@ -179,6 +179,9 @@ type parameters = {
     mutable debug_info   : bool;
     mutable verbose      : bool;
     mutable trace_files  : string list;
+
+    mutable shuffle_tasks: bool; (* Shuffle tasks from diffrent node 
+                                    to simulate network delay *)
   }
 
 let cmd_line_params : parameters = {
@@ -195,6 +198,8 @@ let cmd_line_params : parameters = {
     debug_info    = default_debug_info;
     verbose       = default_verbose;
     trace_files   = [];
+
+    shuffle_tasks= default_shuffle_tasks; 
   }
 
 (* Error handlers *)
@@ -345,7 +350,8 @@ let interpret_k3 params prog = let p = params in
     * for interpretation *)
   let tp = typed_program_with_globals prog in 
   try 
-    interpret_k3_program p.run_length p.peers tp
+    interpret_k3_program 
+      p.run_length p.peers tp p.shuffle_tasks
   with RuntimeError (uuid,str) -> handle_interpret_error (K3Data tp) (uuid,str)
 
 let interpret params inputs = 
@@ -537,6 +543,9 @@ let set_debug_info () =
 let set_verbose () =
   cmd_line_params.verbose <- true
 
+let set_shuffle_tasks () = 
+  cmd_line_params.shuffle_tasks <- true
+
 let append_search_path p = 
   cmd_line_params.search_paths <- cmd_line_params.search_paths @ [p]
 
@@ -599,7 +608,10 @@ let param_specs = Arg.align
   "-d", Arg.Unit set_debug_info,
       "         Print debug info (context specific)";
   "-v", Arg.Unit set_verbose,
-      "         Print verbose output (context specific)";
+  "             Print verbose output (context specific)";
+  (*Shuffle tasks *)
+  "-shuffle", Arg.Unit set_shuffle_tasks, 
+      "         Shuffle tasks to simulate network delays";
   ])
 
 let usage_msg =

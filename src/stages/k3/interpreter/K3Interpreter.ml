@@ -12,6 +12,15 @@ open K3Streams
 open K3Consumption
 open K3Runtime
 
+(* If Shuffle tasks received from differnt nodes to simulate network delay*)
+type parameters = {
+  mutable shuffle_tasks :bool;
+}
+
+let interpreter_params : parameters = {
+  shuffle_tasks = false ;
+}
+
 (* Generic helpers *)
 
 let (<|) x f = f x
@@ -466,16 +475,30 @@ and eval_expr cenv texpr =
     (* Messaging *)
     | Send ->
       let renv, parts = child_values cenv in
+      (* get the sender's address from global variable "me" *)
+      let sender_add = match cenv with
+        | ([],_) -> error "empty mutable env "
+        | (m_env_lst,_) -> 
+            try
+              let tmp_value_t =  !( List.assoc "me" m_env_lst ) in
+              match tmp_value_t with
+                |VAddress add -> add 
+                | _-> error "global address me not found" 
+            with Not_found -> error "global variable Me not found"
+      in
       begin match parts with
         | [target;addr;arg] -> 
             let e = expr_of_value uuid in
             let send_code = K3Helpers.mk_send (e target) (e addr) (e arg) in
             let send_str = K3PrintSyntax.string_of_expr send_code in
             LOG send_str NAME "K3Interpreter.Msg" LEVEL DEBUG;
-            (schedule_trigger target addr arg; renv, VTemp VUnit)
+            if interpreter_params.shuffle_tasks then
+              (* buffer trigger for later shuffle*)
+              (buffer_trigger target addr arg sender_add;  renv, VTemp VUnit)
+            else
+              (schedule_trigger target addr arg; renv, VTemp VUnit);
         | _ -> error "(Sort): bad values"
       end
-
     (* TODO: mutation and deref *)
 
     | _ -> error "unhandled expression"
@@ -587,14 +610,15 @@ let eval_instructions env address (res_env, d_env) (ri_env, instrs) =
   match instrs with
   | [] -> 
     if node_has_work address
-    then (log_node @: "consuming messages"; run_scheduler address env);
-    ri_env, []
+    then (log_node @: "consuming messages"; 
+      run_scheduler address env interpreter_params.shuffle_tasks);
+      ri_env, []
 
   | (Consume id)::t ->
     log_node @: "consuming from event loop: "^id;
     try let i = List.assoc id d_env in 
         let r = run_dispatcher address res_env ri_env i
-        in run_scheduler address env; r, t
+        in run_scheduler address env interpreter_params.shuffle_tasks; r, t
     with Not_found -> 
       int_error "eval_instructions" @: "no event loop found for "^id
 
@@ -670,13 +694,14 @@ let eval_networked_program peer_list prog =
     ) envs
 
 (* Interpret actions *)
-let interpret_k3_program run_length peers typed_prog = 
+let interpret_k3_program run_length peers typed_prog shuffle_tasks = 
   configure_scheduler run_length;
   match peers with
   (* single-site version *)
   | []            -> failwith "interpret_k3_program: Peers list is empty!"
   | [addr,role,_] -> [addr, eval_program addr role typed_prog]
   | nodes         -> (* networked version *)
+    interpreter_params.shuffle_tasks <- shuffle_tasks;
     List.iter (fun ipr -> 
       print_endline @:
         "Starting node "^K3Printing.string_of_address_and_role ipr

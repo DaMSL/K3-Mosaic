@@ -18,5 +18,5 @@ val eval_networked_program : (address * id_t option * string option) list ->
  * the complete environment *)
 val interpret_k3_program : int64 -> 
   (address * id_t option * string option) list -> 
-  program_t -> (address * program_env_t) list
+  program_t -> bool -> (address * program_env_t) list
 

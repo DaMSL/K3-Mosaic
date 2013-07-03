@@ -48,12 +48,14 @@ type scheduler_spec = {
     mutable mode : queue_granularity_t;
     mutable events_to_process : int64;
     mutable interleave_period : int;
+    mutable shuffle_tasks     : bool;
   }
 
 let scheduler_params = {
     mode = PerTrigger;
     events_to_process = Int64.minus_one;
     interleave_period = 10;
+    shuffle_tasks = false;
   }
     
 let use_global_queueing () = scheduler_params.mode = Global
@@ -62,6 +64,14 @@ let events_processed = ref Int64.zero
 
 (* node address -> task queue * per trigger input queues *)
 let node_queues = Hashtbl.create 10
+
+(* 
+ * receive_address -> (Hashtbl: (sender_address -> trigger_queue))
+ * For test purpose, temp buffer to store messages from different
+ * nodes, and then shuffer them to simulate network delay and messages
+ * from different nodes are out of order
+ * *)
+let trigger_buffer = Hashtbl.create 10
 
 (* Node helpers *)
 let is_node address = Hashtbl.mem node_queues address
@@ -123,10 +133,72 @@ let schedule_event source_bindings source_id source_address events =
     List.iter (fun trigger_id -> List.iter (schedule_fn trigger_id) events) trigger_ids
   with Not_found -> () 
 
+(* 
+ * Shuffle task from different nodes randomly to simulate network delay.
+ *
+ * It first buffer all triggers into a Hashtbl (sender_addr -> trigger queue),
+ * then randmoly pop a trigger buffer queue and schedule it by calling
+ * schedule_trigger. The order of trigger from the same sender address is
+ * preserverd. 
+ * *)
+
+let buffer_trigger v_target v_address args v_sender_addr = 
+  let helper htbl = 
+    try 
+      let q = Hashtbl.find htbl v_sender_addr in
+      Queue.push (v_target,v_address,args) q 
+    with Not_found -> 
+      let new_q = Queue.create () in
+      Queue.push (v_target,v_address,args) new_q;
+      Hashtbl.add htbl v_sender_addr new_q
+  in
+  match v_address, v_target with 
+  | VAddress address, VTarget trigger_id ->
+    ( 
+     try
+      let per_node_trigger_buf = Hashtbl.find trigger_buffer address in
+      helper per_node_trigger_buf;
+    with Not_found ->
+      let new_htbl = Hashtbl.create 10 in
+      helper new_htbl;
+      Hashtbl.add trigger_buffer address new_htbl
+    )
+  | _ -> error INVALID_TRIGGER_TARGET
+
+let rec remove_at n = function
+      | [] -> []
+      | h :: t -> if n = 0 then t else h :: remove_at (n-1) t
+
+let schedule_trigger_random receive_address = 
+  Random.self_init(); (*TO DO random onece*)
+  let per_node_trigger_buf = Hashtbl.find trigger_buffer receive_address in
+
+  let senders_lst_ref = 
+    ref (Hashtbl.fold (fun sender_add _ lst -> sender_add::lst)
+                      per_node_trigger_buf [] )
+  in
+  while ((List.length !senders_lst_ref) > 0 ) 
+  do
+    let i = Random.int (List.length !senders_lst_ref) in
+    let addr = List.nth (!senders_lst_ref) i in
+    let queue = Hashtbl.find per_node_trigger_buf addr in 
+    if Queue.is_empty queue then 
+      senders_lst_ref := remove_at i (!senders_lst_ref)
+    else
+      let trigger = Queue.take queue in 
+      match trigger with (v_target,v_address,args) ->
+        schedule_trigger v_target v_address args
+  done;
+  Hashtbl.reset per_node_trigger_buf
+
 
 (* Scheduler execution *)
 
 let continue_processing address =
+  (* shedule buffered trigger if the shuffle flag is on*)
+  if scheduler_params.shuffle_tasks && Hashtbl.mem trigger_buffer address
+  then schedule_trigger_random address;
+  
   let has_messages = not (Queue.is_empty (get_global_queue address)) in 
   let events_remain = 
     scheduler_params.events_to_process < Int64.zero ||
@@ -162,7 +234,8 @@ let process_task address env =
 
     | BlockDispatch (id, max_to_process) ->
       if use_global_queueing() then ()
-      else process_trigger_queue address env id max_to_process
+      else
+        process_trigger_queue address env id max_to_process
 
   with Queue.Empty -> error INVALID_GLOBAL_QUEUE
 
@@ -180,12 +253,19 @@ let node_has_work address =
   let node_queues = get_node_queues address in
   let empty_global_q = Queue.is_empty (fst node_queues) in
   let empty_trigger_q = Hashtbl.fold (fun _ q acc -> acc && Queue.is_empty q) (snd node_queues) true in
-  not ( empty_global_q && empty_trigger_q)
+  let empty_shuffle_buffer = 
+    if scheduler_params.shuffle_tasks then 
+      (( Hashtbl.length (Hashtbl.find trigger_buffer address)) = 0) 
+    else true
+  in
+  not ( empty_global_q && empty_trigger_q && empty_shuffle_buffer)
 
 let network_has_work () = 
   Hashtbl.fold (fun addr _ acc -> acc || node_has_work addr) node_queues false
 
-let run_scheduler ?(slice = max_int) address env =
+ 
+let run_scheduler ?(slice = max_int) address env shuffle_tasks =
   let i = ref slice in
+  scheduler_params.shuffle_tasks <- shuffle_tasks;
   while !i > 0 && continue_processing address
   do process_task address env; decr i done
