@@ -23,9 +23,9 @@ let runtime_errors = [
   ]
   
 let error t =
-  let (i, s) = try (List.assoc t runtime_errors)
-               with Not_found -> (-1, "K3Runtime: unknown error code")
-  in raise (RuntimeError(i, s))
+  let i, s = try List.assoc t runtime_errors
+             with Not_found -> -1, "K3Runtime: unknown error code"
+  in raise @: RuntimeError(i, s)
 
 (* Event queues and scheduling *)
 
@@ -102,7 +102,7 @@ let register_trigger address trigger_id =
   let trigger_queues = get_trigger_queues address in
   if not (Hashtbl.mem trigger_queues trigger_id) then
     Hashtbl.add trigger_queues trigger_id (Queue.create ())
-  else invalid_arg ("duplicate trigger registration for "^trigger_id)
+  else invalid_arg @: "duplicate trigger registration for "^trigger_id
 
 let unregister_trigger address trigger_id force =
   try let q = get_trigger_input_queue address trigger_id in
@@ -113,24 +113,28 @@ let unregister_trigger address trigger_id force =
 
 
 (* Scheduling methods *)
-let schedule_task address task = Queue.push task (get_global_queue address)
+let schedule_task address task = Queue.push task @: get_global_queue address
 
 let schedule_trigger v_target v_address args = match v_target, v_address with
   | VTarget trigger_id, VAddress address ->
     if use_global_queueing()
-    then schedule_task address (NamedDispatch (trigger_id, args))
+    then schedule_task address @: NamedDispatch (trigger_id, args)
     else
       let q = get_trigger_input_queue address trigger_id
       in Queue.push args q;
-         schedule_task address (BlockDispatch (trigger_id, dispatch_block_size()))
+      schedule_task address @: BlockDispatch (trigger_id, dispatch_block_size())
 
   | _, _ -> error INVALID_TRIGGER_TARGET
 
 let schedule_event source_bindings source_id source_address events =
-  let schedule_fn trig_id = schedule_trigger (VTarget trig_id) (VAddress source_address) in 
+  let schedule_fn trig_id =
+    schedule_trigger (VTarget trig_id) (VAddress source_address) in 
   try
-    let trigger_ids = List.map snd (List.filter (fun (x,y) -> x = source_id) source_bindings) in 
-    List.iter (fun trigger_id -> List.iter (schedule_fn trigger_id) events) trigger_ids
+    let trigger_ids = snd_many @: 
+      List.filter (fun (x,_) -> x = source_id) source_bindings in 
+    List.iter 
+      (fun trigger_id -> List.iter (schedule_fn trigger_id) events) 
+      trigger_ids
   with Not_found -> () 
 
 (* 
@@ -249,9 +253,9 @@ let initialize_scheduler address (trig_env,_) =
   List.iter (fun (id, _) -> register_trigger address id) trig_env
 
 let node_has_work address =
-  if not(is_node address) then false else 
+  if not @: is_node address then false else 
   let node_queues = get_node_queues address in
-  let empty_global_q = Queue.is_empty (fst node_queues) in
+  let empty_global_q = Queue.is_empty @: fst node_queues in
   let empty_trigger_q = Hashtbl.fold (fun _ q acc -> acc && Queue.is_empty q) (snd node_queues) true in
   let empty_shuffle_buffer = 
     if scheduler_params.shuffle_tasks then 
