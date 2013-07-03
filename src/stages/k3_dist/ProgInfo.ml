@@ -164,17 +164,20 @@ let stmt_has_rhs_map p stmt_id rhs_map_id =
   let (_, _, _, _, maplist) = find_stmt p stmt_id in
   List.exists (fun (map_id, _) -> map_id = rhs_map_id) maplist
 
-let stmts_without_rhs_maps_in_t (p:prog_data_t) (t:trig_name_t) = 
+let stmts_rhs_map_inner (p:prog_data_t) (t:trig_name_t) ~op = 
   let stmt_data = get_stmt_data p in
-  let (_, _, _, trig_stmt_ids) = find_trigger p t in
-  List.map
-    (fun (id, _, _, _, _) -> id) @:
-    List.filter
-      (fun (stmt_id, _, _, _, maplist) -> 
-        maplist = [] &&
-        List.exists (fun id -> id = stmt_id) trig_stmt_ids
-      )
-      stmt_data
+  let _, _, _, trig_stmt_ids = find_trigger p t in
+  filter_map
+    (fun (stmt_id, _, _, _, maplist) -> 
+      if op maplist [] &&
+        List.exists ((=) stmt_id) trig_stmt_ids
+      then Some stmt_id
+      else None
+    ) stmt_data
+
+let stmts_without_rhs_maps_in_t p t = stmts_rhs_map_inner ~op:(=) p t
+
+let stmts_with_rhs_maps_in_t p t = stmts_rhs_map_inner ~op:(<>) p t
     
 let lhs_map_of_stmt p stmt_id =
   let (_, _, lhs_map, _, _) = find_stmt p stmt_id in

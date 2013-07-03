@@ -476,7 +476,7 @@ let rcv_fetch_trig p trig =
               )
               acc_code
             )
-            (stmts_of_t p trig) @:
+            (stmts_with_rhs_maps_in_t p trig) @:
             mk_cunit (* really want exception here *)
         ) @:
         mk_var "stmts_and_map_ids"
@@ -498,17 +498,20 @@ mk_code_sink
   let counter_pat = ["count", t_int] in
   let full_pat = part_pat @ counter_pat in
   let full_types = wrap_ttuple @: extract_arg_types full_pat in
-  let part_pat_as_vars = ids_to_vars @: extract_arg_names part_pat in
+  let part_pat_as_vars = ids_to_vars @: fst_many part_pat in
   let query_pat = mk_tuple @: part_pat_as_vars @ [mk_cunknown] in
   mk_iter
     (mk_lambda
       (wrap_args ["stmt_id", t_stmt_id; "count", t_int]) @:
       mk_if (* do we already have a tuple for this? *)
         (mk_has_member stmt_cntrs query_pat full_types)
-        (mk_update (* really an error -- shouldn't happen. Raise exception? *)
-          stmt_cntrs
+        (mk_let_deep (wrap_args ["_", t_unit; "_", t_unit; "old_count", t_int])
           (mk_peek @: mk_slice stmt_cntrs query_pat) @:
-          mk_tuple @: part_pat_as_vars@[mk_var "count"]
+          mk_update (* really an error -- shouldn't happen. Raise exception? *)
+            stmt_cntrs
+            (mk_peek @: mk_slice stmt_cntrs query_pat) @:
+            mk_tuple @: 
+              part_pat_as_vars@[mk_add (mk_var "old_count") @: mk_var "count"]
         ) @:
         mk_insert
           stmt_cntrs @:
@@ -533,8 +536,7 @@ let send_push_stmt_map_trig p s_rhs_lhs trig_name =
       let rhs_map_name = map_name_of p rhs_map_id in
       let shuffle_fn = find_shuffle stmt_id rhs_map_id lhs_map_id in
       let partial_key = partial_key_from_bound p stmt_id lhs_map_id in
-      let slice_key = 
-        mk_var "vid" :: slice_key_from_bound p stmt_id rhs_map_id in
+      let slice_key = slice_key_from_bound p stmt_id rhs_map_id in
       acc_code@
       [mk_code_sink 
         (send_push_name_of_t p trig_name stmt_id rhs_map_id)
@@ -554,12 +556,11 @@ let send_push_stmt_map_trig p s_rhs_lhs trig_name =
             mk_apply
               (mk_var shuffle_fn) @:
               mk_tuple
-                (mk_tuple partial_key::
-                  (mk_slice 
-                    (mk_var rhs_map_name) @:
-                    mk_tuple @: slice_key
-                  )::[mk_cbool false]
-                )
+                [mk_tuple partial_key;
+                 (* we need the latest vid data that's less than the current vid *)
+                 map_latest_vid_vals p (mk_var rhs_map_name) 
+                   (some slice_key) rhs_map_id ~keep_vid:true;
+                 mk_cbool false]
       ] (* trigger *)
     ) (* fun *)
     []

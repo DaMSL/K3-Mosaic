@@ -173,6 +173,7 @@ type parameters = {
     mutable input_files  : string list;
                            (* ip,     role,         alias *)
     mutable peers        : (address * id_t option * string option) list;
+    mutable default_peer : bool; (* whether we're using the default peer *)
     mutable partition_map : K3Route.part_map_t;
     mutable run_length   : int64;
     mutable print_types  : bool; (* TODO: change to a debug flag *)
@@ -192,6 +193,7 @@ let cmd_line_params : parameters = {
     search_paths  = default_search_paths;
     input_files   = [];
     peers         = default_peers;
+    default_peer  = true;
     partition_map = [];
     run_length    = default_run_length;
     print_types   = default_print_types;
@@ -397,14 +399,14 @@ let print_k3_dist_test_program = function
           let map_final_l = 
             list_map (fun (nm, code) -> nm, parse_k3_expr code) maplist in
           (* join according to map name *)
-          let map_tests_join = assoc_join tests_by_map map_final_l in
+          let map_tests_join = assoc_join map_final_l tests_by_map in
           let tests_vals = 
-            list_map (fun (_, (e, final)) -> e, InlineExpr final) 
+            list_map (fun (_, (final, e)) -> e, InlineExpr final) 
               map_tests_join
           in
           (* filter our all role stuff in the original generated ast *)
           let filter_p = List.filter 
-            (fun d -> not @: is_role d || is_def_role d) p in
+            (fun d -> not (is_role d || is_def_role d)) p in
           (* add the produced test roles and trigger *)
           let new_p = filter_p @ parse_k3_prog code_s in
           new_p, tests_vals
@@ -412,7 +414,7 @@ let print_k3_dist_test_program = function
           (* we don't have a trace file for final value tests *)
           p, list_map (fun (_, e) -> e, FileExpr "dummy") tests_by_map
       in
-      let prog_test = NetworkTest(p, test_vals) in
+      let prog_test = NetworkTest(p', test_vals) in
       let _, prog_test = renumber_test_program_ids prog_test in
       let prog_test = typed_program_test prog_test in
       print_endline @: PS.string_of_program_test prog_test
@@ -553,8 +555,12 @@ let append_input_file f =
   cmd_line_params.input_files <- cmd_line_params.input_files @ [f]
   
 let append_peers ipr_str_list =
-  let ip_roles = Str.split (Str.regexp (Str.quote ",")) ipr_str_list in
-  cmd_line_params.peers <- cmd_line_params.peers @ (List.map parse_ip_role ip_roles)
+  let ip_roles = Str.split (Str.regexp @: Str.quote ",") ipr_str_list in
+  let new_peers = List.map parse_ip_role ip_roles in
+  if cmd_line_params.default_peer then 
+    cmd_line_params.peers <- new_peers
+  else
+    cmd_line_params.peers <- cmd_line_params.peers @ new_peers
 
 (* Load peer address from file*)
 let load_peer file = 

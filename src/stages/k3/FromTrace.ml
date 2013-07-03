@@ -114,7 +114,7 @@ module RelEvent = struct
     Hashtbl.replace evt.effects mapn eff';
     evt
 
-  let to_s evt = string_of_op evt.op ^ evt.relname
+  let to_s evt = string_of_op evt.op ^"_"^ evt.relname
 
   let dispatch_s ~last evt =
     let send = "send("^to_s evt^", me, "^concat_f ", " evt.vals^")" in

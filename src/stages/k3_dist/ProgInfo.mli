@@ -47,6 +47,7 @@ val s_and_over_stmts_in_t :
   prog_data_t ->
   (prog_data_t -> stmt_id_t -> 'a list) -> trig_name_t -> (stmt_id_t * 'a) list
 val stmt_has_rhs_map : prog_data_t -> stmt_id_t -> map_id_t -> bool
+val stmts_with_rhs_maps_in_t : prog_data_t -> trig_name_t -> stmt_id_t list
 val stmts_without_rhs_maps_in_t : prog_data_t -> trig_name_t -> stmt_id_t list
 val rhs_maps_of_stmt : prog_data_t -> stmt_id_t -> map_id_t list
 val lhs_map_of_stmt : prog_data_t -> stmt_id_t -> map_id_t
