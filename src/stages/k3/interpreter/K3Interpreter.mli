@@ -17,7 +17,7 @@ val eval_networked_program : scheduler_state -> (address * id_t option * string 
  * interpreter based on the number of peers
  * Takes run_length -> peer_list -> node_address -> role -> program and returns
  * the complete environment *)
-val interpret_k3_program : int64 -> 
+val interpret_k3_program : ?shuffle_tasks:bool -> int64 -> 
   (address * id_t option * string option) list -> 
-  program_t -> bool -> (address * program_env_t) list
+  program_t -> (address * program_env_t) list
 

@@ -1,5 +1,7 @@
 (* Utilities that are useful *)
 
+let _ = Random.self_init ()
+
 (* abbreviations for annoyingly long functions *)
 let foi = float_of_int
 let iof = int_of_float

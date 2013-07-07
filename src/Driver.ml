@@ -353,7 +353,7 @@ let interpret_k3 params prog = let p = params in
   let tp = typed_program_with_globals prog in 
   try 
     interpret_k3_program 
-      p.run_length p.peers tp p.shuffle_tasks
+      p.run_length p.peers tp ~shuffle_tasks:p.shuffle_tasks
   with RuntimeError (uuid,str) -> handle_interpret_error (K3Data tp) (uuid,str)
 
 let interpret params inputs = 

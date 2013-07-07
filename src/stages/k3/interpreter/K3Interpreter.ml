@@ -12,15 +12,6 @@ open K3Streams
 open K3Consumption
 open K3Runtime
 
-(* If Shuffle tasks received from differnt nodes to simulate network delay*)
-type parameters = {
-  mutable shuffle_tasks :bool;
-}
-
-let interpreter_params : parameters = {
-  shuffle_tasks = false ;
-}
-
 (* Generic helpers *)
 
 let (<|) x f = f x
@@ -59,7 +50,6 @@ let lookup id (mutable_env, frame_env) =
 (* Expression interpretation *)
 
 let value_of_eval ev = match ev with VDeclared v_ref -> !v_ref | VTemp v -> v
-
 
 (* Given an arg_t and a value_t, bind the values to their corresponding argument names. *)
 let rec bind_args uuid a v =
@@ -478,27 +468,29 @@ and eval_expr sched_st cenv texpr =
     | Send ->
       let renv, parts = child_values cenv in
       (* get the sender's address from global variable "me" *)
-      let sender_add = match cenv with
-        | (m_env_lst,_) -> 
-            try
-              match !(List.assoc "me" m_env_lst) with
-                |VAddress add -> add 
-                | _ -> error "global address for me not found" 
-            with Not_found -> error "global variable Me not found"
-      in
       begin match sched_st, parts with
-        | Some sched, [target;addr;arg] -> 
+        | Some s, [target;addr;arg] -> 
             let e = expr_of_value uuid in
+            (* log our send *)
             let send_code = K3Helpers.mk_send (e target) (e addr) (e arg) in
             let send_str = K3PrintSyntax.string_of_expr send_code in
             LOG send_str NAME "K3Interpreter.Msg" LEVEL DEBUG;
-            if interpreter_params.shuffle_tasks then
+
+            (* check if we need to buffer our triggers for shuffling *)
+            if K3Runtime.use_shuffle_tasks s then
+              (* look for "me" to extract our own address *)
+              let sender_addr = 
+                (try match !(List.assoc "me" @: fst cenv) with
+                  |VAddress add -> add 
+                  | _           -> error "global address for me not found" 
+                with Not_found  -> error "global variable 'me' not found")
+              in
               (* buffer trigger for later shuffle *)
-              buffer_trigger target addr arg sender_add;
+              buffer_trigger s target addr arg sender_addr;
               renv, VTemp VUnit
             else
-              schedule_trigger sched target addr arg; 
-              renv, VTemp VUnit
+              (schedule_trigger s target addr arg; 
+              renv, VTemp VUnit)
         | None, _ -> error "Send: missing scheduler"
         | _, _    -> error "Send: bad values"
       end
@@ -616,15 +608,17 @@ let eval_instructions sched_st env address (res_env, d_env) (ri_env, instrs) =
   match instrs with
   | [] -> 
     if node_has_work sched_st address
-    then (log_node @: "consuming messages"; 
-      run_scheduler sched_st address env interpreter_params.shuffle_tasks);
-      ri_env, []
+    then 
+      (log_node "consuming messages"; 
+      run_scheduler sched_st address env;
+      ri_env, [])
+    else ri_env, []
 
   | (Consume id)::t ->
     log_node @: "consuming from event loop: "^id;
     try let i = List.assoc id d_env in 
         let r = run_dispatcher sched_st address res_env ri_env i in
-        run_scheduler sched_st address env interpreter_params.shuffle_tasks; 
+        run_scheduler sched_st address env; 
         r, t
     with Not_found -> 
       int_error "eval_instructions" @: "no event loop found for "^id
@@ -652,7 +646,7 @@ let initialize_peer sched_st address role_opt k3_program =
 let eval_program sched_st address role_opt prog =
   let rec run_until_empty f (x,y) = 
     match f (x,y) with
-    | _, [] -> ()
+    | _, []  -> ()
     | x', y' -> run_until_empty f (x',y')
   in
   let _, ((res_env, d_env, instrs), env) = 
@@ -704,15 +698,14 @@ let eval_networked_program sched_st peer_list prog =
     ) envs
 
 (* Interpret actions *)
-let interpret_k3_program run_length peers typed_prog shuffle_tasks = 
-  let s = init_scheduler_state () in
+let interpret_k3_program ?(shuffle_tasks=false) run_length peers typed_prog = 
+  let s = init_scheduler_state ~shuffle_tasks () in
   configure_scheduler s run_length;
   match peers with
   (* single-site version *)
   | []            -> failwith "interpret_k3_program: Peers list is empty!"
   | [addr,role,_] -> [addr, eval_program s addr role typed_prog]
   | nodes         -> (* networked version *)
-    interpreter_params.shuffle_tasks <- shuffle_tasks;
     List.iter (fun ipr -> 
       print_endline @:
         "Starting node "^K3Printing.string_of_address_and_role ipr
