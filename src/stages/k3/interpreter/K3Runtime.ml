@@ -316,11 +316,12 @@ let process_trigger_queue s address env trigger_id max_to_process =
 
 let process_task s address prog_env =
   let q = get_global_queue s address in
+  let pop_q () = ignore @: Queue.take q in
   try
     match Queue.peek q with
     | Background fn -> 
         fn prog_env;
-        ignore @: Queue.take q;
+        pop_q ();
         NormalExec
 
     | NamedDispatch (id, arg) ->
@@ -328,17 +329,18 @@ let process_task s address prog_env =
         begin match check_breakpoint s id arg with
         | None     ->
             invoke_trigger s address prog_env id arg;
-            ignore @: Queue.take q;
+            pop_q ();
             NormalExec
         | Some PreBreakPoint  -> BreakPoint
         | Some PostBreakPoint -> 
             invoke_trigger s address prog_env id arg;
-            ignore @: Queue.take q;
+            pop_q ();
             BreakPoint
         end
       else NormalExec
 
     | BlockDispatch (id, max_to_process) ->
+      pop_q ();
       if use_global_queueing s then NormalExec
       else process_trigger_queue s address prog_env id max_to_process
 
