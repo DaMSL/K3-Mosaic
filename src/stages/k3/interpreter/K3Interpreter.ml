@@ -14,6 +14,8 @@ open K3Runtime
 
 (* Generic helpers *)
 
+type breakpoint_t = K3Runtime.breakpoint_t
+
 let (<|) x f = f x
 and (|>) f y = f y
 
@@ -603,6 +605,7 @@ let env_of_program ?address sched_st k3_program =
 
 
 (* Instruction interpretation *)
+(* returns status, env, instructions left *)
 let eval_instructions sched_st env address (res_env, d_env) (ri_env, instrs) =
   let log_node s = LOG "Node %s: %s" (string_of_address address) s LEVEL TRACE in
   match instrs with
@@ -610,16 +613,16 @@ let eval_instructions sched_st env address (res_env, d_env) (ri_env, instrs) =
     if node_has_work sched_st address
     then 
       (log_node "consuming messages"; 
-      run_scheduler sched_st address env;
-      ri_env, [])
-    else ri_env, []
+      let status = run_scheduler sched_st address env in
+      status, (ri_env, []))
+    else NormalExec, (ri_env, [])
 
   | (Consume id)::t ->
     log_node @: "consuming from event loop: "^id;
     try let i = List.assoc id d_env in 
         let r = run_dispatcher sched_st address res_env ri_env i in
-        run_scheduler sched_st address env; 
-        r, t
+        let status = run_scheduler sched_st address env in
+        status, (r, t)
     with Not_found -> 
       int_error "eval_instructions" @: "no event loop found for "^id
 
@@ -636,79 +639,83 @@ let interpreter_event_loop role_opt k3_program =
 	  | None, Some (_,y) -> y
 	  | None, None -> error ()
 
-(* returns address, event_loop_t, environment *)
+(* returns address, (event_loop_t, environment) *)
 let initialize_peer sched_st address role_opt k3_program =
-  let env = env_of_program sched_st k3_program ~address in
-    initialize_scheduler sched_st address env;
-    address, (interpreter_event_loop role_opt k3_program, env)
+  let prog_env = env_of_program sched_st k3_program ~address in
+    initialize_scheduler sched_st address prog_env;
+    address, (interpreter_event_loop role_opt k3_program, prog_env)
 
-(* Single-site program interpretation *)
-let eval_program sched_st address role_opt prog =
-  let rec run_until_empty f (x,y) = 
-    match f (x,y) with
-    | _, []  -> ()
-    | x', y' -> run_until_empty f (x',y')
-  in
-  let _, ((res_env, d_env, instrs), env) = 
-    initialize_peer sched_st address role_opt prog in
-  run_until_empty
-    (eval_instructions sched_st env address (res_env, d_env)) 
-    ([], instrs);
-  print_endline @: string_of_program_env env;
-  env
+(* preserve the state of the interpreter *)
+type interpreter_t = {
+  scheduler : scheduler_state;
+  (* metadata including remaining resources and instructions *)
+  peer_meta : (address, resource_impl_env_t * instruction_t list) Hashtbl.t;
+  peer_list : K3Global.peer_t list;
+  envs : (address * (resource_env_t * dispatcher_env_t * program_env_t)) list;
+}
 
+type status_t = K3Runtime.status_t
 
-(* Distributed program interpretation *)
-let eval_networked_program sched_st peer_list prog =
-  (* Initialize an environment for each peer *)
-  let peer_meta = Hashtbl.create @: List.length peer_list in
-  let envs = List.map (fun (addr, role_opt, _) ->  
-      let _, ((res_env, d_env, instrs), env) = 
-        initialize_peer sched_st addr role_opt prog
-      in Hashtbl.replace peer_meta addr ([], instrs);
-      addr, (res_env, d_env, env)
-    ) peer_list
-  in
-
+let interpret_k3_program {scheduler; peer_meta; peer_list; envs} =
   (* Continue running until all peers have finished their instructions,
    * and all messages have been processed *)
   let run_network () = 
     (Hashtbl.fold (fun _ (_,i) acc -> acc || i <> []) peer_meta false) 
-      || network_has_work sched_st
+      || network_has_work scheduler
   in
-  let step_peer (addr, role_opt, _) = 
-    try let (rese, de, env), (rie, i) = 
-      List.assoc addr envs, Hashtbl.find peer_meta addr in
-        (* Both branches invoke eval_instructions to process pending messages,
-         * even if there are no sources on which to consume events *)
-        if i = [] then 
-          ignore @: eval_instructions sched_st env addr (rese, de) (rie, i)
-        else Hashtbl.replace 
-          peer_meta addr @: eval_instructions sched_st env addr (rese, de) (rie, i)
-    with Not_found -> 
-      LOG "Network evaluation for peer %s" (string_of_address addr) LEVEL ERROR
-  in
-  while run_network () do List.iter step_peer peer_list done;
+  let step_peer (addr, _, _) = 
+    try 
+      let (res_env, de, env), (rie, inst) = 
+        List.assoc addr envs, Hashtbl.find peer_meta addr in
+      let status, eval =
+        eval_instructions scheduler env addr (res_env, de) (rie, inst) in
 
-  (* Log and return program state *)
-  List.map (fun (addr, (_,_,e)) -> 
+      (* Both branches invoke eval_instructions to process pending messages,
+        * even if there are no sources on which to consume events *)
+      if inst = [] then status (* return status *)
+      else (Hashtbl.replace peer_meta addr @: eval;
+           status)
+           
+    with Not_found -> int_error "step_peer" @:
+      Printf.sprintf "Network evaluation for peer %s" (string_of_address addr)
+  in
+  let loop status = 
+    if run_network () && status = NormalExec then
+      (* fold over all the peers *)
+      List.fold_left (fun status' peer ->
+          match step_peer peer with
+          | BreakPoint -> BreakPoint
+          | _          -> status'
+        ) NormalExec peer_list
+    else status
+  in
+  let result = loop NormalExec in
+  let prog_state = List.map (fun (addr, (_,_,e)) -> addr, e) envs in
+  (* We only print if we finished execution *)
+  if result = NormalExec then
+    (* Log program state *)
+    List.iter (fun (addr, e) ->
       LOG ">>>> Peer %s" (string_of_address addr) LEVEL TRACE;
       LOG "%s" (string_of_program_env e) LEVEL TRACE;
-      addr, e
-    ) envs
+    ) prog_state;
+  result, prog_state
 
-(* Interpret actions *)
-let interpret_k3_program ?(shuffle_tasks=false) run_length peers typed_prog = 
-  let s = init_scheduler_state ~shuffle_tasks () in
-  configure_scheduler s run_length;
-  match peers with
-  (* single-site version *)
-  | []            -> failwith "interpret_k3_program: Peers list is empty!"
-  | [addr,role,_] -> [addr, eval_program s addr role typed_prog]
-  | nodes         -> (* networked version *)
-    List.iter (fun ipr -> 
-      print_endline @:
-        "Starting node "^K3Printing.string_of_address_and_role ipr
-    ) nodes;
-    eval_networked_program s peers typed_prog
+(* Initialize an interpreter given the parameters *)
+let init_k3_interpreter ?shuffle_tasks ?breakpoints ~run_length ~peers 
+    typed_prog =
+  let s = init_scheduler_state ?shuffle_tasks ?breakpoints ~run_length () in
+  match peers with 
+  | []  -> failwith "interpret_k3_program: Peers list is empty!"
+  | _   ->
+      (* Initialize an environment for each peer *)
+      let peer_meta = Hashtbl.create @: List.length peers in
+      let envs = List.map (fun (addr, role_opt, _) ->  
+                 (* event_loop_t * program_env_t *)
+          let _, ((res_env, d_env, instrs), prog_env) = 
+            initialize_peer s addr role_opt typed_prog
+          in Hashtbl.replace peer_meta addr ([], instrs);
+          addr, (res_env, d_env, prog_env)
+        ) peers
+      in
+      {scheduler=s; peer_meta=peer_meta; peer_list=peers; envs=envs}
 

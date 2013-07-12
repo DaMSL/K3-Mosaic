@@ -7,6 +7,9 @@ open K3Helpers
 
 module U = K3Util
 
+              (* ip,     role,         alias *)
+type peer_t = (address * id_t option * string option)
+
 let me_name = "me"
 let peers_name = "peers"
 

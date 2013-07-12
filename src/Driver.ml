@@ -12,8 +12,8 @@ open K3Util
 open K3Typechecker
 open K3Streams
 open K3Consumption
-open K3Interpreter
-open K3Runtime
+(*open K3Interpreter*)
+(*open K3Runtime*)
 open K3Testing
 open ReifiedK3
 
@@ -171,8 +171,7 @@ type parameters = {
     mutable out_lang     : out_lang_t;
     mutable search_paths : string list;
     mutable input_files  : string list;
-                           (* ip,     role,         alias *)
-    mutable peers        : (address * id_t option * string option) list;
+    mutable peers        : K3Global.peer_t list;
     mutable default_peer : bool; (* whether we're using the default peer *)
     mutable partition_map : K3Route.part_map_t;
     mutable run_length   : int64;
@@ -185,7 +184,7 @@ type parameters = {
                                     to simulate network delay *)
   }
 
-let cmd_line_params : parameters = {
+let cmd_line_params = {
     action        = ref Print;
     test_mode     = ref ProgramTest;
     in_lang       = K3in;
@@ -351,9 +350,11 @@ let interpret_k3 params prog = let p = params in
   (* this not only adds type info, it adds the globals which are crucial
     * for interpretation *)
   let tp = typed_program_with_globals prog in 
+  let open K3Interpreter in
+  let interp = init_k3_interpreter tp 
+    ~run_length:p.run_length ~peers:p.peers ~shuffle_tasks:p.shuffle_tasks in
   try 
-    interpret_k3_program 
-      p.run_length p.peers tp ~shuffle_tasks:p.shuffle_tasks
+    snd @: interpret_k3_program interp 
   with RuntimeError (uuid,str) -> handle_interpret_error (K3Data tp) (uuid,str)
 
 let interpret params inputs = 

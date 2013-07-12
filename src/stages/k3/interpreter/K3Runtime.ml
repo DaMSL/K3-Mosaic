@@ -16,12 +16,14 @@ type runtime_error_type =
   | INVALID_TRIGGER_QUEUE
   | INVALID_TRIGGER_TARGET
   | INVALID_SHUFFLE_BUFFER
+  | INVALID_BREAKPOINT
 
 let runtime_errors = [
     INVALID_GLOBAL_QUEUE, (-1000, "invalid empty task queue");
     INVALID_TRIGGER_QUEUE, (-1001, "invalid dequeue on trigger");
     INVALID_TRIGGER_TARGET, (-1002, "invalid target for message send");
     INVALID_SHUFFLE_BUFFER, (-1003, "error in shuffle buffer");
+    INVALID_BREAKPOINT, (-1004, "invalid breakpoint");
   ]
   
 let error t =
@@ -46,6 +48,9 @@ type task_t =
   | NamedDispatch of id_t * value_t 
   | BlockDispatch of id_t * int
 
+type status_t = NormalExec | BreakPoint
+type bp_t = PostBreakPoint | PreBreakPoint
+
 type scheduler_spec = {
     mutable mode : queue_granularity_t;
     mutable events_to_process : int64;
@@ -53,33 +58,56 @@ type scheduler_spec = {
     mutable shuffle_tasks     : bool;
   }
 
+let default_interleave_period = 10
+let default_events_to_process = Int64.minus_one
+
 let default_params = {
     mode = PerTrigger;
-    events_to_process = Int64.minus_one;
-    interleave_period = 10;
+    events_to_process = default_events_to_process;
+    interleave_period = default_interleave_period;
     shuffle_tasks = false;
   }
+
+(* Breakpoint types *)
+type breakpoint_t = {
+  trigger : id_t;
+  (* specify values for some args, others can be left out *)
+  args : value_t;
+  (* when the counter reaches 0, the breakpoint is activated *)
+  counter : int;
+  (* stop pre or post trigger *)
+  post_trigger: bool;
+}
+
+type node_queue_t = 
+    (* node,  (general queue,   (trigger, trig queue of args) *)
+    (address, (task_t Queue.t * (id_t, value_t Queue.t) Hashtbl.t)) Hashtbl.t
+
+
+(* for causing intentional reordering within the simulated network (while
+  * still maintaining TCP-like ordering from a single sender *)
+type shuffle_buffer_t = 
+    (* node * sender,   (trigger * args)) *)
+    (address, (address, (id_t * value_t) Queue.t) Hashtbl.t) Hashtbl.t
 
 type scheduler_state = {
   params : scheduler_spec;
   mutable events_processed : Int64.t;
-  node_queues : 
-    (* node,  (general queue,   (trigger, trig queue of args) *)
-    (address, (task_t Queue.t * (id_t, value_t Queue.t) Hashtbl.t)) Hashtbl.t;
-
-  (* for causing intentional reordering within the simulated network (while
-   * still maintaining TCP-like ordering from a single sender *)
-  shuffle_buffer :
-    (* node * sender,   (trigger * args)) *)
-    (address, (address, (id_t * value_t) Queue.t) Hashtbl.t) Hashtbl.t;
+  node_queues : node_queue_t;
+  shuffle_buffer : shuffle_buffer_t;
+  mutable breakpoints : breakpoint_t list;
  }
 
-let init_scheduler_state ?(shuffle_tasks=false) () = {
-  params = {default_params with shuffle_tasks = shuffle_tasks};
-  events_processed = Int64.zero;
-  node_queues = Hashtbl.create 10;
-  shuffle_buffer = Hashtbl.create 10;
-}
+let init_scheduler_state ?(shuffle_tasks=false) ?(breakpoints=[])
+    ?(run_length=default_events_to_process) () = 
+  {
+    params = { default_params with shuffle_tasks = shuffle_tasks; 
+               events_to_process = run_length };
+    events_processed = Int64.zero;
+    node_queues = Hashtbl.create 10;
+    shuffle_buffer = Hashtbl.create 10;
+    breakpoints = breakpoints;
+  }
 
 let use_global_queueing s = s.params.mode = Global
 let dispatch_block_size s = s.params.interleave_period  
@@ -186,21 +214,20 @@ let schedule_trigger_random s receive_address =
   let senders_set = 
     Hashtbl.fold (fun sender_add _ acc -> sender_add::acc) per_node_buf []
   in
-  let _ = iterate_until
-    (fun (set, len) ->
-      if len <= 0 then Left ()
+  let rec loop set len =
+    if len <= 0 then ()
+    else
+      let i = Random.int len in
+      let addr = at set i in
+      let q = Hashtbl.find per_node_buf addr in
+      if Queue.is_empty q then
+        loop (list_remove addr set) (len - 1)
       else
-        let i = Random.int len in
-        let addr = at set i in
-        let q = Hashtbl.find per_node_buf addr in
-        if Queue.is_empty q then
-          Right(list_remove addr set, len - 1)
-        else
-          let trigger_id, args = Queue.take q in
-          schedule_trigger s (VTarget trigger_id) (VAddress receive_address)
-            args;
-          Right(set, len)
-    ) (senders_set, List.length senders_set) in
+        let trigger_id, args = Queue.take q in
+        schedule_trigger s (VTarget trigger_id) (VAddress receive_address)
+          args;
+        loop set len
+  in loop senders_set (List.length senders_set);
   Hashtbl.reset per_node_buf
 
 (* Scheduler execution *)
@@ -213,6 +240,46 @@ let continue_processing s address =
   in
   has_messages && events_remain
 
+(* compare the breakpoint filter to the actual arguments *)
+let rec breakpoint_arg_test test_arg arg =
+  let all l1 l2 = 
+    List.for_all2 breakpoint_arg_test l1 l2 
+  in
+  match test_arg, arg with
+  | VUnknown, _            -> true
+  | VTuple l1, VTuple l2   -> all l1 l2
+  | VOption o1, VOption o2 -> 
+      begin match o1, o2 with
+      | None, None         -> true
+      | Some o1', Some o2' -> breakpoint_arg_test o1' o2'
+      | _, _               -> false
+      end
+  | VSet l1, VSet l2       -> all l1 l2
+  | VBag l1, VBag l2       -> all l1 l2
+  | VList l1, VList l2     -> all l1 l2
+  | VFunction _, _
+  | _, VFunction _         -> error INVALID_BREAKPOINT
+  | a, b when a = b        -> true
+  | _                      -> false
+
+let check_breakpoint s target_trig arg =
+  let bp_type, bp' = 
+    List.fold_left (fun (bp, acc) b -> 
+      if b.trigger = target_trig && breakpoint_arg_test b.args arg then
+        let b' = {b with counter = b.counter - 1} in
+        if b'.counter <= 0 then 
+          let t = match b.post_trigger with
+            | true  -> Some PostBreakPoint 
+            | false -> Some PreBreakPoint in
+          t, acc
+        else bp, b'::acc
+      else bp, b::acc) 
+    (None, []) 
+    s.breakpoints
+  in
+  s.breakpoints <- bp';
+  bp_type
+
 let invoke_trigger s address (trigger_env, val_env) trigger_id arg =
   (* get the frozen function for the trigger and apply it to the env and args *)
   (List.assoc trigger_id trigger_env) val_env arg;
@@ -223,34 +290,61 @@ let invoke_trigger s address (trigger_env, val_env) trigger_id arg =
 
 (* process the events for a particular trigger queue *)
 let process_trigger_queue s address env trigger_id max_to_process =
-  let q = get_trigger_input_queue s address trigger_id in
-  let processed = ref max_to_process in
-  while not (Queue.is_empty q) && !processed > 0 do
-    try invoke_trigger s address env trigger_id @: Queue.take q;
-        decr processed
-    with Not_found -> error INVALID_TRIGGER_QUEUE
-  done;
+  let q = try get_trigger_input_queue s address trigger_id
+          with Not_found -> error INVALID_TRIGGER_QUEUE
+  in
+  let rec loop num_left =
+    if Queue.is_empty q || num_left <= 0 then NormalExec
+    else 
+      let args = Queue.peek q in
+      match check_breakpoint s trigger_id args with
+      | None     -> 
+          invoke_trigger s address env trigger_id @: Queue.take q;
+          loop (num_left - 1)
+      | Some PreBreakPoint  -> BreakPoint
+      | Some PostBreakPoint ->
+          invoke_trigger s address env trigger_id @: Queue.take q;
+          BreakPoint
+  in
+  let res = loop max_to_process in
+
   (* the block we were assigned wasn't enough for this trigger *)
   if not @: Queue.is_empty q then 
-    schedule_task s address @: BlockDispatch (trigger_id, dispatch_block_size s)
+    schedule_task s address @: 
+      BlockDispatch (trigger_id, dispatch_block_size s);
+  res
 
 let process_task s address prog_env =
+  let q = get_global_queue s address in
   try
-    match Queue.take @: get_global_queue s address with
-    | Background fn -> fn prog_env
+    match Queue.peek q with
+    | Background fn -> 
+        fn prog_env;
+        ignore @: Queue.take q;
+        NormalExec
 
     | NamedDispatch (id, arg) ->
-      if use_global_queueing s then invoke_trigger s address prog_env id arg else ()
+      if use_global_queueing s then 
+        begin match check_breakpoint s id arg with
+        | None     ->
+            invoke_trigger s address prog_env id arg;
+            ignore @: Queue.take q;
+            NormalExec
+        | Some PreBreakPoint  -> BreakPoint
+        | Some PostBreakPoint -> 
+            invoke_trigger s address prog_env id arg;
+            ignore @: Queue.take q;
+            BreakPoint
+        end
+      else NormalExec
 
     | BlockDispatch (id, max_to_process) ->
-      if use_global_queueing s then ()
+      if use_global_queueing s then NormalExec
       else process_trigger_queue s address prog_env id max_to_process
 
   with Queue.Empty -> error INVALID_GLOBAL_QUEUE
 
 (* Scheduler toplevel methods *)
-let configure_scheduler s program_events = 
-  s.params.events_to_process <- program_events
 
 (* register the node and its triggers *)
 let initialize_scheduler s address (trig_env,_) =
@@ -274,10 +368,14 @@ let network_has_work s =
   Hashtbl.fold (fun addr _ acc -> acc || node_has_work s addr) s.node_queues false
 
 let run_scheduler ?(slice = max_int) s address env =
-  let i = ref slice in
-  (* schedule shuffle trigger if the shuffle flag is on *)
-  if s.params.shuffle_tasks then schedule_trigger_random s address;
-  while !i > 0 && continue_processing s address
-  do process_task s address env; decr i done
+  let rec loop i = 
+    if i <= 0 || not @: continue_processing s address then NormalExec
+    else 
+      (* schedule shuffle trigger if the shuffle flag is on *)
+      (if s.params.shuffle_tasks then schedule_trigger_random s address;
+      match process_task s address env with
+      | NormalExec -> loop (i-1)
+      | BreakPoint -> BreakPoint)
+  in loop slice
 
 let use_shuffle_tasks s  = s.params.shuffle_tasks 
