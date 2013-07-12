@@ -48,9 +48,6 @@ type task_t =
   | NamedDispatch of id_t * value_t 
   | BlockDispatch of id_t * int
 
-type status_t = NormalExec | BreakPoint
-type bp_t = PostBreakPoint | PreBreakPoint
-
 type scheduler_spec = {
     mutable mode : queue_granularity_t;
     mutable events_to_process : int64;
@@ -78,6 +75,12 @@ type breakpoint_t = {
   (* stop pre or post trigger *)
   post_trigger: bool;
 }
+
+
+type bp_t = PostBreakPoint of breakpoint_t 
+ | PreBreakPoint of breakpoint_t
+
+type status_t = NormalExec | BreakPoint of breakpoint_t
 
 type node_queue_t = 
     (* node,  (general queue,   (trigger, trig queue of args) *)
@@ -108,6 +111,9 @@ let init_scheduler_state ?(shuffle_tasks=false) ?(breakpoints=[])
     shuffle_buffer = Hashtbl.create 10;
     breakpoints = breakpoints;
   }
+
+let add_breakpoint s bp = 
+  s.breakpoints <- bp :: s.breakpoints
 
 let use_global_queueing s = s.params.mode = Global
 let dispatch_block_size s = s.params.interleave_period  
@@ -267,14 +273,10 @@ let check_breakpoint s target_trig arg =
     List.fold_left (fun (bp, acc) b -> 
       if b.trigger = target_trig && breakpoint_arg_test b.args arg then
         let b' = {b with counter = b.counter - 1} in
-        if b'.counter <= 0 then 
-          let t = match b.post_trigger with
-            | true  -> Some PostBreakPoint 
-            | false -> Some PreBreakPoint in
-          t, acc
+        if b'.counter <= 0 then BreakPoint b, acc
         else bp, b'::acc
       else bp, b::acc) 
-    (None, []) 
+    (NormalExec, []) 
     s.breakpoints
   in
   s.breakpoints <- bp';
@@ -297,14 +299,15 @@ let process_trigger_queue s address env trigger_id max_to_process =
     if Queue.is_empty q || num_left <= 0 then NormalExec
     else 
       let args = Queue.peek q in
-      match check_breakpoint s trigger_id args with
-      | None     -> 
+      let m_bp = check_breakpoint s trigger_id args in
+      match m_bp with
+      | NormalExec     -> 
           invoke_trigger s address env trigger_id @: Queue.take q;
           loop (num_left - 1)
-      | Some PreBreakPoint  -> BreakPoint
-      | Some PostBreakPoint ->
+      | BreakPoint bp when bp.post_trigger -> 
           invoke_trigger s address env trigger_id @: Queue.take q;
-          BreakPoint
+          m_bp
+      | BreakPoint bp -> m_bp
   in
   let res = loop max_to_process in
 
@@ -326,16 +329,17 @@ let process_task s address prog_env =
 
     | NamedDispatch (id, arg) ->
       if use_global_queueing s then 
-        begin match check_breakpoint s id arg with
-        | None     ->
+        let m_bp = check_breakpoint s id arg in
+        begin match m_bp with
+        | NormalExec ->
             invoke_trigger s address prog_env id arg;
             pop_q ();
-            NormalExec
-        | Some PreBreakPoint  -> BreakPoint
-        | Some PostBreakPoint -> 
+            m_bp
+        | BreakPoint bp when bp.post_trigger -> 
             invoke_trigger s address prog_env id arg;
             pop_q ();
-            BreakPoint
+            m_bp
+        | BreakPoint bp -> m_bp
         end
       else NormalExec
 
@@ -377,7 +381,7 @@ let run_scheduler ?(slice = max_int) s address env =
       (if s.params.shuffle_tasks then schedule_trigger_random s address;
       match process_task s address env with
       | NormalExec -> loop (i-1)
-      | BreakPoint -> BreakPoint)
+      | BreakPoint bp -> BreakPoint bp)
   in loop slice
 
 let use_shuffle_tasks s  = s.params.shuffle_tasks 

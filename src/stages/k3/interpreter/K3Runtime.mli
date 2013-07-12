@@ -3,7 +3,6 @@ open K3Streams
 open K3Values
 
 type scheduler_state
-type status_t = NormalExec | BreakPoint
 
 type breakpoint_t = {
   trigger : id_t;
@@ -14,6 +13,8 @@ type breakpoint_t = {
   (* stop pre or post trigger *)
   post_trigger: bool;
 }
+
+type status_t = NormalExec | BreakPoint of breakpoint_t
 
 (* send target_trig, addr, arg *)
 val schedule_trigger : scheduler_state -> value_t -> value_t -> value_t -> unit

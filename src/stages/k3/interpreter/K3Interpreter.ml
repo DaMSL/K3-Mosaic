@@ -684,8 +684,8 @@ let interpret_k3_program {scheduler; peer_meta; peer_list; envs} =
       (* fold over all the peers *)
       List.fold_left (fun status' peer ->
           match step_peer peer with
-          | BreakPoint -> BreakPoint
-          | _          -> status'
+          | BreakPoint bp -> BreakPoint bp
+          | NormalExec    -> status'
         ) NormalExec peer_list
     else status
   in
