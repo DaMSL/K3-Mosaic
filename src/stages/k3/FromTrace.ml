@@ -125,13 +125,15 @@ end
 (* possible map types *)
 type map_t = SingletonMap of SingletonMap.t | OutputMap of OutputMap.t
 
+module StringMap = Map.Make(struct type t = string let compare = compare end)
+
 (* update map values to match events *)
-let update_maps (maps:(string, map_t) Hashtbl.t) events =
-  if Hashtbl.length maps = 0 then failwith "empty maps";
-  List.iter (fun evt ->
-    Hashtbl.iter (fun mapname eff_list ->
-      let map = Hashtbl.find maps mapname in
-      List.iter (fun (op, ivars, ovars, v) ->
+let update_maps maps events =
+  if StringMap.is_empty maps then failwith "empty maps" else
+  List.fold_left (fun acc evt ->
+    Hashtbl.fold (fun mapname eff_list acc' ->
+      let map = StringMap.find mapname maps in
+      List.fold_left (fun acc'' (op, ivars, ovars, v) ->
         (* debug *)
         (*print_endline @: mapname^" "^concat_f "," ovars^":= "^sof v;*)
         let m' = match map, op with
@@ -144,10 +146,10 @@ let update_maps (maps:(string, map_t) Hashtbl.t) events =
         | OutputMap m, RelEvent.Delete ->
             OutputMap(OutputMap.del m ivars ovars)
         in
-        Hashtbl.replace maps mapname m'
-      ) eff_list
-    ) evt.RelEvent.effects
-  ) events
+        StringMap.add mapname m' maps 
+      ) acc' eff_list
+    ) evt.RelEvent.effects acc
+  ) maps events
 
 (* dump a map into a string *)
 let dump_map mapname mapdata =
@@ -160,11 +162,10 @@ let dump_map mapname mapdata =
     []
 
 let parse_trace file ~dist =
-  let (maps : (string, map_t) Hashtbl.t) = Hashtbl.create 0 in
   let lines = read_file_lines file in
 
-  let _, sys_ready, events =
-    List.fold_left (fun (line, sys_ready, events) str ->
+  let maps, _, sys_ready, events =
+    List.fold_left (fun (maps, line, sys_ready, events) str ->
       let m = r_groups str ~n:4
         ~r:"DECLARE MAP \\([^(]+\\)(\\(int\\|float\\))\\[\\([^]]*\\)\\]\\[\\([^]]*\\)\\]"
       in
@@ -184,11 +185,12 @@ let parse_trace file ~dist =
               OutputMap(OutputMap.init mapname maptype ovars otypes)
 
           | _ -> failwith @: "missing values at line "^soi line
-        in Hashtbl.add maps (unwrap_some mapname) new_map;
-        line+1, sys_ready, events
+        in
+        let maps' = StringMap.add (unwrap_some mapname) new_map maps in
+        maps', line+1, sys_ready, events
       else
       if r_match "ON SYSTEM READY {\n[^}]*}" str then 
-        line+1, true, events else
+        maps, line+1, true, events else
       let m = r_groups str ~n:3
         ~r:"ON \\(\\+\\|-\\) \\([^(]+\\)([^)]*) <- \\[\\([^]]*\\)\\]" in
       if not @: null m then
@@ -196,7 +198,7 @@ let parse_trace file ~dist =
         | Some op, Some relname, Some vals ->
             let vals = foss @: r_split "; *" vals in
             let evt = RelEvent.init op relname vals in
-            line+1, sys_ready, evt::events
+            maps, line+1, sys_ready, evt::events
         | _ -> failwith @: "invalid input for ON at line "^soi line
       else
       let m = r_groups str ~n:4
@@ -211,7 +213,7 @@ let parse_trace file ~dist =
             | []    -> failwith @: "No event to update at line "^soi line
             | e::es -> 
                 let e' = RelEvent.add_effect e mapname ivars_f ovars_f v_f in
-                line+1, sys_ready, e'::es
+                maps, line+1, sys_ready, e'::es
             end
           | _ -> failwith @: "error in update at line "^soi line
       else
@@ -225,12 +227,12 @@ let parse_trace file ~dist =
             | []    -> failwith @: "No event to update at line "^soi line
             | e::es -> 
                 let e' = RelEvent.del_effect e mapname ivars_f ovars_f in
-                line+1, sys_ready, e'::es
+                maps, line+1, sys_ready, e'::es
             end
           | _ -> failwith @: "error in update at line "^soi line
       else 
-        line+1, sys_ready, events 
-    ) (1, false, []) lines
+        maps, line+1, sys_ready, events 
+    ) (StringMap.empty, 1, false, []) lines
   in
   let events = List.rev events in (* reverse events *)
 
@@ -277,10 +279,10 @@ let parse_trace file ~dist =
     []
   in
   (* update all maps with the event data *)
-  update_maps maps events;
+  let maps = update_maps maps events in
   (* list of all maps and their data *)
   let mapl = 
-    Hashtbl.fold (fun name mapdata acc ->
+    StringMap.fold (fun name mapdata acc ->
       (name, dump_map name mapdata)::acc
     ) maps [] 
   in
@@ -295,5 +297,8 @@ let dump_map_strings maps =
   in
   String.concat ", " maps'
 
+(* Convert a file to a string representation *)
+(*let get_strings_of_file file ~dist = *)
+  (*let maps, events = parse_trace file ~dist in*)
 
 
