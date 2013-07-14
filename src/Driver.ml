@@ -395,7 +395,7 @@ let print_k3_dist_test_program = function
         if not @: null cmd_line_params.trace_files then
           let code_s, maplist = 
             let trace_file = at cmd_line_params.trace_files idx in
-            FromTrace.parse_trace trace_file ~dist:true
+            FromTrace.string_of_file trace_file ~is_dist:true
           in
           let map_final_l = 
             list_map (fun (nm, code) -> nm, parse_k3_expr code) maplist in

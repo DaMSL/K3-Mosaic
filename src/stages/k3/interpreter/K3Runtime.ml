@@ -323,8 +323,8 @@ let process_task s address prog_env =
   try
     match Queue.peek q with
     | Background fn -> 
-        fn prog_env;
         pop_q ();
+        fn prog_env;
         NormalExec
 
     | NamedDispatch (id, arg) ->
@@ -332,12 +332,12 @@ let process_task s address prog_env =
         let m_bp = check_breakpoint s id arg in
         begin match m_bp with
         | NormalExec ->
-            invoke_trigger s address prog_env id arg;
             pop_q ();
+            invoke_trigger s address prog_env id arg;
             m_bp
         | BreakPoint bp when bp.post_trigger -> 
-            invoke_trigger s address prog_env id arg;
             pop_q ();
+            invoke_trigger s address prog_env id arg;
             m_bp
         | BreakPoint bp -> m_bp
         end

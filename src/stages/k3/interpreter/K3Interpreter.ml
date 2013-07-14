@@ -679,14 +679,16 @@ let interpret_k3_program {scheduler; peer_meta; peer_list; envs} =
     with Not_found -> int_error "step_peer" @:
       Printf.sprintf "Network evaluation for peer %s" (string_of_address addr)
   in
-  let loop status = 
+  let rec loop status = 
     if run_network () && status = NormalExec then
       (* fold over all the peers *)
-      List.fold_left (fun status' peer ->
+      let status' = List.fold_left (fun status' peer ->
           match step_peer peer with
           | BreakPoint bp -> BreakPoint bp
           | NormalExec    -> status'
         ) NormalExec peer_list
+      in
+      loop status'
     else status
   in
   let result = loop NormalExec in
