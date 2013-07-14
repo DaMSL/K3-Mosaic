@@ -15,6 +15,9 @@ let concat_f str f_list =
 (* float of string list *)
 let foss l = list_map fos l
 
+(* connect with newlines *)
+let str_make = String.concat "\n"
+
 module StrMap = Map.Make(struct type t = string let compare = compare end)
 
 module SingletonMap = struct
@@ -161,9 +164,8 @@ let dump_map mapname mapdata =
     "}\n"::
     []
 
-let parse_trace file ~dist =
+let parse_trace file =
   let lines = read_file_lines file in
-
   let maps, _, sys_ready, events =
     List.fold_left (fun (maps, line, sys_ready, events) str ->
       let m = r_groups str ~n:4
@@ -235,23 +237,24 @@ let parse_trace file ~dist =
     ) (StringMap.empty, 1, false, []) lines
   in
   let events = List.rev events in (* reverse events *)
+  events, maps, sys_ready
 
+let string_of_go_trig ~has_sys_ready events =
   (* the extra input trigger *) 
-  let trig_s =
-    let s = ["trigger go(id : int) {} = do {\n"] in
-    let s = if sys_ready then s@["  send(system_ready_event, me, 1);\n"] else s
-    in
-    let len = List.length events in
-    let s2 = list_mapi (fun (i, x) ->
-      let last = if i >= len - 1 then true else false in
-      Printf.sprintf "  %s\n" @: RelEvent.dispatch_s x ~last
-    ) events
-    in
-    let s2 = s2@["}\n"] in
-    String.concat "" @: s@s2
+  let s = ["trigger go(id : int) {} = do {\n"] in
+  let s = if has_sys_ready then s@["  send(system_ready_event, me, 1);\n"] else s
   in
-  let str_make = String.concat "\n" in
-  let role_s = if dist then
+  let len = List.length events in
+  let s2 = list_mapi (fun (i, x) ->
+    let last = if i >= len - 1 then true else false in
+    Printf.sprintf "  %s\n" @: RelEvent.dispatch_s x ~last
+  ) events
+  in
+  let s2 = s2@["}\n"] in
+  String.concat "" @: s@s2
+
+let string_of_test_role ~is_dist =
+  if is_dist then
     (str_make @:
       "role switch {"::
       "  source s_on_init : int = stream([1])"::
@@ -277,17 +280,12 @@ let parse_trace file ~dist =
     "}"::[])::
     "default role test\n"::
     []
-  in
-  (* update all maps with the event data *)
-  let maps = update_maps maps events in
-  (* list of all maps and their data *)
-  let mapl = 
-    StringMap.fold (fun name mapdata acc ->
-      (name, dump_map name mapdata)::acc
-    ) maps [] 
-  in
-  (* return the tree components we have to add *)
-  str_make (trig_s::role_s), mapl
+
+(* convert the maps to a list *)
+let string_of_maps maps = 
+  StringMap.fold (fun name mapdata acc ->
+    (name, dump_map name mapdata)::acc
+  ) maps [] 
 
 (* combine the map strings (left string, right string) into their final form *)
 let dump_map_strings maps =
@@ -298,7 +296,15 @@ let dump_map_strings maps =
   String.concat ", " maps'
 
 (* Convert a file to a string representation *)
-(*let get_strings_of_file file ~dist = *)
-  (*let maps, events = parse_trace file ~dist in*)
+let string_of_file file ~is_dist = 
+  let events, maps, sys_ready = parse_trace file in
+  (* update all maps with the event data *)
+  let maps = update_maps maps events in
+  (* list of all maps and their data *)
+  let mapl = string_of_maps maps in
+  let trig_s = string_of_go_trig ~has_sys_ready:sys_ready events in
+  let role_s = string_of_test_role ~is_dist in
+  (* return the tree components we have to add *)
+  str_make (trig_s::role_s), mapl
 
 
