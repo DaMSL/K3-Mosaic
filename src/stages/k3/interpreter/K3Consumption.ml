@@ -65,10 +65,10 @@ let pull_source id t res in_chan =
          begin match !exp_l_ref with
           | [] -> None
           | e::es -> 
-              begin match K3Util.tag_of_expr e with
-                | Const c -> exp_l_ref := es; Some (value_of_const c)
-                | _ -> raise (ResourceError id)
-              end
+              exp_l_ref := es;
+              let v = try K3Values.value_of_const_expr e
+                      with Failure _ -> raise @: ResourceError id
+              in Some v
          end
 
 	  | _ -> raise (ResourceError id)

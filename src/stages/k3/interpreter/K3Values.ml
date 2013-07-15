@@ -154,6 +154,14 @@ let value_of_const = function
   | CAddress (ip,port) -> VAddress (ip,port)
   | CTarget id -> VTarget id
 
+(* limited conversion between expr and values *)
+let rec value_of_const_expr e = match tag_of_expr e with
+    | Tuple -> let es = decompose_tuple e in
+      VTuple(list_map value_of_const_expr es)
+    | Const c -> value_of_const c
+    | _ -> failwith "value is too complex"
+
+
 let rec type_of_value uuid value = 
   let typ_fst vs = type_of_value uuid @: List.hd vs in
   match value with
