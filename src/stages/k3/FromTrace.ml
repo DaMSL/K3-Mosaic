@@ -84,17 +84,17 @@ module RelEvent = struct
   type t = {
     op:op_t;
     relname:string;
+    types: string list;
     vals:float list;
     (* mapname, effect *)
     effects: (string, hash_t) Hashtbl.t;
     id:int;
   }
 
-  let init op relname vals =
+  let init op relname types vals =
     let r = {
         op = if op = "+" then Insert else Delete;
-        relname=relname;
-        vals=vals;
+        relname; vals; types;
         effects=Hashtbl.create 0;
         id = !next_evt_id
       } in
@@ -119,9 +119,56 @@ module RelEvent = struct
 
   let to_s evt = string_of_op evt.op ^"_"^ evt.relname
 
+  (* convert the event to a send message *)
   let dispatch_s ~last evt =
     let send = "send("^to_s evt^", me, "^concat_f ", " evt.vals^")" in
     if last then send else send^";"
+
+  (* convert the event to a stream message *)
+  let stream_s events = 
+    let groups = match events with
+      | []  -> failwith "no events"
+      | [e] -> [[e]]
+      | _   ->
+        let fst_evt = hd events in
+        (* group events by op and name *)
+        let _,_,gs = List.fold_left
+          (fun (last_op, last_relname, groups) evt -> 
+            match groups with 
+            | []        -> failwith "error"
+            | grp::grps ->
+              (* continue the same group *)
+              if evt.op = last_op && evt.relname = last_relname then
+                last_op, last_relname, (evt::grp)::grps
+              else 
+                (* start a new group and reverse the previous group *)
+                evt.op, evt.relname, [evt]::(List.rev grp)::grps
+          ) (fst_evt.op, fst_evt.relname, [[fst_evt]]) (tl events)
+        in List.rev gs
+    in
+    let src num = Printf.sprintf "s%d" num in 
+    let len = List.length groups in
+    let _, src_s = mapfold (fun num group ->
+      let src = src num in
+      let evt = hd group in
+      let types = match evt.types with
+        | []  -> failwith "missing types"
+        | [t] -> t
+        | ts  -> "("^String.concat ", " ts^")"
+      in
+      let vals_inner = list_map (fun evt -> concat_f ", " evt.vals) group in
+      let vals = "["^String.concat "; " vals_inner^"]" in
+      num - 1, Printf.sprintf "source %s : %s = stream(%s)\n\
+                      bind %s -> %s"
+                      src types vals
+                      src (to_s evt)
+    ) 1 groups
+    in
+    let _, consume_s = mapfold (fun num group ->
+      num - 1, Printf.sprintf "consume %s" (src num)
+    ) len groups
+    in
+    src_s@consume_s
 
 end
 
@@ -193,13 +240,16 @@ let parse_trace file =
       else
       if r_match "ON SYSTEM READY {\n[^}]*}" str then 
         maps, line+1, true, events else
-      let m = r_groups str ~n:3
-        ~r:"ON \\(\\+\\|-\\) \\([^(]+\\)([^)]*) <- \\[\\([^]]*\\)\\]" in
+      let m = r_groups str ~n:4
+        ~r:"ON \\(\\+\\|-\\) \\([^(]+\\)(\\([^)]+\\)) <- \\[\\([^]]*\\)\\]" in
       if not @: null m then
-        match at m 0, at m 1, at m 2 with
-        | Some op, Some relname, Some vals ->
+        match m with
+        | [Some op; Some relname; Some id_types; Some vals] ->
             let vals = foss @: r_split "; *" vals in
-            let evt = RelEvent.init op relname vals in
+            let id_types = r_split ", *" id_types in
+            let id_types = List.map (r_split ":") id_types in
+            let types = List.map (fun l -> at l 1) id_types in 
+            let evt = RelEvent.init op relname types vals in
             maps, line+1, sys_ready, evt::events
         | _ -> failwith @: "invalid input for ON at line "^soi line
       else
@@ -207,7 +257,7 @@ let parse_trace file =
         ~r:"UPDATE '\\([^']*\\)'\\[\\([^]]*\\)\\]\\[\\([^]]*\\)\\] := \
           \\(.*\\)$" in
       if not @: null m then match m with
-          | (Some mapname)::(Some ivars)::(Some ovars)::(Some v)::_ ->
+        | [Some mapname; Some ivars; Some ovars; Some v] ->
             let ivars_f = if ivars = "-" then [] else foss @: r_split "; " ivars in
             let ovars_f = if ovars = "-" then [] else foss @: r_split "; " ovars in
             let v_f = fos v in
@@ -217,7 +267,7 @@ let parse_trace file =
                 let e' = RelEvent.add_effect e mapname ivars_f ovars_f v_f in
                 maps, line+1, sys_ready, e'::es
             end
-          | _ -> failwith @: "error in update at line "^soi line
+        | _ -> failwith @: "error in update at line "^soi line
       else
       let m = r_groups str ~n:3
         ~r:"REMOVE '\\([^']*\\)'\\[\\([^]]*\\)\\]\\[\\([^]]*\\)\\]" in
@@ -253,16 +303,14 @@ let string_of_go_trig ~has_sys_ready events =
   let s2 = s2@["}\n"] in
   String.concat "" @: s@s2
 
-let string_of_test_role ~is_dist =
+let string_of_test_role ~is_dist events =
   if is_dist then
     (str_make @:
       "role switch {"::
       "  source s_on_init : int = stream([1])"::
       "  bind s_on_init -> on_init"::
       "  consume s_on_init"::
-      "  source s1 : int = stream([1])"::
-      "  bind s1 -> go"::
-      "  consume s1"::
+      RelEvent.stream_s events@
       "}"::
       "role node {"::
       "  source s_on_init : int = stream([1])"::
@@ -273,12 +321,10 @@ let string_of_test_role ~is_dist =
       []
   else (* single-site *)
     (str_make @:
-    "role test {"::
-    "  source s1 : int = stream([1])"::
-    "  bind s1 -> go"::
-    "  consume s1"::
+    "role switch {"::
+    RelEvent.stream_s events@
     "}"::[])::
-    "default role test\n"::
+    "default role switch\n"::
     []
 
 (* convert the maps to a list *)
@@ -302,9 +348,9 @@ let string_of_file file ~is_dist =
   let maps = update_maps maps events in
   (* list of all maps and their data *)
   let mapl = string_of_maps maps in
-  let trig_s = string_of_go_trig ~has_sys_ready:sys_ready events in
-  let role_s = string_of_test_role ~is_dist in
+  (*let trig_s = string_of_go_trig ~has_sys_ready:sys_ready events in*)
+  let role_s = string_of_test_role ~is_dist events in
   (* return the tree components we have to add *)
-  str_make (trig_s::role_s), mapl
+  str_make ((* trig_s::*)role_s), mapl
 
 
