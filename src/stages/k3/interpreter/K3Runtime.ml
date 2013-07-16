@@ -59,7 +59,7 @@ let default_interleave_period = 10
 let default_events_to_process = Int64.minus_one
 
 let default_params = {
-    mode = PerTrigger;
+    mode = Global;
     events_to_process = default_events_to_process;
     interleave_period = default_interleave_period;
     shuffle_tasks = false;
@@ -84,14 +84,14 @@ type status_t = NormalExec | BreakPoint of breakpoint_t
 
 type node_queue_t = 
     (* node,  (general queue,   (trigger, trig queue of args) *)
-    (address, (task_t Queue.t * (id_t, value_t Queue.t) Hashtbl.t)) Hashtbl.t
+    (address, (task_t K3Queue.t * (id_t, value_t K3Queue.t) Hashtbl.t)) Hashtbl.t
 
 
 (* for causing intentional reordering within the simulated network (while
   * still maintaining TCP-like ordering from a single sender *)
 type shuffle_buffer_t = 
     (* node * sender,   (trigger * args)) *)
-    (address, (address, (id_t * value_t) Queue.t) Hashtbl.t) Hashtbl.t
+    (address, (address, (id_t * value_t) K3Queue.t) Hashtbl.t) Hashtbl.t
 
 type scheduler_state = {
   params : scheduler_spec;
@@ -125,7 +125,7 @@ let get_node_queues s address = Hashtbl.find s.node_queues address
 
 let register_node s address = 
   if not @: is_node s address then
-    Hashtbl.add s.node_queues address (Queue.create (), Hashtbl.create 10)
+    Hashtbl.add s.node_queues address (K3Queue.create (), Hashtbl.create 10)
   else invalid_arg @: "duplicate node at "^string_of_address address
 
 let unregister_node s address = Hashtbl.remove s.node_queues address
@@ -146,26 +146,28 @@ let get_trigger_input_queue s address trigger_id =
 let register_trigger s address trigger_id =
   let trigger_queues = get_trigger_queues s address in
   if not @: Hashtbl.mem trigger_queues trigger_id then
-    Hashtbl.add trigger_queues trigger_id @: Queue.create ()
+    Hashtbl.add trigger_queues trigger_id @: K3Queue.create ()
   else invalid_arg @: "duplicate trigger registration for "^trigger_id
 
 let unregister_trigger s address trigger_id force =
   try let q = get_trigger_input_queue s address trigger_id in
-      if (Queue.is_empty q) || force then
+      if (K3Queue.is_empty q) || force then
         let trigger_queues = get_trigger_queues s address in
         Hashtbl.remove trigger_queues trigger_id
   with Not_found -> () 
 
 (* Scheduling methods *)
-let schedule_task s address task = Queue.push task @: get_global_queue s address
+let schedule_task s address task =
+  K3Queue.push task @: get_global_queue s address
 
-let schedule_trigger s v_target v_address args = match v_target, v_address with
+let schedule_trigger s v_target v_address args = 
+  match v_target, v_address with
   | VTarget trigger_id, VAddress address ->
     if use_global_queueing s then 
       schedule_task s address @: NamedDispatch (trigger_id, args)
     else
       let q = get_trigger_input_queue s address trigger_id in
-      Queue.push args q;
+      K3Queue.push args q;
       schedule_task s address @: 
         BlockDispatch (trigger_id, dispatch_block_size s)
 
@@ -203,12 +205,12 @@ let buffer_trigger s target address args sender_addr =
       in
       let q = begin try Hashtbl.find inner_h sender_addr
               with Not_found -> 
-                let q' = Queue.create () in
+                let q' = K3Queue.create () in
                 Hashtbl.add inner_h sender_addr q';
                 q'
               end
       in
-      Queue.push (trigger_id, args) q
+      K3Queue.push (trigger_id, args) q
   | _ -> error INVALID_TRIGGER_TARGET
 
 (* if shuffling is on, we move messages from the shuffle buffer to the queues *)
@@ -226,10 +228,10 @@ let schedule_trigger_random s receive_address =
       let i = Random.int len in
       let addr = at set i in
       let q = Hashtbl.find per_node_buf addr in
-      if Queue.is_empty q then
+      if K3Queue.is_empty q then
         loop (list_remove addr set) (len - 1)
       else
-        let trigger_id, args = Queue.take q in
+        let trigger_id, args = K3Queue.pop q in
         schedule_trigger s (VTarget trigger_id) (VAddress receive_address)
           args;
         loop set len
@@ -239,7 +241,7 @@ let schedule_trigger_random s receive_address =
 (* Scheduler execution *)
 
 let continue_processing s address =
-  let has_messages = not @: Queue.is_empty @: get_global_queue s address in 
+  let has_messages = not @: K3Queue.is_empty @: get_global_queue s address in 
   let events_remain = 
     s.params.events_to_process < Int64.zero ||
     s.events_processed < s.params.events_to_process
@@ -283,6 +285,9 @@ let check_breakpoint s target_trig arg =
   bp_type
 
 let invoke_trigger s address (trigger_env, val_env) trigger_id arg =
+  (* add a level to the global queue *)
+  let q = get_global_queue s address in
+  K3Queue.increase_level q;
   (* get the frozen function for the trigger and apply it to the env and args *)
   (List.assoc trigger_id trigger_env) val_env arg;
   (* log the state for this trigger *)
@@ -296,32 +301,32 @@ let process_trigger_queue s address env trigger_id max_to_process =
           with Not_found -> error INVALID_TRIGGER_QUEUE
   in
   let rec loop num_left =
-    if Queue.is_empty q || num_left <= 0 then NormalExec
+    if K3Queue.is_empty q || num_left <= 0 then NormalExec
     else 
-      let args = Queue.peek q in
+      let args = K3Queue.peek q in
       let m_bp = check_breakpoint s trigger_id args in
       match m_bp with
-      | NormalExec     -> 
-          invoke_trigger s address env trigger_id @: Queue.take q;
+      | NormalExec -> 
+          invoke_trigger s address env trigger_id @: K3Queue.pop q;
           loop (num_left - 1)
       | BreakPoint bp when bp.post_trigger -> 
-          invoke_trigger s address env trigger_id @: Queue.take q;
+          invoke_trigger s address env trigger_id @: K3Queue.pop q;
           m_bp
       | BreakPoint bp -> m_bp
   in
   let res = loop max_to_process in
 
   (* the block we were assigned wasn't enough for this trigger *)
-  if not @: Queue.is_empty q then 
+  if not @: K3Queue.is_empty q then 
     schedule_task s address @: 
       BlockDispatch (trigger_id, dispatch_block_size s);
   res
 
 let process_task s address prog_env =
   let q = get_global_queue s address in
-  let pop_q () = ignore @: Queue.take q in
+  let pop_q () = ignore @: K3Queue.pop q in
   try
-    match Queue.peek q with
+    match K3Queue.peek q with
     | Background fn -> 
         pop_q ();
         fn prog_env;
@@ -348,7 +353,7 @@ let process_task s address prog_env =
       if use_global_queueing s then NormalExec
       else process_trigger_queue s address prog_env id max_to_process
 
-  with Queue.Empty -> error INVALID_GLOBAL_QUEUE
+  with K3Queue.Empty -> error INVALID_GLOBAL_QUEUE
 
 (* Scheduler toplevel methods *)
 
@@ -360,9 +365,9 @@ let initialize_scheduler s address (trig_env,_) =
 let node_has_work s address =
   if not @: is_node s address then false else 
   let node_queues = get_node_queues s address in
-  let empty_global_q = Queue.is_empty @: fst node_queues in
+  let empty_global_q = K3Queue.is_empty @: fst node_queues in
   let empty_trigger_q = 
-    Hashtbl.fold (fun _ q acc -> acc && Queue.is_empty q) (snd node_queues) true in
+    Hashtbl.fold (fun _ q acc -> acc && K3Queue.is_empty q) (snd node_queues) true in
   let empty_shuffle_buffer = 
     if s.params.shuffle_tasks then 
       (Hashtbl.length @: Hashtbl.find s.shuffle_buffer address) = 0
@@ -380,7 +385,7 @@ let run_scheduler ?(slice = max_int) s address env =
       (* schedule shuffle trigger if the shuffle flag is on *)
       (if s.params.shuffle_tasks then schedule_trigger_random s address;
       match process_task s address env with
-      | NormalExec -> loop (i-1)
+      | NormalExec    -> loop (i-1)
       | BreakPoint bp -> BreakPoint bp)
   in loop slice
 

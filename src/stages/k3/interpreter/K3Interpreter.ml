@@ -491,6 +491,7 @@ and eval_expr sched_st cenv texpr =
               buffer_trigger s target addr arg sender_addr;
               renv, VTemp VUnit
             else
+              (* create a new level on the queues *)
               (schedule_trigger s target addr arg; 
               renv, VTemp VUnit)
         | None, _ -> error "Send: missing scheduler"
@@ -608,23 +609,23 @@ let env_of_program ?address sched_st k3_program =
 (* returns status, env, instructions left *)
 let eval_instructions sched_st env address (res_env, d_env) (ri_env, instrs) =
   let log_node s = LOG "Node %s: %s" (string_of_address address) s LEVEL TRACE in
-  match instrs with
-  | [] -> 
-    if node_has_work sched_st address
-    then 
-      (log_node "consuming messages"; 
-      let status = run_scheduler sched_st address env in
-      status, (ri_env, []))
-    else NormalExec, (ri_env, [])
+  if node_has_work sched_st address
+  then 
+    (log_node "consuming messages"; 
+    let status = run_scheduler sched_st address env in
+    status, (ri_env, []))
+  else 
+    match instrs with
+    | [] -> NormalExec, (ri_env, [])
 
-  | (Consume id)::t ->
-    log_node @: "consuming from event loop: "^id;
-    try let i = List.assoc id d_env in 
-        let r = run_dispatcher sched_st address res_env ri_env i in
-        let status = run_scheduler sched_st address env in
-        status, (r, t)
-    with Not_found -> 
-      int_error "eval_instructions" @: "no event loop found for "^id
+    | (Consume id)::t ->
+      log_node @: "consuming from event loop: "^id;
+      try let i = List.assoc id d_env in 
+          let r = run_dispatcher sched_st address res_env ri_env i in
+          let status = run_scheduler sched_st address env in
+          status, (r, t)
+      with Not_found -> 
+        int_error "eval_instructions" @: "no event loop found for "^id
 
 (* Program interpretation *) 
 let interpreter_event_loop role_opt k3_program = 
