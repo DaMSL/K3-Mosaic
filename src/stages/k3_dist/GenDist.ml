@@ -417,9 +417,11 @@ mk_code_sink
   (wrap_args (args_of_t_with_v p trig_name))
   [] @: (* locals *)
   mk_block @:
-    send_fetches_of_rhs_maps@
-    send_completes_for_stmts_with_no_fetch@ 
-    send_puts
+    send_completes_for_stmts_with_no_fetch@
+    send_puts@
+    send_fetches_of_rhs_maps
+    
+    
    
 (* trigger_rcv_fetch
  * -----------------------------------------
