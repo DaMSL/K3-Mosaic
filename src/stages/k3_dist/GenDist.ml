@@ -652,9 +652,8 @@ List.fold_left
                mk_cunit (* do nothing *)
              ]
            ) @:
-           mk_update (* else: no value in the counter *)
-             stmt_cntrs
-             (mk_peek stmt_cntrs_slice) @:
+           mk_insert (* else: no value in the counter *)
+             stmt_cntrs @:
              (* Initialize if the push arrives before the put. *)
              mk_tuple @: part_pat_as_vars @ [mk_cint(-1)]
          ]
