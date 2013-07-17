@@ -361,15 +361,14 @@ let send_puts =
         (wrap_args 
           ["ip_and_stmt_id", wrap_ttuple [t_addr; t_stmt_id]; "count", t_int]
         ) @:
-        mk_apply (* break up because of the way inner gbagg forms tuples *)
-          (mk_lambda (wrap_args ["ip", t_addr; "stmt_id", t_stmt_id]) @:
-            mk_combine
-              (mk_var "acc") @:
-              mk_singleton
-                (wrap_tset @: wrap_ttuple [t_stmt_id; t_int]) @:
-                mk_tuple [mk_var "stmt_id"; mk_var "count"]
-          ) @:
-          mk_var "ip_and_stmt_id"
+        mk_let_many (* break up because of the way inner gbagg forms tuples *)
+          ["ip", t_addr; "stmt_id", t_stmt_id]
+          (mk_var "ip_and_stmt_id") @:
+          mk_combine
+            (mk_var "acc") @:
+            mk_singleton
+              (wrap_tset @: wrap_ttuple [t_stmt_id; t_int]) @:
+              mk_tuple [mk_var "stmt_id"; mk_var "count"]
       )
       (mk_empty @: wrap_tset @: wrap_ttuple [t_stmt_id; t_int]) @:
       mk_gbagg (* inner gba *)
@@ -560,7 +559,7 @@ let send_push_stmt_map_trig p s_rhs_lhs trig_name =
               mk_tuple
                 [mk_tuple partial_key;
                  (* we need the latest vid data that's less than the current vid *)
-                 map_latest_vid_vals p (mk_var rhs_map_name) 
+                 K3Dist.map_latest_vid_vals p (mk_var rhs_map_name) 
                    (some slice_key) rhs_map_id ~keep_vid:true;
                  mk_cbool false]
       ] (* trigger *)

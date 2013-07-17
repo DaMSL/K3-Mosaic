@@ -22,6 +22,8 @@ let string_of_shuffles () =
     string_of_int r^" l:"^string_of_int l^" bb:("^string_of_binds bb^
     ") nm:"^nm^"\n") "" !shuffle_fn_entries
 
+(* Part of the name is the binding pattern. So long as the combination of
+ * binding patterns is the same, we can use the same shuffle function *)
 let shuffle_for p rhs_map_id lhs_map_id bindings = 
   "shuffle_"^map_name_of p rhs_map_id^"_"^map_name_of p lhs_map_id^
   List.fold_left (fun acc (r,l) -> acc^"_"^string_of_int r^"t"^string_of_int l)
