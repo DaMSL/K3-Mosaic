@@ -203,7 +203,7 @@ let gen_route_fn p map_id =
                      * but it really doesn't, since we're only concerned about
                      * point locality *)
                     [mk_apply (mk_var hash_func) @: mk_var id_unwrap;
-                    mk_fst t_two_ints @: mk_peek @: mk_var "pmap_slice"]
+                    mk_snd t_two_ints @: mk_peek @: mk_var "pmap_slice"]
                 ) @:
                 mk_mult
                   (mk_var "value") @:
