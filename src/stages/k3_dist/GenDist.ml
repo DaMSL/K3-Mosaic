@@ -417,9 +417,11 @@ mk_code_sink
   (wrap_args (args_of_t_with_v p trig_name))
   [] @: (* locals *)
   mk_block @:
-    send_fetches_of_rhs_maps@
-    send_completes_for_stmts_with_no_fetch@ 
-    send_puts
+    send_completes_for_stmts_with_no_fetch@
+    send_puts@
+    send_fetches_of_rhs_maps
+    
+    
    
 (* trigger_rcv_fetch
  * -----------------------------------------
@@ -652,9 +654,8 @@ List.fold_left
                mk_cunit (* do nothing *)
              ]
            ) @:
-           mk_update (* else: no value in the counter *)
-             stmt_cntrs
-             (mk_peek stmt_cntrs_slice) @:
+           mk_insert (* else: no value in the counter *)
+             stmt_cntrs @:
              (* Initialize if the push arrives before the put. *)
              mk_tuple @: part_pat_as_vars @ [mk_cint(-1)]
          ]
