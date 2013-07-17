@@ -48,8 +48,10 @@ let v_leq = v_op vid_leq
 (* slice_col is the k3 expression representing the collection.
  * pat_m is an optional pattern for slicing the data first *)
 let map_latest_vid_vals p slice_col pat_m map_id ~keep_vid =
+  let max_vid = "max_vid" in
+  let map_vid = "map_vid" in
   let m_id_t = 
-    if keep_vid then P.map_ids_types_with_v_for p map_id
+    if keep_vid then P.map_ids_types_with_v_for ~vid:map_vid p map_id
     else P.map_ids_types_for p map_id in
   let m_ids = fst_many m_id_t in
   let m_ts = snd_many m_id_t in
@@ -71,33 +73,33 @@ let map_latest_vid_vals p slice_col pat_m map_id ~keep_vid =
     mk_agg 
       (mk_assoc_lambda 
         (* we project out the vid at the same time *)
-        (wrap_args ["acc", m_t_set; "max_vid", t_vid])
+        (wrap_args ["acc", m_t_set; max_vid, t_vid])
         (wrap_args m_id_t_v)
         (mk_if 
           (* if the map vid is less than current vid *)
-          (v_lt (mk_var "map_vid") (mk_var "vid"))
+          (v_lt (mk_var map_vid) (mk_var "vid"))
           (* if the map vid is equal to the max_vid, we add add it to our
           * accumulator and use the same max_vid *)
           (mk_if
-            (v_eq (mk_var "map_vid") (mk_var "max_vid"))
+            (v_eq (mk_var map_vid) (mk_var max_vid))
             (mk_tuple
               [mk_combine
                 (mk_singleton m_t_set (mk_tuple @: ids_to_vars m_ids)) @:
                     mk_var "acc";
-              mk_var "max_vid"])
+              mk_var max_vid])
             (* else if map vid is greater than max_vid, make a new
             * collection and set a new max_vid *)
             (mk_if
-              (v_gt (mk_var "map_vid") (mk_var "max_vid"))
+              (v_gt (mk_var map_vid) (mk_var max_vid))
               (mk_tuple
                 [mk_singleton m_t_set (mk_tuple @: ids_to_vars m_ids); 
-                mk_var "map_vid"])
+                mk_var map_vid])
               (* else keep the same accumulator and max_vid *)
-              (mk_tuple [mk_var "acc"; mk_var "max_vid"])
+              (mk_tuple [mk_var "acc"; mk_var max_vid])
             )
           )
           (* else keep the same acc and max_vid *)
-          (mk_tuple [mk_var "acc"; mk_var "max_vid"])
+          (mk_tuple [mk_var "acc"; mk_var max_vid])
         )
       )
       (mk_tuple [mk_empty m_t_set; min_vid_k3])
