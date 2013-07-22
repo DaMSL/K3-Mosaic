@@ -163,7 +163,10 @@ let rec value_of_const_expr e = match tag_of_expr e with
 
 
 let rec type_of_value uuid value = 
-  let typ_fst vs = type_of_value uuid @: List.hd vs in
+  let typ_fst = function
+    | []   -> t_unit (* make up because we just don't know *)
+    | v::_ -> type_of_value uuid v
+  in
   match value with
   | VUnknown -> canonical TUnknown
   | VUnit -> t_unit

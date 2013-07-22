@@ -561,7 +561,7 @@ let send_push_stmt_map_trig p s_rhs_lhs trig_name =
                  (* we need the latest vid data that's less than the current vid *)
                  K3Dist.map_latest_vid_vals p (mk_var rhs_map_name) 
                    (some slice_key) rhs_map_id ~keep_vid:true;
-                 mk_cbool false]
+                 mk_cbool true]
       ] (* trigger *)
     ) (* fun *)
     []
