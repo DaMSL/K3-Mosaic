@@ -61,6 +61,10 @@ module OutputMap = struct
   let to_s map =
     map.name^"["^String.concat ", " map.ovars^"]"
 
+  (* get types of the map in string format *)
+  let types_s map = String.concat ", " map.otypes^", "^map.typ
+
+  (* get values of the map in string format *)
   let val_s map =
     let s_list = 
       Hashtbl.fold (fun ovars v acc ->
@@ -202,14 +206,13 @@ let update_maps maps events =
   ) maps events
 
 (* dump a map into a string *)
-let dump_map mapname mapdata =
-  String.concat "" @: 
-    "{\n"::
-    (match mapdata with
-    | SingletonMap m -> SingletonMap.val_s m
-    | OutputMap m    -> OutputMap.val_s m)::"\n"::
-    "}\n"::
-    []
+let dump_map mapname mapdata = match mapdata with
+    | SingletonMap m -> "{"^SingletonMap.val_s m^"}"
+    | OutputMap m    -> 
+        let s = OutputMap.val_s m in
+        (* if our map is empty, we need the types *)
+        if s = "" then "{} : {"^OutputMap.types_s m^"}"
+        else "{"^OutputMap.val_s m^"}"
 
 let parse_trace file =
   let lines = read_file_lines file in

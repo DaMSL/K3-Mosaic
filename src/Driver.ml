@@ -397,6 +397,8 @@ let print_k3_dist_test_program = function
             let trace_file = at cmd_line_params.trace_files idx in
             FromTrace.string_of_file trace_file ~is_dist:true
           in
+           (* debug *)
+           (* List.iter (fun (nm, code) -> print_endline code) maplist; *)
           let map_final_l = 
             list_map (fun (nm, code) -> nm, parse_k3_expr code) maplist in
           (* join according to map name *)
@@ -409,6 +411,7 @@ let print_k3_dist_test_program = function
           let filter_p = List.filter 
             (fun d -> not (is_role d || is_def_role d)) p in
           (* add the produced test roles and trigger *)
+          (* (* debug *) print_endline code_s; *)
           let new_p = filter_p @ parse_k3_prog code_s in
           new_p, tests_vals
         else 
