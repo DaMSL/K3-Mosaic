@@ -162,7 +162,7 @@ module RelEvent = struct
                       bind %s -> %s"
                       src types vals
                       src (to_s evt)
-    ) 1 groups
+    ) len groups
     in
     let _, consume_s = mapfold (fun num group ->
       num - 1, Printf.sprintf "consume %s" (src num)
