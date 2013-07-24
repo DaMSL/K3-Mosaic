@@ -150,7 +150,7 @@ let gen_shuffle_functions p trig =
       let bindings = get_map_bindings_in_stmt p s rmap lmap in
       try let shuffle_fn = find_shuffle_by_binding rmap lmap bindings in
         add_stmt_to_shuffle_fn s shuffle_fn; (* increment in list *)
-        acc (* don't add *)
+        acc (* we found a shuffle function -- don't add *)
       with Not_found -> 
         let name = shuffle_for p rmap lmap bindings in
         add_shuffle_fn s rmap lmap bindings name;
