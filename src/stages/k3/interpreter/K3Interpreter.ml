@@ -203,16 +203,19 @@ and eval_expr sched_st cenv texpr =
             | TBag -> VBag([])
             | TList -> VList([])
         )
+
     | Singleton(ct) ->
         let nenv, element = child_value cenv 0 in
         let name = "Singleton" in
-        let ctype, _ = ct <| collection_of ++% base_of |> t_erroru name @: VTBad(ct) in
+        let ctype, _ = 
+          ct <| collection_of ++% base_of |> t_erroru name @: VTBad(ct) in
         cenv, VTemp(
             match ctype with
-            | TSet -> VSet([element])
-            | TBag -> VBag([element])
+            | TSet  -> VSet([element])
+            | TBag  -> VBag([element])
             | TList -> VList([element])
         )
+
     | Combine ->
         let nenv, components = child_values cenv in
         let left, right = (
@@ -258,8 +261,8 @@ and eval_expr sched_st cenv texpr =
     | Neg ->
         let fenv, vals = child_values cenv in fenv, VTemp(
           match vals with
-          | [VBool(b)] -> VBool(not b)
-          | [VInt(i)] -> VInt(-i)
+          | [VBool(b)]  -> VBool(not b)
+          | [VInt(i)]   -> VInt(-i)
           | [VFloat(f)] -> VFloat(-. f)
           | _ -> error "(Neg): invalid value"
         )
@@ -310,38 +313,42 @@ and eval_expr sched_st cenv texpr =
     | Map ->
         let fenv, f = child_value cenv 0 in
         let nenv, c = child_value fenv 1 in
-        let g = eval_fn f sched_st in
-        let folder = fun cl -> List.fold_left (
-            fun (e, r) x -> let ienv, i = g e x in (ienv, r @ [value_of_eval i])
-        ) (nenv, []) cl in (
-            match c with
-            | VSet(cl) | VBag(cl) | VList(cl) ->
-              let renv, r =  folder cl
-              in renv, (preserve_collection (fun _ -> r) c)
-            | _ -> error "(Map): non-collection value"
-        )
+        let folder cl = mapfold (fun env x -> 
+          let ienv, i = eval_fn f sched_st env x in 
+          ienv, value_of_eval i
+        ) nenv cl 
+        in 
+        begin match c with
+        | VSet(cl) | VBag(cl) | VList(cl) ->
+          let renv, r = folder cl
+          in renv, (preserve_collection (fun _ -> r) c)
+        | _ -> error "(Map): non-collection value"
+        end
+
     | FilterMap ->
         let penv, p = child_value cenv 0 in
         let fenv, f = child_value penv 1 in
         let nenv, c = child_value fenv 2 in
         let p' = eval_fn p sched_st in
         let f' = eval_fn f sched_st in
-        let folder = fun cl -> List.fold_left (
-            fun (e, r) -> fun x ->
-                let p'env, inc = p' e x in
-                match value_of_eval inc with
-                | VBool(true) ->
-                    let ienv, i = f' e x in
-                    (ienv, r @ [value_of_eval i])
-                | VBool(false) -> (p'env, r)
-                | _ -> error "(FilterMap): non boolean predicate"
-        ) (nenv, []) cl in (
-            match c with
-            | VSet(cl) | VBag(cl) | VList(cl) ->
-              let renv, r =  folder cl
-              in renv, (preserve_collection (fun _ -> r) c)
-            | _ -> error "(FilterMap): non-collection value"
-        )
+        let folder cl = List.fold_left (fun (e, r) x ->
+          let p'env, filter = p' e x in
+          match value_of_eval filter with
+          | VBool true  ->
+              let ienv, v = f' e x in
+              ienv, (value_of_eval v)::r
+          | VBool false -> p'env, r
+          | _           -> error "(FilterMap): non boolean predicate"
+        ) (nenv, []) cl 
+        in 
+        begin match c with
+        | VSet(cl) | VBag(cl) | VList(cl) ->
+          let renv, r = folder cl in 
+          let r = List.rev r in (* reverse because of cons *)
+          renv, (preserve_collection (fun _ -> r) c)
+        | _ -> error "(FilterMap): non-collection value"
+        end
+
     | Flatten ->
         let nenv, c = child_value cenv 0 in
         nenv, (preserve_collection (fun vs -> List.concat (List.map extract_value_list vs)) c)
@@ -353,7 +360,8 @@ and eval_expr sched_st cenv texpr =
         let f' = eval_fn f sched_st in
         let renv, rval = List.fold_left (
             fun (e, v) a -> 
-              let renv, reval = f' e (VTuple([v; a])) in renv, value_of_eval reval
+              let renv, reval = f' e (VTuple([v; a])) in 
+              renv, value_of_eval reval
           ) 
           (nenv, zero) 
           (extract_value_list col)
@@ -369,7 +377,7 @@ and eval_expr sched_st cenv texpr =
         let cl = extract_value_list c in
         let gb_agg_fn find_fn replace_fn = fun e a ->
             let kenv, key = 
-              let e,k = g' e a in e, value_of_eval k
+              let e, k = g' e a in e, value_of_eval k
             in
             let v = (try find_fn key with Not_found -> z) in
             let aenv, agg = f' kenv (VTuple([v; a])) in
@@ -382,7 +390,8 @@ and eval_expr sched_st cenv texpr =
 		    let hash_gb_agg_method = lazy(
 		      let h = Hashtbl.create 10 in
 		      let agg_fn = gb_agg_fn (Hashtbl.find h) (Hashtbl.replace h) in
-		      let build_fn () = Hashtbl.fold (fun k v kvs -> (VTuple([k; v]) :: kvs)) h []
+		      let build_fn () = 
+            Hashtbl.fold (fun k v kvs -> (VTuple([k; v]) :: kvs)) h []
 		      in agg_fn, build_fn)
 		    in
 		
@@ -400,11 +409,11 @@ and eval_expr sched_st cenv texpr =
 		      in agg_fn, build_fn)
 		    in
 
-        let agg_fn, build_fn = Lazy.force (match c with
+        let agg_fn, build_fn = Lazy.force @: match c with
           | VSet _ | VBag _ -> hash_gb_agg_method
           | VList _         -> order_preserving_gb_agg_method
           | _               -> error "(GroupBy): non-collection value"
-        ) in
+        in
         let renv = List.fold_left agg_fn nenv cl
         in renv, preserve_collection (fun _ -> build_fn ()) c
 
@@ -420,8 +429,8 @@ and eval_expr sched_st cenv texpr =
             let nenv, r = f_val !env (VTuple([v1; v2])) in
               env := nenv;
               match v1 = v2, value_of_eval r with
-              | true, _ -> 0
-              | false, VBool(true) -> -1
+              | true, _             -> 0
+              | false, VBool(true)  -> -1
               | false, VBool(false) -> 1
               | _, _ -> error "(Sort): non-boolean sort result"
           in !env, VTemp(VList(List.sort sort_fn l))
@@ -448,7 +457,8 @@ and eval_expr sched_st cenv texpr =
     | Insert ->
       modify_collection (fun env parts -> match parts with
         | [VDeclared(c_ref); v] ->
-          Some(c_ref, preserve_collection (fun els -> (value_of_eval v)::els) !c_ref)
+          Some(c_ref, preserve_collection 
+            (fun els -> (value_of_eval v)::els) !c_ref)
         | _ -> None)
 
     | Update ->
