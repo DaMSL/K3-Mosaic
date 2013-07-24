@@ -370,18 +370,20 @@ and eval_expr sched_st cenv texpr =
     | GroupByAggregate ->
         let genv, g = child_value cenv 0 in
         let fenv, f = child_value genv 1 in
-        let zenv, z = child_value fenv 2 in
+        let zenv, zero = child_value fenv 2 in
         let nenv, c = child_value zenv 3 in
         let g' = eval_fn g sched_st in
         let f' = eval_fn f sched_st in
         let cl = extract_value_list c in
-        let gb_agg_fn find_fn replace_fn = fun e a ->
-            let kenv, key = 
-              let e, k = g' e a in e, value_of_eval k
-            in
-            let v = (try find_fn key with Not_found -> z) in
-            let aenv, agg = f' kenv (VTuple([v; a])) in
-            replace_fn key (value_of_eval agg); aenv
+        let gb_agg_fn find_fn replace_fn = fun env a ->
+          let kenv, key = 
+            let env, k = g' env a in 
+            env, value_of_eval k
+          in
+          let v = (try find_fn key with Not_found -> zero) in
+          let aenv, agg = f' kenv (VTuple [v; a]) in
+          replace_fn key (value_of_eval agg); 
+          aenv
         in
         
 		    (* We use two different group by aggregation methods to preserve the
@@ -397,13 +399,10 @@ and eval_expr sched_st cenv texpr =
 		
 		    let order_preserving_gb_agg_method = lazy(
 		      let l = ref [] in
-		      let agg_fn =
-		        gb_agg_fn (fun k -> List.assoc k !l)
-		          (fun k v ->
-		            let found,nl = List.fold_left (fun (f_acc,l_acc) (k2,v2) ->
-		                if k = k2 then (true, l_acc@[k,v]) else (f_acc, l_acc@[k2,v2])
-		              ) (false,[]) !l
-		            in l := if found then nl else nl@[k,v])
+		      let agg_fn = gb_agg_fn (fun k -> List.assoc k !l)
+            (fun k v -> 
+              let l' = assoc_modify (function _ -> Some v) k !l in
+              l := l')
 		      in
 		      let build_fn () = List.map (fun (k,v) -> VTuple([k;v])) !l
 		      in agg_fn, build_fn)
