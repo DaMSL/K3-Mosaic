@@ -215,16 +215,19 @@ let list_min f l = list_minmax (<) f l
 
 (* modify/add to/remove_from an association list generically *)
 let assoc_modify f item l =
-  let get_result m_value reduced_l =
+  let mod_or_delete m_value reduced_l =
     match f m_value with
     | None   -> reduced_l
-    | Some x -> (item, x)::reduced_l in
-  try
-    let a = List.assoc item l in
-    let rest = List.remove_assoc item l in
-    get_result (Some a) rest
-  with 
-    Not_found -> get_result None l
+    | Some x -> (item, x)::reduced_l
+  in
+  let found, l = 
+    List.fold_left (fun (found, acc) ((k,v) as x) ->
+      if k = item then true, mod_or_delete (Some v) acc
+      else found, x::acc
+    ) (false, []) l
+  in
+  let l = if found then l else mod_or_delete None l in
+  List.rev l
 
 (* perform a join on 2 association lists. Assumes uniqueness in the keys *)
 let assoc_join l1 l2 =
