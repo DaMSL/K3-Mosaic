@@ -150,15 +150,15 @@ let gen_route_fn p map_id =
   | [] -> (* if no keys, for now we just route to one place *)
   mk_global_fn (route_for p map_id)
     ["_", canonical TUnit]
-    [wrap_tset t_addr] @: (* return *)
-      mk_singleton (wrap_tset t_addr) @:
+    [wrap_tbag t_addr] @: (* return *)
+      mk_singleton (wrap_tbag t_addr) @:
         mk_apply (mk_var "get_ring_node") @:
           mk_tuple [mk_cint 1; mk_cint 1]
 
   | _  -> (* we have keys *)
   mk_global_fn (route_for p map_id)
     ["key", wrap_ttuple key_types]
-    [wrap_tset t_addr] @: (* return *)
+    [wrap_tbag t_addr] @: (* return *)
     (* get the info for the current map and bind it to "pmap" *)
     mk_let "pmap" pmap_types
       (mk_snd pmap_per_map_types @:
