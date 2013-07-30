@@ -563,11 +563,19 @@ let append_peers ipr_str_list =
   else
     cmd_line_params.peers <- cmd_line_params.peers @ new_peers
 
-(* Load peer address from file*)
+(* Load peer address from file
+ * NOTE does not contain localhost if peers are specified*)
 let load_peer file = 
   let line_lst = read_file_lines file in
+  if (List.length line_lst) = 0 then 
+    error "Empty node file"
+  else
+    cmd_line_params.peers 
+      <- (List.map parse_ip_role line_lst)
+  (* old version, conation localhost
   cmd_line_params.peers 
     <- cmd_line_params.peers @ (List.map parse_ip_role line_lst)
+    *)
 
 let add_dbt_trace file = 
   cmd_line_params.trace_files <- cmd_line_params.trace_files @ [file]
