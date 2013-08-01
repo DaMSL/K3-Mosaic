@@ -142,7 +142,11 @@ let lazy_const c = function
   | CBool(false) -> lps "false"
   | CInt(i) -> lps @: string_of_int i
   | CFloat(f) -> lps @: string_of_float f
+  (* seems print string without quotation.
+   * e.g. some_string instead of "some_string"
   | CString(s) -> lps s
+  *)
+  | CString(s) -> lps ("\""^s^"\"")
   | CAddress(s, i) -> lps @: s^":"^string_of_int i
   | CTarget(id) -> lps id
 
