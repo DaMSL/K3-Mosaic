@@ -129,27 +129,28 @@ module RelEvent = struct
     if last then send else send^";"
 
   (* convert the event to a stream message *)
-  let stream_s = function 
-    | [] -> [""]
-    | events -> let groups = match events with
-      | []  -> failwith "no events"
-      | [e] -> [[e]]
-      | _   ->
-        let fst_evt = hd events in
-        (* group events by op and name *)
-        let _,_,gs = List.fold_left
-          (fun (last_op, last_relname, groups) evt -> 
-            match groups with 
-            | []        -> failwith "error"
-            | grp::grps ->
-              (* continue the same group *)
-              if evt.op = last_op && evt.relname = last_relname then
-                last_op, last_relname, (evt::grp)::grps
-              else 
-                (* start a new group and reverse the previous group *)
-                evt.op, evt.relname, [evt]::(List.rev grp)::grps
-          ) (fst_evt.op, fst_evt.relname, [[fst_evt]]) (tl events)
-        in List.rev gs
+  let stream_s events = 
+    if events = [] then [""] else 
+    let groups = match events with
+    | [e] -> [[e]]
+    | _   -> let fst_evt = hd events in
+      (* group events by op and name *)
+      let _,_,gs = List.fold_left
+        (fun (last_op, last_relname, groups) evt -> 
+          match groups with 
+          | []        -> failwith "error"
+          | grp::grps ->
+            (* continue the same group *)
+            if evt.op = last_op && evt.relname = last_relname then
+              last_op, last_relname, (evt::grp)::grps
+            else 
+              (* start a new group and reverse the previous group *)
+              evt.op, evt.relname, [evt]::grp::grps) 
+        (fst_evt.op, fst_evt.relname, [[fst_evt]]) 
+        (tl events)
+      in
+      (* reverse all groups *)
+      List.rev_map (fun grp -> List.rev grp) gs
     in
     let src num = Printf.sprintf "s%d" num in 
     let len = List.length groups in
