@@ -220,7 +220,7 @@ let assoc_modify f item l =
     | None   -> reduced_l
     | Some x -> (item, x)::reduced_l
   in
-  let found, l = 
+  let found, l =
     List.fold_left (fun (found, acc) ((k,v) as x) ->
       if k = item then true, mod_or_delete (Some v) acc
       else found, x::acc
@@ -318,7 +318,11 @@ let str_take_end i s = let l = String.length s in
 let r_groups str ~r ~n =
   if Str.string_match (Str.regexp r) str 0 then
     list_map (fun i ->
-      try some @: Str.matched_group i str
+      try 
+        begin match Str.matched_group i str with
+        | "" -> None
+        | x  -> Some x
+        end
       with Not_found -> None
     ) @: create_range 1 n
   else []

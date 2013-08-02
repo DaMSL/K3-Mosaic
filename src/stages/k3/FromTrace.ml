@@ -129,8 +129,9 @@ module RelEvent = struct
     if last then send else send^";"
 
   (* convert the event to a stream message *)
-  let stream_s events = 
-    let groups = match events with
+  let stream_s = function 
+    | [] -> [""]
+    | events -> let groups = match events with
       | []  -> failwith "no events"
       | [e] -> [[e]]
       | _   ->
@@ -323,12 +324,20 @@ let string_of_test_role ~is_dist events =
       "default role switch"::
       []
   else (* single-site *)
-    (str_make @:
-    "role switch {"::
-    RelEvent.stream_s events@
-    "}"::[])::
-    "default role switch\n"::
-    []
+    if events <> [] then
+      (str_make @:
+        "role switch {"::
+        RelEvent.stream_s events@
+        "}"::[])::
+        "default role switch\n"::
+        []
+    else ["trigger dummy(x:int) {} = ()\n\n\
+            role switch {\n\
+            source dummy : int = stream([1])\n\
+            bind dummy -> dummy\n\
+            consume dummy\n\
+            }\n\
+           default role switch\n"]
 
 (* convert the maps to a list *)
 let string_of_maps maps = 

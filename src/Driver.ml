@@ -44,13 +44,14 @@ let in_lang_descs = [
 type out_lang_t =
   | K3 | AstK3 
   | K3Dist 
-  | K3DistTest (* distributed k3 with some test code *)
+  | K3Test | K3DistTest (* output k3 with some test code *)
   | AstK3Dist 
   | ReifiedK3 
   | Imperative | CPPInternal | CPP
 
 let out_lang_descs = [
     K3,          "k3",        "K3";
+    K3Test,      "k3test",    "K3 Test";
     AstK3,       "k3ast",     "K3 AST";
     K3Dist,      "k3dist",    "Distributed K3";
     K3DistTest,  "k3disttest","Distributed K3 with test code";
@@ -386,7 +387,7 @@ let print_k3_program f = function
   | _ -> error "Cannot print this type of data"
 
 (* create and print a k3 program with an expected section *)
-let print_k3_dist_test_program = function
+let print_k3_test_program = function
   | idx, K3DistData (p, meta) -> 
       (* get the folded expressions for latest vid *)
       let tests_by_map = GenTest.expected_code_all_maps meta in
@@ -411,12 +412,43 @@ let print_k3_dist_test_program = function
           let filter_p = List.filter 
             (fun d -> not (is_role d || is_def_role d)) p in
           (* add the produced test roles and trigger *)
-          (* (* debug *) print_endline code_s; *)
+          (* debug *) 
+          (*print_endline @: code_s;*)
           let new_p = filter_p @ parse_k3_prog code_s in
           new_p, tests_vals
         else 
           (* we don't have a trace file for final value tests *)
           p, list_map (fun (_, e) -> e, FileExpr "dummy") tests_by_map
+      in
+      let prog_test = NetworkTest(p', test_vals) in
+      let _, prog_test = renumber_test_program_ids prog_test in
+      let prog_test = typed_program_test prog_test in
+      print_endline @: PS.string_of_program_test prog_test
+
+  | idx, K3Data p -> 
+      (* get the test values from the dbtoaster trace *)
+      let p', test_vals =
+        if cmd_line_params.trace_files <> [] then
+          let code_s, maplist = 
+            let trace_file = at cmd_line_params.trace_files idx in
+            FromTrace.string_of_file trace_file ~is_dist:false
+          in
+           (* debug *)
+            (*List.iter (fun (nm, code) -> print_endline code) maplist; *)
+          let map_final_l = list_map (fun (nm, code) -> 
+            K3Helpers.mk_var nm, parse_k3_expr code) maplist in
+          let tests_vals = list_map (fun (nm, e) -> 
+            nm, InlineExpr e) map_final_l in
+          (* filter our all role stuff in the original generated ast *)
+          let filter_p = List.filter 
+            (fun d -> not (is_role d || is_def_role d)) p in
+          (* add the produced test roles and trigger *)
+          (* debug *)
+          (*print_endline code_s;*)
+          let s = parse_k3_prog code_s in
+          let new_p = filter_p @ s in
+          new_p, tests_vals
+        else error "Test printout requires trace file"
       in
       let prog_test = NetworkTest(p', test_vals) in
       let _, prog_test = renumber_test_program_ids prog_test in
@@ -461,13 +493,13 @@ let print params inputs =
   let idx_inputs = insert_index_fst 0 inputs in
   let sofp = string_of_program ~verbose:cmd_line_params.verbose in
   let print_fn = match params.out_lang with
-    | AstK3 | AstK3Dist -> print_k3_program sofp |- snd
-    | K3 | K3Dist       -> print_k3_program PS.string_of_program |- snd
-    | K3DistTest        -> print_k3_dist_test_program
-    | ReifiedK3         -> print_reified_k3_program |- snd
-    | Imperative        -> print_imperative_program params.print_types |- snd
-    | CPPInternal       -> print_cppi_program params.print_types |- snd
-    | CPP               -> print_cpp_program |- snd
+    | AstK3 | AstK3Dist   -> print_k3_program sofp |- snd
+    | K3 | K3Dist         -> print_k3_program PS.string_of_program |- snd
+    | K3Test | K3DistTest -> print_k3_test_program
+    | ReifiedK3           -> print_reified_k3_program |- snd
+    | Imperative          -> print_imperative_program params.print_types |- snd
+    | CPPInternal         -> print_cppi_program params.print_types |- snd
+    | CPP                 -> print_cpp_program |- snd
   in List.iter print_fn idx_inputs
 
 (* Test actions *)
@@ -499,9 +531,10 @@ let process_inputs params =
         let m3prog = parse_m3_file f in
         let proginfo = M3ProgInfo.prog_data_of_m3 m3prog in
         if params.debug_info then 
-            print_endline (ProgInfo.string_of_prog_data proginfo);
+          print_endline (ProgInfo.string_of_prog_data proginfo);
         let prog = M3ToK3.m3_to_k3 m3prog in
-        K3DistData(prog, proginfo)
+        if params.out_lang = K3Test then K3Data(prog)
+        else K3DistData(prog, proginfo)
   in List.map proc_fn params.input_files
 
 (* this function can only transform to another k3 format *)

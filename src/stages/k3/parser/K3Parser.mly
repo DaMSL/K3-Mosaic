@@ -506,9 +506,9 @@ collection :
     | LBRACE RBRACE COLON isolated_value_type_expr { build_collection [] $4 }
     | LBRACEBAR RBRACEBAR COLON isolated_value_type_expr { build_collection [] $4 }
     | LBRACKET RBRACKET COLON isolated_value_type_expr{ build_collection [] $4 }
-    | LBRACE RBRACE error { print_error "missing type for empty collection"}
-    | LBRACEBAR RBRACEBAR error { print_error "missing type for empty collection"}
-    | LBRACKET RBRACKET error { print_error "missing type for empty collection"}
+    | LBRACE RBRACE error { print_error "missing type for empty set"}
+    | LBRACEBAR RBRACEBAR error { print_error "missing type for empty bag"}
+    | LBRACKET RBRACKET error { print_error "missing type for empty list"}
 
     | LBRACE expr_seq RBRACE { build_collection $2 (mk_unknown_collection TSet) }
     | LBRACEBAR expr_seq RBRACEBAR { build_collection $2 (mk_unknown_collection TBag) }
