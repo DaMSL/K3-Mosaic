@@ -78,10 +78,12 @@ end
 module RelEvent = struct
   let next_evt_id = ref 0
 
-  type op_t = Insert | Delete
+  type op_t = Insert | Delete | System_Ready
 
   let string_of_op = function 
-    Insert -> "insert" | Delete -> "delete"
+    | Insert       -> "insert"
+    | Delete       -> "delete"
+    | System_Ready -> "system_ready_event"
 
                 (*      ivars        ovars        val *)
   type hash_t = (op_t * float list * float list * float) list
@@ -96,8 +98,12 @@ module RelEvent = struct
   }
 
   let init op relname types vals =
+    let oper = match op with 
+        | "+" -> Insert
+        | "-" -> Delete
+        | _   -> System_Ready in
     let r = {
-        op = if op = "+" then Insert else Delete;
+        op = oper;
         relname; vals; types;
         effects=Hashtbl.create 0;
         id = !next_evt_id
@@ -109,7 +115,7 @@ module RelEvent = struct
     let eff_list = 
       try Hashtbl.find evt.effects mapn
       with Not_found -> [] in
-    let eff' = (Insert, ivars, ovars, v):: eff_list in
+    let eff' = eff_list@[Insert, ivars, ovars, v] in
     Hashtbl.replace evt.effects mapn eff';
     evt
 
@@ -117,11 +123,13 @@ module RelEvent = struct
     let eff_list = 
       try Hashtbl.find evt.effects mapn
       with Not_found -> [] in
-    let eff' = (Delete, ivars, ovars, 0.):: eff_list in
+    let eff' = eff_list@[Delete, ivars, ovars, 0.] in
     Hashtbl.replace evt.effects mapn eff';
     evt
 
-  let to_s evt = string_of_op evt.op ^"_"^ evt.relname
+  let to_s evt = match evt.op with
+    | Insert | Delete -> string_of_op evt.op ^"_"^ evt.relname
+    | System_Ready    -> "system_ready_event"
 
   (* convert the event to a send message *)
   let dispatch_s ~last evt =
@@ -143,8 +151,7 @@ module RelEvent = struct
             (* continue the same group *)
             if evt.op = last_op && evt.relname = last_relname then
               last_op, last_relname, (evt::grp)::grps
-            else 
-              (* start a new group and reverse the previous group *)
+            else (* start a new group *)
               evt.op, evt.relname, [evt]::grp::grps) 
         (fst_evt.op, fst_evt.relname, [[fst_evt]]) 
         (tl events)
@@ -188,21 +195,21 @@ let update_maps maps events =
   if StringMap.is_empty maps then failwith "empty maps" else
   List.fold_left (fun acc evt ->
     Hashtbl.fold (fun mapname eff_list acc' ->
-      let map = StringMap.find mapname maps in
+      let map = StringMap.find mapname acc' in
       List.fold_left (fun acc'' (op, ivars, ovars, v) ->
         (* debug *)
         (*print_endline @: mapname^" "^concat_f "," ovars^":= "^sof v;*)
         let m' = match map, op with
-        | SingletonMap m, RelEvent.Insert -> 
+        | SingletonMap m, (RelEvent.Insert | RelEvent.System_Ready) -> 
             SingletonMap(SingletonMap.set m ivars ovars v)
         | SingletonMap m, RelEvent.Delete -> 
             SingletonMap(SingletonMap.del m ivars ovars)
-        | OutputMap m, RelEvent.Insert -> 
+        | OutputMap m, (RelEvent.Insert | RelEvent.System_Ready) -> 
             OutputMap(OutputMap.set m ivars ovars v)
         | OutputMap m, RelEvent.Delete ->
             OutputMap(OutputMap.del m ivars ovars)
         in
-        StringMap.add mapname m' maps 
+        StringMap.add mapname m' acc'' 
       ) acc' eff_list
     ) evt.RelEvent.effects acc
   ) maps events
@@ -257,6 +264,10 @@ let parse_trace file =
             let evt = RelEvent.init op relname types vals in
             maps, line+1, sys_ready, evt::events
         | _ -> failwith @: "invalid input for ON at line "^soi line
+      else
+      if Str.string_match (Str.regexp "ON SYSTEM READY <- \\[\\]") str 0 then
+        let evt = RelEvent.init "system_ready" "" ["int"] [0.] in
+        maps, line+1, sys_ready, evt::events
       else
       let m = r_groups str ~n:4
         ~r:"UPDATE '\\([^']*\\)'\\[\\([^]]*\\)\\]\\[\\([^]]*\\)\\] := \
