@@ -633,22 +633,22 @@ let type_of_resource (env:(id_t * type_t list) list) r = match r with
   | Pattern p -> types_of_pattern env p
 
 let typecheck_bind src_types trig_arg_types =
-  match src_types, trig_arg_types with
+  match trig_arg_types, src_types with
   | [], [] -> 
     Some(TMsg("Neither source event nor trigger argument has valid types."))
   
-  | [x], [y] when x <> y ->
-    Some(TMismatch(x,y,"Resource binding type mismatch."))
+  | [TValue x], [TValue y] when not (x === y) ->
+    Some(TMismatch(TValue x, TValue y, "Resource binding type mismatch."))
     
-  | x, _ when List.length x > 1 ->
+  | _, x when List.length x > 1 ->
     Some(TMsg("Multiple resource event types found for dispatch to trigger."))
   
-  | _, x when List.length x > 1 ->
+  | x, _ when List.length x > 1 ->
     Some(TMsg("Multiple trigger arg types found during bind."))
   
-  | [x], [y] when x = y -> None
+  | [_], [_] -> None
   
-  | x, y -> Some(TMsg("Invalid types."))
+  | _, _ -> Some(TMsg("Invalid types."))
 
 let bound_resource_type error_prefix resource_env src_id =
   try List.assoc src_id resource_env
