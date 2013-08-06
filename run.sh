@@ -1,0 +1,2 @@
+#utop -I src/util -I tests -I src/stages/imperative -I src/stages/k3_dist -I src/stages/m3 -I src/stages/k3 -I src/stages/k3/core -I src/stages/k3/interpreter -I src/stages/k3/parser -I src/stages/k3/utils -I lib/bolt
+utop -I bin/src/util -I bin/src/stages/imperative -I bin/src/stages/k3_dist -I bin/src/stages/m3 -I bin/src/stages/k3 -I bin/src/stages/k3/core -I bin/src/stages/k3/interpreter -I bin/src/stages/k3/parser -I bin/src/stages/k3/utils -I lib/bolt
