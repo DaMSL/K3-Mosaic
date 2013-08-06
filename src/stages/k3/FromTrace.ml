@@ -115,7 +115,7 @@ module RelEvent = struct
     let eff_list = 
       try Hashtbl.find evt.effects mapn
       with Not_found -> [] in
-    let eff' = eff_list@[Insert, ivars, ovars, v] in
+    let eff' = (Insert, ivars, ovars, v)::eff_list in
     Hashtbl.replace evt.effects mapn eff';
     evt
 
@@ -123,7 +123,7 @@ module RelEvent = struct
     let eff_list = 
       try Hashtbl.find evt.effects mapn
       with Not_found -> [] in
-    let eff' = eff_list@[Delete, ivars, ovars, 0.] in
+    let eff' = (Delete, ivars, ovars, 0.)::eff_list in
     Hashtbl.replace evt.effects mapn eff';
     evt
 
@@ -250,8 +250,16 @@ let parse_trace file =
         let maps' = StringMap.add (unwrap_some mapname) new_map maps in
         maps', line+1, sys_ready, events
       else
-      if r_match "ON SYSTEM READY {\n[^}]*}" str then 
+      if r_match "ON SYSTEM READY {" str then 
         maps, line+1, true, events else
+      if r_match "ON SYSTEM READY <- \\[\\]" str then
+        (* only if full system ready has been seen *)
+        if sys_ready then
+          let evt = RelEvent.init "system_ready" "" ["int"] [0.] in
+          maps, line+1, sys_ready, evt::events
+        else
+          maps, line+1, sys_ready, events
+      else
       let m = r_groups str ~n:4
         ~r:"ON \\(\\+\\|-\\) \\([^(]+\\)(\\([^)]+\\)) <- \\[\\([^]]*\\)\\]" in
       if not @: null m then
@@ -264,10 +272,6 @@ let parse_trace file =
             let evt = RelEvent.init op relname types vals in
             maps, line+1, sys_ready, evt::events
         | _ -> failwith @: "invalid input for ON at line "^soi line
-      else
-      if Str.string_match (Str.regexp "ON SYSTEM READY <- \\[\\]") str 0 then
-        let evt = RelEvent.init "system_ready" "" ["int"] [0.] in
-        maps, line+1, sys_ready, evt::events
       else
       let m = r_groups str ~n:4
         ~r:"UPDATE '\\([^']*\\)'\\[\\([^]]*\\)\\]\\[\\([^]]*\\)\\] := \
@@ -302,7 +306,20 @@ let parse_trace file =
         maps, line+1, sys_ready, events 
     ) (StringMap.empty, 1, false, []) lines
   in
-  let events = List.rev events in (* reverse events *)
+  let events = List.rev events in
+  (* get rid of events with no effects *)
+  let events = filter_map (fun e ->
+    let len = Hashtbl.length e.RelEvent.effects in
+    if len = 0 then None
+    else begin
+      (* reverse the effect lists *)
+      Hashtbl.iter (fun mapname efflist -> 
+        Hashtbl.replace e.RelEvent.effects mapname @: List.rev efflist
+      ) e.RelEvent.effects;
+      Some e
+    end
+  ) events
+  in
   events, maps, sys_ready
 
 let string_of_go_trig ~has_sys_ready events =
