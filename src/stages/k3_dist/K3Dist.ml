@@ -46,8 +46,8 @@ let v_leq = v_op vid_leq
 (* This is needed both for sending a push, and for modifying a local slice
  * operation *)
 (* slice_col is the k3 expression representing the collection.
- * pat_m is an optional pattern for slicing the data first *)
-let map_latest_vid_vals p slice_col pat_m map_id ~keep_vid =
+ * m_pat is an optional pattern for slicing the data first *)
+let map_latest_vid_vals p slice_col m_pat map_id ~keep_vid =
   let max_vid = "max_vid" in
   let map_vid = "map_vid" in
   let m_id_t = 
@@ -57,9 +57,13 @@ let map_latest_vid_vals p slice_col pat_m map_id ~keep_vid =
   let m_ts = snd_many m_id_t in
   let m_t_set = wrap_tset @: wrap_ttuple @: m_ts in
   let m_id_t_v = P.map_ids_types_with_v_for ~vid:"map_vid" p map_id in 
-  (* if we have bound variables, we need to slice first. Otherwise, 
+  let m_id_t_no_val = P.map_ids_types_no_val_for p map_id in
+  let m_id_no_val = fst_many @: m_id_t_no_val in
+  let m_t_no_val = snd_many @: m_id_t_no_val in
+  let num_keys = List.length m_id_t_no_val in 
+  (* if we have bound variables, we should slice first. Otherwise, 
       we don't need a slice *)
-  let access_k3 = begin match pat_m with
+  let access_k3 = begin match m_pat with
     | Some pat ->
         (* slice with an unknown for the vid so we only get the effect of
         * any bound variables *)
@@ -67,40 +71,81 @@ let map_latest_vid_vals p slice_col pat_m map_id ~keep_vid =
           mk_tuple @: P.map_add_v mk_cunknown pat
     | None     -> slice_col
     end 
-  in 
-  (* get the maximum vid that's less than our current vid *)
-  mk_fst [m_t_set; t_vid] @:
-    mk_agg 
-      (mk_assoc_lambda 
-        (* we project out the vid at the same time *)
-        (wrap_args ["acc", m_t_set; max_vid, t_vid])
-        (wrap_args m_id_t_v)
-        (mk_if 
-          (* if the map vid is less than current vid *)
-          (v_lt (mk_var map_vid) (mk_var "vid"))
-          (* if the map vid is equal to the max_vid, we add add it to our
-          * accumulator and use the same max_vid *)
+  in
+  (* we need to get the latest vid for every possible key, and then filter 
+   * only those latest values *)
+  let num_pat_unknowns = match m_pat with
+    | Some pat -> 
+        (* sanity check *)
+        let p_len = List.length pat in
+        if p_len <> num_keys + 1 then (* keys + value *)
+          let s =
+            Printf.sprintf "expected pattern length %d but got %d" num_keys p_len
+          in invalid_arg s 
+        else 
+          (* get number of bound value *)
+          let open K3.AST in
+          let l = List.length @:
+            List.filter (fun e -> K3Util.tag_of_expr e <> Const CUnknown) pat
+          in
+          (* another sanity check *)
+          if l > num_keys then invalid_arg "too many values specified in pattern"
+          else l
+    | None -> 0
+  in
+  (* a routine common to both methods of slicing *)
+  let common_vid_lambda =
+    mk_assoc_lambda 
+      (wrap_args ["acc", m_t_set; max_vid, t_vid])
+      (wrap_args m_id_t_v)
+      (mk_if 
+        (* if the map vid is less than current vid *)
+        (v_lt (mk_var map_vid) (mk_var "vid"))
+        (* if the map vid is equal to the max_vid, we add add it to our
+        * accumulator and use the same max_vid *)
+        (mk_if
+          (v_eq (mk_var map_vid) (mk_var max_vid))
+          (mk_tuple
+            [mk_combine
+              (mk_singleton m_t_set (mk_tuple @: ids_to_vars m_ids)) @:
+                  mk_var "acc";
+            mk_var max_vid])
+          (* else if map vid is greater than max_vid, make a new
+          * collection and set a new max_vid *)
           (mk_if
-            (v_eq (mk_var map_vid) (mk_var max_vid))
+            (v_gt (mk_var map_vid) (mk_var max_vid))
             (mk_tuple
-              [mk_combine
-                (mk_singleton m_t_set (mk_tuple @: ids_to_vars m_ids)) @:
-                    mk_var "acc";
-              mk_var max_vid])
-            (* else if map vid is greater than max_vid, make a new
-            * collection and set a new max_vid *)
-            (mk_if
-              (v_gt (mk_var map_vid) (mk_var max_vid))
-              (mk_tuple
-                [mk_singleton m_t_set (mk_tuple @: ids_to_vars m_ids); 
-                mk_var map_vid])
-              (* else keep the same accumulator and max_vid *)
-              (mk_tuple [mk_var "acc"; mk_var max_vid])
-            )
+              [mk_singleton m_t_set (mk_tuple @: ids_to_vars m_ids); 
+              mk_var map_vid])
+            (* else keep the same accumulator and max_vid *)
+            (mk_tuple [mk_var "acc"; mk_var max_vid])
           )
-          (* else keep the same acc and max_vid *)
-          (mk_tuple [mk_var "acc"; mk_var max_vid])
         )
-      )
-      (mk_tuple [mk_empty m_t_set; min_vid_k3])
-      access_k3
+        (* else keep the same acc and max_vid *)
+        (mk_tuple [mk_var "acc"; mk_var max_vid])
+      ) 
+  in
+  if num_keys - num_pat_unknowns <= 0 then
+    (* a regular fold is enough if we have no keys or if every key is bound *)
+    (* get the maximum vid that's less than our current vid *)
+    mk_fst [m_t_set; t_vid] @:
+      mk_agg 
+        common_vid_lambda
+        (mk_tuple [mk_empty m_t_set; min_vid_k3])
+        access_k3
+  else
+    (* we have free keys so we need to do some more work *)
+    mk_flatten @: mk_map
+      (mk_assoc_lambda
+        (wrap_args ["_", wrap_ttuple m_t_no_val]) (* group *)
+        (wrap_args ["project", m_t_set; "_", t_vid]) @:
+        mk_var "project"
+      ) @:
+      mk_gbagg 
+        (mk_lambda (wrap_args m_id_t_v) @:
+          (* group by the keys (not vid, not values) *)
+          mk_tuple @: ids_to_vars @: m_id_no_val)
+        (* get the maximum vid that's less than our current vid *)
+        common_vid_lambda
+        (mk_tuple [mk_empty m_t_set; min_vid_k3])
+        access_k3
