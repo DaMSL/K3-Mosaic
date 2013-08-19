@@ -4,7 +4,7 @@ open Util
 open K3.AST
 open K3Helpers
 
-(* address, maybe name, hash *)
+(* address, role, name, hash *)
 let id_t_node = K3Global.peers_id_type @ ["hash", t_int]
 let id_t_node_no_hash = list_drop_end 1 id_t_node
 let id_node = fst @: List.split id_t_node
@@ -118,7 +118,7 @@ let get_all_nodes_code =
   mk_global_fn "get_all_nodes"
   ["_", t_unit] [wrap_tlist t_addr] @:
   mk_map
-    (mk_lambda (wrap_args ["addr", t_addr; "_", t_unit; "_", t_unit]) @:
+    (mk_lambda (wrap_args id_t_node) @:
       mk_var "addr") @:
     (mk_var node_ring_nm)
 

@@ -230,8 +230,13 @@ let on_init_trig p =
       [mk_iter 
         (mk_lambda 
           (wrap_args K3Global.peers_id_type) @:
-          mk_apply (mk_var K3Ring.add_node_name) @: 
-            mk_tuple @: ids_to_vars K3Global.peers_ids
+          (* only add to node list if role <> switch *)
+          mk_if
+           (mk_neq
+            (mk_var K3Global.peers_role_name) (mk_cstring "switch"))
+           (mk_apply (mk_var K3Ring.add_node_name) @: 
+              mk_tuple @: ids_to_vars K3Global.peers_ids)
+           (mk_cunit)
         ) @:
           mk_var K3Global.peers_name]
 

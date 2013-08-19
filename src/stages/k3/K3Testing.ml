@@ -94,20 +94,25 @@ let extract_first_env = function
   | (addr, (_, (env, _)))::_ -> (env, [])
   | [] -> invalid_arg "no environment"
 
-let unify_tuple_lists l1 l2 =
+let unify_tuple_lists id l1 l2 =
   let tuple_remove_value = function
     | VTuple tuplist -> VTuple(list_drop_end 1 tuplist)
-    | _ -> failwith "not a tuple!" 
+    | _ -> failwith @: Printf.sprintf "%s is not a tuple!" id
   in
   (* check that our lists are disjoint *)
   let l1' = List.rev_map tuple_remove_value l1 in
   let l2' = List.rev_map tuple_remove_value l2 in
-  if LAS.diff l1' l2' != []
-  then failwith "Lists not disjoint!"
-  else LAS.union l1 l2
+  (* hack to make sure the disjoint test doesn't pick up on things that always
+   * overlap *)
+  match id with
+  | "pmap_data" | "node_ring" | "peers" -> LAS.union l1 l2
+  | _ -> 
+    if LAS.inter l1' l2' <> []
+    then failwith @: Printf.sprintf "In %s, lists not disjoint!" id
+    else LAS.union l1 l2
 
 (* unify the values of the same ids in different environments *)
-let unify_values r_newval = function
+let unify_values id r_newval = function
   | None -> Some r_newval
   | Some r_oldval -> (* we found an old value *)
     let newval, oldval = !r_newval, !r_oldval in
@@ -119,13 +124,13 @@ let unify_values r_newval = function
     let both_tup_list l1 l2 = is_tup_list l1 && is_tup_list l2 in
     match oldval, newval with
     | VSet l1, VSet l2 when both_tup_list l1 l2 -> 
-        Some(ref @: VSet(unify_tuple_lists l1 l2))
+        Some(ref @: VSet(unify_tuple_lists id l1 l2))
     | VSet l1, VSet l2 -> Some(ref @: VSet(LAS.union l1 l2))
     | VBag l1, VBag l2 when both_tup_list l1 l2 -> 
-        Some(ref @: VBag(unify_tuple_lists l1 l2))
+        Some(ref @: VBag(unify_tuple_lists id l1 l2))
     | VBag l1, VBag l2 -> Some(ref @: VBag(LAS.union l1 l2))
     | VList l1, VList l2 when both_tup_list l1 l2 -> 
-        Some(ref @: VList(unify_tuple_lists l1 l2))
+        Some(ref @: VList(unify_tuple_lists id l1 l2))
     | VList l1, VList l2 -> Some(ref @: VList(LAS.union l1 l2))
     | _,_ -> Some r_newval
 
@@ -136,7 +141,7 @@ let unify_envs (envs : (address * program_env_t) list) =
     (* ignore triggers and frames *)
     List.fold_left (fun acc (addr, (_, (m_env, _))) ->
       List.fold_left (fun acc' (id, newval) ->
-        assoc_modify (unify_values newval) id acc'
+        assoc_modify (unify_values id newval) id acc'
       ) acc m_env
     ) [] envs
   in
