@@ -215,13 +215,18 @@ let update_maps maps events =
   ) maps events
 
 (* dump a map into a string *)
-let dump_map mapname mapdata = match mapdata with
+let dump_map mapname = function
     | SingletonMap m -> "{"^SingletonMap.val_s m^"}"
     | OutputMap m    -> 
         let s = OutputMap.val_s m in
         (* if our map is empty, we need the types *)
         if s = "" then "{} : {"^OutputMap.types_s m^"}"
         else "{"^OutputMap.val_s m^"}"
+
+(* return the dimensions of the map *)
+let map_dims = function
+    | SingletonMap _ -> 1
+    | OutputMap m    -> 1 + List.length m.OutputMap.ovars
 
 let parse_trace file =
   let lines = read_file_lines file in
@@ -373,6 +378,12 @@ let string_of_maps maps =
   StringMap.fold (fun name mapdata acc ->
     (name, dump_map name mapdata)::acc
   ) maps [] 
+
+(* get the names and dimensions of maps *)
+let map_names_and_dims maps =
+  StringMap.fold (fun name mapdata acc ->
+    (name, map_dims mapdata)::acc
+  ) maps []
 
 (* combine the map strings (left string, right string) into their final form *)
 let dump_map_strings maps =

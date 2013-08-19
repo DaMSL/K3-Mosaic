@@ -27,6 +27,7 @@ let free_bucket_type = wrap_tlist @: wrap_ttuple t_two_ints
 let sorted_ip_inner_type = [t_addr; wrap_tlist t_addr]
 let sorted_ip_list_type = wrap_tlist @: wrap_ttuple sorted_ip_inner_type
 
+(* map_parameter starts at 0 *)
 (*             map_name * (map_parameter * modulo)  *)
 type part_map_t = (id_t * (int * int) list) list
 
