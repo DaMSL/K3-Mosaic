@@ -7,6 +7,15 @@ popd > /dev/null
 
 cd $SCRIPTPATH
 if [ ! -d "./bin" ]; then mkdir bin; fi
+# partition map tool
+ocamlbuild PartMapTool.byte -build-dir ./bin -tag debug $@
+if [ -f "./bin/src/PartMapTool.byte" ]
+then echo "#!/bin/bash" > ./bin/partmap_tool
+     echo "ocamlrun -b $SCRIPTPATH/bin/src/PartMapTool.byte \$@" >> ./bin/partmap_tool
+     chmod +x ./bin/partmap_tool
+fi
+
+# driver
 ocamlbuild Driver.byte -build-dir ./bin -tag debug $@
 if [ -f "./bin/src/Driver.byte" ]
 then echo "#!/bin/bash" > ./bin/k3
