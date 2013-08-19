@@ -24,7 +24,14 @@ let diff l1 l2 =
    @param l2 The second list set
    @return   true if l1 is a subset of l2
 *)
-let subset l1 l2 = ((diff l1 l2) = [])
+let subset l1 l2 =
+  let hash = Hashtbl.create (List.length l2) in
+  List.iter (fun x -> Hashtbl.replace hash x ()) l2;
+  List.for_all (fun x ->
+    try
+      Hashtbl.find hash x; true
+    with Not_found -> false
+  ) l1
 
 (** 
    Compare two sets for equality
