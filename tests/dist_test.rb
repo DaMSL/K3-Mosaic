@@ -10,16 +10,16 @@
 require 'optparse'
 require 'pathname'
 
-$num_peers = 1
+$num_nodes = 1
 
 # option parser
 opt_parser = OptionParser.new do |opts|
 	opts.banner = "Usage: dist_test.rb [options]"
 	opts.separator ""
 	opts.separator "Specific options:"
-    opts.on("-p", "--peers [NUMBER]", Integer,
-            "Choose a number of peers") do |n|
-        $num_peers = n
+    opts.on("-p", "--nodes [NUMBER]", Integer,
+            "Choose a number of nodes") do |n|
+        $num_nodes = n
         end
 end
 
@@ -129,13 +129,13 @@ def test_file(file, dbt_path, k3_path)
     #File.unlink('temp3.k3ast')
     #File.unlink('temp3.k3dist')
 
-    # create peer list
-    peer_list = Array.new($num_peers - 1) do |i|
+    # create node list
+    node_list = Array.new($num_nodes) do |i|
         "#{i}.#{i}.#{i}.#{i}:10/node"
     end
 
     peer_str = "-n localhost:10000/switch"
-    peer_list.each do |ip|
+    node_list.each do |ip|
         peer_str += ",#{ip}"
     end
 
