@@ -127,19 +127,20 @@ let unify_values r_newval = function
     | VList l1, VList l2 when both_tup_list l1 l2 -> 
         Some(ref @: VList(unify_tuple_lists l1 l2))
     | VList l1, VList l2 -> Some(ref @: VList(LAS.union l1 l2))
-    | _,_ -> None (* any other value is not relevant *)
+    | _,_ -> Some r_newval
 
 (* unify the environments of different nodes *)
 let unify_envs (envs : (address * program_env_t) list) = 
   (* fold over all the nodes. we discard triggers and frames *)
-  let m_env = 
+  let unified_env = 
+    (* ignore triggers and frames *)
     List.fold_left (fun acc (addr, (_, (m_env, _))) ->
       List.fold_left (fun acc' (id, newval) ->
         assoc_modify (unify_values newval) id acc'
       ) acc m_env
     ) [] envs
   in
-  (m_env, [])
+  (unified_env, []) (* no frames *)
 
 (* test a program and comare it to the expected output. Takes an interpretation
  * function that expects an untyped AST (this takes care of handling any extra
@@ -154,8 +155,20 @@ let test_program globals_k3 interpret_fn file_name test =
     | _ -> failwith "unsupported test"
   in
   let node_envs = interpret_fn program in
+
+  (* print out the environments *)
+  (*List.iter (fun (addr, env) -> *)
+    (*Printf.printf "Environment for %s\n" (K3Printing.string_of_address addr); *)
+    (*print_endline @: K3Values.string_of_program_env env*)
+  (* ) node_envs;*)
+
   (* unify the node value environments *)
   let (v_env:env_t) = op_fn node_envs in
+
+  (* debug - print the unified env *)
+  (*Printf.printf "Unified environment:\n";*)
+  (*print_endline @: K3Values.string_of_env ~skip_functions:false v_env;*)
+
   let numbered_tests = insert_index_fst 1 tests in
   let prog_globals = K3Global.add_globals_k3 globals_k3 program in
   (* get the type bindings from the typechecker so we have an environment for

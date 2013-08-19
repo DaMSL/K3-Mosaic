@@ -48,7 +48,7 @@ val string_of_value : value_t -> string
 val print_env : bool -> env_t -> unit
 val print_program_env : program_env_t -> unit
 
-val string_of_env : env_t -> string
+val string_of_env : ?skip_functions:bool -> env_t -> string
 val string_of_program_env : program_env_t -> string
 
 (* Conversion between values and other types *)

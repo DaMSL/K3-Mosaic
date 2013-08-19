@@ -139,7 +139,8 @@ let print_program_env (trigger_env,val_env) =
 
 let old_trig_env, old_val_env = ref [], ref []
 
-let string_of_env (env:env_t) = wrap_formatter (fun () -> print_env true env)
+let string_of_env ?(skip_functions=true) (env:env_t) = 
+  wrap_formatter (fun () -> print_env skip_functions env)
 
 let string_of_program_env env = wrap_formatter (fun () -> print_program_env env)
 
