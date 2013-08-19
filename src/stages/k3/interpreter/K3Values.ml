@@ -10,7 +10,28 @@ exception RuntimeError of int * string
 
 (* Interpreter representation of values *)
 
+module IdMap = Map.Make(struct type t = id_t let compare = String.compare end)
+
+(* add to the id_map from a list *)
+let add_from_list map l = 
+  List.fold_left (fun acc (k, v) ->
+    IdMap.add k v acc
+  ) map l
+
+let map_modify f key map =
+  let oldval = 
+    try 
+      Some(IdMap.find key map)
+    with Not_found -> None
+  in
+  match f oldval with
+  | None   -> IdMap.remove key map
+  | Some v -> IdMap.add key v map
+
+let map_length map = IdMap.fold (fun _ _ sum -> sum + 1) map 0
+
 type eval_t = VDeclared of value_t ref | VTemp of value_t
+
 and foreign_func_t = env_t -> env_t * eval_t
 
 and value_t
@@ -31,15 +52,16 @@ and value_t
     | VAddress of address
     | VTarget of id_t
 
-and frame_t = (id_t * value_t) list
+    (* arguments to a function/trigger *)
+and frame_t = (id_t * value_t) list 
 
 (* mutable environment, frame environment *)
-and env_t = (id_t * value_t ref) list * (frame_t list)
+and env_t = (value_t ref) IdMap.t * (frame_t list)
 
 (* trigger env is where we store the trigger functions. These functions take the
  * scheduler_state (parametrized here to prevent circular inclusion), the
  * environment, value_t of arguments, and produce unit *)
-type trigger_env_t = (id_t * (env_t -> value_t -> unit)) list
+type trigger_env_t = (env_t -> value_t -> unit) IdMap.t
 type program_env_t = trigger_env_t * env_t
 
 (* Value stringification *)
@@ -108,32 +130,42 @@ let string_of_value v = wrap_formatter (fun () -> print_value v)
 
 (* Environment stringification *)
 let print_binding (id,v) = ob(); ps (id^" = "); pc(); print_value v; cb(); fnl()
+
+(* for a map structure *)
+let print_binding_m id v = ob(); ps (id^" = "); pc(); print_value v; cb(); fnl()
  
 let print_frame frame = List.iter print_binding frame
   
-let print_env skip_functions (globals, frames) =
-  let filter_env l = List.filter 
-    (function 
+let print_env skip_functions (globals, (frames:frame_t list)) =
+  let filter_m e = IdMap.filter 
+    (fun _ -> function
+      | VFunction _        -> false
+      | VForeignFunction _ -> false
+      | _                  -> true) 
+    e in
+  let filter_l l = List.filter 
+    (function
       | _, VFunction _        -> false
       | _, VForeignFunction _ -> false
       | _                     -> true) 
     l in
   let len l = string_of_int (List.length l) in
-    ps ("----Globals("^(len globals)^")----"); fnl();
-    let global_l = List.map (fun (id, ref_v) -> id, !ref_v) globals in
-    let global_l' = if not skip_functions then global_l
-                    else filter_env global_l in
-    List.iter print_binding global_l';
-    fnl();
-    ps ("----Frames("^(len frames)^")----"); fnl();
-    let frames' = List.map filter_env frames in
-    List.iter print_frame frames'
+  let len_m e = string_of_int @: map_length e in
+  ps ("----Globals("^(len_m globals)^")----"); fnl();
+  let global_m = IdMap.map (fun ref_v -> !ref_v) globals in
+  let global_m' = if not skip_functions then global_m
+                  else filter_m global_m in
+  IdMap.iter print_binding_m global_m';
+  fnl();
+  ps ("----Frames("^(len frames)^")----"); fnl();
+  let frames' = List.map filter_l frames in
+  List.iter print_frame frames'
 
 let print_trigger_env env =
-  ps ("----Triggers("^(string_of_int @: List.length env)^")----"); fnl();
-  List.iter (fun (id,_) -> ps id; fnl()) env
+  ps ("----Triggers("^(string_of_int @: map_length env)^")----"); fnl();
+  IdMap.iter (fun id _ -> ps id; fnl()) env
 
-let print_program_env (trigger_env,val_env) =
+let print_program_env (trigger_env, val_env) =
   print_trigger_env trigger_env;
   print_env false val_env
 

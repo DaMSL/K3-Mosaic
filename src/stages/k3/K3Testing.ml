@@ -140,10 +140,10 @@ let unify_envs (envs : (address * program_env_t) list) =
   let unified_env = 
     (* ignore triggers and frames *)
     List.fold_left (fun acc (addr, (_, (m_env, _))) ->
-      List.fold_left (fun acc' (id, newval) ->
-        assoc_modify (unify_values id newval) id acc'
+      IdMap.fold (fun id newval acc' ->
+        map_modify (unify_values id newval) id acc'
       ) acc m_env
-    ) [] envs
+    ) IdMap.empty envs
   in
   (unified_env, []) (* no frames *)
 

@@ -289,7 +289,7 @@ let invoke_trigger s address (trigger_env, val_env) trigger_id arg =
   let q = get_global_queue s address in
   K3Queue.increase_level q;
   (* get the frozen function for the trigger and apply it to the env and args *)
-  (List.assoc trigger_id trigger_env) val_env arg;
+  (IdMap.find trigger_id trigger_env) val_env arg;
   (* log the state for this trigger *)
   LOG "Trigger %s@%s:\n%s" trigger_id (string_of_address address) (string_of_env val_env) 
     NAME "K3Runtime.TriggerState" LEVEL DEBUG;
@@ -360,7 +360,7 @@ let process_task s address prog_env =
 (* register the node and its triggers *)
 let initialize_scheduler s address (trig_env,_) =
   if not @: is_node s address then register_node s address; 
-  List.iter (fun (id, _) -> register_trigger s address id) trig_env
+  IdMap.iter (fun id _ -> register_trigger s address id) trig_env
 
 let node_has_work s address =
   if not @: is_node s address then false else 

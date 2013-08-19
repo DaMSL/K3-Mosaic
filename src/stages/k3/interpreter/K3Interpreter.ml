@@ -43,10 +43,7 @@ let lookup id (mutable_env, frame_env) =
         with Not_found -> match_in_frames t
   in
   try VTemp(match_in_frames frame_env)
-  with Not_found ->
-    (if List.mem_assoc id mutable_env
-     then VDeclared(List.assoc id mutable_env)
-     else raise Not_found)
+  with Not_found -> VDeclared(IdMap.find id mutable_env)
 
 
 (* Expression interpretation *)
@@ -491,7 +488,7 @@ and eval_expr sched_st cenv texpr =
             if K3Runtime.use_shuffle_tasks s then
               (* look for "me" to extract our own address *)
               let sender_addr = 
-                (try match !(List.assoc "me" @: fst cenv) with
+                (try match !(IdMap.find "me" @: fst cenv) with
                   |VAddress add -> add 
                   | _           -> error "global address for me not found" 
                 with Not_found  -> error "global variable 'me' not found")
@@ -563,7 +560,8 @@ let dispatch_foreign id = K3StdLib.lookup_value id
 let prepare_trigger sched_st id arg local_decls body =
   fun (m_env, f_env) -> fun a ->
     let default (id,t,_) = id, ref (default_isolated_value t) in
-    let local_env = (List.map default local_decls)@m_env, f_env in 
+    let new_vals = List.map default local_decls in
+    let local_env = add_from_list m_env new_vals, f_env in 
     let _, reval = (eval_fun (-1) (VFunction(arg,body))) (Some sched_st) local_env a in
     match value_of_eval reval with
       | VUnit -> ()
@@ -577,7 +575,7 @@ let prepare_sinks sched_st env fp =
       failwith "sink resource interpretation not supported"
       
     | Sink(Code(id, arg, locals, body)) ->
-      (id, prepare_trigger sched_st id arg locals body) :: trig_env, (m_env, f_env)
+      IdMap.add id (prepare_trigger sched_st id arg locals body) trig_env, (m_env, f_env)
 
     | _ -> env
     ) env fp
@@ -602,7 +600,7 @@ let env_of_program ?address sched_st k3_program =
 
           | _, None -> (m_env, f_env), default_value t 
         in
-        trig_env, (((id, ref init_val) :: rm_env), rf_env)
+        trig_env, ((IdMap.add id (ref init_val) rm_env), rf_env)
 
     | Foreign (id,t) -> trig_env, (m_env, [id, dispatch_foreign id]::f_env)
 
@@ -610,7 +608,8 @@ let env_of_program ?address sched_st k3_program =
 
     | _ -> env
   in
-  let init_env = ([], ([],[])) in
+  (* triggers, (variables, arg frames) *)
+  let init_env = IdMap.empty, (IdMap.empty,[]) in
   List.fold_left env_of_declaration init_env k3_program
 
 
