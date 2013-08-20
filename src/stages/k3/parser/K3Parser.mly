@@ -494,6 +494,7 @@ constant :
     | INTEGER   { CInt($1) }
     | FLOAT     { CFloat($1) }
     | STRING    { CString($1) }
+    | address   { $1 }
 ;
 
 range :
