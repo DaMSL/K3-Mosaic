@@ -36,11 +36,13 @@ dbtoaster_exe_path = File.join(dbtoaster_path, "/bin/dbtoaster")
 p = Pathname.new(dbtoaster_exe_path)
 raise "Can't find dbtoaster executable" unless p.exist?
 
-path = File.join($cur_path, "../bin/k3")
-p = Pathname.new(path)
+k3_path = File.join($cur_path, "../bin/k3")
+p = Pathname.new(k3_path)
 raise "Can't find dbtoaster file" unless p.exist?
 
-k3_path = path
+$part_path = File.join($cur_path, "../bin/partmap_tool")
+p = Pathname.new($part_path)
+raise "Can't find partmap_tool file" unless p.exist?
 
 def check_error(dir, err_file)
 	# Check for error
@@ -103,31 +105,16 @@ def test_file(file, dbt_path, k3_path)
 	puts "#{k3_path} -p -i m3 -l k3 temp.m3 > temp.k3"
 	`#{k3_path} -p -i m3 -l k3 temp.m3 > temp.k3 2> #{err_file}`
 
+    # create a parition map
+    puts "#{$part_path} temp.trace -n #{$num_nodes} > temp.part"
+    output = `#{$part_path} temp.trace -n #{$num_nodes} > temp.part`
+    part_str = if $num_nodes > 1 then "-m temp.part" else "" end
+
     # create a k3 distributed file
-	puts "#{k3_path} -p -i m3 -l k3disttest temp.m3 -trace #{trace_file} > temp.k3dist"
-	`#{k3_path} -p -i m3 -l k3disttest temp.m3 -trace #{trace_file} > temp.k3dist 2> #{err_file}`
+	puts "#{k3_path} -p -i m3 -l k3disttest temp.m3 -trace #{trace_file} #{part_str} > temp.k3dist"
+	`#{k3_path} -p -i m3 -l k3disttest temp.m3 -trace #{trace_file} #{part_str} > temp.k3dist 2> #{err_file}`
 	check_error(curdir, err_file)
     check_type_error(curdir, 'temp.k3dist')
-
-    ##parse the distributed file
-	#puts "#{k3_path} -p -i k3 temp2.k3dist > temp3.k3dist"
-	#`#{k3_path} -p -i k3 -l k3 temp2.k3dist > temp3.k3dist 2> #{err_file}`
-	#check_error(curdir, err_file)
-    #check_type_error(curdir, 'temp3.k3dist')
-
-    ## compare the parsed file to the original file via AST
-	#puts "#{k3_path} -p -i k3 -l k3ast temp2.k3dist > temp2.k3ast"
-	#`#{k3_path} -p -i k3 -l k3ast temp2.k3dist > temp2.k3ast 2> #{err_file}`
-	#check_error(curdir, err_file)
-    #check_type_error(curdir, 'temp2.k3ast')
-	#puts "#{k3_path} -p -i k3 -l k3ast temp3.k3dist > temp3.k3ast"
-	#`#{k3_path} -p -i k3 -l k3ast temp3.k3dist > temp3.k3ast 2> #{err_file}`
-	#check_error(curdir, err_file)
-    #check_type_error(curdir, 'temp3.k3ast')
-    #check_file_match(curdir, 'temp2.k3ast', 'temp3.k3ast')
-    #File.unlink('temp2.k3ast')
-    #File.unlink('temp3.k3ast')
-    #File.unlink('temp3.k3dist')
 
     # create node list
     node_list = Array.new($num_nodes) do |i|
