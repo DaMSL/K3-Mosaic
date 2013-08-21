@@ -5,12 +5,13 @@ open K3.AST
 open K3Helpers
 
 (* address, role, name, hash *)
-let id_t_node = K3Global.peers_id_type @ ["hash", t_int]
+let id_t_node_for hash_name = K3Global.peers_id_type @ [hash_name, t_int]
+let id_t_node = id_t_node_for "hash"
 let id_t_node_no_hash = list_drop_end 1 id_t_node
 let id_node = fst @: List.split id_t_node
 let id_node_no_hash = fst @: List.split id_t_node_no_hash
 let t_node = snd @: List.split id_t_node
-let t_ring = wrap_tset_mut @: wrap_ttuple t_node (* should be a sorted set *)
+let t_ring = wrap_tlist_mut @: wrap_ttuple t_node
 
 let node_ring_nm = "node_ring"
 let node_ring_code = 
@@ -19,7 +20,7 @@ let node_ring_code =
 
 let replicas_nm = "replicas"
 let replicas_code = mk_global_val_init replicas_nm (wrap_tset_mut t_int) @:
-  mk_singleton (wrap_tset_mut t_int) (mk_cint 1)
+  mk_singleton (wrap_tset_mut t_int) (mk_cint 8)
 
 let ring_foreign_funcs = 
   mk_foreign_fn "hash_int" t_int t_int ::
@@ -60,14 +61,44 @@ let add_node_code =
       ) @:
       mk_var "rng"
     ) @:
-  mk_iter (* insert each new element *)
-    (mk_lambda
-      (wrap_args ["x", wrap_ttuple t_node]) @:
-      mk_insert
-        (mk_var node_ring_nm) @:
-        mk_var "x"
-    ) @:
-    (mk_var "new_elems")
+  mk_block
+  [ mk_iter (* insert each new element *)
+      (mk_lambda
+        (wrap_args ["x", wrap_ttuple t_node]) @:
+        mk_insert
+          (mk_var node_ring_nm) @:
+          mk_var "x"
+      ) @:
+      (mk_var "new_elems")
+    ;
+    (* sort by the hash *)
+    mk_let "temp_ring" t_ring 
+      (mk_sort (mk_var node_ring_nm) @:
+        mk_assoc_lambda
+          (wrap_args @: id_t_node_for "hash1") 
+          (wrap_args @: id_t_node_for "hash2") @:
+          mk_gt (mk_var "hash1") (mk_var "hash2")
+      ) @:
+    (* delete everything in the ring and insert the contents of the temp ring.
+     * This wouldn't be necessary if we had annotations that worked *)
+    mk_block
+    [
+      mk_iter
+        (mk_lambda (wrap_args ["node", wrap_ttuple t_node]) @:
+          mk_delete (mk_var node_ring_nm) @:
+            (mk_var "node")
+        ) @:
+        (mk_var node_ring_nm)
+      ;
+      mk_iter
+        (mk_lambda (wrap_args ["node", wrap_ttuple t_node]) @:
+          mk_insert (mk_var node_ring_nm) @:
+            (mk_var "node")
+        ) @:
+        (mk_var "temp_ring")
+    ]
+  ]
+
 
 let remove_node_code =
   mk_global_fn "remove_node"
@@ -83,7 +114,8 @@ let remove_node_code =
         mk_var "nodes_to_delete"
 
 (* function to get the node for an int. Returns the node's address *)
-(* note about scaling: ocaml's hash function's range is 0 to max_int *)
+(* note about scaling: ocaml's hash function's range is 0 to the maximum hash
+ * value, which is 2^30 *)
 let get_ring_node_code = 
   mk_global_fn "get_ring_node"
   ["data", t_int; "max_val", t_int] [t_addr] @:
