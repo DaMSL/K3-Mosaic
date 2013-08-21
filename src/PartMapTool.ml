@@ -6,12 +6,14 @@ let error s = prerr_endline s; exit 1
 type parameters = {
   mutable trace_file : string;
   mutable num_nodes : int;
+  mutable factor : int;
   mutable debug : bool;
 }
 
 let cmd_line_params = {
   trace_file = "";
   num_nodes = 0;
+  factor = 16; (* factor to multiply by to get finer partitions *)
   debug = false;
 }
 
@@ -63,13 +65,16 @@ let calc_part num_nodes dims =
 
 (* first try - do an extremely naive implementation of partitioning *)
 let calc_part_maps num_nodes maps_dims =
-  list_map (fun (mapname, dim) ->
-    mapname, calc_part num_nodes dim
+  filter_map (fun (mapname, dim) ->
+    if dim <= 0 then None
+    else Some(mapname, calc_part num_nodes dim)
   ) maps_dims
 
 let param_specs = Arg.align
   ["-n", Arg.Int  (fun i -> cmd_line_params.num_nodes <- i), "Set number of nodes";
-   "-d", Arg.Bool (fun b -> cmd_line_params.debug <- b), "Set debug mode"]
+   "-d", Arg.Bool (fun b -> cmd_line_params.debug <- b), "Set debug mode";
+   "-f", Arg.Int  (fun f -> cmd_line_params.factor <- f), "Set multiplicative factor"]
+
 
 let usage_msg = "partmap_tool [opts] trace_file"^
      "\n---- Options ----"
@@ -87,9 +92,14 @@ let main () =
     (Arg.usage param_specs usage_msg;
      error "\nMust have number for nodes") 
   else
-    let maps_dims = maps_and_dims cmd_line_params.trace_file in
-    (*print_maps_dims maps_dims;*)
-    let maps_sizes = calc_part_maps cmd_line_params.num_nodes maps_dims in
+    let p = cmd_line_params in
+    let maps_dims = maps_and_dims p.trace_file in
+    (* reduce by one for value *)
+    let maps_dims = list_map (fun (a, i) -> a, i-1) maps_dims in
+    (* print_maps_dims maps_dims; (* debug *) *)
+    (* increase the amount of targets we need to hit, for finer grain
+     * partitioning *)
+    let maps_sizes = calc_part_maps (p.num_nodes * p.factor) maps_dims in
     let s = string_of_maps_sizes maps_sizes in
     print_endline s
 
