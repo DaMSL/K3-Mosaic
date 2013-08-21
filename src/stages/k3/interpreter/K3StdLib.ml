@@ -116,7 +116,11 @@ let _ = Hashtbl.add func_table
   mod_name (mod_decl, mod_args, mod_fn)
 
 (* maximum integer *)
-let get_max_int_fn e = e, int_temp max_int
+(* this is used for the maximum hash value
+ * we'll fudge this and make it what the real max hash value is
+ * ocaml limits the max hash value to be consistent between the 64 and 32 bit
+ * runtimes *)
+let get_max_int_fn e = e, int_temp 0x40000000
 
 let get_max_int_name = "get_max_int"
 let get_max_int_decl = wrap_tfunc t_unit t_int
