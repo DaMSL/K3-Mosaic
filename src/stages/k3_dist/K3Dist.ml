@@ -15,7 +15,7 @@ let init_vid_k3 =
     mk_tuple [mk_cint 0; mk_cint 0; mk_apply (mk_var "hash_addr") G.me_var]
 
 let min_vid_k3 = mk_tuple [mk_cint 0; mk_cint 0; mk_cint 0]
-
+let max_vid_k3 = mk_tuple [mk_cint max_int; mk_cint max_int; mk_cint max_int ]
 
 (* trigger argument manipulation convenience functions *)
 let arg_types_of_t p trig_nm = extract_arg_types (args_of_t p trig_nm)
@@ -26,6 +26,7 @@ let args_of_t_with_v p trig_nm = ("vid", t_vid)::args_of_t p trig_nm
 let arg_types_of_t_with_v p trig_nm = t_vid::arg_types_of_t p trig_nm
 let args_of_t_as_vars_with_v p trig_nm = 
   mk_var "vid"::args_of_t_as_vars p trig_nm
+
 
 (* vid comparison names and code *)
 let v_op op l r = mk_apply (mk_var op) @: mk_tuple [l;r]
@@ -41,6 +42,70 @@ let vid_geq = "vid_geq"
 let v_geq = v_op vid_geq
 let vid_leq = "vid_leq"
 let v_leq = v_op vid_leq
+
+
+(* global variable moved from GenDist.ml *)
+
+(* log, buffer names *)
+let log_write_for p trig_nm = "log_write_"^trig_nm (* varies with bound *)
+let log_get_bound_for p trig_nm = "log_get_bound_"^trig_nm 
+let log_read_geq = "log_read_geq" (* takes vid, returns (trig, vid)list >= vid *)
+(* adds the delta to all subsequent vids following in the buffer so that non
+ * delta computations will be correct. Must be atomic ie. no other reads of the
+ * wrong buffer value can happen *)
+let add_delta_to_buffer_for_map p map_id = 
+  "add_delta_to_buffer_"^map_name_of p map_id
+
+(* foreign functions *)
+let hash_addr = "hash_addr"
+let foreign_hash_addr = mk_foreign_fn hash_addr t_addr t_int
+let declare_foreign_functions p = foreign_hash_addr::[]
+
+(* global data structures 
+ * ---------------------------------------------- *)
+
+(* vid counter used to assign vids *)
+let vid_counter_name = "__vid_counter__"
+let vid_counter = mk_var vid_counter_name
+let vid_counter_t = wrap_tset @: t_int_mut
+
+
+(* epoch 
+ * TODO 
+ * Need to combine vid_counter, epoch and hash together 
+ * Create a global hash_me variale? Intstead of doing hash
+ * everytime need a vid? *)
+let epoch_name = "__epoch__"
+let epoch_var = mk_var epoch_name
+let epoch_t = wrap_tset @: t_int_mut
+
+(* stmt_cntrs - (vid, stmt_id, counter) *)
+let stmt_cntrs_name = "__stmt_cntrs__"
+let stmt_cntrs = mk_var stmt_cntrs_name
+
+let stmt_cntrs_id_type_vid_name = "vid"
+let stmt_cntrs_id_type_stmt_id_name = "stmt_id"
+let stmt_cntrs_id_type_counter_name = "counter"
+
+let stmt_cntrs_id_type_name = [
+  stmt_cntrs_id_type_vid_name;
+  stmt_cntrs_id_type_stmt_id_name;
+  stmt_cntrs_id_type_counter_name
+]
+
+let stmt_cntrs_id_type = [(stmt_cntrs_id_type_vid_name, t_vid_mut);
+                          (stmt_cntrs_id_type_stmt_id_name, t_int_mut);
+                          (stmt_cntrs_id_type_counter_name, t_int_mut)] 
+
+let stmt_cntrs_type = wrap_tset @: wrap_ttuple_mut @: 
+  snd @: List.split stmt_cntrs_id_type
+  (*
+let stmt_cntrs_type = wrap_tset_mut @: wrap_ttuple_mut 
+      [t_vid_mut; t_int_mut; t_int_mut] 
+*)
+(* names for log *)
+let log_for_t t = "log_"^t
+let log_master = "log__master"
 
 (* get the latest vals up to a certain vid *)
 (* This is needed both for sending a push, and for modifying a local slice
