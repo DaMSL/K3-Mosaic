@@ -95,21 +95,23 @@ let extract_first_env = function
   | [] -> invalid_arg "no environment"
 
 let unify_tuple_lists id l1 l2 =
-  let tuple_remove_value = function
-    | VTuple tuplist -> VTuple(list_drop_end 1 tuplist)
-    | _ -> failwith @: Printf.sprintf "%s is not a tuple!" id
-  in
-  (* check that our lists are disjoint *)
-  let l1' = List.rev_map tuple_remove_value l1 in
-  let l2' = List.rev_map tuple_remove_value l2 in
   (* hack to make sure the disjoint test doesn't pick up on things that always
    * overlap *)
   match id with
   | "pmap_data" | "node_ring" | "peers" -> LAS.union l1 l2
   | _ -> 
-    if LAS.inter l1' l2' <> []
-    then failwith @: Printf.sprintf "In %s, lists not disjoint!" id
-    else LAS.union l1 l2
+    (* can't use disjointness since nodes copy over maps to work with them *)
+    (* check that our lists are disjoint *)
+    (*let tuple_remove_value = function*)
+      (*| VTuple tuplist -> VTuple(list_drop_end 1 tuplist)*)
+      (*| _ -> failwith @: Printf.sprintf "%s is not a tuple!" id*)
+    (*in*)
+    (*let l1' = List.rev_map tuple_remove_value l1 in*)
+    (*let l2' = List.rev_map tuple_remove_value l2 in*)
+    (*if LAS.inter l1' l2' <> []*)
+    (*then failwith @: Printf.sprintf "In %s, lists not disjoint!" id*)
+    (*else LAS.union l1 l2*)
+    LAS.union l1 l2
 
 (* unify the values of the same ids in different environments *)
 let unify_values id r_newval = function
