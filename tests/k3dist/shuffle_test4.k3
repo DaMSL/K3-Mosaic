@@ -1,0 +1,132 @@
+/* Further investigation of route */
+foreign hash_int : int -> int
+foreign hash_addr : address -> int
+foreign int_of_float : float -> int
+foreign float_of_int : int -> float
+foreign get_max_int : unit -> int
+foreign divf : (float, float) -> float
+foreign mod : (int, int) -> int
+
+declare pmap_data : [int, [int, int]] = [3, [0, 2]; 2, [0, 2]; 5, [0, 2]; 4, 
+  [0, 2]; 6, [0, 2]; 1, [0, 2]]
+
+declare node_ring : {address, string, string, int} =
+  {(0.0.0.0:0, "node", "" , 591081439); (1.1.1.1:1, "node", "", 112982129)}
+
+declare replicas : ref {int} = {1}
+
+declare set_replicas : int -> unit = \n:int ->
+    update(replicas, peek(replicas), n)
+
+declare add_node : (address, string, string) -> unit =
+  \(addr:address, _role_:string, name:string) ->
+    let rng:[int] = [1:1:peek(replicas[_])] in
+    let new_elems:ref {address, string, string, int} =
+      map(\i:int -> (addr, _role_, name, hash_int(i + hash_addr(addr))), rng) in
+    iterate
+      (\x:(address, string, string, int) -> insert(node_ring, x),
+      new_elems)
+
+declare remove_node : (address, string, string) -> unit =
+  \(addr:address, _role_:string, name:string) ->
+    let nodes_to_delete:ref {address, string, string, int} = node_ring[addr, 
+      _role_, name, _] in
+    iterate
+      (\x:(address, string, string, int) -> delete(node_ring, x),
+      nodes_to_delete)
+
+declare get_ring_node : (int, int) -> address = \(data:int, max_val:int) ->
+    let scaled:int =
+      int_of_float(float_of_int(get_max_int(())) *
+        divf(float_of_int(data), float_of_int(max_val))) in
+    let results:ref {address, string, string, int} =
+      filtermap(\(addr:address, _role_:string, name:string, hash:int) ->
+                    hash >= scaled,
+        \(__id_0:address, __id_1:string, __id_2:string, __id_3:int) ->
+            (__id_0, __id_1, __id_2, __id_3),
+        node_ring) in
+    let (addr:address, _, _, _) =
+      if results == {} : ref {address, string, string, int}
+      then peek(node_ring)
+      else peek(results) in addr
+
+declare get_all_nodes : unit -> [address] = \_ ->
+    map
+      (\(addr:address, _role_:string, name:string, hash:int) -> addr,
+      node_ring)
+
+declare calc_dim_bounds : [int, int] -> ([int, int], int) = \pmap:[int, int] ->
+    fold
+      (\((xs:[int, int], acc_size:int), (pos:int, bin_size:int)) ->
+           (xs++[pos, acc_size], bin_size * acc_size),
+      ([] : [int, int], 1),
+      pmap)
+
+declare route_to_ATIMESD_mR1 : maybe int -> [int] = \key:maybe int ->
+    let pmap:[int, int] =
+      let (__fst:int, __snd:[int, int]) = peek(pmap_data[6, _]) in __snd in
+    if pmap == [] : [int, int]
+    then [] : [int]
+    else let (dim_bounds:[int, int], max_val:int) = calc_dim_bounds(pmap) in
+      let key_id_0:maybe int = key in
+      let bound_bucket:int =
+        (if key_id_0 == nothing: maybe int
+         then 0
+         else let pmap_slice:[int, int] = pmap[0, _] in
+           if pmap_slice == [] : [int, int]
+           then 0
+           else let just key_id_0_unwrap:int = key_id_0 in
+             let value:int =
+               mod(hash_int(key_id_0_unwrap), 
+                 let (__fst:int, __snd:int) = peek(pmap_slice) in __snd) in
+             value * let (__fst:int, __snd:int) = peek(dim_bounds[0, _]) in
+             __snd) + 0 in
+      let free_dims:[int, int] =
+        (if key_id_0 != nothing: maybe int then [] : [int, int] else pmap[0, _])
+        ++[] : [int, int] in
+      let free_domains:[int, [int]] =
+        map(\(i:int, b_i:int) -> (i, [0:1:b_i + -1]), free_dims) in
+      let free_cart_prod:[[int, int]] =
+        fold
+          (\(prev_cart_prod:[[int, int]], (i:int, domain:[int])) ->
+               flatten
+                 (map
+                    (\domain_element:int ->
+                         if prev_cart_prod == [] : [[int, int]]
+                         then [[i, domain_element]]
+                         else
+                           map
+                             (\rest_tup:[int, int] ->
+                                  rest_tup++[i, domain_element],
+                             prev_cart_prod),
+                    domain)),
+          [] : [[int, int]],
+          free_domains) in
+          map
+            (\free_bucket:[int, int] ->
+              fold
+                (\(acc:int, (i:int, val:int)) ->
+                      acc + (val *
+                      let (__fst:int, __snd:int) = peek(dim_bounds[i, _]) in
+                      __fst),
+                bound_bucket,
+                free_bucket),
+              free_cart_prod)
+
+declare result : [int] = route_to_ATIMESD_mR1(just 202)
+
+declare res_dim : ([int, int], int) = calc_dim_bounds([0,2])
+
+declare max_i : int = get_max_int(())
+  
+trigger on_init(x:int) {} = do {
+  ()
+}
+
+role dummy {
+  source s_on_init : (int) = stream([1])
+  bind s_on_init -> on_init
+  consume s_on_init
+}
+
+default role dummy

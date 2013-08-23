@@ -1,0 +1,157 @@
+// Testing the shuffle functions
+
+foreign hash_int : int -> int
+foreign hash_addr : address -> int
+foreign int_of_float : float -> int
+foreign float_of_int : int -> float
+foreign get_max_int : unit -> int
+foreign divf : (float, float) -> float
+foreign mod : (int, int) -> int
+
+declare node_ring : ref {address, maybe string, int}
+
+declare replicas : ref {int} = {1}
+
+declare set_replicas : int -> unit = \n:int ->
+    update(replicas, peek(replicas), n)
+
+declare add_node : (address, maybe string) -> unit =
+  \(addr:address, name:maybe string) ->
+    let rng:[int] = [1:1:peek(replicas[_])] in
+    let new_elems:ref {address, maybe string, int} =
+      map(\i:int -> (addr, name, hash_int(i + hash_addr(addr))), rng) in
+    iterate(\x:(address, maybe string, int) -> insert(node_ring, x), new_elems)
+
+declare remove_node : (address, maybe string) -> unit =
+  \(addr:address, name:maybe string) ->
+    let nodes_to_delete:ref {address, maybe string, int} = node_ring[addr, 
+      name, _] in
+    iterate
+      (\x:(address, maybe string, int) -> delete(node_ring, x),
+      nodes_to_delete)
+
+declare get_ring_node : (int, int) -> address = \(data:int, max_val:int) ->
+    let scaled:int =
+      int_of_float(float_of_int(get_max_int(())) *
+        divf(float_of_int(data), float_of_int(max_val))) in
+    let results:ref {address, maybe string, int} =
+      filtermap(\(addr:address, name:maybe string, hash:int) -> hash >= scaled,
+        \(__id_0:address, __id_1:maybe string, __id_2:int) ->
+            (__id_0, __id_1, __id_2),
+        node_ring) in
+    let (addr:address, _, _) =
+      if results == {} : ref {address, maybe string, int}
+      then peek(node_ring)
+      else peek(results) in addr
+
+declare get_all_nodes : unit -> [address] = \_ ->
+    map(\(addr:address, _, _) -> addr, node_ring)
+
+declare dummy : unit = 
+  iterate(\(addr:address, name:maybe string) -> add_node(addr, name), peers)
+
+declare pmap_data : [int, [int, int]] = [0, [] : [int, int]; 1, [] :
+  [int, int]; 2, [] : [int, int]; 3, [] : [int, int]]
+
+declare calc_dim_bounds : [int, int] -> ([int, int], int) = \pmap:[int, int] ->
+    fold
+      (\((xs:[int, int], acc_size:int), (pos:int, bin_size:int)) ->
+           (xs++[pos, acc_size], bin_size * acc_size),
+      ([] : [int, int], 1),
+      pmap)
+
+declare route_to_ATIMESD : unit -> {address} = \_ -> {get_ring_node(1, 1)}
+
+declare shuffle_ATIMESD_mS1_ATIMESD :
+  (unit, {(int, int, int), int, int}, bool) -> {|address, {(int, int, int), int, int}|} =
+  \(_, tuples:{(int, int, int), int, int}, shuffle_on_empty:bool) ->
+    let all_targets:{|address, {(int, int, int), int, int}|} =
+      if shuffle_on_empty == true
+      then
+        map
+          (\ip:address -> (ip, {} : {(int, int, int), int, int}),
+          route_to_ATIMESD(()))
+      else {||} : {|address, {(int, int, int), int, int}|} in
+    groupby(\(ip:address, tuple:{(int, int, int), int, int}) -> ip,
+      \(acc:{(int, int, int), int, int}, 
+       (ip:address, tuple:{(int, int, int), int, int})) -> tuple++acc,
+      {} : {(int, int, int), int, int},
+      all_targets++
+        flatten
+          (map
+             (\r_tuple:((int, int, int), int, int) ->
+                  let (__id_r0:(int, int, int), __id_r1:int, __id_r2:int) =
+                    r_tuple in
+                  map(\ip:address -> (ip, {r_tuple}), route_to_ATIMESD(())),
+             tuples)))
+
+declare shuffle_ATIMESD_mS2_ATIMESD :
+  (unit, {(int, int, int), int, int}, bool) -> {|address, {(int, int, int), int, int}|} =
+  \(_, tuples:{(int, int, int), int, int}, shuffle_on_empty:bool) ->
+    let all_targets:{|address, {(int, int, int), int, int}|} =
+      if shuffle_on_empty == true
+      then
+        map
+          (\ip:address -> (ip, {} : {(int, int, int), int, int}),
+          route_to_ATIMESD(()))
+      else {||} : {|address, {(int, int, int), int, int}|} in
+    groupby(\(ip:address, tuple:{(int, int, int), int, int}) -> ip,
+      \(acc:{(int, int, int), int, int}, 
+       (ip:address, tuple:{(int, int, int), int, int})) -> tuple++acc,
+      {} : {(int, int, int), int, int},
+      all_targets++
+        flatten
+          (map
+             (\r_tuple:((int, int, int), int, int) ->
+                  let (__id_r0:(int, int, int), __id_r1:int, __id_r2:int) =
+                    r_tuple in
+                  map(\ip:address -> (ip, {r_tuple}), route_to_ATIMESD(())),
+             tuples)))
+
+declare result1 : {address, {(int, int, int), int, int}} = 
+    {} : {address, {(int, int, int), int, int}}
+
+declare result2 : {address, {(int, int, int), int, int}} = 
+    {} : {address, {(int, int, int), int, int}}
+
+declare result3 : {(address, int), int} =
+  groupby(\(ip:address, stmt_id:int) -> (ip, stmt_id),
+  \(acc:int, (ip:address, stmt_id:int)) -> acc + 1,
+  0,
+  {} : {address, int}++
+      map
+      (\(ip:address, tuples:{(int, int, int), int, int}) -> (ip, 6),
+      shuffle_ATIMESD_mS2_ATIMESD((), {} : {(int, int, int), int, int}, 
+          true))++
+      map
+      (\(ip:address, tuples:{(int, int, int), int, int}) -> (ip, 6),
+      shuffle_ATIMESD_mS1_ATIMESD((), {} : {(int, int, int), int, int}, 
+          true)))
+
+declare result4 : {|address, int|} =  
+  map
+  (\(ip:address, tuples:{(int, int, int), int, int}) -> (ip, 6),
+  shuffle_ATIMESD_mS2_ATIMESD((), {} : {(int, int, int), int, int}, 
+      true))++
+  map
+  (\(ip:address, tuples:{(int, int, int), int, int}) -> (ip, 6),
+  shuffle_ATIMESD_mS1_ATIMESD((), {} : {(int, int, int), int, int}, 
+      true))
+
+trigger on_init(x:int) {} = do {
+  iterate(\(addr:address, name:maybe string) -> add_node(addr, name), peers);
+  iterate(\r:(address, {((int, int, int), int, int)}) -> insert(result1, r),
+    shuffle_ATIMESD_mS1_ATIMESD(
+      ((), {} : {(int, int, int), int, int}, true)));
+  iterate(\r:(address, {((int, int, int), int, int)}) -> insert(result2, r),
+    shuffle_ATIMESD_mS2_ATIMESD(
+      ((), {} : {(int, int, int), int, int}, true)))
+}
+
+role switch {
+  source s_on_init : int = stream([1])
+  bind s_on_init -> on_init
+  consume s_on_init
+}
+
+default role switch
