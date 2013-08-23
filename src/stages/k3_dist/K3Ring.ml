@@ -146,13 +146,18 @@ let get_ring_node_code =
     mk_var "addr"
 
 (* k3 function to get all of the nodes in the node ring *)
+let get_all_uniq_nodes_nm = "get_all_uniq_nodes"
 let get_all_nodes_code =
-  mk_global_fn "get_all_nodes"
+  mk_global_fn get_all_uniq_nodes_nm
   ["_", t_unit] [wrap_tlist t_addr] @:
-  mk_map
-    (mk_lambda (wrap_args id_t_node) @:
-      mk_var "addr") @:
-    (mk_var node_ring_nm)
+  mk_fst_many [t_addr; t_unit] @: (* project out just the sorted value *)
+    mk_gbagg
+      (mk_lambda (wrap_args id_t_node) @:
+        mk_var "addr")
+      (mk_lambda (wrap_args ["_", t_unit; "_", wrap_ttuple t_node]) @: mk_cunit)
+      (mk_empty (wrap_tlist t_addr)) @:
+      mk_var node_ring_nm
+
 
 let gen_ring_code =
   ring_foreign_funcs @
