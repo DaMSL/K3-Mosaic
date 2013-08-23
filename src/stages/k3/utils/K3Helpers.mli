@@ -194,11 +194,23 @@ val mk_let_many :
 (* macro to make a deep-matching let statement *)
 val mk_let_deep : arg_t -> expr_t -> expr_t -> expr_t
 
+(* like fst, but for a tuple of any size *)
+val project_from_tuple : value_type_t list -> expr_t -> total:int -> choice:int -> expr_t
+
 (* macro similar to fst *)
 val mk_fst: value_type_t list -> expr_t -> expr_t
 
 (* macro similar to snd *)
 val mk_snd: value_type_t list -> expr_t -> expr_t
+
+(* like fst, but for a collection with a tuple of any size *)
+val project_from_col : value_type_t list -> expr_t -> total:int -> choice:int -> expr_t
+
+(* macro similar to fst but for a collection *)
+val mk_fst_many: value_type_t list -> expr_t -> expr_t
+
+(* macro similar to snd but for a collection *)
+val mk_snd_many: value_type_t list -> expr_t -> expr_t
 
 (* data type to manipulate tuples *)
 type tuple_pat = Position of int | ExternVar of id_t | Unknown

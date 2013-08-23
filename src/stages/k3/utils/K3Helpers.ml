@@ -352,11 +352,35 @@ let mk_let_many var_name_and_type_list var_values expr =
 let mk_let_deep args var_values expr =
   mk_apply (mk_lambda args expr) var_values
 
+let project_from_tuple tuple_types tuple ~total ~choice =
+  let l = create_range 1 total in
+  let l = List.map (fun i -> "__"^soi i) l in
+  let c = "__"^soi choice in
+  mk_let_many (list_zip l tuple_types) tuple (mk_var c)
+
 let mk_fst tuple_types tuple =
-    mk_let_many (list_zip ["__fst";"__snd"] tuple_types) tuple (mk_var "__fst")
+  project_from_tuple tuple_types tuple ~choice:1 ~total:2
 
 let mk_snd tuple_types tuple =
-    mk_let_many (list_zip ["__fst";"__snd"] tuple_types) tuple (mk_var "__snd")
+  project_from_tuple tuple_types tuple ~choice:2 ~total:2
+
+let project_from_col tuple_types col ~total ~choice =
+  let l = create_range 1 total in
+  let l = List.map (fun i -> "__"^soi i) l in
+  let c = "__"^soi choice in
+  let id_ts = list_zip l tuple_types in
+  mk_map
+    (mk_lambda (wrap_args id_ts) @:
+      mk_var c) @:
+    col
+
+let mk_fst_many tuple_types collection =
+  project_from_col tuple_types collection ~total:2 ~choice:1
+
+let mk_snd_many tuple_types collection =
+  project_from_col tuple_types collection ~total:2 ~choice:2
+  
+
 
 
 (* Functions to manipulate tuples in K3 code *)
