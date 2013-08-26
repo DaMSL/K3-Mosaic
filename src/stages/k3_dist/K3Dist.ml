@@ -87,7 +87,7 @@ let stmt_cntrs_id_type_vid_name = "vid"
 let stmt_cntrs_id_type_stmt_id_name = "stmt_id"
 let stmt_cntrs_id_type_counter_name = "counter"
 
-let stmt_cntrs_id_type_name = [
+let stmt_cntrs_ids = [
   stmt_cntrs_id_type_vid_name;
   stmt_cntrs_id_type_stmt_id_name;
   stmt_cntrs_id_type_counter_name

@@ -86,6 +86,8 @@ let switches_code switches_lst =
     switches_lst
   )
 
+  
+(*
 (* switch_idx : t_int_mut
  * ------------------------
  * For switch node. The index of a switch node. 
@@ -106,6 +108,8 @@ let switch_idx_update_code new_idx = mk_update
     switch_idx_var 
     (mk_peek switch_idx_var) @: mk_cint new_idx
 
+*)
+
 let switch_get_nth_addr_name = "nth_addr"
 let switch_get_nth_code n =
   let slice_pattern = mk_tuple @: [mk_cint n; mk_cunknown] in
@@ -113,6 +117,7 @@ let switch_get_nth_code n =
   mk_let_deep (* figure out which switch idx myself is *)
     (wrap_args ["_",t_unit; switch_get_nth_addr_name,t_addr])
     (mk_peek @: mk_slice switches_var slice_pattern) 
+
 
 (*
  * data_nodes [(idx:t_int, len:t_int, addrs:[t_addr])]
@@ -243,7 +248,7 @@ let globals ps =
     else
       (switches_code switches_lst) ::
       (switches_num_code @: List.length switches_lst)::
-      switch_idx_code ::
+      (*switch_idx_code ::*)
       [data_nodes_code ps]
   in
   me_code:: (* me *) 

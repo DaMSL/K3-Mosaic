@@ -231,24 +231,27 @@ let do_garbage_collection_trig_name =
   "do_garbage_collection"
 
 let do_garbage_collection_trig_code p ast = 
-  (* help function to delete log up to given vid *)
-  let delete_log_up_to safe_vid log_arg log_args_names log =
+  (* help function to delete collection up to given vid *)
+  (* delete vid that is < safe_vid  *)
+  let delete_collection_up_to_vid safe_vid log_arg log_args_names log =
     mk_iter
       (mk_lambda
         (wrap_args log_arg ) @:
         mk_if 
-          (K3Dist.v_geq (mk_var safe_vid) (mk_var "vid"))
+          (K3Dist.v_gt (mk_var safe_vid) (mk_var "vid"))
           (mk_delete (mk_var log) @: 
-            (mk_tuple @: ids_to_vars log_args_names ))
+            (mk_tuple @: ids_to_vars log_args_names )
+          )
           mk_cunit (*else fo nothing *)
       )
      (mk_var log)
   in
+  (* helper, clear log structure *)
   let clear_all_log safe_vid= 
     let clear_all_trig_log_code = 
        List.fold_left 
         (fun acc trig -> 
-          (delete_log_up_to 
+          (delete_collection_up_to_vid 
             safe_vid 
             (args_of_t_with_v p trig)
             ("vid":: (arg_names_of_t  p trig) )
@@ -257,7 +260,7 @@ let do_garbage_collection_trig_code p ast =
         []
         (get_trig_list p)
     in
-    (*clear global map decleration *)
+    (*TODO helper, clear global map decleration *)
     let clear_global_map_decl safe_vid =
       let decls = K3Util.globals_of_program ast in  
       List.fold_left 
@@ -265,56 +268,159 @@ let do_garbage_collection_trig_code p ast =
           match decl with
           | Global(name, TValue typ, m_expr),_ ->
           begin try
-            let map_id = P.map_id_of_name p name in
-            let types =
-              snd(
-                List.fold_left (fun (i,acc) t -> (i+1,("tmp_1",t)::acc))
-                  (0,[])
-                  (map_types_for p map_id )
-              )
+            let map_id = ProgInfo.map_id_of_name p name in
+            (*[("vid", t_vid);("__map_0", type)...("__map_val", type)]*)
+            let map_id_t_v = ProgInfo.map_ids_types_with_v_for 
+                              ~prefix:"__map_" ~vid:"vid" p map_id 
             in
-            let args_with_v = ("vid",t_vid) :: types in
-            let args_name = fst @: List.split args_with_v in
-            (delete_log_up_to 
-              safe_vid
-              args_with_v
-              args_name
-              name) :: acc
-              with Not_found -> acc  end
+            let map_ids_v = fst_many map_id_t_v in
+            let map_ts_v = snd_many map_id_t_v in 
+            let delc_types = wrap_tset @: wrap_ttuple @: map_ts_v in
+            let map_id_t_no_val = ProgInfo.map_ids_types_no_val_for 
+                                  ~prefix:"__map_" p map_id in
+            let map_id_no_val = fst_many @: map_id_t_no_val in
+            let map_t_no_val = snd_many @: map_id_t_no_val in
+            let key_num = List.length map_id_t_no_val in
+            let leq_than_vid_name = "stuff_leq_than_vid_"^name in
+            (* use iterate if the map does not have keys*)
+            if key_num = 0 then
+             (delete_collection_up_to_vid
+                safe_vid
+                map_id_t_v
+                map_ids_v
+                name) :: acc 
+            else (* more than one key, need gbagg *)
+            (* delete elements that are <=  than the agreed vid from 
+             * map struture, and store them in "stuff_leq_than_vid " *)
+            let map_id_t_v_val_only = (*["vid",t_vid; "val",type ] for gbagg*)
+              (list_take 1 map_id_t_v) @ (list_take_end 1 map_id_t_v) 
+            in
+            let map_id_v_val_only = fst_many map_id_t_v_val_only in
+            let map_t_v_val_only = snd_many map_id_t_v_val_only in
+            let map_t_val_only = list_take_end 1 map_ts_v in
+            let map_val_maybe_type = wrap_tmaybe (List.nth map_t_val_only 0) in
+            let leq_than_vid_cleared_type = 
+              map_t_no_val @ [wrap_ttuple [t_vid; map_val_maybe_type]] 
+            in
+            let leq_than_vid_cleared_set_type = 
+              wrap_tset @: wrap_ttuple leq_than_vid_cleared_type
+            in
+            (
+            (mk_let 
+              leq_than_vid_name
+              delc_types
+              (mk_agg 
+                (mk_assoc_lambda 
+                  (wrap_args ["leq_than_vid",delc_types])
+                  (wrap_args map_id_t_v) 
+                  (mk_if 
+                    (K3Dist.v_geq (mk_var safe_vid) (mk_var "vid"))
+                    (mk_block [
+                      (* delete from map structure *)
+                      (mk_delete (mk_var name) @: 
+                          (mk_tuple @: ids_to_vars map_ids_v )
+                      );
+                      mk_combine
+                        (mk_var "leq_than_vid") 
+                        (mk_singleton 
+                          delc_types @: (mk_tuple @: ids_to_vars map_ids_v)
+                        )
+                      ])
+                    (mk_var "leq_than_vid")
+                  )
+                )
+                (mk_empty delc_types )
+                (mk_var name)
+              ) (*end of agg*)
+            ) @: (* end of let stuff_bigger_than_vid *)
+           (* groupby leq_than_vid by map key, for each map key,
+            * only keep the element with max vid *)
+           (mk_let
+            "leq_than_vid_cleared" (*[map_0,..,(vid,maybe map_val)]*)
+            leq_than_vid_cleared_set_type 
+            (mk_gbagg
+              (mk_lambda (* group fun, groupby map key *)
+                (wrap_args map_id_t_v)
+                (mk_tuple @: ids_to_vars map_id_no_val) 
+              )
+              (mk_assoc_lambda (* agg func *)
+                (wrap_args (List.combine 
+                  ["max_vid";"val"]
+                  [t_vid; map_val_maybe_type])
+                )
+                (wrap_args map_id_t_v)
+                (mk_if
+                  (K3Dist.v_lt (mk_var "max_vid") (mk_var "vid") )
+                  (mk_tuple @: [mk_var "vid"; 
+                                mk_just @: mk_var ("__map_"^"val")]) 
+                  (mk_tuple @: [mk_var "max_vid";mk_var "val"])
+                )
+              )
+              (mk_tuple [min_vid_k3; mk_nothing map_val_maybe_type])
+              (mk_var leq_than_vid_name)
+            )(* end of mk_gbagg*)
+           ) @:
+          (* iterate leq_than_vid_cleared, and add it back to map structure *)
+          mk_iter
+            (mk_lambda
+              (wrap_args @: List.combine 
+                  (map_id_no_val @ ["vid_maybeVal"])
+                  leq_than_vid_cleared_type
+              ) @:
+              ( 
+                (mk_let_deep 
+                  (wrap_args ["vid",t_vid;"__map_val",map_val_maybe_type])
+                  (mk_var "vid_maybeVal")
+                )@:
+                mk_unwrap_maybe ["__map_val", map_val_maybe_type] @:
+                mk_insert 
+                  (mk_var name) 
+                  (mk_tuple @: ids_to_vars 
+                    (["vid"] @ map_id_no_val @ ["__map_val"^"_unwrap"]) 
+                  )
+              )
+            )
+            (mk_var "leq_than_vid_cleared")
+          )
+          :: acc
+          with Not_found -> acc  
+          end
           | _ -> acc
-      
       )
       []
       decls 
     in
-
+    (* real trig *)
     mk_block (
       (* clear stmt_cntrs  *)
-      (delete_log_up_to
+      (delete_collection_up_to_vid
         safe_vid
         stmt_cntrs_id_type
-        stmt_cntrs_id_type_name 
+        stmt_cntrs_ids
         stmt_cntrs_name ) ::
 
       (* clear acks *)
-      (delete_log_up_to
+      (delete_collection_up_to_vid
         safe_vid
         ack_lst_id_type
         ack_lst_id_names
         ack_lst_name ) ::
 
       (* clear log master [t_vid;t_trig_id]*)
-      (delete_log_up_to 
+      (delete_collection_up_to_vid 
         safe_vid 
         ["vid",t_vid;"trig_id",t_trig_id] 
         ["vid";"trig_id"]
         log_master) ::
       
       (* clear each trig log *)
-      clear_all_trig_log_code 
+      clear_all_trig_log_code @
 
+      (clear_global_map_decl safe_vid) @
 
       (* update epoch *)
+      [mk_update epoch_var (mk_peek epoch_var) @:
+        mk_add (mk_cint 1) (mk_peek epoch_var)]
       
 
 
@@ -332,7 +438,6 @@ let do_garbage_collection_trig_code p ast =
       (mk_var "safe_vid_to_delete_final");
      
       clear_all_log "safe_vid_to_delete_final"
-    
   
   ]
 
@@ -470,7 +575,6 @@ let safe_vid_to_delete_rcv_trig_code =
         ])
         (* else do nothing *)
         mk_cunit
-    
     ]
 
 (* min_max_acked_vid_rcv_node_trig

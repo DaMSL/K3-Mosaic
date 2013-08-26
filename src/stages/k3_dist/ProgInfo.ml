@@ -213,6 +213,7 @@ let def_map = "__map_"
 let def_vid = "vid"
 
 (* create ids to reference the map vars *)
+(* ["__map_0",type; "__map_1",type; ... "__map_val",type ] *)
 let map_ids_types_for ?(prefix=def_map) p map_id =
   let ts = map_types_for p map_id in
   let id_ts = types_to_ids_types prefix ts in
