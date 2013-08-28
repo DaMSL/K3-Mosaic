@@ -242,7 +242,7 @@ let gen_route_fn p map_id =
         (mk_lambda (wrap_args ["i", t_int; "b_i", t_int]) @:
           mk_tuple [mk_var "i"; mk_range TList 
             (mk_cint 0) (mk_cint 1) @: 
-            mk_add (mk_var "b_i") @: mk_cint (-1)]
+            (mk_var "b_i")]
         ) @:
         mk_var "free_dims"
       ) @:
