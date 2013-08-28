@@ -24,7 +24,7 @@ let free_domains_type = wrap_tlist @: wrap_ttuple [t_int; wrap_tlist t_int]
 let inner_cart_prod_type = wrap_tlist @: wrap_ttuple t_two_ints
 let free_cart_prod_type = wrap_tlist @: wrap_tlist @: wrap_ttuple t_two_ints
 let free_bucket_type = wrap_tlist @: wrap_ttuple t_two_ints
-let sorted_ip_inner_type = [t_addr; wrap_tlist t_addr]
+let sorted_ip_inner_type = [t_addr; t_unit]
 let sorted_ip_list_type = wrap_tlist @: wrap_ttuple sorted_ip_inner_type
 
 (* map_parameter starts at 0 *)
@@ -280,10 +280,8 @@ let gen_route_fn p map_id =
     mk_let "sorted_ip_list" (sorted_ip_list_type)
       (mk_gbagg
         (mk_lambda (wrap_args ["ip", t_addr]) @: mk_var "ip")
-        (mk_lambda (wrap_args ["acc", wrap_tlist t_addr; "ip", t_addr]) @:
-          mk_combine 
-            (mk_singleton (wrap_tlist t_addr) @: mk_var "ip") @: 
-            mk_var "acc"
+        (mk_lambda (wrap_args ["_", t_unit; "_", t_unit]) @:
+          mk_cunit
         )
         (mk_empty @: wrap_tlist t_addr) @:
         mk_map
@@ -310,11 +308,7 @@ let gen_route_fn p map_id =
         mk_apply (mk_var "get_ring_node") @: mk_tuple (* empty ip list *)
           [mk_var "bound_bucket"; mk_var "max_val"]
       ) @:
-      mk_map
-        (mk_lambda 
-          (wrap_args @: list_zip ["__fst";"__snd"] sorted_ip_inner_type) @:
-          mk_var "__fst"
-        ) @:
+      mk_fst_many sorted_ip_inner_type @:
         mk_var "sorted_ip_list"
     
 (* create all code needed for route functions, including foreign funcs*)
