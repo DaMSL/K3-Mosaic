@@ -695,7 +695,7 @@ let interpret_k3_program {scheduler; peer_meta; peer_list; envs} =
             else count, stat
           ) (0, status) peer_list
       in
-      Printf.printf "msgs: %d\n" message_peers;
+      (*Printf.printf "msgs: %d\n" message_peers;*)
       if message_peers > 0 then loop status'
       else 
         (* now deal with sources *)
@@ -713,7 +713,7 @@ let interpret_k3_program {scheduler; peer_meta; peer_list; envs} =
             else count, stat
           ) peer_meta (0, status')
         in
-        Printf.printf "sources: %d\n" source_peers;
+        (*Printf.printf "sources: %d\n" source_peers;*)
         if source_peers > 0 then loop status'
         else status'
     else status
