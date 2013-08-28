@@ -614,26 +614,28 @@ let env_of_program ?address sched_st k3_program =
 
 
 (* Instruction interpretation *)
-(* returns status, env, instructions left *)
-let eval_instructions sched_st env address (res_env, d_env) (ri_env, instrs) =
-  let log_node s = LOG "Node %s: %s" (string_of_address address) s LEVEL TRACE in
-  if node_has_work sched_st address
-  then 
-    (log_node "consuming messages"; 
-    let status = run_scheduler sched_st address env in
-    status, (ri_env, []))
-  else 
-    match instrs with
-    | [] -> NormalExec, (ri_env, [])
 
-    | (Consume id)::t ->
-      log_node @: "consuming from event loop: "^id;
-      try let i = List.assoc id d_env in 
-          let r = run_dispatcher sched_st address res_env ri_env i in
-          let status = run_scheduler sched_st address env in
-          status, (r, t)
-      with Not_found -> 
-        int_error "eval_instructions" @: "no event loop found for "^id
+(* consume messages to a specific node *)
+let consume_msgs ?(slice = max_int) sched_st env address =
+  let log_node s = LOG "Node %s: %s" (string_of_address address) s LEVEL TRACE in
+  log_node "consuming messages"; 
+  let status = run_scheduler ~slice sched_st address env in
+  status
+
+(* consume sources ie. evaluate instructions *)
+let consume_sources sched_st env address (res_env, d_env) (ri_env, instrs) =
+  let log_node s = LOG "Node %s: %s" (string_of_address address) s LEVEL TRACE in
+  match instrs with
+  | []              -> NormalExec, (ri_env, [])
+  | (Consume id)::t ->
+    log_node @: "consuming from event loop: "^id;
+    try let i = List.assoc id d_env in 
+        let r = run_dispatcher sched_st address res_env ri_env i in
+        (*let status = run_scheduler sched_st address env in*)
+        (*status, (r, t)*)
+        NormalExec, (r,t)
+    with Not_found -> 
+      int_error "consume_sources" @: "no event loop found for "^id
 
 (* Program interpretation *) 
 let interpreter_event_loop role_opt k3_program = 
@@ -668,39 +670,55 @@ type status_t = K3Runtime.status_t
 let interpret_k3_program {scheduler; peer_meta; peer_list; envs} =
   (* Continue running until all peers have finished their instructions,
    * and all messages have been processed *)
-  let run_network () = 
-    (Hashtbl.fold (fun _ (_,i) acc -> acc || i <> []) peer_meta false) 
-      || network_has_work scheduler
-  in
-  let step_peer (addr, _, _) = 
-    try 
-      let (res_env, de, env), (rie, inst) = 
-        List.assoc addr envs, Hashtbl.find peer_meta addr in
-      let status, eval =
-        eval_instructions scheduler env addr (res_env, de) (rie, inst) in
-
-      (* Both branches invoke eval_instructions to process pending messages,
-        * even if there are no sources on which to consume events *)
-      if inst = [] then status (* return status *)
-      else (Hashtbl.replace peer_meta addr @: eval;
-           status)
-           
-    with Not_found -> int_error "step_peer" @:
-      Printf.sprintf "Network evaluation for peer %s" (string_of_address addr)
-  in
-  let rec loop status = 
-    if run_network () && status = NormalExec then
-      (* fold over all the peers *)
-      let status' = List.fold_left (fun status' peer ->
-          match step_peer peer with
-          | BreakPoint bp -> BreakPoint bp
-          | NormalExec    -> status'
-        ) NormalExec peer_list
+  let rec loop (status:status_t) = 
+    if status = NormalExec then
+      (* find and process every peer that has a message to process. This way we make sure we
+       * don't inject new sources until all messages are processed *)
+      let message_peers, status' = 
+        (* for global queueing, we don't loop. Instead, we run for only one
+         * iteration, since each trigger needs a different environment *)
+        if K3Runtime.use_global_queueing scheduler then
+          if network_has_work scheduler then
+            let addr = next_global_address scheduler in
+            let (_,_,prog_env) = List.assoc addr envs in
+            match consume_msgs ~slice:1 scheduler prog_env addr with
+            | BreakPoint bp -> 1, BreakPoint bp
+            | NormalExec    -> 1, status
+          else 0, status
+        else
+          List.fold_left (fun (count, stat) (addr,_,_) ->
+            if node_has_work scheduler addr then
+              let (_,_,prog_env) = List.assoc addr envs in
+              match consume_msgs scheduler prog_env addr with
+              | BreakPoint bp -> count + 1, BreakPoint bp
+              | NormalExec    -> count + 1, stat
+            else count, stat
+          ) (0, status) peer_list
       in
-      loop status'
+      Printf.printf "msgs: %d\n" message_peers;
+      if message_peers > 0 then loop status'
+      else 
+        (* now deal with sources *)
+        let source_peers, (status':status_t) =
+          Hashtbl.fold (fun addr (ri_env, insts) (count, stat) ->
+            if insts <> [] then
+              let res_env, de, env = List.assoc addr envs in
+              let status, eval =
+                consume_sources scheduler env addr (res_env, de) (ri_env, insts)
+              in 
+              Hashtbl.replace peer_meta addr eval;
+              match status with
+              | BreakPoint bp -> count + 1, BreakPoint bp
+              | NormalExec    -> count + 1, stat
+            else count, stat
+          ) peer_meta (0, status')
+        in
+        Printf.printf "sources: %d\n" source_peers;
+        if source_peers > 0 then loop status'
+        else status'
     else status
   in
-  let result = loop NormalExec in
+  let (result:status_t) = loop NormalExec in
   let prog_state = List.map (fun (addr, (_,_,e)) -> addr, e) envs in
   (* We only print if we finished execution *)
   if result = NormalExec then

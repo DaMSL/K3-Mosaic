@@ -38,3 +38,7 @@ val init_scheduler_state : ?shuffle_tasks:bool -> ?breakpoints:breakpoint_t list
 -> ?run_length:int64 -> unit -> scheduler_state
 
 val use_shuffle_tasks : scheduler_state -> bool
+
+val use_global_queueing : scheduler_state -> bool
+
+val next_global_address : scheduler_state -> address

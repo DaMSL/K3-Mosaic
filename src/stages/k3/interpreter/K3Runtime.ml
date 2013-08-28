@@ -33,23 +33,12 @@ let error t =
 
 (* Event queues and scheduling *)
 
-(* Two modes of queueing supported:
- * i. global queueing, where all trigger messages are managed on a single
- *    queue. In multithreading evaluation, this would suffer from contention
- *    on the queue.
- * ii. per trigger queue, with trigger dispatch block tasks are placed
- *     on the global queue to indicate work should be done on a trigger-specific
- *     queue
- *)
-type queue_granularity_t = Global | PerTrigger
-
 type task_t =
     Background of (program_env_t -> unit)
   | NamedDispatch of id_t * value_t 
   | BlockDispatch of id_t * int
 
 type scheduler_spec = {
-    mutable mode : queue_granularity_t;
     mutable events_to_process : int64;
     mutable interleave_period : int;
     mutable shuffle_tasks     : bool;
@@ -59,7 +48,6 @@ let default_interleave_period = 10
 let default_events_to_process = Int64.minus_one
 
 let default_params = {
-    mode = Global;
     events_to_process = default_events_to_process;
     interleave_period = default_interleave_period;
     shuffle_tasks = false;
@@ -82,12 +70,29 @@ type bp_t = PostBreakPoint of breakpoint_t
 
 type status_t = NormalExec | BreakPoint of breakpoint_t
 
-type node_queue_t = 
-    (* node,  (general queue,   (trigger, trig queue of args) *)
+(* Three modes of queueing supported:
+ * i. Global queueing, where all nodes and triggers are managed on a single
+ *    queue.
+ * ii. Per-node queueing, where all trigger messages are managed on a single
+ *    per-node queue. In multithreading evaluation, this would suffer from contention
+ *    on the queue.
+ * iii. Per-trigger queue, with trigger dispatch block tasks are placed
+ *     on the global queue to indicate work should be done on a trigger-specific
+ *     queue
+ *)
+
+type node_queue_t =
+    (* node,  (node    queue,   (trigger, trig queue of args) *)
     (address, (task_t K3Queue.t * (id_t, value_t K3Queue.t) Hashtbl.t)) Hashtbl.t
 
+(* one global queue for more deterministic execution *)
+type global_queue_t = (address * task_t) K3Queue.t
 
-(* for causing intentional reordering within the simulated network (while
+type queue_t = Global of global_queue_t
+             | PerNode of node_queue_t
+             | PerTrigger of node_queue_t
+
+ (* for causing intentional reordering within the simulated network (while
   * still maintaining TCP-like ordering from a single sender *)
 type shuffle_buffer_t = 
     (* node * sender,   (trigger * args)) *)
@@ -96,7 +101,7 @@ type shuffle_buffer_t =
 type scheduler_state = {
   params : scheduler_spec;
   mutable events_processed : Int64.t;
-  node_queues : node_queue_t;
+  queue : queue_t;
   shuffle_buffer : shuffle_buffer_t;
   mutable breakpoints : breakpoint_t list;
  }
@@ -107,7 +112,7 @@ let init_scheduler_state ?(shuffle_tasks=false) ?(breakpoints=[])
     params = { default_params with shuffle_tasks = shuffle_tasks; 
                events_to_process = run_length };
     events_processed = Int64.zero;
-    node_queues = Hashtbl.create 10;
+    queue = Global(K3Queue.create ());
     shuffle_buffer = Hashtbl.create 10;
     breakpoints = breakpoints;
   }
@@ -115,25 +120,35 @@ let init_scheduler_state ?(shuffle_tasks=false) ?(breakpoints=[])
 let add_breakpoint s bp = 
   s.breakpoints <- bp :: s.breakpoints
 
-let use_global_queueing s = s.params.mode = Global
+let use_global_queueing s = match s.queue with Global _ -> true | _ -> false
 let dispatch_block_size s = s.params.interleave_period  
 
 (* Node helpers *)
-let is_node s address = Hashtbl.mem s.node_queues address
+let is_node s address = match s.queue with
+  | PerNode q | PerTrigger q -> Hashtbl.mem q address
+  | Global q                 -> failwith "no node info in global queue"
 
-let get_node_queues s address = Hashtbl.find s.node_queues address
+let get_node_queues s address = match s.queue with
+  | PerNode q | PerTrigger q -> Hashtbl.find q address
+  | Global q                 -> failwith "no node queue in global queue"
 
 let register_node s address = 
-  if not @: is_node s address then
-    Hashtbl.add s.node_queues address (K3Queue.create (), Hashtbl.create 10)
+  if not @: is_node s address then match s.queue with
+  | PerNode q
+  | PerTrigger q -> Hashtbl.add q address (K3Queue.create (), Hashtbl.create 10)
+  | Global q     -> failwith "no node data in global queue"
   else invalid_arg @: "duplicate node at "^string_of_address address
 
-let unregister_node s address = Hashtbl.remove s.node_queues address
+let unregister_node s address = match s.queue with
+  | PerNode q | PerTrigger q -> Hashtbl.remove q address
+  | Global q                 -> failwith "no node data in global queue"
 
 (* Global queueing helpers *)
-let get_global_queue s address = 
-  try fst @: get_node_queues s address
-  with Not_found -> failwith @: "unknown node "^string_of_address address
+let get_global_queue s address = match s.queue with
+  | PerNode q | PerTrigger q -> 
+      (try fst @: Hashtbl.find q address
+      with Not_found -> failwith @: "unknown node "^string_of_address address)
+  | Global q     -> failwith "global data is immediately accessible"
 
 (* Per trigger queueing helpers *)
 let get_trigger_queues s address = 
@@ -157,20 +172,22 @@ let unregister_trigger s address trigger_id force =
   with Not_found -> () 
 
 (* Scheduling methods *)
-let schedule_task s address task =
-  K3Queue.push task @: get_global_queue s address
+let schedule_task s address task = match s.queue with
+  | Global q -> K3Queue.push (address, task) q
+  | PerNode q | PerTrigger q -> K3Queue.push task @: get_global_queue s address
 
 let schedule_trigger s v_target v_address args = 
   match v_target, v_address with
   | VTarget trigger_id, VAddress address ->
-    if use_global_queueing s then 
-      schedule_task s address @: NamedDispatch (trigger_id, args)
-    else
+    begin match s.queue with
+    | Global _ | PerNode _ -> 
+        schedule_task s address @: NamedDispatch (trigger_id, args)
+    | PerTrigger _ ->
       let q = get_trigger_input_queue s address trigger_id in
       K3Queue.push args q;
       schedule_task s address @: 
         BlockDispatch (trigger_id, dispatch_block_size s)
-
+    end
   | _, _ -> error INVALID_TRIGGER_TARGET
 
 let schedule_event s source_bindings source_id source_address events =
@@ -241,7 +258,10 @@ let schedule_trigger_random s receive_address =
 (* Scheduler execution *)
 
 let continue_processing s address =
-  let has_messages = not @: K3Queue.is_empty @: get_global_queue s address in 
+  let has_messages = match s.queue with
+    | Global q -> not @: K3Queue.is_empty q
+    | PerNode _ | PerTrigger _ -> 
+        not @: K3Queue.is_empty @: get_global_queue s address in 
   let events_remain = 
     s.params.events_to_process < Int64.zero ||
     s.events_processed < s.params.events_to_process
@@ -286,8 +306,11 @@ let check_breakpoint s target_trig arg =
 
 let invoke_trigger s address (trigger_env, val_env) trigger_id arg =
   (* add a level to the global queue *)
-  let q = get_global_queue s address in
-  K3Queue.increase_level q;
+  (match s.queue with
+  | Global q -> K3Queue.increase_level q
+  | PerNode _ | PerTrigger _ ->
+    let q = get_global_queue s address in
+    K3Queue.increase_level q);
   (* get the frozen function for the trigger and apply it to the env and args *)
   (IdMap.find trigger_id trigger_env) val_env arg;
   (* log the state for this trigger *)
@@ -322,45 +345,71 @@ let process_trigger_queue s address env trigger_id max_to_process =
       BlockDispatch (trigger_id, dispatch_block_size s);
   res
 
+(* obtain the address of the next node on the global queue *)
+let next_global_address s = match s.queue with
+  | Global q -> 
+      let addr, _ = K3Queue.peek q in
+      addr
+  | PerNode _ | PerTrigger _ -> failwith "non-global queue"
+
 let process_task s address prog_env =
-  let q = get_global_queue s address in
-  let pop_q () = ignore @: K3Queue.pop q in
+  let module K = K3Queue in
   try
-    match K3Queue.peek q with
-    | Background fn -> 
-        pop_q ();
-        fn prog_env;
-        NormalExec
-
-    | NamedDispatch (id, arg) ->
-      if use_global_queueing s then 
-        let m_bp = check_breakpoint s id arg in
-        begin match m_bp with
-        | NormalExec ->
-            pop_q ();
-            invoke_trigger s address prog_env id arg;
-            m_bp
-        | BreakPoint bp when bp.post_trigger -> 
-            pop_q ();
-            invoke_trigger s address prog_env id arg;
-            m_bp
-        | BreakPoint bp -> m_bp
+    begin match s.queue with
+    | Global q ->
+        (* global mode ignores the address given *)
+        begin match K.peek q with
+        | _, Background fn -> 
+            ignore @: K.pop q; fn prog_env; NormalExec
+        | address', NamedDispatch (id, arg) ->
+            let m_bp = check_breakpoint s id arg in
+            begin match m_bp with
+            | NormalExec ->
+                ignore @: K.pop q;
+                invoke_trigger s address' prog_env id arg; m_bp
+            | BreakPoint bp when bp.post_trigger -> 
+                ignore @: K.pop q;
+                invoke_trigger s address' prog_env id arg; m_bp
+            | BreakPoint bp -> m_bp
+            end
+        | _, BlockDispatch _ -> failwith "global queue doesn't handle block_dispatch"
         end
-      else NormalExec
 
-    | BlockDispatch (id, max_to_process) ->
-      pop_q ();
-      if use_global_queueing s then NormalExec
-      else process_trigger_queue s address prog_env id max_to_process
-
+    | PerNode _ | PerTrigger _ -> 
+      let q = get_global_queue s address in
+        begin match s.queue, K.peek q with
+        | _, Background fn -> 
+            ignore @: K.pop q; fn prog_env; NormalExec
+        | PerNode _, NamedDispatch (id, arg) ->
+            let m_bp = check_breakpoint s id arg in
+            begin match m_bp with
+            | NormalExec ->
+                ignore @: K.pop q;
+                invoke_trigger s address prog_env id arg;
+                m_bp
+            | BreakPoint bp when bp.post_trigger -> 
+                ignore @: K.pop q;
+                invoke_trigger s address prog_env id arg;
+                m_bp
+            | BreakPoint bp -> m_bp
+            end
+        | PerTrigger _, NamedDispatch _ -> NormalExec
+        | PerTrigger _, BlockDispatch (id, max_to_process) ->
+          ignore @: K.pop q;
+          process_trigger_queue s address prog_env id max_to_process
+        | _, _ -> failwith "incorrect message in queue"
+        end
+      end
   with K3Queue.Empty -> error INVALID_GLOBAL_QUEUE
 
 (* Scheduler toplevel methods *)
 
 (* register the node and its triggers *)
-let initialize_scheduler s address (trig_env,_) =
-  if not @: is_node s address then register_node s address; 
-  IdMap.iter (fun id _ -> register_trigger s address id) trig_env
+let initialize_scheduler s address (trig_env,_) = match s.queue with
+  | PerTrigger _ | PerNode _ -> 
+    if not @: is_node s address then register_node s address; 
+    IdMap.iter (fun id _ -> register_trigger s address id) trig_env
+  | Global _ -> ()
 
 let node_has_work s address =
   if not @: is_node s address then false else 
@@ -375,9 +424,12 @@ let node_has_work s address =
   in
   not (empty_global_q && empty_trigger_q && empty_shuffle_buffer)
 
-let network_has_work s = 
-  Hashtbl.fold (fun addr _ acc -> acc || node_has_work s addr) s.node_queues false
+let network_has_work s = match s.queue with
+  | PerNode q | PerTrigger q -> Hashtbl.fold (fun addr _ acc ->
+      acc || node_has_work s addr) q false
+  | Global q -> not @: K3Queue.is_empty q
 
+(* address is ignored for global queue *)
 let run_scheduler ?(slice = max_int) s address env =
   let rec loop i = 
     if i <= 0 || not @: continue_processing s address then NormalExec
