@@ -294,7 +294,7 @@ let gen_route_fn p map_id =
                   (wrap_args ["i", t_int; "val", t_int]) @:
                   mk_add (mk_var "acc") @:
                     mk_mult (mk_var "val") @:
-                      mk_fst t_two_ints @:
+                      mk_snd t_two_ints @:
                         mk_peek @: mk_slice (mk_var "dim_bounds") @:
                           mk_tuple [mk_var "i"; mk_cunknown]
                 )
