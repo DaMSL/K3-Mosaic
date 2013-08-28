@@ -352,10 +352,10 @@ let interpret_k3 params prog = let p = params in
     * for interpretation *)
   let tp = typed_program_with_globals prog in 
   let open K3Interpreter in
-  let interp = init_k3_interpreter tp 
-    ~run_length:p.run_length ~peers:p.peers ~shuffle_tasks:p.shuffle_tasks in
-  try 
-    snd @: interpret_k3_program interp 
+  try
+    let interp = init_k3_interpreter tp 
+      ~run_length:p.run_length ~peers:p.peers ~shuffle_tasks:p.shuffle_tasks in
+      snd @: interpret_k3_program interp 
   with RuntimeError (uuid,str) -> handle_interpret_error (K3Data tp) (uuid,str)
 
 let interpret params inputs = 
