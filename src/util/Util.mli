@@ -170,3 +170,7 @@ val r_split : string -> string -> string list
 
 (* regexp -> str -> bool *)
 val r_match : string -> string -> bool
+
+
+(* --- other stuff ---- *)
+val make_lst : 'a -> int -> 'a list 

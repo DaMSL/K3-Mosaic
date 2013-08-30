@@ -260,7 +260,7 @@ let do_garbage_collection_trig_code p ast =
         []
         (get_trig_list p)
     in
-    (*TODO helper, clear global map decleration *)
+    (* helper, clear global map decleration *)
     let clear_global_map_decl safe_vid =
       let decls = K3Util.globals_of_program ast in  
       List.fold_left 
@@ -282,13 +282,48 @@ let do_garbage_collection_trig_code p ast =
             let map_t_no_val = snd_many @: map_id_t_no_val in
             let key_num = List.length map_id_t_no_val in
             let leq_than_vid_name = "stuff_leq_than_vid_"^name in
+            let cmp_unkown = 
+              (List.combine 
+                (make_lst "_" @: key_num + 1 ) 
+                (make_lst t_unknown @: key_num + 1)) 
+            in
             (* use iterate if the map does not have keys*)
             if key_num = 0 then
-             (delete_collection_up_to_vid
-                safe_vid
-                map_id_t_v
-                map_ids_v
-                name) :: acc 
+              (* get the element with max_vid in the map first, temporary 
+               * delete it from the map. Call delete_collection_up_to_vid
+               * to the map, and then add the element with max_vid back. This
+               * will make sure there is at least one element after GC. *)
+             ( 
+              mk_if (mk_is_empty (mk_var name) delc_types)
+                mk_cunit (* if map is empty do nothing *)
+                (
+                  (* get the element with max vid *)
+                  (mk_let
+                  "element_with_max_vid"
+                  (wrap_ttuple map_ts_v) @:
+                  mk_peek 
+                    (mk_sort 
+                      (mk_var name) 
+                      (mk_assoc_lambda (* compare func *)
+                        (wrap_args @: ("vid1", t_vid) :: cmp_unkown)  
+                        (wrap_args @: ("vid2", t_vid) :: cmp_unkown) @:
+                          v_gt (mk_var "vid1") @: mk_var "vid2") )
+                ) @:
+                mk_block [
+                  (* delete the element with max vid from map *)
+                  mk_delete (mk_var name) (mk_var "element_with_max_vid");
+
+                  (* clear map *)
+                  (delete_collection_up_to_vid
+                    safe_vid
+                    map_id_t_v
+                    map_ids_v
+                    name
+                  );
+                  (* insert the element with max vid into map *)
+                  mk_insert (mk_var name) (mk_var "element_with_max_vid")
+               ]) (* else *)
+            ) :: acc 
             else (* more than one key, need gbagg *)
             (* delete elements that are <=  than the agreed vid from 
              * map struture, and store them in "stuff_leq_than_vid " *)
@@ -421,9 +456,6 @@ let do_garbage_collection_trig_code p ast =
       (* update epoch *)
       [mk_update epoch_var (mk_peek epoch_var) @:
         mk_add (mk_cint 1) (mk_peek epoch_var)]
-      
-
-
     )
   in
   mk_code_sink
@@ -584,6 +616,15 @@ let safe_vid_to_delete_rcv_trig_code =
  * 2. find the local safe vid (stmt_cnt before the vid are all zero)
  * 3. compare the safe vid with min_max_acked_vid, send the 
  *    smaller one back to switch
+ *  
+ *  NOTE bug fixed
+ *  1. if the node never get message, its local stmt_cntrs is empty, 
+ *     will send vid (0,0,0). Should send min_max_acked_vid.
+ *
+ *  2. if after a GC, one node is not getting any message and all its counter
+ *      in stmt_cntrs is = 0, it will send its max vid in stmt_cntrs to others.
+ *      This could casue the next GC not to delte anything. it should send 
+ *      min_max_acked_vid 
  * *)
 let min_max_acked_vid_rcv_node_trig_name = 
   "min_max_acked_vid_rcv_node"
@@ -598,7 +639,7 @@ let get_vid_all_finish_up_to_code =
   mk_let_deep 
     (wrap_args 
         [vid_all_finish_up_to, t_vid; 
-         "_", t_unit] )
+         "found", t_bool] )
     (mk_agg 
      (mk_assoc_lambda 
         (wrap_args [vid_all_finish_up_to,t_vid;
@@ -635,10 +676,20 @@ let send_vid_finish_up_to_node2switch_code addr vid_finish_up_to =
   mk_let
     "safe_vid_to_delete"
     t_vid 
-     ( mk_if
-       (mk_gt (mk_peek min_max_acked_vid_var) (mk_var vid_finish_up_to))
-       (mk_var vid_finish_up_to)
-       (mk_peek min_max_acked_vid_var) ) @:
+     (mk_if
+       (* if the "found" is false, it means either
+        *   1. the stmt_cntrs is empty or
+        *   2. all the stmt in the stmt_cntrs has cnt = 0 
+        * in this case, the safe_vid_to_delete should
+        * set to min_max_acked_vid *)
+       (mk_eq (mk_var "found") (mk_cbool false)) 
+       (mk_peek min_max_acked_vid_var)
+       (mk_if
+          (mk_gt (mk_peek min_max_acked_vid_var) (mk_var vid_finish_up_to))
+          (mk_var vid_finish_up_to)
+          (mk_peek min_max_acked_vid_var) 
+       )(* end inner if *)
+     ) (*end if *)@:
   mk_send (mk_ctarget safe_vid_to_delete_rcv_trig_name)
            (mk_var addr)  @: 
            mk_tuple [ mk_var "safe_vid_to_delete"]
