@@ -579,6 +579,8 @@ let send_push_stmt_map_trig p s_rhs_lhs trig_name =
  * Also called for virtual pushes: local data transfers to allow tracking of 
  * present data w/ counters params can be moved to the put statement, but it's
  * a good reminder to have it here 
+ * We write to specific buffer maps to prevent mixing of buffer and non-buffer
+ * data, which can cause confusion when the time comes to compute.
  * A later optimization could be lumping maps between statements in a trigger *)
 
 let rcv_push_trig p s_rhs trig_name = 
@@ -604,20 +606,20 @@ List.fold_left
             (wrap_args ["tuple", wrap_ttuple tuple_types]) @:
             mk_if
               (mk_has_member 
-                (mk_var map_name)
+                (mk_var @: P.buf_of_map_name map_name)
                 reduced_code @:
                 wrap_ttuple tuple_types
               )
               (mk_update
                 (mk_var map_name)
                 (mk_peek @: mk_slice
-                  (mk_var map_name)
+                  (mk_var @: P.buf_of_map_name map_name)
                   reduced_code
                 ) @:
                 mk_var "tuple"
               ) @:
               mk_insert
-                (mk_var map_name) @:
+                (mk_var @: P.buf_of_map_name map_name) @:
                 mk_var "tuple"
           ) @:
           mk_var "tuples"

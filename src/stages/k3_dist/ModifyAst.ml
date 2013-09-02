@@ -29,7 +29,7 @@ let rec add_vid_to_init_val types e =
   | Tuple -> let xs = U.decompose_tuple e in
       mk_tuple (P.map_add_v vid_var xs)
   (* this should only be encountered if there's no tuple *)
-  | Const _ | Var _ -> mk_tuple (P.map_add_v vid_var [e])
+  | Const _ | Var _ -> mk_tuple @: P.map_add_v vid_var [e]
   | _ -> failwith "add_vid_to_init_val: unhandled modification"
 
 (* add a vid to global value map declarations *)
@@ -40,20 +40,21 @@ let modify_global_map p = function
       let map_id = P.map_id_of_name p name in
       let types = wrap_tset @: wrap_ttuple @: P.map_types_with_v_for p map_id in
       begin match m_expr with
-        | None   -> some @: mk_global_val name types
+        | None   -> [mk_global_val name types; 
+                     mk_global_val (P.buf_of_map_name name) types]
         | Some e -> (* add a vid *)
           let e' = add_vid_to_init_val types e in
-          some @: mk_global_val_init
-            name types e'
+          [mk_global_val_init name types e';
+           mk_global_val_init (P.buf_of_map_name name) types e']
       end
-    with Not_found -> None end
-  | _ -> None
+    with Not_found -> [] end
+  | _ -> []
 
 (* return ast for map declarations, adding the vid *)
 let modify_map_decl_ast p ast =
   let decls = U.globals_of_program ast in
   init_vid_k3 :: 
-    (flatten_some @: list_map (modify_global_map p) decls)
+    (List.flatten @: list_map (modify_global_map p) decls)
 
 (* --- Trigger modification --- *)
 
@@ -98,11 +99,6 @@ let corr_ast_for_m_s p ast map stmt trig =
   let args2 = Set.diff args trig_args
   in (args2, block_nth trig_ast stmt_idx)
 
-let maps_with_existing_out_tier p stmt =
-  let maps = P.map_names_ids_of_stmt p stmt in
-  let lmap = P.lhs_map_of_stmt p stmt in
-  ("existing_out_tier", lmap) :: maps
-
 exception UnhandledModification of string
 
 (* modify the internals of a type. A function gets both the unwrapped type and
@@ -130,8 +126,16 @@ let add_vid_to_lambda_args lambda =
 (* these are passed around while folding over the tree *)
 type msg_t = AddVidMsg | NopMsg | DelMsg
 
+(* the maps here have a buffer suffix *)
+
 (* add vid to all map accesses *)
-let modify_map_access p ast stmt =
+let modify_map_add_vid p ast stmt =
+  let lmap_alias = "existing_out_tier" in
+  let maps_with_existing_out_tier p stmt =
+    let maps = P.map_names_ids_of_stmt p stmt in
+    let lmap = P.lhs_map_of_stmt p stmt in
+    (lmap_alias, lmap) :: maps
+  in
   let lmap = P.lhs_map_of_stmt p stmt in
   let lmap_name = P.map_name_of p lmap in
   let lmap_types = P.map_types_with_v_for p lmap in
@@ -178,8 +182,14 @@ let modify_map_access p ast stmt =
               with Not_found -> raise @: UnhandledModification(
                 "No "^id^ " map found in stmt "^string_of_int stmt)
       in
+      let buf_col = 
+        (* if this isn't the lmap (in which case it's stored locally)
+         * adjust the name of the map to be a buffer *)
+        if id <> lmap_alias && id <> lmap_name then 
+          mk_var @: P.buf_of_map_name id
+        else col in
       (* get the latest vid values for this map *)
-      map_latest_vid_vals p col pat_m m ~keep_vid:false
+      map_latest_vid_vals p buf_col pat_m m ~keep_vid:false
 
     | _ -> raise (UnhandledModification ("Cannot handle non-var in slice"))
   in
@@ -238,14 +248,15 @@ let modify_map_access p ast stmt =
       begin match U.tag_of_expr arg with
         | Var id when id = lmap_name -> 
           begin match (U.typed_vars_of_lambda lambda, U.decompose_lambda lambda) with
-            | ([id, t],b) -> NopMsg,
+            | ([arg_id, t],b) -> NopMsg,
               mk_apply 
                 (mk_lambda 
-                  (wrap_args [id, wrap_tset @: wrap_ttuple lmap_types]) b)
+                  (wrap_args [arg_id, wrap_tset @: wrap_ttuple lmap_types]) b) 
                 arg
             | _ -> raise (UnhandledModification(PR.string_of_expr e)) end
         | _ -> NopMsg, e
       end
+
     | Combine -> let x, y = U.decompose_combine e in
       begin match msg_vid 0, msg_vid 1 with
       | true, true -> AddVidMsg, e
@@ -357,7 +368,7 @@ let modify_delta p ast stmt target_trigger =
 (* return a modified version of the original ast for s *)
 let modify_ast_for_s p ast stmt trig target_trig = 
   let ast = ast_for_s p ast stmt trig in
-  let ast = modify_map_access p ast stmt in
+  let ast = modify_map_add_vid p ast stmt in
   (* do we need to send a delta to another trigger *)
   match target_trig with
     | Some t -> modify_delta p ast stmt t
@@ -366,6 +377,6 @@ let modify_ast_for_s p ast stmt trig target_trig =
 (* return a modified version of the corrective update *)
 let modify_corr_ast p ast map stmt trig =
   let (args, ast) = corr_ast_for_m_s p ast map stmt trig in
-  let ast = modify_map_access p ast stmt in
+  let ast = modify_map_add_vid p ast stmt in
   (args, ast)
 

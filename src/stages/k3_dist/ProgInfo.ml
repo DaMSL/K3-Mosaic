@@ -197,6 +197,9 @@ let map_id_of_name p str =
   let (id, _, _) = find_map_by_name p str in
   id
 
+(* get the buffer version name of a map *)
+let buf_of_map_name name = name^"_buf"
+
 let trigger_of_stmt p stmt_id : trig_name_t =
   let (_, trig, _, _, _) = find_stmt p stmt_id in
   trigger_name_for_id p trig

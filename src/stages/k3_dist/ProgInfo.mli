@@ -60,6 +60,8 @@ val find_map_bindings_in_stmt :
   prog_data_t -> stmt_id_t -> map_id_t -> map_var_binding_t list
 val map_name_of : prog_data_t -> map_id_t -> string
 val map_id_of_name : prog_data_t -> string -> map_id_t
+(* change a map name to a buffer map name *)
+val buf_of_map_name : string -> string
 val map_types_for : prog_data_t -> map_id_t -> value_type_t list
 val map_types_no_val_for : prog_data_t -> map_id_t -> value_type_t list
 
