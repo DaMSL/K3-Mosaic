@@ -377,41 +377,59 @@ let send_puts =
       (mk_empty @: wrap_tbag @: wrap_ttuple [t_stmt_id; t_int]) @:
       mk_gbagg (* inner gba *)
         (mk_lambda (* group func *)
-          (wrap_args ["ip", t_addr; "stmt_id", t_stmt_id]) @:
+          (wrap_args ["ip", t_addr; "stmt_id", t_stmt_id; "count", t_int]) @:
           mk_tuple [mk_var "ip"; mk_var "stmt_id"]
         )
         (mk_assoc_lambda (* agg func *)
           (wrap_args ["acc", t_int]) 
-          (wrap_args ["ip", t_addr; "stmt_id", t_stmt_id]) @:
+          (wrap_args ["ip", t_addr; "stmt_id", t_stmt_id; "count", t_int]) @:
           mk_add
             (mk_var "acc") @:
-            mk_cint 1
+            mk_var "count"
         )
         (mk_cint 0) @: (* [] *)
         List.fold_left
           (fun acc_code (stmt_id, (rhs_map_id, lhs_map_id)) ->
+            (* shuffle allows us to recreate the path the data will take from
+             * rhs to lhs *)
             let shuffle_fn = find_shuffle stmt_id rhs_map_id lhs_map_id in
-            let key = partial_key_from_bound p stmt_id lhs_map_id in
+            let shuffle_key = partial_key_from_bound p stmt_id lhs_map_id in
+            (* route allows us to know how many nodes send data from rhs to lhs
+             * *)
+            let route_fn = route_for p rhs_map_id in
+            let route_key = partial_key_from_bound p stmt_id rhs_map_id in
             (* we need the types for creating empty rhs tuples *)
             let rhs_map_types = map_types_with_v_for p rhs_map_id in
             let tuple_types = wrap_tset @: wrap_ttuple rhs_map_types in
             mk_combine
               acc_code @:
+              mk_let "sender_count" t_int
+                (* count up the number of IPs received from route *)
+                (mk_agg
+                  (mk_lambda
+                    (wrap_args ["count", t_int; "ip", t_addr]) @:
+                    mk_add (mk_var "count") (mk_cint 1)
+                  )
+                  (mk_cint 0) @:
+                  (mk_apply
+                    (mk_var route_fn) @:
+                      mk_tuple route_key
+                  )
+                ) @:
               mk_map
                 (mk_lambda
-                  (wrap_args  ["ip", t_addr;
-                    "tuples", tuple_types]
-                  ) @:
-                  mk_tuple [mk_var "ip"; mk_cint stmt_id]
+                  (wrap_args  ["ip", t_addr; "tuples", tuple_types]) @:
+                      mk_tuple 
+                        [mk_var "ip"; mk_cint stmt_id; mk_var "sender_count"]
                 ) @:
                 mk_apply
                   (mk_var shuffle_fn) @:
                   mk_tuple @:
-                      (mk_tuple key)::
+                      (mk_tuple shuffle_key)::
                       [mk_empty tuple_types]@
                       [mk_cbool true]
           )
-          (mk_empty @: wrap_tbag @: wrap_ttuple [t_addr; t_stmt_id]) @:
+          (mk_empty @: wrap_tbag @: wrap_ttuple [t_addr; t_stmt_id; t_int]) @:
           s_rhs_lhs
   ]
 in
