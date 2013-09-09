@@ -294,7 +294,8 @@ let mk_is_empty collection typ =
 
 (* checks if a member of a collection is present *)
 let mk_has_member collection pattern member_type = 
-  mk_neg @: mk_eq (mk_slice collection pattern) 
+  mk_neq 
+    (mk_slice collection pattern) 
     (mk_empty @: wrap_tset member_type)
 
 let mk_code_sink name args locals code =
@@ -380,8 +381,6 @@ let mk_fst_many tuple_types collection =
 let mk_snd_many tuple_types collection =
   project_from_col tuple_types collection ~total:2 ~choice:2
   
-
-
 
 (* Functions to manipulate tuples in K3 code *)
 type tuple_pat = Position of int | ExternVar of id_t | Unknown
