@@ -12,8 +12,6 @@ open K3Util
 open K3Typechecker
 open K3Streams
 open K3Consumption
-(*open K3Interpreter*)
-(*open K3Runtime*)
 open K3Testing
 open ReifiedK3
 
@@ -166,22 +164,23 @@ let action_specs action_param = setter_specs action_param action_descriptions
 
 (* Driver parameters *)
 type parameters = {
-    action               : action_t ref;
-    test_mode            : test_mode_t ref;
-    mutable in_lang      : in_lang_t;
-    mutable out_lang     : out_lang_t;
-    mutable search_paths : string list;
-    mutable input_files  : string list;
-    mutable peers        : K3Global.peer_t list;
-    mutable default_peer : bool; (* whether we're using the default peer *)
+    action                : action_t ref;
+    test_mode             : test_mode_t ref;
+    mutable in_lang       : in_lang_t;
+    mutable out_lang      : out_lang_t;
+    mutable search_paths  : string list;
+    mutable input_files   : string list;
+    mutable peers         : K3Global.peer_t list;
+    mutable default_peer  : bool; (* whether we're using the default peer *)
     mutable partition_map : K3Route.part_map_t;
-    mutable run_length   : int64;
-    mutable print_types  : bool; (* TODO: change to a debug flag *)
-    mutable debug_info   : bool;
-    mutable verbose      : bool;
-    mutable trace_files  : string list;
+    mutable run_length    : int64;
+    mutable print_types   : bool; (* TODO                                    : change to a debug flag *)
+    mutable debug_info    : bool;
+    mutable verbose       : bool;
+    mutable trace_files   : string list;
 
-    mutable shuffle_tasks: bool; (* Shuffle tasks from diffrent node 
+    mutable queue_type   : K3Runtime.queue_type; (* type of queue for interpreter *)
+    mutable shuffle_tasks : bool; (* Shuffle tasks from different node
                                     to simulate network delay *)
   }
 
@@ -201,7 +200,8 @@ let cmd_line_params = {
     verbose       = default_verbose;
     trace_files   = [];
 
-    shuffle_tasks= default_shuffle_tasks; 
+    queue_type   = K3Runtime.GlobalQ;
+    shuffle_tasks = default_shuffle_tasks; 
   }
 
 (* Error handlers *)
@@ -353,8 +353,10 @@ let interpret_k3 params prog = let p = params in
   let tp = typed_program_with_globals prog in 
   let open K3Interpreter in
   try
-    let interp = init_k3_interpreter tp 
-      ~run_length:p.run_length ~peers:p.peers ~shuffle_tasks:p.shuffle_tasks in
+    let interp = init_k3_interpreter tp ~run_length:p.run_length 
+                                        ~peers:p.peers 
+                                        ~shuffle_tasks:p.shuffle_tasks 
+                                        ~queue_type:p.queue_type in
       snd @: interpret_k3_program interp 
   with RuntimeError (uuid,str) -> handle_interpret_error (K3Data tp) (uuid,str)
 
@@ -567,30 +569,6 @@ let process_parameters params =
   | Test      -> test params inputs
 
 (* General parameter setters *)
-let set_output_language l =
-  cmd_line_params.out_lang <- parse_out_lang l
-
-let set_input_language l =
-  cmd_line_params.in_lang <- parse_in_lang l
-
-let set_print_types () =
-  cmd_line_params.print_types <- true
-
-let set_debug_info () =
-  cmd_line_params.debug_info <- true
-
-let set_verbose () =
-  cmd_line_params.verbose <- true
-
-let set_shuffle_tasks () = 
-  cmd_line_params.shuffle_tasks <- true
-
-let append_search_path p = 
-  cmd_line_params.search_paths <- cmd_line_params.search_paths @ [p]
-
-let append_input_file f = 
-  cmd_line_params.input_files <- cmd_line_params.input_files @ [f]
-  
 let append_peers ipr_str_list =
   let ip_roles = Str.split (Str.regexp @: Str.quote ",") ipr_str_list in
   let new_peers = List.map parse_ip_role ip_roles in
@@ -608,13 +586,6 @@ let load_peer file =
   else
     cmd_line_params.peers 
       <- (List.map parse_ip_role line_lst)
-  (* old version, conation localhost
-  cmd_line_params.peers 
-    <- cmd_line_params.peers @ (List.map parse_ip_role line_lst)
-    *)
-
-let add_dbt_trace file = 
-  cmd_line_params.trace_files <- cmd_line_params.trace_files @ [file]
 
 let load_partition_map file = 
   let str = read_file file in
@@ -622,10 +593,6 @@ let load_partition_map file =
   let prog = parse_program_from_string K3Parser.program K3Lexer.tokenize str_full 
   in cmd_line_params.partition_map <- K3Route.list_of_k3_partition_map prog
   
-let set_run_length len =
-  cmd_line_params.run_length <- Int64.of_string len
-
-
 (* Argument descriptions *)
 let param_specs = Arg.align
 
@@ -634,34 +601,44 @@ let param_specs = Arg.align
    test_specs cmd_line_params.test_mode@[
   
   (* Compilation parameters *)
-  "-i", Arg.String set_input_language, 
+  "-i", Arg.String (fun l -> cmd_line_params.in_lang <- parse_in_lang l),
       "lang     Set the compiler's input language";
-  "-l", Arg.String set_output_language, 
+  "-l", Arg.String (fun l -> cmd_line_params.out_lang <- parse_out_lang l),
       "lang     Set the compiler's output language";
-  "-I", Arg.String append_search_path, 
+  "-I", Arg.String (fun p -> 
+      cmd_line_params.search_paths <- cmd_line_params.search_paths @ [p]),
       "dir      Include a directory in the module search path";
   
   (* Interpreter and evaluation parameters *)
   "-n", Arg.String append_peers, 
       "[addr]   Append addresses to the peer list";
-  "-steps", Arg.String set_run_length, 
+  "-steps", Arg.String (fun len ->
+      cmd_line_params.run_length <- Int64.of_string len),
       "int64    Set program run length in # of messages";
   "-m", Arg.String load_partition_map,
       "file     Load a partition map from a file";
   "-peers", Arg.String load_peer,
       "file     Load peer address from a file";
-  "-trace", Arg.String add_dbt_trace,
+  "-trace", Arg.String (fun file -> 
+    cmd_line_params.trace_files <- cmd_line_params.trace_files @ [file]),
       "file     Load a DBToaster trace file";
 
   (* Debugging parameters *)
-  "-t", Arg.Unit set_print_types,
+  
+  "-t", Arg.Unit (fun () -> cmd_line_params.print_types <- true),
       "         Print types as part of output";
-  "-d", Arg.Unit set_debug_info,
+  "-d", Arg.Unit (fun () -> cmd_line_params.debug_info  <- true),
       "         Print debug info (context specific)";
-  "-v", Arg.Unit set_verbose,
+  "-v", Arg.Unit (fun () -> cmd_line_params.verbose <- true),
   "             Print verbose output (context specific)";
-  (*Shuffle tasks *)
-  "-shuffle", Arg.Unit set_shuffle_tasks, 
+  (* Interpreter related *)
+  "-q", Arg.String (fun q -> cmd_line_params.queue_type <- match q with
+    | "global"  -> K3Runtime.GlobalQ
+    | "node"    -> K3Runtime.PerNodeQ
+    | "trigger" -> K3Runtime.PerTriggerQ
+    | x         -> error @: "Unknown parameter "^x),
+      "         Queue type: global/node/trigger";
+  "-shuffle", Arg.Unit (fun () -> cmd_line_params.shuffle_tasks <- true),
       "         Shuffle tasks to simulate network delays";
   ])
 
@@ -676,7 +653,9 @@ let usage_msg =
      "\n---- Options ----")
 
 let parse_cmd_line () =
-  Arg.parse param_specs append_input_file usage_msg
+  Arg.parse param_specs 
+    (fun f -> cmd_line_params.input_files <- cmd_line_params.input_files @ [f])
+    usage_msg
 
 (* --- Start --- *)
 let main () =

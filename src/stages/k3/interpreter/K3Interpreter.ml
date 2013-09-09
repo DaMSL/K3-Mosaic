@@ -768,9 +768,13 @@ let interpret_k3_program {scheduler; peer_meta; peer_list; envs} =
   result, prog_state
 
 (* Initialize an interpreter given the parameters *)
-let init_k3_interpreter ?shuffle_tasks ?breakpoints ~run_length ~peers 
-    typed_prog =
-  let s = init_scheduler_state ?shuffle_tasks ?breakpoints ~run_length () in
+let init_k3_interpreter ?shuffle_tasks 
+                        ?breakpoints 
+                        ?(queue_type=GlobalQ)
+                        ~run_length 
+                        ~peers 
+                        typed_prog =
+  let s = init_scheduler_state ?shuffle_tasks ?breakpoints ~queue_type ~run_length () in
   match peers with 
   | []  -> failwith "interpret_k3_program: Peers list is empty!"
   | _   ->

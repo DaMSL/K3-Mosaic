@@ -16,6 +16,8 @@ type breakpoint_t = {
 
 type status_t = NormalExec | BreakPoint of breakpoint_t
 
+type queue_type = GlobalQ | PerNodeQ | PerTriggerQ
+
 (* send target_trig, addr, arg *)
 val schedule_trigger : scheduler_state -> value_t -> value_t -> value_t -> unit
 
@@ -34,8 +36,11 @@ val network_has_work : scheduler_state ->  bool
 
 val run_scheduler : ?slice:int -> scheduler_state -> address -> program_env_t -> status_t
 
-val init_scheduler_state : ?shuffle_tasks:bool -> ?breakpoints:breakpoint_t list
--> ?run_length:int64 -> unit -> scheduler_state
+val init_scheduler_state : ?shuffle_tasks:bool -> 
+  ?breakpoints:breakpoint_t list -> 
+  ?run_length:int64 -> 
+  ?queue_type:queue_type ->
+  unit -> scheduler_state
 
 val use_shuffle_tasks : scheduler_state -> bool
 

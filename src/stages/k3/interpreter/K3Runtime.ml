@@ -92,6 +92,8 @@ type queue_t = Global of global_queue_t
              | PerNode of node_queue_t
              | PerTrigger of node_queue_t
 
+type queue_type = GlobalQ | PerNodeQ | PerTriggerQ
+
  (* for causing intentional reordering within the simulated network (while
   * still maintaining TCP-like ordering from a single sender *)
 type shuffle_buffer_t = 
@@ -106,13 +108,19 @@ type scheduler_state = {
   mutable breakpoints : breakpoint_t list;
  }
 
-let init_scheduler_state ?(shuffle_tasks=false) ?(breakpoints=[])
-    ?(run_length=default_events_to_process) () = 
+let init_scheduler_state ?(shuffle_tasks=false) 
+                         ?(breakpoints=[])
+                         ?(run_length=default_events_to_process) 
+                         ?(queue_type=GlobalQ)
+                         () = 
   {
     params = { default_params with shuffle_tasks = shuffle_tasks; 
                events_to_process = run_length };
     events_processed = Int64.zero;
-    queue = Global(K3Queue.create ());
+    queue = (match queue_type with
+     | GlobalQ     -> Global(K3Queue.create ())
+     | PerNodeQ    -> PerNode(Hashtbl.create 10)
+     | PerTriggerQ -> PerTrigger(Hashtbl.create 10));
     shuffle_buffer = Hashtbl.create 10;
     breakpoints = breakpoints;
   }
