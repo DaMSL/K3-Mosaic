@@ -40,12 +40,10 @@ let modify_global_map p = function
       let map_id = P.map_id_of_name p name in
       let types = wrap_tset @: wrap_ttuple @: P.map_types_with_v_for p map_id in
       begin match m_expr with
-        | None   -> [mk_global_val name types; 
-                     mk_global_val (P.buf_of_map_name name) types]
+        | None   -> [mk_global_val name types]
         | Some e -> (* add a vid *)
           let e' = add_vid_to_init_val types e in
-          [mk_global_val_init name types e';
-           mk_global_val_init (P.buf_of_map_name name) types e']
+          [mk_global_val_init name types e']
       end
     with Not_found -> [] end
   | _ -> []
@@ -186,7 +184,7 @@ let modify_map_add_vid p ast stmt =
         (* if this isn't the lmap (in which case it's stored locally)
          * adjust the name of the map to be a buffer *)
         if id <> lmap_alias && id <> lmap_name then 
-          mk_var @: P.buf_of_map_name id
+          mk_var @: P.buf_of_rhs_lhs_maps id lmap_name
         else col in
       (* get the latest vid values for this map *)
       map_latest_vid_vals p buf_col pat_m m ~keep_vid:false

@@ -93,8 +93,21 @@ let declare_global_vars p ast =
     mk_global_val_init vid_counter_name vid_counter_t @:
     mk_singleton vid_counter_t @: mk_cint 1 in
 
-  let global_map_decl_code =
-    M.modify_map_decl_ast p ast in
+  let global_map_decl_code = M.modify_map_decl_ast p ast in
+
+  (* we need to make buffer versions of rhs maps based on what they write to on
+   * the lhs *)
+  let map_buffers_decl_code = 
+    (* get all rhs, lhs map pairs *)
+    let rhs_lhs_l =
+      nub @: List.flatten @: for_all_stmts p @: P.rhs_lhs_of_stmt p in
+    let make_map_decl (rhs, lhs) =
+      let map_name = 
+        P.buf_of_rhs_lhs_maps (P.map_name_of p rhs) @: P.map_name_of p lhs in
+      mk_global_val map_name (wrap_tbag @: wrap_ttuple @: map_types_with_v_for p rhs) 
+    in
+    list_map make_map_decl rhs_lhs_l
+  in
 
   (* stmt counters, used to make sure we've received all msgs *)
   let stmt_cntrs_type = wrap_tset_mut @: wrap_ttuple_mut 
@@ -115,6 +128,7 @@ let declare_global_vars p ast =
   in
   vid_counter_code ::
   global_map_decl_code @
+  map_buffers_decl_code @
   stmt_cntrs_code :: 
   log_structs_code
 
@@ -604,7 +618,10 @@ let send_push_stmt_map_trig p s_rhs_lhs trig_name =
 let rcv_push_trig p s_rhs trig_name = 
 List.fold_left
   (fun acc_code (stmt_id, read_map_id) ->
-    let map_name = map_name_of p read_map_id in
+    let lmap_id = lhs_map_of_stmt p stmt_id in
+    let lmap_name = map_name_of p lmap_id in
+    let rmap_name = map_name_of p read_map_id in
+    let rbuf_name = buf_of_rhs_lhs_maps rmap_name lmap_name in
     let tuple_types = map_types_with_v_for p read_map_id in
     (* remove value from tuple so we can do a slice *)
     let tuple_pat = tuple_make_pattern tuple_types in
@@ -624,20 +641,20 @@ List.fold_left
             (wrap_args ["tuple", wrap_ttuple tuple_types]) @:
             mk_if
               (mk_has_member 
-                (mk_var @: P.buf_of_map_name map_name)
+                (mk_var rbuf_name)
                 reduced_code @:
                 wrap_ttuple tuple_types
               )
               (mk_update
-                (mk_var map_name)
+                (mk_var rbuf_name)
                 (mk_peek @: mk_slice
-                  (mk_var @: P.buf_of_map_name map_name)
+                  (mk_var rbuf_name)
                   reduced_code
                 ) @:
                 mk_var "tuple"
               ) @:
               mk_insert
-                (mk_var @: P.buf_of_map_name map_name) @:
+                (mk_var rbuf_name) @:
                 mk_var "tuple"
           ) @:
           mk_var "tuples"
