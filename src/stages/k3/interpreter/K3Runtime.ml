@@ -47,6 +47,10 @@ type scheduler_spec = {
 let default_interleave_period = 10
 let default_events_to_process = Int64.minus_one
 
+let dummy = ref 0 
+let default_gc_period = 1.
+let previous_gc_time = ref (Unix.time())
+
 let default_params = {
     events_to_process = default_events_to_process;
     interleave_period = default_interleave_period;
@@ -311,6 +315,19 @@ let invoke_trigger s address (trigger_env, val_env) trigger_id arg =
   | PerNode _ | PerTrigger _ ->
     let q = get_global_queue s address in
     K3Queue.increase_level q);
+  (* if the current time between last GC is bigger than given interval,
+   * then start GC. 
+   * TODO the trigger id "max_acked_vid_send" is hardcode for the moment 
+   * 1 sec period is too short to test on simple query *)
+  if (List.mem_assoc "max_acked_vid_send" trigger_env) && 
+    (Unix.time() -. !previous_gc_time) > default_gc_period 
+  then 
+    begin 
+     (List.assoc "max_acked_vid_send" trigger_env) val_env (VInt 1);
+     previous_gc_time := Unix.time();
+     LOG "GC start %f: \n" (Unix.time() -. !previous_gc_time) 
+        NAME "K3Runtime.TriggerSTate" LEVEL DEBUG;
+  end;
   (* get the frozen function for the trigger and apply it to the env and args *)
   (IdMap.find trigger_id trigger_env) val_env arg;
   (* log the state for this trigger *)

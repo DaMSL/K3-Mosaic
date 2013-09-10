@@ -331,6 +331,15 @@ let r_split r str = Str.split (Str.regexp r) str
 
 let r_match r str = Str.string_match (Str.regexp r) str 0
 
+(* --- other stuff ---- *)
+
+(* make a list contain given number of given element *)
+let  make_lst element num = 
+  let rec helper lst num = 
+    if num = 0 then lst
+    else helper (element::lst) (num-1)
+  in
+  helper [] num 
 
 
 

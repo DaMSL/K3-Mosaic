@@ -32,6 +32,7 @@ let canonical typ = TIsolated(TImmutable(typ,[]))
 
 (* A type for simple K3 types *)
 let t_bool = canonical TBool
+let t_bool_mut = TIsolated(TMutable(TBool,[]))
 let t_int = canonical TInt
 let t_int_mut = TIsolated(TMutable(TInt,[]))
 let t_float = canonical TFloat
@@ -43,6 +44,7 @@ let t_unknown = canonical TUnknown
 
 (* A type for addresses *)
 let t_addr = canonical TAddress
+let t_addr_mut = TIsolated(TMutable(TAddress,[]))
 
 (* wrap a type in a list *)
 let wrap_tlist typ = 

@@ -31,6 +31,7 @@ open K3Dist
 open ProgInfo
 open K3Route
 open K3Shuffle
+open GarbageCollection
 
 module G = K3Global
 module M = ModifyAst
@@ -56,6 +57,9 @@ let rcv_corrective_name_of_t p trig_nm stmt_id map_id =
 let do_corrective_name_of_t p trig_nm stmt_id map_id =
   trig_nm^"_do_corrective_s"^string_of_int stmt_id^"_m_"^map_name_of p map_id
 
+
+(*NOTE moved to K3Dist.ml 
+===================================
 (* log, buffer names *)
 let log_write_for p trig_nm = "log_write_"^trig_nm (* varies with bound *)
 let log_get_bound_for p trig_nm = "log_get_bound_"^trig_nm 
@@ -71,12 +75,23 @@ let hash_addr = "hash_addr"
 let foreign_hash_addr = mk_foreign_fn hash_addr t_addr t_int
 let declare_foreign_functions p = foreign_hash_addr::[]
 
-(* global data structures --------- *)
+(* global data structures 
+ * ---------------------------------------------- *)
 
 (* vid counter used to assign vids *)
 let vid_counter_name = "__vid_counter__"
 let vid_counter = mk_var vid_counter_name
 let vid_counter_t = wrap_tset @: t_int_mut
+
+
+(* epoch 
+ * TODO 
+ * Need to combine vid_counter, epoch and hash together 
+ * Create a global hash_me variale? Intstead of doing hash
+ * everytime need a vid? *)
+let epoch_name = "__epoch__"
+let epoch_var = mk_var epoch_name
+let epoch_t = wrap_tset @: t_int_mut
 
 (* stmt_cntrs - (vid, stmt_id, counter) *)
 let stmt_cntrs_name = "__stmt_cntrs__"
@@ -86,6 +101,9 @@ let stmt_cntrs = mk_var stmt_cntrs_name
 let log_for_t t = "log_"^t
 let log_master = "log__master"
 
+*)
+
+
 let declare_global_vars p ast =
   (* vid_counter to generate vids. 
    * We use a singleton because refs aren't ready *)
@@ -93,12 +111,19 @@ let declare_global_vars p ast =
     mk_global_val_init vid_counter_name vid_counter_t @:
     mk_singleton vid_counter_t @: mk_cint 1 in
 
+  (* epoch code *)
+  let epoch_code = 
+    mk_global_val_init epoch_name epoch_t @:
+    mk_singleton epoch_t @: mk_cint 0 in
+
   let global_map_decl_code =
     M.modify_map_decl_ast p ast in
 
   (* stmt counters, used to make sure we've received all msgs *)
+  (* moved to K3Dist
   let stmt_cntrs_type = wrap_tset_mut @: wrap_ttuple_mut 
       [t_vid_mut; t_int_mut; t_int_mut] in
+  *)
   let stmt_cntrs_code = mk_global_val stmt_cntrs_name stmt_cntrs_type in
   (* structures used for logs *)
   let log_structs_code =
@@ -114,9 +139,17 @@ let declare_global_vars p ast =
     log_master_code::log_structs
   in
   vid_counter_code ::
+  epoch_code ::
   global_map_decl_code @
   stmt_cntrs_code :: 
-  log_structs_code
+  acks_code :: (* GarbageCollection.ml*)
+  (vid_rcv_cnt_code vid_rcv_cnt_name) ::
+  (vid_rcv_cnt_code vid_rcv_cnt_2_name) ::
+  vid_buf_code ::
+  vid_buf_2_code ::
+  min_max_acked_vid_code ::
+  gc_vid_code ::
+  log_structs_code 
 
 (* global functions *)
 (* most of our global functions come from the shuffle/route code *)
@@ -238,14 +271,15 @@ let on_init_trig p =
               mk_tuple @: ids_to_vars K3Global.peers_ids)
            (mk_cunit)
         ) @:
-          mk_var K3Global.peers_name]
+          mk_var K3Global.peers_name
+     ]
 
 (* The start trigger inserts a vid into each message *)
 let start_trig p t =
   mk_code_sink t (wrap_args @: args_of_t p t) [] @:
     mk_let "vid" t_vid
       (mk_tuple [
-        mk_cint 0; (* epoch not implemented yet *)
+        mk_peek epoch_var;
         mk_peek vid_counter;
         mk_apply (mk_var hash_addr) G.me_var
       ]) @:
@@ -253,9 +287,25 @@ let start_trig p t =
          mk_send 
            (mk_ctarget(send_fetch_name_of_t p t)) G.me_var @: 
            mk_tuple @: args_of_t_as_vars_with_v p t;
-         mk_update vid_counter (mk_peek vid_counter) @:
-           mk_add (mk_cint 1) (mk_peek vid_counter)
-        ]
+
+        (* increase vid_counter *)
+        mk_update vid_counter (mk_peek vid_counter) @:
+          mk_add (mk_cint 1) (mk_peek vid_counter);
+        
+        (* start garbege collection every 10 
+         * TODO maybe need to change by GC every few seconds *)
+        mk_if
+          (mk_eq 
+            (mk_apply 
+              (mk_var "mod") @:
+               mk_tuple[mk_peek vid_counter;mk_cint 10])
+            (mk_cint 0)) (*end eq*)
+          (mk_send (* send to max_acked_vid_send to statr GC *)
+            (mk_ctarget max_acked_vid_send_trig_name)
+            K3Global.me_var
+            (mk_cint 1))
+          mk_cunit
+      ]
 
 let send_fetch_trig p s_rhs_lhs s_rhs trig_name =
   let send_fetches_of_rhs_maps  =
@@ -348,11 +398,17 @@ let send_puts =
   [mk_iter
     (mk_lambda 
       (wrap_args ["ip", t_addr; "stmt_id_cnt_list", stmt_id_cnt_type]) @:
-      mk_send
-        (mk_ctarget(rcv_put_name_of_t p trig_name))
-        (mk_var "ip") @:
-        mk_tuple @: mk_var "stmt_id_cnt_list"::
-          args_of_t_as_vars_with_v p trig_name
+      mk_block[
+        (* send rcv_put *)
+        mk_send
+          (mk_ctarget(rcv_put_name_of_t p trig_name))
+          (mk_var "ip") @:
+          mk_tuple @: G.me_var ::  mk_var "stmt_id_cnt_list"::
+            args_of_t_as_vars_with_v p trig_name;
+        (* insert a record into the ack list, waiting for ack*)
+         mk_insert ack_lst @: 
+              mk_tuple [mk_var "ip"; mk_var "vid"; mk_cbool false]
+        ]
     ) @:
     mk_gbagg
       (mk_assoc_lambda (* grouping func -- assoc because of gbagg tuple *)
@@ -514,8 +570,8 @@ let rcv_put_trig p trig_name =
 mk_code_sink
   (rcv_put_name_of_t p trig_name)
   (wrap_args @:
-    ("stmt_id_cnt_list", wrap_tset @: wrap_ttuple [t_stmt_id; t_int])::
-    args_of_t_with_v p trig_name
+    ("sender_ip",t_addr)::("stmt_id_cnt_list", wrap_tset @: wrap_ttuple [t_stmt_id; t_int])::
+      (args_of_t_with_v p trig_name)
   )
   [] @:
   let part_pat = ["vid", t_vid; "stmt_id", t_stmt_id] in
@@ -524,24 +580,29 @@ mk_code_sink
   let full_types = wrap_ttuple @: extract_arg_types full_pat in
   let part_pat_as_vars = ids_to_vars @: fst_many part_pat in
   let query_pat = mk_tuple @: part_pat_as_vars @ [mk_cunknown] in
-  mk_iter
-    (mk_lambda
-      (wrap_args ["stmt_id", t_stmt_id; "count", t_int]) @:
-      mk_if (* do we already have a tuple for this? *)
-        (mk_has_member stmt_cntrs query_pat full_types)
-        (mk_let_deep (wrap_args ["_", t_unit; "_", t_unit; "old_count", t_int])
-          (mk_peek @: mk_slice stmt_cntrs query_pat) @:
-          mk_update (* really an error -- shouldn't happen. Raise exception? *)
-            stmt_cntrs
+  mk_block [
+    mk_iter
+      (mk_lambda
+        (wrap_args ["stmt_id", t_stmt_id; "count", t_int]) @:
+        mk_if (* do we already have a tuple for this? *)
+          (mk_has_member stmt_cntrs query_pat full_types)
+          (mk_let_deep (wrap_args ["_", t_unit; "_", t_unit; "old_count", t_int])
             (mk_peek @: mk_slice stmt_cntrs query_pat) @:
-            mk_tuple @: 
-              part_pat_as_vars@[mk_add (mk_var "old_count") @: mk_var "count"]
-        ) @:
-        mk_insert
-          stmt_cntrs @:
-          mk_tuple @: part_pat_as_vars@[mk_var "count"]
-    ) @:
-    mk_var "stmt_id_cnt_list"
+            mk_update (* really an error -- shouldn't happen. Raise exception? *)
+              stmt_cntrs
+              (mk_peek @: mk_slice stmt_cntrs query_pat) @:
+              mk_tuple @: 
+                part_pat_as_vars@[mk_add (mk_var "old_count") @: mk_var "count"]
+          ) @:
+          mk_insert
+            stmt_cntrs @:
+            mk_tuple @: part_pat_as_vars@[mk_var "count"]
+      ) @:
+        mk_var "stmt_id_cnt_list";
+    (* ack send*)
+    mk_send (mk_ctarget "ack_send")  G.me_var @:
+      mk_tuple [mk_var "sender_ip"; mk_var "vid"]
+  ]
 
 
 (* Trigger_send_push_stmt_map
@@ -951,8 +1012,10 @@ let modified_roles ast =
 
 (* Generate all the code for a specific trigger *)
 let gen_dist_for_t p ast trig =
+  (* s_rhs : (stmt_id,rhs_map_id)list *)
   let s_rhs = 
     s_and_over_stmts_in_t p rhs_maps_of_stmt trig in
+  (* s_rhs_lhs : (stmt_id,rhs_map_id,lhs_map_id)list *)
   let s_rhs_lhs = 
     s_and_over_stmts_in_t p rhs_lhs_of_stmt trig
   in
@@ -982,6 +1045,16 @@ let gen_dist p partmap ast =
     declare_foreign_functions p @
     filter_corrective_list ::  (* global func *)
     (mk_flow @:
+      ack_rcv_trig ::
+      ack_send_trig ::
+      do_garbage_collection_trig_code p ast ::
+      min_max_acked_vid_rcv_node_trig ::
+      min_max_acked_vid_rcv_switch_trig ::
+      final_safe_vid_to_delete_rcv_trig_code ::
+      min_safe_vid_to_delete_rcv_trig_code ::
+      safe_vid_to_delete_rcv_trig_code ::
+      vid_rcv_trig ::
+      (max_acked_vid_send_trig vid_counter epoch_var hash_addr ) ::
       on_init_trig p::
       regular_trigs@
       send_corrective_trigs p@
