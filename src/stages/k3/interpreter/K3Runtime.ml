@@ -319,15 +319,17 @@ let invoke_trigger s address (trigger_env, val_env) trigger_id arg =
    * then start GC. 
    * TODO the trigger id "max_acked_vid_send" is hardcode for the moment 
    * 1 sec period is too short to test on simple query *)
+  (*
   if (List.mem_assoc "max_acked_vid_send" trigger_env) && 
     (Unix.time() -. !previous_gc_time) > default_gc_period 
   then 
     begin 
-     (List.assoc "max_acked_vid_send" trigger_env) val_env (VInt 1);
+     (IdMap.find "max_acked_vid_send" trigger_env) val_env (VInt 1);
      previous_gc_time := Unix.time();
      LOG "GC start %f: \n" (Unix.time() -. !previous_gc_time) 
         NAME "K3Runtime.TriggerSTate" LEVEL DEBUG;
-  end;
+    end;
+    *)
   (* get the frozen function for the trigger and apply it to the env and args *)
   (IdMap.find trigger_id trigger_env) val_env arg;
   (* log the state for this trigger *)
