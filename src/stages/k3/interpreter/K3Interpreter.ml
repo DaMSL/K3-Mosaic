@@ -170,6 +170,44 @@ and eval_expr sched_st cenv texpr =
         )
     in
 
+    let eval_eq_op ~neq =
+      let error = int_erroru uuid "eval_cmpop" in
+      let fenv, vals = child_values cenv in fenv, VTemp(
+      let rec check2 left right = match left, right with
+        | VList xs, VList ys -> 
+            (try List.for_all2 (fun x y -> check2 x y) xs ys
+            with Invalid_argument _ -> false)
+        | (VList xs | VBag xs | VSet xs), (VList ys | VBag ys | VSet ys) ->
+            let dx = ListAsSet.diff xs ys in
+            let dy = ListAsSet.diff ys xs in
+            if dx = [] && dy = [] then true
+            else (* do a careful match *)
+              (* check for all possible combinations: yacc should be empty
+                * when we're done, and we check all x's for existance *)
+              let ok, dy' =
+                  foldl_until (fun (ok, yacc) x ->
+                    let found, ys' =
+                      List.fold_left (fun (found, yacc) y ->
+                        if check2 x y then (true, yacc)
+                        else (found, y::yacc)
+                      ) (false, []) dy
+                    in
+                    if not found then Left (false, [])
+                    else Right (true, ys')
+                  ) (true, []) dx in
+              ok && dy' = []
+        | v1, v2 -> v1 = v2
+      in
+      match vals with
+      | [v1; v2] -> 
+          let res = check2 v1 v2 in
+          let res = if neq then not res else res in
+          VBool res
+      | _        -> error "eval_eq: missing values"
+
+    )
+    in
+
     let eval_cmpop cmp_op =
       let error = int_erroru uuid "eval_cmpop" in
       let fenv, vals = child_values cenv in fenv, VTemp(
@@ -264,9 +302,9 @@ and eval_expr sched_st cenv texpr =
           | _ -> error "(Neg): invalid value"
         )
 
-    | Eq -> eval_cmpop (=)
+    | Eq -> eval_eq_op ~neq:false
     | Lt -> eval_cmpop (<)
-    | Neq -> eval_cmpop (<>)
+    | Neq -> eval_eq_op ~neq:true
     | Leq -> eval_cmpop (<=)
 
     (* Control flow *)
@@ -730,9 +768,13 @@ let interpret_k3_program {scheduler; peer_meta; peer_list; envs} =
   result, prog_state
 
 (* Initialize an interpreter given the parameters *)
-let init_k3_interpreter ?shuffle_tasks ?breakpoints ~run_length ~peers 
-    typed_prog =
-  let s = init_scheduler_state ?shuffle_tasks ?breakpoints ~run_length () in
+let init_k3_interpreter ?shuffle_tasks 
+                        ?breakpoints 
+                        ?(queue_type=GlobalQ)
+                        ~run_length 
+                        ~peers 
+                        typed_prog =
+  let s = init_scheduler_state ?shuffle_tasks ?breakpoints ~queue_type ~run_length () in
   match peers with 
   | []  -> failwith "interpret_k3_program: Peers list is empty!"
   | _   ->
