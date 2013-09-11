@@ -11,6 +11,7 @@ require 'optparse'
 require 'pathname'
 
 $num_nodes = 1
+$q_type = "global"
 
 # option parser
 opt_parser = OptionParser.new do |opts|
@@ -20,6 +21,10 @@ opt_parser = OptionParser.new do |opts|
     opts.on("-p", "--nodes [NUMBER]", Integer,
             "Choose a number of nodes") do |n|
         $num_nodes = n
+        end
+    opts.on("-q", "--queue [STRING]", String,
+            "Select type of queue: global/trigger/node") do |s|
+        $q_type = s
         end
 end
 
@@ -111,8 +116,8 @@ def test_file(file, dbt_path, k3_path)
     part_str = if $num_nodes > 1 then "-m temp.part" else "" end
 
     # create a k3 distributed file
-	puts "#{k3_path} -p -i m3 -l k3disttest temp.m3 -trace #{trace_file} #{part_str} > temp.k3dist"
-	`#{k3_path} -p -i m3 -l k3disttest temp.m3 -trace #{trace_file} #{part_str} > temp.k3dist 2> #{err_file}`
+	puts "#{k3_path} -p -i m3 -l k3disttest -q #{$q_type} temp.m3 -trace #{trace_file} #{part_str} > temp.k3dist"
+	`#{k3_path} -p -i m3 -l k3disttest -q #{$q_type} temp.m3 -trace #{trace_file} #{part_str} > temp.k3dist 2> #{err_file}`
 	check_error(curdir, err_file)
     check_type_error(curdir, 'temp.k3dist')
 

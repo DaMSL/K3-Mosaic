@@ -25,6 +25,7 @@ distributed = false
 test_list_name = nil
 test_list = []
 $num_nodes = 1
+$q_type = "global"
 
 # option parser
 opt_parser = OptionParser.new do |opts|
@@ -48,6 +49,10 @@ opt_parser = OptionParser.new do |opts|
     opts.on("-p", "--nodes [NUMBER]", Integer,
             "Choose a number of nodes") do |n|
         $num_nodes = n
+        end
+    opts.on("-q", "--queue [STRING]", String,
+            "Select type of queue: global/trigger/node") do |s|
+        $q_type = s
         end
 end
 
@@ -102,7 +107,7 @@ node_cmd = ""
 
 if distributed then
   test_cmd = File.join(cur_path, "./dist_test.rb")
-  node_cmd = "-p #{$num_nodes}"
+  node_cmd = "-p #{$num_nodes} -q #{$q_type}"
 else
   test_cmd = File.join(cur_path, "./sql_test.rb")
 end
