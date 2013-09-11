@@ -31,11 +31,11 @@ open K3Dist
 open ProgInfo
 open K3Route
 open K3Shuffle
-open GarbageCollection
 
 module G = K3Global
 module M = ModifyAst
 module U = K3Util
+module GC = GarbageCollection
 
 exception ProcessingFailed of string;;
 
@@ -156,13 +156,13 @@ let declare_global_vars p ast =
   global_map_decl_code @
   map_buffers_decl_code @
   stmt_cntrs_code :: 
-  acks_code :: (* GarbageCollection.ml*)
-  (vid_rcv_cnt_code vid_rcv_cnt_name) ::
-  (vid_rcv_cnt_code vid_rcv_cnt_2_name) ::
-  vid_buf_code ::
-  vid_buf_2_code ::
-  min_max_acked_vid_code ::
-  gc_vid_code ::
+  GC.acks_code :: 
+  GC.vid_rcv_cnt_code GC.vid_rcv_cnt_name ::
+  GC.vid_rcv_cnt_code GC.vid_rcv_cnt_2_name ::
+  GC.vid_buf_code ::
+  GC.vid_buf_2_code ::
+  GC.min_max_acked_vid_code ::
+  GC.gc_vid_code ::
   log_structs_code 
 
 (* global functions *)
@@ -315,7 +315,7 @@ let start_trig p t =
                mk_tuple[mk_peek vid_counter;mk_cint 10])
             (mk_cint 0)) (*end eq*)
           (mk_send (* send to max_acked_vid_send to statr GC *)
-            (mk_ctarget max_acked_vid_send_trig_name)
+            (mk_ctarget GC.max_acked_vid_send_trig_name)
             K3Global.me_var
             (mk_cint 1))
           mk_cunit
@@ -420,7 +420,7 @@ let send_puts =
           mk_tuple @: G.me_var ::  mk_var "stmt_id_cnt_list"::
             args_of_t_as_vars_with_v p trig_name;
         (* insert a record into the ack list, waiting for ack*)
-         mk_insert ack_lst @: 
+         mk_insert GC.ack_lst @: 
               mk_tuple [mk_var "ip"; mk_var "vid"; mk_cbool false]
         ]
     ) @:
@@ -1062,16 +1062,16 @@ let gen_dist p partmap ast =
     declare_foreign_functions p @
     filter_corrective_list ::  (* global func *)
     (mk_flow @:
-      ack_rcv_trig ::
-      ack_send_trig ::
-      do_garbage_collection_trig_code p ast ::
-      min_max_acked_vid_rcv_node_trig ::
-      min_max_acked_vid_rcv_switch_trig ::
-      final_safe_vid_to_delete_rcv_trig_code ::
-      min_safe_vid_to_delete_rcv_trig_code ::
-      safe_vid_to_delete_rcv_trig_code ::
-      vid_rcv_trig ::
-      (max_acked_vid_send_trig vid_counter epoch_var hash_addr ) ::
+      GC.ack_rcv_trig ::
+      GC.ack_send_trig ::
+      GC.do_garbage_collection_trig_code p ast ::
+      GC.min_max_acked_vid_rcv_node_trig ::
+      GC.min_max_acked_vid_rcv_switch_trig ::
+      GC.final_safe_vid_to_delete_rcv_trig_code ::
+      GC.min_safe_vid_to_delete_rcv_trig_code ::
+      GC.safe_vid_to_delete_rcv_trig_code ::
+      GC.vid_rcv_trig ::
+      GC.max_acked_vid_send_trig vid_counter epoch_var hash_addr  ::
       on_init_trig p::
       regular_trigs@
       send_corrective_trigs p@
