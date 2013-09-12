@@ -17,9 +17,8 @@ require 'pathname'
 
 cur_path = File.expand_path(File.dirname(__FILE__))
 examples_path = File.join(cur_path, "../external/dbtoaster/examples/queries/")
-simple_dir = "simple"
 
-simple_flag = false
+dir_filter = ""
 test_num = nil
 distributed = false
 test_list_name = nil
@@ -33,7 +32,10 @@ opt_parser = OptionParser.new do |opts|
 	opts.separator ""
 	opts.separator "Specific options:"
 	opts.on("-s", "--simple", "Do only simple tests") do
-			simple_flag = true 
+			dir_filter = "simple" 
+		end
+	opts.on("-f", "--filter [SIMPLE]", String, "Run only specific tests") do |s|
+			dir_filter = s
 		end
 	opts.on("-n", "--testnum [NUMBER]", Integer, 
 		  	"Choose a specific test") do |n|
@@ -72,34 +74,13 @@ end
 p = Pathname.new(examples_path)
 raise "Can't find path #{examples_path}" unless p.exist?
 
-# start off with simple dir
-simple_path = File.join(examples_path, simple_dir)
-simple_p = Pathname.new(simple_path)
-raise "Can't find path #{simple_path}" unless simple_p.exist?
-
 all_files = []
 
-# add all simple files
-simple_p.children.each do |f|
-	if f.extname == ".sql" then all_files << f end
-end
-
-# add all the other children if we're not in simple mode
-if not simple_flag then
-	p.children.each do |d|
-		dir, last = d.split
-		if last.to_s != simple_dir 
-		then d.children.each do |f|
-			if f.extname == ".sql" then all_files << f end
-		  end 
-		end
-  end
-end
-
-def short_name_of(long_name)
-		dir, file = File.split(long_name)
-		dir1, dir2 = File.split(dir)
-		return File.join(dir2, file)
+# Add all children
+p.children.each do |d|
+    d.children.each do |f|
+        if f.extname == ".sql" then all_files << f end
+    end 
 end
 
 err_file = "./err_log.txt"
@@ -119,10 +100,17 @@ if test_num == nil then
 	passed = 0
     tested = 0
 
-	for file in all_files
+	for file, last_dir in all_files
     if test_list == [] or (test_list.find_index(index) != nil) then
       long_name = file.to_s
-      short_name = short_name_of(long_name)
+      dir, file = File.split(long_name)
+      first, last = File.split(dir)
+      short_name = File.join(last, file)
+      # Skip non-matching files
+      if dir_filter != "" and dir_filter != last then 
+        index += 1
+        next 
+      end
       print "Test #{index} (#{short_name}): "
 
       output = `#{test_cmd} #{node_cmd} #{long_name}` 
@@ -143,8 +131,8 @@ if test_num == nil then
 	end
 	puts "Passed #{passed} out of #{tested} tests"
 else # one test
-	test_file = all_files[(test_num-1)]
-	puts("Test #{test_num} (#{test_file.to_s}):")
-    puts `#{test_cmd} #{node_cmd} #{test_file.to_s}`
+	file = all_files[(test_num-1)]
+	puts("Test #{test_num} (#{file.to_s}):")
+    puts `#{test_cmd} #{node_cmd} #{file.to_s}`
 end
 
