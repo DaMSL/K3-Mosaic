@@ -76,11 +76,24 @@ raise "Can't find path #{examples_path}" unless p.exist?
 
 all_files = []
 
-# Add all children
+# start off with simple dir so it appears first in our list
+simple_path = File.join(examples_path, "simple")
+simple_p = Pathname.new(simple_path)
+raise "Can't find path #{simple_path}" unless simple_p.exist?
+
+# add all simple files so they're first in our list
+simple_p.children.each do |f|
+	if f.extname == ".sql" then all_files << f end
+end
+
+# Add all children but simple path files
 p.children.each do |d|
+  dir, last = d.split
+  if last.to_s != "simple" then 
     d.children.each do |f|
         if f.extname == ".sql" then all_files << f end
     end 
+  end
 end
 
 err_file = "./err_log.txt"
