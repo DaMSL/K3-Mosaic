@@ -6,6 +6,19 @@ SCRIPTPATH=`pwd -P`
 popd > /dev/null
 
 cd $SCRIPTPATH
+
+# check for bolt
+if [ ! -f "./lib/bolt/bolt.cmo" ] 
+then 
+  cd deps/bolt-1.4
+  ./configure
+  make all
+  if [ ! -d "$SCRIPTPATH/lib/bolt" ]; then mkdir $SCRIPTPATH/lib/bolt; fi
+  cp _build/bolt.* $SCRIPTPATH/lib/bolt
+  cp _build/src/threads/boltThread.* $SCRIPTPATH/lib/bolt
+  cd $SCRIPTPATH
+fi
+
 if [ ! -d "./bin" ]; then mkdir bin; fi
 # partition map tool
 ocamlbuild PartMapTool.byte -build-dir ./bin -tag debug $@
