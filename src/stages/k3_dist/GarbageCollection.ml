@@ -334,12 +334,23 @@ let do_garbage_collection_trig_code p ast =
             let map_t_v_val_only = snd_many map_id_t_v_val_only in
             let map_t_val_only = list_take_end 1 map_ts_v in
             let map_val_maybe_type = wrap_tmaybe (List.nth map_t_val_only 0) in
+            (*(map_t_1,map_t_2..), (t_vid, (map_val))*)
+            let leq_than_vid_cleared_type = 
+              [wrap_ttuple map_t_no_val; wrap_ttuple [t_vid; map_val_maybe_type]] 
+            in
+            let leq_than_vid_cleared_set_type = 
+              wrap_tset @: wrap_ttuple leq_than_vid_cleared_type
+            in
+            (* map_id_no_val_tuple(map_id_1, map_id_2...) *)
+            let map_id_no_val_tuple_name = "map_id_no_val_tuple" in
+            (*
             let leq_than_vid_cleared_type = 
               map_t_no_val @ [wrap_ttuple [t_vid; map_val_maybe_type]] 
             in
             let leq_than_vid_cleared_set_type = 
               wrap_tset @: wrap_ttuple leq_than_vid_cleared_type
             in
+            *)
             (
             (mk_let 
               leq_than_vid_name
@@ -399,13 +410,18 @@ let do_garbage_collection_trig_code p ast =
           mk_iter
             (mk_lambda
               (wrap_args @: List.combine 
-                  (map_id_no_val @ ["vid_maybeVal"])
+                  (["map_id_tuple";"vid_maybeVal"])
                   leq_than_vid_cleared_type
               ) @:
               ( 
+                (*let (vid:(int, int, int), __map_val:maybe int) = vid_maybeVal*)
                 (mk_let_deep 
                   (wrap_args ["vid",t_vid;"__map_val",map_val_maybe_type])
                   (mk_var "vid_maybeVal")
+                )@:
+                (mk_let_deep
+                  (wrap_args map_id_t_no_val)
+                  (mk_var "map_id_tuple")
                 )@:
                 mk_unwrap_maybe ["__map_val", map_val_maybe_type] @:
                 mk_insert 
