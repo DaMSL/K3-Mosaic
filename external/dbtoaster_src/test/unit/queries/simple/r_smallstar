@@ -1,0 +1,19 @@
+{
+  :path => "test/queries/simple/r_smallstar.sql",
+  :datasets => {
+    "standard" => {
+      :toplevels => {
+        "__SQL_SUM_AGGREGATE_1" => {
+          :type => :onelevel,
+          :expected => {
+            [1] => 4,
+            [2] => 64,
+            [3] => 100,
+            [4] => 9,
+            [5] => 81
+          }
+        }
+      }
+    }
+  }
+}

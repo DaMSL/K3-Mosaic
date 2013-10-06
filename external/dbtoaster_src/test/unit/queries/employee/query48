@@ -1,0 +1,21 @@
+{
+  :path => "test/queries/employee/query48.sql",
+  :datasets => {
+    "standard" => {
+      :toplevels => {
+        "COUNT" => {
+          :type => :onelevel,
+          :expected => {
+            [7506, 'DENNIS', 'SALES'     ] => 1,
+            [7499, 'ALLEN',  'SALES'     ] => 1,
+            [7369, 'SMITH',  'RESEARCH'  ] => 1,
+            [7505, 'DOYLE',  'SALES'     ] => 1,
+            [7521, 'WARK',   'SALES'     ] => 1,
+            [7507, 'BAKER',  'OPERATIONS'] => 1
+          }
+        }
+      }
+    }
+  }
+}
+

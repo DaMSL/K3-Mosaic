@@ -1,0 +1,64 @@
+{
+  :path => "test/queries/tpch/ssb4.sql",
+  :datasets => {
+    "standard" => {
+      :toplevels => {
+        "SSB4" => {
+          :type => :onelevel,
+          :expected => results_file("test/results/tpch/ssb4_standard.csv"),
+        }
+      }
+    },
+    
+    "tiny" => {
+      :subs => [ [/schemas\.sql/, "schemas_tiny.sql"] ],
+      :toplevels => {
+        "SSB4" => {
+          :type => :onelevel,
+          :expected => results_file("test/results/tpch/ssb4_tiny.csv")
+        }
+      }
+    },
+
+    "big" => {
+      :subs => [ [/schemas\.sql/, "schemas_big.sql"] ],
+      :toplevels => {
+        "SSB4" => {
+          :type => :onelevel,
+          :expected => results_file("test/results/tpch/ssb4_big.csv")
+        }
+      }
+    },
+        
+    "standard_del" => {
+      :subs => [ [/schemas\.sql/, "schemas_del.sql"] ],
+      :toplevels => {
+        "SSB4" => {
+          :type => :onelevel,
+          :expected => results_file("test/results/tpch/ssb4_standard_del.csv"),
+        }
+      }
+    },
+    
+    "tiny_del" => {
+      :subs => [ [/schemas\.sql/, "schemas_tiny_del.sql"] ],
+      :toplevels => {
+        "SSB4" => {
+          :type => :onelevel,
+          :expected => { }
+        }
+      }
+    },
+    
+    "big_del" => {
+      :subs => [ [/schemas\.sql/, "schemas_big_del.sql"] ],
+      :toplevels => {
+        "SSB4" => {
+          :type => :onelevel,
+          :expected => results_file("test/results/tpch/ssb4_big_del.csv")
+        }
+      }
+    }
+     
+  }
+}

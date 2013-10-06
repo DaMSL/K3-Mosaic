@@ -1,0 +1,72 @@
+{
+  :path => "test/queries/tpch/query8.sql",
+  :datasets => {
+    "standard" => {
+      :toplevels => {
+        "MKT_SHARE" => {
+          :type => :onelevel,
+          :expected => { }
+        }
+      }
+    },
+    
+    "tiny" => {
+      :subs => [ [/schemas\.sql/, "schemas_tiny.sql"] ],
+      :toplevels => {
+        "MKT_SHARE" => {
+          :type => :onelevel,
+          :expected => { }
+        }
+      }
+    },
+    
+    "big" => {
+      :subs => [ [/schemas\.sql/, "schemas_big.sql"] ],
+      :toplevels => {
+        "MKT_SHARE" => {
+          :type => :onelevel,
+          :expected => {
+            [1995] => 0.67324542068201248973,
+            [1996] => 0.42888155903711040882          
+          }
+        }
+      }
+    },
+    
+    "standard_del" => {
+      :subs => [ [/schemas\.sql/, "schemas_del.sql"] ],
+      :toplevels => {
+        "MKT_SHARE" => {
+          :type => :onelevel,
+          :expected => { }
+        }
+      }
+    },
+    
+    "tiny_del" => {
+      :subs => [ [/schemas\.sql/, "schemas_tiny_del.sql"] ],
+      :toplevels => {
+        "MKT_SHARE" => {
+          :type => :onelevel,
+          :expected => { }
+        }
+      }
+    },
+    
+    "big_del" => {
+      :subs => [ [/schemas\.sql/, "schemas_big_del.sql"] ],
+      :toplevels => {
+        "MKT_SHARE" => {
+          :type => :onelevel,
+          :expected => {
+            [1995] => 0.03469238626314883003,
+            [1996] => 0.00502797929529238690
+          }
+        }
+      }
+    }
+    
+  }
+}
+
+

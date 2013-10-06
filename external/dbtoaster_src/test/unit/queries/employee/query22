@@ -1,0 +1,18 @@
+{
+  :path => "test/queries/employee/query22.sql",
+  :datasets => {
+    "standard" => {
+      :toplevels => {
+        "__SQL_COUNT_AGGREGATE_1" => {
+          :type => :onelevel,
+          :expected => {
+            [20] => 1,
+            [30] => 4,
+            [40] => 1
+          }
+        }
+      }
+    }
+  }
+}
+

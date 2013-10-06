@@ -1,0 +1,19 @@
+{
+  :path => "test/queries/simple/r_bigsumstar.sql",
+  :datasets => {
+    "standard" => {
+      :toplevels => {
+        "__SQL_SUM_AGGREGATE_1" => {
+          :type => :onelevel,
+          :expected => {
+            [1] => 12,
+            [2] => 756,
+            [3] => 16,
+            [4] => 972,
+            [5] => 256
+          }
+        }
+      }
+    }
+  }
+}
