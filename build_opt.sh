@@ -3,6 +3,14 @@ pushd `dirname $0` > /dev/null
 SCRIPTPATH=`pwd -P`
 popd > /dev/null
 
+# check for dbtoaster
+if [ ! -f "./external/dbtoaster_src/bin/dbtoaster_release" ] 
+then 
+  cd external/dbtoaster_src
+  make all
+  cd $SCRIPTPATH
+fi
+
 # check for bolt
 if [ ! -f "./lib/bolt/bolt.cmo" ] 
 then 
