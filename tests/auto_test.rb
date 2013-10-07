@@ -20,6 +20,7 @@ examples_path = File.join(cur_path, "../external/dbtoaster/examples/queries/")
 
 dir_filter = ""
 test_num = nil
+test_name = nil
 distributed = false
 test_list_name = nil
 test_list = []
@@ -34,8 +35,11 @@ opt_parser = OptionParser.new do |opts|
 	opts.on("-s", "--simple", "Do only simple tests") do
 			dir_filter = "simple" 
 		end
-	opts.on("-f", "--filter [SIMPLE]", String, "Run only specific tests") do |s|
+	opts.on("-l", "--filter [SIMPLE]", String, "Run only specific tests") do |s|
 			dir_filter = s
+		end
+	opts.on("-f", "--file [NAME]", String, "Run a specific test file") do |s|
+			test_name = s
 		end
 	opts.on("-n", "--testnum [NUMBER]", Integer, 
 		  	"Choose a specific test") do |n|
@@ -74,6 +78,7 @@ end
 p = Pathname.new(examples_path)
 raise "Can't find path #{examples_path}" unless p.exist?
 
+simple_files = []
 all_files = []
 
 # start off with simple dir so it appears first in our list
@@ -83,18 +88,27 @@ raise "Can't find path #{simple_path}" unless simple_p.exist?
 
 # add all simple files so they're first in our list
 simple_p.children.each do |f|
-	if f.extname == ".sql" then all_files << f end
+  if f.extname == ".sql" then simple_files << ["simple", f.basename, f] end
 end
+simple_files.sort_by! do |_, name, _| name end
 
 # Add all children but simple path files
 p.children.each do |d|
   dir, last = d.split
   if last.to_s != "simple" then 
     d.children.each do |f|
-        if f.extname == ".sql" then all_files << f end
+        if f.extname == ".sql" then all_files << [last, f.basename, f] end
     end 
   end
 end
+
+# Sort the array
+all_files.sort_by! do |last, fname, f| fname end
+all_files.sort_by! do |last, fname, f| last end
+
+# Combine with simple array
+all_files = simple_files.concat(all_files)
+all_files.map! do |_, _, f| f end
 
 err_file = "./err_log.txt"
 node_cmd = ""
