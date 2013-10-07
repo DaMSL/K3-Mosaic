@@ -8,6 +8,7 @@ if [ ! -f "./external/dbtoaster_src/bin/dbtoaster_release" ]
 then 
   cd external/dbtoaster_src
   make all
+  cp bin/dbtoaster* ../dbtoaster/bin
   cd $SCRIPTPATH
 fi
 
