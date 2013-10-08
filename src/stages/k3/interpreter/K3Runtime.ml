@@ -98,6 +98,11 @@ type queue_t = Global of global_queue_t
 
 type queue_type = GlobalQ | PerNodeQ | PerTriggerQ
 
+let string_of_queue_t = function
+  | GlobalQ     -> "global queue"
+  | PerNodeQ    -> "pernode queue"
+  | PerTriggerQ -> "pertrigger queue"
+
  (* for causing intentional reordering within the simulated network (while
   * still maintaining TCP-like ordering from a single sender *)
 type shuffle_buffer_t = 
@@ -117,6 +122,7 @@ let init_scheduler_state ?(shuffle_tasks=false)
                          ?(run_length=default_events_to_process) 
                          ?(queue_type=GlobalQ)
                          () = 
+  (*Printf.printf "Creating %s\n" (string_of_queue_t queue_type);*)
   {
     params = { default_params with shuffle_tasks = shuffle_tasks; 
                events_to_process = run_length };

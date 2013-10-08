@@ -116,8 +116,8 @@ def test_file(file, dbt_path, k3_path)
     part_str = if $num_nodes > 1 then "-m temp.part" else "" end
 
     # create a k3 distributed file
-	puts "#{k3_path} -p -i m3 -l k3disttest -q #{$q_type} temp.m3 -trace #{trace_file} #{part_str} > temp.k3dist"
-	`#{k3_path} -p -i m3 -l k3disttest -q #{$q_type} temp.m3 -trace #{trace_file} #{part_str} > temp.k3dist 2> #{err_file}`
+	puts "#{k3_path} -p -i m3 -l k3disttest  temp.m3 -trace #{trace_file} #{part_str} > temp.k3dist"
+	`#{k3_path} -p -i m3 -l k3disttest temp.m3 -trace #{trace_file} #{part_str} > temp.k3dist 2> #{err_file}`
 	check_error(curdir, err_file)
     check_type_error(curdir, 'temp.k3dist')
 
@@ -132,8 +132,8 @@ def test_file(file, dbt_path, k3_path)
     end
 
 	# run the k3 driver on the input
-	puts "#{k3_path} -test #{peer_str} temp.k3dist"
-	output = `#{k3_path} -test #{peer_str} temp.k3dist 2> #{err_file}`
+	puts "#{k3_path} -test #{peer_str} -q #{$q_type} temp.k3dist"
+	output = `#{k3_path} -test #{peer_str} -q #{$q_type} temp.k3dist 2> #{err_file}`
 	check_error(curdir, err_file)
 	puts output
     exit
