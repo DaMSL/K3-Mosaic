@@ -1,4 +1,4 @@
-#!/usr/bin/ruby
+#!/opt/local/bin/ruby1.9
 
 #
 # Unit test K3 single-site execution.
@@ -26,6 +26,7 @@ test_list_name = nil
 test_list = []
 $num_nodes = 1
 $q_type = "global"
+$shuffle = false
 
 # option parser
 opt_parser = OptionParser.new do |opts|
@@ -59,6 +60,10 @@ opt_parser = OptionParser.new do |opts|
     opts.on("-q", "--queue [STRING]", String,
             "Select type of queue: global/trigger/node") do |s|
         $q_type = s
+        end
+    opts.on("-x", "--shuffle", 
+            "Shuffle the queues") do
+        $shuffle = true
         end
 end
 
@@ -112,6 +117,7 @@ all_files.map! do |_, _, f| f end
 
 err_file = "./err_log.txt"
 node_cmd = ""
+$shuffle_cmd = if $shuffle then "--shuffle" else "" end
 
 if distributed then
   test_cmd = File.join(cur_path, "./dist_test.rb")
@@ -140,7 +146,7 @@ if test_num == nil then
       end
       print "Test #{index} (#{short_name}): "
 
-      output = `#{test_cmd} #{node_cmd} #{long_name}` 
+      output = `#{test_cmd} #{node_cmd} #{$shuffle_cmd} #{long_name}` 
 
       if (/ERROR|FAILED/ =~ output) != nil then 
         puts "ERROR"
@@ -160,6 +166,6 @@ if test_num == nil then
 else # one test
 	file = all_files[(test_num-1)]
 	puts("Test #{test_num} (#{file.to_s}):")
-    puts `#{test_cmd} #{node_cmd} #{file.to_s}`
+    puts `#{test_cmd} #{node_cmd} #{$shuffle_cmd} #{file.to_s}`
 end
 

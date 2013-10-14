@@ -12,6 +12,7 @@ require 'pathname'
 
 $num_nodes = 1
 $q_type = "global"
+$shuffle = false
 
 # option parser
 opt_parser = OptionParser.new do |opts|
@@ -26,6 +27,10 @@ opt_parser = OptionParser.new do |opts|
             "Select type of queue: global/trigger/node") do |s|
         $q_type = s
         end
+    opts.on("-x", "--shuffle", 
+            "Shuffle the queues") do
+        $shuffle = true
+        end
 end
 
 # now parse the options
@@ -37,6 +42,8 @@ file=File.expand_path(ARGV[0])
 $cur_path = File.expand_path(File.dirname(__FILE__))
 dbtoaster_path = File.join($cur_path, "../external/dbtoaster")
 dbtoaster_exe_path = File.join(dbtoaster_path, "/bin/dbtoaster")
+
+$shuffle_cmd = if $shuffle then "-shuffle" else "" end
 
 p = Pathname.new(dbtoaster_exe_path)
 raise "Can't find dbtoaster executable" unless p.exist?
@@ -132,8 +139,8 @@ def test_file(file, dbt_path, k3_path)
     end
 
 	# run the k3 driver on the input
-	puts "#{k3_path} -test #{peer_str} -q #{$q_type} temp.k3dist"
-	output = `#{k3_path} -test #{peer_str} -q #{$q_type} temp.k3dist 2> #{err_file}`
+	puts "#{k3_path} -test #{peer_str} -q #{$q_type} #{$shuffle_cmd} temp.k3dist"
+	output = `#{k3_path} -test #{peer_str} -q #{$q_type} #{$shuffle_cmd} temp.k3dist 2> #{err_file}`
 	check_error(curdir, err_file)
 	puts output
     exit
