@@ -1,4 +1,4 @@
-#!/opt/local/bin/ruby1.9
+#!/usr/bin/env ruby
 
 #
 # Unit test K3 single-site execution.
