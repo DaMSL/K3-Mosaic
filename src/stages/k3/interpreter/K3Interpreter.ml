@@ -718,15 +718,16 @@ let interpret_k3_program {scheduler; peer_meta; peer_list; envs} =
         if K3Runtime.use_global_queueing scheduler then
           if network_has_work scheduler then
             let addr = next_global_address scheduler in
-            let (_,_,prog_env) = List.assoc addr envs in
+            let _,_,prog_env = List.assoc addr envs in
             match consume_msgs ~slice:1 scheduler prog_env addr with
             | BreakPoint bp -> 1, BreakPoint bp
             | NormalExec    -> 1, status
           else 0, status
         else
+          (* do one cycle over all the nodes *)
           List.fold_left (fun (count, stat) (addr,_,_) ->
             if node_has_work scheduler addr then
-              let (_,_,prog_env) = List.assoc addr envs in
+              let _,_,prog_env = List.assoc addr envs in
               match consume_msgs scheduler prog_env addr with
               | BreakPoint bp -> count + 1, BreakPoint bp
               | NormalExec    -> count + 1, stat
@@ -734,7 +735,7 @@ let interpret_k3_program {scheduler; peer_meta; peer_list; envs} =
           ) (0, status) peer_list
       in
       (*Printf.printf "msgs: %d\n" message_peers;*)
-      if message_peers > 0 then loop status'
+      if message_peers > 0  && not (K3Runtime.use_shuffle_tasks scheduler) then loop status'
       else 
         (* now deal with sources *)
         let source_peers, (status':status_t) =
@@ -752,7 +753,7 @@ let interpret_k3_program {scheduler; peer_meta; peer_list; envs} =
           ) peer_meta (0, status')
         in
         (*Printf.printf "sources: %d\n" source_peers;*)
-        if source_peers > 0 then loop status'
+        if source_peers > 0 || message_peers > 0 then loop status'
         else status'
     else status
   in

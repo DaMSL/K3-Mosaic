@@ -117,12 +117,15 @@ type scheduler_state = {
   mutable breakpoints : breakpoint_t list;
  }
 
+let use_shuffle_tasks s  = s.params.shuffle_tasks 
+
 let init_scheduler_state ?(shuffle_tasks=false) 
                          ?(breakpoints=[])
                          ?(run_length=default_events_to_process) 
                          ?(queue_type=GlobalQ)
                          () = 
-  (*Printf.printf "Creating %s\n" (string_of_queue_t queue_type);*)
+  (*Printf.printf "Creating %s with shuffle %s\n" *)
+    (*(string_of_queue_t queue_type) (sob shuffle_tasks);*)
   {
     params = { default_params with shuffle_tasks = shuffle_tasks; 
                events_to_process = run_length };
@@ -250,6 +253,7 @@ let buffer_trigger s target address args sender_addr =
 
 (* if shuffling is on, we move messages from the shuffle buffer to the queues *)
 let schedule_trigger_random s receive_address = 
+  if Hashtbl.length s.shuffle_buffer = 0 then () else
   let per_node_buf = try Hashtbl.find s.shuffle_buffer receive_address
                      with Not_found -> error INVALID_SHUFFLE_BUFFER
   in
@@ -274,17 +278,6 @@ let schedule_trigger_random s receive_address =
   Hashtbl.reset per_node_buf
 
 (* Scheduler execution *)
-
-let continue_processing s address =
-  let has_messages = match s.queue with
-    | Global q -> not @: K3Queue.is_empty q
-    | PerNode _ | PerTrigger _ -> 
-        not @: K3Queue.is_empty @: get_global_queue s address in 
-  let events_remain = 
-    s.params.events_to_process < Int64.zero ||
-    s.events_processed < s.params.events_to_process
-  in
-  has_messages && events_remain
 
 (* compare the breakpoint filter to the actual arguments *)
 let rec breakpoint_arg_test test_arg arg =
@@ -448,19 +441,30 @@ let node_has_work s address =
   if not @: is_node s address then false else 
   let node_queues = get_node_queues s address in
   let empty_global_q = K3Queue.is_empty @: fst node_queues in
-  let empty_trigger_q = 
-    Hashtbl.fold (fun _ q acc -> acc && K3Queue.is_empty q) (snd node_queues) true in
   let empty_shuffle_buffer = 
-    if s.params.shuffle_tasks then 
-      (Hashtbl.length @: Hashtbl.find s.shuffle_buffer address) = 0
+    if use_shuffle_tasks s then 
+      try Hashtbl.length @: Hashtbl.find s.shuffle_buffer address = 0
+      with Not_found -> false
     else true
   in
-  not (empty_global_q && empty_trigger_q && empty_shuffle_buffer)
+  not @: empty_global_q && empty_shuffle_buffer
 
 let network_has_work s = match s.queue with
   | PerNode q | PerTrigger q -> Hashtbl.fold (fun addr _ acc ->
       acc || node_has_work s addr) q false
   | Global q -> not @: K3Queue.is_empty q
+
+let continue_processing s address =
+  let has_messages = match s.queue with
+    | Global q -> network_has_work s
+    | PerNode _ | PerTrigger _ -> node_has_work s address
+  in
+  let events_remain = 
+    s.params.events_to_process < Int64.zero ||
+    s.events_processed < s.params.events_to_process
+  in
+  has_messages && events_remain
+
 
 (* address is ignored for global queue *)
 let run_scheduler ?(slice = max_int) s address env =
@@ -468,10 +472,9 @@ let run_scheduler ?(slice = max_int) s address env =
     if i <= 0 || not @: continue_processing s address then NormalExec
     else 
       (* schedule shuffle trigger if the shuffle flag is on *)
-      (if s.params.shuffle_tasks then schedule_trigger_random s address;
+      (if use_shuffle_tasks s then schedule_trigger_random s address;
       match process_task s address env with
       | NormalExec    -> loop (i-1)
       | BreakPoint bp -> BreakPoint bp)
   in loop slice
 
-let use_shuffle_tasks s  = s.params.shuffle_tasks 
