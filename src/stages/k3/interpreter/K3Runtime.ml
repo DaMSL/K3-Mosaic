@@ -17,6 +17,7 @@ type runtime_error_type =
   | INVALID_TRIGGER_TARGET
   | INVALID_SHUFFLE_BUFFER
   | INVALID_BREAKPOINT
+  | INVALID_ADDRESS
 
 let runtime_errors = [
     INVALID_GLOBAL_QUEUE, (-1000, "invalid empty task queue");
@@ -24,6 +25,7 @@ let runtime_errors = [
     INVALID_TRIGGER_TARGET, (-1002, "invalid target for message send");
     INVALID_SHUFFLE_BUFFER, (-1003, "error in shuffle buffer");
     INVALID_BREAKPOINT, (-1004, "invalid breakpoint");
+    INVALID_ADDRESS, (-1005, "invalid node address");
   ]
   
 let error t =
@@ -193,7 +195,8 @@ let unregister_trigger s address trigger_id force =
   with Not_found -> () 
 
 (* Scheduling methods *)
-let schedule_task s address task = match s.queue with
+let schedule_task s address task = 
+  match s.queue with
   | Global q -> K3Queue.push (address, task) q
   | PerNode q | PerTrigger q -> K3Queue.push task @: get_global_queue s address
 
@@ -438,16 +441,17 @@ let initialize_scheduler s address (trig_env,_) = match s.queue with
   | Global _ -> ()
 
 let node_has_work s address =
-  if not @: is_node s address then false else 
+  if not @: is_node s address then error INVALID_ADDRESS else 
   let node_queues = get_node_queues s address in
   let empty_global_q = K3Queue.is_empty @: fst node_queues in
   let empty_shuffle_buffer = 
     if use_shuffle_tasks s then 
-      try Hashtbl.length @: Hashtbl.find s.shuffle_buffer address = 0
-      with Not_found -> false
+      try (Hashtbl.length @: Hashtbl.find s.shuffle_buffer address) = 0
+      with Not_found -> true
     else true
   in
-  not @: empty_global_q && empty_shuffle_buffer
+  Printf.printf "empty_glob_q: %s, empty_shuffle_buffer: %s\n" (sob empty_global_q) (sob empty_shuffle_buffer);
+  not (empty_global_q && empty_shuffle_buffer)
 
 let network_has_work s = match s.queue with
   | PerNode q | PerTrigger q -> Hashtbl.fold (fun addr _ acc ->
@@ -472,7 +476,7 @@ let run_scheduler ?(slice = max_int) s address env =
     if i <= 0 || not @: continue_processing s address then NormalExec
     else 
       (* schedule shuffle trigger if the shuffle flag is on *)
-      (if use_shuffle_tasks s then schedule_trigger_random s address;
+      (if use_shuffle_tasks s then (schedule_trigger_random s address);
       match process_task s address env with
       | NormalExec    -> loop (i-1)
       | BreakPoint bp -> BreakPoint bp)
