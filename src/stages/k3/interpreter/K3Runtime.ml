@@ -450,7 +450,7 @@ let node_has_work s address =
       with Not_found -> true
     else true
   in
-  Printf.printf "empty_glob_q: %s, empty_shuffle_buffer: %s\n" (sob empty_global_q) (sob empty_shuffle_buffer);
+  (*Printf.printf "empty_glob_q: %s, empty_shuffle_buffer: %s\n" (sob empty_global_q) (sob empty_shuffle_buffer);*)
   not (empty_global_q && empty_shuffle_buffer)
 
 let network_has_work s = match s.queue with
