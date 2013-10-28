@@ -120,7 +120,7 @@ let get_map_list (p:prog_data_t) =
 
 let for_all_maps (p:prog_data_t) f =
   List.map (fun m -> f m) @: get_map_list p
- 
+
 let find_map (p:prog_data_t) (map_id:map_id_t) =
   try List.find (fun (id, _, _) -> id = map_id) @: get_map_data p
   with
@@ -189,6 +189,11 @@ let rhs_lhs_of_stmt (p:prog_data_t) stmt_id =
     (fun (rhs_map, _) -> (rhs_map, lhs_map))
     rhs_maps
 
+let for_all_rhs_lhs_maps (p:prog_data_t) f =
+  let rhs_lhs_l =
+     nub @: List.flatten @: for_all_stmts p @: rhs_lhs_of_stmt p in
+  List.map f rhs_lhs_l
+
 let map_name_of p map_id = 
   let (_, name, _) = find_map p map_id in 
   name
@@ -199,6 +204,11 @@ let map_id_of_name p str =
 
 (* get the buffer version name of a map *)
 let buf_of_rhs_lhs_maps rhs lhs = rhs^"_to_"^lhs^"_buf"
+
+let buf_of_rhs_lhs_map_id p rhs_id lhs_id =
+  let rhs = map_name_of p rhs_id in
+  let lhs = map_name_of p lhs_id in
+  buf_of_rhs_lhs_maps rhs lhs
 
 let trigger_of_stmt p stmt_id : trig_name_t =
   let (_, trig, _, _, _) = find_stmt p stmt_id in

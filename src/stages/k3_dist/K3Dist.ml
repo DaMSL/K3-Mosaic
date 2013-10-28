@@ -56,6 +56,9 @@ let log_read_geq = "log_read_geq" (* takes vid, returns (trig, vid)list >= vid *
 let add_delta_to_buffer_for_map p map_id = 
   "add_delta_to_buffer_"^map_name_of p map_id
 
+let add_delta_to_buffer_rmap_lmap p rmap_id lmap_id =
+  "add_delta_to_buffer_"^P.buf_of_rhs_lhs_map_id p rmap_id lmap_id
+
 (* foreign functions *)
 let hash_addr = "hash_addr"
 let foreign_hash_addr = mk_foreign_fn hash_addr t_addr t_int

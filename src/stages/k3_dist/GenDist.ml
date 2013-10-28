@@ -57,53 +57,6 @@ let rcv_corrective_name_of_t p trig_nm stmt_id map_id =
 let do_corrective_name_of_t p trig_nm stmt_id map_id =
   trig_nm^"_do_corrective_s"^string_of_int stmt_id^"_m_"^map_name_of p map_id
 
-
-(*NOTE moved to K3Dist.ml 
-===================================
-(* log, buffer names *)
-let log_write_for p trig_nm = "log_write_"^trig_nm (* varies with bound *)
-let log_get_bound_for p trig_nm = "log_get_bound_"^trig_nm 
-let log_read_geq = "log_read_geq" (* takes vid, returns (trig, vid)list >= vid *)
-(* adds the delta to all subsequent vids following in the buffer so that non
- * delta computations will be correct. Must be atomic ie. no other reads of the
- * wrong buffer value can happen *)
-let add_delta_to_buffer_for_map p map_id = 
-  "add_delta_to_buffer_"^map_name_of p map_id
-
-(* foreign functions *)
-let hash_addr = "hash_addr"
-let foreign_hash_addr = mk_foreign_fn hash_addr t_addr t_int
-let declare_foreign_functions p = foreign_hash_addr::[]
-
-(* global data structures 
- * ---------------------------------------------- *)
-
-(* vid counter used to assign vids *)
-let vid_counter_name = "__vid_counter__"
-let vid_counter = mk_var vid_counter_name
-let vid_counter_t = wrap_tset @: t_int_mut
-
-
-(* epoch 
- * TODO 
- * Need to combine vid_counter, epoch and hash together 
- * Create a global hash_me variale? Intstead of doing hash
- * everytime need a vid? *)
-let epoch_name = "__epoch__"
-let epoch_var = mk_var epoch_name
-let epoch_t = wrap_tset @: t_int_mut
-
-(* stmt_cntrs - (vid, stmt_id, counter) *)
-let stmt_cntrs_name = "__stmt_cntrs__"
-let stmt_cntrs = mk_var stmt_cntrs_name
-
-(* names for log *)
-let log_for_t t = "log_"^t
-let log_master = "log__master"
-
-*)
-
-
 let declare_global_vars p ast =
   (* vid_counter to generate vids. 
    * We use a singleton because refs aren't ready *)
@@ -121,15 +74,12 @@ let declare_global_vars p ast =
   (* we need to make buffer versions of rhs maps based on what they write to on
    * the lhs *)
   let map_buffers_decl_code = 
-    (* get all rhs, lhs map pairs *)
-    let rhs_lhs_l =
-      nub @: List.flatten @: for_all_stmts p @: P.rhs_lhs_of_stmt p in
+    (* for all rhs, lhs map pairs *)
     let make_map_decl (rhs, lhs) =
-      let map_name = 
-        P.buf_of_rhs_lhs_maps (P.map_name_of p rhs) @: P.map_name_of p lhs in
+      let map_name = P.buf_of_rhs_lhs_map_id p rhs lhs in
       mk_global_val map_name (wrap_tbag @: wrap_ttuple @: map_types_with_v_for p rhs) 
     in
-    list_map make_map_decl rhs_lhs_l
+    P.for_all_rhs_lhs_maps p make_map_decl
   in
 
   (* stmt counters, used to make sure we've received all msgs *)
@@ -217,23 +167,39 @@ let declare_global_funcs partmap p =
         mk_tuple [mk_var "vid2"; mk_var "trig"]
       ) @:
       mk_var log_master
- in
-  (* add_delta_to_buffer -- add delta to vid and all future vids *)
-  let add_delta_to_buffer_code map =
-    let map_name = map_name_of p map in
-    let val_type = list_last @: map_types_for p map in
-    let val_name = list_last @: extract_arg_names @: map_ids_types_for p map in
-    let types_v = map_types_with_v_for p map in
-    let ids_types_v = map_ids_types_with_v_for p map in
+  in
+  (* add_delta_to_buffer *)
+  (* For a regular do_complete, we need to add to the future vids that exist only.
+   * For a corrective, we need to update the current vid (if it exists) and all future 
+   * exising vids, and we need to do it for the buffer map *)
+  let add_delta_to_buffer_code maps =
+    let func_name, map_name, map_id, comp_fn =
+      match maps with
+      | `Corrective(rmap, lmap) ->
+          add_delta_to_buffer_rmap_lmap p rmap lmap,
+          P.buf_of_rhs_lhs_map_id p rmap lmap,
+          rmap, (* we're really dealing with the rmap *)
+          v_geq (* >= for correctives *)
+
+      | `DoComplete lmap       ->
+          add_delta_to_buffer_for_map p lmap,
+          P.map_name_of p lmap,
+          lmap,
+          v_gt (* only > for do_complete *)
+    in
+    let val_type = list_last @: map_types_for p map_id in
+    let val_name = list_last @: extract_arg_names @: map_ids_types_for p map_id in
+    let types_v = map_types_with_v_for p map_id in
+    let ids_types_v = map_ids_types_with_v_for p map_id in
     (* make ids and type list for arguments *)
-    let ids_types_arg = map_ids_types_for ~prefix:"__arg_" p map in
+    let ids_types_arg = map_ids_types_for ~prefix:"__arg_" p map_id in
     let arg_val_id = list_last @: extract_arg_names @: ids_types_arg in
     let ids_types_arg_v = map_ids_types_add_v ~vid:"vid_arg" ids_types_arg in
-    let ids_types_v2 = map_ids_types_with_v_for ~vid:"vid2" p map in
-    let ids_no_val = extract_arg_names @: map_ids_types_no_val_for p map in
+    let ids_types_v2 = map_ids_types_with_v_for ~vid:"vid2" p map_id in
+    let ids_no_val = extract_arg_names @: map_ids_types_no_val_for p map_id in
     let val_result_id = "val_result" in
 
-    mk_global_fn (add_delta_to_buffer_for_map p map)
+    mk_global_fn func_name
       ["vid", t_vid; "delta_tuples", wrap_tset @: wrap_ttuple types_v]
       [t_unit] @:
       mk_iter (* loop over vids >= in the map *)
@@ -253,16 +219,17 @@ let declare_global_funcs partmap p =
             ) @:
             mk_var "delta_tuples"
         ) @:
-        mk_filtermap (* filter all vids >= given vid *)
+        mk_filtermap (* filter all vids >/>= given vid *)
           (mk_lambda (wrap_args ids_types_v2) @:
-            v_geq (mk_var "vid2") (mk_var "vid")
+            comp_fn (mk_var "vid2") (mk_var "vid")
           )
           (mk_id types_v) @:
           mk_var map_name
   in
   global_vid_ops @
   [log_read_geq_code] @
-  for_all_maps p add_delta_to_buffer_code @
+  for_all_maps p (fun map -> add_delta_to_buffer_code @: `DoComplete map) @
+  for_all_rhs_lhs_maps p (fun (r,l) -> add_delta_to_buffer_code @: `Corrective(r,l)) @
   for_all_trigs p log_write_code @
   for_all_trigs p log_get_bound_code @
   gen_shuffle_route_code p partmap
@@ -306,8 +273,10 @@ let start_trig p t =
         mk_update vid_counter (mk_peek vid_counter) @:
           mk_add (mk_cint 1) (mk_peek vid_counter);
         
-        (* start garbege collection every 10 
+        (* start garbage collection every 10 
          * TODO maybe need to change by GC every few seconds *)
+        (* disable gc for now so we can test properly *)
+        (*
         mk_if
           (mk_eq 
             (mk_apply 
@@ -319,6 +288,7 @@ let start_trig p t =
             K3Global.me_var
             (mk_cint 1))
           mk_cunit
+          *)
       ]
 
 let send_fetch_trig p s_rhs_lhs s_rhs trig_name =
@@ -793,7 +763,7 @@ let send_corrective_trigs p =
           List.flatten @:
             for_all_trigs p 
               (fun trig -> 
-                List.map (fun stmt -> (trig, stmt)) @: stmts_of_t p trig) in
+                List.map (fun stmt -> trig, stmt) @: stmts_of_t p trig) in
     (* predefined K3 list of stmts with rhs maps (ie. the above) *)
     let trig_stmt_k3_list = 
       let types = wrap_tset @: wrap_ttuple [t_trig_id; t_stmt_id] in
@@ -877,17 +847,17 @@ let send_corrective_trigs p =
 
  
 let do_complete_trigs p ast trig_name =
-let do_complete_trig stmt_id =
-mk_code_sink (do_complete_name_of_t p trig_name stmt_id)
-  (wrap_args @: args_of_t_with_v p trig_name)
-  [] @: (* locals *)
-    let lmap = lhs_map_of_stmt p stmt_id in
-    let send_to = 
-        if List.exists (fun m -> m = lmap) @: maps_potential_corrective p
-        then Some(send_corrective_name_of_t p lmap)
-        else None
-    in
-    M.modify_ast_for_s p ast stmt_id trig_name send_to
+  let do_complete_trig stmt_id =
+    mk_code_sink (do_complete_name_of_t p trig_name stmt_id)
+      (wrap_args @: args_of_t_with_v p trig_name)
+      [] @: (* locals *)
+        let lmap = lhs_map_of_stmt p stmt_id in
+        let send_to = 
+            if List.exists (fun m -> m = lmap) @: maps_potential_corrective p
+            then Some(send_corrective_name_of_t p lmap)
+            else None
+        in
+        M.modify_ast_for_s p ast stmt_id trig_name send_to
 in
 List.map (fun stmt -> do_complete_trig stmt) @: stmts_of_t p trig_name
 
@@ -936,21 +906,22 @@ let filter_corrective_list = mk_global_fn filter_corrective_list_name
  * Receives bound variables and delta tuples for one map.  
  *
  * Analogous to rcv_push for non-correctives
- * Note: this can be rolled into the do_corrective function
+ * Has 2 parts: updating the local cache of the buffers, and executing the requested vid(s)
  *)
 let rcv_correctives_trig p s_rhs trig_name = 
 List.map
-  (fun (stmt_id, map_id) ->
-    mk_code_sink (rcv_corrective_name_of_t p trig_name stmt_id map_id)
+  (fun (stmt_id, rmap) ->
+    let lmap = lhs_map_of_stmt p stmt_id in
+    mk_code_sink (rcv_corrective_name_of_t p trig_name stmt_id rmap)
       (wrap_args 
         ["vid", t_vid; 
-        "delta_tuples", wrap_tset @: wrap_ttuple @: map_types_with_v_for p map_id]
+        "delta_tuples", wrap_tset @: wrap_ttuple @: map_types_with_v_for p rmap]
       )
       [] @: (* locals *)
       mk_block
         (* accumulate delta for this vid and all following vids *)
         [mk_apply
-          (mk_var @: add_delta_to_buffer_for_map p map_id) @:
+          (mk_var @: add_delta_to_buffer_rmap_lmap p rmap lmap) @:
           mk_tuple [mk_var "vid"; mk_var "delta_tuples"]
           ;
           (* only execute if we have all the updates *)
@@ -972,7 +943,7 @@ List.map
               ) @:
               mk_send
                 (mk_ctarget @: 
-                  do_corrective_name_of_t p trig_name stmt_id map_id
+                  do_corrective_name_of_t p trig_name stmt_id rmap
                 )
                 G.me_var @:
                 mk_tuple @: args_of_t_as_vars_with_v p trig_name @

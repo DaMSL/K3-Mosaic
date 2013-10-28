@@ -306,10 +306,9 @@ let modify_delta p ast stmt target_trigger =
       | _ -> raise(UnhandledModification("No inner lambda")) end in
     let delta_name = hd @: U.vars_of_lambda lambda2 in
     let delta_types = extract_arg_types @: U.typed_vars_of_arg params2 in
-    let full_vars_code = 
+    let full_vars = 
       let full_types = P.map_add_v t_vid @: lmap_types @ delta_types in
       let full_names = lmap_bind_ids_v @ [delta_name] in
-      mk_tuple @:
         P.map_add_v (mk_var "vid") @:
           [mk_singleton 
             (wrap_tset @: wrap_ttuple full_types) @:
@@ -319,12 +318,18 @@ let modify_delta p ast stmt target_trigger =
       (mk_lambda params @:
           mk_apply 
             (mk_lambda params2 @:
-                mk_block @:
-                  body2 ::
-                  [mk_send 
+                mk_block
+                  [body2 
+                   ;
+                   (* we add the delta to all following vids, and we send it for correctives *)
+                   mk_apply
+                    (mk_var @: add_delta_to_buffer_for_map p lmap) @:
+                     mk_tuple full_vars
+                   ;
+                   mk_send 
                     (mk_const @: CTarget target_trigger)
-                    G.me_var @:
-                    full_vars_code
+                     G.me_var @:
+                     mk_tuple @: full_vars
                   ]
             ) arg2
       ) arg
@@ -334,30 +339,38 @@ let modify_delta p ast stmt target_trigger =
       | Lambda a -> a
       | _ -> raise(UnhandledModification("No inner lambda")) end in
     let delta_name = "__delta_values__" in
+    let delta_v_name = "__delta_with_vid__" in
     let delta_ids_types = U.typed_vars_of_arg params2 in
     let delta_types = extract_arg_types delta_ids_types in
     let delta_col_type = wrap_tset @: wrap_ttuple delta_types in
+    let delta_col_v_type = wrap_tset @: wrap_ttuple @: P.map_types_add_v delta_types in
     let delta_ids = extract_arg_names delta_ids_types in
     let delta_last_id = list_take_end 1 delta_ids in
     mk_apply
       (mk_lambda params @:
-          mk_let delta_name (delta_col_type) col @:
+          mk_let delta_name delta_col_type col @:
+          (* project vid into collection *)
+          mk_let delta_v_name delta_col_v_type 
+            (mk_map
+              (mk_lambda 
+                (wrap_args delta_ids_types) @:
+                  mk_tuple @: 
+                    ids_to_vars @: lmap_bind_ids_v@delta_last_id
+                ) @:
+               mk_var delta_name) @:
           mk_block @:
-            (mk_iter lambda2 @: 
-              mk_var delta_name)::
-            [mk_send
-              (mk_const @: CTarget target_trigger)
+            (* execute lambda on delta values *)
+            [mk_iter lambda2 @: 
+              mk_var delta_name
+             ;
+             mk_apply
+              (mk_var @: add_delta_to_buffer_for_map p lmap) @:
+              mk_tuple [mk_var "vid"; mk_var delta_v_name]
+             ; 
+             mk_send (* send to a (corrective) target *)
+              (mk_ctarget target_trigger)
               G.me_var @:
-              mk_tuple @:
-                (mk_var "vid"):: (* project vid into collection *)
-                  [mk_map
-                    (mk_lambda 
-                      (wrap_args delta_ids_types) @:
-                        mk_tuple @: 
-                          ids_to_vars @: lmap_bind_ids_v@delta_last_id
-                    ) @:
-                    mk_var delta_name
-                  ]
+              mk_tuple [mk_var "vid"; mk_var delta_v_name]
             ]
       ) 
       arg
@@ -374,7 +387,7 @@ let modify_ast_for_s p ast stmt trig target_trig =
 
 (* return a modified version of the corrective update *)
 let modify_corr_ast p ast map stmt trig =
-  let (args, ast) = corr_ast_for_m_s p ast map stmt trig in
+  let args, ast = corr_ast_for_m_s p ast map stmt trig in
   let ast = modify_map_add_vid p ast stmt in
-  (args, ast)
+  args, ast
 
