@@ -51,6 +51,8 @@ val stmt_has_rhs_map : prog_data_t -> stmt_id_t -> map_id_t -> bool
 val stmts_with_rhs_maps_in_t : prog_data_t -> trig_name_t -> stmt_id_t list
 val stmts_without_rhs_maps_in_t : prog_data_t -> trig_name_t -> stmt_id_t list
 val rhs_maps_of_stmt : prog_data_t -> stmt_id_t -> map_id_t list
+val stmts_rhs_maps : prog_data_t -> (stmt_id_t * map_id_t) list
+val for_all_stmts_rhs_maps : prog_data_t -> (stmt_id_t * map_id_t -> 'a) -> 'a list
 val lhs_map_of_stmt : prog_data_t -> stmt_id_t -> map_id_t
 val rhs_lhs_of_stmt : prog_data_t -> stmt_id_t -> (map_id_t * map_id_t) list
 val find_lmap_bindings_in_stmt :
@@ -62,8 +64,8 @@ val find_map_bindings_in_stmt :
 val map_name_of : prog_data_t -> map_id_t -> string
 val map_id_of_name : prog_data_t -> string -> map_id_t
 (* change a map name to a buffer map name *)
-val buf_of_rhs_lhs_maps : string -> string -> string
-val buf_of_rhs_lhs_map_id: prog_data_t -> map_id_t -> map_id_t -> string
+val buf_of_stmt_map : int -> string -> string
+val buf_of_stmt_map_id: prog_data_t -> int -> map_id_t -> string
 val map_types_for : prog_data_t -> map_id_t -> value_type_t list
 val map_types_no_val_for : prog_data_t -> map_id_t -> value_type_t list
 

@@ -160,6 +160,13 @@ let rhs_maps_of_stmt (p:prog_data_t) (stmt_id:stmt_id_t) =
   let (_, _, _, _, maplist) = find_stmt p stmt_id in
   nub @: List.map (fun (map_id, _) -> map_id) maplist
 
+let stmts_rhs_maps (p:prog_data_t) =
+  List.flatten @:
+    for_all_stmts p @: 
+      fun s -> List.map (fun rmap -> s, rmap) @: rhs_maps_of_stmt p s
+
+let for_all_stmts_rhs_maps p f = List.map f @: stmts_rhs_maps p
+
 let stmt_has_rhs_map p stmt_id rhs_map_id =
   let (_, _, _, _, maplist) = find_stmt p stmt_id in
   List.exists (fun (map_id, _) -> map_id = rhs_map_id) maplist
@@ -178,7 +185,7 @@ let stmts_rhs_map_inner (p:prog_data_t) (t:trig_name_t) ~op =
 let stmts_without_rhs_maps_in_t p t = stmts_rhs_map_inner ~op:(=) p t
 
 let stmts_with_rhs_maps_in_t p t = stmts_rhs_map_inner ~op:(<>) p t
-    
+
 let lhs_map_of_stmt p stmt_id =
   let (_, _, lhs_map, _, _) = find_stmt p stmt_id in
   lhs_map
@@ -203,12 +210,11 @@ let map_id_of_name p str =
   id
 
 (* get the buffer version name of a map *)
-let buf_of_rhs_lhs_maps rhs lhs = rhs^"_to_"^lhs^"_buf"
+let buf_of_stmt_map stmt map = Printf.sprintf "map_%s_s%d_buf" map stmt
 
-let buf_of_rhs_lhs_map_id p rhs_id lhs_id =
-  let rhs = map_name_of p rhs_id in
-  let lhs = map_name_of p lhs_id in
-  buf_of_rhs_lhs_maps rhs lhs
+let buf_of_stmt_map_id p stmt map_id =
+  let map = map_name_of p map_id in
+  buf_of_stmt_map stmt map
 
 let trigger_of_stmt p stmt_id : trig_name_t =
   let (_, trig, _, _, _) = find_stmt p stmt_id in

@@ -53,11 +53,11 @@ let log_read_geq = "log_read_geq" (* takes vid, returns (trig, vid)list >= vid *
 (* adds the delta to all subsequent vids following in the buffer so that non
  * delta computations will be correct. Must be atomic ie. no other reads of the
  * wrong buffer value can happen *)
-let add_delta_to_buffer_for_map p map_id = 
-  "add_delta_to_buffer_"^map_name_of p map_id
+let add_delta_to_map p map_id = 
+  "add_delta_to_"^map_name_of p map_id
 
-let add_delta_to_buffer_rmap_lmap p rmap_id lmap_id =
-  "add_delta_to_buffer_"^P.buf_of_rhs_lhs_map_id p rmap_id lmap_id
+let add_delta_to_buffer_stmt_map p stmt map_id =
+  "add_delta_to_"^P.buf_of_stmt_map_id p stmt map_id
 
 (* foreign functions *)
 let hash_addr = "hash_addr"

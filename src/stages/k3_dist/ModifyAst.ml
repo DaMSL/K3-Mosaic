@@ -72,7 +72,7 @@ let block_nth exp i = match U.tag_of_expr exp with
   | _            -> raise (InvalidAst("block_nth: Not a block"))
 
 (* return the AST for a given stmt *)
-let ast_for_s p ast stmt (trig:P.trig_name_t) = 
+let ast_for_s p ast (stmt:P.stmt_id_t) (trig:P.trig_name_t) = 
   let trig_decl = U.trigger_of_program trig ast in
   let trig_ast = U.expr_of_code trig_decl in
   let s_idx = stmt_idx_in_t p trig stmt in
@@ -184,7 +184,7 @@ let modify_map_add_vid p ast stmt =
         (* if this isn't the lmap (in which case it's stored locally)
          * adjust the name of the map to be a buffer *)
         if id <> lmap_alias && id <> lmap_name then 
-          mk_var @: P.buf_of_rhs_lhs_maps id lmap_name
+          mk_var @: P.buf_of_stmt_map stmt id
         else col in
       (* get the latest vid values for this map *)
       map_latest_vid_vals p buf_col pat_m m ~keep_vid:false
@@ -316,22 +316,22 @@ let modify_delta p ast stmt target_trigger =
           ] in
     mk_apply
       (mk_lambda params @:
-          mk_apply 
-            (mk_lambda params2 @:
-                mk_block
-                  [body2 
-                   ;
-                   (* we add the delta to all following vids, and we send it for correctives *)
-                   mk_apply
-                    (mk_var @: add_delta_to_buffer_for_map p lmap) @:
-                     mk_tuple full_vars
-                   ;
-                   mk_send 
-                    (mk_const @: CTarget target_trigger)
-                     G.me_var @:
-                     mk_tuple @: full_vars
-                  ]
-            ) arg2
+        mk_apply 
+          (mk_lambda params2 @:
+            mk_block
+              [body2 
+                ;
+                (* we add the delta to all following vids, and we send it for correctives *)
+                mk_apply
+                (mk_var @: add_delta_to_map p lmap) @:
+                  mk_tuple full_vars
+                ;
+                mk_send 
+                (mk_const @: CTarget target_trigger)
+                  G.me_var @:
+                  mk_tuple @: full_vars
+              ]
+          ) arg2
       ) arg
   | Iterate -> (* more complex modification *)
     let (lambda2, col) = U.decompose_iterate body in
@@ -364,7 +364,7 @@ let modify_delta p ast stmt target_trigger =
               mk_var delta_name
              ;
              mk_apply
-              (mk_var @: add_delta_to_buffer_for_map p lmap) @:
+              (mk_var @: add_delta_to_map p lmap) @:
               mk_tuple [mk_var "vid"; mk_var delta_v_name]
              ; 
              mk_send (* send to a (corrective) target *)

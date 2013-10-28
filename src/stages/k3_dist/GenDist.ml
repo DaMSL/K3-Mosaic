@@ -71,15 +71,14 @@ let declare_global_vars p ast =
 
   let global_map_decl_code = M.modify_map_decl_ast p ast in
 
-  (* we need to make buffer versions of rhs maps based on what they write to on
-   * the lhs *)
+  (* we need to make buffer versions of rhs maps based on their statement *)
   let map_buffers_decl_code = 
     (* for all rhs, lhs map pairs *)
-    let make_map_decl (rhs, lhs) =
-      let map_name = P.buf_of_rhs_lhs_map_id p rhs lhs in
-      mk_global_val map_name (wrap_tbag @: wrap_ttuple @: map_types_with_v_for p rhs) 
+    let make_map_decl (stmt, map) =
+      let map_name = P.buf_of_stmt_map_id p stmt map in
+      mk_global_val map_name @: wrap_tbag @: wrap_ttuple @: map_types_with_v_for p map 
     in
-    P.for_all_rhs_lhs_maps p make_map_decl
+    for_all_stmts_rhs_maps p make_map_decl
   in
 
   (* stmt counters, used to make sure we've received all msgs *)
@@ -169,20 +168,21 @@ let declare_global_funcs partmap p =
       mk_var log_master
   in
   (* add_delta_to_buffer *)
-  (* For a regular do_complete, we need to add to the future vids that exist only.
+  (* We reuse this function for 2 purposes:
+   * For a regular do_complete, we need to add to the future vids that exist only.
    * For a corrective, we need to update the current vid (if it exists) and all future 
    * exising vids, and we need to do it for the buffer map *)
   let add_delta_to_buffer_code maps =
     let func_name, map_name, map_id, comp_fn =
       match maps with
-      | `Corrective(rmap, lmap) ->
-          add_delta_to_buffer_rmap_lmap p rmap lmap,
-          P.buf_of_rhs_lhs_map_id p rmap lmap,
-          rmap, (* we're really dealing with the rmap *)
+      | `Corrective(stmt, map) ->
+          add_delta_to_buffer_stmt_map p stmt map,
+          P.buf_of_stmt_map_id p stmt map,
+          map,
           v_geq (* >= for correctives *)
 
       | `DoComplete lmap       ->
-          add_delta_to_buffer_for_map p lmap,
+          add_delta_to_map p lmap,
           P.map_name_of p lmap,
           lmap,
           v_gt (* only > for do_complete *)
@@ -229,7 +229,8 @@ let declare_global_funcs partmap p =
   global_vid_ops @
   [log_read_geq_code] @
   for_all_maps p (fun map -> add_delta_to_buffer_code @: `DoComplete map) @
-  for_all_rhs_lhs_maps p (fun (r,l) -> add_delta_to_buffer_code @: `Corrective(r,l)) @
+  for_all_stmts_rhs_maps p (fun (stmt,m) -> 
+    add_delta_to_buffer_code @: `Corrective(stmt,m)) @
   for_all_trigs p log_write_code @
   for_all_trigs p log_get_bound_code @
   gen_shuffle_route_code p partmap
@@ -646,13 +647,10 @@ let send_push_stmt_map_trig p s_rhs_lhs trig_name =
  * data, which can cause confusion when the time comes to compute.
  * A later optimization could be lumping maps between statements in a trigger *)
 
-let rcv_push_trig p s_rhs trig_name = 
+let rcv_push_trig (p:P.prog_data_t) s_rhs trig_name = 
 List.fold_left
   (fun acc_code (stmt_id, read_map_id) ->
-    let lmap_id = lhs_map_of_stmt p stmt_id in
-    let lmap_name = map_name_of p lmap_id in
-    let rmap_name = map_name_of p read_map_id in
-    let rbuf_name = buf_of_rhs_lhs_maps rmap_name lmap_name in
+    let rbuf_name = buf_of_stmt_map_id p stmt_id read_map_id in
     let tuple_types = map_types_with_v_for p read_map_id in
     (* remove value from tuple so we can do a slice *)
     let tuple_pat = tuple_make_pattern tuple_types in
@@ -911,7 +909,6 @@ let filter_corrective_list = mk_global_fn filter_corrective_list_name
 let rcv_correctives_trig p s_rhs trig_name = 
 List.map
   (fun (stmt_id, rmap) ->
-    let lmap = lhs_map_of_stmt p stmt_id in
     mk_code_sink (rcv_corrective_name_of_t p trig_name stmt_id rmap)
       (wrap_args 
         ["vid", t_vid; 
@@ -921,7 +918,7 @@ List.map
       mk_block
         (* accumulate delta for this vid and all following vids *)
         [mk_apply
-          (mk_var @: add_delta_to_buffer_rmap_lmap p rmap lmap) @:
+          (mk_var @: add_delta_to_buffer_stmt_map p stmt_id rmap) @:
           mk_tuple [mk_var "vid"; mk_var "delta_tuples"]
           ;
           (* only execute if we have all the updates *)
