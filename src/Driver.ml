@@ -40,11 +40,11 @@ let in_lang_descs = [
   ]
 
 type out_lang_t =
-  | K3 | AstK3 
-  | K3Dist 
+  | K3 | AstK3
+  | K3Dist
   | K3Test | K3DistTest (* output k3 with some test code *)
-  | AstK3Dist 
-  | ReifiedK3 
+  | AstK3Dist
+  | ReifiedK3
   | Imperative | CPPInternal | CPP
 
 let out_lang_descs = [
@@ -61,7 +61,7 @@ let out_lang_descs = [
   ]
 
 (* types of data carried around  by the driver *)
-type data_t = 
+type data_t =
   | K3Data of program_t
   (* for distributed programs, we also need the metadata of the maps *)
   | K3DistData of program_t * ProgInfo.prog_data_t
@@ -73,7 +73,7 @@ let string_of_data = function
   | K3TestData _ -> "k3testdata"
 
 (* Evaluation option setters *)
-let parse_port p = 
+let parse_port p =
   let error () = invalid_arg ("invalid port: "^p) in
   try let r = int_of_string p in if r > 65535 then error() else r
   with Failure _ -> error()
@@ -84,14 +84,14 @@ let parse_ip_role ipr_str =
   let num = "[0-9]+" in
   let ip = num^"\\."^num^"\\."^num^"\\."^num in
   let r = Str.regexp @:
-    "\\("^ident^"=\\)?\\("^ip^"\\|localhost\\)\\(:"^num^"\\)?\\(/"^ident^"\\)?" 
+    "\\("^ident^"=\\)?\\("^ip^"\\|localhost\\)\\(:"^num^"\\)?\\(/"^ident^"\\)?"
   in
   let error () = invalid_arg "invalid ip string format" in
   if Str.string_match r ipr_str 0 then
-    let ms = List.map (fun i -> 
+    let ms = List.map (fun i ->
         try some @: Str.matched_group i ipr_str
         with Not_found -> None
-      ) [1;2;3;4] 
+      ) [1;2;3;4]
     in
     let alias = match at ms 0 with
     | None   -> None
@@ -108,7 +108,7 @@ let parse_ip_role ipr_str =
     | Some ip, Some port -> (ip, parse_port @: str_drop 1 port), role, alias
   else error ()
 
-let string_of_lang_descs descs i = 
+let string_of_lang_descs descs i =
   let l = List.filter (fun (x,_,_) -> x = i) descs in
   if l = [] then "unknown" else let _,_,r = List.hd l in r
 
@@ -123,7 +123,7 @@ let format_language_description (lang_t, short_desc, long_desc) =
   in
   "  "^(pad_or_truncate_str short_desc 10)^long_desc
 
-let parse_lang data str s = 
+let parse_lang data str s =
   try
     let (x,_,_) = List.find (fun (_,s2,_) -> s = s2) data
     in x
@@ -133,7 +133,7 @@ let parse_in_lang = parse_lang in_lang_descs "input language"
 let parse_out_lang = parse_lang out_lang_descs "output language"
 
 (* Spec helpers *)
-let setter_specs param spec_desc = List.map (fun (param_val, flag, desc) -> 
+let setter_specs param spec_desc = List.map (fun (param_val, flag, desc) ->
   let fn () = param := param_val
   in (flag, Arg.Unit fn, "         "^desc)) spec_desc
 
@@ -201,7 +201,7 @@ let cmd_line_params = {
     trace_files   = [];
 
     queue_type   = K3Runtime.GlobalQ;
-    shuffle_tasks = default_shuffle_tasks; 
+    shuffle_tasks = default_shuffle_tasks;
   }
 
 (* Error handlers *)
@@ -211,12 +211,12 @@ let handle_lexer_error () =
 
 let handle_local_parse_error lexbuf =
   let curpos = lexbuf.Lexing.lex_curr_p in
-  let curr = curpos.Lexing.pos_cnum in 
+  let curr = curpos.Lexing.pos_cnum in
   let bol = curpos.Lexing.pos_bol in
   let diff = curr-bol in
   let line = curpos.Lexing.pos_lnum in
-  let tok = Lexing.lexeme lexbuf in  
-  Printf.printf "\nError on line %d , character %d , token %s\n" 
+  let tok = Lexing.lexeme lexbuf in
+  Printf.printf "\nError on line %d , character %d , token %s\n"
       line diff tok; raise Parsing.Parse_error
 
 let handle_parse_error ?(msg = "") lexbuf =
@@ -227,20 +227,20 @@ let handle_type_error p (uuid, name, msg) =
   let s = K3TypeError.string_of_error msg in
   print_endline "----Type error----";
   print_endline @: "Error("^(string_of_int uuid)^"): "^name^": "^s;
-  (match p with 
-  | K3Data p | K3DistData(p,_)-> 
+  (match p with
+  | K3Data p | K3DistData(p,_)->
     print_endline @: PS.string_of_program ~uuid_highlight:uuid p
-  | K3TestData p_test -> print_endline @: 
+  | K3TestData p_test -> print_endline @:
     PS.string_of_program_test ~uuid_highlight:uuid p_test);
   exit 1
 
 let handle_interpret_error p (uuid,error) =
   print_endline "----Interpreter error----";
   print_endline @: "Error("^(string_of_int uuid)^"): "^error;
-  (match p with 
-  | K3Data p | K3DistData(p,_)-> 
+  (match p with
+  | K3Data p | K3DistData(p,_)->
       print_endline @: PS.string_of_program ~uuid_highlight:uuid p
-  | K3TestData p_test -> print_endline @: 
+  | K3TestData p_test -> print_endline @:
     PS.string_of_program_test ~uuid_highlight:uuid p_test);
   exit 1
 
@@ -251,7 +251,7 @@ let parse_program_from_string parsefn lexfn str =
     with Failure _ -> handle_lexer_error ()
   in
     try parsefn lexfn lexbuf
-    with 
+    with
     | Parsing.Parse_error -> handle_local_parse_error lexbuf
     | Failure(msg) -> handle_parse_error ~msg:msg lexbuf
     | Pervasives.Exit -> raise Parsing.Parse_error
@@ -265,7 +265,7 @@ let parse_program parsefn lexfn file =
   in
   let prog =
     try parsefn lexfn lexbuf
-    with 
+    with
     | Parsing.Parse_error -> handle_local_parse_error lexbuf
     | Failure(msg) -> handle_parse_error ~msg:msg lexbuf
     | Pervasives.Exit -> raise Parsing.Parse_error
@@ -275,7 +275,7 @@ let parse_program parsefn lexfn file =
 
 let parse_k3_file = parse_program K3Parser.program K3Lexer.tokenize
 
-let parse_m3_file = 
+let parse_m3_file =
     parse_program Calculusparser.mapProgram Calculuslexer.tokenize
 
 let parse_k3_prog s = K3Parser.program K3Lexer.tokenize @: Lexing.from_string s
@@ -290,17 +290,17 @@ let typed_program_with_globals p =
   let p' =
     K3Global.add_globals cmd_line_params.peers p in
   try deduce_program_type p'
-  with TypeError (a,b,c) -> handle_type_error (K3Data p') (a,b,c) 
+  with TypeError (a,b,c) -> handle_type_error (K3Data p') (a,b,c)
 
 let typed_program_test_with_globals prog_test =
-  let add_g p = 
+  let add_g p =
     K3Global.add_globals cmd_line_params.peers p
   in
   match prog_test with
-  | ProgTest(p, testl)    -> 
+  | ProgTest(p, testl)    ->
       let p' = add_g p in
       let p_t = ProgTest(p', testl) in
-      begin 
+      begin
         try deduce_program_test_type p_t
         with TypeError (a,b,c) -> handle_type_error (K3TestData p_t) (a,b,c)
       end
@@ -309,20 +309,20 @@ let typed_program_test_with_globals prog_test =
       let p_t = NetworkTest(p', testl) in
       begin
         try deduce_program_test_type p_t
-        with TypeError (a,b,c) -> handle_type_error (K3TestData p_t) (a,b,c) 
+        with TypeError (a,b,c) -> handle_type_error (K3TestData p_t) (a,b,c)
       end
   | ExprTest(p_ts) -> failwith "expr_test unhandled"
 
 
 (* for most functions, we don't need the globals included *)
 let typed_program p =
-  K3Global.remove_globals cmd_line_params.peers @: 
+  K3Global.remove_globals cmd_line_params.peers @:
       typed_program_with_globals p
 
 (* don't include globals *)
 let typed_program_test prog_test =
   let prog_test' = typed_program_test_with_globals prog_test in
-  let remove_g p = 
+  let remove_g p =
     K3Global.remove_globals cmd_line_params.peers p
   in
   match prog_test' with
@@ -332,15 +332,15 @@ let typed_program_test prog_test =
 
 let imperative_program p =
   RK3ToImperative.imperative_of_program (fun () -> []) (typed_program p)
-  
-let cpp_program p = 
+
+let cpp_program p =
   let mk_meta() = [] in
   CPPTyping.deduce_program_type @:
     cpp_of_imperative mk_meta @:
       RK3ToImperative.imperative_of_program mk_meta @: typed_program p
 
 (* Action handlers *)
-(* TODO *) 
+(* TODO *)
 let repl params inputs = ()
 
 (* TODO *)
@@ -350,28 +350,28 @@ let compile params inputs = ()
 let interpret_k3 params prog = let p = params in
   (* this not only adds type info, it adds the globals which are crucial
     * for interpretation *)
-  let tp = typed_program_with_globals prog in 
+  let tp = typed_program_with_globals prog in
   let open K3Interpreter in
   try
-    let interp = init_k3_interpreter tp ~run_length:p.run_length 
-                                        ~peers:p.peers 
-                                        ~shuffle_tasks:p.shuffle_tasks 
+    let interp = init_k3_interpreter tp ~run_length:p.run_length
+                                        ~peers:p.peers
+                                        ~shuffle_tasks:p.shuffle_tasks
                                         ~queue_type:p.queue_type in
-      snd @: interpret_k3_program interp 
+      snd @: interpret_k3_program interp
   with RuntimeError (uuid,str) -> handle_interpret_error (K3Data tp) (uuid,str)
 
-let interpret params inputs = 
+let interpret params inputs =
   let f = function
-    | K3Data p 
-    | K3DistData(p, _) 
+    | K3Data p
+    | K3DistData(p, _)
     | K3TestData(ProgTest(p, _))
     | K3TestData(NetworkTest(p, _)) -> ignore @: interpret_k3 params p
     | _ -> failwith "data type not supported for interpretation"
-  in 
+  in
   List.iter f inputs
 
 (* Print actions *)
-let print_event_loop (id, (res_env, ds_env, instrs)) = 
+let print_event_loop (id, (res_env, ds_env, instrs)) =
     print_endline ("----Role "^id^" Flow Program----");
     print_string (string_of_resource_env res_env);
     print_string (string_of_dispatcher_env ds_env)
@@ -384,41 +384,41 @@ let print_k3_program f = function
     let event_loops, default = roles_of_program tp in
       print_endline (f tp);
       List.iter print_event_loop event_loops;
-      (match default with None -> () 
+      (match default with None -> ()
         | Some (_,x) -> print_event_loop ("DEFAULT", x))
   | _ -> error "Cannot print this type of data"
 
 (* create and print a k3 program with an expected section *)
 let print_k3_test_program = function
-  | idx, K3DistData (p, meta) -> 
+  | idx, K3DistData (p, meta) ->
       (* get the folded expressions for latest vid *)
       let tests_by_map = GenTest.expected_code_all_maps meta in
       (* get the test values from the dbtoaster trace if available *)
       let p', test_vals =
         if not @: null cmd_line_params.trace_files then
-          let code_s, maplist = 
+          let code_s, maplist =
             let trace_file = at cmd_line_params.trace_files idx in
             FromTrace.string_of_file trace_file ~is_dist:true
           in
            (* debug *)
            (* List.iter (fun (nm, code) -> print_endline code) maplist; *)
-          let map_final_l = 
+          let map_final_l =
             list_map (fun (nm, code) -> nm, parse_k3_expr code) maplist in
           (* join according to map name *)
           let map_tests_join = assoc_join map_final_l tests_by_map in
-          let tests_vals = 
-            list_map (fun (_, (final, e)) -> e, InlineExpr final) 
+          let tests_vals =
+            list_map (fun (_, (final, e)) -> e, InlineExpr final)
               map_tests_join
           in
           (* filter our all role stuff in the original generated ast *)
-          let filter_p = List.filter 
+          let filter_p = List.filter
             (fun d -> not (is_role d || is_def_role d)) p in
           (* add the produced test roles and trigger *)
-          (* debug *) 
+          (* debug *)
           (*print_endline @: code_s;*)
           let new_p = filter_p @ parse_k3_prog code_s in
           new_p, tests_vals
-        else 
+        else
           (* we don't have a trace file for final value tests *)
           p, list_map (fun (_, e) -> e, FileExpr "dummy") tests_by_map
       in
@@ -427,22 +427,22 @@ let print_k3_test_program = function
       let prog_test = typed_program_test prog_test in
       print_endline @: PS.string_of_program_test prog_test
 
-  | idx, K3Data p -> 
+  | idx, K3Data p ->
       (* get the test values from the dbtoaster trace *)
       let p', test_vals =
         if cmd_line_params.trace_files <> [] then
-          let code_s, maplist = 
+          let code_s, maplist =
             let trace_file = at cmd_line_params.trace_files idx in
             FromTrace.string_of_file trace_file ~is_dist:false
           in
            (* debug *)
             (*List.iter (fun (nm, code) -> print_endline code) maplist; *)
-          let map_final_l = list_map (fun (nm, code) -> 
+          let map_final_l = list_map (fun (nm, code) ->
             K3Helpers.mk_var nm, parse_k3_expr code) maplist in
-          let tests_vals = list_map (fun (nm, e) -> 
+          let tests_vals = list_map (fun (nm, e) ->
             nm, InlineExpr e) map_final_l in
           (* filter our all role stuff in the original generated ast *)
-          let filter_p = List.filter 
+          let filter_p = List.filter
             (fun d -> not (is_role d || is_def_role d)) p in
           (* add the produced test roles and trigger *)
           (* debug *)
@@ -461,19 +461,19 @@ let print_k3_test_program = function
 
 let print_reified_k3_program = function
   | K3Data p | K3DistData(p, _) ->
-    let print_expr_fn c e = 
+    let print_expr_fn c e =
         lazy (print_reified_expr @: reify_expr [] e) in
-    let tp = typed_program p in 
+    let tp = typed_program p in
     print_endline @: string_of_program ~print_expr_fn:print_expr_fn tp
   | _ -> error "Cannot print this type of data"
 
 let print_imp func print_types = function
   | K3Data p | K3DistData(p, _) ->
     let string_of_meta m =
-      (if print_types then (ImperativeUtil.string_of_type @: fst m)^";" 
+      (if print_types then (ImperativeUtil.string_of_type @: fst m)^";"
        else "")^
       (string_of_annotation @: snd m)
-    in print_endline @: 
+    in print_endline @:
       ImperativeUtil.string_of_program string_of_meta @: func p
   | _ -> error "Cannot print this type of data"
 
@@ -483,13 +483,13 @@ let print_imperative_program = print_imp imperative_program
 let print_cpp_program = function
   | K3Data p | K3DistData(p, _) ->
     let files_and_content = CPPGen.generate_program @: cpp_program p in
-    let mk_filename id = (String.make 40 '=')^" "^id in 
+    let mk_filename id = (String.make 40 '=')^" "^id in
     let print_content (f,c) =
       print_endline @: mk_filename f; print_endline c; print_endline "\n\n"
     in
     List.iter print_content files_and_content
   | _ -> error "Cannot print this type of data"
-  
+
 (* Top-level print handler *)
 let print params inputs =
   let idx_inputs = insert_index_fst 0 inputs in
@@ -506,21 +506,21 @@ let print params inputs =
 
 (* Test actions *)
 let test params inputs =
-  let test_fn fname input = 
+  let test_fn fname input =
     match input with
-    | K3TestData(ExprTest _ as x) -> test_expressions fname x 
-    | K3TestData((ProgTest _ | NetworkTest _) as x) -> 
+    | K3TestData(ExprTest _ as x) -> test_expressions fname x
+    | K3TestData((ProgTest _ | NetworkTest _) as x) ->
         let globals_k3 = K3Global.globals params.peers in
         test_program globals_k3 (interpret_k3 params) fname x
     | x -> error @: "testing not yet implemented for "^string_of_data x
   in List.iter2 test_fn params.input_files inputs
 
-let transform_to_k3_dist partmap p proginfo = 
+let transform_to_k3_dist partmap p proginfo =
   (* do not use. Simply for type checking original program *)
   (*tp = typed_program p in *)
   try
     GenDist.gen_dist proginfo partmap p
-  with Invalid_argument(msg) -> 
+  with Invalid_argument(msg) ->
     print_endline ("ERROR: " ^msg);
     print_endline (ProgInfo.string_of_prog_data proginfo);
     exit (-1)
@@ -529,10 +529,10 @@ let process_inputs params =
   let proc_fn f = match params.in_lang, !(params.action) with
     | K3in, Test -> K3TestData(parse_test_file params f)
     | K3in, _    -> K3Data(parse_k3_file f)
-    | M3in, _    -> 
+    | M3in, _    ->
         let m3prog = parse_m3_file f in
         let proginfo = M3ProgInfo.prog_data_of_m3 m3prog in
-        if params.debug_info then 
+        if params.debug_info then
           print_endline (ProgInfo.string_of_prog_data proginfo);
         let prog = M3ToK3.m3_to_k3 m3prog in
         if params.out_lang = K3Test then K3Data(prog)
@@ -542,16 +542,16 @@ let process_inputs params =
 (* this function can only transform to another k3 format *)
 let transform params ds =
   let proc_fn input = match params.out_lang, input with
-   | (AstK3Dist | K3Dist | K3DistTest), K3DistData(p, proginfo) -> 
+   | (AstK3Dist | K3Dist | K3DistTest), K3DistData(p, proginfo) ->
        let p' = transform_to_k3_dist params.partition_map p proginfo in
        K3DistData(p', proginfo)
-   | (AstK3Dist | K3Dist | K3DistTest), _ -> 
+   | (AstK3Dist | K3Dist | K3DistTest), _ ->
        failwith "Missing metadata for distributed version"
    | _, data -> data
   in List.map proc_fn ds
 
 (* Driver execution *)
-let process_parameters params = 
+let process_parameters params =
   (* preprocess params *)
 
   (* distributed programs must have M3 as their input language *)
@@ -572,45 +572,45 @@ let process_parameters params =
 let append_peers ipr_str_list =
   let ip_roles = Str.split (Str.regexp @: Str.quote ",") ipr_str_list in
   let new_peers = List.map parse_ip_role ip_roles in
-  if cmd_line_params.default_peer then 
+  if cmd_line_params.default_peer then
     cmd_line_params.peers <- new_peers
   else
     cmd_line_params.peers <- cmd_line_params.peers @ new_peers
 
 (* Load peer address from file
  * NOTE does not contain localhost if peers are specified*)
-let load_peer file = 
+let load_peer file =
   let line_lst = read_file_lines file in
-  if (List.length line_lst) = 0 then 
+  if (List.length line_lst) = 0 then
     error "Empty node file"
   else
-    cmd_line_params.peers 
+    cmd_line_params.peers
       <- (List.map parse_ip_role line_lst)
 
-let load_partition_map file = 
+let load_partition_map file =
   let str = read_file file in
   let str_full = "declare pmap : [(string, [(int, int)])] = "^str in
-  let prog = parse_program_from_string K3Parser.program K3Lexer.tokenize str_full 
+  let prog = parse_program_from_string K3Parser.program K3Lexer.tokenize str_full
   in cmd_line_params.partition_map <- K3Route.list_of_k3_partition_map prog
-  
+
 (* Argument descriptions *)
 let param_specs = Arg.align
 
-  (* Actions *) 
+  (* Actions *)
   (action_specs cmd_line_params.action@
    test_specs cmd_line_params.test_mode@[
-  
+
   (* Compilation parameters *)
   "-i", Arg.String (fun l -> cmd_line_params.in_lang <- parse_in_lang l),
       "lang     Set the compiler's input language";
   "-l", Arg.String (fun l -> cmd_line_params.out_lang <- parse_out_lang l),
       "lang     Set the compiler's output language";
-  "-I", Arg.String (fun p -> 
+  "-I", Arg.String (fun p ->
       cmd_line_params.search_paths <- cmd_line_params.search_paths @ [p]),
       "dir      Include a directory in the module search path";
-  
+
   (* Interpreter and evaluation parameters *)
-  "-n", Arg.String append_peers, 
+  "-n", Arg.String append_peers,
       "[addr]   Append addresses to the peer list";
   "-steps", Arg.String (fun len ->
       cmd_line_params.run_length <- Int64.of_string len),
@@ -619,12 +619,12 @@ let param_specs = Arg.align
       "file     Load a partition map from a file";
   "-peers", Arg.String load_peer,
       "file     Load peer address from a file";
-  "-trace", Arg.String (fun file -> 
+  "-trace", Arg.String (fun file ->
     cmd_line_params.trace_files <- cmd_line_params.trace_files @ [file]),
       "file     Load a DBToaster trace file";
 
   (* Debugging parameters *)
-  
+
   "-t", Arg.Unit (fun () -> cmd_line_params.print_types <- true),
       "         Print types as part of output";
   "-d", Arg.Unit (fun () -> cmd_line_params.debug_info  <- true),
@@ -653,7 +653,7 @@ let usage_msg =
      "\n---- Options ----")
 
 let parse_cmd_line () =
-  Arg.parse param_specs 
+  Arg.parse param_specs
     (fun f -> cmd_line_params.input_files <- cmd_line_params.input_files @ [f])
     usage_msg
 
@@ -663,7 +663,7 @@ let main () =
   if (List.length cmd_line_params.input_files) < 1 then
     (Arg.usage param_specs usage_msg;
      error "\nNo input files specified");
-  
+
   process_parameters cmd_line_params
 
 let _ = if not !Sys.interactive then Printexc.print main ()

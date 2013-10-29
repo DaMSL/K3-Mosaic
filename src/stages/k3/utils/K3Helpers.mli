@@ -43,7 +43,7 @@ val wrap_tbag : value_type_t -> value_type_t
 val wrap_tbag_mut : value_type_t -> value_type_t
 val wrap_ttuple : value_type_t list -> value_type_t
 val wrap_ttuple_mut : value_type_t list -> value_type_t
-val wrap_tmaybe : value_type_t -> value_type_t 
+val wrap_tmaybe : value_type_t -> value_type_t
 val wrap_tmaybes : value_type_t list -> value_type_t list
 val wrap_tfunc : value_type_t -> value_type_t -> type_t
 
@@ -148,22 +148,22 @@ val mk_has_member :
   value_type_t -> expr_t
 
 (* macro to create a trigger *)
-val mk_code_sink : id_t -> arg_t -> (id_t * value_type_t * annotation_t) list 
+val mk_code_sink : id_t -> arg_t -> (id_t * value_type_t * annotation_t) list
   -> expr_t -> flow_statement_t * annotation_t
 
 (* macro to create a global value *)
 val mk_global_val : id_t -> value_type_t -> declaration_t * annotation_t
 
-val mk_global_val_init : 
+val mk_global_val_init :
   id_t -> value_type_t -> expr_t -> declaration_t * annotation_t
 
 (* macro to generate a global function with more control over args *)
 val mk_global_fn_raw:
-  id_t -> arg_t -> value_type_t -> value_type_t -> expr_t -> 
+  id_t -> arg_t -> value_type_t -> value_type_t -> expr_t ->
     declaration_t * annotation_t
 
 (* macro to create a global function *)
-val mk_global_fn : 
+val mk_global_fn :
   id_t -> (id_t * value_type_t) list -> value_type_t list ->
   expr_t -> declaration_t * annotation_t
 

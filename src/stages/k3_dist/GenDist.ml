@@ -5,15 +5,15 @@
 
 (* Notes:
  * We currently carry the vid inside tuples all the way *)
-  
 
-(* Call Graph * 
- * on_insert_<trigger>_switch  
+
+(* Call Graph *
+ * on_insert_<trigger>_switch
  *    on_put_<trigger>
- *    do_complete_<trigger> (* no maps *) 
- *    on_insert_<trigger>_fetch 
- *        <trigger>_fetch_<rhs_map> -> 
- *            <trigger>_push_<rhs_map> -> 
+ *    do_complete_<trigger> (* no maps *)
+ *    on_insert_<trigger>_fetch
+ *        <trigger>_fetch_<rhs_map> ->
+ *            <trigger>_push_<rhs_map> ->
  *                get_completed_stmts
  *                do_complete_<trigger>_<stmt>
  *                    get_corrective_list
@@ -47,7 +47,7 @@ let send_push_name_of_t p trig_nm stmt_id map_id =
   trig_nm^"_send_push_s"^string_of_int stmt_id^"_m_"^map_name_of p map_id
 let rcv_push_name_of_t p trig_nm stmt_id map_id =
   trig_nm^"_rcv_push_s"^string_of_int stmt_id^"_m_"^map_name_of p map_id
-let send_corrective_name_of_t p map_id = 
+let send_corrective_name_of_t p map_id =
   map_name_of p map_id^"_send_correctives"
 let do_complete_name_of_t p trig_nm stmt_id =
   trig_nm^"_do_complete_s"^string_of_int stmt_id
@@ -58,32 +58,32 @@ let do_corrective_name_of_t p trig_nm stmt_id map_id =
   trig_nm^"_do_corrective_s"^string_of_int stmt_id^"_m_"^map_name_of p map_id
 
 let declare_global_vars p ast =
-  (* vid_counter to generate vids. 
+  (* vid_counter to generate vids.
    * We use a singleton because refs aren't ready *)
-  let vid_counter_code = 
+  let vid_counter_code =
     mk_global_val_init vid_counter_name vid_counter_t @:
     mk_singleton vid_counter_t @: mk_cint 1 in
 
   (* epoch code *)
-  let epoch_code = 
+  let epoch_code =
     mk_global_val_init epoch_name epoch_t @:
     mk_singleton epoch_t @: mk_cint 0 in
 
   let global_map_decl_code = M.modify_map_decl_ast p ast in
 
   (* we need to make buffer versions of rhs maps based on their statement *)
-  let map_buffers_decl_code = 
+  let map_buffers_decl_code =
     (* for all rhs, lhs map pairs *)
     let make_map_decl (stmt, map) =
       let map_name = P.buf_of_stmt_map_id p stmt map in
-      mk_global_val map_name @: wrap_tbag @: wrap_ttuple @: map_types_with_v_for p map 
+      mk_global_val map_name @: wrap_tbag @: wrap_ttuple @: map_types_with_v_for p map
     in
     for_all_stmts_rhs_maps p make_map_decl
   in
 
   (* stmt counters, used to make sure we've received all msgs *)
   (* moved to K3Dist
-  let stmt_cntrs_type = wrap_tset_mut @: wrap_ttuple_mut 
+  let stmt_cntrs_type = wrap_tset_mut @: wrap_ttuple_mut
       [t_vid_mut; t_int_mut; t_int_mut] in
   *)
   let stmt_cntrs_code = mk_global_val stmt_cntrs_name stmt_cntrs_type in
@@ -94,9 +94,9 @@ let declare_global_vars p ast =
       wrap_tset @: wrap_ttuple [t_vid; t_trig_id] in
     let log_struct_code_for t = mk_global_val
       (log_for_t t) @:
-      wrap_tset @: 
+      wrap_tset @:
         wrap_ttuple @: extract_arg_types @: args_of_t_with_v p t
-    in 
+    in
     let log_structs = for_all_trigs p log_struct_code_for in
     log_master_code::log_structs
   in
@@ -104,20 +104,20 @@ let declare_global_vars p ast =
   epoch_code ::
   global_map_decl_code @
   map_buffers_decl_code @
-  stmt_cntrs_code :: 
-  GC.acks_code :: 
+  stmt_cntrs_code ::
+  GC.acks_code ::
   GC.vid_rcv_cnt_code GC.vid_rcv_cnt_name ::
   GC.vid_rcv_cnt_code GC.vid_rcv_cnt_2_name ::
   GC.vid_buf_code ::
   GC.vid_buf_2_code ::
   GC.min_max_acked_vid_code ::
   GC.gc_vid_code ::
-  log_structs_code 
+  log_structs_code
 
 (* global functions *)
 (* most of our global functions come from the shuffle/route code *)
-let declare_global_funcs partmap p = 
-  let global_vid_ops = 
+let declare_global_funcs partmap p =
+  let global_vid_ops =
       mk_global_vid_op vid_eq VEq ::
       mk_global_vid_op vid_neq VNeq ::
       mk_global_vid_op vid_lt VLt ::
@@ -126,7 +126,7 @@ let declare_global_funcs partmap p =
       mk_global_vid_op vid_geq VGeq ::
       [] in
   (* log_write *)
-  let log_write_code t = mk_global_fn 
+  let log_write_code t = mk_global_fn
     (log_write_for p t)
     (args_of_t_with_v p t)
     [t_unit] @:
@@ -139,7 +139,7 @@ let declare_global_funcs partmap p =
       ]
   in
   (* log_get_bound -- necessary since each trigger has different args *)
-  let log_get_bound_code t = 
+  let log_get_bound_code t =
     let pat_tuple = args_of_t_with_v p t in
     let pat_unknown = List.map (fun (id,_) -> match id with
                                   | "vid" -> mk_var "vid"
@@ -157,7 +157,7 @@ let declare_global_funcs partmap p =
     ["vid", t_vid]
     [wrap_tset @: wrap_ttuple [t_vid; t_trig_id]] @:
     mk_filtermap
-      (mk_lambda 
+      (mk_lambda
         (wrap_args ["vid2", t_vid; "trig", t_trig_id]) @:
         v_geq (mk_var "vid2") @: mk_var "vid"
       )
@@ -170,7 +170,7 @@ let declare_global_funcs partmap p =
   (* add_delta_to_buffer *)
   (* We reuse this function for 2 purposes:
    * For a regular do_complete, we need to add to the future vids that exist only.
-   * For a corrective, we need to update the current vid (if it exists) and all future 
+   * For a corrective, we need to update the current vid (if it exists) and all future
    * exising vids, and we need to do it for the buffer map *)
   let add_delta_to_buffer_code maps =
     let func_name, map_name, map_id, comp_fn =
@@ -229,7 +229,7 @@ let declare_global_funcs partmap p =
   global_vid_ops @
   [log_read_geq_code] @
   for_all_maps p (fun map -> add_delta_to_buffer_code @: `DoComplete map) @
-  for_all_stmts_rhs_maps p (fun (stmt,m) -> 
+  for_all_stmts_rhs_maps p (fun (stmt,m) ->
     add_delta_to_buffer_code @: `Corrective(stmt,m)) @
   for_all_trigs p log_write_code @
   for_all_trigs p log_get_bound_code @
@@ -242,14 +242,14 @@ let declare_global_funcs partmap p =
 let on_init_trig p =
   mk_code_sink "on_init" (wrap_args ["x", t_int]) [] @:
     mk_block
-      [mk_iter 
-        (mk_lambda 
+      [mk_iter
+        (mk_lambda
           (wrap_args K3Global.peers_id_type) @:
           (* only add to node list if role <> switch *)
           mk_if
            (mk_neq
             (mk_var K3Global.peers_role_name) (mk_cstring "switch"))
-           (mk_apply (mk_var K3Ring.add_node_name) @: 
+           (mk_apply (mk_var K3Ring.add_node_name) @:
               mk_tuple @: ids_to_vars K3Global.peers_ids)
            (mk_cunit)
         ) @:
@@ -266,21 +266,21 @@ let start_trig p t =
         mk_apply (mk_var hash_addr) G.me_var
       ]) @:
       mk_block [
-         mk_send 
-           (mk_ctarget(send_fetch_name_of_t p t)) G.me_var @: 
+         mk_send
+           (mk_ctarget(send_fetch_name_of_t p t)) G.me_var @:
            mk_tuple @: args_of_t_as_vars_with_v p t;
 
         (* increase vid_counter *)
         mk_update vid_counter (mk_peek vid_counter) @:
           mk_add (mk_cint 1) (mk_peek vid_counter);
-        
-        (* start garbage collection every 10 
+
+        (* start garbage collection every 10
          * TODO maybe need to change by GC every few seconds *)
         (* disable gc for now so we can test properly *)
         (*
         mk_if
-          (mk_eq 
-            (mk_apply 
+          (mk_eq
+            (mk_apply
               (mk_var "mod") @:
                mk_tuple[mk_peek vid_counter;mk_cint 10])
             (mk_cint 0)) (*end eq*)
@@ -297,11 +297,11 @@ let send_fetch_trig p s_rhs_lhs s_rhs trig_name =
     if null s_rhs then []
     else
     [mk_iter
-      (mk_lambda 
-        (wrap_args ["ip", t_addr; 
+      (mk_lambda
+        (wrap_args ["ip", t_addr;
           "stmt_map_ids", wrap_tbag @: wrap_ttuple [t_stmt_id; t_map_id]]
         ) @:
-        mk_send 
+        mk_send
           (mk_ctarget (rcv_fetch_name_of_t p trig_name))
           (mk_var "ip") @:
           mk_tuple @:
@@ -315,15 +315,15 @@ let send_fetch_trig p s_rhs_lhs s_rhs trig_name =
         )
         (mk_assoc_lambda (* Agg function *)
           (wrap_args ["acc", wrap_tbag @: wrap_ttuple [t_stmt_id; t_map_id]])
-          (wrap_args 
+          (wrap_args
             ["stmt_id", t_stmt_id; "map_id", t_map_id; "ip", t_addr]) @:
           mk_combine
             (mk_var "acc") @:
-            mk_singleton 
+            mk_singleton
               (wrap_tbag @: wrap_ttuple [t_stmt_id; t_map_id]) @:
               mk_tuple [mk_var "stmt_id";mk_var "map_id"]
-          
-        ) 
+
+        )
         (mk_empty @: wrap_tbag @: wrap_ttuple [t_stmt_id; t_map_id])
         (* [] *) @:
         List.fold_left
@@ -331,13 +331,13 @@ let send_fetch_trig p s_rhs_lhs s_rhs trig_name =
             let route_fn = route_for p rhs_map_id in
             let key = partial_key_from_bound p stmt_id rhs_map_id in
             mk_combine
-              (mk_map 
+              (mk_map
                 (mk_lambda (wrap_args["ip", t_addr]) @:
                   mk_tuple @:
-                    [mk_cint stmt_id; mk_cint rhs_map_id; 
+                    [mk_cint stmt_id; mk_cint rhs_map_id;
                       mk_var "ip"]
                 ) @:
-                mk_apply 
+                mk_apply
                   (mk_var route_fn) @:
                   mk_tuple key
               )
@@ -352,11 +352,11 @@ let send_completes_for_stmts_with_no_fetch =
   if null s_no_rhs then []
   else
     List.fold_left
-      (fun acc_code (stmt_id, lhs_map_id, do_complete_trig_name) -> 
+      (fun acc_code (stmt_id, lhs_map_id, do_complete_trig_name) ->
         let route_fn = route_for p lhs_map_id in
         let key = partial_key_from_bound p stmt_id lhs_map_id in
           acc_code@
-          [mk_iter 
+          [mk_iter
             (mk_lambda (wrap_args["ip", t_addr]) @:
               mk_send
                 (mk_ctarget(do_complete_trig_name))
@@ -365,11 +365,11 @@ let send_completes_for_stmts_with_no_fetch =
             ) @:
             mk_apply (mk_var route_fn) @: mk_tuple key
           ]
-      ) 
+      )
       [] @:
-      List.map 
-        (fun stmt_id -> 
-          (stmt_id, lhs_map_of_stmt p stmt_id, 
+      List.map
+        (fun stmt_id ->
+          (stmt_id, lhs_map_of_stmt p stmt_id,
           do_complete_name_of_t p trig_name stmt_id)
         )
         s_no_rhs
@@ -381,7 +381,7 @@ let send_puts =
    * count is generated by counting the number of messages going to a
    * specific IP *)
   [mk_iter
-    (mk_lambda 
+    (mk_lambda
       (wrap_args ["ip", t_addr; "stmt_id_cnt_list", stmt_id_cnt_type]) @:
       mk_block[
         (* send rcv_put *)
@@ -391,7 +391,7 @@ let send_puts =
           mk_tuple @: G.me_var ::  mk_var "stmt_id_cnt_list"::
             args_of_t_as_vars_with_v p trig_name;
         (* insert a record into the ack list, waiting for ack*)
-         mk_insert GC.ack_lst @: 
+         mk_insert GC.ack_lst @:
               mk_tuple [mk_var "ip"; mk_var "vid"; mk_cbool false]
         ]
     ) @:
@@ -403,7 +403,7 @@ let send_puts =
       )
       (mk_assoc_lambda (* agg func *)
         (wrap_args ["acc", stmt_id_cnt_type])
-        (wrap_args 
+        (wrap_args
           ["ip_and_stmt_id", wrap_ttuple [t_addr; t_stmt_id]; "count", t_int]
         ) @:
         mk_let_many (* break up because of the way inner gbagg forms tuples *)
@@ -422,7 +422,7 @@ let send_puts =
           mk_tuple [mk_var "ip"; mk_var "stmt_id"]
         )
         (mk_assoc_lambda (* agg func *)
-          (wrap_args ["acc", t_int]) 
+          (wrap_args ["acc", t_int])
           (wrap_args ["ip", t_addr; "stmt_id", t_stmt_id; "count", t_int]) @:
           mk_add
             (mk_var "acc") @:
@@ -460,7 +460,7 @@ let send_puts =
               mk_map
                 (mk_lambda
                   (wrap_args  ["ip", t_addr; "tuples", tuple_types]) @:
-                      mk_tuple 
+                      mk_tuple
                         [mk_var "ip"; mk_cint stmt_id; mk_var "sender_count"]
                 ) @:
                 mk_apply
@@ -483,9 +483,9 @@ mk_code_sink
     send_completes_for_stmts_with_no_fetch@
     send_puts@
     send_fetches_of_rhs_maps
-    
-    
-   
+
+
+
 (* trigger_rcv_fetch
  * -----------------------------------------
  * Receive a fetch at a node.
@@ -500,7 +500,7 @@ mk_code_sink
 let rcv_fetch_trig p trig =
   mk_code_sink
     (rcv_fetch_name_of_t p trig)
-    (wrap_args @: ("stmts_and_map_ids", 
+    (wrap_args @: ("stmts_and_map_ids",
       wrap_tset @: wrap_ttuple [t_stmt_id; t_map_id])::
       args_of_t_with_v p trig
     )
@@ -516,13 +516,13 @@ let rcv_fetch_trig p trig =
           (wrap_args ["stmt_id", t_stmt_id; "map_id", t_map_id]) @:
           (* this send is not polymorphic. every fetch trigger expects
            * the same set of bound variables. *)
-          List.fold_right 
+          List.fold_right
             (fun stmt acc_code -> mk_if
               (mk_eq
                 (mk_var "stmt_id") @:
                 mk_cint stmt
               )
-              (List.fold_right 
+              (List.fold_right
                 (fun map_id acc_code2 -> mk_if
                   (mk_eq
                     (mk_var "map_id") @:
@@ -576,7 +576,7 @@ mk_code_sink
             mk_update (* really an error -- shouldn't happen. Raise exception? *)
               stmt_cntrs
               (mk_peek @: mk_slice stmt_cntrs query_pat) @:
-              mk_tuple @: 
+              mk_tuple @:
                 part_pat_as_vars@[mk_add (mk_var "old_count") @: mk_var "count"]
           ) @:
           mk_insert
@@ -599,22 +599,22 @@ mk_code_sink
  * processing on the switch side to figure out which maps (in which stmts) we
  * have locally
  *)
-let send_push_stmt_map_trig p s_rhs_lhs trig_name = 
+let send_push_stmt_map_trig p s_rhs_lhs trig_name =
   List.fold_left
     (fun acc_code (stmt_id, (rhs_map_id, lhs_map_id)) ->
-      let rhs_map_types = map_types_with_v_for p rhs_map_id in 
+      let rhs_map_types = map_types_with_v_for p rhs_map_id in
       let rhs_map_name = map_name_of p rhs_map_id in
       let shuffle_fn = find_shuffle stmt_id rhs_map_id lhs_map_id in
       let partial_key = partial_key_from_bound p stmt_id lhs_map_id in
       let slice_key = slice_key_from_bound p stmt_id rhs_map_id in
       acc_code@
-      [mk_code_sink 
+      [mk_code_sink
         (send_push_name_of_t p trig_name stmt_id rhs_map_id)
         (wrap_args @: args_of_t_with_v p trig_name)
         [] @: (* locals *)
           mk_iter
-            (mk_lambda 
-              (wrap_args 
+            (mk_lambda
+              (wrap_args
                 ["ip",t_addr;"tuples",wrap_tset @: wrap_ttuple rhs_map_types]
               ) @:
               mk_send
@@ -628,7 +628,7 @@ let send_push_stmt_map_trig p s_rhs_lhs trig_name =
               mk_tuple
                 [mk_tuple partial_key;
                  (* we need the latest vid data that's less than the current vid *)
-                 K3Dist.map_latest_vid_vals p (mk_var rhs_map_name) 
+                 K3Dist.map_latest_vid_vals p (mk_var rhs_map_name)
                    (some slice_key) rhs_map_id ~keep_vid:true;
                  mk_cbool true]
       ] (* trigger *)
@@ -640,14 +640,14 @@ let send_push_stmt_map_trig p s_rhs_lhs trig_name =
 (* rcv_push_trig
  * --------------------------------------
  * Receive a push at a node
- * Also called for virtual pushes: local data transfers to allow tracking of 
+ * Also called for virtual pushes: local data transfers to allow tracking of
  * present data w/ counters params can be moved to the put statement, but it's
- * a good reminder to have it here 
+ * a good reminder to have it here
  * We write to specific buffer maps to prevent mixing of buffer and non-buffer
  * data, which can cause confusion when the time comes to compute.
  * A later optimization could be lumping maps between statements in a trigger *)
 
-let rcv_push_trig (p:P.prog_data_t) s_rhs trig_name = 
+let rcv_push_trig (p:P.prog_data_t) s_rhs trig_name =
 List.fold_left
   (fun acc_code (stmt_id, read_map_id) ->
     let rbuf_name = buf_of_stmt_map_id p stmt_id read_map_id in
@@ -657,7 +657,7 @@ List.fold_left
     let reduced_pat = slice_pat_take (List.length tuple_pat - 1) tuple_pat in
     let reduced_code = mk_rebuild_tuple "tuple" tuple_types reduced_pat in
     acc_code@
-    [mk_code_sink 
+    [mk_code_sink
       (rcv_push_name_of_t p trig_name stmt_id read_map_id)
       (wrap_args @: ("tuples", wrap_tset @: wrap_ttuple @: tuple_types)::
         args_of_t_with_v p trig_name
@@ -669,7 +669,7 @@ List.fold_left
           (mk_lambda
             (wrap_args ["tuple", wrap_ttuple tuple_types]) @:
             mk_if
-              (mk_has_member 
+              (mk_has_member
                 (mk_var rbuf_name)
                 reduced_code @:
                 wrap_ttuple tuple_types
@@ -706,17 +706,17 @@ List.fold_left
                  full_pat
                  (mk_peek stmt_cntrs_slice) @:
                  mk_tuple @:
-                   part_pat_as_vars @ 
+                   part_pat_as_vars @
                    [mk_sub (mk_var "count") (mk_cint 1)]
-               
+
              ;mk_if (* check if the counter is 0 *)
                (mk_eq
                  (mk_peek stmt_cntrs_slice) @:
                  mk_tuple @: part_pat_as_vars @ [mk_cint 0]
-               ) 
+               )
                (* Send to local do_complete *)
                (mk_send
-                 (mk_ctarget @: 
+                 (mk_ctarget @:
                    do_complete_name_of_t p trig_name stmt_id)
                  G.me_var @:
                  mk_tuple @: args_of_t_as_vars_with_v p trig_name
@@ -733,13 +733,13 @@ List.fold_left
   )
   [] (* empty code *)
   s_rhs
-    
- 
+
+
 (* list of trig, stmt with a map on the rhs that's also on the lhs. These are
  * the potential corrective maps *)
 let maps_potential_corrective p =
   let lhs_maps = ListAsSet.uniq @: for_all_stmts p @: lhs_map_of_stmt p in
-  let rhs_maps = ListAsSet.uniq @: List.flatten @: 
+  let rhs_maps = ListAsSet.uniq @: List.flatten @:
     for_all_stmts p @: rhs_maps_of_stmt p in
   ListAsSet.inter lhs_maps rhs_maps
 
@@ -748,28 +748,32 @@ let maps_potential_corrective p =
  * Generate code to send data for all possible correctives.
  * When we compute, we produce lhs results. These might be used in other
  * statements as rhs inputs. We need to find those places, and then carry out
- * the shuffling of the changed data for those statements ie from rhs to lhs 
+ * the shuffling of the changed data for those statements ie from rhs to lhs
+ * This is a very coarse-grained method of finding correctives needed.
+ *
+ * We must make sure that we only send the delta once. However, all vids can be sent
+ * for execution together.
  *)
 let send_corrective_trigs p =
   (* for a given lhs map which we just changed, find all statements containing the
-   * same map on the rhs *)
-  let send_correctives map_id = 
+   * same map on the rhs. This is crude, but should be enough for a first try *)
+  let send_correctives map_id =
     (* list of (trig,stmt) that have this map_id on the rhs *)
     let trigs_stmts_with_matching_rhs_map =
         List.filter
           (fun (trig, stmt_id) -> stmt_has_rhs_map p stmt_id map_id) @:
           List.flatten @:
-            for_all_trigs p 
-              (fun trig -> 
+            for_all_trigs p
+              (fun trig ->
                 List.map (fun stmt -> trig, stmt) @: stmts_of_t p trig) in
-    (* predefined K3 list of stmts with rhs maps (ie. the above) *)
-    let trig_stmt_k3_list = 
+    (* turn the ocaml list into a static k3 list *)
+    let trig_stmt_k3_list =
       let types = wrap_tset @: wrap_ttuple [t_trig_id; t_stmt_id] in
-      List.fold_left 
-        (fun acc_code (trig, stmt_id) -> 
-          mk_combine 
+      List.fold_left
+        (fun acc_code (trig, stmt_id) ->
+          mk_combine
             (mk_singleton types @:
-              mk_tuple @: [mk_cint (trigger_id_for_name p trig); 
+              mk_tuple @: [mk_cint (trigger_id_for_name p trig);
                mk_cint stmt_id]
             )
             acc_code
@@ -780,7 +784,7 @@ let send_corrective_trigs p =
     match trigs_stmts_with_matching_rhs_map with [] -> [] | _ ->
     (* we transfer with vid so we don't need to strip *)
     let tuple_types = wrap_ttuple @: map_types_with_v_for p map_id in
-    [mk_code_sink 
+    [mk_code_sink
       (send_corrective_name_of_t p map_id)
       (wrap_args ["vid", t_vid; "delta_tuples", wrap_tset tuple_types])
       [] @:
@@ -795,7 +799,7 @@ let send_corrective_trigs p =
         mk_iter  (* loop over corrective list *)
           (mk_lambda
             (wrap_args ["vid", t_vid; "stmt_id", t_stmt_id]) @:
-            List.fold_left  
+            List.fold_left
               (* loop over all possible read map matches *)
               (fun acc_code (target_trig, target_stmt) ->
                 (* we already have the map vars for the rhs map in the
@@ -808,21 +812,21 @@ let send_corrective_trigs p =
                     (mk_var "stmt_id") @:
                     mk_cint target_stmt
                   )
-                  (mk_iter 
-                    (mk_lambda 
+                  (mk_iter
+                    (mk_lambda
                       (wrap_args ["ip", t_addr; "tuples", wrap_tset tuple_types]) @:
                       mk_send
                         (* we always send to the same map_id ie. the remote
                          * buffer of the same map we just calculated *)
                         (mk_ctarget (rcv_corrective_name_of_t p target_trig
-                          target_stmt map_id)) 
+                          target_stmt map_id))
                         (mk_var "ip") @:
                         mk_tuple [mk_var "vid"; mk_var "tuples"]
                     ) @:
                     (* get bound vars from log so we can calculate shuffle *)
-                    mk_let_many 
+                    mk_let_many
                       (args_of_t_with_v p target_trig)
-                      (mk_apply 
+                      (mk_apply
                         (mk_var @: log_get_bound_for p target_trig) @:
                         mk_var "vid"
                       ) @:
@@ -836,21 +840,21 @@ let send_corrective_trigs p =
                   acc_code (* just another branch on the if *)
               )
               mk_cunit (* base case *)
-              trigs_stmts_with_matching_rhs_map 
+              trigs_stmts_with_matching_rhs_map
           ) @:
           mk_var "corrective_list"
     ]
   in
   List.flatten @: List.map send_correctives @: maps_potential_corrective p
 
- 
+
 let do_complete_trigs p ast trig_name =
   let do_complete_trig stmt_id =
     mk_code_sink (do_complete_name_of_t p trig_name stmt_id)
       (wrap_args @: args_of_t_with_v p trig_name)
       [] @: (* locals *)
         let lmap = lhs_map_of_stmt p stmt_id in
-        let send_to = 
+        let send_to =
             if List.exists (fun m -> m = lmap) @: maps_potential_corrective p
             then Some(send_corrective_name_of_t p lmap)
             else None
@@ -860,10 +864,10 @@ in
 List.map (fun stmt -> do_complete_trig stmt) @: stmts_of_t p trig_name
 
 
-(* get_corrective_list: 
+(* get_corrective_list:
  * ---------------------------------------
  * Return list of corrective statements we need to execute by checking
- * which statements were performed after time x that used a particular map 
+ * which statements were performed after time x that used a particular map
  * The only reason for this function is that we may have the same stmt
  * needing to execute with different vids
  * Optimization TODO: check also by ranges within the map.
@@ -876,7 +880,7 @@ let filter_corrective_list = mk_global_fn filter_corrective_list_name
   [wrap_tset @: wrap_ttuple [t_vid; t_stmt_id]]
   (mk_sort (* sort so that early vids are first for performance *)
     (mk_flatten @: mk_map
-      (mk_lambda 
+      (mk_lambda
         (wrap_args ["trig_id", t_trig_id; "stmt_id", t_stmt_id]) @:
         mk_filtermap
           (mk_lambda (wrap_args ["vid", t_vid; "trig_id2", t_trig_id]) @:
@@ -887,7 +891,7 @@ let filter_corrective_list = mk_global_fn filter_corrective_list_name
           ) @:
           mk_apply  (* list of triggers >= vid *)
             (mk_var log_read_geq) @: (* TODO *)
-            mk_var "vid"  
+            mk_var "vid"
       ) @:
       mk_var "trig_stmt_list"
     ) @:
@@ -897,21 +901,21 @@ let filter_corrective_list = mk_global_fn filter_corrective_list_name
       v_lt (mk_var "vid1") @: mk_var "vid2"
   )
 
-    
+
 (* receive_correctives:
  * ---------------------------------------
  * Function that gets called when a corrective message is received.
- * Receives bound variables and delta tuples for one map.  
+ * Receives bound variables and delta tuples for one map.
  *
  * Analogous to rcv_push for non-correctives
  * Has 2 parts: updating the local cache of the buffers, and executing the requested vid(s)
  *)
-let rcv_correctives_trig p s_rhs trig_name = 
+let rcv_correctives_trig p s_rhs trig_name =
 List.map
   (fun (stmt_id, rmap) ->
     mk_code_sink (rcv_corrective_name_of_t p trig_name stmt_id rmap)
-      (wrap_args 
-        ["vid", t_vid; 
+      (wrap_args
+        ["vid", t_vid;
         "delta_tuples", wrap_tset @: wrap_ttuple @: map_types_with_v_for p rmap]
       )
       [] @: (* locals *)
@@ -932,14 +936,14 @@ List.map
                 [mk_var "vid"; mk_cint stmt_id; mk_cint 0]
             )
             (* get bound vars from log *)
-            (mk_let_many 
+            (mk_let_many
               (args_of_t_with_v p trig_name)
-              (mk_apply 
+              (mk_apply
                 (mk_var @: log_get_bound_for p trig_name)
                 (mk_var "vid")
               ) @:
               mk_send
-                (mk_ctarget @: 
+                (mk_ctarget @:
                   do_corrective_name_of_t p trig_name stmt_id rmap
                 )
                 G.me_var @:
@@ -956,7 +960,7 @@ List.map
 let do_corrective_trigs p s_rhs ast trig_name =
 List.map
   (fun (stmt_id, map_id) ->
-    mk_code_sink 
+    mk_code_sink
       (do_corrective_name_of_t p trig_name stmt_id map_id)
       (wrap_args @: args_of_t_with_v p trig_name@
         ["delta_tuples", wrap_tset @: wrap_ttuple @: map_types_with_v_for p map_id]
@@ -974,8 +978,8 @@ List.map
 let demux_trigs ast =
   let trigs = U.triggers_of_program ast in
   let demux_s = "demux_" in
-  let demux_ts = 
-    List.filter (fun c -> 
+  let demux_ts =
+    List.filter (fun c ->
       String.sub (U.id_of_code c) 0 (String.length demux_s) = demux_s)
       trigs
   (* assume all demux are flow sinks too *)
@@ -983,11 +987,11 @@ let demux_trigs ast =
 
 (* we take the existing default role and prepend it with a one-shot to
  * call out on-init function *)
-let modified_roles ast = 
+let modified_roles ast =
   let roles = List.filter (fun d -> U.is_role d || U.is_def_role d) ast in
   let def_role_id = U.id_of_role @: List.find U.is_def_role roles in
   let pred = fun d -> U.is_role d && U.id_of_role d = def_role_id in
-  let def_role = List.find pred roles in 
+  let def_role = List.find pred roles in
   let other_roles = List.filter (not |- pred) roles in
   let (_, flow_prog) = U.decompose_role def_role in
   (mk_role def_role_id @:
@@ -998,16 +1002,16 @@ let modified_roles ast =
 (* Generate all the code for a specific trigger *)
 let gen_dist_for_t p ast trig =
   (* s_rhs : (stmt_id,rhs_map_id)list *)
-  let s_rhs = 
+  let s_rhs =
     s_and_over_stmts_in_t p rhs_maps_of_stmt trig in
   (* s_rhs_lhs : (stmt_id,rhs_map_id,lhs_map_id)list *)
-  let s_rhs_lhs = 
+  let s_rhs_lhs =
     s_and_over_stmts_in_t p rhs_lhs_of_stmt trig
   in
   start_trig p trig::
   send_fetch_trig p s_rhs_lhs s_rhs trig::
-  (if null s_rhs then [] 
-  else 
+  (if null s_rhs then []
+  else
     rcv_put_trig p trig::
     [rcv_fetch_trig p trig])@
   send_push_stmt_map_trig p s_rhs_lhs trig@

@@ -26,7 +26,7 @@ let iso_to_contained typ =
     | TContained(m) -> TContained(handle_mutable_type m)
   in
   handle_value_type typ
-    
+
 (* the default type *)
 let canonical typ = TIsolated(TImmutable(typ,[]))
 
@@ -47,43 +47,43 @@ let t_addr = canonical TAddress
 let t_addr_mut = TIsolated(TMutable(TAddress,[]))
 
 (* wrap a type in a list *)
-let wrap_tlist typ = 
+let wrap_tlist typ =
   let c = iso_to_contained typ in
   canonical @: TCollection(TList, c)
 
 (* wrap a type in a mutable list *)
-let wrap_tlist_mut typ = 
+let wrap_tlist_mut typ =
   let c = iso_to_contained typ in
   TIsolated(TMutable(TCollection(TList, c),[]))
 
 (* wrap a type in a set *)
-let wrap_tset typ = 
+let wrap_tset typ =
   let c = iso_to_contained typ in
   canonical @: TCollection(TSet, c)
 
 (* wrap a type in a mutable set *)
-let wrap_tset_mut typ = 
+let wrap_tset_mut typ =
   let c = iso_to_contained typ in
   TIsolated(TMutable(TCollection(TSet, c),[]))
 
 (* wrap a type in a bag *)
-let wrap_tbag typ = 
+let wrap_tbag typ =
   let c = iso_to_contained typ in
   canonical @: TCollection(TBag, c)
 
 (* wrap a type in a mutable bag *)
-let wrap_tbag_mut typ = 
+let wrap_tbag_mut typ =
   let c = iso_to_contained typ in
   TIsolated(TMutable(TCollection(TBag, c),[]))
 
 (* wrap a type in an immutable tuple *)
-let wrap_ttuple typ = match typ with 
+let wrap_ttuple typ = match typ with
   | [h]    -> h
-  | h::t   -> canonical @: TTuple(typ) 
+  | h::t   -> canonical @: TTuple(typ)
   | _      -> invalid_arg "No tuple to wrap"
 
 (* wrap a type in a mutable tuple *)
-let wrap_ttuple_mut typ = match typ with 
+let wrap_ttuple_mut typ = match typ with
   | [h]    -> h
   | h::t   -> TIsolated(TMutable(TTuple(typ),[]))
   | _      -> invalid_arg "No mutable tuple to wrap"
@@ -94,7 +94,7 @@ let wrap_tmaybes ts = List.map wrap_tmaybe ts
 let wrap_tfunc tin tout = TFunction(tin, tout)
 
 (* wrap a function argument *)
-let wrap_args id_typ = 
+let wrap_args id_typ =
   let wrap_args_inner = function
     | ("_",_) -> AIgnored
     | (i,t) -> AVar(i,t)
@@ -111,7 +111,7 @@ let wrap_args_deep id_arg =
   | xs  -> ATuple xs
 
 (* wrap function arguments, turning tmaybes to amaybes *)
-let wrap_args_maybe id_typ = 
+let wrap_args_maybe id_typ =
   let wrap_args_inner = function
     | ("_",_) -> AIgnored
     | (i, TIsolated(TImmutable(TMaybe(t), _))) -> AMaybe(AVar(i,t))
@@ -129,7 +129,7 @@ let wrap_args_maybe id_typ =
 let meta = []   (* we fill meta with a default value *)
 
 let class_id = "K3" (* used for symbol generation *)
-let new_num () = Symbols.gen_int_sym class_id 
+let new_num () = Symbols.gen_int_sym class_id
 
 (* function to make a simple tree with no meta or numbering *)
 let mk_stree tag children = mk_tree @: (((new_num (), tag), meta), children)
@@ -141,8 +141,8 @@ let mk_cfloat f = mk_const @: CFloat f
 let mk_cstring s = mk_const @: CString s
 let mk_cbool b = mk_const @: CBool b
 let mk_ctarget t = mk_const @: CTarget t
-let mk_cunknown = mk_const CUnknown 
-let mk_cunit = mk_const CUnit 
+let mk_cunknown = mk_const CUnknown
+let mk_cunit = mk_const CUnit
 let mk_caddress a = mk_const @: CAddress a
 
 let mk_var id = mk_stree (Var(id)) []
@@ -200,7 +200,7 @@ let mk_apply lambda input = mk_stree Apply [lambda; input]
 
 let mk_block statements = mk_stree Block statements
 
-let mk_iter iter_fun collection = 
+let mk_iter iter_fun collection =
     mk_stree Iterate [iter_fun; collection]
 
 let mk_if pred true_exp false_exp =
@@ -209,7 +209,7 @@ let mk_if pred true_exp false_exp =
 let mk_map map_fun collection =
     mk_stree Map [map_fun; collection]
 
-let mk_filtermap pred_fun map_fun collection = 
+let mk_filtermap pred_fun map_fun collection =
     mk_stree FilterMap [pred_fun; map_fun; collection]
 
 let mk_flatten collection = mk_stree Flatten [collection]
@@ -244,12 +244,12 @@ let mk_deref ref = mk_stree Deref [ref]
 let mk_send target address args = mk_stree Send [target; address; args]
 
 (* Macros to make role related stuff *)
-let mk_const_stream id typ l = 
+let mk_const_stream id typ l =
     (* copy from K3Util to prevent circularity *)
     let rec k3_container_of_list typ = function
     | [] -> mk_empty typ
     | [x] -> mk_singleton typ x
-    | x::xs -> mk_combine (k3_container_of_list typ [x]) @: 
+    | x::xs -> mk_combine (k3_container_of_list typ [x]) @:
         k3_container_of_list typ xs
     in
     mk_no_anno @:
@@ -260,7 +260,7 @@ let mk_random_stream id typ len = mk_no_anno @:
     Source(Resource(id, Stream(TValue(typ), RandomStream len)))
 
 let mk_file_handle id typ path ?(is_json=false) is_sink =
-    let t = Resource(id, Handle(TValue(typ), File path, 
+    let t = Resource(id, Handle(TValue(typ), File path,
                 if is_json then JSON else CSV))
     in if is_sink then mk_no_anno @: Sink t
        else mk_no_anno @: Source t
@@ -275,7 +275,7 @@ let mk_bind id1 id2 = mk_no_anno @: Bind(id1, id2)
 let mk_consume id = mk_no_anno @: Instruction(Consume id)
 
 let mk_role id flowprog = mk_no_anno @: Role (id, flowprog)
-    
+
 
 (* Macros to do more complex tasks ---- *)
 
@@ -286,8 +286,8 @@ let extract_arg_names l = List.map (fun (nam,_) -> nam) l
 
 (* function to take a list of names and convert to K3 variables *)
 (* "_" translates to CUnknown *)
-let ids_to_vars = List.map (fun x -> match x with 
-  | "_" -> mk_const @: CUnknown 
+let ids_to_vars = List.map (fun x -> match x with
+  | "_" -> mk_const @: CUnknown
   | x   -> mk_var x)
 
 (* check if a collection is empty *)
@@ -295,9 +295,9 @@ let mk_is_empty collection typ =
   mk_eq collection @: mk_empty typ
 
 (* checks if a member of a collection is present *)
-let mk_has_member collection pattern member_type = 
-  mk_neq 
-    (mk_slice collection pattern) 
+let mk_has_member collection pattern member_type =
+  mk_neq
+    (mk_slice collection pattern)
     (mk_empty @: wrap_tset member_type)
 
 let mk_code_sink name args locals code =
@@ -305,7 +305,7 @@ let mk_code_sink name args locals code =
 
 let mk_global_fn_raw name input_arg input_types output_types expr =
   mk_no_anno @:
-    Global(name, 
+    Global(name,
       wrap_tfunc input_types output_types,
       Some (mk_lambda (input_arg) expr)
     )
@@ -314,16 +314,16 @@ let mk_global_fn_raw name input_arg input_types output_types expr =
  * construct allows for an expr_t as well.
  * The types are expected in list format (always!) *)
 let mk_global_fn name input_names_and_types output_types expr =
-  mk_global_fn_raw name 
+  mk_global_fn_raw name
     (wrap_args input_names_and_types)
     (wrap_ttuple @: extract_arg_types input_names_and_types)
-    (wrap_ttuple output_types) 
+    (wrap_ttuple output_types)
     expr
 
-let mk_global_val name val_type = 
+let mk_global_val name val_type =
   mk_no_anno @: Global(name, TValue(val_type), None)
 
-let mk_global_val_init name val_type e = 
+let mk_global_val_init name val_type e =
   mk_no_anno @: Global(name, TValue(val_type), Some e)
 
 let mk_foreign_fn name input_types output_types =
@@ -342,7 +342,7 @@ let mk_let var_name var_type var_value expr =
         )
         (var_value)
 
-(* A let that assigns multiple variables simultaneously. 
+(* A let that assigns multiple variables simultaneously.
  * For breaking up tuples and passing multiple values out of functions.
  * var_name_type_list must be a (string, type) list, and the var_values must
  * evaluate to the same types *)
@@ -382,7 +382,7 @@ let mk_fst_many tuple_types collection =
 
 let mk_snd_many tuple_types collection =
   project_from_col tuple_types collection ~total:2 ~choice:2
-  
+
 
 (* Functions to manipulate tuples in K3 code *)
 type tuple_pat = Position of int | ExternVar of id_t | Unknown
@@ -391,7 +391,7 @@ let def_tup_prefix = "__temp_"
 
 let mk_tuple_range types = create_range 0 @: List.length types
 
-let tuple_make_pattern (types:value_type_t list) = 
+let tuple_make_pattern (types:value_type_t list) =
     List.map (fun x -> Position x) (mk_tuple_range types)
 
 (* functions to take and drop from the pattern, filling in unknowns for the
@@ -411,8 +411,8 @@ let slice_pat_drop num pat =
 let int_to_temp_id prefix i = prefix^string_of_int i
 
 let tuple_pat_to_ids pat =
-    List.map 
-    (fun x -> match x with 
+    List.map
+    (fun x -> match x with
       | Position y -> int_to_temp_id def_tup_prefix y
       | ExternVar y -> y
       | Unknown -> "_")
@@ -437,7 +437,7 @@ let mk_rebuild_tuple tup_name types pattern =
 
 (* unwrap maybe values by creating an inner values with postfix "_unwrap" *)
 let mk_unwrap_maybe var_names_and_types expr =
-  let unwrap_n_t = 
+  let unwrap_n_t =
     List.map (fun (n,t) -> (n^"_unwrap",t)) var_names_and_types in
   let names = fst @: List.split var_names_and_types in
   let vars = ids_to_vars names in
@@ -451,7 +451,7 @@ let t_stmt_id = t_int
 let t_map_id = t_int
 
 (* for vids *)
-              (* epoch, count, switch hash *) 
+              (* epoch, count, switch hash *)
 let vid_types = [t_int; t_int; t_int]
 let vid_mut_types = [t_int_mut; t_int_mut; t_int_mut]
 let t_vid = wrap_ttuple vid_types
@@ -460,29 +460,29 @@ let t_vid_mut = wrap_ttuple vid_mut_types
 (* functions for comparing vids *)
 (* vid format: (epoch, counter, switch hash) *)
 type vid_op = VEq | VNeq | VGt | VLt | VGeq | VLeq
-let mk_global_vid_op name tag = 
+let mk_global_vid_op name tag =
   let lvid_id_t = types_to_ids_types "l" vid_types in
   let lvid_id = fst @: List.split lvid_id_t in
   let rvid_id_t = types_to_ids_types "r" vid_types in
   let rvid_id = fst @: List.split rvid_id_t in
   let arg_pair = wrap_args_deep [wrap_args lvid_id_t; wrap_args rvid_id_t] in
   let arg_types = wrap_ttuple [wrap_ttuple vid_types; wrap_ttuple vid_types] in
-  let op f i = 
+  let op f i =
     let nth_l = List.nth lvid_id in let nth_r = List.nth rvid_id in
     f (mk_var @: nth_l i) (mk_var @: nth_r i) in
   let mk_vid_eq = mk_and (op mk_eq 0) @: mk_and (op mk_eq 1) (op mk_eq 2) in
   let mk_vid_neq = mk_not mk_vid_eq in
-  let mk_vid_lt = mk_or (op mk_lt 0) @: 
+  let mk_vid_lt = mk_or (op mk_lt 0) @:
                     mk_and (op mk_eq 0) @:
-                      mk_or (op mk_lt 1) @: 
+                      mk_or (op mk_lt 1) @:
                         mk_and (op mk_eq 1) (op mk_lt 2) in
   let mk_vid_geq = mk_not mk_vid_lt in
-  let mk_vid_gt = mk_or (op mk_gt 0) @: 
+  let mk_vid_gt = mk_or (op mk_gt 0) @:
                     mk_and (op mk_eq 0) @:
-                      mk_or (op mk_gt 1) @: 
+                      mk_or (op mk_gt 1) @:
                         mk_and (op mk_eq 1) (op mk_gt 2) in
   let mk_vid_leq = mk_not mk_vid_gt in
-  mk_global_fn_raw name arg_pair arg_types t_bool @: 
+  mk_global_fn_raw name arg_pair arg_types t_bool @:
     match tag with
     | VEq -> mk_vid_eq
     | VNeq -> mk_vid_neq
@@ -492,7 +492,7 @@ let mk_global_vid_op name tag =
     | VLeq -> mk_vid_leq
 
 (* id function for maps *)
-let mk_id tuple_types = 
+let mk_id tuple_types =
     let prefix = "__id_" in
     let r = mk_tuple_range @: tuple_types in
     let ids = List.map (int_to_temp_id prefix) r in

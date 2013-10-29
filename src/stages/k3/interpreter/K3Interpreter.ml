@@ -24,10 +24,10 @@ let (++%) f g = fun t x -> f (g t) x
 let (%++) f g = fun t x -> f (g t x)
 
 (* Prettified error handling *)
-let int_erroru uuid fn_name s = 
+let int_erroru uuid fn_name s =
   let msg = fn_name^": "^s in
-  let rs = "interpreter: "^msg in 
-  LOG rs LEVEL ERROR; 
+  let rs = "interpreter: "^msg in
+  LOG rs LEVEL ERROR;
   raise @: RuntimeError(uuid, msg)
 
 let int_error = int_erroru (-1)
@@ -59,7 +59,7 @@ let rec bind_args uuid a v =
   | AMaybe(a') -> (
       match v with
       | VOption(Some v') -> bind_args uuid a' v'
-      | VOption(None) -> 
+      | VOption(None) ->
           error "bind_args: missing VOption value"
       | _ -> error "bind_args: improper maybe value"
   )
@@ -69,17 +69,17 @@ let rec bind_args uuid a v =
       | _ -> error "bind_args: bad tuple value"
   )
 
-let rec eval_fun uuid f = 
+let rec eval_fun uuid f =
   let error = int_erroru uuid "eval_fun" in
   let strip_frame (m_env, f_env) = m_env, List.tl f_env in
   match f with
-    | VFunction(arg, body) -> 
+    | VFunction(arg, body) ->
         fun sched_st (m_env, f_env) a ->
             let new_env = m_env, (bind_args uuid arg a :: f_env) in
             let renv, result = eval_expr sched_st new_env body in
             (strip_frame renv, result)
-    
-    | VForeignFunction(arg, f) -> 
+
+    | VForeignFunction(arg, f) ->
         fun _ (m_env, f_env) a ->
             let new_env = m_env, (bind_args uuid arg a :: f_env) in
             let renv, result = f new_env in
@@ -90,23 +90,23 @@ let rec eval_fun uuid f =
 and eval_expr sched_st cenv texpr =
     (*LOG "%s" *)
       (*(string_of_env cenv) NAME "K3Interpreter.DetailedState" LEVEL DEBUG;*)
-    
+
     let ((uuid, tag), _), children = decompose_tree texpr in
     let error = int_erroru uuid "eval_expr" in
     let t_erroru = t_error uuid in (* pre-curry the type error *)
     let eval_fn = eval_fun uuid in
-    
-    let child_value env i = 
+
+    let child_value env i =
       let renv, reval = eval_expr sched_st env @: List.nth children i
       in renv, value_of_eval reval
     in
 
-    let child_values env = 
+    let child_values env =
       let renv, revals = threaded_eval sched_st env children
       in renv, List.map value_of_eval revals
     in
 
-    let extract_value_list x = 
+    let extract_value_list x =
       let error = int_erroru uuid "extract_value_list" in
       match x with
         | VSet cl
@@ -131,11 +131,11 @@ and eval_expr sched_st cenv texpr =
       let match_or_unknown v1 v2 = match v1, v2 with
         | VUnknown, _ -> true
         | _, _ -> v1 = v2
-      in 
+      in
       match pat_v, v with
-      | VTuple pat_f, VTuple v_f -> 
+      | VTuple pat_f, VTuple v_f ->
         (try List.for_all2 match_or_unknown pat_f v_f
-         with Invalid_argument _ -> false)  
+         with Invalid_argument _ -> false)
       | _, _ -> match_or_unknown pat_v v
     in
 
@@ -149,15 +149,15 @@ and eval_expr sched_st cenv texpr =
         | None -> error "no ref found"
       end
     in
-    
+
     let remove_from_collection v l =
-      snd (List.fold_left (fun (found, acc) el -> 
+      snd (List.fold_left (fun (found, acc) el ->
               if (not found) && v = el then (true, acc) else (found, acc@[el])
            ) (false, []) l)
     in
 
     (* TODO: byte and string types for binary and comparison operations *)
-    let eval_binop bool_op int_op float_op = 
+    let eval_binop bool_op int_op float_op =
       let error = int_erroru uuid "eval_binop" in
       let fenv, vals = child_values cenv in fenv, VTemp(
         match vals with
@@ -174,7 +174,7 @@ and eval_expr sched_st cenv texpr =
       let error = int_erroru uuid "eval_cmpop" in
       let fenv, vals = child_values cenv in fenv, VTemp(
       let rec check2 left right = match left, right with
-        | VList xs, VList ys -> 
+        | VList xs, VList ys ->
             (try List.for_all2 (fun x y -> check2 x y) xs ys
             with Invalid_argument _ -> false)
         | (VList xs | VBag xs | VSet xs), (VList ys | VBag ys | VSet ys) ->
@@ -199,7 +199,7 @@ and eval_expr sched_st cenv texpr =
         | v1, v2 -> v1 = v2
       in
       match vals with
-      | [v1; v2] -> 
+      | [v1; v2] ->
           let res = check2 v1 v2 in
           let res = if neq then not res else res in
           VBool res
@@ -220,7 +220,7 @@ and eval_expr sched_st cenv texpr =
     (* Start of evaluator *)
     match tag with
     | Const(c) -> (cenv, VTemp(value_of_const c))
-    | Var(id) -> begin try cenv, lookup id cenv with Not_found -> 
+    | Var(id) -> begin try cenv, lookup id cenv with Not_found ->
         error @: "(Var): id "^id^" not found" end
     | Tuple -> let fenv, vals = child_values cenv in (fenv, VTemp(VTuple(vals)))
     | Just  ->
@@ -242,7 +242,7 @@ and eval_expr sched_st cenv texpr =
     | Singleton(ct) ->
         let nenv, element = child_value cenv 0 in
         let name = "Singleton" in
-        let ctype, _ = 
+        let ctype, _ =
           ct <| collection_of ++% base_of |> t_erroru name @: VTBad(ct) in
         cenv, VTemp(
             match ctype with
@@ -279,10 +279,10 @@ and eval_expr sched_st cenv texpr =
             | VFloat(x), VInt(y)   -> (fun i -> VFloat(x +. ((f i) *. (f y))))
             | VFloat(x), VFloat(y) -> (fun i -> VFloat(x +. ((f i) *. y)))
             | _, _ -> error "(Range): mismatching start and stride"
-          in 
+          in
           let l = Array.to_list (Array.init steps init_fn) in
           let reval = VTemp(match c_t with
-                | TSet -> VSet(l) 
+                | TSet -> VSet(l)
                 | TBag -> VBag(l)
                 | TList -> VList(l))
           in renv, reval
@@ -291,8 +291,8 @@ and eval_expr sched_st cenv texpr =
 
     (* Arithmetic and comparators *)
     | Add  -> eval_binop (||) (+) (+.)
-    | Mult -> eval_binop (&&) ( * ) ( *. ) 
-    
+    | Mult -> eval_binop (&&) ( * ) ( *. )
+
     | Neg ->
         let fenv, vals = child_values cenv in fenv, VTemp(
           match vals with
@@ -328,7 +328,7 @@ and eval_expr sched_st cenv texpr =
         let g = eval_fn f sched_st in
         let folder l = List.fold_left (
             fun e x -> let ienv, _ = g e x in ienv
-        ) nenv l in 
+        ) nenv l in
           begin match c with
             | VSet cl
             | VBag cl
@@ -343,16 +343,16 @@ and eval_expr sched_st cenv texpr =
             | VBool(b) when not b -> eval_expr sched_st penv (List.nth children 2)
             | _ -> error "(IfThenElse): non-boolean predicate"
         )
-        
-    (* Collection transformers *)  
+
+    (* Collection transformers *)
     | Map ->
         let fenv, f = child_value cenv 0 in
         let nenv, c = child_value fenv 1 in
-        let folder cl = mapfold (fun env x -> 
-          let ienv, i = eval_fn f sched_st env x in 
+        let folder cl = mapfold (fun env x ->
+          let ienv, i = eval_fn f sched_st env x in
           ienv, value_of_eval i
-        ) nenv cl 
-        in 
+        ) nenv cl
+        in
         begin match c with
         | VSet(cl) | VBag(cl) | VList(cl) ->
           let renv, r = folder cl
@@ -374,11 +374,11 @@ and eval_expr sched_st cenv texpr =
               ienv, (value_of_eval v)::r
           | VBool false -> p'env, r
           | _           -> error "(FilterMap): non boolean predicate"
-        ) (nenv, []) cl 
-        in 
+        ) (nenv, []) cl
+        in
         begin match c with
         | VSet(cl) | VBag(cl) | VList(cl) ->
-          let renv, r = folder cl in 
+          let renv, r = folder cl in
           let r = List.rev r in (* reverse because of cons *)
           renv, (preserve_collection (fun _ -> r) c)
         | _ -> error "(FilterMap): non-collection value"
@@ -394,11 +394,11 @@ and eval_expr sched_st cenv texpr =
         let nenv, col = child_value zenv 2 in
         let f' = eval_fn f sched_st in
         let renv, rval = List.fold_left (
-            fun (e, v) a -> 
-              let renv, reval = f' e (VTuple([v; a])) in 
+            fun (e, v) a ->
+              let renv, reval = f' e (VTuple([v; a])) in
               renv, value_of_eval reval
-          ) 
-          (nenv, zero) 
+          )
+          (nenv, zero)
           (extract_value_list col)
         in renv, VTemp rval
 
@@ -411,31 +411,31 @@ and eval_expr sched_st cenv texpr =
         let f' = eval_fn f sched_st in
         let cl = extract_value_list c in
         let gb_agg_fn find_fn replace_fn = fun env a ->
-          let kenv, key = 
-            let env, k = g' env a in 
+          let kenv, key =
+            let env, k = g' env a in
             env, value_of_eval k
           in
           let v = (try find_fn key with Not_found -> zero) in
           let aenv, agg = f' kenv (VTuple [v; a]) in
-          replace_fn key (value_of_eval agg); 
+          replace_fn key (value_of_eval agg);
           aenv
         in
-        
+
 		    (* We use two different group by aggregation methods to preserve the
          * order of group=by entries in the result collection based on their
          * order in the input collection *)
 		    let hash_gb_agg_method = lazy(
 		      let h = Hashtbl.create 10 in
 		      let agg_fn = gb_agg_fn (Hashtbl.find h) (Hashtbl.replace h) in
-		      let build_fn () = 
+		      let build_fn () =
             Hashtbl.fold (fun k v kvs -> (VTuple([k; v]) :: kvs)) h []
 		      in agg_fn, build_fn)
 		    in
-		
+
 		    let order_preserving_gb_agg_method = lazy(
 		      let l = ref [] in
 		      let agg_fn = gb_agg_fn (fun k -> List.assoc k !l)
-            (fun k v -> 
+            (fun k v ->
               let l' = assoc_modify (function _ -> Some v) k !l in
               l := l')
 		      in
@@ -455,11 +455,11 @@ and eval_expr sched_st cenv texpr =
       let renv, parts = child_values cenv in
       begin match parts with
         | [c;f] ->
-          let env, l, f_val = 
+          let env, l, f_val =
             ref renv, extract_value_list c, eval_fn f sched_st in
           let sort_fn v1 v2 =
-            (* Comparator application propagates an environment since it could 
-             * be stateful *) 
+            (* Comparator application propagates an environment since it could
+             * be stateful *)
             let nenv, r = f_val !env (VTuple([v1; v2])) in
               env := nenv;
               match v1 = v2, value_of_eval r with
@@ -469,19 +469,19 @@ and eval_expr sched_st cenv texpr =
               | _, _ -> error "(Sort): non-boolean sort result"
           in !env, VTemp(VList(List.sort sort_fn l))
         | _ -> error "(Sort): bad values"
-      end      
+      end
 
     (* Collection accessors and modifiers *)
     | Slice ->
       let renv, parts = child_values cenv in
       begin match parts with
-        | [c;pat] -> 
-            renv, (preserve_collection (fun els -> 
+        | [c;pat] ->
+            renv, (preserve_collection (fun els ->
                 List.filter (match_pattern pat) els) c)
         | _       -> error "(Slice): bad values"
       end
-      
-    | Peek -> 
+
+    | Peek ->
       let renv, c = child_value cenv 0 in
       begin match extract_value_list c with
         | x::_ -> renv, VTemp(x)
@@ -491,7 +491,7 @@ and eval_expr sched_st cenv texpr =
     | Insert ->
       modify_collection (fun env parts -> match parts with
         | [VDeclared(c_ref); v] ->
-          Some(c_ref, preserve_collection 
+          Some(c_ref, preserve_collection
             (fun els -> (value_of_eval v)::els) !c_ref)
         | _ -> None)
 
@@ -509,13 +509,13 @@ and eval_expr sched_st cenv texpr =
           Some(c_ref, preserve_collection (fun l ->
             remove_from_collection (value_of_eval oldv) l) !c_ref)
         | _ -> None)
-      
+
     (* Messaging *)
     | Send ->
       let renv, parts = child_values cenv in
       (* get the sender's address from global variable "me" *)
       begin match sched_st, parts with
-        | Some s, [target;addr;arg] -> 
+        | Some s, [target;addr;arg] ->
             let e = expr_of_value uuid in
             (* log our send *)
             let send_code = K3Helpers.mk_send (e target) (e addr) (e arg) in
@@ -525,10 +525,10 @@ and eval_expr sched_st cenv texpr =
             (* check if we need to buffer our triggers for shuffling *)
             if K3Runtime.use_shuffle_tasks s then
               (* look for "me" to extract our own address *)
-              let sender_addr = 
+              let sender_addr =
                 (try match !(IdMap.find "me" @: fst cenv) with
-                  |VAddress add -> add 
-                  | _           -> error "global address for me not found" 
+                  |VAddress add -> add
+                  | _           -> error "global address for me not found"
                 with Not_found  -> error "global variable 'me' not found")
               in
               (* buffer trigger for later shuffle *)
@@ -536,7 +536,7 @@ and eval_expr sched_st cenv texpr =
               renv, VTemp VUnit
             else
               (* create a new level on the queues *)
-              (schedule_trigger s target addr arg; 
+              (schedule_trigger s target addr arg;
               renv, VTemp VUnit)
         | None, _ -> error "Send: missing scheduler"
         | _, _    -> error "Send: bad values"
@@ -556,21 +556,21 @@ and threaded_eval sched_st ienv texprs =
 
 (* Returns a default value for every type in the language *)
 let rec default_value = function
-  | TFunction _ -> 
+  | TFunction _ ->
       int_error "default_value" "no default value available for function types"
   | TValue vt -> default_isolated_value vt
 
-and default_collection_value ct et = 
+and default_collection_value ct et =
   match ct with
   | TSet -> VSet []
   | TBag -> VBag []
   | TList -> VList []
 
-and default_base_value bt = 
+and default_base_value bt =
   let error = int_error "default_base_value" in
   match bt with
   | TUnknown -> VUnknown
-  | TUnit    -> VUnit 
+  | TUnit    -> VUnit
   | TBool    -> VBool false
   | TByte    -> error "bytes are not implemented"
   | TInt     -> VInt 0
@@ -579,27 +579,27 @@ and default_base_value bt =
 
   | TMaybe   vt -> error "options are not implemented"
   | TTuple   ft -> VTuple (List.map default_isolated_value ft)
-  
+
   | TCollection (ct,et) -> default_collection_value ct et
   | TAddress            -> error "addresses are not implemented"
-  | TTarget bt          -> error "targets are not implemented" 
+  | TTarget bt          -> error "targets are not implemented"
 
 and default_isolated_value = function
   | TIsolated (TMutable (bt,_))   -> default_base_value bt
   | TIsolated (TImmutable (bt,_)) -> default_base_value bt
-  | TContained _ -> 
+  | TContained _ ->
       int_error "default_isolated_value" "invalid default contained value"
 
 (* Returns a foreign function evaluator *)
 let dispatch_foreign id = K3StdLib.lookup_value id
 
-(* Returns a trigger evaluator function to serve as a simulation 
+(* Returns a trigger evaluator function to serve as a simulation
  * of the trigger *)
 let prepare_trigger sched_st id arg local_decls body =
   fun (m_env, f_env) -> fun a ->
     let default (id,t,_) = id, ref (default_isolated_value t) in
     let new_vals = List.map default local_decls in
-    let local_env = add_from_list m_env new_vals, f_env in 
+    let local_env = add_from_list m_env new_vals, f_env in
     let _, reval = (eval_fun (-1) (VFunction(arg,body))) (Some sched_st) local_env a in
     match value_of_eval reval with
       | VUnit -> ()
@@ -607,11 +607,11 @@ let prepare_trigger sched_st id arg local_decls body =
 
 (* add code sinks to the trigger environment *)
 let prepare_sinks sched_st env fp =
-  List.fold_left 
+  List.fold_left
     (fun ((trig_env, (m_env, f_env)) as env) (fs,a) -> match fs with
     | Sink(Resource _) ->
       failwith "sink resource interpretation not supported"
-      
+
     | Sink(Code(id, arg, locals, body)) ->
       IdMap.add id (prepare_trigger sched_st id arg locals body) trig_env, (m_env, f_env)
 
@@ -628,15 +628,15 @@ let env_of_program ?address sched_st k3_program =
     | K3.AST.Global (id, t, init_opt) ->
         let (rm_env, rf_env), init_val = match id, init_opt with
           | _, Some e ->
-            let renv, reval = eval_expr (Some sched_st) (m_env, f_env) e 
+            let renv, reval = eval_expr (Some sched_st) (m_env, f_env) e
             in renv, value_of_eval reval
 
           (* substitute the proper address expression for 'me' *)
-          | id, _ when id = K3Global.me_name -> 
+          | id, _ when id = K3Global.me_name ->
               let renv, reval = eval_expr (Some sched_st) (m_env, f_env) @: mk_caddress me_addr
               in renv, value_of_eval reval
 
-          | _, None -> (m_env, f_env), default_value t 
+          | _, None -> (m_env, f_env), default_value t
         in
         trig_env, ((IdMap.add id (ref init_val) rm_env), rf_env)
 
@@ -656,7 +656,7 @@ let env_of_program ?address sched_st k3_program =
 (* consume messages to a specific node *)
 let consume_msgs ?(slice = max_int) sched_st env address =
   let log_node s = LOG "Node %s: %s" (string_of_address address) s LEVEL TRACE in
-  log_node "consuming messages"; 
+  log_node "consuming messages";
   let status = run_scheduler ~slice sched_st address env in
   status
 
@@ -667,23 +667,23 @@ let consume_sources sched_st env address (res_env, d_env) (ri_env, instrs) =
   | []              -> NormalExec, (ri_env, [])
   | (Consume id)::t ->
     log_node @: "consuming from event loop: "^id;
-    try let i = List.assoc id d_env in 
+    try let i = List.assoc id d_env in
         let r = run_dispatcher sched_st address res_env ri_env i in
         (*let status = run_scheduler sched_st address env in*)
         NormalExec, (r, t)
-    with Not_found -> 
+    with Not_found ->
       int_error "consume_sources" @: "no event loop found for "^id
 
-(* Program interpretation *) 
-let interpreter_event_loop role_opt k3_program = 
+(* Program interpretation *)
+let interpreter_event_loop role_opt k3_program =
   let error () =
     int_error "interpreter_event_loop" "No role found for K3 program" in
 	let roles, default_role = extended_roles_of_program k3_program in
-  let get_role role fail_f = try List.assoc role roles with Not_found -> 
+  let get_role role fail_f = try List.assoc role roles with Not_found ->
     fail_f ()
   in match role_opt, default_role with
 	  | Some x, Some (_,y) -> get_role x (fun () -> y)
-	  | Some x, None -> get_role x error 
+	  | Some x, None -> get_role x error
 	  | None, Some (_,y) -> y
 	  | None, None -> error ()
 
@@ -707,11 +707,11 @@ type status_t = K3Runtime.status_t
 let interpret_k3_program {scheduler; peer_meta; peer_list; envs} =
   (* Continue running until all peers have finished their instructions,
    * and all messages have been processed *)
-  let rec loop (status:status_t) = 
+  let rec loop (status:status_t) =
     if status = NormalExec then
       (* find and process every peer that has a message to process. This way we make sure we
        * don't inject new sources until all messages are processed *)
-      let message_peers, status' = 
+      let message_peers, status' =
         (* for global queueing, we don't loop. Instead, we run for only one
          * iteration, since each trigger needs a different environment *)
         if K3Runtime.use_global_queueing scheduler then
@@ -735,7 +735,7 @@ let interpret_k3_program {scheduler; peer_meta; peer_list; envs} =
       in
       (*Printf.printf "msgs: %d\n" message_peers;*)
       if message_peers > 0  && not (K3Runtime.use_shuffle_tasks scheduler) then loop status'
-      else 
+      else
         (* now deal with sources *)
         let source_peers, (status':status_t) =
           Hashtbl.fold (fun addr (ri_env, insts) (count, stat) ->
@@ -743,7 +743,7 @@ let interpret_k3_program {scheduler; peer_meta; peer_list; envs} =
               let res_env, de, env = List.assoc addr envs in
               let status, eval =
                 consume_sources scheduler env addr (res_env, de) (ri_env, insts)
-              in 
+              in
               Hashtbl.replace peer_meta addr eval;
               match status with
               | BreakPoint bp -> count + 1, BreakPoint bp
@@ -768,21 +768,21 @@ let interpret_k3_program {scheduler; peer_meta; peer_list; envs} =
   result, prog_state
 
 (* Initialize an interpreter given the parameters *)
-let init_k3_interpreter ?shuffle_tasks 
-                        ?breakpoints 
+let init_k3_interpreter ?shuffle_tasks
+                        ?breakpoints
                         ?(queue_type=GlobalQ)
-                        ~run_length 
-                        ~peers 
+                        ~run_length
+                        ~peers
                         typed_prog =
   let s = init_scheduler_state ?shuffle_tasks ?breakpoints ~queue_type ~run_length () in
-  match peers with 
+  match peers with
   | []  -> failwith "interpret_k3_program: Peers list is empty!"
   | _   ->
       (* Initialize an environment for each peer *)
       let peer_meta = Hashtbl.create @: List.length peers in
-      let envs = List.map (fun (addr, role_opt, _) ->  
+      let envs = List.map (fun (addr, role_opt, _) ->
                  (* event_loop_t * program_env_t *)
-          let _, ((res_env, d_env, instrs), prog_env) = 
+          let _, ((res_env, d_env, instrs), prog_env) =
             initialize_peer s addr role_opt typed_prog
           in Hashtbl.replace peer_meta addr ([], instrs);
           addr, (res_env, d_env, prog_env)

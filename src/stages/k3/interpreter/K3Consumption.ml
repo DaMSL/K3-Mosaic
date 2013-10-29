@@ -26,7 +26,7 @@ let value_of_string t v = match t with
   | _ -> VString(v)
 
 let pull_source id t res in_chan =
-	let tuple_val, signature = 
+	let tuple_val, signature =
 		match t <| base_of %++ value_of |> (fun () -> raise (ResourceError id)) with
     | TBool -> false, [TBool]
     | TInt -> false, [TInt]
@@ -35,36 +35,36 @@ let pull_source id t res in_chan =
 		| TTuple(ts) -> true, List.map base_of ts
 		| _ -> raise (ResourceError id)
 	in
-  begin 
+  begin
     print_endline ("Pulling from source "^id);
 	  match res, in_chan with
-	  | Handle(t, File _, CSV), In(Some chan) -> 
-	    (try 
+	  | Handle(t, File _, CSV), In(Some chan) ->
+	    (try
          let next_record = Str.split (Str.regexp ",") (input_line chan) in
          let fields = List.map2 value_of_string signature next_record in
          let r = if tuple_val then VTuple(fields) else List.hd fields
          in Some (r)
-       with 
+       with
         | Invalid_argument _ -> raise (ResourceError id)
         | End_of_file -> None)
 
     | Stream(t, RandomStream _), InRand index ->
         if !index <= 0 then None
-        else let rec random_val t = 
+        else let rec random_val t =
                match base_of t with
                | TBool -> VBool(Random.bool ())
                | TInt  -> VInt(Random.int max_int)
                | TFloat -> VFloat(Random.float max_float)
                | TTuple(ts) -> VTuple(List.map random_val ts)
                | _ -> raise (ResourceError id)
-             in index := !index - 1; 
+             in index := !index - 1;
              Some(random_val @: value_of t @: fun () -> raise (ResourceError id))
 
      (* a constant stream *)
      | Stream(t, ConstStream _), InConst exp_l_ref ->
          begin match !exp_l_ref with
           | [] -> None
-          | e::es -> 
+          | e::es ->
               exp_l_ref := es;
               let v = try K3Values.value_of_const_expr e
                       with Failure _ -> raise @: ResourceError id
@@ -79,7 +79,7 @@ let pull_source id t res in_chan =
  * Network handles remain open, thereby preserving their connections. *)
 (* resource_impl has our implementation ie. open stuff *)
 let resource_delta resource_env resource_impl_env d =
-  let partition_net l = List.partition (is_net_handle resource_env) l in 
+  let partition_net l = List.partition (is_net_handle resource_env) l in
   (* ids of network and file resources *)
   let opened_net, opened_files = partition_net @: List.map fst resource_impl_env in
   let net_resources, file_resources = partition_net (resources_of_dispatcher d) in
@@ -88,7 +88,7 @@ let resource_delta resource_env resource_impl_env d =
       (fun id -> id, List.assoc id resource_impl_env)
       (ListAsSet.inter opened_net net_resources),
     ListAsSet.diff net_resources opened_net,
-    ListAsSet.diff opened_net net_resources 
+    ListAsSet.diff opened_net net_resources
   in
   let open_files, close_files = file_resources, opened_files in
   pass_net, open_net, open_files, close_net, close_files
@@ -100,8 +100,8 @@ let initialize_resources resource_env resource_impl_env d =
       | Some(source, Handle (_, File (filename), _)) ->
         if source then [id, In(Some(open_in filename))]
         else [id, Out(Some(open_out filename))]
-      
-      | Some(_, Stream(_, ConstStream e)) -> 
+
+      | Some(_, Stream(_, ConstStream e)) ->
           [id, InConst(ref @: K3Util.list_of_k3_container e)]
 
       | Some(_, Stream(_, RandomStream i)) -> [id, InRand(ref i)]
@@ -123,7 +123,7 @@ let initialize_resources resource_env resource_impl_env d =
   in
     (* close all resources that should be closed *)
 	  List.iter close_channel_impl (close_net@close_files);
-	  let opened_resources = List.flatten (List.map open_channel_impl 
+	  let opened_resources = List.flatten (List.map open_channel_impl
       (open_net@open_files))
 	  in pass_net@opened_resources
 
@@ -144,13 +144,13 @@ let next_value resource_env resource_impl_env resource_ids =
     | _ -> None
   in
   let track_failed_access result_none_f finished id = match access_resource id with
-	  | None -> result_none_f (id::finished) 
+	  | None -> result_none_f (id::finished)
 	  | x -> finished, Some(id,x)
   in
   let rec randomize_access failed resource_ids = match resource_ids with
 	  | [] -> failed, None
 	  | [id] -> track_failed_access (fun f -> f,None) failed id
-	  | _ -> 
+	  | _ ->
 	    let id = random_element resource_ids in
       track_failed_access
         (fun f -> randomize_access f (List.filter ((=) id) resource_ids)) failed id
@@ -159,20 +159,20 @@ let next_value resource_env resource_impl_env resource_ids =
 (* Run a pattern dispatcher for a single step *)
 let rec run_dispatcher_step sched_st address d state_opt origin value =
   let module A = ResourceActions in
-  let module F = ResourceFSM in 
-  let next_access state_id = 
+  let module F = ResourceFSM in
+  let next_access state_id =
     pre_entry_of_state (state_id, List.assoc state_id d) in
   (* if we're given a state, use that. Otherwise, go to first state *)
   let state = match state_opt with None -> fst (List.hd d) | Some x -> x in
   try
     let (id, (match_action, next)), (fail_action, fail) = List.assoc state d in
     match id = origin, match_action with
-      | true, F.Output (A.Source(A.Dispatch(b), _)) -> schedule_event 
+      | true, F.Output (A.Source(A.Dispatch(b), _)) -> schedule_event
           sched_st (List.map (fun t -> id, t) b) id address [value];
         None, Some next, next_access next
 
-      (* TODO: egress pattern dispatching *)        
-      | true, F.Output (A.Sink(A.Dispatch b)) -> 
+      (* TODO: egress pattern dispatching *)
+      | true, F.Output (A.Sink(A.Dispatch b)) ->
         failwith "sink dispatching not yet supported"
 
       | _, F.Terminate -> Some(value), None, []
@@ -182,7 +182,7 @@ let rec run_dispatcher_step sched_st address d state_opt origin value =
 (* Pattern-based dispatching. Given a resource specification and implementation
  * environment, and a dispatcher (i.e. an FSM), repeatedly steps through the
  * dispatcher. At each step the dispatcher indicates the resources to be accessed
- * next, and it is the responsibility of this executor to pull the next value 
+ * next, and it is the responsibility of this executor to pull the next value
  * from the list of resources *)
 (* resource_impl_env is the implementation of a resource, and d is a dispatcher
  * fsm *)
@@ -191,9 +191,9 @@ let run_dispatcher sched_st address resource_env resource_impl_env d =
   let init_finished () = failwith "no value found during initialization" in
   let assign_value origin value o v = origin := o; value := v in
   let ri_env, rids =
-    let x = initialize_resources resource_env resource_impl_env d 
+    let x = initialize_resources resource_env resource_impl_env d
     in x, List.map fst x
-  in  
+  in
   let finished_resources, resources_remain = ref [], ref true in
   let get_value value_f finished_f resources =
     match next_value resource_env ri_env resources with
@@ -201,7 +201,7 @@ let run_dispatcher sched_st address resource_env resource_impl_env d =
       finished_resources := ListAsSet.union !finished_resources f;
       resources_remain := ListAsSet.diff rids !finished_resources <> [];
       value_f o v
-    
+
     | f, _ ->
       finished_resources := ListAsSet.union !finished_resources f;
       resources_remain := ListAsSet.diff rids !finished_resources <> [];
@@ -212,7 +212,7 @@ let run_dispatcher sched_st address resource_env resource_impl_env d =
     let s, rids = initial_resources_of_dispatcher d
     in ref(Some s), get_value init_value init_finished rids
   in
-  while !state <> None && !resources_remain do 
+  while !state <> None && !resources_remain do
     match run_dispatcher_step sched_st address d !state !origin !value with
     (* Retry value at next state *)
     | Some v, Some s, [] when v = !value -> state := Some(s)

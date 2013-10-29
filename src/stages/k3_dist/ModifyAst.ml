@@ -17,7 +17,7 @@ exception InvalidAst of string
 (* change the initialization values of global maps to have the vid as well *)
 (* receives the new types to put in and the starting expression to change *)
 (* inserts a reference to the default vid var for that node *)
-let rec add_vid_to_init_val types e = 
+let rec add_vid_to_init_val types e =
   let add = add_vid_to_init_val types in
   let vid_var = mk_var init_vid in
   match U.tag_of_expr e with
@@ -51,13 +51,13 @@ let modify_global_map p = function
 (* return ast for map declarations, adding the vid *)
 let modify_map_decl_ast p ast =
   let decls = U.globals_of_program ast in
-  init_vid_k3 :: 
+  init_vid_k3 ::
     (List.flatten @: list_map (modify_global_map p) decls)
 
 (* --- Trigger modification --- *)
 
 (* get the relative offset of the stmt in the trigger *)
-let stmt_idx_in_t p trig stmt = 
+let stmt_idx_in_t p trig stmt =
   let ss = P.stmts_of_t p trig in
   foldl_until (fun acc s -> if s = stmt then Left acc else Right (acc+1)) 0 ss
 
@@ -72,7 +72,7 @@ let block_nth exp i = match U.tag_of_expr exp with
   | _            -> raise (InvalidAst("block_nth: Not a block"))
 
 (* return the AST for a given stmt *)
-let ast_for_s p ast (stmt:P.stmt_id_t) (trig:P.trig_name_t) = 
+let ast_for_s p ast (stmt:P.stmt_id_t) (trig:P.trig_name_t) =
   let trig_decl = U.trigger_of_program trig ast in
   let trig_ast = U.expr_of_code trig_decl in
   let s_idx = stmt_idx_in_t p trig stmt in
@@ -87,12 +87,12 @@ let corr_ast_for_m_s p ast map stmt trig =
   let stmt_idx = List.assoc stmt s_i in
 
   let trig_name = "correct_"^map_name^"_for_"^trig in
-  let trig_decl = 
-    try U.trigger_of_program trig_name ast 
+  let trig_decl =
+    try U.trigger_of_program trig_name ast
     with Not_found -> failwith @: "Missing corrective for "^trig_name in
   let trig_ast = U.expr_of_code trig_decl in
   let args = U.typed_vars_of_arg @: U.args_of_code trig_decl in
-  let trig_args = P.args_of_t p trig in 
+  let trig_args = P.args_of_t p trig in
   (* remove the trigger args from the list of args in the corrective trigger *)
   let args2 = Set.diff args trig_args
   in (args2, block_nth trig_ast stmt_idx)
@@ -101,7 +101,7 @@ exception UnhandledModification of string
 
 (* modify the internals of a type. A function gets both the unwrapped type and
  * the original type (wrapped) in case it wants to use that *)
-let modify_tuple_type fn typ = 
+let modify_tuple_type fn typ =
   let unwrap_m = function
     | TMutable(t, a)   -> TMutable(fn t typ, a)
     | TImmutable(t, a) -> TImmutable(fn t typ, a)
@@ -140,7 +140,7 @@ let modify_map_add_vid p ast stmt =
   let maps_n_id = maps_with_existing_out_tier p stmt in
   let map_names = fst_many maps_n_id in
   (* names of maps with one dimension in this statement *)
-  let maps_n_1d = fst_many @: List.filter 
+  let maps_n_1d = fst_many @: List.filter
     (fun (_,m) -> null @: P.map_types_no_val_for p m) maps_n_id in
   let var_vid = mk_var "vid" in
   (* add a vid to a tuple *)
@@ -148,7 +148,7 @@ let modify_map_add_vid p ast stmt =
     mk_tuple @: P.map_add_v var_vid @: U.extract_if_tuple e
   in
   (* Sometimes we only find out that a node needs to have a vid from a higher
-   * vid in the tree, and we need to add it top-down. The main use for this 
+   * vid in the tree, and we need to add it top-down. The main use for this
    * right now is for combine *)
   let rec add_vid_from_above e =
     match U.tag_of_expr e with
@@ -157,7 +157,7 @@ let modify_map_add_vid p ast stmt =
         mk_flatten @: add_vid_from_above body
     | Lambda args ->
         let body = U.decompose_lambda e in
-        mk_lambda args @: add_vid_from_above body 
+        mk_lambda args @: add_vid_from_above body
     | Map -> let lambda, col = U.decompose_map e in
         mk_map
           (add_vid_from_above lambda) col
@@ -180,10 +180,10 @@ let modify_map_add_vid p ast stmt =
               with Not_found -> raise @: UnhandledModification(
                 "No "^id^ " map found in stmt "^string_of_int stmt)
       in
-      let buf_col = 
+      let buf_col =
         (* if this isn't the lmap (in which case it's stored locally)
          * adjust the name of the map to be a buffer *)
-        if id <> lmap_alias && id <> lmap_name then 
+        if id <> lmap_alias && id <> lmap_name then
           mk_var @: P.buf_of_stmt_map stmt id
         else col in
       (* get the latest vid values for this map *)
@@ -194,7 +194,7 @@ let modify_map_add_vid p ast stmt =
 
   (* we return a message to the higher levels in the tree,
    * and the new tree node *)
-  let rec modify e msgs path = 
+  let rec modify e msgs path =
     let get_msg i = at msgs i in
     let msg_vid i = if null msgs then false else at msgs i = AddVidMsg in
     let msg_del i = if null msgs then false else at msgs i = DelMsg in
@@ -210,19 +210,19 @@ let modify_map_add_vid p ast stmt =
      * anything *)
     | Delete -> DelMsg, e
 
-    | Slice -> 
+    | Slice ->
       (* If we have any bound variable, we should slice on those *)
       let col, pat = U.decompose_slice e in
       let pat = U.extract_if_tuple pat in
-      let has_bound = List.exists (fun e -> match U.tag_of_expr e with 
+      let has_bound = List.exists (fun e -> match U.tag_of_expr e with
           | Const(CUnknown) -> false
-          | _ -> true) 
+          | _ -> true)
         pat in
       let pat_m = if has_bound then Some pat else None
       in
       NopMsg, modify_map_read p col pat_m
 
-    | Iterate -> 
+    | Iterate ->
       let (lambda, col) = U.decompose_iterate e in
       (* if our lambda requests a deletion, we delete *)
       if msg_del 0 then DelMsg, e
@@ -234,7 +234,7 @@ let modify_map_add_vid p ast stmt =
 
     (* handle the case of map, which appears in some files *)
     | Map -> let (lambda, col) = U.decompose_map e in
-      if msg_vid 1 then 
+      if msg_vid 1 then
         (* if our collection added a vid, we need to do it in the lambda *)
         let mod_lambda = add_vid_to_lambda_args lambda in
         NopMsg, mk_map mod_lambda col
@@ -244,12 +244,12 @@ let modify_map_add_vid p ast stmt =
     (* in this case, we modify the types of the lambda vars themselves *)
     | Apply  -> let (lambda, arg) = U.decompose_apply e in
       begin match U.tag_of_expr arg with
-        | Var id when id = lmap_name -> 
+        | Var id when id = lmap_name ->
           begin match (U.typed_vars_of_lambda lambda, U.decompose_lambda lambda) with
             | ([arg_id, t],b) -> NopMsg,
-              mk_apply 
-                (mk_lambda 
-                  (wrap_args [arg_id, wrap_tset @: wrap_ttuple lmap_types]) b) 
+              mk_apply
+                (mk_lambda
+                  (wrap_args [arg_id, wrap_tset @: wrap_ttuple lmap_types]) b)
                 arg
             | _ -> raise (UnhandledModification(PR.string_of_expr e)) end
         | _ -> NopMsg, e
@@ -265,11 +265,11 @@ let modify_map_add_vid p ast stmt =
 
     | Var name when List.mem name map_names -> AddVidMsg, e
 
-    (* if any statements in a block requested deletion, delete 
+    (* if any statements in a block requested deletion, delete
      * those statements *)
     | Block -> let ss = U.decompose_block e in
       let s_msg = list_zip ss msgs in
-      let ss' = fst @: List.split @: 
+      let ss' = fst @: List.split @:
         List.filter (fun (_, msg) -> msg <> DelMsg) s_msg in
       NopMsg, mk_block ss'
 
@@ -277,7 +277,7 @@ let modify_map_add_vid p ast stmt =
       begin match U.tag_of_expr col with
       (* match only for maps with one dimension *)
       | Var name when List.mem name maps_n_1d ->
-          (* we use the same function as Seek, except we don't supply a pattern 
+          (* we use the same function as Seek, except we don't supply a pattern
           * (no bound vars) *)
           NopMsg, mk_peek @: modify_map_read p col None
       | _ -> NopMsg, e
@@ -295,38 +295,38 @@ let modify_delta p ast stmt target_trigger =
   let lmap_bind_ids_v = P.map_ids_add_v @: fst @: List.split lmap_bindings in
   let (lambda, arg) = U.decompose_apply ast in
   let body = U.decompose_lambda lambda in
-  let params = match U.tag_of_expr lambda with Lambda a -> a 
+  let params = match U.tag_of_expr lambda with Lambda a -> a
     | _ -> raise(UnhandledModification("No lambda")) in
   match U.tag_of_expr body with
   | Apply -> (* simple modification - sending a single piece of data *)
     let (lambda2, arg2) = U.decompose_apply body in
     let body2 = U.decompose_lambda lambda2 in
-    let params2 = begin match U.tag_of_expr lambda2 with 
+    let params2 = begin match U.tag_of_expr lambda2 with
       | Lambda a -> a
       | _ -> raise(UnhandledModification("No inner lambda")) end in
     let delta_name = hd @: U.vars_of_lambda lambda2 in
     let delta_types = extract_arg_types @: U.typed_vars_of_arg params2 in
-    let full_vars = 
+    let full_vars =
       let full_types = P.map_add_v t_vid @: lmap_types @ delta_types in
       let full_names = lmap_bind_ids_v @ [delta_name] in
         P.map_add_v (mk_var "vid") @:
-          [mk_singleton 
+          [mk_singleton
             (wrap_tset @: wrap_ttuple full_types) @:
-            mk_tuple @: ids_to_vars full_names 
+            mk_tuple @: ids_to_vars full_names
           ] in
     mk_apply
       (mk_lambda params @:
-        mk_apply 
+        mk_apply
           (mk_lambda params2 @:
             mk_block
-              [body2 
+              [body2
                 ;
                 (* we add the delta to all following vids, and we send it for correctives *)
                 mk_apply
                 (mk_var @: add_delta_to_map p lmap) @:
                   mk_tuple full_vars
                 ;
-                mk_send 
+                mk_send
                 (mk_const @: CTarget target_trigger)
                   G.me_var @:
                   mk_tuple @: full_vars
@@ -335,7 +335,7 @@ let modify_delta p ast stmt target_trigger =
       ) arg
   | Iterate -> (* more complex modification *)
     let (lambda2, col) = U.decompose_iterate body in
-    let params2 = begin match U.tag_of_expr lambda2 with 
+    let params2 = begin match U.tag_of_expr lambda2 with
       | Lambda a -> a
       | _ -> raise(UnhandledModification("No inner lambda")) end in
     let delta_name = "__delta_values__" in
@@ -350,34 +350,34 @@ let modify_delta p ast stmt target_trigger =
       (mk_lambda params @:
           mk_let delta_name delta_col_type col @:
           (* project vid into collection *)
-          mk_let delta_v_name delta_col_v_type 
+          mk_let delta_v_name delta_col_v_type
             (mk_map
-              (mk_lambda 
+              (mk_lambda
                 (wrap_args delta_ids_types) @:
-                  mk_tuple @: 
+                  mk_tuple @:
                     ids_to_vars @: lmap_bind_ids_v@delta_last_id
                 ) @:
                mk_var delta_name) @:
           mk_block @:
             (* execute lambda on delta values *)
-            [mk_iter lambda2 @: 
+            [mk_iter lambda2 @:
               mk_var delta_name
              ;
              mk_apply
               (mk_var @: add_delta_to_map p lmap) @:
               mk_tuple [mk_var "vid"; mk_var delta_v_name]
-             ; 
+             ;
              mk_send (* send to a (corrective) target *)
               (mk_ctarget target_trigger)
               G.me_var @:
               mk_tuple [mk_var "vid"; mk_var delta_v_name]
             ]
-      ) 
+      )
       arg
   | _ -> raise (UnhandledModification(PR.string_of_expr ast))
 
 (* return a modified version of the original ast for s *)
-let modify_ast_for_s p ast stmt trig target_trig = 
+let modify_ast_for_s p ast stmt trig target_trig =
   let ast = ast_for_s p ast stmt trig in
   let ast = modify_map_add_vid p ast stmt in
   (* do we need to send a delta to another trigger *)

@@ -11,12 +11,12 @@ type trig_id_t = int
 type trig_name_t = string
 type map_id_t = int
 (* id, position in map's args *)
-type map_var_binding_t = id_t * int 
+type map_var_binding_t = id_t * int
 
 type stmt_data_t
   (* stmt_id, trig_id, lhs_map, lhs_map_binding, rhs_maps_with_bindings *)
-  = stmt_id_t * trig_id_t * map_id_t * map_var_binding_t list * 
-    (map_id_t * map_var_binding_t list) list 
+  = stmt_id_t * trig_id_t * map_id_t * map_var_binding_t list *
+    (map_id_t * map_var_binding_t list) list
 
 type trig_data_t
   (* trig_id, name, bound_args, stmts *)
@@ -30,9 +30,9 @@ type prog_data_t = trig_data_t list * stmt_data_t list * map_data_t list
 let string_of_var (vn, vt) = vn^":"^(string_of_value_type vt)
 
 let string_of_binding (vn, idx) = vn^":"^(string_of_int idx)
-let string_of_bindings bl = 
+let string_of_bindings bl =
   (String.concat ", " (List.map string_of_binding bl))
-let string_of_map (map, bl) = 
+let string_of_map (map, bl) =
   (string_of_int map) ^ "[" ^ (string_of_bindings bl) ^ "]"
 
 let string_of_map_data ((map_id, map_name, tl):map_data_t):string =
@@ -40,7 +40,7 @@ let string_of_map_data ((map_id, map_name, tl):map_data_t):string =
   (String.concat ", " (List.map string_of_value_type tl))^"]"
 
 
-let string_of_stmt_data ((stmt_id, trig_id, lhs_map, lhs_map_binding, 
+let string_of_stmt_data ((stmt_id, trig_id, lhs_map, lhs_map_binding,
                          rhs_maps_with_bindings):stmt_data_t):string =
   ( (string_of_int trig_id)^"::"^(string_of_int stmt_id)^" : "^
     (string_of_map (lhs_map, lhs_map_binding))^" <<== "^
@@ -54,7 +54,7 @@ let string_of_trig_data ((trig_id, name, bound_args, stmts):trig_data_t):string=
     (String.concat ", " (List.map string_of_int stmts))
   )
 
-let string_of_prog_data ((trig_data, stmt_data, map_data):prog_data_t): string = 
+let string_of_prog_data ((trig_data, stmt_data, map_data):prog_data_t): string =
   ( "--- Triggers ---\n"^
     (String.concat "\n" (List.map string_of_trig_data trig_data))^
     "\n\n--- Statements ---\n"^
@@ -62,45 +62,45 @@ let string_of_prog_data ((trig_data, stmt_data, map_data):prog_data_t): string =
     "\n\n--- Maps ---\n"^
     (String.concat "\n" (List.map string_of_map_data map_data))^
     "\n" )
-    
+
 
 (* --- helper functions to get information from the data structure --- *)
 let get_trig_data (p:prog_data_t) = match p with
   (trig, _, _) -> trig
 
 let get_stmt_data (p:prog_data_t) = match p with
-  (_, stmt, _) -> stmt 
+  (_, stmt, _) -> stmt
 
 let get_map_data (p:prog_data_t) = match p with
   (_, _, map) -> map
 
 (* function to check if a trigger is a delete/insert trigger *)
 let check_prefix name prefix =
-  let len = String.length prefix in 
+  let len = String.length prefix in
   if String.sub name 0 len = prefix then true else false
 
-let relevant_trig t = 
+let relevant_trig t =
   check_prefix t "insert_" || check_prefix t "delete_"
- 
+
 (* only non-corrective triggers *)
-let get_trig_list (p:prog_data_t) = 
+let get_trig_list (p:prog_data_t) =
   let l = List.map (fun (_, name, _, _) -> name) @: get_trig_data p in
   List.filter relevant_trig l
 
 let for_all_trigs (p:prog_data_t) f =
   List.map (fun t -> f t) @: get_trig_list p
 
-let find_trigger (p:prog_data_t) (tname:string) = 
+let find_trigger (p:prog_data_t) (tname:string) =
   try List.find (fun (_, name, _, _) -> name = tname) @: get_trig_data p
   with
     Not_found -> raise (Bad_data ("No "^tname^" trigger found"))
 
-let trigger_id_for_name p (trig_name:trig_name_t) = 
-  let (id, _, _, _) = find_trigger p trig_name in 
+let trigger_id_for_name p (trig_name:trig_name_t) =
+  let (id, _, _, _) = find_trigger p trig_name in
   id
 
-let trigger_name_for_id p (trig_id:trig_id_t) = 
-  try let (_, name, _, _) = 
+let trigger_name_for_id p (trig_id:trig_id_t) =
+  try let (_, name, _, _) =
         List.find (fun (id, _, _, _) -> id = trig_id) @: get_trig_data p
       in name
   with
@@ -130,12 +130,12 @@ let find_map_by_name (p:prog_data_t) str =
   try List.find (fun (_, s, _) -> s = str) @: get_map_data p
   with
     Not_found -> raise (Bad_data ("No "^str^" map name found"))
-    
+
 let find_stmt (p:prog_data_t) (stmt_id:stmt_id_t) =
   try List.find (fun (id, _, _, _, _) -> id = stmt_id) @: get_stmt_data p
   with
     Not_found -> raise (Bad_data ("No "^(string_of_int stmt_id)^" stmt_id found"))
-  
+
 
 let args_of_t (p:prog_data_t) (trig_name:trig_name_t) =
   let (_, _, args, _) = find_trigger p trig_name in
@@ -146,23 +146,23 @@ let stmts_of_t (p:prog_data_t) trig_name =
   stmts
 
 (* map a function over stmts in a trigger in a specific way *)
-let map_over_stmts_in_t (p:prog_data_t) func map_func trig_name = 
+let map_over_stmts_in_t (p:prog_data_t) func map_func trig_name =
   let stmts = stmts_of_t p trig_name in
-  List.flatten @: List.map 
+  List.flatten @: List.map
     (fun stmt -> List.map (map_func trig_name stmt) @: func p stmt)
     stmts
 
 (* output (stmt_id, x) list. Guaranteed to be in stmt order *)
-let s_and_over_stmts_in_t (p:prog_data_t) func trig_name = 
+let s_and_over_stmts_in_t (p:prog_data_t) func trig_name =
     map_over_stmts_in_t p func (fun _ stmt x -> (stmt, x)) trig_name
 
-let rhs_maps_of_stmt (p:prog_data_t) (stmt_id:stmt_id_t) = 
+let rhs_maps_of_stmt (p:prog_data_t) (stmt_id:stmt_id_t) =
   let (_, _, _, _, maplist) = find_stmt p stmt_id in
   nub @: List.map (fun (map_id, _) -> map_id) maplist
 
 let stmts_rhs_maps (p:prog_data_t) =
   List.flatten @:
-    for_all_stmts p @: 
+    for_all_stmts p @:
       fun s -> List.map (fun rmap -> s, rmap) @: rhs_maps_of_stmt p s
 
 let for_all_stmts_rhs_maps p f = List.map f @: stmts_rhs_maps p
@@ -171,11 +171,11 @@ let stmt_has_rhs_map p stmt_id rhs_map_id =
   let (_, _, _, _, maplist) = find_stmt p stmt_id in
   List.exists (fun (map_id, _) -> map_id = rhs_map_id) maplist
 
-let stmts_rhs_map_inner (p:prog_data_t) (t:trig_name_t) ~op = 
+let stmts_rhs_map_inner (p:prog_data_t) (t:trig_name_t) ~op =
   let stmt_data = get_stmt_data p in
   let _, _, _, trig_stmt_ids = find_trigger p t in
   filter_map
-    (fun (stmt_id, _, _, _, maplist) -> 
+    (fun (stmt_id, _, _, _, maplist) ->
       if op maplist [] &&
         List.exists ((=) stmt_id) trig_stmt_ids
       then Some stmt_id
@@ -201,8 +201,8 @@ let for_all_rhs_lhs_maps (p:prog_data_t) f =
      nub @: List.flatten @: for_all_stmts p @: rhs_lhs_of_stmt p in
   List.map f rhs_lhs_l
 
-let map_name_of p map_id = 
-  let (_, name, _) = find_map p map_id in 
+let map_name_of p map_id =
+  let (_, name, _) = find_map p map_id in
   name
 
 let map_id_of_name p str =
@@ -220,8 +220,8 @@ let trigger_of_stmt p stmt_id : trig_name_t =
   let (_, trig, _, _, _) = find_stmt p stmt_id in
   trigger_name_for_id p trig
 
-let map_types_for p map_id = 
-  let (_, _, vars) = find_map p map_id in 
+let map_types_for p map_id =
+  let (_, _, vars) = find_map p map_id in
   vars
 
 let map_types_no_val_for p map = list_drop_end 1 @: map_types_for p map
@@ -239,7 +239,7 @@ let map_ids_types_for ?(prefix=def_map) p map_id =
   (list_drop_end 1 id_ts)@[prefix^"val", hd @: list_take_end 1 ts]
 
 (* ids to reference the map vars, with vid *)
-let map_ids_types_no_val_for ?(prefix=def_map) p map_id = list_drop_end 1 @: 
+let map_ids_types_no_val_for ?(prefix=def_map) p map_id = list_drop_end 1 @:
   map_ids_types_for ~prefix:prefix p map_id
 let map_add_v v xs = v::xs
 let map_ids_add_v ?(vid=def_vid) xs = map_add_v vid xs
@@ -264,13 +264,13 @@ let reduce_l_to_map_size p map l =
 let find_lmap_bindings_in_stmt (p:prog_data_t) (stmt:stmt_id_t) (map:map_id_t) =
   let (_, _, lmap, lmapbind, _) = find_stmt p stmt in
   (* make sure bindings are only as big as the map size minus the value *)
-  if lmap = map then reduce_l_to_map_size p map lmapbind 
+  if lmap = map then reduce_l_to_map_size p map lmapbind
   else raise (Bad_data ("find_lhs_map_binding_in_stmt: No "^
           (string_of_int map)^" lhs map_id found"))
 
 let find_rmap_bindings_in_stmt (p:prog_data_t) (stmt:stmt_id_t) (map:map_id_t) =
   let (_, _, _, _, rmaps) = find_stmt p stmt in
-  let (_, binding) = 
+  let (_, binding) =
     try List.find (fun (rmap, _) -> map = rmap) rmaps
     with
       Not_found -> raise (Bad_data ("find_rhs_map_bindings_in_stmt: No "^
@@ -285,14 +285,14 @@ let find_map_bindings_in_stmt (p:prog_data_t) (stmt:stmt_id_t) (map:map_id_t) =
       find_rmap_bindings_in_stmt p stmt map
 
 (* returns a k3 list of maybes that has the relevant map pattern *)
-let var_list_from_bound (p:prog_data_t) (stmt_id:stmt_id_t) (map_id:map_id_t) = 
-  let map_binds = reduce_l_to_map_size p map_id @: 
+let var_list_from_bound (p:prog_data_t) (stmt_id:stmt_id_t) (map_id:map_id_t) =
+  let map_binds = reduce_l_to_map_size p map_id @:
     find_map_bindings_in_stmt p stmt_id map_id in
   let trig_args = args_of_t p @: trigger_of_stmt p stmt_id in
   let map_types = map_types_for p map_id in
   let idx_types = insert_index_fst 0 map_types in
   List.map
-    (fun (i,typ) -> try 
+    (fun (i,typ) -> try
         (* Look for var name with this binding, then check it's part of trig
          * args. If not, it's a loop var, and shouldn't be used *)
         let id = fst @: List.find (fun (_, loc) -> loc = i) map_binds in
@@ -303,17 +303,17 @@ let var_list_from_bound (p:prog_data_t) (stmt_id:stmt_id_t) (map_id:map_id_t) =
     idx_types
 
 (* returns a k3 list of maybes that has the relevant map pattern *)
-let partial_key_from_bound (p:prog_data_t) stmt_id map_id = 
-  let result = List.map (fun (x, typ) -> 
-      if x = "_" then mk_nothing (wrap_tmaybe typ) 
+let partial_key_from_bound (p:prog_data_t) stmt_id map_id =
+  let result = List.map (fun (x, typ) ->
+      if x = "_" then mk_nothing (wrap_tmaybe typ)
       else mk_just @: mk_var x) @:
     list_drop_end 1 @: var_list_from_bound p stmt_id map_id
   in match result with [] -> [mk_const CUnit] | _ -> result
-                  
+
 (* returns a k3 list of variables or CUnknown. Can't use same types as
  * partial_key *)
-let slice_key_from_bound (p:prog_data_t) (stmt_id:stmt_id_t) (map_id:map_id_t) = 
-  let result = List.map 
+let slice_key_from_bound (p:prog_data_t) (stmt_id:stmt_id_t) (map_id:map_id_t) =
+  let result = List.map
     (fun (x,_) -> if x = "_" then mk_const CUnknown else mk_var x) @:
     var_list_from_bound p stmt_id map_id
   in match result with [] -> [mk_const CUnit] | _ -> result
@@ -321,13 +321,13 @@ let slice_key_from_bound (p:prog_data_t) (stmt_id:stmt_id_t) (map_id:map_id_t) =
 (* return a binding pattern for a stmt of (left_index, right_index) list
  * showing how a lhs map variable corresponds to a rhs variable
  * starting at 0 index *)
-let get_map_bindings_in_stmt (p:prog_data_t) (stmt_id:stmt_id_t) 
+let get_map_bindings_in_stmt (p:prog_data_t) (stmt_id:stmt_id_t)
   (rmap:map_id_t) (lmap:map_id_t) =
   (* make sure we only take bindings not including the value *)
   let lmap_bindings = find_lmap_bindings_in_stmt p stmt_id lmap in
   let rmap_bindings = find_rmap_bindings_in_stmt p stmt_id rmap in
   List.flatten @: List.map
-    (fun (id, index) -> 
+    (fun (id, index) ->
       try [index, List.assoc id rmap_bindings]
       with Not_found -> []
     )
