@@ -158,12 +158,18 @@ let s_and_over_stmts_in_t (p:prog_data_t) func trig_name =
 
 let rhs_maps_of_stmt (p:prog_data_t) (stmt_id:stmt_id_t) =
   let (_, _, _, _, maplist) = find_stmt p stmt_id in
-  nub @: List.map (fun (map_id, _) -> map_id) maplist
+  nub @: fst_many maplist
 
 let stmts_rhs_maps (p:prog_data_t) =
   List.flatten @:
-    for_all_stmts p @:
-      fun s -> List.map (fun rmap -> s, rmap) @: rhs_maps_of_stmt p s
+  List.map (fun (stmt, _, _, _, rmaplist) -> 
+    let maplist = nub @: fst_many rmaplist in
+    List.map (fun map -> stmt, map) maplist
+  )
+  (get_stmt_data p)
+
+let stmts_lhs_maps (p:prog_data_t) =
+  List.map (fun (stmt, _, _, lmap, _) -> stmt, lmap) @: get_stmt_data p
 
 let for_all_stmts_rhs_maps p f = List.map f @: stmts_rhs_maps p
 
