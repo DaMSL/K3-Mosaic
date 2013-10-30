@@ -318,19 +318,22 @@ let modify_delta p ast stmt target_trigger =
       (mk_lambda params @:
         mk_apply
           (mk_lambda params2 @:
-            mk_block
+            mk_block @:
               [body2
                 ;
                 (* we add the delta to all following vids, and we send it for correctives *)
                 mk_apply
                 (mk_var @: add_delta_to_map p lmap) @:
-                  mk_tuple full_vars
-                ;
-                mk_send
-                (mk_const @: CTarget target_trigger)
-                  G.me_var @:
-                  mk_tuple @: full_vars
-              ]
+                  mk_tuple full_vars]
+                @
+                (* do we need to send to another trigger *)
+                match target_trigger with 
+                | None -> [] 
+                | Some t ->
+                  [mk_send
+                    (mk_ctarget t)
+                    G.me_var @:
+                    mk_tuple @: full_vars]
           ) arg2
       ) arg
   | Iterate -> (* more complex modification *)
@@ -365,13 +368,15 @@ let modify_delta p ast stmt target_trigger =
              ;
              mk_apply
               (mk_var @: add_delta_to_map p lmap) @:
-              mk_tuple [mk_var "vid"; mk_var delta_v_name]
-             ;
-             mk_send (* send to a (corrective) target *)
-              (mk_ctarget target_trigger)
-              G.me_var @:
-              mk_tuple [mk_var "vid"; mk_var delta_v_name]
-            ]
+              mk_tuple [mk_var "vid"; mk_var delta_v_name]]
+            @
+            match target_trigger with 
+            | None -> []
+            | Some t ->
+              [mk_send (* send to a (corrective) target *)
+                (mk_ctarget t)
+                G.me_var @:
+                mk_tuple [mk_var "vid"; mk_var delta_v_name]]
       )
       arg
   | _ -> raise (UnhandledModification(PR.string_of_expr ast))
@@ -380,10 +385,7 @@ let modify_delta p ast stmt target_trigger =
 let modify_ast_for_s p ast stmt trig target_trig =
   let ast = ast_for_s p ast stmt trig in
   let ast = modify_map_add_vid p ast stmt in
-  (* do we need to send a delta to another trigger *)
-  match target_trig with
-    | Some t -> modify_delta p ast stmt t
-    | None -> ast
+  modify_delta p ast stmt target_trig
 
 (* return a modified version of the corrective update *)
 let modify_corr_ast p ast map stmt trig =
