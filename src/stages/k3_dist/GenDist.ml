@@ -784,65 +784,107 @@ let send_corrective_trigs p =
     match trigs_stmts_with_matching_rhs_map with [] -> [] | _ ->
     (* we transfer with vid so we don't need to strip *)
     let tuple_types = wrap_ttuple @: map_types_with_v_for p map_id in
+    let t_tuple_set = wrap_tset tuple_types in
+    let t_vid_list = wrap_tlist t_vid in
     [mk_code_sink
       (send_corrective_name_of_t p map_id)
-      (wrap_args ["vid", t_vid; "delta_tuples", wrap_tset tuple_types])
+      (wrap_args ["corrective_vid", t_vid; "delta_tuples", t_tuple_set])
       [] @:
-      (* the corrective list tells us which statements were really executed *)
-      mk_let "corrective_list" (* (vid * stmt_id) list *)
-        (wrap_tset @: wrap_ttuple [t_vid; t_stmt_id])
+      (* the corrective list tells us which statements were fetched 
+       * from us and when *)
+      mk_let "corrective_list" (* (stmt_id * vid list) list *)
+        (wrap_tlist @: wrap_ttuple [t_stmt_id; wrap_tlist t_vid])
         (mk_apply
           (mk_var filter_corrective_list_name) @:
-          mk_tuple @:
-            mk_var "vid"::[trig_stmt_k3_list] (* feed in list of possible stmts *)
+          mk_tuple (* feed in list of possible stmts *)
+            [mk_var "corrective_vid"; trig_stmt_k3_list] 
         ) @:
-        mk_iter  (* loop over corrective list *)
-          (mk_lambda
-            (wrap_args ["vid", t_vid; "stmt_id", t_stmt_id]) @:
-            List.fold_left
-              (* loop over all possible read map matches *)
-              (fun acc_code (target_trig, target_stmt) ->
-                (* we already have the map vars for the rhs map in the
-                 * tuples. Now we try to get some more for the lhs map *)
-                let target_map = lhs_map_of_stmt p target_stmt in
-                let key = partial_key_from_bound p target_stmt target_map in
-                let shuffle_fn = find_shuffle target_stmt map_id target_map in
-                mk_if (* if match, send data *)
-                  (mk_eq
-                    (mk_var "stmt_id") @:
-                    mk_cint target_stmt
-                  )
-                  (mk_iter
-                    (mk_lambda
-                      (wrap_args ["ip", t_addr; "tuples", wrap_tset tuple_types]) @:
-                      mk_send
-                        (* we always send to the same map_id ie. the remote
-                         * buffer of the same map we just calculated *)
-                        (mk_ctarget (rcv_corrective_name_of_t p target_trig
-                          target_stmt map_id))
-                        (mk_var "ip") @:
-                        mk_tuple [mk_var "vid"; mk_var "tuples"]
-                    ) @:
-                    (* get bound vars from log so we can calculate shuffle *)
-                    mk_let_many
-                      (args_of_t_with_v p target_trig)
-                      (mk_apply
-                        (mk_var @: log_get_bound_for p target_trig) @:
-                        mk_var "vid"
+      mk_iter  (* loop over corrective list and act for specific statements *)
+        (mk_lambda
+          (wrap_args ["stmt_id", t_stmt_id; "vid_list", wrap_tset t_vid]) @:
+          List.fold_left
+            (* loop over all possible read map matches *)
+            (fun acc_code (target_trig, target_stmt) ->
+              (* we already have the map vars for the rhs map in the
+                * tuples. Now we try to get some more for the lhs map *)
+              let target_map = lhs_map_of_stmt p target_stmt in
+              let key = partial_key_from_bound p target_stmt target_map in
+              let shuffle_fn = find_shuffle target_stmt map_id target_map in
+              mk_if (* if match, send data *)
+                (mk_eq
+                  (mk_var "stmt_id") @:
+                  mk_cint target_stmt)
+                (mk_iter
+                  (mk_assoc_lambda
+                    (wrap_args ["ip", t_addr])
+                    (wrap_args 
+                      ["vid_send_list", t_vid_list; "tuple", t_tuple_set]) @:
+                    mk_send
+                      (* we always send to the same map_id ie. the remote
+                        * buffer of the same map we just calculated *)
+                      (mk_ctarget @: rcv_corrective_name_of_t p target_trig
+                        target_stmt map_id)
+                      (mk_var "ip") @:
+                      (* we send the vid where the update is taking place as 
+                       * well * as the vids of the sites where corrections must 
+                       * be * calculated *)
+                      mk_tuple 
+                        [mk_var "corrective_vid"; mk_var "vid_send_list";
+                        mk_var "tuple"]
+                  ) @:
+                  mk_gbagg
+                    (* group by the IPs. We want all the vids we'll need to 
+                     * execute, and we concatenate the tuples since we're
+                     * adding deltas anyway, so if there's no stale value,
+                     * there's no harm done *)
+                    (mk_lambda 
+                      (wrap_args 
+                        ["ip", t_addr; "vid", t_vid; "tuples", t_tuple_set]) @:
+                          mk_var "ip"
+                    )
+                    (mk_assoc_lambda
+                      (wrap_args 
+                        ["acc_vid", t_vid_list; "acc_tuples", t_tuple_set])
+                      (wrap_args 
+                        ["ip", t_addr; "vid", t_vid; "tuples", t_tuple_set]) @:
+                        mk_tuple
+                          [mk_combine (mk_var "acc_vid") @: 
+                            mk_singleton t_vid_list (mk_var "vid");
+                           (* critical that this be a set combine to 
+                            * eliminate dups !!!! *)
+                           mk_combine (mk_var "acc_tuples") @: mk_var "tuples"]
+                    )
+                    (mk_tuple [mk_empty t_vid_list; mk_empty t_tuple_set]) @:
+                    mk_flatten @: mk_map
+                      (mk_lambda (wrap_args ["vid", t_vid]) @:
+                        (* get bound vars from log so we can calculate shuffle *)
+                        mk_let_many
+                          (args_of_t_with_v p target_trig)
+                          (mk_apply
+                            (mk_var @: log_get_bound_for p target_trig) @:
+                            mk_var "vid"
+                          ) @:
+                        (* insert vid into the ip, tuples output of shuffle *)
+                        mk_map (* (ip * vid * tuple list) list *)
+                          (mk_lambda 
+                            (wrap_args ["ip", t_addr; "tuples", t_tuple_set]) @:
+                              mk_tuple 
+                                [mk_var "ip"; mk_var "vid"; mk_var "tuples"]
+                          ) @:
+                          mk_apply
+                            (mk_var shuffle_fn) @:
+                            mk_tuple
+                              [mk_tuple key; mk_var "delta_tuples"; 
+                               mk_cbool false] (* (ip * tuple list) list *)
                       ) @:
-                      mk_apply
-                        (mk_var shuffle_fn) @:
-                        mk_tuple @:
-                          mk_tuple key::
-                          mk_var "delta_tuples"::
-                          [mk_cbool false]
-                  )
-                  acc_code (* just another branch on the if *)
-              )
-              mk_cunit (* base case *)
-              trigs_stmts_with_matching_rhs_map
-          ) @:
-          mk_var "corrective_list"
+                      mk_var "vid_list" 
+                )
+                acc_code (* just another branch on the if *)
+            )
+            mk_cunit (* base case *)
+            trigs_stmts_with_matching_rhs_map
+        ) @:
+        mk_var "corrective_list"
     ]
   in
   List.flatten @: List.map send_correctives @: maps_potential_corrective p
@@ -864,42 +906,50 @@ in
 List.map (fun stmt -> do_complete_trig stmt) @: stmts_of_t p trig_name
 
 
-(* get_corrective_list:
- * ---------------------------------------
+(* 
  * Return list of corrective statements we need to execute by checking
  * which statements were performed after time x that used a particular map
  * The only reason for this function is that we may have the same stmt
  * needing to execute with different vids
- * Optimization TODO: check also by ranges within the map.
+ * Optimization TODO: check also by ranges within the map ie. more fine grain
  *)
-let filter_corrective_list = mk_global_fn filter_corrective_list_name
+let filter_corrective_list = 
+  let trig_stmt_list_t = wrap_tlist @: wrap_ttuple [t_trig_id; t_stmt_id] in
+  let vid_list_t = wrap_tlist t_vid in
+  mk_global_fn filter_corrective_list_name
   (* (trigger_id, stmt_id) list *)
-  ["vid", t_vid; "trig_stmt_list", wrap_tset @: wrap_ttuple
-    [t_trig_id; t_stmt_id]
-  ]
-  [wrap_tset @: wrap_ttuple [t_vid; t_stmt_id]]
-  (mk_sort (* sort so that early vids are first for performance *)
-    (mk_flatten @: mk_map
-      (mk_lambda
-        (wrap_args ["trig_id", t_trig_id; "stmt_id", t_stmt_id]) @:
-        mk_filtermap
-          (mk_lambda (wrap_args ["vid", t_vid; "trig_id2", t_trig_id]) @:
-            mk_eq (mk_var "trig_id2") @: mk_var "trig_id"
-          )
-          (mk_lambda (wrap_args ["vid", t_vid; "trig_id2", t_trig_id]) @:
-            mk_tuple [mk_var "vid"; mk_var "stmt_id"]
-          ) @:
-          mk_apply  (* list of triggers >= vid *)
-            (mk_var log_read_geq) @: (* TODO *)
-            mk_var "vid"
+  ["request_vid", t_vid; "trig_stmt_list", trig_stmt_list_t]
+  [wrap_tlist @: wrap_ttuple [t_stmt_id; wrap_tlist t_vid]] 
+  @:
+  (* group the list by stmt_ids *)
+  mk_gbagg
+    (mk_lambda (wrap_args ["_", t_vid; "stmt_id", t_stmt_id]) @:
+      mk_var "stmt_id"
+    )
+    (mk_assoc_lambda (wrap_args ["vid_list", vid_list_t]) 
+                     (wrap_args ["vid", t_vid; "_", t_stmt_id]) @:
+      mk_combine (mk_var "vid_list") (mk_singleton vid_list_t @: mk_var "vid")
+    )
+    (mk_empty vid_list_t) @:
+    mk_sort (* sort so early vids are generally sent out first *)
+      (* get a list of vid, stmt_id pairs *)
+      (mk_flatten @: mk_map
+        (mk_lambda (wrap_args ["vid", t_vid; "trig_id", t_trig_id]) @:
+          (* convert to vid, stmt *)
+          mk_map
+            (mk_lambda 
+              (wrap_args ["_", t_trig_id; "stmt_id", t_stmt_id]) @:
+              mk_tuple [mk_var "vid"; mk_var "stmt_id"]) @:
+            (mk_slice (mk_var "trig_stmt_list") @:
+              mk_tuple [mk_var "trig_id"; mk_cunknown])
+        ) @:
+        mk_apply (* list of triggers >= vid *)
+          (mk_var log_read_geq) @: mk_var "request_vid"
       ) @:
-      mk_var "trig_stmt_list"
-    ) @:
-    mk_assoc_lambda (* compare func *)
-      (wrap_args ["vid1", t_vid; "stmt1", t_stmt_id])
-      (wrap_args ["vid2", t_vid; "stmt2", t_stmt_id]) @:
-      v_lt (mk_var "vid1") @: mk_var "vid2"
-  )
+      mk_assoc_lambda (* compare func *)
+        (wrap_args ["vid1", t_vid; "stmt1", t_stmt_id])
+        (wrap_args ["vid2", t_vid; "stmt2", t_stmt_id]) @:
+        v_lt (mk_var "vid1") @: mk_var "vid2"
 
 
 (* receive_correctives:
@@ -916,16 +966,19 @@ List.map
     mk_code_sink (rcv_corrective_name_of_t p trig_name stmt_id rmap)
       (wrap_args
         ["vid", t_vid;
+        "compute_vids", wrap_tlist t_vid;
         "delta_tuples", wrap_tset @: wrap_ttuple @: map_types_with_v_for p rmap]
       )
       [] @: (* locals *)
       mk_block
-        (* accumulate delta for this vid and all following vids *)
+        (* accumulate delta for this vid and all following vids. This is a very
+         * sensitive point in the protocol and it's essential this only be done
+         * once for a given corrective *)
         [mk_apply
           (mk_var @: add_delta_to_buffer_stmt_map p stmt_id rmap) @:
           mk_tuple [mk_var "vid"; mk_var "delta_tuples"]
           ;
-          (* only execute if we have all the updates *)
+          (* for every computation vid, only execute if we have all the updates *)
           mk_if
             (mk_eq
               (mk_peek @: mk_slice stmt_cntrs @:
