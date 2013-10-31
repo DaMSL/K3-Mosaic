@@ -55,7 +55,16 @@ let list_take_end len li = list_drop (List.length li - len) li
 (* drop from the end of a list *)
 let list_drop_end len li = list_take (List.length li - len) li
 
-let list_zip list1 list2 = List.map2 (fun i j -> (i,j)) list1 list2
+(* tail-recursive and tolerates different lengths *)
+let list_zip l1 l2 = 
+  let rec loop acc l1 l2 =
+    match l1, l2 with
+    | _, [] | [], _   -> List.rev acc
+    | x::xs, y::ys    -> loop ((x,y)::acc) xs ys
+  in loop [] l1 l2
+
+(*let list_zip list1 list2 = *)
+  (*List.map2 (fun i j -> (i,j)) list1 list2*)
 
 let hd l = match l with
   | x::_ -> x
