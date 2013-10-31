@@ -72,11 +72,15 @@ let block_nth exp i = match U.tag_of_expr exp with
   | _            -> raise (InvalidAst("block_nth: Not a block"))
 
 (* return the AST for a given stmt *)
-let ast_for_s p ast (stmt:P.stmt_id_t) (trig:P.trig_name_t) =
+let ast_for_s_t p ast (stmt:P.stmt_id_t) (trig:P.trig_name_t) =
   let trig_decl = U.trigger_of_program trig ast in
   let trig_ast = U.expr_of_code trig_decl in
   let s_idx = stmt_idx_in_t p trig stmt in
   block_nth trig_ast s_idx
+
+let ast_for_s p ast (stmt:P.stmt_id_t) =
+  let trig = P.trigger_of_stmt p stmt in
+  ast_for_s_t p ast stmt trig
 
 (* return the corrective args and AST for a given stmt, map, trig *)
 let corr_ast_for_m_s p ast map stmt trig =
@@ -288,108 +292,144 @@ let modify_map_add_vid p ast stmt =
 
 (* this delta extraction is very brittle, since it's tailored to the way the M3
  * to K3 calculations are written *)
-let modify_delta p ast stmt target_trigger =
+let delta_action p ast stmt action =
   let lmap = P.lhs_map_of_stmt p stmt in
+  let lmap_name = P.map_name_of p lmap in
   let lmap_types = P.map_types_with_v_for p lmap in
+  (* we need to know how the map is accessed in the statement *)
   let lmap_bindings = P.find_lmap_bindings_in_stmt p stmt lmap in
-  let lmap_bind_ids_v = P.map_ids_add_v @: fst @: List.split lmap_bindings in
-  let (lambda, arg) = U.decompose_apply ast in
+  let lmap_bind_ids_v = P.map_ids_add_v @: fst @: List.split lmap_bindings
+  in
+  let lambda, arg = U.decompose_apply ast in
   let body = U.decompose_lambda lambda in
   let params = match U.tag_of_expr lambda with Lambda a -> a
-    | _ -> raise(UnhandledModification("No lambda")) in
+    | _ -> raise @: UnhandledModification("No lambda") in
   match U.tag_of_expr body with
-  | Apply -> (* simple modification - sending a single piece of data *)
-    let (lambda2, arg2) = U.decompose_apply body in
+  | Apply -> 
+    (* simple modification - sending a single tuple of data *)
+    (* these applies are lets *)
+    let lambda2, arg2 = U.decompose_apply body in
     let body2 = U.decompose_lambda lambda2 in
     let params2 = begin match U.tag_of_expr lambda2 with
       | Lambda a -> a
-      | _ -> raise(UnhandledModification("No inner lambda")) end in
+      | _ -> raise @: UnhandledModification("No inner lambda") end in
     let delta_name = hd @: U.vars_of_lambda lambda2 in
     let delta_types = extract_arg_types @: U.typed_vars_of_arg params2 in
+    let full_types = lmap_types @ delta_types in
+    let full_names = lmap_bind_ids_v @ [delta_name] in
     let full_vars =
-      let full_types = P.map_add_v t_vid @: lmap_types @ delta_types in
-      let full_names = lmap_bind_ids_v @ [delta_name] in
         P.map_add_v (mk_var "vid") @:
           [mk_singleton
-            (wrap_tset @: wrap_ttuple full_types) @:
+            (wrap_tset @: wrap_ttuple @: P.map_add_v t_vid full_types) @:
             mk_tuple @: ids_to_vars full_names
           ] in
-    mk_apply
-      (mk_lambda params @:
-        mk_apply
-          (mk_lambda params2 @:
-            mk_block @:
-              [body2
-                ;
-                (* we add the delta to all following vids, and we send it for correctives *)
-                mk_apply
-                (mk_var @: add_delta_to_map p lmap) @:
-                  mk_tuple full_vars]
-                @
-                (* do we need to send to another trigger *)
-                match target_trigger with 
-                | None -> [] 
-                | Some t ->
-                  [mk_send
-                    (mk_ctarget t)
-                    G.me_var @:
-                    mk_tuple @: full_vars]
-          ) arg2
-      ) arg
+    begin match action with
+    | `GetBody varname -> 
+        (* get the body for adding the delta *)
+        mk_let "existing_out_tier" (wrap_tbag @: wrap_ttuple lmap_types) 
+          (mk_var lmap_name) @:
+        mk_iter
+          (mk_lambda (wrap_args @: list_zip full_names full_types)
+            body2) @:
+          mk_var varname
+
+    | `ModifyDelta target_trigger ->
+      (* modify the delta itself *)
+      mk_apply
+        (mk_lambda params @:
+          mk_apply
+            (mk_lambda params2 @:
+              mk_block @:
+                [ (* we add the delta to all following vids,
+                   * and we send it for correctives *)
+                  mk_apply
+                  (mk_var @: add_delta_to_map p lmap) @:
+                    mk_tuple full_vars]
+                  @
+                  (* do we need to send to another trigger *)
+                  match target_trigger with 
+                  | None -> [] 
+                  | Some t ->
+                    [mk_send
+                      (mk_ctarget t)
+                      G.me_var @:
+                      mk_tuple @: full_vars]
+            ) arg2
+        ) arg
+    end
   | Iterate -> (* more complex modification *)
-    let (lambda2, col) = U.decompose_iterate body in
+    let lambda2, col = U.decompose_iterate body in
     let params2 = begin match U.tag_of_expr lambda2 with
       | Lambda a -> a
       | _ -> raise(UnhandledModification("No inner lambda")) end in
-    let delta_name = "__delta_values__" in
-    let delta_v_name = "__delta_with_vid__" in
-    let delta_ids_types = U.typed_vars_of_arg params2 in
-    let delta_types = extract_arg_types delta_ids_types in
-    let delta_col_type = wrap_tset @: wrap_ttuple delta_types in
-    let delta_col_v_type = wrap_tset @: wrap_ttuple @: P.map_types_add_v delta_types in
-    let delta_ids = extract_arg_names delta_ids_types in
-    let delta_last_id = list_take_end 1 delta_ids in
-    mk_apply
-      (mk_lambda params @:
-          mk_let delta_name delta_col_type col @:
-          (* project vid into collection *)
-          mk_let delta_v_name delta_col_v_type
-            (mk_map
-              (mk_lambda
-                (wrap_args delta_ids_types) @:
-                  mk_tuple @:
-                    ids_to_vars @: lmap_bind_ids_v@delta_last_id
-                ) @:
-               mk_var delta_name) @:
-          mk_block @:
-            (* execute lambda on delta values *)
-            [mk_iter lambda2 @:
-              mk_var delta_name
-             ;
-             mk_apply
-              (mk_var @: add_delta_to_map p lmap) @:
-              mk_tuple [mk_var "vid"; mk_var delta_v_name]]
-            @
-            match target_trigger with 
-            | None -> []
-            | Some t ->
-              [mk_send (* send to a (corrective) target *)
-                (mk_ctarget t)
-                G.me_var @:
+    begin match action with
+    | `GetBody varname -> 
+        (* This is a place where our heuristics don't pick up on the need to add a
+        * vid, and yet we need to add it here to be able to process the incoming
+        * deltas including vids *)
+        let lambda2' = add_vid_to_lambda_args lambda2 in
+        (* get the body for adding the delta *)
+        mk_let "existing_out_tier" (wrap_tbag @: wrap_ttuple lmap_types) 
+          (mk_var lmap_name) @:
+        (* get the body for adding the delta *)
+        mk_iter lambda2' @: mk_var varname
+
+    | `ModifyDelta target_trigger ->
+      let delta_name = "__delta_values__" in
+      let delta_v_name = "__delta_with_vid__" in
+      let delta_ids_types = U.typed_vars_of_arg params2 in
+      let delta_types = extract_arg_types delta_ids_types in
+      let delta_col_type = wrap_tset @: wrap_ttuple delta_types in
+      let delta_col_v_type = 
+        wrap_tset @: wrap_ttuple @: P.map_types_add_v delta_types in
+      let delta_ids = extract_arg_names delta_ids_types in
+      let delta_last_id = list_take_end 1 delta_ids
+      in
+      mk_apply
+        (mk_lambda params @:
+            mk_let delta_name delta_col_type col @:
+            (* project vid into collection *)
+            mk_let delta_v_name delta_col_v_type
+              (mk_map
+                (mk_lambda
+                  (wrap_args delta_ids_types) @:
+                    mk_tuple @:
+                      ids_to_vars @: lmap_bind_ids_v@delta_last_id
+                  ) @:
+                mk_var delta_name) @:
+            mk_block @:
+              (* add delta values to all following vids *)
+              [mk_apply
+                (mk_var @: add_delta_to_map p lmap) @:
                 mk_tuple [mk_var "vid"; mk_var delta_v_name]]
-      )
-      arg
+              @
+              match target_trigger with 
+              | None -> []
+              | Some t ->
+                [mk_send (* send to a (corrective) target *)
+                  (mk_ctarget t)
+                  G.me_var @:
+                  mk_tuple [mk_var "vid"; mk_var delta_v_name]]
+        )
+        arg
+    end
   | _ -> raise (UnhandledModification(PR.string_of_expr ast))
 
 (* return a modified version of the original ast for s *)
 let modify_ast_for_s p ast stmt trig target_trig =
-  let ast = ast_for_s p ast stmt trig in
+  let ast = ast_for_s_t p ast stmt trig in
   let ast = modify_map_add_vid p ast stmt in
-  modify_delta p ast stmt target_trig
+  delta_action p ast stmt @: `ModifyDelta target_trig
 
 (* return a modified version of the corrective update *)
 let modify_corr_ast p ast map stmt trig =
   let args, ast = corr_ast_for_m_s p ast map stmt trig in
   let ast = modify_map_add_vid p ast stmt in
   args, ast
+
+(* return the computation for adding the delta in a particular statement *)
+let delta_computation_of_stmt p ast stmt varname =
+  let ast = ast_for_s p ast stmt in
+  let ast = modify_map_add_vid p ast stmt in
+  delta_action p ast stmt @: `GetBody varname
 

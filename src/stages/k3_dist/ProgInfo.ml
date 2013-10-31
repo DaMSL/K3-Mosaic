@@ -169,7 +169,7 @@ let stmts_rhs_maps (p:prog_data_t) =
   (get_stmt_data p)
 
 let stmts_lhs_maps (p:prog_data_t) =
-  List.map (fun (stmt, _, _, lmap, _) -> stmt, lmap) @: get_stmt_data p
+  List.map (fun (stmt, _, lmap, _, _) -> stmt, lmap) @: get_stmt_data p
 
 let for_all_stmts_rhs_maps p f = List.map f @: stmts_rhs_maps p
 
