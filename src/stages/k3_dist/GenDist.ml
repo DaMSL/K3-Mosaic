@@ -22,6 +22,10 @@
  *                        do_complete_corrective_<trigger>_<stmt>_<delta_rhs_map>
  *                            On_corrective_<trigger>_<delta_rhs_map>
  *                            ...
+ *
+ * Ordering invariant: the arrival of packets between a pair of nodes must be
+ * ordered in one instance: correctives must arrive after the original push of
+ * data. Otherwise, the corrective will be erased.
  *)
 
 open Util
@@ -984,31 +988,39 @@ List.map
           mk_tuple [mk_var "vid"; mk_var "delta_tuples"]
           ;
           (* for every computation vid, only execute if we have all the updates *)
-          mk_if
-            (mk_eq
-              (mk_peek @: mk_slice stmt_cntrs @:
-                mk_tuple
-                  [mk_var "vid"; mk_cint stmt_id; mk_cunknown]
-              ) @: (* error if we get more than one result *)
-              mk_tuple
-                [mk_var "vid"; mk_cint stmt_id; mk_cint 0]
-            )
-            (* get bound vars from log *)
-            (mk_let_many
-              (args_of_t_with_v p trig_name)
-              (mk_apply
-                (mk_var @: log_get_bound_for p trig_name)
-                (mk_var "vid")
-              ) @:
-              mk_send
-                (mk_ctarget @:
-                  do_corrective_name_of_t p trig_name stmt_id rmap
+          mk_iter
+            (mk_lambda (wrap_args ["compute_vid", t_vid]) @:
+              mk_if
+                (mk_eq
+                  (mk_peek @:
+                    (* We'll crash if we can't find the right stmt here, but this is
+                    * desired behavior since it makes sure a corrective can't happen
+                    * without an earlier push/put *)
+                    mk_slice stmt_cntrs @:
+                    mk_tuple
+                      [mk_var "compute_vid"; mk_cint stmt_id; mk_cunknown]
+                  ) @: (* error if we get more than one result *)
+                  mk_tuple
+                    [mk_var "compute_vid"; mk_cint stmt_id; mk_cint 0]
                 )
-                G.me_var @:
-                mk_tuple @: args_of_t_as_vars_with_v p trig_name @
-                  [mk_var "delta_tuples"]
+                (* get bound vars from log *)
+                (mk_let_many
+                  (args_of_t_with_v p trig_name)
+                  (mk_apply
+                    (mk_var @: log_get_bound_for p trig_name)
+                    (mk_var "compute_vid")
+                  ) @:
+                  mk_send
+                    (mk_ctarget @:
+                      do_corrective_name_of_t p trig_name stmt_id rmap
+                    )
+                    G.me_var @:
+                    mk_tuple @: args_of_t_as_vars_with_v ~vid:"compute_vid" p trig_name @
+                      [mk_var "delta_tuples"]
+                ) @:
+                mk_cunit (* else *)
             ) @:
-            mk_cunit (* else *)
+            mk_var "compute_vids"
         ]
   )
   s_rhs
