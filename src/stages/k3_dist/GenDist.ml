@@ -228,6 +228,23 @@ let declare_global_funcs partmap p ast =
                   mk_tuple @: mk_cunknown::vars_arg_no_v_no_val@[mk_cunknown]
           ) @:
           mk_var delta_tuples_nm
+        ] in
+  let global_inits =
+    (* global initialization that should happen once *)
+      mk_global_val_init "init" t_unit @:
+        mk_block
+          [mk_iter
+            (mk_lambda
+              (wrap_args K3Global.peers_id_type) @:
+              (* only add to node list if role <> switch *)
+              mk_if
+              (mk_neq
+                (mk_var K3Global.peers_role_name) (mk_cstring "switch"))
+              (mk_apply (mk_var K3Ring.add_node_name) @:
+                  mk_tuple @: ids_to_vars K3Global.peers_ids)
+              (mk_cunit)
+            ) @:
+              mk_var K3Global.peers_name
         ]
   in
   global_vid_ops @
@@ -237,28 +254,12 @@ let declare_global_funcs partmap p ast =
     add_delta_to_buffer_code @: `Corrective(stmt,m)) @
   for_all_trigs p log_write_code @
   for_all_trigs p log_get_bound_code @
-  gen_shuffle_route_code p partmap
+  gen_shuffle_route_code p partmap @
+  [global_inits]
 
 
 (* ---- start of protocol code ---- *)
 
-(* Trigger that's called once, on system init *)
-let on_init_trig p =
-  mk_code_sink "on_init" (wrap_args ["x", t_int]) [] @:
-    mk_block
-      [mk_iter
-        (mk_lambda
-          (wrap_args K3Global.peers_id_type) @:
-          (* only add to node list if role <> switch *)
-          mk_if
-           (mk_neq
-            (mk_var K3Global.peers_role_name) (mk_cstring "switch"))
-           (mk_apply (mk_var K3Ring.add_node_name) @:
-              mk_tuple @: ids_to_vars K3Global.peers_ids)
-           (mk_cunit)
-        ) @:
-          mk_var K3Global.peers_name
-     ]
 
 (* The start trigger inserts a vid into each message *)
 let start_trig p t =
@@ -1044,17 +1045,8 @@ let demux_trigs ast =
 
 (* we take the existing default role and prepend it with a one-shot to
  * call out on-init function *)
-let modified_roles ast =
-  let roles = List.filter (fun d -> U.is_role d || U.is_def_role d) ast in
-  let def_role_id = U.id_of_role @: List.find U.is_def_role roles in
-  let pred = fun d -> U.is_role d && U.id_of_role d = def_role_id in
-  let def_role = List.find pred roles in
-  let other_roles = List.filter (not |- pred) roles in
-  let (_, flow_prog) = U.decompose_role def_role in
-  (mk_role def_role_id @:
-    mk_const_stream "s_on_init" t_int [mk_cint 1] ::
-    mk_bind "s_on_init" "on_init" ::
-    mk_consume "s_on_init" :: flow_prog) :: other_roles
+let roles_of ast =
+  List.filter (fun d -> U.is_role d || U.is_def_role d) ast
 
 (* Generate all the code for a specific trigger *)
 let gen_dist_for_t p ast trig =
@@ -1101,11 +1093,10 @@ let gen_dist p partmap ast =
       GC.safe_vid_to_delete_rcv_trig_code ::
       GC.vid_rcv_trig ::
       GC.max_acked_vid_send_trig vid_counter epoch_var hash_addr  ::
-      on_init_trig p::
       regular_trigs@
       send_corrective_trigs p@
       demux_trigs ast)::    (* per-map basis *)
-      modified_roles ast in
+      roles_of ast in
   let foreign = List.filter (fun d -> U.is_foreign d) prog in
   let rest = List.filter (fun d -> not @: U.is_foreign d) prog in
   snd @: U.renumber_program_ids (foreign @ rest)

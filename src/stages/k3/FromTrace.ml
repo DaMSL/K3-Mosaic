@@ -344,18 +344,17 @@ let string_of_go_trig ~has_sys_ready events =
 let string_of_test_role ~is_dist events =
   if is_dist then
     (str_make @:
+      "trigger node_dummy(x:int) {} = ()"::
       "role switch {"::
-      "  source s_on_init : int = stream([1])"::
-      "  bind s_on_init -> on_init"::
-      "  consume s_on_init"::
-      RelEvent.stream_s events@
-      "}"::
-      "role node {"::
-      "  source s_on_init : int = stream([1])"::
-      "  bind s_on_init -> on_init"::
-      "  consume s_on_init"::
-      "}"::[])::
-      "default role switch"::
+        RelEvent.stream_s events@
+      ["}";
+       "role node {";
+       "  source s_dummy : int = stream([1])";
+       "  bind s_dummy -> node_dummy";
+       "  consume s_dummy";
+       "}"
+      ])::
+       "default role switch"::
       []
   else (* single-site *)
     if events <> [] then
