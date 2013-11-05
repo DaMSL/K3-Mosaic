@@ -15,23 +15,22 @@ type runtime_error_type =
     INVALID_GLOBAL_QUEUE
   | INVALID_TRIGGER_QUEUE
   | INVALID_TRIGGER_TARGET
-  | INVALID_SHUFFLE_BUFFER
+  | INVALID_SHUFFLE_BUFFER of address
   | INVALID_BREAKPOINT
   | INVALID_ADDRESS
 
-let runtime_errors = [
-    INVALID_GLOBAL_QUEUE, (-1000, "invalid empty task queue");
-    INVALID_TRIGGER_QUEUE, (-1001, "invalid dequeue on trigger");
-    INVALID_TRIGGER_TARGET, (-1002, "invalid target for message send");
-    INVALID_SHUFFLE_BUFFER, (-1003, "error in shuffle buffer");
-    INVALID_BREAKPOINT, (-1004, "invalid breakpoint");
-    INVALID_ADDRESS, (-1005, "invalid node address");
-  ]
+let runtime_error = function
+  | INVALID_GLOBAL_QUEUE           -> -1000, "invalid empty task queue"
+  | INVALID_TRIGGER_QUEUE          -> -1001, "invalid dequeue on trigger"
+  | INVALID_TRIGGER_TARGET         -> -1002, "invalid target for message send"
+  | INVALID_SHUFFLE_BUFFER address ->
+      (-1003, "error in shuffle buffer: no rcv address "^string_of_address address)
+  | INVALID_BREAKPOINT             -> -1004, "invalid breakpoint"
+  | INVALID_ADDRESS                -> -1005, "invalid node address"
 
 let error t =
-  let i, s = try List.assoc t runtime_errors
-             with Not_found -> -1, "K3Runtime: unknown error code"
-  in raise @: RuntimeError(i, s)
+  let i, s = runtime_error t in
+  raise @: RuntimeError(i, s)
 
 (* Event queues and scheduling *)
 
@@ -240,6 +239,9 @@ let buffer_trigger s target address args sender_addr =
       let inner_h = begin try Hashtbl.find s.shuffle_buffer address
                     with Not_found ->
                       let h = Hashtbl.create 10 in
+                      (* Printf.printf "adding %s to shuffle buf\n" 
+                       *   (string_of_address address);
+                       * *)
                       Hashtbl.add s.shuffle_buffer address h;
                       h
                     end
@@ -257,8 +259,8 @@ let buffer_trigger s target address args sender_addr =
 (* if shuffling is on, we move messages from the shuffle buffer to the queues *)
 let schedule_trigger_random s receive_address =
   if Hashtbl.length s.shuffle_buffer = 0 then () else
-  let per_node_buf = try Hashtbl.find s.shuffle_buffer receive_address
-                     with Not_found -> error INVALID_SHUFFLE_BUFFER
+  if not @: Hashtbl.mem s.shuffle_buffer receive_address then () else
+  let per_node_buf = Hashtbl.find s.shuffle_buffer receive_address
   in
   (* set of available senders *)
   let senders_set =
