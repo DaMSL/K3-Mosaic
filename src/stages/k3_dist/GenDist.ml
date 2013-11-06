@@ -559,6 +559,7 @@ let rcv_fetch_trig p trig =
 (* Receive Put trigger
  * --------------------------------------- *
  * Update the statement counters with the received values
+ * If the counter is 0, we need to call do_complete
  *)
 let rcv_put_trig p trig_name =
 mk_code_sink
@@ -582,18 +583,43 @@ mk_code_sink
           (mk_has_member stmt_cntrs query_pat full_types)
           (mk_let_deep (wrap_args ["_", t_unit; "_", t_unit; "old_count", t_int])
             (mk_peek @: mk_slice stmt_cntrs query_pat) @:
-            mk_update (* really an error -- shouldn't happen. Raise exception? *)
-              stmt_cntrs
-              (mk_peek @: mk_slice stmt_cntrs query_pat) @:
-              mk_tuple @:
-                part_pat_as_vars@[mk_add (mk_var "old_count") @: mk_var "count"]
+            (* update the count *)
+            mk_let "new_count" t_int
+              (mk_add (mk_var "old_count") @: mk_var "count") @:
+            mk_block [
+              mk_update
+                stmt_cntrs
+                (mk_tuple @:
+                  part_pat_as_vars@[mk_var "old_count"]) @:
+                mk_tuple @:
+                  part_pat_as_vars@[mk_var "new_count"]
+              ;
+              mk_if
+                (mk_eq (mk_var "new_count") @: mk_cint 0)
+                (* we need to create a possible send for each statement in the trigger *)
+                (List.fold_left (fun acc_code stmt_id ->
+                  mk_if
+                    (mk_eq (mk_var "stmt_id") @: mk_cint stmt_id)
+                    (mk_send
+                      (mk_ctarget @:
+                        do_complete_name_of_t p trig_name stmt_id)
+                      G.me_var @:
+                      mk_tuple @: args_of_t_as_vars_with_v p trig_name
+                    ) @:
+                    acc_code
+                  )
+                  (mk_cunit) @:
+                  P.stmts_of_t p trig_name
+                ) @:
+                mk_cunit
+            ]
           ) @:
           mk_insert
             stmt_cntrs @:
             mk_tuple @: part_pat_as_vars@[mk_var "count"]
       ) @:
         mk_var "stmt_id_cnt_list";
-    (* ack send*)
+    (* ack send for GC *)
     mk_send (mk_ctarget "ack_send")  G.me_var @:
       mk_tuple [mk_var "sender_ip"; mk_var "vid"]
   ]
