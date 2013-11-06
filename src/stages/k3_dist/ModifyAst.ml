@@ -82,24 +82,29 @@ let ast_for_s p ast (stmt:P.stmt_id_t) =
   let trig = P.trigger_of_stmt p stmt in
   ast_for_s_t p ast stmt trig
 
-(* return the corrective args and AST for a given stmt, map, trig *)
+(* return the corrective (args, stmt_id, AST) for a given stmt, map, trig *)
 let corr_ast_for_m_s p ast map stmt trig =
+  (* find the specific statement in the corrective trigger that deals with our map *)
   let map_name = P.map_name_of p map in
   let s_with_m = P.s_and_over_stmts_in_t p P.rhs_maps_of_stmt trig in
-  let s_with_m_filter = List.filter (fun (_,m) -> m = map) s_with_m in
-  let s_i = insert_index_snd 0 @: fst @: List.split s_with_m_filter in
+  let s_with_m_filter = List.filter (fun (s,m) -> m = map) s_with_m in
+  (* find all the statements in the trigger dealing with our map and count them. 
+   * This will tell us how far to go in the corrective trigger for the map *)
+  let s_i = insert_index_snd 0 @: fst_many s_with_m_filter in
   let stmt_idx = List.assoc stmt s_i in
 
   let trig_name = "correct_"^map_name^"_for_"^trig in
   let trig_decl =
     try U.trigger_of_program trig_name ast
     with Not_found -> failwith @: "Missing corrective for "^trig_name in
+  let trig_min_stmt = list_min @: P.stmts_of_t p trig_name in
   let trig_ast = U.expr_of_code trig_decl in
   let args = U.typed_vars_of_arg @: U.args_of_code trig_decl in
   let trig_args = P.args_of_t p trig in
   (* remove the trigger args from the list of args in the corrective trigger *)
-  let args2 = Set.diff args trig_args
-  in (args2, block_nth trig_ast stmt_idx)
+  let args2 = Set.diff args trig_args in
+  let stmt_block = block_nth trig_ast stmt_idx
+  in args2, trig_min_stmt + stmt_idx, stmt_block
 
 exception UnhandledModification of string
 
@@ -296,9 +301,9 @@ let delta_action p ast stmt action =
   let lmap = P.lhs_map_of_stmt p stmt in
   let lmap_name = P.map_name_of p lmap in
   let lmap_types = P.map_types_with_v_for p lmap in
-  (* we need to know how the map is accessed in the statement *)
+  (* we need to know how the map is accessed in the statement. *)
   let lmap_bindings = P.find_lmap_bindings_in_stmt p stmt lmap in
-  let lmap_bind_ids_v = P.map_ids_add_v @: fst @: List.split lmap_bindings
+  let lmap_bind_ids_v = P.map_ids_add_v @: fst_many lmap_bindings
   in
   let lambda, arg = U.decompose_apply ast in
   let body = U.decompose_lambda lambda in
@@ -413,19 +418,19 @@ let delta_action p ast stmt action =
         )
         arg
     end
-  | _ -> raise (UnhandledModification(PR.string_of_expr ast))
+  | _ -> raise @: UnhandledModification(PR.string_of_expr ast)
 
 (* return a modified version of the original ast for s *)
-let modify_ast_for_s p ast stmt trig target_trig =
+let modify_ast_for_s p ast stmt trig send_to_trig =
   let ast = ast_for_s_t p ast stmt trig in
   let ast = modify_map_add_vid p ast stmt in
-  delta_action p ast stmt @: `ModifyDelta target_trig
+  delta_action p ast stmt @: `ModifyDelta send_to_trig
 
 (* return a modified version of the corrective update *)
-let modify_corr_ast p ast map stmt trig =
-  let args, ast = corr_ast_for_m_s p ast map stmt trig in
+let modify_corr_ast p ast map stmt trig send_to_trig =
+  let args, corr_stmt, ast = corr_ast_for_m_s p ast map stmt trig in
   let ast = modify_map_add_vid p ast stmt in
-  args, ast
+  args, delta_action p ast corr_stmt @: `ModifyDelta send_to_trig
 
 (* return the computation for adding the delta in a particular statement *)
 let delta_computation_of_stmt p ast stmt varname =

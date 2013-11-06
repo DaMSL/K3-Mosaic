@@ -219,8 +219,18 @@ let list_minmax op f l = match l with
       (x, f x) xs
   | _     -> invalid_arg "Empty list"
 
-let list_max f l = list_minmax (>) f l
-let list_min f l = list_minmax (<) f l
+let list_max_op f l = list_minmax (>) f l
+let list_min_op f l = list_minmax (<) f l
+
+let list_min l = List.fold_left (fun acc x ->
+  if x < acc then x else acc) 
+  (hd l) 
+  (tl l)
+
+let list_max l = List.fold_left (fun acc x ->
+  if x > acc then x else acc) 
+  (hd l) 
+  (tl l)
 
 (* modify/add to/remove_from an association list generically *)
 let assoc_modify f item l =

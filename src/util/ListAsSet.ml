@@ -12,11 +12,12 @@
 let diff l1 l2 =
   let hash = Hashtbl.create (List.length l2) in
   List.iter (fun x -> Hashtbl.replace hash x ()) l2;
-  List.fold_left (fun acc x ->
-    try 
-      Hashtbl.find hash x; acc 
-    with Not_found -> x::acc
-  ) [] l1
+  List.rev 
+   (List.fold_left (fun acc x ->
+      try 
+        Hashtbl.find hash x; acc 
+      with Not_found -> x::acc
+    ) [] l1)
    
 (** 
    Determines if one list is a subset of the other.

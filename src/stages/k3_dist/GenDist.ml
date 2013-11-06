@@ -1027,22 +1027,28 @@ List.map
 ;;
 
 (* do corrective triggers *)
-let do_corrective_trigs p s_rhs ast trig_name =
-List.map
-  (fun (stmt_id, map_id) ->
-    mk_code_sink
-      (do_corrective_name_of_t p trig_name stmt_id map_id)
+(* very similar to do_complete, but we only have to do it for certain
+ * (stmt, map) combinations *)
+let do_corrective_trigs p s_rhs ast trig_name corrective_maps =
+  let do_corrective_trig (stmt_id, map_id) =
+    mk_code_sink (do_corrective_name_of_t p trig_name stmt_id map_id)
       (wrap_args @: args_of_t_with_v p trig_name@
-        ["delta_tuples", wrap_tset @: wrap_ttuple @: map_types_with_v_for p map_id]
-      )
+        ["delta_tuples", 
+          wrap_tset @: wrap_ttuple @: map_types_with_v_for p map_id])
       [] @: (* locals *)
-        (*mk_cunit*)
-        let (args, ast) = M.modify_corr_ast p ast map_id stmt_id trig_name in
+        let lmap = lhs_map_of_stmt p stmt_id in
+        let send_to =
+          if List.exists (fun m -> m = lmap) corrective_maps
+          then Some(send_corrective_name_of_t p lmap)
+          else None
+        in
+        let args, ast =
+          M.modify_corr_ast p ast map_id stmt_id trig_name send_to in
         let args_v = map_ids_types_add_v args in
         mk_iter (mk_lambda (wrap_args args_v) ast) @:
           mk_var "delta_tuples"
-  )
-  s_rhs
+  in
+  List.map do_corrective_trig s_rhs
 
 (* this is hardwired for the m3tok3 module, which produces demux triggers *)
 let demux_trigs ast =
@@ -1061,11 +1067,13 @@ let roles_of ast =
   List.filter (fun d -> U.is_role d || U.is_def_role d) ast
 
 (* Generate all the code for a specific trigger *)
-let gen_dist_for_t p ast trig =
-  (* s_rhs : (stmt_id,rhs_map_id)list *)
+let gen_dist_for_t p ast trig corr_maps =
+  (* (stmt_id,rhs_map_id)list *)
   let s_rhs =
     s_and_over_stmts_in_t p rhs_maps_of_stmt trig in
-  (* s_rhs_lhs : (stmt_id,rhs_map_id,lhs_map_id)list *)
+  (* stmts that can be involved in correctives *)
+  let s_rhs_corr = List.filter (fun (s,map) -> List.mem map corr_maps) s_rhs in
+  (* (stmt_id,rhs_map_id,lhs_map_id)list *)
   let s_rhs_lhs =
     s_and_over_stmts_in_t p rhs_lhs_of_stmt trig
   in
@@ -1078,8 +1086,8 @@ let gen_dist_for_t p ast trig =
   send_push_stmt_map_trig p s_rhs_lhs trig@
   rcv_push_trig p s_rhs trig@
   do_complete_trigs p ast trig@
-  rcv_correctives_trig p s_rhs trig@
-  do_corrective_trigs p s_rhs ast trig@
+  rcv_correctives_trig p s_rhs_corr trig@
+  do_corrective_trigs p s_rhs_corr ast trig corr_maps@
   []
 
 (* Function to generate the whole distributed program *)
@@ -1087,8 +1095,10 @@ let gen_dist p partmap ast =
   (* because this uses state, need it initialized here *)
   (* TODO: change to not require state *)
   let global_funcs = declare_global_funcs partmap p ast in
+  let potential_corr_maps = maps_potential_corrective p in
   let regular_trigs = List.flatten @:
-    for_all_trigs p @: fun t -> gen_dist_for_t p ast t in
+    for_all_trigs p @:
+      fun t -> gen_dist_for_t p ast t potential_corr_maps in
   let prog =
     declare_global_vars p ast @
     global_funcs @ (* maybe make this not order-dependent *)

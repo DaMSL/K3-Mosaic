@@ -12,13 +12,13 @@ val modify_ast_for_s : prog_data_t -> program_t -> stmt_id_t ->
 (* Modify a corrective AST for having version ids. Returns arguments to use for
  * calling the AST *)
 val modify_corr_ast : prog_data_t -> program_t ->
-  map_id_t -> stmt_id_t -> trig_name_t ->
+  map_id_t -> stmt_id_t -> trig_name_t -> trig_name_t option ->
     (id_t * value_type_t) list * expr_t
 
 (* return global ast for map declarations, adding the vid *)
 val modify_map_decl_ast : prog_data_t -> program_t -> program_t
 
 (* gt the computation for adding the delta in a statement *)
-val delta_computation_of_stmt : prog_data_t -> program_t -> stmt_id_t -> 
+val delta_computation_of_stmt : prog_data_t -> program_t -> stmt_id_t ->
   id_t -> expr_t
 

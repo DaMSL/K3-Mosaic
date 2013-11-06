@@ -268,11 +268,11 @@ let reduce_l_to_map_size p map l =
   list_take map_size l
 
 let find_lmap_bindings_in_stmt (p:prog_data_t) (stmt:stmt_id_t) (map:map_id_t) =
-  let (_, _, lmap, lmapbind, _) = find_stmt p stmt in
+  let _, _, lmap, lmapbind, _ = find_stmt p stmt in
   (* make sure bindings are only as big as the map size minus the value *)
   if lmap = map then reduce_l_to_map_size p map lmapbind
-  else raise (Bad_data ("find_lhs_map_binding_in_stmt: No "^
-          (string_of_int map)^" lhs map_id found"))
+  else raise @: Bad_data ("find_lhs_map_binding_in_stmt: No "^
+          string_of_int map^" lhs map_id found")
 
 let find_rmap_bindings_in_stmt (p:prog_data_t) (stmt:stmt_id_t) (map:map_id_t) =
   let (_, _, _, _, rmaps) = find_stmt p stmt in

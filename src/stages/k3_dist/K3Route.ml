@@ -62,7 +62,7 @@ let k3_partition_map_of_list p l =
   (* we just create an empty partition map for all possible map ids *)
   if null l then
     let max_map_id =
-      snd @: list_max id_fn @: get_map_list p in
+      list_max @: get_map_list p in
     let r = create_range 0 (max_map_id + 1) in
     let k3_pmap = list_map (fun id -> 
       mk_tuple [mk_cint id; mk_empty pmap_types]
