@@ -79,7 +79,7 @@ let list_last xs = hd @: list_take_end 1 xs
 (* will only remove one instance of x in xs (as opposed to filter) *)
 let list_remove r l =
   let rec loop acc = function
-    | x::xs when x = r -> (List.rev acc)@xs
+    | x::xs when x = r -> List.rev_append acc xs
     | x::xs -> loop (x::acc) xs
     | []    -> List.rev acc
   in loop [] l
@@ -100,10 +100,11 @@ let rec foldl_until f acc = function
 let read_file_lines file =
   let in_chan = open_in file in
   let rec read_lines acc =
-      try
-        let acc' = input_line in_chan :: acc
-        in read_lines acc'
-      with End_of_file -> acc in
+    let input = try Some(input_line in_chan) with End_of_file -> None in
+    match input with
+    | None   -> acc
+    | Some x -> read_lines (x::acc)
+  in
   let ls = List.rev @: read_lines [] in
   close_in in_chan; ls
 
