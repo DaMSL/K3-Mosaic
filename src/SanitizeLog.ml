@@ -135,7 +135,7 @@ let clean_up_headings trig =
 let do_per_trigger log = 
   List.map (remove_unwanted |- clean_up_headings) log
 
-let convert_to_db_format trig =
+let convert_to_db_format log_name trig =
   (* join lines together *)
   let trig_nm = hd trig in
   let r_eq_line = regexp ".+ = .+" in
@@ -153,12 +153,12 @@ let convert_to_db_format trig =
   let r_trig = regexp "{\\([0-9]+\\)}, \\(.+\\) Trigger \\(.+\\):" in
   if not @: string_match r_trig trig_nm 0 then failwith "trigger heading mismatch";
   let m = matched_group in
-  let vid, addr, trig_nm = m 0 trig_nm, m 1 trig_nm, m 2 trig_nm in
+  let vid, addr, trig_nm = m 1 trig_nm, m 2 trig_nm, m 3 trig_nm in
   let r_eq = regexp " = " in
   List.rev_map (fun str ->
     let k_v = split r_eq str in
     let map, value = at k_v 0, at k_v 1 in
-    Printf.sprintf "%s, %s, %s, %s, %s\n" vid addr trig_nm map value
+    Printf.sprintf "%s, %s, %s, %s, %s, %s\n" log_name vid addr trig_nm map value
   ) trig
 
 (* output the log in readable format *)
@@ -166,13 +166,13 @@ let string_of_log log =
   let log = List.map unlines log in
   String.concat "\n\n\n" log
 
-type action = Clean | ToDb
+type action = Clean | ToDb of string
 
 let input_file = ref ""
 let action = ref Clean
 
 let param_specs =
-  ["--db", Arg.Unit (fun () -> action := ToDb), "Convert to CSV for a DB"]
+  ["--db", Arg.String (fun log_name -> action := ToDb log_name), "Convert to CSV for a DB"]
 
 let parse_cmd_line () =
   Arg.parse param_specs
@@ -187,8 +187,8 @@ let main () =
   let log = do_per_trigger log in
   match !action with
   | Clean -> print_endline @: string_of_log log
-  | ToDb  ->
-      let log = List.map convert_to_db_format log in
+  | ToDb name ->
+      let log = List.map (convert_to_db_format name) log in
       print_endline @:
         unlines @: List.map (fun t -> unlines t) log
 
