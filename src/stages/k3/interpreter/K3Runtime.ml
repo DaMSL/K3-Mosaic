@@ -345,7 +345,12 @@ let invoke_trigger s address (trigger_env, val_env) trigger_id arg =
   (* get the frozen function for the trigger and apply it to the env and args *)
   (IdMap.find trigger_id trigger_env) val_env arg;
   (* log the state for this trigger *)
-  LOG "Trigger %s@%s:\n%s" trigger_id (string_of_address address) (string_of_env val_env)
+  let arg_s = string_of_value arg^"\n" in
+  LOG "Trigger %s@%s\nargs = %s" 
+    trigger_id 
+    (string_of_address address) 
+    (*(combine_s)*)
+    (arg_s^string_of_env val_env)
     NAME "K3Runtime.TriggerState" LEVEL DEBUG;
   s.events_processed <- Int64.succ s.events_processed
 
