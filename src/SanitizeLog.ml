@@ -123,14 +123,15 @@ let clean_up_headings trig =
   in
   let vid_s = at (r_split " = " vid_s) 1 in
   let r_amper = regexp "@" in
-  List.map (fun line ->
+  List.rev @: List.fold_left (fun acc line ->
     if string_match trig_r line 0 then
       let trig_s = at (split r_hyphen line) 1 in
       let trig_split = split r_amper trig_s in
       let trig_s, addr_s = hd trig_split, at trig_split 1 in
-      String.concat "\n" @: (Format.sprintf "%s, %s %s:" vid_s addr_s trig_s)::send_s
-    else line
-  ) trig 
+      let trig_line = [Format.sprintf "%s, %s %s:" vid_s addr_s trig_s] in
+      send_s@trig_line@acc
+    else line::acc
+  ) [] trig 
 
 let do_per_trigger log = 
   List.map (remove_unwanted |- clean_up_headings) log
