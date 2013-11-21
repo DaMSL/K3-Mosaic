@@ -343,7 +343,11 @@ let invoke_trigger s address (trigger_env, val_env) trigger_id arg =
     end;
     *)
   (* get the frozen function for the trigger and apply it to the address, env and args *)
-  (IdMap.find trigger_id trigger_env) address val_env arg;
+  let trig = IdMap.find trigger_id trigger_env in
+  (try (* re-raise exception with trig name *)
+    trig address val_env arg
+  with RuntimeError(id, msg) -> raise @:
+    RuntimeError(id, Format.sprintf "In trigger %s: %s" trigger_id msg));
   (* log the state for this trigger *)
   let arg_s = string_of_value arg^"\n" in
   LOG "Trigger %s@%s\nargs = %s" 
