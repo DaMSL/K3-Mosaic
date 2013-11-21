@@ -24,10 +24,15 @@ let (++%) f g = fun t x -> f (g t) x
 let (%++) f g = fun t x -> f (g t x)
 
 (* Prettified error handling *)
-let int_erroru uuid fn_name s =
+let int_erroru uuid ?extra fn_name s =
   let msg = fn_name^": "^s in
   let rs = "interpreter: "^msg in
   LOG rs LEVEL ERROR;
+  (match extra with 
+  | Some (address, env) ->
+    LOG ">>>> Peer %s" (string_of_address address) LEVEL ERROR;
+    LOG "%s" (string_of_env env) LEVEL ERROR
+  | _ -> ());
   raise @: RuntimeError(uuid, msg)
 
 let int_error = int_erroru (-1)
@@ -92,7 +97,7 @@ and eval_expr (address:address) sched_st cenv texpr =
       (*(string_of_env cenv) NAME "K3Interpreter.DetailedState" LEVEL DEBUG;*)
 
     let ((uuid, tag), _), children = decompose_tree texpr in
-    let error = int_erroru uuid "eval_expr" in
+    let error = int_erroru uuid "eval_expr" ~extra:(address, cenv) in
     let t_erroru = t_error uuid in (* pre-curry the type error *)
     let eval_fn = eval_fun uuid in
 
