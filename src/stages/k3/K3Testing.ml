@@ -34,7 +34,7 @@ let parse_expr s = K3Parser.expr K3Lexer.tokenize (Lexing.from_string s)
 let eval_test_expr_env tdecl_prog t_env trig_env val_env expr = 
   let typed_expr = deduce_expr_type trig_env t_env expr in
   value_of_eval @: snd @: 
-    eval_expr None val_env typed_expr
+    eval_expr ("localhost", 1) None val_env typed_expr
 
 (* we pass in an optional interpreter environment, a program for type bindings,
  * and an expression *)

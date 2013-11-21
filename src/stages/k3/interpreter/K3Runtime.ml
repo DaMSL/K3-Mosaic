@@ -342,8 +342,8 @@ let invoke_trigger s address (trigger_env, val_env) trigger_id arg =
         NAME "K3Runtime.TriggerSTate" LEVEL DEBUG;
     end;
     *)
-  (* get the frozen function for the trigger and apply it to the env and args *)
-  (IdMap.find trigger_id trigger_env) val_env arg;
+  (* get the frozen function for the trigger and apply it to the address, env and args *)
+  (IdMap.find trigger_id trigger_env) address val_env arg;
   (* log the state for this trigger *)
   let arg_s = string_of_value arg^"\n" in
   LOG "Trigger %s@%s\nargs = %s" 

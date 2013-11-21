@@ -74,20 +74,20 @@ let rec eval_fun uuid f =
   let strip_frame (m_env, f_env) = m_env, List.tl f_env in
   match f with
     | VFunction(arg, body) ->
-        fun sched_st (m_env, f_env) a ->
+        fun address sched_st (m_env, f_env) a ->
             let new_env = m_env, (bind_args uuid arg a :: f_env) in
-            let renv, result = eval_expr sched_st new_env body in
+            let renv, result = eval_expr address sched_st new_env body in
             (strip_frame renv, result)
 
     | VForeignFunction(arg, f) ->
-        fun _ (m_env, f_env) a ->
+        fun _ _ (m_env, f_env) a ->
             let new_env = m_env, (bind_args uuid arg a :: f_env) in
             let renv, result = f new_env in
             (strip_frame renv, result)
 
    | _ -> error "eval_fun: Non-function value"
 
-and eval_expr sched_st cenv texpr =
+and eval_expr (address:address) sched_st cenv texpr =
     (*LOG "%s" *)
       (*(string_of_env cenv) NAME "K3Interpreter.DetailedState" LEVEL DEBUG;*)
 
@@ -97,12 +97,12 @@ and eval_expr sched_st cenv texpr =
     let eval_fn = eval_fun uuid in
 
     let child_value env i =
-      let renv, reval = eval_expr sched_st env @: List.nth children i
+      let renv, reval = eval_expr address sched_st env @: List.nth children i
       in renv, value_of_eval reval
     in
 
     let child_values env =
-      let renv, revals = threaded_eval sched_st env children
+      let renv, revals = threaded_eval address sched_st env children
       in renv, List.map value_of_eval revals
     in
 
@@ -143,7 +143,7 @@ and eval_expr sched_st cenv texpr =
      * existing binding of the named entity in the environment *)
     let modify_collection modify_f =
       let error = int_erroru uuid "modify_collection" in
-      let renv, parts = threaded_eval sched_st cenv children in
+      let renv, parts = threaded_eval address sched_st cenv children in
       begin match modify_f renv parts with
         | Some (v_ref,v) -> (v_ref := value_of_eval v; renv, VTemp VUnit)
         | None -> error "no ref found"
@@ -315,17 +315,17 @@ and eval_expr sched_st cenv texpr =
     | Apply ->
         let fenv, f = child_value cenv 0 in
         let aenv, a = child_value fenv 1 in
-        let renv, reval = (eval_fn f) sched_st aenv a
+        let renv, reval = (eval_fn f) address sched_st aenv a
         in renv, VTemp(value_of_eval reval)
 
     | Block ->
-        let fenv, vals = threaded_eval sched_st cenv children
+        let fenv, vals = threaded_eval address sched_st cenv children
         in fenv, (List.nth vals (List.length vals - 1))
 
     | Iterate ->
         let fenv, f = child_value cenv 0 in
         let nenv, c = child_value fenv 1 in
-        let g = eval_fn f sched_st in
+        let g = eval_fn f address sched_st in
         let folder l = List.fold_left (
             fun e x -> let ienv, _ = g e x in ienv
         ) nenv l in
@@ -339,8 +339,10 @@ and eval_expr sched_st cenv texpr =
     | IfThenElse ->
         let penv, pred = child_value cenv 0 in (
             match pred with
-            | VBool(b) when b -> eval_expr sched_st penv (List.nth children 1)
-            | VBool(b) when not b -> eval_expr sched_st penv (List.nth children 2)
+            | VBool(b) when b     ->
+                eval_expr address sched_st penv @: List.nth children 1
+            | VBool(b) when not b ->
+                eval_expr address sched_st penv @: List.nth children 2
             | _ -> error "(IfThenElse): non-boolean predicate"
         )
 
@@ -349,7 +351,7 @@ and eval_expr sched_st cenv texpr =
         let fenv, f = child_value cenv 0 in
         let nenv, c = child_value fenv 1 in
         let folder cl = mapfold (fun env x ->
-          let ienv, i = eval_fn f sched_st env x in
+          let ienv, i = eval_fn f address sched_st env x in
           ienv, value_of_eval i
         ) nenv cl
         in
@@ -364,8 +366,8 @@ and eval_expr sched_st cenv texpr =
         let penv, p = child_value cenv 0 in
         let fenv, f = child_value penv 1 in
         let nenv, c = child_value fenv 2 in
-        let p' = eval_fn p sched_st in
-        let f' = eval_fn f sched_st in
+        let p' = eval_fn p address sched_st in
+        let f' = eval_fn f address sched_st in
         let folder cl = List.fold_left (fun (e, r) x ->
           let p'env, filter = p' e x in
           match value_of_eval filter with
@@ -392,7 +394,7 @@ and eval_expr sched_st cenv texpr =
         let fenv, f = child_value cenv 0 in
         let zenv, zero = child_value fenv 1 in
         let nenv, col = child_value zenv 2 in
-        let f' = eval_fn f sched_st in
+        let f' = eval_fn f address sched_st in
         let renv, rval = List.fold_left (
             fun (e, v) a ->
               let renv, reval = f' e (VTuple([v; a])) in
@@ -407,8 +409,8 @@ and eval_expr sched_st cenv texpr =
         let fenv, f = child_value genv 1 in
         let zenv, zero = child_value fenv 2 in
         let nenv, c = child_value zenv 3 in
-        let g' = eval_fn g sched_st in
-        let f' = eval_fn f sched_st in
+        let g' = eval_fn g address sched_st in
+        let f' = eval_fn f address sched_st in
         let cl = extract_value_list c in
         let gb_agg_fn find_fn replace_fn = fun env a ->
           let kenv, key =
@@ -421,27 +423,27 @@ and eval_expr sched_st cenv texpr =
           aenv
         in
 
-		    (* We use two different group by aggregation methods to preserve the
+      (* We use two different group by aggregation methods to preserve the
          * order of group=by entries in the result collection based on their
          * order in the input collection *)
-		    let hash_gb_agg_method = lazy(
-		      let h = Hashtbl.create 10 in
-		      let agg_fn = gb_agg_fn (Hashtbl.find h) (Hashtbl.replace h) in
-		      let build_fn () =
+      let hash_gb_agg_method = lazy(
+        let h = Hashtbl.create 10 in
+        let agg_fn = gb_agg_fn (Hashtbl.find h) (Hashtbl.replace h) in
+        let build_fn () =
             Hashtbl.fold (fun k v kvs -> (VTuple([k; v]) :: kvs)) h []
-		      in agg_fn, build_fn)
-		    in
+        in agg_fn, build_fn)
+      in
 
-		    let order_preserving_gb_agg_method = lazy(
-		      let l = ref [] in
-		      let agg_fn = gb_agg_fn (fun k -> List.assoc k !l)
+      let order_preserving_gb_agg_method = lazy(
+          let l = ref [] in
+          let agg_fn = gb_agg_fn (fun k -> List.assoc k !l)
             (fun k v ->
               let l' = assoc_modify (function _ -> Some v) k !l in
               l := l')
-		      in
-		      let build_fn () = List.map (fun (k,v) -> VTuple([k;v])) !l
-		      in agg_fn, build_fn)
-		    in
+          in
+          let build_fn () = List.map (fun (k,v) -> VTuple([k;v])) !l
+          in agg_fn, build_fn)
+       in
 
         let agg_fn, build_fn = Lazy.force @: match c with
           | VSet _ | VBag _ -> hash_gb_agg_method
@@ -456,7 +458,7 @@ and eval_expr sched_st cenv texpr =
       begin match parts with
         | [c;f] ->
           let env, l, f_val =
-            ref renv, extract_value_list c, eval_fn f sched_st in
+            ref renv, extract_value_list c, eval_fn f address sched_st in
           let sort_fn v1 v2 =
             (* Comparator application propagates an environment since it could
              * be stateful *)
@@ -524,16 +526,9 @@ and eval_expr sched_st cenv texpr =
 
             (* check if we need to buffer our triggers for shuffling *)
             if K3Runtime.use_shuffle_tasks s then
-              (* look for "me" to extract our own address *)
-              let sender_addr =
-                (try match !(IdMap.find "me" @: fst cenv) with
-                  |VAddress add -> add
-                  | _           -> error "global address for me not found"
-                with Not_found  -> error "global variable 'me' not found")
-              in
               (* buffer trigger for later shuffle *)
-              buffer_trigger s target addr arg sender_addr;
-              renv, VTemp VUnit
+              (buffer_trigger s target addr arg address;
+              renv, VTemp VUnit)
             else
               (* create a new level on the queues *)
               (schedule_trigger s target addr arg;
@@ -545,12 +540,13 @@ and eval_expr sched_st cenv texpr =
 
     | _ -> error "unhandled expression"
 
-and threaded_eval sched_st ienv texprs =
+and threaded_eval address sched_st ienv texprs =
     match texprs with
     | [] -> (ienv, [])
     | h :: t ->
-        let nenv, nval = eval_expr sched_st ienv h in
-        let lenv, vals = threaded_eval sched_st nenv t in (lenv, nval :: vals)
+        let nenv, nval = eval_expr address sched_st ienv h in
+        let lenv, vals = threaded_eval address sched_st nenv t in
+        (lenv, nval :: vals)
 
 (* Declaration interpretation *)
 
@@ -596,11 +592,11 @@ let dispatch_foreign id = K3StdLib.lookup_value id
 (* Returns a trigger evaluator function to serve as a simulation
  * of the trigger *)
 let prepare_trigger sched_st id arg local_decls body =
-  fun (m_env, f_env) -> fun a ->
+  fun address (m_env, f_env) args ->
     let default (id,t,_) = id, ref (default_isolated_value t) in
     let new_vals = List.map default local_decls in
     let local_env = add_from_list m_env new_vals, f_env in
-    let _, reval = (eval_fun (-1) (VFunction(arg,body))) (Some sched_st) local_env a in
+    let _, reval = (eval_fun (-1) @: VFunction(arg,body)) address (Some sched_st) local_env args in
     match value_of_eval reval with
       | VUnit -> ()
       | _ -> int_error "prepare_trigger" @: "trigger "^id^" returns non-unit"
@@ -628,12 +624,12 @@ let env_of_program ?address sched_st k3_program =
     | K3.AST.Global (id, t, init_opt) ->
         let (rm_env, rf_env), init_val = match id, init_opt with
           | _, Some e ->
-            let renv, reval = eval_expr (Some sched_st) (m_env, f_env) e
+            let renv, reval = eval_expr me_addr (Some sched_st) (m_env, f_env) e
             in renv, value_of_eval reval
 
           (* substitute the proper address expression for 'me' *)
           | id, _ when id = K3Global.me_name ->
-              let renv, reval = eval_expr (Some sched_st) (m_env, f_env) @: mk_caddress me_addr
+              let renv, reval = eval_expr me_addr (Some sched_st) (m_env, f_env) @: mk_caddress me_addr
               in renv, value_of_eval reval
 
           | _, None -> (m_env, f_env), default_value t
@@ -678,14 +674,14 @@ let consume_sources sched_st env address (res_env, d_env) (ri_env, instrs) =
 let interpreter_event_loop role_opt k3_program =
   let error () =
     int_error "interpreter_event_loop" "No role found for K3 program" in
-	let roles, default_role = extended_roles_of_program k3_program in
+ let roles, default_role = extended_roles_of_program k3_program in
   let get_role role fail_f = try List.assoc role roles with Not_found ->
     fail_f ()
   in match role_opt, default_role with
-	  | Some x, Some (_,y) -> get_role x (fun () -> y)
-	  | Some x, None -> get_role x error
-	  | None, Some (_,y) -> y
-	  | None, None -> error ()
+   | Some x, Some (_,y) -> get_role x (fun () -> y)
+   | Some x, None -> get_role x error
+   | None, Some (_,y) -> y
+   | None, None -> error ()
 
 (* returns address, (event_loop_t, environment) *)
 let initialize_peer sched_st address role_opt k3_program =

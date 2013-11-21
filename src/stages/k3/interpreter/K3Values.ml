@@ -59,9 +59,10 @@ and frame_t = (id_t * value_t) list
 and env_t = (value_t ref) IdMap.t * (frame_t list)
 
 (* trigger env is where we store the trigger functions. These functions take the
+ * address,
  * scheduler_state (parametrized here to prevent circular inclusion), the
  * environment, value_t of arguments, and produce unit *)
-type trigger_env_t = (env_t -> value_t -> unit) IdMap.t
+type trigger_env_t = (address -> env_t -> value_t -> unit) IdMap.t
 type program_env_t = trigger_env_t * env_t
 
 (* Value stringification *)

@@ -10,7 +10,7 @@ val value_of_eval : eval_t -> value_t
 val env_of_program : ?address:address -> scheduler_state -> program_t -> program_env_t
 
 (* expression evaluation can be done without a scheduler for micro evaluation *)
-val eval_expr : scheduler_state option -> env_t -> expr_t -> env_t * eval_t
+val eval_expr : address -> scheduler_state option -> env_t -> expr_t -> env_t * eval_t
 
 type status_t = K3Runtime.status_t
 type breakpoint_t = K3Runtime.breakpoint_t
