@@ -158,7 +158,7 @@ let convert_to_db_format log_name trig =
   List.rev_map (fun str ->
     let k_v = split r_eq str in
     let map, value = at k_v 0, at k_v 1 in
-    Printf.sprintf "%s, %s, %s, %s, %s, %s\n" log_name vid addr trig_nm map value
+    Printf.sprintf "%s/ %s/ %s/ %s/ %s/ %s\n" log_name vid addr trig_nm map value
   ) trig
 
 (* output the log in readable format *)
@@ -190,7 +190,7 @@ let main () =
   | ToDb name ->
       let log = List.map (convert_to_db_format name) log in
       print_endline @:
-        unlines @: List.map (fun t -> unlines t) log
+        String.concat "" @: List.map (fun t -> String.concat "" t) log
 
 
 let _ = if not !Sys.interactive then Printexc.print main ()
