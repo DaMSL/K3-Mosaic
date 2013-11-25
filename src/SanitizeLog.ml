@@ -119,7 +119,7 @@ let clean_up_headings trig =
       at (split r_hyphen line) 1) 
     sends_s in
   let send_s = match sends_s with [] -> []
-      | _ -> ["send_msgs = "^String.concat ";\n" sends_s]
+      | _ -> ["send_msgs = "^String.concat "; " sends_s]
   in
   let vid_s = at (r_split " = " vid_s) 1 in
   let r_amper = regexp "@" in
@@ -136,7 +136,7 @@ let clean_up_headings trig =
 let do_per_trigger log = 
   List.map (remove_unwanted |- clean_up_headings) log
 
-let convert_to_db_format log_name trig =
+let convert_to_db_format log_name (idx,trig) =
   (* join lines together *)
   let trig_nm = hd trig in
   let r_eq_line = regexp ".+ = .+" in
@@ -159,7 +159,7 @@ let convert_to_db_format log_name trig =
   List.rev_map (fun str ->
     let k_v = split r_eq str in
     let map, value = at k_v 0, at k_v 1 in
-    Printf.sprintf "%s/ %s/ %s/ %s/ %s/ %s\n" log_name vid addr trig_nm map value
+    Printf.sprintf "%s/%d/%s/%s/%s/%s\n" log_name idx addr trig_nm map value
   ) trig
 
 (* output the log in readable format *)
@@ -189,8 +189,9 @@ let main () =
   match !action with
   | Clean -> print_endline @: string_of_log log
   | ToDb name ->
+      let log = insert_index_fst 1 log in (* add indices *)
       let log = List.map (convert_to_db_format name) log in
-      print_endline @:
+      print_string @:
         String.concat "" @: List.map (fun t -> String.concat "" t) log
 
 
