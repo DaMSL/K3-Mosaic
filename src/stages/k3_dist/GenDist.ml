@@ -515,6 +515,7 @@ let rcv_fetch_trig p trig =
     )
     [] @: (* locals *)
     mk_block
+      (* save the bound variables for this vid *)
       [mk_apply
         (mk_var @: log_write_for p trig) @:
         mk_tuple @: args_of_t_as_vars_with_v p trig
@@ -700,7 +701,13 @@ List.fold_left
       [] @: (* locals *)
       (* save the tuples *)
       mk_block
-        [mk_iter
+        (* save the bound variables for this vid. This is necessary for both the 
+         * sending and receiving nodes, which is why we're also doing it here *)
+        [mk_apply
+          (mk_var @: log_write_for p trig_name) @:
+            mk_tuple @: args_of_t_as_vars_with_v p trig_name
+        ;
+         mk_iter
           (mk_lambda
             (wrap_args ["tuple", wrap_ttuple tuple_types]) @:
             mk_if
