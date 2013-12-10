@@ -47,6 +47,7 @@ let v_leq = v_op vid_leq
 (* global variable moved from GenDist.ml *)
 
 (* log, buffer names *)
+let log_master_write_nm = "log_master_write"
 let log_write_for p trig_nm = "log_write_"^trig_nm (* varies with bound *)
 let log_get_bound_for p trig_nm = "log_get_bound_"^trig_nm
 let log_read_geq = "log_read_geq" (* takes vid, returns (trig, vid)list >= vid *)

@@ -122,6 +122,7 @@ let declare_global_vars p ast =
 
 (* global functions *)
 (* most of our global functions come from the shuffle/route code *)
+
 let declare_global_funcs partmap p ast =
   let global_vid_ops =
       mk_global_vid_op vid_eq VEq ::
@@ -131,28 +132,23 @@ let declare_global_funcs partmap p ast =
       mk_global_vid_op vid_leq VLeq ::
       mk_global_vid_op vid_geq VGeq ::
       [] in
+  (* log_master_write *)
+  let log_master_write_code () = mk_global_fn
+    log_master_write_nm
+    ["vid", t_vid; "trig_id", t_trig_id; "stmt_id", t_stmt_id]
+    [t_unit] @:
+    mk_insert (mk_var log_master) @: (* write to master log *)
+      mk_tuple
+        [mk_var "vid"; mk_var "trig_id"; mk_var "stmt_id"]
+  in
   (* log_write *)
   let log_write_code t = mk_global_fn
     (log_write_for p t)
-    (("stmt_id", wrap_tmaybe t_stmt_id)::args_of_t_with_v p t)
+    (args_of_t_with_v p t)
     [t_unit] @:
-      mk_block
-        [mk_if
-          (mk_neq (mk_var "stmt_id") @: mk_nothing_m t_stmt_id)
-          (mk_unwrap_maybe
-            ["stmt_id", wrap_tmaybe t_stmt_id] @:
-              (mk_insert (mk_var log_master) @: (* write to master log *)
-                mk_tuple
-                  [mk_var "vid"; mk_cint @: trigger_id_for_name p t; mk_var "stmt_id_unwrap"]
-              )
-          ) @:
-          mk_cunit
-        ;
-        (* NOTE: this can be split up into another function
-                 write bound to trigger_specific log *)
-        mk_insert (mk_var @: log_for_t t) @:
-          mk_tuple @: args_of_t_as_vars_with_v p t
-        ]
+      (* write bound to trigger_specific log *)
+      mk_insert (mk_var @: log_for_t t) @:
+        mk_tuple @: args_of_t_as_vars_with_v p t
   in
   (* log_get_bound -- necessary since each trigger has different args *)
   let log_get_bound_code t =
@@ -268,6 +264,7 @@ let declare_global_funcs partmap p ast =
   for_all_maps p (fun map -> add_delta_to_buffer_code @: `DoComplete map) @
   for_all_stmts_rhs_maps p (fun (stmt,m) ->
     add_delta_to_buffer_code @: `Corrective(stmt,m)) @
+  [log_master_write_code ()] @
   for_all_trigs p log_write_code @
   for_all_trigs p log_get_bound_code @
   gen_shuffle_route_code p partmap @
@@ -535,41 +532,49 @@ let rcv_fetch_trig p trig =
       args_of_t_with_v p trig
     )
     [] @: (* locals *)
-    (* invoke generated send pushes. *)
-    mk_iter
-      (mk_lambda
-        (wrap_args ["stmt_id", t_stmt_id; "map_id", t_map_id]) @:
-        (* this send is not polymorphic. every fetch trigger expects
-          * the same set of bound variables. *)
-        List.fold_right
-          (fun stmt acc_code -> mk_if
-            (mk_eq
-              (mk_var "stmt_id") @:
-              mk_cint stmt
-            )
-            (List.fold_right
-              (fun map_id acc_code2 -> mk_if
-                (mk_eq
-                  (mk_var "map_id") @:
-                  mk_cint map_id
-                )
-                (mk_send (* send to local send push trigger *)
-                  (mk_ctarget @:
-                    send_push_name_of_t p trig stmt map_id)
-                  G.me_var @:
-                  mk_tuple @: args_of_t_as_vars_with_v p trig
-                )
-                acc_code2
+    mk_block [
+      (* save the bound variables for this trigger so they're available later *)
+      mk_apply
+        (mk_var @: log_write_for p trig) @:
+        mk_tuple @:
+          args_of_t_as_vars_with_v p trig
+      ;
+      (* invoke generated send pushes. *)
+      mk_iter
+        (mk_lambda
+          (wrap_args ["stmt_id", t_stmt_id; "map_id", t_map_id]) @:
+          (* this send is not polymorphic. every fetch trigger expects
+            * the same set of bound variables. *)
+          List.fold_right
+            (fun stmt acc_code -> mk_if
+              (mk_eq
+                (mk_var "stmt_id") @:
+                mk_cint stmt
               )
-              (rhs_maps_of_stmt p stmt) @:
-              mk_cunit (* zero: do nothing but really exception *)
+              (List.fold_right
+                (fun map_id acc_code2 -> mk_if
+                  (mk_eq
+                    (mk_var "map_id") @:
+                    mk_cint map_id
+                  )
+                  (mk_send (* send to local send push trigger *)
+                    (mk_ctarget @:
+                      send_push_name_of_t p trig stmt map_id)
+                    G.me_var @:
+                    mk_tuple @: args_of_t_as_vars_with_v p trig
+                  )
+                  acc_code2
+                )
+                (rhs_maps_of_stmt p stmt) @:
+                mk_cunit (* zero: do nothing but really exception *)
+              )
+              acc_code
             )
-            acc_code
-          )
-          (stmts_with_rhs_maps_in_t p trig) @:
-          mk_cunit (* really want exception here *)
-      ) @:
-      mk_var "stmts_and_map_ids"
+            (stmts_with_rhs_maps_in_t p trig) @:
+            mk_cunit (* really want exception here *)
+        ) @:
+        mk_var "stmts_and_map_ids"
+    ]
 
 (* Receive Put trigger
  * --------------------------------------- *
@@ -662,14 +667,14 @@ let send_push_stmt_map_trig p s_rhs_lhs trig_name =
         (send_push_name_of_t p trig_name stmt_id rhs_map_id)
         (wrap_args @: args_of_t_with_v p trig_name)
         [] @: (* locals *)
-        (* save the bound variables for this vid. Write to both master log and 
-        * bound variable log. Note that we need to do it here to make sure nothing 
-        * else can stop us before we send the push *)
-        mk_block
-          [mk_apply
-            (mk_var @: log_write_for p trig_name) @:
-            mk_tuple @:
-              (mk_just @: mk_cint stmt_id)::args_of_t_as_vars_with_v p trig_name
+        mk_block [
+          (* save this particular statement execution in the master log
+           * Note that we need to do it here to make sure nothing 
+           * else can stop us before we send the push *)
+          mk_apply
+            (mk_var log_master_write_nm) @:
+            mk_tuple [mk_var "vid"; mk_cint @:
+              trigger_id_for_name p trig_name; mk_cint stmt_id]
           ;
           mk_iter
             (mk_lambda
@@ -730,7 +735,7 @@ List.fold_left
         [mk_apply
           (mk_var @: log_write_for p trig_name) @:
             mk_tuple @:
-              (mk_nothing_m t_stmt_id)::args_of_t_as_vars_with_v p trig_name
+              args_of_t_as_vars_with_v p trig_name
         ;
          mk_iter
           (mk_lambda
