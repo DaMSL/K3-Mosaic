@@ -95,7 +95,9 @@ let declare_global_vars p ast =
   let log_structs_code =
     let log_master_code = mk_global_val
       log_master @:
-      wrap_tset @: wrap_ttuple [t_vid; t_trig_id] in
+      wrap_tset @:
+        wrap_ttuple [t_vid; t_trig_id; t_stmt_id]
+    in
     let log_struct_code_for t = mk_global_val
       (log_for_t t) @:
       wrap_tset @:
@@ -132,15 +134,25 @@ let declare_global_funcs partmap p ast =
   (* log_write *)
   let log_write_code t = mk_global_fn
     (log_write_for p t)
-    (args_of_t_with_v p t)
+    (("stmt_id", wrap_tmaybe t_stmt_id)::args_of_t_with_v p t)
     [t_unit] @:
-    mk_block
-      [mk_insert (mk_var log_master) @: (* write to master log *)
-        mk_tuple [mk_var "vid"; mk_cint (trigger_id_for_name p t)]
-      ;
-      mk_insert (mk_var @: log_for_t t) @: (* write to trigger_specific log *)
-        mk_tuple @: args_of_t_as_vars_with_v p t
-      ]
+      mk_block
+        [mk_if
+          (mk_neq (mk_var "stmt_id") @: mk_nothing_m t_stmt_id)
+          (mk_unwrap_maybe
+            ["stmt_id", wrap_tmaybe t_stmt_id] @:
+              (mk_insert (mk_var log_master) @: (* write to master log *)
+                mk_tuple
+                  [mk_var "vid"; mk_cint @: trigger_id_for_name p t; mk_var "stmt_id_unwrap"]
+              )
+          ) @:
+          mk_cunit
+        ;
+        (* NOTE: this can be split up into another function
+                 write bound to trigger_specific log *)
+        mk_insert (mk_var @: log_for_t t) @:
+          mk_tuple @: args_of_t_as_vars_with_v p t
+        ]
   in
   (* log_get_bound -- necessary since each trigger has different args *)
   let log_get_bound_code t =
@@ -159,15 +171,15 @@ let declare_global_funcs partmap p ast =
   let log_read_geq_code = mk_global_fn
     log_read_geq
     ["vid", t_vid]
-    [wrap_tset @: wrap_ttuple [t_vid; t_trig_id]] @:
+    [wrap_tset @: wrap_ttuple [t_vid; t_trig_id; t_stmt_id]] @:
     mk_filtermap
       (mk_lambda
-        (wrap_args ["vid2", t_vid; "trig", t_trig_id]) @:
+        (wrap_args ["vid2", t_vid; "trig", t_trig_id; "stmt", t_stmt_id]) @:
         v_geq (mk_var "vid2") @: mk_var "vid"
       )
       (mk_lambda
-        (wrap_args ["vid2", t_vid; "trig", t_trig_id]) @:
-        mk_tuple [mk_var "vid2"; mk_var "trig"]
+        (wrap_args ["vid2", t_vid; "trig", t_trig_id; "stmt", t_stmt_id]) @:
+        mk_tuple [mk_var "vid2"; mk_var "trig"; mk_var "stmt"]
       ) @:
       mk_var log_master
   in
@@ -514,48 +526,41 @@ let rcv_fetch_trig p trig =
       args_of_t_with_v p trig
     )
     [] @: (* locals *)
-    mk_block
-      (* save the bound variables for this vid *)
-      [mk_apply
-        (mk_var @: log_write_for p trig) @:
-        mk_tuple @: args_of_t_as_vars_with_v p trig
-      ;
-      (* invoke generated send pushes.$ *)
-      mk_iter
-        (mk_lambda
-          (wrap_args ["stmt_id", t_stmt_id; "map_id", t_map_id]) @:
-          (* this send is not polymorphic. every fetch trigger expects
-           * the same set of bound variables. *)
-          List.fold_right
-            (fun stmt acc_code -> mk_if
-              (mk_eq
-                (mk_var "stmt_id") @:
-                mk_cint stmt
-              )
-              (List.fold_right
-                (fun map_id acc_code2 -> mk_if
-                  (mk_eq
-                    (mk_var "map_id") @:
-                    mk_cint map_id
-                  )
-                  (mk_send (* send to local send push trigger *)
-                    (mk_ctarget @:
-                      send_push_name_of_t p trig stmt map_id)
-                    G.me_var @:
-                    mk_tuple @: args_of_t_as_vars_with_v p trig
-                  )
-                  acc_code2
-                )
-                (rhs_maps_of_stmt p stmt) @:
-                mk_cunit (* zero: do nothing but really exception *)
-              )
-              acc_code
+    (* invoke generated send pushes. *)
+    mk_iter
+      (mk_lambda
+        (wrap_args ["stmt_id", t_stmt_id; "map_id", t_map_id]) @:
+        (* this send is not polymorphic. every fetch trigger expects
+          * the same set of bound variables. *)
+        List.fold_right
+          (fun stmt acc_code -> mk_if
+            (mk_eq
+              (mk_var "stmt_id") @:
+              mk_cint stmt
             )
-            (stmts_with_rhs_maps_in_t p trig) @:
-            mk_cunit (* really want exception here *)
-        ) @:
-        mk_var "stmts_and_map_ids"
-      ]
+            (List.fold_right
+              (fun map_id acc_code2 -> mk_if
+                (mk_eq
+                  (mk_var "map_id") @:
+                  mk_cint map_id
+                )
+                (mk_send (* send to local send push trigger *)
+                  (mk_ctarget @:
+                    send_push_name_of_t p trig stmt map_id)
+                  G.me_var @:
+                  mk_tuple @: args_of_t_as_vars_with_v p trig
+                )
+                acc_code2
+              )
+              (rhs_maps_of_stmt p stmt) @:
+              mk_cunit (* zero: do nothing but really exception *)
+            )
+            acc_code
+          )
+          (stmts_with_rhs_maps_in_t p trig) @:
+          mk_cunit (* really want exception here *)
+      ) @:
+      mk_var "stmts_and_map_ids"
 
 (* Receive Put trigger
  * --------------------------------------- *
@@ -648,6 +653,15 @@ let send_push_stmt_map_trig p s_rhs_lhs trig_name =
         (send_push_name_of_t p trig_name stmt_id rhs_map_id)
         (wrap_args @: args_of_t_with_v p trig_name)
         [] @: (* locals *)
+        (* save the bound variables for this vid. Write to both master log and 
+        * bound variable log. Note that we need to do it here to make sure nothing 
+        * else can stop us before we send the push *)
+        mk_block
+          [mk_apply
+            (mk_var @: log_write_for p trig_name) @:
+            mk_tuple @:
+              (mk_just @: mk_cint stmt_id)::args_of_t_as_vars_with_v p trig_name
+          ;
           mk_iter
             (mk_lambda
               (wrap_args
@@ -663,10 +677,11 @@ let send_push_stmt_map_trig p s_rhs_lhs trig_name =
               (mk_var shuffle_fn) @:
               mk_tuple
                 [mk_tuple partial_key;
-                 (* we need the latest vid data that's less than the current vid *)
-                 K3Dist.map_latest_vid_vals p (mk_var rhs_map_name)
-                   (some slice_key) rhs_map_id ~keep_vid:true;
-                 mk_cbool true]
+                (* we need the latest vid data that's less than the current vid *)
+                K3Dist.map_latest_vid_vals p (mk_var rhs_map_name)
+                  (some slice_key) rhs_map_id ~keep_vid:true;
+                mk_cbool true]
+          ]
       ] (* trigger *)
     ) (* fun *)
     []
@@ -705,7 +720,8 @@ List.fold_left
          * sending and receiving nodes, which is why we're also doing it here *)
         [mk_apply
           (mk_var @: log_write_for p trig_name) @:
-            mk_tuple @: args_of_t_as_vars_with_v p trig_name
+            mk_tuple @:
+              (mk_nothing_m t_stmt_id)::args_of_t_as_vars_with_v p trig_name
         ;
          mk_iter
           (mk_lambda
@@ -975,15 +991,12 @@ let filter_corrective_list =
     (mk_empty vid_list_t) @:
     mk_sort (* sort so early vids are generally sent out first *)
       (* get a list of vid, stmt_id pairs *)
-      (mk_flatten @: mk_map
-        (mk_lambda (wrap_args ["vid", t_vid; "trig_id", t_trig_id]) @:
+      (mk_map
+        (mk_lambda 
+          (wrap_args
+            ["vid", t_vid; "trig_id", t_trig_id; "stmt_id", t_stmt_id]) @:
           (* convert to vid, stmt *)
-          mk_map
-            (mk_lambda
-              (wrap_args ["_", t_trig_id; "stmt_id", t_stmt_id]) @:
-              mk_tuple [mk_var "vid"; mk_var "stmt_id"]) @:
-            (mk_slice (mk_var "trig_stmt_list") @:
-              mk_tuple [mk_var "trig_id"; mk_cunknown])
+          mk_tuple [mk_var "vid"; mk_var "stmt_id"]
         ) @:
         mk_apply (* list of triggers >= vid *)
           (mk_var log_read_geq) @: mk_var "request_vid"

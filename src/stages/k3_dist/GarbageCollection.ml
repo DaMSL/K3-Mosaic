@@ -460,8 +460,8 @@ let do_garbage_collection_trig_code p ast =
       (* clear log master [t_vid;t_trig_id]*)
       (delete_collection_up_to_vid 
         safe_vid 
-        ["vid",t_vid;"trig_id",t_trig_id] 
-        ["vid";"trig_id"]
+        ["vid",t_vid;"trig_id",t_trig_id; "stmt_id",t_stmt_id] 
+        ["vid";"trig_id";"stmt_id"]
         log_master) ::
       
       (* clear each trig log *)
