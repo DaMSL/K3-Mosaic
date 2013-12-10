@@ -182,6 +182,7 @@ type parameters = {
     mutable queue_type   : K3Runtime.queue_type; (* type of queue for interpreter *)
     mutable shuffle_tasks : bool; (* Shuffle tasks from different node
                                     to simulate network delay *)
+    mutable force_correctives : bool; (* Force correctives being generated *)
   }
 
 let cmd_line_params = {
@@ -202,6 +203,7 @@ let cmd_line_params = {
 
     queue_type   = K3Runtime.GlobalQ;
     shuffle_tasks = default_shuffle_tasks;
+    force_correctives = false;
   }
 
 (* Error handlers *)
@@ -515,11 +517,11 @@ let test params inputs =
     | x -> error @: "testing not yet implemented for "^string_of_data x
   in List.iter2 test_fn params.input_files inputs
 
-let transform_to_k3_dist partmap p proginfo =
+let transform_to_k3_dist force_correctives partmap p proginfo =
   (* do not use. Simply for type checking original program *)
   (*tp = typed_program p in *)
   try
-    GenDist.gen_dist proginfo partmap p
+    GenDist.gen_dist ~force_correctives proginfo partmap p
   with Invalid_argument(msg) ->
     print_endline ("ERROR: " ^msg);
     print_endline (ProgInfo.string_of_prog_data proginfo);
@@ -543,7 +545,8 @@ let process_inputs params =
 let transform params ds =
   let proc_fn input = match params.out_lang, input with
    | (AstK3Dist | K3Dist | K3DistTest), K3DistData(p, proginfo) ->
-       let p' = transform_to_k3_dist params.partition_map p proginfo in
+       let p' = transform_to_k3_dist 
+                  params.force_correctives params.partition_map p proginfo in
        K3DistData(p', proginfo)
    | (AstK3Dist | K3Dist | K3DistTest), _ ->
        failwith "Missing metadata for distributed version"
@@ -640,6 +643,8 @@ let param_specs = Arg.align
       "         Queue type: global/node/trigger";
   "-shuffle", Arg.Unit (fun () -> cmd_line_params.shuffle_tasks <- true),
       "         Shuffle tasks to simulate network delays";
+  "-force", Arg.Unit (fun () -> cmd_line_params.force_correctives <- true),
+      "         Force distributed compilation to produce more correctives";
   ])
 
 let usage_msg =

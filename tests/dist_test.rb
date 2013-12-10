@@ -13,6 +13,7 @@ require 'pathname'
 $num_nodes = 1
 $q_type = "global"
 $shuffle = false
+$force_correctives = false
 
 # option parser
 opt_parser = OptionParser.new do |opts|
@@ -31,6 +32,10 @@ opt_parser = OptionParser.new do |opts|
             "Shuffle the queues") do
         $shuffle = true
         end
+    opts.on("-f", "--force_correctives", 
+            "Force correctives") do
+        $force_correctives = true
+        end
 end
 
 # now parse the options
@@ -44,6 +49,7 @@ dbtoaster_path = File.join($cur_path, "../external/dbtoaster")
 dbtoaster_exe_path = File.join(dbtoaster_path, "/bin/dbtoaster")
 
 $shuffle_cmd = if $shuffle then "-shuffle" else "" end
+$force_cmd = if $force_correctives then "-force" else "" end
 
 p = Pathname.new(dbtoaster_exe_path)
 raise "Can't find dbtoaster executable" unless p.exist?
@@ -123,8 +129,8 @@ def test_file(file, dbt_path, k3_path)
     part_str = if $num_nodes > 1 then "-m temp.part" else "" end
 
     # create a k3 distributed file
-	puts "#{k3_path} -p -i m3 -l k3disttest  temp.m3 -trace #{trace_file} #{part_str} > temp.k3dist"
-	`#{k3_path} -p -i m3 -l k3disttest temp.m3 -trace #{trace_file} #{part_str} > temp.k3dist 2> #{err_file}`
+	puts "#{k3_path} -p -i m3 -l k3disttest  temp.m3 -trace #{trace_file} #{part_str} #{$force_cmd} > temp.k3dist"
+	`#{k3_path} -p -i m3 -l k3disttest temp.m3 -trace #{trace_file} #{part_str} #{$force_cmd} > temp.k3dist 2> #{err_file}`
 	check_error(curdir, err_file)
     check_type_error(curdir, 'temp.k3dist')
 

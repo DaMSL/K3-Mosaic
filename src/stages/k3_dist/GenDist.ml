@@ -278,22 +278,31 @@ let declare_global_funcs partmap p ast =
 
 
 (* The start trigger inserts a vid into each message *)
-let start_trig p t =
+let start_trig ~force_correctives p t =
+  let update_epoch = 
+    if force_correctives then
+      (* force correctives by changing the epoch *)
+      [mk_update epoch_var (mk_peek epoch_var) @:
+        mk_apply (mk_var "mod") @:
+          mk_tuple [mk_add (mk_peek epoch_var) @: mk_cint 1; mk_cint 2]]
+    else []
+  in
   mk_code_sink t (wrap_args @: args_of_t p t) [] @:
-    mk_let "vid" t_vid
-      (mk_tuple [
-        mk_peek epoch_var;
-        mk_peek vid_counter;
-        mk_apply (mk_var hash_addr) G.me_var
-      ]) @:
-      mk_block [
+    mk_block @:
+      update_epoch@
+      [mk_let "vid" t_vid
+         (mk_tuple [
+           mk_peek epoch_var;
+           mk_peek vid_counter;
+           mk_apply (mk_var hash_addr) G.me_var]) @:
+       mk_block [
          mk_send
            (mk_ctarget(send_fetch_name_of_t p t)) G.me_var @:
            mk_tuple @: args_of_t_as_vars_with_v p t;
 
         (* increase vid_counter *)
-        mk_update vid_counter (mk_peek vid_counter) @:
-          mk_add (mk_cint 1) (mk_peek vid_counter);
+         mk_update vid_counter (mk_peek vid_counter) @:
+           mk_add (mk_cint 1) (mk_peek vid_counter);
 
         (* start garbage collection every 10
          * TODO maybe need to change by GC every few seconds *)
@@ -311,7 +320,7 @@ let start_trig p t =
             (mk_cint 1))
           mk_cunit
           *)
-      ]
+      ]]
 
 let send_fetch_trig p s_rhs_lhs s_rhs trig_name =
   let send_fetches_of_rhs_maps  =
@@ -1113,7 +1122,7 @@ let roles_of ast =
   List.filter (fun d -> U.is_role d || U.is_def_role d) ast
 
 (* Generate all the code for a specific trigger *)
-let gen_dist_for_t p ast trig corr_maps =
+let gen_dist_for_t ~force_correctives p ast trig corr_maps =
   (* (stmt_id,rhs_map_id)list *)
   let s_rhs =
     s_and_over_stmts_in_t p rhs_maps_of_stmt trig in
@@ -1123,7 +1132,7 @@ let gen_dist_for_t p ast trig corr_maps =
   let s_rhs_lhs =
     s_and_over_stmts_in_t p rhs_lhs_of_stmt trig
   in
-  start_trig p trig::
+  start_trig ~force_correctives p trig::
   send_fetch_trig p s_rhs_lhs s_rhs trig::
   (if null s_rhs then []
   else
@@ -1137,14 +1146,14 @@ let gen_dist_for_t p ast trig corr_maps =
   []
 
 (* Function to generate the whole distributed program *)
-let gen_dist p partmap ast =
+let gen_dist ?(force_correctives=false) p partmap ast =
   (* because this uses state, need it initialized here *)
   (* TODO: change to not require state *)
   let global_funcs = declare_global_funcs partmap p ast in
   let potential_corr_maps = maps_potential_corrective p in
   let regular_trigs = List.flatten @:
-    for_all_trigs p @:
-      fun t -> gen_dist_for_t p ast t potential_corr_maps in
+    for_all_trigs p @: fun t ->
+      gen_dist_for_t ~force_correctives p ast t potential_corr_maps in
   let prog =
     declare_global_vars p ast @
     global_funcs @ (* maybe make this not order-dependent *)

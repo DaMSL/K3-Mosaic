@@ -27,6 +27,7 @@ test_list = []
 $num_nodes = 1
 $q_type = "global"
 $shuffle = false
+$force_correctives = false
 
 # option parser
 opt_parser = OptionParser.new do |opts|
@@ -64,6 +65,10 @@ opt_parser = OptionParser.new do |opts|
     opts.on("-x", "--shuffle", 
             "Shuffle the queues") do
         $shuffle = true
+        end
+    opts.on("-f", "--force_correctives", 
+            "Force correctives") do
+        $force_correctives = true
         end
 end
 
@@ -118,6 +123,7 @@ all_files.map! do |_, _, f| f end
 err_file = "./err_log.txt"
 node_cmd = ""
 $shuffle_cmd = if $shuffle then "--shuffle" else "" end
+$force_cmd = if $force_correctives then "--force_correctives" else "" end
 
 if distributed then
   test_cmd = File.join(cur_path, "./dist_test.rb")
@@ -146,7 +152,7 @@ if test_num == nil then
       end
       print "Test #{index} (#{short_name}): "
 
-      output = `#{test_cmd} #{node_cmd} #{$shuffle_cmd} #{long_name}` 
+      output = `#{test_cmd} #{node_cmd} #{$shuffle_cmd} #{$force_cmd} #{long_name}` 
 
       if (/ERROR|FAILED/ =~ output) != nil then 
         puts "ERROR"
@@ -166,6 +172,6 @@ if test_num == nil then
 else # one test
 	file = all_files[(test_num-1)]
 	puts("Test #{test_num} (#{file.to_s}):")
-    puts `#{test_cmd} #{node_cmd} #{$shuffle_cmd} #{file.to_s}`
+    puts `#{test_cmd} #{node_cmd} #{$shuffle_cmd} #{$force_cmd} #{file.to_s}`
 end
 
