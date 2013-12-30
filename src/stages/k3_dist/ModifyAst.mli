@@ -20,5 +20,5 @@ val modify_map_decl_ast : prog_data_t -> program_t -> program_t
 
 (* gt the computation for adding the delta in a statement *)
 val delta_computation_of_stmt : prog_data_t -> program_t -> stmt_id_t ->
-  id_t -> expr_t
+  id_t -> rename_map:((id_t * id_t) option) -> expr_t
 

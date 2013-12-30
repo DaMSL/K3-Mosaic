@@ -186,16 +186,18 @@ let declare_global_funcs partmap p ast =
     * 2. Add to all next vids
     * The first part uses the original K3 AST. The second doesn't *)
   let add_delta_to_buffer_code maps =
-    let func_name, map_name, map_id =
+    let func_name, map_name, rename_map, map_id =
       match maps with
       | `Corrective(stmt, map) ->
           add_delta_to_buffer_stmt_map p stmt map,
           P.buf_of_stmt_map_id p stmt map,
+          (* we rename the map in the old ast for the corrective *)
+          Some (P.map_name_of p map, P.buf_of_stmt_map_id p stmt map),
           map
-
-      | `DoComplete map       ->
+      | `DoComplete map ->
           add_delta_to_map p map,
           P.map_name_of p map,
+          None,
           map
     in
     (* find a stmt to get the initializing AST from. Doesn't matter which *)
@@ -203,7 +205,9 @@ let declare_global_funcs partmap p ast =
     let stmts_lmaps = P.stmts_lhs_maps p in
     let stmt_chosen = fst @:
       List.find (fun (_, map) -> map = map_id) stmts_lmaps in
-    let stmt_ast = M.delta_computation_of_stmt p ast stmt_chosen delta_tuples_nm in
+    let stmt_ast =
+      M.delta_computation_of_stmt p ast stmt_chosen delta_tuples_nm ~rename_map
+    in
 
     (* for the second part: writing deltas into >= vid *)
     let ids_types_arg = map_ids_types_for ~prefix:"__arg_" p map_id in

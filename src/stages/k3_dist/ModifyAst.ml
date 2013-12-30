@@ -420,6 +420,13 @@ let delta_action p ast stmt action =
     end
   | _ -> raise @: UnhandledModification(PR.string_of_expr ast)
 
+(* rename a variable in an ast *)
+let rename_var old_var_name new_var_name ast =
+  T.modify_tree_bu ast @: fun e ->
+    match U.tag_of_expr e with
+    | Var v when v = old_var_name -> mk_var new_var_name
+    | _ -> e
+
 (* return a modified version of the original ast for s *)
 let modify_ast_for_s p ast stmt trig send_to_trig =
   let ast = ast_for_s_t p ast stmt trig in
@@ -433,8 +440,13 @@ let modify_corr_ast p ast map stmt trig send_to_trig =
   args, delta_action p ast corr_stmt @: `ModifyDelta send_to_trig
 
 (* return the computation for adding the delta in a particular statement *)
-let delta_computation_of_stmt p ast stmt varname =
+let delta_computation_of_stmt p ast stmt varname ~rename_map =
   let ast = ast_for_s p ast stmt in
   let ast = modify_map_add_vid p ast stmt in
-  delta_action p ast stmt @: `GetBody varname
+  let ast = delta_action p ast stmt @: `GetBody varname in
+  match rename_map with
+  | None                    -> ast
+  | Some (old_map, new_map) -> rename_var old_map new_map ast
+
+
 
