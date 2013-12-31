@@ -80,7 +80,7 @@ let declare_global_vars p ast =
     (* for all rhs, lhs map pairs *)
     let make_map_decl (stmt, map) =
       let map_name = P.buf_of_stmt_map_id p stmt map in
-      mk_global_val map_name @: wrap_tbag @: wrap_ttuple @: map_types_with_v_for p map
+      mk_global_val map_name @: wrap_tset @: wrap_ttuple @: map_types_with_v_for p map
     in
     for_all_stmts_rhs_maps p make_map_decl
   in
@@ -245,6 +245,7 @@ let declare_global_funcs partmap p ast =
           ) @:
           mk_var delta_tuples_nm
         ] in
+
   let global_inits =
     (* global initialization that should happen once *)
       mk_global_val_init "init" t_unit @:
@@ -1108,7 +1109,7 @@ let do_corrective_trigs p s_rhs ast trig_name corrective_maps =
         in
         let args, ast =
           M.modify_corr_ast p ast map_id stmt_id trig_name send_to in
-        let args_v = map_ids_types_add_v args in
+        let args_v = map_ids_types_add_v ~vid:"_" args in
         mk_iter (mk_lambda (wrap_args args_v) ast) @:
           mk_var "delta_tuples"
   in
