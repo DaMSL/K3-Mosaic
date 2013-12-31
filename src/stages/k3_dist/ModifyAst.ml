@@ -296,7 +296,8 @@ let modify_map_add_vid p ast stmt =
   in T.modify_tree_bu_with_path_and_msgs ast modify
 
 (* this delta extraction is very brittle, since it's tailored to the way the M3
- * to K3 calculations are written *)
+ * to K3 calculations are written. ModifyDelta is used for modifying do_completes,
+ * while GetBody is used for add_delta_to_buffer *)
 let delta_action p ast stmt action =
   let lmap = P.lhs_map_of_stmt p stmt in
   let lmap_name = P.map_name_of p lmap in
