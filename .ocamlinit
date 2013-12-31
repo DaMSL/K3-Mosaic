@@ -1,0 +1,14 @@
+#use "topfind";;
+#require "str";;
+#require "bolt";;
+#directory "bin/src";;
+#directory "bin/src/stages";;
+#directory "bin/src/util";;
+#directory "bin/src/stages/imperative";;
+#directory "bin/src/stages/k3";;
+#directory "bin/src/stages/k3/core";;
+#directory "bin/src/stages/k3/interpreter";;
+#directory "bin/src/stages/k3/parser";;
+#directory "bin/src/stages/k3/utils";;
+#directory "bin/src/stages/k3_dist";;
+#directory "bin/src/stages/m3";;
