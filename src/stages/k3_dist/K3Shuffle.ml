@@ -67,7 +67,7 @@ let add_stmt_to_shuffle_fn stmt_id fn_name =
 let gen_shuffle_fn p rmap lmap bindings fn_name =
   let tuple_types_unwrap = map_types_with_v_for p rmap in
   let tuple_types = wrap_ttuple tuple_types_unwrap in
-  let many_tuples_type = wrap_tbag tuple_types in
+  let many_tuples_type = wrap_tset tuple_types in
   let result_types = wrap_tbag @: wrap_ttuple [t_addr; many_tuples_type] in
   (* deducts the last map type which is the value *)
   let lkey_types = wrap_tmaybes @: map_types_no_val_for p lmap in
@@ -101,7 +101,7 @@ let gen_shuffle_fn p rmap lmap bindings fn_name =
            * be done for empty packets *)
           (mk_map
             (mk_lambda (wrap_args ["ip", t_addr]) @:
-              mk_tuple [mk_var "ip"; mk_empty @: wrap_tbag tuple_types]
+              mk_tuple [mk_var "ip"; mk_empty @: wrap_tset tuple_types]
             ) @:
             mk_apply
               (mk_var @: route_for p lmap) @:
