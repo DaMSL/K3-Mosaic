@@ -341,7 +341,28 @@ let string_of_go_trig ~has_sys_ready events =
   let s2 = s2@["}\n"] in
   String.concat "" @: s@s2
 
-let string_of_test_role ~is_dist events =
+(* parse an order file, which is an alternative to a trace file *)
+let events_of_order_file file =
+  let lines = read_file_lines file in
+  (* read a line of the order file: +R: 4, 3 *)
+  let r_line = Str.regexp "\\(.\\)\\(.*\\):\\(.*\\)" in
+  let r_split = Str.regexp ", " in
+  let r_float = Str.regexp ".+\\..*" in (* check if float *)
+  List.map (fun line ->
+    if not @: Str.string_match r_line line 0 then
+      failwith "Bad order file syntax"
+    else 
+      let g i = Str.matched_group i line in
+      let op, name, args = g 1, g 2, g 3 in
+      let args = Str.split r_split args in
+      let types = List.map (fun str ->
+        if Str.string_match r_float str 0 then "float" else "int"
+      ) args in
+      let vals = List.map (fun str -> fos str) args in
+      RelEvent.init op name types vals
+  ) lines
+
+let strings_of_test_role ~is_dist events =
   if is_dist then
     (str_make @:
       "trigger node_dummy(x:int) {} = ()"::
@@ -372,6 +393,9 @@ let string_of_test_role ~is_dist events =
             }\n\
            default role switch\n"]
 
+let string_of_test_role ~is_dist events =
+  str_make @: strings_of_test_role ~is_dist events
+
 (* convert the maps to a list *)
 let string_of_maps maps = 
   StringMap.fold (fun name mapdata acc ->
@@ -400,8 +424,8 @@ let string_of_file file ~is_dist =
   (* list of all maps and their data *)
   let mapl = string_of_maps maps in
   (*let trig_s = string_of_go_trig ~has_sys_ready:sys_ready events in*)
-  let role_s = string_of_test_role ~is_dist events in
+  let role_s = strings_of_test_role ~is_dist events in
   (* return the tree components we have to add *)
-  str_make ((* trig_s::*)role_s), mapl
+  str_make role_s, mapl
 
 

@@ -167,13 +167,26 @@ let string_of_log log =
   let log = List.map unlines log in
   String.concat "\n\n\n" log
 
-type action = Clean | ToDb of string
+type action = Clean | ToDb of string | Events of event_action
+
+(* what to do in case of event output *)
+and event_action = Plain | Strip | StripSort 
+
+let event_action_of_string = function
+  | "plain" -> Plain
+  | "strip" -> Strip
+  | "sort"  -> StripSort
+  | _       -> invalid_arg "not an event action"
 
 let input_file = ref ""
 let action = ref Clean
 
 let param_specs =
-  ["--db", Arg.String (fun log_name -> action := ToDb log_name), "Convert to CSV for a DB"]
+  ["--db", Arg.String (fun log_name -> action := ToDb log_name),
+     "Convert to CSV for a DB";
+   "--events", Arg.String (fun s -> action := Events(event_action_of_string s)),
+     "plain, strip, or sort"
+  ]
 
 let parse_cmd_line () =
   Arg.parse param_specs
@@ -182,6 +195,7 @@ let parse_cmd_line () =
 
 let main () =
   parse_cmd_line ();
+  if !input_file = "" then Arg.usage param_specs "Please enter a filename" else
   let log = load_log !input_file in
   let log = pre_sanitize log in
   let log = group_triggers log in
@@ -193,7 +207,53 @@ let main () =
       let log = List.map (convert_to_db_format name) log in
       print_string @:
         String.concat "" @: List.map (fun t -> String.concat "" t) log
-
+  | Events event_type ->
+      let r_trig_add = regexp ".*Trigger insert_\\(.*\\)_send_fetch.*" in
+      let r_trig_del = regexp ".*Trigger delete_\\(.*\\)_send_fetch.*" in
+      let r_args = regexp ".*args = (\\(.*\\))"  in
+      let filtered = filter_map (fun trig ->
+        let acc, select =
+          List.fold_left (fun ((trig,args),select) line ->
+            if Str.string_match r_trig_add line 0 then 
+              let trig' = "+"^Str.matched_group 1 line in
+              (trig',args), true
+            else if Str.string_match r_trig_del line 0 then 
+              let trig' = "-"^Str.matched_group 1 line in
+              (trig',args), true
+            else if Str.string_match r_args line 0 then
+              let args' = Str.matched_group 1 line in
+              (trig,args'), select
+            else (trig,args), select
+          ) (("",""),false) trig
+        in
+        if select=true then Some acc else None
+      ) log
+      in
+      let r_args = regexp "(\\(.*\\), \\(.*\\), \\(.*\\)), \\(.*\\)" in
+      let split_data d = List.map (fun (trig, args) ->
+        if not @: Str.string_match r_args args 0 then
+          failwith "Bad args format"
+        else
+          let g i = Str.matched_group i args in
+          let v1, v2, v3, args =
+            ios @: g 1, ios @: g 2, ios @: g 3, g 4 in
+          (v1, v2, v3), (trig, args)
+      ) d
+      in
+      let sort d = List.sort (fun ((x1, y1, z1),_) ((x2, y2, z2),_) ->
+        if x1 = x2 then if y1 = y2 then z1 - z2
+                        else y1 - y2
+        else x1 - x2
+      ) d
+      in
+      let data = 
+        match event_type with
+        | Plain -> filtered
+        | Strip -> snd_many @: split_data filtered (* remove vid *)
+        | StripSort -> snd_many @: sort @: split_data filtered
+      in
+      print_string @:
+        String.concat "\n" @: List.map (fun (t, args) -> t^": "^args) data
 
 let _ = if not !Sys.interactive then Printexc.print main ()
 

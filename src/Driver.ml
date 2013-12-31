@@ -63,8 +63,9 @@ let out_lang_descs = [
 (* types of data carried around  by the driver *)
 type data_t =
   | K3Data of program_t
-  (* for distributed programs, we also need the metadata of the maps *)
-  | K3DistData of program_t * ProgInfo.prog_data_t
+  (* for distributed programs, we also need the metadata of the maps, and we include
+   * the non-distributed program *)
+  | K3DistData of program_t * ProgInfo.prog_data_t * program_t
   | K3TestData of program_test_t
 
 let string_of_data = function
@@ -178,6 +179,7 @@ type parameters = {
     mutable debug_info    : bool;
     mutable verbose       : bool;
     mutable trace_files   : string list;
+    mutable order_files   : string list;
 
     mutable queue_type   : K3Runtime.queue_type; (* type of queue for interpreter *)
     mutable shuffle_tasks : bool; (* Shuffle tasks from different node
@@ -185,7 +187,7 @@ type parameters = {
     mutable force_correctives : bool; (* Force correctives being generated *)
   }
 
-let cmd_line_params = {
+let default_cmd_line_params () = {
     action        = ref Print;
     test_mode     = ref ProgramTest;
     in_lang       = K3in;
@@ -200,11 +202,14 @@ let cmd_line_params = {
     debug_info    = default_debug_info;
     verbose       = default_verbose;
     trace_files   = [];
+    order_files   = [];
 
     queue_type   = K3Runtime.GlobalQ;
     shuffle_tasks = default_shuffle_tasks;
     force_correctives = false;
   }
+
+let cmd_line_params = default_cmd_line_params ()
 
 (* Error handlers *)
 let handle_lexer_error () =
@@ -230,7 +235,7 @@ let handle_type_error p (uuid, name, msg) =
   print_endline "----Type error----";
   print_endline @: "Error("^(string_of_int uuid)^"): "^name^": "^s;
   (match p with
-  | K3Data p | K3DistData(p,_)->
+  | K3Data p | K3DistData(p,_,_)->
     print_endline @: PS.string_of_program ~uuid_highlight:uuid p
   | K3TestData p_test -> print_endline @:
     PS.string_of_program_test ~uuid_highlight:uuid p_test);
@@ -240,7 +245,7 @@ let handle_interpret_error p (uuid,error) =
   print_endline "----Interpreter error----";
   print_endline @: "Error("^(string_of_int uuid)^"): "^error;
   (match p with
-  | K3Data p | K3DistData(p,_)->
+  | K3Data p | K3DistData(p,_,_)->
       print_endline @: PS.string_of_program ~uuid_highlight:uuid p
   | K3TestData p_test -> print_endline @:
     PS.string_of_program_test ~uuid_highlight:uuid p_test);
@@ -365,7 +370,7 @@ let interpret_k3 params prog = let p = params in
 let interpret params inputs =
   let f = function
     | K3Data p
-    | K3DistData(p, _)
+    | K3DistData(p,_,_)
     | K3TestData(ProgTest(p, _))
     | K3TestData(NetworkTest(p, _)) -> ignore @: interpret_k3 params p
     | _ -> failwith "data type not supported for interpretation"
@@ -381,7 +386,7 @@ let print_event_loop (id, (res_env, ds_env, instrs)) =
 let string_of_typed_meta (t,a) = string_of_annotation a
 
 let print_k3_program f = function
-  | K3Data p | K3DistData (p,_) ->
+  | K3Data p | K3DistData (p,_,_) ->
     let tp = typed_program p in
     let event_loops, default = roles_of_program tp in
       print_endline (f tp);
@@ -392,13 +397,16 @@ let print_k3_program f = function
 
 (* create and print a k3 program with an expected section *)
 let print_k3_test_program = function
-  | idx, K3DistData (p, meta) ->
-      (* get the folded expressions for latest vid *)
+  | idx, K3DistData (p, meta, orig_p) ->
+      (* get the folded expressions comparing values for latest vid.
+       * These go in the expected statements at the end *)
       let tests_by_map = GenTest.expected_code_all_maps meta in
-      (* get the test values from the dbtoaster trace if available *)
+      let drop_roles =
+        List.filter (fun d -> not (is_role d || is_def_role d)) in
       let p', test_vals =
+        (* get the test values from the dbtoaster trace if available *)
         if not @: null cmd_line_params.trace_files then
-          let code_s, maplist =
+          let role_s, maplist =
             let trace_file = at cmd_line_params.trace_files idx in
             FromTrace.string_of_file trace_file ~is_dist:true
           in
@@ -412,16 +420,41 @@ let print_k3_test_program = function
             list_map (fun (_, (final, e)) -> e, InlineExpr final)
               map_tests_join
           in
-          (* filter our all role stuff in the original generated ast *)
-          let filter_p = List.filter
-            (fun d -> not (is_role d || is_def_role d)) p in
           (* add the produced test roles and trigger *)
           (* debug *)
           (*print_endline @: code_s;*)
-          let new_p = filter_p @ parse_k3_prog code_s in
+          (* filter out all role stuff in the original generated ast *)
+          let new_p = drop_roles p @ parse_k3_prog role_s in
           new_p, tests_vals
+
+        (* use the order files to simulate the system *)
+        else if not @: null cmd_line_params.order_files then
+          let order_file = at cmd_line_params.order_files idx in
+          let events = FromTrace.events_of_order_file order_file in
+          let role_s = FromTrace.string_of_test_role ~is_dist:false events in
+          (* Note that we take the single-site version here *)
+          let p' = drop_roles orig_p @ parse_k3_prog role_s in
+          (* run the interpreter on our code *)
+          let params = default_cmd_line_params () in
+          let _, (_, (env, _)) = 
+            hd @: interpret_k3 params p' in (* assume one node *)
+          (* match the maps with their values *)
+          let tests_vals = 
+            List.map (fun (name, exp) ->
+              let v = 
+                try IdMap.find name env
+                with Not_found -> failwith "Map not found"
+              in exp, InlineExpr(expr_of_value 0 !v)
+            ) tests_by_map
+          in
+          (* now create a distributed version *)
+          let role_dist_s =
+            FromTrace.string_of_test_role ~is_dist:true events in
+          let p' = drop_roles p @ parse_k3_prog role_dist_s in
+          p', tests_vals
+
         else
-          (* we don't have a trace file for final value tests *)
+          (* we don't have a trace file or order file for final value tests *)
           p, list_map (fun (_, e) -> e, FileExpr "dummy") tests_by_map
       in
       let prog_test = NetworkTest(p', test_vals) in
@@ -462,7 +495,7 @@ let print_k3_test_program = function
   | _ -> error "Cannot print this type of data"
 
 let print_reified_k3_program = function
-  | K3Data p | K3DistData(p, _) ->
+  | K3Data p | K3DistData(p,_,_) ->
     let print_expr_fn c e =
         lazy (print_reified_expr @: reify_expr [] e) in
     let tp = typed_program p in
@@ -470,7 +503,7 @@ let print_reified_k3_program = function
   | _ -> error "Cannot print this type of data"
 
 let print_imp func print_types = function
-  | K3Data p | K3DistData(p, _) ->
+  | K3Data p | K3DistData(p, _, _) ->
     let string_of_meta m =
       (if print_types then (ImperativeUtil.string_of_type @: fst m)^";"
        else "")^
@@ -483,7 +516,7 @@ let print_cppi_program = print_imp cpp_program
 let print_imperative_program = print_imp imperative_program
 
 let print_cpp_program = function
-  | K3Data p | K3DistData(p, _) ->
+  | K3Data p | K3DistData(p, _, _) ->
     let files_and_content = CPPGen.generate_program @: cpp_program p in
     let mk_filename id = (String.make 40 '=')^" "^id in
     let print_content (f,c) =
@@ -538,16 +571,16 @@ let process_inputs params =
           print_endline (ProgInfo.string_of_prog_data proginfo);
         let prog = M3ToK3.m3_to_k3 m3prog in
         if params.out_lang = K3Test then K3Data(prog)
-        else K3DistData(prog, proginfo)
+        else K3DistData(prog, proginfo, prog)
   in List.map proc_fn params.input_files
 
 (* this function can only transform to another k3 format *)
 let transform params ds =
   let proc_fn input = match params.out_lang, input with
-   | (AstK3Dist | K3Dist | K3DistTest), K3DistData(p, proginfo) ->
+   | (AstK3Dist | K3Dist | K3DistTest), K3DistData(p, proginfo, _) ->
        let p' = transform_to_k3_dist 
                   params.force_correctives params.partition_map p proginfo in
-       K3DistData(p', proginfo)
+       K3DistData(p', proginfo, p)
    | (AstK3Dist | K3Dist | K3DistTest), _ ->
        failwith "Missing metadata for distributed version"
    | _, data -> data
@@ -625,6 +658,9 @@ let param_specs = Arg.align
   "-trace", Arg.String (fun file ->
     cmd_line_params.trace_files <- cmd_line_params.trace_files @ [file]),
       "file     Load a DBToaster trace file";
+  "--order", Arg.String (fun file ->
+    cmd_line_params.order_files <- cmd_line_params.order_files @ [file]),
+      "file     Load a map order file";
 
   (* Debugging parameters *)
 
