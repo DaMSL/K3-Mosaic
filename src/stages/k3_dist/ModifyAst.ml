@@ -297,7 +297,7 @@ let modify_map_add_vid p ast stmt =
 
 (* this delta extraction is very brittle, since it's tailored to the way the M3
  * to K3 calculations are written. ModifyDelta is used for modifying do_completes,
- * while GetBody is used for add_delta_to_buffer *)
+ * while GetBody is used for add_delta_to_buffer to initialize values *)
 let delta_action p ast stmt action =
   let lmap = P.lhs_map_of_stmt p stmt in
   let lmap_name = P.map_name_of p lmap in
@@ -339,7 +339,7 @@ let delta_action p ast stmt action =
             body2) @:
           mk_var varname
 
-    | `ModifyDelta target_trigger ->
+    | `ModifyDelta(target_trigger, add_delta_nm_fn) ->
       (* modify the delta itself *)
       mk_apply
         (mk_lambda params @:
@@ -349,7 +349,7 @@ let delta_action p ast stmt action =
                 [ (* we add the delta to all following vids,
                    * and we send it for correctives *)
                   mk_apply
-                  (mk_var @: add_delta_to_map p lmap) @:
+                  (mk_var @: add_delta_nm_fn p lmap) @:
                     mk_tuple full_vars]
                   @
                   (* do we need to send to another trigger *)
@@ -380,7 +380,7 @@ let delta_action p ast stmt action =
         (* get the body for adding the delta *)
         mk_iter lambda2' @: mk_var varname
 
-    | `ModifyDelta target_trigger ->
+    | `ModifyDelta(target_trigger, add_delta_nm_fn) ->
       let delta_name = "__delta_values__" in
       let delta_v_name = "__delta_with_vid__" in
       let delta_ids_types = U.typed_vars_of_arg params2 in
@@ -406,7 +406,7 @@ let delta_action p ast stmt action =
             mk_block @:
               (* add delta values to all following vids *)
               [mk_apply
-                (mk_var @: add_delta_to_map p lmap) @:
+                (mk_var @: add_delta_nm_fn p lmap) @:
                 mk_tuple [mk_var "vid"; mk_var delta_v_name]]
               @
               match target_trigger with 
@@ -432,13 +432,13 @@ let rename_var old_var_name new_var_name ast =
 let modify_ast_for_s p ast stmt trig send_to_trig =
   let ast = ast_for_s_t p ast stmt trig in
   let ast = modify_map_add_vid p ast stmt in
-  delta_action p ast stmt @: `ModifyDelta send_to_trig
+  delta_action p ast stmt @: `ModifyDelta(send_to_trig, add_delta_to_map)
 
 (* return a modified version of the corrective update *)
 let modify_corr_ast p ast map stmt trig send_to_trig =
   let args, corr_stmt, ast = corr_ast_for_m_s p ast map stmt trig in
   let ast = modify_map_add_vid p ast stmt in
-  args, delta_action p ast corr_stmt @: `ModifyDelta send_to_trig
+  args, delta_action p ast corr_stmt @: `ModifyDelta(send_to_trig, propagate_delta_map)
 
 (* return the computation for adding the delta in a particular statement *)
 let delta_computation_of_stmt p ast stmt varname ~rename_map =

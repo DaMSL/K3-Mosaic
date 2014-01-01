@@ -185,30 +185,40 @@ let declare_global_funcs partmap p ast =
     * 1. Initialize the given vid using the delta values
     * 2. Add to all next vids
     * The first part uses the original K3 AST. The second doesn't *)
-  let add_delta_to_buffer_code maps =
-    let func_name, map_name, rename_map, map_id =
-      match maps with
-      | `Corrective(stmt, map) ->
-          add_delta_to_buffer_stmt_map p stmt map,
-          P.buf_of_stmt_map_id p stmt map,
+  let add_delta_to_buffer_code action map_id =
+    let func_name, map_name, rename_map, mk_compare, do_init_val =
+      match action with
+      | `RcvCorrectiveAddPropagate stmt  ->
+          add_delta_to_buffer_stmt_map p stmt map_id,
+          P.buf_of_stmt_map_id p stmt map_id,
           (* we rename the map in the old ast for the corrective *)
-          Some (P.map_name_of p map, P.buf_of_stmt_map_id p stmt map),
-          map
-      | `DoComplete map ->
-          add_delta_to_map p map,
-          P.map_name_of p map,
+          Some (P.map_name_of p map_id, P.buf_of_stmt_map_id p stmt map_id),
+          mk_gt,
+          true
+      | `DoCompleteAddPropagate ->
+          add_delta_to_map p map_id,
+          P.map_name_of p map_id,
           None,
-          map
+          mk_gt,
+          true
+      | `DoCorrectivePropagate ->
+          propagate_delta_map p map_id,
+          P.map_name_of p map_id,
+          None,
+          mk_geq, (* we add to the current vid as well *)
+          false   (* don't initialize the current value *)
     in
-    (* find a stmt to get the initializing AST from. Doesn't matter which *)
     let delta_tuples_nm = "delta_tuples" in
-    let stmts_lmaps = P.stmts_lhs_maps p in
-    let stmt_chosen = fst @:
-      List.find (fun (_, map) -> map = map_id) stmts_lmaps in
-    let stmt_ast =
-      M.delta_computation_of_stmt p ast stmt_chosen delta_tuples_nm ~rename_map
+    let init_ast =
+      if do_init_val then
+        (* find a stmt to get the initializing AST from. Doesn't matter which *)
+        let stmts_lmaps = P.stmts_lhs_maps p in
+        let stmt_chosen = fst @:
+          List.find (fun (_, map) -> map = map_id) stmts_lmaps in
+        [M.delta_computation_of_stmt p ast stmt_chosen delta_tuples_nm
+          ~rename_map]
+      else []
     in
-
     (* for the second part: writing deltas into >= vid *)
     let ids_types_arg = map_ids_types_for ~prefix:"__arg_" p map_id in
     let ids_types_arg_v = map_ids_types_add_v ~vid:"vid_arg" ids_types_arg in
@@ -225,27 +235,26 @@ let declare_global_funcs partmap p ast =
     mk_global_fn func_name
       ["min_vid", t_vid; delta_tuples_nm, wrap_tset @: wrap_ttuple types_v]
       [t_unit] @:
-      mk_block
-        [stmt_ast;
-         mk_iter (* loop over values in the delta tuples *)
-          (mk_lambda (wrap_args ids_types_arg_v) @:
-            mk_iter
-              (mk_lambda (wrap_args ids_types_v) @:
-                mk_update (mk_var map_name) (mk_tuple vars_v) @:
-                  mk_tuple @: vars_v_no_val@
-                    [mk_add vars_val vars_arg_val]
-              ) @:
-              mk_filtermap (* only greater vid for this part *)
-                (mk_lambda (wrap_args ids_types_v) @:
-                  mk_gt (mk_var "vid") @: mk_var "min_vid")
-                (mk_id types_v) @:
-                (* slice w/o vid and value *)
-                mk_slice (mk_var map_name) @:
-                  mk_tuple @: mk_cunknown::vars_arg_no_v_no_val@[mk_cunknown]
-          ) @:
-          mk_var delta_tuples_nm
-        ] in
-
+      mk_block @:
+        init_ast @
+        [mk_iter (* loop over values in the delta tuples *)
+         (mk_lambda (wrap_args ids_types_arg_v) @:
+           mk_iter
+             (mk_lambda (wrap_args ids_types_v) @:
+               mk_update (mk_var map_name) (mk_tuple vars_v) @:
+                 mk_tuple @: vars_v_no_val@
+                   [mk_add vars_val vars_arg_val]
+             ) @:
+             mk_filtermap (* only greater vid for this part *)
+               (mk_lambda (wrap_args ids_types_v) @:
+                 mk_compare (mk_var "vid") @: mk_var "min_vid")
+               (mk_id types_v) @:
+               (* slice w/o vid and value *)
+               mk_slice (mk_var map_name) @:
+                 mk_tuple @: mk_cunknown::vars_arg_no_v_no_val@[mk_cunknown]
+         ) @:
+         mk_var delta_tuples_nm]
+  in
   let global_inits =
     (* global initialization that should happen once *)
       mk_global_val_init "init" t_unit @:
@@ -266,9 +275,12 @@ let declare_global_funcs partmap p ast =
   in
   global_vid_ops @
   [log_read_geq_code] @
-  for_all_maps p (fun map -> add_delta_to_buffer_code @: `DoComplete map) @
-  for_all_stmts_rhs_maps p (fun (stmt,m) ->
-    add_delta_to_buffer_code @: `Corrective(stmt,m)) @
+  for_all_maps p (fun map ->
+    add_delta_to_buffer_code `DoCompleteAddPropagate map) @
+  for_all_maps p (fun map ->
+    add_delta_to_buffer_code `DoCorrectivePropagate map) @
+  for_all_stmts_rhs_maps p (fun (stmt, map) ->
+    add_delta_to_buffer_code (`RcvCorrectiveAddPropagate stmt) map) @
   [log_master_write_code ()] @
   for_all_trigs p log_write_code @
   for_all_trigs p log_get_bound_code @
@@ -1032,7 +1044,9 @@ let filter_corrective_list =
  * Receives bound variables and delta tuples for one map.
  *
  * Analogous to rcv_push for non-correctives
- * Has 2 parts: updating the local cache of the buffers, and executing the requested vid(s)
+ * Has 2 parts: updating the local buffers, and executing the requested vid(s)
+ * The local buffer is always updated at a new vid (one that was empty before),
+ * adding to the value from an earlier vid, and propagating to future vids.
  *)
 let rcv_correctives_trig p s_rhs trig_name =
 List.map
@@ -1093,7 +1107,10 @@ List.map
 
 (* do corrective triggers *)
 (* very similar to do_complete, but we only have to do it for certain
- * (stmt, map) combinations *)
+ * (stmt, map) combinations.
+ * Do_corrective , unlike do_complete, doesn't need to add to an earlier vid 
+ * value. Instead, it adds to the value that already resides at a specific
+ * vid and propagates. *)
 let do_corrective_trigs p s_rhs ast trig_name corrective_maps =
   let do_corrective_trig (stmt_id, map_id) =
     mk_code_sink (do_corrective_name_of_t p trig_name stmt_id map_id)
