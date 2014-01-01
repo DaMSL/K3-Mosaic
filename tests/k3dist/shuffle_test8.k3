@@ -1,0 +1,277 @@
+/* Now we test shuffle */
+foreign hash_int : int -> int
+foreign hash_addr : address -> int
+foreign int_of_float : float -> int
+foreign float_of_int : int -> float
+foreign get_max_int : unit -> int
+foreign divf : (float, float) -> float
+foreign mod : (int, int) -> int
+
+declare node_ring : ref [address, string, string, int]
+
+declare pmap_data : [int, [int, int]] = 
+    [(3, [(0, 8); (1, 4)]); (2, [(0, 32)]); (5, [(0, 32)]); (4, [(0, 32)]); (6, [(0, 32)])]
+
+declare replicas : ref {int} = {8}
+
+declare set_replicas : int -> unit = \n:int ->
+    update(replicas, peek(replicas), n)
+
+declare my_peers : {address, string, string} = 
+    {(0.0.0.0:10, "node", ""); (localhost:10000, "switch", ""); (1.1.1.1:10, "node", "")}
+
+declare add_node : (address, string, string) -> unit =
+  \(addr:address, _role_:string, name:string) ->
+    let rng:[int] = [1:1:peek(replicas[_])] in
+    let new_elems:ref [address, string, string, int] =
+      map(\i:int -> (addr, _role_, name, hash_int(i + hash_addr(addr))), rng) in
+    do {
+      iterate
+        (\x:(address, string, string, int) -> insert(node_ring, x),
+        new_elems);
+      let temp_ring:ref [address, string, string, int] = sort(node_ring,
+        \((addr:address, _role_:string, name:string, hash1:int), 
+         (addr:address, _role_:string, name:string, hash2:int)) ->
+          hash1 > hash2) in
+      do {
+        iterate
+          (\node:(address, string, string, int) -> delete(node_ring, node),
+          node_ring);
+        iterate
+          (\node:(address, string, string, int) -> insert(node_ring, node),
+          temp_ring)
+        }
+      }
+
+declare remove_node : (address, string, string) -> unit =
+  \(addr:address, _role_:string, name:string) ->
+    let nodes_to_delete:ref [address, string, string, int] = node_ring[addr, 
+      _role_, name, _] in
+    iterate
+      (\x:(address, string, string, int) -> delete(node_ring, x),
+      nodes_to_delete)
+
+declare get_ring_node : (int, int) -> address = \(data:int, max_val:int) ->
+    let scaled:int =
+      int_of_float(float_of_int(get_max_int(())) *
+        divf(float_of_int(data), float_of_int(max_val))) in
+    let results:ref [address, string, string, int] =
+      filtermap(\(addr:address, _role_:string, name:string, hash:int) ->
+                    hash >= scaled,
+        \(__id_0:address, __id_1:string, __id_2:string, __id_3:int) ->
+            (__id_0, __id_1, __id_2, __id_3),
+        node_ring) in
+    let (addr:address, _, _, _) =
+      if results == [] : ref [address, string, string, int]
+      then peek(node_ring)
+      else peek(results) in addr
+
+declare get_all_uniq_nodes : unit -> [address] = \_ ->
+    map
+      (\(__1:address, __2:unit) -> __1,
+      groupby(\(addr:address, _role_:string, name:string, hash:int) -> addr,
+        \(_, _) -> (),
+        [] : [address],
+        node_ring))
+
+/* dummy to add peers to node ring */
+declare dummy_init : unit =
+  iterate
+    (\(addr:address, _role_:string, name:string) ->
+         if _role_ != "switch" then add_node(addr, _role_, name) else (),
+    my_peers)
+
+declare calc_dim_bounds : [int, int] -> ([int, int], int) = \pmap:[int, int] ->
+    fold
+      (\((xs:[int, int], acc_size:int), (pos:int, bin_size:int)) ->
+           (xs++[pos, acc_size], bin_size * acc_size),
+      ([] : [int, int], 1),
+      pmap)
+
+declare pmap : [int, int] = 
+    let (__1:int, __2:[int, int]) = peek(pmap_data[3, _]) in __2
+
+declare dim_bounds_max : ([int, int], int) = calc_dim_bounds(pmap)
+declare dim_bounds :[int, int] = let (__1:[int, int], __2:int) = dim_bounds_max in __1
+declare max_val :int = let (__1:[int, int], __2:int) = dim_bounds_max in __2
+
+declare key_id_0 : maybe int = nothing : maybe int
+declare key_id_1 : maybe int = just 5
+
+declare route_to_ATIMESD_mT1 : maybe int -> {|address|} = \key:maybe int ->
+    let pmap:[int, int] =
+      let (__1:int, __2:[int, int]) = peek(pmap_data[2, _]) in __2 in
+    if pmap == [] : [int, int]
+    then get_all_uniq_nodes(())
+    else let (dim_bounds:[int, int], max_val:int) = calc_dim_bounds(pmap) in
+      let key_id_0:maybe int = key in
+      let bound_bucket:int =
+        (if key_id_0 == nothing: maybe int
+         then 0
+         else let pmap_slice:[int, int] = pmap[0, _] in
+           if pmap_slice == [] : [int, int]
+           then 0
+           else let just key_id_0_unwrap:int = key_id_0 in
+             let value:int =
+               mod(hash_int(key_id_0_unwrap), 
+                 let (__1:int, __2:int) = peek(pmap_slice) in __2) in value *
+             let (__1:int, __2:int) = peek(dim_bounds[0, _]) in __2) + 0 in
+      let free_dims:[int, int] =
+        (if key_id_0 != nothing: maybe int then [] : [int, int] else pmap[0, _])
+        ++[] : [int, int] in
+      let free_domains:[int, [int]] =
+        map(\(i:int, b_i:int) -> (i, [0:1:b_i]), free_dims) in
+      let free_cart_prod:[[int, int]] =
+        fold
+          (\(prev_cart_prod:[[int, int]], (i:int, domain:[int])) ->
+               flatten
+                 (map
+                    (\domain_element:int ->
+                         if prev_cart_prod == [] : [[int, int]]
+                         then [[i, domain_element]]
+                         else
+                           map
+                             (\rest_tup:[int, int] ->
+                                  rest_tup++[i, domain_element],
+                             prev_cart_prod),
+                    domain)),
+          [] : [[int, int]],
+          free_domains) in
+      let sorted_ip_list:[address, unit] =
+        groupby(\ip:address -> ip,
+          \(_, _) -> (),
+          [] : [address],
+          map
+            (\free_bucket:[int, int] ->
+                 get_ring_node
+                   (fold
+                      (\(acc:int, (i:int, val:int)) ->
+                           acc + (val *
+                           let (__1:int, __2:int) = peek(dim_bounds[i, _]) in
+                           __2),
+                      bound_bucket,
+                      free_bucket), max_val),
+            free_cart_prod)) in
+      if sorted_ip_list == [] : [address, unit]
+      then [get_ring_node(bound_bucket, max_val)]
+      else map(\(__1:address, __2:unit) -> __1, sorted_ip_list)
+
+declare route_to_ATIMESD_mT1_mR1 : (maybe int, maybe int) -> {|address|} =
+  \key:(maybe int, maybe int) ->
+    let pmap:[int, int] =
+      let (__1:int, __2:[int, int]) = peek(pmap_data[3, _]) in __2 in
+    if pmap == [] : [int, int]
+    then get_all_uniq_nodes(())
+    else let (dim_bounds:[int, int], max_val:int) = calc_dim_bounds(pmap) in
+      let (key_id_0:maybe int, key_id_1:maybe int) = key in
+      let bound_bucket:int =
+        (if key_id_1 == nothing: maybe int
+         then 0
+         else let pmap_slice:[int, int] = pmap[1, _] in
+           if pmap_slice == [] : [int, int]
+           then 0
+           else let just key_id_1_unwrap:int = key_id_1 in
+             let value:int =
+               mod(hash_int(key_id_1_unwrap), 
+                 let (__1:int, __2:int) = peek(pmap_slice) in __2) in value *
+             let (__1:int, __2:int) = peek(dim_bounds[1, _]) in __2) +
+        ((if key_id_0 == nothing: maybe int
+          then 0
+          else let pmap_slice:[int, int] = pmap[0, _] in
+            if pmap_slice == [] : [int, int]
+            then 0
+            else let just key_id_0_unwrap:int = key_id_0 in
+              let value:int =
+                mod(hash_int(key_id_0_unwrap), 
+                  let (__1:int, __2:int) = peek(pmap_slice) in __2) in value *
+              let (__1:int, __2:int) = peek(dim_bounds[0, _]) in __2) + 0) in
+      let free_dims:[int, int] =
+        (if key_id_1 != nothing: maybe int then [] : [int, int] else pmap[1, _])
+        ++
+        (if key_id_0 != nothing: maybe int then [] : [int, int] else pmap[0, _])
+        ++[] : [int, int] in
+      let free_domains:[int, [int]] =
+        map(\(i:int, b_i:int) -> (i, [0:1:b_i]), free_dims) in
+      let free_cart_prod:[[int, int]] =
+        fold
+          (\(prev_cart_prod:[[int, int]], (i:int, domain:[int])) ->
+               flatten
+                 (map
+                    (\domain_element:int ->
+                         if prev_cart_prod == [] : [[int, int]]
+                         then [[i, domain_element]]
+                         else
+                           map
+                             (\rest_tup:[int, int] ->
+                                  rest_tup++[i, domain_element],
+                             prev_cart_prod),
+                    domain)),
+          [] : [[int, int]],
+          free_domains) in
+      let sorted_ip_list:[address, unit] =
+        groupby(\ip:address -> ip,
+          \(_, _) -> (),
+          [] : [address],
+          map
+            (\free_bucket:[int, int] ->
+                 get_ring_node
+                   (fold
+                      (\(acc:int, (i:int, val:int)) ->
+                           acc + (val *
+                           let (__1:int, __2:int) = peek(dim_bounds[i, _]) in
+                           __2),
+                      bound_bucket,
+                      free_bucket), max_val),
+            free_cart_prod)) in
+      if sorted_ip_list == [] : [address, unit]
+      then [get_ring_node(bound_bucket, max_val)]
+      else map(\(__1:address, __2:unit) -> __1, sorted_ip_list)
+
+declare shuffle_ATIMESD_mT1_mR1_ATIMESD_mT1_0t1 :
+  (maybe int, {|(int, int, int), int, int, int|}, bool) -> {|address, {|(int, int, int), int, int, int|}|} =
+  \(l_key:maybe int, tuples:{|(int, int, int), int, int, int|}, 
+   shuffle_on_empty:bool) ->
+    let __id_l0:maybe int = l_key in
+    let all_targets:{|address, {|(int, int, int), int, int, int|}|} =
+      if shuffle_on_empty == true
+      then
+        map
+          (\ip:address -> (ip, {||} : {|(int, int, int), int, int, int|}),
+          route_to_ATIMESD_mT1(l_key))
+      else {||} : {|address, {|(int, int, int), int, int, int|}|} in
+    groupby(\(ip:address, tuple:{|(int, int, int), int, int, int|}) -> ip,
+      \(acc:{|(int, int, int), int, int, int|}, 
+       (ip:address, tuple:{|(int, int, int), int, int, int|})) -> tuple++acc,
+      {||} : {|(int, int, int), int, int, int|},
+      all_targets++
+        flatten
+          (map
+             (\r_tuple:((int, int, int), int, int, int) ->
+                  let (__id_r0:(int, int, int), __id_r1:int, __id_r2:int, 
+                      __id_r3:int) = r_tuple in
+                  let full_lkey:maybe int = just __id_r2 in
+                  map
+                    (\ip:address -> (ip, {|r_tuple|}),
+                    route_to_ATIMESD_mT1(full_lkey)),
+             tuples)))
+
+
+
+/*declare result : {|address|} = route_to_ATIMESD_mT1_mR1(just 1, just 5)*/
+
+declare result : {|address, {|(int, int, int), int, int, int|}|} = 
+  shuffle_ATIMESD_mT1_mR1_ATIMESD_mT1_0t1 ((nothing : maybe int, {} : {|(int, int, int), int, int, int|}, true))
+
+declare res_dim : ([int, int], int) = calc_dim_bounds([0,2])
+
+trigger on_init(x:int) {} = do {
+  ()
+}
+
+role dummy {
+  source s_on_init : (int) = stream([1])
+  bind s_on_init -> on_init
+  consume s_on_init
+}
+
+default role dummy
