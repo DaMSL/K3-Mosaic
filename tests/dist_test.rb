@@ -14,6 +14,7 @@ $num_nodes = 1
 $q_type = "global"
 $shuffle = false
 $force_correctives = false
+$order_file = ""
 
 # option parser
 opt_parser = OptionParser.new do |opts|
@@ -36,6 +37,10 @@ opt_parser = OptionParser.new do |opts|
             "Force correctives") do
         $force_correctives = true
         end
+    opts.on("-o", "--order [STRING]", String,
+            "Use an order file instead of creating a trace") do |s|
+        $order_file = s
+        end
 end
 
 # now parse the options
@@ -48,8 +53,8 @@ $cur_path = File.expand_path(File.dirname(__FILE__))
 dbtoaster_path = File.join($cur_path, "../external/dbtoaster")
 dbtoaster_exe_path = File.join(dbtoaster_path, "/bin/dbtoaster")
 
-$shuffle_cmd = if $shuffle then "-shuffle" else "" end
-$force_cmd = if $force_correctives then "-force" else "" end
+$shuffle_cmd = if $shuffle then "--shuffle" else "" end
+$force_cmd = if $force_correctives then "--force" else "" end
 
 p = Pathname.new(dbtoaster_exe_path)
 raise "Can't find dbtoaster executable" unless p.exist?
@@ -128,9 +133,12 @@ def test_file(file, dbt_path, k3_path)
     output = `#{$part_path} temp.trace -n #{$num_nodes} > temp.part`
     part_str = if $num_nodes > 1 then "-m temp.part" else "" end
 
+    # string for k3 distributed file creation: either use a trace file or an order file
+    create_str = if $order_file=="" then "--trace #{trace_file}" else "--order #{$order_file}" end
+
     # create a k3 distributed file
-	puts "#{k3_path} -p -i m3 -l k3disttest  temp.m3 -trace #{trace_file} #{part_str} #{$force_cmd} > temp.k3dist"
-	`#{k3_path} -p -i m3 -l k3disttest temp.m3 -trace #{trace_file} #{part_str} #{$force_cmd} > temp.k3dist 2> #{err_file}`
+	puts "#{k3_path} -p -i m3 -l k3disttest temp.m3 #{create_str} #{part_str} #{$force_cmd} > temp.k3dist"
+	`#{k3_path} -p -i m3 -l k3disttest temp.m3 #{create_str} #{part_str} #{$force_cmd} > temp.k3dist 2> #{err_file}`
 	check_error(curdir, err_file)
     check_type_error(curdir, 'temp.k3dist')
 
@@ -145,8 +153,8 @@ def test_file(file, dbt_path, k3_path)
     end
 
 	# run the k3 driver on the input
-	puts "#{k3_path} -test #{peer_str} -q #{$q_type} #{$shuffle_cmd} temp.k3dist"
-	output = `#{k3_path} -test #{peer_str} -q #{$q_type} #{$shuffle_cmd} temp.k3dist 2> #{err_file}`
+	puts "#{k3_path} --test #{peer_str} -q #{$q_type} #{$shuffle_cmd} temp.k3dist"
+	output = `#{k3_path} --test #{peer_str} -q #{$q_type} #{$shuffle_cmd} temp.k3dist 2> #{err_file}`
 	check_error(curdir, err_file)
 	puts output
     exit

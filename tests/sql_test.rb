@@ -91,8 +91,8 @@ def test_file(file, dbt_path, k3_path)
   check_type_error(curdir, 'temp.k3')
 
 	# run the k3 driver on the input to get test results
-	puts "#{k3_path} -test temp.k3"
-	output = `#{k3_path} -test temp.k3 2> #{err_file}`
+	puts "#{k3_path} --test temp.k3"
+	output = `#{k3_path} --test temp.k3 2> #{err_file}`
 	check_error(curdir, err_file)
 	puts output
 end

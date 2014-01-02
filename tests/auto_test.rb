@@ -28,6 +28,7 @@ $num_nodes = 1
 $q_type = "global"
 $shuffle = false
 $force_correctives = false
+$order_file = ""
 
 # option parser
 opt_parser = OptionParser.new do |opts|
@@ -69,6 +70,10 @@ opt_parser = OptionParser.new do |opts|
     opts.on("-f", "--force_correctives", 
             "Force correctives") do
         $force_correctives = true
+        end
+    opts.on("-o", "--order [STRING]", String,
+            "Use an order file instead of creating a trace") do |s|
+        $order_file = s
         end
 end
 
@@ -128,6 +133,7 @@ $force_cmd = if $force_correctives then "--force_correctives" else "" end
 if distributed then
   test_cmd = File.join(cur_path, "./dist_test.rb")
   node_cmd = "-p #{$num_nodes} -q #{$q_type}"
+  node_cmd = if $order_file=="" then node_cmd else "#{node_cmd} --order #{$order_file}" end
 else
   test_cmd = File.join(cur_path, "./sql_test.rb")
 end

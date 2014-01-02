@@ -36,41 +36,32 @@ let map_latest_val_code p map_id =
   in
   (* if the map is a singleton, we need to use just a fold. Otherwise, we need a
    * groupby. In either case, we need to project out what we don't need *)
-  if null map_ids_no_val then
-    mk_let_many
-      ["_", t_unit; "_project_", set_type] 
-      (mk_agg
-        inner_assoc
-        (mk_tuple [min_vid_k3; mk_empty set_type]) @:
-        mk_var @: P.map_name_of p map_id) @:
-      mk_var "_project_"
-  else
-    mk_flatten @: mk_map
-      (mk_assoc_lambda 
-        (wrap_args ["_", t_unit])
-        (wrap_args ["_", t_unit; "_project_", set_type]) @:
-        mk_var "_project_") @:
-      mk_gbagg 
-        (* group by the keys excluding the vid *)
-        (mk_lambda (wrap_args map_ids_types_vid) @:
-          mk_tuple @: ids_to_vars map_ids_no_val)
-        (* find the highest vid *)
-        inner_assoc
-        (mk_tuple [min_vid_k3; mk_empty set_type]) @:
-        mk_var @: P.map_name_of p map_id
+  let code =
+    if null map_ids_no_val then
+      mk_let_many
+        ["_", t_unit; "_project_", set_type] 
+        (mk_agg
+          inner_assoc
+          (mk_tuple [min_vid_k3; mk_empty set_type]) @:
+          mk_var @: P.map_name_of p map_id) @:
+        mk_var "_project_"
+    else
+      mk_flatten @: mk_map
+        (mk_assoc_lambda 
+          (wrap_args ["_", t_unit])
+          (wrap_args ["_", t_unit; "_project_", set_type]) @:
+          mk_var "_project_") @:
+        mk_gbagg 
+          (* group by the keys excluding the vid *)
+          (mk_lambda (wrap_args map_ids_types_vid) @:
+            mk_tuple @: ids_to_vars map_ids_no_val)
+          (* find the highest vid *)
+          inner_assoc
+          (mk_tuple [min_vid_k3; mk_empty set_type]) @:
+          mk_var @: P.map_name_of p map_id
+  in code, mk_empty set_type
 
 (* code for every map *)
 let expected_code_all_maps p =
   let mapl = P.get_map_list p in
   list_map (fun m -> P.map_name_of p m, map_latest_val_code p m) mapl
-  
-      
-
-        
-
-      
-
-  
-
-
-

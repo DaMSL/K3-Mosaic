@@ -142,8 +142,8 @@ let setter_specs param spec_desc = List.map (fun (param_val, flag, desc) ->
 type test_mode_t = ExpressionTest | ProgramTest
 
 let test_descriptions = [
-    ExpressionTest,   "-expr",  "Use expression test input";
-    ProgramTest,      "-prog",  "Use program test input";
+    ExpressionTest,   "--expr",  "Use expression test input";
+    ProgramTest,      "--prog",  "Use program test input";
   ]
 
 let test_specs test_mode_param = setter_specs test_mode_param test_descriptions
@@ -156,9 +156,9 @@ type action_t = REPL | Compile | Interpret | Print | Test
 let action_descriptions = [
     Print,            "-p",    "Print program as specified language";
     Compile,          "-c",    "Compile to specified language";
-    Interpret,        "-eval", "Interpret with specified language";
-    Test,             "-test", "K3 testing";
-    REPL,             "-top",  "Interactive toplevel";
+    Interpret,        "--eval", "Interpret with specified language";
+    Test,             "--test", "K3 testing";
+    REPL,             "--top",  "Interactive toplevel";
   ]
 
 let action_specs action_param = setter_specs action_param action_descriptions
@@ -406,6 +406,10 @@ let print_k3_test_program = function
       let p', test_vals =
         (* get the test values from the dbtoaster trace if available *)
         if not @: null cmd_line_params.trace_files then
+          (* we only care about the code part *)
+          let tests_by_map = List.map (fun (nm, (code, empty)) ->
+            nm, code) tests_by_map 
+          in
           let role_s, maplist =
             let trace_file = at cmd_line_params.trace_files idx in
             FromTrace.string_of_file trace_file ~is_dist:true
@@ -440,11 +444,17 @@ let print_k3_test_program = function
             hd @: interpret_k3 params p' in (* assume one node *)
           (* match the maps with their values *)
           let tests_vals = 
-            List.map (fun (name, exp) ->
+            List.map (fun (name, (exp_code, empty)) ->
               let v = 
-                try IdMap.find name env
-                with Not_found -> failwith "Map not found"
-              in exp, InlineExpr(expr_of_value 0 !v)
+                try !(IdMap.find name env)
+                with Not_found -> failwith "Missing map in environment"
+              in
+              (* deal with empty sets. In these cases, we don't have the types *)
+              let res = match v with 
+              | VSet [] -> empty
+              | _       -> expr_of_value 0 v
+              in 
+              exp_code, InlineExpr res
             ) tests_by_map
           in
           (* now create a distributed version *)
@@ -455,7 +465,7 @@ let print_k3_test_program = function
 
         else
           (* we don't have a trace file or order file for final value tests *)
-          p, list_map (fun (_, e) -> e, FileExpr "dummy") tests_by_map
+          p, list_map (fun (_, (e,_)) -> e, FileExpr "dummy") tests_by_map
       in
       let prog_test = NetworkTest(p', test_vals) in
       let _, prog_test = renumber_test_program_ids prog_test in
@@ -648,14 +658,14 @@ let param_specs = Arg.align
   (* Interpreter and evaluation parameters *)
   "-n", Arg.String append_peers,
       "[addr]   Append addresses to the peer list";
-  "-steps", Arg.String (fun len ->
+  "--steps", Arg.String (fun len ->
       cmd_line_params.run_length <- Int64.of_string len),
       "int64    Set program run length in # of messages";
   "-m", Arg.String load_partition_map,
       "file     Load a partition map from a file";
-  "-peers", Arg.String load_peer,
+  "--peers", Arg.String load_peer,
       "file     Load peer address from a file";
-  "-trace", Arg.String (fun file ->
+  "--trace", Arg.String (fun file ->
     cmd_line_params.trace_files <- cmd_line_params.trace_files @ [file]),
       "file     Load a DBToaster trace file";
   "--order", Arg.String (fun file ->
@@ -677,9 +687,9 @@ let param_specs = Arg.align
     | "trigger" -> K3Runtime.PerTriggerQ
     | x         -> error @: "Unknown parameter "^x),
       "         Queue type: global/node/trigger";
-  "-shuffle", Arg.Unit (fun () -> cmd_line_params.shuffle_tasks <- true),
+  "--shuffle", Arg.Unit (fun () -> cmd_line_params.shuffle_tasks <- true),
       "         Shuffle tasks to simulate network delays";
-  "-force", Arg.Unit (fun () -> cmd_line_params.force_correctives <- true),
+  "--force", Arg.Unit (fun () -> cmd_line_params.force_correctives <- true),
       "         Force distributed compilation to produce more correctives";
   ])
 

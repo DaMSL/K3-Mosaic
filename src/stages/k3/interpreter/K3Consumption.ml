@@ -36,7 +36,7 @@ let pull_source id t res in_chan =
 		| _ -> raise (ResourceError id)
 	in
   begin
-    print_endline ("Pulling from source "^id);
+    (*print_endline ("Pulling from source "^id);*)
 	  match res, in_chan with
 	  | Handle(t, File _, CSV), In(Some chan) ->
 	    (try
