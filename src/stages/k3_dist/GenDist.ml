@@ -186,38 +186,32 @@ let declare_global_funcs partmap p ast =
     * 2. Add to all next vids
     * The first part uses the original K3 AST. The second doesn't *)
   let add_delta_to_buffer_code action map_id =
-    let func_name, map_name, rename_map, mk_compare, do_init_val =
+    let func_name, map_name, rename_map, mod_delta_add =
       match action with
-      | `RcvCorrectiveAddPropagate stmt  ->
+      | `RcvCorrective stmt  ->
           add_delta_to_buffer_stmt_map p stmt map_id,
           P.buf_of_stmt_map_id p stmt map_id,
           (* we rename the map in the old ast for the corrective *)
           Some (P.map_name_of p map_id, P.buf_of_stmt_map_id p stmt map_id),
-          mk_gt,
-          true
-      | `DoCompleteAddPropagate ->
+          false
+      | `DoComplete ->
           add_delta_to_map p map_id,
           P.map_name_of p map_id,
           None,
-          mk_gt,
-          true
-      | `DoCorrectivePropagate ->
-          propagate_delta_map p map_id,
+          false
+      | `DoCorrective ->
+          cond_add_delta_to_map p map_id,
           P.map_name_of p map_id,
           None,
-          mk_geq, (* we add to the current vid as well *)
-          false   (* don't initialize the current value *)
+          true
     in
     let delta_tuples_nm = "delta_tuples" in
     let init_ast =
-      if do_init_val then
-        (* find a stmt to get the initializing AST from. Doesn't matter which *)
-        let stmts_lmaps = P.stmts_lhs_maps p in
-        let stmt_chosen = fst @:
-          List.find (fun (_, map) -> map = map_id) stmts_lmaps in
-        [M.delta_computation_of_stmt p ast stmt_chosen delta_tuples_nm
-          ~rename_map]
-      else []
+      (* find a stmt to get the initializing AST from. Doesn't matter which *)
+      let stmts_lmaps = P.stmts_lhs_maps p in
+      let stmt_chosen = fst @:
+        List.find (fun (_, map) -> map = map_id) stmts_lmaps in
+      M.delta_add_of_stmt p ast stmt_chosen delta_tuples_nm ~rename_map ~mod_delta_add
     in
     (* for the second part: writing deltas into >= vid *)
     let ids_types_arg = map_ids_types_for ~prefix:"__arg_" p map_id in
@@ -236,7 +230,7 @@ let declare_global_funcs partmap p ast =
       ["min_vid", t_vid; delta_tuples_nm, wrap_tset @: wrap_ttuple types_v]
       [t_unit] @:
       mk_block @:
-        init_ast @
+        init_ast::
         [mk_iter (* loop over values in the delta tuples *)
          (mk_lambda (wrap_args ids_types_arg_v) @:
            mk_iter
@@ -247,7 +241,7 @@ let declare_global_funcs partmap p ast =
              ) @:
              mk_filtermap (* only greater vid for this part *)
                (mk_lambda (wrap_args ids_types_v) @:
-                 mk_compare (mk_var "vid") @: mk_var "min_vid")
+                 mk_gt (mk_var "vid") @: mk_var "min_vid")
                (mk_id types_v) @:
                (* slice w/o vid and value *)
                mk_slice (mk_var map_name) @:
@@ -276,11 +270,11 @@ let declare_global_funcs partmap p ast =
   global_vid_ops @
   [log_read_geq_code] @
   for_all_maps p (fun map ->
-    add_delta_to_buffer_code `DoCompleteAddPropagate map) @
+    add_delta_to_buffer_code `DoComplete map) @
   for_all_maps p (fun map ->
-    add_delta_to_buffer_code `DoCorrectivePropagate map) @
+    add_delta_to_buffer_code `DoCorrective map) @
   for_all_stmts_rhs_maps p (fun (stmt, map) ->
-    add_delta_to_buffer_code (`RcvCorrectiveAddPropagate stmt) map) @
+    add_delta_to_buffer_code (`RcvCorrective stmt) map) @
   [log_master_write_code ()] @
   for_all_trigs p log_write_code @
   for_all_trigs p log_get_bound_code @

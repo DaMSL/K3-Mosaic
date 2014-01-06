@@ -60,8 +60,8 @@ let add_delta_to_map p map_id =
 let add_delta_to_buffer_stmt_map p stmt map_id =
   "add_delta_to_"^P.buf_of_stmt_map_id p stmt map_id
 
-let propagate_delta_map p map_id =
-  "propagate_delta_"^P.map_name_of p map_id
+let cond_add_delta_to_map p map_id =
+  "cond_add_delta_to_"^P.map_name_of p map_id
 
 (* foreign functions *)
 let hash_addr = "hash_addr"
