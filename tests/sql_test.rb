@@ -85,8 +85,8 @@ def test_file(file, dbt_path, k3_path)
   check_type_error(curdir, 'temp3.k3')
 
   # convert to a test
-	puts "#{k3_path} -p -i m3 -l k3test -trace #{trace_file} temp.m3 > temp.k3"
-	`#{k3_path} -p -i m3 -l k3test -trace #{trace_file} temp.m3 > temp.k3 2> #{err_file}`
+	puts "#{k3_path} -p -i m3 -l k3test --trace #{trace_file} temp.m3 > temp.k3"
+	`#{k3_path} -p -i m3 -l k3test --trace #{trace_file} temp.m3 > temp.k3 2> #{err_file}`
 	check_error(curdir, err_file)
   check_type_error(curdir, 'temp.k3')
 
