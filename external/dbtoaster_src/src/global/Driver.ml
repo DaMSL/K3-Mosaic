@@ -96,6 +96,7 @@ let optimizations_by_level =
          "AGGRESSIVE-FACTORIZE";
          "AGGRESSIVE-UNIFICATION";
          "DELETE-ON-ZERO";
+         "OPTIMIZE-PATTERNS";
       ];
    ]
 let optimizations = 
@@ -838,6 +839,7 @@ if stage_is_active StageK3ToTargetLanguage then (
       | IMP
       | CPP         -> 
          begin try 
+            k3_program := K3.unique_vars_prog !k3_program;
             imperative_program := 
                ImperativeCompiler.Compiler.imp_of_k3 !imperative_opts 
                                                      !k3_program 

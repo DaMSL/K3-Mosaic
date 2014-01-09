@@ -19,6 +19,12 @@ clean:
 
 push_site:
 	@if [ "$(SITE_USERNAME)" ] ; then\
+		scp -r site/index.php \
+			$(SITE_USERNAME)_dbtoaster@ssh.phx.nearlyfreespeech.net:index.php ; \
+		scp -r site/css/*.css \
+			$(SITE_USERNAME)_dbtoaster@ssh.phx.nearlyfreespeech.net:css/ ; \
+		scp -r site/js/*.js \
+			$(SITE_USERNAME)_dbtoaster@ssh.phx.nearlyfreespeech.net:js/ ; \
 		scp -r site/pages/*.php \
 			$(SITE_USERNAME)_dbtoaster@ssh.phx.nearlyfreespeech.net:pages/ ; \
 	else echo "Set the SITE_USERNAME variable in makefile.local"; fi
@@ -29,5 +35,8 @@ pull_site:
 			$(patsubst %,$(SITE_USERNAME)_dbtoaster@ssh.phx.nearlyfreespeech.net:%, \
 								 $(SITE_SYNC_FILES)) site/ ;\
 	else echo "Set the SITE_USERNAME variable in makefile.local"; fi
+
+local_server:
+	cd site;	php -S localhost:8000   
 
 .PHONY: all clean push_site

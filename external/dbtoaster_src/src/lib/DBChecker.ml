@@ -147,8 +147,18 @@ struct
             if Sql.is_agg_query q.stmt then
                (q.stmt, q.schema)
             else
-               let (targets, sources, condition, gb, opts) = q.stmt in
-                  (( targets @ ["COUNT", 
+               let (targets, sources, condition, gb, opts) = 
+                  match q.stmt with
+                  | Sql.Select(targets,sources,cond,gb_vars,
+                               Sql.ConstB(true),opts) -> 
+                     (targets,sources,cond,gb_vars,opts) 
+                  | Sql.Select(_,_,_,_,_,_) ->
+                     failwith 
+                        ("DBChecker currently does not support HAVING clauses")
+                  | _ -> 
+                     failwith ("DBChecker currently does not support UNION")
+               in
+                  (Sql.Select( targets @ ["COUNT", 
                         Sql.Aggregate(Sql.CountAgg(
                                       (if List.mem Sql.Select_Distinct opts
                                        then Some([]) else None)),
@@ -158,14 +168,20 @@ struct
                         (None, tn, Sql.expr_type te !(db_session.tables) 
                                                     sources)) 
                         targets,
-                        
+                     Sql.ConstB(true),
                      List.filter (fun x -> x <> Sql.Select_Distinct) opts
                   ), (q.schema @ ["COUNT", Type.TInt]))
          in
          let db_result = I.query !(db_session.client) real_query real_schema in
          let db_hashtbl = to_hashtbl db_result in
          let target_name = 
-            let (targets, _, _, _,_) = real_query in
+            let targets = 
+               match real_query with
+               | Sql.Select(targets,_,_,_,_,_) -> 
+                  targets 
+               | _ -> 
+                  failwith ("DBChecker currently does not support UNION")
+            in
             prefix^(fst (List.nth targets ((List.length targets) - 1)))
          in
             try 

@@ -99,6 +99,8 @@ let keywords =
         "EXTERNAL", EXTERNAL;
         "FUNCTION", FUNCTION;
         "RETURNS", RETURNS;
+        "UNION", UNION;
+        "INTERVAL", INTERVAL;
     ]
 let _ = hashtbl_of_pair_list keyword_table keywords
 
