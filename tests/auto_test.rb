@@ -53,8 +53,8 @@ opt_parser = OptionParser.new do |opts|
 		end
     opts.on("-l", "--list [FILE]", String, 
           "Execute tests from a list in a file") do |file|
-      test_list_name = file
-    end
+          test_list_name = file
+        end
     opts.on("-p", "--nodes [NUMBER]", Integer,
             "Choose a number of nodes") do |n|
         $num_nodes = n
@@ -67,7 +67,7 @@ opt_parser = OptionParser.new do |opts|
             "Shuffle the queues") do
         $shuffle = true
         end
-    opts.on("-f", "--force_correctives", 
+    opts.on("-r", "--force", 
             "Force correctives") do
         $force_correctives = true
         end
@@ -139,7 +139,7 @@ else
 end
 
 # run either one test or many tests
-if test_num == nil then
+if test_num == nil and test_name == nil then
 	if File.exist?(err_file) then File.delete(err_file) end
 	index = 1
 	passed = 0
@@ -175,9 +175,11 @@ if test_num == nil then
       index += 1
 	end
 	puts "Passed #{passed} out of #{tested} tests"
-else # one test
+elsif test_num != nil then # numbered test
 	file = all_files[(test_num-1)]
 	puts("Test #{test_num} (#{file.to_s}):")
     puts `#{test_cmd} #{node_cmd} #{$shuffle_cmd} #{$force_cmd} #{file.to_s}`
+elsif test_name != nil then # named test
+	puts("Test #{1} (#{test_name}):")
+    puts `#{test_cmd} #{node_cmd} #{$shuffle_cmd} #{$force_cmd} #{test_name}`
 end
-
