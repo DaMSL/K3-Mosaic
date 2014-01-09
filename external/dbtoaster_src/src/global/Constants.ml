@@ -131,7 +131,6 @@ let string_of_const (a: const_t): string =
       | CBool(false) -> "false"
       | CInt(av)     -> string_of_int av
       | CFloat(av)   -> string_of_float av
-      | CString(av)  -> av
       | CString(av)  -> Printf.sprintf "\"%s\"" av
       | CDate(y,m,d) -> (string_of_int y) ^ "-" ^
                         (string_of_int m) ^ "-" ^
