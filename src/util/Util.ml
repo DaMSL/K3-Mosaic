@@ -336,7 +336,7 @@ let str_take_end i s = let l = String.length s in
 
 (* returns a list of groups of a regexp *)
 let r_groups str ~r ~n =
-  if Str.string_match (Str.regexp r) str 0 then
+  if Str.string_match r str 0 then
     list_map (fun i ->
       try
         begin match Str.matched_group i str with
@@ -347,9 +347,7 @@ let r_groups str ~r ~n =
     ) @: create_range 1 n
   else []
 
-let r_split r str = Str.split (Str.regexp r) str
-
-let r_match r str = Str.string_match (Str.regexp r) str 0
+let r_match r str = Str.string_match r str 0
 
 (* --- other stuff ---- *)
 

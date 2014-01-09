@@ -166,13 +166,10 @@ val str_drop_end : int -> string -> string
 (* --- regexp helpers --- *)
 
 (* returns a list of groups of a regexp *)
-val r_groups : string -> r:string -> n:int -> string option list
-
-(* takes regexp, str *)
-val r_split : string -> string -> string list
+val r_groups : string -> r:Str.regexp -> n:int -> string option list
 
 (* regexp -> str -> bool *)
-val r_match : string -> string -> bool
+val r_match : Str.regexp -> string -> bool
 
 
 (* --- other stuff ---- *)

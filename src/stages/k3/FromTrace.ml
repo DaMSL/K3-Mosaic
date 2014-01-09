@@ -7,7 +7,7 @@ let sof f =
   if foi i = f then soi i
   else sof f
 
-(* concat a list of floats into a string *)
+(* concat a list of mapvals into a string *)
 let concat_f str f_list =
   let s_list = list_map (fun f -> sof f) f_list in
   String.concat str s_list
@@ -20,55 +20,125 @@ let str_make = String.concat "\n"
 
 module StrMap = Map.Make(struct type t = string let compare = compare end)
 
+type mapval = Float of float | Int of int | String of string | Bool of bool | Date of int
+type maptype = TFloat | TInt | TString | TDate | TBool
+
+(* string_of_mapval *)
+let somv = function
+  | Float f  -> sof f
+  | Int i    -> soi i
+  | String s -> s
+  | Bool b   -> sob b
+  | Date i   -> soi i (* handle date like int for output purposes *)
+
+let r_dash = Str.regexp "-"
+
+(* mapval_of_string *)
+let mvos typ s = match typ with
+  | TFloat -> Float(fos s)
+  | TInt   -> Int(ios s)
+  | TString -> String(s)
+  | TDate   -> begin match List.map ios @: Str.split r_dash s with
+               | [y;m;d] -> Int(y*10000 * m*100 + d)
+               | _ -> invalid_arg "not a proper date"
+               end
+  | TBool   -> Bool(bos s)
+
+let mvos_many types ss = List.map2 mvos types ss
+
+(* string_of_maptype *)
+let somt = function
+  | TFloat  -> "float"
+  | TInt    -> "int"
+  | TString -> "string"
+  | TDate   -> "int" (* treat like int for output *)
+  | TBool   -> "bool"
+
+(* maptype_of_string *)
+let mtos = function
+  | "float"  -> TFloat
+  | "int"    -> TInt
+  | "string" -> TString
+  | "date"   -> TDate
+  | "bool"   -> TBool
+  | _        -> invalid_arg "unhandled type"
+
+let default_val = function
+  | TFloat  -> Float(0.)
+  | TInt    -> Int(0)
+  | TDate   -> Int(0)
+  | TBool   -> Bool(false)
+  | TString -> String("")
+
+(* concat a list of mapvals into a string *)
+let concat_mv str mv_list =
+  let s_list = list_map somv mv_list in
+  String.concat str s_list
+
 module SingletonMap = struct
-  type t = {name:string; typ:string; v:float}
+  type t = {name:string; typ:maptype; v:mapval}
 
-  let init name typ = {name=name; typ=typ; v=0.}
+  let init name typ =
+    let typ = mtos typ in
+    let v = default_val typ in
+    {name; typ; v}
 
-  let set map ivars ovars v = {map with v=v}
+  let set map ivars ovars v = {map with v}
 
-  let del map ivars ovars = {map with v=0.}
+  let set_s map ivars ovars v = set map [] [] (mvos map.typ v)
+
+  let del map ivars ovars = {map with typ=TFloat; v=default_val TFloat}
+
+  let del_s map ivars ovars = del map ivars ovars
 
   let to_s map = map.name^"-Singleton"
 
-  let val_s map = String.concat "" @: "("::sof map.v::[")"]
+  let val_s map = String.concat "" @: "("::somv map.v::[")"]
 end
 
 module OutputMap = struct
   type t = {
     name:string;
-    typ:string;
+    typ:maptype;
     ovars:string list;
-    otypes:string list;
-    vs:(float list, float) Hashtbl.t;
+    otypes:maptype list;
+    vs:(mapval list, mapval) Hashtbl.t;
   }
 
-  let init mapname maptype ovars otypes =
-    {name=mapname; 
-    typ=maptype; 
-    ovars=ovars;
-    otypes=otypes;
+  let init name maptype ovars otypes =
+    {name; 
+    typ=mtos maptype; 
+    ovars;
+    otypes=List.map mtos otypes;
     vs=Hashtbl.create 0}
 
   let set map ivars ovars v =
     Hashtbl.replace map.vs ovars v;
     map
 
+  let set_s map ivars ovars v =
+    set map [] (mvos_many map.otypes ovars) (mvos map.typ v)
+
   let del map ivar ovars =
     Hashtbl.remove map.vs ovars;
     map
 
+  let del_s map ivars ovars =
+    del map [] (mvos_many map.otypes ovars)
+
+  (* get the names of the map + output vars *)
   let to_s map =
     map.name^"["^String.concat ", " map.ovars^"]"
 
   (* get types of the map in string format *)
-  let types_s map = String.concat ", " map.otypes^", "^map.typ
+  let types_s map =
+    String.concat ", " (List.map somt map.otypes)^", "^somt map.typ
 
   (* get values of the map in string format *)
   let val_s map =
     let s_list = 
       Hashtbl.fold (fun ovars v acc ->
-        let s = concat_f ", " (ovars@[v]) in
+        let s = concat_mv ", " (ovars@[v]) in
         s::acc) map.vs []
     in
     String.concat "; " s_list
@@ -86,25 +156,29 @@ module RelEvent = struct
     | System_Ready -> "system_ready_event"
 
                 (*      ivars        ovars        val *)
-  type hash_t = (op_t * float list * float list * float) list
+  type hash_t = (op_t * string list * string list * string) list
   type t = {
     op:op_t;
     relname:string;
-    types: string list;
-    vals:float list;
+    types: maptype list;
+    vals:mapval list;
     (* mapname, effect *)
     effects: (string, hash_t) Hashtbl.t;
     id:int;
   }
 
-  let init op relname types vals =
-    let oper = match op with 
+  let init oper relname types values =
+    (* debug *)
+    (*Printf.printf "types[%s] values[%s]" (String.concat ";" types) (String.concat ";" values);*)
+    (*print_newline ();*)
+    let op = match oper with 
         | "+" -> Insert
         | "-" -> Delete
         | _   -> System_Ready in
+    let types = List.map mtos types in
+    let vals = mvos_many types values in
     let r = {
-        op = oper;
-        relname; vals; types;
+        op; relname; vals; types;
         effects=Hashtbl.create 0;
         id = !next_evt_id
       } in
@@ -123,7 +197,7 @@ module RelEvent = struct
     let eff_list = 
       try Hashtbl.find evt.effects mapn
       with Not_found -> [] in
-    let eff' = (Delete, ivars, ovars, 0.)::eff_list in
+    let eff' = (Delete, ivars, ovars, "0.")::eff_list in
     Hashtbl.replace evt.effects mapn eff';
     evt
 
@@ -133,7 +207,7 @@ module RelEvent = struct
 
   (* convert the event to a send message *)
   let dispatch_s ~last evt =
-    let send = "send("^to_s evt^", me, "^concat_f ", " evt.vals^")" in
+    let send = "send("^to_s evt^", me, "^concat_mv ", " evt.vals^")" in
     if last then send else send^";"
 
   (* convert the event to a stream message *)
@@ -166,10 +240,10 @@ module RelEvent = struct
       let evt = hd group in
       let types = match evt.types with
         | []  -> failwith "missing types"
-        | [t] -> t
-        | ts  -> "("^String.concat ", " ts^")"
+        | [t] -> somt t
+        | ts  -> "("^String.concat ", " (List.map somt ts)^")"
       in
-      let vals_inner = list_map (fun evt -> concat_f ", " evt.vals) group in
+      let vals_inner = list_map (fun evt -> concat_mv ", " evt.vals) group in
       let vals = "["^String.concat "; " vals_inner^"]" in
       num - 1, Printf.sprintf "source %s : %s = stream(%s)\n\
                       bind %s -> %s"
@@ -195,19 +269,21 @@ let update_maps maps events =
   if StringMap.is_empty maps then failwith "empty maps" else
   List.fold_left (fun acc evt ->
     Hashtbl.fold (fun mapname eff_list acc' ->
-      let map = StringMap.find mapname acc' in
+      let map = try StringMap.find mapname acc'
+        with Not_found -> failwith @: "Couldn't find "^mapname
+      in
       List.fold_left (fun acc'' (op, ivars, ovars, v) ->
         (* debug *)
         (*print_endline @: mapname^" "^concat_f "," ovars^":= "^sof v;*)
         let m' = match map, op with
         | SingletonMap m, (RelEvent.Insert | RelEvent.System_Ready) -> 
-            SingletonMap(SingletonMap.set m ivars ovars v)
+            SingletonMap(SingletonMap.set_s m ivars ovars v)
         | SingletonMap m, RelEvent.Delete -> 
-            SingletonMap(SingletonMap.del m ivars ovars)
+            SingletonMap(SingletonMap.del_s m ivars ovars)
         | OutputMap m, (RelEvent.Insert | RelEvent.System_Ready) -> 
-            OutputMap(OutputMap.set m ivars ovars v)
+            OutputMap(OutputMap.set_s m ivars ovars v)
         | OutputMap m, RelEvent.Delete ->
-            OutputMap(OutputMap.del m ivars ovars)
+            OutputMap(OutputMap.del_s m ivars ovars)
         in
         StringMap.add mapname m' acc'' 
       ) acc' eff_list
@@ -228,13 +304,41 @@ let map_dims = function
     | SingletonMap _ -> 1
     | OutputMap m    -> 1 + List.length m.OutputMap.ovars
 
+let r_semi = Str.regexp "; "
+let r_comma = Str.regexp ", "
+let r_declare_map = Str.regexp
+    "DECLARE MAP \\([^(]+\\)(\\(int\\|float\\))\\[\\([^]]*\\)\\]\\[\\([^]]*\\)\\]"
+let r_system_ready = Str.regexp "ON SYSTEM READY {" 
+let r_system_ready_empty = Str.regexp "ON SYSTEM READY <- \\[\\]"
+let r_event = Str.regexp
+    "ON \\(\\+\\|-\\) \\([^(]+\\)(\\([^)]+\\)) <- \\[\\([^]]*\\)\\]"
+let r_update = Str.regexp
+    "UPDATE '\\([^']*\\)'\\[\\([^]]*\\)\\]\\[\\([^]]*\\)\\] := \\(.*\\)$"
+let r_remove = Str.regexp
+    "REMOVE '\\([^']*\\)'\\[\\([^]]*\\)\\]\\[\\([^]]*\\)\\]"
+let r_colon = Str.regexp ":"
+
+(* we need to correct for cases when we have a string with a separator inside. The symptom
+ * after splitting is that we'll have a member with only a single quote inside. *)
+let r_quote = Str.regexp "^[^\"]*\"[^\"]*$"
+let correct_for_strings ss =
+  List.rev @: fst @: List.fold_left (fun (acc, concat) s ->
+    let has_quote = r_match r_quote s in
+    match concat, has_quote, acc with
+    | false, false, _ -> s::acc, false
+    | false, true,  _ -> s::acc, true
+    | true,  false, x::acc -> (x^s)::acc, true (* we're now concatenating *)
+    | true,  true,  x::acc -> (x^s)::acc, false
+    | _, _, _ -> invalid_arg "invalid string quotes in list"
+  ) ([], false) ss
+
+
 let parse_trace file =
   let lines = read_file_lines file in
   let maps, _, sys_ready, events =
     List.fold_left (fun (maps, line, sys_ready, events) str ->
-      let m = r_groups str ~n:4
-        ~r:"DECLARE MAP \\([^(]+\\)(\\(int\\|float\\))\\[\\([^]]*\\)\\]\\[\\([^]]*\\)\\]"
-      in
+      (* parse declare map *)
+      let m = r_groups str ~n:4 ~r:r_declare_map in
       if not @: null m then
         let mapname, maptype, ivars, ovars = at m 0, at m 1, at m 2, at m 3 in
         if is_some ivars && ivars <> Some "" then 
@@ -243,10 +347,10 @@ let parse_trace file =
           | None, Some mapname, Some maptype ->
               SingletonMap(SingletonMap.init mapname maptype)
           | Some ovars', Some mapname, Some maptype ->
-              let ovars_s = r_split ", *" ovars' in
+              let ovars_s = Str.split r_comma ovars' in
               let ovars, otypes = 
                 List.split @: list_map (fun v -> 
-                  let l = r_split ":" v in
+                  let l = Str.split r_colon v in
                   hd l, at l 1) ovars_s in
               OutputMap(OutputMap.init mapname maptype ovars otypes)
 
@@ -255,58 +359,61 @@ let parse_trace file =
         let maps' = StringMap.add (unwrap_some mapname) new_map maps in
         maps', line+1, sys_ready, events
       else
-      if r_match "ON SYSTEM READY {" str then 
+      (* parse system ready *)
+      if r_match r_system_ready str then 
         maps, line+1, true, events else
-      if r_match "ON SYSTEM READY <- \\[\\]" str then
+      if r_match r_system_ready_empty str then
         (* only if full system ready has been seen *)
         if sys_ready then
-          let evt = RelEvent.init "system_ready" "" ["int"] [0.] in
+          let evt = RelEvent.init "system_ready" "" ["int"] ["0"] in
           maps, line+1, sys_ready, evt::events
         else
           maps, line+1, sys_ready, events
       else
-      let m = r_groups str ~n:4
-        ~r:"ON \\(\\+\\|-\\) \\([^(]+\\)(\\([^)]+\\)) <- \\[\\([^]]*\\)\\]" in
+      (* parse an event *)
+      let m = r_groups str ~n:4 ~r:r_event in
       if not @: null m then
         match m with
         | [Some op; Some relname; Some id_types; Some vals] ->
-            let vals = foss @: r_split "; *" vals in
-            let id_types = r_split ", *" id_types in
-            let id_types = List.map (r_split ":") id_types in
+            let id_types = Str.split r_comma id_types in
+            let id_types = List.map (Str.split r_colon) id_types in
             let types = List.map (fun l -> at l 1) id_types in 
+            let vals = correct_for_strings @: Str.split r_semi vals in
             let evt = RelEvent.init op relname types vals in
             maps, line+1, sys_ready, evt::events
         | _ -> failwith @: "invalid input for ON at line "^soi line
       else
-      let m = r_groups str ~n:4
-        ~r:"UPDATE '\\([^']*\\)'\\[\\([^]]*\\)\\]\\[\\([^]]*\\)\\] := \
-          \\(.*\\)$" in
+      (* parse an update *)
+      let m = r_groups str ~n:4 ~r:r_update in
       if not @: null m then match m with
         | [Some mapname; Some ivars; Some ovars; Some v] ->
-            let ivars_f = if ivars = "-" then [] else foss @: r_split "; " ivars in
-            let ovars_f = if ovars = "-" then [] else foss @: r_split "; " ovars in
-            let v_f = fos v in
+            let ivars = if ivars = "-" then []
+              else correct_for_strings @: Str.split r_semi ivars in
+            let ovars = if ovars = "-" then []
+              else correct_for_strings @: Str.split r_semi ovars in
             begin match events with
             | []    -> failwith @: "No event to update at line "^soi line
             | e::es -> 
-                let e' = RelEvent.add_effect e mapname ivars_f ovars_f v_f in
+                let e' = RelEvent.add_effect e mapname ivars ovars v in
                 maps, line+1, sys_ready, e'::es
             end
         | _ -> failwith @: "error in update at line "^soi line
       else
-      let m = r_groups str ~n:3
-        ~r:"REMOVE '\\([^']*\\)'\\[\\([^]]*\\)\\]\\[\\([^]]*\\)\\]" in
+      (* parse a remove *)
+      let m = r_groups str ~n:3 ~r:r_remove in
       if not @: null m then match m with
           | (Some mapname)::(Some ivars)::(Some ovars)::_ ->
-            let ivars_f = if ivars = "-" then [] else foss @: r_split "; " ivars in
-            let ovars_f = if ovars = "-" then [] else foss @: r_split "; " ovars in
+            let ivars = if ivars = "-" then []
+                        else correct_for_strings @: Str.split r_semi ivars in
+            let ovars = if ovars = "-" then [] 
+                        else correct_for_strings @: Str.split r_semi ovars in
             begin match events with
             | []    -> failwith @: "No event to update at line "^soi line
             | e::es -> 
-                let e' = RelEvent.del_effect e mapname ivars_f ovars_f in
+                let e' = RelEvent.del_effect e mapname ivars ovars in
                 maps, line+1, sys_ready, e'::es
             end
-          | _ -> failwith @: "error in update at line "^soi line
+          | _ -> failwith @: "error in remove at line "^soi line
       else 
         maps, line+1, sys_ready, events 
     ) (StringMap.empty, 1, false, []) lines
@@ -347,7 +454,9 @@ let events_of_order_file file =
   (* read a line of the order file: +R: 4, 3 *)
   let r_line = Str.regexp "\\(.\\)\\(.*\\):\\(.*\\)" in
   let r_split = Str.regexp ", " in
-  let r_float = Str.regexp ".+\\..*" in (* check if float *)
+  let r_float = Str.regexp "^[0-9]+\\.[0-9]*$" in (* check if float *)
+  let r_int = Str.regexp "^[0-9]+$" in
+  let r_date = Str.regexp "^[0-9]+-[0-9]+-[0-9]+$" in
   List.map (fun line ->
     if not @: Str.string_match r_line line 0 then
       failwith "Bad order file syntax"
@@ -356,10 +465,13 @@ let events_of_order_file file =
       let op, name, args = g 1, g 2, g 3 in
       let args = Str.split r_split args in
       let types = List.map (fun str ->
-        if Str.string_match r_float str 0 then "float" else "int"
+        if r_match r_float str then "float" else
+        if r_match r_int str then "int" else
+        if r_match r_date str then "date" else
+        if str="true" || str="false" then "bool" else
+          "string"
       ) args in
-      let vals = List.map (fun str -> fos str) args in
-      RelEvent.init op name types vals
+      RelEvent.init op name types args
   ) lines
 
 let strings_of_test_role ~is_dist events =

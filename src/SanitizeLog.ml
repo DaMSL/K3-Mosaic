@@ -3,11 +3,14 @@ open Str
 
 let load_log file = read_file_lines file
 
+let r_trace_consuming = Str.regexp ".*TRACE -.*consuming" 
+let r_trace_arrows = Str.regexp ".*TRACE - >>>>.*" 
+
 let pre_sanitize log =
   let _, lines =
     List.fold_left (fun (remove_rest, acc) line ->
-        if r_match ".*TRACE -.*consuming" line then remove_rest, acc
-        else if r_match ".*TRACE - >>>>.*" line then true, acc
+        if r_match r_trace_consuming line then remove_rest, acc
+        else if r_match r_trace_arrows line then true, acc
         else if remove_rest then true, acc
         else false, line::acc)
       (false, [])
@@ -95,6 +98,8 @@ let remove_unwanted trig =
 (* stop the fold *)
 exception Stop of string list
 
+let r_equals = Str.regexp " = "
+
 let clean_up_headings trig =
   (* get vid *)
   let vid_r =  regexp ".*__vid_counter__ =.*" in
@@ -121,7 +126,7 @@ let clean_up_headings trig =
   let send_s = match sends_s with [] -> []
       | _ -> ["send_msgs = "^String.concat "; " sends_s]
   in
-  let vid_s = at (r_split " = " vid_s) 1 in
+  let vid_s = at (Str.split r_equals vid_s) 1 in
   let r_amper = regexp "@" in
   List.rev @: List.fold_left (fun acc line ->
     if string_match trig_r line 0 then
