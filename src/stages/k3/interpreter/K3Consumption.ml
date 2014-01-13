@@ -21,9 +21,11 @@ type resource_impl_env_t = (id_t * channel_impl_t) list
 
 (* Evaluation methods *)
 let value_of_string t v = match t with
-  | TInt -> VInt(int_of_string v)
-  | TFloat -> VFloat(float_of_string v)
-  | _ -> VString(v)
+  | TInt    -> VInt(int_of_string v)
+  | TFloat  -> VFloat(float_of_string v)
+  | TBool   -> VBool(bool_of_string v)
+  | TString -> VString(v)
+  | _       -> invalid_arg "Unknown value"
 
 let pull_source id t res in_chan =
 	let tuple_val, signature =
@@ -67,7 +69,10 @@ let pull_source id t res in_chan =
           | e::es ->
               exp_l_ref := es;
               let v = try K3Values.value_of_const_expr e
-                      with Failure _ -> raise @: ResourceError id
+                      with Failure s -> 
+                        let err = Printf.sprintf "%s: we can't handle an expression of %s"
+                          id  (K3Printing.flat_string_of_expr e) in
+                        raise @: ResourceError err
               in Some v
          end
 

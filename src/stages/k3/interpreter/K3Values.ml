@@ -190,10 +190,16 @@ let value_of_const = function
 
 (* limited conversion between expr and values *)
 let rec value_of_const_expr e = match tag_of_expr e with
-    | Tuple -> let es = decompose_tuple e in
+    | Tuple   -> let es = decompose_tuple e in
       VTuple(list_map value_of_const_expr es)
     | Const c -> value_of_const c
-    | _ -> failwith "value is too complex"
+    | Neg     ->
+        begin match tag_of_expr @: decompose_neg e with
+        | Const(CInt i)   -> VInt (-i)
+        | Const(CFloat f) -> VFloat (-.f)
+        | _ -> failwith @: "Negative can only have int or float" 
+        end
+    | t -> failwith @: "value is too complex: "^soi @: Obj.tag @: Obj.repr t
 
 
 let rec type_of_value uuid value = 
