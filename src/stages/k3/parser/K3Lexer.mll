@@ -17,6 +17,13 @@
 		    Lexing.pos_lnum = pos.Lexing.pos_lnum + 1;
 		    Lexing.pos_bol = pos.Lexing.pos_cnum;
 		  }
+
+  let string_error lexbuf msg = 
+    let pos = lexbuf.Lexing.lex_curr_p in
+    let linenum = pos.Lexing.pos_lnum in 
+    let column = pos.Lexing.pos_cnum - pos.Lexing.pos_bol in 
+    Printf.sprintf "Error on line %d character %d : %s" linenum column msg
+
 }
 
 let whitespace = [' ' '\t']
@@ -160,6 +167,7 @@ rule tokenize = parse
 
     | identifier as name { IDENTIFIER (name) }
     | ip4 as ip { IP(ip) }
+    | _ as c { failwith (string_error lexbuf (Printf.sprintf "Unrecognized character: %c" c))}
 
 and comment depth = parse
 | ml_comment_st  { raise (Failure ("nested comments are invalid")) }
