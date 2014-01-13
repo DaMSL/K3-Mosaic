@@ -622,12 +622,13 @@ let rec types_of_pattern (env:(id_t * type_t list) list) p : type_t list=
 let type_of_resource (env:(id_t * type_t list) list) r = match r with
   | Handle(t,_,_) -> [t]
   | Stream(t, ConstStream e) -> 
+    let uuid = id_of_expr e in
     let t' = t <| value_of |> t_error (-1) "stream" @: TBad(t) in
     let tcol = type_of_expr @: deduce_expr_type [] [] e in
     let t_c, t_e = tcol <| collection_of +++ base_of %++ value_of |> t_error
-      (-1) "stream" @: TBad(t) in
+      uuid "stream" @: TBad(t) in
     if not (t' === t_e) 
-      then t_error (-1) "stream" (VTMismatch(t', t_e, "resource type")) ()
+      then t_error uuid "stream" (VTMismatch(t', t_e, "resource type")) ()
       else [t]
   | Stream(t, _) -> [t]
   | Pattern p -> types_of_pattern env p

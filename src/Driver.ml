@@ -483,7 +483,8 @@ let print_k3_test_program = function
            (* debug *)
             (*List.iter (fun (nm, code) -> print_endline code) maplist; *)
           let map_final_l = list_map (fun (nm, code) ->
-            K3Helpers.mk_var nm, parse_k3_expr code) maplist in
+            K3Helpers.mk_var nm, parse_k3_expr code
+          ) maplist in
           let tests_vals = list_map (fun (nm, e) ->
             nm, InlineExpr e) map_final_l in
           (* filter our all role stuff in the original generated ast *)
@@ -497,7 +498,7 @@ let print_k3_test_program = function
           new_p, tests_vals
         else error "Test printout requires trace file"
       in
-      let prog_test = NetworkTest(p', test_vals) in
+      let prog_test = ProgTest(p', test_vals) in
       let _, prog_test = renumber_test_program_ids prog_test in
       let prog_test = typed_program_test prog_test in
       print_endline @: PS.string_of_program_test prog_test
