@@ -31,7 +31,7 @@ let newline    = "\n\r" | '\n' | '\r'
 
 let digit = ['0'-'9']
 let integer = digit+
-let real = digit+ '.' digit+
+let real = digit+ '.' digit*
 
 let identifier = ['_''a'-'z''A'-'Z']['_''a'-'z''A'-'Z''0'-'9']*
 let ip4 = digit+ '.' digit+ '.' digit+ '.' digit+
@@ -74,8 +74,8 @@ rule tokenize = parse
     | "true"  { BOOL true }
     | "false" { BOOL false }
     
-    | integer as value { INTEGER (int_of_string value) }
     | real as value    { FLOAT (float_of_string value) }
+    | integer as value { INTEGER (int_of_string value) }
     
     | '"' (([^'"']|"\\\"")* as s) '"'  { STRING s }
 

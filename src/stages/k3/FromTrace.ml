@@ -23,9 +23,13 @@ module StrMap = Map.Make(struct type t = string let compare = compare end)
 type mapval = Float of float | Int of int | String of string | Bool of bool | Date of int
 type maptype = TFloat | TInt | TString | TDate | TBool
 
+let r_float_dot = Str.regexp "^-?[0-9]+\\.[0-9]*$"
+
 (* string_of_mapval *)
 let somv = function
-  | Float f  -> sof f
+  | Float f  -> let s = sof f in
+    (* because we type by decimal point, add one for float *)
+    if r_match r_float_dot s then s else s^".0"
   | Int i    -> soi i
   | String s -> s
   | Bool b   -> sob b
@@ -462,8 +466,8 @@ let events_of_order_file file =
   (* read a line of the order file: +R: 4, 3 *)
   let r_line = Str.regexp "\\(.\\)\\(.*\\):\\(.*\\)" in
   let r_split = Str.regexp ", " in
-  let r_float = Str.regexp "^[0-9]+\\.[0-9]*$" in (* check if float *)
-  let r_int = Str.regexp "^[0-9]+$" in
+  let r_float = Str.regexp "^-?[0-9]+\\.[0-9]*$" in (* check if float *)
+  let r_int = Str.regexp "^-?[0-9]+$" in
   let r_date = Str.regexp "^[0-9]+-[0-9]+-[0-9]+$" in
   List.map (fun line ->
     if not @: Str.string_match r_line line 0 then
