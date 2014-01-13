@@ -289,7 +289,7 @@ let update_maps maps events =
       ) acc' eff_list
     ) evt.RelEvent.effects acc
   ) maps events
-
+    
 (* dump a map into a string *)
 let dump_map mapname = function
     | SingletonMap m -> "{"^SingletonMap.val_s m^"}"
@@ -306,8 +306,9 @@ let map_dims = function
 
 let r_semi = Str.regexp "; "
 let r_comma = Str.regexp ", "
+let r_declare_map_short = Str.regexp "DECLARE MAP"
 let r_declare_map = Str.regexp
-    "DECLARE MAP \\([^(]+\\)(\\(int\\|float\\))\\[\\([^]]*\\)\\]\\[\\([^]]*\\)\\]"
+    "DECLARE MAP \\([^(]+\\)(\\(int\\|float\\|string\\|date\\|bool\\))\\[\\([^]]*\\)\\]\\[\\([^]]*\\)\\]"
 let r_system_ready = Str.regexp "ON SYSTEM READY {" 
 let r_system_ready_empty = Str.regexp "ON SYSTEM READY <- \\[\\]"
 let r_event = Str.regexp
@@ -335,40 +336,47 @@ let correct_for_strings ss =
 
 let parse_trace file =
   let lines = read_file_lines file in
-  let maps, _, sys_ready, events =
-    List.fold_left (fun (maps, line, sys_ready, events) str ->
+  let maps, _, sys_ready, events, _ =
+    List.fold_left (fun (maps, line, sys_ready, events, acc_str) s ->
+      let str = acc_str^s in
       (* parse declare map *)
-      let m = r_groups str ~n:4 ~r:r_declare_map in
-      if not @: null m then
-        let mapname, maptype, ivars, ovars = at m 0, at m 1, at m 2, at m 3 in
-        if is_some ivars && ivars <> Some "" then 
-          failwith @: "input vars unsupported at line "^soi line;
-        let new_map = match ovars, mapname, maptype with
-          | None, Some mapname, Some maptype ->
-              SingletonMap(SingletonMap.init mapname maptype)
-          | Some ovars', Some mapname, Some maptype ->
-              let ovars_s = Str.split r_comma ovars' in
-              let ovars, otypes = 
-                List.split @: list_map (fun v -> 
-                  let l = Str.split r_colon v in
-                  hd l, at l 1) ovars_s in
-              OutputMap(OutputMap.init mapname maptype ovars otypes)
+      (* because we split up into lines, we may miss some things. We accumulate once we
+       * pick up on small pieces of what we want *)
+      if r_match r_declare_map_short str then (* we picked up on a map partially *)
+        let m = r_groups str ~n:4 ~r:r_declare_map in
+        if null m then begin
+          (* not enough to read, so add a line *)
+          maps, line+1, sys_ready, events, str
+        end else begin
+          let mapname, maptype, ivars, ovars = at m 0, at m 1, at m 2, at m 3 in
+          if is_some ivars && ivars <> Some "" then 
+            failwith @: "input vars unsupported at line "^soi line;
+          let new_map = match ovars, mapname, maptype with
+            | None, Some mapname, Some maptype ->
+                SingletonMap(SingletonMap.init mapname maptype)
+            | Some ovars', Some mapname, Some maptype ->
+                let ovars_s = Str.split r_comma ovars' in
+                let ovars, otypes = 
+                  List.split @: list_map (fun v -> 
+                    let l = Str.split r_colon v in
+                    hd l, at l 1) ovars_s in
+                OutputMap(OutputMap.init mapname maptype ovars otypes)
 
-          | _ -> failwith @: "missing values at line "^soi line
-        in
-        let maps' = StringMap.add (unwrap_some mapname) new_map maps in
-        maps', line+1, sys_ready, events
-      else
+            | _ -> failwith @: "missing values at line "^soi line
+          in
+          let maps' = StringMap.add (unwrap_some mapname) new_map maps in
+          maps', line+1, sys_ready, events, ""
+      end else
       (* parse system ready *)
       if r_match r_system_ready str then 
-        maps, line+1, true, events else
+        maps, line+1, true, events, acc_str else
       if r_match r_system_ready_empty str then
         (* only if full system ready has been seen *)
         if sys_ready then
           let evt = RelEvent.init "system_ready" "" ["int"] ["0"] in
-          maps, line+1, sys_ready, evt::events
+          maps, line+1, sys_ready, evt::events, acc_str
         else
-          maps, line+1, sys_ready, events
+          maps, line+1, sys_ready, events, acc_str
       else
       (* parse an event *)
       let m = r_groups str ~n:4 ~r:r_event in
@@ -380,7 +388,7 @@ let parse_trace file =
             let types = List.map (fun l -> at l 1) id_types in 
             let vals = correct_for_strings @: Str.split r_semi vals in
             let evt = RelEvent.init op relname types vals in
-            maps, line+1, sys_ready, evt::events
+            maps, line+1, sys_ready, evt::events, acc_str
         | _ -> failwith @: "invalid input for ON at line "^soi line
       else
       (* parse an update *)
@@ -395,7 +403,7 @@ let parse_trace file =
             | []    -> failwith @: "No event to update at line "^soi line
             | e::es -> 
                 let e' = RelEvent.add_effect e mapname ivars ovars v in
-                maps, line+1, sys_ready, e'::es
+                maps, line+1, sys_ready, e'::es, acc_str
             end
         | _ -> failwith @: "error in update at line "^soi line
       else
@@ -411,12 +419,12 @@ let parse_trace file =
             | []    -> failwith @: "No event to update at line "^soi line
             | e::es -> 
                 let e' = RelEvent.del_effect e mapname ivars ovars in
-                maps, line+1, sys_ready, e'::es
+                maps, line+1, sys_ready, e'::es, acc_str
             end
           | _ -> failwith @: "error in remove at line "^soi line
       else 
-        maps, line+1, sys_ready, events 
-    ) (StringMap.empty, 1, false, []) lines
+        maps, line+1, sys_ready, events, acc_str
+    ) (StringMap.empty, 1, false, [], "") lines
   in
   let events = List.rev events in
   (* get rid of events with no effects *)
@@ -531,6 +539,8 @@ let dump_map_strings maps =
 (* Convert a file to a string representation *)
 let string_of_file file ~is_dist = 
   let events, maps, sys_ready = parse_trace file in
+  (* debug *)
+  (*print_endline @: String.concat ", " @: fst_many @: string_of_maps maps;*)
   (* update all maps with the event data *)
   let maps = update_maps maps events in
   (* list of all maps and their data *)

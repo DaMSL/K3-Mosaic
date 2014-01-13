@@ -190,6 +190,24 @@ let print_args = wrap_args ["s", t_string]
 let _ = Hashtbl.add func_table 
   print_name (print_decl, print_args, print_fn)
 
+let r_date = Str.regexp "[0-9]+-[0-9]+-[0-9]+"
+
+(* parse SQL date format *)
+let fn e =
+  match arg_of_env e with
+  | [_,VString s] -> 
+      begin match r_groups s ~n:2 ~r:r_date with
+      | [Some y; Some m; Some d] -> 
+          let x = (ios y)*10000 + (ios m)*100 + (ios d) in
+          e, int_temp x
+      | _ -> invalid_arg "parse_sql_date"
+      end
+  | _ -> invalid_arg "parse_sql_date"
+let name = "parse_sql_date"
+let decl = wrap_tfunc t_string t_int
+let args = wrap_args ["s", t_string]
+let _ = Hashtbl.add func_table name (decl, args, fn)
+
 (* function-lookup functions *)
 let lookup id = Hashtbl.find func_table id 
 let lookup_value id = let (_,a,f) = lookup id in VForeignFunction (a,f)

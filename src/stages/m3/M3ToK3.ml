@@ -1539,6 +1539,8 @@ let m3_to_k3 ?(generate_init = false) ?(role = "client")
              (m3_program: M3.prog_t): (K.program_t) =
   let {M3.maps = m3_prog_schema; M3.triggers = m3_prog_trigs;
        M3.queries = m3_prog_tlqs; M3.db = m3_database } = m3_program in
+  (* declaration for parsing sql date *)
+  let sql_func = KH.mk_foreign_fn "parse_sql_date" KH.t_string KH.t_int in
   let k3_prog_schema = List.map m3_map_to_k3_map !m3_prog_schema in
   let k3_prog_env = List.map (function 
       | K.Global(id, ty, _) -> (id, ty)
@@ -1618,6 +1620,7 @@ let m3_to_k3 ?(generate_init = false) ?(role = "client")
   let k3_prog_client_role = 
     List.map (fun x -> x, []) (k3_prog_sources @ k3_prog_bindings @ k3_prog_consumes)
   in
+    sql_func::
     List.map (fun x -> x, []) (
       k3_prog_schema @
       [ K.Flow(k3_prog_trigs @  k3_prog_demux) ] @
