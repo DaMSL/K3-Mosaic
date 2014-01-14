@@ -308,7 +308,7 @@ let rec lazy_expr c expr =
     logic_paren_pair "!=" p
   | Leq -> let p = U.decompose_leq expr in
     arith_paren_pair "<=" p
-  | Lambda arg -> let e = U.decompose_lambda expr in
+  | Lambda arg -> let _, e = U.decompose_lambda expr in
     wrap_indent (lps "\\" <| lazy_arg c false arg <| lps " ->") <| lind () <| 
     wrap_hov 0 (lazy_expr c e)
   | Apply -> let (e1, e2) = U.decompose_apply expr in
@@ -318,7 +318,7 @@ let rec lazy_expr c expr =
     in begin match U.tag_of_expr e1 with (* can be let *)
       | Var _ -> wrap_indent (lazy_expr c e1 <|
           lcut () <| modify_arg @: lazy_expr c e2)
-      | Lambda arg -> let body = U.decompose_lambda e1 in
+      | Lambda arg -> let _, body = U.decompose_lambda e1 in
         wrap_hov 2 (lps "let " <| lazy_arg c false arg <|
           lps " =" <| lsp () <| lazy_expr c e2 <| lsp () ) <| lps "in"
           <| lsp () <| lazy_expr c body

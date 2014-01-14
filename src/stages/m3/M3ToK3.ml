@@ -293,7 +293,7 @@ let apply_lambda v_el el body =
    are allowed). If [expr] is singleton and lambda_e outputs a tuple the 
    result is wrapped in a Singleton collection. *)
 let apply_lambda_to_expr lambda_e lambda_t expr =
-   let lambda_body = (KU.decompose_lambda (lambda_e)) in
+   let _, lambda_body = (KU.decompose_lambda (lambda_e)) in
    let lambda_rett = 
       (KT.canonical (K.TCollection(K.TSet, KT.canonical lambda_t))) in
    begin match (KU.arg_of_lambda (lambda_e), 

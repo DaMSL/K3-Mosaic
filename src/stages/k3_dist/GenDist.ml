@@ -1114,7 +1114,7 @@ let do_corrective_trigs p s_rhs ast trig_name corrective_maps =
       [] @: (* locals *)
         let lmap = lhs_map_of_stmt p stmt_id in
         let send_to =
-          if List.exists (fun m -> m = lmap) corrective_maps
+          if List.exists ((=) lmap) corrective_maps
           then Some(send_corrective_name_of_t p lmap)
           else None
         in
@@ -1181,18 +1181,9 @@ let gen_dist ?(force_correctives=false) p partmap ast =
     declare_foreign_functions p @
     filter_corrective_list ::  (* global func *)
     (mk_flow @:
-      GC.ack_rcv_trig ::
-      GC.ack_send_trig ::
-      GC.do_garbage_collection_trig_code p ast ::
-      GC.min_max_acked_vid_rcv_node_trig ::
-      GC.min_max_acked_vid_rcv_switch_trig ::
-      GC.final_safe_vid_to_delete_rcv_trig_code ::
-      GC.min_safe_vid_to_delete_rcv_trig_code ::
-      GC.safe_vid_to_delete_rcv_trig_code ::
-      GC.vid_rcv_trig ::
-      GC.max_acked_vid_send_trig vid_counter epoch_var hash_addr  ::
-      regular_trigs@
-      send_corrective_trigs p@
+      GC.triggers p ast @
+      regular_trigs @
+      send_corrective_trigs p @
       demux_trigs ast)::    (* per-map basis *)
       roles_of ast in
   let foreign = List.filter (fun d -> U.is_foreign d) prog in

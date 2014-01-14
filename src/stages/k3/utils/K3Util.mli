@@ -49,7 +49,7 @@ val decompose_ifthenelse : expr_t -> expr_t * expr_t * expr_t
 val decompose_insert : expr_t -> expr_t * expr_t
 val decompose_iterate : expr_t -> expr_t * expr_t
 val decompose_just : expr_t -> expr_t
-val decompose_lambda : expr_t -> expr_t
+val decompose_lambda : expr_t -> arg_t * expr_t
 val decompose_leq : expr_t -> expr_t * expr_t
 val decompose_lt : expr_t -> expr_t * expr_t
 val decompose_map : expr_t -> expr_t * expr_t

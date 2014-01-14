@@ -859,3 +859,16 @@ let max_acked_vid_send_trig vid_cnt_var epoch_var hash_addr =
         (mk_ctarget vid_rcv_trig_name) (* target *)
         (mk_var tmp_addr)
         (mk_var "max_acked_vid")
+
+let triggers p ast =
+  ack_rcv_trig ::
+  ack_send_trig ::
+  do_garbage_collection_trig_code p ast ::
+  min_max_acked_vid_rcv_node_trig ::
+  min_max_acked_vid_rcv_switch_trig ::
+  final_safe_vid_to_delete_rcv_trig_code ::
+  min_safe_vid_to_delete_rcv_trig_code ::
+  safe_vid_to_delete_rcv_trig_code ::
+  vid_rcv_trig ::
+  max_acked_vid_send_trig vid_counter epoch_var hash_addr ::
+  []

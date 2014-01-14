@@ -190,7 +190,7 @@ let decompose_iterate e = match tag_of_expr e with
 let decompose_just e = match tag_of_expr e with
   Just -> nth e 0 | _ -> failwith "not a Just"
 let decompose_lambda e = match tag_of_expr e with 
-  Lambda(_) -> nth e 0 | _ -> failwith "not a Lambda"
+  Lambda arg -> arg, nth e 0 | _ -> failwith "not a Lambda"
 let decompose_leq e = match tag_of_expr e with 
   Leq -> (nth e 0, nth e 1) | _ -> failwith "not a Leq"
 let decompose_lt e = match tag_of_expr e with 

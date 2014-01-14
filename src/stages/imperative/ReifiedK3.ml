@@ -110,9 +110,9 @@ let name_of_reification (fn_arg_env : (id_t * arg_t) list)
         let reify_lambda =
           match is_unit (get_type e), (tag_of_expr fn_e), e_name with
           | false, Lambda _, None ->
-              declare_and_reify "apply" e [decompose_lambda fn_e] 
+              declare_and_reify "apply" e [snd (decompose_lambda fn_e)] 
           | false, Lambda _, Some (e_id, e_t, _, _) ->
-              reify_list (e_id, e_t) [decompose_lambda fn_e]
+              reify_list (e_id, e_t) [snd (decompose_lambda fn_e)]
           | false, _, None -> declare_and_reify "apply" e []
           | _, _, _ -> []
         in
@@ -162,7 +162,7 @@ let name_of_reification (fn_arg_env : (id_t * arg_t) list)
         begin
           let children_to_reify =
             let fn_reifications = match tag_of_expr fn_e with
-              | Lambda _ -> [decompose_lambda fn_e] | _ -> []
+              | Lambda _ -> [snd (decompose_lambda fn_e)] | _ -> []
             in fn_reifications@[init_e]
           in
           match e_name with

@@ -65,8 +65,13 @@ let cond_add_delta_to_map p map_id =
 
 (* foreign functions *)
 let hash_addr = "hash_addr"
-let foreign_hash_addr = mk_foreign_fn hash_addr t_addr t_int
-let declare_foreign_functions p = foreign_hash_addr::[]
+let declare_foreign_functions p = 
+  let foreign_hash_addr = mk_foreign_fn hash_addr t_addr t_int in
+  (* function needed to parse sql dates. Called by m3tok3 *)
+  let sql_func = mk_foreign_fn "parse_sql_date" t_string t_int in
+  foreign_hash_addr::
+  sql_func::
+  []
 
 (* global data structures
  * ---------------------------------------------- *)

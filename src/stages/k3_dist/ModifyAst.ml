@@ -120,13 +120,12 @@ let modify_tuple_type fn typ =
 
 (* modify a lambda to have a vid included in its arguments *)
 let add_vid_to_lambda_args lambda =
-  let body = U.decompose_lambda lambda in
   let vid_avar = AVar("vid", t_vid) in
-  let args = U.arg_of_lambda lambda in
+  let args, body = U.decompose_lambda lambda in
   let new_args = match args with
-    | Some(ATuple(vs)) -> ATuple(P.map_add_v vid_avar vs)
-    | Some(v) -> ATuple(P.map_add_v vid_avar [v])
-    | _ -> raise(UnhandledModification("lambda not found")) in
+    | ATuple(vs) -> ATuple(P.map_add_v vid_avar vs)
+    | v          -> ATuple(P.map_add_v vid_avar [v])
+  in
   mk_lambda new_args body
 
 (* messages about possible modifications to the ast for map accesses *)
@@ -166,7 +165,7 @@ let modify_map_add_vid p ast stmt =
         let body = U.decompose_flatten e in
         mk_flatten @: add_vid_from_above body
     | Lambda args ->
-        let body = U.decompose_lambda e in
+        let _, body = U.decompose_lambda e in
         mk_lambda args @: add_vid_from_above body
     | Map -> let lambda, col = U.decompose_map e in
         mk_map
@@ -255,7 +254,7 @@ let modify_map_add_vid p ast stmt =
     | Apply  -> let (lambda, arg) = U.decompose_apply e in
       begin match U.tag_of_expr arg with
         | Var id when id = lmap_name ->
-          begin match (U.typed_vars_of_lambda lambda, U.decompose_lambda lambda) with
+          begin match (U.typed_vars_of_lambda lambda, snd @: U.decompose_lambda lambda) with
             | ([arg_id, t],b) -> NopMsg,
               mk_apply
                 (mk_lambda
@@ -310,19 +309,13 @@ let delta_action p ast stmt action =
   in
   (* let existing_out_tier = ...*)
   let lambda, arg = U.decompose_apply ast in
-  let body = U.decompose_lambda lambda in
-  let params = match U.tag_of_expr lambda with Lambda a -> a
-    | _ -> raise @: UnhandledModification("No lambda")
-  in
+  let params, body = U.decompose_lambda lambda in
   match U.tag_of_expr body with
   | Apply -> 
     (* simple modification - sending a single tuple of data *)
     (* this is something like prod_ret_x's let *)
     let lambda2, arg2 = U.decompose_apply body in
-    let body2 = U.decompose_lambda lambda2 in
-    let params2 = begin match U.tag_of_expr lambda2 with
-      | Lambda a -> a
-      | _ -> raise @: UnhandledModification("No inner lambda") end in
+    let params2, body2 = U.decompose_lambda lambda2 in
     let delta_name = hd @: U.vars_of_lambda lambda2 in
     let full_names = lmap_bind_ids_v @ [delta_name] in
     let full_vars =
@@ -396,8 +389,8 @@ let delta_action p ast stmt action =
         ) arg
     end
   | Iterate -> (* more complex modification *)
-    (* col contains the calculation code, lambda2 is the delta addition *)
-    let lambda2, col = U.decompose_iterate body in
+    (* col2 contains the calculation code, lambda2 is the delta addition *)
+    let lambda2, col2 = U.decompose_iterate body in
     begin match action with
     | `AddDelta varname -> 
         (* get the body for adding the delta *)
@@ -415,8 +408,7 @@ let delta_action p ast stmt action =
          * that checks to see if a value exists at a specific vid. 
          * If so, we add to it. If not, we initialize using a previous vid. *)
         let lambda2' = add_vid_to_lambda_args lambda2 in
-        let body2 = U.decompose_lambda lambda2' in 
-        let params2 = unwrap_some @: U.arg_of_lambda lambda2' in
+        let params2, body2 = U.decompose_lambda lambda2' in 
         let arg_names = U.vars_of_arg params2 in
         let last_arg = hd @: list_take_end 1 arg_names in
         let arg_types = snd_many @: U.typed_vars_of_arg params2 in
@@ -450,23 +442,20 @@ let delta_action p ast stmt action =
           mk_var varname
 
     | `CalcDelta(target_trigger, add_delta_nm_fn) ->
-      let params2 = begin match U.tag_of_expr lambda2 with
-        | Lambda a -> a
-        | _ -> raise(UnhandledModification("No inner lambda")) end in
+      let params2, _ = U.decompose_lambda lambda2 in
       let delta_name = "__delta_values__" in
       let delta_v_name = "__delta_with_vid__" in
       let delta_ids_types = U.typed_vars_of_arg params2 in
       let delta_types = extract_arg_types delta_ids_types in
       let delta_col_type = wrap_tset @: wrap_ttuple delta_types in
-      let delta_col_v_type = 
-        wrap_tset @: wrap_ttuple @: P.map_types_add_v delta_types in
+      let delta_col_v_type = lmap_type in
       let delta_ids = extract_arg_names delta_ids_types in
       let delta_last_id = list_take_end 1 delta_ids
       in
       mk_apply
         (mk_lambda params @: (* usually existing_out_tier *)
-            (* col contains the calculation code *)
-            mk_let delta_name delta_col_type col @:
+            (* col2 contains the calculation code *)
+            mk_let delta_name delta_col_type col2 @:
             (* project vid into collection *)
             mk_let delta_v_name delta_col_v_type
               (mk_map
