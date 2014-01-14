@@ -48,6 +48,9 @@ type program_env_t = trigger_env_t * env_t
 (* Value comparison *)
 val equal_values : value_t -> value_t -> bool
 
+(* Value sorting for consistency *)
+val sort_values : value_t -> value_t
+
 (* Value stringification *)
 val repr_of_value : value_t -> string
 val string_of_value : value_t -> string

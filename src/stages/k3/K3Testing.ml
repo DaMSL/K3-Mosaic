@@ -169,7 +169,7 @@ let test_program globals_k3 interpret_fn file_name test =
     (*print_endline @: K3Values.string_of_program_env env*)
   (* ) node_envs;*)
 
-  (* unify the node value environments *)
+  (* unify the node value environments if needed *)
   let (v_env:env_t) = op_fn node_envs in
 
   (* debug - print the unified env *)
@@ -183,10 +183,9 @@ let test_program globals_k3 interpret_fn file_name test =
   let tdecl_prog, t_env, trig_env, _ = type_bindings_of_program prog_globals in
   let test_cases = list_map (fun (i, (lexp, rexp)) -> 
       let name = file_name^"_"^soi i in
-      let test_case = case name @: 
-        eval_test_expr_env tdecl_prog t_env trig_env v_env lexp @=? 
-        eval_test_expr [] @: check_as_expr rexp
-      in test_case
+      let v1 = sort_values @: eval_test_expr_env tdecl_prog t_env trig_env v_env lexp in
+      let v2 = sort_values @: eval_test_expr [] @: check_as_expr rexp in
+      case name @: v1 @=? v2
     ) numbered_tests
   in List.iter run_tests test_cases
 

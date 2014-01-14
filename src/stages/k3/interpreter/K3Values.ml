@@ -77,6 +77,17 @@ let rec equal_values a b =
        with Invalid_argument _ -> false)
   | a,b -> a = b
 
+(* Value sorting *)
+let rec sort_values v = 
+  let sort x = List.sort compare x in
+  match v with
+  | VSet l          -> VSet(sort @: List.map sort_values l)
+  | VBag l          -> VBag(sort @: List.map sort_values l)
+  | VTuple l        -> VTuple(List.map sort_values l)
+  | VOption(Some t) -> VOption(Some (sort_values t))
+  | VList l         -> VList(List.map sort_values l)
+  | x               -> x
+
 let rec repr_of_value v = match v with
 	| VUnknown  -> "VUnknown"
 	| VUnit     -> "VUnit"
