@@ -45,8 +45,6 @@ let mvos typ s = match typ with
   | TDate   -> 
                begin match List.map ios @: Str.split r_dash s with
                | [y;m;d] -> let x = y * 10000 + m * 100 + d in
-                            (* debug *)
-                            (*Printf.printf "%s = %d\n" s x;*)
                             Int(x)
                | _ -> invalid_arg "not a proper date"
                end

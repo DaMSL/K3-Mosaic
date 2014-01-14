@@ -498,7 +498,7 @@ let print_k3_test_program = function
           new_p, tests_vals
         else error "Test printout requires trace file"
       in
-      let prog_test = ProgTest(p', test_vals) in
+      let prog_test = NetworkTest(p', test_vals) in
       let _, prog_test = renumber_test_program_ids prog_test in
       let prog_test = typed_program_test prog_test in
       print_endline @: PS.string_of_program_test prog_test

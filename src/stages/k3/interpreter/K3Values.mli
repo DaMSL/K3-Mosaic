@@ -48,12 +48,15 @@ type program_env_t = trigger_env_t * env_t
 (* Value comparison *)
 val equal_values : value_t -> value_t -> bool
 
+(* Find inequalities and put their locations in a list *)
+val find_inequality : value_t -> value_t -> int list
+
 (* Value sorting for consistency *)
 val sort_values : value_t -> value_t
 
 (* Value stringification *)
 val repr_of_value : value_t -> string
-val string_of_value : value_t -> string
+val string_of_value : ?mark_points:int list -> value_t -> string
 
 (* Environment stringification *)
 val print_env : bool -> env_t -> unit

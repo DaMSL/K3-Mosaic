@@ -57,7 +57,10 @@ let ensure assertion = match assertion with
   | AssertTypeEquals(expected, actual) -> 
       equals_assertion (=) expected actual string_of_type
   | AssertValueEquals(expected, actual) -> 
-      equals_assertion equal_values expected actual string_of_value
+      match find_inequality expected actual with
+      | [] -> "PASSED"
+      | xs -> "FAILED: Expected " ^ string_of_value ~mark_points:xs expected ^ ", but got " ^
+      string_of_value ~mark_points:xs actual ^ "."
 
 let rec run_tests ?(indent="") test =
     match test with

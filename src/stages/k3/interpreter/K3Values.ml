@@ -68,13 +68,17 @@ type program_env_t = trigger_env_t * env_t
 (* Value stringification *)
 let unwrap opt = match opt with Some v -> v | _ -> failwith "invalid option unwrap"
 
-(* Value comparison *)
+(* Value comparison. *)
 let rec equal_values a b = 
   let sort x = List.sort compare x in
   match a,b with
   | (VSet l | VBag l), (VSet r | VBag r) ->
       (try List.for_all2 equal_values (sort l) (sort r)
        with Invalid_argument _ -> false)
+    (* consider float equality within a certain epsilon *)
+  | VFloat x, VFloat y ->
+      let e = 0.0001 in
+      abs_float(x -. y) < e
   | a,b -> a = b
 
 (* Value sorting *)
@@ -111,34 +115,43 @@ let rec repr_of_value v = match v with
 	| VTarget id -> "VTarget("^id^")"
 
 
-let rec print_value v =
-  let lazy_value v = lazy(print_value v) in
-  let print_collection lb rb vs =
-    pretty_tag_str ~lb:lb ~rb:rb ~sep:"; " CutHint "" "" (List.map lazy_value vs)
-  in
-  match v with
-  | VUnknown  -> ps "??"
-  | VUnit     -> ps "()"
-  | VBool b   -> ps @: string_of_bool b
-  | VInt i    -> ps @: string_of_int i
-  | VFloat f  -> ps @: string_of_float f
-  | VByte c   -> ps @: string_of_int (Char.code c)
-  | VString s -> ps @: String.escaped s
-  | VTuple vs -> pretty_tag_str CutHint "" "" (List.map lazy_value vs)
+(* mark_points are optional sorted counts of where we want markings *)
+let rec print_value ?(mark_points=[]) v =
+  let count = ref 0 in
+  let rec loop ~mark_points v =
+    incr count;
+    (* debug *)
+    ps @: Printf.sprintf "%d/" !count;
+    (* mark if we're at the right point *)
+    let mark_points = match mark_points with
+      | x::xs when !count = x -> ps "%"; xs
+      | xs                    -> xs
+    in
+    let lazy_value v = lazy(loop v ~mark_points) in
+    let print_collection lb rb vs =
+      pretty_tag_str ~lb:lb ~rb:rb ~sep:"; " CutHint "" "" (List.map lazy_value vs)
+    in
+    match v with
+    | VUnknown  -> ps "??"
+    | VUnit     -> ps "()"
+    | VBool b   -> ps @: string_of_bool b
+    | VInt i    -> ps @: string_of_int i
+    | VFloat f  -> ps @: string_of_float f
+    | VByte c   -> ps @: string_of_int (Char.code c)
+    | VString s -> ps @: String.escaped s
+    | VTuple vs -> pretty_tag_str CutHint "" "" (List.map lazy_value vs)
+    | VOption None -> ps "None"
+    | VOption vopt -> pretty_tag_str CutHint "" "Some" [lazy_value (unwrap vopt)]
+    | VSet vs  -> print_collection "{" "}" vs
+    | VBag vs  -> print_collection "{|" "|}" vs
+    | VList vs -> print_collection "[" "]" vs
+    | VFunction (a, b) -> ps "<fun>"
+    | VForeignFunction (a, _) -> ps "<foreignfun>"
+    | VAddress (ip,port) -> ps (ip^":"^ string_of_int port)
+    | VTarget id -> ps ("<"^id^">")
+  in loop ~mark_points v
 
-  | VOption vopt ->
-    if vopt = None then ps "None"
-    else pretty_tag_str CutHint "" "Some" [lazy_value (unwrap vopt)]
-
-  | VSet vs  -> print_collection "{" "}" vs
-  | VBag vs  -> print_collection "{|" "|}" vs
-  | VList vs -> print_collection "[" "]" vs
-  | VFunction (a, b) -> ps "<fun>"
-  | VForeignFunction (a, _) -> ps "<foreignfun>"
-  | VAddress (ip,port) -> ps (ip^":"^ string_of_int port)
-  | VTarget id -> ps ("<"^id^">")
-
-let string_of_value v = wrap_formatter (fun () -> print_value v)
+let string_of_value ?mark_points v = wrap_formatter (fun () -> print_value ?mark_points v)
 
 (* Environment stringification *)
 let print_binding (id,v) = ob(); ps (id^" = "); pc(); print_value v; cb(); fnl()
@@ -254,6 +267,29 @@ let rec expr_of_value uuid value = match value with
      let l = List.map (expr_of_value uuid) vs in
      k3_container_of_list (type_of_value uuid value) l
   | VFunction _ | VForeignFunction _ -> raise (RuntimeError (uuid, 
-      "expr_of_value: cannot apply to
-  function"))
+      "expr_of_value: cannot apply to function"))
+
+(* Value comparison. Returns a partial list of inequalities if there are any *)
+let find_inequality a b = 
+  let count = ref 0 in
+  let sort x = List.sort compare x in
+  let rec loop a b =
+    let collect l r = List.fold_left2 (fun acc lval rval ->
+      let unequal = loop lval rval in
+      acc@unequal
+    ) [] l r
+    in
+    incr count;
+    (* collect the inequalities from some inner lists *)
+    match a,b with
+    | (VSet l | VBag l), (VSet r | VBag r) -> collect (sort l) (sort r)
+    | VList l, VList r -> collect l r
+      (* consider float equality within a certain epsilon *)
+    | VFloat x, VFloat y ->
+        let e = 0.0001 in
+        if abs_float(x -. y) > e then [!count] else []
+    | VTuple l, VTuple r -> collect l r
+    | a, b -> if a <> b then [!count] else []
+  in
+  sort @: loop a b
 
