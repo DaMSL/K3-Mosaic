@@ -105,7 +105,7 @@ raise "Can't find path #{simple_path}" unless simple_p.exist?
 simple_p.children.each do |f|
   if f.extname == ".sql" then simple_files << ["simple", f.basename, f] end
 end
-simple_files.sort_by! do |_, name, _| name end
+simple_files = simple_files.sort do |(_, namea, _),(_, nameb, _)| namea <=> nameb end
 
 # Add all children but simple path files
 p.children.each do |d|
@@ -118,8 +118,8 @@ p.children.each do |d|
 end
 
 # Sort the array
-all_files.sort_by! do |last, fname, f| fname end
-all_files.sort_by! do |last, fname, f| last end
+all_files = all_files.sort do |(_, fname_a, _),(_, fname_b, _)| fname_a <=> fname_b end
+all_files = all_files.sort do |(last_a, _, _),  (last_b, _, _)| last_a  <=> last_b  end
 
 # Combine with simple array
 all_files = simple_files.concat(all_files)
@@ -181,5 +181,6 @@ elsif test_num != nil then # numbered test
     puts `#{test_cmd} #{node_cmd} #{$shuffle_cmd} #{$force_cmd} #{file.to_s}`
 elsif test_name != nil then # named test
 	puts("Test #{1} (#{test_name}):")
+    puts("#{test_cmd} #{node_cmd} #{$shuffle_cmd} #{$force_cmd} #{test_name}")
     puts `#{test_cmd} #{node_cmd} #{$shuffle_cmd} #{$force_cmd} #{test_name}`
 end

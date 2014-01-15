@@ -14,8 +14,9 @@ raise "No input file" unless ARGV.length >= 1
 file=File.expand_path(ARGV[0])
 
 $cur_path = File.expand_path(File.dirname(__FILE__))
+$dbtoaster = "dbtoaster_release"
 dbtoaster_path = File.join($cur_path, "../external/dbtoaster")
-dbtoaster_exe_path = File.join(dbtoaster_path, "/bin/dbtoaster")
+dbtoaster_exe_path = File.join(dbtoaster_path, "/bin/#{$dbtoaster}")
 
 p = Pathname.new(dbtoaster_exe_path)
 raise "Can't find dbtoaster executable" unless p.exist?
@@ -59,13 +60,13 @@ def test_file(file, dbt_path, k3_path)
 	err_file = File.join(curdir, "temp.err")
 
   # run dbtoaster to get interpreted updates
-  puts "./bin/dbtoaster -d LOG-INTERPRETER-UPDATES -d LOG-INTERPRETER-TRIGGERS -d LOG-M3 #{file} > #{trace_file}"
-  `./bin/dbtoaster -d PRINT-VERBOSE -d LOG-INTERPRETER-UPDATES -d LOG-INTERPRETER-TRIGGERS -d LOG-M3 #{file} > #{trace_file} 2> #{err_file}`
+  puts "./bin/#{$dbtoaster} -d LOG-INTERPRETER-UPDATES -d LOG-INTERPRETER-TRIGGERS -d LOG-M3 #{file} > #{trace_file}"
+  `./bin/#{$dbtoaster} -d PRINT-VERBOSE -d LOG-INTERPRETER-UPDATES -d LOG-INTERPRETER-TRIGGERS -d LOG-M3 #{file} > #{trace_file} 2> #{err_file}`
   check_error(curdir, err_file)
 
 	# run dbtoaster to get m3 file
-  puts "./bin/dbtoaster -l M3 -d PRINT-VERBOSE #{file} > #{m3_file}"
-  `./bin/dbtoaster -l M3 -d PRINT-VERBOSE #{file} > #{m3_file} 2> #{err_file}`
+  puts "./bin/#{$dbtoaster} -l M3 -d PRINT-VERBOSE #{file} > #{m3_file}"
+  `./bin/#{$dbtoaster} -l M3 -d PRINT-VERBOSE #{file} > #{m3_file} 2> #{err_file}`
   check_error(curdir, err_file)
 
 	# change directory back
