@@ -40,11 +40,11 @@ then echo "#!/bin/bash" > ./bin/partmap_tool
 fi
 
 # driver
-ocamlbuild Driver.native -build-dir ./bin $@
-if [ -f "./bin/src/Driver.native" ]
+ocamlbuild Driver.p.native -build-dir ./bin $@
+if [ -f "./bin/src/Driver.p.native" ]
 then echo "#!/bin/bash" > ./bin/k3
      echo "export BOLT_CONFIG=$SCRIPTPATH/bolt.cfg" >> ./bin/k3
-     echo "$SCRIPTPATH/bin/src/Driver.native \$@" >> ./bin/k3
+     echo "$SCRIPTPATH/bin/src/Driver.p.native \$@" >> ./bin/k3
      chmod +x ./bin/k3
 fi
 cd -
