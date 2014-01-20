@@ -31,7 +31,7 @@ let somv = function
     (* because we type by decimal point, add one for float *)
     if r_match r_float_dot s then s else s^".0"
   | Int i    -> soi i
-  | String s -> s
+  | String s -> Printf.sprintf "\"%s\"" s
   | Bool b   -> sob b
   | Date i   -> soi i (* handle date like int for output purposes *)
 
@@ -39,9 +39,12 @@ let r_dash = Str.regexp "-"
 
 (* mapval_of_string *)
 let mvos typ s = match typ with
-  | TFloat -> Float(fos s)
-  | TInt   -> Int(ios s)
-  | TString -> String(s)
+  | TFloat  -> Float(fos s)
+  | TInt    -> Int(ios s)
+  | TString -> let len = String.length s in
+               if s.[len-1]='"' && s.[0]='"' then
+                  String(String.sub s 1 (len-2))
+               else invalid_arg @: s^" is not a string"
   | TDate   -> 
                begin match List.map ios @: Str.split r_dash s with
                | [y;m;d] -> let x = y * 10000 + m * 100 + d in
@@ -178,9 +181,9 @@ module RelEvent = struct
     (*Printf.printf "types[%s] values[%s]" (String.concat ";" types) (String.concat ";" values);*)
     (*print_newline ();*)
     let op = match oper with 
-        | "+" -> Insert
-        | "-" -> Delete
-        | _   -> System_Ready in
+      | "+" -> Insert
+      | "-" -> Delete
+      | _   -> System_Ready in
     let types = List.map mtos types in
     let vals = mvos_many types values in
     let r = {
@@ -466,8 +469,7 @@ let string_of_go_trig ~has_sys_ready events =
 let events_of_order_file file =
   let lines = read_file_lines file in
   (* read a line of the order file: +R: 4, 3 *)
-  let r_line = Str.regexp "\\(.\\)\\(.*\\):\\(.*\\)" in
-  let r_split = Str.regexp ", " in
+  let r_line = Str.regexp "\\(.\\)\\([^:]+\\): \\(.*\\)" in
   let r_float = Str.regexp "^-?[0-9]+\\.[0-9]*$" in (* check if float *)
   let r_int = Str.regexp "^-?[0-9]+$" in
   let r_date = Str.regexp "^[0-9]+-[0-9]+-[0-9]+$" in
@@ -477,15 +479,18 @@ let events_of_order_file file =
     else 
       let g i = Str.matched_group i line in
       let op, name, args = g 1, g 2, g 3 in
-      let args = Str.split r_split args in
+      let argl = Str.split r_comma args in
+      let argl = correct_for_strings argl in
       let types = List.map (fun str ->
         if r_match r_float str then "float" else
         if r_match r_int str then "int" else
         if r_match r_date str then "date" else
         if str="true" || str="false" then "bool" else
           "string"
-      ) args in
-      RelEvent.init op name types args
+      ) argl in
+      (* debug *)
+      (*Printf.printf "%s\n%s\n" args @: String.concat ", " types;*)
+      RelEvent.init op name types argl
   ) lines
 
 let strings_of_test_role ~is_dist events =

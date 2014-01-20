@@ -437,6 +437,8 @@ let print_k3_test_program = function
           let events = FromTrace.events_of_order_file order_file in
           let role_s = FromTrace.string_of_test_role ~is_dist:false events in
           (* Note that we take the single-site version here *)
+          (* debug *)
+          print_endline @: role_s;
           let p' = drop_roles orig_p @ parse_k3_prog role_s in
           (* run the interpreter on our code *)
           let params = default_cmd_line_params () in

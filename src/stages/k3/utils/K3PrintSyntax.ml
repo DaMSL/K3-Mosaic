@@ -77,14 +77,14 @@ let lazy_annos c = function
 
 let rec lazy_base_type c ~in_col ?(no_paren=false) t = 
   let proc () = match t with
-  | TUnit -> lps "unit"
-  | TBool -> lps "bool"
-  | TByte -> lps "byte"
-  | TInt -> lps "int"
-  | TFloat -> lps "float"
-  | TString -> lps "string"
-  | TMaybe(vt) -> lps "maybe " <| lazy_value_type c ~in_col vt
-  | TTuple(vts) -> 
+  | TUnit       -> lps "unit"
+  | TBool       -> lps "bool"
+  | TByte       -> lps "byte"
+  | TInt        -> lps "int"
+  | TFloat      -> lps "float"
+  | TString     -> lps "string"
+  | TMaybe(vt)  -> lps "maybe " <| lazy_value_type c ~in_col vt
+  | TTuple(vts) ->
       (* if we're top level of a collection, drop the parentheses *)
       (* for verbose types, we leave them in. We also leave them for refs *)
       let inner () = lps_list NoCut (lazy_value_type c ~in_col) vts in
@@ -105,12 +105,12 @@ let rec lazy_base_type c ~in_col ?(no_paren=false) t =
 
 (* TODO: annotations *)
 and lazy_mutable_type c ~in_col ?(no_paren=false) = function
-  | TMutable (bt, a) -> 
+  | TMutable (bt, a)   -> 
       lps "ref " <| lazy_base_type c ~in_col:true ~no_paren:false bt
   | TImmutable (bt, a) -> lazy_base_type c ~in_col ~no_paren bt
 
 and lazy_value_type c ~in_col ?(no_paren=false) = function
-  | TIsolated mt -> lazy_mutable_type c ~in_col ~no_paren mt
+  | TIsolated mt  -> lazy_mutable_type c ~in_col ~no_paren mt
   | TContained mt -> lazy_mutable_type c ~in_col ~no_paren mt
 
 let lazy_type c = function
@@ -122,10 +122,10 @@ let lazy_type c = function
 let rec lazy_arg c drop_tuple_paren a = 
   let paren = if drop_tuple_paren then id_fn else lazy_paren in
   match a with
-  | AIgnored -> lps "_"
+  | AIgnored      -> lps "_"
   | AVar (id, vt) -> lps (id^":") <| lazy_value_type c false vt
-  | AMaybe(arg) -> lps "just " <| lazy_arg c false arg
-  | ATuple(args) -> 
+  | AMaybe(arg)   -> lps "just " <| lazy_arg c false arg
+  | ATuple(args)  ->
       lhov 0 <| paren (lps_list CutHint (lazy_arg c false) args) <| lcb ()
 
 let lazy_id_type c (id,t) = lps (id^" : ") <| lazy_value_type c false t
@@ -136,23 +136,19 @@ let lazy_trig_vars c = function
       (lps_list ~sep:", " CutHint (fun (id,t,_) -> lazy_id_type c (id,t)) vars)
 
 let lazy_const c = function
-  | CUnknown -> lps "_"
-  | CUnit -> lps "()"
-  | CBool(true) -> lps "true"
-  | CBool(false) -> lps "false"
-  | CInt(i) -> lps @: string_of_int i
-  | CFloat(f) -> lps @: string_of_float f
-  (* seems print string without quotation.
-   * e.g. some_string instead of "some_string"
-  | CString(s) -> lps s
-  *)
-  | CString(s) -> lps ("\""^s^"\"")
+  | CUnknown       -> lps "_"
+  | CUnit          -> lps "()"
+  | CBool(true)    -> lps "true"
+  | CBool(false)   -> lps "false"
+  | CInt(i)        -> lps @: string_of_int i
+  | CFloat(f)      -> lps @: string_of_float f
+  | CString(s)     -> lps @: "\""^String.escaped s^"\""
   | CAddress(s, i) -> lps @: s^":"^string_of_int i
-  | CTarget(id) -> lps id
+  | CTarget(id)    -> lps id
 
 let lazy_collection c ct eval = match ct with
-    | TSet -> lps "{" <| eval <| lps "}"
-    | TBag -> lps "{|" <| eval <| lps "|}"
+    | TSet  -> lps "{" <| eval <| lps "}"
+    | TBag  -> lps "{|" <| eval <| lps "|}"
     | TList -> lps "[" <| eval <| lps "]"
 
 let lazy_collection_vt c vt eval = match vt with
@@ -200,10 +196,10 @@ let rec lazy_expr c expr =
   (* for == and != *)
   in let logic_paren e = match U.tag_of_expr e with
     | Eq | Neq -> lazy_paren 
-    | _ -> arith_paren e (* arith ast is used for logic *)
+    | _        -> arith_paren e (* arith ast is used for logic *)
   in let logic_paren_l e = match U.tag_of_expr e with
     | Eq | Neq -> lazy_paren
-    | _ -> arith_paren_l e
+    | _        -> arith_paren_l e
   in let arith_paren_pair sym (el, er) = 
     let wrapl = arith_paren_l el in
     let wrapr = arith_paren er in
@@ -216,7 +212,7 @@ let rec lazy_expr c expr =
     try (match T.type_of_expr e with
     | TValue x | TFunction(_,x) -> match T.base_of x with
         | TBool -> true
-        | _ -> false)
+        | _     -> false)
     with T.TypeError(_,_,_) -> false (* assume additive *)
   in let tuple_no_paren c e = match U.tag_of_expr e with
     | Tuple -> let es = U.decompose_tuple e in

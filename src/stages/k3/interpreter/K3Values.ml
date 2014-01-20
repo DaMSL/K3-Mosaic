@@ -121,7 +121,7 @@ let rec print_value ?(mark_points=[]) v =
   let rec loop ~mark_points v =
     incr count;
     (* debug *)
-    ps @: Printf.sprintf "%d/" !count;
+    (*ps @: Printf.sprintf "%d/" !count;*)
     (* mark if we're at the right point *)
     let mark_points = match mark_points with
       | x::xs when !count = x -> ps "%"; xs
@@ -138,7 +138,7 @@ let rec print_value ?(mark_points=[]) v =
     | VInt i    -> ps @: string_of_int i
     | VFloat f  -> ps @: string_of_float f
     | VByte c   -> ps @: string_of_int (Char.code c)
-    | VString s -> ps @: String.escaped s
+    | VString s -> ps @: Printf.sprintf "\"%s\"" @: String.escaped s
     | VTuple vs -> pretty_tag_str CutHint "" "" (List.map lazy_value vs)
     | VOption None -> ps "None"
     | VOption vopt -> pretty_tag_str CutHint "" "Some" [lazy_value (unwrap vopt)]
@@ -274,10 +274,12 @@ let find_inequality a b =
   let count = ref 0 in
   let sort x = List.sort compare x in
   let rec loop a b =
-    let collect l r = List.fold_left2 (fun acc lval rval ->
-      let unequal = loop lval rval in
-      acc@unequal
-    ) [] l r
+    let collect l r = 
+      try List.fold_left2 (fun acc lval rval ->
+        let unequal = loop lval rval in
+        acc@unequal
+      ) [] l r
+      with Invalid_argument _ -> [!count]
     in
     incr count;
     (* collect the inequalities from some inner lists *)
