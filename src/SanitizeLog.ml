@@ -142,17 +142,22 @@ let do_per_trigger log =
   List.map (remove_unwanted |- clean_up_headings) log
 
 let convert_to_db_format log_name (idx,trig) =
-  (* join lines together *)
+  let r_sp_begin = regexp "^ +\\([^ ].*\\)$" in  (* spaces followed by anything *)
+  let drop_spaces s = 
+    if r_match r_sp_begin s then
+      Str.replace_first r_sp_begin "\\1" s
+    else s
+  in
+  let r_eq_line = regexp ".+ =.*" in
   let trig_nm = hd trig in
-  let r_eq_line = regexp ".+ = .+" in
-  (* handle multi-lines *)
+  (* join map lines together *)
   let trig = 
     List.fold_left (fun trig_acc str ->
       (* check for a new line *)
       if string_match r_eq_line str 0 then str::trig_acc
       else match trig_acc with
       | []    -> [str]
-      | x::xs -> (x^str)::xs
+      | x::xs -> (x^drop_spaces str)::xs
     ) [] (tl trig)
   in
   (* decompose trigger name *)
@@ -164,7 +169,7 @@ let convert_to_db_format log_name (idx,trig) =
   List.rev_map (fun str ->
     let k_v = split r_eq str in
     let map, value = at k_v 0, at k_v 1 in
-    Printf.sprintf "%s/%d/%s/%s/%s/%s\n" log_name idx addr trig_nm map value
+    Printf.sprintf "%s|%d|%s|%s|%s|%s\n" log_name idx addr trig_nm map value
   ) trig
 
 (* output the log in readable format *)
