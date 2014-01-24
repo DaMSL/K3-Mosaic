@@ -43,7 +43,7 @@ then echo "#!/bin/bash" > ./bin/partmap_tool
 fi
 # log sanitization tool
 ocamlbuild SanitizeLog.byte -build-dir ./bin -tag debug $@
-if [ -f "./bin/src/PartMapTool.byte" ]
+if [ -f "./bin/src/SanitizeLog.byte" ]
 then echo "#!/bin/bash" > ./bin/sanitize_log
      echo "ocamlrun -b $SCRIPTPATH/bin/src/SanitizeLog.byte \$@" >> ./bin/sanitize_log
      chmod +x ./bin/sanitize_log

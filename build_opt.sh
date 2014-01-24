@@ -39,6 +39,14 @@ then echo "#!/bin/bash" > ./bin/partmap_tool
      chmod +x ./bin/partmap_tool
 fi
 
+# log sanitization tool
+ocamlbuild SanitizeLog.native -build-dir ./bin $@
+if [ -f "./bin/src/SanitizeLog.native" ]
+then echo "#!/bin/bash" > ./bin/sanitize_log
+     echo "$SCRIPTPATH/bin/src/SanitizeLog.native \$@" >> ./bin/sanitize_log
+     chmod +x ./bin/sanitize_log
+fi
+
 # driver
 ocamlbuild Driver.native -build-dir ./bin $@
 if [ -f "./bin/src/Driver.native" ]
