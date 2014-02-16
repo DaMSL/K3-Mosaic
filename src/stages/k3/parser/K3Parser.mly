@@ -577,6 +577,8 @@ conditional :
 
 lambda :
      | BACKSLASH arg RARROW expr { mkexpr (Lambda($2)) [$4] }
+     /* Alternative syntax for indicating non-tuple output */
+     | BACKSLASH arg RASSOC expr { mkexpr (Lambda($2)) [$4] }
 
      /* Error handling */
      | BACKSLASH arg RARROW error { lambda_error "body" }

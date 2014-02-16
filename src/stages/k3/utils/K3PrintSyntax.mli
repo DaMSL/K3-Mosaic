@@ -9,8 +9,8 @@ val string_of_mutable_type : mutable_type_t -> string
 
 val string_of_type : type_t -> string
 
-val string_of_expr : ?uuid_highlight:int -> expr_t -> string
+val string_of_expr : ?uuid_highlight:int -> ?lambda_ret:bool -> expr_t -> string
 
-val string_of_program : ?uuid_highlight:int -> program_t -> string
+val string_of_program : ?uuid_highlight:int -> ?lambda_ret:bool -> program_t -> string
 
-val string_of_program_test : ?uuid_highlight:int -> program_test_t -> string
+val string_of_program_test : ?uuid_highlight:int -> ?lambda_ret:bool -> program_test_t -> string

@@ -185,28 +185,30 @@ type parameters = {
     mutable shuffle_tasks : bool; (* Shuffle tasks from different node
                                     to simulate network delay *)
     mutable force_correctives : bool; (* Force correctives being generated *)
+    mutable lambda_ret : bool;    (* print syntax with * when return isn't a tuple *)
   }
 
 let default_cmd_line_params () = {
-    action        = ref Print;
-    test_mode     = ref ProgramTest;
-    in_lang       = K3in;
-    out_lang      = K3;
-    search_paths  = default_search_paths;
-    input_files   = [];
-    peers         = default_peers;
-    default_peer  = true;
-    partition_map = [];
-    run_length    = default_run_length;
-    print_types   = default_print_types;
-    debug_info    = default_debug_info;
-    verbose       = default_verbose;
-    trace_files   = [];
-    order_files   = [];
+    action            = ref Print;
+    test_mode         = ref ProgramTest;
+    in_lang           = K3in;
+    out_lang          = K3;
+    search_paths      = default_search_paths;
+    input_files       = [];
+    peers             = default_peers;
+    default_peer      = true;
+    partition_map     = [];
+    run_length        = default_run_length;
+    print_types       = default_print_types;
+    debug_info        = default_debug_info;
+    verbose           = default_verbose;
+    trace_files       = [];
+    order_files       = [];
 
-    queue_type   = K3Runtime.GlobalQ;
-    shuffle_tasks = default_shuffle_tasks;
+    queue_type        = K3Runtime.GlobalQ;
+    shuffle_tasks     = default_shuffle_tasks;
     force_correctives = false;
+    lambda_ret        = false;
   }
 
 let cmd_line_params = default_cmd_line_params ()
@@ -396,7 +398,7 @@ let print_k3_program f = function
   | _ -> error "Cannot print this type of data"
 
 (* create and print a k3 program with an expected section *)
-let print_k3_test_program = function
+let print_k3_test_program ~lambda_ret = function
   | idx, K3DistData (p, meta, orig_p) ->
       (* get the folded expressions comparing values for latest vid.
        * These go in the expected statements at the end *)
@@ -472,7 +474,7 @@ let print_k3_test_program = function
       let prog_test = NetworkTest(p', test_vals) in
       let _, prog_test = renumber_test_program_ids prog_test in
       let prog_test = typed_program_test prog_test in
-      print_endline @: PS.string_of_program_test prog_test
+      print_endline @: PS.string_of_program_test ~lambda_ret prog_test
 
   | idx, K3Data p ->
       (* get the test values from the dbtoaster trace *)
@@ -503,7 +505,7 @@ let print_k3_test_program = function
       let prog_test = NetworkTest(p', test_vals) in
       let _, prog_test = renumber_test_program_ids prog_test in
       let prog_test = typed_program_test prog_test in
-      print_endline @: PS.string_of_program_test prog_test
+      print_endline @: PS.string_of_program_test ~lambda_ret prog_test
 
   | _ -> error "Cannot print this type of data"
 
@@ -540,12 +542,13 @@ let print_cpp_program = function
 
 (* Top-level print handler *)
 let print params inputs =
+  let lambda_ret = params.lambda_ret in
   let idx_inputs = insert_index_fst 0 inputs in
   let sofp = string_of_program ~verbose:cmd_line_params.verbose in
   let print_fn = match params.out_lang with
     | AstK3 | AstK3Dist   -> print_k3_program sofp |- snd
-    | K3 | K3Dist         -> print_k3_program PS.string_of_program |- snd
-    | K3Test | K3DistTest -> print_k3_test_program
+    | K3 | K3Dist         -> print_k3_program (PS.string_of_program ~lambda_ret) |- snd
+    | K3Test | K3DistTest -> print_k3_test_program ~lambda_ret
     | ReifiedK3           -> print_reified_k3_program |- snd
     | Imperative          -> print_imperative_program params.print_types |- snd
     | CPPInternal         -> print_cppi_program params.print_types |- snd
@@ -694,6 +697,9 @@ let param_specs = Arg.align
       "         Shuffle tasks to simulate network delays";
   "--force", Arg.Unit (fun () -> cmd_line_params.force_correctives <- true),
       "         Force distributed compilation to produce more correctives";
+  (* Print related *)
+  "--lambda", Arg.Unit (fun () -> cmd_line_params.lambda_ret  <- true),
+      "         Print syntax with lambda return hint (*)";
   ])
 
 let usage_msg =

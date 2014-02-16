@@ -25,11 +25,13 @@ let lps_list ?(sep=", ") cut_t f l =
   [lazy (ps_list ~sep:sep cut_t (force_list |- f) l)]
 
 (* type we pass all the way down for configuring behaviors *)
-type config = {verbose_types:bool;
-               uuid:int option}
+type config = {verbose_types:bool; (* more verbose type printing *)
+               uuid:int option;    (* highlight a particular uuid *)
+               lambda_ret:bool} (* highlight a lambda with a non-tuple return type *)
 
 let default_config = {verbose_types=false;
-                      uuid=None}
+                      uuid=None;
+                      lambda_ret=false}
 
 let verbose_types_config = {default_config with verbose_types=true}
 
@@ -304,9 +306,25 @@ let rec lazy_expr c expr =
     logic_paren_pair "!=" p
   | Leq -> let p = U.decompose_leq expr in
     arith_paren_pair "<=" p
-  | Lambda arg -> let _, e = U.decompose_lambda expr in
-    wrap_indent (lps "\\" <| lazy_arg c false arg <| lps " ->") <| lind () <| 
-    wrap_hov 0 (lazy_expr c e)
+  | Lambda arg -> 
+      (* check if we need to highlight this lambda for the new k3 *)
+      let highlight = 
+        if c.lambda_ret then
+          let ms = U.meta_of_expr expr in
+          begin match list_find (function Type _ -> true | _ -> false) ms with
+            | Some (Type (TFunction(_,x))) -> 
+              begin match T.base_of x with
+                | TTuple _ -> false
+                | _        -> true (* we highlight anything that's not a tuple result *)
+              end
+            | _ -> false
+          end
+        else false
+      in
+      let _, e = U.decompose_lambda expr in
+    wrap_indent (lps "\\" <| lazy_arg c false arg <| 
+    (if highlight then lps " =>" else lps " ->")) <| lind () <| 
+      wrap_hov 0 (lazy_expr c e)
   | Apply -> let (e1, e2) = U.decompose_apply expr in
     let modify_arg = begin match U.tag_of_expr e2 with
       | Tuple -> id_fn
@@ -451,18 +469,20 @@ let string_of_type t = wrap_f @: fun () ->
   force_list @: lazy_type verbose_types_config t
 
 (* print a K3 expression in syntax *)
-let string_of_expr ?uuid_highlight e = 
+let string_of_expr ?uuid_highlight ?(lambda_ret=false) e = 
+  let config = {default_config with lambda_ret} in
   let config = match uuid_highlight with 
-    | None   -> default_config
-    | _      -> {default_config with uuid=uuid_highlight}
+    | None   -> config
+    | _      -> {config with uuid=uuid_highlight}
   in
   wrap_f @: fun () -> force_list @: lazy_expr config e
 
 (* print a K3 program in syntax *)
-let string_of_program ?uuid_highlight prog = 
+let string_of_program ?uuid_highlight ?(lambda_ret=false) prog = 
+  let config = {default_config with lambda_ret} in
   let config = match uuid_highlight with 
-    | None -> default_config
-    | _    -> {default_config with uuid=uuid_highlight}
+    | None -> config
+    | _    -> {config with uuid=uuid_highlight}
   in
   wrap_f @: fun () -> 
     let l = lps_list ~sep:"" CutHint (lazy_declaration config |- fst) prog in
@@ -471,26 +491,26 @@ let string_of_program ?uuid_highlight prog =
     cb
 
 (* print a k3 program with test expressions *)
-let string_of_program_test ?uuid_highlight ptest = 
+let string_of_program_test ?uuid_highlight ?lambda_ret ptest = 
   (* print a check_expr *)
   let string_of_check_expr = function
       | FileExpr s -> "file "^s
-      | InlineExpr e -> string_of_expr ?uuid_highlight e
+      | InlineExpr e -> string_of_expr ?uuid_highlight ?lambda_ret e
   in
   (* print a test expression *)
   let string_of_test_expr (e, check_e) =
     Printf.sprintf "(%s) = %s"
-      (string_of_expr ?uuid_highlight e) @:
+      (string_of_expr ?uuid_highlight ?lambda_ret e) @:
       string_of_check_expr check_e
   in
   match ptest with
   | NetworkTest(p, checklist) -> 
       Printf.sprintf "%s\n\nnetwork expected\n\n%s"
-        (string_of_program ?uuid_highlight p)
+        (string_of_program ?uuid_highlight ?lambda_ret p)
         (String.concat ",\n\n" @: list_map string_of_test_expr checklist)
   | ProgTest(p, checklist) -> 
       Printf.sprintf "%s\n\nexpected\n\n%s"
-        (string_of_program ?uuid_highlight p)
+        (string_of_program ?uuid_highlight ?lambda_ret p)
         (String.concat ",\n\n" @: list_map string_of_test_expr checklist)
   | ExprTest _ -> failwith "can't print an expression test"
 
