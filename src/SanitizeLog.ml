@@ -169,7 +169,7 @@ let convert_to_db_format log_name (idx,trig) =
   List.rev_map (fun str ->
     let k_v = split r_eq str in
     let map, value = at k_v 0, at k_v 1 in
-    Printf.sprintf "%s|%d|%s|%s|%s|%s\n" log_name idx addr trig_nm map value
+    Printf.sprintf "%s/%d/%s/%s/%s/%s\n" log_name idx addr trig_nm map value
   ) trig
 
 (* output the log in readable format *)
