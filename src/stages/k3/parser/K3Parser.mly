@@ -498,9 +498,9 @@ constant :
 ;
 
 range :
-    | LBRACE expr COLON expr COLON expr RBRACE { mkexpr (Range(TSet)) [$2; $4; $6] }
-    | LBRACEBAR expr COLON expr COLON expr RBRACEBAR { mkexpr (Range(TBag)) [$2; $4; $6] }
-    | LBRACKET expr COLON expr COLON expr RBRACKET { mkexpr (Range(TList)) [$2; $4; $6] }
+    | LBRACE expr COLON COLON expr COLON COLON expr RBRACE { mkexpr (Range(TSet)) [$2; $5; $8] }
+    | LBRACEBAR expr COLON COLON expr COLON COLON expr RBRACEBAR { mkexpr (Range(TBag)) [$2; $5; $8] }
+    | LBRACKET expr COLON COLON expr COLON COLON expr RBRACKET { mkexpr (Range(TList)) [$2; $5; $8] }
 ;
 
 collection :

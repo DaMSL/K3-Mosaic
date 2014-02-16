@@ -262,7 +262,7 @@ let rec lazy_expr c expr =
       | _ -> expr_pair ~sep:(lcut() <| lps "++" <| lcut()) ~wl:wrapl (e1, e2) 
     end
   | Range ct -> let t = U.decompose_range expr in
-    lazy_collection c ct @: expr_triple ~sep:(fun () -> lps ":") t
+    lazy_collection c ct @: expr_triple ~sep:(fun () -> lps "::") t
   | Add -> let (e1, e2) = U.decompose_add expr in
     begin match U.tag_of_expr e2, expr_type_is_bool e1 with
       | Neg, false -> let e3 = U.decompose_neg e2 in
