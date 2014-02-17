@@ -445,11 +445,9 @@ let rec k3_container_of_list typ = function
     k3_container_of_list typ xs
 
 (* convert an arg to a value type *)
-let rec value_type_of_arg a =
-    match a with
-    | AIgnored -> canonical TUnknown
-    | AVar(i, t) -> t
-    | AMaybe(a') -> canonical (TMaybe(value_type_of_arg a'))
-    | ATuple(args) -> canonical (TTuple(List.map value_type_of_arg args))
-
+let rec value_type_of_arg = function
+  | AIgnored -> canonical TUnknown
+  | AVar(i, t) -> t
+  | AMaybe(a') -> canonical (TMaybe(value_type_of_arg a'))
+  | ATuple(args) -> canonical (TTuple(List.map value_type_of_arg args))
 

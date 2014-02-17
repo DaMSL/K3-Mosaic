@@ -154,7 +154,24 @@ let base_of vt           = apply_to_base_of fst vt
 let annotated_base_of vt = apply_to_base_of (fun x -> x) vt
 let annotation_of vt     = apply_to_base_of snd vt
 
-
+(* get a default value for a type *)
+let canonical_value_of_type vt = 
+  let rec loop vt =
+    let bt = base_of vt in
+    match bt with
+    | TUnknown -> H.mk_cint 0
+    | TUnit -> H.mk_cunit
+    | TBool -> H.mk_cbool false
+    | TInt -> H.mk_cint 0
+    | TFloat -> H.mk_cfloat 0.
+    | TString -> H.mk_cstring ""
+    | TMaybe t -> H.mk_nothing vt
+    | TTuple ts -> H.mk_tuple @: List.map loop ts
+    | TCollection(ctype, t) -> H.mk_empty vt
+    | TAddress -> H.mk_caddress Constants.default_address
+    | _ -> failwith "unhandled default"
+  in loop vt
+  
 (* This copies all annotations from the base type *)
 let rec contained_of vt =
     let inner_base_type, inner_ann = annotated_base_of vt in

@@ -42,6 +42,9 @@ val contained_of: value_type_t -> value_type_t
 val value_of: type_t -> (unit -> unit) -> value_type_t
 val canonical: base_type_t -> value_type_t
 
+(* get a canonical value for a specific type *)
+val canonical_value_of_type : value_type_t -> expr_t
+
 (* AST integrity *)
 val check_tag_arity: expr_tag_t -> 'child list -> bool
 

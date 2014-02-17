@@ -129,27 +129,7 @@ let rec lazy_arg c drop_tuple_paren a =
   | ATuple(args)  ->
       lhov 0 <| paren (lps_list CutHint (lazy_arg c false) args) <| lcb ()
 
-(* get an id for the argument at the shallow level for trigger or lambda *)
-let shallow_bind = function
-  | AIgnored     -> "_"
-  | AVar (id, _) -> id
-  | AMaybe _     -> "m_x"
-  | ATuple _     -> "x"
-
-(*
-let rec deep_bind =
-  let i = rec 1 in
-  let loop =
-    | AIgnored | AVar -> [] (* do nothing *)
-    | ATuple args -> 
-*)
-
 let lazy_id_type c (id,t) = lps (id^" : ") <| lazy_value_type c false t
-
-let lazy_trig_vars c = function
-  | [] -> lps "{}"
-  | vars -> lazy_box_brace 
-      (lps_list ~sep:", " CutHint (fun (id,t,_) -> lazy_id_type c (id,t)) vars)
 
 let lazy_const c = function
   | CUnknown       -> lps "_"
@@ -177,7 +157,66 @@ let lazy_collection_vt c vt eval = match vt with
 let lazy_concat ?(sep=lsp ()) f l = 
   List.flatten @: list_intersperse_val sep @: List.map f l
 
-let rec lazy_expr c expr = 
+(* Get an id from a number *)
+let id_of_num i = Printf.sprintf "_b%d_" i
+
+(* get an id for the argument at the shallow level for trigger or lambda *)
+let shallow_bind_id = function
+  | AIgnored     -> "_"
+  | AVar (id, _) -> id
+  | AMaybe _     
+  | ATuple _     -> id_of_num 1
+
+(* arg type with numbers included in tuples and maybes *)
+type arg_num
+    = NIgnored
+    | NVar      of id_t * value_type_t
+    | NMaybe    of int * arg_num 
+    | NTuple    of int * arg_num list
+
+(* convert args to an arg type containing numbers for binding *)
+let arg_num_of_arg a = 
+  let i = ref 0 in
+  let rec loop = function
+    | AIgnored     -> NIgnored
+    | AVar (id, v) -> NVar (id,v)
+    | AMaybe x     -> incr i; NMaybe(!i, loop x)
+    | ATuple xs    -> incr i; NTuple(!i, List.map loop xs)
+  in loop a
+
+(* retrieve the ids from one level of arg_num *)
+let get_id_of_arg = function
+  | NIgnored    -> "_"
+  | NVar(id,_)  -> id
+  | NMaybe(i,_)
+  | NTuple(i,_) -> id_of_num i
+
+(* convert an arg_num to a value type *)
+let rec value_type_of_arg_num = function
+  | NIgnored -> T.canonical TUnknown
+  | NVar(i, t) -> t
+  | NMaybe(_, a') -> T.canonical (TMaybe(value_type_of_arg_num a'))
+  | NTuple(_, args) -> T.canonical (TTuple(List.map value_type_of_arg_num args))
+
+let rec deep_bind c arg =
+  let arg_n = arg_num_of_arg arg in (* convert to arg_num *)
+  let rec loop = function
+    | NIgnored 
+    | NVar(_, _)      -> [] (* do nothing *)
+    | NTuple(i, args) -> 
+        let sub_ids = List.map get_id_of_arg args in
+        lps @: Printf.sprintf "bind %s as (%s) in " (id_of_num i) (String.concat ", " sub_ids) 
+    | NMaybe(i, arg)  -> 
+        (* we don't have such sophisticated pattern matching methods. On the nothing side, we put
+         * a canonical value *)
+        let typ = value_type_of_arg_num arg in
+        let default_v = T.canonical_value_of_type typ in
+        lps "case " <| lps (id_of_num i) <| lps " of " <| lcut () <|
+        lps "Nothing -> " <| lazy_expr c default_v <| lcut () <|
+        lps "Just " <| lps (get_id_of_arg arg) <| lps " -> " <| lcut ()
+  in loop arg_n
+
+and lazy_expr c expr = 
   let expr_pair ?(sep=lps "," <| lsp ()) ?(wl=id_fn) ?(wr=id_fn) (e1, e2) =
     wl(lazy_expr c e1) <| sep <| wr(lazy_expr c e2) in
   let expr_sub ?(sep=lps "," <| lsp ()) p =
@@ -319,23 +358,8 @@ let rec lazy_expr c expr =
   | Leq -> let p = U.decompose_leq expr in
     arith_paren_pair "<=" p
   | Lambda arg -> 
-      (* check if we need to highlight this lambda for the new k3 *)
-      let highlight = 
-        if c.lambda_ret then
-          let ms = U.meta_of_expr expr in
-          begin match list_find (function Type _ -> true | _ -> false) ms with
-            | Some (Type (TFunction(_,x))) -> 
-              begin match T.base_of x with
-                | TTuple _ -> false
-                | _        -> true (* we highlight anything that's not a tuple result *)
-              end
-            | _ -> false
-          end
-        else false
-      in
       let _, e = U.decompose_lambda expr in
-    wrap_indent (lps "\\" <| lazy_arg c false arg <| 
-    (if highlight then lps " =>" else lps " ->")) <| lind () <| 
+    wrap_indent (lps "\\" <| lazy_arg c false arg <| lps " ->") <| lind () <| 
       wrap_hov 0 (lazy_expr c e)
   | Apply -> let (e1, e2) = U.decompose_apply expr in
     let modify_arg = begin match U.tag_of_expr e2 with
@@ -409,7 +433,7 @@ and apply_method_nocol c ~name ~args =
   in
   lps ("."^name) <| lsp () <| lazy_concat (fun e -> wrap_if_big e @: lazy_expr c e) args
 
-(* Apply a method to a colleciton *)
+(* Apply a method to a collection *)
 and apply_method c ~name ~col ~args =
   (* we only need parens if we're not applying to a variable *)
   let f = match U.tag_of_expr col with
@@ -418,17 +442,13 @@ and apply_method c ~name ~col ~args =
   in f @: lazy_expr c col <| apply_method_nocol c ~name ~args
 
 let lazy_trigger c id arg vars expr = 
-  let is_block expr = match U.tag_of_expr expr with
-    | Block -> true
-    | _ -> false
-  in
+  let is_block expr = match U.tag_of_expr expr with Block -> true | _ -> false in
   let indent f = if is_block expr 
                then lps " " <| f
                else lind () <| lbox (lhov 0) f in
-  lps @: "trigger "^id <|
-  lazy_paren @: lazy_arg c true arg <| lps " " <|
-  lazy_trig_vars c vars <|
-  lps " =" <| indent (lazy_expr c expr) <| lcut ()
+  lps ("trigger "^id) <| lps " : " <| 
+  lazy_value_type ~in_col:false c @: U.value_type_of_arg arg <| lsp () <|
+  lps "=" <| indent (lazy_expr c @: KH.mk_lambda arg expr) <| lcut ()
 
 let channel_format c = function
   | CSV  -> "csv"
