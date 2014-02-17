@@ -109,6 +109,9 @@ val list_bunch : int -> 'a list -> 'a list list
 (* intersperse 2 lists together. When one runs out, continue with the other *)
 val list_intersperse : 'a list -> 'a list -> 'a list
 
+(* intersperse a list with a value, like String.concat *)
+val list_intersperse_val : 'a -> 'a list -> 'a list
+
 (* functions without exceptions *)
 val list_find : ('a -> bool) -> 'a list -> 'a option
 val find : ('a -> 'b -> 'c) -> 'a -> 'b -> 'c option

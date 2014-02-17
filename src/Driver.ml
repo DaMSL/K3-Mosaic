@@ -46,6 +46,7 @@ type out_lang_t =
   | AstK3Dist
   | ReifiedK3
   | Imperative | CPPInternal | CPP
+  | K3New (* new k3 syntax *)
 
 let out_lang_descs = [
     K3,          "k3",        "K3";
@@ -58,6 +59,7 @@ let out_lang_descs = [
     Imperative,  "imp",       "Imperative";
     CPPInternal, "cppi",      "C++-internal";
     CPP,         "cpp",       "C++";
+    K3New,       "k3new",     "New K3";
   ]
 
 (* types of data carried around  by the driver *)
@@ -548,6 +550,7 @@ let print params inputs =
   let print_fn = match params.out_lang with
     | AstK3 | AstK3Dist   -> print_k3_program sofp |- snd
     | K3 | K3Dist         -> print_k3_program (PS.string_of_program ~lambda_ret) |- snd
+    | K3New               -> print_k3_program K3NewPrint.string_of_program |- snd
     | K3Test | K3DistTest -> print_k3_test_program ~lambda_ret
     | ReifiedK3           -> print_reified_k3_program |- snd
     | Imperative          -> print_imperative_program params.print_types |- snd
