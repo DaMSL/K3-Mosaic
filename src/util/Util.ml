@@ -206,11 +206,12 @@ let list_intersperse la lb =
     | [], []       -> acc
   in List.rev @: loop [] la lb
 
-let list_intersperse_val v l =
-  let rec loop acc = function
-    | x::xs -> loop (x::v::acc) xs
-    | []    -> acc
-  in List.rev @: loop [] l
+let list_intersperse_val v = function
+  | [] -> []
+  | l  -> let rec loop acc = function
+            | x::xs -> loop (x::v::acc) xs
+            | []    -> acc
+          in List.rev @: loop [hd l] (tl l)
 
 (* functions without exceptions *)
 let list_find f l = try Some(List.find f l) with Not_found -> None

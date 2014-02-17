@@ -88,8 +88,6 @@ let rec lazy_base_type c ~in_col ?(no_paren=false) t =
   | TString     -> lps "string"
   | TMaybe(vt)  -> lps "maybe " <| lazy_value_type c ~in_col vt
   | TTuple(vts) ->
-      (* if we're top level of a collection, drop the parentheses *)
-      (* for verbose types, we leave them in. We also leave them for refs *)
       let inner () = lps_list NoCut (lazy_value_type c ~in_col) vts in
       if not c.verbose_types && no_paren then inner ()
       else lps "(" <| inner () <| lps ")"
@@ -130,6 +128,21 @@ let rec lazy_arg c drop_tuple_paren a =
   | AMaybe(arg)   -> lps "just " <| lazy_arg c false arg
   | ATuple(args)  ->
       lhov 0 <| paren (lps_list CutHint (lazy_arg c false) args) <| lcb ()
+
+(* get an id for the argument at the shallow level for trigger or lambda *)
+let shallow_bind = function
+  | AIgnored     -> "_"
+  | AVar (id, _) -> id
+  | AMaybe _     -> "m_x"
+  | ATuple _     -> "x"
+
+(*
+let rec deep_bind =
+  let i = rec 1 in
+  let loop =
+    | AIgnored | AVar -> [] (* do nothing *)
+    | ATuple args -> 
+*)
 
 let lazy_id_type c (id,t) = lps (id^" : ") <| lazy_value_type c false t
 
@@ -219,10 +232,6 @@ let rec lazy_expr c expr =
         | TBool -> true
         | _     -> false)
     with T.TypeError(_,_,_) -> false (* assume additive *)
-  in let tuple_no_paren c e = match U.tag_of_expr e with
-    | Tuple -> let es = U.decompose_tuple e in
-      lps_list CutHint (lazy_expr c) es
-    | _ -> lazy_expr c e
   (* many instructions need to wrap the same way *)
   in let wrap e = match U.tag_of_expr expr with
     Insert | Iterate | Map | FilterMap | Flatten | Send | Delete | Update |
@@ -241,20 +250,20 @@ let rec lazy_expr c expr =
       lazy_collection_vt c vt [] <| lsp () <| lps ":" <| lsp () <|
         lazy_value_type c false vt
   | Singleton vt -> let e = U.decompose_singleton expr in
-    lazy_collection_vt c vt @: tuple_no_paren c e
+    lazy_collection_vt c vt @: lazy_expr c e
   | Combine -> 
     let rec assemble_list c e =  (* print out in list format *)
       let (l, r) = U.decompose_combine e in
       begin match U.tag_of_expr l, U.tag_of_expr r with
         | Singleton _, Combine -> let l2 = U.decompose_singleton l in
-            tuple_no_paren c l2 <| lps ";" <| lsp () <| 
+            lazy_expr c l2 <| lps "," <| lsp () <| 
             assemble_list c r
         | Singleton _, Singleton _ -> let l2 = U.decompose_singleton l in
           let r2 = U.decompose_singleton r in
-          tuple_no_paren c l2 <| lps ";" <| lsp () <| 
-            tuple_no_paren c r2
+          lazy_expr c l2 <| lps "," <| lsp () <| 
+            lazy_expr c r2
         | Singleton _, Empty _ -> let l2 = U.decompose_singleton l in 
-          tuple_no_paren c l2
+          lazy_expr c l2
         | _ -> error () (* type error *)
       end in
     let (e1, e2) = U.decompose_combine expr in
@@ -356,7 +365,7 @@ let rec lazy_expr c expr =
   | FilterMap -> let lf, lm, col = U.decompose_filter_map expr in
     apply_method c ~name:"filter" ~col ~args:[lf] <|
       apply_method_nocol c ~name:"map" ~args:[lm]
-  (* flatten(map()) becomes ext *)
+  (* flatten(map(...)) becomes ext(...) *)
   | Flatten -> let e = U.decompose_flatten expr in
     begin match U.tag_of_expr e with
     | Map -> 
@@ -373,7 +382,7 @@ let rec lazy_expr c expr =
   | Peek -> let col = U.decompose_peek expr in
     apply_method c ~name:"peek" ~col ~args:[]
   | Slice -> let col, pat = U.decompose_slice expr in
-    lazy_expr c col <| lazy_bracket @: tuple_no_paren c pat
+    lazy_expr c col <| lazy_bracket @: lazy_expr c pat
   | Insert -> let col, x = U.decompose_insert expr in
     apply_method c ~name:"insert" ~col ~args:[x]
   | Delete -> let col, x = U.decompose_delete expr in
@@ -386,7 +395,7 @@ let rec lazy_expr c expr =
     lps "!" <| lazy_expr c e
   | Send -> let target, addr, args = U.decompose_send expr in
     wrap_indent @: lazy_paren (expr_pair (target, addr)) <| lps "<- " <| 
-      lps_list CutHint (tuple_no_paren c) args 
+      lps_list CutHint (lazy_expr c) args 
   in
   (* if we asked to highlight a uuid, do so now *)
   match c.uuid with 
@@ -398,7 +407,7 @@ and apply_method_nocol c ~name ~args =
       | Var _ | Const _ | Tuple | Empty _ -> id_fn
       | _ -> lazy_paren
   in
-  lps ("."^name) <| lazy_concat (fun e -> wrap_if_big e @: lazy_expr c e) args
+  lps ("."^name) <| lsp () <| lazy_concat (fun e -> wrap_if_big e @: lazy_expr c e) args
 
 (* Apply a method to a colleciton *)
 and apply_method c ~name ~col ~args =
