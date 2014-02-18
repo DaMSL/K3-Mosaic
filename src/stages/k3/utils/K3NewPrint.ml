@@ -124,7 +124,7 @@ let rec lazy_arg c drop_tuple_paren a =
   let paren = if drop_tuple_paren then id_fn else lazy_paren in
   match a with
   | AIgnored      -> lps "_"
-  | AVar (id, vt) -> lps (id^":") <| lazy_value_type c false vt
+  | AVar (id, vt) -> lps id
   | AMaybe(arg)   -> lps "just " <| lazy_arg c false arg
   | ATuple(args)  ->
       lhov 0 <| paren (lps_list CutHint (lazy_arg c false) args) <| lcb ()
@@ -208,20 +208,24 @@ let break_args = function
 
 (* create a deep bind for lambdas, triggers, and let statements *)
 (* depth allows to skip one depth level of binding *)
-let rec deep_bind ?(depth=0) c arg_n =
+let rec deep_bind ?(depth=0) ?top_expr c arg_n =
   let rec loop d = function
     | NIgnored 
     | NVar(_, _)      -> [] (* do nothing *)
     | NTuple(i, args) -> 
+        (* we allow binding an expression at the top level *)
+        let bind_text = begin match top_expr, d with 
+          | Some e, 0 -> lazy_expr c e
+          | _         -> lps @: id_of_num i
+        end in
         (if d >= depth then
-          let sub_ids = List.map get_id_of_arg args in
-          lps (Printf.sprintf "bind %s as (%s) in " 
-            (id_of_num i) (String.concat ", " sub_ids)) <| lcut ()
+          let sub_ids = String.concat ", " @: List.map get_id_of_arg args in
+          lps "bind " <| bind_text <| lps " as (" <| lps sub_ids <| lps ") in " <| lcut ()
         else []) 
         <| List.flatten @: List.map (loop @: d+1) args
     | NMaybe(i, arg)  -> 
-        (* we don't have such sophisticated pattern matching methods. On the nothing side, we put
-         * a canonical value *)
+        (* we don't have such sophisticated pattern matching methods. On the nothing side, 
+         * we put a canonical value *)
         let typ = value_type_of_arg_num arg in
         let default_v = T.canonical_value_of_type typ in
         lps "case " <| lps (id_of_num i) <| lps " of " <| lcut () <|
@@ -406,17 +410,22 @@ and lazy_expr ?(many_args=false) c expr =
       let depth = if many_args then 1 else 0 in
       wrap_indent (lps "\\" <| write_args <| lps " ->") <| lind () <| 
       wrap_hov 0 (deep_bind ~depth c arg_n <| lazy_expr c e)
-  | Apply -> let (e1, e2) = U.decompose_apply expr in
-    let modify_arg = begin match U.tag_of_expr e2 with
-      | Tuple -> id_fn
-      | _ -> lazy_paren end
-    in begin match U.tag_of_expr e1 with (* can be let *)
-      | Var _ -> wrap_indent (lazy_expr c e1 <|
-          lcut () <| modify_arg @: lazy_expr c e2)
+  | Apply -> let e1, e2 = U.decompose_apply expr in
+    begin match U.tag_of_expr e1 with (* can be let *)
+      (* function application *)
+      | Var _ -> wrap_indent (lazy_expr c e1 <| lsp () <| lazy_expr c e2)
+      (* let expression *)
       | Lambda arg -> let _, body = U.decompose_lambda e1 in
-        wrap_hov 2 (lps "let " <| lazy_arg c false arg <|
-          lps " =" <| lsp () <| lazy_expr c e2 <| lsp () ) <| lps "in"
-          <| lsp () <| lazy_expr c body
+        begin match arg with
+        (* If we have an arg tuple, it's a bind *)
+        | ATuple _ -> let arg_n = arg_num_of_arg arg in
+                      deep_bind c arg_n ~top_expr:e2 <| lazy_expr c body 
+        (* Otherwise it's a let *)
+        | _        -> 
+            wrap_hov 2 (lps "let " <| lazy_arg c false arg <|
+              lps " =" <| lsp () <| lazy_expr c e2 <| lsp () ) <| lps "in"
+              <| lsp () <| lazy_expr c body
+        end
       | _ -> error () (* type error *)
     end
   | Block -> let es = U.decompose_block expr in
