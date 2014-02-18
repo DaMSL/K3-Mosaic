@@ -162,19 +162,20 @@ let lazy_concat ?(sep=lsp) f l =
 (* Get an id from a number *)
 let id_of_num i = Printf.sprintf "_b%d_" i
 
-(* get an id for the argument at the shallow level for trigger or lambda *)
-let shallow_bind_id = function
-  | AIgnored     -> "_"
-  | AVar (id, _) -> id
-  | AMaybe _     
-  | ATuple _     -> id_of_num 1
-
 (* arg type with numbers included in tuples and maybes *)
 type arg_num
     = NIgnored
     | NVar      of id_t * value_type_t
     | NMaybe    of int * arg_num 
     | NTuple    of int * arg_num list
+
+(* get an id for the argument at the shallow level for trigger or lambda *)
+let shallow_bind_id = function
+  | NIgnored     -> "_"
+  | NVar (id, _) -> id
+  | NMaybe (i,_)     
+  | NTuple (i,_)  -> id_of_num i
+
 
 (* convert args to an arg type containing numbers for binding *)
 let arg_num_of_arg a = 
@@ -200,16 +201,24 @@ let rec value_type_of_arg_num = function
   | NMaybe(_, a') -> T.canonical (TMaybe(value_type_of_arg_num a'))
   | NTuple(_, args) -> T.canonical (TTuple(List.map value_type_of_arg_num args))
 
+(* Break args down for lambdas with multiple values *)
+let break_args = function
+  | NTuple(_,args) -> args
+  | _ -> failwith "Can't break args"
+
 (* create a deep bind for lambdas, triggers, and let statements *)
-let rec deep_bind c arg =
-  let arg_n = arg_num_of_arg arg in (* convert to arg_num *)
-  let rec loop = function
+(* depth allows to skip one depth level of binding *)
+let rec deep_bind ?(depth=0) c arg_n =
+  let rec loop d = function
     | NIgnored 
     | NVar(_, _)      -> [] (* do nothing *)
     | NTuple(i, args) -> 
-        let sub_ids = List.map get_id_of_arg args in
-        lps (Printf.sprintf "bind %s as (%s) in " (id_of_num i) (String.concat ", " sub_ids)) <| lcut () <|
-        List.flatten @: List.map loop args
+        (if d >= depth then
+          let sub_ids = List.map get_id_of_arg args in
+          lps (Printf.sprintf "bind %s as (%s) in " 
+            (id_of_num i) (String.concat ", " sub_ids)) <| lcut ()
+        else []) 
+        <| List.flatten @: List.map (loop @: d+1) args
     | NMaybe(i, arg)  -> 
         (* we don't have such sophisticated pattern matching methods. On the nothing side, we put
          * a canonical value *)
@@ -218,24 +227,31 @@ let rec deep_bind c arg =
         lps "case " <| lps (id_of_num i) <| lps " of " <| lcut () <|
         lps "Nothing -> " <| lazy_expr c default_v <| lcut () <|
         lps "Just " <| lps (get_id_of_arg arg) <| lps " -> " <| lcut ()
-  in loop arg_n
+  in loop 0 arg_n
 
-and apply_method_nocol c ~name ~args =
+and apply_method_nocol ?many_args c ~name ~args =
   let wrap_if_big e = match U.tag_of_expr e with
       | Var _ | Const _ | Tuple | Empty _ -> id_fn
       | _ -> lazy_paren
   in
-  lps ("."^name) <| lsp () <| lazy_concat (fun e -> wrap_if_big e @: lazy_expr c e) args
+  let args = match many_args with
+    | None    -> List.map (fun x -> x, false) args
+    | Some rs -> list_zip args rs
+  in
+  lps ("."^name) <| lsp () <| 
+    lazy_concat (fun (e, many_args) -> wrap_if_big e @: lazy_expr ~many_args c e) args
 
 (* Apply a method to a collection *)
-and apply_method c ~name ~col ~args =
+and apply_method ?many_args c ~name ~col ~args =
   (* we only need parens if we're not applying to a variable *)
   let f = match U.tag_of_expr col with
   | Var _ -> id_fn
   | _     -> lazy_paren
-  in f @: lazy_expr c col <| apply_method_nocol c ~name ~args
+  in f @: lazy_expr c col <| apply_method_nocol c ~name ~args ?many_args
 
-and lazy_expr c expr = 
+(* printing expressions *)
+(* argnums is for lambda only: number of expected arguments *)
+and lazy_expr ?(many_args=false) c expr = 
   let expr_pair ?(sep=lps "," <| lsp ()) ?(wl=id_fn) ?(wr=id_fn) (e1, e2) =
     wl(lazy_expr c e1) <| sep <| wr(lazy_expr c e2) in
   let expr_sub ?(sep=lps "," <| lsp ()) p =
@@ -378,8 +394,18 @@ and lazy_expr c expr =
     arith_paren_pair "<=" p
   | Lambda arg -> 
       let _, e = U.decompose_lambda expr in
-      wrap_indent (lps "\\" <| lps (shallow_bind_id arg) <| lps " ->") <| lind () <| 
-      wrap_hov 0 (deep_bind c arg <| lazy_expr c e)
+      let arg_n = arg_num_of_arg arg in (* convert to arg_num *)
+      let write_args = 
+        (* check whether we need to handle curried arguments *)
+        if many_args then
+          let args_n = break_args arg_n in
+          lazy_concat (lps |- shallow_bind_id) args_n
+        else lps @: shallow_bind_id arg_n
+      in
+      (* for curried arguments, we deep bind at a deeper level *)
+      let depth = if many_args then 1 else 0 in
+      wrap_indent (lps "\\" <| write_args <| lps " ->") <| lind () <| 
+      wrap_hov 0 (deep_bind ~depth c arg_n <| lazy_expr c e)
   | Apply -> let (e1, e2) = U.decompose_apply expr in
     let modify_arg = begin match U.tag_of_expr e2 with
       | Tuple -> id_fn
@@ -417,9 +443,9 @@ and lazy_expr c expr =
     | _   -> failwith "Unhandled Flatten without map"
     end
   | Aggregate -> let lambda, acc, col = U.decompose_aggregate expr in
-    apply_method c ~name:"fold" ~col ~args:[lambda; acc]
+    apply_method c ~name:"fold" ~col ~args:[lambda; acc] ~many_args:[true;false]
   | GroupByAggregate -> let lam1, lam2, zero, col = U.decompose_gbagg expr in
-    apply_method c ~name:"groupby" ~col ~args:[lam1; lam2; zero]
+    apply_method c ~name:"groupby" ~col ~args:[lam1; lam2; zero] ~many_args:[false;true;false]
   | Sort -> let lambda, col = U.decompose_sort expr in
     apply_method c ~name:"sort" ~col ~args:[lambda]
   | Peek -> let col = U.decompose_peek expr in
