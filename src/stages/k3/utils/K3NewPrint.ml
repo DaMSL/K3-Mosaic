@@ -154,8 +154,10 @@ let lazy_collection_vt c vt eval = match vt with
   | TContained(TImmutable(TCollection(ct, _),_)) -> lazy_collection c ct eval
   | _ -> error () (* type error *)
 
-let lazy_concat ?(sep=lsp ()) f l = 
-  List.flatten @: list_intersperse_val sep @: List.map f l
+let lazy_concat ?(sep=lsp) f l = 
+  let len = List.length l - 1 in
+  let l2 = list_populate (fun _ -> sep ()) 0 len in
+  List.flatten @: list_intersperse (List.map f l) l2
 
 (* Get an id from a number *)
 let id_of_num i = Printf.sprintf "_b%d_" i
@@ -176,12 +178,12 @@ type arg_num
 
 (* convert args to an arg type containing numbers for binding *)
 let arg_num_of_arg a = 
-  let i = ref 0 in
+  let i = ref 1 in
   let rec loop = function
     | AIgnored     -> NIgnored
     | AVar (id, v) -> NVar (id,v)
-    | AMaybe x     -> incr i; NMaybe(!i, loop x)
-    | ATuple xs    -> incr i; NTuple(!i, List.map loop xs)
+    | AMaybe x     -> let n = !i in incr i; NMaybe(n, loop x)
+    | ATuple xs    -> let n = !i in incr i; NTuple(n, List.map loop xs)
   in loop a
 
 (* retrieve the ids from one level of arg_num *)
@@ -198,6 +200,7 @@ let rec value_type_of_arg_num = function
   | NMaybe(_, a') -> T.canonical (TMaybe(value_type_of_arg_num a'))
   | NTuple(_, args) -> T.canonical (TTuple(List.map value_type_of_arg_num args))
 
+(* create a deep bind for lambdas, triggers, and let statements *)
 let rec deep_bind c arg =
   let arg_n = arg_num_of_arg arg in (* convert to arg_num *)
   let rec loop = function
@@ -205,7 +208,8 @@ let rec deep_bind c arg =
     | NVar(_, _)      -> [] (* do nothing *)
     | NTuple(i, args) -> 
         let sub_ids = List.map get_id_of_arg args in
-        lps @: Printf.sprintf "bind %s as (%s) in " (id_of_num i) (String.concat ", " sub_ids) 
+        lps (Printf.sprintf "bind %s as (%s) in " (id_of_num i) (String.concat ", " sub_ids)) <| lcut () <|
+        List.flatten @: List.map loop args
     | NMaybe(i, arg)  -> 
         (* we don't have such sophisticated pattern matching methods. On the nothing side, we put
          * a canonical value *)
@@ -215,6 +219,21 @@ let rec deep_bind c arg =
         lps "Nothing -> " <| lazy_expr c default_v <| lcut () <|
         lps "Just " <| lps (get_id_of_arg arg) <| lps " -> " <| lcut ()
   in loop arg_n
+
+and apply_method_nocol c ~name ~args =
+  let wrap_if_big e = match U.tag_of_expr e with
+      | Var _ | Const _ | Tuple | Empty _ -> id_fn
+      | _ -> lazy_paren
+  in
+  lps ("."^name) <| lsp () <| lazy_concat (fun e -> wrap_if_big e @: lazy_expr c e) args
+
+(* Apply a method to a collection *)
+and apply_method c ~name ~col ~args =
+  (* we only need parens if we're not applying to a variable *)
+  let f = match U.tag_of_expr col with
+  | Var _ -> id_fn
+  | _     -> lazy_paren
+  in f @: lazy_expr c col <| apply_method_nocol c ~name ~args
 
 and lazy_expr c expr = 
   let expr_pair ?(sep=lps "," <| lsp ()) ?(wl=id_fn) ?(wr=id_fn) (e1, e2) =
@@ -315,7 +334,7 @@ and lazy_expr c expr =
       | _ -> expr_pair ~sep:(lcut() <| lps "++" <| lcut()) ~wl:wrapl (e1, e2) 
     end
   | Range ct -> let st, str, num = U.decompose_range expr in
-    apply_method c ~name:"range" ~col:(KH.mk_empty KH.t_int) ~args:[st;str;num]
+    apply_method c ~name:"range" ~col:(KH.mk_empty @: KH.wrap_tlist KH.t_int) ~args:[st;str;num]
   | Add -> let (e1, e2) = U.decompose_add expr in
     begin match U.tag_of_expr e2, expr_type_is_bool e1 with
       | Neg, false -> let e3 = U.decompose_neg e2 in
@@ -359,8 +378,8 @@ and lazy_expr c expr =
     arith_paren_pair "<=" p
   | Lambda arg -> 
       let _, e = U.decompose_lambda expr in
-    wrap_indent (lps "\\" <| lazy_arg c false arg <| lps " ->") <| lind () <| 
-      wrap_hov 0 (lazy_expr c e)
+      wrap_indent (lps "\\" <| lps (shallow_bind_id arg) <| lps " ->") <| lind () <| 
+      wrap_hov 0 (deep_bind c arg <| lazy_expr c e)
   | Apply -> let (e1, e2) = U.decompose_apply expr in
     let modify_arg = begin match U.tag_of_expr e2 with
       | Tuple -> id_fn
@@ -425,21 +444,6 @@ and lazy_expr c expr =
   match c.uuid with 
   | Some i when i = U.id_of_expr expr -> lps "%" <| wrap out
   | _ -> wrap out
-
-and apply_method_nocol c ~name ~args =
-  let wrap_if_big e = match U.tag_of_expr e with
-      | Var _ | Const _ | Tuple | Empty _ -> id_fn
-      | _ -> lazy_paren
-  in
-  lps ("."^name) <| lsp () <| lazy_concat (fun e -> wrap_if_big e @: lazy_expr c e) args
-
-(* Apply a method to a collection *)
-and apply_method c ~name ~col ~args =
-  (* we only need parens if we're not applying to a variable *)
-  let f = match U.tag_of_expr col with
-  | Var _ -> id_fn
-  | _     -> lazy_paren
-  in f @: lazy_expr c col <| apply_method_nocol c ~name ~args
 
 let lazy_trigger c id arg vars expr = 
   let is_block expr = match U.tag_of_expr expr with Block -> true | _ -> false in
