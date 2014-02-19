@@ -25,17 +25,6 @@ let lps s = [lazy (ps s)]      (* print string *)
 let lps_list ?(sep=", ") cut_t f l = 
   [lazy (ps_list ~sep:sep cut_t (force_list |- f) l)]
 
-(* type we pass all the way down for configuring behaviors *)
-type config = {verbose_types:bool; (* more verbose type printing *)
-               uuid:int option;    (* highlight a particular uuid *)
-               lambda_ret:bool} (* highlight a lambda with a non-tuple return type *)
-
-let default_config = {verbose_types=false;
-                      uuid=None;
-                      lambda_ret=false}
-
-let verbose_types_config = {default_config with verbose_types=true}
-
 (* low precedence joining of lists *)
 let (<|) a b = a @ b
 
@@ -49,6 +38,39 @@ let lbox b f = b <| f <| lcb ()
 let wrap_hv i f = lbox (lhv i) f
 let wrap_hov i f = lbox (lhov i) f
 let wrap_indent f = wrap_hov 2 f
+
+let lazy_concat ?(sep=lsp) f l = 
+  let len = List.length l - 1 in
+  let l2 = list_populate (fun _ -> sep ()) 0 len in
+  wrap_hov 0 @: List.flatten @: list_intersperse (List.map f l) l2
+
+(* separator for lazy_concat *)
+let lcomma () = lps "," <| lsp ()
+
+(* type we pass all the way down for configuring behaviors *)
+type config = {verbose_types:bool; (* more verbose type printing *)
+               uuid:int option;    (* highlight a particular uuid *)
+               lambda_ret:bool} (* highlight a lambda with a non-tuple return type *)
+
+let default_config = {verbose_types=false;
+                      uuid=None;
+                      lambda_ret=false}
+
+let verbose_types_config = {default_config with verbose_types=true}
+
+(* Get a binding id from a number *)
+let id_of_num i = Printf.sprintf "_b%d_" i
+(* Get a record id from a number *)
+let record_id_of_num i = Printf.sprintf "_r%d_" i
+
+(* Add record ids to a list *)
+let add_record_ids l =
+  let i_l = insert_index_fst 1 l in
+  List.map (fun (i, x) -> record_id_of_num i, x) i_l
+
+(* Add record ids to a string *)
+let add_record_ids_str l =
+  List.map (fun (s,x) -> Printf.sprintf "%s:%s" s x) @: add_record_ids l
 
 let error () = lps "???"
 
@@ -78,41 +100,40 @@ let lazy_annos c = function
   | [] -> [] 
   | annos -> lps "@ " <| lazy_brace @: lps_list ~sep:"; " NoCut (lazy_anno c) annos
 
-let rec lazy_base_type c ~in_col ?(no_paren=false) t = 
-  let proc () = match t with
-  | TUnit       -> lps "unit"
-  | TBool       -> lps "bool"
-  | TByte       -> lps "byte"
-  | TInt        -> lps "int"
-  | TFloat      -> lps "float"
-  | TString     -> lps "string"
-  | TMaybe(vt)  -> lps "maybe " <| lazy_value_type c ~in_col vt
-  | TTuple(vts) ->
-      let inner () = lps_list NoCut (lazy_value_type c ~in_col) vts in
-      if not c.verbose_types && no_paren then inner ()
-      else lps "(" <| inner () <| lps ")"
-  | TCollection(TSet, vt) -> 
-      lps "{" <| lazy_value_type c ~in_col:true ~no_paren:true vt <| lps "}"
-  | TCollection(TBag, vt) -> 
-      lps "{|" <| lazy_value_type c ~in_col:true ~no_paren:true vt <| lps "|}"
-  | TCollection(TList, vt) -> 
-      lps "[" <| lazy_value_type c ~in_col:true ~no_paren:true vt <| lps "]"
-  | TAddress -> lps "address" (* ? *)
-  | TTarget bt -> lps "target" <| lazy_base_type c ~in_col bt
-  | TUnknown -> lps "unknown"
-  in
-  if c.verbose_types && in_col then lps "c:" <| proc () 
-  else proc ()
+let rec lazy_base_type c ~in_col t = 
+  let wrap_single f = if in_col then lps "{ elem:" <| f <| lps " }" else f in
+  match t with
+  | TUnit       -> wrap_single @: lps "unit"
+  | TBool       -> wrap_single @: lps "bool"
+  | TByte       -> wrap_single @: lps "byte"
+  | TInt        -> wrap_single @: lps "int"
+  | TFloat      -> wrap_single @: lps "float"
+  | TString     -> wrap_single @: lps "string"
+  | TMaybe(vt)  -> wrap_single(lps "option " <| lazy_value_type c ~in_col vt)
+  | TAddress    -> wrap_single @: lps "address" (* ? *)
+  | TTarget bt  -> wrap_single (lps "target" <| lazy_base_type c ~in_col bt)
+  | TUnknown    -> wrap_single @: lps "unknown"
+  | TTuple(vts) -> (* tuples become records *)
+      let rec_vts = add_record_ids vts in
+      let inner = lazy_concat ~sep:lcomma (fun (id, vt) ->
+        lps (id^":") <| lazy_value_type c ~in_col:false vt) rec_vts
+      in lazy_brace (lsp () <| inner <| lsp ())
+  | TCollection(ct, vt) -> 
+      lps "collection " <| lazy_value_type c ~in_col:true vt <| lps " @ " <| lps
+        begin match ct with
+          | TSet  -> "{ Set }"
+          | TList -> "{ List }"
+          | TBag  -> "{ Bag }"
+        end
 
-(* TODO: annotations *)
-and lazy_mutable_type c ~in_col ?(no_paren=false) = function
+and lazy_mutable_type c ~in_col = function
   | TMutable (bt, a)   -> 
-      lps "ref " <| lazy_base_type c ~in_col:true ~no_paren:false bt
-  | TImmutable (bt, a) -> lazy_base_type c ~in_col ~no_paren bt
+      lps "mut " <| lazy_base_type c ~in_col bt
+  | TImmutable (bt, a) -> lazy_base_type c ~in_col bt
 
-and lazy_value_type c ~in_col ?(no_paren=false) = function
-  | TIsolated mt  -> lazy_mutable_type c ~in_col ~no_paren mt
-  | TContained mt -> lazy_mutable_type c ~in_col ~no_paren mt
+and lazy_value_type c ~in_col = function
+  | TIsolated mt  -> lazy_mutable_type c ~in_col mt
+  | TContained mt -> lazy_mutable_type c ~in_col mt
 
 let lazy_type c = function
   | TFunction(f,t) ->
@@ -153,14 +174,6 @@ let lazy_collection_vt c vt eval = match vt with
   | TContained(TMutable(TCollection(ct, _),_))
   | TContained(TImmutable(TCollection(ct, _),_)) -> lazy_collection c ct eval
   | _ -> error () (* type error *)
-
-let lazy_concat ?(sep=lsp) f l = 
-  let len = List.length l - 1 in
-  let l2 = list_populate (fun _ -> sep ()) 0 len in
-  List.flatten @: list_intersperse (List.map f l) l2
-
-(* Get an id from a number *)
-let id_of_num i = Printf.sprintf "_b%d_" i
 
 (* arg type with numbers included in tuples and maybes *)
 type arg_num
@@ -231,20 +244,11 @@ let rec deep_bind ?(depth=0) ?top_expr ?(in_record=false) c arg_n =
         end in
         (* only produce binds if we're deeper than specified depth *)
         (if d >= depth then
-          if record then 
-            let to_rec_id i  = Printf.sprintf "_r%d_" i in
-            let add_rec_id (i,s) = Printf.sprintf "%s:%s" (to_rec_id i) s in
-            let args_id = List.map get_id_of_arg args in
-            let args_i = insert_index_fst 1 args_id in
-            let args_rec : string list = List.map add_rec_id args_i in
-            let sub_ids = lazy_concat ~sep:(fun () -> lps ", " <| lsp ()) lps args_rec in
-            lps "bind " <| bind_text <| lps " as {" <| sub_ids <| lps "} in " 
-              <| lcut ()
-          else
-            let sub_ids = lazy_concat ~sep:(fun () -> lps "," <| lsp ())
-              (lps |- get_id_of_arg) args in
-            lps "bind " <| bind_text <| lps " as (" <| sub_ids <| lps ") in " 
-              <| lcut ()
+          let args_id = List.map get_id_of_arg args in
+          let args_rec = add_record_ids_str args_id in
+          let sub_ids = lazy_concat ~sep:lcomma lps args_rec in
+          lps "bind " <| bind_text <| lps " as {" <| sub_ids <| lps "} in " 
+            <| lcut ()
         else []) 
         <| List.flatten @: List.map (loop @: d+1) args
     | NMaybe(i, arg)  -> 
@@ -347,12 +351,15 @@ and lazy_expr ?(many_args=false) ?in_record c expr =
   | Const con -> lazy_const c con
   | Var id -> lps id
   | Tuple -> let es = U.decompose_tuple expr in
-    lazy_paren @: lps_list CutHint (lazy_expr c) es
+    let id_es = add_record_ids es in
+    let inner = lazy_concat ~sep:lcomma (fun (id, e) ->
+        lps (id^":") <| lazy_expr c e) id_es
+    in lazy_brace inner
   | Just -> let e = U.decompose_just expr in
     lps "just " <| lazy_expr c e
   | Nothing vt -> lps "nothing:" <| lsp () <| lazy_value_type c false vt
   | Empty vt ->
-      lazy_collection_vt c vt [] <| lsp () <| lps ":" <| lsp () <|
+      lps "empty " <| lazy_collection_vt c vt [] <| lsp () <| lps ":" <| lsp () <|
         lazy_value_type c false vt
   | Singleton vt -> let e = U.decompose_singleton expr in
     lazy_collection_vt c vt @: lazy_expr c e
@@ -405,7 +412,7 @@ and lazy_expr ?(many_args=false) ?in_record c expr =
       | _ -> arith_paren_pair "*" (e1, e2)
     end 
   | Neg -> let e = U.decompose_neg expr in
-    let sym = if expr_type_is_bool e then "!" else "-" in
+    let sym = if expr_type_is_bool e then "not " else "-" in
     begin match U.tag_of_expr e with
       | Var _ 
       | Const _ -> lps sym <| lazy_expr c e
@@ -431,7 +438,7 @@ and lazy_expr ?(many_args=false) ?in_record c expr =
         if many_args then
           let args_n = break_args arg_n in
           lazy_concat (lps |- shallow_bind_id ?in_record) args_n
-        else lps @: shallow_bind_id arg_n
+        else lps @: shallow_bind_id ?in_record arg_n
       in
       (* for curried arguments, we deep bind at a deeper level *)
       let depth = if many_args then 1 else 0 in
@@ -465,12 +472,12 @@ and lazy_expr ?(many_args=false) ?in_record c expr =
     lps "(" <| lind () <| 
     wrap_hv 0 (lps_list ~sep:";" CutHint (lazy_expr c) es <| lsp ()) 
       <| lps ")"
-  | Iterate -> let lambda, col = U.decompose_iterate expr in
-    apply_method c ~name:"iterate" ~col ~args:[lambda]
   | IfThenElse -> let (e1, e2, e3) = U.decompose_ifthenelse expr in
     wrap_indent (lps "if " <| lazy_expr c e1) <| lsp () <|
     wrap_indent (lps "then" <| lsp () <| lazy_expr c e2) <| lsp () <|
     wrap_indent (lps "else" <| lsp () <| lazy_expr c e3)
+  | Iterate -> let lambda, col = U.decompose_iterate expr in
+    apply_method c ~name:"iterate" ~col ~args:[lambda] ~in_record:true
   | Map -> let lambda, col = U.decompose_map expr in
     apply_method c ~name:"map" ~col ~args:[lambda] ~in_record:true
   | FilterMap -> let lf, lm, col = U.decompose_filter_map expr in
@@ -490,7 +497,7 @@ and lazy_expr ?(many_args=false) ?in_record c expr =
   | GroupByAggregate -> let lam1, lam2, zero, col = U.decompose_gbagg expr in
     apply_method c ~name:"groupby" ~col ~args:[lam1; lam2; zero] ~many_args:[false;true;false]
       ~in_record:true
-  | Sort -> let lambda, col = U.decompose_sort expr in
+  | Sort -> let col, lambda = U.decompose_sort expr in
     apply_method c ~name:"sort" ~col ~args:[lambda] ~in_record:true
   | Peek -> let col = U.decompose_peek expr in
     apply_method c ~name:"peek" ~col ~args:[]
