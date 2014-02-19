@@ -100,8 +100,11 @@ let lazy_annos c = function
   | [] -> [] 
   | annos -> lps "@ " <| lazy_brace @: lps_list ~sep:"; " NoCut (lazy_anno c) annos
 
-let rec lazy_base_type c ~in_col t = 
-  let wrap_single f = if in_col then lps "{ elem:" <| f <| lps " }" else f in
+let rec lazy_base_type ?(brace=true) c ~in_col t = 
+  let wrap_single f = 
+    let wrap = if brace then lazy_brace else id_fn in
+    if in_col then wrap(lps "elem:" <| f) else f
+  in
   match t with
   | TUnit       -> wrap_single @: lps "unit"
   | TBool       -> wrap_single @: lps "bool"
@@ -116,8 +119,9 @@ let rec lazy_base_type c ~in_col t =
   | TTuple(vts) -> (* tuples become records *)
       let rec_vts = add_record_ids vts in
       let inner = lazy_concat ~sep:lcomma (fun (id, vt) ->
-        lps (id^":") <| lazy_value_type c ~in_col:false vt) rec_vts
-      in lazy_brace (lsp () <| inner <| lsp ())
+        lps (id^":") <| lazy_value_type c ~in_col:false vt) rec_vts in
+      let wrap = if brace then lazy_brace else id_fn in
+      wrap (lsp () <| inner <| lsp ())
   | TCollection(ct, vt) -> 
       lps "collection " <| lazy_value_type c ~in_col:true vt <| lps " @ " <| lps
         begin match ct with
@@ -155,24 +159,41 @@ let lazy_id_type c (id,t) = lps (id^" : ") <| lazy_value_type c false t
 let lazy_const c = function
   | CUnknown       -> lps "_"
   | CUnit          -> lps "()"
-  | CBool(true)    -> lps "true"
-  | CBool(false)   -> lps "false"
-  | CInt(i)        -> lps @: string_of_int i
-  | CFloat(f)      -> lps @: string_of_float f
-  | CString(s)     -> lps @: "\""^String.escaped s^"\""
+  | CBool true     -> lps "true"
+  | CBool false    -> lps "false"
+  | CInt i         -> lps @: string_of_int i
+  | CFloat f       -> lps @: string_of_float f
+  | CString s      -> lps @: "\""^String.escaped s^"\""
   | CAddress(s, i) -> lps @: s^":"^string_of_int i
-  | CTarget(id)    -> lps id
+  | CTarget id     -> lps id
 
-let lazy_collection c ct eval = match ct with
-    | TSet  -> lps "{" <| eval <| lps "}"
-    | TBag  -> lps "{|" <| eval <| lps "|}"
-    | TList -> lps "[" <| eval <| lps "]"
+let unwrap_vt = function
+  | TIsolated(TMutable(t,_))    -> t
+  | TIsolated(TImmutable(t,_))  -> t
+  | TContained(TMutable(t,_))   -> t
+  | TContained(TImmutable(t,_)) -> t
 
-let lazy_collection_vt c vt eval = match vt with
-  | TIsolated(TMutable(TCollection(ct, _),_))
-  | TIsolated(TImmutable(TCollection(ct, _),_))
-  | TContained(TMutable(TCollection(ct, _),_))
-  | TContained(TImmutable(TCollection(ct, _),_)) -> lazy_collection c ct eval
+(* unwrap a type_t that's not a function *)
+let unwrap_t_val = function
+  | TValue vt -> vt
+  | _         -> failwith "Function type unexpected"
+
+(* wrap a const collection expression with collection notation *)
+let lazy_collection_vt c vt eval = match unwrap_vt vt with
+  | TCollection(ct, et) ->
+      (* preceding list of element types *)
+      let lazy_elem_list =
+        lps "|" <| lazy_base_type ~brace:false ~in_col:true c (unwrap_vt et) <| lps "|" <| lsp ()
+      in
+      begin match unwrap_vt et with
+      | TTuple _ -> lazy_elem_list <| eval (* braces provided by tuple *)
+      | _        -> lps "{" <| lazy_elem_list <| eval <| lps "}"
+      end <| lps @: 
+        begin match ct with
+        | TSet  -> "@ { Set }"
+        | TBag  -> "@ { Bag }"
+        | TList -> "@ { List }"
+        end
   | _ -> error () (* type error *)
 
 (* arg type with numbers included in tuples and maybes *)
@@ -358,14 +379,15 @@ and lazy_expr ?(many_args=false) ?in_record c expr =
   | Just -> let e = U.decompose_just expr in
     lps "just " <| lazy_expr c e
   | Nothing vt -> lps "nothing:" <| lsp () <| lazy_value_type c false vt
-  | Empty vt ->
-      lps "empty " <| lazy_collection_vt c vt [] <| lsp () <| lps ":" <| lsp () <|
-        lazy_value_type c false vt
-  | Singleton vt -> let e = U.decompose_singleton expr in
-    lazy_collection_vt c vt @: lazy_expr c e
+  | Empty vt -> lps "empty " <| lazy_value_type c false vt
+  | Singleton _ -> 
+    (* Singletons are sometimes typed with unknowns (if read from a file) *)
+    let e = U.decompose_singleton expr in
+    let t = unwrap_t_val @: T.type_of_expr expr in
+    lazy_collection_vt c t @: lazy_expr c e
   | Combine ->
     let rec assemble_list c e =  (* print out in list format *)
-      let (l, r) = U.decompose_combine e in
+      let l, r = U.decompose_combine e in
       begin match U.tag_of_expr l, U.tag_of_expr r with
         | Singleton _, Combine -> let l2 = U.decompose_singleton l in
             lazy_expr c l2 <| lps "," <| lsp () <|
@@ -384,7 +406,8 @@ and lazy_expr ?(many_args=false) ?in_record c expr =
     begin match U.tag_of_expr e1, U.tag_of_expr e2 with
       | Singleton vt, Combine | Singleton vt, Singleton _
       | Singleton vt, Empty _ ->
-        lazy_collection_vt c vt @: assemble_list c expr
+        let t = unwrap_t_val @: T.type_of_expr expr in
+        lazy_collection_vt c t @: assemble_list c expr
       | _ -> expr_pair ~sep:(lcut() <| lps "++" <| lcut()) ~wl:wrapl (e1, e2)
     end
   | Range ct -> let st, str, num = U.decompose_range expr in
