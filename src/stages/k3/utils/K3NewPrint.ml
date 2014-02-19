@@ -289,6 +289,7 @@ and apply_method_nocol ?many_args ?in_record c ~name ~args =
       | Var _ | Const _ | Tuple | Empty _ -> id_fn
       | _ -> lazy_paren
   in
+  (* attach a full list of many_args to the argument (lambdas and otherwise) *)
   let args = match many_args with
     | None    -> List.map (fun x -> x, false) args
     | Some rs -> list_zip args rs
@@ -408,7 +409,7 @@ and lazy_expr ?(many_args=false) ?in_record c expr =
       | Singleton vt, Empty _ ->
         let t = unwrap_t_val @: T.type_of_expr expr in
         lazy_collection_vt c t @: assemble_list c expr
-      | _ -> expr_pair ~sep:(lcut() <| lps "++" <| lcut()) ~wl:wrapl (e1, e2)
+      | _ -> apply_method c ~name:"combine" ~col:e1 ~args:[e2]
     end
   | Range ct -> let st, str, num = U.decompose_range expr in
     apply_method c ~name:"range" ~col:(KH.mk_empty @: KH.wrap_tlist KH.t_int) ~args:[st;str;num]
@@ -473,7 +474,8 @@ and lazy_expr ?(many_args=false) ?in_record c expr =
       | Var _ -> 
           let wrap_fn = begin match U.tag_of_expr e2 with
             | Var _
-            | Const _ -> id_fn
+            | Const _
+            | Tuple   -> id_fn
             | _       -> lazy_paren
           end in
           wrap_indent (lazy_expr c e1 <| lsp () <| wrap_fn @: lazy_expr c e2)
@@ -504,14 +506,14 @@ and lazy_expr ?(many_args=false) ?in_record c expr =
   | Map -> let lambda, col = U.decompose_map expr in
     apply_method c ~name:"map" ~col ~args:[lambda] ~in_record:true
   | FilterMap -> let lf, lm, col = U.decompose_filter_map expr in
-    apply_method c ~name:"filter" ~col ~args:[lf] ~in_record:true <|
+    lazy_paren (apply_method c ~name:"filter" ~col ~args:[lf] ~in_record:true) <|
       apply_method_nocol c ~name:"map" ~args:[lm] ~in_record:true
   (* flatten(map(...)) becomes ext(...) *)
   | Flatten -> let e = U.decompose_flatten expr in
     begin match U.tag_of_expr e with
     | Map -> 
         let lambda, col = U.decompose_map e in
-        apply_method c ~name:"ext" ~col ~args:[lambda]
+        apply_method c ~name:"ext" ~col ~args:[lambda] ~in_record:true
     | _   -> failwith "Unhandled Flatten without map"
     end
   | Aggregate -> let lambda, acc, col = U.decompose_aggregate expr in
