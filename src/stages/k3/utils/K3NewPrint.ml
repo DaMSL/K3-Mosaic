@@ -122,13 +122,14 @@ let rec lazy_base_type ?(brace=true) c ~in_col t =
         lps (id^":") <| lazy_value_type c ~in_col:false vt) rec_vts in
       let wrap = if brace then lazy_brace else id_fn in
       wrap (lsp () <| inner <| lsp ())
-  | TCollection(ct, vt) -> 
+  | TCollection(ct, vt) -> wrap_single ( 
       lps "collection " <| lazy_value_type c ~in_col:true vt <| lps " @ " <| lps
         begin match ct with
           | TSet  -> "{ Set }"
           | TList -> "{ List }"
           | TBag  -> "{ Bag }"
         end
+      )
 
 and lazy_mutable_type c ~in_col = function
   | TMutable (bt, a)   -> 
@@ -306,22 +307,19 @@ and apply_method ?many_args ?in_record c ~name ~col ~args =
   | _     -> lazy_paren
   in f @: lazy_expr c col <| apply_method_nocol c ~name ~args ?many_args ?in_record
 
+(* apply a function to arguments *)
+and function_application c fun_e l_e = 
+  let print_fn e = match U.tag_of_expr e with
+    | Var _ | Const _ | Tuple   -> lazy_expr c e
+    | _                         -> lazy_paren @: lazy_expr c e
+  in
+  wrap_indent (lazy_expr c fun_e <| lsp () <| lazy_concat print_fn l_e)
+
 (* printing expressions *)
 (* argnums is for lambda only: number of expected arguments *)
 and lazy_expr ?(many_args=false) ?in_record c expr =
   let expr_pair ?(sep=lps "," <| lsp ()) ?(wl=id_fn) ?(wr=id_fn) (e1, e2) =
     wl(lazy_expr c e1) <| sep <| wr(lazy_expr c e2) in
-  let expr_sub ?(sep=lps "," <| lsp ()) p =
-    expr_pair ~sep:sep ~wl:wrap_indent ~wr:(wrap_hov 0) p in
-  let expr_triple ?(sep=fun () -> lps "," <| lsp ()) (e1,e2,e3) =
-    let w = wrap_indent in
-    w(lazy_expr c e1) <| sep () <| w(lazy_expr c e2) <| sep () <| w(lazy_expr c
-    e3) in
-  let expr_quad ?(sep=fun () -> lps "," <| lsp ()) (e1,e2,e3,e4) =
-    let w = wrap_indent in
-    w(lazy_expr c e1) <| sep () <| w(lazy_expr c e2) <| sep () <| w(lazy_expr c
-    e3) <| sep () <| w(lazy_expr c e4) in
-  (* TODO: do comparisons also *)
   let is_apply_let e = let e1, e2 = U.decompose_apply e in
     match U.tag_of_expr e1 with
       | Var _ -> false | Lambda _ -> true | _ -> invalid_arg "bad apply input"
@@ -412,7 +410,7 @@ and lazy_expr ?(many_args=false) ?in_record c expr =
       | _ -> apply_method c ~name:"combine" ~col:e1 ~args:[e2]
     end
   | Range ct -> let st, str, num = U.decompose_range expr in
-    apply_method c ~name:"range" ~col:(KH.mk_empty @: KH.wrap_tlist KH.t_int) ~args:[st;str;num]
+    function_application c (KH.mk_var "range") [st;str;num]
   | Add -> let (e1, e2) = U.decompose_add expr in
     begin match U.tag_of_expr e2, expr_type_is_bool e1 with
       | Neg, false -> let e3 = U.decompose_neg e2 in
@@ -471,14 +469,7 @@ and lazy_expr ?(many_args=false) ?in_record c expr =
   | Apply -> let e1, e2 = U.decompose_apply expr in
     begin match U.tag_of_expr e1 with (* can be let *)
       (* function application *)
-      | Var _ -> 
-          let wrap_fn = begin match U.tag_of_expr e2 with
-            | Var _
-            | Const _
-            | Tuple   -> id_fn
-            | _       -> lazy_paren
-          end in
-          wrap_indent (lazy_expr c e1 <| lsp () <| wrap_fn @: lazy_expr c e2)
+      | Var _ -> function_application c e1 [e2]
       (* let expression *)
       | Lambda arg -> let _, body = U.decompose_lambda e1 in
         begin match arg with
@@ -527,7 +518,31 @@ and lazy_expr ?(many_args=false) ?in_record c expr =
   | Peek -> let col = U.decompose_peek expr in
     apply_method c ~name:"peek" ~col ~args:[]
   | Slice -> let col, pat = U.decompose_slice expr in
-    lazy_expr c col <| lazy_bracket @: lazy_expr c pat
+    let es = begin match U.tag_of_expr pat with
+      | Tuple -> U.decompose_tuple pat
+      | _     -> [pat]
+    end in
+    let ts = List.map (unwrap_t_val |- T.type_of_expr) es in
+    let id_e = add_record_ids es in
+    let id_t = add_record_ids ts in
+    (* find the non-unknown slices *)
+    let filter_e = List.filter (fun (_,c) ->
+      begin match U.tag_of_expr c with
+      | Const CUnknown -> false
+      | _              -> true
+      end) id_e
+    in
+    if null filter_e then [] (* no slice needed *)
+    else 
+      let do_eq (id, v) = KH.mk_eq (KH.mk_var id) v in
+      let lambda = KH.mk_lambda (KH.wrap_args id_t) @:
+        List.fold_right (fun x acc ->
+          KH.mk_and acc (do_eq x)
+        ) 
+        (tl filter_e) 
+        (do_eq @: hd filter_e)
+      in
+      apply_method c ~name:"filter" ~col ~in_record:true ~args:[lambda]
   | Insert -> let col, x = U.decompose_insert expr in
     apply_method c ~name:"insert" ~col ~args:[x]
   | Delete -> let col, x = U.decompose_delete expr in
