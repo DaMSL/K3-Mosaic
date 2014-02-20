@@ -100,30 +100,33 @@ let lazy_annos c = function
   | [] -> [] 
   | annos -> lps "@ " <| lazy_brace @: lps_list ~sep:"; " NoCut (lazy_anno c) annos
 
-let rec lazy_base_type ?(brace=true) c ~in_col t = 
+let rec lazy_base_type ?(brace=true) ?(mut=false) ?(empty=false) c ~in_col t = 
+  let wrap_mut f = if mut && not empty then lps "mut " <| f else f in
   let wrap_single f = 
     let wrap = if brace then lazy_brace else id_fn in
     if in_col then wrap(lps "elem:" <| f) else f
   in
+  let wrap = wrap_single |- wrap_mut in
   match t with
-  | TUnit       -> wrap_single @: lps "unit"
-  | TBool       -> wrap_single @: lps "bool"
-  | TByte       -> wrap_single @: lps "byte"
-  | TInt        -> wrap_single @: lps "int"
-  | TFloat      -> wrap_single @: lps "float"
-  | TString     -> wrap_single @: lps "string"
-  | TMaybe(vt)  -> wrap_single(lps "option " <| lazy_value_type c ~in_col vt)
-  | TAddress    -> wrap_single @: lps "address" (* ? *)
-  | TTarget bt  -> wrap_single (lps "target" <| lazy_base_type c ~in_col bt)
-  | TUnknown    -> wrap_single @: lps "unknown"
+  | TUnit       -> wrap @: lps "()"
+  | TBool       -> wrap @: lps "bool"
+  | TByte       -> wrap @: lps "byte"
+  | TInt        -> wrap @: lps "int"
+  | TFloat      -> wrap @: lps "real"
+  | TString     -> wrap @: lps "string"
+  | TMaybe(vt)  -> wrap(lps "option " <| lazy_value_type c ~in_col vt)
+  | TAddress    -> wrap @: lps "address" (* ? *)
+  | TTarget bt  -> wrap (lps "target" <| lazy_base_type c ~in_col bt)
+  | TUnknown    -> wrap @: lps "unknown"
   | TTuple(vts) -> (* tuples become records *)
       let rec_vts = add_record_ids vts in
       let inner = lazy_concat ~sep:lcomma (fun (id, vt) ->
         lps (id^":") <| lazy_value_type c ~in_col:false vt) rec_vts in
       let wrap = if brace then lazy_brace else id_fn in
       wrap (lsp () <| inner <| lsp ())
-  | TCollection(ct, vt) -> wrap_single ( 
-      lps "collection " <| lazy_value_type c ~in_col:true vt <| lps " @ " <| lps
+  | TCollection(ct, vt) -> wrap ( 
+    (if not empty then lps "collection " else [])
+    <| lazy_value_type c ~in_col:true vt <| lps " @ " <| lps
         begin match ct with
           | TSet  -> "{ Set }"
           | TList -> "{ List }"
@@ -131,14 +134,13 @@ let rec lazy_base_type ?(brace=true) c ~in_col t =
         end
       )
 
-and lazy_mutable_type c ~in_col = function
-  | TMutable (bt, a)   -> 
-      lps "mut " <| lazy_base_type c ~in_col bt
-  | TImmutable (bt, a) -> lazy_base_type c ~in_col bt
+and lazy_mutable_type ?empty c ~in_col = function
+  | TMutable (bt, a)   -> lazy_base_type ?empty c ~in_col ~mut:true bt
+  | TImmutable (bt, a) -> lazy_base_type ?empty c ~in_col bt
 
-and lazy_value_type c ~in_col = function
-  | TIsolated mt  -> lazy_mutable_type c ~in_col mt
-  | TContained mt -> lazy_mutable_type c ~in_col mt
+and lazy_value_type ?empty c ~in_col = function
+  | TIsolated mt  -> lazy_mutable_type ?empty c ~in_col mt
+  | TContained mt -> lazy_mutable_type ?empty c ~in_col mt
 
 let lazy_type c = function
   | TFunction(f,t) ->
@@ -164,11 +166,12 @@ let lazy_const c = function
   | CAddress(s, i) -> lps @: s^":"^string_of_int i
   | CTarget id     -> lps id
 
+(* returns mutability and type *)
 let unwrap_vt = function
-  | TIsolated(TMutable(t,_))    -> t
-  | TIsolated(TImmutable(t,_))  -> t
-  | TContained(TMutable(t,_))   -> t
-  | TContained(TImmutable(t,_)) -> t
+  | TIsolated(TMutable(t,_))
+  | TContained(TMutable(t,_))   -> true, t
+  | TIsolated(TImmutable(t,_))
+  | TContained(TImmutable(t,_)) -> false, t
 
 (* unwrap a type_t that's not a function *)
 let unwrap_t_val = function
@@ -177,19 +180,18 @@ let unwrap_t_val = function
 
 (* wrap a const collection expression with collection notation *)
 let lazy_collection_vt c vt eval = match unwrap_vt vt with
-  | TCollection(ct, et) ->
+  | _, TCollection(ct, et) ->
       (* preceding list of element types *)
+      let mut, t = unwrap_vt et in
       let lazy_elem_list =
-        lps "|" <| lazy_base_type ~brace:false ~in_col:true c (unwrap_vt et) <| lps "|" <| lsp ()
+        lazy_base_type ~brace:false ~in_col:true ~mut c t <| lps "|" <| lsp ()
       in
-      begin match unwrap_vt et with
-      | TTuple _ -> lazy_elem_list <| eval (* braces provided by tuple *)
-      | _        -> lps "{" <| lazy_elem_list <| eval <| lps "}"
-      end <| lps @: 
+      lps "{|" <| lazy_elem_list <| eval <| lps "|}" <|
+      lps @: 
         begin match ct with
-        | TSet  -> "@ { Set }"
-        | TBag  -> "@ { Bag }"
-        | TList -> "@ { List }"
+        | TSet  -> " @ { Set }"
+        | TBag  -> " @ { Bag }"
+        | TList -> " @ { List }"
         end
   | _ -> error () (* type error *)
 
@@ -239,6 +241,12 @@ let rec value_type_of_arg_num = function
 let break_args = function
   | NTuple(_,args) -> args
   | _              -> failwith "Can't break args"
+
+(* Break args down for lambdas with multiple values *)
+let peel_arg = function
+  | NTuple(a,[x])   -> x, None
+  | NTuple(a,x::xs) -> x, Some(NTuple(a, xs))
+  | _               -> failwith "Can't break args"
 
 (* code to unwrap an option type *)
 let unwrap_option f =
@@ -312,6 +320,25 @@ and function_application c fun_e l_e =
   in
   wrap_indent (lazy_expr c fun_e <| lsp () <| lazy_concat print_fn l_e)
 
+(* handle the printing of a lambda *)
+and handle_lambda c ~many_args ?in_record arg_n e =
+  let depth = if many_args then 1 else 0 in
+  let write arg =
+    lps "\\" <| lps @: shallow_bind_id ?in_record arg <| lps " ->" <| lsp ()
+  in
+  let exec arg =
+    (* for curried arguments, we deep bind at a deeper level *)
+    write arg <| lind () <| 
+      wrap_hov 0 (deep_bind ~depth ?in_record c arg_n <| lazy_expr c e)
+  in
+  if many_args then
+    match peel_arg arg_n with
+    | arg, Some tup_arg -> 
+        lazy_paren (write arg <| wrap_hov 0 (deep_bind ~depth:0 ?in_record c arg) <|
+          handle_lambda c ~many_args ?in_record tup_arg e)
+    | arg, None         -> lazy_paren @: exec arg
+  else exec arg_n
+
 (* printing expressions *)
 (* argnums is for lambda only: number of expected arguments *)
 and lazy_expr ?(many_args=false) ?in_record c expr =
@@ -329,10 +356,10 @@ and lazy_expr ?(many_args=false) ?in_record c expr =
     | Mult | Add -> lazy_paren
     | _ -> id_fn in
   (* we're more sensitive for left side *)
- let paren_l e = match U.tag_of_expr e with
-    | IfThenElse -> lazy_paren
-    | Apply when is_apply_let e -> lazy_paren
-    | _ -> id_fn in
+ (*let paren_l e = match U.tag_of_expr e with*)
+    (*| IfThenElse -> lazy_paren*)
+    (*| Apply when is_apply_let e -> lazy_paren*)
+    (*| _ -> id_fn in*)
  let arith_paren_l e = match U.tag_of_expr e with
     | IfThenElse -> lazy_paren
     | Apply when is_apply_let e -> lazy_paren
@@ -374,8 +401,8 @@ and lazy_expr ?(many_args=false) ?in_record c expr =
     in lazy_brace inner
   | Just -> let e = U.decompose_just expr in
     lps "just " <| lazy_expr c e
-  | Nothing vt -> lps "nothing:" <| lsp () <| lazy_value_type c false vt
-  | Empty vt -> lps "empty " <| lazy_value_type c false vt
+  | Nothing vt -> lps "None " <| if fst @: unwrap_vt vt then lps "mut" else lps "immut"
+  | Empty vt -> lps "empty " <| lazy_value_type ~empty:true c ~in_col:false vt
   | Singleton _ -> 
     (* Singletons are sometimes typed with unknowns (if read from a file) *)
     let e = U.decompose_singleton expr in
@@ -412,7 +439,7 @@ and lazy_expr ?(many_args=false) ?in_record c expr =
       | Neg, false -> let e3 = U.decompose_neg e2 in
         arith_paren_pair "-" (e1, e3)
       | _, false -> arith_paren_pair "+" (e1, e2)
-      | _, true -> arith_paren_pair "|" (e1, e2)
+      | _, true -> arith_paren_pair "or" (e1, e2)
     end
   | Mult -> let (e1, e2) = U.decompose_mult expr in
     let is_neg = begin match U.tag_of_expr e1 with
@@ -425,7 +452,7 @@ and lazy_expr ?(many_args=false) ?in_record c expr =
       | _ -> false
     end in
     begin match expr_type_is_bool e1, is_neg with
-      | true, _ -> arith_paren_pair "&" (e1, e2)
+      | true, _ -> arith_paren_pair "and" (e1, e2)
       | false, true -> lps "-" <| lazy_expr c e2 (* just a minus *)
       | _ -> arith_paren_pair "*" (e1, e2)
     end 
@@ -451,17 +478,7 @@ and lazy_expr ?(many_args=false) ?in_record c expr =
   | Lambda arg -> 
       let _, e = U.decompose_lambda expr in
       let arg_n = arg_num_of_arg arg in (* convert to arg_num *)
-      let write_args = 
-        (* check whether we need to handle curried arguments *)
-        if many_args then
-          let args_n = break_args arg_n in
-          lazy_concat (lps |- shallow_bind_id ?in_record) args_n
-        else lps @: shallow_bind_id ?in_record arg_n
-      in
-      (* for curried arguments, we deep bind at a deeper level *)
-      let depth = if many_args then 1 else 0 in
-      wrap_indent (lps "\\" <| write_args <| lps " ->") <| lind () <| 
-      wrap_hov 0 (deep_bind ~depth ?in_record c arg_n <| lazy_expr c e)
+      handle_lambda c ~many_args arg_n e
   | Apply -> let e1, e2 = U.decompose_apply expr in
     begin match U.tag_of_expr e1 with (* can be let *)
       (* function application *)
@@ -618,7 +635,7 @@ let lazy_declaration c d =
       lps ("role "^id^" ") <| lazy_box_brace (lazy_flow_program c fprog)
   | Flow fprog -> lazy_flow_program c fprog
   | DefaultRole id -> lps ("default role "^id)
-  | Foreign(id, t) -> lps ("foreign "^id^" :") <| lsp () <| lazy_type c t
+  | Foreign(id, t) -> lps ("declare "^id^" :") <| lsp () <| lazy_type c t
   in
   wrap_hv 0 out <| lcut ()
 
