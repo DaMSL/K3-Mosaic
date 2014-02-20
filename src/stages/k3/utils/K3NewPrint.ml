@@ -146,14 +146,10 @@ let lazy_type c = function
       lazy_value_type c ~in_col:false t
   | TValue vt -> lazy_value_type c false vt
 
-let rec lazy_arg c drop_tuple_paren a = 
-  let paren = if drop_tuple_paren then id_fn else lazy_paren in
-  match a with
+let rec lazy_arg c drop_tuple_paren = function
   | AIgnored      -> lps "_"
   | AVar (id, vt) -> lps id
-  | AMaybe(arg)   -> lps "just " <| lazy_arg c false arg
-  | ATuple(args)  ->
-      lhov 0 <| paren (lps_list CutHint (lazy_arg c false) args) <| lcb ()
+  | _             -> failwith "shouldn't be here"
 
 let lazy_id_type c (id,t) = lps (id^" : ") <| lazy_value_type c false t
 
@@ -244,6 +240,11 @@ let break_args = function
   | NTuple(_,args) -> args
   | _              -> failwith "Can't break args"
 
+(* code to unwrap an option type *)
+let unwrap_option f =
+  lps "case " <| f <| lps " of" <| lsp () <|
+  lps "{ Some x -> x }" <| lsp () <| lps "{ None -> error () }"
+
 (* create a deep bind for lambdas, triggers, and let statements
  * -depth allows to skip one depth level of binding
  * -top_expr allows us to use an expression at the top bind
@@ -251,6 +252,12 @@ let break_args = function
 let rec deep_bind ?(depth=0) ?top_expr ?(in_record=false) c arg_n =
   let rec loop d a = 
     let record = in_record && d=depth in (* do we want a record now *)
+    (* we allow binding an expression at the top level *)
+    let bind_text i = match top_expr, d with 
+      | Some e, d 
+          when d=depth -> lazy_expr c e
+      | _              -> lps @: id_of_num i
+    in
     match a with
       (* unwrap a record *)
     | NVar(i, id, _) when record -> 
@@ -259,52 +266,42 @@ let rec deep_bind ?(depth=0) ?top_expr ?(in_record=false) c arg_n =
     | NIgnored 
     | NVar _      -> [] (* do nothing *)
     | NTuple(i, args) -> 
-        (* we allow binding an expression at the top level *)
-        let bind_text = begin match top_expr, d with 
-          | Some e, d when d=depth -> lazy_expr c e
-          | _                      -> lps @: id_of_num i
-        end in
         (* only produce binds if we're deeper than specified depth *)
-        (if d >= depth then
+        (if d < depth then [] else
           let args_id = List.map get_id_of_arg args in
           let args_rec = add_record_ids_str args_id in
           let sub_ids = lazy_concat ~sep:lcomma lps args_rec in
-          lps "bind " <| bind_text <| lps " as {" <| sub_ids <| lps "} in " 
-            <| lcut ()
-        else []) 
-        <| List.flatten @: List.map (loop @: d+1) args
-    | NMaybe(i, arg)  -> 
-        (* we don't have such sophisticated pattern matching methods. On the nothing side, 
-         * we put a canonical value *)
-        let typ = value_type_of_arg_num arg in
-        let default_v = T.canonical_value_of_type typ in
-        lps "case " <| lps (id_of_num i) <| lps " of " <| lcut () <|
-        lps "Nothing -> " <| lazy_expr c default_v <| lcut () <|
-        lps "Just " <| lps (get_id_of_arg arg) <| lps " -> " <| lcut ()
-  in loop 0 arg_n
+          lps "bind " <| bind_text i <| lps " as {" <| sub_ids <| lps "} in " 
+          <| lcut ()) <|
+      List.flatten @: List.map (loop @: d+1) args
+  | NMaybe(i, arg)  -> 
+      if d < depth then [] else
+        lps "let " <| lps (get_id_of_arg arg) <| lps " = " <| unwrap_option (bind_text i) <|
+        lps " in" <| lsp () <| loop (d+1) arg
+in loop 0 arg_n
 
 (* Apply a method -- the lambda part
- * -in_record: the lambda should take in a record *)
+* -in_record: the lambda should take in a record *)
 and apply_method_nocol ?many_args ?in_record c ~name ~args =
-  let wrap_if_big e = match U.tag_of_expr e with
-      | Var _ | Const _ | Tuple | Empty _ -> id_fn
-      | _ -> lazy_paren
-  in
-  (* attach a full list of many_args to the argument (lambdas and otherwise) *)
-  let args = match many_args with
-    | None    -> List.map (fun x -> x, false) args
-    | Some rs -> list_zip args rs
-  in
-  lps ("."^name) <| lsp () <| 
-    lazy_concat (fun (e, m_args) -> 
-      wrap_if_big e @: lazy_expr ~many_args:m_args ?in_record c e) args
+let wrap_if_big e = match U.tag_of_expr e with
+    | Var _ | Const _ | Tuple | Empty _ -> id_fn
+    | _ -> lazy_paren
+in
+(* attach a full list of many_args to the argument (lambdas and otherwise) *)
+let args = match many_args with
+  | None    -> List.map (fun x -> x, false) args
+  | Some rs -> list_zip args rs
+in
+lps ("."^name) <| lsp () <| 
+  lazy_concat (fun (e, m_args) -> 
+    wrap_if_big e @: lazy_expr ~many_args:m_args ?in_record c e) args
 
 (* Apply a method to a collection *)
 and apply_method ?many_args ?in_record c ~name ~col ~args =
-  (* we only need parens if we're not applying to a variable *)
-  let f = match U.tag_of_expr col with
-  | Var _ -> id_fn
-  | _     -> lazy_paren
+(* we only need parens if we're not applying to a variable *)
+let f = match U.tag_of_expr col with
+| Var _ -> id_fn
+| _     -> lazy_paren
   in f @: lazy_expr c col <| apply_method_nocol c ~name ~args ?many_args ?in_record
 
 (* apply a function to arguments *)
@@ -401,7 +398,6 @@ and lazy_expr ?(many_args=false) ?in_record c expr =
       end in
     let (e1, e2) = U.decompose_combine expr in
     (* wrap the left side of the combine if it's needed *)
-    let wrapl = paren_l e1 in
     begin match U.tag_of_expr e1, U.tag_of_expr e2 with
       | Singleton vt, Combine | Singleton vt, Singleton _
       | Singleton vt, Empty _ ->
@@ -473,8 +469,9 @@ and lazy_expr ?(many_args=false) ?in_record c expr =
       (* let expression *)
       | Lambda arg -> let _, body = U.decompose_lambda e1 in
         begin match arg with
-        (* If we have an arg tuple, it's a bind *)
-        | ATuple _ -> let arg_n = arg_num_of_arg arg in
+        (* If we have an arg tuple, it's a bind. A maybe is similar *)
+        | ATuple _ 
+        | AMaybe _ -> let arg_n = arg_num_of_arg arg in
                       deep_bind c arg_n ~top_expr:e2 <| lazy_expr c body 
         (* Otherwise it's a let *)
         | _        -> 
@@ -516,7 +513,8 @@ and lazy_expr ?(many_args=false) ?in_record c expr =
   | Sort -> let col, lambda = U.decompose_sort expr in
     apply_method c ~name:"sort" ~col ~args:[lambda] ~in_record:true
   | Peek -> let col = U.decompose_peek expr in
-    apply_method c ~name:"peek" ~col ~args:[]
+    (* peeks return options need to be pattern matched *)
+    unwrap_option (lazy_paren(apply_method c ~name:"peek" ~col ~args:[]))
   | Slice -> let col, pat = U.decompose_slice expr in
     let es = begin match U.tag_of_expr pat with
       | Tuple -> U.decompose_tuple pat
