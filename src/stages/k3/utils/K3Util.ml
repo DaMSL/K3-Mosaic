@@ -26,6 +26,13 @@ let rec typed_vars_of_arg arg =
     | AMaybe(a') -> typed_vars_of_arg a'
     | ATuple(vt_l) -> List.concat (List.map typed_vars_of_arg vt_l)
 
+(* convert an arg to a type *)
+let rec types_of_arg = function
+  | AIgnored     -> canonical TUnknown (* who cares *)
+  | AVar (_, vt) -> vt
+  | AMaybe a     -> canonical @: TMaybe(types_of_arg a)
+  | ATuple xs    -> wrap_ttuple @: List.map types_of_arg xs
+
 let id_of_var e = match tag_of_expr e with
   | Var id -> id | _ -> failwith "invalid variable"
 

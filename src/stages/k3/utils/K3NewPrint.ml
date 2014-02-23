@@ -49,12 +49,10 @@ let lcomma () = lps "," <| lsp ()
 
 (* type we pass all the way down for configuring behaviors *)
 type config = {verbose_types:bool; (* more verbose type printing *)
-               uuid:int option;    (* highlight a particular uuid *)
-               lambda_ret:bool} (* highlight a lambda with a non-tuple return type *)
+               uuid:int option}    (* highlight a particular uuid *)
 
 let default_config = {verbose_types=false;
-                      uuid=None;
-                      lambda_ret=false}
+                      uuid=None}
 
 let verbose_types_config = {default_config with verbose_types=true}
 
@@ -166,23 +164,16 @@ let lazy_const c = function
   | CAddress(s, i) -> lps @: s^":"^string_of_int i
   | CTarget id     -> lps id
 
-(* returns mutability and type *)
-let unwrap_vt = function
-  | TIsolated(TMutable(t,_))
-  | TContained(TMutable(t,_))   -> true, t
-  | TIsolated(TImmutable(t,_))
-  | TContained(TImmutable(t,_)) -> false, t
-
 (* unwrap a type_t that's not a function *)
 let unwrap_t_val = function
   | TValue vt -> vt
   | _         -> failwith "Function type unexpected"
 
 (* wrap a const collection expression with collection notation *)
-let lazy_collection_vt c vt eval = match unwrap_vt vt with
+let lazy_collection_vt c vt eval = match KH.unwrap_vtype vt with
   | _, TCollection(ct, et) ->
       (* preceding list of element types *)
-      let mut, t = unwrap_vt et in
+      let mut, t = KH.unwrap_vtype et in
       let lazy_elem_list =
         lazy_base_type ~brace:false ~in_col:true ~mut c t <| lps "|" <| lsp ()
       in
@@ -401,7 +392,8 @@ and lazy_expr ?(many_args=false) ?in_record c expr =
     in lazy_brace inner
   | Just -> let e = U.decompose_just expr in
     lps "just " <| lazy_expr c e
-  | Nothing vt -> lps "None " <| if fst @: unwrap_vt vt then lps "mut" else lps "immut"
+  | Nothing vt -> lps "None " <| if fst @: KH.unwrap_vtype vt 
+      then lps "mut" else lps "immut"
   | Empty vt -> lps "empty " <| lazy_value_type ~empty:true c ~in_col:false vt
   | Singleton _ -> 
     (* Singletons are sometimes typed with unknowns (if read from a file) *)
@@ -658,8 +650,8 @@ let string_of_type t = wrap_f @: fun () ->
   force_list @: lazy_type verbose_types_config t
 
 (* print a K3 expression in syntax *)
-let string_of_expr ?uuid_highlight ?(lambda_ret=false) e = 
-  let config = {default_config with lambda_ret} in
+let string_of_expr ?uuid_highlight e = 
+  let config = default_config in
   let config = match uuid_highlight with 
     | None   -> config
     | _      -> {config with uuid=uuid_highlight}
@@ -667,8 +659,8 @@ let string_of_expr ?uuid_highlight ?(lambda_ret=false) e =
   wrap_f @: fun () -> force_list @: lazy_expr config e
 
 (* print a K3 program in syntax *)
-let string_of_program ?uuid_highlight ?(lambda_ret=false) prog = 
-  let config = {default_config with lambda_ret} in
+let string_of_program ?uuid_highlight prog = 
+  let config = default_config in
   let config = match uuid_highlight with 
     | None -> config
     | _    -> {config with uuid=uuid_highlight}
@@ -679,27 +671,72 @@ let string_of_program ?uuid_highlight ?(lambda_ret=false) prog =
     force_list l;
     cb
 
+let r_insert = Str.regexp "^insert_\\(.+\\)$"
+let r_insert_bad = Str.regexp "^insert_.*\\(do\\|send\\|rcv\\)"
+
+(* add sources and feeds to the program *)
+(* expects a distributed program *)
+let add_sources p filename =
+  let open K3Helpers in
+  (* we find all the insert triggers and concatenate their arguments into one big argument
+   * list with maybes *)
+  let is_insert s     = r_match r_insert s && not @: r_match r_insert_bad s in
+  let insert_trigs    = List.filter (is_insert |- U.id_of_code) @:
+    U.triggers_of_program p in
+  match insert_trigs with [] -> "" | _ -> (* check for no insert trigs *)
+  let insert_ids      = List.map U.id_of_code insert_trigs in
+  (* arg for each trigger *)
+  let insert_args     = List.map U.args_of_code insert_trigs in
+  let maybe_arg_types = wrap_tmaybes @: List.map U.types_of_arg insert_args in
+  let arg_ids         = List.map (fun trig -> trig^"_args") insert_ids in
+  let new_args        = list_zip arg_ids maybe_arg_types in
+  let trig_info       = list_zip insert_ids maybe_arg_types in
+  (* add a demultiplexing argument *)
+  let new_args'       = wrap_args @: ("trigger_id", t_string)::new_args in
+  (* write the demultiplexing trigger *)
+  let code =
+    mk_code_sink "switch_main" new_args' [] @:
+      List.fold_left (fun acc_code (trig_id, trig_t) ->
+        mk_if (mk_eq (mk_var "trigger_id") @: mk_cstring trig_id)
+          (mk_send (mk_ctarget @: "insert_"^trig_id) K3Global.me_var @:
+            mk_unwrap_maybe [trig_id^"_args", trig_t] @:
+              mk_var @: trig_id^"_args_unwrap")
+          acc_code)
+        mk_cunit
+        trig_info
+  in
+  let flow = mk_flow [code] in
+  let source_s = "source s1 : "^string_of_value_type (wrap_ttuple maybe_arg_types)^
+    " = file \""^filename^"\" k3\n" in
+  let feed_s   = "feed s1 |> switch_main\n" in
+  string_of_program [flow] ^ source_s ^ feed_s
+
+(* print a new k3 program with added sources and feeds *)
+let string_of_dist_program p =
+  string_of_program p ^
+  add_sources p "default.txt"
+
 (* print a k3 program with test expressions *)
-let string_of_program_test ?uuid_highlight ?lambda_ret ptest = 
+let string_of_program_test ?uuid_highlight ptest = 
   (* print a check_expr *)
   let string_of_check_expr = function
       | FileExpr s -> "file "^s
-      | InlineExpr e -> string_of_expr ?uuid_highlight ?lambda_ret e
+      | InlineExpr e -> string_of_expr ?uuid_highlight e
   in
   (* print a test expression *)
   let string_of_test_expr (e, check_e) =
     Printf.sprintf "(%s) = %s"
-      (string_of_expr ?uuid_highlight ?lambda_ret e) @:
+      (string_of_expr ?uuid_highlight e) @:
       string_of_check_expr check_e
   in
   match ptest with
   | NetworkTest(p, checklist) -> 
       Printf.sprintf "%s\n\nnetwork expected\n\n%s"
-        (string_of_program ?uuid_highlight ?lambda_ret p)
+        (string_of_program ?uuid_highlight p)
         (String.concat ",\n\n" @: list_map string_of_test_expr checklist)
   | ProgTest(p, checklist) -> 
       Printf.sprintf "%s\n\nexpected\n\n%s"
-        (string_of_program ?uuid_highlight ?lambda_ret p)
+        (string_of_program ?uuid_highlight p)
         (String.concat ",\n\n" @: list_map string_of_test_expr checklist)
   | ExprTest _ -> failwith "can't print an expression test"
 

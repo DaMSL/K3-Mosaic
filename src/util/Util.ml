@@ -25,6 +25,8 @@ let id_fn a = a
 
 let (|-) = compose
 
+let pair x y = (x,y)
+
 let null l = match l with [] -> true | _ -> false
 
 let at l i = List.nth l i

@@ -10,6 +10,7 @@ val meta_of_expr : expr_t -> annotation_t
 (* Variable id extraction *)
 val vars_of_arg : arg_t -> id_t list
 val typed_vars_of_arg : arg_t -> (id_t * value_type_t) list
+val types_of_arg : arg_t -> value_type_t
 val id_of_var : expr_t -> id_t
 
 val tuple_type_of_args : value_type_t list -> type_t

@@ -56,6 +56,13 @@ val wrap_args_deep : arg_t list -> arg_t
 (* wrap arguments, turning maybe types to maybe argument types *)
 val wrap_args_maybe : (id_t * value_type_t) list -> arg_t
 
+(* Unwrap functions for types *)
+(* returns mutability and type *)
+val unwrap_vtype : value_type_t -> bool * base_type_t
+
+(* unwrap a tuple type and return its list. If not a ttuple, return as singleton *)
+val unwrap_ttuple : value_type_t -> value_type_t list
+
 (* simple functions that enable easy construction of AST trees *)
 val mk_const : constant_t -> expr_t
 val mk_cint : int -> expr_t

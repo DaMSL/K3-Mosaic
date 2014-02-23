@@ -107,22 +107,36 @@ let wrap_args id_typ =
 let wrap_args_deep id_arg =
   match id_arg with
   | []  -> invalid_arg "Nothing to wrap in wrap_args_deep"
-  | [x] -> invalid_arg "No need for wrap_args_deep: single argument"
+  | [x] -> x
   | xs  -> ATuple xs
 
 (* wrap function arguments, turning tmaybes to amaybes *)
 let wrap_args_maybe id_typ =
   let wrap_args_inner = function
     | ("_",_) -> AIgnored
-    | (i, TIsolated(TImmutable(TMaybe(t), _))) -> AMaybe(AVar(i,t))
-    | (i, TIsolated(TMutable(TMaybe(t), _))) -> AMaybe(AVar(i,t))
-    | (i, TContained(TImmutable(TMaybe(t), _))) -> AMaybe(AVar(i,t))
+    | (i, TIsolated(TImmutable(TMaybe(t), _)))
+    | (i, TIsolated(TMutable(TMaybe(t), _)))
+    | (i, TContained(TImmutable(TMaybe(t), _)))
     | (i, TContained(TMutable(TMaybe(t), _))) -> AMaybe(AVar(i,t))
     | (i,t) -> AVar(i,t)
   in match id_typ with
     | [x]   -> wrap_args_inner x
     | x::xs -> ATuple(List.map wrap_args_inner id_typ)
     | _     -> invalid_arg "No ids, types for wrap_args_maybe"
+
+(* Unwrap functions for types *)
+
+(* returns mutability and type *)
+let unwrap_vtype = function
+  | TIsolated(TMutable(t,_))
+  | TContained(TMutable(t,_))   -> true, t
+  | TIsolated(TImmutable(t,_))
+  | TContained(TImmutable(t,_)) -> false, t
+
+(* unwrap a tuple type and return its list. If not a ttuple, return as singleton *)
+let unwrap_ttuple vt = match snd @: unwrap_vtype vt with
+  | TTuple vt_l -> vt_l
+  | x           -> [vt]
 
 (* Helper functions to create K3 AST nodes more easily *)
 

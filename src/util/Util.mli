@@ -16,6 +16,8 @@ val compose :('b -> 'c) -> ('a -> 'b) -> ('a -> 'c)
 val id_fn : 'a -> 'a
 val (|-) : ('b -> 'c) -> ('a -> 'b) -> ('a -> 'c)
 
+val pair : ('a -> 'b -> 'a * 'b)
+
 (* whether a list is empty *)
 val null : 'a list -> bool
 
