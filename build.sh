@@ -34,20 +34,6 @@ then
 fi
 
 if [ ! -d "./bin" ]; then mkdir bin; fi
-# partition map tool
-ocamlbuild PartMapTool.byte -build-dir ./bin -tag debug $@
-if [ -f "./bin/src/PartMapTool.byte" ]
-then echo "#!/bin/bash" > ./bin/partmap_tool
-     echo "ocamlrun -b $SCRIPTPATH/bin/src/PartMapTool.byte \$@" >> ./bin/partmap_tool
-     chmod +x ./bin/partmap_tool
-fi
-# log sanitization tool
-ocamlbuild SanitizeLog.byte -build-dir ./bin -tag debug $@
-if [ -f "./bin/src/SanitizeLog.byte" ]
-then echo "#!/bin/bash" > ./bin/sanitize_log
-     echo "ocamlrun -b $SCRIPTPATH/bin/src/SanitizeLog.byte \$@" >> ./bin/sanitize_log
-     chmod +x ./bin/sanitize_log
-fi
 
 # driver
 ocamlbuild Driver.byte -build-dir ./bin -tag debug $@
