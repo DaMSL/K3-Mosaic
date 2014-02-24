@@ -68,6 +68,8 @@ val read_file : string -> string
 
 val write_file : string -> string -> unit
 
+val write_file_lines : string -> string list -> unit
+
 (* create a numerical range from a to b *)
 val create_range : ?step:int -> int -> int -> int list
 
@@ -179,3 +181,6 @@ val r_match : Str.regexp -> string -> bool
 
 (* --- other stuff ---- *)
 val make_lst : 'a -> int -> 'a list
+
+(* transpose a list of lists *)
+val transpose : 'a list list -> 'a list list

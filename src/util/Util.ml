@@ -117,6 +117,11 @@ let write_file file s =
   output_string out_chan s;
   close_out out_chan
 
+let write_file_lines file l =
+  let out_chan = open_out file in
+  List.iter (output_string out_chan) l;
+  close_out out_chan
+
 (* make a range from first to last. Tail recursive *)
 let create_range ?(step=1) first length =
     let last = first + ((length-1) * step) in
@@ -368,5 +373,20 @@ let  make_lst element num =
   in
   helper [] num
 
-
+(* transpose a list of lists *)
+let transpose l =
+  List.rev @: fst @: List.fold_right (fun _ (acc,rem) ->
+    let newl, rem =
+      List.fold_right (fun x (acc2,rem2) ->
+        match x with
+        | []    -> failwith "List is too short"
+        | x::xs -> x::acc2, xs::rem2
+      )
+      rem
+      ([],[])
+    in
+    newl::acc, rem
+  )
+  (List.hd l)
+  ([], l)
 

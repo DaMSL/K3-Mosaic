@@ -59,16 +59,16 @@ let verbose_types_config = {default_config with verbose_types=true}
 (* Get a binding id from a number *)
 let id_of_num i = Printf.sprintf "_b%d_" i
 (* Get a record id from a number *)
-let record_id_of_num i = Printf.sprintf "_r%d_" i
+let record_id_of_num ?(prefix="r") i = Printf.sprintf "_%s%d_" prefix i
 
 (* Add record ids to a list *)
-let add_record_ids l =
+let add_record_ids ?prefix l =
   let i_l = insert_index_fst 1 l in
-  List.map (fun (i, x) -> record_id_of_num i, x) i_l
+  List.map (fun (i, x) -> record_id_of_num ?prefix i, x) i_l
 
 (* Add record ids to a string *)
-let add_record_ids_str l =
-  List.map (fun (s,x) -> Printf.sprintf "%s:%s" s x) @: add_record_ids l
+let add_record_ids_str ?prefix ?(sep=":") l =
+  List.map (fun (s,x) -> Printf.sprintf "%s%s%s" s sep x) @: add_record_ids ?prefix l
 
 let error () = lps "???"
 
