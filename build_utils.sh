@@ -1,5 +1,11 @@
 # Build all the ocaml utilities
 
+#get directory of script
+pushd `dirname $0` > /dev/null
+SCRIPTPATH=`pwd -P`
+popd > /dev/null
+cd $SCRIPTPATH
+
 if [ ! -d "./bin" ]; then mkdir bin; fi
 
 # partition map tool

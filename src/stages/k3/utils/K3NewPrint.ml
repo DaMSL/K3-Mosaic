@@ -712,9 +712,9 @@ let add_sources p filename =
   string_of_program [flow] ^ source_s ^ feed_s
 
 (* print a new k3 program with added sources and feeds *)
-let string_of_dist_program p =
+let string_of_dist_program ?(file="default.txt") p =
   string_of_program p ^
-  add_sources p "default.txt"
+  add_sources p file
 
 (* print a k3 program with test expressions *)
 let string_of_program_test ?uuid_highlight ptest = 

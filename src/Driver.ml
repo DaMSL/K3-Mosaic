@@ -188,6 +188,7 @@ type parameters = {
                                     to simulate network delay *)
     mutable force_correctives : bool; (* Force correctives being generated *)
     mutable lambda_ret : bool;    (* print syntax with * when return isn't a tuple *)
+    mutable k3new_data_file : string;
   }
 
 let default_cmd_line_params () = {
@@ -211,6 +212,7 @@ let default_cmd_line_params () = {
     shuffle_tasks     = default_shuffle_tasks;
     force_correctives = false;
     lambda_ret        = false;
+    k3new_data_file   = "";
   }
 
 let cmd_line_params = default_cmd_line_params ()
@@ -550,7 +552,8 @@ let print params inputs =
   let print_fn = match params.out_lang with
     | AstK3 | AstK3Dist   -> print_k3_program sofp |- snd
     | K3 | K3Dist         -> print_k3_program (PS.string_of_program ~lambda_ret) |- snd
-    | K3New               -> print_k3_program K3NewPrint.string_of_dist_program |- snd
+    | K3New               -> print_k3_program (K3NewPrint.string_of_dist_program
+                               ~file:params.k3new_data_file) |- snd
     | K3Test | K3DistTest -> print_k3_test_program ~lambda_ret
     | ReifiedK3           -> print_reified_k3_program |- snd
     | Imperative          -> print_imperative_program params.print_types |- snd
@@ -680,6 +683,9 @@ let param_specs = Arg.align
   "--order", Arg.String (fun file ->
     cmd_line_params.order_files <- cmd_line_params.order_files @ [file]),
       "file     Load a map order file";
+  "--datafile", Arg.String (fun file ->
+    cmd_line_params.k3new_data_file <- file),
+      "file     Specify a k3new data file";
 
   (* Debugging parameters *)
 
