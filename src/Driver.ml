@@ -212,7 +212,7 @@ let default_cmd_line_params () = {
     shuffle_tasks     = default_shuffle_tasks;
     force_correctives = false;
     lambda_ret        = false;
-    k3new_data_file   = "";
+    k3new_data_file   = "default.k3";
   }
 
 let cmd_line_params = default_cmd_line_params ()

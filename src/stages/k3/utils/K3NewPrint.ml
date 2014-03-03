@@ -305,6 +305,13 @@ let f = match U.tag_of_expr col with
 
 (* apply a function to arguments *)
 and function_application c fun_e l_e = 
+  (* Check if we need to modify the function *)
+  (* for example, hash gets only one function in the new k3 *)
+  let fun_e = match U.tag_of_expr fun_e with
+  | Var x when str_take 4 x = "hash"
+          -> KH.mk_var "hash"
+  | _     -> fun_e
+  in
   let print_fn e = match U.tag_of_expr e with
     | Var _ | Const _ | Tuple   -> lazy_expr c e
     | _                         -> lazy_paren @: lazy_expr c e
@@ -344,8 +351,15 @@ and lazy_expr ?(many_args=false) ?in_record c expr =
      - If a left sub-element is 'ifthenelse' or a 'let', we wrap it.
      - For a == or !=, we also wrap sub- ==/!= *)
   let arith_paren e = match U.tag_of_expr e with
-    | Mult | Add -> lazy_paren
-    | _ -> id_fn in
+    | Mult 
+    | Add   -> lazy_paren
+    | Apply -> let e1, _ = U.decompose_apply e in
+               begin match U.tag_of_expr e1 with
+               | Var "divf" -> lazy_paren
+               | Var "mod"  -> lazy_paren
+               | _          -> id_fn
+               end
+    | _     -> id_fn in
   (* we're more sensitive for left side *)
  (*let paren_l e = match U.tag_of_expr e with*)
     (*| IfThenElse -> lazy_paren*)
@@ -384,6 +398,9 @@ and lazy_expr ?(many_args=false) ?in_record c expr =
     | _ -> id_fn e
   in let out = match U.tag_of_expr expr with
   | Const con -> lazy_const c con
+  (* translate float to real *)
+  | Var id when id = "int_of_float" -> lps "int_of_real"
+  | Var id when id = "float_of_int" -> lps "real_of_int"
   | Var id -> lps id
   | Tuple -> let es = U.decompose_tuple expr in
     let id_es = add_record_ids es in
@@ -391,7 +408,7 @@ and lazy_expr ?(many_args=false) ?in_record c expr =
         lps (id^":") <| lazy_expr c e) id_es
     in lazy_brace inner
   | Just -> let e = U.decompose_just expr in
-    lps "just " <| lazy_expr c e
+    lps "Some " <| lazy_expr c e
   | Nothing vt -> lps "None " <| if fst @: KH.unwrap_vtype vt 
       then lps "mut" else lps "immut"
   | Empty vt -> lps "empty " <| lazy_value_type ~empty:true c ~in_col:false vt
@@ -472,7 +489,16 @@ and lazy_expr ?(many_args=false) ?in_record c expr =
       let arg_n = arg_num_of_arg arg in (* convert to arg_num *)
       handle_lambda c ~many_args arg_n e
   | Apply -> let e1, e2 = U.decompose_apply expr in
+    let do_pair_paren sym =
+      begin match U.decompose_tuple e2 with
+        | [x; y] -> arith_paren_pair sym (x, y)
+        | _      -> failwith "malformed tuple"
+      end
+    in
     begin match U.tag_of_expr e1 with (* can be let *)
+      (* divide becomes an infix operator *)
+      | Var "divf" -> do_pair_paren "/"
+      | Var "mod"  -> do_pair_paren "%"
       (* function application *)
       | Var _ -> function_application c e1 [e2]
       (* let expression *)
@@ -658,6 +684,23 @@ let string_of_expr ?uuid_highlight e =
   in
   wrap_f @: fun () -> force_list @: lazy_expr config e
 
+let filter_incompatible prog =
+  filter_map (fun ((d,a) as dec) ->
+    (* we don't want the monomorphic hash functions *)
+    match d with 
+    | Foreign("int_of_float", (TFunction _ as f))
+        -> Some(Foreign("int_of_real", f), a)
+    | Foreign("float_of_int", (TFunction _ as f))
+        -> Some(Foreign("real_of_int", f), a)
+    | Foreign("divf", (TFunction _)) 
+        -> None
+    | Foreign("mod", (TFunction _)) 
+        -> None
+    | Foreign(id, TFunction _) when str_take 4 id = "hash"
+        -> None
+    | _ -> Some dec
+  ) prog
+  
 (* print a K3 program in syntax *)
 let string_of_program ?uuid_highlight prog = 
   let config = default_config in
@@ -713,8 +756,10 @@ let add_sources p filename =
 
 (* print a new k3 program with added sources and feeds *)
 let string_of_dist_program ?(file="default.txt") p =
-  string_of_program p ^
-  add_sources p file
+  let p' = filter_incompatible p in
+  "include \"Core/Builtins.k3\"" ^
+  string_of_program p' ^
+  add_sources p' file
 
 (* print a k3 program with test expressions *)
 let string_of_program_test ?uuid_highlight ptest = 
