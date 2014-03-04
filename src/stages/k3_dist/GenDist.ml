@@ -41,6 +41,9 @@ module M = ModifyAst
 module U = K3Util
 module GC = GarbageCollection
 
+(* control whether gc code is emitted *)
+let enable_gc = false
+
 exception ProcessingFailed of string;;
 
 (* global trigger names needed for generated triggers and sends *)
@@ -111,13 +114,15 @@ let declare_global_vars p ast =
   global_map_decl_code @
   map_buffers_decl_code @
   stmt_cntrs_code ::
-  GC.acks_code ::
-  GC.vid_rcv_cnt_code GC.vid_rcv_cnt_name ::
-  GC.vid_rcv_cnt_code GC.vid_rcv_cnt_2_name ::
-  GC.vid_buf_code ::
-  GC.vid_buf_2_code ::
-  GC.min_max_acked_vid_code ::
-  GC.gc_vid_code ::
+  (if enable_gc then
+    GC.acks_code ::
+    GC.vid_rcv_cnt_code GC.vid_rcv_cnt_name ::
+    GC.vid_rcv_cnt_code GC.vid_rcv_cnt_2_name ::
+    GC.vid_buf_code ::
+    GC.vid_buf_2_code ::
+    GC.min_max_acked_vid_code ::
+    [GC.gc_vid_code]
+  else []) @
   log_structs_code
 
 (* global functions *)
@@ -303,32 +308,32 @@ let start_trig ~force_correctives p t =
            mk_peek epoch_var;
            mk_peek vid_counter;
            mk_apply (mk_var hash_addr) G.me_var]) @:
-       mk_block [
+       mk_block @: [
          mk_send
            (mk_ctarget(send_fetch_name_of_t p t)) G.me_var @:
            mk_tuple @: args_of_t_as_vars_with_v p t;
 
         (* increase vid_counter *)
          mk_update vid_counter (mk_peek vid_counter) @:
-           mk_add (mk_cint 1) (mk_peek vid_counter);
+           mk_add (mk_cint 1) (mk_peek vid_counter)] @
 
-        (* start garbage collection every 10
-         * TODO maybe need to change by GC every few seconds *)
-        (* disable gc for now so we can test properly *)
-        (*
-        mk_if
-          (mk_eq
-            (mk_apply
-              (mk_var "mod") @:
-               mk_tuple[mk_peek vid_counter;mk_cint 10])
-            (mk_cint 0)) (*end eq*)
-          (mk_send (* send to max_acked_vid_send to statr GC *)
-            (mk_ctarget GC.max_acked_vid_send_trig_name)
-            K3Global.me_var
-            (mk_cint 1))
-          mk_cunit
-          *)
-      ]]
+        (if enable_gc then
+          (* start garbage collection every 10
+          * TODO maybe need to change by GC every few seconds *)
+          (* disable gc for now so we can test properly *)
+          [mk_if
+            (mk_eq
+              (mk_apply
+                (mk_var "mod") @:
+                mk_tuple[mk_peek vid_counter;mk_cint 10])
+              (mk_cint 0)) (*end eq*)
+            (mk_send (* send to max_acked_vid_send to statr GC *)
+              (mk_ctarget GC.max_acked_vid_send_trig_name)
+              K3Global.me_var
+              (mk_cint 1))
+            mk_cunit]
+        else [])
+      ]
 
 let send_fetch_trig p s_rhs_lhs s_rhs trig_name =
   let send_fetches_of_rhs_maps  =
@@ -421,17 +426,19 @@ let send_puts =
   [mk_iter
     (mk_lambda
       (wrap_args ["ip", t_addr; "stmt_id_cnt_list", stmt_id_cnt_type]) @:
-      mk_block[
+      mk_block @: [
         (* send rcv_put *)
         mk_send
           (mk_ctarget(rcv_put_name_of_t p trig_name))
           (mk_var "ip") @:
           mk_tuple @: G.me_var ::  mk_var "stmt_id_cnt_list"::
-            args_of_t_as_vars_with_v p trig_name;
-        (* insert a record into the ack list, waiting for ack*)
-         mk_insert GC.ack_lst @:
-              mk_tuple [mk_var "ip"; mk_var "vid"; mk_cbool false]
-        ]
+            args_of_t_as_vars_with_v p trig_name] @
+
+        (if enable_gc then [
+          (* insert a record into the ack list, waiting for ack*)
+          mk_insert GC.ack_lst @:
+                mk_tuple [mk_var "ip"; mk_var "vid"; mk_cbool false]
+        ] else [])
     ) @:
     mk_gbagg
       (mk_assoc_lambda (* grouping func -- assoc because of gbagg tuple *)
@@ -606,7 +613,7 @@ mk_code_sink
   let full_types = wrap_ttuple @: extract_arg_types full_pat in
   let part_pat_as_vars = ids_to_vars @: fst_many part_pat in
   let query_pat = mk_tuple @: part_pat_as_vars @ [mk_cunknown] in
-  mk_block [
+  mk_block @: [
     mk_iter
       (mk_lambda
         (wrap_args ["stmt_id", t_stmt_id; "count", t_int]) @:
@@ -649,11 +656,13 @@ mk_code_sink
             stmt_cntrs @:
             mk_tuple @: part_pat_as_vars@[mk_var "count"]
       ) @:
-        mk_var "stmt_id_cnt_list";
+        mk_var "stmt_id_cnt_list"] @
+    
+    (if enable_gc then
     (* ack send for GC *)
-    mk_send (mk_ctarget "ack_send")  G.me_var @:
-      mk_tuple [mk_var "sender_ip"; mk_var "vid"]
-  ]
+    [mk_send (mk_ctarget "ack_send")  G.me_var @:
+      mk_tuple [mk_var "sender_ip"; mk_var "vid"]]
+    else [])
 
 
 (* Trigger_send_push_stmt_map
@@ -1181,7 +1190,7 @@ let gen_dist ?(force_correctives=false) p partmap ast =
     declare_foreign_functions p @
     filter_corrective_list ::  (* global func *)
     (mk_flow @:
-      GC.triggers p ast @
+      (if enable_gc then GC.triggers p ast else []) @
       regular_trigs @
       send_corrective_trigs p @
       demux_trigs ast)::    (* per-map basis *)
