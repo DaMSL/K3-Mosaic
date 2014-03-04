@@ -695,6 +695,8 @@ let filter_incompatible prog =
     match d with 
     | Foreign(id, (TFunction _)) when StringSet.mem id drop_globals -> None
     | Foreign(id, TFunction _)   when str_take 4 id = "hash"        -> None
+    | Role _        -> None
+    | DefaultRole _ -> None
     | _ -> Some dec
   ) prog
   
