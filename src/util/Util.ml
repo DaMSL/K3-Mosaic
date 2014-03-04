@@ -21,6 +21,8 @@ let (@:) f x = f x;;
 
 let compose f g = fun x -> f (g x)
 
+let flip f a b = f b a
+
 let id_fn a = a
 
 let (|-) = compose

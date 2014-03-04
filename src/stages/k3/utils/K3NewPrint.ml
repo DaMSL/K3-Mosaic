@@ -127,8 +127,8 @@ let rec lazy_base_type ?(brace=true) ?(mut=false) ?(empty=false) c ~in_col t =
     <| lazy_value_type c ~in_col:true vt <| lps " @ " <| lps
         begin match ct with
           | TSet  -> "{ Set }"
-          | TList -> "{ List }"
-          | TBag  -> "{ Bag }"
+          | TList -> "{ Seq }"
+          | TBag  -> "{ Collection }"
         end
       )
 
@@ -181,8 +181,8 @@ let lazy_collection_vt c vt eval = match KH.unwrap_vtype vt with
       lps @: 
         begin match ct with
         | TSet  -> " @ { Set }"
-        | TBag  -> " @ { Bag }"
-        | TList -> " @ { List }"
+        | TBag  -> " @ { Collection }"
+        | TList -> " @ { Seq }"
         end
   | _ -> error () (* type error *)
 
@@ -684,20 +684,17 @@ let string_of_expr ?uuid_highlight e =
   in
   wrap_f @: fun () -> force_list @: lazy_expr config e
 
+module StringSet = Set.Make(struct type t=string let compare=String.compare end)
+
+let drop_globals = List.fold_left (flip StringSet.add) StringSet.empty
+  ["divf"; "mod"; "float_of_int"; "int_of_float"; "get_max_int"]
+
 let filter_incompatible prog =
   filter_map (fun ((d,a) as dec) ->
     (* we don't want the monomorphic hash functions *)
     match d with 
-    | Foreign("int_of_float", (TFunction _ as f))
-        -> Some(Foreign("int_of_real", f), a)
-    | Foreign("float_of_int", (TFunction _ as f))
-        -> Some(Foreign("real_of_int", f), a)
-    | Foreign("divf", (TFunction _)) 
-        -> None
-    | Foreign("mod", (TFunction _)) 
-        -> None
-    | Foreign(id, TFunction _) when str_take 4 id = "hash"
-        -> None
+    | Foreign(id, (TFunction _)) when StringSet.mem id drop_globals -> None
+    | Foreign(id, TFunction _)   when str_take 4 id = "hash"        -> None
     | _ -> Some dec
   ) prog
   
@@ -749,7 +746,8 @@ let add_sources p filename =
         trig_info
   in
   let flow = mk_flow [code] in
-  let source_s = "source s1 : "^string_of_value_type (wrap_ttuple maybe_arg_types)^
+  let full_arg_types = t_string::maybe_arg_types in
+  let source_s = "source s1 : "^string_of_value_type (wrap_ttuple full_arg_types)^
     " = file \""^filename^"\" k3\n" in
   let feed_s   = "feed s1 |> switch_main\n" in
   string_of_program [flow] ^ source_s ^ feed_s
@@ -757,7 +755,9 @@ let add_sources p filename =
 (* print a new k3 program with added sources and feeds *)
 let string_of_dist_program ?(file="default.txt") p =
   let p' = filter_incompatible p in
-  "include \"Core/Builtins.k3\"" ^
+  "include \"Core/Builtins.k3\"\n\
+   include \"Annotation/Set.k3\"\n\
+   include \"Annotation/Seq.k3\"\n\n" ^
   string_of_program p' ^
   add_sources p' file
 

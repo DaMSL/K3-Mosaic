@@ -13,6 +13,7 @@ type ('a, 'b) either_t = Left of 'a | Right of 'b
 val (@:) : ('a -> 'b) -> 'a -> 'b
 
 val compose :('b -> 'c) -> ('a -> 'b) -> ('a -> 'c)
+val flip : ('a -> 'b -> 'c) -> 'b -> 'a -> 'c
 val id_fn : 'a -> 'a
 val (|-) : ('b -> 'c) -> ('a -> 'b) -> ('a -> 'c)
 
