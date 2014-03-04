@@ -15,3 +15,4 @@ true: use_str
 true: use_unix
 true: use_dynlink
 true: bolt
+true: bin_annot
