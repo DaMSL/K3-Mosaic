@@ -138,10 +138,15 @@ def test_file(file, dbt_path, k3_path)
     create_str = if $order_file=="" then "--trace #{trace_file}" else "--order #{$order_file}" end
 
     # create a k3 distributed file
-	puts "#{k3_path} -p -i m3 -l k3disttest temp.m3 #{create_str} #{part_str} #{$force_cmd} > temp.k3dist"
-	`#{k3_path} -p -i m3 -l k3disttest temp.m3 #{create_str} #{part_str} #{$force_cmd} > temp.k3dist 2> #{err_file}`
+	puts "#{k3_path} -p --lambda -i m3 -l k3disttest temp.m3 #{create_str} #{part_str} #{$force_cmd} > temp.k3dist"
+	`#{k3_path} -p --lambda -i m3 -l k3disttest temp.m3 #{create_str} #{part_str} #{$force_cmd} > temp.k3dist 2> #{err_file}`
 	check_error(curdir, err_file)
     check_type_error(curdir, 'temp.k3dist')
+    
+    # create a new k3 distributed file (for convenience)
+	puts "#{k3_path} -p -i k3 -l k3new temp.k3dist > temp.k3new"
+	`#{k3_path} -p -i k3 -l k3new temp.k3dist > temp.k3new 2> #{err_file}`
+	check_error(curdir, err_file)
 
     # create node list
     node_list = Array.new($num_nodes) do |i|
