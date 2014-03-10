@@ -14,6 +14,7 @@ open K3Streams
 open K3Consumption
 open K3Testing
 open ReifiedK3
+open DriverHelpers
 
 (* Note these override module names *)
 module Imperative = Imperative.AST(CPP.CPPTarget)
@@ -217,24 +218,6 @@ let default_cmd_line_params () = {
 
 let cmd_line_params = default_cmd_line_params ()
 
-(* Error handlers *)
-let handle_lexer_error () =
-  print_endline ("Lexer failure");
-  exit 1
-
-let handle_local_parse_error lexbuf =
-  let curpos = lexbuf.Lexing.lex_curr_p in
-  let curr = curpos.Lexing.pos_cnum in
-  let bol = curpos.Lexing.pos_bol in
-  let diff = curr-bol in
-  let line = curpos.Lexing.pos_lnum in
-  let tok = Lexing.lexeme lexbuf in
-  Printf.printf "\nError on line %d , character %d , token %s\n"
-      line diff tok; raise Parsing.Parse_error
-
-let handle_parse_error ?(msg = "") lexbuf =
-  print_endline ("Lexer reached: '"^(Lexing.lexeme lexbuf)^"'; "^msg);
-  exit 1
 
 let handle_type_error p (uuid, name, msg) =
   let s = K3TypeError.string_of_error msg in
@@ -268,31 +251,6 @@ let parse_program_from_string parsefn lexfn str =
     | Parsing.Parse_error -> handle_local_parse_error lexbuf
     | Failure(msg) -> handle_parse_error ~msg:msg lexbuf
     | Pervasives.Exit -> raise Parsing.Parse_error
-
-let parse_program parsefn lexfn file =
-  let in_chan = try open_in file
-    with Sys_error _ -> error ("failed to open file: "^file) in
-  let lexbuf =
-    try Lexing.from_channel in_chan
-    with Failure _ -> handle_lexer_error ()
-  in
-  let prog =
-    try parsefn lexfn lexbuf
-    with
-    | Parsing.Parse_error -> handle_local_parse_error lexbuf
-    | Failure(msg) -> handle_parse_error ~msg:msg lexbuf
-    | Pervasives.Exit -> raise Parsing.Parse_error
-  in
-    close_in in_chan;
-    prog
-
-let parse_k3_file = parse_program K3Parser.program K3Lexer.tokenize
-
-let parse_m3_file =
-    parse_program Calculusparser.mapProgram Calculuslexer.tokenize
-
-let parse_k3_prog s = K3Parser.program K3Lexer.tokenize @: Lexing.from_string s
-let parse_k3_expr s = K3Parser.expr K3Lexer.tokenize @: Lexing.from_string s
 
 let parse_test_file params = match !(params.test_mode) with
   | ExpressionTest -> parse_program K3Parser.expression_test K3Lexer.tokenize

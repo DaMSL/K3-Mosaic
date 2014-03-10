@@ -56,21 +56,18 @@ let list_of_k3_partition_map k3maps =
   List.map parse_map maps_with_data
 
 (* convert a list defining a partition map with map names to an equivalent k3
- * structure except using the map_ids *)
+ * structure except using the map names *)
 let k3_partition_map_of_list p l =
   (* handle the case of no input partition map ie. a default partition map *)
   (* we just create an empty partition map for all possible map ids *)
   if null l then
-    let max_map_id =
-      list_max @: get_map_list p in
-    let r = create_range 0 (max_map_id + 1) in
-    let k3_pmap = list_map (fun id -> 
-      mk_tuple [mk_cint id; mk_empty pmap_types]
-    ) r in
+    let map_names = for_all_maps p (map_name_of p) in
+    let k3_pmap = list_map (fun s -> 
+      mk_tuple [mk_cstring s; mk_empty pmap_types]
+    ) map_names in
     U.k3_container_of_list full_pmap_types k3_pmap
   else
     let one_map_to_k3 (m, ds) = 
-      let id = mk_cint @: map_id_of_name p m in
       let check_index i = let ts = map_types_for p @: map_id_of_name p m
         in try ignore(List.nth ts i); true with Failure _ -> false in
       let k3tuplize (a, b) = mk_tuple [mk_cint a; mk_cint b] in
@@ -78,7 +75,7 @@ let k3_partition_map_of_list p l =
         (fun (i, d) -> if check_index i then k3tuplize (i,d) 
           else invalid_arg @: "index "^string_of_int i^" out of range in map "^m)
         ds
-      in mk_tuple [id; U.k3_container_of_list pmap_types newdata] in
+      in mk_tuple [mk_cstring m; U.k3_container_of_list pmap_types newdata] in
     let new_l = List.map one_map_to_k3 l in
     U.k3_container_of_list full_pmap_types new_l
 
@@ -112,10 +109,27 @@ let route_foreign_funcs p =
   mk_foreign_fn "mod" (wrap_ttuple [t_int; t_int]) t_int ::
   (hash_funcs_foreign p)
 
+(* partition map as input by the user (with map names) *)
+let pmap_input = "pmap_input"
+let global_pmap_input p partmap =
+  mk_global_val_init pmap_input 
+  (wrap_tlist @: wrap_ttuple [t_string; pmap_types]) @:
+  k3_partition_map_of_list p partmap
+
+(* convert human-readable map name to map id *)
 let pmap_data = "pmap_data"
-let global_pmaps p partmap =
-  mk_global_val_init (pmap_data) full_pmap_types @:
-    k3_partition_map_of_list p partmap
+let global_pmaps =
+  mk_global_val_init pmap_data full_pmap_types @:
+    mk_map
+      (mk_lambda (wrap_args ["map_name", t_string; "map_types", pmap_types]) @:
+        mk_tuple 
+          [project_from_tuple [t_int; t_string; t_int] ~total:3 ~choice:1 @:
+            mk_peek @: 
+              mk_slice (mk_var K3Dist.map_ids) @:
+                mk_tuple [mk_cunknown; mk_var "map_name"; mk_cunknown]
+          ; mk_var "map_types"]
+      ) @:
+      mk_var "pmap_input"
 
 (* calculate the size of the bucket of each dimensioned we're partitioned on
  * This is order-dependent in pmap *)
@@ -314,7 +328,8 @@ let gen_route_fn p map_id =
 (* create all code needed for route functions, including foreign funcs*)
 let gen_route_code p partmap =
   K3Ring.gen_ring_code @
-  global_pmaps p partmap ::
+  global_pmap_input p partmap ::
+  global_pmaps ::
   route_foreign_funcs p @ 
   calc_dim_bounds_code ::
   List.map (gen_route_fn p) (get_map_list p)

@@ -244,6 +244,11 @@ let unwrap_option f =
   lps "case " <| f <| lps " of" <| lsp () <|
   lps "{ Some x -> x }" <| lsp () <| lps "{ None -> error () }"
 
+(* Variable names to translate *)
+module StringMap = Map.Make(struct type t = string let compare = String.compare end)
+let var_translate = List.fold_left (fun acc (x,y) -> StringMap.add x y acc) StringMap.empty @:
+  ["int_of_float", "int_of_real"; "float_of_int", "real_of_int"; "peers", "my_peers"]
+
 (* create a deep bind for lambdas, triggers, and let statements
  * -depth allows to skip one depth level of binding
  * -top_expr allows us to use an expression at the top bind
@@ -398,11 +403,8 @@ and lazy_expr ?(many_args=false) ?in_record c expr =
     | _ -> id_fn e
   in let out = match U.tag_of_expr expr with
   | Const con -> lazy_const c con
-  (* translate float to real *)
-  | Var id when id = "int_of_float" -> lps "int_of_real"
-  | Var id when id = "float_of_int" -> lps "real_of_int"
-  | Var id -> lps id
-  | Tuple -> let es = U.decompose_tuple expr in
+  | Var id    -> begin try lps @: StringMap.find id var_translate with Not_found -> lps id end
+  | Tuple     -> let es = U.decompose_tuple expr in
     let id_es = add_record_ids es in
     let inner = lazy_concat ~sep:lcomma (fun (id, e) ->
         lps (id^":") <| lazy_expr c e) id_es

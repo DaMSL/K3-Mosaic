@@ -8,6 +8,8 @@ module P = ProgInfo
 (* initial vid to put in initialization statements *)
 let init_vid = "__init_vid__"
 
+let map_ids = "__map_ids__"
+
 (* global declaration of default vid to put into every map *)
 let init_vid_k3 =
   mk_global_val_init init_vid t_vid @:

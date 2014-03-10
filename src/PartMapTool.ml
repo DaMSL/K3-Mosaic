@@ -4,23 +4,39 @@ open Util
 let error s = prerr_endline s; exit 1
 
 type parameters = {
-  mutable trace_file : string;
+  mutable dist_file : string;
   mutable num_nodes : int;
   mutable factor : int;
   mutable debug : bool;
 }
 
 let cmd_line_params = {
-  trace_file = "";
+  dist_file = "";
   num_nodes = 0;
   factor = 16; (* factor to multiply by to get finer partitions *)
   debug = false;
 }
 
-(* get all the maps in the trace file *)
+(* get all the maps from the distributed k3 file *)
 let maps_and_dims file =
-  let _, maps, _ = FromTrace.parse_trace file in
-  FromTrace.map_names_and_dims maps
+  let open K3Util in let open K3.AST in
+  let prog = DriverHelpers.parse_k3_file file in
+  match fst @: global_of_program K3Dist.map_ids prog with
+  | Global(_, _, Some e) ->
+      let l = list_of_k3_container e in
+      let l = List.map (fun t -> begin match decompose_tuple t with
+        | [x;y;z] -> x,y,z
+        | _       -> failwith @: "wrong format for "^K3Dist.map_ids
+        end
+      ) l
+      in
+      (* take only the names and dimensions *)
+      List.map (fun (_,x,y) -> begin match tag_of_expr x, tag_of_expr y with
+        | Const(CString(s)), Const(CInt(i)) -> s, i
+        | _ -> failwith @: "2: wrong format for "^K3Dist.map_ids
+        end
+      ) l
+  | _ -> failwith @: K3Dist.map_ids^" not found"
 
 let print_maps_dims maps_dims =
   List.iter (fun (mapname, i) -> Printf.printf "%s:%d\n" mapname i) maps_dims
@@ -76,16 +92,16 @@ let param_specs = Arg.align
    "-f", Arg.Int  (fun f -> cmd_line_params.factor <- f), "Set multiplicative factor"]
 
 
-let usage_msg = "partmap_tool [opts] trace_file"^
+let usage_msg = "partmap_tool [opts] k3_dist_file"^
      "\n---- Options ----"
 
 let parse_cmd_line () =
-  Arg.parse param_specs (fun f -> cmd_line_params.trace_file <- f) usage_msg
+  Arg.parse param_specs (fun f -> cmd_line_params.dist_file <- f) usage_msg
 
 (* --- Start --- *)
 let main () =
   parse_cmd_line ();
-  if cmd_line_params.trace_file = "" then
+  if cmd_line_params.dist_file = "" then
     (Arg.usage param_specs usage_msg;
      error "\nNo input files specified")
   else if cmd_line_params.num_nodes <= 0 then
@@ -93,7 +109,7 @@ let main () =
      error "\nMust have number for nodes") 
   else
     let p = cmd_line_params in
-    let maps_dims = maps_and_dims p.trace_file in
+    let maps_dims = maps_and_dims p.dist_file in
     (* reduce by one for value *)
     let maps_dims = list_map (fun (a, i) -> a, i-1) maps_dims in
     (* print_maps_dims maps_dims; (* debug *) *)

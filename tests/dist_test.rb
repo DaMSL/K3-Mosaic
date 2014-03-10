@@ -129,21 +129,28 @@ def test_file(file, dbt_path, k3_path)
 	puts "#{k3_path} -p -i m3 -l k3 temp.m3 > temp.k3"
 	`#{k3_path} -p -i m3 -l k3 temp.m3 > temp.k3 2> #{err_file}`
 
-    # create a parition map
-    puts "#{$part_path} temp.trace -n #{$num_nodes} > temp.part"
-    output = `#{$part_path} temp.trace -n #{$num_nodes} > temp.part`
-    part_str = if $num_nodes > 1 then "-m temp.part" else "" end
-
     # string for k3 distributed file creation: either use a trace file or an order file
     create_str = if $order_file=="" then "--trace #{trace_file}" else "--order #{$order_file}" end
 
-    # create a k3 distributed file
-	puts "#{k3_path} -p --lambda -i m3 -l k3disttest temp.m3 #{create_str} #{part_str} #{$force_cmd} > temp.k3dist"
-	`#{k3_path} -p --lambda -i m3 -l k3disttest temp.m3 #{create_str} #{part_str} #{$force_cmd} > temp.k3dist 2> #{err_file}`
+    # create a k3 distributed file (without a partition map)
+	puts "#{k3_path} -p --lambda -i m3 -l k3disttest temp.m3 #{create_str} #{$force_cmd} > temp.k3dist"
+	`#{k3_path} -p --lambda -i m3 -l k3disttest temp.m3 #{create_str} #{$force_cmd} > temp.k3dist 2> #{err_file}`
 	check_error(curdir, err_file)
     check_type_error(curdir, 'temp.k3dist')
     
-    # create a new k3 distributed file (for convenience)
+    if $num_nodes > 1 then
+      # create a partition map
+      puts "#{$part_path} temp.k3dist -n #{$num_nodes} > temp.part"
+      output = `#{$part_path} temp.k3dist -n #{$num_nodes} > temp.part`
+      
+      # create another k3 distributed file (with partition map)
+      puts "#{k3_path} -p --lambda -i m3 -l k3disttest temp.m3 #{create_str} -m temp.part #{$force_cmd} > temp.k3dist"
+      `#{k3_path} -p --lambda -i m3 -l k3disttest temp.m3 #{create_str} -m temp.part #{$force_cmd} > temp.k3dist 2> #{err_file}`
+      check_error(curdir, err_file)
+      check_type_error(curdir, 'temp.k3dist')
+    end
+    
+    # create a k3new distributed file (for convenience)
 	puts "#{k3_path} -p -i k3 -l k3new temp.k3dist > temp.k3new"
 	`#{k3_path} -p -i k3 -l k3new temp.k3dist > temp.k3new 2> #{err_file}`
 	check_error(curdir, err_file)

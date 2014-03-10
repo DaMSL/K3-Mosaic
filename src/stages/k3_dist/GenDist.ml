@@ -65,12 +65,14 @@ let do_corrective_name_of_t p trig_nm stmt_id map_id =
   trig_nm^"_do_corrective_s"^string_of_int stmt_id^"_m_"^map_name_of p map_id
 
 let declare_global_vars p ast =
-  (* mapping of map_id to number *)
+  (* mapping of map_id to map_name and dimensionality *)
   let map_list =
-    let t_map_list = wrap_tset @: wrap_ttuple [t_string ;t_int] in
-    let content = P.for_all_maps p 
-      (fun i -> mk_tuple [mk_cstring @: map_name_of p i; mk_cint i]) in
-    mk_global_val_init "__map_ids__" t_map_list @:
+    let t_map_list = wrap_tset @: wrap_ttuple [t_int; t_string ;t_int] in
+    let content = P.for_all_maps p (fun i ->
+      mk_tuple [mk_cint i; 
+                mk_cstring @: map_name_of p i;
+                mk_cint @: List.length @: map_types_for p i]) in
+    mk_global_val_init K3Dist.map_ids t_map_list @:
       U.k3_container_of_list t_map_list content 
   in
   (* vid_counter to generate vids.
