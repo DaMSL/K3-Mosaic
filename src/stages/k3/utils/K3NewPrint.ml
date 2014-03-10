@@ -686,15 +686,16 @@ let string_of_expr ?uuid_highlight e =
 
 module StringSet = Set.Make(struct type t=string let compare=String.compare end)
 
-let drop_globals = List.fold_left (flip StringSet.add) StringSet.empty
-  ["divf"; "mod"; "float_of_int"; "int_of_float"; "get_max_int"; "parse_sql_date"]
-
 let filter_incompatible prog =
+  let drop_globals = List.fold_left (flip StringSet.add) StringSet.empty
+    ["divf"; "mod"; "float_of_int"; "int_of_float"; "get_max_int"; "parse_sql_date"; "peers"; "pmap_data" ]
+  in
   filter_map (fun ((d,a) as dec) ->
     (* we don't want the monomorphic hash functions *)
     match d with 
-    | Foreign(id, (TFunction _)) when StringSet.mem id drop_globals -> None
-    | Foreign(id, TFunction _)   when str_take 4 id = "hash"        -> None
+    | Foreign(id, _)   when StringSet.mem id drop_globals -> None
+    | Foreign(id, _)   when str_take 4 id = "hash"        -> None
+    | Global(id, _, _) when StringSet.mem id drop_globals -> None
     | Role _        -> None
     | DefaultRole _ -> None
     | _ -> Some dec
@@ -759,8 +760,7 @@ let string_of_dist_program ?(file="default.txt") p =
   let p' = filter_incompatible p in
   "include \"Core/Builtins.k3\"\n\
    include \"Annotation/Set.k3\"\n\
-   include \"Annotation/Seq.k3\"\n\n\
-   declare peers : collection {address:address, role:string, name:string} @ Set\n\n" ^
+   include \"Annotation/Seq.k3\"\n\n" ^
   string_of_program p' ^
   add_sources p' file
 
