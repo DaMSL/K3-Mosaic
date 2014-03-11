@@ -114,9 +114,9 @@ let calc_part_maps num_nodes maps_dims =
 
 let param_specs = Arg.align
   ["-n", Arg.Int  (fun i -> cmd_line_params.num_nodes <- i), "INTEGER Set number of nodes";
-   "-d", Arg.Bool (fun b -> cmd_line_params.debug <- b), "FLAG Set debug mode";
+   "-d", Arg.Unit (fun _ -> cmd_line_params.debug <- true), "FLAG Set debug mode";
    "-f", Arg.Int  (fun f -> cmd_line_params.factor <- f), "INTEGER Set multiplicative factor";
-   "--k3new", Arg.Bool (fun b -> cmd_line_params.k3new <- b), "FLAG K3New output"]
+   "--k3new", Arg.Unit (fun _ -> cmd_line_params.k3new <- true), "FLAG K3New output"]
 
 
 let usage_msg = "partmap_tool [opts] k3_dist_file"^
