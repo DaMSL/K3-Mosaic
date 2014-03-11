@@ -8,6 +8,7 @@ type parameters = {
   mutable num_nodes : int;
   mutable factor : int;
   mutable debug : bool;
+  mutable k3new : bool; (* k3new output *)
 }
 
 let cmd_line_params = {
@@ -15,6 +16,7 @@ let cmd_line_params = {
   num_nodes = 0;
   factor = 16; (* factor to multiply by to get finer partitions *)
   debug = false;
+  k3new = false;
 }
 
 (* get all the maps from the distributed k3 file *)
@@ -41,6 +43,30 @@ let maps_and_dims file =
 let print_maps_dims maps_dims =
   List.iter (fun (mapname, i) -> Printf.printf "%s:%d\n" mapname i) maps_dims
 
+open K3Helpers
+
+let inner_type = wrap_tlist @: wrap_ttuple [t_int; t_int]
+let pmap_types = wrap_tlist @: wrap_ttuple [t_string; inner_type]
+
+(* convert map_sizes structure to k3 expressions *)
+let k3_of_maps_sizes maps_sizes =
+  K3Util.k3_container_of_list pmap_types @:
+    List.map (fun (m, ss) ->
+      mk_tuple [mk_cstring m; 
+        K3Util.k3_container_of_list inner_type @:
+          List.map (fun (dim, size) ->
+            mk_tuple [mk_cint dim; mk_cint size]) ss]
+  ) maps_sizes
+
+(* add a declaration to the k3 ast *)
+let k3_decl_of_k3_expr k3exp =
+  K3Typechecker.deduce_program_type @:
+    [mk_global_val_init "pmap_input" pmap_types k3exp]
+
+let k3new_string_of_maps_sizes maps_sizes =
+  let k = k3_decl_of_k3_expr @: k3_of_maps_sizes maps_sizes in
+  K3NewPrint.string_of_program k
+  
 let string_of_maps_sizes maps_sizes =
   let module B = Buffer in
   let buf = B.create 100 in
@@ -87,9 +113,10 @@ let calc_part_maps num_nodes maps_dims =
   ) maps_dims
 
 let param_specs = Arg.align
-  ["-n", Arg.Int  (fun i -> cmd_line_params.num_nodes <- i), "Set number of nodes";
-   "-d", Arg.Bool (fun b -> cmd_line_params.debug <- b), "Set debug mode";
-   "-f", Arg.Int  (fun f -> cmd_line_params.factor <- f), "Set multiplicative factor"]
+  ["-n", Arg.Int  (fun i -> cmd_line_params.num_nodes <- i), "INTEGER Set number of nodes";
+   "-d", Arg.Bool (fun b -> cmd_line_params.debug <- b), "FLAG Set debug mode";
+   "-f", Arg.Int  (fun f -> cmd_line_params.factor <- f), "INTEGER Set multiplicative factor";
+   "--k3new", Arg.Bool (fun b -> cmd_line_params.k3new <- b), "FLAG K3New output"]
 
 
 let usage_msg = "partmap_tool [opts] k3_dist_file"^
@@ -116,7 +143,10 @@ let main () =
     (* increase the amount of targets we need to hit, for finer grain
      * partitioning *)
     let maps_sizes = calc_part_maps (p.num_nodes * p.factor) maps_dims in
-    let s = string_of_maps_sizes maps_sizes in
+    let s = if p.k3new then
+      k3new_string_of_maps_sizes maps_sizes
+    else
+      string_of_maps_sizes maps_sizes in
     print_endline s
 
 let _ = if not !Sys.interactive then Printexc.print main ()
