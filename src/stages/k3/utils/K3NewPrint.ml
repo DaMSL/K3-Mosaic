@@ -551,7 +551,7 @@ and lazy_expr ?(many_args=false) ?in_record c expr =
     apply_method c ~name:"sort" ~col ~args:[lambda] ~in_record:true
   | Peek -> let col = U.decompose_peek expr in
     (* peeks return options need to be pattern matched *)
-    unwrap_option (lazy_paren(apply_method c ~name:"peek" ~col ~args:[]))
+    unwrap_option (lazy_paren(apply_method c ~name:"peek" ~col ~args:[KH.mk_cunit]))
   | Slice -> let col, pat = U.decompose_slice expr in
     let es = begin match U.tag_of_expr pat with
       | Tuple -> U.decompose_tuple pat
@@ -690,7 +690,7 @@ module StringSet = Set.Make(struct type t=string let compare=String.compare end)
 
 let filter_incompatible prog =
   let drop_globals = List.fold_left (flip StringSet.add) StringSet.empty
-    ["divf"; "mod"; "float_of_int"; "int_of_float"; "get_max_int"; "parse_sql_date"; "peers"; "pmap_data" ]
+    ["divf"; "mod"; "float_of_int"; "int_of_float"; "get_max_int"; "parse_sql_date"; "peers"; "pmap_input" ]
   in
   filter_map (fun ((d,a) as dec) ->
     (* we don't want the monomorphic hash functions *)
@@ -743,7 +743,7 @@ let add_sources p filename =
     mk_code_sink "switch_main" new_args' [] @:
       List.fold_left (fun acc_code (trig_id, trig_t) ->
         mk_if (mk_eq (mk_var "trigger_id") @: mk_cstring trig_id)
-          (mk_send (mk_ctarget @: "insert_"^trig_id) K3Global.me_var @:
+          (mk_send (mk_ctarget @: trig_id) K3Global.me_var @:
             mk_unwrap_maybe [trig_id^"_args", trig_t] @:
               mk_var @: trig_id^"_args_unwrap")
           acc_code)
@@ -760,9 +760,6 @@ let add_sources p filename =
 (* print a new k3 program with added sources and feeds *)
 let string_of_dist_program ?(file="default.txt") p =
   let p' = filter_incompatible p in
-  "include \"Core/Builtins.k3\"\n\
-   include \"Annotation/Set.k3\"\n\
-   include \"Annotation/Seq.k3\"\n\n" ^
   string_of_program p' ^
   add_sources p' file
 
