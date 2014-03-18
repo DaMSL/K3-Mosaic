@@ -460,7 +460,8 @@ and lazy_expr ?(many_args=false) ?in_record c expr =
       | _ -> apply_method c ~name:"combine" ~col:e1 ~args:[e2]
     end
   | Range ct -> let st, str, num = U.decompose_range expr in
-    function_application c (KH.mk_var "range") [st;str;num]
+    (* newk3 range only has the last number *)
+    function_application c (KH.mk_var "range") [KH.mk_add num @: KH.mk_cint 1]
   | Add -> let (e1, e2) = U.decompose_add expr in
     begin match U.tag_of_expr e2, expr_type_is_bool e1 with
       | Neg, false -> let e3 = U.decompose_neg e2 in
@@ -585,7 +586,7 @@ and lazy_expr ?(many_args=false) ?in_record c expr =
       | _              -> true
       end) id_e
     in
-    if null filter_e then [] (* no slice needed *)
+    if null filter_e then lazy_expr c col (* no slice needed *)
     else 
       let mk_bool e = U.attach_type (TValue KH.t_bool) e in
       (* add bool type so we get & instead of * *)
