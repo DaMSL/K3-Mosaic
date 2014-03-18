@@ -7,6 +7,8 @@ val id_of_expr : expr_t -> int
 val tag_of_expr : expr_t -> expr_tag_t
 val meta_of_expr : expr_t -> annotation_t
 
+val details_of_expr : expr_t -> int * expr_tag_t * annotation_t * expr_t list
+
 (* Variable id extraction *)
 val vars_of_arg : arg_t -> id_t list
 val typed_vars_of_arg : arg_t -> (id_t * value_type_t) list
@@ -149,3 +151,6 @@ val k3_container_of_list : value_type_t -> expr_t list -> expr_t
 
 (* convert arg to value type *)
 val value_type_of_arg: arg_t -> value_type_t
+
+(* Attach a type annotation to an expr *)
+val attach_type : type_t -> expr_t -> expr_t

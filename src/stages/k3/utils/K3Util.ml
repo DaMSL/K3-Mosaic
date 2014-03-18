@@ -11,6 +11,11 @@ let id_of_expr e = fst (fst_data e)
 let tag_of_expr e = snd (fst_data e)
 let meta_of_expr e = snd_data e
 
+(* Get all components of an expression node *)
+let details_of_expr (e:expr_t) =
+  let ((id, tag), anns), children = decompose_tree e in
+  id, tag, anns, children
+
 (* Variable id extraction *)
 let rec vars_of_arg arg =
     match arg with
@@ -457,4 +462,10 @@ let rec value_type_of_arg = function
   | AVar(i, t) -> t
   | AMaybe(a') -> canonical (TMaybe(value_type_of_arg a'))
   | ATuple(args) -> canonical (TTuple(List.map value_type_of_arg args))
+
+(* Attach a type annotation to an expr *)
+let attach_type t e =
+  let uuid, tag, anns, children = details_of_expr e in
+  mk_tree (((uuid, tag), (Type t)::anns), children)
+
 

@@ -244,6 +244,22 @@ let unwrap_option f =
   lps "case " <| f <| lps " of" <| lsp () <|
   lps "{ Some x -> x }" <| lsp () <| lps "{ None -> error () }"
 
+(* A slice can have other statements inside it. We need to get the inner tuple
+ * out, and to make a function that will construct everything inside the lambda
+ * once given an inner expression
+ *)
+let rec extract_slice e =
+  match U.tag_of_expr e with
+  | Tuple -> U.decompose_tuple e, id_fn
+    (* let statement *)
+  | Apply -> let lambda, arg = U.decompose_apply e in
+    let t, f = extract_slice lambda in
+    t, (fun fn -> KH.mk_apply fn arg) |- f
+  | Lambda _ -> let argt, body = U.decompose_lambda e in
+    let t, f = extract_slice body in
+    t, KH.mk_lambda argt |- f
+  | _ -> failwith "extract_slice unhandled expression"
+
 (* Variable names to translate *)
 module StringMap = Map.Make(struct type t = string let compare = String.compare end)
 let var_translate = List.fold_left (fun acc (x,y) -> StringMap.add x y acc) StringMap.empty @:
@@ -553,9 +569,11 @@ and lazy_expr ?(many_args=false) ?in_record c expr =
     (* peeks return options need to be pattern matched *)
     unwrap_option (lazy_paren(apply_method c ~name:"peek" ~col ~args:[KH.mk_cunit]))
   | Slice -> let col, pat = U.decompose_slice expr in
-    let es = begin match U.tag_of_expr pat with
-      | Tuple -> U.decompose_tuple pat
-      | _     -> [pat]
+    let es, lam_fn = begin match U.tag_of_expr pat with
+      | Tuple -> U.decompose_tuple pat, id_fn
+      (* if we have a let, we need a proper tuple extraction *)
+      | Apply -> extract_slice pat
+      | _     -> [pat], id_fn
     end in
     let ts = List.map (unwrap_t_val |- T.type_of_expr) es in
     let id_e = add_record_ids es in
@@ -569,8 +587,11 @@ and lazy_expr ?(many_args=false) ?in_record c expr =
     in
     if null filter_e then [] (* no slice needed *)
     else 
-      let do_eq (id, v) = KH.mk_eq (KH.mk_var id) v in
+      let mk_bool e = U.attach_type (TValue KH.t_bool) e in
+      (* add bool type so we get & instead of * *)
+      let do_eq (id, v) = mk_bool @: KH.mk_eq (KH.mk_var id) v in
       let lambda = KH.mk_lambda (KH.wrap_args id_t) @:
+        lam_fn @: (* apply an inner lambda constructor *)
         List.fold_right (fun x acc ->
           KH.mk_and acc (do_eq x)
         ) 
