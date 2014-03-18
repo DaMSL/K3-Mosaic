@@ -102,7 +102,7 @@ let rec lazy_base_type ?(brace=true) ?(mut=false) ?(empty=false) c ~in_col t =
   let wrap_mut f = if mut && not empty then lps "mut " <| f else f in
   let wrap_single f = 
     let wrap = if brace then lazy_brace else id_fn in
-    if in_col then wrap(lps "elem:" <| f) else f
+    if in_col then wrap(lps "i:" <| f) else f
   in
   let wrap = wrap_single |- wrap_mut in
   match t with
@@ -240,9 +240,12 @@ let peel_arg = function
   | _               -> failwith "Can't break args"
 
 (* code to unwrap an option type *)
-let unwrap_option f =
+(* project: add a projection out of a record *)
+let unwrap_option ?(project=false) f =
+  let p = if project then ".i" else "" in
   lps "case " <| f <| lps " of" <| lsp () <|
-  lps "{ Some x -> x }" <| lsp () <| lps "{ None -> error () }"
+  lps (Printf.sprintf "{ Some x -> x%s }" p) <| lsp () <| 
+  lps "{ None -> error () }"
 
 (* A slice can have other statements inside it. We need to get the inner tuple
  * out, and to make a function that will construct everything inside the lambda
@@ -281,7 +284,7 @@ let rec deep_bind ?(depth=0) ?top_expr ?(in_record=false) c arg_n =
     match a with
       (* unwrap a record *)
     | NVar(i, id, _) when record -> 
-        lps "bind " <| lps (id_of_num i) <| lps " as {elem:" <| lps id
+        lps "bind " <| lps (id_of_num i) <| lps " as {i:" <| lps id
         <| lps "} in " <| lcut ()
     | NIgnored 
     | NVar _      -> [] (* do nothing *)
@@ -461,7 +464,7 @@ and lazy_expr ?(many_args=false) ?in_record c expr =
     end
   | Range ct -> let st, str, num = U.decompose_range expr in
     (* newk3 range only has the last number *)
-    function_application c (KH.mk_var "range") [KH.mk_add num @: KH.mk_cint 1]
+    function_application c (KH.mk_var "range") [num]
   | Add -> let (e1, e2) = U.decompose_add expr in
     begin match U.tag_of_expr e2, expr_type_is_bool e1 with
       | Neg, false -> let e3 = U.decompose_neg e2 in
@@ -567,8 +570,21 @@ and lazy_expr ?(many_args=false) ?in_record c expr =
   | Sort -> let col, lambda = U.decompose_sort expr in
     apply_method c ~name:"sort" ~col ~args:[lambda] ~in_record:true
   | Peek -> let col = U.decompose_peek expr in
+    (* get the type of the collection. If it's a singleton type, we need to add
+     * projection *)
+    let col_t = unwrap_t_val @: T.type_of_expr col in
+    let project = (* not a tuple, so need projection out of the record *)
+      begin match snd @: KH.unwrap_vtype col_t with
+      | TCollection(_, vt) -> begin match snd @: KH.unwrap_vtype vt with
+        | TTuple _ -> false
+        | _        -> true
+        end
+      | _ -> failwith "expected a collection type"
+      end
+    in
     (* peeks return options need to be pattern matched *)
-    unwrap_option (lazy_paren(apply_method c ~name:"peek" ~col ~args:[KH.mk_cunit]))
+    unwrap_option ~project @:
+      lazy_paren @: apply_method c ~name:"peek" ~col ~args:[KH.mk_cunit]
   | Slice -> let col, pat = U.decompose_slice expr in
     let es, lam_fn = begin match U.tag_of_expr pat with
       | Tuple -> U.decompose_tuple pat, id_fn
