@@ -63,8 +63,12 @@ let record_id_of_num ?(prefix="r") i = Printf.sprintf "_%s%d_" prefix i
 
 (* Add record ids to a list *)
 let add_record_ids ?prefix l =
-  let i_l = insert_index_fst 1 l in
-  List.map (fun (i, x) -> record_id_of_num ?prefix i, x) i_l
+  match l with
+  | []  -> failwith "No list to add record ids to"
+  | [x] -> ["i", x]
+  | _   ->
+    let i_l = insert_index_fst 1 l in
+    List.map (fun (i, x) -> record_id_of_num ?prefix i, x) i_l
 
 (* Add record ids to a string *)
 let add_record_ids_str ?prefix ?(sep=":") l =
@@ -313,27 +317,27 @@ in loop 0 arg_n
 
 (* Apply a method -- the lambda part
 * -in_record: the lambda should take in a record *)
-and apply_method_nocol ?many_args ?in_record ?prefix_fn c ~name ~args =
+and apply_method_nocol ?lambda_many_args ?in_record ?out_record ?prefix_fn c ~name ~args =
 let wrap_if_big e = match U.tag_of_expr e with
     | Var _ | Const _ | Tuple | Empty _ -> id_fn
     | _ -> lazy_paren
 in
-(* attach a full list of many_args to the argument (lambdas and otherwise) *)
-let args = match many_args with
+(* attach a full list of lambda_many_args to the argument (lambdas and otherwise) *)
+let args = match lambda_many_args with
   | None    -> List.map (fun x -> x, false) args
   | Some rs -> list_zip args rs
 in
 lps ("."^name) <| lsp () <| 
   lazy_concat (fun (e, m_args) -> 
-    wrap_if_big e @: lazy_expr ~many_args:m_args ?in_record ?prefix_fn c e) args
+    wrap_if_big e @: lazy_expr ~many_args:m_args ?in_record ?out_record ?prefix_fn c e) args
 
 (* Apply a method to a collection *)
-and apply_method ?many_args ?in_record ?prefix_fn c ~name ~col ~args =
+and apply_method ?lambda_many_args ?in_record ?out_record ?prefix_fn c ~name ~col ~args =
 (* we only need parens if we're not applying to a variable *)
 let f = match U.tag_of_expr col with
 | Var _ -> id_fn
 | _     -> lazy_paren
-  in f @: lazy_expr c col <| apply_method_nocol c ~name ~args ?many_args ?in_record ?prefix_fn
+  in f @: lazy_expr c col <| apply_method_nocol c ~name ~args ?lambda_many_args ?in_record ?out_record ?prefix_fn
 
 (* apply a function to arguments *)
 and function_application c fun_e l_e = 
@@ -361,7 +365,7 @@ and handle_lambda c ~many_args ~in_record ~prefix_fn arg_n e =
     write arg <| lind () <| 
       wrap_hov 0 (deep_bind ~depth ~in_record c arg_n <| lazy_expr c (prefix_fn e))
   in
-  (* handle argument by argument if many_args *)
+  (* handle argument by argument if lambda_many_args *)
   if many_args then
     match peel_arg arg_n with
     | arg, Some tup_arg -> 
@@ -373,7 +377,9 @@ and handle_lambda c ~many_args ~in_record ~prefix_fn arg_n e =
 (* printing expressions *)
 (* argnums: lambda only   -- number of expected arguments *)
 (* prefix_fn: lambda only -- modify the lambda with a prefix *)
-and lazy_expr ?(many_args=false) ?(in_record=false) ?(prefix_fn=id_fn) c expr =
+(* in_record: whether the input (to a lambda) needs to be a record *)
+(* out_record: whether the output of an expression should be a record *)
+and lazy_expr ?(many_args=false) ?(in_record=false) ?(out_record=false) ?(prefix_fn=id_fn) c expr =
   let expr_pair ?(sep=lps "," <| lsp ()) ?(wl=id_fn) ?(wr=id_fn) (e1, e2) =
     wl(lazy_expr c e1) <| sep <| wr(lazy_expr c e2) in
   let is_apply_let e = let e1, e2 = U.decompose_apply e in
@@ -430,7 +436,9 @@ and lazy_expr ?(many_args=false) ?(in_record=false) ?(prefix_fn=id_fn) c expr =
     Aggregate | GroupByAggregate -> wrap_hv 2 e
     | IfThenElse -> wrap_hv 0 e
     | _ -> id_fn e
-  in let out = match U.tag_of_expr expr with
+  in 
+  (* begin analysis of tags *)
+  let analyze () = match U.tag_of_expr expr with
   | Const con -> lazy_const c con
   | Var id    -> begin try lps @: StringMap.find id var_translate with Not_found -> lps id end
   | Tuple     -> let es = U.decompose_tuple expr in
@@ -572,13 +580,13 @@ and lazy_expr ?(many_args=false) ?(in_record=false) ?(prefix_fn=id_fn) c expr =
     | _   -> failwith "Unhandled Flatten without map"
     end
   | Aggregate -> let lambda, acc, col = U.decompose_aggregate expr in
-    apply_method c ~name:"fold" ~col ~args:[lambda; acc] ~many_args:[true;false]
+    apply_method c ~name:"fold" ~col ~args:[lambda; acc] ~lambda_many_args:[true;false]
       ~in_record:true
   | GroupByAggregate -> let lam1, lam2, zero, col = U.decompose_gbagg expr in
-    apply_method c ~name:"groupby" ~col ~args:[lam1; lam2; zero] ~many_args:[false;true;false]
+    apply_method c ~name:"groupby" ~col ~args:[lam1; lam2; zero] ~lambda_many_args:[false;true;false]
       ~in_record:true
   | Sort -> let col, lambda = U.decompose_sort expr in
-    apply_method c ~name:"sort" ~col ~args:[lambda] ~in_record:true ~many_args:[true]
+    apply_method c ~name:"sort" ~col ~args:[lambda] ~in_record:true ~lambda_many_args:[true]
       ~prefix_fn:(fun e -> KH.mk_if e (KH.mk_cint (-1)) @: KH.mk_cint 1)
   | Peek -> let col = U.decompose_peek expr in
     (* get the type of the collection. If it's a singleton type, we need to add
@@ -587,13 +595,14 @@ and lazy_expr ?(many_args=false) ?(in_record=false) ?(prefix_fn=id_fn) c expr =
     let project = (* not a tuple, so need projection out of the record *)
       begin match snd @: KH.unwrap_vtype col_t with
       | TCollection(_, vt) -> begin match snd @: KH.unwrap_vtype vt with
-        | TTuple _ -> false
-        | _        -> true
+        | TTuple _          -> false
+        | _ when out_record -> false (* we need a record output *)
+        | _                 -> true
         end
       | _ -> failwith "expected a collection type"
       end
     in
-    (* peeks return options need to be pattern matched *)
+    (* peeks return options and need to be pattern matched *)
     unwrap_option ~project @:
       lazy_paren @: apply_method c ~name:"peek" ~col ~args:[KH.mk_cunit]
   | Slice -> let col, pat = U.decompose_slice expr in
@@ -628,11 +637,11 @@ and lazy_expr ?(many_args=false) ?(in_record=false) ?(prefix_fn=id_fn) c expr =
       in
       apply_method c ~name:"filter" ~col ~in_record:true ~args:[lambda]
   | Insert -> let col, x = U.decompose_insert expr in
-    apply_method c ~name:"insert" ~col ~args:[x]
+    apply_method c ~name:"insert" ~col ~args:[x] ~out_record:true
   | Delete -> let col, x = U.decompose_delete expr in
-    apply_method c ~name:"delete" ~col ~args:[x]
+    apply_method c ~name:"delete" ~col ~args:[x] ~out_record:true
   | Update -> let col, oldx, newx = U.decompose_update expr in
-    apply_method c ~name:"update" ~col ~args:[oldx;newx]
+    apply_method c ~name:"update" ~col ~args:[oldx;newx] ~out_record:true
   | Assign -> let (l, r) = U.decompose_assign expr in
     lazy_expr c l <| lps " <- " <| lazy_expr c r
   | Deref -> let e = U.decompose_deref expr in
@@ -641,10 +650,18 @@ and lazy_expr ?(many_args=false) ?(in_record=false) ?(prefix_fn=id_fn) c expr =
     wrap_indent @: lazy_paren (expr_pair (target, addr)) <| lps "<- " <| 
       lps_list CutHint (lazy_expr c) args 
   in
-  (* if we asked to highlight a uuid, do so now *)
-  match c.uuid with 
-  | Some i when i = U.id_of_expr expr -> lps "%" <| wrap out
-  | _ -> wrap out
+  (* check if we need to wrap our output in a tuple (record) *)
+  if out_record then match U.tag_of_expr expr with
+  (* these expression tags should be wrapped if a record is needed *)
+  | Const _ | Var _ | Just | Nothing _ | Add | Mult | Neg | Eq | Lt | Neq | Leq 
+  | Apply | IfThenElse ->
+      (* check the type of the expression *)
+      begin match snd @: KH.unwrap_vtype @: unwrap_t_val @: T.type_of_expr expr with
+      | TTuple _ -> wrap @: analyze ()
+      | _        -> lazy_expr ~many_args ~in_record ~out_record:false ~prefix_fn c (KH.mk_tuple ~force:true [expr])
+      end
+  | _ -> wrap @: analyze ()
+  else wrap @: analyze ()
 
 let lazy_trigger c id arg vars expr = 
   let is_block expr = match U.tag_of_expr expr with Block -> true | _ -> false in

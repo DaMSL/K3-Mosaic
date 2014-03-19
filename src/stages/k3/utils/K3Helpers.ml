@@ -161,8 +161,8 @@ let mk_caddress a = mk_const @: CAddress a
 
 let mk_var id = mk_stree (Var(id)) []
 
-let mk_tuple items = match items with
-  | [i]   -> i
+let mk_tuple ?(force=false) items = match items with
+  | [i] when not force -> i
   | i::is -> mk_stree Tuple items
   | _     -> invalid_arg "Nothing to use mk_tuple on"
 
