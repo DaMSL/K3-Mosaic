@@ -194,11 +194,14 @@ type arg_num
     | NTuple    of int * arg_num list
 
 (* get an id for the argument at the shallow level for trigger or lambda *)
-let shallow_bind_id ?(in_record=false) = function
+let shallow_bind_id ~in_record = function
   | NIgnored        -> "_"
-  (* if we want a record, we'll need *)
-  | NVar (i, id, _) when in_record
-                    -> id_of_num i
+  (* A case of a single variable in an in_record (map etc) *)
+  | NVar (i, id, vt) when in_record ->
+      begin match snd @: KH.unwrap_vtype vt with
+      | TTuple _ -> id (* we have a single variable representing a tuple -- don't bind *)
+      | _        -> id_of_num i
+      end
   | NVar (_, id, _) -> id
   | NMaybe (i,_)     
   | NTuple (i,_)    -> id_of_num i
@@ -272,7 +275,7 @@ let var_translate = List.fold_left (fun acc (x,y) -> StringMap.add x y acc) Stri
  * -depth allows to skip one depth level of binding
  * -top_expr allows us to use an expression at the top bind
  * -top_rec indicates that the first level of binding should be to a record *)
-let rec deep_bind ?(depth=0) ?top_expr ?(in_record=false) c arg_n =
+let rec deep_bind ?(depth=0) ?top_expr ~in_record c arg_n =
   let rec loop d a = 
     let record = in_record && d=depth in (* do we want a record now *)
     (* we allow binding an expression at the top level *)
@@ -282,12 +285,17 @@ let rec deep_bind ?(depth=0) ?top_expr ?(in_record=false) c arg_n =
       | _              -> lps @: id_of_num i
     in
     match a with
-      (* unwrap a record *)
-    | NVar(i, id, _) when record -> 
-        lps "bind " <| lps (id_of_num i) <| lps " as {i:" <| lps id
-        <| lps "} in " <| lcut ()
+      (* pretend to unwrap a record *)
+    | NVar(i, id, vt) when record -> 
+        begin match snd @: KH.unwrap_vtype vt with
+        | TTuple _ -> [] (* don't bind if we have an id representing a record *)
+        | _        ->
+          (* force bind a variable that comes in as a pretend record *)
+          lps "bind " <| lps (id_of_num i) <| lps " as {i:" <| lps id
+          <| lps "} in " <| lcut ()
+        end
     | NIgnored 
-    | NVar _      -> [] (* do nothing *)
+    | NVar _      -> [] (* no binding needed *)
     | NTuple(i, args) -> 
         (* only produce binds if we're deeper than specified depth *)
         (if d < depth then [] else
@@ -305,7 +313,7 @@ in loop 0 arg_n
 
 (* Apply a method -- the lambda part
 * -in_record: the lambda should take in a record *)
-and apply_method_nocol ?many_args ?in_record c ~name ~args =
+and apply_method_nocol ?many_args ?in_record ?prefix_fn c ~name ~args =
 let wrap_if_big e = match U.tag_of_expr e with
     | Var _ | Const _ | Tuple | Empty _ -> id_fn
     | _ -> lazy_paren
@@ -317,15 +325,15 @@ let args = match many_args with
 in
 lps ("."^name) <| lsp () <| 
   lazy_concat (fun (e, m_args) -> 
-    wrap_if_big e @: lazy_expr ~many_args:m_args ?in_record c e) args
+    wrap_if_big e @: lazy_expr ~many_args:m_args ?in_record ?prefix_fn c e) args
 
 (* Apply a method to a collection *)
-and apply_method ?many_args ?in_record c ~name ~col ~args =
+and apply_method ?many_args ?in_record ?prefix_fn c ~name ~col ~args =
 (* we only need parens if we're not applying to a variable *)
 let f = match U.tag_of_expr col with
 | Var _ -> id_fn
 | _     -> lazy_paren
-  in f @: lazy_expr c col <| apply_method_nocol c ~name ~args ?many_args ?in_record
+  in f @: lazy_expr c col <| apply_method_nocol c ~name ~args ?many_args ?in_record ?prefix_fn
 
 (* apply a function to arguments *)
 and function_application c fun_e l_e = 
@@ -343,27 +351,29 @@ and function_application c fun_e l_e =
   wrap_indent (lazy_expr c fun_e <| lsp () <| lazy_concat print_fn l_e)
 
 (* handle the printing of a lambda *)
-and handle_lambda c ~many_args ?in_record arg_n e =
+and handle_lambda c ~many_args ~in_record ~prefix_fn arg_n e =
   let depth = if many_args then 1 else 0 in
   let write arg =
-    lps "\\" <| lps @: shallow_bind_id ?in_record arg <| lps " ->" <| lsp ()
+    lps "\\" <| lps @: shallow_bind_id ~in_record arg <| lps " ->" <| lsp ()
   in
   let exec arg =
     (* for curried arguments, we deep bind at a deeper level *)
     write arg <| lind () <| 
-      wrap_hov 0 (deep_bind ~depth ?in_record c arg_n <| lazy_expr c e)
+      wrap_hov 0 (deep_bind ~depth ~in_record c arg_n <| lazy_expr c (prefix_fn e))
   in
+  (* handle argument by argument if many_args *)
   if many_args then
     match peel_arg arg_n with
     | arg, Some tup_arg -> 
-        lazy_paren (write arg <| wrap_hov 0 (deep_bind ~depth:0 ?in_record c arg) <|
-          handle_lambda c ~many_args ?in_record tup_arg e)
+        lazy_paren (write arg <| wrap_hov 0 (deep_bind ~depth:0 ~in_record c arg) <|
+          handle_lambda c ~many_args ~in_record ~prefix_fn tup_arg e)
     | arg, None         -> lazy_paren @: exec arg
   else exec arg_n
 
 (* printing expressions *)
-(* argnums is for lambda only: number of expected arguments *)
-and lazy_expr ?(many_args=false) ?in_record c expr =
+(* argnums: lambda only   -- number of expected arguments *)
+(* prefix_fn: lambda only -- modify the lambda with a prefix *)
+and lazy_expr ?(many_args=false) ?(in_record=false) ?(prefix_fn=id_fn) c expr =
   let expr_pair ?(sep=lps "," <| lsp ()) ?(wl=id_fn) ?(wr=id_fn) (e1, e2) =
     wl(lazy_expr c e1) <| sep <| wr(lazy_expr c e2) in
   let is_apply_let e = let e1, e2 = U.decompose_apply e in
@@ -509,7 +519,7 @@ and lazy_expr ?(many_args=false) ?in_record c expr =
   | Lambda arg -> 
       let _, e = U.decompose_lambda expr in
       let arg_n = arg_num_of_arg arg in (* convert to arg_num *)
-      handle_lambda c ~many_args arg_n e
+      handle_lambda c ~many_args ~in_record ~prefix_fn arg_n e
   | Apply -> let e1, e2 = U.decompose_apply expr in
     let do_pair_paren sym =
       begin match U.decompose_tuple e2 with
@@ -529,7 +539,7 @@ and lazy_expr ?(many_args=false) ?in_record c expr =
         (* If we have an arg tuple, it's a bind. A maybe is similar *)
         | ATuple _ 
         | AMaybe _ -> let arg_n = arg_num_of_arg arg in
-                      deep_bind c arg_n ~top_expr:e2 <| lazy_expr c body 
+                      deep_bind c arg_n ~top_expr:e2 ~in_record:false <| lazy_expr c body 
         (* Otherwise it's a let *)
         | _        -> 
             wrap_hov 2 (lps "let " <| lazy_arg c false arg <|
@@ -568,7 +578,8 @@ and lazy_expr ?(many_args=false) ?in_record c expr =
     apply_method c ~name:"groupby" ~col ~args:[lam1; lam2; zero] ~many_args:[false;true;false]
       ~in_record:true
   | Sort -> let col, lambda = U.decompose_sort expr in
-    apply_method c ~name:"sort" ~col ~args:[lambda] ~in_record:true
+    apply_method c ~name:"sort" ~col ~args:[lambda] ~in_record:true ~many_args:[true]
+      ~prefix_fn:(fun e -> KH.mk_if e (KH.mk_cint (-1)) @: KH.mk_cint 1)
   | Peek -> let col = U.decompose_peek expr in
     (* get the type of the collection. If it's a singleton type, we need to add
      * projection *)
