@@ -795,6 +795,9 @@ let add_sources p filename =
   let insert_trigs    = List.filter (is_insert |- U.id_of_code) @:
     U.triggers_of_program p in
   match insert_trigs with [] -> "" | _ -> (* check for no insert trigs *)
+  (* Get lexicographical order so we know where the arguments belong *)
+  let insert_trigs    = List.sort (fun x y ->
+    String.compare (U.id_of_code x) (U.id_of_code y)) insert_trigs in
   let insert_ids      = List.map U.id_of_code insert_trigs in
   (* arg for each trigger *)
   let insert_args     = List.map U.args_of_code insert_trigs in
@@ -814,7 +817,7 @@ let add_sources p filename =
               mk_var @: trig_id^"_args_unwrap")
           acc_code)
         mk_cunit
-        trig_info
+        (List.rev trig_info)
   in
   let flow = mk_flow [code] in
   let full_arg_types = t_string::maybe_arg_types in

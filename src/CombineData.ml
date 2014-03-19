@@ -97,13 +97,18 @@ let _ =
     | Some fname -> (* we have a map file so use it to map *)
       let ss = read_file_lines fname in
       let fmap = parse_map_file ss in
-      List.map (fun (fname,d) -> List.assoc fname fmap, d) files_names
+      let fns =
+        List.map (fun (fname,d) -> List.assoc fname fmap, d) files_names in
+      (* Lexicographical ordering for consistency *)
+      List.sort (fun (n,_) (n',_) -> String.compare n n') fns
     | None -> (* just use filenames as trigger names *)
       let mod_fname n = 
         let n = Filename.chop_extension n in
         Printf.sprintf "%s%c%s" "insert_" (Char.uppercase n.[0]) (str_drop 1 n)
       in
-      List.map (fun (fname, d) -> mod_fname fname, d) files_names
+      let fns = List.map (fun (fname, d) -> mod_fname fname, d) files_names in
+      (* Lexicographical ordering for consistency *)
+      List.sort (fun (n,_) (n',_) -> String.compare n n') fns
   in
   let data = combine_data files_names in
   List.iter print_endline data
