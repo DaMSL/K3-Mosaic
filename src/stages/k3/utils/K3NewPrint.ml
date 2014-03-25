@@ -203,7 +203,8 @@ let shallow_bind_id ~in_record = function
   (* A case of a single variable in an in_record (map etc) *)
   | NVar (i, id, vt) when in_record ->
       begin match snd @: KH.unwrap_vtype vt with
-      | TTuple _ -> id (* we have a single variable representing a tuple -- don't bind *)
+      | TTuple _ (* we have a single variable representing a tuple -- don't bind *)
+      | TCollection _ -> id (* single variable representing collection *)
       | _        -> id_of_num i
       end
   | NVar (_, id, _) -> id
@@ -297,7 +298,8 @@ let rec deep_bind ?(depth=0) ?top_expr ~in_record c arg_n =
       (* pretend to unwrap a record *)
     | NVar(i, id, vt) when record -> 
         begin match snd @: KH.unwrap_vtype vt with
-        | TTuple _ -> [] (* don't bind if we have an id representing a record *)
+        | TTuple _      (* don't bind if we have an id representing a record *)
+        | TCollection _ -> [] (* or a collection *)
         | _        ->
           (* force bind a variable that comes in as a pretend record *)
           lps "bind " <| lps (id_of_num i) <| lps " as {i:" <| lps id
@@ -491,7 +493,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(NonLambda,Out)) c expr =
       | Singleton vt, Empty _ ->
         let t = unwrap_t_val @: T.type_of_expr expr in
         lazy_collection_vt c t @: assemble_list c expr
-      | _ -> apply_method c ~name:"combine" ~col:e1 ~args:[e2] ~arg_info:[NonLambda, OutRec]
+      | _ -> apply_method c ~name:"combine" ~col:e1 ~args:[e2] ~arg_info:[NonLambda, Out]
     end
   | Range ct -> let st, str, num = U.decompose_range expr in
     (* newk3 range only has the last number *)
