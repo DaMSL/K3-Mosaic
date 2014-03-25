@@ -64,9 +64,10 @@ let record_id_of_num ?(prefix="r") i = Printf.sprintf "_%s%d_" prefix i
 (* Add record ids to a list *)
 let add_record_ids ?prefix l =
   match l with
-  | []  -> failwith "No list to add record ids to"
-  | [x] -> ["i", x]
-  | _   ->
+  | []    -> failwith "No list to add record ids to"
+  | [x]   -> ["i", x]
+  | [x;y] -> ["key", x; "value", y] (* to make gbaggs easy *)
+  | _     ->
     let i_l = insert_index_fst 1 l in
     List.map (fun (i, x) -> record_id_of_num ?prefix i, x) i_l
 
@@ -203,8 +204,8 @@ let shallow_bind_id ~in_record = function
   (* A case of a single variable in an in_record (map etc) *)
   | NVar (i, id, vt) when in_record ->
       begin match snd @: KH.unwrap_vtype vt with
-      | TTuple _ (* we have a single variable representing a tuple -- don't bind *)
-      | TCollection _ -> id (* single variable representing collection *)
+      | TTuple _ -> id (* we have a single variable representing a tuple -- don't bind *)
+      (*| TCollection _ -> id [> single variable representing collection <]*)
       | _        -> id_of_num i
       end
   | NVar (_, id, _) -> id
@@ -298,8 +299,8 @@ let rec deep_bind ?(depth=0) ?top_expr ~in_record c arg_n =
       (* pretend to unwrap a record *)
     | NVar(i, id, vt) when record -> 
         begin match snd @: KH.unwrap_vtype vt with
-        | TTuple _      (* don't bind if we have an id representing a record *)
-        | TCollection _ -> [] (* or a collection *)
+        | TTuple _  -> []    (* don't bind if we have an id representing a record *)
+        (*| TCollection _ -> [] [> or a collection <]*)
         | _        ->
           (* force bind a variable that comes in as a pretend record *)
           lps "bind " <| lps (id_of_num i) <| lps " as {i:" <| lps id
@@ -605,19 +606,13 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(NonLambda,Out)) c expr =
   | Aggregate -> let lambda, acc, col = U.decompose_aggregate expr in
     (* find out if our accumulator is a collection type *)
     let acc_t = snd @: KH.unwrap_vtype @: unwrap_t_val @: T.type_of_expr acc in
-    let acc_in, acc_out = match acc_t with
-      | TCollection _ -> InRec, OutRec
-      | _             -> In, Out
-    in
+    let acc_in, acc_out = In, Out in
     apply_method c ~name:"fold" ~col ~args:[lambda; acc]
       ~arg_info:[Lambda [acc_in; InRec], acc_out; NonLambda, acc_out]
   | GroupByAggregate -> let lam1, lam2, acc, col = U.decompose_gbagg expr in
     (* find out if our accumulator is a collection type *)
     let acc_t = snd @: KH.unwrap_vtype @: unwrap_t_val @: T.type_of_expr acc in
-    let acc_in, acc_out = match acc_t with
-      | TCollection _ -> InRec, OutRec
-      | _             -> In, Out
-    in
+    let acc_in, acc_out = In, Out in
     apply_method c ~name:"groupBy" ~col ~args:[lam1; lam2; acc] 
       ~arg_info:[Lambda [InRec], Out; Lambda [acc_in; InRec], acc_out; NonLambda, acc_out]
   | Sort -> let col, lambda = U.decompose_sort expr in
