@@ -361,10 +361,10 @@ and function_application c fun_e l_e =
 (* handle the printing of a lambda *)
 and handle_lambda c ~expr_info ~prefix_fn arg e =
   let arg_n = arg_num_of_arg arg in (* convert to arg_num *)
-  let arg_l = match expr_info with
+  let arg_l, out_rec = match expr_info with
     | Lambda [], _  -> failwith @: Printf.sprintf "Missing lambda arg list at %d" (U.id_of_expr e)
-    | NonLambda, _  -> [In] (* deal with cases where we don't prepare it *)
-    | Lambda l,  _  -> l
+    | NonLambda, o  -> [In], o  (* deal with cases where we don't prepare it *)
+    | Lambda l,  o  -> l,    o
   in
   let many_args = List.length arg_l > 1 in
   let depth = if many_args then 1 else 0 in
@@ -374,7 +374,9 @@ and handle_lambda c ~expr_info ~prefix_fn arg e =
   let exec arg in_record =
     (* for curried arguments, we deep bind at a deeper level *)
     write arg in_record <| lind () <| 
-      wrap_hov 0 (deep_bind ~depth:0 ~in_record c arg <| lazy_expr c (prefix_fn e))
+      wrap_hov 0 (deep_bind ~depth:0 ~in_record c arg <| 
+      (* for the final expr, we may need to wrap the output in a record *)
+      lazy_expr c (prefix_fn e) ~expr_info:(NonLambda, out_rec))
   in
   (* loop over the lambda arguments *)
   let rec loop a = function
