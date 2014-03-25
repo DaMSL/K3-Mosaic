@@ -586,10 +586,18 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(NonLambda,Out)) c expr =
       apply_method_nocol c ~name:"map" ~args:[lm] ~arg_info:[Lambda [InRec], OutRec]
   (* flatten(map(...)) becomes ext(...) *)
   | Flatten -> let e = U.decompose_flatten expr in
+    (* ext needs an empty type right now to know what to do if the result is empty       flatten should always return a bag type since we can't guarantee uniqueness*)
+    let t = unwrap_t_val @: T.type_of_expr expr in
+    let t = match snd @: KH.unwrap_vtype t with
+     | TCollection(_, x) -> KH.canonical @: TCollection(TBag, x)
+     | _                 -> failwith "not a collection"
+    in
+    let empty_c = KH.mk_empty t in
     begin match U.tag_of_expr e with
     | Map -> 
         let lambda, col = U.decompose_map e in
-        apply_method c ~name:"ext" ~col ~args:[lambda] ~arg_info:[Lambda [InRec], OutRec]
+        apply_method c ~name:"ext" ~col ~args:[lambda; empty_c] 
+          ~arg_info:[Lambda [InRec], OutRec; NonLambda, OutRec ]
     | _   -> failwith "Unhandled Flatten without map"
     end
   | Aggregate -> let lambda, acc, col = U.decompose_aggregate expr in
