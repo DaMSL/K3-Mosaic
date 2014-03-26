@@ -399,7 +399,7 @@ let delta_action p ast stmt action =
         * deltas including vids *)
         let lambda2' = add_vid_to_lambda_args lambda2 in
         (* define existing_out_tier because it's used in the code *)
-        mk_let "existing_out_tier" (wrap_tbag @: wrap_ttuple lmap_types) 
+        mk_let "existing_out_tier" (wrap_tset @: wrap_ttuple lmap_types) 
           (mk_var lmap_name) @:
         mk_iter lambda2' @: mk_var varname
 
