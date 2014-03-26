@@ -25,7 +25,8 @@ let inner_cart_prod_type = wrap_tlist @: wrap_ttuple t_two_ints
 let free_cart_prod_type = wrap_tlist @: wrap_tlist @: wrap_ttuple t_two_ints
 let free_bucket_type = wrap_tlist @: wrap_ttuple t_two_ints
 let sorted_ip_inner_type = [t_addr; t_unit]
-let sorted_ip_list_type = wrap_tlist @: wrap_ttuple sorted_ip_inner_type
+let sorted_ip_list_type = wrap_tbag @: wrap_ttuple sorted_ip_inner_type
+let output_type = wrap_tbag t_addr
 
 (* map_parameter starts at 0 *)
 (*             map_name * (map_parameter * modulo)  *)
@@ -81,14 +82,8 @@ let k3_partition_map_of_list p l =
 
 exception NoHashFunction of K3.AST.base_type_t
 
-let unwrap_base_type t = match t with
-  | TIsolated(TMutable(x,_))    -> x
-  | TContained(TMutable(x,_))   -> x
-  | TIsolated(TImmutable(x,_))  -> x
-  | TContained(TImmutable(x,_)) -> x
-
 let hash_func_for typ =
-  let rec inner t = match unwrap_base_type t with
+  let rec inner t = match snd @: unwrap_vtype t with
     | TInt     -> "int"
     | TFloat   -> "float"
     | TBool    -> "bool"
@@ -264,30 +259,28 @@ let gen_route_fn p map_id =
     mk_let "free_cart_prod" free_cart_prod_type
       (mk_agg
         (mk_assoc_lambda (wrap_args ["prev_cart_prod", free_cart_prod_type])
-          (wrap_args ["i", t_int; "domain", wrap_tlist t_int])
-          (mk_flatten @: mk_map
+          (wrap_args ["i", t_int; "domain", wrap_tlist t_int]) @:
+          mk_flatten @: mk_map
             (* for every domain element in the domain *)
             (mk_lambda (wrap_args ["domain_element", t_int]) @:
               mk_if (mk_is_empty (mk_var "prev_cart_prod") free_cart_prod_type)
                 (mk_singleton free_cart_prod_type @:
                   mk_singleton inner_cart_prod_type @:
                     mk_tuple [mk_var "i"; mk_var "domain_element"]
-                )
-                (mk_map
+                ) @:
+                mk_map
                   (* add current element to every previous sublist *)
                   (mk_lambda (AVar("rest_tup", inner_cart_prod_type)) @:
                     mk_combine (mk_var "rest_tup") @:
                       mk_singleton inner_cart_prod_type @:
                         mk_tuple [mk_var "i"; mk_var "domain_element"]
-                  )
-                  (mk_var "prev_cart_prod")
-                )
-            )
-            (mk_var "domain")
-          )
+                  ) @:
+                  mk_var "prev_cart_prod"
+            ) @:
+            mk_var "domain"
         )
-        (mk_empty free_cart_prod_type)
-        (mk_var "free_domains")
+        (mk_empty free_cart_prod_type) @:
+        mk_var "free_domains"
       ) @:
     (* We now add in the value of the bound variables as a constant
      * and calculate the result for every possibility *)
@@ -297,7 +290,7 @@ let gen_route_fn p map_id =
         (mk_lambda (wrap_args ["_", t_unit; "_", t_unit]) @:
           mk_cunit
         )
-        (mk_empty @: wrap_tlist t_addr) @:
+        (mk_empty @: output_type) @:
         mk_map
           (mk_lambda (wrap_args ["free_bucket", free_bucket_type]) @:
             mk_apply (mk_var "get_ring_node") @: mk_tuple
@@ -318,7 +311,7 @@ let gen_route_fn p map_id =
       ) @:
     mk_if
       (mk_is_empty (mk_var "sorted_ip_list") @: sorted_ip_list_type)
-      (mk_singleton (wrap_tlist t_addr) @:
+      (mk_singleton output_type @:
         mk_apply (mk_var "get_ring_node") @: mk_tuple (* empty ip list *)
           [mk_var "bound_bucket"; mk_var "max_val"]
       ) @:

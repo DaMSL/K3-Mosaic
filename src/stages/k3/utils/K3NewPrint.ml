@@ -602,7 +602,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(NonLambda,Out)) c expr =
     | Map -> 
         let lambda, col = U.decompose_map e in
         apply_method c ~name:"ext" ~col ~args:[lambda; empty_c] 
-          ~arg_info:[Lambda [InRec], OutRec; NonLambda, OutRec ]
+          ~arg_info:[Lambda [InRec], Out; NonLambda, OutRec ]
     | _   -> failwith "Unhandled Flatten without map"
     end
   | Aggregate -> let lambda, acc, col = U.decompose_aggregate expr in
