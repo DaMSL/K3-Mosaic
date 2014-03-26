@@ -77,6 +77,11 @@ let add_record_ids_str ?prefix ?(sep=":") l =
 
 let error () = lps "???"
 
+let s_of_col_type = function
+  | TSet  -> "Set"
+  | TBag  -> "Collection"
+  | TList -> "Seq"
+
 let lazy_control_anno c = function
   | Effect ids -> lps "effect " <| lazy_paren @: 
       lps_list NoCut lps ids
@@ -321,27 +326,27 @@ let rec deep_bind ?(depth=0) ?top_expr ~in_record c arg_n =
       if d < depth then [] else
         lps "let " <| lps (get_id_of_arg arg) <| lps " = " <| unwrap_option (bind_text i) <|
         lps " in" <| lsp () <| loop (d+1) arg
-in loop 0 arg_n
+  in loop 0 arg_n
 
 (* Apply a method -- the lambda part
 * -in_record: the lambda should take in a record *)
 and apply_method_nocol ?prefix_fn c ~name ~args ~arg_info =
-let wrap_if_big e = match U.tag_of_expr e with
-    | Var _ | Const _ | Tuple | Empty _ -> id_fn
-    | _ -> lazy_paren
-in
-let args' = list_zip args arg_info in
-lps ("."^name) <| lsp () <| 
-  lazy_concat (fun (e, info) -> 
-    wrap_if_big e @: lazy_expr ~expr_info:info ?prefix_fn c e) args'
+  let wrap_if_big e = match U.tag_of_expr e with
+      | Var _ | Const _ | Tuple | Empty _ -> id_fn
+      | _ -> lazy_paren
+  in
+  let args' = list_zip args arg_info in
+  lps ("."^name) <| lsp () <| 
+    lazy_concat (fun (e, info) -> 
+      wrap_if_big e @: lazy_expr ~expr_info:info ?prefix_fn c e) args'
 
 (* Apply a method to a collection *)
 and apply_method ?prefix_fn c ~name ~col ~args ~arg_info =
-(* we only need parens if we're not applying to a variable *)
-let f = match U.tag_of_expr col with
-| Var _ -> id_fn
-| _     -> lazy_paren
-  in f @: lazy_expr c col <| apply_method_nocol c ~name ~args ~arg_info ?prefix_fn
+  (* we only need parens if we're not applying to a variable *)
+  let f = match U.tag_of_expr col with
+  | Var _ -> id_fn
+  | _     -> lazy_paren
+    in f @: lazy_expr c col <| apply_method_nocol c ~name ~args ~arg_info ?prefix_fn
 
 (* apply a function to arguments *)
 and function_application c fun_e l_e = 
@@ -367,7 +372,6 @@ and handle_lambda c ~expr_info ~prefix_fn arg e =
     | Lambda l,  o  -> l,    o
   in
   let many_args = List.length arg_l > 1 in
-  let depth = if many_args then 1 else 0 in
   let write arg in_record =
     lps "\\" <| lps @: shallow_bind_id ~in_record arg <| lps " ->" <| lsp ()
   in
@@ -546,6 +550,8 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(NonLambda,Out)) c expr =
       let _, e = U.decompose_lambda expr in
       handle_lambda c ~prefix_fn ~expr_info arg e
   | Apply -> let e1, e2 = U.decompose_apply expr in
+    let t_e2 =
+      begin try unwrap_t_val @: T.type_of_expr e2 with _ -> KH.t_unit end in 
     let do_pair_paren sym =
       begin match U.decompose_tuple e2 with
         | [x; y] -> arith_paren_pair sym (x, y)
@@ -560,17 +566,30 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(NonLambda,Out)) c expr =
       | Var _ -> function_application c e1 [e2]
       (* let expression *)
       | Lambda arg -> let _, body = U.decompose_lambda e1 in
+        let print_let inject =
+          wrap_hov 2 (lps "let " <| lazy_arg c false arg <|
+            lps " =" <| lsp () <| lazy_expr c e2 <| lsp () ) <| lps "in" <| lsp ()
+            <| inject <| lazy_expr c body
+        in
         begin match arg with
         (* If we have an arg tuple, it's a bind. A maybe is similar *)
         | ATuple _ 
-        | AMaybe _ -> let arg_n = arg_num_of_arg arg in
-                      deep_bind c arg_n ~top_expr:e2 ~in_record:false <|
-                        lazy_expr c body 
+        | AMaybe _   -> let arg_n = arg_num_of_arg arg in
+                        deep_bind c arg_n ~top_expr:e2 ~in_record:false <|
+                          lazy_expr c body 
         (* Otherwise it's a let *)
-        | _        -> 
-            wrap_hov 2 (lps "let " <| lazy_arg c false arg <|
-              lps " =" <| lsp () <| lazy_expr c e2 <| lsp () ) <| lps "in"
-              <| lsp () <| lazy_expr c body
+        | AVar(id, vt) -> 
+            (* check if we're casting the type of collection *)
+            begin match snd @: KH.unwrap_vtype t_e2, snd @: KH.unwrap_vtype vt with
+            | TCollection(ct,_), TCollection(ct',_) when ct <> ct' ->
+                let inject = lps
+                  (Printf.sprintf "let %s = coerce %s %s" id id (s_of_col_type ct'))
+                  <| lsp () <| lps "in" <| lsp ()
+                in
+                print_let inject
+            | _ -> print_let []
+            end
+        | AIgnored -> print_let []
         end
       | _ -> error () (* type error *)
     end
@@ -607,16 +626,12 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(NonLambda,Out)) c expr =
     end
   | Aggregate -> let lambda, acc, col = U.decompose_aggregate expr in
     (* find out if our accumulator is a collection type *)
-    let acc_t = snd @: KH.unwrap_vtype @: unwrap_t_val @: T.type_of_expr acc in
-    let acc_in, acc_out = In, Out in
     apply_method c ~name:"fold" ~col ~args:[lambda; acc]
-      ~arg_info:[Lambda [acc_in; InRec], acc_out; NonLambda, acc_out]
+      ~arg_info:[Lambda [In; InRec], Out; NonLambda, Out]
   | GroupByAggregate -> let lam1, lam2, acc, col = U.decompose_gbagg expr in
     (* find out if our accumulator is a collection type *)
-    let acc_t = snd @: KH.unwrap_vtype @: unwrap_t_val @: T.type_of_expr acc in
-    let acc_in, acc_out = In, Out in
     apply_method c ~name:"groupBy" ~col ~args:[lam1; lam2; acc] 
-      ~arg_info:[Lambda [InRec], Out; Lambda [acc_in; InRec], acc_out; NonLambda, acc_out]
+      ~arg_info:[Lambda [InRec], Out; Lambda [In; InRec], Out; NonLambda, Out]
   | Sort -> let col, lambda = U.decompose_sort expr in
     apply_method c ~name:"sort" ~col ~args:[lambda] ~arg_info:[Lambda [InRec; InRec], Out]
       ~prefix_fn:(fun e -> KH.mk_if e (KH.mk_cint (-1)) @: KH.mk_cint 1)
