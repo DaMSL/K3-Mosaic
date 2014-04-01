@@ -1024,6 +1024,10 @@ let filter_corrective_list =
   ["request_vid", t_vid; "trig_stmt_list", trig_stmt_list_t]
   [wrap_tlist @: wrap_ttuple [t_stmt_id; wrap_tlist t_vid]]
   @:
+  mk_let "log_entries" 
+    (wrap_tlist @: wrap_ttuple [t_vid; t_trig_id; t_stmt_id])
+    (mk_apply (* list of triggers >= vid *)
+      (mk_var log_read_geq) @: mk_var "request_vid") @:
   (* group the list by stmt_ids *)
   mk_gbagg
     (mk_lambda (wrap_args ["_", t_vid; "stmt_id", t_stmt_id]) @:
@@ -1043,8 +1047,7 @@ let filter_corrective_list =
           (* convert to vid, stmt *)
           mk_tuple [mk_var "vid"; mk_var "stmt_id"]
         ) @:
-        mk_apply (* list of triggers >= vid *)
-          (mk_var log_read_geq) @: mk_var "request_vid"
+        mk_var "log_entries"
       ) @:
       mk_assoc_lambda (* compare func *)
         (wrap_args ["vid1", t_vid; "stmt1", t_stmt_id])
