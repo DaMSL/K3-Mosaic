@@ -550,8 +550,6 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(NonLambda,Out)) c expr =
       let _, e = U.decompose_lambda expr in
       handle_lambda c ~prefix_fn ~expr_info arg e
   | Apply -> let e1, e2 = U.decompose_apply expr in
-    let t_e2 =
-      begin try unwrap_t_val @: T.type_of_expr e2 with _ -> KH.t_unit end in 
     let do_pair_paren sym =
       begin match U.decompose_tuple e2 with
         | [x; y] -> arith_paren_pair sym (x, y)
@@ -566,10 +564,10 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(NonLambda,Out)) c expr =
       | Var _ -> function_application c e1 [e2]
       (* let expression *)
       | Lambda arg -> let _, body = U.decompose_lambda e1 in
-        let print_let inject =
+        let print_let () =
           wrap_hov 2 (lps "let " <| lazy_arg c false arg <|
             lps " =" <| lsp () <| lazy_expr c e2 <| lsp () ) <| lps "in" <| lsp ()
-            <| inject <| lazy_expr c body
+            <| lazy_expr c body
         in
         begin match arg with
         (* If we have an arg tuple, it's a bind. A maybe is similar *)
@@ -578,18 +576,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(NonLambda,Out)) c expr =
                         deep_bind c arg_n ~top_expr:e2 ~in_record:false <|
                           lazy_expr c body 
         (* Otherwise it's a let *)
-        | AVar(id, vt) -> 
-            (* check if we're casting the type of collection *)
-            begin match snd @: KH.unwrap_vtype t_e2, snd @: KH.unwrap_vtype vt with
-            | TCollection(ct,_), TCollection(ct',_) when ct <> ct' ->
-                let inject = lps
-                  (Printf.sprintf "let %s = coerce %s %s" id id (s_of_col_type ct'))
-                  <| lsp () <| lps "in" <| lsp ()
-                in
-                print_let inject
-            | _ -> print_let []
-            end
-        | AIgnored -> print_let []
+        | _          -> print_let ()
         end
       | _ -> error () (* type error *)
     end
