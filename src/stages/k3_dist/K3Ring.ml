@@ -11,7 +11,7 @@ let id_t_node_no_hash = list_drop_end 1 id_t_node
 let id_node = fst @: List.split id_t_node
 let id_node_no_hash = fst @: List.split id_t_node_no_hash
 let t_node = snd @: List.split id_t_node
-let t_ring = wrap_tlist_mut @: wrap_ttuple t_node
+let t_ring = wrap_tlist @: wrap_ttuple t_node
 
 let node_ring_nm = "node_ring"
 let node_ring_code = 
@@ -19,8 +19,8 @@ let node_ring_code =
   in mk_anno_sort c [2] (* sort by 3rd field *)
 
 let replicas_nm = "replicas"
-let replicas_code = mk_global_val_init replicas_nm (wrap_tset_mut t_int) @:
-  mk_singleton (wrap_tset_mut t_int) (mk_cint 8)
+let replicas_code = mk_global_val_init replicas_nm (wrap_tset t_int) @:
+  mk_singleton (wrap_tset t_int) (mk_cint 8)
 
 let ring_foreign_funcs = 
   mk_foreign_fn "hash_int" t_int t_int ::

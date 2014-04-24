@@ -81,7 +81,7 @@ let declare_foreign_functions p =
 (* vid counter used to assign vids *)
 let vid_counter_name = "__vid_counter__"
 let vid_counter = mk_var vid_counter_name
-let vid_counter_t = wrap_tset @: t_int_mut
+let vid_counter_t = wrap_tset @: t_int
 
 
 (* epoch
@@ -91,7 +91,7 @@ let vid_counter_t = wrap_tset @: t_int_mut
  * everytime need a vid? *)
 let epoch_name = "__epoch__"
 let epoch_var = mk_var epoch_name
-let epoch_t = wrap_tset @: t_int_mut
+let epoch_t = wrap_tset @: t_int
 
 (* stmt_cntrs - (vid, stmt_id, counter) *)
 let stmt_cntrs_name = "__stmt_cntrs__"
@@ -107,11 +107,11 @@ let stmt_cntrs_ids = [
   stmt_cntrs_id_type_counter_name
 ]
 
-let stmt_cntrs_id_type = [(stmt_cntrs_id_type_vid_name, t_vid_mut);
-                          (stmt_cntrs_id_type_stmt_id_name, t_int_mut);
-                          (stmt_cntrs_id_type_counter_name, t_int_mut)]
+let stmt_cntrs_id_type = [(stmt_cntrs_id_type_vid_name, t_vid);
+                          (stmt_cntrs_id_type_stmt_id_name, t_int);
+                          (stmt_cntrs_id_type_counter_name, t_int)]
 
-let stmt_cntrs_type = wrap_tset @: wrap_ttuple_mut @:
+let stmt_cntrs_type = wrap_tset @: wrap_ttuple @:
   snd @: List.split stmt_cntrs_id_type
   (*
 let stmt_cntrs_type = wrap_tset_mut @: wrap_ttuple_mut
