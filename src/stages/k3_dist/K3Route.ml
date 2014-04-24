@@ -290,7 +290,7 @@ let gen_route_fn p map_id =
         (mk_lambda (wrap_args ["_", t_unit; "_", t_unit]) @:
           mk_cunit
         )
-        (mk_empty @: output_type) @:
+        mk_cunit @:
         mk_map
           (mk_lambda (wrap_args ["free_bucket", free_bucket_type]) @:
             mk_apply (mk_var "get_ring_node") @: mk_tuple
