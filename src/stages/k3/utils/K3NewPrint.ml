@@ -563,20 +563,31 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(NonLambda,Out)) c expr =
       (* function application *)
       | Var _ -> function_application c e1 [e2]
       (* let expression *)
-      | Lambda arg -> let _, body = U.decompose_lambda e1 in
-        let print_let () =
+      | Lambda arg ->
+        let t_e2 = begin try unwrap_t_val @: T.type_of_expr e2
+          with _ -> KH.t_unit end in
+        let _, body = U.decompose_lambda e1 in
+        let print_let assign_exp =
           wrap_hov 2 (lps "let " <| lazy_arg c false arg <|
-            lps " =" <| lsp () <| lazy_expr c e2 <| lsp () ) <| lps "in" <| lsp ()
+            lps " =" <| lsp () <| lazy_expr c assign_exp <| lsp () ) <| lps "in" <| lsp ()
             <| lazy_expr c body
         in
         begin match arg with
         (* If we have an arg tuple, it's a bind. A maybe is similar *)
         | ATuple _ 
-        | AMaybe _   -> let arg_n = arg_num_of_arg arg in
-                        deep_bind c arg_n ~top_expr:e2 ~in_record:false <|
-                          lazy_expr c body 
+        | AMaybe _     -> let arg_n = arg_num_of_arg arg in
+                          deep_bind c arg_n ~top_expr:e2 ~in_record:false <|
+                            lazy_expr c body 
         (* Otherwise it's a let *)
-        | _          -> print_let ()
+        | AVar(id, vt) ->
+            (* check if we're casting the type of the collection *)
+            begin match snd @: KH.unwrap_vtype t_e2, snd @: KH.unwrap_vtype vt with
+            | TCollection(ct,_), TCollection(ct',_) when ct <> ct' ->
+                let e2' = KH.mk_combine (KH.mk_empty vt) e2 in
+                print_let e2'
+            | _ -> print_let e2
+            end
+        | AIgnored     -> print_let e2
         end
       | _ -> error () (* type error *)
     end
