@@ -60,18 +60,20 @@ let combine_data t_d =
     if rem_num = 0 then acc else
     (* choose a random list to draw from *)
     let i = Random.int rem_num in
+    (* Note that we can't remove any list, because that list generates a 'Nothing' *)
     let _, line, remain, rem_num, trig_id =
-      List.fold_right (fun (t,l) (idx, out, remain, rem_num, trig_id) -> 
+      List.fold_right (fun ((t,l) as vals) (idx, out, remain, rem_num, trig_id) -> 
         let do_just x  = (Printf.sprintf "Just%s %s" mut_s @: rec_of_tup x)::out in
         let do_none () = ("Nothing"^mut_s)::out in
         match l with
-        | []           -> idx,   do_none (), (t,[])::remain, rem_num,   trig_id
+        | []           -> idx,   do_none (), vals::remain,   rem_num,   trig_id
+                          (* idx only keeps track of live lists *)
         | [x]   when i=idx -> 
                           idx-1, do_just x,  (t,[])::remain, rem_num-1, Some t
-        | [x]          -> idx-1, do_none (), (t,[])::remain, rem_num-1, trig_id
+        | [x]          -> idx-1, do_none (), vals::remain,   rem_num,   trig_id
         | x::xs when i=idx -> 
                           idx-1, do_just x,  (t,xs)::remain, rem_num,   Some t
-        | xs           -> idx-1, do_none (), (t,xs)::remain, rem_num,   trig_id
+        | xs           -> idx-1, do_none (), vals::remain,   rem_num,   trig_id
           (* don't count empty lists for the randomization *)
       )
       remain
