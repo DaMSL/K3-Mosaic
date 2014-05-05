@@ -125,7 +125,7 @@ def test_file(file, dbt_path, k3_path)
 	puts "cd #{curdir}"
 	Dir.chdir "#{curdir}"
 
-    # create a k3 file for comparison's sake
+  # create a k3 file for comparison's sake
 	puts "#{k3_path} -p -i m3 -l k3 temp.m3 > temp.k3"
 	`#{k3_path} -p -i m3 -l k3 temp.m3 > temp.k3 2> #{err_file}`
 
@@ -143,21 +143,12 @@ def test_file(file, dbt_path, k3_path)
       puts "#{$part_path} temp.k3dist -n #{$num_nodes} > temp.part"
       output = `#{$part_path} temp.k3dist -n #{$num_nodes} > temp.part`
 
-      # Also create a k3new partition map
-      puts "#{$part_path} temp.k3dist -n #{$num_nodes} --k3new > part.k3new"
-      output = `#{$part_path} temp.k3dist -n #{$num_nodes} --k3new > part.k3new`
-      
       # create another k3 distributed file (with partition map)
       puts "#{k3_path} -p --lambda -i m3 -l k3disttest temp.m3 #{create_str} -m temp.part #{$force_cmd} > temp.k3dist"
       `#{k3_path} -p --lambda -i m3 -l k3disttest temp.m3 #{create_str} -m temp.part #{$force_cmd} > temp.k3dist 2> #{err_file}`
       check_error(curdir, err_file)
       check_type_error(curdir, 'temp.k3dist')
     end
-    
-    # create a k3new distributed file (for convenience)
-	puts "#{k3_path} -p -i k3 -l k3new temp.k3dist > temp.k3new"
-	`#{k3_path} -p -i k3 -l k3new temp.k3dist > temp.k3new 2> #{err_file}`
-	check_error(curdir, err_file)
 
     # create node list
     node_list = Array.new($num_nodes) do |i|
