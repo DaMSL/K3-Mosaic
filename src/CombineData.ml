@@ -36,15 +36,32 @@ let parse_cmd_line () =
 
 let r_pipe = Str.regexp "|"
 let r_comma = Str.regexp ","
+let d = "[0-9]"
+let r_date = Str.regexp (Printf.sprintf "%s%s%s%s-%s%s-%s%s" d d d d d d d d)
+let r_quoted1 = Str.regexp "^\".*\"$"
+let r_quoted2 = Str.regexp "^'.*'$"
 
 let wrap_mut_rec s = if params.mut then Printf.sprintf "(%s,MemImmut)" s else s
 
-(* convert a tuple to a record *)
+(* check if we have a non-string. If it's a string, quote it *)
+let quote_string s =
+  let test f =
+    try ignore @: f s; true
+    with Invalid_argument _ | Failure _ -> false in
+  if test int_of_string ||
+     test float_of_string ||
+     (*r_match r_date s ||*) (* for now, dates are just strings in the input *)
+     test bool_of_string ||
+     r_match r_quoted1 s || r_match r_quoted2 s
+  then s
+  else Printf.sprintf "\"%s\"" (String.escaped s)
+
+(* convert a tuple string to a record string *)
 let rec_of_tup s =
   let to_rec r =
     let l = K3NewPrint.add_record_ids @: Str.split r s in
     let str = String.concat "," @:
-      List.map (fun (s, s') -> Printf.sprintf "%s=%s" s (wrap_mut_rec s')) l in
+      List.map (fun (s, s') -> Printf.sprintf "%s=%s" s (wrap_mut_rec @: quote_string s')) l in
     Printf.sprintf "{%s}" str
   in
   if String.contains s '|' then to_rec r_pipe

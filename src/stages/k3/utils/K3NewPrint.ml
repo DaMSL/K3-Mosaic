@@ -163,15 +163,22 @@ let rec lazy_arg c drop_tuple_paren = function
 
 let lazy_id_type c (id,t) = lps (id^" : ") <| lazy_value_type c false t
 
-let lazy_const c = function
+let lazy_const c v =
+  let remove_float_dot s =
+    let l = String.length s in
+    if s.[l - 1] = '.' then
+      str_take (l-1) s
+    else s
+  in
+  match v with
   | CUnknown       -> lps "_"
   | CUnit          -> lps "()"
   | CBool true     -> lps "true"
   | CBool false    -> lps "false"
   | CInt i         -> lps @: string_of_int i
-  | CFloat f       -> lps @: string_of_float f
-  | CString s      -> lps @: "\""^String.escaped s^"\""
-  | CAddress(s, i) -> lps @: s^":"^string_of_int i
+  | CFloat f       -> lps @: remove_float_dot @: string_of_float f
+  | CString s      -> lps @: Printf.sprintf "\"%s\"" (String.escaped s)
+  | CAddress(s, i) -> lps @: Printf.sprintf "%s:%d" s i
   | CTarget id     -> lps id
 
 (* unwrap a type_t that's not a function *)
