@@ -26,6 +26,9 @@ type error_type =
   | VTBad of value_type_t
   | BTBad of base_type_t
   | MTBad of mutable_type_t
+  | InvalidTypeAnnotation
+  | MultiplePossibleTypes of string
+  | UntypedExpression
   | TMsg of string
 
 (* uuid, location in typechecker, compared types *)
@@ -91,17 +94,17 @@ let (%++) f g = fun t x -> f (g t x)
 
 (* Type extraction primitives *)
 let type_of_expr e =
-  let error s = t_error (id_of_expr e) "ExprType" (TMsg s) () in
+  let error s err = t_error (id_of_expr e) s err () in
   let is_type_annotation a = match a with Type _ -> true | _ -> false in
   let extract_type = function
-    Type t -> t | _ -> error "invalid type annotation" in
+    Type t -> t | _ -> error "Invalid type annotation" InvalidTypeAnnotation in
   let type_annotations = List.filter is_type_annotation (meta_of_expr e) in
   match type_annotations with
-    | []  -> error "found untyped expression"
+    | []  -> error "Untyped expression" UntypedExpression
     | [x] -> extract_type x
-    | l   -> error @: "multiple possible types found: "^
-      List.fold_left (fun acc x -> 
-        acc^" "^string_of_type @: extract_type x) "" l
+    | l   -> error "Multiple possible types" @: MultiplePossibleTypes(
+        List.fold_left (fun acc x -> 
+          acc^" "^string_of_type @: extract_type x) "" l)
 
 (* Type composition/decomposition primitives *)
 
@@ -251,12 +254,13 @@ let rec gen_arg_bindings a =
     | AMaybe(a') -> gen_arg_bindings a'
     | ATuple(args) -> List.concat (List.map gen_arg_bindings args)
 
-let rec deduce_expr_type trig_env cur_env utexpr =
+(* fill_in: check at each node whether we already have a type annotation. If so, don't go any further down *)
+let rec deduce_expr_type ?(override=true) trig_env cur_env utexpr =
     let ((uuid, tag), aux), untyped_children = decompose_tree utexpr in
     let t_erroru = t_error uuid in (* pre-curry the type error *)
 
     (* Check Tag Arity *)
-    if not (check_tag_arity tag untyped_children) then raise MalformedTree else
+    if not @: check_tag_arity tag untyped_children then raise MalformedTree else
 
     (* Determine if the environment to be passed down to child typechecking needs to be augmented. *)
     let env =
@@ -264,8 +268,13 @@ let rec deduce_expr_type trig_env cur_env utexpr =
         | Lambda(a) -> gen_arg_bindings a @ cur_env
         | _ -> cur_env
     in
-
-    let typed_children = List.map (deduce_expr_type trig_env env) untyped_children in
+    (* If not overriding, find those children for which we have no type already *)
+    let typed_children = List.map (fun child ->
+      if override || try ignore(type_of_expr child); false with TypeError(_,_,UntypedExpression) -> true | _ -> false then
+          deduce_expr_type ~override trig_env env child
+        else child) 
+      untyped_children
+    in
     let attach_type t = mk_tree (((uuid, tag), ((Type t)::aux)), typed_children) in
     let bind n = type_of_expr (List.nth typed_children n) in
 

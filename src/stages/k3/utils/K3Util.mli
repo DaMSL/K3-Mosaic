@@ -8,6 +8,7 @@ val tag_of_expr : expr_t -> expr_tag_t
 val meta_of_expr : expr_t -> annotation_t
 
 val details_of_expr : expr_t -> int * expr_tag_t * annotation_t * expr_t list
+val expr_of_details : int -> expr_tag_t -> annotation_t -> expr_t list -> expr_t
 
 (* Variable id extraction *)
 val vars_of_arg : arg_t -> id_t list
@@ -154,3 +155,8 @@ val value_type_of_arg: arg_t -> value_type_t
 
 (* Attach a type annotation to an expr *)
 val attach_type : type_t -> expr_t -> expr_t
+
+(* Stringification functions *)
+val string_of_tag : expr_tag_t -> string
+
+val string_of_const : constant_t -> string

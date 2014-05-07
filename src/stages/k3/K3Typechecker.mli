@@ -18,6 +18,9 @@ type error_type =
     | VTBad of value_type_t
     | BTBad of base_type_t
     | MTBad of mutable_type_t
+    | InvalidTypeAnnotation
+    | MultiplePossibleTypes of string
+    | UntypedExpression
     | TMsg of string
 
 exception TypeError of int * string * error_type
@@ -53,7 +56,7 @@ val deduce_constant_type: int -> (id_t * type_t) list -> constant_t -> value_typ
 
 (* takes trigger environment, environment and expression and returns a typed
  * expression *)
-val deduce_expr_type: type_bindings_t -> type_bindings_t -> expr_t -> expr_t
+val deduce_expr_type: ?override:bool -> type_bindings_t -> type_bindings_t -> expr_t -> expr_t
 
 (* given a program, returns the typechecked program, its environment, trigger
  * environment, and resource environment *)

@@ -10,6 +10,8 @@ module U = K3Util
 module T = K3Typechecker
 module KH = K3Helpers
 
+exception MissingType of int * string
+
 let force_list = List.iter force 
 
 (* lazy functions *)
@@ -48,13 +50,20 @@ let lazy_concat ?(sep=lsp) f l =
 let lcomma () = lps "," <| lsp ()
 
 (* type we pass all the way down for configuring behaviors *)
-type config = {verbose_types:bool; (* more verbose type printing *)
-               uuid:int option}    (* highlight a particular uuid *)
+type config = {
+               verbose_types:bool; (* more verbose type printing *)
+               env:T.type_bindings_t;  (* type bindings for environment *)
+               trig_env:T.type_bindings_t
+              } 
 
 let default_config = {verbose_types=false;
-                      uuid=None}
+                      env=[];
+                      trig_env=[]}
 
 let verbose_types_config = {default_config with verbose_types=true}
+
+(* light type checking for expressions we create *)
+let light_type c e = T.deduce_expr_type ~override:false c.trig_env c.env e
 
 (* Get a binding id from a number *)
 let id_of_num i = Printf.sprintf "_b%d_" i
@@ -335,8 +344,7 @@ let rec deep_bind ?(depth=0) ?top_expr ~in_record c arg_n =
         lps " in" <| lsp () <| loop (d+1) arg
   in loop 0 arg_n
 
-(* Apply a method -- the lambda part
-* -in_record: the lambda should take in a record *)
+(* Apply a method -- the lambda part *)
 and apply_method_nocol ?prefix_fn c ~name ~args ~arg_info =
   let wrap_if_big e = match U.tag_of_expr e with
       | Var _ | Const _ | Tuple | Empty _ -> id_fn
@@ -359,10 +367,11 @@ and apply_method ?prefix_fn c ~name ~col ~args ~arg_info =
 and function_application c fun_e l_e = 
   (* Check if we need to modify the function *)
   (* for example, hash gets only one function in the new k3 *)
-  let fun_e = match U.tag_of_expr fun_e with
-  | Var x when str_take 4 x = "hash"
-          -> KH.mk_var "hash"
-  | _     -> fun_e
+  let id, tag, anns, children = U.details_of_expr fun_e in
+  let fun_e = match tag with
+  | Var x when str_take 4 x = "hash" ->
+         U.expr_of_details id (Var "hash") anns children
+  | _ -> fun_e
   in
   let print_fn e = match U.tag_of_expr e with
     | Var _ | Const _ | Tuple   -> lazy_expr c e
@@ -511,7 +520,8 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(NonLambda,Out)) c expr =
     end
   | Range ct -> let st, str, num = U.decompose_range expr in
     (* newk3 range only has the last number *)
-    function_application c (KH.mk_var "range") [num]
+    let range_type = TFunction(KH.t_int, KH.wrap_tlist KH.t_int) in
+    function_application c (U.attach_type range_type @: KH.mk_var "range") [num]
   | Add -> let (e1, e2) = U.decompose_add expr in
     begin match U.tag_of_expr e2, expr_type_is_bool e1 with
       | Neg, false -> let e3 = U.decompose_neg e2 in
@@ -590,7 +600,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(NonLambda,Out)) c expr =
             (* check if we're casting the type of the collection *)
             begin match snd @: KH.unwrap_vtype t_e2, snd @: KH.unwrap_vtype vt with
             | TCollection(ct,_), TCollection(ct',_) when ct <> ct' ->
-                let e2' = KH.mk_combine (KH.mk_empty vt) e2 in
+                let e2' = light_type c @: KH.mk_combine (KH.mk_empty vt) e2 in
                 print_let e2'
             | _ -> print_let e2
             end
@@ -621,7 +631,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(NonLambda,Out)) c expr =
      | TCollection(_, x) -> KH.canonical @: TCollection(TBag, x)
      | _                 -> failwith "not a collection"
     in
-    let empty_c = KH.mk_empty t in
+    let empty_c = light_type c @: KH.mk_empty t in
     begin match U.tag_of_expr e with
     | Map -> 
         let lambda, col = U.decompose_map e in
@@ -639,7 +649,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(NonLambda,Out)) c expr =
       ~arg_info:[Lambda [InRec], Out; Lambda [In; InRec], Out; NonLambda, Out]
   | Sort -> let col, lambda = U.decompose_sort expr in
     apply_method c ~name:"sort" ~col ~args:[lambda] ~arg_info:[Lambda [InRec; InRec], Out]
-      ~prefix_fn:(fun e -> KH.mk_if e (KH.mk_cint (-1)) @: KH.mk_cint 1)
+      ~prefix_fn:(fun e -> light_type c @: KH.mk_if e (KH.mk_cint (-1)) @: KH.mk_cint 1)
   | Peek -> let col = U.decompose_peek expr in
     (* get the type of the collection. If it's a singleton type, we need to add
      * projection *)
@@ -656,7 +666,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(NonLambda,Out)) c expr =
     in
     (* peeks return options and need to be pattern matched *)
     unwrap_option ~project @:
-      lazy_paren @: apply_method c ~name:"peek" ~col ~args:[KH.mk_cunit] ~arg_info:[NonLambda, Out]
+      lazy_paren @: apply_method c ~name:"peek" ~col ~args:[light_type c @: KH.mk_cunit] ~arg_info:[NonLambda, Out]
   | Slice -> let col, pat = U.decompose_slice expr in
     let es, lam_fn = begin match U.tag_of_expr pat with
       | Tuple -> U.decompose_tuple pat, id_fn
@@ -676,16 +686,15 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(NonLambda,Out)) c expr =
     in
     if null filter_e then lazy_expr c col (* no slice needed *)
     else 
-      let mk_bool e = U.attach_type (TValue KH.t_bool) e in
-      (* add bool type so we get & instead of * *)
-      let do_eq (id, v) = mk_bool @: KH.mk_eq (KH.mk_var id) v in
-      let lambda = KH.mk_lambda (KH.wrap_args id_t) @:
-        lam_fn @: (* apply an inner lambda constructor *)
-        List.fold_right (fun x acc ->
-          KH.mk_and acc (do_eq x)
-        ) 
-        (tl filter_e) 
-        (do_eq @: hd filter_e)
+      let do_eq (id, v) = KH.mk_eq (KH.mk_var id) v in
+      let lambda = light_type c @:
+        KH.mk_lambda (KH.wrap_args id_t) @:
+          lam_fn @: (* apply an inner lambda constructor *)
+          List.fold_right (fun x acc ->
+            KH.mk_and acc (do_eq x)
+          ) 
+          (tl filter_e) 
+          (do_eq @: hd filter_e)
       in
       apply_method c ~name:"filter" ~col ~args:[lambda] ~arg_info:[Lambda[InRec], Out]
   | Insert -> let col, x = U.decompose_insert expr in
@@ -703,18 +712,26 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(NonLambda,Out)) c expr =
       lps_list CutHint (lazy_expr c) args 
   in
   (* check if we need to wrap our output in a tuple (record) *)
-  if snd expr_info = OutRec then match U.tag_of_expr expr with
-  (* these expression tags should be wrapped if a record is needed *)
-  | Const _ | Var _ | Just | Nothing _ | Add | Mult | Neg | Eq | Lt | Neq | Leq 
-  | Apply | IfThenElse ->
-      (* check the type of the expression *)
-      begin match snd @: KH.unwrap_vtype @: unwrap_t_val @: T.type_of_expr expr with
-      | TTuple _ -> wrap @: analyze ()
-      | _        -> lazy_expr ~expr_info:((fst expr_info, Out))
-                      ~prefix_fn c @: KH.mk_tuple ~force:true [expr]
-      end
+  match snd expr_info with
+  | OutRec ->
+    begin match U.tag_of_expr expr with
+    | Lambda _ -> wrap @: analyze ()
+      (* don't wrap a lambda itself *)
+    | _ ->
+        (* check the type of the expression *)
+        let t =
+          begin try T.type_of_expr expr
+            with T.TypeError(id, _, T.UntypedExpression) ->
+              raise @: MissingType(id, K3Printing.string_of_expr expr)
+          end
+        in
+        begin match snd @: KH.unwrap_vtype @: unwrap_t_val t with
+        | TTuple _ -> wrap @: analyze ()
+        | _        -> lazy_expr ~expr_info:((fst expr_info, Out))
+                        ~prefix_fn c @: light_type c @: KH.mk_tuple ~force:true [expr]
+        end
+    end
   | _ -> wrap @: analyze ()
-  else wrap @: analyze ()
 
 let lazy_trigger c id arg vars expr = 
   let is_block expr = match U.tag_of_expr expr with Block -> true | _ -> false in
@@ -788,23 +805,6 @@ let string_of_base_type t = wrap_f @: fun () ->
 let string_of_value_type t = wrap_f @: fun () ->
   force_list @: lazy_value_type verbose_types_config false t
 
-(* print a K3 type in syntax *)
-let string_of_mutable_type t = wrap_f @: fun () ->
-  force_list @: lazy_mutable_type verbose_types_config false t
-
-(* print a K3 type in syntax *)
-let string_of_type t = wrap_f @: fun () ->
-  force_list @: lazy_type verbose_types_config t
-
-(* print a K3 expression in syntax *)
-let string_of_expr ?uuid_highlight e = 
-  let config = default_config in
-  let config = match uuid_highlight with 
-    | None   -> config
-    | _      -> {config with uuid=uuid_highlight}
-  in
-  wrap_f @: fun () -> force_list @: lazy_expr config e
-
 module StringSet = Set.Make(struct type t=string let compare=String.compare end)
 
 let filter_incompatible prog =
@@ -823,12 +823,9 @@ let filter_incompatible prog =
   ) prog
   
 (* print a K3 program in syntax *)
-let string_of_program ?uuid_highlight prog = 
-  let config = default_config in
-  let config = match uuid_highlight with 
-    | None -> config
-    | _    -> {config with uuid=uuid_highlight}
-  in
+(* We get the typechecking environments so we can do incremental typechecking where needed *)
+let string_of_program prog (env, trig_env) = 
+  let config = {default_config with env; trig_env} in
   wrap_f @: fun () -> 
     let l = lps_list ~sep:"" CutHint (lazy_declaration config |- fst) prog in
     obx 0;  (* vertical box *)
@@ -840,7 +837,7 @@ let r_insert_bad = Str.regexp "^insert_.*\\(do\\|send\\|rcv\\)"
 
 (* add sources and feeds to the program *)
 (* expects a distributed program *)
-let add_sources p filename =
+let add_sources p envs filename =
   let open K3Helpers in
   (* we find all the insert triggers and concatenate their arguments into one big argument
    * list with maybes *)
@@ -877,35 +874,10 @@ let add_sources p filename =
   let source_s = "source s1 : "^string_of_value_type (wrap_ttuple full_arg_types)^
     " = file \""^filename^"\" k3\n" in
   let feed_s   = "feed s1 |> switch_main\n" in
-  string_of_program [flow] ^ source_s ^ feed_s
+  string_of_program [flow] envs ^ source_s ^ feed_s
 
 (* print a new k3 program with added sources and feeds *)
-let string_of_dist_program ?(file="default.txt") p =
+let string_of_dist_program ?(file="default.txt") (p, envs) =
   let p' = filter_incompatible p in
-  string_of_program p' ^
-  add_sources p' file
-
-(* print a k3 program with test expressions *)
-let string_of_program_test ?uuid_highlight ptest = 
-  (* print a check_expr *)
-  let string_of_check_expr = function
-      | FileExpr s -> "file "^s
-      | InlineExpr e -> string_of_expr ?uuid_highlight e
-  in
-  (* print a test expression *)
-  let string_of_test_expr (e, check_e) =
-    Printf.sprintf "(%s) = %s"
-      (string_of_expr ?uuid_highlight e) @:
-      string_of_check_expr check_e
-  in
-  match ptest with
-  | NetworkTest(p, checklist) -> 
-      Printf.sprintf "%s\n\nnetwork expected\n\n%s"
-        (string_of_program ?uuid_highlight p)
-        (String.concat ",\n\n" @: list_map string_of_test_expr checklist)
-  | ProgTest(p, checklist) -> 
-      Printf.sprintf "%s\n\nexpected\n\n%s"
-        (string_of_program ?uuid_highlight p)
-        (String.concat ",\n\n" @: list_map string_of_test_expr checklist)
-  | ExprTest _ -> failwith "can't print an expression test"
+  string_of_program p' envs ^ add_sources p' envs file
 

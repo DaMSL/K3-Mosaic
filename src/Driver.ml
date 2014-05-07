@@ -260,7 +260,9 @@ let parse_test_file params = match !(params.test_mode) with
 let typed_program_with_globals p =
   let p' =
     K3Global.add_globals cmd_line_params.peers p in
-  try deduce_program_type p'
+  try 
+    let p, env, trig_env, _ = type_bindings_of_program p' in
+    p, (env, trig_env)
   with TypeError (a,b,c) -> handle_type_error (K3Data p') (a,b,c)
 
 let typed_program_test_with_globals prog_test =
@@ -287,8 +289,9 @@ let typed_program_test_with_globals prog_test =
 
 (* for most functions, we don't need the globals included *)
 let typed_program p =
-  K3Global.remove_globals cmd_line_params.peers @:
-      typed_program_with_globals p
+  let p, envs = typed_program_with_globals p in
+  K3Global.remove_globals cmd_line_params.peers p, envs
+      
 
 (* don't include globals *)
 let typed_program_test prog_test =
@@ -302,13 +305,13 @@ let typed_program_test prog_test =
   | ExprTest(p_ts)     -> failwith "expr_test unhandled"
 
 let imperative_program p =
-  RK3ToImperative.imperative_of_program (fun () -> []) (typed_program p)
+  RK3ToImperative.imperative_of_program (fun () -> []) (fst @: typed_program p)
 
 let cpp_program p =
   let mk_meta() = [] in
   CPPTyping.deduce_program_type @:
     cpp_of_imperative mk_meta @:
-      RK3ToImperative.imperative_of_program mk_meta @: typed_program p
+      RK3ToImperative.imperative_of_program mk_meta @: fst @: typed_program p
 
 (* Action handlers *)
 (* TODO *)
@@ -321,7 +324,7 @@ let compile params inputs = ()
 let interpret_k3 params prog = let p = params in
   (* this not only adds type info, it adds the globals which are crucial
     * for interpretation *)
-  let tp = typed_program_with_globals prog in
+  let tp, envs = typed_program_with_globals prog in
   let open K3Interpreter in
   try
     let interp = init_k3_interpreter tp ~run_length:p.run_length
@@ -351,9 +354,9 @@ let string_of_typed_meta (t,a) = string_of_annotation a
 
 let print_k3_program ?(no_roles=false) f = function
   | K3Data p | K3DistData (p,_,_) ->
-    let tp = typed_program p in
+    let tp, envs = typed_program p in
     let event_loops, default = roles_of_program tp in
-      print_endline (f tp);
+      print_endline @: f (tp, envs);
       if not no_roles then (
         List.iter print_event_loop event_loops;
         (match default with None -> ()
@@ -477,7 +480,7 @@ let print_reified_k3_program = function
   | K3Data p | K3DistData(p,_,_) ->
     let print_expr_fn c e =
         lazy (print_reified_expr @: reify_expr [] e) in
-    let tp = typed_program p in
+    let tp, _ = typed_program p in
     print_endline @: string_of_program ~print_expr_fn:print_expr_fn tp
   | _ -> error "Cannot print this type of data"
 
@@ -510,8 +513,8 @@ let print params inputs =
   let idx_inputs = insert_index_fst 0 inputs in
   let sofp = string_of_program ~verbose:cmd_line_params.verbose ~print_id:true in
   let print_fn = match params.out_lang with
-    | AstK3 | AstK3Dist   -> print_k3_program sofp |- snd
-    | K3 | K3Dist         -> print_k3_program (PS.string_of_program ~lambda_ret) |- snd
+    | AstK3 | AstK3Dist   -> print_k3_program (sofp |- fst) |- snd
+    | K3 | K3Dist         -> print_k3_program (PS.string_of_program ~lambda_ret |- fst) |- snd
     | K3New               -> print_k3_program ~no_roles:true (K3NewPrint.string_of_dist_program
                                ~file:params.k3new_data_file) |- snd
     | K3Test | K3DistTest -> print_k3_test_program ~lambda_ret
