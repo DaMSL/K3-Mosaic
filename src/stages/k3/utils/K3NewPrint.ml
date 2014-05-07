@@ -636,7 +636,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(NonLambda,Out)) c expr =
     | Map -> 
         let lambda, col = U.decompose_map e in
         apply_method c ~name:"ext" ~col ~args:[lambda; empty_c] 
-          ~arg_info:[Lambda [InRec], Out; NonLambda, OutRec ]
+          ~arg_info:[Lambda [InRec], Out; NonLambda, Out]
     | _   -> failwith "Unhandled Flatten without map"
     end
   | Aggregate -> let lambda, acc, col = U.decompose_aggregate expr in
@@ -808,6 +808,14 @@ let string_of_value_type t = wrap_f @: fun () ->
 module StringSet = Set.Make(struct type t=string let compare=String.compare end)
 
 let filter_incompatible prog =
+  let r_demux = Str.regexp "^demux_.*" in
+  let filter_trigs fl =
+    filter_map (fun ((s,_) as trig) -> match s with
+      | Sink(Code(id, _, _, _)) when r_match r_demux id -> None
+      | _ -> Some trig
+    ) fl
+  in 
+  let r_hash = Str.regexp "^hash.*" in
   let drop_globals = List.fold_left (flip StringSet.add) StringSet.empty
     ["divf"; "mod"; "float_of_int"; "int_of_float"; "get_max_int"; "parse_sql_date"; "peers"; "pmap_input" ]
   in
@@ -815,11 +823,12 @@ let filter_incompatible prog =
     (* we don't want the monomorphic hash functions *)
     match d with 
     | Foreign(id, _)   when StringSet.mem id drop_globals -> None
-    | Foreign(id, _)   when str_take 4 id = "hash"        -> None
+    | Foreign(id, _)   when r_match r_hash id             -> None
     | Global(id, _, _) when StringSet.mem id drop_globals -> None
+    | Flow(fl)      -> Some((Flow(filter_trigs fl), a))
     | Role _        -> None
     | DefaultRole _ -> None
-    | _ -> Some dec
+    | _             -> Some dec
   ) prog
   
 (* print a K3 program in syntax *)
@@ -839,7 +848,7 @@ let r_insert_bad = Str.regexp "^insert_.*\\(do\\|send\\|rcv\\)"
 (* expects a distributed program *)
 let add_sources p envs filename =
   let open K3Helpers in
-  (* we find all the insert triggers and concatenate their arguments into one big argument
+  (* find all the insert triggers and concatenate their arguments into one big argument
    * list with maybes *)
   let is_insert s     = r_match r_insert s && not @: r_match r_insert_bad s in
   let insert_trigs    = List.filter (is_insert |- U.id_of_code) @:
