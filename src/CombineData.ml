@@ -133,7 +133,7 @@ let _ =
     | None -> (* just use filenames as trigger names *)
       let mod_fname n = 
         let n = Filename.chop_extension n in
-        Printf.sprintf "%s%c%s" "insert_" (Char.uppercase n.[0]) (str_drop 1 n)
+        "insert_"^(String.uppercase n)
       in
       let fns = List.map (fun (fname, d) -> mod_fname fname, d) files_names in
       (* Lexicographical ordering for consistency *)
