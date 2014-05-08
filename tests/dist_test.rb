@@ -140,8 +140,10 @@ def test_file(file, dbt_path, k3_path)
     
     if $num_nodes > 1 then
       # create a partition map
-      puts "#{$part_path} temp.k3dist -n #{$num_nodes} > temp.part"
-      output = `#{$part_path} temp.k3dist -n #{$num_nodes} > temp.part`
+      str = "#{$part_path} temp.k3dist -n #{$num_nodes} > temp.part"
+      puts str
+      output = `#{str}`
+      check_type_error(curdir, 'temp.part')
 
       # create another k3 distributed file (with partition map)
       puts "#{k3_path} -p --lambda -i m3 -l k3disttest temp.m3 #{create_str} -m temp.part #{$force_cmd} > temp.k3dist"
