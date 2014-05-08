@@ -404,7 +404,7 @@ type tuple_pat = Position of int | ExternVar of id_t | Unknown
 
 let def_tup_prefix = "__temp_"
 
-let mk_tuple_range types = create_range 0 @: List.length types
+let mk_tuple_range ?(first=0) types = create_range first @: List.length types
 
 let tuple_make_pattern (types:value_type_t list) =
     List.map (fun x -> Position x) (mk_tuple_range types)
@@ -433,8 +433,8 @@ let tuple_pat_to_ids pat =
       | Unknown -> "_")
     pat
 
-let types_to_ids_types prefix types =
-  let range = mk_tuple_range types in
+let types_to_ids_types ?first prefix types =
+  let range = mk_tuple_range ?first types in
   let ids = List.map (int_to_temp_id prefix) range in
   list_zip ids types
 

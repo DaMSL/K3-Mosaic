@@ -861,21 +861,46 @@ let add_sources p envs filename =
   let insert_ids      = List.map U.id_of_code insert_trigs in
   (* arg for each trigger *)
   let insert_args     = List.map U.args_of_code insert_trigs in
-  let maybe_arg_types = wrap_tmaybes @: List.map U.types_of_arg insert_args in
+  let arg_types       = List.map U.types_of_arg insert_args in
+  (* the source has dates as strings, before we convert them *)
+  let arg_types_source = List.map (fun args -> 
+    wrap_ttuple @: List.map (fun t ->
+      if t = t_date then t_string else t) 
+      (unwrap_ttuple args)
+  ) arg_types
+  in
+  let maybe_arg_types = wrap_tmaybes arg_types_source in
   let arg_ids         = List.map (fun trig -> trig^"_args") insert_ids in
   let new_args        = list_zip arg_ids maybe_arg_types in
-  let trig_info       = list_zip insert_ids maybe_arg_types in
+  let trig_info       = list_zip insert_ids arg_types in
   (* add a demultiplexing argument *)
   let new_args'       = wrap_args @: ("trigger_id", t_string)::new_args in
   (* write the demultiplexing trigger *)
   let code =
     mk_code_sink "switch_main" new_args' [] @:
       List.fold_left (fun acc_code (trig_id, trig_t) ->
+        let trig_args_unwrap_nm = trig_id^"_args_unwrap" in
+        let trig_t_l = unwrap_ttuple trig_t in
+        let handle_args =
+          (* check if there's a date *)
+          if List.exists ((=) t_date) trig_t_l then
+            mk_unwrap_maybe [trig_id^"_args", wrap_tmaybe trig_t] @:
+              let ids_types = types_to_ids_types ~first:1 "_a" trig_t_l in
+              (* deconstruct the tuple and rebuild it, changing dates to ints *)
+              mk_let_many ids_types (mk_var trig_args_unwrap_nm) @:
+                mk_tuple @: List.map (fun (id, t) ->
+                  if t = t_date then mk_apply (mk_var "parse_sql_date") (mk_var id)
+                  else mk_var id
+                ) ids_types
+          (* no date, so simple code path *)
+          else 
+            mk_unwrap_maybe [trig_id^"_args", wrap_tmaybe trig_t] @:
+              mk_var @: trig_args_unwrap_nm
+        in
         mk_if (mk_eq (mk_var "trigger_id") @: mk_cstring trig_id)
-          (mk_send (mk_ctarget @: trig_id) K3Global.me_var @:
-            mk_unwrap_maybe [trig_id^"_args", trig_t] @:
-              mk_var @: trig_id^"_args_unwrap")
-          acc_code)
+          (mk_send (mk_ctarget @: trig_id) K3Global.me_var handle_args)
+          acc_code
+        )
         mk_cunit
         (List.rev trig_info)
   in
