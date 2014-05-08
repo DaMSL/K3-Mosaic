@@ -75,6 +75,10 @@ def main():
   cmd = 'ruby auto_test.rb -d -p 2 -f {file}'.format(file=args.sql_file)
   print_sys(cmd)
 
+  # handle the logs created
+  os.system('cp log.out raw_{nice_name}.log'.format(**locals()))
+  os.system('../bin/sanitize_log --db old raw_{nice_name}.log > {nice_name}.log'.format(**locals()))
+
   # convert to the new k3 file format
   print("\nConverting to new k3 file format...")
   cmd = '../bin/k3 -i k3 -l k3new --datafile {nice_name}.csv temp.k3dist > {nice_name}.k3'.format(**locals())
