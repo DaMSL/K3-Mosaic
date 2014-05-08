@@ -22,6 +22,7 @@ type resource_impl_env_t = (id_t * channel_impl_t) list
 (* Evaluation methods *)
 let value_of_string t v = match t with
   | TInt    -> VInt(int_of_string v)
+  | TDate   -> VInt(int_of_sql_date v)
   | TFloat  -> VFloat(float_of_string v)
   | TBool   -> VBool(bool_of_string v)
   | TString -> VString(v)
@@ -32,6 +33,7 @@ let pull_source id t res in_chan =
 		match t <| base_of %++ value_of |> (fun () -> raise (ResourceError id)) with
     | TBool -> false, [TBool]
     | TInt -> false, [TInt]
+    | TDate -> false, [TDate]
     | TFloat -> false, [TFloat]
     | TString -> false, [TString]
 		| TTuple(ts) -> true, List.map base_of ts
@@ -56,6 +58,7 @@ let pull_source id t res in_chan =
                match base_of t with
                | TBool -> VBool(Random.bool ())
                | TInt  -> VInt(Random.int max_int)
+               | TDate -> VInt(Random.int max_int)
                | TFloat -> VFloat(Random.float max_float)
                | TTuple(ts) -> VTuple(List.map random_val ts)
                | _ -> raise (ResourceError id)

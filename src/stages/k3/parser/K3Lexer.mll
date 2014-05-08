@@ -128,6 +128,7 @@ rule tokenize = parse
     | "bool"   { TYPE TBool }
     | "byte"   { TYPE TByte }
     | "int"    { TYPE TInt }
+    | "date"    { TYPE TDate }
     | "float"  { TYPE TFloat }
     | "string" { TYPE TString }
     | "address" { TYPE TAddress }

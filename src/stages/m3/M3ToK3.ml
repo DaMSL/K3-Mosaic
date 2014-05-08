@@ -30,7 +30,7 @@ let m3_type_to_k3_base_type = (function
    | T.TInt             -> K.TInt
    | T.TFloat           -> K.TFloat
    | T.TString          -> K.TString
-   | T.TDate            -> K.TInt
+   | T.TDate            -> K.TDate
 (*      K.TTuple [
         KT.canonical K.TInt;
         KT.canonical K.TInt;

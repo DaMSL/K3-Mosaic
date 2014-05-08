@@ -185,3 +185,6 @@ val make_lst : 'a -> int -> 'a list
 
 (* transpose a list of lists *)
 val transpose : 'a list list -> 'a list list
+
+(* convert date string to int *)
+val int_of_sql_date : string -> int

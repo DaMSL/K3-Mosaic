@@ -34,6 +34,7 @@ type base_type_t
     | TBool
     | TByte
     | TInt
+    | TDate (* treated like TInt, but gives us extra info *)
     | TFloat
     | TString
     | TMaybe        of value_type_t

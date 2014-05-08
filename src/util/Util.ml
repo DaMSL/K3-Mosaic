@@ -359,7 +359,9 @@ let r_groups str ~r ~n =
         | "" -> None
         | x  -> Some x
         end
-      with Not_found -> None
+      with 
+      | Not_found -> None
+      | Invalid_argument _ -> invalid_arg @: Printf.sprintf "Bad group %d for string %s" i str
     ) @: create_range 1 n
   else []
 
@@ -392,3 +394,9 @@ let transpose l =
   (List.hd l)
   ([], l)
 
+(* convert date string to integer *)
+let r_date = Str.regexp "\\([0-9]+\\)-\\([0-9]+\\)-\\([0-9]+\\)"
+let int_of_sql_date s = match r_groups s ~n:3 ~r:r_date with
+  | [Some y; Some m; Some d] -> 
+      (ios y)*10000 + (ios m)*100 + (ios d)
+  | l -> invalid_arg @: Printf.sprintf "int_of_sql_date for string %s. Found only %i members" s (List.length l)

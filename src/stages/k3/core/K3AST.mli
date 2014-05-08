@@ -29,6 +29,7 @@ type base_type_t
     | TBool
     | TByte
     | TInt
+    | TDate         (* like TInt *)
     | TFloat
     | TString
     | TMaybe        of value_type_t

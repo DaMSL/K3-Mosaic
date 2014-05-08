@@ -90,7 +90,8 @@ let signature_of_type t =
     | TBool                 -> tag   d "b" []
     | TByte                 -> tag   d "y" []
     | TInt                  -> tag   d "i" []
-    | TFloat                -> tag   d "d" []
+    | TDate                 -> tag   d "d" []
+    | TFloat                -> tag   d "f" []
     | TString               -> tag   d "s" []
     | TMaybe vt             -> tag   d "o" [sig_vt (d+1) vt]
     | TTuple vtl            -> tag_t d "t" (List.map (sig_vt (d+1)) vtl)
@@ -128,7 +129,8 @@ let type_of_signature s =
     | 'b' -> n i TBool
     | 'y' -> n i TByte
     | 'i' -> n i TInt
-    | 'd' -> n i TFloat
+    | 'd' -> n i TDate
+    | 'f' -> n i TFloat
     | 's' -> n i TString
     | 'o' -> ((vt_sig s) >>= (fun vt -> TMaybe(vt))) (i+1)
     | 't' -> 

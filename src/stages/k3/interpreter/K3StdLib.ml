@@ -42,6 +42,18 @@ let hash_int_args = wrap_args ["i", t_int]
 let _ = Hashtbl.add func_table 
   hash_int_name (hash_int_decl, hash_int_args, hash_int_fn)
 
+(* hash_date -- implemented as int *)
+let hash_date_fn e = 
+  match arg_of_env e with 
+  | [_,VInt i] -> e, int_temp @: Hashtbl.hash i 
+  | _ -> invalid_arg "hash_date"
+
+let f_name = "hash_date"
+let f_decl = wrap_tfunc t_date t_int
+let f_args = wrap_args ["d", t_date]
+let _ = Hashtbl.add func_table 
+  f_name (f_decl, f_args, hash_date_fn)
+
 (* hash_byte *)
 let hash_byte_fn e = 
   match arg_of_env e with 
@@ -190,18 +202,11 @@ let print_args = wrap_args ["s", t_string]
 let _ = Hashtbl.add func_table 
   print_name (print_decl, print_args, print_fn)
 
-let r_date = Str.regexp "[0-9]+-[0-9]+-[0-9]+"
 
 (* parse SQL date format *)
 let fn e =
   match arg_of_env e with
-  | [_,VString s] -> 
-      begin match r_groups s ~n:2 ~r:r_date with
-      | [Some y; Some m; Some d] -> 
-          let x = (ios y)*10000 + (ios m)*100 + (ios d) in
-          e, int_temp x
-      | _ -> invalid_arg "parse_sql_date"
-      end
+  | [_,VString s] -> e, int_temp @: int_of_sql_date s
   | _ -> invalid_arg "parse_sql_date"
 let name = "parse_sql_date"
 let decl = wrap_tfunc t_string t_int

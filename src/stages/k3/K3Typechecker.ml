@@ -196,6 +196,8 @@ let rec assignable t_l t_r =
     | TTuple(t_ls), TTuple(t_rs) -> List.length t_ls = List.length t_rs && 
         List.for_all2 assignable t_ls t_rs
     | TCollection(t_lc, t_le), TCollection(t_rc, t_re) -> assignable t_le t_re
+    | TDate, TInt -> true
+    | TInt, TDate -> true
     (* handle lambdas with _ arguments *)
     | TUnknown, _ -> true
     | _ when t_lb = t_rb -> true

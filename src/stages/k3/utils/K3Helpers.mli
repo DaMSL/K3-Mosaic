@@ -12,6 +12,7 @@ val t_bool : value_type_t
 val t_bool_mut: value_type_t
 val t_int : value_type_t
 val t_int_mut : value_type_t
+val t_date : value_type_t
 val t_float : value_type_t
 val t_float_mut : value_type_t
 val t_byte : value_type_t

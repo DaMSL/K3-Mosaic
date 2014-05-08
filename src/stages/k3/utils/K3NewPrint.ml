@@ -128,7 +128,8 @@ let rec lazy_base_type ?(brace=true) ?(mut=false) ?(empty=false) c ~in_col t =
   | TUnit       -> wrap @: lps "()"
   | TBool       -> wrap @: lps "bool"
   | TByte       -> wrap @: lps "byte"
-  | TInt        -> wrap @: lps "int"
+  | TInt        
+  | TDate       -> wrap @: lps "int"
   | TFloat      -> wrap @: lps "real"
   | TString     -> wrap @: lps "string"
   | TMaybe(vt)  -> wrap(lps "option " <| lazy_value_type c ~in_col vt)

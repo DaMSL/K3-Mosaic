@@ -35,6 +35,7 @@ let t_bool = canonical TBool
 let t_bool_mut = TIsolated(TMutable(TBool,[]))
 let t_int = canonical TInt
 let t_int_mut = TIsolated(TMutable(TInt,[]))
+let t_date = canonical TDate
 let t_float = canonical TFloat
 let t_float_mut = TIsolated(TMutable(TFloat,[]))
 let t_byte = canonical TByte

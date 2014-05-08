@@ -112,6 +112,7 @@ let rec flat_string_of_base_type t = match t with
     | TBool     -> "TBool"
     | TByte     -> "TByte"
     | TInt      -> "TInt"
+    | TDate     -> "TDate"
     | TFloat    -> "TFloat"
     | TString   -> "TString"
 
@@ -346,6 +347,7 @@ and print_base_type c t =
     | TBool     -> term_tag "TBool"
     | TByte     -> term_tag "TByte"
     | TInt      -> term_tag "TInt"
+    | TDate     -> term_tag "TDate"
     | TFloat    -> term_tag "TFloat"
     | TString   -> term_tag "TString"
 

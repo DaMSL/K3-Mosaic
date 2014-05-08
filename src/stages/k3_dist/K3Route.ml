@@ -52,7 +52,9 @@ let list_of_k3_partition_map k3maps =
     let mdata = List.map parse_tup tuple_list in
     (name, mdata) in
   let maps_with_data = match List.hd k3maps with 
-    | (Global(_,_,Some e), _) -> U.list_of_k3_container e
+    | (Global(_,_,Some e), _) ->
+        begin try U.list_of_k3_container e
+        with Invalid_argument msg -> invalid_arg @: msg^" "^K3Printing.string_of_expr e end
     | _ -> error "no global variable found" in
   List.map parse_map maps_with_data
 
@@ -85,6 +87,7 @@ exception NoHashFunction of K3.AST.base_type_t
 let hash_func_for typ =
   let rec inner t = match snd @: unwrap_vtype t with
     | TInt     -> "int"
+    | TDate    -> "date"
     | TFloat   -> "float"
     | TBool    -> "bool"
     | TString  -> "string"

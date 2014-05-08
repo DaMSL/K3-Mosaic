@@ -574,7 +574,8 @@ and default_base_value bt =
   | TUnit    -> VUnit
   | TBool    -> VBool false
   | TByte    -> error "bytes are not implemented"
-  | TInt     -> VInt 0
+  | TInt 
+  | TDate    -> VInt 0
   | TFloat   -> VFloat 0.0
   | TString  -> error "strings are not implemented"
 

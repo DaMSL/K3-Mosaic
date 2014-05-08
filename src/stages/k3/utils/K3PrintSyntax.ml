@@ -83,6 +83,7 @@ let rec lazy_base_type c ~in_col ?(no_paren=false) t =
   | TBool       -> lps "bool"
   | TByte       -> lps "byte"
   | TInt        -> lps "int"
+  | TDate       -> lps "date"
   | TFloat      -> lps "float"
   | TString     -> lps "string"
   | TMaybe(vt)  -> lps "maybe " <| lazy_value_type c ~in_col vt

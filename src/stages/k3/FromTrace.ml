@@ -41,6 +41,7 @@ let r_dash = Str.regexp "-"
 let mvos typ s = match typ with
   | TFloat  -> Float(fos s)
   | TInt    -> Int(ios s)
+  | TDate   -> Int(int_of_sql_date s)
   | TString -> let len = String.length s in
                if s.[len-1]='"' && s.[0]='"' then
                   String(String.sub s 1 (len-2))
@@ -59,6 +60,7 @@ let mvos_many types ss = List.map2 mvos types ss
 let somt = function
   | TFloat  -> "float"
   | TInt    -> "int"
+  | TDate   -> "date"
   | TString -> "string"
   | TDate   -> "int" (* treat like int for output *)
   | TBool   -> "bool"
@@ -67,6 +69,7 @@ let somt = function
 let mtos = function
   | "float"  -> TFloat
   | "int"    -> TInt
+  | "date"   -> TDate
   | "string" -> TString
   | "date"   -> TDate
   | "bool"   -> TBool
