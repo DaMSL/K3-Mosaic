@@ -111,63 +111,69 @@ def test_file(file, dbt_path, k3_path)
 	m3_file = File.join(curdir, "temp.m3")
 	err_file = File.join(curdir, "temp.err")
 
-    # run dbtoaster to get interpreted updates
-    puts "./bin/#{$dbtoaster} -d LOG-INTERPRETER-UPDATES -d LOG-INTERPRETER-TRIGGERS -d LOG-M3 #{file} > #{trace_file}"
-    `./bin/#{$dbtoaster} -d PRINT-VERBOSE -d LOG-INTERPRETER-UPDATES -d LOG-INTERPRETER-TRIGGERS -d LOG-M3 #{file} > #{trace_file} 2> #{err_file}`
-    check_error(curdir, err_file)
+  # run dbtoaster to get interpreted updates
+  cmd = "./bin/#{$dbtoaster} -d PRINT-VERBOSE -d LOG-INTERPRETER-UPDATES -d LOG-INTERPRETER-TRIGGERS -d LOG-M3 #{file} > #{trace_file} 2> #{err_file}"
+    puts cmd
+  `#{cmd}`
+  check_error(curdir, err_file)
 
 	# run dbtoaster to get m3 file with distributed portion
-    puts "./bin/#{$dbtoaster} -l distm3 -d PRINT-VERBOSE #{file} > #{m3_file}"
-    `./bin/#{$dbtoaster} -l distm3 -d PRINT-VERBOSE #{file} > #{m3_file} 2> #{err_file}`
-    check_error(curdir, err_file)
+  cmd = "./bin/#{$dbtoaster} -l distm3 -d PRINT-VERBOSE #{file} > #{m3_file} 2> #{err_file}"
+  puts cmd
+  `#{cmd}`
+  check_error(curdir, err_file)
 
 	# change directory back
 	puts "cd #{curdir}"
 	Dir.chdir "#{curdir}"
 
   # create a k3 file for comparison's sake
-	puts "#{k3_path} -p -i m3 -l k3 temp.m3 > temp.k3"
-	`#{k3_path} -p -i m3 -l k3 temp.m3 > temp.k3 2> #{err_file}`
+	cmd = "#{k3_path} -p -i m3 -l k3 temp.m3 > temp.k3 2> #{err_file}"
+  puts cmd
+  `#{cmd}`
 
-    # string for k3 distributed file creation: either use a trace file or an order file
-    create_str = if $order_file=="" then "--trace #{trace_file}" else "--order #{$order_file}" end
+  # string for k3 distributed file creation: either use a trace file or an order file
+  create_str = if $order_file=="" then "--trace #{trace_file}" else "--order #{$order_file}" end
 
-    # create a k3 distributed file (without a partition map)
-	puts "#{k3_path} -p --lambda -i m3 -l k3disttest temp.m3 #{create_str} #{$force_cmd} > temp.k3dist"
-	`#{k3_path} -p --lambda -i m3 -l k3disttest temp.m3 #{create_str} #{$force_cmd} > temp.k3dist 2> #{err_file}`
-	check_error(curdir, err_file)
-    check_type_error(curdir, 'temp.k3dist')
+  # create a k3 distributed file (without a partition map)
+  cmd = "#{k3_path} -p --lambda -i m3 -l k3disttest temp.m3 #{create_str} #{$force_cmd} > temp.k3dist 2> #{err_file}"
+  puts cmd
+  `#{cmd}`
+  check_error(curdir, err_file)
+  check_type_error(curdir, 'temp.k3dist')
     
-    if $num_nodes > 1 then
+  if $num_nodes > 1 then
       # create a partition map
-      str = "#{$part_path} temp.k3dist -n #{$num_nodes} > temp.part"
-      puts str
-      output = `#{str}`
+      cmd = "#{$part_path} temp.k3dist -n #{$num_nodes} > temp.part"
+      puts cmd
+      output = `#{cmd}`
       check_type_error(curdir, 'temp.part')
 
       # create another k3 distributed file (with partition map)
-      puts "#{k3_path} -p --lambda -i m3 -l k3disttest temp.m3 #{create_str} -m temp.part #{$force_cmd} > temp.k3dist"
-      `#{k3_path} -p --lambda -i m3 -l k3disttest temp.m3 #{create_str} -m temp.part #{$force_cmd} > temp.k3dist 2> #{err_file}`
+      cmd = "#{k3_path} -p --lambda -i m3 -l k3disttest temp.m3 #{create_str} -m temp.part #{$force_cmd} > temp.k3dist 2> #{err_file}"
+      puts cmd
+      `#{cmd}`
       check_error(curdir, err_file)
       check_type_error(curdir, 'temp.k3dist')
-    end
+  end
 
-    # create node list
-    node_list = Array.new($num_nodes) do |i|
-        "#{i}.#{i}.#{i}.#{i}:10/node"
-    end
+  # create node list
+  node_list = Array.new($num_nodes) do |i|
+        port = (i + 4) * 10000
+        "127.0.0.1:#{port}/node"
+  end
 
-    peer_str = "-n localhost:10000/switch"
-    node_list.each do |ip|
-        peer_str += ",#{ip}"
-    end
+  peer_str = "-n localhost:10000/switch"
+  node_list.each do |ip|
+      peer_str += ",#{ip}"
+  end
 
 	# run the k3 driver on the input
-	puts "#{k3_path} --test #{peer_str} -q #{$q_type} #{$shuffle_cmd} temp.k3dist"
-	output = `#{k3_path} --test #{peer_str} -q #{$q_type} #{$shuffle_cmd} temp.k3dist 2> #{err_file}`
+  cmd = "#{k3_path} --test #{peer_str} -q #{$q_type} #{$shuffle_cmd} temp.k3dist" 
+	puts cmd
+	output = `#{cmd} 2> #{err_file}`
 	check_error(curdir, err_file)
 	puts output
-    exit
 end
 
 test_file(file, dbtoaster_path, k3_path)
