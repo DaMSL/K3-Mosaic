@@ -138,8 +138,7 @@ let declare_global_vars p ast =
 
 (* global functions *)
 (* most of our global functions come from the shuffle/route code *)
-
-let declare_global_funcs partmap p ast =
+let declare_global_prims =
   let global_vid_ops =
       mk_global_vid_op vid_eq VEq ::
       mk_global_vid_op vid_neq VNeq ::
@@ -147,7 +146,11 @@ let declare_global_funcs partmap p ast =
       mk_global_vid_op vid_gt VGt ::
       mk_global_vid_op vid_leq VLeq ::
       mk_global_vid_op vid_geq VGeq ::
-      [] in
+      []
+  in
+  global_vid_ops
+
+let declare_global_funcs partmap p ast =
   (* log_master_write *)
   let log_master_write_code () = mk_global_fn
     log_master_write_nm
@@ -283,7 +286,6 @@ let declare_global_funcs partmap p ast =
               mk_var K3Global.peers_name
         ]
   in
-  global_vid_ops @
   [log_read_geq_code] @
   for_all_maps p (fun map ->
     add_delta_to_buffer_code `DoComplete map) @
@@ -1198,8 +1200,11 @@ let gen_dist ?(force_correctives=false) p partmap ast =
   let regular_trigs = List.flatten @:
     for_all_trigs p @: fun t ->
       gen_dist_for_t ~force_correctives p ast t potential_corr_maps in
-  let prog =
+  let global_prims = 
     declare_global_vars p ast @
+    declare_global_prims
+  in
+  let prog_middle =
     global_funcs @ (* maybe make this not order-dependent *)
     declare_foreign_functions p @
     filter_corrective_list ::  (* global func *)
@@ -1209,6 +1214,11 @@ let gen_dist ?(force_correctives=false) p partmap ast =
       send_corrective_trigs p @
       demux_trigs ast)::    (* per-map basis *)
       roles_of ast in
+  let frontiers = emit_frontier_fns p in
+  let prog = global_prims @
+    frontiers @
+    prog_middle
+  in
   let foreign = List.filter (fun d -> U.is_foreign d) prog in
   let rest = List.filter (fun d -> not @: U.is_foreign d) prog in
   snd @: U.renumber_program_ids (foreign @ rest)

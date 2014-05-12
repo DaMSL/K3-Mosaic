@@ -538,12 +538,7 @@ let test params inputs =
 let transform_to_k3_dist force_correctives partmap p proginfo =
   (* do not use. Simply for type checking original program *)
   (*tp = typed_program p in *)
-  try
-    GenDist.gen_dist ~force_correctives proginfo partmap p
-  with Invalid_argument(msg) ->
-    print_endline ("ERROR: " ^msg);
-    print_endline (ProgInfo.string_of_prog_data proginfo);
-    exit (-1)
+  GenDist.gen_dist ~force_correctives proginfo partmap p
 
 let process_inputs params =
   let proc_fn f = match params.in_lang, !(params.action) with

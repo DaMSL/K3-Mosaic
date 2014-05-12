@@ -121,61 +121,71 @@ let stmt_cntrs_type = wrap_tset_mut @: wrap_ttuple_mut
 let log_for_t t = "log_"^t
 let log_master = "log__master"
 
-(* get the latest vals up to a certain vid *)
-(* This is needed both for sending a push, and for modifying a local slice
- * operation *)
-(* slice_col is the k3 expression representing the collection.
- * m_pat is an optional pattern for slicing the data first *)
+(* the function name for the frontier function *)
+(* takes the types of the map *)
+(* NOTE: assumes the first type is vid *)
+let frontier_name p map_id =
+  let m_t = snd_many @: P.map_ids_types_for p map_id in
+  "frontier_"^String.concat "_" @:
+    List.map K3PrintSyntax.string_of_value_type m_t
+
+let frontier_hash = Hashtbl.create 50
+
+(* Get the latest vals up to a certain vid 
+ * - This is needed both for sending a push, and for modifying a local slice
+ * operation
+ * - slice_col is the k3 expression representing the collection.
+ * m_pat is an optional pattern for slicing the data first 
+ * - assumes a local 'vid' variable containing the border of the frontier
+ * - keep_vid indicates whether we need to rmove the vid from the result collection
+ *   (we usually need it removed only for modifying ast *)
 let map_latest_vid_vals p slice_col m_pat map_id ~keep_vid =
-  let max_vid = "max_vid" in
-  let map_vid = "map_vid" in
-  let m_id_t =
-    if keep_vid then P.map_ids_types_with_v_for ~vid:map_vid p map_id
-    else P.map_ids_types_for p map_id in
-  let m_ids = fst_many m_id_t in
-  let m_ts = snd_many m_id_t in
-  let m_t_set = wrap_tset @: wrap_ttuple @: m_ts in
   let m_id_t_v = P.map_ids_types_with_v_for ~vid:"map_vid" p map_id in
-  let m_id_t_no_val = P.map_ids_types_no_val_for p map_id in
-  let m_id_no_val = fst_many @: m_id_t_no_val in
-  let m_t_no_val = snd_many @: m_id_t_no_val in
-  let num_keys = List.length m_id_t_no_val in
-  (* if we have bound variables, we should slice first. Otherwise,
-      we don't need a slice *)
-  let access_k3 = begin match m_pat with
+  let m_t = P.map_types_for p map_id in
+  (* Add the types to the hashtable *)
+  Hashtbl.replace frontier_hash m_t map_id;
+  (* create a function name per type signature *)
+  let access_k3 = match m_pat with
     | Some pat ->
         (* slice with an unknown for the vid so we only get the effect of
         * any bound variables *)
         mk_slice slice_col @:
           mk_tuple @: P.map_add_v mk_cunknown pat
     | None     -> slice_col
-    end
   in
-  (* we need to get the latest vid for every possible key, and then filter
-   * only those latest values *)
-  let num_pat_unknowns = match m_pat with
-    | Some pat ->
-        (* sanity check *)
-        let p_len = List.length pat in
-        if p_len <> num_keys + 1 then (* keys + value *)
-          let s =
-            Printf.sprintf "expected pattern length %d but got %d" num_keys p_len
-          in invalid_arg s
-        else
-          (* get number of bound value *)
-          let open K3.AST in
-          let l = List.length @:
-            List.filter (fun e -> K3Util.tag_of_expr e <> Const CUnknown) pat
-          in
-          (* another sanity check *)
-          if l > num_keys then invalid_arg "too many values specified in pattern"
-          else l
-    | None -> 0
+  let simple_app = 
+    mk_apply (mk_var @: frontier_name p map_id) @:
+      mk_tuple [mk_var "vid"; access_k3]
   in
+  if keep_vid then simple_app
+  else
+    (* remove the vid from the collection *)
+    mk_map 
+      (mk_lambda 
+        (wrap_args m_id_t_v) @:
+        mk_tuple @: list_drop 1 @: ids_to_vars @: fst_many m_id_t_v)
+      simple_app
+
+
+
+
+(* Create a function for getting the latest vals up to a certain vid *)
+(* This is needed both for sending a push, and for modifying a local slice
+ * operation *)
+(* Returns the type pattern for the function, and the function itself *)
+let frontier_fn p map_id =
+  let max_vid = "max_vid" in
+  let map_vid = "map_vid" in
+  let m_id_t_v = P.map_ids_types_with_v_for ~vid:"map_vid" p map_id in
+  let m_t_v_set = wrap_tset @: wrap_ttuple @: snd_many @: m_id_t_v in
+  let m_id_t_no_val = P.map_ids_types_no_val_for p map_id in
+  (* create a function name per type signature *)
+  (* if we have bound variables, we should slice first. Otherwise,
+      we don't need a slice *)
   (* a routine common to both methods of slicing *)
   let common_vid_lambda =
     mk_assoc_lambda
-      (wrap_args ["acc", m_t_set; max_vid, t_vid])
+      (wrap_args ["acc", m_t_v_set; max_vid, t_vid])
       (wrap_args m_id_t_v)
       (mk_if
         (* if the map vid is less than current vid *)
@@ -186,7 +196,7 @@ let map_latest_vid_vals p slice_col m_pat map_id ~keep_vid =
           (v_eq (mk_var map_vid) (mk_var max_vid))
           (mk_tuple
             [mk_combine
-              (mk_singleton m_t_set (mk_tuple @: ids_to_vars m_ids)) @:
+              (mk_singleton m_t_v_set (mk_tuple @: ids_to_vars @: fst_many m_id_t_v)) @:
                   mk_var "acc";
             mk_var max_vid])
           (* else if map vid is greater than max_vid, make a new
@@ -194,7 +204,7 @@ let map_latest_vid_vals p slice_col m_pat map_id ~keep_vid =
           (mk_if
             (v_gt (mk_var map_vid) (mk_var max_vid))
             (mk_tuple
-              [mk_singleton m_t_set (mk_tuple @: ids_to_vars m_ids);
+              [mk_singleton m_t_v_set (mk_tuple @: ids_to_vars @: fst_many m_id_t_v);
               mk_var map_vid])
             (* else keep the same accumulator and max_vid *)
             (mk_tuple [mk_var "acc"; mk_var max_vid])
@@ -204,28 +214,38 @@ let map_latest_vid_vals p slice_col m_pat map_id ~keep_vid =
         (mk_tuple [mk_var "acc"; mk_var max_vid])
       )
   in
-  if num_keys - num_pat_unknowns <= 0 then
-    (* a regular fold is enough if we have no keys or if every key is bound *)
-    (* get the maximum vid that's less than our current vid *)
-    mk_fst [m_t_set; t_vid] @:
+  (* a regular fold is enough if we have no keys *)
+  (* get the maximum vid that's less than our current vid *)
+  let action = match m_id_t_no_val with
+  | [] ->
+    mk_fst [m_t_v_set; t_vid] @:
       mk_agg
         common_vid_lambda
-        (mk_tuple [mk_empty m_t_set; min_vid_k3])
-        access_k3
-  else
-    (* we have free keys so we need to do some more work *)
-    mk_flatten @: mk_map
-      (mk_assoc_lambda
-        (wrap_args ["_", wrap_ttuple m_t_no_val]) (* group *)
-        (wrap_args ["project", m_t_set; "_", t_vid]) @:
-        mk_var "project"
-      ) @:
-      mk_gbagg
-        (mk_lambda (wrap_args m_id_t_v) @:
-          (* group by the keys (not vid, not values) *)
-          mk_tuple @: ids_to_vars @: m_id_no_val)
-        (* get the maximum vid that's less than our current vid *)
-        common_vid_lambda
-        (mk_tuple [mk_empty m_t_set; min_vid_k3])
-        access_k3
+        (mk_tuple [mk_empty m_t_v_set; min_vid_k3])
+        (mk_var "input_map")
+  | _ ->
+      mk_flatten @: mk_map
+        (mk_assoc_lambda
+          (wrap_args ["_", wrap_ttuple @: snd_many m_id_t_no_val]) (* group *)
+          (wrap_args ["project", m_t_v_set; "_", t_vid]) @:
+          mk_var "project"
+        ) @:
+        mk_gbagg
+          (mk_lambda (wrap_args m_id_t_v) @:
+            (* group by the keys (not vid, not values) *)
+            mk_tuple @: ids_to_vars @: fst_many m_id_t_no_val)
+          (* get the maximum vid that's less than our current vid *)
+          common_vid_lambda
+          (mk_tuple [mk_empty m_t_v_set; min_vid_k3])
+          (mk_var "input_map")
+  in
+  mk_global_fn (frontier_name p map_id) ["vid", t_vid; "input_map", m_t_v_set] [m_t_v_set] @:
+      action
 
+(* emit all the frontier functions after collecting the types *)
+let emit_frontier_fns p =
+  let fns = ref [] in
+  Hashtbl.iter (fun _ map_id ->
+    fns := frontier_fn p map_id :: !fns)
+  frontier_hash;
+  !fns

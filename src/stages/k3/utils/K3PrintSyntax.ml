@@ -49,7 +49,7 @@ let wrap_hv i f = lbox (lhv i) f
 let wrap_hov i f = lbox (lhov i) f
 let wrap_indent f = wrap_hov 2 f
 
-let error () = lps "???"
+let error s = lps @: "???: "^s
 
 let lazy_control_anno c = function
   | Effect ids -> lps "effect " <| lazy_paren @: 
@@ -159,7 +159,7 @@ let lazy_collection_vt c vt eval = match vt with
   | TIsolated(TImmutable(TCollection(ct, _),_))
   | TContained(TMutable(TCollection(ct, _),_))
   | TContained(TImmutable(TCollection(ct, _),_)) -> lazy_collection c ct eval
-  | _ -> error () (* type error *)
+  | _ -> error @: K3Printing.string_of_value_type vt (* type error *)
 
 
 let rec lazy_expr c expr = 
@@ -253,7 +253,7 @@ let rec lazy_expr c expr =
             tuple_no_paren c r2
         | Singleton _, Empty _ -> let l2 = U.decompose_singleton l in 
           tuple_no_paren c l2
-        | _ -> error () (* type error *)
+        | _ -> error (K3Printing.string_of_expr l^", "^K3Printing.string_of_expr r) (* type error *)
       end in
     let (e1, e2) = U.decompose_combine expr in
     (* wrap the left side of the combine if it's needed *)
@@ -337,7 +337,7 @@ let rec lazy_expr c expr =
         wrap_hov 2 (lps "let " <| lazy_arg c false arg <|
           lps " =" <| lsp () <| lazy_expr c e2 <| lsp () ) <| lps "in"
           <| lsp () <| lazy_expr c body
-      | _ -> error () (* type error *)
+      | _ -> error (K3Printing.string_of_expr e1) (* type error *)
     end
   | Block -> let es = U.decompose_block expr in
     lps "do {" <| lind () <| 
