@@ -159,7 +159,7 @@ def test_file(file, dbt_path, k3_path)
 
   # create node list
   node_list = Array.new($num_nodes) do |i|
-        port = (i + 4) * 10000
+        port = (i + 5) * 10000
         "127.0.0.1:#{port}/node"
   end
 

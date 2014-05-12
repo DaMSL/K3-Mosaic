@@ -72,7 +72,7 @@ def main():
 
   # create the old k3 files necessary for this query
   print("\nCreating old k3 files...")
-  cmd = 'ruby auto_test.rb -d -p 2 -f {file}'.format(file=args.sql_file)
+  cmd = 'time ruby auto_test.rb -d -p 1 -f {file}'.format(file=args.sql_file)
   print_sys(cmd)
 
   # handle the logs created
