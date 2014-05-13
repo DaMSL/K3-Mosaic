@@ -260,7 +260,7 @@ let modify_map_add_vid p ast stmt =
                 (mk_lambda
                   (wrap_args [arg_id, wrap_tset @: wrap_ttuple lmap_types]) b)
                 arg
-            | _ -> raise (UnhandledModification(PR.string_of_expr e)) end
+            | _ -> raise (UnhandledModification("At Apply: "^PR.string_of_expr e)) end
         | _ -> NopMsg, e
       end
 
@@ -378,13 +378,14 @@ let delta_action p ast stmt action =
                     mk_tuple full_vars]
                   @
                   (* do we need to send to another trigger *)
-                  match target_trigger with 
+                  begin match target_trigger with 
                   | None -> [] 
                   | Some t ->
                     [mk_send
                       (mk_ctarget t)
                       G.me_var @:
                       mk_tuple @: full_vars]
+                  end
             ) arg2 (* this is where the original calculation code is *)
         ) arg
     end
@@ -481,7 +482,8 @@ let delta_action p ast stmt action =
         )
         arg
     end
-  | _ -> raise @: UnhandledModification(PR.string_of_expr ast)
+  | _ -> raise @: UnhandledModification(
+     Printf.sprintf "Bad tag [%d]: %s" (U.id_of_expr body) (PR.string_of_expr body))
 
 (* rename a variable in an ast *)
 let rename_var old_var_name new_var_name ast =
