@@ -243,8 +243,8 @@ let declare_global_funcs partmap p ast =
     let vars_val = hd @: list_take_end 1 vars_v in
     let vars_arg_val = hd @: list_take_end 1 vars_arg_v in
     let vars_arg_no_v_no_val =
-      ids_to_vars @: fst_many @: list_drop_end 1 ids_types_arg in
-
+      ids_to_vars @: fst_many @: list_drop_end 1 ids_types_arg
+    in
     mk_global_fn func_name
       ["min_vid", t_vid; delta_tuples_nm, wrap_tset @: wrap_ttuple types_v]
       [t_unit] @:
@@ -1167,6 +1167,14 @@ let demux_trigs ast =
 let roles_of ast =
   List.filter (fun d -> U.is_role d || U.is_def_role d) ast
 
+(* Generate all the frontier functions *)
+let emit_frontier_fns p =
+  let hash = Hashtbl.create 50 in
+  ignore(for_all_maps p (fun map -> Hashtbl.replace hash (map_types_for p map) map));
+  let fns = ref [] in
+  Hashtbl.iter (fun _ map_id -> fns := map_id :: !fns) hash;
+  List.map (fun map -> frontier_fn p map) !fns
+
 (* Generate all the code for a specific trigger *)
 let gen_dist_for_t ~force_correctives p ast trig corr_maps =
   (* (stmt_id,rhs_map_id)list *)
@@ -1192,6 +1200,7 @@ let gen_dist_for_t ~force_correctives p ast trig corr_maps =
   []
 
 (* Function to generate the whole distributed program *)
+(* @param force_correctives Attempt to create dist code that encourages correctives *)
 let gen_dist ?(force_correctives=false) p partmap ast =
   (* because this uses state, need it initialized here *)
   (* TODO: change to not require state *)
@@ -1200,11 +1209,10 @@ let gen_dist ?(force_correctives=false) p partmap ast =
   let regular_trigs = List.flatten @:
     for_all_trigs p @: fun t ->
       gen_dist_for_t ~force_correctives p ast t potential_corr_maps in
-  let global_prims = 
+  let prog = 
     declare_global_vars p ast @
-    declare_global_prims
-  in
-  let prog_middle =
+    declare_global_prims @
+    emit_frontier_fns p @
     global_funcs @ (* maybe make this not order-dependent *)
     declare_foreign_functions p @
     filter_corrective_list ::  (* global func *)
@@ -1214,11 +1222,6 @@ let gen_dist ?(force_correctives=false) p partmap ast =
       send_corrective_trigs p @
       demux_trigs ast)::    (* per-map basis *)
       roles_of ast in
-  let frontiers = emit_frontier_fns p in
-  let prog = global_prims @
-    frontiers @
-    prog_middle
-  in
   let foreign = List.filter (fun d -> U.is_foreign d) prog in
   let rest = List.filter (fun d -> not @: U.is_foreign d) prog in
   snd @: U.renumber_program_ids (foreign @ rest)

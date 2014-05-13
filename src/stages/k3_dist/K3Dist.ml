@@ -129,8 +129,6 @@ let frontier_name p map_id =
   "frontier_"^String.concat "_" @:
     List.map K3PrintSyntax.string_of_value_type m_t
 
-let frontier_hash = Hashtbl.create 50
-
 (* Get the latest vals up to a certain vid 
  * - This is needed both for sending a push, and for modifying a local slice
  * operation
@@ -142,8 +140,6 @@ let frontier_hash = Hashtbl.create 50
 let map_latest_vid_vals p slice_col m_pat map_id ~keep_vid =
   let m_id_t_v = P.map_ids_types_with_v_for ~vid:"map_vid" p map_id in
   let m_t = P.map_types_for p map_id in
-  (* Add the types to the hashtable *)
-  Hashtbl.replace frontier_hash m_t map_id;
   (* create a function name per type signature *)
   let access_k3 = match m_pat with
     | Some pat ->
@@ -165,9 +161,6 @@ let map_latest_vid_vals p slice_col m_pat map_id ~keep_vid =
         (wrap_args m_id_t_v) @:
         mk_tuple @: list_drop 1 @: ids_to_vars @: fst_many m_id_t_v)
       simple_app
-
-
-
 
 (* Create a function for getting the latest vals up to a certain vid *)
 (* This is needed both for sending a push, and for modifying a local slice
@@ -241,11 +234,3 @@ let frontier_fn p map_id =
   in
   mk_global_fn (frontier_name p map_id) ["vid", t_vid; "input_map", m_t_v_set] [m_t_v_set] @:
       action
-
-(* emit all the frontier functions after collecting the types *)
-let emit_frontier_fns p =
-  let fns = ref [] in
-  Hashtbl.iter (fun _ map_id ->
-    fns := frontier_fn p map_id :: !fns)
-  frontier_hash;
-  !fns
