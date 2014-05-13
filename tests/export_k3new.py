@@ -1,4 +1,4 @@
-#!/usr/bin/env python3.3
+#!/usr/bin/env python3
 
 #
 # Prepare everything the new k3 needs to evaluate

@@ -11,7 +11,8 @@ then
       mkdir "./external/dbtoaster/bin"
   fi
   cd external/dbtoaster_src
-  make all
+  echo "Building DBToaster..."
+  make bin/dbtoaster
   cp bin/dbtoaster* ../dbtoaster/bin
   cd $SCRIPTPATH
 fi
