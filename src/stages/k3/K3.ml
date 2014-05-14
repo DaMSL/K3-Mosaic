@@ -34,6 +34,7 @@ type base_type_t
     | TCollection   of container_type_t * value_type_t
     | TAddress
     | TTarget       of base_type_t
+    | TIndirect     of value_type_t
 
 and mutable_type_t
     = TMutable      of base_type_t * annotation_t
@@ -111,6 +112,7 @@ type expr_tag_t
 
     | Assign
     | Deref
+    | Indirect
 
     | Send
 

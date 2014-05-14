@@ -333,7 +333,7 @@ module CPPGenerator : Imperative.Generator
 
   (* TODO: for now, ignore TImmutable and TMutable. Think about whether these
    * should be implement as const types and shared_ptrs *) 
-  and print_k3_value_type vt = match base_of vt with
+  and print_k3_value_type vt = match base_of vt () with
     | TBool  -> ps "bool"
     | TByte  -> ps "char"
     | TInt   -> ps "int"

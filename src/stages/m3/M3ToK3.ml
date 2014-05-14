@@ -52,7 +52,7 @@ let mk_k3_tuple (elems:K.value_type_t list) =
    KT.canonical (K.TTuple(elems))
 
 let init_val_from_type t =
-  begin match KT.base_of t with
+  begin match KT.base_of t () with
     | K.TInt   -> KH.mk_const (K.CInt(0))
     | K.TFloat -> KH.mk_const (K.CFloat(0.))
     | _ -> failwith "Map type with no initial value"
@@ -129,7 +129,7 @@ let tvar_to_vtvar (v,vt) =
 
 let init_val_from_full_type t = init_val_from_type (extract_value_type t)
 
-let base_of_any t = KT.base_of (extract_value_type t)
+let base_of_any t = KT.base_of (extract_value_type t) ()
 
 let compatible_types t1 t2 = 
   begin match base_of_any t1, base_of_any t2 with
@@ -577,21 +577,21 @@ let map_access_to_expr mapn ins outs map_ret_t theta_vars_k init_expr_opt =
             let map_expr = KH.mk_var mapn in
             if free_vars_k = [] then 
                if init_expr_opt = None 
-               then mk_lookup map_expr (KT.base_of map_ret_kt) outs_k outs_tl
+               then mk_lookup map_expr (KT.base_of map_ret_kt ()) outs_k outs_tl
                else 
                   let _,init_expr = extract_opt init_expr_opt in
                     KH.mk_if (mk_test_member map_expr outs_k 
                                              (List.map KT.canonical
                                                        outs_tl)
                                              map_ret_kt)
-                             (mk_lookup map_expr (KT.base_of map_ret_kt) outs_k outs_tl)
+                             (mk_lookup map_expr (KT.base_of map_ret_kt ()) outs_k outs_tl)
                              init_expr
             else
                slice_and_project map_expr
                      
         | ( x,[]) -> 
             let map_expr = KH.mk_var mapn in
-            if init_expr_opt = None then mk_lookup map_expr (KT.base_of map_ret_kt) outs_k outs_tl
+            if init_expr_opt = None then mk_lookup map_expr (KT.base_of map_ret_kt ()) outs_k outs_tl
             else 
                let iv_e = KH.mk_var (gen_init_val_sym ()) in
                let _,init_expr = extract_opt init_expr_opt in   
@@ -599,7 +599,7 @@ let map_access_to_expr mapn ins outs map_ret_t theta_vars_k init_expr_opt =
                                         (List.map KT.canonical
                                                   ins_tl)
                                         map_ret_kt)
-                        (mk_lookup map_expr (KT.base_of map_out_t) ins_k ins_tl)
+                        (mk_lookup map_expr (KT.base_of map_out_t ()) ins_k ins_tl)
                         (apply_lambda [KU.id_of_var iv_e, map_ret_kt] 
                                       [init_expr] iv_e)
                                  
@@ -608,14 +608,14 @@ let map_access_to_expr mapn ins outs map_ret_t theta_vars_k init_expr_opt =
                                     
             let out_access_expr coll_ve =   
                if free_vars_k = [] then  
-                  (mk_lookup coll_ve (KT.base_of map_ret_kt) outs_k outs_tl)
+                  (mk_lookup coll_ve (KT.base_of map_ret_kt ()) outs_k outs_tl)
                else
                   slice_and_project coll_ve
             in
             
             if init_expr_opt = None then 
                apply_lambda [KU.id_of_var map_out_ve, map_out_t] 
-                            [mk_lookup map_expr (KT.base_of map_out_t) ins_k ins_tl]
+                            [mk_lookup map_expr (KT.base_of map_out_t ()) ins_k ins_tl]
                             (out_access_expr map_out_ve)
             else 
                let init_outs_el,ie = extract_opt init_expr_opt in
@@ -637,7 +637,7 @@ let map_access_to_expr mapn ins outs map_ret_t theta_vars_k init_expr_opt =
                             ) ie
                      ),(
                                KH.mk_block [ 
-                                  mk_update map_expr (KT.base_of map_ret_kt) ins_k ins_tl [] [] iv_e;
+                                  mk_update map_expr (KT.base_of map_ret_kt ()) ins_k ins_tl [] [] iv_e;
                                   out_access_expr iv_e
                                ]
                             )
@@ -656,7 +656,7 @@ let map_access_to_expr mapn ins outs map_ret_t theta_vars_k init_expr_opt =
                                                      ins_tl)
                                            (map_out_t))
                            (apply_lambda [KU.id_of_var map_out_ve, map_out_t]
-                                         [mk_lookup map_expr (KT.base_of map_out_t) ins_k ins_tl]
+                                         [mk_lookup map_expr (KT.base_of map_out_t ()) ins_k ins_tl]
                                          (out_access_expr map_out_ve))
                            (apply_lambda [KU.id_of_var iv_e, map_out_t]
                                          [init_expr]
@@ -1035,28 +1035,28 @@ let rec calc_to_k3_expr meta ?(generate_init = false) theta_vars_k calc :
             let (exists_outs_el,exists_ret_ve,exists_e),nm = rcr exists_calc in
             let ret_ve = KH.mk_var (gen_exists_ret_sym ()) in
             let exists_body = 
-               (exprs_to_tuple ((List.map (fun (x,_) -> KH.mk_var x)
+               exprs_to_tuple @: (List.map (fun (x,_) -> KH.mk_var x)
                                           exists_outs_el) @ 
                                 [ KH.mk_if 
-                                    (KH.mk_neq (fst exists_ret_ve)
-                                               (KH.mk_const (zero_of_type
-                                                  (KT.base_of 
-                                                    (extract_value_type
-                                                      (snd exists_ret_ve))))))
-                                    (KH.mk_const (K.CInt(1)))
-                                    (KH.mk_const (K.CInt(0)))
-                                ])) 
+                                    (KH.mk_neq (fst exists_ret_ve) @:
+                                               KH.mk_const @: zero_of_type @:
+                                                  KT.base_of  
+                                                    (extract_value_type @:
+                                                      snd exists_ret_ve) ())
+                                    (KH.mk_const @: K.CInt 1)
+                                    (KH.mk_const @: K.CInt 0)
+                                ]
             in               
             let exists_lambda = 
                   lambda (List.map (fun (x,xt) -> 
                                       (x, extract_value_type xt))
                                    (exists_outs_el @
-                                    [KU.id_of_var (fst exists_ret_ve),
-                                     (snd exists_ret_ve)]))
+                                    [KU.id_of_var @: fst exists_ret_ve,
+                                     snd exists_ret_ve]))
                          exists_body
             in
             let expr = apply_lambda_to_expr exists_lambda K.TInt exists_e in   
-               ((exists_outs_el, (ret_ve, K.TValue(KH.t_int)), expr), nm)
+               ((exists_outs_el, (ret_ve, K.TValue KH.t_int), expr), nm)
             
          (***** END EXISTS HACK *****)
 

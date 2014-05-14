@@ -213,7 +213,7 @@ let rec lazy_expr c expr =
     expr_pair ~sep:(lsp () <| lps sym <| lsp ()) ~wl:wrapl ~wr:wrapr (el, er) 
   in let expr_type_is_bool e = 
     try (match T.type_of_expr e with
-    | TValue x | TFunction(_,x) -> match T.base_of x with
+    | TValue x | TFunction(_,x) -> match T.base_of x () with
         | TBool -> true
         | _     -> false)
     with T.TypeError(_,_,_) -> false (* assume additive *)
@@ -314,7 +314,7 @@ let rec lazy_expr c expr =
           let ms = U.meta_of_expr expr in
           begin match list_find (function Type _ -> true | _ -> false) ms with
             | Some (Type (TFunction(_,x))) -> 
-              begin match T.base_of x with
+              begin match T.base_of x () with
                 | TTuple _ -> false
                 | _        -> true (* we highlight anything that's not a tuple result *)
               end

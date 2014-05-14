@@ -24,7 +24,7 @@ let is_external_type t = match t with TInternal _ -> false | _ -> true
 
 let positions_of_deps d = match d with Element -> [] | Positions p -> p
 
-let tuple_type_fields vt = match base_of vt with
+let tuple_type_fields vt = match base_of vt () with
   | TTuple fields -> fields
   | _ -> failwith "invalid tuple type"
 
@@ -35,13 +35,14 @@ let project_tuple_type_fields vt pos =
 
 let project_tuple_type vt pos = 
   let t =  match project_tuple_type_fields vt pos with 
-    | [] -> failwith "invalid tuple projection"
-    | [x] -> base_of x | x -> TTuple x
+    | []  -> failwith "invalid tuple projection"
+    | [x] -> base_of x () 
+    | x   -> TTuple x
   in ib_type t
 
 let element_of_collection t = match t with
   | TInternal(TValue(vt)) -> 
-    begin match base_of vt with TCollection (ct,et) -> Some(ct, et) | _ -> None end
+    begin match base_of vt () with TCollection (ct,et) -> Some(ct, et) | _ -> None end
   | _ -> None
 
 
@@ -196,7 +197,7 @@ let rec composite_decl_of_type id counter vt =
     in if y = [] then failwith "invalid field types for composite"
        else x, TComposite(y), z
   in
-  match base_of vt with
+  match base_of vt () with
   | TUnit | TUnknown | TAddress | TTarget _ ->
     failwith "invalid argument for composite type construction"
 
@@ -355,7 +356,7 @@ and wrap_collection primary (orig_ct, orig_elem_t) (ct, elem_t, elem_t_decl_opt)
 
   let is_native_collection = match ct with
     | TInternal (TValue vt) -> 
-      begin try (let _ = collection_of (base_of vt) (fun () -> raise Not_found) in true)
+      begin try (let _ = collection_of (base_of vt ()) (fun () -> raise Not_found) in true)
             with Not_found -> false
       end
     | _ -> false

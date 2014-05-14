@@ -16,13 +16,6 @@ open K3Runtime
 
 type breakpoint_t = K3Runtime.breakpoint_t
 
-let (<|) x f = f x
-and (|>) f y = f y
-
-let (+++) f g = fun t x -> f (g t x) x
-let (++%) f g = fun t x -> f (g t) x
-let (%++) f g = fun t x -> f (g t x)
-
 (* Prettified error handling *)
 let int_erroru uuid ?extra fn_name s =
   let msg = fn_name^": "^s in
@@ -236,7 +229,7 @@ and eval_expr (address:address) sched_st cenv texpr =
     (* Collection constructors *)
     | Empty(ct) ->
         let name = "Empty" in
-        let ctype, _ = ct <| collection_of ++% base_of |> t_erroru name @: VTBad(ct) in
+        let ctype, _ = ct <| collection_of +++ base_of |> t_erroru name @: VTBad(ct) in
         cenv, VTemp(
             match ctype with
             | TSet -> VSet([])
@@ -248,7 +241,7 @@ and eval_expr (address:address) sched_st cenv texpr =
         let nenv, element = child_value cenv 0 in
         let name = "Singleton" in
         let ctype, _ =
-          ct <| collection_of ++% base_of |> t_erroru name @: VTBad(ct) in
+          ct <| collection_of +++ base_of |> t_erroru name @: VTBad(ct) in
         cenv, VTemp(
             match ctype with
             | TSet  -> VSet([element])

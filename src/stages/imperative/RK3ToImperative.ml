@@ -269,7 +269,7 @@ let imperative_of_expr_node mk_meta fn_arg_env
 
   (* Loop body construction *)
   let collection_loop c_type c_pair c_reify_cmds body_cmd_fn =
-    let _, elem_t = collection_of (base_of (value_of c_type type_failure)) type_failure in
+    let _, elem_t = collection_of (base_of (value_of c_type type_failure) ()) type_failure in
     let loop_id, loop_t = mk_loop_sym(), elem_t in
     let loop_body = body_cmd_fn loop_id loop_t in
     let loop_target, pre_cmds = unwrap_pair
@@ -661,8 +661,8 @@ let imperative_of_expr_node mk_meta fn_arg_env
 
           let gb_key_id, gb_val_id = mk_gb_key_sym (), mk_gb_val_sym () in
           let gb_tuple_t, gb_key_t, gb_val_t =
-            let result_type = base_of (value_of (type_of_expr e) type_failure) in
-            match base_of (snd (collection_of result_type type_failure)) with
+            let result_type = base_of (value_of (type_of_expr e) type_failure) () in
+            match base_of (snd @: collection_of result_type type_failure) () with
               | TTuple([gb_t; a_t]) as t -> (U.iv_type (canonical t)), (U.iv_type gb_t), (U.iv_type a_t) 
               | _ -> failwith "invalid groupby collection element type"
           in
@@ -866,7 +866,7 @@ let imperative_of_csv_parser mk_meta output_t =
     (* TODO: this should be a general n'th element method *)
     let index_fn = Member (Method "at") in 
     let error = "invalid value type in imperative_of_csv_parser" in
-    let bt = base_of (value_of t (fun _ -> failwith error)) in
+    let bt = base_of (value_of t (fun _ -> failwith error)) () in
     let field_expr t = 
       i+1, 
       U.mk_fn (meta t) (Cast (U.ib_type t))
@@ -1441,7 +1441,6 @@ let imperative_of_program mk_meta p =
        @(skip_decl serializer_decl "serializer" None))
   in
   
-  let dt i = fst (List.nth decls_types_and_vars i) in
   let dd i = fst (snd (List.nth decls_types_and_vars i)) in
   let dv i = snd (snd (List.nth decls_types_and_vars i)) in  
 

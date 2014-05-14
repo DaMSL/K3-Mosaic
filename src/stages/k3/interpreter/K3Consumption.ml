@@ -30,13 +30,13 @@ let value_of_string t v = match t with
 
 let pull_source id t res in_chan =
 	let tuple_val, signature =
-		match t <| base_of %++ value_of |> (fun () -> raise (ResourceError id)) with
+		match t <| base_of +++ value_of |> (fun () -> raise (ResourceError id)) with
     | TBool -> false, [TBool]
     | TInt -> false, [TInt]
     | TDate -> false, [TDate]
     | TFloat -> false, [TFloat]
     | TString -> false, [TString]
-		| TTuple(ts) -> true, List.map base_of ts
+		| TTuple(ts) -> true, List.map (fun x -> base_of x ()) ts
 		| _ -> raise (ResourceError id)
 	in
   begin
@@ -55,7 +55,7 @@ let pull_source id t res in_chan =
     | Stream(t, RandomStream _), InRand index ->
         if !index <= 0 then None
         else let rec random_val t =
-               match base_of t with
+               match base_of t () with
                | TBool -> VBool(Random.bool ())
                | TInt  -> VInt(Random.int max_int)
                | TDate -> VInt(Random.int max_int)

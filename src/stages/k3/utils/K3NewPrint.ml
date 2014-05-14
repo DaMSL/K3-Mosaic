@@ -465,7 +465,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(NonLambda,Out)) c expr =
     expr_pair ~sep:(lsp () <| lps sym <| lsp ()) ~wl:wrapl ~wr:wrapr (el, er)
   in let expr_type_is_bool e =
     try (match T.type_of_expr e with
-    | TValue x | TFunction(_,x) -> match T.base_of x with
+    | TValue x | TFunction(_,x) -> match T.base_of x () with
         | TBool -> true
         | _     -> false)
     with T.TypeError(_,_,_) -> false (* assume additive *)

@@ -305,7 +305,7 @@ let gen_flow_name class_name = gen_string_sym flow_sym_class class_name
 (* Basic types *)
 let k3_type t = match t with | TInternal x -> x | _ -> failwith "invalid internal type" 
 let vi_type t = value_of (k3_type t) (fun () -> failwith "invalid value_type")
-let bi_type t = base_of (vi_type t)
+let bi_type t = base_of (vi_type t) ()
 let ib_type bt = TInternal(TValue(canonical bt)) 
 let iv_type vt = TInternal(TValue vt)
 let i_type t = TInternal t

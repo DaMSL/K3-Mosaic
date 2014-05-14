@@ -115,7 +115,7 @@ module Protobuf : SerializerGenerator = struct
       let base_field ?(id=field_id) ?(default=None) type_id =
         [field_name id, (id, type_id, false, repeated, default)]
       in 
-      match base_of t with
+      match base_of t () with
 	    | TBool   -> [], base_field "bool"
       
       (* TODO: is there a better representation for a single byte? *)
@@ -193,7 +193,7 @@ module Protobuf : SerializerGenerator = struct
     let m = meta mk_meta in
     let unit_meta, int_meta, string_meta = m unit_t, m int_t, m string_t in
     let call_method = call_method_proc mk_meta in
-    match base_of src_vt with
+    match base_of src_vt () with
     | TTuple fields ->
       fst (List.fold_left (fun (acc,i) t -> 
         let field_expr = mk_fn (m (iv_type t)) (Member (Position i)) [src_expr] in
@@ -246,7 +246,7 @@ module Protobuf : SerializerGenerator = struct
     let rcr = deserialize_value_cmds mk_meta in  
     let m = meta mk_meta in
     let unit_meta, int_meta, string_meta = m unit_t, m int_t, m string_t in
-    match base_of dest_vt with
+    match base_of dest_vt () with
     | TTuple fields ->
       let field_exprs, field_cmds, _ = List.fold_left (fun (eacc,cmdacc,i) t -> 
           let e,cmds = rcr src_expr ("field"^(string_of_int i)) t

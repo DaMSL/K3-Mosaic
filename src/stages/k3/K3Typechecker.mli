@@ -28,18 +28,17 @@ exception TypeError of int * string * error_type
 val t_error : int -> string -> error_type -> unit -> unit
 val type_of_expr: expr_t -> type_t
 
-(* Operators *)
+(* Operators to simulate haskell's `fun` *)
 val (<|): 'a -> ('a -> 'b) -> 'b
 val (|>): ('a -> 'b) -> 'a -> 'b
 
+(* Thread an exception between applied functions *)
 val (+++): ('b -> 'x -> 'c) -> ('a -> 'x -> 'b) -> 'a -> 'x -> 'c
-val (++%): ('b -> 'x -> 'c) -> ('a -> 'b) -> 'a -> 'x -> 'c
-val (%++): ('b -> 'c) -> ('a -> 'x -> 'b) -> 'a -> 'x -> 'c
 
 (* Type extractors *)
 val collection_of : base_type_t -> (unit -> unit) -> container_type_t * value_type_t
-val mutable_of: value_type_t -> mutable_type_t
-val base_of: value_type_t -> base_type_t
+val mutable_of: value_type_t -> 'a -> mutable_type_t
+val base_of: value_type_t -> 'a -> base_type_t
 val annotation_of : value_type_t -> annotation_t
 val contained_of: value_type_t -> value_type_t
 val value_of: type_t -> (unit -> unit) -> value_type_t
