@@ -51,6 +51,7 @@ and value_t
     | VForeignFunction of arg_t * foreign_func_t
     | VAddress of address
     | VTarget of id_t
+    | VIndirect of value_t ref
 
     (* arguments to a function/trigger *)
 and frame_t = (id_t * value_t) list 

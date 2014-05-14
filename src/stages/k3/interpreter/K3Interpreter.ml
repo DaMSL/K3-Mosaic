@@ -107,9 +107,7 @@ and eval_expr (address:address) sched_st cenv texpr =
     let extract_value_list x =
       let error = int_erroru uuid "extract_value_list" in
       match x with
-        | VSet cl
-        | VBag cl
-        | VList cl -> cl
+        | VSet cl | VBag cl | VList cl -> cl
         | _ -> error "non-collection"
     in
 
@@ -128,7 +126,7 @@ and eval_expr (address:address) sched_st cenv texpr =
     let match_pattern pat_v v =
       let match_or_unknown v1 v2 = match v1, v2 with
         | VUnknown, _ -> true
-        | _, _ -> v1 = v2
+        | _, _        -> v1 = v2
       in
       match pat_v, v with
       | VTuple pat_f, VTuple v_f ->
@@ -159,11 +157,11 @@ and eval_expr (address:address) sched_st cenv texpr =
       let error = int_erroru uuid "eval_binop" in
       let fenv, vals = child_values cenv in fenv, VTemp(
         match vals with
-        | [VBool(b1); VBool(b2)] -> VBool(bool_op b1 b2)
-        | [VInt(i1); VInt(i2)] -> VInt(int_op i1 i2)
-        | [VInt(i1); VFloat(f2)] -> VFloat(float_op (float_of_int i1) f2)
-        | [VFloat(f1); VInt(i2)] -> VFloat(float_op f1 (float_of_int i2))
-        | [VFloat(f1); VFloat(f2)] -> VFloat(float_op f1 f2)
+        | [VBool b1;  VBool b2]  -> VBool(bool_op b1 b2)
+        | [VInt i1;   VInt i2]   -> VInt(int_op i1 i2)
+        | [VInt i1;   VFloat f2] -> VFloat(float_op (float_of_int i1) f2)
+        | [VFloat f1; VInt i2]   -> VFloat(float_op f1 (float_of_int i2))
+        | [VFloat f1; VFloat f2] -> VFloat(float_op f1 f2)
         | _ -> error "non-matching values"
         )
     in
@@ -218,10 +216,12 @@ and eval_expr (address:address) sched_st cenv texpr =
     (* Start of evaluator *)
     match tag with
     | Const(c) -> (cenv, VTemp(value_of_const c))
-    | Var(id) -> begin try cenv, lookup id cenv with Not_found ->
-        error @: "(Var): id "^id^" not found" end
-    | Tuple -> let fenv, vals = child_values cenv in (fenv, VTemp(VTuple(vals)))
-    | Just  ->
+    | Var(id)  -> begin
+        try cenv, lookup id cenv
+        with Not_found -> error @: "(Var): id "^id^" not found"
+        end
+    | Tuple    -> let fenv, vals = child_values cenv in (fenv, VTemp(VTuple(vals)))
+    | Just     ->
       let renv, rval = child_value cenv 0
       in (renv, VTemp(VOption (Some rval)))
     | Nothing _ -> cenv, VTemp(VOption(None))
@@ -534,7 +534,23 @@ and eval_expr (address:address) sched_st cenv texpr =
         | None, _ -> error "Send: missing scheduler"
         | _, _    -> error "Send: bad values"
       end
-    (* TODO: mutation and deref *)
+
+    | Indirect -> let fenv, v = child_value cenv 0 in
+      fenv, VTemp(VIndirect(ref v))
+
+    | Deref    -> let fenv, v = child_value cenv 0 in
+      begin match v with
+      | VIndirect x -> fenv, VTemp(!x)
+      | _             -> error "Deref: not an indirection"
+      end
+
+    | Assign   -> let fenv, vs = child_values cenv in
+      begin match vs with
+      | [VIndirect ind; v] ->
+          ind := v;
+          fenv, VTemp(VUnit)
+      | _                  -> error "Assign: incorrect units"
+      end
 
     | _ -> error "unhandled expression"
 
