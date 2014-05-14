@@ -44,6 +44,8 @@ val wrap_tbag : value_type_t -> value_type_t
 val wrap_tbag_mut : value_type_t -> value_type_t
 val wrap_ttuple : value_type_t list -> value_type_t
 val wrap_ttuple_mut : value_type_t list -> value_type_t
+val wrap_tind : value_type_t -> value_type_t
+val wrap_tind_mut : value_type_t -> value_type_t
 val wrap_tmaybe : value_type_t -> value_type_t
 val wrap_tmaybes : value_type_t list -> value_type_t list
 val wrap_tfunc : value_type_t -> value_type_t -> type_t
@@ -120,6 +122,7 @@ val mk_insert : expr_t -> expr_t -> expr_t
 val mk_delete : expr_t -> expr_t -> expr_t
 val mk_update : expr_t -> expr_t -> expr_t -> expr_t
 
+val mk_ind : expr_t -> expr_t
 val mk_assign : expr_t -> expr_t -> expr_t
 val mk_deref : expr_t -> expr_t
 val mk_send : expr_t -> expr_t -> expr_t -> expr_t

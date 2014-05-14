@@ -344,6 +344,7 @@ let imperative_of_expr_node mk_meta fn_arg_env
   | K3.AST.Tuple       -> ret_expr e Tuple
   | K3.AST.Just        -> ret_expr e Just
   | K3.AST.Nothing v_t -> ret_expr e Nothing
+  | K3.AST.Indirect    -> ret_expr e Nothing (* error *)
 
   | K3.AST.Empty v_t     -> ret_cmds []
   | K3.AST.Singleton v_t -> ret_cstr ()

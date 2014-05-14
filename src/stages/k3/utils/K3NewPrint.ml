@@ -125,18 +125,19 @@ let rec lazy_base_type ?(brace=true) ?(mut=false) ?(empty=false) c ~in_col t =
   in
   let wrap = wrap_single |- wrap_mut in
   match t with
-  | TUnit       -> wrap @: lps "()"
-  | TBool       -> wrap @: lps "bool"
-  | TByte       -> wrap @: lps "byte"
+  | TUnit        -> wrap @: lps "()"
+  | TBool        -> wrap @: lps "bool"
+  | TByte        -> wrap @: lps "byte"
   | TInt        
-  | TDate       -> wrap @: lps "int"
-  | TFloat      -> wrap @: lps "real"
-  | TString     -> wrap @: lps "string"
-  | TMaybe(vt)  -> wrap(lps "option " <| lazy_value_type c ~in_col vt)
-  | TAddress    -> wrap @: lps "address" (* ? *)
-  | TTarget bt  -> wrap (lps "target" <| lazy_base_type c ~in_col bt)
-  | TUnknown    -> wrap @: lps "unknown"
-  | TTuple(vts) -> (* tuples become records *)
+  | TDate        -> wrap @: lps "int"
+  | TFloat       -> wrap @: lps "real"
+  | TString      -> wrap @: lps "string"
+  | TMaybe(vt)   -> wrap(lps "option " <| lazy_value_type c ~in_col vt)
+  | TAddress     -> wrap @: lps "address" (* ? *)
+  | TTarget bt   -> wrap (lps "target" <| lazy_base_type c ~in_col bt)
+  | TUnknown     -> wrap @: lps "unknown"
+  | TIndirect vt -> wrap (lps "ind " <| lazy_value_type c ~in_col vt)
+  | TTuple(vts)  -> (* tuples become records *)
       let rec_vts = add_record_ids vts in
       let inner = lazy_concat ~sep:lcomma (fun (id, vt) ->
         lps (id^":") <| lazy_value_type c ~in_col:false vt) rec_vts in
@@ -704,10 +705,16 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(NonLambda,Out)) c expr =
     apply_method c ~name:"delete" ~col ~args:[x] ~arg_info:[NonLambda,OutRec]
   | Update -> let col, oldx, newx = U.decompose_update expr in
     apply_method c ~name:"update" ~col ~args:[oldx;newx] ~arg_info:[NonLambda,OutRec;NonLambda,OutRec]
-  | Assign -> let (l, r) = U.decompose_assign expr in
-    lazy_expr c l <| lps " <- " <| lazy_expr c r
+  | Assign -> let l, r = U.decompose_assign expr in
+    (* assignment must be within a bind *)
+    lps "bind" <| lsp () <| lazy_expr c l <| lsp () <| lps "as ind __y in"
+      <| lsp () <| lps "__y =" <| lsp () <| lazy_expr c r
+  | Indirect -> let x = U.decompose_indirect expr in
+    lps "ind" <| lsp () <| lazy_expr c x
   | Deref -> let e = U.decompose_deref expr in
-    lps "!" <| lazy_expr c e
+    (* dereference must be within a bind *)
+    lps "bind" <| lsp () <| lazy_expr c e <| lsp () <| lps "as " <| lps "ind __x"
+      <| lsp () <| lps "in __x"
   | Send -> let target, addr, args = U.decompose_send expr in
     wrap_indent @: lazy_paren (expr_pair (target, addr)) <| lps "<- " <| 
       lps_list CutHint (lazy_expr c) args 

@@ -139,7 +139,6 @@ let frontier_name p map_id =
  *   (we usually need it removed only for modifying ast *)
 let map_latest_vid_vals p slice_col m_pat map_id ~keep_vid =
   let m_id_t_v = P.map_ids_types_with_v_for ~vid:"map_vid" p map_id in
-  let m_t = P.map_types_for p map_id in
   (* create a function name per type signature *)
   let access_k3 = match m_pat with
     | Some pat ->

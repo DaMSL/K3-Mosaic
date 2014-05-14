@@ -327,11 +327,6 @@ let do_garbage_collection_trig_code p ast =
             else (* more than one key, need gbagg *)
             (* delete elements that are <=  than the agreed vid from 
              * map struture, and store them in "stuff_leq_than_vid " *)
-            let map_id_t_v_val_only = (*["vid",t_vid; "val",type ] for gbagg*)
-              (list_take 1 map_id_t_v) @ (list_take_end 1 map_id_t_v) 
-            in
-            let map_id_v_val_only = fst_many map_id_t_v_val_only in
-            let map_t_v_val_only = snd_many map_id_t_v_val_only in
             let map_t_val_only = list_take_end 1 map_ts_v in
             let map_val_maybe_type = wrap_tmaybe (List.nth map_t_val_only 0) in
             (*(map_t_1,map_t_2..), (t_vid, (map_val))*)
@@ -342,7 +337,6 @@ let do_garbage_collection_trig_code p ast =
               wrap_tset @: wrap_ttuple leq_than_vid_cleared_type
             in
             (* map_id_no_val_tuple(map_id_1, map_id_2...) *)
-            let map_id_no_val_tuple_name = "map_id_no_val_tuple" in
             (*
             let leq_than_vid_cleared_type = 
               map_t_no_val @ [wrap_ttuple [t_vid; map_val_maybe_type]] 

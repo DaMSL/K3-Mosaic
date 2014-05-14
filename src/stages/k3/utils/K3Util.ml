@@ -98,6 +98,7 @@ let signature_of_type t =
     | TCollection (ct,et)   -> tag   d "c" [sig_ct (d+1) ct; sig_vt (d+1) et]
     | TAddress              -> tag   d "a" []
     | TTarget arg_t         -> tag   d "h" [sig_bt (d+1) arg_t]
+    | TIndirect _           -> tag   d "r" [] (* error *)
   and sig_mt d mt = match mt with
     | TMutable    (bt,_) -> tag d "M" [sig_bt (d+1) bt]
     | TImmutable  (bt,_) -> tag d "U" [sig_bt (d+1) bt]
@@ -239,6 +240,8 @@ let decompose_tuple e = match tag_of_expr e with
   Tuple -> sub_tree e  | _ -> failwith "not a Tuple"
 let decompose_update e = match tag_of_expr e with 
   Update -> (nth e 0, nth e 1, nth e 2) | _ -> failwith "not an Update"
+let decompose_indirect e = match tag_of_expr e with
+  Indirect -> nth e 0 | _ -> failwith "not an Indirect"
 
 let decompose_role (d,_) = match d with
   Role (id, fp) -> (id, fp) | _ -> failwith "not a role"
@@ -516,6 +519,7 @@ let string_of_tag = function
   | Insert           -> "Insert"
   | Delete           -> "Delete"
   | Update           -> "Update"
+  | Indirect         -> "Indirect"
   | Assign           -> "Assign"
   | Deref            -> "Deref"
   | Send             -> "Send"

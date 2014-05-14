@@ -102,6 +102,7 @@ let rec lazy_base_type c ~in_col ?(no_paren=false) t =
   | TAddress -> lps "address" (* ? *)
   | TTarget bt -> lps "target" <| lazy_base_type c ~in_col bt
   | TUnknown -> lps "unknown"
+  | TIndirect vt -> lps "ind " <| lazy_value_type c ~in_col vt
   in
   if c.verbose_types && in_col then lps "c:" <| proc () 
   else proc ()
@@ -372,11 +373,13 @@ let rec lazy_expr c expr =
     lps "delete" <| lazy_paren @: expr_sub p
   | Update -> let t = U.decompose_update expr in
     lps "update" <| lazy_paren @: expr_triple t
-  | Assign -> let (l, r) = U.decompose_assign expr in
+  | Indirect -> let x = U.decompose_indirect expr in
+    lps "ind" <| lsp () <| lazy_expr c x
+  | Assign -> let l, r = U.decompose_assign expr in
     lazy_expr c l <| lps " <- " <| lazy_expr c r
   | Deref -> let e = U.decompose_deref expr in
     lps "!" <| lazy_expr c e
-  | Send -> let (e1, e2, es) = U.decompose_send expr in
+  | Send -> let e1, e2, es = U.decompose_send expr in
     wrap_indent (lps "send" <| lazy_paren (expr_pair (e1, e2) <| lps ", " <| 
       lps_list CutHint (tuple_no_paren c) es))
   in

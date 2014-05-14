@@ -46,12 +46,6 @@ let mvos typ s = match typ with
                if s.[len-1]='"' && s.[0]='"' then
                   String(String.sub s 1 (len-2))
                else invalid_arg @: s^" is not a string"
-  | TDate   -> 
-               begin match List.map ios @: Str.split r_dash s with
-               | [y;m;d] -> let x = y * 10000 + m * 100 + d in
-                            Int(x)
-               | _ -> invalid_arg "not a proper date"
-               end
   | TBool   -> Bool(bos s)
 
 let mvos_many types ss = List.map2 mvos types ss
@@ -62,7 +56,6 @@ let somt = function
   | TInt    -> "int"
   | TDate   -> "date"
   | TString -> "string"
-  | TDate   -> "int" (* treat like int for output *)
   | TBool   -> "bool"
 
 (* maptype_of_string *)
@@ -71,13 +64,12 @@ let mtos = function
   | "int"    -> TInt
   | "date"   -> TDate
   | "string" -> TString
-  | "date"   -> TDate
   | "bool"   -> TBool
   | _        -> invalid_arg "unhandled type"
 
 let default_val = function
   | TFloat  -> Float(0.)
-  | TInt    -> Int(0)
+  | TInt
   | TDate   -> Int(0)
   | TBool   -> Bool(false)
   | TString -> String("")

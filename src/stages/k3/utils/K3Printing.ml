@@ -100,8 +100,9 @@ let string_of_tag_type tag = match tag with
     | Delete  -> "Delete"
     | Peek    -> "Peek"
 
-    | Assign  -> "Assign"
-    | Deref   -> "Deref"
+    | Indirect -> "Indirect"
+    | Assign   -> "Assign"
+    | Deref    -> "Deref"
 
     | Send    -> "Send"
 
@@ -126,6 +127,7 @@ let rec flat_string_of_base_type t = match t with
 
     | TAddress -> "TAddress"
     | TTarget(t) -> tag_str "TTarget" [flat_string_of_base_type t]
+    | TIndirect(ind) -> tag_str "TIndirect" [flat_string_of_value_type ind]
 
 and flat_string_of_mutable_type mt = match mt with
     | TMutable(bt,_) -> "TMutable("^flat_string_of_base_type bt^")"
@@ -191,6 +193,7 @@ let flat_string_of_expr_tag tag children =
     | Delete     -> my_tag "Delete"
     | Peek       -> my_tag "Peek"
 
+    | Indirect   -> my_tag "Indirect"
     | Assign     -> my_tag "Assign"
     | Deref      -> my_tag "Deref"
 
@@ -350,6 +353,7 @@ and print_base_type c t =
     | TDate     -> term_tag "TDate"
     | TFloat    -> term_tag "TFloat"
     | TString   -> term_tag "TString"
+    | TIndirect vt -> my_tag "TIndirect" [lazy_value_type c vt]
 
     | TMaybe(t) -> my_tag "TMaybe" [lazy_value_type c t]
 
@@ -448,6 +452,7 @@ and print_expr_tag c tag lazy_children =
     | Delete     -> my_tag "Delete"
     | Peek       -> my_tag "Peek"
 
+    | Indirect   -> my_tag "Indirect"
     | Assign     -> my_tag "Assign"
     | Deref      -> my_tag "Deref"
 

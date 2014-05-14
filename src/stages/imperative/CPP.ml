@@ -357,7 +357,7 @@ module CPPGenerator : Imperative.Generator
     | TTarget target_bt -> ps "int"
 
     | TUnit -> ps "void" 
-    | TUnknown -> failwith "no C++ repr for TUnknown"
+    | _ -> failwith "no C++ repr for this type"
 
   and print_k3_type t =
     let error = "invalid function type, expected a value" in
@@ -682,6 +682,7 @@ module CPPGenerator : Imperative.Generator
 
 	  | Op     op -> print_op op e ch
 	  | Fn     fn_tag -> print_fn (e_type, e) fn_tag ch
+    | Nothing -> failwith "Unexpected"
 
   and print_expr e =
     print_tree (fun cll e -> print_expr_tag (List.flatten cll) e) e

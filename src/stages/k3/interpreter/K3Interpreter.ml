@@ -552,8 +552,6 @@ and eval_expr (address:address) sched_st cenv texpr =
       | _                  -> error "Assign: incorrect units"
       end
 
-    | _ -> error "unhandled expression"
-
 and threaded_eval address sched_st ienv texprs =
     match texprs with
     | [] -> (ienv, [])
@@ -592,6 +590,8 @@ and default_base_value bt =
   | TTuple   ft -> VTuple (List.map default_isolated_value ft)
 
   | TCollection (ct,et) -> default_collection_value ct et
+  | TIndirect vt       -> let bt = base_of vt () in
+                           VIndirect(ref (default_base_value bt))
   | TAddress            -> error "addresses are not implemented"
   | TTarget bt          -> error "targets are not implemented"
 

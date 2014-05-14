@@ -22,5 +22,8 @@ let string_of_error = function
   | BTBad(t)          -> "Bad type "^P.string_of_base_type t
   | MTBad(t)          -> "Bad type "^P.string_of_mutable_type t
   | TMsg(s)           -> s
+  | InvalidTypeAnnotation   -> "Invalid type annotation"
+  | MultiplePossibleTypes s -> "Multiple types are possible: "^s
+  | UntypedExpression       -> "Untyped expression found"
   
 

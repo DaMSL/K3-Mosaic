@@ -115,6 +115,8 @@ let rec repr_of_value v = match v with
 	| VAddress (ip,port) -> "VAddress("^ip^":"^ string_of_int port^")"
 	| VTarget id -> "VTarget("^id^")"
 
+  | VIndirect ind -> "VIndirect("^repr_of_value !ind^")"
+
 
 (* mark_points are optional sorted counts of where we want markings *)
 let rec print_value ?(mark_points=[]) v =
@@ -150,6 +152,7 @@ let rec print_value ?(mark_points=[]) v =
     | VForeignFunction (a, _) -> ps "<foreignfun>"
     | VAddress (ip,port) -> ps (ip^":"^ string_of_int port)
     | VTarget id -> ps ("<"^id^">")
+    | VIndirect ind -> pretty_tag_str CutHint "" "ind" [lazy_value !ind]
   in loop ~mark_points v
 
 let string_of_value ?mark_points v = wrap_formatter (fun () -> print_value ?mark_points v)
@@ -250,6 +253,7 @@ let rec type_of_value uuid value =
   | VBag vs -> wrap_tbag @: typ_fst vs
   | VFunction _ | VForeignFunction _ -> raise (RuntimeError (uuid, 
       "type_of_value: cannot apply to function"))
+  | VIndirect ind -> type_of_value uuid !ind
 
 let rec expr_of_value uuid value = match value with
   | VUnknown -> mk_const CUnknown
@@ -269,6 +273,7 @@ let rec expr_of_value uuid value = match value with
      k3_container_of_list (type_of_value uuid value) l
   | VFunction _ | VForeignFunction _ -> raise (RuntimeError (uuid, 
       "expr_of_value: cannot apply to function"))
+  | VIndirect ind -> mk_ind @: expr_of_value uuid !ind
 
 (* Value comparison. Returns a partial list of inequalities if there are any *)
 let find_inequality a b = 

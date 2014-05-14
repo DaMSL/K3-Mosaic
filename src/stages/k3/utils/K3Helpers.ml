@@ -89,6 +89,10 @@ let wrap_ttuple_mut typ = match typ with
   | h::t   -> TIsolated(TMutable(TTuple(typ),[]))
   | _      -> invalid_arg "No mutable tuple to wrap"
 
+(* wrap a type in a mutable indirection *)
+let wrap_tind t = TIsolated(TImmutable(TIndirect t, []))
+let wrap_tind_mut t = TIsolated(TMutable(TIndirect t, []))
+
 let wrap_tmaybe t = canonical @: TMaybe t
 let wrap_tmaybes ts = List.map wrap_tmaybe ts
 
@@ -249,6 +253,8 @@ let mk_update collection old_val new_val =
     mk_stree Update [collection; old_val; new_val]
 
 let mk_peek collection = mk_stree Peek [collection]
+
+let mk_ind v = mk_stree Indirect [v]
 
 (* left: TRef, right: T/TRef *)
 let mk_assign left right = mk_stree Assign [left; right]
