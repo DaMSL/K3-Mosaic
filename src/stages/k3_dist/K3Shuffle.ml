@@ -25,9 +25,10 @@ let string_of_shuffles () =
 (* Part of the name is the binding pattern. So long as the combination of
  * binding patterns is the same, we can use the same shuffle function *)
 let shuffle_for p rhs_map_id lhs_map_id bindings = 
-  "shuffle_"^map_name_of p rhs_map_id^"_"^map_name_of p lhs_map_id^
-  List.fold_left (fun acc (r,l) -> acc^"_"^string_of_int r^"t"^string_of_int l)
-    "" bindings
+  let binds = List.map (fun (r, l) -> Printf.sprintf "%dt%d" r l) bindings in
+  let bind_s = String.concat "_" binds in
+  let bind_s = if bind_s = "" then "" else "_bind_"^bind_s in
+  Printf.sprintf "shuffle_%s_to_%s%s" (map_name_of p rhs_map_id) (map_name_of p lhs_map_id) bind_s
 
 let get_fn_name ((_,_,_,_,name):shuffle_fn_entry) = name
 
