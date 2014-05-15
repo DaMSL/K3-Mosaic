@@ -64,6 +64,9 @@ let rcv_corrective_name_of_t p trig_nm stmt_id map_id =
 let do_corrective_name_of_t p trig_nm stmt_id map_id =
   trig_nm^"_do_corrective_s"^string_of_int stmt_id^"_m_"^map_name_of p map_id
 
+(* function to check index *)
+let check_stmt_cntr_index = "check_and_update_stmt_cntr_index"
+
 let declare_global_vars p ast =
   (* mapping of map_id to map_name and dimensionality *)
   let map_list =
@@ -198,6 +201,50 @@ let declare_global_funcs partmap p ast =
       ) @:
       mk_var log_master
   in
+  (* check_stmt_cntr_indx *)
+  (* Check to see if we should send a do_complete message *)
+  let check_stmt_cntr_index_fn = mk_global_fn
+    check_stmt_cntr_index
+    ["vid", t_vid; "stmt_id", t_stmt_id]
+    [t_bool] @: (* return whether we should send the do_complete *)
+    let part_pat = ["vid", t_vid; "stmt_id", t_stmt_id] in
+    let counter_pat = ["count", t_int] in
+    let full_pat = part_pat @ counter_pat in
+    let full_types = wrap_ttuple @: extract_arg_types full_pat in
+    let part_pat_as_vars = ids_to_vars @: fst_many part_pat in
+    let query_pat = mk_tuple @: part_pat_as_vars @ [mk_cunknown] in
+    let stmt_cntrs_slice = mk_slice stmt_cntrs query_pat in
+    mk_if (* check if the counter exists *)
+      (mk_has_member stmt_cntrs query_pat full_types)
+      (mk_block
+        [mk_update
+          stmt_cntrs
+          (mk_peek stmt_cntrs_slice) @: (* oldval *)
+          mk_let_many (* newval *)
+            full_pat
+            (mk_peek stmt_cntrs_slice) @:
+            mk_tuple @:
+              part_pat_as_vars @
+              [mk_sub (mk_var "count") (mk_cint 1)]
+
+        ;mk_if (* check if the counter is 0 *)
+          (mk_eq
+            (mk_peek stmt_cntrs_slice) @:
+            mk_tuple @: part_pat_as_vars @ [mk_cint 0]
+          )
+          (* Return true - send a do_complete *)
+          (mk_cbool true)
+          (mk_cbool false)
+        ]
+      ) @:
+      mk_block
+        [mk_insert (* else: no value in the counter *)
+          stmt_cntrs @:
+          (* Initialize if the push arrives before the put. *)
+          mk_tuple @: part_pat_as_vars @ [mk_cint(-1)];
+        mk_cbool false
+        ]
+  in
   (* add_delta_to_buffer *)
   (* this is the same procedure for both correctives and do_complete *
    * it consists of 2 parts:
@@ -281,12 +328,13 @@ let declare_global_funcs partmap p ast =
                 (mk_var K3Global.peers_role_name) (mk_cstring "switch"))
               (mk_apply (mk_var K3Ring.add_node_name) @:
                   mk_tuple @: ids_to_vars K3Global.peers_ids)
-              (mk_cunit)
+              mk_cunit
             ) @:
               mk_var K3Global.peers_name
         ]
   in
-  [log_read_geq_code] @
+  log_read_geq_code ::
+  check_stmt_cntr_index_fn ::
   for_all_maps p (fun map ->
     add_delta_to_buffer_code `DoComplete map) @
   for_all_maps p (fun map ->
@@ -793,46 +841,19 @@ List.fold_left
           ) @:
           mk_var "tuples"
          ;
-         (* check statment counters to see if we can process *)
-         let part_pat = ["vid", t_vid; "stmt_id", t_stmt_id] in
-         let counter_pat = ["count", t_int] in
-         let full_pat = part_pat @ counter_pat in
-         let full_types = wrap_ttuple @: extract_arg_types full_pat in
-         let part_pat_as_vars = [mk_var "vid"; mk_cint stmt_id] in
-         let query_pat = mk_tuple @: part_pat_as_vars @ [mk_cunknown] in
-         let stmt_cntrs_slice = mk_slice stmt_cntrs query_pat in
-         mk_if (* check if the counter exists *)
-           (mk_has_member stmt_cntrs query_pat full_types)
-           (mk_block
-             [mk_update
-               stmt_cntrs
-               (mk_peek stmt_cntrs_slice) @: (* oldval *)
-               mk_let_many (* newval *)
-                 full_pat
-                 (mk_peek stmt_cntrs_slice) @:
-                 mk_tuple @:
-                   part_pat_as_vars @
-                   [mk_sub (mk_var "count") (mk_cint 1)]
-
-             ;mk_if (* check if the counter is 0 *)
-               (mk_eq
-                 (mk_peek stmt_cntrs_slice) @:
-                 mk_tuple @: part_pat_as_vars @ [mk_cint 0]
-               )
-               (* Send to local do_complete *)
-               (mk_send
-                 (mk_ctarget @:
-                   do_complete_name_of_t p trig_name stmt_id)
-                 G.me_var @:
-                 mk_tuple @: args_of_t_as_vars_with_v p trig_name
-               ) @:
-               mk_cunit (* do nothing *)
-             ]
-           ) @:
-           mk_insert (* else: no value in the counter *)
-             stmt_cntrs @:
-             (* Initialize if the push arrives before the put. *)
-             mk_tuple @: part_pat_as_vars @ [mk_cint(-1)]
+         (* check and update statment counters to see if we should send a do_complete *)
+         mk_if
+           (mk_apply (mk_var check_stmt_cntr_index) @:
+             mk_tuple [mk_var "vid"; mk_cint stmt_id]
+           )
+           (* Send to local do_complete *)
+           (mk_send
+             (mk_ctarget @:
+               do_complete_name_of_t p trig_name stmt_id)
+             G.me_var @:
+             mk_tuple @: args_of_t_as_vars_with_v p trig_name
+           )
+           mk_cunit
          ]
     ]
   )
