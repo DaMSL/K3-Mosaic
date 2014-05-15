@@ -299,19 +299,21 @@ let declare_global_funcs partmap p ast =
         init_ast::
         [mk_iter (* loop over values in the delta tuples *)
          (mk_lambda (wrap_args ids_types_arg_v) @:
-           mk_iter
-             (mk_lambda (wrap_args ids_types_v) @:
-               mk_update (mk_var map_name) (mk_tuple vars_v) @:
-                 mk_tuple @: vars_v_no_val@
-                   [mk_add vars_val vars_arg_val]
-             ) @:
-             mk_filtermap (* only greater vid for this part *)
+           mk_let "filtered" (wrap_tset @: wrap_ttuple types_v)
+             (mk_filtermap (* only greater vid for this part *)
                (mk_lambda (wrap_args ids_types_v) @:
                  mk_gt (mk_var "vid") @: mk_var "min_vid")
                (mk_id types_v) @:
                (* slice w/o vid and value *)
                mk_slice (mk_var map_name) @:
-                 mk_tuple @: mk_cunknown::vars_arg_no_v_no_val@[mk_cunknown]
+                 mk_tuple @: mk_cunknown::vars_arg_no_v_no_val@[mk_cunknown]) @:
+              mk_iter
+                (mk_lambda (wrap_args ids_types_v) @:
+                  mk_update (mk_var map_name) (mk_tuple vars_v) @:
+                    mk_tuple @: vars_v_no_val@
+                      [mk_add vars_val vars_arg_val]
+                ) @:
+                mk_var "filtered"
          ) @:
          mk_var delta_tuples_nm]
   in
