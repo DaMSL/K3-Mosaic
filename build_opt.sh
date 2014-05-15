@@ -1,7 +1,11 @@
+#!/bin/bash
+
 #get directory of script
 pushd `dirname $0` > /dev/null
 SCRIPTPATH=`pwd -P`
 popd > /dev/null
+
+cd $SCRIPTPATH
 
 # check for dbtoaster
 if [ ! -f "./external/dbtoaster/bin/dbtoaster_release" ] 
@@ -30,7 +34,6 @@ then
   cd $SCRIPTPATH
 fi
 
-cd $SCRIPTPATH
 if [ ! -d "./bin" ]; then mkdir bin; fi
 
 # driver
