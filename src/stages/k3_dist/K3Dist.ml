@@ -125,7 +125,7 @@ let log_master = "log__master"
 (* takes the types of the map *)
 (* NOTE: assumes the first type is vid *)
 let frontier_name p map_id =
-  let m_t = snd_many @: P.map_ids_types_for p map_id in
+  let m_t = P.map_types_for p map_id in
   "frontier_"^String.concat "_" @:
     List.map K3PrintSyntax.string_of_value_type m_t
 

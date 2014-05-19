@@ -445,7 +445,7 @@ let send_fetch_trig p s_rhs_lhs s_rhs trig_name =
                 ) @:
                 mk_apply
                   (mk_var route_fn) @:
-                  mk_tuple key
+                  mk_tuple @: (mk_cint rhs_map_id)::key
               )
               acc_code
           )
@@ -469,7 +469,8 @@ let send_completes_for_stmts_with_no_fetch =
                 (mk_var "ip") @:
                 mk_tuple @: args_of_t_as_vars_with_v p trig_name
             ) @:
-            mk_apply (mk_var route_fn) @: mk_tuple key
+            mk_apply (mk_var route_fn) @:
+              mk_tuple @: (mk_cint lhs_map_id)::key
           ]
       )
       [] @:
@@ -562,7 +563,7 @@ let send_puts =
                   (mk_cint 0) @:
                   (mk_apply
                     (mk_var route_fn) @:
-                      mk_tuple route_key
+                      mk_tuple @: (mk_cint rhs_map_id)::route_key
                   )
                 ) @:
               mk_map
@@ -574,9 +575,9 @@ let send_puts =
                 mk_apply
                   (mk_var shuffle_fn) @:
                   mk_tuple @:
-                      (mk_tuple shuffle_key)::
-                      [mk_empty tuple_types]@
-                      [mk_cbool true]
+                      shuffle_key@
+                      [mk_empty tuple_types;
+                       mk_cbool true]
           )
           (mk_empty @: wrap_tbag @: wrap_ttuple [t_addr; t_stmt_id; t_int]) @:
           s_rhs_lhs
@@ -772,10 +773,10 @@ let send_push_stmt_map_trig p s_rhs_lhs trig_name =
             ) @:
             mk_apply
               (mk_var shuffle_fn) @:
-              mk_tuple
-                [mk_tuple partial_key;
+              mk_tuple @:
+                partial_key@
                 (* we need the latest vid data that's less than the current vid *)
-                K3Dist.map_latest_vid_vals p (mk_var rhs_map_name)
+                [K3Dist.map_latest_vid_vals p (mk_var rhs_map_name)
                   (some slice_key) rhs_map_id ~keep_vid:true;
                 mk_cbool true]
           ]
@@ -1001,8 +1002,9 @@ let send_corrective_trigs p =
                           ) @:
                           mk_apply
                             (mk_var shuffle_fn) @:
-                            mk_tuple
-                              [mk_tuple key; mk_var "delta_tuples";
+                            mk_tuple @:
+                              key @
+                               [mk_var "delta_tuples";
                                mk_cbool false] (* (ip * tuple list) list *)
                       ) @:
                       mk_var "vid_list"
@@ -1192,11 +1194,9 @@ let roles_of ast =
 
 (* Generate all the frontier functions *)
 let emit_frontier_fns p =
-  let hash = Hashtbl.create 50 in
-  ignore(for_all_maps p (fun map -> Hashtbl.replace hash (map_types_for p map) map));
-  let fns = ref [] in
-  Hashtbl.iter (fun _ map_id -> fns := map_id :: !fns) hash;
-  List.map (fun map -> frontier_fn p map) !fns
+  (* get a representative map of each type *)
+  let fns = List.map (hd |- snd) @: uniq_types_and_maps p in
+  List.map (frontier_fn p) fns
 
 (* Generate all the code for a specific trigger *)
 let gen_dist_for_t ~force_correctives p ast trig corr_maps =

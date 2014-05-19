@@ -4,6 +4,7 @@ open Util
 open K3.AST
 open K3Helpers
 open ProgInfo
+module P = ProgInfo
 module U = K3Util
 
 (* TODO: the code here uses an index to refer to the right map id. This means
@@ -11,7 +12,10 @@ module U = K3Util
  * be sorted out in the future *)
 
 (* route function name *)
-let route_for p map_id = "route_to_"^map_name_of p map_id
+let route_for p map_id =
+  let m_t = P.map_types_no_val_for p map_id in
+  "route_to_"^String.concat "_" @:
+    List.map K3PrintSyntax.string_of_value_type m_t
 
 let t_two_ints = [t_int; t_int]
 let t_list_two_ints = wrap_tlist @: wrap_ttuple t_two_ints
@@ -154,7 +158,7 @@ let gen_route_fn p map_id =
    * them for indexing *)
   let map_range = create_range 0 @: List.length map_types in
   let key_types = wrap_tmaybes map_types in
-  let prefix = "key_id_" in
+  let prefix = "key_" in
   let key_ids =
     fst @: List.split @: map_ids_types_no_val_for ~prefix:prefix p map_id in
   let to_id i = List.nth key_ids i in
@@ -162,7 +166,7 @@ let gen_route_fn p map_id =
 
   | [] -> (* if no keys, for now we just route to one place *)
   mk_global_fn (route_for p map_id)
-    ["_", canonical TUnit]
+    ["_", t_int; "_", t_unit]
     [wrap_tbag t_addr] @: (* return *)
       mk_singleton (wrap_tbag t_addr) @:
         mk_apply (mk_var "get_ring_node") @:
@@ -170,13 +174,13 @@ let gen_route_fn p map_id =
 
   | _  -> (* we have keys *)
   mk_global_fn (route_for p map_id)
-    ["key", wrap_ttuple key_types]
+    (("map_id", t_map_id)::types_to_ids_types prefix key_types)
     [wrap_tbag t_addr] @: (* return *)
     (* get the info for the current map and bind it to "pmap" *)
     mk_let "pmap" pmap_types
       (mk_snd pmap_per_map_types @:
         mk_peek @: mk_slice (mk_var pmap_data) @:
-          mk_tuple [mk_cint @: map_id; mk_cunknown]
+          mk_tuple [mk_var "map_id"; mk_cunknown]
       ) @:
 
     (* handle the case of no partitioning at all *)
@@ -186,8 +190,6 @@ let gen_route_fn p map_id =
     (* calculate the dim bounds ie. the bucket sizes when linearizing *)
     mk_let_many ["dim_bounds", dim_bounds_type; "max_val", t_int]
       (mk_apply (mk_var "calc_dim_bounds") @: mk_var "pmap") @:
-    mk_destruct_tuple "key" key_types prefix
-    @:
     (* calc_bound_bucket *)
     (* we calculate the contribution of the bound components *)
     mk_let "bound_bucket" t_int 
@@ -328,5 +330,7 @@ let gen_route_code p partmap =
   global_pmaps ::
   route_foreign_funcs p @ 
   calc_dim_bounds_code ::
-  List.map (gen_route_fn p) (get_map_list p)
+  (* create a route for each map type, using only the key types *)
+  List.map (gen_route_fn p) (List.map (hd |- snd) @:
+    P.uniq_types_and_maps ~type_fn:P.map_types_no_val_for p)
 

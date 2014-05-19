@@ -73,11 +73,11 @@ let gen_shuffle_fn p rmap lmap bindings fn_name =
   (* deducts the last map type which is the value *)
   let lkey_types = wrap_tmaybes @: map_types_no_val_for p lmap in
   (* lkey refers to the access pattern from trig args. rkey is from the tuples*)
-  let id_l = "__id_l" in let id_r = "__id_r" in
+  let id_l = "lkey_" in let id_r = "rkey_" in
   let to_rkey i = int_to_temp_id id_r i in
   let to_lkey i = int_to_temp_id id_l i in
   let lmap_range = mk_tuple_range lkey_types in
-  let full_lkey = 
+  let full_lkey_vars = 
     List.map (* use bindings to construct lkey. Also tuple -> just var *)
       (fun x -> try mk_just @: mk_var @: to_rkey @: adjust_key_id_for_v 
           (List.assoc x bindings)
@@ -86,18 +86,16 @@ let gen_shuffle_fn p rmap lmap bindings fn_name =
   in
   (* functions to change behavior for non-key routes *)
   let pred = List.length lkey_types > 0 in
-  let if_lkey f g = if pred then force f @: g else g in 
+  let tuples, shuffle_on_empty = "tuples", "shuffle_on_empty" in
+  let l_key_ids_types = types_to_ids_types id_l lkey_types in
   mk_global_fn fn_name
-  ((if pred then ["l_key", wrap_ttuple lkey_types] else ["_", t_unit]) @
-    ["tuples", many_tuples_type; 
-    "shuffle_on_empty", canonical TBool])
+  ((if pred then l_key_ids_types else ["_", t_unit]) @
+    [tuples, many_tuples_type; 
+    shuffle_on_empty, canonical TBool])
     [result_types] @: (* return *)
-    if_lkey (* only destruct lkey if we have lkey *)
-      (* destruct the key *)
-      (lazy (mk_destruct_tuple "l_key" lkey_types id_l)) @: 
       mk_let "all_targets" result_types
         (mk_if 
-          (mk_eq (mk_var "shuffle_on_empty") @: mk_cbool true)
+          (mk_eq (mk_var shuffle_on_empty) @: mk_cbool true)
           (* in shuffle on empty case, we prepare all the routing that must
            * be done for empty packets *)
           (mk_map
@@ -106,7 +104,9 @@ let gen_shuffle_fn p rmap lmap bindings fn_name =
             ) @:
             mk_apply
               (mk_var @: route_for p lmap) @:
-              if pred then mk_var "l_key" else mk_cunit
+                mk_tuple @: mk_cint lmap ::
+                  if pred then ids_to_vars @: fst_many l_key_ids_types
+                  else [mk_cunit]
           ) @:
           mk_empty result_types
         ) @:
@@ -127,10 +127,6 @@ let gen_shuffle_fn p rmap lmap bindings fn_name =
               (* start with partial l_key and build up an l_key using data
                * from the tuple, that can be used for routing *)
               mk_destruct_tuple "r_tuple" tuple_types_unwrap id_r @:
-              if_lkey (* only evaluate full lkey if we have lkey *)
-                (lazy (mk_let "full_lkey" (wrap_ttuple lkey_types) @:
-                  mk_tuple full_lkey
-                ))
                 (mk_map
                   (mk_lambda (wrap_args ["ip", t_addr]) @:
                     mk_tuple [mk_var "ip"; 
@@ -138,11 +134,12 @@ let gen_shuffle_fn p rmap lmap bindings fn_name =
                   ) @:
                   mk_apply (* route each full l_key *)
                     (mk_var @: route_for p lmap) @:
-                      mk_tuple 
-                        [if pred then mk_var "full_lkey" else mk_cunit] 
+                      mk_tuple @: mk_cint lmap ::
+                        if pred then full_lkey_vars
+                        else [mk_cunit]
                 )
               ) @:
-              mk_var "tuples"
+              mk_var tuples
 
 let gen_shuffle_functions p trig =
   let trig_data = s_and_over_stmts_in_t p rhs_lhs_of_stmt trig in

@@ -400,3 +400,14 @@ let int_of_sql_date s = match r_groups s ~n:3 ~r:r_date with
   | [Some y; Some m; Some d] -> 
       (ios y)*10000 + (ios m)*100 + (ios d)
   | l -> invalid_arg @: Printf.sprintf "int_of_sql_date for string %s. Found only %i members" s (List.length l)
+
+(* replace a hash value by looking at the old value, if any *)
+let hashtbl_replace hash key replace_fn =
+  let old = try Some(Hashtbl.find hash key)
+            with Not_found -> None
+  in
+  Hashtbl.replace hash key (replace_fn old)
+
+
+
+
