@@ -40,6 +40,7 @@ module G = K3Global
 module M = ModifyAst
 module U = K3Util
 module GC = GarbageCollection
+module T = K3Typechecker
 
 (* control whether gc code is emitted *)
 let enable_gc = false
@@ -245,14 +246,17 @@ let declare_global_funcs partmap p ast =
         mk_cbool false
         ]
   in
+
   (* add_delta_to_buffer *)
   (* this is the same procedure for both correctives and do_complete *
    * it consists of 2 parts:
     * 1. Initialize the given vid using the delta values
-    * 2. Add to all next vids
-    * The first part uses the original K3 AST. The second doesn't *)
+    * 2. Add to all next vids *)
+  (* NOTE: this function assumes the initial value is always 0.
+   * If we need another value, it must be handled via message from
+   * m3tok3 *)
   let add_delta_to_buffer_code action map_id =
-    let func_name, map_name, rename_map, mod_delta_add =
+    let func_name, map_name, rename_map, corrective =
       match action with
       | `RcvCorrective stmt  ->
           add_delta_to_buffer_stmt_map p stmt map_id,
@@ -272,34 +276,82 @@ let declare_global_funcs partmap p ast =
           true
     in
     let delta_tuples_nm = "delta_tuples" in
-    let init_ast =
-      (* find a stmt to get the initializing AST from. Doesn't matter which *)
-      let stmts_lmaps = P.stmts_lhs_maps p in
-      let stmt_chosen = fst @:
-        List.find (fun (_, map) -> map = map_id) stmts_lmaps in
-      M.delta_add_of_stmt p ast stmt_chosen delta_tuples_nm ~rename_map ~mod_delta_add
-    in
-    (* for the second part: writing deltas into >= vid *)
     let ids_types_arg = map_ids_types_for ~prefix:"__arg_" p map_id in
     let ids_types_arg_v = map_ids_types_add_v ~vid:"vid_arg" ids_types_arg in
     let ids_types_v = map_ids_types_with_v_for p map_id in
     let types_v = snd_many ids_types_v in
+    let t_col_v = wrap_t_of_map @: wrap_ttuple types_v in
+    let len_types_v = List.length types_v in
     let vars_v = ids_to_vars @: fst_many ids_types_v in
     let vars_arg_v = ids_to_vars @: fst_many ids_types_arg_v in
+    let vars_no_val = list_drop_end 1 @:
+      ids_to_vars @: fst_many @: map_ids_types_for p map_id in
     let vars_v_no_val = list_drop_end 1 vars_v in
     let vars_val = hd @: list_take_end 1 vars_v in
     let vars_arg_val = hd @: list_take_end 1 vars_arg_v in
     let vars_arg_no_v_no_val =
-      ids_to_vars @: fst_many @: list_drop_end 1 ids_types_arg
+      ids_to_vars @: fst_many @: list_drop_end 1 ids_types_arg in
+    let t_val = hd @: list_take_end 1 types_v in
+    let id_val = hd @: list_take_end 1 @: fst_many @: ids_types_v in
+    let lookup_value, update_value = "lookup_value", "update_value" in
+    let update_vars = list_drop_end 1 vars_v @ [mk_var update_value] in
+    let zero = match T.base_of t_val () with
+      | TInt   -> mk_cint 0
+      | TFloat -> mk_cfloat 0.
+      | t      -> failwith @:
+        "Unhandled value type "^K3PrintSyntax.string_of_base_type t
+    in
+    let tuple_projection =
+      project_from_tuple types_v (mk_peek @: mk_var lookup_value)
+        ~total:len_types_v
+        ~choice:len_types_v
+    in
+    let regular_delta = 
+      mk_let lookup_value t_col_v
+        (map_latest_vid_vals p (mk_var map_name)
+          (Some(vars_no_val @ [mk_cunknown])) map_id ~keep_vid:true) @:
+        mk_let update_value t_val
+          (* get either 0 to add or the value we read *)
+          (mk_add (mk_var id_val) @:
+            mk_if
+              (mk_is_empty (mk_var lookup_value) t_col_v)
+              zero
+              tuple_projection) @:
+          mk_insert
+            (mk_var map_name) @:
+            mk_tuple update_vars
     in
     mk_global_fn func_name
       ["min_vid", t_vid; delta_tuples_nm, wrap_tset @: wrap_ttuple types_v]
       [t_unit] @:
       mk_block @:
-        init_ast::
-        [mk_iter (* loop over values in the delta tuples *)
+        [mk_iter  (* loop over values in delta tuples *)
+          (mk_lambda (wrap_args @: ids_types_v) @:
+            if corrective then
+            (* this part is just for correctives:
+             * We need to check if there's a value at the particular version id
+             * If so, we must add the value directly *)
+              mk_let lookup_value t_col_v
+                (mk_slice (mk_var map_name) @:
+                  mk_tuple @: vars_v_no_val @ [mk_cunknown]) @:
+              mk_if
+                (mk_not @: mk_is_empty (mk_var lookup_value) t_col_v)
+                (* then just update the value *)
+                (mk_let update_value t_val 
+                  (mk_add (mk_var id_val) @: tuple_projection) @:
+                  mk_insert
+                    (mk_var map_name) @:
+                    mk_tuple update_vars)
+                (* else, if it's just a regular delta, read the frontier *)
+                regular_delta
+            else
+              regular_delta) @:
+          mk_var delta_tuples_nm
+        ;
+        (* add to future values *)
+        mk_iter (* loop over values in the delta tuples *)
          (mk_lambda (wrap_args ids_types_arg_v) @:
-           mk_let "filtered" (wrap_tset @: wrap_ttuple types_v)
+           mk_let "filtered" (wrap_t_of_map @: wrap_ttuple types_v)
              (mk_filtermap (* only greater vid for this part *)
                (mk_lambda (wrap_args ids_types_v) @:
                  mk_gt (mk_var "vid") @: mk_var "min_vid")
@@ -550,7 +602,7 @@ let send_puts =
             let route_key = partial_key_from_bound p stmt_id rhs_map_id in
             (* we need the types for creating empty rhs tuples *)
             let rhs_map_types = map_types_with_v_for p rhs_map_id in
-            let tuple_types = wrap_tset @: wrap_ttuple rhs_map_types in
+            let tuple_types = wrap_t_of_map @: wrap_ttuple rhs_map_types in
             mk_combine
               acc_code @:
               mk_let "sender_count" t_int
@@ -610,7 +662,7 @@ let rcv_fetch_trig p trig =
   mk_code_sink
     (rcv_fetch_name_of_t p trig)
     (wrap_args @: ("stmts_and_map_ids",
-      wrap_tset @: wrap_ttuple [t_stmt_id; t_map_id])::
+      wrap_t_of_map @: wrap_ttuple [t_stmt_id; t_map_id])::
       args_of_t_with_v p trig
     )
     [] @: (* locals *)
@@ -667,7 +719,7 @@ let rcv_put_trig p trig_name =
 mk_code_sink
   (rcv_put_name_of_t p trig_name)
   (wrap_args @:
-    ("sender_ip",t_addr)::("stmt_id_cnt_list", wrap_tset @: wrap_ttuple [t_stmt_id; t_int])::
+    ("sender_ip",t_addr)::("stmt_id_cnt_list", wrap_t_of_map @: wrap_ttuple [t_stmt_id; t_int])::
       (args_of_t_with_v p trig_name)
   )
   [] @:
@@ -763,7 +815,7 @@ let send_push_stmt_map_trig p s_rhs_lhs trig_name =
           mk_iter
             (mk_lambda
               (wrap_args
-                ["ip",t_addr;"tuples",wrap_tset @: wrap_ttuple rhs_map_types]
+                ["ip",t_addr;"tuples", wrap_t_of_map @: wrap_ttuple rhs_map_types]
               ) @:
               mk_send
                 (mk_ctarget @:
@@ -808,7 +860,7 @@ List.fold_left
     acc_code@
     [mk_code_sink
       (rcv_push_name_of_t p trig_name stmt_id read_map_id)
-      (wrap_args @: ("tuples", wrap_tset @: wrap_ttuple @: tuple_types)::
+      (wrap_args @: ("tuples", wrap_t_of_map @: wrap_ttuple @: tuple_types)::
         args_of_t_with_v p trig_name
       )
       [] @: (* locals *)
@@ -913,7 +965,7 @@ let send_corrective_trigs p =
     match trigs_stmts_with_matching_rhs_map with [] -> [] | _ ->
     (* we transfer with vid so we don't need to strip *)
     let tuple_types = wrap_ttuple @: map_types_with_v_for p map_id in
-    let t_tuple_set = wrap_tset tuple_types in
+    let t_tuple_set = wrap_t_of_map tuple_types in
     let t_vid_list = wrap_tlist t_vid in
     [mk_code_sink
       (send_corrective_name_of_t p map_id)
@@ -1099,7 +1151,7 @@ List.map
       (wrap_args
         ["vid", t_vid;
         "compute_vids", wrap_tlist t_vid;
-        "delta_tuples", wrap_tset @: wrap_ttuple @: map_types_with_v_for p rmap]
+        "delta_tuples", wrap_t_of_map @: wrap_ttuple @: map_types_with_v_for p rmap]
       )
       [] @: (* locals *)
       mk_block
@@ -1160,7 +1212,7 @@ let do_corrective_trigs p s_rhs ast trig_name corrective_maps =
     mk_code_sink (do_corrective_name_of_t p trig_name stmt_id map_id)
       (wrap_args @: args_of_t_with_v p trig_name@
         ["delta_tuples", 
-          wrap_tset @: wrap_ttuple @: map_types_with_v_for p map_id])
+          wrap_t_of_map @: wrap_ttuple @: map_types_with_v_for p map_id])
       [] @: (* locals *)
         let lmap = lhs_map_of_stmt p stmt_id in
         let send_to =

@@ -10,6 +10,9 @@ let init_vid = "__init_vid__"
 
 let map_ids = "__map_ids__"
 
+(* what the generic type of the global maps is *)
+let wrap_t_of_map = wrap_tset
+
 (* global declaration of default vid to put into every map *)
 let init_vid_k3 =
   mk_global_val_init init_vid t_vid @:
@@ -133,7 +136,8 @@ let frontier_name p map_id =
  * - This is needed both for sending a push, and for modifying a local slice
  * operation
  * - slice_col is the k3 expression representing the collection.
- * m_pat is an optional pattern for slicing the data first 
+ * - m_pat is an optional pattern for slicing the data first 
+ *   It doesn't include a vid
  * - assumes a local 'vid' variable containing the border of the frontier
  * - keep_vid indicates whether we need to rmove the vid from the result collection
  *   (we usually need it removed only for modifying ast *)

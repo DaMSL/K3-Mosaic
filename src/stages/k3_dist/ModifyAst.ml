@@ -38,7 +38,7 @@ let modify_global_map p = function
   | Global(name, TValue typ, m_expr),_ ->
     begin try
       let map_id = P.map_id_of_name p name in
-      let types = wrap_tset @: wrap_ttuple @: P.map_types_with_v_for p map_id in
+      let types = wrap_t_of_map @: wrap_ttuple @: P.map_types_with_v_for p map_id in
       begin match m_expr with
         | None   -> [mk_global_val name types]
         | Some e -> (* add a vid *)
