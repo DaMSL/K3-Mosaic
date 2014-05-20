@@ -298,9 +298,8 @@ let modify_map_add_vid p ast stmt =
 (* this delta extraction is very brittle, since it's tailored to the way the M3
  * to K3 calculations are written. ModifyDelta is used for modifying do_completes,
  * while GetBody is used for add_delta_to_buffer to initialize values *)
-let delta_action p ast stmt action =
+let delta_action p ast stmt m_target_trigger add_delta_nm_fn =
   let lmap = P.lhs_map_of_stmt p stmt in
-  let lmap_name = P.map_name_of p lmap in
   let lmap_types = P.map_types_with_v_for p lmap in
   let lmap_type = wrap_tset @: wrap_ttuple lmap_types in
   (* we need to know how the map is accessed in the statement. *)
@@ -324,164 +323,74 @@ let delta_action p ast stmt action =
             lmap_type @:
             mk_tuple @: ids_to_vars full_names
           ] in
-    begin match action with
-    | `AddDelta varname -> 
-        (* get the body for adding the delta *)
-        mk_let "existing_out_tier" lmap_type
-          (mk_var lmap_name) @:
-        mk_iter (* iterate over the delta tuples *)
-          (mk_lambda (wrap_args @: list_zip full_names lmap_types)
-            body2) @:
-          mk_var varname
 
-    | `AddDeltaModified varname ->
-        (* Do corrective requires that we make a special delta that checks to
-         * see if a value exists. If so, we add to it. If not, we initialize
-         * using a previous vid. *)
-        let pattern_unknown = mk_tuple @: ids_to_vars @: lmap_bind_ids_v @ ["_"] in
-        let lhs_var = mk_var lmap_name in
-        let lhs_slice_var = mk_var "lhs_slice" in
-        (* ids/types representing the lhs map *)
-        let ids_types = types_to_ids_types "lhs" lmap_types in
-        let id_vars = ids_to_vars @: fst_many ids_types in
-        let ids_no_last = list_drop_end 1 id_vars in
-        let id_last = hd @: list_take_end 1 id_vars in
-        mk_let "existing_out_tier" lmap_type
-          (mk_var lmap_name) @:
-        mk_iter (* iterate over the delta tuples *)
-          (mk_lambda (wrap_args @: list_zip full_names lmap_types) @:
-            mk_let "lhs_slice" lmap_type
-              (mk_slice lhs_var pattern_unknown) @:
-            mk_if (* check if the value exists in the lhs map *)
-              (mk_neq lhs_slice_var @: mk_empty lmap_type)
-              (* if it exists, we just add to the existing value *)
-              (mk_update (mk_var lmap_name) (mk_peek lhs_slice_var) @:
-                (* add the value of the delta tuple to the lhs map *)
-                mk_let_many ids_types (mk_peek lhs_slice_var) @:
-                mk_tuple @: ids_no_last @
-                  [mk_add id_last @: mk_var delta_name])
-              body2) @:
-          mk_var varname
-
-    | `CalcDelta(target_trigger, add_delta_nm_fn) ->
-      (* modify the delta itself *)
-      mk_apply
-        (mk_lambda params @:
-          mk_apply
-            (mk_lambda params2 @:
-              mk_block @:
-                [ (* we add the delta to all following vids,
-                   * and we send it for correctives *)
-                  mk_apply
-                  (mk_var @: add_delta_nm_fn p lmap) @:
-                    (* create a single tuple to send *)
-                    mk_tuple full_vars]
-                  @
-                  (* do we need to send to another trigger *)
-                  begin match target_trigger with 
-                  | None -> [] 
-                  | Some t ->
-                    [mk_send
-                      (mk_ctarget t)
-                      G.me_var @:
-                      mk_tuple @: full_vars]
-                  end
-            ) arg2 (* this is where the original calculation code is *)
-        ) arg
-    end
-  | Iterate -> (* more complex modification *)
-    (* col2 contains the calculation code, lambda2 is the delta addition *)
-    let lambda2, col2 = U.decompose_iterate body in
-    begin match action with
-    | `AddDelta varname -> 
-        (* get the body for adding the delta *)
-        (* This is a place where our heuristics don't pick up on the need to add a
-        * vid, and yet we need to add it here to be able to process the incoming
-        * deltas including vids *)
-        let lambda2' = add_vid_to_lambda_args lambda2 in
-        (* define existing_out_tier because it's used in the code *)
-        mk_let "existing_out_tier" (wrap_tset @: wrap_ttuple lmap_types) 
-          (mk_var lmap_name) @:
-        mk_iter lambda2' @: mk_var varname
-
-    | `AddDeltaModified varname ->
-        (* Unlike AddDelta, do_corrective requires that we make a special delta
-         * that checks to see if a value exists at a specific vid. 
-         * If so, we add to it. If not, we initialize using a previous vid. *)
-        let lambda2' = add_vid_to_lambda_args lambda2 in
-        let params2, body2 = U.decompose_lambda lambda2' in 
-        let arg_names = U.vars_of_arg params2 in
-        let last_arg = hd @: list_take_end 1 arg_names in
-        let arg_types = snd_many @: U.typed_vars_of_arg params2 in
-        let lhs_var = mk_var lmap_name in
-        let lhs_slice_var = mk_var "lhs_slice" in
-        let pattern_unknown = mk_tuple @: ids_to_vars @: list_drop_end 1 arg_names @ ["_"] in
-        (* ids/types representing the lhs map *)
-        let ids_types = types_to_ids_types "lhs" arg_types in
-        let id_vars = ids_to_vars @: fst_many ids_types in
-        let ids_no_last = list_drop_end 1 id_vars in
-        let id_last = hd @: list_take_end 1 id_vars in
-        (* This lambda loops over the delta tuple collection. We'll just add to
-         * the beginning of this lambda the code that checks a particular vid *)
-        mk_let "existing_out_tier" lmap_type
-          (mk_var lmap_name) @:
-        mk_iter (* iterate over the delta tuples *)
-          (* the arguments must match the lhs at this point *)
+    (* modify the delta itself *)
+    mk_apply
+      (mk_lambda params @:
+        mk_apply
           (mk_lambda params2 @:
-            mk_let "lhs_slice" lmap_type
-              (mk_slice lhs_var pattern_unknown) @:
-            mk_if (* check if the value exists in the lhs map *)
-              (mk_neq lhs_slice_var @: mk_empty lmap_type)
-              (* if it exists, we just add to the existing value *)
-              (mk_update lhs_var (mk_peek lhs_slice_var) @:
-                (* add the value of the delta tuple to the lhs map *)
-                mk_let_many ids_types (mk_peek lhs_slice_var) @:
-                mk_tuple @: ids_no_last @
-                  [mk_add id_last @: mk_var last_arg])
-              (* otherwise, just proceed with what's in the code already *)
-              body2) @:
-          mk_var varname
-
-    | `CalcDelta(target_trigger, add_delta_nm_fn) ->
-      let params2, _ = U.decompose_lambda lambda2 in
-      let delta_name = "__delta_values__" in
-      let delta_v_name = "__delta_with_vid__" in
-      let delta_ids_types = U.typed_vars_of_arg params2 in
-      let delta_types = extract_arg_types delta_ids_types in
-      let delta_col_type = wrap_tset @: wrap_ttuple delta_types in
-      let delta_col_v_type = lmap_type in
-      let delta_ids = extract_arg_names delta_ids_types in
-      let delta_last_id = list_take_end 1 delta_ids
-      in
-      mk_apply
-        (mk_lambda params @: (* usually existing_out_tier *)
-            (* col2 contains the calculation code *)
-            mk_let delta_name delta_col_type col2 @:
-            (* project vid into collection *)
-            mk_let delta_v_name delta_col_v_type
-              (mk_map
-                (mk_lambda
-                  (wrap_args delta_ids_types) @:
-                    mk_tuple @:
-                      ids_to_vars @: lmap_bind_ids_v@delta_last_id
-                  ) @:
-                mk_var delta_name) @:
             mk_block @:
-              (* add delta values to all following vids *)
-              [mk_apply
+              [ (* we add the delta to all following vids,
+                  * and we send it for correctives *)
+                mk_apply
                 (mk_var @: add_delta_nm_fn p lmap) @:
-                mk_tuple [mk_var "vid"; mk_var delta_v_name]]
-              @
-              match target_trigger with 
-              | None -> []
-              | Some t ->
-                [mk_send (* send to a (corrective) target *)
-                  (mk_ctarget t)
-                  G.me_var @:
-                  mk_tuple [mk_var "vid"; mk_var delta_v_name]]
-        )
-        arg
-    end
+                  (* create a single tuple to send *)
+                  mk_tuple full_vars]
+                @
+                (* do we need to send to another trigger *)
+                begin match m_target_trigger with 
+                | None   -> [] 
+                | Some t ->
+                  [mk_send
+                    (mk_ctarget t)
+                    G.me_var @:
+                    mk_tuple @: full_vars]
+                end
+          ) arg2 (* this is where the original calculation code is *)
+      ) arg
+  
+| Iterate -> (* more complex modification *)
+  (* col2 contains the calculation code, lambda2 is the delta addition *)
+  let lambda2, col2 = U.decompose_iterate body in
+  let params2, _ = U.decompose_lambda lambda2 in
+  let delta_name = "__delta_values__" in
+  let delta_v_name = "__delta_with_vid__" in
+  let delta_ids_types = U.typed_vars_of_arg params2 in
+  let delta_types = extract_arg_types delta_ids_types in
+  let delta_col_type = wrap_tset @: wrap_ttuple delta_types in
+  let delta_col_v_type = lmap_type in
+  let delta_ids = extract_arg_names delta_ids_types in
+  let delta_last_id = list_take_end 1 delta_ids
+  in
+  mk_apply
+    (mk_lambda params @: (* usually existing_out_tier *)
+        (* col2 contains the calculation code *)
+        mk_let delta_name delta_col_type col2 @:
+        (* project vid into collection *)
+        mk_let delta_v_name delta_col_v_type
+          (mk_map
+            (mk_lambda
+              (wrap_args delta_ids_types) @:
+                mk_tuple @:
+                  ids_to_vars @: lmap_bind_ids_v@delta_last_id
+              ) @:
+            mk_var delta_name) @:
+        mk_block @:
+          (* add delta values to all following vids *)
+          [mk_apply
+            (mk_var @: add_delta_nm_fn p lmap) @:
+            mk_tuple [mk_var "vid"; mk_var delta_v_name]]
+          @
+          match m_target_trigger with 
+          | None -> []
+          | Some t ->
+            [mk_send (* send to a (corrective) target *)
+              (mk_ctarget t)
+              G.me_var @:
+              mk_tuple [mk_var "vid"; mk_var delta_v_name]]
+    )
+    arg
+
   | _ -> raise @: UnhandledModification(
      Printf.sprintf "Bad tag [%d]: %s" (U.id_of_expr body) (PR.string_of_expr body))
 
@@ -496,26 +405,10 @@ let rename_var old_var_name new_var_name ast =
 let modify_ast_for_s p ast stmt trig send_to_trig =
   let ast = ast_for_s_t p ast stmt trig in
   let ast = modify_map_add_vid p ast stmt in
-  delta_action p ast stmt @: `CalcDelta(send_to_trig, add_delta_to_map)
+  delta_action p ast stmt send_to_trig add_delta_to_map
 
 (* return a modified version of the corrective update *)
 let modify_corr_ast p ast map stmt trig send_to_trig =
   let args, corr_stmt, ast = corr_ast_for_m_s p ast map stmt trig in
   let ast = modify_map_add_vid p ast stmt in
-  args, delta_action p ast corr_stmt @: `CalcDelta(send_to_trig, cond_add_delta_to_map)
-
-(* return the computation for adding the delta in a particular statement *)
-let delta_add_of_stmt p ast stmt varname ~mod_delta_add ~rename_map =
-  let ast = ast_for_s p ast stmt in
-  let ast = modify_map_add_vid p ast stmt in
-  let ast = if mod_delta_add then
-              delta_action p ast stmt @: `AddDeltaModified varname
-            else
-              delta_action p ast stmt @: `AddDelta varname
-  in
-  match rename_map with
-  | None                    -> ast
-  | Some (old_map, new_map) -> rename_var old_map new_map ast
-
-
-
+  args, delta_action p ast corr_stmt send_to_trig cond_add_delta_to_map
