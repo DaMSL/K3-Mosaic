@@ -364,8 +364,12 @@ let rec lazy_expr c expr =
     lps "sort" <| lazy_paren @: expr_sub p
   | Peek -> let col = U.decompose_peek expr in
     lps "peek" <| lazy_paren @: lazy_expr c col
-  | Slice -> let (col, pat) = U.decompose_slice expr in
-    lazy_expr c col <| lazy_bracket @: tuple_no_paren c pat
+  | Slice -> let col, pat = U.decompose_slice expr in
+    let wrap = begin match U.tag_of_expr col with 
+      | Var _ -> id_fn
+      | _     -> lazy_paren
+    end in
+    wrap(lazy_expr c col) <| lazy_bracket @: tuple_no_paren c pat
   | Insert -> let (e1, e2) = U.decompose_insert expr in
     lps "insert" <| lazy_paren  
       (lazy_expr c e1 <| lps "," <| lsp () <| tuple_no_paren c e2)

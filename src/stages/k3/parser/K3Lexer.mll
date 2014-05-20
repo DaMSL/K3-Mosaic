@@ -73,6 +73,8 @@ rule tokenize = parse
     
     | "true"  { BOOL true }
     | "false" { BOOL false }
+
+    | "ind"   { INDIRECT }
     
     | real as value    { FLOAT (float_of_string value) }
     | integer as value { INTEGER (int_of_string value) }
@@ -109,6 +111,7 @@ rule tokenize = parse
     | '>'  { GT }
     | ">=" { GEQ }
 
+    | "$"   { DEREF }
     | "->"  { RARROW }
     | "<-"  { LARROW }
     | "<->" { LRARROW }
@@ -132,6 +135,7 @@ rule tokenize = parse
     | "float"  { TYPE TFloat }
     | "string" { TYPE TString }
     | "address" { TYPE TAddress }
+
     | "maybe"  { MAYBE }
     | "ref"    { REF }
     | "just"   { JUST }

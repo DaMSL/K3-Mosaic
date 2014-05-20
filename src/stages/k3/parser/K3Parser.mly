@@ -91,7 +91,7 @@
 %token <float> FLOAT
 %token <string> STRING
 %token <bool> BOOL
-%token MAYBE JUST
+%token MAYBE JUST INDIRECT
 %token REF
 %token RANGE
 
@@ -125,6 +125,8 @@
 %token SORT RANK
 
 %token PEEK
+
+%token DEREF
 
 %token IF THEN ELSE LET IN
 
@@ -354,6 +356,7 @@ isolated_base_type_expr :
     | LPAREN isolated_base_type_tuple RPAREN { $2, [] }
     | annotated_collection_type      { $1 }
     | MAYBE isolated_value_type_expr { TMaybe($2), [] }
+    | INDIRECT isolated_value_type_expr { TIndirect($2), [] }
 ;
 
 contained_base_type_expr :
@@ -361,6 +364,7 @@ contained_base_type_expr :
     | LPAREN contained_base_type_tuple RPAREN { $2, [] }
     | annotated_collection_type       { $1 }
     | MAYBE contained_value_type_expr { TMaybe($2), [] }
+    | INDIRECT contained_value_type_expr { TIndirect($2), [] }
 ;
 
 isolated_base_type_tuple :
@@ -409,6 +413,7 @@ expr :
     | LPAREN tuple RPAREN { $2 }
     | block { $1 }
 
+    | INDIRECT expr { mkexpr Indirect [$2] }
     | JUST expr { mkexpr Just [$2] }
     | NOTHING COLON isolated_value_type_expr { mkexpr (Nothing($3)) [] }
 
@@ -449,6 +454,9 @@ expr :
     | LET arg GETS expr IN error   { print_error "Let body error" }
     | LET arg GETS error           { print_error "Let binding target error" }
     | LET error                    { print_error "Let binding error" }
+
+    | DEREF expr { mkexpr Deref [$2] }
+
 ;
 
 expr_list :
