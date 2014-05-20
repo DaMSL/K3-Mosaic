@@ -38,12 +38,14 @@ let modify_global_map p = function
   | Global(name, TValue typ, m_expr),_ ->
     begin try
       let map_id = P.map_id_of_name p name in
-      let types = wrap_t_of_map @: wrap_ttuple @: P.map_types_with_v_for p map_id in
+      let map_type = 
+        wrap_t_of_map @: wrap_ttuple @: P.map_types_with_v_for p map_id in
+      let map_type_ind = wrap_tind map_type in
       begin match m_expr with
-        | None   -> [mk_global_val name types]
+        | None   -> [mk_global_val name map_type_ind]
         | Some e -> (* add a vid *)
-          let e' = add_vid_to_init_val types e in
-          [mk_global_val_init name types e']
+          let e' = mk_ind @: add_vid_to_init_val map_type e in
+          [mk_global_val_init name map_type_ind e']
       end
     with Not_found -> [] end
   | _ -> []
@@ -196,7 +198,7 @@ let modify_map_add_vid p ast stmt =
           mk_var @: P.buf_of_stmt_map stmt id
         else col in
       (* get the latest vid values for this map *)
-      map_latest_vid_vals p buf_col pat_m m ~keep_vid:false
+      map_latest_vid_vals p (mk_deref buf_col) pat_m m ~keep_vid:false
 
     | _ -> raise (UnhandledModification ("Cannot handle non-var in slice"))
   in
@@ -306,9 +308,11 @@ let delta_action p ast stmt m_target_trigger ~corrective =
   let lmap_bindings = P.find_lmap_bindings_in_stmt p stmt lmap in
   let lmap_bind_ids_v = P.map_ids_add_v @: fst_many lmap_bindings
   in
-  (* let existing_out_tier = ...*)
+  (* let existing_out_tier = ..., which we remove *)
   let lambda, arg = U.decompose_apply ast in
   let params, body = U.decompose_lambda lambda in
+  if U.vars_of_arg params <> ["existing_out_tier"] then
+    failwith "sanity check fail: expected existing_out_tier";
   match U.tag_of_expr body with
   | Apply -> 
     (* simple modification - sending a single tuple of data *)
@@ -326,73 +330,67 @@ let delta_action p ast stmt m_target_trigger ~corrective =
 
     (* modify the delta itself *)
     mk_apply
-      (mk_lambda params @:
-        mk_apply
-          (mk_lambda params2 @:
-            mk_block @:
-              [ (* we add the delta to all following vids,
-                  * and we send it for correctives *)
-                mk_apply
-                (mk_var @: add_delta_to_map p lmap) @:
-                  (* create a single tuple to send *)
-                  mk_tuple @:
-                    mk_cbool (if corrective then true else false)::full_vars]
-                @
-                (* do we need to send to another trigger *)
-                begin match m_target_trigger with 
-                | None   -> [] 
-                | Some t ->
-                  [mk_send
-                    (mk_ctarget t)
-                    G.me_var @:
-                    mk_tuple @: full_vars]
-                end
-          ) arg2 (* this is where the original calculation code is *)
-      ) arg
-  
-| Iterate -> (* more complex modification *)
-  (* col2 contains the calculation code, lambda2 is the delta addition *)
-  let lambda2, col2 = U.decompose_iterate body in
-  let params2, _ = U.decompose_lambda lambda2 in
-  let delta_name = "__delta_values__" in
-  let delta_v_name = "__delta_with_vid__" in
-  let delta_ids_types = U.typed_vars_of_arg params2 in
-  let delta_types = extract_arg_types delta_ids_types in
-  let delta_col_type = wrap_tset @: wrap_ttuple delta_types in
-  let delta_col_v_type = lmap_type in
-  let delta_ids = extract_arg_names delta_ids_types in
-  let delta_last_id = list_take_end 1 delta_ids
-  in
-  mk_apply
-    (mk_lambda params @: (* usually existing_out_tier *)
-        (* col2 contains the calculation code *)
-        mk_let delta_name delta_col_type col2 @:
-        (* project vid into collection *)
-        mk_let delta_v_name delta_col_v_type
-          (mk_map
-            (mk_lambda
-              (wrap_args delta_ids_types) @:
-                mk_tuple @:
-                  ids_to_vars @: lmap_bind_ids_v@delta_last_id
-              ) @:
-            mk_var delta_name) @:
+      (mk_lambda params2 @:
         mk_block @:
-          (* add delta values to all following vids *)
-          [mk_apply
+          [ (* we add the delta to all following vids,
+              * and we send it for correctives *)
+            mk_apply
             (mk_var @: add_delta_to_map p lmap) @:
-            mk_tuple @: mk_cbool 
-              (if corrective then true else false)::
-                [mk_var "vid"; mk_var delta_v_name]]
-          @
-          match m_target_trigger with 
-          | None -> []
-          | Some t ->
-            [mk_send (* send to a (corrective) target *)
-              (mk_ctarget t)
-              G.me_var @:
-              mk_tuple [mk_var "vid"; mk_var delta_v_name]]
-    )
-    arg
+              (* create a single tuple to send *)
+              mk_tuple @:
+                mk_cbool (if corrective then true else false)::full_vars]
+            @
+            (* do we need to send to another trigger *)
+            begin match m_target_trigger with 
+            | None   -> [] 
+            | Some t ->
+              [mk_send
+                (mk_ctarget t)
+                G.me_var @:
+                mk_tuple @: full_vars]
+            end
+      ) arg2 (* this is where the original calculation code is *)
+  
+  | Iterate -> (* more complex modification *)
+    (* col2 contains the calculation code, lambda2 is the delta addition *)
+    let lambda2, col2 = U.decompose_iterate body in
+    let params2, _ = U.decompose_lambda lambda2 in
+    let delta_name = "__delta_values__" in
+    let delta_v_name = "__delta_with_vid__" in
+    let delta_ids_types = U.typed_vars_of_arg params2 in
+    let delta_types = extract_arg_types delta_ids_types in
+    let delta_col_type = wrap_tset @: wrap_ttuple delta_types in
+    let delta_col_v_type = lmap_type in
+    let delta_ids = extract_arg_names delta_ids_types in
+    let delta_last_id = list_take_end 1 delta_ids
+    in
+    (* col2 contains the calculation code *)
+    mk_let delta_name delta_col_type col2 @:
+    (* project vid into collection *)
+    mk_let delta_v_name delta_col_v_type
+      (mk_map
+        (mk_lambda
+          (wrap_args delta_ids_types) @:
+            mk_tuple @:
+              ids_to_vars @: lmap_bind_ids_v@delta_last_id
+          ) @:
+        mk_var delta_name) @:
+    mk_block @:
+      (* add delta values to all following vids *)
+      [mk_apply
+        (mk_var @: add_delta_to_map p lmap) @:
+        mk_tuple @: mk_cbool 
+          (if corrective then true else false)::
+            [mk_var "vid"; mk_var delta_v_name]]
+      @
+      begin match m_target_trigger with 
+      | None -> []
+      | Some t ->
+        [mk_send (* send to a (corrective) target *)
+          (mk_ctarget t)
+          G.me_var @:
+          mk_tuple [mk_var "vid"; mk_var delta_v_name]]
+      end
 
   | _ -> raise @: UnhandledModification(
      Printf.sprintf "Bad tag [%d]: %s" (U.id_of_expr body) (PR.string_of_expr body))

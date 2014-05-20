@@ -97,16 +97,12 @@ let declare_global_vars p ast =
     (* for all rhs, lhs map pairs *)
     let make_map_decl (stmt, map) =
       let map_name = P.buf_of_stmt_map_id p stmt map in
-      mk_global_val map_name @: wrap_tset @: wrap_ttuple @: map_types_with_v_for p map
+      mk_global_val map_name @:
+        wrap_tind @: wrap_t_of_map @: wrap_ttuple @: map_types_with_v_for p map
     in
     for_all_stmts_rhs_maps p make_map_decl
   in
 
-  (* stmt counters, used to make sure we've received all msgs *)
-  (* moved to K3Dist
-  let stmt_cntrs_type = wrap_tset_mut @: wrap_ttuple_mut
-      [t_vid_mut; t_int_mut; t_int_mut] in
-  *)
   let stmt_cntrs_code = mk_global_val stmt_cntrs_name stmt_cntrs_type in
   (* structures used for logs *)
   let log_structs_code =
@@ -300,7 +296,7 @@ let declare_global_funcs partmap p ast =
     in
     let regular_delta = 
       mk_let lookup_value t_col_v
-        (map_latest_vid_vals p (mk_var map_name)
+        (map_latest_vid_vals p (mk_deref @: mk_var map_name)
           (Some(vars_no_val @ [mk_cunknown])) map_id ~keep_vid:true) @:
         mk_let update_value t_val
           (* get either 0 to add or the value we read *)
@@ -310,7 +306,7 @@ let declare_global_funcs partmap p ast =
               zero
               tuple_projection) @:
           mk_insert
-            (mk_var map_name) @:
+            (mk_deref @: mk_var map_name) @:
             mk_tuple update_vars
     in
     mk_global_fn func_name
@@ -329,7 +325,7 @@ let declare_global_funcs partmap p ast =
               mk_let lookup_value t_col_v
                 (mk_if
                   (mk_var corrective) 
-                  (mk_slice (mk_var map_name) @:
+                  (mk_slice (mk_deref @: mk_var map_name) @:
                     mk_tuple @: vars_v_no_val @ [mk_cunknown]) @:
                   mk_empty @: wrap_t_of_map @: wrap_ttuple types_v) @:
               mk_if
@@ -338,7 +334,7 @@ let declare_global_funcs partmap p ast =
                 (mk_let update_value t_val 
                   (mk_add (mk_var id_val) @: tuple_projection) @:
                   mk_insert
-                    (mk_var map_name) @:
+                    (mk_deref @: mk_var map_name) @:
                     mk_tuple update_vars)
                 (* else, if it's just a regular delta, read the frontier *)
                 regular_delta
@@ -355,11 +351,11 @@ let declare_global_funcs partmap p ast =
                  mk_gt (mk_var "vid") @: mk_var "min_vid")
                (mk_id types_v) @:
                (* slice w/o vid and value *)
-               mk_slice (mk_var map_name) @:
+               mk_slice (mk_deref @: mk_var map_name) @:
                  mk_tuple @: mk_cunknown::vars_arg_no_v_no_val@[mk_cunknown]) @:
               mk_iter
                 (mk_lambda (wrap_args ids_types_v) @:
-                  mk_update (mk_var map_name) (mk_tuple vars_v) @:
+                  mk_update (mk_deref @: mk_var map_name) (mk_tuple vars_v) @:
                     mk_tuple @: vars_v_no_val@
                       [mk_add vars_val vars_arg_val]
                 ) @:
@@ -824,7 +820,7 @@ let send_push_stmt_map_trig p s_rhs_lhs trig_name =
               mk_tuple @:
                 partial_key@
                 (* we need the latest vid data that's less than the current vid *)
-                [K3Dist.map_latest_vid_vals p (mk_var rhs_map_name)
+                [K3Dist.map_latest_vid_vals p (mk_deref @: mk_var rhs_map_name)
                   (some slice_key) rhs_map_id ~keep_vid:true;
                 mk_cbool true]
           ]
@@ -874,20 +870,20 @@ List.fold_left
             (wrap_args ["tuple", wrap_ttuple tuple_types]) @:
             mk_if
               (mk_has_member
-                (mk_var rbuf_name)
+                (mk_deref @: mk_var rbuf_name)
                 reduced_code @:
                 wrap_ttuple tuple_types
               )
               (mk_update
-                (mk_var rbuf_name)
+                (mk_deref @: mk_var rbuf_name)
                 (mk_peek @: mk_slice
-                  (mk_var rbuf_name)
+                  (mk_deref @: mk_var rbuf_name)
                   reduced_code
                 ) @:
                 mk_var "tuple"
               ) @:
               mk_insert
-                (mk_var rbuf_name) @:
+                (mk_deref @: mk_var rbuf_name) @:
                 mk_var "tuple"
           ) @:
           mk_var "tuples"

@@ -43,7 +43,7 @@ let map_latest_val_code p map_id =
         (mk_agg
           inner_assoc
           (mk_tuple [min_vid_k3; mk_empty set_type]) @:
-          mk_var @: P.map_name_of p map_id) @:
+          mk_deref @: mk_var @: P.map_name_of p map_id) @:
         mk_var "_project_"
     else
       mk_flatten @: mk_map
@@ -58,7 +58,7 @@ let map_latest_val_code p map_id =
           (* find the highest vid *)
           inner_assoc
           (mk_tuple [min_vid_k3; mk_empty set_type]) @:
-          mk_var @: P.map_name_of p map_id
+          mk_deref @: mk_var @: P.map_name_of p map_id
   in code, mk_empty set_type
 
 (* code for every map *)
