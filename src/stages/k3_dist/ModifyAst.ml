@@ -298,7 +298,7 @@ let modify_map_add_vid p ast stmt =
 (* this delta extraction is very brittle, since it's tailored to the way the M3
  * to K3 calculations are written. ModifyDelta is used for modifying do_completes,
  * while GetBody is used for add_delta_to_buffer to initialize values *)
-let delta_action p ast stmt m_target_trigger add_delta_nm_fn =
+let delta_action p ast stmt m_target_trigger ~corrective =
   let lmap = P.lhs_map_of_stmt p stmt in
   let lmap_types = P.map_types_with_v_for p lmap in
   let lmap_type = wrap_tset @: wrap_ttuple lmap_types in
@@ -333,9 +333,10 @@ let delta_action p ast stmt m_target_trigger add_delta_nm_fn =
               [ (* we add the delta to all following vids,
                   * and we send it for correctives *)
                 mk_apply
-                (mk_var @: add_delta_nm_fn p lmap) @:
+                (mk_var @: add_delta_to_map p lmap) @:
                   (* create a single tuple to send *)
-                  mk_tuple full_vars]
+                  mk_tuple @:
+                    mk_cbool (if corrective then true else false)::full_vars]
                 @
                 (* do we need to send to another trigger *)
                 begin match m_target_trigger with 
@@ -378,8 +379,10 @@ let delta_action p ast stmt m_target_trigger add_delta_nm_fn =
         mk_block @:
           (* add delta values to all following vids *)
           [mk_apply
-            (mk_var @: add_delta_nm_fn p lmap) @:
-            mk_tuple [mk_var "vid"; mk_var delta_v_name]]
+            (mk_var @: add_delta_to_map p lmap) @:
+            mk_tuple @: mk_cbool 
+              (if corrective then true else false)::
+                [mk_var "vid"; mk_var delta_v_name]]
           @
           match m_target_trigger with 
           | None -> []
@@ -405,10 +408,10 @@ let rename_var old_var_name new_var_name ast =
 let modify_ast_for_s p ast stmt trig send_to_trig =
   let ast = ast_for_s_t p ast stmt trig in
   let ast = modify_map_add_vid p ast stmt in
-  delta_action p ast stmt send_to_trig add_delta_to_map
+  delta_action p ast stmt send_to_trig ~corrective:false
 
 (* return a modified version of the corrective update *)
 let modify_corr_ast p ast map stmt trig send_to_trig =
   let args, corr_stmt, ast = corr_ast_for_m_s p ast map stmt trig in
   let ast = modify_map_add_vid p ast stmt in
-  args, delta_action p ast corr_stmt send_to_trig cond_add_delta_to_map
+  args, delta_action p ast corr_stmt send_to_trig ~corrective:true
