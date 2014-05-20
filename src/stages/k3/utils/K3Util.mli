@@ -13,7 +13,6 @@ val expr_of_details : int -> expr_tag_t -> annotation_t -> expr_t list -> expr_t
 (* Variable id extraction *)
 val vars_of_arg : arg_t -> id_t list
 val typed_vars_of_arg : arg_t -> (id_t * value_type_t) list
-val types_of_arg : arg_t -> value_type_t
 val id_of_var : expr_t -> id_t
 
 val tuple_type_of_args : value_type_t list -> type_t
@@ -43,6 +42,7 @@ val decompose_apply : expr_t -> expr_t * expr_t
 val decompose_assign : expr_t -> expr_t * expr_t
 val decompose_block : expr_t -> expr_t list
 val decompose_combine : expr_t -> expr_t * expr_t
+val decompose_const : expr_t -> constant_t
 val decompose_delete : expr_t -> expr_t * expr_t
 val decompose_deref : expr_t -> expr_t
 val decompose_eq : expr_t -> expr_t * expr_t
@@ -146,13 +146,6 @@ val renumber_expr_ids : start:int -> expr_t -> int * expr_t
 val renumber_program_ids : ?start:int -> program_t -> int * program_t
 val renumber_test_program_ids : 
   ?start:int -> program_test_t -> int * program_test_t
-
-(* Convert between k3 representation and ocaml representation of containers *)
-val list_of_k3_container : expr_t -> expr_t list
-val k3_container_of_list : value_type_t -> expr_t list -> expr_t
-
-(* convert arg to value type *)
-val value_type_of_arg: arg_t -> value_type_t
 
 (* Attach a type annotation to an expr *)
 val attach_type : type_t -> expr_t -> expr_t

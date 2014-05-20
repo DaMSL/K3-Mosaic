@@ -378,7 +378,7 @@ let rec lazy_expr c expr =
   | Assign -> let l, r = U.decompose_assign expr in
     lazy_expr c l <| lps " <- " <| lazy_expr c r
   | Deref -> let e = U.decompose_deref expr in
-    lps "!" <| lazy_expr c e
+    lps "$" <| lazy_expr c e
   | Send -> let e1, e2, es = U.decompose_send expr in
     wrap_indent (lps "send" <| lazy_paren (expr_pair (e1, e2) <| lps ", " <| 
       lps_list CutHint (tuple_no_paren c) es))

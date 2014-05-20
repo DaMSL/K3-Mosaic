@@ -110,7 +110,7 @@ let initialize_resources resource_env resource_impl_env d =
         else [id, Out(Some(open_out filename))]
 
       | Some(_, Stream(_, ConstStream e)) ->
-          [id, InConst(ref @: K3Util.list_of_k3_container e)]
+          [id, InConst(ref @: K3Helpers.list_of_k3_container e)]
 
       | Some(_, Stream(_, RandomStream i)) -> [id, InRand(ref i)]
 

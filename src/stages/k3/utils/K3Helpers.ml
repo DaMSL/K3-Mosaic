@@ -3,6 +3,8 @@ open Util
 open K3.AST
 open K3.Annotation
 
+module U = K3Util
+
 (* Annotation manipulation *)
 let mk_no_anno a = (a, [])
 
@@ -242,8 +244,16 @@ let mk_gbagg group_fun agg_fun init collection =
 let mk_sort collection compare_fun =
     mk_stree Sort [collection; compare_fun]
 
-let mk_slice collection pattern =
-    mk_stree Slice [collection; pattern]
+let mk_slice collection pattern = 
+  (* don't create a slice if we only have unknowns *)
+  let pat_l = try U.decompose_tuple pattern
+              with Failure _ -> [pattern]
+  in
+  let all_unknowns = List.for_all
+    (fun x -> U.tag_of_expr x = Const(CUnknown)) pat_l
+  in
+  if all_unknowns then collection 
+  else mk_stree Slice [collection; pattern]
 
 let mk_insert collection x = mk_stree Insert [collection; x]
 
@@ -521,3 +531,25 @@ let mk_id tuple_types =
     mk_lambda (wrap_args ids_types) @:
       mk_tuple @: ids_to_vars @: extract_arg_names @: ids_types
 
+(* ----- Converting between ocaml lists and k3 containers ----- *)
+
+let rec list_of_k3_container e = 
+  match U.tag_of_expr e with
+  | Combine -> let l, r = U.decompose_combine e in
+      list_of_k3_container l @ list_of_k3_container r
+  | Empty _ -> []
+  | Singleton _ -> [U.decompose_singleton e]
+  | _ -> invalid_arg "not a k3 list"
+
+let rec k3_container_of_list typ = function
+  | [] -> mk_empty typ
+  | [x] -> mk_singleton typ x
+  | x::xs -> mk_combine (k3_container_of_list typ [x]) @: 
+    k3_container_of_list typ xs
+
+(* convert an arg to a type *)
+let rec value_type_of_arg = function
+  | AIgnored     -> t_unknown (* who cares *)
+  | AVar (_, vt) -> vt
+  | AMaybe a     -> wrap_tmaybe @: value_type_of_arg a
+  | ATuple xs    -> wrap_ttuple @: List.map value_type_of_arg xs

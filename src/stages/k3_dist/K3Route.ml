@@ -52,12 +52,12 @@ let list_of_k3_partition_map k3maps =
       let i = parse_int @: List.nth l 0 in
       let d = parse_int @: List.nth l 1 in
       (i, d) in
-    let tuple_list = U.list_of_k3_container @: List.nth map_tup 1 in
+    let tuple_list = list_of_k3_container @: List.nth map_tup 1 in
     let mdata = List.map parse_tup tuple_list in
     (name, mdata) in
   let maps_with_data = match List.hd k3maps with 
     | (Global(_,_,Some e), _) ->
-        begin try U.list_of_k3_container e
+        begin try list_of_k3_container e
         with Invalid_argument msg -> invalid_arg @: msg^" "^K3Printing.string_of_expr e end
     | _ -> error "no global variable found" in
   List.map parse_map maps_with_data
@@ -72,7 +72,7 @@ let k3_partition_map_of_list p l =
     let k3_pmap = list_map (fun s -> 
       mk_tuple [mk_cstring s; mk_empty pmap_types]
     ) map_names in
-    U.k3_container_of_list full_pmap_types k3_pmap
+    k3_container_of_list full_pmap_types k3_pmap
   else
     let one_map_to_k3 (m, ds) = 
       let check_index i = let ts = map_types_for p @: map_id_of_name p m
@@ -82,9 +82,9 @@ let k3_partition_map_of_list p l =
         (fun (i, d) -> if check_index i then k3tuplize (i,d) 
           else invalid_arg @: "index "^string_of_int i^" out of range in map "^m)
         ds
-      in mk_tuple [mk_cstring m; U.k3_container_of_list pmap_types newdata] in
+      in mk_tuple [mk_cstring m; k3_container_of_list pmap_types newdata] in
     let new_l = List.map one_map_to_k3 l in
-    U.k3_container_of_list full_pmap_types new_l
+    k3_container_of_list full_pmap_types new_l
 
 exception NoHashFunction of K3.AST.base_type_t
 

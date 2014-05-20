@@ -1517,7 +1517,7 @@ let csv_adaptor_to_k3 (name_prefix: string)
         [],
         k3_code
       ))),
-      K.TValue(KU.value_type_of_arg (lambda_args args))
+      K.TValue(KH.value_type_of_arg (lambda_args args))
     )
 ;;
 

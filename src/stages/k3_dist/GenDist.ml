@@ -77,7 +77,7 @@ let declare_global_vars p ast =
                 mk_cstring @: map_name_of p i;
                 mk_cint @: List.length @: map_types_for p i]) in
     mk_global_val_init K3Dist.map_ids t_map_list @:
-      U.k3_container_of_list t_map_list content 
+      k3_container_of_list t_map_list content 
   in
   (* vid_counter to generate vids.
    * We use a singleton because refs aren't ready *)

@@ -747,7 +747,7 @@ let lazy_trigger c id arg vars expr =
                then lps " " <| f
                else lind () <| lbox (lhov 0) f in
   lps ("trigger "^id) <| lps " : " <| 
-  lazy_value_type ~in_col:false c @: U.value_type_of_arg arg <| lsp () <|
+  lazy_value_type ~in_col:false c @: KH.value_type_of_arg arg <| lsp () <|
   lps "=" <| indent (lazy_expr c @: KH.mk_lambda arg expr) <| lcut ()
 
 let channel_format c = function
@@ -868,7 +868,7 @@ let add_sources p envs filename =
   let insert_ids      = List.map U.id_of_code insert_trigs in
   (* arg for each trigger *)
   let insert_args     = List.map U.args_of_code insert_trigs in
-  let arg_types       = List.map U.types_of_arg insert_args in
+  let arg_types       = List.map KH.value_type_of_arg insert_args in
   (* the source has dates as strings, before we convert them *)
   let arg_types_source = List.map (fun args -> 
     wrap_ttuple @: List.map (fun t ->

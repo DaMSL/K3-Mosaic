@@ -4,7 +4,6 @@ open Tree
 
 open K3.AST
 open K3.Annotation
-open K3Helpers
 
 (* AST accessors *)
 let id_of_expr e = fst (fst_data e) 
@@ -34,13 +33,6 @@ let rec typed_vars_of_arg arg =
     | AMaybe(a') -> typed_vars_of_arg a'
     | ATuple(vt_l) -> List.concat (List.map typed_vars_of_arg vt_l)
 
-(* convert an arg to a type *)
-let rec types_of_arg = function
-  | AIgnored     -> canonical TUnknown (* who cares *)
-  | AVar (_, vt) -> vt
-  | AMaybe a     -> canonical @: TMaybe(types_of_arg a)
-  | ATuple xs    -> wrap_ttuple @: List.map types_of_arg xs
-
 let id_of_var e = match tag_of_expr e with
   | Var id -> id | _ -> failwith "invalid variable"
 
@@ -50,7 +42,6 @@ let tuple_type_of_args args_t =
 
 let tuple_type_of_arg arg =
   tuple_type_of_args (List.map snd (typed_vars_of_arg arg)) 
-   
 
 (* Predicates *)
 let is_const e = match tag_of_expr e with | Const _ -> true | _ -> false
@@ -186,6 +177,8 @@ let decompose_block e = match tag_of_expr e with
   Block -> sub_tree e | _ -> failwith "not a Block"
 let decompose_combine e = match tag_of_expr e with 
   Combine -> (nth e 0, nth e 1) | _ -> failwith "not a Combine"
+let decompose_const e = match tag_of_expr e with 
+  Const c -> c | _ -> failwith "not a Combine"
 let decompose_delete e = match tag_of_expr e with 
   Delete -> (nth e 0, nth e 1) | _ -> failwith "not a Delete"
 let decompose_deref e = match tag_of_expr e with 
@@ -450,26 +443,6 @@ let renumber_test_program_ids ?(start=0) test_p =
       n, NetworkTest(p', t_l)
   | _ -> failwith "can't renumber expression test"
 
-let rec list_of_k3_container e = 
-  match tag_of_expr e with
-  | Combine -> let l, r = decompose_combine e in
-      list_of_k3_container l @ list_of_k3_container r
-  | Empty _ -> []
-  | Singleton _ -> [decompose_singleton e]
-  | _ -> invalid_arg "not a k3 list"
-
-let rec k3_container_of_list typ = function
-  | [] -> mk_empty typ
-  | [x] -> mk_singleton typ x
-  | x::xs -> mk_combine (k3_container_of_list typ [x]) @: 
-    k3_container_of_list typ xs
-
-(* convert an arg to a value type *)
-let rec value_type_of_arg = function
-  | AIgnored -> canonical TUnknown
-  | AVar(i, t) -> t
-  | AMaybe(a') -> canonical (TMaybe(value_type_of_arg a'))
-  | ATuple(args) -> canonical (TTuple(List.map value_type_of_arg args))
 
 (* Attach a type annotation to an expr *)
 let attach_type t e =

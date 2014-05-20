@@ -414,7 +414,7 @@ let rec deduce_expr_type ?(override=true) trig_env cur_env utexpr =
         | Lambda(t_a) ->
             let t0 = bind 0 in
             let t_r = t0 <| value_of |> t_erroru "Lambda" @: TBad(t0)
-            in TFunction(value_type_of_arg t_a, t_r)
+            in TFunction(H.value_type_of_arg t_a, t_r)
 
         | Apply ->
             let name = "Apply" in
@@ -621,7 +621,7 @@ let rec deduce_expr_type ?(override=true) trig_env cur_env utexpr =
 
 let check_trigger_type trig_env env id args locals body rebuild_f =
   let name = "Trigger("^id^")" in
-  let self_bindings = id, TValue(canonical @: TTarget(base_of (value_type_of_arg args) ())) in
+  let self_bindings = id, TValue(canonical @: TTarget(base_of (H.value_type_of_arg args) ())) in
   let arg_bindings = gen_arg_bindings args in
   let local_bindings = List.map (fun (i, vt, _) -> (i, TValue(vt))) locals in
   let inner_env = self_bindings :: arg_bindings @ local_bindings @ env in
@@ -742,7 +742,7 @@ let types_of_endpoints endpoint_l =
   List.fold_left (fun env ep -> match ep with
       | Resource(id,r) -> error_if_dup id (type_of_resource env r) env
       | Code(id, args, locals, body) ->
-        let t = TValue(canonical @: TTarget(base_of (value_type_of_arg args) ()))
+        let t = TValue(canonical @: TTarget(base_of (H.value_type_of_arg args) ()))
         in error_if_dup id [t] env
     ) [] endpoint_l
 
