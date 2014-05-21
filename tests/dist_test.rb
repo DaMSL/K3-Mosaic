@@ -81,7 +81,7 @@ end
 
 def check_type_error(dir, data_file)
     buf = IO.read(data_file)
-    res = buf.match(/^Error.*$/)
+    res = buf.match(/^(Error|ERROR).*$/)
     if res != nil then
         puts "ERROR: #{res}"
         Dir.chdir dir
@@ -146,7 +146,7 @@ def test_file(file, dbt_path, k3_path)
       # create a partition map
       cmd = "#{$part_path} temp.k3dist -n #{$num_nodes} > temp.part"
       puts cmd
-      output = `#{cmd}`
+      `#{cmd}`
       check_type_error(curdir, 'temp.part')
 
       # create another k3 distributed file (with partition map)
@@ -169,11 +169,17 @@ def test_file(file, dbt_path, k3_path)
   end
 
 	# run the k3 driver on the input
-  cmd = "#{k3_path} --test #{peer_str} -q #{$q_type} #{$shuffle_cmd} temp.k3dist" 
+  cmd = "#{k3_path} --test #{peer_str} -q #{$q_type} #{$shuffle_cmd} temp.k3dist > #{err_file} 2>&1" 
 	puts cmd
-	output = `#{cmd} 2> #{err_file}`
-	check_error(curdir, err_file)
-	puts output
+	`#{cmd}`
+  check_type_error(curdir, err_file)
+  # no error. print the file
+  file = File.open(err_file, "r") do |f|
+    f.each_line do |line|
+      puts line
+    end
+  end
+  
 end
 
 test_file(file, dbtoaster_path, k3_path)
