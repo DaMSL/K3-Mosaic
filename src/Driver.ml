@@ -225,7 +225,10 @@ let handle_type_error p (uuid, name, msg) =
   print_endline @: "Error("^(string_of_int uuid)^"): "^name^": "^s;
   (match p with
   | K3Data p | K3DistData(p,_,_)->
-    print_endline @: PS.string_of_program ~uuid_highlight:uuid p
+      if cmd_line_params.debug_info then
+        print_endline @: string_of_program ~print_id:true p
+      else
+        print_endline @: PS.string_of_program ~uuid_highlight:uuid p
   | K3TestData p_test -> print_endline @:
     PS.string_of_program_test ~uuid_highlight:uuid p_test);
   exit 1
