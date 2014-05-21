@@ -30,7 +30,8 @@ let map_modify f key map =
 
 let map_length map = IdMap.fold (fun _ _ sum -> sum + 1) map 0
 
-type eval_t = VDeclared of value_t ref | VTemp of value_t
+type eval_t = VDeclared of value_t ref
+            | VTemp of value_t
 
 and foreign_func_t = env_t -> env_t * eval_t
 

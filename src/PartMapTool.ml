@@ -25,7 +25,7 @@ let maps_and_dims file =
   let prog = DriverHelpers.parse_k3_file file in
   match fst @: global_of_program K3Dist.map_ids prog with
   | Global(_, _, Some e) ->
-      let l = list_of_k3_container e in
+      let l = K3Helpers.list_of_k3_container e in
       let l = List.map (fun t -> begin match decompose_tuple t with
         | [x;y;z] -> x,y,z
         | _       -> failwith @: "wrong format for "^K3Dist.map_ids
@@ -50,10 +50,10 @@ let pmap_types = wrap_tlist @: wrap_ttuple [t_string; inner_type]
 
 (* convert map_sizes structure to k3 expressions *)
 let k3_of_maps_sizes maps_sizes =
-  K3Util.k3_container_of_list pmap_types @:
+  k3_container_of_list pmap_types @:
     List.map (fun (m, ss) ->
       mk_tuple [mk_cstring m; 
-        K3Util.k3_container_of_list inner_type @:
+        k3_container_of_list inner_type @:
           List.map (fun (dim, size) ->
             mk_tuple [mk_cint dim; mk_cint size]) ss]
   ) maps_sizes

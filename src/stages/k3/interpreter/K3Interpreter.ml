@@ -493,7 +493,7 @@ and eval_expr (address:address) sched_st cenv texpr =
         | [VDeclared(c_ref); v] ->
           Some(c_ref, preserve_collection
             (fun els -> (value_of_eval v)::els) !c_ref)
-        | _ -> None)
+       | _ -> None)
 
     | Update ->
       modify_collection (fun env parts -> match parts with
@@ -540,8 +540,8 @@ and eval_expr (address:address) sched_st cenv texpr =
 
     | Deref    -> let fenv, v = child_value cenv 0 in
       begin match v with
-      | VIndirect x -> fenv, VTemp(!x)
-      | _             -> error "Deref: not an indirection"
+      | VIndirect x -> fenv, VDeclared(x)
+      | _           -> error "Deref: not an indirection"
       end
 
     | Assign   -> let fenv, vs = child_values cenv in
@@ -694,9 +694,9 @@ let interpreter_event_loop role_opt k3_program =
     fail_f ()
   in match role_opt, default_role with
    | Some x, Some (_,y) -> get_role x (fun () -> y)
-   | Some x, None -> get_role x error
-   | None, Some (_,y) -> y
-   | None, None -> error ()
+   | Some x, None       -> get_role x error
+   | None, Some (_,y)   -> y
+   | None, None         -> error ()
 
 (* returns address, (event_loop_t, environment) *)
 let initialize_peer sched_st address role_opt k3_program =

@@ -10,7 +10,8 @@ val add_from_list : 'a IdMap.t -> (id_t * 'a) list -> 'a IdMap.t
 
 val map_modify : ('a option -> 'a option) -> id_t -> 'a IdMap.t -> 'a IdMap.t
 
-type eval_t = VDeclared of value_t ref | VTemp of value_t
+type eval_t = VDeclared of value_t ref 
+            | VTemp of value_t
 and foreign_func_t = env_t -> env_t * eval_t
 
 and value_t

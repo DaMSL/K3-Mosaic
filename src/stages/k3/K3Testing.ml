@@ -127,15 +127,22 @@ let unify_values id r_newval = function
       | _ -> false
     in
     let both_tup_list l1 l2 = is_tup_list l1 && is_tup_list l2 in
-    match oldval, newval with
+    let unwrap_ind = function
+      | VIndirect r -> !r
+      | x           -> x
+    in
+    let wrap_ind x =
+      match oldval with VIndirect _ -> ref (VIndirect(ref x)) | _ -> ref x
+    in
+    match unwrap_ind oldval, unwrap_ind newval with
     | VSet l1, VSet l2 when both_tup_list l1 l2 -> 
-        Some(ref @: VSet(unify_tuple_lists id l1 l2))
+        Some(wrap_ind @: VSet(unify_tuple_lists id l1 l2))
     | VSet l1, VSet l2 -> Some(ref @: VSet(LAS.union l1 l2))
     | VBag l1, VBag l2 when both_tup_list l1 l2 -> 
-        Some(ref @: VBag(unify_tuple_lists id l1 l2))
+        Some(wrap_ind @: VBag(unify_tuple_lists id l1 l2))
     | VBag l1, VBag l2 -> Some(ref @: VBag(LAS.union l1 l2))
     | VList l1, VList l2 when both_tup_list l1 l2 -> 
-        Some(ref @: VList(unify_tuple_lists id l1 l2))
+        Some(wrap_ind @: VList(unify_tuple_lists id l1 l2))
     | VList l1, VList l2 -> Some(ref @: VList(LAS.union l1 l2))
     | _,_ -> Some r_newval
 
