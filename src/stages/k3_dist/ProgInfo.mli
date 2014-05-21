@@ -124,5 +124,7 @@ val slice_key_from_bound : prog_data_t ->
 val get_map_bindings_in_stmt : prog_data_t -> stmt_id_t -> map_id_t -> map_id_t
 -> (int * int) list
 
-(* get a list of unique types for maps (no vid) and their map ids *)
+(* get a list of unique types for maps (no vid) and their map ids *
+ * @param type_fn allows to select a different type function for uniqueness *)
+ 
 val uniq_types_and_maps : ?type_fn:(prog_data_t -> map_id_t -> value_type_t list) -> prog_data_t -> (value_type_t list * map_id_t list) list

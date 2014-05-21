@@ -251,17 +251,8 @@ let declare_global_funcs partmap p ast =
   (* NOTE: this function assumes the initial value is always 0.
    * If we need another value, it must be handled via message from
    * m3tok3 *)
-  let add_delta_to_buffer_code action map_id =
-    let func_name, map_name, has_corrective = match action with
-      | `RcvCorrective stmt  ->
-          add_delta_to_buffer_stmt_map p stmt map_id,
-          P.buf_of_stmt_map_id p stmt map_id,
-          false
-      | `DoComplete ->
-          add_delta_to_map p map_id,
-          P.map_name_of p map_id,
-          true
-    in
+  let add_delta_to_buffer_code map_id =
+    let func_name = add_delta_to_map p map_id in
     let delta_tuples_nm = "delta_tuples" in
     let ids_types_arg = map_ids_types_for ~prefix:"__arg_" p map_id in
     let ids_types_arg_v = map_ids_types_add_v ~vid:"vid_arg" ids_types_arg in
@@ -281,7 +272,7 @@ let declare_global_funcs partmap p ast =
     let t_val = hd @: list_take_end 1 types_v in
     let id_val = hd @: list_take_end 1 @: fst_many @: ids_types_v in
     let lookup_value, update_value = "lookup_value", "update_value" in
-    let corrective = "corrective" in
+    let corrective, target_map = "corrective", "target_map" in
     let update_vars = list_drop_end 1 vars_v @ [mk_var update_value] in
     let zero = match T.base_of t_val () with
       | TInt   -> mk_cint 0
@@ -296,7 +287,7 @@ let declare_global_funcs partmap p ast =
     in
     let regular_delta = 
       mk_let lookup_value t_col_v
-        (map_latest_vid_vals p (mk_deref @: mk_var map_name)
+        (map_latest_vid_vals p (mk_deref @: mk_var target_map)
           (Some(vars_no_val @ [mk_cunknown])) map_id ~keep_vid:true) @:
         mk_let update_value t_val
           (* get either 0 to add or the value we read *)
@@ -306,26 +297,25 @@ let declare_global_funcs partmap p ast =
               zero
               tuple_projection) @:
           mk_insert
-            (mk_deref @: mk_var map_name) @:
+            (mk_deref @: mk_var target_map) @:
             mk_tuple update_vars
     in
     mk_global_fn func_name
       (* corrective: whether this is a corrective delta *)
-      ((if has_corrective then [corrective, t_bool] else []) @
-        ["min_vid", t_vid; 
-         delta_tuples_nm, wrap_t_of_map @: wrap_ttuple types_v])
+      ([target_map, wrap_tind @: wrap_t_of_map @: wrap_ttuple types_v;
+        corrective, t_bool; "min_vid", t_vid; 
+        delta_tuples_nm, wrap_t_of_map @: wrap_ttuple types_v])
       [t_unit] @:
       mk_block @:
         [mk_iter  (* loop over values in delta tuples *)
           (mk_lambda (wrap_args @: ids_types_v) @:
-            if has_corrective then
             (* this part is just for correctives:
              * We need to check if there's a value at the particular version id
              * If so, we must add the value directly *)
               mk_let lookup_value t_col_v
                 (mk_if
                   (mk_var corrective) 
-                  (mk_slice (mk_deref @: mk_var map_name) @:
+                  (mk_slice (mk_deref @: mk_var target_map) @:
                     mk_tuple @: vars_v_no_val @ [mk_cunknown]) @:
                   mk_empty @: wrap_t_of_map @: wrap_ttuple types_v) @:
               mk_if
@@ -334,12 +324,10 @@ let declare_global_funcs partmap p ast =
                 (mk_let update_value t_val 
                   (mk_add (mk_var id_val) @: tuple_projection) @:
                   mk_insert
-                    (mk_deref @: mk_var map_name) @:
+                    (mk_deref @: mk_var target_map) @:
                     mk_tuple update_vars)
                 (* else, if it's just a regular delta, read the frontier *)
-                regular_delta
-            else
-              regular_delta) @:
+                regular_delta) @:
           mk_var delta_tuples_nm
         ;
         (* add to future values *)
@@ -351,11 +339,11 @@ let declare_global_funcs partmap p ast =
                  mk_gt (mk_var "vid") @: mk_var "min_vid")
                (mk_id types_v) @:
                (* slice w/o vid and value *)
-               mk_slice (mk_deref @: mk_var map_name) @:
+               mk_slice (mk_deref @: mk_var target_map) @:
                  mk_tuple @: mk_cunknown::vars_arg_no_v_no_val@[mk_cunknown]) @:
               mk_iter
                 (mk_lambda (wrap_args ids_types_v) @:
-                  mk_update (mk_deref @: mk_var map_name) (mk_tuple vars_v) @:
+                  mk_update (mk_deref @: mk_var target_map) (mk_tuple vars_v) @:
                     mk_tuple @: vars_v_no_val@
                       [mk_add vars_val vars_arg_val]
                 ) @:
@@ -383,10 +371,9 @@ let declare_global_funcs partmap p ast =
   in
   log_read_geq_code ::
   check_stmt_cntr_index_fn ::
-  for_all_maps p (fun map ->
-    add_delta_to_buffer_code `DoComplete map) @
-  for_all_stmts_rhs_maps p (fun (stmt, map) ->
-    add_delta_to_buffer_code (`RcvCorrective stmt) map) @
+  List.map (fun (_,maps) ->
+    add_delta_to_buffer_code @: hd maps)
+    (uniq_types_and_maps p) @
   [log_master_write_code ()] @
   for_all_trigs p log_write_code @
   for_all_trigs p log_get_bound_code @
@@ -1139,6 +1126,7 @@ let filter_corrective_list =
 let rcv_correctives_trig p s_rhs trig_name =
 List.map
   (fun (stmt_id, rmap) ->
+    let buf_map_nm = buf_of_stmt_map_id p stmt_id rmap in
     mk_code_sink (rcv_corrective_name_of_t p trig_name stmt_id rmap)
       (wrap_args
         ["vid", t_vid;
@@ -1151,8 +1139,9 @@ List.map
          * sensitive point in the protocol and it's essential this only be done
          * once for a given corrective *)
         [mk_apply
-          (mk_var @: add_delta_to_buffer_stmt_map p stmt_id rmap) @:
-          mk_tuple [mk_var "vid"; mk_var "delta_tuples"]
+          (mk_var @: add_delta_to_map p rmap) @:
+            (* pass the map indirection, false=not corrective *)
+            mk_tuple [mk_var buf_map_nm; mk_cbool false; mk_var "vid"; mk_var "delta_tuples"]
           ;
           (* for every computation vid, only execute if we have all the updates *)
           mk_iter

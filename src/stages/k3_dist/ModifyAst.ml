@@ -338,6 +338,7 @@ let delta_action p ast stmt m_target_trigger ~corrective =
             (mk_var @: add_delta_to_map p lmap) @:
               (* create a single tuple to send *)
               mk_tuple @:
+                (mk_var @: P.map_name_of p lmap)::
                 mk_cbool (if corrective then true else false)::full_vars]
             @
             (* do we need to send to another trigger *)
@@ -379,8 +380,9 @@ let delta_action p ast stmt m_target_trigger ~corrective =
       (* add delta values to all following vids *)
       [mk_apply
         (mk_var @: add_delta_to_map p lmap) @:
-        mk_tuple @: mk_cbool 
-          (if corrective then true else false)::
+        mk_tuple @: 
+          (mk_var @: P.map_name_of p lmap)::
+            mk_cbool (if corrective then true else false)::
             [mk_var "vid"; mk_var delta_v_name]]
       @
       begin match m_target_trigger with 

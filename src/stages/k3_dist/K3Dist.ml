@@ -58,15 +58,12 @@ let log_get_bound_for p trig_nm = "log_get_bound_"^trig_nm
 let log_read_geq = "log_read_geq" (* takes vid, returns (trig, vid)list >= vid *)
 (* adds the delta to all subsequent vids following in the buffer so that non
  * delta computations will be correct. Must be atomic ie. no other reads of the
- * wrong buffer value can happen *)
+ * wrong buffer value can happen. 
+ * Also used for adding to map buffers and for correctives *)
 let add_delta_to_map p map_id =
-  "add_delta_to_"^map_name_of p map_id
-
-let add_delta_to_buffer_stmt_map p stmt map_id =
-  "add_delta_to_"^P.buf_of_stmt_map_id p stmt map_id
-
-let cond_add_delta_to_map p map_id =
-  "cond_add_delta_to_"^P.map_name_of p map_id
+  let m_t = map_types_for p map_id in
+  "add_delta_to_"^String.concat "_" @:
+    List.map K3PrintSyntax.string_of_value_type m_t
 
 (* foreign functions *)
 let hash_addr = "hash_addr"
