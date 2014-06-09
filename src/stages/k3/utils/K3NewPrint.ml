@@ -298,7 +298,7 @@ let rec extract_slice e =
 (* Variable names to translate *)
 module StringMap = Map.Make(struct type t = string let compare = String.compare end)
 let var_translate = List.fold_left (fun acc (x,y) -> StringMap.add x y acc) StringMap.empty @:
-  ["int_of_float", "int_of_real"; "float_of_int", "real_of_int"; "peers", "my_peers"]
+  ["int_of_float", "truncate"; "float_of_int", "real_of_int"; "peers", "my_peers"]
 
 type in_record = InRec | In
 type out_record = OutRec | Out
