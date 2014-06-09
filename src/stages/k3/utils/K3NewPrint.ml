@@ -302,7 +302,7 @@ let var_translate = List.fold_left (fun acc (x,y) -> StringMap.add x y acc) Stri
 
 type in_record = InRec | In
 type out_record = OutRec | Out
-type arg_info  = Lambda of in_record list | NonLambda
+type arg_info  = ALambda of in_record list | ANonLambda
 type arg_info_l = (arg_info * out_record) list
 
 (* create a deep bind for lambdas, triggers, and let statements
@@ -385,9 +385,9 @@ and function_application c fun_e l_e =
 and handle_lambda c ~expr_info ~prefix_fn arg e =
   let arg_n = arg_num_of_arg arg in (* convert to arg_num *)
   let arg_l, out_rec = match expr_info with
-    | Lambda [], _  -> failwith @: Printf.sprintf "Missing lambda arg list at %d" (U.id_of_expr e)
-    | NonLambda, o  -> [In], o  (* deal with cases where we don't prepare it *)
-    | Lambda l,  o  -> l,    o
+    | ALambda [], _  -> failwith @: Printf.sprintf "Missing lambda arg list at %d" (U.id_of_expr e)
+    | ANonLambda, o  -> [In], o  (* deal with cases where we don't prepare it *)
+    | ALambda l,  o  -> l,    o
   in
   let many_args = List.length arg_l > 1 in
   let write arg in_record =
@@ -398,7 +398,7 @@ and handle_lambda c ~expr_info ~prefix_fn arg e =
     write arg in_record <| lind () <| 
       wrap_hov 0 (deep_bind ~depth:0 ~in_record c arg <| 
       (* for the final expr, we may need to wrap the output in a record *)
-      lazy_expr c (prefix_fn e) ~expr_info:(NonLambda, out_rec))
+      lazy_expr c (prefix_fn e) ~expr_info:(ANonLambda, out_rec))
   in
   (* loop over the lambda arguments *)
   let rec loop a = function
@@ -419,7 +419,7 @@ and handle_lambda c ~expr_info ~prefix_fn arg e =
 (* argnums: lambda only   -- number of expected arguments *)
 (* prefix_fn: lambda only -- modify the lambda with a prefix *)
 (* expr_info: additional info about the expression in the form of an arg_info structure *)
-and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(NonLambda,Out)) c expr =
+and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
   let expr_pair ?(sep=lps "," <| lsp ()) ?(wl=id_fn) ?(wr=id_fn) (e1, e2) =
     wl(lazy_expr c e1) <| sep <| wr(lazy_expr c e2) in
   let is_apply_let e = let e1, e2 = U.decompose_apply e in
@@ -518,7 +518,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(NonLambda,Out)) c expr =
       | Singleton vt, Empty _ ->
         let t = unwrap_t_val @: T.type_of_expr expr in
         lazy_collection_vt c t @: assemble_list c expr
-      | _ -> apply_method c ~name:"combine" ~col:e1 ~args:[e2] ~arg_info:[NonLambda, Out]
+      | _ -> apply_method c ~name:"combine" ~col:e1 ~args:[e2] ~arg_info:[ANonLambda, Out]
     end
   | Range ct -> let st, str, num = U.decompose_range expr in
     (* newk3 range only has the last number *)
@@ -619,12 +619,12 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(NonLambda,Out)) c expr =
     wrap_indent (lps "then" <| lsp () <| lazy_expr c e2) <| lsp () <|
     wrap_indent (lps "else" <| lsp () <| lazy_expr c e3)
   | Iterate -> let lambda, col = U.decompose_iterate expr in
-    apply_method c ~name:"iterate" ~col ~args:[lambda] ~arg_info:[Lambda [InRec], Out]
+    apply_method c ~name:"iterate" ~col ~args:[lambda] ~arg_info:[ALambda [InRec], Out]
   | Map -> let lambda, col = U.decompose_map expr in
-    apply_method c ~name:"map" ~col ~args:[lambda] ~arg_info:[Lambda [InRec], OutRec]
+    apply_method c ~name:"map" ~col ~args:[lambda] ~arg_info:[ALambda [InRec], OutRec]
   | FilterMap -> let lf, lm, col = U.decompose_filter_map expr in
-    lazy_paren (apply_method c ~name:"filter" ~col ~args:[lf] ~arg_info:[Lambda [InRec], Out]) <|
-      apply_method_nocol c ~name:"map" ~args:[lm] ~arg_info:[Lambda [InRec], OutRec]
+    lazy_paren (apply_method c ~name:"filter" ~col ~args:[lf] ~arg_info:[ALambda [InRec], Out]) <|
+      apply_method_nocol c ~name:"map" ~args:[lm] ~arg_info:[ALambda [InRec], OutRec]
   (* flatten(map(...)) becomes ext(...) *)
   | Flatten -> let e = U.decompose_flatten expr in
     (* ext needs an empty type right now to know what to do if the result is empty       flatten should always return a bag type since we can't guarantee uniqueness*)
@@ -638,19 +638,19 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(NonLambda,Out)) c expr =
     | Map -> 
         let lambda, col = U.decompose_map e in
         apply_method c ~name:"ext" ~col ~args:[lambda; empty_c] 
-          ~arg_info:[Lambda [InRec], Out; NonLambda, Out]
+          ~arg_info:[ALambda [InRec], Out; ANonLambda, Out]
     | _   -> failwith "Unhandled Flatten without map"
     end
   | Aggregate -> let lambda, acc, col = U.decompose_aggregate expr in
     (* find out if our accumulator is a collection type *)
     apply_method c ~name:"fold" ~col ~args:[lambda; acc]
-      ~arg_info:[Lambda [In; InRec], Out; NonLambda, Out]
+      ~arg_info:[ALambda [In; InRec], Out; ANonLambda, Out]
   | GroupByAggregate -> let lam1, lam2, acc, col = U.decompose_gbagg expr in
     (* find out if our accumulator is a collection type *)
     apply_method c ~name:"groupBy" ~col ~args:[lam1; lam2; acc] 
-      ~arg_info:[Lambda [InRec], Out; Lambda [In; InRec], Out; NonLambda, Out]
+      ~arg_info:[ALambda [InRec], Out; ALambda [In; InRec], Out; ANonLambda, Out]
   | Sort -> let col, lambda = U.decompose_sort expr in
-    apply_method c ~name:"sort" ~col ~args:[lambda] ~arg_info:[Lambda [InRec; InRec], Out]
+    apply_method c ~name:"sort" ~col ~args:[lambda] ~arg_info:[ALambda [InRec; InRec], Out]
       ~prefix_fn:(fun e -> light_type c @: KH.mk_if e (KH.mk_cint (-1)) @: KH.mk_cint 1)
   | Peek -> let col = U.decompose_peek expr in
     (* get the type of the collection. If it's a singleton type, we need to add
@@ -668,7 +668,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(NonLambda,Out)) c expr =
     in
     (* peeks return options and need to be pattern matched *)
     unwrap_option ~project @:
-      lazy_paren @: apply_method c ~name:"peek" ~col ~args:[light_type c @: KH.mk_cunit] ~arg_info:[NonLambda, Out]
+      lazy_paren @: apply_method c ~name:"peek" ~col ~args:[light_type c @: KH.mk_cunit] ~arg_info:[ANonLambda, Out]
   | Slice -> let col, pat = U.decompose_slice expr in
     let es, lam_fn = begin match U.tag_of_expr pat with
       | Tuple -> U.decompose_tuple pat, id_fn
@@ -698,13 +698,13 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(NonLambda,Out)) c expr =
           (tl filter_e) 
           (do_eq @: hd filter_e)
       in
-      apply_method c ~name:"filter" ~col ~args:[lambda] ~arg_info:[Lambda[InRec], Out]
+      apply_method c ~name:"filter" ~col ~args:[lambda] ~arg_info:[ALambda[InRec], Out]
   | Insert -> let col, x = U.decompose_insert expr in
-    apply_method c ~name:"insert" ~col ~args:[x] ~arg_info:[NonLambda,OutRec]
+    apply_method c ~name:"insert" ~col ~args:[x] ~arg_info:[ANonLambda,OutRec]
   | Delete -> let col, x = U.decompose_delete expr in
-    apply_method c ~name:"delete" ~col ~args:[x] ~arg_info:[NonLambda,OutRec]
+    apply_method c ~name:"delete" ~col ~args:[x] ~arg_info:[ANonLambda,OutRec]
   | Update -> let col, oldx, newx = U.decompose_update expr in
-    apply_method c ~name:"update" ~col ~args:[oldx;newx] ~arg_info:[NonLambda,OutRec;NonLambda,OutRec]
+    apply_method c ~name:"update" ~col ~args:[oldx;newx] ~arg_info:[ANonLambda,OutRec;ANonLambda,OutRec]
   | Assign -> let l, r = U.decompose_assign expr in
     (* assignment must be within a bind *)
     lps "bind" <| lsp () <| lazy_expr c l <| lsp () <| lps "as ind __y in"
