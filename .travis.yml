@@ -2,5 +2,6 @@ language: c
 install:
   - sudo apt-get update -qq
   - sudo apt-get install -qq ocaml ocaml-native-compilers time camlp4-extra
+  - ocaml -version
 script:
   - bash -ex ./build_opt.sh
