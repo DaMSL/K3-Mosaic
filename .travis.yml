@@ -6,4 +6,4 @@ install:
   - ocamlbuild -version
   - camlp4 -version
 script:
-  - bash ./build_opt.sh
+  - bash ./build_opt.sh -verbose 1
