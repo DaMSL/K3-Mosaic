@@ -1,4 +1,4 @@
-<**/*.ml> : pp(camlp4o ../lib/bolt/bolt_pp.cmo), ocaml
+<src/**/*.ml> : pp(camlp4o ../lib/bolt/bolt_pp.cmo), ocaml
 <src/util>: include
 <src>: include
 <src/stages/k3>: include
