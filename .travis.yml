@@ -6,4 +6,4 @@ install:
   - ocaml -version
   - ocamlbuild -version
 script:
-  - bash -ex ./build_opt.sh -verbose 1 -classic-display
+  - bash -ex ./build_opt.sh -classic-display
