@@ -4,6 +4,25 @@ open K3Dist
 open K3Helpers
 open Util
 
+(* Description of GC protocol
+ * --------------------------
+ * Switches have a list of highest fully sent vid: max_vid
+ *    Rely on tcpip to tell us what's been acked. Otherwise need to implement ack ourselves.
+ *    Report to a master switch their max_vid. Master switch finds lowest max_vid.
+ * Nodes have a rcv buffer for fetches and puts
+ *     Keep track of latest vid processed: stmt counter pointer
+ *         Updated with stmt counter complete: may move forward in vid
+ *         Updated with put/fetch: may move backwards in vid
+ *     2 modes:
+ *         Can either wait until max_vid is cleared, or send best achieved vid (best_vid) back to master switch.
+ * Master switch finds lowest agreed upon vid and broadcasts GC up to this vid.
+ * Nodes delete logs, data, stmt_ctr up to this vid
+ * Potential problem: a put that hasn't been processed can insert a potential entry early in the stmt_ctrs
+ *     Solution: scan input buffer to make sure nothing with lesser vid than max_vid
+ *               Assumes: a received TPCIP packet will have been put in the buffer.
+ *                        May need special external function (flush_network(trig_to_call_when_done)) to make this work.
+ *)
+
 (*
  * hard code generate switches list in K3Global
 (*
