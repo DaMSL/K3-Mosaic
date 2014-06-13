@@ -47,14 +47,15 @@ def run():
     if args.test_list_name:
         check_exists('test list', args.test_list_name)
         with open(args.test_list_name, 'r') as f:
-            test_list = f.readlines()
+            f_list = f.readlines()
+            test_list += list(map(lambda x: x.replace('\n', ''), f_list))
 
     # take all files in a test_path
     if args.test_path:
         for root, dirs, files in os.walk(args.test_path):
             for f in files:
-                if os.path.split(f)[1] == ".sql":
-                    test_list += os.path.join(root, f)
+                if os.path.splitext(f)[1] == ".sql":
+                    test_list += [os.path.join(root, f)]
 
     # handle test names from command line
     if args.test_name:
@@ -77,7 +78,7 @@ def run():
             res = dist_test.run(test_file,
                                 args.num_nodes,
                                 args.queue_type,
-                                args.do_shuffle,
+                                args.shuffle,
                                 args.force_correctives,
                                 args.order_file,
                                 verbose)
@@ -92,7 +93,7 @@ def run():
         print("Failed {0}/{1} tests".format(failed, len(test_list)))
         sys.exit(1)
     else:
-        print("Passed {1} tests".format(len(test_list)))
+        print("Passed {0} test(s)".format(len(test_list)))
 
 if __name__ == '__main__':
     run()

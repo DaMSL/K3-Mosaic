@@ -39,7 +39,7 @@ def run(target_file, verbose):
 
     # run dbtoaster to get interpreted updates
     debug_cmd = ''
-    debug_flags = ['LOG-INTERPRETER-UPDATES', 'LOG-INTERPRETER-TRIGGERS', 'LOG-M3']
+    debug_flags = ['PRINT-VERBOSE', 'LOG-INTERPRETER-UPDATES', 'LOG-INTERPRETER-TRIGGERS', 'LOG-M3']
     for f in debug_flags:
         debug_cmd += ' -d ' + f
     cmd = '{dbtoaster_name} {debug_cmd} {target_file} > {trace_file} 2> {error_file}' \
@@ -50,7 +50,7 @@ def run(target_file, verbose):
         return False
 
     # run dbtoaster to get m3 file with distributed portion
-    cmd = '{dbtoaster_name} -l distm3 -d PRINT-VERBOSE {target_file} > {m3_file} 2> {error_file}' \
+    cmd = '{dbtoaster_name} -l M3 -d PRINT-VERBOSE {target_file} > {m3_file} 2> {error_file}' \
           .format(**locals())
     print_system(cmd, verbose)
     if check_error(error_file, verbose):

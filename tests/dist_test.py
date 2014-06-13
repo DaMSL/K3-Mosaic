@@ -16,14 +16,16 @@ def run(target_file,
         verbose=True):
 
     to_root = ".."
-    script_path = os.path.dirname(__file__)
+    script_path = os.path.abspath(os.path.dirname(__file__))
     root_path = os.path.join(script_path, to_root)
-    dbtoaster_dir = os.path.join(root_path, "./external/dbtoaster")
-    dbtoaster_name = "./bin/dbtoaster_release"
+    dbtoaster_dir = os.path.join(root_path, "external/dbtoaster")
+    dbtoaster_name = "bin/dbtoaster_release"
     dbtoaster = os.path.join(dbtoaster_dir, dbtoaster_name)
-    k3o = os.path.join(root_path, "./bin/k3")
-    partmap_tool = os.path.join(root_path, "./bin/partmap_tool")
-    saved_dir = os.path.curdir
+    k3o = os.path.join(root_path, "bin/k3")
+    partmap_tool = os.path.join(root_path, "bin/partmap_tool")
+
+    saved_dir = os.path.abspath(os.path.curdir)
+    target_file = os.path.join(saved_dir, target_file)
     trace_file = os.path.join(saved_dir, "temp.trace")
     m3_file = os.path.join(saved_dir, "temp.m3")
     k3_file = os.path.join(saved_dir, "temp.k3")
@@ -70,12 +72,16 @@ def run(target_file,
     print_system(cmd, verbose)
 
     # string for k3 distributed file creation: either use a trace file or an order file
-    create_cmd = "--trace #{trace_file}" if order_file == "" else "--order #{$order_file}"
+    if not order_file:
+        create_cmd = "--trace {0}".format(trace_file)
+    else:
+        create_cmd = "--order {0}".format(order_file)
+
     force_cmd = "--force" if force_correctives else ""
 
     # create a k3 distributed file (without a partition map)
     cmd = ('{k3o} -p -i m3 -l k3disttest {m3_file} {create_cmd} {force_cmd}'
-           + ' > {k3dist_file} 2> {err_file}').format(**locals())
+           + ' > {k3dist_file} 2> {error_file}').format(**locals())
     print_system(cmd, verbose)
     if check_error(error_file, verbose) or check_error(k3dist_file, verbose, True):
         return False
@@ -89,7 +95,7 @@ def run(target_file,
 
         # create another k3 distributed file (with partition map)
         cmd = ("{k3o} -p -i m3 -l k3disttest {m3_file} {create_cmd} -m {part_file} {force_cmd}"
-               + "> {k3dist_file} 2> {err_file}").format(**locals())
+               + "> {k3dist_file} 2> {error_file}").format(**locals())
         print_system(cmd, verbose)
         if check_error(error_file, verbose) or check_error(k3dist_file, verbose, True):
             return False
@@ -98,9 +104,10 @@ def run(target_file,
     node_list = []
     for i in range(num_nodes):
         port = 50000 + (i * 10000)
-        node_list += '127.0.0.1:{0}/node'.format(port)
+        node_list += ['127.0.0.1:{0}/node'.format(port)]
 
-    peer_cmd = "-n localhost:40000/switch" + ','.join(node_list)
+    peer_list = ["-n localhost:40000/switch"] + node_list
+    peer_cmd = ','.join(peer_list)
     shuffle_cmd = "--shuffle" if do_shuffle else ""
 
     # run the k3 driver on the input
