@@ -1,4 +1,5 @@
 language: c
+python: "3.3"
 install:
   - echo "yes" | sudo add-apt-repository ppa:avsm/ocaml41+opam11
   - sudo apt-get update -qq
@@ -7,5 +8,5 @@ install:
   - ocamlbuild -version
 script:
   - bash -ex ./build_opt.sh -classic-display
-  - python3 tests/auto_test.py -l passed_local_tests.txt
-  - python3 tests/auto_test.py -d -l passed_dist_tests.txt
+  - python tests/auto_test.py -l passed_local_tests.txt
+  - python tests/auto_test.py -d -l passed_dist_tests.txt
