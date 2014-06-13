@@ -47,14 +47,16 @@ def run():
     if args.test_list_name:
         check_exists('test list', args.test_list_name)
         with open(args.test_list_name, 'r') as f:
-            test_list = f.readlines()
+            f_list = f.readlines()
+            test_list += list(map(lambda x: x.replace('\n', ''), f_list))
 
     # take all files in a test_path
     if args.test_path:
         for root, dirs, files in os.walk(args.test_path):
             for f in files:
-                if os.path.split(f)[1] == ".sql":
-                    test_list += os.path.join(root, f)
+                if os.path.splitext(f)[1] == ".sql":
+                    print(f)
+                    test_list += [os.path.join(root, f)]
 
     # handle test names from command line
     if args.test_name:
