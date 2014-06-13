@@ -49,9 +49,12 @@ def run():
     # handle a test list
     if args.test_list_name:
         check_exists('test list', args.test_list_name)
+        # we need to add the file path to each file in the list
+        list_path, _ = os.path.split(args.test_list_name)
         with open(args.test_list_name, 'r') as f:
             f_list = f.readlines()
-            test_list += list(map(lambda x: x.replace('\n', ''), f_list))
+            test_list += list(map(lambda x: os.path.join(list_path, x).replace('\n', ''),
+                                  f_list))
 
     # take all files in a test_path
     if args.test_path:
