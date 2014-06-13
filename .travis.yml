@@ -7,3 +7,5 @@ install:
   - ocamlbuild -version
 script:
   - bash -ex ./build_opt.sh -classic-display
+  - python3 tests/auto_test.py -l passed_local_tests.txt
+  - python3 tests/auto_test.py -d -l passed_dist_tests.txt
