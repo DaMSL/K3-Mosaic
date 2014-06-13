@@ -23,7 +23,7 @@ def run(target_file,
     dbtoaster = os.path.join(dbtoaster_dir, dbtoaster_name)
     k3o = os.path.join(root_path, "./bin/k3")
     partmap_tool = os.path.join(root_path, "./bin/partmap_tool")
-    saved_dir = os.path.curdir()
+    saved_dir = os.path.curdir
     trace_file = os.path.join(saved_dir, "temp.trace")
     m3_file = os.path.join(saved_dir, "temp.m3")
     k3_file = os.path.join(saved_dir, "temp.k3")
