@@ -18,6 +18,7 @@ def run(target_file,
 
     to_root = ".."
     script_path = os.path.abspath(os.path.dirname(__file__))
+    target_file = os.path.abspath(target_file)
     root_path = os.path.join(script_path, to_root)
     dbtoaster_dir = os.path.join(root_path, "external/dbtoaster")
     dbtoaster_name = "bin/dbtoaster_release"
@@ -26,7 +27,6 @@ def run(target_file,
     partmap_tool = os.path.join(root_path, "bin/partmap_tool")
 
     saved_dir = os.path.abspath(os.path.curdir)
-    target_file = os.path.join(saved_dir, target_file)
     trace_file = os.path.join(saved_dir, "temp.trace")
     m3_file = os.path.join(saved_dir, "temp.m3")
     k3_file = os.path.join(saved_dir, "temp.k3")

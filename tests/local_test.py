@@ -14,7 +14,7 @@ from test_utils import check_exists, check_error, print_system
 def run(target_file, verbose):
     to_root = ".."
     script_path = os.path.abspath(os.path.dirname(__file__))
-    target_file = os.path.join(script_path, target_file)
+    target_file = os.path.abspath(target_file)
     root_path = os.path.join(script_path, to_root)
     dbtoaster_dir = os.path.join(root_path, "external/dbtoaster")
     dbtoaster_name = "bin/dbtoaster_release"
