@@ -39,7 +39,7 @@ def run(target_file, verbose):
 
     # run dbtoaster to get interpreted updates
     debug_cmd = ''
-    debug_flags = ['LOG-INTERPRETER-UPDATES', 'LOG-INTERPRETER-TRIGGERS', 'LOG-M3']
+    debug_flags = ['PRINT-VERBOSE', 'LOG-INTERPRETER-UPDATES', 'LOG-INTERPRETER-TRIGGERS', 'LOG-M3']
     for f in debug_flags:
         debug_cmd += ' -d ' + f
     cmd = '{dbtoaster_name} {debug_cmd} {target_file} > {trace_file} 2> {error_file}' \

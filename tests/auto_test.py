@@ -77,7 +77,7 @@ def run():
             res = dist_test.run(test_file,
                                 args.num_nodes,
                                 args.queue_type,
-                                args.do_shuffle,
+                                args.shuffle,
                                 args.force_correctives,
                                 args.order_file,
                                 verbose)
@@ -92,7 +92,7 @@ def run():
         print("Failed {0}/{1} tests".format(failed, len(test_list)))
         sys.exit(1)
     else:
-        print("Passed {1} tests".format(len(test_list)))
+        print("Passed {0} test(s)".format(len(test_list)))
 
 if __name__ == '__main__':
     run()
