@@ -18,26 +18,26 @@ def check_exists(name, path):
 
 def run():
     parser = argparse.ArgumentParser()
-    parser.add_parser('-p', '--path', action='store', dest='test_path',
-                      default=None, help="Do all tests in a given directory")
-    parser.add_parser('-f', '--file', action='append', dest='test_name',
-                      help="Run a specific test file")
-    parser.add_parser('-l', '--list', action='store', dest='test_list_name',
-                      default=None, help="Execute tests from a list file")
-    parser.add_parser('-d', '--dist', action='store_true', dest='distributed',
-                      default=False, help="Distributed test")
-    parser.add_parser('-n', '--nodes', action='store', dest='num_nodes',
-                      default=1, help="Number of data nodes")
-    parser.add_parser('-q', '--queue', action='store', dest='queue_type',
-                      default="global", help="Queue type: global/trigger/node")
-    parser.add_parser('-r', '--force', action='store', dest='force_correctives',
-                      default=False, help="Force correctives")
-    parser.add_parser('-x', '--shuffle', action='store', dest='shuffle',
-                      default=False, help="Shuffle the queues")
-    parser.add_parser('-o', '--order', action='store', dest='order_file',
-                      default=None, help="Use an order file instead of creating a trace")
-    parser.add_parser('-v', '--verbose', action='store_true', dest='verbose',
-                      default=False, help="See test results in detail")
+    parser.add_argument('-p', '--path', action='store', dest='test_path',
+                        default=None, help="Do all tests in a given directory")
+    parser.add_argument('-f', '--file', action='append', dest='test_name',
+                        help="Run a specific test file")
+    parser.add_argument('-l', '--list', action='store', dest='test_list_name',
+                        default=None, help="Execute tests from a list file")
+    parser.add_argument('-d', '--dist', action='store_true', dest='distributed',
+                        default=False, help="Distributed test")
+    parser.add_argument('-n', '--nodes', action='store', dest='num_nodes',
+                        default=1, help="Number of data nodes")
+    parser.add_argument('-q', '--queue', action='store', dest='queue_type',
+                        default="global", help="Queue type: global/trigger/node")
+    parser.add_argument('-r', '--force', action='store', dest='force_correctives',
+                        default=False, help="Force correctives")
+    parser.add_argument('-x', '--shuffle', action='store', dest='shuffle',
+                        default=False, help="Shuffle the queues")
+    parser.add_argument('-o', '--order', action='store', dest='order_file',
+                        default=None, help="Use an order file instead of creating a trace")
+    parser.add_argument('-v', '--verbose', action='store_true', dest='verbose',
+                        default=False, help="See test results in detail")
 
     args = parser.parse_args()
 
@@ -60,11 +60,17 @@ def run():
     if args.test_name:
         test_list.extend(args.test_name)
 
+    if len(test_list) == 0:
+        parser.print_help()
+        sys.exit(1)
+
     failed = 0
     verbose = args.verbose or len(test_list) == 1
     # run either one test or many tests
     for index, test_file in enumerate(test_list):
         print("[{0}] Testing {1}... ".format(index, test_file), end="", flush=True)
+        if verbose:
+            print("")
         if not args.distributed:
             res = local_test.run(test_file, verbose)
         else:
@@ -87,3 +93,6 @@ def run():
         sys.exit(1)
     else:
         print("Passed {1} tests".format(len(test_list)))
+
+if __name__ == '__main__':
+    run()
