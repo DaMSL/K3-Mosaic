@@ -8,5 +8,6 @@ install:
   - sudo pip install six
 script:
   - bash -ex ./build_opt.sh -classic-display
+  - bash -ex ./build_utils.sh -classic-display
   - tests/auto_test.py -l tests/passed_local_tests.txt
   - tests/auto_test.py -d -l tests/passed_dist_tests.txt
