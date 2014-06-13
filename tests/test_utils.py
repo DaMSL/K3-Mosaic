@@ -1,9 +1,10 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 
 # Unit test utilities
 
 import os
 import re
+import six
 
 def check_exists(name, path):
     if not os.path.exists(path):
@@ -20,16 +21,16 @@ def check_error(filename, verbose, search=False):
                 mo = re.search(r'^(Error|ERROR)', buf)
                 if mo:
                     if verbose:
-                        print(buf)
+                        six.print_(buf)
                     return True
                 return False
             else:
                 if verbose:
-                    print('ERROR: ' + buf)
+                    six.print_('ERROR: ' + buf)
                 return True
     return False
 
 def print_system(cmd, verbose):
     if verbose:
-        print(cmd)
+        six.print_(cmd)
     os.system(cmd)

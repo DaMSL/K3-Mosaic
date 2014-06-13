@@ -1,13 +1,14 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 
 #
 # Compare the output of an SQL test using dbtoaster to K3 execution
 #
 # Usage:
-#    ./sql_test.py SQL_query
+#    ./local_test.py SQL_query
 #
 
 import os
+import six
 from test_utils import check_exists, check_error, print_system
 
 def run(target_file, verbose):
@@ -34,7 +35,7 @@ def run(target_file, verbose):
 
     # change to dbtoaster path (dbtoaster needs it)
     if verbose:
-        print("cd {0}".format(dbtoaster_dir))
+        six.print_("cd {0}".format(dbtoaster_dir))
     os.chdir(dbtoaster_dir)
 
     # run dbtoaster to get interpreted updates
@@ -59,7 +60,7 @@ def run(target_file, verbose):
 
     # change directory back
     if verbose:
-        print("cd {0}".format(saved_dir))
+        six.print_("cd {0}".format(saved_dir))
     os.chdir(saved_dir)
 
     # convert to a k3 file to check
@@ -90,5 +91,5 @@ def run(target_file, verbose):
     with open(output_file, 'r') as f:
         buf = f.read()
         if verbose:
-            print(buf)
+            six.print_(buf)
     return True
