@@ -348,29 +348,35 @@ let parse_trace file =
        * pick up on small pieces of what we want *)
       if r_match r_declare_map_short str then (* we picked up on a map partially *)
         let m = r_groups str ~n:4 ~r:r_declare_map in
-        if null m then begin
-          (* not enough to read, so add a line *)
-          maps, line+1, sys_ready, events, str
-        end else begin
-          let mapname, maptype, ivars, ovars = at m 0, at m 1, at m 2, at m 3 in
-          if is_some ivars && ivars <> Some "" then 
-            failwith @: "input vars unsupported at line "^soi line;
-          let new_map = match ovars, mapname, maptype with
-            | None, Some mapname, Some maptype ->
-                SingletonMap(SingletonMap.init mapname maptype)
-            | Some ovars', Some mapname, Some maptype ->
-                let ovars_s = Str.split r_comma ovars' in
-                let ovars, otypes = 
-                  List.split @: list_map (fun v -> 
-                    let l = Str.split r_colon v in
-                    hd l, at l 1) ovars_s in
-                OutputMap(OutputMap.init mapname maptype ovars otypes)
+        match m with
+        | [] -> (* not enough to read, so add a line *)
+            maps, line+1, sys_ready, events, str
 
-            | _ -> failwith @: "missing values at line "^soi line
-          in
-          let maps' = StringMap.add (unwrap_some mapname) new_map maps in
-          maps', line+1, sys_ready, events, ""
-      end else
+        | [_; _; Some ivars; _] when ivars <> "" ->
+            failwith @: "input vars unsupported at line "^soi line
+
+        | [Some mapname; Some maptype; _; None] ->
+            let newmap = SingletonMap(SingletonMap.init mapname maptype) in
+            let maps' = StringMap.add mapname newmap maps in
+            maps', line+1, sys_ready, events, ""
+
+        | [Some mapname; Some maptype; _; Some ovars] ->
+            let newmap = 
+              let ovars_s = Str.split r_comma ovars in
+              let ovars', otypes = 
+                List.split @: list_map (fun v -> 
+                  match Str.split r_colon v with
+                  | [x;y] -> (x,y)
+                  | _     -> failwith @: "incorrect data at line "^soi line)
+                ovars_s in
+              OutputMap(OutputMap.init mapname maptype ovars' otypes)
+            in
+            let maps' = StringMap.add mapname newmap maps in
+            maps', line+1, sys_ready, events, ""
+
+        | _ -> failwith @: "couldn't extract map details at line "^soi line
+
+      else
       (* parse system ready *)
       if r_match r_system_ready str then 
         maps, line+1, true, events, acc_str else
@@ -389,10 +395,14 @@ let parse_trace file =
         | [Some op; Some relname; Some id_types; Some vals] ->
             let id_types = Str.split r_comma id_types in
             let id_types = List.map (Str.split r_colon) id_types in
-            let types = List.map (fun l -> at l 1) id_types in 
+            let types = List.map (function 
+              | _::y::_ -> y
+              | _       -> failwith @: "Bad data at line "^soi line)
+            id_types in 
             let vals = correct_for_strings @: Str.split r_semi vals in
             let evt = RelEvent.init op relname types vals in
             maps, line+1, sys_ready, evt::events, acc_str
+
         | _ -> failwith @: "invalid input for ON at line "^soi line
       else
       (* parse an update *)
