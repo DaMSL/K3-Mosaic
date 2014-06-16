@@ -71,13 +71,13 @@ let rec_of_tup s =
 
 (* takes a list of trigger names and a list of lists of data lines *)
 (* returns a list of strings, each one being a line *)
-let combine_data t_d =
+let combine_data t_d : string list=
   let mut_s = if params.mut then " MemImmut" else "" in
   let rec loop remain rem_num acc =
     if rem_num = 0 then acc else
     (* choose a random list to draw from *)
     let i = Random.int rem_num in
-    (* Note that we can't remove any list, because that list generates a 'Nothing' *)
+    (* Note that we can't remove any list, because empty lists generate a 'Nothing' *)
     let _, line, remain, rem_num, trig_id =
       List.fold_right (fun ((t,l) as vals) (idx, out, remain, rem_num, trig_id) -> 
         let do_just x  = (Printf.sprintf "Just%s %s" mut_s @: rec_of_tup x)::out in
@@ -100,14 +100,23 @@ let combine_data t_d =
       | None   -> failwith "trigger not found" 
       | Some t -> (Printf.sprintf "\"%s\"" t)::line
     in
+    loop remain rem_num (line::acc)
+  in
+  let to_string line =
     (* convert every line to a record *)
     let line = K3NewPrint.add_record_ids ~prefix:"r" line in
     let line = List.map (fun (s,s') -> Printf.sprintf "%s=%s" s (wrap_mut_rec s')) line in
-    let line = Printf.sprintf "{%s}" @: String.concat "," line in
-    loop remain rem_num (line::acc)
+    Printf.sprintf "{%s}" @: String.concat "," line
   in
+  (* add an 'end' to the (reversed) list of lines *)
+  let add_end lines = match lines with
+    | (s::ss)::ls -> ("\"end\""::(List.map (fun _ -> "Nothing") ss))::ls
+    | _           -> failwith "bad input in adding end line"
+  in 
+  (* initialize the counts for each source *)
   let remain_init = List.fold_left (fun acc -> function (_,[]) -> acc | _ -> acc+1) 0 t_d in
-  List.rev @: loop t_d remain_init []
+  let lines = add_end @: loop t_d remain_init [] in
+  List.rev_map to_string lines
 
 let read_files files = List.map read_file_lines files
 
