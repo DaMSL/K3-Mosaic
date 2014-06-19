@@ -6,8 +6,9 @@ open Util
 
 (* Description of GC protocol
  * --------------------------
- * Switches have a list of highest fully sent vid: max_vid
- *    Rely on tcpip to tell us what's been acked. Otherwise need to implement ack ourselves.
+ * Switches keep track of the highest vid that's been acknowledged: max_vid
+ *    Have to make sure received acks from every single node the switch sent data to.
+ *      Counter per sent vid, or for error checking, keep track of each node that responded
  *    Report to a master switch their max_vid. Master switch finds lowest max_vid.
  * Nodes have a rcv buffer for fetches and puts
  *     Keep track of latest vid processed: stmt counter pointer
@@ -57,29 +58,30 @@ let dummy_name = "dummy"
 let dummy_trig_arg = [dummy_name,t_int]
 
 (* 
- * acks
+ * Switch acks
  * ---------------------------------
- * used to stored that the acks from data node that a certain
- * vid has received the application layer 
- * acks:  rcv_addr,vid,is_acked *)
-let ack_lst_name = "acks" (* global val*)
-let ack_lst = mk_var ack_lst_name
+ * Used to stored that the acks from data node that a certain
+ * vid has been seen by the application layer 
+ * acks:  rcv_addr, vid, is_acked
+ *)
+let switch_ack_log_name = "switch_ack_log" (* global val*)
+let switch_ack_log = mk_var switch_ack_log_name
 
-let ack_lst_id_addr_name = "addr"
-let ack_lst_id_vid_name = "vid"
-let ack_lst_id_is_acked_name = "is_acked"
-let ack_lst_id_names = [ack_lst_id_addr_name;
-                        ack_lst_id_vid_name;
-                        ack_lst_id_is_acked_name]
+let switch_ack_log_id_addr_name = "addr"
+let switch_ack_log_id_vid_name = "vid"
+let switch_ack_log_id_is_acked_name = "is_acked"
+let switch_ack_log_id_names = [switch_ack_log_id_addr_name;
+                        switch_ack_log_id_vid_name;
+                        switch_ack_log_id_is_acked_name]
 
-let ack_lst_id_type = [("addr", t_addr_mut);
+let switch_ack_log_id_type = [("addr", t_addr_mut);
                        ("vid", t_vid_mut);
                        ("is_acked", t_bool_mut)] 
 
 let ack_type = wrap_tset_mut @: wrap_ttuple_mut 
                   [t_addr_mut; t_vid_mut; t_bool_mut]
 
-let acks_code = mk_global_val  ack_lst_name ack_type 
+let acks_code = mk_global_val  switch_ack_log_name ack_type 
  
 (* Generate triggers dealing with ack of rcv_put *)
 let ack_trig_args = ["ip", t_addr; "vid", t_vid]
@@ -88,7 +90,7 @@ let ack_rcv_trig =
   let slice_vars = ids_to_vars["ip";"vid"] in
   let slice_pat = mk_tuple @: slice_vars @ [mk_cunknown] in
   mk_code_sink "ack_rcv" (wrap_args ack_trig_args) [] @:
-    mk_update ack_lst (mk_peek @: mk_slice ack_lst slice_pat) @:
+    mk_update switch_ack_log (mk_peek @: mk_slice switch_ack_log slice_pat) @:
       mk_tuple @:slice_vars@[mk_cbool true]
 
 let ack_send_trig = 
@@ -466,9 +468,9 @@ let do_garbage_collection_trig_code p ast =
       (* clear acks *)
       (delete_collection_up_to_vid
         safe_vid
-        ack_lst_id_type
-        ack_lst_id_names
-        ack_lst_name ) ::
+        switch_ack_log_id_type
+        switch_ack_log_id_names
+        switch_ack_log_name ) ::
 
       (* clear log master [t_vid;t_trig_id]*)
       (delete_collection_up_to_vid 
@@ -823,7 +825,7 @@ let vid_rcv_trig =
 (* max_acked_vid_send
  * -----------------------
  * For switch node. The start point of GC. 
- * Send my current max acked vid in the ack_lst 
+ * Send my current max acked vid in the switch_ack_log 
  * to the first switch node 
  * *)
 let max_acked_vid_send_trig_name = "max_acked_vid_send"
@@ -838,22 +840,22 @@ let max_acked_vid_send_trig vid_cnt_var epoch_var hash_addr =
       (mk_agg 
         (mk_assoc_lambda 
           (wrap_args ["max_acked_vid",t_vid])
-          (wrap_args ack_lst_id_type) 
+          (wrap_args switch_ack_log_id_type) 
           (mk_if
             (* if current vid is acked && > max_vid then update max_acked_vid *)
             (mk_and
               (K3Dist.v_gt  
-                (mk_var ack_lst_id_vid_name) @: 
+                (mk_var switch_ack_log_id_vid_name) @: 
                 mk_var "max_acked_vid"
               )
-              (mk_eq (mk_var ack_lst_id_is_acked_name) (mk_cbool true))
+              (mk_eq (mk_var switch_ack_log_id_is_acked_name) (mk_cbool true))
             )
-            (mk_var ack_lst_id_vid_name)
+            (mk_var switch_ack_log_id_vid_name)
             (mk_var "max_acked_vid")
           )
         )
         min_vid_k3
-        (mk_var ack_lst_name))  
+        (mk_var switch_ack_log_name))  
   in
   mk_code_sink
     max_acked_vid_send_trig_name 
