@@ -196,7 +196,7 @@ let rec assignable t_l t_r =
     | TMaybe(t_lm), TMaybe(t_rm) -> assignable t_lm t_rm
     | TTuple(t_ls), TTuple(t_rs) -> List.length t_ls = List.length t_rs && 
         List.for_all2 assignable t_ls t_rs
-    | TCollection(t_lc, t_le), TCollection(t_rc, t_re) -> assignable t_le t_re
+    | TCollection(t_lc, t_le), TCollection(t_rc, t_re) -> t_lc = t_rc && assignable t_le t_re
     | TDate, TInt -> true
     | TInt, TDate -> true
     (* handle lambdas with _ arguments *)
@@ -443,7 +443,9 @@ let rec deduce_expr_type ?(override=true) trig_env cur_env utexpr =
             let t_c, t_e = 
               t1 <| collection_of +++ base_of +++ value_of |> t_erroru name @:
                   TBad(t1) in
-            if t_a <~ t_e then TValue(canonical (TCollection(t_c, contained_of t_r)))
+            (* set mapped always becomes a bag *)
+            let t_c' = if t_c = TSet then TBag else t_c in
+            if t_a <~ t_e then TValue(canonical (TCollection(t_c', contained_of t_r)))
             else t_erroru name (VTMismatch(t_a, t_e, "element:")) ()
 
         | FilterMap ->
@@ -454,12 +456,14 @@ let rec deduce_expr_type ?(override=true) trig_env cur_env utexpr =
             let t_c, t_e = t2 <| collection_of +++ base_of +++ value_of |>
               t_erroru name @: TBad t2 in
 
+            (* set mapped always becomes a bag *)
+            let t_c' = if t_c = TSet then TBag else t_c in
             if not (t_pa <~ t_e) 
                 then t_erroru name (VTMismatch(t_pa, t_e,"predicate:")) () else
             if not (canonical TBool === t_pr) 
                 then t_erroru name (VTMismatch(canonical TBool, t_pr, "")) () else
             if not (t_ma <~ t_e) then t_erroru name (VTMismatch(t_ma, t_e, "map:")) () else
-            TValue(canonical @: TCollection(t_c, contained_of t_mr))
+            TValue(canonical @: TCollection(t_c', contained_of t_mr))
 
         | Flatten ->
             let name = "Flatten" in
@@ -504,7 +508,7 @@ let rec deduce_expr_type ?(override=true) trig_env cur_env utexpr =
             if not (t_aa <~ expected2) 
                 then t_erroru name (VTMismatch(t_aa, expected2, "agg func:")) () 
             else TValue(canonical @: 
-                TCollection(t_c, contained_of @: canonical @: TTuple[t_gr; t_ar]))
+                TCollection(TBag, contained_of @: canonical @: TTuple[t_gr; t_ar]))
 
         | Sort ->
             let name = "Sort" in
