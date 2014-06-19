@@ -110,7 +110,7 @@ let combine_data t_d : string list=
   in
   (* add an 'end' to the (reversed) list of lines *)
   let add_end lines = match lines with
-    | (s::ss)::ls -> ("\"end\""::(List.map (fun _ -> "Nothing") ss))::ls
+    | (s::ss)::ls -> ("\"end\""::(List.map (fun _ -> "Nothing MemImmut") ss))::ls
     | _           -> failwith "bad input in adding end line"
   in 
   (* initialize the counts for each source *)

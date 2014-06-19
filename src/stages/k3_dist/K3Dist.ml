@@ -11,7 +11,7 @@ let init_vid = "__init_vid__"
 let map_ids = "__map_ids__"
 
 (* what the generic type of the global maps is *)
-let wrap_t_of_map = wrap_tset
+let wrap_t_of_map = wrap_tbag
 
 (* global declaration of default vid to put into every map *)
 let init_vid_k3 =
@@ -81,7 +81,7 @@ let declare_foreign_functions p =
 (* vid counter used to assign vids *)
 let vid_counter_name = "__vid_counter__"
 let vid_counter = mk_var vid_counter_name
-let vid_counter_t = wrap_tset @: t_int
+let vid_counter_t = wrap_tbag @: t_int
 
 
 (* epoch
@@ -91,7 +91,7 @@ let vid_counter_t = wrap_tset @: t_int
  * everytime need a vid? *)
 let epoch_name = "__epoch__"
 let epoch_var = mk_var epoch_name
-let epoch_t = wrap_tset @: t_int
+let epoch_t = wrap_tbag @: t_int
 
 (* stmt_cntrs - (vid, stmt_id, counter) *)
 let stmt_cntrs_name = "__stmt_cntrs__"
@@ -111,12 +111,10 @@ let stmt_cntrs_id_type = [(stmt_cntrs_id_type_vid_name, t_vid);
                           (stmt_cntrs_id_type_stmt_id_name, t_int);
                           (stmt_cntrs_id_type_counter_name, t_int)]
 
-let stmt_cntrs_type = wrap_tset @: wrap_ttuple @:
+let stmt_cntrs_wrap = wrap_tbag
+let stmt_cntrs_type = stmt_cntrs_wrap @: wrap_ttuple @:
   snd @: List.split stmt_cntrs_id_type
-  (*
-let stmt_cntrs_type = wrap_tset_mut @: wrap_ttuple_mut
-      [t_vid_mut; t_int_mut; t_int_mut]
-*)
+
 (* names for log *)
 let log_for_t t = "log_"^t
 let log_master = "log__master"
@@ -170,7 +168,8 @@ let frontier_fn p map_id =
   let max_vid = "max_vid" in
   let map_vid = "map_vid" in
   let m_id_t_v = P.map_ids_types_with_v_for ~vid:"map_vid" p map_id in
-  let m_t_v_set = wrap_tset @: wrap_ttuple @: snd_many @: m_id_t_v in
+  let m_t_v = wrap_ttuple @: snd_many @: m_id_t_v in
+  let m_t_v_bag = wrap_t_of_map m_t_v in
   let m_id_t_no_val = P.map_ids_types_no_val_for p map_id in
   (* create a function name per type signature *)
   (* if we have bound variables, we should slice first. Otherwise,
@@ -178,7 +177,7 @@ let frontier_fn p map_id =
   (* a routine common to both methods of slicing *)
   let common_vid_lambda =
     mk_assoc_lambda
-      (wrap_args ["acc", m_t_v_set; max_vid, t_vid])
+      (wrap_args ["acc", m_t_v_bag; max_vid, t_vid])
       (wrap_args m_id_t_v)
       (mk_if
         (* if the map vid is less than current vid *)
@@ -189,7 +188,7 @@ let frontier_fn p map_id =
           (v_eq (mk_var map_vid) (mk_var max_vid))
           (mk_tuple
             [mk_combine
-              (mk_singleton m_t_v_set (mk_tuple @: ids_to_vars @: fst_many m_id_t_v)) @:
+              (mk_singleton m_t_v_bag (mk_tuple @: ids_to_vars @: fst_many m_id_t_v)) @:
                   mk_var "acc";
             mk_var max_vid])
           (* else if map vid is greater than max_vid, make a new
@@ -197,7 +196,7 @@ let frontier_fn p map_id =
           (mk_if
             (v_gt (mk_var map_vid) (mk_var max_vid))
             (mk_tuple
-              [mk_singleton m_t_v_set (mk_tuple @: ids_to_vars @: fst_many m_id_t_v);
+              [mk_singleton m_t_v_bag (mk_tuple @: ids_to_vars @: fst_many m_id_t_v);
               mk_var map_vid])
             (* else keep the same accumulator and max_vid *)
             (mk_tuple [mk_var "acc"; mk_var max_vid])
@@ -211,16 +210,16 @@ let frontier_fn p map_id =
   (* get the maximum vid that's less than our current vid *)
   let action = match m_id_t_no_val with
   | [] ->
-    mk_fst [m_t_v_set; t_vid] @:
+    mk_fst [m_t_v_bag; t_vid] @:
       mk_agg
         common_vid_lambda
-        (mk_tuple [mk_empty m_t_v_set; min_vid_k3])
+        (mk_tuple [mk_empty m_t_v_bag; min_vid_k3])
         (mk_var "input_map")
   | _ ->
       mk_flatten @: mk_map
         (mk_assoc_lambda
           (wrap_args ["_", wrap_ttuple @: snd_many m_id_t_no_val]) (* group *)
-          (wrap_args ["project", m_t_v_set; "_", t_vid]) @:
+          (wrap_args ["project", m_t_v_bag; "_", t_vid]) @:
           mk_var "project"
         ) @:
         mk_gbagg
@@ -229,8 +228,8 @@ let frontier_fn p map_id =
             mk_tuple @: ids_to_vars @: fst_many m_id_t_no_val)
           (* get the maximum vid that's less than our current vid *)
           common_vid_lambda
-          (mk_tuple [mk_empty m_t_v_set; min_vid_k3])
+          (mk_tuple [mk_empty m_t_v_bag; min_vid_k3])
           (mk_var "input_map")
   in
-  mk_global_fn (frontier_name p map_id) ["vid", t_vid; "input_map", m_t_v_set] [m_t_v_set] @:
+  mk_global_fn (frontier_name p map_id) ["vid", t_vid; "input_map", m_t_v_bag] [m_t_v_bag] @:
       action

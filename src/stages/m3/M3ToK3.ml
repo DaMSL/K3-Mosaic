@@ -66,11 +66,11 @@ let mk_k3_collection (base_ivars:K.base_type_t list)
    let v = KT.canonical base_v in
    if ivars = []
      then if ovars = [] 
-        then KH.wrap_tset v
-        else KH.wrap_tset (mk_k3_tuple (ovars @ [v]))
+        then KH.wrap_tbag v
+        else KH.wrap_tbag (mk_k3_tuple (ovars @ [v]))
      else if ovars = []
-        then KH.wrap_tset (mk_k3_tuple (ivars @ [v]))
-        else KH.wrap_tset (mk_k3_tuple (ivars @ [KH.wrap_tset (
+        then KH.wrap_tbag (mk_k3_tuple (ivars @ [v]))
+        else KH.wrap_tbag (mk_k3_tuple (ivars @ [KH.wrap_tbag (
                                                   mk_k3_tuple (ovars@[v])
                                                 )]))
 
@@ -93,7 +93,7 @@ let m3_map_to_k3_map (m3_map: M3.map_t) : K.declaration_t =
               let ivc = if (ivar_types = []) && (ovar_types = [])
                 then Some(
                     KH.mk_singleton 
-                              (KH.wrap_tset (KT.canonical element_type))
+                              (KH.wrap_tbag (KT.canonical element_type))
                               (init_val_from_type (KT.canonical element_type))
                   )
                 else None
@@ -295,7 +295,7 @@ let apply_lambda v_el el body =
 let apply_lambda_to_expr lambda_e lambda_t expr =
    let _, lambda_body = (KU.decompose_lambda (lambda_e)) in
    let lambda_rett = 
-      (KT.canonical (K.TCollection(K.TSet, KT.canonical lambda_t))) in
+      (KT.canonical (K.TCollection(K.TBag, KT.canonical lambda_t))) in
    begin match (KU.arg_of_lambda (lambda_e), 
                 KU.tag_of_expr lambda_body) with
       | ((Some(K.AVar(_))), K.Tuple) -> 
@@ -386,11 +386,11 @@ let mk_slice collection all_keys bound_keys =
               then KH.mk_var x
               else KH.mk_const K.CUnknown) all_keys)@[KH.mk_const K.CUnknown]))
 
-let mk_lookup collection set_t keys key_types =
+let mk_lookup collection bag_t keys key_types =
   let coll_type = 
-    (KT.canonical (K.TCollection(K.TSet, 
+    (KT.canonical (K.TCollection(K.TBag, 
       (KT.canonical (K.TTuple(
-        List.map KT.canonical (key_types@[set_t])
+        List.map KT.canonical (key_types@[bag_t])
       )))
     )))
   in
@@ -400,10 +400,10 @@ let mk_lookup collection set_t keys key_types =
             (mk_slice collection keys keys) @:
             KH.mk_if 
               (KH.mk_eq wrapped_value @: KH.mk_empty coll_type) 
-              (KH.mk_const @: zero_of_type set_t) @:
+              (KH.mk_const @: zero_of_type bag_t) @:
               mk_project (List.length keys+1) 
                          (List.length keys)
-                         set_t @:
+                         bag_t @:
                          KH.mk_peek wrapped_value
 
 let mk_test_member collection keys key_types val_type =
@@ -423,7 +423,7 @@ let mk_val_tuple keys v = KH.mk_tuple ((List.map KH.mk_var keys)@[v]);;
 
 let mk_iter = KH.mk_iter
 
-let mk_update collection set_t ivars ivar_t ovars ovar_t new_val =
+let mk_update collection bag_t ivars ivar_t ovars ovar_t new_val =
   (* new_val might (and in fact, usually will) depend on the collection, so 
      we need to evaluate it and save it to a variable before clearing the
      existing elements out of the collection *)
@@ -433,7 +433,7 @@ let mk_update collection set_t ivars ivar_t ovars ovar_t new_val =
       if ovars = [] then 
         KH.mk_block [
           mk_iter
-            (KH.mk_lambda (mk_arg "value" set_t) 
+            (KH.mk_lambda (mk_arg "value" bag_t) 
               (KH.mk_delete collection (KH.mk_var "value"))
             )
             (KH.mk_slice collection (KH.mk_tuple [KH.mk_const K.CUnknown]));
@@ -442,7 +442,7 @@ let mk_update collection set_t ivars ivar_t ovars ovar_t new_val =
       else
         KH.mk_block [
           mk_iter
-            (mk_lambda ovars ovar_t "value" set_t (
+            (mk_lambda ovars ovar_t "value" bag_t (
               KH.mk_delete collection (mk_var_tuple ovars "value")
             ))
             (mk_slice collection ovars ovars);
@@ -452,7 +452,7 @@ let mk_update collection set_t ivars ivar_t ovars ovar_t new_val =
       if ovars = [] then
         KH.mk_block [
           mk_iter
-            (mk_lambda ivars ivar_t "value" set_t (
+            (mk_lambda ivars ivar_t "value" bag_t (
               KH.mk_delete collection (mk_var_tuple ivars "value")
             ))
             (mk_slice collection ivars ivars);
@@ -462,7 +462,7 @@ let mk_update collection set_t ivars ivar_t ovars ovar_t new_val =
         failwith "FullPC unsupported"
   in
     KH.mk_apply 
-      (KH.mk_lambda (mk_arg (KU.id_of_var new_val_var) set_t) update_block)
+      (KH.mk_lambda (mk_arg (KU.id_of_var new_val_var) bag_t) update_block)
       (new_val)
 
 (**********************************************************************)

@@ -260,7 +260,7 @@ let modify_map_add_vid p ast stmt =
             | ([arg_id, t],b) -> NopMsg,
               mk_apply
                 (mk_lambda
-                  (wrap_args [arg_id, wrap_tset @: wrap_ttuple lmap_types]) b)
+                  (wrap_args [arg_id, wrap_t_of_map @: wrap_ttuple lmap_types]) b)
                 arg
             | _ -> raise (UnhandledModification("At Apply: "^PR.string_of_expr e)) end
         | _ -> NopMsg, e
@@ -303,7 +303,7 @@ let modify_map_add_vid p ast stmt =
 let delta_action p ast stmt m_target_trigger ~corrective =
   let lmap = P.lhs_map_of_stmt p stmt in
   let lmap_types = P.map_types_with_v_for p lmap in
-  let lmap_type = wrap_tset @: wrap_ttuple lmap_types in
+  let lmap_type = wrap_t_of_map @: wrap_ttuple lmap_types in
   (* we need to know how the map is accessed in the statement. *)
   let lmap_bindings = P.find_lmap_bindings_in_stmt p stmt lmap in
   let lmap_bind_ids_v = P.map_ids_add_v @: fst_many lmap_bindings
@@ -360,7 +360,7 @@ let delta_action p ast stmt m_target_trigger ~corrective =
     let delta_v_name = "__delta_with_vid__" in
     let delta_ids_types = U.typed_vars_of_arg params2 in
     let delta_types = extract_arg_types delta_ids_types in
-    let delta_col_type = wrap_tset @: wrap_ttuple delta_types in
+    let delta_col_type = wrap_t_of_map @: wrap_ttuple delta_types in
     let delta_col_v_type = lmap_type in
     let delta_ids = extract_arg_names delta_ids_types in
     let delta_last_id = list_take_end 1 delta_ids

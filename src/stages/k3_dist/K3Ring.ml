@@ -149,7 +149,7 @@ let get_ring_node_code =
 let get_all_uniq_nodes_nm = "get_all_uniq_nodes"
 let get_all_nodes_code =
   mk_global_fn get_all_uniq_nodes_nm
-  ["_", t_unit] [wrap_tlist t_addr] @:
+  ["_", t_unit] [wrap_tbag t_addr] @:
   mk_fst_many [t_addr; t_unit] @: (* project out just the sorted value *)
     mk_gbagg
       (mk_lambda (wrap_args id_t_node) @:
