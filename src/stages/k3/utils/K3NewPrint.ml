@@ -65,7 +65,13 @@ let default_config = {
 let verbose_types_config = default_config
 
 (* light type checking for expressions we create *)
-let light_type c e = T.deduce_expr_type ~override:false c.trig_env c.env e
+let light_type c e =
+  try
+     T.deduce_expr_type ~override:false c.trig_env c.env e
+  with T.TypeError (uuid, name, err) ->
+    prerr_string @: Printf.sprintf "Typechecker Error @%d: %s\n%s\n\n%s" uuid name
+      (K3TypeError.string_of_error err) (K3PrintSyntax.string_of_expr ~uuid_highlight:uuid e);
+    exit 1
 
 (* Get a binding id from a number *)
 let id_of_num i = Printf.sprintf "_b%d_" i
@@ -440,6 +446,26 @@ and handle_lambda c ~expr_info ~prefix_fn arg e =
     else lazy_paren @: exec a in_record
   in loop arg_n arg_l
 
+
+(* create a fold instead of a map or ext (for typechecking reasons) *)
+(* expects a lambda expression, and collection expression inside a map/flattenMap *)
+and fold_of_map_ext c expr =
+  let t_out = unwrap_t_val @: T.type_of_expr expr in
+  (* the only difference between map and ext is whether we wrap the output
+   * of the lambda in a singleton before combining *)
+  let (lambda, col), wrap_fn = match U.tag_of_expr expr with
+    | Map     -> U.decompose_map expr, KH.mk_singleton t_out
+    | Flatten -> U.decompose_map @: U.decompose_flatten expr, id_fn
+    | _       -> failwith "Can only convert flattenMap or map to fold"
+  in
+  let empty = KH.mk_empty t_out in
+  let args, body = U.decompose_lambda lambda in
+  let acc_id = "__acc_map" in
+  let acc_arg = AVar (acc_id, t_out) in
+  let args' = ATuple [acc_arg; args] in
+  let body' = KH.mk_combine (KH.mk_var acc_id) (wrap_fn body) in
+  lazy_expr c @: light_type c @: KH.mk_agg (KH.mk_lambda args' body') empty col
+
 (* printing expressions *)
 (* argnums: lambda only   -- number of expected arguments *)
 (* prefix_fn: lambda only -- modify the lambda with a prefix *)
@@ -639,37 +665,54 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
     lps "(" <| lind () <| 
     wrap_hv 0 (lps_list ~sep:";" CutHint (lazy_expr c) es <| lsp ()) 
       <| lps ")"
+
   | IfThenElse -> let (e1, e2, e3) = U.decompose_ifthenelse expr in
     wrap_indent (lps "if " <| lazy_expr c e1) <| lsp () <|
     wrap_indent (lps "then" <| lsp () <| lazy_expr c e2) <| lsp () <|
     wrap_indent (lps "else" <| lsp () <| lazy_expr c e3)
+
   | Iterate -> let lambda, col = U.decompose_iterate expr in
     apply_method c ~name:"iterate" ~col ~args:[lambda] ~arg_info:[ALambda [InRec], Out]
-  | Map -> let lambda, col = U.decompose_map expr in
-    apply_method c ~name:"map" ~col ~args:[lambda] ~arg_info:[ALambda [InRec], OutRec]
+
+  | Map ->
+      if c.map_to_fold then
+        fold_of_map_ext c expr
+
+      else (* normal map *)
+        let lambda, col = U.decompose_map expr in
+        apply_method c ~name:"map" ~col ~args:[lambda] ~arg_info:[ALambda [InRec], OutRec]
+
   | FilterMap -> let lf, lm, col = U.decompose_filter_map expr in
     lazy_paren (apply_method c ~name:"filter" ~col ~args:[lf] ~arg_info:[ALambda [InRec], Out]) <|
       (* check if a map is necessary, or if it's just mapping id (ie just a filter) *)
       if is_id_lambda lm then []
       else
-        apply_method_nocol c ~name:"map" ~args:[lm] ~arg_info:[ALambda [InRec], OutRec]
+        lazy_expr c @: light_type c @: KH.mk_map lm col
+
   (* flatten(map(...)) becomes ext(...) *)
-  | Flatten -> let e = U.decompose_flatten expr in
-    (* ext needs an empty type right now to know what to do if the result is empty
-     * flatten should always return a bag type since we can't guarantee uniqueness*)
-    let t = unwrap_t_val @: T.type_of_expr expr in
-    let t = match snd @: KH.unwrap_vtype t with
-     | TCollection(_, x) -> KH.canonical @: TCollection(TBag, x)
-     | _                 -> failwith "not a collection"
-    in
-    let empty_c = light_type c @: KH.mk_empty t in
-    begin match U.tag_of_expr e with
-    | Map -> 
-        let lambda, col = U.decompose_map e in
-        apply_method c ~name:"ext" ~col ~args:[lambda; empty_c] 
-          ~arg_info:[ALambda [InRec], Out; ANonLambda, Out]
-    | _   -> failwith "Unhandled Flatten without map"
-    end
+  | Flatten -> 
+      if c.map_to_fold then
+        (* both map and ext become folds *)
+        fold_of_map_ext c expr
+      else (* normal ext *)
+        let e = U.decompose_flatten expr in
+        (* ext needs an empty type right now to know what to do if the result is empty
+        * flatten should always return a bag type since we can't guarantee uniqueness*)
+        let t = unwrap_t_val @: T.type_of_expr expr in
+        let t = match KH.unwrap_vtype t with
+          | _, TCollection(TList, x) -> KH.canonical @: TCollection(TList, x)
+          | _, TCollection(_, x)     -> KH.canonical @: TCollection(TBag, x)
+          | _, _                     -> failwith "not a collection"
+        in
+        let empty_c = light_type c @: KH.mk_empty t in
+        begin match U.tag_of_expr e with
+        | Map -> 
+            let lambda, col = U.decompose_map e in
+            apply_method c ~name:"ext" ~col ~args:[lambda; empty_c] 
+              ~arg_info:[ALambda [InRec], Out; ANonLambda, Out]
+        | _   -> failwith "Unhandled Flatten without map"
+        end
+
   | Aggregate -> let lambda, acc, col = U.decompose_aggregate expr in
     (* find out if our accumulator is a collection type *)
     apply_method c ~name:"fold" ~col ~args:[lambda; acc]

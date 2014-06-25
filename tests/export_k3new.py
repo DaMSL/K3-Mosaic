@@ -8,7 +8,7 @@ import argparse
 import os
 import re
 
-path = "/../../../"
+path = "../../../"
 
 def get_nice_name(path):
     (first, last) = os.path.split(path)
@@ -33,7 +33,7 @@ def get_data_files(sql_file, sql_file_path):
     # Get all file streams from include files
     includes = re.findall(r"INCLUDE '([^']+)';", sql_file, re.DOTALL)
     for include in includes:
-        with open(sql_path+path+include, 'r') as inc_file:
+        with open(os.path.join(sql_path, path, include), 'r') as inc_file:
             s = inc_file.read()
         file_paths += get_file_streams(s)
 
@@ -45,15 +45,17 @@ def get_data_files(sql_file, sql_file_path):
     for fp in file_paths:
         pat = r'\W{0}\W'.format(fp[0])
         if re.search(pat, sql_file):
-            out.append((fp[0], sql_path+path+fp[1]))
-    return out 
+            out.append((fp[0], os.path.join(sql_path, path, fp[1])))
+    return out
 
 def main():
     parser = argparse.ArgumentParser()
 
     parser.add_argument("sql_file", type=str, help="Specify path of sql file")
-    parser.add_argument("-n", "--nodes", type=int, dest="num_nodes", 
-                                        default=2, help="Number of nodes")
+    parser.add_argument("-n", "--nodes", type=int, dest="num_nodes",
+                        default=2, help="Number of nodes")
+    parser.add_argument("--folds_only", action='store_true', dest="folds_only",
+                        default=False, help="Covert map and ext to fold")
     args = parser.parse_args()
 
     num_nodes = args.num_nodes - 1
@@ -80,8 +82,12 @@ def main():
     os.system('../bin/sanitize_log --db old raw_{nice_name}.log > {nice_name}.log'.format(**locals()))
 
     # convert to the new k3 file format
+    fold_cmd = ""
+    if args.folds_only:
+        fold_cmd = '--k3new_folds'
+
     print("\nConverting to new k3 file format...")
-    cmd = '../bin/k3 -i k3 -l k3new --datafile {nice_name}.csv temp.k3dist > {nice_name}.k3'.format(**locals())
+    cmd = '../bin/k3 -i k3 -l k3new {fold_cmd} --datafile {nice_name}.csv temp.k3dist > {nice_name}.k3 2> temp.err'.format(**locals())
     print_sys(cmd)
 
     # create k3 partmap

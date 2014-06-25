@@ -190,6 +190,7 @@ type parameters = {
     mutable force_correctives : bool; (* Force correctives being generated *)
     mutable lambda_ret : bool;    (* print syntax with * when return isn't a tuple *)
     mutable k3new_data_file : string;
+    mutable k3new_folds : bool;   (* output fold instead of map/ext *)
   }
 
 let default_cmd_line_params () = {
@@ -214,6 +215,7 @@ let default_cmd_line_params () = {
     force_correctives = false;
     lambda_ret        = false;
     k3new_data_file   = "default.k3";
+    k3new_folds       = false;
   }
 
 let cmd_line_params = default_cmd_line_params ()
@@ -519,7 +521,9 @@ let print params inputs =
     | AstK3 | AstK3Dist   -> print_k3_program (sofp |- fst) |- snd
     | K3 | K3Dist         -> print_k3_program (PS.string_of_program ~lambda_ret |- fst) |- snd
     | K3New               -> print_k3_program ~no_roles:true (K3NewPrint.string_of_dist_program
-                               ~file:params.k3new_data_file) |- snd
+                               ~map_to_fold:params.k3new_folds
+                               ~file:params.k3new_data_file)
+                               |- snd
     | K3Test | K3DistTest -> print_k3_test_program ~lambda_ret
     | ReifiedK3           -> print_reified_k3_program |- snd
     | Imperative          -> print_imperative_program params.print_types |- snd
@@ -647,6 +651,8 @@ let param_specs = Arg.align
   "--datafile", Arg.String (fun file ->
     cmd_line_params.k3new_data_file <- file),
       "file     Specify a k3new data file";
+  "--k3new_folds", Arg.Unit (fun () -> cmd_line_params.k3new_folds <- true),
+      "         For k3new: output folds instead of ext and map";
 
   (* Debugging parameters *)
 
