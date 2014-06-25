@@ -317,9 +317,14 @@ let extract_arg_names l = List.map (fun (nam,_) -> nam) l
 
 (* function to take a list of names and convert to K3 variables *)
 (* "_" translates to CUnknown *)
-let ids_to_vars = List.map (fun x -> match x with
+let ids_to_vars = List.map (function
   | "_" -> mk_const @: CUnknown
   | x   -> mk_var x)
+
+let vars_to_ids = List.map (fun x -> match U.tag_of_expr x with
+  | Const(CUnknown) -> "_"
+  | Var id          -> id
+  | _               -> failwith "Not a var or unknown")
 
 (* check if a collection is empty *)
 let mk_is_empty collection typ =

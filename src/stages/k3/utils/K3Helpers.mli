@@ -146,8 +146,10 @@ val extract_arg_types : ('a * 'b) list -> 'b list
 val extract_arg_names : ('a * 'b) list -> 'a list
 
 (* take a list of ids and convert it to a list of vars *)
-val ids_to_vars :
-  id_t list -> expr_t list
+val ids_to_vars : id_t list -> expr_t list
+
+(* take a list of vars and convert it to ids *)
+val vars_to_ids : expr_t list -> id_t list
 
 (* check if a collection is empty *)
 val mk_is_empty : expr_t -> value_type_t -> expr_t
