@@ -453,14 +453,14 @@ and fold_of_map_ext c expr =
   let t_out = unwrap_t_val @: T.type_of_expr expr in
   (* the only difference between map and ext is whether we wrap the output
    * of the lambda in a singleton before combining *)
-  let (lambda, col), wrap_fn = match U.tag_of_expr expr with
-    | Map     -> U.decompose_map expr, KH.mk_singleton t_out
-    | Flatten -> U.decompose_map @: U.decompose_flatten expr, id_fn
+  let (lambda, col), wrap_fn, suffix = match U.tag_of_expr expr with
+    | Map     -> U.decompose_map expr, KH.mk_singleton t_out, "map"
+    | Flatten -> U.decompose_map @: U.decompose_flatten expr, id_fn, "ext"
     | _       -> failwith "Can only convert flattenMap or map to fold"
   in
   let empty = KH.mk_empty t_out in
   let args, body = U.decompose_lambda lambda in
-  let acc_id = "__acc_map" in
+  let acc_id = "__acc_"^suffix in
   let acc_arg = AVar (acc_id, t_out) in
   let args' = ATuple [acc_arg; args] in
   let body' = KH.mk_combine (KH.mk_var acc_id) (wrap_fn body) in
