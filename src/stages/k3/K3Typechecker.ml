@@ -473,7 +473,7 @@ let rec deduce_expr_type ?(override=true) trig_env cur_env utexpr =
                   TBad(t0) in
             let t_c1, t_e1 = t_e0 <| collection_of +++ base_of |> t_erroru name
                 @: VTBad(t_e0) in
-            TValue(canonical (TCollection(t_c0, t_e1)))
+            TValue(canonical (TCollection(t_c1, t_e1)))
 
         | Aggregate ->
             let name = "Aggregate" in
