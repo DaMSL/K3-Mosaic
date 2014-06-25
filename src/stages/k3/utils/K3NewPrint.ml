@@ -51,16 +51,18 @@ let lcomma () = lps "," <| lsp ()
 
 (* type we pass all the way down for configuring behaviors *)
 type config = {
-               verbose_types:bool; (* more verbose type printing *)
-               env:T.type_bindings_t;  (* type bindings for environment *)
-               trig_env:T.type_bindings_t
+                env:T.type_bindings_t;  (* type bindings for environment *)
+                trig_env:T.type_bindings_t;
+                map_to_fold:bool;       (* convert maps and ext to fold, due to k3new limitations *)
               } 
 
-let default_config = {verbose_types=false;
-                      env=[];
-                      trig_env=[]}
+let default_config = {
+                       env = [];
+                       trig_env = [];
+                       map_to_fold = false;
+                     }
 
-let verbose_types_config = {default_config with verbose_types=true}
+let verbose_types_config = default_config
 
 (* light type checking for expressions we create *)
 let light_type c e = T.deduce_expr_type ~override:false c.trig_env c.env e
@@ -295,6 +297,29 @@ let rec extract_slice e =
     t, KH.mk_lambda argt |- f
   | _ -> failwith "extract_slice unhandled expression"
 
+(* identify if a lambda is an id lambda *)
+let is_id_lambda e =
+  (* get a flat list of only the first level of ids *)
+  let id_of_arg = function
+    | AVar(v,_) -> Some v
+    | _         -> None
+  in
+  let flat_ids_of_arg = function
+    | AVar(v,_)  -> [v]
+    | ATuple(vs) ->
+        let vs' = List.map id_of_arg vs in
+        if List.mem None vs' then []
+        else flatten_some vs'
+    | _          -> []
+  in
+  let args, body = U.decompose_lambda e in
+  let ids = flat_ids_of_arg args in
+  if null ids then false
+  else match U.tag_of_expr body, ids with
+    | Var id, [id'] when id = id' -> true
+    | Tuple, _ -> ids = KH.vars_to_ids @: U.decompose_tuple body
+    | _, _     -> false
+
 (* Variable names to translate *)
 module StringMap = Map.Make(struct type t = string let compare = String.compare end)
 let var_translate = List.fold_left (fun acc (x,y) -> StringMap.add x y acc) StringMap.empty @:
@@ -310,17 +335,17 @@ type arg_info_l = (arg_info * out_record) list
  * -top_expr allows us to use an expression at the top bind
  * -top_rec indicates that the first level of binding should be to a record *)
 let rec deep_bind ?(depth=0) ?top_expr ~in_record c arg_n =
-  let rec loop d a = 
+  let rec loop d a =
     let record = in_record && d=depth in (* do we want a record now *)
     (* we allow binding an expression at the top level *)
-    let bind_text i = match top_expr, d with 
-      | Some e, d 
+    let bind_text i = match top_expr, d with
+      | Some e, d
           when d=depth -> lazy_expr c e
       | _              -> lps @: id_of_num i
     in
     match a with
       (* pretend to unwrap a record *)
-    | NVar(i, id, vt) when record -> 
+    | NVar(i, id, vt) when record ->
         begin match snd @: KH.unwrap_vtype vt with
         | TTuple _  -> []    (* don't bind if we have an id representing a record *)
         (*| TCollection _ -> [] [> or a collection <]*)
@@ -329,7 +354,7 @@ let rec deep_bind ?(depth=0) ?top_expr ~in_record c arg_n =
           lps "bind " <| lps (id_of_num i) <| lps " as {i:" <| lps id
           <| lps "} in " <| lcut ()
         end
-    | NIgnored 
+    | NIgnored
     | NVar _      -> [] (* no binding needed *)
     | NTuple(i, args) -> 
         (* only produce binds if we're deeper than specified depth *)
@@ -624,10 +649,14 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
     apply_method c ~name:"map" ~col ~args:[lambda] ~arg_info:[ALambda [InRec], OutRec]
   | FilterMap -> let lf, lm, col = U.decompose_filter_map expr in
     lazy_paren (apply_method c ~name:"filter" ~col ~args:[lf] ~arg_info:[ALambda [InRec], Out]) <|
-      apply_method_nocol c ~name:"map" ~args:[lm] ~arg_info:[ALambda [InRec], OutRec]
+      (* check if a map is necessary, or if it's just mapping id (ie just a filter) *)
+      if is_id_lambda lm then []
+      else
+        apply_method_nocol c ~name:"map" ~args:[lm] ~arg_info:[ALambda [InRec], OutRec]
   (* flatten(map(...)) becomes ext(...) *)
   | Flatten -> let e = U.decompose_flatten expr in
-    (* ext needs an empty type right now to know what to do if the result is empty       flatten should always return a bag type since we can't guarantee uniqueness*)
+    (* ext needs an empty type right now to know what to do if the result is empty
+     * flatten should always return a bag type since we can't guarantee uniqueness*)
     let t = unwrap_t_val @: T.type_of_expr expr in
     let t = match snd @: KH.unwrap_vtype t with
      | TCollection(_, x) -> KH.canonical @: TCollection(TBag, x)
@@ -815,6 +844,7 @@ let string_of_value_type t = wrap_f @: fun () ->
 
 module StringSet = Set.Make(struct type t=string let compare=String.compare end)
 
+(* remove/convert functions that are renamed in k3new *)
 let filter_incompatible prog =
   let r_demux = Str.regexp "^demux_.*" in
   let filter_trigs fl =
@@ -841,8 +871,8 @@ let filter_incompatible prog =
   
 (* print a K3 program in syntax *)
 (* We get the typechecking environments so we can do incremental typechecking where needed *)
-let string_of_program prog (env, trig_env) = 
-  let config = {default_config with env; trig_env} in
+let string_of_program ?(map_to_fold=false) prog (env, trig_env) = 
+  let config = {env; trig_env; map_to_fold} in
   wrap_f @: fun () -> 
     let l = lps_list ~sep:"" CutHint (lazy_declaration config |- fst) prog in
     obx 0;  (* vertical box *)
@@ -919,7 +949,8 @@ let add_sources p envs filename =
   string_of_program [flow] envs ^ source_s ^ feed_s
 
 (* print a new k3 program with added sources and feeds *)
-let string_of_dist_program ?(file="default.txt") (p, envs) =
+(* envs are the typechecking environments to allow us to do incremental typechecking *)
+let string_of_dist_program ?(file="default.txt") ?map_to_fold (p, envs) =
   let p' = filter_incompatible p in
-  string_of_program p' envs ^ add_sources p' envs file
+  string_of_program ?map_to_fold p' envs ^ add_sources p' envs file
 
