@@ -774,7 +774,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
   | Insert -> let col, x = U.decompose_insert expr in
     apply_method c ~name:"insert" ~col ~args:[x] ~arg_info:[ANonLambda,OutRec]
   | Delete -> let col, x = U.decompose_delete expr in
-    apply_method c ~name:"delete" ~col ~args:[x] ~arg_info:[ANonLambda,OutRec]
+    apply_method c ~name:"erase" ~col ~args:[x] ~arg_info:[ANonLambda,OutRec]
   | Update -> let col, oldx, newx = U.decompose_update expr in
     apply_method c ~name:"update" ~col ~args:[oldx;newx] ~arg_info:[ANonLambda,OutRec;ANonLambda,OutRec]
   | Assign -> let l, r = U.decompose_assign expr in
