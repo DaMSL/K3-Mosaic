@@ -14,7 +14,7 @@ let t_node = snd @: List.split id_t_node
 let t_ring = wrap_tlist @: wrap_ttuple t_node
 
 let node_ring_nm = "node_ring"
-let node_ring_code = 
+let node_ring_code =
   let c = mk_global_val node_ring_nm t_ring
   in mk_anno_sort c [2] (* sort by 3rd field *)
 
@@ -22,7 +22,7 @@ let replicas_nm = "replicas"
 let replicas_code = mk_global_val_init replicas_nm (wrap_tset t_int) @:
   mk_singleton (wrap_tset t_int) (mk_cint 8)
 
-let ring_foreign_funcs = 
+let ring_foreign_funcs =
   mk_foreign_fn "hash_int" t_int t_int ::
   mk_foreign_fn "hash_addr" t_addr t_int ::
   mk_foreign_fn "int_of_float" t_float t_int::
@@ -32,7 +32,7 @@ let ring_foreign_funcs =
   []
 
 (* function to set the number of replicas *)
-let set_replicas_code = 
+let set_replicas_code =
   let var_replicas = mk_var replicas_nm in
   mk_global_fn "set_replicas"
   ["n", t_int] [t_unit] @:
@@ -41,13 +41,13 @@ let set_replicas_code =
 let add_node_name = "add_node"
 
 (* function to add a node in the consistent hashing ring *)
-let add_node_code = 
+let add_node_code =
   mk_global_fn add_node_name
   id_t_node_no_hash [t_unit] @:
   mk_let "rng" (wrap_tlist t_int)
-    (mk_range TList 
-      (mk_cint 1) (mk_cint 1) @: 
-        mk_peek @: 
+    (mk_range TList
+      (mk_cint 1) (mk_cint 1) @:
+        mk_peek @:
           mk_slice (mk_var replicas_nm) mk_cunknown) @:
   mk_let "new_elems" t_ring
     (mk_map
@@ -72,10 +72,10 @@ let add_node_code =
       (mk_var "new_elems")
     ;
     (* sort by the hash *)
-    mk_let "temp_ring" t_ring 
+    mk_let "temp_ring" t_ring
       (mk_sort (mk_var node_ring_nm) @:
         mk_assoc_lambda
-          (wrap_args @: id_t_node_for "hash1") 
+          (wrap_args @: id_t_node_for "hash1")
           (wrap_args @: id_t_node_for "hash2") @:
           mk_gt (mk_var "hash1") (mk_var "hash2")
       ) @:
@@ -116,19 +116,19 @@ let remove_node_code =
 (* function to get the node for an int. Returns the node's address *)
 (* note about scaling: ocaml's hash function's range is 0 to the maximum hash
  * value, which is 2^30 *)
-let get_ring_node_code = 
+let get_ring_node_code =
   mk_global_fn "get_ring_node"
   ["data", t_int; "max_val", t_int] [t_addr] @:
   mk_let "scaled" t_int
-    (mk_apply (mk_var "int_of_float") @: 
+    (mk_apply (mk_var "int_of_float") @:
       mk_mult
-        (mk_apply (mk_var "float_of_int") @: 
+        (mk_apply (mk_var "float_of_int") @:
           mk_apply (mk_var "get_max_int") mk_cunit) @:
         mk_apply (mk_var "divf") @: mk_tuple
           [mk_apply (mk_var "float_of_int") @: mk_var "data";
           mk_apply (mk_var "float_of_int") @: mk_var "max_val"]
     ) @:
-  mk_let "results" t_ring 
+  mk_let "results" t_ring
     (mk_filtermap (* filter to only hashes greater than data *)
       (mk_lambda
         (wrap_args @: id_t_node) @:

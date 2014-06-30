@@ -30,7 +30,7 @@ let format ?(inline = "") (prefix:string) (idx:int) =
 (**
    Generate a fresh variable of the class with the specified prefix
 *)
-let generate ?(inline="") (prefix:string) = 
+let generate ?(inline="") (prefix:string) =
    let { counter = ctr } = StringMap.find prefix !classes in
       ctr := !ctr + 1;
       format ~inline:inline prefix !ctr
@@ -42,7 +42,7 @@ let generate ?(inline="") (prefix:string) =
    @param   prefix       The prefix that will be associated with the class
    @return               A function for generating variables of the class
 *)
-let declare_class (source_file:string) (prefix:string) = 
+let declare_class (source_file:string) (prefix:string) =
    let decl = {
       counter     = ref 0;
       source_file = source_file;
@@ -56,21 +56,21 @@ let declare_class (source_file:string) (prefix:string) =
       ) ("Duplicate declaration of symbol generator with prefix "^prefix)
    );
    classes := StringMap.add prefix decl !classes;
-   (fun ?(inline="") () -> 
-      decl.counter := !(decl.counter) + 1; 
+   (fun ?(inline="") () ->
+      decl.counter := !(decl.counter) + 1;
       format ~inline:inline prefix !(decl.counter)
    )
 ;;
 (**
    Dump a list of all known classes
 *)
-let declared_classes () = 
-   StringMap.fold (fun k v accum -> 
+let declared_classes () =
+   StringMap.fold (fun k v accum ->
       accum^v.prefix^" (in "^v.source_file^")\n"
    ) !classes ""
 ;;
 let rec mk_safe_name ?(idx=None) (unsafe_names:string list) (base:string) =
-   let (curr_name,next_idx) = 
+   let (curr_name,next_idx) =
       match idx with
          | None -> (base, 1)
          | Some(idx) -> (base^"_"^(string_of_int idx), idx+1)

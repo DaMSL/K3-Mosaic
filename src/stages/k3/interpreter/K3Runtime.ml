@@ -239,7 +239,7 @@ let buffer_trigger s target address args sender_addr =
       let inner_h = begin try Hashtbl.find s.shuffle_buffer address
                     with Not_found ->
                       let h = Hashtbl.create 10 in
-                      (* Printf.printf "adding %s to shuffle buf\n" 
+                      (* Printf.printf "adding %s to shuffle buf\n"
                        *   (string_of_address address);
                        * *)
                       Hashtbl.add s.shuffle_buffer address h;
@@ -350,9 +350,9 @@ let invoke_trigger s address (trigger_env, val_env) trigger_id arg =
     RuntimeError(id, Format.sprintf "In trigger %s: %s" trigger_id msg));
   (* log the state for this trigger *)
   let arg_s = string_of_value arg^"\n" in
-  LOG "Trigger %s@%s\nargs = %s" 
-    trigger_id 
-    (string_of_address address) 
+  LOG "Trigger %s@%s\nargs = %s"
+    trigger_id
+    (string_of_address address)
     (*(combine_s)*)
     (arg_s^string_of_env val_env)
     NAME "K3Runtime.TriggerState" LEVEL DEBUG;

@@ -1,8 +1,8 @@
 (**
-   A plan is the third representation in the compiler pipeline 
+   A plan is the third representation in the compiler pipeline
    (SQL -> Calc -> Plan)
-   
-   Each plan consists of a set of compiled datastructures, which consist of 
+
+   Each plan consists of a set of compiled datastructures, which consist of
    {ul
       {- A datastructure description, including a name and a definition of the
          the query which the datastructure is responsible for maintaining}
@@ -21,10 +21,10 @@ type ds_t = {
                                this expr_t must always be a single external leaf
                                and can always be simply (assuming its schema
                                matches) dropped into an existing expression in
-                               order to access this datastructure.  
-                               {b mk_ds_name} and {b expand_ds_name} are 
+                               order to access this datastructure.
+                               {b mk_ds_name} and {b expand_ds_name} are
                                utility methods for interacting with ds_names *)
-   
+
    ds_definition : expr_t  (** The definition of the datastructure.  This is the
                                query that the map will be maintaining the result
                                of *)
@@ -41,7 +41,7 @@ let expand_ds_name (name:expr_t) =
       | _ -> failwith "Error: invalid datastructure name"
    end
 
-(** Stringify a datastructure description.  The string conforms to the grammar 
+(** Stringify a datastructure description.  The string conforms to the grammar
     of Calculusparser *)
 let string_of_ds (ds:ds_t): string =
    (string_of_expr ds.ds_name)^" := "^(string_of_expr ds.ds_definition)
@@ -49,7 +49,7 @@ let string_of_ds (ds:ds_t): string =
 (******************* Statements *******************)
 
 (** A statement can either update (increment) the existing value of the key that
-    it is writing to, or replace the value of the key that it is writing to 
+    it is writing to, or replace the value of the key that it is writing to
     entirely *)
 type stmt_type_t = UpdateStmt | ReplaceStmt
 
@@ -57,13 +57,13 @@ type stmt_type_t = UpdateStmt | ReplaceStmt
 type stmt_t = {
    target_map  : expr_t;      (** The datastructure to be modified *)
    update_type : stmt_type_t; (** The type of alteration to be performed *)
-   update_expr   : expr_t     (** The calculus expression defining the new 
+   update_expr   : expr_t     (** The calculus expression defining the new
                                   value or update *)
 }
 
-(** Stringify a statement.  This string conforms to the grammar of 
+(** Stringify a statement.  This string conforms to the grammar of
     Calculusparser *)
-let string_of_statement (stmt:stmt_t): string = 
+let string_of_statement (stmt:stmt_t): string =
    let expr_string = (CalculusPrinter.string_of_expr (stmt.update_expr)) in
    (string_of_expr (stmt.target_map))^
    (if stmt.update_type = UpdateStmt
@@ -71,7 +71,7 @@ let string_of_statement (stmt:stmt_t): string =
       else " := ")^
    (if String.contains expr_string '\n' then "\n  " else "")^
    expr_string
-   
+
 
 (******************* Compiled Datastructures *******************)
 (** A compiled datastructure *)

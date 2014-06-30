@@ -60,7 +60,7 @@ val deduce_expr_type: ?override:bool -> type_bindings_t -> type_bindings_t -> ex
 (* given a program, returns the typechecked program, its environment, trigger
  * environment, and resource environment *)
 val type_bindings_of_program :
-  program_t -> 
+  program_t ->
   program_t * type_bindings_t * type_bindings_t * event_type_bindings_t
 
 val deduce_program_type : program_t -> program_t

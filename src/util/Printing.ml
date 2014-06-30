@@ -5,7 +5,7 @@ open Lazy
 type cut_type = NoCut | CutHint | CutLine
 
 let formatter = ref (stdbuf, str_formatter);;
- 
+
 let ob () = pp_open_hovbox (snd !formatter) 2
 let obv i = pp_open_hovbox (snd !formatter) i
 let obn () = pp_open_hbox (snd !formatter) ()
@@ -62,5 +62,5 @@ let wrap_formatter ?(fresh=true) ?(margin=300) print_fn =
     formatter := (buffer, formatter_of_buffer buffer);
     let r = print ()
     in formatter := saved_formatter; r
-  
+
   else print()

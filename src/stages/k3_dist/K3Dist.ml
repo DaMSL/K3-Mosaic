@@ -58,7 +58,7 @@ let log_get_bound_for p trig_nm = "log_get_bound_"^trig_nm
 let log_read_geq = "log_read_geq" (* takes vid, returns (trig, vid)list >= vid *)
 (* adds the delta to all subsequent vids following in the buffer so that non
  * delta computations will be correct. Must be atomic ie. no other reads of the
- * wrong buffer value can happen. 
+ * wrong buffer value can happen.
  * Also used for adding to map buffers and for correctives *)
 let add_delta_to_map p map_id =
   let m_t = map_types_for p map_id in
@@ -67,7 +67,7 @@ let add_delta_to_map p map_id =
 
 (* foreign functions *)
 let hash_addr = "hash_addr"
-let declare_foreign_functions p = 
+let declare_foreign_functions p =
   let foreign_hash_addr = mk_foreign_fn hash_addr t_addr t_int in
   (* function needed to parse sql dates. Called by m3tok3 *)
   let sql_func = mk_foreign_fn "parse_sql_date" t_string t_int in
@@ -127,11 +127,11 @@ let frontier_name p map_id =
   "frontier_"^String.concat "_" @:
     List.map K3PrintSyntax.string_of_value_type m_t
 
-(* Get the latest vals up to a certain vid 
+(* Get the latest vals up to a certain vid
  * - This is needed both for sending a push, and for modifying a local slice
  * operation
  * - slice_col is the k3 expression representing the collection.
- * - m_pat is an optional pattern for slicing the data first 
+ * - m_pat is an optional pattern for slicing the data first
  *   It doesn't include a vid
  * - assumes a local 'vid' variable containing the border of the frontier
  * - keep_vid indicates whether we need to rmove the vid from the result collection
@@ -147,15 +147,15 @@ let map_latest_vid_vals p slice_col m_pat map_id ~keep_vid =
           mk_tuple @: P.map_add_v mk_cunknown pat
     | None     -> slice_col
   in
-  let simple_app = 
+  let simple_app =
     mk_apply (mk_var @: frontier_name p map_id) @:
       mk_tuple [mk_var "vid"; access_k3]
   in
   if keep_vid then simple_app
   else
     (* remove the vid from the collection *)
-    mk_map 
-      (mk_lambda 
+    mk_map
+      (mk_lambda
         (wrap_args m_id_t_v) @:
         mk_tuple @: list_drop 1 @: ids_to_vars @: fst_many m_id_t_v)
       simple_app

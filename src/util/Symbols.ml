@@ -16,13 +16,13 @@ let is_symbol class_id =
 
 let get_symbol_prefix class_id =
   try Hashtbl.find sym_prefixes class_id
-  with Not_found -> raise (SymbolNotFound class_id) 
-  
+  with Not_found -> raise (SymbolNotFound class_id)
+
 let get_symbol_counter class_id =
   try let current = Hashtbl.find sym_counters class_id in
     Hashtbl.replace sym_counters class_id (current+1);
     current
-  with Not_found -> raise (SymbolNotFound class_id) 
+  with Not_found -> raise (SymbolNotFound class_id)
 
 let register_symbol class_id prefix =
   if not(is_sym_prefix class_id || is_sym_counter class_id) then
@@ -42,4 +42,4 @@ let initialize_k3_symbols () =
   register_symbol default_class sym_prefix
 ;;
 
-initialize_k3_symbols();;  
+initialize_k3_symbols();;

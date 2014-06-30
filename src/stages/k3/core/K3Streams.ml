@@ -21,14 +21,14 @@ module type FSMType = sig
   type output
   type state_id = int
   type action_t = Output of output | Terminate
-  type transition_t = action_t * state_id 
+  type transition_t = action_t * state_id
 
     (* Matched transitions and actions, non-match transition and action *)
-    type fsm_state = (input * transition_t) * transition_t  
-    
+    type fsm_state = (input * transition_t) * transition_t
+
     (* state id -> state metadata *)
     type fsm_t = (state_id * fsm_state) list
-    
+
     (* fsm id -> fsm *)
     type fsm_env_t = (id_t * fsm_t) list
 
@@ -43,17 +43,17 @@ module FSM = functor(Labels : FSMLabels) ->
 struct
   type input = Labels.input
   type output = Labels.output
-  
+
   type state_id = int
   type action_t = Output of output | Terminate
-  type transition_t = action_t * state_id 
+  type transition_t = action_t * state_id
 
 	(* Matched transitions and actions, non-match transition and action *)
-	type fsm_state = (input * transition_t) * transition_t  
-	
+	type fsm_state = (input * transition_t) * transition_t
+
 	(* state id -> state metadata *)
 	type fsm_t = (state_id * fsm_state) list
-	
+
 	(* fsm id -> fsm *)
 	type fsm_env_t = (id_t * fsm_t) list
 
@@ -69,19 +69,19 @@ struct
 	let print_transition (i, ((input, (ma,n)), (fa,f))) =
 	  ps (string_of_int i); ps " : ";
     ps ("<"^(string_of_input input)^">");
-	  ps (String.concat ", " [string_of_action "Match" ma; string_of_int n; 
+	  ps (String.concat ", " [string_of_action "Match" ma; string_of_int n;
                             string_of_action "Mismatch" fa; string_of_int f])
-	
+
 	let print_fsm fsm =
 	  ps "[ ";
 	  List.iter (fun t -> ob(); print_transition t; ps "; "; cb()) fsm;
 	  ps " ]"
-	
+
   let string_of_fsm fsm = wrap_formatter (fun () -> print_fsm fsm)
-  
+
 	let print_fsm_env fsm_env =
 	  List.iter (fun (id, fsm) -> ps id; ps " = "; pc(); print_fsm fsm; fnl()) fsm_env
-	
+
 	let string_of_fsm_env fsm_env = wrap_formatter (fun () -> print_fsm_env fsm_env)
 
 end
@@ -91,18 +91,18 @@ module ResourceActions = struct
   type input = id_t
 
   type resource_output =
-      (* sink dispatch list *) 
+      (* sink dispatch list *)
     | Dispatch of id_t list
     | Fail
 
   type output =
       (* Sources have pre-entry metadata as well a resource output *)
     | Source of resource_output * id_t list
-    | Sink of resource_output 
+    | Sink of resource_output
 
   let string_of_input i = i
 
-  let string_of_resource_output r = match r with 
+  let string_of_resource_output r = match r with
     | Dispatch dispatch -> "Dispatch["^(String.concat "," dispatch)^"]"
     | Fail -> "Fail"
 
@@ -118,7 +118,7 @@ module ResourceFSM : FSMType
   = FSM(ResourceActions)
 
 type dispatcher_t = ResourceFSM.fsm_t
-type dispatcher_env_t = ResourceFSM.fsm_env_t 
+type dispatcher_env_t = ResourceFSM.fsm_env_t
 
 type event_loop_t =
   resource_env_t * dispatcher_env_t * (instruction_t list)
@@ -131,8 +131,8 @@ let _ = register_symbol state_sym_class "__";;
 (* Stringification *)
 let print_resource_env resource_env =
   let my_tag = pretty_tag_str CutHint "" in
-  List.iter (fun (id, (source,r)) -> 
-      my_tag (if source then "Source" else "Sink") 
+  List.iter (fun (id, (source,r)) ->
+      my_tag (if source then "Source" else "Sink")
         [lazy (print_flow_resource def_c r)];
       fnl()
     ) resource_env
@@ -153,29 +153,29 @@ let fail_action_of_state s = fst (snd (snd s))
 
 let pre_entry_of_state state =
   let module A = ResourceActions in
-  let module F = ResourceFSM in 
+  let module F = ResourceFSM in
   match match_action_of_state state with
   | F.Output (A.Source (_,p)) -> p
   | _ -> []
 
 (* Accessors *)
 let handle_of_resource resource_env id =
-    try 
+    try
       let resource = List.assoc id resource_env in Some resource
-    with Not_found -> None 
+    with Not_found -> None
 
-let is_net_handle resource_env id = 
+let is_net_handle resource_env id =
   match handle_of_resource resource_env id with
     | Some(_, Handle(_, Network _, _)) -> true
     | _ -> false
 
-let is_file_handle resource_env id = 
+let is_file_handle resource_env id =
   match handle_of_resource resource_env id with
     | Some(_, Handle(_, File _, _)) -> true
     | _ -> false
 
 (* Given a source and FSM environment, construct an FSM continuation. *)
-let compile_pattern resource_env resource_bindings fsm_env 
+let compile_pattern resource_env resource_bindings fsm_env
                     post_rcr_f choice_f sequence_f terminal_f p =
   let rec compile_aux resource_env fsm_env ~on_success ~on_fail p =
 	  let rcr = compile_aux resource_env fsm_env in
@@ -189,11 +189,11 @@ let compile_pattern resource_env resource_bindings fsm_env
 	  in
 	  let replace_placeholder oid nid l =
 	    let sub i = if i = oid then nid else i in
-	    List.map 
+	    List.map
         (fun (i, ((inp, (ma,n)), (fa,f))) ->
-          (sub i, ((inp, (ma, sub n)), (fa, sub f)))) l 
+          (sub i, ((inp, (ma, sub n)), (fa, sub f)))) l
 	  in
-	  let choice_states good bad l = 
+	  let choice_states good bad l =
 	    rcr_list bad l
         (fun next p -> rcr ~on_success:good ~on_fail:next p) choice_f
 	  in
@@ -202,64 +202,64 @@ let compile_pattern resource_env resource_bindings fsm_env
         (fun next p -> rcr ~on_success:next ~on_fail:bad p) sequence_f
 	  in
 	  let optional_state state = rcr ~on_success:state ~on_fail:state in
-	  let repeat_state state p = 
+	  let repeat_state state p =
 	    let placeholder_state = gen_state_sym() in
 	    let states = rcr ~on_success:placeholder_state ~on_fail:state p
 	    in replace_placeholder placeholder_state (fst (List.hd states)) states
 	  in
-    match p with 
-	  | Terminal id -> 
+    match p with
+	  | Terminal id ->
 	    if List.mem_assoc id resource_env then
         let bindings = List.map snd (List.filter (fun (x,y) -> x=id) resource_bindings) in
         let resource = List.assoc id resource_env
-        in terminal_f id on_success on_fail bindings resource  
-	    
+        in terminal_f id on_success on_fail bindings resource
+
 	    else if List.mem_assoc id fsm_env then
         (* Inline derived FSMs *)
-        List.assoc id fsm_env 
-	
+        List.assoc id fsm_env
+
 	    else failwith ("io pattern compile error: could not find channel "^id)
-	
+
 	  | Choice (l)   -> choice_states on_success on_fail l
 	  | Sequence (l) -> sequence_states on_success on_fail l
 	  | Optional (p) -> optional_state on_success p
 	  | Repeat (p,_) -> repeat_state on_success p
   in
   let end_state = gen_state_sym() in
-  end_state, compile_aux resource_env fsm_env end_state end_state p 
+  end_state, compile_aux resource_env fsm_env end_state end_state p
 
 (* Dispatcher FSM compilation *)
 (* p is a resource pattern *)
 let compile_dispatcher resource_env resource_bindings fsm_env p =
   let module A = ResourceActions in
   let module F = ResourceFSM in
-  let replace_entry_ids new_ids fsm = 
+  let replace_entry_ids new_ids fsm =
     let new_hd = match List.hd fsm with
     | (a, ((b, (F.Output (A.Source(c, _)), d)), e)) ->
-      (a, ((b, (F.Output (A.Source(c, new_ids)), d)), e)) 
-    | x -> x 
+      (a, ((b, (F.Output (A.Source(c, new_ids)), d)), e))
+    | x -> x
     in new_hd::(List.tl fsm)
   in
   let choice_f pre_entry_acc states =
-	  (* Lift up and replace the pre-entry ids at the child *) 
+	  (* Lift up and replace the pre-entry ids at the child *)
 	  let new_entry_acc = (pre_entry_of_state (List.hd states))@pre_entry_acc in
 	  let new_states = replace_entry_ids [] states in
 	  new_states, new_entry_acc
   in
-  let sequence_f pre_entry_acc states = 
+  let sequence_f pre_entry_acc states =
 	  (* Pass-through the pre-entry ids at the child *)
 	  states, pre_entry_of_state (List.hd states)
   in
   let terminal_f id on_success on_fail bindings r = match r with
     | (true, Handle _) | (true, Stream _) ->
       let match_action = F.Output (A.Source(A.Dispatch(bindings), [id])) in
-      let fail_action = F.Output (A.Source(A.Fail,[id])) in 
+      let fail_action = F.Output (A.Source(A.Fail,[id])) in
       [gen_state_sym(),
         ((id, (match_action, on_success)), (fail_action, on_fail))]
 
     | (false, Handle _) ->
       let match_action = F.Output (A.Sink(A.Dispatch(bindings))) in
-      let fail_action = F.Output (A.Sink(A.Fail)) in 
+      let fail_action = F.Output (A.Sink(A.Fail)) in
       [gen_state_sym(),
         ((id, (match_action, on_success)), (fail_action, on_fail))]
 
@@ -267,9 +267,9 @@ let compile_dispatcher resource_env resource_bindings fsm_env p =
   in
   let end_state, rfsm = compile_pattern resource_env resource_bindings fsm_env
                           replace_entry_ids choice_f sequence_f terminal_f p
-  in 
+  in
   let end_transition = F.Terminate, end_state in
-  let eof_state = (end_state, (("", end_transition), end_transition)) 
+  let eof_state = (end_state, (("", end_transition), end_transition))
   in rfsm@[eof_state]
 
 (* Returns all resources (input and output) associated with this dispatcher *)
@@ -291,14 +291,14 @@ let event_loop_of_flow fp : event_loop_t =
      * For sources, we also include a self-repetition pattern in the FSM environment. *)
     match fs with
     | Source (Resource (id,r)) ->
-      let npats, nrenv, nd_env = match r with 
-	      | Handle _ | Stream _ -> 
+      let npats, nrenv, nd_env = match r with
+	      | Handle _ | Stream _ ->
             [id, Repeat(Terminal(id), UntilEOF)], res_env@[id, (true,r)], d_env
 	      | Pattern p -> [id, p], res_env, d_env
       in (pat_acc@npats, bind_acc), (nrenv, nd_env, instrs)
 
     | Sink (Resource (id,r)) ->
-      let npats, nrenv, nd_env = match r with 
+      let npats, nrenv, nd_env = match r with
 	      | Handle (t,ct,cf) -> [], res_env@[id, (false,r)], d_env
 	      | Pattern p -> [id, p], res_env, d_env
         | Stream _ -> failwith "Streams not supported as sinks"
@@ -306,7 +306,7 @@ let event_loop_of_flow fp : event_loop_t =
 
     | Bind (src_id, trig_id) ->
       (pat_acc, (src_id, trig_id)::bind_acc), (res_env, d_env, instrs)
-    
+
     | Instruction i ->
       let compile_fsm (id,p) = id, compile_dispatcher res_env bind_acc d_env p in
       let nd = List.map compile_fsm pat_acc
@@ -319,20 +319,20 @@ let event_loop_of_flow fp : event_loop_t =
 
 (* Role environment constructor *)
 let event_loop_of_role (pr,pde,pi) (role_env, default) (d,_) = match d with
-	| Role(id, fp) -> 
+	| Role(id, fp) ->
 	  let r,de,i = event_loop_of_flow fp in
 	  (role_env@[id, (pr@r,pde@de,pi@i)], default)
-	
-	| DefaultRole(id) -> 
+
+	| DefaultRole(id) ->
 	  (try role_env, Some(id, List.assoc id role_env)
-     with Not_found -> (role_env, default))  
-	
+     with Not_found -> (role_env, default))
+
 	| _ -> role_env, default
 
 (* Accumulates event loops based on all flow programs in a K3 program *)
 let event_loop_of_program (racc,dacc,iacc) (d,_) = match d with
-  | Flow fp -> 
-  let r,dp,i = event_loop_of_flow fp in racc@r, dacc@dp, iacc@i 
+  | Flow fp ->
+  let r,dp,i = event_loop_of_flow fp in racc@r, dacc@dp, iacc@i
   | _ -> racc,dacc,iacc
 
 (* For each role in a K3 program, returns a stream and FSM environment,
@@ -341,7 +341,7 @@ let roles_of_program k3_program =
   List.fold_left (event_loop_of_role ([],[],[])) ([], None) k3_program
 
 (* Same as roles_of_program, except with each role prepended with top-level
- * flows defined in the K3 program, making these act as global, common roles. *) 
+ * flows defined in the K3 program, making these act as global, common roles. *)
 let extended_roles_of_program k3_program =
   let init = List.fold_left event_loop_of_program ([],[],[]) k3_program
   in List.fold_left (event_loop_of_role init) ([], None) k3_program

@@ -10,12 +10,12 @@ type channel_impl_t =
   | InConst of expr_t list ref
   | InRand of int ref
 
-type resource_impl_env_t = (id_t * channel_impl_t) list 
+type resource_impl_env_t = (id_t * channel_impl_t) list
 
 val run_dispatcher :
   K3Runtime.scheduler_state -> address
   -> resource_env_t -> resource_impl_env_t -> dispatcher_t
-  -> resource_impl_env_t  
+  -> resource_impl_env_t
 
 (* TODO:
 val initialize_demultiplexer :
@@ -23,5 +23,5 @@ val initialize_demultiplexer :
 
 val run_demultiplexer :
   resource_demultiplexer -> state_id option -> id_t -> value_t
-  -> value_t option * state_id option * id_t list  
+  -> value_t option * state_id option * id_t list
 *)

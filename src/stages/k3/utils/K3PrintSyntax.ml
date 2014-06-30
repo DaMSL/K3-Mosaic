@@ -9,7 +9,7 @@ open K3.Annotation
 module U = K3Util
 module T = K3Typechecker
 
-let force_list = List.iter force 
+let force_list = List.iter force
 
 (* lazy functions *)
 let lhv i = [lazy (obc i)]     (* open box *)
@@ -21,7 +21,7 @@ let lcut () = [lazy (pbsi 0 0)] (* print nothing or split line *)
 let lind () = [lazy (pbsi 1 2)] (* print break with indent or space *)
 let lsp () = [lazy (pbsi 1 0)] (* print space or split line *)
 let lps s = [lazy (ps s)]      (* print string *)
-let lps_list ?(sep=", ") cut_t f l = 
+let lps_list ?(sep=", ") cut_t f l =
   [lazy (ps_list ~sep:sep cut_t (force_list |- f) l)]
 
 (* type we pass all the way down for configuring behaviors *)
@@ -41,8 +41,8 @@ let (<|) a b = a @ b
 let lazy_paren f = lps "(" <| f <| lps ")"
 let lazy_bracket f = lps "[" <| f <| lps "]"
 let lazy_brace f = lps "{" <| f <| lps "}"
-let lazy_box_brace f = 
-  lps "{" <| lind () <| lv 0 <| f <| 
+let lazy_box_brace f =
+  lps "{" <| lind () <| lv 0 <| f <|
   lcb () <| lcut () <| lps "}"
 let lbox b f = b <| f <| lcb ()
 let wrap_hv i f = lbox (lhv i) f
@@ -52,11 +52,11 @@ let wrap_indent f = wrap_hov 2 f
 let error s = lps @: "???: "^s
 
 let lazy_control_anno c = function
-  | Effect ids -> lps "effect " <| lazy_paren @: 
+  | Effect ids -> lps "effect " <| lazy_paren @:
       lps_list NoCut lps ids
   | Parallel i -> lps "parallel " <| lazy_paren (lps @: string_of_int i)
 
-let lazy_data_anno c a = 
+let lazy_data_anno c a =
   let positions ps = lps_list NoCut (lps |- string_of_int) ps in
   match a with
   | FunDep (ps, Element) -> lps "key " <| lazy_paren (positions ps)
@@ -73,11 +73,11 @@ let lazy_anno c = function
   | Control(r,a) -> lazy_control_anno c a
   | _ -> []
 
-let lazy_annos c = function 
-  | [] -> [] 
+let lazy_annos c = function
+  | [] -> []
   | annos -> lps "@ " <| lazy_brace @: lps_list ~sep:"; " NoCut (lazy_anno c) annos
 
-let rec lazy_base_type c ~in_col ?(no_paren=false) t = 
+let rec lazy_base_type c ~in_col ?(no_paren=false) t =
   let proc () = match t with
   | TUnit       -> lps "unit"
   | TBool       -> lps "bool"
@@ -93,23 +93,23 @@ let rec lazy_base_type c ~in_col ?(no_paren=false) t =
       let inner () = lps_list NoCut (lazy_value_type c ~in_col) vts in
       if not c.verbose_types && no_paren then inner ()
       else lps "(" <| inner () <| lps ")"
-  | TCollection(TSet, vt) -> 
+  | TCollection(TSet, vt) ->
       lps "{" <| lazy_value_type c ~in_col:true ~no_paren:true vt <| lps "}"
-  | TCollection(TBag, vt) -> 
+  | TCollection(TBag, vt) ->
       lps "{|" <| lazy_value_type c ~in_col:true ~no_paren:true vt <| lps "|}"
-  | TCollection(TList, vt) -> 
+  | TCollection(TList, vt) ->
       lps "[" <| lazy_value_type c ~in_col:true ~no_paren:true vt <| lps "]"
   | TAddress -> lps "address" (* ? *)
   | TTarget bt -> lps "target" <| lazy_base_type c ~in_col bt
   | TUnknown -> lps "unknown"
   | TIndirect vt -> lps "ind " <| lazy_value_type c ~in_col vt
   in
-  if c.verbose_types && in_col then lps "c:" <| proc () 
+  if c.verbose_types && in_col then lps "c:" <| proc ()
   else proc ()
 
 (* TODO: annotations *)
 and lazy_mutable_type c ~in_col ?(no_paren=false) = function
-  | TMutable (bt, a)   -> 
+  | TMutable (bt, a)   ->
       lps "ref " <| lazy_base_type c ~in_col:true ~no_paren:false bt
   | TImmutable (bt, a) -> lazy_base_type c ~in_col ~no_paren bt
 
@@ -119,11 +119,11 @@ and lazy_value_type c ~in_col ?(no_paren=false) = function
 
 let lazy_type c = function
   | TFunction(f,t) ->
-      lazy_value_type c ~in_col:false f <| lps " -> " <| 
+      lazy_value_type c ~in_col:false f <| lps " -> " <|
       lazy_value_type c ~in_col:false t
   | TValue vt -> lazy_value_type c false vt
 
-let rec lazy_arg c drop_tuple_paren a = 
+let rec lazy_arg c drop_tuple_paren a =
   let paren = if drop_tuple_paren then id_fn else lazy_paren in
   match a with
   | AIgnored      -> lps "_"
@@ -136,7 +136,7 @@ let lazy_id_type c (id,t) = lps (id^" : ") <| lazy_value_type c false t
 
 let lazy_trig_vars c = function
   | [] -> lps "{}"
-  | vars -> lazy_box_brace 
+  | vars -> lazy_box_brace
       (lps_list ~sep:", " CutHint (fun (id,t,_) -> lazy_id_type c (id,t)) vars)
 
 let lazy_const c = function
@@ -163,22 +163,22 @@ let lazy_collection_vt c vt eval = match vt with
   | _ -> error @: K3Printing.string_of_value_type vt (* type error *)
 
 
-let rec lazy_expr c expr = 
+let rec lazy_expr c expr =
   let expr_pair ?(sep=lps "," <| lsp ()) ?(wl=id_fn) ?(wr=id_fn) (e1, e2) =
     wl(lazy_expr c e1) <| sep <| wr(lazy_expr c e2) in
   let expr_sub ?(sep=lps "," <| lsp ()) p =
     expr_pair ~sep:sep ~wl:wrap_indent ~wr:(wrap_hov 0) p in
-  let expr_triple ?(sep=fun () -> lps "," <| lsp ()) (e1,e2,e3) = 
+  let expr_triple ?(sep=fun () -> lps "," <| lsp ()) (e1,e2,e3) =
     let w = wrap_indent in
     w(lazy_expr c e1) <| sep () <| w(lazy_expr c e2) <| sep () <| w(lazy_expr c
     e3) in
-  let expr_quad ?(sep=fun () -> lps "," <| lsp ()) (e1,e2,e3,e4) = 
+  let expr_quad ?(sep=fun () -> lps "," <| lsp ()) (e1,e2,e3,e4) =
     let w = wrap_indent in
     w(lazy_expr c e1) <| sep () <| w(lazy_expr c e2) <| sep () <| w(lazy_expr c
     e3) <| sep () <| w(lazy_expr c e4) in
   (* TODO: do comparisons also *)
   let is_apply_let e = let e1, e2 = U.decompose_apply e in
-    match U.tag_of_expr e1 with 
+    match U.tag_of_expr e1 with
       | Var _ -> false | Lambda _ -> true | _ -> invalid_arg "bad apply input"
   in
   (* handle parentheses:
@@ -199,20 +199,20 @@ let rec lazy_expr c expr =
     | _ -> arith_paren e
   (* for == and != *)
   in let logic_paren e = match U.tag_of_expr e with
-    | Eq | Neq -> lazy_paren 
+    | Eq | Neq -> lazy_paren
     | _        -> arith_paren e (* arith ast is used for logic *)
   in let logic_paren_l e = match U.tag_of_expr e with
     | Eq | Neq -> lazy_paren
     | _        -> arith_paren_l e
-  in let arith_paren_pair sym (el, er) = 
+  in let arith_paren_pair sym (el, er) =
     let wrapl = arith_paren_l el in
     let wrapr = arith_paren er in
-    expr_pair ~sep:(lsp () <| lps sym <| lsp ()) ~wl:wrapl ~wr:wrapr (el, er) 
-  in let logic_paren_pair sym (el, er) = 
+    expr_pair ~sep:(lsp () <| lps sym <| lsp ()) ~wl:wrapl ~wr:wrapr (el, er)
+  in let logic_paren_pair sym (el, er) =
     let wrapl = logic_paren_l el in
     let wrapr = logic_paren er in
-    expr_pair ~sep:(lsp () <| lps sym <| lsp ()) ~wl:wrapl ~wr:wrapr (el, er) 
-  in let expr_type_is_bool e = 
+    expr_pair ~sep:(lsp () <| lps sym <| lsp ()) ~wl:wrapl ~wr:wrapr (el, er)
+  in let expr_type_is_bool e =
     try (match T.type_of_expr e with
     | TValue x | TFunction(_,x) -> match T.base_of x () with
         | TBool -> true
@@ -232,27 +232,27 @@ let rec lazy_expr c expr =
   | Const con -> lazy_const c con
   | Var id -> lps id
   | Tuple -> let es = U.decompose_tuple expr in
-    lazy_paren @: lps_list CutHint (lazy_expr c) es 
+    lazy_paren @: lps_list CutHint (lazy_expr c) es
   | Just -> let e = U.decompose_just expr in
     lps "just " <| lazy_expr c e
   | Nothing vt -> lps "nothing:" <| lsp () <| lazy_value_type c false vt
-  | Empty vt -> 
+  | Empty vt ->
       lazy_collection_vt c vt [] <| lsp () <| lps ":" <| lsp () <|
         lazy_value_type c false vt
   | Singleton vt -> let e = U.decompose_singleton expr in
     lazy_collection_vt c vt @: tuple_no_paren c e
-  | Combine -> 
+  | Combine ->
     let rec assemble_list c e =  (* print out in list format *)
       let (l, r) = U.decompose_combine e in
       begin match U.tag_of_expr l, U.tag_of_expr r with
         | Singleton _, Combine -> let l2 = U.decompose_singleton l in
-            tuple_no_paren c l2 <| lps ";" <| lsp () <| 
+            tuple_no_paren c l2 <| lps ";" <| lsp () <|
             assemble_list c r
         | Singleton _, Singleton _ -> let l2 = U.decompose_singleton l in
           let r2 = U.decompose_singleton r in
-          tuple_no_paren c l2 <| lps ";" <| lsp () <| 
+          tuple_no_paren c l2 <| lps ";" <| lsp () <|
             tuple_no_paren c r2
-        | Singleton _, Empty _ -> let l2 = U.decompose_singleton l in 
+        | Singleton _, Empty _ -> let l2 = U.decompose_singleton l in
           tuple_no_paren c l2
         | _ -> error (K3Printing.string_of_expr l^", "^K3Printing.string_of_expr r) (* type error *)
       end in
@@ -260,10 +260,10 @@ let rec lazy_expr c expr =
     (* wrap the left side of the combine if it's needed *)
     let wrapl = paren_l e1 in
     begin match U.tag_of_expr e1, U.tag_of_expr e2 with
-      | Singleton vt, Combine | Singleton vt, Singleton _ 
-      | Singleton vt, Empty _ -> 
+      | Singleton vt, Combine | Singleton vt, Singleton _
+      | Singleton vt, Empty _ ->
         lazy_collection_vt c vt @: assemble_list c expr
-      | _ -> expr_pair ~sep:(lcut() <| lps "++" <| lcut()) ~wl:wrapl (e1, e2) 
+      | _ -> expr_pair ~sep:(lcut() <| lps "++" <| lcut()) ~wl:wrapl (e1, e2)
     end
   | Range ct -> let t = U.decompose_range expr in
     lazy_collection c ct @: expr_triple ~sep:(fun () -> lps "::") t
@@ -273,12 +273,12 @@ let rec lazy_expr c expr =
         arith_paren_pair "-" (e1, e3)
       | _, false -> arith_paren_pair "+" (e1, e2)
       | _, true -> arith_paren_pair "|" (e1, e2)
-    end 
+    end
   | Mult -> let (e1, e2) = U.decompose_mult expr in
     let is_neg = begin match U.tag_of_expr e1 with
       | Neg -> let e = U.decompose_neg e1 in
-        begin match U.tag_of_expr e with 
-          | Const(CInt(1)) -> true 
+        begin match U.tag_of_expr e with
+          | Const(CInt(1)) -> true
           | _ -> false
         end
       | Const(CInt(-1)) -> true
@@ -288,11 +288,11 @@ let rec lazy_expr c expr =
       | true, _ -> arith_paren_pair "&" (e1, e2)
       | false, true -> lps "-" <| lazy_expr c e2 (* just a minus *)
       | _ -> arith_paren_pair "*" (e1, e2)
-    end 
+    end
   | Neg -> let e = U.decompose_neg expr in
     let sym = if expr_type_is_bool e then "!" else "-" in
     begin match U.tag_of_expr e with
-      | Var _ 
+      | Var _
       | Const _ -> lps sym <| lazy_expr c e
       | Lt -> let p = U.decompose_lt e in
         arith_paren_pair ">=" p
@@ -308,13 +308,13 @@ let rec lazy_expr c expr =
     logic_paren_pair "!=" p
   | Leq -> let p = U.decompose_leq expr in
     arith_paren_pair "<=" p
-  | Lambda arg -> 
+  | Lambda arg ->
       (* check if we need to highlight this lambda for the new k3 *)
-      let highlight = 
+      let highlight =
         if c.lambda_ret then
           let ms = U.meta_of_expr expr in
           begin match list_find (function Type _ -> true | _ -> false) ms with
-            | Some (Type (TFunction(_,x))) -> 
+            | Some (Type (TFunction(_,x))) ->
               begin match T.base_of x () with
                 | TTuple _ -> false
                 | _        -> true (* we highlight anything that's not a tuple result *)
@@ -324,8 +324,8 @@ let rec lazy_expr c expr =
         else false
       in
       let _, e = U.decompose_lambda expr in
-    wrap_indent (lps "\\" <| lazy_arg c false arg <| 
-    (if highlight then lps " =>" else lps " ->")) <| lind () <| 
+    wrap_indent (lps "\\" <| lazy_arg c false arg <|
+    (if highlight then lps " =>" else lps " ->")) <| lind () <|
       wrap_hov 0 (lazy_expr c e)
   | Apply -> let (e1, e2) = U.decompose_apply expr in
     let modify_arg = begin match U.tag_of_expr e2 with
@@ -341,8 +341,8 @@ let rec lazy_expr c expr =
       | _ -> error (K3Printing.string_of_expr e1) (* type error *)
     end
   | Block -> let es = U.decompose_block expr in
-    lps "do {" <| lind () <| 
-    wrap_hv 0 (lps_list ~sep:";" CutHint (lazy_expr c) es <| lsp ()) 
+    lps "do {" <| lind () <|
+    wrap_hv 0 (lps_list ~sep:";" CutHint (lazy_expr c) es <| lsp ())
       <| lps "}"
   | Iterate -> let p = U.decompose_iterate expr in
     lps "iterate" <| lcut () <| lazy_paren @: expr_sub p
@@ -365,13 +365,13 @@ let rec lazy_expr c expr =
   | Peek -> let col = U.decompose_peek expr in
     lps "peek" <| lazy_paren @: lazy_expr c col
   | Slice -> let col, pat = U.decompose_slice expr in
-    let wrap = begin match U.tag_of_expr col with 
+    let wrap = begin match U.tag_of_expr col with
       | Var _ -> id_fn
       | _     -> lazy_paren
     end in
     wrap(lazy_expr c col) <| lazy_bracket @: tuple_no_paren c pat
   | Insert -> let (e1, e2) = U.decompose_insert expr in
-    lps "insert" <| lazy_paren  
+    lps "insert" <| lazy_paren
       (lazy_expr c e1 <| lps "," <| lsp () <| tuple_no_paren c e2)
   | Delete -> let p = U.decompose_delete expr in
     lps "delete" <| lazy_paren @: expr_sub p
@@ -384,20 +384,20 @@ let rec lazy_expr c expr =
   | Deref -> let e = U.decompose_deref expr in
     lps "$" <| lazy_expr c e
   | Send -> let e1, e2, es = U.decompose_send expr in
-    wrap_indent (lps "send" <| lazy_paren (expr_pair (e1, e2) <| lps ", " <| 
+    wrap_indent (lps "send" <| lazy_paren (expr_pair (e1, e2) <| lps ", " <|
       lps_list CutHint (tuple_no_paren c) es))
   in
   (* if we asked to highlight a uuid, do so now *)
-  match c.uuid with 
+  match c.uuid with
   | Some i when i = U.id_of_expr expr -> lps "%" <| wrap out
   | _ -> wrap out
 
-let lazy_trigger c id arg vars expr = 
+let lazy_trigger c id arg vars expr =
   let is_block expr = match U.tag_of_expr expr with
     | Block -> true
     | _ -> false
   in
-  let indent f = if is_block expr 
+  let indent f = if is_block expr
                then lps " " <| f
                else lind () <| lbox (lhov 0) f in
   lps @: "trigger "^id <|
@@ -414,7 +414,7 @@ let lazy_channel c chan_t chan_f = match chan_t with
   | Network(str, port) -> lps @: "socket(\""^str^"\":"^string_of_int port^")"
 
 let rec lazy_resource_pattern c = function
-  | Terminal id -> lps id 
+  | Terminal id -> lps id
   | Choice rps  -> lps_list ~sep:"| " CutHint (lazy_resource_pattern c) rps
   | Sequence rps -> lps_list ~sep:" " CutHint (lazy_resource_pattern c) rps
   | Optional rp -> lazy_resource_pattern c rp <| lps "?"
@@ -424,7 +424,7 @@ let lazy_stream c = function
   | RandomStream i -> lps "random" <| lazy_paren (lps @: string_of_int i)
   | ConstStream e  -> lps "stream" <| lazy_paren (lazy_expr c e)
 
-let lazy_resource c r = 
+let lazy_resource c r =
   let common t = lazy_type c t <| lps " = " in
   match r with
   | Handle(t, chan_t, chan_f) -> common t <| lazy_channel c chan_t chan_f
@@ -434,7 +434,7 @@ let lazy_resource c r =
 let lazy_flow c = function
   | Source(Code(id, arg, vars, expr))
   | Sink(Code(id, arg, vars, expr)) -> lazy_trigger c id arg vars expr
-  | Source(Resource(id, r)) -> 
+  | Source(Resource(id, r)) ->
       lps ("source "^id^" : ") <| lazy_resource c r
   | Sink(Resource(id, r)) ->
       lps ("sink "^id^" : ") <| lazy_resource c r
@@ -443,14 +443,14 @@ let lazy_flow c = function
 
 let lazy_flow_program c fas = lps_list ~sep:"" CutHint (lazy_flow c |- fst) fas
 
-let lazy_declaration c d = 
+let lazy_declaration c d =
   let out = match d with
-  | Global(id, t, expr) -> let end_part = begin match expr with 
+  | Global(id, t, expr) -> let end_part = begin match expr with
       | None -> []
       | Some e -> lps " =" <| lsp () <| lazy_expr c e
     end in
     wrap_hov 2 (lps @: "declare "^id^" :" <| lsp () <| lazy_type c t <| end_part)
-  | Role(id, fprog) -> 
+  | Role(id, fprog) ->
       lps ("role "^id^" ") <| lazy_box_brace (lazy_flow_program c fprog)
   | Flow fprog -> lazy_flow_program c fprog
   | DefaultRole id -> lps ("default role "^id)
@@ -461,7 +461,7 @@ let lazy_declaration c d =
 let wrap_f = wrap_formatter ~margin:80
 
 (* print a K3 type in syntax *)
-let string_of_base_type t = wrap_f @: fun () -> 
+let string_of_base_type t = wrap_f @: fun () ->
   force_list @: lazy_base_type verbose_types_config false t
 
 (* print a K3 type in syntax *)
@@ -477,29 +477,29 @@ let string_of_type t = wrap_f @: fun () ->
   force_list @: lazy_type verbose_types_config t
 
 (* print a K3 expression in syntax *)
-let string_of_expr ?uuid_highlight ?(lambda_ret=false) e = 
+let string_of_expr ?uuid_highlight ?(lambda_ret=false) e =
   let config = {default_config with lambda_ret} in
-  let config = match uuid_highlight with 
+  let config = match uuid_highlight with
     | None   -> config
     | _      -> {config with uuid=uuid_highlight}
   in
   wrap_f @: fun () -> force_list @: lazy_expr config e
 
 (* print a K3 program in syntax *)
-let string_of_program ?uuid_highlight ?(lambda_ret=false) prog = 
+let string_of_program ?uuid_highlight ?(lambda_ret=false) prog =
   let config = {default_config with lambda_ret} in
-  let config = match uuid_highlight with 
+  let config = match uuid_highlight with
     | None -> config
     | _    -> {config with uuid=uuid_highlight}
   in
-  wrap_f @: fun () -> 
+  wrap_f @: fun () ->
     let l = lps_list ~sep:"" CutHint (lazy_declaration config |- fst) prog in
     obx 0;  (* vertical box *)
     force_list l;
     cb
 
 (* print a k3 program with test expressions *)
-let string_of_program_test ?uuid_highlight ?lambda_ret ptest = 
+let string_of_program_test ?uuid_highlight ?lambda_ret ptest =
   (* print a check_expr *)
   let string_of_check_expr = function
       | FileExpr s -> "file "^s
@@ -512,11 +512,11 @@ let string_of_program_test ?uuid_highlight ?lambda_ret ptest =
       string_of_check_expr check_e
   in
   match ptest with
-  | NetworkTest(p, checklist) -> 
+  | NetworkTest(p, checklist) ->
       Printf.sprintf "%s\n\nnetwork expected\n\n%s"
         (string_of_program ?uuid_highlight ?lambda_ret p)
         (String.concat ",\n\n" @: list_map string_of_test_expr checklist)
-  | ProgTest(p, checklist) -> 
+  | ProgTest(p, checklist) ->
       Printf.sprintf "%s\n\nexpected\n\n%s"
         (string_of_program ?uuid_highlight ?lambda_ret p)
         (String.concat ",\n\n" @: list_map string_of_test_expr checklist)

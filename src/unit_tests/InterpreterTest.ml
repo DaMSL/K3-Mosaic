@@ -7,15 +7,15 @@ open K3Interpreter
 
 let parse = parse_expr
 
-let case_list l = 
+let case_list l =
   List.map (fun (id, expr_str, expected_val) ->
             case id @: eval_test_expr ([], parse_expr expr_str) @=? expected_val)           l
 
-let case_files l = case_list @: 
-  List.map (fun (id, test_f, expected_val) -> 
-             id, (read_file test_f), expected_val) 
+let case_files l = case_list @:
+  List.map (fun (id, test_f, expected_val) ->
+             id, (read_file test_f), expected_val)
            l
-  
+
 let tests = group "all" [
     group "Constants" @: case_list [
         "Booleans" , "true",   VBool true;
@@ -51,9 +51,9 @@ let tests = group "all" [
         "Leq" , "0 <= 1", VBool true;
     ];
     group "Iterate" @: case_list [
-        "Iteration Always Returns Unit", 
+        "Iteration Always Returns Unit",
         "declare set : {int}
-         iterate(x:int -> insert(set, x), {1; 2})", 
+         iterate(x:int -> insert(set, x), {1; 2})",
          VSet [VInt 0; VInt 1; VInt 2];
     ];
 ]

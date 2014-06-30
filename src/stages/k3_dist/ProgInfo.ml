@@ -162,7 +162,7 @@ let rhs_maps_of_stmt (p:prog_data_t) (stmt_id:stmt_id_t) =
 
 let stmts_rhs_maps (p:prog_data_t) =
   List.flatten @:
-  List.map (fun (stmt, _, _, _, rmaplist) -> 
+  List.map (fun (stmt, _, _, _, rmaplist) ->
     let maplist = nub @: fst_many rmaplist in
     List.map (fun map -> stmt, map) maplist
   )
@@ -344,7 +344,7 @@ let get_map_bindings_in_stmt (p:prog_data_t) (stmt_id:stmt_id_t)
 let uniq_types_and_maps ?(type_fn=map_types_for) (p:prog_data_t)  =
   let hash = Hashtbl.create 50 in
   ignore (for_all_maps p @:
-    fun map_id -> 
+    fun map_id ->
       hashtbl_replace hash (type_fn p map_id) @:
         function None -> [map_id] | Some l -> map_id::l);
   let fns = ref [] in

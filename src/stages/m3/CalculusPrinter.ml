@@ -1,6 +1,6 @@
 (**
    A module for pretty-printing Calculus expressions and Arithmetic values.
-   
+
    {b WARNING}: [CalculusPrinter] is not threadsafe.  Only one thread may be
    using it at any given time.
 *)
@@ -13,7 +13,7 @@ open Format
 
 
 (**/**)
-(** The number of spaces used to indent the second and following lines of a 
+(** The number of spaces used to indent the second and following lines of a
     term *)
 let line_indent = ref 2;
 
@@ -50,13 +50,13 @@ let rec dump (stringifier: 'a -> string) (thing:'a): unit =
 
 (**
    Dump a list of elements to the formatter.
-   @param default          (optional) The string to dump if [l] is empty 
+   @param default          (optional) The string to dump if [l] is empty
                            (default: "")
    @param format_element   The function for formatting elements of the list
    @param sep              The string to separate elements of the list by
    @param l                The list to dump
 *)
-let rec format_list ?(default = "") (format_element:'a -> unit) (sep:string) 
+let rec format_list ?(default = "") (format_element:'a -> unit) (sep:string)
                     (l:'a list): unit =
    if l = [] then !fmt.string default
    else (
@@ -74,24 +74,24 @@ let rec format_list ?(default = "") (format_element:'a -> unit) (sep:string)
 let rec format_value (v:value_t) =
    !fmt.bopen 0;
    begin match v with
-      | ValueRing.Sum(sl)  -> 
+      | ValueRing.Sum(sl)  ->
          !fmt.string "(";
          format_list format_value " +" ~default:"0" sl;
          !fmt.string ")"
-         
-      | ValueRing.Prod(pl) -> 
+
+      | ValueRing.Prod(pl) ->
          !fmt.string "(";
          format_list format_value " *" ~default:"1" pl;
          !fmt.string ")"
-         
-      | ValueRing.Neg(element) -> 
+
+      | ValueRing.Neg(element) ->
          !fmt.string "(";
          format_list format_value " *" [(Arithmetic.mk_int (-1)); element];
          !fmt.string ")"
-         
-      | ValueRing.Val(AConst(_)) | ValueRing.Val(AVar(_)) -> 
+
+      | ValueRing.Val(AConst(_)) | ValueRing.Val(AVar(_)) ->
          !fmt.string (string_of_value v)
-         
+
       | ValueRing.Val(AFn(fname, fargs, ftype)) ->
          !fmt.string "[";
          !fmt.string fname;
@@ -102,7 +102,7 @@ let rec format_value (v:value_t) =
          format_list format_value "," fargs;
          !fmt.bclose ();
          !fmt.string ")";
-         
+
    end;
    !fmt.bclose ();
 ;;
@@ -111,20 +111,20 @@ let rec format_value (v:value_t) =
    Dump a Calculus expression to the formatter
    @param expr   The Calculus expression to dump
 *)
-let rec format_expr ?(show_type = false) (expr:expr_t) = 
+let rec format_expr ?(show_type = false) (expr:expr_t) =
    !fmt.bopen 0;
    begin match expr with
-      | CalcRing.Sum(sl)  -> 
+      | CalcRing.Sum(sl)  ->
          !fmt.string "(";
          format_list format_expr " +" ~default:"0" sl;
          !fmt.string ")"
-         
-      | CalcRing.Prod(pl) -> 
+
+      | CalcRing.Prod(pl) ->
          !fmt.string "(";
          format_list format_expr " *" ~default:"1" pl;
          !fmt.string ")"
-         
-      | CalcRing.Neg(element) -> 
+
+      | CalcRing.Neg(element) ->
          !fmt.string "(";
          format_list format_expr " *"
                      [  Calculus.mk_value (Arithmetic.mk_int (-1));
@@ -133,7 +133,7 @@ let rec format_expr ?(show_type = false) (expr:expr_t) =
 
       | CalcRing.Val(Value(ValueRing.Val(AVar(_) | AConst(_)) as v)) ->
          format_value v;
-      
+
       | CalcRing.Val(Value(v)) ->
          !fmt.string "{";
          format_value v;
@@ -149,7 +149,7 @@ let rec format_expr ?(show_type = false) (expr:expr_t) =
          !fmt.break 0 !line_indent;
          format_expr subexp;
          !fmt.string ")"
-      
+
       | CalcRing.Val(Rel(reln, relv)) ->
          !fmt.string reln;
          !fmt.string "(";
@@ -157,7 +157,7 @@ let rec format_expr ?(show_type = false) (expr:expr_t) =
          format_list (dump string_of_var) "," relv;
          !fmt.bclose ();
          !fmt.string ")"
-         
+
       | CalcRing.Val(External(extn, ivars, ovars, extt, extivc)) ->
          !fmt.string extn;
          if(extt <> TFloat) then (
@@ -179,12 +179,12 @@ let rec format_expr ?(show_type = false) (expr:expr_t) =
          !fmt.string "]";
          begin match extivc with
             | None -> ()
-            | Some(ivcexpr) -> 
+            | Some(ivcexpr) ->
                !fmt.string ":(";
                format_expr ivcexpr;
                !fmt.string ")"
          end
-      
+
       | CalcRing.Val(Cmp(cmpop, lhs, rhs)) ->
          !fmt.string "{";
          format_value lhs;
@@ -193,7 +193,7 @@ let rec format_expr ?(show_type = false) (expr:expr_t) =
          !fmt.space ();
          format_value rhs;
          !fmt.string "}";
-         
+
       | CalcRing.Val(Lift(v, subexp)) ->
          !fmt.string "(";
          !fmt.string (string_of_var v);
@@ -209,7 +209,7 @@ let rec format_expr ?(show_type = false) (expr:expr_t) =
          format_expr subexp;
          !fmt.string ")";
 (***** END EXISTS HACK *****)
-      
+
    end;
    !fmt.bclose();;
 
@@ -218,7 +218,7 @@ let rec format_expr ?(show_type = false) (expr:expr_t) =
 (******************************* API **************************)
 
 (**
-   Generate the pretty-printed (Calculusparser-compatible) representation of a 
+   Generate the pretty-printed (Calculusparser-compatible) representation of a
    value expression.
    @param v    A value expression
    @return     The pretty-printed string representation of [v]
@@ -229,7 +229,7 @@ let string_of_value v =
 ;;
 
 (**
-   Generate the pretty-printed (Calculusparser-compatible) representation of a 
+   Generate the pretty-printed (Calculusparser-compatible) representation of a
    Calculus expression.
    @param e    A Calculus expression
    @return     The pretty-printed string representation of [e]

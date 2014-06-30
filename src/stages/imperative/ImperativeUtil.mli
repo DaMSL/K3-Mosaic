@@ -7,14 +7,14 @@ sig
   open ASTImport.AST
 
 	(* AST accessors *)
-	val id_of_expr : 'a expr_t -> int 
+	val id_of_expr : 'a expr_t -> int
 	val tag_of_expr : 'a expr_t -> expr_tag_t
 	val meta_of_expr : 'a expr_t -> 'a
-	
-	val id_of_cmd : 'a cmd_t -> int 
+
+	val id_of_cmd : 'a cmd_t -> int
 	val tag_of_cmd : 'a cmd_t -> 'a cmd_tag_t
 	val meta_of_cmd : 'a cmd_t -> 'a
-	
+
 	(* Stringification *)
   val print_type : type_t -> unit
   val print_decl : ('a -> string) -> 'a decl_t -> unit
@@ -29,7 +29,7 @@ sig
 	val string_of_cmd: ('a -> string) -> 'a cmd_t -> string
   val string_of_component : ('a -> string) -> 'a component_t -> string
 	val string_of_program: ('a -> string) -> 'a program_t -> string
-	
+
 	val var_ids_of_expr : 'a expr_t -> id_t list
 	val var_ids_of_decl : 'a decl_t -> id_t list
 	val var_ids_of_cmd : 'a cmd_t -> id_t list
@@ -38,16 +38,16 @@ sig
   val gen_expr_sym : unit -> int
   val gen_cmd_sym  : unit -> int
   val gen_flow_sym : unit -> int
-  
+
   val gen_expr_name : string -> string
-  val gen_cmd_name  : string -> string   
+  val gen_cmd_name  : string -> string
   val gen_flow_name : string -> string
 
   (* Typing helpers *)
   val k3_type  : type_t -> K3.AST.type_t
   val vi_type  : type_t -> K3.AST.value_type_t
   val bi_type  : type_t -> K3.AST.base_type_t
-  val ib_type  : K3.AST.base_type_t -> type_t 
+  val ib_type  : K3.AST.base_type_t -> type_t
 	val iv_type  : K3.AST.value_type_t -> type_t
   val i_type   : K3.AST.type_t -> type_t
 	val unit_t   : type_t
@@ -72,7 +72,7 @@ sig
   val mk_tuple : 'a -> 'a expr_t list -> 'a expr_t
   val mk_op    : 'a -> op_t -> 'a expr_t list -> 'a expr_t
   val mk_fn    : 'a -> fn_t -> 'a expr_t list -> 'a expr_t
- 
+
   (* Command constructors *)
   val mk_assign : 'a -> id_t -> 'a expr_t -> 'a cmd_t
   val mk_decl   : 'a -> 'a decl_t -> 'a cmd_t
@@ -85,7 +85,7 @@ sig
 
   (* Higher-level constructors *)
   val call_proc : (unit -> 'a) -> id_t -> (type_t * 'a) expr_t list -> (type_t * 'a) cmd_t
-  
+
   val invoke_method :
     'a -> id_t -> 'a expr_t -> 'a expr_t list -> 'a expr_t
 

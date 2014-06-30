@@ -265,7 +265,7 @@ let parse_test_file params = match !(params.test_mode) with
 let typed_program_with_globals p =
   let p' =
     K3Global.add_globals cmd_line_params.peers p in
-  try 
+  try
     let p, env, trig_env, _ = type_bindings_of_program p' in
     p, (env, trig_env)
   with TypeError (a,b,c) -> handle_type_error (K3Data p') (a,b,c)
@@ -296,7 +296,7 @@ let typed_program_test_with_globals prog_test =
 let typed_program p =
   let p, envs = typed_program_with_globals p in
   K3Global.remove_globals cmd_line_params.peers p, envs
-      
+
 
 (* don't include globals *)
 let typed_program_test prog_test =
@@ -382,7 +382,7 @@ let print_k3_test_program ~lambda_ret = function
         if not @: null cmd_line_params.trace_files then
           (* we only care about the code part *)
           let tests_by_map = List.map (fun (nm, (code, empty)) ->
-            nm, code) tests_by_map 
+            nm, code) tests_by_map
           in
           let role_s, maplist =
             let trace_file = at cmd_line_params.trace_files idx in
@@ -416,20 +416,20 @@ let print_k3_test_program ~lambda_ret = function
           let p' = drop_roles orig_p @ parse_k3_prog role_s in
           (* run the interpreter on our code *)
           let params = default_cmd_line_params () in
-          let _, (_, (env, _)) = 
+          let _, (_, (env, _)) =
             hd @: interpret_k3 params p' in (* assume one node *)
           (* match the maps with their values *)
-          let tests_vals = 
+          let tests_vals =
             List.map (fun (name, (exp_code, empty)) ->
-              let v = 
+              let v =
                 try !(IdMap.find name env)
                 with Not_found -> failwith "Missing map in environment"
               in
               (* deal with empty sets. In these cases, we don't have the types *)
-              let res = match v with 
+              let res = match v with
               | VSet [] -> empty
               | _       -> expr_of_value 0 v
-              in 
+              in
               exp_code, InlineExpr res
             ) tests_by_map
           in
@@ -565,7 +565,7 @@ let process_inputs params =
 let transform params ds =
   let proc_fn input = match params.out_lang, input with
    | (AstK3Dist | K3Dist | K3DistTest), K3DistData(p, proginfo, _) ->
-       let p' = transform_to_k3_dist 
+       let p' = transform_to_k3_dist
                   params.force_correctives params.partition_map p proginfo in
        K3DistData(p', proginfo, p)
    | (AstK3Dist | K3Dist | K3DistTest), _ ->

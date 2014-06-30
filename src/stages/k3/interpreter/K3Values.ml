@@ -13,14 +13,14 @@ exception RuntimeError of int * string
 module IdMap = Map.Make(struct type t = id_t let compare = String.compare end)
 
 (* add to the id_map from a list *)
-let add_from_list map l = 
+let add_from_list map l =
   List.fold_left (fun acc (k, v) ->
     IdMap.add k v acc
   ) map l
 
 let map_modify f key map =
-  let oldval = 
-    try 
+  let oldval =
+    try
       Some(IdMap.find key map)
     with Not_found -> None
   in
@@ -55,7 +55,7 @@ and value_t
     | VIndirect of value_t ref
 
     (* arguments to a function/trigger *)
-and frame_t = (id_t * value_t) list 
+and frame_t = (id_t * value_t) list
 
 (* mutable environment, frame environment *)
 and env_t = (value_t ref) IdMap.t * (frame_t list)
@@ -71,7 +71,7 @@ type program_env_t = trigger_env_t * env_t
 let unwrap opt = match opt with Some v -> v | _ -> failwith "invalid option unwrap"
 
 (* Value comparison. *)
-let rec equal_values a b = 
+let rec equal_values a b =
   let sort x = List.sort compare x in
   match a,b with
   | (VSet l | VBag l), (VSet r | VBag r) ->
@@ -84,7 +84,7 @@ let rec equal_values a b =
   | a,b -> a = b
 
 (* Value sorting *)
-let rec sort_values v = 
+let rec sort_values v =
   let sort x = List.sort compare x in
   match v with
   | VSet l          -> VSet(sort @: List.map sort_values l)
@@ -103,14 +103,14 @@ let rec repr_of_value v = match v with
 	| VByte c   -> "VByte("^ string_of_int (Char.code c)^")"
 	| VString s -> "VString("^s^")"
 	| VTuple vs -> "VTuple("^ String.concat ", " (List.map repr_of_value vs)^")"
-	
+
 	| VOption vopt ->
 	  "VOption("^(if vopt = None then "None" else repr_of_value (unwrap vopt))^")"
-	
+
 	| VSet vs  -> "VSet(["^ String.concat "; " (List.map repr_of_value vs)^"])"
 	| VBag vs  -> "VBag(["^ String.concat "; " (List.map repr_of_value vs)^"])"
 	| VList vs -> "VList(["^ String.concat "; " (List.map repr_of_value vs)^"])"
-	
+
 	| VFunction (a, b) -> "VFunction("^ string_of_arg a ^" -> "^(string_of_expr b)^")"
   | VForeignFunction (a, _) -> "VForeignFunction("^ string_of_arg a^")"
 	| VAddress (ip,port) -> "VAddress("^ip^":"^ string_of_int port^")"
@@ -163,21 +163,21 @@ let print_binding (id,v) = ob(); ps (id^" = "); pc(); print_value v; cb(); fnl()
 
 (* for a map structure *)
 let print_binding_m id v = ob(); ps (id^" = "); pc(); print_value v; cb(); fnl()
- 
+
 let print_frame frame = List.iter print_binding frame
-  
+
 let print_env skip_functions (globals, (frames:frame_t list)) =
-  let filter_m e = IdMap.filter 
+  let filter_m e = IdMap.filter
     (fun _ -> function
       | VFunction _        -> false
       | VForeignFunction _ -> false
-      | _                  -> true) 
+      | _                  -> true)
     e in
-  let filter_l l = List.filter 
+  let filter_l l = List.filter
     (function
       | _, VFunction _        -> false
       | _, VForeignFunction _ -> false
-      | _                     -> true) 
+      | _                     -> true)
     l in
   let len l = string_of_int (List.length l) in
   let len_m e = string_of_int @: map_length e in
@@ -201,7 +201,7 @@ let print_program_env (trigger_env, val_env) =
 
 let old_trig_env, old_val_env = ref [], ref []
 
-let string_of_env ?(skip_functions=true) (env:env_t) = 
+let string_of_env ?(skip_functions=true) (env:env_t) =
   wrap_formatter (fun () -> print_env skip_functions env)
 
 let string_of_program_env env = wrap_formatter (fun () -> print_program_env env)
@@ -226,12 +226,12 @@ let rec value_of_const_expr e = match tag_of_expr e with
         begin match tag_of_expr @: decompose_neg e with
         | Const(CInt i)   -> VInt (-i)
         | Const(CFloat f) -> VFloat (-.f)
-        | _ -> failwith @: "Negative can only have int or float" 
+        | _ -> failwith @: "Negative can only have int or float"
         end
     | t -> failwith @: "value is too complex: "^soi @: Obj.tag @: Obj.repr t
 
 
-let rec type_of_value uuid value = 
+let rec type_of_value uuid value =
   let typ_fst = function
     | []   -> t_unit (* make up because we just don't know *)
     | v::_ -> type_of_value uuid v
@@ -252,7 +252,7 @@ let rec type_of_value uuid value =
   | VSet vs -> wrap_tset @: typ_fst vs
   | VList vs -> wrap_tlist @: typ_fst vs
   | VBag vs -> wrap_tbag @: typ_fst vs
-  | VFunction _ | VForeignFunction _ -> raise (RuntimeError (uuid, 
+  | VFunction _ | VForeignFunction _ -> raise (RuntimeError (uuid,
       "type_of_value: cannot apply to function"))
   | VIndirect ind -> type_of_value uuid !ind
 
@@ -269,19 +269,19 @@ let rec expr_of_value uuid value = match value with
   | VOption(None) -> mk_nothing t_unknown
   | VOption(Some v) -> mk_just @: expr_of_value uuid v
   | VTuple vs -> mk_tuple @: List.map (expr_of_value uuid) vs
-  | VSet vs | VList vs | VBag vs -> 
+  | VSet vs | VList vs | VBag vs ->
      let l = List.map (expr_of_value uuid) vs in
      k3_container_of_list (type_of_value uuid value) l
-  | VFunction _ | VForeignFunction _ -> raise (RuntimeError (uuid, 
+  | VFunction _ | VForeignFunction _ -> raise (RuntimeError (uuid,
       "expr_of_value: cannot apply to function"))
   | VIndirect ind -> mk_ind @: expr_of_value uuid !ind
 
 (* Value comparison. Returns a partial list of inequalities if there are any *)
-let find_inequality a b = 
+let find_inequality a b =
   let count = ref 0 in
   let sort x = List.sort compare x in
   let rec loop a b =
-    let collect l r = 
+    let collect l r =
       try List.fold_left2 (fun acc lval rval ->
         let unequal = loop lval rval in
         acc@unequal

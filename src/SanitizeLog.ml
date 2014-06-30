@@ -3,8 +3,8 @@ open Str
 
 let load_log file = read_file_lines file
 
-let r_trace_consuming = Str.regexp ".*TRACE -.*consuming" 
-let r_trace_arrows = Str.regexp ".*TRACE - >>>>.*" 
+let r_trace_consuming = Str.regexp ".*TRACE -.*consuming"
+let r_trace_arrows = Str.regexp ".*TRACE - >>>>.*"
 
 let pre_sanitize log =
   let _, lines =
@@ -24,7 +24,7 @@ let group_triggers log =
   let r_send = regexp ".*DEBUG - send.*" in
   let _, trigs =
     List.fold_left (fun (seen_send, acc_groups) line ->
-        let add_to_group () = match acc_groups with 
+        let add_to_group () = match acc_groups with
           | []    -> []             (* no group. don't add *)
           | x::xs -> (line::x)::xs
         in
@@ -33,7 +33,7 @@ let group_triggers log =
           false, add_to_group ()
         else if string_match r_trig line 0 then    (* start a new group *)
           false, [line]::acc_groups
-        else if string_match r_send line 0 && not seen_send then 
+        else if string_match r_send line 0 && not seen_send then
           true, [line]::acc_groups
         else seen_send, add_to_group ())
       (false, [])
@@ -80,7 +80,7 @@ let check_unwanted unwanted line =
 let remove_unwanted trig =
   let r_equals = regexp "[^=]*=.*" in
   let r_trig = regexp ".*Trigger.*" in (* remove all before trig *)
-  let _, _, lines = 
+  let _, _, lines =
     List.fold_left (fun (remove, after_trig, acc) line ->
       if string_match r_trig line 0 then remove, true, line::acc
       else if not after_trig then remove, false, acc (* skip anything before trig *)
@@ -109,10 +109,10 @@ let clean_up_headings trig =
   (* accumulate sends over multiple lines *)
   let sends_s = List.rev @:
     try snd @:
-      List.fold_left (fun (in_send, acc_sends) line -> 
+      List.fold_left (fun (in_send, acc_sends) line ->
         if string_match send_r line 0 then (true, line::acc_sends)
         else if string_match trig_r line 0 then raise @: Stop acc_sends
-        else if in_send then match acc_sends with 
+        else if in_send then match acc_sends with
           | []    -> true, [line]
           | x::xs -> true, (x^line)::xs
         else failwith "Error in clean_up_headings: no trigger"
@@ -121,7 +121,7 @@ let clean_up_headings trig =
   in
   let r_hyphen = regexp " - " in
   let sends_s = List.map (fun line ->
-      at (split r_hyphen line) 1) 
+      at (split r_hyphen line) 1)
     sends_s in
   let send_s = match sends_s with [] -> []
       | _ -> ["send_msgs = "^String.concat "; " sends_s]
@@ -136,14 +136,14 @@ let clean_up_headings trig =
       let trig_line = [Format.sprintf "%s, %s %s:" vid_s addr_s trig_s] in
       send_s@trig_line@acc
     else line::acc
-  ) [] trig 
+  ) [] trig
 
-let do_per_trigger log = 
+let do_per_trigger log =
   List.map (remove_unwanted |- clean_up_headings) log
 
 let convert_to_db_format log_name (idx,trig) =
   let r_sp_begin = regexp "^ +\\([^ ].*\\)$" in  (* spaces followed by anything *)
-  let drop_spaces s = 
+  let drop_spaces s =
     if r_match r_sp_begin s then
       Str.replace_first r_sp_begin "\\1" s
     else s
@@ -151,7 +151,7 @@ let convert_to_db_format log_name (idx,trig) =
   let r_eq_line = regexp ".+ =.*" in
   let trig_nm = hd trig in
   (* join map lines together *)
-  let trig = 
+  let trig =
     List.fold_left (fun trig_acc str ->
       (* check for a new line *)
       if string_match r_eq_line str 0 then str::trig_acc
@@ -180,7 +180,7 @@ let string_of_log log =
 type action = Clean | ToDb of string | Events of event_action
 
 (* what to do in case of event output *)
-and event_action = Plain | Strip | StripSort 
+and event_action = Plain | Strip | StripSort
 
 let event_action_of_string = function
   | "plain" -> Plain
@@ -224,10 +224,10 @@ let main () =
       let filtered = filter_map (fun trig ->
         let acc, select =
           List.fold_left (fun ((trig,args),select) line ->
-            if Str.string_match r_trig_add line 0 then 
+            if Str.string_match r_trig_add line 0 then
               let trig' = "+"^Str.matched_group 1 line in
               (trig',args), true
-            else if Str.string_match r_trig_del line 0 then 
+            else if Str.string_match r_trig_del line 0 then
               let trig' = "-"^Str.matched_group 1 line in
               (trig',args), true
             else if Str.string_match r_args line 0 then
@@ -256,7 +256,7 @@ let main () =
         else x1 - x2
       ) d
       in
-      let data = 
+      let data =
         match event_type with
         | Plain -> filtered
         | Strip -> snd_many @: split_data filtered (* remove vid *)

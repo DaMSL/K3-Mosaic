@@ -6,7 +6,7 @@ open K3.AST
 open K3.Annotation
 
 (* AST accessors *)
-let id_of_expr e = fst (fst_data e) 
+let id_of_expr e = fst (fst_data e)
 let tag_of_expr e = snd (fst_data e)
 let meta_of_expr e = snd_data e
 
@@ -25,7 +25,7 @@ let rec vars_of_arg arg =
     | AVar(v,_) -> [v]
     | AMaybe(a') -> vars_of_arg a'
     | ATuple(vt_l) -> List.concat (List.map vars_of_arg vt_l)
-  
+
 let rec typed_vars_of_arg arg =
     match arg with
     | AIgnored -> []
@@ -37,11 +37,11 @@ let id_of_var e = match tag_of_expr e with
   | Var id -> id | _ -> failwith "invalid variable"
 
 let tuple_type_of_args args_t =
-	if List.length args_t = 1 then TValue (List.hd args_t) 
+	if List.length args_t = 1 then TValue (List.hd args_t)
 	else TValue (TIsolated(TImmutable(TTuple(args_t),[])))
 
 let tuple_type_of_arg arg =
-  tuple_type_of_args (List.map snd (typed_vars_of_arg arg)) 
+  tuple_type_of_args (List.map snd (typed_vars_of_arg arg))
 
 (* Predicates *)
 let is_const e = match tag_of_expr e with | Const _ -> true | _ -> false
@@ -97,14 +97,14 @@ let signature_of_type t =
     | TIsolated   mt -> tag d "I" [sig_mt (d+1) mt]
     | TContained  mt -> tag d "C" [sig_mt (d+1) mt]
   and sig_t d t = match t with
-	  | TFunction (arg_t,ret_t) -> tag d "F" [sig_vt (d+1) arg_t; sig_vt (d+1) ret_t] 
+	  | TFunction (arg_t,ret_t) -> tag d "F" [sig_vt (d+1) arg_t; sig_vt (d+1) ret_t]
 	  | TValue vt -> tag d "V" [sig_vt (d+1) vt]
   in sig_t 0 t
 
 (* Reconstruct a type from a signature, with empty annotations. *)
 let type_of_signature s =
   let string_of_char c = String.make 1 c in
-  let (>>) f g = fun a -> g (f a) in 
+  let (>>) f g = fun a -> g (f a) in
   let (>>=) f g = fun a -> let b,c = f a in b, (g c) in
   let (>>>) f g = fun h a -> let b,c = f a in let d,e = g b in d, (h c e) in
   let n i t = i+1, t in
@@ -125,13 +125,13 @@ let type_of_signature s =
     | 'f' -> n i TFloat
     | 's' -> n i TString
     | 'o' -> ((vt_sig s) >>= (fun vt -> TMaybe(vt))) (i+1)
-    | 't' -> 
+    | 't' ->
       let nf = int_of_string (string_of_char s.[i+1])
       in ((vt_sig_l s (i+2) nf) >> (fun (i,vtl) -> i, TTuple(vtl))) []
 
     | 'c' -> ((ct_sig s) >>> (vt_sig s)) (fun ct et -> TCollection(ct,et)) (i+1)
     | 'a' -> n i TAddress
-    | 'h' -> ((bt_sig s) >>= (fun bt -> TTarget(bt))) (i+1) 
+    | 'h' -> ((bt_sig s) >>= (fun bt -> TTarget(bt))) (i+1)
     | _ -> failwith "invalid tag for base type"
 
   and mt_sig s i = match s.[i] with
@@ -144,12 +144,12 @@ let type_of_signature s =
     | 'C' -> ((mt_sig s) >>= (fun mt -> TContained(mt))) (i+1)
     | _ -> failwith "invalid tag for value type"
 
-  and vt_sig_l s i n acc = 
+  and vt_sig_l s i n acc =
     if n = 0 then i, acc
-    else ((vt_sig s) >> (fun (ni,nt) -> vt_sig_l s (n-1) ni (acc@[nt]))) i 
-  
+    else ((vt_sig s) >> (fun (ni,nt) -> vt_sig_l s (n-1) ni (acc@[nt]))) i
+
   and t_sig s i = match s.[i] with
-    | 'F' -> 
+    | 'F' ->
       ((vt_sig s) >>> (vt_sig s)) (fun arg_t ret_t -> TFunction(arg_t,ret_t)) (i+1)
 
     | 'V' -> ((vt_sig s) >>= (fun vt -> TValue(vt))) (i+1)
@@ -165,73 +165,73 @@ let is_peek e = match tag_of_expr e with Peek -> true | _ -> false
 (* AST destructors *)
 let nth e i = List.nth (sub_tree e) i
 
-let decompose_add e = match tag_of_expr e with 
+let decompose_add e = match tag_of_expr e with
   Add -> (nth e 0, nth e 1) | _ -> failwith "not Add"
-let decompose_aggregate e = match tag_of_expr e with 
+let decompose_aggregate e = match tag_of_expr e with
   Aggregate -> (nth e 0, nth e 1, nth e 2) | _ -> failwith "not Aggregate"
 let decompose_apply e = match tag_of_expr e with
   Apply -> (nth e 0, nth e 1) | _ -> failwith "not Apply"
-let decompose_assign e = match tag_of_expr e with 
+let decompose_assign e = match tag_of_expr e with
   Assign -> (nth e 0, nth e 1) | _ -> failwith "not Assign"
-let decompose_block e = match tag_of_expr e with 
+let decompose_block e = match tag_of_expr e with
   Block -> sub_tree e | _ -> failwith "not a Block"
-let decompose_combine e = match tag_of_expr e with 
+let decompose_combine e = match tag_of_expr e with
   Combine -> (nth e 0, nth e 1) | _ -> failwith "not a Combine"
-let decompose_const e = match tag_of_expr e with 
+let decompose_const e = match tag_of_expr e with
   Const c -> c | _ -> failwith "not a Combine"
-let decompose_delete e = match tag_of_expr e with 
+let decompose_delete e = match tag_of_expr e with
   Delete -> (nth e 0, nth e 1) | _ -> failwith "not a Delete"
-let decompose_deref e = match tag_of_expr e with 
+let decompose_deref e = match tag_of_expr e with
   Deref -> (nth e 0) | _ -> failwith "not a Deref"
-let decompose_eq e = match tag_of_expr e with 
+let decompose_eq e = match tag_of_expr e with
   Eq -> (nth e 0, nth e 1) | _ -> failwith "not an Equals"
-let decompose_filter_map e = match tag_of_expr e with 
+let decompose_filter_map e = match tag_of_expr e with
   FilterMap -> (nth e 0, nth e 1, nth e 2) | _ -> failwith "not a FilterMap"
-let decompose_flatten e = match tag_of_expr e with 
+let decompose_flatten e = match tag_of_expr e with
   Flatten -> nth e 0 | _ -> failwith "not a Flatten"
-let decompose_gbagg e = match tag_of_expr e with 
-  GroupByAggregate -> (nth e 0, nth e 1, nth e 2, nth e 3) 
+let decompose_gbagg e = match tag_of_expr e with
+  GroupByAggregate -> (nth e 0, nth e 1, nth e 2, nth e 3)
   | _ -> failwith "not a GroupByAggregte"
-let decompose_ifthenelse e = match tag_of_expr e with 
+let decompose_ifthenelse e = match tag_of_expr e with
   IfThenElse -> (nth e 0, nth e 1, nth e 2) | _ -> failwith "not a IfThenElse"
-let decompose_insert e = match tag_of_expr e with 
+let decompose_insert e = match tag_of_expr e with
   Insert -> (nth e 0, nth e 1) | _ -> failwith "not a Insert"
-let decompose_iterate e = match tag_of_expr e with 
+let decompose_iterate e = match tag_of_expr e with
   Iterate -> (nth e 0, nth e 1) | _ -> failwith "not a Iterate"
 let decompose_just e = match tag_of_expr e with
   Just -> nth e 0 | _ -> failwith "not a Just"
-let decompose_lambda e = match tag_of_expr e with 
+let decompose_lambda e = match tag_of_expr e with
   Lambda arg -> arg, nth e 0 | _ -> failwith "not a Lambda"
-let decompose_leq e = match tag_of_expr e with 
+let decompose_leq e = match tag_of_expr e with
   Leq -> (nth e 0, nth e 1) | _ -> failwith "not a Leq"
-let decompose_lt e = match tag_of_expr e with 
+let decompose_lt e = match tag_of_expr e with
   Lt -> (nth e 0, nth e 1) | _ -> failwith "not a Lt"
-let decompose_map e = match tag_of_expr e with 
+let decompose_map e = match tag_of_expr e with
   Map -> (nth e 0, nth e 1) | _ -> failwith "not a Map"
-let decompose_mult e = match tag_of_expr e with 
+let decompose_mult e = match tag_of_expr e with
   Mult -> (nth e 0, nth e 1) | _ -> failwith "not a Mult"
-let decompose_neg e = match tag_of_expr e with 
+let decompose_neg e = match tag_of_expr e with
   Neg -> nth e 0 | _ -> failwith "not a Neg"
-let decompose_neq e = match tag_of_expr e with 
+let decompose_neq e = match tag_of_expr e with
   Neq -> (nth e 0, nth e 1) | _ -> failwith "not a Neq"
-let decompose_peek e = match tag_of_expr e with 
+let decompose_peek e = match tag_of_expr e with
   Peek -> nth e 0 | _ -> failwith "not a Peek"
 let decompose_range e = match tag_of_expr e with
   Range _ -> (nth e 0, nth e 1, nth e 2) | _ -> failwith "not a Range"
-let decompose_send e = 
+let decompose_send e =
   let rec rest i acc = if i = 1 then acc else rest (i-1) ((nth e i)::acc)
-  in match tag_of_expr e with 
-  Send -> (nth e 0, nth e 1, rest ((List.length (sub_tree e))-1) []) 
+  in match tag_of_expr e with
+  Send -> (nth e 0, nth e 1, rest ((List.length (sub_tree e))-1) [])
   | _ -> failwith "not a Send"
 let decompose_singleton e = match tag_of_expr e with
   Singleton vt -> nth e 0 | _ -> failwith "not a Singleton"
-let decompose_slice e = match tag_of_expr e with 
+let decompose_slice e = match tag_of_expr e with
   Slice -> (nth e 0, nth e 1) | _ -> failwith "not a Slice"
-let decompose_sort e = match tag_of_expr e with 
+let decompose_sort e = match tag_of_expr e with
   Sort -> (nth e 0, nth e 1) | _ -> failwith "not a Sort"
-let decompose_tuple e = match tag_of_expr e with 
+let decompose_tuple e = match tag_of_expr e with
   Tuple -> sub_tree e  | _ -> failwith "not a Tuple"
-let decompose_update e = match tag_of_expr e with 
+let decompose_update e = match tag_of_expr e with
   Update -> (nth e 0, nth e 1, nth e 2) | _ -> failwith "not an Update"
 let decompose_indirect e = match tag_of_expr e with
   Indirect -> nth e 0 | _ -> failwith "not an Indirect"
@@ -263,10 +263,10 @@ let global_values_of_program p = List.filter is_global_val p
 let global_functions_of_program p = List.filter is_global_fn p
 let flows_of_program p   = List.filter is_flow p
 
-let global_of_program id p = 
+let global_of_program id p =
   match_declaration id (fun (d,a) -> match d with
       | Global (n,_,_) when n = id -> true
-      | _ -> false 
+      | _ -> false
     ) (globals_of_program p)
 
 (* Flow program accesors *)
@@ -275,30 +275,30 @@ let is_sink (fs,_)      = match fs with Sink _ -> true | _ -> false
 let is_generator (fs,_) = match fs with Source(Code _) -> true | _ -> false
 let is_trigger (fs,_)   = match fs with Sink(Code _) -> true | _ -> false
 
-let endpoints_of_flow match_f fp = 
-  let endpoints = List.filter match_f fp in 
+let endpoints_of_flow match_f fp =
+  let endpoints = List.filter match_f fp in
   let unwrap (fs,_) = match fs with Source ep -> [ep] | Sink ep -> [ep] | _ -> []
-  in List.flatten (List.map unwrap endpoints) 
+  in List.flatten (List.map unwrap endpoints)
 
-let endpoints_of_program match_f p = 
+let endpoints_of_program match_f p =
   let flow_program (d,_) = match d with Flow p -> p | _ -> [] in
   let flow_statements = List.flatten (List.map flow_program (flows_of_program p))
   in endpoints_of_flow match_f flow_statements
 
 let sources_of_flow p    = endpoints_of_flow is_source p
-let sinks_of_flow p      = endpoints_of_flow is_sink p 
+let sinks_of_flow p      = endpoints_of_flow is_sink p
 let generators_of_flow p = endpoints_of_flow is_generator p
-let triggers_of_flow p   = endpoints_of_flow is_trigger p 
+let triggers_of_flow p   = endpoints_of_flow is_trigger p
 
 let sources_of_program p    = endpoints_of_program is_source p
-let sinks_of_program p      = endpoints_of_program is_sink p 
+let sinks_of_program p      = endpoints_of_program is_sink p
 let generators_of_program p = endpoints_of_program is_generator p
-let triggers_of_program p   = endpoints_of_program is_trigger p 
+let triggers_of_program p   = endpoints_of_program is_trigger p
 
 let trigger_of_program id p =
   match_declaration id (fun fs -> match fs with
       | Code (n,_,_,_) when n = id -> true
-      | _ -> false 
+      | _ -> false
     ) (triggers_of_program p)
 
 let id_of_code = function
@@ -336,7 +336,7 @@ let free_vars_of_expr e =
   let add_bindings env e = (vars_of_lambda e)@env in
   let not_bound_var env acc e =
     (List.flatten acc)@
-    (if is_var e && not(List.mem (id_of_var e) env) then [e] else []) 
+    (if is_var e && not(List.mem (id_of_var e) env) then [e] else [])
   in uniq (fold_tree add_bindings not_bound_var [] [] e)
 
 (* Returns whether e2 is directly contained in e1 *)
@@ -354,7 +354,7 @@ let substitute_expr subs e =
     let vars = vars_of_lambda e in
     if vars = [] then subs
     else
-      List.fold_left (fun acc (src, dest) -> 
+      List.fold_left (fun acc (src, dest) ->
         if is_var src && List.mem (id_of_var src) vars then acc
         else acc@[src,dest]) [] subs
   in
@@ -364,11 +364,11 @@ let substitute_expr subs e =
     in
     let new_e = recompose_tree e parts in
     if List.mem_assoc new_e subs then
-      let sub_e = List.assoc new_e subs 
+      let sub_e = List.assoc new_e subs
       in (sub_e, sub_ids@[id_of_expr new_e, id_of_expr sub_e])
     else (new_e, sub_ids)
   in fold_tree remove_var sub_aux subs (e, []) e
-  
+
 (* Linearizes (i.e. flattens) an expression tree to its constituent
  * subexpressions, in an order given by its first argument.
  * The first argument linearizes a single node and is of the form:
@@ -386,41 +386,41 @@ let renumber_expr_ids ~start (exp:K3.AST.expr_t) =
     mk_tree @: (((i, tag_of_expr t), meta_of_expr t), acc_children)
   in
   !num_ref, fold_tree1 (fun _ _ -> num_ref := !num_ref + 1; !num_ref) modify 0 exp
-  
+
 (* renumber ids for a whole program *)
 let renumber_program_ids ?(start=0) prog =
-  let handle_code num x y z e = 
+  let handle_code num x y z e =
     let num', e' = renumber_expr_ids e ~start:num in
-    num', Code(x,y,z,e') 
+    num', Code(x,y,z,e')
   in
   let handle_flow num = function
-    | Source(Code(x,y,z,e)),a -> 
+    | Source(Code(x,y,z,e)),a ->
         let num', code = handle_code num x y z e in
         num', (Source code, a)
-    | Sink(Code(x,y,z,e)), a -> 
+    | Sink(Code(x,y,z,e)), a ->
         let num', code = handle_code num x y z e in
         num', (Sink code, a)
     | x -> num, x
-  in 
+  in
   let handle_dec num = function
-    | Global(x, y, Some e), a -> 
+    | Global(x, y, Some e), a ->
         let num', e' = renumber_expr_ids e ~start:num in
         num', (Global(x, y, Some e'), a)
-    | Flow(fs), a -> 
+    | Flow(fs), a ->
         let num', fs' = mapfold handle_flow num fs in
         num', (Flow(fs'), a)
-    | Role(id, fs),a -> 
+    | Role(id, fs),a ->
         let num', fs' = mapfold handle_flow num fs in
         num', (Role(id, fs'), a)
     | x -> num, x
-  in 
+  in
   mapfold handle_dec start prog
 
-let renumber_test_program_ids ?(start=0) test_p = 
+let renumber_test_program_ids ?(start=0) test_p =
   let renumber_test_list start_num l =
     mapfold (fun num (e, check_e) ->
       match check_e with
-      | FileExpr _ -> 
+      | FileExpr _ ->
           let n, e' = renumber_expr_ids ~start:num e in
           n, (e', check_e)
       | InlineExpr e2 ->
@@ -429,16 +429,16 @@ let renumber_test_program_ids ?(start=0) test_p =
           n, (e', InlineExpr e2')
     ) start_num l
   in
-  let proc p testl = 
+  let proc p testl =
     let num, p' = renumber_program_ids ~start:start p in
     let num, t_l  = renumber_test_list num testl in
     num, (p', t_l)
-  in 
+  in
   match test_p with
-  | ProgTest(p, testl) -> 
+  | ProgTest(p, testl) ->
       let n, (p', t_l) = proc p testl in
       n, ProgTest(p', t_l)
-  | NetworkTest(p, testl) -> 
+  | NetworkTest(p, testl) ->
       let n, (p', t_l) = proc p testl in
       n, NetworkTest(p', t_l)
   | _ -> failwith "can't renumber expression test"

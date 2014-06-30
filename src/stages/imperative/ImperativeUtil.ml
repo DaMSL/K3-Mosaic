@@ -25,13 +25,13 @@ open ASTImport.AST
 open Lang
 
 (* AST accessors *)
-let id_of_expr e = fst (fst_data e) 
+let id_of_expr e = fst (fst_data e)
 let tag_of_expr e = snd (fst_data e)
 let meta_of_expr e = snd_data e
 
-let id_of_cmd c = fst (fst_data c) 
+let id_of_cmd c = fst (fst_data c)
 let tag_of_cmd c = snd (fst_data c)
-let meta_of_cmd c = snd_data c 
+let meta_of_cmd c = snd_data c
 
 
 (* Pretty printing helpers *)
@@ -45,11 +45,11 @@ let lps s = lazy (ps s)
 let lazy_string_opt string_f a = match a with
   | Some b -> [lazy (string_f b)]
   | None -> []
-  
+
 (* Type and program grammar pretty printing *)
 
 let print_tree print_node tree =
-  let lazy_root = 
+  let lazy_root =
     fold_tree (fun _ _ -> ())
       (fun _ lazy_ch e -> [lazy (print_node lazy_ch e)])
       () [] tree
@@ -66,16 +66,16 @@ and     lazy_expr string_of_meta e      = lazy (print_expr string_of_meta e)
 and     lazy_cmd string_of_meta c       = lazy (print_cmd string_of_meta c)
 and     lazy_program string_of_meta p   = lazy (print_program string_of_meta p)
 
-and print_type t = 
+and print_type t =
   let ptag ?(cut=CutHint) t ch = pretty_tag_str CutHint "" t ch in
   match t with
   | TInternal it -> ptag "TInternal" [lazy (K3Printing.print_type def_c it)]
   | TTop         -> ps "TTop"
   | TNamed id    -> ptag ~cut:NoCut "TNamed" [lps id]
-  
+
   | TImpFunction (args_t, rt) ->
     ptag "TImpFunction" ((List.map lazy_type args_t)@[lazy_type rt])
-    
+
   | TExt e  -> ptag "TExt" [lazy (print_ext_type e)]
 
 and print_type_env env =
@@ -84,9 +84,9 @@ and print_type_env env =
   ps "]"; cb()
 
 and print_op op =
-  let pop t = ob(); ps t; cb() in 
+  let pop t = ob(); ps t; cb() in
   match op with
-  | Add  -> pop "Add" 
+  | Add  -> pop "Add"
   | Mult -> pop "Mult"
   | And  -> pop "And"
   | Or   -> pop "Or"
@@ -98,10 +98,10 @@ and print_op op =
   | Leq  -> pop "Leq"
   | Ternary  -> pop "Ternary"
 
-and print_decl_arg string_of_meta da = 
+and print_decl_arg string_of_meta da =
   let my_tag = pretty_tag_str CutHint "" in
   match da with
-    Constructor expr_args -> my_tag "Constructor" (List.map (lazy_expr string_of_meta) expr_args) 
+    Constructor expr_args -> my_tag "Constructor" (List.map (lazy_expr string_of_meta) expr_args)
   | Init expr -> my_tag "Init" [lazy_expr string_of_meta expr]
 
 and print_type_decl td =
@@ -111,7 +111,7 @@ and print_type_decl td =
     | TExpr t -> my_tag "TExpr" [lazy_type t]
     | TComposite t_fields -> my_tag "TComposite" [lazy (print_fields t_fields)]
     | TExtDecl d -> my_tag "TExtDecl" [lazy (print_ext_type_decl d)]
-  
+
 and print_arg arg =
   if arg = [] then ps "()"
   else ps_list CutHint (fun (id,t) -> ps (id^": "); print_type t) arg
@@ -127,9 +127,9 @@ and print_decl string_of_meta d =
   | DFn (id,a,rt,body) ->
     my_tag ~cut:CutLine "DFn"
       ([lps id; lazy_arg a; lazy_type rt]@(List.map (lazy_cmd string_of_meta) body))
-      
+
   | DClass (id, parent_opt, members) ->
-    let lazy_id = match parent_opt with 
+    let lazy_id = match parent_opt with
       | None -> [lps id] | Some(p_type) -> [lps (id^" : "); lazy_type p_type]
     in
     let m_str m = wrap_unless_empty "<" ">" (string_of_meta m) in
@@ -171,7 +171,7 @@ and print_fn_tag fn_tag lazy_children =
   | Cast t         -> my_tag "Cast" [lazy_type t]
   | Send id        -> my_tag "Send" [lps id]
   | FExt f         -> my_tag "FExt" [lazy (print_ext_fn f lazy_children)]
- 
+
 and print_expr_tag string_of_meta tag lazy_children =
   let my_tag t = pretty_tag_str CutHint "" t lazy_children in
   let ch_tag t ch = pretty_tag_str CutHint "" t ch in
@@ -197,7 +197,7 @@ and print_cmd_tag string_of_meta tag lazy_children =
   let my_tag_list = my_tag ~lb:"([" ~rb:"])" ~sep:"; " ~cut:CutLine in
   let ch_tag ?(cut=CutHint) t ch = pretty_tag_str cut "" t ch in
   match tag with
-    Assign (id, e)  -> ch_tag "Assign" [lps id; lazy_expr string_of_meta e] 
+    Assign (id, e)  -> ch_tag "Assign" [lps id; lazy_expr string_of_meta e]
   | Decl   d        -> ch_tag "Decl" [lazy_decl string_of_meta d]
   | Expr   e        -> ch_tag "Expr" [lazy_expr string_of_meta e]
 
@@ -205,7 +205,7 @@ and print_cmd_tag string_of_meta tag lazy_children =
 	  ch_tag ~cut:CutLine "IfThenElse" ([lazy_expr string_of_meta pred]@lazy_children)
 
   | Block           -> my_tag_list "Block"
-  
+
   | Foreach (id,t,e) ->
       let lazy_for_args = lazy (
         ps "("; ps id; ps " : "; print_type t;
@@ -213,7 +213,7 @@ and print_cmd_tag string_of_meta tag lazy_children =
       in ch_tag ~cut:CutLine "Foreach" (lazy_for_args :: lazy_children)
 
   | While e  -> ch_tag ~cut:CutLine "While" ((lazy_expr string_of_meta e)::lazy_children)
-  
+
   | Return e -> ch_tag "Return" [lazy_expr string_of_meta e]
 
   | CExt c -> ch_tag "CExt" ([lazy (print_ext_cmd string_of_meta c lazy_children)]@lazy_children)
@@ -227,21 +227,21 @@ and print_cmd string_of_meta c =
 and print_component string_of_meta c =
   let my_tag ?(cut=CutLine) = pretty_tag_str cut "" in
   match c with
-	| Include (name, p_opt, c_opt, expected) -> 
-    let p = match p_opt with 
+	| Include (name, p_opt, c_opt, expected) ->
+    let p = match p_opt with
       | None -> [] | Some(p) -> [lazy_program string_of_meta p]
     in
     let c = match c_opt with | None -> [] | Some(c) -> [lps c]
-    in 
+    in
       my_tag ~cut:(if p_opt = None then CutHint else CutLine)
         ("Include"^(if expected then "Library" else ""))
         ([lps name]@p@c); fnl(); fnl()
- 
+
 	| Component decls ->
 	  let m_str m = wrap_unless_empty "<" ">" (string_of_meta m) in
 	  List.iter (fun (d,m) ->
 	    print_decl string_of_meta d; print_extra (m_str m); fnl(); fnl()) decls
-   
+
 and print_program string_of_meta p =
   ob(); ps "["; fnl(); List.iter (print_component string_of_meta) p; ps "]"; cb()
 
@@ -269,7 +269,7 @@ let var_ids_of_expr e =
   let add_var _ subvars e = (List.flatten subvars)@(match tag_of_expr e with
     | Var id -> [id]
     | _ -> [])
-  in ListAsSet.no_duplicates (fold_tree (fun _ _ -> None) add_var None [] e) 
+  in ListAsSet.no_duplicates (fold_tree (fun _ _ -> None) add_var None [] e)
 
 let rec var_ids_of_decl d = match d with
   | DVar   (id,_,da_opt) ->
@@ -296,17 +296,17 @@ and var_ids_of_cmd c =
 (* Symbol helpers *)
 let gen_expr_sym () = gen_int_sym expr_sym_class
 let gen_cmd_sym ()  = gen_int_sym cmd_sym_class
-let gen_flow_sym () = gen_int_sym flow_sym_class    
+let gen_flow_sym () = gen_int_sym flow_sym_class
 let gen_expr_name class_name = gen_string_sym expr_sym_class class_name
-let gen_cmd_name class_name  = gen_string_sym cmd_sym_class class_name   
+let gen_cmd_name class_name  = gen_string_sym cmd_sym_class class_name
 let gen_flow_name class_name = gen_string_sym flow_sym_class class_name
 
 
 (* Basic types *)
-let k3_type t = match t with | TInternal x -> x | _ -> failwith "invalid internal type" 
+let k3_type t = match t with | TInternal x -> x | _ -> failwith "invalid internal type"
 let vi_type t = value_of (k3_type t) (fun () -> failwith "invalid value_type")
 let bi_type t = base_of (vi_type t) ()
-let ib_type bt = TInternal(TValue(canonical bt)) 
+let ib_type bt = TInternal(TValue(canonical bt))
 let iv_type vt = TInternal(TValue vt)
 let i_type t = TInternal t
 let unit_t = ib_type TUnit
@@ -344,15 +344,15 @@ let mk_const meta const = mk_iexpr (Const const) meta []
 let mk_nothing meta = mk_iexpr (Nothing) meta []
 
 let mk_var meta id = mk_iexpr (Var id) meta []
- 
-let mk_tuple meta fields = 
+
+let mk_tuple meta fields =
   if List.length fields = 1 then List.hd fields
   else mk_iexpr Tuple meta fields
 
 let mk_op meta op_tag args = mk_iexpr (Op op_tag) meta args
 
 let mk_fn meta fn_tag args = mk_iexpr (Fn fn_tag) meta args
- 
+
 (* Command constructors *)
 
 let mk_assign meta id e = mk_cmd (Assign (id, e)) meta []
@@ -375,7 +375,7 @@ let mk_return meta e = mk_cmd (Return e) meta []
 
 (* Higher-level constructors *)
 let call_proc mk_meta id args =
-  let unit_meta = unit_t, mk_meta() 
+  let unit_meta = unit_t, mk_meta()
   in mk_expr unit_meta (mk_fn unit_meta (Named id) args)
 
 let invoke_method meta id obj args = mk_fn meta (Member (Method id)) ([obj]@args)
@@ -384,7 +384,7 @@ let call_method_proc mk_meta id obj args =
   let unit_meta = unit_t, mk_meta()
   in mk_expr unit_meta (invoke_method unit_meta id obj args)
 
-let cast_to_top mk_meta e = 
+let cast_to_top mk_meta e =
   let meta = TTop, mk_meta() in mk_fn meta (Cast TTop) [e]
 
 end

@@ -2,7 +2,7 @@
 open Util
 
 (* redefine sof (string_of_float) to write integers if possible *)
-let sof f = 
+let sof f =
   let i = iof f in
   if foi i = f then soi i
   else sof f
@@ -110,8 +110,8 @@ module OutputMap = struct
   }
 
   let init name maptype ovars otypes =
-    {name; 
-    typ=mtos maptype; 
+    {name;
+    typ=mtos maptype;
     ovars;
     otypes=List.map mtos otypes;
     vs=Hashtbl.create 0}
@@ -140,13 +140,13 @@ module OutputMap = struct
 
   (* get values of the map in string format *)
   let val_s map =
-    let s_list = 
+    let s_list =
       Hashtbl.fold (fun ovars v acc ->
         let s = concat_mv ", " (ovars@[v]) in
         s::acc) map.vs []
     in
     String.concat "; " s_list
-    
+
 end
 
 module RelEvent = struct
@@ -154,7 +154,7 @@ module RelEvent = struct
 
   type op_t = Insert | Delete | System_Ready
 
-  let string_of_op = function 
+  let string_of_op = function
     | Insert       -> "insert"
     | Delete       -> "delete"
     | System_Ready -> "system_ready_event"
@@ -175,7 +175,7 @@ module RelEvent = struct
     (* debug *)
     (*Printf.printf "types[%s] values[%s]" (String.concat ";" types) (String.concat ";" values);*)
     (*print_newline ();*)
-    let op = match oper with 
+    let op = match oper with
       | "+" -> Insert
       | "-" -> Delete
       | _   -> System_Ready in
@@ -190,7 +190,7 @@ module RelEvent = struct
     r
 
   let add_effect evt mapn ivars ovars v =
-    let eff_list = 
+    let eff_list =
       try Hashtbl.find evt.effects mapn
       with Not_found -> [] in
     let eff' = (Insert, ivars, ovars, v)::eff_list in
@@ -198,7 +198,7 @@ module RelEvent = struct
     evt
 
   let del_effect evt mapn ivars ovars =
-    let eff_list = 
+    let eff_list =
       try Hashtbl.find evt.effects mapn
       with Not_found -> [] in
     let eff' = (Delete, ivars, ovars, "0.")::eff_list in
@@ -215,29 +215,29 @@ module RelEvent = struct
     if last then send else send^";"
 
   (* convert the event to a stream message *)
-  let stream_s events = 
-    if events = [] then [""] else 
+  let stream_s events =
+    if events = [] then [""] else
     let groups = match events with
     | [e] -> [[e]]
     | _   -> let fst_evt = hd events in
       (* group events by op and name *)
       let _,_,gs = List.fold_left
-        (fun (last_op, last_relname, groups) evt -> 
-          match groups with 
+        (fun (last_op, last_relname, groups) evt ->
+          match groups with
           | []        -> failwith "error"
           | grp::grps ->
             (* continue the same group *)
             if evt.op = last_op && evt.relname = last_relname then
               last_op, last_relname, (evt::grp)::grps
             else (* start a new group *)
-              evt.op, evt.relname, [evt]::grp::grps) 
-        (fst_evt.op, fst_evt.relname, [[fst_evt]]) 
+              evt.op, evt.relname, [evt]::grp::grps)
+        (fst_evt.op, fst_evt.relname, [[fst_evt]])
         (tl events)
       in
       (* reverse all groups *)
       List.rev_map (fun grp -> List.rev grp) gs
     in
-    let src num = Printf.sprintf "s%d" num in 
+    let src num = Printf.sprintf "s%d" num in
     let len = List.length groups in
     let _, src_s = mapfold (fun num group ->
       let src = src num in
@@ -280,24 +280,24 @@ let update_maps maps events =
         (* debug *)
         (*print_endline @: mapname^" "^concat_f "," ovars^":= "^sof v;*)
         let m' = match map, op with
-        | SingletonMap m, (RelEvent.Insert | RelEvent.System_Ready) -> 
+        | SingletonMap m, (RelEvent.Insert | RelEvent.System_Ready) ->
             SingletonMap(SingletonMap.set_s m ivars ovars v)
-        | SingletonMap m, RelEvent.Delete -> 
+        | SingletonMap m, RelEvent.Delete ->
             SingletonMap(SingletonMap.del_s m ivars ovars)
-        | OutputMap m, (RelEvent.Insert | RelEvent.System_Ready) -> 
+        | OutputMap m, (RelEvent.Insert | RelEvent.System_Ready) ->
             OutputMap(OutputMap.set_s m ivars ovars v)
         | OutputMap m, RelEvent.Delete ->
             OutputMap(OutputMap.del_s m ivars ovars)
         in
-        StringMap.add mapname m' acc'' 
+        StringMap.add mapname m' acc''
       ) acc' eff_list
     ) evt.RelEvent.effects acc
   ) maps events
-    
+
 (* dump a map into a string *)
 let dump_map mapname = function
     | SingletonMap m -> "{|"^SingletonMap.val_s m^"|}"
-    | OutputMap m    -> 
+    | OutputMap m    ->
         let s = OutputMap.val_s m in
         (* if our map is empty, we need the types *)
         if s = "" then "{||} : {|"^OutputMap.types_s m^"|}"
@@ -313,7 +313,7 @@ let r_comma = Str.regexp ", "
 let r_declare_map_short = Str.regexp "DECLARE MAP"
 let r_declare_map = Str.regexp
     "DECLARE MAP \\([^(]+\\)(\\(int\\|float\\|string\\|date\\|bool\\))\\[\\([^]]*\\)\\]\\[\\([^]]*\\)\\]"
-let r_system_ready = Str.regexp "ON SYSTEM READY {" 
+let r_system_ready = Str.regexp "ON SYSTEM READY {"
 let r_system_ready_empty = Str.regexp "ON SYSTEM READY <- \\[\\]"
 let r_event = Str.regexp
     "ON \\(\\+\\|-\\) \\([^(]+\\)(\\([^)]+\\)) <- \\[\\([^]]*\\)\\]"
@@ -361,10 +361,10 @@ let parse_trace file =
             maps', line+1, sys_ready, events, ""
 
         | [Some mapname; Some maptype; _; Some ovars] ->
-            let newmap = 
+            let newmap =
               let ovars_s = Str.split r_comma ovars in
-              let ovars', otypes = 
-                List.split @: list_map (fun v -> 
+              let ovars', otypes =
+                List.split @: list_map (fun v ->
                   match Str.split r_colon v with
                   | [x;y] -> (x,y)
                   | _     -> failwith @: "incorrect data at line "^soi line)
@@ -378,7 +378,7 @@ let parse_trace file =
 
       else
       (* parse system ready *)
-      if r_match r_system_ready str then 
+      if r_match r_system_ready str then
         maps, line+1, true, events, acc_str else
       if r_match r_system_ready_empty str then
         (* only if full system ready has been seen *)
@@ -395,10 +395,10 @@ let parse_trace file =
         | [Some op; Some relname; Some id_types; Some vals] ->
             let id_types = Str.split r_comma id_types in
             let id_types = List.map (Str.split r_colon) id_types in
-            let types = List.map (function 
+            let types = List.map (function
               | _::y::_ -> y
               | _       -> failwith @: "Bad data at line "^soi line)
-            id_types in 
+            id_types in
             let vals = correct_for_strings @: Str.split r_semi vals in
             let evt = RelEvent.init op relname types vals in
             maps, line+1, sys_ready, evt::events, acc_str
@@ -415,7 +415,7 @@ let parse_trace file =
               else correct_for_strings @: Str.split r_semi ovars in
             begin match events with
             | []    -> failwith @: "No event to update at line "^soi line
-            | e::es -> 
+            | e::es ->
                 let e' = RelEvent.add_effect e mapname ivars ovars v in
                 maps, line+1, sys_ready, e'::es, acc_str
             end
@@ -427,16 +427,16 @@ let parse_trace file =
           | (Some mapname)::(Some ivars)::(Some ovars)::_ ->
             let ivars = if ivars = "-" then []
                         else correct_for_strings @: Str.split r_semi ivars in
-            let ovars = if ovars = "-" then [] 
+            let ovars = if ovars = "-" then []
                         else correct_for_strings @: Str.split r_semi ovars in
             begin match events with
             | []    -> failwith @: "No event to update at line "^soi line
-            | e::es -> 
+            | e::es ->
                 let e' = RelEvent.del_effect e mapname ivars ovars in
                 maps, line+1, sys_ready, e'::es, acc_str
             end
           | _ -> failwith @: "error in remove at line "^soi line
-      else 
+      else
         maps, line+1, sys_ready, events, acc_str
     ) (StringMap.empty, 1, false, [], "") lines
   in
@@ -447,7 +447,7 @@ let parse_trace file =
     if len = 0 then None
     else begin
       (* reverse the effect lists *)
-      Hashtbl.iter (fun mapname efflist -> 
+      Hashtbl.iter (fun mapname efflist ->
         Hashtbl.replace e.RelEvent.effects mapname @: List.rev efflist
       ) e.RelEvent.effects;
       Some e
@@ -457,7 +457,7 @@ let parse_trace file =
   events, maps, sys_ready
 
 let string_of_go_trig ~has_sys_ready events =
-  (* the extra input trigger *) 
+  (* the extra input trigger *)
   let s = ["trigger go(id : int) {} = do {\n"] in
   let s = if has_sys_ready then s@["  send(system_ready_event, me, 1);\n"] else s
   in
@@ -481,7 +481,7 @@ let events_of_order_file file =
   List.map (fun line ->
     if not @: Str.string_match r_line line 0 then
       failwith "Bad order file syntax"
-    else 
+    else
       let g i = Str.matched_group i line in
       let op, name, args = g 1, g 2, g 3 in
       let argl = Str.split r_comma args in
@@ -533,10 +533,10 @@ let string_of_test_role ~is_dist events =
   str_make @: strings_of_test_role ~is_dist events
 
 (* convert the maps to a list *)
-let string_of_maps maps = 
+let string_of_maps maps =
   StringMap.fold (fun name mapdata acc ->
     (name, dump_map name mapdata)::acc
-  ) maps [] 
+  ) maps []
 
 (* get the names and dimensions of maps *)
 let map_names_and_dims maps =
@@ -548,12 +548,12 @@ let map_names_and_dims maps =
 let dump_map_strings maps =
   let maps' = list_map (fun (left_s, right_s) ->
     String.concat "" @: left_s::" = "::[right_s]
-  ) maps 
+  ) maps
   in
   String.concat ", " maps'
 
 (* Convert a file to a string representation *)
-let string_of_file file ~is_dist = 
+let string_of_file file ~is_dist =
   let events, maps, sys_ready = parse_trace file in
   (* debug *)
   (*print_endline @: String.concat ", " @: fst_many @: string_of_maps maps;*)

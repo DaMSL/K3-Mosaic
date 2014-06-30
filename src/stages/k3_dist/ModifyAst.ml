@@ -38,7 +38,7 @@ let modify_global_map p = function
   | Global(name, TValue typ, m_expr),_ ->
     begin try
       let map_id = P.map_id_of_name p name in
-      let map_type = 
+      let map_type =
         wrap_t_of_map @: wrap_ttuple @: P.map_types_with_v_for p map_id in
       let map_type_ind = wrap_tind map_type in
       begin match m_expr with
@@ -90,7 +90,7 @@ let corr_ast_for_m_s p ast map stmt trig =
   let map_name = P.map_name_of p map in
   let s_with_m = P.s_and_over_stmts_in_t p P.rhs_maps_of_stmt trig in
   let s_with_m_filter = List.filter (fun (s,m) -> m = map) s_with_m in
-  (* find all the statements in the trigger dealing with our map and count them. 
+  (* find all the statements in the trigger dealing with our map and count them.
    * This will tell us how far to go in the corrective trigger for the map *)
   let s_i = insert_index_snd 0 @: fst_many s_with_m_filter in
   let stmt_idx = List.assoc stmt s_i in
@@ -136,7 +136,7 @@ type msg_t = AddVidMsg | NopMsg | DelMsg
 
 (* the maps here have a buffer suffix *)
 
-(* add vid to all map accesses. This is a complicated function that 
+(* add vid to all map accesses. This is a complicated function that
  * has to dig through the entire AST, but it's pretty resilient *)
 let modify_map_add_vid p ast stmt =
   let lmap_alias = "existing_out_tier" in
@@ -314,7 +314,7 @@ let delta_action p ast stmt m_target_trigger ~corrective =
   if U.vars_of_arg params <> ["existing_out_tier"] then
     failwith "sanity check fail: expected existing_out_tier";
   match U.tag_of_expr body with
-  | Apply -> 
+  | Apply ->
     (* simple modification - sending a single tuple of data *)
     (* this is something like prod_ret_x's let *)
     let lambda2, arg2 = U.decompose_apply body in
@@ -342,8 +342,8 @@ let delta_action p ast stmt m_target_trigger ~corrective =
                 mk_cbool (if corrective then true else false)::full_vars]
             @
             (* do we need to send to another trigger *)
-            begin match m_target_trigger with 
-            | None   -> [] 
+            begin match m_target_trigger with
+            | None   -> []
             | Some t ->
               [mk_send
                 (mk_ctarget t)
@@ -351,7 +351,7 @@ let delta_action p ast stmt m_target_trigger ~corrective =
                 mk_tuple @: full_vars]
             end
       ) arg2 (* this is where the original calculation code is *)
-  
+
   | Iterate -> (* more complex modification *)
     (* col2 contains the calculation code, lambda2 is the delta addition *)
     let lambda2, col2 = U.decompose_iterate body in
@@ -380,12 +380,12 @@ let delta_action p ast stmt m_target_trigger ~corrective =
       (* add delta values to all following vids *)
       [mk_apply
         (mk_var @: add_delta_to_map p lmap) @:
-        mk_tuple @: 
+        mk_tuple @:
           (mk_var @: P.map_name_of p lmap)::
             mk_cbool (if corrective then true else false)::
             [mk_var "vid"; mk_var delta_v_name]]
       @
-      begin match m_target_trigger with 
+      begin match m_target_trigger with
       | None -> []
       | Some t ->
         [mk_send (* send to a (corrective) target *)

@@ -6,7 +6,7 @@ type reified_expr_t = reified_node_t tree_t
 
 val print_reified_expr : reified_expr_t -> unit
 val string_of_reified_expr : reified_expr_t -> string
-  
+
 (* Top-down name generation for reification
  * Arguments:
  * i. label * reified name option of current node (and ancestors)
@@ -16,9 +16,9 @@ val string_of_reified_expr : reified_expr_t -> string
  *)
 val name_of_reification :
   (id_t * arg_t) list
-  -> (int * (id_t * type_t * bool * bool)) list   
+  -> (int * (id_t * type_t * bool * bool)) list
   -> expr_t
-  -> (int * (id_t * type_t * bool * bool)) list  
+  -> (int * (id_t * type_t * bool * bool)) list
 
 (* bottom-up reification of an expression, given a target variable, and
  * child reifications and their variable usages.

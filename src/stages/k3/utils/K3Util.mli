@@ -3,7 +3,7 @@ open K3.Annotation
 
 (* AST *)
 
-val id_of_expr : expr_t -> int 
+val id_of_expr : expr_t -> int
 val tag_of_expr : expr_t -> expr_tag_t
 val meta_of_expr : expr_t -> annotation_t
 
@@ -129,7 +129,7 @@ val filter_expr :
 val substitute_expr :
   (expr_t * expr_t) list -> expr_t
   -> expr_t * (int * int) list
-  
+
 (* Linearizes (i.e. flattens) an expression tree to its constituent
  * subexpressions, in an order given by its first argument.
  * The first argument linearizes a single node and is of the form:
@@ -144,7 +144,7 @@ val post_order_linearization : expr_t list list -> expr_t -> expr_t list
 (* expression -> starting number -> expression *)
 val renumber_expr_ids : start:int -> expr_t -> int * expr_t
 val renumber_program_ids : ?start:int -> program_t -> int * program_t
-val renumber_test_program_ids : 
+val renumber_test_program_ids :
   ?start:int -> program_test_t -> int * program_test_t
 
 (* Attach a type annotation to an expr *)

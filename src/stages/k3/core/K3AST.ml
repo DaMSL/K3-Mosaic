@@ -16,7 +16,7 @@ end
 
 
 (* Start of AST signature *)
-module type ASTType = sig 
+module type ASTType = sig
 
 include ASTCommon
 
@@ -139,7 +139,7 @@ type stop_behavior_t
 type channel_format_t = CSV | JSON
 
 type channel_type_t
-    = File       of string 
+    = File       of string
     | Network    of address
 
 type stream_type_t
@@ -156,7 +156,7 @@ type resource_pattern_t =
 (* TODO: produce, listen instructions *)
 type instruction_t = Consume of id_t
 
-type flow_resource_t = 
+type flow_resource_t =
   | Handle  of type_t * channel_type_t * channel_format_t
   | Stream of type_t * stream_type_t
   | Pattern of resource_pattern_t

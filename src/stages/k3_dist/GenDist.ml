@@ -73,11 +73,11 @@ let declare_global_vars p ast =
   let map_list =
     let t_map_list = wrap_tbag @: wrap_ttuple [t_int; t_string ;t_int] in
     let content = P.for_all_maps p (fun i ->
-      mk_tuple [mk_cint i; 
+      mk_tuple [mk_cint i;
                 mk_cstring @: map_name_of p i;
                 mk_cint @: List.length @: map_types_for p i]) in
     mk_global_val_init K3Dist.map_ids t_map_list @:
-      k3_container_of_list t_map_list content 
+      k3_container_of_list t_map_list content
   in
   (* vid_counter to generate vids.
    * We use a singleton because refs aren't ready *)
@@ -285,7 +285,7 @@ let declare_global_funcs partmap p ast =
         ~total:len_types_v
         ~choice:len_types_v
     in
-    let regular_delta = 
+    let regular_delta =
       mk_let lookup_value t_col_v
         (map_latest_vid_vals p (mk_deref @: mk_var target_map)
           (Some(vars_no_val @ [mk_cunknown])) map_id ~keep_vid:true) @:
@@ -303,7 +303,7 @@ let declare_global_funcs partmap p ast =
     mk_global_fn func_name
       (* corrective: whether this is a corrective delta *)
       ([target_map, wrap_tind @: wrap_t_of_map @: wrap_ttuple types_v;
-        corrective, t_bool; "min_vid", t_vid; 
+        corrective, t_bool; "min_vid", t_vid;
         delta_tuples_nm, wrap_t_of_map @: wrap_ttuple types_v])
       [t_unit] @:
       mk_block @:
@@ -314,14 +314,14 @@ let declare_global_funcs partmap p ast =
              * If so, we must add the value directly *)
               mk_let lookup_value t_col_v
                 (mk_if
-                  (mk_var corrective) 
+                  (mk_var corrective)
                   (mk_slice (mk_deref @: mk_var target_map) @:
                     mk_tuple @: vars_v_no_val @ [mk_cunknown]) @:
                   mk_empty @: wrap_t_of_map @: wrap_ttuple types_v) @:
               mk_if
                 (mk_not @: mk_is_empty (mk_var lookup_value) t_col_v)
                 (* then just update the value *)
-                (mk_let update_value t_val 
+                (mk_let update_value t_val
                   (mk_add (mk_var id_val) @: tuple_projection) @:
                   mk_insert
                     (mk_deref @: mk_var target_map) @:
@@ -386,7 +386,7 @@ let declare_global_funcs partmap p ast =
 
 (* The start trigger inserts a vid into each message *)
 let start_trig ~force_correctives p t =
-  let update_epoch = 
+  let update_epoch =
     if force_correctives then
       (* force correctives by changing the epoch *)
       [mk_update epoch_var (mk_peek epoch_var) @:
@@ -752,7 +752,7 @@ mk_code_sink
             mk_tuple @: part_pat_as_vars@[mk_var "count"]
       ) @:
         mk_var "stmt_id_cnt_list"] @
-    
+
     (if enable_gc then
     (* ack send for GC *)
     [mk_send (mk_ctarget "ack_send")  G.me_var @:
@@ -784,7 +784,7 @@ let send_push_stmt_map_trig p s_rhs_lhs trig_name =
         [] @: (* locals *)
         mk_block [
           (* save this particular statement execution in the master log
-           * Note that we need to do it here to make sure nothing 
+           * Note that we need to do it here to make sure nothing
            * else can stop us before we send the push *)
           mk_apply
             (mk_var log_master_write_nm) @:
@@ -845,7 +845,7 @@ List.fold_left
       [] @: (* locals *)
       (* save the tuples *)
       mk_block
-        (* save the bound variables for this vid. This is necessary for both the 
+        (* save the bound variables for this vid. This is necessary for both the
          * sending and receiving nodes, which is why we're also doing it here *)
         [mk_apply
           (mk_var @: log_write_for p trig_name) @:
@@ -1015,8 +1015,8 @@ let send_corrective_trigs p =
                               mk_gbagg
                                 (mk_lambda (wrap_args ["tuple", tuple_types]) @:
                                   mk_var "tuple")
-                                (mk_lambda (wrap_args ["_", t_unit; "_", tuple_types]) 
-                                  mk_cunit) 
+                                (mk_lambda (wrap_args ["_", t_unit; "_", tuple_types])
+                                  mk_cunit)
                                 mk_cunit @:
                                 mk_combine (mk_var "acc_tuples") @: mk_var "tuples"]
                     )
@@ -1088,7 +1088,7 @@ let filter_corrective_list =
   ["request_vid", t_vid; "trig_stmt_list", trig_stmt_list_t]
   [wrap_tbag @: wrap_ttuple [t_stmt_id; wrap_tlist t_vid]]
   @:
-  mk_let "log_entries" 
+  mk_let "log_entries"
     (wrap_tbag @: wrap_ttuple [t_vid; t_trig_id; t_stmt_id])
     (mk_apply (* list of triggers >= vid *)
       (mk_var log_read_geq) @: mk_var "request_vid") @:
@@ -1105,7 +1105,7 @@ let filter_corrective_list =
     mk_sort (* sort so early vids are generally sent out first *)
       (* get a list of vid, stmt_id pairs *)
       (mk_map
-        (mk_lambda 
+        (mk_lambda
           (wrap_args
             ["vid", t_vid; "trig_id", t_trig_id; "stmt_id", t_stmt_id]) @:
           (* convert to vid, stmt *)
@@ -1191,14 +1191,14 @@ List.map
 (* do corrective triggers *)
 (* very similar to do_complete, but we only have to do it for certain
  * (stmt, map) combinations.
- * Do_corrective , unlike do_complete, doesn't need to add to an earlier vid 
+ * Do_corrective , unlike do_complete, doesn't need to add to an earlier vid
  * value. Instead, it adds to the value that already resides at a specific
  * vid and propagates. *)
 let do_corrective_trigs p s_rhs ast trig_name corrective_maps =
   let do_corrective_trig (stmt_id, map_id) =
     mk_code_sink (do_corrective_name_of_t p trig_name stmt_id map_id)
       (wrap_args @: args_of_t_with_v p trig_name@
-        ["delta_tuples", 
+        ["delta_tuples",
           wrap_t_of_map @: wrap_ttuple @: map_types_with_v_for p map_id])
       [] @: (* locals *)
         let lmap = lhs_map_of_stmt p stmt_id in
@@ -1271,7 +1271,7 @@ let gen_dist ?(force_correctives=false) p partmap ast =
   let regular_trigs = List.flatten @:
     for_all_trigs p @: fun t ->
       gen_dist_for_t ~force_correctives p ast t potential_corr_maps in
-  let prog = 
+  let prog =
     declare_global_vars p ast @
     declare_global_prims @
     emit_frontier_fns p @

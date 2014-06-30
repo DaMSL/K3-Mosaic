@@ -8,13 +8,13 @@ module StringMap = Map.Make(String)
 
 (**** Global type definitions ****)
 (** Comparison operations *)
-type cmp_t = 
+type cmp_t =
    Eq (** Equals *) | Lt (** Less than *) | Lte (** Less than or equal *)
- | Gt (** Greater than *) | Gte (** Greater than or equal *) 
+ | Gt (** Greater than *) | Gte (** Greater than or equal *)
  | Neq (** Not equal *)
 
 (** Basic Types *)
-type type_t = 
+type type_t =
    | TBool                 (** Boolean *)
    | TInt                  (** Integer *)
    | TFloat                (** Floating point number *)
@@ -43,16 +43,16 @@ let inverse_of_cmp = function
  | Lt -> Gte | Lte -> Gt
  | Gt -> Lte | Gte -> Lt
 
- 
+
 (**** Conversion to Strings ****)
 (**
-   Get the string representation (according to SQL syntax) of a comparison 
+   Get the string representation (according to SQL syntax) of a comparison
    operation.
    @param op   A comparison operation
    @return     The string representation of [op]
 *)
-let string_of_cmp (op:cmp_t): string = 
-   begin match op with 
+let string_of_cmp (op:cmp_t): string =
+   begin match op with
       | Eq  -> "="  | Lt -> "<" | Lte -> "<="
       | Neq -> "!=" | Gt -> ">" | Gte -> ">="
    end
@@ -129,14 +129,14 @@ let string_of_var ?(verbose = Debug.active "PRINT-VERBOSE")
    @return      The string representation of [vars]
 *)
 let string_of_vars ?(verbose = Debug.active "PRINT-VERBOSE")
-                    (vars : var_t list): string = 
+                    (vars : var_t list): string =
    ListExtras.string_of_list (string_of_var ~verbose:verbose) vars
 
 
 
 (**** Escalation ****)
 (**
-   Given two types, return the "greater" of the two.  
+   Given two types, return the "greater" of the two.
    {ul
       {- [TAny] can be escalated to any other type}
       {- [TBool] can be escalated to [TInt]}
@@ -148,7 +148,7 @@ let string_of_vars ?(verbose = Debug.active "PRINT-VERBOSE")
    @param b       The second type
    @return        A type that both [a] and [b] escalate to.
 *)
-let escalate_type ?(opname="<op>") (a:type_t) (b:type_t): type_t = 
+let escalate_type ?(opname="<op>") (a:type_t) (b:type_t): type_t =
    begin match (a,b) with
       | (at,bt) when at = bt -> at
       | (TAny,t) | (t,TAny) -> t
@@ -175,8 +175,8 @@ let can_escalate_type (from_type:type_t) (to_type:type_t): bool =
    @param tlist   A list of types
    @return        A type that every element of [tlist] escalates to
 *)
-let escalate_type_list ?(opname="<op>") tlist = 
+let escalate_type_list ?(opname="<op>") tlist =
    if tlist = [] then TInt
-   else 
-      List.fold_left (escalate_type ~opname:opname) 
+   else
+      List.fold_left (escalate_type ~opname:opname)
                      (List.hd tlist) (List.tl tlist)

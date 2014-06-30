@@ -19,11 +19,11 @@ type breakpoint_t = K3Runtime.breakpoint_t
 val interpret_k3_program : interpreter_t -> status_t * (address * program_env_t) list
 
 (* create an interpreter state to run a k3 program *)
-val init_k3_interpreter : 
-  ?shuffle_tasks:bool -> 
-  ?breakpoints:breakpoint_t list -> 
+val init_k3_interpreter :
+  ?shuffle_tasks:bool ->
+  ?breakpoints:breakpoint_t list ->
   ?queue_type:K3Runtime.queue_type ->
-  run_length:int64 -> 
-  peers:K3Global.peer_t list -> 
+  run_length:int64 ->
+  peers:K3Global.peer_t list ->
   program_t -> interpreter_t
 

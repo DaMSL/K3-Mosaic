@@ -1,12 +1,12 @@
-(** 
-   A module for representing expressions over a ring functorized over a based 
+(**
+   A module for representing expressions over a ring functorized over a based
    type.  The module also includes tools for transforming arbitrary expressions
    into polynomials, and for computing deltas of expressions.
 *)
 
 (** The base type t over which we define the ring, plus its zero and one
    elements.
-*) 
+*)
 module type Base =
 sig
   type t
@@ -34,7 +34,7 @@ sig
       products, rather than the Sum and Prod constructors from expr_t, because
       the mk-functions automatically eliminate certain redundancies on the
       fly that the implementations of other functions of Ring may
-      depend upon. 
+      depend upon.
    *)
    type expr_t = Val  of leaf_t
                | Sum  of expr_t list
@@ -46,15 +46,15 @@ sig
       constant ring element. *)
    type mono_t = int * (leaf_t list)
 
-   (** Comparison options to allow for order-independance in Sum/Prod terms *) 
-   type cmp_opt_t = 
+   (** Comparison options to allow for order-independance in Sum/Prod terms *)
+   type cmp_opt_t =
       | OptSumOrderIndependent
       | OptProdOrderIndependent
 
    (** the zero- and one-elements of the ring *)
    val zero: expr_t
    val one:  expr_t
-    
+
    (** Default comparison options. See cmp_opt_t *)
    val default_cmp_opts : cmp_opt_t list
 
@@ -185,37 +185,37 @@ sig
       blow-up in the worst case, simplify is always polynomial-time.
    *)
    val simplify: expr_t -> expr_t
-   
-   (** cmp_exprs sum_f prod_f leaf_f a b -> 
-      
-      Helper function for comparing expressions.  
-      
+
+   (** cmp_exprs sum_f prod_f leaf_f a b ->
+
+      Helper function for comparing expressions.
+
       Performs a DFS in parallel over two expressions.  If any differences are
       encountered between the two expressions, cmp_exprs will immediately return
-      None.  
-      
-      
+      None.
+
+
       cmp_leaf will be invoked to determine whether two leaves are equivalent
       and should return None if they are not.  Metadata about the comparison
       may be returned if they are equivalent in isolation.
-      
+
       sum_f and prod_f are invoked on values returned by cmp_leaf and should be
       used to ensure that the returned metadata is consistent.  If so, metadata
-      regarding the entire sum or product should be returned.      
-      
+      regarding the entire sum or product should be returned.
+
       A positive result (Some(x)) is guaranteed to be an equivalent expr, while
       a negative result (None) only indicates that we were not able to establish
-      equivalence.  Among other things, form normalization and double-negation  
+      equivalence.  Among other things, form normalization and double-negation
       are not handled properly (yet).
    *)
-   val cmp_exprs: ?cmp_opts:cmp_opt_t list -> 
+   val cmp_exprs: ?cmp_opts:cmp_opt_t list ->
                   ('a list -> 'a option) ->
                   ('a list -> 'a option) ->
                   (leaf_t -> leaf_t  -> 'a option) ->
                   expr_t -> expr_t -> 'a option
-   
-   (** multiply_out lhs sum rhs 
-      
+
+   (** multiply_out lhs sum rhs
+
       Shorthand operation that multiplies every sum term in sum by lhs and rhs
       and returns the resultant list of expressions
    *)
@@ -255,7 +255,7 @@ struct
 
    type mono_t = int * (leaf_t list)
 
-   type cmp_opt_t = 
+   type cmp_opt_t =
       | OptSumOrderIndependent
       | OptProdOrderIndependent
 
@@ -392,19 +392,19 @@ struct
 
    let simplify (e: expr_t) =
       apply_to_leaves (fun x -> mk_val x) e
-    
+
    let rec cmp_exprs ?(cmp_opts:cmp_opt_t list = default_cmp_opts)
                      (sum_f: 'a list -> 'a option)
                      (prod_f: 'a list -> 'a option)
                      (leaf_f: leaf_t -> leaf_t -> 'a option)
-                     (a: expr_t) (b: expr_t): 'a option = 
+                     (a: expr_t) (b: expr_t): 'a option =
       let sum_order_indep  = List.mem OptSumOrderIndependent  cmp_opts in
       let prod_order_indep = List.mem OptProdOrderIndependent cmp_opts in
       let rcr a b = cmp_exprs ~cmp_opts:cmp_opts sum_f prod_f leaf_f a b in
-      let rcr_all order_indep merge_fn al bl = 
+      let rcr_all order_indep merge_fn al bl =
          if List.length al <> List.length bl then None
-         else begin try 
-            if (order_indep) 
+         else begin try
+            if (order_indep)
             then merge_fn (fst(
                (* For each term of the first expression find the equivalent *)
                (* yet unmatched term from the second expression, if exists *)
@@ -417,8 +417,8 @@ struct
                         | Some(new_mapping) -> (new_mapping :: mappings,
                                                 found_b :: bl_matched);
                         | None -> raise Not_found
-               ) ([],[]) al)) 
-            else merge_fn (List.map2 (fun a b -> 
+               ) ([],[]) al))
+            else merge_fn (List.map2 (fun a b ->
                begin match rcr a b with
                   | None -> raise Not_found
                   | Some(s) -> s
@@ -428,18 +428,18 @@ struct
       in
       match (a,b) with
         (Val  xa, Val  xb) -> leaf_f  xa xb
-      | (Neg  ae, Neg  be) -> rcr     ae be 
-      | (Sum  ae, Sum  be) -> rcr_all sum_order_indep  sum_f  ae be 
-      | (Prod ae, Prod be) -> rcr_all prod_order_indep prod_f ae be 
+      | (Neg  ae, Neg  be) -> rcr     ae be
+      | (Sum  ae, Sum  be) -> rcr_all sum_order_indep  sum_f  ae be
+      | (Prod ae, Prod be) -> rcr_all prod_order_indep prod_f ae be
       | _ -> None
    and
       find_expr (cmp_f: expr_t -> expr_t -> 'a option)
                 (a: expr_t) (bl: expr_t list) : (expr_t * 'a option) =
          List.fold_left (fun (e, mapping) b ->
-            if (mapping = None) 
+            if (mapping = None)
             then (b, cmp_f a b)
             else (e, mapping);
-         ) (zero, None) bl 
+         ) (zero, None) bl
 
    let multiply_out (lhs:expr_t list) (sum:expr_t) (rhs:expr_t list):
                     expr_t list =

@@ -21,7 +21,7 @@ let int_erroru uuid ?extra fn_name s =
   let msg = fn_name^": "^s in
   let rs = "interpreter: "^msg in
   LOG rs LEVEL ERROR;
-  (match extra with 
+  (match extra with
   | Some (address, env) ->
     LOG ">>>> Peer %s" (string_of_address address) LEVEL ERROR;
     LOG "%s" (string_of_env env) LEVEL ERROR
@@ -581,7 +581,7 @@ and default_base_value bt =
   | TUnit    -> VUnit
   | TBool    -> VBool false
   | TByte    -> error "bytes are not implemented"
-  | TInt 
+  | TInt
   | TDate    -> VInt 0
   | TFloat   -> VFloat 0.0
   | TString  -> error "strings are not implemented"

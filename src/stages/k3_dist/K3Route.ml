@@ -38,13 +38,13 @@ type part_map_t = (id_t * (int * int) list) list
 
 (* convert a k3 data structure with partition map data to an ocaml list with the
  * same data for easy manipulation *)
-let list_of_k3_partition_map k3maps = 
+let list_of_k3_partition_map k3maps =
   let error str = invalid_arg @: "Invalid partition map: "^str in
   let parse_map e = let map_tup = U.decompose_tuple e in
     let parse_int e = match U.tag_of_expr e with
       | Const(CInt(i)) -> i
-      | _ -> error "no integer found" in 
-    let name = match U.tag_of_expr @: List.hd map_tup with 
+      | _ -> error "no integer found" in
+    let name = match U.tag_of_expr @: List.hd map_tup with
      | Const(CString(s)) -> s
      | Var(s) -> s
      | _ -> error "no map name found" in
@@ -55,7 +55,7 @@ let list_of_k3_partition_map k3maps =
     let tuple_list = list_of_k3_container @: List.nth map_tup 1 in
     let mdata = List.map parse_tup tuple_list in
     (name, mdata) in
-  let maps_with_data = match List.hd k3maps with 
+  let maps_with_data = match List.hd k3maps with
     | (Global(_,_,Some e), _) ->
         begin try list_of_k3_container e
         with Invalid_argument msg -> invalid_arg @: msg^" "^K3Printing.string_of_expr e end
@@ -69,17 +69,17 @@ let k3_partition_map_of_list p l =
   (* we just create an empty partition map for all possible map ids *)
   if null l then
     let map_names = for_all_maps p (map_name_of p) in
-    let k3_pmap = list_map (fun s -> 
+    let k3_pmap = list_map (fun s ->
       mk_tuple [mk_cstring s; mk_empty pmap_types]
     ) map_names in
     k3_container_of_list full_pmap_types k3_pmap
   else
-    let one_map_to_k3 (m, ds) = 
+    let one_map_to_k3 (m, ds) =
       let check_index i = let ts = map_types_for p @: map_id_of_name p m
         in try ignore(List.nth ts i); true with Failure _ -> false in
       let k3tuplize (a, b) = mk_tuple [mk_cint a; mk_cint b] in
-      let newdata = List.map 
-        (fun (i, d) -> if check_index i then k3tuplize (i,d) 
+      let newdata = List.map
+        (fun (i, d) -> if check_index i then k3tuplize (i,d)
           else invalid_arg @: "index "^string_of_int i^" out of range in map "^m)
         ds
       in mk_tuple [mk_cstring m; k3_container_of_list pmap_types newdata] in
@@ -107,14 +107,14 @@ let hash_funcs_foreign p : (declaration_t * annotation_t) list =
   let names_types = List.map (fun t -> (t, hash_func_for t)) map_types in
   List.map (fun (t, name) -> mk_foreign_fn name t t_int) names_types
 
-let route_foreign_funcs p = 
+let route_foreign_funcs p =
   mk_foreign_fn "mod" (wrap_ttuple [t_int; t_int]) t_int ::
   (hash_funcs_foreign p)
 
 (* partition map as input by the user (with map names) *)
 let pmap_input = "pmap_input"
 let global_pmap_input p partmap =
-  mk_global_val_init pmap_input 
+  mk_global_val_init pmap_input
   (wrap_tlist @: wrap_ttuple [t_string; pmap_types]) @:
   k3_partition_map_of_list p partmap
 
@@ -124,9 +124,9 @@ let global_pmaps =
   mk_global_val_init pmap_data full_pmap_types @:
     mk_map
       (mk_lambda (wrap_args ["map_name", t_string; "map_types", pmap_types]) @:
-        mk_tuple 
+        mk_tuple
           [project_from_tuple [t_int; t_string; t_int] ~total:3 ~choice:1 @:
-            mk_peek @: 
+            mk_peek @:
               mk_slice (mk_var K3Dist.map_ids) @:
                 mk_tuple [mk_cunknown; mk_var "map_name"; mk_cunknown]
           ; mk_var "map_types"]
@@ -135,16 +135,16 @@ let global_pmaps =
 
 (* calculate the size of the bucket of each dimensioned we're partitioned on
  * This is order-dependent in pmap *)
-let calc_dim_bounds_code = 
-  mk_global_fn "calc_dim_bounds" 
+let calc_dim_bounds_code =
+  mk_global_fn "calc_dim_bounds"
   ["pmap", pmap_types] (*args*) [dim_bounds_type; t_int] (* return *) @:
-    mk_agg 
-      (mk_assoc_lambda 
+    mk_agg
+      (mk_assoc_lambda
         (wrap_args ["xs", wrap_tlist @: wrap_ttuple [t_int; t_int];
           "acc_size", t_int])
         (wrap_args ["pos", t_int; "bin_size", t_int]) @:
-        mk_tuple [mk_combine (mk_var "xs") @: 
-          mk_singleton t_list_two_ints @: 
+        mk_tuple [mk_combine (mk_var "xs") @:
+          mk_singleton t_list_two_ints @:
             mk_tuple [mk_var "pos"; mk_var "acc_size"];
           mk_mult (mk_var "bin_size") (mk_var "acc_size")]
       )
@@ -152,7 +152,7 @@ let calc_dim_bounds_code =
         mk_cint 1])
       (mk_var "pmap")
 
-let gen_route_fn p map_id = 
+let gen_route_fn p map_id =
   let map_types = map_types_no_val_for p map_id in
   (* it's very important that the index for ranges start with 0, since we use
    * them for indexing *)
@@ -162,7 +162,7 @@ let gen_route_fn p map_id =
   let key_ids =
     fst @: List.split @: map_ids_types_no_val_for ~prefix:prefix p map_id in
   let to_id i = List.nth key_ids i in
-  match map_types with 
+  match map_types with
 
   | [] -> (* if no keys, for now we just route to one place *)
   mk_global_fn (route_for p map_id)
@@ -186,23 +186,23 @@ let gen_route_fn p map_id =
     (* handle the case of no partitioning at all *)
     mk_if (mk_eq (mk_var "pmap") (mk_empty pmap_types))
       (mk_apply (mk_var K3Ring.get_all_uniq_nodes_nm) mk_cunit) @:
-      
+
     (* calculate the dim bounds ie. the bucket sizes when linearizing *)
     mk_let_many ["dim_bounds", dim_bounds_type; "max_val", t_int]
       (mk_apply (mk_var "calc_dim_bounds") @: mk_var "pmap") @:
     (* calc_bound_bucket *)
     (* we calculate the contribution of the bound components *)
-    mk_let "bound_bucket" t_int 
+    mk_let "bound_bucket" t_int
     (List.fold_left
-      (fun acc_code index -> 
+      (fun acc_code index ->
         let temp_id = to_id index in
         let id_unwrap = temp_id^"_unwrap" in
         let temp_type = List.nth map_types index in
         let maybe_type = wrap_tmaybe temp_type in
         let hash_func = hash_func_for temp_type in
-        mk_add 
+        mk_add
           (* check if we have a binding in this index *)
-          (mk_if (mk_eq (mk_var temp_id) @: mk_nothing maybe_type) 
+          (mk_if (mk_eq (mk_var temp_id) @: mk_nothing maybe_type)
             (mk_cint 0) @: (* no contribution *)
             (* bind the slice for this index *)
             mk_let "pmap_slice" pmap_types
@@ -235,15 +235,15 @@ let gen_route_fn p map_id =
     (* now calculate the free parameters' contribution *)
     mk_let "free_dims" free_dims_type
       (List.fold_left
-        (fun acc_code x -> 
+        (fun acc_code x ->
           let type_x = List.nth key_types x in
           let id_x = to_id x in
-          mk_combine 
-          (mk_if 
+          mk_combine
+          (mk_if
             (* we only care about indices that are nothing *)
             (mk_neq (mk_var @: id_x) @: mk_nothing type_x)
             (mk_empty free_dims_type) @:
-            mk_slice (mk_var "pmap") @: 
+            mk_slice (mk_var "pmap") @:
               mk_tuple [mk_cint x; mk_cunknown]
           ) acc_code
         )
@@ -254,8 +254,8 @@ let gen_route_fn p map_id =
     mk_let "free_domains" free_domains_type
       (mk_map
         (mk_lambda (wrap_args ["i", t_int; "b_i", t_int]) @:
-          mk_tuple [mk_var "i"; mk_range TList 
-            (mk_cint 0) (mk_cint 1) @: 
+          mk_tuple [mk_var "i"; mk_range TList
+            (mk_cint 0) (mk_cint 1) @:
             (mk_var "b_i")]
         ) @:
         mk_var "free_dims"
@@ -312,7 +312,7 @@ let gen_route_fn p map_id =
                 mk_var "free_bucket";
               mk_var "max_val"]
           ) @:
-          mk_var "free_cart_prod" 
+          mk_var "free_cart_prod"
       ) @:
     mk_if
       (mk_is_empty (mk_var "sorted_ip_list") @: sorted_ip_list_type)
@@ -322,13 +322,13 @@ let gen_route_fn p map_id =
       ) @:
       mk_fst_many sorted_ip_inner_type @:
         mk_var "sorted_ip_list"
-    
+
 (* create all code needed for route functions, including foreign funcs*)
 let gen_route_code p partmap =
   K3Ring.gen_ring_code @
   global_pmap_input p partmap ::
   global_pmaps ::
-  route_foreign_funcs p @ 
+  route_foreign_funcs p @
   calc_dim_bounds_code ::
   (* create a route for each map type, using only the key types *)
   List.map (gen_route_fn p) (List.map (hd |- snd) @:

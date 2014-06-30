@@ -1,12 +1,12 @@
 (**
    Utilities for performing list-based translation.  The basic type [table_fn_t]
    describes a functional mapping as a list of 2-tuples, with the first elements
-   representing the domain, and the second representing the range.  
+   representing the domain, and the second representing the range.
 *)
 
 (**
-   A list, or table of mappings, represented as 2-tuples.  Each element of the 
-   table represents a mapping from the first element of the 2-tuple to the 
+   A list, or table of mappings, represented as 2-tuples.  Each element of the
+   table represents a mapping from the first element of the 2-tuple to the
    second.
 *)
 type ('a, 'b) table_fn_t = ('a * 'b) list
@@ -19,10 +19,10 @@ exception NonFunctionalMappingException
 (**
    Apply the functional mapping to an element.
    @param theta   The functional mapping table
-   @param default The output value to be used if the [x] is not present in the 
+   @param default The output value to be used if the [x] is not present in the
                   domain of [theta]
    @param x       The value to be mapped
-   @return        The mapping of [x] in [theta], or [default] if [x] is not 
+   @return        The mapping of [x] in [theta], or [default] if [x] is not
                   present in the domain of [theta]
    @raise NonFunctionalMappingException If [theta]'s domain has duplicates
 *)
@@ -41,7 +41,7 @@ let apply (theta: ('a, 'b) table_fn_t)
    element is not present in the functional mapping table.
    @param theta The functional mapping table
    @param x     The value to be mapped
-   @return      The mapping of [x] in [theta], or [x] if it is not present in 
+   @return      The mapping of [x] in [theta], or [x] if it is not present in
                 the domain of [theta]
    @raise NonFunctionalMappingException If [theta]'s domain has duplicates
 *)
@@ -113,7 +113,7 @@ let img (theta: ('a, 'b) table_fn_t): 'a list = snd (List.split theta)
    @param x     An element of the type of the domain of the mapping
    @return      true if [x] is in the domain of [theta]
 *)
-let in_dom (theta: ('a, 'b) table_fn_t) (a:'a): bool = 
+let in_dom (theta: ('a, 'b) table_fn_t) (a:'a): bool =
    List.mem_assoc a theta
 
 (**
@@ -140,7 +140,7 @@ let functional (theta: ('a, 'b) table_fn_t): bool =
    @return      true if the range/image of [theta] contains no duplicates
 *)
 let onto (theta: ('a, 'b) table_fn_t): bool =
-   let i = img theta in 
+   let i = img theta in
    ((ListAsSet.no_duplicates i) = i)
 
 (**
@@ -151,15 +151,15 @@ let onto (theta: ('a, 'b) table_fn_t): bool =
                   merged into a functional and onto mapping, or None otherwise.
 *)
 let merge (theta1:('a,'b) table_fn_t) (theta2:('a,'b) table_fn_t):
-          (('a,'b) table_fn_t) option = 
+          (('a,'b) table_fn_t) option =
    if List.exists (fun a -> (List.assoc a theta1) <> (List.assoc a theta2))
                   (ListAsSet.inter (dom theta1) (dom theta2))
-   then None else 
+   then None else
    let merged = ListAsSet.union theta1 theta2 in
    if onto merged then Some(merged) else None
 
 (**
-   Attempt to murge multiple functional mappings.  Identical to folding 
+   Attempt to murge multiple functional mappings.  Identical to folding
    Function.merge over a list of mapping tables.
    @param thetas  The list of functional mapping tables.
    @return        A Some() wrapped mapping if the functional mapping tables
@@ -170,7 +170,7 @@ let multimerge (thetas:('a,'b) table_fn_t list): ('a,'b) table_fn_t option =
                   (Some([])) thetas
 
 (**
-   Find identities in a functional mapping table. (mappings that map to 
+   Find identities in a functional mapping table. (mappings that map to
    themselves.
    @param theta The functional mapping table
    @return      A list of all elements that would be mapped to themselves
@@ -188,8 +188,8 @@ let is_identity (theta: ('a, 'a) table_fn_t): bool =
    List.length (identities theta) = List.length theta
 
 (**
-   Determine if the provided functional mapping has a transitive closure (i.e., 
-   if applying the mapping a second time could produce a different mapping).  
+   Determine if the provided functional mapping has a transitive closure (i.e.,
+   if applying the mapping a second time could produce a different mapping).
    @param theta The functional mapping table
    @return      true if the mapping is its own transitive closure
 *)

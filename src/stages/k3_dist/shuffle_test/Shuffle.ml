@@ -3,14 +3,14 @@ open Util
 (*
  * m_to_n_pat = positions of m's keys in n's schema (pregenerated for each mn)
  * node_to_ip: translate node number to IP
- * bmod = (int * int) list = (index * bucket modulo factor) list 
+ * bmod = (int * int) list = (index * bucket modulo factor) list
  * (pre-generated per map), order determines order of bucketing
 *)
 
 (* for each binding pattern, keep a subspace of buckets corresponding to
  * the unbound dimensions of the binding pattern.
- * space : (index * value) list list 
- * 
+ * space : (index * value) list list
+ *
  * unbound_pat_space = ((int list) * (int * value) list list) list
  *)
 
@@ -25,7 +25,7 @@ let range first last =
         if index = last then acc@[index]
         else range_inner (index+1) (acc@[index])
     in
-		if first > last then invalid_arg "Range has first > last" 
+		if first > last then invalid_arg "Range has first > last"
     else range_inner first []
 ;;
 
@@ -33,16 +33,16 @@ let range first last =
  * hashmaps *)
 let group_by_aggregate (agg_fn:'a->'b->'a) (init:'a) (group_fn:'b->'c)
 (collection:'b list) : ('c * 'a) list =
-    List.fold_left 
-        (fun acc_groups i -> 
-            let (match_group, mismatch_groups) = 
+    List.fold_left
+        (fun acc_groups i ->
+            let (match_group, mismatch_groups) =
                 List.partition
                     (fun (tag, group) -> (group_fn i)=tag)
                     acc_groups
             in
             match match_group with
             | [] -> (group_fn i, agg_fn init i) :: mismatch_groups
-            | [(tag, group)] -> (tag, agg_fn group i) :: mismatch_groups 
+            | [(tag, group)] -> (tag, agg_fn group i) :: mismatch_groups
             | head::tail -> raise (Invalid_argument "too many matches in
                 aggregate function")
         )
@@ -62,22 +62,22 @@ let node_to_ip node = node
  * Like bmod, dims are ordered by their position in the list
  *)
 let calc_dim_bounds bmod =
-  let calc = List.fold_left 
-    (fun (xs,acc) (pos, bin_size) -> (xs@[pos, acc], bin_size * acc)) 
-    ([],1) 
+  let calc = List.fold_left
+    (fun (xs,acc) (pos, bin_size) -> (xs@[pos, acc], bin_size * acc))
+    ([],1)
     bmod
   in fst calc
- 
+
   (* run over the m_key input and calculate the value that the bound variables contribute
-  * the bound values serve as our constant. We can pre-calculate their contribution 
-  * to the node location and use that for every possible node that results from 
+  * the bound values serve as our constant. We can pre-calculate their contribution
+  * to the node location and use that for every possible node that results from
   * unbound values, so this calculation should only be done once.
   * For each bound value, we multiply it by the bucket of every previous dimension
   * obtained in dim_boundaries *)
-let calc_bound_bucket bmod dim_bounds key = 
-  fst @: List.fold_left 
+let calc_bound_bucket bmod dim_bounds key =
+  fst @: List.fold_left
     (fun (acc,index) v -> match v with
-      | Some x -> (try 
+      | Some x -> (try
             let value = x mod (List.assoc index bmod) in
             let bucket_size = List.assoc index dim_bounds in
             (acc + value * bucket_size, index + 1)
@@ -90,10 +90,10 @@ let calc_bound_bucket bmod dim_bounds key =
 (* make a list of lists of ranges 0...b_i for each unbound_dim.
 * This is every possible value in each unbound dimension
 *)
-let calc_unbound_domains bmod key : (int * int list) list = 
+let calc_unbound_domains bmod key : (int * int list) list =
   (* find which dimensions and buckets are not specified in the pattern
    * (unbound) but are used for partitioning *)
-  let unbound_dims bmod key = 
+  let unbound_dims bmod key =
     try
       List.filter
         (fun (i,_) -> match List.nth key i with None -> true | _ -> false) bmod
@@ -111,14 +111,14 @@ let calc_unbound_domains bmod key : (int * int list) list =
  * This should be precomputed once per pattern, rather than repeated
  * per invocation of route.
  *)
-let calc_unbound_cart_prod (unbound_domains:(int * int list) list) : (int * int) list list = 
+let calc_unbound_cart_prod (unbound_domains:(int * int list) list) : (int * int) list list =
   List.fold_left
     (fun prev_cart_prod (i, (domain:int list)) -> List.flatten
-      (List.map 
+      (List.map
         (* for every domain element in the domain *)
         (fun (domain_element:int) -> match prev_cart_prod with
           | [] -> [[(i,domain_element)]]
-          | _  -> List.map 
+          | _  -> List.map
                    (* add current element to every previous sublist *)
                    (fun rest_tup -> rest_tup@[i,domain_element])
                    prev_cart_prod
@@ -126,11 +126,11 @@ let calc_unbound_cart_prod (unbound_domains:(int * int list) list) : (int * int)
         domain
       )
     )
-    [] 
+    []
     unbound_domains
 
 (* function to calculate the full value of a possible bucket *)
-let full_bucket_calc dim_bounds unbound_bucket bound_bucket : int = 
+let full_bucket_calc dim_bounds unbound_bucket bound_bucket : int =
   List.fold_left
     (fun acc (i,v) -> acc + v * List.assoc i dim_bounds)
     bound_bucket (* start with this const *)
@@ -139,24 +139,24 @@ let full_bucket_calc dim_bounds unbound_bucket bound_bucket : int =
 (* We now add in the value of the bound variables as a constant
  * and calculate the result for every possibility
  *)
-let calc_unbound_ip_list bound_bucket unbound_cart_prod dim_bounds num_of_nodes = 
+let calc_unbound_ip_list bound_bucket unbound_cart_prod dim_bounds num_of_nodes =
   (* calculate a single bucket using the whole key. Our unbound values
    * don't need to be hashed because they just take all possibilities *)
-  let ip_list = 
+  let ip_list =
     group_by_aggregate (fun acc ip -> ip::acc) [] (fun ip -> ip) @:
       List.map
-        (fun (unbound_bucket:(int * int) list) -> 
-          node_to_ip @: 
-            (full_bucket_calc dim_bounds unbound_bucket bound_bucket) 
+        (fun (unbound_bucket:(int * int) list) ->
+          node_to_ip @:
+            (full_bucket_calc dim_bounds unbound_bucket bound_bucket)
             mod num_of_nodes
         )
         (unbound_cart_prod:((int * int) list list))
   in
   match ip_list with
-  | [] -> [node_to_ip (bound_bucket mod num_of_nodes)] 
+  | [] -> [node_to_ip (bound_bucket mod num_of_nodes)]
   | _ -> List.map fst ip_list (* we only want ips ie the group tag *)
 
-(* Returns a list of ips *)                        
+(* Returns a list of ips *)
 (* Route is specialized for a specific bmod *)
 (* m_key = m's parameters
  *     e.g. [Some 10; None] (in reality, this has to be a tuple since it
@@ -181,10 +181,10 @@ let route (bmod:(int * int) list) (num_of_nodes:int) (key:int option list) =
 	let m_to_n_pat = [(0,-1);(1,1);(2,-1);(3,0);(4,-1)]
 	let shuffle_on_empty = false
 	let n_pat = []
-	let n_key = [] 
+	let n_key = []
 	let tuples = [[101;203;305;404;501;2];[450;383;214;563;321;5]]
   *)
-	
+
 (* Returns a list of ip, tuple pairs.
  *
  * To handle empty messages, we create all possible empty messages up front
@@ -219,8 +219,8 @@ let route (bmod:(int * int) list) (num_of_nodes:int) (key:int option list) =
 (* In K3, this function will have to be part of the code per binding *)
 let full_n_key (n_key:int option list) n_to_m_pat m_tuple : int option list =
   snd @: List.fold_left
-    (fun (index,acc_tup) k -> 
-      if List.exists (fun (x,_) -> x = index) n_to_m_pat then 
+    (fun (index,acc_tup) k ->
+      if List.exists (fun (x,_) -> x = index) n_to_m_pat then
         let m_place = List.assoc index n_to_m_pat in
         let m_val = try List.nth m_tuple m_place with
         | Invalid_argument "List.nth" -> invalid_arg "Bad n_to_m_pat or tuple"
@@ -247,10 +247,10 @@ let shuffle_m_to_n n_bmod num_of_nodes n_to_m_pat n_key tuples shuffle_on_empty 
     let all_targets = get_all_targets shuffle_on_empty route_to_n n_key in
     group_by_aggregate (* sort by IPs *)
       (fun acc (ip, tuple) -> acc@ [tuple])
-      [] 
+      []
       (fun (ip, tuple) -> ip)
       (all_targets@ List.flatten @:
-        List.map (fun m_tuple -> 
+        List.map (fun m_tuple ->
           List.map
             (fun ip -> (ip, m_tuple))
             (route_to_n @: full_n_key n_key n_to_m_pat m_tuple)

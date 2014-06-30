@@ -12,7 +12,7 @@ module KH = K3Helpers
 
 exception MissingType of int * string
 
-let force_list = List.iter force 
+let force_list = List.iter force
 
 (* lazy functions *)
 let lhv i = [lazy (obc i)]     (* open box *)
@@ -24,7 +24,7 @@ let lcut () = [lazy (pbsi 0 0)] (* print nothing or split line *)
 let lind () = [lazy (pbsi 1 2)] (* print break with indent or space *)
 let lsp () = [lazy (pbsi 1 0)] (* print space or split line *)
 let lps s = [lazy (ps s)]      (* print string *)
-let lps_list ?(sep=", ") cut_t f l = 
+let lps_list ?(sep=", ") cut_t f l =
   [lazy (ps_list ~sep:sep cut_t (force_list |- f) l)]
 
 (* low precedence joining of lists *)
@@ -33,15 +33,15 @@ let (<|) a b = a @ b
 let lazy_paren f = lps "(" <| f <| lps ")"
 let lazy_bracket f = lps "[" <| f <| lps "]"
 let lazy_brace f = lps "{" <| f <| lps "}"
-let lazy_box_brace f = 
-  lps "{" <| lind () <| lv 0 <| f <| 
+let lazy_box_brace f =
+  lps "{" <| lind () <| lv 0 <| f <|
   lcb () <| lcut () <| lps "}"
 let lbox b f = b <| f <| lcb ()
 let wrap_hv i f = lbox (lhv i) f
 let wrap_hov i f = lbox (lhov i) f
 let wrap_indent f = wrap_hov 2 f
 
-let lazy_concat ?(sep=lsp) f l = 
+let lazy_concat ?(sep=lsp) f l =
   let len = List.length l - 1 in
   let l2 = list_populate (fun _ -> sep ()) 0 len in
   wrap_hov 0 @: List.flatten @: list_intersperse (List.map f l) l2
@@ -54,7 +54,7 @@ type config = {
                 env:T.type_bindings_t;  (* type bindings for environment *)
                 trig_env:T.type_bindings_t;
                 map_to_fold:bool;       (* convert maps and ext to fold, due to k3new limitations *)
-              } 
+              }
 
 let default_config = {
                        env = [];
@@ -100,11 +100,11 @@ let s_of_col_type = function
   | TList -> "Seq"
 
 let lazy_control_anno c = function
-  | Effect ids -> lps "effect " <| lazy_paren @: 
+  | Effect ids -> lps "effect " <| lazy_paren @:
       lps_list NoCut lps ids
   | Parallel i -> lps "parallel " <| lazy_paren (lps @: string_of_int i)
 
-let lazy_data_anno c a = 
+let lazy_data_anno c a =
   let positions ps = lps_list NoCut (lps |- string_of_int) ps in
   match a with
   | FunDep (ps, Element) -> lps "key " <| lazy_paren (positions ps)
@@ -121,13 +121,13 @@ let lazy_anno c = function
   | Control(r,a) -> lazy_control_anno c a
   | _ -> []
 
-let lazy_annos c = function 
-  | [] -> [] 
+let lazy_annos c = function
+  | [] -> []
   | annos -> lps "@ " <| lazy_brace @: lps_list ~sep:"; " NoCut (lazy_anno c) annos
 
-let rec lazy_base_type ?(brace=true) ?(mut=false) ?(empty=false) c ~in_col t = 
+let rec lazy_base_type ?(brace=true) ?(mut=false) ?(empty=false) c ~in_col t =
   let wrap_mut f = if mut && not empty then lps "mut " <| f else f in
-  let wrap_single f = 
+  let wrap_single f =
     let wrap = if brace then lazy_brace else id_fn in
     if in_col then wrap(lps "i:" <| f) else f
   in
@@ -136,7 +136,7 @@ let rec lazy_base_type ?(brace=true) ?(mut=false) ?(empty=false) c ~in_col t =
   | TUnit        -> wrap @: lps "()"
   | TBool        -> wrap @: lps "bool"
   | TByte        -> wrap @: lps "byte"
-  | TInt        
+  | TInt
   | TDate        -> wrap @: lps "int"
   | TFloat       -> wrap @: lps "real"
   | TString      -> wrap @: lps "string"
@@ -151,7 +151,7 @@ let rec lazy_base_type ?(brace=true) ?(mut=false) ?(empty=false) c ~in_col t =
         lps (id^":") <| lazy_value_type c ~in_col:false vt) rec_vts in
       let wrap = if brace then lazy_brace else id_fn in
       wrap (lsp () <| inner <| lsp ())
-  | TCollection(ct, vt) -> wrap ( 
+  | TCollection(ct, vt) -> wrap (
     (if not empty then lps "collection " else [])
     <| lazy_value_type c ~in_col:true vt <| lps " @ " <| lps
         begin match ct with
@@ -171,7 +171,7 @@ and lazy_value_type ?empty c ~in_col = function
 
 let lazy_type c = function
   | TFunction(f,t) ->
-      lazy_value_type c ~in_col:false f <| lps " -> " <| 
+      lazy_value_type c ~in_col:false f <| lps " -> " <|
       lazy_value_type c ~in_col:false t
   | TValue vt -> lazy_value_type c false vt
 
@@ -209,7 +209,7 @@ let lazy_collection_vt c vt eval = match KH.unwrap_vtype vt with
         lazy_base_type ~brace:false ~in_col:true ~mut c t <| lps "|" <| lsp ()
       in
       lps "{|" <| lazy_elem_list <| eval <| lps "|}" <|
-      lps @: 
+      lps @:
         begin match ct with
         | TSet  -> " @ { Set }"
         | TBag  -> " @ { Collection }"
@@ -221,7 +221,7 @@ let lazy_collection_vt c vt eval = match KH.unwrap_vtype vt with
 type arg_num
     = NIgnored
     | NVar      of int * id_t * value_type_t
-    | NMaybe    of int * arg_num 
+    | NMaybe    of int * arg_num
     | NTuple    of int * arg_num list
 
 (* get an id for the argument at the shallow level for trigger or lambda *)
@@ -235,11 +235,11 @@ let shallow_bind_id ~in_record = function
       | _        -> id_of_num i
       end
   | NVar (_, id, _) -> id
-  | NMaybe (i,_)     
+  | NMaybe (i,_)
   | NTuple (i,_)    -> id_of_num i
 
 (* convert args to an arg type containing numbers for binding *)
-let arg_num_of_arg a = 
+let arg_num_of_arg a =
   let i = ref 1 in
   let rec loop = function
     | AIgnored     -> NIgnored
@@ -279,7 +279,7 @@ let peel_arg = function
 let unwrap_option ?(project=false) f =
   let p = if project then ".i" else "" in
   lps "case " <| f <| lps " of" <| lsp () <|
-  lps (Printf.sprintf "{ Some x -> x%s }" p) <| lsp () <| 
+  lps (Printf.sprintf "{ Some x -> x%s }" p) <| lsp () <|
   lps "{ None -> error () }"
 
 (* A slice can have other statements inside it. We need to get the inner tuple
@@ -357,16 +357,16 @@ let rec deep_bind ?(depth=0) ?top_expr ~in_record c arg_n =
         end
     | NIgnored
     | NVar _      -> [] (* no binding needed *)
-    | NTuple(i, args) -> 
+    | NTuple(i, args) ->
         (* only produce binds if we're deeper than specified depth *)
         (if d < depth then [] else
           let args_id = List.map get_id_of_arg args in
           let args_rec = add_record_ids_str args_id in
           let sub_ids = lazy_concat ~sep:lcomma lps args_rec in
-          lps "bind " <| bind_text i <| lps " as {" <| sub_ids <| lps "} in " 
+          lps "bind " <| bind_text i <| lps " as {" <| sub_ids <| lps "} in "
           <| lcut ()) <|
       List.flatten @: List.map (loop @: d+1) args
-  | NMaybe(i, arg)  -> 
+  | NMaybe(i, arg)  ->
       if d < depth then [] else
         lps "let " <| lps (get_id_of_arg arg) <| lps " = " <| unwrap_option (bind_text i) <|
         lps " in" <| lsp () <| loop (d+1) arg
@@ -379,8 +379,8 @@ and apply_method_nocol ?prefix_fn c ~name ~args ~arg_info =
       | _ -> lazy_paren
   in
   let args' = list_zip args arg_info in
-  lps ("."^name) <| lsp () <| 
-    lazy_concat (fun (e, info) -> 
+  lps ("."^name) <| lsp () <|
+    lazy_concat (fun (e, info) ->
       wrap_if_big e @: lazy_expr ~expr_info:info ?prefix_fn c e) args'
 
 (* Apply a method to a collection *)
@@ -392,7 +392,7 @@ and apply_method ?prefix_fn c ~name ~col ~args ~arg_info =
     in f @: lazy_expr c col <| apply_method_nocol c ~name ~args ~arg_info ?prefix_fn
 
 (* apply a function to arguments *)
-and function_application c fun_e l_e = 
+and function_application c fun_e l_e =
   (* Check if we need to modify the function *)
   (* for example, hash gets only one function in the new k3 *)
   let id, tag, anns, children = U.details_of_expr fun_e in
@@ -421,8 +421,8 @@ and handle_lambda c ~expr_info ~prefix_fn arg e =
   in
   let exec arg in_record =
     (* for curried arguments, we deep bind at a deeper level *)
-    write arg in_record <| lind () <| 
-      wrap_hov 0 (deep_bind ~depth:0 ~in_record c arg <| 
+    write arg in_record <| lind () <|
+      wrap_hov 0 (deep_bind ~depth:0 ~in_record c arg <|
       (* for the final expr, we may need to wrap the output in a record *)
       lazy_expr c (prefix_fn e) ~expr_info:(ANonLambda, out_rec))
   in
@@ -432,9 +432,9 @@ and handle_lambda c ~expr_info ~prefix_fn arg e =
   | x::xs ->
     let in_record = match x with InRec -> true | _ -> false in
     (* handle argument by argument if lambda_many_args *)
-    if many_args then 
+    if many_args then
       match peel_arg a with
-      | arg, Some tup_arg -> 
+      | arg, Some tup_arg ->
           lazy_paren (write arg in_record <| wrap_hov 0 (deep_bind ~depth:0 ~in_record c arg) <|
             loop tup_arg xs)
       | arg, None         -> lazy_paren @: exec arg in_record
@@ -477,7 +477,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
      - If a left sub-element is 'ifthenelse' or a 'let', we wrap it.
      - For a == or !=, we also wrap sub- ==/!= *)
   let arith_paren e = match U.tag_of_expr e with
-    | Mult 
+    | Mult
     | Add   -> lazy_paren
     | Apply -> let e1, _ = U.decompose_apply e in
                begin match U.tag_of_expr e1 with
@@ -522,7 +522,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
     Aggregate | GroupByAggregate -> wrap_hv 2 e
     | IfThenElse -> wrap_hv 0 e
     | _ -> id_fn e
-  in 
+  in
   (* begin analysis of tags *)
   let analyze () = match U.tag_of_expr expr with
   | Const con -> lazy_const c con
@@ -534,10 +534,10 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
     in lazy_brace inner
   | Just -> let e = U.decompose_just expr in
     lps "Some " <| lazy_expr c e
-  | Nothing vt -> lps "None " <| if fst @: KH.unwrap_vtype vt 
+  | Nothing vt -> lps "None " <| if fst @: KH.unwrap_vtype vt
       then lps "mut" else lps "immut"
   | Empty vt -> lps "empty " <| lazy_value_type ~empty:true c ~in_col:false vt
-  | Singleton _ -> 
+  | Singleton _ ->
     (* Singletons are sometimes typed with unknowns (if read from a file) *)
     let e = U.decompose_singleton expr in
     let t = U.unwrap_t_val @: T.type_of_expr expr in
@@ -581,7 +581,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
     let is_neg = begin match U.tag_of_expr e1 with
       | Neg -> let e = U.decompose_neg e1 in
         begin match U.tag_of_expr e with
-          | Const(CInt(1)) -> true 
+          | Const(CInt(1)) -> true
           | _ -> false
         end
       | Const(CInt(-1)) -> true
@@ -591,11 +591,11 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
       | true, _ -> arith_paren_pair "and" (e1, e2)
       | false, true -> lps "-" <| lazy_expr c e2 (* just a minus *)
       | _ -> arith_paren_pair "*" (e1, e2)
-    end 
+    end
   | Neg -> let e = U.decompose_neg expr in
     let sym = if expr_type_is_bool e then "not " else "-" in
     begin match U.tag_of_expr e with
-      | Var _ 
+      | Var _
       | Const _ -> lps sym <| lazy_expr c e
       | Lt -> let p = U.decompose_lt e in
         arith_paren_pair ">=" p
@@ -611,7 +611,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
     logic_paren_pair "!=" p
   | Leq -> let p = U.decompose_leq expr in
     arith_paren_pair "<=" p
-  | Lambda arg -> 
+  | Lambda arg ->
       let _, e = U.decompose_lambda expr in
       handle_lambda c ~prefix_fn ~expr_info arg e
   | Apply -> let e1, e2 = U.decompose_apply expr in
@@ -639,10 +639,10 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
         in
         begin match arg with
         (* If we have an arg tuple, it's a bind. A maybe is similar *)
-        | ATuple _ 
+        | ATuple _
         | AMaybe _     -> let arg_n = arg_num_of_arg arg in
                           deep_bind c arg_n ~top_expr:e2 ~in_record:false <|
-                            lazy_expr c body 
+                            lazy_expr c body
         (* Otherwise it's a let *)
         | AVar(id, vt) ->
             (* check if we're casting the type of the collection *)
@@ -657,8 +657,8 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
       | _ -> error () (* type error *)
     end
   | Block -> let es = U.decompose_block expr in
-    lps "(" <| lind () <| 
-    wrap_hv 0 (lps_list ~sep:";" CutHint (lazy_expr c) es <| lsp ()) 
+    lps "(" <| lind () <|
+    wrap_hv 0 (lps_list ~sep:";" CutHint (lazy_expr c) es <| lsp ())
       <| lps ")"
 
   | IfThenElse -> let (e1, e2, e3) = U.decompose_ifthenelse expr in
@@ -685,7 +685,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
         lazy_expr c @: light_type c @: KH.mk_map lm col
 
   (* flatten(map(...)) becomes ext(...) *)
-  | Flatten -> 
+  | Flatten ->
       if c.map_to_fold then
         (* both map and ext become folds *)
         fold_of_map_ext c expr
@@ -701,9 +701,9 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
         in
         let empty_c = light_type c @: KH.mk_empty t in
         begin match U.tag_of_expr e with
-        | Map -> 
+        | Map ->
             let lambda, col = U.decompose_map e in
-            apply_method c ~name:"ext" ~col ~args:[lambda; empty_c] 
+            apply_method c ~name:"ext" ~col ~args:[lambda; empty_c]
               ~arg_info:[ALambda [InRec], Out; ANonLambda, Out]
         | _   -> failwith "Unhandled Flatten without map"
         end
@@ -714,7 +714,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
       ~arg_info:[ALambda [In; InRec], Out; ANonLambda, Out]
   | GroupByAggregate -> let lam1, lam2, acc, col = U.decompose_gbagg expr in
     (* find out if our accumulator is a collection type *)
-    apply_method c ~name:"groupBy" ~col ~args:[lam1; lam2; acc] 
+    apply_method c ~name:"groupBy" ~col ~args:[lam1; lam2; acc]
       ~arg_info:[ALambda [InRec], Out; ALambda [In; InRec], Out; ANonLambda, Out]
   | Sort -> let col, lambda = U.decompose_sort expr in
     apply_method c ~name:"sort" ~col ~args:[lambda] ~arg_info:[ALambda [InRec; InRec], Out]
@@ -754,15 +754,15 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
       end) id_e
     in
     if null filter_e then lazy_expr c col (* no slice needed *)
-    else 
+    else
       let do_eq (id, v) = KH.mk_eq (KH.mk_var id) v in
       let lambda = light_type c @:
         KH.mk_lambda (KH.wrap_args id_t) @:
           lam_fn @: (* apply an inner lambda constructor *)
           List.fold_right (fun x acc ->
             KH.mk_and acc (do_eq x)
-          ) 
-          (tl filter_e) 
+          )
+          (tl filter_e)
           (do_eq @: hd filter_e)
       in
       apply_method c ~name:"filter" ~col ~args:[lambda] ~arg_info:[ALambda[InRec], Out]
@@ -783,8 +783,8 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
     lps "bind" <| lsp () <| lazy_expr c e <| lsp () <| lps "as " <| lps "ind __x"
       <| lsp () <| lps "in __x"
   | Send -> let target, addr, args = U.decompose_send expr in
-    wrap_indent @: lazy_paren (expr_pair (target, addr)) <| lps "<- " <| 
-      lps_list CutHint (lazy_expr c) args 
+    wrap_indent @: lazy_paren (expr_pair (target, addr)) <| lps "<- " <|
+      lps_list CutHint (lazy_expr c) args
   in
   (* check if we need to wrap our output in a tuple (record) *)
   match snd expr_info with
@@ -808,12 +808,12 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
     end
   | _ -> wrap @: analyze ()
 
-let lazy_trigger c id arg vars expr = 
+let lazy_trigger c id arg vars expr =
   let is_block expr = match U.tag_of_expr expr with Block -> true | _ -> false in
-  let indent f = if is_block expr 
+  let indent f = if is_block expr
                then lps " " <| f
                else lind () <| lbox (lhov 0) f in
-  lps ("trigger "^id) <| lps " : " <| 
+  lps ("trigger "^id) <| lps " : " <|
   lazy_value_type ~in_col:false c @: KH.value_type_of_arg arg <| lsp () <|
   lps "=" <| indent (lazy_expr c @: KH.mk_lambda arg expr) <| lcut ()
 
@@ -826,7 +826,7 @@ let lazy_channel c chan_t chan_f = match chan_t with
   | Network(str, port) -> lps @: "socket(\""^str^"\":"^string_of_int port^")"
 
 let rec lazy_resource_pattern c = function
-  | Terminal id -> lps id 
+  | Terminal id -> lps id
   | Choice rps  -> lps_list ~sep:"| " CutHint (lazy_resource_pattern c) rps
   | Sequence rps -> lps_list ~sep:" " CutHint (lazy_resource_pattern c) rps
   | Optional rp -> lazy_resource_pattern c rp <| lps "?"
@@ -836,7 +836,7 @@ let lazy_stream c = function
   | RandomStream i -> lps "random" <| lazy_paren (lps @: string_of_int i)
   | ConstStream e  -> lps "stream" <| lazy_paren (lazy_expr c e)
 
-let lazy_resource c r = 
+let lazy_resource c r =
   let common t = lazy_type c t <| lps " = " in
   match r with
   | Handle(t, chan_t, chan_f) -> common t <| lazy_channel c chan_t chan_f
@@ -846,7 +846,7 @@ let lazy_resource c r =
 let lazy_flow c = function
   | Source(Code(id, arg, vars, expr))
   | Sink(Code(id, arg, vars, expr)) -> lazy_trigger c id arg vars expr
-  | Source(Resource(id, r)) -> 
+  | Source(Resource(id, r)) ->
       lps ("source "^id^" : ") <| lazy_resource c r
   | Sink(Resource(id, r)) ->
       lps ("sink "^id^" : ") <| lazy_resource c r
@@ -855,14 +855,14 @@ let lazy_flow c = function
 
 let lazy_flow_program c fas = lps_list ~sep:"" CutHint (lazy_flow c |- fst) fas
 
-let lazy_declaration c d = 
+let lazy_declaration c d =
   let out = match d with
-  | Global(id, t, expr) -> let end_part = begin match expr with 
+  | Global(id, t, expr) -> let end_part = begin match expr with
       | None -> []
       | Some e -> lps " =" <| lsp () <| lazy_expr c e
     end in
     wrap_hov 2 (lps @: "declare "^id^" :" <| lsp () <| lazy_type c t <| end_part)
-  | Role(id, fprog) -> 
+  | Role(id, fprog) ->
       lps ("role "^id^" ") <| lazy_box_brace (lazy_flow_program c fprog)
   | Flow fprog -> lazy_flow_program c fprog
   | DefaultRole id -> lps ("default role "^id)
@@ -873,7 +873,7 @@ let lazy_declaration c d =
 let wrap_f = wrap_formatter ~margin:80
 
 (* print a K3 type in syntax *)
-let string_of_base_type t = wrap_f @: fun () -> 
+let string_of_base_type t = wrap_f @: fun () ->
   force_list @: lazy_base_type verbose_types_config false t
 
 (* print a K3 type in syntax *)
@@ -890,14 +890,14 @@ let filter_incompatible prog =
       | Sink(Code(id, _, _, _)) when r_match r_demux id -> None
       | _ -> Some trig
     ) fl
-  in 
+  in
   let r_hash = Str.regexp "^hash.*" in
   let drop_globals = List.fold_left (flip StringSet.add) StringSet.empty
     ["divf"; "mod"; "float_of_int"; "int_of_float"; "get_max_int"; "parse_sql_date"; "peers"; "pmap_input" ]
   in
   filter_map (fun ((d,a) as dec) ->
     (* we don't want the monomorphic hash functions *)
-    match d with 
+    match d with
     | Foreign(id, _)   when StringSet.mem id drop_globals -> None
     | Foreign(id, _)   when r_match r_hash id             -> None
     | Global(id, _, _) when StringSet.mem id drop_globals -> None
@@ -906,12 +906,12 @@ let filter_incompatible prog =
     | DefaultRole _ -> None
     | _             -> Some dec
   ) prog
-  
+
 (* print a K3 program in syntax *)
 (* We get the typechecking environments so we can do incremental typechecking where needed *)
-let string_of_program ?(map_to_fold=false) prog (env, trig_env) = 
+let string_of_program ?(map_to_fold=false) prog (env, trig_env) =
   let config = {env; trig_env; map_to_fold} in
-  wrap_f @: fun () -> 
+  wrap_f @: fun () ->
     let l = lps_list ~sep:"" CutHint (lazy_declaration config |- fst) prog in
     obx 0;  (* vertical box *)
     force_list l;
@@ -938,9 +938,9 @@ let add_sources p envs filename =
   let insert_args     = List.map U.args_of_code insert_trigs in
   let arg_types       = List.map KH.value_type_of_arg insert_args in
   (* the source has dates as strings, before we convert them *)
-  let arg_types_source = List.map (fun args -> 
+  let arg_types_source = List.map (fun args ->
     wrap_ttuple @: List.map (fun t ->
-      if t = t_date then t_string else t) 
+      if t = t_date then t_string else t)
       (unwrap_ttuple args)
   ) arg_types
   in
@@ -968,7 +968,7 @@ let add_sources p envs filename =
                   else mk_var id
                 ) ids_types
           (* no date, so simple code path *)
-          else 
+          else
             mk_unwrap_maybe [trig_id^"_args", wrap_tmaybe trig_t] @:
               mk_var @: trig_args_unwrap_nm
         in

@@ -27,7 +27,7 @@ val string_of_map: (map_id_t * map_var_binding_t list) -> string
 val string_of_map_data: map_data_t -> string
 val string_of_stmt_data: stmt_data_t -> string
 val string_of_trig_data: trig_data_t -> string
-val string_of_prog_data: prog_data_t -> string 
+val string_of_prog_data: prog_data_t -> string
 
 (* Utility functions using this data structure *)
 val get_trig_list : prog_data_t -> trig_name_t list
@@ -42,7 +42,7 @@ val find_map : prog_data_t -> map_id_t -> map_data_t
 val find_map_by_name : prog_data_t -> string -> map_data_t
 val find_stmt : prog_data_t -> stmt_id_t -> stmt_data_t
 val trigger_id_for_name : prog_data_t -> trig_name_t -> trig_id_t
-val trigger_name_for_id : prog_data_t -> trig_id_t -> trig_name_t 
+val trigger_name_for_id : prog_data_t -> trig_id_t -> trig_name_t
 val args_of_t : prog_data_t -> trig_name_t -> (id_t * value_type_t) list
 val s_and_over_stmts_in_t :
   prog_data_t ->
@@ -80,11 +80,11 @@ val map_types_with_v_for : prog_data_t -> map_id_t -> value_type_t list
 val map_names_ids_of_stmt : prog_data_t -> stmt_id_t -> (string * map_id_t) list
 
 (* construct a representation of ids and types for a map *)
-val map_ids_types_for : ?prefix:string -> prog_data_t -> map_id_t -> 
+val map_ids_types_for : ?prefix:string -> prog_data_t -> map_id_t ->
     (string * value_type_t) list
 
 (* get ids and types with no value *)
-val map_ids_types_no_val_for : ?prefix:string -> prog_data_t -> map_id_t -> 
+val map_ids_types_no_val_for : ?prefix:string -> prog_data_t -> map_id_t ->
     (string * value_type_t) list
 
 (* add a vid of any kind (var, whatever) to a list. Allows consistent placement
@@ -96,11 +96,11 @@ val map_add_v : 'a -> 'a list -> 'a list
 val map_ids_add_v : ?vid:string -> string list -> string list
 
 (*add a vid to the ids,types*)
-val map_ids_types_add_v : ?vid:string -> (string * value_type_t) list -> 
+val map_ids_types_add_v : ?vid:string -> (string * value_type_t) list ->
     (string * value_type_t) list
 
 (* construct a list of ids, types including the vid *)
-val map_ids_types_with_v_for : ?prefix:string -> ?vid:string -> prog_data_t -> 
+val map_ids_types_with_v_for : ?prefix:string -> ?vid:string -> prog_data_t ->
     map_id_t -> (string * value_type_t) list
 
 (* because we add the vid first, we need to modify the numbering of arguments in
@@ -126,5 +126,5 @@ val get_map_bindings_in_stmt : prog_data_t -> stmt_id_t -> map_id_t -> map_id_t
 
 (* get a list of unique types for maps (no vid) and their map ids *
  * @param type_fn allows to select a different type function for uniqueness *)
- 
+
 val uniq_types_and_maps : ?type_fn:(prog_data_t -> map_id_t -> value_type_t list) -> prog_data_t -> (value_type_t list * map_id_t list) list

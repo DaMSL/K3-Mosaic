@@ -72,7 +72,7 @@ let pull_source id t res in_chan =
           | e::es ->
               exp_l_ref := es;
               let v = try K3Values.value_of_const_expr e
-                      with Failure s -> 
+                      with Failure s ->
                         let err = Printf.sprintf "%s: we can't handle an expression of %s"
                           id  (K3Printing.flat_string_of_expr e) in
                         raise @: ResourceError err

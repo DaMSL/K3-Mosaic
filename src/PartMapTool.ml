@@ -52,7 +52,7 @@ let pmap_types = wrap_tlist @: wrap_ttuple [t_string; inner_type]
 let k3_of_maps_sizes maps_sizes =
   k3_container_of_list pmap_types @:
     List.map (fun (m, ss) ->
-      mk_tuple [mk_cstring m; 
+      mk_tuple [mk_cstring m;
         k3_container_of_list inner_type @:
           List.map (fun (dim, size) ->
             mk_tuple [mk_cint dim; mk_cint size]) ss]
@@ -66,7 +66,7 @@ let k3_decl_of_k3_expr k3exp =
 let k3new_string_of_maps_sizes maps_sizes =
   let p, env, trig_env, _ = k3_decl_of_k3_expr @: k3_of_maps_sizes maps_sizes in
   K3NewPrint.string_of_program p (env, trig_env)
-  
+
 let string_of_maps_sizes maps_sizes =
   let module B = Buffer in
   let buf = B.create 100 in
@@ -93,7 +93,7 @@ let calc_part num_nodes dims =
     if prod >= num_nodes then l
     else
       (* keep increasing the dimension sizes until we meet our goal *)
-      let prod', l' = 
+      let prod', l' =
         mapfold (fun acc_prod (dim, size) ->
           if acc_prod >= num_nodes then acc_prod, (dim, size)
           else acc_prod * 2, (dim, size * 2) (* double the size of this dimension *)
@@ -112,7 +112,7 @@ let calc_part_maps num_nodes maps_dims =
     else Some(mapname, calc_part num_nodes dim)
   ) maps_dims
 
-let param_specs = 
+let param_specs =
   let c = cmd_line_params in Arg.align
   ["-n", Arg.Int  (fun i -> c.num_nodes <- i), "INTEGER Set number of nodes";
    "-d", Arg.Unit (fun _ -> c.debug <- true), "FLAG Set debug mode";
@@ -134,7 +134,7 @@ let main () =
      error "\nNo input files specified")
   else if cmd_line_params.num_nodes <= 0 then
     (Arg.usage param_specs usage_msg;
-     error "\nMust have number for nodes") 
+     error "\nMust have number for nodes")
   else
     let p = cmd_line_params in
     let maps_dims = maps_and_dims p.dist_file in

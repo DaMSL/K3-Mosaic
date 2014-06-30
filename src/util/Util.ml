@@ -37,6 +37,10 @@ let fst_many l = fst @: List.split l
 
 let snd_many l = snd @: List.split l
 
+(* apply to one part of the tuple, and send the other part through *)
+let first (x,y) f  = f x, y
+let second (x,y) f = x, f y
+
 (* take the first x elements of a list *)
 let list_take len li =
   let rec take len2 li2 acc_list =
@@ -60,7 +64,7 @@ let list_take_end len li = list_drop (List.length li - len) li
 let list_drop_end len li = list_take (List.length li - len) li
 
 (* tail-recursive and tolerates different lengths *)
-let list_zip l1 l2 = 
+let list_zip l1 l2 =
   let rec loop acc l1 l2 =
     match l1, l2 with
     | _, [] | [], _   -> List.rev acc
@@ -240,13 +244,13 @@ let list_max_op f l = list_minmax (>) f l
 let list_min_op f l = list_minmax (<) f l
 
 let list_min l = List.fold_left (fun acc x ->
-  if x < acc then x else acc) 
-  (hd l) 
+  if x < acc then x else acc)
+  (hd l)
   (tl l)
 
 let list_max l = List.fold_left (fun acc x ->
-  if x > acc then x else acc) 
-  (hd l) 
+  if x > acc then x else acc)
+  (hd l)
   (tl l)
 
 (* modify/add to/remove_from an association list generically *)
@@ -359,7 +363,7 @@ let r_groups str ~r ~n =
         | "" -> None
         | x  -> Some x
         end
-      with 
+      with
       | Not_found -> None
       | Invalid_argument _ -> invalid_arg @: Printf.sprintf "Bad group %d for string %s" i str
     ) @: create_range 1 n
@@ -397,7 +401,7 @@ let transpose l =
 (* convert date string to integer *)
 let r_date = Str.regexp "\\([0-9]+\\)-\\([0-9]+\\)-\\([0-9]+\\)"
 let int_of_sql_date s = match r_groups s ~n:3 ~r:r_date with
-  | [Some y; Some m; Some d] -> 
+  | [Some y; Some m; Some d] ->
       (ios y)*10000 + (ios m)*100 + (ios d)
   | l -> invalid_arg @: Printf.sprintf "int_of_sql_date for string %s. Found only %i members" s (List.length l)
 

@@ -7,7 +7,7 @@ open K3Annotations
 (****************************
  * Functors
  ****************************)
-module GenericAST(Annotation : ASTAnnotationType) = 
+module GenericAST(Annotation : ASTAnnotationType) =
 struct
 
 include ASTCommonImpl
@@ -148,7 +148,7 @@ type resource_pattern_t =
 (* TODO: produce, listen instructions *)
 type instruction_t = Consume of id_t
 
-type flow_resource_t = 
+type flow_resource_t =
   | Handle  of type_t * channel_type_t * channel_format_t
   | Stream of type_t * stream_type_t
   | Pattern of resource_pattern_t
@@ -195,7 +195,7 @@ end
 module rec AST : ( ASTType with type annotation_t = Annotation.annotation_t )
 = GenericAST(Annotation)
 
-and Annotation : ( AnnotationType with type type_t = AST.type_t 
+and Annotation : ( AnnotationType with type type_t = AST.type_t
                                    and type expr_t = AST.expr_t )
 = struct
 
@@ -212,7 +212,7 @@ type dependency = Element | Positions of positions
 
 type rigidity_t = Constraint | Hint
 
-type data_annotation_t = 
+type data_annotation_t =
   | FunDep   of positions * dependency
   | MVFunDep of positions * dependency
   | Unique   of positions

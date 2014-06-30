@@ -1,14 +1,14 @@
 (**
    Functionality for managing debugging statements and 'hidden' functionality
    in DBToaster.  Accessed through dbtoaster's -d flag.
-   
-   The debug module keeps track of a list of globally 'active' debug modes.  
-   Each mode is identified in the string, and referenced within the code via 
-   the Debug.exec, Debug.print, and Debug.active functions.  
-   
-   Debug modes can be explicitly managed in the code using Debug.activate or 
+
+   The debug module keeps track of a list of globally 'active' debug modes.
+   Each mode is identified in the string, and referenced within the code via
+   the Debug.exec, Debug.print, and Debug.active functions.
+
+   Debug modes can be explicitly managed in the code using Debug.activate or
    Debug.deactivate.  Users can activate debug modes in the dbtoaster binary by
-   passing -d [mode name].  A list of available Debug modes is being maintained 
+   passing -d [mode name].  A list of available Debug modes is being maintained
    on the Assembla page.
 *)
 
@@ -23,7 +23,7 @@ struct
 end
 (**/**)
 
-(** 
+(**
    Overwrite the list of active debug modes.
    @param new_modes The new list of active debug modes.
 *)
@@ -33,15 +33,15 @@ let set_modes new_modes = DebugInternal.debug_modes := new_modes;;
    Activate the indicated debug mode
    @param mode The name of the mode to activate
 *)
-let activate (mode:debug_mode_t): unit = 
-   DebugInternal.debug_modes := 
+let activate (mode:debug_mode_t): unit =
+   DebugInternal.debug_modes :=
       StringSet.add mode !DebugInternal.debug_modes;;
 (**
    Deactivate the indicated debug mode
    @param mode The name of the mode to deactivate
 *)
-let deactivate (mode:debug_mode_t): unit = 
-   DebugInternal.debug_modes := 
+let deactivate (mode:debug_mode_t): unit =
+   DebugInternal.debug_modes :=
       StringSet.remove mode !DebugInternal.debug_modes;;
 
 (**
@@ -50,11 +50,11 @@ let deactivate (mode:debug_mode_t): unit =
    @param f    The function to evaluate if the triggering mode is active
 *)
 let exec (mode:debug_mode_t) (f:(unit->'a)): unit =
-   if StringSet.mem mode !DebugInternal.debug_modes 
+   if StringSet.mem mode !DebugInternal.debug_modes
       then let _ = f () in () else ();;
 
 (**
-   Print a string when the indicated debug mode is active.  The string should 
+   Print a string when the indicated debug mode is active.  The string should
    be encapsulated in a generator function of type ( unit -> string )
    @param mode The triggering mode
    @param f    The string-generating function
@@ -71,7 +71,7 @@ let active (mode:debug_mode_t) = StringSet.mem mode !DebugInternal.debug_modes;;
 
 (**
    Determine the operating system on which we are running
-   @return A string describing the operating system (the output of unmame or 
+   @return A string describing the operating system (the output of unmame or
            ??? if uname does not exist
 *)
 let os () =
@@ -89,7 +89,7 @@ module Logger = struct
       | Error
       | Bug
    (** [string_of_level level]
-   
+
       Generate a human-readable string representation of a debug level
    *)
    let string_of_level = function
@@ -99,9 +99,9 @@ module Logger = struct
       | Bug    -> "BUG"
 
    (** [log level ~continuation ~detail ~exc m msg]
-   
-      Log a message of a specified class, for a specified module 
-      
+
+      Log a message of a specified class, for a specified module
+
       @param m            The module to associate with this warning, or an empty
                           string for an unassociated message
       @param level        The log level to post the message at
@@ -131,14 +131,14 @@ module Logger = struct
    (** Log a message at the bug level and exit with status -1 *)
    let bug = log Bug ~continuation:(Some(fun _ -> exit (-1)))
 
-   (** Generate a set of logging functions for a specific module 
-   
+   (** Generate a set of logging functions for a specific module
+
       Typical usage for a module m is:
-      
+
       [let (inform, warn, error, bug) = Debug.Logger.functions_for_module m]
       @param m    The name of a module
       @return     A set of functions [(inform, warn, error, bug)] identical to
-                  those in the logger module, but with the module parameter 
+                  those in the logger module, but with the module parameter
                   bound to [m].
    *)
    let functions_for_module m = (inform m, warn m, error m, bug m)

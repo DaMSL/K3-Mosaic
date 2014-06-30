@@ -26,7 +26,7 @@ let push x s =
     S.push q s.q;
     (* reset the level increase flag *)
     if s.increase_level then s.increase_level <- false;
-  else 
+  else
     let q = S.top s.q in
     Q.push x q
 
@@ -49,5 +49,5 @@ let pop s =
   with
   | Q.Empty | S.Empty -> raise Empty
 
-  
+
 

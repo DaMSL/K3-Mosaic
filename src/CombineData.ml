@@ -79,16 +79,16 @@ let combine_data t_d : string list=
     let i = Random.int rem_num in
     (* Note that we can't remove any list, because empty lists generate a 'Nothing' *)
     let _, line, remain, rem_num, trig_id =
-      List.fold_right (fun ((t,l) as vals) (idx, out, remain, rem_num, trig_id) -> 
+      List.fold_right (fun ((t,l) as vals) (idx, out, remain, rem_num, trig_id) ->
         let do_just x  = (Printf.sprintf "Just%s %s" mut_s @: rec_of_tup x)::out in
         let do_none () = ("Nothing"^mut_s)::out in
         match l with
         | []           -> idx,   do_none (), vals::remain,   rem_num,   trig_id
                           (* idx only keeps track of live lists *)
-        | [x]   when i=idx -> 
+        | [x]   when i=idx ->
                           idx-1, do_just x,  (t,[])::remain, rem_num-1, Some t
         | [x]          -> idx-1, do_none (), vals::remain,   rem_num,   trig_id
-        | x::xs when i=idx -> 
+        | x::xs when i=idx ->
                           idx-1, do_just x,  (t,xs)::remain, rem_num,   Some t
         | xs           -> idx-1, do_none (), vals::remain,   rem_num,   trig_id
           (* don't count empty lists for the randomization *)
@@ -97,7 +97,7 @@ let combine_data t_d : string list=
       (rem_num-1, [], [], rem_num, None)
     in
     let line = match trig_id with
-      | None   -> failwith "trigger not found" 
+      | None   -> failwith "trigger not found"
       | Some t -> (Printf.sprintf "\"%s\"" t)::line
     in
     loop remain rem_num (line::acc)
@@ -112,7 +112,7 @@ let combine_data t_d : string list=
   let add_end lines = match lines with
     | (s::ss)::ls -> ("\"end\""::(List.map (fun _ -> "Nothing MemImmut") ss))::ls
     | _           -> failwith "bad input in adding end line"
-  in 
+  in
   (* initialize the counts for each source *)
   let remain_init = List.fold_left (fun acc -> function (_,[]) -> acc | _ -> acc+1) 0 t_d in
   let lines = add_end @: loop t_d remain_init [] in
@@ -120,12 +120,12 @@ let combine_data t_d : string list=
 
 let read_files files = List.map read_file_lines files
 
-let parse_map_file ss = 
+let parse_map_file ss =
   let r_comma = Str.regexp "," in
   let pair = function [x;y] -> (x,y) | _ -> failwith "not a pair" in
   List.map (pair |- Str.split r_comma) ss
 
-let _ = 
+let _ =
   parse_cmd_line();
   if params.data_files = [] then print_endline usage_msg else
   let files = read_files params.data_files in
@@ -140,7 +140,7 @@ let _ =
       (* Lexicographical ordering for consistency *)
       List.sort (fun (n,_) (n',_) -> String.compare n n') fns
     | None -> (* just use filenames as trigger names *)
-      let mod_fname n = 
+      let mod_fname n =
         let n = Filename.chop_extension n in
         "insert_"^(String.uppercase n)
       in

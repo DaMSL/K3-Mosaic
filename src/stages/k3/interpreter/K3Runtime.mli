@@ -36,9 +36,9 @@ val network_has_work : scheduler_state ->  bool
 
 val run_scheduler : ?slice:int -> scheduler_state -> address -> program_env_t -> status_t
 
-val init_scheduler_state : ?shuffle_tasks:bool -> 
-  ?breakpoints:breakpoint_t list -> 
-  ?run_length:int64 -> 
+val init_scheduler_state : ?shuffle_tasks:bool ->
+  ?breakpoints:breakpoint_t list ->
+  ?run_length:int64 ->
   ?queue_type:queue_type ->
   unit -> scheduler_state
 

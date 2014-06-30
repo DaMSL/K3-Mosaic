@@ -16,24 +16,24 @@ val sub_tree  : 'a tree_t -> 'a tree_t list
 
 (* Tree traversals *)
 
-val fold_tree : 
+val fold_tree :
   ('td -> 'a tree_t -> 'td) ->
   ('td -> 'bu list -> 'a tree_t -> 'bu) ->
   'td -> 'bu -> 'a tree_t -> 'bu
 
 (* takes no init value for bottom up *)
-val fold_tree1 : 
+val fold_tree1 :
   ('td -> 'a tree_t -> 'td) ->
   ('td -> 'bu list -> 'a tree_t -> 'bu) ->
   'td -> 'a tree_t -> 'bu
 
 
-val fold_tree_thread : 
+val fold_tree_thread :
   ('td -> 'a tree_t -> 'td) ->
   ('td * 'bu list -> 'a tree_t -> 'td * 'bu) ->
   'td -> 'bu -> 'a tree_t -> 'td * 'bu
 
-val fold_tree_lazy : 
+val fold_tree_lazy :
   ('td Lazy.t -> 'a tree_t -> 'td) ->
   ('td Lazy.t -> ('bu Lazy.t) list -> 'a tree_t -> 'bu) ->
   'td -> 'bu -> 'a tree_t -> 'bu
