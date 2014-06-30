@@ -291,9 +291,12 @@ let cartesian_product l1 l2 =
 
 (* efficient function to get unique entities *)
 let nub xs =
-    let blank = Hashtbl.create (List.length xs) in
-    List.iter (fun x -> Hashtbl.replace blank x ()) xs;
-    Hashtbl.fold (fun h () t -> h :: t) blank []
+    let h = Hashtbl.create 50 in
+    List.rev @:
+      List.fold_left (fun acc x ->
+        if Hashtbl.mem h x then acc
+        else (Hashtbl.replace h x (); x::acc)
+      ) [] xs
 
 (* --- Array function --- *)
 
