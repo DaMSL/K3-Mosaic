@@ -154,3 +154,6 @@ val attach_type : type_t -> expr_t -> expr_t
 val string_of_tag : expr_tag_t -> string
 
 val string_of_const : constant_t -> string
+
+(* Get a value_type_t from a type_t *)
+val unwrap_t_val : type_t -> value_type_t

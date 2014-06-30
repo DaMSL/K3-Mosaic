@@ -200,11 +200,6 @@ let lazy_const c v =
   | CAddress(s, i) -> lps @: Printf.sprintf "%s:%d" s i
   | CTarget id     -> lps id
 
-(* unwrap a type_t that's not a function *)
-let unwrap_t_val = function
-  | TValue vt -> vt
-  | _         -> failwith "Function type unexpected"
-
 (* wrap a const collection expression with collection notation *)
 let lazy_collection_vt c vt eval = match KH.unwrap_vtype vt with
   | _, TCollection(ct, et) ->
@@ -450,7 +445,7 @@ and handle_lambda c ~expr_info ~prefix_fn arg e =
 (* create a fold instead of a map or ext (for typechecking reasons) *)
 (* expects a lambda expression, and collection expression inside a map/flattenMap *)
 and fold_of_map_ext c expr =
-  let t_out = unwrap_t_val @: T.type_of_expr expr in
+  let t_out = U.unwrap_t_val @: T.type_of_expr expr in
   (* the only difference between map and ext is whether we wrap the output
    * of the lambda in a singleton before combining *)
   let (lambda, col), wrap_fn, suffix = match U.tag_of_expr expr with
@@ -545,7 +540,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
   | Singleton _ -> 
     (* Singletons are sometimes typed with unknowns (if read from a file) *)
     let e = U.decompose_singleton expr in
-    let t = unwrap_t_val @: T.type_of_expr expr in
+    let t = U.unwrap_t_val @: T.type_of_expr expr in
     lazy_collection_vt c t @: lazy_expr c e
   | Combine ->
     let rec assemble_list c e =  (* print out in list format *)
@@ -567,7 +562,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
     begin match U.tag_of_expr e1, U.tag_of_expr e2 with
       | Singleton vt, Combine | Singleton vt, Singleton _
       | Singleton vt, Empty _ ->
-        let t = unwrap_t_val @: T.type_of_expr expr in
+        let t = U.unwrap_t_val @: T.type_of_expr expr in
         lazy_collection_vt c t @: assemble_list c expr
       | _ -> apply_method c ~name:"combine" ~col:e1 ~args:[e2] ~arg_info:[ANonLambda, Out]
     end
@@ -634,7 +629,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
       | Var _ -> function_application c e1 [e2]
       (* let expression *)
       | Lambda arg ->
-        let t_e2 = begin try unwrap_t_val @: T.type_of_expr e2
+        let t_e2 = begin try U.unwrap_t_val @: T.type_of_expr e2
           with _ -> KH.t_unit end in
         let _, body = U.decompose_lambda e1 in
         let print_let assign_exp =
@@ -698,7 +693,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
         let e = U.decompose_flatten expr in
         (* ext needs an empty type right now to know what to do if the result is empty
         * flatten should always return a bag type since we can't guarantee uniqueness*)
-        let t = unwrap_t_val @: T.type_of_expr expr in
+        let t = U.unwrap_t_val @: T.type_of_expr expr in
         let t = match KH.unwrap_vtype t with
           | _, TCollection(TList, x) -> KH.canonical @: TCollection(TList, x)
           | _, TCollection(_, x)     -> KH.canonical @: TCollection(TBag, x)
@@ -727,7 +722,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
   | Peek -> let col = U.decompose_peek expr in
     (* get the type of the collection. If it's a singleton type, we need to add
      * projection *)
-    let col_t = unwrap_t_val @: T.type_of_expr col in
+    let col_t = U.unwrap_t_val @: T.type_of_expr col in
     let project = (* not a tuple, so need projection out of the record *)
       begin match snd @: KH.unwrap_vtype col_t with
       | TCollection(_, vt) -> begin match snd @: KH.unwrap_vtype vt, snd expr_info with
@@ -748,7 +743,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
       | Apply -> extract_slice pat
       | _     -> [pat], id_fn
     end in
-    let ts = List.map (unwrap_t_val |- T.type_of_expr) es in
+    let ts = List.map (U.unwrap_t_val |- T.type_of_expr) es in
     let id_e = add_record_ids es in
     let id_t = add_record_ids ts in
     (* find the non-unknown slices *)
@@ -805,7 +800,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
               raise @: MissingType(id, K3Printing.string_of_expr expr)
           end
         in
-        begin match snd @: KH.unwrap_vtype @: unwrap_t_val t with
+        begin match snd @: KH.unwrap_vtype @: U.unwrap_t_val t with
         | TTuple _ -> wrap @: analyze ()
         | _        -> lazy_expr ~expr_info:((fst expr_info, Out))
                         ~prefix_fn c @: light_type c @: KH.mk_tuple ~force:true [expr]

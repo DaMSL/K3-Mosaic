@@ -319,23 +319,17 @@ let rec deduce_expr_type ?(override=true) trig_env cur_env utexpr =
                 t_erroru name @: TBad(t1) in
             let t_v1 = t1 <| value_of |> t_erroru name @: TBad(t1) in
 
-            (* Only collections of matching element types can be combined. *)
+            (* Only matching collections can be combined. *)
             (* Note: strictly speaking this isn't true, e.g. [nothing]++[Just 1]
              * we'll use assignable here even though it's not a perfect match *)
             if not (t_v0 === t_v1) then t_erroru name (VTMismatch(t_v0, t_v1,"")) () else
 
             (* Determine combined collection type. *)
-            let t_cr = begin match (t_c0, t_c1) with
-              | (TList, _)    -> TList
-              | (_, TList)    -> TList
-              | (TBag, _)     -> TBag
-              | (_, TBag)     -> TBag
-              | (TSet, TSet)  -> TSet
-            end in let t_e = begin match is_unknown_t t_e0, is_unknown_t t_e1 with
+            let t_e = begin match is_unknown_t t_e0, is_unknown_t t_e1 with
               | false, _ -> t_e0
               | _, false -> t_e1
               | _        -> t_e0
-            end in TValue(canonical (TCollection(t_cr, contained_of t_e)))
+            end in TValue(canonical (TCollection(t_c0, contained_of t_e)))
 
         | Range(t_c) ->
             let name = "Range" in
@@ -519,9 +513,9 @@ let rec deduce_expr_type ?(override=true) trig_env cur_env utexpr =
 
             let expected1 = canonical @: TTuple[t_e; t_e] in
             if not (t_ca <~ expected1) then 
-                t_erroru name (VTMismatch(t_ca, expected1, "")) () else
-            if not (canonical TBool === t_cr) 
-                then t_erroru name (VTMismatch(canonical TBool, t_cr, "")) () else
+              t_erroru name (VTMismatch(t_ca, expected1, "")) () else
+            if not (canonical TBool === t_cr) then
+              t_erroru name (VTMismatch(canonical TBool, t_cr, "")) () else
             TValue(canonical @: TCollection(TList, t_e))
 
         | Slice ->

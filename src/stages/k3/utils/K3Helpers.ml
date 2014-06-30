@@ -558,3 +558,4 @@ let rec value_type_of_arg = function
   | AVar (_, vt) -> vt
   | AMaybe a     -> wrap_tmaybe @: value_type_of_arg a
   | ATuple xs    -> wrap_ttuple @: List.map value_type_of_arg xs
+

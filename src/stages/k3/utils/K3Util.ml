@@ -496,3 +496,9 @@ let string_of_tag = function
   | Assign           -> "Assign"
   | Deref            -> "Deref"
   | Send             -> "Send"
+
+(* unwrap a type_t that's not a function *)
+let unwrap_t_val = function
+  | TValue vt -> vt
+  | _         -> failwith "Function type unexpected"
+
