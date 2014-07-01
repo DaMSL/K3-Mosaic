@@ -242,7 +242,7 @@ val types_to_ids_types : ?first:int -> string -> value_type_t list -> (string * 
  * int_to_temp_id *)
 val mk_destruct_tuple: id_t -> value_type_t list -> string -> expr_t -> expr_t
 
-(* Create K3 code to rebuild a tuple 
+(* Create K3 code to rebuild a tuple
  * A lambda determines how to shuffle the ids of the tuple, or insert external ids
  * *)
 val mk_rebuild_tuple: ?prefix:id_t -> id_t -> value_type_t list -> (id_t list -> id_t list) -> expr_t

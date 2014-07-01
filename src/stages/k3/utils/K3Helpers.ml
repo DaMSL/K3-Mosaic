@@ -452,7 +452,7 @@ let mk_destruct_tuple tup_name types prefix expr =
   mk_let_many ids_types (mk_var tup_name) expr
 
 (* rebuild a tuple based on the types of the tuple.
- * A lambda allows you to shuffle the ids/types as you wish 
+ * A lambda allows you to shuffle the ids/types as you wish
  * *)
 let mk_rebuild_tuple ?(prefix=def_tup_prefix) tup_name types f =
   let ids_types = types_to_ids_types prefix types in
