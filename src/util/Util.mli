@@ -31,8 +31,8 @@ val fst_many : ('a * 'b) list -> 'a list
 (* take the second elements in a tuple for a whole list *)
 val snd_many : ('a * 'b) list -> 'b list
 
-val first : 'a * 'b  -> ('a -> 'c) -> 'c * 'b
-val second : 'a * 'b -> ('b -> 'c) -> 'a * 'c
+val first  : ('a -> 'c) -> 'a * 'b -> 'c * 'b
+val second : ('b -> 'c) -> 'a * 'b -> 'a * 'c
 
 (* take the first x values of a list *)
 val list_take : int -> 'a list -> 'a list

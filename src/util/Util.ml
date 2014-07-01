@@ -38,8 +38,8 @@ let fst_many l = fst @: List.split l
 let snd_many l = snd @: List.split l
 
 (* apply to one part of the tuple, and send the other part through *)
-let first (x,y) f  = f x, y
-let second (x,y) f = x, f y
+let first  f (x,y) = f x, y
+let second f (x,y) = x, f y
 
 (* take the first x elements of a list *)
 let list_take len li =
