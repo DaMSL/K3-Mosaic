@@ -36,14 +36,21 @@ type vid_op = VEq | VNeq | VGt | VLt | VGeq | VLeq
 val mk_global_vid_op : id_t -> vid_op -> declaration_t * annotation_t
 
 (* wrap in a specific type *)
-val wrap_tlist : value_type_t -> value_type_t
-val wrap_tlist_mut : value_type_t -> value_type_t
-val wrap_tset : value_type_t -> value_type_t
-val wrap_tset_mut : value_type_t -> value_type_t
-val wrap_tbag : value_type_t -> value_type_t
-val wrap_tbag_mut : value_type_t -> value_type_t
 val wrap_ttuple : value_type_t list -> value_type_t
 val wrap_ttuple_mut : value_type_t list -> value_type_t
+val wrap_tlist : value_type_t -> value_type_t
+(* a version that wraps in a tuple if necessary *)
+val wrap_tlist' : value_type_t list -> value_type_t
+val wrap_tlist_mut : value_type_t -> value_type_t
+val wrap_tlist_mut' : value_type_t list -> value_type_t
+val wrap_tset : value_type_t -> value_type_t
+val wrap_tset' : value_type_t list -> value_type_t
+val wrap_tset_mut : value_type_t -> value_type_t
+val wrap_tset_mut' : value_type_t list -> value_type_t
+val wrap_tbag : value_type_t -> value_type_t
+val wrap_tbag' : value_type_t list -> value_type_t
+val wrap_tbag_mut : value_type_t -> value_type_t
+val wrap_tbag_mut' : value_type_t list -> value_type_t
 val wrap_tind : value_type_t -> value_type_t
 val wrap_tind_mut : value_type_t -> value_type_t
 val wrap_tmaybe : value_type_t -> value_type_t
@@ -104,6 +111,7 @@ val mk_geq : expr_t -> expr_t -> expr_t
 val mk_gt : expr_t -> expr_t -> expr_t
 
 val mk_lambda : arg_t -> expr_t -> expr_t
+val mk_lambda' : (id_t * value_type_t) list -> expr_t -> expr_t
 val mk_apply : expr_t -> expr_t -> expr_t
 val mk_block : expr_t list -> expr_t
 val mk_iter : expr_t -> expr_t -> expr_t
@@ -139,12 +147,6 @@ val mk_bind : id_t -> id_t -> flow_statement_t * annotation_t
 val mk_consume : id_t -> flow_statement_t * annotation_t
 val mk_role : id_t -> flow_program_t -> declaration_t * annotation_t
 
-(* extract only the types from a list of (id, type) *)
-val extract_arg_types : ('a * 'b) list -> 'b list
-
-(* extract only the names from a list of (id, type) *)
-val extract_arg_names : ('a * 'b) list -> 'a list
-
 (* take a list of ids and convert it to a list of vars *)
 val ids_to_vars : id_t list -> expr_t list
 
@@ -162,6 +164,9 @@ val mk_has_member :
 
 (* macro to create a trigger *)
 val mk_code_sink : id_t -> arg_t -> (id_t * value_type_t * annotation_t) list
+  -> expr_t -> flow_statement_t * annotation_t
+(* use lists instead of needing wrap_args *)
+val mk_code_sink' : id_t -> (id_t * value_type_t) list -> (id_t * value_type_t * annotation_t) list
   -> expr_t -> flow_statement_t * annotation_t
 
 (* macro to create a global value *)
@@ -188,19 +193,13 @@ val mk_foreign_fn :
 val mk_flow : flow_program_t -> declaration_t * annotation_t
 
 (* macro to create an associative lambda ie a lambda with 2 args *)
-val mk_assoc_lambda :
-  arg_t ->
-  arg_t ->
-  expr_t ->
-  expr_t
+val mk_assoc_lambda : arg_t -> arg_t -> expr_t -> expr_t
+
+(* same macro, but auto-calls wrap_args *)
+val mk_assoc_lambda' : (id_t * value_type_t) list -> (id_t * value_type_t) list -> expr_t -> expr_t
 
 (* macro to create a regular functional let structure *)
-val mk_let :
-  id_t ->
-  value_type_t ->
-  expr_t ->
-  expr_t ->
-  expr_t
+val mk_let : id_t -> value_type_t -> expr_t -> expr_t -> expr_t
 
 (* macro to make a 'let many', where many values are assigned simultaneously *)
 val mk_let_many :
@@ -208,6 +207,8 @@ val mk_let_many :
 
 (* macro to make a deep-matching let statement *)
 val mk_let_deep : arg_t -> expr_t -> expr_t -> expr_t
+
+val mk_let_deep' : (id_t * value_type_t) list -> expr_t -> expr_t -> expr_t
 
 (* like fst, but for a tuple of any size *)
 val project_from_tuple : value_type_t list -> expr_t -> total:int -> choice:int -> expr_t

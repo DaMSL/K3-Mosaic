@@ -10,8 +10,11 @@ let init_vid = "__init_vid__"
 
 let map_ids = "__map_ids__"
 
+let t_vid_list = wrap_tlist t_vid
+
 (* what the generic type of the global maps is *)
 let wrap_t_of_map = wrap_tbag
+let wrap_t_of_map' = wrap_tbag'
 
 (* global declaration of default vid to put into every map *)
 let init_vid_k3 =
@@ -23,8 +26,8 @@ let min_vid_k3 = mk_tuple [mk_cint 0; mk_cint 0; mk_cint 0]
 let max_vid_k3 = mk_tuple [mk_cint max_int; mk_cint max_int; mk_cint max_int ]
 
 (* trigger argument manipulation convenience functions *)
-let arg_types_of_t p trig_nm = extract_arg_types (args_of_t p trig_nm)
-let arg_names_of_t p trig_nm = extract_arg_names (args_of_t p trig_nm)
+let arg_types_of_t p trig_nm = snd_many @: args_of_t p trig_nm
+let arg_names_of_t p trig_nm = fst_many @: args_of_t p trig_nm
 let args_of_t_as_vars p trig_nm = ids_to_vars (arg_names_of_t p trig_nm)
 
 let args_of_t_with_v ?(vid="vid") p trig_nm = (vid, t_vid)::args_of_t p trig_nm
@@ -97,23 +100,22 @@ let epoch_t = wrap_tbag @: t_int
 let stmt_cntrs_name = "__stmt_cntrs__"
 let stmt_cntrs = mk_var stmt_cntrs_name
 
-let stmt_cntrs_id_type_vid_name = "vid"
-let stmt_cntrs_id_type_stmt_id_name = "stmt_id"
-let stmt_cntrs_id_type_counter_name = "counter"
+let stmt_cntrs_vid_name = "vid"
+let stmt_cntrs_stmt_id_name = "stmt_id"
+let stmt_cntrs_counter_name = "counter"
 
 let stmt_cntrs_ids = [
-  stmt_cntrs_id_type_vid_name;
-  stmt_cntrs_id_type_stmt_id_name;
-  stmt_cntrs_id_type_counter_name
+  stmt_cntrs_vid_name;
+  stmt_cntrs_stmt_id_name;
+  stmt_cntrs_counter_name
 ]
 
-let stmt_cntrs_id_type = [(stmt_cntrs_id_type_vid_name, t_vid);
-                          (stmt_cntrs_id_type_stmt_id_name, t_int);
-                          (stmt_cntrs_id_type_counter_name, t_int)]
+let stmt_cntrs_id_type = [stmt_cntrs_vid_name, t_vid;
+                          stmt_cntrs_stmt_id_name, t_int;
+                          stmt_cntrs_counter_name, t_int]
 
-let stmt_cntrs_wrap = wrap_tbag
-let stmt_cntrs_type = stmt_cntrs_wrap @: wrap_ttuple @:
-  snd @: List.split stmt_cntrs_id_type
+let stmt_cntrs_wrap = wrap_tbag'
+let stmt_cntrs_type = stmt_cntrs_wrap @: snd_many stmt_cntrs_id_type
 
 (* names for log *)
 let log_for_t t = "log_"^t

@@ -359,10 +359,10 @@ let delta_action p ast stmt m_target_trigger ~corrective =
     let delta_name = "__delta_values__" in
     let delta_v_name = "__delta_with_vid__" in
     let delta_ids_types = U.typed_vars_of_arg params2 in
-    let delta_types = extract_arg_types delta_ids_types in
+    let delta_types = snd_many delta_ids_types in
     let delta_col_type = wrap_t_of_map @: wrap_ttuple delta_types in
     let delta_col_v_type = lmap_type in
-    let delta_ids = extract_arg_names delta_ids_types in
+    let delta_ids = fst_many delta_ids_types in
     let delta_last_id = list_take_end 1 delta_ids
     in
     (* col2 contains the calculation code *)

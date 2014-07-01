@@ -685,9 +685,9 @@ let get_vid_all_finish_up_to_code =
           (mk_if
             (* if the current vid counter is 0 search *)
             (mk_eq
-              (mk_var stmt_cntrs_id_type_counter_name)
+              (mk_var stmt_cntrs_counter_name)
               (mk_cint 0) )
-            (mk_tuple [mk_var stmt_cntrs_id_type_vid_name;
+            (mk_tuple [mk_var stmt_cntrs_vid_name;
                        mk_cbool false])
             (mk_tuple [mk_var vid_all_finish_up_to;
                        mk_cbool true])

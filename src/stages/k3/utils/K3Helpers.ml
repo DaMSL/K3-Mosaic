@@ -49,36 +49,6 @@ let t_unknown = canonical TUnknown
 let t_addr = canonical TAddress
 let t_addr_mut = TIsolated(TMutable(TAddress,[]))
 
-(* wrap a type in a list *)
-let wrap_tlist typ =
-  let c = iso_to_contained typ in
-  canonical @: TCollection(TList, c)
-
-(* wrap a type in a mutable list *)
-let wrap_tlist_mut typ =
-  let c = iso_to_contained typ in
-  TIsolated(TMutable(TCollection(TList, c),[]))
-
-(* wrap a type in a set *)
-let wrap_tset typ =
-  let c = iso_to_contained typ in
-  canonical @: TCollection(TSet, c)
-
-(* wrap a type in a mutable set *)
-let wrap_tset_mut typ =
-  let c = iso_to_contained typ in
-  TIsolated(TMutable(TCollection(TSet, c),[]))
-
-(* wrap a type in a bag *)
-let wrap_tbag typ =
-  let c = iso_to_contained typ in
-  canonical @: TCollection(TBag, c)
-
-(* wrap a type in a mutable bag *)
-let wrap_tbag_mut typ =
-  let c = iso_to_contained typ in
-  TIsolated(TMutable(TCollection(TBag, c),[]))
-
 (* wrap a type in an immutable tuple *)
 let wrap_ttuple typ = match typ with
   | [h]    -> h
@@ -90,6 +60,48 @@ let wrap_ttuple_mut typ = match typ with
   | [h]    -> h
   | h::t   -> TIsolated(TMutable(TTuple(typ),[]))
   | _      -> invalid_arg "No mutable tuple to wrap"
+
+(* wrap a type in a list *)
+let wrap_tlist typ =
+  let c = iso_to_contained typ in
+  canonical @: TCollection(TList, c)
+
+let wrap_tlist' tl = wrap_tlist @: wrap_ttuple tl
+
+(* wrap a type in a mutable list *)
+let wrap_tlist_mut typ =
+  let c = iso_to_contained typ in
+  TIsolated(TMutable(TCollection(TList, c),[]))
+
+let wrap_tlist_mut' tl = wrap_tlist_mut @: wrap_ttuple tl
+
+(* wrap a type in a set *)
+let wrap_tset typ =
+  let c = iso_to_contained typ in
+  canonical @: TCollection(TSet, c)
+
+let wrap_tset' tl = wrap_tset @: wrap_ttuple tl
+
+(* wrap a type in a mutable set *)
+let wrap_tset_mut typ =
+  let c = iso_to_contained typ in
+  TIsolated(TMutable(TCollection(TSet, c),[]))
+
+let wrap_tset_mut' tl = wrap_tset_mut @: wrap_ttuple tl
+
+(* wrap a type in a bag *)
+let wrap_tbag typ =
+  let c = iso_to_contained typ in
+  canonical @: TCollection(TBag, c)
+
+let wrap_tbag' tl = wrap_tbag @: wrap_ttuple tl
+
+(* wrap a type in a mutable bag *)
+let wrap_tbag_mut typ =
+  let c = iso_to_contained typ in
+  TIsolated(TMutable(TCollection(TBag, c),[]))
+
+let wrap_tbag_mut' tl = wrap_tbag_mut @: wrap_ttuple tl
 
 (* wrap a type in a mutable indirection *)
 let wrap_tind t = TIsolated(TImmutable(TIndirect t, []))
@@ -217,6 +229,8 @@ let mk_gt left right = mk_not (mk_leq left right)
 
 let mk_lambda argt expr = mk_stree (Lambda(argt)) [expr]
 
+let mk_lambda' argl expr = mk_lambda (wrap_args argl) expr
+
 let mk_apply lambda input = mk_stree Apply [lambda; input]
 
 let mk_block statements = mk_stree Block statements
@@ -310,11 +324,6 @@ let mk_role id flowprog = mk_no_anno @: Role (id, flowprog)
 
 (* Macros to do more complex tasks ---- *)
 
-(* functions to extract names/types from argument lists (id, type) *)
-let extract_arg_types l = List.map (fun (_,typ) -> typ) l
-
-let extract_arg_names l = List.map (fun (nam,_) -> nam) l
-
 (* function to take a list of names and convert to K3 variables *)
 (* "_" translates to CUnknown *)
 let ids_to_vars = List.map (function
@@ -339,6 +348,8 @@ let mk_has_member collection pattern typ =
 let mk_code_sink name args locals code =
   mk_no_anno @: Sink(Code(name, args, locals, code))
 
+let mk_code_sink' name args locals code = mk_code_sink name (wrap_args args) locals code
+
 let mk_global_fn_raw name input_arg input_types output_types expr =
   mk_no_anno @:
     Global(name,
@@ -352,7 +363,7 @@ let mk_global_fn_raw name input_arg input_types output_types expr =
 let mk_global_fn name input_names_and_types output_types expr =
   mk_global_fn_raw name
     (wrap_args input_names_and_types)
-    (wrap_ttuple @: extract_arg_types input_names_and_types)
+    (wrap_ttuple @: snd_many input_names_and_types)
     (wrap_ttuple output_types)
     expr
 
@@ -368,15 +379,9 @@ let mk_foreign_fn name input_types output_types =
 let mk_flow stmt_list = mk_no_anno @: Flow(stmt_list)
 
 (* a lambda with 2 arguments for things like aggregation functions *)
-let mk_assoc_lambda arg1 arg2 expr = mk_lambda (ATuple[arg1;arg2]) expr
+let mk_assoc_lambda arg1 arg2 expr = mk_lambda (ATuple[arg1; arg2]) expr
 
-(* a classic let x = e1 in e2 construct *)
-let mk_let var_name var_type var_value expr =
-    mk_apply
-        (mk_lambda (wrap_args [var_name, var_type])
-            (expr)
-        )
-        (var_value)
+let mk_assoc_lambda' arg1 arg2 expr = mk_lambda (ATuple[wrap_args arg1; wrap_args arg2]) expr
 
 (* A let that assigns multiple variables simultaneously.
  * For breaking up tuples and passing multiple values out of functions.
@@ -387,9 +392,14 @@ let mk_let_many var_name_and_type_list var_values expr =
         (mk_lambda (wrap_args var_name_and_type_list) expr)
         var_values
 
+(* a classic let x = e1 in e2 construct *)
+let mk_let var_name var_type var_value expr = mk_let_many [var_name, var_type] var_value expr
+
 (* a let statement with deep argument matching *)
 let mk_let_deep args var_values expr =
   mk_apply (mk_lambda args expr) var_values
+
+let mk_let_deep' args var_values expr = mk_let_deep (wrap_args args) var_values expr
 
 let project_from_tuple tuple_types tuple ~total ~choice =
   let l = create_range 1 total in
@@ -409,8 +419,7 @@ let project_from_col tuple_types col ~total ~choice =
   let c = "__"^soi choice in
   let id_ts = list_zip l tuple_types in
   mk_map
-    (mk_lambda (wrap_args id_ts) @:
-      mk_var c) @:
+    (mk_lambda' id_ts @: mk_var c) @:
     col
 
 let mk_fst_many tuple_types collection =
@@ -533,8 +542,8 @@ let mk_id tuple_types =
     let r = mk_tuple_range @: tuple_types in
     let ids = List.map (int_to_temp_id prefix) r in
     let ids_types = list_zip ids tuple_types in
-    mk_lambda (wrap_args ids_types) @:
-      mk_tuple @: ids_to_vars @: extract_arg_names @: ids_types
+    mk_lambda' ids_types @:
+      mk_tuple @: ids_to_vars @: fst_many @: ids_types
 
 (* ----- Converting between ocaml lists and k3 containers ----- *)
 
