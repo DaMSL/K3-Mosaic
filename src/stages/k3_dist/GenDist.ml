@@ -177,7 +177,7 @@ let declare_global_funcs partmap p ast =
       (log_get_bound_for p t)
       ["vid", t_vid]
       (arg_types_of_t_with_v p t) @:
-      mk_peek @: mk_slice (mk_var @: log_for_t t) @: mk_tuple pat_unknown
+      mk_peek @: mk_slice' (mk_var @: log_for_t t) pat_unknown
   in
   (* log_read_geq -- get list of (t,vid) >= vid *)
   let log_read_geq_code = mk_global_fn
@@ -200,14 +200,14 @@ let declare_global_funcs partmap p ast =
     let counter = fst @: hd @: list_take_end 1 stmt_cntrs_id_t in
     let full_types = snd_many stmt_cntrs_id_t in
     let part_pat_as_vars = ids_to_vars @: fst_many part_pat in
-    let query_pat = mk_tuple @: part_pat_as_vars @ [mk_cunknown] in
-    let stmt_cntrs_slice = mk_slice stmt_cntrs query_pat in
+    let query_pat = part_pat_as_vars @ [mk_cunknown] in
+    let stmt_cntrs_slice = mk_slice' stmt_cntrs query_pat in
     mk_global_fn
       check_stmt_cntr_index
       part_pat
       [t_bool] @: (* return whether we should send the do_complete *)
       mk_if (* check if the counter exists *)
-        (mk_has_member stmt_cntrs query_pat @: stmt_cntrs_wrap full_types)
+        (mk_has_member' stmt_cntrs query_pat @: stmt_cntrs_wrap full_types)
         (mk_block
           [mk_update
             stmt_cntrs
@@ -310,8 +310,8 @@ let declare_global_funcs partmap p ast =
               mk_let lookup_value t_col_v
                 (mk_if
                   (mk_var corrective)
-                  (mk_slice (mk_deref @: mk_var target_map) @:
-                    mk_tuple @: vars_v_no_val @ [mk_cunknown]) @:
+                  (mk_slice' (mk_deref @: mk_var target_map) @:
+                    vars_v_no_val @ [mk_cunknown]) @:
                   mk_empty @: wrap_t_of_map' types_v) @:
               mk_if
                 (mk_not @: mk_is_empty (mk_var lookup_value) t_col_v)
@@ -334,8 +334,8 @@ let declare_global_funcs partmap p ast =
                  mk_gt (mk_var "vid") @: mk_var "min_vid")
                (mk_id types_v) @:
                (* slice w/o vid and value *)
-               mk_slice (mk_deref @: mk_var target_map) @:
-                 mk_tuple @: mk_cunknown::vars_arg_no_v_no_val@[mk_cunknown]) @:
+               mk_slice' (mk_deref @: mk_var target_map) @:
+                 mk_cunknown::vars_arg_no_v_no_val@[mk_cunknown]) @:
               mk_iter
                 (mk_lambda' ids_types_v @:
                   mk_update (mk_deref @: mk_var target_map) (mk_tuple vars_v) @:
@@ -695,15 +695,15 @@ mk_code_sink'
   let full_pat = part_pat @ counter_pat in
   let full_types = snd_many full_pat in
   let part_pat_as_vars = ids_to_vars @: fst_many part_pat in
-  let query_pat = mk_tuple @: part_pat_as_vars @ [mk_cunknown] in
+  let query_pat = part_pat_as_vars @ [mk_cunknown] in
   mk_block @: [
     mk_iter
       (mk_lambda'
         ["stmt_id", t_stmt_id; "count", t_int] @:
         mk_if (* do we already have a tuple for this? *)
-          (mk_has_member stmt_cntrs query_pat @: stmt_cntrs_wrap full_types)
+          (mk_has_member' stmt_cntrs query_pat @: stmt_cntrs_wrap full_types)
           (mk_let_deep' ["_", t_unit; "_", t_unit; "old_count", t_int]
-            (mk_peek @: mk_slice stmt_cntrs query_pat) @:
+            (mk_peek @: mk_slice' stmt_cntrs query_pat) @:
             (* update the count *)
             mk_let "new_count" t_int
               (mk_add (mk_var "old_count") @: mk_var "count") @:
@@ -1140,8 +1140,7 @@ List.map
                     (* We'll crash if we can't find the right stmt here, but this is
                     * desired behavior since it makes sure a corrective can't happen
                     * without an earlier push/put *)
-                    mk_slice stmt_cntrs @:
-                    mk_tuple
+                    mk_slice' stmt_cntrs
                       [mk_var "compute_vid"; mk_cint stmt_id; mk_cunknown]
                   ) @: (* error if we get more than one result *)
                   mk_tuple

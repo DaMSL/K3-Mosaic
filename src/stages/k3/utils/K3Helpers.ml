@@ -269,6 +269,8 @@ let mk_slice collection pattern =
   if all_unknowns then collection
   else mk_stree Slice [collection; pattern]
 
+let mk_slice' collection pattern = mk_slice collection @: mk_tuple pattern
+
 let mk_insert collection x = mk_stree Insert [collection; x]
 
 let mk_delete collection x = mk_stree Delete [collection;x]
@@ -344,6 +346,8 @@ let mk_has_member collection pattern typ =
   mk_neq
     (mk_slice collection pattern)
     (mk_empty typ)
+
+let mk_has_member' col pat typ = mk_has_member col (mk_tuple pat) typ
 
 let mk_code_sink name args locals code =
   mk_no_anno @: Sink(Code(name, args, locals, code))

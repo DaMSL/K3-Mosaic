@@ -126,6 +126,7 @@ val mk_sort : expr_t -> expr_t -> expr_t
 
 val mk_peek : expr_t -> expr_t
 val mk_slice : expr_t -> expr_t -> expr_t
+val mk_slice' : expr_t -> expr_t list -> expr_t
 val mk_insert : expr_t -> expr_t -> expr_t
 val mk_delete : expr_t -> expr_t -> expr_t
 val mk_update : expr_t -> expr_t -> expr_t -> expr_t
@@ -157,10 +158,9 @@ val vars_to_ids : expr_t list -> id_t list
 val mk_is_empty : expr_t -> value_type_t -> expr_t
 
 (* macro to check if a collection has a specific member *)
-val mk_has_member :
-  expr_t ->
-  expr_t ->
-  value_type_t -> expr_t
+val mk_has_member : expr_t -> expr_t -> value_type_t -> expr_t
+
+val mk_has_member' : expr_t -> expr_t list -> value_type_t -> expr_t
 
 (* macro to create a trigger *)
 val mk_code_sink : id_t -> arg_t -> (id_t * value_type_t * annotation_t) list
