@@ -509,17 +509,19 @@ let rec deduce_expr_type ?(override=true) trig_env cur_env utexpr =
 
         | Sort ->
             let name = "Sort" in
-            let t0 = bind 0 in let t1 = bind 1 in
-            let t_c, t_e = t0 <| collection_of +++ base_of +++ value_of |>
+            let t0, t1 = bind 0, bind 1 in
+            let t_col, t_elem = t0 <| collection_of +++ base_of +++ value_of |>
                 t_erroru name @: TBad t0 in
-            let t_ca, t_cr = t1 <| function_of |> t_erroru name @: TBad t1 in
+            let t_carg, t_cret = t1 <| function_of |> t_erroru name @: TBad t1 in
 
-            let expected1 = canonical @: TTuple[t_e; t_e] in
-            if not (t_ca <~ expected1) then
-              t_erroru name (VTMismatch(t_ca, expected1, "")) () else
-            if not (canonical TBool === t_cr) then
-              t_erroru name (VTMismatch(canonical TBool, t_cr, "")) () else
-            TValue(canonical @: TCollection(TList, t_e))
+            let expected1 = canonical @: TTuple[t_elem; t_elem] in
+            if not (t_carg <~ expected1) then
+              t_erroru name (VTMismatch(t_carg, expected1, "")) () else
+            if not (canonical TBool === t_cret) then
+              t_erroru name (VTMismatch(canonical TBool, t_cret, "")) () else
+            if not (t_col = TList) then
+              t_erroru name (VTMismatch(canonical @: TCollection(t_col, t_elem), H.wrap_tlist t_elem, "")) () else
+            TValue(canonical @: TCollection(TList, t_elem))
 
         | Slice ->
             let name = "Slice" in
