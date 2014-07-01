@@ -155,7 +155,7 @@ let get_all_nodes_code =
       (mk_lambda (wrap_args id_t_node) @:
         mk_var "addr")
       (mk_lambda (wrap_args ["_", t_unit; "_", wrap_ttuple t_node]) @: mk_cunit)
-      (mk_empty (wrap_tlist t_addr)) @:
+      (mk_cunit) @:
       mk_var node_ring_nm
 
 

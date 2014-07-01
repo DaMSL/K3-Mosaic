@@ -472,35 +472,38 @@ let rec deduce_expr_type ?(override=true) trig_env cur_env utexpr =
         | Aggregate ->
             let name = "Aggregate" in
             let t0 = bind 0 in let t1 = bind 1 in let t2 = bind 2 in
-            let t_a, t_r = t0 <| function_of |> t_erroru name @: TBad(t0) in
-            let t_z = t1 <| value_of |> t_erroru name @: TBad(t1) in
-            let t_c, t_e = t2 <| collection_of +++ base_of +++ value_of |>
+            let t_arg, t_ret = t0 <| function_of |> t_erroru name @: TBad(t0) in
+            let t_zero = t1 <| value_of |> t_erroru name @: TBad(t1) in
+            let t_col, t_elem = t2 <| collection_of +++ base_of +++ value_of |>
                 t_erroru name @: TBad(t2) in
-            let expected1 = canonical @: TTuple[t_z; t_e] in
-            if not (t_a <~ expected1)
-                then t_erroru name (VTMismatch(t_a, expected1, "")) () else
-            let expected2 = canonical @: TTuple[t_r; t_e] in
-            if not (t_a <~ expected2)
-                then t_erroru name (VTMismatch(t_a, expected2, "")) () else
-            TValue(t_z)
+            let expected1 = canonical @: TTuple[t_zero; t_elem] in
+            if not (t_arg <~ expected1)
+                then t_erroru name (VTMismatch(t_arg, expected1, "")) () else
+            let expected2 = canonical @: TTuple[t_ret; t_elem] in
+            if not (t_arg <~ expected2)
+                then t_erroru name (VTMismatch(t_arg, expected2, "")) () else
+            if not (t_zero <~ t_ret)
+                then t_erroru name (VTMismatch(t_ret, t_zero, "")) () else
+            TValue(t_zero)
 
         | GroupByAggregate ->
             let name = "GroupByAggregate" in
-            let t0 = bind 0 in let t1 = bind 1 in let t2 = bind 2 in
-            let t3 = bind 3 in
+            let t0, t1, t2, t3 = bind 0, bind 1, bind 2, bind 3 in
             let t_ga, t_gr = t0 <| function_of |> t_erroru name @: TBad t0 in
             let t_aa, t_ar = t1 <| function_of |> t_erroru name @: TBad t1 in
-            let t_z = t2 <| value_of |> t_erroru name @: TBad t2 in
-            let t_c, t_e = t3 <| collection_of +++ base_of +++ value_of |>
+            let t_zero = t2 <| value_of |> t_erroru name @: TBad t2 in
+            let t_col, t_elem = t3 <| collection_of +++ base_of +++ value_of |>
                 t_erroru name @: TBad t3 in
-            if not (t_ga <~ t_e) then t_erroru name (VTMismatch(t_ga, t_e,
+            if not (t_ga <~ t_elem) then t_erroru name (VTMismatch(t_ga, t_elem,
                 "grouping func:")) () else
-            let expected1 = canonical @: TTuple[t_z; t_e] in
+            let expected1 = canonical @: TTuple[t_zero; t_elem] in
             if not (t_aa <~ expected1)
                 then t_erroru name (VTMismatch(t_aa, expected1, "agg func:")) () else
-            let expected2 = canonical @: TTuple[t_ar; t_e] in
+            let expected2 = canonical @: TTuple[t_ar; t_elem] in
             if not (t_aa <~ expected2)
-                then t_erroru name (VTMismatch(t_aa, expected2, "agg func:")) ()
+                then t_erroru name (VTMismatch(t_aa, expected2, "agg func:")) () else
+            if not (t_zero <~ t_ar)
+                then t_erroru name (VTMismatch(t_ar, t_zero, "agg func:")) ()
             else TValue(canonical @:
                 TCollection(TBag, contained_of @: canonical @: TTuple[t_gr; t_ar]))
 
