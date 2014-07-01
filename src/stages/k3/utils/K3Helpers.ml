@@ -434,38 +434,12 @@ let mk_snd_many tuple_types collection =
 
 
 (* Functions to manipulate tuples in K3 code *)
-type tuple_pat = Position of int | ExternVar of id_t | Unknown
-
 let def_tup_prefix = "__temp_"
 
 let mk_tuple_range ?(first=0) types = create_range first @: List.length types
 
-let tuple_make_pattern (types:value_type_t list) =
-    List.map (fun x -> Position x) (mk_tuple_range types)
-
-(* functions to take and drop from the pattern, filling in unknowns for the
- * values you drop. list_drop and list_take can be used for non-slice operations
- *)
-let slice_pat_take num pat =
-    let range = create_range 1 (List.length pat - num) in
-    let unknowns = List.map (fun _ -> Unknown) range in
-    list_take num pat @unknowns
-
-let slice_pat_drop num pat =
-    let range = create_range 1 (List.length pat - num) in
-    let unknowns = List.map (fun _ -> Unknown) range in
-    unknowns@list_drop num pat
-
 (* convert a number to an id used for breaking apart tuples *)
 let int_to_temp_id prefix i = prefix^string_of_int i
-
-let tuple_pat_to_ids pat =
-    List.map
-    (fun x -> match x with
-      | Position y -> int_to_temp_id def_tup_prefix y
-      | ExternVar y -> y
-      | Unknown -> "_")
-    pat
 
 let types_to_ids_types ?first prefix types =
   let range = mk_tuple_range ?first types in
@@ -477,12 +451,13 @@ let mk_destruct_tuple tup_name types prefix expr =
   let ids_types = types_to_ids_types prefix types in
   mk_let_many ids_types (mk_var tup_name) expr
 
-(* rebuild a tuple based on the types of the tuple and a pattern of temporaries
- * or external variables
- *)
-let mk_rebuild_tuple tup_name types pattern =
-  mk_destruct_tuple tup_name types def_tup_prefix
-    (mk_tuple @: ids_to_vars @: tuple_pat_to_ids pattern)
+(* rebuild a tuple based on the types of the tuple.
+ * A lambda allows you to shuffle the ids/types as you wish 
+ * *)
+let mk_rebuild_tuple ?(prefix=def_tup_prefix) tup_name types f =
+  let ids_types = types_to_ids_types prefix types in
+  mk_let_many ids_types (mk_var tup_name) @:
+    mk_tuple @: ids_to_vars @: f @: fst_many ids_types
 
 (* unwrap maybe values by creating an inner values with postfix "_unwrap" *)
 let mk_unwrap_maybe var_names_and_types expr =

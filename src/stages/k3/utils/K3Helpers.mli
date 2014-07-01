@@ -228,19 +228,6 @@ val mk_fst_many: value_type_t list -> expr_t -> expr_t
 (* macro similar to snd but for a collection *)
 val mk_snd_many: value_type_t list -> expr_t -> expr_t
 
-(* data type to manipulate tuples *)
-type tuple_pat = Position of int | ExternVar of id_t | Unknown
-
-(* create a string pattern of a tuple, for manipulation
- * specify the length of the pattern *)
-val tuple_make_pattern: value_type_t list -> tuple_pat list
-
-(* take and drop from a pattern, replacing the values taken/dropped with
- * unknowns for slices *)
-val slice_pat_take: int -> tuple_pat list -> tuple_pat list
-
-val slice_pat_drop: int -> tuple_pat list -> tuple_pat list
-
 (* given an integer and a prefix, create an id for the internals of a tuple *)
 val int_to_temp_id: string -> int -> id_t
 
@@ -255,12 +242,10 @@ val types_to_ids_types : ?first:int -> string -> value_type_t list -> (string * 
  * int_to_temp_id *)
 val mk_destruct_tuple: id_t -> value_type_t list -> string -> expr_t -> expr_t
 
-(* create K3 code to build a tuple using a pattern containing portions of the
- * old tuple and ids of new variables. The pattern is produced by
- * tuple_make_pattern
- * tuple name -> type list -> pattern
+(* Create K3 code to rebuild a tuple 
+ * A lambda determines how to shuffle the ids of the tuple, or insert external ids
  * *)
-val mk_rebuild_tuple: id_t -> value_type_t list -> tuple_pat list -> expr_t
+val mk_rebuild_tuple: ?prefix:id_t -> id_t -> value_type_t list -> (id_t list -> id_t list) -> expr_t
 
 (* unwrap maybe values by creating an inner values with postfix "_unwrap" *)
 val mk_unwrap_maybe: (id_t * value_type_t) list -> expr_t -> expr_t

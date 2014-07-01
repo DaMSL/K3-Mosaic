@@ -819,9 +819,9 @@ List.fold_left
     let rbuf_name = buf_of_stmt_map_id p stmt_id read_map_id in
     let tuple_types = map_types_with_v_for p read_map_id in
     (* remove value from tuple so we can do a slice *)
-    let tuple_pat = tuple_make_pattern tuple_types in
-    let reduced_pat = slice_pat_take (List.length tuple_pat - 1) tuple_pat in
-    let reduced_code = mk_rebuild_tuple "tuple" tuple_types reduced_pat in
+    let tuple_id_t = types_to_ids_types "_tup" tuple_types in
+    let tuple_vars_no_val =
+      ids_to_vars @: (list_drop_end 1 @: fst_many tuple_id_t) @ ["_"] in
     acc_code@
     [mk_code_sink'
       (rcv_push_name_of_t p trig_name stmt_id read_map_id)
@@ -840,18 +840,17 @@ List.fold_left
          mk_iter
           (mk_lambda'
             ["tuple", wrap_ttuple tuple_types] @:
+            mk_let_many tuple_id_t (mk_var "tuple") @:
             mk_if
-              (mk_has_member
+              (mk_has_member'
                 (mk_deref @: mk_var rbuf_name)
-                reduced_code @:
-                wrap_t_of_map' tuple_types
-              )
+                tuple_vars_no_val @:
+                wrap_t_of_map' tuple_types)
               (mk_update
                 (mk_deref @: mk_var rbuf_name)
-                (mk_peek @: mk_slice
+                (mk_peek @: mk_slice'
                   (mk_deref @: mk_var rbuf_name)
-                  reduced_code
-                ) @:
+                  tuple_vars_no_val) @:
                 mk_var "tuple"
               ) @:
               mk_insert
