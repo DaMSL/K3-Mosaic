@@ -152,11 +152,11 @@ let declare_global_funcs partmap p ast =
   (* log_master_write *)
   let log_master_write_code () = mk_global_fn
     log_master_write_nm
-    ["vid", t_vid; "trig_id", t_trig_id; "stmt_id", t_stmt_id]
+    log_master_id_t
     [t_unit] @:
     mk_insert (mk_var log_master) @: (* write to master log *)
-      mk_tuple
-        [mk_var "vid"; mk_var "trig_id"; mk_var "stmt_id"]
+      mk_tuple @:
+        ids_to_vars @: fst_many log_master_id_t
   in
   (* log_write *)
   let log_write_code t = mk_global_fn
@@ -170,10 +170,9 @@ let declare_global_funcs partmap p ast =
   (* log_get_bound -- necessary since each trigger has different args *)
   let log_get_bound_code t =
     let pat_tuple = args_of_t_with_v p t in
-    let pat_unknown = List.map (fun (id,_) -> match id with
-                                  | "vid" -> mk_var "vid"
-                                  | _     -> mk_cunknown
-                               ) pat_tuple
+    (* create a pattern for selecting vid alone *)
+    let pat_unknown = List.map (fun (id, _) ->
+      if id = "vid" then mk_var "vid" else mk_cunknown) pat_tuple
     in mk_global_fn
       (log_get_bound_for p t)
       ["vid", t_vid]
@@ -183,62 +182,60 @@ let declare_global_funcs partmap p ast =
   (* log_read_geq -- get list of (t,vid) >= vid *)
   let log_read_geq_code = mk_global_fn
     log_read_geq
-    ["vid", t_vid]
-    [wrap_tbag' [t_vid; t_trig_id; t_stmt_id]] @:
+    ["vid2", t_vid]
+    [wrap_tbag' @: snd_many log_master_id_t] @:
     mk_filtermap
+      (* get only >= vids *)
       (mk_lambda'
-        ["vid2", t_vid; "trig", t_trig_id; "stmt", t_stmt_id] @:
-        v_geq (mk_var "vid2") @: mk_var "vid"
+        log_master_id_t @:
+        v_geq (mk_var "vid") @: mk_var "vid2"
       )
-      (mk_lambda'
-        ["vid2", t_vid; "trig", t_trig_id; "stmt", t_stmt_id] @:
-        mk_tuple [mk_var "vid2"; mk_var "trig"; mk_var "stmt"]
-      ) @:
+      (mk_id @: snd_many log_master_id_t) @:
       mk_var log_master
   in
   (* check_stmt_cntr_indx *)
   (* Check to see if we should send a do_complete message *)
-  let check_stmt_cntr_index_fn = mk_global_fn
-    check_stmt_cntr_index
-    ["vid", t_vid; "stmt_id", t_stmt_id]
-    [t_bool] @: (* return whether we should send the do_complete *)
-    let part_pat = ["vid", t_vid; "stmt_id", t_stmt_id] in
-    let counter_pat = ["count", t_int] in
-    let full_pat = part_pat @ counter_pat in
-    let full_types = snd_many full_pat in
+  let check_stmt_cntr_index_fn =
+    let part_pat = list_drop_end 1 stmt_cntrs_id_t in
+    let counter = fst @: hd @: list_take_end 1 stmt_cntrs_id_t in
+    let full_types = snd_many stmt_cntrs_id_t in
     let part_pat_as_vars = ids_to_vars @: fst_many part_pat in
     let query_pat = mk_tuple @: part_pat_as_vars @ [mk_cunknown] in
     let stmt_cntrs_slice = mk_slice stmt_cntrs query_pat in
-    mk_if (* check if the counter exists *)
-      (mk_has_member stmt_cntrs query_pat @: stmt_cntrs_wrap full_types)
-      (mk_block
-        [mk_update
-          stmt_cntrs
-          (mk_peek stmt_cntrs_slice) @: (* oldval *)
-          mk_let_many (* newval *)
-            full_pat
-            (mk_peek stmt_cntrs_slice) @:
-            mk_tuple @:
-              part_pat_as_vars @
-              [mk_sub (mk_var "count") (mk_cint 1)]
+    mk_global_fn
+      check_stmt_cntr_index
+      part_pat
+      [t_bool] @: (* return whether we should send the do_complete *)
+      mk_if (* check if the counter exists *)
+        (mk_has_member stmt_cntrs query_pat @: stmt_cntrs_wrap full_types)
+        (mk_block
+          [mk_update
+            stmt_cntrs
+            (mk_peek stmt_cntrs_slice) @: (* oldval *)
+            mk_let_many (* newval *)
+              stmt_cntrs_id_t
+              (mk_peek stmt_cntrs_slice) @:
+              mk_tuple @:
+                part_pat_as_vars @
+                [mk_sub (mk_var counter) (mk_cint 1)]
 
-        ;mk_if (* check if the counter is 0 *)
-          (mk_eq
-            (mk_peek stmt_cntrs_slice) @:
-            mk_tuple @: part_pat_as_vars @ [mk_cint 0]
-          )
-          (* Return true - send a do_complete *)
-          (mk_cbool true)
-          (mk_cbool false)
-        ]
-      ) @:
-      mk_block
-        [mk_insert (* else: no value in the counter *)
-          stmt_cntrs @:
-          (* Initialize if the push arrives before the put. *)
-          mk_tuple @: part_pat_as_vars @ [mk_cint(-1)];
-        mk_cbool false
-        ]
+          ;mk_if (* check if the counter is 0 *)
+            (mk_eq
+              (mk_peek stmt_cntrs_slice) @:
+              mk_tuple @: part_pat_as_vars @ [mk_cint 0]
+            )
+            (* Return true - send a do_complete *)
+            (mk_cbool true)
+            (mk_cbool false)
+          ]
+        ) @:
+        mk_block
+          [mk_insert (* else: no value in the counter *)
+            stmt_cntrs @:
+            (* Initialize if the push arrives before the put. *)
+            mk_tuple @: part_pat_as_vars @ [mk_cint(-1)];
+          mk_cbool false
+          ]
   in
 
   (* add_delta_to_buffer *)
@@ -1070,28 +1067,34 @@ let filter_corrective_list =
   [wrap_tbag' [t_stmt_id; t_vid_list]]
   @:
   mk_let "log_entries"
-    (wrap_tbag' [t_vid; t_trig_id; t_stmt_id])
+    (wrap_tbag' @: snd_many log_master_id_t)
     (mk_apply (* list of triggers >= vid *)
       (mk_var log_read_geq) @: mk_var "request_vid") @:
   (* group the list by stmt_ids *)
   mk_gbagg
-    (mk_lambda' ["_", t_vid; "stmt_id", t_stmt_id] @:
-      mk_var "stmt_id"
-    )
+    (mk_lambda' ["_", t_vid; "stmt_id", t_stmt_id] @: mk_var "stmt_id")
     (mk_assoc_lambda'
       ["vid_list", t_vid_list]
       ["vid", t_vid; "_", t_stmt_id] @:
       mk_combine (mk_var "vid_list") (mk_singleton t_vid_list @: mk_var "vid")
     )
     (mk_empty t_vid_list) @:
+    let vid_stmt_id_t  = ["vid", t_vid; "stmt_id", t_stmt_id] in
+    let vid_stmt_col_t = wrap_tlist' @: snd_many vid_stmt_id_t in
     mk_sort (* sort so early vids are generally sent out first *)
       (* get a list of vid, stmt_id pairs *)
-      (mk_map
-        (mk_lambda'
-          ["vid", t_vid; "trig_id", t_trig_id; "stmt_id", t_stmt_id] @:
+      (** this is reall a map, but make it a fold to convert to a list *)
+      (mk_agg
+        (mk_assoc_lambda'
+          ["acc", vid_stmt_col_t]
+          log_master_id_t @:
           (* convert to vid, stmt *)
-          mk_tuple [mk_var "vid"; mk_var "stmt_id"]
-        ) @:
+          mk_combine
+            (mk_var "acc") @:
+            mk_singleton
+              vid_stmt_col_t @:
+              mk_tuple @: ids_to_vars @: fst_many vid_stmt_id_t)
+        (mk_empty vid_stmt_col_t) @:
         mk_var "log_entries"
       ) @:
       mk_assoc_lambda' (* compare func *)

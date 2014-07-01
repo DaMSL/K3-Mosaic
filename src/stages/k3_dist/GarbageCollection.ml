@@ -461,8 +461,8 @@ let do_garbage_collection_trig_code p ast =
       (* clear stmt_cntrs  *)
       (delete_collection_up_to_vid
         safe_vid
-        stmt_cntrs_id_type
-        stmt_cntrs_ids
+        stmt_cntrs_id_t
+        (fst_many stmt_cntrs_id_t)
         stmt_cntrs_name ) ::
 
       (* clear acks *)
@@ -675,7 +675,7 @@ let get_vid_all_finish_up_to_code =
      (mk_assoc_lambda
         (wrap_args [vid_all_finish_up_to,t_vid;
                     "found",t_bool])
-        (wrap_args stmt_cntrs_id_type)
+        (wrap_args stmt_cntrs_id_t)
         (mk_if
           (* already found *)
           (mk_eq (mk_var "found") (mk_cbool true))

@@ -327,7 +327,7 @@ let mk_role id flowprog = mk_no_anno @: Role (id, flowprog)
 (* function to take a list of names and convert to K3 variables *)
 (* "_" translates to CUnknown *)
 let ids_to_vars = List.map (function
-  | "_" -> mk_const @: CUnknown
+  | "_" -> mk_cunknown
   | x   -> mk_var x)
 
 let vars_to_ids = List.map (fun x -> match U.tag_of_expr x with

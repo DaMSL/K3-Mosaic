@@ -104,22 +104,19 @@ let stmt_cntrs_vid_name = "vid"
 let stmt_cntrs_stmt_id_name = "stmt_id"
 let stmt_cntrs_counter_name = "counter"
 
-let stmt_cntrs_ids = [
-  stmt_cntrs_vid_name;
-  stmt_cntrs_stmt_id_name;
-  stmt_cntrs_counter_name
-]
-
-let stmt_cntrs_id_type = [stmt_cntrs_vid_name, t_vid;
-                          stmt_cntrs_stmt_id_name, t_int;
-                          stmt_cntrs_counter_name, t_int]
+let stmt_cntrs_id_t= [
+       stmt_cntrs_vid_name, t_vid;
+       stmt_cntrs_stmt_id_name, t_int;
+       stmt_cntrs_counter_name, t_int;
+  ]
 
 let stmt_cntrs_wrap = wrap_tbag'
-let stmt_cntrs_type = stmt_cntrs_wrap @: snd_many stmt_cntrs_id_type
+let stmt_cntrs_type = stmt_cntrs_wrap @: snd_many stmt_cntrs_id_t
 
 (* names for log *)
 let log_for_t t = "log_"^t
 let log_master = "log__master"
+let log_master_id_t = ["vid", t_vid; "trig_id", t_trig_id; "stmt_id", t_stmt_id]
 
 (* the function name for the frontier function *)
 (* takes the types of the map *)
