@@ -41,6 +41,10 @@ let snd_many l = snd @: List.split l
 let first  f (x,y) = f x, y
 let second f (x,y) = x, f y
 
+let first3  f (x,y,z) = f x, y, z
+let second3 f (x,y,z) = x, f y, z
+let third3  f (x,y,z) = x, y, f z
+
 (* take the first x elements of a list *)
 let list_take len li =
   let rec take len2 li2 acc_list =
