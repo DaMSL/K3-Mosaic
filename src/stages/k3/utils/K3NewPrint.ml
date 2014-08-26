@@ -448,13 +448,18 @@ and handle_lambda c ~expr_info ~prefix_fn arg e =
 (* create a fold instead of a map or ext (for typechecking reasons) *)
 (* expects a lambda expression, and collection expression inside a map/flattenMap *)
 and fold_of_map_ext c expr =
-  let t_out = U.unwrap_t_val @: T.type_of_expr expr in
-  (* the only difference between map and ext is whether we wrap the output
-   * of the lambda in a singleton before combining *)
-  let (lambda, col), wrap_fn, suffix = match U.tag_of_expr expr with
-    | Map     -> U.decompose_map expr, KH.mk_singleton t_out, "map"
-    | Flatten -> U.decompose_map @: U.decompose_flatten expr, id_fn, "ext"
-    | _       -> failwith "Can only convert flattenMap or map to fold"
+  let self_t_out = U.unwrap_t_val @: T.type_of_expr expr in
+  let map_t_out  = match KH.unwrap_vtype @: self_t_out with
+                   | mut, TCollection(_, t_e)  -> if mut then KH.wrap_tbag_mut t_e
+                                                  else KH.wrap_tbag t_e
+                   | _ -> failwith "unexpected"
+  in
+  (* customize for the different operations *)
+  let (lambda, col), wrap_fn, suffix, t_out = match U.tag_of_expr expr with
+    | Map     -> U.decompose_map expr, KH.mk_singleton map_t_out, "map", map_t_out
+    | MapSelf -> U.decompose_map_self expr, KH.mk_singleton self_t_out, "selfMap", self_t_out
+    | Flatten -> U.decompose_map @: U.decompose_flatten expr, id_fn, "ext", self_t_out
+    | _       -> failwith "Can only convert flatten-map, map, or selfMap to fold"
   in
   let empty = KH.mk_empty t_out in
   let args, body = U.decompose_lambda lambda in

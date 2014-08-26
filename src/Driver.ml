@@ -467,7 +467,7 @@ let print params inputs =
                                ~map_to_fold:params.k3new_folds
                                ~file:params.k3new_data_file)
                                |- snd
-    | K3Test | K3DistTest -> print_k3_test_program 
+    | K3Test | K3DistTest -> print_k3_test_program
   in List.iter print_fn idx_inputs
 
 (* Test actions *)
