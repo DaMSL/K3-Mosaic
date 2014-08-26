@@ -99,7 +99,6 @@ type expr_tag_t
     | IfThenElse
 
     | Map
-    | MapSelf
     | Filter
     | Flatten
     | Aggregate

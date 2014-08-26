@@ -449,17 +449,11 @@ and handle_lambda c ~expr_info ~prefix_fn arg e =
 (* expects a lambda expression, and collection expression inside a map/flattenMap *)
 and fold_of_map_ext c expr =
   let self_t_out = U.unwrap_t_val @: T.type_of_expr expr in
-  let map_t_out  = match KH.unwrap_vtype @: self_t_out with
-                   | mut, TCollection(_, t_e)  -> if mut then KH.wrap_tbag_mut t_e
-                                                  else KH.wrap_tbag t_e
-                   | _ -> failwith "unexpected"
-  in
   (* customize for the different operations *)
   let (lambda, col), wrap_fn, suffix, t_out = match U.tag_of_expr expr with
-    | Map     -> U.decompose_map expr, KH.mk_singleton map_t_out, "map", map_t_out
-    | MapSelf -> U.decompose_map_self expr, KH.mk_singleton self_t_out, "selfMap", self_t_out
+    | Map -> U.decompose_map expr, KH.mk_singleton self_t_out, "map", self_t_out
     | Flatten -> U.decompose_map @: U.decompose_flatten expr, id_fn, "ext", self_t_out
-    | _       -> failwith "Can only convert flatten-map, map, or selfMap to fold"
+    | _       -> failwith "Can only convert flatten-map or map to fold"
   in
   let empty = KH.mk_empty t_out in
   let args, body = U.decompose_lambda lambda in
@@ -684,14 +678,6 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
       else (* normal map *)
         let lambda, col = U.decompose_map expr in
         apply_method c ~name:"map" ~col ~args:[lambda] ~arg_info:[ALambda [InRec], OutRec]
-
-  | MapSelf ->
-      if c.map_to_fold then
-        fold_of_map_ext c expr
-
-      else (* normal map *)
-        let lambda, col = U.decompose_map_self expr in
-        apply_method c ~name:"mapself" ~col ~args:[lambda] ~arg_info:[ALambda [InRec], OutRec]
 
   | Filter -> let lf, col = U.decompose_filter expr in
     apply_method c ~name:"filter" ~col ~args:[lf] ~arg_info:[ALambda [InRec], Out]

@@ -120,7 +120,7 @@
 
 %token DO
 
-%token MAP MAPSELF ITERATE FILTER FLATTEN
+%token MAP ITERATE FILTER FLATTEN
 %token AGGREGATE GROUPBYAGGREGATE
 %token SORT RANK
 
@@ -625,7 +625,6 @@ mutation :
 transformers :
     | expr CONCAT expr                                    { mkexpr Combine [$1; $3] }
     | MAP LPAREN expr COMMA expr RPAREN                   { mkexpr Map [$3; $5] }
-    | MAPSELF LPAREN expr COMMA expr RPAREN               { mkexpr MapSelf [$3; $5] }
     | ITERATE LPAREN expr COMMA expr RPAREN               { mkexpr Iterate [$3; $5] }
     | FILTER LPAREN expr COMMA expr COMMA expr RPAREN     { mkexpr Filter [$3; $5; $7] }
     | FLATTEN LPAREN expr RPAREN                          { mkexpr Flatten [$3] }

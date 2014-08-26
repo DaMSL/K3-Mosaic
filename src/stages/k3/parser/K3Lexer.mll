@@ -143,7 +143,6 @@ rule tokenize = parse
     | "range"  { RANGE }
 
     | "map"       { MAP }
-    | "mapself"   { MAPSELF }
     | "iterate"   { ITERATE }
     | "filter"    { FILTER }
     | "flatten"   { FLATTEN }

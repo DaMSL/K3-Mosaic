@@ -88,7 +88,6 @@ let string_of_tag_type tag = match tag with
     | IfThenElse -> "IfThenElse"
 
     | Map              -> "Map"
-    | MapSelf          -> "MapSelf"
     | Iterate          -> "Iterate"
     | Filter           -> "Filter"
     | Flatten          -> "Flatten"
@@ -182,7 +181,6 @@ let flat_string_of_expr_tag tag children =
     | IfThenElse -> my_tag "IfThenElse"
 
     | Map              -> my_tag "Map"
-    | MapSelf          -> my_tag "MapSelf"
     | Iterate          -> my_tag "Iterate"
     | Filter           -> my_tag "Filter"
     | Flatten          -> my_tag "Flatten"
@@ -442,7 +440,6 @@ and print_expr_tag c tag lazy_children =
     | IfThenElse -> my_tag "IfThenElse"
 
     | Map              -> my_tag "Map"
-    | MapSelf          -> my_tag "MapSelf"
     | Iterate          -> my_tag "Iterate"
     | Filter           -> my_tag "Filter"
     | Flatten          -> my_tag "Flatten"

@@ -244,9 +244,6 @@ let mk_if pred true_exp false_exp =
 let mk_map map_fun collection =
     mk_stree Map [map_fun; collection]
 
-let mk_map_self map_fun collection =
-    mk_stree MapSelf [map_fun; collection]
-
 let mk_filter pred_fun collection =
     mk_stree Filter [pred_fun; collection]
 

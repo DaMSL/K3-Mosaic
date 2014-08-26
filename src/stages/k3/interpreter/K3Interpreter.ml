@@ -212,7 +212,7 @@ and eval_expr (address:address) sched_st cenv texpr =
           | _ -> error "eval_cmpop: missing values"
       )
     in
-    (* Common for both Map and MapSelf *)
+    (* Common for Map *)
     let handle_map colF =
       let fenv, f = child_value cenv 0 in
       let nenv, c = child_value fenv 1 in
@@ -373,11 +373,9 @@ and eval_expr (address:address) sched_st cenv texpr =
         )
 
     (* Collection transformers *)
-    (* Map by default transforms to a bag *)
-    | Map     -> handle_map (fun _ x -> VTemp(VBag x))
 
     (* Keeps the same type *)
-    | MapSelf -> handle_map @: (fun c r -> preserve_collection (fun _ -> r) c)
+    | Map -> handle_map @: (fun c r -> preserve_collection (fun _ -> r) c)
 
     | Filter ->
         let penv, p = child_value cenv 0 in

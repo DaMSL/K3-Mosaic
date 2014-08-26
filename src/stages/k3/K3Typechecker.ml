@@ -67,7 +67,6 @@ let check_tag_arity tag children =
     | IfThenElse    -> 3
 
     | Map               -> 2
-    | MapSelf           -> 2
     | Filter            -> 2
     | Flatten           -> 1
     | Aggregate         -> 3
@@ -433,19 +432,6 @@ let rec deduce_expr_type ?(override=true) trig_env cur_env utexpr =
 
         | Map ->
             let name = "Map" in
-            let t0 = bind 0 in let t1 = bind 1 in
-            let t_a, t_r = t0 <| function_of |> t_erroru name @: TBad(t0) in
-            let t_c, t_e =
-              t1 <| collection_of +++ base_of +++ value_of |> t_erroru name @:
-                  TBad(t1) in
-            (* everything mapped always becomes a bag *)
-            let t_c' = TBag in
-            if t_a <~ t_e then
-              TValue(canonical (TCollection(t_c', contained_of t_r)))
-            else t_erroru name (VTMismatch(t_a, t_e, "element:")) ()
-
-        | MapSelf ->
-            let name = "MapSelf" in
             let t0 = bind 0 in let t1 = bind 1 in
             let t_a, t_r = t0 <| function_of |> t_erroru name @: TBad t0 in
             let t_c, t_e =

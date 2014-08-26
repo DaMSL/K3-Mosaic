@@ -342,8 +342,6 @@ let rec lazy_expr c expr =
     wrap_indent (lps "else" <| lsp () <| lazy_expr c e3)
   | Map -> let p = U.decompose_map expr in
     lps "map" <| lcut () <| lazy_paren @: expr_sub p
-  | MapSelf -> let p = U.decompose_map expr in
-    lps "mapself" <| lcut () <| lazy_paren @: expr_sub p
   | Filter -> let p = U.decompose_filter expr in
     lps "filter" <| lazy_paren @: expr_sub p
   | Flatten -> let e = U.decompose_flatten expr in

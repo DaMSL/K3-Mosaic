@@ -57,7 +57,6 @@ val decompose_lambda : expr_t -> arg_t * expr_t
 val decompose_leq : expr_t -> expr_t * expr_t
 val decompose_lt : expr_t -> expr_t * expr_t
 val decompose_map : expr_t -> expr_t * expr_t
-val decompose_map_self : expr_t -> expr_t * expr_t
 val decompose_mult : expr_t -> expr_t * expr_t
 val decompose_neg : expr_t -> expr_t
 val decompose_neq : expr_t -> expr_t * expr_t

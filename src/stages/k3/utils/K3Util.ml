@@ -209,8 +209,6 @@ let decompose_lt e = match tag_of_expr e with
   Lt -> (nth e 0, nth e 1) | _ -> failwith "not a Lt"
 let decompose_map e = match tag_of_expr e with
   Map -> (nth e 0, nth e 1) | _ -> failwith "not a Map"
-let decompose_map_self e = match tag_of_expr e with
-  MapSelf -> (nth e 0, nth e 1) | _ -> failwith "not a MapSelf"
 let decompose_mult e = match tag_of_expr e with
   Mult -> (nth e 0, nth e 1) | _ -> failwith "not a Mult"
 let decompose_neg e = match tag_of_expr e with
@@ -485,7 +483,6 @@ let string_of_tag = function
   | Iterate          -> "Iterate"
   | IfThenElse       -> "IfThenElse"
   | Map              -> "Map"
-  | MapSelf          -> "MapSelf"
   | Filter           -> "Filter"
   | Flatten          -> "Flatten"
   | Aggregate        -> "Aggregate"

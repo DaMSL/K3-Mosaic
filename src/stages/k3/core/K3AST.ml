@@ -107,7 +107,6 @@ type expr_tag_t
     | IfThenElse
 
     | Map
-    | MapSelf (* keep the same type *)
     | Filter
     | Flatten
     | Aggregate
