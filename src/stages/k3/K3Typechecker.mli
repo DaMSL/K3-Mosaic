@@ -37,6 +37,7 @@ val (+++): ('b -> 'x -> 'c) -> ('a -> 'x -> 'b) -> 'a -> 'x -> 'c
 
 (* Type extractors *)
 val collection_of : base_type_t -> (unit -> unit) -> container_type_t * value_type_t
+
 val mutable_of: value_type_t -> 'a -> mutable_type_t
 val base_of: value_type_t -> 'a -> base_type_t
 val annotation_of : value_type_t -> annotation_t

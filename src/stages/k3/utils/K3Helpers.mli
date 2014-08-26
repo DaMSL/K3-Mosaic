@@ -42,7 +42,7 @@ val preserve_iso : value_type_t -> (mutable_type_t -> mutable_type_t) -> value_t
 val preserve_mut : mutable_type_t -> (base_type_t -> base_type_t) -> mutable_type_t
 
 (* convert a type to mutable *)
-val mut : value_type_t -> value_type_t                                        
+val mut : value_type_t -> value_type_t
 
 
 (* wrap in a specific type *)
@@ -83,6 +83,10 @@ val wrap_args_maybe : (id_t * value_type_t) list -> arg_t
 (* Unwrap functions for types *)
 (* returns mutability and type *)
 val unwrap_vtype : value_type_t -> bool * base_type_t
+
+val unwrap_col : base_type_t -> container_type_t * value_type_t
+
+val unwrap_vcol : value_type_t -> bool * (container_type_t * value_type_t)
 
 (* unwrap a tuple type and return its list. If not a ttuple, return as singleton *)
 val unwrap_ttuple : value_type_t -> value_type_t list
@@ -273,3 +277,6 @@ val k3_container_of_list : value_type_t -> expr_t list -> expr_t
 
 (* convert arg to value type *)
 val value_type_of_arg: arg_t -> value_type_t
+
+(* convert the type of a collection *)
+val mk_convert_col : value_type_t -> value_type_t -> expr_t -> expr_t

@@ -146,6 +146,14 @@ let unwrap_vtype = function
   | TIsolated(TImmutable(t,_))
   | TContained(TImmutable(t,_)) -> false, t
 
+let unwrap_col = function
+  | TCollection(t_c, t_e) -> t_c, t_e
+  | _ -> failwith "Not a collection"
+
+let unwrap_vcol t =
+  let mut, t = unwrap_vtype t in
+  mut, unwrap_col t
+
 (* unwrap a tuple type and return its list. If not a ttuple, return as singleton *)
 let unwrap_ttuple vt = match snd @: unwrap_vtype vt with
   | TTuple vt_l -> vt_l
@@ -540,4 +548,15 @@ let rec value_type_of_arg = function
   | AVar (_, vt) -> vt
   | AMaybe a     -> wrap_tmaybe @: value_type_of_arg a
   | ATuple xs    -> wrap_ttuple @: List.map value_type_of_arg xs
+
+let mk_convert_col src_t dest_t col =
+  let _, (t_c, t_elem) = unwrap_vcol src_t in
+  mk_agg
+    (mk_lambda
+      (wrap_args ["acc", dest_t; "x", t_elem]) @:
+      mk_combine
+          (mk_singleton dest_t @: mk_var "x") @:
+          mk_var "acc")
+    (mk_empty dest_t)
+    col
 

@@ -11,7 +11,7 @@ let id_t_node_no_hash = list_drop_end 1 id_t_node
 let id_node = fst @: List.split id_t_node
 let id_node_no_hash = fst @: List.split id_t_node_no_hash
 let t_node = snd @: List.split id_t_node
-let t_ring = wrap_tlist @: wrap_ttuple t_node
+let t_ring = wrap_tlist' t_node
 
 let node_ring_nm = "node_ring"
 let node_ring_code =
@@ -147,6 +147,7 @@ let get_ring_node_code =
 (* k3 function to get all of the nodes in the node ring *)
 let get_all_uniq_nodes_nm = "get_all_uniq_nodes"
 let get_all_nodes_code =
+  let t_ring_bag = wrap_tbag @: snd @: snd @: unwrap_vcol t_ring in
   mk_global_fn get_all_uniq_nodes_nm
   ["_", t_unit] [wrap_tbag t_addr] @:
   mk_fst_many [t_addr; t_unit] @: (* project out just the sorted value *)
@@ -155,7 +156,8 @@ let get_all_nodes_code =
         mk_var "addr")
       (mk_lambda (wrap_args ["_", t_unit; "_", wrap_ttuple t_node]) @: mk_cunit)
       (mk_cunit) @:
-      mk_var node_ring_nm
+      mk_convert_col t_ring t_ring_bag @:
+        mk_var node_ring_nm
 
 
 let gen_ring_code =
