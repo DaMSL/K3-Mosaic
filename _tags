@@ -3,7 +3,6 @@
 <src>: include
 <src/stages/k3>: include
 <src/stages/k3/{core,parser,interpreter,utils}>: include
-<src/stages/imperative>: include
 <src/stages/m3>: include
 <src/stages/k3_dist>: include
 <src/unit_tests>: include

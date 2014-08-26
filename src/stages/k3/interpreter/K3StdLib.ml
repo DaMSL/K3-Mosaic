@@ -2,6 +2,7 @@
 
 open Util
 open K3Values
+open K3Values.Value
 open K3Helpers
 open K3.AST
 

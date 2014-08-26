@@ -14,19 +14,10 @@ open K3Typechecker
 open K3Streams
 open K3Consumption
 open K3Testing
-open ReifiedK3
 open DriverHelpers
 
 (* Note these override module names *)
-module Imperative = Imperative.AST(CPP.CPPTarget)
-module ImperativeUtil = ImperativeUtil.Util(CPP.CPPTarget)
-module RK3ToImperative = RK3ToImperative.Make(CPP.CPPTarget)
-
-module CPPExt = CPP.CPPTarget
-module CPT = CPP.CPPTarget.ASTImport
-module CPPGen = CPP.CPPGenerator
 module P = Printf
-open ImperativeToCPP
 
 module PS = K3PrintSyntax
 
@@ -46,8 +37,6 @@ type out_lang_t =
   | K3Dist
   | K3Test | K3DistTest (* output k3 with some test code *)
   | AstK3Dist
-  | ReifiedK3
-  | Imperative | CPPInternal | CPP
   | K3New (* new k3 syntax *)
 
 let out_lang_descs = [
@@ -57,10 +46,6 @@ let out_lang_descs = [
     K3Dist,      "k3dist",    "Distributed K3";
     K3DistTest,  "k3disttest","Distributed K3 with test code";
     AstK3Dist,   "k3distast", "Distributed K3 AST";
-    ReifiedK3,   "rk3",       "Reified K3";
-    Imperative,  "imp",       "Imperative";
-    CPPInternal, "cppi",      "C++-internal";
-    CPP,         "cpp",       "C++";
     K3New,       "k3new",     "New K3";
   ]
 
@@ -308,15 +293,6 @@ let typed_program_test prog_test =
   | NetworkTest(p, tl) -> NetworkTest(remove_g p, tl)
   | ExprTest(p_ts)     -> failwith "expr_test unhandled"
 
-let imperative_program p =
-  RK3ToImperative.imperative_of_program (fun () -> []) (fst @: typed_program p)
-
-let cpp_program p =
-  let mk_meta() = [] in
-  CPPTyping.deduce_program_type @:
-    cpp_of_imperative mk_meta @:
-      RK3ToImperative.imperative_of_program mk_meta @: fst @: typed_program p
-
 (* Action handlers *)
 (* TODO *)
 let repl params inputs = ()
@@ -480,37 +456,6 @@ let print_k3_test_program = function
 
   | _ -> error "Cannot print this type of data"
 
-let print_reified_k3_program = function
-  | K3Data p | K3DistData(p,_,_) ->
-    let print_expr_fn c e =
-        lazy (print_reified_expr @: reify_expr [] e) in
-    let tp, _ = typed_program p in
-    print_endline @: string_of_program ~print_expr_fn:print_expr_fn tp
-  | _ -> error "Cannot print this type of data"
-
-let print_imp func print_types = function
-  | K3Data p | K3DistData(p, _, _) ->
-    let string_of_meta m =
-      (if print_types then (ImperativeUtil.string_of_type @: fst m)^";"
-       else "")^
-      (string_of_annotation @: snd m)
-    in print_endline @:
-      ImperativeUtil.string_of_program string_of_meta @: func p
-  | _ -> error "Cannot print this type of data"
-
-let print_cppi_program = print_imp cpp_program
-let print_imperative_program = print_imp imperative_program
-
-let print_cpp_program = function
-  | K3Data p | K3DistData(p, _, _) ->
-    let files_and_content = CPPGen.generate_program @: cpp_program p in
-    let mk_filename id = (String.make 40 '=')^" "^id in
-    let print_content (f,c) =
-      print_endline @: mk_filename f; print_endline c; print_endline "\n\n"
-    in
-    List.iter print_content files_and_content
-  | _ -> error "Cannot print this type of data"
-
 (* Top-level print handler *)
 let print params inputs =
   let idx_inputs = insert_index_fst 0 inputs in
@@ -523,10 +468,6 @@ let print params inputs =
                                ~file:params.k3new_data_file)
                                |- snd
     | K3Test | K3DistTest -> print_k3_test_program 
-    | ReifiedK3           -> print_reified_k3_program |- snd
-    | Imperative          -> print_imperative_program params.print_types |- snd
-    | CPPInternal         -> print_cppi_program params.print_types |- snd
-    | CPP                 -> print_cpp_program |- snd
   in List.iter print_fn idx_inputs
 
 (* Test actions *)

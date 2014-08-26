@@ -12,7 +12,7 @@ val map_modify : ('a option -> 'a option) -> id_t -> 'a IdMap.t -> 'a IdMap.t
 
 module rec ValueMap : sig include Map.S with type key = Value.value_t end
 
-and Value : sig 
+and Value : sig
   type eval_t = VDeclared of value_t ref | VTemp of value_t
   and foreign_func_t = env_t -> env_t * eval_t
   (* arguments to a function/trigger *)
