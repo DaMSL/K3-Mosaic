@@ -501,7 +501,7 @@ let rec deduce_expr_type ?(override=true) trig_env cur_env utexpr =
             if not (t_zero <~ t_ar) then
               t_erroru name (VTMismatch(t_ar, t_zero, "agg func:")) ()
             else TValue(canonical @:
-              TCollection(TMap, contained_of @: canonical @: TTuple[t_gr; t_ar]))
+              TCollection(t_col, contained_of @: canonical @: TTuple[t_gr; t_ar]))
 
         | Sort ->
             let name = "Sort" in

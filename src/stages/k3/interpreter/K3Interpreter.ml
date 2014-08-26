@@ -440,18 +440,17 @@ and eval_expr (address:address) sched_st cenv texpr =
           aenv, data'
         in
 
-        let hash_gb_agg_method = lazy(
-          let agg_fn = gb_agg_fn ValueMap.find ValueMap.add in
-          let build_fn b = VMap b in
-          let data = ValueMap.empty in
-          agg_fn, build_fn, data)
-        in
+        let agg_fn = gb_agg_fn ValueMap.find ValueMap.add in
+        let zero = ValueMap.empty in
 
-        let (agg_fn, build_fn, data0) = Lazy.force @: match c with
-          | VSet _ | VBag _ | VList _ | VMap _ -> hash_gb_agg_method
+        let build_fn b = match c with
+          | VSet _  -> VSet(list_of_valuemap b)
+          | VBag _  -> VBag(list_of_valuemap b)
+          | VList _ -> VList(list_of_valuemap b)
+          | VMap _  -> VMap(b)
           | _       -> error "(GroupBy): non-collection value"
         in
-        let renv, data = List.fold_left agg_fn (nenv, data0) cl in
+        let renv, data = List.fold_left agg_fn (nenv, zero) cl in
         renv, VTemp(build_fn data)
 
     | Sort ->

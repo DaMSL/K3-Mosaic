@@ -98,12 +98,6 @@ let rec equal_values a b =
       abs_float(x -. y) < e
   | a,b -> a = b
 
-(* Convert a value map to a list *)
-let list_of_map_values mv =
-    List.rev @: ValueMap.fold (fun k v acc ->
-      (VTuple [k; v])::acc
-    ) mv []
-
 (* Value sorting *)
 let rec sort_values v =
   let sort x = List.sort compare x in
@@ -131,7 +125,7 @@ let rec repr_of_value v = match v with
 	| VSet vs  -> "VSet(["^  String.concat "; " (List.map repr_of_value vs)^"])"
 	| VBag vs  -> "VBag(["^  String.concat "; " (List.map repr_of_value vs)^"])"
 	| VList vs -> "VList(["^ String.concat "; " (List.map repr_of_value vs)^"])"
-	| VMap ms  -> "VMap(["^  String.concat "; " (List.map repr_of_value @: list_of_map_values ms)^"])"
+	| VMap ms  -> "VMap(["^  String.concat "; " (List.map repr_of_value @: list_of_valuemap ms)^"])"
 
 	| VFunction (a, b) -> "VFunction("^ string_of_arg a ^" -> "^(string_of_expr b)^")"
   | VForeignFunction (a, _) -> "VForeignFunction("^ string_of_arg a^")"
@@ -171,7 +165,7 @@ let rec print_value ?(mark_points=[]) v =
     | VSet vs  -> print_collection "{" "}" vs
     | VBag vs  -> print_collection "{|" "|}" vs
     | VList vs -> print_collection "[" "]" vs
-    | VMap vms -> print_collection "[|" "|]" @: list_of_map_values vms
+    | VMap vms -> print_collection "[|" "|]" @: list_of_valuemap vms
     | VFunction (a, b) -> ps "<fun>"
     | VForeignFunction (a, _) -> ps "<foreignfun>"
     | VAddress (ip,port) -> ps (ip^":"^ string_of_int port)
@@ -272,7 +266,7 @@ let rec type_of_value uuid value =
   | VTuple vs -> wrap_ttuple @: List.map (type_of_value uuid ) vs
   | VSet vs -> wrap_tset @: typ_fst vs
   | VList vs -> wrap_tlist @: typ_fst vs
-  | VMap vms -> wrap_tlist @: typ_fst @: list_of_map_values vms
+  | VMap vms -> wrap_tlist @: typ_fst @: list_of_valuemap vms
   | VBag vs -> wrap_tbag @: typ_fst vs
   | VFunction _ | VForeignFunction _ -> raise (RuntimeError (uuid,
       "type_of_value: cannot apply to function"))
@@ -295,7 +289,7 @@ let rec expr_of_value uuid value = match value with
      let l = List.map (expr_of_value uuid) vs in
      k3_container_of_list (type_of_value uuid value) l
   | VMap mvs ->
-      let l = List.map (expr_of_value uuid) @: list_of_map_values mvs in
+      let l = List.map (expr_of_value uuid) @: list_of_valuemap mvs in
       k3_container_of_list (type_of_value uuid value) l
   | VFunction _ | VForeignFunction _ -> raise (RuntimeError (uuid,
       "expr_of_value: cannot apply to function"))
