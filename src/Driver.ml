@@ -207,25 +207,25 @@ let cmd_line_params = default_cmd_line_params ()
 
 let handle_type_error p (uuid, name, msg) =
   let s = K3TypeError.string_of_error msg in
-  print_endline "----Type error----";
-  print_endline @: "Error("^(string_of_int uuid)^"): "^name^": "^s;
+  prerr_endline "----Type error----";
+  prerr_endline @: "Error("^(string_of_int uuid)^"): "^name^": "^s;
   (match p with
   | K3Data p | K3DistData(p,_,_)->
       if cmd_line_params.debug_info then
-        print_endline @: string_of_program ~print_id:true p
+        prerr_endline @: string_of_program ~print_id:true p
       else
-        print_endline @: PS.string_of_program ~uuid_highlight:uuid p
-  | K3TestData p_test -> print_endline @:
+        prerr_endline @: PS.string_of_program ~uuid_highlight:uuid p
+  | K3TestData p_test -> prerr_endline @:
     PS.string_of_program_test ~uuid_highlight:uuid p_test);
   exit 1
 
 let handle_interpret_error p (uuid,error) =
-  print_endline "----Interpreter error----";
-  print_endline @: "Error("^(string_of_int uuid)^"): "^error;
+  prerr_endline "----Interpreter error----";
+  prerr_endline @: "Error("^(string_of_int uuid)^"): "^error;
   (match p with
   | K3Data p | K3DistData(p,_,_)->
-      print_endline @: PS.string_of_program ~uuid_highlight:uuid p
-  | K3TestData p_test -> print_endline @:
+      prerr_endline @: PS.string_of_program ~uuid_highlight:uuid p
+  | K3TestData p_test -> prerr_endline @:
     PS.string_of_program_test ~uuid_highlight:uuid p_test);
   exit 1
 

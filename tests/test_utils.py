@@ -6,6 +6,8 @@ import os
 import re
 import six
 
+err_len = 300
+
 def check_exists(name, path):
     if not os.path.exists(path):
         raise Exception("No {0} executable found at {1}".format(name, path))
@@ -21,12 +23,12 @@ def check_error(filename, verbose, search=False):
                 mo = re.search(r'^(Error|ERROR)', buf)
                 if mo:
                     if verbose:
-                        six.print_(buf)
+                        six.print_(buf[0:err_len])
                     return True
                 return False
             else:
                 if verbose:
-                    six.print_('ERROR: ' + buf)
+                    six.print_('ERROR: ' + buf[0:err_len])
                 return True
     return False
 
