@@ -35,6 +35,16 @@ val t_vid_mut : value_type_t
 type vid_op = VEq | VNeq | VGt | VLt | VGeq | VLeq
 val mk_global_vid_op : id_t -> vid_op -> declaration_t * annotation_t
 
+(* preserve isolation while operating on underlying type *)
+val preserve_iso : value_type_t -> (mutable_type_t -> mutable_type_t) -> value_type_t
+
+(* preserve mutability while operating on underlying base type & annotation *)
+val preserve_mut : mutable_type_t -> (base_type_t -> base_type_t) -> mutable_type_t
+
+(* convert a type to mutable *)
+val mut : value_type_t -> value_type_t                                        
+
+
 (* wrap in a specific type *)
 val wrap_ttuple : value_type_t list -> value_type_t
 val wrap_ttuple_mut : value_type_t list -> value_type_t
@@ -51,6 +61,10 @@ val wrap_tbag : value_type_t -> value_type_t
 val wrap_tbag' : value_type_t list -> value_type_t
 val wrap_tbag_mut : value_type_t -> value_type_t
 val wrap_tbag_mut' : value_type_t list -> value_type_t
+val wrap_tmap : value_type_t -> value_type_t
+val wrap_tmap' : value_type_t list -> value_type_t
+val wrap_tmap_mut : value_type_t -> value_type_t
+val wrap_tmap_mut' : value_type_t list -> value_type_t
 val wrap_tind : value_type_t -> value_type_t
 val wrap_tind_mut : value_type_t -> value_type_t
 val wrap_tmaybe : value_type_t -> value_type_t

@@ -32,80 +32,74 @@ let iso_to_contained typ =
 (* the default type *)
 let canonical typ = TIsolated(TImmutable(typ,[]))
 
+(* preserve isolation while operating on underlying type *)
+let preserve_iso t f = match t with
+  | TIsolated t  -> TIsolated(f t)
+  | TContained t -> TContained(f t)
+
+let preserve_mut t f = match t with
+  | TMutable(t, a)   -> TMutable(f t, a)
+  | TImmutable(t, a) -> TImmutable(f t, a)
+
+(* change immutable type to mutable *)
+let mut typ = preserve_iso typ @: function
+  | TImmutable(t,a) -> TMutable(t,a)
+  | t -> t
+
 (* A type for simple K3 types *)
 let t_bool = canonical TBool
-let t_bool_mut = TIsolated(TMutable(TBool,[]))
+let t_bool_mut = mut t_bool
 let t_int = canonical TInt
-let t_int_mut = TIsolated(TMutable(TInt,[]))
+let t_int_mut = mut t_int
 let t_date = canonical TDate
 let t_float = canonical TFloat
-let t_float_mut = TIsolated(TMutable(TFloat,[]))
+let t_float_mut = mut t_int
 let t_byte = canonical TByte
 let t_string = canonical TString
 let t_unit = canonical TUnit
 let t_unknown = canonical TUnknown
-
-(* A type for addresses *)
 let t_addr = canonical TAddress
-let t_addr_mut = TIsolated(TMutable(TAddress,[]))
+let t_addr_mut = mut t_addr
 
 (* wrap a type in an immutable tuple *)
 let wrap_ttuple typ = match typ with
   | [h]    -> h
   | h::t   -> canonical @: TTuple(typ)
   | _      -> invalid_arg "No tuple to wrap"
+let wrap_ttuple_mut typ = mut @: wrap_ttuple typ
 
-(* wrap a type in a mutable tuple *)
-let wrap_ttuple_mut typ = match typ with
-  | [h]    -> h
-  | h::t   -> TIsolated(TMutable(TTuple(typ),[]))
-  | _      -> invalid_arg "No mutable tuple to wrap"
+(* general collection wrap function *)
+let wrap_tcol tcol typ =
+  let c = iso_to_contained typ in
+  canonical @: TCollection(tcol, c)
 
 (* wrap a type in a list *)
-let wrap_tlist typ =
-  let c = iso_to_contained typ in
-  canonical @: TCollection(TList, c)
-
+let wrap_tlist typ = wrap_tcol TList typ
 let wrap_tlist' tl = wrap_tlist @: wrap_ttuple tl
-
-(* wrap a type in a mutable list *)
-let wrap_tlist_mut typ =
-  let c = iso_to_contained typ in
-  TIsolated(TMutable(TCollection(TList, c),[]))
-
+let wrap_tlist_mut typ = mut @: wrap_tlist typ
 let wrap_tlist_mut' tl = wrap_tlist_mut @: wrap_ttuple tl
 
 (* wrap a type in a set *)
-let wrap_tset typ =
-  let c = iso_to_contained typ in
-  canonical @: TCollection(TSet, c)
-
+let wrap_tset typ = wrap_tcol TSet typ
 let wrap_tset' tl = wrap_tset @: wrap_ttuple tl
-
-(* wrap a type in a mutable set *)
-let wrap_tset_mut typ =
-  let c = iso_to_contained typ in
-  TIsolated(TMutable(TCollection(TSet, c),[]))
-
+let wrap_tset_mut typ = mut @: wrap_tset typ
 let wrap_tset_mut' tl = wrap_tset_mut @: wrap_ttuple tl
 
 (* wrap a type in a bag *)
-let wrap_tbag typ =
-  let c = iso_to_contained typ in
-  canonical @: TCollection(TBag, c)
-
+let wrap_tbag typ = wrap_tcol TBag typ
 let wrap_tbag' tl = wrap_tbag @: wrap_ttuple tl
-
-(* wrap a type in a mutable bag *)
-let wrap_tbag_mut typ =
-  let c = iso_to_contained typ in
-  TIsolated(TMutable(TCollection(TBag, c),[]))
-
+let wrap_tbag_mut typ = mut @: wrap_tbag typ
 let wrap_tbag_mut' tl = wrap_tbag_mut @: wrap_ttuple tl
+
+(* wrap a type in a map *)
+let wrap_tmap typ = wrap_tcol TMap typ
+let wrap_tmap' tl = wrap_tmap @: wrap_ttuple tl
+let wrap_tmap_mut typ = mut @: wrap_tmap typ
+let wrap_tmap_mut' tl = wrap_tmap_mut @: wrap_ttuple tl
 
 (* wrap a type in a mutable indirection *)
 let wrap_tind t = TIsolated(TImmutable(TIndirect t, []))
-let wrap_tind_mut t = TIsolated(TMutable(TIndirect t, []))
+let wrap_tind_mut t = mut @: wrap_tind t
 
 let wrap_tmaybe t = canonical @: TMaybe t
 let wrap_tmaybes ts = List.map wrap_tmaybe ts
