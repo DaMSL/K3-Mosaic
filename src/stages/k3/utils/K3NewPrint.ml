@@ -98,6 +98,7 @@ let s_of_col_type = function
   | TSet  -> "Set"
   | TBag  -> "Collection"
   | TList -> "Seq"
+  | TMap  -> "Map"
 
 let lazy_control_anno c = function
   | Effect ids -> lps "effect " <| lazy_paren @:
@@ -158,6 +159,7 @@ let rec lazy_base_type ?(brace=true) ?(mut=false) ?(empty=false) c ~in_col t =
           | TSet  -> "{ Set }"
           | TList -> "{ Seq }"
           | TBag  -> "{ Collection }"
+          | TMap  -> "{ Map }"
         end
       )
 
@@ -214,6 +216,7 @@ let lazy_collection_vt c vt eval = match KH.unwrap_vtype vt with
         | TSet  -> " @ { Set }"
         | TBag  -> " @ { Collection }"
         | TList -> " @ { Seq }"
+        | TMap  -> " @ { Map }"
         end
   | _ -> error () (* type error *)
 
@@ -518,7 +521,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
     with T.TypeError(_,_,_) -> false (* assume additive *)
   (* many instructions need to wrap the same way *)
   in let wrap e = match U.tag_of_expr expr with
-    Insert | Iterate | Map | FilterMap | Flatten | Send | Delete | Update |
+    Insert | Iterate | Map | Filter | Flatten | Send | Delete | Update |
     Aggregate | GroupByAggregate -> wrap_hv 2 e
     | IfThenElse -> wrap_hv 0 e
     | _ -> id_fn e
@@ -677,12 +680,16 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
         let lambda, col = U.decompose_map expr in
         apply_method c ~name:"map" ~col ~args:[lambda] ~arg_info:[ALambda [InRec], OutRec]
 
-  | FilterMap -> let lf, lm, col = U.decompose_filter_map expr in
-    lazy_paren (apply_method c ~name:"filter" ~col ~args:[lf] ~arg_info:[ALambda [InRec], Out]) <|
-      (* check if a map is necessary, or if it's just mapping id (ie just a filter) *)
-      if is_id_lambda lm then []
-      else
-        lazy_expr c @: light_type c @: KH.mk_map lm col
+  | MapSelf ->
+      if c.map_to_fold then
+        fold_of_map_ext c expr
+
+      else (* normal map *)
+        let lambda, col = U.decompose_map_self expr in
+        apply_method c ~name:"mapself" ~col ~args:[lambda] ~arg_info:[ALambda [InRec], OutRec]
+
+  | Filter -> let lf, col = U.decompose_filter expr in
+    apply_method c ~name:"filter" ~col ~args:[lf] ~arg_info:[ALambda [InRec], Out]
 
   (* flatten(map(...)) becomes ext(...) *)
   | Flatten ->

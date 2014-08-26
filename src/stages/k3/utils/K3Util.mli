@@ -46,7 +46,7 @@ val decompose_const : expr_t -> constant_t
 val decompose_delete : expr_t -> expr_t * expr_t
 val decompose_deref : expr_t -> expr_t
 val decompose_eq : expr_t -> expr_t * expr_t
-val decompose_filter_map : expr_t -> expr_t * expr_t * expr_t
+val decompose_filter : expr_t -> expr_t * expr_t
 val decompose_flatten : expr_t -> expr_t
 val decompose_gbagg : expr_t -> expr_t * expr_t * expr_t * expr_t
 val decompose_ifthenelse : expr_t -> expr_t * expr_t * expr_t
@@ -57,6 +57,7 @@ val decompose_lambda : expr_t -> arg_t * expr_t
 val decompose_leq : expr_t -> expr_t * expr_t
 val decompose_lt : expr_t -> expr_t * expr_t
 val decompose_map : expr_t -> expr_t * expr_t
+val decompose_map_self : expr_t -> expr_t * expr_t
 val decompose_mult : expr_t -> expr_t * expr_t
 val decompose_neg : expr_t -> expr_t
 val decompose_neq : expr_t -> expr_t * expr_t

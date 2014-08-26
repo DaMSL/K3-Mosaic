@@ -3,6 +3,7 @@ open Util
 open K3.AST
 open K3Util
 open K3Values
+open K3Values.Value
 open K3Typechecker
 open K3Streams
 open K3Runtime

@@ -572,11 +572,11 @@ let imperative_of_expr_node mk_meta fn_arg_env
       | _ -> failwith "invalid reified map children"
     end
 
-  | FilterMap ->
+  | Filter ->
     begin match children with
-      | [filter_fn_pair; map_fn_pair; c_pair] ->
-        let f_fn_e, m_fn_e, c_e = decompose_filter_map e in
-        let filter_fn_reify_cmds, map_fn_reify_cmds, c_reify_cmds =
+      | [filter_fn_pair; c_pair] ->
+        let f_fn_e, c_e = decompose_filter e in
+        let filter_fn_reify_cmds, c_reify_cmds =
           match List.map (fun p -> List.flatten (List.assoc p reify_cmds_by_children)) children with
             | [a;b;c] -> a,b,c
             | _ -> failwith "invalid filtermap reified sub cmds"

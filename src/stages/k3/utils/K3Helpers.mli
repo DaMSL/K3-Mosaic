@@ -118,7 +118,8 @@ val mk_iter : expr_t -> expr_t -> expr_t
 val mk_if : expr_t -> expr_t -> expr_t -> expr_t
 
 val mk_map : expr_t -> expr_t -> expr_t
-val mk_filtermap : expr_t -> expr_t -> expr_t -> expr_t
+val mk_map_self : expr_t -> expr_t -> expr_t
+val mk_filter : expr_t -> expr_t -> expr_t
 val mk_flatten : expr_t -> expr_t
 val mk_agg : expr_t -> expr_t -> expr_t -> expr_t
 val mk_gbagg : expr_t -> expr_t -> expr_t -> expr_t -> expr_t

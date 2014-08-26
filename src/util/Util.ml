@@ -12,6 +12,8 @@ let fos = float_of_string
 let bos = bool_of_string
 let sob = string_of_bool
 
+let const a _ = a
+
 (* Either type *)
 type ('a, 'b) either_t = Left of 'a | Right of 'b
 

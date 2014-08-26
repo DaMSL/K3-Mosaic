@@ -31,53 +31,53 @@
 
   let numerrors = ref 0
 
-  let print_error msg = 
-      incr numerrors; 
-      let pos = Parsing.symbol_start_pos() in 
-      let linenum = pos.Lexing.pos_lnum in 
-      let column = pos.Lexing.pos_cnum - pos.Lexing.pos_bol in 
+  let print_error msg =
+      incr numerrors;
+      let pos = Parsing.symbol_start_pos() in
+      let linenum = pos.Lexing.pos_lnum in
+      let column = pos.Lexing.pos_cnum - pos.Lexing.pos_bol in
       Printf.printf "Error on line %d character %d : " linenum column;
       print_endline msg;
       if !numerrors > 20 then raise Exit else raise Parsing.Parse_error
-        
+
   (* Predefined errors *)
   let missing_paren ?(side="left") = print_error ("Missing "^side^" parenthesis")
 
   let id_error () = print_error("Expected identifier")
   let type_error () = print_error("Expected type expression")
-  
+
   let address_error ip port = print_error("Invalid address "^ip^":"^(string_of_int port))
 
-  let op_error op_class i = 
+  let op_error op_class i =
     let op_type = match i with 1 -> " unary" | 2 -> " binary" | 3 -> " ternary" | _ -> ""
     in print_error("Invalid"^op_type^" "^op_class^" operator syntax")
 
   let arith_error i = op_error "arithmetic" i
   let comp_error () = op_error "comparison" 2
-  
+
   let cond_error cond_class =
     print_error ("Invalid conditional "^cond_class^" error")
 
-  let lambda_error error_class = 
+  let lambda_error error_class =
     print_error ("Invalid lambda "^error_class^" expression")
 
   let assign_error assign_class =
     print_error ("Invalid "^assign_class^" assignment RHS expression")
 
   let positional_error value_class i =
-    let i_str = match i with 
+    let i_str = match i with
         | 1 -> "first"   | 2 -> "second" | 3 -> "third"
         | 4 -> "fourth"  | 5 -> "second" | 6 -> "third"
         | 7 -> "seventh" | 8 -> "eighth" | 9 -> "ninth"
         | _ -> string_of_int i
     in print_error ("Expected "^value_class^" as "^i_str^" argument")
-  
+
   let coll_error i = positional_error "collection" i
   let coll_lambda_error fn_class i = positional_error (fn_class^" function") i
   let value_error i = positional_error "value" i
 
   let expr_error () = print_error("Expected expression")
-  
+
   let flow_program_error () = print_error("Expected flow program")
 
 %}
@@ -120,7 +120,7 @@
 
 %token DO
 
-%token MAP ITERATE FILTERMAP FLATTEN
+%token MAP MAPSELF ITERATE FILTER FLATTEN
 %token AGGREGATE GROUPBYAGGREGATE
 %token SORT RANK
 
@@ -190,7 +190,7 @@ declaration :
     | DECLARE IDENTIFIER COLON type_expr GETS error { expr_error() }
     | DECLARE IDENTIFIER COLON error                { type_error() }
     | DECLARE error                                 { id_error() }
-    
+
     | FOREIGN IDENTIFIER COLON error { type_error() }
     | FOREIGN error                  { id_error() }
 
@@ -250,7 +250,7 @@ resource :
         Source(Resource($2, Stream($4, $6)))
       }
 
-    | SOURCE PATTERN IDENTIFIER GETS resource_pattern { 
+    | SOURCE PATTERN IDENTIFIER GETS resource_pattern {
         Source(Resource($3, Pattern($5)))
       }
 
@@ -258,7 +258,7 @@ resource :
         let channel_type, channel_format = $6
         in Sink(Resource($2, Handle($4, channel_type, channel_format)))
       }
-      
+
     | SINK PATTERN IDENTIFIER GETS resource_pattern {
         Sink(Resource($3, Pattern($5)))
       }
@@ -284,12 +284,12 @@ resource_pattern :
 
     | resource_pattern QUESTION          { Optional($1) }
     | resource_pattern TIMES             { Repeat($1, UntilEOF) }
-    
+
     | resource_pattern OR resource_pattern {
         let unwrap_choice x = match x with Choice(l) -> l | _ -> [x]
         in Choice((unwrap_choice $1)@(unwrap_choice $3))
       }
-    
+
     | resource_pattern resource_pattern {
         let unwrap_seq x = match x with Sequence(l) -> l | _ -> [x]
         in Sequence((unwrap_seq $1)@(unwrap_seq $2))
@@ -450,7 +450,7 @@ expr :
     | SEND error { print_error("Invalid send syntax") }
 
     | expr LPAREN error { print_error("Function application error") }
-    
+
     | LET arg GETS expr IN error   { print_error "Let body error" }
     | LET arg GETS error           { print_error "Let binding target error" }
     | LET error                    { print_error "Let binding error" }
@@ -485,14 +485,14 @@ value_typed_identifier_list :
 ;
 
 arg :
-    | UNKNOWN { AIgnored } 
+    | UNKNOWN { AIgnored }
     | value_typed_identifier  { AVar(fst $1, snd $1) }
     | JUST arg                { AMaybe($2) }
     | LPAREN arg_list RPAREN  { if List.length $2 == 1 then List.hd $2 else ATuple($2) }
 ;
 
 arg_list :
-    | arg                { [($1)] } 
+    | arg                { [($1)] }
     | arg COMMA arg_list { $1 :: $3 }
 
 constant :
@@ -530,7 +530,7 @@ variable :
 
 address :
     | IDENTIFIER COLON INTEGER { CAddress($1,$3) }
-    | IP COLON INTEGER { 
+    | IP COLON INTEGER {
         let parts = Str.split (Str.regexp_string ".") $1 in
         let valid = List.for_all (fun x -> (int_of_string x) < 256) parts in
         if valid then CAddress(String.concat "." parts, $3)
@@ -625,8 +625,9 @@ mutation :
 transformers :
     | expr CONCAT expr                                    { mkexpr Combine [$1; $3] }
     | MAP LPAREN expr COMMA expr RPAREN                   { mkexpr Map [$3; $5] }
+    | MAPSELF LPAREN expr COMMA expr RPAREN               { mkexpr MapSelf [$3; $5] }
     | ITERATE LPAREN expr COMMA expr RPAREN               { mkexpr Iterate [$3; $5] }
-    | FILTERMAP LPAREN expr COMMA expr COMMA expr RPAREN  { mkexpr FilterMap [$3; $5; $7] }
+    | FILTER LPAREN expr COMMA expr COMMA expr RPAREN     { mkexpr Filter [$3; $5; $7] }
     | FLATTEN LPAREN expr RPAREN                          { mkexpr Flatten [$3] }
     | AGGREGATE LPAREN expr COMMA expr COMMA expr RPAREN  { mkexpr Aggregate [$3; $5; $7] }
     | GROUPBYAGGREGATE LPAREN expr COMMA expr COMMA expr COMMA expr RPAREN {
@@ -636,27 +637,26 @@ transformers :
 
     /* Error handling */
     | expr CONCAT error { print_error("Expected expression for combine") }
-    
+
     | MAP LPAREN expr error { coll_error 2 }
     | MAP LPAREN error      { coll_lambda_error "map" 1 }
     | MAP error             { print_error("Invalid map syntax") }
-    
+
     | ITERATE LPAREN expr error { coll_error 2 }
     | ITERATE LPAREN error      { coll_lambda_error "iterate" 1 }
     | ITERATE error             { print_error("Invalid iterate syntax") }
-    
-    | FILTERMAP LPAREN expr COMMA expr error { coll_error 3 }
-    | FILTERMAP LPAREN expr error            { coll_lambda_error "filtermap map" 2 }
-    | FILTERMAP LPAREN error                 { coll_lambda_error "filtermap filter" 1 }
-    | FILTERMAP error                        { print_error("Invalid filtermap syntax") }
-    
+
+    | FILTER LPAREN expr error { coll_error 2 }
+    | FILTER LPAREN error      { coll_lambda_error "filter" 1 }
+    | FILTER error             { print_error("Invalid filterhsyntax") }
+
     | FLATTEN LPAREN error { print_error("Expected a nested collection") }
-    
+
     | AGGREGATE LPAREN expr COMMA expr error { coll_error 3 }
     | AGGREGATE LPAREN expr error            { value_error 2 }
     | AGGREGATE LPAREN error                 { coll_lambda_error "aggregate" 1 }
     | AGGREGATE error                        { print_error("Invalid fold syntax") }
-    
+
     | GROUPBYAGGREGATE LPAREN expr COMMA expr COMMA expr error { coll_error 4 }
     | GROUPBYAGGREGATE LPAREN expr COMMA expr error            { value_error 3 }
     | GROUPBYAGGREGATE LPAREN expr error                       { coll_lambda_error "group-by aggregate" 2 }
@@ -676,7 +676,7 @@ integer_list :
 
 identifier_list :
     | IDENTIFIER                       { [$1] }
-    | IDENTIFIER COMMA identifier_list { $1::$3 } 
+    | IDENTIFIER COMMA identifier_list { $1::$3 }
 ;
 
 
@@ -700,7 +700,7 @@ expression_test :
     | expression_test_list                          { ExprTest $1 }
 
 named_expr_list :
-    | expr GETS check_expr                          { [$1, $3] }           
+    | expr GETS check_expr                          { [$1, $3] }
     | expr GETS check_expr COMMA named_expr_list    { $5@[$1, $3] }
     | expr GETS error { print_error "invalid check expression"}
 ;

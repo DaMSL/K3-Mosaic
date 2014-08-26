@@ -184,13 +184,12 @@ let declare_global_funcs partmap p ast =
     log_read_geq
     ["vid2", t_vid]
     [wrap_tbag' @: snd_many log_master_id_t] @:
-    mk_filtermap
+    mk_filter
       (* get only >= vids *)
       (mk_lambda'
         log_master_id_t @:
         v_geq (mk_var "vid") @: mk_var "vid2"
-      )
-      (mk_id @: snd_many log_master_id_t) @:
+      ) @:
       mk_var log_master
   in
   (* check_stmt_cntr_indx *)
@@ -329,10 +328,9 @@ let declare_global_funcs partmap p ast =
         mk_iter (* loop over values in the delta tuples *)
          (mk_lambda' ids_types_arg_v @:
            mk_let "filtered" (wrap_t_of_map' types_v)
-             (mk_filtermap (* only greater vid for this part *)
+             (mk_filter (* only greater vid for this part *)
                (mk_lambda' ids_types_v @:
-                 mk_gt (mk_var "vid") @: mk_var "min_vid")
-               (mk_id types_v) @:
+                 mk_gt (mk_var "vid") @: mk_var "min_vid") @:
                (* slice w/o vid and value *)
                mk_slice' (mk_deref @: mk_var target_map) @:
                  mk_cunknown::vars_arg_no_v_no_val@[mk_cunknown]) @:

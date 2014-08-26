@@ -129,12 +129,11 @@ let get_ring_node_code =
           mk_apply (mk_var "float_of_int") @: mk_var "max_val"]
     ) @:
   mk_let "results" t_ring
-    (mk_filtermap (* filter to only hashes greater than data *)
+    (mk_filter (* filter to only hashes greater than data *)
       (mk_lambda
         (wrap_args @: id_t_node) @:
         mk_geq (mk_var "hash") (mk_var "scaled")
-      )
-      (mk_id t_node) @:
+      ) @:
       mk_var node_ring_nm
     ) @:
   mk_let_many (List.map (function ("addr",_) as x -> x | _,t -> "_",t) id_t_node)

@@ -10,11 +10,16 @@ val add_from_list : 'a IdMap.t -> (id_t * 'a) list -> 'a IdMap.t
 
 val map_modify : ('a option -> 'a option) -> id_t -> 'a IdMap.t -> 'a IdMap.t
 
-type eval_t = VDeclared of value_t ref
-            | VTemp of value_t
-and foreign_func_t = env_t -> env_t * eval_t
+module rec ValueMap : sig include Map.S with type key = Value.value_t end
 
-and value_t
+and Value : sig 
+  type eval_t = VDeclared of value_t ref | VTemp of value_t
+  and foreign_func_t = env_t -> env_t * eval_t
+  (* arguments to a function/trigger *)
+  and frame_t = (id_t * value_t) list
+  (* an env_t is global values and frames (functional environment) *)
+  and env_t = (value_t ref) IdMap.t * (frame_t list)
+  and value_t
     = VUnknown
     | VUnit
     | VBool of bool
@@ -27,17 +32,18 @@ and value_t
     | VSet of value_t list
     | VBag of value_t list
     | VList of value_t list
+    | VMap of value_t ValueMap.t
     | VFunction of arg_t * expr_t
     | VForeignFunction of arg_t * foreign_func_t
     | VAddress of address
     | VTarget of id_t
     | VIndirect of value_t ref
+end
 
-    (* arguments to a function/trigger *)
-and frame_t = (id_t * value_t) list
+open Value
 
-(* an env_t is global values and frames (functional environment) *)
-and env_t = (value_t ref) IdMap.t * (frame_t list)
+val list_of_valuemap : value_t ValueMap.t -> value_t list
+val valuemap_of_list : value_t list -> value_t ValueMap.t
 
 (* trigger env is where we store the trigger functions. These functions take the
  * address,

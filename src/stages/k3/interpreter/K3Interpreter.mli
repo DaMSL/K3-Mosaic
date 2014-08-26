@@ -1,5 +1,6 @@
 open K3.AST
 open K3Values
+open K3Values.Value
 open K3Runtime
 
 (* opaque type for interpreter state *)

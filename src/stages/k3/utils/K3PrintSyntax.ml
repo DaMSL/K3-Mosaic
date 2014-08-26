@@ -25,13 +25,14 @@ let lps_list ?(sep=", ") cut_t f l =
   [lazy (ps_list ~sep:sep cut_t (force_list |- f) l)]
 
 (* type we pass all the way down for configuring behaviors *)
-type config = {verbose_types:bool; (* more verbose type printing *)
+type config = {
+               verbose_types:bool; (* more verbose type printing *)
                uuid:int option;    (* highlight a particular uuid *)
-               lambda_ret:bool} (* highlight a lambda with a non-tuple return type *)
+              }
 
 let default_config = {verbose_types=false;
                       uuid=None;
-                      lambda_ret=false}
+                     }
 
 let verbose_types_config = {default_config with verbose_types=true}
 
@@ -99,6 +100,8 @@ let rec lazy_base_type c ~in_col ?(no_paren=false) t =
       lps "{|" <| lazy_value_type c ~in_col:true ~no_paren:true vt <| lps "|}"
   | TCollection(TList, vt) ->
       lps "[" <| lazy_value_type c ~in_col:true ~no_paren:true vt <| lps "]"
+  | TCollection(TMap, vt) ->
+      lps "[|" <| lazy_value_type c ~in_col:true ~no_paren:true vt <| lps "|]"
   | TAddress -> lps "address" (* ? *)
   | TTarget bt -> lps "target" <| lazy_base_type c ~in_col bt
   | TUnknown -> lps "unknown"
@@ -154,6 +157,7 @@ let lazy_collection c ct eval = match ct with
     | TSet  -> lps "{" <| eval <| lps "}"
     | TBag  -> lps "{|" <| eval <| lps "|}"
     | TList -> lps "[" <| eval <| lps "]"
+    | TMap  -> lps "[|" <| eval <| lps "|]"
 
 let lazy_collection_vt c vt eval = match vt with
   | TIsolated(TMutable(TCollection(ct, _),_))
@@ -224,7 +228,7 @@ let rec lazy_expr c expr =
     | _ -> lazy_expr c e
   (* many instructions need to wrap the same way *)
   in let wrap e = match U.tag_of_expr expr with
-    Insert | Iterate | Map | FilterMap | Flatten | Send | Delete | Update |
+    Insert | Iterate | Map | Filter | Flatten | Send | Delete | Update |
     Aggregate | GroupByAggregate -> wrap_hv 2 e
     | IfThenElse -> wrap_hv 0 e
     | _ -> id_fn e
@@ -309,23 +313,9 @@ let rec lazy_expr c expr =
   | Leq -> let p = U.decompose_leq expr in
     arith_paren_pair "<=" p
   | Lambda arg ->
-      (* check if we need to highlight this lambda for the new k3 *)
-      let highlight =
-        if c.lambda_ret then
-          let ms = U.meta_of_expr expr in
-          begin match list_find (function Type _ -> true | _ -> false) ms with
-            | Some (Type (TFunction(_,x))) ->
-              begin match T.base_of x () with
-                | TTuple _ -> false
-                | _        -> true (* we highlight anything that's not a tuple result *)
-              end
-            | _ -> false
-          end
-        else false
-      in
       let _, e = U.decompose_lambda expr in
     wrap_indent (lps "\\" <| lazy_arg c false arg <|
-    (if highlight then lps " =>" else lps " ->")) <| lind () <|
+    lps " ->") <| lind () <|
       wrap_hov 0 (lazy_expr c e)
   | Apply -> let (e1, e2) = U.decompose_apply expr in
     let modify_arg = begin match U.tag_of_expr e2 with
@@ -352,8 +342,10 @@ let rec lazy_expr c expr =
     wrap_indent (lps "else" <| lsp () <| lazy_expr c e3)
   | Map -> let p = U.decompose_map expr in
     lps "map" <| lcut () <| lazy_paren @: expr_sub p
-  | FilterMap -> let t = U.decompose_filter_map expr in
-    lps "filtermap" <| lazy_paren @: expr_triple t
+  | MapSelf -> let p = U.decompose_map expr in
+    lps "mapself" <| lcut () <| lazy_paren @: expr_sub p
+  | Filter -> let p = U.decompose_filter expr in
+    lps "filter" <| lazy_paren @: expr_sub p
   | Flatten -> let e = U.decompose_flatten expr in
     lps "flatten" <| lcut () <| lazy_paren @: lazy_expr c e
   | Aggregate -> let t = U.decompose_aggregate expr in
@@ -477,8 +469,8 @@ let string_of_type t = wrap_f @: fun () ->
   force_list @: lazy_type verbose_types_config t
 
 (* print a K3 expression in syntax *)
-let string_of_expr ?uuid_highlight ?(lambda_ret=false) e =
-  let config = {default_config with lambda_ret} in
+let string_of_expr ?uuid_highlight e =
+  let config = default_config in
   let config = match uuid_highlight with
     | None   -> config
     | _      -> {config with uuid=uuid_highlight}
@@ -486,8 +478,8 @@ let string_of_expr ?uuid_highlight ?(lambda_ret=false) e =
   wrap_f @: fun () -> force_list @: lazy_expr config e
 
 (* print a K3 program in syntax *)
-let string_of_program ?uuid_highlight ?(lambda_ret=false) prog =
-  let config = {default_config with lambda_ret} in
+let string_of_program ?uuid_highlight prog =
+  let config = default_config in
   let config = match uuid_highlight with
     | None -> config
     | _    -> {config with uuid=uuid_highlight}
@@ -499,26 +491,26 @@ let string_of_program ?uuid_highlight ?(lambda_ret=false) prog =
     cb
 
 (* print a k3 program with test expressions *)
-let string_of_program_test ?uuid_highlight ?lambda_ret ptest =
+let string_of_program_test ?uuid_highlight ptest =
   (* print a check_expr *)
   let string_of_check_expr = function
       | FileExpr s -> "file "^s
-      | InlineExpr e -> string_of_expr ?uuid_highlight ?lambda_ret e
+      | InlineExpr e -> string_of_expr ?uuid_highlight e
   in
   (* print a test expression *)
   let string_of_test_expr (e, check_e) =
     Printf.sprintf "(%s) = %s"
-      (string_of_expr ?uuid_highlight ?lambda_ret e) @:
+      (string_of_expr ?uuid_highlight e) @:
       string_of_check_expr check_e
   in
   match ptest with
   | NetworkTest(p, checklist) ->
       Printf.sprintf "%s\n\nnetwork expected\n\n%s"
-        (string_of_program ?uuid_highlight ?lambda_ret p)
+        (string_of_program ?uuid_highlight p)
         (String.concat ",\n\n" @: list_map string_of_test_expr checklist)
   | ProgTest(p, checklist) ->
       Printf.sprintf "%s\n\nexpected\n\n%s"
-        (string_of_program ?uuid_highlight ?lambda_ret p)
+        (string_of_program ?uuid_highlight p)
         (String.concat ",\n\n" @: list_map string_of_test_expr checklist)
   | ExprTest _ -> failwith "can't print an expression test"
 

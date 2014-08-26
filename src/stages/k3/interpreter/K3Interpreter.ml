@@ -7,6 +7,7 @@ open K3Util
 open K3Helpers
 open K3Printing
 open K3Values
+open K3Values.Value
 open K3Typechecker
 open K3Streams
 open K3Consumption
@@ -108,7 +109,8 @@ and eval_expr (address:address) sched_st cenv texpr =
       let error = int_erroru uuid "extract_value_list" in
       match x with
         | VSet cl | VBag cl | VList cl -> cl
-        | _ -> error "non-collection"
+        | VMap cn -> list_of_valuemap cn
+        | _       -> error "non-collection"
     in
 
     let preserve_collection f v = VTemp(
@@ -117,6 +119,7 @@ and eval_expr (address:address) sched_st cenv texpr =
         | VSet cl  -> VSet(nub @: f cl)
         | VBag cl  -> VBag(f cl)
         | VList cl -> VList(f cl)
+        | VMap cm  -> VMap(valuemap_of_list @: f @: list_of_valuemap cm)
         | _        -> error "non-collection"
       )
     in
@@ -146,11 +149,8 @@ and eval_expr (address:address) sched_st cenv texpr =
       end
     in
 
-    let remove_from_collection v l =
-      snd (List.fold_left (fun (found, acc) el ->
-              if (not found) && v = el then (true, acc) else (found, acc@[el])
-           ) (false, []) l)
-    in
+    (* removes only one instance *)
+    let remove_from_collection v l = list_remove v l in
 
     (* TODO: byte and string types for binary and comparison operations *)
     let eval_binop bool_op int_op float_op =
@@ -212,6 +212,26 @@ and eval_expr (address:address) sched_st cenv texpr =
           | _ -> error "eval_cmpop: missing values"
       )
     in
+    (* Common for both Map and MapSelf *)
+    let handle_map colF =
+      let fenv, f = child_value cenv 0 in
+      let nenv, c = child_value fenv 1 in
+      let folder cl = mapfold (fun env x ->
+        let ienv, i = eval_fn f address sched_st env x in
+        ienv, value_of_eval i
+      ) nenv cl
+      in
+      begin match c with
+      | VSet cl | VBag cl | VList cl ->
+        let renv, r = folder cl
+        in renv, colF c r
+      | VMap cm ->
+        let cl = list_of_valuemap cm in
+        let renv, r = folder cl
+        in renv, colF c r
+      | _ -> error "(Map): non-collection value"
+      end
+    in
 
     (* Start of evaluator *)
     match tag with
@@ -232,9 +252,10 @@ and eval_expr (address:address) sched_st cenv texpr =
         let ctype, _ = ct <| collection_of +++ base_of |> t_erroru name @: VTBad(ct) in
         cenv, VTemp(
             match ctype with
-            | TSet -> VSet([])
-            | TBag -> VBag([])
+            | TSet  -> VSet([])
+            | TBag  -> VBag([])
             | TList -> VList([])
+            | TMap  -> VMap(ValueMap.empty)
         )
 
     | Singleton(ct) ->
@@ -244,9 +265,10 @@ and eval_expr (address:address) sched_st cenv texpr =
           ct <| collection_of +++ base_of |> t_erroru name @: VTBad(ct) in
         cenv, VTemp(
             match ctype with
-            | TSet  -> VSet([element])
-            | TBag  -> VBag([element])
-            | TList -> VList([element])
+            | TSet  -> VSet  [element]
+            | TBag  -> VBag  [element]
+            | TList -> VList [element]
+            | TMap  -> VMap  (valuemap_of_list [element])
         )
 
     | Combine ->
@@ -257,12 +279,16 @@ and eval_expr (address:address) sched_st cenv texpr =
           | _ -> error "(combine): missing sub-components"
         ) in nenv, VTemp(
             match left, right with
-            | VList v1, (VList v2 | VSet v2 | VBag v2) -> VList(v1 @ v2)
-            | (VSet v1 | VBag v1), VList v2            -> VList(v1 @ v2)
-            | VBag v1, (VSet v2 | VBag v2)             -> VBag(v1 @ v2)
-            | VSet v1, VBag v2                         -> VBag(v1 @ v2)
-            | VSet v1, VSet v2                         -> VSet(nub @: v1 @ v2)
-            | _ -> error "(combine): non-collection"
+            | VList v1, VList v2 -> VList(v1 @ v2)
+            | VSet v1, VSet v2   -> VSet(nub @: v1 @ v2)
+            | VBag v1, VBag v2   -> VBag(v1 @ v2)
+            | VMap v1, VMap v2   -> VMap(ValueMap.merge (fun k mv1 mv2 ->
+                                      match mv1, mv2 with
+                                      | _, Some _ -> mv2
+                                      | Some _, _ -> mv1
+                                      | _         -> None)
+                                      v1 v2)
+            | _ -> error "(combine): mismatching or non-collections"
         )
 
     | Range c_t ->
@@ -280,9 +306,10 @@ and eval_expr (address:address) sched_st cenv texpr =
           in
           let l = Array.to_list (Array.init steps init_fn) in
           let reval = VTemp(match c_t with
-                | TSet -> VSet(l)
-                | TBag -> VBag(l)
-                | TList -> VList(l))
+            | TSet  -> VSet l
+            | TBag  -> VBag l
+            | TList -> VList l
+            | TMap  -> failwith "(Range) cannot have map")
           in renv, reval
         | _ -> error "(Range): invalid format"
       end
@@ -331,6 +358,7 @@ and eval_expr (address:address) sched_st cenv texpr =
             | VSet cl
             | VBag cl
             | VList cl -> folder cl, VTemp(VUnit)
+            | VMap cm  -> folder @: list_of_valuemap cm, VTemp(VUnit)
             | _ -> error "(Iterate): non-collection value"
           end
 
@@ -345,33 +373,20 @@ and eval_expr (address:address) sched_st cenv texpr =
         )
 
     (* Collection transformers *)
-    | Map ->
-        let fenv, f = child_value cenv 0 in
-        let nenv, c = child_value fenv 1 in
-        let folder cl = mapfold (fun env x ->
-          let ienv, i = eval_fn f address sched_st env x in
-          ienv, value_of_eval i
-        ) nenv cl
-        in
-        begin match c with
-        | VSet(cl) | VBag(cl) | VList(cl) ->
-          let renv, r = folder cl
-          in renv, (preserve_collection (fun _ -> r) c)
-        | _ -> error "(Map): non-collection value"
-        end
+    (* Map by default transforms to a bag *)
+    | Map     -> handle_map (fun _ x -> VTemp(VBag x))
 
-    | FilterMap ->
+    (* Keeps the same type *)
+    | MapSelf -> handle_map @: (fun c r -> preserve_collection (fun _ -> r) c)
+
+    | Filter ->
         let penv, p = child_value cenv 0 in
-        let fenv, f = child_value penv 1 in
-        let nenv, c = child_value fenv 2 in
+        let nenv, c = child_value penv 1 in
         let p' = eval_fn p address sched_st in
-        let f' = eval_fn f address sched_st in
-        let folder cl = List.fold_left (fun (e, r) x ->
-          let p'env, filter = p' e x in
+        let folder cl = List.fold_left (fun (env, r) x ->
+          let p'env, filter = p' env x in
           match value_of_eval filter with
-          | VBool true  ->
-              let ienv, v = f' e x in
-              ienv, (value_of_eval v)::r
+          | VBool true  -> p'env, x::r
           | VBool false -> p'env, r
           | _           -> error "(FilterMap): non boolean predicate"
         ) (nenv, []) cl
@@ -381,12 +396,17 @@ and eval_expr (address:address) sched_st cenv texpr =
           let renv, r = folder cl in
           let r = List.rev r in (* reverse because of cons *)
           renv, (preserve_collection (fun _ -> r) c)
+        | VMap cm ->
+          let cl = list_of_valuemap cm in
+          let renv, r = folder cl in
+          let r = List.rev r in (* reverse because of cons *)
+          renv, VTemp(VMap(valuemap_of_list r))
         | _ -> error "(FilterMap): non-collection value"
         end
 
     | Flatten ->
         let nenv, c = child_value cenv 0 in
-        nenv, (preserve_collection (fun vs -> List.concat (List.map extract_value_list vs)) c)
+        nenv, preserve_collection (fun vs -> List.concat (List.map extract_value_list vs)) c
 
     | Aggregate ->
         let fenv, f = child_value cenv 0 in
@@ -395,7 +415,7 @@ and eval_expr (address:address) sched_st cenv texpr =
         let f' = eval_fn f address sched_st in
         let renv, rval = List.fold_left (
             fun (e, v) a ->
-              let renv, reval = f' e (VTuple([v; a])) in
+              let renv, reval = f' e (VTuple [v; a]) in
               renv, value_of_eval reval
           )
           (nenv, zero)
@@ -410,46 +430,31 @@ and eval_expr (address:address) sched_st cenv texpr =
         let g' = eval_fn g address sched_st in
         let f' = eval_fn f address sched_st in
         let cl = extract_value_list c in
-        let gb_agg_fn find_fn replace_fn = fun env a ->
+
+        let gb_agg_fn find_fn replace_fn = fun (env, data) a ->
           let kenv, key =
             let env, k = g' env a in
             env, value_of_eval k
           in
-          let v = (try find_fn key with Not_found -> zero) in
+          let v = (try find_fn key data with Not_found -> zero) in
           let aenv, agg = f' kenv (VTuple [v; a]) in
-          replace_fn key (value_of_eval agg);
-          aenv
+          let data' = replace_fn key (value_of_eval agg) data in
+          aenv, data'
         in
 
-      (* We use two different group by aggregation methods to preserve the
-         * order of group=by entries in the result collection based on their
-         * order in the input collection *)
-      let hash_gb_agg_method = lazy(
-        let h = Hashtbl.create 10 in
-        let agg_fn = gb_agg_fn (Hashtbl.find h) (Hashtbl.replace h) in
-        let build_fn () =
-            Hashtbl.fold (fun k v kvs -> (VTuple([k; v]) :: kvs)) h []
-        in agg_fn, build_fn)
-      in
-
-      let order_preserving_gb_agg_method = lazy(
-          let l = ref [] in
-          let agg_fn = gb_agg_fn (fun k -> List.assoc k !l)
-            (fun k v ->
-              let l' = assoc_modify (function _ -> Some v) k !l in
-              l := l')
-          in
-          let build_fn () = List.map (fun (k,v) -> VTuple([k;v])) !l
-          in agg_fn, build_fn)
-       in
-
-        let agg_fn, build_fn = Lazy.force @: match c with
-          | VSet _ | VBag _ -> hash_gb_agg_method
-          | VList _         -> order_preserving_gb_agg_method
-          | _               -> error "(GroupBy): non-collection value"
+        let hash_gb_agg_method = lazy(
+          let agg_fn = gb_agg_fn ValueMap.find ValueMap.add in
+          let build_fn b = VMap b in
+          let data = ValueMap.empty in
+          agg_fn, build_fn, data)
         in
-        let renv = List.fold_left agg_fn nenv cl
-        in renv, preserve_collection (fun _ -> build_fn ()) c
+
+        let (agg_fn, build_fn, data0) = Lazy.force @: match c with
+          | VSet _ | VBag _ | VList _ | VMap _ -> hash_gb_agg_method
+          | _       -> error "(GroupBy): non-collection value"
+        in
+        let renv, data = List.fold_left agg_fn (nenv, data0) cl in
+        renv, VTemp(build_fn data)
 
     | Sort ->
       let renv, parts = child_values cenv in
@@ -472,10 +477,11 @@ and eval_expr (address:address) sched_st cenv texpr =
       end
 
     (* Collection accessors and modifiers *)
+    (* TODO: convert to lookup for maps *)
     | Slice ->
       let renv, parts = child_values cenv in
       begin match parts with
-        | [c;pat] ->
+        | [c; pat] ->
             renv, (preserve_collection (fun els ->
                 List.filter (match_pattern pat) els) c)
         | _       -> error "(Slice): bad values"
@@ -484,30 +490,46 @@ and eval_expr (address:address) sched_st cenv texpr =
     | Peek ->
       let renv, c = child_value cenv 0 in
       begin match extract_value_list c with
-        | x::_ -> renv, VTemp(x)
+        | x::_ -> renv, VTemp x
         | _    -> error "(Peek): empty container"
       end
 
     | Insert ->
       modify_collection (fun env parts -> match parts with
         | [VDeclared(c_ref); v] ->
-          Some(c_ref, preserve_collection
-            (fun els -> (value_of_eval v)::els) !c_ref)
+            begin match !c_ref, value_of_eval v with
+            | VMap cm, VTuple [k; value] -> Some(c_ref, VTemp(VMap(ValueMap.add k value cm)))
+            | VMap _, _ -> error "Insert(Map): no key-value tuple found"
+            | _ -> Some(c_ref, preserve_collection
+                     (fun els -> (value_of_eval v)::els) !c_ref)
+            end
        | _ -> None)
 
     | Update ->
       modify_collection (fun env parts -> match parts with
-        | [VDeclared(c_ref);oldv;newv] ->
-          Some(c_ref, preserve_collection (fun l ->
-            (value_of_eval newv)::
-              (remove_from_collection (value_of_eval oldv) l)) !c_ref)
+        | [VDeclared(c_ref); oldv; newv] ->
+            begin match !c_ref, value_of_eval oldv, value_of_eval newv with
+            | VMap cm, VTuple [oldk; _], VTuple [newk; newv] ->
+                Some(c_ref, VTemp(VMap(ValueMap.add newk newv @:
+                                         ValueMap.remove oldk cm)))
+            | VMap _, _, _ -> error "Insert(Map): no key-value tuple found"
+            | _ -> Some(c_ref, preserve_collection (fun l ->
+                    value_of_eval newv ::
+                      remove_from_collection (value_of_eval oldv) l)
+                    !c_ref)
+            end
         | _ -> None)
 
     | Delete ->
       modify_collection (fun env parts -> match parts with
-        | [VDeclared(c_ref);oldv] ->
-          Some(c_ref, preserve_collection (fun l ->
-            remove_from_collection (value_of_eval oldv) l) !c_ref)
+        | [VDeclared c_ref; oldv] ->
+            begin match !c_ref, value_of_eval oldv with
+            | VMap cm, VTuple [oldk; _] ->
+                Some(c_ref, VTemp(VMap(ValueMap.remove oldk cm)))
+            | VMap _, _ -> error "Insert(Map): no key-value tuple found"
+            | _ -> Some(c_ref, preserve_collection (fun l ->
+                    remove_from_collection (value_of_eval oldv) l) !c_ref)
+            end
         | _ -> None)
 
     (* Messaging *)
@@ -570,9 +592,10 @@ let rec default_value = function
 
 and default_collection_value ct et =
   match ct with
-  | TSet -> VSet []
-  | TBag -> VBag []
+  | TSet  -> VSet []
+  | TBag  -> VBag []
   | TList -> VList []
+  | TMap  -> VMap (ValueMap.empty)
 
 and default_base_value bt =
   let error = int_error "default_base_value" in

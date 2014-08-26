@@ -1,6 +1,7 @@
 open K3.AST
 open K3Streams
 open K3Values
+open K3Values.Value
 
 type scheduler_state
 

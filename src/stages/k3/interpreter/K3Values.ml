@@ -30,35 +30,50 @@ let map_modify f key map =
 
 let map_length map = IdMap.fold (fun _ _ sum -> sum + 1) map 0
 
-type eval_t = VDeclared of value_t ref
-            | VTemp of value_t
+module rec ValueMap : Map.S with type key = Value.value_t =
+  Map.Make(struct type t = Value.value_t let compare = compare end)
 
-and foreign_func_t = env_t -> env_t * eval_t
+and Value : sig
+  type eval_t = VDeclared of value_t ref
+              | VTemp of value_t
 
-and value_t
-    = VUnknown
-    | VUnit
-    | VBool of bool
-    | VInt of int
-    | VFloat of float
-    | VByte of char
-    | VString of string
-    | VTuple of value_t list
-    | VOption of value_t option
-    | VSet of value_t list
-    | VBag of value_t list
-    | VList of value_t list
-    | VFunction of arg_t * expr_t
-    | VForeignFunction of arg_t * foreign_func_t
-    | VAddress of address
-    | VTarget of id_t
-    | VIndirect of value_t ref
+  and foreign_func_t = env_t -> env_t * eval_t
 
-    (* arguments to a function/trigger *)
-and frame_t = (id_t * value_t) list
+  (* arguments to a function/trigger *)
+  and frame_t = (id_t * value_t) list
 
-(* mutable environment, frame environment *)
-and env_t = (value_t ref) IdMap.t * (frame_t list)
+  (* mutable environment, frame environment *)
+  and env_t = (value_t ref) IdMap.t * (frame_t list)
+
+  and value_t
+      = VUnknown
+      | VUnit
+      | VBool of bool
+      | VInt of int
+      | VFloat of float
+      | VByte of char
+      | VString of string
+      | VTuple of value_t list
+      | VOption of value_t option
+      | VSet of value_t list
+      | VBag of value_t list
+      | VList of value_t list
+      | VMap of value_t ValueMap.t
+      | VFunction of arg_t * expr_t
+      | VForeignFunction of arg_t * foreign_func_t
+      | VAddress of address
+      | VTarget of id_t
+      | VIndirect of value_t ref
+  end = Value
+
+open Value
+
+let list_of_valuemap vm = ValueMap.fold (fun key v acc -> (VTuple [key; v])::acc) vm []
+let valuemap_of_list l  = List.fold_left (fun acc -> function
+                                          | VTuple [key; v] -> ValueMap.add key v acc
+                                          | _ -> failwith "Not a tuple of key-value")
+                          ValueMap.empty
+                          l
 
 (* trigger env is where we store the trigger functions. These functions take the
  * address,
@@ -83,6 +98,12 @@ let rec equal_values a b =
       abs_float(x -. y) < e
   | a,b -> a = b
 
+(* Convert a value map to a list *)
+let list_of_map_values mv =
+    List.rev @: ValueMap.fold (fun k v acc ->
+      (VTuple [k; v])::acc
+    ) mv []
+
 (* Value sorting *)
 let rec sort_values v =
   let sort x = List.sort compare x in
@@ -105,11 +126,12 @@ let rec repr_of_value v = match v with
 	| VTuple vs -> "VTuple("^ String.concat ", " (List.map repr_of_value vs)^")"
 
 	| VOption vopt ->
-	  "VOption("^(if vopt = None then "None" else repr_of_value (unwrap vopt))^")"
+      "VOption("^(if vopt = None then "None" else repr_of_value (unwrap vopt))^")"
 
-	| VSet vs  -> "VSet(["^ String.concat "; " (List.map repr_of_value vs)^"])"
-	| VBag vs  -> "VBag(["^ String.concat "; " (List.map repr_of_value vs)^"])"
+	| VSet vs  -> "VSet(["^  String.concat "; " (List.map repr_of_value vs)^"])"
+	| VBag vs  -> "VBag(["^  String.concat "; " (List.map repr_of_value vs)^"])"
 	| VList vs -> "VList(["^ String.concat "; " (List.map repr_of_value vs)^"])"
+	| VMap ms  -> "VMap(["^  String.concat "; " (List.map repr_of_value @: list_of_map_values ms)^"])"
 
 	| VFunction (a, b) -> "VFunction("^ string_of_arg a ^" -> "^(string_of_expr b)^")"
   | VForeignFunction (a, _) -> "VForeignFunction("^ string_of_arg a^")"
@@ -149,6 +171,7 @@ let rec print_value ?(mark_points=[]) v =
     | VSet vs  -> print_collection "{" "}" vs
     | VBag vs  -> print_collection "{|" "|}" vs
     | VList vs -> print_collection "[" "]" vs
+    | VMap vms -> print_collection "[|" "|]" @: list_of_map_values vms
     | VFunction (a, b) -> ps "<fun>"
     | VForeignFunction (a, _) -> ps "<foreignfun>"
     | VAddress (ip,port) -> ps (ip^":"^ string_of_int port)
@@ -198,8 +221,6 @@ let print_trigger_env env =
 let print_program_env (trigger_env, val_env) =
   print_trigger_env trigger_env;
   print_env false val_env
-
-let old_trig_env, old_val_env = ref [], ref []
 
 let string_of_env ?(skip_functions=true) (env:env_t) =
   wrap_formatter (fun () -> print_env skip_functions env)
@@ -251,6 +272,7 @@ let rec type_of_value uuid value =
   | VTuple vs -> wrap_ttuple @: List.map (type_of_value uuid ) vs
   | VSet vs -> wrap_tset @: typ_fst vs
   | VList vs -> wrap_tlist @: typ_fst vs
+  | VMap vms -> wrap_tlist @: typ_fst @: list_of_map_values vms
   | VBag vs -> wrap_tbag @: typ_fst vs
   | VFunction _ | VForeignFunction _ -> raise (RuntimeError (uuid,
       "type_of_value: cannot apply to function"))
@@ -272,6 +294,9 @@ let rec expr_of_value uuid value = match value with
   | VSet vs | VList vs | VBag vs ->
      let l = List.map (expr_of_value uuid) vs in
      k3_container_of_list (type_of_value uuid value) l
+  | VMap mvs ->
+      let l = List.map (expr_of_value uuid) @: list_of_map_values mvs in
+      k3_container_of_list (type_of_value uuid value) l
   | VFunction _ | VForeignFunction _ -> raise (RuntimeError (uuid,
       "expr_of_value: cannot apply to function"))
   | VIndirect ind -> mk_ind @: expr_of_value uuid !ind

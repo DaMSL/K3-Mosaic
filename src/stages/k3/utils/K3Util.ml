@@ -75,6 +75,7 @@ let signature_of_type t =
     | TSet  -> tag d "S" []
     | TBag  -> tag d "B" []
     | TList -> tag d "L" []
+    | TMap  -> tag d "M" []
   and sig_bt d bt = match bt with
     | TUnknown              -> tag   d "k" []
     | TUnit                 -> tag   d "n" []
@@ -185,8 +186,8 @@ let decompose_deref e = match tag_of_expr e with
   Deref -> (nth e 0) | _ -> failwith "not a Deref"
 let decompose_eq e = match tag_of_expr e with
   Eq -> (nth e 0, nth e 1) | _ -> failwith "not an Equals"
-let decompose_filter_map e = match tag_of_expr e with
-  FilterMap -> (nth e 0, nth e 1, nth e 2) | _ -> failwith "not a FilterMap"
+let decompose_filter e = match tag_of_expr e with
+  Filter -> (nth e 0, nth e 1) | _ -> failwith "not a Filter"
 let decompose_flatten e = match tag_of_expr e with
   Flatten -> nth e 0 | _ -> failwith "not a Flatten"
 let decompose_gbagg e = match tag_of_expr e with
@@ -208,6 +209,8 @@ let decompose_lt e = match tag_of_expr e with
   Lt -> (nth e 0, nth e 1) | _ -> failwith "not a Lt"
 let decompose_map e = match tag_of_expr e with
   Map -> (nth e 0, nth e 1) | _ -> failwith "not a Map"
+let decompose_map_self e = match tag_of_expr e with
+  MapSelf -> (nth e 0, nth e 1) | _ -> failwith "not a MapSelf"
 let decompose_mult e = match tag_of_expr e with
   Mult -> (nth e 0, nth e 1) | _ -> failwith "not a Mult"
 let decompose_neg e = match tag_of_expr e with
@@ -482,7 +485,8 @@ let string_of_tag = function
   | Iterate          -> "Iterate"
   | IfThenElse       -> "IfThenElse"
   | Map              -> "Map"
-  | FilterMap        -> "FilterMap"
+  | MapSelf          -> "MapSelf"
+  | Filter           -> "Filter"
   | Flatten          -> "Flatten"
   | Aggregate        -> "Aggregate"
   | GroupByAggregate -> "GroupByAggregate"

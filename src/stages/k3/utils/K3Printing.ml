@@ -44,6 +44,7 @@ let string_of_container_type t_c = match t_c with
     | TSet  -> "TSet"
     | TBag  -> "TBag"
     | TList -> "TList"
+    | TMap  -> "TMap"
 
 let string_of_const cn = match cn with
     | CUnit          -> "CUnit"
@@ -87,8 +88,9 @@ let string_of_tag_type tag = match tag with
     | IfThenElse -> "IfThenElse"
 
     | Map              -> "Map"
+    | MapSelf          -> "MapSelf"
     | Iterate          -> "Iterate"
-    | FilterMap        -> "FilterMap"
+    | Filter           -> "Filter"
     | Flatten          -> "Flatten"
     | Aggregate        -> "Aggregate"
     | GroupByAggregate -> "GroupByAggregate"
@@ -180,8 +182,9 @@ let flat_string_of_expr_tag tag children =
     | IfThenElse -> my_tag "IfThenElse"
 
     | Map              -> my_tag "Map"
+    | MapSelf          -> my_tag "MapSelf"
     | Iterate          -> my_tag "Iterate"
-    | FilterMap        -> my_tag "FilterMap"
+    | Filter           -> my_tag "Filter"
     | Flatten          -> my_tag "Flatten"
     | Aggregate        -> my_tag "Aggregate"
     | GroupByAggregate -> my_tag "GroupByAggregate"
@@ -244,9 +247,9 @@ let flat_string_of_flow_endpoint e =
   match e with
   | Resource (id,r) -> tag_str "Resource" [id; flat_string_of_flow_resource r]
   | Code(i, arg, ds, e) ->
-	  let decls = "["^(String.concat ", " (List.map string_of_id_and_vtype ds))^"]" in
-	  tag_str "Code"
-	    [i; flat_string_of_arg arg; decls; flat_string_of_expr e]
+    let decls = "["^(String.concat ", " (List.map string_of_id_and_vtype ds))^"]" in
+    tag_str "Code"
+     [i; flat_string_of_arg arg; decls; flat_string_of_expr e]
 
 let flat_string_of_flow_statement fs = match fs with
     | Source ep      -> tag_str "Source" [flat_string_of_flow_endpoint ep]
@@ -439,8 +442,9 @@ and print_expr_tag c tag lazy_children =
     | IfThenElse -> my_tag "IfThenElse"
 
     | Map              -> my_tag "Map"
+    | MapSelf          -> my_tag "MapSelf"
     | Iterate          -> my_tag "Iterate"
-    | FilterMap        -> my_tag "FilterMap"
+    | Filter           -> my_tag "Filter"
     | Flatten          -> my_tag "Flatten"
     | Aggregate        -> my_tag "Aggregate"
     | GroupByAggregate -> my_tag "GroupByAggregate"
@@ -509,10 +513,10 @@ let print_flow_endpoint c ep =
   match ep with
   | Resource (id,r) -> my_tag "Resource" [lps id; lazy (print_flow_resource c r)]
   | Code(i, arg, ds, e) ->
-	  let decls = lazy(ps "[";
-          ps_list CutLine force (List.map print_id_vt ds); ps "]") in
-	  my_tag "Code"
-	    [lps (quote i); lazy_arg c arg; decls; c.print_expr_fn c e]
+    let decls = lazy(ps "[";
+                     ps_list CutLine force (List.map print_id_vt ds); ps "]") in
+    my_tag "Code"
+      [lps (quote i); lazy_arg c arg; decls; c.print_expr_fn c e]
 
 let print_flow_statement c fs =
   let my_tag = pretty_tag_str CutHint "" in

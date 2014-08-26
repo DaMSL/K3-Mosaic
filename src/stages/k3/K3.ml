@@ -19,6 +19,7 @@ type container_type_t
     = TSet
     | TBag
     | TList
+    | TMap
 
 type base_type_t
     = TUnknown
@@ -98,7 +99,8 @@ type expr_tag_t
     | IfThenElse
 
     | Map
-    | FilterMap
+    | MapSelf
+    | Filter
     | Flatten
     | Aggregate
     | GroupByAggregate

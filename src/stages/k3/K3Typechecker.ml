@@ -59,15 +59,16 @@ let check_tag_arity tag children =
     | Neq   -> 2
     | Leq   -> 2
 
-    | Lambda(_) -> 1
-    | Apply     -> 2
+    | Lambda _ -> 1
+    | Apply    -> 2
 
     | Block         -> length
     | Iterate       -> 2
     | IfThenElse    -> 3
 
     | Map               -> 2
-    | FilterMap         -> 3
+    | MapSelf           -> 2
+    | Filter            -> 2
     | Flatten           -> 1
     | Aggregate         -> 3
     | GroupByAggregate  -> 4
@@ -437,27 +438,36 @@ let rec deduce_expr_type ?(override=true) trig_env cur_env utexpr =
             let t_c, t_e =
               t1 <| collection_of +++ base_of +++ value_of |> t_erroru name @:
                   TBad(t1) in
-            (* set mapped always becomes a bag *)
-            let t_c' = if t_c = TSet then TBag else t_c in
-            if t_a <~ t_e then TValue(canonical (TCollection(t_c', contained_of t_r)))
+            (* everything mapped always becomes a bag *)
+            let t_c' = TBag in
+            if t_a <~ t_e then
+              TValue(canonical (TCollection(t_c', contained_of t_r)))
             else t_erroru name (VTMismatch(t_a, t_e, "element:")) ()
 
-        | FilterMap ->
-            let name = "FilterMap" in
-            let t0 = bind 0 in let t1 = bind 1 in let t2 = bind 2 in
-            let t_pa, t_pr = t0 <| function_of |> t_erroru name @: TBad t0 in
-            let t_ma, t_mr = t1 <| function_of |> t_erroru name @: TBad t0 in
-            let t_c, t_e = t2 <| collection_of +++ base_of +++ value_of |>
-              t_erroru name @: TBad t2 in
+        | MapSelf ->
+            let name = "MapSelf" in
+            let t0 = bind 0 in let t1 = bind 1 in
+            let t_a, t_r = t0 <| function_of |> t_erroru name @: TBad t0 in
+            let t_c, t_e =
+              t1 <| collection_of +++ base_of +++ value_of |> t_erroru name @:
+                  TBad t1 in
+            (* everything mapped always becomes a bag *)
+            if t_a <~ t_e then
+              TValue(canonical (TCollection(t_c, contained_of t_r)))
+            else t_erroru name (VTMismatch(t_a, t_e, "element:")) ()
 
-            (* set mapped always becomes a bag *)
-            let t_c' = if t_c = TSet then TBag else t_c in
-            if not (t_pa <~ t_e)
-                then t_erroru name (VTMismatch(t_pa, t_e,"predicate:")) () else
-            if not (canonical TBool === t_pr)
-                then t_erroru name (VTMismatch(canonical TBool, t_pr, "")) () else
-            if not (t_ma <~ t_e) then t_erroru name (VTMismatch(t_ma, t_e, "map:")) () else
-            TValue(canonical @: TCollection(t_c', contained_of t_mr))
+        | Filter ->
+            let name = "Filter" in
+            let t0, t1 = bind 0, bind 1 in
+            let t_pa, t_pr = t0 <| function_of |> t_erroru name @: TBad t0 in
+            let t_c, t_e = t1 <| collection_of +++ base_of +++ value_of |>
+              t_erroru name @: TBad t1 in
+
+            if not (t_pa <~ t_e) then
+              t_erroru name (VTMismatch(t_pa, t_e,"predicate:")) () else
+            if not (canonical TBool === t_pr) then
+              t_erroru name (VTMismatch(canonical TBool, t_pr, "")) () else
+            TValue(canonical @: TCollection(t_c, t_e))
 
         | Flatten ->
             let name = "Flatten" in
@@ -494,18 +504,18 @@ let rec deduce_expr_type ?(override=true) trig_env cur_env utexpr =
             let t_zero = t2 <| value_of |> t_erroru name @: TBad t2 in
             let t_col, t_elem = t3 <| collection_of +++ base_of +++ value_of |>
                 t_erroru name @: TBad t3 in
-            if not (t_ga <~ t_elem) then t_erroru name (VTMismatch(t_ga, t_elem,
-                "grouping func:")) () else
+            if not (t_ga <~ t_elem) then
+              t_erroru name (VTMismatch(t_ga, t_elem, "grouping func:")) () else
             let expected1 = canonical @: TTuple[t_zero; t_elem] in
-            if not (t_aa <~ expected1)
-                then t_erroru name (VTMismatch(t_aa, expected1, "agg func:")) () else
+            if not (t_aa <~ expected1) then
+              t_erroru name (VTMismatch(t_aa, expected1, "agg func:")) () else
             let expected2 = canonical @: TTuple[t_ar; t_elem] in
-            if not (t_aa <~ expected2)
-                then t_erroru name (VTMismatch(t_aa, expected2, "agg func:")) () else
-            if not (t_zero <~ t_ar)
-                then t_erroru name (VTMismatch(t_ar, t_zero, "agg func:")) ()
+            if not (t_aa <~ expected2) then
+              t_erroru name (VTMismatch(t_aa, expected2, "agg func:")) () else
+            if not (t_zero <~ t_ar) then
+              t_erroru name (VTMismatch(t_ar, t_zero, "agg func:")) ()
             else TValue(canonical @:
-                TCollection(TBag, contained_of @: canonical @: TTuple[t_gr; t_ar]))
+              TCollection(TMap, contained_of @: canonical @: TTuple[t_gr; t_ar]))
 
         | Sort ->
             let name = "Sort" in
@@ -520,7 +530,8 @@ let rec deduce_expr_type ?(override=true) trig_env cur_env utexpr =
             if not (canonical TBool === t_cret) then
               t_erroru name (VTMismatch(canonical TBool, t_cret, "")) () else
             if not (t_col = TList) then
-              t_erroru name (VTMismatch(canonical @: TCollection(t_col, t_elem), H.wrap_tlist t_elem, "")) () else
+              t_erroru name (VTMismatch(canonical @: TCollection(t_col, t_elem),
+                            H.wrap_tlist t_elem, "")) () else
             TValue(canonical @: TCollection(TList, t_elem))
 
         | Slice ->
