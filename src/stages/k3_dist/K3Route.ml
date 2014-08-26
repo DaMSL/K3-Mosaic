@@ -18,18 +18,18 @@ let route_for p map_id =
     List.map K3PrintSyntax.string_of_value_type m_t
 
 let t_two_ints = [t_int; t_int]
-let t_list_two_ints = wrap_tlist @: wrap_ttuple t_two_ints
-let dim_bounds_type = wrap_tlist @: wrap_ttuple t_two_ints
-let pmap_types = wrap_tlist @: wrap_ttuple t_two_ints
+let t_list_two_ints = wrap_tlist' t_two_ints
+let dim_bounds_type = wrap_tlist' t_two_ints
+let pmap_types = wrap_tlist' t_two_ints
 let pmap_per_map_types = [t_map_id; pmap_types]
-let full_pmap_types = wrap_tlist @: wrap_ttuple pmap_per_map_types
-let free_dims_type = wrap_tlist @: wrap_ttuple t_two_ints
-let free_domains_type = wrap_tlist @: wrap_ttuple [t_int; wrap_tlist t_int]
-let inner_cart_prod_type = wrap_tlist @: wrap_ttuple t_two_ints
-let free_cart_prod_type = wrap_tlist @: wrap_tlist @: wrap_ttuple t_two_ints
-let free_bucket_type = wrap_tlist @: wrap_ttuple t_two_ints
+let full_pmap_types = wrap_tlist' pmap_per_map_types
+let free_dims_type = wrap_tlist' t_two_ints
+let free_domains_type = wrap_tlist' [t_int; wrap_tlist t_int]
+let inner_cart_prod_type = wrap_tlist' t_two_ints
+let free_cart_prod_type = wrap_tlist @: wrap_tlist' t_two_ints
+let free_bucket_type = wrap_tlist' t_two_ints
 let sorted_ip_inner_type = [t_addr; t_unit]
-let sorted_ip_list_type = wrap_tbag @: wrap_ttuple sorted_ip_inner_type
+let sorted_ip_list_type = wrap_tbag' sorted_ip_inner_type
 let output_type = wrap_tbag t_addr
 
 (* map_parameter starts at 0 *)

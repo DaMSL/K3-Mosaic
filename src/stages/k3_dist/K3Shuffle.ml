@@ -70,7 +70,9 @@ let gen_shuffle_fn p rmap lmap bindings fn_name =
   let tuple_types_unwrap = map_types_with_v_for p rmap in
   let tuple_types = wrap_ttuple tuple_types_unwrap in
   let many_tuples_type = wrap_t_of_map tuple_types in
-  let result_types = wrap_tbag @: wrap_ttuple [t_addr; many_tuples_type] in
+  let base_result_type = [t_addr; many_tuples_type] in
+  let result_types = wrap_tbag' base_result_type in
+  let all_targets_type = wrap_tbag' base_result_type in
   (* deducts the last map type which is the value *)
   let lkey_types = wrap_tmaybes @: map_types_no_val_for p lmap in
   (* lkey refers to the access pattern from trig args. rkey is from the tuples*)
@@ -94,7 +96,7 @@ let gen_shuffle_fn p rmap lmap bindings fn_name =
     [tuples, many_tuples_type;
     shuffle_on_empty, canonical TBool])
     [result_types] @: (* return *)
-      mk_let "all_targets" result_types
+      mk_let "all_targets" all_targets_type
         (mk_if
           (mk_eq (mk_var shuffle_on_empty) @: mk_cbool true)
           (* in shuffle on empty case, we prepare all the routing that must
@@ -109,7 +111,7 @@ let gen_shuffle_fn p rmap lmap bindings fn_name =
                   if pred then ids_to_vars @: fst_many l_key_ids_types
                   else [mk_cunit]
           ) @:
-          mk_empty result_types
+          mk_empty all_targets_type
         ) @:
       mk_gbagg (* sort by IPs *)
         (mk_lambda (wrap_args ["ip", t_addr; "tuple", many_tuples_type]) @:
