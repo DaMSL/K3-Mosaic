@@ -15,11 +15,20 @@ include ASTCommonImpl
 (* Annotations *)
 type annotation_t = Annotation.annotation_t
 
+(* multimap index *)
+type index_t = {
+                 mm_unique:  bool;
+                 mm_indices: int list; (* list of tuple indices *)
+                 mm_comp_fn: string option;
+                 mm_submaps: index_t list;
+               }
+
 type container_type_t
     = TSet
     | TBag
     | TList
     | TMap
+    | TMultimap of index_t list
 
 type base_type_t
     = TUnknown

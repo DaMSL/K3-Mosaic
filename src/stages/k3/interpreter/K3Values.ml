@@ -30,8 +30,10 @@ let map_modify f key map =
 
 let map_length map = IdMap.fold (fun _ _ sum -> sum + 1) map 0
 
-module rec ValueMap : Map.S with type key = Value.value_t =
-  Map.Make(struct type t = Value.value_t let compare = compare end)
+module IntSet = Set.Make(struct type t = int let compare = compare end)
+
+module rec ValueMap : NearMap.S with type key = Value.value_t =
+  NearMap.Make(struct type t = Value.value_t let compare = compare end)
 
 and Value : sig
   type eval_t = VDeclared of value_t ref
@@ -44,6 +46,12 @@ and Value : sig
 
   (* mutable environment, frame environment *)
   and env_t = (value_t ref) IdMap.t * (frame_t list)
+
+  and vindex_t = {
+    vi_unique: bool;
+    vi_indices: IntSet.t;
+    vi_comp_fn: value_t option;
+  }
 
   and value_t
       = VUnknown
@@ -59,6 +67,7 @@ and Value : sig
       | VBag of value_t list
       | VList of value_t list
       | VMap of value_t ValueMap.t
+      | VMultimap of vindex_t list
       | VFunction of arg_t * expr_t
       | VForeignFunction of arg_t * foreign_func_t
       | VAddress of address

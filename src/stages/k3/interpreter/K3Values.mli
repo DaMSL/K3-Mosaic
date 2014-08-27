@@ -10,7 +10,9 @@ val add_from_list : 'a IdMap.t -> (id_t * 'a) list -> 'a IdMap.t
 
 val map_modify : ('a option -> 'a option) -> id_t -> 'a IdMap.t -> 'a IdMap.t
 
-module rec ValueMap : sig include Map.S with type key = Value.value_t end
+module IntSet : sig include Set.S with type elt = int end
+
+module rec ValueMap : sig include NearMap.S with type key = Value.value_t end
 
 and Value : sig
   type eval_t = VDeclared of value_t ref | VTemp of value_t
@@ -19,6 +21,11 @@ and Value : sig
   and frame_t = (id_t * value_t) list
   (* an env_t is global values and frames (functional environment) *)
   and env_t = (value_t ref) IdMap.t * (frame_t list)
+  and vindex_t = {
+    vi_unique: bool;
+    vi_indices: IntSet.t;
+    vi_comp_fn: value_t option;
+  }
   and value_t
     = VUnknown
     | VUnit
@@ -33,6 +40,7 @@ and Value : sig
     | VBag of value_t list
     | VList of value_t list
     | VMap of value_t ValueMap.t
+    | VMultimap of vindex_t list
     | VFunction of arg_t * expr_t
     | VForeignFunction of arg_t * foreign_func_t
     | VAddress of address
