@@ -1058,46 +1058,50 @@ List.map (fun stmt -> do_complete_trig stmt) @: stmts_of_t p trig_name
  *)
 let filter_corrective_list =
   let trig_stmt_list_t = wrap_tbag' [t_trig_id; t_stmt_id] in
+  let return_type_base = [t_stmt_id; t_vid_list] in
+  let return_type = wrap_tbag' return_type_base in
   mk_global_fn filter_corrective_list_name
   (* (trigger_id, stmt_id) list *)
   ["request_vid", t_vid; "trig_stmt_list", trig_stmt_list_t]
-  [wrap_tbag' [t_stmt_id; t_vid_list]]
+  [return_type]
   @:
   mk_let "log_entries"
     (wrap_tbag' @: snd_many log_master_id_t)
     (mk_apply (* list of triggers >= vid *)
       (mk_var log_read_geq) @: mk_var "request_vid") @:
-  (* group the list by stmt_ids *)
-  mk_gbagg
-    (mk_lambda' ["_", t_vid; "stmt_id", t_stmt_id] @: mk_var "stmt_id")
-    (mk_assoc_lambda'
-      ["vid_list", t_vid_list]
-      ["vid", t_vid; "_", t_stmt_id] @:
-      mk_combine (mk_var "vid_list") (mk_singleton t_vid_list @: mk_var "vid")
-    )
-    (mk_empty t_vid_list) @:
-    let vid_stmt_id_t  = ["vid", t_vid; "stmt_id", t_stmt_id] in
-    let vid_stmt_col_t = wrap_tlist' @: snd_many vid_stmt_id_t in
-    mk_sort (* sort so early vids are generally sent out first *)
-      (* get a list of vid, stmt_id pairs *)
-      (** this is reall a map, but make it a fold to convert to a list *)
-      (mk_agg
-        (mk_assoc_lambda'
-          ["acc", vid_stmt_col_t]
-          log_master_id_t @:
-          (* convert to vid, stmt *)
-          mk_combine
-            (mk_var "acc") @:
-            mk_singleton
-              vid_stmt_col_t @:
-              mk_tuple @: ids_to_vars @: fst_many vid_stmt_id_t)
-        (mk_empty vid_stmt_col_t) @:
-        mk_var "log_entries"
-      ) @:
-      mk_assoc_lambda' (* compare func *)
-        ["vid1", t_vid; "stmt1", t_stmt_id]
-        ["vid2", t_vid; "stmt2", t_stmt_id] @:
-        v_lt (mk_var "vid1") @: mk_var "vid2"
+  (* convert to bag *)
+  mk_convert_col (wrap_tlist' return_type_base) return_type @:
+    (* group the list by stmt_ids *)
+    mk_gbagg
+      (mk_lambda' ["_", t_vid; "stmt_id", t_stmt_id] @: mk_var "stmt_id")
+      (mk_assoc_lambda'
+        ["vid_list", t_vid_list]
+        ["vid", t_vid; "_", t_stmt_id] @:
+        mk_combine (mk_var "vid_list") (mk_singleton t_vid_list @: mk_var "vid")
+      )
+      (mk_empty t_vid_list) @:
+      let vid_stmt_id_t  = ["vid", t_vid; "stmt_id", t_stmt_id] in
+      let vid_stmt_col_t = wrap_tlist' @: snd_many vid_stmt_id_t in
+      mk_sort (* sort so early vids are generally sent out first *)
+        (* get a list of vid, stmt_id pairs *)
+        (** this is reall a map, but make it a fold to convert to a list *)
+        (mk_agg
+          (mk_assoc_lambda'
+            ["acc", vid_stmt_col_t]
+            log_master_id_t @:
+            (* convert to vid, stmt *)
+            mk_combine
+              (mk_var "acc") @:
+              mk_singleton
+                vid_stmt_col_t @:
+                mk_tuple @: ids_to_vars @: fst_many vid_stmt_id_t)
+          (mk_empty vid_stmt_col_t) @:
+          mk_var "log_entries"
+        ) @:
+        mk_assoc_lambda' (* compare func *)
+          ["vid1", t_vid; "stmt1", t_stmt_id]
+          ["vid2", t_vid; "stmt2", t_stmt_id] @:
+          v_lt (mk_var "vid1") @: mk_var "vid2"
 
 
 (* receive_correctives:

@@ -167,15 +167,15 @@ let gen_route_fn p map_id =
   | [] -> (* if no keys, for now we just route to one place *)
   mk_global_fn (route_for p map_id)
     ["_", t_int; "_", t_unit]
-    [wrap_tbag t_addr] @: (* return *)
-      mk_singleton (wrap_tbag t_addr) @:
+    [output_type] @: (* return *)
+      mk_singleton output_type @:
         mk_apply (mk_var "get_ring_node") @:
           mk_tuple [mk_cint 1; mk_cint 1]
 
   | _  -> (* we have keys *)
   mk_global_fn (route_for p map_id)
     (("map_id", t_map_id)::types_to_ids_types prefix key_types)
-    [wrap_tbag t_addr] @: (* return *)
+    [output_type] @: (* return *)
     (* get the info for the current map and bind it to "pmap" *)
     mk_let "pmap" pmap_types
       (mk_snd pmap_per_map_types @:
@@ -289,6 +289,7 @@ let gen_route_fn p map_id =
       ) @:
     (* We now add in the value of the bound variables as a constant
      * and calculate the result for every possibility *)
+    (* TODO: this can be turned into sets *)
     mk_let "sorted_ip_list" (sorted_ip_list_type)
       (mk_gbagg
         (mk_lambda (wrap_args ["ip", t_addr]) @: mk_var "ip")
@@ -296,22 +297,29 @@ let gen_route_fn p map_id =
           mk_cunit
         )
         mk_cunit @:
-        mk_map
-          (mk_lambda (wrap_args ["free_bucket", free_bucket_type]) @:
-            mk_apply (mk_var "get_ring_node") @: mk_tuple
-              [mk_agg
-                (mk_assoc_lambda (wrap_args ["acc", t_int])
-                  (wrap_args ["i", t_int; "val", t_int]) @:
-                  mk_add (mk_var "acc") @:
-                    mk_mult (mk_var "val") @:
-                      mk_snd t_two_ints @:
-                        mk_peek @: mk_slice (mk_var "dim_bounds") @:
-                          mk_tuple [mk_var "i"; mk_cunknown]
-                )
-                (mk_var "bound_bucket") @: (* start with this const *)
-                mk_var "free_bucket";
-              mk_var "max_val"]
-          ) @:
+        (* convert to bag *)
+        mk_agg
+          (mk_lambda
+             (wrap_args ["acc_ips", output_type;
+                         "free_bucket", free_bucket_type]) @:
+              mk_combine
+                (mk_var "acc_ips") @:
+                mk_singleton output_type @:
+                  mk_apply (mk_var "get_ring_node") @: mk_tuple
+                    [mk_agg
+                      (mk_assoc_lambda (wrap_args ["acc", t_int])
+                        (wrap_args ["i", t_int; "val", t_int]) @:
+                        mk_add (mk_var "acc") @:
+                          mk_mult (mk_var "val") @:
+                            mk_snd t_two_ints @:
+                              mk_peek @: mk_slice (mk_var "dim_bounds") @:
+                                mk_tuple [mk_var "i"; mk_cunknown]
+                      )
+                      (mk_var "bound_bucket") @: (* start with this const *)
+                      mk_var "free_bucket";
+                    mk_var "max_val"]
+          )
+          (mk_empty output_type) @:
           mk_var "free_cart_prod"
       ) @:
     mk_if

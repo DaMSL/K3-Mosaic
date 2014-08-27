@@ -626,7 +626,7 @@ transformers :
     | expr CONCAT expr                                    { mkexpr Combine [$1; $3] }
     | MAP LPAREN expr COMMA expr RPAREN                   { mkexpr Map [$3; $5] }
     | ITERATE LPAREN expr COMMA expr RPAREN               { mkexpr Iterate [$3; $5] }
-    | FILTER LPAREN expr COMMA expr COMMA expr RPAREN     { mkexpr Filter [$3; $5; $7] }
+    | FILTER LPAREN expr COMMA expr RPAREN                { mkexpr Filter [$3; $5] }
     | FLATTEN LPAREN expr RPAREN                          { mkexpr Flatten [$3] }
     | AGGREGATE LPAREN expr COMMA expr COMMA expr RPAREN  { mkexpr Aggregate [$3; $5; $7] }
     | GROUPBYAGGREGATE LPAREN expr COMMA expr COMMA expr COMMA expr RPAREN {
