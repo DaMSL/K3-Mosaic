@@ -25,6 +25,7 @@ and Value : sig
     vi_unique: bool;
     vi_indices: IntSet.t;
     vi_comp_fn: value_t option;
+    vi_data: (value_t list) ValueMap.t;
   }
   and value_t
     = VUnknown
