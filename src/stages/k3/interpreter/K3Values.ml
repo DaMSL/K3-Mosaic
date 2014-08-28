@@ -460,14 +460,17 @@ let rec multimap_merge l r = match l, r with
   | VMultimap _, x
   | x, _           -> failwith @: "(multimap_merge): not a multimap:" ^ repr_of_value x
 
-let rec multimap_fold f zero mm = match mm with
+let rec multimap_fold f zero mm =
+  let error x = failwith @: "(multimap_fold): "^x in
+  match mm with
   (* doesn't matter which index we take *)
   | VMultimap ((_,map)::_) ->
     ValueMap.fold (fun _ x acc -> match x with
       | VMultimap _ -> multimap_fold f acc x
       | VBag b      -> bag_fold f acc b
+      | x           -> error @: "unexpected value in multimap: " ^ repr_of_value x
     ) map zero
-  | x -> failwith @: "(multimap_fold): not a multimap:" ^ repr_of_value x
+  | x -> error @: "not a multimap:" ^ repr_of_value x
 
 let multimap_map f mm =
   multimap_fold (fun acc x -> bag_insert (f x) acc) bag_empty mm
