@@ -19,11 +19,8 @@ and Value : sig
   and frame_t = (id_t * value_t) list
   (* an env_t is global values and frames (functional environment) *)
   and env_t = (value_t ref) IdMap.t * (frame_t list)
-  and vindex_t = {
-    vi_indices: IntSet.t;
-    vi_comp_fn: value_t option;
-    vi_data: (value_t list) ValueMap.t;
-  }
+  and bag_t = value_t list
+  and vindex_t = index_t * value_t ValueMap.t
   and value_t
     = VUnknown
     | VUnit

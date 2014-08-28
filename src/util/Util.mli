@@ -1,3 +1,5 @@
+module IntSet : sig include Set.S with type elt = int end
+
 (* low-precedence function application. Saves ( ) *)
 val foi : int -> float
 val iof : float -> int
@@ -73,6 +75,8 @@ val compose_fn : ('a -> 'b) -> ('c -> 'a) -> 'c -> 'b
 
 (* fold left until the predicate (2nd arg) is true *)
 val foldl_until : ('a -> 'b -> ('a, 'a) either_t ) -> 'a -> 'b list -> 'a
+
+val list_filter_idxs : IntSet.t -> 'a list -> 'a list
 
 val read_file_lines : string -> string list
 

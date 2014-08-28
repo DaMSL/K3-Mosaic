@@ -2,6 +2,8 @@
 
 let _ = Random.self_init ()
 
+module IntSet = Set.Make(struct type t = int let compare = compare end)
+
 (* abbreviations for annoyingly long functions *)
 let foi = float_of_int
 let iof = int_of_float
@@ -114,6 +116,14 @@ let rec foldl_until f acc = function
         | Right acc' -> foldl_until f acc' xs
         end
     | [] -> acc
+
+(* filter list by a set of indices (starting at 0) *)
+let list_filter_idxs idx l =
+  List.rev @: snd @:
+    List.fold_left (fun (i, acc) x ->
+      if IntSet.mem i idx then (i+1, x::acc)
+      else (i+1, acc)
+    ) (0, []) l
 
 (* I/O helpers *)
 (* read a file and convert it into lines *)

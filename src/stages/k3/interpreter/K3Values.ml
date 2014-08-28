@@ -45,11 +45,10 @@ and Value : sig
   (* mutable environment, frame environment *)
   and env_t = (value_t ref) IdMap.t * (frame_t list)
 
-  and vindex_t = {
-    vi_indices: IntSet.t;
-    vi_comp_fn: value_t option;
-    vi_data: (value_t list) ValueMap.t;
-  }
+  (* bag type - currently list is good enough *)
+  and bag_t = value_t list
+
+  and vindex_t = index_t * value_t ValueMap.t
 
   and value_t
       = VUnknown
@@ -61,8 +60,8 @@ and Value : sig
       | VString of string
       | VTuple of value_t list
       | VOption of value_t option
-      | VSet of value_t list
-      | VBag of value_t list
+      | VSet of bag_t (* easier to convert this way *)
+      | VBag of bag_t
       | VList of value_t list
       | VMap of value_t ValueMap.t
       | VMultimap of vindex_t list
@@ -327,4 +326,149 @@ let find_inequality a b =
     | a, b -> if a <> b then [!count] else []
   in
   sort @: loop a b
+
+(* ----- Bag functions ----- *)
+let bag_insert x bag = x::bag
+
+let bag_delete x bag = list_remove x bag
+
+let bag_fold = List.fold_left
+
+let bag_map = List.map
+
+let bag_singleton x = [x]
+
+let bag_empty = []
+
+let bag_is_empty b = b = []
+
+let bag_merge x y = x@y
+
+(* ------ Multimap functions ------ *)
+let multimap_init idxs =
+  VMultimap(List.map (fun idx -> idx, ValueMap.empty) idxs)
+
+let multimap_is_empty mm = match mm with
+  | VMultimap idxs ->
+      List.for_all (fun (_, map) -> ValueMap.is_empty map) idxs
+  | x -> failwith @: "(multimap_is_empty): not a multimap: " ^ repr_of_value x
+
+(* insert a value into a multimap *)
+let rec multimap_insert x mm =
+  let error x = failwith @: "(multimap_insert):"^x in
+  match mm, x with
+  | VMultimap idxs, VTuple xs ->
+      VMultimap(
+        List.map (fun (idx, map) -> idx,
+          let key = VTuple(list_filter_idxs idx.mm_indices xs) in
+          try begin
+            match ValueMap.find key map with
+            | VMultimap _ as v ->
+                let v' = multimap_insert x v in
+                ValueMap.add key v' map
+            | VBag b -> ValueMap.add key (VBag(bag_insert x b)) map
+            | x -> error @: "bad value in map ("^repr_of_value x^")"
+            end
+          with
+            Not_found ->
+              if null idx.mm_submaps then
+                ValueMap.add key (VBag (bag_singleton x)) map
+              else
+                let v = multimap_init idx.mm_submaps in
+                let v' = multimap_insert x v in
+                ValueMap.add key v' map
+        ) idxs
+      )
+  | VMultimap _, x -> error @: "not a tuple: " ^ repr_of_value x
+  | x, _           -> error @: "not a multimap: " ^ repr_of_value x
+
+let rec multimap_delete x mm =
+  let error x = failwith @: "(multimap_delete):"^x in
+  match mm, x with
+  | VMultimap idxs, VTuple xs ->
+      VMultimap(
+        List.map (fun (idx, map) -> idx,
+          let key = VTuple(list_filter_idxs idx.mm_indices xs) in
+          try begin
+            match ValueMap.find key map with
+            | VMultimap _ as v ->
+                let v' = multimap_delete x v in
+                if multimap_is_empty v' then
+                  ValueMap.remove key map
+                else
+                  (* add back the reduced value *)
+                  ValueMap.add key v' map
+            | VBag b ->
+                let b' = bag_delete x b in
+                if bag_is_empty b' then ValueMap.remove key map
+                else ValueMap.add key (VBag b') map
+            | x -> error @: "unexpected value: " ^ repr_of_value x
+            end
+          with Not_found -> map
+        ) idxs
+      )
+  | VMultimap _, x -> error @: "not a tuple: " ^ repr_of_value x
+  | x, _           -> error @: "not a valuemap" ^ repr_of_value x
+
+let rec multimap_slice idx_ids comps x mm =
+  let error x = failwith @: "(multimap_slice):"^x in
+  match mm, x, idx_ids, comps with
+  | VMultimap idxs, VTuple xs, idx_id::rem_ids, comp::rem_comps ->
+      begin try
+        (* TODO: change to map here to find faster? *)
+        let idx, map = List.find (fun (i,_) -> IntSet.equal i.mm_indices idx_id) idxs in
+        let key = VTuple(list_filter_idxs idx.mm_indices xs) in
+        let find_fn = match comp with
+          | VInt 1    -> ValueMap.find_gt
+          | VInt 0    -> ValueMap.find
+          | VInt (-1) -> ValueMap.find_lt
+          | _ -> failwith "(multimap_slice): unexpected comp value"
+        in
+        begin try
+          match find_fn key map with
+          | VMultimap _ as v -> multimap_slice rem_ids rem_comps x v
+          | VBag b as v      -> v
+          | _ -> failwith "(multimap_slice): unexpected value in map"
+        with
+          Not_found -> VBag bag_empty
+        end
+      with
+        Not_found    -> error @: "no corresponding index found"
+      end
+  | _, _, [], _       -> error @: "no index provided"
+  | _, _, _, []       -> error @: "no comps provided"
+  | VMultimap _,x,_,_ -> error @: "not a tuple:" ^ repr_of_value x
+  | x, _, _, _        -> error @: "not a valuemap" ^ repr_of_value x
+
+let rec multimap_merge l r = match l, r with
+  | VMultimap idxs, VMultimap idxs' ->
+      VMultimap(
+        List.map2 (fun (idx, map) (idx', map') -> idx,
+          ValueMap.merge
+            (fun key v v' -> match v, v' with
+               | Some _, None    -> v
+               | None, Some _    -> v'
+               | Some(VMultimap _ as submaps),
+                 Some(VMultimap _ as submaps') ->
+                  Some(multimap_merge submaps submaps')
+               | Some(VBag x), Some(VBag x') -> Some(VBag(bag_merge x x'))
+               | _ -> None)
+            map map'
+        ) idxs idxs'
+      )
+
+  | VMultimap _, x
+  | x, _           -> failwith @: "(multimap_merge): not a multimap:" ^ repr_of_value x
+
+let rec multimap_fold f zero mm = match mm with
+  (* doesn't matter which index we take *)
+  | VMultimap ((_,map)::_) ->
+    ValueMap.fold (fun _ x acc -> match x with
+      | VMultimap _ -> multimap_fold f acc x
+      | VBag b      -> bag_fold f acc b
+    ) map zero
+  | x -> failwith @: "(multimap_fold): not a multimap:" ^ repr_of_value x
+
+let multimap_map f mm =
+  multimap_fold (fun acc x -> bag_insert (f x) acc) bag_empty mm
 

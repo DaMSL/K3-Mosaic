@@ -1,5 +1,6 @@
 (* The K3 Programming Language *)
 
+open Util
 open Tree
 open K3AST
 open K3Annotations
@@ -14,8 +15,6 @@ include ASTCommonImpl
 
 (* Annotations *)
 type annotation_t = Annotation.annotation_t
-
-module IntSet = Set.Make(struct type t = int let compare = compare end)
 
 (* multimap index *)
 type index_t = {

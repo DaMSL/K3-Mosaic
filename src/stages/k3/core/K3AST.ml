@@ -1,5 +1,6 @@
 (* The K3 AST type signature *)
 
+open Util
 open Tree
 
 module type ASTCommon = sig
@@ -22,8 +23,6 @@ include ASTCommon
 
 (* Annotations *)
 type annotation_t
-
-module IntSet : sig include Set.S with type elt = int end
 
 (* multimap index *)
 type index_t  = {
