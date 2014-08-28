@@ -106,6 +106,13 @@ let list_remove r l =
     | []    -> List.rev acc
   in loop [] l
 
+let list_replace r r' l =
+  let rec loop acc = function
+    | x::xs when x = r -> List.rev_append acc (r'::xs)
+    | x::xs -> loop (x::acc) xs
+    | []    -> List.rev acc
+  in loop [] l
+
 let compose_fn f g x = f(g x)
 
 (* function that folds until a predicate is true *)

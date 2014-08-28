@@ -18,6 +18,7 @@ type type_bindings_t = (id_t * type_t) list
 type event_type_bindings_t = (id_t * (id_t * (type_t list)) list) list
 
 (* Internal type declarations *)
+(* has_type, expected_type, msg *)
 type error_type =
   | TMismatch of type_t * type_t * string
   | VTMismatch of value_type_t * value_type_t * string
@@ -340,11 +341,11 @@ let rec deduce_expr_type ?(override=true) trig_env cur_env utexpr =
             if not(steps = TInt)
                 then t_erroru name (BTMismatch(TInt, steps,"steps:")) () else
             let t_e = begin
-                match (start, stride) with
-                | (TInt, TInt) -> TInt
-                | (TFloat, TInt)
-                | (TInt, TFloat)
-                | (TFloat, TFloat) -> TFloat
+                match start, stride with
+                | TInt, TInt     -> TInt
+                | TFloat, TInt
+                | TInt, TFloat
+                | TFloat, TFloat -> TFloat
                 | _ -> t_erroru name (TMsg("start and stride types are bad")) ()
             end in TValue(canonical @: TCollection(t_c, TContained(TImmutable (t_e,[]))))
 
@@ -354,12 +355,12 @@ let rec deduce_expr_type ?(override=true) trig_env cur_env utexpr =
             let t_l = t0 <| base_of +++ value_of |> t_erroru name @: TBad(t0) in
             let t_r = t1 <| base_of +++ value_of |> t_erroru name @: TBad(t1) in
             let result_type = (
-                match (t_l, t_r) with
-                | (TFloat, TFloat) -> TFloat
-                | (TInt, TFloat) -> TFloat
-                | (TFloat, TInt) -> TFloat
-                | (TInt, TInt) -> TInt
-                | (TBool, TBool) -> TBool
+                match t_l, t_r with
+                | TFloat, TFloat -> TFloat
+                | TInt, TFloat   -> TFloat
+                | TFloat, TInt   -> TFloat
+                | TInt, TInt     -> TInt
+                | TBool, TBool   -> TBool
                 | _ -> t_erroru name (TMsg "Types do not match") ()
             ) in TValue(canonical (result_type))
 
@@ -437,9 +438,9 @@ let rec deduce_expr_type ?(override=true) trig_env cur_env utexpr =
             let t_c, t_e =
               t1 <| collection_of +++ base_of +++ value_of |> t_erroru name @:
                   TBad t1 in
-            (* everything mapped always becomes a bag *)
             if t_a <~ t_e then
-              TValue(canonical (TCollection(t_c, contained_of t_r)))
+              if t_c = TMultimap then TValue(wrap_tbag @: contained_of t_r)
+              else TValue(canonical @: TCollection(t_c, contained_of t_r))
             else t_erroru name (VTMismatch(t_a, t_e, "element:")) ()
 
         | Filter ->
@@ -463,7 +464,10 @@ let rec deduce_expr_type ?(override=true) trig_env cur_env utexpr =
                   TBad(t0) in
             let t_c1, t_e1 = t_e0 <| collection_of +++ base_of |> t_erroru name
                 @: VTBad(t_e0) in
-            TValue(canonical (TCollection(t_c1, t_e1)))
+            match t_c0 with
+            | TMap | TMultimap -> t_erroru name (TBad t_c0) ()
+            | _ ->
+              TValue(canonical (TCollection(t_c1, t_e1)))
 
         | Aggregate ->
             let name = "Aggregate" in
@@ -530,6 +534,38 @@ let rec deduce_expr_type ?(override=true) trig_env cur_env utexpr =
             if t_e === t_p then TValue t_e
             (* take care of possible unknowns in pattern *)
             else if t_p <~ t_e then t0
+            else t_erroru name (VTMismatch(t_p, t_e, "")) ()
+
+        | SliceIdx idxs ->
+            let name = "SliceIdx" in
+            let t0, t1, t2 = bind 0, bind 1, bind 2 in
+            let tcomp = t0 <| value_of |> t_erroru name @: TBad(t0) in
+            let tcomp' = wrap_ttuple @: t_int in
+            if not (tcomp === tcomp') then t_erroru name
+                (VTMismatch(tcomp, tcomp', "comparison_list:")) else
+            let t_c, t_e =
+              t1 <| collection_of +++ base_of +++ value_of |>
+                  t_erroru name @: TBad t1 in
+            let rec check_index idxs mmidxs = match idxs, mmidx with
+              | [], [] -> true
+              | idx::idxs, ms ->
+                begin try
+                  let m_idx = List.find (IntSet.equal i.mm_indices) ms in
+                  check_index idxs m_idx.mm_submaps
+                with
+                  Not_found -> false
+                end
+              | _ -> false
+            in
+            begin match t_c with
+            | TMultimap mmidx when check_index idxs mmidx -> ()
+            | TMultimap _ -> t_erroru name @: TMsg "slice mismatch on mulimap" ()
+            | _ -> t_erroru name (TBad t_c) ()
+            end;
+            let t_p = t2 <| value_of |> t_erroru name @: TBad(t2) in
+            if t_e === t_p then TValue t_e
+            (* take care of possible unknowns in pattern *)
+            else if t_p <~ t_e then t1
             else t_erroru name (VTMismatch(t_p, t_e, "")) ()
 
         | Insert ->
