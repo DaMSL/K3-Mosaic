@@ -30,8 +30,6 @@ let map_modify f key map =
 
 let map_length map = IdMap.fold (fun _ _ sum -> sum + 1) map 0
 
-module IntSet = Set.Make(struct type t = int let compare = compare end)
-
 module rec ValueMap : NearMap.S with type key = Value.value_t =
   NearMap.Make(struct type t = Value.value_t let compare = compare end)
 
@@ -48,7 +46,6 @@ and Value : sig
   and env_t = (value_t ref) IdMap.t * (frame_t list)
 
   and vindex_t = {
-    vi_unique: bool;
     vi_indices: IntSet.t;
     vi_comp_fn: value_t option;
     vi_data: (value_t list) ValueMap.t;

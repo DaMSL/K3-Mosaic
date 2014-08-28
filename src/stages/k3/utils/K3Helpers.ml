@@ -260,7 +260,8 @@ let mk_gbagg group_fun agg_fun init collection =
 let mk_sort collection compare_fun =
     mk_stree Sort [collection; compare_fun]
 
-let mk_slice collection pattern =
+(* generic version of slice used by multiple functions *)
+let mk_slice_gen f collection pattern =
   (* don't create a slice if we only have unknowns *)
   let pat_l = try U.decompose_tuple pattern
               with Failure _ -> [pattern]
@@ -269,9 +270,26 @@ let mk_slice collection pattern =
     (fun x -> U.tag_of_expr x = Const(CUnknown)) pat_l
   in
   if all_unknowns then collection
-  else mk_stree Slice [collection; pattern]
+  else 
+    let tag, l = f [collection; pattern] in
+    mk_stree tag l
+
+let mk_slice collection pattern = mk_slice_gen (fun l -> Slice, l) collection pattern
 
 let mk_slice' collection pattern = mk_slice collection @: mk_tuple pattern
+
+(* l_idx is the list of indices to use, made of ocaml ints *)
+(* l_comp is the pattern of gt, le, eq expressed as values of 1, -1, 0 *)
+let mk_slice_idx idxs comps col pat =
+  let idx_sets =
+    List.map (fun l ->
+      List.fold_left (fun acc x -> IntSet.add x acc) IntSet.empty l)
+    idxs
+  in
+  mk_slice_gen (fun l -> SliceIdx idx_sets, comps::l) col pat
+
+let mk_slice_idx' idxs comps col pat =
+  mk_slice_idx idxs (mk_tuple comps) col @: mk_tuple pat
 
 let mk_insert collection x = mk_stree Insert [collection; x]
 

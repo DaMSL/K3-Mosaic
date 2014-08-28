@@ -23,10 +23,11 @@ include ASTCommon
 (* Annotations *)
 type annotation_t
 
+module IntSet : sig include Set.S with type elt = int end
+
 (* multimap index *)
-type  index_t = {
-                   mm_unique:  bool;
-                   mm_indices: int list; (* list of tuple indices *)
+type index_t  = {
+                   mm_indices: IntSet.t; (* tuple indices *)
                    mm_comp_fn: string option;
                    mm_submaps: index_t list;
                 }
@@ -124,6 +125,8 @@ type expr_tag_t
 
     | Peek
     | Slice
+    (* the tuple index numbers we want to slice by, hierarchically *)
+    | SliceIdx of IntSet.t list
     | Insert
     | Delete
     | Update

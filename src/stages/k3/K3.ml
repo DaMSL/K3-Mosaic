@@ -15,10 +15,11 @@ include ASTCommonImpl
 (* Annotations *)
 type annotation_t = Annotation.annotation_t
 
+module IntSet = Set.Make(struct type t = int let compare = compare end)
+
 (* multimap index *)
 type index_t = {
-                 mm_unique:  bool;
-                 mm_indices: int list; (* list of tuple indices *)
+                 mm_indices: IntSet.t; (* tuple indices *)
                  mm_comp_fn: string option;
                  mm_submaps: index_t list;
                }
@@ -116,6 +117,8 @@ type expr_tag_t
 
     | Peek
     | Slice
+    (* the tuple index numbers we want to slice by, hierarchically *)
+    | SliceIdx of IntSet.t list
     | Insert
     | Delete
     | Update
