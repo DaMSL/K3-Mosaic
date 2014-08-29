@@ -54,6 +54,9 @@ val list_drop_end : int -> 'a list -> 'a list
 (* combine two lists into one list with tuples *)
 val list_zip : 'a list -> 'b list -> ('a * 'b) list
 
+(* split a list of pairs into 2 lists *)
+val list_unzip : ('a * 'b) list -> ('a list * 'b list)
+
 (* take the head of a list *)
 val hd : 'a list -> 'a
 

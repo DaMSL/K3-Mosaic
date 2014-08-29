@@ -63,19 +63,25 @@ let ensure assertion = match assertion with
       | xs -> false, "FAILED: Expected " ^ string_of_value ~mark_points:xs expected ^ ",\n\n but got " ^
         string_of_value ~mark_points:xs actual ^ "."
 
-let rec run_tests ?(indent="") test =
+let run_tests ?(indent="") test =
+  let rec loop indent test =
     match test with
     | TestCase(name, assertion) -> (
         let passed, result_string = ensure assertion in
-        let s = indent ^ name ^ ": " ^ result_string in
-        if passed then print_endline s
-        else prerr_endline s
+        passed, indent ^ name ^ ": " ^ result_string
     )
-    | TestGroup(name, tests) -> (
-        print_endline(indent ^ name ^ ":");
-        List.iter (run_tests ~indent:("  "^indent)) tests; ()
-    )
+    | TestGroup(name, tests) ->
+        let passed, ss = list_unzip @: List.map (loop @: "  "^indent) tests in
+        List.exists id_fn passed, indent^name^":\n"^String.concat "\n" ss
+  in
+  loop "" test
 
+let print_tests tests =
+  let passed, ss = list_unzip @: List.map run_tests tests in
+  let passed = List.for_all id_fn passed in
+  let s = String.concat "\n" ss in
+  if passed then print_endline s
+  else prerr_endline @: "ERROR: "^s
 
 (* Driver methods *)
 let check_as_expr ce = match ce with
@@ -91,7 +97,7 @@ let test_expressions file_name = function
           eval_test_expr decls e @=? eval_test_expr decls @: check_as_expr x
         in i+1, test_acc@[test_case]
       ) (0, []) expr_tests
-    in List.iter run_tests test_cases
+    in print_tests test_cases
   | _ -> failwith "not expression tests"
 
 let env_deref_refs env = List.rev_map (fun (id, v) -> (id, !v)) env
@@ -200,5 +206,5 @@ let test_program globals_k3 interpret_fn file_name test =
       let v2 = sort_values @: eval_test_expr [] @: check_as_expr rexp in
       case name @: v1 @=? v2
     ) numbered_tests
-  in List.iter run_tests test_cases
+  in print_tests test_cases
 

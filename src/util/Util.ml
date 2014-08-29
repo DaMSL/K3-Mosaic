@@ -77,6 +77,12 @@ let list_zip l1 l2 =
     | x::xs, y::ys    -> loop ((x,y)::acc) xs ys
   in loop [] l1 l2
 
+let list_unzip l =
+  let rec loop acc acc' = function
+    | []         -> (List.rev acc, List.rev acc')
+    | (x,x')::xs -> loop (x::acc) (x'::acc') xs
+  in loop [] [] l
+
 (*let list_zip list1 list2 = *)
   (*List.map2 (fun i j -> (i,j)) list1 list2*)
 
