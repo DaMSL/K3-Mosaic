@@ -50,8 +50,8 @@ let eval_test_expr decl_prog expr =
 
 (* Tests *)
 let equals_assertion comp_fn expected actual string_fn =
-  if comp_fn expected actual then "PASSED."
-  else "FAILED: Expected " ^ string_fn expected ^ ", but got " ^
+  if comp_fn expected actual then true, "PASSED."
+  else false, "FAILED: Expected " ^ string_fn expected ^ ",\n\n but got " ^
     string_fn actual ^ "."
 
 let ensure assertion = match assertion with
@@ -59,15 +59,17 @@ let ensure assertion = match assertion with
       equals_assertion (=) expected actual string_of_type
   | AssertValueEquals(expected, actual) ->
       match find_inequality expected actual with
-      | [] -> "PASSED"
-      | xs -> "FAILED: Expected " ^ string_of_value ~mark_points:xs expected ^ ", but got " ^
-      string_of_value ~mark_points:xs actual ^ "."
+      | [] -> true, "PASSED"
+      | xs -> false, "FAILED: Expected " ^ string_of_value ~mark_points:xs expected ^ ",\n\n but got " ^
+        string_of_value ~mark_points:xs actual ^ "."
 
 let rec run_tests ?(indent="") test =
     match test with
     | TestCase(name, assertion) -> (
-        let result_string = ensure assertion
-        in print_endline (indent ^ name ^ ": " ^ result_string);
+        let passed, result_string = ensure assertion in
+        let s = indent ^ name ^ ": " ^ result_string in
+        if passed then print_endline s
+        else prerr_endline s
     )
     | TestGroup(name, tests) -> (
         print_endline(indent ^ name ^ ":");
