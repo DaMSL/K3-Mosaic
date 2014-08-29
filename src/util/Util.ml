@@ -98,6 +98,12 @@ let tl l = match l with
 
 let list_last xs = hd @: list_take_end 1 xs
 
+let replicate n x = 
+  let rec loop n acc = match n with
+    | 0 -> acc
+    | _ -> loop (n-1) (x::acc)
+  in loop n []
+
 (* will only remove one instance of x in xs (as opposed to filter) *)
 let list_remove r l =
   let rec loop acc = function
@@ -444,6 +450,7 @@ let hashtbl_replace hash key replace_fn =
   in
   Hashtbl.replace hash key (replace_fn old)
 
-
+let intset_of_list l =
+  List.fold_left (fun acc x -> IntSet.add x acc) IntSet.empty l
 
 

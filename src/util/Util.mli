@@ -68,6 +68,9 @@ val tl : 'a list -> 'a list
 (* take the last member of a list *)
 val list_last : 'a list -> 'a
 
+(* replicate a value into a list *)
+val replicate : int -> 'a -> 'a list
+
 (* will only remove one instance of x in xs (as opposed to filter) *)
 val list_remove : 'a -> 'a list -> 'a list
 
@@ -206,3 +209,5 @@ val int_of_sql_date : string -> int
 
 (* replace a hashtbl value by examining existing value *)
 val hashtbl_replace : ('a, 'b) Hashtbl.t -> 'a -> ('b option -> 'b) -> unit
+
+val intset_of_list : int list -> IntSet.t

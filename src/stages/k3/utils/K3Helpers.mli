@@ -65,6 +65,10 @@ val wrap_tmap : value_type_t -> value_type_t
 val wrap_tmap' : value_type_t list -> value_type_t
 val wrap_tmap_mut : value_type_t -> value_type_t
 val wrap_tmap_mut' : value_type_t list -> value_type_t
+val wrap_tmmap : index_t list -> value_type_t -> value_type_t
+val wrap_tmmap' : index_t list -> value_type_t list -> value_type_t
+val wrap_tmmap_mut : index_t list -> value_type_t -> value_type_t
+val wrap_tmmap_mut' : index_t list -> value_type_t list -> value_type_t
 val wrap_tind : value_type_t -> value_type_t
 val wrap_tind_mut : value_type_t -> value_type_t
 val wrap_tmaybe : value_type_t -> value_type_t

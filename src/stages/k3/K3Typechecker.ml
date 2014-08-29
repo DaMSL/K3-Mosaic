@@ -438,9 +438,9 @@ let rec deduce_expr_type ?(override=true) trig_env cur_env utexpr =
             let t_c, t_e =
               t1 <| collection_of +++ base_of +++ value_of |> t_erroru name @:
                   TBad t1 in
-            if t_a <~ t_e then
-              if t_c = TMultimap then TValue(wrap_tbag @: contained_of t_r)
-              else TValue(canonical @: TCollection(t_c, contained_of t_r))
+            if t_a <~ t_e then match t_c with
+              | TMultimap _ -> TValue(H.wrap_tbag @: contained_of t_r)
+              | _           -> TValue(canonical @: TCollection(t_c, contained_of t_r))
             else t_erroru name (VTMismatch(t_a, t_e, "element:")) ()
 
         | Filter ->
@@ -464,10 +464,10 @@ let rec deduce_expr_type ?(override=true) trig_env cur_env utexpr =
                   TBad(t0) in
             let t_c1, t_e1 = t_e0 <| collection_of +++ base_of |> t_erroru name
                 @: VTBad(t_e0) in
-            match t_c0 with
-            | TMap | TMultimap -> t_erroru name (TBad t_c0) ()
-            | _ ->
-              TValue(canonical (TCollection(t_c1, t_e1)))
+            begin match t_c0 with
+            | TMap | TMultimap _ -> t_erroru name (TBad t0) ()
+            | _ -> TValue(canonical @: TCollection(t_c1, t_e1))
+            end
 
         | Aggregate ->
             let name = "Aggregate" in
@@ -539,18 +539,21 @@ let rec deduce_expr_type ?(override=true) trig_env cur_env utexpr =
         | SliceIdx idxs ->
             let name = "SliceIdx" in
             let t0, t1, t2 = bind 0, bind 1, bind 2 in
-            let tcomp = t0 <| value_of |> t_erroru name @: TBad(t0) in
-            let tcomp' = wrap_ttuple @: t_int in
+            let tcomp  = t0 <| value_of |> t_erroru name @: TBad t0 in
+            let tcomp' = H.wrap_ttuple @: replicate (List.length idxs) H.t_int in
             if not (tcomp === tcomp') then t_erroru name
-                (VTMismatch(tcomp, tcomp', "comparison_list:")) else
+                (VTMismatch(tcomp, tcomp', "comparison_list:")) ();
             let t_c, t_e =
               t1 <| collection_of +++ base_of +++ value_of |>
                   t_erroru name @: TBad t1 in
-            let rec check_index idxs mmidxs = match idxs, mmidx with
-              | [], [] -> true
+            (* check for a match between the indices and the multimap
+               do this by iterating through the multimap indices *)
+            let rec check_index idxs mmidxs =
+              match idxs, mmidxs with
+              | [], []        -> true
               | idx::idxs, ms ->
                 begin try
-                  let m_idx = List.find (IntSet.equal i.mm_indices) ms in
+                  let m_idx = List.find (fun m -> IntSet.equal idx m.mm_indices) ms in
                   check_index idxs m_idx.mm_submaps
                 with
                   Not_found -> false
@@ -559,10 +562,10 @@ let rec deduce_expr_type ?(override=true) trig_env cur_env utexpr =
             in
             begin match t_c with
             | TMultimap mmidx when check_index idxs mmidx -> ()
-            | TMultimap _ -> t_erroru name @: TMsg "slice mismatch on mulimap" ()
-            | _ -> t_erroru name (TBad t_c) ()
+            | TMultimap _ -> t_erroru name (TMsg "slice mismatch on multimap") ()
+            | _ -> t_erroru name (TBad t1) ()
             end;
-            let t_p = t2 <| value_of |> t_erroru name @: TBad(t2) in
+            let t_p = t2 <| value_of |> t_erroru name @: TBad t2 in
             if t_e === t_p then TValue t_e
             (* take care of possible unknowns in pattern *)
             else if t_p <~ t_e then t1

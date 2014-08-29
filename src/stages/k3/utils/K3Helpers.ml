@@ -97,6 +97,13 @@ let wrap_tmap' tl = wrap_tmap @: wrap_ttuple tl
 let wrap_tmap_mut typ = mut @: wrap_tmap typ
 let wrap_tmap_mut' tl = wrap_tmap_mut @: wrap_ttuple tl
 
+(* wrap a type in a multimap *)
+let wrap_tmmap idxs typ = wrap_tcol (TMultimap idxs) typ
+let wrap_tmmap' idxs tl = wrap_tmmap idxs @: wrap_ttuple tl
+let wrap_tmmap_mut idxs typ = mut @: wrap_tmmap idxs typ
+let wrap_tmmap_mut' idxs tl = wrap_tmmap_mut idxs @: wrap_ttuple tl
+
+
 (* wrap a type in a mutable indirection *)
 let wrap_tind t = TIsolated(TImmutable(TIndirect t, []))
 let wrap_tind_mut t = mut @: wrap_tind t
@@ -270,7 +277,7 @@ let mk_slice_gen f collection pattern =
     (fun x -> U.tag_of_expr x = Const(CUnknown)) pat_l
   in
   if all_unknowns then collection
-  else 
+  else
     let tag, l = f [collection; pattern] in
     mk_stree tag l
 
