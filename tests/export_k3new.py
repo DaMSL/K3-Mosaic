@@ -87,7 +87,7 @@ def main():
         fold_cmd = '--k3new_folds'
 
     print("\nConverting to new k3 file format...")
-    cmd = '../bin/k3 -i k3 -l k3new {fold_cmd} --datafile {nice_name}.csv temp.k3dist > {nice_name}.k3 2> temp.err'.format(**locals())
+    cmd = '../bin/k3 -i k3 -l k3new {fold_cmd} --k3new_folds --datafile {nice_name}.csv temp.k3dist > {nice_name}.k3 2> temp.err'.format(**locals())
     print_sys(cmd)
 
     # create k3 partmap
