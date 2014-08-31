@@ -23,10 +23,10 @@ type error_type =
   | TMismatch of type_t * type_t * string
   | VTMismatch of value_type_t * value_type_t * string
   | BTMismatch of base_type_t * base_type_t * string
-  | TBad of type_t
-  | VTBad of value_type_t
-  | BTBad of base_type_t
-  | MTBad of mutable_type_t
+  | TBad of type_t * string
+  | VTBad of value_type_t * string
+  | BTBad of base_type_t * string
+  | MTBad of mutable_type_t * string
   | InvalidTypeAnnotation
   | MultiplePossibleTypes of string
   | UntypedExpression
@@ -34,6 +34,12 @@ type error_type =
 
 (* uuid, location in typechecker, compared types *)
 exception TypeError of int * string * error_type
+
+let not_value t      = TBad(t, "not a value")
+let not_function t   = TBad(t, "not a function")
+let not_collection t = TBad(t, "not a collection")
+let not_collection_vt t = VTBad(t, "not a collection")
+let not_collection_bt t = BTBad(t, "not a collection")
 
 let t_error uuid name msg () = raise @: TypeError(uuid, name, msg)
 
@@ -247,7 +253,7 @@ let deduce_constant_type id trig_env c =
       | CTarget(id) -> (* retrieve type from trig env *)
           let name = "CTarget" in
           begin try let typ = List.assoc id trig_env in
-              typ <| base_of +++ value_of |> t_erroru name @: TBad(typ)
+              typ <| base_of +++ value_of |> t_erroru name @: not_value typ 
           with Not_found -> t_erroru name (TMsg("Trigger "^id^" not found")) () end
   in canonical constant_type
 
@@ -292,33 +298,34 @@ let rec deduce_expr_type ?(override=true) trig_env cur_env utexpr =
         | Tuple ->
             let child_types = List.map
             (fun e ->
-                type_of_expr e <| value_of |> t_erroru "Tuple" (TBad(type_of_expr e)))
+                let t = type_of_expr e in
+                t <| value_of |> t_erroru "Tuple" @: not_value t )
                 typed_children
             in
             TValue(canonical (TTuple(child_types)))
         | Just ->
             let inner = bind 0 in
-            let inner_type = inner <| value_of |> t_erroru "Just" (TBad(inner)) in
+            let inner_type = inner <| value_of |> t_erroru "Just" (not_value inner ) in
             TValue(canonical (TMaybe(inner_type)))
         | Nothing(t) -> TValue(t)
         | Empty(t) -> TValue(t)
         | Singleton(t) ->
             let name = "Singleton" in
             let t_c, t_e = t <| collection_of +++ base_of |>
-                t_erroru name @: VTBad(t) in
+                t_erroru name @: not_collection_vt t in
             let t0 = bind 0 in
-            let t_ne = t0 <| value_of |> t_erroru name @: TBad(t0)
+            let t_ne = t0 <| value_of |> t_erroru name @: not_value t0 
             in TValue(canonical (TCollection(t_c, contained_of t_ne)))
         | Combine ->
             let name = "Combine" in
             let t0 = bind 0 in
             let t_c0, t_e0 = t0 <| collection_of +++ base_of +++ value_of |>
-                t_erroru name @: TBad(t0) in
-            let t_v0 = t0 <| value_of |> t_erroru name @: TBad(t0) in
+                t_erroru name @: not_collection t0  in
+            let t_v0 = t0 <| value_of |> t_erroru name @: not_value t0  in
             let t1 = bind 1 in
             let t_c1, t_e1 = t1 <| collection_of +++ base_of +++ value_of |>
-                t_erroru name @: TBad(t1) in
-            let t_v1 = t1 <| value_of |> t_erroru name @: TBad(t1) in
+                t_erroru name @: not_collection t1  in
+            let t_v1 = t1 <| value_of |> t_erroru name @: not_value t1  in
 
             (* Only matching collections can be combined. *)
             (* Note: strictly speaking this isn't true, e.g. [nothing]++[Just 1]
@@ -335,9 +342,9 @@ let rec deduce_expr_type ?(override=true) trig_env cur_env utexpr =
         | Range(t_c) ->
             let name = "Range" in
             let t0 = bind 0 in let t1 = bind 1 in let t2 = bind 2 in
-            let start = t0 <| base_of +++ value_of |> t_erroru name @: TBad(t0) in
-            let stride = t1 <| base_of +++ value_of |> t_erroru name @: TBad(t1) in
-            let steps = t2 <| base_of +++ value_of |> t_erroru name @: TBad(t2) in
+            let start = t0 <| base_of +++ value_of |> t_erroru name @: not_value t0  in
+            let stride = t1 <| base_of +++ value_of |> t_erroru name @: not_value t1  in
+            let steps = t2 <| base_of +++ value_of |> t_erroru name @: not_value t2  in
             if not(steps = TInt)
                 then t_erroru name (BTMismatch(TInt, steps,"steps:")) () else
             let t_e = begin
@@ -352,8 +359,8 @@ let rec deduce_expr_type ?(override=true) trig_env cur_env utexpr =
         | (Add|Mult) ->
             let name = match tag with Add -> "Add" | Mult -> "Mult" | _ -> "" in
             let t0 = bind 0 in let t1 = bind 1 in
-            let t_l = t0 <| base_of +++ value_of |> t_erroru name @: TBad(t0) in
-            let t_r = t1 <| base_of +++ value_of |> t_erroru name @: TBad(t1) in
+            let t_l = t0 <| base_of +++ value_of |> t_erroru name @: not_value t0  in
+            let t_r = t1 <| base_of +++ value_of |> t_erroru name @: not_value t1  in
             let result_type = (
                 match t_l, t_r with
                 | TFloat, TFloat -> TFloat
@@ -367,18 +374,18 @@ let rec deduce_expr_type ?(override=true) trig_env cur_env utexpr =
         | Neg ->
             let name = "Neg" in
             let t0 = bind 0 in
-            let t_0 = t0 <| base_of +++ value_of |> t_erroru name @: TBad(t0) in (
+            let t_0 = t0 <| base_of +++ value_of |> t_erroru name @: not_value t0  in (
                 match t_0 with
                 | (TBool|TInt|TFloat) as t -> TValue(canonical (t))
-                | t-> t_erroru name (BTBad(t)) ()
+                | t-> t_erroru name (not_collection_bt t) ()
             )
 
         | (Eq|Lt|Neq|Leq) ->
             let name = match tag with Eq -> "Eq" | Lt -> "Lt" | Neq -> "Neq"
                 | Leq -> "Leq" | _ -> "" in
             let t0 = bind 0 in let t1 = bind 1 in
-            let t_l = t0 <| value_of |> t_erroru name @: TBad(t0) in
-            let t_r = t1 <| value_of |> t_erroru name @: TBad(t1) in
+            let t_l = t0 <| value_of |> t_erroru name @: not_value t0  in
+            let t_r = t1 <| value_of |> t_erroru name @: not_value t1  in
 
             (* We can compare any two values whose base types are the same, and *)
             (* are comparable, regardless of if either of them are refs. *)
@@ -388,9 +395,9 @@ let rec deduce_expr_type ?(override=true) trig_env cur_env utexpr =
         | IfThenElse ->
             let name = "IfThenElse" in
             let t0 = bind 0 in let t1 = bind 1 in let t2 = bind 2 in
-            let t_p = t0 <| value_of |> t_erroru name @: TBad(t0) in
-            let t_t = t1 <| value_of |> t_erroru name @: TBad(t1) in
-            let t_e = t2 <| value_of |> t_erroru name @: TBad(t2) in
+            let t_p = t0 <| value_of |> t_erroru name @: not_value t0  in
+            let t_t = t1 <| value_of |> t_erroru name @: not_value t1  in
+            let t_e = t2 <| value_of |> t_erroru name @: not_value t2  in
             if canonical TBool === t_p then
                 if t_t === t_e then TValue(t_t)
                 else t_erroru name (VTMismatch(t_t, t_e,"")) ()
@@ -402,30 +409,32 @@ let rec deduce_expr_type ?(override=true) trig_env cur_env utexpr =
                 match components with
                 | e :: [] -> type_of_expr e
                 | h :: t when type_of_expr h <| value_of |>
-                    t_erroru name @: TBad(type_of_expr h) === canonical TUnit -> validate_block t
+                              t_erroru name (not_value @: type_of_expr h) === canonical TUnit ->
+                                validate_block t
                 | _ -> t_erroru name (TMsg("Bad or non-TUnit expression")) ()
             ) in validate_block typed_children
 
         | Lambda(t_a) ->
+            let name = "Lambda" in
             let t0 = bind 0 in
-            let t_r = t0 <| value_of |> t_erroru "Lambda" @: TBad(t0)
+            let t_r = t0 <| value_of |> t_erroru name @: not_value t0 
             in TFunction(H.value_type_of_arg t_a, t_r)
 
         | Apply ->
             let name = "Apply" in
             let t0 = bind 0 in let t1 = bind 1 in
-            let t_e, t_r = t0 <| function_of |> t_erroru name @: TBad(t0) in
-            let t_a = t1 <| value_of |> t_erroru name @: TBad(t0) in
+            let t_e, t_r = t0 <| function_of |> t_erroru name @: not_function t0  in
+            let t_a = t1 <| value_of |> t_erroru name @: not_value t0  in
             if t_e <~ t_a then TValue(t_r)
             else t_erroru name (VTMismatch(t_e, t_a,"")) ()
 
         | Iterate ->
             let name = "Iterate" in
             let t0 = bind 0 in let t1 = bind 1 in
-            let t_a, t_r = t0 <| function_of |> t_erroru name @: TBad(t0) in
+            let t_a, t_r = t0 <| function_of |> t_erroru name @: not_function t0  in
             let t_c, t_e =
               t1 <| collection_of +++ base_of +++ value_of |> t_erroru name @:
-                  TBad(t1) in
+                  not_collection t1  in
             if not (t_r === canonical TUnit)
                 then t_erroru name (VTMismatch(t_r, canonical TUnit, "return val:")) () else
             if t_a <~ t_e then TValue(canonical TUnit)
@@ -434,10 +443,10 @@ let rec deduce_expr_type ?(override=true) trig_env cur_env utexpr =
         | Map ->
             let name = "Map" in
             let t0 = bind 0 in let t1 = bind 1 in
-            let t_a, t_r = t0 <| function_of |> t_erroru name @: TBad t0 in
+            let t_a, t_r = t0 <| function_of |> t_erroru name @: not_function t0  in
             let t_c, t_e =
               t1 <| collection_of +++ base_of +++ value_of |> t_erroru name @:
-                  TBad t1 in
+                  not_collection t1  in
             if t_a <~ t_e then match t_c with
               | TMultimap _ -> TValue(H.wrap_tbag @: contained_of t_r)
               | _           -> TValue(canonical @: TCollection(t_c, contained_of t_r))
@@ -446,9 +455,9 @@ let rec deduce_expr_type ?(override=true) trig_env cur_env utexpr =
         | Filter ->
             let name = "Filter" in
             let t0, t1 = bind 0, bind 1 in
-            let t_pa, t_pr = t0 <| function_of |> t_erroru name @: TBad t0 in
+            let t_pa, t_pr = t0 <| function_of |> t_erroru name @: not_function t0  in
             let t_c, t_e = t1 <| collection_of +++ base_of +++ value_of |>
-              t_erroru name @: TBad t1 in
+              t_erroru name @: not_collection t1  in
 
             if not (t_pa <~ t_e) then
               t_erroru name (VTMismatch(t_pa, t_e,"predicate:")) () else
@@ -461,21 +470,21 @@ let rec deduce_expr_type ?(override=true) trig_env cur_env utexpr =
             let t0 = bind 0 in
             let t_c0, t_e0 =
               t0 <| collection_of +++ base_of +++ value_of |> t_erroru name @:
-                  TBad(t0) in
+                  not_collection t0  in
             let t_c1, t_e1 = t_e0 <| collection_of +++ base_of |> t_erroru name
-                @: VTBad(t_e0) in
+                @: not_collection_vt t_e0 in
             begin match t_c0 with
-            | TMap | TMultimap _ -> t_erroru name (TBad t0) ()
+            | TMap | TMultimap _ -> t_erroru name (TBad (t0, "can't flatten a Map")) ()
             | _ -> TValue(canonical @: TCollection(t_c1, t_e1))
             end
 
         | Aggregate ->
             let name = "Aggregate" in
-            let t0 = bind 0 in let t1 = bind 1 in let t2 = bind 2 in
-            let t_arg, t_ret = t0 <| function_of |> t_erroru name @: TBad(t0) in
-            let t_zero = t1 <| value_of |> t_erroru name @: TBad(t1) in
+            let t0, t1, t2 = bind 0, bind 1, bind 2 in
+            let t_arg, t_ret = t0 <| function_of |> t_erroru name @: not_function t0  in
+            let t_zero = t1 <| value_of |> t_erroru name @: not_value t1  in
             let t_col, t_elem = t2 <| collection_of +++ base_of +++ value_of |>
-                t_erroru name @: TBad(t2) in
+                t_erroru name @: not_collection t2  in
             let expected1 = canonical @: TTuple[t_zero; t_elem] in
             if not (t_arg <~ expected1)
                 then t_erroru name (VTMismatch(t_arg, expected1, "")) () else
@@ -489,11 +498,11 @@ let rec deduce_expr_type ?(override=true) trig_env cur_env utexpr =
         | GroupByAggregate ->
             let name = "GroupByAggregate" in
             let t0, t1, t2, t3 = bind 0, bind 1, bind 2, bind 3 in
-            let t_ga, t_gr = t0 <| function_of |> t_erroru name @: TBad t0 in
-            let t_aa, t_ar = t1 <| function_of |> t_erroru name @: TBad t1 in
-            let t_zero = t2 <| value_of |> t_erroru name @: TBad t2 in
+            let t_ga, t_gr = t0 <| function_of |> t_erroru name @: not_function t0  in
+            let t_aa, t_ar = t1 <| function_of |> t_erroru name @: not_function t1  in
+            let t_zero = t2 <| value_of |> t_erroru name @: not_value t2  in
             let t_col, t_elem = t3 <| collection_of +++ base_of +++ value_of |>
-                t_erroru name @: TBad t3 in
+                t_erroru name @: not_collection t3  in
             if not (t_ga <~ t_elem) then
               t_erroru name (VTMismatch(t_ga, t_elem, "grouping func:")) () else
             let expected1 = canonical @: TTuple[t_zero; t_elem] in
@@ -511,8 +520,8 @@ let rec deduce_expr_type ?(override=true) trig_env cur_env utexpr =
             let name = "Sort" in
             let t0, t1 = bind 0, bind 1 in
             let t_col, t_elem = t0 <| collection_of +++ base_of +++ value_of |>
-                t_erroru name @: TBad t0 in
-            let t_carg, t_cret = t1 <| function_of |> t_erroru name @: TBad t1 in
+                t_erroru name @: not_collection t0  in
+            let t_carg, t_cret = t1 <| function_of |> t_erroru name @: not_function t1  in
 
             let expected1 = canonical @: TTuple[t_elem; t_elem] in
             if not (t_carg <~ expected1) then
@@ -529,8 +538,8 @@ let rec deduce_expr_type ?(override=true) trig_env cur_env utexpr =
             let t0, t1 = bind 0, bind 1 in
             let t_c, t_e =
               t0 <| collection_of +++ base_of +++ value_of |>
-                  t_erroru name @: TBad(t0) in
-            let t_p = t1 <| value_of |> t_erroru name @: TBad(t1) in
+                  t_erroru name @: not_collection t0  in
+            let t_p = t1 <| value_of |> t_erroru name @: not_value t1  in
             if t_e === t_p then TValue t_e
             (* take care of possible unknowns in pattern *)
             else if t_p <~ t_e then t0
@@ -539,13 +548,13 @@ let rec deduce_expr_type ?(override=true) trig_env cur_env utexpr =
         | SliceIdx idxs ->
             let name = "SliceIdx" in
             let t0, t1, t2 = bind 0, bind 1, bind 2 in
-            let tcomp  = t0 <| value_of |> t_erroru name @: TBad t0 in
+            let tcomp  = t0 <| value_of |> t_erroru name @: not_value t0  in
             let tcomp' = H.wrap_ttuple @: replicate (List.length idxs) H.t_int in
             if not (tcomp === tcomp') then t_erroru name
                 (VTMismatch(tcomp, tcomp', "comparison_list:")) ();
             let t_c, t_e =
               t1 <| collection_of +++ base_of +++ value_of |>
-                  t_erroru name @: TBad t1 in
+                  t_erroru name @: not_collection t1  in
             (* check for a match between the indices and the multimap
                do this by iterating through the multimap indices *)
             let rec check_index idxs mmidxs =
@@ -563,9 +572,9 @@ let rec deduce_expr_type ?(override=true) trig_env cur_env utexpr =
             begin match t_c with
             | TMultimap mmidx when check_index idxs mmidx -> ()
             | TMultimap _ -> t_erroru name (TMsg "slice mismatch on multimap") ()
-            | _ -> t_erroru name (TBad t1) ()
+            | _ -> t_erroru name (TBad(t1, "not a multimap")) ()
             end;
-            let t_p = t2 <| value_of |> t_erroru name @: TBad t2 in
+            let t_p = t2 <| value_of |> t_erroru name @: not_value t2  in
             if t_e === t_p then TValue t_e
             (* take care of possible unknowns in pattern *)
             else if t_p <~ t_e then t1
@@ -576,8 +585,8 @@ let rec deduce_expr_type ?(override=true) trig_env cur_env utexpr =
             let t0 = bind 0 in let t1 = bind 1 in
             let t_c, t_e =
               t0 <| collection_of +++ base_of +++ value_of |>
-                  t_erroru name @: TBad t0 in
-            let t_n = t1 <| value_of |> t_erroru name @: TBad t1 in
+                  t_erroru name @: not_collection t0  in
+            let t_n = t1 <| value_of |> t_erroru name @: not_value t1  in
             if t_e === t_n then TValue (canonical TUnit)
             else t_erroru name (VTMismatch(t_e, t_n, "")) ()
 
@@ -585,9 +594,9 @@ let rec deduce_expr_type ?(override=true) trig_env cur_env utexpr =
             let name = "Update" in
             let t0 = bind 0 in let t1 = bind 1 in let t2 = bind 2 in
             let t_c, t_e = t0 <| collection_of +++ base_of +++ value_of |>
-                t_erroru name @: TBad t0 in
-            let t_o = t1 <| value_of |> t_erroru name @: TBad t1 in
-            let t_n = t2 <| value_of |> t_erroru name @: TBad t2 in
+                t_erroru name @: not_collection t0  in
+            let t_o = t1 <| value_of |> t_erroru name @: not_value t1  in
+            let t_n = t2 <| value_of |> t_erroru name @: not_value t2  in
             if t_e === t_o then
                 if t_e === t_n then TValue(canonical TUnit)
                 else t_erroru name (VTMismatch(t_n, t_e, "new value:")) ()
@@ -598,8 +607,8 @@ let rec deduce_expr_type ?(override=true) trig_env cur_env utexpr =
             let t0 = bind 0 in let t1 = bind 1 in
             let t_c, t_e =
               t0 <| collection_of +++ base_of +++ value_of |>
-              t_erroru name @: TBad t0 in
-            let t_n = t1 <| value_of |> t_erroru name @: TBad t1 in
+              t_erroru name @: not_collection t0  in
+            let t_n = t1 <| value_of |> t_erroru name @: not_value t1  in
             if t_e === t_n then TValue(canonical TUnit)
             else t_erroru name (VTMismatch(t_e, t_n, "")) ()
 
@@ -608,7 +617,7 @@ let rec deduce_expr_type ?(override=true) trig_env cur_env utexpr =
             let t0 = bind 0 in
             let t_c, t_e =
               t0 <| collection_of +++ base_of +++ value_of |>
-                  t_erroru name @: TBad t0 in
+                  t_erroru name @: not_collection t0  in
             TValue(t_e)
 
         | Assign ->
@@ -617,8 +626,8 @@ let rec deduce_expr_type ?(override=true) trig_env cur_env utexpr =
             let t0 = bind 0 and t1 = bind 1 in
             let t_l =
               t0 <| base_of +++ dereft +++ base_of +++ value_of |>
-                t_erroru name @: TBad t0 in
-            let t_r = t1 <| base_of +++ value_of |> t_erroru name @: TBad t1 in
+                t_erroru name @: TBad(t0, "not an indirection") in
+            let t_r = t1 <| base_of +++ value_of |> t_erroru name @: not_value t1  in
             if canonical t_l === canonical t_r then TValue(canonical TUnit)
             else
               t_erroru name (BTMismatch(t_l, t_r, "")) ()
@@ -627,34 +636,32 @@ let rec deduce_expr_type ?(override=true) trig_env cur_env utexpr =
             let name = "Deref" in
             let t0 = bind 0 in
             let t_r = t0 <| dereft +++ base_of +++ value_of |>
-              t_erroru name @: TBad t0 in
+              t_erroru name @: TBad(t0, "not an indirection") in
             TValue (t_r)
 
         (* Add a layer of indirection *)
         | Indirect ->
             let name = "Indirect" in
             let t0 = bind 0 in
-            let t_r = t0 <| value_of |> t_erroru name @: TBad t0 in
+            let t_r = t0 <| value_of |> t_erroru name @: not_value t0  in
             TValue (canonical @: TIndirect t_r)
 
         | Send ->
             let name = "Send" in
             let t0 = bind 0 in let t1 = bind 1 in let t2 = bind 2 in
-            let t_target  = t0 <| base_of +++ value_of |>
-                t_erroru name @: TBad t0 in
-            let t_address = t1 <| base_of +++ value_of |>
-                t_erroru name @: TBad t1 in
-            let t_args = t2 <| value_of |>
-                t_erroru name @: TBad t2 in
+            let t_target  = t0 <| base_of +++ value_of |> t_erroru name @: not_value t0 in
+            let t_address = t1 <| base_of +++ value_of |> t_erroru name @: not_value t1 in
+            let t_args    = t2 <| value_of |> t_erroru name @: not_value t2 in
             let t_target_args = begin match t_target with
-                | TTarget(t_arg) -> t_arg
-                | _ -> t_erroru name (BTBad(t_target)) ()
+                | TTarget t_arg -> t_arg
+                | _             -> t_erroru name (BTBad(t_target, "not a target")) ()
             end in
-            match t_address with TAddress ->
+            match t_address with 
+            | TAddress ->
                 let expected = canonical t_target_args in
                 if expected === t_args then TValue(canonical TUnit)
                 else t_erroru name (VTMismatch(t_args, expected, "")) ()
-            | _ -> t_erroru name (BTBad(t_address)) ()
+            | _ -> t_erroru name (BTBad(t_address, "not an address")) ()
 
     in attach_type current_type
 
@@ -667,7 +674,7 @@ let check_trigger_type trig_env env id args locals body rebuild_f =
   let typed_body = deduce_expr_type trig_env inner_env body in
   let t_b =
     type_of_expr typed_body <| value_of |>
-      t_error (-1) name @: TBad(type_of_expr typed_body)
+      t_error (-1) name @: not_value @: type_of_expr typed_body
   in
   if not (t_b === canonical TUnit) then
     t_error (-1) name (VTMismatch(canonical TUnit, t_b,"")) ()
@@ -696,10 +703,10 @@ let type_of_resource (env:(id_t * type_t list) list) r = match r with
   | Handle(t,_,_) -> [t]
   | Stream(t, ConstStream e) ->
     let uuid = id_of_expr e in
-    let t' = t <| value_of |> t_error (-1) "stream" @: TBad(t) in
+    let t' = t <| value_of |> t_error (-1) "stream" @: not_value t in
     let tcol = type_of_expr @: deduce_expr_type [] [] e in
     let t_c, t_e = tcol <| collection_of +++ base_of +++ value_of |> t_error
-      uuid "stream" @: TBad(t) in
+      uuid "stream" @: not_collection t in
     if not (t' === t_e)
       then t_error uuid "stream" (VTMismatch(t', t_e, "resource type")) ()
       else [t]
@@ -709,20 +716,20 @@ let type_of_resource (env:(id_t * type_t list) list) r = match r with
 let typecheck_bind src_types trig_arg_types =
   match trig_arg_types, src_types with
   | [], [] ->
-    Some(TMsg("Neither source event nor trigger argument has valid types."))
+    Some(TMsg "Neither source event nor trigger argument has valid types.")
 
   | [TValue x], [TValue y] when not (x === y) ->
     Some(TMismatch(TValue x, TValue y, "Resource binding type mismatch."))
 
   | _, x when List.length x > 1 ->
-    Some(TMsg("Multiple resource event types found for dispatch to trigger."))
+    Some(TMsg "Multiple resource event types found for dispatch to trigger.")
 
   | x, _ when List.length x > 1 ->
-    Some(TMsg("Multiple trigger arg types found during bind."))
+    Some(TMsg "Multiple trigger arg types found during bind.")
 
   | [_], [_] -> None
 
-  | _, _ -> Some(TMsg("Invalid types."))
+  | _, _ -> Some(TMsg "Invalid types.")
 
 let bound_resource_type error_prefix resource_env src_id =
   try List.assoc src_id resource_env
@@ -732,11 +739,11 @@ let bound_resource_type error_prefix resource_env src_id =
 let arg_type_of_trigger error_prefix trig_env trig_id =
   try
     let t = (List.assoc trig_id trig_env) <| base_of +++ value_of |>
-      t_error (-1) error_prefix @: (TMsg("Invalid trigger argument type"))
+      t_error (-1) error_prefix @: (TMsg "Invalid trigger argument type")
     in
     begin match t with
       | TTarget(arg_t) -> [TValue(canonical arg_t)]
-      | _ -> t_error (-1) error_prefix (TMsg("Invalid trigger argument type")) ()
+      | _ -> t_error (-1) error_prefix (TMsg "Invalid trigger argument type") ()
     end
   with Not_found ->
     t_error (-1) error_prefix (TMsg("Could not find trigger named "^trig_id)) ()

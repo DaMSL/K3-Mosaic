@@ -249,7 +249,8 @@ and eval_expr (address:address) sched_st cenv texpr =
     (* Collection constructors *)
     | Empty(ct) ->
         let name = "Empty" in
-        let ctype, _ = ct <| collection_of +++ base_of |> t_erroru name @: VTBad(ct) in
+        let ctype, _ = ct <| collection_of +++ base_of |> t_erroru name @:
+                                                          VTBad(ct, "not a collection") in
         cenv, VTemp(
             match ctype with
             | TSet  -> VSet([])
@@ -262,7 +263,8 @@ and eval_expr (address:address) sched_st cenv texpr =
         let nenv, element = child_value cenv 0 in
         let name = "Singleton" in
         let ctype, _ =
-          ct <| collection_of +++ base_of |> t_erroru name @: VTBad(ct) in
+          ct <| collection_of +++ base_of |> t_erroru name @:
+                                             VTBad(ct, "not a collection") in
         cenv, VTemp(
             match ctype with
             | TSet  -> VSet  [element]

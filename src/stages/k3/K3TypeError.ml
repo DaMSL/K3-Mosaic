@@ -17,10 +17,10 @@ let string_of_error = function
       P.string_of_base_type t1^"\nBut an expression was expected of type "^
       P.string_of_base_type t2
 
-  | TBad(t)           -> "Bad type "^P.string_of_type t
-  | VTBad(t)          -> "Bad type "^P.string_of_value_type t
-  | BTBad(t)          -> "Bad type "^P.string_of_base_type t
-  | MTBad(t)          -> "Bad type "^P.string_of_mutable_type t
+  | TBad(t, s)        -> "Bad type "^P.string_of_type t^": "^s
+  | VTBad(t, s)       -> "Bad type "^P.string_of_value_type t^": "^s
+  | BTBad(t, s)       -> "Bad type "^P.string_of_base_type t^": "^s
+  | MTBad(t, s)       -> "Bad type "^P.string_of_mutable_type t^": "^s
   | TMsg(s)           -> s
   | InvalidTypeAnnotation   -> "Invalid type annotation"
   | MultiplePossibleTypes s -> "Multiple types are possible: "^s

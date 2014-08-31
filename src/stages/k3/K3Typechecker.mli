@@ -14,10 +14,10 @@ type error_type =
     | TMismatch of type_t * type_t * string
     | VTMismatch of value_type_t * value_type_t * string
     | BTMismatch of base_type_t * base_type_t * string
-    | TBad of type_t
-    | VTBad of value_type_t
-    | BTBad of base_type_t
-    | MTBad of mutable_type_t
+    | TBad of type_t * string
+    | VTBad of value_type_t * string
+    | BTBad of base_type_t * string
+    | MTBad of mutable_type_t * string
     | InvalidTypeAnnotation
     | MultiplePossibleTypes of string
     | UntypedExpression
