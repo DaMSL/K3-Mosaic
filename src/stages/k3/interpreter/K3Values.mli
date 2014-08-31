@@ -45,9 +45,6 @@ end
 
 open Value
 
-val list_of_valuemap : value_t ValueMap.t -> value_t list
-val valuemap_of_list : value_t list -> value_t ValueMap.t
-
 (* trigger env is where we store the trigger functions. These functions take the
  * address,
  * scheduler_state (parametrized here to prevent circular inclusion), the

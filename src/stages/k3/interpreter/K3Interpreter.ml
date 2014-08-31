@@ -109,7 +109,7 @@ and eval_expr (address:address) sched_st cenv texpr =
       let error = int_erroru uuid "extract_value_list" in
       match x with
         | VSet cl | VBag cl | VList cl -> cl
-        | VMap cn -> list_of_valuemap cn
+        | VMap cn -> ValueMap.to_list cn
         | _       -> error "non-collection"
     in
 
@@ -212,108 +212,105 @@ and eval_expr (address:address) sched_st cenv texpr =
           | _ -> error "eval_cmpop: missing values"
       )
     in
-    (* Common for Map *)
-    let handle_map colF =
-      let fenv, f = child_value cenv 0 in
-      let nenv, c = child_value fenv 1 in
-      let folder cl = mapfold (fun env x ->
-        let ienv, i = eval_fn f address sched_st env x in
-        ienv, value_of_eval i
-      ) nenv cl
-      in
-      begin match c with
-      | VSet cl | VBag cl | VList cl ->
-        let renv, r = folder cl
-        in renv, colF c r
-      | VMap cm ->
-        let cl = list_of_valuemap cm in
-        let renv, r = folder cl
-        in renv, colF c r
-      | _ -> error "(Map): non-collection value"
-      end
+    (* handle transformers with a common pattern (map, fold, filter) *)
+    let transform folder name = function
+      | VSet m  -> let env, m' = folder ISet.fold ISet.insert ISet.empty m
+                   in env, VSet m'
+      | VBag m  -> let env, m' = folder IBag.fold IBag.insert ISet.empty m
+                   in env, VBag m'
+      | VList m  -> let env, m' = folder IList.fold IList.insert IList.empty m
+                   in env, VList(List.rev m')
+      | VMap m  -> let env, m' = folder IMap.fold IMap.insert IMap.empty m
+                   in env, VMap m'
+      | VMultimap m ->
+          let env, m' = folder IMultimap.fold IMultimap.insert (IMultimap.from_mmap c) m
+          in env, m'
+      | _ -> t_erroru name "non-collection value" ()
     in
 
     (* Start of evaluator *)
     match tag with
-    | Const(c) -> (cenv, VTemp(value_of_const c))
-    | Var(id)  -> begin
+    | Const c   -> cenv, VTemp(value_of_const c)
+    | Var id    -> begin
         try cenv, lookup id cenv
         with Not_found -> error @: "(Var): id "^id^" not found"
         end
-    | Tuple    -> let fenv, vals = child_values cenv in (fenv, VTemp(VTuple(vals)))
-    | Just     ->
+    | Tuple     -> let fenv, vals = child_values cenv in 
+                   fenv, VTemp(VTuple vals)
+    | Just      ->
       let renv, rval = child_value cenv 0
       in (renv, VTemp(VOption (Some rval)))
-    | Nothing _ -> cenv, VTemp(VOption(None))
+
+    | Nothing _ -> cenv, VTemp(VOption None)
 
     (* Collection constructors *)
-    | Empty(ct) ->
+    | Empty ct ->
         let name = "Empty" in
         let ctype, _ = ct <| collection_of +++ base_of |> t_erroru name @:
                                                           VTBad(ct, "not a collection") in
         cenv, VTemp(
             match ctype with
-            | TSet  -> VSet([])
-            | TBag  -> VBag([])
-            | TList -> VList([])
-            | TMap  -> VMap(ValueMap.empty)
+            | TSet           -> VSet(ISet.empty)
+            | TBag           -> VBag(IBag.empty)
+            | TList          -> VList(IList.empty)
+            | TMap           -> VMap(IMap.empty)
+            | TMultimap idxs -> IMultimap.init idxs
         )
 
-    | Singleton(ct) ->
-        let nenv, element = child_value cenv 0 in
+    | Singleton ct ->
         let name = "Singleton" in
+        let nenv, element = child_value cenv 0 in
         let ctype, _ =
           ct <| collection_of +++ base_of |> t_erroru name @:
                                              VTBad(ct, "not a collection") in
         cenv, VTemp(
-            match ctype with
-            | TSet  -> VSet  [element]
-            | TBag  -> VBag  [element]
-            | TList -> VList [element]
-            | TMap  -> VMap  (valuemap_of_list [element])
+          match ctype with
+          | TSet           -> VSet(ISet.singleton element)
+          | TBag           -> VBag(IBag.singleton element)
+          | TList          -> VList(IList.singleton element)
+          | TMap           -> VMap(IMap.singleton element)
+          | TMultimap idxs -> Multimap.singleton idxs element
         )
 
     | Combine ->
+        let name = "Combine" in
         let nenv, components = child_values cenv in
-        let left, right = (
-          match components with
-          | [x; y] -> (x, y)
-          | _ -> error "(combine): missing sub-components"
-        ) in nenv, VTemp(
-            match left, right with
-            | VList v1, VList v2 -> VList(v1 @ v2)
-            | VSet v1, VSet v2   -> VSet(nub @: v1 @ v2)
-            | VBag v1, VBag v2   -> VBag(v1 @ v2)
-            | VMap v1, VMap v2   -> VMap(ValueMap.merge (fun k mv1 mv2 ->
-                                      match mv1, mv2 with
-                                      | _, Some _ -> mv2
-                                      | Some _, _ -> mv1
-                                      | _         -> None)
-                                      v1 v2)
-            | _ -> error "(combine): mismatching or non-collections"
+        let left, right = match components with
+          | [x; y] -> x, y
+          | _      -> t_erroru name "missing sub-components" ()
+        in nenv, VTemp(
+          match left, right with
+          | VList v1, VList v2         -> VList(IList.combine v1 v2)
+          | VSet v1,  VSet v2          -> VSet(ISet.combine v1 v2)
+          | VBag v1,  VBag v2          -> VBag(IBag.combine v1 v2)
+          | VMap v1,  VMap v2          -> VMap(IMap.combine v1 v2)
+          | VMultimap v1, VMultimap v2 -> IMultiMap.combine v1 v2
+          | _ -> t_erroru name "mismatching or non-collections"
         )
 
     | Range c_t ->
+      let name = "range" in
       let renv, parts = child_values cenv in
       begin match parts with
-        | [start; stride; VInt(steps)] ->
-          let init_fn =
+        | [start; stride; VInt steps] ->
+          let init_fn i =
             let f = float_of_int in
             match start, stride with
-            | VInt(x),   VInt(y)   -> (fun i -> VInt(x+(i*y)))
-            | VInt(x),   VFloat(y) -> (fun i -> VFloat((f x) +. ((f i) *. y)))
-            | VFloat(x), VInt(y)   -> (fun i -> VFloat(x +. ((f i) *. (f y))))
-            | VFloat(x), VFloat(y) -> (fun i -> VFloat(x +. ((f i) *. y)))
-            | _, _ -> error "(Range): mismatching start and stride"
+            | VInt x,   VInt y   -> VInt(x + i * y)
+            | VInt x,   VFloat y -> VFloat((f x) +. ((f i) *. y))
+            | VFloat x, VInt y   -> VFloat(x +. ((f i) *. (f y)))
+            | VFloat x, VFloat y -> VFloat(x +. ((f i) *. y))
+            | _, _ -> t_erroru name "mismatching start and stride" ()
           in
           let l = Array.to_list (Array.init steps init_fn) in
           let reval = VTemp(match c_t with
-            | TSet  -> VSet l
-            | TBag  -> VBag l
-            | TList -> VList l
-            | TMap  -> failwith "(Range) cannot have map")
+            | TSet  -> VSet(ISet.of_list l)
+            | TBag  -> VBag(IBag.of_list l)
+            | TList -> VList(IList.of_list l)
+            | TMap
+            | TMultimap _ -> t_erroru name "cannot have map" ())
           in renv, reval
-        | _ -> error "(Range): invalid format"
+        | _ -> t_erroru name "invalid format" ()
       end
 
     (* Arithmetic and comparators *)
@@ -323,19 +320,19 @@ and eval_expr (address:address) sched_st cenv texpr =
     | Neg ->
         let fenv, vals = child_values cenv in fenv, VTemp(
           match vals with
-          | [VBool(b)]  -> VBool(not b)
-          | [VInt(i)]   -> VInt(-i)
-          | [VFloat(f)] -> VFloat(-. f)
+          | [VBool b]  -> VBool(not b)
+          | [VInt i]   -> VInt(-i)
+          | [VFloat f] -> VFloat(-. f)
           | _ -> error "(Neg): invalid value"
         )
 
-    | Eq -> eval_eq_op ~neq:false
-    | Lt -> eval_cmpop (<)
+    | Eq  -> eval_eq_op ~neq:false
+    | Lt  -> eval_cmpop (<)
     | Neq -> eval_eq_op ~neq:true
     | Leq -> eval_cmpop (<=)
 
     (* Control flow *)
-    | Lambda(a) ->
+    | Lambda a ->
       let body = List.nth children 0
       in cenv, VTemp(VFunction(a, body))
 
@@ -347,65 +344,87 @@ and eval_expr (address:address) sched_st cenv texpr =
 
     | Block ->
         let fenv, vals = threaded_eval address sched_st cenv children
-        in fenv, (List.nth vals (List.length vals - 1))
+        in fenv, List.nth vals @: List.length vals - 1
 
     | Iterate ->
+        let name = "Iterate" in
+        let vunit = VTemp VUnit in
         let fenv, f = child_value cenv 0 in
         let nenv, c = child_value fenv 1 in
         let g = eval_fn f address sched_st in
-        let folder l = List.fold_left (
-            fun e x -> let ienv, _ = g e x in ienv
-        ) nenv l in
-          begin match c with
-            | VSet cl
-            | VBag cl
-            | VList cl -> folder cl, VTemp(VUnit)
-            | VMap cm  -> folder @: list_of_valuemap cm, VTemp(VUnit)
-            | _ -> error "(Iterate): non-collection value"
-          end
+        (* This folder is much simpler since we can ignore the output
+           except for the environment *)
+        let folder env x = fst @: g env x in
+        begin match c with
+          | VSet c      -> ISet.fold folder nenv c,  vunit
+          | VBag c      -> IBag.fold folder nenv c,  vunit
+          | VList c     -> IList.fold folder nenv c, vunit
+          | VMap c      -> IMap.fold folder nenv c,  vunit
+          | VMultimap c -> IMultiMap.fold folder nenv c, vunit
+          | _ -> t_erroru name "non-collection value" ()
+        end
 
     | IfThenElse ->
-        let penv, pred = child_value cenv 0 in (
-            match pred with
-            | VBool(b) when b     ->
-                eval_expr address sched_st penv @: List.nth children 1
-            | VBool(b) when not b ->
-                eval_expr address sched_st penv @: List.nth children 2
-            | _ -> error "(IfThenElse): non-boolean predicate"
-        )
+        let name = "IfThenElse" in
+        let penv, pred = child_value cenv 0 in
+        match pred with
+        | VBool true  ->
+            eval_expr address sched_st penv @: List.nth children 1
+        | VBool false ->
+            eval_expr address sched_st penv @: List.nth children 2
+        | _ -> t_erroru name "non-boolean predicate" ()
 
     (* Collection transformers *)
 
     (* Keeps the same type *)
-    | Map -> handle_map @: (fun c r -> preserve_collection (fun _ -> r) c)
+    | Map -> 
+        let name = "Map" in
+        let fenv, f = child_value cenv 0 in
+        let nenv, c = child_value fenv 1 in
+        let f' = eval_fn f address sched_st in
+        let folder fold_fn insert_fn zero col = fold_fn (fun (env, acc) x ->
+          let env', y = f' env x in
+          env', insert_fn (value_of_eval y) acc
+        ) (nenv, zero) col
+        in
+        transform folder name c
 
     | Filter ->
+        let name = "Filter" in
         let penv, p = child_value cenv 0 in
         let nenv, c = child_value penv 1 in
         let p' = eval_fn p address sched_st in
-        let folder cl = List.fold_left (fun (env, r) x ->
-          let p'env, filter = p' env x in
+        let folder fold_fn insert_fn zero col = fold_fn (fun (env, acc) x ->
+          let env', filter = p' env x in
           match value_of_eval filter with
-          | VBool true  -> p'env, x::r
-          | VBool false -> p'env, r
-          | _           -> error "(FilterMap): non boolean predicate"
-        ) (nenv, []) cl
+          | VBool true  -> env', insert_fn x acc
+          | VBool false -> env', acc
+          | _           -> t_erroru name "non boolean predicate" ()
+        ) (nenv, zero) cl
         in
-        begin match c with
-        | VSet(cl) | VBag(cl) | VList(cl) ->
-          let renv, r = folder cl in
-          let r = List.rev r in (* reverse because of cons *)
-          renv, (preserve_collection (fun _ -> r) c)
-        | VMap cm ->
-          let cl = list_of_valuemap cm in
-          let renv, r = folder cl in
-          let r = List.rev r in (* reverse because of cons *)
-          renv, VTemp(VMap(valuemap_of_list r))
-        | _ -> error "(FilterMap): non-collection value"
-        end
+        transform folder name c
 
     | Flatten ->
+        let name = "Flatten" in
         let nenv, c = child_value cenv 0 in
+        let inner = match c with
+          | VSet m -> ISet.peek m
+          | VBag m -> IBag.peek m
+          | VList m -> IList.peek m
+          | VMap m -> IMap.peek m
+          | VMultimap m -> IMultimap.peek m
+        in
+        let folder fold_fn zero col = fold_fn (fun acc x ->
+            match acc, x with
+            | VSet m,  VSet m'  -> VSet(ISet.combine m m')
+            | VBag m,  VBag m'  -> VBag(IBag.combine m m')
+            | VList m, VList m' -> VList(IList.combine m m')
+            | VMap m,  VMap m'  -> VMap(IMap.combine m m')
+            | VMultimap m, VMultimap m' -> VMultimap(IMultimap.combine m m')
+            | _ -> t_erroru name "mismatch in collections" ()
+        ) zero col in
+        let get_inner combine_fn, zero = match c with
+          | VBag _ -> ISet.
         nenv, preserve_collection (fun vs -> List.concat (List.map extract_value_list vs)) c
 
     | Aggregate ->

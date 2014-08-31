@@ -33,6 +33,9 @@ let map_length map = IdMap.fold (fun _ _ sum -> sum + 1) map 0
 module rec ValueMap : NearMap.S with type key = Value.value_t =
   NearMap.Make(struct type t = Value.value_t let compare = compare end)
 
+module rec ValueMMap : IMultimap.S with type key = Value.value_t list =
+  IMultimap.Make(struct type t = Value.value_t let compare = compare)
+
 and Value : sig
   type eval_t = VDeclared of value_t ref
               | VTemp of value_t
@@ -45,11 +48,6 @@ and Value : sig
   (* mutable environment, frame environment *)
   and env_t = (value_t ref) IdMap.t * (frame_t list)
 
-  (* bag type - currently list is good enough *)
-  and bag_t = value_t list
-
-  and vindex_t = index_t * value_t ValueMap.t
-
   and value_t
       = VUnknown
       | VUnit
@@ -60,11 +58,11 @@ and Value : sig
       | VString of string
       | VTuple of value_t list
       | VOption of value_t option
-      | VSet of bag_t (* easier to convert this way *)
-      | VBag of bag_t
-      | VList of value_t list
+      | VSet of ISet.t
+      | VBag of IBag.t
+      | VList of IList.t
       | VMap of value_t ValueMap.t
-      | VMultimap of vindex_t list
+      | VMultimap of value_t ValueMMap.t
       | VFunction of arg_t * expr_t
       | VForeignFunction of arg_t * foreign_func_t
       | VAddress of address
@@ -73,13 +71,6 @@ and Value : sig
   end = Value
 
 open Value
-
-let list_of_valuemap vm = ValueMap.fold (fun key v acc -> (VTuple [key; v])::acc) vm []
-let valuemap_of_list l  = List.fold_left (fun acc -> function
-                                          | VTuple [key; v] -> ValueMap.add key v acc
-                                          | _ -> failwith "Not a tuple of key-value")
-                          ValueMap.empty
-                          l
 
 (* trigger env is where we store the trigger functions. These functions take the
  * address,
@@ -95,14 +86,21 @@ let unwrap opt = match opt with Some v -> v | _ -> failwith "invalid option unwr
 let rec equal_values a b =
   let sort x = List.sort compare x in
   match a,b with
-  | (VSet l | VBag l), (VSet r | VBag r) ->
-      (try List.for_all2 equal_values (sort l) (sort r)
-       with Invalid_argument _ -> false)
+  | VSet m, VSet m' ->
+      let e = ref true in
+      let m, m' = ISet.sort m, ISet.sort m' in
+      ISet.iter2 (fun x y -> if not equal_value x y then e := false) m m';
+      !e
+  | VBag m, VBag m' ->
+      let e = ref true in
+      let m, m' = IBag.sort m, IBag.sort m' in
+      IBag.iter2 (fun x y -> if not equal_value x y then e := false) m m';
+      !e
     (* consider float equality within a certain epsilon *)
   | VFloat x, VFloat y ->
       let e = 0.0001 in
       abs_float(x -. y) < e
-  | a,b -> a = b
+  | a, b -> a = b
 
 (* Value sorting *)
 let rec sort_values v =
@@ -327,3 +325,16 @@ let find_inequality a b =
   in
   sort @: loop a b
 
+let v_peek = function
+  | VSet m      -> VOption(ISet.peek m)
+  | VBag m      -> VOption(IBag.peek m)
+  | VList m     -> VOption(IList.peek m)
+  | VMap m      -> VOption(IMap.peek m)
+  | VMultimap m -> VOption(IMultimap.peek m)
+
+let v_fold f acc = function
+  | VSet m      -> ISet.fold f acc m
+  | VBag m      -> IBag.fold f acc m
+  | VList m     -> IList.fold f acc m
+  | VMap m      -> IMap.fold f acc m
+  | VMultimap m -> IMultimap.fold f acc m
