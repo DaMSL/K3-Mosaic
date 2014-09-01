@@ -96,7 +96,10 @@ let tl l = match l with
   | _::x -> x
   | _ -> invalid_arg "empty list or singleton"
 
-let list_last xs = hd @: list_take_end 1 xs
+let rec list_last xs = match xs with
+  | []    -> failwith "empty list"
+  | [x]   -> x
+  | _::xs -> list_last xs
 
 let replicate n x = 
   let rec loop n acc = match n with
@@ -131,9 +134,10 @@ let rec foldl_until f acc = function
     | [] -> acc
 
 (* filter list by a set of indices (starting at 0) *)
+(* assume a small list *)
 let list_filter_idxs idx l =
-  List.rev @: snd @:
-    List.fold_left (fun (i, acc) x ->
+  snd @:
+    List.fold_right (fun x (i, acc) ->
       if IntSet.mem i idx then (i+1, x::acc)
       else (i+1, acc)
     ) (0, []) l

@@ -3,6 +3,8 @@ open K3Values
 
 (* ----- Set functions ----- *)
 
+type 'a t = 'a list
+
 let of_list l = nub @: l
 
 let to_list s = s
@@ -39,3 +41,6 @@ let equals x y =
   let sort = List.sort compare in
   sort x = sort y
 
+let iter2 f x y = 
+  let sort = List.sort compare in
+  List.iter2 f (sort x) (sort y)

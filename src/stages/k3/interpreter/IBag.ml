@@ -3,6 +3,8 @@ open K3Values
 
 (* ----- Bag functions ----- *)
 
+type 'a t = 'a list
+
 let of_list l = l
 
 let to_list b = b
@@ -23,13 +25,13 @@ let map = List.map
 
 let filter = List.filter
 
-let iterate = List.iterate
+let iter = List.iter
 
-let combine x y = x@y
+let combine x y = x @ y
 
 let peek b = match b with
-  | h::_ -> VOption (Some h)
-  | _    -> VOption None
+  | h::_ -> Some h
+  | _    -> None
 
 let update v v' b = list_replace v v' b
 
@@ -37,3 +39,6 @@ let equals x y =
   let sort = List.sort compare in
   sort x = sort y
 
+let iter2 f x y = 
+  let sort = List.sort compare in
+  List.iter2 f (sort x) (sort y)

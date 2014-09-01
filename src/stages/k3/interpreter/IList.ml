@@ -2,6 +2,9 @@ open Util
 open K3Values
 
 (* ----- List functions ----- *)
+
+type 'a t = 'a list
+
 let singleton x = [x]
 
 let empty = []
@@ -18,12 +21,16 @@ let map = List.map
 
 let filter = List.filter
 
-let iterate = List.iterate
+let iter = List.iter
 
-let combine x y = x@y
+let combine x y = x @ y
 
 let peek b = match b with
-  | h::_ -> VOption (Some h)
-  | _    -> VOption None
+  | h::_ -> Some h
+  | _    -> None
+
+let sort = List.sort
 
 let update v v' b = list_replace v v' b
+
+let iter2 = List.iter2
