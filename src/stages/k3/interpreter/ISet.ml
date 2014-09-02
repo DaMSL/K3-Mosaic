@@ -6,7 +6,7 @@ type 'a t = 'a list
 
 let of_list l = nub @: l
 
-let to_list s = s
+let to_list s = List.sort compare s
 
 let singleton x = [x]
 
@@ -25,8 +25,6 @@ let map = List.map
 let filter = List.filter
 
 let iter = List.iter
-
-let iter2 = List.iter2
 
 let combine x y = nub @: x @ y
 

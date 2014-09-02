@@ -4,6 +4,10 @@ open Util
 
 type 'a t = 'a list
 
+let of_list l = l
+		  
+let to_list m = m
+
 let singleton x = [x]
 
 let empty = []

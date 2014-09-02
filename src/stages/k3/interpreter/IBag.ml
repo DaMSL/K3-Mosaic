@@ -6,7 +6,7 @@ type 'a t = 'a list
 
 let of_list l = l
 
-let to_list b = b
+let to_list b = List.sort compare b
 
 let singleton x = [x]
 

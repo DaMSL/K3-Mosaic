@@ -1,5 +1,4 @@
 open Util
-open IBag
 open K3.AST
 
 (* ------ Multimap functions ------ *)
@@ -10,15 +9,17 @@ module type S = sig
   type t
   val init : index_t list -> t
   val from_mmap : t -> t
+  val get_idxs : t -> index_t list
   val singleton : index_t list -> row -> t
   val is_empty : t -> bool
   val insert : row -> t -> t
   val delete : row -> t -> t
-  val slice : IntSet.t list -> int list -> t -> row IBag.t
+  val slice : IntSet.t list -> [< `EQ | `GT | `LT ] list -> row -> t -> row IBag.t
   val combine : t -> t -> t
   val fold : ('a -> row -> 'a) -> 'a -> t -> 'a
   val map : (row -> 'a) -> t -> 'a IBag.t
   val iter : (row -> unit) -> t -> unit
+  val iter2 : (row -> row -> unit) -> t -> t -> unit
   val filter : (row -> bool) -> t -> t
   val update : row -> row -> t -> t
   val peek : t -> row option
@@ -47,16 +48,14 @@ module Make(Ord: NearMap.OrderedType) = struct
 
   let init idxs = List.map (fun idx -> idx, InnerMap.empty) idxs
 
-  let from_mmap m = List.map (fun (idx, _) -> idx, InnerMap.empty) m
+  let get_idxs mm = List.map fst mm
 
-  let singleton idxs x =
-    let m = init idxs in
-    insert x m
+  let from_mmap m = List.map (fun (idx, _) -> idx, InnerMap.empty) m
 
   let is_empty mm = List.for_all (fun (_, map) -> InnerMap.is_empty map) mm
 
   (* insert a value (list representing tuple) into a multimap *)
-  let rec insert xs mm =
+  let rec insert (xs:row) (mm:t) =
   List.map (fun (idx, map) -> idx,
     let key = list_filter_idxs idx.mm_indices xs in
     try begin
@@ -72,6 +71,10 @@ module Make(Ord: NearMap.OrderedType) = struct
           let v  = init idx.mm_submaps in
           InnerMap.add key (CMap(insert xs v)) map
   ) mm
+
+  let singleton (idxs:index_t list) (x:row) =
+    let m = init idxs in
+    insert x m
 
   let rec delete xs mm =
     List.map (fun (idx, map) -> idx,
@@ -139,20 +142,29 @@ module Make(Ord: NearMap.OrderedType) = struct
         | CMap m -> fold f acc m
         | CBag b -> IBag.fold f acc b
       ) map zero
-    | [] -> error @: "malformed map"
+    | [] -> error @: "malformed multimap"
 
   let map f mm =
     fold (fun acc x -> IBag.insert (f x) acc) IBag.empty mm
 
-  let rec iter f mm =
-    match mm with
+  let rec iter f = function
     (* doesn't matter which index we take *)
     | ((_,map)::_) ->
       InnerMap.iter (fun _ x -> match x with
         | CMap m -> iter f m
         | CBag b -> IBag.iter f b
       ) map
-    | [] -> failwith @: "(iter): malformed map"
+    | [] -> failwith @: "(iter): malformed multimap"
+
+  let rec iter2 f mm mm' = match mm, mm' with
+    (* doesn't matter which index we take *)
+    | ((_,map)::_), ((_,map')::_) ->
+      InnerMap.iter2 (fun _ x x' -> match x, x' with
+        | CMap m, CMap m' -> iter2 f m m'
+        | CBag b, CBag b' -> IBag.iter2 f b b'
+        | _ -> failwith "(iter2): mismatch between multimaps"
+      ) map map'
+    | _ -> failwith @: "(iter): malformed multimap"
 
   (* very hard to implement filter efficiently *)
   let rec filter f mm =

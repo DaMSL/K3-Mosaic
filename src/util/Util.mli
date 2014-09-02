@@ -172,6 +172,10 @@ val is_some : 'a option -> bool
 (* unwrap a some. Fail if not a Some *)
 val unwrap_some : 'a option -> 'a
 
+val maybe : 'a -> ('b -> 'a) -> 'b option -> 'a
+
+val maybe_f : (unit -> 'a) -> ('b -> 'a) -> 'b option -> 'a
+
 (* flatten a list of maybes into a list *)
 val flatten_some : 'a option list -> 'a list
 

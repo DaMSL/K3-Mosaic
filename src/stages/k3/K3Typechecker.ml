@@ -253,7 +253,7 @@ let deduce_constant_type id trig_env c =
       | CTarget(id) -> (* retrieve type from trig env *)
           let name = "CTarget" in
           begin try let typ = List.assoc id trig_env in
-              typ <| base_of +++ value_of |> t_erroru name @: not_value typ 
+              typ <| base_of +++ value_of |> t_erroru name @: not_value typ
           with Not_found -> t_erroru name (TMsg("Trigger "^id^" not found")) () end
   in canonical constant_type
 
@@ -314,7 +314,7 @@ let rec deduce_expr_type ?(override=true) trig_env cur_env utexpr =
             let t_c, t_e = t <| collection_of +++ base_of |>
                 t_erroru name @: not_collection_vt t in
             let t0 = bind 0 in
-            let t_ne = t0 <| value_of |> t_erroru name @: not_value t0 
+            let t_ne = t0 <| value_of |> t_erroru name @: not_value t0
             in TValue(canonical (TCollection(t_c, contained_of t_ne)))
         | Combine ->
             let name = "Combine" in
@@ -417,7 +417,7 @@ let rec deduce_expr_type ?(override=true) trig_env cur_env utexpr =
         | Lambda(t_a) ->
             let name = "Lambda" in
             let t0 = bind 0 in
-            let t_r = t0 <| value_of |> t_erroru name @: not_value t0 
+            let t_r = t0 <| value_of |> t_erroru name @: not_value t0
             in TFunction(H.value_type_of_arg t_a, t_r)
 
         | Apply ->
@@ -656,7 +656,7 @@ let rec deduce_expr_type ?(override=true) trig_env cur_env utexpr =
                 | TTarget t_arg -> t_arg
                 | _             -> t_erroru name (BTBad(t_target, "not a target")) ()
             end in
-            match t_address with 
+            match t_address with
             | TAddress ->
                 let expected = canonical t_target_args in
                 if expected === t_args then TValue(canonical TUnit)

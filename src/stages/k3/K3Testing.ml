@@ -202,8 +202,8 @@ let test_program globals_k3 interpret_fn file_name test =
   let tdecl_prog, t_env, trig_env, _ = type_bindings_of_program prog_globals in
   let test_cases = list_map (fun (i, (lexp, rexp)) ->
       let name = file_name^"_"^soi i in
-      let v1 = sort_values @: eval_test_expr_env tdecl_prog t_env trig_env v_env lexp in
-      let v2 = sort_values @: eval_test_expr [] @: check_as_expr rexp in
+      let v1 = eval_test_expr_env tdecl_prog t_env trig_env v_env lexp in
+      let v2 = eval_test_expr [] @: check_as_expr rexp in
       case name @: v1 @=? v2
     ) numbered_tests
   in print_tests test_cases

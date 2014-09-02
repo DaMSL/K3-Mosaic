@@ -102,9 +102,6 @@ and eval_expr (address:address) sched_st cenv texpr =
       in renv, List.map value_of_eval revals
     in
 
-    (* removes only one instance *)
-    let remove_from_collection v l = list_remove v l in
-
     (* TODO: byte and string types for binary and comparison operations *)
     let eval_binop bool_op int_op float_op =
       let error = int_erroru uuid "eval_binop" in
@@ -156,7 +153,7 @@ and eval_expr (address:address) sched_st cenv texpr =
             | TSet           -> VSet(ISet.empty)
             | TBag           -> VBag(IBag.empty)
             | TList          -> VList(IList.empty)
-            | TMap           -> VMap(IMap.empty)
+            | TMap           -> VMap(ValueMap.empty)
             | TMultimap idxs -> VMultimap(ValueMMap.init idxs)
         )
 
@@ -176,8 +173,8 @@ and eval_expr (address:address) sched_st cenv texpr =
             | VList v1, VList v2         -> VList(IList.combine v1 v2)
             | VSet v1,  VSet v2          -> VSet(ISet.combine v1 v2)
             | VBag v1,  VBag v2          -> VBag(IBag.combine v1 v2)
-            | VMap v1,  VMap v2          -> VMap(IMap.combine v1 v2)
-            | VMultimap v1, VMultimap v2 -> VMultimap(IMultiMap.combine v1 v2)
+            | VMap v1,  VMap v2          -> VMap(ValueMap.combine v1 v2)
+            | VMultimap v1, VMultimap v2 -> VMultimap(ValueMMap.combine v1 v2)
             | _ -> error name "mismatching or non-collections"
             end)
           | _      -> error name "missing sub-components"
@@ -246,24 +243,21 @@ and eval_expr (address:address) sched_st cenv texpr =
         let name = "Iterate" in
         begin match child_values cenv with
           | nenv, [f;c] ->
-              let vunit = VTemp VUnit in
               let f' = eval_fn f address sched_st in
-              (* This folder is much simpler since we can ignore the output
-                except for the environment *)
-              let folder env x = fst @: f' env x in
-              v_fold error folder nenv c, vunit
+              v_fold error (fun env x -> fst @: f' env x) nenv c, VTemp VUnit
           | _ -> error name "bad format"
         end
 
     | IfThenElse ->
         let name = "IfThenElse" in
         let penv, pred = child_value cenv 0 in
-        match pred with
+        begin match pred with
         | VBool true  ->
             eval_expr address sched_st penv @: List.nth children 1
         | VBool false ->
             eval_expr address sched_st penv @: List.nth children 2
         | _ -> error name "non-boolean predicate"
+        end
 
     (* Collection transformers *)
 
@@ -271,12 +265,12 @@ and eval_expr (address:address) sched_st cenv texpr =
     | Map ->
         let name = "Map" in
         begin match child_values cenv with
-          | nenv, [f; c] ->
+          | nenv, [f; col] ->
             let f' = eval_fn f address sched_st in
-            let zero = v_empty error ~no_multimap c in
-            let env, c' = v_fold (fun (env, acc) x ->
+            let zero = v_empty error ~no_multimap:true col in
+            let env, c' = v_fold error (fun (env, acc) x ->
               let env', y = f' env x in
-              env', v_insert (value_of_eval y) acc
+              env', v_insert error (value_of_eval y) acc
             ) (nenv, zero) col
             in
             env, VTemp c'
@@ -286,16 +280,16 @@ and eval_expr (address:address) sched_st cenv texpr =
     | Filter ->
         let name = "Filter" in
         begin match child_values cenv with
-          | nenv, [p; c] ->
+          | nenv, [p; col] ->
             let p' = eval_fn p address sched_st in
-            let zero = v_empty error c in
-            let env, c' = v_fold (fun (env, acc) x ->
+            let zero = v_empty error col in
+            let env, c' = v_fold error (fun (env, acc) x ->
               let env', filter = p' env x in
               match value_of_eval filter with
-              | VBool true  -> env', v_insert x acc
+              | VBool true  -> env', v_insert error x acc
               | VBool false -> env', acc
               | _           -> error name "non boolean predicate"
-            ) (nenv, zero) cl
+            ) (nenv, zero) col
             in
             env, VTemp c'
           | _ -> error name "bad format"
@@ -305,7 +299,7 @@ and eval_expr (address:address) sched_st cenv texpr =
         let name = "Flatten" in
         let nenv, c = child_value cenv 0 in
         let zero = match v_peek error c with
-          | VOption(Some(m)) -> v_empty m
+          | Some m -> v_empty error m
           | _ -> error name "No inner collection"
         in
         let new_col = v_fold error (fun acc x -> v_combine error x acc) zero c in
@@ -327,29 +321,29 @@ and eval_expr (address:address) sched_st cenv texpr =
 
     | GroupByAggregate ->
         begin match child_values cenv with
-          | nenv, [g; f; zero; c] ->
+          | nenv, [g; f; zero; col] ->
             let g' = eval_fn g address sched_st in
             let f' = eval_fn f address sched_st in
             (* result type *)
-            let empty = v_empty error ~no_multimap c in
+            let empty = v_empty error ~no_multimap:true col in
 
             (* use hashtable for maximum performance *)
             let r_env = ref nenv in
             let h = Hashtbl.create 100 in
-            (* common to both cases below *)
-            let apply_and_update acc =
-              let env', acc' = f' env @: VTuple[acc; x] in
-              Hashtbl.replace h key acc';
-              r_env := env'
-            in
             v_iter error (fun x ->
-                let env, key = g' !r_env x in
+                let env, key = second value_of_eval @: g' !r_env x in
+                (* common to both cases below *)
+                let apply_and_update acc =
+                  let env', acc' = f' env @: VTuple[acc; x] in
+                  Hashtbl.replace h key @: value_of_eval acc';
+                  r_env := env'
+                in
                 try
                   let acc = Hashtbl.find h key in
                   apply_and_update acc
                 with Not_found ->
                   apply_and_update zero
-              ) c;
+              ) col;
             (* insert into result collection *)
             !r_env, VTemp(Hashtbl.fold (fun k v acc ->
                 v_insert error (VTuple [k;v]) acc
@@ -386,13 +380,13 @@ and eval_expr (address:address) sched_st cenv texpr =
 
     | SliceIdx idx ->
       begin match child_values cenv with
-        | renv, [comps; c; pat] -> renv, VTemp(v_slice_idx error comps pat c)
+        | renv, [comps; c; pat] -> renv, VTemp(v_slice_idx error idx comps pat c)
         | _       -> error "SliceIdx" "bad values"
       end
 
     | Peek ->
       let renv, c = child_value cenv 0 in
-      renv, VTemp(v_peek error c)
+      renv, VTemp(VOption(v_peek error c))
 
     | Insert ->
         begin match threaded_eval address sched_st cenv children with

@@ -101,7 +101,7 @@ let rec list_last xs = match xs with
   | [x]   -> x
   | _::xs -> list_last xs
 
-let replicate n x = 
+let replicate n x =
   let rec loop n acc = match n with
     | 0 -> acc
     | _ -> loop (n-1) (x::acc)
@@ -140,7 +140,7 @@ let list_filter_idxs idx l =
     List.fold_right (fun x (i, acc) ->
       if IntSet.mem i idx then (i+1, x::acc)
       else (i+1, acc)
-    ) (0, []) l
+    ) l (0, [])
 
 (* I/O helpers *)
 (* read a file and convert it into lines *)
@@ -360,6 +360,10 @@ let is_some = function None -> false | Some _ -> true
 
 (* unwrap a some. Fail if not a Some *)
 let unwrap_some = function None -> failwith "Not a Some" | Some x -> x
+
+let maybe def f = function None -> def | Some x -> f x
+
+let maybe_f def f = function None -> def () | Some x -> f x
 
 (* flatten a list of maybes into a list *)
 let flatten_some l = List.rev @:
