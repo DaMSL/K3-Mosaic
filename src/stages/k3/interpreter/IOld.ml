@@ -4,6 +4,27 @@ open K3.AST
 
 (* ------ Multimap functions ------ *)
 
+module type S = sig
+  type elt
+  type row = elt list
+  type t
+  val init : index_t list -> t
+  val from_mmap : t -> t
+  val singleton : index_t list -> row -> t
+  val is_empty : t -> bool
+  val insert : row -> t -> t
+  val delete : row -> t -> t
+  val slice : IntSet.t list -> int list -> t -> row IBag.t
+  val combine : t -> t -> t
+  val fold : ('a -> row -> 'a) -> 'a -> t -> 'a
+  val map : (row -> 'a) -> t -> 'a IBag.t
+  val iter : (row -> unit) -> t -> unit
+  val filter : (row -> bool) -> t -> t
+  val update : row -> row -> t -> t
+  val peek : t -> row option
+  val to_list : t -> row list
+end
+
 module Make(Ord: NearMap.OrderedType) = struct
 
   module OrdList = struct
@@ -13,27 +34,29 @@ module Make(Ord: NearMap.OrderedType) = struct
 
   module InnerMap = NearMap.Make(OrdList)
 
-  type key = Ord.t list
+  type elt = Ord.t
 
-  type 'a vindex_t = index_t * 'a InnerMap.t
+  type row = elt list
+
+  type vindex_t = index_t * content InnerMap.t
 
   (* top level type *)
-  type 'a t = 'a content vindex_t list
+  and t = vindex_t list
 
-  and  'a content = CMap of 'a t | CBag of 'a IBag.t
+  and content = CMap of t | CBag of row IBag.t
 
-  let init (idxs : index_t list) = List.map (fun idx -> idx, InnerMap.empty) idxs
+  let init idxs = List.map (fun idx -> idx, InnerMap.empty) idxs
 
-  let from_mmap (m : 'a t) = List.map (fun (idx, _) -> idx, InnerMap.empty) m
+  let from_mmap m = List.map (fun (idx, _) -> idx, InnerMap.empty) m
 
   let singleton idxs x =
     let m = init idxs in
     insert x m
 
-  let is_empty (mm: 'a t) = List.for_all (fun (_, map) -> InnerMap.is_empty map) mm
+  let is_empty mm = List.for_all (fun (_, map) -> InnerMap.is_empty map) mm
 
   (* insert a value (list representing tuple) into a multimap *)
-  let rec insert xs (mm: 'a t) =
+  let rec insert xs mm =
   List.map (fun (idx, map) -> idx,
     let key = list_filter_idxs idx.mm_indices xs in
     try begin
@@ -50,7 +73,7 @@ module Make(Ord: NearMap.OrderedType) = struct
           InnerMap.add key (CMap(insert xs v)) map
   ) mm
 
-  let rec delete xs (mm:'a t) =
+  let rec delete xs mm =
     List.map (fun (idx, map) -> idx,
       let key = list_filter_idxs idx.mm_indices xs in
       try begin
@@ -95,7 +118,7 @@ module Make(Ord: NearMap.OrderedType) = struct
     | [], _       -> error @: "no index provided"
     | _, []       -> error @: "no comps provided"
 
-  let rec combine (l:'a t) (r:'a t) =
+  let rec combine l r =
     List.map2 (fun (idx, map) (idx', map') -> idx,
       InnerMap.merge
         (fun key v v' -> match v, v' with
@@ -107,7 +130,7 @@ module Make(Ord: NearMap.OrderedType) = struct
         map map'
     ) l r
 
-  let rec fold f zero (mm:'a t) =
+  let rec fold f zero mm =
     let error x = failwith @: "(fold): "^x in
     match mm with
     (* doesn't matter which index we take *)
@@ -118,10 +141,10 @@ module Make(Ord: NearMap.OrderedType) = struct
       ) map zero
     | [] -> error @: "malformed map"
 
-  let map f (mm:'a t) =
+  let map f mm =
     fold (fun acc x -> IBag.insert (f x) acc) IBag.empty mm
 
-  let rec iter f (mm:'a t) =
+  let rec iter f mm =
     match mm with
     (* doesn't matter which index we take *)
     | ((_,map)::_) ->
@@ -132,27 +155,27 @@ module Make(Ord: NearMap.OrderedType) = struct
     | [] -> failwith @: "(iter): malformed map"
 
   (* very hard to implement filter efficiently *)
-  let rec filter f (mm : 'a t) =
+  let rec filter f mm =
     fold (fun acc x ->
         if f x then insert x acc
         else acc) (from_mmap mm) mm
 
-  let update old_val new_val (mm : 'a t) =
+  let update old_val new_val mm =
     let mm' = delete old_val mm in
     insert new_val mm'
 
-  let rec peek (mm : 'a t) =
+  let rec peek mm =
     let error x = failwith @: "(peek): "^x in
     match mm with
     (* doesn't matter which index we take *)
     | ((_, map)::_) ->
       begin try
         match snd @: InnerMap.choose map with
-        | CMap (m:'a t) -> peek m
-        | CBag b        -> IBag.peek b
+        | CMap m -> peek m
+        | CBag b -> IBag.peek b
       with Not_found -> None end
     | [] -> error @: "malformed multimap"
 
-  let to_list (mm : 'a t) = fold (fun acc x -> x::acc) [] mm
+  let to_list mm = fold (fun acc x -> x::acc) [] mm
 
 end

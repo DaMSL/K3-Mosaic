@@ -1,5 +1,4 @@
 open Util
-open K3Values
 
 (* ----- Set functions ----- *)
 

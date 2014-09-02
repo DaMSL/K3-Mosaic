@@ -34,7 +34,7 @@ module rec ValueMap : NearMap.S with type key = Value.value_t =
   NearMap.Make(
     struct type t = Value.value_t let compare = compare end)
 
-module rec ValueMMap : IMultimap.S with type key = Value.value_t list =
+and ValueMMap : IMultimap.S with type key = Value.value_t list =
   IMultimap.Make(
     struct type t = Value.value_t let compare = compare end)
 
@@ -64,7 +64,7 @@ and Value : sig
       | VBag of IBag.t
       | VList of IList.t
       | VMap of value_t ValueMap.t
-      | VMultimap of value_t ValueMMap.t
+      | VMultimap of ValueMMap.t
       | VFunction of arg_t * expr_t
       | VForeignFunction of arg_t * foreign_func_t
       | VAddress of address
@@ -126,10 +126,10 @@ let tag = function
 	| VTarget _          -> "VTarget"
   | VIndirect _        -> "VIndirect"
 
-let rec repr_of_value v = 
+let rec repr_of_value v =
   let s_of_col m = String.concat "; " @: List.map repr_of_value @: v_to_list m in
   let paren s = Printf.sprintf "(%s)" s in
-  tag v ^ 
+  tag v ^
   match v with
 	| VBool b                 -> paren @: string_of_bool b
 	| VInt i                  -> paren @: string_of_int i
@@ -417,8 +417,11 @@ let v_empty_of_t = function
   | _ -> err_fn "v_empty" "not a collection" ()
 
 (* sort only applies to list *)
-let v_sort err_fn f = function
-  | VList m     -> VList(IList.sort f m)
+let v_sort err_fn f c =
+  match c with
+  | VList m -> VList(IList.sort (fun x y -> match f (VTuple[x;y]) with
+                                            | VBool true  -> 1
+                                            | VBool false -> -1) m)
   | _ -> err_fn "v_sort" "not a list"
 
 let v_singleton err_fn elem c =
@@ -455,9 +458,9 @@ let v_slice err_fn pat = function
 let v_slice_idx err_fn comps pat c = match c, comps, pat with
   | VMultimap mm, VTuple comps', VTuple pat' ->
       let comps'' = List.map (function
-          | -1 -> `LT
-          | 0 -> `EQ
-          | 1 -> `GT
+          | VInt (-1) -> `LT
+          | VInt 0    -> `EQ
+          | VInt 1    -> `GT
           | x -> err_fn "v_slice_idx" @: "not a valid comparison value: "^soi x) comps'
       in
       VBag(ValueMMap.slice_idx idx comps'' pat' mm)
@@ -468,7 +471,7 @@ let v_iter2 err_fn f xs ys = match xs, ys with
   | VSet xs, VSet ys -> ISet.iter2 f xs ys
   | VBag xs, VBag ys -> IBag.iter2 f xs ys
   | VMap xs, VMap ys -> IMap.iter2 (fun k v v' -> f (VTuple[k;v]) (VTuple[k;v'])) xs ys
-  | VMultimap xs, VMultimap ys -> IMultimap.iter2 f xs ys
+  | VMultimap xs, VMultimap ys -> IMultimap.iter2 (fun x y -> f (VTuple x) (VTuple y)) xs ys
   | _ -> err_fn "v_iter2" "mismatching or no collections"
 
 (* Value comparison. *)

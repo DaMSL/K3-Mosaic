@@ -157,7 +157,7 @@ and eval_expr (address:address) sched_st cenv texpr =
             | TBag           -> VBag(IBag.empty)
             | TList          -> VList(IList.empty)
             | TMap           -> VMap(IMap.empty)
-            | TMultimap idxs -> IMultimap.init idxs
+            | TMultimap idxs -> VMultimap(ValueMMap.init idxs)
         )
 
     | Singleton ct ->
@@ -170,7 +170,7 @@ and eval_expr (address:address) sched_st cenv texpr =
 
     | Combine ->
         let name = "Combine" in
-        begin match child_values c_env with
+        begin match child_values cenv with
           | nenv, [left; right] -> nenv, VTemp(
             begin match left, right with
             | VList v1, VList v2         -> VList(IList.combine v1 v2)
@@ -384,7 +384,7 @@ and eval_expr (address:address) sched_st cenv texpr =
         | _       -> error "Slice" "bad values"
       end
 
-    | SliceIdx idx -> 
+    | SliceIdx idx ->
       begin match child_values cenv with
         | renv, [comps; c; pat] -> renv, VTemp(v_slice_idx error comps pat c)
         | _       -> error "SliceIdx" "bad values"
