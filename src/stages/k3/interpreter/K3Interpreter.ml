@@ -302,7 +302,7 @@ and eval_expr (address:address) sched_st cenv texpr =
           (* the container is empty, so we must use the types *)
           | _ -> let t = type_of_expr texpr in
                  let _, (tcol, _)  = unwrap_tcol t in
-                 v_empty_of_t tcol 
+                 v_empty_of_t tcol
         in
         let new_col = v_fold error (fun acc x -> v_combine error x acc) zero c in
         nenv, VTemp new_col
@@ -591,16 +591,16 @@ let consume_sources sched_st env address (res_env, d_env) (ri_env, instrs) =
 
 (* Program interpretation *)
 let interpreter_event_loop role_opt k3_program =
-  let error () =
-    int_error "interpreter_event_loop" "No role found for K3 program" in
+  let error s =
+    int_error "interpreter_event_loop" s in
  let roles, default_role = extended_roles_of_program k3_program in
   let get_role role fail_f = try List.assoc role roles with Not_found ->
-    fail_f ()
+    fail_f @: "No role "^role^" found in k3 program"
   in match role_opt, default_role with
-   | Some x, Some (_,y) -> get_role x (fun () -> y)
+   | Some x, Some (_,y) -> get_role x (fun _ -> y)
    | Some x, None       -> get_role x error
    | None, Some (_,y)   -> y
-   | None, None         -> error ()
+   | None, None         -> error "No roles specified or found for K3 program"
 
 (* returns address, (event_loop_t, environment) *)
 let initialize_peer sched_st address role_opt k3_program =

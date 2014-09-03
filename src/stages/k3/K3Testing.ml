@@ -60,8 +60,9 @@ let ensure assertion = match assertion with
   | AssertValueEquals(expected, actual) ->
       match find_inequality expected actual with
       | [] -> true, "PASSED"
-      | xs -> false, "FAILED: Expected " ^ string_of_value ~mark_points:xs expected ^ ",\n\n but got " ^
-        string_of_value ~mark_points:xs actual ^ "."
+      | xs -> false, Printf.sprintf "FAILED: Expected %s, but got %s."
+                (string_of_value ~mark_points:xs expected) 
+                (string_of_value ~mark_points:xs actual)
 
 let run_tests ?(indent="") test =
   let rec loop indent test =

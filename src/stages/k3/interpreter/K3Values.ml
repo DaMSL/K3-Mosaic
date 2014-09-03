@@ -384,19 +384,19 @@ let v_iter2 err_fn f xs ys = match xs, ys with
 
 (* Value comparison. *)
 let equal_values ?(neq=false) a b =
-  let res = ref true in
-  let dummy_err _ _ = res := false in
+  let equal = ref true in
+  let dummy_err _ _ = equal := false in
   let rec check2 left right = match left, right with
     | (VList _ | VSet _ | VBag _ | VMap _ | VMultimap _), _->
         (try v_iter2 dummy_err check2 left right
-        with Invalid_argument _ -> res := false)
+        with Invalid_argument _ -> equal := false)
     | VFloat x, VFloat y ->
       let e = 0.0001 in
-      if abs_float(x -. y) > e then res := false
-    | x, y -> if x != y then res := false
+      if abs_float(x -. y) > e then equal := false
+    | x, y -> if x <> y then equal := false
   in
   check2 a b;
-  if neq then not !res else !res
+  if neq then not !equal else !equal
 
 (* Value comparison. Returns a partial list of inequality positions if there are any *)
 let find_inequality a b =
