@@ -92,6 +92,10 @@ val unwrap_col : base_type_t -> container_type_t * value_type_t
 
 val unwrap_vcol : value_type_t -> bool * (container_type_t * value_type_t)
 
+val unwrap_tval : type_t -> value_type_t
+
+val unwrap_tcol : type_t -> bool * (container_type_t * value_type_t)
+
 (* unwrap a tuple type and return its list. If not a ttuple, return as singleton *)
 val unwrap_ttuple : value_type_t -> value_type_t list
 

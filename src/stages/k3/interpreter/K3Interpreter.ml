@@ -296,11 +296,13 @@ and eval_expr (address:address) sched_st cenv texpr =
         end
 
     | Flatten ->
-        let name = "Flatten" in
         let nenv, c = child_value cenv 0 in
         let zero = match v_peek error c with
           | Some m -> v_empty error m
-          | _ -> error name "No inner collection"
+          (* the container is empty, so we must use the types *)
+          | _ -> let t = type_of_expr texpr in
+                 let _, (tcol, _)  = unwrap_tcol t in
+                 v_empty_of_t tcol 
         in
         let new_col = v_fold error (fun acc x -> v_combine error x acc) zero c in
         nenv, VTemp new_col

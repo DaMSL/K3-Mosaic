@@ -155,11 +155,15 @@ let unwrap_vtype = function
 
 let unwrap_col = function
   | TCollection(t_c, t_e) -> t_c, t_e
-  | _ -> failwith "Not a collection"
+  | t -> failwith @: "Not a collection: "^K3Printing.flat_string_of_base_type t
 
 let unwrap_vcol t =
   let mut, t = unwrap_vtype t in
   mut, unwrap_col t
+
+let unwrap_tval = function TValue v -> v | _ -> failwith "not a value"
+
+let unwrap_tcol t = unwrap_vcol @: unwrap_tval t
 
 (* unwrap a tuple type and return its list. If not a ttuple, return as singleton *)
 let unwrap_ttuple vt = match snd @: unwrap_vtype vt with
