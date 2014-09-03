@@ -390,7 +390,7 @@ and eval_expr (address:address) sched_st cenv texpr =
       renv, VTemp(match v_peek error c with
                   | None   -> error "Peek" "peek on an empty value"
                   | Some x -> x)
-            
+
 
     | Insert ->
         begin match threaded_eval address sched_st cenv children with

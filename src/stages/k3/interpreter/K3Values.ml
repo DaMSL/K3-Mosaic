@@ -413,7 +413,7 @@ let find_inequality a b =
     | VFloat x, VFloat y ->
       let e = 0.0001 in
       if abs_float(x -. y) > e then add_cur ()
-    | x, y -> if x != y then add_cur ()
+    | x, y -> if x <> y then add_cur ()
   in
   check2 a b;
   nub @: !res
