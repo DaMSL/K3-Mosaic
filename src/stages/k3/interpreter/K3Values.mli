@@ -19,9 +19,8 @@ and Value : sig
   type eval_t = VDeclared of value_t ref | VTemp of value_t
   and foreign_func_t = env_t -> env_t * eval_t
   (* arguments to a function/trigger *)
-  and frame_t = (id_t * value_t) list
   (* an env_t is global values and frames (functional environment) *)
-  and env_t = (value_t ref) IdMap.t * (frame_t list)
+  and env_t = (value_t ref) IdMap.t * value_t list IdMap.t
   and value_t
       = VUnknown
       | VUnit

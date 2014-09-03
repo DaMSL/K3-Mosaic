@@ -34,55 +34,64 @@ let int_error = int_erroru (-1)
 (* Environment helpers *)
 
 let lookup id (mutable_env, frame_env) =
-  let rec match_in_frames frame_env =
-    match frame_env with
-    | [] -> raise Not_found
-    | h :: t ->
-        try List.assoc id h
-        with Not_found -> match_in_frames t
-  in
-  try VTemp(match_in_frames frame_env)
-  with Not_found -> VDeclared(IdMap.find id mutable_env)
-
+  try
+    VTemp(hd @: IdMap.find id frame_env)
+  with Not_found ->
+    VDeclared(IdMap.find id mutable_env)
 
 (* Expression interpretation *)
 
 let value_of_eval ev = match ev with VDeclared v_ref -> !v_ref | VTemp v -> v
 
+let env_add i v env =
+    try
+      let vs = IdMap.find i env in
+      IdMap.add i (v::vs) env
+    with Not_found -> IdMap.add i [v] env
+
+let env_remove i env =
+  try match IdMap.find i env with
+    | [v]   -> IdMap.remove i env
+    | _::vs -> IdMap.add i vs env
+    | []    -> failwith @: "unexpectedly can't find id "^i^" in env"
+  with Not_found -> env
+
 (* Given an arg_t and a value_t, bind the values to their corresponding argument names. *)
-let rec bind_args uuid a v =
+let rec bind_args uuid arg v env =
   let error = int_erroru uuid "bind_args" in
-  match a with
-  | AIgnored -> []
-  | AVar(i, _) -> [(i, v)]
-  | AMaybe(a') -> (
-      match v with
-      | VOption(Some v') -> bind_args uuid a' v'
-      | VOption(None) ->
-          error "bind_args: missing VOption value"
-      | _ -> error "bind_args: improper maybe value"
-  )
-  | ATuple(args) -> (
-      match v with
-      | VTuple(vs) -> List.concat (List.map2 (bind_args uuid) args vs)
-      | _ -> error "bind_args: bad tuple value"
-  )
+  match arg, v with
+  | AIgnored, _                 -> env
+  | AVar(i, _), _               -> env_add i v env
+  | AMaybe a', VOption(Some v') -> bind_args uuid a' v' env
+  | AMaybe _,  VOption None     -> error "missing VOption value"
+  | AMaybe _, _                 -> error "improper maybe value"
+  | ATuple args, VTuple vs      -> list_fold2 (fun acc a v ->
+                                     bind_args uuid a v acc) env args vs
+  | ATuple _, _                 -> error "bad tuple value"
+
+let rec unbind_args uuid arg env =
+  let error = int_erroru uuid "unbind_args" in
+  match arg with
+  | AIgnored    -> env
+  | AVar(i, _)  -> env_remove i env
+  | AMaybe a    -> unbind_args uuid a env
+  | ATuple args -> List.fold_left (fun acc a ->
+                     unbind_args uuid a acc) env args
 
 let rec eval_fun uuid f =
   let error = int_erroru uuid "eval_fun" in
-  let strip_frame (m_env, f_env) = m_env, List.tl f_env in
   match f with
     | VFunction(arg, body) ->
         fun address sched_st (m_env, f_env) a ->
-            let new_env = m_env, (bind_args uuid arg a :: f_env) in
-            let renv, result = eval_expr address sched_st new_env body in
-            (strip_frame renv, result)
+          let new_env = m_env, bind_args uuid arg a f_env in
+          let (m_env', f_env'), result = eval_expr address sched_st new_env body in
+          (m_env', unbind_args uuid arg f_env'), result
 
     | VForeignFunction(arg, f) ->
         fun _ _ (m_env, f_env) a ->
-            let new_env = m_env, (bind_args uuid arg a :: f_env) in
-            let renv, result = f new_env in
-            (strip_frame renv, result)
+          let new_env = m_env, (bind_args uuid arg a f_env) in
+          let (m_env', f_env'), result = f new_env in
+          (m_env', unbind_args uuid arg f_env'), result
 
    | _ -> error "eval_fun: Non-function value"
 
@@ -555,14 +564,14 @@ let env_of_program ?address sched_st k3_program =
         in
         trig_env, ((IdMap.add id (ref init_val) rm_env), rf_env)
 
-    | Foreign (id,t) -> trig_env, (m_env, [id, dispatch_foreign id]::f_env)
+    | Foreign (id,t) -> trig_env, (m_env, env_add id (dispatch_foreign id) f_env)
 
     | Flow fp -> prepare_sinks sched_st env fp
 
     | _ -> env
   in
   (* triggers, (variables, arg frames) *)
-  let init_env = IdMap.empty, (IdMap.empty,[]) in
+  let init_env = IdMap.empty, (IdMap.empty, IdMap.empty) in
   List.fold_left env_of_declaration init_env k3_program
 
 

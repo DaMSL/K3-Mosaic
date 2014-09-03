@@ -104,7 +104,7 @@ let test_expressions file_name = function
 let env_deref_refs env = List.rev_map (fun (id, v) -> (id, !v)) env
 
 let extract_first_env = function
-  | (addr, (_, (env, _)))::_ -> (env, [])
+  | (addr, (_, (env, _)))::_ -> (env, IdMap.empty)
   | [] -> invalid_arg "no environment"
 
 let unify_tuple_lists id l1 l2 =
@@ -167,7 +167,7 @@ let unify_envs (envs : (address * program_env_t) list) =
       ) acc m_env
     ) IdMap.empty envs
   in
-  (unified_env, []) (* no frames *)
+  (unified_env, IdMap.empty) (* no frames *)
 
 (* test a program and comare it to the expected output. Takes an interpretation
  * function that expects an untyped AST (this takes care of handling any extra

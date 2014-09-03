@@ -16,13 +16,13 @@ type entry_t = type_t * arg_t * foreign_func_t
 let (func_table : ((id_t, entry_t) Hashtbl.t)) = Hashtbl.create 10
 
 (* retreive arguments from environment *)
-let arg_of_env e = List.hd @: snd e
+let arg_of_env id (_,e) = hd @: IdMap.find id e
 
 (* ------- Hashing Functions ------- *)
 (* hash_float *)
 let hash_float_fn e =
-  match arg_of_env e with
-   | [_,VFloat f] -> e, int_temp @: Hashtbl.hash f
+  match arg_of_env "f" e with
+   | VFloat f -> e, int_temp @: Hashtbl.hash f
    | _ -> invalid_arg "hash_float"
 
 let hash_float_name = "hash_float"
@@ -33,8 +33,8 @@ let _ = Hashtbl.add
 
 (* hash_int *)
 let hash_int_fn e =
-  match arg_of_env e with
-  | [_,VInt i] -> e, int_temp @: Hashtbl.hash i
+  match arg_of_env "i" e with
+  | VInt i -> e, int_temp @: Hashtbl.hash i
   | _ -> invalid_arg "hash_int"
 
 let hash_int_name = "hash_int"
@@ -45,8 +45,8 @@ let _ = Hashtbl.add func_table
 
 (* hash_date -- implemented as int *)
 let hash_date_fn e =
-  match arg_of_env e with
-  | [_,VInt i] -> e, int_temp @: Hashtbl.hash i
+  match arg_of_env "d" e with
+  | VInt i -> e, int_temp @: Hashtbl.hash i
   | _ -> invalid_arg "hash_date"
 
 let f_name = "hash_date"
@@ -57,8 +57,8 @@ let _ = Hashtbl.add func_table
 
 (* hash_byte *)
 let hash_byte_fn e =
-  match arg_of_env e with
-  | [_,VByte b] -> e, int_temp @: Hashtbl.hash b
+  match arg_of_env "b" e with
+  | VByte b -> e, int_temp @: Hashtbl.hash b
   | _ -> invalid_arg "hash_byte"
 
 let hash_byte_name = "hash_byte"
@@ -69,8 +69,8 @@ let _ = Hashtbl.add func_table
 
 (* hash_string *)
 let hash_string_fn e =
-  match arg_of_env e with
-  | [_,VString s] -> e, int_temp @: Hashtbl.hash s
+  match arg_of_env "s" e with
+  | VString s -> e, int_temp @: Hashtbl.hash s
   | _ -> invalid_arg "hash_string"
 
 let hash_string_name = "hash_string"
@@ -81,8 +81,8 @@ let _ = Hashtbl.add func_table
 
 (* hash_addr *)
 let hash_addr_fn e =
-  match arg_of_env e with
-  | [_,VAddress a] -> e, int_temp @: Hashtbl.hash a
+  match arg_of_env "addr" e with
+  | VAddress a -> e, int_temp @: Hashtbl.hash a
   | _ -> invalid_arg "hash_addr"
 
 let hash_addr_name = "hash_addr"
@@ -95,8 +95,8 @@ let _ = Hashtbl.add func_table
 (* ------------ Math functions ------------- *)
 (* float division *)
 let divf_fn e =
-  match arg_of_env e with
-  | [_,VFloat x;_,VFloat y] -> e, float_temp @: x /. y
+  match arg_of_env "x" e, arg_of_env "y" e with
+  | VFloat x, VFloat y -> e, float_temp @: x /. y
   | _ -> invalid_arg "divf"
 
 let divf_name = "divf"
@@ -106,8 +106,8 @@ let _ = Hashtbl.add func_table divf_name (divf_decl, divf_args, divf_fn)
 
 (* int (truncated) division *)
 let divi_fn e =
-  match arg_of_env e with
-  | [_,VInt x;_,VInt y] -> e, int_temp @: x / y
+  match arg_of_env "x" e, arg_of_env "y" e with
+  | VInt x, VInt y -> e, int_temp @: x / y
   | _ -> invalid_arg "divi"
 
 let divi_name = "divi"
@@ -118,8 +118,8 @@ let _ = Hashtbl.add func_table
 
 (* mod *)
 let mod_fn e =
-  match arg_of_env e with
-  | [_,VInt x;_,VInt y] -> e, int_temp @: x mod y
+  match arg_of_env "x" e, arg_of_env "y" e with
+  | VInt x, VInt y -> e, int_temp @: x mod y
   | _ -> invalid_arg "mod"
 
 let mod_name = "mod"
@@ -146,8 +146,8 @@ let _ = Hashtbl.add func_table
 
 (* float_of_int *)
 let float_of_int_fn e =
-  match arg_of_env e with
-  | [_,VInt x] -> e, float_temp @: float_of_int x
+  match arg_of_env "i" e with
+  | VInt x -> e, float_temp @: float_of_int x
   | _ -> invalid_arg "float_of_int_fn"
 
 let float_of_int_name = "float_of_int"
@@ -158,8 +158,8 @@ let _ = Hashtbl.add func_table
 
 (* int_of_float *)
 let int_of_float_fn e =
-  match arg_of_env e with
-  | [_,VFloat x] -> e, int_temp @: int_of_float x
+  match arg_of_env "f" e with
+  | VFloat x -> e, int_temp @: int_of_float x
   | _ -> invalid_arg "int_of_float_fn"
 
 let int_of_float_name = "int_of_float"
@@ -170,8 +170,8 @@ let _ = Hashtbl.add func_table
 
 (* string_of_int *)
 let string_of_int_fn e =
-  match arg_of_env e with
-  | [_,VInt x] -> e, string_temp @: string_of_int x
+  match arg_of_env "i" e with
+  | VInt x -> e, string_temp @: string_of_int x
   | _ -> invalid_arg "string_of_int_fn"
 
 let string_of_int_name = "string_of_int"
@@ -182,8 +182,8 @@ let _ = Hashtbl.add func_table
 
 (* string_of_float *)
 let string_of_float_fn e =
-  match arg_of_env e with
-  | [_,VFloat x] -> e, string_temp @: string_of_float x
+  match arg_of_env "f" e with
+  | VFloat x -> e, string_temp @: string_of_float x
   | _ -> invalid_arg "string_of_float_fn"
 
 let string_of_float_name = "string_of_float"
@@ -194,8 +194,8 @@ let _ = Hashtbl.add func_table
 
 (* -------- print functions -------- *)
 let print_fn e =
-  match arg_of_env e with
-  | [_,VString s] -> print_string s; e, unit_temp
+  match arg_of_env "s" e with
+  | VString s -> print_string s; e, unit_temp
   | _ -> invalid_arg "print_fn"
 let print_name = "print"
 let print_decl = wrap_tfunc t_string t_unit
@@ -206,8 +206,8 @@ let _ = Hashtbl.add func_table
 
 (* parse SQL date format *)
 let fn e =
-  match arg_of_env e with
-  | [_,VString s] -> e, int_temp @: int_of_sql_date s
+  match arg_of_env "s" e with
+  | VString s -> e, int_temp @: int_of_sql_date s
   | _ -> invalid_arg "parse_sql_date"
 let name = "parse_sql_date"
 let decl = wrap_tfunc t_string t_int

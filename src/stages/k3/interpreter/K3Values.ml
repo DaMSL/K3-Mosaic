@@ -42,11 +42,8 @@ and Value : sig
 
   and foreign_func_t = env_t -> env_t * eval_t
 
-  (* arguments to a function/trigger *)
-  and frame_t = (id_t * value_t) list
-
   (* mutable environment, frame environment *)
-  and env_t = (value_t ref) IdMap.t * (frame_t list)
+  and env_t = (value_t ref) IdMap.t * value_t list IdMap.t
 
   and value_t
       = VUnknown
@@ -91,48 +88,48 @@ let v_to_list = function
   | _ -> failwith "(v_to_list): not a collection"
 
 let tag = function
-	| VUnknown           -> "VUnknown"
-	| VUnit              -> "VUnit"
-	| VBool _            -> "VBool"
-	| VInt _             -> "VInt"
-	| VFloat _           -> "VFloat"
-	| VByte _            -> "VByte"
-	| VString _          -> "VString"
-	| VTuple _           -> "VTuple"
-  | VOption _          -> "VOption"
-	| VSet _             -> "VSet"
-	| VBag _             -> "VBag"
-	| VList _            -> "VList"
-  | VMap _             -> "VMap"
-  | VMultimap _        -> "VMultimap"
-	| VFunction _        -> "VFunction"
-  | VForeignFunction _ -> "VForeignFunction"
-	| VAddress _         -> "VAddress"
-	| VTarget _          -> "VTarget"
-  | VIndirect _        -> "VIndirect"
+ | VUnknown           -> "VUnknown"
+ | VUnit              -> "VUnit"
+ | VBool _            -> "VBool"
+ | VInt _             -> "VInt"
+ | VFloat _           -> "VFloat"
+ | VByte _            -> "VByte"
+ | VString _          -> "VString"
+ | VTuple _           -> "VTuple"
+ | VOption _          -> "VOption"
+ | VSet _             -> "VSet"
+ | VBag _             -> "VBag"
+ | VList _            -> "VList"
+ | VMap _             -> "VMap"
+ | VMultimap _        -> "VMultimap"
+ | VFunction _        -> "VFunction"
+ | VForeignFunction _ -> "VForeignFunction"
+ | VAddress _         -> "VAddress"
+ | VTarget _          -> "VTarget"
+ | VIndirect _        -> "VIndirect"
 
 let rec repr_of_value v =
   let s_of_col m = String.concat "; " @: List.map repr_of_value @: v_to_list m in
   let paren s = Printf.sprintf "(%s)" s in
   tag v ^
   match v with
-	| VBool b                 -> paren @: string_of_bool b
-	| VInt i                  -> paren @: string_of_int i
-	| VFloat f                -> paren @: string_of_float f
-	| VByte c                 -> paren @: string_of_int (Char.code c)
-	| VString s               -> paren s
-	| VTuple vs               -> paren @: String.concat ", " @: List.map repr_of_value vs
+  | VBool b                 -> paren @: string_of_bool b
+  | VInt i                  -> paren @: string_of_int i
+  | VFloat f                -> paren @: string_of_float f
+  | VByte c                 -> paren @: string_of_int (Char.code c)
+  | VString s               -> paren s
+  | VTuple vs               -> paren @: String.concat ", " @: List.map repr_of_value vs
   | VOption None            -> paren "None"
   | VOption(Some x)         -> paren @: repr_of_value x
-	| VSet _
-	| VBag _
-	| VList _
+  | VSet _
+  | VBag _
+  | VList _
   | VMap _
   | VMultimap _             -> paren @: s_of_col v
-	| VFunction (a, b)        -> paren @: Printf.sprintf "%s -> %s" (string_of_arg a) (string_of_expr b)
+  | VFunction (a, b)        -> paren @: Printf.sprintf "%s -> %s" (string_of_arg a) (string_of_expr b)
   | VForeignFunction (a, _) -> paren @: string_of_arg a
-	| VAddress (ip, port)     -> paren @: ip^":"^ string_of_int port
-	| VTarget id              -> paren @: id
+  | VAddress (ip, port)     -> paren @: ip^":"^ string_of_int port
+  | VTarget id              -> paren @: id
   | VIndirect ind           -> paren @: repr_of_value !ind
   | _                       -> ""
 
@@ -186,9 +183,9 @@ let print_binding (id,v) = ob(); ps (id^" = "); pc(); print_value v; cb(); fnl()
 (* for a map structure *)
 let print_binding_m id v = ob(); ps (id^" = "); pc(); print_value v; cb(); fnl()
 
-let print_frame frame = List.iter print_binding frame
+let print_frame frame = IdMap.iter print_binding_m frame
 
-let print_env skip_functions (globals, (frames:frame_t list)) =
+let print_env skip_functions (globals, frames) =
   let filter_m e = IdMap.filter
     (fun _ -> function
       | VFunction _        -> false
@@ -207,9 +204,9 @@ let print_env skip_functions (globals, (frames:frame_t list)) =
                   else filter_m global_m in
   IdMap.iter print_binding_m global_m';
   fnl();
-  ps @: Printf.sprintf "----Frames(%i)----" @: List.length frames; fnl();
-  let frames' = List.map filter_l frames in
-  List.iter print_frame frames'
+  ps "----Frames----"; fnl()
+  (*let frames' = IdMap.map filter_l frames in
+  print_frame frames'*)
 
 let print_trigger_env env =
   ps @: Printf.sprintf "----Triggers(%i)----" @: IdMap.cardinal env; fnl();
@@ -468,6 +465,7 @@ let rec expr_of_value uuid value =
   | VMap vs -> handle_cols value
   | VMultimap vs -> handle_cols value
   | VIndirect ind -> mk_ind @: expr_of_value uuid !ind
-  | VFunction _ | VForeignFunction _ -> raise (RuntimeError (uuid,
+  | VFunction _
+  | VForeignFunction _ -> raise (RuntimeError (uuid,
       "expr_of_value: cannot apply to function"))
 

@@ -85,8 +85,12 @@ let list_unzip l =
     | (x,x')::xs -> loop (x::acc) (x'::acc') xs
   in loop [] [] l
 
-(*let list_zip list1 list2 = *)
-  (*List.map2 (fun i j -> (i,j)) list1 list2*)
+let list_fold2 f zero l1 l2 =
+  let rec loop acc l1 l2 = match l1, l2 with
+    | [], []       -> acc
+    | x::xs, y::ys -> loop (f acc x y) xs ys
+    | _ -> invalid_arg "mismatching lists"
+  in loop zero l1 l2
 
 let hd l = match l with
   | x::_ -> x
