@@ -26,13 +26,6 @@ module type S = sig
   val to_list : t -> elt list
 end
 
-module type OrderedKeyType =
-  sig
-    type t
-    val compare: t -> t -> int
-    val filter_idxs : IntSet.t -> t -> t
-  end
-
 module Make(OrdKey: ICommon.OrderedKeyType) = struct
 
   module InnerMap = NearMap.Make(OrdKey)

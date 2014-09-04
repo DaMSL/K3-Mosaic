@@ -4,7 +4,8 @@ open Util
 
 module type S = sig
   type elt
-  type t
+  module InnerMap : NearMap.S
+  type t = int InnerMap.t
   val empty : t
   val singleton : elt -> t
   val is_empty : t -> bool

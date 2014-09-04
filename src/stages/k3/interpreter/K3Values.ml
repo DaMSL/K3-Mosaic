@@ -36,14 +36,11 @@ module rec OrderedKey : ICommon.OrderedKeyType = struct
       | _ -> invalid_arg "not a vtuple"
     end
 
-and ValueMap : NearMap.S with type key = Value.value_t =
-  NearMap.Make(OrderedKey)
+and ValueMap : NearMap.S with type key = Value.value_t = NearMap.Make(OrderedKey)
 
-and ValueBag : IBag.S with type elt = Value.value_t =
-  IBag.Make(OrderedKey)
+and ValueBag : IBag.S with type elt = Value.value_t = IBag.Make(OrderedKey)
 
-and ValueMMap : IMultimap.S with type elt = Value.value_t and type innerbag = ValueBag.t =
-  IMultimap.Make(OrderedKey)
+and ValueMMap : IMultimap.S with type elt = Value.value_t and type innerbag = ValueBag.t = IMultimap.Make(OrderedKey)
 
 and Value : sig
   type eval_t = VDeclared of value_t ref
