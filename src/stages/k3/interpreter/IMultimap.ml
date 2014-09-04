@@ -5,46 +5,49 @@ open K3.AST
 
 module type S = sig
   type elt
-  type row = elt list
   type t
+  type innerbag
   val init : index_t list -> t
   val from_mmap : t -> t
   val get_idxs : t -> index_t list
-  val singleton : index_t list -> row -> t
+  val singleton : index_t list -> elt -> t
   val is_empty : t -> bool
-  val insert : row -> t -> t
-  val delete : row -> t -> t
-  val slice : IntSet.t list -> [< `EQ | `GT | `LT ] list -> row -> t -> row IBag.t
+  val insert : elt -> t -> t
+  val delete : elt -> t -> t
+  val slice : IntSet.t list -> [< `EQ | `GT | `LT ] list -> elt -> t -> innerbag
   val combine : t -> t -> t
-  val fold : ('a -> row -> 'a) -> 'a -> t -> 'a
-  val map : (row -> 'a) -> t -> 'a IBag.t
-  val iter : (row -> unit) -> t -> unit
-  val iter2 : (row -> row -> unit) -> t -> t -> unit
-  val filter : (row -> bool) -> t -> t
-  val update : row -> row -> t -> t
-  val peek : t -> row option
-  val to_list : t -> row list
+  val fold : ('a -> elt -> 'a) -> 'a -> t -> 'a
+  val map : (elt -> elt) -> t -> innerbag
+  val iter : (elt -> unit) -> t -> unit
+  val iter2 : (elt -> elt -> unit) -> t -> t -> unit
+  val filter : (elt -> bool) -> t -> t
+  val update : elt -> elt -> t -> t
+  val peek : t -> elt option
+  val to_list : t -> elt list
 end
 
-module Make(Ord: NearMap.OrderedType) = struct
-
-  module OrdList = struct
-    type t = Ord.t list
-    let compare = compare
+module type OrderedKeyType =
+  sig
+    type t
+    val compare: t -> t -> int
+    val filter_idxs : IntSet.t -> t -> t
   end
 
-  module InnerMap = NearMap.Make(OrdList)
+module Make(OrdKey: ICommon.OrderedKeyType) = struct
 
-  type elt = Ord.t
+  module InnerMap = NearMap.Make(OrdKey)
+  module InnerBag = IBag.Make(OrdKey)
 
-  type row = elt list
+  type innerbag = InnerBag.t
+
+  type elt = OrdKey.t
 
   type vindex_t = index_t * content InnerMap.t
 
   (* top level type *)
   and t = vindex_t list
 
-  and content = CMap of t | CBag of row IBag.t
+  and content = CMap of t | CBag of innerbag
 
   let init idxs = List.map (fun idx -> idx, InnerMap.empty) idxs
 
@@ -55,30 +58,30 @@ module Make(Ord: NearMap.OrderedType) = struct
   let is_empty mm = List.for_all (fun (_, map) -> InnerMap.is_empty map) mm
 
   (* insert a value (list representing tuple) into a multimap *)
-  let rec insert (xs:row) (mm:t) =
+  let rec insert (xs:elt) (mm:t) =
   List.map (fun (idx, map) -> idx,
-    let key = list_filter_idxs idx.mm_indices xs in
+    let key = OrdKey.filter_idxs idx.mm_indices xs in
     try begin
       match InnerMap.find key map with
       | CMap m -> InnerMap.add key (CMap(insert xs m)) map
-      | CBag b -> InnerMap.add key (CBag(IBag.insert xs b)) map
+      | CBag b -> InnerMap.add key (CBag(InnerBag.insert xs b)) map
       end
     with
       Not_found ->
         if null idx.mm_submaps then
-          InnerMap.add key (CBag(IBag.singleton xs)) map
+          InnerMap.add key (CBag(InnerBag.singleton xs)) map
         else
           let v  = init idx.mm_submaps in
           InnerMap.add key (CMap(insert xs v)) map
   ) mm
 
-  let singleton (idxs:index_t list) (x:row) =
+  let singleton (idxs:index_t list) (x:elt) =
     let m = init idxs in
     insert x m
 
   let rec delete xs mm =
     List.map (fun (idx, map) -> idx,
-      let key = list_filter_idxs idx.mm_indices xs in
+      let key = OrdKey.filter_idxs idx.mm_indices xs in
       try begin
         match InnerMap.find key map with
         | CMap v ->
@@ -88,8 +91,8 @@ module Make(Ord: NearMap.OrderedType) = struct
               (* add back the reduced value *)
               InnerMap.add key (CMap v') map
         | CBag b ->
-            let b' = IBag.delete xs b in
-            if IBag.is_empty b' then InnerMap.remove key map
+            let b' = InnerBag.delete xs b in
+            if InnerBag.is_empty b' then InnerMap.remove key map
             else InnerMap.add key (CBag b') map
         end
       with Not_found -> map
@@ -102,7 +105,7 @@ module Make(Ord: NearMap.OrderedType) = struct
         begin try
           (* TODO: change to map here to find faster? *)
           let idx, map = List.find (fun (i,_) -> IntSet.equal i.mm_indices idx_id) mm in
-          let key = list_filter_idxs idx.mm_indices xs in
+          let key = OrdKey.filter_idxs idx.mm_indices xs in
           let find_fn = match comp with
             | `GT -> InnerMap.find_gt
             | `EQ -> InnerMap.find
@@ -113,7 +116,7 @@ module Make(Ord: NearMap.OrderedType) = struct
             | CMap v -> slice rem_ids rem_comps xs v
             | CBag b -> b
           with
-            Not_found -> IBag.empty
+            Not_found -> InnerBag.empty
           end
         with
           Not_found    -> error @: "no corresponding index found"
@@ -128,7 +131,7 @@ module Make(Ord: NearMap.OrderedType) = struct
           | Some _, None    -> v
           | None, Some _    -> v'
           | Some(CMap s), Some(CMap s') -> Some(CMap(combine s s'))
-          | Some(CBag s), Some(CBag s') -> Some(CBag(IBag.combine s s'))
+          | Some(CBag s), Some(CBag s') -> Some(CBag(InnerBag.combine s s'))
           | _ -> failwith "(combine): mismatch in bags/maps")
         map map'
     ) l r
@@ -140,19 +143,19 @@ module Make(Ord: NearMap.OrderedType) = struct
     | (_,map)::_ ->
       InnerMap.fold (fun _ x acc -> match x with
         | CMap m -> fold f acc m
-        | CBag b -> IBag.fold f acc b
+        | CBag b -> InnerBag.fold f acc b
       ) map zero
     | [] -> error @: "malformed multimap"
 
   let map f mm =
-    fold (fun acc x -> IBag.insert (f x) acc) IBag.empty mm
+    fold (fun acc x -> InnerBag.insert (f x) acc) InnerBag.empty mm
 
   let rec iter f = function
     (* doesn't matter which index we take *)
     | ((_,map)::_) ->
       InnerMap.iter (fun _ x -> match x with
         | CMap m -> iter f m
-        | CBag b -> IBag.iter f b
+        | CBag b -> InnerBag.iter f b
       ) map
     | [] -> failwith @: "(iter): malformed multimap"
 
@@ -161,7 +164,7 @@ module Make(Ord: NearMap.OrderedType) = struct
     | ((_,map)::_), ((_,map')::_) ->
       InnerMap.iter2 (fun _ x x' -> match x, x' with
         | CMap m, CMap m' -> iter2 f m m'
-        | CBag b, CBag b' -> IBag.iter2 f b b'
+        | CBag b, CBag b' -> InnerBag.iter2 f b b'
         | _ -> failwith "(iter2): mismatch between multimaps"
       ) map map'
     | _ -> failwith @: "(iter): malformed multimap"
@@ -184,7 +187,7 @@ module Make(Ord: NearMap.OrderedType) = struct
       begin try
         match snd @: InnerMap.choose map with
         | CMap m -> peek m
-        | CBag b -> IBag.peek b
+        | CBag b -> InnerBag.peek b
       with Not_found -> None end
     | [] -> error @: "malformed multimap"
 

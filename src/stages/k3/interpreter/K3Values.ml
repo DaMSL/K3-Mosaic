@@ -28,13 +28,22 @@ let map_modify f key map =
   | None   -> IdMap.remove key map
   | Some v -> IdMap.add key v map
 
-module rec ValueMap : NearMap.S with type key = Value.value_t =
-  NearMap.Make(
-    struct type t = Value.value_t let compare = compare end)
+module rec OrderedKey : ICommon.OrderedKeyType = struct
+    type t = Value.value_t
+    let compare = compare
+    let filter_idxs idxs = function
+      | Value.VTuple l -> Value.VTuple(list_filter_idxs idxs l)
+      | _ -> invalid_arg "not a vtuple"
+    end
 
-and ValueMMap : IMultimap.S with type elt = Value.value_t =
-  IMultimap.Make(
-    struct type t = Value.value_t let compare = compare end)
+and ValueMap : NearMap.S with type key = Value.value_t =
+  NearMap.Make(OrderedKey)
+
+and ValueBag : IBag.S with type elt = Value.value_t =
+  IBag.Make(OrderedKey)
+
+and ValueMMap : IMultimap.S with type elt = Value.value_t and type innerbag = ValueBag.t =
+  IMultimap.Make(OrderedKey)
 
 and Value : sig
   type eval_t = VDeclared of value_t ref
@@ -56,7 +65,7 @@ and Value : sig
       | VTuple of value_t list
       | VOption of value_t option
       | VSet of value_t ISet.t
-      | VBag of value_t IBag.t
+      | VBag of ValueBag.t
       | VList of value_t IList.t
       | VMap of value_t ValueMap.t
       | VMultimap of ValueMMap.t
@@ -80,11 +89,11 @@ type program_env_t = trigger_env_t * env_t
 let unwrap opt = match opt with Some v -> v | _ -> failwith "invalid option unwrap"
 
 let v_to_list = function
-  | VBag m -> IBag.to_list m
-  | VSet m -> ISet.to_list m
+  | VBag m  -> ValueBag.to_list m
+  | VSet m  -> ISet.to_list m
   | VList m -> IList.to_list m
   | VMap vs -> List.map (fun (k,v) -> VTuple[k;v]) @: ValueMap.to_list vs
-  | VMultimap vs -> List.map (fun x -> VTuple x) @: ValueMMap.to_list vs
+  | VMultimap vs -> ValueMMap.to_list vs
   | _ -> failwith "(v_to_list): not a collection"
 
 let tag = function
@@ -254,15 +263,15 @@ type 'a t_err_fn = (string -> string -> 'a)
 
 let v_peek err_fn c = match c with
   | VSet m      -> ISet.peek m
-  | VBag m      -> IBag.peek m
+  | VBag m      -> ValueBag.peek m
   | VList m     -> IList.peek m
   | VMap m      -> maybe None (some |- map_to_tuple) @: ValueMap.peek m
-  | VMultimap m -> maybe None (some |- mmap_to_tuple) @: ValueMMap.peek m
+  | VMultimap m -> ValueMMap.peek m
   | _ -> err_fn "v_peek" "not a collection"
 
 let v_combine err_fn x y = match x, y with
   | VSet m,  VSet m'          -> VSet(ISet.combine m m')
-  | VBag m,  VBag m'          -> VBag(IBag.combine m m')
+  | VBag m,  VBag m'          -> VBag(ValueBag.combine m m')
   | VList m, VList m'         -> VList(IList.combine m m')
   | VMap m,  VMap m'          -> VMap(ValueMap.combine m m')
   | VMultimap m, VMultimap m' -> VMultimap(ValueMMap.combine m m')
@@ -270,56 +279,56 @@ let v_combine err_fn x y = match x, y with
 
 let v_fold err_fn f acc = function
   | VSet m      -> ISet.fold f acc m
-  | VBag m      -> IBag.fold f acc m
+  | VBag m      -> ValueBag.fold f acc m
   | VList m     -> IList.fold f acc m
   | VMap m      -> ValueMap.fold (fun k v acc -> f acc @: VTuple[k;v]) m acc
-  | VMultimap m -> ValueMMap.fold (fun acc x -> f acc @: VTuple x) acc m
+  | VMultimap m -> ValueMMap.fold f acc m
   | _ -> err_fn "v_fold" "not a collection"
 
 let v_iter err_fn f = function
   | VSet m      -> ISet.iter f m
-  | VBag m      -> IBag.iter f m
+  | VBag m      -> ValueBag.iter f m
   | VList m     -> IList.iter f m
   | VMap m      -> ValueMap.iter (fun k v -> f (VTuple[k;v])) m
-  | VMultimap m -> ValueMMap.iter (fun x -> f @: VTuple x) m
+  | VMultimap m -> ValueMMap.iter f m
   | _ -> err_fn "v_iter" "not a collection"
 
 let v_insert err_fn x m = match x, m with
   | _, VSet m             -> VSet(ISet.insert x m)
-  | _, VBag m             -> VBag(IBag.insert x m)
+  | _, VBag m             -> VBag(ValueBag.insert x m)
   | _, VList m            -> VList(IList.insert x m)
   | VTuple[k;v], VMap m   -> VMap(ValueMap.add k v m)
-  | VTuple x, VMultimap m -> VMultimap(ValueMMap.insert x m)
+  | _, VMultimap m        -> VMultimap(ValueMMap.insert x m)
   | _ -> err_fn "v_insert" "invalid input"
 
 let v_delete err_fn x m = match x, m with
   | _, VSet m             -> VSet(ISet.delete x m)
-  | _, VBag m             -> VBag(IBag.delete x m)
+  | _, VBag m             -> VBag(ValueBag.delete x m)
   | _, VList m            -> VList(IList.delete x m)
   | VTuple [k; v], VMap m -> VMap(ValueMap.remove k m)
-  | VTuple x, VMultimap m -> VMultimap(ValueMMap.delete x m)
+  | _, VMultimap m        -> VMultimap(ValueMMap.delete x m)
   | _ -> err_fn "v_delete" "invalid input"
 
 let v_update err_fn oldv newv c = match oldv, newv, c with
   | _,_,VSet m                         -> VSet(ISet.update oldv newv m)
-  | _,_,VBag m                         -> VBag(IBag.update oldv newv m)
+  | _,_,VBag m                         -> VBag(ValueBag.update oldv newv m)
   | _,_,VList m                        -> VList(IList.update oldv newv m)
   | VTuple[k;v], VTuple[k';v'], VMap m -> VMap(ValueMap.update k v k' v' m)
-  | VTuple x, VTuple x', VMultimap m   -> VMultimap(ValueMMap.update x x' m)
+  | _,_, VMultimap m                   -> VMultimap(ValueMMap.update oldv newv m)
   | _ -> err_fn "v_update" "not a collection"
 
 let v_empty err_fn ?(no_multimap=false) = function
   | VSet _      -> VSet(ISet.empty)
-  | VBag _      -> VBag(IBag.empty)
+  | VBag _      -> VBag(ValueBag.empty)
   | VList _     -> VList(IList.empty)
   | VMap _      -> VMap(ValueMap.empty)
-  | VMultimap m -> if no_multimap then VBag(IBag.empty)
+  | VMultimap m -> if no_multimap then VBag(ValueBag.empty)
                    else VMultimap(ValueMMap.from_mmap m)
   | _ -> err_fn "v_empty" "not a collection"
 
 let v_empty_of_t = function
   | TSet        -> VSet(ISet.empty)
-  | TBag        -> VBag(IBag.empty)
+  | TBag        -> VBag(ValueBag.empty)
   | TList       -> VList(IList.empty)
   | TMap        -> VMap(ValueMap.empty)
   | TMultimap m -> VMultimap(ValueMMap.init m)
@@ -331,10 +340,10 @@ let v_sort err_fn f = function
 
 let v_singleton err_fn elem c = match elem, c with
   | _,TSet                   -> VSet(ISet.singleton elem)
-  | _,TBag                   -> VBag(IBag.singleton elem)
+  | _,TBag                   -> VBag(ValueBag.singleton elem)
   | _,TList                  -> VList(IList.singleton elem)
   | VTuple[k;v], TMap        -> VMap(ValueMap.singleton k v)
-  | VTuple x, TMultimap idxs -> VMultimap(ValueMMap.singleton idxs x)
+  | _, TMultimap idxs        -> VMultimap(ValueMMap.singleton idxs elem)
   | _ -> err_fn "v_singleton" "not a collection"
 
 (* for v_slice *)
@@ -351,49 +360,35 @@ let match_pattern pat_v v =
 
 let v_slice err_fn pat = function
   | VSet m         -> VSet(ISet.filter (match_pattern pat) m)
-  | VBag m         -> VBag(IBag.filter (match_pattern pat) m)
+  | VBag m         -> VBag(ValueBag.filter (match_pattern pat) m)
   | VList m        -> VList(IList.filter (match_pattern pat) m)
   | VMap m         -> VMap(ValueMap.filter (fun k v ->
                         match_pattern pat @: VTuple[k;v]) m)
-  | VMultimap mm   -> VMultimap(ValueMMap.filter (fun x ->
-                        match_pattern pat @: VTuple x) mm)
+  | VMultimap mm   -> VMultimap(ValueMMap.filter (match_pattern pat) mm)
   | _ -> err_fn "v_slice" "not a collection"
 
 (* only for multimap *)
-let v_slice_idx = fun err_fn idxs comps pat c -> match c, comps, pat with
-  | VMultimap mm, VTuple comps', VTuple pat' ->
+let v_slice_idx = fun err_fn idxs comps pat c -> match c, comps with
+  | VMultimap mm, VTuple comps' ->
       let comp_fn = function
         | VInt (-1) -> `LT
         | VInt 1    -> `GT
         | _         -> `EQ
       in
       let comps'' = List.map comp_fn comps' in
-      VBag(IBag.map mmap_to_tuple @: ValueMMap.slice idxs comps'' pat' mm)
+      VBag(ValueMMap.slice idxs comps'' pat mm)
   | _ -> err_fn "v_slice_idx" "bad format"
 
 let v_iter2 err_fn f xs ys = match xs, ys with
   | VList xs, VList ys -> IList.iter2 f xs ys
   | VSet xs, VSet ys -> ISet.iter2 f xs ys
-  | VBag xs, VBag ys -> IBag.iter2 f xs ys
+  | VBag xs, VBag ys -> ValueBag.iter2 f xs ys
   | VMap xs, VMap ys -> ValueMap.iter2 (fun k v v' -> f (VTuple[k;v]) (VTuple[k;v'])) xs ys
   | VMultimap xs, VMultimap ys -> ValueMMap.iter2 (fun x y -> f (VTuple x) (VTuple y)) xs ys
   | _ -> err_fn "v_iter2" "mismatching or no collections"
 
 (* Value comparison. *)
-let equal_values ?(neq=false) a b =
-  let equal = ref true in
-  let dummy_err _ _ = equal := false in
-  let rec check2 left right = match left, right with
-    | (VList _ | VSet _ | VBag _ | VMap _ | VMultimap _), _->
-        (try v_iter2 dummy_err check2 left right
-        with Invalid_argument _ -> equal := false)
-    | VFloat x, VFloat y ->
-      let e = 0.0001 in
-      if abs_float(x -. y) > e then equal := false
-    | x, y -> if x <> y then equal := false
-  in
-  check2 a b;
-  if neq then not !equal else !equal
+let equal_values a b = a = b
 
 (* Value comparison. Returns a partial list of inequality positions if there are any *)
 let find_inequality a b =
