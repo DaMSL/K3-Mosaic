@@ -21,19 +21,6 @@ then
   cd $SCRIPTPATH
 fi
 
-# check for bolt
-if [ ! -f "./lib/bolt/bolt.cmo" ] 
-then 
-  cd deps/bolt-1.4
-  ./configure
-  make all
-  if [ ! -d "$SCRIPTPATH/lib/bolt" ]; then mkdir $SCRIPTPATH/lib/bolt; fi
-  cp _build/bolt.* $SCRIPTPATH/lib/bolt
-  cp _build/src/threads/boltThread.* $SCRIPTPATH/lib/bolt
-  cp _build/src/syntax/bolt_pp.cm* $SCRIPTPATH/lib/bolt
-  cd $SCRIPTPATH
-fi
-
 if [ ! -d "./bin" ]; then mkdir bin; fi
 
 # driver
