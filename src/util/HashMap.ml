@@ -25,7 +25,13 @@ module type S = sig
     val compare : ('a -> 'a -> int) -> 'a t -> 'a t -> int
 end
 
-module Make(Ord : ICommon.OrderedKeyType) = struct
+module type OrderedType = sig
+  type t
+  val compare : t -> t -> int
+  val hash : t -> int
+end
+
+module Make(Ord : OrderedType) = struct
 
   module IntMap : (Map.S with type key = int) = Map.Make(struct
     type t = int
@@ -39,13 +45,13 @@ module Make(Ord : ICommon.OrderedKeyType) = struct
 
   let empty = IntMap.empty
 
-  let singleton k v = IntMap.singleton (Hashtbl.hash k) @@
+  let singleton k v = IntMap.singleton (Ord.hash k) @@
                         WrapMap.singleton k v
 
   let is_empty x = x = empty
 
   let add k v m =
-    let h = Hashtbl.hash k in
+    let h = Ord.hash k in
     try
       let im = IntMap.find h m in
       IntMap.add h (WrapMap.add k v im) m
@@ -53,7 +59,7 @@ module Make(Ord : ICommon.OrderedKeyType) = struct
       IntMap.add h (WrapMap.singleton k v) m
 
   let remove k m =
-    let h = Hashtbl.hash k in
+    let h = Ord.hash k in
     try
       let im  = IntMap.find h m in
       let im' = WrapMap.remove k im in
@@ -63,7 +69,7 @@ module Make(Ord : ICommon.OrderedKeyType) = struct
     with Not_found -> m
 
   let find k m =
-    let h = Hashtbl.hash k in
+    let h = Ord.hash k in
     let im = IntMap.find h m in
     WrapMap.find k im
 
