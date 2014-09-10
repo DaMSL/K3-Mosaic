@@ -22,6 +22,7 @@ module type S = sig
     val choose : 'a t -> (key * 'a)
     val to_list : 'a t -> (key * 'a) list
     val of_list : (key * 'a) list -> 'a t
+    val compare : ('a -> 'a -> int) -> 'a t -> 'a t -> int
 end
 
 module Make(Ord : ICommon.OrderedKeyType) = struct
@@ -112,5 +113,8 @@ module Make(Ord : ICommon.OrderedKeyType) = struct
 
   let of_list l = List.fold_left (fun acc (k, v) ->
     add k v acc) empty l
+
+  let compare (f:'a -> 'a -> int) (m:'a t) (m': 'a t) : int = IntMap.compare (fun a b -> WrapMap.compare f a b) m m'
+
 end
 

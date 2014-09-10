@@ -30,7 +30,8 @@ let map_modify f key map =
 
 module rec OrderedKey : ICommon.OrderedKeyType = struct
     type t = Value.value_t
-    let compare = compare
+    let compare = ValueComp.compare_v
+    let hash = ValueComp.hash
     let filter_idxs idxs = function
       | Value.VTuple l -> Value.VTuple(list_filter_idxs idxs l)
       | _ -> invalid_arg "not a vtuple"
@@ -46,6 +47,58 @@ and ValueMMap : IMultimap.S with type elt = Value.value_t
                              and type InnerBag.elt = Value.value_t
                              and type InnerBag.t = int HashMap.Make(OrderedKey).t
                                = IMultimap.Make(OrderedKey)
+
+and ValueComp : (sig val compare_v : Value.value_t -> Value.value_t -> int
+                     val hash : Value.value_t -> int 
+                     val reset_counter : unit -> unit
+                     val get_counter : unit -> int
+                 end) = struct
+    open Value
+    exception Mismatch of int
+    let counter = ref 0 (* for pinpointing errors *)
+
+    let get_counter () = !counter
+    let reset_counter () = counter := 0
+
+    let rec compare_v a b =
+      incr counter;
+      match a,b with
+      | VTuple vs, VTuple vs' ->
+          begin try
+            List.iter2 (fun x y -> let r = compare_v x y in
+                         if r <> 0 then raise (Mismatch r)) vs vs'; 0
+          with Mismatch r -> r end
+      | VOption(Some v), VOption(Some v') -> compare_v v v'
+      | VSet v, VSet v' -> ISet.compare compare_v v v'
+      | VBag v, VBag v' -> ValueBag.compare v v'
+      | VList v, VList v' -> IList.compare compare_v v v'
+      | VMap v, VMap v' -> ValueMap.compare compare_v v v'
+      | VMultimap v, VMultimap v' -> ValueMMap.compare_m v v'
+      | VIndirect v, VIndirect v' -> compare_v !v !v'
+      | x, y -> compare x y (* generic comparison *)
+
+    module IntMap : (Map.S with type key = int) = Map.Make(struct
+      type t = int
+      let compare x y = x - y
+    end)
+
+    (* try to get a consistent hashing scheme based on members *)
+    let rec hash v =
+      (* hash members only *)
+      let col_hash fold_fn v = fold_fn (fun acc x -> hash x lxor acc) 0 v in
+      let map_hash fold_fn v = fold_fn (fun k v acc -> hash k lxor hash v lxor acc) v 0 in
+      match v with
+      | VTuple vs       -> col_hash List.fold_left vs
+      | VOption(Some v) -> hash v
+      | VIndirect v     -> hash !v
+      | VSet v          -> col_hash ISet.fold v
+      | VBag v          -> col_hash ValueBag.fold v
+      | VList v         -> col_hash IList.fold v
+      | VMap v          -> map_hash ValueMap.fold v
+      | VMultimap v     -> col_hash ValueMMap.fold v
+      | x               -> Hashtbl.hash x
+
+  end
 
 and Value : sig
   type eval_t = VDeclared of value_t ref
@@ -382,27 +435,14 @@ let v_slice_idx = fun err_fn idxs comps pat c -> match c, comps with
   | _ -> err_fn "v_slice_idx" "bad format"
 
 (* Value comparison. *)
-let equal_values a b = a = b
+let equal_values a b = ValueComp.compare_v a b = 0
 
 (* Value comparison. Returns a partial list of inequality positions if there are any *)
 let find_inequality a b =
-  let count = ref 0 in
-  let res = ref [] in
-  let add_cur () = res := !count :: !res in
-  let dummy_err _ _ = add_cur () in
-  let rec check2 left right =
-    incr count;
-    match left, right with
-    | (VList _ | VSet _ | VBag _ | VMap _ | VMultimap _), _->
-        (try v_iter2 dummy_err check2 left right
-        with Invalid_argument _ -> add_cur ())
-    | VFloat x, VFloat y ->
-      let e = 0.0001 in
-      if abs_float(x -. y) > e then add_cur ()
-    | x, y -> if x <> y then add_cur ()
-  in
-  check2 a b;
-  nub @: !res
+  ValueComp.reset_counter ();
+  if ValueComp.compare_v a b <> 0 then
+    Some(ValueComp.get_counter ())
+  else None
 
 let rec type_of_value uuid value =
   let get_typ v = type_of_value uuid v in

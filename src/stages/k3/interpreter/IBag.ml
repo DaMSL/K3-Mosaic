@@ -20,6 +20,7 @@ module type S = sig
   val count : elt -> t -> int
   val to_list : t -> elt list
   val of_list : elt list -> t
+  val compare : t -> t -> int
 end
 
 module Make(Ord : ICommon.OrderedKeyType) = struct
@@ -72,4 +73,6 @@ module Make(Ord : ICommon.OrderedKeyType) = struct
   let of_list l = List.fold_left (fun acc x -> insert x acc) empty l
 
   let to_list (b:t) : elt list = fold (fun (acc:elt list) (x:elt) -> x::acc) ([]:elt list) (b:t)
+
+  let compare x y = HMap.compare (-) x y
 end

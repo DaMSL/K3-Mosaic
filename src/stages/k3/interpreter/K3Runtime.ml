@@ -8,6 +8,8 @@ open K3Values.Value
 open K3Util
 open K3Printing
 
+let sp = Printf.sprintf
+
 (* consumeable id -> trigger id *)
 type source_bindings_t = (id_t * id_t) list
 
@@ -286,6 +288,7 @@ let schedule_trigger_random s receive_address =
 (* Scheduler execution *)
 
 (* compare the breakpoint filter to the actual arguments *)
+(*
 let rec breakpoint_arg_test test_arg arg =
   let all l1 l2 =
     List.for_all2 breakpoint_arg_test l1 l2
@@ -306,7 +309,8 @@ let rec breakpoint_arg_test test_arg arg =
   | _, VFunction _         -> error INVALID_BREAKPOINT
   | a, b when a = b        -> true
   | _                      -> false
-
+*)
+(*
 let check_breakpoint s target_trig arg =
   let bp_type, bp' =
     List.fold_left (fun (bp, acc) b ->
@@ -320,6 +324,7 @@ let check_breakpoint s target_trig arg =
   in
   s.breakpoints <- bp';
   bp_type
+*)
 
 let invoke_trigger s address (trigger_env, val_env) trigger_id arg =
   (* add a level to the global queue *)
@@ -339,7 +344,7 @@ let invoke_trigger s address (trigger_env, val_env) trigger_id arg =
     begin
      (IdMap.find "max_acked_vid_send" trigger_env) val_env (VInt 1);
      previous_gc_time := Unix.time();
-     LOG "GC start %f: \n" (Unix.time() -. !previous_gc_time)
+     Log.log "GC start %f: \n" (Unix.time() -. !previous_gc_time)
         NAME "K3Runtime.TriggerSTate" LEVEL DEBUG;
     end;
     *)
@@ -351,12 +356,12 @@ let invoke_trigger s address (trigger_env, val_env) trigger_id arg =
     RuntimeError(id, Format.sprintf "In trigger %s: %s" trigger_id msg));
   (* log the state for this trigger *)
   let arg_s = string_of_value arg^"\n" in
-  LOG "Trigger %s@%s\nargs = %s"
+  Log.log (sp "Trigger %s@%s\nargs = %s"
     trigger_id
     (string_of_address address)
     (*(combine_s)*)
-    (arg_s^string_of_env val_env)
-    NAME "K3Runtime.TriggerState" LEVEL DEBUG;
+    (arg_s^string_of_env val_env))
+    ~name:"K3Runtime.TriggerState" `Debug;
   s.events_processed <- Int64.succ s.events_processed
 
 (* process the events for a particular trigger queue *)
@@ -368,7 +373,7 @@ let process_trigger_queue s address env trigger_id max_to_process =
     if K3Queue.is_empty q || num_left <= 0 then NormalExec
     else
       let args = K3Queue.peek q in
-      let m_bp = check_breakpoint s trigger_id args in
+      let m_bp = NormalExec (* check_breakpoint s trigger_id args *) in
       match m_bp with
       | NormalExec ->
           invoke_trigger s address env trigger_id @: K3Queue.pop q;
@@ -403,7 +408,7 @@ let process_task s address prog_env =
         | _, Background fn ->
             ignore @: K.pop q; fn prog_env; NormalExec
         | address', NamedDispatch (id, arg) ->
-            let m_bp = check_breakpoint s id arg in
+            let m_bp = NormalExec (* check_breakpoint s id arg *) in
             begin match m_bp with
             | NormalExec ->
                 ignore @: K.pop q;
@@ -422,7 +427,7 @@ let process_task s address prog_env =
         | _, Background fn ->
             ignore @: K.pop q; fn prog_env; NormalExec
         | PerNode _, NamedDispatch (id, arg) ->
-            let m_bp = check_breakpoint s id arg in
+            let m_bp = NormalExec (* check_breakpoint s id arg *) in
             begin match m_bp with
             | NormalExec ->
                 ignore @: K.pop q;

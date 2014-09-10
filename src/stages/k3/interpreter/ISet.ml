@@ -41,3 +41,12 @@ let equals x y =
 let iter2 f x y = 
   let sort = List.sort compare in
   List.iter2 f (sort x) (sort y)
+
+exception Mismatch of int
+
+let compare f x y = try
+    let sort = List.sort f in
+    List.iter2 (fun x y -> let v = f x y in
+                  if v <> 0 then raise (Mismatch v)) (sort x) (sort y);
+     0
+  with Mismatch v -> v

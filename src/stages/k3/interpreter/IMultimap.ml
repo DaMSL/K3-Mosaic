@@ -23,6 +23,7 @@ module type S = sig
   val update : elt -> elt -> t -> t
   val peek : t -> elt option
   val to_list : t -> elt list
+  val compare_m : t -> t -> int
 end
 
 module Make(OrdKey: ICommon.OrderedKeyType) = struct
@@ -174,5 +175,15 @@ module Make(OrdKey: ICommon.OrderedKeyType) = struct
     | [] -> error @: "malformed multimap"
 
   let to_list mm = fold (fun acc x -> x::acc) [] mm
+
+  (* compare on any index *)
+  let rec compare_m m m' = match m, m' with
+    | (_, map)::_, (_, map')::_ ->
+        MMap.compare (fun a b -> match a, b with
+          | CMap m, CMap m' -> compare_m m m'
+          | CBag b, CBag b' -> InnerBag.compare b b'
+          | x, y            -> compare x y)
+          map map'
+    | x, y -> compare x y
 
 end

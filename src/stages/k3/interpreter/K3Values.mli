@@ -56,10 +56,10 @@ type trigger_env_t = (address -> env_t -> value_t -> unit) IdMap.t
 type program_env_t = trigger_env_t * env_t
 
 (* Value comparison *)
-val equal_values : ?neq:bool -> value_t -> value_t -> bool
+val equal_values : value_t -> value_t -> bool
 
 (* Find inequalities and put their locations in a list *)
-val find_inequality : value_t -> value_t -> int list
+val find_inequality : value_t -> value_t -> int option
 
 (* Value stringification *)
 val repr_of_value : value_t -> string
@@ -84,7 +84,6 @@ val v_peek : value_t option t_err_fn -> value_t -> value_t option
 val v_combine : value_t t_err_fn -> value_t -> value_t -> value_t
 val v_fold : 'a t_err_fn -> ('a -> value_t -> 'a) -> 'a -> value_t -> 'a
 val v_iter : unit t_err_fn -> (value_t -> unit) -> value_t -> unit
-val v_iter2 : unit t_err_fn -> (value_t -> value_t -> unit) -> value_t -> value_t -> unit
 val v_insert : value_t t_err_fn -> value_t -> value_t -> value_t
 val v_delete : value_t t_err_fn -> value_t -> value_t -> value_t
 val v_update : value_t t_err_fn -> value_t -> value_t -> value_t -> value_t

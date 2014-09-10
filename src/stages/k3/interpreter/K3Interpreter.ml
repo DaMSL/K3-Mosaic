@@ -71,7 +71,6 @@ let rec bind_args uuid arg v env =
   | ATuple _, _                 -> error "bad tuple value"
 
 let rec unbind_args uuid arg env =
-  let error = int_erroru uuid "unbind_args" in
   match arg with
   | AIgnored    -> env
   | AVar(i, _)  -> env_remove i env
@@ -127,8 +126,9 @@ and eval_expr (address:address) sched_st cenv texpr =
     in
 
     let eval_eq_op ~neq =
+      let f = if neq then not else id_fn in
       match child_values cenv with
-      | fenv, [l; r] -> fenv, VTemp(VBool(equal_values ~neq l r))
+      | fenv, [l; r] -> fenv, VTemp(VBool(f @@ equal_values l r))
       | _ -> error "eval_eq_op" "bad input"
     in
 
@@ -161,7 +161,7 @@ and eval_expr (address:address) sched_st cenv texpr =
         cenv, VTemp(
             match ctype with
             | TSet           -> VSet(ISet.empty)
-            | TBag           -> VBag(IBag.empty)
+            | TBag           -> VBag(ValueBag.empty)
             | TList          -> VList(IList.empty)
             | TMap           -> VMap(ValueMap.empty)
             | TMultimap idxs -> VMultimap(ValueMMap.init idxs)
@@ -182,7 +182,7 @@ and eval_expr (address:address) sched_st cenv texpr =
             begin match left, right with
             | VList v1, VList v2         -> VList(IList.combine v1 v2)
             | VSet v1,  VSet v2          -> VSet(ISet.combine v1 v2)
-            | VBag v1,  VBag v2          -> VBag(IBag.combine v1 v2)
+            | VBag v1,  VBag v2          -> VBag(ValueBag.combine v1 v2)
             | VMap v1,  VMap v2          -> VMap(ValueMap.combine v1 v2)
             | VMultimap v1, VMultimap v2 -> VMultimap(ValueMMap.combine v1 v2)
             | _ -> error name "mismatching or non-collections"
@@ -206,7 +206,7 @@ and eval_expr (address:address) sched_st cenv texpr =
           let l = Array.to_list (Array.init steps init_fn) in
           let reval = VTemp(match c_t with
             | TSet  -> VSet(ISet.of_list l)
-            | TBag  -> VBag(IBag.of_list l)
+            | TBag  -> VBag(ValueBag.of_list l)
             | TList -> VList(IList.of_list l)
             | TMap
             | TMultimap _ -> error name "cannot have map")

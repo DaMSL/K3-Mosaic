@@ -59,10 +59,10 @@ let ensure assertion = match assertion with
       equals_assertion (=) expected actual string_of_type
   | AssertValueEquals(expected, actual) ->
       match find_inequality expected actual with
-      | [] -> true, "PASSED"
-      | xs -> false, Printf.sprintf "FAILED: Expected %s, but got %s."
-                (string_of_value ~mark_points:xs expected) 
-                (string_of_value ~mark_points:xs actual)
+      | None   -> true, "PASSED"
+      | Some x -> false, Printf.sprintf "FAILED: Expected %s, but got %s."
+                (string_of_value ~mark_points:[x] expected)
+                (string_of_value ~mark_points:[x] actual)
 
 let run_tests ?(indent="") test =
   let rec loop indent test =
@@ -127,16 +127,11 @@ let unify_tuple_lists id l1 l2 =
     LAS.union l1 l2
 
 (* unify the values of the same ids in different environments *)
+(* only does one level of unification *)
 let unify_values id r_newval = function
   | None -> Some r_newval
   | Some r_oldval -> (* we found an old value *)
     let newval, oldval = !r_newval, !r_oldval in
-    let is_tup_list = function
-      | [] -> true
-      | (VTuple(_))::_ -> true
-      | _ -> false
-    in
-    let both_tup_list l1 l2 = is_tup_list l1 && is_tup_list l2 in
     let unwrap_ind = function
       | VIndirect r -> !r
       | x           -> x
@@ -144,17 +139,15 @@ let unify_values id r_newval = function
     let wrap_ind x =
       match oldval with VIndirect _ -> ref (VIndirect(ref x)) | _ -> ref x
     in
+    let err _ s = failwith @@ Printf.sprintf "(unify_values):%s" s in
+    let v, v' = unwrap_ind oldval, unwrap_ind newval in
     match unwrap_ind oldval, unwrap_ind newval with
-    | VSet l1, VSet l2 when both_tup_list l1 l2 ->
-        Some(wrap_ind @: VSet(unify_tuple_lists id l1 l2))
-    | VSet l1, VSet l2 -> Some(ref @: VSet(LAS.union l1 l2))
-    | VBag l1, VBag l2 when both_tup_list l1 l2 ->
-        Some(wrap_ind @: VBag(unify_tuple_lists id l1 l2))
-    | VBag l1, VBag l2 -> Some(ref @: VBag(LAS.union l1 l2))
-    | VList l1, VList l2 when both_tup_list l1 l2 ->
-        Some(wrap_ind @: VList(unify_tuple_lists id l1 l2))
-    | VList l1, VList l2 -> Some(ref @: VList(LAS.union l1 l2))
-    | _,_ -> Some r_newval
+    | VSet _, VSet _           -> some @@ wrap_ind @@ v_combine err v v'
+    | VBag _, VBag _           -> some @@ wrap_ind @@ v_combine err v v'
+    | VList _, VList _         -> some @@ wrap_ind @@ v_combine err v v'
+    | VMap _, VMap _           -> some @@ wrap_ind @@ v_combine err v v'
+    | VMultimap _, VMultimap _ -> some @@ wrap_ind @@ v_combine err v v'
+    | _,_                      -> Some r_newval
 
 (* unify the environments of different nodes *)
 let unify_envs (envs : (address * program_env_t) list) =

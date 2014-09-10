@@ -5,7 +5,6 @@ open Util
 type 'a t = 'a list
 
 let of_list l = l
-		  
 let to_list m = m
 
 let singleton x = [x]
@@ -37,3 +36,11 @@ let sort = List.sort
 let update v v' b = list_replace v v' b
 
 let iter2 = List.iter2
+
+exception Mismatch of int
+
+let compare f x y = try
+     List.iter2 (fun x y -> let v = f x y in
+                  if v <> 0 then raise (Mismatch v)) x y;
+     0
+  with Mismatch v -> v
