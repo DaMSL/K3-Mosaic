@@ -30,8 +30,8 @@ let map_modify f key map =
 
 module rec OrderedKey : ICommon.OrderedKeyType = struct
     type t = Value.value_t
-    let compare = ValueComp.compare_v
-    let hash = ValueComp.hash
+    let compare a b = ValueComp.compare_v a b
+    let hash a = ValueComp.hash a
     let filter_idxs idxs = function
       | Value.VTuple l -> Value.VTuple(list_filter_idxs idxs l)
       | _ -> invalid_arg "not a vtuple"
@@ -49,7 +49,7 @@ and ValueMMap : IMultimap.S with type elt = Value.value_t
                                = IMultimap.Make(OrderedKey)
 
 and ValueComp : (sig val compare_v : Value.value_t -> Value.value_t -> int
-                     val hash : Value.value_t -> int 
+                     val hash : Value.value_t -> int
                      val reset_counter : unit -> unit
                      val get_counter : unit -> int
                  end) = struct
