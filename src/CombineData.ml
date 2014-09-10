@@ -1,8 +1,7 @@
 (* Utility to combine data together into one file for the new k3 *)
-
 open Util
 
-Random.self_init ()
+let _ = Random.self_init ()
 
 type params = {
   mutable data_files : string list;
