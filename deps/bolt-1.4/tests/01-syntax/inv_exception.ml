@@ -1,1 +1,0 @@
-let () = LOG "msg" EXCEPTION 0 LEVEL DEBUG
