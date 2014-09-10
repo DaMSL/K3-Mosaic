@@ -13,7 +13,6 @@
 ../external/dbtoaster/examples/queries/simple/r_gtesomedynamic.sql
 ../external/dbtoaster/examples/queries/simple/r_gtsomedynamic.sql
 ../external/dbtoaster/examples/queries/simple/r_impossibleineq.sql
-../external/dbtoaster/examples/queries/simple/r_indynamic.sql
 ../external/dbtoaster/examples/queries/simple/r_ineqandeq.sql
 ../external/dbtoaster/examples/queries/simple/r_inlist.sql
 ../external/dbtoaster/examples/queries/simple/r_instatic.sql
@@ -39,7 +38,6 @@
 ../external/dbtoaster/examples/queries/simple/rs.sql
 ../external/dbtoaster/examples/queries/simple/rs_cmpnest.sql
 ../external/dbtoaster/examples/queries/simple/rs_column_mapping_1.sql
-../external/dbtoaster/examples/queries/simple/rs_column_mapping_2.sql
 ../external/dbtoaster/examples/queries/simple/rs_column_mapping_3.sql
 ../external/dbtoaster/examples/queries/simple/rs_eqineq.sql
 ../external/dbtoaster/examples/queries/simple/rs_example2.sql
