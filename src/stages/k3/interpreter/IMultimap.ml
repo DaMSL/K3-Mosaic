@@ -28,7 +28,9 @@ end
 module Make(OrdKey: ICommon.OrderedKeyType) = struct
 
   module MMap = NearMap.Make(OrdKey)
-  module InnerBag : (IBag.S with type elt = OrdKey.t) = IBag.Make(OrdKey)
+  module InnerBag : (IBag.S 
+    with type elt = OrdKey.t
+     and type t = int HashMap.Make(OrdKey).t) = IBag.Make(OrdKey)
 
   type elt = OrdKey.t
 

@@ -39,9 +39,12 @@ module rec OrderedKey : ICommon.OrderedKeyType = struct
 and ValueMap : NearMap.S with type key = Value.value_t = NearMap.Make(OrderedKey)
 
 and ValueBag : IBag.S with type elt = Value.value_t
+                      and type t = int HashMap.Make(OrderedKey).t
                          = IBag.Make(OrderedKey)
 
 and ValueMMap : IMultimap.S with type elt = Value.value_t
+                             and type InnerBag.elt = Value.value_t
+                             and type InnerBag.t = int HashMap.Make(OrderedKey).t
                                = IMultimap.Make(OrderedKey)
 
 and Value : sig
@@ -377,14 +380,6 @@ let v_slice_idx = fun err_fn idxs comps pat c -> match c, comps with
       let comps'' = List.map comp_fn comps' in
       VBag(ValueMMap.slice idxs comps'' pat mm)
   | _ -> err_fn "v_slice_idx" "bad format"
-
-let v_iter2 err_fn f xs ys = match xs, ys with
-  | VList xs, VList ys -> IList.iter2 f xs ys
-  | VSet xs, VSet ys -> ISet.iter2 f xs ys
-  | VBag xs, VBag ys -> ValueBag.iter2 f xs ys
-  | VMap xs, VMap ys -> ValueMap.iter2 (fun k v v' -> f (VTuple[k;v]) (VTuple[k;v'])) xs ys
-  | VMultimap xs, VMultimap ys -> ValueMMap.iter2 (fun x y -> f (VTuple x) (VTuple y)) xs ys
-  | _ -> err_fn "v_iter2" "mismatching or no collections"
 
 (* Value comparison. *)
 let equal_values a b = a = b

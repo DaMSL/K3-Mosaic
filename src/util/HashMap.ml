@@ -4,7 +4,9 @@ open Util
 
 module type S = sig
     type key
-    type 'a t
+    module IntMap : (Map.S with type key = int)
+    module WrapMap : Map.S
+    type 'a t = ('a WrapMap.t) IntMap.t
     val empty : 'a t
     val singleton : key -> 'a -> 'a t
     val is_empty : 'a t -> bool

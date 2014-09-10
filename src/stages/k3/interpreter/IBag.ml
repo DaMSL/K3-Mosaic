@@ -24,7 +24,7 @@ end
 
 module Make(Ord : ICommon.OrderedKeyType) = struct
 
-  module HMap : (HashMap.S with type key = Ord.t) = HashMap.Make(Ord)
+  module HMap = HashMap.Make(Ord)
 
   type elt = Ord.t
   type t = int HMap.t

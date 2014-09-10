@@ -38,6 +38,9 @@ module type S =
     val map: ('a -> 'b) -> 'a t -> 'b t
     val mapi: (key -> 'a -> 'b) -> 'a t -> 'b t
     val to_list : 'a t -> (key * 'a) list
+    val peek : 'a t -> (key * 'a) option
+    val combine : 'a t -> 'a t -> 'a t
+    val update : key -> 'a -> key -> 'a -> 'a t -> 'a t
   end
 
 module Make(Ord: OrderedType) = struct
@@ -350,5 +353,16 @@ module Make(Ord: OrderedType) = struct
       bindings_aux [] s
 
     let choose = min_binding
+
+    let to_list m = fold (fun k v acc -> (k,v)::acc) m []
+
+    let peek m = try Some(choose m) with Not_found -> None
+
+    let combine m m' = merge (fun _ mx my -> match mx, my with
+      | _, Some _ -> my
+      | Some _, _ -> mx
+      | _         -> None) m m'
+
+    let update oldk oldv k v m = add k v @@ remove oldk m
 
 end
