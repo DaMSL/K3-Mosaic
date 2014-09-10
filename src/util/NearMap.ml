@@ -37,6 +37,7 @@ module type S =
     val find_lt: key -> 'a t -> 'a
     val map: ('a -> 'b) -> 'a t -> 'b t
     val mapi: (key -> 'a -> 'b) -> 'a t -> 'b t
+    val to_list : 'a t -> (key * 'a) list
   end
 
 module Make(Ord: OrderedType) = struct
@@ -112,31 +113,30 @@ module Make(Ord: OrderedType) = struct
           else find x (if c < 0 then l else r)
 
     (* find the one value just greater than x *)
-    let find_gt x m = 
+    let find_gt x m =
       let rec loop last m =
-	match m, last with
-	| Empty, None ->
-	    raise Not_found
-	| Empty, Some x -> x
-	| Node(l, v, d, r, _) ->
-	    let c = Ord.compare x v in
-	    if c < 0 then loop (Some v) l
-	    else loop last r
-      in loop None m
+      match m, last with
+      | Empty, None   -> raise Not_found
+      | Empty, Some (_,d) -> d
+      | Node(l, v, d, r, _), _ ->
+          let c = Ord.compare x v in
+          if c < 0 then loop (Some(v,d)) l
+          else loop last r
+          in loop None m
 
     (* find the one value just less than x *)
-    let find_lt x m = 
+    let find_lt x m =
       let rec loop last m =
-	match m, last with
-	| Empty, None ->
-	    raise Not_found
-	| Empty, Some x -> x
-	| Node(l, v, d, r, _) ->
-	    let c = Ord.compare x v in
-	    if c <= 0 then loop last l
-	    else loop (Some v) r
-      in loop None m
-	      
+      match m, last with
+      | Empty, None ->
+          raise Not_found
+      | Empty, Some (_,d) -> d
+      | Node(l, v, d, r, _), _ ->
+          let c = Ord.compare x v in
+          if c <= 0 then loop last l
+          else loop (Some(v,d)) r
+          in loop None m
+
     let rec mem x = function
         Empty ->
           false

@@ -16,16 +16,17 @@ open K3Runtime
 (* Generic helpers *)
 
 type breakpoint_t = K3Runtime.breakpoint_t
+let sp = Printf.sprintf
 
 (* Prettified error handling *)
 let int_erroru uuid ?extra fn_name s =
   let msg = fn_name^": "^s in
   let rs = "interpreter: "^msg in
-  LOG rs LEVEL ERROR;
+  Log.log rs `Error;
   (match extra with
   | Some (address, env) ->
-    LOG ">>>> Peer %s" (string_of_address address) LEVEL ERROR;
-    LOG "%s" (string_of_env env) LEVEL ERROR
+    Log.log (sp ">>>> Peer %s" @: string_of_address address) `Error;
+    Log.log (sp "%s" @@ string_of_env env) `Error
   | _ -> ());
   raise @: RuntimeError(uuid, msg)
 
@@ -437,7 +438,7 @@ and eval_expr (address:address) sched_st cenv texpr =
             (* log our send *)
             let send_code = K3Helpers.mk_send (e target) (e addr) (e arg) in
             let send_str = K3PrintSyntax.string_of_expr send_code in
-            LOG send_str NAME "K3Interpreter.Msg" LEVEL DEBUG;
+            Log.log send_str ~name:"K3Interpreter.Msg" `Debug;
 
             (* check if we need to buffer our triggers for shuffling *)
             if K3Runtime.use_shuffle_tasks s then
@@ -579,14 +580,14 @@ let env_of_program ?address sched_st k3_program =
 
 (* consume messages to a specific node *)
 let consume_msgs ?(slice = max_int) sched_st env address =
-  let log_node s = LOG "Node %s: %s" (string_of_address address) s LEVEL TRACE in
+  let log_node s = Log.log (sp "Node %s: %s" (string_of_address address) s) `Trace in
   log_node "consuming messages";
   let status = run_scheduler ~slice sched_st address env in
   status
 
 (* consume sources ie. evaluate instructions *)
 let consume_sources sched_st env address (res_env, d_env) (ri_env, instrs) =
-  let log_node s = LOG "Node %s: %s" (string_of_address address) s LEVEL TRACE in
+  let log_node s = Log.log (sp "Node %s: %s" (string_of_address address) s) `Trace in
   match instrs with
   | []              -> NormalExec, (ri_env, [])
   | (Consume id)::t ->
@@ -686,8 +687,8 @@ let interpret_k3_program {scheduler; peer_meta; peer_list; envs} =
   if result = NormalExec then
     (* Log program state *)
     List.iter (fun (addr, e) ->
-      LOG ">>>> Peer %s" (string_of_address addr) LEVEL TRACE;
-      LOG "%s" (string_of_program_env e) LEVEL TRACE;
+      Log.log (sp ">>>> Peer %s" (string_of_address addr)) `Trace;
+      Log.log (sp "%s" (string_of_program_env e)) `Trace;
     ) prog_state;
   result, prog_state
 
