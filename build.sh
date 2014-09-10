@@ -8,8 +8,8 @@ popd > /dev/null
 cd $SCRIPTPATH
 
 # check for dbtoaster
-if [ ! -f "./external/dbtoaster/bin/dbtoaster_release" ] 
-then 
+if [ ! -f "./external/dbtoaster/bin/dbtoaster_release" ]
+then
   if [ ! -d "./external/dbtoaster/bin" ]
   then
       mkdir "./external/dbtoaster/bin"
