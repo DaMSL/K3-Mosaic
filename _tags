@@ -1,4 +1,4 @@
-<src/**/*.ml> : pp(camlp4o ../lib/bolt/bolt_pp.cmo), ocaml
+<src/**/*.ml> : ocaml
 <src/util>: include
 <src>: include
 <src/stages/k3>: include
@@ -6,7 +6,6 @@
 <src/stages/m3>: include
 <src/stages/k3_dist>: include
 <src/unit_tests>: include
-<lib/bolt>: not_hygienic
 <external>: not_hygienic
 <bin>: not_hygienic
 <deps>: -traverse
@@ -14,5 +13,4 @@
 true: use_str
 true: use_unix
 true: use_dynlink
-true: bolt
 true: bin_annot
