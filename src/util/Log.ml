@@ -1,7 +1,7 @@
 open Util
 
 let file = "./log.out"
-let logging = ref false
+let logging = ref true
 let channel = ref None
 
 let set b = logging := b
