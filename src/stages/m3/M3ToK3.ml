@@ -295,7 +295,7 @@ let mk_slice collection all_keys bound_keys =
     List.map (fun x ->
         if List.mem x bound_keys then KH.mk_var x
         else KH.mk_cunknown)
-      all_keys 
+      all_keys
     @ [KH.mk_cunknown]
 
 let mk_lookup collection bag_t keys key_types =

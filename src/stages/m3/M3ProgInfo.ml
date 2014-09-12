@@ -1,3 +1,4 @@
+open Util
 open ProgInfo
 
 let translate_vars = List.map (fun (x, t) -> (x, M3ToK3.m3_type_to_k3_type t))
@@ -22,26 +23,23 @@ let rec get_externals expr =
   ) expr
 
 let prog_data_of_m3 (prog:M3.prog_t): prog_data_t =
-  let (map_data, map_mapping) = snd (
+  let map_data, map_mapping = snd @@
     List.fold_right (fun map (i, (map_data, map_mapping)) ->
-      let (map_name, map_vars) = begin match map with
+      let map_name, map_vars = match map with
         | M3.DSView({Plan.ds_name = name}) ->
-          ( List.hd (Calculus.externals_of_expr name),
-            (Calculus.all_vars name)@["value", Calculus.type_of_expr name] )
+          List.hd @@ Calculus.externals_of_expr name,
+            Calculus.all_vars name@["value", Calculus.type_of_expr name]
 
-        | M3.DSTable(name, vars, _) ->
-          ( name, vars@["value", M3Type.TInt] )
-      end in
-        ( i - 1,
-          ( (i, map_name, List.map snd (translate_vars map_vars))::map_data,
-            (map_name, i)::map_mapping
-        ))
-
-    ) !(prog.M3.maps) ((List.length !(prog.M3.maps)), ([], [])))
+        | M3.DSTable(name, vars, _) -> name, vars@["value", M3Type.TInt]
+      in
+        i - 1,
+          ((i, map_name, snd_many @@ translate_vars map_vars)::map_data,
+            (map_name, i)::map_mapping)
+    ) !(prog.M3.maps) (List.length !(prog.M3.maps), ([], []))
   in
 
   let mk_bindings =
-    translate_external (ListAsFunction.apply_strict map_mapping)
+    translate_external @@ ListAsFunction.apply_strict map_mapping
   in
 
   let (trig_data, stmt_data) =
