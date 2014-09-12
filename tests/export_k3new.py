@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 
 #
 # Prepare everything the new k3 needs to evaluate
@@ -7,6 +7,7 @@
 import argparse
 import os
 import re
+import six
 
 path = "../../../"
 
@@ -54,8 +55,8 @@ def main():
     parser.add_argument("sql_file", type=str, help="Specify path of sql file")
     parser.add_argument("-n", "--nodes", type=int, dest="num_nodes",
                         default=2, help="Number of nodes")
-    parser.add_argument("--folds_only", action='store_true', dest="folds_only",
-                        default=False, help="Covert map and ext to fold")
+    parser.add_argument("--no_folds_only", action='store_false', dest="folds_only",
+                        default=True, help="Covert map and ext to fold")
     args = parser.parse_args()
 
     num_nodes = args.num_nodes - 1
@@ -69,11 +70,11 @@ def main():
     data_files = get_data_files(s, args.sql_file)
 
     def print_sys(cmd):
-        print(cmd)
+        six.print_(cmd)
         os.system(cmd)
 
     # create the old k3 files necessary for this query
-    print("\nCreating old k3 files...")
+    six.print_("\nCreating old k3 files...")
     cmd = 'time python auto_test.py -d -p 1 -f {file}'.format(file=args.sql_file)
     print_sys(cmd)
 
@@ -86,17 +87,17 @@ def main():
     if args.folds_only:
         fold_cmd = '--k3new_folds'
 
-    print("\nConverting to new k3 file format...")
+    six.print_("\nConverting to new k3 file format...")
     cmd = '../bin/k3 -i k3 -l k3new {fold_cmd} --k3new_folds --datafile {nice_name}.csv temp.k3dist > {nice_name}.k3 2> temp.err'.format(**locals())
     print_sys(cmd)
 
     # create k3 partmap
-    print("\nCreating k3 partition map...")
+    six.print_("\nCreating k3 partition map...")
     cmd = '../bin/partmap_tool temp.k3dist --k3new -n {num_nodes} > {nice_name}_part.k3'.format(**locals())
     print_sys(cmd)
 
     # combine data files
-    print("\nCombining data files...")
+    six.print_("\nCombining data files...")
     files_s = ' '.join([df[1] for df in data_files])
     cmd = '../bin/combine_data --mut {files_s} > {nice_name}.csv'.format(**locals())
     print_sys(cmd)
