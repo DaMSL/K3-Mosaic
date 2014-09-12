@@ -25,9 +25,11 @@ include ASTCommon
 type annotation_t
 
 (* multimap index *)
+type index_kind = Ordered | Hash
 type index_t  = {
                    mm_indices: IntSet.t; (* tuple indices *)
                    mm_comp_fn: string option;
+                   mm_idx_kind : index_kind;
                    mm_submaps: index_t list;
                 }
 

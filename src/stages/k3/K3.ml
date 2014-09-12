@@ -16,10 +16,13 @@ include ASTCommonImpl
 (* Annotations *)
 type annotation_t = Annotation.annotation_t
 
+type index_kind = Ordered | Hash
+
 (* multimap index *)
 type index_t = {
                  mm_indices: IntSet.t; (* tuple indices *)
                  mm_comp_fn: string option;
+                 mm_idx_kind : index_kind;
                  mm_submaps: index_t list;
                }
 

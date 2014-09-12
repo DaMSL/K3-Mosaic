@@ -2,8 +2,50 @@
 open Util
 open ProgInfo
 open K3Helpers
+open K3.AST
 module G = K3Global
 module P = ProgInfo
+
+module IdMap = Map.Make(struct type t = id_t let compare = String.compare end)
+
+type config = {
+  p : P.prog_data_t;
+  (* a mapping from map name to index list we build up as we slice *)
+  map_idxs : index_t list IdMap.t;
+}
+
+(* add an index to the config structure *)
+let add_index id (idx_set_kind_l:(IntSet.t * index_kind) list) (c:config) =
+  let cur_idx = try IdMap.find id c.map_idxs with Not_found -> [] in
+  let rec loop cur_idx' = function
+    | [] -> cur_idx'
+    | (idx_set, kind)::tail ->
+        (* look for a matching index column set and add to it *)
+        let found, idx_src' = mapfold (fun found idx ->
+          if IntSet.equal idx.mm_indices idx_set then
+            (* iterate with sub-indices *)
+            let mm_submaps = loop idx.mm_submaps tail in
+            (* change to ordered type if requested *)
+            true, match kind with
+              | Ordered -> {idx with mm_submaps; mm_idx_kind=Ordered}
+              | _       -> {idx with mm_submaps}
+
+          else found, idx)
+          false cur_idx'
+        in
+        if found then cur_idx'
+        else (* if not found, add the index *)
+          { mm_indices = idx_set;
+            mm_comp_fn = None;
+            mm_idx_kind = kind;
+            mm_submaps = loop [] tail; (* empty current index *)
+          }::idx_src'
+  in
+  let idx_l' = loop cur_idx idx_set_kind_l in
+  {c with map_idxs=IdMap.add id idx_l' c.map_idxs}
+
+let add_index' id idx_kind_l c =
+  add_index id (List.map (first intset_of_list) idx_kind_l) c
 
 (* initial vid to put in initialization statements *)
 let init_vid = "__init_vid__"
