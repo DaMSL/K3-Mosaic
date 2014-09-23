@@ -3,6 +3,7 @@ open Util
 open ProgInfo
 open K3Helpers
 open K3.AST
+module U = K3Util
 module G = K3Global
 module P = ProgInfo
 
@@ -11,10 +12,10 @@ module IdMap = Map.Make(struct type t = id_t let compare = String.compare end)
 type config = {
   p : P.prog_data_t;
   (* a mapping from map name to index list we build up as we slice *)
-  map_idxs : index_t list IdMap.t;
+  mutable map_idxs : index_t list IdMap.t;
 }
 
-(* add an index to the config structure *)
+(* add an index to the config structure and update it *)
 let add_index id (idx_set_kind_l:(IntSet.t * index_kind) list) (c:config) =
   let cur_idx = try IdMap.find id c.map_idxs with Not_found -> [] in
   let rec loop cur_idx' = function
@@ -42,10 +43,18 @@ let add_index id (idx_set_kind_l:(IntSet.t * index_kind) list) (c:config) =
           }::idx_src'
   in
   let idx_l' = loop cur_idx idx_set_kind_l in
-  {c with map_idxs=IdMap.add id idx_l' c.map_idxs}
+  c.map_idxs <- IdMap.add id idx_l' c.map_idxs
 
-let add_index' id idx_kind_l c =
-  add_index id (List.map (first intset_of_list) idx_kind_l) c
+(* add an index from a k3 pattern *)
+let add_index_pat id pat_kind_l c =
+  let idx_set_of_pat pat =
+    insert_index_fst 0 pat
+    |> List.filter (fun (_,x) ->
+        match U.tag_of_expr x with Const(CUnknown) -> false | _ -> true)
+    |> fst_many |> intset_of_list
+  in
+  let idx_kind_l = List.map (first idx_set_of_pat) pat_kind_l in
+  add_index id idx_kind_l c
 
 (* initial vid to put in initialization statements *)
 let init_vid = "__init_vid__"
