@@ -116,6 +116,7 @@ type expr_tag_t
     | Block
     | Iterate
     | IfThenElse
+    | CaseOf of id_t (* first child is some, second is none *)
 
     | Map
     | Filter

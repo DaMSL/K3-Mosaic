@@ -269,6 +269,18 @@ and eval_expr (address:address) sched_st cenv texpr =
         | _ -> error name "non-boolean predicate"
         end
 
+    | CaseOf x ->
+        let name = "CaseOf" in
+        let penv, pred = child_value cenv 0 in
+        begin match pred with
+        | VOption(Some v) ->
+            let penv' = second (env_add x v) penv in
+            eval_expr address sched_st penv' @: List.nth children 1
+        | VOption None    ->
+            eval_expr address sched_st penv @: List.nth children 2
+        | _ -> error name "non-maybe predicate"
+        end
+
     (* Collection transformers *)
 
     (* Keeps the same type *)

@@ -96,6 +96,10 @@ let hd l = match l with
   | x::_ -> x
   | _ -> invalid_arg "empty list"
 
+let hd' = function
+  | x::_ -> Some x
+  | _    -> None
+
 let tl l = match l with
   | _::x -> x
   | _ -> invalid_arg "empty list or singleton"

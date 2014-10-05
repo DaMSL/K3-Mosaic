@@ -10,6 +10,8 @@ val fos : string -> float
 val bos : string -> bool
 val sob : bool -> string
 
+val const : 'a -> 'b -> 'a
+
 type ('a, 'b) either_t = Left of 'a | Right of 'b
 
 val (@:) : ('a -> 'b) -> 'a -> 'b
@@ -63,6 +65,8 @@ val list_fold2 : ('acc -> 'b -> 'c -> 'acc) -> 'acc -> 'b list -> 'c list -> 'ac
 
 (* take the head of a list *)
 val hd : 'a list -> 'a
+
+val hd' : 'a list -> 'a option
 
 (* take the tail of a list *)
 val tl : 'a list -> 'a list

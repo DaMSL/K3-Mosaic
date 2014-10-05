@@ -72,6 +72,7 @@ let check_tag_arity tag children =
     | Block         -> length
     | Iterate       -> 2
     | IfThenElse    -> 3
+    | CaseOf _      -> 3
 
     | Map               -> 2
     | Filter            -> 2
@@ -146,6 +147,12 @@ let dereft bt x =
     match bt with
     | TIndirect vt -> vt
     | _ -> x (); dummy
+
+let demaybe bt x =
+  let dummy = canonical TUnknown in
+  match bt with
+  | TMaybe vt -> vt
+  | _ -> x (); dummy
 
 let annotation_of vt =
     match vt with
@@ -257,44 +264,57 @@ let deduce_constant_type id trig_env c =
           with Not_found -> t_erroru name (TMsg("Trigger "^id^" not found")) () end
   in canonical constant_type
 
-let rec gen_arg_bindings a =
-    match a with
-    | AIgnored -> []
-    | AVar(i, t) -> [(i, TValue(t))]
-    | AMaybe(a') -> gen_arg_bindings a'
-    | ATuple(args) -> List.concat (List.map gen_arg_bindings args)
+let rec gen_arg_bindings = function
+  | AIgnored    -> []
+  | AVar(i, t)  -> [i, TValue t]
+  | AMaybe a'   -> gen_arg_bindings a'
+  | ATuple args -> List.concat @@ List.map gen_arg_bindings args
 
 (* fill_in: check at each node whether we already have a type annotation. If so, don't go any further down *)
-let rec deduce_expr_type ?(override=true) trig_env cur_env utexpr =
+let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
     let ((uuid, tag), aux), untyped_children = decompose_tree utexpr in
     let t_erroru = t_error uuid in (* pre-curry the type error *)
+    let wrap_tv t _ = TValue t in
 
     (* Check Tag Arity *)
     if not @: check_tag_arity tag untyped_children then raise MalformedTree else
 
-    (* Determine if the environment to be passed down to child typechecking needs to be augmented. *)
-    let env =
-        match tag with
-        | Lambda(a) -> gen_arg_bindings a @ cur_env
-        | _ -> cur_env
+    (* Augment environments for children *)
+    let env_proc_fn (last_ch:expr_t option) i = match tag, last_ch, i with
+      | Lambda a, None, _    -> gen_arg_bindings a @ env
+      | CaseOf x, Some ch, 1 ->
+          let name = "CaseOf" in
+          let t = type_of_expr ch in
+          let t_e = t <| wrap_tv +++ demaybe +++ base_of +++ value_of |>
+                  t_erroru name @: not_value t in
+          (x, t_e) :: env
+      | _                    -> env
     in
     (* If not overriding, find those children for which we have no type already *)
-    let typed_children = List.map (fun child ->
-      if override || try ignore(type_of_expr child); false with TypeError(_,_,UntypedExpression) -> true | _ -> false then
-          deduce_expr_type ~override trig_env env child
-        else child)
+    let has_type ch =
+      try ignore @@ type_of_expr ch; true
+      with TypeError(_, _, UntypedExpression) -> false
+           | _                                -> true
+    in
+    let typed_children = List.rev @: fst @@ List.fold_left (fun (acc, i) ch ->
+        if override || not @@ has_type ch
+        then 
+          let ch' = deduce_expr_type ~override trig_env (env_proc_fn (hd' acc) i) ch
+          in ch'::acc, i+1
+        else ch::acc,  i+1)
+      ([], 0)
       untyped_children
     in
-    let attach_type t = mk_tree (((uuid, tag), ((Type t)::aux)), typed_children) in
-    let bind n = type_of_expr (List.nth typed_children n) in
+    let attach_type t = mk_tree (((uuid, tag), Type t::aux), typed_children) in
+    let bind n = type_of_expr @@ List.nth typed_children n in
 
     let current_type =
         match tag with
         | Const(c) -> TValue(deduce_constant_type uuid trig_env c)
-        | Var(id) -> (
+        | Var id -> begin
             try List.assoc id env
             with Not_found -> t_erroru "Var" (TMsg(id^" not found")) ()
-        )
+          end
         | Tuple ->
             let child_types = List.map
             (fun e ->
@@ -302,13 +322,13 @@ let rec deduce_expr_type ?(override=true) trig_env cur_env utexpr =
                 t <| value_of |> t_erroru "Tuple" @: not_value t )
                 typed_children
             in
-            TValue(canonical (TTuple(child_types)))
+            TValue(canonical (TTuple child_types))
         | Just ->
             let inner = bind 0 in
             let inner_type = inner <| value_of |> t_erroru "Just" (not_value inner ) in
-            TValue(canonical (TMaybe(inner_type)))
-        | Nothing(t) -> TValue(t)
-        | Empty(t) -> TValue(t)
+            TValue(canonical (TMaybe inner_type))
+        | Nothing t -> TValue t
+        | Empty t   -> TValue t
         | Singleton(t) ->
             let name = "Singleton" in
             let t_c, t_e = t <| collection_of +++ base_of |>
@@ -394,7 +414,7 @@ let rec deduce_expr_type ?(override=true) trig_env cur_env utexpr =
 
         | IfThenElse ->
             let name = "IfThenElse" in
-            let t0 = bind 0 in let t1 = bind 1 in let t2 = bind 2 in
+            let t0, t1, t2 = bind 0, bind 1, bind 2 in
             let t_p = t0 <| value_of |> t_erroru name @: not_value t0  in
             let t_t = t1 <| value_of |> t_erroru name @: not_value t1  in
             let t_e = t2 <| value_of |> t_erroru name @: not_value t2  in
@@ -402,6 +422,15 @@ let rec deduce_expr_type ?(override=true) trig_env cur_env utexpr =
                 if t_t === t_e then TValue(t_t)
                 else t_erroru name (VTMismatch(t_t, t_e,"")) ()
             else t_erroru name (VTMismatch(canonical TBool, t_p,"")) ()
+
+        | CaseOf id ->
+            (* the expression was handled in the prelude *)
+            let name = "CaseOf" in
+            let t1, t2 = bind 1, bind 2 in
+            let t_s = t1 <| value_of |> t_erroru name @: not_value t1 in
+            let t_n = t2 <| value_of |> t_erroru name @: not_value t2 in
+            if t_n === t_s then TValue t_s
+            else t_erroru name (VTMismatch(t_n, t_s, "case branches")) ()
 
         | Block ->
             let name = "Block" in
@@ -414,7 +443,7 @@ let rec deduce_expr_type ?(override=true) trig_env cur_env utexpr =
                 | _ -> t_erroru name (TMsg("Bad or non-TUnit expression")) ()
             ) in validate_block typed_children
 
-        | Lambda(t_a) ->
+        | Lambda t_a ->
             let name = "Lambda" in
             let t0 = bind 0 in
             let t_r = t0 <| value_of |> t_erroru name @: not_value t0
@@ -422,7 +451,7 @@ let rec deduce_expr_type ?(override=true) trig_env cur_env utexpr =
 
         | Apply ->
             let name = "Apply" in
-            let t0 = bind 0 in let t1 = bind 1 in
+            let t0, t1 = bind 0, bind 1 in
             let t_e, t_r = t0 <| function_of |> t_erroru name @: not_function t0  in
             let t_a = t1 <| value_of |> t_erroru name @: not_value t0  in
             if t_e <~ t_a then TValue(t_r)
