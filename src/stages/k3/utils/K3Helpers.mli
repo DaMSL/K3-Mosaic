@@ -142,7 +142,8 @@ val mk_apply : expr_t -> expr_t -> expr_t
 val mk_block : expr_t list -> expr_t
 val mk_iter : expr_t -> expr_t -> expr_t
 val mk_if : expr_t -> expr_t -> expr_t -> expr_t
-val mk_case : id_t -> expr_t -> expr_t -> expr_t -> expr_t
+val mk_case : expr_t -> id_t -> expr_t -> expr_t -> expr_t
+val mk_case_rev : expr_t -> id_t -> expr_t -> expr_t -> expr_t
 
 val mk_map : expr_t -> expr_t -> expr_t
 val mk_filter : expr_t -> expr_t -> expr_t

@@ -202,7 +202,7 @@ let gen_route_fn p map_id =
         let hash_func = hash_func_for temp_type in
         mk_add
           (* check if we have a binding in this index *)
-          (mk_if (mk_eq (mk_var temp_id) @: mk_nothing maybe_type)
+          (mk_case_rev (mk_var temp_id) id_unwrap
             (mk_cint 0) @: (* no contribution *)
             (* bind the slice for this index *)
             mk_let "pmap_slice" pmap_types
@@ -211,22 +211,20 @@ let gen_route_fn p map_id =
             (* check if we don't partition by this index *)
             (mk_if (mk_eq (mk_var "pmap_slice") @: mk_empty pmap_types)
               (mk_cint 0) @:
-              mk_unwrap_maybe [temp_id, maybe_type] @:
-                mk_let "value" t_int
-                (mk_apply (mk_var "mod") @:
-                  mk_tuple
-                    (* we hash first. This could seem like it destroys locality,
-                     * but it really doesn't, since we're only concerned about
-                     * point locality *)
-                    [mk_apply (mk_var hash_func) @: mk_var id_unwrap;
-                    mk_snd t_two_ints @: mk_peek @: mk_var "pmap_slice"]
-                ) @:
-                mk_mult
-                  (mk_var "value") @:
-                  mk_snd t_two_ints @:
-                    mk_peek @: mk_slice (mk_var "dim_bounds") @:
-                      mk_tuple [mk_cint index; mk_cunknown]
-              )
+              mk_let "value" t_int
+              (mk_apply (mk_var "mod") @:
+                mk_tuple
+                  (* we hash first. This could seem like it destroys locality,
+                    * but it really doesn't, since we're only concerned about
+                    * point locality *)
+                  [mk_apply (mk_var hash_func) @: mk_var id_unwrap;
+                  mk_snd t_two_ints @: mk_peek @: mk_var "pmap_slice"]
+              ) @:
+              mk_mult
+                (mk_var "value") @:
+                mk_snd t_two_ints @:
+                  mk_peek @: mk_slice (mk_var "dim_bounds") @:
+                    mk_tuple [mk_cint index; mk_cunknown])
           ) acc_code
       )
       (mk_cint 0)
