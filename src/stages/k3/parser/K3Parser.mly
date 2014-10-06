@@ -5,6 +5,7 @@
   open K3.AST
   open K3.Annotation
   open Tree
+  open K3Helpers
 
   let uuid = ref 1
 
@@ -57,6 +58,9 @@
 
   let cond_error cond_class =
     print_error ("Invalid conditional "^cond_class^" error")
+
+  let case_error case_class =
+    print_error ("Invalid case "^case_class^" error")
 
   let lambda_error error_class =
     print_error ("Invalid lambda "^error_class^" expression")
@@ -130,6 +134,8 @@
 
 %token IF THEN ELSE LET IN
 
+%token CASE OF
+
 %token SEND
 
 %token ANNOTATE
@@ -151,6 +157,8 @@
 %right LRARROW
 
 %right IF THEN ELSE
+
+%right CASE OF
 
 %right CONCAT
 
@@ -424,6 +432,7 @@ expr :
     | arithmetic { $1 }
     | predicate { $1 }
     | conditional { $1 }
+    | case { $1 }
     | lambda { $1 }
     | access { $1 }
     | transformers { $1 }
@@ -582,6 +591,18 @@ conditional :
     | IF expr THEN error           { cond_error "then branch" }
     | IF error                     { cond_error "predicate" }
 ;
+
+case :
+    | CASE expr OF LBRACE JUST IDENTIFIER RARROW expr RBRACE LBRACE NOTHING RARROW expr RBRACE
+      { mk_case $2 $6 $8 $13 }
+    | CASE expr OF LBRACE NOTHING RARROW expr RBRACE LBRACE JUST IDENTIFIER RARROW expr RBRACE
+      { mk_case $2 $11 $7 $13 }
+
+    /* Error handling */
+    | CASE expr OF LBRACE JUST IDENTIFIER RARROW expr { case_error "nothing case" }
+    | CASE expr OF LBRACE NOTHING RARROW expr { case_error "just case" }
+    | CASE expr OF error { case_error "case" }
+    | CASE error { case_error "predicate" }
 
 lambda :
      | BACKSLASH arg RARROW expr { mkexpr (Lambda($2)) [$4] }

@@ -156,6 +156,9 @@ rule tokenize = parse
     | "then" { THEN }
     | "else" { ELSE }
 
+    | "case" { CASE }
+    | "of"   { OF }
+
     | "let"  { LET }
     | "in"   { IN }
 

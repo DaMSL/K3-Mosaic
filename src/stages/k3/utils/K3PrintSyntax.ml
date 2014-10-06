@@ -342,8 +342,8 @@ let rec lazy_expr c expr =
     wrap_indent (lps "else" <| lsp () <| lazy_expr c e3)
   | CaseOf x -> let e1, e2, e3 = U.decompose_caseof expr in
     wrap_indent (lps "case" <| lsp () <| lazy_expr c e1 <| lsp () <| lps "of" <| lsp () <|
-    wrap_indent (lazy_brace (lps ("Just "^x^" ->") <| lsp () <| lazy_expr c e2)) <| lsp () <|
-    wrap_indent (lazy_brace (lps "Nothing ->" <| lsp () <| lazy_expr c e3)))
+    wrap_indent (lazy_brace (lps ("just "^x^" ->") <| lsp () <| lazy_expr c e2)) <| lsp () <|
+    wrap_indent (lazy_brace (lps "nothing ->" <| lsp () <| lazy_expr c e3)))
   | Map -> let p = U.decompose_map expr in
     lps "map" <| lcut () <| lazy_paren @: expr_sub p
   | Filter -> let p = U.decompose_filter expr in
