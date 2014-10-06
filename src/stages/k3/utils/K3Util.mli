@@ -43,6 +43,7 @@ val decompose_assign : expr_t -> expr_t * expr_t
 val decompose_block : expr_t -> expr_t list
 val decompose_combine : expr_t -> expr_t * expr_t
 val decompose_const : expr_t -> constant_t
+val decompose_caseof : expr_t -> expr_t * expr_t * expr_t
 val decompose_delete : expr_t -> expr_t * expr_t
 val decompose_deref : expr_t -> expr_t
 val decompose_eq : expr_t -> expr_t * expr_t

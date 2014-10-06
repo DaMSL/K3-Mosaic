@@ -86,6 +86,7 @@ let string_of_tag_type tag = match tag with
 
     | Block      -> "Block"
     | IfThenElse -> "IfThenElse"
+    | CaseOf x   -> "CaseOf "^x
 
     | Map              -> "Map"
     | Iterate          -> "Iterate"
@@ -179,6 +180,7 @@ let flat_string_of_expr_tag tag children =
 
     | Block      -> my_tag "Block"
     | IfThenElse -> my_tag "IfThenElse"
+    | CaseOf x   -> my_tag @@ "CaseOf "^x
 
     | Map              -> my_tag "Map"
     | Iterate          -> my_tag "Iterate"
@@ -438,6 +440,7 @@ and print_expr_tag c tag lazy_children =
 
     | Block      -> my_tag_list "Block"
     | IfThenElse -> my_tag "IfThenElse"
+    | CaseOf x   -> my_tag @@ "CaseOf "^x
 
     | Map              -> my_tag "Map"
     | Iterate          -> my_tag "Iterate"

@@ -520,8 +520,8 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
     with T.TypeError(_,_,_) -> false (* assume additive *)
   (* many instructions need to wrap the same way *)
   in let wrap e = match U.tag_of_expr expr with
-    Insert | Iterate | Map | Filter | Flatten | Send | Delete | Update |
-    Aggregate | GroupByAggregate -> wrap_hv 2 e
+    | Insert | Iterate | Map | Filter | Flatten | Send | Delete | Update
+    | Aggregate | GroupByAggregate -> wrap_hv 2 e
     | IfThenElse -> wrap_hv 0 e
     | _ -> id_fn e
   in
@@ -663,10 +663,16 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
     wrap_hv 0 (lps_list ~sep:";" CutHint (lazy_expr c) es <| lsp ())
       <| lps ")"
 
-  | IfThenElse -> let (e1, e2, e3) = U.decompose_ifthenelse expr in
+  | IfThenElse -> let e1, e2, e3 = U.decompose_ifthenelse expr in
     wrap_indent (lps "if " <| lazy_expr c e1) <| lsp () <|
     wrap_indent (lps "then" <| lsp () <| lazy_expr c e2) <| lsp () <|
     wrap_indent (lps "else" <| lsp () <| lazy_expr c e3)
+
+  | CaseOf x ->
+    let e1, e2, e3 = U.decompose_caseof expr in
+    lps "case" <| lsp () <| lazy_expr c e1 <| lsp () <| lps "of" <| lsp () <|
+    wrap_indent (lazy_brace (lps ("Some "^x^" ->") <| lsp () <| lazy_expr c e2)) <|
+    wrap_indent (lazy_brace (lps "None ->" <| lsp () <| lazy_expr c e3))
 
   | Iterate -> let lambda, col = U.decompose_iterate expr in
     apply_method c ~name:"iterate" ~col ~args:[lambda] ~arg_info:[ALambda [InRec], Out]
