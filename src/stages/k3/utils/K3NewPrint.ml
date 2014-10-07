@@ -89,8 +89,8 @@ let add_record_ids ?prefix l =
     List.map (fun (i, x) -> record_id_of_num ?prefix i, x) i_l
 
 (* Add record ids to a string *)
-let add_record_ids_str ?prefix ?(sep=":") l =
-  List.map (fun (s,x) -> Printf.sprintf "%s%s%s" s sep x) @: add_record_ids ?prefix l
+let concat_record_str ?(sep=":") l =
+  List.map (fun (s,x) -> Printf.sprintf "%s%s%s" s sep x) l
 
 let error () = lps "???"
 
@@ -352,8 +352,7 @@ let rec deep_bind ?(depth=0) ?top_expr ~in_record c arg_n =
     | NVar(i, id, vt) when record ->
         begin match snd @: KH.unwrap_vtype vt with
         | TTuple _  -> []    (* don't bind if we have an id representing a record *)
-        (*| TCollection _ -> [] [> or a collection <]*)
-        | _        ->
+        | _         ->
           (* force bind a variable that comes in as a pretend record *)
           lps "bind " <| lps (id_of_num i) <| lps " as {i:" <| lps id
           <| lps "} in " <| lcut ()
@@ -364,11 +363,17 @@ let rec deep_bind ?(depth=0) ?top_expr ~in_record c arg_n =
         (* only produce binds if we're deeper than specified depth *)
         (if d < depth then [] else
           let args_id = List.map get_id_of_arg args in
-          let args_rec = add_record_ids_str args_id in
-          let sub_ids = lazy_concat ~sep:lcomma lps args_rec in
-          lps "bind " <| bind_text i <| lps " as {" <| sub_ids <| lps "} in "
-          <| lcut ()) <|
-      List.flatten @: List.map (loop @: d+1) args
+          let rec_ids = List.filter ((<>) "_" |- snd) @@ add_record_ids args_id in
+          (* filter out all the ignored ids *)
+          begin match rec_ids with
+          | []      -> [] (* if there's nothing to bind, skip it *)
+          | rec_ids ->
+            let args_rec = concat_record_str rec_ids in
+            let sub_ids = lazy_concat ~sep:lcomma lps args_rec in
+            lps "bind " <| bind_text i <| lps " as {" <| sub_ids <| lps "} in "
+            <| lcut () end)  <|
+        (* rest of the binds *)
+        List.flatten @: List.map (loop @: d+1) args
   | NMaybe(i, arg)  ->
       if d < depth then [] else
         lps "let " <| lps (get_id_of_arg arg) <| lps " = " <| unwrap_option (bind_text i) <|
