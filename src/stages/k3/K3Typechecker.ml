@@ -35,6 +35,7 @@ type error_type =
 (* uuid, location in typechecker, compared types *)
 exception TypeError of int * string * error_type
 
+let not_maybe t      = TBad(t, "not a maybe")
 let not_value t      = TBad(t, "not a value")
 let not_function t   = TBad(t, "not a function")
 let not_collection t = TBad(t, "not a collection")
@@ -286,7 +287,7 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
           let name = "CaseOf" in
           let t = type_of_expr ch in
           let t_e = t <| wrap_tv +++ demaybe +++ base_of +++ value_of |>
-                  t_erroru name @: not_value t in
+                  t_erroru name @: not_maybe t in
           (x, t_e) :: env
       | _                    -> env
     in
@@ -298,7 +299,7 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
     in
     let typed_children = List.rev @: fst @@ List.fold_left (fun (acc, i) ch ->
         if override || not @@ has_type ch
-        then 
+        then
           let ch' = deduce_expr_type ~override trig_env (env_proc_fn (hd' acc) i) ch
           in ch'::acc, i+1
         else ch::acc,  i+1)
@@ -647,7 +648,7 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
             let t_c, t_e =
               t0 <| collection_of +++ base_of +++ value_of |>
                   t_erroru name @: not_collection t0  in
-            TValue(t_e)
+            TValue(H.wrap_tmaybe @@ t_e)
 
         | Assign ->
             (* TODO: check for mutability *)

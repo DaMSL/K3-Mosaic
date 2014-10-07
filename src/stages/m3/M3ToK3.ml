@@ -306,13 +306,14 @@ let mk_lookup collection bag_t keys key_types =
   KH.mk_let (KU.id_of_var wrapped_value)
             coll_type
             (mk_slice collection keys keys) @:
-            KH.mk_if
-              (KH.mk_eq wrapped_value @: KH.mk_empty coll_type)
+            KH.mk_case_ns
+              (KH.mk_peek wrapped_value)
+              "unwrapped_value"
               (KH.mk_const @: zero_of_type bag_t) @:
               mk_project (List.length keys+1)
-                          (List.length keys)
-                          bag_t @:
-                          KH.mk_peek wrapped_value
+                (List.length keys)
+                bag_t @:
+                (KH.mk_var "unwrapped_value")
 
 let mk_test_member collection keys key_types val_type =
   KH.mk_has_member' collection
@@ -466,7 +467,7 @@ let map_access_to_expr mapn ins outs map_ret_t theta_vars_k init_expr_opt =
       | [], [] ->
           (* No need to perform initial value computation. This should have *)
           (* already been initialized at system start-up. *)
-          KH.mk_peek @: KH.mk_var mapn
+          KH.mk_peek_or_zero @@ KH.mk_var mapn
 
       | [], y -> begin match free_vars_k, init_expr_opt with
           | [], None ->
@@ -1164,7 +1165,7 @@ let m3_stmt_to_k3_stmt (meta: meta_t) ?(generate_init = false)
       | Plan.ReplaceStmt, _ ->
          init_val_from_type @: m3_type_to_k3_type map_type
 
-      | Plan.UpdateStmt, [] -> KH.mk_peek @: existing_out_tier
+      | Plan.UpdateStmt, [] -> KH.mk_peek_or_zero existing_out_tier
 
       | Plan.UpdateStmt, _ ->
          let init_expr_opt =

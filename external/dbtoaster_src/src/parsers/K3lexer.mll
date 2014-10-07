@@ -1,6 +1,6 @@
-{   
-open K3parser   
-open Lexing   
+{
+open K3parser
+open Lexing
 
 let init_line lexbuf =
     let pos = lexbuf.Lexing.lex_curr_p in
@@ -20,14 +20,18 @@ let hashtbl_of_pair_list h l =
     List.iter (fun (p1, p2) -> Hashtbl.add h p1 p2) l
 
 let keyword_table = Hashtbl.create 35
-let keywords =   
-   [   
+let keywords =
+   [
          "ON", ON;
          "SYSTEM", SYSTEM;
          "READY", READY;
          "QUERY", QUERY;
          "IF", IF;
          "ELSE", ELSE;
+         "case", CASE;
+         "of", OF;
+         "JUST", JUST;
+         "NOTHING", NOTHING;
          "IF0", IF0;
          "ITERATE", ITERATE;
          "LAMBDA", LAMBDA;
@@ -51,7 +55,7 @@ let keywords =
          "OUT", OUT;
          "SINGLETON", SINGLETON;
          "COMBINE", COMBINE;
-      
+
          "CREATE", CREATE;
          "TABLE", TABLE;
          "STREAM", STREAM;
@@ -78,30 +82,30 @@ let _ = hashtbl_of_pair_list keyword_table keywords
 
 let ops_table = Hashtbl.create 11
 let ops =
-    [   
+    [
         "==",   EQ;
         "!=",   NE;
-        "<",    LT;   
-        "<=",   LE;  
+        "<",    LT;
+        "<=",   LE;
         "+",    SUM;
         "*",    PRODUCT;
         ">",    GT;
         "-",    MINUS;
     ]
 let _ = hashtbl_of_pair_list ops_table ops
-    
-}   
- 
-let char        = ['a'-'z' 'A'-'Z']   
-let digit       = ['0'-'9']   
+
+}
+
+let char        = ['a'-'z' 'A'-'Z']
+let digit       = ['0'-'9']
 let decint      = digit+
 let int         = ('-')?decint
 let decimal     = digit+ '.' digit+
 let number      = ('-'|'+')?digit+ '.' digit*
 let float       = (int|decimal)'E'('+'|'-')?digit+
 let identifier  = (char|('_'+(digit|char)))(char|digit|'_')*
-let whitespace  = [' ' '\t']   
-let newline     = "\n\r" | '\n' | '\r'  
+let whitespace  = [' ' '\t']
+let newline     = "\n\r" | '\n' | '\r'
 let cmp_op      = "<" | "<=" | "==" | "!=" | '>'
 let arith_op    = '+' | '*' | '-'
 let strconst    = ('\"'[^'\"']*'\"') | ('\''[^'\'']*'\'')
@@ -111,7 +115,7 @@ let multicmend  = "*/"
 
 
 rule tokenize = parse
-| whitespace    { tokenize lexbuf }   
+| whitespace    { tokenize lexbuf }
 | newline       { advance_line lexbuf; tokenize lexbuf }
 | int           { INTEGER(int_of_string (lexeme lexbuf)) }
 | number        { CONST_FLOAT(float_of_string (lexeme lexbuf))  }
@@ -121,17 +125,17 @@ rule tokenize = parse
 | cmp_op
 | arith_op      { let op_str = lexeme lexbuf in
                       try Hashtbl.find ops_table op_str
-                      with Not_found -> 
+                      with Not_found ->
                           raise (Failure ("unknown operator "^(op_str)))
                 }
-| identifier    { 
+| identifier    {
                   let keyword_str = lexeme lexbuf in
                   let keyword_str_uc = String.uppercase keyword_str in
                       try Hashtbl.find keyword_table keyword_str_uc
                       with Not_found -> ID(keyword_str)
                 }
-| strconst      { let s = lexeme lexbuf in 
-                      CONST_STRING(String.sub s 1 ((String.length s)-2)) 
+| strconst      { let s = lexeme lexbuf in
+                      CONST_STRING(String.sub s 1 ((String.length s)-2))
                 }
 | ','           { COMMA }
 | '('           { LPAREN }

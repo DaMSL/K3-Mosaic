@@ -214,6 +214,14 @@ let decl = wrap_tfunc t_string t_int
 let args = wrap_args ["s", t_string]
 let _ = Hashtbl.add func_table name (decl, args, fn)
 
+(* error function ---------- *)
+let fn env =
+  failwith "Error function called"
+let name = "error"
+let decl = wrap_tfunc t_unit t_unknown
+let args = wrap_args ["_", t_unit]
+let _ = Hashtbl.add func_table name (decl, args, fn)
+
 (* function-lookup functions *)
 let lookup id = Hashtbl.find func_table id
 let lookup_value id = let (_,a,f) = lookup id in VForeignFunction (a,f)

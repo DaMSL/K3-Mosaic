@@ -36,7 +36,7 @@ let set_replicas_code =
   let var_replicas = mk_var replicas_nm in
   mk_global_fn "set_replicas"
   ["n", t_int] [t_unit] @:
-    mk_update var_replicas (mk_peek var_replicas) (mk_var "n")
+    mk_update var_replicas (mk_peek_or_error var_replicas) (mk_var "n")
 
 let add_node_name = "add_node"
 
@@ -47,7 +47,7 @@ let add_node_code =
   mk_let "rng" (wrap_tlist t_int)
     (mk_range TList
       (mk_cint 1) (mk_cint 1) @:
-        mk_peek @:
+        mk_peek_or_error @:
           mk_slice (mk_var replicas_nm) mk_cunknown) @:
   mk_let "new_elems" t_ring
     (mk_map
@@ -117,6 +117,8 @@ let remove_node_code =
 (* note about scaling: ocaml's hash function's range is 0 to the maximum hash
  * value, which is 2^30 *)
 let get_ring_node_code =
+  let results_nm = "results" in
+  let results = mk_var results_nm in
   mk_global_fn "get_ring_node"
   ["data", t_int; "max_val", t_int] [t_addr] @:
   mk_let "scaled" t_int
@@ -128,7 +130,7 @@ let get_ring_node_code =
           [mk_apply (mk_var "float_of_int") @: mk_var "data";
           mk_apply (mk_var "float_of_int") @: mk_var "max_val"]
     ) @:
-  mk_let "results" t_ring
+  mk_let results_nm t_ring
     (mk_filter (* filter to only hashes greater than data *)
       (mk_lambda
         (wrap_args @: id_t_node) @:
@@ -137,11 +139,10 @@ let get_ring_node_code =
       mk_var node_ring_nm
     ) @:
   mk_let_many (List.map (function ("addr",_) as x -> x | _,t -> "_",t) id_t_node)
-    (mk_if (* if we have results, peek. otherwise, take the first node *)
-      (mk_is_empty (mk_var "results") t_ring)
-      (mk_peek @: mk_var node_ring_nm) @:
-      mk_peek @: mk_var "results"
-    ) @:
+    (* if we have results, peek. otherwise, take the first node *)
+    (mk_case_sn (mk_peek results) "res_val"
+      (mk_var "res_val")
+      (mk_peek_or_error @@ mk_var node_ring_nm)) @@
     mk_var "addr"
 
 (* k3 function to get all of the nodes in the node ring *)

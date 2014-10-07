@@ -411,10 +411,7 @@ and eval_expr (address:address) sched_st cenv texpr =
     | Peek ->
       let renv, c = child_value cenv 0 in
       (* a hack while peek still uses unsafe semantics *)
-      renv, VTemp(match v_peek error c with
-                  | None   -> error "Peek" "peek on an empty value"
-                  | Some x -> x)
-
+      renv, VTemp(VOption(v_peek error c))
 
     | Insert ->
         begin match threaded_eval address sched_st cenv children with

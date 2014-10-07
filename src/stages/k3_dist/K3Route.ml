@@ -126,7 +126,7 @@ let global_pmaps =
       (mk_lambda (wrap_args ["map_name", t_string; "map_types", pmap_types]) @:
         mk_tuple
           [project_from_tuple [t_int; t_string; t_int] ~total:3 ~choice:1 @:
-            mk_peek @:
+            mk_peek_or_error @:
               mk_slice (mk_var K3Dist.map_ids) @:
                 mk_tuple [mk_cunknown; mk_var "map_name"; mk_cunknown]
           ; mk_var "map_types"]
@@ -179,7 +179,7 @@ let gen_route_fn p map_id =
     (* get the info for the current map and bind it to "pmap" *)
     mk_let "pmap" pmap_types
       (mk_snd pmap_per_map_types @:
-        mk_peek @: mk_slice (mk_var pmap_data) @:
+        mk_peek_or_error @: mk_slice (mk_var pmap_data) @:
           mk_tuple [mk_var "map_id"; mk_cunknown]
       ) @:
 
@@ -198,18 +198,17 @@ let gen_route_fn p map_id =
         let temp_id = to_id index in
         let id_unwrap = temp_id^"_unwrap" in
         let temp_type = List.nth map_types index in
-        let maybe_type = wrap_tmaybe temp_type in
         let hash_func = hash_func_for temp_type in
         mk_add
           (* check if we have a binding in this index *)
-          (mk_case_rev (mk_var temp_id) id_unwrap
+          (mk_case_ns (mk_var temp_id) id_unwrap
             (mk_cint 0) @: (* no contribution *)
             (* bind the slice for this index *)
             mk_let "pmap_slice" pmap_types
               (mk_slice (mk_var "pmap") @:
                 mk_tuple [mk_cint index; mk_cunknown]) @:
             (* check if we don't partition by this index *)
-            (mk_if (mk_eq (mk_var "pmap_slice") @: mk_empty pmap_types)
+            (mk_case_ns (mk_peek @@ mk_var "pmap_slice") "peek_slice"
               (mk_cint 0) @:
               mk_let "value" t_int
               (mk_apply (mk_var "mod") @:
@@ -218,12 +217,12 @@ let gen_route_fn p map_id =
                     * but it really doesn't, since we're only concerned about
                     * point locality *)
                   [mk_apply (mk_var hash_func) @: mk_var id_unwrap;
-                  mk_snd t_two_ints @: mk_peek @: mk_var "pmap_slice"]
+                  mk_snd t_two_ints @: mk_var "peek_slice"]
               ) @:
               mk_mult
                 (mk_var "value") @:
                 mk_snd t_two_ints @:
-                  mk_peek @: mk_slice (mk_var "dim_bounds") @:
+                  mk_peek_or_error @: mk_slice (mk_var "dim_bounds") @:
                     mk_tuple [mk_cint index; mk_cunknown])
           ) acc_code
       )
@@ -310,7 +309,7 @@ let gen_route_fn p map_id =
                         mk_add (mk_var "acc") @:
                           mk_mult (mk_var "val") @:
                             mk_snd t_two_ints @:
-                              mk_peek @: mk_slice (mk_var "dim_bounds") @:
+                              mk_peek_or_error @: mk_slice (mk_var "dim_bounds") @:
                                 mk_tuple [mk_var "i"; mk_cunknown]
                       )
                       (mk_var "bound_bucket") @: (* start with this const *)

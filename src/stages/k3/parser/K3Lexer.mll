@@ -4,24 +4,24 @@
     open K3Parser
     open K3.AST
 
-		let init_line lexbuf =
-		  let pos = lexbuf.Lexing.lex_curr_p in
-		  lexbuf.Lexing.lex_curr_p <- { pos with
-		    Lexing.pos_lnum = 1;
-		    Lexing.pos_bol = 0;
-		  }
+                let init_line lexbuf =
+                  let pos = lexbuf.Lexing.lex_curr_p in
+                  lexbuf.Lexing.lex_curr_p <- { pos with
+                    Lexing.pos_lnum = 1;
+                    Lexing.pos_bol = 0;
+                  }
 
-		let advance_line lexbuf =
-		  let pos = lexbuf.Lexing.lex_curr_p in
-		  lexbuf.Lexing.lex_curr_p <- { pos with
-		    Lexing.pos_lnum = pos.Lexing.pos_lnum + 1;
-		    Lexing.pos_bol = pos.Lexing.pos_cnum;
-		  }
+                let advance_line lexbuf =
+                  let pos = lexbuf.Lexing.lex_curr_p in
+                  lexbuf.Lexing.lex_curr_p <- { pos with
+                    Lexing.pos_lnum = pos.Lexing.pos_lnum + 1;
+                    Lexing.pos_bol = pos.Lexing.pos_cnum;
+                  }
 
-  let string_error lexbuf msg = 
+let string_error lexbuf msg =
     let pos = lexbuf.Lexing.lex_curr_p in
-    let linenum = pos.Lexing.pos_lnum in 
-    let column = pos.Lexing.pos_cnum - pos.Lexing.pos_bol in 
+    let linenum = pos.Lexing.pos_lnum in
+    let column = pos.Lexing.pos_cnum - pos.Lexing.pos_bol in
     Printf.sprintf "Error on line %d character %d : %s" linenum column msg
 
 }
@@ -56,7 +56,7 @@ rule tokenize = parse
     | "trigger"  { TRIGGER }
     | "role"     { ROLE }
     | "default"  { DEFAULT }
-    
+
     | "source"   { SOURCE }
     | "sink"     { SINK }
     | "file"     { FILE }
@@ -70,15 +70,15 @@ rule tokenize = parse
     | "()"      { UNIT }
     | '_'       { UNKNOWN }
     | "nothing" { NOTHING }
-    
+
     | "true"  { BOOL true }
     | "false" { BOOL false }
 
     | "ind"   { INDIRECT }
-    
+
     | real as value    { FLOAT (float_of_string value) }
     | integer as value { INTEGER (int_of_string value) }
-    
+
     | '"' (([^'"']|"\\\"")* as s) '"'  { STRING s }
 
     | '(' { LPAREN }
@@ -135,6 +135,7 @@ rule tokenize = parse
     | "float"  { TYPE TFloat }
     | "string" { TYPE TString }
     | "address" { TYPE TAddress }
+    | "unknown" { TYPE TUnknown }
 
     | "maybe"  { MAYBE }
     | "ref"    { REF }

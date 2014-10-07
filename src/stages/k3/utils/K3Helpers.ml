@@ -254,11 +254,11 @@ let mk_iter iter_fun collection =
 let mk_if pred true_exp false_exp =
     mk_stree IfThenElse [pred; true_exp; false_exp]
 
-let mk_case pred id some none =
+let mk_case_sn pred id some none =
     mk_stree (CaseOf id) [pred; some; none]
 
 (* reverse case for when that's easier to do *)
-let mk_case_rev pred id none some =
+let mk_case_ns pred id none some =
     mk_stree (CaseOf id) [pred; some; none]
 
 let mk_map map_fun collection =
@@ -595,4 +595,10 @@ let mk_convert_col src_t dest_t col =
           mk_var "acc_conv")
     (mk_empty dest_t)
     col
+
+let mk_peek_or_zero e = mk_case_ns (mk_peek e) "_i"
+  (mk_cint 0) (mk_var "_i")
+
+let mk_peek_or_error e = mk_case_ns (mk_peek e) "_i"
+  (mk_apply (mk_var "error") mk_cunit) (mk_var "_i")
 

@@ -594,9 +594,9 @@ conditional :
 
 case :
     | CASE expr OF LBRACE JUST IDENTIFIER RARROW expr RBRACE LBRACE NOTHING RARROW expr RBRACE
-      { mk_case $2 $6 $8 $13 }
+      { mk_case_sn $2 $6 $8 $13 }
     | CASE expr OF LBRACE NOTHING RARROW expr RBRACE LBRACE JUST IDENTIFIER RARROW expr RBRACE
-      { mk_case $2 $11 $7 $13 }
+      { mk_case_sn $2 $11 $7 $13 }
 
     /* Error handling */
     | CASE expr OF LBRACE JUST IDENTIFIER RARROW expr { case_error "nothing case" }
