@@ -28,10 +28,6 @@ let keywords =
          "QUERY", QUERY;
          "IF", IF;
          "ELSE", ELSE;
-         "case", CASE;
-         "of", OF;
-         "JUST", JUST;
-         "NOTHING", NOTHING;
          "IF0", IF0;
          "ITERATE", ITERATE;
          "LAMBDA", LAMBDA;
