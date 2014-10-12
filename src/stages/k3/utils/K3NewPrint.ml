@@ -677,8 +677,30 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
 
   | CaseOf x ->
     let e1, e2, e3 = U.decompose_caseof expr in
+    (* HACK to make peek work: records of one element still need projection *)
+    (* NOTE: caseOf will only work on peek if peek is the first expr inside *)
+    let project =
+      begin match U.tag_of_expr e1 with
+      | Peek ->
+          let col = U.decompose_peek e1 in
+          (* get the type of the collection. If it's a singleton type, we need to add
+          * projection *)
+          let col_t = U.unwrap_t_val @: T.type_of_expr col in
+          begin match snd @: KH.unwrap_vtype col_t with
+          | TCollection(_, vt) -> begin match snd @: KH.unwrap_vtype vt, snd expr_info with
+            | TTuple _, _ -> false
+            | _, OutRec   -> false (* we need a record output *)
+            | _           -> true
+            end
+          | _ -> failwith "expected a collection type"
+          end
+      | _ -> false
+      end
+    in
+    let wrap_ret x = if project then x <| lps ".i" else x in
     lps "case" <| lsp () <| lazy_expr c e1 <| lsp () <| lps "of" <| lsp () <|
-    wrap_indent (lazy_brace (lps ("Some "^x^" ->") <| lsp () <| lazy_expr c e2)) <|
+    wrap_indent (lazy_brace (lps ("Some "^x^" ->") <| lsp () <|
+      wrap_ret (lazy_expr c e2))) <|
     wrap_indent (lazy_brace (lps "None ->" <| lsp () <| lazy_expr c e3))
 
   | Iterate -> let lambda, col = U.decompose_iterate expr in
@@ -731,21 +753,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
     apply_method c ~name:"sort" ~col ~args:[lambda] ~arg_info:[ALambda [InRec; InRec], Out]
       ~prefix_fn:(fun e -> light_type c @: KH.mk_if e (KH.mk_cint (-1)) @: KH.mk_cint 1)
   | Peek -> let col = U.decompose_peek expr in
-    (* get the type of the collection. If it's a singleton type, we need to add
-     * projection *)
-    let col_t = U.unwrap_t_val @: T.type_of_expr col in
-    let project = (* not a tuple, so need projection out of the record *)
-      begin match snd @: KH.unwrap_vtype col_t with
-      | TCollection(_, vt) -> begin match snd @: KH.unwrap_vtype vt, snd expr_info with
-        | TTuple _, _ -> false
-        | _, OutRec   -> false (* we need a record output *)
-        | _           -> true
-        end
-      | _ -> failwith "expected a collection type"
-      end
-    in
     (* peeks return options and need to be pattern matched *)
-    unwrap_option ~project @:
       lazy_paren @: apply_method c ~name:"peek" ~col ~args:[light_type c @: KH.mk_cunit] ~arg_info:[ANonLambda, Out]
   | Slice -> let col, pat = U.decompose_slice expr in
     let es, lam_fn = begin match U.tag_of_expr pat with
