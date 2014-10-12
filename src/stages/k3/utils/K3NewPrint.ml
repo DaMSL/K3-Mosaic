@@ -338,13 +338,13 @@ type arg_info_l = (arg_info * out_record) list
  * -depth allows to skip one depth level of binding
  * -top_expr allows us to use an expression at the top bind
  * -top_rec indicates that the first level of binding should be to a record *)
-let rec deep_bind ?(depth=0) ?top_expr ~in_record c arg_n =
+let rec deep_bind ?top_expr ~in_record c arg_n =
   let rec loop d a =
-    let record = in_record && d=depth in (* do we want a record now *)
+    let record = in_record && d=0 in (* do we want a record now *)
     (* we allow binding an expression at the top level *)
     let bind_text i = match top_expr, d with
       | Some e, d
-          when d=depth -> lazy_expr c e
+          when d=0 -> lazy_expr c e
       | _              -> lps @: id_of_num i
     in
     match a with
@@ -361,7 +361,7 @@ let rec deep_bind ?(depth=0) ?top_expr ~in_record c arg_n =
     | NVar _      -> [] (* no binding needed *)
     | NTuple(i, args) ->
         (* only produce binds if we're deeper than specified depth *)
-        (if d < depth then [] else
+        (if d < 0 then [] else
           let args_id = List.map get_id_of_arg args in
           let rec_ids = List.filter ((<>) "_" |- snd) @@ add_record_ids args_id in
           (* filter out all the ignored ids *)
@@ -375,7 +375,7 @@ let rec deep_bind ?(depth=0) ?top_expr ~in_record c arg_n =
         (* rest of the binds *)
         List.flatten @: List.map (loop @: d+1) args
   | NMaybe(i, arg)  ->
-      if d < depth then [] else
+      if d < 0 then [] else
         lps "let " <| lps (get_id_of_arg arg) <| lps " = " <| unwrap_option (bind_text i) <|
         lps " in" <| lsp () <| loop (d+1) arg
   in loop 0 arg_n
@@ -424,18 +424,20 @@ and handle_lambda c ~expr_info ~prefix_fn arg e =
     | ALambda l,  o  -> l,    o
   in
   let many_args = List.length arg_l > 1 in
-  let write arg in_record =
+  let write_lambda arg in_record =
     lps "\\" <| lps @: shallow_bind_id ~in_record arg <| lps " ->" <| lsp ()
   in
-  let exec arg in_record =
+  let final_exec bindings arg in_record =
+    let binds = bindings <| deep_bind ~in_record c arg in
     (* for curried arguments, we deep bind at a deeper level *)
-    write arg in_record <| lind () <|
-      wrap_hov 0 (deep_bind ~depth:0 ~in_record c arg <|
+    write_lambda arg in_record <| lind () <|
+      wrap_hov 0 @@
       (* for the final expr, we may need to wrap the output in a record *)
-      lazy_expr c (prefix_fn e) ~expr_info:(ANonLambda, out_rec))
+        binds <| lazy_expr c (prefix_fn e) ~expr_info:(ANonLambda, out_rec)
   in
   (* loop over the lambda arguments *)
-  let rec loop a = function
+  (* bindings are lazy binds which we only write at the end *)
+  let rec loop bindings a = function
   | []    -> lps @: Printf.sprintf "Incorrect number of args at %d" (U.id_of_expr e)
   | x::xs ->
     let in_record = match x with InRec -> true | _ -> false in
@@ -443,11 +445,11 @@ and handle_lambda c ~expr_info ~prefix_fn arg e =
     if many_args then
       match peel_arg a with
       | arg, Some tup_arg ->
-          lazy_paren (write arg in_record <| wrap_hov 0 (deep_bind ~depth:0 ~in_record c arg) <|
-            loop tup_arg xs)
-      | arg, None         -> lazy_paren @: exec arg in_record
-    else lazy_paren @: exec a in_record
-  in loop arg_n arg_l
+          let binds = bindings <| deep_bind ~in_record c arg in
+          lazy_paren (write_lambda arg in_record <| loop binds tup_arg xs)
+      | arg, None         -> lazy_paren @: final_exec bindings arg in_record
+    else lazy_paren @: final_exec bindings a in_record
+  in loop [] arg_n arg_l
 
 
 (* create a fold instead of a map or ext (for typechecking reasons) *)
