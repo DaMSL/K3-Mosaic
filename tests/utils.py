@@ -5,12 +5,14 @@
 import os
 import re
 import six
+import sys
 
 err_len = 300
 
 def check_exists(name, path):
     if not os.path.exists(path):
-        raise Exception("No {0} executable found at {1}".format(name, path))
+        s = "No {0} executable found at {1}".format(name, path)
+        raise Exception(s)
 
 # @param search - only error if we find 'error' with regexp
 def check_error(filename, verbose, search=False):
@@ -36,3 +38,14 @@ def print_system(cmd, verbose):
     if verbose:
         six.print_(cmd)
     os.system(cmd)
+
+def get_os():
+    l = len("darwin")
+    if sys.platform[:l] == "darwin":
+        return "osx"
+    l = len("linux")
+    if sys.platform[:l] == "linux":
+        return "ubuntu"
+    else:
+        return "windows"
+

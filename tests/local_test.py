@@ -9,7 +9,7 @@
 
 import os
 import six
-from test_utils import check_exists, check_error, print_system
+from utils import check_exists, check_error, print_system
 
 def run(target_file, verbose):
     to_root = ".."
