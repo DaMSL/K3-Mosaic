@@ -304,10 +304,11 @@ let declare_global_funcs partmap p ast =
         corrective, t_bool; "min_vid", t_vid;
         delta_tuples_nm, wrap_t_of_map' types_v])
       [t_unit] @@
-      mk_bind (mk_var target_map) tmap_deref @@
       mk_block @@
         [mk_iter  (* loop over values in delta tuples *)
           (mk_lambda' ids_types_v @@
+            (* careful to put bind in proper place *)
+            mk_bind (mk_var target_map) tmap_deref @@
             (* this part is just for correctives:
              * We need to check if there's a value at the particular version id
              * If so, we must add the value directly *)
@@ -331,19 +332,22 @@ let declare_global_funcs partmap p ast =
         mk_iter (* loop over values in the delta tuples *)
          (mk_lambda' ids_types_arg_v @@
            mk_let "filtered" (wrap_t_of_map' types_v)
-             (mk_filter (* only greater vid for this part *)
+           (* careful to put bind in proper place *)
+           (mk_bind (mk_var target_map) tmap_deref @@
+             mk_filter (* only greater vid for this part *)
                (mk_lambda' ids_types_v @@
                  mk_gt (mk_var "vid") @@ mk_var "min_vid") @@
                (* slice w/o vid and value *)
                mk_slice' (mk_var tmap_deref) @@
                  mk_cunknown::vars_arg_no_v_no_val@[mk_cunknown]) @@
-              mk_iter
-                (mk_lambda' ids_types_v @@
-                  mk_update tmap_deref (mk_tuple vars_v) @@
-                    mk_tuple @@ vars_v_no_val@
-                      [mk_add vars_val vars_arg_val]
-                ) @@
-                mk_var "filtered"
+           mk_iter
+             (mk_lambda' ids_types_v @@
+               (* careful to put bind in proper place *)
+               mk_bind (mk_var target_map) tmap_deref @@
+                 mk_update tmap_deref (mk_tuple vars_v) @@
+                   mk_tuple @@ vars_v_no_val@[mk_add vars_val vars_arg_val]
+             ) @@
+             mk_var "filtered"
          ) @@
          mk_var delta_tuples_nm]
   in
@@ -830,7 +834,6 @@ List.fold_left
       (("tuples", wrap_t_of_map' tuple_types)::
         args_of_t_with_v p trig_name)
       [] @@ (* locals *)
-      mk_bind (mk_var rbuf_name) rbuf_deref @@
       (* save the tuples *)
       mk_block
         (* save the bound variables for this vid. This is necessary for both the
@@ -843,6 +846,8 @@ List.fold_left
          mk_iter
           (mk_lambda'
             ["tuple", wrap_ttuple tuple_types] @@
+            (* be very careful with bind placement *)
+            mk_bind (mk_var rbuf_name) rbuf_deref @@
             mk_let_many tuple_id_t (mk_var "tuple") @@
             mk_case_sn
               (mk_peek @@ mk_slice'
