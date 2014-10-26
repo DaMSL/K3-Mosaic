@@ -38,19 +38,19 @@ let switches_var = mk_var switches_name
 let switches_type = wrap_tset t_addr
 
 let switches_code =
-  mk_global_val_init switches_name switches_type @:
-  mk_let "sw" t_string (mk_cstring "switch") @:
+  mk_global_val_init switches_name switches_type @@
+  mk_let "sw" t_string (mk_cstring "switch") @@
   mk_filtermap
     (* filter fun*)
-    (mk_lambda (wrap_args K3Global.peers_id_type) @:
+    (mk_lambda (wrap_args K3Global.peers_id_type) @@
       mk_eq
         (mk_var K3Global.peers_id_type_name_name)
         (mk_just (mk_cstring "sw")) (* TODO the switch role name is hardcode*)
     )
     (* map fun *)
-    (mk_lambda (wrap_args K3Global.peers_id_type) @:
+    (mk_lambda (wrap_args K3Global.peers_id_type) @@
                 mk_var K3Global.peers_id_type_addr_name
-    ) @:
+    ) @@
     mk_var K3Global.peers_name
 *)
 
@@ -78,7 +78,7 @@ let switch_ack_log_id_type = [("addr", t_addr_mut);
                        ("vid", t_vid_mut);
                        ("is_acked", t_bool_mut)]
 
-let ack_type = wrap_tset_mut @: wrap_ttuple_mut
+let ack_type = wrap_tset_mut @@ wrap_ttuple_mut
                   [t_addr_mut; t_vid_mut; t_bool_mut]
 
 let acks_code = mk_global_val  switch_ack_log_name ack_type
@@ -88,14 +88,14 @@ let ack_trig_args = ["ip", t_addr; "vid", t_vid]
 
 let ack_rcv_trig =
   let slice_vars = ids_to_vars["ip";"vid"] in
-  let slice_pat = mk_tuple @: slice_vars @ [mk_cunknown] in
-  mk_code_sink "ack_rcv" (wrap_args ack_trig_args) [] @:
-    mk_update switch_ack_log (mk_peek @: mk_slice switch_ack_log slice_pat) @:
-      mk_tuple @:slice_vars@[mk_cbool true]
+  let slice_pat = mk_tuple @@ slice_vars @ [mk_cunknown] in
+  mk_code_sink "ack_rcv" (wrap_args ack_trig_args) [] @@
+    mk_update switch_ack_log_name (mk_peek @@ mk_slice switch_ack_log slice_pat) @@
+      mk_tuple @@slice_vars@[mk_cbool true]
 
 let ack_send_trig =
-    mk_code_sink "ack_send" (wrap_args ack_trig_args) [] @:
-            mk_send (mk_ctarget "ack_rcv")  (mk_var "ip") @:
+    mk_code_sink "ack_send" (wrap_args ack_trig_args) [] @@
+            mk_send (mk_ctarget "ack_rcv")  (mk_var "ip") @@
                       mk_tuple [mk_var "me"; mk_var "vid"]
 
 (* Max vid among each switch node
@@ -123,19 +123,16 @@ let vid_trig_args = [vid_trig_arg_vid, t_vid]
 let vid_rcv_cnt_code name =
   mk_global_val_init
     name
-    vid_rcv_cnt_type @:
-    mk_singleton vid_rcv_cnt_type @: mk_cint 0
+    vid_rcv_cnt_type @@
+    mk_singleton vid_rcv_cnt_type @@ mk_cint 0
 
-let vid_rcv_cnt_incr_code var = mk_update
-    var
-    (mk_peek var) @:
-    mk_add (mk_cint 1) (mk_peek var)
+let vid_rcv_cnt_incr_code x = mk_update x
+    (mk_peek @@ mk_var x) @@
+    mk_add (mk_cint 1) (mk_peek @@ mk_var x)
 
-let vid_rcv_cnt_reset_code var = mk_update
-    var
-    (mk_peek var) @:
+let vid_rcv_cnt_reset_code x = mk_update x
+    (mk_peek @@ mk_var x) @@
     mk_cint 0
-
 
 (* send ,receive vid and cal the biggest vid *)
 let vid_buf_name = "vid_buf" (* global val*)
@@ -144,7 +141,7 @@ let vid_buf_var = mk_var vid_buf_name
 let vid_buf_2_name = "vid_buf_2" (* two buf is needed*)
 let vid_buf_2_var = mk_var vid_buf_2_name
 
-let vid_buf_type = wrap_tset @: wrap_ttuple [t_vid]
+let vid_buf_type = wrap_tset @@ wrap_ttuple [t_vid]
 
 let vid_buf_code = mk_global_val vid_buf_name vid_buf_type
 let vid_buf_2_code = mk_global_val vid_buf_2_name vid_buf_type
@@ -152,8 +149,8 @@ let vid_buf_2_code = mk_global_val vid_buf_2_name vid_buf_type
 let vid_buf_empty_code buf_var= (* empty vid_buf *)
   mk_iter
     (mk_lambda
-      (wrap_args ["vid", t_vid]) @:
-      mk_delete vid_buf_var @: mk_var "vid"
+      (wrap_args ["vid", t_vid]) @@
+      mk_delete vid_buf_name @@ mk_var "vid"
     )
     buf_var
 
@@ -167,13 +164,13 @@ let min_max_acked_vid_type = wrap_tset min_max_acked_vid_id_type
 let min_max_acked_vid_code = (* global val*)
   mk_global_val_init
     min_max_acked_vid_name
-    min_max_acked_vid_type @:
+    min_max_acked_vid_type @@
     mk_singleton min_max_acked_vid_type min_vid_k3
 
 let min_max_acked_vid_update_code new_vid_var =
   mk_update
-    min_max_acked_vid_var
-    (mk_peek min_max_acked_vid_var) @:
+    min_max_acked_vid_name
+    (mk_peek min_max_acked_vid_var) @@
     new_vid_var
 
 (* gc_vid
@@ -187,7 +184,7 @@ let gc_vid_type = wrap_tset gc_vid_id_type
 let gc_vid_code =
   mk_global_val_init
     gc_vid_name
-    gc_vid_type @:
+    gc_vid_type @@
     mk_singleton
       gc_vid_type
       min_vid_k3
@@ -198,18 +195,18 @@ let gc_vid_code =
 let my_idx_name = "my_idx"
 
 let slice_my_idx_code =
-  let idx_slice_pattern = mk_tuple @: [mk_cunknown; K3Global.me_var] in
+  let idx_slice_pattern = mk_tuple @@ [mk_cunknown; K3Global.me_var] in
   (* let (my_idx:int, _) = peek(switches[_, me])  *)
   mk_let_deep (* figure out which switch idx myself is *)
     (wrap_args [my_idx_name,t_int;"_",t_unit])
-    (mk_peek @: mk_slice K3Global.switches_var idx_slice_pattern)
+    (mk_peek @@ mk_slice K3Global.switches_var idx_slice_pattern)
 
 (* slice length and data_nodes_group
  * -------------------------------*)
 let data_nodes_group_name = "data_nodes_group"
 let slice_data_nodes_len_and_data_nodes_group_code =
   let group_slice_pattern =
-        mk_tuple @: [mk_var my_idx_name; mk_cunknown; mk_cunknown]
+        mk_tuple @@ [mk_var my_idx_name; mk_cunknown; mk_cunknown]
   in
   (*  let (_, data_nodes_group:{address}) = peek(data_nodes[my_idx, _]) *)
   mk_let_deep (* figure out the group of data nodes need to contact *)
@@ -217,7 +214,7 @@ let slice_data_nodes_len_and_data_nodes_group_code =
       ["_", t_unit;
        K3Global.data_nodes_id_type_len_name, K3Global.data_nodes_id_type_len;
        data_nodes_group_name, K3Global.data_nodes_id_type_addrs])
-     (mk_peek @: mk_slice K3Global.data_nodes_var group_slice_pattern)
+     (mk_peek @@ mk_slice K3Global.data_nodes_var group_slice_pattern)
 
 (* get_min_vid_code
  * ----------------
@@ -235,7 +232,7 @@ let get_min_vid_code vid_lst_var =
       (wrap_args [min_vid_name,t_vid])
       (wrap_args [temp_vid_name, t_vid])
       (mk_if
-        (K3Dist.v_lt  (mk_var temp_vid_name) @: mk_var min_vid_name)
+        (K3Dist.v_lt  (mk_var temp_vid_name) @@ mk_var min_vid_name)
         (mk_var temp_vid_name)
         (mk_var min_vid_name)
         )
@@ -257,11 +254,11 @@ let do_garbage_collection_trig_code p ast =
   let delete_collection_up_to_vid safe_vid log_arg log_args_names log =
     mk_iter
       (mk_lambda
-        (wrap_args log_arg ) @:
+        (wrap_args log_arg ) @@
         mk_if
           (K3Dist.v_gt (mk_var safe_vid) (mk_var "vid"))
-          (mk_delete (mk_var log) @:
-            (mk_tuple @: ids_to_vars log_args_names )
+          (mk_delete log @@
+            (mk_tuple @@ ids_to_vars log_args_names )
           )
           mk_cunit (*else fo nothing *)
       )
@@ -296,17 +293,17 @@ let do_garbage_collection_trig_code p ast =
             in
             let map_ids_v = fst_many map_id_t_v in
             let map_ts_v = snd_many map_id_t_v in
-            let delc_types = wrap_tset @: wrap_ttuple @: map_ts_v in
+            let delc_types = wrap_tset @@ wrap_ttuple @@ map_ts_v in
             let map_id_t_no_val = ProgInfo.map_ids_types_no_val_for
                                   ~prefix:"__map_" p map_id in
-            let map_id_no_val = fst_many @: map_id_t_no_val in
-            let map_t_no_val = snd_many @: map_id_t_no_val in
+            let map_id_no_val = fst_many @@ map_id_t_no_val in
+            let map_t_no_val = snd_many @@ map_id_t_no_val in
             let key_num = List.length map_id_t_no_val in
             let leq_than_vid_name = "stuff_leq_than_vid_"^name in
             let cmp_unkown =
               (List.combine
-                (make_lst "_" @: key_num + 1 )
-                (make_lst t_unknown @: key_num + 1))
+                (make_lst "_" @@ key_num + 1 )
+                (make_lst t_unknown @@ key_num + 1))
             in
             (* use iterate if the map does not have keys*)
             if key_num = 0 then
@@ -321,18 +318,18 @@ let do_garbage_collection_trig_code p ast =
                   (* get the element with max vid *)
                   (mk_let
                   "element_with_max_vid"
-                  (wrap_ttuple map_ts_v) @:
+                  (wrap_ttuple map_ts_v) @@
                   mk_peek
                     (mk_sort
                       (mk_var name)
                       (mk_assoc_lambda (* compare func *)
-                        (wrap_args @: ("vid1", t_vid) :: cmp_unkown)
-                        (wrap_args @: ("vid2", t_vid) :: cmp_unkown) @:
-                          v_gt (mk_var "vid1") @: mk_var "vid2") )
-                ) @:
+                        (wrap_args @@ ("vid1", t_vid) :: cmp_unkown)
+                        (wrap_args @@ ("vid2", t_vid) :: cmp_unkown) @@
+                          v_gt (mk_var "vid1") @@ mk_var "vid2") )
+                ) @@
                 mk_block [
                   (* delete the element with max vid from map *)
-                  mk_delete (mk_var name) (mk_var "element_with_max_vid");
+                  mk_delete name (mk_var "element_with_max_vid");
 
                   (* clear map *)
                   (delete_collection_up_to_vid
@@ -342,7 +339,7 @@ let do_garbage_collection_trig_code p ast =
                     name
                   );
                   (* insert the element with max vid into map *)
-                  mk_insert (mk_var name) (mk_var "element_with_max_vid")
+                  mk_insert name (mk_var "element_with_max_vid")
                ]) (* else *)
             ) :: acc
             else (* more than one key, need gbagg *)
@@ -355,7 +352,7 @@ let do_garbage_collection_trig_code p ast =
               [wrap_ttuple map_t_no_val; wrap_ttuple [t_vid; map_val_maybe_type]]
             in
             let leq_than_vid_cleared_set_type =
-              wrap_tset @: wrap_ttuple leq_than_vid_cleared_type
+              wrap_tset @@ wrap_ttuple leq_than_vid_cleared_type
             in
             (* map_id_no_val_tuple(map_id_1, map_id_2...) *)
             (*
@@ -363,7 +360,7 @@ let do_garbage_collection_trig_code p ast =
               map_t_no_val @ [wrap_ttuple [t_vid; map_val_maybe_type]]
             in
             let leq_than_vid_cleared_set_type =
-              wrap_tset @: wrap_ttuple leq_than_vid_cleared_type
+              wrap_tset @@ wrap_ttuple leq_than_vid_cleared_type
             in
             *)
             (
@@ -378,13 +375,13 @@ let do_garbage_collection_trig_code p ast =
                     (K3Dist.v_geq (mk_var safe_vid) (mk_var "vid"))
                     (mk_block [
                       (* delete from map structure *)
-                      (mk_delete (mk_var name) @:
-                          (mk_tuple @: ids_to_vars map_ids_v )
+                      (mk_delete name @@
+                          (mk_tuple @@ ids_to_vars map_ids_v )
                       );
                       mk_combine
                         (mk_var "leq_than_vid")
                         (mk_singleton
-                          delc_types @: (mk_tuple @: ids_to_vars map_ids_v)
+                          delc_types @@ (mk_tuple @@ ids_to_vars map_ids_v)
                         )
                       ])
                     (mk_var "leq_than_vid")
@@ -393,7 +390,7 @@ let do_garbage_collection_trig_code p ast =
                 (mk_empty delc_types )
                 (mk_var name)
               ) (*end of agg*)
-            ) @: (* end of let stuff_bigger_than_vid *)
+            ) @@ (* end of let stuff_bigger_than_vid *)
            (* groupby leq_than_vid by map key, for each map key,
             * only keep the element with max vid *)
            (mk_let
@@ -402,7 +399,7 @@ let do_garbage_collection_trig_code p ast =
             (mk_gbagg
               (mk_lambda (* group fun, groupby map key *)
                 (wrap_args map_id_t_v)
-                (mk_tuple @: ids_to_vars map_id_no_val)
+                (mk_tuple @@ ids_to_vars map_id_no_val)
               )
               (mk_assoc_lambda (* agg func *)
                 (wrap_args (List.combine
@@ -412,36 +409,36 @@ let do_garbage_collection_trig_code p ast =
                 (wrap_args map_id_t_v)
                 (mk_if
                   (K3Dist.v_lt (mk_var "max_vid") (mk_var "vid") )
-                  (mk_tuple @: [mk_var "vid";
-                                mk_just @: mk_var ("__map_"^"val")])
-                  (mk_tuple @: [mk_var "max_vid";mk_var "val"])
+                  (mk_tuple @@ [mk_var "vid";
+                                mk_just @@ mk_var ("__map_"^"val")])
+                  (mk_tuple @@ [mk_var "max_vid";mk_var "val"])
                 )
               )
               (mk_tuple [min_vid_k3; mk_nothing map_val_maybe_type])
               (mk_var leq_than_vid_name)
             )(* end of mk_gbagg*)
-           ) @:
+           ) @@
           (* iterate leq_than_vid_cleared, and add it back to map structure *)
           mk_iter
             (mk_lambda
-              (wrap_args @: List.combine
+              (wrap_args @@ List.combine
                   (["map_id_tuple";"vid_maybeVal"])
                   leq_than_vid_cleared_type
-              ) @:
+              ) @@
               (
                 (*let (vid:(int, int, int), __map_val:maybe int) = vid_maybeVal*)
                 (mk_let_deep
                   (wrap_args ["vid",t_vid;"__map_val",map_val_maybe_type])
                   (mk_var "vid_maybeVal")
-                )@:
+                )@@
                 (mk_let_deep
                   (wrap_args map_id_t_no_val)
                   (mk_var "map_id_tuple")
-                )@:
-                mk_unwrap_maybe ["__map_val", map_val_maybe_type] @:
+                )@@
+                mk_unwrap_maybe ["__map_val", map_val_maybe_type] @@
                 mk_insert
-                  (mk_var name)
-                  (mk_tuple @: ids_to_vars
+                  name
+                  (mk_tuple @@ ids_to_vars
                     (["vid"] @ map_id_no_val @ ["__map_val"^"_unwrap"])
                   )
               )
@@ -485,19 +482,19 @@ let do_garbage_collection_trig_code p ast =
       (clear_global_map_decl safe_vid) @
 
       (* update epoch *)
-      [mk_update epoch_var (mk_peek epoch_var) @:
+      [mk_update epoch_name (mk_peek epoch_var) @@
         mk_add (mk_cint 1) (mk_peek epoch_var)]
     )
   in
   mk_code_sink
   do_garbage_collection_trig_name
   (wrap_args ["safe_vid_to_delete_final", t_vid])
-  [] @:
+  [] @@
   (* TODO delete log up to the vid *)
   mk_block [
     mk_update
-      gc_vid_var
-      (mk_peek gc_vid_var) @:
+      gc_vid_name
+      (mk_peek gc_vid_var) @@
       (mk_var "safe_vid_to_delete_final");
 
       clear_all_log "safe_vid_to_delete_final"
@@ -518,15 +515,15 @@ let final_safe_vid_to_delete_rcv_trig_code =
   mk_code_sink
   final_safe_vid_to_delete_rcv_trig_name
   (wrap_args ["final_safe_vid_to_delete", t_vid])
-  [] @:
+  [] @@
  (* send safe_vid_to_delete_final to the group of data nodes it responsbile for *)
-  slice_my_idx_code @:
-  slice_data_nodes_len_and_data_nodes_group_code @:
+  slice_my_idx_code @@
+  slice_data_nodes_len_and_data_nodes_group_code @@
   mk_block[
   (* iterete each nodes in the group and send them the safe_vid_to_delete_final *)
    mk_iter
      (mk_lambda
-     (wrap_args ["addr", t_addr])@:
+     (wrap_args ["addr", t_addr])@@
         (mk_send (mk_ctarget do_garbage_collection_trig_name)
             (mk_var "addr")
             (mk_var "final_safe_vid_to_delete")))
@@ -553,13 +550,13 @@ let min_safe_vid_to_delete_rcv_trig_code =
  mk_code_sink
   min_safe_vid_to_delete_rcv_trig_name
   (wrap_args ["min_safe_vid_to_delete", t_vid])
-  [] @:
+  [] @@
   mk_block [
     (* update vid_rcv_cnt_2 *)
-    vid_rcv_cnt_incr_code vid_rcv_cnt_2_var;
+    vid_rcv_cnt_incr_code vid_rcv_cnt_2_name;
 
     (* store the vid into vid_buf_2*)
-    mk_insert vid_buf_2_var @: mk_var "min_safe_vid_to_delete";
+    mk_insert vid_buf_2_name @@ mk_var "min_safe_vid_to_delete";
 
     mk_if
         (mk_eq
@@ -567,15 +564,15 @@ let min_safe_vid_to_delete_rcv_trig_code =
           (mk_peek K3Global.switches_num_var)
         )
         (* get min vid *)
-        (get_min_vid_code vid_buf_2_var @: (mk_block[
+        (get_min_vid_code vid_buf_2_var @@ (mk_block[
           (* reset *)
-          vid_rcv_cnt_reset_code vid_rcv_cnt_2_var;
+          vid_rcv_cnt_reset_code vid_rcv_cnt_2_name;
           vid_buf_empty_code vid_buf_2_var;
 
           (* send the decided vid to all switch nodes*)
           mk_iter
           (mk_lambda
-          (wrap_args K3Global.switches_id_args) @:
+          (wrap_args K3Global.switches_id_args) @@
             (mk_send (mk_ctarget final_safe_vid_to_delete_rcv_trig_name)
                     (mk_var K3Global.switches_id_type_addr_name)
                     (mk_var min_vid_name))
@@ -603,17 +600,17 @@ let safe_vid_to_delete_rcv_trig_code =
   mk_code_sink
     safe_vid_to_delete_rcv_trig_name
     (wrap_args ["safe_vid_to_delete", t_vid])
-    [] @:
+    [] @@
     mk_block [
       (* update vid_rcv_cnt *)
-      vid_rcv_cnt_incr_code vid_rcv_cnt_var;
+      vid_rcv_cnt_incr_code vid_rcv_cnt_name;
 
       (* store the vid into buffer *)
-      mk_insert vid_buf_var @: mk_var "safe_vid_to_delete";
+      mk_insert vid_buf_name @@ mk_var "safe_vid_to_delete";
 
       (* if receive all vid from each switch *)
-      slice_my_idx_code @:
-      slice_data_nodes_len_and_data_nodes_group_code @:
+      slice_my_idx_code @@
+      slice_data_nodes_len_and_data_nodes_group_code @@
       mk_if
         (mk_eq
           (mk_peek vid_rcv_cnt_var)
@@ -623,9 +620,9 @@ let safe_vid_to_delete_rcv_trig_code =
           )
        (mk_block[
           (* get min vid *)
-          get_min_vid_code vid_buf_var @:
+          get_min_vid_code vid_buf_var @@
           (* send the min vid to the first switch node *)
-          K3Global.switch_get_nth_code 0 @:
+          K3Global.switch_get_nth_code 0 @@
 
           mk_send
             (mk_ctarget min_safe_vid_to_delete_rcv_trig_name) (* target *)
@@ -633,7 +630,7 @@ let safe_vid_to_delete_rcv_trig_code =
             (mk_var min_vid_name);
 
           (* reset buf*)
-          vid_rcv_cnt_reset_code vid_rcv_cnt_var;
+          vid_rcv_cnt_reset_code vid_rcv_cnt_name;
           vid_buf_empty_code vid_buf_var
         ])
         (* else do nothing *)
@@ -699,8 +696,8 @@ let get_vid_all_finish_up_to_code =
         (mk_var stmt_cntrs_name)
         (mk_assoc_lambda (* compare func *)
           (wrap_args ["vid1", t_vid; "_",t_unknown; "_",t_unknown])
-          (wrap_args ["vid2", t_vid; "_",t_unknown; "_",t_unknown]) @:
-          v_lt (mk_var "vid1") @: mk_var "vid2") )
+          (wrap_args ["vid2", t_vid; "_",t_unknown; "_",t_unknown]) @@
+          v_lt (mk_var "vid1") @@ mk_var "vid2") )
     ) (* end of agg *)
 in
 let send_vid_finish_up_to_node2switch_code addr vid_finish_up_to =
@@ -720,20 +717,20 @@ let send_vid_finish_up_to_node2switch_code addr vid_finish_up_to =
           (mk_var vid_finish_up_to)
           (mk_peek min_max_acked_vid_var)
        )(* end inner if *)
-     ) (*end if *)@:
+     ) (*end if *)@@
   mk_send (mk_ctarget safe_vid_to_delete_rcv_trig_name)
-           (mk_var addr)  @:
+           (mk_var addr)  @@
            mk_tuple [ mk_var "safe_vid_to_delete"]
 in
 mk_code_sink
     min_max_acked_vid_rcv_node_trig_name
     (wrap_args ["vid",t_vid; "switch_addr",t_addr])
-    [] @:
+    [] @@
     mk_block [
       (* update max_vid *)
       min_max_acked_vid_update_code (mk_var "vid");
 
-      get_vid_all_finish_up_to_code @:
+      get_vid_all_finish_up_to_code @@
       send_vid_finish_up_to_node2switch_code
         "switch_addr"
         vid_all_finish_up_to
@@ -752,10 +749,10 @@ let min_max_acked_vid_rcv_switch_trig =
   mk_code_sink
     min_max_acked_vid_rcv_switch_trig_name
     (wrap_args vid_trig_args)
-    [] @:
+    [] @@
     (* get the group of data nodes this switch node is for*)
-    slice_my_idx_code @:
-    slice_data_nodes_len_and_data_nodes_group_code @:
+    slice_my_idx_code @@
+    slice_data_nodes_len_and_data_nodes_group_code @@
 
     mk_block [
       (* send myself. Switch node is not in the data node group *)
@@ -769,7 +766,7 @@ let min_max_acked_vid_rcv_switch_trig =
       (* iterete each nodes in the group and send them the min_max_acked_vid *)
       mk_iter
         (mk_lambda
-        (wrap_args ["addr", t_addr])@:
+        (wrap_args ["addr", t_addr])@@
           (mk_send (mk_ctarget min_max_acked_vid_rcv_node_trig_name)
                     (mk_var "addr")
                     (mk_tuple
@@ -795,20 +792,20 @@ let vid_rcv_trig =
   mk_code_sink
   vid_rcv_trig_name
   (wrap_args vid_trig_args)
-  [] @:
+  [] @@
   mk_block [
-    vid_rcv_cnt_incr_code vid_rcv_cnt_var; (* update vid_rcv_cnt *)
-    mk_insert vid_buf_var @: mk_var "vid"; (* store the vid into buffer *)
+    vid_rcv_cnt_incr_code vid_rcv_cnt_name; (* update vid_rcv_cnt *)
+    mk_insert vid_buf_name @@ mk_var "vid"; (* store the vid into buffer *)
     mk_if (* if receive all vid from each switch *)
       (mk_eq (mk_peek vid_rcv_cnt_var) (mk_peek K3Global.switches_num_var))
       (mk_block [
         (* fold vid_buf to find the biggest vid *)
-        get_min_vid_code vid_buf_var @:
+        get_min_vid_code vid_buf_var @@
 
         (* send the min_max_acked_ vid to all switch nodes*)
         mk_iter
           (mk_lambda
-          (wrap_args K3Global.switches_id_args) @:
+          (wrap_args K3Global.switches_id_args) @@
             (mk_send (mk_ctarget min_max_acked_vid_rcv_switch_trig_name)
                     (mk_var K3Global.switches_id_type_addr_name)
                     (mk_var min_vid_name ))
@@ -816,7 +813,7 @@ let vid_rcv_trig =
           K3Global.switches_var;
 
         (* reset vid_buf and count *)
-        vid_rcv_cnt_reset_code vid_rcv_cnt_var;
+        vid_rcv_cnt_reset_code vid_rcv_cnt_name;
         vid_buf_empty_code vid_buf_var
       ])
       (mk_cunit)
@@ -845,7 +842,7 @@ let max_acked_vid_send_trig vid_cnt_var epoch_var hash_addr =
             (* if current vid is acked && > max_vid then update max_acked_vid *)
             (mk_and
               (K3Dist.v_gt
-                (mk_var switch_ack_log_id_vid_name) @:
+                (mk_var switch_ack_log_id_vid_name) @@
                 mk_var "max_acked_vid"
               )
               (mk_eq (mk_var switch_ack_log_id_is_acked_name) (mk_cbool true))
@@ -860,16 +857,16 @@ let max_acked_vid_send_trig vid_cnt_var epoch_var hash_addr =
   mk_code_sink
     max_acked_vid_send_trig_name
     (wrap_args dummy_trig_arg)
-    [] @:
+    [] @@
       mk_let  (* get addr of the first switch node*)
        tmp_addr
        K3Global.switches_id_type_addr
        ( mk_snd
             K3Global.switches_type_raw
             (mk_peek K3Global.switches_var)
-        ) @:
+        ) @@
       (* get max_acked_vid *)
-      max_acked_vid_code @:
+      max_acked_vid_code @@
       mk_send
         (mk_ctarget vid_rcv_trig_name) (* target *)
         (mk_var tmp_addr)

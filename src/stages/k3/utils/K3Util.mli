@@ -39,19 +39,19 @@ val is_peek : expr_t -> bool
 val decompose_add : expr_t -> expr_t * expr_t
 val decompose_aggregate : expr_t -> expr_t * expr_t * expr_t
 val decompose_apply : expr_t -> expr_t * expr_t
-val decompose_assign : expr_t -> expr_t * expr_t
+val decompose_assign : expr_t -> id_t * expr_t
 val decompose_block : expr_t -> expr_t list
 val decompose_combine : expr_t -> expr_t * expr_t
 val decompose_const : expr_t -> constant_t
 val decompose_caseof : expr_t -> expr_t * expr_t * expr_t
-val decompose_delete : expr_t -> expr_t * expr_t
-val decompose_deref : expr_t -> expr_t
+val decompose_bind : expr_t -> expr_t * id_t * expr_t
+val decompose_delete : expr_t -> id_t * expr_t
 val decompose_eq : expr_t -> expr_t * expr_t
 val decompose_filter : expr_t -> expr_t * expr_t
 val decompose_flatten : expr_t -> expr_t
 val decompose_gbagg : expr_t -> expr_t * expr_t * expr_t * expr_t
 val decompose_ifthenelse : expr_t -> expr_t * expr_t * expr_t
-val decompose_insert : expr_t -> expr_t * expr_t
+val decompose_insert : expr_t -> id_t * expr_t
 val decompose_iterate : expr_t -> expr_t * expr_t
 val decompose_just : expr_t -> expr_t
 val decompose_lambda : expr_t -> arg_t * expr_t
@@ -68,7 +68,7 @@ val decompose_singleton : expr_t -> expr_t
 val decompose_slice : expr_t -> expr_t * expr_t
 val decompose_sort : expr_t -> expr_t * expr_t
 val decompose_tuple : expr_t -> expr_t list
-val decompose_update : expr_t -> expr_t * expr_t * expr_t
+val decompose_update : expr_t -> id_t * expr_t * expr_t
 val decompose_indirect : expr_t -> expr_t
 
 val decompose_role : declaration_t * 'a -> id_t * flow_program_t
@@ -150,11 +150,6 @@ val renumber_test_program_ids :
 
 (* Attach a type annotation to an expr *)
 val attach_type : type_t -> expr_t -> expr_t
-
-(* Stringification functions *)
-val string_of_tag : expr_tag_t -> string
-
-val string_of_const : constant_t -> string
 
 (* Get a value_type_t from a type_t *)
 val unwrap_t_val : type_t -> value_type_t

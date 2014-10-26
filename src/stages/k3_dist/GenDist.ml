@@ -154,7 +154,7 @@ let declare_global_funcs partmap p ast =
     log_master_write_nm
     log_master_id_t
     [t_unit] @@
-    mk_insert (mk_var log_master) @@ (* write to master log *)
+    mk_insert log_master @@ (* write to master log *)
       mk_tuple @@
         ids_to_vars @@ fst_many log_master_id_t
   in
@@ -164,7 +164,7 @@ let declare_global_funcs partmap p ast =
     (args_of_t_with_v p t)
     [t_unit] @@
       (* write bound to trigger_specific log *)
-      mk_insert (mk_var @@ log_for_t t) @@
+      mk_insert (log_for_t t) @@
         mk_tuple @@ args_of_t_as_vars_with_v p t
   in
   (* log_get_bound -- necessary since each trigger has different args *)
@@ -214,7 +214,7 @@ let declare_global_funcs partmap p ast =
           [mk_case_ns (mk_peek stmt_cntrs_slice) "ctr_slice"
            mk_cunit
            (mk_update
-            stmt_cntrs
+            stmt_cntrs_name
             (mk_var "ctr_slice") @@ (* oldval *)
             mk_let_many (* newval *)
               stmt_cntrs_id_t
@@ -235,7 +235,7 @@ let declare_global_funcs partmap p ast =
         ) @@
         mk_block
           [mk_insert (* else: no value in the counter *)
-            stmt_cntrs @@
+            stmt_cntrs_name @@
             (* Initialize if the push arrives before the put. *)
             mk_tuple @@ part_pat_as_vars @ [mk_cint(-1)];
           mk_cbool false
@@ -272,6 +272,7 @@ let declare_global_funcs partmap p ast =
     let id_val = hd @@ list_take_end 1 @@ fst_many @@ ids_types_v in
     let lookup_value, update_value = "lookup_value", "update_value" in
     let corrective, target_map = "corrective", "target_map" in
+    let tmap_deref = "tmap_deref" in
     let update_vars = list_drop_end 1 vars_v @ [mk_var update_value] in
     let zero = match T.base_of t_val () with
       | TInt   -> mk_cint 0
@@ -286,7 +287,7 @@ let declare_global_funcs partmap p ast =
     in
     let regular_delta =
       mk_let lookup_value t_col_v
-        (map_latest_vid_vals p (mk_deref @@ mk_var target_map)
+        (map_latest_vid_vals p (mk_var tmap_deref)
           (Some(vars_no_val @ [mk_cunknown])) map_id ~keep_vid:true) @@
         mk_let update_value t_val
           (* get either 0 to add or the value we read *)
@@ -295,9 +296,7 @@ let declare_global_funcs partmap p ast =
               (mk_peek @@ mk_var lookup_value) "val"
               zero @@
               tuple_projection "val") @@
-          mk_insert
-            (mk_deref @@ mk_var target_map) @@
-            mk_tuple update_vars
+          mk_insert tmap_deref @@ mk_tuple update_vars
     in
     mk_global_fn func_name
       (* corrective: whether this is a corrective delta *)
@@ -305,6 +304,7 @@ let declare_global_funcs partmap p ast =
         corrective, t_bool; "min_vid", t_vid;
         delta_tuples_nm, wrap_t_of_map' types_v])
       [t_unit] @@
+      mk_bind (mk_var target_map) tmap_deref @@
       mk_block @@
         [mk_iter  (* loop over values in delta tuples *)
           (mk_lambda' ids_types_v @@
@@ -314,7 +314,7 @@ let declare_global_funcs partmap p ast =
               mk_let lookup_value t_col_v
                 (mk_if
                   (mk_var corrective)
-                  (mk_slice' (mk_deref @@ mk_var target_map) @@
+                  (mk_slice' (mk_var tmap_deref) @@
                     vars_v_no_val @ [mk_cunknown]) @@
                   mk_empty @@ wrap_t_of_map' types_v) @@
               mk_case_sn
@@ -322,9 +322,7 @@ let declare_global_funcs partmap p ast =
                 (* then just update the value *)
                 (mk_let update_value t_val
                   (mk_add (mk_var id_val) @@ tuple_projection "val") @@
-                  mk_insert
-                    (mk_deref @@ mk_var target_map) @@
-                    mk_tuple update_vars)
+                  mk_insert tmap_deref @@ mk_tuple update_vars)
                 (* else, if it's just a regular delta, read the frontier *)
                 regular_delta) @@
           mk_var delta_tuples_nm
@@ -337,11 +335,11 @@ let declare_global_funcs partmap p ast =
                (mk_lambda' ids_types_v @@
                  mk_gt (mk_var "vid") @@ mk_var "min_vid") @@
                (* slice w/o vid and value *)
-               mk_slice' (mk_deref @@ mk_var target_map) @@
+               mk_slice' (mk_var target_map) @@
                  mk_cunknown::vars_arg_no_v_no_val@[mk_cunknown]) @@
               mk_iter
                 (mk_lambda' ids_types_v @@
-                  mk_update (mk_deref @@ mk_var target_map) (mk_tuple vars_v) @@
+                  mk_update target_map (mk_tuple vars_v) @@
                     mk_tuple @@ vars_v_no_val@
                       [mk_add vars_val vars_arg_val]
                 ) @@
@@ -388,7 +386,7 @@ let start_trig ~force_correctives p t =
     if force_correctives then
       (* force correctives by changing the epoch *)
       [mk_let "old_epoch" t_int (mk_peek_or_zero epoch_var) @@
-       mk_update epoch_var (mk_var "old_epoch") @@
+       mk_update epoch_name (mk_var "old_epoch") @@
         mk_apply (mk_var "mod") @@
           mk_tuple [mk_add (mk_var "old_epoch") @@ mk_cint 1; mk_cint 2]]
     else []
@@ -408,7 +406,7 @@ let start_trig ~force_correctives p t =
 
         (* increase vid_counter *)
          mk_let "vid_counter_old" t_int (mk_peek_or_zero vid_counter) @@
-         mk_update vid_counter (mk_var "vid_counter_old") @@
+         mk_update vid_counter_name (mk_var "vid_counter_old") @@
            mk_add (mk_cint 1) (mk_var "vid_counter_old")] @
 
         (if enable_gc then
@@ -529,7 +527,7 @@ let send_puts =
 
         (if enable_gc then [
           (* insert a record into the switch ack log, waiting for ack*)
-          mk_insert GC.switch_ack_log @@
+          mk_insert GC.switch_ack_log_name @@
                 mk_tuple [mk_var "ip"; mk_var "vid"; mk_cbool false]
         ] else [])
     ) @@
@@ -711,7 +709,7 @@ mk_code_sink'
               (mk_add (mk_var "old_count") @@ mk_var "count") @@
             mk_block [
               mk_update
-                stmt_cntrs
+                stmt_cntrs_name
                 (mk_tuple @@
                   part_pat_as_vars@[mk_var "old_count"]) @@
                 mk_tuple @@
@@ -737,7 +735,7 @@ mk_code_sink'
                 mk_cunit
             ]) @@
           mk_insert
-            stmt_cntrs @@
+            stmt_cntrs_name @@
             mk_tuple @@ part_pat_as_vars@[mk_var "count"]
       ) @@
         mk_var "stmt_id_cnt_list"] @
@@ -763,6 +761,7 @@ let send_push_stmt_map_trig p s_rhs_lhs trig_name =
     (fun acc_code (stmt_id, (rhs_map_id, lhs_map_id)) ->
       let rhs_map_types = map_types_with_v_for p rhs_map_id in
       let rhs_map_name = map_name_of p rhs_map_id in
+      let rhsm_deref = rhs_map_name^"_deref" in
       let shuffle_fn = find_shuffle stmt_id rhs_map_id lhs_map_id in
       let partial_key = partial_key_from_bound p stmt_id lhs_map_id in
       let slice_key = slice_key_from_bound p stmt_id rhs_map_id in
@@ -771,6 +770,7 @@ let send_push_stmt_map_trig p s_rhs_lhs trig_name =
         (send_push_name_of_t p trig_name stmt_id rhs_map_id)
         (args_of_t_with_v p trig_name)
         [] @@ (* locals *)
+        mk_bind (mk_var rhs_map_name) rhsm_deref @@
         mk_block [
           (* save this particular statement execution in the master log
            * Note that we need to do it here to make sure nothing
@@ -794,7 +794,7 @@ let send_push_stmt_map_trig p s_rhs_lhs trig_name =
               mk_tuple @@
                 partial_key@
                 (* we need the latest vid data that's less than the current vid *)
-                [K3Dist.map_latest_vid_vals p (mk_deref @@ mk_var rhs_map_name)
+                [K3Dist.map_latest_vid_vals p (mk_var rhsm_deref)
                   (some slice_key) rhs_map_id ~keep_vid:true;
                 mk_cbool true]
           ]
@@ -818,6 +818,7 @@ let rcv_push_trig (p:P.prog_data_t) s_rhs trig_name =
 List.fold_left
   (fun acc_code (stmt_id, read_map_id) ->
     let rbuf_name = buf_of_stmt_map_id p stmt_id read_map_id in
+    let rbuf_deref = rbuf_name^"_deref" in
     let tuple_types = map_types_with_v_for p read_map_id in
     (* remove value from tuple so we can do a slice *)
     let tuple_id_t = types_to_ids_types "_tup" tuple_types in
@@ -829,6 +830,7 @@ List.fold_left
       (("tuples", wrap_t_of_map' tuple_types)::
         args_of_t_with_v p trig_name)
       [] @@ (* locals *)
+      mk_bind (mk_var rbuf_name) rbuf_deref @@
       (* save the tuples *)
       mk_block
         (* save the bound variables for this vid. This is necessary for both the
@@ -844,16 +846,13 @@ List.fold_left
             mk_let_many tuple_id_t (mk_var "tuple") @@
             mk_case_sn
               (mk_peek @@ mk_slice'
-                (mk_deref @@ mk_var rbuf_name)
+                (mk_var rbuf_deref)
                 tuple_vars_no_val)
               "vals"
-              (mk_update
-                (mk_deref @@ mk_var rbuf_name)
+              (mk_update rbuf_deref
                 (mk_var "vals") @@
                 mk_var "tuple") @@
-              mk_insert
-                (mk_deref @@ mk_var rbuf_name) @@
-                mk_var "tuple"
+              mk_insert rbuf_name @@ mk_var "tuple"
           ) @@
           mk_var "tuples"
          ;

@@ -214,12 +214,12 @@ let modify_map_add_vid p ast stmt =
     (* a lambda simply passes through a message *)
     | Lambda _ -> get_msg 0, e
 
-    | Insert   -> let (col, elem) = U.decompose_insert e in
+    | Insert _ -> let (col, elem) = U.decompose_insert e in
         NopMsg, mk_insert col @: modify_tuple elem
 
     (* deletes need to be removed, since we have versioning ie. we don't delete
      * anything *)
-    | Delete -> DelMsg, e
+    | Delete _ -> DelMsg, e
 
     | Slice ->
       (* If we have any bound variable, we should slice on those *)

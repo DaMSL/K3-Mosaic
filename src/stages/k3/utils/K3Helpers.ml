@@ -261,6 +261,9 @@ let mk_case_sn pred id some none =
 let mk_case_ns pred id none some =
     mk_stree (CaseOf id) [pred; some; none]
 
+let mk_bind pred id expr = mk_stree (BindAs id) [pred; expr]
+let mk_deref col = mk_bind col "__x" (mk_var "__x")
+
 let mk_map map_fun collection =
     mk_stree Map [map_fun; collection]
 
@@ -309,21 +312,19 @@ let mk_slice_idx idxs comps col pat =
 let mk_slice_idx' idxs comps col pat =
   mk_slice_idx idxs (mk_tuple comps) col @: mk_tuple pat
 
-let mk_insert collection x = mk_stree Insert [collection; x]
+let mk_insert col x = mk_stree (Insert col) [x]
 
-let mk_delete collection x = mk_stree Delete [collection;x]
+let mk_delete col x = mk_stree (Delete col) [x]
 
-let mk_update collection old_val new_val =
-    mk_stree Update [collection; old_val; new_val]
+let mk_update col old_val new_val =
+    mk_stree (Update col) [old_val; new_val]
 
-let mk_peek collection = mk_stree Peek [collection]
+let mk_peek col = mk_stree Peek [col]
 
 let mk_ind v = mk_stree Indirect [v]
 
 (* left: TRef, right: T/TRef *)
-let mk_assign left right = mk_stree Assign [left; right]
-
-let mk_deref ref = mk_stree Deref [ref]
+let mk_assign left right = mk_stree (Assign left) [right]
 
 (* target:TTarget(T) address:TAdress args:T *)
 let mk_send target address args = mk_stree Send [target; address; args]
@@ -355,7 +356,7 @@ let mk_net_handle id typ addr ?(is_json=false) is_sink =
     in if is_sink then mk_no_anno @: Sink t
        else mk_no_anno @: Source t
 
-let mk_bind id1 id2 = mk_no_anno @: Bind(id1, id2)
+let mk_bind_role id1 id2 = mk_no_anno @: BindFlow(id1, id2)
 
 let mk_consume id = mk_no_anno @: Instruction(Consume id)
 

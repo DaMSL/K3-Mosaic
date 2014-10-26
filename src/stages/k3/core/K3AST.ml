@@ -129,13 +129,13 @@ type expr_tag_t
     | Slice
     (* the tuple index numbers we want to slice by, hierarchically *)
     | SliceIdx of IntSet.t list
-    | Insert
-    | Delete
-    | Update
+    | Insert of id_t
+    | Delete of id_t
+    | Update of id_t
 
-    | Assign
-    | Deref
+    | Assign of id_t
     | Indirect
+    | BindAs of id_t
 
     | Send
 
@@ -183,7 +183,7 @@ type flow_endpoint_t =
 type flow_statement_t =
   | Source      of flow_endpoint_t
   | Sink        of flow_endpoint_t
-  | Bind        of id_t * id_t
+  | BindFlow    of id_t * id_t
   | Instruction of instruction_t
 
 type flow_program_t = (flow_statement_t * annotation_t) list

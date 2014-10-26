@@ -36,7 +36,7 @@ let set_replicas_code =
   let var_replicas = mk_var replicas_nm in
   mk_global_fn "set_replicas"
   ["n", t_int] [t_unit] @:
-    mk_update var_replicas (mk_peek_or_error var_replicas) (mk_var "n")
+    mk_update replicas_nm (mk_peek_or_error var_replicas) (mk_var "n")
 
 let add_node_name = "add_node"
 
@@ -66,7 +66,7 @@ let add_node_code =
       (mk_lambda
         (wrap_args ["x", wrap_ttuple t_node]) @:
         mk_insert
-          (mk_var node_ring_nm) @:
+          node_ring_nm @:
           mk_var "x"
       ) @:
       (mk_var "new_elems")
@@ -85,14 +85,14 @@ let add_node_code =
     [
       mk_iter
         (mk_lambda (wrap_args ["node", wrap_ttuple t_node]) @:
-          mk_delete (mk_var node_ring_nm) @:
+          mk_delete node_ring_nm @:
             (mk_var "node")
         ) @:
         (mk_var node_ring_nm)
       ;
       mk_iter
         (mk_lambda (wrap_args ["node", wrap_ttuple t_node]) @:
-          mk_insert (mk_var node_ring_nm) @:
+          mk_insert node_ring_nm @:
             (mk_var "node")
         ) @:
         (mk_var "temp_ring")
@@ -109,7 +109,7 @@ let remove_node_code =
         ) @:
     mk_iter
         (mk_lambda (wrap_args ["x", wrap_ttuple t_node]) @:
-        mk_delete (mk_var node_ring_nm) (mk_var "x")
+        mk_delete node_ring_nm (mk_var "x")
         ) @:
         mk_var "nodes_to_delete"
 

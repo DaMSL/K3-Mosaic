@@ -144,6 +144,8 @@ val mk_iter : expr_t -> expr_t -> expr_t
 val mk_if : expr_t -> expr_t -> expr_t -> expr_t
 val mk_case_sn : expr_t -> id_t -> expr_t -> expr_t -> expr_t
 val mk_case_ns : expr_t -> id_t -> expr_t -> expr_t -> expr_t
+val mk_bind : expr_t -> id_t -> expr_t -> expr_t
+val mk_deref : expr_t -> expr_t
 
 val mk_map : expr_t -> expr_t -> expr_t
 val mk_filter : expr_t -> expr_t -> expr_t
@@ -159,13 +161,12 @@ val mk_slice' : expr_t -> expr_t list -> expr_t
    expr_t: list of integer values specifying GT, LT, EQ *)
 val mk_slice_idx : int list list -> expr_t -> expr_t -> expr_t -> expr_t
 val mk_slice_idx' : int list list -> expr_t list -> expr_t -> expr_t list -> expr_t
-val mk_insert : expr_t -> expr_t -> expr_t
-val mk_delete : expr_t -> expr_t -> expr_t
-val mk_update : expr_t -> expr_t -> expr_t -> expr_t
+val mk_insert : id_t -> expr_t -> expr_t
+val mk_delete : id_t -> expr_t -> expr_t
+val mk_update : id_t -> expr_t -> expr_t -> expr_t
 
 val mk_ind : expr_t -> expr_t
-val mk_assign : expr_t -> expr_t -> expr_t
-val mk_deref : expr_t -> expr_t
+val mk_assign : id_t -> expr_t -> expr_t
 val mk_send : expr_t -> expr_t -> expr_t -> expr_t
 
 (* smart role constructors *)
@@ -176,7 +177,7 @@ val mk_file_handle : id_t -> value_type_t -> string -> ?is_json:bool -> bool ->
     flow_statement_t * annotation_t
 val mk_net_handle : id_t -> value_type_t -> address -> ?is_json:bool -> bool ->
     flow_statement_t * annotation_t
-val mk_bind : id_t -> id_t -> flow_statement_t * annotation_t
+val mk_bind_role : id_t -> id_t -> flow_statement_t * annotation_t
 val mk_consume : id_t -> flow_statement_t * annotation_t
 val mk_role : id_t -> flow_program_t -> declaration_t * annotation_t
 

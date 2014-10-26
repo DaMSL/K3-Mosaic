@@ -173,19 +173,19 @@ let decompose_aggregate e = match tag_of_expr e, sub_tree e with
 let decompose_apply e = match tag_of_expr e, sub_tree e with
   Apply, [e0; e1] -> (e0, e1) | _ -> failwith "not Apply"
 let decompose_assign e = match tag_of_expr e, sub_tree e with
-  Assign, [e0; e1] -> e0, e1 | _ -> failwith "not Assign"
+  Assign x, [e0] -> x, e0 | _ -> failwith "not Assign"
 let decompose_block e = match tag_of_expr e with
   Block -> sub_tree e | _ -> failwith "not a Block"
 let decompose_caseof e = match tag_of_expr e, sub_tree e with
-  CaseOf x, [e0; e1; e2] -> e0, e1, e2 | _ -> failwith "not a Combine"
+  CaseOf _, [e0; e1; e2] -> e0, e1, e2 | _ -> failwith "not a CaseOf"
+let decompose_bind e = match tag_of_expr e, sub_tree e with
+  BindAs x, [e0; e1] -> e0, x, e1 | _ -> failwith "not a BindAs"
 let decompose_combine e = match tag_of_expr e, sub_tree e with
   Combine, [e0; e1] -> e0, e1 | _ -> failwith "not a Combine"
 let decompose_const e = match tag_of_expr e with
   Const c -> c | _ -> failwith "not a Combine"
 let decompose_delete e = match tag_of_expr e, sub_tree e with
-  Delete, [e0; e1] -> (e0, e1) | _ -> failwith "not a Delete"
-let decompose_deref e = match tag_of_expr e, sub_tree e with
-  Deref, [e0] -> e0 | _ -> failwith "not a Deref"
+  Delete x, [e0] -> x, e0 | _ -> failwith "not a Delete"
 let decompose_eq e = match tag_of_expr e, sub_tree e with
   Eq, [e0; e1] -> e0, e1 | _ -> failwith "not an Equals"
 let decompose_filter e = match tag_of_expr e, sub_tree e with
@@ -197,8 +197,10 @@ let decompose_gbagg e = match tag_of_expr e, sub_tree e with
   | _ -> failwith "not a GroupByAggregte"
 let decompose_ifthenelse e = match tag_of_expr e, sub_tree e with
   IfThenElse, [e0; e1; e2] -> e0, e1, e2 | _ -> failwith "not a IfThenElse"
+let decompose_indirect e = match tag_of_expr e, sub_tree e with
+  Indirect, [e0] -> e0 | _ -> failwith "not an Indirect"
 let decompose_insert e = match tag_of_expr e, sub_tree e with
-  Insert, [e0; e1] -> e0, e1 | _ -> failwith "not a Insert"
+  Insert x, [e0] -> x, e0 | _ -> failwith "not a Insert"
 let decompose_iterate e = match tag_of_expr e, sub_tree e with
   Iterate, [e0; e1] -> e0, e1 | _ -> failwith "not a Iterate"
 let decompose_just e = match tag_of_expr e, sub_tree e with
@@ -209,35 +211,33 @@ let decompose_leq e = match tag_of_expr e, sub_tree e with
   Leq, [e0; e1] -> e0, e1 | _ -> failwith "not a Leq"
 let decompose_lt e = match tag_of_expr e, sub_tree e with
   Lt, [e0; e1] -> e0, e1 | _ -> failwith "not a Lt"
-let decompose_map e = match tag_of_expr e with
-  Map -> (nth e 0, nth e 1) | _ -> failwith "not a Map"
-let decompose_mult e = match tag_of_expr e with
-  Mult -> (nth e 0, nth e 1) | _ -> failwith "not a Mult"
-let decompose_neg e = match tag_of_expr e with
-  Neg -> nth e 0 | _ -> failwith "not a Neg"
-let decompose_neq e = match tag_of_expr e with
-  Neq -> (nth e 0, nth e 1) | _ -> failwith "not a Neq"
-let decompose_peek e = match tag_of_expr e with
-  Peek -> nth e 0 | _ -> failwith "not a Peek"
-let decompose_range e = match tag_of_expr e with
-  Range _ -> (nth e 0, nth e 1, nth e 2) | _ -> failwith "not a Range"
+let decompose_map e = match tag_of_expr e, sub_tree e with
+  Map, [e0; e1] -> e0, e1 | _ -> failwith "not a Map"
+let decompose_mult e = match tag_of_expr e, sub_tree e with
+  Mult, [e0; e1] -> e0, e1 | _ -> failwith "not a Mult"
+let decompose_neg e = match tag_of_expr e, sub_tree e with
+  Neg, [e0] -> e0 | _ -> failwith "not a Neg"
+let decompose_neq e = match tag_of_expr e, sub_tree e with
+  Neq, [e0; e1] -> e0, e1 | _ -> failwith "not a Neq"
+let decompose_peek e = match tag_of_expr e, sub_tree e with
+  Peek, [e0] -> e0 | _ -> failwith "not a Peek"
+let decompose_range e = match tag_of_expr e, sub_tree e with
+  Range _, [e0; e1; e2] -> e0, e1, e2 | _ -> failwith "not a Range"
 let decompose_send e =
   let rec rest i acc = if i = 1 then acc else rest (i-1) ((nth e i)::acc)
   in match tag_of_expr e with
   Send -> (nth e 0, nth e 1, rest ((List.length (sub_tree e))-1) [])
   | _ -> failwith "not a Send"
-let decompose_singleton e = match tag_of_expr e with
-  Singleton vt -> nth e 0 | _ -> failwith "not a Singleton"
-let decompose_slice e = match tag_of_expr e with
-  Slice -> (nth e 0, nth e 1) | _ -> failwith "not a Slice"
-let decompose_sort e = match tag_of_expr e with
-  Sort -> (nth e 0, nth e 1) | _ -> failwith "not a Sort"
+let decompose_singleton e = match tag_of_expr e, sub_tree e with
+  Singleton vt, [e0] -> e0 | _ -> failwith "not a Singleton"
+let decompose_slice e = match tag_of_expr e, sub_tree e with
+  Slice, [e0; e1] -> e0, e1 | _ -> failwith "not a Slice"
+let decompose_sort e = match tag_of_expr e, sub_tree e with
+  Sort, [e0; e1] -> e0, e1 | _ -> failwith "not a Sort"
 let decompose_tuple e = match tag_of_expr e with
   Tuple -> sub_tree e  | _ -> failwith "not a Tuple"
-let decompose_update e = match tag_of_expr e with
-  Update -> (nth e 0, nth e 1, nth e 2) | _ -> failwith "not an Update"
-let decompose_indirect e = match tag_of_expr e with
-  Indirect -> nth e 0 | _ -> failwith "not an Indirect"
+let decompose_update e = match tag_of_expr e, sub_tree e with
+  Update x, [e0; e1] -> x, e0, e1 | _ -> failwith "not an Update"
 
 let decompose_role (d,_) = match d with
   Role (id, fp) -> (id, fp) | _ -> failwith "not a role"
@@ -451,55 +451,6 @@ let renumber_test_program_ids ?(start=0) test_p =
 let attach_type t e =
   let uuid, tag, anns, children = details_of_expr e in
   expr_of_details uuid tag ((Type t)::anns) children
-
-let string_of_const = function
-  | CUnit      -> "CUnit"
-  | CUnknown   -> "CUnknown"
-  | CBool b    -> "CBool "^sob b
-  | CInt i     -> "CInt "^soi i
-  | CFloat f   -> "CFloat "^sof f
-  | CString s  -> "CString "^s
-  | CAddress _ -> "CAddress"
-  | CTarget s  -> "CTarget "^s
-
-let string_of_tag = function
-  | Const c          -> "Const "^string_of_const c
-  | Var id           -> "Var "^id
-  | Tuple            -> "Tuple"
-  | Just             -> "Just"
-  | Nothing _        -> "Nothing"
-  | Empty _          -> "Empty"
-  | Singleton _      -> "Singleton"
-  | Combine          -> "Combine"
-  | Range _          -> "Range"
-  | Add              -> "Add"
-  | Mult             -> "Mult"
-  | Neg              -> "Neg"
-  | Lt               -> "Lt"
-  | Eq               -> "Eq"
-  | Neq              -> "Neq"
-  | Leq              -> "Leq"
-  | Lambda _         -> "Lambda"
-  | Apply            -> "Apply"
-  | Block            -> "Block"
-  | Iterate          -> "Iterate"
-  | IfThenElse       -> "IfThenElse"
-  | CaseOf _         -> "CaseOf"
-  | Map              -> "Map"
-  | Filter           -> "Filter"
-  | Flatten          -> "Flatten"
-  | Aggregate        -> "Aggregate"
-  | GroupByAggregate -> "GroupByAggregate"
-  | Sort             -> "Sort"
-  | Peek             -> "Peek"
-  | Slice            -> "Slice"
-  | Insert           -> "Insert"
-  | Delete           -> "Delete"
-  | Update           -> "Update"
-  | Indirect         -> "Indirect"
-  | Assign           -> "Assign"
-  | Deref            -> "Deref"
-  | Send             -> "Send"
 
 (* unwrap a type_t that's not a function *)
 let unwrap_t_val = function

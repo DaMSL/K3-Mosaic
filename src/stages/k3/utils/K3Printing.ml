@@ -61,32 +61,33 @@ let string_of_stop_behavior_t s = match s with
     | UntilEmpty -> "UntilEmpty"
     | UntilEOF -> "UntilEOF"
 
-let string_of_tag_type tag = match tag with
-    | Const c  -> "Const"
-    | Var i    -> "Var"
-    | Tuple     -> "Tuple"
-    | Just      -> "Just"
-    | Nothing t -> "Nothing"
+let string_of_tag_type = function
+    | Const _          -> "Const"
+    | Var _            -> "Var"
+    | Tuple            -> "Tuple"
+    | Just             -> "Just"
+    | Nothing _        -> "Nothing"
 
-    | Empty t     -> "Empty"
-    | Singleton t -> "Singleton"
-    | Combine     -> "Combine"
-    | Range(ct)   -> "Range"
+    | Empty _          -> "Empty"
+    | Singleton _      -> "Singleton"
+    | Combine          -> "Combine"
+    | Range _          -> "Range"
 
-    | Add   -> "Add"
-    | Mult  -> "Mult"
-    | Neg   -> "Neg"
-    | Eq    -> "Eq"
-    | Neq   -> "Neq"
-    | Lt    -> "Lt"
-    | Leq   -> "Leq"
+    | Add              -> "Add"
+    | Mult             -> "Mult"
+    | Neg              -> "Neg"
+    | Eq               -> "Eq"
+    | Neq              -> "Neq"
+    | Lt               -> "Lt"
+    | Leq              -> "Leq"
 
-    | Lambda a -> "Lambda"
-    | Apply    -> "Apply"
+    | Lambda a         -> "Lambda"
+    | Apply            -> "Apply"
 
-    | Block      -> "Block"
-    | IfThenElse -> "IfThenElse"
-    | CaseOf x   -> "CaseOf "^x
+    | Block            -> "Block"
+    | IfThenElse       -> "IfThenElse"
+    | CaseOf x         -> "CaseOf "^x
+    | BindAs x         -> "BindAs "^x
 
     | Map              -> "Map"
     | Iterate          -> "Iterate"
@@ -96,41 +97,48 @@ let string_of_tag_type tag = match tag with
     | GroupByAggregate -> "GroupByAggregate"
     | Sort             -> "Sort"
 
-    | Slice   -> "Slice"
-    | Insert  -> "Insert"
-    | Update  -> "Update"
-    | Delete  -> "Delete"
-    | Peek    -> "Peek"
+    | Slice            -> "Slice"
+    | Insert x         -> "Insert "^x
+    | Update x         -> "Update "^x
+    | Delete x         -> "Delete "^x
+    | Peek             -> "Peek"
 
-    | Indirect -> "Indirect"
-    | Assign   -> "Assign"
-    | Deref    -> "Deref"
+    | Indirect         -> "Indirect"
+    | Assign x         -> "Assign"^x
 
-    | Send    -> "Send"
+    | Send             -> "Send"
+
+
+let sott tag = string_of_tag_type tag
+
+let base_type_tag = function
+  | TUnknown      -> "TUnknown"
+  | TUnit         -> "TUnit"
+  | TBool         -> "TBool"
+  | TByte         -> "TByte"
+  | TInt          -> "TInt"
+  | TDate         -> "TDate"
+  | TFloat        -> "TFloat"
+  | TString       -> "TString"
+  | TMaybe _      -> "TMaybe"
+  | TTuple t_l    -> "TTuple"
+  | TCollection _ -> "TCollection"
+  | TAddress      -> "TAddress"
+  | TTarget _     -> "TTarget"
+  | TIndirect _   -> "TIndirect"
+
+let btt = base_type_tag
 
 (* Flat stringification *)
 let rec flat_string_of_base_type t = match t with
-    | TUnknown  -> "TUnknown"
-    | TUnit     -> "TUnit"
-    | TBool     -> "TBool"
-    | TByte     -> "TByte"
-    | TInt      -> "TInt"
-    | TDate     -> "TDate"
-    | TFloat    -> "TFloat"
-    | TString   -> "TString"
-
-    | TMaybe(t) -> tag_str "TMaybe" [flat_string_of_value_type t]
-
-    | TTuple(t_l) -> tag_str "TTuple" (List.map flat_string_of_value_type t_l)
-
-    | TCollection(t_c, t_e) ->
-        tag_str "TCollection"
-          [string_of_container_type t_c; flat_string_of_value_type t_e]
-
-    | TAddress -> "TAddress"
-    | TTarget(t) -> tag_str "TTarget" [flat_string_of_base_type t]
-    | TIndirect(ind) -> tag_str "TIndirect" [flat_string_of_value_type ind]
-
+  | TMaybe t'             -> tag_str (btt t) [flat_string_of_value_type t']
+  | TTuple t_l            -> tag_str (btt t) (List.map flat_string_of_value_type t_l)
+  | TCollection(t_c, t_e) -> tag_str (btt t)
+        [string_of_container_type t_c; flat_string_of_value_type t_e]
+  | TTarget t'            -> tag_str (btt t) [flat_string_of_base_type t']
+  | TIndirect ind         -> tag_str (btt t) [flat_string_of_value_type ind]
+  | _                     -> base_type_tag t
+  
 and flat_string_of_mutable_type mt = match mt with
     | TMutable(bt,_) -> "TMutable("^flat_string_of_base_type bt^")"
     | TImmutable(bt,_) -> "TImmutable("^flat_string_of_base_type bt^")"
@@ -152,55 +160,17 @@ let rec flat_string_of_arg a = match a with
     | AMaybe(a') -> tag_str "AMaybe" [flat_string_of_arg a']
     | ATuple(args) -> tag_str "ATuple" (List.map flat_string_of_arg args)
 
-let flat_string_of_expr_tag tag children =
+let flat_string_of_expr_tag t children =
   let my_tag ?(extra="") t = tag_str ~extra:extra t children
-  in match tag with
-    | Const(cns)  -> tag_str "Const" [string_of_const cns]
-    | Var(i)    -> tag_str "Var" [i]
-    | Tuple     -> my_tag "Tuple"
-
-    | Just      -> my_tag "Just"
-    | Nothing t -> my_tag "Nothing" ~extra:(flat_string_of_value_type t)
-
-    | Empty t     -> my_tag "Empty" ~extra:(flat_string_of_value_type t)
-    | Singleton t -> my_tag "Singleton" ~extra:(flat_string_of_value_type t)
-    | Combine     -> my_tag "Combine"
-    | Range(ct)   -> my_tag "Range" ~extra:(string_of_container_type ct)
-
-    | Add   -> my_tag "Add"
-    | Mult  -> my_tag "Mult"
-    | Neg   -> my_tag "Neg"
-    | Eq    -> my_tag "Eq"
-    | Neq   -> my_tag "Neq"
-    | Lt    -> my_tag "Lt"
-    | Leq   -> my_tag "Leq"
-
-    | Lambda a -> my_tag "Lambda" ~extra:(flat_string_of_arg a)
-    | Apply    -> my_tag "Apply"
-
-    | Block      -> my_tag "Block"
-    | IfThenElse -> my_tag "IfThenElse"
-    | CaseOf x   -> my_tag @@ "CaseOf "^x
-
-    | Map              -> my_tag "Map"
-    | Iterate          -> my_tag "Iterate"
-    | Filter           -> my_tag "Filter"
-    | Flatten          -> my_tag "Flatten"
-    | Aggregate        -> my_tag "Aggregate"
-    | GroupByAggregate -> my_tag "GroupByAggregate"
-    | Sort             -> my_tag "Sort"
-
-    | Slice      -> my_tag "Slice"
-    | Insert     -> my_tag "Insert"
-    | Update     -> my_tag "Update"
-    | Delete     -> my_tag "Delete"
-    | Peek       -> my_tag "Peek"
-
-    | Indirect   -> my_tag "Indirect"
-    | Assign     -> my_tag "Assign"
-    | Deref      -> my_tag "Deref"
-
-    | Send       -> my_tag "Send"
+  in match t with
+  | Const cns    -> tag_str (sott t) [string_of_const cns]
+  | Var i        -> tag_str (sott t) [i]
+  | Nothing t'   -> my_tag (sott t) ~extra:(flat_string_of_value_type t')
+  | Empty t'     -> my_tag (sott t) ~extra:(flat_string_of_value_type t')
+  | Singleton t' -> my_tag (sott t) ~extra:(flat_string_of_value_type t')
+  | Range(ct)    -> my_tag (sott t) ~extra:(string_of_container_type ct)
+  | Lambda a     -> my_tag (sott t) ~extra:(flat_string_of_arg a)
+  | _            -> my_tag @@ sott t
 
 (* TODO: Why can't this function be point-free? *)
 let flat_string_of_expr expr =
@@ -252,10 +222,10 @@ let flat_string_of_flow_endpoint e =
      [i; flat_string_of_arg arg; decls; flat_string_of_expr e]
 
 let flat_string_of_flow_statement fs = match fs with
-    | Source ep      -> tag_str "Source" [flat_string_of_flow_endpoint ep]
-    | Sink ep        -> tag_str "Sink" [flat_string_of_flow_endpoint ep]
-    | Bind(i, i2)    -> tag_str "Bind" [i; i2]
-    | Instruction(i) -> tag_str "Instruction" [flat_string_of_instruction i]
+    | Source ep       -> tag_str "Source" [flat_string_of_flow_endpoint ep]
+    | Sink ep         -> tag_str "Sink" [flat_string_of_flow_endpoint ep]
+    | BindFlow(i, i2) -> tag_str "BindFlow" [i; i2]
+    | Instruction(i)  -> tag_str "Instruction" [flat_string_of_instruction i]
 
 let flat_string_of_flow_program sp =
   "[ "^(String.concat ","
@@ -292,11 +262,11 @@ module type StringifyAST = sig
   val print_value_type   : config_t -> value_type_t -> unit
   val print_type         : config_t -> type_t -> unit
 
-	val print_arg : config_t -> arg_t -> unit
-	val print_expr : config_t -> expr_t -> unit
+  val print_arg : config_t -> arg_t -> unit
+  val print_expr : config_t -> expr_t -> unit
 
-	val print_resource_pattern : config_t -> resource_pattern_t -> unit
-	val print_flow_resource    : config_t -> flow_resource_t -> unit
+  val print_resource_pattern : config_t -> resource_pattern_t -> unit
+  val print_flow_resource    : config_t -> flow_resource_t -> unit
 
   val print_flow_statement : config_t -> flow_statement_t -> unit
 
@@ -304,20 +274,20 @@ module type StringifyAST = sig
 
   val print_declaration : config_t -> declaration_t -> unit
 
-	val string_of_base_type: base_type_t -> string
-	val string_of_value_type: value_type_t -> string
-	val string_of_type: type_t -> string
+  val string_of_base_type: base_type_t -> string
+  val string_of_value_type: value_type_t -> string
+  val string_of_type: type_t -> string
 
   val string_of_arg: arg_t -> string
-	val string_of_expr: expr_t -> string
+  val string_of_expr: expr_t -> string
 
-	val string_of_resource_pattern : resource_pattern_t -> string
-	val string_of_flow_resource    : flow_resource_t -> string
-	val string_of_flow_statement   : flow_statement_t -> string
-	val string_of_flow_program     : flow_program_t -> string
-	val string_of_declaration: declaration_t -> string
+  val string_of_resource_pattern : resource_pattern_t -> string
+  val string_of_flow_resource    : flow_resource_t -> string
+  val string_of_flow_statement   : flow_statement_t -> string
+  val string_of_flow_program     : flow_program_t -> string
+  val string_of_declaration: declaration_t -> string
 
-	val string_of_program: ?verbose:bool -> ?print_id:bool ->
+  val string_of_program: ?verbose:bool -> ?print_id:bool ->
     ?print_expr_fn:(config_t -> expr_t -> unit Lazy.t) ->
     program_t -> string
 end
@@ -348,27 +318,13 @@ and print_base_type c t =
   let my_tag t lazy_ch_t = pretty_tag_str CutHint "" t lazy_ch_t in
   let term_tag t = pretty_tag_term_str t in
   match t with
-    | TUnknown  -> term_tag "TUnknown"
-    | TUnit     -> term_tag "TUnit"
-    | TBool     -> term_tag "TBool"
-    | TByte     -> term_tag "TByte"
-    | TInt      -> term_tag "TInt"
-    | TDate     -> term_tag "TDate"
-    | TFloat    -> term_tag "TFloat"
-    | TString   -> term_tag "TString"
-    | TIndirect vt -> my_tag "TIndirect" [lazy_value_type c vt]
-
-    | TMaybe(t) -> my_tag "TMaybe" [lazy_value_type c t]
-
-    | TTuple(t_l) -> my_tag "TTuple" @: List.map (lazy_value_type c) t_l
-
-    | TCollection(t_c, t_e) ->
-        my_tag "TCollection"
-          [lps (string_of_container_type t_c); lazy_value_type c t_e]
-
-    | TAddress -> term_tag "TAddress"
-
-    | TTarget(t) -> my_tag "TTarget" [lazy_base_type c t]
+    | TIndirect vt          -> my_tag (btt t) [lazy_value_type c vt]
+    | TMaybe t'             -> my_tag (btt t) [lazy_value_type c t']
+    | TTuple t_l            -> my_tag (btt t) @: List.map (lazy_value_type c) t_l
+    | TCollection(t_c, t_e) -> my_tag (btt t) [lps (string_of_container_type t_c); lazy_value_type c t_e]
+    | TAddress              -> term_tag (btt t)
+    | TTarget t'            -> my_tag (btt t) [lazy_base_type c t']
+    | _                     -> term_tag @@ btt t
 
 and print_mutable_type c mt =
   if c.verbose then
@@ -396,71 +352,34 @@ and print_type c t =
   match t with
     | TFunction(t_a, t_r) ->
         my_tag "TFunction" (List.map (lazy_value_type c) [t_a; t_r])
-
     | TValue(t) -> my_tag "TValue" [lazy_value_type c t]
 
 and print_arg c a =
   let my_tag t lazy_ch_t = pretty_tag_str CutHint "" t lazy_ch_t in
   match a with
-    | AIgnored -> my_tag "AIgnored" []
-    | AVar(i, t)  -> my_tag "AVar" [lps i; lazy_type c (TValue t)]
-    | AMaybe(a') -> my_tag "AMaybe" [lazy_arg c a']
-    | ATuple(args) -> my_tag "ATuple" (List.map (lazy_arg c) args)
+  | AIgnored     -> my_tag "AIgnored" []
+  | AVar(i, t)   -> my_tag "AVar" [lps i; lazy_type c (TValue t)]
+  | AMaybe(a')   -> my_tag "AMaybe" [lazy_arg c a']
+  | ATuple(args) -> my_tag "ATuple" (List.map (lazy_arg c) args)
 
-and print_expr_tag c tag lazy_children =
+and print_expr_tag c t lazy_children =
   let my_tag ?(lb="(") ?(rb=")") ?(sep=", ") ?(extra="") t =
     pretty_tag_str ~lb:lb ~rb:rb ~sep:sep CutHint extra t lazy_children
   in
   let my_tag_list = my_tag ~lb:"([" ~rb:"])" ~sep:"; " in
   let ch_tag cut_t t ch = pretty_tag_str cut_t "" t ch in
   let extra_tag t extra = pretty_tag_str CutHint "" t (extra@lazy_children) in
-  match tag with
-    | Const(ct)  -> ch_tag NoCut "Const" [lps (string_of_const ct)]
-    | Var(i)    -> ch_tag NoCut "Var" [lps i]
-    | Tuple     -> my_tag_list "Tuple"
-
-    | Just      -> my_tag "Just"
-    | Nothing t -> extra_tag "Nothing" [lazy_value_type c t]
-
-    | Empty t     -> extra_tag "Empty" [lazy_value_type c t]
-    | Singleton t -> extra_tag "Singleton" [lazy_value_type c t]
-    | Combine     -> my_tag "Combine"
-    | Range(ct)   -> my_tag "Range" ~extra:(string_of_container_type ct)
-
-    | Add   -> my_tag "Add"
-    | Mult  -> my_tag "Mult"
-    | Neg   -> my_tag "Neg"
-    | Eq    -> my_tag "Eq"
-    | Neq   -> my_tag "Neq"
-    | Lt    -> my_tag "Lt"
-    | Leq   -> my_tag "Leq"
-
-    | Lambda a -> extra_tag "Lambda" [lazy_arg c a]
-    | Apply    -> my_tag "Apply"
-
-    | Block      -> my_tag_list "Block"
-    | IfThenElse -> my_tag "IfThenElse"
-    | CaseOf x   -> my_tag @@ "CaseOf "^x
-
-    | Map              -> my_tag "Map"
-    | Iterate          -> my_tag "Iterate"
-    | Filter           -> my_tag "Filter"
-    | Flatten          -> my_tag "Flatten"
-    | Aggregate        -> my_tag "Aggregate"
-    | GroupByAggregate -> my_tag "GroupByAggregate"
-    | Sort             -> my_tag "Sort"
-
-    | Slice      -> my_tag "Slice"
-    | Insert     -> my_tag "Insert"
-    | Update     -> my_tag "Update"
-    | Delete     -> my_tag "Delete"
-    | Peek       -> my_tag "Peek"
-
-    | Indirect   -> my_tag "Indirect"
-    | Assign     -> my_tag "Assign"
-    | Deref      -> my_tag "Deref"
-
-    | Send       -> my_tag "Send"
+  match t with
+  | Const ct     -> ch_tag NoCut (sott t) [lps (string_of_const ct)]
+  | Var i        -> ch_tag NoCut (sott t) [lps i]
+  | Tuple        -> my_tag_list (sott t)
+  | Nothing t'   -> extra_tag (sott t) [lazy_value_type c t']
+  | Empty t'     -> extra_tag (sott t) [lazy_value_type c t']
+  | Singleton t' -> extra_tag (sott t) [lazy_value_type c t']
+  | Range ct     -> my_tag (sott t) ~extra:(string_of_container_type ct)
+  | Lambda a     -> extra_tag (sott t) [lazy_arg c a]
+  | Block        -> my_tag_list @@ sott t
+  | _            -> my_tag @@ sott t
 
 and print_expr c expr =
   let id_pr e = if c.print_id then print_expr_id c @: id_of_expr e else () in
@@ -522,10 +441,10 @@ let print_flow_statement c fs =
   let my_tag = pretty_tag_str CutHint "" in
   let print_endpoint = print_flow_endpoint c in
   match fs with
-    | Source ep     -> my_tag "Source" [lazy (print_endpoint ep)]
-    | Sink ep       -> my_tag "Sink" [lazy (print_endpoint ep)]
-    | Bind(i, i2)   -> my_tag "Bind" [lps i; lps i2]
-    | Instruction i -> my_tag "Instruction" [lazy (print_instruction c i)]
+    | Source ep       -> my_tag "Source" [lazy (print_endpoint ep)]
+    | Sink ep         -> my_tag "Sink" [lazy (print_endpoint ep)]
+    | BindFlow(i, i2) -> my_tag "BindFlow" [lps i; lps i2]
+    | Instruction i   -> my_tag "Instruction" [lazy (print_instruction c i)]
 
 let print_flow_program c fp =
   let print_fn (fs, _) =

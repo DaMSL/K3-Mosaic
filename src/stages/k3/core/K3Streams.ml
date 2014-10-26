@@ -304,7 +304,7 @@ let event_loop_of_flow fp : event_loop_t =
         | Stream _ -> failwith "Streams not supported as sinks"
       in (pat_acc@npats, bind_acc), (nrenv, nd_env, instrs)
 
-    | Bind (src_id, trig_id) ->
+    | BindFlow (src_id, trig_id) ->
       (pat_acc, (src_id, trig_id)::bind_acc), (res_env, d_env, instrs)
 
     | Instruction i ->

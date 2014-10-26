@@ -111,7 +111,6 @@ rule tokenize = parse
     | '>'  { GT }
     | ">=" { GEQ }
 
-    | "$"   { DEREF }
     | "->"  { RARROW }
     | "<-"  { LARROW }
     | "<->" { LRARROW }
@@ -162,6 +161,8 @@ rule tokenize = parse
 
     | "let"  { LET }
     | "in"   { IN }
+    | "bind" { BIND }
+    | "as"   { AS }
 
     | "send" { SEND }
 

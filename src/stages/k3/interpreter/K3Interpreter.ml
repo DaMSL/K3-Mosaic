@@ -25,10 +25,10 @@ let int_erroru uuid ?extra fn_name s =
   Log.log rs `Error;
   (match extra with
   | Some (address, env) ->
-    Log.log (sp ">>>> Peer %s" @: string_of_address address) `Error;
+    Log.log (sp ">>>> Peer %s" @@ string_of_address address) `Error;
     Log.log (sp "%s" @@ string_of_env env) `Error
   | _ -> ());
-  raise @: RuntimeError(uuid, msg)
+  raise @@ RuntimeError(uuid, msg)
 
 let int_error = int_erroru (-1)
 
@@ -36,9 +36,23 @@ let int_error = int_erroru (-1)
 
 let lookup id (mutable_env, frame_env) =
   try
-    VTemp(hd @: IdMap.find id frame_env)
+    VTemp(hd @@ IdMap.find id frame_env)
   with Not_found ->
     VDeclared(IdMap.find id mutable_env)
+
+let env_modify id (env:env_t) f =
+  try
+    begin match IdMap.find id @@ snd env with
+    | v::vs -> second (IdMap.add id @@ f v::vs) env
+    | []    -> failwith "unexpected"
+    end
+    with Not_found -> (* look in globals *)
+      try
+        let rv = IdMap.find id @@ fst env in
+        rv := f !rv;
+        env
+      with Not_found ->
+        failwith @@ id^" not found in any environment"
 
 (* Expression interpretation *)
 
@@ -54,8 +68,9 @@ let env_remove i env =
   try match IdMap.find i env with
     | [v]   -> IdMap.remove i env
     | _::vs -> IdMap.add i vs env
-    | []    -> failwith @: "unexpectedly can't find id "^i^" in env"
+    | []    -> failwith @@ "unexpectedly can't find id "^i^" in env"
   with Not_found -> env
+
 
 (* Given an arg_t and a value_t, bind the values to their corresponding argument names. *)
 let rec bind_args uuid arg v env =
@@ -102,7 +117,7 @@ and eval_expr (address:address) sched_st cenv texpr =
     let eval_fn = eval_fun uuid in
 
     let child_value env i =
-      let renv, reval = eval_expr address sched_st env @: List.nth children i
+      let renv, reval = eval_expr address sched_st env @@ List.nth children i
       in renv, value_of_eval reval
     in
 
@@ -143,7 +158,7 @@ and eval_expr (address:address) sched_st cenv texpr =
     | Const c   -> cenv, VTemp(value_of_const c)
     | Var id    -> begin
         try cenv, lookup id cenv
-        with Not_found -> error "Var" @: "id "^id^" not found"
+        with Not_found -> error "Var" @@ "id "^id^" not found"
         end
     | Tuple     -> let fenv, vals = child_values cenv in
                    fenv, VTemp(VTuple vals)
@@ -156,7 +171,7 @@ and eval_expr (address:address) sched_st cenv texpr =
     (* Collection constructors *)
     | Empty ct ->
         let name = "Empty" in
-        let ctype, _ = ct <| collection_of +++ base_of |> t_erroru name @:
+        let ctype, _ = ct <| collection_of +++ base_of |> t_erroru name @@
                                                           VTBad(ct, "not a collection") in
         cenv, VTemp(
             match ctype with
@@ -171,7 +186,7 @@ and eval_expr (address:address) sched_st cenv texpr =
         let name = "Singleton" in
         let nenv, element = child_value cenv 0 in
         let ctype, _ =
-          ct <| collection_of +++ base_of |> t_erroru name @:
+          ct <| collection_of +++ base_of |> t_erroru name @@
                                              VTBad(ct, "not a collection") in
         cenv, VTemp(v_singleton error element ctype)
 
@@ -254,7 +269,7 @@ and eval_expr (address:address) sched_st cenv texpr =
         begin match child_values cenv with
           | nenv, [f;c] ->
               let f' = eval_fn f address sched_st in
-              v_fold error (fun env x -> fst @: f' env x) nenv c, VTemp VUnit
+              v_fold error (fun env x -> fst @@ f' env x) nenv c, VTemp VUnit
           | _ -> error name "bad format"
         end
 
@@ -263,9 +278,9 @@ and eval_expr (address:address) sched_st cenv texpr =
         let penv, pred = child_value cenv 0 in
         begin match pred with
         | VBool true  ->
-            eval_expr address sched_st penv @: List.nth children 1
+            eval_expr address sched_st penv @@ List.nth children 1
         | VBool false ->
-            eval_expr address sched_st penv @: List.nth children 2
+            eval_expr address sched_st penv @@ List.nth children 2
         | _ -> error name "non-boolean predicate"
         end
 
@@ -274,11 +289,28 @@ and eval_expr (address:address) sched_st cenv texpr =
         let penv, pred = child_value cenv 0 in
         begin match pred with
         | VOption(Some v) ->
-            let penv' = second (env_add x v) penv in
-            eval_expr address sched_st penv' @: List.nth children 1
+            let penv = second (env_add x v) penv in
+            let penv, v = eval_expr address sched_st penv @@
+              List.nth children 1 in
+            second (env_remove x) penv, v
         | VOption None    ->
-            eval_expr address sched_st penv @: List.nth children 2
+            eval_expr address sched_st penv @@ List.nth children 2
         | _ -> error name "non-maybe predicate"
+        end
+
+    | BindAs x ->
+        let name = "BindAs" in
+        let penv, pred = child_value cenv 0 in
+        begin match pred with
+        | VIndirect rv ->
+          let penv = second (env_add x !rv) penv in
+          let penv, ret = eval_expr address sched_st penv @@ List.nth children 1
+          in
+          (* update bound value *)
+          let v = value_of_eval @@ lookup x penv in
+          rv := v;
+          second (env_remove x) penv, ret
+        | _ -> error name "non-indirect predicate"
         end
 
     (* Collection transformers *)
@@ -355,11 +387,11 @@ and eval_expr (address:address) sched_st cenv texpr =
             let r_env = ref nenv in
             let h = Hashtbl.create 100 in
             v_iter error (fun x ->
-                let env, key = second value_of_eval @: g' !r_env x in
+                let env, key = second value_of_eval @@ g' !r_env x in
                 (* common to both cases below *)
                 let apply_and_update acc =
-                  let env', acc' = f' env @: VTuple[acc; x] in
-                  Hashtbl.replace h key @: value_of_eval acc';
+                  let env', acc' = f' env @@ VTuple[acc; x] in
+                  Hashtbl.replace h key @@ value_of_eval acc';
                   r_env := env'
                 in
                 try
@@ -413,29 +445,23 @@ and eval_expr (address:address) sched_st cenv texpr =
       (* a hack while peek still uses unsafe semantics *)
       renv, VTemp(VOption(v_peek error c))
 
-    | Insert ->
-        begin match threaded_eval address sched_st cenv children with
-          | renv, [VDeclared c_ref; v] ->
-              c_ref := v_insert error (value_of_eval v) !c_ref;
-              renv, VTemp VUnit
-          | _ -> error "Insert" "bad format"
-        end
+    | Insert col_id ->
+        let renv, v = child_value cenv 0 in
+        (env_modify col_id renv @@
+          fun col -> v_insert error v col), VTemp VUnit
 
-    | Update ->
-        begin match threaded_eval address sched_st cenv children with
-          | renv, [VDeclared c_ref; oldv; newv] ->
-              c_ref := v_update error (value_of_eval oldv) (value_of_eval newv) !c_ref;
-              renv, VTemp VUnit
+    | Update col_id ->
+        begin match child_values cenv with
+          | renv, [oldv; newv] ->
+              (env_modify col_id renv @@
+                fun col -> v_update error oldv newv col), VTemp VUnit
           | _ -> error "Update" "bad format"
         end
 
-    | Delete ->
-        begin match threaded_eval address sched_st cenv children with
-          | renv, [VDeclared c_ref; v] ->
-              c_ref := v_delete error (value_of_eval v) !c_ref;
-              renv, VTemp VUnit
-          | _ -> error "Update" "bad format"
-        end
+    | Delete col_id ->
+        let renv, v = child_value cenv 0 in
+        (env_modify col_id renv @@
+          fun col -> v_delete error v col), VTemp VUnit
 
     (* Messaging *)
     | Send ->
@@ -465,19 +491,8 @@ and eval_expr (address:address) sched_st cenv texpr =
     | Indirect -> let fenv, v = child_value cenv 0 in
       fenv, VTemp(VIndirect(ref v))
 
-    | Deref    -> let fenv, v = child_value cenv 0 in
-      begin match v with
-      | VIndirect x -> fenv, VDeclared x
-      | _           -> error "Deref" "not an indirection"
-      end
-
-    | Assign   -> let fenv, vs = child_values cenv in
-      begin match vs with
-      | [VIndirect ind; v] ->
-          ind := v;
-          fenv, VTemp(VUnit)
-      | _                  -> error "Assign" "incorrect units"
-      end
+    | Assign x -> let fenv, v = child_value cenv 0 in
+      env_modify x fenv @@ const v, VTemp VUnit
 
 and threaded_eval address sched_st ienv texprs =
     match texprs with
@@ -534,10 +549,10 @@ let prepare_trigger sched_st id arg local_decls body =
     let default (id,t,_) = id, ref (default_isolated_value t) in
     let new_vals = List.map default local_decls in
     let local_env = add_from_list m_env new_vals, f_env in
-    let _, reval = (eval_fun (-1) @: VFunction(arg,body)) address (Some sched_st) local_env args in
+    let _, reval = (eval_fun (-1) @@ VFunction(arg,body)) address (Some sched_st) local_env args in
     match value_of_eval reval with
       | VUnit -> ()
-      | _ -> int_error "prepare_trigger" @: "trigger "^id^" returns non-unit"
+      | _ -> int_error "prepare_trigger" @@ "trigger "^id^" returns non-unit"
 
 (* add code sinks to the trigger environment *)
 let prepare_sinks sched_st env fp =
@@ -567,7 +582,7 @@ let env_of_program ?address sched_st k3_program =
 
           (* substitute the proper address expression for 'me' *)
           | id, _ when id = K3Global.me_name ->
-              let renv, reval = eval_expr me_addr (Some sched_st) (m_env, f_env) @: mk_caddress me_addr
+              let renv, reval = eval_expr me_addr (Some sched_st) (m_env, f_env) @@ mk_caddress me_addr
               in renv, value_of_eval reval
 
           | _, None -> (m_env, f_env), default_value t
@@ -600,13 +615,13 @@ let consume_sources sched_st env address (res_env, d_env) (ri_env, instrs) =
   match instrs with
   | []              -> NormalExec, (ri_env, [])
   | (Consume id)::t ->
-    log_node @: "consuming from event loop: "^id;
+    log_node @@ "consuming from event loop: "^id;
     try let i = List.assoc id d_env in
         let r = run_dispatcher sched_st address res_env ri_env i in
         (*let status = run_scheduler sched_st address env in*)
         NormalExec, (r, t)
     with Not_found ->
-      int_error "consume_sources" @: "no event loop found for "^id
+      int_error "consume_sources" @@ "no event loop found for "^id
 
 (* Program interpretation *)
 let interpreter_event_loop role_opt k3_program =
@@ -614,7 +629,7 @@ let interpreter_event_loop role_opt k3_program =
     int_error "interpreter_event_loop" s in
  let roles, default_role = extended_roles_of_program k3_program in
   let get_role role fail_f = try List.assoc role roles with Not_found ->
-    fail_f @: "No role "^role^" found in k3 program"
+    fail_f @@ "No role "^role^" found in k3 program"
   in match role_opt, default_role with
    | Some x, Some (_,y) -> get_role x (fun _ -> y)
    | Some x, None       -> get_role x error
@@ -713,7 +728,7 @@ let init_k3_interpreter ?shuffle_tasks
   | []  -> failwith "interpret_k3_program: Peers list is empty!"
   | _   ->
       (* Initialize an environment for each peer *)
-      let peer_meta = Hashtbl.create @: List.length peers in
+      let peer_meta = Hashtbl.create @@ List.length peers in
       let envs = List.map (fun (addr, role_opt, _) ->
                  (* event_loop_t * program_env_t *)
           let _, ((res_env, d_env, instrs), prog_env) =

@@ -332,41 +332,42 @@ let mk_val_tuple keys v = KH.mk_tuple @: (KH.ids_to_vars keys)@[v]
 
 let mk_iter = KH.mk_iter
 
-let mk_update collection bag_t ivars ivar_t ovars ovar_t new_val =
-(* new_val might (and in fact, usually will) depend on the collection, so
+let mk_update col bag_t ivars ivar_t ovars ovar_t new_val =
+(* new_val might (and in fact, usually will) depend on the col, so
     we need to evaluate it and save it to a variable before clearing the
-    existing elements out of the collection *)
-let new_val_var = KH.mk_var "update_value" in
-let update_block = match ivars, ovars with
-  | [], [] ->
-      KH.mk_block [
-        mk_iter
-          (KH.mk_lambda (mk_arg "value" bag_t) @:
-            KH.mk_delete collection @: KH.mk_var "value") @:
-          KH.mk_slice collection (KH.mk_tuple [KH.mk_cunknown]);
-        KH.mk_insert collection (mk_val_tuple [] new_val_var)
-      ]
-  | [], _  ->
-      KH.mk_block [
-        mk_iter
-          (mk_lambda ovars ovar_t "value" bag_t @:
-            KH.mk_delete collection (mk_var_tuple ovars "value")) @:
-          mk_slice collection ovars ovars;
-        KH.mk_insert collection (mk_val_tuple ovars new_val_var)
-      ]
-  | _, []  ->
-      KH.mk_block [
-        mk_iter
-          (mk_lambda ivars ivar_t "value" bag_t @:
-            KH.mk_delete collection (mk_var_tuple ivars "value")) @:
-          mk_slice collection ivars ivars;
-        KH.mk_insert collection (mk_val_tuple ivars new_val_var)
-      ]
-  | _      -> failwith "FullPC unsupported"
-in
-KH.mk_apply
-  (KH.mk_lambda (mk_arg (KU.id_of_var new_val_var) bag_t) update_block)
-  new_val
+    existing elements out of the col *)
+  let colv = KH.mk_var col in
+  let new_val_var = KH.mk_var "update_value" in
+  let update_block = match ivars, ovars with
+    | [], [] ->
+        KH.mk_block [
+          mk_iter
+            (KH.mk_lambda (mk_arg "value" bag_t) @:
+              KH.mk_delete col @: KH.mk_var "value") @:
+            KH.mk_slice colv (KH.mk_tuple [KH.mk_cunknown]);
+          KH.mk_insert col (mk_val_tuple [] new_val_var)
+        ]
+    | [], _  ->
+        KH.mk_block [
+          mk_iter
+            (mk_lambda ovars ovar_t "value" bag_t @:
+              KH.mk_delete col (mk_var_tuple ovars "value")) @:
+            mk_slice colv ovars ovars;
+          KH.mk_insert col (mk_val_tuple ovars new_val_var)
+        ]
+    | _, []  ->
+        KH.mk_block [
+          mk_iter
+            (mk_lambda ivars ivar_t "value" bag_t @:
+              KH.mk_delete col (mk_var_tuple ivars "value")) @:
+            mk_slice colv ivars ivars;
+          KH.mk_insert col (mk_val_tuple ivars new_val_var)
+        ]
+    | _      -> failwith "FullPC unsupported"
+  in
+  KH.mk_apply
+    (KH.mk_lambda (mk_arg (KU.id_of_var new_val_var) bag_t) update_block)
+    new_val
 
 (**********************************************************************)
 (**/**)
@@ -526,7 +527,7 @@ let map_access_to_expr mapn ins outs map_ret_t theta_vars_k init_expr_opt =
                   in
                   let ib' =
                     KH.mk_block [
-                      mk_update map_expr (KT.base_of map_ret_kt ()) ins_k ins_tl [] [] iv_e;
+                      mk_update mapn (KT.base_of map_ret_kt ()) ins_k ins_tl [] [] iv_e;
                       out_access_expr iv_e]
                   in
                   if init_outs_k = outs_k then ie, ib'
@@ -1236,7 +1237,7 @@ let m3_stmt_to_k3_stmt (meta: meta_t) ?(generate_init = false)
    (* the lhs_collection accordingly. *)
    let coll_update_expr =
       let single_update_expr =
-          mk_update lhs_collection map_k3_type
+          mk_update mapn map_k3_type
             (KH.vars_to_ids lhs_ins_el) (lhs_ins_kt) (KH.vars_to_ids lhs_outs_el)
             lhs_outs_kt (KH.mk_add existing_v rhs_ret_ve)
       in
@@ -1272,7 +1273,7 @@ let m3_stmt_to_k3_stmt (meta: meta_t) ?(generate_init = false)
                                      (List.map KT.canonical lhs_outs_kt))@
                        [KU.id_of_var rhs_ret_ve,
                         KU.unwrap_t_val rhs_ret_vt])
-                      (KH.mk_delete lhs_collection
+                      (KH.mk_delete mapn
                                     (KH.mk_tuple (lhs_outs_el@
                                                   [rhs_ret_ve]))))
               old_slice;
@@ -1430,7 +1431,7 @@ let k3_demuxes stream_rels =
       in
       ( ( source,
           List.map (fun (_, (reln, _, _)) ->
-            K.Bind(source_id, "demux_"^reln)
+            K.BindFlow(source_id, "demux_"^reln)
           ) adaptors,
           K.Instruction(K.Consume(source_id))
         ),

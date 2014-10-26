@@ -527,7 +527,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
     with T.TypeError(_,_,_) -> false (* assume additive *)
   (* many instructions need to wrap the same way *)
   in let wrap e = match U.tag_of_expr expr with
-    | Insert | Iterate | Map | Filter | Flatten | Send | Delete | Update
+    | Insert _ | Iterate | Map | Filter | Flatten | Send | Delete _ | Update _
     | Aggregate | GroupByAggregate -> wrap_hv 2 e
     | IfThenElse -> wrap_hv 0 e
     | _ -> id_fn e
@@ -703,6 +703,10 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
       wrap_ret (lazy_expr c e2))) <|
     wrap_indent (lazy_brace (lps "None ->" <| lsp () <| lazy_expr c e3))
 
+  | BindAs _ -> let bind, id, r = U.decompose_bind expr in
+    lps "bind" <| lsp () <| lazy_expr c bind <| lsp () <| lps "as" <| lsp () <|
+    lps id <| lsp () <| lps "in" <| lsp () <| wrap_indent (lazy_expr c r)
+
   | Iterate -> let lambda, col = U.decompose_iterate expr in
     apply_method c ~name:"iterate" ~col ~args:[lambda] ~arg_info:[ALambda [InRec], Out]
 
@@ -785,22 +789,19 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
           (do_eq @: hd filter_e)
       in
       apply_method c ~name:"filter" ~col ~args:[lambda] ~arg_info:[ALambda[InRec], Out]
-  | Insert -> let col, x = U.decompose_insert expr in
-    apply_method c ~name:"insert" ~col ~args:[x] ~arg_info:[ANonLambda,OutRec]
-  | Delete -> let col, x = U.decompose_delete expr in
-    apply_method c ~name:"erase" ~col ~args:[x] ~arg_info:[ANonLambda,OutRec]
-  | Update -> let col, oldx, newx = U.decompose_update expr in
-    apply_method c ~name:"update" ~col ~args:[oldx;newx] ~arg_info:[ANonLambda,OutRec;ANonLambda,OutRec]
-  | Assign -> let l, r = U.decompose_assign expr in
-    (* assignment must be within a bind *)
-    lps "bind" <| lsp () <| lazy_expr c l <| lsp () <| lps "as ind __y in"
-      <| lsp () <| lps "__y =" <| lsp () <| lazy_expr c r
+  | Insert _ -> let col, x = U.decompose_insert expr in
+    lps col <| lps "." <| apply_method_nocol c ~name:"insert" ~args:[x]
+      ~arg_info:[ANonLambda,OutRec]
+  | Delete _ -> let col, x = U.decompose_delete expr in
+    lps col <| lps "." <| apply_method_nocol c ~name:"erase" ~args:[x]
+      ~arg_info:[ANonLambda,OutRec]
+  | Update _ -> let col, oldx, newx = U.decompose_update expr in
+    lps col <| lps "." <| apply_method_nocol c ~name:"update" ~args:[oldx;newx]
+      ~arg_info:[ANonLambda,OutRec; ANonLambda,OutRec]
+  | Assign _ -> let l, r = U.decompose_assign expr in
+    lps l <| lsp () <| lps "=" <| lsp () <| lazy_expr c r
   | Indirect -> let x = U.decompose_indirect expr in
     lps "ind" <| lsp () <| lazy_expr c x
-  | Deref -> let e = U.decompose_deref expr in
-    (* dereference must be within a bind *)
-    lps "bind" <| lsp () <| lazy_expr c e <| lsp () <| lps "as " <| lps "ind __x"
-      <| lsp () <| lps "in __x"
   | Send -> let target, addr, args = U.decompose_send expr in
     wrap_indent @: lazy_paren (expr_pair (target, addr)) <| lps "<- " <|
       lps_list CutHint (lazy_expr c) args
@@ -869,7 +870,7 @@ let lazy_flow c = function
       lps ("source "^id^" : ") <| lazy_resource c r
   | Sink(Resource(id, r)) ->
       lps ("sink "^id^" : ") <| lazy_resource c r
-  | Bind(id1, id2) -> lps @: "bind "^id1^" -> "^id2
+  | BindFlow(id1, id2) -> lps @: "bind "^id1^" -> "^id2
   | Instruction(Consume id) -> lps @: "consume "^id
 
 let lazy_flow_program c fas = lps_list ~sep:"" CutHint (lazy_flow c |- fst) fas

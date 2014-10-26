@@ -62,6 +62,9 @@
   let case_error case_class =
     print_error ("Invalid case "^case_class^" error")
 
+  let bind_error bind_class =
+    print_error ("Invalid bind "^bind_class^" error")
+
   let lambda_error error_class =
     print_error ("Invalid lambda "^error_class^" expression")
 
@@ -130,11 +133,10 @@
 
 %token PEEK
 
-%token DEREF
-
 %token IF THEN ELSE LET IN
 
 %token CASE OF
+%token BIND AS
 
 %token SEND
 
@@ -225,8 +227,8 @@ flow_statement :
       in Sink(Code($2, $3, locals, $8))
     }
 
-    | BIND IDENTIFIER RARROW IDENTIFIER                   { Bind($2, $4) }
-    | BIND SOURCE IDENTIFIER RARROW TRIGGER IDENTIFIER    { Bind($3, $6) }
+    | BIND IDENTIFIER RARROW IDENTIFIER                   { BindFlow($2, $4) }
+    | BIND SOURCE IDENTIFIER RARROW TRIGGER IDENTIFIER    { BindFlow($3, $6) }
 
     /* Error handling */
 
@@ -433,6 +435,7 @@ expr :
     | predicate { $1 }
     | conditional { $1 }
     | case { $1 }
+    | bind { $1 }
     | lambda { $1 }
     | access { $1 }
     | transformers { $1 }
@@ -463,8 +466,6 @@ expr :
     | LET arg GETS expr IN error   { print_error "Let body error" }
     | LET arg GETS error           { print_error "Let binding target error" }
     | LET error                    { print_error "Let binding error" }
-
-    | DEREF expr { mkexpr Deref [$2] }
 
 ;
 
@@ -601,8 +602,18 @@ case :
     /* Error handling */
     | CASE expr OF LBRACE JUST IDENTIFIER RARROW expr { case_error "nothing case" }
     | CASE expr OF LBRACE NOTHING RARROW expr { case_error "just case" }
-    | CASE expr OF error { case_error "case" }
+    | CASE expr OF error { case_error "expr" }
     | CASE error { case_error "predicate" }
+
+bind :
+    | BIND expr AS IDENTIFIER IN expr { mk_bind $2 $4 $6 }
+
+    /* Error handling */
+    | BIND expr AS IDENTIFIER IN error { bind_error "expr" }
+    | BIND expr AS IDENTIFIER error { bind_error "missing 'in'" }
+    | BIND expr AS error { bind_error "id" }
+    | BIND expr error    { bind_error "missing of" }
+    | BIND error         { bind_error "predicate" }
 
 lambda :
      | BACKSLASH arg RARROW expr { mkexpr (Lambda($2)) [$4] }
@@ -621,15 +632,15 @@ access :
 
 mutation :
     /* Inserts, deletes and sends use a vararg function syntax for their value/payload */
-    | INSERT LPAREN expr COMMA tuple RPAREN { mkexpr Insert [$3; $5] }
-    | DELETE LPAREN expr COMMA tuple RPAREN { mkexpr Delete [$3; $5] }
+    | INSERT LPAREN IDENTIFIER COMMA tuple RPAREN { mkexpr (Insert $3) [$5] }
+    | DELETE LPAREN IDENTIFIER COMMA tuple RPAREN { mkexpr (Delete $3) [$5] }
 
     /* Updates must explicitly specify their new/old value as a tuple */
-    | UPDATE LPAREN expr COMMA expr COMMA expr RPAREN { mkexpr Update [$3; $5; $7] }
+    | UPDATE LPAREN IDENTIFIER COMMA expr COMMA expr RPAREN { mkexpr (Update $3) [$5; $7] }
 
-    | expr LARROW expr { mkexpr Assign [$1; $3] }
-    | expr GETS expr { mkexpr Assign [$1; $3] }
-    | expr COLONGETS expr { mkexpr Assign [$1;$3] }
+    | IDENTIFIER LARROW expr { mkexpr (Assign $1) [$3] }
+    | IDENTIFIER GETS expr { mkexpr (Assign $1) [$3] }
+    | IDENTIFIER COLONGETS expr { mkexpr (Assign $1) [$3] }
 
     /* Error handling */
     | INSERT LPAREN expr error { value_error 2 }
