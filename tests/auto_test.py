@@ -12,7 +12,6 @@ import os
 import sys
 import six
 
-import local_test
 import dist_test
 
 def check_exists(name, path):
@@ -79,7 +78,7 @@ def run():
         if verbose:
             six.print_("")
         if not args.distributed:
-            res = local_test.run(test_file, verbose)
+            res = local_test.run(test_file, verbose=verbose, distrib=False)
         else:
             res = dist_test.run(test_file,
                                 args.num_nodes,
@@ -87,7 +86,8 @@ def run():
                                 args.shuffle,
                                 args.force_correctives,
                                 args.order_file,
-                                verbose)
+                                verbose,
+                                distrib=True)
         # check if a test failed
         if not res:
             six.print_("[ERROR]")
