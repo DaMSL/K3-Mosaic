@@ -272,7 +272,7 @@ let declare_global_funcs partmap p ast =
     let id_val = hd @@ list_take_end 1 @@ fst_many @@ ids_types_v in
     let lookup_value, update_value = "lookup_value", "update_value" in
     let corrective, target_map = "corrective", "target_map" in
-    let tmap_deref = "tmap_deref" in
+    let tmap_deref = target_map^"_d" in
     let update_vars = list_drop_end 1 vars_v @ [mk_var update_value] in
     let zero = match T.base_of t_val () with
       | TInt   -> mk_cint 0
@@ -335,11 +335,11 @@ let declare_global_funcs partmap p ast =
                (mk_lambda' ids_types_v @@
                  mk_gt (mk_var "vid") @@ mk_var "min_vid") @@
                (* slice w/o vid and value *)
-               mk_slice' (mk_var target_map) @@
+               mk_slice' (mk_var tmap_deref) @@
                  mk_cunknown::vars_arg_no_v_no_val@[mk_cunknown]) @@
               mk_iter
                 (mk_lambda' ids_types_v @@
-                  mk_update target_map (mk_tuple vars_v) @@
+                  mk_update tmap_deref (mk_tuple vars_v) @@
                     mk_tuple @@ vars_v_no_val@
                       [mk_add vars_val vars_arg_val]
                 ) @@
@@ -818,7 +818,7 @@ let rcv_push_trig (p:P.prog_data_t) s_rhs trig_name =
 List.fold_left
   (fun acc_code (stmt_id, read_map_id) ->
     let rbuf_name = buf_of_stmt_map_id p stmt_id read_map_id in
-    let rbuf_deref = rbuf_name^"_deref" in
+    let rbuf_deref = rbuf_name^"_d" in
     let tuple_types = map_types_with_v_for p read_map_id in
     (* remove value from tuple so we can do a slice *)
     let tuple_id_t = types_to_ids_types "_tup" tuple_types in
@@ -852,7 +852,7 @@ List.fold_left
               (mk_update rbuf_deref
                 (mk_var "vals") @@
                 mk_var "tuple") @@
-              mk_insert rbuf_name @@ mk_var "tuple"
+              mk_insert rbuf_deref @@ mk_var "tuple"
           ) @@
           mk_var "tuples"
          ;

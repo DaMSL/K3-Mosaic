@@ -442,8 +442,7 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
 
         | BindAs id ->
             (* handled in the prelude *)
-            let name = "BindAs" in
-            bind 0
+            bind 1
 
         | Block ->
             let name = "Block" in

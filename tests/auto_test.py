@@ -28,7 +28,7 @@ def run():
                         default=None, help="Execute tests from a list file")
     parser.add_argument('-d', '--dist', action='store_true', dest='distributed',
                         default=False, help="Distributed test")
-    parser.add_argument('-n', '--nodes', action='store', dest='num_nodes',
+    parser.add_argument('-n', '--nodes', action='store', type=int, dest='num_nodes',
                         default=1, help="Number of data nodes")
     parser.add_argument('-q', '--queue', action='store', dest='queue_type',
                         default="global", help="Queue type: global/trigger/node")
@@ -81,12 +81,12 @@ def run():
             res = local_test.run(test_file, verbose=verbose, distrib=False)
         else:
             res = dist_test.run(test_file,
-                                args.num_nodes,
-                                args.queue_type,
-                                args.shuffle,
-                                args.force_correctives,
-                                args.order_file,
-                                verbose,
+                                num_nodes=args.num_nodes,
+                                queue_type=args.queue_type,
+                                do_shuffle=args.shuffle,
+                                force_correctives=args.force_correctives,
+                                order_file=args.order_file,
+                                verbose=verbose,
                                 distrib=True)
         # check if a test failed
         if not res:

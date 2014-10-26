@@ -368,9 +368,9 @@ let rec lazy_expr c expr =
     lps "insert" <| lazy_paren
       (lps l <| lps " ," <| lsp () <| lazy_expr c r)
   | Delete _ -> let l, r = U.decompose_delete expr in
-    lps "delete" <| lazy_paren @@ lps l <| lps " , " <| lazy_expr c r
+    lps "delete" <| lazy_paren (lps l <| lps " , " <| lazy_expr c r)
   | Update _ -> let l, o, n = U.decompose_update expr in
-    lps "update" <| lazy_paren @@ lps l <| lps " , " <| expr_pair (o,n)
+    lps "update" <| lazy_paren (lps l <| lps " , " <| expr_pair (o,n))
   | Indirect -> let x = U.decompose_indirect expr in
     lps "ind" <| lsp () <| lazy_expr c x
   | Assign _ -> let l, r = U.decompose_assign expr in

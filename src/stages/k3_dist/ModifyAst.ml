@@ -198,7 +198,8 @@ let modify_map_add_vid p ast stmt =
           mk_var @: P.buf_of_stmt_map stmt id
         else col in
       (* get the latest vid values for this map *)
-      map_latest_vid_vals p (mk_deref buf_col) pat_m m ~keep_vid:false
+      mk_bind buf_col "__x" @@
+      map_latest_vid_vals p (mk_var "__x") pat_m m ~keep_vid:false
 
     | _ -> raise (UnhandledModification ("Cannot handle non-var in slice"))
   in

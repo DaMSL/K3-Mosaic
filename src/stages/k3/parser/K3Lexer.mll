@@ -63,7 +63,7 @@ rule tokenize = parse
     | "socket"   { SOCKET }
     | "random"   { RANDOM }
     | "stream"   { STREAM }
-    | "bind"     { BIND }
+    | "bindflow"     { BINDFLOW }
     | "pattern"  { PATTERN }
     | "consume"  { CONSUME }
 

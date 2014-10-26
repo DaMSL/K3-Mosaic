@@ -250,7 +250,7 @@ module RelEvent = struct
       let vals_inner = list_map (fun evt -> concat_mv ", " evt.vals) group in
       let vals = "["^String.concat "; " vals_inner^"]" in
       num - 1, Printf.sprintf "source %s : %s = stream(%s)\n\
-                      bind %s -> %s"
+                      bindflow %s -> %s"
                       src types vals
                       src (to_s evt)
     ) len groups
@@ -507,7 +507,7 @@ let strings_of_test_role ~is_dist events =
       ["}";
        "role node {";
        "  source s_dummy : int = stream([1])";
-       "  bind s_dummy -> node_dummy";
+       "  bindflow s_dummy -> node_dummy";
        "  consume s_dummy";
        "}"
       ])::
@@ -524,7 +524,7 @@ let strings_of_test_role ~is_dist events =
     else ["trigger dummy(x:int) {} = ()\n\n\
             role switch {\n\
             source dummy : int = stream([1])\n\
-            bind dummy -> dummy\n\
+            bindflow dummy -> dummy\n\
             consume dummy\n\
             }\n\
            default role switch\n"]
