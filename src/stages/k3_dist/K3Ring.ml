@@ -27,7 +27,6 @@ let ring_foreign_funcs =
   mk_foreign_fn "hash_addr" t_addr t_int ::
   mk_foreign_fn "int_of_float" t_float t_int::
   mk_foreign_fn "float_of_int" t_int t_float ::
-  mk_foreign_fn "divf" (wrap_ttuple [t_float;t_float]) t_float ::
   mk_foreign_fn "get_max_int" t_unit t_int ::
   []
 

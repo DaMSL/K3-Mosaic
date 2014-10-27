@@ -11,6 +11,7 @@ module V = Arithmetic.ValueRing
 module C = Calculus.CalcRing
 module K = K3.AST
 module KP = K3Printing
+module KS = K3PrintSyntax
 module KH = K3Helpers
 module KU = K3Util
 module KT = K3Typechecker
@@ -276,7 +277,14 @@ let external_lambda fn t_l ftype =
   Evaluates the external function [fn] by binding its arguments to
   the expressions in [te_l]. *)
 let apply_external_lambda fn te_l ftype =
-  failwith "TODO: Add support for external lambdas"
+  let unwrap = snd |- KH.unwrap_vtype in
+  let in_ts, out_t = List.map KH.unwrap_tval @@ fst_many te_l, KH.unwrap_tval ftype in
+  let fname = match fn, List.map unwrap in_ts, unwrap @@ KH.unwrap_tval ftype with
+    | "/", [K.TFloat; K.TFloat], K.TFloat -> "divf"
+    | _ -> failwith @@ Printf.sprintf "Unsupported extern lambda: %s: %s -> %s" 
+             fn (KS.string_of_value_type @@ KH.wrap_ttuple in_ts) (KS.string_of_value_type out_t)
+  in
+  KH.mk_apply (KH.mk_var fname) (KH.mk_tuple @@ snd_many te_l)
 
 let mk_project ?(id="projected_field") width idx ret_t expr =
   let rec build_tuple w =

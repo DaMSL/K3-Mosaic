@@ -264,7 +264,12 @@ let globals ps =
   (peers_code ps) ::                                  (* peers *)
   switches_data_nodes_code
 
+(* k3 stdlib *)
+let stdlib =
+  mk_foreign_fn "divf" (wrap_ttuple [t_float;t_float]) t_float ::
+  []
+
 let add_globals_k3 k3_globals ds = k3_globals@ds
-let add_globals peers ds = add_globals_k3 (globals peers) ds
+let add_globals peers ds = add_globals_k3 (globals peers @ stdlib) ds
 let remove_globals peers ds = list_drop (List.length @: globals peers) ds
 
