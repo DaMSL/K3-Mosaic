@@ -264,9 +264,16 @@ let globals ps =
   (peers_code ps) ::                                  (* peers *)
   switches_data_nodes_code
 
+(* cross-reference foreign functions *)
+let add_foreign_fn nm = 
+  let (t,_,_) = K3StdLib.lookup nm in
+  mk_foreign_short nm t
+
 (* k3 stdlib *)
 let stdlib =
-  mk_foreign_fn "divf" (wrap_ttuple [t_float;t_float]) t_float ::
+  add_foreign_fn "divf"::
+  add_foreign_fn "maxi"::
+  add_foreign_fn "reciprocal"::
   []
 
 let add_globals_k3 k3_globals ds = k3_globals@ds

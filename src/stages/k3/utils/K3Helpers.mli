@@ -222,6 +222,9 @@ val mk_global_fn :
 val mk_foreign_fn :
   id_t -> value_type_t -> value_type_t -> declaration_t * annotation_t
 
+(* macro to declare a foreign function given a type *)
+val mk_foreign_short : id_t -> type_t -> declaration_t * annotation_t
+
 (* macro to declare a flow *)
 val mk_flow : flow_program_t -> declaration_t * annotation_t
 

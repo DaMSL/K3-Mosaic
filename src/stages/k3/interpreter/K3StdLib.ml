@@ -128,6 +128,26 @@ let mod_args = wrap_args ["x", t_int; "y", t_int]
 let _ = Hashtbl.add func_table
   mod_name (mod_decl, mod_args, mod_fn)
 
+(* reciprocal *)
+let name = "reciprocal"
+let args = ["x", t_int]
+let fn e =
+  match arg_of_env "x" e with
+  | VInt x -> e, float_temp @: 1. /. foi x
+  | _      -> invalid_arg name
+let decl = wrap_tfunc (wrap_ttuple @@ snd_many args) t_float
+let _ = Hashtbl.add func_table name (decl, wrap_args args, fn)
+
+(* max int *)
+let name = "maxi"
+let fn e =
+  match arg_of_env "x" e, arg_of_env "y" e with
+  | VInt x, VInt y -> e, int_temp @@ max x y
+  | _ -> invalid_arg name
+let args = ["x", t_int; "y", t_int]
+let decl = wrap_tfunc (wrap_ttuple @@ snd_many args) t_int
+let _ = Hashtbl.add func_table name (decl, wrap_args args, fn)
+
 (* maximum integer *)
 (* this is used for the maximum hash value
  * we'll fudge this and make it what the real max hash value is

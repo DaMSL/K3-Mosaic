@@ -416,8 +416,10 @@ let mk_global_val name val_type =
 let mk_global_val_init name val_type e =
   mk_no_anno @: Global(name, TValue(val_type), Some e)
 
+let mk_foreign_short name t = mk_no_anno @: Foreign(name, t)
+
 let mk_foreign_fn name input_types output_types =
-  mk_no_anno @: Foreign(name, wrap_tfunc input_types output_types)
+  mk_foreign_short name @@ wrap_tfunc input_types output_types
 
 let mk_flow stmt_list = mk_no_anno @: Flow(stmt_list)
 
