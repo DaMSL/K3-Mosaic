@@ -75,6 +75,11 @@ and ValueComp : (sig val compare_v : Value.value_t -> Value.value_t -> int
       | VMap v, VMap v' -> ValueMap.compare compare_v v v'
       | VMultimap v, VMultimap v' -> ValueMMap.compare_m v v'
       | VIndirect v, VIndirect v' -> compare_v !v !v'
+      | VFloat v, VFloat v' ->
+          let r = v -. v' in
+          if r > 0.001 then 1
+          else if r < -0.001 then -1
+          else 0
       | x, y -> compare x y (* generic comparison *)
 
     module IntMap : (Map.S with type key = int) = Map.Make(struct
@@ -96,6 +101,8 @@ and ValueComp : (sig val compare_v : Value.value_t -> Value.value_t -> int
       | VList v         -> col_hash IList.fold v
       | VMap v          -> map_hash ValueMap.fold v
       | VMultimap v     -> col_hash ValueMMap.fold v
+      (* floats need to be hashed in a way that won't make them impossible to distinguish *)
+      | VFloat v        -> Hashtbl.hash @@ floor @@ v *. 1000.
       | x               -> Hashtbl.hash x
 
   end
