@@ -705,7 +705,8 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
 
   | BindAs _ -> let bind, id, r = U.decompose_bind expr in
     lps "bind" <| lsp () <| lazy_expr c bind <| lsp () <| lps "as" <| lsp () <|
-    lps id <| lsp () <| lps "in" <| lsp () <| wrap_indent (lazy_expr c r)
+    lps "ind" <| lsp () <| lps id <| lsp () <| lps "in" <| lsp () <|
+    wrap_indent (lazy_expr c r)
 
   | Iterate -> let lambda, col = U.decompose_iterate expr in
     apply_method c ~name:"iterate" ~col ~args:[lambda] ~arg_info:[ALambda [InRec], Out]
