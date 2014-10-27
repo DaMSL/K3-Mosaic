@@ -76,9 +76,14 @@ and ValueComp : (sig val compare_v : Value.value_t -> Value.value_t -> int
       | VMultimap v, VMultimap v' -> ValueMMap.compare_m v v'
       | VIndirect v, VIndirect v' -> compare_v !v !v'
       | VFloat v, VFloat v' ->
-          let r = v -. v' in
-          if r > 0.001 then 1
-          else if r < -0.001 then -1
+          let x, r = frexp v in
+          let x', r' = frexp v' in
+          let d = r - r' in
+          if d <> 0 then d
+          else 
+          let d = x -. x' in
+          if d > 0.0001 then 1
+          else if d < -0.0001 then -1
           else 0
       | x, y -> compare x y (* generic comparison *)
 
@@ -102,7 +107,8 @@ and ValueComp : (sig val compare_v : Value.value_t -> Value.value_t -> int
       | VMap v          -> map_hash ValueMap.fold v
       | VMultimap v     -> col_hash ValueMMap.fold v
       (* floats need to be hashed in a way that won't make them impossible to distinguish *)
-      | VFloat v        -> Hashtbl.hash @@ floor @@ v *. 1000.
+      | VFloat v        -> let x, r = frexp v in
+                           Hashtbl.hash (ceil (x *. 1000.)) lxor Hashtbl.hash r
       | x               -> Hashtbl.hash x
 
   end
