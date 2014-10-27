@@ -791,13 +791,13 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
       in
       apply_method c ~name:"filter" ~col ~args:[lambda] ~arg_info:[ALambda[InRec], Out]
   | Insert _ -> let col, x = U.decompose_insert expr in
-    lps col <| lps "." <| apply_method_nocol c ~name:"insert" ~args:[x]
+    lps col <| apply_method_nocol c ~name:"insert" ~args:[x]
       ~arg_info:[ANonLambda,OutRec]
   | Delete _ -> let col, x = U.decompose_delete expr in
-    lps col <| lps "." <| apply_method_nocol c ~name:"erase" ~args:[x]
+    lps col <| apply_method_nocol c ~name:"erase" ~args:[x]
       ~arg_info:[ANonLambda,OutRec]
   | Update _ -> let col, oldx, newx = U.decompose_update expr in
-    lps col <| lps "." <| apply_method_nocol c ~name:"update" ~args:[oldx;newx]
+    lps col <| apply_method_nocol c ~name:"update" ~args:[oldx;newx]
       ~arg_info:[ANonLambda,OutRec; ANonLambda,OutRec]
   | Assign _ -> let l, r = U.decompose_assign expr in
     lps l <| lsp () <| lps "=" <| lsp () <| lazy_expr c r
