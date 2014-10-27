@@ -944,8 +944,7 @@ let r_insert_bad = Str.regexp "^insert_.*\\(do\\|send\\|rcv\\)"
 (* expects a distributed program *)
 let add_sources p envs filename =
   let open K3Helpers in
-  (* find all the insert triggers and concatenate their arguments into one big argument
-   * list with maybes *)
+  (* finds all insert triggers and concatenates arguments *)
   let is_insert s     = r_match r_insert s && not @: r_match r_insert_bad s in
   let insert_trigs    = List.filter (is_insert |- U.id_of_code) @:
     U.triggers_of_program p in
@@ -953,55 +952,37 @@ let add_sources p envs filename =
   (* Get lexicographical order so we know where the arguments belong *)
   let insert_trigs    = List.sort (fun x y ->
     String.compare (U.id_of_code x) (U.id_of_code y)) insert_trigs in
-  let insert_ids      = List.map U.id_of_code insert_trigs in
-  (* arg for each trigger *)
-  let insert_args     = List.map U.args_of_code insert_trigs in
-  let arg_types       = List.map KH.value_type_of_arg insert_args in
   (* the source has dates as strings, before we convert them *)
-  let arg_types_source = List.map (fun args ->
-    wrap_ttuple @: List.map (fun t ->
-      if t = t_date then t_string else t)
-      (unwrap_ttuple args)
-  ) arg_types
-  in
-  let maybe_arg_types = wrap_tmaybes arg_types_source in
-  let arg_ids         = List.map (fun trig -> trig^"_args") insert_ids in
-  let new_args        = list_zip arg_ids maybe_arg_types in
-  let trig_info       = list_zip insert_ids arg_types in
+  let remove_date_t ts = List.map (fun t ->
+    if t = t_date then t_string else t) ts in
+  let t_arg_id_ts      = List.map (fun t ->
+                          let t' = U.id_of_code t in t',
+                          List.mapi (fun i ty -> t'^"_arg"^soi i, ty) @@
+                          remove_date_t @@
+                          unwrap_ttuple @@
+                          KH.value_type_of_arg @@ U.args_of_code t)
+                        insert_trigs in
+  let arg_id_ts = List.concat @@ List.map snd t_arg_id_ts in
   (* add a demultiplexing argument *)
-  let new_args'       = wrap_args @: ("trigger_id", t_string)::new_args in
+  let arg_ids'       = ("trigger_id", t_string)::arg_id_ts in
+  let convert_date (var, t) = if t = t_date then
+    mk_apply (mk_var "parse_sql_date") var else var in
   (* write the demultiplexing trigger *)
   let code =
-    mk_code_sink "switch_main" new_args' [] @:
-      List.fold_left (fun acc_code (trig_id, trig_t) ->
-        let trig_args_unwrap_nm = trig_id^"_args_unwrap" in
-        let trig_t_l = unwrap_ttuple trig_t in
+    mk_code_sink "switch_main" (wrap_args arg_ids') [] @:
+      List.fold_left (fun acc_code (trig_id, trig_ts) ->
         let handle_args =
-          (* check if there's a date *)
-          if List.exists ((=) t_date) trig_t_l then
-            mk_unwrap_maybe [trig_id^"_args", wrap_tmaybe trig_t] @:
-              let ids_types = types_to_ids_types ~first:1 "_a" trig_t_l in
-              (* deconstruct the tuple and rebuild it, changing dates to ints *)
-              mk_let_many ids_types (mk_var trig_args_unwrap_nm) @:
-                mk_tuple @: List.map (fun (id, t) ->
-                  if t = t_date then mk_apply (mk_var "parse_sql_date") (mk_var id)
-                  else mk_var id
-                ) ids_types
-          (* no date, so simple code path *)
-          else
-            mk_unwrap_maybe [trig_id^"_args", wrap_tmaybe trig_t] @:
-              mk_var @: trig_args_unwrap_nm
+            mk_tuple @@ List.map convert_date @@ List.map (first mk_var) trig_ts
         in
         mk_if (mk_eq (mk_var "trigger_id") @: mk_cstring trig_id)
           (mk_send (mk_ctarget @: trig_id) K3Global.me_var handle_args)
           acc_code
         )
         mk_cunit
-        (List.rev trig_info)
+        t_arg_id_ts
   in
   let flow = mk_flow [code] in
-  let full_arg_types = t_string::maybe_arg_types in
-  let source_s = "source s1 : "^string_of_value_type (wrap_ttuple full_arg_types)^
+  let source_s = "source s1 : "^string_of_value_type (wrap_ttuple @@ snd_many arg_ids')^
     " = file \""^filename^"\" k3\n" in
   let feed_s   = "feed s1 |> switch_main\n" in
   string_of_program [flow] envs ^ source_s ^ feed_s
