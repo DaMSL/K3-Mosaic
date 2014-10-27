@@ -99,7 +99,7 @@ def main():
     # combine data files
     six.print_("\nCombining data files...")
     files_s = ' '.join([df[1] for df in data_files])
-    cmd = '../bin/combine_data --mut {files_s} > {nice_name}.csv'.format(**locals())
+    cmd = '../bin/combine_data {files_s} > {nice_name}.csv'.format(**locals())
     print_sys(cmd)
 
 
