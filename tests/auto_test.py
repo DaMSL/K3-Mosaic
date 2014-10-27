@@ -78,7 +78,7 @@ def run():
         if verbose:
             six.print_("")
         if not args.distributed:
-            res = local_test.run(test_file, verbose=verbose, distrib=False)
+            res = dist_test.run(test_file, verbose=verbose, distrib=False)
         else:
             res = dist_test.run(test_file,
                                 num_nodes=args.num_nodes,
