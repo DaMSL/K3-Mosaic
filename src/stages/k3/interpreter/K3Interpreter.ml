@@ -13,7 +13,13 @@ open K3Streams
 open K3Consumption
 open K3Runtime
 
+module KP = K3Printing
+
 (* Generic helpers *)
+
+(* set to true to debug *)
+let debug = ref false
+let debug_env = ref false
 
 type breakpoint_t = K3Runtime.breakpoint_t
 let sp = Printf.sprintf
@@ -153,8 +159,10 @@ and eval_expr (address:address) sched_st cenv texpr =
         | _ -> error "eval_cmpop" "missing values"
     in
 
+    let name = KP.string_of_tag_type tag in
+
     (* Start of evaluator *)
-    match tag with
+    let envout, valout = match tag with
     | Const c   -> cenv, VTemp(value_of_const c)
     | Var id    -> begin
         try cenv, lookup id cenv
@@ -493,6 +501,11 @@ and eval_expr (address:address) sched_st cenv texpr =
 
     | Assign x -> let fenv, v = child_value cenv 0 in
       env_modify x fenv @@ const v, VTemp VUnit
+
+    in
+    if !debug then Printf.printf "tag: %s, uuid: %d, val: %s\n" name uuid (string_of_value @@ value_of_eval valout);
+    if !debug_env then Printf.printf "env: %s\n" (string_of_env ~skip_functions:true envout);
+    envout, valout
 
 and threaded_eval address sched_st ienv texprs =
     match texprs with
