@@ -880,7 +880,16 @@ let lazy_declaration c d =
   let out = match d with
   | Global(id, t, expr) -> let end_part = begin match expr with
       | None -> []
-      | Some e -> lps " =" <| lsp () <| lazy_expr c e
+      | Some e ->
+          (* handle the special case of the csv loader *)
+          try
+            let lam, s = U.decompose_apply e in
+            begin match U.tag_of_expr lam, U.tag_of_expr s with
+            | Var "load_csv", Const(CString(f)) -> lps (Printf.sprintf "@:LoadFile(%s)" f) <| lcut ()
+            | _ -> failwith "Not found"
+            end
+          with Not_found -> (* normal global *)
+            lps " =" <| lsp () <| lazy_expr c e
     end in
     wrap_hov 2 (lps @: "declare "^id^" :" <| lsp () <| lazy_type c t <| end_part)
   | Role(id, fprog) ->
@@ -914,7 +923,7 @@ let filter_incompatible prog =
   in
   let r_hash = Str.regexp "^hash.*" in
   let drop_globals = List.fold_left (flip StringSet.add) StringSet.empty
-    ["divf"; "mod"; "float_of_int"; "int_of_float"; "get_max_int"; "parse_sql_date"; "peers"; "pmap_input" ]
+    ["error"; "divf"; "mod"; "float_of_int"; "int_of_float"; "get_max_int"; "parse_sql_date"; "peers"; "pmap_input" ]
   in
   filter_map (fun ((d,a) as dec) ->
     (* we don't want the monomorphic hash functions *)
@@ -953,9 +962,6 @@ let add_sources p envs filename =
   (* Get lexicographical order so we know where the arguments belong *)
   let insert_trigs    = List.sort (fun x y ->
     String.compare (U.id_of_code x) (U.id_of_code y)) insert_trigs in
-  (* the source has dates as strings, before we convert them *)
-  let remove_date_t ts = List.map (fun t ->
-    if t = t_date then t_string else t) ts in
   let t_arg_id_ts      = List.map (fun t ->
                           let t' = U.id_of_code t in t',
                           List.mapi (fun i ty -> t'^"_arg"^soi i, ty) @@
@@ -965,7 +971,7 @@ let add_sources p envs filename =
   let arg_id_ts = List.concat @@ List.map snd t_arg_id_ts in
   (* add a demultiplexing argument *)
   let arg_ids'       = ("trigger_id", t_string)::arg_id_ts in
-  let convert_date (var, t) = 
+  let convert_date (var, t) =
     if t = t_date then
     mk_apply (mk_var "parse_sql_date") var else var in
   (* write the demultiplexing trigger *)
