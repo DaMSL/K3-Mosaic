@@ -220,6 +220,9 @@ val transpose : 'a list list -> 'a list list
 (* convert date string to int *)
 val int_of_sql_date : string -> int
 
+(* extract a part of the date, as represented by an integer *)
+val date_part : string -> int -> int
+
 (* replace a hashtbl value by examining existing value *)
 val hashtbl_replace : ('a, 'b) Hashtbl.t -> 'a -> ('b option -> 'b) -> unit
 

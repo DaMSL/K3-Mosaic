@@ -459,6 +459,13 @@ let int_of_sql_date s = match r_groups s ~n:3 ~r:r_date with
       (ios y)*10000 + (ios m)*100 + (ios d)
   | l -> invalid_arg @: Printf.sprintf "int_of_sql_date for string %s. Found only %i members" s (List.length l)
 
+  (* extract a part of the date, as represented by an integer *)
+let date_part p i = match p with
+  | "day"   -> i mod 100
+  | "month" -> (i mod 10000) / 100
+  | "year"  -> i / 10000
+  | _       -> failwith @@ "date_part: unknown param "^p
+
 (* replace a hash value by looking at the old value, if any *)
 let hashtbl_replace hash key replace_fn =
   let old = try Some(Hashtbl.find hash key)

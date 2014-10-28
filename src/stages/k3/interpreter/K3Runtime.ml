@@ -372,7 +372,7 @@ let process_trigger_queue s address env trigger_id max_to_process =
   let rec loop num_left =
     if K3Queue.is_empty q || num_left <= 0 then NormalExec
     else
-      let args = K3Queue.peek q in
+      (* let args = K3Queue.peek q in *)
       let m_bp = NormalExec (* check_breakpoint s trigger_id args *) in
       match m_bp with
       | NormalExec ->

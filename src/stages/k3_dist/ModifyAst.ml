@@ -378,7 +378,7 @@ let delta_action p ast stmt m_target_trigger ~corrective =
             (mk_slice
               (mk_var "acc") @@
               mk_tuple @@ (ids_to_vars @@ lmap_bind_ids_v) @ [mk_cunknown]) @@
-            mk_case_ns (mk_peek @@ mk_var "slice") "content"
+            mk_case_ns (mk_peek @@ mk_var "slice") "slice_d"
               (* if we don't have this value, just insert *)
               (mk_block [
                 mk_insert "acc" @@
@@ -388,7 +388,7 @@ let delta_action p ast stmt m_target_trigger ~corrective =
               (mk_block [
                 mk_let_many
                   slice_ids_types
-                  (mk_var "content") @@
+                  (mk_var "slice_d") @@
                 mk_update "acc"
                   (mk_tuple slice_vars) @@
                   mk_tuple @@ list_drop_end 1 slice_vars @

@@ -233,6 +233,18 @@ let string_of_float_args = wrap_args ["f", t_float]
 let _ = Hashtbl.add func_table
   string_of_float_name (string_of_float_decl, string_of_float_args, string_of_float_fn)
 
+(* substring *)
+let name = "substring"
+let args = ["s", t_string; "f", t_int; "t", t_int]
+let fn e =
+  let aoe = List.map (fun x -> arg_of_env (fst x) e) args in
+  match aoe with
+  | [VString s; VInt f; VInt t] -> e, string_temp @@ String.sub s f t
+  | _ -> invalid_arg name
+let decl = wrap_tfunc (wrap_ttuple @@ snd_many args) t_string
+let _ = Hashtbl.add func_table name (decl, wrap_args args, fn)
+
+
 (* -------- print functions -------- *)
 let print_fn e =
   match arg_of_env "s" e with
@@ -244,16 +256,26 @@ let print_args = wrap_args ["s", t_string]
 let _ = Hashtbl.add func_table
   print_name (print_decl, print_args, print_fn)
 
-
 (* parse SQL date format *)
+let name = "parse_sql_date"
 let fn e =
   match arg_of_env "s" e with
   | VString s -> e, int_temp @: int_of_sql_date s
   | _ -> invalid_arg "parse_sql_date"
-let name = "parse_sql_date"
 let decl = wrap_tfunc t_string t_int
 let args = wrap_args ["s", t_string]
 let _ = Hashtbl.add func_table name (decl, args, fn)
+
+(* return a part of the date as int *)
+let name = "date_part"
+let args = ["part", t_string; "d", t_date]
+let fn e =
+  let aoe = List.map (fun x -> arg_of_env (fst x) e) args in
+  match aoe with
+  | [VString p; VInt d] -> e, int_temp @@ date_part p d
+  | _ -> invalid_arg name
+let decl = wrap_tfunc (wrap_ttuple @@ snd_many args) t_int
+let _ = Hashtbl.add func_table name (decl, wrap_args args, fn)
 
 (* global table for regexes *)
 let regexes = Hashtbl.create 10

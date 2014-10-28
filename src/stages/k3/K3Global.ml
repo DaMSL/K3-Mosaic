@@ -277,6 +277,8 @@ let stdlib =
   add_foreign_fn "reciprocali"::
   add_foreign_fn "reciprocal"::
   add_foreign_fn "regex_match"::
+  add_foreign_fn "substring"::
+  add_foreign_fn "date_part"::
   []
 
 let add_globals_k3 k3_globals ds = k3_globals@ds
