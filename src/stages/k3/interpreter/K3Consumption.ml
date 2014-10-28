@@ -29,6 +29,8 @@ let value_of_string t v = match t with
   | TString -> VString(v)
   | _       -> invalid_arg "Unknown value"
 
+let r_comma = Str.regexp ","
+
 let pull_source id t res in_chan =
 	let tuple_val, signature =
 		match t <| base_of +++ value_of |> (fun () -> raise (ResourceError id)) with
@@ -45,7 +47,7 @@ let pull_source id t res in_chan =
 	  match res, in_chan with
 	  | Handle(t, File _, CSV), In(Some chan) ->
 	    (try
-         let next_record = Str.split (Str.regexp ",") (input_line chan) in
+         let next_record = Str.split r_comma (input_line chan) in
          let fields = List.map2 value_of_string signature next_record in
          let r = if tuple_val then VTuple(fields) else List.hd fields
          in Some (r)

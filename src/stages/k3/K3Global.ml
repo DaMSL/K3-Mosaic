@@ -266,8 +266,10 @@ let globals ps =
 
 (* cross-reference foreign functions *)
 let add_foreign_fn nm = 
-  let (t,_,_) = K3StdLib.lookup nm in
-  mk_foreign_short nm t
+  try
+    let (t,_,_) = K3StdLib.lookup nm in
+    mk_foreign_short nm t
+  with Not_found -> failwith @@ "foreign function "^nm^" not found in stdlib"
 
 (* k3 stdlib *)
 let stdlib =
@@ -279,6 +281,7 @@ let stdlib =
   add_foreign_fn "regex_match"::
   add_foreign_fn "substring"::
   add_foreign_fn "date_part"::
+  add_foreign_fn "load_csv"::
   []
 
 let add_globals_k3 k3_globals ds = k3_globals@ds

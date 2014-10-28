@@ -298,6 +298,47 @@ let fn e =
 let decl = wrap_tfunc (wrap_ttuple @@ snd_many args) t_float
 let _ = Hashtbl.add func_table name (decl, wrap_args args, fn)
 
+let r_pipe = Str.regexp "|"
+let d         = "[0-9]"
+let r_date    = Str.regexp (Printf.sprintf "%s%s%s%s-%s%s-%s%s" d d d d d d d d)
+let r_float   = Str.regexp (Printf.sprintf "%s*\\.%s*" d d)
+let r_int     = Str.regexp @@ "[0-9]*"
+let r_bool    = Str.regexp @@ "true|false"
+
+(* convert the data in a line *)
+let read_data line =
+  List.map (fun s ->
+    if r_match r_date s then VInt(int_of_sql_date s)
+    else if r_match r_float s then VFloat(fos s)
+    else if r_match r_int s then VInt(ios s)
+    else if r_match r_bool s then VBool(bos s)
+    else VString s) line
+
+(* csv loading function *)
+let name = "load_csv"
+let args = ["file", t_string]
+let ret  = t_unknown
+let err_fn s s' = failwith @@ "load_csv: "^s^" "^s'
+let fn e =
+  let aoe = List.map (fun x -> arg_of_env (fst x) e) args in
+  match aoe with
+  | [VString f] ->
+    let chan = open_in f in
+    let rec loop v =
+      try
+        let next_rec = Str.split r_pipe (input_line chan) in
+        let l = read_data next_rec in
+        loop (v_insert err_fn (VTuple l) v)
+      with End_of_file -> v
+    in 
+    let cont = loop (v_empty_of_t TBag) in
+    close_in chan;
+    e, VTemp(cont)
+
+  | _ -> invalid_arg name
+let decl = wrap_tfunc (wrap_ttuple @@ snd_many args) ret
+let _ = Hashtbl.add func_table name (decl, wrap_args args, fn)
+
 (* error function ---------- *)
 let fn env =
   failwith "Error function called"

@@ -1471,7 +1471,7 @@ let m3_to_k3 ?(generate_init = false) ?(role = "client")
         M3.queries = m3_prog_tlqs; M3.db = m3_database
       } = m3_program in
   (* declaration for parsing sql date *)
-  let sql_func = KH.mk_foreign_fn "parse_sql_date" KH.t_string KH.t_int in
+  let sql_func = KH.(mk_foreign_fn "parse_sql_date" t_string t_int) in
   let k3_prog_schema = List.map m3_map_to_k3_map !m3_prog_schema in
   let k3_prog_env = List.map (function
       | K.Global(id, ty, _) -> id, ty
@@ -1491,8 +1491,17 @@ let m3_to_k3 ?(generate_init = false) ?(role = "client")
   let table_rels, stream_rels =
     Schema.partition_sources_by_type m3_database
   in
-  if table_rels <> []
-    then failwith "Table relations presently unsupported" else
+  let table_data =
+    List.map (fun (src, rels) -> match src, hd rels with
+      | (Schema.FileSource(f, Schema.Delimited "\n")), (_, (nm, vs, _)) ->
+        let ts = List.map (fun (_, t) -> m3_type_to_k3_type t) vs in
+        let open K3Helpers in
+        mk_global_val_init nm (K3Dist.wrap_t_of_map' ts) @@
+          mk_apply (mk_var "load_csv") (mk_cunit)
+
+      | _ -> failwith "Table relations that aren't filesources are unsuppored"
+    ) table_rels
+  in
 
   let k3_prog_demux_calls, k3_prog_demux_deep = k3_demuxes stream_rels in
 
@@ -1510,6 +1519,7 @@ let m3_to_k3 ?(generate_init = false) ?(role = "client")
     add_empty @: k3_prog_sources @ k3_prog_bindings @ k3_prog_consumes
   in
   sql_func::
+  table_data @
   (add_empty @:
     k3_prog_schema @
     [ K.Flow(k3_prog_trigs @ k3_prog_demux) ] @
