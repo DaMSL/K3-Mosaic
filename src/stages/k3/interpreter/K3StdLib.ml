@@ -9,6 +9,7 @@ open K3.AST
 let float_temp x = VTemp(VFloat(x))
 let string_temp x = VTemp(VString(x))
 let int_temp x = VTemp(VInt(x))
+let bool_temp x = VTemp(VBool(x))
 let unit_temp = VTemp(VUnit)
 
 (* static hashtable for storing functions efficiently *)
@@ -129,12 +130,22 @@ let _ = Hashtbl.add func_table
   mod_name (mod_decl, mod_args, mod_fn)
 
 (* reciprocal *)
-let name = "reciprocal"
+let name = "reciprocali"
 let args = ["x", t_int]
 let fn e =
   match arg_of_env "x" e with
   | VInt x -> e, float_temp @: 1. /. foi x
   | _      -> invalid_arg name
+let decl = wrap_tfunc (wrap_ttuple @@ snd_many args) t_float
+let _ = Hashtbl.add func_table name (decl, wrap_args args, fn)
+
+(* reciprocal *)
+let name = "reciprocal"
+let args = ["x", t_float]
+let fn e =
+  match arg_of_env "x" e with
+  | VFloat x -> e, float_temp @: 1. /. x
+  | _        -> invalid_arg name
 let decl = wrap_tfunc (wrap_ttuple @@ snd_many args) t_float
 let _ = Hashtbl.add func_table name (decl, wrap_args args, fn)
 
@@ -145,6 +156,16 @@ let fn e =
   | VInt x, VInt y -> e, int_temp @@ max x y
   | _ -> invalid_arg name
 let args = ["x", t_int; "y", t_int]
+let decl = wrap_tfunc (wrap_ttuple @@ snd_many args) t_int
+let _ = Hashtbl.add func_table name (decl, wrap_args args, fn)
+
+(* max int float *)
+let name = "maxif"
+let fn e =
+  match arg_of_env "x" e, arg_of_env "y" e with
+  | VInt x, VFloat y -> e, float_temp @@ max (foi x) y
+  | _ -> invalid_arg name
+let args = ["x", t_int; "y", t_float]
 let decl = wrap_tfunc (wrap_ttuple @@ snd_many args) t_int
 let _ = Hashtbl.add func_table name (decl, wrap_args args, fn)
 
@@ -233,6 +254,27 @@ let name = "parse_sql_date"
 let decl = wrap_tfunc t_string t_int
 let args = wrap_args ["s", t_string]
 let _ = Hashtbl.add func_table name (decl, args, fn)
+
+(* global table for regexes *)
+let regexes = Hashtbl.create 10
+
+(* regex_match *)
+let name = "regex_match"
+let args = ["r", t_string; "s", t_string]
+let fn e =
+  match arg_of_env "r" e, arg_of_env "s" e with
+  | VString rs, VString s -> e, 
+    begin try
+      let r = Hashtbl.find regexes rs in
+      bool_temp @@ Str.string_match r s 0
+    with Not_found ->
+      let r = Str.regexp rs in
+      Hashtbl.add regexes rs r;
+      bool_temp @@ Str.string_match r s 0
+    end
+  | _      -> invalid_arg name
+let decl = wrap_tfunc (wrap_ttuple @@ snd_many args) t_float
+let _ = Hashtbl.add func_table name (decl, wrap_args args, fn)
 
 (* error function ---------- *)
 let fn env =

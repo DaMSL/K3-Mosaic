@@ -281,8 +281,11 @@ let apply_external_lambda fn te_l ftype =
   let in_ts, out_t = List.map KH.unwrap_tval @@ fst_many te_l, KH.unwrap_tval ftype in
   let fname = match fn, List.map unwrap in_ts, unwrap @@ KH.unwrap_tval ftype with
     | "/", [K.TFloat; K.TFloat], K.TFloat -> "divf"
-    | "/", [K.TInt], K.TFloat             -> "reciprocal"
+    | "/", [K.TInt], K.TFloat             -> "reciprocali"
+    | "/", [K.TFloat], K.TFloat           -> "reciprocal"
     | "listmax", [K.TInt; K.TInt], K.TInt -> "maxi"
+    | "listmax", [K.TInt; K.TFloat], K.TFloat -> "maxif"
+    | "regexp_match", [K.TString; K.TString], K.TInt -> "regex_match"
     | _ -> failwith @@ Printf.sprintf "Unsupported extern lambda: %s: %s -> %s"
              fn (KS.string_of_value_type @@ KH.wrap_ttuple in_ts) (KS.string_of_value_type out_t)
   in

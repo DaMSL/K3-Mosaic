@@ -273,7 +273,10 @@ let add_foreign_fn nm =
 let stdlib =
   add_foreign_fn "divf"::
   add_foreign_fn "maxi"::
+  add_foreign_fn "maxif"::
+  add_foreign_fn "reciprocali"::
   add_foreign_fn "reciprocal"::
+  add_foreign_fn "regex_match"::
   []
 
 let add_globals_k3 k3_globals ds = k3_globals@ds
