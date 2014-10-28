@@ -959,14 +959,14 @@ let add_sources p envs filename =
   let t_arg_id_ts      = List.map (fun t ->
                           let t' = U.id_of_code t in t',
                           List.mapi (fun i ty -> t'^"_arg"^soi i, ty) @@
-                          remove_date_t @@
                           unwrap_ttuple @@
                           KH.value_type_of_arg @@ U.args_of_code t)
                         insert_trigs in
   let arg_id_ts = List.concat @@ List.map snd t_arg_id_ts in
   (* add a demultiplexing argument *)
   let arg_ids'       = ("trigger_id", t_string)::arg_id_ts in
-  let convert_date (var, t) = if t = t_date then
+  let convert_date (var, t) = 
+    if t = t_date then
     mk_apply (mk_var "parse_sql_date") var else var in
   (* write the demultiplexing trigger *)
   let code =
