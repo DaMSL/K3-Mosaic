@@ -42,7 +42,8 @@ let modify_global_map p = function
         wrap_t_of_map @@ wrap_ttuple @@ P.map_types_with_v_for p map_id in
       let map_type_ind = wrap_tind map_type in
       begin match m_expr with
-        | None   -> [mk_global_val name map_type_ind]
+        | None   -> [mk_global_val_init name map_type_ind @@
+                      mk_ind @@ mk_empty map_type]
         | Some e -> (* add a vid *)
           let e' = mk_ind @@ add_vid_to_init_val map_type e in
           [mk_global_val_init name map_type_ind e']

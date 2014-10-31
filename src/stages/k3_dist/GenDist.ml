@@ -97,8 +97,11 @@ let declare_global_vars p ast =
     (* for all rhs, lhs map pairs *)
     let make_map_decl (stmt, map) =
       let map_name = P.buf_of_stmt_map_id p stmt map in
-      mk_global_val map_name @@
-        wrap_tind @@ wrap_t_of_map' @@ map_types_with_v_for p map
+      let map_t = wrap_t_of_map' @@ map_types_with_v_for p map in
+      (* for indirections, we need to create initial values *)
+      mk_global_val_init map_name
+        (wrap_tind map_t) @@
+        mk_ind @@ mk_empty map_t
     in
     for_all_stmts_rhs_maps p make_map_decl
   in
