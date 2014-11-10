@@ -57,6 +57,10 @@ and ValueComp : (sig val compare_v : Value.value_t -> Value.value_t -> int
     exception Mismatch of int
     let counter = ref 0 (* for pinpointing errors *)
 
+    let precision = 2. (* for floats *)
+    let hash_mult = 10. ** 2.
+    let comp_diff = 1. /. hash_mult
+
     let get_counter () = !counter
     let reset_counter () = counter := 0
 
@@ -76,10 +80,14 @@ and ValueComp : (sig val compare_v : Value.value_t -> Value.value_t -> int
       | VMultimap v, VMultimap v' -> ValueMMap.compare_m v v'
       | VIndirect v, VIndirect v' -> compare_v !v !v'
       | VFloat v, VFloat v' ->
-          let d = v -. v' in
-          if d > 0.0001 then 1
-          else if d < -0.0001 then -1
-          else 0
+          let (f, i), (f', i') = frexp v, frexp v' in
+          let d = i - i' in
+          if d <> 0 then d
+          else
+            let d = f -. f' in
+            if d > comp_diff then 1
+            else if d < -. comp_diff then -1
+            else 0
       | x, y -> compare x y (* generic comparison *)
 
     module IntMap : (Map.S with type key = int) = Map.Make(struct
@@ -102,8 +110,8 @@ and ValueComp : (sig val compare_v : Value.value_t -> Value.value_t -> int
       | VMap v          -> map_hash ValueMap.fold v
       | VMultimap v     -> col_hash ValueMMap.fold v
       (* floats need to be hashed in a way that won't make them impossible to distinguish *)
-      | VFloat v        -> if v > 100. then Hashtbl.hash @@ floor v
-                           else Hashtbl.hash @@ floor @@ v *. 1000.
+      | VFloat v        -> let f, i = frexp v in
+                           Hashtbl.hash i lxor (Hashtbl.hash @@ floor @@ f *. hash_mult)
       | x               -> Hashtbl.hash x
 
   end
