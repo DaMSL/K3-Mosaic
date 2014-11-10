@@ -888,7 +888,7 @@ let lazy_declaration c d =
             | Var "load_csv", Const(CString(f)) -> lps (Printf.sprintf "@:LoadFile(%s)" f) <| lcut ()
             | _ -> failwith "Not found"
             end
-          with Not_found -> (* normal global *)
+          with Failure _ -> (* normal global *)
             lps " =" <| lsp () <| lazy_expr c e
     end in
     wrap_hov 2 (lps @: "declare "^id^" :" <| lsp () <| lazy_type c t <| end_part)
