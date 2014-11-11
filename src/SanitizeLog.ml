@@ -3,49 +3,83 @@ open Str
 
 let load_log file = read_file_lines file
 
-let r_trace_consuming = Str.regexp ".*TRACE -.*consuming"
-let r_trace_arrows = Str.regexp ".*TRACE - >>>>.*"
+type action = Clean | ToDb of string | Events of event_action
+
+(* what to do in case of event output *)
+and event_action = Plain | Strip | StripSort
+
+let input_file = ref ""
+let action = ref Clean
+let k3new  = ref false
+
+let event_action_of_string = function
+  | "plain" -> Plain
+  | "strip" -> Strip
+  | "sort"  -> StripSort
+  | _       -> invalid_arg "not an event action"
+
+let param_specs =
+  ["--db", Arg.String (fun log_name -> action := ToDb log_name),
+     "Convert to CSV for a DB";
+   "--events", Arg.String (fun s -> action := Events(event_action_of_string s)),
+     "plain, strip, or sort";
+   "--k3new", Arg.Set k3new, "Handle k3new files"
+  ]
+
+let parse_cmd_line () =
+  Arg.parse param_specs
+    (fun f -> input_file := f)
+    "Requires log file to convert"
+
 
 let pre_sanitize log =
+  if !k3new then log else
+  let r_old_consuming = Str.regexp ".*consuming" in
+  let r_old_arrows = Str.regexp ".*>>>>.*" in
   let _, lines =
     List.fold_left (fun (remove_rest, acc) line ->
-        if r_match r_trace_consuming line then remove_rest, acc
-        else if r_match r_trace_arrows line then true, acc
-        else if remove_rest then true, acc
-        else false, line::acc)
-      (false, [])
-      log
+      if r_match r_old_consuming line then remove_rest, acc
+      else if r_match r_old_arrows line then true, acc
+      else if remove_rest then true, acc
+      else false, line::acc
+    ) (false, []) log
   in
   List.rev lines
 
 (* group triggers into batches *)
 let group_triggers log =
-  let r_trig = regexp ".*DEBUG - Trigger.*" in
-  let r_send = regexp ".*DEBUG - send.*" in
+  let r_old_trig = (regexp "send(.*\\|Trigger.*", regexp "^$") in
+  let r_new_trig = (regexp ".*Message for:.*", regexp ".*=====.*")  in
+  let r_trig = if !k3new then r_new_trig else r_old_trig in
   let _, trigs =
-    List.fold_left (fun (seen_send, acc_groups) line ->
+    List.fold_left (fun (collect, acc_groups) line ->
         let add_to_group () = match acc_groups with
           | []    -> []             (* no group. don't add *)
           | x::xs -> (line::x)::xs
         in
-        if line = "" then seen_send, acc_groups
-        else if string_match r_trig line 0 && seen_send then
-          false, add_to_group ()
-        else if string_match r_trig line 0 then    (* start a new group *)
-          false, [line]::acc_groups
-        else if string_match r_send line 0 && not seen_send then
-          true, [line]::acc_groups
-        else seen_send, add_to_group ())
+        if collect then
+          if r_match (snd r_trig) line then
+            false, acc_groups
+          else
+            true, add_to_group ()
+        else (* not collect *)
+          if r_match (fst r_trig) line then
+            true, [line]::acc_groups
+          else
+            false, acc_groups)
       (false, [])
       log
   in
   List.rev_map (fun trigl -> List.rev trigl) trigs
 
 let unwanted_lines =
-  ["----Globals";
-   "----Frames"]
+  [ "----Globals"
+  ; "----Frames"
+  ; "Contents: "
+  ; "Environment:"
+  ]
 
-let unwanted_lines_r = List.map (fun str -> regexp @: str^".*") unwanted_lines
+let unwanted_lines_r = List.map (fun str -> regexp @@ str^".*") unwanted_lines
 
 let unwanted_multilines =
   [
@@ -71,7 +105,7 @@ let unwanted_multilines =
    "__vid_counter__";
   ]
 
-let unwanted_multilines_r = List.map (fun str -> regexp @: str^".*") unwanted_multilines
+let unwanted_multilines_r = List.map (fun str -> regexp @@ str^".*") unwanted_multilines
 
 (* check if any of the unwanted regexs match our line *)
 let check_unwanted unwanted line =
@@ -80,89 +114,95 @@ let check_unwanted unwanted line =
 let remove_unwanted trig =
   let r_equals = regexp "[^=]*=.*" in
   let r_trig = regexp ".*Trigger.*" in (* remove all before trig *)
-  let _, _, lines =
-    List.fold_left (fun (remove, after_trig, acc) line ->
-      if string_match r_trig line 0 then remove, true, line::acc
-      else if not after_trig then remove, false, acc (* skip anything before trig *)
-      else if check_unwanted unwanted_lines_r line then remove, after_trig, acc
-      else if check_unwanted unwanted_multilines_r line then true, after_trig, acc
+  List.rev @@ snd @@
+    List.fold_left (fun (remove, acc) line ->
+      if string_match r_trig line 0 then remove, line::acc
+      else if check_unwanted unwanted_lines_r line then remove, acc
+      else if check_unwanted unwanted_multilines_r line then true, acc
       (* reset the remove flag if we see another = *)
-      else if string_match r_equals line 0 then false, after_trig, line::acc
-      (* keep removing until we see an =, or till the end of the trigger *)
-      else if remove then remove, after_trig, acc
-      else remove, after_trig, line::acc)
-    (false, false, [])
+      else if string_match r_equals line 0 then false, line::acc
+      else remove, line::acc)
+    (false, [])
     trig
-  in List.rev lines
-
-(* stop the fold *)
-exception Stop of string list
 
 let r_equals = Str.regexp " = "
+let r_amper = regexp "@"
+
+(* remove headings and change them into fields *)
+let vid_r =  regexp ".*__vid_counter__ =.*"
+let send_r = regexp "^send(.*"
+let trig_old_r = regexp {|.*Trigger \(.*\)@\(.*\)|}
+let trig_new_r = regexp {|.*Message for: \(.*\)@\(.*\)|}
 
 let clean_up_headings trig =
   (* get vid *)
-  let vid_r =  regexp ".*__vid_counter__ =.*" in
-  let vid_s = List.find (fun s -> string_match vid_r s 0) trig in
-  let send_r = regexp ".*DEBUG - send.*" in
-  let trig_r = regexp ".*DEBUG - Trigger.*" in
+  let trig_r = if !k3new then trig_new_r else trig_old_r in
+  let vid_s = List.find (r_match vid_r) trig in
   (* accumulate sends over multiple lines *)
-  let sends_s = List.rev @:
-    try snd @:
-      List.fold_left (fun (in_send, acc_sends) line ->
-        if string_match send_r line 0 then (true, line::acc_sends)
-        else if string_match trig_r line 0 then raise @: Stop acc_sends
-        else if in_send then match acc_sends with
-          | []    -> true, [line]
-          | x::xs -> true, (x^line)::xs
-        else failwith "Error in clean_up_headings: no trigger"
-      ) (false, []) trig
-    with Stop ss -> ss
+  let x = List.fold_left (fun (status, t, acc, acc_sends) line ->
+            if r_match send_r line then      `InSend, t, acc, line::acc_sends
+            else if r_match trig_r line then `InTrig, Some line, acc, acc_sends
+            else match status, acc_sends with
+              | `InSend, x::xs -> `InSend, t, acc, (x^line)::xs
+              | `InTrig, _     -> `InTrig, t, line::acc, acc_sends
+              | _              ->  failwith "bad state"
+            ) (`Out, None, [], []) trig
   in
-  let r_hyphen = regexp " - " in
-  let sends_s = List.map (fun line ->
-      at (split r_hyphen line) 1)
-    sends_s in
-  let send_s = match sends_s with [] -> []
-      | _ -> ["send_msgs = "^String.concat "; " sends_s]
-  in
-  let vid_s = at (Str.split r_equals vid_s) 1 in
-  let r_amper = regexp "@" in
-  List.rev @: List.fold_left (fun acc line ->
-    if string_match trig_r line 0 then
-      let trig_s = at (split r_hyphen line) 1 in
-      let trig_split = split r_amper trig_s in
-      let trig_s, addr_s = hd trig_split, at trig_split 1 in
-      let trig_line = [Format.sprintf "%s, %s %s:" vid_s addr_s trig_s] in
-      send_s@trig_line@acc
-    else line::acc
-  ) [] trig
+  match x with
+  | _, None, _, _ -> failwith "no trigger name found"
+  | _, Some t, acc, acc_sends ->
+    let send_s = match acc_sends with [] -> [] | _ -> ["send_msgs = "^String.concat "; " acc_sends] in
+    let vid_s = at (Str.split r_equals vid_s) 1 in
+    let trig_line = match r_groups t ~r:trig_r ~n:2 with
+    | [Some trig_s; Some addr_s] -> Format.sprintf "%s, %s %s:" vid_s addr_s trig_s
+    | _ -> failwith "bad trigger pattern"
+    in
+    trig_line :: List.rev send_s @ List.rev acc
+
+
+(* for new format: switch records to tuples *)
+let r_label = regexp {|i:\|key:\|value:\|_r[0-9]_+:|}
+let r_lbrace = regexp "{"
+let r_rbrace = regexp "}"
+let record_to_tuple line =
+     Str.global_replace r_label "" line
+  |> Str.global_replace r_lbrace "("
+  |> Str.global_replace r_rbrace ")"
+
+(* for new format: remove junk from beginning of lines *)
+let r_new_prefix = regexp {|\[.*trace\] *|}
+let remove_junk line = Str.global_replace r_new_prefix "" line
+let clean_lines t =
+  if !k3new then
+    List.map (record_to_tuple |- remove_junk) t
+  else t
 
 let do_per_trigger log =
-  List.map (remove_unwanted |- clean_up_headings) log
+  List.map (remove_unwanted |- clean_up_headings |- clean_lines) log
 
-let convert_to_db_format log_name (idx,trig) =
-  let r_sp_begin = regexp "^ +\\([^ ].*\\)$" in  (* spaces followed by anything *)
+let r_sp_begin = regexp {|^ +\([^ ].*\)$|}  (* spaces followed by anything *)
+let r_trig = regexp {|Trigger \(.+\)|}
+let r_eq_line = regexp ".+ =.*"
+
+let convert_to_db_format log_name (idx, trig) =
   let drop_spaces s =
     if r_match r_sp_begin s then
-      Str.replace_first r_sp_begin "\\1" s
+      Str.replace_first r_sp_begin {|\1|} s
     else s
   in
-  let r_eq_line = regexp ".+ =.*" in
   let trig_nm = hd trig in
   (* join map lines together *)
   let trig =
     List.fold_left (fun trig_acc str ->
       (* check for a new line *)
-      if string_match r_eq_line str 0 then str::trig_acc
+      if r_match r_eq_line str then str::trig_acc
       else match trig_acc with
       | []    -> [str]
       | x::xs -> (x^drop_spaces str)::xs
     ) [] (tl trig)
   in
   (* decompose trigger name *)
-  let r_trig = regexp "{\\([0-9]+\\)}, \\(.+\\) Trigger \\(.+\\):" in
-  if not @: string_match r_trig trig_nm 0 then failwith "trigger heading mismatch";
+  if not @@ r_match r_trig trig_nm then failwith "trigger heading mismatch";
   let m = matched_group in
   let vid, addr, trig_nm = m 1 trig_nm, m 2 trig_nm, m 3 trig_nm in
   let r_eq = regexp " = " in
@@ -177,32 +217,6 @@ let string_of_log log =
   let log = List.map unlines log in
   String.concat "\n\n\n" log
 
-type action = Clean | ToDb of string | Events of event_action
-
-(* what to do in case of event output *)
-and event_action = Plain | Strip | StripSort
-
-let event_action_of_string = function
-  | "plain" -> Plain
-  | "strip" -> Strip
-  | "sort"  -> StripSort
-  | _       -> invalid_arg "not an event action"
-
-let input_file = ref ""
-let action = ref Clean
-
-let param_specs =
-  ["--db", Arg.String (fun log_name -> action := ToDb log_name),
-     "Convert to CSV for a DB";
-   "--events", Arg.String (fun s -> action := Events(event_action_of_string s)),
-     "plain, strip, or sort"
-  ]
-
-let parse_cmd_line () =
-  Arg.parse param_specs
-    (fun f -> input_file := f)
-    "Requires log file to convert"
-
 let main () =
   parse_cmd_line ();
   if !input_file = "" then Arg.usage param_specs "Please enter a filename" else
@@ -210,13 +224,15 @@ let main () =
   let log = pre_sanitize log in
   let log = group_triggers log in
   let log = do_per_trigger log in
+  List.iter (fun t -> List.iter print_endline t; print_newline ()) log
+  (*
   match !action with
-  | Clean -> print_endline @: string_of_log log
+  | Clean -> print_endline @@ string_of_log log
   | ToDb name ->
       let log = insert_index_fst 1 log in (* add indices *)
       let log = List.map (convert_to_db_format name) log in
-      print_string @:
-        String.concat "" @: List.map (fun t -> String.concat "" t) log
+      print_string @@
+        String.concat "" @@ List.map (fun t -> String.concat "" t) log
   | Events event_type ->
       let r_trig_add = regexp ".*Trigger insert_\\(.*\\)_send_fetch.*" in
       let r_trig_del = regexp ".*Trigger delete_\\(.*\\)_send_fetch.*" in
@@ -236,17 +252,17 @@ let main () =
             else (trig,args), select
           ) (("",""),false) trig
         in
-        if select=true then Some acc else None
+        if select then Some acc else None
       ) log
       in
       let r_args = regexp "(\\(.*\\), \\(.*\\), \\(.*\\)), \\(.*\\)" in
       let split_data d = List.map (fun (trig, args) ->
-        if not @: Str.string_match r_args args 0 then
+        if not @@ Str.string_match r_args args 0 then
           failwith "Bad args format"
         else
           let g i = Str.matched_group i args in
           let v1, v2, v3, args =
-            ios @: g 1, ios @: g 2, ios @: g 3, g 4 in
+            ios @@ g 1, ios @@ g 2, ios @@ g 3, g 4 in
           (v1, v2, v3), (trig, args)
       ) d
       in
@@ -259,11 +275,12 @@ let main () =
       let data =
         match event_type with
         | Plain -> filtered
-        | Strip -> snd_many @: split_data filtered (* remove vid *)
-        | StripSort -> snd_many @: sort @: split_data filtered
+        | Strip -> snd_many @@ split_data filtered (* remove vid *)
+        | StripSort -> snd_many @@ sort @@ split_data filtered
       in
-      print_string @:
-        String.concat "\n" @: List.map (fun (t, args) -> t^": "^args) data
+      print_string @@
+        String.concat "\n" @@ List.map (fun (t, args) -> t^": "^args) data
+    *)
 
 let _ = if not !Sys.interactive then Printexc.print main ()
 
