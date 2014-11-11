@@ -31,8 +31,8 @@ let int_erroru uuid ?extra fn_name s =
   Log.log rs `Error;
   (match extra with
   | Some (address, env) ->
-    Log.log (sp ">>>> Peer %s" @@ string_of_address address) `Error;
-    Log.log (sp "%s" @@ string_of_env env) `Error
+    Log.log (sp ">>>> Peer %s\n" @@ string_of_address address) `Error;
+    Log.log (sp "%s\n" @@ string_of_env env) `Error
   | _ -> ());
   raise @@ RuntimeError(uuid, msg)
 
@@ -481,7 +481,7 @@ and eval_expr (address:address) sched_st cenv texpr =
             (* log our send *)
             let send_code = K3Helpers.mk_send (e target) (e addr) (e arg) in
             let send_str = K3PrintSyntax.string_of_expr send_code in
-            Log.log send_str ~name:"K3Interpreter.Msg" `Debug;
+            Log.log (send_str^"\n") ~name:"K3Interpreter.Msg" `Debug;
 
             (* check if we need to buffer our triggers for shuffling *)
             if K3Runtime.use_shuffle_tasks s then
@@ -617,18 +617,18 @@ let env_of_program ?address sched_st k3_program =
 
 (* consume messages to a specific node *)
 let consume_msgs ?(slice = max_int) sched_st env address =
-  let log_node s = Log.log (sp "Node %s: %s" (string_of_address address) s) `Trace in
-  log_node "consuming messages";
+  let log_node s = Log.log (sp "Node %s: %s\n" (string_of_address address) s) `Trace in
+  log_node "consuming messages\n";
   let status = run_scheduler ~slice sched_st address env in
   status
 
 (* consume sources ie. evaluate instructions *)
 let consume_sources sched_st env address (res_env, d_env) (ri_env, instrs) =
-  let log_node s = Log.log (sp "Node %s: %s" (string_of_address address) s) `Trace in
+  let log_node s = Log.log (sp "Node %s: %s\n" (string_of_address address) s) `Trace in
   match instrs with
   | []              -> NormalExec, (ri_env, [])
   | (Consume id)::t ->
-    log_node @@ "consuming from event loop: "^id;
+    log_node @@ sp "consuming from event loop: %s\n" id;
     try let i = List.assoc id d_env in
         let r = run_dispatcher sched_st address res_env ri_env i in
         (*let status = run_scheduler sched_st address env in*)
@@ -724,8 +724,8 @@ let interpret_k3_program {scheduler; peer_meta; peer_list; envs} =
   if result = NormalExec then
     (* Log program state *)
     List.iter (fun (addr, e) ->
-      Log.log (sp ">>>> Peer %s" (string_of_address addr)) `Trace;
-      Log.log (sp "%s" (string_of_program_env e)) `Trace;
+      Log.log (sp ">>>> Peer %s\n" (string_of_address addr)) `Trace;
+      Log.log (sp "%s\n" (string_of_program_env e)) `Trace;
     ) prog_state;
   result, prog_state
 
