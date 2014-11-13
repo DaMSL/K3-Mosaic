@@ -31,3 +31,4 @@
 ../external/dbtoaster/examples/queries/simple/rs_stringjoin.sql
 ../external/dbtoaster/examples/queries/simple/rst.sql
 ../external/dbtoaster/examples/queries/simple/rstar.sql
+../external/dbtoaster/examples/queries/tpch/query3_small.sql
