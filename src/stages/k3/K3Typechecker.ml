@@ -216,6 +216,9 @@ let rec assignable t_l t_r =
     | TCollection(t_lc, t_le), TCollection(t_rc, t_re) -> t_lc = t_rc && assignable t_le t_re
     | TDate, TInt -> true
     | TInt, TDate -> true
+    (* ints and floats can be assigned. They'll just be concatentated *)
+    | TInt, TFloat -> true
+    | TFloat, TInt -> true
     (* handle lambdas with _ arguments *)
     | TUnknown, _ -> true
     | TTop, _ | _, TTop -> true
