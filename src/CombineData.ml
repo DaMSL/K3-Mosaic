@@ -23,7 +23,7 @@ let usage_msg = "Enter data files"
 type file_type = String | Int | Float | Date | Bool
 
 let default_val = function
-  | String -> "\"\""
+  | String -> ""
   | Int    -> "0"
   | Float  -> "0.0"
   | Bool   -> "false"
@@ -55,15 +55,13 @@ let r_float   = Str.regexp (Printf.sprintf "%s*\\.%s*" d d)
 let r_int     = Str.regexp @@ "[0-9]*"
 let r_bool    = Str.regexp @@ "true|false"
 
-let add_quotes s = Printf.sprintf "\"%s\"" s
-
 let to_string i line files : string =
   let file = files.(i) in
   (* normalize to using pipes *)
   let line =
     if file.sep = Comma then Str.global_replace r_comma "|" line else line in
   String.concat "|" @@
-    add_quotes file.trig_name :: (Array.to_list @@
+    file.trig_name :: (Array.to_list @@
     Array.mapi (fun i' f ->
       if i = i' then line
       else default_sep_vals f)
@@ -98,7 +96,7 @@ let combine_data files =
     print_endline @@ to_string j line files;
     loop ()
   in loop ();
-  print_string @@ add_quotes "end" ^"|"^(all_defaults files)
+  print_string @@ "end" ^"|"^(all_defaults files)
 
 let get_sep ss =
   let s = hd ss in
