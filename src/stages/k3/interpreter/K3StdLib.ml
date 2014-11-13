@@ -284,21 +284,21 @@ let _ = Hashtbl.add func_table name (decl, wrap_args args, fn)
 let regexes = Hashtbl.create 10
 
 (* regex_match *)
-let name = "regex_match"
+let name = "regex_match_int"
 let args = ["r", t_string; "s", t_string]
 let fn e =
   match arg_of_env "r" e, arg_of_env "s" e with
   | VString rs, VString s -> e,
-    begin try
-      let r = Hashtbl.find regexes rs in
-      bool_temp @@ Str.string_match r s 0
-    with Not_found ->
-      let r = Str.regexp rs in
-      Hashtbl.add regexes rs r;
-      bool_temp @@ Str.string_match r s 0
-    end
+    let r = begin try
+        Hashtbl.find regexes rs
+      with Not_found ->
+        let r' = Str.regexp rs in
+        Hashtbl.add regexes rs r'; r'
+      end
+    in
+    int_temp @@ if Str.string_match r s 0 then 1 else 0
   | _      -> invalid_arg name
-let decl = wrap_tfunc (wrap_ttuple @@ snd_many args) t_float
+let decl = wrap_tfunc (wrap_ttuple @@ snd_many args) t_int
 let _ = Hashtbl.add func_table name (decl, wrap_args args, fn)
 
 let r_pipe = Str.regexp "|"

@@ -278,7 +278,7 @@ let stdlib =
   add_foreign_fn "maxif"::
   add_foreign_fn "reciprocali"::
   add_foreign_fn "reciprocal"::
-  add_foreign_fn "regex_match"::
+  add_foreign_fn "regex_match_int"::
   add_foreign_fn "substring"::
   add_foreign_fn "date_part"::
   add_foreign_fn "load_csv_bag"::

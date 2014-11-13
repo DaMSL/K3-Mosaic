@@ -285,7 +285,7 @@ let apply_external_lambda fn te_l ftype =
     | "/", [K.TFloat], K.TFloat           -> "reciprocal"
     | "listmax", [K.TInt; K.TInt], K.TInt -> "maxi"
     | "listmax", [K.TInt; K.TFloat], K.TFloat -> "maxif"
-    | "regexp_match", [K.TString; K.TString], K.TInt -> "regex_match"
+    | "regexp_match", [K.TString; K.TString], K.TInt -> "regex_match_int"
     | "substring", [K.TString; K.TInt; K.TInt], K.TString -> "substring"
     | "date_part", [K.TString; K.TDate], K.TInt -> "date_part"
     | _ -> failwith @@ Printf.sprintf "Unsupported extern lambda: %s: %s -> %s"
