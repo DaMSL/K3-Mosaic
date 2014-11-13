@@ -224,8 +224,6 @@ let main () =
   let log = pre_sanitize log in
   let log = group_triggers log in
   let log = do_per_trigger log in
-  List.iter (fun t -> List.iter print_endline t; print_newline ()) log
-  (*
   match !action with
   | Clean -> print_endline @@ string_of_log log
   | ToDb name ->
@@ -280,7 +278,6 @@ let main () =
       in
       print_string @@
         String.concat "\n" @@ List.map (fun (t, args) -> t^": "^args) data
-    *)
 
 let _ = if not !Sys.interactive then Printexc.print main ()
 
