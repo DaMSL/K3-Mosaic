@@ -83,6 +83,8 @@ def run(target_file,
     print_system(cmd, verbose)
     if check_error(error_file, verbose) or check_error(k3_file, verbose, True):
         return False
+
+    load_path = "--load_path {0}".format(dbtoaster_dir)
     
     # execution diverges from here
     if distrib:
@@ -126,7 +128,7 @@ def run(target_file,
         shuffle_cmd = "--shuffle" if do_shuffle else ""
 
         # run the k3 driver on the input
-        cmd = '{k3o} --test {peer_cmd} -q {queue_type} {shuffle_cmd} {k3dist_file} > {output_file} 2> {error_file}' \
+        cmd = '{k3o} --test {peer_cmd} -q {queue_type} {shuffle_cmd} {load_path} {k3dist_file} > {output_file} 2> {error_file}' \
             .format(**locals())
         print_system(cmd, verbose)
         if check_error(error_file, verbose, True):
@@ -140,7 +142,7 @@ def run(target_file,
 
         return True
 
-    if not distrib:
+    else: # not distrib
         # convert again to check for any loopback malformations
         cmd = "{k3o} -p -i k3 -l k3 {k3_file} > {k3_file2} 2> {error_file}".format(**locals())
         print_system(cmd, verbose)
@@ -155,7 +157,7 @@ def run(target_file,
             return False
 
         # run the k3 driver on the input to get test results
-        cmd = "{k3o} --test {k3_file3} >{output_file} 2> {error_file}".format(**locals())
+        cmd = "{k3o} --test {k3_file3} {load_path} >{output_file} 2> {error_file}".format(**locals())
         print_system(cmd, verbose)
         if check_error(error_file, verbose):
             return False

@@ -176,6 +176,7 @@ type parameters = {
     mutable force_correctives : bool; (* Force correctives being generated *)
     mutable k3new_data_file : string;
     mutable k3new_folds : bool;   (* output fold instead of map/ext *)
+    mutable load_path : string;    (* path for the interpreter to load csv files from *)
   }
 
 let default_cmd_line_params () = {
@@ -200,6 +201,7 @@ let default_cmd_line_params () = {
     force_correctives = false;
     k3new_data_file   = "default.k3";
     k3new_folds       = false;
+    load_path         = "";
   }
 
 let cmd_line_params = default_cmd_line_params ()
@@ -310,8 +312,10 @@ let interpret_k3 params prog = let p = params in
     let interp = init_k3_interpreter tp ~run_length:p.run_length
                                         ~peers:p.peers
                                         ~shuffle_tasks:p.shuffle_tasks
-                                        ~queue_type:p.queue_type in
-      snd @: interpret_k3_program interp
+                                        ~queue_type:p.queue_type 
+                                        ~load_path:p.load_path
+    in 
+    snd @: interpret_k3_program interp
   with RuntimeError (uuid,str) -> handle_interpret_error (K3Data tp) (uuid,str)
 
 let interpret params inputs =
@@ -612,6 +616,8 @@ let param_specs = Arg.align
       "         Shuffle tasks to simulate network delays";
   "--force", Arg.Unit (fun () -> cmd_line_params.force_correctives <- true),
       "         Force distributed compilation to produce more correctives";
+  "--load_path", Arg.String (fun s -> cmd_line_params.load_path <- s),
+      "         Path for interpreter to load files from";
   ])
 
 let usage_msg =

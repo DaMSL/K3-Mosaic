@@ -735,12 +735,14 @@ let init_k3_interpreter ?shuffle_tasks
                         ?(queue_type=GlobalQ)
                         ~run_length
                         ~peers
+                        ~load_path
                         typed_prog =
   let s = init_scheduler_state ?shuffle_tasks ?breakpoints ~queue_type ~run_length () in
   match peers with
   | []  -> failwith "interpret_k3_program: Peers list is empty!"
   | _   ->
       (* Initialize an environment for each peer *)
+      K3StdLib.g_load_path := load_path;
       let peer_meta = Hashtbl.create @@ List.length peers in
       let envs = List.map (fun (addr, role_opt, _) ->
                  (* event_loop_t * program_env_t *)

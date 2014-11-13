@@ -26,5 +26,7 @@ val init_k3_interpreter :
   ?queue_type:K3Runtime.queue_type ->
   run_length:int64 ->
   peers:K3Global.peer_t list ->
-  program_t -> interpreter_t
+  load_path:string ->
+  program_t ->
+  interpreter_t
 

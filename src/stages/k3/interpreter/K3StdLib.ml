@@ -6,6 +6,9 @@ open K3Values.Value
 open K3Helpers
 open K3.AST
 
+(* load path for load_csv *)
+let g_load_path = ref ""
+
 let float_temp x = VTemp(VFloat(x))
 let string_temp x = VTemp(VString(x))
 let int_temp x = VTemp(VInt(x))
@@ -323,7 +326,7 @@ let fn e =
   let aoe = List.map (fun x -> arg_of_env (fst x) e) args in
   match aoe with
   | [VString f] ->
-    let chan = open_in f in
+    let chan = open_in (!g_load_path^Filename.dir_sep^f) in
     let rec loop v =
       try
         let next_rec = Str.split r_pipe (input_line chan) in
