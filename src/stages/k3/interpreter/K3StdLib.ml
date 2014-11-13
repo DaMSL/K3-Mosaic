@@ -303,18 +303,18 @@ let _ = Hashtbl.add func_table name (decl, wrap_args args, fn)
 
 let r_pipe = Str.regexp "|"
 let d         = "[0-9]"
-let r_date    = Str.regexp (Printf.sprintf "%s%s%s%s-%s%s-%s%s" d d d d d d d d)
-let r_float   = Str.regexp (Printf.sprintf "%s*\\.%s*" d d)
-let r_int     = Str.regexp @@ "[0-9]*"
-let r_bool    = Str.regexp @@ "true|false"
+let r_date    = Str.regexp (Printf.sprintf "^%s%s%s%s-%s%s-%s%s$" d d d d d d d d)
+let r_float   = Str.regexp (Printf.sprintf {|^%s*\(\.%s+\)?$|} d d)
+let r_int     = Str.regexp @@ "^[0-9]+$"
+let r_bool    = Str.regexp @@ "^true$|^false$"
 
 (* convert the data in a line *)
 let read_data line =
   List.map (fun s ->
     if r_match r_date s then VInt(int_of_sql_date s)
-    else if r_match r_float s then VFloat(fos s)
-    else if r_match r_int s then VInt(ios s)
     else if r_match r_bool s then VBool(bos s)
+    else if r_match r_int s then VInt(ios s)
+    else if r_match r_float s then VFloat(fos s)
     else VString s) line
 
 (* csv loading function *)
