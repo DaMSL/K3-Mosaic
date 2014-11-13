@@ -68,7 +68,6 @@
 ../external/dbtoaster/examples/queries/tpch/query14.sql
 ../external/dbtoaster/examples/queries/tpch/query16.sql
 ../external/dbtoaster/examples/queries/tpch/query17.sql
-../external/dbtoaster/examples/queries/tpch/query18.sql
 ../external/dbtoaster/examples/queries/tpch/query19.sql
 ../external/dbtoaster/examples/queries/tpch/query20.sql
 ../external/dbtoaster/examples/queries/tpch/query21.sql
