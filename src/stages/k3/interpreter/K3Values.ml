@@ -88,6 +88,8 @@ and ValueComp : (sig val compare_v : Value.value_t -> Value.value_t -> int
             if d > comp_diff then 1
             else if d < -. comp_diff then -1
             else 0
+      | VFloat v as vv, VInt v' -> compare_v vv (VFloat(foi v'))
+      | VInt v', (VFloat v as vv) -> compare_v (VFloat(foi v')) vv
       | x, y -> compare x y (* generic comparison *)
 
     module IntMap : (Map.S with type key = int) = Map.Make(struct
