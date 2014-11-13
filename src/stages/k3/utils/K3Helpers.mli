@@ -19,6 +19,7 @@ val t_byte : value_type_t
 val t_string : value_type_t
 val t_unit : value_type_t
 val t_unknown : value_type_t
+val t_top : value_type_t
 
 (* easy type for addresses *)
 val t_addr : value_type_t

@@ -285,7 +285,7 @@ let name = "regex_match"
 let args = ["r", t_string; "s", t_string]
 let fn e =
   match arg_of_env "r" e, arg_of_env "s" e with
-  | VString rs, VString s -> e, 
+  | VString rs, VString s -> e,
     begin try
       let r = Hashtbl.find regexes rs in
       bool_temp @@ Str.string_match r s 0
@@ -317,7 +317,7 @@ let read_data line =
 (* csv loading function *)
 let name = "load_csv_bag"
 let args = ["file", t_string]
-let ret  = wrap_tbag t_unknown
+let ret  = wrap_tbag t_top
 let err_fn s s' = failwith @@ "load_csv: "^s^" "^s'
 let fn e =
   let aoe = List.map (fun x -> arg_of_env (fst x) e) args in
@@ -330,7 +330,7 @@ let fn e =
         let l = read_data next_rec in
         loop (v_insert err_fn (VTuple l) v)
       with End_of_file -> v
-    in 
+    in
     let cont = loop (v_empty_of_t TBag) in
     close_in chan;
     e, VTemp(cont)

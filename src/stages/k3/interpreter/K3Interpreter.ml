@@ -528,7 +528,7 @@ and default_collection_value ct et = v_empty_of_t ct
 and default_base_value bt =
   let error = int_error "default_base_value" in
   match bt with
-  | TUnknown -> VUnknown
+  | TTop | TUnknown -> VUnknown
   | TUnit    -> VUnit
   | TBool    -> VBool false
   | TByte    -> error "bytes are not implemented"

@@ -41,7 +41,8 @@ type container_type_t
     | TMultimap of index_t list
 
 type base_type_t
-    = TUnknown
+    = TTop
+    | TUnknown
     | TUnit
     | TBool
     | TByte

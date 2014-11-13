@@ -105,6 +105,7 @@ let rec lazy_base_type c ~in_col ?(no_paren=false) t =
   | TAddress -> lps "address" (* ? *)
   | TTarget bt -> lps "target" <| lazy_base_type c ~in_col bt
   | TUnknown -> lps "unknown"
+  | TTop -> lps "top"
   | TIndirect vt -> lps "ind " <| lazy_value_type c ~in_col vt
   in
   if c.verbose_types && in_col then lps "c:" <| proc ()

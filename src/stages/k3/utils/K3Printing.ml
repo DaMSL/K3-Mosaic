@@ -112,6 +112,7 @@ let string_of_tag_type = function
 let sott tag = string_of_tag_type tag
 
 let base_type_tag = function
+  | TTop          -> "TTop"
   | TUnknown      -> "TUnknown"
   | TUnit         -> "TUnit"
   | TBool         -> "TBool"

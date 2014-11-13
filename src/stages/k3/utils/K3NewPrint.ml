@@ -145,6 +145,7 @@ let rec lazy_base_type ?(brace=true) ?(mut=false) ?(empty=false) c ~in_col t =
   | TAddress     -> wrap @: lps "address" (* ? *)
   | TTarget bt   -> wrap (lps "target" <| lazy_base_type c ~in_col bt)
   | TUnknown     -> wrap @: lps "unknown"
+  | TTop         -> wrap @: lps "top"
   | TIndirect vt -> wrap (lps "ind " <| lazy_value_type c ~in_col vt)
   | TTuple(vts)  -> (* tuples become records *)
       let rec_vts = add_record_ids vts in

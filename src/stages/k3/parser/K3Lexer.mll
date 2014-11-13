@@ -135,6 +135,7 @@ rule tokenize = parse
     | "string" { TYPE TString }
     | "address" { TYPE TAddress }
     | "unknown" { TYPE TUnknown }
+    | "top" { TYPE TTop }
 
     | "maybe"  { MAYBE }
     | "ref"    { REF }

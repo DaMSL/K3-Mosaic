@@ -58,6 +58,7 @@ let t_byte = canonical TByte
 let t_string = canonical TString
 let t_unit = canonical TUnit
 let t_unknown = canonical TUnknown
+let t_top = canonical TTop
 let t_addr = canonical TAddress
 let t_addr_mut = mut t_addr
 
