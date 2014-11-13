@@ -315,9 +315,9 @@ let read_data line =
     else VString s) line
 
 (* csv loading function *)
-let name = "load_csv"
+let name = "load_csv_bag"
 let args = ["file", t_string]
-let ret  = t_unknown
+let ret  = wrap_tbag t_unknown
 let err_fn s s' = failwith @@ "load_csv: "^s^" "^s'
 let fn e =
   let aoe = List.map (fun x -> arg_of_env (fst x) e) args in

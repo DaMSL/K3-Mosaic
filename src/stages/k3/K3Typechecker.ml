@@ -217,6 +217,8 @@ let rec assignable t_l t_r =
     | TInt, TDate -> true
     (* handle lambdas with _ arguments *)
     | TUnknown, _ -> true
+    (* simple version of universal types *)
+    | _, TUnknown -> true
     | _ when t_lb = t_rb -> true
     | _ -> false
 

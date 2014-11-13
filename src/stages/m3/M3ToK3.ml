@@ -1491,16 +1491,37 @@ let m3_to_k3 ?(generate_init = false) ?(role = "client")
   let table_rels, stream_rels =
     Schema.partition_sources_by_type m3_database
   in
-  let table_data =
-    List.map (fun (src, rels) -> match src, hd rels with
-      | (Schema.FileSource(f, Schema.Delimited "\n")), (_, (nm, vs, _)) ->
-        let ts = List.map (fun (_, t) -> m3_type_to_k3_type t) vs in
-        let open K3Helpers in
-        mk_global_val_init nm (K3Dist.wrap_t_of_map' ts) @@
-          mk_apply (mk_var "load_csv") (mk_cunit)
+  (* turn into hashtable *)
+  let table_rel_h = Hashtbl.create 10 in
+  List.iter (fun (src, rels) ->
+      let (_, (nm, _, _)) = hd rels in
+      Hashtbl.add table_rel_h nm (src, hd rels))
+    table_rels;
+  (* add initializations from csv *)
+  let k3_prog_schema =
+    List.map
+      (function
+      | K.Global(id, t, None) as x ->
+          begin try
+            begin match Hashtbl.find table_rel_h id with
+            | (Schema.FileSource(f, Schema.Delimited "\n")), (_, (nm, vs, _)) ->
+              let open K3Helpers in
+              (* this will be missing the value type, just like the file *)
+              let ts = List.map (fun (_, t) -> m3_type_to_k3_type t) vs in
+              let id_ts = types_to_ids_types "m" ts in
+              let vars = ids_to_vars @@ fst_many id_ts in
+              K.Global(nm, t,
+                some @@
+                  mk_map
+                    (mk_lambda' id_ts @@
+                      mk_tuple @@ vars@[mk_cint 1])
+                  (mk_apply (mk_var "load_csv_bag") @@ mk_cstring f))
 
-      | _ -> failwith "Table relations that aren't filesources are unsuppored"
-    ) table_rels
+            | _ -> failwith "Table relations that aren't filesources are unsuppored"
+            end
+          with Not_found -> x end
+      | x -> x
+      ) k3_prog_schema
   in
 
   let k3_prog_demux_calls, k3_prog_demux_deep = k3_demuxes stream_rels in
@@ -1519,7 +1540,6 @@ let m3_to_k3 ?(generate_init = false) ?(role = "client")
     add_empty @: k3_prog_sources @ k3_prog_bindings @ k3_prog_consumes
   in
   sql_func::
-  table_data @
   (add_empty @:
     k3_prog_schema @
     [ K.Flow(k3_prog_trigs @ k3_prog_demux) ] @
