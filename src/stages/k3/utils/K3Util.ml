@@ -459,3 +459,7 @@ let unwrap_t_val = function
   | TValue vt -> vt
   | _         -> failwith "Function type unexpected"
 
+let unwrap_tuple e = match tag_of_expr e with
+  | Tuple -> decompose_tuple e
+  | x     -> [e]
+

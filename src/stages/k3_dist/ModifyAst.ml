@@ -5,14 +5,65 @@ open K3Dist
 
 module U = K3Util
 module P = ProgInfo
-module T = Tree
 module PR = K3Printing
-module Set = ListAsSet
-module G = K3Global
 
 exception InvalidAst of string
 
+module IntSetSet = Set.Make(struct type t = IntSet.t let compare = IntSet.compare end)
+
 (* --- Map declarations --- *)
+
+(* find all access patterns on maps in the code. We could probably get this info from
+ * dbtoaster, but it's not hard to just get it here *)
+let get_map_access_patterns ast =
+  (* for top-down, get any existing_out_tier value *)
+  let td_fn out_tier n = match U.tag_of_expr n with
+      | Apply -> let lam, app = U.decompose_apply n in
+                 begin try
+                   let arg, _   = U.decompose_lambda lam in
+                   begin match arg, U.tag_of_expr app with
+                   | AVar ("existing_out_tier", _), Var x -> Some x
+                   | _ -> out_tier
+                   end
+                 with Failure _ -> out_tier end
+      | _      -> out_tier
+  in
+  (* for bottom-up, get access patterns *)
+  let bu_fn out_tier bu_results n =
+      (* merge 2 values for a map *)
+      let merge_fn k ma mb = match ma, mb with
+        | Some x, None
+        | None, Some x     -> Some x
+        | Some xs, Some ys -> Some (IntSetSet.union xs ys)
+        | _                -> None
+      in
+      (* combine the bottom-up results *)
+      let map = List.fold_left (fun acc x ->
+        StrMap.merge merge_fn acc x) StrMap.empty bu_results in
+      match U.tag_of_expr n with
+      | Slice  ->
+          let col, pat = U.decompose_slice n in
+          let pat = U.unwrap_tuple pat |> insert_index_fst 0
+                 |> List.filter (fun (_,x) -> U.tag_of_expr x <> Const CUnknown)
+                 |> fst_many |> IntSet.of_list
+          in
+          let add_to_map k =
+             begin try
+               let v = StrMap.find k map in
+               StrMap.add k (IntSetSet.add pat v) map
+             with Not_found ->
+               StrMap.add k (IntSetSet.singleton pat) map
+             end
+          in
+          begin match U.tag_of_expr col, out_tier with
+          | Var "existing_out_tier", Some id -> add_to_map id
+          | Var "existing_out_tier", _       -> failwith "missing existing out tier binding"
+          | Var k, _ -> add_to_map k
+          | _        -> map
+          end
+      | _      -> map
+  in
+  Tree.fold_tree td_fn bu_fn None StrMap.empty
 
 (* change the initialization values of global maps to have the vid as well *)
 (* receives the new types to put in and the starting expression to change *)
@@ -105,7 +156,7 @@ let corr_ast_for_m_s p ast map stmt trig =
   let args = U.typed_vars_of_arg @@ U.args_of_code trig_decl in
   let trig_args = P.args_of_t p trig in
   (* remove the trigger args from the list of args in the corrective trigger *)
-  let args2 = Set.diff args trig_args in
+  let args2 = ListAsSet.diff args trig_args in
   let stmt_block = block_nth trig_ast stmt_idx
   in args2, trig_min_stmt + stmt_idx, stmt_block
 
@@ -296,7 +347,7 @@ let modify_map_add_vid p ast stmt =
       end
 
     | _ -> NopMsg, e
-  in T.modify_tree_bu_with_path_and_msgs ast modify
+  in Tree.modify_tree_bu_with_path_and_msgs ast modify
 
 (* this delta extraction is very brittle, since it's tailored to the way the M3
  * to K3 calculations are written. *)
@@ -347,7 +398,7 @@ let delta_action p ast stmt m_target_trigger ~corrective =
             | Some t ->
               [mk_send
                 (mk_ctarget t)
-                G.me_var @@
+                K3Global.me_var @@
                 mk_tuple @@ full_vars]
             end
       ) arg2 (* this is where the original calculation code is *)
@@ -413,7 +464,7 @@ let delta_action p ast stmt m_target_trigger ~corrective =
       | Some t ->
         [mk_send (* send to a (corrective) target *)
           (mk_ctarget t)
-          G.me_var @@
+          K3Global.me_var @@
           mk_tuple [mk_var "vid"; mk_var delta_v_name]]
       end
 
@@ -422,7 +473,7 @@ let delta_action p ast stmt m_target_trigger ~corrective =
 
 (* rename a variable in an ast *)
 let rename_var old_var_name new_var_name ast =
-  T.modify_tree_bu ast @@ fun e ->
+  Tree.modify_tree_bu ast @@ fun e ->
     match U.tag_of_expr e with
     | Var v when v = old_var_name -> mk_var new_var_name
     | _ -> e

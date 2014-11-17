@@ -154,3 +154,6 @@ val attach_type : type_t -> expr_t -> expr_t
 
 (* Get a value_type_t from a type_t *)
 val unwrap_t_val : type_t -> value_type_t
+
+(* Get the expression list inside a tuple if any *)
+val unwrap_tuple : expr_t -> expr_t list
