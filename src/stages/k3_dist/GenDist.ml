@@ -1227,15 +1227,13 @@ let emit_frontier_fns p =
 
 (* Generate all the code for a specific trigger *)
 let gen_dist_for_t ~force_correctives p ast trig corr_maps =
-  (* (stmt_id,rhs_map_id)list *)
-  let s_rhs =
-    s_and_over_stmts_in_t p rhs_maps_of_stmt trig in
+  (* (stmt_id, rhs_map_id)list *)
+  let s_rhs = s_and_over_stmts_in_t p rhs_maps_of_stmt trig in
   (* stmts that can be involved in correctives *)
-  let s_rhs_corr = List.filter (fun (s,map) -> List.mem map corr_maps) s_rhs in
+  let s_rhs_corr = List.filter (fun (s, map) -> List.mem map corr_maps) s_rhs in
   (* (stmt_id,rhs_map_id,lhs_map_id)list *)
-  let s_rhs_lhs =
-    s_and_over_stmts_in_t p rhs_lhs_of_stmt trig
-  in
+  let s_rhs_lhs = s_and_over_stmts_in_t p rhs_lhs_of_stmt trig in
+
   start_trig ~force_correctives p trig::
   send_fetch_trig p s_rhs_lhs s_rhs trig::
   (if null s_rhs then []
@@ -1253,9 +1251,9 @@ let gen_dist_for_t ~force_correctives p ast trig corr_maps =
 (* @param force_correctives Attempt to create dist code that encourages correctives *)
 let gen_dist ?(force_correctives=false) p partmap ast =
   (* because this uses state, need it initialized here *)
-  (* TODO: change to not require state *)
   let global_funcs = declare_global_funcs partmap p ast in
   let potential_corr_maps = maps_potential_corrective p in
+  (* regular trigs then insert entries into shuffle fn table *)
   let regular_trigs = List.flatten @@
     for_all_trigs p @@ fun t ->
       gen_dist_for_t ~force_correctives p ast t potential_corr_maps in
@@ -1272,7 +1270,7 @@ let gen_dist ?(force_correctives=false) p partmap ast =
       send_corrective_trigs p @
       demux_trigs ast)::    (* per-map basis *)
       roles_of ast in
-  let foreign = List.filter (fun d -> U.is_foreign d) prog in
-  let rest = List.filter (fun d -> not @@ U.is_foreign d) prog in
+  let foreign = List.filter (U.is_foreign) prog in
+  let rest = List.filter (not |- U.is_foreign) prog in
   snd @@ U.renumber_program_ids (foreign @ rest)
 

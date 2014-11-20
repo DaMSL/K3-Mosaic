@@ -1,5 +1,6 @@
 module IntSet : sig include Set.S with type elt = int end
 module IntMap : sig include Map.S with type key = int end
+module StrMap : sig include Map.S with type key = string end
 
 (* low-precedence function application. Saves ( ) *)
 val foi : int -> float
@@ -229,5 +230,8 @@ val date_part : string -> int -> int
 
 (* replace a hashtbl value by examining existing value *)
 val hashtbl_replace : ('a, 'b) Hashtbl.t -> 'a -> ('b option -> 'b) -> unit
+
+(* combine hashtables *)
+val hashtbl_combine : ('a, 'b) Hashtbl.t -> ('a, 'b) Hashtbl.t -> ('b -> 'b -> 'b) -> unit
 
 val intset_of_list : int list -> IntSet.t

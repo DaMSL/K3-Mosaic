@@ -4,6 +4,7 @@ let _ = Random.self_init ()
 
 module IntSet = Set.Make(struct type t = int let compare = (-) end)
 module IntMap = Map.Make(struct type t = int let compare = (-) end)
+module StrMap = Map.Make(struct type t = string let compare = String.compare end)
 
 (* abbreviations for annoyingly long functions *)
 let foi = float_of_int
@@ -481,6 +482,16 @@ let hashtbl_replace hash key replace_fn =
             with Not_found -> None
   in
   Hashtbl.replace hash key (replace_fn old)
+
+let hashtbl_combine h h' combine_fn =
+  Hashtbl.iter (fun k v' -> 
+    try
+      let v = Hashtbl.find h k in
+      Hashtbl.replace h k @@ combine_fn v v'
+    with Not_found ->
+      Hashtbl.add h k v'
+  ) h'
+
 
 let intset_of_list l =
   List.fold_left (fun acc x -> IntSet.add x acc) IntSet.empty l
