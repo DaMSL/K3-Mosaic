@@ -94,7 +94,7 @@ and ValueComp : (sig val compare_v : Value.value_t -> Value.value_t -> int
 
     module IntMap : (Map.S with type key = int) = Map.Make(struct
       type t = int
-      let compare x y = x - y
+      let compare = (-)
     end)
 
     (* try to get a consistent hashing scheme based on members *)

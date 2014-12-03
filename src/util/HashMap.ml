@@ -34,9 +34,7 @@ end
 module Make(Ord : OrderedType) = struct
 
   module IntMap : (Map.S with type key = int) = Map.Make(struct
-    type t = int
-    let compare x y = x - y
-  end)
+    type t = int let compare = (-) end)
 
   module WrapMap : (Map.S with type key = Ord.t) = Map.Make(Ord)
 
