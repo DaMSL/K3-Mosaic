@@ -86,6 +86,7 @@ rule tokenize = parse
     | ',' { COMMA }
     | ';' { SEMICOLON }
 
+    | '.'  { PERIOD }
     | '{'  { LBRACE }
     | '}'  { RBRACE }
     | "{|" { LBRACEBAR }

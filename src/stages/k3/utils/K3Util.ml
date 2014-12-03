@@ -234,6 +234,8 @@ let decompose_slice e = match tag_of_expr e, sub_tree e with
   Slice, [e0; e1] -> e0, e1 | _ -> failwith "not a Slice"
 let decompose_sort e = match tag_of_expr e, sub_tree e with
   Sort, [e0; e1] -> e0, e1 | _ -> failwith "not a Sort"
+let decompose_subscript e = match tag_of_expr e, sub_tree e with
+  Subscript i, [e0] -> i, e0 | _ -> failwith "not a subscript"
 let decompose_tuple e = match tag_of_expr e with
   Tuple -> sub_tree e  | _ -> failwith "not a Tuple"
 let decompose_update e = match tag_of_expr e, sub_tree e with

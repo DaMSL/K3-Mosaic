@@ -106,6 +106,7 @@ type expr_tag_t
 
     | Lambda        of arg_t
     | Apply
+    | Subscript     of int (* for tuple access *)
 
     | Block
     | Iterate

@@ -154,6 +154,7 @@ val mk_flatten : expr_t -> expr_t
 val mk_agg : expr_t -> expr_t -> expr_t -> expr_t
 val mk_gbagg : expr_t -> expr_t -> expr_t -> expr_t -> expr_t
 val mk_sort : expr_t -> expr_t -> expr_t
+val mk_subscript : int -> expr_t -> expr_t
 
 val mk_peek : expr_t -> expr_t
 val mk_slice : expr_t -> expr_t -> expr_t

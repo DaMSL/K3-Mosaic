@@ -2,7 +2,8 @@
 
 let _ = Random.self_init ()
 
-module IntSet = Set.Make(struct type t = int let compare = compare end)
+module IntSet = Set.Make(struct type t = int let compare = (-) end)
+module IntMap = Map.Make(struct type t = int let compare = (-) end)
 
 (* abbreviations for annoyingly long functions *)
 let foi = float_of_int
@@ -64,6 +65,14 @@ let rec list_drop len li = match li with
   | [] -> []
   | x::xs when len = 0 -> li
   | x::xs -> list_drop (len-1) xs
+
+(* split list into before and after *)
+let list_split len l =
+  let rec split len acc = function
+    | [] -> acc, []
+    | x::xs when len = 0 -> List.rev (x::acc), xs
+    | x::xs -> split (len-1) (x::acc) xs
+  in split len [] l
 
 (* take the last x elements of a list *)
 let list_take_end len li = list_drop (List.length li - len) li

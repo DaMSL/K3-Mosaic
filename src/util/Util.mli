@@ -1,4 +1,5 @@
 module IntSet : sig include Set.S with type elt = int end
+module IntMap : sig include Map.S with type key = int end
 
 (* low-precedence function application. Saves ( ) *)
 val foi : int -> float
@@ -45,6 +46,9 @@ val third3  : ('c -> 'd) -> 'a * 'b * 'c -> 'a * 'b * 'd
 
 (* take the first x values of a list *)
 val list_take : int -> 'a list -> 'a list
+
+(* take and drop together *)
+val list_split : int -> 'a list -> 'a list * 'a list
 
 (* take the last x values of a list *)
 val list_take_end : int -> 'a list -> 'a list

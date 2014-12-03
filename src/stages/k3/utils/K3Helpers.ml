@@ -282,6 +282,8 @@ let mk_gbagg group_fun agg_fun init collection =
 let mk_sort collection compare_fun =
     mk_stree Sort [collection; compare_fun]
 
+let mk_subscript i tuple = mk_stree (Subscript i) [tuple]
+
 (* generic version of slice used by multiple functions *)
 let mk_slice_gen f collection pattern =
   (* don't create a slice if we only have unknowns *)

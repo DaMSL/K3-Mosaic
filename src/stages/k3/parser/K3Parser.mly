@@ -106,7 +106,7 @@
 
 %token <K3.AST.base_type_t> TYPE
 
-%token LPAREN RPAREN COMMA SEMICOLON
+%token LPAREN RPAREN COMMA SEMICOLON PERIOD
 
 %token LBRACE RBRACE LBRACEBAR RBRACEBAR LBRACKET RBRACKET
 
@@ -437,6 +437,7 @@ expr :
     | case { $1 }
     | bind { $1 }
     | lambda { $1 }
+    | tuple_index { $1 }
     | access { $1 }
     | transformers { $1 }
     | mutation { $1 }
@@ -624,6 +625,9 @@ lambda :
      | BACKSLASH arg RARROW error { lambda_error "body" }
      | BACKSLASH error            { lambda_error "argument" }
 ;
+
+tuple_index :
+    | expr PERIOD LBRACKET INTEGER RBRACKET { mkexpr (Subscript $4) [$1] }
 
 access :
     | expr LBRACKET tuple RBRACKET { mkexpr Slice [$1; $3] }

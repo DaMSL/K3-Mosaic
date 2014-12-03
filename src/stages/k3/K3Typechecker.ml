@@ -37,11 +37,13 @@ exception TypeError of int * string * error_type
 
 let not_maybe t      = TBad(t, "not a maybe")
 let not_value t      = TBad(t, "not a value")
+let not_tuple t      = TBad(t, "not a tuple")
 let not_ind t        = TBad(t, "not an indirection")
 let not_function t   = TBad(t, "not a function")
 let not_collection t = TBad(t, "not a collection")
 let not_collection_vt t = VTBad(t, "not a collection")
 let not_collection_bt t = BTBad(t, "not a collection")
+let error_tuple_small n tl t = TBad(t, Printf.sprintf "tuple has size %d but subscript %d" tl n)
 
 let t_error uuid name msg () = raise @@ TypeError(uuid, name, msg)
 
@@ -68,8 +70,9 @@ let check_tag_arity tag children =
     | Neq   -> 2
     | Leq   -> 2
 
-    | Lambda _ -> 1
-    | Apply    -> 2
+    | Lambda _    -> 1
+    | Apply       -> 2
+    | Subscript _ -> 1
 
     | Block         -> length
     | Iterate       -> 2
@@ -460,6 +463,15 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
             let t_a = t1 <| value_of |> t_erroru @@ not_value t0  in
             if t_e <~ t_a then TValue(t_r)
             else t_erroru (VTMismatch(t_e, t_a,"")) ()
+
+        | Subscript n ->
+            let t0 = bind 0 in
+            let t_e = t0 <| base_of +++ value_of |> t_erroru @@ not_value t0 in
+            begin match t_e with
+            | TTuple l when n < List.length l -> TValue(at l n)
+            | TTuple l -> t_erroru (error_tuple_small n (List.length l) t0) ()
+            | _ -> t_erroru (not_tuple t0) ()
+            end
 
         | Iterate ->
             let t0 = bind 0 in let t1 = bind 1 in
