@@ -16,15 +16,9 @@ include ASTCommonImpl
 (* Annotations *)
 type annotation_t = Annotation.annotation_t
 
-type index_kind = Ordered | Hash
-
 (* multimap index *)
-type index_t = {
-                 mm_indices: IntSet.t; (* tuple indices *)
-                 mm_comp_fn: string option;
-                 mm_idx_kind : index_kind;
-                 mm_submaps: index_t list;
-               }
+type index_t = HashIdx of IntSet.t
+             | OrdIdx of int list
 
 type container_type_t
     = TSet
@@ -123,7 +117,7 @@ type expr_tag_t
     | Peek
     | Slice
     (* the tuple index numbers we want to slice by, hierarchically *)
-    | SliceIdx of IntSet.t list
+    | SliceIdx of index_t
     | Insert of id_t
     | Delete of id_t
     | Update of id_t

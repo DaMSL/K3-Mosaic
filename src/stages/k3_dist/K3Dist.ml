@@ -9,10 +9,20 @@ module P = ProgInfo
 
 module IdMap = Map.Make(struct type t = id_t let compare = String.compare end)
 
+let index_t_cmp x y = match x, y with
+  | HashIdx s, HashIdx s' -> IntSet.compare s s'
+  | OrdIdx l,  OrdIdx l'  -> compare l l'
+  | OrdIdx _, HashIdx _   -> -1
+  | HashIdx _, OrdIdx _   -> 1
+
+module IndexSet = Set.Make(struct type t = index_t let compare = index_t_cmp end)
+
 type config = {
   p : P.prog_data_t;
-  (* a mapping from map name to index list we build up as we slice *)
-  mutable map_idxs : index_t list IdMap.t;
+  (* a mapping from K3 map ids to index sets we build up as we slice *)
+  map_idxs : IndexSet.t IntMap.t;
+  (* a mapping from new map names to index sets we build up as we slice *)
+  mapn_idxs : IndexSet.t StrMap.t;
 }
 
 (* add an index to the config structure and update it *)
