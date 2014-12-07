@@ -18,6 +18,8 @@ module type S = sig
   val update : elt -> elt -> t -> t
   val peek : t -> elt option
   val count : elt -> t -> int
+  val intersect : t -> t -> t
+  val union : t -> t -> t
   val to_list : t -> elt list
   val of_list : elt list -> t
   val compare : t -> t -> int
@@ -69,6 +71,18 @@ module Make(Ord : ICommon.OrderedKeyType) = struct
     insert k' m
 
   let count e m = HMap.find e m
+
+  let intersect l r = HMap.merge (fun k ml mr -> match ml, mr with
+    | Some l, Some r -> Some (min l r)
+    | _              -> None
+  ) l r
+
+  let union l r = HMap.merge (fun _ ml mr -> match ml, mr with
+    | Some l, Some r -> Some (max l r)
+    | Some x, _
+    | _, Some x      -> Some x
+    | _              -> None
+  ) l r
 
   let of_list l = List.fold_left (fun acc x -> insert x acc) empty l
 

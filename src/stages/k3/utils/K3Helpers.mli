@@ -66,10 +66,10 @@ val wrap_tmap : value_type_t -> value_type_t
 val wrap_tmap' : value_type_t list -> value_type_t
 val wrap_tmap_mut : value_type_t -> value_type_t
 val wrap_tmap_mut' : value_type_t list -> value_type_t
-val wrap_tmmap : index_t list -> value_type_t -> value_type_t
-val wrap_tmmap' : index_t list -> value_type_t list -> value_type_t
-val wrap_tmmap_mut : index_t list -> value_type_t -> value_type_t
-val wrap_tmmap_mut' : index_t list -> value_type_t list -> value_type_t
+val wrap_tmmap : IndexSet.t -> value_type_t -> value_type_t
+val wrap_tmmap' : IndexSet.t -> value_type_t list -> value_type_t
+val wrap_tmmap_mut : IndexSet.t -> value_type_t -> value_type_t
+val wrap_tmmap_mut' : IndexSet.t -> value_type_t list -> value_type_t
 val wrap_tind : value_type_t -> value_type_t
 val wrap_tind_mut : value_type_t -> value_type_t
 val wrap_tmaybe : value_type_t -> value_type_t
@@ -161,8 +161,8 @@ val mk_slice : expr_t -> expr_t -> expr_t
 val mk_slice' : expr_t -> expr_t list -> expr_t
 (* int list list: specify index to use
    expr_t: list of integer values specifying GT, LT, EQ *)
-val mk_slice_idx : int list list -> expr_t -> expr_t -> expr_t -> expr_t
-val mk_slice_idx' : int list list -> expr_t list -> expr_t -> expr_t list -> expr_t
+val mk_slice_idx : int list -> ordered:bool -> comp:comp_t -> expr_t -> expr_t -> expr_t
+val mk_slice_idx' : int list -> ordered:bool-> comp:comp_t -> expr_t -> expr_t list -> expr_t
 val mk_insert : id_t -> expr_t -> expr_t
 val mk_delete : id_t -> expr_t -> expr_t
 val mk_update : id_t -> expr_t -> expr_t -> expr_t

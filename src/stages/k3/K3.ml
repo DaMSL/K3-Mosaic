@@ -16,16 +16,28 @@ include ASTCommonImpl
 (* Annotations *)
 type annotation_t = Annotation.annotation_t
 
+type comp_t = LT | EQ | GT
+
 (* multimap index *)
 type index_t = HashIdx of IntSet.t
              | OrdIdx of int list
+
+let index_t_cmp x y = match x, y with
+  | HashIdx s, HashIdx s' -> IntSet.compare s s'
+  | OrdIdx l,  OrdIdx l'  -> compare l l'
+  | OrdIdx _, HashIdx _   -> -1
+  | HashIdx _, OrdIdx _   -> 1
+
+module IndexSet = Set.Make(struct type t = index_t let compare = index_t_cmp end)
+module IndexMap = Map.Make(struct type t = index_t let compare = index_t_cmp end)
+
 
 type container_type_t
     = TSet
     | TBag
     | TList
     | TMap
-    | TMultimap of index_t list
+    | TMultimap of IndexSet.t
 
 type base_type_t
     = TTop
@@ -116,8 +128,7 @@ type expr_tag_t
 
     | Peek
     | Slice
-    (* the tuple index numbers we want to slice by, hierarchically *)
-    | SliceIdx of index_t
+    | SliceIdx of index_t * comp_t
     | Insert of id_t
     | Delete of id_t
     | Update of id_t

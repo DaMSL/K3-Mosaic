@@ -33,7 +33,11 @@ module rec OrderedKey : ICommon.OrderedKeyType = struct
     let compare a b = ValueComp.compare_v a b
     let hash a = ValueComp.hash a
     let filter_idxs idxs = function
-      | Value.VTuple l -> Value.VTuple(list_filter_idxs idxs l)
+      | Value.VTuple l ->
+          begin match idxs with
+          | HashIdx s -> Value.VTuple(list_filter_idxs_by_set s l)
+          | OrdIdx il -> Value.VTuple(list_filter_idxs_by_list il l)
+          end
       | _ -> invalid_arg "not a vtuple"
     end
 
@@ -77,7 +81,7 @@ and ValueComp : (sig val compare_v : Value.value_t -> Value.value_t -> int
       | VBag v, VBag v' -> ValueBag.compare v v'
       | VList v, VList v' -> IList.compare compare_v v v'
       | VMap v, VMap v' -> ValueMap.compare compare_v v v'
-      | VMultimap v, VMultimap v' -> ValueMMap.compare_m v v'
+      | VMultimap v, VMultimap v' -> ValueMMap.compare v v'
       | VIndirect v, VIndirect v' -> compare_v !v !v'
       | VFloat v, VFloat v' ->
           let (f, i), (f', i') = frexp v, frexp v' in
@@ -441,15 +445,8 @@ let v_slice err_fn pat = function
   | _ -> err_fn "v_slice" "not a collection"
 
 (* only for multimap *)
-let v_slice_idx = fun err_fn idxs comps pat c -> match c, comps with
-  | VMultimap mm, VTuple comps' ->
-      let comp_fn = function
-        | VInt (-1) -> `LT
-        | VInt 1    -> `GT
-        | _         -> `EQ
-      in
-      let comps'' = List.map comp_fn comps' in
-      VBag(ValueMMap.slice idxs comps'' pat mm)
+let v_slice_idx err_fn idx comp pat = function
+  | VMultimap mm -> VBag(ValueMMap.slice idx comp pat mm)
   | _ -> err_fn "v_slice_idx" "bad format"
 
 (* Value comparison. *)

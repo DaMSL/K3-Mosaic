@@ -28,10 +28,6 @@ val arg_of_lambda : expr_t -> arg_t option
 val vars_of_lambda : expr_t -> id_t list
 val typed_vars_of_lambda : expr_t -> (id_t * value_type_t) list
 
-(* Type tags *)
-val signature_of_type : type_t -> string
-val type_of_signature : string -> type_t
-
 (* AST testers *)
 val is_peek : expr_t -> bool
 

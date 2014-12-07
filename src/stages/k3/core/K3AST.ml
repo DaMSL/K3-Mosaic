@@ -24,16 +24,23 @@ include ASTCommon
 (* Annotations *)
 type annotation_t
 
+type comp_t = LT | EQ | GT
+
 (* multimap index *)
 type index_t = HashIdx of IntSet.t
              | OrdIdx of int list
+
+val index_t_cmp : index_t -> index_t -> int
+
+module IndexSet : sig include Set.S with type elt = index_t end
+module IndexMap : sig include Map.S with type key = index_t end
 
 type container_type_t
     = TSet
     | TBag
     | TList
     | TMap
-    | TMultimap of index_t list
+    | TMultimap of IndexSet.t
 
 type base_type_t
     = TTop
@@ -124,8 +131,7 @@ type expr_tag_t
 
     | Peek
     | Slice
-    (* the tuple index numbers we want to slice by, hierarchically *)
-    | SliceIdx of IntSet.t list
+    | SliceIdx of index_t * comp_t
     | Insert of id_t
     | Delete of id_t
     | Update of id_t

@@ -92,4 +92,4 @@ val v_empty_of_t : container_type_t -> value_t
 val v_sort : value_t t_err_fn -> (value_t -> value_t -> int) -> value_t -> value_t
 val v_singleton : value_t t_err_fn -> value_t -> container_type_t -> value_t
 val v_slice : value_t t_err_fn -> value_t -> value_t -> value_t
-val v_slice_idx : value_t t_err_fn -> IntSet.t list -> value_t -> value_t -> value_t -> value_t
+val v_slice_idx : value_t t_err_fn -> index_t -> comp_t -> value_t -> value_t -> value_t

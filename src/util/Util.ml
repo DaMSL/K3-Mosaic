@@ -153,12 +153,17 @@ let rec foldl_until f acc = function
 
 (* filter list by a set of indices (starting at 0) *)
 (* assume a small list *)
-let list_filter_idxs idx l =
+let list_filter_idxs_by_set idxs l =
   snd @:
     List.fold_right (fun x (i, acc) ->
-      if IntSet.mem i idx then (i+1, x::acc)
+      if IntSet.mem i idxs then (i+1, x::acc)
       else (i+1, acc)
     ) l (0, [])
+
+(* this version preserves index ordering *)
+let list_filter_idxs_by_list idxs l =
+  let a = Array.of_list l in
+  List.map (fun i -> a.(i)) idxs
 
 (* I/O helpers *)
 (* read a file and convert it into lines *)

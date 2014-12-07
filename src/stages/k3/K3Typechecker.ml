@@ -582,35 +582,18 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
             else if t_p <~ t_e then t0
             else t_erroru (VTMismatch(t_p, t_e, "")) ()
 
-        | SliceIdx idxs ->
-            let t0, t1, t2 = bind 0, bind 1, bind 2 in
-            let tcomp  = t0 <| value_of |> t_erroru @@ not_value t0  in
-            let tcomp' = H.wrap_ttuple @@ replicate (List.length idxs) H.t_int in
-            if not (tcomp === tcomp') then t_erroru
-                (VTMismatch(tcomp, tcomp', "comparison_list:")) ();
+        | SliceIdx(idx, comp) ->
+            let t0, t1 = bind 0, bind 1 in
             let t_c, t_e =
-              t1 <| collection_of +++ base_of +++ value_of |>
-                  t_erroru @@ not_collection t1  in
-            (* check for a match between the indices and the multimap
-               do this by iterating through the multimap indices *)
-            let rec check_index idxs mmidxs =
-              match idxs, mmidxs with
-              | [], []        -> true
-              | idx::idxs, ms ->
-                begin try
-                  let m_idx = List.find (fun m -> IntSet.equal idx m.mm_indices) ms in
-                  check_index idxs m_idx.mm_submaps
-                with
-                  Not_found -> false
-                end
-              | _ -> false
+              t0 <| collection_of +++ base_of +++ value_of |>
+                  t_erroru @@ not_collection t0
             in
             begin match t_c with
-            | TMultimap mmidx when check_index idxs mmidx -> ()
+            | TMultimap mmidx when IndexSet.mem idx mmidx -> ()
             | TMultimap _ -> t_erroru (TMsg "slice mismatch on multimap") ()
             | _ -> t_erroru (TBad(t1, "not a multimap")) ()
             end;
-            let t_p = t2 <| value_of |> t_erroru @@ not_value t2  in
+            let t_p = t1 <| value_of |> t_erroru @@ not_value t1  in
             if t_e === t_p then TValue t_e
             (* take care of possible unknowns in pattern *)
             else if t_p <~ t_e then t1
