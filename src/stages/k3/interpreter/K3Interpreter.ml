@@ -1,4 +1,3 @@
-open Lazy
 open Util
 open Tree
 
@@ -435,6 +434,12 @@ and eval_expr (address:address) sched_st cenv texpr =
       | _ -> error name "bad values"
       end
 
+    | Subscript i ->
+      begin match child_values cenv with
+      | renv, [VTuple l] -> renv, VTemp(at l i)
+      | _                -> error "Subscript" "bad tuple"
+      end
+
     (* Collection accessors and modifiers *)
     | Slice ->
       begin match child_values cenv with
@@ -442,9 +447,9 @@ and eval_expr (address:address) sched_st cenv texpr =
         | _       -> error "Slice" "bad values"
       end
 
-    | SliceIdx idx ->
+    | SliceIdx(idx, comp) ->
       begin match child_values cenv with
-        | renv, [comps; c; pat] -> renv, VTemp(v_slice_idx error idx comps pat c)
+        | renv, [c; pat] -> renv, VTemp(v_slice_idx error idx comp pat c)
         | _       -> error "SliceIdx" "bad values"
       end
 
