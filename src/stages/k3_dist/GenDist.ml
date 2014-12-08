@@ -32,9 +32,6 @@ open Util
 open K3.AST
 open K3Helpers
 open K3Dist
-open ProgInfo
-open K3Route
-open K3Shuffle
 
 module G = K3Global
 module M = ModifyAst
@@ -104,7 +101,7 @@ let declare_global_vars c ast =
         (wrap_tind map_t) @@
         mk_ind @@ mk_empty map_t
     in
-    for_all_stmts_rhs_maps c.p make_map_decl
+    P.for_all_stmts_rhs_maps c.p make_map_decl
   in
 
   let stmt_cntrs_code = mk_global_val stmt_cntrs_name stmt_cntrs_type in
@@ -118,7 +115,7 @@ let declare_global_vars c ast =
       (log_for_t t) @@
       wrap_tbag' @@ snd_many @@ args_of_t_with_v c t
     in
-    let log_structs = for_all_trigs c.p log_struct_code_for in
+    let log_structs = P.for_all_trigs c.p log_struct_code_for in
     log_master_code::log_structs
   in
   map_list ::
@@ -377,11 +374,11 @@ let declare_global_funcs partmap c ast =
   check_stmt_cntr_index_fn ::
   List.map (fun (_,maps) ->
     add_delta_to_buffer_code @@ hd maps)
-    (uniq_types_and_maps c.p) @
+    (P.uniq_types_and_maps c.p) @
   [log_master_write_code ()] @
-  for_all_trigs c.p log_write_code @
-  for_all_trigs c.p log_get_bound_code @
-  gen_shuffle_route_code c.p partmap @
+  P.for_all_trigs c.p log_write_code @
+  P.for_all_trigs c.p log_get_bound_code @
+  K3Shuffle.gen_shuffle_route_code c.p partmap @
   [global_inits]
 
 
@@ -489,7 +486,7 @@ let send_fetch_trig c s_rhs_lhs s_rhs trig_name =
     ]
 in
 let send_completes_for_stmts_with_no_fetch =
-  let s_no_rhs = stmts_without_rhs_maps_in_t c.p trig_name in
+  let s_no_rhs = P.stmts_without_rhs_maps_in_t c.p trig_name in
   if null s_no_rhs then []
   else
     List.fold_left
@@ -575,7 +572,7 @@ let send_puts =
           (fun acc_code (stmt_id, (rhs_map_id, lhs_map_id)) ->
             (* shuffle allows us to recreate the path the data will take from
              * rhs to lhs *)
-            let shuffle_fn = find_shuffle stmt_id rhs_map_id lhs_map_id in
+            let shuffle_fn = K3Shuffle.find_shuffle stmt_id rhs_map_id lhs_map_id in
             let shuffle_key = P.partial_key_from_bound c.p stmt_id lhs_map_id in
             (* route allows us to know how many nodes send data from rhs to lhs
              * *)
@@ -770,7 +767,7 @@ let send_push_stmt_map_trig c s_rhs_lhs trig_name =
       let rhs_map_types = P.map_types_with_v_for c.p rhs_map_id in
       let rhs_map_name = P.map_name_of c.p rhs_map_id in
       let rhsm_deref = rhs_map_name^"_deref" in
-      let shuffle_fn = find_shuffle stmt_id rhs_map_id lhs_map_id in
+      let shuffle_fn = K3Shuffle.find_shuffle stmt_id rhs_map_id lhs_map_id in
       let partial_key = P.partial_key_from_bound c.p stmt_id lhs_map_id in
       let slice_key = P.slice_key_from_bound c.p stmt_id rhs_map_id in
       acc_code@
@@ -888,9 +885,9 @@ List.fold_left
 (* list of trig, stmt with a map on the rhs that's also on the lhs. These are
  * the potential corrective maps *)
 let maps_potential_corrective c =
-  let lhs_maps = ListAsSet.uniq @@ for_all_stmts c.p @@ lhs_map_of_stmt c.p in
+  let lhs_maps = ListAsSet.uniq @@ P.for_all_stmts c.p @@ P.lhs_map_of_stmt c.p in
   let rhs_maps = ListAsSet.uniq @@ List.flatten @@
-    for_all_stmts c.p @@ rhs_maps_of_stmt c.p in
+    P.for_all_stmts c.p @@ P.rhs_maps_of_stmt c.p in
   ListAsSet.inter lhs_maps rhs_maps
 
 (* send_corrective_trigs
@@ -959,7 +956,7 @@ let send_corrective_trigs c =
                * tuples. Now we try to get some more for the lhs map *)
               let target_map = P.lhs_map_of_stmt c.p target_stmt in
               let key = P.partial_key_from_bound c.p target_stmt target_map in
-              let shuffle_fn = find_shuffle target_stmt map_id target_map in
+              let shuffle_fn = K3Shuffle.find_shuffle target_stmt map_id target_map in
               mk_if (* if match, send data *)
                 (mk_eq
                   (mk_var "stmt_id") @@
@@ -1198,7 +1195,7 @@ let do_corrective_trigs c s_rhs ast trig_name corrective_maps =
         in
         let args, ast =
           M.modify_corr_ast c ast map_id stmt_id trig_name send_to in
-        let args_v = map_ids_types_add_v ~vid:"_" args in
+        let args_v = P.map_ids_types_add_v ~vid:"_" args in
         mk_iter (mk_lambda' args_v ast) @@
           mk_var "delta_tuples"
   in
@@ -1229,11 +1226,11 @@ let emit_frontier_fns c =
 (* Generate all the code for a specific trigger *)
 let gen_dist_for_t c ast trig corr_maps =
   (* (stmt_id, rhs_map_id)list *)
-  let s_rhs = P.s_and_over_stmts_in_t c.p rhs_maps_of_stmt trig in
+  let s_rhs = P.s_and_over_stmts_in_t c.p P.rhs_maps_of_stmt trig in
   (* stmts that can be involved in correctives *)
   let s_rhs_corr = List.filter (fun (s, map) -> List.mem map corr_maps) s_rhs in
   (* (stmt_id,rhs_map_id,lhs_map_id)list *)
-  let s_rhs_lhs = P.s_and_over_stmts_in_t c.p rhs_lhs_of_stmt trig in
+  let s_rhs_lhs = P.s_and_over_stmts_in_t c.p P.rhs_lhs_of_stmt trig in
 
   start_trig c trig::
   send_fetch_trig c s_rhs_lhs s_rhs trig::
@@ -1266,7 +1263,7 @@ let gen_dist ?(force_correctives=false) ?(use_multiindex=true) p partmap ast =
   let potential_corr_maps = maps_potential_corrective c in
   (* regular trigs then insert entries into shuffle fn table *)
   let regular_trigs = List.flatten @@
-    for_all_trigs c.p @@ fun t ->
+    P.for_all_trigs c.p @@ fun t ->
       gen_dist_for_t c ast t potential_corr_maps in
   let prog =
     declare_global_vars c ast @
