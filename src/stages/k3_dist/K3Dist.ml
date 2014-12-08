@@ -74,6 +74,16 @@ let t_vid_list = wrap_tlist t_vid
 let wrap_t_of_map = wrap_tbag
 let wrap_t_of_map' = wrap_tbag'
 
+(* wrap with the index type of the map, if requested *)
+let wrap_t_map_idx c map_id =
+  if c.use_multiindex then
+    let idxs = IntMap.find map_id c.map_idxs in
+    wrap_tmmap idxs
+  else
+    wrap_tbag
+
+let wrap_t_map_idx' c map_id = wrap_t_map_idx c map_id |- wrap_ttuple
+
 (* global declaration of default vid to put into every map *)
 let init_vid_k3 =
   mk_global_val_init init_vid t_vid @:
@@ -194,7 +204,7 @@ let frontier_name c map_id =
  * - m_pat is an optional pattern for slicing the data first
  *   It doesn't include a vid
  * - assumes a local 'vid' variable containing the border of the frontier
- * - keep_vid indicates whether we need to rmove the vid from the result collection
+ * - keep_vid indicates whether we need to remove the vid from the result collection
  *   (we usually need it removed only for modifying ast *)
 let map_latest_vid_vals c slice_col m_pat map_id ~keep_vid =
   let m_id_t_v = P.map_ids_types_with_v_for ~vid:"map_vid" c.p map_id in

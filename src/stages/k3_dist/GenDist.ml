@@ -67,7 +67,7 @@ let do_corrective_name_of_t c trig_nm stmt_id map_id =
 let check_stmt_cntr_index = "check_and_update_stmt_cntr_index"
 
 let declare_global_vars c ast =
-  (* mapping of map_id to map_name and dimensionality *)
+  (* global containing mapping of map_id to map_name and dimensionality *)
   let map_list =
     let t_map_list = wrap_tbag' [t_int; t_string ;t_int] in
     let content = P.for_all_maps c.p (fun i ->
@@ -93,9 +93,9 @@ let declare_global_vars c ast =
   (* we need to make buffer versions of rhs maps based on their statement *)
   let map_buffers_decl_code =
     (* for all rhs, lhs map pairs *)
-    let make_map_decl (stmt, map) =
-      let map_name = P.buf_of_stmt_map_id c.p stmt map in
-      let map_t = wrap_t_of_map' @@ P.map_types_with_v_for c.p map in
+    let make_map_decl (stmt, map_id) =
+      let map_name = P.buf_of_stmt_map_id c.p stmt map_id in
+      let map_t = wrap_t_map_idx' c map_id @@ P.map_types_with_v_for c.p map_id in
       (* for indirections, we need to create initial values *)
       mk_global_val_init map_name
         (wrap_tind map_t) @@
@@ -258,7 +258,7 @@ let declare_global_funcs partmap c ast =
     let ids_types_arg_v = P.map_ids_types_add_v ~vid:"vid_arg" ids_types_arg in
     let ids_types_v = P.map_ids_types_with_v_for c.p map_id in
     let types_v = snd_many ids_types_v in
-    let t_col_v = wrap_t_of_map' types_v in
+    let t_col_v = wrap_t_map_idx' c map_id types_v in
     let len_types_v = List.length types_v in
     let vars_v = ids_to_vars @@ fst_many ids_types_v in
     let vars_arg_v = ids_to_vars @@ fst_many ids_types_arg_v in
@@ -301,7 +301,7 @@ let declare_global_funcs partmap c ast =
     in
     mk_global_fn func_name
       (* corrective: whether this is a corrective delta *)
-      ([target_map, wrap_tind @@ wrap_t_of_map' types_v;
+      ([target_map, wrap_tind @@ wrap_t_map_idx' c map_id types_v;
         corrective, t_bool; "min_vid", t_vid;
         delta_tuples_nm, wrap_t_of_map' types_v])
       [t_unit] @@
@@ -1281,7 +1281,7 @@ let gen_dist ?(force_correctives=false) ?(use_multiindex=true) p partmap ast =
   let prog =
     declare_global_vars c ast @
     declare_global_prims @
-    emit_frontier_fns c @
+    (if not c.use_multiindex then emit_frontier_fns c else []) @
     global_funcs @ (* maybe make this not order-dependent *)
     declare_foreign_functions c @
     filter_corrective_list ::  (* global func *)
