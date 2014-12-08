@@ -248,7 +248,7 @@ let get_min_vid_code vid_lst_var =
 let do_garbage_collection_trig_name =
   "do_garbage_collection"
 
-let do_garbage_collection_trig_code p ast =
+let do_garbage_collection_trig_code (c:config) ast =
   (* help function to delete collection up to given vid *)
   (* delete vid that is < safe_vid  *)
   let delete_collection_up_to_vid safe_vid log_arg log_args_names log =
@@ -271,12 +271,12 @@ let do_garbage_collection_trig_code p ast =
         (fun acc trig ->
           (delete_collection_up_to_vid
             safe_vid
-            (args_of_t_with_v p trig)
-            ("vid":: (arg_names_of_t  p trig) )
+            (args_of_t_with_v c trig)
+            ("vid":: (arg_names_of_t c trig) )
             (log_for_t trig))::
           acc )
         []
-        (get_trig_list p)
+        (P.get_trig_list c.p)
     in
     (* helper, clear global map decleration *)
     let clear_global_map_decl safe_vid =
@@ -286,16 +286,16 @@ let do_garbage_collection_trig_code p ast =
           match decl with
           | Global(name, TValue typ, m_expr),_ ->
           begin try
-            let map_id = ProgInfo.map_id_of_name p name in
+            let map_id = ProgInfo.map_id_of_name c.p name in
             (*[("vid", t_vid);("__map_0", type)...("__map_val", type)]*)
             let map_id_t_v = ProgInfo.map_ids_types_with_v_for
-                              ~prefix:"__map_" ~vid:"vid" p map_id
+                              ~prefix:"__map_" ~vid:"vid" c.p map_id
             in
             let map_ids_v = fst_many map_id_t_v in
             let map_ts_v = snd_many map_id_t_v in
             let delc_types = wrap_tset @@ wrap_ttuple @@ map_ts_v in
             let map_id_t_no_val = ProgInfo.map_ids_types_no_val_for
-                                  ~prefix:"__map_" p map_id in
+                                  ~prefix:"__map_" c.p map_id in
             let map_id_no_val = fst_many @@ map_id_t_no_val in
             let map_t_no_val = snd_many @@ map_id_t_no_val in
             let key_num = List.length map_id_t_no_val in
@@ -872,10 +872,10 @@ let max_acked_vid_send_trig vid_cnt_var epoch_var hash_addr =
         (mk_var tmp_addr)
         (mk_var "max_acked_vid")
 
-let triggers p ast =
+let triggers c ast =
   ack_rcv_trig ::
   ack_send_trig ::
-  do_garbage_collection_trig_code p ast ::
+  do_garbage_collection_trig_code c ast ::
   min_max_acked_vid_rcv_node_trig ::
   min_max_acked_vid_rcv_switch_trig ::
   final_safe_vid_to_delete_rcv_trig_code ::

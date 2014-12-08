@@ -15,6 +15,9 @@ type config = {
   map_idxs : IndexSet.t IntMap.t;
   (* a mapping from new map names to index sets we build up as we slice *)
   mapn_idxs : IndexSet.t StrMap.t;
+  use_multiindex : bool;
+  force_correctives : bool;
+  enable_gc : bool;
 }
 
 (*
@@ -81,14 +84,14 @@ let min_vid_k3 = mk_tuple [mk_cint 0; mk_cint 0; mk_cint 0]
 let max_vid_k3 = mk_tuple [mk_cint max_int; mk_cint max_int; mk_cint max_int ]
 
 (* trigger argument manipulation convenience functions *)
-let arg_types_of_t p trig_nm = snd_many @: args_of_t p trig_nm
-let arg_names_of_t p trig_nm = fst_many @: args_of_t p trig_nm
-let args_of_t_as_vars p trig_nm = ids_to_vars (arg_names_of_t p trig_nm)
+let arg_types_of_t c trig_nm = snd_many @: P.args_of_t c.p trig_nm
+let arg_names_of_t c trig_nm = fst_many @: P.args_of_t c.p trig_nm
+let args_of_t_as_vars c trig_nm = ids_to_vars (arg_names_of_t c trig_nm)
 
-let args_of_t_with_v ?(vid="vid") p trig_nm = (vid, t_vid)::args_of_t p trig_nm
-let arg_types_of_t_with_v p trig_nm = t_vid::arg_types_of_t p trig_nm
-let args_of_t_as_vars_with_v ?(vid="vid") p trig_nm =
-  mk_var vid::args_of_t_as_vars p trig_nm
+let args_of_t_with_v ?(vid="vid") c trig_nm = (vid, t_vid)::P.args_of_t c.p trig_nm
+let arg_types_of_t_with_v c trig_nm = t_vid::arg_types_of_t c trig_nm
+let args_of_t_as_vars_with_v ?(vid="vid") c trig_nm =
+  mk_var vid::args_of_t_as_vars c trig_nm
 
 
 (* vid comparison names and code *)
@@ -112,21 +115,21 @@ let v_leq = v_op vid_leq
 (* log, buffer names *)
 let log_master_write_nm = "log_master_write"
 let log_write_for p trig_nm = "log_write_"^trig_nm (* varies with bound *)
-let log_get_bound_for p trig_nm = "log_get_bound_"^trig_nm
+let log_get_bound_for _ trig_nm = "log_get_bound_"^trig_nm
 let log_read_geq = "log_read_geq" (* takes vid, returns (trig, vid)list >= vid *)
 (* adds the delta to all subsequent vids following in the buffer so that non
  * delta computations will be correct. Must be atomic ie. no other reads of the
  * wrong buffer value can happen.
  * Also used for adding to map buffers and for correctives *)
-let add_delta_to_map p map_id =
-  let m_t = map_types_for p map_id in
+let add_delta_to_map c map_id =
+  let m_t = map_types_for c.p map_id in
   "add_delta_to_"^String.concat "_" @:
     List.map K3PrintSyntax.string_of_value_type m_t
 
 (* foreign functions *)
 let hash_addr = "hash_addr"
 let error_nm = "error"
-let declare_foreign_functions p =
+let declare_foreign_functions _ =
   let foreign_hash_addr = mk_foreign_fn hash_addr t_addr t_int in
   let foreign_error_fn  = mk_foreign_fn error_nm t_unit t_unknown in
   (* function needed to parse sql dates. Called by m3tok3 *)
@@ -179,8 +182,8 @@ let log_master_id_t = ["vid", t_vid; "trig_id", t_trig_id; "stmt_id", t_stmt_id]
 (* the function name for the frontier function *)
 (* takes the types of the map *)
 (* NOTE: assumes the first type is vid *)
-let frontier_name p map_id =
-  let m_t = P.map_types_for p map_id in
+let frontier_name c map_id =
+  let m_t = P.map_types_for c.p map_id in
   "frontier_"^String.concat "_" @:
     List.map K3PrintSyntax.string_of_value_type m_t
 
@@ -193,8 +196,8 @@ let frontier_name p map_id =
  * - assumes a local 'vid' variable containing the border of the frontier
  * - keep_vid indicates whether we need to rmove the vid from the result collection
  *   (we usually need it removed only for modifying ast *)
-let map_latest_vid_vals p slice_col m_pat map_id ~keep_vid =
-  let m_id_t_v = P.map_ids_types_with_v_for ~vid:"map_vid" p map_id in
+let map_latest_vid_vals c slice_col m_pat map_id ~keep_vid =
+  let m_id_t_v = P.map_ids_types_with_v_for ~vid:"map_vid" c.p map_id in
   (* create a function name per type signature *)
   let access_k3 = match m_pat with
     | Some pat ->
@@ -205,7 +208,7 @@ let map_latest_vid_vals p slice_col m_pat map_id ~keep_vid =
     | None     -> slice_col
   in
   let simple_app =
-    mk_apply (mk_var @: frontier_name p map_id) @:
+    mk_apply (mk_var @: frontier_name c map_id) @:
       mk_tuple [mk_var "vid"; access_k3]
   in
   if keep_vid then simple_app
@@ -221,13 +224,13 @@ let map_latest_vid_vals p slice_col m_pat map_id ~keep_vid =
 (* This is needed both for sending a push, and for modifying a local slice
  * operation *)
 (* Returns the type pattern for the function, and the function itself *)
-let frontier_fn p map_id =
+let frontier_fn c map_id =
   let max_vid = "max_vid" in
   let map_vid = "map_vid" in
-  let m_id_t_v = P.map_ids_types_with_v_for ~vid:"map_vid" p map_id in
+  let m_id_t_v = P.map_ids_types_with_v_for ~vid:"map_vid" c.p map_id in
   let m_t_v = wrap_ttuple @: snd_many @: m_id_t_v in
   let m_t_v_bag = wrap_t_of_map m_t_v in
-  let m_id_t_no_val = P.map_ids_types_no_val_for p map_id in
+  let m_id_t_no_val = P.map_ids_types_no_val_for c.p map_id in
   (* create a function name per type signature *)
   (* if we have bound variables, we should slice first. Otherwise,
       we don't need a slice *)
@@ -288,5 +291,5 @@ let frontier_fn p map_id =
           (mk_tuple [mk_empty m_t_v_bag; min_vid_k3])
           (mk_var "input_map")
   in
-  mk_global_fn (frontier_name p map_id) ["vid", t_vid; "input_map", m_t_v_bag] [m_t_v_bag] @:
+  mk_global_fn (frontier_name c map_id) ["vid", t_vid; "input_map", m_t_v_bag] [m_t_v_bag] @:
       action

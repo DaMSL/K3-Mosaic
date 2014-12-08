@@ -153,3 +153,6 @@ val unwrap_t_val : type_t -> value_type_t
 
 (* Get the expression list inside a tuple if any *)
 val unwrap_tuple : expr_t -> expr_t list
+
+(* Fold over all expression trees in a program (triggers, globals) *)
+val fold_over_exprs : ('a -> expr_t -> 'a) -> 'a -> program_t -> 'a

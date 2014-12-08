@@ -9,13 +9,11 @@ module PR = K3Printing
 
 exception InvalidAst of string
 
-module IntSetSet = Set.Make(struct type t = IntSet.t let compare = IntSet.compare end)
-
 (* --- Map declarations --- *)
 
 (* find all access patterns on maps in the code. We could probably get this info from
  * dbtoaster, but it's not hard to just get it here *)
-let get_map_access_patterns ast =
+let get_map_access_patterns ast : IndexSet.t StrMap.t =
   (* for top-down, get any existing_out_tier value *)
   let td_fn out_tier n = match U.tag_of_expr n with
       | Apply -> let lam, app = U.decompose_apply n in
@@ -34,7 +32,7 @@ let get_map_access_patterns ast =
       let merge_fn k ma mb = match ma, mb with
         | Some x, None
         | None, Some x     -> Some x
-        | Some xs, Some ys -> Some (IntSetSet.union xs ys)
+        | Some xs, Some ys -> Some (IndexSet.union xs ys)
         | _                -> None
       in
       (* combine the bottom-up results *)
@@ -50,9 +48,9 @@ let get_map_access_patterns ast =
           let add_to_map k =
              begin try
                let v = StrMap.find k map in
-               StrMap.add k (IntSetSet.add pat v) map
+               StrMap.add k (IndexSet.add (HashIdx pat) v) map
              with Not_found ->
-               StrMap.add k (IntSetSet.singleton pat) map
+               StrMap.add k (IndexSet.singleton @@ HashIdx pat) map
              end
           in
           begin match U.tag_of_expr col, out_tier with
@@ -63,7 +61,17 @@ let get_map_access_patterns ast =
           end
       | _      -> map
   in
-  Tree.fold_tree td_fn bu_fn None StrMap.empty
+  U.fold_over_exprs (fun acc t ->
+    Tree.fold_tree td_fn bu_fn None acc t
+  ) StrMap.empty ast
+
+(* convert to a per-mapid representation *)
+let get_map_access_patterns_ids c ast =
+  let pats = get_map_access_patterns ast in
+  StrMap.fold (fun nm v acc ->
+      IntMap.add (ProgInfo.map_id_of_name c.p nm) v acc)
+    pats
+    IntMap.empty
 
 (* change the initialization values of global maps to have the vid as well *)
 (* receives the new types to put in and the starting expression to change *)
@@ -84,13 +92,13 @@ let rec add_vid_to_init_val types e =
   | _ -> failwith "add_vid_to_init_val: unhandled modification"
 
 (* add a vid to global value map declarations *)
-let modify_global_map p = function
+let modify_global_map c = function
   (* filter to have only map declarations *)
   | Global(name, TValue typ, m_expr),_ ->
     begin try
-      let map_id = P.map_id_of_name p name in
+      let map_id = P.map_id_of_name c.p name in
       let map_type =
-        wrap_t_of_map @@ wrap_ttuple @@ P.map_types_with_v_for p map_id in
+        wrap_t_of_map @@ wrap_ttuple @@ P.map_types_with_v_for c.p map_id in
       let map_type_ind = wrap_tind map_type in
       begin match m_expr with
         | None   -> [mk_global_val_init name map_type_ind @@
@@ -103,16 +111,16 @@ let modify_global_map p = function
   | _ -> []
 
 (* return ast for map declarations, adding the vid *)
-let modify_map_decl_ast p ast =
+let modify_map_decl_ast c ast =
   let decls = U.globals_of_program ast in
   init_vid_k3 ::
-    (List.flatten @@ list_map (modify_global_map p) decls)
+    (List.flatten @@ list_map (modify_global_map c) decls)
 
 (* --- Trigger modification --- *)
 
 (* get the relative offset of the stmt in the trigger *)
-let stmt_idx_in_t p trig stmt =
-  let ss = P.stmts_of_t p trig in
+let stmt_idx_in_t c trig stmt =
+  let ss = P.stmts_of_t c.p trig in
   foldl_until (fun acc s -> if s = stmt then Left acc else Right (acc+1)) 0 ss
 
 (* get the nth member in a block. If it's not a block and we only ask for the
@@ -126,21 +134,21 @@ let block_nth exp i = match U.tag_of_expr exp with
   | _            -> raise (InvalidAst("block_nth: Not a block"))
 
 (* return the AST for a given stmt *)
-let ast_for_s_t p ast (stmt:P.stmt_id_t) (trig:P.trig_name_t) =
+let ast_for_s_t c ast (stmt:P.stmt_id_t) (trig:P.trig_name_t) =
   let trig_decl = U.trigger_of_program trig ast in
   let trig_ast = U.expr_of_code trig_decl in
-  let s_idx = stmt_idx_in_t p trig stmt in
+  let s_idx = stmt_idx_in_t c trig stmt in
   block_nth trig_ast s_idx
 
-let ast_for_s p ast (stmt:P.stmt_id_t) =
-  let trig = P.trigger_of_stmt p stmt in
-  ast_for_s_t p ast stmt trig
+let ast_for_s c ast (stmt:P.stmt_id_t) =
+  let trig = P.trigger_of_stmt c.p stmt in
+  ast_for_s_t c ast stmt trig
 
 (* return the corrective (args, stmt_id, AST) for a given stmt, map, trig *)
-let corr_ast_for_m_s p ast map stmt trig =
+let corr_ast_for_m_s c ast map stmt trig =
   (* find the specific statement in the corrective trigger that deals with our map *)
-  let map_name = P.map_name_of p map in
-  let s_with_m = P.s_and_over_stmts_in_t p P.rhs_maps_of_stmt trig in
+  let map_name = P.map_name_of c.p map in
+  let s_with_m = P.s_and_over_stmts_in_t c.p P.rhs_maps_of_stmt trig in
   let s_with_m_filter = List.filter (fun (s,m) -> m = map) s_with_m in
   (* find all the statements in the trigger dealing with our map and count them.
    * This will tell us how far to go in the corrective trigger for the map *)
@@ -151,10 +159,10 @@ let corr_ast_for_m_s p ast map stmt trig =
   let trig_decl =
     try U.trigger_of_program trig_name ast
     with Not_found -> failwith @@ "Missing corrective for "^trig_name in
-  let trig_min_stmt = list_min @@ P.stmts_of_t p trig_name in
+  let trig_min_stmt = list_min @@ P.stmts_of_t c.p trig_name in
   let trig_ast = U.expr_of_code trig_decl in
   let args = U.typed_vars_of_arg @@ U.args_of_code trig_decl in
-  let trig_args = P.args_of_t p trig in
+  let trig_args = P.args_of_t c.p trig in
   (* remove the trigger args from the list of args in the corrective trigger *)
   let args2 = ListAsSet.diff args trig_args in
   let stmt_block = block_nth trig_ast stmt_idx
@@ -190,20 +198,20 @@ type msg_t = AddVidMsg | NopMsg | DelMsg
 
 (* add vid to all map accesses. This is a complicated function that
  * has to dig through the entire AST, but it's pretty resilient *)
-let modify_map_add_vid p ast stmt =
+let modify_map_add_vid (c:config) ast stmt =
   let lmap_alias = "existing_out_tier" in
-  let lmap = P.lhs_map_of_stmt p stmt in
-  let maps_with_existing_out_tier p stmt =
-    let maps = P.map_names_ids_of_stmt p stmt in
+  let lmap = P.lhs_map_of_stmt c.p stmt in
+  let maps_with_existing_out_tier stmt =
+    let maps = P.map_names_ids_of_stmt c.p stmt in
     (lmap_alias, lmap) :: maps
   in
-  let lmap_name  = P.map_name_of p lmap in
-  let lmap_types = P.map_types_with_v_for p lmap in
-  let maps_n_id  = maps_with_existing_out_tier p stmt in
+  let lmap_name  = P.map_name_of c.p lmap in
+  let lmap_types = P.map_types_with_v_for c.p lmap in
+  let maps_n_id  = maps_with_existing_out_tier stmt in
   let map_names  = fst_many maps_n_id in
   (* names of maps with one dimension in this statement *)
   let maps_n_1d  = fst_many @@ List.filter
-    (fun (_, m) -> null @@ P.map_types_no_val_for p m) maps_n_id in
+    (fun (_, m) -> null @@ P.map_types_no_val_for c.p m) maps_n_id in
   let var_vid    = mk_var "vid" in
   (* add a vid to a tuple *)
   let modify_tuple e =
@@ -235,7 +243,7 @@ let modify_map_add_vid p ast stmt =
   in
   (* modify a direct map read, such as in a slice or a peek. col is the
    * collection, pat_m is an option pattern (for slice) *)
-  let modify_map_read p col pat_m =
+  let modify_map_read c col pat_m =
   match U.tag_of_expr col with
     | Var id ->
       let m = try List.assoc id maps_n_id (* includes existing_out_tier *)
@@ -250,7 +258,7 @@ let modify_map_add_vid p ast stmt =
         else col in
       (* get the latest vid values for this map *)
       mk_bind buf_col "__x" @@
-      map_latest_vid_vals p (mk_var "__x") pat_m m ~keep_vid:false
+      map_latest_vid_vals c (mk_var "__x") pat_m m ~keep_vid:false
 
     | _ -> raise (UnhandledModification ("Cannot handle non-var in slice"))
   in
@@ -283,7 +291,7 @@ let modify_map_add_vid p ast stmt =
         pat in
       let pat_m = if has_bound then Some pat else None
       in
-      NopMsg, modify_map_read p col pat_m
+      NopMsg, modify_map_read c col pat_m
 
     | Iterate ->
       let (lambda, col) = U.decompose_iterate e in
@@ -342,7 +350,7 @@ let modify_map_add_vid p ast stmt =
       | Var name when List.mem name maps_n_1d ->
           (* we use the same function as Seek, except we don't supply a pattern
           * (no bound vars) *)
-          NopMsg, mk_peek @@ modify_map_read p col None
+          NopMsg, mk_peek @@ modify_map_read c col None
       | _ -> NopMsg, e
       end
 
@@ -351,12 +359,12 @@ let modify_map_add_vid p ast stmt =
 
 (* this delta extraction is very brittle, since it's tailored to the way the M3
  * to K3 calculations are written. *)
-let delta_action p ast stmt m_target_trigger ~corrective =
-  let lmap = P.lhs_map_of_stmt p stmt in
-  let lmap_types = P.map_types_with_v_for p lmap in
+let delta_action c ast stmt m_target_trigger ~corrective =
+  let lmap = P.lhs_map_of_stmt c.p stmt in
+  let lmap_types = P.map_types_with_v_for c.p lmap in
   let lmap_type = wrap_t_of_map @@ wrap_ttuple lmap_types in
   (* we need to know how the map is accessed in the statement. *)
-  let lmap_bindings = P.find_lmap_bindings_in_stmt p stmt lmap in
+  let lmap_bindings = P.find_lmap_bindings_in_stmt c.p stmt lmap in
   let lmap_bind_ids_v = P.map_ids_add_v @@ fst_many lmap_bindings
   in
   (* let existing_out_tier = ..., which we remove *)
@@ -386,10 +394,10 @@ let delta_action p ast stmt m_target_trigger ~corrective =
           [ (* we add the delta to all following vids,
               * and we send it for correctives *)
             mk_apply
-            (mk_var @@ add_delta_to_map p lmap) @@
+            (mk_var @@ add_delta_to_map c lmap) @@
               (* create a single tuple to send *)
               mk_tuple @@
-                (mk_var @@ P.map_name_of p lmap)::
+                (mk_var @@ P.map_name_of c.p lmap)::
                 mk_cbool (if corrective then true else false)::full_vars]
             @
             (* do we need to send to another trigger *)
@@ -453,9 +461,9 @@ let delta_action p ast stmt m_target_trigger ~corrective =
     mk_block @@
       (* add delta values to all following vids *)
       [mk_apply
-        (mk_var @@ add_delta_to_map p lmap) @@
+        (mk_var @@ add_delta_to_map c lmap) @@
         mk_tuple @@
-          (mk_var @@ P.map_name_of p lmap)::
+          (mk_var @@ P.map_name_of c.p lmap)::
             mk_cbool (if corrective then true else false)::
             [mk_var "vid"; mk_var delta_v_name]]
       @
@@ -479,14 +487,14 @@ let rename_var old_var_name new_var_name ast =
     | _ -> e
 
 (* return a modified version of the original ast for stmt s *)
-let modify_ast_for_s p ast stmt trig send_to_trig =
-  let ast = ast_for_s_t p ast stmt trig in
-  let ast = modify_map_add_vid p ast stmt in
-  let ast = delta_action p ast stmt send_to_trig ~corrective:false in
+let modify_ast_for_s (c:config) ast stmt trig send_to_trig =
+  let ast = ast_for_s_t c ast stmt trig in
+  let ast = modify_map_add_vid c ast stmt in
+  let ast = delta_action c ast stmt send_to_trig ~corrective:false in
   ast
 
 (* return a modified version of the corrective update *)
-let modify_corr_ast p ast map stmt trig send_to_trig =
-  let args, corr_stmt, ast = corr_ast_for_m_s p ast map stmt trig in
-  let ast = modify_map_add_vid p ast stmt in
-  args, delta_action p ast corr_stmt send_to_trig ~corrective:true
+let modify_corr_ast c ast map stmt trig send_to_trig =
+  let args, corr_stmt, ast = corr_ast_for_m_s c ast map stmt trig in
+  let ast = modify_map_add_vid c ast stmt in
+  args, delta_action c ast corr_stmt send_to_trig ~corrective:true
