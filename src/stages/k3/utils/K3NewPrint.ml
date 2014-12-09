@@ -85,7 +85,7 @@ let add_record_ids ?prefix l =
   | [x]   -> ["i", x]
   | [x;y] -> ["key", x; "value", y] (* to make gbaggs easy *)
   | _     ->
-    let i_l = insert_index_fst 1 l in
+    let i_l = insert_index_fst ~first:1 l in
     List.map (fun (i, x) -> record_id_of_num ?prefix i, x) i_l
 
 (* Add record ids to a string *)

@@ -202,11 +202,11 @@ let create_range ?(step=1) first length =
 (* make a range that corresponds to a given list *)
 let create_corr_range first xs = create_range first @: List.length xs
 
-let insert_index_fst first xs =
+let insert_index_fst ?(first=0) xs =
     let is = create_corr_range first xs in
     list_zip is xs
 
-let insert_index_snd first xs =
+let insert_index_snd ?(first=0) xs =
     let is = create_corr_range first xs in
     list_zip xs is
 

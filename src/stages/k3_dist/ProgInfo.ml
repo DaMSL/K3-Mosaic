@@ -296,7 +296,7 @@ let var_list_from_bound (p:prog_data_t) (stmt_id:stmt_id_t) (map_id:map_id_t) =
     find_map_bindings_in_stmt p stmt_id map_id in
   let trig_args = args_of_t p @: trigger_of_stmt p stmt_id in
   let map_types = map_types_for p map_id in
-  let idx_types = insert_index_fst 0 map_types in
+  let idx_types = insert_index_fst map_types in
   List.map
     (fun (i,typ) -> try
         (* Look for var name with this binding, then check it's part of trig

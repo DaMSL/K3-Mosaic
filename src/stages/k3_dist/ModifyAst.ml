@@ -41,7 +41,7 @@ let get_map_access_patterns ast : IndexSet.t StrMap.t =
       match U.tag_of_expr n with
       | Slice  ->
           let col, pat = U.decompose_slice n in
-          let pat = U.unwrap_tuple pat |> insert_index_fst 0
+          let pat = U.unwrap_tuple pat |> insert_index_fst
                  |> List.filter (fun (_,x) -> U.tag_of_expr x <> Const CUnknown)
                  |> fst_many |> IntSet.of_list
           in
@@ -152,7 +152,7 @@ let corr_ast_for_m_s c ast map stmt trig =
   let s_with_m_filter = List.filter (fun (s,m) -> m = map) s_with_m in
   (* find all the statements in the trigger dealing with our map and count them.
    * This will tell us how far to go in the corrective trigger for the map *)
-  let s_i = insert_index_snd 0 @@ fst_many s_with_m_filter in
+  let s_i = insert_index_snd @@ fst_many s_with_m_filter in
   let stmt_idx = List.assoc stmt s_i in
 
   let trig_name = "correct_"^map_name^"_for_"^trig in

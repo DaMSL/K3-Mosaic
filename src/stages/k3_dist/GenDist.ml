@@ -1227,8 +1227,8 @@ let emit_frontier_fns c =
 (* Assumes vid is first *)
 let map_indices_add_vid idxs =
   let map_idx_add_vid = function
-    | HashIdx s -> OrdIdx ((List.map ((+) 1) @@ IntSet.elements s) @ [0])
-    | OrdIdx l  -> OrdIdx ((List.map ((+) 1) l) @ [0])
+    | HashIdx s -> OrdIdx ((List.map ((+) 1) @@ IntSet.elements s) @ [vid_idx])
+    | OrdIdx l  -> OrdIdx ((List.map ((+) 1) l) @ [vid_idx])
   in
   let add_vid_all_idxs is =
     IndexSet.fold (fun x acc -> IndexSet.add (map_idx_add_vid x) acc) is IndexSet.empty

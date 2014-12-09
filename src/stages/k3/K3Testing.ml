@@ -189,7 +189,7 @@ let test_program globals_k3 interpret_fn file_name test =
   (*Printf.printf "Unified environment:\n";*)
   (*print_endline @: K3Values.string_of_env ~skip_functions:false v_env;*)
 
-  let numbered_tests = insert_index_fst 1 tests in
+  let numbered_tests = insert_index_fst ~first:1 tests in
   let prog_globals = K3Global.add_globals_k3 globals_k3 program in
   (* get the type bindings from the typechecker so we have an environment for
    * typechecking *)

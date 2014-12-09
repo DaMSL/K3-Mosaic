@@ -20,6 +20,9 @@ type config = {
   enable_gc : bool;
 }
 
+(* location of vid in tuples *)
+let vid_idx = 0
+
 (*
 (* add an index to the config structure and update it *)
 let add_index id (idx_set_kind_l:(IntSet.t * index_kind) list) (c:config) =
@@ -197,43 +200,63 @@ let frontier_name c map_id =
   "frontier_"^String.concat "_" @:
     List.map K3PrintSyntax.string_of_value_type m_t
 
+let get_idx idx map_id =
+  try IntMap.find map_id idx
+  with Not_found -> failwith @@ "Failed to find index for map "^soi map_id
+
 (* Get the latest vals up to a certain vid
  * - This is needed both for sending a push, and for modifying a local slice
  * operation
  * - slice_col is the k3 expression representing the collection.
- * - m_pat is an optional pattern for slicing the data first
- *   It doesn't include a vid
  * - assumes a local 'vid' variable containing the border of the frontier
+ * - pat assumes NO VID
  * - keep_vid indicates whether we need to remove the vid from the result collection
  *   (we usually need it removed only for modifying ast *)
-let map_latest_vid_vals c slice_col m_pat map_id ~keep_vid =
+let map_latest_vid_vals c slice_col m_pat map_id ~keep_vid : expr_t =
   let m_id_t_v = P.map_ids_types_with_v_for ~vid:"map_vid" c.p map_id in
-  (* create a function name per type signature *)
-  let access_k3 = match m_pat with
-    | Some pat ->
-        (* slice with an unknown for the vid so we only get the effect of
-        * any bound variables *)
-        mk_slice slice_col @:
-          mk_tuple @: P.map_add_v mk_cunknown pat
-    | None     -> slice_col
-  in
-  let simple_app =
-    mk_apply (mk_var @: frontier_name c map_id) @:
-      mk_tuple [mk_var "vid"; access_k3]
-  in
-  if keep_vid then simple_app
-  else
-    (* remove the vid from the collection *)
-    mk_map
-      (mk_lambda
-        (wrap_args m_id_t_v) @:
+  (* function to remove the vid from the collection *)
+  let remove_vid_if_needed = if keep_vid then id_fn else
+      mk_map (mk_lambda (wrap_args m_id_t_v) @:
         mk_tuple @: list_drop 1 @: ids_to_vars @: fst_many m_id_t_v)
-      simple_app
+  in
+  let pat = match m_pat with
+    | Some pat -> pat
+    | None     -> List.map (const mk_cunknown) @@ P.map_types_for c.p map_id
+  in
+  if c.use_multiindex then
+    (* create the corresponding index for the pattern *)
+    let idx  = fst_many @@
+      List.filter (fun (_,x) -> U.tag_of_expr x <> Const(CUnknown)) @@
+      insert_index_fst @@ P.map_add_v mk_cunknown pat
+    in
+    let idx = idx @ [vid_idx] in (* vid is always matched last in the index *)
+    remove_vid_if_needed @@
+      (* filter out anything that doesn't have the same parameters *)
+      (* TODO: implement this at the C++ level for efficiency *)
+      mk_slice
+        (mk_tuple @@ P.map_add_v mk_cunknown pat)
+        (mk_slice_idx idx ~ordered:true ~comp:LT slice_col @@
+          mk_tuple @@ mk_var "vid"::pat)
+
+  else (* no multiindex *)
+    (* create a function name per type signature *)
+    let access_k3 =
+      (* slice with an unknown for the vid so we only get the effect of
+      * any bound variables *)
+      mk_slice slice_col @:
+        mk_tuple @: P.map_add_v mk_cunknown pat
+    in
+    let simple_app =
+      mk_apply (mk_var @: frontier_name c map_id) @:
+        mk_tuple [mk_var "vid"; access_k3]
+    in
+    if keep_vid then simple_app else remove_vid_if_needed simple_app
 
 (* Create a function for getting the latest vals up to a certain vid *)
 (* This is needed both for sending a push, and for modifying a local slice
  * operation *)
 (* Returns the type pattern for the function, and the function itself *)
+(* NOTE: this is only necessary when not using multiindexes *)
 let frontier_fn c map_id =
   let max_vid = "max_vid" in
   let map_vid = "map_vid" in

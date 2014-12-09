@@ -111,10 +111,10 @@ val create_range : ?step:int -> int -> int -> int list
 val create_corr_range : int -> 'a list -> int list
 
 (* insert an index for each member of a list *)
-val insert_index_fst : int -> 'a list -> (int * 'a) list
+val insert_index_fst : ?first:int -> 'a list -> (int * 'a) list
 
 (* insert an index for each member of a list, in snd place *)
-val insert_index_snd : int -> 'a list -> ('a * int) list
+val insert_index_snd : ?first:int -> 'a list -> ('a * int) list
 
 (* tail recursive, so more efficient than mapping alone *)
 val list_map : ('a -> 'b) -> 'a list -> 'b list

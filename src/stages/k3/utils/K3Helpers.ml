@@ -303,13 +303,13 @@ let mk_slice' collection pattern = mk_slice collection @: mk_tuple pattern
 
 (* l_idx is the list of indices to use, made of ocaml ints *)
 (* l_comp is the pattern of gt, le, eq expressed as values of 1, -1, 0 *)
-let mk_slice_idx idxs ~ordered ~comp col pat =
-  let idx' = if ordered then OrdIdx idxs
-             else HashIdx (IntSet.of_list idxs) in
+let mk_slice_idx idx ~ordered ~comp col pat =
+  let idx' = if ordered then OrdIdx idx
+             else HashIdx (IntSet.of_list idx) in
   mk_slice_gen (SliceIdx(idx', comp)) col pat
 
-let mk_slice_idx' idxs ~ordered ~comp col pat =
-  mk_slice_idx idxs ~comp ~ordered col @: mk_tuple pat
+let mk_slice_idx' idx ~ordered ~comp col pat =
+  mk_slice_idx idx ~comp ~ordered col @: mk_tuple pat
 
 let mk_insert col x = mk_stree (Insert col) [x]
 

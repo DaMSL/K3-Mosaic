@@ -462,7 +462,7 @@ let print_k3_test_program = function
 
 (* Top-level print handler *)
 let print params inputs =
-  let idx_inputs = insert_index_fst 0 inputs in
+  let idx_inputs = insert_index_fst inputs in
   let sofp = string_of_program ~verbose:cmd_line_params.verbose ~print_id:true in
   let print_fn = match params.out_lang with
     | AstK3 | AstK3Dist   -> print_k3_program (sofp |- fst) |- snd
