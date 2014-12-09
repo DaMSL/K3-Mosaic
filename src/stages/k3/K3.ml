@@ -23,10 +23,11 @@ type index_t = HashIdx of IntSet.t
              | OrdIdx of int list * IntSet.t
 
 let index_t_cmp x y = match x, y with
-  | HashIdx s, HashIdx s' -> IntSet.compare s s'
-  | OrdIdx(l, e),  OrdIdx(l', e') -> (match compare l l' with 0 -> IntSet.compare e e' | c -> c)
-  | OrdIdx _, HashIdx _   -> -1
-  | HashIdx _, OrdIdx _   -> 1
+  | HashIdx s, HashIdx s'         -> IntSet.compare s s'
+  (* we deliberately ignore the equality set, which is extra info *)
+  | OrdIdx(l, e),  OrdIdx(l', e') -> compare l l'
+  | OrdIdx _, HashIdx _           -> -1
+  | HashIdx _, OrdIdx _           -> 1
 
 module IndexSet = Set.Make(struct type t = index_t let compare = index_t_cmp end)
 module IndexMap = Map.Make(struct type t = index_t let compare = index_t_cmp end)

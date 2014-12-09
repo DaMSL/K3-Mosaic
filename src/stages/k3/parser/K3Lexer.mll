@@ -93,12 +93,16 @@ rule tokenize = parse
     | "|}" { RBRACEBAR }
     | '['  { LBRACKET }
     | ']'  { RBRACKET }
+    | "[|"  { LBRACKETBAR }
+    | "|]"  { RBRACKETBAR }
+    | '|'  { BAR }
 
     | '-' { NEG }
     | '+' { PLUS }
     | '*' { TIMES }
     | '/' { DIVIDE }
     | '%' { MODULO }
+    | '#' { HASH }
 
     | '&' { AND }
     | '|' { OR }

@@ -78,6 +78,22 @@ let lazy_annos c = function
   | [] -> []
   | annos -> lps "@ " <| lazy_brace @@ lps_list ~sep:"; " NoCut (lazy_anno c) annos
 
+let string_of_int_set s  = String.concat ", " @@ IntSet.fold (fun x acc -> soi x::acc) s []
+let string_of_int_list s = String.concat ", " @@ List.fold_right (fun x acc -> soi x::acc) s []
+
+let lazy_keyset  s = lazy_bracket @@ lps @@ string_of_int_set s
+let lazy_keylist s = lazy_bracket @@ lps @@ string_of_int_list s
+
+let lazy_index = function
+  | HashIdx s    -> lps "#" <| lazy_keyset s
+  | OrdIdx(l, s) ->
+      let eq_set = if IntSet.is_empty s then []
+                   else lps "," <| lsp () <| lazy_keyset s
+      in
+      lazy_keylist l <| eq_set
+
+let lazy_indices xs = IndexSet.fold (fun x acc -> acc <| lazy_index x) xs []
+
 let rec lazy_base_type c ~in_col ?(no_paren=false) t =
   let proc () = match t with
   | TUnit       -> lps "unit"
@@ -102,6 +118,9 @@ let rec lazy_base_type c ~in_col ?(no_paren=false) t =
       lps "[" <| lazy_value_type c ~in_col:true ~no_paren:true vt <| lps "]"
   | TCollection(TMap, vt) ->
       lps "[|" <| lazy_value_type c ~in_col:true ~no_paren:true vt <| lps "|]"
+  | TCollection(TMultimap idxs, vt) ->
+      lps "[|" <| lazy_value_type c ~in_col:true ~no_paren:true vt <| lsp () <|
+      lps "|"  <| lazy_indices idxs <| lps "|]"
   | TAddress -> lps "address" (* ? *)
   | TTarget bt -> lps "target" <| lazy_base_type c ~in_col bt
   | TUnknown -> lps "unknown"

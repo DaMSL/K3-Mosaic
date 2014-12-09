@@ -108,9 +108,9 @@
 
 %token LPAREN RPAREN COMMA SEMICOLON PERIOD
 
-%token LBRACE RBRACE LBRACEBAR RBRACEBAR LBRACKET RBRACKET
+%token LBRACE RBRACE LBRACEBAR RBRACEBAR LBRACKET RBRACKET LBRACKETBAR RBRACKETBAR BAR
 
-%token NEG PLUS MINUS TIMES DIVIDE MODULO
+%token NEG PLUS MINUS TIMES DIVIDE MODULO HASH
 
 %token CONCAT
 
@@ -416,6 +416,22 @@ collection_type :
     | LBRACE contained_value_type_expr RBRACE { TCollection(TSet, $2) }
     | LBRACEBAR contained_value_type_expr RBRACEBAR { TCollection(TBag, $2) }
     | LBRACKET contained_value_type_expr RBRACKET { TCollection(TList, $2) }
+    | LBRACKETBAR contained_value_type_expr BAR indices RBRACKETBAR { TCollection(TMultimap $4, $2) }
+;
+
+indices :
+    | index BAR indices { IndexSet.add $1 $3 }
+    | index             { IndexSet.singleton $1 }
+
+index :
+    | HASH LBRACKET key_list RBRACKET                              { HashIdx (IntSet.of_list $3) }
+    | LBRACKET key_list RBRACKET                                   { OrdIdx($2, IntSet.empty) }
+    | LBRACKET key_list RBRACKET COMMA LBRACKET key_list RBRACKET  { OrdIdx($2, IntSet.of_list $6) }
+;
+
+key_list :
+    | INTEGER COMMA key_list { $1::$3 }
+    | INTEGER                { [$1] }
 ;
 
 /* Expressions */
@@ -630,9 +646,15 @@ tuple_index :
     | expr PERIOD LBRACKET INTEGER RBRACKET { mkexpr (Subscript $4) [$1] }
 
 access :
+    | expr LBRACKET tuple access_comp index RBRACKET { mkexpr (SliceIdx($5, $4)) [$1; $3] }
     | expr LBRACKET tuple RBRACKET { mkexpr Slice [$1; $3] }
     | PEEK LPAREN expr RPAREN { mkexpr Peek [$3] }
 ;
+
+access_comp :
+    | BAR GT { GT }
+    | BAR LT { LT }
+    | BAR    { EQ }
 
 mutation :
     /* Inserts, deletes and sends use a vararg function syntax for their value/payload */
