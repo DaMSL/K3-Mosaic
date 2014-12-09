@@ -177,6 +177,7 @@ type parameters = {
     mutable k3new_data_file : string;
     mutable k3new_folds : bool;   (* output fold instead of map/ext *)
     mutable load_path : string;    (* path for the interpreter to load csv files from *)
+    mutable use_multiindex : bool; (* whether to generate code that uses multiindex maps *)
   }
 
 let default_cmd_line_params () = {
@@ -202,6 +203,7 @@ let default_cmd_line_params () = {
     k3new_data_file   = "default.k3";
     k3new_folds       = false;
     load_path         = "";
+    use_multiindex    = true;
   }
 
 let cmd_line_params = default_cmd_line_params ()
@@ -312,9 +314,9 @@ let interpret_k3 params prog = let p = params in
     let interp = init_k3_interpreter tp ~run_length:p.run_length
                                         ~peers:p.peers
                                         ~shuffle_tasks:p.shuffle_tasks
-                                        ~queue_type:p.queue_type 
+                                        ~queue_type:p.queue_type
                                         ~load_path:p.load_path
-    in 
+    in
     snd @: interpret_k3_program interp
   with RuntimeError (uuid,str) -> handle_interpret_error (K3Data tp) (uuid,str)
 
@@ -485,10 +487,10 @@ let test params inputs =
     | x -> error @: "testing not yet implemented for "^string_of_data x
   in List.iter2 test_fn params.input_files inputs
 
-let transform_to_k3_dist force_correctives partmap p proginfo =
-  (* do not use. Simply for type checking original program *)
-  (*tp = typed_program p in *)
-  GenDist.gen_dist ~force_correctives proginfo partmap p
+let transform_to_k3_dist params p proginfo =
+  let force_correctives = params.force_correctives in
+  let use_multiindex = params.use_multiindex in
+  GenDist.gen_dist ~force_correctives ~use_multiindex proginfo params.partition_map p
 
 let process_inputs params =
   let proc_fn f = match params.in_lang, !(params.action) with
@@ -508,8 +510,7 @@ let process_inputs params =
 let transform params ds =
   let proc_fn input = match params.out_lang, input with
    | (AstK3Dist | K3Dist | K3DistTest), K3DistData(p, proginfo, _) ->
-       let p' = transform_to_k3_dist
-                  params.force_correctives params.partition_map p proginfo in
+       let p' = transform_to_k3_dist params p proginfo in
        K3DistData(p', proginfo, p)
    | (AstK3Dist | K3Dist | K3DistTest), _ ->
        failwith "Missing metadata for distributed version"
@@ -596,6 +597,8 @@ let param_specs = Arg.align
       "file     Specify a k3new data file";
   "--k3new_folds", Arg.Unit (fun () -> cmd_line_params.k3new_folds <- true),
       "         For k3new: output folds instead of ext and map";
+  "--nomidx", Arg.Unit (fun () -> cmd_line_params.use_multiindex <- false),
+      "         Don't use multiindex maps";
 
   (* Debugging parameters *)
 
