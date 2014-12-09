@@ -229,14 +229,12 @@ let map_latest_vid_vals c slice_col m_pat map_id ~keep_vid : expr_t =
       List.filter (fun (_,x) -> U.tag_of_expr x <> Const(CUnknown)) @@
       insert_index_fst @@ P.map_add_v mk_cunknown pat
     in
-    let idx = idx @ [vid_idx] in (* vid is always matched last in the index *)
+    let idx' = idx @ [vid_idx] in (* vid is always matched last in the index *)
     remove_vid_if_needed @@
       (* filter out anything that doesn't have the same parameters *)
-      (* TODO: implement this at the C++ level for efficiency *)
-      mk_slice
-        (mk_tuple @@ P.map_add_v mk_cunknown pat)
-        (mk_slice_idx idx ~ordered:true ~comp:LT slice_col @@
-          mk_tuple @@ mk_var "vid"::pat)
+      (* the multimap layer implements extra eq key filtering *)
+      (mk_slice_idx idx' ~eqset:(Some idx) ~comp:LT slice_col @@
+        mk_tuple @@ mk_var "vid"::pat)
 
   else (* no multiindex *)
     (* create a function name per type signature *)

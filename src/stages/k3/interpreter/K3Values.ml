@@ -35,8 +35,8 @@ module rec OrderedKey : ICommon.OrderedKeyType = struct
     let filter_idxs idxs = function
       | Value.VTuple l ->
           begin match idxs with
-          | HashIdx s -> Value.VTuple(list_filter_idxs_by_set s l)
-          | OrdIdx il -> Value.VTuple(list_filter_idxs_by_list il l)
+          | HashIdx s    -> Value.VTuple(list_filter_idxs_by_set s l)
+          | OrdIdx(il,_) -> Value.VTuple(list_filter_idxs_by_list il l)
           end
       | _ -> invalid_arg "not a vtuple"
     end

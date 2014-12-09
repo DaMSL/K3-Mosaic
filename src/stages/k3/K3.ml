@@ -20,11 +20,11 @@ type comp_t = LT | EQ | GT
 
 (* multimap index *)
 type index_t = HashIdx of IntSet.t
-             | OrdIdx of int list
+             | OrdIdx of int list * IntSet.t
 
 let index_t_cmp x y = match x, y with
   | HashIdx s, HashIdx s' -> IntSet.compare s s'
-  | OrdIdx l,  OrdIdx l'  -> compare l l'
+  | OrdIdx(l, e),  OrdIdx(l', e') -> (match compare l l' with 0 -> IntSet.compare e e' | c -> c)
   | OrdIdx _, HashIdx _   -> -1
   | HashIdx _, OrdIdx _   -> 1
 

@@ -75,22 +75,34 @@ module Make(OrdKey: ICommon.OrderedKeyType) = struct
       with Not_found -> map
     ) mm
 
-  let slice (idx_id:index_t) comp (xs:elt) (mm:t) : InnerBag.t =
+  (* @eqset: set of key members that need to remain equal even in LT/GT *)
+  let slice (idx:index_t) comp (xs:elt) (mm:t) : InnerBag.t =
     let error x = failwith @@ "(slice):"^x in
     try
-      let mmap = IndexMap.find idx_id mm in
-      let key = OrdKey.filter_idxs idx_id xs in
+      let mmap = IndexMap.find idx mm in
+      let key  = OrdKey.filter_idxs idx xs in
       let find_fn = match comp with
         | GT -> MMap.find_gt
         | EQ -> MMap.find
         | LT -> MMap.find_lt
       in
-      begin
-        try find_fn key mmap
-        with Not_found -> InnerBag.empty
-      end
-    with
-      Not_found -> error "no corresponding index found"
+      begin try
+        begin match idx with
+          | OrdIdx(_,eq_set) when not (IntSet.is_empty eq_set) ->
+              let eq_set = HashIdx(eq_set) in
+              let eq_key = OrdKey.filter_idxs eq_set xs in
+              let res = find_fn key mmap in
+              (* check that the equality constraint holds *)
+              begin match InnerBag.peek res with
+              | None   -> res
+              | Some x ->
+                  let eq_key2 = OrdKey.filter_idxs eq_set x in
+                  if OrdKey.compare eq_key eq_key2 = 0 then res
+                  else InnerBag.empty
+              end
+          | _ -> find_fn key mmap end
+      with Not_found -> InnerBag.empty end
+    with Not_found -> error "no corresponding index found"
 
   let combine l r =
     IndexMap.merge (fun idx lmap rmap ->

@@ -28,7 +28,8 @@ type comp_t = LT | EQ | GT
 
 (* multimap index *)
 type index_t = HashIdx of IntSet.t
-             | OrdIdx of int list
+              (* 2: set of eq keys *)
+             | OrdIdx of int list * IntSet.t
 
 val index_t_cmp : index_t -> index_t -> int
 

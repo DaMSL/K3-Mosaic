@@ -1224,11 +1224,11 @@ let emit_frontier_fns c =
   List.map (frontier_fn c) fns
 
 (* Convert map indices from non-vid versions to be ordered and handle vid *)
-(* Assumes vid is first *)
+(* vid is always the last thing to be matched on *)
 let map_indices_add_vid idxs =
   let map_idx_add_vid = function
-    | HashIdx s -> OrdIdx ((List.map ((+) 1) @@ IntSet.elements s) @ [vid_idx])
-    | OrdIdx l  -> OrdIdx ((List.map ((+) 1) l) @ [vid_idx])
+    | HashIdx s    -> OrdIdx ((List.map ((+) 1) @@ IntSet.elements s) @ [vid_idx], s)
+    | OrdIdx(l,eq) -> OrdIdx ((List.map ((+) 1) l) @ [vid_idx], eq)
   in
   let add_vid_all_idxs is =
     IndexSet.fold (fun x acc -> IndexSet.add (map_idx_add_vid x) acc) is IndexSet.empty
