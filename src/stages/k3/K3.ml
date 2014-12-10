@@ -29,6 +29,10 @@ let index_t_cmp x y = match x, y with
   | OrdIdx _, HashIdx _           -> -1
   | HashIdx _, OrdIdx _           -> 1
 
+let filter_by_index_t idx l = match idx with
+  | HashIdx s    -> list_filter_idxs_by_set s l
+  | OrdIdx(il,_) -> list_filter_idxs_by_list il l
+
 module IndexSet = Set.Make(struct type t = index_t let compare = index_t_cmp end)
 module IndexMap = Map.Make(struct type t = index_t let compare = index_t_cmp end)
 

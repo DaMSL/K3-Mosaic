@@ -92,7 +92,15 @@ let lazy_index = function
       in
       lazy_keylist l <| eq_set
 
-let lazy_indices xs = IndexSet.fold (fun x acc -> acc <| lazy_index x) xs []
+let lazy_indices xs = List.flatten @@ List.map lazy_index @@ IndexSet.elements xs
+
+let lazy_collection _ ct eval = match ct with
+    | TSet  -> lps "{" <| eval <| lps "}"
+    | TBag  -> lps "{|" <| eval <| lps "|}"
+    | TList -> lps "[" <| eval <| lps "]"
+    | TMap  -> lps "[|" <| eval <| lps "|]"
+    | TMultimap idxs ->
+        lps "[|" <| eval <| lsp () <| lps "|"  <| lazy_indices idxs <| lps "|]"
 
 let rec lazy_base_type c ~in_col ?(no_paren=false) t =
   let proc () = match t with
@@ -110,17 +118,7 @@ let rec lazy_base_type c ~in_col ?(no_paren=false) t =
       let inner () = lps_list NoCut (lazy_value_type c ~in_col) vts in
       if not c.verbose_types && no_paren then inner ()
       else lps "(" <| inner () <| lps ")"
-  | TCollection(TSet, vt) ->
-      lps "{" <| lazy_value_type c ~in_col:true ~no_paren:true vt <| lps "}"
-  | TCollection(TBag, vt) ->
-      lps "{|" <| lazy_value_type c ~in_col:true ~no_paren:true vt <| lps "|}"
-  | TCollection(TList, vt) ->
-      lps "[" <| lazy_value_type c ~in_col:true ~no_paren:true vt <| lps "]"
-  | TCollection(TMap, vt) ->
-      lps "[|" <| lazy_value_type c ~in_col:true ~no_paren:true vt <| lps "|]"
-  | TCollection(TMultimap idxs, vt) ->
-      lps "[|" <| lazy_value_type c ~in_col:true ~no_paren:true vt <| lsp () <|
-      lps "|"  <| lazy_indices idxs <| lps "|]"
+  | TCollection(ct, vt) -> lazy_collection c ct (lazy_value_type c ~in_col:true ~no_paren:true vt)
   | TAddress -> lps "address" (* ? *)
   | TTarget bt -> lps "target" <| lazy_base_type c ~in_col bt
   | TUnknown -> lps "unknown"
@@ -173,12 +171,6 @@ let lazy_const c = function
   | CAddress(s, i) -> lps @@ s^":"^string_of_int i
   | CTarget(id)    -> lps id
 
-let lazy_collection c ct eval = match ct with
-    | TSet  -> lps "{" <| eval <| lps "}"
-    | TBag  -> lps "{|" <| eval <| lps "|}"
-    | TList -> lps "[" <| eval <| lps "]"
-    | TMap  -> lps "[|" <| eval <| lps "|]"
-
 let lazy_collection_vt c vt eval = match vt with
   | TIsolated(TMutable(TCollection(ct, _),_))
   | TIsolated(TImmutable(TCollection(ct, _),_))
@@ -186,6 +178,9 @@ let lazy_collection_vt c vt eval = match vt with
   | TContained(TImmutable(TCollection(ct, _),_)) -> lazy_collection c ct eval
   | _ -> error @@ K3Printing.string_of_value_type vt (* type error *)
 
+let wrap_if_var e = match U.tag_of_expr e with
+  | Var _ -> id_fn
+  | _     -> lazy_paren
 
 let rec lazy_expr c expr =
   let expr_pair ?(sep=lps "," <| lsp ()) ?(wl=id_fn) ?(wr=id_fn) (e1, e2) =
@@ -381,11 +376,11 @@ let rec lazy_expr c expr =
   | Peek -> let col = U.decompose_peek expr in
     lps "peek" <| lazy_paren @@ lazy_expr c col
   | Slice -> let col, pat = U.decompose_slice expr in
-    let wrap = begin match U.tag_of_expr col with
-      | Var _ -> id_fn
-      | _     -> lazy_paren
-    end in
-    wrap(lazy_expr c col) <| lazy_bracket @@ tuple_no_paren c pat
+    wrap_if_var col (lazy_expr c col) <| lazy_bracket @@ tuple_no_paren c pat
+  | SliceIdx(idx, comp) -> let col, pat = U.decompose_sliceidx expr in
+    let comp_s = match comp with GT -> lps ">" | LT -> lps "<" | EQ -> [] in
+    wrap_if_var col (lazy_expr c col) <|
+    lazy_bracket (tuple_no_paren c pat <| lps "|" <| comp_s <| lazy_index idx)
   | Insert _ -> let l, r = U.decompose_insert expr in
     lps "insert" <| lazy_paren
       (lps l <| lps " ," <| lsp () <| lazy_expr c r)

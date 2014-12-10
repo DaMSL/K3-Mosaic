@@ -51,6 +51,8 @@ let first3  f (x,y,z) = f x, y, z
 let second3 f (x,y,z) = x, f y, z
 let third3  f (x,y,z) = x, y, f z
 
+let singleton x = [x]
+
 (* take the first x elements of a list *)
 let list_take len li =
   let rec take len2 li2 acc_list =
@@ -281,7 +283,7 @@ let list_intersperse la lb =
     | [], []       -> acc
   in List.rev @: loop [] la lb
 
-let list_intersperse_val v = function
+let list_intercalate v = function
   | [] -> []
   | l  -> let rec loop acc = function
             | x::xs -> loop (x::v::acc) xs
@@ -489,7 +491,7 @@ let hashtbl_replace hash key replace_fn =
   Hashtbl.replace hash key (replace_fn old)
 
 let hashtbl_combine h h' combine_fn =
-  Hashtbl.iter (fun k v' -> 
+  Hashtbl.iter (fun k v' ->
     try
       let v = Hashtbl.find h k in
       Hashtbl.replace h k @@ combine_fn v v'

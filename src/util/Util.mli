@@ -45,6 +45,8 @@ val first3  : ('a -> 'd) -> 'a * 'b * 'c -> 'd * 'b * 'c
 val second3 : ('b -> 'd) -> 'a * 'b * 'c -> 'a * 'd * 'c
 val third3  : ('c -> 'd) -> 'a * 'b * 'c -> 'a * 'b * 'd
 
+val singleton : 'a -> 'a list
+
 (* take the first x values of a list *)
 val list_take : int -> 'a list -> 'a list
 
@@ -148,7 +150,7 @@ val list_bunch : int -> 'a list -> 'a list list
 val list_intersperse : 'a list -> 'a list -> 'a list
 
 (* intersperse a list with a value, like String.concat *)
-val list_intersperse_val : 'a -> 'a list -> 'a list
+val list_intercalate : 'a -> 'a list -> 'a list
 
 (* functions without exceptions *)
 val list_find : ('a -> bool) -> 'a list -> 'a option

@@ -32,12 +32,8 @@ module rec OrderedKey : ICommon.OrderedKeyType = struct
     type t = Value.value_t
     let compare a b = ValueComp.compare_v a b
     let hash a = ValueComp.hash a
-    let filter_idxs idxs = function
-      | Value.VTuple l ->
-          begin match idxs with
-          | HashIdx s    -> Value.VTuple(list_filter_idxs_by_set s l)
-          | OrdIdx(il,_) -> Value.VTuple(list_filter_idxs_by_list il l)
-          end
+    let filter_idxs idx = function
+      | Value.VTuple l -> Value.VTuple(filter_by_index_t idx l)
       | _ -> invalid_arg "not a vtuple"
     end
 

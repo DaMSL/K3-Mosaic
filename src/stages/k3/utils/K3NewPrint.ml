@@ -94,11 +94,27 @@ let concat_record_str ?(sep=":") l =
 
 let error () = lps "???"
 
-let s_of_col_type = function
-  | TSet  -> "Set"
-  | TBag  -> "Collection"
-  | TList -> "Seq"
-  | TMap  -> "Map"
+let lazy_bracket_list f l = lazy_bracket (lps_list NoCut f l)
+
+let lazy_index idx =
+  lps "Index" <| lazy_paren (
+    match idx with
+    | HashIdx s    -> lps "hashkey=" <| lazy_bracket_list (lps |- soi) (IntSet.elements s)
+    | OrdIdx(l, s) ->
+        let eq_set = if IntSet.is_empty s then []
+                    else lps "," <| lsp () <| lps "eq=" <|
+                          lazy_bracket_list (lps |- soi) (IntSet.elements s)
+        in
+        lps "key=" <| lazy_bracket_list (lps |- soi) l <| eq_set)
+
+let lazy_indices is = List.flatten @@ List.map lazy_index @@ IndexSet.elements is
+
+let lazy_col = function
+  | TSet        -> lps "{ Set }"
+  | TBag        -> lps "{ Collection }"
+  | TList       -> lps "{ Seq }"
+  | TMap        -> lps "{ Map }"
+  | TMultimap s -> lps "{ MultiIndex, " <| lazy_indices s <| lps " }"
 
 let lazy_control_anno c = function
   | Effect ids -> lps "effect " <| lazy_paren @@
@@ -155,14 +171,7 @@ let rec lazy_base_type ?(brace=true) ?(mut=false) ?(empty=false) c ~in_col t =
       wrap (lsp () <| inner <| lsp ())
   | TCollection(ct, vt) -> wrap (
     (if not empty then lps "collection " else [])
-    <| lazy_value_type c ~in_col:true vt <| lps " @ " <| lps
-        begin match ct with
-          | TSet  -> "{ Set }"
-          | TList -> "{ Seq }"
-          | TBag  -> "{ Collection }"
-          | TMap  -> "{ Map }"
-        end
-      )
+    <| lazy_value_type c ~in_col:true vt <| lps " @ " <| lazy_col ct)
 
 and lazy_mutable_type ?empty c ~in_col = function
   | TMutable (bt, a)   -> lazy_base_type ?empty c ~in_col ~mut:true bt
@@ -211,14 +220,7 @@ let lazy_collection_vt c vt eval = match KH.unwrap_vtype vt with
       let lazy_elem_list =
         lazy_base_type ~brace:false ~in_col:true ~mut c t <| lps "|" <| lsp ()
       in
-      lps "{|" <| lazy_elem_list <| eval <| lps "|}" <|
-      lps @@
-        begin match ct with
-        | TSet  -> " @ { Set }"
-        | TBag  -> " @ { Collection }"
-        | TList -> " @ { Seq }"
-        | TMap  -> " @ { Map }"
-        end
+      lps "{|" <| lazy_elem_list <| eval <| lps "|}" <| lps " @ " <| lazy_col ct
   | _ -> error () (* type error *)
 
 (* arg type with numbers included in tuples and maybes *)
@@ -761,11 +763,21 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
   | Peek -> let col = U.decompose_peek expr in
     (* peeks return options and need to be pattern matched *)
       lazy_paren @@ apply_method c ~name:"peek" ~col ~args:[light_type c @@ KH.mk_cunit] ~arg_info:[ANonLambda, Out]
+
   | Subscript _ -> let i, tup = U.decompose_subscript expr in
       let t = KH.unwrap_ttuple @@ U.unwrap_t_val @@ T.type_of_expr tup in
       let id_t = add_record_ids t in
       let id = fst @@ at id_t i in
       (lazy_paren @@ lazy_expr c tup) <| lps "." <| lps id
+
+  | SliceIdx(idx, comp) -> let col, pat = U.decompose_slice expr in
+    let ts = KH.unwrap_ttuple @@ snd @@ snd @@ KH.unwrap_tcol @@
+             T.type_of_expr col in
+    let ids  = fst_many @@ add_record_ids ts in
+    let ids' = filter_by_index_t idx ids in
+    let name = String.concat "_" @@ "slice_by"::ids' in
+    apply_method c ~name ~col ~args:[pat] ~arg_info:[ANonLambda, Out]
+
   | Slice -> let col, pat = U.decompose_slice expr in
     let es, lam_fn = begin match U.tag_of_expr pat with
       | Tuple -> U.decompose_tuple pat, id_fn

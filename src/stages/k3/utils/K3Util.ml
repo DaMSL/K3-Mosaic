@@ -134,6 +134,8 @@ let decompose_singleton e = match tag_of_expr e, sub_tree e with
   Singleton vt, [e0] -> e0 | _ -> failwith "not a Singleton"
 let decompose_slice e = match tag_of_expr e, sub_tree e with
   Slice, [e0; e1] -> e0, e1 | _ -> failwith "not a Slice"
+let decompose_sliceidx e = match tag_of_expr e, sub_tree e with
+  SliceIdx _, [e0; e1] -> e0, e1 | _ -> failwith "not a Slice"
 let decompose_sort e = match tag_of_expr e, sub_tree e with
   Sort, [e0; e1] -> e0, e1 | _ -> failwith "not a Sort"
 let decompose_subscript e = match tag_of_expr e, sub_tree e with
