@@ -227,7 +227,7 @@ let main () =
   match !action with
   | Clean -> print_endline @@ string_of_log log
   | ToDb name ->
-      let log = insert_index_fst 1 log in (* add indices *)
+      let log = insert_index_fst ~first:1 log in (* add indices *)
       let log = List.map (convert_to_db_format name) log in
       print_string @@
         String.concat "" @@ List.map (fun t -> String.concat "" t) log
