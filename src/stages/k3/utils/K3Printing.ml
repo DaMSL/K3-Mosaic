@@ -40,11 +40,26 @@ let string_of_address_and_role (addr, role_opt, alias_opt) =
     string_of_address addr^
     (match role_opt with None -> "" | Some r -> "/"^r)
 
+let string_of_int_list l = String.concat ", " @@ List.map soi l
+let string_of_int_set  s = String.concat ", " @@ List.map soi @@ IntSet.elements s
+let wrap_brackets s = "["^s^"]"
+
+let string_of_index = function
+  | HashIdx s   -> "HashSet("^wrap_brackets @@ string_of_int_set s^")"
+  | OrdIdx(l,s) -> "OrdIdx("^(wrap_brackets @@ string_of_int_list l)^", "
+                            ^(wrap_brackets @@ string_of_int_set s)^")"
+
+let string_of_comp = function GT -> "GT" | LT -> "LT" | EQ -> "EQ"
+
+let string_of_indices idxs =
+  String.concat ", " @@ List.map string_of_index @@ IndexSet.elements idxs
+
 let string_of_container_type t_c = match t_c with
     | TSet  -> "TSet"
     | TBag  -> "TBag"
     | TList -> "TList"
     | TMap  -> "TMap"
+    | TMultimap ss -> "TMultimap("^string_of_indices ss^")"
 
 let string_of_const cn = match cn with
     | CUnit          -> "CUnit"
@@ -99,6 +114,7 @@ let string_of_tag_type = function
     | Subscript n      -> "Subscript"^soi n
 
     | Slice            -> "Slice"
+    | SliceIdx(s,c)    -> "SliceIdx("^string_of_index s^", "^string_of_comp c^")"
     | Insert x         -> "Insert "^x
     | Update x         -> "Update "^x
     | Delete x         -> "Delete "^x
@@ -140,7 +156,7 @@ let rec flat_string_of_base_type t = match t with
   | TTarget t'            -> tag_str (btt t) [flat_string_of_base_type t']
   | TIndirect ind         -> tag_str (btt t) [flat_string_of_value_type ind]
   | _                     -> base_type_tag t
-  
+
 and flat_string_of_mutable_type mt = match mt with
     | TMutable(bt,_) -> "TMutable("^flat_string_of_base_type bt^")"
     | TImmutable(bt,_) -> "TImmutable("^flat_string_of_base_type bt^")"
