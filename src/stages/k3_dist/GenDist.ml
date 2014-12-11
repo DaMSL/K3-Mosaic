@@ -1223,25 +1223,6 @@ let emit_frontier_fns c =
   let fns = List.map (hd |- snd) @@ P.uniq_types_and_maps c.p in
   List.map (frontier_fn c) fns
 
-(* Convert map indices from non-vid versions to be ordered and handle vid *)
-(* vid is always the last thing to be matched on *)
-(* NOTE: we assume vid is 0 here !!! *)
-let vid_shift = (+) 1
-let add_vid_idx l = l @ [vid_idx]
-let map_indices_add_vid idxs =
-  let map_idx_add_vid = function
-    | HashIdx s    -> 
-        let l = List.map vid_shift @@ IntSet.elements s in
-        OrdIdx (add_vid_idx l, IntSet.of_list l)
-    | OrdIdx(l,eq) -> 
-        let eq' = IntSet.of_list @@ List.map vid_shift @@ IntSet.elements eq in
-        OrdIdx (add_vid_idx (List.map vid_shift l), eq')
-  in
-  let add_vid_all_idxs is =
-    IndexSet.fold (fun x acc -> IndexSet.add (map_idx_add_vid x) acc) is IndexSet.empty
-  in
-  IntMap.map add_vid_all_idxs idxs
-
 (* Generate all the code for a specific trigger *)
 let gen_dist_for_t c ast trig corr_maps =
   (* (stmt_id, rhs_map_id)list *)
@@ -1276,7 +1257,7 @@ let gen_dist ?(force_correctives=false) ?(use_multiindex=true) p partmap ast =
           ; enable_gc
           }
   in
-  let map_idxs = map_indices_add_vid @@ M.get_map_access_patterns_ids c ast in
+  let map_idxs = M.get_map_access_patterns_ids c ast in
   let c = {c with map_idxs} in
   (* our shuffle functions need to precalculate all possible shuffles *)
   let global_funcs = declare_global_funcs partmap c ast in

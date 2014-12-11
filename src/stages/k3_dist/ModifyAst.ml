@@ -67,6 +67,25 @@ let get_map_access_patterns ast : IndexSet.t StrMap.t =
     Tree.fold_tree td_fn bu_fn None acc t
   ) StrMap.empty ast
 
+(* Convert map indices from non-vid versions to be ordered and handle vid *)
+(* vid is always the last thing to be matched on *)
+(* NOTE: we assume vid is 0 here !!! *)
+let vid_shift = (+) 1
+let add_vid_idx l = l @ [vid_idx]
+let map_indices_add_vid idxs =
+  let map_idx_add_vid = function
+    | HashIdx s    -> 
+        let l = List.map vid_shift @@ IntSet.elements s in
+        OrdIdx (add_vid_idx l, IntSet.of_list l)
+    | OrdIdx(l,eq) -> 
+        let eq' = IntSet.of_list @@ List.map vid_shift @@ IntSet.elements eq in
+        OrdIdx (add_vid_idx (List.map vid_shift l), eq')
+  in
+  let add_vid_all_idxs is =
+    IndexSet.fold (fun x acc -> IndexSet.add (map_idx_add_vid x) acc) is IndexSet.empty
+  in
+  IntMap.map add_vid_all_idxs idxs
+
 (* convert to a per-mapid representation *)
 let get_map_access_patterns_ids c ast =
   let pats = get_map_access_patterns ast in
@@ -76,9 +95,11 @@ let get_map_access_patterns_ids c ast =
   (* add in the patterns for singletons *)
   let map_types = P.for_all_maps c.p (fun id -> id, P.map_types_for c.p id) in
   let singleton_maps = List.filter (function (_,[_]) -> true | _ -> false) map_types in
-  List.fold_left (fun acc (id,_) ->
-    IntMap.add id (IndexSet.singleton @@ OrdIdx([0],IntSet.empty)) acc)
-  pats singleton_maps
+  let pats = List.fold_left (fun acc (id,_) ->
+               IntMap.add id (IndexSet.singleton @@ OrdIdx([],IntSet.empty)) acc)
+             pats singleton_maps
+  in
+  map_indices_add_vid pats
 
 (* change the initialization values of global maps to have the vid as well *)
 (* receives the new types to put in and the starting expression to change *)
@@ -105,7 +126,7 @@ let modify_global_map c = function
     begin try
       let map_id = P.map_id_of_name c.p name in
       let map_type =
-        wrap_t_of_map @@ wrap_ttuple @@ P.map_types_with_v_for c.p map_id in
+        wrap_t_map_idx' c map_id @@ P.map_types_with_v_for c.p map_id in
       let map_type_ind = wrap_tind map_type in
       begin match m_expr with
         | None   -> [mk_global_val_init name map_type_ind @@
