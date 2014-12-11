@@ -74,7 +74,7 @@ let get_map_access_patterns_ids c ast =
       IntMap.add (ProgInfo.map_id_of_name c.p nm) v acc)
     pats IntMap.empty in
   (* add in the patterns for singletons *)
-  let map_types = P.for_all_maps c.p (fun id -> id, P.map_types_no_val_for c.p id) in
+  let map_types = P.for_all_maps c.p (fun id -> id, P.map_types_for c.p id) in
   let singleton_maps = List.filter (function (_,[_]) -> true | _ -> false) map_types in
   List.fold_left (fun acc (id,_) ->
     IntMap.add id (IndexSet.singleton @@ OrdIdx([0],IntSet.empty)) acc)

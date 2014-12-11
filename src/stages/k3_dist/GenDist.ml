@@ -1225,10 +1225,17 @@ let emit_frontier_fns c =
 
 (* Convert map indices from non-vid versions to be ordered and handle vid *)
 (* vid is always the last thing to be matched on *)
+(* NOTE: we assume vid is 0 here !!! *)
+let vid_shift = (+) 1
+let add_vid_idx l = l @ [vid_idx]
 let map_indices_add_vid idxs =
   let map_idx_add_vid = function
-    | HashIdx s    -> OrdIdx ((List.map ((+) 1) @@ IntSet.elements s) @ [vid_idx], s)
-    | OrdIdx(l,eq) -> OrdIdx ((List.map ((+) 1) l) @ [vid_idx], eq)
+    | HashIdx s    -> 
+        let l = List.map vid_shift @@ IntSet.elements s in
+        OrdIdx (add_vid_idx l, IntSet.of_list l)
+    | OrdIdx(l,eq) -> 
+        let eq' = IntSet.of_list @@ List.map vid_shift @@ IntSet.elements eq in
+        OrdIdx (add_vid_idx (List.map vid_shift l), eq')
   in
   let add_vid_all_idxs is =
     IndexSet.fold (fun x acc -> IndexSet.add (map_idx_add_vid x) acc) is IndexSet.empty
