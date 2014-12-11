@@ -238,3 +238,6 @@ val hashtbl_replace : ('a, 'b) Hashtbl.t -> 'a -> ('b option -> 'b) -> unit
 val hashtbl_combine : ('a, 'b) Hashtbl.t -> ('a, 'b) Hashtbl.t -> ('b -> 'b -> 'b) -> unit
 
 val intset_of_list : int list -> IntSet.t
+
+val string_of_int_list : int list -> string
+val string_of_int_set  : IntSet.t -> string

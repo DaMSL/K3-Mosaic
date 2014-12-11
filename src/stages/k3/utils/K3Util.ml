@@ -370,7 +370,8 @@ let unwrap_tuple e = match tag_of_expr e with
 (* Fold over all expressions in the program (triggers, globals) *)
 let fold_over_exprs f zero p =
   List.fold_left (fun acc (x,_) -> match x with
-    | Role(_, l) -> List.fold_left (fun acc' (y,_) -> match y with
+    | Role(_, l)
+    | Flow l     -> List.fold_left (fun acc' (y,_) -> match y with
        | Sink(Code(_, _, _, e)) -> f acc' e
        | _ -> acc'
       ) acc l

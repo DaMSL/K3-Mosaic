@@ -8,6 +8,7 @@ val def_c : config_t
 (* Annotations *)
 val string_of_annotation : annotation_t -> string
 
+val string_of_index : index_t -> string
 val string_of_address: address -> string
 val string_of_address_and_role: address * id_t option * string option -> string
 val string_of_container_type: container_type_t -> string

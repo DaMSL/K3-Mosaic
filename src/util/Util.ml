@@ -503,4 +503,6 @@ let hashtbl_combine h h' combine_fn =
 let intset_of_list l =
   List.fold_left (fun acc x -> IntSet.add x acc) IntSet.empty l
 
+let string_of_int_list l = String.concat ", " @@ List.map soi l
+let string_of_int_set  s = String.concat ", " @@ List.map soi @@ IntSet.elements s
 

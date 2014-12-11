@@ -15,7 +15,8 @@ exception InvalidAst of string
  * dbtoaster, but it's not hard to just get it here *)
 let get_map_access_patterns ast : IndexSet.t StrMap.t =
   (* for top-down, get any existing_out_tier value *)
-  let td_fn out_tier n = match U.tag_of_expr n with
+  let td_fn out_tier n =
+      match U.tag_of_expr n with
       | Apply -> let lam, app = U.decompose_apply n in
                  begin try
                    let arg, _   = U.decompose_lambda lam in
@@ -41,6 +42,7 @@ let get_map_access_patterns ast : IndexSet.t StrMap.t =
       match U.tag_of_expr n with
       | Slice  ->
           let col, pat = U.decompose_slice n in
+          (* get tuple pattern *)
           let pat = U.unwrap_tuple pat |> insert_index_fst
                  |> List.filter (fun (_,x) -> U.tag_of_expr x <> Const CUnknown)
                  |> fst_many |> IntSet.of_list
@@ -68,10 +70,15 @@ let get_map_access_patterns ast : IndexSet.t StrMap.t =
 (* convert to a per-mapid representation *)
 let get_map_access_patterns_ids c ast =
   let pats = get_map_access_patterns ast in
-  StrMap.fold (fun nm v acc ->
+  let pats = StrMap.fold (fun nm v acc ->
       IntMap.add (ProgInfo.map_id_of_name c.p nm) v acc)
-    pats
-    IntMap.empty
+    pats IntMap.empty in
+  (* add in the patterns for singletons *)
+  let map_types = P.for_all_maps c.p (fun id -> id, P.map_types_no_val_for c.p id) in
+  let singleton_maps = List.filter (function (_,[_]) -> true | _ -> false) map_types in
+  List.fold_left (fun acc (id,_) ->
+    IntMap.add id (IndexSet.singleton @@ OrdIdx([0],IntSet.empty)) acc)
+  pats singleton_maps
 
 (* change the initialization values of global maps to have the vid as well *)
 (* receives the new types to put in and the starting expression to change *)

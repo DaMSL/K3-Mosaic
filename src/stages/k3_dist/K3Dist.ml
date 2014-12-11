@@ -20,6 +20,14 @@ type config = {
   enable_gc : bool;
 }
 
+let string_of_map_idxs c map_idxs =
+  let b = Buffer.create 100 in
+  IntMap.iter (fun map_id idx ->
+    Printf.bprintf b "map %s:\n" @@ P.map_name_of c.p map_id;
+    IndexSet.iter (Printf.bprintf b "%s\n" |- K3Printing.string_of_index) idx
+  ) map_idxs;
+  Buffer.contents b
+
 (* location of vid in tuples *)
 let vid_idx = 0
 
@@ -80,8 +88,12 @@ let wrap_t_of_map' = wrap_tbag'
 (* wrap with the index type of the map, if requested *)
 let wrap_t_map_idx c map_id =
   if c.use_multiindex then
-    let idxs = IntMap.find map_id c.map_idxs in
-    wrap_tmmap idxs
+    try
+      let idxs = IntMap.find map_id c.map_idxs in
+      wrap_tmmap idxs
+    with Not_found ->
+      prerr_string @@ "Map_idxs:\n"^string_of_map_idxs c c.map_idxs;
+      failwith @@ "Failed to find map index for map id "^P.map_name_of c.p map_id
   else
     wrap_tbag
 

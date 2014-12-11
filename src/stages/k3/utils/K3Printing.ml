@@ -40,8 +40,6 @@ let string_of_address_and_role (addr, role_opt, alias_opt) =
     string_of_address addr^
     (match role_opt with None -> "" | Some r -> "/"^r)
 
-let string_of_int_list l = String.concat ", " @@ List.map soi l
-let string_of_int_set  s = String.concat ", " @@ List.map soi @@ IntSet.elements s
 let wrap_brackets s = "["^s^"]"
 
 let string_of_index = function
