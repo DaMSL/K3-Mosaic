@@ -594,9 +594,9 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
             | _ -> t_erroru (TBad(t1, "not a multimap")) ()
             end;
             let t_p = t1 <| value_of |> t_erroru @@ not_value t1  in
-            if t_e === t_p then TValue t_e
+            (* indexing returns a bag *)
             (* take care of possible unknowns in pattern *)
-            else if t_p <~ t_e then t1
+            if t_p <~ t_e then TValue(H.wrap_tbag t_e)
             else t_erroru (VTMismatch(t_p, t_e, "")) ()
 
         | Insert id ->
