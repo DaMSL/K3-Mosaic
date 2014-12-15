@@ -33,6 +33,7 @@ open K3.AST
 open K3Helpers
 open K3Dist
 
+module D = K3Dist
 module G = K3Global
 module M = ModifyAst
 module U = K3Util
@@ -264,6 +265,7 @@ let declare_global_funcs partmap c ast =
     let vars_arg_v = ids_to_vars @@ fst_many ids_types_arg_v in
     let vars_no_val = list_drop_end 1 @@
       ids_to_vars @@ fst_many @@ P.map_ids_types_for c.p map_id in
+    let idx = D.make_into_index vars_no_val in
     let vars_v_no_val = list_drop_end 1 vars_v in
     let vars_val = hd @@ list_take_end 1 vars_v in
     let vars_arg_val = hd @@ list_take_end 1 vars_arg_v in
@@ -335,12 +337,17 @@ let declare_global_funcs partmap c ast =
            mk_let "filtered" (wrap_t_of_map' types_v)
            (* careful to put bind in proper place *)
            (mk_bind (mk_var target_map) tmap_deref @@
-             mk_filter (* only greater vid for this part *)
-               (mk_lambda' ids_types_v @@
-                 mk_gt (mk_var "vid") @@ mk_var "min_vid") @@
-               (* slice w/o vid and value *)
-               mk_slice' (mk_var tmap_deref) @@
-                 mk_cunknown::vars_arg_no_v_no_val@[mk_cunknown]) @@
+             (* slice for all values > vid with same key *)
+             if c.use_multiindex then
+               mk_slice_idx' ~idx ~comp:GTA (mk_var tmap_deref) @@
+                 P.map_add_v (mk_var "min_vid") @@ vars_arg_no_v_no_val@[mk_cunknown]
+             else
+               mk_filter (* only greater vid for this part *)
+                 (mk_lambda' ids_types_v @@
+                   mk_gt (mk_var "vid") @@ mk_var "min_vid") @@
+                 (* slice w/o vid and value *)
+                 mk_slice' (mk_var tmap_deref) @@
+                   P.map_add_v mk_cunknown @@ vars_arg_no_v_no_val@[mk_cunknown]) @@
            mk_iter
              (mk_lambda' ids_types_v @@
                (* careful to put bind in proper place *)

@@ -30,6 +30,14 @@ let string_of_map_idxs c map_idxs =
 
 (* location of vid in tuples *)
 let vid_idx = 0
+let vid_shift = (+) 1
+let add_vid_idx l = l @ [vid_idx]
+
+(* generic function to turn a list of tuple elements into an index. Puts the vid last *)
+(* NOTE: takes a list not including vid and value *)
+let make_into_index l =
+  let l' = List.map vid_shift @@ fst_many @@ insert_index_fst l in
+  OrdIdx(add_vid_idx l', IntSet.of_list l')
 
 (*
 (* add an index to the config structure and update it *)
@@ -241,12 +249,12 @@ let map_latest_vid_vals c slice_col m_pat map_id ~keep_vid : expr_t =
       List.filter (fun (_,x) -> U.tag_of_expr x <> Const(CUnknown)) @@
       insert_index_fst @@ P.map_add_v mk_cunknown pat
     in
-    let idx' = idx @ [vid_idx] in (* vid is always matched last in the index *)
+    let idx' = add_vid_idx idx in (* vid is always matched last in the index *)
+    let idx = OrdIdx(idx', IntSet.of_list idx) in
     remove_vid_if_needed @@
       (* filter out anything that doesn't have the same parameters *)
       (* the multimap layer implements extra eq key filtering *)
-      (mk_slice_idx idx' ~eqset:(Some idx) ~comp:LT slice_col @@
-        mk_tuple @@ mk_var "vid"::pat)
+      (mk_slice_idx' ~idx ~comp:LT slice_col @@ mk_var "vid"::pat)
 
   else (* no multiindex *)
     (* create a function name per type signature *)

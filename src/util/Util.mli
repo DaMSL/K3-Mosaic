@@ -90,6 +90,9 @@ val list_remove : 'a -> 'a list -> 'a list
 (* replace efficiently inside a list *)
 val list_replace : 'a -> 'a -> 'a list -> 'a list
 
+(* modify a specific position in a list *)
+val list_modify : int -> ('a -> 'a) -> 'a list -> 'a list
+
 val compose_fn : ('a -> 'b) -> ('c -> 'a) -> 'c -> 'b
 
 (* fold left until the predicate (2nd arg) is true *)

@@ -378,7 +378,7 @@ let rec lazy_expr c expr =
   | Slice -> let col, pat = U.decompose_slice expr in
     wrap_if_var col (lazy_expr c col) <| lazy_bracket @@ tuple_no_paren c pat
   | SliceIdx(idx, comp) -> let col, pat = U.decompose_sliceidx expr in
-    let comp_s = match comp with GT -> lps ">" | LT -> lps "<" | EQ -> [] in
+    let comp_s = match comp with GT -> lps ">" | LT -> lps "<" | EQ -> [] | LTA -> lps "<<" | GTA -> lps ">>" in
     wrap_if_var col (lazy_expr c col) <|
     lazy_bracket (tuple_no_paren c pat <| lsp () <| lps "|" <| comp_s <| lazy_index idx)
   | Insert _ -> let l, r = U.decompose_insert expr in

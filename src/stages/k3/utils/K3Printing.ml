@@ -47,7 +47,7 @@ let string_of_index = function
   | OrdIdx(l,s) -> "OrdIdx("^(wrap_brackets @@ string_of_int_list l)^", "
                             ^(wrap_brackets @@ string_of_int_set s)^")"
 
-let string_of_comp = function GT -> "GT" | LT -> "LT" | EQ -> "EQ"
+let string_of_comp = function GT -> "GT" | LT -> "LT" | EQ -> "EQ" | LTA -> "LTA" | GTA -> "GTA"
 
 let string_of_indices idxs =
   String.concat ", " @@ List.map string_of_index @@ IndexSet.elements idxs

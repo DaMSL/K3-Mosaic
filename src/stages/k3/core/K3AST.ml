@@ -24,7 +24,8 @@ include ASTCommon
 (* Annotations *)
 type annotation_t
 
-type comp_t = LT | EQ | GT
+(* LTA/GTA: all less than/gt *)
+type comp_t = LTA | LT | EQ | GT | GTA
 
 (* multimap index *)
 type index_t = HashIdx of IntSet.t

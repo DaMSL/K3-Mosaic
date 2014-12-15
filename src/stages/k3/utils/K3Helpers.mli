@@ -162,8 +162,8 @@ val mk_slice : expr_t -> expr_t -> expr_t
 val mk_slice' : expr_t -> expr_t list -> expr_t
 (* int list list: specify index to use
    expr_t: list of integer values specifying GT, LT, EQ *)
-val mk_slice_idx : int list -> eqset:int list option -> comp:comp_t -> expr_t -> expr_t -> expr_t
-val mk_slice_idx' : int list -> eqset:int list option-> comp:comp_t -> expr_t -> expr_t list -> expr_t
+val mk_slice_idx : idx:index_t -> comp:comp_t -> expr_t -> expr_t -> expr_t
+val mk_slice_idx' : idx:index_t -> comp:comp_t -> expr_t -> expr_t list -> expr_t
 val mk_insert : id_t -> expr_t -> expr_t
 val mk_delete : id_t -> expr_t -> expr_t
 val mk_update : id_t -> expr_t -> expr_t -> expr_t

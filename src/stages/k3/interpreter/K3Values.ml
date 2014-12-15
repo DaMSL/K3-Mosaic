@@ -35,6 +35,12 @@ module rec OrderedKey : ICommon.OrderedKeyType = struct
     let filter_idxs idx = function
       | Value.VTuple l -> Value.VTuple(filter_by_index_t idx l)
       | _ -> invalid_arg "not a vtuple"
+    let set_to_minmax m s x = 
+      let v = match m with `Min -> Value.VMin | `Max -> Value.VMax in
+      match x with
+      | Value.VTuple l ->
+          Value.VTuple(List.mapi (fun i x -> if IntSet.mem i s then v else x) l)
+      | _ -> invalid_arg "not a vtuple"
     end
 
 and ValueMap : NearMap.S with type key = Value.value_t = NearMap.Make(OrderedKey)
@@ -67,6 +73,10 @@ and ValueComp : (sig val compare_v : Value.value_t -> Value.value_t -> int
     let rec compare_v a b =
       incr counter;
       match a,b with
+      | _,    VMax -> -1
+      | VMax, _    -> 1
+      | _,    VMin -> 1
+      | VMin, _    -> -1
       | VTuple vs, VTuple vs' ->
           begin try
             List.iter2 (fun x y -> let r = compare_v x y in
@@ -128,7 +138,9 @@ and Value : sig
   and env_t = (value_t ref) IdMap.t * value_t list IdMap.t
 
   and value_t
-      = VUnknown
+      = VMax
+      | VMin
+      | VUnknown
       | VUnit
       | VBool of bool
       | VInt of int
@@ -170,6 +182,8 @@ let v_to_list = function
   | _ -> failwith "(v_to_list): not a collection"
 
 let tag = function
+ | VMax               -> "VMax"
+ | VMin               -> "VMin"
  | VUnknown           -> "VUnknown"
  | VUnit              -> "VUnit"
  | VBool _            -> "VBool"
@@ -233,6 +247,8 @@ let rec print_value ?(mark_points=[]) v =
     in
     match v with
     | VUnknown                -> ps "??"
+    | VMax                    -> ps "VMax"
+    | VMin                    -> ps "VMin"
     | VUnit                   -> ps "()"
     | VBool b                 -> ps @: string_of_bool b
     | VInt i                  -> ps @: string_of_int i
@@ -477,9 +493,10 @@ let rec type_of_value uuid value =
   | VList _            -> wrap_tlist @: col_get ()
   | VMap _             -> wrap_tmap @: col_get ()
   | VMultimap mm       -> wrap_tmmap (ValueMMap.get_idxs mm) @: col_get ()
+  | VIndirect ind      -> type_of_value uuid !ind
   | VFunction _
   | VForeignFunction _ -> raise (RuntimeError (uuid, "type_of_value: cannot apply to function"))
-  | VIndirect ind      -> type_of_value uuid !ind
+  | VMax | VMin        -> raise (RuntimeError (uuid, "type_of_value: cannot apply to vmax/vmin"))
 
 let rec expr_of_value uuid value =
   let handle_cols vs =
@@ -506,6 +523,8 @@ let rec expr_of_value uuid value =
   | VMultimap vs -> handle_cols value
   | VIndirect ind -> mk_ind @: expr_of_value uuid !ind
   | VFunction _
-  | VForeignFunction _ -> raise (RuntimeError (uuid,
-      "expr_of_value: cannot apply to function"))
+  | VForeignFunction _ -> raise @@ RuntimeError (uuid,
+      "expr_of_value: cannot apply to function")
+  | VMax | VMin -> raise @@ RuntimeError (uuid,
+      "expr_of_value: cannot apply to vmax/vmin")
 

@@ -652,9 +652,11 @@ access :
 ;
 
 access_comp :
-    | BAR GT { GT }
-    | BAR LT { LT }
-    | BAR    { EQ }
+    | BAR GT GT { GTA }
+    | BAR GT    { GT }
+    | BAR LT LT { LTA }
+    | BAR LT    { LT }
+    | BAR       { EQ }
 
 mutation :
     /* Inserts, deletes and sends use a vararg function syntax for their value/payload */

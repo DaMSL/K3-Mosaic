@@ -24,7 +24,9 @@ and Value : sig
   (* an env_t is global values and frames (functional environment) *)
   and env_t = (value_t ref) IdMap.t * value_t list IdMap.t
   and value_t
-      = VUnknown
+      = VMax
+      | VMin
+      | VUnknown
       | VUnit
       | VBool of bool
       | VInt of int

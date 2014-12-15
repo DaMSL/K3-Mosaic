@@ -70,8 +70,6 @@ let get_map_access_patterns ast : IndexSet.t StrMap.t =
 (* Convert map indices from non-vid versions to be ordered and handle vid *)
 (* vid is always the last thing to be matched on *)
 (* NOTE: we assume vid is 0 here !!! *)
-let vid_shift = (+) 1
-let add_vid_idx l = l @ [vid_idx]
 let map_indices_add_vid idxs =
   let map_idx_add_vid = function
     | HashIdx s    -> 

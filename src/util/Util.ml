@@ -142,6 +142,13 @@ let list_replace r r' l =
     | []    -> List.rev acc
   in loop [] l
 
+let list_modify n f l =
+  let rec loop i acc = function
+    | x::xs when i = 0 -> List.rev_append acc @@ (f x)::xs
+    | x::xs -> loop (i-1) (x::acc) xs
+    | []    -> List.rev acc
+  in loop n [] l
+
 let compose_fn f g x = f(g x)
 
 (* function that folds until a predicate is true *)

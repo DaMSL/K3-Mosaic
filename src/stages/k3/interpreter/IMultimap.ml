@@ -76,31 +76,46 @@ module Make(OrdKey: ICommon.OrderedKeyType) = struct
     ) mm
 
   (* @eqset: set of key members that need to remain equal even in LT/GT *)
+  (* Assumes that max vid is the last member *)
   let slice (idx:index_t) comp (xs:elt) (mm:t) : InnerBag.t =
     let error x = failwith @@ "(slice):"^x in
     try
       let mmap = IndexMap.find idx mm in
       let key  = OrdKey.filter_idxs idx xs in
-      let find_fn = match comp with
-        | GT -> MMap.find_gt
-        | EQ -> MMap.find
-        | LT -> MMap.find_lt
-      in
       begin try
         begin match idx with
-          | OrdIdx(_,eq_set) when not (IntSet.is_empty eq_set) ->
-              let eq_set = HashIdx(eq_set) in
+          | OrdIdx(_, eq_set') ->
+              let eq_set = HashIdx(eq_set') in
               let eq_key = OrdKey.filter_idxs eq_set xs in
+              let find_all minmax key m =
+                List.fold_left InnerBag.union InnerBag.empty @@
+                    MMap.find_range key (OrdKey.set_to_minmax minmax eq_set' key) m
+              in
+              let find_fn = match comp with
+                | GT  -> MMap.find_gt
+                | EQ  -> MMap.find
+                | LT  -> MMap.find_lt
+                | LTA -> find_all `Min
+                | GTA -> find_all `Max
+              in
               let res = find_fn key mmap in
+
               (* check that the equality constraint holds *)
-              begin match InnerBag.peek res with
-              | None   -> res
-              | Some x ->
-                  let eq_key2 = OrdKey.filter_idxs eq_set x in
-                  if OrdKey.compare eq_key eq_key2 = 0 then res
-                  else InnerBag.empty
+              if not (IntSet.is_empty eq_set') && List.mem comp [GT; LT] then
+                begin match InnerBag.peek res with
+                | None   -> res
+                | Some x ->
+                    let eq_key2 = OrdKey.filter_idxs eq_set x in
+                    if OrdKey.compare eq_key eq_key2 = 0 then res
+                    else InnerBag.empty
+                end
+              else res
+          | HashIdx _ ->
+              begin match comp with
+              | EQ  -> MMap.find key mmap
+              | _  -> failwith "Unsupported comparison for hash idx"
               end
-          | _ -> find_fn key mmap end
+        end
       with Not_found -> InnerBag.empty end
     with Not_found -> error "no corresponding index found"
 

@@ -35,6 +35,7 @@ module type S =
     val find: key -> 'a t -> 'a
     val find_gt: key -> 'a t -> 'a
     val find_lt: key -> 'a t -> 'a
+    val find_range : key -> key -> 'a t -> 'a list
     val map: ('a -> 'b) -> 'a t -> 'b t
     val mapi: (key -> 'a -> 'b) -> 'a t -> 'b t
     val to_list : 'a t -> (key * 'a) list
@@ -115,34 +116,39 @@ module Make(Ord: OrderedType) = struct
           if c = 0 then d
           else find x (if c < 0 then l else r)
 
-    (* find the one value just greater than x *)
-    let find_gt x m =
+    (* find the one value just greater than/less than x *)
+    let find_comp comp x m =
       let rec loop last m =
-      match m, last with
-      | Empty, None   -> raise Not_found
-      | Empty, Some (_,d) -> d
-      | Node(l, v, d, r, _), _ ->
-          let c = Ord.compare x v in
-          if c < 0 then loop (Some(v,d)) l
-          else loop last r
-          in loop None m
+        match m, last with
+        | Empty, None   -> raise Not_found
+        | Empty, Some (_,d) -> d
+        | Node(l, v, d, r, _), _ ->
+            let op, s, t = match comp with
+              | `GT -> (>), l, r
+              | `LT -> (<), r, l
+            in
+            let c = Ord.compare v x in
+            if op c 0 then loop (Some(v,d)) s
+            else loop last t
+      in loop None m
 
-    (* find the one value just less than x *)
-    let find_lt x m =
-      let rec loop last m =
-      match m, last with
-      | Empty, None ->
-          raise Not_found
-      | Empty, Some (_,d) -> d
-      | Node(l, v, d, r, _), _ ->
-          let c = Ord.compare x v in
-          if c <= 0 then loop last l
-          else loop (Some(v,d)) r
-          in loop None m
+    let find_gt x m = find_comp `GT x m
+    let find_lt x m = find_comp `LT x m
+
+    (* find all values between x and y, exclusive *)
+    let find_range x y m =
+      let rec loop = function
+        | Empty -> []
+        | Node(l, v, d, r, _) ->
+            let cmin, cmax = Ord.compare v x, Ord.compare v y in
+            let d' = if cmin <= 0 && cmax >= 0 then [d] else [] in
+            let lacc = if cmin < 0 then loop l else [] in
+            let racc = if cmax > 0 then loop r else [] in
+            d' @ lacc @ racc
+      in loop m
 
     let rec mem x = function
-        Empty ->
-          false
+        Empty -> false
       | Node(l, v, d, r, _) ->
           let c = Ord.compare x v in
           c = 0 || mem x (if c < 0 then l else r)

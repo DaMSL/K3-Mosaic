@@ -16,7 +16,8 @@ include ASTCommonImpl
 (* Annotations *)
 type annotation_t = Annotation.annotation_t
 
-type comp_t = LT | EQ | GT
+(* LTA: All LT *)
+type comp_t = LTA | LT | EQ | GT | GTA
 
 (* multimap index *)
 type index_t = HashIdx of IntSet.t
