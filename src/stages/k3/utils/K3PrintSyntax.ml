@@ -293,7 +293,7 @@ let rec lazy_expr c expr =
       | Neg, false -> let e3 = U.decompose_neg e2 in
         arith_paren_pair "-" (e1, e3)
       | _, false -> arith_paren_pair "+" (e1, e2)
-      | _, true -> arith_paren_pair "|" (e1, e2)
+      | _, true -> arith_paren_pair "||" (e1, e2)
     end
   | Mult -> let (e1, e2) = U.decompose_mult expr in
     let is_neg = begin match U.tag_of_expr e1 with

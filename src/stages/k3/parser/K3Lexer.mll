@@ -95,7 +95,7 @@ rule tokenize = parse
     | ']'  { RBRACKET }
     | "[|"  { LBRACKETBAR }
     | "|]"  { RBRACKETBAR }
-    | '|'  { BAR }
+    | "|"   { BAR }
 
     | '-' { NEG }
     | '+' { PLUS }
@@ -105,7 +105,7 @@ rule tokenize = parse
     | '#' { HASH }
 
     | '&' { AND }
-    | '|' { OR }
+    | "||" { OR }
     | '!' { NOT }
 
     | '<'  { LT }
