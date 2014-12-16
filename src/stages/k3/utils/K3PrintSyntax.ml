@@ -99,8 +99,10 @@ let lazy_collection _ ct eval = match ct with
     | TBag  -> lps "{|" <| eval <| lps "|}"
     | TList -> lps "[" <| eval <| lps "]"
     | TMap  -> lps "[|" <| eval <| lps "|]"
-    | TMultimap idxs ->
-        lps "[|" <| eval <| lsp () <| lps "|"  <| lazy_indices idxs <| lps "|]"
+    | TMultimap idxs -> begin match eval with
+        | [] -> lps "[| |]"
+        | _  -> lps "[|" <| eval <| lsp () <| lps "|"  <| lazy_indices idxs <| lps "|]"
+        end
 
 let rec lazy_base_type c ~in_col ?(no_paren=false) t =
   let proc () = match t with

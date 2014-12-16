@@ -371,10 +371,10 @@ isolated_base_type_expr :
 
 contained_base_type_expr :
     | TYPE { $1, [] }
-    | LPAREN contained_base_type_tuple RPAREN { $2, [] }
     | annotated_collection_type       { $1 }
     | MAYBE contained_value_type_expr { TMaybe($2), [] }
     | INDIRECT contained_value_type_expr { TIndirect($2), [] }
+    | LPAREN contained_base_type_tuple RPAREN { $2, [] }
 ;
 
 isolated_base_type_tuple :
@@ -410,13 +410,15 @@ annotated_collection_type :
 ;
 
 collection_type :
-    | LBRACE contained_value_type_tuple RBRACE { TCollection(TSet, $2) }
-    | LBRACEBAR contained_value_type_tuple RBRACEBAR { TCollection(TBag, $2) }
-    | LBRACKET contained_value_type_tuple RBRACKET { TCollection(TList, $2) }
     | LBRACE contained_value_type_expr RBRACE { TCollection(TSet, $2) }
-    | LBRACEBAR contained_value_type_expr RBRACEBAR { TCollection(TBag, $2) }
-    | LBRACKET contained_value_type_expr RBRACKET { TCollection(TList, $2) }
+    | LBRACE contained_value_type_tuple RBRACE { TCollection(TSet, $2) }
     | LBRACKETBAR contained_value_type_expr BAR indices RBRACKETBAR { TCollection(TMultimap $4, $2) }
+    | LBRACKETBAR contained_value_type_tuple BAR indices RBRACKETBAR { TCollection(TMultimap $4, $2) }
+    | LBRACKETBAR contained_value_type_expr BAR error { print_error "invalid indices" }
+    | LBRACEBAR contained_value_type_expr RBRACEBAR { TCollection(TBag, $2) }
+    | LBRACEBAR contained_value_type_tuple RBRACEBAR { TCollection(TBag, $2) }
+    | LBRACKET contained_value_type_expr RBRACKET { TCollection(TList, $2) }
+    | LBRACKET contained_value_type_tuple RBRACKET { TCollection(TList, $2) }
 ;
 
 indices :
@@ -425,8 +427,10 @@ indices :
 
 index :
     | HASH LBRACKET key_list RBRACKET                              { HashIdx (IntSet.of_list $3) }
-    | LBRACKET key_list RBRACKET                                   { OrdIdx($2, IntSet.empty) }
     | LBRACKET key_list RBRACKET COMMA LBRACKET key_list RBRACKET  { OrdIdx($2, IntSet.of_list $6) }
+    | LBRACKET key_list RBRACKET COMMA LBRACKET error              { print_error "Invalid equality set" }
+    | LBRACKET key_list RBRACKET                                   { OrdIdx($2, IntSet.empty) }
+    | LBRACKET error                                               { print_error "Invalid index" }
 ;
 
 key_list :
@@ -541,13 +545,16 @@ range :
 collection :
     | LBRACE RBRACE COLON isolated_value_type_expr { build_collection [] $4 }
     | LBRACEBAR RBRACEBAR COLON isolated_value_type_expr { build_collection [] $4 }
+    | LBRACKETBAR RBRACKETBAR COLON isolated_value_type_expr{ build_collection [] $4 }
     | LBRACKET RBRACKET COLON isolated_value_type_expr{ build_collection [] $4 }
+
     | LBRACE RBRACE error { print_error "missing type for empty set"}
     | LBRACEBAR RBRACEBAR error { print_error "missing type for empty bag"}
     | LBRACKET RBRACKET error { print_error "missing type for empty list"}
 
     | LBRACE expr_seq RBRACE { build_collection $2 (mk_unknown_collection TSet) }
     | LBRACEBAR expr_seq RBRACEBAR { build_collection $2 (mk_unknown_collection TBag) }
+    | LBRACKETBAR expr_seq BAR indices RBRACKETBAR { build_collection $2 (mk_unknown_collection (TMultimap $4)) }
     | LBRACKET expr_seq RBRACKET { build_collection $2 (mk_unknown_collection TList) }
 ;
 
