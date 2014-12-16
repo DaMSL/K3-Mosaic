@@ -380,7 +380,7 @@ let rec lazy_expr c expr =
   | SliceIdx(idx, comp) -> let col, pat = U.decompose_sliceidx expr in
     let comp_s = match comp with GT -> lps ">" | LT -> lps "<" | EQ -> [] | LTA -> lps "<<" | GTA -> lps ">>" in
     wrap_if_var col (lazy_expr c col) <|
-    lazy_bracket (tuple_no_paren c pat <| lsp () <| lps "|" <| comp_s <| lazy_index idx)
+    lazy_bracket (tuple_no_paren c pat <| lsp () <| lps "|" <| comp_s <| lsp () <| lazy_index idx)
   | Insert _ -> let l, r = U.decompose_insert expr in
     lps "insert" <| lazy_paren
       (lps l <| lps " ," <| lsp () <| lazy_expr c r)

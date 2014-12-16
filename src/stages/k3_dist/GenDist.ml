@@ -318,9 +318,13 @@ let declare_global_funcs partmap c ast =
               mk_let lookup_value t_col_v
                 (mk_if
                   (mk_var corrective)
-                  (mk_slice' (mk_var tmap_deref) @@
-                    vars_v_no_val @ [mk_cunknown]) @@
-                  mk_empty @@ wrap_t_of_map' types_v) @@
+                  (if c.use_multiindex then
+                    mk_slice_idx' ~idx ~comp:EQ (mk_var tmap_deref) @@
+                      vars_v_no_val @ [mk_cunknown]
+                  else
+                    (mk_slice' (mk_var tmap_deref) @@
+                      vars_v_no_val @ [mk_cunknown])) @@
+                    mk_empty @@ wrap_t_of_map' types_v) @@
               mk_case_sn
                 (mk_peek @@ mk_var lookup_value) "val"
                 (* then just update the value *)

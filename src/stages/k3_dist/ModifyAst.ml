@@ -69,7 +69,6 @@ let get_map_access_patterns ast : IndexSet.t StrMap.t =
 
 (* Convert map indices from non-vid versions to be ordered and handle vid *)
 (* vid is always the last thing to be matched on *)
-(* NOTE: we assume vid is 0 here !!! *)
 let map_indices_add_vid idxs =
   let map_idx_add_vid = function
     | HashIdx s    -> 
@@ -83,6 +82,8 @@ let map_indices_add_vid idxs =
     IndexSet.fold (fun x acc -> IndexSet.add (map_idx_add_vid x) acc) is IndexSet.empty
   in
   IntMap.map add_vid_all_idxs idxs
+
+(* TODO: add index for future, and for pinpoint access *)
 
 (* convert to a per-mapid representation *)
 let get_map_access_patterns_ids c ast =
