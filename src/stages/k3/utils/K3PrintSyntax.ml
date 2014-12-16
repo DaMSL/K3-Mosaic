@@ -78,8 +78,8 @@ let lazy_annos c = function
   | [] -> []
   | annos -> lps "@ " <| lazy_brace @@ lps_list ~sep:"; " NoCut (lazy_anno c) annos
 
-let string_of_int_set s  = String.concat ", " @@ IntSet.fold (fun x acc -> soi x::acc) s []
-let string_of_int_list s = String.concat ", " @@ List.fold_right (fun x acc -> soi x::acc) s []
+let string_of_int_set s  = String.concat ", " @@ List.map soi @@ IntSet.elements s
+let string_of_int_list s = String.concat ", " @@ List.map soi s
 
 let lazy_keyset  s = lazy_bracket @@ lps @@ string_of_int_set s
 let lazy_keylist s = lazy_bracket @@ lps @@ string_of_int_list s
@@ -92,7 +92,9 @@ let lazy_index = function
       in
       lazy_keylist l <| eq_set
 
-let lazy_indices xs = List.flatten @@ List.map lazy_index @@ IndexSet.elements xs
+let lazy_indices xs = List.flatten @@ 
+  list_intercalate (lsp () <| lps "|" <| lsp ()) @@
+  List.map lazy_index @@ IndexSet.elements xs
 
 let lazy_collection _ ct eval = match ct with
     | TSet  -> lps "{" <| eval <| lps "}"
