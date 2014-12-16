@@ -1,6 +1,5 @@
 #use "topfind";;
 #require "str";;
-#require "bolt";;
 #directory "bin/src";;
 #directory "bin/src/stages";;
 #directory "bin/src/util";;
