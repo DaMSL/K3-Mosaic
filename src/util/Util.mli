@@ -155,6 +155,9 @@ val list_intersperse : 'a list -> 'a list -> 'a list
 (* intersperse a list with a value, like String.concat *)
 val list_intercalate : 'a -> 'a list -> 'a list
 
+(* to work with lazy values *)
+val list_intercalate_lazy : (unit -> 'a) -> 'a list -> 'a list
+
 (* functions without exceptions *)
 val list_find : ('a -> bool) -> 'a list -> 'a option
 val find : ('a -> 'b -> 'c) -> 'a -> 'b -> 'c option

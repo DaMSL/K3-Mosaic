@@ -291,11 +291,20 @@ let list_intersperse la lb =
   in List.rev @: loop [] la lb
 
 let list_intercalate v = function
-  | [] -> []
-  | l  -> let rec loop acc = function
-            | x::xs -> loop (x::v::acc) xs
-            | []    -> acc
-          in List.rev @: loop [hd l] (tl l)
+  | []     -> []
+  | y::ys  -> 
+      let rec loop acc = function
+        | x::xs -> loop (x::v::acc) xs
+        | []    -> List.rev acc
+      in loop [y] ys
+
+let list_intercalate_lazy v = function
+  | []     -> []
+  | y::ys  -> 
+      let rec loop acc = function
+        | x::xs -> loop (x::v ()::acc) xs
+        | []    -> List.rev acc
+      in loop [y] ys
 
 (* functions without exceptions *)
 let list_find f l = try Some(List.find f l) with Not_found -> None

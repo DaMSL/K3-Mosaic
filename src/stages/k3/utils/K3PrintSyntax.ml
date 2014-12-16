@@ -93,7 +93,7 @@ let lazy_index = function
       lazy_keylist l <| eq_set
 
 let lazy_indices xs = List.flatten @@ 
-  list_intercalate (lsp () <| lps "|" <| lsp ()) @@
+  list_intercalate_lazy (fun () -> lsp () <| lps "|" <| lsp ()) @@
   List.map lazy_index @@ IndexSet.elements xs
 
 let lazy_collection _ ct eval = match ct with
