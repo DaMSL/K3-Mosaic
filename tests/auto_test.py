@@ -40,6 +40,8 @@ def run():
                         default=None, help="Use an order file instead of creating a trace")
     parser.add_argument('-v', '--verbose', action='store_true', dest='verbose',
                         default=False, help="See test results in detail")
+    parser.add_argument('--idx', action='store_true', dest='use_idx',
+                        default=False, help="No multi index maps")
 
     args = parser.parse_args()
 
@@ -78,7 +80,7 @@ def run():
         if verbose:
             six.print_("")
         if not args.distributed:
-            res = dist_test.run(test_file, verbose=verbose, distrib=False)
+            res = dist_test.run(test_file, verbose=verbose, distrib=False) 
         else:
             res = dist_test.run(test_file,
                                 num_nodes=args.num_nodes,
@@ -87,7 +89,8 @@ def run():
                                 force_correctives=args.force_correctives,
                                 order_file=args.order_file,
                                 verbose=verbose,
-                                distrib=True)
+                                distrib=True,
+                                use_idx=args.use_idx)
         # check if a test failed
         if not res:
             six.print_("[ERROR]")

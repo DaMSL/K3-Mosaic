@@ -203,7 +203,7 @@ let default_cmd_line_params () = {
     k3new_data_file   = "default.k3";
     k3new_folds       = false;
     load_path         = "";
-    use_multiindex    = true;
+    use_multiindex    = false;
   }
 
 let cmd_line_params = default_cmd_line_params ()
@@ -597,7 +597,7 @@ let param_specs = Arg.align
       "file     Specify a k3new data file";
   "--k3new_folds", Arg.Unit (fun () -> cmd_line_params.k3new_folds <- true),
       "         For k3new: output folds instead of ext and map";
-  "--nomidx", Arg.Unit (fun () -> cmd_line_params.use_multiindex <- false),
+  "--use_idx", Arg.Unit (fun () -> cmd_line_params.use_multiindex <- true),
       "         Don't use multiindex maps";
 
   (* Debugging parameters *)

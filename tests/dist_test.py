@@ -15,7 +15,8 @@ def run(target_file,
         force_correctives=False,
         order_file="",
         verbose=True,
-        distrib=False
+        distrib=False,
+        use_idx=False
         ):
 
     to_root = ".."
@@ -95,9 +96,10 @@ def run(target_file,
             create_cmd = "--order {0}".format(order_file)
 
         force_cmd = "--force" if force_correctives else ""
+        idx_cmd = "--use_idx" if use_idx else ""
 
         # create a k3 distributed file (without a partition map)
-        cmd = ('{k3o} -p -i m3 -l k3disttest {m3_file} {create_cmd} {force_cmd}'
+        cmd = ('{k3o} -p -i m3 -l k3disttest {m3_file} {create_cmd} {force_cmd} {idx_cmd}'
             + ' > {k3dist_file} 2> {error_file}').format(**locals())
         print_system(cmd, verbose)
         if check_error(error_file, verbose) or check_error(k3dist_file, verbose, True):
@@ -111,7 +113,7 @@ def run(target_file,
                 return False
 
             # create another k3 distributed file (with partition map)
-            cmd = ("{k3o} -p -i m3 -l k3disttest {m3_file} {create_cmd} -m {part_file} {force_cmd}"
+            cmd = ("{k3o} -p -i m3 -l k3disttest {m3_file} {create_cmd} -m {part_file} {force_cmd} {idx_cmd}"
                 + "> {k3dist_file} 2> {error_file}").format(**locals())
             print_system(cmd, verbose)
             if check_error(error_file, verbose) or check_error(k3dist_file, verbose, True):
