@@ -35,12 +35,13 @@ module rec OrderedKey : ICommon.OrderedKeyType = struct
     let filter_idxs idx = function
       | Value.VTuple l -> Value.VTuple(filter_by_index_t idx l)
       | _ -> invalid_arg "not a vtuple"
-    let set_to_minmax m s x = 
+    let set_to_minmax m s x =
       let v = match m with `Min -> Value.VMin | `Max -> Value.VMax in
       match x with
       | Value.VTuple l ->
           Value.VTuple(List.mapi (fun i x -> if IntSet.mem i s then v else x) l)
       | _ -> invalid_arg "not a vtuple"
+    let to_string = ValueUtils.repr_of_value
     end
 
 and ValueMap : NearMap.S with type key = Value.value_t = NearMap.Make(OrderedKey)
@@ -161,7 +162,73 @@ and Value : sig
       | VIndirect of value_t ref
   end = Value
 
+and ValueUtils : (sig val v_to_list : Value.value_t -> Value.value_t list
+                      val tag : Value.value_t -> string
+                      val repr_of_value : Value.value_t -> string
+                  end) = struct
+  open Value
+    (* Value stringification *)
+    let v_to_list = function
+      | VBag m  -> ValueBag.to_list m
+      | VSet m  -> ISet.to_list m
+      | VList m -> IList.to_list m
+      | VMap vs -> List.map (fun (k,v) -> VTuple[k;v]) @: ValueMap.to_list vs
+      | VMultimap vs -> ValueMMap.to_list vs
+      | _ -> failwith "(v_to_list): not a collection"
+
+    let tag = function
+    | VMax               -> "VMax"
+    | VMin               -> "VMin"
+    | VUnknown           -> "VUnknown"
+    | VUnit              -> "VUnit"
+    | VBool _            -> "VBool"
+    | VInt _             -> "VInt"
+    | VFloat _           -> "VFloat"
+    | VByte _            -> "VByte"
+    | VString _          -> "VString"
+    | VTuple _           -> "VTuple"
+    | VOption _          -> "VOption"
+    | VSet _             -> "VSet"
+    | VBag _             -> "VBag"
+    | VList _            -> "VList"
+    | VMap _             -> "VMap"
+    | VMultimap _        -> "VMultimap"
+    | VFunction _        -> "VFunction"
+    | VForeignFunction _ -> "VForeignFunction"
+    | VAddress _         -> "VAddress"
+    | VTarget _          -> "VTarget"
+    | VIndirect _        -> "VIndirect"
+
+    let rec repr_of_value v =
+      let s_of_col m = String.concat "; " @: List.map repr_of_value @: v_to_list m in
+      let paren s = Printf.sprintf "(%s)" s in
+      tag v ^
+      match v with
+      | VBool b                 -> paren @: string_of_bool b
+      | VInt i                  -> paren @: string_of_int i
+      | VFloat f                -> paren @: string_of_float f
+      | VByte c                 -> paren @: string_of_int (Char.code c)
+      | VString s               -> paren s
+      | VTuple vs               -> paren @: String.concat ", " @: List.map repr_of_value vs
+      | VOption None            -> paren "None"
+      | VOption(Some x)         -> paren @: repr_of_value x
+      | VSet _
+      | VBag _
+      | VList _
+      | VMap _
+      | VMultimap _             -> paren @: s_of_col v
+      | VFunction (a, b)        -> paren @: Printf.sprintf "%s -> %s" (string_of_arg a) (string_of_expr b)
+      | VForeignFunction (a, _) -> paren @: string_of_arg a
+      | VAddress (ip, port)     -> paren @: ip^":"^ string_of_int port
+      | VTarget id              -> paren @: id
+      | VIndirect ind           -> paren @: repr_of_value !ind
+      | _                       -> ""
+
+  end
+
 open Value
+
+include ValueUtils
 
 (* trigger env is where we store the trigger functions. These functions take the
  * address,
@@ -169,66 +236,6 @@ open Value
  * environment, value_t of arguments, and produce unit *)
 type trigger_env_t = (address -> env_t -> value_t -> unit) IdMap.t
 type program_env_t = trigger_env_t * env_t
-
-(* Value stringification *)
-let unwrap opt = match opt with Some v -> v | _ -> failwith "invalid option unwrap"
-
-let v_to_list = function
-  | VBag m  -> ValueBag.to_list m
-  | VSet m  -> ISet.to_list m
-  | VList m -> IList.to_list m
-  | VMap vs -> List.map (fun (k,v) -> VTuple[k;v]) @: ValueMap.to_list vs
-  | VMultimap vs -> ValueMMap.to_list vs
-  | _ -> failwith "(v_to_list): not a collection"
-
-let tag = function
- | VMax               -> "VMax"
- | VMin               -> "VMin"
- | VUnknown           -> "VUnknown"
- | VUnit              -> "VUnit"
- | VBool _            -> "VBool"
- | VInt _             -> "VInt"
- | VFloat _           -> "VFloat"
- | VByte _            -> "VByte"
- | VString _          -> "VString"
- | VTuple _           -> "VTuple"
- | VOption _          -> "VOption"
- | VSet _             -> "VSet"
- | VBag _             -> "VBag"
- | VList _            -> "VList"
- | VMap _             -> "VMap"
- | VMultimap _        -> "VMultimap"
- | VFunction _        -> "VFunction"
- | VForeignFunction _ -> "VForeignFunction"
- | VAddress _         -> "VAddress"
- | VTarget _          -> "VTarget"
- | VIndirect _        -> "VIndirect"
-
-let rec repr_of_value v =
-  let s_of_col m = String.concat "; " @: List.map repr_of_value @: v_to_list m in
-  let paren s = Printf.sprintf "(%s)" s in
-  tag v ^
-  match v with
-  | VBool b                 -> paren @: string_of_bool b
-  | VInt i                  -> paren @: string_of_int i
-  | VFloat f                -> paren @: string_of_float f
-  | VByte c                 -> paren @: string_of_int (Char.code c)
-  | VString s               -> paren s
-  | VTuple vs               -> paren @: String.concat ", " @: List.map repr_of_value vs
-  | VOption None            -> paren "None"
-  | VOption(Some x)         -> paren @: repr_of_value x
-  | VSet _
-  | VBag _
-  | VList _
-  | VMap _
-  | VMultimap _             -> paren @: s_of_col v
-  | VFunction (a, b)        -> paren @: Printf.sprintf "%s -> %s" (string_of_arg a) (string_of_expr b)
-  | VForeignFunction (a, _) -> paren @: string_of_arg a
-  | VAddress (ip, port)     -> paren @: ip^":"^ string_of_int port
-  | VTarget id              -> paren @: id
-  | VIndirect ind           -> paren @: repr_of_value !ind
-  | _                       -> ""
-
 
 (* mark_points are optional sorted counts of where we want markings *)
 let rec print_value ?(mark_points=[]) v =
@@ -243,7 +250,7 @@ let rec print_value ?(mark_points=[]) v =
     let lazy_value v = lazy(loop v ~mark_points) in
     let print_collection lb rb vs =
       pretty_tag_str ~lb:lb ~rb:rb ~sep:"; " CutHint "" ""
-        (List.map lazy_value @: v_to_list vs)
+        (List.map lazy_value @: ValueUtils.v_to_list vs)
     in
     match v with
     | VUnknown                -> ps "??"
@@ -260,7 +267,7 @@ let rec print_value ?(mark_points=[]) v =
                                    (List.map lazy_value vs)
     | VOption None            -> ps "None"
     | VOption vopt            -> pretty_tag_str CutHint "" "Some"
-                                   [lazy_value (unwrap vopt)]
+                                   [lazy_value (unwrap_some vopt)]
     | VSet _ as vs            -> print_collection "{" "}" vs
     | VBag _ as vs            -> print_collection "{|" "|}" vs
     | VList _ as vs           -> print_collection "[" "]" vs
@@ -500,7 +507,7 @@ let rec type_of_value uuid value =
 
 let rec expr_of_value uuid value =
   let handle_cols vs =
-    let l = List.map (expr_of_value uuid) @: v_to_list vs in
+    let l = List.map (expr_of_value uuid) @: ValueUtils.v_to_list vs in
     k3_container_of_list (type_of_value uuid value) l
   in
   match value with

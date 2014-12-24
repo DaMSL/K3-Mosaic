@@ -1,5 +1,6 @@
 open Util
 open K3.AST
+module KP = K3Printing
 
 (* ------ Multimap functions ------ *)
 
@@ -24,6 +25,7 @@ module type S = sig
   val peek : t -> elt option
   val to_list : t -> elt list
   val compare : t -> t -> int
+  val to_string : t -> string
 end
 
 module Make(OrdKey: ICommon.OrderedKeyType) = struct
@@ -175,4 +177,12 @@ module Make(OrdKey: ICommon.OrderedKeyType) = struct
       MMap.compare InnerBag.compare map map'
     with Not_found -> failwith "(compare): mismatching indexes"
 
+  let string_of_mmap (m:content MMap.t) =
+    String.concat ", " @@
+      List.map (fun (k,b) ->
+        Printf.sprintf "(%s => %s)" (OrdKey.to_string k) @@
+          Printf.sprintf "[%s]" @@ String.concat "; " @@ List.map OrdKey.to_string @@ InnerBag.to_list b)  @@
+        MMap.bindings m
+
+  let to_string (m:t) = KP.string_of_index_map string_of_mmap m
 end
