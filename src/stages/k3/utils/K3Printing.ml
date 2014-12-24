@@ -49,15 +49,20 @@ let string_of_index = function
 
 let string_of_comp = function GT -> "GT" | LT -> "LT" | EQ -> "EQ" | LTA -> "LTA" | GTA -> "GTA"
 
-let string_of_indices idxs =
+let string_of_index_set idxs =
   String.concat ", " @@ List.map string_of_index @@ IndexSet.elements idxs
+
+let string_of_index_map f m =
+  String.concat ", " @@ List.map (fun (k,v) ->
+    Printf.sprintf "(%s => %s)" (string_of_index k) (f v)) @@
+      IndexMap.bindings m
 
 let string_of_container_type t_c = match t_c with
     | TSet  -> "TSet"
     | TBag  -> "TBag"
     | TList -> "TList"
     | TMap  -> "TMap"
-    | TMultimap ss -> "TMultimap("^string_of_indices ss^")"
+    | TMultimap ss -> "TMultimap("^string_of_index_set ss^")"
 
 let string_of_const cn = match cn with
     | CUnit          -> "CUnit"
