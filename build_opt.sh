@@ -24,7 +24,7 @@ fi
 if [ ! -d "./bin" ]; then mkdir bin; fi
 
 # driver
-ocamlbuild Driver.native -build-dir ./bin $@
+ocamlbuild -use-ocamlfind Driver.native -build-dir ./bin $@
 if [ -f "./bin/src/Driver.native" ]
 then echo "#!/bin/bash" > ./bin/k3
      echo "export BOLT_CONFIG=$SCRIPTPATH/bolt.cfg" >> ./bin/k3

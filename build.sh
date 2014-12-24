@@ -24,7 +24,7 @@ fi
 if [ ! -d "./bin" ]; then mkdir bin; fi
 
 # driver
-ocamlbuild Driver.byte -build-dir ./bin -tag debug $@
+ocamlbuild -use-ocamlfind Driver.byte -build-dir ./bin -tag debug $@
 if [ -f "./bin/src/Driver.byte" ]
 then echo "#!/bin/bash" > ./bin/k3
      echo "export BOLT_CONFIG=$SCRIPTPATH/bolt.cfg" >> ./bin/k3
