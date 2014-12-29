@@ -47,6 +47,12 @@ and Value : sig
       | VIndirect of value_t ref
 end
 
+and ValueComp : sig val compare_v : Value.value_t -> Value.value_t -> int
+                     val hash : Value.value_t -> int
+                     val reset_counter : unit -> unit
+                     val get_counter : unit -> int
+                 end
+
 open Value
 
 (* trigger env is where we store the trigger functions. These functions take the

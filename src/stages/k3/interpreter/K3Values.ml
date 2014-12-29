@@ -91,6 +91,7 @@ and ValueComp : (sig val compare_v : Value.value_t -> Value.value_t -> int
       | VMap v, VMap v' -> ValueMap.compare compare_v v v'
       | VMultimap v, VMultimap v' -> ValueMMap.compare v v'
       | VIndirect v, VIndirect v' -> compare_v !v !v'
+      | VInt v, VInt v' -> v - v'
       | VFloat v, VFloat v' ->
           let (f, i), (f', i') = frexp v, frexp v' in
           let d = i - i' in
@@ -201,7 +202,9 @@ and ValueUtils : (sig val v_to_list : Value.value_t -> Value.value_t list
     | VIndirect _        -> "VIndirect"
 
     let rec repr_of_value v =
-      let s_of_col m = String.concat "; " @: List.map repr_of_value @: v_to_list m in
+      let s_of_col m = String.concat "; " @@ List.map repr_of_value @@
+        List.sort ValueComp.compare_v @@
+        v_to_list m in
       let paren s = Printf.sprintf "(%s)" s in
       tag v ^
       match v with
@@ -250,7 +253,7 @@ let rec print_value ?(mark_points=[]) v =
     let lazy_value v = lazy(loop v ~mark_points) in
     let print_collection lb rb vs =
       pretty_tag_str ~lb:lb ~rb:rb ~sep:"; " CutHint "" ""
-        (List.map lazy_value @: ValueUtils.v_to_list vs)
+        (List.map lazy_value @: List.sort ValueComp.compare_v @@ ValueUtils.v_to_list vs)
     in
     match v with
     | VUnknown                -> ps "??"
