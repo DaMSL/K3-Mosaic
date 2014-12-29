@@ -160,19 +160,27 @@ let rec foldl_until f acc = function
         end
     | [] -> acc
 
+let keep_if_in_set i x = function
+   | None        -> x
+   | Some (aset, _) when IntSet.mem i aset -> x
+   | Some (_, v) -> v
+
 (* filter list by a set of indices (starting at 0) *)
 (* assume a small list *)
-let list_filter_idxs_by_set idxs l =
+(* @anti_set: (set, value) - set anything not in this set to value *)
+let list_filter_idxs_by_set ?anti_set idxs l =
   snd @:
     List.fold_right (fun x (i, acc) ->
-      if IntSet.mem i idxs then (i+1, x::acc)
+      let x' = keep_if_in_set i x anti_set in
+      if IntSet.mem i idxs then (i+1, x'::acc)
       else (i+1, acc)
     ) l (0, [])
 
 (* this version preserves index ordering *)
-let list_filter_idxs_by_list idxs l =
+(* @anti_set: (set, value) - set anything not in this set to value *)
+let list_filter_idxs_by_list ?anti_set idxs l =
   let a = Array.of_list l in
-  List.map (fun i -> a.(i)) idxs
+  List.map (fun i -> keep_if_in_set i a.(i) anti_set) idxs
 
 (* I/O helpers *)
 (* read a file and convert it into lines *)
@@ -292,7 +300,7 @@ let list_intersperse la lb =
 
 let list_intercalate v = function
   | []     -> []
-  | y::ys  -> 
+  | y::ys  ->
       let rec loop acc = function
         | x::xs -> loop (x::v::acc) xs
         | []    -> List.rev acc
@@ -300,7 +308,7 @@ let list_intercalate v = function
 
 let list_intercalate_lazy v = function
   | []     -> []
-  | y::ys  -> 
+  | y::ys  ->
       let rec loop acc = function
         | x::xs -> loop (x::v ()::acc) xs
         | []    -> List.rev acc

@@ -774,7 +774,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
     let ts = KH.unwrap_ttuple @@ snd @@ snd @@ KH.unwrap_tcol @@
              T.type_of_expr col in
     let ids  = fst_many @@ add_record_ids ts in
-    let ids' = filter_by_index_t idx ids in
+    let ids' = U.filter_by_index_t idx ids in
     let name = String.concat "_" @@ "slice_by"::ids' in
     apply_method c ~name ~col ~args:[pat] ~arg_info:[ANonLambda, Out]
 

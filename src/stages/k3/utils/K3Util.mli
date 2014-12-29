@@ -1,3 +1,4 @@
+open Util
 open K3.AST
 open K3.Annotation
 
@@ -157,3 +158,6 @@ val unwrap_tuple : expr_t -> expr_t list
 
 (* Fold over all expression trees in a program (triggers, globals) *)
 val fold_over_exprs : ('a -> expr_t -> 'a) -> 'a -> program_t -> 'a
+
+val filter_by_index_t : ?anti_set:IntSet.t * 'a -> index_t -> 'a list -> 'a list
+

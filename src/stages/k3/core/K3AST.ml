@@ -34,8 +34,6 @@ type index_t = HashIdx of IntSet.t
 
 val index_t_cmp : index_t -> index_t -> int
 
-val filter_by_index_t : index_t -> 'a list -> 'a list
-
 module IndexSet : sig include Set.S with type elt = index_t end
 module IndexMap : sig include Map.S with type key = index_t end
 

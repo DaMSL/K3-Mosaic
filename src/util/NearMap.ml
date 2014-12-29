@@ -140,10 +140,11 @@ module Make(Ord: OrderedType) = struct
       let rec loop = function
         | Empty -> []
         | Node(l, v, d, r, _) ->
-            let cmin, cmax = Ord.compare v x, Ord.compare v y in
-            let d' = if cmin <= 0 && cmax >= 0 then [d] else [] in
-            let lacc = if cmin < 0 then loop l else [] in
-            let racc = if cmax > 0 then loop r else [] in
+            let comp f a b = f (Ord.compare a b) 0 in
+            let (<<) = comp (<) in
+            let d' = if x << v && v << y then [d] else [] in
+            let lacc = if x << v then loop l else [] in
+            let racc = if v << y then loop r else [] in
             d' @ lacc @ racc
       in loop m
 

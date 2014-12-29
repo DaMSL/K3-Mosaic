@@ -378,3 +378,9 @@ let fold_over_exprs f zero p =
     | Global(_, _, Some e) -> f acc e
     | _                    -> acc
   ) zero p
+
+
+let filter_by_index_t ?anti_set idx l = match idx with
+  | HashIdx s    -> list_filter_idxs_by_set ?anti_set s l
+  | OrdIdx(il,_) -> list_filter_idxs_by_list ?anti_set il l
+

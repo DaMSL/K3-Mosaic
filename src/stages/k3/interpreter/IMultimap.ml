@@ -7,6 +7,7 @@ module KP = K3Printing
 module type S = sig
   type elt
   type t
+  type content
   module InnerBag : IBag.S
   val init : IndexSet.t -> t
   val from_mmap : t -> t
@@ -26,6 +27,7 @@ module type S = sig
   val to_list : t -> elt list
   val compare : t -> t -> int
   val to_string : t -> string
+  val string_of_content : content -> string
 end
 
 module Make(OrdKey: ICommon.OrderedKeyType) = struct
@@ -89,18 +91,26 @@ module Make(OrdKey: ICommon.OrderedKeyType) = struct
           | OrdIdx(_, eq_set') ->
               let eq_set = HashIdx(eq_set') in
               let eq_key = OrdKey.filter_idxs eq_set xs in
-              let find_all minmax key m =
+              let find_all min_key max_key m =
                 List.fold_left InnerBag.union InnerBag.empty @@
-                    MMap.find_range key (OrdKey.set_to_minmax minmax eq_set' key) m
+                    MMap.find_range min_key max_key m
               in
               let find_fn = match comp with
-                | GT  -> MMap.find_gt
-                | EQ  -> MMap.find
-                | LT  -> MMap.find_lt
-                | LTA -> find_all `Min
-                | GTA -> find_all `Max
+                | GT  -> MMap.find_gt key
+                | EQ  -> MMap.find key
+                | LT  -> MMap.find_lt key
+                | LTA -> 
+                    let k2 = OrdKey.filter_with_minmax `Min idx eq_set' xs in
+                    (*Printf.printf "key : %s\n" (OrdKey.to_string key);
+                    Printf.printf "mkey: %s\n" (OrdKey.to_string k2);*)
+                    find_all k2 key
+                | GTA -> 
+                    let k2 = OrdKey.filter_with_minmax `Max idx eq_set' xs in
+                    (*Printf.printf "key : %s\n" (OrdKey.to_string key);
+                    Printf.printf "mkey: %s\n" (OrdKey.to_string k2);*)
+                    find_all key k2
               in
-              let res = find_fn key mmap in
+              let res = find_fn mmap in
 
               (* check that the equality constraint holds *)
               if not (IntSet.is_empty eq_set') && List.mem comp [GT; LT] then
@@ -181,8 +191,10 @@ module Make(OrdKey: ICommon.OrderedKeyType) = struct
     String.concat ", " @@
       List.map (fun (k,b) ->
         Printf.sprintf "(%s => %s)" (OrdKey.to_string k) @@
-          Printf.sprintf "[%s]" @@ String.concat "; " @@ List.map OrdKey.to_string @@ InnerBag.to_list b)  @@
+          Printf.sprintf "[%s]" @@ InnerBag.to_string b)  @@
         MMap.bindings m
 
   let to_string (m:t) = KP.string_of_index_map string_of_mmap m
+
+  let string_of_content = InnerBag.to_string
 end

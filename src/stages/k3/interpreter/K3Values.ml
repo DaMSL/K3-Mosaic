@@ -35,11 +35,12 @@ module rec OrderedKey : ICommon.OrderedKeyType = struct
     let filter_idxs idx = function
       | Value.VTuple l -> Value.VTuple(filter_by_index_t idx l)
       | _ -> invalid_arg "not a vtuple"
-    let set_to_minmax m s x =
+    (* set members other than given set to min/max *)
+    let filter_with_minmax m idx mset x =
       let v = match m with `Min -> Value.VMin | `Max -> Value.VMax in
       match x with
       | Value.VTuple l ->
-          Value.VTuple(List.mapi (fun i x -> if IntSet.mem i s then v else x) l)
+          Value.VTuple(filter_by_index_t ~anti_set:(mset, v) idx l)
       | _ -> invalid_arg "not a vtuple"
     let to_string = ValueUtils.repr_of_value
     end
@@ -223,7 +224,6 @@ and ValueUtils : (sig val v_to_list : Value.value_t -> Value.value_t list
       | VTarget id              -> paren @: id
       | VIndirect ind           -> paren @: repr_of_value !ind
       | _                       -> ""
-
   end
 
 open Value

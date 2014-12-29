@@ -98,8 +98,8 @@ val compose_fn : ('a -> 'b) -> ('c -> 'a) -> 'c -> 'b
 (* fold left until the predicate (2nd arg) is true *)
 val foldl_until : ('a -> 'b -> ('a, 'a) either_t ) -> 'a -> 'b list -> 'a
 
-val list_filter_idxs_by_set : IntSet.t -> 'a list -> 'a list
-val list_filter_idxs_by_list : int list -> 'a list -> 'a list
+val list_filter_idxs_by_set  : ?anti_set:IntSet.t * 'a -> IntSet.t -> 'a list -> 'a list
+val list_filter_idxs_by_list : ?anti_set:IntSet.t * 'a -> int list -> 'a list -> 'a list
 
 val read_file_lines : string -> string list
 

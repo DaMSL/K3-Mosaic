@@ -7,6 +7,6 @@ module type OrderedKeyType = sig
   val hash : t -> int
   val filter_idxs : index_t -> t -> t
   (* set values *other* than this set to min/max *)
-  val set_to_minmax : [`Min | `Max] -> IntSet.t -> t -> t
+  val filter_with_minmax : [`Min | `Max] -> index_t -> IntSet.t -> t -> t
   val to_string : t -> string
 end
