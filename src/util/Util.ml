@@ -169,12 +169,12 @@ let keep_if_in_set i x = function
 (* assume a small list *)
 (* @anti_set: (set, value) - set anything not in this set to value *)
 let list_filter_idxs_by_set ?anti_set idxs l =
-  snd @:
-    List.fold_right (fun x (i, acc) ->
+  List.rev @@ snd @@
+    List.fold_left (fun (i, acc) x ->
       let x' = keep_if_in_set i x anti_set in
       if IntSet.mem i idxs then (i+1, x'::acc)
       else (i+1, acc)
-    ) l (0, [])
+    ) (0, []) l
 
 (* this version preserves index ordering *)
 (* @anti_set: (set, value) - set anything not in this set to value *)

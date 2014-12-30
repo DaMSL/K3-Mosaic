@@ -34,7 +34,9 @@ module type S =
     val split: key -> 'a t -> 'a t * 'a option * 'a t
     val find: key -> 'a t -> 'a
     val find_gt: key -> 'a t -> 'a
+    val find_gteq: key -> 'a t -> 'a
     val find_lt: key -> 'a t -> 'a
+    val find_lteq: key -> 'a t -> 'a
     val find_range : key -> key -> 'a t -> 'a list
     val map: ('a -> 'b) -> 'a t -> 'b t
     val mapi: (key -> 'a -> 'b) -> 'a t -> 'b t
@@ -124,8 +126,10 @@ module Make(Ord: OrderedType) = struct
         | Empty, Some (_,d) -> d
         | Node(l, v, d, r, _), _ ->
             let op, s, t = match comp with
-              | `GT -> (>), l, r
-              | `LT -> (<), r, l
+              | `GT   -> (>),  l, r
+              | `GTEQ -> (>=), l, r
+              | `LT   -> (<),  r, l
+              | `LTEQ -> (<=), r, l
             in
             let c = Ord.compare v x in
             if op c 0 then loop (Some(v,d)) s
@@ -134,6 +138,8 @@ module Make(Ord: OrderedType) = struct
 
     let find_gt x m = find_comp `GT x m
     let find_lt x m = find_comp `LT x m
+    let find_gteq x m = find_comp `GTEQ x m
+    let find_lteq x m = find_comp `LTEQ x m
 
     (* find all values between x and y, exclusive *)
     let find_range x y m =

@@ -113,15 +113,14 @@ module Make(OrdKey: ICommon.OrderedKeyType) = struct
               let res = find_fn mmap in
 
               (* check that the equality constraint holds *)
-              if not (IntSet.is_empty eq_set') && List.mem comp [GT; LT] then
-                begin match InnerBag.peek res with
+              if not (IntSet.is_empty eq_set') && List.mem comp [GT; LT] then begin
+                match InnerBag.peek res with
                 | None   -> res
                 | Some x ->
                     let eq_key2 = OrdKey.filter_idxs eq_set x in
                     if OrdKey.compare eq_key eq_key2 = 0 then res
                     else InnerBag.empty
-                end
-              else res
+              end else res
           | HashIdx _ ->
               begin match comp with
               | EQ  -> MMap.find key mmap
