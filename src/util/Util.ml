@@ -502,9 +502,9 @@ let int_of_sql_date s = match r_groups s ~n:3 ~r:r_date with
 
   (* extract a part of the date, as represented by an integer *)
 let date_part p i = match p with
-  | "day"   -> i mod 100
-  | "month" -> (i mod 10000) / 100
-  | "year"  -> i / 10000
+  | "day"   | "DAY"   -> i mod 100
+  | "month" | "MONTH" -> (i mod 10000) / 100
+  | "year"  | "YEAR"  -> i / 10000
   | _       -> failwith @@ "date_part: unknown param "^p
 
 (* replace a hash value by looking at the old value, if any *)
