@@ -41,7 +41,7 @@ def run():
     parser.add_argument('-v', '--verbose', action='store_true', dest='verbose',
                         default=False, help="See test results in detail")
     parser.add_argument('--idx', action='store_true', dest='use_idx',
-                        default=False, help="No multi index maps")
+                        default=False, help="Use multi index maps")
 
     args = parser.parse_args()
 
