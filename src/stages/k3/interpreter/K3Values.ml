@@ -72,6 +72,13 @@ and ValueComp : (sig val compare_v : Value.value_t -> Value.value_t -> int
     let get_counter () = !counter
     let reset_counter () = counter := 0
 
+    (* get a difference between float numbers *)
+    let float_diff f f' =
+      let d = f -. f' in
+      if d > comp_diff then 1
+      else if d < -. comp_diff then -1
+      else 0
+
     let rec compare_v a b =
       incr counter;
       match a,b with
@@ -92,17 +99,13 @@ and ValueComp : (sig val compare_v : Value.value_t -> Value.value_t -> int
       | VMultimap v, VMultimap v' -> ValueMMap.compare v v'
       | VIndirect v, VIndirect v' -> compare_v !v !v'
       | VInt v, VInt v' -> v - v'
+      | VInt i, VFloat f -> float_diff (foi i) f
+      | VFloat f, VInt i -> float_diff f (foi i)
       | VFloat v, VFloat v' ->
           let (f, i), (f', i') = frexp v, frexp v' in
           let d = i - i' in
           if d <> 0 then d
-          else
-            let d = f -. f' in
-            if d > comp_diff then 1
-            else if d < -. comp_diff then -1
-            else 0
-      | VFloat v as vv, VInt v' -> compare_v vv (VFloat(foi v'))
-      | VInt v', (VFloat v as vv) -> compare_v (VFloat(foi v')) vv
+          else float_diff f f'
       | x, y -> compare x y (* generic comparison *)
 
     module IntMap : (Map.S with type key = int) = Map.Make(struct
@@ -473,6 +476,8 @@ let v_slice_idx err_fn idx comp pat = function
 
 (* Value comparison. *)
 let equal_values a b = ValueComp.compare_v a b = 0
+
+let compare_values f a b = f (ValueComp.compare_v a b) 0
 
 (* Value comparison. Returns a partial list of inequality positions if there are any *)
 let find_inequality a b =

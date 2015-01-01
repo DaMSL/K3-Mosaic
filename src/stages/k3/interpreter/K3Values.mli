@@ -65,6 +65,7 @@ type program_env_t = trigger_env_t * env_t
 
 (* Value comparison *)
 val equal_values : value_t -> value_t -> bool
+val compare_values : (int -> int -> bool) -> value_t -> value_t -> bool
 
 (* Find inequalities and put their locations in a list *)
 val find_inequality : value_t -> value_t -> int option
