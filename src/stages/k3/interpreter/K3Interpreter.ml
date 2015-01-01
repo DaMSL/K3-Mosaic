@@ -154,7 +154,7 @@ and eval_expr (address:address) sched_st cenv texpr =
 
     let eval_cmpop cmp_op =
       match child_values cenv with
-        | fenv, [v1; v2] -> fenv, VTemp(VBool(cmp_op v1 v2))
+        | fenv, [v1; v2] -> fenv, VTemp(VBool(compare_values cmp_op v1 v2))
         | _ -> error "eval_cmpop" "missing values"
     in
 
