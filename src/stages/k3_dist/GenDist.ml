@@ -42,8 +42,6 @@ module T = K3Typechecker
 module R = K3Route
 
 (* control whether gc code is emitted *)
-let enable_gc = false
-
 exception ProcessingFailed of string;;
 
 (* global trigger names needed for generated triggers and sends *)
@@ -125,7 +123,7 @@ let declare_global_vars c ast =
   global_map_decl_code @
   map_buffers_decl_code @
   stmt_cntrs_code ::
-  (if enable_gc then
+  (if c.enable_gc then
     GC.acks_code ::
     GC.vid_rcv_cnt_code GC.vid_rcv_cnt_name ::
     GC.vid_rcv_cnt_code GC.vid_rcv_cnt_2_name ::
@@ -425,8 +423,8 @@ let start_trig (c:config) t =
          mk_update vid_counter_name (mk_var "vid_counter_old") @@
            mk_add (mk_cint 1) (mk_var "vid_counter_old")] @
 
-        (if enable_gc then
-          (* start garbage collection every 10
+        (if c.enable_gc then
+          (* start garbage collection every 10 vids
           * TODO maybe need to change by GC every few seconds *)
           (* disable gc for now so we can test properly *)
           [mk_if
@@ -435,7 +433,7 @@ let start_trig (c:config) t =
                 (mk_var "mod") @@
                 mk_tuple [mk_peek_or_zero vid_counter; mk_cint 10])
               (mk_cint 0)) (*end eq*)
-            (mk_send (* send to max_acked_vid_send to statr GC *)
+            (mk_send (* send to max_acked_vid_send to start GC *)
               (mk_ctarget GC.max_acked_vid_send_trig_name)
               K3Global.me_var
               (mk_cint 1))
@@ -538,13 +536,13 @@ let send_puts =
         mk_send
           (mk_ctarget(rcv_put_name_of_t c trig_name))
           (mk_var "ip") @@
-          mk_tuple @@ G.me_var ::  mk_var "stmt_id_cnt_list"::
+          mk_tuple @@ G.me_var :: mk_var "stmt_id_cnt_list"::
             args_of_t_as_vars_with_v c trig_name] @
 
-        (if enable_gc then [
+        (if c.enable_gc then [
           (* insert a record into the switch ack log, waiting for ack*)
           mk_insert GC.switch_ack_log_name @@
-                mk_tuple [mk_var "ip"; mk_var "vid"; mk_cbool false]
+            mk_tuple [mk_var "ip"; mk_var "vid"; mk_cbool false]
         ] else [])
     ) @@
     mk_gbagg
@@ -756,10 +754,10 @@ mk_code_sink'
       ) @@
         mk_var "stmt_id_cnt_list"] @
 
-    (if enable_gc then
-    (* ack send for GC *)
-    [mk_send (mk_ctarget "ack_send")  G.me_var @@
-      mk_tuple [mk_var "sender_ip"; mk_var "vid"]]
+    (if c.enable_gc then
+      (* ack send for GC *)
+      [mk_send (mk_ctarget "ack_send") G.me_var @@
+        mk_tuple [mk_var "sender_ip"; mk_var "vid"]]
     else [])
 
 
@@ -1258,7 +1256,7 @@ let gen_dist_for_t c ast trig corr_maps =
 
 (* Function to generate the whole distributed program *)
 (* @param force_correctives Attempt to create dist code that encourages correctives *)
-let gen_dist ?(force_correctives=false) ?(use_multiindex=true) p partmap ast =
+let gen_dist ?(force_correctives=false) ?(use_multiindex=false) ?(enable_gc=false) p partmap ast =
   (* collect all map access patterns for creating indexed maps *)
   let c = { p
           ; map_idxs=IntMap.empty

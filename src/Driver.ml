@@ -178,6 +178,7 @@ type parameters = {
     mutable k3new_folds : bool;   (* output fold instead of map/ext *)
     mutable load_path : string;    (* path for the interpreter to load csv files from *)
     mutable use_multiindex : bool; (* whether to generate code that uses multiindex maps *)
+    mutable enable_gc : bool;
   }
 
 let default_cmd_line_params () = {
@@ -204,6 +205,7 @@ let default_cmd_line_params () = {
     k3new_folds       = false;
     load_path         = "";
     use_multiindex    = false;
+    enable_gc         = false;
   }
 
 let cmd_line_params = default_cmd_line_params ()
@@ -490,7 +492,8 @@ let test params inputs =
 let transform_to_k3_dist params p proginfo =
   let force_correctives = params.force_correctives in
   let use_multiindex = params.use_multiindex in
-  GenDist.gen_dist ~force_correctives ~use_multiindex proginfo params.partition_map p
+  let enable_gc = params.enable_gc in
+  GenDist.gen_dist ~force_correctives ~use_multiindex ~enable_gc proginfo params.partition_map p
 
 let process_inputs params =
   let proc_fn f = match params.in_lang, !(params.action) with
@@ -598,7 +601,9 @@ let param_specs = Arg.align
   "--k3new_folds", Arg.Unit (fun () -> cmd_line_params.k3new_folds <- true),
       "         For k3new: output folds instead of ext and map";
   "--use_idx", Arg.Unit (fun () -> cmd_line_params.use_multiindex <- true),
-      "         Don't use multiindex maps";
+      "         Use multiindex maps";
+  "--gc", Arg.Unit (fun () -> cmd_line_params.enable_gc <- true),
+      "         Use garbage collection";
 
   (* Debugging parameters *)
 

@@ -42,6 +42,8 @@ def run():
                         default=False, help="See test results in detail")
     parser.add_argument('--idx', action='store_true', dest='use_idx',
                         default=False, help="Use multi index maps")
+    parser.add_argument('--gc', action='store_true', dest='enable_gc',
+                        default=False, help="Enable garbage collector")
 
     args = parser.parse_args()
 
@@ -90,7 +92,8 @@ def run():
                                 order_file=args.order_file,
                                 verbose=verbose,
                                 distrib=True,
-                                use_idx=args.use_idx)
+                                use_idx=args.use_idx,
+                                enable_gc=args.enable_gc)
         # check if a test failed
         if not res:
             six.print_("[ERROR]")

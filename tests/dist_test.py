@@ -16,7 +16,8 @@ def run(target_file,
         order_file="",
         verbose=True,
         distrib=False,
-        use_idx=False
+        use_idx=False,
+        enable_gc=False
         ):
 
     to_root = ".."
@@ -86,7 +87,7 @@ def run(target_file,
         return False
 
     load_path = "--load_path {0}".format(dbtoaster_dir)
-    
+
     # execution diverges from here
     if distrib:
         # string for k3 distributed file creation: either use a trace file or an order file
@@ -97,9 +98,10 @@ def run(target_file,
 
         force_cmd = "--force" if force_correctives else ""
         idx_cmd = "--use_idx" if use_idx else ""
+        gc_cmd = "--gc" if enable_gc else ""
 
         # create a k3 distributed file (without a partition map)
-        cmd = ('{k3o} -p -i m3 -l k3disttest {m3_file} {create_cmd} {force_cmd} {idx_cmd}'
+        cmd = ('{k3o} -p -i m3 -l k3disttest {m3_file} {create_cmd} {force_cmd} {idx_cmd} {gc_cmd}'
             + ' > {k3dist_file} 2> {error_file}').format(**locals())
         print_system(cmd, verbose)
         if check_error(error_file, verbose) or check_error(k3dist_file, verbose, True):
@@ -113,7 +115,7 @@ def run(target_file,
                 return False
 
             # create another k3 distributed file (with partition map)
-            cmd = ("{k3o} -p -i m3 -l k3disttest {m3_file} {create_cmd} -m {part_file} {force_cmd} {idx_cmd}"
+            cmd = ("{k3o} -p -i m3 -l k3disttest {m3_file} {create_cmd} -m {part_file} {force_cmd} {idx_cmd} {gc_cmd}"
                 + "> {k3dist_file} 2> {error_file}").format(**locals())
             print_system(cmd, verbose)
             if check_error(error_file, verbose) or check_error(k3dist_file, verbose, True):
