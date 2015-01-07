@@ -542,7 +542,7 @@ let send_puts =
         (if c.enable_gc then [
           (* insert a record into the switch ack log, waiting for ack*)
           mk_insert GC.switch_ack_log_name @@
-            mk_tuple [mk_var "ip"; mk_var "vid"; mk_cbool false]
+            mk_tuple [mk_var "vid"; mk_var "ip"; mk_cbool false]
         ] else [])
     ) @@
     mk_gbagg
@@ -704,7 +704,7 @@ let rcv_fetch_trig c trig =
 let rcv_put_trig c trig_name =
 mk_code_sink'
   (rcv_put_name_of_t c trig_name)
-  (["sender_ip",t_addr; "stmt_id_cnt_list", wrap_t_of_map' [t_stmt_id; t_int]]@
+  (["sender_ip", t_addr; "stmt_id_cnt_list", wrap_t_of_map' [t_stmt_id; t_int]]@
       (args_of_t_with_v c trig_name))
   [] @@
   let part_pat = ["vid", t_vid; "stmt_id", t_stmt_id] in
@@ -754,11 +754,7 @@ mk_code_sink'
       ) @@
         mk_var "stmt_id_cnt_list"] @
 
-    (if c.enable_gc then
-      (* ack send for GC *)
-      [mk_send (mk_ctarget "ack_send") G.me_var @@
-        mk_tuple [mk_var "sender_ip"; mk_var "vid"]]
-    else [])
+    (if c.enable_gc then GC.ack_send_code else [])
 
 
 (* Trigger_send_push_stmt_map
@@ -1099,6 +1095,10 @@ let filter_corrective_list =
       mk_sort (* sort so early vids are generally sent out first *)
         (* get a list of vid, stmt_id pairs *)
         (** this is reall a map, but make it a fold to convert to a list *)
+        (mk_assoc_lambda' (* compare func *)
+          ["vid1", t_vid; "stmt1", t_stmt_id]
+          ["vid2", t_vid; "stmt2", t_stmt_id] @@
+          v_lt (mk_var "vid1") @@ mk_var "vid2")
         (mk_agg
           (mk_assoc_lambda'
             ["acc", vid_stmt_col_t]
@@ -1111,12 +1111,7 @@ let filter_corrective_list =
                 mk_tuple @@ ids_to_vars @@ fst_many vid_stmt_id_t)
           (mk_empty vid_stmt_col_t) @@
           mk_var "log_entries"
-        ) @@
-        mk_assoc_lambda' (* compare func *)
-          ["vid1", t_vid; "stmt1", t_stmt_id]
-          ["vid2", t_vid; "stmt2", t_stmt_id] @@
-          v_lt (mk_var "vid1") @@ mk_var "vid2"
-
+        )
 
 (* receive_correctives:
  * ---------------------------------------

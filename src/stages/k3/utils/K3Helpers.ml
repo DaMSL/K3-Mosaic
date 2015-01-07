@@ -77,32 +77,24 @@ let wrap_tcol tcol typ =
 (* wrap a type in a list *)
 let wrap_tlist typ = wrap_tcol TList typ
 let wrap_tlist' tl = wrap_tlist @: wrap_ttuple tl
-let wrap_tlist_mut typ = mut @: wrap_tlist typ
-let wrap_tlist_mut' tl = wrap_tlist_mut @: wrap_ttuple tl
 
 (* wrap a type in a set *)
 let wrap_tset typ = wrap_tcol TSet typ
 let wrap_tset' tl = wrap_tset @: wrap_ttuple tl
-let wrap_tset_mut typ = mut @: wrap_tset typ
-let wrap_tset_mut' tl = wrap_tset_mut @: wrap_ttuple tl
 
 (* wrap a type in a bag *)
 let wrap_tbag typ = wrap_tcol TBag typ
 let wrap_tbag' tl = wrap_tbag @: wrap_ttuple tl
-let wrap_tbag_mut typ = mut @: wrap_tbag typ
-let wrap_tbag_mut' tl = wrap_tbag_mut @: wrap_ttuple tl
 
 (* wrap a type in a map *)
 let wrap_tmap typ = wrap_tcol TMap typ
-let wrap_tmap' tl = wrap_tmap @: wrap_ttuple tl
-let wrap_tmap_mut typ = mut @: wrap_tmap typ
-let wrap_tmap_mut' tl = wrap_tmap_mut @: wrap_ttuple tl
+let wrap_tmap' = function
+  | [k; v] -> wrap_tmap @: wrap_ttuple [k; v] 
+  | _      -> failwith "wrap_tmap': wrong number of arguments"
 
 (* wrap a type in a multimap *)
 let wrap_tmmap idxs typ = wrap_tcol (TMultimap idxs) typ
 let wrap_tmmap' idxs tl = wrap_tmmap idxs @: wrap_ttuple tl
-let wrap_tmmap_mut idxs typ = mut @: wrap_tmmap idxs typ
-let wrap_tmmap_mut' idxs tl = wrap_tmmap_mut idxs @: wrap_ttuple tl
 
 
 (* wrap a type in a mutable indirection *)
@@ -187,6 +179,8 @@ let mk_cint i = mk_const @: CInt i
 let mk_cfloat f = mk_const @: CFloat f
 let mk_cstring s = mk_const @: CString s
 let mk_cbool b = mk_const @: CBool b
+let mk_ctrue = mk_cbool true
+let mk_cfalse = mk_cbool false
 let mk_ctarget t = mk_const @: CTarget t
 let mk_cunknown = mk_const CUnknown
 let mk_cunit = mk_const CUnit
@@ -273,13 +267,13 @@ let mk_filter pred_fun collection =
 
 let mk_flatten collection = mk_stree Flatten [collection]
 
-let mk_agg agg_fun init collection =
-    mk_stree Aggregate [agg_fun; init; collection]
+let mk_agg agg_fn init collection =
+    mk_stree Aggregate [agg_fn; init; collection]
 
 let mk_gbagg group_fun agg_fun init collection =
     mk_stree GroupByAggregate [group_fun; agg_fun; init; collection]
 
-let mk_sort collection compare_fun =
+let mk_sort compare_fun collection =
     mk_stree Sort [collection; compare_fun]
 
 let mk_subscript i tuple = mk_stree (Subscript i) [tuple]
@@ -318,6 +312,14 @@ let mk_update col old_val new_val =
 
 let mk_peek col = mk_stree Peek [col]
 
+(* handle the common case of updating a peek on a slice *)
+let mk_update_slice col slice new_val =
+  mk_case_ns
+    (mk_peek @@ mk_slice' (mk_var col) slice)
+    "__slice"
+    mk_cunit @@
+    mk_update col (mk_var "__slice") new_val
+
 let mk_ind v = mk_stree Indirect [v]
 
 (* left: TRef, right: T/TRef *)
@@ -325,6 +327,11 @@ let mk_assign left right = mk_stree (Assign left) [right]
 
 (* target:TTarget(T) address:TAdress args:T *)
 let mk_send target address args = mk_stree Send [target; address; args]
+
+(* convenience function to aggregate starting with the first item *)
+(* NOTE: will run the first item twice *)
+let mk_agg_fst agg_fn col =
+  mk_agg agg_fn (mk_case_sn (mk_peek col) "__case" (mk_var "__case") (mk_apply (mk_var "error") mk_cunit)) col
 
 (* Macros to make role related stuff *)
 let mk_const_stream id typ l =
@@ -601,4 +608,20 @@ let mk_peek_or_zero e = mk_case_ns (mk_peek e) "_i"
 
 let mk_peek_or_error e = mk_case_ns (mk_peek e) "_i"
   (mk_apply (mk_var "error") mk_cunit) (mk_var "_i")
+
+(* data structure record to standardize manipulation *)
+type data_struct = { id: string;
+                     e: (string * value_type_t) list;
+                     t: value_type_t;
+                     init: expr_t option;
+                   }
+
+(* utility functions *)
+let decl_global x = match x.init with
+  | Some init -> mk_global_val_init x.id x.t init
+  | None      -> mk_global_val x.id x.t
+
+(* convenience function to add to ids in names *)
+let id_t_add x id_t = List.map (fun (id,t) -> id^x, t) id_t
+
 

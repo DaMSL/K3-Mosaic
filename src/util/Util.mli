@@ -34,6 +34,13 @@ val at : 'a list -> int -> 'a
 (* take the first elements in a tuple for a whole list *)
 val fst_many : ('a * 'b) list -> 'a list
 
+val fst3 : 'a * 'b * 'c -> 'a
+val snd3 : 'a * 'b * 'c -> 'b
+val thd3 : 'a * 'b * 'c -> 'c
+
+val curry : ('a -> 'b -> 'c) -> 'a * 'b -> 'c
+val curry3 : ('a -> 'b -> 'c -> 'd) -> 'a * 'b * 'c -> 'd
+
 (* take the second elements in a tuple for a whole list *)
 val snd_many : ('a * 'b) list -> 'b list
 

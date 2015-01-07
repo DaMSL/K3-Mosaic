@@ -180,6 +180,8 @@ let vid_counter_name = "__vid_counter__"
 let vid_counter = mk_var vid_counter_name
 let vid_counter_t = wrap_tbag @: t_int
 
+(* specifies the job of a node: master/switch/node *)
+let job = ("job", t_string)
 
 (* epoch
  * TODO
@@ -205,6 +207,7 @@ let stmt_cntrs_id_t= [
   ]
 
 let stmt_cntrs_wrap = wrap_tbag'
+(* NOTE: change to mmap with index on vid, stmt *)
 let stmt_cntrs_type = stmt_cntrs_wrap @: snd_many stmt_cntrs_id_t
 
 (* names for log *)

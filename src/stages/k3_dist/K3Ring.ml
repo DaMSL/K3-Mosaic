@@ -72,11 +72,12 @@ let add_node_code =
     ;
     (* sort by the hash *)
     mk_let "temp_ring" t_ring
-      (mk_sort (mk_var node_ring_nm) @:
-        mk_assoc_lambda
+      (mk_sort
+        (mk_assoc_lambda
           (wrap_args @: id_t_node_for "hash1")
           (wrap_args @: id_t_node_for "hash2") @:
-          mk_gt (mk_var "hash1") (mk_var "hash2")
+          mk_gt (mk_var "hash1") (mk_var "hash2"))
+        (mk_var node_ring_nm)
       ) @:
     (* delete everything in the ring and insert the contents of the temp ring.
      * This wouldn't be necessary if we had annotations that worked *)

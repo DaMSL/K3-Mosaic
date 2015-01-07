@@ -43,6 +43,13 @@ let fst_many l = fst @: List.split l
 
 let snd_many l = snd @: List.split l
 
+let fst3 (x,_,_) = x
+let snd3 (_,x,_) = x
+let thd3 (_,_,x) = x
+
+let curry f (a,b) = f a b
+let curry3 f (a,b,c) = f a b c
+
 (* apply to one part of the tuple, and send the other part through *)
 let first  f (x,y) = f x, y
 let second f (x,y) = x, f y

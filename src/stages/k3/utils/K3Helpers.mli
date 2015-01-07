@@ -53,24 +53,14 @@ val wrap_ttuple_mut : value_type_t list -> value_type_t
 val wrap_tlist : value_type_t -> value_type_t
 (* a version that wraps in a tuple if necessary *)
 val wrap_tlist' : value_type_t list -> value_type_t
-val wrap_tlist_mut : value_type_t -> value_type_t
-val wrap_tlist_mut' : value_type_t list -> value_type_t
 val wrap_tset : value_type_t -> value_type_t
 val wrap_tset' : value_type_t list -> value_type_t
-val wrap_tset_mut : value_type_t -> value_type_t
-val wrap_tset_mut' : value_type_t list -> value_type_t
 val wrap_tbag : value_type_t -> value_type_t
 val wrap_tbag' : value_type_t list -> value_type_t
-val wrap_tbag_mut : value_type_t -> value_type_t
-val wrap_tbag_mut' : value_type_t list -> value_type_t
 val wrap_tmap : value_type_t -> value_type_t
 val wrap_tmap' : value_type_t list -> value_type_t
-val wrap_tmap_mut : value_type_t -> value_type_t
-val wrap_tmap_mut' : value_type_t list -> value_type_t
 val wrap_tmmap : IndexSet.t -> value_type_t -> value_type_t
 val wrap_tmmap' : IndexSet.t -> value_type_t list -> value_type_t
-val wrap_tmmap_mut : IndexSet.t -> value_type_t -> value_type_t
-val wrap_tmmap_mut' : IndexSet.t -> value_type_t list -> value_type_t
 val wrap_tind : value_type_t -> value_type_t
 val wrap_tind_mut : value_type_t -> value_type_t
 val wrap_tmaybe : value_type_t -> value_type_t
@@ -107,6 +97,8 @@ val mk_cint : int -> expr_t
 val mk_cfloat : float -> expr_t
 val mk_cstring : string -> expr_t
 val mk_cbool : bool -> expr_t
+val mk_ctrue : expr_t
+val mk_cfalse : expr_t
 val mk_ctarget : id_t -> expr_t
 val mk_cunknown : expr_t
 val mk_cunit : expr_t
@@ -153,6 +145,7 @@ val mk_map : expr_t -> expr_t -> expr_t
 val mk_filter : expr_t -> expr_t -> expr_t
 val mk_flatten : expr_t -> expr_t
 val mk_agg : expr_t -> expr_t -> expr_t -> expr_t
+val mk_agg_fst : expr_t -> expr_t -> expr_t
 val mk_gbagg : expr_t -> expr_t -> expr_t -> expr_t -> expr_t
 val mk_sort : expr_t -> expr_t -> expr_t
 val mk_subscript : int -> expr_t -> expr_t
@@ -167,6 +160,7 @@ val mk_slice_idx' : idx:index_t -> comp:comp_t -> expr_t -> expr_t list -> expr_
 val mk_insert : id_t -> expr_t -> expr_t
 val mk_delete : id_t -> expr_t -> expr_t
 val mk_update : id_t -> expr_t -> expr_t -> expr_t
+val mk_update_slice : id_t -> expr_t list -> expr_t -> expr_t
 
 val mk_ind : expr_t -> expr_t
 val mk_assign : id_t -> expr_t -> expr_t
@@ -305,3 +299,15 @@ val mk_convert_col : value_type_t -> value_type_t -> expr_t -> expr_t
 val mk_peek_or_zero : expr_t -> expr_t
 
 val mk_peek_or_error : expr_t -> expr_t
+
+(* data structure record to standardize manipulation *)
+type data_struct = { id: string;
+                     e: (string * value_type_t) list;
+                     t: value_type_t;
+                     init: expr_t option;
+                   }
+
+val decl_global : data_struct -> declaration_t * annotation_t
+
+(* add to id,type list *)
+val id_t_add : string -> (string * 'a) list -> (string * 'a) list
