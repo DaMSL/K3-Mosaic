@@ -127,7 +127,7 @@ let global_pmaps =
         mk_tuple
           [project_from_tuple [t_int; t_string; t_int] ~total:3 ~choice:1 @:
             mk_peek_or_error @:
-              mk_slice (mk_var K3Dist.map_ids) @:
+              mk_slice (mk_var K3Dist.map_ids_id) @:
                 mk_tuple [mk_cunknown; mk_var "map_name"; mk_cunknown]
           ; mk_var "map_types"]
       ) @:

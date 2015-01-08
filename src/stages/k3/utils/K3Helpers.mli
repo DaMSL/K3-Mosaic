@@ -91,6 +91,10 @@ val unwrap_tcol : type_t -> bool * (container_type_t * value_type_t)
 (* unwrap a tuple type and return its list. If not a ttuple, return as singleton *)
 val unwrap_ttuple : value_type_t -> value_type_t list
 
+val unwrap_tind : value_type_t -> value_type_t
+
+val is_tind : value_type_t -> bool
+
 (* simple functions that enable easy construction of AST trees *)
 val mk_const : constant_t -> expr_t
 val mk_cint : int -> expr_t
@@ -311,3 +315,6 @@ val decl_global : data_struct -> declaration_t * annotation_t
 
 (* add to id,type list *)
 val id_t_add : string -> (string * 'a) list -> (string * 'a) list
+
+(* modify values of id_t format and convert any remaining values to vars *)
+val modify_e : (string * 'a) list -> (string * expr_t) list -> expr_t list

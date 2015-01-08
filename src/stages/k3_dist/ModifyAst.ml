@@ -71,10 +71,10 @@ let get_map_access_patterns ast : IndexSet.t StrMap.t =
 (* vid is always the last thing to be matched on *)
 let map_indices_add_vid idxs =
   let map_idx_add_vid = function
-    | HashIdx s    -> 
+    | HashIdx s    ->
         let l = List.map vid_shift @@ IntSet.elements s in
         OrdIdx (add_vid_idx l, IntSet.of_list l)
-    | OrdIdx(l,eq) -> 
+    | OrdIdx(l,eq) ->
         let eq' = IntSet.of_list @@ List.map vid_shift @@ IntSet.elements eq in
         OrdIdx (add_vid_idx (List.map vid_shift l), eq')
   in
@@ -105,7 +105,7 @@ let get_map_access_patterns_ids c ast =
 (* inserts a reference to the default vid var for that node *)
 let rec add_vid_to_init_val types e =
   let add = add_vid_to_init_val types in
-  let vid_var = mk_var init_vid in
+  let vid_var = mk_var init_vid.id in
   match U.tag_of_expr e with
   | Combine -> let x, y = U.decompose_combine e in
       mk_combine (add x) (add y)
@@ -119,29 +119,26 @@ let rec add_vid_to_init_val types e =
   | _ -> failwith "add_vid_to_init_val: unhandled modification"
 
 (* add a vid to global value map declarations *)
-let modify_global_map c = function
+let get_global_map_inits c = function
   (* filter to have only map declarations *)
   | Global(name, TValue typ, m_expr),_ ->
     begin try
       let map_id = P.map_id_of_name c.p name in
-      let map_type =
-        wrap_t_map_idx' c map_id @@ P.map_types_with_v_for c.p map_id in
-      let map_type_ind = wrap_tind map_type in
+      let e  = P.map_ids_types_with_v_for c.p map_id in
+      let t' = wrap_t_map_idx' c map_id @@ snd_many e in
+      let t  = wrap_tind t' in
       begin match m_expr with
-        | None   -> [mk_global_val_init name map_type_ind @@
-                      mk_ind @@ mk_empty map_type]
-        | Some e -> (* add a vid *)
-          let e' = mk_ind @@ add_vid_to_init_val map_type e in
-          [mk_global_val_init name map_type_ind e']
+        | None     -> []
+                      (* add a vid *)
+        | Some exp -> [map_id, mk_ind @@ add_vid_to_init_val t' exp]
       end
     with Not_found -> [] end
   | _ -> []
 
-(* return ast for map declarations, adding the vid *)
-let modify_map_decl_ast c ast =
+(* return ast for map initializations, adding the vid *)
+let map_inits_from_ast c ast : expr_t IntMap.t =
   let decls = U.globals_of_program ast in
-  init_vid_k3 ::
-    (List.flatten @@ list_map (modify_global_map c) decls)
+  intmap_of_list @@ List.flatten @@ List.map (get_global_map_inits c) decls
 
 (* --- Trigger modification --- *)
 

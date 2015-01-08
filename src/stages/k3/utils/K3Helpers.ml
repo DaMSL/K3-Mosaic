@@ -89,7 +89,7 @@ let wrap_tbag' tl = wrap_tbag @: wrap_ttuple tl
 (* wrap a type in a map *)
 let wrap_tmap typ = wrap_tcol TMap typ
 let wrap_tmap' = function
-  | [k; v] -> wrap_tmap @: wrap_ttuple [k; v] 
+  | [k; v] -> wrap_tmap @: wrap_ttuple [k; v]
   | _      -> failwith "wrap_tmap': wrong number of arguments"
 
 (* wrap a type in a multimap *)
@@ -162,6 +162,16 @@ let unwrap_tcol t = unwrap_vcol @: unwrap_tval t
 let unwrap_ttuple vt = match snd @: unwrap_vtype vt with
   | TTuple vt_l -> vt_l
   | x           -> [vt]
+
+(* unwrap an indirection type *)
+let unwrap_tind t = match snd @@ unwrap_vtype t with
+  | TIndirect vt -> vt
+  | _            -> t
+
+let is_tind t = match snd @@ unwrap_vtype t with
+  | TIndirect _ -> true
+  | _           -> false
+
 
 (* Helper functions to create K3 AST nodes more easily *)
 
@@ -624,4 +634,11 @@ let decl_global x = match x.init with
 (* convenience function to add to ids in names *)
 let id_t_add x id_t = List.map (fun (id,t) -> id^x, t) id_t
 
-
+(* modify e values of id_t format and convert any remaining values to vars *)
+let modify_e id_t val_l =
+  let m = strmap_of_list val_l in
+  List.map (fun (s, _) ->
+    try StrMap.find s m
+    with Not_found -> mk_var s)
+  id_t
+  

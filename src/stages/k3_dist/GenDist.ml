@@ -66,73 +66,26 @@ let do_corrective_name_of_t c trig_nm stmt_id map_id =
 let check_stmt_cntr_index = "check_and_update_stmt_cntr_index"
 
 let declare_global_vars c ast =
-  (* global containing mapping of map_id to map_name and dimensionality *)
-  let map_list =
-    let t_map_list = wrap_tbag' [t_int; t_string ;t_int] in
-    let content = P.for_all_maps c.p (fun i ->
-      mk_tuple [mk_cint i;
-                mk_cstring @@ P.map_name_of c.p i;
-                mk_cint @@ List.length @@ P.map_types_for c.p i]) in
-    mk_global_val_init K3Dist.map_ids t_map_list @@
-      k3_container_of_list t_map_list content
+  (* replace default inits with ones from ast *)
+  let dict = M.map_inits_from_ast c ast in
+  let replace_init (ds, id) =
+    try
+      let init = some @@ IntMap.find id dict in
+      {ds with init}
+    with Not_found -> ds
   in
-  (* vid_counter to generate vids.
-   * We use a singleton because refs aren't ready *)
-  let vid_counter_code =
-    mk_global_val_init vid_counter_name vid_counter_t @@
-    mk_singleton vid_counter_t @@ mk_cint 1 in
+  decl_global init_vid ::
+  decl_global (map_ids c) ::
+  decl_global D.vid_counter ::
+  decl_global D.epoch_counter ::
+  decl_global D.nd_stmt_cntrs ::
+  decl_global D.nd_log_master ::
+  List.map decl_global (D.log_ds c) @
+  (* combine generic map inits with ones from the ast *)
+  List.map (decl_global |- replace_init) (D.maps c) @
+  List.map (decl_global |- replace_init) (D.map_buffers c) @
+  if c.enable_gc then GC.globals else []
 
-  (* epoch code *)
-  let epoch_code =
-    mk_global_val_init epoch_name epoch_t @@
-    mk_singleton epoch_t @@ mk_cint 0 in
-
-  let global_map_decl_code = M.modify_map_decl_ast c ast in
-
-  (* we need to make buffer versions of rhs maps based on their statement *)
-  let map_buffers_decl_code =
-    (* for all rhs, lhs map pairs *)
-    let make_map_decl (stmt, map_id) =
-      let map_name = P.buf_of_stmt_map_id c.p stmt map_id in
-      let map_t = wrap_t_map_idx' c map_id @@ P.map_types_with_v_for c.p map_id in
-      (* for indirections, we need to create initial values *)
-      mk_global_val_init map_name
-        (wrap_tind map_t) @@
-        mk_ind @@ mk_empty map_t
-    in
-    P.for_all_stmts_rhs_maps c.p make_map_decl
-  in
-
-  let stmt_cntrs_code = mk_global_val stmt_cntrs_name stmt_cntrs_type in
-  (* structures used for logs *)
-  let log_structs_code =
-    let log_master_code = mk_global_val
-      log_master @@
-      wrap_tbag' [t_vid; t_trig_id; t_stmt_id]
-    in
-    let log_struct_code_for t = mk_global_val
-      (log_for_t t) @@
-      wrap_tbag' @@ snd_many @@ args_of_t_with_v c t
-    in
-    let log_structs = P.for_all_trigs c.p log_struct_code_for in
-    log_master_code::log_structs
-  in
-  map_list ::
-  vid_counter_code ::
-  epoch_code ::
-  global_map_decl_code @
-  map_buffers_decl_code @
-  stmt_cntrs_code ::
-  (if c.enable_gc then
-    GC.acks_code ::
-    GC.vid_rcv_cnt_code GC.vid_rcv_cnt_name ::
-    GC.vid_rcv_cnt_code GC.vid_rcv_cnt_2_name ::
-    GC.vid_buf_code ::
-    GC.vid_buf_2_code ::
-    GC.min_max_acked_vid_code ::
-    [GC.gc_vid_code]
-  else []) @
-  log_structs_code
 
 (* global functions *)
 (* most of our global functions come from the shuffle/route code *)
@@ -150,13 +103,11 @@ let declare_global_prims =
 
 let declare_global_funcs partmap c ast =
   (* log_master_write *)
-  let log_master_write_code () = mk_global_fn
-    log_master_write_nm
-    log_master_id_t
+  let log_master_write_code () =
+    mk_global_fn log_master_write_nm nd_log_master.e
     [t_unit] @@
-    mk_insert log_master @@ (* write to master log *)
-      mk_tuple @@
-        ids_to_vars @@ fst_many log_master_id_t
+    mk_insert nd_log_master.id @@ (* write to master log *)
+      mk_tuple @@ ids_to_vars @@ fst_many nd_log_master.e
   in
   (* log_write *)
   let log_write_code t = mk_global_fn
@@ -164,7 +115,7 @@ let declare_global_funcs partmap c ast =
     (args_of_t_with_v c t)
     [t_unit] @@
       (* write bound to trigger_specific log *)
-      mk_insert (log_for_t t) @@
+      mk_insert (D.log_for_t t) @@
         mk_tuple @@ args_of_t_as_vars_with_v c t
   in
   (* log_get_bound -- necessary since each trigger has different args *)
@@ -178,7 +129,7 @@ let declare_global_funcs partmap c ast =
       ["vid", t_vid]
       (arg_types_of_t_with_v c t) @@
       mk_case_sn
-        (mk_peek @@ mk_slice' (mk_var @@ log_for_t t) pat_unknown) "slice"
+        (mk_peek @@ mk_slice' (mk_var @@ D.log_for_t t) pat_unknown) "slice"
         (mk_var "slice")
         (mk_apply (mk_var "error") mk_cunit)
   in
@@ -186,38 +137,38 @@ let declare_global_funcs partmap c ast =
   let log_read_geq_code = mk_global_fn
     log_read_geq
     ["vid2", t_vid]
-    [wrap_tbag' @@ snd_many log_master_id_t] @@
+    [wrap_tbag' @@ snd_many nd_log_master.e] @@
     mk_filter
       (* get only >= vids *)
       (mk_lambda'
-        log_master_id_t @@
+        nd_log_master.e @@
         v_geq (mk_var "vid") @@ mk_var "vid2"
       ) @@
-      mk_var log_master
+      mk_var nd_log_master.id
   in
   (* check_stmt_cntr_indx *)
   (* Check to see if we should send a do_complete message *)
   let check_stmt_cntr_index_fn =
-    let part_pat = list_drop_end 1 stmt_cntrs_id_t in
-    let counter = fst @@ hd @@ list_take_end 1 stmt_cntrs_id_t in
-    let full_types = snd_many stmt_cntrs_id_t in
+    let part_pat = list_drop_end 1 nd_stmt_cntrs.e in
+    let counter = fst @@ hd @@ list_take_end 1 nd_stmt_cntrs.e in
+    let full_types = snd_many nd_stmt_cntrs.e in
     let part_pat_as_vars = ids_to_vars @@ fst_many part_pat in
     let query_pat = part_pat_as_vars @ [mk_cunknown] in
-    let stmt_cntrs_slice = mk_slice' stmt_cntrs query_pat in
+    let stmt_cntrs_slice = mk_slice' (mk_var nd_stmt_cntrs.id) query_pat in
     mk_global_fn
       check_stmt_cntr_index
       part_pat
       [t_bool] @@ (* return whether we should send the do_complete *)
       mk_if (* check if the counter exists *)
-        (mk_has_member' stmt_cntrs query_pat @@ stmt_cntrs_wrap full_types)
+        (mk_has_member' (mk_var nd_stmt_cntrs.id) query_pat @@ nd_stmt_cntrs.t)
         (mk_block
           [mk_case_ns (mk_peek stmt_cntrs_slice) "ctr_slice"
            mk_cunit
            (mk_update
-            stmt_cntrs_name
+            nd_stmt_cntrs.id
             (mk_var "ctr_slice") @@ (* oldval *)
             mk_let_many (* newval *)
-              stmt_cntrs_id_t
+              nd_stmt_cntrs.e
               (mk_var "ctr_slice") @@
               mk_tuple @@
                 part_pat_as_vars @
@@ -235,7 +186,7 @@ let declare_global_funcs partmap c ast =
         ) @@
         mk_block
           [mk_insert (* else: no value in the counter *)
-            stmt_cntrs_name @@
+            nd_stmt_cntrs.id @@
             (* Initialize if the push arrives before the put. *)
             mk_tuple @@ part_pat_as_vars @ [mk_cint(-1)];
           mk_cbool false
@@ -399,10 +350,9 @@ let start_trig (c:config) t =
   let update_epoch =
     if c.force_correctives then
       (* force correctives by changing the epoch *)
-      [mk_let "old_epoch" t_int (mk_peek_or_zero epoch_var) @@
-       mk_update epoch_name (mk_var "old_epoch") @@
+      [mk_assign epoch_counter.id @@
         mk_apply (mk_var "mod") @@
-          mk_tuple [mk_add (mk_var "old_epoch") @@ mk_cint 1; mk_cint 2]]
+          mk_tuple [mk_add (mk_var epoch_counter.id) @@ mk_cint 1; mk_cint 2]]
     else []
   in
   mk_code_sink' t (P.args_of_t c.p t) [] @@
@@ -410,35 +360,17 @@ let start_trig (c:config) t =
       update_epoch@
       [mk_let "vid" t_vid
          (mk_tuple [
-           mk_peek_or_zero epoch_var;
-           mk_peek_or_zero vid_counter;
+           mk_var epoch_counter.id;
+           mk_var vid_counter.id;
            mk_apply (mk_var hash_addr) G.me_var]) @@
        mk_block @@ [
          mk_send
            (mk_ctarget(send_fetch_name_of_t c t)) G.me_var @@
            mk_tuple @@ args_of_t_as_vars_with_v c t;
-
         (* increase vid_counter *)
-         mk_let "vid_counter_old" t_int (mk_peek_or_zero vid_counter) @@
-         mk_update vid_counter_name (mk_var "vid_counter_old") @@
-           mk_add (mk_cint 1) (mk_var "vid_counter_old")] @
-
-        (if c.enable_gc then
-          (* start garbage collection every 10 vids
-          * TODO maybe need to change by GC every few seconds *)
-          (* disable gc for now so we can test properly *)
-          [mk_if
-            (mk_eq
-              (mk_apply
-                (mk_var "mod") @@
-                mk_tuple [mk_peek_or_zero vid_counter; mk_cint 10])
-              (mk_cint 0)) (*end eq*)
-            (mk_send (* send to max_acked_vid_send to start GC *)
-              (mk_ctarget GC.max_acked_vid_send_trig_name)
-              K3Global.me_var
-              (mk_cint 1))
-            mk_cunit]
-        else [])
+         mk_assign vid_counter.id @@
+           mk_add (mk_cint 1) @@ mk_var vid_counter.id
+         ]
       ]
 
 let send_fetch_trig c s_rhs_lhs s_rhs trig_name =
@@ -539,11 +471,7 @@ let send_puts =
           mk_tuple @@ G.me_var :: mk_var "stmt_id_cnt_list"::
             args_of_t_as_vars_with_v c trig_name] @
 
-        (if c.enable_gc then [
-          (* insert a record into the switch ack log, waiting for ack*)
-          mk_insert GC.switch_ack_log_name @@
-            mk_tuple [mk_var "vid"; mk_var "ip"; mk_cbool false]
-        ] else [])
+        if c.enable_gc then [GC.sw_ack_init_code] else []
     ) @@
     mk_gbagg
       (mk_assoc_lambda' (* grouping func -- assoc because of gbagg tuple *)
@@ -707,15 +635,13 @@ mk_code_sink'
   (["sender_ip", t_addr; "stmt_id_cnt_list", wrap_t_of_map' [t_stmt_id; t_int]]@
       (args_of_t_with_v c trig_name))
   [] @@
-  let part_pat = ["vid", t_vid; "stmt_id", t_stmt_id] in
-  let part_pat_as_vars = ids_to_vars @@ fst_many part_pat in
-  let query_pat = part_pat_as_vars @ [mk_cunknown] in
+  let pat x = modify_e D.nd_stmt_cntrs.e ["counter", x] in
   mk_block @@ [
     mk_iter
       (mk_lambda'
         ["stmt_id", t_stmt_id; "count", t_int] @@
         mk_case_sn
-          (mk_peek @@ mk_slice' stmt_cntrs query_pat) "old_val"
+          (mk_peek @@ mk_slice' (mk_var D.nd_stmt_cntrs.id) @@ pat mk_cunknown) "old_val"
           (mk_let_deep' ["_", t_unit; "_", t_unit; "old_count", t_int]
             (mk_var "old_val") @@
             (* update the count *)
@@ -723,11 +649,9 @@ mk_code_sink'
               (mk_add (mk_var "old_count") @@ mk_var "count") @@
             mk_block [
               mk_update
-                stmt_cntrs_name
-                (mk_tuple @@
-                  part_pat_as_vars@[mk_var "old_count"]) @@
-                mk_tuple @@
-                  part_pat_as_vars@[mk_var "new_count"]
+                D.nd_stmt_cntrs.id
+                (mk_tuple @@ pat @@ mk_var "old_count") @@
+                 mk_tuple @@ pat @@ mk_var "new_count"
               ;
               mk_if
                 (mk_eq (mk_var "new_count") @@ mk_cint 0)
@@ -749,12 +673,12 @@ mk_code_sink'
                 mk_cunit
             ]) @@
           mk_insert
-            stmt_cntrs_name @@
-            mk_tuple @@ part_pat_as_vars@[mk_var "count"]
+            D.nd_stmt_cntrs.id @@
+            mk_tuple @@ pat @@ mk_var "count"
       ) @@
         mk_var "stmt_id_cnt_list"] @
 
-    (if c.enable_gc then GC.ack_send_code else [])
+      (if c.enable_gc then [GC.nd_ack_send_code] else [])
 
 
 (* Trigger_send_push_stmt_map
@@ -1076,7 +1000,7 @@ let filter_corrective_list =
   [return_type]
   @@
   mk_let "log_entries"
-    (wrap_tbag' @@ snd_many log_master_id_t)
+    D.nd_log_master.t
     (mk_apply (* list of triggers >= vid *)
       (mk_var log_read_geq) @@ mk_var "request_vid") @@
   (* convert to bag *)
@@ -1102,7 +1026,7 @@ let filter_corrective_list =
         (mk_agg
           (mk_assoc_lambda'
             ["acc", vid_stmt_col_t]
-            log_master_id_t @@
+            D.nd_log_master.e @@
             (* convert to vid, stmt *)
             mk_combine
               (mk_var "acc") @@
@@ -1150,7 +1074,7 @@ List.map
                     (* We'll crash if we can't find the right stmt here, but this is
                     * desired behavior since it makes sure a corrective can't happen
                     * without an earlier push/put *)
-                    mk_slice' stmt_cntrs
+                    mk_slice' (mk_var D.nd_stmt_cntrs.id)
                       [mk_var "compute_vid"; mk_cint stmt_id; mk_cunknown]
                   ) @@ (* error if we get more than one result *)
                   mk_just @@
@@ -1269,7 +1193,8 @@ let gen_dist ?(force_correctives=false) ?(use_multiindex=false) ?(enable_gc=fals
   (* regular trigs then insert entries into shuffle fn table *)
   let regular_trigs = List.flatten @@
     P.for_all_trigs c.p @@ fun t ->
-      gen_dist_for_t c ast t potential_corr_maps in
+      gen_dist_for_t c ast t potential_corr_maps
+  in
   let prog =
     declare_global_vars c ast @
     declare_global_prims @
@@ -1278,12 +1203,13 @@ let gen_dist ?(force_correctives=false) ?(use_multiindex=false) ?(enable_gc=fals
     declare_foreign_functions c @
     filter_corrective_list ::  (* global func *)
     (mk_flow @@
-      (if c.enable_gc then GC.triggers c ast else []) @
+      (if c.enable_gc then GC.triggers else []) @
       regular_trigs @
       send_corrective_trigs c @
       demux_trigs ast)::    (* per-map basis *)
-      roles_of ast in
-  let foreign = List.filter (U.is_foreign) prog in
-  let rest = List.filter (not |- U.is_foreign) prog in
+      roles_of ast
+  in
+  (* order foreign functions first *)
+  let foreign, rest = List.partition (U.is_foreign) prog in
   snd @@ U.renumber_program_ids (foreign @ rest)
 

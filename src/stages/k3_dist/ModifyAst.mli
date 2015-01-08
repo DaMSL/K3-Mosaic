@@ -21,4 +21,4 @@ val modify_corr_ast : config -> program_t ->
     (id_t * value_type_t) list * expr_t
 
 (* return global ast for map declarations, adding the vid *)
-val modify_map_decl_ast : config -> program_t -> program_t
+val map_inits_from_ast : config -> program_t -> expr_t IntMap.t

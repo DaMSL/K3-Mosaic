@@ -82,11 +82,6 @@ let add_index_pat id pat_kind_l c =
   add_index id idx_kind_l c
 *)
 
-(* initial vid to put in initialization statements *)
-let init_vid = "__init_vid__"
-
-let map_ids = "__map_ids__"
-
 let t_vid_list = wrap_tlist t_vid
 
 (* what the generic type of the global maps is *)
@@ -108,10 +103,10 @@ let wrap_t_map_idx c map_id =
 let wrap_t_map_idx' c map_id = wrap_t_map_idx c map_id |- wrap_ttuple
 
 (* global declaration of default vid to put into every map *)
-let init_vid_k3 =
-  mk_global_val_init init_vid t_vid @:
-    (* epoch, counter=0, node hash *)
-    mk_tuple [mk_cint 0; mk_cint 0; mk_apply (mk_var "hash_addr") G.me_var]
+let init_vid =
+                      (* epoch, counter=0, node hash *)
+  let init = some @@ mk_tuple [mk_cint 0; mk_cint 0; mk_apply (mk_var "hash_addr") G.me_var] in
+  {id="init_vid"; t=t_vid; e=[]; init}
 
 let min_vid_k3 = mk_tuple [mk_cint 0; mk_cint 0; mk_cint 0]
 let max_vid_k3 = mk_tuple [mk_cint max_int; mk_cint max_int; mk_cint max_int ]
@@ -176,44 +171,76 @@ let declare_foreign_functions _ =
  * ---------------------------------------------- *)
 
 (* vid counter used to assign vids *)
-let vid_counter_name = "__vid_counter__"
-let vid_counter = mk_var vid_counter_name
-let vid_counter_t = wrap_tbag @: t_int
+let vid_counter = {id="vid_counter"; t=t_int_mut; e=[]; init=some @@ mk_cint 1}
 
 (* specifies the job of a node: master/switch/node *)
-let job = ("job", t_string)
+let job = {id="job"; t=mut t_string; e=[]; init=None}
 
-(* epoch
- * TODO
- * Need to combine vid_counter, epoch and hash together
- * Create a global hash_me variale? Intstead of doing hash
- * everytime need a vid? *)
-let epoch_name = "__epoch__"
-let epoch_var = mk_var epoch_name
-let epoch_t = wrap_tbag @: t_int
+(* epoch *)
+let epoch_counter = {id="epoch_counter"; t=mut t_int; e=[]; init=some @@ mk_cint 0}
+
+(* global containing mapping of map_id to map_name and dimensionality *)
+let map_ids_id = "map_ids"
+let map_ids c =
+  let e = ["map_idx", t_int; "map_name", t_string; "map_dim", t_int] in
+  let t = wrap_tbag' @@ snd_many e in
+  let init =
+    some @@ k3_container_of_list t @@
+      P.for_all_maps c.p @@ fun i ->
+        mk_tuple [mk_cint i;
+                  mk_cstring @@ P.map_name_of c.p i;
+                  mk_cint @@ List.length @@ P.map_types_for c.p i] in
+  {id=map_ids_id; e; t; init}
 
 (* stmt_cntrs - (vid, stmt_id, counter) *)
-let stmt_cntrs_name = "__stmt_cntrs__"
-let stmt_cntrs = mk_var stmt_cntrs_name
-
-let stmt_cntrs_vid_name = "vid"
-let stmt_cntrs_stmt_id_name = "stmt_id"
-let stmt_cntrs_counter_name = "counter"
-
-let stmt_cntrs_id_t= [
-       stmt_cntrs_vid_name, t_vid;
-       stmt_cntrs_stmt_id_name, t_int;
-       stmt_cntrs_counter_name, t_int;
-  ]
-
-let stmt_cntrs_wrap = wrap_tbag'
 (* NOTE: change to mmap with index on vid, stmt *)
-let stmt_cntrs_type = stmt_cntrs_wrap @: snd_many stmt_cntrs_id_t
+let nd_stmt_cntrs =
+  let e = ["vid", t_vid; "stmt_id", t_int; "counter", t_int] in
+  {id="nd_stmt_cntrs"; e; t=wrap_tbag' @@ snd_many e; init=None}
+
+(* master log *)
+let nd_log_master =
+  let e = ["vid", t_vid; "trig_id", t_trig_id; "stmt_id", t_stmt_id] in
+  {id="nd_log_master"; e; t=wrap_tbag' @@ snd_many e; init=None}
 
 (* names for log *)
-let log_for_t t = "log_"^t
-let log_master = "log__master"
-let log_master_id_t = ["vid", t_vid; "trig_id", t_trig_id; "stmt_id", t_stmt_id]
+let log_for_t t = "nd_log_"^t
+
+(* log data structures *)
+let log_ds c : data_struct list =
+  let log_struct_for trig =
+    let e = args_of_t_with_v c trig in
+    {id=log_for_t trig; e; t=wrap_tbag' @@ snd_many e; init=None}
+  in
+  P.for_all_trigs c.p log_struct_for
+
+(* create a map structure: used for both maps and buffers *)
+let make_map_decl c map_name map_id =
+  let e = P.map_ids_types_with_v_for c.p map_id in
+  let t' = wrap_t_map_idx' c map_id @@ snd_many e in
+  (* for indirections, we need to create initial values *)
+  let init = some @@ mk_ind @@ mk_empty t' in
+  ({id=map_name; e; init; t=wrap_tind t'}, map_id)
+
+(* Buffer versions of maps per statement (to prevent mixing values) *)
+(* NOTE: doesn't contain special inits from AST *)
+let map_buffers c =
+  (* for all rhs, lhs map pairs *)
+  let do_map (stmt, map_id) =
+    let name = P.buf_of_stmt_map_id c.p stmt map_id in
+    make_map_decl c name map_id
+  in
+  P.for_all_stmts_rhs_maps c.p do_map
+
+(* Regular maps *)
+(* NOTE: doesn't contain special inits from AST *)
+let maps c =
+  (* for all rhs, lhs map pairs *)
+  let do_map map_id =
+    let name = P.map_name_of c.p map_id in
+    make_map_decl c name map_id
+  in
+  P.for_all_maps c.p do_map
 
 (* the function name for the frontier function *)
 (* takes the types of the map *)
