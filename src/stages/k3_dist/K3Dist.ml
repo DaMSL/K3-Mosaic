@@ -170,14 +170,75 @@ let declare_foreign_functions _ =
 (* global data structures
  * ---------------------------------------------- *)
 
+(* determine the master switch by lowest address *)
+let master_addr =
+  let init = some @@ mk_agg_fst
+              (mk_assoc_lambda' ["min_addr", t_addr] G.peers_id_type @@
+                mk_if (mk_and (mk_lt (mk_var "addr") @@ mk_var "min_addr") @@
+                              (mk_eq (mk_var "job") @@ mk_cstring "switch"))
+                  (mk_var "addr") @@
+                  mk_var "min_addr") @@
+              mk_var G.peers.id
+  in
+  {id="master_addr"; t=mut t_addr; init; e=[]}
+
+let is_master =
+  let init = some @@ mk_eq (mk_var ms_addr.id) G.me_var in
+  {id="is_master"; t=mut t_bool; e=[]; init}
+
 (* vid counter used to assign vids *)
 let vid_counter = {id="vid_counter"; t=t_int_mut; e=[]; init=some @@ mk_cint 1}
 
-(* specifies the job of a node: master/switch/node *)
-let job = {id="job"; t=mut t_string; e=[]; init=None}
-
 (* epoch *)
 let epoch_counter = {id="epoch_counter"; t=mut t_int; e=[]; init=some @@ mk_cint 0}
+
+let num_peers =
+  let init =
+    some @@ mk_agg
+      (mk_lambda (wrap_args ["acc", t_int; "_", t_addr]) @@
+        mk_add (mk_var "acc") @@ mk_cint 1)
+      (mk_cint 0) @@
+      mk_var G.peers.id
+  in
+  {id="num_peers"; t=mut t_int; e=[]; init}
+
+(* --- Init code --- *)
+
+let ms_init_counter = {id="ms_init_counter"; t=mut t_int; e=[]; init=some @@ mk_cint 0}
+(* whether we can begin operations on this node/switch *)
+let init_flag = {id="init_flag"; t=mut t_bool; e=[]; init = some @@ mk_cfalse}
+
+let ms_rcv_init_trig_nm = "ms_init_trig"
+let rcv_init_trig_nm = "init_trig"
+
+(* code for all nodes+switches to check in before starting *)
+let send_init_to_master =
+  let init = some @@ mk_send ms_rcv_init_trig_nm (mk_var master_addr.id) G.me_var in
+  {id="send_init_to_master"; t=t_unit; e=[]; init}
+
+(* code for master to verify that all peers have answered and to begin *)
+let ms_rcv_init_trig =
+  mk_code_sink' ms_rcv_init_trig_nm ["_", t_addr] [] @@
+  mk_block [
+    (* increment counter *)
+    mk_assign ms_init_counter.id
+      mk_add (mk_var ms_init_counter.id) (mk_cint 1);
+    (* check if >= to num_peers *)
+    mk_if (mk_geq (mk_var ms_init_counter.id) @@ mk_var num_peers.id)
+      (* send to all peers *)
+      (mk_iter
+        (mk_lambda (wrap_args ["peer", t_addr]) @@
+          mk_send rcv_init_trig_nm (mk_var "peer") mk_cunit) @@
+        mk_var "peers")
+      mk_cunit
+  ]
+
+(* code for nodes/switches to set init to true *)
+let rcv_ms_init_trig =
+  mk_code_sink' rcv_init_trig_nm ["_", t_unit] [] @@
+  mk_assign init_flag.id (mk_cbool true)
+
+(* --- End of init code --- *)
 
 (* global containing mapping of map_id to map_name and dimensionality *)
 let map_ids_id = "map_ids"

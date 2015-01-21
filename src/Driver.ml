@@ -65,37 +65,22 @@ let string_of_data = function
 (* Evaluation option setters *)
 let parse_port p =
   let error () = invalid_arg ("invalid port: "^p) in
-  try let r = int_of_string p in if r > 65535 then error() else r
+  try let r = int_of_string p in if r > 65535 then error () else r
   with Failure _ -> error()
 
-(* ip-role format is 'alias=ip:port/role' *)
+(* ip-role format is 'ip:port/role' *)
 let parse_ip_role ipr_str =
   let ident = "[a-zA-Z_][a-zA-Z0-9_]*" in (* legal identifier *)
   let num = "[0-9]+" in
   let ip = num^"\\."^num^"\\."^num^"\\."^num in
   let r = Str.regexp @:
-    "\\("^ident^"=\\)?\\("^ip^"\\|localhost\\)\\(:"^num^"\\)?\\(/"^ident^"\\)?"
+    Printf.sprintf "\\(%s\\|localhost\\)\\(:%s\\)/\\(%s\\)" ip num ident
   in
   let error () = invalid_arg "invalid ip string format" in
   if Str.string_match r ipr_str 0 then
-    let ms = List.map (fun i ->
-        try some @: Str.matched_group i ipr_str
-        with Not_found -> None
-      ) [1;2;3;4]
-    in
-    let alias = match at ms 0 with
-    | None   -> None
-    | Some x -> some @: str_drop_end 1 x (* get rid of extra char *)
-    in
-    let role = match at ms 3 with
-    | None   -> None
-    | Some x -> some @: str_drop 1 x (* get rid of extra char *)
-    in
-    match at ms 1, at ms 2 with (* ip, port *)
-    | None, None         -> error ()
-    | Some ip, None      -> (ip, default_port), role, alias
-    | None, Some port    -> (default_ip, parse_port @: str_drop 1 port), role, alias
-    | Some ip, Some port -> (ip, parse_port @: str_drop 1 port), role, alias
+    match r_groups ipr_str ~r ~n:3 with
+    | [Some ip; Some port; Some role] -> (ip, parse_port @@ str_drop 1 port), str_drop 1 role
+    | _                               -> error ()
   else error ()
 
 let string_of_lang_descs descs i =
@@ -554,8 +539,7 @@ let load_peer file =
   if (List.length line_lst) = 0 then
     error "Empty node file"
   else
-    cmd_line_params.peers
-      <- (List.map parse_ip_role line_lst)
+    cmd_line_params.peers <- List.map parse_ip_role line_lst
 
 let load_partition_map file =
   let str = read_file file in

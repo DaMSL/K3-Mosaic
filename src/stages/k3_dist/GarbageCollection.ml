@@ -6,64 +6,27 @@ open Util
 
 module D = K3Dist
 module G = K3Global
+module Std = K3StdLib
 
 (* Description of GC protocol
  * --------------------------
- * Switches keep track of the highest vid that's been acknowledged: max_vid
- *    Have to make sure received acks from every single node the switch sent data to.
- *      Counter per sent vid, or for error checking, keep track of each node that responded
- *    Report to a master switch their max_vid. Master switch finds lowest max_vid.
- * Nodes have a rcv buffer for fetches and puts
  *     Keep track of latest vid processed: stmt counter pointer
  *         Updated with stmt counter complete: may move forward in vid
  *         Updated with put/fetch: may move backwards in vid
- *     2 modes:
- *         Can either wait until max_vid is cleared, or send best achieved vid (best_vid) back to master switch.
- * Master switch finds lowest agreed upon vid and broadcasts GC up to this vid.
+ *
+ * Master switch must be aware of all nodes and switches
+ * Master switch keeps track of min vid from each switch and node
+ * Each node acks its received Put message to the sending switch.
+ * Each switch keeps track of its max ack vid and sends it X seconds after GC.
+ * Each node keeps track of its max executed vid and sends it X seconds after GC.
+ * If a node/switch has no unacked/unexecuted vids, it sends an AnyGC message X minutes after GC.
+ *   This allows us to proceed even if one node gets no new data.
+ * Master switch first sends min vid to node/switches that sent AnyGC in QueryGC.
+ * Nodes/switches reply either with OkToGc or with a lower vid.
+ * Master switch takes minimum vid (or same vid) and broadcasts a DoGC.
  * Nodes delete logs, data, stmt_ctr up to this vid
- * Potential problem: a put that hasn't been processed can insert a potential entry early in the stmt_ctrs
- *     Solution: scan input buffer to make sure nothing with lesser vid than max_vid
- *               Assumes: a received TPCIP packet will have been put in the buffer.
- *                        May need special external function (flush_network(trig_to_call_when_done)) to make this work.
+ *
  *)
-
-(*
- * We send acks to the switches upon receiving puts
- *)
-
-(*
- * hard code generate switches list in K3Global
-(*
- * switch node list
- * --------------------------------
- * Iterate peers list to get all the switch list, and
- * generate the "switches" global variable
- *)
-let switches_name = "switches"
-let switches_var = mk_var switches_name
-
-let switches_type = wrap_tset t_addr
-
-let switches_code =
-  mk_global_val_init switches_name switches_type @@
-  mk_let "sw" t_string (mk_cstring "switch") @@
-  mk_filtermap
-    (* filter fun*)
-    (mk_lambda (wrap_args K3Global.peers_id_type) @@
-      mk_eq
-        (mk_var K3Global.peers_id_type_name_name)
-        (mk_just (mk_cstring "sw")) (* TODO the switch role name is hardcode*)
-    )
-    (* map fun *)
-    (mk_lambda (wrap_args K3Global.peers_id_type) @@
-                mk_var K3Global.peers_id_type_addr_name
-    ) @@
-    mk_var K3Global.peers_name
-*)
-
-let dummy_name = "dummy"
-let dummy_trig_arg = [dummy_name, t_int]
-let unit_arg = ["_", t_unit]
 
 (* prefixes:
   * sw: switch
@@ -71,28 +34,23 @@ let unit_arg = ["_", t_unit]
   * nd: node
 *)
 
-(* determine the master switch by lowest address *)
-let master_switch_addr =
-  let init = some @@ mk_agg_fst
-              (mk_assoc_lambda' ["min_addr", t_addr] G.peers_id_type @@
-                mk_if (mk_and (mk_lt (mk_var "addr") @@ mk_var "min_addr") @@
-                              (mk_eq (mk_var "job") @@ mk_cstring "switch"))
-                  (mk_var "addr") @@
-                  mk_var "min_addr") @@
-              mk_var G.peers_name
-  in
-  {id="master_switch_addr"; t=t_addr; init; e=[]}
+let unit_arg = ["_", t_unit]
 
 (* Switch acks: track which nodes replied with an ack *)
 (* NOTE: candidate for map *)
 let sw_ack_log =
-  let e = ["vid", t_vid; "addr", t_addr; "ack", t_bool] in
-  {id="sw_ack_log"; t=wrap_tset' @@ snd_many e; e; init=None} (* global val*)
+  let e = ["vid_addr", wrap_ttuple [t_vid; t_addr]; "ack", t_bool] in
+  {id="sw_ack_log"; t=wrap_tmap' @@ snd_many e; e; init=None} (* global val*)
 
 (* max acknowledged vid on each switch *)
 let sw_max_ack_vid = {id="max_ack_vid"; t=t_vid_mut; e=[]; init=Some min_vid_k3}
 
-(* trigger for recieving an ack from a node *)
+(* insert a record into the switch ack log, waiting for ack*)
+let sw_ack_init_code =
+  mk_insert sw_ack_log.id @@
+    mk_tuple @@ modify_e sw_ack_log.e ["ack", mk_cbool false]
+
+(* trigger for receiving an ack from a node *)
 let sw_ack_rcv_trig =
   let ack_trig_args = list_drop_end 1 sw_ack_log.e in
   let slice_vars = ids_to_vars @@ fst_many ack_trig_args in
@@ -103,13 +61,8 @@ let sw_ack_rcv_trig =
         mk_tuple @@ slice_vars@[mk_ctrue];
     ]
 
-(* insert a record into the switch ack log, waiting for ack*)
-let sw_ack_init_code =
-  mk_insert sw_ack_log.id @@
-    mk_tuple @@ modify_e sw_ack_log.e ["ack", mk_cbool false]
-
 (* code to be incorporated in GenDist's rcv_put *)
-(* assumes paramters "sender_ip" and "vid" *)
+(* assumes parameters "sender_ip" and "vid" *)
 let nd_ack_send_code =
   mk_send (mk_ctarget "ack_rcv") (mk_var "sender_ip") @@ mk_tuple [mk_var "me"; mk_var "vid"]
 
@@ -145,9 +98,10 @@ let ms_max_sw_vid_map =
   {id="ms_max_sw_vid_map"; t=wrap_tmap' @@ snd_many e; e; init=None}
 
 (* master switch trigger to receive and add to the max vid map *)
+let ms_add_max_sw_vid = "ms_add_max_sw_vid"
 let ms_add_max_sw_vid_trig =
   let max_vid = "addr_max_vid" in
-  mk_code_sink' "ms_add_max_sw_vid"
+  mk_code_sink' ms_add_max_sw_vid
     [max_vid, wrap_ttuple @@ snd_many ms_max_sw_vid_map.e] [] @@
     mk_insert ms_max_sw_vid_map.id @@ mk_var max_vid
 
@@ -162,6 +116,40 @@ let ms_add_max_nd_vid_trig =
   mk_code_sink' "ms_add_max_nd_vid"
     [max_vid, wrap_ttuple @@ snd_many ms_max_nd_vid_map.e] [] @@
     mk_insert ms_max_nd_vid_map.id @@ mk_var max_vid
+
+(* find min vid to send to all nodes and switches *)
+let ms_send_min_vid = "ms_send_min_vid_trig"
+let ms_send_min_vid_trig =
+  let min_vid, min_vid_sw, min_vid_nd, max_vid = "min_vid", "min_vid_sw", "min_vid_nd", "max_vid" in
+  mk_code_sink' ms_send_min_vid unit_arg [] @@
+    (* get min of switch max vids *)
+    mk_let min_vid_sw t_vid
+      (mk_agg
+        (mk_assoc_lambda' [min_vid, t_vid] ms_max_sw_vid_map.e @@
+          mk_if (mk_lt (mk_var max_vid) @@ mk_var min_vid)
+            (mk_var max_vid) @@
+            mk_var min_vid)
+      min_vid_k3 @@
+      mk_var ms_max_sw_vid_map.id) @@
+    (* get min of node max vids *)
+    mk_let min_vid_nd t_vid
+      (mk_agg
+        (mk_assoc_lambda' [min_vid, t_vid] ms_max_nd_vid_map.e @@
+          mk_if (mk_lt (mk_var "max_vid") @@ mk_var min_vid)
+            (mk_var "max_vid") @@
+            mk_var min_vid)
+      min_vid_k3 @@
+      mk_var ms_max_nd_vid_map.id) @@
+    (* min_vid *)
+    mk_let min_vid t_vid
+      (mk_if (mk_lt (mk_var min_vid_sw) @@ mk_var min_vid_nd)
+        (mk_var min_vid_sw) @@
+         mk_var min_vid_nd) @@
+    (* broadcast gc *)
+    mk_iter
+      (mk_lambda' peers.e @@
+        mk_send (mk_ctarget "exec_gc") (mk_var "addr") @@ mk_var min_vid) @@
+      mk_var peers.id
 
 (* node: find max vid for which we have 0 stmt cntrs *)
 let nd_max_done_vid = {id="nd_max_done_vid"; e=[]; t=t_vid_mut; init=Some min_vid_k3}
@@ -243,17 +231,61 @@ let do_gc_fn c ast =
         gc_std D.nd_stmt_cntrs;
         gc_std D.nd_log_master;
       ] @
+      (* clean dynamic structures *)
       List.map gc_std (D.log_ds c) @
       List.map (gc_std |- fst) (D.map_buffers c) @
       List.map (gc_std |- fst) (D.maps c)
 
+let ms_last_gc_time = {id="ms_last_gc_time"; t=mut t_int; e=[];
+                       init=some @@ mk_apply (mk_var Std.now_int_name) mk_cunit}
+let sw_last_send_time = {ms_last_gc_time with id="sw_last_send_time"}
+let nd_last_send_time = {ms_last_gc_time with id="nd_last_send_time"}
+
+let ms_gc_interval = {id="ms_gc_interval"; t=mut t_int; e=[]; init=some @@ mk_cint 300}
+let sw_send_interval = {ms_gc_interval with id="sw_send_interval"}
+let nd_send_interval = {ms_gc_interval with id="nd_send_interval"}
+
+(* code to do with triggering the gc process. We perform gc in single-thread mode *)
+(* insert this code into triggers *)
+let check_time_code last_time interval_var trig_nm =
+  mk_let "cur" t_int
+    (mk_apply (mk_var Std.now_int_name) mk_cunit) @@
+  mk_if
+    (mk_gt
+      (mk_sub
+        (mk_var "cur") @@
+        mk_var last_time.id) @@
+      mk_var interval_var.id)
+    (mk_send trig_nm G.me_var mk_cunit) @@
+    mk_cunit
+
+let ms_check_time_code = check_time_code ms_last_gc_time.id ms_gc_interval.id ms_send_min_vid_trig
+let nd_check_time_code = check_time_code ms_last_gc_time.id ms_gc_interval.id ms_send_min_vid_trig
+
+(* generic trigger to send variable to master switch *)
+let send_var_trig trig_nm fn_nm var_nm =
+    mk_code_sink' trig_nm ["_", t_unit] [] @@
+      mk_block [
+        mk_apply fn_nm mk_cunit;
+        mk_send ms_add_max_sw_vid (mk_var master_switch_addr.id) @@
+          mk_tuple [G.me_var; mk_var var_nm]
+      ]
+
+let nd_send_max_done_vid_trig =
+  send_var_trig "nd_send_max_done_vid_trig" nd_update_max_done_vid_fn nd_max_done_vid.id
+
+let sw_send_max_ack_vid_trig =
+  send_var_trig "sw_send_max_ack_vid_trig" sw_update_max_ack_vid_fn nd_max_done_vid.id
+
 let globals =
-  [decl_global master_switch_addr;
+  [decl_global master_addr;
+   decl_global is_master;
    decl_global ms_max_sw_vid_map;
    decl_global ms_max_nd_vid_map;
    decl_global sw_max_ack_vid;
    decl_global sw_ack_log;
    decl_global nd_max_done_vid;
+   decl_global last_gc_time;
   ]
 
 let fns =
@@ -264,4 +296,6 @@ let fns =
 let triggers =
   [ms_add_max_sw_vid_trig;
    ms_add_max_nd_vid_trig;
+   nd_send_max_done_vid_trig;
+   sw_send_max_ack_vid_trig;
   ]

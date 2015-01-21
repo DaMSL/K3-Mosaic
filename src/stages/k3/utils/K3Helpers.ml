@@ -336,7 +336,7 @@ let mk_ind v = mk_stree Indirect [v]
 let mk_assign left right = mk_stree (Assign left) [right]
 
 (* target:TTarget(T) address:TAdress args:T *)
-let mk_send target address args = mk_stree Send [target; address; args]
+let mk_send target address args = mk_stree Send [mk_ctarget target; address; args]
 
 (* convenience function to aggregate starting with the first item *)
 (* NOTE: will run the first item twice *)

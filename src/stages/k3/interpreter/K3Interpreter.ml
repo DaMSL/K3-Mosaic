@@ -657,8 +657,8 @@ let interpreter_event_loop role_opt k3_program =
 (* returns address, (event_loop_t, environment) *)
 let initialize_peer sched_st address role_opt k3_program =
   let prog_env = env_of_program sched_st k3_program ~address in
-    initialize_scheduler sched_st address prog_env;
-    address, (interpreter_event_loop role_opt k3_program, prog_env)
+  initialize_scheduler sched_st address prog_env;
+  address, (interpreter_event_loop role_opt k3_program, prog_env)
 
 (* preserve the state of the interpreter *)
 type interpreter_t = {

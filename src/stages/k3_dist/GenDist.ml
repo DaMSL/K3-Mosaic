@@ -76,6 +76,11 @@ let declare_global_vars c ast =
   in
   decl_global init_vid ::
   decl_global (map_ids c) ::
+  decl_global D.num_peers ::
+  decl_global D.master_addr ::
+  decl_global D.is_master ::
+  decl_global D.init_flag ::
+  decl_global D.ms_init_counter ::
   decl_global D.vid_counter ::
   decl_global D.epoch_counter ::
   decl_global D.nd_stmt_cntrs ::
@@ -90,15 +95,14 @@ let declare_global_vars c ast =
 (* global functions *)
 (* most of our global functions come from the shuffle/route code *)
 let declare_global_prims =
-  let global_vid_ops =
-      mk_global_vid_op vid_eq VEq ::
-      mk_global_vid_op vid_neq VNeq ::
-      mk_global_vid_op vid_lt VLt ::
-      mk_global_vid_op vid_gt VGt ::
-      mk_global_vid_op vid_leq VLeq ::
-      mk_global_vid_op vid_geq VGeq ::
-      []
-  in
+  let global_vid_ops = [
+    mk_global_vid_op vid_eq VEq;
+    mk_global_vid_op vid_neq VNeq;
+    mk_global_vid_op vid_lt VLt;
+    mk_global_vid_op vid_gt VGt;
+    mk_global_vid_op vid_leq VLeq;
+    mk_global_vid_op vid_geq VGeq;
+  ] in
   global_vid_ops
 
 let declare_global_funcs partmap c ast =
@@ -365,7 +369,7 @@ let start_trig (c:config) t =
            mk_apply (mk_var hash_addr) G.me_var]) @@
        mk_block @@ [
          mk_send
-           (mk_ctarget(send_fetch_name_of_t c t)) G.me_var @@
+           (send_fetch_name_of_t c t) G.me_var @@
            mk_tuple @@ args_of_t_as_vars_with_v c t;
         (* increase vid_counter *)
          mk_assign vid_counter.id @@
@@ -382,7 +386,7 @@ let send_fetch_trig c s_rhs_lhs s_rhs trig_name =
         ["ip", t_addr;
           "stmt_map_ids", wrap_tbag' [t_stmt_id; t_map_id]] @@
         mk_send
-          (mk_ctarget (rcv_fetch_name_of_t c trig_name))
+          (rcv_fetch_name_of_t c trig_name)
           (mk_var "ip") @@
           mk_tuple @@
             mk_var "stmt_map_ids"::
@@ -438,7 +442,7 @@ let send_completes_for_stmts_with_no_fetch =
           [mk_iter
             (mk_lambda' ["ip", t_addr] @@
               mk_send
-                (mk_ctarget(do_complete_trig_name))
+                (do_complete_trig_name)
                 (mk_var "ip") @@
                 mk_tuple @@ args_of_t_as_vars_with_v c trig_name
             ) @@
@@ -466,7 +470,7 @@ let send_puts =
       mk_block @@ [
         (* send rcv_put *)
         mk_send
-          (mk_ctarget(rcv_put_name_of_t c trig_name))
+          (rcv_put_name_of_t c trig_name)
           (mk_var "ip") @@
           mk_tuple @@ G.me_var :: mk_var "stmt_id_cnt_list"::
             args_of_t_as_vars_with_v c trig_name] @
@@ -606,8 +610,7 @@ let rcv_fetch_trig c trig =
                     mk_cint map_id
                   )
                   (mk_send (* send to local send push trigger *)
-                    (mk_ctarget @@
-                      send_push_name_of_t c trig stmt map_id)
+                    (send_push_name_of_t c trig stmt map_id)
                     G.me_var @@
                     mk_tuple @@ args_of_t_as_vars_with_v c trig
                   )
@@ -660,8 +663,7 @@ mk_code_sink'
                   mk_if
                     (mk_eq (mk_var "stmt_id") @@ mk_cint stmt_id)
                     (mk_send
-                      (mk_ctarget @@
-                        do_complete_name_of_t c trig_name stmt_id)
+                      (do_complete_name_of_t c trig_name stmt_id)
                       G.me_var @@
                       mk_tuple @@ args_of_t_as_vars_with_v c trig_name
                     ) @@
@@ -718,8 +720,7 @@ let send_push_stmt_map_trig c s_rhs_lhs trig_name =
             (mk_lambda'
               ["ip",t_addr;"tuples", wrap_t_of_map' rhs_map_types] @@
               mk_send
-                (mk_ctarget @@
-                  rcv_push_name_of_t c trig_name stmt_id rhs_map_id)
+                (rcv_push_name_of_t c trig_name stmt_id rhs_map_id)
                 (mk_var "ip") @@
                 mk_tuple @@ mk_var "tuples"::args_of_t_as_vars_with_v c trig_name
             ) @@
@@ -798,8 +799,7 @@ List.fold_left
            )
            (* Send to local do_complete *)
            (mk_send
-             (mk_ctarget @@
-               do_complete_name_of_t c trig_name stmt_id)
+             (do_complete_name_of_t c trig_name stmt_id)
              G.me_var @@
              mk_tuple @@ args_of_t_as_vars_with_v c trig_name
            )
@@ -897,7 +897,7 @@ let send_corrective_trigs c =
                     mk_send
                       (* we always send to the same map_id ie. the remote
                         * buffer of the same map we just calculated *)
-                      (mk_ctarget @@ rcv_corrective_name_of_t c target_trig
+                      (rcv_corrective_name_of_t c target_trig
                         target_stmt map_id)
                       (mk_var "ip") @@
                       (* we send the vid where the update is taking place as
@@ -1088,8 +1088,7 @@ List.map
                     (mk_var "compute_vid")
                   ) @@
                   mk_send
-                    (mk_ctarget @@
-                      do_corrective_name_of_t c trig_name stmt_id rmap)
+                    (do_corrective_name_of_t c trig_name stmt_id rmap)
                     G.me_var @@
                     mk_tuple @@ args_of_t_as_vars_with_v ~vid:"compute_vid" c trig_name @
                       [mk_var "delta_tuples"]
@@ -1164,13 +1163,13 @@ let gen_dist_for_t c ast trig corr_maps =
   send_fetch_trig c s_rhs_lhs s_rhs trig::
   (if null s_rhs then []
   else
-    rcv_put_trig c trig::
-    [rcv_fetch_trig c trig])@
+    [rcv_put_trig c trig;
+     rcv_fetch_trig c trig])@
   send_push_stmt_map_trig c s_rhs_lhs trig@
-  rcv_push_trig c s_rhs trig@
-  do_complete_trigs c ast trig@
-  rcv_correctives_trig c s_rhs_corr trig@
-  do_corrective_trigs c s_rhs_corr ast trig corr_maps@
+  rcv_push_trig c s_rhs trig @
+  do_complete_trigs c ast trig @
+  rcv_correctives_trig c s_rhs_corr trig @
+  do_corrective_trigs c s_rhs_corr ast trig corr_maps @
   []
 
 (* Function to generate the whole distributed program *)
@@ -1196,6 +1195,8 @@ let gen_dist ?(force_correctives=false) ?(use_multiindex=false) ?(enable_gc=fals
       gen_dist_for_t c ast t potential_corr_maps
   in
   let prog =
+    (* init code from nodes/sw to master *)
+    declare_global D.send_init_to_master
     declare_global_vars c ast @
     declare_global_prims @
     (if not c.use_multiindex then emit_frontier_fns c else []) @
@@ -1203,6 +1204,9 @@ let gen_dist ?(force_correctives=false) ?(use_multiindex=false) ?(enable_gc=fals
     declare_foreign_functions c @
     filter_corrective_list ::  (* global func *)
     (mk_flow @@
+      (* trigs for init *)
+      D.ms_rcv_init_trig ::
+      D.rcv_ms_init_trig ::
       (if c.enable_gc then GC.triggers else []) @
       regular_trigs @
       send_corrective_trigs c @

@@ -168,7 +168,7 @@ val mk_update_slice : id_t -> expr_t list -> expr_t -> expr_t
 
 val mk_ind : expr_t -> expr_t
 val mk_assign : id_t -> expr_t -> expr_t
-val mk_send : expr_t -> expr_t -> expr_t -> expr_t
+val mk_send : id_t -> expr_t -> expr_t -> expr_t
 
 (* smart role constructors *)
 val mk_const_stream : id_t -> value_type_t -> expr_t list -> flow_statement_t *
