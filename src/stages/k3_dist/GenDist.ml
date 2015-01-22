@@ -466,16 +466,16 @@ let send_puts =
    * specific IP *)
   [mk_iter
     (mk_lambda'
-      ["ip", t_addr; "stmt_id_cnt_list", stmt_id_cnt_type] @@
+      ["address", t_addr; "stmt_id_cnt_list", stmt_id_cnt_type] @@
       mk_block @@ [
         (* send rcv_put *)
         mk_send
           (rcv_put_name_of_t c trig_name)
-          (mk_var "ip") @@
+          (mk_var "address") @@
           mk_tuple @@ G.me_var :: mk_var "stmt_id_cnt_list"::
             args_of_t_as_vars_with_v c trig_name] @
 
-        if c.enable_gc then [GC.sw_ack_init_code] else []
+        if c.enable_gc then [GC.sw_ack_init_code ~addr_nm:"address" ~vid_nm:"vid"] else []
     ) @@
     mk_gbagg
       (mk_assoc_lambda' (* grouping func -- assoc because of gbagg tuple *)

@@ -36,38 +36,43 @@ module Std = K3StdLib
 
 let unit_arg = ["_", t_unit]
 
+(* --- Acks between switches and nodes --- *)
+
 (* Switch acks: track which nodes replied with an ack *)
-(* NOTE: candidate for map *)
 let sw_ack_log =
-  let e = ["vid_addr", wrap_ttuple [t_vid; t_addr]; "ack", t_bool] in
+  let e = ["vid", t_vid; "addresses", wrap_tset t_addr] in
   {id="sw_ack_log"; t=wrap_tmap' @@ snd_many e; e; init=None} (* global val*)
 
-(* max acknowledged vid on each switch *)
-let sw_max_ack_vid = {id="max_ack_vid"; t=t_vid_mut; e=[]; init=Some min_vid_k3}
+(* switch: max acknowledged vid *)
+let sw_max_ack_vid = {id="sw_max_ack_vid"; t=t_vid_mut; e=[]; init=Some min_vid_k3}
 
-(* insert a record into the switch ack log, waiting for ack*)
-let sw_ack_init_code =
-  mk_insert sw_ack_log.id @@
-    mk_tuple @@ modify_e sw_ack_log.e ["ack", mk_cbool false]
+(* insert a record into the switch ack log, waiting for ack (in send_put) *)
+(* assumes "address" and "vid" *)
+let sw_ack_init_code ~addr_nm ~vid_nm =
+  let inner_t = snd @@ list_last sw_ack_log.e in
+  mk_case_sn 
+    (mk_peek @@ mk_slice (mk_var sw_ack_log.id) @@ mk_tuple [mk_var "vid"; mk_cunknown])
+    "old_val"
+    (mk_insert sw_ack_log.id @@
+      mk_tuple [mk_var "vid"; mk_combine (mk_subscript 2 @@ mk_var "old_val") @@
+                                mk_singleton inner_t @@ mk_var "address"])
+    mk_cunit
 
 (* trigger for receiving an ack from a node *)
 let sw_ack_rcv_trig =
-  let ack_trig_args = list_drop_end 1 sw_ack_log.e in
+  let ack_trig_args = ["vid", t_vid; "address", t_addr] in
   let slice_vars = ids_to_vars @@ fst_many ack_trig_args in
   mk_code_sink' "ack_rcv" ack_trig_args [] @@
-    mk_block [
-      (* set entry to true *)
-      mk_update_slice (sw_ack_log.id) (slice_vars@[mk_cunknown]) @@
-        mk_tuple @@ slice_vars@[mk_ctrue];
-    ]
+    (* set entry to true *)
+    mk_insert (sw_ack_log.id) @@ mk_tuple @@ modify_e sw_ack_log.e ["ack", mk_ctrue]
 
 (* code to be incorporated in GenDist's rcv_put *)
 (* assumes parameters "sender_ip" and "vid" *)
 let nd_ack_send_code =
   mk_send (mk_ctarget "ack_rcv") (mk_var "sender_ip") @@ mk_tuple [mk_var "me"; mk_var "vid"]
 
-(* Update the sw_max_ack_vid variable with the highest fully acknowledged vid.
- * The max_ack_vid will be sent to the master switch *)
+(* Update the sw_max_ack_vid variable with the highest fully acknowledged vid,
+ * and the sw_ack_vid_all *)
 let sw_update_max_ack_vid_fn =
   let sw_ack1, sw_ack2 = id_t_add "1" sw_ack_log.e, id_t_add "2" sw_ack_log.e in
   mk_global_fn "update_max_ack_vid" unit_arg [] @@
@@ -90,7 +95,7 @@ let sw_update_max_ack_vid_fn =
             mk_filter
               (mk_lambda' sw_ack_log.e @@
                 D.v_gt (mk_var "vid") @@ mk_var @@ sw_max_ack_vid.id)
-              (mk_var @@ sw_ack_log.id)
+              (mk_var sw_ack_log.id)
 
 (* store the max vid received from each switch *)
 let ms_max_sw_vid_map =
@@ -283,6 +288,7 @@ let globals =
    decl_global ms_max_sw_vid_map;
    decl_global ms_max_nd_vid_map;
    decl_global sw_max_ack_vid;
+   decl_global sw_ack_vid_all;
    decl_global sw_ack_log;
    decl_global nd_max_done_vid;
    decl_global last_gc_time;
@@ -294,7 +300,8 @@ let fns =
   ]
 
 let triggers =
-  [ms_add_max_sw_vid_trig;
+  [sw_ack_rcv_trig;
+   ms_add_max_sw_vid_trig;
    ms_add_max_nd_vid_trig;
    nd_send_max_done_vid_trig;
    sw_send_max_ack_vid_trig;
