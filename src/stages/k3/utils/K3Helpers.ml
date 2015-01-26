@@ -341,7 +341,10 @@ let mk_send target address args = mk_stree Send [mk_ctarget target; address; arg
 (* convenience function to aggregate starting with the first item *)
 (* NOTE: will run the first item twice *)
 let mk_agg_fst agg_fn col =
-  mk_agg agg_fn (mk_case_sn (mk_peek col) "__case" (mk_var "__case") (mk_apply (mk_var "error") mk_cunit)) col
+  mk_agg agg_fn
+    (mk_case_sn (mk_peek col) "__case"
+      (mk_var "__case")
+      (mk_apply (mk_var "error") @@ mk_cstring "error with mk_agg_fst")) col
 
 (* Macros to make role related stuff *)
 let mk_const_stream id typ l =
@@ -623,7 +626,7 @@ let mk_peek_or_zero e = mk_case_ns (mk_peek e) "_i"
   (mk_cint 0) (mk_var "_i")
 
 let mk_peek_or_error e = mk_case_ns (mk_peek e) "_i"
-  (mk_apply (mk_var "error") mk_cunit) (mk_var "_i")
+  (mk_apply (mk_var "error") @@ mk_cstring "bad peek") (mk_var "_i")
 
 (* data structure record to standardize manipulation *)
 type data_struct = { id: string;
@@ -647,4 +650,10 @@ let modify_e id_t val_l =
     try StrMap.find s m
     with Not_found -> mk_var s)
   id_t
+
+let unit_arg = ["_", t_unit]
+
+let mk_error s = mk_apply (mk_var "error") @@ mk_cstring s
+
+
   

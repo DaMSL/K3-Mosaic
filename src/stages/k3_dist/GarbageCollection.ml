@@ -30,8 +30,6 @@ module Std = K3StdLib
   * nd: node
 *)
 
-let unit_arg = ["_", t_unit]
-
 (* --- Acks between switches and nodes --- *)
 
 (* Switch acks: track which nodes replied with an ack *)

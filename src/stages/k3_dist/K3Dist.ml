@@ -214,12 +214,12 @@ let send_init_to_master =
 let ms_rcv_init_trig =
   mk_code_sink' ms_rcv_init_trig_nm ["_", t_addr] [] @@
   mk_block [
-    (* increment counter *)
+    (* increment init counter *)
     mk_assign ms_init_counter.id @@
       mk_add (mk_var ms_init_counter.id) (mk_cint 1);
     (* check if >= to num_peers *)
     mk_if (mk_geq (mk_var ms_init_counter.id) @@ mk_var num_peers.id)
-      (* send to all peers *)
+      (* send rcv_init to all peers *)
       (mk_iter
         (mk_lambda (wrap_args ["peer", t_addr]) @@
           mk_send rcv_init_trig_nm (mk_var "peer") mk_cunit) @@
@@ -297,6 +297,15 @@ let maps c =
   in
   P.for_all_maps c.p do_map
 
+(* State of switch: 
+ * 0: idle
+ * 1: sending
+ * 2: waiting for vid *)
+let sw_state_idle = 0
+let sw_state_sending = 1
+let sw_state_wait_vid = 2
+let sw_state = {id="sw_state"; t=mut t_int; e=[]; init=some @@ mk_cint 0}
+
 (* buffers for insert/delete -- we need a per-trigger list *)
 let sw_trig_buf_prefix = "sw_buf_"
 let sw_trig_bufs (c:config) =
@@ -307,10 +316,6 @@ let sw_trig_bufs (c:config) =
 let sw_trig_buf_idx =
   let e = ["trig_id", t_int] in
   {id="sw_trig_buf_idx"; e; t=wrap_tlist' @@ snd_many e; init=None}
-
-(* counter for msgs to send *)
-let sw_msgs_to_send_ctr =
-  {id="sw_msgs_to_send_ctr"; e=[]; t=mut t_int; init=some @@ mk_cint 0}
 
 (* --- Begin frontier function code --- *)
 

@@ -322,3 +322,9 @@ val id_t_add : string -> (string * 'a) list -> (string * 'a) list
 
 (* modify values of id_t format and convert any remaining values to vars *)
 val modify_e : (string * 'a) list -> (string * expr_t) list -> expr_t list
+
+(* easy access to unit argument for functions/triggers *)
+val unit_arg : (string * value_type_t) list
+
+(* easy to use error function macro *)
+val mk_error : string -> expr_t

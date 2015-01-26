@@ -354,9 +354,10 @@ let _ = Hashtbl.add func_table now_int_name (decl, wrap_args args, fn)
 let fn env =
   failwith "Error function called"
 let name = "error"
-let decl = wrap_tfunc t_unit t_unknown
-let args = wrap_args ["_", t_unit]
-let _ = Hashtbl.add func_table name (decl, args, fn)
+let args = ["s", t_string]
+let ret = t_unknown
+let decl = wrap_tfunc (wrap_ttuple @@ snd_many args) ret
+let _ = Hashtbl.add func_table name (decl, wrap_args args, fn)
 
 (* function-lookup functions *)
 let lookup id = Hashtbl.find func_table id

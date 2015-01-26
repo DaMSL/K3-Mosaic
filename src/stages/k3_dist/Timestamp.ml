@@ -46,11 +46,7 @@ let sw_next_switch_addr =
 
 (* how many msgs need a vid *)
 let sw_need_vid_ctr =
-  {id="sw_need_vid_counter"; t=mut t_int; e=[]; init=some @@ mk_cint 0}
-
-(* parameter: up to how many messages to process at once before letting queue continue (latency) *)
-let sw_chunk_msgs_to_process =
-  {id="sw_chunk_msgs_to_process"; t=mut t_int; e=[]; init=some @@ mk_cint 10}
+  {id="sw_need_vid_cntr"; t=mut t_int; e=[]; init=some @@ mk_cint 0}
 
 (* list tracking available vids taken from token *)
 let sw_token_vid_list =
@@ -63,7 +59,7 @@ let sw_highest_vid =
 
 (* trigger for when we receive the token *)
 let sw_rcv_token_nm = "sw_rcv_token"
-let sw_rcv_token_trig =
+let sw_rcv_token_trig driver_trig_nm =
   mk_code_sink' sw_rcv_token_nm ["vid", t_vid] [] @@
   (* if we have stuff to number *)
   mk_if (mk_gt (mk_var sw_need_vid_ctr.id) @@ mk_cint 0)
@@ -73,14 +69,18 @@ let sw_rcv_token_trig =
                   mk_sub (mk_add (mk_subscript 2 @@ mk_var "vid") @@ mk_var sw_need_vid_ctr.id) @@
                         mk_cint 1]) @@
       mk_block [
-        (* reserve a block *)
+        (* reserve a block of vids *)
         mk_insert sw_token_vid_list.id @@ mk_tuple [mk_var "vid"; mk_var sw_need_vid_ctr.id];
         (* clear counter of msgs needing vid *)
         mk_assign sw_need_vid_ctr.id @@ mk_cint 0;
         (* update highest seen vid *)
         mk_assign sw_highest_vid.id @@ mk_var "next_vid";
         (* send on the token *)
-        mk_send sw_rcv_token_nm (mk_var sw_next_switch_addr.id) @@ mk_var "next_vid"
+        mk_send sw_rcv_token_nm (mk_var sw_next_switch_addr.id) @@ mk_var "next_vid";
+        (* if we've been waiting for a vid, start the driver *)
+        mk_if (mk_eq (mk_var D.sw_state.id) @@ mk_var D.sw_state_wait_vid)
+          (mk_send driver_trig_nm G.me_var mk_cunit)
+          mk_cunit;
       ]) @@
     (* if we have nothing to number, pass the token on as is *)
     mk_send sw_rcv_token_nm (mk_var sw_next_switch_addr.id) @@ mk_var "vid"
@@ -89,14 +89,14 @@ let sw_rcv_token_trig =
 let sw_gen_vid_nm = "sw_gen_vid"
 let sw_gen_vid =
   let vid_num, vid_new, num_new = "vid_num", "vid_new", "num_new" in
-  mk_global_fn sw_gen_vid_nm ["_", t_unit] [t_bool; t_vid] @@
+  mk_global_fn sw_gen_vid_nm ["_", t_unit] [wrap_tmaybe t_vid] @@
   (* if we have a vid, pop it *)
   mk_case_ns (mk_peek @@ mk_var sw_token_vid_list.id) vid_num
-    (* if we have no vid available, return false *)
-    (mk_tuple [mk_cfalse; min_vid_k3]) @@
+    (* if we have no vid available, return none *)
+    (mk_nothing t_vid) @@
     (* else *)
     mk_let num_new t_int (mk_sub (mk_subscript 2 @@ mk_var vid_num) @@ mk_cint 1) @@
-    mk_let vid_new t_vid (vid_increment ~vid_expr:(mk_subscript 1 @@ mk_var vid_num)) @@
+    mk_let vid_new t_vid (vid_increment ~vid_expr:(mk_subscript 1 @@ mk_var vid_num) ()) @@
     mk_block [
       (* check if we've hit <=0 *)
       mk_if (mk_leq (mk_var num_new) @@ mk_cint 0)
@@ -105,9 +105,9 @@ let sw_gen_vid =
         (* else, decrement the num and increment the vid *)
         mk_update sw_token_vid_list.id (mk_var vid_num) @@
           mk_tuple [mk_var vid_new; mk_var num_new];
-      (* return true and the vid *)
-      mk_tuple [mk_ctrue; mk_subscript 1 @@ mk_var vid_num]
-    ] 
+      (* return the vid *)
+      mk_just @@ mk_subscript 1 @@ mk_var vid_num
+    ]
 
 
 

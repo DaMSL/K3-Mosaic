@@ -336,21 +336,46 @@ let declare_global_funcs partmap c ast =
 
 (* ---- start of protocol code ---- *)
 
-(* The start trigger puts the message in a trig buffer *)
+(* The driver trigger: loop over the trigger data structures as long as we have spare vids *)
+let sw_driver_trig_nm = "sw_driver_trig"
+let sw_driver_trig =
+  mk_code_sink sw_driver_trig_nm unit_arg [] @@
+  mk_case_ns (mk_apply (mk_var TS.sw_gen_vid_nm) mk_cunit) "vid"
+    (* if we don't have a vid, set state to waiting for vid *)
+    (mk_assign D.sw_state @@ mk_cint D.sw_state_wait_vid) @@
+    (* else *)
+    mk_case_ns (mk_peek @@ mk_var D.sw_trig_buf_idx.id) "send_fn"
+      (* no message to send -- set state to idle *)
+      (mk_assign D.sw_state @@ mk_cint D.sw_state_idle) @@
+      (* some msg *)
+      mk_block [
+        (* set state to sending *)
+        mk_assign D.sw_state @@ mk_cint D.sw_state_sending;
+        (* erase from trig buf index *)
+        mk_delete D.sw_trig_buf_idx.id (mk_var "send_fn");
+        (* send the msg *)
+        mk_apply (mk_var "send_fn") @@ mk_var "vid";
+        (* recurse *)
+        mk_send sw_driver_trig_nm G.me_var mk_cunit;
+      ]
+
+(* The start trigger puts the message in a trig buffer and calls the driver if needed *)
 let start_trig (c:config) t =
   let args = P.args_of_t c.p t in
   mk_code_sink' t args [] @@
     mk_block [
       (* insert args into trig buffer *)
       mk_insert (D.sw_trig_buf_prefix.id^t) @@ mk_tuple args;
-      (* insert function into trig index buffer *)
+      (* insert send_fetch function into trig index buffer *)
       mk_insert D.sw_trig_buf_idx.id @@ mk_var P.send_fetch_name_of_t;
-      (* increment counters for msgs to send and msgs to get vids *)
-      mk_assign D.sw_msgs_to_send_ctr.id @@ mk_add (mk_var D.sw_msgs_to_send_ctr.id) @@ mk_cint 1;
-      mk_assign TS.sw_need_vid.id @@ mk_add (mk_var D.sw_need_vid.id) @@ mk_cint 1
+      (* increment counters for msgs to get vids *)
+      mk_assign TS.sw_need_vid.id @@ mk_add (mk_var D.sw_need_vid.id) @@ mk_cint 1;
+      (* call the driver trigger *)
+      mk_send sw_driver_trig_nm G.me_var mk_cunit;
     ]
 
 (* sending fetches is done from functions now *)
+(* each function takes a vid to plant in the arguments, which are in the trig buffers *)
 let send_fetch_fn c s_rhs_lhs s_rhs trig_name =
   let send_fetches_of_rhs_maps  =
     if null s_rhs then []
@@ -378,9 +403,7 @@ let send_fetch_fn c s_rhs_lhs s_rhs trig_name =
             (mk_var "acc") @@
             mk_singleton
               (wrap_tbag' [t_stmt_id; t_map_id]) @@
-              mk_tuple [mk_var "stmt_id";mk_var "map_id"]
-
-        )
+              mk_tuple [mk_var "stmt_id";mk_var "map_id"])
         (mk_empty @@ wrap_tbag' [t_stmt_id; t_map_id])
         (* [] *) @@
         List.fold_left
@@ -448,7 +471,6 @@ let send_fetch_fn c s_rhs_lhs s_rhs trig_name =
             (mk_var "address") @@
             mk_tuple @@ G.me_var :: mk_var "stmt_id_cnt_list"::
               args_of_t_as_vars_with_v c trig_name] @
-
           if c.enable_gc then [GC.sw_ack_init_code ~addr_nm:"address" ~vid_nm:"vid"] else []
       ) @@
       mk_gbagg
@@ -531,16 +553,23 @@ in
 (* Actual SendFetch function *)
 (* We use functions rather than triggers to have better control over
  * latency *)
+let buf = D.sw_trig_buf_prefix^t in
 mk_global_fn
   (send_fetch_name_of_t c trig_name)
-  (args_of_t_with_v c trig_name)
+  ["vid", t_vid]
   [t_unit] @@
-  mk_block @@
-    send_completes_for_stmts_with_no_fetch @
-    send_puts @
-    send_fetches_of_rhs_maps
-
-
+  (* pull an argument out of the buffers *)
+  mk_case_ns (mk_peek buf) "args"
+    (mk_error @@ "unexpected missing arguments in "^buf) @@
+    (* pull out the arguments *)
+    mk_let_deep' (args_of_t_with_v c trig_name)
+      (mk_var "args") @@
+      mk_block @@
+        (* delete the entry in the trig buffer *)
+        mk_delete buf (mk_var "args") ::
+        send_completes_for_stmts_with_no_fetch @
+        send_puts @
+        send_fetches_of_rhs_maps
 
 (* trigger_rcv_fetch
  * -----------------------------------------
