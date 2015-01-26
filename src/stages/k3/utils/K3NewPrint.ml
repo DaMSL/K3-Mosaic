@@ -1000,7 +1000,7 @@ let add_sources p envs filename =
             mk_tuple @@ List.map convert_date @@ List.map (first mk_var) trig_ts
         in
         mk_if (mk_eq (mk_var "trigger_id") @@ mk_cstring trig_id)
-          (mk_send (mk_ctarget @@ trig_id) K3Global.me_var handle_args)
+          (mk_send trig_id K3Global.me_var handle_args)
           acc_code
         )
         mk_cunit

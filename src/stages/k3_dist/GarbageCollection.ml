@@ -1,5 +1,4 @@
 open K3.AST
-open ProgInfo
 open K3Dist
 open K3Helpers
 open Util
@@ -19,10 +18,7 @@ module Std = K3StdLib
  * Each node acks its received Put message to the sending switch.
  * Each switch keeps track of its max ack vid and sends it X seconds after GC.
  * Each node keeps track of its max executed vid and sends it X seconds after GC.
- * If a node/switch has no unacked/unexecuted vids, it sends an AnyGC message X minutes after GC.
- *   This allows us to proceed even if one node gets no new data.
- * Master switch first sends min vid to node/switches that sent AnyGC in QueryGC.
- * Nodes/switches reply either with OkToGc or with a lower vid.
+ * If a node/switch has no unacked/unexecuted vids, it sends the current timestamp X minutes after GC.
  * Master switch takes minimum vid (or same vid) and broadcasts a DoGC.
  * Nodes delete logs, data, stmt_ctr up to this vid
  *
@@ -61,10 +57,28 @@ let sw_ack_init_code ~addr_nm ~vid_nm =
 (* trigger for receiving an ack from a node *)
 let sw_ack_rcv_trig =
   let ack_trig_args = ["vid", t_vid; "address", t_addr] in
-  let slice_vars = ids_to_vars @@ fst_many ack_trig_args in
+  let inner_t = snd @@ list_last sw_ack_log.e in
+  let old_col, old_val = "old_col", "old_val" in
   mk_code_sink' "ack_rcv" ack_trig_args [] @@
-    (* set entry to true *)
-    mk_insert (sw_ack_log.id) @@ mk_tuple @@ modify_e sw_ack_log.e ["ack", mk_ctrue]
+  mk_case_sn
+    (mk_peek @@ mk_slice (mk_var sw_ack_log.id) @@ mk_tuple [mk_var "vid"; mk_cunknown])
+    old_val
+    (mk_let old_col inner_t (mk_subscript 2 @@ mk_var "old_val") @@
+      mk_block [
+        mk_delete old_col @@ mk_var "address";
+        (* check if we need to delete entry *)
+        mk_case_sn (mk_peek old_col)
+          "some_left"
+
+          (* delete the entry if we're the only thing left *)
+          (mk_delete sw_ack_log.id @@ mk_tuple [mk_var "vid"; mk_singleton inner_t @@ mk_var "address"])
+          
+        
+
+      mk_insert sw_ack_log
+    
+    mk_insert (sw_ack_log.id) @@ mk_tuple @@ modify_e sw_ack_log.e ["ack", mk_ctrue])
+    mk_cunit
 
 (* code to be incorporated in GenDist's rcv_put *)
 (* assumes parameters "sender_ip" and "vid" *)

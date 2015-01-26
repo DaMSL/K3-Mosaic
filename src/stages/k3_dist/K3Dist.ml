@@ -108,9 +108,6 @@ let init_vid =
   let init = some @@ mk_tuple [mk_cint 0; mk_cint 0; mk_apply (mk_var "hash_addr") G.me_var] in
   {id="init_vid"; t=t_vid; e=[]; init}
 
-let min_vid_k3 = mk_tuple [mk_cint 0; mk_cint 0; mk_cint 0]
-let max_vid_k3 = mk_tuple [mk_cint max_int; mk_cint max_int; mk_cint max_int ]
-
 (* trigger argument manipulation convenience functions *)
 let arg_types_of_t c trig_nm = snd_many @: P.args_of_t c.p trig_nm
 let arg_names_of_t c trig_nm = fst_many @: P.args_of_t c.p trig_nm
@@ -136,7 +133,6 @@ let vid_geq = "vid_geq"
 let v_geq = v_op vid_geq
 let vid_leq = "vid_leq"
 let v_leq = v_op vid_leq
-
 
 (* global variable moved from GenDist.ml *)
 
@@ -172,22 +168,20 @@ let declare_foreign_functions _ =
 
 (* determine the master switch by lowest address *)
 let master_addr =
+  let jobs = G.jobs [] in
   let init = some @@ mk_agg_fst
-              (mk_assoc_lambda' ["min_addr", t_addr] G.peers_id_type @@
+              (mk_assoc_lambda' ["min_addr", t_addr] jobs.e @@
                 mk_if (mk_and (mk_lt (mk_var "addr") @@ mk_var "min_addr") @@
-                              (mk_eq (mk_var "job") @@ mk_cstring "switch"))
+                              (mk_eq (mk_var "job") @@ mk_cint G.job_switch))
                   (mk_var "addr") @@
                   mk_var "min_addr") @@
-              mk_var G.peers.id
+              mk_var jobs.id
   in
   {id="master_addr"; t=mut t_addr; init; e=[]}
 
 let is_master =
-  let init = some @@ mk_eq (mk_var ms_addr.id) G.me_var in
+  let init = some @@ mk_eq (mk_var master_addr.id) G.me_var in
   {id="is_master"; t=mut t_bool; e=[]; init}
-
-(* vid counter used to assign vids *)
-let vid_counter = {id="vid_counter"; t=t_int_mut; e=[]; init=some @@ mk_cint 1}
 
 (* epoch *)
 let epoch_counter = {id="epoch_counter"; t=mut t_int; e=[]; init=some @@ mk_cint 0}
@@ -198,11 +192,11 @@ let num_peers =
       (mk_lambda (wrap_args ["acc", t_int; "_", t_addr]) @@
         mk_add (mk_var "acc") @@ mk_cint 1)
       (mk_cint 0) @@
-      mk_var G.peers.id
+      mk_var (G.peers []).id
   in
   {id="num_peers"; t=mut t_int; e=[]; init}
 
-(* --- Init code --- *)
+(* --- Protocol Init code --- *)
 
 let ms_init_counter = {id="ms_init_counter"; t=mut t_int; e=[]; init=some @@ mk_cint 0}
 (* whether we can begin operations on this node/switch *)
@@ -221,7 +215,7 @@ let ms_rcv_init_trig =
   mk_code_sink' ms_rcv_init_trig_nm ["_", t_addr] [] @@
   mk_block [
     (* increment counter *)
-    mk_assign ms_init_counter.id
+    mk_assign ms_init_counter.id @@
       mk_add (mk_var ms_init_counter.id) (mk_cint 1);
     (* check if >= to num_peers *)
     mk_if (mk_geq (mk_var ms_init_counter.id) @@ mk_var num_peers.id)
@@ -302,6 +296,23 @@ let maps c =
     make_map_decl c name map_id
   in
   P.for_all_maps c.p do_map
+
+(* buffers for insert/delete -- we need a per-trigger list *)
+let sw_trig_buf_prefix = "sw_buf_"
+let sw_trig_bufs (c:config) =
+  P.for_all_trigs c.p @@ fun t ->
+  {id=sw_trig_buf_prefix^t; t=wrap_tlist' @@ snd_many @@ P.args_of_t c.p t; e=[]; init=None}
+
+(* list for next message -- contains trigger id *)
+let sw_trig_buf_idx =
+  let e = ["trig_id", t_int] in
+  {id="sw_trig_buf_idx"; e; t=wrap_tlist' @@ snd_many e; init=None}
+
+(* counter for msgs to send *)
+let sw_msgs_to_send_ctr =
+  {id="sw_msgs_to_send_ctr"; e=[]; t=mut t_int; init=some @@ mk_cint 0}
+
+(* --- Begin frontier function code --- *)
 
 (* the function name for the frontier function *)
 (* takes the types of the map *)
@@ -435,3 +446,5 @@ let frontier_fn c map_id =
   in
   mk_global_fn (frontier_name c map_id) ["vid", t_vid; "input_map", m_t_v_bag] [m_t_v_bag] @:
       action
+
+(* End of frontier function code *)

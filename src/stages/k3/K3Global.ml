@@ -35,10 +35,12 @@ let peers_num ps =
   {id="peers_num"; e=[]; t=mut t_int; init}
 
 (* specifies the job of a node: master/switch/node *)
-let job = {id="job"; t=mut t_string; e=[]; init=None}
+let job_switch = 0
+let job_node   = 1
+let job = {id="job"; t=mut t_int; e=[]; init=None}
 
 let jobs (ps:peer_t list) =
-  let e = ["addr", t_addr; "job", t_string] in
+  let e = ["addr", t_addr; "job", t_int] in
   let t = wrap_tmap' @@ snd_many e in
   let init = some @@
     k3_container_of_list t @@
@@ -49,10 +51,9 @@ let jobs (ps:peer_t list) =
 
 (* create k3 globals for the address and peers *)
 let globals (ps:peer_t list) =
-  decl_global me ::         (* me *)
-  decl_global (peers ps) :: (* peers *)
-  decl_global (jobs ps) ::  (* jobs - not removed *)
-  []
+  [ decl_global me;          (* me *)
+    decl_global @@ peers ps; (* peers *)
+    decl_global @@ jobs ps ] (* jobs - not removed *)
 
 (* cross-reference foreign functions *)
 let add_foreign_fn nm =

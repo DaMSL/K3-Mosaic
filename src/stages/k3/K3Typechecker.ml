@@ -468,7 +468,7 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
             let t0 = bind 0 in
             let t_e = t0 <| base_of +++ value_of |> t_erroru @@ not_value t0 in
             begin match t_e with
-            | TTuple l when n < List.length l -> TValue(at l n)
+            | TTuple l when n <= List.length l -> TValue(at l @@ n-1)
             | TTuple l -> t_erroru (error_tuple_small n (List.length l) t0) ()
             | _ -> t_erroru (not_tuple t0) ()
             end

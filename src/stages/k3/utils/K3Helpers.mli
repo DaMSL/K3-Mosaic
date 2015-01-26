@@ -33,6 +33,10 @@ val t_map_id : value_type_t
 val t_vid : value_type_t
 val t_vid_mut : value_type_t
 
+val vid_increment : ?vid_expr:expr_t -> unit -> expr_t
+val min_vid_k3 : expr_t
+val max_vid_k3 : expr_t
+
 (* create a global vid comparison function *)
 type vid_op = VEq | VNeq | VGt | VLt | VGeq | VLeq
 val mk_global_vid_op : id_t -> vid_op -> declaration_t * annotation_t

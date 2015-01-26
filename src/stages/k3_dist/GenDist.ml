@@ -40,6 +40,8 @@ module U = K3Util
 module GC = GarbageCollection
 module T = K3Typechecker
 module R = K3Route
+module P = ProgInfo
+module TS = TimeStamp
 
 (* control whether gc code is emitted *)
 exception ProcessingFailed of string;;
@@ -81,10 +83,12 @@ let declare_global_vars c ast =
   decl_global D.is_master ::
   decl_global D.init_flag ::
   decl_global D.ms_init_counter ::
-  decl_global D.vid_counter ::
   decl_global D.epoch_counter ::
   decl_global D.nd_stmt_cntrs ::
   decl_global D.nd_log_master ::
+  decl_global D.sw_trig_buf_idx ::
+  decl_global D.sw_msgs_to_send_ctr ::
+  List.map decl_global (D.sw_trig_bufs c) @
   List.map decl_global (D.log_ds c) @
   (* combine generic map inits with ones from the ast *)
   List.map (decl_global |- replace_init) (D.maps c) @
@@ -316,24 +320,6 @@ let declare_global_funcs partmap c ast =
          ) @@
          mk_var delta_tuples_nm]
   in
-  let global_inits =
-    (* global initialization that should happen once *)
-      mk_global_val_init "init" t_unit @@
-        mk_block
-          [mk_iter
-            (mk_lambda'
-              K3Global.peers_id_type @@
-              (* only add to node list if role <> switch *)
-              mk_if
-              (mk_neq
-                (mk_var K3Global.peers_role_name) (mk_cstring "switch"))
-              (mk_apply (mk_var K3Ring.add_node_name) @@
-                  mk_tuple @@ ids_to_vars K3Global.peers_ids)
-              mk_cunit
-            ) @@
-              mk_var K3Global.peers_name
-        ]
-  in
   log_read_geq_code ::
   check_stmt_cntr_index_fn ::
   List.map (fun (_,maps) ->
@@ -343,41 +329,29 @@ let declare_global_funcs partmap c ast =
   P.for_all_trigs c.p log_write_code @
   P.for_all_trigs c.p log_get_bound_code @
   K3Shuffle.gen_shuffle_route_code c.p partmap @
-  [global_inits]
+  K3Ring.init_ring ::
+  []
+
 
 
 (* ---- start of protocol code ---- *)
 
-
-(* The start trigger inserts a vid into each message *)
+(* The start trigger puts the message in a trig buffer *)
 let start_trig (c:config) t =
-  let update_epoch =
-    if c.force_correctives then
-      (* force correctives by changing the epoch *)
-      [mk_assign epoch_counter.id @@
-        mk_apply (mk_var "mod") @@
-          mk_tuple [mk_add (mk_var epoch_counter.id) @@ mk_cint 1; mk_cint 2]]
-    else []
-  in
-  mk_code_sink' t (P.args_of_t c.p t) [] @@
-    mk_block @@
-      update_epoch@
-      [mk_let "vid" t_vid
-         (mk_tuple [
-           mk_var epoch_counter.id;
-           mk_var vid_counter.id;
-           mk_apply (mk_var hash_addr) G.me_var]) @@
-       mk_block @@ [
-         mk_send
-           (send_fetch_name_of_t c t) G.me_var @@
-           mk_tuple @@ args_of_t_as_vars_with_v c t;
-        (* increase vid_counter *)
-         mk_assign vid_counter.id @@
-           mk_add (mk_cint 1) @@ mk_var vid_counter.id
-         ]
-      ]
+  let args = P.args_of_t c.p t in
+  mk_code_sink' t args [] @@
+    mk_block [
+      (* insert args into trig buffer *)
+      mk_insert (D.sw_trig_buf_prefix.id^t) @@ mk_tuple args;
+      (* insert function into trig index buffer *)
+      mk_insert D.sw_trig_buf_idx.id @@ mk_var P.send_fetch_name_of_t;
+      (* increment counters for msgs to send and msgs to get vids *)
+      mk_assign D.sw_msgs_to_send_ctr.id @@ mk_add (mk_var D.sw_msgs_to_send_ctr.id) @@ mk_cint 1;
+      mk_assign TS.sw_need_vid.id @@ mk_add (mk_var D.sw_need_vid.id) @@ mk_cint 1
+    ]
 
-let send_fetch_trig c s_rhs_lhs s_rhs trig_name =
+(* sending fetches is done from functions now *)
+let send_fetch_fn c s_rhs_lhs s_rhs trig_name =
   let send_fetches_of_rhs_maps  =
     if null s_rhs then []
     else
@@ -429,139 +403,141 @@ let send_fetch_trig c s_rhs_lhs s_rhs trig_name =
           (mk_empty @@ wrap_tbag' [t_stmt_id; t_map_id; t_addr])
           s_rhs
     ]
-in
-let send_completes_for_stmts_with_no_fetch =
-  let s_no_rhs = P.stmts_without_rhs_maps_in_t c.p trig_name in
-  if null s_no_rhs then []
-  else
-    List.fold_left
-      (fun acc_code (stmt_id, lhs_map_id, do_complete_trig_name) ->
-        let route_fn = R.route_for c.p lhs_map_id in
-        let key = P.partial_key_from_bound c.p stmt_id lhs_map_id in
-          acc_code@
-          [mk_iter
-            (mk_lambda' ["ip", t_addr] @@
-              mk_send
-                (do_complete_trig_name)
-                (mk_var "ip") @@
-                mk_tuple @@ args_of_t_as_vars_with_v c trig_name
-            ) @@
-            mk_apply (mk_var route_fn) @@
-              mk_tuple @@ (mk_cint lhs_map_id)::key
-          ]
-      )
-      [] @@
-      List.map
-        (fun stmt_id ->
-          (stmt_id, P.lhs_map_of_stmt c.p stmt_id,
-          do_complete_name_of_t c trig_name stmt_id)
+  in
+  let send_completes_for_stmts_with_no_fetch =
+    let s_no_rhs = P.stmts_without_rhs_maps_in_t c.p trig_name in
+    if null s_no_rhs then []
+    else
+      List.fold_left
+        (fun acc_code (stmt_id, lhs_map_id, do_complete_trig_name) ->
+          let route_fn = R.route_for c.p lhs_map_id in
+          let key = P.partial_key_from_bound c.p stmt_id lhs_map_id in
+            acc_code@
+            [mk_iter
+              (mk_lambda' ["ip", t_addr] @@
+                mk_send
+                  (do_complete_trig_name)
+                  (mk_var "ip") @@
+                  mk_tuple @@ args_of_t_as_vars_with_v c trig_name
+              ) @@
+              mk_apply (mk_var route_fn) @@
+                mk_tuple @@ (mk_cint lhs_map_id)::key
+            ]
         )
-        s_no_rhs
-in
-let send_puts =
-  if null s_rhs_lhs then [] else
-  let stmt_id_cnt_type = wrap_tbag' [t_stmt_id; t_int] in
-  (* send puts
-   * count is generated by counting the number of messages going to a
-   * specific IP *)
-  [mk_iter
-    (mk_lambda'
-      ["address", t_addr; "stmt_id_cnt_list", stmt_id_cnt_type] @@
-      mk_block @@ [
-        (* send rcv_put *)
-        mk_send
-          (rcv_put_name_of_t c trig_name)
-          (mk_var "address") @@
-          mk_tuple @@ G.me_var :: mk_var "stmt_id_cnt_list"::
-            args_of_t_as_vars_with_v c trig_name] @
+        [] @@
+        List.map
+          (fun stmt_id ->
+            (stmt_id, P.lhs_map_of_stmt c.p stmt_id,
+            do_complete_name_of_t c trig_name stmt_id)
+          )
+          s_no_rhs
+  in
+  let send_puts =
+    if null s_rhs_lhs then [] else
+    let stmt_id_cnt_type = wrap_tbag' [t_stmt_id; t_int] in
+    (* send puts
+    * count is generated by counting the number of messages going to a
+    * specific IP *)
+    [mk_iter
+      (mk_lambda'
+        ["address", t_addr; "stmt_id_cnt_list", stmt_id_cnt_type] @@
+        mk_block @@ [
+          (* send rcv_put *)
+          mk_send
+            (rcv_put_name_of_t c trig_name)
+            (mk_var "address") @@
+            mk_tuple @@ G.me_var :: mk_var "stmt_id_cnt_list"::
+              args_of_t_as_vars_with_v c trig_name] @
 
-        if c.enable_gc then [GC.sw_ack_init_code ~addr_nm:"address" ~vid_nm:"vid"] else []
-    ) @@
-    mk_gbagg
-      (mk_assoc_lambda' (* grouping func -- assoc because of gbagg tuple *)
-        ["ip", t_addr; "stmt_id", t_stmt_id]
-        ["count", t_int] @@
-        mk_var "ip"
-      )
-      (mk_assoc_lambda' (* agg func *)
-        ["acc", stmt_id_cnt_type]
-        ["ip_and_stmt_id", wrap_ttuple [t_addr; t_stmt_id]; "count", t_int] @@
-        mk_let_many (* break up because of the way inner gbagg forms tuples *)
+          if c.enable_gc then [GC.sw_ack_init_code ~addr_nm:"address" ~vid_nm:"vid"] else []
+      ) @@
+      mk_gbagg
+        (mk_assoc_lambda' (* grouping func -- assoc because of gbagg tuple *)
           ["ip", t_addr; "stmt_id", t_stmt_id]
-          (mk_var "ip_and_stmt_id") @@
-          mk_combine
-            (mk_var "acc") @@
-            mk_singleton
-              stmt_id_cnt_type @@
-              mk_tuple [mk_var "stmt_id"; mk_var "count"]
-      )
-      (mk_empty @@ wrap_tbag' [t_stmt_id; t_int]) @@
-      mk_gbagg (* inner gba *)
-        (mk_lambda' (* group func *)
-          ["ip", t_addr; "stmt_id", t_stmt_id; "count", t_int] @@
-          mk_tuple [mk_var "ip"; mk_var "stmt_id"]
+          ["count", t_int] @@
+          mk_var "ip"
         )
         (mk_assoc_lambda' (* agg func *)
-          ["acc", t_int]
-          ["ip", t_addr; "stmt_id", t_stmt_id; "count", t_int] @@
-          mk_add
-            (mk_var "acc") @@
-            mk_var "count"
-        )
-        (mk_cint 0) @@ (* [] *)
-        List.fold_left
-          (fun acc_code (stmt_id, (rhs_map_id, lhs_map_id)) ->
-            (* shuffle allows us to recreate the path the data will take from
-             * rhs to lhs *)
-            let shuffle_fn = K3Shuffle.find_shuffle stmt_id rhs_map_id lhs_map_id in
-            let shuffle_key = P.partial_key_from_bound c.p stmt_id lhs_map_id in
-            (* route allows us to know how many nodes send data from rhs to lhs
-             * *)
-            let route_fn = R.route_for c.p rhs_map_id in
-            let route_key = P.partial_key_from_bound c.p stmt_id rhs_map_id in
-            (* we need the types for creating empty rhs tuples *)
-            let rhs_map_types = P.map_types_with_v_for c.p rhs_map_id in
-            let tuple_types = wrap_t_of_map' rhs_map_types in
+          ["acc", stmt_id_cnt_type]
+          ["ip_and_stmt_id", wrap_ttuple [t_addr; t_stmt_id]; "count", t_int] @@
+          mk_let_many (* break up because of the way inner gbagg forms tuples *)
+            ["ip", t_addr; "stmt_id", t_stmt_id]
+            (mk_var "ip_and_stmt_id") @@
             mk_combine
-              acc_code @@
-              mk_let "sender_count" t_int
-                (* count up the number of IPs received from route *)
-                (mk_agg
-                  (mk_lambda'
-                    ["count", t_int; "ip", t_addr] @@
-                    mk_add (mk_var "count") (mk_cint 1)
-                  )
-                  (mk_cint 0) @@
-                  (mk_apply
-                    (mk_var route_fn) @@
-                      mk_tuple @@ (mk_cint rhs_map_id)::route_key
-                  )
-                ) @@
-              mk_map
-                (mk_lambda'
-                  ["ip", t_addr; "tuples", tuple_types] @@
-                    mk_tuple
-                      [mk_var "ip"; mk_cint stmt_id; mk_var "sender_count"]
-                ) @@
-                mk_apply
-                  (mk_var shuffle_fn) @@
-                  mk_tuple @@
-                      shuffle_key@
-                      [mk_empty tuple_types;
-                       mk_cbool true]
+              (mk_var "acc") @@
+              mk_singleton
+                stmt_id_cnt_type @@
+                mk_tuple [mk_var "stmt_id"; mk_var "count"]
+        )
+        (mk_empty @@ wrap_tbag' [t_stmt_id; t_int]) @@
+        mk_gbagg (* inner gba *)
+          (mk_lambda' (* group func *)
+            ["ip", t_addr; "stmt_id", t_stmt_id; "count", t_int] @@
+            mk_tuple [mk_var "ip"; mk_var "stmt_id"]
           )
-          (mk_empty @@ wrap_tbag' [t_addr; t_stmt_id; t_int]) @@
-          s_rhs_lhs
-  ]
+          (mk_assoc_lambda' (* agg func *)
+            ["acc", t_int]
+            ["ip", t_addr; "stmt_id", t_stmt_id; "count", t_int] @@
+            mk_add
+              (mk_var "acc") @@
+              mk_var "count"
+          )
+          (mk_cint 0) @@ (* [] *)
+          List.fold_left
+            (fun acc_code (stmt_id, (rhs_map_id, lhs_map_id)) ->
+              (* shuffle allows us to recreate the path the data will take from
+              * rhs to lhs *)
+              let shuffle_fn = K3Shuffle.find_shuffle stmt_id rhs_map_id lhs_map_id in
+              let shuffle_key = P.partial_key_from_bound c.p stmt_id lhs_map_id in
+              (* route allows us to know how many nodes send data from rhs to lhs
+              * *)
+              let route_fn = R.route_for c.p rhs_map_id in
+              let route_key = P.partial_key_from_bound c.p stmt_id rhs_map_id in
+              (* we need the types for creating empty rhs tuples *)
+              let rhs_map_types = P.map_types_with_v_for c.p rhs_map_id in
+              let tuple_types = wrap_t_of_map' rhs_map_types in
+              mk_combine
+                acc_code @@
+                mk_let "sender_count" t_int
+                  (* count up the number of IPs received from route *)
+                  (mk_agg
+                    (mk_lambda'
+                      ["count", t_int; "ip", t_addr] @@
+                      mk_add (mk_var "count") (mk_cint 1)
+                    )
+                    (mk_cint 0) @@
+                    (mk_apply
+                      (mk_var route_fn) @@
+                        mk_tuple @@ (mk_cint rhs_map_id)::route_key
+                    )
+                  ) @@
+                mk_map
+                  (mk_lambda'
+                    ["ip", t_addr; "tuples", tuple_types] @@
+                      mk_tuple
+                        [mk_var "ip"; mk_cint stmt_id; mk_var "sender_count"]
+                  ) @@
+                  mk_apply
+                    (mk_var shuffle_fn) @@
+                    mk_tuple @@
+                        shuffle_key@
+                        [mk_empty tuple_types;
+                        mk_cbool true]
+            )
+            (mk_empty @@ wrap_tbag' [t_addr; t_stmt_id; t_int]) @@
+            s_rhs_lhs
+    ]
 in
 (* Actual SendFetch function *)
-mk_code_sink'
+(* We use functions rather than triggers to have better control over
+ * latency *)
+mk_global_fn
   (send_fetch_name_of_t c trig_name)
   (args_of_t_with_v c trig_name)
-  [] @@ (* locals *)
+  [t_unit] @@
   mk_block @@
-    send_completes_for_stmts_with_no_fetch@
-    send_puts@
+    send_completes_for_stmts_with_no_fetch @
+    send_puts @
     send_fetches_of_rhs_maps
 
 

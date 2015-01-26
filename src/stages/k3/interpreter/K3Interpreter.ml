@@ -436,7 +436,7 @@ and eval_expr (address:address) sched_st cenv texpr =
 
     | Subscript i ->
       begin match child_values cenv with
-      | renv, [VTuple l] -> renv, VTemp(at l i)
+      | renv, [VTuple l] -> renv, VTemp(at l @@ i+1)
       | _                -> error "Subscript" "bad tuple"
       end
 

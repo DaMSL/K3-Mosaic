@@ -4,7 +4,9 @@ open Util
 open K3.AST
 open K3Helpers
 
-(* address, role, name, hash *)
+module G = K3Global
+
+(* address, job, hash *)
 let id_t_node_for hash_name = K3Global.peers_id_type @ [hash_name, t_int]
 let id_t_node = id_t_node_for "hash"
 let id_t_node_no_hash = list_drop_end 1 id_t_node
@@ -159,6 +161,19 @@ let get_all_nodes_code =
       (mk_cunit) @:
       mk_convert_col t_ring t_ring_bag @:
         mk_var node_ring_nm
+
+(* global initialization *)
+let init_ring =
+  let jobs = G.jobs [] in
+  let init = some @@
+      mk_iter
+        (mk_lambda' jobs.e @@
+          (* only add to node list if job = node *)
+          mk_if (mk_eq (mk_var "job") @@ mk_cint G.job_node)
+            (mk_apply (mk_var add_node_name) @@ mk_tuple @@ ids_to_vars @@ fst_many jobs.e)
+            mk_cunit) @@
+        mk_var jobs.id in
+  {id="init_ring_node"; e=[]; t=t_unit; init}
 
 
 let gen_ring_code =
