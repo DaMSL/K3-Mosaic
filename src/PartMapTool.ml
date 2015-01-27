@@ -23,59 +23,59 @@ let cmd_line_params = {
 let maps_and_dims file =
   let open K3Util in let open K3.AST in
   let prog = DriverHelpers.parse_k3_file file in
-  match fst @: global_of_program K3Dist.map_ids prog with
+  match fst @@ global_of_program K3Dist.map_ids_id prog with
   | Global(_, _, Some e) ->
       let l = K3Helpers.list_of_k3_container e in
       let l = List.map (fun t -> begin match decompose_tuple t with
         | [x;y;z] -> x,y,z
-        | _       -> failwith @: "wrong format for "^K3Dist.map_ids
+        | _       -> failwith @@ "wrong format for "^K3Dist.map_ids_id
         end
       ) l
       in
       (* take only the names and dimensions *)
       List.map (fun (_,x,y) -> begin match tag_of_expr x, tag_of_expr y with
         | Const(CString(s)), Const(CInt(i)) -> s, i
-        | _ -> failwith @: "2: wrong format for "^K3Dist.map_ids
+        | _ -> failwith @@ "2: wrong format for "^K3Dist.map_ids_id
         end
       ) l
-  | _ -> failwith @: K3Dist.map_ids^" not found"
+  | _ -> failwith @@ K3Dist.map_ids_id^" not found"
 
 let print_maps_dims maps_dims =
   List.iter (fun (mapname, i) -> Printf.printf "%s:%d\n" mapname i) maps_dims
 
 open K3Helpers
 
-let inner_type = wrap_tlist @: wrap_ttuple [t_int; t_int]
-let pmap_types = wrap_tlist @: wrap_ttuple [t_string; inner_type]
+let inner_type = wrap_tlist @@ wrap_ttuple [t_int; t_int]
+let pmap_types = wrap_tlist @@ wrap_ttuple [t_string; inner_type]
 
 (* convert map_sizes structure to k3 expressions *)
 let k3_of_maps_sizes maps_sizes =
-  k3_container_of_list pmap_types @:
+  k3_container_of_list pmap_types @@
     List.map (fun (m, ss) ->
       mk_tuple [mk_cstring m;
-        k3_container_of_list inner_type @:
+        k3_container_of_list inner_type @@
           List.map (fun (dim, size) ->
             mk_tuple [mk_cint dim; mk_cint size]) ss]
   ) maps_sizes
 
 (* add a declaration to the k3 ast *)
 let k3_decl_of_k3_expr k3exp =
-  K3Typechecker.type_bindings_of_program @:
+  K3Typechecker.type_bindings_of_program @@
     [mk_global_val_init "pmap_input" pmap_types k3exp]
 
 let k3new_string_of_maps_sizes maps_sizes =
-  let p, env, trig_env, _ = k3_decl_of_k3_expr @: k3_of_maps_sizes maps_sizes in
+  let p, env, trig_env, _ = k3_decl_of_k3_expr @@ k3_of_maps_sizes maps_sizes in
   K3NewPrint.string_of_program p (env, trig_env)
 
 let string_of_maps_sizes maps_sizes =
   let module B = Buffer in
   let buf = B.create 100 in
   B.add_string buf "[";
-  B.add_string buf @: String.concat ";" @:
+  B.add_string buf @@ String.concat ";" @@
     List.map (fun (mapname, l) ->
       let b = B.create 10 in
       Printf.bprintf b "%s,[" mapname;
-      B.add_string b @: String.concat ";" @:
+      B.add_string b @@ String.concat ";" @@
         List.map (fun (dim, size) -> Printf.sprintf "%d,%d" dim size) l;
       B.add_string b "]";
       B.contents b
@@ -88,7 +88,7 @@ let string_of_maps_sizes maps_sizes =
  * product of dimension sizes *)
 let calc_part num_nodes dims =
   (* create a list of 1s *)
-  let initial_list = list_map (fun i -> i, 1) @: create_range 0 dims in
+  let initial_list = list_map (fun i -> i, 1) @@ create_range 0 dims in
   let rec loop l prod =
     if prod >= num_nodes then l
     else
