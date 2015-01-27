@@ -13,7 +13,7 @@ let empty = []
 
 let is_empty = function [] -> true | _ -> false
 
-let insert x l = x::l
+let insert x l = l@[x]
 
 let delete x l = list_remove x l
 
