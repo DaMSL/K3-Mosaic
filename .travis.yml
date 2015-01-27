@@ -6,7 +6,7 @@ install:
   - ocaml -version
   - ocamlbuild -version
   - sudo pip install six
-  - export OPAMYES=1
+  - sudo export OPAMYES=1
   - sudo opam init
   - sudo eval `opam config env`
   - sudo opam install ocamlfind
