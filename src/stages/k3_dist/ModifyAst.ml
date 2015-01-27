@@ -130,7 +130,7 @@ let get_global_map_inits c = function
       begin match m_expr with
         | None     -> []
                       (* add a vid *)
-        | Some exp -> [map_id, mk_ind @@ add_vid_to_init_val t' exp]
+        | Some exp -> [map_id, mk_ind @@ add_vid_to_init_val t exp]
       end
     with Not_found -> [] end
   | _ -> []
