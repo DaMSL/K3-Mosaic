@@ -22,7 +22,9 @@ and Value : sig
   and foreign_func_t = env_t -> env_t * eval_t
   (* arguments to a function/trigger *)
   (* an env_t is global values and frames (functional environment) *)
-  and env_t = (value_t ref) IdMap.t * value_t list IdMap.t
+  and local_env_t = value_t list IdMap.t
+  and global_env_t = (value_t ref) IdMap.t
+  and env_t = global_env_t * local_env_t
   and value_t
       = VMax
       | VMin
@@ -40,7 +42,7 @@ and Value : sig
       | VList of value_t IList.t
       | VMap of value_t ValueMap.t
       | VMultimap of ValueMMap.t
-      | VFunction of arg_t * expr_t
+      | VFunction of arg_t * local_env_t * expr_t (* closure *)
       | VForeignFunction of arg_t * foreign_func_t
       | VAddress of address
       | VTarget of id_t

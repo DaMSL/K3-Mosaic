@@ -101,11 +101,11 @@ let rec unbind_args uuid arg env =
 let rec eval_fun uuid f =
   let error = int_erroru uuid "eval_fun" in
   match f with
-    | VFunction(arg, body) ->
+    | VFunction(arg, closure, body) ->
         fun address sched_st (m_env, f_env) a ->
-          let new_env = m_env, bind_args uuid arg a f_env in
-          let (m_env', f_env'), result = eval_expr address sched_st new_env body in
-          (m_env', unbind_args uuid arg f_env'), result
+          let new_env = m_env, bind_args uuid arg a closure in
+          let (m_env', _), result = eval_expr address sched_st new_env body in
+          (m_env', f_env), result
 
     | VForeignFunction(arg, f) ->
         fun _ _ (m_env, f_env) a ->
@@ -257,7 +257,7 @@ and eval_expr (address:address) sched_st cenv texpr =
     (* Control flow *)
     | Lambda a ->
       let body = List.nth children 0
-      in cenv, VTemp(VFunction(a, body))
+      in cenv, VTemp(VFunction(a, snd cenv, body))
 
     | Apply ->
         begin match child_values cenv with
@@ -567,7 +567,8 @@ let prepare_trigger sched_st id arg local_decls body =
     let default (id,t,_) = id, ref (default_isolated_value t) in
     let new_vals = List.map default local_decls in
     let local_env = add_from_list m_env new_vals, f_env in
-    let _, reval = (eval_fun (-1) @@ VFunction(arg,body)) address (Some sched_st) local_env args in
+    let _, reval = (eval_fun (-1) @@ VFunction(arg, IdMap.empty, body)) address 
+                   (Some sched_st) local_env args in
     match value_of_eval reval with
       | VUnit -> ()
       | _ -> int_error "prepare_trigger" @@ "trigger "^id^" returns non-unit"

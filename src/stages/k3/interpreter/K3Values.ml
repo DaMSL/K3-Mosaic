@@ -140,8 +140,11 @@ and Value : sig
 
   and foreign_func_t = env_t -> env_t * eval_t
 
-  (* mutable environment, frame environment *)
-  and env_t = (value_t ref) IdMap.t * value_t list IdMap.t
+  (* global environment, frame environment *)
+  (* the global env needs to be separate for closures *)
+  and local_env_t = value_t list IdMap.t
+  and global_env_t = (value_t ref) IdMap.t
+  and env_t = global_env_t * local_env_t
 
   and value_t
       = VMax
@@ -160,7 +163,7 @@ and Value : sig
       | VList of value_t IList.t
       | VMap of value_t ValueMap.t
       | VMultimap of ValueMMap.t
-      | VFunction of arg_t * expr_t
+      | VFunction of arg_t * local_env_t * expr_t (* closure *)
       | VForeignFunction of arg_t * foreign_func_t
       | VAddress of address
       | VTarget of id_t
@@ -224,7 +227,7 @@ and ValueUtils : (sig val v_to_list : Value.value_t -> Value.value_t list
       | VList _
       | VMap _
       | VMultimap _             -> paren @: s_of_col v
-      | VFunction (a, b)        -> paren @: Printf.sprintf "%s -> %s" (string_of_arg a) (string_of_expr b)
+      | VFunction (a, _, b)     -> paren @: Printf.sprintf "%s -> %s" (string_of_arg a) (string_of_expr b)
       | VForeignFunction (a, _) -> paren @: string_of_arg a
       | VAddress (ip, port)     -> paren @: ip^":"^ string_of_int port
       | VTarget id              -> paren @: id
@@ -279,7 +282,7 @@ let rec print_value ?(mark_points=[]) v =
     | VList _ as vs           -> print_collection "[" "]" vs
     | VMap _ as vs            -> print_collection "[|" "|]" vs
     | VMultimap _ as vs       -> print_collection "[||" "||]" vs
-    | VFunction (a, b)        -> ps "<fun>"
+    | VFunction _             -> ps "<fun>"
     | VForeignFunction (a, _) -> ps "<foreignfun>"
     | VAddress (ip,port)      -> ps (ip^":"^ string_of_int port)
     | VTarget id              -> ps ("<"^id^">")
