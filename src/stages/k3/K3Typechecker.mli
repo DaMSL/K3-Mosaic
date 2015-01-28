@@ -12,12 +12,9 @@ type event_type_bindings_t = (id_t * (id_t * (type_t list)) list) list
 
 type error_type =
     | TMismatch of type_t * type_t * string
-    | VTMismatch of value_type_t * value_type_t * string
     | BTMismatch of base_type_t * base_type_t * string
     | TBad of type_t * string
-    | VTBad of value_type_t * string
     | BTBad of base_type_t * string
-    | MTBad of mutable_type_t * string
     | InvalidTypeAnnotation
     | MultiplePossibleTypes of string
     | UntypedExpression
@@ -35,24 +32,14 @@ val (|>): ('a -> 'b) -> 'a -> 'b
 (* Thread an exception between applied functions *)
 val (+++): ('b -> 'x -> 'c) -> ('a -> 'x -> 'b) -> 'a -> 'x -> 'c
 
-(* Type extractors *)
-val collection_of : base_type_t -> (unit -> unit) -> container_type_t * value_type_t
-
-val mutable_of: value_type_t -> 'a -> mutable_type_t
-val base_of: value_type_t -> 'a -> base_type_t
-val annotation_of : value_type_t -> annotation_t
-val contained_of: value_type_t -> value_type_t
-val value_of: type_t -> (unit -> unit) -> value_type_t
-val canonical: base_type_t -> value_type_t
-
 (* get a canonical value for a specific type *)
-val canonical_value_of_type : value_type_t -> expr_t
+val canonical_value_of_type : type_t -> expr_t
 
 (* AST integrity *)
 val check_tag_arity: expr_tag_t -> 'child list -> bool
 
 (* Type deduction for parts of a K3 program *)
-val deduce_constant_type: int -> (id_t * type_t) list -> constant_t -> value_type_t
+val deduce_constant_type: int -> (id_t * type_t) list -> constant_t -> type_t
 
 (* takes trigger environment, environment and expression and returns a typed
  * expression *)

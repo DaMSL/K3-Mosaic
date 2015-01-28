@@ -86,7 +86,7 @@ val string_of_program_env : program_env_t -> string
 (* Conversion between values and other types *)
 val value_of_const : constant_t -> value_t
 val value_of_const_expr : expr_t -> value_t
-val type_of_value : int -> value_t -> value_type_t
+val type_of_value : int -> value_t -> type_t
 val expr_of_value : int -> value_t -> expr_t
 
 (* Universal collection functions *)

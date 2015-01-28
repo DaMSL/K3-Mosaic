@@ -22,9 +22,7 @@
     | [e] -> mkexpr (Singleton(ctype)) [e]
     | e :: es -> mkexpr Combine [mkexpr (Singleton(ctype)) [e]; build_collection es ctype]
 
-  let contained_unknown_type = TContained(TImmutable(TUnknown,[]))
-
-  let mk_unknown_collection t_c = TIsolated(TImmutable(TCollection(t_c, contained_unknown_type),[]))
+  let mk_unknown_collection t_c = canonical @@ TCollection(t_c, canonical TUnknown)
 
   let parse_format s = match String.lowercase s with
     | "csv" -> CSV | "json" -> JSON
@@ -99,7 +97,7 @@
 %token <string> STRING
 %token <bool> BOOL
 %token MAYBE JUST INDIRECT
-%token REF
+%token MUT
 %token RANGE
 
 %token EOF
@@ -108,7 +106,7 @@
 
 %token LPAREN RPAREN COMMA SEMICOLON PERIOD
 
-%token LBRACE RBRACE LBRACEBAR RBRACEBAR LBRACKET RBRACKET LBRACKETBAR RBRACKETBAR BAR
+%token LBRACE RBRACE LBRACEBAR RBRACEBAR LBRACKET RBRACKET LBRACKETBAR RBRACKETBAR BAR LBRACKETCOLON RBRACKETCOLON
 
 %token NEG PLUS MINUS TIMES DIVIDE MODULO HASH
 
@@ -340,85 +338,48 @@ positions : integer_list { $1 };
 
 
 /* Types */
+
 type_expr :
-    | function_type_expr { TFunction(fst $1, snd $1) }
-    | isolated_value_type_expr { TValue($1) }
+    | base_type_expr          { $1 }
+    | MUT base_type_expr      { mut $2 }
     | LPAREN type_expr RPAREN { $2 }
 ;
 
-function_type_expr : isolated_value_type_expr RARROW isolated_value_type_expr { ($1, $3) };
-
-isolated_value_type_expr  : isolated_mutable_type_expr  { TIsolated($1) };
-contained_value_type_expr : contained_mutable_type_expr { TContained($1) };
-
-isolated_mutable_type_expr :
-    | isolated_base_type_expr { let a,b = $1 in TImmutable(a,b) }
-    | REF isolated_base_type_expr { let a,b = $2 in TMutable(a,b) }
+base_type_expr :
+    | type_expr RARROW type_expr    { wrap_tfunc $1 $3 }
+    | TYPE                          { canonical $1 }
+    | LPAREN type_expr_tuple RPAREN { $2 }
+    | annotated_collection_type     { let c, anno = $1 in { (canonical c) with anno} }
+    | MAYBE type_expr               { wrap_tmaybe $2 }
+    | INDIRECT type_expr            { wrap_tind $2 }
 ;
 
-contained_mutable_type_expr :
-    | contained_base_type_expr { let a,b = $1 in TImmutable(a,b) }
-    | REF contained_base_type_expr { let a,b = $2 in TMutable(a,b) }
-;
+type_expr_tuple :
+    | type_expr_list { wrap_ttuple $1 }
 
-isolated_base_type_expr :
-    | TYPE { $1, [] }
-    | LPAREN isolated_base_type_tuple RPAREN { $2, [] }
-    | annotated_collection_type      { $1 }
-    | MAYBE isolated_value_type_expr { TMaybe($2), [] }
-    | INDIRECT isolated_value_type_expr { TIndirect($2), [] }
-;
-
-contained_base_type_expr :
-    | TYPE { $1, [] }
-    | annotated_collection_type       { $1 }
-    | MAYBE contained_value_type_expr { TMaybe($2), [] }
-    | INDIRECT contained_value_type_expr { TIndirect($2), [] }
-    | LPAREN contained_base_type_tuple RPAREN { $2, [] }
-;
-
-isolated_base_type_tuple :
-    | isolated_value_type_expr COMMA isolated_value_type_expr_list {
-        TTuple($1 :: $3)
-    }
-;
-
-contained_base_type_tuple :
-    | contained_value_type_expr COMMA contained_value_type_expr_list {
-        TTuple($1 :: $3)
-    }
-;
-
-contained_value_type_tuple :
-    | contained_value_type_expr COMMA contained_value_type_expr_list {
-        TContained(TImmutable(TTuple($1 :: $3), []))
-    }
-
-isolated_value_type_expr_list :
-    | isolated_value_type_expr { [$1] }
-    | isolated_value_type_expr COMMA isolated_value_type_expr_list { $1 :: $3 }
-;
-
-contained_value_type_expr_list :
-    | contained_value_type_expr { [$1] }
-    | contained_value_type_expr COMMA contained_value_type_expr_list { $1 :: $3 }
+type_expr_list :
+    | type_expr                       { [$1] }
+    | type_expr COMMA type_expr_list  { $1 :: $3 }
 ;
 
 annotated_collection_type :
-    | collection_type                                     { $1,[] }
+    | collection_type                                     { $1, [] }
     | collection_type ANNOTATE LBRACE annotations RBRACE  { $1, $4 }
 ;
 
 collection_type :
-    | LBRACE contained_value_type_expr RBRACE { TCollection(TSet, $2) }
-    | LBRACE contained_value_type_tuple RBRACE { TCollection(TSet, $2) }
-    | LBRACKETBAR contained_value_type_expr BAR indices RBRACKETBAR { TCollection(TMultimap $4, $2) }
-    | LBRACKETBAR contained_value_type_tuple BAR indices RBRACKETBAR { TCollection(TMultimap $4, $2) }
-    | LBRACKETBAR contained_value_type_expr BAR error { print_error "invalid indices" }
-    | LBRACEBAR contained_value_type_expr RBRACEBAR { TCollection(TBag, $2) }
-    | LBRACEBAR contained_value_type_tuple RBRACEBAR { TCollection(TBag, $2) }
-    | LBRACKET contained_value_type_expr RBRACKET { TCollection(TList, $2) }
-    | LBRACKET contained_value_type_tuple RBRACKET { TCollection(TList, $2) }
+    | LBRACE type_expr RBRACE { TCollection(TSet, $2) }
+    | LBRACE type_expr_tuple RBRACE { TCollection(TSet, $2) }
+    | LBRACKETBAR type_expr BAR indices RBRACKETBAR { TCollection(TMultimap $4, $2) }
+    | LBRACKETBAR type_expr_tuple BAR indices RBRACKETBAR { TCollection(TMultimap $4, $2) }
+    | LBRACKETBAR type_expr BAR error { print_error "invalid indices" }
+    | LBRACKETBAR type_expr_tuple BAR error { print_error "invalid indices" }
+    | LBRACEBAR type_expr RBRACEBAR { TCollection(TBag, $2) }
+    | LBRACEBAR type_expr_tuple RBRACEBAR { TCollection(TBag, $2) }
+    | LBRACKETCOLON type_expr RBRACKETCOLON { TCollection(TMap, $2) }
+    | LBRACKETCOLON type_expr_tuple RBRACKETCOLON { TCollection(TMap, $2) }
+    | LBRACKET type_expr RBRACKET { TCollection(TList, $2) }
+    | LBRACKET type_expr_tuple RBRACKET { TCollection(TList, $2) }
 ;
 
 indices :
@@ -443,24 +404,24 @@ expr :
     | LPAREN tuple RPAREN { $2 }
     | block { $1 }
 
-    | INDIRECT expr { mkexpr Indirect [$2] }
-    | JUST expr { mkexpr Just [$2] }
-    | NOTHING COLON isolated_value_type_expr { mkexpr (Nothing($3)) [] }
+    | INDIRECT expr           { mk_ind $2 }
+    | JUST expr               { mk_just $2 }
+    | NOTHING COLON type_expr { mk_nothing $3 }
 
-    | constant { mkexpr (Const($1)) [] }
-    | collection { $1 }
-    | range { $1 }
-    | variable { mkexpr (Var($1)) [] }
-    | arithmetic { $1 }
-    | predicate { $1 }
-    | conditional { $1 }
-    | case { $1 }
-    | bind { $1 }
-    | lambda { $1 }
-    | tuple_index { $1 }
-    | access { $1 }
+    | constant     { mk_const $1 }
+    | collection   { $1 }
+    | range        { $1 }
+    | variable     { mk_var $1 }
+    | arithmetic   { $1 }
+    | predicate    { $1 }
+    | conditional  { $1 }
+    | case         { $1 }
+    | bind         { $1 }
+    | lambda       { $1 }
+    | tuple_index  { $1 }
+    | access       { $1 }
     | transformers { $1 }
-    | mutation { $1 }
+    | mutation     { $1 }
 
     | SEND LPAREN IDENTIFIER COMMA address COMMA tuple RPAREN {
         mkexpr Send [mkexpr (Const(CTarget($3))) []; mkexpr (Const($5)) []; $7]
@@ -473,14 +434,14 @@ expr :
       }
 
     /* Function application and let notation */
-    | expr LPAREN tuple RPAREN    { mkexpr Apply [$1; $3] }
+    | expr LPAREN tuple RPAREN    { mk_apply $1 $3 }
     | LET arg GETS expr IN expr   { mkexpr Apply [mkexpr (Lambda $2) [$6]; $4] }
 
     /* TODO: more error handling */
-    | SEND LPAREN IDENTIFIER COMMA address COMMA error { print_error("Invalid send argument") }
-    | SEND LPAREN IDENTIFIER COMMA error { print_error("Invalid send address") }
-    | SEND LPAREN error { print_error("Invalid send target") }
-    | SEND error { print_error("Invalid send syntax") }
+    | SEND LPAREN IDENTIFIER COMMA address COMMA error { print_error "Invalid send argument" }
+    | SEND LPAREN IDENTIFIER COMMA error { print_error "Invalid send address" }
+    | SEND LPAREN error { print_error "Invalid send target" }
+    | SEND error { print_error "Invalid send syntax" }
 
     | expr LPAREN error { print_error("Function application error") }
 
@@ -505,13 +466,13 @@ tuple :
 ;
 
 value_typed_identifier :
-    | IDENTIFIER COLON isolated_value_type_expr { ($1, $3) }
+    | IDENTIFIER COLON type_expr                { ($1, $3) }
     | IDENTIFIER COLON error                    { type_error() }
 
 ;
 
 value_typed_identifier_list :
-    | value_typed_identifier                                   { [($1)] }
+    | value_typed_identifier                                   { [$1] }
     | value_typed_identifier COMMA value_typed_identifier_list { $1 :: $3 }
 ;
 
@@ -543,19 +504,21 @@ range :
 ;
 
 collection :
-    | LBRACE RBRACE COLON isolated_value_type_expr { build_collection [] $4 }
-    | LBRACEBAR RBRACEBAR COLON isolated_value_type_expr { build_collection [] $4 }
-    | LBRACKETBAR RBRACKETBAR COLON isolated_value_type_expr{ build_collection [] $4 }
-    | LBRACKET RBRACKET COLON isolated_value_type_expr{ build_collection [] $4 }
+    | LBRACE RBRACE COLON type_expr               { build_collection [] $4 }
+    | LBRACEBAR RBRACEBAR COLON type_expr         { build_collection [] $4 }
+    | LBRACKETBAR RBRACKETBAR COLON type_expr     { build_collection [] $4 }
+    | LBRACKET RBRACKET COLON type_expr           { build_collection [] $4 }
+    | LBRACKETCOLON RBRACKETCOLON COLON type_expr { build_collection [] $4 }
 
-    | LBRACE RBRACE error { print_error "missing type for empty set"}
+    | LBRACE RBRACE error       { print_error "missing type for empty set"}
     | LBRACEBAR RBRACEBAR error { print_error "missing type for empty bag"}
-    | LBRACKET RBRACKET error { print_error "missing type for empty list"}
+    | LBRACKET RBRACKET error   { print_error "missing type for empty list"}
 
-    | LBRACE expr_seq RBRACE { build_collection $2 (mk_unknown_collection TSet) }
-    | LBRACEBAR expr_seq RBRACEBAR { build_collection $2 (mk_unknown_collection TBag) }
+    | LBRACE expr_seq RBRACE                       { build_collection $2 (mk_unknown_collection TSet) }
+    | LBRACEBAR expr_seq RBRACEBAR                 { build_collection $2 (mk_unknown_collection TBag) }
     | LBRACKETBAR expr_seq BAR indices RBRACKETBAR { build_collection $2 (mk_unknown_collection (TMultimap $4)) }
-    | LBRACKET expr_seq RBRACKET { build_collection $2 (mk_unknown_collection TList) }
+    | LBRACKET expr_seq RBRACKET                   { build_collection $2 (mk_unknown_collection TList) }
+    | LBRACKETCOLON expr_seq RBRACKETCOLON         { build_collection $2 (mk_unknown_collection TMap) }
 ;
 
 variable :

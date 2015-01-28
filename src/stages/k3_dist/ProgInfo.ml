@@ -20,14 +20,14 @@ type stmt_data_t
 
 type trig_data_t
   (* trig_id, name, bound_args, stmts *)
-  = trig_id_t * string * (id_t * value_type_t) list * stmt_id_t list
+  = trig_id_t * string * (id_t * type_t) list * stmt_id_t list
 
   (* map_id, map_name, parameters *)
-type map_data_t = map_id_t * string * value_type_t list
+type map_data_t = map_id_t * string * type_t list
 
 type prog_data_t = trig_data_t list * stmt_data_t list * map_data_t list
 
-let string_of_var (vn, vt) = vn^":"^(string_of_value_type vt)
+let string_of_var (vn, vt) = vn^":"^(string_of_type vt)
 
 let string_of_binding (vn, idx) = vn^":"^(string_of_int idx)
 let string_of_bindings bl =
@@ -37,7 +37,7 @@ let string_of_map (map, bl) =
 
 let string_of_map_data ((map_id, map_name, tl):map_data_t):string =
   map_name ^ "(" ^ (string_of_int map_id) ^ ")[" ^
-  (String.concat ", " (List.map string_of_value_type tl))^"]"
+  (String.concat ", " (List.map string_of_type tl))^"]"
 
 
 let string_of_stmt_data ((stmt_id, trig_id, lhs_map, lhs_map_binding,

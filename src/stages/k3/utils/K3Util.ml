@@ -36,13 +36,6 @@ let rec typed_vars_of_arg arg =
 let id_of_var e = match tag_of_expr e with
   | Var id -> id | _ -> failwith "invalid variable"
 
-let tuple_type_of_args args_t =
-	if List.length args_t = 1 then TValue (List.hd args_t)
-	else TValue (TIsolated(TImmutable(TTuple(args_t),[])))
-
-let tuple_type_of_arg arg =
-  tuple_type_of_args (List.map snd (typed_vars_of_arg arg))
-
 (* Predicates *)
 let is_const e = match tag_of_expr e with | Const _ -> true | _ -> false
 let is_var e = match tag_of_expr e with | Var _ -> true | _ -> false
@@ -160,8 +153,11 @@ let match_declaration id match_f l =
 
 (* Declaration accessors *)
 let is_global (d,_) = match d with Global _ -> true | _ -> false
-let is_global_fn (d,_) = match d with Global(_,TFunction _,_) -> true | _ -> false
-let is_global_val (d,_) = match d with Global(_,TValue _,_) -> true | _ -> false
+let is_global_fn (d,_) = match d with Global(_,{typ=TFunction _},_) -> true | _ -> false
+let is_global_val (d,_) = match d with
+  | Global(_,{typ=TFunction _},_) -> false
+  | Global _ -> true
+  | _ -> false
 let is_foreign (d,_) = match d with Foreign _ -> true | _ -> false
 let is_flow (d,_)   = match d with Flow _ -> true | _ -> false
 let is_role (d,_)   = match d with Role _ -> true | _ -> false
@@ -359,10 +355,6 @@ let attach_type t e =
   expr_of_details uuid tag ((Type t)::anns) children
 
 (* unwrap a type_t that's not a function *)
-let unwrap_t_val = function
-  | TValue vt -> vt
-  | _         -> failwith "Function type unexpected"
-
 let unwrap_tuple e = match tag_of_expr e with
   | Tuple -> decompose_tuple e
   | x     -> [e]

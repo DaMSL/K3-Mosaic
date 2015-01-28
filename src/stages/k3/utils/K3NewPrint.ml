@@ -157,42 +157,32 @@ let rec lazy_base_type ?(brace=true) ?(mut=false) ?(empty=false) c ~in_col t =
   | TDate        -> wrap @@ lps "int"
   | TFloat       -> wrap @@ lps "real"
   | TString      -> wrap @@ lps "string"
-  | TMaybe(vt)   -> wrap(lps "option " <| lazy_value_type c ~in_col vt)
+  | TMaybe(vt)   -> wrap(lps "option " <| lazy_type c ~in_col vt)
   | TAddress     -> wrap @@ lps "address" (* ? *)
-  | TTarget bt   -> wrap (lps "target" <| lazy_base_type c ~in_col bt)
+  | TTarget bt   -> wrap (lps "target" <| lazy_type c ~in_col bt)
   | TUnknown     -> wrap @@ lps "unknown"
   | TTop         -> wrap @@ lps "top"
-  | TIndirect vt -> wrap (lps "ind " <| lazy_value_type c ~in_col vt)
+  | TIndirect vt -> wrap (lps "ind " <| lazy_type c ~in_col vt)
   | TTuple(vts)  -> (* tuples become records *)
       let rec_vts = add_record_ids vts in
       let inner = lazy_concat ~sep:lcomma (fun (id, vt) ->
-        lps (id^":") <| lazy_value_type c ~in_col:false vt) rec_vts in
+        lps (id^":") <| lazy_type c ~in_col:false vt) rec_vts in
       let wrap = if brace then lazy_brace else id_fn in
       wrap (lsp () <| inner <| lsp ())
   | TCollection(ct, vt) -> wrap (
     (if not empty then lps "collection " else [])
-    <| lazy_value_type c ~in_col:true vt <| lps " @ " <| lazy_col ct)
+    <| lazy_type c ~in_col:true vt <| lps " @ " <| lazy_col ct)
+  | TFunction(it, ot) -> lazy_type c it <| lps " -> " <| lazy_type c ot
 
-and lazy_mutable_type ?empty c ~in_col = function
-  | TMutable (bt, a)   -> lazy_base_type ?empty c ~in_col ~mut:true bt
-  | TImmutable (bt, a) -> lazy_base_type ?empty c ~in_col bt
-
-and lazy_value_type ?empty c ~in_col = function
-  | TIsolated mt  -> lazy_mutable_type ?empty c ~in_col mt
-  | TContained mt -> lazy_mutable_type ?empty c ~in_col mt
-
-let lazy_type c = function
-  | TFunction(f,t) ->
-      lazy_value_type c ~in_col:false f <| lps " -> " <|
-      lazy_value_type c ~in_col:false t
-  | TValue vt -> lazy_value_type c false vt
+and lazy_type ?empty ?(in_col=false) c {typ; mut; anno} =
+  lazy_base_type ?empty ~in_col ~mut c typ
 
 let rec lazy_arg c drop_tuple_paren = function
   | AIgnored      -> lps "_"
   | AVar (id, vt) -> lps id
   | _             -> failwith "shouldn't be here"
 
-let lazy_id_type c (id,t) = lps (id^" : ") <| lazy_value_type c false t
+let lazy_id_type c (id,t) = lps (id^" : ") <| lazy_type c t
 
 let lazy_const c v =
   let remove_float_dot s =
@@ -213,12 +203,12 @@ let lazy_const c v =
   | CTarget id     -> lps id
 
 (* wrap a const collection expression with collection notation *)
-let lazy_collection_vt c vt eval = match KH.unwrap_vtype vt with
-  | _, TCollection(ct, et) ->
+let lazy_collection_vt c vt eval = match vt.typ with
+  | TCollection(ct, et) ->
       (* preceding list of element types *)
-      let mut, t = KH.unwrap_vtype et in
+      let mut = et.mut in
       let lazy_elem_list =
-        lazy_base_type ~brace:false ~in_col:true ~mut c t <| lps "|" <| lsp ()
+        lazy_base_type ~brace:false ~in_col:true ~mut c et.typ <| lps "|" <| lsp ()
       in
       lps "{|" <| lazy_elem_list <| eval <| lps "|}" <| lps " @ " <| lazy_col ct
   | _ -> error () (* type error *)
@@ -226,7 +216,7 @@ let lazy_collection_vt c vt eval = match KH.unwrap_vtype vt with
 (* arg type with numbers included in tuples and maybes *)
 type arg_num
     = NIgnored
-    | NVar      of int * id_t * value_type_t
+    | NVar      of int * id_t * type_t
     | NMaybe    of int * arg_num
     | NTuple    of int * arg_num list
 
@@ -235,7 +225,7 @@ let shallow_bind_id ~in_record = function
   | NIgnored        -> "_"
   (* A case of a single variable in an in_record (map etc) *)
   | NVar (i, id, vt) when in_record ->
-      begin match snd @@ KH.unwrap_vtype vt with
+      begin match vt.typ with
       | TTuple _ -> id (* we have a single variable representing a tuple -- don't bind *)
       (*| TCollection _ -> id [> single variable representing collection <]*)
       | _        -> id_of_num i
@@ -264,10 +254,10 @@ let get_id_of_arg = function
 
 (* convert an arg_num to a value type *)
 let rec value_type_of_arg_num = function
-  | NIgnored        -> T.canonical TUnknown
+  | NIgnored        -> KH.canonical TUnknown
   | NVar(_, _, t)      -> t
-  | NMaybe(_, a')   -> T.canonical (TMaybe(value_type_of_arg_num a'))
-  | NTuple(_, args) -> T.canonical (TTuple(List.map value_type_of_arg_num args))
+  | NMaybe(_, a')   -> KH.canonical (TMaybe(value_type_of_arg_num a'))
+  | NTuple(_, args) -> KH.canonical (TTuple(List.map value_type_of_arg_num args))
 
 (* Break args down for lambdas with multiple values *)
 let break_args = function
@@ -353,7 +343,7 @@ let rec deep_bind ?top_expr ~in_record c arg_n =
     match a with
       (* pretend to unwrap a record *)
     | NVar(i, id, vt) when record ->
-        begin match snd @@ KH.unwrap_vtype vt with
+        begin match vt.typ with
         | TTuple _  -> []    (* don't bind if we have an id representing a record *)
         | _         ->
           (* force bind a variable that comes in as a pretend record *)
@@ -458,7 +448,7 @@ and handle_lambda c ~expr_info ~prefix_fn arg e =
 (* create a fold instead of a map or ext (for typechecking reasons) *)
 (* expects a lambda expression, and collection expression inside a map/flattenMap *)
 and fold_of_map_ext c expr =
-  let self_t_out = U.unwrap_t_val @@ T.type_of_expr expr in
+  let self_t_out = T.type_of_expr expr in
   (* customize for the different operations *)
   let (lambda, col), wrap_fn, suffix, t_out = match U.tag_of_expr expr with
     | Map -> U.decompose_map expr, KH.mk_singleton self_t_out, "map", self_t_out
@@ -523,10 +513,10 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
     let wrapr = logic_paren er in
     expr_pair ~sep:(lsp () <| lps sym <| lsp ()) ~wl:wrapl ~wr:wrapr (el, er)
   in let expr_type_is_bool e =
-    try (match T.type_of_expr e with
-    | TValue x | TFunction(_,x) -> match T.base_of x () with
+    try begin match (T.type_of_expr e).typ with
         | TBool -> true
-        | _     -> false)
+        | _     -> false
+        end
     with T.TypeError(_,_,_) -> false (* assume additive *)
   (* many instructions need to wrap the same way *)
   in let wrap e = match U.tag_of_expr expr with
@@ -546,13 +536,12 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
     in lazy_brace inner
   | Just -> let e = U.decompose_just expr in
     lps "Some " <| lazy_expr c e
-  | Nothing vt -> lps "None " <| if fst @@ KH.unwrap_vtype vt
-      then lps "mut" else lps "immut"
-  | Empty vt -> lps "empty " <| lazy_value_type ~empty:true c ~in_col:false vt
+  | Nothing vt -> lps "None " <| if vt.mut then lps "mut" else lps "immut"
+  | Empty vt   -> lps "empty " <| lazy_type ~empty:true c ~in_col:false vt
   | Singleton _ ->
     (* Singletons are sometimes typed with unknowns (if read from a file) *)
     let e = U.decompose_singleton expr in
-    let t = U.unwrap_t_val @@ T.type_of_expr expr in
+    let t = T.type_of_expr expr in
     lazy_collection_vt c t @@ lazy_expr c e
   | Combine ->
     let rec assemble_list c e =  (* print out in list format *)
@@ -574,13 +563,13 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
     begin match U.tag_of_expr e1, U.tag_of_expr e2 with
       | Singleton vt, Combine | Singleton vt, Singleton _
       | Singleton vt, Empty _ ->
-        let t = U.unwrap_t_val @@ T.type_of_expr expr in
+        let t = T.type_of_expr expr in
         lazy_collection_vt c t @@ assemble_list c expr
       | _ -> apply_method c ~name:"combine" ~col:e1 ~args:[e2] ~arg_info:[ANonLambda, Out]
     end
   | Range ct -> let st, str, num = U.decompose_range expr in
     (* newk3 range only has the last number *)
-    let range_type = TFunction(KH.t_int, KH.wrap_tlist KH.t_int) in
+    let range_type = KH.canonical @@ TFunction(KH.t_int, KH.wrap_tlist KH.t_int) in
     function_application c (U.attach_type range_type @@ KH.mk_var "range") [num]
   | Add -> let (e1, e2) = U.decompose_add expr in
     begin match U.tag_of_expr e2, expr_type_is_bool e1 with
@@ -641,7 +630,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
       | Var _ -> function_application c e1 [e2]
       (* let expression *)
       | Lambda arg ->
-        let t_e2 = begin try U.unwrap_t_val @@ T.type_of_expr e2
+        let t_e2 = begin try T.type_of_expr e2
           with _ -> KH.t_unit end in
         let _, body = U.decompose_lambda e1 in
         let print_let assign_exp =
@@ -658,7 +647,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
         (* Otherwise it's a let *)
         | AVar(id, vt) ->
             (* check if we're casting the type of the collection *)
-            begin match snd @@ KH.unwrap_vtype t_e2, snd @@ KH.unwrap_vtype vt with
+            begin match t_e2.typ, vt.typ with
             | TCollection(ct,_), TCollection(ct',_) when ct <> ct' ->
                 let e2' = light_type c @@ KH.mk_combine (KH.mk_empty vt) e2 in
                 print_let e2'
@@ -688,9 +677,9 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
           let col = U.decompose_peek e1 in
           (* get the type of the collection. If it's a singleton type, we need to add
           * projection *)
-          let col_t = U.unwrap_t_val @@ T.type_of_expr col in
-          begin match snd @@ KH.unwrap_vtype col_t with
-          | TCollection(_, vt) -> begin match snd @@ KH.unwrap_vtype vt, snd expr_info with
+          let col_t = T.type_of_expr col in
+          begin match col_t.typ with
+          | TCollection(_, vt) -> begin match vt.typ, snd expr_info with
             | TTuple _, _ -> false
             | _, OutRec   -> false (* we need a record output *)
             | _           -> true
@@ -734,11 +723,11 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
         let e = U.decompose_flatten expr in
         (* ext needs an empty type right now to know what to do if the result is empty
         * flatten should always return a bag type since we can't guarantee uniqueness*)
-        let t = U.unwrap_t_val @@ T.type_of_expr expr in
-        let t = match KH.unwrap_vtype t with
-          | _, TCollection(TList, x) -> KH.canonical @@ TCollection(TList, x)
-          | _, TCollection(_, x)     -> KH.canonical @@ TCollection(TBag, x)
-          | _, _                     -> failwith "not a collection"
+        let t = T.type_of_expr expr in
+        let t = match t.typ with
+          | TCollection(TList, x) -> KH.canonical @@ TCollection(TList, x)
+          | TCollection(_, x)     -> KH.canonical @@ TCollection(TBag, x)
+          | _                     -> failwith "not a collection"
         in
         let empty_c = light_type c @@ KH.mk_empty t in
         begin match U.tag_of_expr e with
@@ -765,13 +754,13 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
       lazy_paren @@ apply_method c ~name:"peek" ~col ~args:[light_type c @@ KH.mk_cunit] ~arg_info:[ANonLambda, Out]
 
   | Subscript _ -> let i, tup = U.decompose_subscript expr in
-      let t = KH.unwrap_ttuple @@ U.unwrap_t_val @@ T.type_of_expr tup in
+      let t = KH.unwrap_ttuple @@ T.type_of_expr tup in
       let id_t = add_record_ids t in
       let id = fst @@ at id_t i in
       (lazy_paren @@ lazy_expr c tup) <| lps "." <| lps id
 
   | SliceIdx(idx, comp) -> let col, pat = U.decompose_slice expr in
-    let ts = KH.unwrap_ttuple @@ snd @@ snd @@ KH.unwrap_tcol @@
+    let ts = KH.unwrap_ttuple @@ snd @@ KH.unwrap_tcol @@
              T.type_of_expr col in
     let ids  = fst_many @@ add_record_ids ts in
     let ids' = U.filter_by_index_t idx ids in
@@ -785,7 +774,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
       | Apply -> extract_slice pat
       | _     -> [pat], id_fn
     end in
-    let ts = List.map (U.unwrap_t_val |- T.type_of_expr) es in
+    let ts = List.map T.type_of_expr es in
     let id_e = add_record_ids es in
     let id_t = add_record_ids ts in
     (* find the non-unknown slices *)
@@ -839,7 +828,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
               raise @@ MissingType(id, K3Printing.string_of_expr expr)
           end
         in
-        begin match snd @@ KH.unwrap_vtype @@ U.unwrap_t_val t with
+        begin match t.typ with
         | TTuple _ -> wrap @@ analyze ()
         | _        -> lazy_expr ~expr_info:((fst expr_info, Out))
                         ~prefix_fn c @@ light_type c @@ KH.mk_tuple ~force:true [expr]
@@ -853,7 +842,7 @@ let lazy_trigger c id arg vars expr =
                then lps " " <| f
                else lind () <| lbox (lhov 0) f in
   lps ("trigger "^id) <| lps " : " <|
-  lazy_value_type ~in_col:false c @@ KH.value_type_of_arg arg <| lsp () <|
+  lazy_type ~in_col:false c @@ KH.type_of_arg arg <| lsp () <|
   lps "=" <| indent (lazy_expr c @@ KH.mk_lambda arg expr) <| lcut ()
 
 let channel_format c = function
@@ -926,7 +915,7 @@ let string_of_base_type t = wrap_f @@ fun () ->
 
 (* print a K3 type in syntax *)
 let string_of_value_type t = wrap_f @@ fun () ->
-  force_list @@ lazy_value_type verbose_types_config false t
+  force_list @@ lazy_type verbose_types_config t
 
 module StringSet = Set.Make(struct type t=string let compare=String.compare end)
 
@@ -984,7 +973,7 @@ let add_sources p envs filename =
                           let t' = U.id_of_code t in t',
                           List.mapi (fun i ty -> t'^"_arg"^soi i, ty) @@
                           unwrap_ttuple @@
-                          KH.value_type_of_arg @@ U.args_of_code t)
+                          KH.type_of_arg @@ U.args_of_code t)
                         insert_trigs in
   let arg_id_ts = List.concat @@ List.map snd t_arg_id_ts in
   (* add a demultiplexing argument *)

@@ -92,7 +92,7 @@ let lazy_index = function
       in
       lazy_keylist l <| eq_set
 
-let lazy_indices xs = List.flatten @@ 
+let lazy_indices xs = List.flatten @@
   list_intercalate_lazy (fun () -> lsp () <| lps "|" <| lsp ()) @@
   List.map lazy_index @@ IndexSet.elements xs
 
@@ -100,64 +100,51 @@ let lazy_collection _ ct eval = match ct with
     | TSet  -> lps "{" <| eval <| lps "}"
     | TBag  -> lps "{|" <| eval <| lps "|}"
     | TList -> lps "[" <| eval <| lps "]"
-    | TMap  -> lps "[|" <| eval <| lps "|]"
+    | TMap  -> lps "[:" <| eval <| lps ":]"
     | TMultimap idxs -> begin match eval with
         | [] -> lps "[| |]"
         | _  -> lps "[|" <| eval <| lsp () <| lps "|"  <| lazy_indices idxs <| lps "|]"
         end
 
-let rec lazy_base_type c ~in_col ?(no_paren=false) t =
-  let proc () = match t with
-  | TUnit       -> lps "unit"
-  | TBool       -> lps "bool"
-  | TByte       -> lps "byte"
-  | TInt        -> lps "int"
-  | TDate       -> lps "date"
-  | TFloat      -> lps "float"
-  | TString     -> lps "string"
-  | TMaybe(vt)  -> lps "maybe " <| lazy_value_type c ~in_col vt
-  | TTuple(vts) ->
+let rec lazy_base_type c ~in_col ?(no_paren=false) = function
+  | TUnit      -> lps "unit"
+  | TBool      -> lps "bool"
+  | TByte      -> lps "byte"
+  | TInt       -> lps "int"
+  | TDate      -> lps "date"
+  | TFloat     -> lps "float"
+  | TString    -> lps "string"
+  | TMaybe vt  -> lps "maybe " <| lazy_type c ~in_col vt
+  | TTuple vts ->
       (* if we're top level of a collection, drop the parentheses *)
-      (* for verbose types, we leave them in. We also leave them for refs *)
-      let inner () = lps_list NoCut (lazy_value_type c ~in_col) vts in
+      (* for verbose types, we leave them in. We also leave them for mutables *)
+      let inner () = lps_list NoCut (lazy_type c ~in_col) vts in
       if not c.verbose_types && no_paren then inner ()
       else lps "(" <| inner () <| lps ")"
-  | TCollection(ct, vt) -> lazy_collection c ct (lazy_value_type c ~in_col:true ~no_paren:true vt)
-  | TAddress -> lps "address" (* ? *)
-  | TTarget bt -> lps "target" <| lazy_base_type c ~in_col bt
-  | TUnknown -> lps "unknown"
-  | TTop -> lps "top"
-  | TIndirect vt -> lps "ind " <| lazy_value_type c ~in_col vt
-  in
-  if c.verbose_types && in_col then lps "c:" <| proc ()
-  else proc ()
+  | TCollection(ct, vt) -> lazy_collection c ct (lazy_type c ~in_col:true ~no_paren:true vt)
+  | TAddress            -> lps "address" (* ? *)
+  | TTarget t           -> lps "target" <| lazy_type c ~in_col t
+  | TUnknown            -> lps "unknown"
+  | TTop                -> lps "top"
+  | TIndirect vt        -> lps "ind " <| lazy_type c ~in_col vt
+  | TFunction(it, ot)   ->
+      lazy_type c ~in_col:false it <| lps " -> " <| lazy_type c ~in_col:false ot
 
 (* TODO: annotations *)
-and lazy_mutable_type c ~in_col ?(no_paren=false) = function
-  | TMutable (bt, a)   ->
-      lps "ref " <| lazy_base_type c ~in_col:true ~no_paren:false bt
-  | TImmutable (bt, a) -> lazy_base_type c ~in_col ~no_paren bt
-
-and lazy_value_type c ~in_col ?(no_paren=false) = function
-  | TIsolated mt  -> lazy_mutable_type c ~in_col ~no_paren mt
-  | TContained mt -> lazy_mutable_type c ~in_col ~no_paren mt
-
-let lazy_type c = function
-  | TFunction(f,t) ->
-      lazy_value_type c ~in_col:false f <| lps " -> " <|
-      lazy_value_type c ~in_col:false t
-  | TValue vt -> lazy_value_type c false vt
+and lazy_type ?(in_col=false) ?(no_paren=false) c t =
+  let mut = if t.mut then lps "mut " else [] in
+  mut <| lazy_base_type ~in_col ~no_paren c t.typ
 
 let rec lazy_arg c drop_tuple_paren a =
   let paren = if drop_tuple_paren then id_fn else lazy_paren in
   match a with
-  | AIgnored      -> lps "_"
-  | AVar (id, vt) -> lps (id^":") <| lazy_value_type c false vt
-  | AMaybe(arg)   -> lps "just " <| lazy_arg c false arg
-  | ATuple(args)  ->
+  | AIgnored     -> lps "_"
+  | AVar (id, t) -> lps (id^":") <| lazy_type c t
+  | AMaybe(arg)  -> lps "just "  <| lazy_arg c false arg
+  | ATuple(args) ->
       lhov 0 <| paren (lps_list CutHint (lazy_arg c false) args) <| lcb ()
 
-let lazy_id_type c (id,t) = lps (id^" : ") <| lazy_value_type c false t
+let lazy_id_type c (id, t) = lps (id^" : ") <| lazy_type c t
 
 let lazy_trig_vars c = function
   | [] -> lps "{}"
@@ -175,12 +162,9 @@ let lazy_const c = function
   | CAddress(s, i) -> lps @@ s^":"^string_of_int i
   | CTarget(id)    -> lps id
 
-let lazy_collection_vt c vt eval = match vt with
-  | TIsolated(TMutable(TCollection(ct, _),_))
-  | TIsolated(TImmutable(TCollection(ct, _),_))
-  | TContained(TMutable(TCollection(ct, _),_))
-  | TContained(TImmutable(TCollection(ct, _),_)) -> lazy_collection c ct eval
-  | _ -> error @@ K3Printing.string_of_value_type vt (* type error *)
+let lazy_collection_vt c bt eval = match bt with
+  | TCollection(ct, _) -> lazy_collection c ct eval
+  | _ -> error @@ K3Printing.string_of_base_type bt (* type error *)
 
 let wrap_if_var e = match U.tag_of_expr e with
   | Var _ -> id_fn
@@ -236,11 +220,11 @@ let rec lazy_expr c expr =
     let wrapr = logic_paren er in
     expr_pair ~sep:(lsp () <| lps sym <| lsp ()) ~wl:wrapl ~wr:wrapr (el, er)
   in let expr_type_is_bool e =
-    try (match T.type_of_expr e with
-    | TValue x | TFunction(_,x) -> match T.base_of x () with
+    try begin match (T.type_of_expr e).typ with
         | TBool -> true
-        | _     -> false)
-    with T.TypeError(_,_,_) -> false (* assume additive *)
+        | _     -> false
+        end
+    with T.TypeError _ -> false (* assume additive *)
   in let tuple_no_paren c e = match U.tag_of_expr e with
     | Tuple -> let es = U.decompose_tuple e in
       lps_list CutHint (lazy_expr c) es
@@ -252,57 +236,56 @@ let rec lazy_expr c expr =
     | IfThenElse -> wrap_hv 0 e
     | _ -> id_fn e
   in let out = match U.tag_of_expr expr with
-  | Const con -> lazy_const c con
-  | Var id -> lps id
-  | Tuple -> let es = U.decompose_tuple expr in
+  | Const con  -> lazy_const c con
+  | Var id     -> lps id
+  | Tuple      -> let es = U.decompose_tuple expr in
     lazy_paren @@ lps_list CutHint (lazy_expr c) es
-  | Just -> let e = U.decompose_just expr in
+  | Just       -> let e = U.decompose_just expr in
     lps "just " <| lazy_expr c e
-  | Nothing vt -> lps "nothing:" <| lsp () <| lazy_value_type c false vt
-  | Empty vt ->
-      lazy_collection_vt c vt [] <| lsp () <| lps ":" <| lsp () <|
-        lazy_value_type c false vt
-  | Singleton vt -> let e = U.decompose_singleton expr in
-    lazy_collection_vt c vt @@ tuple_no_paren c e
-  | Combine ->
+  | Nothing vt -> lps "nothing:" <| lsp () <| lazy_type c vt
+  | Empty t    -> lazy_collection_vt c t.typ [] <| lsp () <|
+                  lps ":" <| lsp () <| lazy_type c t
+  | Singleton t -> let e = U.decompose_singleton expr in
+    lazy_collection_vt c t.typ @@ tuple_no_paren c e
+  | Combine     ->
     let rec assemble_list c e =  (* print out in list format *)
       let (l, r) = U.decompose_combine e in
       begin match U.tag_of_expr l, U.tag_of_expr r with
-        | Singleton _, Combine -> let l2 = U.decompose_singleton l in
-            tuple_no_paren c l2 <| lps ";" <| lsp () <|
-            assemble_list c r
-        | Singleton _, Singleton _ -> let l2 = U.decompose_singleton l in
-          let r2 = U.decompose_singleton r in
+      | Singleton _, Combine     -> let l2 = U.decompose_singleton l in
           tuple_no_paren c l2 <| lps ";" <| lsp () <|
-            tuple_no_paren c r2
-        | Singleton _, Empty _ -> let l2 = U.decompose_singleton l in
-          tuple_no_paren c l2
-        | _ -> error (K3Printing.string_of_expr l^", "^K3Printing.string_of_expr r) (* type error *)
+          assemble_list c r
+      | Singleton _, Singleton _ -> let l2 = U.decompose_singleton l in
+        let r2 = U.decompose_singleton r in
+        tuple_no_paren c l2 <| lps ";" <| lsp () <|
+          tuple_no_paren c r2
+      | Singleton _, Empty _     -> let l2 = U.decompose_singleton l in
+        tuple_no_paren c l2
+      | _ -> error (K3Printing.string_of_expr l^", "^K3Printing.string_of_expr r) (* type error *)
       end in
-    let (e1, e2) = U.decompose_combine expr in
+    let e1, e2 = U.decompose_combine expr in
     (* wrap the left side of the combine if it's needed *)
     let wrapl = paren_l e1 in
     begin match U.tag_of_expr e1, U.tag_of_expr e2 with
-      | Singleton vt, Combine | Singleton vt, Singleton _
-      | Singleton vt, Empty _ ->
-        lazy_collection_vt c vt @@ assemble_list c expr
-      | _ -> expr_pair ~sep:(lcut() <| lps "++" <| lcut()) ~wl:wrapl (e1, e2)
+    | Singleton t, Combine | Singleton t, Singleton _
+    | Singleton t, Empty _ ->
+      lazy_collection_vt c t.typ @@ assemble_list c expr
+    | _ -> expr_pair ~sep:(lcut() <| lps "++" <| lcut()) ~wl:wrapl (e1, e2)
     end
   | Range ct -> let t = U.decompose_range expr in
     lazy_collection c ct @@ expr_triple ~sep:(fun () -> lps "::") t
-  | Add -> let (e1, e2) = U.decompose_add expr in
+  | Add      -> let (e1, e2) = U.decompose_add expr in
     begin match U.tag_of_expr e2, expr_type_is_bool e1 with
-      | Neg, false -> let e3 = U.decompose_neg e2 in
-        arith_paren_pair "-" (e1, e3)
-      | _, false -> arith_paren_pair "+" (e1, e2)
-      | _, true -> arith_paren_pair "||" (e1, e2)
+    | Neg, false -> let e3 = U.decompose_neg e2 in
+      arith_paren_pair "-" (e1, e3)
+    | _, false   -> arith_paren_pair "+" (e1, e2)
+    | _, true    -> arith_paren_pair "||" (e1, e2)
     end
-  | Mult -> let (e1, e2) = U.decompose_mult expr in
+  | Mult     -> let e1, e2 = U.decompose_mult expr in
     let is_neg = begin match U.tag_of_expr e1 with
       | Neg -> let e = U.decompose_neg e1 in
         begin match U.tag_of_expr e with
-          | Const(CInt(1)) -> true
-          | _ -> false
+        | Const(CInt 1) -> true
+        | _ -> false
         end
       | Const(CInt(-1)) -> true
       | _ -> false
@@ -479,14 +462,6 @@ let wrap_f = wrap_formatter ~margin:80
 (* print a K3 type in syntax *)
 let string_of_base_type t = wrap_f @@ fun () ->
   force_list @@ lazy_base_type verbose_types_config false t
-
-(* print a K3 type in syntax *)
-let string_of_value_type t = wrap_f @@ fun () ->
-  force_list @@ lazy_value_type verbose_types_config false t
-
-(* print a K3 type in syntax *)
-let string_of_mutable_type t = wrap_f @@ fun () ->
-  force_list @@ lazy_mutable_type verbose_types_config false t
 
 (* print a K3 type in syntax *)
 let string_of_type t = wrap_f @@ fun () ->

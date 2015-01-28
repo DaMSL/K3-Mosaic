@@ -34,13 +34,6 @@ id_of_var e = case tag_of_expr e of
   Var id -> id 
   _ -> error "invalid variable"
 
-tuple_type_of_args args_t =
-	if length args_t == 1 then TValue (head args_t) 
-	else TValue $ TIsolated $ TImmutable (TTuple args_t) []
-
-tuple_type_of_arg arg =
-  tuple_type_of_args $ map snd $ typed_vars_of_arg arg 
-
 -- Predicates
 is_const e = case tag_of_expr e of 
   Const _ -> True

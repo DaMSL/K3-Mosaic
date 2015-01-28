@@ -226,11 +226,10 @@ let declare_global_funcs partmap c ast =
     let corrective, target_map = "corrective", "target_map" in
     let tmap_deref = target_map^"_d" in
     let update_vars = list_drop_end 1 vars_v @ [mk_var update_value] in
-    let zero = match T.base_of t_val () with
+    let zero = match t_val.typ with
       | TInt   -> mk_cint 0
       | TFloat -> mk_cfloat 0.
-      | t      -> failwith @@
-        "Unhandled value type "^K3PrintSyntax.string_of_base_type t
+      | _ -> failwith @@ "Unhandled type "^K3PrintSyntax.string_of_type t_val
     in
     let tuple_projection id =
       project_from_tuple types_v (mk_var id)

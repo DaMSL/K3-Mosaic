@@ -15,7 +15,7 @@ module U = K3Util
 let route_for p map_id =
   let m_t = P.map_types_no_val_for p map_id in
   "route_to_"^String.concat "_" @:
-    List.map K3PrintSyntax.string_of_value_type m_t
+    List.map K3PrintSyntax.string_of_type m_t
 
 let t_two_ints = [t_int; t_int]
 let t_list_two_ints = wrap_tlist' t_two_ints
@@ -89,16 +89,16 @@ let k3_partition_map_of_list p l =
 exception NoHashFunction of K3.AST.base_type_t
 
 let hash_func_for typ =
-  let rec inner t = match snd @: unwrap_vtype t with
-    | TInt     -> "int"
-    | TDate    -> "date"
-    | TFloat   -> "float"
-    | TBool    -> "bool"
-    | TString  -> "string"
-    | TAddress -> "addr"
+  let rec inner t = match t.typ with
+    | TInt              -> "int"
+    | TDate             -> "date"
+    | TFloat            -> "float"
+    | TBool             -> "bool"
+    | TString           -> "string"
+    | TAddress          -> "addr"
     | TCollection(_, v) -> "C_"^inner v^"_c"
-    | TTuple(vs) -> "T_"^ String.concat "_" (List.map inner vs) ^"_t"
-    | x -> raise (NoHashFunction x)
+    | TTuple(vs)        -> "T_"^ String.concat "_" (List.map inner vs) ^"_t"
+    | x                 -> raise @@ NoHashFunction x
   in "hash_"^inner typ
 
 let hash_funcs_foreign p : (declaration_t * annotation_t) list =

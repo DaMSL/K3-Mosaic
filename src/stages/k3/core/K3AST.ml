@@ -54,29 +54,24 @@ type base_type_t
     | TDate (* treated like TInt, but gives us extra info *)
     | TFloat
     | TString
-    | TMaybe        of value_type_t
-    | TTuple        of value_type_t list
-    | TCollection   of container_type_t * value_type_t
+    | TMaybe        of type_t
+    | TTuple        of type_t list
+    | TCollection   of container_type_t * type_t
     | TAddress
-    | TTarget       of base_type_t
-    | TIndirect     of value_type_t
+    | TTarget       of type_t
+    | TFunction     of type_t * type_t
+    | TIndirect     of type_t
 
-and mutable_type_t
-    = TMutable      of base_type_t * annotation_t
-    | TImmutable    of base_type_t * annotation_t
-
-and value_type_t
-    = TIsolated     of mutable_type_t
-    | TContained    of mutable_type_t
-
-type type_t
-    = TFunction of value_type_t * value_type_t
-    | TValue    of value_type_t
+and type_t = { 
+  typ: base_type_t;
+  mut: bool;
+  anno: annotation_t;
+}
 
 (* Arguments *)
 type arg_t
     = AIgnored
-    | AVar      of id_t * value_type_t
+    | AVar      of id_t * type_t
     | AMaybe    of arg_t
     | ATuple    of arg_t list
 
@@ -98,10 +93,10 @@ type expr_tag_t
     | Tuple
 
     | Just
-    | Nothing   of value_type_t
+    | Nothing   of type_t
 
-    | Empty     of value_type_t
-    | Singleton of value_type_t
+    | Empty     of type_t
+    | Singleton of type_t
     | Combine
 
     | Range     of container_type_t
@@ -183,7 +178,7 @@ type flow_resource_t =
 
 type flow_endpoint_t =
   | Resource   of id_t * flow_resource_t
-  | Code       of id_t * arg_t * (id_t * value_type_t * annotation_t) list * expr_t
+  | Code       of id_t * arg_t * (id_t * type_t * annotation_t) list * expr_t
 
 type flow_statement_t =
   | Source      of flow_endpoint_t
