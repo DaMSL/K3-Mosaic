@@ -265,7 +265,7 @@ let globals ps =
   switches_data_nodes_code
 
 (* cross-reference foreign functions *)
-let add_foreign_fn nm = 
+let add_foreign_fn nm =
   try
     let (t,_,_) = K3StdLib.lookup nm in
     mk_foreign_short nm t
