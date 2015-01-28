@@ -6,9 +6,9 @@ install:
   - ocaml -version
   - ocamlbuild -version
   - sudo pip install six
-  - sudo opam init -q -y
+  - sudo opam init -y
   - sudo eval `opam config env`
-  - sudo opam install ocamlfind -q -y
+  - sudo opam install ocamlfind -y
 script:
   - bash -ex ./build_opt.sh -classic-display
   - bash -ex ./build_utils.sh -classic-display
