@@ -591,7 +591,7 @@ let env_of_program ?address sched_st k3_program =
         in
         trig_env, ((IdMap.add id (ref init_val) rm_env), rf_env)
 
-    | Foreign (id,t) -> trig_env, (m_env, env_add id (dispatch_foreign id) f_env)
+    | Foreign (id,_) -> trig_env, (IdMap.add id (ref @@ dispatch_foreign id) m_env, f_env)
 
     | Flow fp -> prepare_sinks sched_st env fp
 
