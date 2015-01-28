@@ -4,7 +4,7 @@ sudo apt-get update -qq
 sudo apt-get install -qq ocaml ocaml-native-compilers camlp4-extra opam time
 echo OCaml version
 ocaml -version
-pip install six
+sudo pip install six
 
 export OPAMYES=1
 export OCAMLRUNPARAM=b
