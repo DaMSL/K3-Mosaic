@@ -13,11 +13,8 @@ val expr_of_details : int -> expr_tag_t -> annotation_t -> expr_t list -> expr_t
 
 (* Variable id extraction *)
 val vars_of_arg : arg_t -> id_t list
-val typed_vars_of_arg : arg_t -> (id_t * value_type_t) list
+val typed_vars_of_arg : arg_t -> (id_t * type_t) list
 val id_of_var : expr_t -> id_t
-
-val tuple_type_of_args : value_type_t list -> type_t
-val tuple_type_of_arg : arg_t -> type_t
 
 (* Predicates *)
 val is_const : expr_t -> bool
@@ -27,7 +24,7 @@ val is_var_match : id_t -> expr_t -> bool
 (* Bindings *)
 val arg_of_lambda : expr_t -> arg_t option
 val vars_of_lambda : expr_t -> id_t list
-val typed_vars_of_lambda : expr_t -> (id_t * value_type_t) list
+val typed_vars_of_lambda : expr_t -> (id_t * type_t) list
 
 (* AST testers *)
 val is_peek : expr_t -> bool
@@ -149,9 +146,6 @@ val renumber_test_program_ids :
 
 (* Attach a type annotation to an expr *)
 val attach_type : type_t -> expr_t -> expr_t
-
-(* Get a value_type_t from a type_t *)
-val unwrap_t_val : type_t -> value_type_t
 
 (* Get the expression list inside a tuple if any *)
 val unwrap_tuple : expr_t -> expr_t list

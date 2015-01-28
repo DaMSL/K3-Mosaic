@@ -121,15 +121,15 @@ let rec add_vid_to_init_val types e =
 (* add a vid to global value map declarations *)
 let get_global_map_inits c = function
   (* filter to have only map declarations *)
-  | Global(name, TValue typ, m_expr),_ ->
+  | Global(name, typ, m_expr),_ ->
     begin try
       let map_id = P.map_id_of_name c.p name in
-      let e  = P.map_ids_types_with_v_for c.p map_id in
-      let t' = wrap_tind @@ wrap_t_map_idx' c map_id @@ snd_many e in
+      let e = P.map_ids_types_with_v_for c.p map_id in
+      let t = wrap_tind @@ wrap_t_map_idx' c map_id @@ snd_many e in
       begin match m_expr with
         | None     -> []
                       (* add a vid *)
-        | Some exp -> [map_id, mk_ind @@ add_vid_to_init_val t' exp]
+        | Some exp -> [map_id, mk_ind @@ add_vid_to_init_val t exp]
       end
     with Not_found -> [] end
   | _ -> []
@@ -192,16 +192,6 @@ let corr_ast_for_m_s c ast map stmt trig =
   in args2, trig_min_stmt + stmt_idx, stmt_block
 
 exception UnhandledModification of string
-
-(* modify the internals of a type. A function gets both the unwrapped type and
- * the original type (wrapped) in case it wants to use that *)
-let modify_tuple_type fn typ =
-  let unwrap_m = function
-    | TMutable(t, a)   -> TMutable(fn t typ, a)
-    | TImmutable(t, a) -> TImmutable(fn t typ, a)
-  in match typ with
-    | TIsolated(m)  -> TIsolated(unwrap_m m)
-    | TContained(m) -> TContained(unwrap_m m)
 
 (* modify a lambda to have a vid included in its arguments *)
 let add_vid_to_lambda_args lambda =

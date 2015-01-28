@@ -9,18 +9,12 @@ let string_of_error = function
   | TMismatch(t1,t2,s)  -> s^" This expression has type "^ P.string_of_type t1^
       "\nBut an expression was expected of type "^P.string_of_type t2
 
-  | VTMismatch(t1,t2,s) -> s^" This expression has type "^
-      P.string_of_value_type t1^"\nBut an expression was expected of type "^
-      P.string_of_value_type t2
-
   | BTMismatch(t1,t2,s) -> s^" This expression has type "^
       P.string_of_base_type t1^"\nBut an expression was expected of type "^
       P.string_of_base_type t2
 
   | TBad(t, s)        -> "Bad type "^P.string_of_type t^": "^s
-  | VTBad(t, s)       -> "Bad type "^P.string_of_value_type t^": "^s
   | BTBad(t, s)       -> "Bad type "^P.string_of_base_type t^": "^s
-  | MTBad(t, s)       -> "Bad type "^P.string_of_mutable_type t^": "^s
   | TMsg(s)           -> s
   | InvalidTypeAnnotation   -> "Invalid type annotation"
   | MultiplePossibleTypes s -> "Multiple types are possible: "^s

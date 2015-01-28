@@ -19,8 +19,6 @@ val string_of_tag_type: expr_tag_t -> string
 
 (* Compact stringification *)
 val flat_string_of_base_type: base_type_t -> string
-val flat_string_of_mutable_type: mutable_type_t -> string
-val flat_string_of_value_type: value_type_t -> string
 val flat_string_of_type: type_t -> string
 val flat_string_of_arg: arg_t -> string
 val flat_string_of_expr_tag: expr_tag_t -> string list -> string
@@ -34,8 +32,6 @@ val flat_string_of_program: program_t -> string
 
 (* Pretty stringification, used as the default. *)
 val print_base_type    : config_t -> base_type_t -> unit
-val print_mutable_type : config_t -> mutable_type_t -> unit
-val print_value_type   : config_t -> value_type_t -> unit
 val print_type         : config_t -> type_t -> unit
 
 val print_arg : config_t -> arg_t -> unit
@@ -51,7 +47,6 @@ val print_flow_program : config_t -> flow_program_t -> unit
 val print_declaration : config_t -> declaration_t -> unit
 
 val string_of_base_type: base_type_t -> string
-val string_of_value_type: value_type_t -> string
 val string_of_type: type_t -> string
 
 val string_of_arg: arg_t -> string

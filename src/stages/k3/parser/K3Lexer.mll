@@ -95,6 +95,8 @@ rule tokenize = parse
     | ']'  { RBRACKET }
     | "[|"  { LBRACKETBAR }
     | "|]"  { RBRACKETBAR }
+    | "[:"  { LBRACKETCOLON }
+    | ":]"  { RBRACKETCOLON }
     | "|"   { BAR }
 
     | '-' { NEG }
@@ -131,19 +133,19 @@ rule tokenize = parse
 
     | "do" { DO }
 
-    | "unit"   { TYPE TUnit }
-    | "bool"   { TYPE TBool }
-    | "byte"   { TYPE TByte }
-    | "int"    { TYPE TInt }
+    | "unit"    { TYPE TUnit }
+    | "bool"    { TYPE TBool }
+    | "byte"    { TYPE TByte }
+    | "int"     { TYPE TInt }
     | "date"    { TYPE TDate }
-    | "float"  { TYPE TFloat }
-    | "string" { TYPE TString }
+    | "float"   { TYPE TFloat }
+    | "string"  { TYPE TString }
     | "address" { TYPE TAddress }
     | "unknown" { TYPE TUnknown }
-    | "top" { TYPE TTop }
+    | "top"     { TYPE TTop }
 
     | "maybe"  { MAYBE }
-    | "ref"    { REF }
+    | "mut"    { MUT }
     | "just"   { JUST }
 
     | "range"  { RANGE }

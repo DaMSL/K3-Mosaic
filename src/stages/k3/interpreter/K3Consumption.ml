@@ -7,6 +7,7 @@ open K3Values.Value
 open K3Typechecker
 open K3Streams
 open K3Runtime
+open K3Helpers
 
 (* TODO: add more descriptive resource errors *)
 
@@ -32,21 +33,21 @@ let value_of_string t v = match t with
 let r_comma = Str.regexp ","
 
 let pull_source id t res in_chan =
-	let tuple_val, signature =
-		match t <| base_of +++ value_of |> (fun () -> raise (ResourceError id)) with
-    | TBool -> false, [TBool]
-    | TInt -> false, [TInt]
-    | TDate -> false, [TDate]
-    | TFloat -> false, [TFloat]
-    | TString -> false, [TString]
-		| TTuple(ts) -> true, List.map (fun x -> base_of x ()) ts
-		| _ -> raise (ResourceError id)
-	in
+  let tuple_val, signature =
+    match t.typ with
+    | TBool      -> false, [TBool]
+    | TInt       -> false, [TInt]
+    | TDate      -> false, [TDate]
+    | TFloat     -> false, [TFloat]
+    | TString    -> false, [TString]
+    | TTuple(ts) -> true,  List.map unwrap_t ts
+    | _          -> raise (ResourceError id)
+        in
   begin
     (*print_endline ("Pulling from source "^id);*)
-	  match res, in_chan with
-	  | Handle(t, File _, CSV), In(Some chan) ->
-	    (try
+          match res, in_chan with
+          | Handle(t, File _, CSV), In(Some chan) ->
+            (try
          let next_record = Str.split r_comma (input_line chan) in
          let fields = List.map2 value_of_string signature next_record in
          let r = if tuple_val then VTuple(fields) else List.hd fields
@@ -57,16 +58,17 @@ let pull_source id t res in_chan =
 
     | Stream(t, RandomStream _), InRand index ->
         if !index <= 0 then None
-        else let rec random_val t =
-               match base_of t () with
-               | TBool -> VBool(Random.bool ())
-               | TInt  -> VInt(Random.int max_int)
-               | TDate -> VInt(Random.int max_int)
-               | TFloat -> VFloat(Random.float max_float)
-               | TTuple(ts) -> VTuple(List.map random_val ts)
-               | _ -> raise (ResourceError id)
-             in index := !index - 1;
-             Some(random_val @: value_of t @: fun () -> raise (ResourceError id))
+        else
+          let rec random_val t =
+            match t.typ with
+            | TBool      -> VBool(Random.bool ())
+            | TInt       -> VInt(Random.int max_int)
+            | TDate      -> VInt(Random.int max_int)
+            | TFloat     -> VFloat(Random.float max_float)
+            | TTuple(ts) -> VTuple(List.map random_val ts)
+            | _          -> raise (ResourceError id)
+          in index := !index - 1;
+          Some(random_val t)
 
      (* a constant stream *)
      | Stream(t, ConstStream _), InConst exp_l_ref ->
@@ -78,11 +80,11 @@ let pull_source id t res in_chan =
                       with Failure s ->
                         let err = Printf.sprintf "%s: we can't handle an expression of %s"
                           id  (K3Printing.flat_string_of_expr e) in
-                        raise @: ResourceError err
+                        raise @@ ResourceError err
               in Some v
          end
 
-	  | _ -> raise (ResourceError id)
+          | _ -> raise (ResourceError id)
   end
 
 (* Determines resources to be opened and closed between two instructions.
@@ -92,7 +94,7 @@ let pull_source id t res in_chan =
 let resource_delta resource_env resource_impl_env d =
   let partition_net l = List.partition (is_net_handle resource_env) l in
   (* ids of network and file resources *)
-  let opened_net, opened_files = partition_net @: List.map fst resource_impl_env in
+  let opened_net, opened_files = partition_net @@ List.map fst resource_impl_env in
   let net_resources, file_resources = partition_net (resources_of_dispatcher d) in
   let pass_net, open_net, close_net =
     List.map
@@ -113,7 +115,7 @@ let initialize_resources resource_env resource_impl_env d =
         else [id, Out(Some(open_out filename))]
 
       | Some(_, Stream(_, ConstStream e)) ->
-          [id, InConst(ref @: K3Helpers.list_of_k3_container e)]
+          [id, InConst(ref @@ K3Helpers.list_of_k3_container e)]
 
       | Some(_, Stream(_, RandomStream i)) -> [id, InRand(ref i)]
 
@@ -133,10 +135,10 @@ let initialize_resources resource_env resource_impl_env d =
     resource_delta resource_env resource_impl_env d
   in
     (* close all resources that should be closed *)
-	  List.iter close_channel_impl (close_net@close_files);
-	  let opened_resources = List.flatten (List.map open_channel_impl
+          List.iter close_channel_impl (close_net@close_files);
+          let opened_resources = List.flatten (List.map open_channel_impl
       (open_net@open_files))
-	  in pass_net@opened_resources
+          in pass_net@opened_resources
 
 (* Accesses a resource from the given list of resource ids, returning a value
  * and a list of failed resources *)
@@ -155,14 +157,14 @@ let next_value resource_env resource_impl_env resource_ids =
     | _ -> None
   in
   let track_failed_access result_none_f finished id = match access_resource id with
-	  | None -> result_none_f (id::finished)
-	  | x -> finished, Some(id,x)
+          | None -> result_none_f (id::finished)
+          | x -> finished, Some(id,x)
   in
   let rec randomize_access failed resource_ids = match resource_ids with
-	  | [] -> failed, None
-	  | [id] -> track_failed_access (fun f -> f,None) failed id
-	  | _ ->
-	    let id = random_element resource_ids in
+          | [] -> failed, None
+          | [id] -> track_failed_access (fun f -> f,None) failed id
+          | _ ->
+            let id = random_element resource_ids in
       track_failed_access
         (fun f -> randomize_access f (List.filter ((=) id) resource_ids)) failed id
   in randomize_access [] resource_ids

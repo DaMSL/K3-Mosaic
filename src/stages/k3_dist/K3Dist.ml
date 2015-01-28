@@ -152,7 +152,7 @@ let log_read_geq = "log_read_geq" (* takes vid, returns (trig, vid)list >= vid *
 let add_delta_to_map c map_id =
   let m_t = map_types_for c.p map_id in
   "add_delta_to_"^String.concat "_" @:
-    List.map K3PrintSyntax.string_of_value_type m_t
+    List.map K3PrintSyntax.string_of_type m_t
 
 (* foreign functions *)
 let hash_addr = "hash_addr"
@@ -248,7 +248,7 @@ let maps c =
 let frontier_name c map_id =
   let m_t = P.map_types_for c.p map_id in
   "frontier_"^String.concat "_" @:
-    List.map K3PrintSyntax.string_of_value_type m_t
+    List.map K3PrintSyntax.string_of_type m_t
 
 let get_idx idx map_id =
   try IntMap.find map_id idx
