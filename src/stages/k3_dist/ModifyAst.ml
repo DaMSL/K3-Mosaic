@@ -125,8 +125,7 @@ let get_global_map_inits c = function
     begin try
       let map_id = P.map_id_of_name c.p name in
       let e  = P.map_ids_types_with_v_for c.p map_id in
-      let t' = wrap_t_map_idx' c map_id @@ snd_many e in
-      let t  = wrap_tind t' in
+      let t' = wrap_tind @@ wrap_t_map_idx' c map_id @@ snd_many e in
       begin match m_expr with
         | None     -> []
                       (* add a vid *)

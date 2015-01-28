@@ -151,7 +151,6 @@ let declare_global_funcs partmap c ast =
   let check_stmt_cntr_index_fn =
     let part_pat = list_drop_end 1 nd_stmt_cntrs.e in
     let counter = fst @@ hd @@ list_take_end 1 nd_stmt_cntrs.e in
-    let full_types = snd_many nd_stmt_cntrs.e in
     let part_pat_as_vars = ids_to_vars @@ fst_many part_pat in
     let query_pat = part_pat_as_vars @ [mk_cunknown] in
     let stmt_cntrs_slice = mk_slice' (mk_var nd_stmt_cntrs.id) query_pat in

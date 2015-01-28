@@ -380,6 +380,7 @@ let mk_global_fn_raw name input_arg input_types output_types expr =
  * construct allows for an expr_t as well.
  * The types are expected in list format (always!) *)
 let mk_global_fn name input_names_and_types output_types expr =
+  let output_types = if null output_types then [t_unit] else output_types in
   mk_global_fn_raw name
     (wrap_args input_names_and_types)
     (wrap_ttuple @@ snd_many input_names_and_types)
