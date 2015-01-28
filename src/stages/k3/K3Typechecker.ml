@@ -272,8 +272,10 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
       | Singleton t ->
           let t_c, t_e = try unwrap_tcol t with Failure _ -> t_erroru (not_collection t) () in
           let t_ne = bind 0 in
-          if not (t_ne === t_e) then t_erroru (TMismatch(t_ne, t_e, "Collection inner type")) ()
-          else canonical @@ TCollection(t_c, t_ne)
+          if not (t_e === t_ne) then t_erroru (TMismatch(t_ne, t_e, "Collection inner type")) ()
+          else 
+            let t_e' = if is_unknown_t t_ne then t_e else t_ne in
+            canonical @@ TCollection(t_c, t_e')
 
       | Combine ->
           let t0, t1 = bind 0, bind 1 in
@@ -506,13 +508,13 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
 
       | Send ->
           let target, taddr, targs = bind 0, bind 1, bind 2 in
-          let _ = match target.typ with
-              | TTarget t -> ()
+          let ttarget = match target.typ with
+              | TTarget t -> t
               | _         -> t_erroru (TBad(target, "not a target")) ()
           in
           match taddr.typ with
           | TAddress ->
-              if target === targs then t_unit
+              if ttarget === targs then t_unit
               else t_erroru (TMismatch(target, targs, "")) ()
           | _ -> t_erroru (TBad(taddr, "not an address")) ()
 
