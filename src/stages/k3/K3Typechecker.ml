@@ -272,6 +272,7 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
       | Singleton t ->
           let t_c, t_e = try unwrap_tcol t with Failure _ -> t_erroru (not_collection t) () in
           let t_ne = bind 0 in
+          (* order is important below for unknown collections *)
           if not (t_e === t_ne) then t_erroru (TMismatch(t_ne, t_e, "Collection inner type")) ()
           else 
             let t_e' = if is_unknown_t t_ne then t_e else t_ne in
@@ -349,8 +350,7 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
 
       | Apply ->
           let t_f, t_a = bind 0, bind 1 in
-          let t_e, t_r = try unwrap_tfun t_f with Failure _ -> t_erroru (not_function t_f) ()
-          in
+          let t_e, t_r = try unwrap_tfun t_f with Failure _ -> t_erroru (not_function t_f) () in
           if t_e <~ t_a then t_r
           else t_erroru (TMismatch(t_e, t_a, "")) ()
 
