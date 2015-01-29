@@ -143,16 +143,18 @@ let rec assignable t_l t_r = match t_l.typ, t_r.typ with
       t_lc = t_rc && assignable t_le t_re
   | TFunction(it, ot), TFunction(it', ot') ->
       assignable it it' && assignable ot ot' && it.mut = it'.mut && ot.mut = ot'.mut
-  | TDate, TInt              -> true
-  | TInt, TDate              -> true
+  | TIndirect t, TIndirect t' -> assignable t t'
+  | TDate, TInt               -> true
+  | TInt, TDate               -> true
   (* ints and floats can be assigned. They'll just be concatentated *)
-  | TInt, TFloat             -> true
-  | TFloat, TInt             -> true
+  | TInt, TFloat              -> true
+  | TFloat, TInt              -> true
   (* handle lambdas with _ arguments *)
-  | TUnknown, _              -> true
-  | TTop, _ | _, TTop        -> true
-  | _ when t_l.typ = t_r.typ -> true
-  | _ -> false
+  | TUnknown, _               -> true
+  | TTop, _ 
+  | _, TTop                   -> true
+  | _ when t_l.typ = t_r.typ  -> true
+  | _                         -> false
 
 (* takes mutability into account *)
 and passable t_l t_r =
@@ -681,8 +683,8 @@ let type_bindings_of_program prog =
               raise (TypeError(ast_id, "Global "^i^":"^inner, msg))
           in
           let expr_type = type_of_expr typed_init in
-          if not (t === expr_type) then t_error (-1) i
-              (TMismatch(t, expr_type,
+          if not (expr_type === t) then t_error (-1) i
+              (TMismatch(expr_type, t,
                   "Mismatch in global type declaration.")) ()
           else
           Global(i, t, Some typed_init), (i, t) :: env
