@@ -340,18 +340,18 @@ positions : integer_list { $1 };
 /* Types */
 
 type_expr :
-    | base_type_expr          { $1 }
-    | MUT base_type_expr      { mut $2 }
     | LPAREN type_expr RPAREN { $2 }
+    | MUT base_type_expr      { mut $2 }
+    | base_type_expr          { $1 }
 ;
 
 base_type_expr :
-    | type_expr RARROW type_expr    { wrap_tfunc $1 $3 }
-    | TYPE                          { canonical $1 }
     | LPAREN type_expr_tuple RPAREN { $2 }
-    | annotated_collection_type     { let c, anno = $1 in { (canonical c) with anno} }
     | MAYBE type_expr               { wrap_tmaybe $2 }
     | INDIRECT type_expr            { wrap_tind $2 }
+    | type_expr RARROW type_expr    { wrap_tfunc $1 $3 }
+    | TYPE                          { canonical $1 }
+    | annotated_collection_type     { let c, anno = $1 in { (canonical c) with anno} }
 ;
 
 type_expr_tuple :
