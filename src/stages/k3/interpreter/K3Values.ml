@@ -306,29 +306,19 @@ let print_env skip_functions (globals, frames) =
       | VForeignFunction _ -> false
       | _                  -> true)
     e in
-  let filter_l l = List.filter
-    (function
-      | _, VFunction _        -> false
-      | _, VForeignFunction _ -> false
-      | _                     -> true)
-    l in
   ps @@ Printf.sprintf "----Globals(%i)----" @@ IdMap.cardinal globals; fnl();
   let global_m = IdMap.map (!) globals in
   let global_m' = if not skip_functions then global_m
                   else filter_m global_m in
-  IdMap.iter print_binding_m global_m';
-  fnl();
-  ps "----Frames----"; fnl()
-  (*let frames' = IdMap.map filter_l frames in
-  print_frame frames'*)
+  IdMap.iter print_binding_m global_m'
 
 let print_trigger_env env =
   ps @@ Printf.sprintf "----Triggers(%i)----" @@ IdMap.cardinal env; fnl();
   IdMap.iter (fun id _ -> ps id; fnl()) env
 
 let print_program_env (trigger_env, val_env) =
-  print_trigger_env trigger_env;
-  print_env false val_env
+  (* print_trigger_env trigger_env; *)
+  print_env true val_env
 
 let string_of_env ?(skip_functions=true) (env:env_t) =
   wrap_formatter (fun () -> print_env skip_functions env)
