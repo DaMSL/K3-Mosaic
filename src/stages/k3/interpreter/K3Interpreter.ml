@@ -411,7 +411,7 @@ and eval_expr (address:address) sched_st cenv texpr =
     | Sort -> (* only applies to list *)
       let name = "Sort" in
       begin match child_values cenv with
-      | renv, [c; f] ->
+      | renv, [f; c] ->
         let env = ref renv in
         let f' = eval_fn f address sched_st in
         let sort_fn v1 v2 =
@@ -454,8 +454,7 @@ and eval_expr (address:address) sched_st cenv texpr =
 
     | Insert col_id ->
         let renv, v = child_value cenv 0 in
-        (env_modify col_id renv @@
-          fun col -> v_insert error v col), VTemp VUnit
+        (env_modify col_id renv @@ fun col -> v_insert error v col), VTemp VUnit
 
     | Update col_id ->
         begin match child_values cenv with

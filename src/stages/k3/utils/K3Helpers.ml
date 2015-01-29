@@ -246,7 +246,7 @@ let mk_gbagg group_fun agg_fun init collection =
     mk_stree GroupByAggregate [group_fun; agg_fun; init; collection]
 
 let mk_sort compare_fun collection =
-    mk_stree Sort [collection; compare_fun]
+    mk_stree Sort [compare_fun; collection]
 
 let mk_subscript i tuple = mk_stree (Subscript i) [tuple]
 
