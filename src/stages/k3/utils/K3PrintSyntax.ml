@@ -106,7 +106,9 @@ let lazy_collection _ ct eval = match ct with
         | _  -> lps "[|" <| eval <| lsp () <| lps "|"  <| lazy_indices idxs <| lps "|]"
         end
 
-let rec lazy_base_type c ~in_col ?(no_paren=false) = function
+let rec lazy_base_type c ~in_col ?(no_paren=false) ?(paren_complex=false) t =
+  let wrap_complex x = if paren_complex then lps "(" <| x <| lps ")" else x in
+  match t with
   | TUnit      -> lps "unit"
   | TBool      -> lps "bool"
   | TByte      -> lps "byte"
@@ -114,7 +116,7 @@ let rec lazy_base_type c ~in_col ?(no_paren=false) = function
   | TDate      -> lps "date"
   | TFloat     -> lps "float"
   | TString    -> lps "string"
-  | TMaybe vt  -> lps "maybe " <| lazy_type c ~in_col vt
+  | TMaybe vt  -> lps "maybe " <| wrap_complex (lazy_type c ~in_col ~paren_complex:true vt)
   | TTuple vts ->
       (* if we're top level of a collection, drop the parentheses *)
       (* for verbose types, we leave them in. We also leave them for mutables *)
@@ -126,14 +128,15 @@ let rec lazy_base_type c ~in_col ?(no_paren=false) = function
   | TTarget t           -> lps "target" <| lazy_type c ~in_col t
   | TUnknown            -> lps "unknown"
   | TTop                -> lps "top"
-  | TIndirect vt        -> lps "ind " <| lazy_type c ~in_col vt
+  | TIndirect vt        -> lps "ind " <| wrap_complex (lazy_type c ~in_col ~paren_complex:true vt)
   | TFunction(it, ot)   ->
-      lazy_type c ~in_col:false it <| lps " -> " <| lazy_type c ~in_col:false ot
+      wrap_complex (lazy_type c ~in_col:false it <| lps " -> " <| lazy_type c ~in_col:false ot)
 
 (* TODO: annotations *)
-and lazy_type ?(in_col=false) ?(no_paren=false) c t =
+(* paren_complex: surround by paren if we're a complex type for clarity *)
+and lazy_type ?(in_col=false) ?(no_paren=false) ?paren_complex c t =
   let mut = if t.mut then lps "mut " else [] in
-  mut <| lazy_base_type ~in_col ~no_paren c t.typ
+  mut <| lazy_base_type ~in_col ~no_paren ?paren_complex c t.typ
 
 let rec lazy_arg c drop_tuple_paren a =
   let paren = if drop_tuple_paren then id_fn else lazy_paren in
@@ -376,7 +379,7 @@ let rec lazy_expr c expr =
   | Update _ -> let l, o, n = U.decompose_update expr in
     lps "update" <| lazy_paren (lps l <| lps " , " <| expr_pair (o,n))
   | Indirect -> let x = U.decompose_indirect expr in
-    lps "ind" <| lsp () <| lazy_expr c x
+    lps "ind" <| lsp () <| paren_l x @@ lazy_expr c x
   | Assign _ -> let l, r = U.decompose_assign expr in
     lps l <| lps " <- " <| lazy_expr c r
   | BindAs _ -> let l, id, r = U.decompose_bind expr in
