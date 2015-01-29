@@ -110,105 +110,6 @@ let switch_idx_update_code new_idx = mk_update
 
 *)
 
-let switch_get_nth_addr_name = "nth_addr"
-let switch_get_nth_code n =
-  let slice_pattern = mk_tuple @: [mk_cint n; mk_cunknown] in
-  (* let (_, add:addr) = peek(switches[n, _])  *)
-  mk_let_deep (* figure out which switch idx myself is *)
-    (wrap_args ["_",t_unit; switch_get_nth_addr_name,t_addr])
-    (mk_peek @: mk_slice switches_var slice_pattern)
-
-
-(*
- * data_nodes [(idx:t_int, len:t_int, addrs:[t_addr])]
- * -------------------------------------
- * A global variable of data nodes. To group data nodes into
- * switch_nodes_num of groups. So that each
- * switch node is responsible to commnunicate with one group.
- *
- * TODO the data_nodes and switches are kind of redundant with peers.
- * However, in GarbageCollection, the switch nodes only need to send
- * max_vid to the non-switch nodes (since switches are consensus vid
- * among each other ruing GC)
- * *)
-let data_nodes_id_type_idx_name = "idx"
-let data_nodes_id_type_addrs_name = "addrs"
-let data_nodes_id_type_len_name = "len"
-let data_nodes_id_type_idx = t_int
-let data_nodes_id_type_len = t_int
-let data_nodes_id_type_addrs = wrap_tset t_addr
-let data_nodes_id_addrs_args = [data_nodes_id_type_addrs_name, data_nodes_id_type_addrs]
-let data_nodes_id_args = [data_nodes_id_type_idx_name, data_nodes_id_type_idx;
-                          data_nodes_id_type_len_name, data_nodes_id_type_len;
-                          data_nodes_id_type_addrs_name, data_nodes_id_type_addrs]
-let data_nodes_name = "data_nodes"
-let data_nodes_var = mk_var data_nodes_name
-let data_nodes_type_raw = [data_nodes_id_type_idx; data_nodes_id_type_len; data_nodes_id_type_addrs]
-let data_nodes_type = wrap_tset @: wrap_ttuple data_nodes_type_raw
-
-let get_data_nodes_lst peer_lst = get_nodes_by_role peer_lst "node"
-
-let data_nodes_code peer_lst =
-  let data_nodes_lst = get_data_nodes_lst peer_lst in
-  let data_nodes_num = List.length data_nodes_lst in
-  let switch_nodes_num = (List.length peer_lst) - data_nodes_num in
-  (* round robin way to assign each data node to switch node*)
-  let rec mk_empty_addrs_groups i =
-    if i = 0 then
-      []
-    else
-     Queue.create() :: (mk_empty_addrs_groups (i-1) )
-  in
-  let data_nodes_groups = mk_empty_addrs_groups switch_nodes_num in
-  let data_nodes_num_range = create_range 0 data_nodes_num in
-  output_string out ("data_nodes_num:" ^ (string_of_int data_nodes_num) ^
-                      "total_num:" ^ (string_of_int @: List.length peer_lst) ^
-                      "switch_node_num:" ^ (string_of_int switch_nodes_num));
-  flush out;
-  List.iter2
-    (fun i (addr,_,_) ->
-      Queue.push addr (List.nth data_nodes_groups (i mod switch_nodes_num) )
-    )
-    data_nodes_num_range
-    data_nodes_lst;
-  let mk_addr_set addr_queue =
-    Queue.fold
-      (fun acc addr ->
-        mk_combine
-          (mk_singleton data_nodes_id_type_addrs @: mk_caddress addr)
-          acc
-      )
-      (mk_empty data_nodes_id_type_addrs)
-      addr_queue
-  in
-  mk_global_val_init data_nodes_name data_nodes_type @:
-    snd(
-    List.fold_left
-      (fun (idx,acc) group ->
-        ( idx+1,
-          (mk_combine
-            (mk_singleton data_nodes_type @:
-              mk_tuple [mk_cint idx; mk_cint (Queue.length group); mk_addr_set group])
-            acc)
-        )
-      )
-      (0,(mk_empty data_nodes_type))
-      data_nodes_groups
-    )
-
-(* switches_num : [t_int]
- * ----------------------------------------
- * Create a global variable of switches number
- *)
-let switches_num_name = "switches_num"
-let switches_num_var = mk_var switches_num_name
-let switches_num_type = wrap_tset @: t_int
-
-let switches_num_code num = mk_global_val_init
-  switches_num_name
-  switches_num_type @:
-  mk_singleton switches_num_type @: mk_cint num
-
 (*
  * peers
  * ---------------------------------------
@@ -245,24 +146,10 @@ let rec peers_code = function
 
 (* create k3 globals for the address and peers *)
 let globals ps =
-  let switches_lst = get_switches_lst ps in
-  (* TODO
-   * only the program specify switch role,
-   * the code for switches, switches_num, data_nodes
-   * will generate *)
-  let switches_data_nodes_code =
-    if List.length switches_lst < 0 then (* TODO *)
-      []
-    else
-      (switches_code switches_lst) ::
-      (switches_num_code @: List.length switches_lst)::
-      (*switch_idx_code ::*)
-      [data_nodes_code ps]
-  in
   me_code:: (* me *)
   (peers_num_code @: List.length ps)::                (* peers_num *)
-  (peers_code ps) ::                                  (* peers *)
-  switches_data_nodes_code
+  (peers_code ps)::                                    (* peers *)
+  []
 
 (* cross-reference foreign functions *)
 let add_foreign_fn nm =
@@ -282,6 +169,7 @@ let stdlib =
   add_foreign_fn "substring"::
   add_foreign_fn "print"::
   add_foreign_fn "string_of_float"::
+  add_foreign_fn "string_of_int"::
   add_foreign_fn "date_part"::
   add_foreign_fn "load_csv_bag"::
   []
