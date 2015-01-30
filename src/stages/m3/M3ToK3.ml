@@ -177,16 +177,6 @@ let keys_from_kvars kvars  = List.map (fun kv -> KU.id_of_var kv, kv) kvars
 
 (**/**)
 
-(**[lambda v_el body]
-
-  Constructs a lambda expression from the expression [body] with the
-  variables in [v_el].
-  @param v_el The list of K3 variables of the [body].
-  @param body The body of the lambda expression.
-  @return     The K3 lambda expression expecting [v_el] as arguments and
-              computing [body]. *)
-let lambda v_el body = KH.mk_lambda (KH.wrap_args v_el) body
-
 (**[assoc_lambda v1_el v2_el body]
 
   Constructs an associative lambda expression from the expression [body]
@@ -207,7 +197,7 @@ let apply_lambda v_el el body =
   if List.length v_el != List.length el then
     error ("M3ToK3: Applying lambda to expression with " ^
             "different size schema!");
-  KH.mk_apply (lambda v_el body) (KH.mk_tuple el)
+  KH.mk_apply (KH.mk_lambda' v_el body) (KH.mk_tuple el)
 
 (**[apply_lambda_to_expr lambda_e expr]
 
@@ -234,7 +224,7 @@ let apply_lambda_to_expr lambda_e lambda_t expr =
   are not present in [to_v_el]. *)
 let project_fn (from_v_el:(K.id_t * K.type_t) list)
               (to_v_el:(K.id_t * K.type_t) list) =
-  lambda from_v_el @@ KH.mk_tuple @@ List.map (KH.mk_var |- fst) to_v_el
+  KH.mk_lambda' from_v_el @@ KH.mk_tuple @@ List.map (KH.mk_var |- fst) to_v_el
 
 let gen_accum_var = FreshVariable.declare_class "functional/M3ToK3" "accv"
 
@@ -311,9 +301,6 @@ let mk_slice collection all_keys bound_keys =
     @ [KH.mk_cunknown]
 
 let mk_lookup collection bag_t keys key_types =
-  let coll_type =
-    KH.wrap_tbag' @@ List.map KH.canonical @@ key_types @ [bag_t]
-  in
   let wrapped_value = KH.mk_var "wrapped_lookup_value" in
   KH.mk_let [KU.id_of_var wrapped_value]
             (mk_slice collection keys keys) @@
@@ -896,7 +883,7 @@ let rec calc_to_k3_expr meta ?(generate_init = false) theta_vars_k calc :
                 [fst lift_ret_ve; KH.mk_cint 1]
           in
           let lift_lambda =
-            lambda
+            KH.mk_lambda'
               (lift_outs_el @ [KU.id_of_var @@ fst lift_ret_ve, snd lift_ret_ve])
               lift_body
           in
@@ -920,7 +907,7 @@ let rec calc_to_k3_expr meta ?(generate_init = false) theta_vars_k calc :
                   KH.mk_cint 0]
           in
           let exists_lambda =
-            lambda
+            KH.mk_lambda'
               (exists_outs_el @
                   [KU.id_of_var @@ fst exists_ret_ve, snd exists_ret_ve])
               exists_body
@@ -1030,7 +1017,7 @@ let rec calc_to_k3_expr meta ?(generate_init = false) theta_vars_k calc :
           |  _, [] ->
               p1_outs_el,
               KH.mk_map
-                (lambda
+                (KH.mk_lambda'
                   (p1_outs_el @ [KU.id_of_var p1_ret_ve, p1_ret_t])
                   (KH.mk_tuple @@ List.map (KH.mk_var |- fst) p1_outs_el @
                     [KH.mk_mult p1_ret_ve p2]))
@@ -1038,7 +1025,7 @@ let rec calc_to_k3_expr meta ?(generate_init = false) theta_vars_k calc :
           | [], _ ->
               p2_outs_el,
               KH.mk_map
-                (lambda
+                (KH.mk_lambda'
                   (p2_outs_el @ [KU.id_of_var p2_ret_ve, p2_ret_t]) @@
                   KH.mk_tuple @@ List.map (KH.mk_var |- fst) p2_outs_el @
                     [KH.mk_mult p2_ret_ve p1])
@@ -1051,7 +1038,7 @@ let rec calc_to_k3_expr meta ?(generate_init = false) theta_vars_k calc :
             in
             let nested =
               KH.mk_map
-                (lambda
+                (KH.mk_lambda'
                   (p2_outs_el @ [KU.id_of_var p2_ret_ve, p2_ret_t])
                   prod_e)
                 p2
@@ -1059,7 +1046,7 @@ let rec calc_to_k3_expr meta ?(generate_init = false) theta_vars_k calc :
             union_el,
             KH.mk_flatten @@
               KH.mk_map
-                (lambda
+                (KH.mk_lambda'
                   (p1_outs_el @ [KU.id_of_var p1_ret_ve, p1_ret_t])
                   nested)
               p1
@@ -1239,7 +1226,7 @@ let m3_stmt_to_k3_stmt (meta: meta_t) ?(generate_init = false)
             lhs_outs_kt (KH.mk_add existing_v rhs_ret_ve)
       in
       let inner_loop_body =
-        lambda (vart_to_idvt ((List.combine rhs_outs_el rhs_outs_t) @
+        KH.mk_lambda' (vart_to_idvt ((List.combine rhs_outs_el rhs_outs_t) @
                               [rhs_ret_ve, rhs_ret_vt]))
                single_update_expr
       in
@@ -1266,7 +1253,7 @@ let m3_stmt_to_k3_stmt (meta: meta_t) ?(generate_init = false)
         ) in
           KH.mk_block [
             mk_iter
-              (lambda ((List.combine (List.map KU.id_of_var lhs_outs_el)
+              (KH.mk_lambda' ((List.combine (List.map KU.id_of_var lhs_outs_el)
                                      (List.map KH.canonical lhs_outs_kt))@
                        [KU.id_of_var rhs_ret_ve, rhs_ret_vt])
                       (KH.mk_delete mapn
@@ -1282,7 +1269,7 @@ let m3_stmt_to_k3_stmt (meta: meta_t) ?(generate_init = false)
    (* we update the corresponding output tier. *)
    let statement_expr =
       let outer_loop_body =
-        lambda ((List.combine (List.map KU.id_of_var lhs_ins_el)
+        KH.mk_lambda' ((List.combine (List.map KU.id_of_var lhs_ins_el)
                               (List.map KH.canonical lhs_ins_kt))@
                 [KU.id_of_var existing_out_tier, out_tier_t])
                coll_update_expr
