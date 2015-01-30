@@ -303,15 +303,15 @@ let mk_slice collection all_keys bound_keys =
 let mk_lookup collection bag_t keys key_types =
   let wrapped_value = KH.mk_var "wrapped_lookup_value" in
   KH.mk_let [KU.id_of_var wrapped_value]
-            (mk_slice collection keys keys) @@
-            KH.mk_case_ns
-              (KH.mk_peek wrapped_value)
-              "unwrapped_value"
-              (KH.mk_const @@ zero_of_type bag_t) @@
-              mk_project (List.length keys+1)
-                (List.length keys)
-                bag_t @@
-                (KH.mk_var "unwrapped_value")
+    (mk_slice collection keys keys) @@
+    KH.mk_case_ns
+      (KH.mk_peek wrapped_value)
+      "unwrapped_value"
+      (KH.mk_const @@ zero_of_type bag_t) @@
+      mk_project (List.length keys+1)
+        (List.length keys)
+        bag_t @@
+        (KH.mk_var "unwrapped_value")
 
 let mk_test_member collection keys key_types val_type =
   KH.mk_has_member' collection
@@ -363,9 +363,7 @@ let mk_update col bag_t ivars ivar_t ovars ovar_t new_val =
         ]
     | _      -> failwith "FullPC unsupported"
   in
-  KH.mk_apply
-    (KH.mk_lambda (mk_arg (KU.id_of_var new_val_var) bag_t) update_block)
-    new_val
+  KH.mk_let [KU.id_of_var new_val_var] new_val update_block
 
 (**********************************************************************)
 (**/**)
@@ -1215,8 +1213,6 @@ let m3_stmt_to_k3_stmt (meta: meta_t) ?(generate_init = false)
    let _ = escalate_type rhs_ret_vt @@ KH.canonical map_k3_type in
    let free_lhs_outs_el = List.map KH.mk_var free_lhs_outs in
 
-   let vart_to_idvt = List.map (fun (x, xt) -> KU.id_of_var x, xt)
-   in
    (* Iterate over all the tuples in "incr_expr" collection and update *)
    (* the lhs_collection accordingly. *)
    let coll_update_expr =
@@ -1225,14 +1221,11 @@ let m3_stmt_to_k3_stmt (meta: meta_t) ?(generate_init = false)
             (KH.vars_to_ids lhs_ins_el) (lhs_ins_kt) (KH.vars_to_ids lhs_outs_el)
             lhs_outs_kt (KH.mk_add existing_v rhs_ret_ve)
       in
-      let inner_loop_body =
-        KH.mk_lambda' (vart_to_idvt ((List.combine rhs_outs_el rhs_outs_t) @
-                              [rhs_ret_ve, rhs_ret_vt]))
-               single_update_expr
-      in
-      let update_body =
-        if rhs_outs_el = [] then KH.mk_apply inner_loop_body incr_expr
-        else                     mk_iter inner_loop_body incr_expr
+      let args = (List.combine rhs_outs_el rhs_outs_t) @ [rhs_ret_ve, rhs_ret_vt] in
+      let args = List.map (first KU.id_of_var) args in
+      let update_body = match rhs_outs_el with
+        | [] -> KH.mk_let (fst_many args) incr_expr single_update_expr
+        | _  -> mk_iter (KH.mk_lambda' args single_update_expr) incr_expr
       in
 
       if ( update_type = Plan.UpdateStmt ||

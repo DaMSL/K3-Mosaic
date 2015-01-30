@@ -315,9 +315,9 @@ let rec lazy_expr c expr =
     arith_paren_pair "<=" p
   | Lambda arg ->
       let _, e = U.decompose_lambda expr in
-    wrap_indent (lps "\\" <| lazy_arg c false arg <|
-    lps " ->") <| lind () <|
-      wrap_hov 0 (lazy_expr c e)
+      wrap_indent (lazy_paren (lps "\\" <| lazy_arg c false arg <|
+      lps " ->" <| lind () <|
+        wrap_hov 0 (lazy_expr c e)))
   | Apply -> let e1, e2 = U.decompose_apply expr in
     let modify_arg = match U.tag_of_expr e2 with
       | Tuple -> id_fn
@@ -376,7 +376,7 @@ let rec lazy_expr c expr =
       lsp () <| lps "in" <| lsp () <| lazy_expr c r
   | Let _ -> let ids, bound, bexpr = U.decompose_let expr in
     lps "let" <| lsp () <| lps_list NoCut lps ids <| lsp () <| lps "=" <| lsp () <|
-    lazy_expr c bound <| lsp () <| lps "in" <| lsp () <| lps "in" <| lsp () <| lazy_expr c bexpr
+    lazy_expr c bound <| lsp () <| lps "in" <| lsp () <| lazy_expr c bexpr
   | Send -> let e1, e2, es = U.decompose_send expr in
     wrap_indent (lps "send" <| lazy_paren (expr_pair (e1, e2) <| lps ", " <|
       lps_list CutHint (tuple_no_paren c) es))
