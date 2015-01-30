@@ -166,8 +166,8 @@ let declare_global_funcs partmap c ast =
            (mk_update
             nd_stmt_cntrs.id
             (mk_var "ctr_slice") @@ (* oldval *)
-            mk_let_many (* newval *)
-              nd_stmt_cntrs.e
+            mk_let (* newval *)
+              (fst_many nd_stmt_cntrs.e)
               (mk_var "ctr_slice") @@
               mk_tuple @@
                 part_pat_as_vars @
@@ -236,10 +236,10 @@ let declare_global_funcs partmap c ast =
         ~choice:len_types_v
     in
     let regular_delta =
-      mk_let lookup_value t_col_v
+      mk_let [lookup_value]
         (map_latest_vid_vals c (mk_var tmap_deref)
           (Some(vars_no_val @ [mk_cunknown])) map_id ~keep_vid:true) @@
-        mk_let update_value t_val
+        mk_let [update_value]
           (* get either 0 to add or the value we read *)
           (mk_add (mk_var id_val) @@
             mk_case_ns
@@ -262,7 +262,7 @@ let declare_global_funcs partmap c ast =
             (* this part is just for correctives:
              * We need to check if there's a value at the particular version id
              * If so, we must add the value directly *)
-              mk_let lookup_value t_col_v
+              mk_let [lookup_value]
                 (mk_if
                   (mk_var corrective)
                   (if c.use_multiindex then
@@ -275,7 +275,7 @@ let declare_global_funcs partmap c ast =
               mk_case_sn
                 (mk_peek @@ mk_var lookup_value) "val"
                 (* then just update the value *)
-                (mk_let update_value t_val
+                (mk_let [update_value]
                   (mk_add (mk_var id_val) @@ tuple_projection "val") @@
                   mk_insert tmap_deref @@ mk_tuple update_vars)
                 (* else, if it's just a regular delta, read the frontier *)
@@ -285,7 +285,7 @@ let declare_global_funcs partmap c ast =
         (* add to future values *)
         mk_iter (* loop over values in the delta tuples *)
          (mk_lambda' ids_types_arg_v @@
-           mk_let "filtered" (wrap_t_of_map' types_v)
+           mk_let ["filtered"]
            (* careful to put bind in proper place *)
            (mk_bind (mk_var target_map) tmap_deref @@
              (* slice for all values > vid with same key *)
@@ -356,7 +356,7 @@ let start_trig (c:config) t =
   mk_code_sink' t (P.args_of_t c.p t) [] @@
     mk_block @@
       update_epoch@
-      [mk_let "vid" t_vid
+      [mk_let ["vid"]
          (mk_tuple [
            mk_var epoch_counter.id;
            mk_var vid_counter.id;
@@ -480,8 +480,8 @@ let send_puts =
       (mk_assoc_lambda' (* agg func *)
         ["acc", stmt_id_cnt_type]
         ["ip_and_stmt_id", wrap_ttuple [t_addr; t_stmt_id]; "count", t_int] @@
-        mk_let_many (* break up because of the way inner gbagg forms tuples *)
-          ["ip", t_addr; "stmt_id", t_stmt_id]
+        mk_let (* break up because of the way inner gbagg forms tuples *)
+          ["ip"; "stmt_id"]
           (mk_var "ip_and_stmt_id") @@
           mk_combine
             (mk_var "acc") @@
@@ -518,7 +518,7 @@ let send_puts =
             let tuple_types = wrap_t_of_map' rhs_map_types in
             mk_combine
               acc_code @@
-              mk_let "sender_count" t_int
+              mk_let ["sender_count"]
                 (* count up the number of IPs received from route *)
                 (mk_agg
                   (mk_lambda'
@@ -640,10 +640,10 @@ mk_code_sink'
         ["stmt_id", t_stmt_id; "count", t_int] @@
         mk_case_sn
           (mk_peek @@ mk_slice' (mk_var D.nd_stmt_cntrs.id) @@ pat mk_cunknown) "old_val"
-          (mk_let_deep' ["_", t_unit; "_", t_unit; "old_count", t_int]
+          (mk_let ["_"; "_"; "old_count"]
             (mk_var "old_val") @@
             (* update the count *)
-            mk_let "new_count" t_int
+            mk_let ["new_count"]
               (mk_add (mk_var "old_count") @@ mk_var "count") @@
             mk_block [
               mk_update
@@ -776,7 +776,7 @@ List.fold_left
             ["tuple", wrap_ttuple tuple_types] @@
             (* be very careful with bind placement *)
             mk_bind (mk_var rbuf_name) rbuf_deref @@
-            mk_let_many tuple_id_t (mk_var "tuple") @@
+            mk_let (fst_many tuple_id_t) (mk_var "tuple") @@
             mk_case_sn
               (mk_peek @@ mk_slice'
                 (mk_var rbuf_deref)
@@ -866,8 +866,7 @@ let send_corrective_trigs c =
       [] @@
       (* the corrective list tells us which statements were fetched
        * from us and when *)
-      mk_let "corrective_list" (* (stmt_id * vid list) list *)
-        (wrap_tbag' [t_stmt_id; t_vid_list])
+      mk_let ["corrective_list"] (* (stmt_id * vid list) list *)
         (mk_apply
           (mk_var filter_corrective_list_name) @@
           mk_tuple (* feed in list of possible stmts *)
@@ -932,8 +931,8 @@ let send_corrective_trigs c =
                     mk_flatten @@ mk_map
                       (mk_lambda' ["vid", t_vid] @@
                         (* get bound vars from log so we can calculate shuffle *)
-                        mk_let_many
-                          (args_of_t_with_v c target_trig)
+                        mk_let
+                          (fst_many @@ args_of_t_with_v c target_trig)
                           (mk_apply
                             (mk_var @@ log_get_bound_for c target_trig) @@
                             mk_var "vid"
@@ -997,8 +996,7 @@ let filter_corrective_list =
   ["request_vid", t_vid; "trig_stmt_list", trig_stmt_list_t]
   [return_type]
   @@
-  mk_let "log_entries"
-    D.nd_log_master.t
+  mk_let ["log_entries"]
     (mk_apply (* list of triggers >= vid *)
       (mk_var log_read_geq) @@ mk_var "request_vid") @@
   (* convert to bag *)
@@ -1079,8 +1077,8 @@ List.map
                     mk_tuple [mk_var "compute_vid"; mk_cint stmt_id; mk_cint 0]
                 )
                 (* get bound vars from log *)
-                (mk_let_many
-                  (args_of_t_with_v c trig_name)
+                (mk_let
+                  (fst_many @@ args_of_t_with_v c trig_name)
                   (mk_apply
                     (mk_var @@ log_get_bound_for c trig_name)
                     (mk_var "compute_vid")

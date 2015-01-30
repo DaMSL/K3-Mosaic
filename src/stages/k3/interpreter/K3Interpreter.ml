@@ -192,7 +192,6 @@ and eval_expr (address:address) sched_st cenv texpr =
         cenv, VTemp(v_singleton error element ctype)
 
     | Combine ->
-        let name = "Combine" in
         begin match child_values cenv with
           | nenv, [left; right] -> nenv, VTemp(
             begin match left, right with
@@ -207,7 +206,6 @@ and eval_expr (address:address) sched_st cenv texpr =
         end
 
     | Range c_t ->
-      let name = "range" in
       begin match child_values cenv with
         | renv, [start; stride; VInt steps] ->
           let init_fn i =
@@ -266,7 +264,6 @@ and eval_expr (address:address) sched_st cenv texpr =
         in fenv, list_last vals
 
     | Iterate ->
-        let name = "Iterate" in
         begin match child_values cenv with
           | nenv, [f;c] ->
               let f' = eval_fn f address sched_st in
@@ -275,7 +272,6 @@ and eval_expr (address:address) sched_st cenv texpr =
         end
 
     | IfThenElse ->
-        let name = "IfThenElse" in
         let penv, pred = child_value cenv 0 in
         begin match pred with
         | VBool true  ->
@@ -286,7 +282,6 @@ and eval_expr (address:address) sched_st cenv texpr =
         end
 
     | CaseOf x ->
-        let name = "CaseOf" in
         let penv, pred = child_value cenv 0 in
         begin match pred with
         | VOption(Some v) ->
@@ -300,7 +295,6 @@ and eval_expr (address:address) sched_st cenv texpr =
         end
 
     | BindAs x ->
-        let name = "BindAs" in
         let penv, pred = child_value cenv 0 in
         begin match pred with
         | VIndirect rv ->
@@ -314,11 +308,25 @@ and eval_expr (address:address) sched_st cenv texpr =
         | _ -> error name "non-indirect predicate"
         end
 
+    | Let ids ->
+        let env, bound = child_value cenv 0 in
+        begin match ids, bound with
+        | [id], _ ->
+            let env = second (env_add id bound) env in
+            eval_expr address sched_st env @@ List.nth children 1
+        | _, VTuple vs ->
+            let env = List.fold_left2 (fun acc_env id v ->
+              second (env_add id v) acc_env)
+              env ids vs
+            in
+            eval_expr address sched_st env @@ List.nth children 1
+        | _ -> error name "bad let destruction"
+        end
+
     (* Collection transformers *)
 
     (* Keeps the same type *)
     | Map ->
-        let name = "Map" in
         begin match child_values cenv with
           | nenv, [f; col] ->
             let f' = eval_fn f address sched_st in
@@ -333,7 +341,6 @@ and eval_expr (address:address) sched_st cenv texpr =
         end
 
     | Filter ->
-        let name = "Filter" in
         begin match child_values cenv with
           | nenv, [p; col] ->
             let p' = eval_fn p address sched_st in
@@ -409,7 +416,6 @@ and eval_expr (address:address) sched_st cenv texpr =
         end
 
     | Sort -> (* only applies to list *)
-      let name = "Sort" in
       begin match child_values cenv with
       | renv, [f; c] ->
         let env = ref renv in

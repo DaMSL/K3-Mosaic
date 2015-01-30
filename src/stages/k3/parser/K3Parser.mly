@@ -434,8 +434,8 @@ expr :
       }
 
     /* Function application and let notation */
-    | expr LPAREN tuple RPAREN    { mk_apply $1 $3 }
-    | LET arg GETS expr IN expr   { mkexpr Apply [mkexpr (Lambda $2) [$6]; $4] }
+    | expr LPAREN tuple RPAREN        { mk_apply $1 $3 }
+    | LET id_list GETS expr IN expr   { mk_let $2 $4 $6 }
 
     /* TODO: more error handling */
     | SEND LPAREN IDENTIFIER COMMA address COMMA error { print_error "Invalid send argument" }
@@ -445,10 +445,15 @@ expr :
 
     | expr LPAREN error { print_error("Function application error") }
 
-    | LET arg GETS expr IN error   { print_error "Let body error" }
-    | LET arg GETS error           { print_error "Let binding target error" }
-    | LET error                    { print_error "Let binding error" }
+    | LET id_list GETS expr IN error   { print_error "Let body error" }
+    | LET id_list GETS error           { print_error "Let binding target error" }
+    | LET error                        { print_error "Let binding error" }
 
+;
+
+id_list :
+    | IDENTIFIER { [$1] }
+    | IDENTIFIER COMMA id_list { $1 :: $3 }
 ;
 
 expr_list :

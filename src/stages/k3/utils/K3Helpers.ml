@@ -300,6 +300,13 @@ let mk_assign left right = mk_stree (Assign left) [right]
 (* target:TTarget(T) address:TAdress args:T *)
 let mk_send target address args = mk_stree Send [target; address; args]
 
+(* A let that assigns multiple variables simultaneously.
+ * For breaking up tuples and passing multiple values out of functions.
+ * var_name_type_list must be a (string, type) list, and the var_values must
+ * evaluate to the same types *)
+let mk_let var_ids tuple_val expr =
+  mk_stree (Let(var_ids)) [tuple_val; expr]
+
 (* convenience function to aggregate starting with the first item *)
 (* NOTE: will run the first item twice *)
 let mk_agg_fst agg_fn col =
@@ -405,29 +412,12 @@ let mk_assoc_lambda arg1 arg2 expr = mk_lambda (ATuple[arg1; arg2]) expr
 
 let mk_assoc_lambda' arg1 arg2 expr = mk_lambda (ATuple[wrap_args arg1; wrap_args arg2]) expr
 
-(* A let that assigns multiple variables simultaneously.
- * For breaking up tuples and passing multiple values out of functions.
- * var_name_type_list must be a (string, type) list, and the var_values must
- * evaluate to the same types *)
-let mk_let_many var_name_and_type_list var_values expr =
-    mk_apply
-        (mk_lambda (wrap_args var_name_and_type_list) expr)
-        var_values
-
-(* a classic let x = e1 in e2 construct *)
-let mk_let var_name var_type var_value expr = mk_let_many [var_name, var_type] var_value expr
-
-(* a let statement with deep argument matching *)
-let mk_let_deep args var_values expr =
-  mk_apply (mk_lambda args expr) var_values
-
-let mk_let_deep' args var_values expr = mk_let_deep (wrap_args args) var_values expr
-
+(* TODO: get rid of these *)
 let project_from_tuple tuple_types tuple ~total ~choice =
   let l = create_range 1 total in
   let l = List.map (fun i -> "__"^soi i) l in
   let c = "__"^soi choice in
-  mk_let_many (list_zip l tuple_types) tuple (mk_var c)
+  mk_let l tuple (mk_var c)
 
 let mk_fst tuple_types tuple =
   project_from_tuple tuple_types tuple ~choice:1 ~total:2
@@ -467,14 +457,14 @@ let types_to_ids_types ?first prefix types =
 (* break down a tuple into its components, creating ids with a certain prefix *)
 let mk_destruct_tuple tup_name types prefix expr =
   let ids_types = types_to_ids_types prefix types in
-  mk_let_many ids_types (mk_var tup_name) expr
+  mk_let (fst_many ids_types) (mk_var tup_name) expr
 
 (* rebuild a tuple based on the types of the tuple.
  * A lambda allows you to shuffle the ids/types as you wish
  * *)
 let mk_rebuild_tuple ?(prefix=def_tup_prefix) tup_name types f =
   let ids_types = types_to_ids_types prefix types in
-  mk_let_many ids_types (mk_var tup_name) @@
+  mk_let (fst_many ids_types) (mk_var tup_name) @@
     mk_tuple @@ ids_to_vars @@ f @@ fst_many ids_types
 
 (* unwrap maybe values by creating an inner values with postfix "_unwrap" *)

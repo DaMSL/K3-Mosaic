@@ -61,7 +61,7 @@ type base_type_t
 
 and mutable_t = bool
 
-and type_t = { 
+and type_t = {
   typ: base_type_t;
   mut: bool;
   anno: annotation_t;
@@ -135,6 +135,7 @@ type expr_tag_t
     | Assign of id_t
     | Indirect
     | BindAs of id_t
+    | Let of id_t list
 
     | Send
 

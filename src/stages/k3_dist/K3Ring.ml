@@ -43,12 +43,12 @@ let add_node_name = "add_node"
 let add_node_code =
   mk_global_fn add_node_name
   id_t_node_no_hash [t_unit] @@
-  mk_let "rng" (wrap_tlist t_int)
+  mk_let ["rng"]
     (mk_range TList
       (mk_cint 1) (mk_cint 1) @@
         mk_peek_or_error @@
           mk_slice (mk_var replicas_nm) mk_cunknown) @@
-  mk_let "new_elems" t_ring
+  mk_let ["new_elems"]
     (mk_map
       (mk_lambda (wrap_args ["i", t_int]) @@
         mk_tuple @@
@@ -71,7 +71,7 @@ let add_node_code =
       (mk_var "new_elems")
     ;
     (* sort by the hash *)
-    mk_let "temp_ring" t_ring
+    mk_let ["temp_ring"]
       (mk_sort
         (mk_assoc_lambda
           (wrap_args @@ id_t_node_for "hash1")
@@ -103,7 +103,7 @@ let add_node_code =
 let remove_node_code =
   mk_global_fn "remove_node"
   id_t_node_no_hash [t_unit] @@
-    mk_let "nodes_to_delete" t_ring
+    mk_let ["nodes_to_delete"]
         (mk_slice (mk_var node_ring_nm) @@
         mk_tuple @@ ids_to_vars id_node_no_hash @ [mk_cunknown]
         ) @@
@@ -121,7 +121,7 @@ let get_ring_node_code =
   let results = mk_var results_nm in
   mk_global_fn "get_ring_node"
   ["data", t_int; "max_val", t_int] [t_addr] @@
-  mk_let "scaled" t_int
+  mk_let ["scaled"]
     (mk_apply (mk_var "int_of_float") @@
       mk_mult
         (mk_apply (mk_var "float_of_int") @@
@@ -130,7 +130,7 @@ let get_ring_node_code =
           [mk_apply (mk_var "float_of_int") @@ mk_var "data";
           mk_apply (mk_var "float_of_int") @@ mk_var "max_val"]
     ) @@
-  mk_let results_nm t_ring
+  mk_let [results_nm]
     (mk_filter (* filter to only hashes greater than data *)
       (mk_lambda
         (wrap_args @@ id_t_node) @@
@@ -138,7 +138,7 @@ let get_ring_node_code =
       ) @@
       mk_var node_ring_nm
     ) @@
-  mk_let_many (List.map (function ("addr",_) as x -> x | _,t -> "_",t) id_t_node)
+  mk_let (List.map (function ("addr", _) -> "addr" | _ -> "_") id_t_node)
     (* if we have results, peek. otherwise, take the first node *)
     (mk_case_sn (mk_peek results) "res_val"
       (mk_var "res_val")

@@ -177,7 +177,7 @@ let gen_route_fn p map_id =
     (("map_id", t_map_id)::types_to_ids_types prefix key_types)
     [output_type] @: (* return *)
     (* get the info for the current map and bind it to "pmap" *)
-    mk_let "pmap" pmap_types
+    mk_let ["pmap"]
       (mk_snd pmap_per_map_types @:
         mk_peek_or_error @: mk_slice (mk_var pmap_data) @:
           mk_tuple [mk_var "map_id"; mk_cunknown]
@@ -188,11 +188,11 @@ let gen_route_fn p map_id =
       (mk_apply (mk_var K3Ring.get_all_uniq_nodes_nm) mk_cunit) @:
 
     (* calculate the dim bounds ie. the bucket sizes when linearizing *)
-    mk_let_many ["dim_bounds", dim_bounds_type; "max_val", t_int]
+    mk_let ["dim_bounds"; "max_val"]
       (mk_apply (mk_var "calc_dim_bounds") @: mk_var "pmap") @:
     (* calc_bound_bucket *)
     (* we calculate the contribution of the bound components *)
-    mk_let "bound_bucket" t_int
+    mk_let ["bound_bucket"]
     (List.fold_left
       (fun acc_code index ->
         let temp_id = to_id index in
@@ -204,13 +204,13 @@ let gen_route_fn p map_id =
           (mk_case_ns (mk_var temp_id) id_unwrap
             (mk_cint 0) @: (* no contribution *)
             (* bind the slice for this index *)
-            mk_let "pmap_slice" pmap_types
+            mk_let ["pmap_slice"]
               (mk_slice (mk_var "pmap") @:
                 mk_tuple [mk_cint index; mk_cunknown]) @:
             (* check if we don't partition by this index *)
             (mk_case_ns (mk_peek @@ mk_var "pmap_slice") "peek_slice"
               (mk_cint 0) @:
-              mk_let "value" t_int
+              mk_let ["value"]
               (mk_apply (mk_var "mod") @:
                 mk_tuple
                   (* we hash first. This could seem like it destroys locality,
@@ -230,7 +230,7 @@ let gen_route_fn p map_id =
       map_range
     ) @:
     (* now calculate the free parameters' contribution *)
-    mk_let "free_dims" free_dims_type
+    mk_let ["free_dims"]
       (List.fold_left
         (fun acc_code x ->
           let type_x = List.nth key_types x in
@@ -248,7 +248,7 @@ let gen_route_fn p map_id =
         (map_range)
       ) @:
     (* a list of ranges from 0 to the bucket size, for every free variable *)
-    mk_let "free_domains" free_domains_type
+    mk_let ["free_domains"]
       (mk_map
         (mk_lambda (wrap_args ["i", t_int; "b_i", t_int]) @:
           mk_tuple [mk_var "i"; mk_range TList
@@ -258,7 +258,7 @@ let gen_route_fn p map_id =
         mk_var "free_dims"
       ) @:
     (* calculate the cartesian product to get every possible bucket *)
-    mk_let "free_cart_prod" free_cart_prod_type
+    mk_let ["free_cart_prod"]
       (mk_agg
         (mk_assoc_lambda (wrap_args ["prev_cart_prod", free_cart_prod_type])
           (wrap_args ["i", t_int; "domain", wrap_tlist t_int]) @:
@@ -287,7 +287,7 @@ let gen_route_fn p map_id =
     (* We now add in the value of the bound variables as a constant
      * and calculate the result for every possibility *)
     (* TODO: this can be turned into sets *)
-    mk_let "sorted_ip_list" (sorted_ip_list_type)
+    mk_let ["sorted_ip_list"]
       (mk_gbagg
         (mk_lambda (wrap_args ["ip", t_addr]) @: mk_var "ip")
         (mk_lambda (wrap_args ["_", t_unit; "_", t_unit]) @:

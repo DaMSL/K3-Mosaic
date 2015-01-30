@@ -36,7 +36,7 @@ let peers_num_var = mk_var peers_num_name
 (* update peers_num when peers add or remove. *)
 let peers_num_update_code num_add =
   let old_num_var = mk_var "old_num" in
-  mk_let "old_num" t_int (mk_peek peers_num_var) @:
+  mk_let ["old_num"] (mk_peek peers_num_var) @:
   mk_block [
     mk_delete peers_num_name old_num_var;
     mk_insert peers_num_name @: mk_add (mk_cint num_add) old_num_var

@@ -50,6 +50,7 @@ val decompose_iterate : expr_t -> expr_t * expr_t
 val decompose_just : expr_t -> expr_t
 val decompose_lambda : expr_t -> arg_t * expr_t
 val decompose_leq : expr_t -> expr_t * expr_t
+val decompose_let : expr_t -> id_t list * expr_t * expr_t
 val decompose_lt : expr_t -> expr_t * expr_t
 val decompose_map : expr_t -> expr_t * expr_t
 val decompose_mult : expr_t -> expr_t * expr_t

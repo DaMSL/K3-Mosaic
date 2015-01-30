@@ -106,6 +106,7 @@ let string_of_tag_type = function
     | IfThenElse       -> "IfThenElse"
     | CaseOf x         -> "CaseOf "^x
     | BindAs x         -> "BindAs "^x
+    | Let xs           -> "Let "^String.concat ", " xs
 
     | Map              -> "Map"
     | Iterate          -> "Iterate"

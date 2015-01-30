@@ -96,7 +96,7 @@ let gen_shuffle_fn p rmap lmap bindings fn_name =
     [tuples, many_tuples_type;
     shuffle_on_empty, canonical TBool])
     [result_types] @: (* return *)
-      mk_let "all_targets" all_targets_type
+      mk_let ["all_targets"]
         (mk_if
           (mk_eq (mk_var shuffle_on_empty) @: mk_cbool true)
           (* in shuffle on empty case, we prepare all the routing that must

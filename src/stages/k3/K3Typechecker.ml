@@ -37,6 +37,7 @@ let not_function t   = TBad(t, "not a function")
 let not_collection t = TBad(t, "not a collection")
 let not_collection_bt t = BTBad(t, "not a collection")
 let error_tuple_small n tl t = TBad(t, Printf.sprintf "tuple has size %d but subscript %d" tl n)
+let wrong_let_size t = TBad(t, "wrong size for let")
 
 let t_error uuid name msg () = raise @@ TypeError(uuid, name, msg)
 
@@ -72,6 +73,7 @@ let check_tag_arity tag children =
     | IfThenElse    -> 3
     | CaseOf _      -> 3
     | BindAs _      -> 2
+    | Let _         -> 2
 
     | Map               -> 2
     | Filter            -> 2
@@ -220,15 +222,23 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
     | CaseOf x, Some ch, 1 ->
         let t = type_of_expr ch in
         let t_e = match t.typ with
-                  | TMaybe mt -> mt
-                  | _         -> t_erroru (not_maybe t) () in
+          | TMaybe mt -> mt
+          | _         -> t_erroru (not_maybe t) () in
         (x, t_e) :: env
     | BindAs x, Some ch, 1 ->
         let t = type_of_expr ch in
         let t_e = match t.typ with
-                  | TIndirect it -> it
-                  | _            -> t_erroru (not_ind t) () in
+          | TIndirect it -> it
+          | _            -> t_erroru (not_ind t) () in
         (x, t_e) :: env
+    | Let xs, Some ch, 1 ->
+        let t = type_of_expr ch in
+        let ts = match t.typ with
+          | TTuple ts when List.length ts = List.length xs -> ts
+          | _         when List.length xs = 1              -> [t]
+          | _                                              -> t_erroru (wrong_let_size t) ()
+        in
+        list_zip xs ts @ env
     | _ -> env
   in
   (* If not overriding, find those children for which we have no type already *)
@@ -332,9 +342,11 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
           if t_n === t_s then t_s
           else t_erroru (TMismatch(t_n, t_s, "case branches")) ()
 
-      | BindAs id ->
-          (* handled in the prelude *)
-          bind 1
+        (* handled in the prelude *)
+      | BindAs _ -> bind 1
+
+        (* handled in the prelude *)
+      | Let _ -> bind 1
 
       | Block ->
           let rec validate_block components = match components with

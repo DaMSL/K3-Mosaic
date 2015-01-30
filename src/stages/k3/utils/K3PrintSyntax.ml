@@ -187,10 +187,6 @@ let rec lazy_expr c expr =
     w(lazy_expr c e1) <| sep () <| w(lazy_expr c e2) <| sep () <| w(lazy_expr c
     e3) <| sep () <| w(lazy_expr c e4) in
   (* TODO: do comparisons also *)
-  let is_apply_let e = let e1, e2 = U.decompose_apply e in
-    match U.tag_of_expr e1 with
-      | Var _ -> false | Lambda _ -> true | _ -> invalid_arg "bad apply input"
-  in
   (* handle parentheses:
      - If a sub-element is mult or add, we wrap it.
      - If a left sub-element is 'ifthenelse' or a 'let', we wrap it.
@@ -201,12 +197,12 @@ let rec lazy_expr c expr =
   (* we're more sensitive for left side *)
  let paren_l e = match U.tag_of_expr e with
     | IfThenElse -> lazy_paren
-    | Apply when is_apply_let e -> lazy_paren
-    | _ -> id_fn in
+    | Let _      -> lazy_paren
+    | _          -> id_fn in
  let arith_paren_l e = match U.tag_of_expr e with
     | IfThenElse -> lazy_paren
-    | Apply when is_apply_let e -> lazy_paren
-    | _ -> arith_paren e
+    | Let _      -> lazy_paren
+    | _          -> arith_paren e
   (* for == and != *)
   in let logic_paren e = match U.tag_of_expr e with
     | Eq | Neq -> lazy_paren
@@ -322,19 +318,12 @@ let rec lazy_expr c expr =
     wrap_indent (lps "\\" <| lazy_arg c false arg <|
     lps " ->") <| lind () <|
       wrap_hov 0 (lazy_expr c e)
-  | Apply -> let (e1, e2) = U.decompose_apply expr in
-    let modify_arg = begin match U.tag_of_expr e2 with
+  | Apply -> let e1, e2 = U.decompose_apply expr in
+    let modify_arg = match U.tag_of_expr e2 with
       | Tuple -> id_fn
-      | _ -> lazy_paren end
-    in begin match U.tag_of_expr e1 with (* can be let *)
-      | Var _ -> wrap_indent (lazy_expr c e1 <|
-          lcut () <| modify_arg @@ lazy_expr c e2)
-      | Lambda arg -> let _, body = U.decompose_lambda e1 in
-        wrap_hov 2 (lps "let " <| lazy_arg c false arg <|
-          lps " =" <| lsp () <| lazy_expr c e2 <| lsp () ) <| lps "in"
-          <| lsp () <| lazy_expr c body
-      | _ -> error (K3Printing.string_of_expr e1) (* type error *)
-    end
+      | _     -> lazy_paren
+    in 
+    wrap_indent (lazy_expr c e1 <| lcut () <| modify_arg @@ lazy_expr c e2)
   | Block -> let es = U.decompose_block expr in
     lps "do {" <| lind () <|
     wrap_hv 0 (lps_list ~sep:";" CutHint (lazy_expr c) es <| lsp ())
@@ -385,6 +374,9 @@ let rec lazy_expr c expr =
   | BindAs _ -> let l, id, r = U.decompose_bind expr in
     lps "bind" <| lsp () <| lazy_expr c l <| lsp () <| lps "as" <| lsp () <| lps id <|
       lsp () <| lps "in" <| lsp () <| lazy_expr c r
+  | Let _ -> let ids, bound, bexpr = U.decompose_let expr in
+    lps "let" <| lsp () <| lps_list NoCut lps ids <| lsp () <| lps "=" <| lsp () <|
+    lazy_expr c bound <| lsp () <| lps "in" <| lsp () <| lps "in" <| lsp () <| lazy_expr c bexpr
   | Send -> let e1, e2, es = U.decompose_send expr in
     wrap_indent (lps "send" <| lazy_paren (expr_pair (e1, e2) <| lps ", " <|
       lps_list CutHint (tuple_no_paren c) es))

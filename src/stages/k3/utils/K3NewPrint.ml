@@ -280,18 +280,15 @@ let unwrap_option ?(project=false) f =
 
 (* A slice can have other statements inside it. We need to get the inner tuple
  * out, and to make a function that will construct everything inside the lambda
- * once given an inner expression
+ * once given a bottomed-out inner expression
  *)
 let rec extract_slice e =
   match U.tag_of_expr e with
   | Tuple -> U.decompose_tuple e, id_fn
-    (* let statement *)
-  | Apply -> let lambda, arg = U.decompose_apply e in
-    let t, f = extract_slice lambda in
-    t, (fun fn -> KH.mk_apply fn arg) |- f
-  | Lambda _ -> let argt, body = U.decompose_lambda e in
-    let t, f = extract_slice body in
-    t, KH.mk_lambda argt |- f
+  | Let _ ->
+      let ids, bound, expr = U.decompose_let e in
+      let tup, sub_expr    = extract_slice expr in
+      tup, (KH.mk_let ids bound) |- sub_expr
   | _ -> failwith "extract_slice unhandled expression"
 
 (* identify if a lambda is an id lambda *)
@@ -470,10 +467,6 @@ and fold_of_map_ext c expr =
 and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
   let expr_pair ?(sep=lps "," <| lsp ()) ?(wl=id_fn) ?(wr=id_fn) (e1, e2) =
     wl(lazy_expr c e1) <| sep <| wr(lazy_expr c e2) in
-  let is_apply_let e = let e1, e2 = U.decompose_apply e in
-    match U.tag_of_expr e1 with
-      | Var _ -> false | Lambda _ -> true | _ -> invalid_arg "bad apply input"
-  in
   (* handle parentheses:
      - If a sub-element is mult or add, we wrap it.
      - If a left sub-element is 'ifthenelse' or a 'let', we wrap it.
@@ -495,8 +488,8 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
     (*| _ -> id_fn in*)
  let arith_paren_l e = match U.tag_of_expr e with
     | IfThenElse -> lazy_paren
-    | Apply when is_apply_let e -> lazy_paren
-    | _ -> arith_paren e
+    | Let _      -> lazy_paren
+    | _          -> arith_paren e
   (* for == and != *)
   in let logic_paren e = match U.tag_of_expr e with
     | Eq | Neq -> lazy_paren
@@ -627,35 +620,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
       | Var "divf" -> do_pair_paren "/"
       | Var "mod"  -> do_pair_paren "%"
       (* function application *)
-      | Var _ -> function_application c e1 [e2]
-      (* let expression *)
-      | Lambda arg ->
-        let t_e2 = begin try T.type_of_expr e2
-          with _ -> KH.t_unit end in
-        let _, body = U.decompose_lambda e1 in
-        let print_let assign_exp =
-          wrap_hov 2 (lps "let " <| lazy_arg c false arg <|
-            lps " =" <| lsp () <| lazy_expr c assign_exp <| lsp () ) <| lps "in" <| lsp ()
-            <| lazy_expr c body
-        in
-        begin match arg with
-        (* If we have an arg tuple, it's a bind. A maybe is similar *)
-        | ATuple _
-        | AMaybe _     -> let arg_n = arg_num_of_arg arg in
-                          deep_bind c arg_n ~top_expr:e2 ~in_record:false <|
-                            lazy_expr c body
-        (* Otherwise it's a let *)
-        | AVar(id, vt) ->
-            (* check if we're casting the type of the collection *)
-            begin match t_e2.typ, vt.typ with
-            | TCollection(ct,_), TCollection(ct',_) when ct <> ct' ->
-                let e2' = light_type c @@ KH.mk_combine (KH.mk_empty vt) e2 in
-                print_let e2'
-            | _ -> print_let e2
-            end
-        | AIgnored     -> print_let e2
-        end
-      | _ -> error () (* type error *)
+      | _ -> function_application c e1 [e2]
     end
   | Block -> let es = U.decompose_block expr in
     lps "(" <| lind () <|
@@ -696,9 +661,23 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
     wrap_indent (lazy_brace (lps "None ->" <| lsp () <| lazy_expr c e3))
 
   | BindAs _ -> let bind, id, r = U.decompose_bind expr in
-    lps "bind" <| lsp () <| lazy_expr c bind <| lsp () <| lps "as" <| lsp () <|
+    lps "bind" <| lsp () <| wrap_indent(lazy_expr c bind) <| lsp () <| lps "as" <| lsp () <|
     lps "ind" <| lsp () <| lps id <| lsp () <| lps "in" <| lsp () <|
     wrap_indent (lazy_expr c r)
+
+  | Let _ ->
+      (* let can be either bind (destruct tuples) or let in new k3 *)
+      let ids, bound, bexpr = U.decompose_let expr in
+      begin match ids with
+        | [id] -> (* let *)
+          lps "let" <| lsp () <| lps "id" <| lsp () <| lps "=" <| lsp () <|
+          wrap_indent (lazy_expr c bound) <| lsp () <| lps "in" <| lsp () <|
+          wrap_indent (lazy_expr c bexpr)
+        | _   ->  (* bind deconstruct *)
+          lps "bind" <| lsp () <| wrap_indent(lazy_expr c bound) <| lsp () <| lps "as" <| lsp () <|
+          lsp () <| lps_list NoCut lps ids <| lsp () <| lps "in" <| lsp () <|
+          wrap_indent (lazy_expr c bexpr)
+      end
 
   | Iterate -> let lambda, col = U.decompose_iterate expr in
     apply_method c ~name:"iterate" ~col ~args:[lambda] ~arg_info:[ALambda [InRec], Out]
@@ -768,27 +747,27 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
     apply_method c ~name ~col ~args:[pat] ~arg_info:[ANonLambda, Out]
 
   | Slice -> let col, pat = U.decompose_slice expr in
-    let es, lam_fn = begin match U.tag_of_expr pat with
+    let es, lam_fn = match U.tag_of_expr pat with
       | Tuple -> U.decompose_tuple pat, id_fn
       (* if we have a let, we need a proper tuple extraction *)
-      | Apply -> extract_slice pat
+      | Let _ -> extract_slice pat
       | _     -> [pat], id_fn
-    end in
+    in
     let ts = List.map T.type_of_expr es in
     let id_e = add_record_ids es in
     let id_t = add_record_ids ts in
     (* find the non-unknown slices *)
     let filter_e = List.filter (fun (_,c) ->
-      begin match U.tag_of_expr c with
+      match U.tag_of_expr c with
       | Const CUnknown -> false
-      | _              -> true
-      end) id_e
+      | _              -> true)
+      id_e
     in
     if null filter_e then lazy_expr c col (* no slice needed *)
     else
       let do_eq (id, v) = KH.mk_eq (KH.mk_var id) v in
       let lambda = light_type c @@
-        KH.mk_lambda (KH.wrap_args id_t) @@
+        KH.mk_lambda' id_t @@
           lam_fn @@ (* apply an inner lambda constructor *)
           List.fold_right (fun x acc ->
             KH.mk_and acc (do_eq x)

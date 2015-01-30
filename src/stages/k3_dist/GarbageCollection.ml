@@ -214,7 +214,7 @@ let do_gc_fn c ast =
     in
     let temp = "temp" in
     (* delete any entry with a lower vid *)
-    mk_let temp t' (mk_empty t') @@
+    mk_let [temp] (mk_empty t') @@
     mk_block [
       (* add to temp *)
       do_bind @@

@@ -315,8 +315,7 @@ let mk_lookup collection bag_t keys key_types =
     KH.wrap_tbag' @@ List.map KH.canonical @@ key_types @ [bag_t]
   in
   let wrapped_value = KH.mk_var "wrapped_lookup_value" in
-  KH.mk_let (KU.id_of_var wrapped_value)
-            coll_type
+  KH.mk_let [KU.id_of_var wrapped_value]
             (mk_slice collection keys keys) @@
             KH.mk_case_ns
               (KH.mk_peek wrapped_value)

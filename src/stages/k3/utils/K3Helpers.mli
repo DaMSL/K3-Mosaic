@@ -228,16 +228,7 @@ val mk_assoc_lambda : arg_t -> arg_t -> expr_t -> expr_t
 val mk_assoc_lambda' : (id_t * type_t) list -> (id_t * type_t) list -> expr_t -> expr_t
 
 (* macro to create a regular functional let structure *)
-val mk_let : id_t -> type_t -> expr_t -> expr_t -> expr_t
-
-(* macro to make a 'let many', where many values are assigned simultaneously *)
-val mk_let_many :
-  (id_t * type_t) list -> expr_t -> expr_t -> expr_t
-
-(* macro to make a deep-matching let statement *)
-val mk_let_deep : arg_t -> expr_t -> expr_t -> expr_t
-
-val mk_let_deep' : (id_t * type_t) list -> expr_t -> expr_t -> expr_t
+val mk_let : id_t list -> expr_t -> expr_t -> expr_t
 
 (* like fst, but for a tuple of any size *)
 val project_from_tuple : type_t list -> expr_t -> total:int -> choice:int -> expr_t

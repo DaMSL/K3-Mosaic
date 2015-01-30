@@ -381,28 +381,21 @@ let delta_action c ast stmt m_target_trigger ~corrective =
   let lmap_bind_ids_v = P.map_ids_add_v @@ fst_many lmap_bindings
   in
   (* let existing_out_tier = ..., which we remove *)
-  let lambda, arg = U.decompose_apply ast in
-  let params, body = U.decompose_lambda lambda in
-  if U.vars_of_arg params <> ["existing_out_tier"] then
-    failwith "sanity check fail: expected existing_out_tier";
-  match U.tag_of_expr body with
-  | Apply ->
+  let id, bound, expr = U.decompose_let ast in
+  if id <> ["existing_out_tier"] then failwith "sanity check fail: expected existing_out_tier" else
+  match U.tag_of_expr expr with
+  | Let _ ->
     (* simple modification - sending a single tuple of data *)
     (* this is something like prod_ret_x's let *)
-    let lambda2, arg2 = U.decompose_apply body in
-    let params2, body2 = U.decompose_lambda lambda2 in
-    let delta_name = hd @@ U.vars_of_lambda lambda2 in
-    let full_names = lmap_bind_ids_v @ [delta_name] in
-    let full_vars =
-        P.map_add_v (mk_var "vid") @@
-          [mk_singleton
-            lmap_type @@
-            mk_tuple @@ ids_to_vars full_names
-          ] in
-
-    (* modify the delta itself *)
-    mk_apply
-      (mk_lambda params2 @@
+      let delta_names, bound, expr = U.decompose_let expr in
+      let full_names = lmap_bind_ids_v @ delta_names in
+      let full_vars =
+          P.map_add_v (mk_var "vid") @@
+            [mk_singleton lmap_type @@ mk_tuple @@ ids_to_vars full_names]
+      in
+      (* modify the delta itself *)
+      mk_let delta_names
+        bound @@ (* contains original calculation code *)
         mk_block @@
           [ (* we add the delta to all following vids,
               * and we send it for correctives *)
@@ -422,32 +415,27 @@ let delta_action c ast stmt m_target_trigger ~corrective =
                 K3Global.me_var @@
                 mk_tuple @@ full_vars]
             end
-      ) arg2 (* this is where the original calculation code is *)
 
   | Iterate -> (* more complex modification *)
     (* col2 contains the calculation code, lambda2 is the delta addition *)
-    let lambda2, col2 = U.decompose_iterate body in
+    let lambda2, col2 = U.decompose_iterate expr in
     let params2, _ = U.decompose_lambda lambda2 in
     let delta_name = "__delta_values__" in
     let delta_v_name = "__delta_with_vid__" in
     let delta_ids_types = U.typed_vars_of_arg params2 in
-    let delta_types = snd_many delta_ids_types in
-    (* let delta_col_type = wrap_t_of_map @@ wrap_ttuple lmap_types_no_v in *)
-    (* let delta_ids_types = types_to_ids_types "d" lmap_types_no_v in *)
-    let delta_col_type = wrap_t_of_map @: wrap_ttuple delta_types in
     let delta_ids = fst_many delta_ids_types in
     let delta_last_id = hd @@ list_take_end 1 delta_ids in
     let slice_ids_types = types_to_ids_types "sl" lmap_types in
     let slice_vars = ids_to_vars @@ fst_many slice_ids_types in
     (* col2 contains the calculation code *)
-    mk_let delta_name delta_col_type col2 @@
+    mk_let [delta_name] col2 @@
     (* project vid into collection, adding any repeat values along the way *)
-    mk_let delta_v_name lmap_type
+    mk_let [delta_v_name]
       (mk_agg
         (mk_assoc_lambda'
           ["acc", lmap_type]
           delta_ids_types @@
-            mk_let "slice" lmap_type
+            mk_let ["slice"]
             (mk_slice
               (mk_var "acc") @@
               mk_tuple @@ (ids_to_vars @@ lmap_bind_ids_v) @ [mk_cunknown]) @@
@@ -459,8 +447,8 @@ let delta_action c ast stmt m_target_trigger ~corrective =
                 mk_var "acc"])
               (* otherwise add *)
               (mk_block [
-                mk_let_many
-                  slice_ids_types
+                mk_let
+                  (fst_many slice_ids_types)
                   (mk_var "slice_d") @@
                 mk_update "acc"
                   (mk_tuple slice_vars) @@
@@ -490,7 +478,7 @@ let delta_action c ast stmt m_target_trigger ~corrective =
       end
 
   | _ -> raise @@ UnhandledModification(
-     Printf.sprintf "Bad tag [%d]: %s" (U.id_of_expr body) (PR.string_of_expr body))
+     Printf.sprintf "Bad tag [%d]: %s" (U.id_of_expr expr) @@ PR.string_of_expr expr)
 
 (* rename a variable in an ast *)
 let rename_var old_var_name new_var_name ast =

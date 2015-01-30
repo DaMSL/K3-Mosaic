@@ -104,6 +104,8 @@ let decompose_lambda e = match tag_of_expr e, sub_tree e with
   Lambda arg, [e0] -> arg, e0 | _ -> failwith "not a Lambda"
 let decompose_leq e = match tag_of_expr e, sub_tree e with
   Leq, [e0; e1] -> e0, e1 | _ -> failwith "not a Leq"
+let decompose_let e = match tag_of_expr e, sub_tree e with
+  Let ids, [e0; e1] -> ids, e0, e1 | _ -> failwith "not a Let"
 let decompose_lt e = match tag_of_expr e, sub_tree e with
   Lt, [e0; e1] -> e0, e1 | _ -> failwith "not a Lt"
 let decompose_map e = match tag_of_expr e, sub_tree e with
