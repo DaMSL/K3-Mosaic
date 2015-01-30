@@ -197,7 +197,7 @@ let apply_lambda v_el el body =
   if List.length v_el != List.length el then
     error ("M3ToK3: Applying lambda to expression with " ^
             "different size schema!");
-  KH.mk_apply (KH.mk_lambda' v_el body) (KH.mk_tuple el)
+  KH.mk_let (fst_many v_el) (KH.mk_tuple el) body
 
 (**[apply_lambda_to_expr lambda_e expr]
 
@@ -328,8 +328,6 @@ let mk_var_tuple keys v = KH.mk_tuple @@ KH.ids_to_vars (keys@[v])
 
 let mk_val_tuple keys v = KH.mk_tuple @@ (KH.ids_to_vars keys)@[v]
 
-let mk_iter = KH.mk_iter
-
 let mk_update col bag_t ivars ivar_t ovars ovar_t new_val =
 (* new_val might (and in fact, usually will) depend on the col, so
     we need to evaluate it and save it to a variable before clearing the
@@ -339,7 +337,7 @@ let mk_update col bag_t ivars ivar_t ovars ovar_t new_val =
   let update_block = match ivars, ovars with
     | [], [] ->
         KH.mk_block [
-          mk_iter
+          KH.mk_iter
             (KH.mk_lambda (mk_arg "value" bag_t) @@
               KH.mk_delete col @@ KH.mk_var "value") @@
             KH.mk_slice colv (KH.mk_tuple [KH.mk_cunknown]);
@@ -347,7 +345,7 @@ let mk_update col bag_t ivars ivar_t ovars ovar_t new_val =
         ]
     | [], _  ->
         KH.mk_block [
-          mk_iter
+          KH.mk_iter
             (mk_lambda ovars ovar_t "value" bag_t @@
               KH.mk_delete col (mk_var_tuple ovars "value")) @@
             mk_slice colv ovars ovars;
@@ -355,7 +353,7 @@ let mk_update col bag_t ivars ivar_t ovars ovar_t new_val =
         ]
     | _, []  ->
         KH.mk_block [
-          mk_iter
+          KH.mk_iter
             (mk_lambda ivars ivar_t "value" bag_t @@
               KH.mk_delete col (mk_var_tuple ivars "value")) @@
             mk_slice colv ivars ivars;
@@ -1225,7 +1223,7 @@ let m3_stmt_to_k3_stmt (meta: meta_t) ?(generate_init = false)
       let args = List.map (first KU.id_of_var) args in
       let update_body = match rhs_outs_el with
         | [] -> KH.mk_let (fst_many args) incr_expr single_update_expr
-        | _  -> mk_iter (KH.mk_lambda' args single_update_expr) incr_expr
+        | _  -> KH.mk_iter (KH.mk_lambda' args single_update_expr) incr_expr
       in
 
       if ( update_type = Plan.UpdateStmt ||
@@ -1245,7 +1243,7 @@ let m3_stmt_to_k3_stmt (meta: meta_t) ?(generate_init = false)
           )
         ) in
           KH.mk_block [
-            mk_iter
+            KH.mk_iter
               (KH.mk_lambda' ((List.combine (List.map KU.id_of_var lhs_outs_el)
                                      (List.map KH.canonical lhs_outs_kt))@
                        [KU.id_of_var rhs_ret_ve, rhs_ret_vt])
@@ -1261,17 +1259,15 @@ let m3_stmt_to_k3_stmt (meta: meta_t) ?(generate_init = false)
    (* of the input variables of the lhs collection, and for each of them *)
    (* we update the corresponding output tier. *)
    let statement_expr =
-      let outer_loop_body =
-        KH.mk_lambda' ((List.combine (List.map KU.id_of_var lhs_ins_el)
-                              (List.map KH.canonical lhs_ins_kt))@
-                [KU.id_of_var existing_out_tier, out_tier_t])
-               coll_update_expr
-      in
-      if lhs_ins_el = []
-      then KH.mk_apply outer_loop_body lhs_collection
-      else mk_iter outer_loop_body lhs_collection
+     let args = 
+       (list_zip (List.map KU.id_of_var lhs_ins_el) @@ List.map KH.canonical lhs_ins_kt)@
+         [KU.id_of_var existing_out_tier, out_tier_t]
+     in
+     match lhs_ins_el with
+     | [] -> KH.mk_let (fst_many args) lhs_collection coll_update_expr 
+     | _  -> KH.mk_iter (KH.mk_lambda' args coll_update_expr) lhs_collection
    in
-      (statement_expr, nm)
+   statement_expr, nm
 ;;
 (**[m3_trig_to_k3_trig meta generate_init m3_trig]
 

@@ -23,6 +23,7 @@ let lsp () = [lazy (pbsi 1 0)] (* print space or split line *)
 let lps s = [lazy (ps s)]      (* print string *)
 let lps_list ?(sep=", ") cut_t f l =
   [lazy (ps_list ~sep:sep cut_t (force_list |- f) l)]
+let str_list l = String.concat ", " l
 
 (* type we pass all the way down for configuring behaviors *)
 type config = {
@@ -322,7 +323,7 @@ let rec lazy_expr c expr =
     let modify_arg = match U.tag_of_expr e2 with
       | Tuple -> id_fn
       | _     -> lazy_paren
-    in 
+    in
     wrap_indent (lazy_expr c e1 <| lcut () <| modify_arg @@ lazy_expr c e2)
   | Block -> let es = U.decompose_block expr in
     lps "do {" <| lind () <|
@@ -375,8 +376,10 @@ let rec lazy_expr c expr =
     lps "bind" <| lsp () <| lazy_expr c l <| lsp () <| lps "as" <| lsp () <| lps id <|
       lsp () <| lps "in" <| lsp () <| lazy_expr c r
   | Let _ -> let ids, bound, bexpr = U.decompose_let expr in
-    lps "let" <| lsp () <| lps_list NoCut lps ids <| lsp () <| lps "=" <| lsp () <|
-    lazy_expr c bound <| lsp () <| lps "in" <| lsp () <| lazy_expr c bexpr
+    wrap_indent 
+      (lps "let" <| lsp () <| lps (str_list ids) <| lps " =" <|
+      lsp () <| lazy_expr c bound <| lsp ()
+      <| lps "in" <| lsp () <| lcut () <| lazy_expr c bexpr)
   | Send -> let e1, e2, es = U.decompose_send expr in
     wrap_indent (lps "send" <| lazy_paren (expr_pair (e1, e2) <| lps ", " <|
       lps_list CutHint (tuple_no_paren c) es))
