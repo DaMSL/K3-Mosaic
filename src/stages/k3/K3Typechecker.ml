@@ -238,7 +238,8 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
           | _         when List.length xs = 1              -> [t]
           | _                                              -> t_erroru (wrong_let_size t) ()
         in
-        list_zip xs ts @ env
+        (* remove unknowns from binding *)
+        (List.filter ((<>) "_" |- fst) @@ list_zip xs ts) @ env
     | _ -> env
   in
   (* If not overriding, find those children for which we have no type already *)

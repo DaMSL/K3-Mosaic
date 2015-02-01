@@ -417,6 +417,7 @@ expr :
     | conditional  { $1 }
     | case         { $1 }
     | bind         { $1 }
+    | letin        { $1 }
     | lambda       { $1 }
     | tuple_index  { $1 }
     | access       { $1 }
@@ -434,8 +435,7 @@ expr :
       }
 
     /* Function application and let notation */
-    | expr LPAREN tuple RPAREN        { mk_apply $1 $3 }
-    | LET id_list GETS expr IN expr   { mk_let $2 $4 $6 }
+    | expr LPAREN tuple RPAREN                      { mk_apply $1 $3 }
 
     /* TODO: more error handling */
     | SEND LPAREN IDENTIFIER COMMA address COMMA error { print_error "Invalid send argument" }
@@ -445,14 +445,13 @@ expr :
 
     | expr LPAREN error { print_error("Function application error") }
 
-    | LET id_list GETS expr IN error   { print_error "Let body error" }
-    | LET id_list GETS error           { print_error "Let binding target error" }
-    | LET error                        { print_error "Let binding error" }
 
 ;
 
 id_list :
+    | UNKNOWN    { ["_"] }
     | IDENTIFIER { [$1] }
+    | UNKNOWN COMMA id_list { "_" :: $3 }
     | IDENTIFIER COMMA id_list { $1 :: $3 }
 ;
 
@@ -597,6 +596,14 @@ case :
     | CASE expr OF error { case_error "expr" }
     | CASE error { case_error "predicate" }
 
+letin :
+    | LET LPAREN id_list RPAREN GETS expr IN expr   { mk_let $3 $6 $8 }
+    | LET IDENTIFIER GETS expr IN expr              { mk_let [$2] $4 $6 }
+
+    | LET LPAREN id_list RPAREN GETS expr IN error   { print_error "Let body error" }
+    | LET LPAREN id_list RPAREN GETS error            { print_error "Let binding target error" }
+    | LET error                                      { print_error "Let binding error" }
+
 bind :
     | BIND expr AS IDENTIFIER IN expr { mk_bind $2 $4 $6 }
 
@@ -642,8 +649,6 @@ mutation :
     | UPDATE LPAREN IDENTIFIER COMMA expr COMMA expr RPAREN { mkexpr (Update $3) [$5; $7] }
 
     | IDENTIFIER LARROW expr { mkexpr (Assign $1) [$3] }
-    | IDENTIFIER GETS expr { mkexpr (Assign $1) [$3] }
-    | IDENTIFIER COLONGETS expr { mkexpr (Assign $1) [$3] }
 
     /* Error handling */
     | INSERT LPAREN expr error { value_error 2 }
@@ -653,8 +658,6 @@ mutation :
     | DELETE LPAREN expr error { value_error 2 }
     | DELETE LPAREN error      { coll_error 1 }
     | expr LARROW error        { assign_error "reference" }
-    | expr GETS error          { assign_error "copy" }
-    | expr COLONGETS error     { assign_error "refcopy" }
 ;
 
 transformers :

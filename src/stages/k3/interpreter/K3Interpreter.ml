@@ -311,12 +311,14 @@ and eval_expr (address:address) sched_st cenv texpr =
     | Let ids ->
         let env, bound = child_value cenv 0 in
         begin match ids, bound with
-        | [id], _ ->
-            let env = second (env_add id bound) env in
+        | [id], _  ->
+            let env = if id = "_" then env
+                      else second (env_add id bound) env in
             eval_expr address sched_st env @@ List.nth children 1
         | _, VTuple vs ->
             let env = List.fold_left2 (fun acc_env id v ->
-              second (env_add id v) acc_env)
+              if id = "_" then acc_env
+              else second (env_add id v) acc_env)
               env ids vs
             in
             eval_expr address sched_st env @@ List.nth children 1

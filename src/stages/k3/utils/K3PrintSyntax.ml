@@ -336,8 +336,8 @@ let rec lazy_expr c expr =
     wrap_indent (lps "then" <| lsp () <| lazy_expr c e2) <| lsp () <|
     wrap_indent (lps "else" <| lsp () <| lazy_expr c e3)
   | CaseOf x -> let e1, e2, e3 = U.decompose_caseof expr in
-    wrap_indent (lps "case" <| lsp () <| lazy_expr c e1 <| lsp () <| lps "of" <| lsp () <|
-    wrap_indent (lazy_brace (lps ("just "^x^" ->") <| lsp () <| lazy_expr c e2)) <| lsp () <|
+    wrap_indent (lps "case" <| lsp () <| lazy_expr c e1 <| lsp () <| lps "of" <| lsp () <| 
+    wrap_indent (lazy_brace (lps ("just "^x^" ->") <| lsp () <| lazy_expr c e2)) <| lsp () <| 
     wrap_indent (lazy_brace (lps "nothing ->" <| lsp () <| lazy_expr c e3)))
   | Map -> let p = U.decompose_map expr in
     lps "map" <| lcut () <| lazy_paren @@ expr_sub p
@@ -376,9 +376,10 @@ let rec lazy_expr c expr =
     lps "bind" <| lsp () <| lazy_expr c l <| lsp () <| lps "as" <| lsp () <| lps id <|
       lsp () <| lps "in" <| lsp () <| lazy_expr c r
   | Let _ -> let ids, bound, bexpr = U.decompose_let expr in
-    wrap_indent 
-      (lps "let" <| lsp () <| lps (str_list ids) <| lps " =" <|
-      lsp () <| lazy_expr c bound <| lsp ()
+    let wrap_paren = match ids with [_] -> id_fn | _ -> lazy_paren in
+    wrap_hov 0 (wrap_indent
+      (lps "let" <| lsp () <| wrap_paren (lps_list NoCut lps ids) <| lps " =" <|
+      lsp () <| lazy_expr c bound <| lsp ())
       <| lps "in" <| lsp () <| lcut () <| lazy_expr c bexpr)
   | Send -> let e1, e2, es = U.decompose_send expr in
     wrap_indent (lps "send" <| lazy_paren (expr_pair (e1, e2) <| lps ", " <|

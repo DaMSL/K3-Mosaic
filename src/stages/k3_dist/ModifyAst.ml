@@ -15,17 +15,13 @@ exception InvalidAst of string
  * dbtoaster, but it's not hard to just get it here *)
 let get_map_access_patterns ast : IndexSet.t StrMap.t =
   (* for top-down, get any existing_out_tier value *)
-  let td_fn out_tier n =
-      match U.tag_of_expr n with
-      | Apply -> let lam, app = U.decompose_apply n in
-                 begin try
-                   let arg, _   = U.decompose_lambda lam in
-                   begin match arg, U.tag_of_expr app with
-                   | AVar ("existing_out_tier", _), Var x -> Some x
-                   | _ -> out_tier
-                   end
-                 with Failure _ -> out_tier end
-      | _      -> out_tier
+  let td_fn out_tier n = match U.tag_of_expr n with
+    | Let ["existing_out_tier"] ->
+        begin match U.tag_of_expr @@ snd3 @@ U.decompose_let n with
+        | Var x -> Some x
+        | _     -> failwith "No var assigned to existing_out_tier"
+        end
+    | _ -> out_tier
   in
   (* for bottom-up, get access patterns *)
   let bu_fn out_tier bu_results n =
