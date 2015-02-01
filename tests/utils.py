@@ -22,7 +22,7 @@ def check_error(filename, verbose, search=False):
         with open(filename) as f:
             buf = f.read()
             if search:
-                mo = re.search(r'^(Error|ERROR)', buf)
+                mo = re.search(r'(Error|ERROR)', buf)
                 if mo:
                     if verbose:
                         six.print_(buf[0:err_len])

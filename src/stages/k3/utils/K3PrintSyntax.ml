@@ -197,10 +197,12 @@ let rec lazy_expr c expr =
     | _ -> id_fn in
   (* we're more sensitive for left side *)
  let paren_l e = match U.tag_of_expr e with
+    | CaseOf _   -> lazy_paren
     | IfThenElse -> lazy_paren
     | Let _      -> lazy_paren
     | _          -> id_fn in
  let arith_paren_l e = match U.tag_of_expr e with
+    | CaseOf _   -> lazy_paren
     | IfThenElse -> lazy_paren
     | Let _      -> lazy_paren
     | _          -> arith_paren e

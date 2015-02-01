@@ -112,8 +112,8 @@ let min_vid_k3 = mk_tuple [mk_cint 0; mk_cint 0; mk_cint 0]
 let max_vid_k3 = mk_tuple [mk_cint max_int; mk_cint max_int; mk_cint max_int ]
 
 (* trigger argument manipulation convenience functions *)
-let arg_types_of_t c trig_nm = snd_many @: P.args_of_t c.p trig_nm
-let arg_names_of_t c trig_nm = fst_many @: P.args_of_t c.p trig_nm
+let arg_types_of_t c trig_nm = snd_many @@ P.args_of_t c.p trig_nm
+let arg_names_of_t c trig_nm = fst_many @@ P.args_of_t c.p trig_nm
 let args_of_t_as_vars c trig_nm = ids_to_vars (arg_names_of_t c trig_nm)
 
 let args_of_t_with_v ?(vid="vid") c trig_nm = (vid, t_vid)::P.args_of_t c.p trig_nm
@@ -123,7 +123,7 @@ let args_of_t_as_vars_with_v ?(vid="vid") c trig_nm =
 
 
 (* vid comparison names and code *)
-let v_op op l r = mk_apply (mk_var op) @: mk_tuple [l;r]
+let v_op op l r = mk_apply (mk_var op) @@ mk_tuple [l;r]
 let vid_eq = "vid_eq"
 let v_eq = v_op vid_eq
 let vid_neq = "vid_neq"
@@ -151,7 +151,7 @@ let log_read_geq = "log_read_geq" (* takes vid, returns (trig, vid)list >= vid *
  * Also used for adding to map buffers and for correctives *)
 let add_delta_to_map c map_id =
   let m_t = map_types_for c.p map_id in
-  "add_delta_to_"^String.concat "_" @:
+  "add_delta_to_"^String.concat "_" @@
     List.map K3PrintSyntax.string_of_type m_t
 
 (* foreign functions *)
@@ -247,7 +247,7 @@ let maps c =
 (* NOTE: assumes the first type is vid *)
 let frontier_name c map_id =
   let m_t = P.map_types_for c.p map_id in
-  "frontier_"^String.concat "_" @:
+  "frontier_"^String.concat "_" @@
     List.map K3PrintSyntax.string_of_type m_t
 
 let get_idx idx map_id =
@@ -266,8 +266,8 @@ let map_latest_vid_vals c slice_col m_pat map_id ~keep_vid : expr_t =
   let m_id_t_v = P.map_ids_types_with_v_for ~vid:"map_vid" c.p map_id in
   (* function to remove the vid from the collection *)
   let remove_vid_if_needed = if keep_vid then id_fn else
-      mk_map (mk_lambda (wrap_args m_id_t_v) @:
-        mk_tuple @: list_drop 1 @: ids_to_vars @: fst_many m_id_t_v)
+      mk_map (mk_lambda (wrap_args m_id_t_v) @@
+        mk_tuple @@ list_drop 1 @@ ids_to_vars @@ fst_many m_id_t_v)
   in
   let pat = match m_pat with
     | Some pat -> pat
@@ -291,11 +291,11 @@ let map_latest_vid_vals c slice_col m_pat map_id ~keep_vid : expr_t =
     let access_k3 =
       (* slice with an unknown for the vid so we only get the effect of
       * any bound variables *)
-      mk_slice slice_col @:
-        mk_tuple @: P.map_add_v mk_cunknown pat
+      mk_slice slice_col @@
+        mk_tuple @@ P.map_add_v mk_cunknown pat
     in
     let simple_app =
-      mk_apply (mk_var @: frontier_name c map_id) @:
+      mk_apply (mk_var @@ frontier_name c map_id) @@
         mk_tuple [mk_var "vid"; access_k3]
     in
     if keep_vid then simple_app else remove_vid_if_needed simple_app
@@ -309,7 +309,7 @@ let frontier_fn c map_id =
   let max_vid = "max_vid" in
   let map_vid = "map_vid" in
   let m_id_t_v = P.map_ids_types_with_v_for ~vid:"map_vid" c.p map_id in
-  let m_t_v = wrap_ttuple @: snd_many @: m_id_t_v in
+  let m_t_v = wrap_ttuple @@ snd_many @@ m_id_t_v in
   let m_t_v_bag = wrap_t_of_map m_t_v in
   let m_id_t_no_val = P.map_ids_types_no_val_for c.p map_id in
   (* create a function name per type signature *)
@@ -329,7 +329,7 @@ let frontier_fn c map_id =
           (v_eq (mk_var map_vid) (mk_var max_vid))
           (mk_tuple
             [mk_combine
-              (mk_singleton m_t_v_bag (mk_tuple @: ids_to_vars @: fst_many m_id_t_v)) @:
+              (mk_singleton m_t_v_bag (mk_tuple @@ ids_to_vars @@ fst_many m_id_t_v)) @@
                   mk_var "acc";
             mk_var max_vid])
           (* else if map vid is greater than max_vid, make a new
@@ -337,7 +337,7 @@ let frontier_fn c map_id =
           (mk_if
             (v_gt (mk_var map_vid) (mk_var max_vid))
             (mk_tuple
-              [mk_singleton m_t_v_bag (mk_tuple @: ids_to_vars @: fst_many m_id_t_v);
+              [mk_singleton m_t_v_bag (mk_tuple @@ ids_to_vars @@ fst_many m_id_t_v);
               mk_var map_vid])
             (* else keep the same accumulator and max_vid *)
             (mk_tuple [mk_var "acc"; mk_var max_vid])
@@ -351,26 +351,26 @@ let frontier_fn c map_id =
   (* get the maximum vid that's less than our current vid *)
   let action = match m_id_t_no_val with
   | [] ->
-    mk_fst [m_t_v_bag; t_vid] @:
+    mk_fst @@ 
       mk_agg
         common_vid_lambda
         (mk_tuple [mk_empty m_t_v_bag; min_vid_k3])
         (mk_var "input_map")
   | _ ->
-      mk_flatten @: mk_map
+      mk_flatten @@ mk_map
         (mk_assoc_lambda
-          (wrap_args ["_", wrap_ttuple @: snd_many m_id_t_no_val]) (* group *)
-          (wrap_args ["project", m_t_v_bag; "_", t_vid]) @:
+          (wrap_args ["_", wrap_ttuple @@ snd_many m_id_t_no_val]) (* group *)
+          (wrap_args ["project", m_t_v_bag; "_", t_vid]) @@
           mk_var "project"
-        ) @:
+        ) @@
         mk_gbagg
-          (mk_lambda (wrap_args m_id_t_v) @:
+          (mk_lambda (wrap_args m_id_t_v) @@
             (* group by the keys (not vid, not values) *)
-            mk_tuple @: ids_to_vars @: fst_many m_id_t_no_val)
+            mk_tuple @@ ids_to_vars @@ fst_many m_id_t_no_val)
           (* get the maximum vid that's less than our current vid *)
           common_vid_lambda
           (mk_tuple [mk_empty m_t_v_bag; min_vid_k3])
           (mk_var "input_map")
   in
-  mk_global_fn (frontier_name c map_id) ["vid", t_vid; "input_map", m_t_v_bag] [m_t_v_bag] @:
+  mk_global_fn (frontier_name c map_id) ["vid", t_vid; "input_map", m_t_v_bag] [m_t_v_bag] @@
       action

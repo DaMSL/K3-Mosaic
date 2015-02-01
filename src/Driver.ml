@@ -73,29 +73,29 @@ let parse_ip_role ipr_str =
   let ident = "[a-zA-Z_][a-zA-Z0-9_]*" in (* legal identifier *)
   let num = "[0-9]+" in
   let ip = num^"\\."^num^"\\."^num^"\\."^num in
-  let r = Str.regexp @:
+  let r = Str.regexp @@
     "\\("^ident^"=\\)?\\("^ip^"\\|localhost\\)\\(:"^num^"\\)?\\(/"^ident^"\\)?"
   in
   let error () = invalid_arg "invalid ip string format" in
   if Str.string_match r ipr_str 0 then
     let ms = List.map (fun i ->
-        try some @: Str.matched_group i ipr_str
+        try some @@ Str.matched_group i ipr_str
         with Not_found -> None
       ) [1;2;3;4]
     in
     let alias = match at ms 0 with
     | None   -> None
-    | Some x -> some @: str_drop_end 1 x (* get rid of extra char *)
+    | Some x -> some @@ str_drop_end 1 x (* get rid of extra char *)
     in
     let role = match at ms 3 with
     | None   -> None
-    | Some x -> some @: str_drop 1 x (* get rid of extra char *)
+    | Some x -> some @@ str_drop 1 x (* get rid of extra char *)
     in
     match at ms 1, at ms 2 with (* ip, port *)
     | None, None         -> error ()
     | Some ip, None      -> (ip, default_port), role, alias
-    | None, Some port    -> (default_ip, parse_port @: str_drop 1 port), role, alias
-    | Some ip, Some port -> (ip, parse_port @: str_drop 1 port), role, alias
+    | None, Some port    -> (default_ip, parse_port @@ str_drop 1 port), role, alias
+    | Some ip, Some port -> (ip, parse_port @@ str_drop 1 port), role, alias
   else error ()
 
 let string_of_lang_descs descs i =
@@ -214,24 +214,24 @@ let cmd_line_params = default_cmd_line_params ()
 let handle_type_error p (uuid, name, msg) =
   let s = K3TypeError.string_of_error msg in
   prerr_endline "----Type error----";
-  prerr_endline @: "Error("^(string_of_int uuid)^"): "^name^": "^s;
+  prerr_endline @@ "Error("^(string_of_int uuid)^"): "^name^": "^s;
   (match p with
   | K3Data p | K3DistData(p,_,_)->
       if cmd_line_params.debug_info then
-        prerr_endline @: string_of_program ~print_id:true p
+        prerr_endline @@ string_of_program ~print_id:true p
       else
-        prerr_endline @: PS.string_of_program ~uuid_highlight:uuid p
-  | K3TestData p_test -> prerr_endline @:
+        prerr_endline @@ PS.string_of_program ~uuid_highlight:uuid p
+  | K3TestData p_test -> prerr_endline @@
     PS.string_of_program_test ~uuid_highlight:uuid p_test);
   exit 1
 
 let handle_interpret_error p (uuid,error) =
   prerr_endline "----Interpreter error----";
-  prerr_endline @: "Error("^(string_of_int uuid)^"): "^error;
+  prerr_endline @@ "Error("^(string_of_int uuid)^"): "^error;
   (match p with
   | K3Data p | K3DistData(p,_,_)->
-      prerr_endline @: PS.string_of_program ~uuid_highlight:uuid p
-  | K3TestData p_test -> prerr_endline @:
+      prerr_endline @@ PS.string_of_program ~uuid_highlight:uuid p
+  | K3TestData p_test -> prerr_endline @@
     PS.string_of_program_test ~uuid_highlight:uuid p_test);
   exit 1
 
@@ -319,7 +319,7 @@ let interpret_k3 params prog = let p = params in
                                         ~queue_type:p.queue_type
                                         ~load_path:p.load_path
     in
-    snd @: interpret_k3_program interp
+    snd @@ interpret_k3_program interp
   with RuntimeError (uuid,str) -> handle_interpret_error (K3Data tp) (uuid,str)
 
 let interpret params inputs =
@@ -327,7 +327,7 @@ let interpret params inputs =
     | K3Data p
     | K3DistData(p,_,_)
     | K3TestData(ProgTest(p, _))
-    | K3TestData(NetworkTest(p, _)) -> ignore @: interpret_k3 params p
+    | K3TestData(NetworkTest(p, _)) -> ignore @@ interpret_k3 params p
     | _ -> failwith "data type not supported for interpretation"
   in
   List.iter f inputs
@@ -344,7 +344,7 @@ let print_k3_program ?(no_roles=false) f = function
   | K3Data p | K3DistData (p,_,_) ->
     let tp, envs = typed_program p in
     let event_loops, default = roles_of_program tp in
-      print_endline @: f (tp, envs);
+      print_endline @@ f (tp, envs);
       if not no_roles then (
         List.iter print_event_loop event_loops;
         (match default with None -> ()
@@ -362,7 +362,7 @@ let print_k3_test_program = function
         List.filter (fun d -> not (is_role d || is_def_role d)) in
       let p', test_vals =
         (* get the test values from the dbtoaster trace if available *)
-        if not @: null cmd_line_params.trace_files then
+        if not @@ null cmd_line_params.trace_files then
           (* we only care about the code part *)
           let tests_by_map = List.map (fun (nm, (code, empty)) ->
             nm, code) tests_by_map
@@ -383,24 +383,24 @@ let print_k3_test_program = function
           in
           (* add the produced test roles and trigger *)
           (* debug *)
-          (*print_endline @: code_s;*)
+          (*print_endline @@ code_s;*)
           (* filter out all role stuff in the original generated ast *)
           let new_p = drop_roles p @ parse_k3_prog role_s in
           new_p, tests_vals
 
         (* use the order files to simulate the system *)
-        else if not @: null cmd_line_params.order_files then
+        else if not @@ null cmd_line_params.order_files then
           let order_file = at cmd_line_params.order_files idx in
           let events = FromTrace.events_of_order_file order_file in
           let role_s = FromTrace.string_of_test_role ~is_dist:false events in
           (* Note that we take the single-site version here *)
           (* debug *)
-          print_endline @: role_s;
+          print_endline @@ role_s;
           let p' = drop_roles orig_p @ parse_k3_prog role_s in
           (* run the interpreter on our code *)
           let params = default_cmd_line_params () in
           let _, (_, (env, _)) =
-            hd @: interpret_k3 params p' in (* assume one node *)
+            hd @@ interpret_k3 params p' in (* assume one node *)
           (* match the maps with their values *)
           let tests_vals =
             List.map (fun (name, (exp_code, empty)) ->
@@ -429,7 +429,7 @@ let print_k3_test_program = function
       let prog_test = NetworkTest(p', test_vals) in
       let _, prog_test = renumber_test_program_ids prog_test in
       let prog_test = typed_program_test prog_test in
-      print_endline @: PS.string_of_program_test prog_test
+      print_endline @@ PS.string_of_program_test prog_test
 
   | idx, K3Data p ->
       (* get the test values from the dbtoaster trace *)
@@ -460,7 +460,7 @@ let print_k3_test_program = function
       let prog_test = NetworkTest(p', test_vals) in
       let _, prog_test = renumber_test_program_ids prog_test in
       let prog_test = typed_program_test prog_test in
-      print_endline @: PS.string_of_program_test prog_test
+      print_endline @@ PS.string_of_program_test prog_test
 
   | _ -> error "Cannot print this type of data"
 
@@ -486,7 +486,7 @@ let test params inputs =
     | K3TestData((ProgTest _ | NetworkTest _) as x) ->
         let globals_k3 = K3Global.globals params.peers in
         test_program globals_k3 (interpret_k3 params) fname x
-    | x -> error @: "testing not yet implemented for "^string_of_data x
+    | x -> error @@ "testing not yet implemented for "^string_of_data x
   in List.iter2 test_fn params.input_files inputs
 
 let transform_to_k3_dist params p proginfo =
@@ -540,7 +540,7 @@ let process_parameters params =
 
 (* General parameter setters *)
 let append_peers ipr_str_list =
-  let ip_roles = Str.split (Str.regexp @: Str.quote ",") ipr_str_list in
+  let ip_roles = Str.split (Str.regexp @@ Str.quote ",") ipr_str_list in
   let new_peers = List.map parse_ip_role ip_roles in
   if cmd_line_params.default_peer then
     cmd_line_params.peers <- new_peers
@@ -618,7 +618,7 @@ let param_specs = Arg.align
     | "global"  -> K3Runtime.GlobalQ
     | "node"    -> K3Runtime.PerNodeQ
     | "trigger" -> K3Runtime.PerTriggerQ
-    | x         -> error @: "Unknown parameter "^x),
+    | x         -> error @@ "Unknown parameter "^x),
       "         Queue type: global/node/trigger";
   "--shuffle", Arg.Unit (fun () -> cmd_line_params.shuffle_tasks <- true),
       "         Shuffle tasks to simulate network delays";

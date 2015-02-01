@@ -412,18 +412,9 @@ let mk_assoc_lambda arg1 arg2 expr = mk_lambda (ATuple[arg1; arg2]) expr
 
 let mk_assoc_lambda' arg1 arg2 expr = mk_lambda (ATuple[wrap_args arg1; wrap_args arg2]) expr
 
-(* TODO: get rid of these *)
-let project_from_tuple tuple_types tuple ~total ~choice =
-  let l = create_range 1 total in
-  let l = List.map (fun i -> "__"^soi i) l in
-  let c = "__"^soi choice in
-  mk_let l tuple (mk_var c)
+let mk_fst tuple = mk_subscript 1 tuple
 
-let mk_fst tuple_types tuple =
-  project_from_tuple tuple_types tuple ~choice:1 ~total:2
-
-let mk_snd tuple_types tuple =
-  project_from_tuple tuple_types tuple ~choice:2 ~total:2
+let mk_snd tuple = mk_subscript 2 tuple
 
 let project_from_col tuple_types col ~total ~choice =
   let l = create_range 1 total in
@@ -466,16 +457,6 @@ let mk_rebuild_tuple ?(prefix=def_tup_prefix) tup_name types f =
   let ids_types = types_to_ids_types prefix types in
   mk_let (fst_many ids_types) (mk_var tup_name) @@
     mk_tuple @@ ids_to_vars @@ f @@ fst_many ids_types
-
-(* unwrap maybe values by creating an inner values with postfix "_unwrap" *)
-let mk_unwrap_maybe var_names_and_types expr =
-  let unwrap_n_t =
-    List.map (fun (n,t) -> (n^"_unwrap",t)) var_names_and_types in
-  let names = fst @@ List.split var_names_and_types in
-  let vars = ids_to_vars names in
-  mk_apply
-    (mk_lambda (wrap_args_maybe unwrap_n_t) expr) @@
-    mk_tuple vars
 
 (* K3 types for various elements of a k3 program *)
 let t_trig_id = t_int (* In K3, triggers are always handled by numerical id *)

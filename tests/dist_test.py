@@ -107,19 +107,18 @@ def run(target_file,
         if check_error(error_file, verbose) or check_error(k3dist_file, verbose, True):
             return False
 
-        if num_nodes > 1:
-            # create a partition map
-            cmd = "{partmap_tool} {k3dist_file} -n {num_nodes} > {part_file}".format(**locals())
-            print_system(cmd, verbose)
-            if check_error(part_file, verbose, True):
-                return False
+        # create a partition map
+        cmd = "{partmap_tool} {k3dist_file} -n {num_nodes} > {part_file}".format(**locals())
+        print_system(cmd, verbose)
+        if check_error(part_file, verbose, True):
+            return False
 
-            # create another k3 distributed file (with partition map)
-            cmd = ("{k3o} -p -i m3 -l k3disttest {m3_file} {create_cmd} -m {part_file} {force_cmd} {idx_cmd} {gc_cmd}"
-                + "> {k3dist_file} 2> {error_file}").format(**locals())
-            print_system(cmd, verbose)
-            if check_error(error_file, verbose) or check_error(k3dist_file, verbose, True):
-                return False
+        # create another k3 distributed file (with partition map)
+        cmd = ("{k3o} -p -i m3 -l k3disttest {m3_file} {create_cmd} -m {part_file} {force_cmd} {idx_cmd} {gc_cmd}"
+            + "> {k3dist_file} 2> {error_file}").format(**locals())
+        print_system(cmd, verbose)
+        if check_error(error_file, verbose) or check_error(k3dist_file, verbose, True):
+            return False
 
         # create node list
         node_list = []

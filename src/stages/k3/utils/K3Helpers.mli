@@ -230,14 +230,11 @@ val mk_assoc_lambda' : (id_t * type_t) list -> (id_t * type_t) list -> expr_t ->
 (* macro to create a regular functional let structure *)
 val mk_let : id_t list -> expr_t -> expr_t -> expr_t
 
-(* like fst, but for a tuple of any size *)
-val project_from_tuple : type_t list -> expr_t -> total:int -> choice:int -> expr_t
-
 (* macro similar to fst *)
-val mk_fst: type_t list -> expr_t -> expr_t
+val mk_fst: expr_t -> expr_t
 
 (* macro similar to snd *)
-val mk_snd: type_t list -> expr_t -> expr_t
+val mk_snd: expr_t -> expr_t
 
 (* like fst, but for a collection with a tuple of any size *)
 val project_from_col : type_t list -> expr_t -> total:int -> choice:int -> expr_t
@@ -266,9 +263,6 @@ val mk_destruct_tuple: id_t -> type_t list -> string -> expr_t -> expr_t
  * A lambda determines how to shuffle the ids of the tuple, or insert external ids
  * *)
 val mk_rebuild_tuple: ?prefix:id_t -> id_t -> type_t list -> (id_t list -> id_t list) -> expr_t
-
-(* unwrap maybe values by creating an inner values with postfix "_unwrap" *)
-val mk_unwrap_maybe: (id_t * type_t) list -> expr_t -> expr_t
 
 (* id function for maps. No need fill in a tuple creation *)
 val mk_id: type_t list -> expr_t

@@ -110,8 +110,11 @@ let rec eval_fun uuid f =
     | VForeignFunction(arg, f) ->
         fun _ _ (m_env, f_env) a ->
           let new_env = m_env, (bind_args uuid arg a f_env) in
-          let (m_env', f_env'), result = f new_env in
-          (m_env', unbind_args uuid arg f_env'), result
+          begin try
+            let (m_env', f_env'), result = f new_env in
+            (m_env', unbind_args uuid arg f_env'), result
+          with Failure x ->
+            raise @@ RuntimeError(uuid, x^"\n"^string_of_env (m_env, f_env)) end
 
    | _ -> error "eval_fun: Non-function value"
 
@@ -438,7 +441,7 @@ and eval_expr (address:address) sched_st cenv texpr =
 
     | Subscript i ->
       begin match child_values cenv with
-      | renv, [VTuple l] -> renv, VTemp(at l i)
+      | renv, [VTuple l] -> renv, VTemp(at l (i-1))
       | _                -> error "Subscript" "bad tuple"
       end
 

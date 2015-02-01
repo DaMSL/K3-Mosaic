@@ -230,11 +230,6 @@ let declare_global_funcs partmap c ast =
       | TFloat -> mk_cfloat 0.
       | _ -> failwith @@ "Unhandled type "^K3PrintSyntax.string_of_type t_val
     in
-    let tuple_projection id =
-      project_from_tuple types_v (mk_var id)
-        ~total:len_types_v
-        ~choice:len_types_v
-    in
     let regular_delta =
       mk_let [lookup_value]
         (map_latest_vid_vals c (mk_var tmap_deref)
@@ -245,7 +240,7 @@ let declare_global_funcs partmap c ast =
             mk_case_ns
               (mk_peek @@ mk_var lookup_value) "val"
               zero @@
-              tuple_projection "val") @@
+              mk_subscript len_types_v @@ mk_var "val") @@
           mk_insert tmap_deref @@ mk_tuple update_vars
     in
     mk_global_fn func_name
@@ -276,7 +271,7 @@ let declare_global_funcs partmap c ast =
                 (mk_peek @@ mk_var lookup_value) "val"
                 (* then just update the value *)
                 (mk_let [update_value]
-                  (mk_add (mk_var id_val) @@ tuple_projection "val") @@
+                  (mk_add (mk_var id_val) @@ mk_subscript len_types_v @@ mk_var "val") @@
                   mk_insert tmap_deref @@ mk_tuple update_vars)
                 (* else, if it's just a regular delta, read the frontier *)
                 regular_delta) @@
