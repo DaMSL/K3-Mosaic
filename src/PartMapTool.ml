@@ -19,7 +19,7 @@ let cmd_line_params = {
   k3new = false;
 }
 
-(* get all the maps from the distributed k3 file *)
+(* get all the maps and dimensions from the distributed k3 file, specifically map_ids *)
 let maps_and_dims file =
   let open K3Util in let open K3.AST in
   let prog = DriverHelpers.parse_k3_file file in
@@ -34,7 +34,7 @@ let maps_and_dims file =
       in
       (* take only the names and dimensions *)
       List.map (fun (_,x,y) -> begin match tag_of_expr x, tag_of_expr y with
-        | Const(CString(s)), Const(CInt(i)) -> s, i
+        | Const(CString s), Const(CInt i) -> s, i
         | _ -> failwith @@ "2: wrong format for "^K3Dist.map_ids_id
         end
       ) l
@@ -105,7 +105,6 @@ let calc_part num_nodes dims =
   (* remove partitions of 1 since they aren't really partitioning *)
   List.filter (fun (_, i) -> if i = 1 then false else true) l
 
-(* first try - do an extremely naive implementation of partitioning *)
 let calc_part_maps num_nodes maps_dims =
   filter_map (fun (mapname, dim) ->
     if dim <= 0 then None
@@ -139,15 +138,15 @@ let main () =
     let p = cmd_line_params in
     let maps_dims = maps_and_dims p.dist_file in
     (* reduce by one for value *)
-    let maps_dims = list_map (fun (a, i) -> a, i-1) maps_dims in
+    let maps_dims = List.map (fun (a, i) -> a, if i >= 1 then i-1 else i) maps_dims in
     (* print_maps_dims maps_dims; (* debug *) *)
     (* increase the amount of targets we need to hit, for finer grain
      * partitioning *)
     let maps_sizes = calc_part_maps (p.num_nodes * p.factor) maps_dims in
-    let s = if p.k3new then
-      k3new_string_of_maps_sizes maps_sizes
-    else
-      string_of_maps_sizes maps_sizes
+    let maps_sizes = if null maps_sizes then ["empty", [1, 1]] else maps_sizes in
+    let s =
+      if p.k3new then k3new_string_of_maps_sizes maps_sizes
+      else string_of_maps_sizes maps_sizes
     in
     print_endline s
 

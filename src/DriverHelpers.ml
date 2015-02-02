@@ -45,6 +45,6 @@ let parse_k3_file = parse_program K3Parser.program K3Lexer.tokenize
 let parse_m3_file =
     parse_program Calculusparser.mapProgram Calculuslexer.tokenize
 
-let parse_k3_prog s = K3Parser.program K3Lexer.tokenize @: Lexing.from_string s
-let parse_k3_expr s = K3Parser.expr K3Lexer.tokenize @: Lexing.from_string s
+let parse_k3_prog s = K3Parser.program K3Lexer.tokenize @@ Lexing.from_string s
+let parse_k3_expr s = K3Parser.expr K3Lexer.tokenize @@ Lexing.from_string s
 

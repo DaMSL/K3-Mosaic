@@ -547,11 +547,11 @@ let mk_convert_col src_t dest_t col =
     (mk_empty dest_t)
     col
 
-let mk_peek_or_zero e = mk_case_ns (mk_peek e) "_i"
-  (mk_cint 0) (mk_var "_i")
+let mk_peek_or_zero e = mk_case_ns (mk_peek e) "x"
+  (mk_cint 0) (mk_var "x")
 
-let mk_peek_or_error e = mk_case_ns (mk_peek e) "_i"
-  (mk_apply (mk_var "error") mk_cunit) (mk_var "_i")
+let mk_peek_or_error e = mk_case_ns (mk_peek e) "x"
+  (mk_apply (mk_var "error") mk_cunit) (mk_var "x")
 
 (* data structure record to standardize manipulation *)
 type data_struct = { id: string;

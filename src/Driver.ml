@@ -383,9 +383,11 @@ let print_k3_test_program = function
           in
           (* add the produced test roles and trigger *)
           (* debug *)
-          (*print_endline @@ code_s;*)
           (* filter out all role stuff in the original generated ast *)
-          let new_p = drop_roles p @ parse_k3_prog role_s in
+          let new_p = 
+            try drop_roles p @ parse_k3_prog role_s
+            with x -> print_endline role_s; raise x
+          in
           new_p, tests_vals
 
         (* use the order files to simulate the system *)

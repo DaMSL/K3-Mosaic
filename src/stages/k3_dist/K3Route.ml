@@ -67,7 +67,7 @@ let list_of_k3_partition_map k3maps =
 let k3_partition_map_of_list p l =
   (* handle the case of no input partition map ie. a default partition map *)
   (* we just create an empty partition map for all possible map ids *)
-  if null l then
+  if null l || fst (hd l) = "empty" then
     let map_names = for_all_maps p (map_name_of p) in
     let k3_pmap = list_map (fun s ->
       mk_tuple [mk_cstring s; mk_empty pmap_types]
