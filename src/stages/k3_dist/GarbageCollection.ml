@@ -9,19 +9,18 @@ module Std = K3StdLib
 
 (* Description of GC protocol
  * --------------------------
- *     Keep track of latest vid processed: stmt counter pointer
- *         Updated with stmt counter complete: may move forward in vid
- *         Updated with put/fetch: may move backwards in vid
- *
  * Master switch must be aware of all nodes and switches
  * Master switch keeps track of min vid from each switch and node
  * Each node acks its received Put message to the sending switch.
  * Each switch keeps track of its max ack vid and sends it X seconds after GC.
  * Each node keeps track of its max executed vid and sends it X seconds after GC.
- * If a node/switch has no unacked/unexecuted vids, it sends the current timestamp X minutes after GC.
+ * If a node/switch has no unacked/unexecuted vids, it sends the max vid seen X minutes after GC.
  * Master switch takes minimum vid (or same vid) and broadcasts a DoGC.
  * Nodes delete logs, data, stmt_ctr up to this vid
  *
+ *     Possible realtime updates:
+ *         Updated with stmt counter complete: may move forward in vid
+ *         Updated with put/fetch: may move backwards in vid
  *)
 
 (* prefixes:
@@ -41,15 +40,14 @@ let sw_ack_log =
 let sw_max_ack_vid = {id="sw_max_ack_vid"; t=t_vid_mut; e=[]; init=Some min_vid_k3}
 
 (* insert a record into the switch ack log, waiting for ack (in send_put) *)
-(* assumes "address" and "vid" *)
 let sw_ack_init_code ~addr_nm ~vid_nm =
   let inner_t = snd @@ list_last sw_ack_log.e in
-  mk_case_sn 
-    (mk_peek @@ mk_slice (mk_var sw_ack_log.id) @@ mk_tuple [mk_var "vid"; mk_cunknown])
+  mk_case_sn
+    (mk_peek @@ mk_slice (mk_var sw_ack_log.id) @@ mk_tuple [mk_var vid_nm; mk_cunknown])
     "old_val"
     (mk_insert sw_ack_log.id @@
       mk_tuple [mk_var "vid"; mk_combine (mk_subscript 2 @@ mk_var "old_val") @@
-                                mk_singleton inner_t @@ mk_var "address"])
+                                mk_singleton inner_t @@ mk_var addr_nm])
     mk_cunit
 
 (* trigger for receiving an ack from a node *)
@@ -70,11 +68,11 @@ let sw_ack_rcv_trig =
 
           (* delete the entry if we're the only thing left *)
           (mk_delete sw_ack_log.id @@ mk_tuple [mk_var "vid"; mk_singleton inner_t @@ mk_var "address"])
-          
-        
+
+
 
       mk_insert sw_ack_log
-    
+
     mk_insert (sw_ack_log.id) @@ mk_tuple @@ modify_e sw_ack_log.e ["ack", mk_ctrue])
     mk_cunit
 
@@ -294,7 +292,7 @@ let nd_send_max_done_vid_trig =
 let sw_send_max_ack_vid_trig =
   send_var_trig "sw_send_max_ack_vid_trig" sw_update_max_ack_vid_fn nd_max_done_vid.id
 
-let globals =
+let global_vars =
   [decl_global master_addr;
    decl_global is_master;
    decl_global ms_max_sw_vid_map;
@@ -306,7 +304,7 @@ let globals =
    decl_global last_gc_time;
   ]
 
-let fns =
+let functions =
   [sw_update_max_ack_vid_fn;
    nd_update_max_done_vid_fn;
   ]

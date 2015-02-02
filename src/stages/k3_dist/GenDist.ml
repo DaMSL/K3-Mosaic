@@ -93,10 +93,12 @@ let declare_global_vars c ast =
   (* combine generic map inits with ones from the ast *)
   List.map (decl_global |- replace_init) (D.maps c) @
   List.map (decl_global |- replace_init) (D.map_buffers c) @
-  if c.enable_gc then GC.globals else []
+  TS.global_vars @
+  (if c.enable_gc then GC.global_vars else [])
 
 
-(* global functions *)
+
+(* --- global functions --- *)
 (* most of our global functions come from the shuffle/route code *)
 let declare_global_prims =
   let global_vid_ops = [
@@ -200,7 +202,6 @@ let declare_global_funcs partmap c ast =
           mk_cbool false
           ]
   in
-
   (* add_delta_to_buffer *)
   (* this is the same procedure for both correctives and do_complete *
    * it consists of 2 parts:
@@ -328,6 +329,8 @@ let declare_global_funcs partmap c ast =
   [log_master_write_code ()] @
   P.for_all_trigs c.p log_write_code @
   P.for_all_trigs c.p log_get_bound_code @
+  TS.functions @
+  (if c.enable_gc then GC.functions else []) @
   K3Shuffle.gen_shuffle_route_code c.p partmap @
   K3Ring.init_ring ::
   []
@@ -1201,7 +1204,7 @@ let gen_dist ?(force_correctives=false) ?(use_multiindex=false) ?(enable_gc=fals
   in
   let prog =
     (* init code from nodes/sw to master *)
-    declare_global D.send_init_to_master
+    decl_global D.send_init_to_master
     declare_global_vars c ast @
     declare_global_prims @
     (if not c.use_multiindex then emit_frontier_fns c else []) @
@@ -1213,6 +1216,7 @@ let gen_dist ?(force_correctives=false) ?(use_multiindex=false) ?(enable_gc=fals
       D.ms_rcv_init_trig ::
       D.rcv_ms_init_trig ::
       (if c.enable_gc then GC.triggers else []) @
+      TS.triggers sw_driver_trig_nm @
       regular_trigs @
       send_corrective_trigs c @
       demux_trigs ast)::    (* per-map basis *)

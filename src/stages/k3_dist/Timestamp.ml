@@ -109,6 +109,20 @@ let sw_gen_vid =
       mk_just @@ mk_subscript 1 @@ mk_var vid_num
     ]
 
+let global_vars = 
+  [ decl_global sw_next_switch_addr;
+    decl_global sw_need_vid_ctr;
+    decl_global sw_token_vid_list;
+    decl_global sw_highest_vid;
+  ]
+
+let functions = [sw_gen_vid]
+
+let triggers driver_trig =
+  [ sw_rcv_token_trig driver_trig ]
+
+
+
 
 
 
