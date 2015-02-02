@@ -88,13 +88,11 @@ type node_queue_t =
 type global_queue_t = (address * task_t) Q.t
 
 type queue_t = Global of global_queue_t
-             | PerNode of node_queue_t
 
-type queue_type = GlobalQ | PerNodeQ
+type queue_type = GlobalQ
 
 let string_of_queue_t = function
   | GlobalQ     -> "global queue"
-  | PerNodeQ    -> "pernode queue"
 
  (* for causing intentional reordering within the simulated network (while
   * still maintaining TCP-like ordering from a single sender *)
@@ -122,8 +120,7 @@ let init_scheduler_state ?(shuffle_tasks=false)
     params = { default_params with events_to_process = run_length };
     events_processed = 0;
     queue = (match queue_type with
-     | GlobalQ     -> Global(Q.create ())
-     | PerNodeQ    -> PerNode(Hashtbl.create 10));
+     | GlobalQ     -> Global(Q.create ()));
     sleep_queue = Hashtbl.create 10;
     sleep_t = None;
   }
@@ -132,35 +129,26 @@ let use_global_queueing s = match s.queue with Global _ -> true | _ -> false
 
 (* Node helpers *)
 let is_node s address = match s.queue with
-  | PerNode q -> Hashtbl.mem q address
   | Global q  -> failwith "no node info in global queue"
 
 let get_node_queues s address = match s.queue with
-  | PerNode q -> Hashtbl.find q address
   | Global q  -> failwith "no node queue in global queue"
 
 let register_node s address =
   if not @@ is_node s address then match s.queue with
-  | PerNode q -> Hashtbl.add q address @@ Q.create ()
   | Global q  -> failwith "no node data in global queue"
   else invalid_arg @@ "duplicate node at "^string_of_address address
 
 let unregister_node s address = match s.queue with
-  | PerNode q -> Hashtbl.remove q address
   | Global q  -> failwith "no node data in global queue"
 
 (* Global queueing helpers *)
 let get_global_queue s address = match s.queue with
-  | PerNode q ->
-      (try Hashtbl.find q address
-      with Not_found -> failwith @@ "unknown node "^string_of_address address)
   | Global q  -> failwith "global data is immediately accessible"
 
 (* Scheduling methods *)
-let schedule_task s address task =
-  match s.queue with
+let schedule_task s address task = match s.queue with
   | Global q  -> Q.push (address, task) q
-  | PerNode q -> Q.push task @@ get_global_queue s address
 
 let schedule_trigger s v_target v_address args =
   match v_target, v_address with
@@ -184,11 +172,7 @@ let schedule_event s source_bindings source_id source_address events =
 let invoke_trigger s address (trigger_env, val_env) trigger_id arg =
   (* add a level to the global queue *)
   (match s.queue with
-  | Global q  -> Q.increase_level q
-  | PerNode _ ->
-    let q = get_global_queue s address in
-    Q.increase_level q);
-  (* get the frozen function for the trigger and apply it to the address, env and args *)
+  | Global q  -> Q.increase_level q);
   let trig = IdMap.find trigger_id trigger_env in
   (try (* re-raise exception with trig name *)
     trig address val_env arg
@@ -206,14 +190,11 @@ let invoke_trigger s address (trigger_env, val_env) trigger_id arg =
 (* obtain the address of the next node on the global queue *)
 let next_global_address s = match s.queue with
   | Global q  -> fst @@ Q.peek q
-  | PerNode _ -> failwith "non-global queue"
 
 let process_task s address prog_env =
   let addr, (id, arg) = try begin match s.queue with
       (* global mode ignores the address given *)
     | Global q  -> Q.pop q
-    | PerNode _ -> let q = get_global_queue s address in
-                   address, Q.pop q
     end
     with Q.Empty -> error INVALID_GLOBAL_QUEUE
   in
@@ -229,7 +210,6 @@ let process_task s address prog_env =
 
 (* register the node and its triggers *)
 let initialize_scheduler s address (trig_env,_) = match s.queue with
-  | PerNode _ -> if not @@ is_node s address then register_node s address
   | Global _  -> ()
 
 let node_has_work s address =
@@ -238,17 +218,12 @@ let node_has_work s address =
   with Not_found -> error INVALID_ADDRESS
 
 let network_has_work s = match s.queue with
-  | PerNode q -> Hashtbl.fold (fun addr _ acc -> acc || node_has_work s addr) q false
   | Global q  -> not @@ Q.is_empty q
 
 let wake_up s = 
 
-let continue_processing s address = 
-  match s.sleep_t
-  if Sys.time *. 1000. >
-  match s.queue with
+let continue_processing s address = match s.queue with
   | Global q  -> network_has_work s
-  | PerNode _ -> node_has_work s address
 
 (* address is ignored for global queue *)
 let run_scheduler ?(slice = max_int) s address env =
