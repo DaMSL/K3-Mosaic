@@ -8,30 +8,30 @@ val mk_no_anno : 'a -> 'a * annotation_t
 val mk_anno_sort : 'a * annotation_t -> int list -> 'a * annotation_t
 
 (* easy access to K3 types *)
-val canonical : base_type_t -> value_type_t
-val t_bool : value_type_t
-val t_bool_mut: value_type_t
-val t_int : value_type_t
-val t_int_mut : value_type_t
-val t_date : value_type_t
-val t_float : value_type_t
-val t_float_mut : value_type_t
-val t_byte : value_type_t
-val t_string : value_type_t
-val t_unit : value_type_t
-val t_unknown : value_type_t
-val t_top : value_type_t
+val canonical : base_type_t -> type_t
+val t_bool : type_t
+val t_bool_mut: type_t
+val t_int : type_t
+val t_int_mut : type_t
+val t_date : type_t
+val t_float : type_t
+val t_float_mut : type_t
+val t_byte : type_t
+val t_string : type_t
+val t_unit : type_t
+val t_unknown : type_t
+val t_top : type_t
 
 (* easy type for addresses *)
-val t_addr : value_type_t
-val t_addr_mut : value_type_t
+val t_addr : type_t
+val t_addr_mut : type_t
 
 (* K3 types for various things *)
-val t_trig_id : value_type_t
-val t_stmt_id : value_type_t
-val t_map_id : value_type_t
-val t_vid : value_type_t
-val t_vid_mut : value_type_t
+val t_trig_id : type_t
+val t_stmt_id : type_t
+val t_map_id : type_t
+val t_vid : type_t
+val t_vid_mut : type_t
 
 val vid_increment : ?vid_expr:expr_t -> unit -> expr_t
 val min_vid_k3 : expr_t
@@ -41,63 +41,55 @@ val max_vid_k3 : expr_t
 type vid_op = VEq | VNeq | VGt | VLt | VGeq | VLeq
 val mk_global_vid_op : id_t -> vid_op -> declaration_t * annotation_t
 
-(* preserve isolation while operating on underlying type *)
-val preserve_iso : value_type_t -> (mutable_type_t -> mutable_type_t) -> value_type_t
-
-(* preserve mutability while operating on underlying base type & annotation *)
-val preserve_mut : mutable_type_t -> (base_type_t -> base_type_t) -> mutable_type_t
-
 (* convert a type to mutable *)
-val mut : value_type_t -> value_type_t
+val mut : type_t -> type_t
 
 
 (* wrap in a specific type *)
-val wrap_ttuple : value_type_t list -> value_type_t
-val wrap_ttuple_mut : value_type_t list -> value_type_t
-val wrap_tlist : value_type_t -> value_type_t
+val wrap_ttuple : type_t list -> type_t
+val wrap_ttuple_mut : type_t list -> type_t
+val wrap_tlist : type_t -> type_t
 (* a version that wraps in a tuple if necessary *)
-val wrap_tlist' : value_type_t list -> value_type_t
-val wrap_tset : value_type_t -> value_type_t
-val wrap_tset' : value_type_t list -> value_type_t
-val wrap_tbag : value_type_t -> value_type_t
-val wrap_tbag' : value_type_t list -> value_type_t
-val wrap_tmap : value_type_t -> value_type_t
-val wrap_tmap' : value_type_t list -> value_type_t
-val wrap_tmmap : IndexSet.t -> value_type_t -> value_type_t
-val wrap_tmmap' : IndexSet.t -> value_type_t list -> value_type_t
-val wrap_tind : value_type_t -> value_type_t
-val wrap_tind_mut : value_type_t -> value_type_t
-val wrap_tmaybe : value_type_t -> value_type_t
-val wrap_tmaybes : value_type_t list -> value_type_t list
-val wrap_tfunc : value_type_t -> value_type_t -> type_t
+val wrap_tlist' : type_t list -> type_t
+val wrap_tset : type_t -> type_t
+val wrap_tset' : type_t list -> type_t
+val wrap_tbag : type_t -> type_t
+val wrap_tbag' : type_t list -> type_t
+val wrap_tmap : type_t -> type_t
+val wrap_tmap' : type_t list -> type_t
+val wrap_tmmap : IndexSet.t -> type_t -> type_t
+val wrap_tmmap' : IndexSet.t -> type_t list -> type_t
+val wrap_tind : type_t -> type_t
+val wrap_tind_mut : type_t -> type_t
+val wrap_tmaybe : type_t -> type_t
+val wrap_tmaybes : type_t list -> type_t list
+val wrap_tfunc : type_t -> type_t -> type_t
 
 (* wrap a single layer of arguments *)
-val wrap_args : (id_t * value_type_t) list -> arg_t
+val wrap_args : (id_t * type_t) list -> arg_t
 
 (* wrap multiple layers of arguments *)
 val wrap_args_deep : arg_t list -> arg_t
 
 (* wrap arguments, turning maybe types to maybe argument types *)
-val wrap_args_maybe : (id_t * value_type_t) list -> arg_t
+val wrap_args_maybe : (id_t * type_t) list -> arg_t
 
 (* Unwrap functions for types *)
 (* returns mutability and type *)
-val unwrap_vtype : value_type_t -> bool * base_type_t
+val unwrap_col : base_type_t -> container_type_t * type_t
 
-val unwrap_col : base_type_t -> container_type_t * value_type_t
+val unwrap_tcol : type_t -> container_type_t * type_t
 
-val unwrap_vcol : value_type_t -> bool * (container_type_t * value_type_t)
+val unwrap_tfun : type_t -> type_t * type_t
 
-val unwrap_tval : type_t -> value_type_t
-
-val unwrap_tcol : type_t -> bool * (container_type_t * value_type_t)
+val unwrap_t : type_t -> base_type_t
 
 (* unwrap a tuple type and return its list. If not a ttuple, return as singleton *)
-val unwrap_ttuple : value_type_t -> value_type_t list
+val unwrap_ttuple : type_t -> type_t list
 
-val unwrap_tind : value_type_t -> value_type_t
+val unwrap_tind : type_t -> type_t
 
-val is_tind : value_type_t -> bool
+val is_tind : type_t -> bool
 
 (* simple functions that enable easy construction of AST trees *)
 val mk_const : constant_t -> expr_t
@@ -115,11 +107,11 @@ val mk_caddress : address -> expr_t
 val mk_var : id_t -> expr_t
 val mk_tuple : ?force:bool -> expr_t list -> expr_t
 val mk_just : expr_t -> expr_t
-val mk_nothing : value_type_t -> expr_t
-val mk_nothing_m : value_type_t -> expr_t
+val mk_nothing : type_t -> expr_t
+val mk_nothing_m : type_t -> expr_t
 
-val mk_empty : value_type_t -> expr_t
-val mk_singleton : value_type_t -> expr_t -> expr_t
+val mk_empty : type_t -> expr_t
+val mk_singleton : type_t -> expr_t -> expr_t
 val mk_combine : expr_t -> expr_t -> expr_t
 val mk_range : container_type_t -> expr_t -> expr_t -> expr_t -> expr_t
 
@@ -139,7 +131,7 @@ val mk_geq : expr_t -> expr_t -> expr_t
 val mk_gt : expr_t -> expr_t -> expr_t
 
 val mk_lambda : arg_t -> expr_t -> expr_t
-val mk_lambda' : (id_t * value_type_t) list -> expr_t -> expr_t
+val mk_lambda' : (id_t * type_t) list -> expr_t -> expr_t
 val mk_apply : expr_t -> expr_t -> expr_t
 val mk_block : expr_t list -> expr_t
 val mk_iter : expr_t -> expr_t -> expr_t
@@ -175,12 +167,12 @@ val mk_assign : id_t -> expr_t -> expr_t
 val mk_send : id_t -> expr_t -> expr_t -> expr_t
 
 (* smart role constructors *)
-val mk_const_stream : id_t -> value_type_t -> expr_t list -> flow_statement_t *
+val mk_const_stream : id_t -> type_t -> expr_t list -> flow_statement_t *
     annotation_t
-val mk_random_stream : id_t -> value_type_t -> int -> flow_statement_t * annotation_t
-val mk_file_handle : id_t -> value_type_t -> string -> ?is_json:bool -> bool ->
+val mk_random_stream : id_t -> type_t -> int -> flow_statement_t * annotation_t
+val mk_file_handle : id_t -> type_t -> string -> ?is_json:bool -> bool ->
     flow_statement_t * annotation_t
-val mk_net_handle : id_t -> value_type_t -> address -> ?is_json:bool -> bool ->
+val mk_net_handle : id_t -> type_t -> address -> ?is_json:bool -> bool ->
     flow_statement_t * annotation_t
 val mk_bind_role : id_t -> id_t -> flow_statement_t * annotation_t
 val mk_consume : id_t -> flow_statement_t * annotation_t
@@ -193,39 +185,39 @@ val ids_to_vars : id_t list -> expr_t list
 val vars_to_ids : expr_t list -> id_t list
 
 (* check if a collection is empty *)
-val mk_is_empty : expr_t -> value_type_t -> expr_t
+val mk_is_empty : expr_t -> type_t -> expr_t
 
 (* macro to check if a collection has a specific member *)
-val mk_has_member : expr_t -> expr_t -> value_type_t -> expr_t
+val mk_has_member : expr_t -> expr_t -> type_t -> expr_t
 
-val mk_has_member' : expr_t -> expr_t list -> value_type_t -> expr_t
+val mk_has_member' : expr_t -> expr_t list -> type_t -> expr_t
 
 (* macro to create a trigger *)
-val mk_code_sink : id_t -> arg_t -> (id_t * value_type_t * annotation_t) list
+val mk_code_sink : id_t -> arg_t -> (id_t * type_t * annotation_t) list
   -> expr_t -> flow_statement_t * annotation_t
 (* use lists instead of needing wrap_args *)
-val mk_code_sink' : id_t -> (id_t * value_type_t) list -> (id_t * value_type_t * annotation_t) list
+val mk_code_sink' : id_t -> (id_t * type_t) list -> (id_t * type_t * annotation_t) list
   -> expr_t -> flow_statement_t * annotation_t
 
 (* macro to create a global value *)
-val mk_global_val : id_t -> value_type_t -> declaration_t * annotation_t
+val mk_global_val : id_t -> type_t -> declaration_t * annotation_t
 
 val mk_global_val_init :
-  id_t -> value_type_t -> expr_t -> declaration_t * annotation_t
+  id_t -> type_t -> expr_t -> declaration_t * annotation_t
 
 (* macro to generate a global function with more control over args *)
 val mk_global_fn_raw:
-  id_t -> arg_t -> value_type_t -> value_type_t -> expr_t ->
+  id_t -> arg_t -> type_t -> type_t -> expr_t ->
     declaration_t * annotation_t
 
 (* macro to create a global function *)
 val mk_global_fn :
-  id_t -> (id_t * value_type_t) list -> value_type_t list ->
+  id_t -> (id_t * type_t) list -> type_t list ->
   expr_t -> declaration_t * annotation_t
 
 (* macro to declare a foreign function *)
 val mk_foreign_fn :
-  id_t -> value_type_t -> value_type_t -> declaration_t * annotation_t
+  id_t -> type_t -> type_t -> declaration_t * annotation_t
 
 (* macro to declare a foreign function given a type *)
 val mk_foreign_short : id_t -> type_t -> declaration_t * annotation_t
@@ -237,37 +229,25 @@ val mk_flow : flow_program_t -> declaration_t * annotation_t
 val mk_assoc_lambda : arg_t -> arg_t -> expr_t -> expr_t
 
 (* same macro, but auto-calls wrap_args *)
-val mk_assoc_lambda' : (id_t * value_type_t) list -> (id_t * value_type_t) list -> expr_t -> expr_t
+val mk_assoc_lambda' : (id_t * type_t) list -> (id_t * type_t) list -> expr_t -> expr_t
 
 (* macro to create a regular functional let structure *)
-val mk_let : id_t -> value_type_t -> expr_t -> expr_t -> expr_t
-
-(* macro to make a 'let many', where many values are assigned simultaneously *)
-val mk_let_many :
-  (id_t * value_type_t) list -> expr_t -> expr_t -> expr_t
-
-(* macro to make a deep-matching let statement *)
-val mk_let_deep : arg_t -> expr_t -> expr_t -> expr_t
-
-val mk_let_deep' : (id_t * value_type_t) list -> expr_t -> expr_t -> expr_t
-
-(* like fst, but for a tuple of any size *)
-val project_from_tuple : value_type_t list -> expr_t -> total:int -> choice:int -> expr_t
+val mk_let : id_t list -> expr_t -> expr_t -> expr_t
 
 (* macro similar to fst *)
-val mk_fst: value_type_t list -> expr_t -> expr_t
+val mk_fst: expr_t -> expr_t
 
 (* macro similar to snd *)
-val mk_snd: value_type_t list -> expr_t -> expr_t
+val mk_snd: expr_t -> expr_t
 
 (* like fst, but for a collection with a tuple of any size *)
-val project_from_col : value_type_t list -> expr_t -> total:int -> choice:int -> expr_t
+val project_from_col : type_t list -> expr_t -> total:int -> choice:int -> expr_t
 
 (* macro similar to fst but for a collection *)
-val mk_fst_many: value_type_t list -> expr_t -> expr_t
+val mk_fst_many: type_t list -> expr_t -> expr_t
 
 (* macro similar to snd but for a collection *)
-val mk_snd_many: value_type_t list -> expr_t -> expr_t
+val mk_snd_many: type_t list -> expr_t -> expr_t
 
 (* given an integer and a prefix, create an id for the internals of a tuple *)
 val int_to_temp_id: string -> int -> id_t
@@ -277,32 +257,29 @@ val int_to_temp_id: string -> int -> id_t
 val mk_tuple_range: ?first:int -> 'a list -> int list
 
 (* turn a list of types to a list of made up ids and corresponding types *)
-val types_to_ids_types : ?first:int -> string -> value_type_t list -> (string * value_type_t) list
+val types_to_ids_types : ?first:int -> string -> type_t list -> (string * type_t) list
 
 (* destruct a tuple, at which point parts are available via ids made by
  * int_to_temp_id *)
-val mk_destruct_tuple: id_t -> value_type_t list -> string -> expr_t -> expr_t
+val mk_destruct_tuple: id_t -> type_t list -> string -> expr_t -> expr_t
 
 (* Create K3 code to rebuild a tuple
  * A lambda determines how to shuffle the ids of the tuple, or insert external ids
  * *)
-val mk_rebuild_tuple: ?prefix:id_t -> id_t -> value_type_t list -> (id_t list -> id_t list) -> expr_t
-
-(* unwrap maybe values by creating an inner values with postfix "_unwrap" *)
-val mk_unwrap_maybe: (id_t * value_type_t) list -> expr_t -> expr_t
+val mk_rebuild_tuple: ?prefix:id_t -> id_t -> type_t list -> (id_t list -> id_t list) -> expr_t
 
 (* id function for maps. No need fill in a tuple creation *)
-val mk_id: value_type_t list -> expr_t
+val mk_id: type_t list -> expr_t
 
 (* Convert between k3 representation and ocaml representation of containers *)
 val list_of_k3_container : expr_t -> expr_t list
-val k3_container_of_list : value_type_t -> expr_t list -> expr_t
+val k3_container_of_list : type_t -> expr_t list -> expr_t
 
 (* convert arg to value type *)
-val value_type_of_arg: arg_t -> value_type_t
+val type_of_arg: arg_t -> type_t
 
 (* convert the type of a collection *)
-val mk_convert_col : value_type_t -> value_type_t -> expr_t -> expr_t
+val mk_convert_col : type_t -> type_t -> expr_t -> expr_t
 
 val mk_peek_or_zero : expr_t -> expr_t
 
@@ -310,8 +287,8 @@ val mk_peek_or_error : expr_t -> expr_t
 
 (* data structure record to standardize manipulation *)
 type data_struct = { id: string;
-                     e: (string * value_type_t) list;
-                     t: value_type_t;
+                     e: (string * type_t) list;
+                     t: type_t;
                      init: expr_t option;
                    }
 

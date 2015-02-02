@@ -140,8 +140,11 @@ and Value : sig
 
   and foreign_func_t = env_t -> env_t * eval_t
 
-  (* mutable environment, frame environment *)
-  and env_t = (value_t ref) IdMap.t * value_t list IdMap.t
+  (* global environment, frame environment *)
+  (* the global env needs to be separate for closures *)
+  and local_env_t = value_t list IdMap.t
+  and global_env_t = (value_t ref) IdMap.t
+  and env_t = global_env_t * local_env_t
 
   and value_t
       = VMax
@@ -160,7 +163,7 @@ and Value : sig
       | VList of value_t IList.t
       | VMap of value_t ValueMap.t
       | VMultimap of ValueMMap.t
-      | VFunction of arg_t * expr_t
+      | VFunction of arg_t * local_env_t * expr_t (* closure *)
       | VForeignFunction of arg_t * foreign_func_t
       | VAddress of address
       | VTarget of id_t
@@ -177,7 +180,7 @@ and ValueUtils : (sig val v_to_list : Value.value_t -> Value.value_t list
       | VBag m  -> ValueBag.to_list m
       | VSet m  -> ISet.to_list m
       | VList m -> IList.to_list m
-      | VMap vs -> List.map (fun (k,v) -> VTuple[k;v]) @: ValueMap.to_list vs
+      | VMap vs -> List.map (fun (k,v) -> VTuple[k;v]) @@ ValueMap.to_list vs
       | VMultimap vs -> ValueMMap.to_list vs
       | _ -> failwith "(v_to_list): not a collection"
 
@@ -211,24 +214,24 @@ and ValueUtils : (sig val v_to_list : Value.value_t -> Value.value_t list
       let paren s = Printf.sprintf "(%s)" s in
       tag v ^
       match v with
-      | VBool b                 -> paren @: string_of_bool b
-      | VInt i                  -> paren @: string_of_int i
-      | VFloat f                -> paren @: string_of_float f
-      | VByte c                 -> paren @: string_of_int (Char.code c)
+      | VBool b                 -> paren @@ string_of_bool b
+      | VInt i                  -> paren @@ string_of_int i
+      | VFloat f                -> paren @@ string_of_float f
+      | VByte c                 -> paren @@ string_of_int (Char.code c)
       | VString s               -> paren s
-      | VTuple vs               -> paren @: String.concat ", " @: List.map repr_of_value vs
+      | VTuple vs               -> paren @@ String.concat ", " @@ List.map repr_of_value vs
       | VOption None            -> paren "None"
-      | VOption(Some x)         -> paren @: repr_of_value x
+      | VOption(Some x)         -> paren @@ repr_of_value x
       | VSet _
       | VBag _
       | VList _
       | VMap _
-      | VMultimap _             -> paren @: s_of_col v
-      | VFunction (a, b)        -> paren @: Printf.sprintf "%s -> %s" (string_of_arg a) (string_of_expr b)
-      | VForeignFunction (a, _) -> paren @: string_of_arg a
-      | VAddress (ip, port)     -> paren @: ip^":"^ string_of_int port
-      | VTarget id              -> paren @: id
-      | VIndirect ind           -> paren @: repr_of_value !ind
+      | VMultimap _             -> paren @@ s_of_col v
+      | VFunction (a, _, b)     -> paren @@ Printf.sprintf "%s -> %s" (string_of_arg a) (string_of_expr b)
+      | VForeignFunction (a, _) -> paren @@ string_of_arg a
+      | VAddress (ip, port)     -> paren @@ ip^":"^ string_of_int port
+      | VTarget id              -> paren @@ id
+      | VIndirect ind           -> paren @@ repr_of_value !ind
       | _                       -> ""
   end
 
@@ -256,18 +259,18 @@ let rec print_value ?(mark_points=[]) v =
     let lazy_value v = lazy(loop v ~mark_points) in
     let print_collection lb rb vs =
       pretty_tag_str ~lb:lb ~rb:rb ~sep:"; " CutHint "" ""
-        (List.map lazy_value @: List.sort ValueComp.compare_v @@ ValueUtils.v_to_list vs)
+        (List.map lazy_value @@ List.sort ValueComp.compare_v @@ ValueUtils.v_to_list vs)
     in
     match v with
     | VUnknown                -> ps "??"
     | VMax                    -> ps "VMax"
     | VMin                    -> ps "VMin"
     | VUnit                   -> ps "()"
-    | VBool b                 -> ps @: string_of_bool b
-    | VInt i                  -> ps @: string_of_int i
-    | VFloat f                -> ps @: string_of_float f
-    | VByte c                 -> ps @: string_of_int (Char.code c)
-    | VString s               -> ps @: Printf.sprintf "\"%s\"" @:
+    | VBool b                 -> ps @@ string_of_bool b
+    | VInt i                  -> ps @@ string_of_int i
+    | VFloat f                -> ps @@ string_of_float f
+    | VByte c                 -> ps @@ string_of_int (Char.code c)
+    | VString s               -> ps @@ Printf.sprintf "\"%s\"" @@
                                    String.escaped s
     | VTuple vs               -> pretty_tag_str CutHint "" ""
                                    (List.map lazy_value vs)
@@ -279,7 +282,7 @@ let rec print_value ?(mark_points=[]) v =
     | VList _ as vs           -> print_collection "[" "]" vs
     | VMap _ as vs            -> print_collection "[|" "|]" vs
     | VMultimap _ as vs       -> print_collection "[||" "||]" vs
-    | VFunction (a, b)        -> ps "<fun>"
+    | VFunction _             -> ps "<fun>"
     | VForeignFunction (a, _) -> ps "<foreignfun>"
     | VAddress (ip,port)      -> ps (ip^":"^ string_of_int port)
     | VTarget id              -> ps ("<"^id^">")
@@ -303,29 +306,19 @@ let print_env skip_functions (globals, frames) =
       | VForeignFunction _ -> false
       | _                  -> true)
     e in
-  let filter_l l = List.filter
-    (function
-      | _, VFunction _        -> false
-      | _, VForeignFunction _ -> false
-      | _                     -> true)
-    l in
-  ps @: Printf.sprintf "----Globals(%i)----" @: IdMap.cardinal globals; fnl();
+  ps @@ Printf.sprintf "----Globals(%i)----" @@ IdMap.cardinal globals; fnl();
   let global_m = IdMap.map (!) globals in
   let global_m' = if not skip_functions then global_m
                   else filter_m global_m in
-  IdMap.iter print_binding_m global_m';
-  fnl();
-  ps "----Frames----"; fnl()
-  (*let frames' = IdMap.map filter_l frames in
-  print_frame frames'*)
+  IdMap.iter print_binding_m global_m'
 
 let print_trigger_env env =
-  ps @: Printf.sprintf "----Triggers(%i)----" @: IdMap.cardinal env; fnl();
+  ps @@ Printf.sprintf "----Triggers(%i)----" @@ IdMap.cardinal env; fnl();
   IdMap.iter (fun id _ -> ps id; fnl()) env
 
 let print_program_env (trigger_env, val_env) =
-  print_trigger_env trigger_env;
-  print_env false val_env
+  (* print_trigger_env trigger_env; *)
+  print_env true val_env
 
 let string_of_env ?(skip_functions=true) (env:env_t) =
   wrap_formatter (fun () -> print_env skip_functions env)
@@ -349,12 +342,12 @@ let rec value_of_const_expr e = match tag_of_expr e with
       VTuple(list_map value_of_const_expr es)
     | Const c -> value_of_const c
     | Neg     ->
-        begin match tag_of_expr @: decompose_neg e with
+        begin match tag_of_expr @@ decompose_neg e with
         | Const(CInt i)   -> VInt (-i)
         | Const(CFloat f) -> VFloat (-.f)
-        | _ -> failwith @: "Negative can only have int or float"
+        | _ -> failwith @@ "Negative can only have int or float"
         end
-    | t -> failwith @: "value is too complex: "^soi @: Obj.tag @: Obj.repr t
+    | t -> failwith @@ "value is too complex: "^soi @@ Obj.tag @@ Obj.repr t
 
 (* Global collection functions for values *)
 
@@ -367,7 +360,7 @@ let v_peek err_fn c = match c with
   | VSet m      -> ISet.peek m
   | VBag m      -> ValueBag.peek m
   | VList m     -> IList.peek m
-  | VMap m      -> maybe None (some |- map_to_tuple) @: ValueMap.peek m
+  | VMap m      -> maybe None (some |- map_to_tuple) @@ ValueMap.peek m
   | VMultimap m -> ValueMMap.peek m
   | _ -> err_fn "v_peek" "not a collection"
 
@@ -383,7 +376,7 @@ let v_fold err_fn f acc = function
   | VSet m      -> ISet.fold f acc m
   | VBag m      -> ValueBag.fold f acc m
   | VList m     -> IList.fold f acc m
-  | VMap m      -> ValueMap.fold (fun k v acc -> f acc @: VTuple[k;v]) m acc
+  | VMap m      -> ValueMap.fold (fun k v acc -> f acc @@ VTuple[k;v]) m acc
   | VMultimap m -> ValueMMap.fold f acc m
   | _ -> err_fn "v_fold" "not a collection"
 
@@ -465,7 +458,7 @@ let v_slice err_fn pat = function
   | VBag m         -> VBag(ValueBag.filter (match_pattern pat) m)
   | VList m        -> VList(IList.filter (match_pattern pat) m)
   | VMap m         -> VMap(ValueMap.filter (fun k v ->
-                        match_pattern pat @: VTuple[k;v]) m)
+                        match_pattern pat @@ VTuple[k;v]) m)
   | VMultimap mm   -> VMultimap(ValueMMap.filter (match_pattern pat) mm)
   | _ -> err_fn "v_slice" "not a collection"
 
@@ -489,9 +482,9 @@ let find_inequality a b =
 let rec type_of_value uuid value =
   let get_typ v = type_of_value uuid v in
   let dummy_err _ _ = None in
-  let col_get () = maybe t_unit get_typ @: v_peek dummy_err value in
+  let col_get () = maybe t_unit get_typ @@ v_peek dummy_err value in
   match value with
-  | VUnknown           -> canonical TUnknown
+  | VUnknown           -> t_unknown
   | VUnit              -> t_unit
   | VBool b            -> t_bool
   | VInt _             -> t_int
@@ -499,15 +492,15 @@ let rec type_of_value uuid value =
   | VByte _            -> t_string
   | VString _          -> t_string
   | VAddress (_,_)     -> t_addr
-  | VTarget id         -> canonical @: TTarget(TUnknown) (* We don't have the ids *)
-  | VOption None       -> wrap_tmaybe @: canonical TUnknown
-  | VOption (Some v)   -> wrap_tmaybe @: type_of_value uuid v
-  | VTuple vs          -> wrap_ttuple @: List.map (type_of_value uuid) vs
-  | VBag _             -> wrap_tbag @: col_get ()
-  | VSet _             -> wrap_tset @: col_get ()
-  | VList _            -> wrap_tlist @: col_get ()
-  | VMap _             -> wrap_tmap @: col_get ()
-  | VMultimap mm       -> wrap_tmmap (ValueMMap.get_idxs mm) @: col_get ()
+  | VTarget id         -> canonical @@ TTarget(t_unknown) (* We don't have the ids *)
+  | VOption None       -> wrap_tmaybe @@ t_unknown
+  | VOption (Some v)   -> wrap_tmaybe @@ type_of_value uuid v
+  | VTuple vs          -> wrap_ttuple @@ List.map (type_of_value uuid) vs
+  | VBag _             -> wrap_tbag @@ col_get ()
+  | VSet _             -> wrap_tset @@ col_get ()
+  | VList _            -> wrap_tlist @@ col_get ()
+  | VMap _             -> wrap_tmap @@ col_get ()
+  | VMultimap mm       -> wrap_tmmap (ValueMMap.get_idxs mm) @@ col_get ()
   | VIndirect ind      -> type_of_value uuid !ind
   | VFunction _
   | VForeignFunction _ -> raise (RuntimeError (uuid, "type_of_value: cannot apply to function"))
@@ -515,28 +508,28 @@ let rec type_of_value uuid value =
 
 let rec expr_of_value uuid value =
   let handle_cols vs =
-    let l = List.map (expr_of_value uuid) @: ValueUtils.v_to_list vs in
+    let l = List.map (expr_of_value uuid) @@ ValueUtils.v_to_list vs in
     k3_container_of_list (type_of_value uuid value) l
   in
   match value with
   | VUnknown -> mk_const CUnknown
   | VUnit -> mk_const CUnit
-  | VBool b -> mk_const @: CBool b
-  | VInt i -> mk_const @: CInt i
-  | VFloat f -> mk_const @: CFloat f
-  | VByte b -> mk_const @: CString(string_of_int @: Char.code b)
-  | VString s -> mk_const @: CString s
-  | VAddress (ip,port) -> mk_const @: CAddress (ip,port)
-  | VTarget id -> mk_const @: CTarget id
+  | VBool b -> mk_const @@ CBool b
+  | VInt i -> mk_const @@ CInt i
+  | VFloat f -> mk_const @@ CFloat f
+  | VByte b -> mk_const @@ CString(string_of_int @@ Char.code b)
+  | VString s -> mk_const @@ CString s
+  | VAddress (ip,port) -> mk_const @@ CAddress (ip,port)
+  | VTarget id -> mk_const @@ CTarget id
   | VOption(None) -> mk_nothing t_unknown
-  | VOption(Some v) -> mk_just @: expr_of_value uuid v
-  | VTuple vs -> mk_tuple @: List.map (expr_of_value uuid) vs
+  | VOption(Some v) -> mk_just @@ expr_of_value uuid v
+  | VTuple vs -> mk_tuple @@ List.map (expr_of_value uuid) vs
   | VSet vs -> handle_cols value
   | VList vs -> handle_cols value
   | VBag vs -> handle_cols value
   | VMap vs -> handle_cols value
   | VMultimap vs -> handle_cols value
-  | VIndirect ind -> mk_ind @: expr_of_value uuid !ind
+  | VIndirect ind -> mk_ind @@ expr_of_value uuid !ind
   | VFunction _
   | VForeignFunction _ -> raise @@ RuntimeError (uuid,
       "expr_of_value: cannot apply to function")

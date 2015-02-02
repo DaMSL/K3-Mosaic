@@ -73,6 +73,7 @@ let stdlib = [
   add_foreign_fn "substring";
   add_foreign_fn "print";
   add_foreign_fn "string_of_float";
+  add_foreign_fn "string_of_int";
   add_foreign_fn "date_part";
   add_foreign_fn "load_csv_bag";
   add_foreign_fn "now_int";

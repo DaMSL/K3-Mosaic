@@ -101,24 +101,26 @@ let rec unbind_args uuid arg env =
 let rec eval_fun uuid f =
   let error = int_erroru uuid "eval_fun" in
   match f with
-    | VFunction(arg, body) ->
+    | VFunction(arg, closure, body) ->
         fun address sched_st (m_env, f_env) a ->
-          let new_env = m_env, bind_args uuid arg a f_env in
-          let (m_env', f_env'), result = eval_expr address sched_st new_env body in
-          (m_env', unbind_args uuid arg f_env'), result
+          let new_env = m_env, bind_args uuid arg a closure in
+          let (m_env', _), result = eval_expr address sched_st new_env body in
+          (m_env', f_env), result
 
     | VForeignFunction(arg, f) ->
         fun _ _ (m_env, f_env) a ->
           let new_env = m_env, (bind_args uuid arg a f_env) in
-          let (m_env', f_env'), result = f new_env in
-          (m_env', unbind_args uuid arg f_env'), result
+          begin try
+            let (m_env', f_env'), result = f new_env in
+            (m_env', unbind_args uuid arg f_env'), result
+          with Failure x ->
+            raise @@ RuntimeError(uuid, x^"\n"^string_of_env (m_env, f_env)) end
 
    | _ -> error "eval_fun: Non-function value"
 
 and eval_expr (address:address) sched_st cenv texpr =
     let ((uuid, tag), _), children = decompose_tree texpr in
     let error = int_erroru uuid ~extra:(address, cenv) in
-    let t_erroru = t_error uuid in (* pre-curry the type error *)
     let eval_fn = eval_fun uuid in
 
     let child_value env i =
@@ -177,9 +179,7 @@ and eval_expr (address:address) sched_st cenv texpr =
 
     (* Collection constructors *)
     | Empty ct ->
-        let name = "Empty" in
-        let ctype, _ = ct <| collection_of +++ base_of |> t_erroru name @@
-                                                          VTBad(ct, "not a collection") in
+        let ctype, _ = unwrap_tcol ct in
         cenv, VTemp(
             match ctype with
             | TSet           -> VSet(ISet.empty)
@@ -190,15 +190,11 @@ and eval_expr (address:address) sched_st cenv texpr =
         )
 
     | Singleton ct ->
-        let name = "Singleton" in
         let nenv, element = child_value cenv 0 in
-        let ctype, _ =
-          ct <| collection_of +++ base_of |> t_erroru name @@
-                                             VTBad(ct, "not a collection") in
+        let ctype, _ = unwrap_tcol ct in
         cenv, VTemp(v_singleton error element ctype)
 
     | Combine ->
-        let name = "Combine" in
         begin match child_values cenv with
           | nenv, [left; right] -> nenv, VTemp(
             begin match left, right with
@@ -213,7 +209,6 @@ and eval_expr (address:address) sched_st cenv texpr =
         end
 
     | Range c_t ->
-      let name = "range" in
       begin match child_values cenv with
         | renv, [start; stride; VInt steps] ->
           let init_fn i =
@@ -257,7 +252,7 @@ and eval_expr (address:address) sched_st cenv texpr =
     (* Control flow *)
     | Lambda a ->
       let body = List.nth children 0
-      in cenv, VTemp(VFunction(a, body))
+      in cenv, VTemp(VFunction(a, snd cenv, body))
 
     | Apply ->
         begin match child_values cenv with
@@ -272,7 +267,6 @@ and eval_expr (address:address) sched_st cenv texpr =
         in fenv, list_last vals
 
     | Iterate ->
-        let name = "Iterate" in
         begin match child_values cenv with
           | nenv, [f;c] ->
               let f' = eval_fn f address sched_st in
@@ -281,7 +275,6 @@ and eval_expr (address:address) sched_st cenv texpr =
         end
 
     | IfThenElse ->
-        let name = "IfThenElse" in
         let penv, pred = child_value cenv 0 in
         begin match pred with
         | VBool true  ->
@@ -292,7 +285,6 @@ and eval_expr (address:address) sched_st cenv texpr =
         end
 
     | CaseOf x ->
-        let name = "CaseOf" in
         let penv, pred = child_value cenv 0 in
         begin match pred with
         | VOption(Some v) ->
@@ -306,7 +298,6 @@ and eval_expr (address:address) sched_st cenv texpr =
         end
 
     | BindAs x ->
-        let name = "BindAs" in
         let penv, pred = child_value cenv 0 in
         begin match pred with
         | VIndirect rv ->
@@ -320,11 +311,27 @@ and eval_expr (address:address) sched_st cenv texpr =
         | _ -> error name "non-indirect predicate"
         end
 
+    | Let ids ->
+        let env, bound = child_value cenv 0 in
+        begin match ids, bound with
+        | [id], _  ->
+            let env = if id = "_" then env
+                      else second (env_add id bound) env in
+            eval_expr address sched_st env @@ List.nth children 1
+        | _, VTuple vs ->
+            let env = List.fold_left2 (fun acc_env id v ->
+              if id = "_" then acc_env
+              else second (env_add id v) acc_env)
+              env ids vs
+            in
+            eval_expr address sched_st env @@ List.nth children 1
+        | _ -> error name "bad let destruction"
+        end
+
     (* Collection transformers *)
 
     (* Keeps the same type *)
     | Map ->
-        let name = "Map" in
         begin match child_values cenv with
           | nenv, [f; col] ->
             let f' = eval_fn f address sched_st in
@@ -339,7 +346,6 @@ and eval_expr (address:address) sched_st cenv texpr =
         end
 
     | Filter ->
-        let name = "Filter" in
         begin match child_values cenv with
           | nenv, [p; col] ->
             let p' = eval_fn p address sched_st in
@@ -362,7 +368,7 @@ and eval_expr (address:address) sched_st cenv texpr =
           | Some m -> v_empty error m
           (* the container is empty, so we must use the types *)
           | _ -> let t = type_of_expr texpr in
-                 let _, (tcol, _)  = unwrap_tcol t in
+                 let tcol, _ = unwrap_tcol t in
                  v_empty_of_t tcol
         in
         let new_col = v_fold error (fun acc x -> v_combine error x acc) zero c in
@@ -415,9 +421,8 @@ and eval_expr (address:address) sched_st cenv texpr =
         end
 
     | Sort -> (* only applies to list *)
-      let name = "Sort" in
       begin match child_values cenv with
-      | renv, [c; f] ->
+      | renv, [f; c] ->
         let env = ref renv in
         let f' = eval_fn f address sched_st in
         let sort_fn v1 v2 =
@@ -436,7 +441,7 @@ and eval_expr (address:address) sched_st cenv texpr =
 
     | Subscript i ->
       begin match child_values cenv with
-      | renv, [VTuple l] -> renv, VTemp(at l @@ i+1)
+      | renv, [VTuple l] -> renv, VTemp(at l (i-1))
       | _                -> error "Subscript" "bad tuple"
       end
 
@@ -460,8 +465,7 @@ and eval_expr (address:address) sched_st cenv texpr =
 
     | Insert col_id ->
         let renv, v = child_value cenv 0 in
-        (env_modify col_id renv @@
-          fun col -> v_insert error v col), VTemp VUnit
+        (env_modify col_id renv @@ fun col -> v_insert error v col), VTemp VUnit
 
     | Update col_id ->
         begin match child_values cenv with
@@ -523,39 +527,28 @@ and threaded_eval address sched_st ienv texprs =
 (* Declaration interpretation *)
 
 (* Returns a default value for every type in the language *)
-let rec default_value = function
-  | TFunction _ ->
-      int_error "default_value" "no default value available for function types"
-  | TValue vt -> default_isolated_value vt
+let rec default_value t = default_base_value t.typ
 
 and default_collection_value ct et = v_empty_of_t ct
 
 and default_base_value bt =
   let error = int_error "default_base_value" in
   match bt with
-  | TTop | TUnknown -> VUnknown
-  | TUnit    -> VUnit
-  | TBool    -> VBool false
-  | TByte    -> error "bytes are not implemented"
+  | TTop | TUnknown     -> VUnknown
+  | TUnit               -> VUnit
+  | TBool               -> VBool false
+  | TByte               -> error "bytes are not implemented"
   | TInt
-  | TDate    -> VInt 0
-  | TFloat   -> VFloat 0.0
-  | TString  -> VString ""
-
-  | TMaybe   vt -> error "options are not implemented"
-  | TTuple   ft -> VTuple (List.map default_isolated_value ft)
-
+  | TDate               -> VInt 0
+  | TFloat              -> VFloat 0.0
+  | TString             -> VString ""
+  | TMaybe   vt         -> VOption None
+  | TTuple   ft         -> VTuple (List.map default_value ft)
   | TCollection (ct,et) -> default_collection_value ct et
-  | TIndirect vt       -> let bt = base_of vt () in
-                           VIndirect(ref (default_base_value bt))
-  | TAddress            -> error "addresses are not implemented"
-  | TTarget bt          -> error "targets are not implemented"
-
-and default_isolated_value = function
-  | TIsolated (TMutable (bt,_))   -> default_base_value bt
-  | TIsolated (TImmutable (bt,_)) -> default_base_value bt
-  | TContained _ ->
-      int_error "default_isolated_value" "invalid default contained value"
+  | TIndirect vt        -> VIndirect(ref @@ default_base_value vt.typ)
+  | TAddress            -> error "no default value for an address"
+  | TTarget bt          -> error "no default value for a target"
+  | TFunction _         -> error "no default value for a function"
 
 (* Returns a foreign function evaluator *)
 let dispatch_foreign id = K3StdLib.lookup_value id
@@ -564,10 +557,11 @@ let dispatch_foreign id = K3StdLib.lookup_value id
  * of the trigger *)
 let prepare_trigger sched_st id arg local_decls body =
   fun address (m_env, f_env) args ->
-    let default (id,t,_) = id, ref (default_isolated_value t) in
+    let default (id,t,_) = id, ref @@ default_value t in
     let new_vals = List.map default local_decls in
     let local_env = add_from_list m_env new_vals, f_env in
-    let _, reval = (eval_fun (-1) @@ VFunction(arg,body)) address (Some sched_st) local_env args in
+    let _, reval = (eval_fun (-1) @@ VFunction(arg, IdMap.empty, body)) address
+                   (Some sched_st) local_env args in
     match value_of_eval reval with
       | VUnit -> ()
       | _ -> int_error "prepare_trigger" @@ "trigger "^id^" returns non-unit"
@@ -607,7 +601,7 @@ let env_of_program ?address sched_st k3_program =
         in
         trig_env, ((IdMap.add id (ref init_val) rm_env), rf_env)
 
-    | Foreign (id,t) -> trig_env, (m_env, env_add id (dispatch_foreign id) f_env)
+    | Foreign (id,_) -> trig_env, (IdMap.add id (ref @@ dispatch_foreign id) m_env, f_env)
 
     | Flow fp -> prepare_sinks sched_st env fp
 

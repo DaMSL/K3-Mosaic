@@ -41,8 +41,8 @@ let map_latest_val_code p map_id =
     let mapn_deref = mapn^"_deref" in
     mk_bind (mk_var mapn) mapn_deref @@
     if null map_ids_no_val then
-      mk_let_many
-        ["_", t_unit; "_project_", set_type]
+      mk_let
+        ["_"; "_project_"]
         (mk_agg
           inner_assoc
           (mk_tuple [min_vid_k3; mk_empty set_type]) @:
