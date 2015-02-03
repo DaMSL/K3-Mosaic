@@ -67,17 +67,6 @@ let do_corrective_name_of_t c trig_nm stmt_id map_id =
 let check_stmt_cntr_index = "check_and_update_stmt_cntr_index"
 
 (* --- global functions --- *)
-(* most of our global functions come from the shuffle/route code *)
-let declare_global_prims =
-  let global_vid_ops = [
-    mk_global_vid_op vid_eq VEq;
-    mk_global_vid_op vid_neq VNeq;
-    mk_global_vid_op vid_lt VLt;
-    mk_global_vid_op vid_gt VGt;
-    mk_global_vid_op vid_leq VLeq;
-    mk_global_vid_op vid_geq VGeq;
-  ] in
-  global_vid_ops
 
 let declare_global_funcs partmap c ast =
   (* log_master_write *)

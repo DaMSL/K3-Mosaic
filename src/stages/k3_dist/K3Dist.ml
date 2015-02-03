@@ -118,23 +118,6 @@ let arg_types_of_t_with_v c trig_nm = t_vid::arg_types_of_t c trig_nm
 let args_of_t_as_vars_with_v ?(vid="vid") c trig_nm =
   mk_var vid::args_of_t_as_vars c trig_nm
 
-(* vid comparison names and code *)
-let v_op op l r = mk_apply (mk_var op) @@ mk_tuple [l;r]
-let vid_eq = "vid_eq"
-let v_eq = v_op vid_eq
-let vid_neq = "vid_neq"
-let v_neq = v_op vid_neq
-let vid_lt = "vid_lt"
-let v_lt = v_op vid_lt
-let vid_gt = "vid_gt"
-let v_gt = v_op vid_gt
-let vid_geq = "vid_geq"
-let v_geq = v_op vid_geq
-let vid_leq = "vid_leq"
-let v_leq = v_op vid_leq
-
-(* global variable moved from GenDist.ml *)
-
 (* log, buffer names *)
 let log_master_write_nm = "nd_log_master_write"
 let log_write_for p trig_nm = "nd_log_write_"^trig_nm (* varies with bound *)

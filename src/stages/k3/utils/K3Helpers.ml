@@ -479,40 +479,6 @@ let vid_increment ?(vid_expr=mk_var "vid") () =
 let min_vid_k3 = mk_tuple [mk_cint 0; mk_cint 0]
 let max_vid_k3 = mk_tuple [mk_cint max_int; mk_cint max_int]
 
-(* functions for comparing vids *)
-(* vid format: (epoch, counter, switch hash) *)
-type vid_op = VEq | VNeq | VGt | VLt | VGeq | VLeq
-let mk_global_vid_op name tag =
-  let lvid_id_t = types_to_ids_types "l" vid_types in
-  let lvid_id = fst @@ List.split lvid_id_t in
-  let rvid_id_t = types_to_ids_types "r" vid_types in
-  let rvid_id = fst @@ List.split rvid_id_t in
-  let arg_pair = wrap_args_deep [wrap_args lvid_id_t; wrap_args rvid_id_t] in
-  let arg_types = wrap_ttuple [wrap_ttuple vid_types; wrap_ttuple vid_types] in
-  let op f i =
-    let nth_l = List.nth lvid_id in let nth_r = List.nth rvid_id in
-    f (mk_var @@ nth_l i) (mk_var @@ nth_r i) in
-  let mk_vid_eq = mk_and (op mk_eq 0) @@ mk_and (op mk_eq 1) (op mk_eq 2) in
-  let mk_vid_neq = mk_not mk_vid_eq in
-  let mk_vid_lt = mk_or (op mk_lt 0) @@
-                    mk_and (op mk_eq 0) @@
-                      mk_or (op mk_lt 1) @@
-                        mk_and (op mk_eq 1) (op mk_lt 2) in
-  let mk_vid_geq = mk_not mk_vid_lt in
-  let mk_vid_gt = mk_or (op mk_gt 0) @@
-                    mk_and (op mk_eq 0) @@
-                      mk_or (op mk_gt 1) @@
-                        mk_and (op mk_eq 1) (op mk_gt 2) in
-  let mk_vid_leq = mk_not mk_vid_gt in
-  mk_global_fn_raw name arg_pair arg_types t_bool @@
-    match tag with
-    | VEq -> mk_vid_eq
-    | VNeq -> mk_vid_neq
-    | VGt -> mk_vid_gt
-    | VGeq -> mk_vid_geq
-    | VLt -> mk_vid_lt
-    | VLeq -> mk_vid_leq
-
 (* id function for maps *)
 let mk_id tuple_types =
     let prefix = "__id_" in
