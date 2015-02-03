@@ -6,6 +6,8 @@ open Util
 module D = K3Dist
 module G = K3Global
 module Std = K3StdLib
+module T = Timer
+module TS = Timestamp
 
 (* Description of GC protocol
  * --------------------------
@@ -27,6 +29,7 @@ module Std = K3StdLib
   * sw: switch
   * ms: master switch
   * nd: node
+  * tm: timer
 *)
 
 (* --- Acks between switches and nodes --- *)
@@ -34,179 +37,84 @@ module Std = K3StdLib
 (* Switch acks: track which nodes replied with an ack *)
 let sw_ack_log =
   let e = ["vid", t_vid; "addresses", wrap_tset t_addr] in
-  {id="sw_ack_log"; t=wrap_tmap' @@ snd_many e; e; init=None} (* global val*)
+  create_ds "sw_ack_log" (wrap_tmap' @@ snd_many e) ~e
 
 (* switch: max acknowledged vid *)
-let sw_max_ack_vid = {id="sw_max_ack_vid"; t=t_vid_mut; e=[]; init=Some min_vid_k3}
+let sw_max_ack_vid = create_ds "sw_max_ack_vid" t_vid_mut ~init:min_vid_k3
 
-(* insert a record into the switch ack log, waiting for ack (in send_put) *)
-let sw_ack_init_code ~addr_nm ~vid_nm =
-  let inner_t = snd @@ list_last sw_ack_log.e in
-  mk_case_sn
-    (mk_peek @@ mk_slice (mk_var sw_ack_log.id) @@ mk_tuple [mk_var vid_nm; mk_cunknown])
-    "old_val"
-    (mk_insert sw_ack_log.id @@
-      mk_tuple [mk_var "vid"; mk_combine (mk_subscript 2 @@ mk_var "old_val") @@
-                                mk_singleton inner_t @@ mk_var addr_nm])
-    mk_cunit
-
-(* trigger for receiving an ack from a node *)
+(* switch: trigger for receiving an ack from a node *)
+let sw_ack_rcv_trig_nm = "sw_ack_rcv"
 let sw_ack_rcv_trig =
   let ack_trig_args = ["vid", t_vid; "address", t_addr] in
-  let inner_t = snd @@ list_last sw_ack_log.e in
-  let old_col, old_val = "old_col", "old_val" in
-  mk_code_sink' "ack_rcv" ack_trig_args [] @@
+  let old_set, old_val = "old_set", "old_val" in
+  mk_code_sink' sw_ack_rcv_trig_nm ack_trig_args [] @@
+  (* look for this ack in the log *)
   mk_case_sn
-    (mk_peek @@ mk_slice (mk_var sw_ack_log.id) @@ mk_tuple [mk_var "vid"; mk_cunknown])
+    (mk_peek @@ mk_slice' sw_ack_log.id [mk_var "vid"; mk_cunknown])
     old_val
-    (mk_let old_col inner_t (mk_subscript 2 @@ mk_var "old_val") @@
+    (mk_let [old_set] (mk_snd @@ mk_var "old_val") @@
       mk_block [
-        mk_delete old_col @@ mk_var "address";
-        (* check if we need to delete entry *)
-        mk_case_sn (mk_peek old_col)
-          "some_left"
+        (* remove the ack *)
+        mk_delete old_set [mk_var "address"];
+        (* check if we need to delete the whole entry *)
+        mk_case_ns (mk_peek' old_set) "_"
+          (* delete the entry if nothing is left in the set *)
+          (mk_delete sw_ack_log.id [mk_var old_val]) @@
+          (* insert shrunk set otherwise *)
+          mk_insert sw_ack_log.id [mk_fst' old_val; mk_var old_set]
+      ]) @@
+    mk_error "ack received but no msg sent"  (* entry doesn't exist so it's an error *)
 
-          (* delete the entry if we're the only thing left *)
-          (mk_delete sw_ack_log.id @@ mk_tuple [mk_var "vid"; mk_singleton inner_t @@ mk_var "address"])
+(* switch: insert a record into the switch ack log, waiting for ack (in GenDist.send_put) *)
+let sw_ack_init_code ~addr_nm ~vid_nm =
+  let old_val, old_set = "old_val", "old_set" in
+  let inner_t = snd @@ list_last sw_ack_log.e in
+  mk_case_sn
+    (mk_peek @@ mk_slice' sw_ack_log.id [mk_var vid_nm; mk_cunknown])
+    old_val
+    (mk_let [old_set] (mk_snd @@ mk_var old_val) @@
+      mk_block [
+        (* insert the ack entry *)
+        mk_insert old_set [mk_var addr_nm];
+        (* insert the set back in the ack log *)
+        mk_insert sw_ack_log.id [mk_var vid_nm; mk_var old_set];
+      ]) @@
+    (* else, insert a singleton value into ack log *)
+    mk_insert sw_ack_log.id [mk_var vid_nm; mk_singleton inner_t @@ mk_var addr_nm]
 
+(* node: code to be incorporated in GenDist.rcv_put *)
+(* send ack to switch *)
+let nd_ack_send_code ~addr_nm ~vid_nm =
+  mk_send sw_ack_rcv_trig_nm (mk_var addr_nm) [G.me_var; mk_var vid_nm]
 
+(* master: gc delay in seconds *)
+let ms_gc_interval = create_ds "ms_gc_interval" (mut t_int) ~init:(mk_cint 300)
 
-      mk_insert sw_ack_log
+(* master: store the max vid received from each switch *)
+let ms_gc_vid_map =
+  let e = ["address", t_addr; "max_vid", t_vid] in
+  create_ds "ms_gc_vid_map" (wrap_tmap' @@ snd_many e) ~e
 
-    mk_insert (sw_ack_log.id) @@ mk_tuple @@ modify_e sw_ack_log.e ["ack", mk_ctrue])
-    mk_cunit
+(* master: counter for number of responses *)
+let ms_gc_vid_ctr = create_ds "ms_gc_vid_ctr" (mut t_int) ~init:(mk_cint 0)
 
-(* code to be incorporated in GenDist's rcv_put *)
-(* assumes parameters "sender_ip" and "vid" *)
-let nd_ack_send_code =
-  mk_send (mk_ctarget "ack_rcv") (mk_var "sender_ip") @@ mk_tuple [mk_var "me"; mk_var "vid"]
-
-(* Update the sw_max_ack_vid variable with the highest fully acknowledged vid,
- * and the sw_ack_vid_all *)
-let sw_update_max_ack_vid_fn =
-  let sw_ack1, sw_ack2 = id_t_add "1" sw_ack_log.e, id_t_add "2" sw_ack_log.e in
-  mk_global_fn "update_max_ack_vid" unit_arg [] @@
-    mk_subscript 2 @@
-      (* fold ascending until we find an entry with no ack *)
-      mk_agg
-        (mk_assoc_lambda' ["last_max", t_vid; "cur_max", t_vid; "cont", t_bool]
-                          sw_ack_log.e @@
-          mk_if (mk_not @@ mk_var "ack")
-            (mk_tuple [mk_var "last_max"; mk_var "last_max"; mk_cfalse]) @@
-            mk_if (mk_and (mk_var "cont") @@ D.v_neq (mk_var "vid") (mk_var "cur_max"))
-              (mk_tuple [mk_var "cur_max"; mk_var "vid"; mk_ctrue]) @@
-              mk_tuple [mk_var "last_max"; mk_var "cur_max"; mk_cfalse])
-        (mk_tuple [mk_var sw_max_ack_vid.id; mk_var sw_max_ack_vid.id; mk_ctrue]) @@
-          (* sort ascending *)
-          mk_sort
-            (mk_assoc_lambda' sw_ack1 sw_ack2 @@
-              D.v_lt (mk_var "vid1") (mk_var "vid2")) @@
-            (* get values greater than max_ack_vid *)
-            mk_filter
-              (mk_lambda' sw_ack_log.e @@
-                D.v_gt (mk_var "vid") @@ mk_var @@ sw_max_ack_vid.id)
-              (mk_var sw_ack_log.id)
-
-(* store the max vid received from each switch *)
-let ms_max_sw_vid_map =
-  let e = ["switch_addr", t_addr; "max_vid", t_vid] in
-  {id="ms_max_sw_vid_map"; t=wrap_tmap' @@ snd_many e; e; init=None}
-
-(* master switch trigger to receive and add to the max vid map *)
-let ms_add_max_sw_vid = "ms_add_max_sw_vid"
-let ms_add_max_sw_vid_trig =
-  let max_vid = "addr_max_vid" in
-  mk_code_sink' ms_add_max_sw_vid
-    [max_vid, wrap_ttuple @@ snd_many ms_max_sw_vid_map.e] [] @@
-    mk_insert ms_max_sw_vid_map.id @@ mk_var max_vid
-
-(* store the max vid received from each node *)
-let ms_max_nd_vid_map =
-  let e = ["node_addr", t_addr; "max_vid", t_vid] in
-  {id="ms_max_nd_vid_map"; e; t=wrap_tmap' @@ snd_many e; init=None}
-
-(* master switch trigger to receive and add to the max node vid map *)
-let ms_add_max_nd_vid_trig =
-  let max_vid = "addr_max_vid" in
-  mk_code_sink' "ms_add_max_nd_vid"
-    [max_vid, wrap_ttuple @@ snd_many ms_max_nd_vid_map.e] [] @@
-    mk_insert ms_max_nd_vid_map.id @@ mk_var max_vid
-
-(* find min vid to send to all nodes and switches *)
-let ms_send_min_vid = "ms_send_min_vid_trig"
-let ms_send_min_vid_trig =
-  let min_vid, min_vid_sw, min_vid_nd, max_vid = "min_vid", "min_vid_sw", "min_vid_nd", "max_vid" in
-  mk_code_sink' ms_send_min_vid unit_arg [] @@
-    (* get min of switch max vids *)
-    mk_let min_vid_sw t_vid
-      (mk_agg
-        (mk_assoc_lambda' [min_vid, t_vid] ms_max_sw_vid_map.e @@
-          mk_if (mk_lt (mk_var max_vid) @@ mk_var min_vid)
-            (mk_var max_vid) @@
-            mk_var min_vid)
-      min_vid_k3 @@
-      mk_var ms_max_sw_vid_map.id) @@
-    (* get min of node max vids *)
-    mk_let min_vid_nd t_vid
-      (mk_agg
-        (mk_assoc_lambda' [min_vid, t_vid] ms_max_nd_vid_map.e @@
-          mk_if (mk_lt (mk_var "max_vid") @@ mk_var min_vid)
-            (mk_var "max_vid") @@
-            mk_var min_vid)
-      min_vid_k3 @@
-      mk_var ms_max_nd_vid_map.id) @@
-    (* min_vid *)
-    mk_let min_vid t_vid
-      (mk_if (mk_lt (mk_var min_vid_sw) @@ mk_var min_vid_nd)
-        (mk_var min_vid_sw) @@
-         mk_var min_vid_nd) @@
-    (* broadcast gc *)
-    mk_iter
-      (mk_lambda' peers.e @@
-        mk_send (mk_ctarget "exec_gc") (mk_var "addr") @@ mk_var min_vid) @@
-      mk_var peers.id
-
-(* node: find max vid for which we have 0 stmt cntrs *)
-let nd_max_done_vid = {id="nd_max_done_vid"; e=[]; t=t_vid_mut; init=Some min_vid_k3}
-
-(* update nd_max_done_vid *)
-(* NOTE: could be done in 'real time' when receiving puts/pushes *)
-let nd_update_max_done_vid_fn =
-  let done1, done2 = id_t_add "1" D.nd_stmt_cntrs.e, id_t_add "2" D.nd_stmt_cntrs.e in
-  mk_global_fn "nd_update_max_done_vid" unit_arg [] @@
-    mk_subscript 2 @@
-      (* fold ascending until we find an entry with no 0 in any of its stmts *)
-      mk_agg
-        (mk_assoc_lambda' ["last_max", t_vid; "cur_max", t_vid; "cont", t_bool]
-                          D.nd_stmt_cntrs.e @@
-          mk_if (mk_neq (mk_var "counter") @@ mk_cint 0)
-            (mk_tuple [mk_var "last_max"; mk_var "last_max"; mk_cfalse]) @@
-            mk_if (mk_and (mk_var "cont") @@ D.v_neq (mk_var "vid") (mk_var "cur_max"))
-              (mk_tuple [mk_var "cur_max"; mk_var "vid"; mk_ctrue]) @@
-              mk_tuple [mk_var "last_max"; mk_var "cur_max"; mk_cfalse])
-        (mk_tuple [mk_var nd_max_done_vid.id; mk_var nd_max_done_vid.id; mk_ctrue]) @@
-          (* sort ascending *)
-          mk_sort
-            (mk_assoc_lambda' done1 done2 @@
-              D.v_lt (mk_var "vid1") (mk_var "vid2")) @@
-            (* get values greater than nd_max_done_vid *)
-            mk_filter
-              (mk_lambda' nd_stmt_cntrs.e @@
-                D.v_gt (mk_var "vid") @@ mk_var @@ nd_max_done_vid.id) @@
-              mk_var D.nd_stmt_cntrs.id
-
-(* to search for a vid field *)
-let r_vid = Str.regexp ".*vid.*"
+(* master: number of expected responses *)
+let ms_num_gc_expected =
+  let init = mk_size_slow @@ G.peers [] in
+  create_ds "ms_num_gc_expected" (mut t_int) ~init
 
 (* function to perform garbage collection *)
 (* NOTE: TODO: for now, we use an intermediate ds. A filterInPlace would be better *)
 (* NOTE: to be efficient, we need blind write optimization on write (delete) *)
-let do_gc_fn c ast =
+let do_gc_nm = "do_gc"
+(* to search for a vid field *)
+let r_vid = Str.regexp ".*vid.*"
+let do_gc c =
   let min_vid = "min_gc_vid" in
   (* standard gc code for general data structures *)
-  let gc_std ?do_bind ds =
-    (* look for any entry containing vid *)
-    let vid_str = fst @@ List.find (fun (s,_) -> r_match r_vid s) ds.e in
+  let gc_std ds =
+    (* look for any entry in the ds containing vid *)
+    let vid = fst @@ List.find (r_match r_vid |- fst) ds.e in
     let t' = unwrap_tind ds.t in
     (* handle the possiblity of indirections *)
     let do_bind, id =
@@ -216,103 +124,126 @@ let do_gc_fn c ast =
       else id_fn, ds.id
     in
     let temp = "temp" in
-    (* delete any entry with a lower vid *)
+    (* delete any entry with a lower or matching vid *)
     mk_let [temp] (mk_empty t') @@
     mk_block [
-      (* add to temp *)
+      (* add < vid to temporary collection *)
       do_bind @@
         mk_iter
           (mk_lambda' ds.e @@
-            mk_if (mk_lt (mk_var vid_str) @@ mk_var min_vid)
-              (mk_insert temp @@ mk_tuple @@ ids_to_vars @@ fst_many ds.e) @@
+            mk_if (mk_lt (mk_var vid) @@ mk_var min_vid)
+              (mk_insert temp @@ ids_to_vars @@ fst_many ds.e) @@
               mk_cunit) @@
           mk_var id;
-      (* delete from ds *)
+      (* delete values from ds *)
       mk_iter
         (mk_lambda' ["val", wrap_ttuple @@ snd_many ds.e] @@
-          do_bind @@ mk_delete id @@ mk_var "val") @@
+          do_bind @@ mk_delete id [mk_var "val"]) @@
         mk_var temp
     ]
   in
-  mk_global_fn "do_gc" [min_vid, t_vid] [t_unit] @@
+  mk_code_sink' do_gc_nm [min_vid, t_vid] [] @@
     mk_block @@
-      (* clean master data structures *)
-      [ gc_std ms_max_sw_vid_map;
-        gc_std ms_max_nd_vid_map;
-        (* clean switch data structures *)
+      [ (* clean switch data structures *)
         gc_std sw_ack_log;
         (* clean node data structures *)
-        gc_std nd_max_done_vid;
-        gc_std D.nd_stmt_cntrs;
         gc_std D.nd_log_master;
       ] @
-      (* clean dynamic structures *)
       List.map gc_std (D.log_ds c) @
-      List.map (gc_std |- fst) (D.map_buffers c) @
-      List.map (gc_std |- fst) (D.maps c)
+      List.map gc_std (D.map_buffers c) @
+      List.map gc_std (D.maps c)
 
-let ms_last_gc_time = {id="ms_last_gc_time"; t=mut t_int; e=[];
-                       init=some @@ mk_apply (mk_var Std.now_int_name) mk_cunit}
-let sw_last_send_time = {ms_last_gc_time with id="sw_last_send_time"}
-let nd_last_send_time = {ms_last_gc_time with id="nd_last_send_time"}
+(* master switch trigger to receive and add to the max vid map *)
+let ms_rcv_gc_vid_nm = "ms_rcv_gc_vid"
+let ms_rcv_gc_vid =
+  let data, min_vid = "data", "min_vid" in
+  let peers = G.peers [] in
+  mk_code_sink' ms_rcv_gc_vid_nm
+    [data, wrap_ttuple @@ snd_many ms_gc_vid_map.e] [] @@
+    mk_block [
+      (* insert into data struct *)
+      mk_insert ms_gc_vid_map.id [mk_var data];
+      (* increment count *)
+      mk_assign ms_gc_vid_ctr.id @@
+        mk_add (mk_var ms_gc_vid_ctr.id) @@ mk_cint 1;
+      (* check if we have enough responses *)
+      mk_if (mk_geq (mk_var ms_gc_vid_ctr.id) @@ mk_var ms_num_gc_expected.id)
+        (* if so ... *)
+        (mk_let [min_vid]
+          (* get the min vid *)
+          (mk_min_max "min_vid" "vid" t_vid mk_lt min_vid_k3 ms_gc_vid_map) @@
+          mk_block [
+            (* clear the counter *)
+            mk_assign ms_gc_vid_ctr.id @@ mk_cint 0;
+            (* clear the data struct *)
+            mk_assign ms_gc_vid_map.id @@ mk_empty ms_gc_vid_map.t;
+            (* send gc notices *)
+            mk_iter (mk_lambda' peers.e @@
+              mk_send do_gc_nm (mk_var @@ fst @@ hd @@ peers.e) [mk_cunit]) @@
+              mk_var peers.id;
+            (* tell timer to ping us in X seconds *)
+            mk_send D.ms_send_gc_req_nm (mk_var D.timer_addr.id) [mk_var ms_gc_interval.id];
+          ])
+        (* if not enough responses, do nothing *)
+        mk_cunit
+    ]
 
-let ms_gc_interval = {id="ms_gc_interval"; t=mut t_int; e=[]; init=some @@ mk_cint 300}
-let sw_send_interval = {ms_gc_interval with id="sw_send_interval"}
-let nd_send_interval = {ms_gc_interval with id="nd_send_interval"}
+(* all nodes/switches: respond to request for vid info *)
+let rcv_req_gc_vid_nm = "rcv_req_gc_vid_nm"
+let rcv_req_gc_vid =
+  mk_code_sink' rcv_req_gc_vid_nm unit_arg [] @@
+  (* if we're a switch *)
+  mk_if (mk_or (mk_eq (mk_var G.job.id) @@ mk_cint G.job_switch) @@
+                mk_eq (mk_var G.job.id) @@ mk_cint G.job_master)
+    (* send our min vid: this would be much faster with a min function *)
+    (mk_send ms_rcv_gc_vid_nm (mk_var master_addr.id)
+      [mk_min_max "min_vid" "vid" t_vid mk_lt (mk_var TS.sw_highest_vid.id) sw_ack_log]) @@
+    (* else, if we're a node *)
+    mk_if (mk_eq (mk_var G.job.id) @@ mk_cint G.job_node)
+      (* send out node min vid: much faster if we had a min function *)
+      (mk_send ms_rcv_gc_vid_nm (mk_var master_addr.id)
+        [mk_min_max "min_vid" "vid" t_vid mk_lt max_vid_k3 D.nd_stmt_cntrs])
+      (* else, do nothing *)
+      mk_cunit
 
-(* code to do with triggering the gc process. We perform gc in single-thread mode *)
-(* insert this code into triggers *)
-let check_time_code last_time interval_var trig_nm =
-  mk_let "cur" t_int
-    (mk_apply (mk_var Std.now_int_name) mk_cunit) @@
-  mk_if
-    (mk_gt
-      (mk_sub
-        (mk_var "cur") @@
-        mk_var last_time.id) @@
-      mk_var interval_var.id)
-    (mk_send trig_nm G.me_var mk_cunit) @@
-    mk_cunit
+(* master: trigger to request gc vids *)
+(* called by the timer *)
+let ms_send_gc_req =
+  let peers = G.peers [] in
+  mk_code_sink' D.ms_send_gc_req_nm unit_arg [] @@
+  mk_iter
+    (mk_lambda' peers.e @@
+      mk_send rcv_req_gc_vid_nm (mk_var @@ fst @@ hd @@ peers.e) [mk_cunit]) @@
+    mk_var peers.id
 
-let ms_check_time_code = check_time_code ms_last_gc_time.id ms_gc_interval.id ms_send_min_vid_trig
-let nd_check_time_code = check_time_code ms_last_gc_time.id ms_gc_interval.id ms_send_min_vid_trig
+(* master: init code *)
+let ms_gc_init =
+  let init =
+    (* start gc process for master *)
+    mk_if (mk_eq (mk_var G.job.id) @@ mk_cint G.job_master )
+      (mk_send T.tm_insert_timer_trig_nm (mk_var D.timer_addr.id)
+        [mk_var ms_gc_interval.id; mk_cint @@ T.num_of_trig D.ms_send_gc_req_nm; G.me_var])
+      mk_cunit
+  in
+  create_ds "ms_gc_init" t_unit ~init
 
-(* generic trigger to send variable to master switch *)
-let send_var_trig trig_nm fn_nm var_nm =
-    mk_code_sink' trig_nm ["_", t_unit] [] @@
-      mk_block [
-        mk_apply fn_nm mk_cunit;
-        mk_send ms_add_max_sw_vid (mk_var master_switch_addr.id) @@
-          mk_tuple [G.me_var; mk_var var_nm]
-      ]
-
-let nd_send_max_done_vid_trig =
-  send_var_trig "nd_send_max_done_vid_trig" nd_update_max_done_vid_fn nd_max_done_vid.id
-
-let sw_send_max_ack_vid_trig =
-  send_var_trig "sw_send_max_ack_vid_trig" sw_update_max_ack_vid_fn nd_max_done_vid.id
+(* --- End of code --- *)
 
 let global_vars =
   [decl_global master_addr;
-   decl_global is_master;
-   decl_global ms_max_sw_vid_map;
-   decl_global ms_max_nd_vid_map;
    decl_global sw_max_ack_vid;
-   decl_global sw_ack_vid_all;
    decl_global sw_ack_log;
-   decl_global nd_max_done_vid;
-   decl_global last_gc_time;
+   decl_global ms_gc_interval;
+   decl_global ms_gc_vid_map;
+   decl_global ms_gc_vid_ctr;
+   decl_global ms_num_gc_expected;
+   decl_global ms_gc_init;
   ]
 
-let functions =
-  [sw_update_max_ack_vid_fn;
-   nd_update_max_done_vid_fn;
-  ]
-
-let triggers =
+let triggers c =
   [sw_ack_rcv_trig;
-   ms_add_max_sw_vid_trig;
-   ms_add_max_nd_vid_trig;
-   nd_send_max_done_vid_trig;
-   sw_send_max_ack_vid_trig;
+   ms_rcv_gc_vid;
+   rcv_req_gc_vid;
+   ms_send_gc_req;
+   do_gc c;
   ]

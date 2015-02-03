@@ -41,9 +41,8 @@ module GC = GarbageCollection
 module T = K3Typechecker
 module R = K3Route
 module P = ProgInfo
-module TS = TimeStamp
+module TS = Timestamp
 
-(* control whether gc code is emitted *)
 exception ProcessingFailed of string;;
 
 (* global trigger names needed for generated triggers and sends *)
@@ -67,37 +66,6 @@ let do_corrective_name_of_t c trig_nm stmt_id map_id =
 (* function to check index *)
 let check_stmt_cntr_index = "check_and_update_stmt_cntr_index"
 
-let declare_global_vars c ast =
-  (* replace default inits with ones from ast *)
-  let dict = M.map_inits_from_ast c ast in
-  let replace_init (ds, id) =
-    try
-      let init = some @@ IntMap.find id dict in
-      {ds with init}
-    with Not_found -> ds
-  in
-  decl_global init_vid ::
-  decl_global (map_ids c) ::
-  decl_global D.num_peers ::
-  decl_global D.master_addr ::
-  decl_global D.is_master ::
-  decl_global D.init_flag ::
-  decl_global D.ms_init_counter ::
-  decl_global D.epoch_counter ::
-  decl_global D.nd_stmt_cntrs ::
-  decl_global D.nd_log_master ::
-  decl_global D.sw_trig_buf_idx ::
-  decl_global D.sw_msgs_to_send_ctr ::
-  List.map decl_global (D.sw_trig_bufs c) @
-  List.map decl_global (D.log_ds c) @
-  (* combine generic map inits with ones from the ast *)
-  List.map (decl_global |- replace_init) (D.maps c) @
-  List.map (decl_global |- replace_init) (D.map_buffers c) @
-  TS.global_vars @
-  (if c.enable_gc then GC.global_vars else [])
-
-
-
 (* --- global functions --- *)
 (* most of our global functions come from the shuffle/route code *)
 let declare_global_prims =
@@ -114,19 +82,16 @@ let declare_global_prims =
 let declare_global_funcs partmap c ast =
   (* log_master_write *)
   let log_master_write_code () =
-    mk_global_fn log_master_write_nm nd_log_master.e
-    [t_unit] @@
-    mk_insert nd_log_master.id @@ (* write to master log *)
-      mk_tuple @@ ids_to_vars @@ fst_many nd_log_master.e
+    mk_global_fn log_master_write_nm nd_log_master.e [] @@
+    (* write to master log *)
+    mk_insert nd_log_master.id @@
+      ids_to_vars @@ fst_many nd_log_master.e
   in
   (* log_write *)
-  let log_write_code t = mk_global_fn
-    (log_write_for c.p t)
-    (args_of_t_with_v c t)
-    [t_unit] @@
+  let log_write_code t =
+    mk_global_fn (log_write_for c.p t) (args_of_t_with_v c t) [] @@
       (* write bound to trigger_specific log *)
-      mk_insert (D.log_for_t t) @@
-        mk_tuple @@ args_of_t_as_vars_with_v c t
+      mk_insert (D.log_for_t t) @@ args_of_t_as_vars_with_v c t
   in
   (* log_get_bound -- necessary since each trigger has different args *)
   let log_get_bound_code t =
@@ -325,9 +290,7 @@ let declare_global_funcs partmap c ast =
   TS.functions @
   (if c.enable_gc then GC.functions else []) @
   K3Shuffle.gen_shuffle_route_code c.p partmap @
-  K3Ring.init_ring ::
-  []
-
+  K3Ring.functions
 
 
 (* ---- start of protocol code ---- *)
@@ -676,12 +639,11 @@ mk_code_sink'
                 mk_cunit
             ]) @@
           mk_insert
-            D.nd_stmt_cntrs.id @@
-            mk_tuple @@ pat @@ mk_var "count"
+            D.nd_stmt_cntrs.id @@ pat @@ mk_var "count"
       ) @@
         mk_var "stmt_id_cnt_list"] @
 
-      (if c.enable_gc then [GC.nd_ack_send_code] else [])
+      (if c.enable_gc then [GC.nd_ack_send_code ~addr_nm:"sender_ip" ~vid_nm:"vid"] else [])
 
 
 (* Trigger_send_push_stmt_map
@@ -1149,6 +1111,15 @@ let emit_frontier_fns c =
   let fns = List.map (hd |- snd) @@ P.uniq_types_and_maps c.p in
   List.map (frontier_fn c) fns
 
+let declare_global_vars c ast =
+  D.global_vars c (ModifyAst.map_inits_from_ast c ast) @
+  TS.global_vars @
+  K3Ring.global_vars @
+  (if c.enable_gc then
+      GC.global_vars @
+      Timer.global_vars
+    else [])
+
 (* Generate all the code for a specific trigger *)
 let gen_dist_for_t c ast trig corr_maps =
   (* (stmt_id, rhs_map_id)list *)
@@ -1194,19 +1165,17 @@ let gen_dist ?(force_correctives=false) ?(use_multiindex=false) ?(enable_gc=fals
       gen_dist_for_t c ast t potential_corr_maps
   in
   let prog =
-    (* init code from nodes/sw to master *)
-    decl_global D.send_init_to_master
+    D.declare_foreign_functions @
     declare_global_vars c ast @
     declare_global_prims @
     (if not c.use_multiindex then emit_frontier_fns c else []) @
     global_funcs @ (* maybe make this not order-dependent *)
-    declare_foreign_functions c @
     filter_corrective_list ::  (* global func *)
     (mk_flow @@
       (* trigs for init *)
       D.ms_rcv_init_trig ::
       D.rcv_ms_init_trig ::
-      (if c.enable_gc then GC.triggers else []) @
+      (if c.enable_gc then GC.trigs @ Timer.trigs else []) @
       TS.triggers sw_driver_trig_nm @
       regular_trigs @
       send_corrective_trigs c @

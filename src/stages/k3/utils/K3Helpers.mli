@@ -295,7 +295,10 @@ type data_struct = { id: string;
                      e: (string * type_t) list;
                      t: type_t;
                      init: expr_t option;
+                     map_id: int option;
                    }
+
+val create_ds : ?e:(string * type_t) list -> ?init:expr_t -> ?map_id:int -> string -> type_t -> data_struct
 
 val decl_global : data_struct -> declaration_t * annotation_t
 
@@ -313,4 +316,4 @@ val mk_error : string -> expr_t
 
 val mk_size_slow : data_struct -> expr_t
 
-val mk_min_max : expr_t -> expr_t -> (expr_t -> expr_t -> expr_t) -> expr_t -> data_struct -> expr_t
+val mk_min_max : string -> string -> type_t -> (expr_t -> expr_t -> expr_t) -> expr_t -> data_struct -> expr_t

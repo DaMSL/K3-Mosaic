@@ -567,7 +567,12 @@ type data_struct = { id: string;
                      e: (string * type_t) list;
                      t: type_t;
                      init: expr_t option;
+                     map_id: int option;
                    }
+
+let create_ds ?e ?init ?map_id id t =
+  let e = unwrap_option [] e in
+  {id; t; e; init; map_id}
 
 (* utility functions *)
 let decl_global x = match x.init with
@@ -595,11 +600,11 @@ let mk_size_slow col = mk_fst @@ mk_agg
   (mk_cint 0) @@
   mk_var col.id
 
-let mk_min_max v v' comp_fn zero col = mk_fst @@ mk_agg
-  (mk_assoc_lambda' [v] col.e @@
-    mk_if (comp_fn (mk_var @@ fst v) @@ mk_var @@ fst v')
-      (mk_var @@ fst v) @@
-      mk_var @@ fst v')
+let mk_min_max v v' v_t comp_fn zero col = mk_fst @@ mk_agg
+  (mk_assoc_lambda' [v, v_t] col.e @@
+    mk_if (comp_fn (mk_var v) @@ mk_var v')
+      (mk_var v) @@
+      mk_var v')
   zero @@
   mk_var col.id
 

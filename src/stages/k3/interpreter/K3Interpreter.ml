@@ -13,6 +13,7 @@ open K3Consumption
 open K3Runtime
 
 module KP = K3Printing
+module R = K3Runtime
 
 (* Generic helpers *)
 
@@ -492,15 +493,9 @@ and eval_expr (address:address) sched_st cenv texpr =
             let send_str = K3PrintSyntax.string_of_expr send_code in
             Log.log (send_str^"\n") ~name:"K3Interpreter.Msg" `Debug;
 
-            (* check if we need to buffer our triggers for shuffling *)
-            if K3Runtime.use_shuffle_tasks s then
-              (* buffer trigger for later shuffle *)
-              (buffer_trigger s target addr arg address;
-              renv, VTemp VUnit)
-            else
-              (* create a new level on the queues *)
-              (schedule_trigger s target addr arg;
-              renv, VTemp VUnit)
+            (* create a new level on the queues *)
+            schedule_trigger s target addr arg;
+            renv, VTemp VUnit
         | None, _ -> error "Send" "missing scheduler"
         | _, _    -> error "Send" "bad values"
       end
@@ -656,69 +651,50 @@ let initialize_peer sched_st address role_opt k3_program =
 
 (* preserve the state of the interpreter *)
 type interpreter_t = {
-  scheduler : scheduler_state;
+  scheduler : R.scheduler_state;
   (* metadata including remaining resources and instructions *)
   peer_meta : (address, resource_impl_env_t * instruction_t list) Hashtbl.t;
   peer_list : K3Global.peer_t list;
-  envs : (address * (resource_env_t * dispatcher_env_t * program_env_t)) list;
+  envs : (address, (resource_env_t * dispatcher_env_t * program_env_t)) Hashtbl.t;
 }
-
-type status_t = K3Runtime.status_t
 
 let interpret_k3_program {scheduler; peer_meta; peer_list; envs} =
   (* Continue running until all peers have finished their instructions,
    * and all messages have been processed *)
-  let rec loop (status:status_t) =
-    if status = NormalExec then
-      (* find and process every peer that has a message to process. This way we make sure we
-       * don't inject new sources until all messages are processed *)
-      let message_peers, status' =
-        (* for global queueing, we don't loop. Instead, we run for only one
-         * iteration, since each trigger needs a different environment *)
-        if K3Runtime.use_global_queueing scheduler then
-          if network_has_work scheduler then
-            let addr = next_global_address scheduler in
-            let _,_,prog_env = List.assoc addr envs in
-            match consume_msgs ~slice:1 scheduler prog_env addr with
-            | BreakPoint bp -> 1, BreakPoint bp
-            | NormalExec    -> 1, status
-          else 0, status
-        else
-          (* do one cycle over all the nodes *)
-          List.fold_left (fun (count, stat) (addr,_,_) ->
-            if node_has_work scheduler addr then
-              let _,_,prog_env = List.assoc addr envs in
-              match consume_msgs scheduler prog_env addr with
-              | BreakPoint bp -> count + 1, BreakPoint bp
-              | NormalExec    -> count + 1, stat
-            else count, stat
-          ) (0, status) peer_list
+  let rec loop () =
+    (* find and process every peer that has a message to process. This way we make sure we
+      * don't inject new sources until all messages are processed *)
+    let message_peers =
+      (* for global queueing, we don't loop. Instead, we run for only one
+        * iteration, since each trigger needs a different environment *)
+      if R.network_has_work scheduler then
+        let addr = R.next_global_address scheduler in
+        let _,_,prog_env = Hashtbl.find envs addr in
+        R.consume_msgs ~slice:1 scheduler prog_env addr; 1
+      else 0
+    in
+    (*Printf.printf "msgs: %d\n" message_peers;*)
+    if message_peers > 0 then loop ()
+    else
+      (* now deal with sources *)
+      let source_peers, (status':status_t) =
+        Hashtbl.fold (fun addr (ri_env, insts) count ->
+          if insts <> [] then
+            let res_env, de, env = Hashtbl.find envs addr in
+            let eval =
+              consume_sources scheduler env addr (res_env, de) (ri_env, insts)
+            in
+            Hashtbl.replace peer_meta addr eval;
+            count + 1
+          else count
+        ) peer_meta 0
       in
-      (*Printf.printf "msgs: %d\n" message_peers;*)
-      if message_peers > 0  && not (K3Runtime.use_shuffle_tasks scheduler) then loop status'
-      else
-        (* now deal with sources *)
-        let source_peers, (status':status_t) =
-          Hashtbl.fold (fun addr (ri_env, insts) (count, stat) ->
-            if insts <> [] then
-              let res_env, de, env = List.assoc addr envs in
-              let status, eval =
-                consume_sources scheduler env addr (res_env, de) (ri_env, insts)
-              in
-              Hashtbl.replace peer_meta addr eval;
-              match status with
-              | BreakPoint bp -> count + 1, BreakPoint bp
-              | NormalExec    -> count + 1, stat
-            else count, stat
-          ) peer_meta (0, status')
-        in
-        (*Printf.printf "sources: %d, msgs: %d\n" source_peers message_peers;*)
-        if source_peers > 0 || message_peers > 0 then loop status'
-        else status'
-    else status
+      (*Printf.printf "sources: %d, msgs: %d\n" source_peers message_peers;*)
+      if source_peers > 0 || message_peers > 0 then loop status'
+      else status'
   in
-  let (result:status_t) = loop NormalExec in
-  let prog_state = List.map (fun (addr, (_,_,e)) -> addr, e) envs in
+  loop ();
+  let prog_state = Hashtbl.map (fun (addr, (_,_,e)) -> addr, e) envs in
   (* We only print if we finished execution *)
   if result = NormalExec then
     (* Log program state *)

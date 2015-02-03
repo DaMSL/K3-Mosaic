@@ -293,7 +293,7 @@ let mk_project ?(id="projected_field") width idx ret_t expr =
 (* translate a slice using the names of the bound keys and the names
  * of all keys, to figure out which should be 'unknown' *)
 let mk_slice collection all_keys bound_keys =
-  KH.mk_slice' collection @@
+  KH.mk_slice collection @@
     List.map (fun x ->
         if List.mem x bound_keys then KH.mk_var x
         else KH.mk_cunknown)
@@ -324,23 +324,22 @@ let mk_tuple_arg keys keys_tl v vt = K.ATuple(List.map2 mk_arg keys keys_tl @ [m
 
 let mk_lambda keys keys_tl v vt body = KH.mk_lambda (mk_tuple_arg keys keys_tl v vt) body;;
 
-let mk_var_tuple keys v = KH.mk_tuple @@ KH.ids_to_vars (keys@[v])
+let mk_var_tuple keys v = KH.ids_to_vars (keys@[v])
 
-let mk_val_tuple keys v = KH.mk_tuple @@ (KH.ids_to_vars keys)@[v]
+let mk_val_tuple keys v = (KH.ids_to_vars keys)@[v]
 
 let mk_update col bag_t ivars ivar_t ovars ovar_t new_val =
 (* new_val might (and in fact, usually will) depend on the col, so
     we need to evaluate it and save it to a variable before clearing the
     existing elements out of the col *)
-  let colv = KH.mk_var col in
   let new_val_var = KH.mk_var "update_value" in
   let update_block = match ivars, ovars with
     | [], [] ->
         KH.mk_block [
           KH.mk_iter
             (KH.mk_lambda (mk_arg "value" bag_t) @@
-              KH.mk_delete col @@ KH.mk_var "value") @@
-            KH.mk_slice colv (KH.mk_tuple [KH.mk_cunknown]);
+              KH.mk_delete col [KH.mk_var "value"]) @@
+            KH.mk_slice' col [KH.mk_cunknown];
           KH.mk_insert col (mk_val_tuple [] new_val_var)
         ]
     | [], _  ->
@@ -348,7 +347,7 @@ let mk_update col bag_t ivars ivar_t ovars ovar_t new_val =
           KH.mk_iter
             (mk_lambda ovars ovar_t "value" bag_t @@
               KH.mk_delete col (mk_var_tuple ovars "value")) @@
-            mk_slice colv ovars ovars;
+            mk_slice (KH.mk_var col) ovars ovars;
           KH.mk_insert col (mk_val_tuple ovars new_val_var)
         ]
     | _, []  ->
@@ -356,7 +355,7 @@ let mk_update col bag_t ivars ivar_t ovars ovar_t new_val =
           KH.mk_iter
             (mk_lambda ivars ivar_t "value" bag_t @@
               KH.mk_delete col (mk_var_tuple ivars "value")) @@
-            mk_slice colv ivars ivars;
+            mk_slice (KH.mk_var col) ivars ivars;
           KH.mk_insert col (mk_val_tuple ivars new_val_var)
         ]
     | _      -> failwith "FullPC unsupported"
@@ -1248,8 +1247,7 @@ let m3_stmt_to_k3_stmt (meta: meta_t) ?(generate_init = false)
                                      (List.map KH.canonical lhs_outs_kt))@
                        [KU.id_of_var rhs_ret_ve, rhs_ret_vt])
                       (KH.mk_delete mapn
-                                    (KH.mk_tuple (lhs_outs_el@
-                                                  [rhs_ret_ve]))))
+                                    (lhs_outs_el@ [rhs_ret_ve])))
               old_slice;
            update_body
          ]
@@ -1259,12 +1257,12 @@ let m3_stmt_to_k3_stmt (meta: meta_t) ?(generate_init = false)
    (* of the input variables of the lhs collection, and for each of them *)
    (* we update the corresponding output tier. *)
    let statement_expr =
-     let args = 
+     let args =
        (list_zip (List.map KU.id_of_var lhs_ins_el) @@ List.map KH.canonical lhs_ins_kt)@
          [KU.id_of_var existing_out_tier, out_tier_t]
      in
      match lhs_ins_el with
-     | [] -> KH.mk_let (fst_many args) lhs_collection coll_update_expr 
+     | [] -> KH.mk_let (fst_many args) lhs_collection coll_update_expr
      | _  -> KH.mk_iter (KH.mk_lambda' args coll_update_expr) lhs_collection
    in
    statement_expr, nm
@@ -1326,15 +1324,13 @@ let csv_adaptor_to_k3 (name_prefix: string)
       (if with_deletions then (del_var, T.TInt) :: relv else relv)
   in
   let child_params =
-    KH.mk_tuple
-      (List.map (fun (vn, vt) ->
-        match vt with
-          | T.TDate -> KH.mk_apply (KH.mk_var "parse_sql_date") (KH.mk_var vn)
-          | _ -> (KH.mk_var vn)
-      ) relv)
+    List.map (fun (vn, vt) -> match vt with
+      | T.TDate -> KH.mk_apply (KH.mk_var "parse_sql_date") @@ KH.mk_var vn
+      | _       -> KH.mk_var vn
+    ) relv
   in
   let send_to_event evt =
-    KH.mk_send (Schema.name_of_event evt) (KH.mk_var "me") (child_params)
+    KH.mk_send (Schema.name_of_event evt) (KH.mk_var "me") child_params
   in
   let k3_code =
     if with_deletions then

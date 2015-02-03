@@ -965,7 +965,7 @@ let add_sources p envs filename =
     mk_code_sink "switch_main" (wrap_args arg_ids') [] @@
       List.fold_left (fun acc_code (trig_id, trig_ts) ->
         let handle_args =
-            mk_tuple @@ List.map convert_date @@ List.map (first mk_var) trig_ts
+          List.map convert_date @@ List.map (first mk_var) trig_ts
         in
         mk_if (mk_eq (mk_var "trigger_id") @@ mk_cstring trig_id)
           (mk_send trig_id K3Global.me_var handle_args)

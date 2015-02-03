@@ -184,8 +184,8 @@ let gen_route_fn p map_id =
       ) @@
 
     (* handle the case of no partitioning at all *)
-    mk_if (mk_eq (mk_var "pmap") (mk_empty pmap_types))
-      (mk_apply (mk_var K3Ring.get_all_uniq_nodes_nm) mk_cunit) @@
+    mk_case_ns (mk_peek @@ mk_var "pmap") "_"
+      (mk_var "nodes") @@
 
     (* calculate the dim bounds ie. the bucket sizes when linearizing *)
     mk_let ["dim_bounds"; "max_val"]

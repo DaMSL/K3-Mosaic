@@ -417,6 +417,8 @@ let is_some = function None -> false | Some _ -> true
 (* unwrap a some. Fail if not a Some *)
 let unwrap_some = function None -> failwith "Not a Some" | Some x -> x
 
+let unwrap_option def = function None -> def | Some x -> x
+
 let maybe def f = function None -> def | Some x -> f x
 
 let maybe_f def f = function None -> def () | Some x -> f x

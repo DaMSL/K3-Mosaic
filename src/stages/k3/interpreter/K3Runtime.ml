@@ -220,8 +220,6 @@ let node_has_work s address =
 let network_has_work s = match s.queue with
   | Global q  -> not @@ Q.is_empty q
 
-let wake_up s = 
-
 let continue_processing s address = match s.queue with
   | Global q  -> network_has_work s
 

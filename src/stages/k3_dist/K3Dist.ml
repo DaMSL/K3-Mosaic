@@ -103,10 +103,10 @@ let wrap_t_map_idx c map_id =
 let wrap_t_map_idx' c map_id = wrap_t_map_idx c map_id |- wrap_ttuple
 
 (* global declaration of default vid to put into every map *)
-let init_vid =
-                      (* epoch, counter=0, node hash *)
-  let init = some @@ mk_tuple [mk_cint 0; mk_cint 0; mk_apply (mk_var "hash_addr") G.me_var] in
-  {id="init_vid"; t=t_vid; e=[]; init}
+let g_init_vid =
+                      (* epoch=0, counter=0 *)
+  let init = mk_tuple [mk_cint 0; mk_cint 0] in
+  create_ds "g_init_vid" t_vid ~init
 
 (* trigger argument manipulation convenience functions *)
 let arg_types_of_t c trig_nm = snd_many @@ P.args_of_t c.p trig_nm
@@ -117,7 +117,6 @@ let args_of_t_with_v ?(vid="vid") c trig_nm = (vid, t_vid)::P.args_of_t c.p trig
 let arg_types_of_t_with_v c trig_nm = t_vid::arg_types_of_t c trig_nm
 let args_of_t_as_vars_with_v ?(vid="vid") c trig_nm =
   mk_var vid::args_of_t_as_vars c trig_nm
-
 
 (* vid comparison names and code *)
 let v_op op l r = mk_apply (mk_var op) @@ mk_tuple [l;r]
@@ -137,78 +136,84 @@ let v_leq = v_op vid_leq
 (* global variable moved from GenDist.ml *)
 
 (* log, buffer names *)
-let log_master_write_nm = "log_master_write"
-let log_write_for p trig_nm = "log_write_"^trig_nm (* varies with bound *)
-let log_get_bound_for _ trig_nm = "log_get_bound_"^trig_nm
-let log_read_geq = "log_read_geq" (* takes vid, returns (trig, vid)list >= vid *)
+let log_master_write_nm = "nd_log_master_write"
+let log_write_for p trig_nm = "nd_log_write_"^trig_nm (* varies with bound *)
+let log_get_bound_for _ trig_nm = "nd_log_get_bound_"^trig_nm
+let log_read_geq = "nd_log_read_geq" (* takes vid, returns (trig, vid)list >= vid *)
 (* adds the delta to all subsequent vids following in the buffer so that non
  * delta computations will be correct. Must be atomic ie. no other reads of the
  * wrong buffer value can happen.
  * Also used for adding to map buffers and for correctives *)
 let add_delta_to_map c map_id =
   let m_t = map_types_for c.p map_id in
-  "add_delta_to_"^String.concat "_" @@
+  "nd_add_delta_to_"^String.concat "_" @@
     List.map K3PrintSyntax.string_of_type m_t
 
-(* foreign functions *)
-let hash_addr = "hash_addr"
-let error_nm = "error"
-let declare_foreign_functions _ =
-  let foreign_hash_addr = mk_foreign_fn hash_addr t_addr t_int in
-  let foreign_error_fn  = mk_foreign_fn error_nm t_unit t_unknown in
-  (* function needed to parse sql dates. Called by m3tok3 *)
-  let sql_func = mk_foreign_fn "parse_sql_date" t_string t_int in
-  foreign_hash_addr::
-  foreign_error_fn::
-  sql_func::
-  []
+(**** global data structures ****)
 
-(* global data structures
- * ---------------------------------------------- *)
-
-(* determine the master switch by lowest address *)
+(* address of master node *)
 let master_addr =
   let jobs = G.jobs [] in
-  let init = some @@ mk_agg_fst
-              (mk_assoc_lambda' ["min_addr", t_addr] jobs.e @@
-                mk_if (mk_and (mk_lt (mk_var "addr") @@ mk_var "min_addr") @@
-                              (mk_eq (mk_var "job") @@ mk_cint G.job_switch))
-                  (mk_var "addr") @@
-                  mk_var "min_addr") @@
-              mk_var jobs.id
+  let init =
+    mk_case_sn
+      (mk_peek @@ mk_filter
+        (mk_lambda' jobs.e @@
+          mk_eq (mk_var "job") @@ mk_cint G.job_master) @@
+        mk_var jobs.id)
+      "master"
+      (mk_var "master") @@
+      mk_error "no master found"
   in
-  {id="master_addr"; t=mut t_addr; init; e=[]}
+  create_ds "master_addr" (mut t_addr) ~init
 
-let is_master =
-  let init = some @@ mk_eq (mk_var master_addr.id) G.me_var in
-  {id="is_master"; t=mut t_bool; e=[]; init}
+(* address of timer peer *)
+let timer_addr =
+  let jobs = G.jobs [] in
+  let init =
+    mk_case_sn
+      (mk_peek @@ mk_filter
+        (mk_lambda' (G.jobs []).e @@
+          mk_eq (mk_var "job") @@ mk_cint G.job_timer) @@
+        mk_var jobs.id)
+      "timer"
+      (mk_var "timer") @@
+      mk_error "no timer peer found"
+  in
+  create_ds "timer_addr" (mut t_addr) ~init
 
-(* epoch *)
-let epoch_counter = {id="epoch_counter"; t=mut t_int; e=[]; init=some @@ mk_cint 0}
+let nodes =
+  let jobs = G.jobs [] in
+  let init =
+    mk_filter
+      (mk_lambda' jobs.e @@ mk_eq (mk_var "job") @@ mk_cint G.job_node) @@
+      mk_var jobs.id
+  in
+  let e = ["address", t_addr] in
+  create_ds "nodes" (mut @@ wrap_tbag' @@ snd_many e) ~e ~init
 
 let num_peers =
   let init =
-    some @@ mk_agg
+    mk_agg
       (mk_lambda (wrap_args ["acc", t_int; "_", t_addr]) @@
         mk_add (mk_var "acc") @@ mk_cint 1)
       (mk_cint 0) @@
       mk_var (G.peers []).id
   in
-  {id="num_peers"; t=mut t_int; e=[]; init}
+  create_ds "num_peers" (mut t_int) ~init
 
-(* --- Protocol Init code --- *)
+(**** Protocol Init code ****)
 
-let ms_init_counter = {id="ms_init_counter"; t=mut t_int; e=[]; init=some @@ mk_cint 0}
+let ms_init_counter = create_ds "ms_init_counter" (mut t_int) ~init:(mk_cint 0)
 (* whether we can begin operations on this node/switch *)
-let init_flag = {id="init_flag"; t=mut t_bool; e=[]; init = some @@ mk_cfalse}
+let init_flag = create_ds "init_flag" (mut t_bool) ~init:(mk_cfalse)
 
 let ms_rcv_init_trig_nm = "ms_init_trig"
 let rcv_init_trig_nm = "init_trig"
 
 (* code for all nodes+switches to check in before starting *)
 let send_init_to_master =
-  let init = some @@ mk_send ms_rcv_init_trig_nm (mk_var master_addr.id) G.me_var in
-  {id="send_init_to_master"; t=t_unit; e=[]; init}
+  let init = mk_send ms_rcv_init_trig_nm (mk_var master_addr.id) [G.me_var] in
+  create_ds "send_init_to_master" t_unit ~init
 
 (* code for master to verify that all peers have answered and to begin *)
 let ms_rcv_init_trig =
@@ -222,7 +227,7 @@ let ms_rcv_init_trig =
       (* send rcv_init to all peers *)
       (mk_iter
         (mk_lambda (wrap_args ["peer", t_addr]) @@
-          mk_send rcv_init_trig_nm (mk_var "peer") mk_cunit) @@
+          mk_send rcv_init_trig_nm (mk_var "peer") [mk_cunit]) @@
         mk_var "peers")
       mk_cunit
   ]
@@ -232,7 +237,7 @@ let rcv_ms_init_trig =
   mk_code_sink' rcv_init_trig_nm ["_", t_unit] [] @@
   mk_assign init_flag.id (mk_cbool true)
 
-(* --- End of init code --- *)
+(**** End of init code ****)
 
 (* global containing mapping of map_id to map_name and dimensionality *)
 let map_ids_id = "map_ids"
@@ -240,23 +245,23 @@ let map_ids c =
   let e = ["map_idx", t_int; "map_name", t_string; "map_dim", t_int] in
   let t = wrap_tbag' @@ snd_many e in
   let init =
-    some @@ k3_container_of_list t @@
+    k3_container_of_list t @@
       P.for_all_maps c.p @@ fun i ->
         mk_tuple [mk_cint i;
                   mk_cstring @@ P.map_name_of c.p i;
                   mk_cint @@ List.length @@ P.map_types_for c.p i] in
-  {id=map_ids_id; e; t; init}
+  create_ds map_ids_id t ~e ~init
 
 (* stmt_cntrs - (vid, stmt_id, counter) *)
 (* NOTE: change to mmap with index on vid, stmt *)
 let nd_stmt_cntrs =
   let e = ["vid", t_vid; "stmt_id", t_int; "counter", t_int] in
-  {id="nd_stmt_cntrs"; e; t=wrap_tbag' @@ snd_many e; init=None}
+  create_ds "nd_stmt_cntrs" (wrap_tbag' @@ snd_many e) ~e
 
 (* master log *)
 let nd_log_master =
   let e = ["vid", t_vid; "trig_id", t_trig_id; "stmt_id", t_stmt_id] in
-  {id="nd_log_master"; e; t=wrap_tbag' @@ snd_many e; init=None}
+  create_ds "nd_log_master" (wrap_tbag' @@ snd_many e) ~e
 
 (* names for log *)
 let log_for_t t = "nd_log_"^t
@@ -265,7 +270,7 @@ let log_for_t t = "nd_log_"^t
 let log_ds c : data_struct list =
   let log_struct_for trig =
     let e = args_of_t_with_v c trig in
-    {id=log_for_t trig; e; t=wrap_tbag' @@ snd_many e; init=None}
+    create_ds (log_for_t trig) (wrap_tbag' @@ snd_many e) ~e
   in
   P.for_all_trigs c.p log_struct_for
 
@@ -274,8 +279,8 @@ let make_map_decl c map_name map_id =
   let e = P.map_ids_types_with_v_for c.p map_id in
   let t' = wrap_t_map_idx' c map_id @@ snd_many e in
   (* for indirections, we need to create initial values *)
-  let init = some @@ mk_ind @@ mk_empty t' in
-  ({id=map_name; e; init; t=wrap_tind t'}, map_id)
+  let init = mk_ind @@ mk_empty t' in
+  create_ds map_name (wrap_tind t') ~e ~init ~map_id
 
 (* Buffer versions of maps per statement (to prevent mixing values) *)
 (* NOTE: doesn't contain special inits from AST *)
@@ -297,25 +302,29 @@ let maps c =
   in
   P.for_all_maps c.p do_map
 
-(* State of switch: 
+(* State of switch:
  * 0: idle
  * 1: sending
  * 2: waiting for vid *)
 let sw_state_idle = 0
 let sw_state_sending = 1
 let sw_state_wait_vid = 2
-let sw_state = {id="sw_state"; t=mut t_int; e=[]; init=some @@ mk_cint 0}
+let sw_state = create_ds "sw_state" (mut t_int) ~init:(mk_cint 0)
 
 (* buffers for insert/delete -- we need a per-trigger list *)
 let sw_trig_buf_prefix = "sw_buf_"
 let sw_trig_bufs (c:config) =
   P.for_all_trigs c.p @@ fun t ->
-  {id=sw_trig_buf_prefix^t; t=wrap_tlist' @@ snd_many @@ P.args_of_t c.p t; e=[]; init=None}
+    create_ds (sw_trig_buf_prefix^t) (wrap_tlist' @@ snd_many @@ P.args_of_t c.p t)
 
 (* list for next message -- contains trigger id *)
 let sw_trig_buf_idx =
   let e = ["trig_id", t_int] in
-  {id="sw_trig_buf_idx"; e; t=wrap_tlist' @@ snd_many e; init=None}
+  create_ds "sw_trig_buf_idx" (wrap_tlist' @@ snd_many e) ~e
+
+(* name for master send request trigger (part of GC) *)
+let ms_send_gc_req_nm = "ms_send_gc_req"
+
 
 (* --- Begin frontier function code --- *)
 
@@ -333,7 +342,7 @@ let get_idx idx map_id =
 
 (* Get the latest vals up to a certain vid
  * - This is needed both for sending a push, and for modifying a local slice
- * operation
+ * operation, as well as for GC
  * - slice_col is the k3 expression representing the collection.
  * - assumes a local 'vid' variable containing the border of the frontier
  * - pat assumes NO VID
@@ -368,8 +377,7 @@ let map_latest_vid_vals c slice_col m_pat map_id ~keep_vid : expr_t =
     let access_k3 =
       (* slice with an unknown for the vid so we only get the effect of
       * any bound variables *)
-      mk_slice slice_col @@
-        mk_tuple @@ P.map_add_v mk_cunknown pat
+      mk_slice slice_col @@ P.map_add_v mk_cunknown pat
     in
     let simple_app =
       mk_apply (mk_var @@ frontier_name c map_id) @@
@@ -379,7 +387,7 @@ let map_latest_vid_vals c slice_col m_pat map_id ~keep_vid : expr_t =
 
 (* Create a function for getting the latest vals up to a certain vid *)
 (* This is needed both for sending a push, and for modifying a local slice
- * operation *)
+ * operation, as well as for GC *)
 (* Returns the type pattern for the function, and the function itself *)
 (* NOTE: this is only necessary when not using multiindexes *)
 let frontier_fn c map_id =
@@ -428,7 +436,7 @@ let frontier_fn c map_id =
   (* get the maximum vid that's less than our current vid *)
   let action = match m_id_t_no_val with
   | [] ->
-    mk_fst @@ 
+    mk_fst @@
       mk_agg
         common_vid_lambda
         (mk_tuple [mk_empty m_t_v_bag; min_vid_k3])
@@ -453,3 +461,48 @@ let frontier_fn c map_id =
       action
 
 (* End of frontier function code *)
+
+(**** End of code ****)
+
+let global_vars c dict =
+  (* replace default inits with ones from ast *)
+  let replace_init ds =
+    try
+      let init = some @@ IntMap.find (unwrap_some ds.map_id) dict in
+      {ds with init}
+    with Not_found -> ds
+  in
+  let l =
+    [ g_init_vid;
+      master_addr;
+      timer_addr;
+      nodes;
+      num_peers;
+      map_ids c;
+      nd_stmt_cntrs;
+      nd_log_master;
+      sw_state;
+      sw_trig_buf_idx;
+    ] @
+    sw_trig_bufs c @
+    log_ds c @
+    (* combine generic map inits with ones from the ast *)
+    (List.map replace_init @@ maps c) @
+    (List.map replace_init @@ map_buffers c)
+  in
+  List.map decl_global l
+
+
+(* foreign functions *)
+let declare_foreign_functions =
+  [ mk_foreign_fn "hash_addr" t_addr t_int;
+    mk_foreign_fn "error" t_unit t_unknown;
+    mk_foreign_fn "parse_sql_date" t_string t_int;
+    mk_foreign_fn "hash_int" t_int t_int;
+    mk_foreign_fn "hash_addr" t_addr t_int;
+    mk_foreign_fn "int_of_float" t_float t_int;
+    mk_foreign_fn "float_of_int" t_int t_float;
+    mk_foreign_fn "get_max_int" t_unit t_int;
+  ]
+
+

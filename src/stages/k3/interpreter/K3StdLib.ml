@@ -343,12 +343,20 @@ let decl = wrap_tfunc (wrap_ttuple @@ snd_many args) ret
 let _ = Hashtbl.add func_table name (decl, wrap_args args, fn)
 
 (* get current time *)
-let now_int_name = "now_int"
+let name = "now_int"
 let args = ["_", t_unit]
 let ret  = t_int
 let fn e = e, VTemp(VInt(iof @@ Sys.time () *. 1000.))
 let decl = wrap_tfunc (wrap_ttuple @@ snd_many args) ret
-let _ = Hashtbl.add func_table now_int_name (decl, wrap_args args, fn)
+let _ = Hashtbl.add func_table name (decl, wrap_args args, fn)
+
+(* sleep in ms *)
+let name = "sleep"
+let args = ["ms", t_int]
+let ret  = t_unit
+let fn e = e, VTemp VUnit
+let decl = wrap_tfunc (wrap_ttuple @@ snd_many args) ret
+let _ = Hashtbl.add func_table name (decl, wrap_args args, fn)
 
 (* error function ---------- *)
 let fn env =

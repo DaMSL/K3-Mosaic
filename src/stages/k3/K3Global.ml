@@ -11,42 +11,42 @@ let out = open_out "debug"
               (* ip,     role *)
 type peer_t = (address * id_t)
 
-let me = {id="me"; e=[]; t=t_addr; init=None}
+let me = create_ds "me" t_addr
 let me_var = mk_var me.id
 
 let peers ps =
   let e = ["addr", t_addr] in
   let t = wrap_tset' @@ snd_many e in
-  let init = some @@
+  let init =
     k3_container_of_list t @@
     List.map (mk_caddress |- fst) ps
   in
-  {id="peers"; e; t; init}
+  create_ds "peers" t ~e ~init
 
 let peers_num ps =
   let peers = peers ps in
-  let init = some @@
-    mk_agg
-      (mk_assoc_lambda' ["acc", t_int] peers.e @@
-        mk_add (mk_var "acc") @@ mk_cint 1)
-      (mk_cint 0) @@
-      mk_var peers.id
+  let init = mk_agg
+    (mk_assoc_lambda' ["acc", t_int] peers.e @@
+      mk_add (mk_var "acc") @@ mk_cint 1)
+    (mk_cint 0) @@
+    mk_var peers.id
   in
-  {id="peers_num"; e=[]; t=mut t_int; init}
+  create_ds "peers_num" (mut t_int) ~init
 
 (* specifies the job of a node: master/switch/node *)
-let job_switch = 0
-let job_node   = 1
-let job = {id="job"; t=mut t_int; e=[]; init=None}
+let job_master = 0
+let job_switch = 1
+let job_node   = 2
+let job_timer  = 3
+let job = create_ds "job" (mut t_int) ~init:(mk_cint 0)
 
 let jobs (ps:peer_t list) =
   let e = ["addr", t_addr; "job", t_int] in
   let t = wrap_tmap' @@ snd_many e in
-  let init = some @@
-    k3_container_of_list t @@
+  let init = k3_container_of_list t @@
     List.map (fun (a,r) -> mk_tuple [mk_caddress a; mk_cstring r]) ps
   in
-  {id="jobs"; e; t; init}
+  create_ds "jobs" t ~e ~init
 
 
 (* create k3 globals for the address and peers *)
@@ -73,7 +73,6 @@ let stdlib = [
   add_foreign_fn "substring";
   add_foreign_fn "print";
   add_foreign_fn "string_of_float";
-  add_foreign_fn "string_of_int";
   add_foreign_fn "date_part";
   add_foreign_fn "load_csv_bag";
   add_foreign_fn "now_int";
