@@ -213,6 +213,8 @@ let mk_lambda' argl expr = mk_lambda (wrap_args argl) expr
 
 let mk_apply lambda input = mk_stree Apply [lambda; input]
 
+let mk_apply' fn input = mk_apply (mk_var fn) input
+
 let mk_block statements = mk_stree Block statements
 
 let mk_iter iter_fun collection =
@@ -263,9 +265,9 @@ let mk_slice_gen tag collection pattern =
   else
     mk_stree tag [collection; pattern]
 
-let mk_slice collection pattern = mk_slice_gen Slice collection pattern
+let mk_slice collection pattern = mk_slice_gen Slice collection @@ mk_tuple pattern
 
-let mk_slice' collection pattern = mk_slice collection @@ mk_tuple pattern
+let mk_slice' collection pattern = mk_slice (mk_var collection) pattern
 
 (* l_idx is the list of indices to use, made of ocaml ints *)
 (* l_comp is the pattern of gt, le, eq expressed as GTA, GT, EQ, LT, LTA *)
@@ -275,22 +277,24 @@ let mk_slice_idx ~idx ~comp col pat =
 let mk_slice_idx' ~idx ~comp col pat =
   mk_slice_idx ~idx ~comp col @@ mk_tuple pat
 
-let mk_insert col x = mk_stree (Insert col) [x]
+let mk_insert col x = mk_stree (Insert col) [mk_tuple x]
 
-let mk_delete col x = mk_stree (Delete col) [x]
+let mk_delete col x = mk_stree (Delete col) [mk_tuple x]
 
 let mk_update col old_val new_val =
-    mk_stree (Update col) [old_val; new_val]
+    mk_stree (Update col) [mk_tuple old_val; mk_tuple new_val]
 
 let mk_peek col = mk_stree Peek [col]
+
+let mk_peek' col = mk_peek (mk_var col)
 
 (* handle the common case of updating a peek on a slice *)
 let mk_update_slice col slice new_val =
   mk_case_ns
-    (mk_peek @@ mk_slice' (mk_var col) slice)
+    (mk_peek @@ mk_slice' col slice)
     "__slice"
     mk_cunit @@
-    mk_update col (mk_var "__slice") new_val
+    mk_update col [mk_var "__slice"] [new_val]
 
 let mk_ind v = mk_stree Indirect [v]
 
@@ -298,7 +302,7 @@ let mk_ind v = mk_stree Indirect [v]
 let mk_assign left right = mk_stree (Assign left) [right]
 
 (* target:TTarget(T) address:TAdress args:T *)
-let mk_send target address args = mk_stree Send [mk_ctarget target; address; args]
+let mk_send target address args = mk_stree Send [mk_ctarget target; address; mk_tuple args]
 
 (* A let that assigns multiple variables simultaneously.
  * For breaking up tuples and passing multiple values out of functions.
@@ -313,7 +317,7 @@ let mk_agg_fst agg_fn col =
   mk_agg agg_fn
     (mk_case_sn (mk_peek col) "__case"
       (mk_var "__case")
-      (mk_apply (mk_var "error") @@ mk_cstring "error with mk_agg_fst")) col
+      (mk_apply' "error" @@ mk_cstring "error with mk_agg_fst")) col
 
 (* Macros to make role related stuff *)
 let mk_const_stream id typ l =
@@ -372,7 +376,7 @@ let mk_has_member collection pattern typ =
     (mk_slice collection pattern)
     (mk_empty typ)
 
-let mk_has_member' col pat typ = mk_has_member col (mk_tuple pat) typ
+let mk_has_member' col pat typ = mk_has_member col pat typ
 
 let mk_code_sink name args locals code =
   mk_no_anno @@ Sink(Code(name, args, locals, code))
@@ -416,23 +420,19 @@ let mk_assoc_lambda arg1 arg2 expr = mk_lambda (ATuple[arg1; arg2]) expr
 let mk_assoc_lambda' arg1 arg2 expr = mk_lambda (ATuple[wrap_args arg1; wrap_args arg2]) expr
 
 let mk_fst tuple = mk_subscript 1 tuple
+let mk_fst' tuple = mk_subscript 1 (mk_var tuple)
 
 let mk_snd tuple = mk_subscript 2 tuple
+let mk_snd' tuple = mk_subscript 2 (mk_var tuple)
 
-let project_from_col tuple_types col ~total ~choice =
-  let l = create_range 1 total in
-  let l = List.map (fun i -> "__"^soi i) l in
-  let c = "__"^soi choice in
-  let id_ts = list_zip l tuple_types in
+let project_from_col tuple_types col ~choice =
   mk_map
-    (mk_lambda' id_ts @@ mk_var c) @@
+    (mk_lambda' ["x", wrap_ttuple tuple_types] @@ mk_subscript choice @@ mk_var "x") @@
     col
 
-let mk_fst_many tuple_types collection =
-  project_from_col tuple_types collection ~total:2 ~choice:1
+let mk_fst_many t col = project_from_col t col ~choice:1
 
-let mk_snd_many tuple_types collection =
-  project_from_col tuple_types collection ~total:2 ~choice:2
+let mk_snd_many t col = project_from_col t col ~choice:2
 
 
 (* Functions to manipulate tuples in K3 code *)
@@ -589,5 +589,17 @@ let unit_arg = ["_", t_unit]
 
 let mk_error s = mk_apply (mk_var "error") @@ mk_cstring s
 
+(* code to count the size of a collection *)
+let mk_size_slow col = mk_fst @@ mk_agg
+  (mk_assoc_lambda' ["count", t_int] col.e @@ mk_add (mk_var "count") @@ mk_cint 1)
+  (mk_cint 0) @@
+  mk_var col.id
 
-  
+let mk_min_max v v' comp_fn zero col = mk_fst @@ mk_agg
+  (mk_assoc_lambda' [v] col.e @@
+    mk_if (comp_fn (mk_var @@ fst v) @@ mk_var @@ fst v')
+      (mk_var @@ fst v) @@
+      mk_var @@ fst v')
+  zero @@
+  mk_var col.id
+

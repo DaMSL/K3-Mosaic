@@ -133,6 +133,7 @@ val mk_gt : expr_t -> expr_t -> expr_t
 val mk_lambda : arg_t -> expr_t -> expr_t
 val mk_lambda' : (id_t * type_t) list -> expr_t -> expr_t
 val mk_apply : expr_t -> expr_t -> expr_t
+val mk_apply' : id_t -> expr_t -> expr_t
 val mk_block : expr_t list -> expr_t
 val mk_iter : expr_t -> expr_t -> expr_t
 val mk_if : expr_t -> expr_t -> expr_t -> expr_t
@@ -151,20 +152,22 @@ val mk_sort : expr_t -> expr_t -> expr_t
 val mk_subscript : int -> expr_t -> expr_t
 
 val mk_peek : expr_t -> expr_t
-val mk_slice : expr_t -> expr_t -> expr_t
-val mk_slice' : expr_t -> expr_t list -> expr_t
+(* avoid having to use a mk_var *)
+val mk_peek' : id_t -> expr_t
+val mk_slice : expr_t -> expr_t list -> expr_t
+val mk_slice' : id_t -> expr_t list -> expr_t
 (* int list list: specify index to use
    expr_t: list of integer values specifying GT, LT, EQ *)
 val mk_slice_idx : idx:index_t -> comp:comp_t -> expr_t -> expr_t -> expr_t
 val mk_slice_idx' : idx:index_t -> comp:comp_t -> expr_t -> expr_t list -> expr_t
-val mk_insert : id_t -> expr_t -> expr_t
-val mk_delete : id_t -> expr_t -> expr_t
-val mk_update : id_t -> expr_t -> expr_t -> expr_t
+val mk_insert : id_t -> expr_t list -> expr_t
+val mk_delete : id_t -> expr_t list -> expr_t
+val mk_update : id_t -> expr_t list -> expr_t list -> expr_t
 val mk_update_slice : id_t -> expr_t list -> expr_t -> expr_t
 
 val mk_ind : expr_t -> expr_t
 val mk_assign : id_t -> expr_t -> expr_t
-val mk_send : id_t -> expr_t -> expr_t -> expr_t
+val mk_send : id_t -> expr_t -> expr_t list -> expr_t
 
 (* smart role constructors *)
 val mk_const_stream : id_t -> type_t -> expr_t list -> flow_statement_t *
@@ -236,12 +239,14 @@ val mk_let : id_t list -> expr_t -> expr_t -> expr_t
 
 (* macro similar to fst *)
 val mk_fst: expr_t -> expr_t
+val mk_fst': id_t -> expr_t
 
 (* macro similar to snd *)
 val mk_snd: expr_t -> expr_t
+val mk_snd': id_t -> expr_t
 
 (* like fst, but for a collection with a tuple of any size *)
-val project_from_col : type_t list -> expr_t -> total:int -> choice:int -> expr_t
+val project_from_col : type_t list -> expr_t -> choice:int -> expr_t
 
 (* macro similar to fst but for a collection *)
 val mk_fst_many: type_t list -> expr_t -> expr_t
@@ -301,7 +306,11 @@ val id_t_add : string -> (string * 'a) list -> (string * 'a) list
 val modify_e : (string * 'a) list -> (string * expr_t) list -> expr_t list
 
 (* easy access to unit argument for functions/triggers *)
-val unit_arg : (string * value_type_t) list
+val unit_arg : (string * type_t) list
 
 (* easy to use error function macro *)
 val mk_error : string -> expr_t
+
+val mk_size_slow : data_struct -> expr_t
+
+val mk_min_max : expr_t -> expr_t -> (expr_t -> expr_t -> expr_t) -> expr_t -> data_struct -> expr_t
