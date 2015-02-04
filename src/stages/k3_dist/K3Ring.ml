@@ -74,7 +74,7 @@ let get_ring_node_fn =
     (mk_case_sn (mk_peek' results) "x"
       (mk_var "x") @@
       (* take the first node *)
-      mk_peek_or_error @@ mk_var node_ring.id) @@
+      mk_peek_or_error "empty node ring" @@ mk_var node_ring.id) @@
     mk_var "addr"
 
 (* global initialization *)

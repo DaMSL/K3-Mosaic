@@ -101,16 +101,6 @@ let hash_func_for typ =
     | x                 -> raise @@ NoHashFunction x
   in "hash_"^inner typ
 
-let hash_funcs_foreign p : (declaration_t * annotation_t) list =
-  let map_types = (* all the map types we have *)
-    ListAsSet.uniq @@ List.flatten @@ for_all_maps p @@ (map_types_for p) in
-  let names_types = List.map (fun t -> (t, hash_func_for t)) map_types in
-  List.map (fun (t, name) -> mk_foreign_fn name t t_int) names_types
-
-let route_foreign_funcs p =
-  mk_foreign_fn "mod" (wrap_ttuple [t_int; t_int]) t_int ::
-  (hash_funcs_foreign p)
-
 (* partition map as input by the user (with map names) *)
 let pmap_input = "pmap_input"
 let global_pmap_input p partmap =
@@ -125,10 +115,9 @@ let global_pmaps =
     mk_map
       (mk_lambda (wrap_args ["map_name", t_string; "map_types", pmap_types]) @@
         mk_tuple
-          [mk_subscript 1 @@
-            mk_peek_or_error @@
-              mk_slice (mk_var K3Dist.map_ids_id) @@
-                mk_tuple [mk_cunknown; mk_var "map_name"; mk_cunknown]
+          [mk_fst @@ mk_peek_or_error "can't find map in map_ids" @@
+              mk_slice' K3Dist.map_ids_id
+                [mk_cunknown; mk_var "map_name"; mk_cunknown]
           ; mk_var "map_types"]
       ) @@
       mk_var "pmap_input"
@@ -137,7 +126,7 @@ let global_pmaps =
  * This is order-dependent in pmap *)
 let calc_dim_bounds_code =
   mk_global_fn "calc_dim_bounds"
-  ["pmap", pmap_types] (*args*) [dim_bounds_type; t_int] (* return *) @@
+  ["pmap", pmap_types] [dim_bounds_type; t_int] @@
     mk_agg
       (mk_assoc_lambda
         (wrap_args ["xs", wrap_tlist @@ wrap_ttuple [t_int; t_int];
@@ -146,11 +135,10 @@ let calc_dim_bounds_code =
         mk_tuple [mk_combine (mk_var "xs") @@
           mk_singleton t_list_two_ints @@
             mk_tuple [mk_var "pos"; mk_var "acc_size"];
-          mk_mult (mk_var "bin_size") (mk_var "acc_size")]
-      )
+          mk_mult (mk_var "bin_size") (mk_var "acc_size")])
       (mk_tuple [mk_empty @@ wrap_tlist @@ wrap_ttuple [t_int; t_int];
-        mk_cint 1])
-      (mk_var "pmap")
+        mk_cint 1]) @@
+      mk_var "pmap"
 
 let gen_route_fn p map_id =
   let map_types = map_types_no_val_for p map_id in
@@ -178,10 +166,8 @@ let gen_route_fn p map_id =
     [output_type] @@ (* return *)
     (* get the info for the current map and bind it to "pmap" *)
     mk_let ["pmap"]
-      (mk_snd @@
-        mk_peek_or_error @@ mk_slice (mk_var pmap_data) @@
-          mk_tuple [mk_var "map_id"; mk_cunknown]
-      ) @@
+    (mk_snd @@ mk_peek_or_error "can't find map_id in pmap_data" @@
+        mk_slice' pmap_data @@ [mk_var "map_id"; mk_cunknown]) @@
 
     (* handle the case of no partitioning at all *)
     mk_case_ns (mk_peek @@ mk_var "pmap") "_"
@@ -205,8 +191,7 @@ let gen_route_fn p map_id =
             (mk_cint 0) @@ (* no contribution *)
             (* bind the slice for this index *)
             mk_let ["pmap_slice"]
-              (mk_slice (mk_var "pmap") @@
-                mk_tuple [mk_cint index; mk_cunknown]) @@
+              (mk_slice' "pmap" [mk_cint index; mk_cunknown]) @@
             (* check if we don't partition by this index *)
             (mk_case_ns (mk_peek @@ mk_var "pmap_slice") "peek_slice"
               (mk_cint 0) @@
@@ -221,9 +206,8 @@ let gen_route_fn p map_id =
               ) @@
               mk_mult
                 (mk_var "value") @@
-                mk_snd @@
-                  mk_peek_or_error @@ mk_slice (mk_var "dim_bounds") @@
-                    mk_tuple [mk_cint index; mk_cunknown])
+                mk_snd @@ mk_peek_or_error ("can't find "^soi index^" in dim_bounds") @@
+                    mk_slice' "dim_bounds" [mk_cint index; mk_cunknown])
           ) acc_code
       )
       (mk_cint 0)
@@ -240,8 +224,7 @@ let gen_route_fn p map_id =
             (* we only care about indices that are nothing *)
             (mk_neq (mk_var @@ id_x) @@ mk_nothing type_x)
             (mk_empty free_dims_type) @@
-            mk_slice (mk_var "pmap") @@
-              mk_tuple [mk_cint x; mk_cunknown]
+            mk_slice' "pmap" [mk_cint x; mk_cunknown]
           ) acc_code
         )
         (mk_empty free_dims_type)
@@ -302,16 +285,15 @@ let gen_route_fn p map_id =
               mk_combine
                 (mk_var "acc_ips") @@
                 mk_singleton output_type @@
-                  mk_apply (mk_var "get_ring_node") @@ mk_tuple
+                  mk_apply' "get_ring_node" @@ mk_tuple
                     [mk_agg
                       (mk_assoc_lambda (wrap_args ["acc", t_int])
                         (wrap_args ["i", t_int; "val", t_int]) @@
                         mk_add (mk_var "acc") @@
                           mk_mult (mk_var "val") @@
                             mk_snd @@
-                              mk_peek_or_error @@ mk_slice (mk_var "dim_bounds") @@
-                                mk_tuple [mk_var "i"; mk_cunknown]
-                      )
+                              mk_peek_or_error "can't find i in dim_bounds" @@
+                              mk_slice' "dim_bounds" [mk_var "i"; mk_cunknown])
                       (mk_var "bound_bucket") @@ (* start with this const *)
                       mk_var "free_bucket";
                     mk_var "max_val"]
@@ -329,13 +311,13 @@ let gen_route_fn p map_id =
         mk_var "sorted_ip_list"
 
 (* create all code needed for route functions, including foreign funcs*)
-let gen_route_code p partmap =
-  K3Ring.gen_ring_code @
-  global_pmap_input p partmap ::
-  global_pmaps ::
-  route_foreign_funcs p @
+let global_vars p partmap = [
+    global_pmap_input p partmap;
+    global_pmaps;
+  ]
+
+let functions p partmap =
   calc_dim_bounds_code ::
   (* create a route for each map type, using only the key types *)
-  List.map (gen_route_fn p) (List.map (hd |- snd) @@
+  (List.map (gen_route_fn p) @@ List.map (hd |- snd) @@
     P.uniq_types_and_maps ~type_fn:P.map_types_no_val_for p)
-

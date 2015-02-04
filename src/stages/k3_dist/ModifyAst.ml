@@ -82,13 +82,13 @@ let map_indices_add_vid idxs =
 (* TODO: add index for future, and for pinpoint access *)
 
 (* convert to a per-mapid representation *)
-let get_map_access_patterns_ids c ast =
+let get_map_access_patterns_ids p ast =
   let pats = get_map_access_patterns ast in
   let pats = StrMap.fold (fun nm v acc ->
-      IntMap.add (ProgInfo.map_id_of_name c.p nm) v acc)
+      IntMap.add (ProgInfo.map_id_of_name p nm) v acc)
     pats IntMap.empty in
   (* add in the patterns for singletons *)
-  let map_types = P.for_all_maps c.p (fun id -> id, P.map_types_for c.p id) in
+  let map_types = P.for_all_maps p (fun id -> id, P.map_types_for p id) in
   let singleton_maps = List.filter (function (_,[_]) -> true | _ -> false) map_types in
   let pats = List.fold_left (fun acc (id,_) ->
                IntMap.add id (IndexSet.singleton @@ OrdIdx([],IntSet.empty)) acc)

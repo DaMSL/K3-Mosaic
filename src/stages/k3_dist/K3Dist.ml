@@ -9,12 +9,21 @@ module P = ProgInfo
 
 module IdMap = Map.Make(struct type t = id_t let compare = String.compare end)
 
+type shuffle_fn_entry = {
+  stmts : IntSet.t;
+  rmap : map_id_t;
+  lmap : map_id_t;
+  binding : (int * int) list; (* rmap idx, lmap idx *)
+  name : string;
+}
+
 type config = {
   p : P.prog_data_t;
   (* a mapping from K3 map ids to index sets we build up as we slice *)
   map_idxs : IndexSet.t IntMap.t;
   (* a mapping from new map names to index sets we build up as we slice *)
   mapn_idxs : IndexSet.t StrMap.t;
+  shuffle_meta : shuffle_fn_entry list;
   use_multiindex : bool;
   force_correctives : bool;
   enable_gc : bool;
@@ -117,20 +126,6 @@ let args_of_t_with_v ?(vid="vid") c trig_nm = (vid, t_vid)::P.args_of_t c.p trig
 let arg_types_of_t_with_v c trig_nm = t_vid::arg_types_of_t c trig_nm
 let args_of_t_as_vars_with_v ?(vid="vid") c trig_nm =
   mk_var vid::args_of_t_as_vars c trig_nm
-
-(* log, buffer names *)
-let log_master_write_nm = "nd_log_master_write"
-let log_write_for p trig_nm = "nd_log_write_"^trig_nm (* varies with bound *)
-let log_get_bound_for _ trig_nm = "nd_log_get_bound_"^trig_nm
-let log_read_geq = "nd_log_read_geq" (* takes vid, returns (trig, vid)list >= vid *)
-(* adds the delta to all subsequent vids following in the buffer so that non
- * delta computations will be correct. Must be atomic ie. no other reads of the
- * wrong buffer value can happen.
- * Also used for adding to map buffers and for correctives *)
-let add_delta_to_map c map_id =
-  let m_t = map_types_for c.p map_id in
-  "nd_add_delta_to_"^String.concat "_" @@
-    List.map K3PrintSyntax.string_of_type m_t
 
 (**** global data structures ****)
 
@@ -236,24 +231,26 @@ let map_ids c =
   create_ds map_ids_id t ~e ~init
 
 (* stmt_cntrs - (vid, stmt_id, counter) *)
-(* NOTE: change to mmap with index on vid, stmt *)
+(* TODO: change to mmap with index on vid, stmt *)
 let nd_stmt_cntrs =
   let e = ["vid", t_vid; "stmt_id", t_int; "counter", t_int] in
   create_ds "nd_stmt_cntrs" (wrap_tbag' @@ snd_many e) ~e
 
 (* master log *)
+(* TODO: change to ordered DS, like ordered map *)
 let nd_log_master =
   let e = ["vid", t_vid; "trig_id", t_trig_id; "stmt_id", t_stmt_id] in
   create_ds "nd_log_master" (wrap_tbag' @@ snd_many e) ~e
 
 (* names for log *)
-let log_for_t t = "nd_log_"^t
+let nd_log_for_t t = "nd_log_"^t
 
 (* log data structures *)
+(* TODO: change to maps on vid *)
 let log_ds c : data_struct list =
   let log_struct_for trig =
     let e = args_of_t_with_v c trig in
-    create_ds (log_for_t trig) (wrap_tbag' @@ snd_many e) ~e
+    create_ds (nd_log_for_t trig) (wrap_tbag' @@ snd_many e) ~e
   in
   P.for_all_trigs c.p log_struct_for
 
@@ -295,6 +292,7 @@ let sw_state_wait_vid = 2
 let sw_state = create_ds "sw_state" (mut t_int) ~init:(mk_cint 0)
 
 (* buffers for insert/delete -- we need a per-trigger list *)
+(* these buffers don't inlude a vid, unlike the logs in the nodes *)
 let sw_trig_buf_prefix = "sw_buf_"
 let sw_trig_bufs (c:config) =
   P.for_all_trigs c.p @@ fun t ->
@@ -390,11 +388,11 @@ let frontier_fn c map_id =
       (wrap_args m_id_t_v)
       (mk_if
         (* if the map vid is less than current vid *)
-        (v_lt (mk_var map_vid) (mk_var "vid"))
+        (mk_lt (mk_var map_vid) (mk_var "vid"))
         (* if the map vid is equal to the max_vid, we add add it to our
         * accumulator and use the same max_vid *)
         (mk_if
-          (v_eq (mk_var map_vid) (mk_var max_vid))
+          (mk_eq (mk_var map_vid) @@ mk_var max_vid)
           (mk_tuple
             [mk_combine
               (mk_singleton m_t_v_bag (mk_tuple @@ ids_to_vars @@ fst_many m_id_t_v)) @@
@@ -403,7 +401,7 @@ let frontier_fn c map_id =
           (* else if map vid is greater than max_vid, make a new
           * collection and set a new max_vid *)
           (mk_if
-            (v_gt (mk_var map_vid) (mk_var max_vid))
+            (mk_gt (mk_var map_vid) @@ mk_var max_vid)
             (mk_tuple
               [mk_singleton m_t_v_bag (mk_tuple @@ ids_to_vars @@ fst_many m_id_t_v);
               mk_var map_vid])
@@ -479,13 +477,16 @@ let global_vars c dict =
 (* foreign functions *)
 let declare_foreign_functions =
   [ mk_foreign_fn "hash_addr" t_addr t_int;
+    mk_foreign_fn "hash_int" t_int t_int;
+    mk_foreign_fn "hash_float" t_float t_int;
+    mk_foreign_fn "hash_string" t_string t_int;
+    mk_foreign_fn "hash_date" t_date t_int;
     mk_foreign_fn "error" t_unit t_unknown;
     mk_foreign_fn "parse_sql_date" t_string t_int;
-    mk_foreign_fn "hash_int" t_int t_int;
-    mk_foreign_fn "hash_addr" t_addr t_int;
     mk_foreign_fn "int_of_float" t_float t_int;
     mk_foreign_fn "float_of_int" t_int t_float;
     mk_foreign_fn "get_max_int" t_unit t_int;
+    mk_foreign_fn "mod" (wrap_ttuple [t_int; t_int]) t_int;
   ]
 
 

@@ -80,7 +80,7 @@ let global_vars = [
   decl_global tm_timer_list;
 ]
 
-let trigs = [
+let triggers = [
   tm_insert_timer_trig;
   tm_check_time_trig;
 ]

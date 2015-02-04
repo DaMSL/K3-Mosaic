@@ -525,8 +525,11 @@ let mk_convert_col src_t dest_t col =
 let mk_peek_or_zero e = mk_case_ns (mk_peek e) "x"
   (mk_cint 0) (mk_var "x")
 
-let mk_peek_or_error e = mk_case_ns (mk_peek e) "x"
-  (mk_apply (mk_var "error") @@ mk_cstring "bad peek") (mk_var "x")
+let mk_error s = mk_apply (mk_var "error") @@ mk_cstring s
+
+let mk_peek_or_error s e = mk_case_ns (mk_peek e) "x"
+  (mk_error s) @@
+  mk_var "x"
 
 (* data structure record to standardize manipulation *)
 type data_struct = { id: string;
@@ -558,8 +561,6 @@ let modify_e id_t val_l =
 
 let unit_arg = ["_", t_unit]
 
-let mk_error s = mk_apply (mk_var "error") @@ mk_cstring s
-
 (* code to count the size of a collection *)
 let mk_size_slow col = mk_fst @@ mk_agg
   (mk_assoc_lambda' ["count", t_int] col.e @@ mk_add (mk_var "count") @@ mk_cint 1)
@@ -573,4 +574,13 @@ let mk_min_max v v' v_t comp_fn zero col = mk_fst @@ mk_agg
       mk_var v')
   zero @@
   mk_var col.id
+
+(* pop off the front of a list *)
+let mk_pop col_nm bind_nm fail success =
+  mk_case_ns (mk_peek' col_nm) bind_nm
+    fail @@
+    mk_block [
+      mk_delete col_nm [mk_var bind_nm];
+      success
+    ]
 

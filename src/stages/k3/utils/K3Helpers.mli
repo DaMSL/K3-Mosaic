@@ -284,7 +284,7 @@ val mk_convert_col : type_t -> type_t -> expr_t -> expr_t
 
 val mk_peek_or_zero : expr_t -> expr_t
 
-val mk_peek_or_error : expr_t -> expr_t
+val mk_peek_or_error : string -> expr_t -> expr_t
 
 (* data structure record to standardize manipulation *)
 type data_struct = { id: string;
@@ -313,3 +313,5 @@ val mk_error : string -> expr_t
 val mk_size_slow : data_struct -> expr_t
 
 val mk_min_max : string -> string -> type_t -> (expr_t -> expr_t -> expr_t) -> expr_t -> data_struct -> expr_t
+
+val mk_pop : string -> string -> expr_t -> expr_t -> expr_t

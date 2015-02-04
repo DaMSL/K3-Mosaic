@@ -46,285 +46,335 @@ module TS = Timestamp
 exception ProcessingFailed of string;;
 
 (* global trigger names needed for generated triggers and sends *)
-let send_fetch_name_of_t _ trig_nm = trig_nm^"_send_fetch"
-let rcv_fetch_name_of_t _ trig_nm = trig_nm^"_rcv_fetch"
-let rcv_put_name_of_t _ trig_nm = trig_nm^"_rcv_put"
+let send_fetch_name_of_t trig_nm = "sw_"^trig_nm^"_send_fetch"
+let rcv_fetch_name_of_t trig_nm = "nd_"^trig_nm^"_rcv_fetch"
+let rcv_put_name_of_t trig_nm = "nd_"^trig_nm^"_rcv_put"
 let send_push_name_of_t c trig_nm stmt_id map_id =
-  trig_nm^"_send_push_s"^string_of_int stmt_id^"_m_"^P.map_name_of c.p map_id
+  "nd_"^trig_nm^"_send_push_s"^soi stmt_id^"_m_"^P.map_name_of c.p map_id
 let rcv_push_name_of_t c trig_nm stmt_id map_id =
-  trig_nm^"_rcv_push_s"^string_of_int stmt_id^"_m_"^P.map_name_of c.p map_id
+  "nd_"^trig_nm^"_rcv_push_s"^soi stmt_id^"_m_"^P.map_name_of c.p map_id
 let send_corrective_name_of_t c map_id =
-  P.map_name_of c.p map_id^"_send_correctives"
-let do_complete_name_of_t _ trig_nm stmt_id =
-  trig_nm^"_do_complete_s"^string_of_int stmt_id
-let filter_corrective_list_name = "filter_corrective_list"
+  "nd_"^P.map_name_of c.p map_id^"_send_correctives"
+let do_complete_name_of_t trig_nm stmt_id =
+  "nd_"^trig_nm^"_do_complete_s"^string_of_int stmt_id
 let rcv_corrective_name_of_t c trig_nm stmt_id map_id =
   trig_nm^"_rcv_corrective_s"^string_of_int stmt_id^"_m_"^P.map_name_of c.p map_id
 let do_corrective_name_of_t c trig_nm stmt_id map_id =
   trig_nm^"_do_corrective_s"^string_of_int stmt_id^"_m_"^P.map_name_of c.p map_id
 
-(* function to check index *)
-let check_stmt_cntr_index = "check_and_update_stmt_cntr_index"
+(**** global functions ****)
 
-(* --- global functions --- *)
+(* write to master log *)
+(* TODO: make into ordered map *)
+let nd_log_master_write_nm = "nd_log_master_write"
+let nd_log_master_write =
+  mk_global_fn nd_log_master_write_nm D.nd_log_master.e [] @@
+    mk_insert D.nd_log_master.id @@ ids_to_vars @@ fst_many D.nd_log_master.e
 
-let declare_global_funcs partmap c ast =
-  (* log_master_write *)
-  let log_master_write_code () =
-    mk_global_fn log_master_write_nm nd_log_master.e [] @@
-    (* write to master log *)
-    mk_insert nd_log_master.id @@
-      ids_to_vars @@ fst_many nd_log_master.e
-  in
-  (* log_write *)
-  let log_write_code t =
-    mk_global_fn (log_write_for c.p t) (args_of_t_with_v c t) [] @@
-      (* write bound to trigger_specific log *)
-      mk_insert (D.log_for_t t) @@ args_of_t_as_vars_with_v c t
-  in
-  (* log_get_bound -- necessary since each trigger has different args *)
-  let log_get_bound_code t =
-    let pat_tuple = args_of_t_with_v c t in
-    (* create a pattern for selecting vid alone *)
-    let pat_unknown = List.map (fun (id, _) ->
-      if id = "vid" then mk_var "vid" else mk_cunknown) pat_tuple
-    in mk_global_fn
-      (log_get_bound_for c.p t)
-      ["vid", t_vid]
-      (arg_types_of_t_with_v c t) @@
-      mk_case_sn
-        (mk_peek @@ mk_slice' (mk_var @@ D.log_for_t t) pat_unknown) "slice"
-        (mk_var "slice")
-        (mk_apply (mk_var "error") mk_cunit)
-  in
-  (* log_read_geq -- get list of (t,vid) >= vid *)
-  let log_read_geq_code = mk_global_fn
-    log_read_geq
-    ["vid2", t_vid]
-    [wrap_tbag' @@ snd_many nd_log_master.e] @@
-    mk_filter
-      (* get only >= vids *)
-      (mk_lambda'
-        nd_log_master.e @@
-        v_geq (mk_var "vid") @@ mk_var "vid2"
+(* log_write - save the trigger's arguments *)
+(* TODO: make into map, and reduce args for space *)
+let nd_log_write_for p trig_nm = "nd_log_write_"^trig_nm (* varies with bound *)
+let nd_log_write c t =
+  mk_global_fn (nd_log_write_for c.p t) (args_of_t_with_v c t) [] @@
+  (* write bound to trigger_specific log *)
+  mk_insert (D.nd_log_for_t t) @@ args_of_t_as_vars_with_v c t
+
+(* get bound args *)
+(* TODO: make into map *)
+let nd_log_get_bound_for trig_nm = "nd_log_get_bound_"^trig_nm
+let nd_log_get_bound c t =
+  let id_t = args_of_t_with_v c t in
+  (* create a pattern for selecting vid alone *)
+  let pat = List.map (function ("vid",_) -> mk_var "vid" | _ -> mk_cunknown) id_t in
+  mk_global_fn (nd_log_get_bound_for t)
+    ["vid", t_vid]
+    (arg_types_of_t_with_v c t) @@
+    mk_peek_or_error "failed to find log" @@
+      mk_slice' (D.nd_log_for_t t) pat
+
+(* log_read_geq -- get list of (t, vid) >= vid2 *)
+(* TODO: make ordered or some other DS *)
+let nd_log_read_geq_nm = "nd_log_read_geq"
+let nd_log_read_geq =
+  mk_global_fn nd_log_read_geq_nm
+  ["vid2", t_vid]
+  [wrap_tbag' @@ snd_many nd_log_master.e] @@
+  mk_filter
+    (* get only >= vids *)
+    (mk_lambda' nd_log_master.e @@ mk_geq (mk_var "vid") @@ mk_var "vid2") @@
+    mk_var nd_log_master.id
+
+(* function to check to see if we should send a do_complete message *)
+let nd_check_stmt_cntr_index_nm = "nd_check_stmt_cntr_index"
+let nd_check_stmt_cntr_index =
+  let part_pat = list_drop_end 1 nd_stmt_cntrs.e in
+  let counter = fst @@ hd @@ list_take_end 1 nd_stmt_cntrs.e in
+  let part_pat_as_vars = ids_to_vars @@ fst_many part_pat in
+  let query_pat = part_pat_as_vars @ [mk_cunknown] in
+  let stmt_cntrs_slice = mk_slice' nd_stmt_cntrs.id query_pat in
+  mk_global_fn nd_check_stmt_cntr_index_nm
+    part_pat
+    [t_bool] @@ (* return whether we should send the do_complete *)
+    mk_if (* check if the counter exists *)
+      (mk_has_member' (mk_var nd_stmt_cntrs.id) query_pat @@ nd_stmt_cntrs.t)
+      (mk_block [
+        mk_case_ns (mk_peek stmt_cntrs_slice) "ctr_slice"
+        mk_cunit @@
+        mk_update nd_stmt_cntrs.id
+          [mk_var "ctr_slice"]
+          [mk_let
+            (fst_many nd_stmt_cntrs.e)
+            (mk_var "ctr_slice") @@
+            mk_tuple @@
+              part_pat_as_vars @
+              [mk_sub (mk_var counter) (mk_cint 1)]];
+          (* check if the counter is 0 *)
+          (mk_eq
+            (mk_peek stmt_cntrs_slice) @@
+            mk_just @@ mk_tuple @@ part_pat_as_vars @ [mk_cint 0])
+      ]
       ) @@
-      mk_var nd_log_master.id
-  in
-  (* check_stmt_cntr_indx *)
-  (* Check to see if we should send a do_complete message *)
-  let check_stmt_cntr_index_fn =
-    let part_pat = list_drop_end 1 nd_stmt_cntrs.e in
-    let counter = fst @@ hd @@ list_take_end 1 nd_stmt_cntrs.e in
-    let part_pat_as_vars = ids_to_vars @@ fst_many part_pat in
-    let query_pat = part_pat_as_vars @ [mk_cunknown] in
-    let stmt_cntrs_slice = mk_slice' (mk_var nd_stmt_cntrs.id) query_pat in
-    mk_global_fn
-      check_stmt_cntr_index
-      part_pat
-      [t_bool] @@ (* return whether we should send the do_complete *)
-      mk_if (* check if the counter exists *)
-        (mk_has_member' (mk_var nd_stmt_cntrs.id) query_pat @@ nd_stmt_cntrs.t)
-        (mk_block
-          [mk_case_ns (mk_peek stmt_cntrs_slice) "ctr_slice"
-           mk_cunit
-           (mk_update
-            nd_stmt_cntrs.id
-            (mk_var "ctr_slice") @@ (* oldval *)
-            mk_let (* newval *)
-              (fst_many nd_stmt_cntrs.e)
-              (mk_var "ctr_slice") @@
-              mk_tuple @@
-                part_pat_as_vars @
-                [mk_sub (mk_var counter) (mk_cint 1)])
+      (* else: no value in the counter *)
+      mk_block [
+        (* Initialize if the push arrives before the put. *)
+        mk_insert nd_stmt_cntrs.id @@ part_pat_as_vars @ [mk_cint(-1)];
+        mk_cbool false
+      ]
 
-          ;mk_if (* check if the counter is 0 *)
-            (mk_eq
-              (mk_peek stmt_cntrs_slice) @@
-              mk_just @@ mk_tuple @@ part_pat_as_vars @ [mk_cint 0]
-            )
-            (* Return true - send a do_complete *)
-            (mk_cbool true)
-            (mk_cbool false)
-          ]
-        ) @@
-        mk_block
-          [mk_insert (* else: no value in the counter *)
-            nd_stmt_cntrs.id @@
-            (* Initialize if the push arrives before the put. *)
-            mk_tuple @@ part_pat_as_vars @ [mk_cint(-1)];
-          mk_cbool false
-          ]
+(* add_delta_to_buffer *)
+(* adds the delta to all subsequent vids following in the buffer so that non
+ * delta computations will be correct. Must be atomic ie. no other reads of the
+ * wrong buffer value can happen.
+ * This is the same procedure for both correctives and do_complete
+ * it consists of 2 parts:
+ * 1. Initialize the given vid using the delta values
+ * 2. Add to all next vids *)
+(* NOTE: this function assumes the initial value is always 0.
+ * If we need another value, it must be handled via message from
+ * m3tok3 *)
+let nd_add_delta_to_buf_nm c map_id =
+  let t = P.map_types_for c.p map_id in
+  "nd_add_delta_to_"^String.concat "_" @@
+    List.map K3PrintSyntax.string_of_type t
+
+let nd_add_delta_to_buf c map_id =
+  let func_name = add_delta_to_map_nm c map_id in
+  let delta_tuples_nm = "delta_tuples" in
+  let ids_types_arg = P.map_ids_types_for ~prefix:"__arg_" c.p map_id in
+  let ids_types_arg_v = P.map_ids_types_add_v ~vid:"vid_arg" ids_types_arg in
+  let ids_types_v = P.map_ids_types_with_v_for c.p map_id in
+  let types_v = snd_many ids_types_v in
+  let t_col_v = wrap_t_of_map' types_v in
+  let len_types_v = List.length types_v in
+  let vars_v = ids_to_vars @@ fst_many ids_types_v in
+  let vars_arg_v = ids_to_vars @@ fst_many ids_types_arg_v in
+  let vars_no_val = list_drop_end 1 @@
+    ids_to_vars @@ fst_many @@ P.map_ids_types_for c.p map_id in
+  let idx = D.make_into_index vars_no_val in
+  let vars_v_no_val = list_drop_end 1 vars_v in
+  let vars_val = hd @@ list_take_end 1 vars_v in
+  let vars_arg_val = hd @@ list_take_end 1 vars_arg_v in
+  let vars_arg_no_v_no_val =
+    ids_to_vars @@ fst_many @@ list_drop_end 1 ids_types_arg in
+  let t_val = hd @@ list_take_end 1 types_v in
+  let id_val = hd @@ list_take_end 1 @@ fst_many @@ ids_types_v in
+  let lookup_value, update_value = "lookup_value", "update_value" in
+  let corrective, target_map = "corrective", "target_map" in
+  let tmap_deref = target_map^"_d" in
+  let update_vars = list_drop_end 1 vars_v @ [mk_var update_value] in
+  let zero = match t_val.typ with
+    | TInt   -> mk_cint 0
+    | TFloat -> mk_cfloat 0.
+    | _ -> failwith @@ "Unhandled type "^K3PrintSyntax.string_of_type t_val
   in
-  (* add_delta_to_buffer *)
-  (* this is the same procedure for both correctives and do_complete *
-   * it consists of 2 parts:
-    * 1. Initialize the given vid using the delta values
-    * 2. Add to all next vids *)
-  (* NOTE: this function assumes the initial value is always 0.
-   * If we need another value, it must be handled via message from
-   * m3tok3 *)
-  let add_delta_to_buffer_code map_id =
-    let func_name = add_delta_to_map c map_id in
-    let delta_tuples_nm = "delta_tuples" in
-    let ids_types_arg = P.map_ids_types_for ~prefix:"__arg_" c.p map_id in
-    let ids_types_arg_v = P.map_ids_types_add_v ~vid:"vid_arg" ids_types_arg in
-    let ids_types_v = P.map_ids_types_with_v_for c.p map_id in
-    let types_v = snd_many ids_types_v in
-    let t_col_v = wrap_t_of_map' types_v in
-    let len_types_v = List.length types_v in
-    let vars_v = ids_to_vars @@ fst_many ids_types_v in
-    let vars_arg_v = ids_to_vars @@ fst_many ids_types_arg_v in
-    let vars_no_val = list_drop_end 1 @@
-      ids_to_vars @@ fst_many @@ P.map_ids_types_for c.p map_id in
-    let idx = D.make_into_index vars_no_val in
-    let vars_v_no_val = list_drop_end 1 vars_v in
-    let vars_val = hd @@ list_take_end 1 vars_v in
-    let vars_arg_val = hd @@ list_take_end 1 vars_arg_v in
-    let vars_arg_no_v_no_val =
-      ids_to_vars @@ fst_many @@ list_drop_end 1 ids_types_arg in
-    let t_val = hd @@ list_take_end 1 types_v in
-    let id_val = hd @@ list_take_end 1 @@ fst_many @@ ids_types_v in
-    let lookup_value, update_value = "lookup_value", "update_value" in
-    let corrective, target_map = "corrective", "target_map" in
-    let tmap_deref = target_map^"_d" in
-    let update_vars = list_drop_end 1 vars_v @ [mk_var update_value] in
-    let zero = match t_val.typ with
-      | TInt   -> mk_cint 0
-      | TFloat -> mk_cfloat 0.
-      | _ -> failwith @@ "Unhandled type "^K3PrintSyntax.string_of_type t_val
-    in
-    let regular_delta =
-      mk_let [lookup_value]
-        (map_latest_vid_vals c (mk_var tmap_deref)
-          (Some(vars_no_val @ [mk_cunknown])) map_id ~keep_vid:true) @@
-        mk_let [update_value]
-          (* get either 0 to add or the value we read *)
-          (mk_add (mk_var id_val) @@
-            mk_case_ns
+  let regular_delta =
+    mk_let [lookup_value]
+      (map_latest_vid_vals c (mk_var tmap_deref)
+        (Some(vars_no_val @ [mk_cunknown])) map_id ~keep_vid:true) @@
+      mk_let [update_value]
+        (* get either 0 to add or the value we read *)
+        (mk_add (mk_var id_val) @@
+          mk_case_ns
+            (mk_peek @@ mk_var lookup_value) "val"
+            zero @@
+            mk_subscript len_types_v @@ mk_var "val") @@
+        mk_insert tmap_deref update_vars
+  in
+  mk_global_fn func_name
+    (* corrective: whether this is a corrective delta *)
+    ([target_map, wrap_tind @@ wrap_t_map_idx' c map_id types_v;
+      corrective, t_bool; "min_vid", t_vid;
+      delta_tuples_nm, wrap_t_of_map' types_v])
+    [t_unit] @@
+    mk_block @@
+      [mk_iter  (* loop over values in delta tuples *)
+        (mk_lambda' ids_types_v @@
+          (* careful to put bind in proper place *)
+          mk_bind (mk_var target_map) tmap_deref @@
+          (* this part is just for correctives:
+            * We need to check if there's a value at the particular version id
+            * If so, we must add the value directly *)
+            mk_let [lookup_value]
+              (mk_if
+                (mk_var corrective)
+                (if c.use_multiindex then
+                  mk_slice_idx' ~idx ~comp:EQ (mk_var tmap_deref) @@
+                    vars_v_no_val @ [mk_cunknown]
+                else
+                  (mk_slice' tmap_deref @@
+                    vars_v_no_val @ [mk_cunknown])) @@
+                  mk_empty @@ wrap_t_of_map' types_v) @@
+            mk_case_sn
               (mk_peek @@ mk_var lookup_value) "val"
-              zero @@
-              mk_subscript len_types_v @@ mk_var "val") @@
-          mk_insert tmap_deref @@ mk_tuple update_vars
-    in
-    mk_global_fn func_name
-      (* corrective: whether this is a corrective delta *)
-      ([target_map, wrap_tind @@ wrap_t_map_idx' c map_id types_v;
-        corrective, t_bool; "min_vid", t_vid;
-        delta_tuples_nm, wrap_t_of_map' types_v])
-      [t_unit] @@
-      mk_block @@
-        [mk_iter  (* loop over values in delta tuples *)
-          (mk_lambda' ids_types_v @@
-            (* careful to put bind in proper place *)
-            mk_bind (mk_var target_map) tmap_deref @@
-            (* this part is just for correctives:
-             * We need to check if there's a value at the particular version id
-             * If so, we must add the value directly *)
-              mk_let [lookup_value]
-                (mk_if
-                  (mk_var corrective)
-                  (if c.use_multiindex then
-                    mk_slice_idx' ~idx ~comp:EQ (mk_var tmap_deref) @@
-                      vars_v_no_val @ [mk_cunknown]
-                  else
-                    (mk_slice' (mk_var tmap_deref) @@
-                      vars_v_no_val @ [mk_cunknown])) @@
-                    mk_empty @@ wrap_t_of_map' types_v) @@
-              mk_case_sn
-                (mk_peek @@ mk_var lookup_value) "val"
-                (* then just update the value *)
-                (mk_let [update_value]
-                  (mk_add (mk_var id_val) @@ mk_subscript len_types_v @@ mk_var "val") @@
-                  mk_insert tmap_deref @@ mk_tuple update_vars)
-                (* else, if it's just a regular delta, read the frontier *)
-                regular_delta) @@
-          mk_var delta_tuples_nm
-        ;
-        (* add to future values *)
-        mk_iter (* loop over values in the delta tuples *)
-         (mk_lambda' ids_types_arg_v @@
-           mk_let ["filtered"]
-           (* careful to put bind in proper place *)
-           (mk_bind (mk_var target_map) tmap_deref @@
-             (* slice for all values > vid with same key *)
-             if c.use_multiindex then
-               mk_slice_idx' ~idx ~comp:GTA (mk_var tmap_deref) @@
-                 P.map_add_v (mk_var "min_vid") @@ vars_arg_no_v_no_val@[mk_cunknown]
-             else
-               mk_filter (* only greater vid for this part *)
-                 (mk_lambda' ids_types_v @@
-                   mk_gt (mk_var "vid") @@ mk_var "min_vid") @@
-                 (* slice w/o vid and value *)
-                 mk_slice' (mk_var tmap_deref) @@
-                   P.map_add_v mk_cunknown @@ vars_arg_no_v_no_val@[mk_cunknown]) @@
-           mk_iter
-             (mk_lambda' ids_types_v @@
-               (* careful to put bind in proper place *)
-               mk_bind (mk_var target_map) tmap_deref @@
-                 mk_update tmap_deref (mk_tuple vars_v) @@
-                   mk_tuple @@ vars_v_no_val@[mk_add vars_val vars_arg_val]
-             ) @@
-             mk_var "filtered"
-         ) @@
-         mk_var delta_tuples_nm]
-  in
-  log_read_geq_code ::
-  check_stmt_cntr_index_fn ::
-  List.map (fun (_,maps) ->
-    add_delta_to_buffer_code @@ hd maps)
-    (P.uniq_types_and_maps c.p) @
-  [log_master_write_code ()] @
-  P.for_all_trigs c.p log_write_code @
-  P.for_all_trigs c.p log_get_bound_code @
-  TS.functions @
-  (if c.enable_gc then GC.functions else []) @
-  K3Shuffle.gen_shuffle_route_code c.p partmap @
-  K3Ring.functions
+              (* then just update the value *)
+              (mk_let [update_value]
+                (mk_add (mk_var id_val) @@ mk_subscript len_types_v @@ mk_var "val") @@
+                mk_insert tmap_deref update_vars)
+              (* else, if it's just a regular delta, read the frontier *)
+              regular_delta) @@
+        mk_var delta_tuples_nm
+      ;
+      (* add to future values *)
+      mk_iter (* loop over values in the delta tuples *)
+        (mk_lambda' ids_types_arg_v @@
+          mk_let ["filtered"]
+          (* careful to put bind in proper place *)
+          (mk_bind (mk_var target_map) tmap_deref @@
+            (* slice for all values > vid with same key *)
+            if c.use_multiindex then
+              mk_slice_idx' ~idx ~comp:GTA (mk_var tmap_deref) @@
+                P.map_add_v (mk_var "min_vid") @@ vars_arg_no_v_no_val@[mk_cunknown]
+            else
+              mk_filter (* only greater vid for this part *)
+                (mk_lambda' ids_types_v @@
+                  mk_gt (mk_var "vid") @@ mk_var "min_vid") @@
+                (* slice w/o vid and value *)
+                mk_slice' tmap_deref @@
+                  P.map_add_v mk_cunknown @@ vars_arg_no_v_no_val@[mk_cunknown]) @@
+          mk_iter
+            (mk_lambda' ids_types_v @@
+              (* careful to put bind in proper place *)
+              mk_bind (mk_var target_map) tmap_deref @@
+                mk_update tmap_deref
+                  vars_v @@
+                  vars_v_no_val @ [mk_add vars_val vars_arg_val]
+            ) @@
+            mk_var "filtered"
+        ) @@
+        mk_var delta_tuples_nm]
+(*
+ * Return list of corrective statements we need to execute by checking
+ * which statements were performed after time x that used a particular map
+ * The only reason for this function is that we may have the same stmt
+ * needing to execute with different vids
+ * Optimization TODO: check also by ranges within the map ie. more fine grain
+ *)
+let nd_filter_corrective_list_nm = "nd_filter_corrective_list"
+let nd_filter_corrective_list =
+  let trig_stmt_list_t = wrap_tbag' [t_trig_id; t_stmt_id] in
+  let return_type_base = [t_stmt_id; t_vid_list] in
+  let return_type = wrap_tbag' return_type_base in
+  mk_global_fn nd_filter_corrective_list_nm
+  (* (trigger_id, stmt_id) list *)
+  ["request_vid", t_vid; "trig_stmt_list", trig_stmt_list_t]
+  [return_type]
+  @@
+  mk_let ["log_entries"]
+    (mk_apply (* list of triggers >= vid *)
+      (mk_var log_read_geq) @@ mk_var "request_vid") @@
+  (* convert to bag *)
+  mk_convert_col (wrap_tlist' return_type_base) return_type @@
+    (* group the list by stmt_ids *)
+    mk_gbagg
+      (mk_lambda' ["_", t_vid; "stmt_id", t_stmt_id] @@ mk_var "stmt_id")
+      (mk_assoc_lambda'
+        ["vid_list", t_vid_list]
+        ["vid", t_vid; "_", t_stmt_id] @@
+        mk_combine (mk_var "vid_list") (mk_singleton t_vid_list @@ mk_var "vid")
+      )
+      (mk_empty t_vid_list) @@
+      let vid_stmt_id_t  = ["vid", t_vid; "stmt_id", t_stmt_id] in
+      let vid_stmt_col_t = wrap_tlist' @@ snd_many vid_stmt_id_t in
+      mk_sort (* sort so early vids are generally sent out first *)
+        (* get a list of vid, stmt_id pairs *)
+        (** this is reall a map, but make it a fold to convert to a list *)
+        (mk_assoc_lambda' (* compare func *)
+          ["vid1", t_vid; "stmt1", t_stmt_id]
+          ["vid2", t_vid; "stmt2", t_stmt_id] @@
+          v_lt (mk_var "vid1") @@ mk_var "vid2")
+        (mk_agg
+          (mk_assoc_lambda'
+            ["acc", vid_stmt_col_t]
+            D.nd_log_master.e @@
+            (* convert to vid, stmt *)
+            mk_combine
+              (mk_var "acc") @@
+              mk_singleton
+                vid_stmt_col_t @@
+                mk_tuple @@ ids_to_vars @@ fst_many vid_stmt_id_t)
+          (mk_empty vid_stmt_col_t) @@
+          mk_var "log_entries"
+        )
 
 
-(* ---- start of protocol code ---- *)
+
+(**** protocol code ****)
 
 (* The driver trigger: loop over the trigger data structures as long as we have spare vids *)
 let sw_driver_trig_nm = "sw_driver_trig"
-let sw_driver_trig =
-  mk_code_sink sw_driver_trig_nm unit_arg [] @@
-  mk_case_ns (mk_apply (mk_var TS.sw_gen_vid_nm) mk_cunit) "vid"
+let sw_driver_trig (c:config) =
+  let trig_id = "trig_id" in
+  (* dispatch code by trigger ids, for the trig buffers *)
+  let dispatch_code =
+    List.fold_left (fun acc (id, nm) ->
+      (* check if we match on the id *)
+      mk_if (mk_eq (mk_var trig_id) @@ mk_cint id)
+        (* if so, pop the next trigger args *)
+        (mk_pop (sw_trig_buf_prefix^nm) "trig_args"
+          (mk_error @@ "missing trigger "^nm^" args") @@
+          mk_apply' (send_fetch_name_of_t nm) @@ mk_var "trig_args")
+        (* else, continue *)
+        acc)
+    (mk_error "mismatch on trigger id") @@
+    P.for_all_trigs c.p (fun x -> P.trigger_id_for_name c.p x, x)
+  in
+  mk_code_sink' sw_driver_trig_nm unit_arg [] @@
+  mk_case_ns (mk_apply' TS.sw_gen_vid_nm mk_cunit) "vid"
     (* if we don't have a vid, set state to waiting for vid *)
-    (mk_assign D.sw_state @@ mk_cint D.sw_state_wait_vid) @@
+    (mk_assign D.sw_state.id @@ mk_cint D.sw_state_wait_vid) @@
     (* else *)
-    mk_case_ns (mk_peek @@ mk_var D.sw_trig_buf_idx.id) "send_fn"
-      (* no message to send -- set state to idle *)
-      (mk_assign D.sw_state @@ mk_cint D.sw_state_idle) @@
-      (* some msg *)
+    mk_pop D.sw_trig_buf_idx.id trig_id 
+      (* empty: no message to send -- set state to idle *)
+      (mk_assign D.sw_state.id @@ mk_cint D.sw_state_idle) @@
+      (* have a msg *)
       mk_block [
         (* set state to sending *)
-        mk_assign D.sw_state @@ mk_cint D.sw_state_sending;
-        (* erase from trig buf index *)
-        mk_delete D.sw_trig_buf_idx.id (mk_var "send_fn");
-        (* send the msg *)
-        mk_apply (mk_var "send_fn") @@ mk_var "vid";
-        (* recurse *)
-        mk_send sw_driver_trig_nm G.me_var mk_cunit;
+        mk_assign D.sw_state.id @@ mk_cint D.sw_state_sending;
+        (* send the msg using dispatch code *)
+        dispatch_code;
+        (* recurse, trying to get another message *)
+        mk_send sw_driver_trig_nm G.me_var [mk_cunit];
       ]
 
-(* The start trigger puts the message in a trig buffer and calls the driver if needed *)
-let start_trig (c:config) t =
-  let args = P.args_of_t c.p t in
-  mk_code_sink' t args [] @@
+(* The start trigger puts the message in a trig buffer and calls the driver *)
+let sw_start_trig (c:config) trig =
+  let args_t = snd_many @@ P.args_of_t c.p trig in
+  let args = ["args", wrap_ttuple args_t] in
+  mk_code_sink' trig args [] @@
     mk_block [
       (* insert args into trig buffer *)
-      mk_insert (D.sw_trig_buf_prefix.id^t) @@ mk_tuple args;
-      (* insert send_fetch function into trig index buffer *)
-      mk_insert D.sw_trig_buf_idx.id @@ mk_var P.send_fetch_name_of_t;
+      mk_insert (D.sw_trig_buf_prefix^trig) [mk_var "args"];
+      (* insert trig id into trig index buffer *)
+      mk_insert D.sw_trig_buf_idx.id [mk_cint @@ P.trigger_id_for_name c.p trig];
       (* increment counters for msgs to get vids *)
-      mk_assign TS.sw_need_vid.id @@ mk_add (mk_var D.sw_need_vid.id) @@ mk_cint 1;
+      mk_assign TS.sw_need_vid_ctr.id @@ mk_add (mk_var TS.sw_need_vid_ctr.id) @@ mk_cint 1;
       (* call the driver trigger *)
-      mk_send sw_driver_trig_nm G.me_var mk_cunit;
+      mk_send sw_driver_trig_nm G.me_var [mk_cunit];
     ]
 
 (* sending fetches is done from functions now *)
 (* each function takes a vid to plant in the arguments, which are in the trig buffers *)
-let send_fetch_fn c s_rhs_lhs s_rhs trig_name =
+let sw_send_fetch_fn c s_rhs_lhs s_rhs trig_name =
   let send_fetches_of_rhs_maps  =
     if null s_rhs then []
     else
@@ -457,7 +507,7 @@ let send_fetch_fn c s_rhs_lhs s_rhs trig_name =
             (fun acc_code (stmt_id, (rhs_map_id, lhs_map_id)) ->
               (* shuffle allows us to recreate the path the data will take from
               * rhs to lhs *)
-              let shuffle_fn = K3Shuffle.find_shuffle stmt_id rhs_map_id lhs_map_id in
+              let shuffle_fn = K3Shuffle.find_shuffle_nm c stmt_id rhs_map_id lhs_map_id in
               let shuffle_key = P.partial_key_from_bound c.p stmt_id lhs_map_id in
               (* route allows us to know how many nodes send data from rhs to lhs
               * *)
@@ -495,29 +545,28 @@ let send_fetch_fn c s_rhs_lhs s_rhs trig_name =
                         mk_cbool true]
             )
             (mk_empty @@ wrap_tbag' [t_addr; t_stmt_id; t_int]) @@
-            s_rhs_lhs
-    ]
-in
-(* Actual SendFetch function *)
-(* We use functions rather than triggers to have better control over
- * latency *)
-let buf = D.sw_trig_buf_prefix^t in
-mk_global_fn
-  (send_fetch_name_of_t c trig_name)
-  ["vid", t_vid]
-  [t_unit] @@
-  (* pull an argument out of the buffers *)
-  mk_case_ns (mk_peek buf) "args"
-    (mk_error @@ "unexpected missing arguments in "^buf) @@
-    (* pull out the arguments *)
-    mk_let_deep' (args_of_t_with_v c trig_name)
-      (mk_var "args") @@
-      mk_block @@
-        (* delete the entry in the trig buffer *)
-        mk_delete buf (mk_var "args") ::
-        send_completes_for_stmts_with_no_fetch @
-        send_puts @
-        send_fetches_of_rhs_maps
+            s_rhs_lhs]
+  in
+  (* Actual SendFetch function *)
+  (* We use functions rather than triggers to have better control over
+  * latency *)
+  let buf = D.sw_trig_buf_prefix^t in
+  mk_global_fn
+    (send_fetch_name_of_t c trig_name)
+    ["vid", t_vid]
+    [t_unit] @@
+    (* pull an argument out of the buffers *)
+    mk_case_ns (mk_peek buf) "args"
+      (mk_error @@ "unexpected missing arguments in "^buf) @@
+      (* pull out the arguments *)
+      mk_let_deep' (args_of_t_with_v c trig_name)
+        (mk_var "args") @@
+        mk_block @@
+          (* delete the entry in the trig buffer *)
+          mk_delete buf (mk_var "args") ::
+          send_completes_for_stmts_with_no_fetch @
+          send_puts @
+          send_fetches_of_rhs_maps
 
 (* trigger_rcv_fetch
  * -----------------------------------------
@@ -650,7 +699,7 @@ let send_push_stmt_map_trig c s_rhs_lhs trig_name =
       let rhs_map_types = P.map_types_with_v_for c.p rhs_map_id in
       let rhs_map_name = P.map_name_of c.p rhs_map_id in
       let rhsm_deref = rhs_map_name^"_deref" in
-      let shuffle_fn = K3Shuffle.find_shuffle stmt_id rhs_map_id lhs_map_id in
+      let shuffle_fn = K3Shuffle.find_shuffle c stmt_id rhs_map_id lhs_map_id in
       let partial_key = P.partial_key_from_bound c.p stmt_id lhs_map_id in
       let slice_key = P.slice_key_from_bound c.p stmt_id rhs_map_id in
       acc_code@
@@ -836,7 +885,7 @@ let send_corrective_trigs c =
                * tuples. Now we try to get some more for the lhs map *)
               let target_map = P.lhs_map_of_stmt c.p target_stmt in
               let key = P.partial_key_from_bound c.p target_stmt target_map in
-              let shuffle_fn = K3Shuffle.find_shuffle target_stmt map_id target_map in
+              let shuffle_fn = K3Shuffle.find_shuffle_nm target_stmt map_id target_map in
               mk_if (* if match, send data *)
                 (mk_eq
                   (mk_var "stmt_id") @@
@@ -933,59 +982,6 @@ let do_complete_trigs c ast trig_name =
 in
 List.map do_complete_trig @@ P.stmts_of_t c.p trig_name
 
-
-(*
- * Return list of corrective statements we need to execute by checking
- * which statements were performed after time x that used a particular map
- * The only reason for this function is that we may have the same stmt
- * needing to execute with different vids
- * Optimization TODO: check also by ranges within the map ie. more fine grain
- *)
-let filter_corrective_list =
-  let trig_stmt_list_t = wrap_tbag' [t_trig_id; t_stmt_id] in
-  let return_type_base = [t_stmt_id; t_vid_list] in
-  let return_type = wrap_tbag' return_type_base in
-  mk_global_fn filter_corrective_list_name
-  (* (trigger_id, stmt_id) list *)
-  ["request_vid", t_vid; "trig_stmt_list", trig_stmt_list_t]
-  [return_type]
-  @@
-  mk_let ["log_entries"]
-    (mk_apply (* list of triggers >= vid *)
-      (mk_var log_read_geq) @@ mk_var "request_vid") @@
-  (* convert to bag *)
-  mk_convert_col (wrap_tlist' return_type_base) return_type @@
-    (* group the list by stmt_ids *)
-    mk_gbagg
-      (mk_lambda' ["_", t_vid; "stmt_id", t_stmt_id] @@ mk_var "stmt_id")
-      (mk_assoc_lambda'
-        ["vid_list", t_vid_list]
-        ["vid", t_vid; "_", t_stmt_id] @@
-        mk_combine (mk_var "vid_list") (mk_singleton t_vid_list @@ mk_var "vid")
-      )
-      (mk_empty t_vid_list) @@
-      let vid_stmt_id_t  = ["vid", t_vid; "stmt_id", t_stmt_id] in
-      let vid_stmt_col_t = wrap_tlist' @@ snd_many vid_stmt_id_t in
-      mk_sort (* sort so early vids are generally sent out first *)
-        (* get a list of vid, stmt_id pairs *)
-        (** this is reall a map, but make it a fold to convert to a list *)
-        (mk_assoc_lambda' (* compare func *)
-          ["vid1", t_vid; "stmt1", t_stmt_id]
-          ["vid2", t_vid; "stmt2", t_stmt_id] @@
-          v_lt (mk_var "vid1") @@ mk_var "vid2")
-        (mk_agg
-          (mk_assoc_lambda'
-            ["acc", vid_stmt_col_t]
-            D.nd_log_master.e @@
-            (* convert to vid, stmt *)
-            mk_combine
-              (mk_var "acc") @@
-              mk_singleton
-                vid_stmt_col_t @@
-                mk_tuple @@ ids_to_vars @@ fst_many vid_stmt_id_t)
-          (mk_empty vid_stmt_col_t) @@
-          mk_var "log_entries"
-        )
 
 (* receive_correctives:
  * ---------------------------------------
@@ -1100,14 +1096,27 @@ let emit_frontier_fns c =
   let fns = List.map (hd |- snd) @@ P.uniq_types_and_maps c.p in
   List.map (frontier_fn c) fns
 
-let declare_global_vars c ast =
+let declare_global_vars c partmap ast =
   D.global_vars c (ModifyAst.map_inits_from_ast c ast) @
+  Timer.global_vars @
   TS.global_vars @
   K3Ring.global_vars @
-  (if c.enable_gc then
-      GC.global_vars @
-      Timer.global_vars
-    else [])
+  K3Route.global_vars c.p partmap @
+  (if c.enable_gc then GC.global_vars else [])
+
+let declare_global_funcs c partmap ast =
+  nd_log_master_write ::
+  (P.for_all_trigs c.p @@ nd_log_write c) @
+  (P.for_all_trigs c.p @@ nd_log_get_bound c) @
+  nd_log_read_geq ::
+  nd_check_stmt_cntr_index ::
+  nd_filter_corrective_list ::
+  (if not c.use_multiindex then emit_frontier_fns c else []) @
+  (List.map (nd_add_delta_to_buf c |- hd |- snd) @@ P.uniq_types_and_maps c.p) @
+  (if c.enable_gc then TS.functions else []) @
+  K3Route.functions c.p partmap @
+  K3Shuffle.functions c @
+  K3Ring.functions
 
 (* Generate all the code for a specific trigger *)
 let gen_dist_for_t c ast trig corr_maps =
@@ -1135,18 +1144,15 @@ let gen_dist_for_t c ast trig corr_maps =
 (* @param force_correctives Attempt to create dist code that encourages correctives *)
 let gen_dist ?(force_correctives=false) ?(use_multiindex=false) ?(enable_gc=false) p partmap ast =
   (* collect all map access patterns for creating indexed maps *)
-  let c = { p
-          ; map_idxs=IntMap.empty
-          ; mapn_idxs=StrMap.empty
-          ; use_multiindex
-          ; force_correctives
-          ; enable_gc
-          }
-  in
-  let map_idxs = M.get_map_access_patterns_ids c ast in
-  let c = {c with map_idxs} in
-  (* our shuffle functions need to precalculate all possible shuffles *)
-  let global_funcs = declare_global_funcs partmap c ast in
+  let c = {
+      p;
+      shuffle_meta=K3Shuffle.gen_meta p;
+      mapn_idxs=StrMap.empty;
+      use_multiindex;
+      force_correctives;
+      enable_gc;
+      map_idxs = M.get_map_access_patterns_ids p ast;
+    } in
   let potential_corr_maps = maps_potential_corrective c in
   (* regular trigs then insert entries into shuffle fn table *)
   let regular_trigs = List.flatten @@
@@ -1155,17 +1161,12 @@ let gen_dist ?(force_correctives=false) ?(use_multiindex=false) ?(enable_gc=fals
   in
   let prog =
     D.declare_foreign_functions @
-    declare_global_vars c ast @
-    declare_global_prims @
-    (if not c.use_multiindex then emit_frontier_fns c else []) @
-    global_funcs @ (* maybe make this not order-dependent *)
-    filter_corrective_list ::  (* global func *)
+    declare_global_vars c partmap ast @
+    declare_global_funcs c partmap ast @
     (mk_flow @@
-      (* trigs for init *)
-      D.ms_rcv_init_trig ::
-      D.rcv_ms_init_trig ::
       (if c.enable_gc then GC.trigs @ Timer.trigs else []) @
       TS.triggers sw_driver_trig_nm @
+      Timer.triggers @
       regular_trigs @
       send_corrective_trigs c @
       demux_trigs ast)::    (* per-map basis *)

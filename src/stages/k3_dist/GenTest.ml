@@ -19,13 +19,13 @@ let map_latest_val_code p map_id =
       (wrap_args map_ids_types_vid) @:
       mk_if
         (* if the vid is greater than the max, we use only the new tuple *)
-        (v_gt (mk_var "vid") (mk_var "_max_vid_"))
+        (mk_gt (mk_var "vid") @@ mk_var "_max_vid_")
         (mk_tuple [mk_var "vid";
                   mk_singleton set_type @:
                     mk_tuple @: ids_to_vars map_ids]) @:
         (* else, if the vid is =, add to the set *)
         mk_if
-          (v_eq (mk_var "vid") (mk_var "_max_vid_"))
+          (mk_eq (mk_var "vid") @@ mk_var "_max_vid_")
           (mk_tuple [mk_var "vid";
                       mk_combine
                       (mk_singleton set_type @:
