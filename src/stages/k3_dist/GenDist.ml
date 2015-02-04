@@ -115,11 +115,9 @@ let nd_check_stmt_cntr_index =
   mk_global_fn nd_check_stmt_cntr_index_nm
     part_pat
     [t_bool] @@ (* return whether we should send the do_complete *)
-    mk_if (* check if the counter exists *)
-      (mk_has_member' (mk_var nd_stmt_cntrs.id) query_pat @@ nd_stmt_cntrs.t)
+    mk_case_sn (* check if the counter exists *)
+      (mk_peek @@ mk_slice' nd_stmt_cntrs.id query_pat) "ctr_slice"
       (mk_block [
-        mk_case_ns (mk_peek stmt_cntrs_slice) "ctr_slice"
-        mk_cunit @@
         mk_update nd_stmt_cntrs.id
           [mk_var "ctr_slice"]
           [mk_let
@@ -129,11 +127,9 @@ let nd_check_stmt_cntr_index =
               part_pat_as_vars @
               [mk_sub (mk_var counter) (mk_cint 1)]];
           (* check if the counter is 0 *)
-          (mk_eq
-            (mk_peek stmt_cntrs_slice) @@
-            mk_just @@ mk_tuple @@ part_pat_as_vars @ [mk_cint 0])
-      ]
-      ) @@
+          mk_eq (mk_cint 0) @@
+            mk_subscript (index_e D.nd_stmt_cntrs.e "counter") @@
+              mk_var "ctr_slice"]) @@
       (* else: no value in the counter *)
       mk_block [
         (* Initialize if the push arrives before the put. *)

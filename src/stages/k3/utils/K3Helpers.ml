@@ -386,8 +386,6 @@ let mk_has_member collection pattern typ =
     (mk_slice collection pattern)
     (mk_empty typ)
 
-let mk_has_member' col pat typ = mk_has_member col pat typ
-
 let mk_code_sink name args locals code =
   mk_no_anno @@ Sink(Code(name, args, locals, code))
 

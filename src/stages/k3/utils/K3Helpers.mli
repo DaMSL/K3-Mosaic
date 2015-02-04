@@ -186,9 +186,7 @@ val vars_to_ids : expr_t list -> id_t list
 val mk_is_empty : expr_t -> type_t -> expr_t
 
 (* macro to check if a collection has a specific member *)
-val mk_has_member : expr_t -> expr_t -> type_t -> expr_t
-
-val mk_has_member' : expr_t -> expr_t list -> type_t -> expr_t
+val mk_has_member : expr_t -> expr_t list -> type_t -> expr_t
 
 (* macro to create a trigger *)
 val mk_code_sink : id_t -> arg_t -> (id_t * type_t * annotation_t) list

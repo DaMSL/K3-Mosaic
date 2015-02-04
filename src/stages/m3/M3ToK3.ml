@@ -314,7 +314,7 @@ let mk_lookup collection bag_t keys key_types =
         (KH.mk_var "unwrapped_value")
 
 let mk_test_member collection keys key_types val_type =
-  KH.mk_has_member' collection
+  KH.mk_has_member collection
     (KH.ids_to_vars @@ keys @ ["_"])
     (KH.wrap_ttuple_mut (key_types @ [val_type]))
 
