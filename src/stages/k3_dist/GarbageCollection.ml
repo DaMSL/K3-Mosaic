@@ -80,7 +80,7 @@ let sw_ack_init_code ~addr_nm ~vid_nm =
         mk_insert sw_ack_log.id [mk_var vid_nm; mk_var old_set];
       ]) @@
     (* else, insert a singleton value into ack log *)
-    mk_insert sw_ack_log.id [mk_var vid_nm; mk_singleton inner_t @@ mk_var addr_nm]
+    mk_insert sw_ack_log.id [mk_var vid_nm; mk_singleton inner_t [mk_var addr_nm]]
 
 (* node: code to be incorporated in GenDist.rcv_put *)
 (* send ack to switch *)

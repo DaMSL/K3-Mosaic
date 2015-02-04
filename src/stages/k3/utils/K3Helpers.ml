@@ -174,7 +174,7 @@ let mk_nothing_m typ = mk_nothing @@ wrap_tmaybe typ
 
 let mk_empty val_type = mk_stree (Empty val_type) []
 
-let mk_singleton val_type x = mk_stree (Singleton val_type) [x]
+let mk_singleton val_type x = mk_stree (Singleton val_type) [mk_tuple x]
 
 let mk_combine x y = mk_stree Combine [x;y]
 
@@ -316,8 +316,8 @@ let mk_let var_ids tuple_val expr =
 let mk_agg_fst agg_fn col =
   mk_agg agg_fn
     (mk_case_sn (mk_peek col) "__case"
-      (mk_var "__case")
-      (mk_apply' "error" @@ mk_cstring "error with mk_agg_fst")) col
+      (mk_var "__case") @@
+      mk_apply' "error" [mk_cstring "error with mk_agg_fst"]) col
 
 (* Macros to make role related stuff *)
 let mk_const_stream id typ l =
@@ -517,7 +517,7 @@ let mk_convert_col src_t dest_t col =
     (mk_lambda
       (wrap_args ["acc_conv", dest_t; "x", t_elem]) @@
       mk_combine
-          (mk_singleton dest_t @@ mk_var "x") @@
+          (mk_singleton dest_t [mk_var "x"]) @@
           mk_var "acc_conv")
     (mk_empty dest_t)
     col

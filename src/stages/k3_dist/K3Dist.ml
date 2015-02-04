@@ -329,7 +329,7 @@ let get_idx idx map_id =
  * - pat assumes NO VID
  * - keep_vid indicates whether we need to remove the vid from the result collection
  *   (we usually need it removed only for modifying ast *)
-let map_latest_vid_vals c slice_col m_pat map_id ~keep_vid : expr_t =
+let map_latest_vid_vals ?(vid_nm="vid") c slice_col m_pat map_id ~keep_vid : expr_t =
   let m_id_t_v = P.map_ids_types_with_v_for ~vid:"map_vid" c.p map_id in
   (* function to remove the vid from the collection *)
   let remove_vid_if_needed = if keep_vid then id_fn else
@@ -351,7 +351,7 @@ let map_latest_vid_vals c slice_col m_pat map_id ~keep_vid : expr_t =
     remove_vid_if_needed @@
       (* filter out anything that doesn't have the same parameters *)
       (* the multimap layer implements extra eq key filtering *)
-      (mk_slice_idx' ~idx ~comp:LT slice_col @@ mk_var "vid"::pat)
+      (mk_slice_idx' ~idx ~comp:LT slice_col @@ mk_var vid_nm::pat)
 
   else (* no multiindex *)
     (* create a function name per type signature *)
@@ -362,7 +362,7 @@ let map_latest_vid_vals c slice_col m_pat map_id ~keep_vid : expr_t =
     in
     let simple_app =
       mk_apply (mk_var @@ frontier_name c map_id) @@
-        mk_tuple [mk_var "vid"; access_k3]
+        mk_tuple [mk_var vid_nm; access_k3]
     in
     if keep_vid then simple_app else remove_vid_if_needed simple_app
 
@@ -388,30 +388,26 @@ let frontier_fn c map_id =
       (wrap_args m_id_t_v)
       (mk_if
         (* if the map vid is less than current vid *)
-        (mk_lt (mk_var map_vid) (mk_var "vid"))
+        (mk_lt (mk_var map_vid) @@ mk_var "vid")
         (* if the map vid is equal to the max_vid, we add add it to our
         * accumulator and use the same max_vid *)
         (mk_if
           (mk_eq (mk_var map_vid) @@ mk_var max_vid)
-          (mk_tuple
-            [mk_combine
-              (mk_singleton m_t_v_bag (mk_tuple @@ ids_to_vars @@ fst_many m_id_t_v)) @@
-                  mk_var "acc";
-            mk_var max_vid])
+          (mk_block [
+            mk_insert "acc" @@ ids_to_vars @@ fst_many m_id_t_v;
+            mk_tuple [mk_var "acc"; mk_var max_vid]
+          ]) @@
           (* else if map vid is greater than max_vid, make a new
           * collection and set a new max_vid *)
-          (mk_if
+          mk_if
             (mk_gt (mk_var map_vid) @@ mk_var max_vid)
             (mk_tuple
-              [mk_singleton m_t_v_bag (mk_tuple @@ ids_to_vars @@ fst_many m_id_t_v);
-              mk_var map_vid])
+              [mk_singleton m_t_v_bag @@ ids_to_vars @@ fst_many m_id_t_v;
+              mk_var map_vid]) @@
             (* else keep the same accumulator and max_vid *)
-            (mk_tuple [mk_var "acc"; mk_var max_vid])
-          )
-        )
+            mk_tuple [mk_var "acc"; mk_var max_vid])
         (* else keep the same acc and max_vid *)
-        (mk_tuple [mk_var "acc"; mk_var max_vid])
-      )
+        (mk_tuple [mk_var "acc"; mk_var max_vid]))
   in
   (* a regular fold is enough if we have no keys *)
   (* get the maximum vid that's less than our current vid *)

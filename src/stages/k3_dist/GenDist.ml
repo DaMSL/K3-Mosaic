@@ -158,7 +158,7 @@ let nd_add_delta_to_buf_nm c map_id =
     List.map K3PrintSyntax.string_of_type t
 
 let nd_add_delta_to_buf c map_id =
-  let func_name = add_delta_to_map_nm c map_id in
+  let func_name = nd_add_delta_to_buf_nm c map_id in
   let delta_tuples_nm = "delta_tuples" in
   let ids_types_arg = P.map_ids_types_for ~prefix:"__arg_" c.p map_id in
   let ids_types_arg_v = P.map_ids_types_add_v ~vid:"vid_arg" ids_types_arg in
@@ -281,42 +281,37 @@ let nd_filter_corrective_list =
   @@
   mk_let ["log_entries"]
     (mk_apply (* list of triggers >= vid *)
-      (mk_var log_read_geq) @@ mk_var "request_vid") @@
+      (mk_var nd_log_read_geq_nm) @@ mk_var "request_vid") @@
   (* convert to bag *)
   mk_convert_col (wrap_tlist' return_type_base) return_type @@
     (* group the list by stmt_ids *)
     mk_gbagg
       (mk_lambda' ["_", t_vid; "stmt_id", t_stmt_id] @@ mk_var "stmt_id")
       (mk_assoc_lambda'
-        ["vid_list", t_vid_list]
-        ["vid", t_vid; "_", t_stmt_id] @@
-        mk_combine (mk_var "vid_list") (mk_singleton t_vid_list @@ mk_var "vid")
-      )
+        ["vid_list", t_vid_list] ["vid", t_vid; "_", t_stmt_id] @@
+        mk_block [
+          mk_insert "vid_list" [mk_var "vid"];
+          mk_var "vid_list" ])
       (mk_empty t_vid_list) @@
       let vid_stmt_id_t  = ["vid", t_vid; "stmt_id", t_stmt_id] in
       let vid_stmt_col_t = wrap_tlist' @@ snd_many vid_stmt_id_t in
       mk_sort (* sort so early vids are generally sent out first *)
         (* get a list of vid, stmt_id pairs *)
-        (** this is reall a map, but make it a fold to convert to a list *)
+        (** this is really a map, but make it a fold to convert to a list *)
         (mk_assoc_lambda' (* compare func *)
           ["vid1", t_vid; "stmt1", t_stmt_id]
           ["vid2", t_vid; "stmt2", t_stmt_id] @@
-          v_lt (mk_var "vid1") @@ mk_var "vid2")
+          mk_lt (mk_var "vid1") @@ mk_var "vid2")
         (mk_agg
           (mk_assoc_lambda'
             ["acc", vid_stmt_col_t]
             D.nd_log_master.e @@
             (* convert to vid, stmt *)
-            mk_combine
-              (mk_var "acc") @@
-              mk_singleton
-                vid_stmt_col_t @@
-                mk_tuple @@ ids_to_vars @@ fst_many vid_stmt_id_t)
+            mk_block [
+              mk_insert "acc" @@ ids_to_vars @@ fst_many vid_stmt_id_t;
+              mk_var "acc" ])
           (mk_empty vid_stmt_col_t) @@
-          mk_var "log_entries"
-        )
-
-
+          mk_var "log_entries")
 
 (**** protocol code ****)
 
@@ -343,7 +338,7 @@ let sw_driver_trig (c:config) =
     (* if we don't have a vid, set state to waiting for vid *)
     (mk_assign D.sw_state.id @@ mk_cint D.sw_state_wait_vid) @@
     (* else *)
-    mk_pop D.sw_trig_buf_idx.id trig_id 
+    mk_pop D.sw_trig_buf_idx.id trig_id
       (* empty: no message to send -- set state to idle *)
       (mk_assign D.sw_state.id @@ mk_cint D.sw_state_idle) @@
       (* have a msg *)
@@ -380,28 +375,20 @@ let sw_send_fetch_fn c s_rhs_lhs s_rhs trig_name =
     else
     [mk_iter
       (mk_lambda'
-        ["ip", t_addr;
-          "stmt_map_ids", wrap_tbag' [t_stmt_id; t_map_id]] @@
-        mk_send
-          (rcv_fetch_name_of_t c trig_name)
-          (mk_var "ip") @@
-          mk_tuple @@
-            mk_var "stmt_map_ids"::
-            args_of_t_as_vars_with_v c trig_name
-      ) @@
+        ["ip", t_addr; "stmt_map_ids", wrap_tbag' [t_stmt_id; t_map_id]] @@
+        mk_send (rcv_fetch_name_of_t trig_name) (mk_var "ip") @@
+          mk_var "stmt_map_ids" ::
+          args_of_t_as_vars_with_v c trig_name) @@
       mk_gbagg
         (mk_lambda' (* Grouping function *)
-          ["stmt_id", t_stmt_id; "map_id", t_map_id; "ip", t_addr]
-          (mk_var "ip")
-        )
+          ["stmt_id", t_stmt_id; "map_id", t_map_id; "ip", t_addr] @@
+          mk_var "ip")
         (mk_assoc_lambda' (* Agg function *)
           ["acc", wrap_tbag' [t_stmt_id; t_map_id]]
           ["stmt_id", t_stmt_id; "map_id", t_map_id; "ip", t_addr] @@
-          mk_combine
-            (mk_var "acc") @@
-            mk_singleton
-              (wrap_tbag' [t_stmt_id; t_map_id]) @@
-              mk_tuple [mk_var "stmt_id";mk_var "map_id"])
+          mk_block [
+            mk_insert "acc" @@ [mk_var "stmt_id"; mk_var "map_id"];
+            mk_var "acc"])
         (mk_empty @@ wrap_tbag' [t_stmt_id; t_map_id])
         (* [] *) @@
         List.fold_left
@@ -411,14 +398,9 @@ let sw_send_fetch_fn c s_rhs_lhs s_rhs trig_name =
             mk_combine
               (mk_map
                 (mk_lambda' ["ip", t_addr] @@
-                  mk_tuple @@
-                    [mk_cint stmt_id; mk_cint rhs_map_id;
-                      mk_var "ip"]
-                ) @@
-                mk_apply
-                  (mk_var route_fn) @@
-                  mk_tuple @@ (mk_cint rhs_map_id)::key
-              )
+                  mk_tuple @@ [mk_cint stmt_id; mk_cint rhs_map_id; mk_var "ip"]) @@
+                mk_apply (mk_var route_fn) @@
+                  mk_tuple @@ (mk_cint rhs_map_id)::key)
               acc_code
           )
           (mk_empty @@ wrap_tbag' [t_stmt_id; t_map_id; t_addr])
@@ -436,10 +418,8 @@ let sw_send_fetch_fn c s_rhs_lhs s_rhs trig_name =
             acc_code@
             [mk_iter
               (mk_lambda' ["ip", t_addr] @@
-                mk_send
-                  (do_complete_trig_name)
-                  (mk_var "ip") @@
-                  mk_tuple @@ args_of_t_as_vars_with_v c trig_name
+                mk_send (do_complete_trig_name) (mk_var "ip") @@
+                  args_of_t_as_vars_with_v c trig_name
               ) @@
               mk_apply (mk_var route_fn) @@
                 mk_tuple @@ (mk_cint lhs_map_id)::key
@@ -449,7 +429,7 @@ let sw_send_fetch_fn c s_rhs_lhs s_rhs trig_name =
         List.map
           (fun stmt_id ->
             (stmt_id, P.lhs_map_of_stmt c.p stmt_id,
-            do_complete_name_of_t c trig_name stmt_id)
+            do_complete_name_of_t trig_name stmt_id)
           )
           s_no_rhs
   in
@@ -462,14 +442,15 @@ let sw_send_fetch_fn c s_rhs_lhs s_rhs trig_name =
     [mk_iter
       (mk_lambda'
         ["address", t_addr; "stmt_id_cnt_list", stmt_id_cnt_type] @@
-        mk_block @@ [
+        mk_block @@
           (* send rcv_put *)
-          mk_send
-            (rcv_put_name_of_t c trig_name)
+          (mk_send
+            (rcv_put_name_of_t trig_name)
             (mk_var "address") @@
-            mk_tuple @@ G.me_var :: mk_var "stmt_id_cnt_list"::
-              args_of_t_as_vars_with_v c trig_name] @
-          if c.enable_gc then [GC.sw_ack_init_code ~addr_nm:"address" ~vid_nm:"vid"] else []
+            G.me_var :: mk_var "stmt_id_cnt_list"::
+              args_of_t_as_vars_with_v c trig_name) ::
+          if c.enable_gc then
+            [GC.sw_ack_init_code ~addr_nm:"address" ~vid_nm:"vid"] else []
       ) @@
       mk_gbagg
         (mk_assoc_lambda' (* grouping func -- assoc because of gbagg tuple *)
@@ -480,15 +461,13 @@ let sw_send_fetch_fn c s_rhs_lhs s_rhs trig_name =
         (mk_assoc_lambda' (* agg func *)
           ["acc", stmt_id_cnt_type]
           ["ip_and_stmt_id", wrap_ttuple [t_addr; t_stmt_id]; "count", t_int] @@
-          mk_let_many (* break up because of the way inner gbagg forms tuples *)
-            ["ip", t_addr; "stmt_id", t_stmt_id]
-            (mk_var "ip_and_stmt_id") @@
+          mk_let (* break up because of the way inner gbagg forms tuples *)
+            ["ip"; "stmt_id"] (mk_var "ip_and_stmt_id") @@
             mk_combine
               (mk_var "acc") @@
               mk_singleton
-                stmt_id_cnt_type @@
-                mk_tuple [mk_var "stmt_id"; mk_var "count"]
-        )
+                stmt_id_cnt_type
+                [mk_var "stmt_id"; mk_var "count"])
         (mk_empty @@ wrap_tbag' [t_stmt_id; t_int]) @@
         mk_gbagg (* inner gba *)
           (mk_lambda' (* group func *)
@@ -518,25 +497,19 @@ let sw_send_fetch_fn c s_rhs_lhs s_rhs trig_name =
               let tuple_types = wrap_t_of_map' rhs_map_types in
               mk_combine
                 acc_code @@
-                mk_let "sender_count" t_int
+                mk_let ["sender_count"]
                   (* count up the number of IPs received from route *)
                   (mk_agg
                     (mk_lambda'
                       ["count", t_int; "ip", t_addr] @@
-                      mk_add (mk_var "count") (mk_cint 1)
-                    )
+                      mk_add (mk_var "count") @@ mk_cint 1)
                     (mk_cint 0) @@
-                    (mk_apply
-                      (mk_var route_fn) @@
-                        mk_tuple @@ (mk_cint rhs_map_id)::route_key
-                    )
-                  ) @@
+                    mk_apply
+                      (mk_var route_fn) @@ mk_tuple @@ mk_cint rhs_map_id::route_key) @@
                 mk_map
                   (mk_lambda'
                     ["ip", t_addr; "tuples", tuple_types] @@
-                      mk_tuple
-                        [mk_var "ip"; mk_cint stmt_id; mk_var "sender_count"]
-                  ) @@
+                      mk_tuple [mk_var "ip"; mk_cint stmt_id; mk_var "sender_count"]) @@
                   mk_apply
                     (mk_var shuffle_fn) @@
                     mk_tuple @@
@@ -550,23 +523,19 @@ let sw_send_fetch_fn c s_rhs_lhs s_rhs trig_name =
   (* Actual SendFetch function *)
   (* We use functions rather than triggers to have better control over
   * latency *)
-  let buf = D.sw_trig_buf_prefix^t in
+  let buf = D.sw_trig_buf_prefix^trig_name in
   mk_global_fn
-    (send_fetch_name_of_t c trig_name)
-    ["vid", t_vid]
-    [t_unit] @@
-    (* pull an argument out of the buffers *)
-    mk_case_ns (mk_peek buf) "args"
+    (send_fetch_name_of_t trig_name) ["vid", t_vid] [] @@
+    (* pop an argument out of the buffers *)
+    mk_pop buf "args"
       (mk_error @@ "unexpected missing arguments in "^buf) @@
-      (* pull out the arguments *)
-      mk_let_deep' (args_of_t_with_v c trig_name)
+      (* decompose args *)
+      mk_let (fst_many @@ args_of_t_with_v c trig_name)
         (mk_var "args") @@
-        mk_block @@
-          (* delete the entry in the trig buffer *)
-          mk_delete buf (mk_var "args") ::
-          send_completes_for_stmts_with_no_fetch @
-          send_puts @
-          send_fetches_of_rhs_maps
+      mk_block @@
+        send_completes_for_stmts_with_no_fetch @
+        send_puts @
+        send_fetches_of_rhs_maps
 
 (* trigger_rcv_fetch
  * -----------------------------------------
@@ -579,11 +548,10 @@ let sw_send_fetch_fn c s_rhs_lhs s_rhs trig_name =
  * need to record only one trigger in the log, and because it reduces messages
  * between nodes.
  *)
-let rcv_fetch_trig c trig =
+let nd_rcv_fetch_trig c trig =
   mk_code_sink'
-    (rcv_fetch_name_of_t c trig)
-    (("stmts_and_map_ids",
-      wrap_t_of_map' [t_stmt_id; t_map_id])::
+    (rcv_fetch_name_of_t trig)
+    (("stmts_and_map_ids", wrap_t_of_map' [t_stmt_id; t_map_id])::
       args_of_t_with_v c trig)
     [] @@ (* locals *)
     mk_block [
@@ -730,7 +698,7 @@ let send_push_stmt_map_trig c s_rhs_lhs trig_name =
               mk_tuple @@
                 partial_key@
                 (* we need the latest vid data that's less than the current vid *)
-                [K3Dist.map_latest_vid_vals c (mk_var rhsm_deref)
+                [D.map_latest_vid_vals c (mk_var rhsm_deref)
                   (some slice_key) rhs_map_id ~keep_vid:true;
                 mk_cbool true]
           ]

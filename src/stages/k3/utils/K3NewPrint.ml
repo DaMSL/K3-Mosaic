@@ -448,7 +448,7 @@ and fold_of_map_ext c expr =
   let self_t_out = T.type_of_expr expr in
   (* customize for the different operations *)
   let (lambda, col), wrap_fn, suffix, t_out = match U.tag_of_expr expr with
-    | Map -> U.decompose_map expr, KH.mk_singleton self_t_out, "map", self_t_out
+    | Map     -> U.decompose_map expr, KH.mk_singleton self_t_out |- singleton, "map", self_t_out
     | Flatten -> U.decompose_map @@ U.decompose_flatten expr, id_fn, "ext", self_t_out
     | _       -> failwith "Can only convert flatten-map or map to fold"
   in
@@ -514,8 +514,8 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
   (* many instructions need to wrap the same way *)
   in let wrap e = match U.tag_of_expr expr with
     | Insert _ | Iterate | Map | Filter | Flatten | Send | Delete _ | Update _
-    | Aggregate | GroupByAggregate -> wrap_hv 2 e
-    | IfThenElse -> wrap_hv 0 e
+    | Aggregate | GroupByAggregate -> wrap_hov 2 e
+    | IfThenElse -> wrap_hov 0 e
     | _ -> id_fn e
   in
   (* begin analysis of tags *)

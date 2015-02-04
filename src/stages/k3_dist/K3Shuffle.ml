@@ -91,16 +91,12 @@ let gen_shuffle_fn p rmap lmap bindings fn_name =
                 (mk_map
                   (mk_lambda (wrap_args ["ip", t_addr]) @@
                     mk_tuple [mk_var "ip";
-                      mk_singleton many_tuples_type @@ mk_var "r_tuple"]
-                  ) @@
+                      mk_singleton many_tuples_type [mk_var "r_tuple"]]) @@
                   mk_apply (* route each full l_key *)
                     (mk_var @@ route_for p lmap) @@
-                      mk_tuple @@ mk_cint lmap ::
-                        if pred then full_lkey_vars
-                        else [mk_cunit]
-                )
-              ) @@
-              mk_var tuples
+                      mk_tuple @@ mk_cint lmap :: if pred then full_lkey_vars
+                                                  else [mk_cunit])) @@
+            mk_var tuples
 
 (* generate all meta information about functions *)
 let gen_meta p =
@@ -129,7 +125,8 @@ let functions c =
 (* external function to find a shuffle function *)
 let find_shuffle_nm c s rmap lmap =
   try
-    List.find (fun x -> x.rmap = rmap && x.lmap = lmap && IntSet.mem s x.stmts) c.shuffle_meta
+    let f = List.find (fun x -> x.rmap = rmap && x.lmap = lmap && IntSet.mem s x.stmts) c.shuffle_meta
+    in f.name
   with
     Not_found -> failwith @@
       Printf.sprintf "Couldn't find shuffle for stmt %d, rmap %d, lmap %d" s rmap lmap

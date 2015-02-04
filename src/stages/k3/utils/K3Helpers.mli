@@ -107,7 +107,7 @@ val mk_nothing : type_t -> expr_t
 val mk_nothing_m : type_t -> expr_t
 
 val mk_empty : type_t -> expr_t
-val mk_singleton : type_t -> expr_t -> expr_t
+val mk_singleton : type_t -> expr_t list -> expr_t
 val mk_combine : expr_t -> expr_t -> expr_t
 val mk_range : container_type_t -> expr_t -> expr_t -> expr_t -> expr_t
 
