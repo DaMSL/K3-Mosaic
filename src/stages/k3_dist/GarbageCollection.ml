@@ -124,23 +124,32 @@ let do_gc c =
       else id_fn, ds.id
     in
     let temp = "temp" in
+    (* if we're in a map ds, we need to get the frontier at min_vid *)
+    (match ds.map_id with
+      | Some map_id ->
+          mk_let ["frontier"]
+            (map_latest_vid_vals c (mk_var id) None map_id ~keep_vid:true ~vid_nm:min_vid)
+      | _ -> id_fn) @@
     (* delete any entry with a lower or matching vid *)
     mk_let [temp] (mk_empty t') @@
-    mk_block [
+    mk_block @@
       (* add < vid to temporary collection *)
-      do_bind @@
+      (do_bind @@
         mk_iter
           (mk_lambda' ds.e @@
             mk_if (mk_lt (mk_var vid) @@ mk_var min_vid)
               (mk_insert temp @@ ids_to_vars @@ fst_many ds.e) @@
               mk_cunit) @@
-          mk_var id;
+          mk_var id) ::
       (* delete values from ds *)
-      mk_iter
+      (mk_iter
         (mk_lambda' ["val", wrap_ttuple @@ snd_many ds.e] @@
           do_bind @@ mk_delete id [mk_var "val"]) @@
-        mk_var temp
-    ]
+        mk_var temp) ::
+      (* if we have a mosaic map, insert back the frontier *)
+      (if ds.map_id <> None then
+        [mk_combine (mk_var "frontier") @@ mk_var "id"]
+      else [])
   in
   mk_code_sink' do_gc_nm [min_vid, t_vid] [] @@
     mk_block @@
