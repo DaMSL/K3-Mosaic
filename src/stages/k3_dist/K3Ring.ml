@@ -92,6 +92,7 @@ let functions =
   ]
 
 let global_vars =
+  List.map decl_global
   [ node_ring;
     replicas
   ]

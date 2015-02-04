@@ -8,7 +8,7 @@ exception InvalidAst of string
 exception UnhandledModification of string
 
 (* Scan an ast for map access patterns *)
-val get_map_access_patterns_ids : config -> program_t -> IndexSet.t IntMap.t
+val get_map_access_patterns_ids : prog_data_t -> program_t -> IndexSet.t IntMap.t
 
 (* Modify an AST for having version ids, sending the delta to a trigger etc *)
 val modify_ast_for_s : config -> program_t -> stmt_id_t ->

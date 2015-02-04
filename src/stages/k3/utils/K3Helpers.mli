@@ -31,7 +31,6 @@ val t_trig_id : type_t
 val t_stmt_id : type_t
 val t_map_id : type_t
 val t_vid : type_t
-val t_vid_mut : type_t
 
 val vid_increment : ?vid_expr:expr_t -> unit -> expr_t
 val min_vid_k3 : expr_t
@@ -303,6 +302,9 @@ val id_t_add : string -> (string * 'a) list -> (string * 'a) list
 
 (* modify values of id_t format and convert any remaining values to vars *)
 val modify_e : (string * 'a) list -> (string * expr_t) list -> expr_t list
+
+(* find the index of a member of an id_t *)
+val index_e : (string * 'a) list -> string -> int
 
 (* easy access to unit argument for functions/triggers *)
 val unit_arg : (string * type_t) list

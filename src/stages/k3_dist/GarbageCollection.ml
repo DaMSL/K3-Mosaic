@@ -40,7 +40,7 @@ let sw_ack_log =
   create_ds "sw_ack_log" (wrap_tmap' @@ snd_many e) ~e
 
 (* switch: max acknowledged vid *)
-let sw_max_ack_vid = create_ds "sw_max_ack_vid" t_vid_mut ~init:min_vid_k3
+let sw_max_ack_vid = create_ds "sw_max_ack_vid" (mut t_vid) ~init:min_vid_k3
 
 (* switch: trigger for receiving an ack from a node *)
 let sw_ack_rcv_trig_nm = "sw_ack_rcv"

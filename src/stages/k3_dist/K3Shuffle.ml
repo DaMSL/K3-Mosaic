@@ -116,7 +116,7 @@ let gen_meta p =
           fn :: acc_meta)
       [] trig_data
   in
-  for_all_trigs p @@ gen_trig_meta
+  List.flatten @@ for_all_trigs p @@ gen_trig_meta
 
 (* generate all shuffle functions *)
 let functions c =

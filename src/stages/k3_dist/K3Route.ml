@@ -311,7 +311,8 @@ let gen_route_fn p map_id =
         mk_var "sorted_ip_list"
 
 (* create all code needed for route functions, including foreign funcs*)
-let global_vars p partmap = [
+let global_vars p partmap = 
+  [
     global_pmap_input p partmap;
     global_pmaps;
   ]

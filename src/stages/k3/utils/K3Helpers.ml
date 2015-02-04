@@ -311,23 +311,33 @@ let mk_send target address args = mk_stree Send [mk_ctarget target; address; mk_
 let mk_let var_ids tuple_val expr =
   mk_stree (Let(var_ids)) [tuple_val; expr]
 
+(* ----- Converting between ocaml lists and k3 containers ----- *)
+
+let rec list_of_k3_container e =
+  match U.tag_of_expr e with
+  | Combine -> let l, r = U.decompose_combine e in
+      list_of_k3_container l @ list_of_k3_container r
+  | Empty _ -> []
+  | Singleton _ -> [U.decompose_singleton e]
+  | _ -> invalid_arg "not a k3 list"
+
+let rec k3_container_of_list typ = function
+  | []    -> mk_empty typ
+  | [x]   -> mk_singleton typ [x]
+  | x::xs -> mk_combine (k3_container_of_list typ [x]) @@
+    k3_container_of_list typ xs
+
 (* convenience function to aggregate starting with the first item *)
 (* NOTE: will run the first item twice *)
 let mk_agg_fst agg_fn col =
   mk_agg agg_fn
     (mk_case_sn (mk_peek col) "__case"
       (mk_var "__case") @@
-      mk_apply' "error" [mk_cstring "error with mk_agg_fst"]) col
+      mk_apply' "error" @@ mk_cstring "error with mk_agg_fst") col
 
 (* Macros to make role related stuff *)
-let mk_const_stream id typ l =
+let mk_const_stream id typ (l:expr_t list) =
     (* copy from K3Util to prevent circularity *)
-    let rec k3_container_of_list typ = function
-    | [] -> mk_empty typ
-    | [x] -> mk_singleton typ x
-    | x::xs -> mk_combine (k3_container_of_list typ [x]) @@
-        k3_container_of_list typ xs
-    in
     mk_no_anno @@
     Source(Resource(id, Stream(typ,
         ConstStream(k3_container_of_list (wrap_tlist typ) l))))
@@ -488,22 +498,6 @@ let mk_id tuple_types =
     mk_lambda' ids_types @@
       mk_tuple @@ ids_to_vars @@ fst_many @@ ids_types
 
-(* ----- Converting between ocaml lists and k3 containers ----- *)
-
-let rec list_of_k3_container e =
-  match U.tag_of_expr e with
-  | Combine -> let l, r = U.decompose_combine e in
-      list_of_k3_container l @ list_of_k3_container r
-  | Empty _ -> []
-  | Singleton _ -> [U.decompose_singleton e]
-  | _ -> invalid_arg "not a k3 list"
-
-let rec k3_container_of_list typ = function
-  | [] -> mk_empty typ
-  | [x] -> mk_singleton typ x
-  | x::xs -> mk_combine (k3_container_of_list typ [x]) @@
-    k3_container_of_list typ xs
-
 (* convert an arg to a type *)
 let rec type_of_arg = function
   | AIgnored     -> t_unknown (* who cares *)
@@ -558,6 +552,9 @@ let modify_e id_t val_l =
     try StrMap.find s m
     with Not_found -> mk_var s)
   id_t
+
+let index_e id_t s =
+  List.assoc s @@ insert_index_snd @@ fst_many id_t
 
 let unit_arg = ["_", t_unit]
 
