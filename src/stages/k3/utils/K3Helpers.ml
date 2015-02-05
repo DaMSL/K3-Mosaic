@@ -304,6 +304,8 @@ let mk_assign left right = mk_stree (Assign left) [right]
 (* target:TTarget(T) address:TAdress args:T *)
 let mk_send target address args = mk_stree Send [mk_ctarget target; address; mk_tuple args]
 
+let mk_send_raw target addr args = mk_stree Send [target; addr; args]
+
 (* A let that assigns multiple variables simultaneously.
  * For breaking up tuples and passing multiple values out of functions.
  * var_name_type_list must be a (string, type) list, and the var_values must
