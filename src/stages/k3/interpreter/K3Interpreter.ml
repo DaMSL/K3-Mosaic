@@ -18,11 +18,10 @@ module R = K3Runtime
 (* Generic helpers *)
 
 (* set to true to debug *)
+let sp = Printf.sprintf
+
 let debug = ref false
 let debug_env = ref false
-
-type breakpoint_t = K3Runtime.breakpoint_t
-let sp = Printf.sprintf
 
 (* Prettified error handling *)
 let int_erroru uuid ?extra fn_name s =
@@ -486,11 +485,11 @@ and eval_expr (address:address) sched_st cenv texpr =
       let renv, parts = child_values cenv in
       (* get the sender's address from global variable "me" *)
       begin match sched_st, parts with
-        | Some s, [target;addr;arg] ->
+        | Some s, [target; addr; arg] ->
             let e = expr_of_value uuid in
             (* log our send *)
-            let send_code = K3Helpers.mk_send (e target) (e addr) (e arg) in
-            let send_str = K3PrintSyntax.string_of_expr send_code in
+            let send_code = K3Helpers.mk_send_raw (e target) (e addr) @@ e arg in
+            let send_str  = K3PrintSyntax.string_of_expr send_code in
             Log.log (send_str^"\n") ~name:"K3Interpreter.Msg" `Debug;
 
             (* create a new level on the queues *)
@@ -507,8 +506,11 @@ and eval_expr (address:address) sched_st cenv texpr =
       env_modify x fenv @@ const v, VTemp VUnit
 
     in
-    if !debug then Printf.printf "tag: %s, uuid: %d, val: %s\n" name uuid (string_of_value @@ value_of_eval valout);
-    if !debug_env then Printf.printf "env: %s\n" (string_of_env ~skip_functions:true envout);
+    if !debug then
+      Printf.printf "tag: %s, uuid: %d, val: %s\n" name uuid (string_of_value @@ value_of_eval valout);
+    if !debug_env then
+      Printf.printf "env: %s\n" (string_of_env ~skip_functions:true envout);
+
     envout, valout
 
 and threaded_eval address sched_st ienv texprs =
@@ -588,8 +590,9 @@ let env_of_program ?address sched_st k3_program =
             in renv, value_of_eval reval
 
           (* substitute the proper address expression for 'me' *)
-          | id, _ when id = K3Global.me_name ->
-              let renv, reval = eval_expr me_addr (Some sched_st) (m_env, f_env) @@ mk_caddress me_addr
+          | id, _ when id = K3Global.me.id ->
+              let renv, reval =
+                eval_expr me_addr (Some sched_st) (m_env, f_env) @@ mk_caddress me_addr
               in renv, value_of_eval reval
 
           | _, None -> (m_env, f_env), default_value t
@@ -610,44 +613,39 @@ let env_of_program ?address sched_st k3_program =
 (* Instruction interpretation *)
 
 (* consume messages to a specific node *)
-let consume_msgs ?(slice = max_int) sched_st env address =
+let consume_msgs ?slice sched_st address env =
   let log_node s = Log.log (sp "Node %s: %s\n" (string_of_address address) s) `Trace in
-  log_node "consuming messages\n";
-  let status = run_scheduler ~slice sched_st address env in
-  status
+  run_scheduler ?slice sched_st address env
 
 (* consume sources ie. evaluate instructions *)
 let consume_sources sched_st env address (res_env, d_env) (ri_env, instrs) =
   let log_node s = Log.log (sp "Node %s: %s\n" (string_of_address address) s) `Trace in
   match instrs with
-  | []              -> NormalExec, (ri_env, [])
+  | []              -> (ri_env, [])
   | (Consume id)::t ->
     log_node @@ sp "consuming from event loop: %s\n" id;
     try let i = List.assoc id d_env in
         let r = run_dispatcher sched_st address res_env ri_env i in
-        (*let status = run_scheduler sched_st address env in*)
-        NormalExec, (r, t)
+        r, t
     with Not_found ->
       int_error "consume_sources" @@ "no event loop found for "^id
 
 (* Program interpretation *)
-let interpreter_event_loop role_opt k3_program =
+let interpreter_event_loop role k3_program =
   let error s =
     int_error "interpreter_event_loop" s in
  let roles, default_role = extended_roles_of_program k3_program in
-  let get_role role fail_f = try List.assoc role roles with Not_found ->
+ let get_role role fail_f = try List.assoc role roles with Not_found ->
     fail_f @@ "No role "^role^" found in k3 program"
-  in match role_opt, default_role with
-   | Some x, Some (_,y) -> get_role x (fun _ -> y)
-   | Some x, None       -> get_role x error
-   | None, Some (_,y)   -> y
-   | None, None         -> error "No roles specified or found for K3 program"
+ in match default_role with
+   | Some (_, y) -> get_role role @@ const y
+   | None        -> get_role role error
 
 (* returns address, (event_loop_t, environment) *)
-let initialize_peer sched_st address role_opt k3_program =
+let initialize_peer sched_st address role k3_program =
   let prog_env = env_of_program sched_st k3_program ~address in
   initialize_scheduler sched_st address prog_env;
-  address, (interpreter_event_loop role_opt k3_program, prog_env)
+  address, (interpreter_event_loop role k3_program, prog_env)
 
 (* preserve the state of the interpreter *)
 type interpreter_t = {
@@ -656,76 +654,80 @@ type interpreter_t = {
   peer_meta : (address, resource_impl_env_t * instruction_t list) Hashtbl.t;
   peer_list : K3Global.peer_t list;
   envs : (address, (resource_env_t * dispatcher_env_t * program_env_t)) Hashtbl.t;
+
+  (* how often (in sec) to consume a source *)
+  src_interval : float;
+  mutable last_s_time : float;
 }
 
-let interpret_k3_program {scheduler; peer_meta; peer_list; envs} =
+let interpret_k3_program i =
   (* Continue running until all peers have finished their instructions,
    * and all messages have been processed *)
-  let rec loop () =
+  let rec loop last_src_peers =
     (* find and process every peer that has a message to process. This way we make sure we
       * don't inject new sources until all messages are processed *)
-    let message_peers =
+    let msg_peers =
       (* for global queueing, we don't loop. Instead, we run for only one
         * iteration, since each trigger needs a different environment *)
-      if R.network_has_work scheduler then
-        let addr = R.next_global_address scheduler in
-        let _,_,prog_env = Hashtbl.find envs addr in
-        R.consume_msgs ~slice:1 scheduler prog_env addr; 1
+      if R.network_has_work i.scheduler then
+        let addr = R.next_global_address i.scheduler in
+        let prog_env = thd3 @@ Hashtbl.find i.envs addr in
+        consume_msgs ~slice:1 i.scheduler addr prog_env; 1
       else 0
     in
-    (*Printf.printf "msgs: %d\n" message_peers;*)
-    if message_peers > 0 then loop ()
-    else
-      (* now deal with sources *)
-      let source_peers, (status':status_t) =
+    let t = Sys.time () in
+    let src_peers =
+      (* is it time to scan for sources again ? *)
+      if t -. i.last_s_time >= i.src_interval then begin
+        i.last_s_time <- t;
         Hashtbl.fold (fun addr (ri_env, insts) count ->
-          if insts <> [] then
-            let res_env, de, env = Hashtbl.find envs addr in
+          if insts <> [] then begin
+            let res_env, de, env = Hashtbl.find i.envs addr in
             let eval =
-              consume_sources scheduler env addr (res_env, de) (ri_env, insts)
+              consume_sources i.scheduler env addr (res_env, de) (ri_env, insts)
             in
-            Hashtbl.replace peer_meta addr eval;
+            Hashtbl.replace i.peer_meta addr eval;
             count + 1
-          else count
-        ) peer_meta 0
-      in
-      (*Printf.printf "sources: %d, msgs: %d\n" source_peers message_peers;*)
-      if source_peers > 0 || message_peers > 0 then loop status'
-      else status'
+          end else count)
+        i.peer_meta 0
+      (* if it's not time for a source, use last count *)
+      end else last_src_peers
+    in
+    (* check if we should continue *)
+    if msg_peers > 0 || src_peers > 0 then loop src_peers else ()
   in
-  loop ();
-  let prog_state = Hashtbl.map (fun (addr, (_,_,e)) -> addr, e) envs in
-  (* We only print if we finished execution *)
-  if result = NormalExec then
-    (* Log program state *)
-    List.iter (fun (addr, e) ->
-      Log.log (sp ">>>> Peer %s\n" (string_of_address addr)) `Trace;
-      Log.log (sp "%s\n" (string_of_program_env e)) `Trace;
-    ) prog_state;
-  result, prog_state
+  loop 1;
+  let prog_state = List.map (second thd3) @@ list_of_hashtbl i.envs in
+  (* Log program state *)
+  List.iter (fun (addr, e) ->
+    Log.log (sp ">>>> Peer %s\n" (string_of_address addr)) `Trace;
+    Log.log (sp "%s\n" (string_of_program_env e)) `Trace;
+  ) prog_state;
+  prog_state
 
 (* Initialize an interpreter given the parameters *)
-let init_k3_interpreter ?shuffle_tasks
-                        ?breakpoints
-                        ?(queue_type=GlobalQ)
+let init_k3_interpreter ?(queue_type=GlobalQ)
                         ~run_length
-                        ~peers
+                        ~(peers:K3Global.peer_t list)
                         ~load_path
+                        ?(src_interval=0.002)
                         typed_prog =
-  let s = init_scheduler_state ?shuffle_tasks ?breakpoints ~queue_type ~run_length () in
+  let scheduler =
+    init_scheduler_state ~queue_type ~run_length () in
   match peers with
   | []  -> failwith "interpret_k3_program: Peers list is empty!"
   | _   ->
       (* Initialize an environment for each peer *)
       K3StdLib.g_load_path := load_path;
-      let peer_meta = Hashtbl.create @@ List.length peers in
-      let envs = List.map (fun (addr, role_opt, _) ->
+      let len = List.length peers in
+      let peer_meta = Hashtbl.create len in
+      let envs = Hashtbl.create len in
+      List.iter (fun (addr, role) ->
                  (* event_loop_t * program_env_t *)
           let _, ((res_env, d_env, instrs), prog_env) =
-            initialize_peer s addr role_opt typed_prog
-          in Hashtbl.replace peer_meta addr ([], instrs);
-          addr, (res_env, d_env, prog_env)
-        ) peers
-      in
-      {scheduler=s; peer_meta=peer_meta; peer_list=peers; envs=envs}
+            initialize_peer scheduler addr role typed_prog in
+          Hashtbl.replace peer_meta addr ([], instrs);
+          Hashtbl.replace envs addr (res_env, d_env, prog_env)
+      ) peers;
+      {scheduler; peer_meta; peer_list=peers; envs; last_s_time=0.; src_interval}
 

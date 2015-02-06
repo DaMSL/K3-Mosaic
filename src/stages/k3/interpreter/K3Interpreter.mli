@@ -13,20 +13,15 @@ val env_of_program : ?address:address -> scheduler_state -> program_t -> program
 (* expression evaluation can be done without a scheduler for micro evaluation *)
 val eval_expr : address -> scheduler_state option -> env_t -> expr_t -> env_t * eval_t
 
-type status_t = K3Runtime.status_t
-type breakpoint_t = K3Runtime.breakpoint_t
-
 (* Takes an interpreter and runs it, either initialized or after a breakpoint *)
-val interpret_k3_program : interpreter_t -> status_t * (address * program_env_t) list
+val interpret_k3_program : interpreter_t -> (address * program_env_t) list
 
 (* create an interpreter state to run a k3 program *)
 val init_k3_interpreter :
-  ?shuffle_tasks:bool ->
-  ?breakpoints:breakpoint_t list ->
   ?queue_type:K3Runtime.queue_type ->
   run_length:int64 ->
   peers:K3Global.peer_t list ->
   load_path:string ->
-  program_t ->
-  interpreter_t
+  ?src_interval:float ->
+  program_t -> interpreter_t
 

@@ -252,6 +252,8 @@ val hashtbl_replace : ('a, 'b) Hashtbl.t -> 'a -> ('b option -> 'b) -> unit
 (* combine hashtables *)
 val hashtbl_combine : ('a, 'b) Hashtbl.t -> ('a, 'b) Hashtbl.t -> ('b -> 'b -> 'b) -> unit
 
+val list_of_hashtbl : ('a, 'b) Hashtbl.t -> ('a * 'b) list
+
 val intset_of_list : int list -> IntSet.t
 val intmap_of_list : (int * 'a) list -> 'a IntMap.t
 val strmap_of_list : (string * 'a) list -> 'a StrMap.t

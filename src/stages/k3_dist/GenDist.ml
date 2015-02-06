@@ -111,7 +111,6 @@ let nd_check_stmt_cntr_index =
   let counter = fst @@ hd @@ list_take_end 1 nd_stmt_cntrs.e in
   let part_pat_as_vars = ids_to_vars @@ fst_many part_pat in
   let query_pat = part_pat_as_vars @ [mk_cunknown] in
-  let stmt_cntrs_slice = mk_slice' nd_stmt_cntrs.id query_pat in
   mk_global_fn nd_check_stmt_cntr_index_nm
     part_pat
     [t_bool] @@ (* return whether we should send the do_complete *)
@@ -148,13 +147,8 @@ let nd_check_stmt_cntr_index =
 (* NOTE: this function assumes the initial value is always 0.
  * If we need another value, it must be handled via message from
  * m3tok3 *)
-let nd_add_delta_to_buf_nm c map_id =
-  let t = P.map_types_for c.p map_id in
-  "nd_add_delta_to_"^String.concat "_" @@
-    List.map K3PrintSyntax.string_of_type t
-
 let nd_add_delta_to_buf c map_id =
-  let func_name = nd_add_delta_to_buf_nm c map_id in
+  let func_name = D.nd_add_delta_to_buf_nm c map_id in
   let delta_tuples_nm = "delta_tuples" in
   let ids_types_arg = P.map_ids_types_for ~prefix:"__arg_" c.p map_id in
   let ids_types_arg_v = P.map_ids_types_add_v ~vid:"vid_arg" ids_types_arg in
@@ -901,7 +895,7 @@ List.map
          * sensitive point in the protocol and it's essential this only be done
          * once for a given corrective *)
         mk_apply'
-          (nd_add_delta_to_buf_nm c rmap) @@
+          (D.nd_add_delta_to_buf_nm c rmap) @@
             (* pass the map indirection, false=not corrective *)
             mk_tuple [mk_var buf_map_nm; mk_cbool false; mk_var "vid";
                       mk_var "delta_tuples"] ;

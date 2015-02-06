@@ -532,6 +532,7 @@ let hashtbl_combine h h' combine_fn =
       Hashtbl.add h k v'
   ) h'
 
+let list_of_hashtbl h = Hashtbl.fold (fun k v acc -> (k,v)::acc) h []
 
 let intset_of_list l =
   List.fold_left (fun acc x -> IntSet.add x acc) IntSet.empty l

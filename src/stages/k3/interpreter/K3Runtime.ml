@@ -43,7 +43,6 @@ type task_t = id_t * value_t
 type scheduler_spec = {
     mutable events_to_process : int64;
     mutable interleave_period : int;
-    mutable shuffle_tasks     : bool;
   }
 
 let default_interleave_period = 10
@@ -54,7 +53,6 @@ let dummy = ref 0
 let default_params = {
     events_to_process = default_events_to_process;
     interleave_period = default_interleave_period;
-    shuffle_tasks = false;
   }
 
 (* Breakpoint types *)
@@ -109,11 +107,7 @@ type scheduler_state = {
   sleep_t : int option;
  }
 
-let use_shuffle_tasks s  = s.params.shuffle_tasks
-
-let init_scheduler_state ?(shuffle_tasks=false)
-                         ?(breakpoints=[])
-                         ?(run_length=default_events_to_process)
+let init_scheduler_state ?(run_length=default_events_to_process)
                          ?(queue_type=GlobalQ)
                          () =
   {

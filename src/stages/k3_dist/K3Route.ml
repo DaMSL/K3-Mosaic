@@ -133,9 +133,8 @@ let calc_dim_bounds_code =
           "acc_size", t_int])
         (wrap_args ["pos", t_int; "bin_size", t_int]) @@
         mk_tuple [mk_combine (mk_var "xs") @@
-          mk_singleton t_list_two_ints @@
-            mk_tuple [mk_var "pos"; mk_var "acc_size"];
-          mk_mult (mk_var "bin_size") (mk_var "acc_size")])
+          mk_singleton t_list_two_ints [mk_var "pos"; mk_var "acc_size"];
+          mk_mult (mk_var "bin_size") @@ mk_var "acc_size"])
       (mk_tuple [mk_empty @@ wrap_tlist @@ wrap_ttuple [t_int; t_int];
         mk_cint 1]) @@
       mk_var "pmap"
@@ -156,9 +155,8 @@ let gen_route_fn p map_id =
   mk_global_fn (route_for p map_id)
     ["_", t_int; "_", t_unit]
     [output_type] @@ (* return *)
-      mk_singleton output_type @@
-        mk_apply (mk_var "get_ring_node") @@
-          mk_tuple [mk_cint 1; mk_cint 1]
+      mk_singleton output_type
+        [mk_apply' "get_ring_node" @@ mk_tuple [mk_cint 1; mk_cint 1]]
 
   | _  -> (* we have keys *)
   mk_global_fn (route_for p map_id)
@@ -249,33 +247,26 @@ let gen_route_fn p map_id =
             (* for every domain element in the domain *)
             (mk_lambda (wrap_args ["domain_element", t_int]) @@
               mk_if (mk_is_empty (mk_var "prev_cart_prod") free_cart_prod_type)
-                (mk_singleton free_cart_prod_type @@
-                  mk_singleton inner_cart_prod_type @@
-                    mk_tuple [mk_var "i"; mk_var "domain_element"]
-                ) @@
+                (mk_singleton free_cart_prod_type
+                  [mk_singleton inner_cart_prod_type
+                    [mk_var "i"; mk_var "domain_element"]]) @@
                 mk_map
                   (* add current element to every previous sublist *)
-                  (mk_lambda (AVar("rest_tup", inner_cart_prod_type)) @@
+                  (mk_lambda' ["rest_tup", inner_cart_prod_type] @@
                     mk_combine (mk_var "rest_tup") @@
-                      mk_singleton inner_cart_prod_type @@
-                        mk_tuple [mk_var "i"; mk_var "domain_element"]
-                  ) @@
-                  mk_var "prev_cart_prod"
-            ) @@
-            mk_var "domain"
-        )
+                      mk_singleton inner_cart_prod_type
+                        [mk_var "i"; mk_var "domain_element"]) @@
+                  mk_var "prev_cart_prod") @@
+            mk_var "domain")
         (mk_empty free_cart_prod_type) @@
-        mk_var "free_domains"
-      ) @@
+        mk_var "free_domains") @@
     (* We now add in the value of the bound variables as a constant
      * and calculate the result for every possibility *)
     (* TODO: this can be turned into sets *)
     mk_let ["sorted_ip_list"]
       (mk_gbagg
         (mk_lambda (wrap_args ["ip", t_addr]) @@ mk_var "ip")
-        (mk_lambda (wrap_args ["_", t_unit; "_", t_unit]) @@
-          mk_cunit
-        )
+        (mk_lambda (wrap_args ["_", t_unit; "_", t_unit]) mk_cunit)
         mk_cunit @@
         (* convert to bag *)
         mk_agg
@@ -284,11 +275,11 @@ let gen_route_fn p map_id =
                          "free_bucket", free_bucket_type]) @@
               mk_combine
                 (mk_var "acc_ips") @@
-                mk_singleton output_type @@
-                  mk_apply' "get_ring_node" @@ mk_tuple
+                mk_singleton output_type
+                  [mk_apply' "get_ring_node" @@ mk_tuple
                     [mk_agg
-                      (mk_assoc_lambda (wrap_args ["acc", t_int])
-                        (wrap_args ["i", t_int; "val", t_int]) @@
+                      (mk_assoc_lambda' ["acc", t_int]
+                                        ["i", t_int; "val", t_int] @@
                         mk_add (mk_var "acc") @@
                           mk_mult (mk_var "val") @@
                             mk_snd @@
@@ -296,22 +287,20 @@ let gen_route_fn p map_id =
                               mk_slice' "dim_bounds" [mk_var "i"; mk_cunknown])
                       (mk_var "bound_bucket") @@ (* start with this const *)
                       mk_var "free_bucket";
-                    mk_var "max_val"]
-          )
+                    mk_var "max_val"]])
           (mk_empty output_type) @@
           mk_var "free_cart_prod"
       ) @@
     mk_if
       (mk_is_empty (mk_var "sorted_ip_list") @@ sorted_ip_list_type)
-      (mk_singleton output_type @@
-        mk_apply (mk_var "get_ring_node") @@ mk_tuple (* empty ip list *)
-          [mk_var "bound_bucket"; mk_var "max_val"]
-      ) @@
+      (mk_singleton output_type
+        [mk_apply' "get_ring_node" @@ mk_tuple (* empty ip list *)
+          [mk_var "bound_bucket"; mk_var "max_val"]]) @@
       mk_fst_many sorted_ip_inner_type @@
         mk_var "sorted_ip_list"
 
 (* create all code needed for route functions, including foreign funcs*)
-let global_vars p partmap = 
+let global_vars p partmap =
   [
     global_pmap_input p partmap;
     global_pmaps;

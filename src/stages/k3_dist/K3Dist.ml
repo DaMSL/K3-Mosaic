@@ -306,6 +306,11 @@ let sw_trig_buf_idx =
 (* name for master send request trigger (part of GC) *)
 let ms_send_gc_req_nm = "ms_send_gc_req"
 
+let nd_add_delta_to_buf_nm c map_id =
+  let t = P.map_types_for c.p map_id in
+  "nd_add_delta_to_"^String.concat "_" @@
+    List.map K3PrintSyntax.string_of_type t
+
 
 (* --- Begin frontier function code --- *)
 

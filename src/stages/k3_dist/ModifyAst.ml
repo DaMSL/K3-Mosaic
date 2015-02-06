@@ -6,6 +6,7 @@ open K3Dist
 module U = K3Util
 module P = ProgInfo
 module PR = K3Printing
+module D = K3Dist
 
 exception InvalidAst of string
 
@@ -101,15 +102,15 @@ let get_map_access_patterns_ids p ast =
 (* inserts a reference to the default vid var for that node *)
 let rec add_vid_to_init_val types e =
   let add = add_vid_to_init_val types in
-  let vid_var = mk_var init_vid.id in
+  let vid_var = mk_var g_init_vid.id in
   match U.tag_of_expr e with
   | Combine -> let x, y = U.decompose_combine e in
       mk_combine (add x) (add y)
   | Empty t -> mk_empty types
   | Singleton t -> let x = U.decompose_singleton e in
-      mk_singleton types (add x)
+      mk_singleton types [add x]
   | Tuple -> let xs = U.decompose_tuple e in
-      mk_tuple (P.map_add_v vid_var xs)
+      mk_tuple @@ P.map_add_v vid_var xs
   (* this should only be encountered if there's no tuple *)
   | Const _ | Var _ -> mk_tuple @@ P.map_add_v vid_var [e]
   | _ -> failwith "add_vid_to_init_val: unhandled modification"
@@ -190,6 +191,7 @@ let corr_ast_for_m_s c ast map stmt trig =
 exception UnhandledModification of string
 
 (* modify a lambda to have a vid included in its arguments *)
+(* TODO: add support for LET *)
 let add_vid_to_lambda_args lambda =
   let vid_avar = AVar("vid", t_vid) in
   let args, body = U.decompose_lambda lambda in
@@ -224,7 +226,7 @@ let modify_map_add_vid (c:config) ast stmt =
   let var_vid    = mk_var "vid" in
   (* add a vid to a tuple *)
   let modify_tuple e =
-    mk_tuple @@ P.map_add_v var_vid @@ U.extract_if_tuple e
+    P.map_add_v var_vid @@ U.extract_if_tuple e
   in
   (* Sometimes we only find out that a node needs to have a vid from a higher
    * vid in the tree, and we need to add it top-down. The main use for this
@@ -238,16 +240,15 @@ let modify_map_add_vid (c:config) ast stmt =
         let _, body = U.decompose_lambda e in
         mk_lambda args @@ add_vid_from_above body
     | Map -> let lambda, col = U.decompose_map e in
-        mk_map
-          (add_vid_from_above lambda) col
+        mk_map (add_vid_from_above lambda) col
     | Combine -> let x, y = U.decompose_combine e in
         mk_combine (add_vid_from_above x) (add_vid_from_above y)
     | Singleton t -> let x = U.decompose_singleton e in
-        mk_singleton t @@ add_vid_from_above x
+        mk_singleton t [add_vid_from_above x]
     | Apply -> (* this should be a let *)
         let lambda, input = U.decompose_apply e in
         mk_apply (add_vid_from_above lambda) input
-    | _ -> modify_tuple e
+    | _ -> mk_tuple @@ modify_tuple e
     (* TODO: handle combining more variables *)
   in
   (* modify a direct map read, such as in a slice or a peek. col is the
@@ -283,7 +284,7 @@ let modify_map_add_vid (c:config) ast stmt =
     (* a lambda simply passes through a message *)
     | Lambda _ -> get_msg 0, e
 
-    | Insert _ -> let (col, elem) = U.decompose_insert e in
+    | Insert _ -> let col, elem = U.decompose_insert e in
         NopMsg, mk_insert col @@ modify_tuple elem
 
     (* deletes need to be removed, since we have versioning ie. we don't delete
@@ -346,10 +347,10 @@ let modify_map_add_vid (c:config) ast stmt =
     | Var name when List.mem name map_names -> AddVidMsg, e
 
     (* if any statements in a block requested deletion, delete
-     * those statements *)
+     * those statements - they're not relevant *)
     | Block -> let ss = U.decompose_block e in
       let s_msg = list_zip ss msgs in
-      let ss' = fst @@ List.split @@
+      let ss' = fst_many @@
         List.filter (fun (_, msg) -> msg <> DelMsg) s_msg in
       NopMsg, mk_block ss'
 
@@ -387,7 +388,7 @@ let delta_action c ast stmt m_target_trigger ~corrective =
       let full_names = lmap_bind_ids_v @ delta_names in
       let full_vars =
           P.map_add_v (mk_var "vid") @@
-            [mk_singleton lmap_type @@ mk_tuple @@ ids_to_vars full_names]
+            [mk_singleton lmap_type @@ ids_to_vars full_names]
       in
       (* modify the delta itself *)
       mk_let delta_names
@@ -395,21 +396,19 @@ let delta_action c ast stmt m_target_trigger ~corrective =
         mk_block @@
           [ (* we add the delta to all following vids,
               * and we send it for correctives *)
-            mk_apply
-            (mk_var @@ add_delta_to_map c lmap) @@
+            mk_apply'
+            (D.nd_add_delta_to_buf_nm c lmap) @@
               (* create a single tuple to send *)
               mk_tuple @@
                 (mk_var @@ P.map_name_of c.p lmap)::
-                mk_cbool (if corrective then true else false)::full_vars]
+                (if corrective then mk_ctrue else mk_cfalse)::full_vars]
             @
             (* do we need to send to another trigger *)
             begin match m_target_trigger with
             | None   -> []
             | Some t ->
-              [mk_send
-                (mk_ctarget t)
-                K3Global.me_var @@
-                mk_tuple @@ full_vars]
+              (* TODO: turn to function? *)
+              [mk_send t K3Global.me_var @@ full_vars]
             end
 
   | Iterate -> (* more complex modification *)
@@ -432,45 +431,36 @@ let delta_action c ast stmt m_target_trigger ~corrective =
           ["acc", lmap_type]
           delta_ids_types @@
             mk_let ["slice"]
-            (mk_slice
-              (mk_var "acc") @@
-              mk_tuple @@ (ids_to_vars @@ lmap_bind_ids_v) @ [mk_cunknown]) @@
+            (mk_slice' "acc" @@
+              (ids_to_vars @@ lmap_bind_ids_v) @ [mk_cunknown]) @@
             mk_case_ns (mk_peek @@ mk_var "slice") "slice_d"
               (* if we don't have this value, just insert *)
               (mk_block [
-                mk_insert "acc" @@
-                  mk_tuple @@ ids_to_vars @@ lmap_bind_ids_v@[delta_last_id];
-                mk_var "acc"])
+                mk_insert "acc" @@ ids_to_vars @@ lmap_bind_ids_v@[delta_last_id];
+                mk_var "acc"]) @@
               (* otherwise add *)
-              (mk_block [
+              mk_block [
                 mk_let
-                  (fst_many slice_ids_types)
-                  (mk_var "slice_d") @@
+                  (fst_many slice_ids_types) (mk_var "slice_d") @@
                 mk_update "acc"
-                  (mk_tuple slice_vars) @@
-                  mk_tuple @@ list_drop_end 1 slice_vars @
-                    [mk_add
-                      (list_last slice_vars) @@
-                      mk_var delta_last_id];
-                mk_var "acc"]))
+                  slice_vars @@
+                  list_drop_end 1 slice_vars @
+                    [mk_add (list_last slice_vars) @@ mk_var delta_last_id];
+                     mk_var "acc"])
         (mk_empty lmap_type) @@
         mk_var delta_name) @@
     mk_block @@
       (* add delta values to all following vids *)
-      [mk_apply
-        (mk_var @@ add_delta_to_map c lmap) @@
-        mk_tuple @@
-          (mk_var @@ P.map_name_of c.p lmap)::
-            mk_cbool (if corrective then true else false)::
-            [mk_var "vid"; mk_var delta_v_name]]
-      @
+      [mk_apply' (D.nd_add_delta_to_buf_nm c lmap) @@
+        mk_tuple [mk_var @@ P.map_name_of c.p lmap;
+                  if corrective then mk_ctrue else mk_cfalse;
+                  mk_var "vid";
+                  mk_var delta_v_name]] @
       begin match m_target_trigger with
-      | None -> []
+      | None   -> []
       | Some t ->
         [mk_send (* send to a (corrective) target *)
-          (mk_ctarget t)
-          K3Global.me_var @@
-          mk_tuple [mk_var "vid"; mk_var delta_v_name]]
+          t K3Global.me_var [mk_var "vid"; mk_var delta_v_name]]
       end
 
   | _ -> raise @@ UnhandledModification(
