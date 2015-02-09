@@ -181,7 +181,7 @@ let next_value resource_env resource_impl_env resource_ids =
   in randomize_access [] resource_ids
 
 (* Run a pattern dispatcher for a single step *)
-let rec run_dispatcher_step schedule_fn d state_opt origin value =
+let rec dispatch schedule_fn d state_opt origin value =
   let module A = ResourceActions in
   let module F = ResourceFSM in
   let next_access state_id =
@@ -206,62 +206,64 @@ let rec run_dispatcher_step schedule_fn d state_opt origin value =
 (* type for allowing the dispatcher to maintain state between values *)
 type dispatcher_t = {
   mutable ri_env : (string * channel_impl_t) list;
+  mutable ri_env_ids : string list;
+  mutable next_access_ids : string list;
   mutable state : K3Streams.ResourceFSM.state_id option;
-  mutable finished_res : id_t list;
-  mutable have_res_left : bool;
+  mutable done_res : id_t list; (* resources that are done *)
+  mutable have_res : bool;
+  mutable origin : id_t;
+  mutable value : value_t;
 }
 
-(* let init_dispatcher address resource_env resource_impl_env d = *)
+let def_dispatcher =
+  { ri_env = [];
+    ri_env_ids = [];
+    next_access_ids = [];
+    state = None;
+    done_res = [];
+    have_res = true;
+    origin = "";
+    value = VUnknown;
+  }
 
+  (* check if we're still running *)
+let is_running e = is_some e.state && e.have_res
 
-
-
-(* Pattern-based dispatching. Given a resource specification and implementation
- * environment, and a dispatcher (i.e. an FSM), repeatedly steps through the
- * dispatcher. At each step the dispatcher indicates the resources to be accessed
- * next, and it is the responsibility of this executor to pull the next value
- * from the list of resources
- *
- * @resource_impl_env: the implementation of a resource (file channels),
- * @d: dispatcher fsm *)
-let run_dispatcher schedule_fn resource_env resource_impl_env d =
-  let init_value o v = ref o, ref v in
-  let init_finished () = failwith "no value found during initialization" in
-  let assign_value origin value o v = origin := o; value := v in
-  let ri_env, rids =
-    let x = initialize_resources resource_env resource_impl_env d
-    in x, fst_many x
+(* create a dispatcher_t data structure and init the dispatcher *)
+let init_dispatcher resource_env e fsm =
+  let ri_env, ri_env_ids =
+    let x = initialize_resources resource_env e.ri_env fsm in
+    x, fst_many x
   in
-  let finished_resources, resources_remain = ref [], ref true in
-  (* get the next value *)
-  let get_value value_f finished_f resources =
-    match next_value resource_env ri_env resources with
-    | f, Some(o, Some v) ->
-      finished_resources := ListAsSet.union !finished_resources f;
-      resources_remain   := ListAsSet.diff rids !finished_resources <> [];
-      value_f o v
+  let state, next_access_ids = first some @@ initial_resources_of_dispatcher fsm in
+  {def_dispatcher with ri_env; ri_env_ids; next_access_ids; state}
 
-    | f, _ ->
-      finished_resources := ListAsSet.union !finished_resources f;
-      resources_remain   := ListAsSet.diff rids !finished_resources <> [];
-      finished_f ()
+(* take a step in the dispatcher.
+ * @e: dispatcher_t
+ * return: whether we're done *)
+let run_step schedule_fn e res_env (fsm:K3Streams.ResourceFSM.fsm_t) =
+  let fin, access = next_value res_env e.ri_env (ListAsSet.diff e.next_access_ids e.done_res) in
+  e.done_res <- ListAsSet.union e.done_res fin;
+  e.have_res <- ListAsSet.diff e.ri_env_ids e.done_res <> [];
+  begin match access with
+  | Some(o, Some v) -> e.origin <- o; e.value <- v
+  | _ -> ()
+  end;
+  let rec loop () =
+    match dispatch schedule_fn fsm e.state e.origin e.value with
+    (* A value failed sending, so try again at next state *)
+    | Some v, Some s, [] when v = e.value ->
+        e.state <- Some s;
+        loop ()
+    (* Terminal state *)
+    | Some v, None, [] ->
+        e.state <- None;
+        false
+
+    | _, state', access_ids' ->
+        e.state <- state';
+        e.next_access_ids <- access_ids';
+        true
   in
-  let state, (origin, value) =
-    let s, rids = initial_resources_of_dispatcher d
-    in ref @@ Some s, get_value init_value init_finished rids
-  in
-  while !state <> None && !resources_remain do
-  match run_dispatcher_step schedule_fn d !state !origin !value with
-  (* Retry value at next state *)
-  | Some v, Some s, [] when v = !value -> state := Some s
-
-  (* Terminal state *)
-  | Some v, None, []                   -> state := None
-
-  | rejected, next_state, next_access ->
-      (* TODO: buffer rejected as desired *)
-      state := next_state;
-      get_value (assign_value origin value) id_fn
-        (ListAsSet.diff next_access !finished_resources)
-  done;
-  ri_env
+  if is_running e then loop ()
+  else false

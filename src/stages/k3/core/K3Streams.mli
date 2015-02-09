@@ -64,18 +64,16 @@ module ResourceFSM : FSMType
       and  type output = ResourceActions.output
 
 open ResourceFSM
-type dispatcher_t = fsm_t
-type dispatcher_env_t = fsm_env_t
 
 type event_loop_t =
-  resource_env_t * dispatcher_env_t * (instruction_t list)
+  resource_env_t * fsm_env_t * (instruction_t list)
 
 (* Stringification *)
 val string_of_resource_bindings : resource_bindings_t -> string
 val string_of_resource_env      : resource_env_t -> string
 
-val string_of_dispatcher     : dispatcher_t -> string
-val string_of_dispatcher_env : dispatcher_env_t -> string
+val string_of_dispatcher     : fsm_t -> string
+val string_of_dispatcher_env : fsm_env_t -> string
 
 (* Accessors *)
 val id_of_state : state_id * fsm_state -> state_id
@@ -92,14 +90,14 @@ val is_file_handle : resource_env_t -> id_t -> bool
 (* Compilation *)
 val compile_dispatcher :
   resource_env_t -> resource_bindings_t
-  -> dispatcher_env_t -> resource_pattern_t
-  -> dispatcher_t
+  -> fsm_env_t -> resource_pattern_t
+  -> fsm_t
 
 (* Dispatcher processing *)
-val resources_of_dispatcher : dispatcher_t -> input list
+val resources_of_dispatcher : fsm_t -> input list
 
 val initial_resources_of_dispatcher :
-  dispatcher_t -> state_id * input list
+  fsm_t -> state_id * input list
 
 (* Event loop helpers *)
 val event_loop_of_flow : flow_program_t -> event_loop_t

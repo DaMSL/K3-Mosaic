@@ -117,11 +117,11 @@ module ResourceFSM : FSMType
       and  type output = ResourceActions.output
   = FSM(ResourceActions)
 
-type dispatcher_t = ResourceFSM.fsm_t
-type dispatcher_env_t = ResourceFSM.fsm_env_t
+type fsm_t = ResourceFSM.fsm_t
+type fsm_env_t = ResourceFSM.fsm_env_t
 
 type event_loop_t =
-  resource_env_t * dispatcher_env_t * (instruction_t list)
+  resource_env_t * fsm_env_t * (instruction_t list)
 
 (* State identifier generation *)
 let state_sym_class = "FSM"

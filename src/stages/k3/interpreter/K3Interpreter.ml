@@ -14,6 +14,8 @@ open K3Runtime
 
 module KP = K3Printing
 module R = K3Runtime
+module C = K3Consumption
+module SR = K3Streams.ResourceFSM
 
 (* Generic helpers *)
 
@@ -612,22 +614,53 @@ let env_of_program ?address sched_st k3_program =
 
 (* Instruction interpretation *)
 
+type environments = {
+  res_env : resource_env_t;
+  fsm_env : SR.fsm_env_t;  (* really the dispatcher's fsm *)
+  prog_env : program_env_t;
+  mutable instrs : instruction_t list; (* role instructions *)
+  mutable disp_env : dispatcher_t;
+}
+
+(* preserve the state of the interpreter *)
+type interpreter_t = {
+  scheduler : R.scheduler_state;
+  (* metadata including remaining resources and instructions *)
+  peer_list : K3Global.peer_t list;
+  envs : (address, environments) Hashtbl.t;
+
+  (* how often (in sec) to consume a source *)
+  src_interval : float;
+  mutable last_s_time : float;
+}
+
 (* consume sources ie. evaluate instructions *)
-let consume_sources sched_st env address (res_env, d_env) (ri_env, instrs) =
+let consume_sources sched_st address env =
   let log_node s = Log.log (sp "Node %s: %s\n" (string_of_address address) s) `Trace in
   (* function to pass to consumer *)
   let schedule_fn src_bindings src_id events =
     schedule_event sched_st src_bindings src_id address events
   in
-  match instrs with
-  | []                 -> ri_env, []
+  match env.instrs with
+  | []                 -> failwith "consume_sources: missing instructions"
   | Consume id :: rest ->
-    log_node @@ sp "consuming from event loop: %s\n" id;
-    try let d = List.assoc id d_env in
-        let ri_env = run_dispatcher schedule_fn res_env ri_env d in
-        ri_env, rest
-    with Not_found ->
-      int_error "consume_sources" @@ "no event loop found for "^id
+    let fsm = List.assoc id env.fsm_env in
+    let rec loop () =
+      log_node @@ sp "consuming from event loop: %s\n" id;
+      (* check if we're in the middle of running the dispatcher *)
+      if C.is_running env.disp_env then
+        (* take another step in this stream, and check if we're done *)
+        if C.run_step schedule_fn env.disp_env env.res_env fsm then ()
+        else env.instrs <- rest
+      else
+        (* create a new stream *)
+        try
+          let disp_env = C.init_dispatcher env.res_env env.disp_env fsm in
+          env.disp_env <- disp_env;
+          loop ()
+        with Not_found ->
+          int_error "consume_sources" @@ "no event loop found for "^id
+    in loop ()
 
 (* Program interpretation *)
 let interpreter_event_loop role k3_program =
@@ -645,28 +678,19 @@ let initialize_peer sched_st address role k3_program =
   let prog_env = env_of_program sched_st k3_program ~address in
   address, (interpreter_event_loop role k3_program, prog_env)
 
-(* preserve the state of the interpreter *)
-type interpreter_t = {
-  scheduler : R.scheduler_state;
-  (* metadata including remaining resources and instructions *)
-  peer_meta : (address, resource_impl_env_t * instruction_t list) Hashtbl.t;
-  peer_list : K3Global.peer_t list;
-  envs : (address, (resource_env_t * dispatcher_env_t * program_env_t)) Hashtbl.t;
-
-  (* how often (in sec) to consume a source *)
-  src_interval : float;
-  mutable last_s_time : float;
-}
-
 let interpret_k3_program i =
   (* Continue running until all peers have finished their instructions,
-   * and all messages have been processed *)
+   * and all messages have been processed
+   *  @last_src_peers: how many peers had active sources
+   *)
   let rec loop last_src_peers =
+    (* number of peers with messages *)
     let msg_peers =
       if R.network_has_work i.scheduler then
+        (* func to return program env *)
         let prog_env_fn addr =
           Log.log (sp "Node %s: consuming messages\n" @@ string_of_address addr) `Trace;
-          thd3 @@ Hashtbl.find i.envs addr
+          (Hashtbl.find i.envs addr).prog_env
         in
         run_scheduler ~slice:1 i.scheduler prog_env_fn; 1
       else 0
@@ -676,16 +700,12 @@ let interpret_k3_program i =
       (* is it time to scan for sources again ? *)
       if t -. i.last_s_time >= i.src_interval then begin
         i.last_s_time <- t;
-        Hashtbl.fold (fun addr (ri_env, insts) count ->
-          if insts <> [] then begin
-            let res_env, de, env = Hashtbl.find i.envs addr in
-            let eval =
-              consume_sources i.scheduler env addr (res_env, de) (ri_env, insts)
-            in
-            Hashtbl.replace i.peer_meta addr eval;
+        Hashtbl.fold (fun addr env count ->
+          if env.instrs <> [] then begin
+            consume_sources i.scheduler addr env;
             count + 1
           end else count)
-        i.peer_meta 0
+        i.envs 0
       (* if it's not time for a source, use last count *)
       end else last_src_peers
     in
@@ -693,7 +713,7 @@ let interpret_k3_program i =
     if msg_peers > 0 || src_peers > 0 then loop src_peers else ()
   in
   loop 1;
-  let prog_state = List.map (second thd3) @@ list_of_hashtbl i.envs in
+  let prog_state = List.map (fun (i,x) -> i, x.prog_env) @@ list_of_hashtbl i.envs in
   (* Log program state *)
   List.iter (fun (addr, e) ->
     Log.log (sp ">>>> Peer %s\n" (string_of_address addr)) `Trace;
@@ -710,14 +730,12 @@ let init_k3_interpreter ?queue_type ~peers ~load_path ?(src_interval=0.002) type
       (* Initialize an environment for each peer *)
       K3StdLib.g_load_path := load_path;
       let len = List.length peers in
-      let peer_meta = Hashtbl.create len in
       let envs = Hashtbl.create len in
       List.iter (fun (addr, role) ->
                  (* event_loop_t * program_env_t *)
-          let _, ((res_env, d_env, instrs), prog_env) =
+          let _, ((res_env, fsm_env, instrs), prog_env) =
             initialize_peer scheduler addr role typed_prog in
-          Hashtbl.replace peer_meta addr ([], instrs);
-          Hashtbl.replace envs addr (res_env, d_env, prog_env)
+          Hashtbl.replace envs addr {res_env; fsm_env; prog_env; instrs; disp_env=C.def_dispatcher}
       ) peers;
-      {scheduler; peer_meta; peer_list=peers; envs; last_s_time=0.; src_interval}
+      {scheduler; peer_list=peers; envs; last_s_time=0.; src_interval}
 
