@@ -39,13 +39,13 @@ let eval_test_expr_env tdecl_prog t_env trig_env val_env expr =
 
 (* we pass in an optional interpreter environment, a program for type bindings,
  * and an expression *)
-let eval_test_expr decl_prog expr =
+let eval_test_expr peers decl_prog expr =
   (* get the type bindings from the typechecker so we have an environment for
    * typechecking *)
   let tdecl_prog, t_env, trig_env, _ = type_bindings_of_program decl_prog in
   (* get the value environment from the interpreter, excluding the trigger
    * functions. if we pass an environment, use that *)
-  let _, val_env = env_of_program (K3Runtime.init_scheduler_state ()) tdecl_prog in
+  let _, val_env = env_of_program (K3Runtime.init_scheduler_state peers) tdecl_prog in
   eval_test_expr_env tdecl_prog t_env trig_env val_env expr
 
 (* Tests *)
@@ -89,13 +89,13 @@ let check_as_expr ce = match ce with
   | InlineExpr e -> e
   | FileExpr (fp) -> parse_expr @: read_file fp
 
-let test_expressions file_name = function
+let test_expressions peers file_name = function
   | ExprTest expr_tests ->
     let test_cases = snd @:
       List.fold_left (fun (i, test_acc) (decls, e, x) ->
         let name = file_name^" "^(string_of_int i) in
         let test_case = case name @:
-          eval_test_expr decls e @=? eval_test_expr decls @: check_as_expr x
+          eval_test_expr peers decls e @=? eval_test_expr peers decls @: check_as_expr x
         in i+1, test_acc@[test_case]
       ) (0, []) expr_tests
     in print_tests test_cases
@@ -166,7 +166,7 @@ let unify_envs (envs : (address * program_env_t) list) =
  * function that expects an untyped AST (this takes care of handling any extra
  * information needed by the interpreter) also takes a program_test data
  * structure indicating the kind of test desired *)
-let test_program globals_k3 interpret_fn file_name test =
+let test_program peers globals_k3 interpret_fn file_name test =
   let op_fn, program, tests = match test with
     (* for a single-site test, we just extract the env. For multi-site, we unify
      * the environments, and rename all node variables to be node_var (TODO) *)
@@ -197,7 +197,7 @@ let test_program globals_k3 interpret_fn file_name test =
   let test_cases = list_map (fun (i, (lexp, rexp)) ->
       let name = file_name^"_"^soi i in
       let v1 = eval_test_expr_env tdecl_prog t_env trig_env v_env lexp in
-      let v2 = eval_test_expr [] @: check_as_expr rexp in
+      let v2 = eval_test_expr peers [] @: check_as_expr rexp in
       case name @: v1 @=? v2
     ) numbered_tests
   in print_tests test_cases

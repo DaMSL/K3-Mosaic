@@ -182,7 +182,7 @@ let default_cmd_line_params () = {
     trace_files       = [];
     order_files       = [];
 
-    queue_type        = K3Runtime.GlobalQ;
+    queue_type        = K3Runtime.PerNodeQ;
     force_correctives = false;
     k3new_data_file   = "default.k3";
     k3new_folds       = false;
@@ -467,10 +467,10 @@ let print params inputs =
 let test params inputs =
   let test_fn fname input =
     match input with
-    | K3TestData(ExprTest _ as x) -> test_expressions fname x
+    | K3TestData(ExprTest _ as x) -> test_expressions params.peers fname x
     | K3TestData((ProgTest _ | NetworkTest _) as x) ->
         let globals_k3 = K3Global.globals params.peers in
-        test_program globals_k3 (interpret_k3 params) fname x
+        test_program params.peers globals_k3 (interpret_k3 params) fname x
     | x -> error @@ "testing not yet implemented for "^string_of_data x
   in List.iter2 test_fn params.input_files inputs
 
@@ -599,8 +599,9 @@ let param_specs = Arg.align
   "             Print verbose output (context specific)";
   (* Interpreter related *)
   "-q", Arg.String (fun q -> cmd_line_params.queue_type <- match q with
-    | "global"  -> K3Runtime.GlobalQ
-    | x         -> error @@ "Unknown parameter "^x),
+    | "global" -> K3Runtime.GlobalQ
+    | "node"   -> K3Runtime.PerNodeQ
+    | x        -> error @@ "Unknown parameter "^x),
       "         Queue type: global/node/trigger";
   "--force", Arg.Unit (fun () -> cmd_line_params.force_correctives <- true),
       "         Force distributed compilation to produce more correctives";

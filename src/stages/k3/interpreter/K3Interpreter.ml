@@ -612,11 +612,6 @@ let env_of_program ?address sched_st k3_program =
 
 (* Instruction interpretation *)
 
-(* consume messages to a specific node *)
-let consume_msgs ?slice sched_st address env =
-  let log_node s = Log.log (sp "Node %s: %s\n" (string_of_address address) s) `Trace in
-  run_scheduler ?slice sched_st address env
-
 (* consume sources ie. evaluate instructions *)
 let consume_sources sched_st env address (res_env, d_env) (ri_env, instrs) =
   let log_node s = Log.log (sp "Node %s: %s\n" (string_of_address address) s) `Trace in
@@ -662,15 +657,14 @@ type interpreter_t = {
 let interpret_k3_program i =
   (* Continue running until all peers have finished their instructions,
    * and all messages have been processed *)
-  let find_env addr = Hashtbl.find i.envs addr in
   let rec loop last_src_peers =
     let msg_peers =
-      (* for global queueing, we don't loop. Instead, we run for only one
-        * iteration, since each trigger needs a different environment *)
       if R.network_has_work i.scheduler then
-        let addr = R.next_global_address i.scheduler in
-        let prog_env = thd3 @@ Hashtbl.find i.envs addr in
-        consume_msgs ~slice:1 i.scheduler addr prog_env; 1
+        let prog_env_fn addr =
+          Log.log (sp "Node %s: consuming messages\n" @@ string_of_address addr) `Trace;
+          thd3 @@ Hashtbl.find i.envs addr
+        in
+        run_scheduler ~slice:1 i.scheduler prog_env_fn; 1
       else 0
     in
     let t = Sys.time () in
@@ -704,13 +698,8 @@ let interpret_k3_program i =
   prog_state
 
 (* Initialize an interpreter given the parameters *)
-let init_k3_interpreter ?queue_type
-                        ~(peers:K3Global.peer_t list)
-                        ~load_path
-                        ?(src_interval=0.002)
-                        typed_prog =
-  let scheduler =
-    init_scheduler_state ?queue_type ~peers in
+let init_k3_interpreter ?queue_type ~peers ~load_path ?(src_interval=0.002) typed_prog =
+  let scheduler = init_scheduler_state ?queue_type ~peers in
   match peers with
   | []  -> failwith "interpret_k3_program: Peers list is empty!"
   | _   ->

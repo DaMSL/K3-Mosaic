@@ -52,7 +52,7 @@ type n_task_t = Task of task_t
 type per_node_q = {
   h   : (address,  n_task_t Queue.t) Hashtbl.t;
   arr : (address * n_task_t Queue.t) array;
-  last : int; (* index of last peer executed *)
+  mutable last : int; (* index of last peer executed *)
 }
 
 (* one global queue for more deterministic execution *)
@@ -153,15 +153,15 @@ let process_task s prog_env_fn = match s.queue with
       begin try
         decr_count s;
         let addr, (id, arg) = Q.pop q in
-        invoke_trigger s addr prog_env id arg
+        invoke_trigger s addr (prog_env_fn addr) id arg
       with Q.Empty -> error INVALID_GLOBAL_QUEUE end
 
   | PerNode q ->
       (* round-robin *)
-      let rec loop i n =
+      let rec loop idx n =
         let cont () = loop (next_idx q.arr q.last) (n-1) in
         if n = 0 then () else
-        let addr, nodeq = q.arr.(i) in
+        let addr, nodeq = q.arr.(idx) in
         if Queue.is_empty nodeq then cont ()
         else
           begin match Queue.peek nodeq with
@@ -174,11 +174,11 @@ let process_task s prog_env_fn = match s.queue with
               decr_count s;
               ignore @@ Queue.pop nodeq;
               (* save last executed *)
-              q.last <- i;
+              q.last <- idx;
               invoke_trigger s addr (prog_env_fn addr) id arg
           end
       in
-      loop (next_idx s q.last) (Array.length q.arr)
+      loop (next_idx q.arr q.last) @@ Array.length q.arr
 
 (* Scheduler toplevel methods *)
 
