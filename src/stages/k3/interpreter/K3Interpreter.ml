@@ -644,7 +644,6 @@ let interpreter_event_loop role k3_program =
 (* returns address, (event_loop_t, environment) *)
 let initialize_peer sched_st address role k3_program =
   let prog_env = env_of_program sched_st k3_program ~address in
-  initialize_scheduler sched_st address prog_env;
   address, (interpreter_event_loop role k3_program, prog_env)
 
 (* preserve the state of the interpreter *)
@@ -663,9 +662,8 @@ type interpreter_t = {
 let interpret_k3_program i =
   (* Continue running until all peers have finished their instructions,
    * and all messages have been processed *)
+  let find_env addr = Hashtbl.find i.envs addr in
   let rec loop last_src_peers =
-    (* find and process every peer that has a message to process. This way we make sure we
-      * don't inject new sources until all messages are processed *)
     let msg_peers =
       (* for global queueing, we don't loop. Instead, we run for only one
         * iteration, since each trigger needs a different environment *)
@@ -706,14 +704,13 @@ let interpret_k3_program i =
   prog_state
 
 (* Initialize an interpreter given the parameters *)
-let init_k3_interpreter ?(queue_type=GlobalQ)
-                        ~run_length
+let init_k3_interpreter ?queue_type
                         ~(peers:K3Global.peer_t list)
                         ~load_path
                         ?(src_interval=0.002)
                         typed_prog =
   let scheduler =
-    init_scheduler_state ~queue_type ~run_length () in
+    init_scheduler_state ?queue_type ~peers in
   match peers with
   | []  -> failwith "interpret_k3_program: Peers list is empty!"
   | _   ->

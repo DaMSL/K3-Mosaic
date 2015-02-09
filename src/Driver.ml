@@ -162,6 +162,7 @@ type parameters = {
     mutable load_path : string;    (* path for the interpreter to load csv files from *)
     mutable use_multiindex : bool; (* whether to generate code that uses multiindex maps *)
     mutable enable_gc : bool;
+    mutable src_interval : float;   (* interval (s) between the interpreter feeding sources *)
   }
 
 let default_cmd_line_params () = {
@@ -188,6 +189,7 @@ let default_cmd_line_params () = {
     load_path         = "";
     use_multiindex    = false;
     enable_gc         = false;
+    src_interval      = 0.002;
   }
 
 let cmd_line_params = default_cmd_line_params ()
@@ -295,10 +297,10 @@ let interpret_k3 params prog = let p = params in
   let tp, envs = typed_program_with_globals prog in
   let open K3Interpreter in
   try
-    let interp = init_k3_interpreter tp ~run_length:p.run_length
-                                        ~peers:p.peers
+    let interp = init_k3_interpreter tp ~peers:p.peers
                                         ~queue_type:p.queue_type
                                         ~load_path:p.load_path
+                                        ~src_interval:p.src_interval
     in
     interpret_k3_program interp
   with RuntimeError (uuid,str) -> handle_interpret_error (K3Data tp) (uuid,str)
@@ -365,7 +367,7 @@ let print_k3_test_program = function
           (* add the produced test roles and trigger *)
           (* debug *)
           (* filter out all role stuff in the original generated ast *)
-          let new_p = 
+          let new_p =
             try drop_roles p @ parse_k3_prog role_s
             with x -> print_endline role_s; raise x
           in
@@ -604,6 +606,8 @@ let param_specs = Arg.align
       "         Force distributed compilation to produce more correctives";
   "--load_path", Arg.String (fun s -> cmd_line_params.load_path <- s),
       "         Path for interpreter to load files from";
+  "--src_int", Arg.Float (fun f -> cmd_line_params.src_interval <- f),
+      "         Interval between feeding in sources";
   ])
 
 let usage_msg =

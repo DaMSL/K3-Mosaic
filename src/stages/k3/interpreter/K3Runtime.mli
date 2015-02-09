@@ -23,9 +23,8 @@ val network_has_work : scheduler_state ->  bool
 val run_scheduler : ?slice:int -> scheduler_state -> address -> program_env_t -> unit
 
 val init_scheduler_state : 
-  ?run_length:int64 ->
   ?queue_type:queue_type ->
-  unit ->
+  peers:K3Global.peer_t list ->
   scheduler_state
 
 val use_global_queueing : scheduler_state -> bool

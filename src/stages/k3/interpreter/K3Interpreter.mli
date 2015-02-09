@@ -19,7 +19,6 @@ val interpret_k3_program : interpreter_t -> (address * program_env_t) list
 (* create an interpreter state to run a k3 program *)
 val init_k3_interpreter :
   ?queue_type:K3Runtime.queue_type ->
-  run_length:int64 ->
   peers:K3Global.peer_t list ->
   load_path:string ->
   ?src_interval:float ->
