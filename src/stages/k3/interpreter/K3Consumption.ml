@@ -181,7 +181,7 @@ let next_value resource_env resource_impl_env resource_ids =
   in randomize_access [] resource_ids
 
 (* Run a pattern dispatcher for a single step *)
-let rec run_dispatcher_step sched_st address d state_opt origin value =
+let rec run_dispatcher_step schedule_fn d state_opt origin value =
   let module A = ResourceActions in
   let module F = ResourceFSM in
   let next_access state_id =
@@ -191,8 +191,8 @@ let rec run_dispatcher_step sched_st address d state_opt origin value =
   try
     let (id, (match_action, next)), (fail_action, fail) = List.assoc state d in
     match id = origin, match_action with
-    | true, F.Output (A.Source(A.Dispatch b, _)) -> schedule_event
-        sched_st (List.map (fun t -> id, t) b) id address [value];
+    | true, F.Output (A.Source(A.Dispatch b, _)) ->
+      schedule_fn (List.map (fun t -> id, t) b) id [value];
       None, Some next, next_access next
 
     (* egress pattern dispatching *)
@@ -203,6 +203,19 @@ let rec run_dispatcher_step sched_st address d state_opt origin value =
     | _, _ -> Some value, Some fail, next_access fail
   with Not_found -> failwith ("invalid state "^(string_of_int state))
 
+(* type for allowing the dispatcher to maintain state between values *)
+type dispatcher_t = {
+  mutable ri_env : (string * channel_impl_t) list;
+  mutable state : K3Streams.ResourceFSM.state_id option;
+  mutable finished_res : id_t list;
+  mutable have_res_left : bool;
+}
+
+(* let init_dispatcher address resource_env resource_impl_env d = *)
+
+
+
+
 (* Pattern-based dispatching. Given a resource specification and implementation
  * environment, and a dispatcher (i.e. an FSM), repeatedly steps through the
  * dispatcher. At each step the dispatcher indicates the resources to be accessed
@@ -211,7 +224,7 @@ let rec run_dispatcher_step sched_st address d state_opt origin value =
  *
  * @resource_impl_env: the implementation of a resource (file channels),
  * @d: dispatcher fsm *)
-let run_dispatcher sched_st address resource_env resource_impl_env d =
+let run_dispatcher schedule_fn resource_env resource_impl_env d =
   let init_value o v = ref o, ref v in
   let init_finished () = failwith "no value found during initialization" in
   let assign_value origin value o v = origin := o; value := v in
@@ -238,7 +251,7 @@ let run_dispatcher sched_st address resource_env resource_impl_env d =
     in ref @@ Some s, get_value init_value init_finished rids
   in
   while !state <> None && !resources_remain do
-  match run_dispatcher_step sched_st address d !state !origin !value with
+  match run_dispatcher_step schedule_fn d !state !origin !value with
   (* Retry value at next state *)
   | Some v, Some s, [] when v = !value -> state := Some s
 

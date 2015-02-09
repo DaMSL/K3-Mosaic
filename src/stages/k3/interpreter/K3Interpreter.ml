@@ -615,13 +615,17 @@ let env_of_program ?address sched_st k3_program =
 (* consume sources ie. evaluate instructions *)
 let consume_sources sched_st env address (res_env, d_env) (ri_env, instrs) =
   let log_node s = Log.log (sp "Node %s: %s\n" (string_of_address address) s) `Trace in
+  (* function to pass to consumer *)
+  let schedule_fn src_bindings src_id events =
+    schedule_event sched_st src_bindings src_id address events
+  in
   match instrs with
-  | []              -> (ri_env, [])
-  | (Consume id)::t ->
+  | []                 -> ri_env, []
+  | Consume id :: rest ->
     log_node @@ sp "consuming from event loop: %s\n" id;
-    try let i = List.assoc id d_env in
-        let r = run_dispatcher sched_st address res_env ri_env i in
-        r, t
+    try let d = List.assoc id d_env in
+        let ri_env = run_dispatcher schedule_fn res_env ri_env d in
+        ri_env, rest
     with Not_found ->
       int_error "consume_sources" @@ "no event loop found for "^id
 
