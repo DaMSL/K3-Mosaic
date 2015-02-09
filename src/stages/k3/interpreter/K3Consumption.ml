@@ -27,11 +27,12 @@ let value_of_string t v = match t with
   | TDate   -> VInt(int_of_sql_date v)
   | TFloat  -> VFloat(float_of_string v)
   | TBool   -> VBool(bool_of_string v)
-  | TString -> VString(v)
+  | TString -> VString v
   | _       -> invalid_arg "Unknown value"
 
 let r_comma = Str.regexp ","
 
+(* pull (parse/generate) a single value out of a source *)
 let pull_source id t res in_chan =
   let tuple_val, signature =
     match t.typ with
@@ -40,33 +41,34 @@ let pull_source id t res in_chan =
     | TDate      -> false, [TDate]
     | TFloat     -> false, [TFloat]
     | TString    -> false, [TString]
-    | TTuple(ts) -> true,  List.map unwrap_t ts
-    | _          -> raise (ResourceError id)
+    | TTuple ts  -> true,  List.map unwrap_t ts
+    | _          -> raise @@ ResourceError id
         in
   begin
     (*print_endline ("Pulling from source "^id);*)
-          match res, in_chan with
-          | Handle(t, File _, CSV), In(Some chan) ->
-            (try
-         let next_record = Str.split r_comma (input_line chan) in
-         let fields = List.map2 value_of_string signature next_record in
-         let r = if tuple_val then VTuple(fields) else List.hd fields
-         in Some (r)
-       with
-        | Invalid_argument _ -> raise (ResourceError id)
-        | End_of_file -> None)
+    match res, in_chan with
+    | Handle(t, File _, CSV), In(Some chan) ->
+      begin try
+        (* parse the lines *)
+        let next_record = Str.split r_comma (input_line chan) in
+        let fields = List.map2 value_of_string signature next_record in
+        let r = if tuple_val then VTuple fields else List.hd fields in
+        Some r
+      with
+        | Invalid_argument _ -> raise @@ ResourceError id
+        | End_of_file        -> None
+      end
 
     | Stream(t, RandomStream _), InRand index ->
         if !index <= 0 then None
         else
-          let rec random_val t =
-            match t.typ with
+          let rec random_val t = match t.typ with
             | TBool      -> VBool(Random.bool ())
             | TInt       -> VInt(Random.int max_int)
             | TDate      -> VInt(Random.int max_int)
             | TFloat     -> VFloat(Random.float max_float)
-            | TTuple(ts) -> VTuple(List.map random_val ts)
-            | _          -> raise (ResourceError id)
+            | TTuple ts  -> VTuple(List.map random_val ts)
+            | _          -> raise @@ ResourceError id
           in index := !index - 1;
           Some(random_val t)
 
@@ -107,9 +109,10 @@ let resource_delta resource_env resource_impl_env d =
   pass_net, open_net, open_files, close_net, close_files
 
 (* Initialize all resources used by a multiplexer given existing resources. *)
+(* @d: finite state machine *)
 let initialize_resources resource_env resource_impl_env d =
   let open_channel_impl id =
-    match (handle_of_resource resource_env id) with
+    match handle_of_resource resource_env id with
       | Some(source, Handle (_, File (filename), _)) ->
         if source then [id, In(Some(open_in filename))]
         else [id, Out(Some(open_out filename))]
@@ -126,8 +129,8 @@ let initialize_resources resource_env resource_impl_env d =
   in
   let close_channel_impl id =
     try match List.assoc id resource_impl_env with
-      | In(Some(c)) -> close_in c
-      | Out(Some(c)) -> close_out c
+      | In(Some c) -> close_in c
+      | Out(Some c) -> close_out c
       | _ -> ()
     with Not_found -> ()
   in
@@ -135,38 +138,46 @@ let initialize_resources resource_env resource_impl_env d =
     resource_delta resource_env resource_impl_env d
   in
     (* close all resources that should be closed *)
-          List.iter close_channel_impl (close_net@close_files);
-          let opened_resources = List.flatten (List.map open_channel_impl
-      (open_net@open_files))
-          in pass_net@opened_resources
+  List.iter close_channel_impl (close_net@close_files);
+  let opened_resources = List.flatten @@
+    List.map open_channel_impl @@ open_net @ open_files in
+  pass_net @ opened_resources
 
-(* Accesses a resource from the given list of resource ids, returning a value
- * and a list of failed resources *)
+(* Accesses a resource from the given list of resource ids
+ * @resource_env: ids and resources from source file
+ * @resource_impl_env: open channels
+ * returns: failed resource ids, (resource id, value)
+ *)
 let next_value resource_env resource_impl_env resource_ids =
-  let random_element l = List.nth l (Random.int (List.length l)) in
-  let channel_of_impl id = let chan = List.assoc id resource_impl_env in
-    match chan with
-    | In _ | InConst _  | InRand _ -> chan
+  let random_element l = List.nth l @@ Random.int @@ List.length l in
+  (* find the resource channel *)
+  let channel_of_impl id =
+    match List.assoc id resource_impl_env with
+    | In _ | InConst _  | InRand _ as chan -> chan
     | _ -> failwith "invalid channel for access"
   in
+  (* find the resource description *)
   let access_resource id = match handle_of_resource resource_env id with
     | Some (true, ((Handle (t, _, _) | Stream (t, _)) as x)) ->
-       begin try pull_source id t x (channel_of_impl id)
+       begin try pull_source id t x @@ channel_of_impl id
              with Not_found -> None
        end
     | _ -> None
   in
+  (* wrapper to find resource that handles failed resources as well *)
+  (* any failed resources are sent back to randomize_access *)
   let track_failed_access result_none_f finished id = match access_resource id with
-          | None -> result_none_f (id::finished)
-          | x -> finished, Some(id,x)
+    | None -> result_none_f @@ id::finished
+    | x    -> finished, Some(id,x)
   in
-  let rec randomize_access failed resource_ids = match resource_ids with
-          | [] -> failed, None
-          | [id] -> track_failed_access (fun f -> f,None) failed id
-          | _ ->
-            let id = random_element resource_ids in
+  (* pick a random source to read from *)
+  let rec randomize_access failed = function
+    | []           -> failed, None
+    | [id]         -> track_failed_access (fun f -> f, None) failed id
+    | resource_ids ->
+      let id = random_element resource_ids in
       track_failed_access
-        (fun f -> randomize_access f (List.filter ((=) id) resource_ids)) failed id
+        (fun f -> randomize_access f @@ List.filter ((=) id) resource_ids) failed id
   in randomize_access [] resource_ids
 
 (* Run a pattern dispatcher for a single step *)
@@ -180,63 +191,64 @@ let rec run_dispatcher_step sched_st address d state_opt origin value =
   try
     let (id, (match_action, next)), (fail_action, fail) = List.assoc state d in
     match id = origin, match_action with
-      | true, F.Output (A.Source(A.Dispatch(b), _)) -> schedule_event
-          sched_st (List.map (fun t -> id, t) b) id address [value];
-        None, Some next, next_access next
+    | true, F.Output (A.Source(A.Dispatch b, _)) -> schedule_event
+        sched_st (List.map (fun t -> id, t) b) id address [value];
+      None, Some next, next_access next
 
-      (* TODO: egress pattern dispatching *)
-      | true, F.Output (A.Sink(A.Dispatch b)) ->
-        failwith "sink dispatching not yet supported"
+    (* egress pattern dispatching *)
+    | true, F.Output (A.Sink(A.Dispatch b)) ->
+      failwith "sink dispatching not yet supported"
 
-      | _, F.Terminate -> Some(value), None, []
-      | _, _ -> Some(value), Some(fail), next_access fail
+    | _, F.Terminate -> Some value, None, []
+    | _, _ -> Some value, Some fail, next_access fail
   with Not_found -> failwith ("invalid state "^(string_of_int state))
 
 (* Pattern-based dispatching. Given a resource specification and implementation
  * environment, and a dispatcher (i.e. an FSM), repeatedly steps through the
  * dispatcher. At each step the dispatcher indicates the resources to be accessed
  * next, and it is the responsibility of this executor to pull the next value
- * from the list of resources *)
-(* resource_impl_env is the implementation of a resource, and d is a dispatcher
- * fsm *)
+ * from the list of resources
+ *
+ * @resource_impl_env: the implementation of a resource (file channels),
+ * @d: dispatcher fsm *)
 let run_dispatcher sched_st address resource_env resource_impl_env d =
   let init_value o v = ref o, ref v in
   let init_finished () = failwith "no value found during initialization" in
   let assign_value origin value o v = origin := o; value := v in
   let ri_env, rids =
     let x = initialize_resources resource_env resource_impl_env d
-    in x, List.map fst x
+    in x, fst_many x
   in
   let finished_resources, resources_remain = ref [], ref true in
+  (* get the next value *)
   let get_value value_f finished_f resources =
     match next_value resource_env ri_env resources with
-    | f, Some(o,Some(v)) ->
+    | f, Some(o, Some v) ->
       finished_resources := ListAsSet.union !finished_resources f;
-      resources_remain := ListAsSet.diff rids !finished_resources <> [];
+      resources_remain   := ListAsSet.diff rids !finished_resources <> [];
       value_f o v
 
     | f, _ ->
       finished_resources := ListAsSet.union !finished_resources f;
-      resources_remain := ListAsSet.diff rids !finished_resources <> [];
+      resources_remain   := ListAsSet.diff rids !finished_resources <> [];
       finished_f ()
-
   in
   let state, (origin, value) =
     let s, rids = initial_resources_of_dispatcher d
-    in ref(Some s), get_value init_value init_finished rids
+    in ref @@ Some s, get_value init_value init_finished rids
   in
   while !state <> None && !resources_remain do
-    match run_dispatcher_step sched_st address d !state !origin !value with
-    (* Retry value at next state *)
-    | Some v, Some s, [] when v = !value -> state := Some(s)
+  match run_dispatcher_step sched_st address d !state !origin !value with
+  (* Retry value at next state *)
+  | Some v, Some s, [] when v = !value -> state := Some s
 
-    (* Terminal state *)
-    | Some(v), None, [] -> state := None
+  (* Terminal state *)
+  | Some v, None, []                   -> state := None
 
-    | rejected, next_state, next_access ->
-        (* TODO: buffer rejected as desired *)
-        state := next_state;
-        get_value (assign_value origin value) (fun () -> ())
-          (ListAsSet.diff next_access !finished_resources)
+  | rejected, next_state, next_access ->
+      (* TODO: buffer rejected as desired *)
+      state := next_state;
+      get_value (assign_value origin value) id_fn
+        (ListAsSet.diff next_access !finished_resources)
   done;
   ri_env
