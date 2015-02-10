@@ -105,8 +105,10 @@ let nd_log_read_geq =
     mk_var nd_log_master.id
 
 (* function to check to see if we should send a do_complete message *)
+(* if so, deletes the counter *)
 let nd_check_stmt_cntr_index_nm = "nd_check_stmt_cntr_index"
 let nd_check_stmt_cntr_index =
+  let lookup = "lookup" in
   let part_pat = list_drop_end 1 nd_stmt_cntrs.e in
   let counter = fst @@ hd @@ list_take_end 1 nd_stmt_cntrs.e in
   let part_pat_as_vars = ids_to_vars @@ fst_many part_pat in
@@ -114,27 +116,33 @@ let nd_check_stmt_cntr_index =
   mk_global_fn nd_check_stmt_cntr_index_nm
     part_pat
     [t_bool] @@ (* return whether we should send the do_complete *)
-    mk_case_sn (* check if the counter exists *)
-      (mk_peek @@ mk_slice' nd_stmt_cntrs.id query_pat) "ctr_slice"
+    (* check if the counter exists *)
+    mk_case_sn
+      (mk_peek @@ mk_slice' nd_stmt_cntrs.id query_pat) lookup
       (mk_block [
         mk_update nd_stmt_cntrs.id
-          [mk_var "ctr_slice"]
+          [mk_var lookup]
           [mk_let
             (fst_many nd_stmt_cntrs.e)
-            (mk_var "ctr_slice") @@
+            (mk_var lookup) @@
             mk_tuple @@
               part_pat_as_vars @
               [mk_sub (mk_var counter) (mk_cint 1)]];
-          (* check if the counter is 0 *)
-          mk_eq (mk_cint 0) @@
-            mk_subscript (index_e D.nd_stmt_cntrs.e "counter") @@
-              mk_var "ctr_slice"]) @@
+        (* if the counter is 0 *)
+        mk_if
+          (mk_eq (mk_cint 0) @@ mk_subscript (index_e D.nd_stmt_cntrs.e "counter") @@
+            mk_var lookup)
+          (* delete it and return true *)
+          (mk_block [
+            mk_delete nd_stmt_cntrs.id [mk_var lookup];
+            mk_ctrue ])
+          (* else return false *)
+          mk_cfalse]) @@
       (* else: no value in the counter *)
       mk_block [
         (* Initialize if the push arrives before the put. *)
         mk_insert nd_stmt_cntrs.id @@ part_pat_as_vars @ [mk_cint(-1)];
-        mk_cbool false
-      ]
+        mk_cbool false ]
 
 (* add_delta_to_buffer *)
 (* adds the delta to all subsequent vids following in the buffer so that non
@@ -902,13 +910,9 @@ List.map
           (* for every computation vid, only execute if we have all the updates *)
           mk_iter
             (mk_lambda' ["compute_vid", t_vid] @@
-              (* check if our stmt_counter is 0 *)
-              mk_if
-                (mk_eq (mk_cint 0) @@
-                  mk_subscript (index_e D.nd_stmt_cntrs.e "counter")  @@
-                    mk_peek_or_error "rcv_correctives: can't find stmt_cntr entry" @@
-                      mk_slice' D.nd_stmt_cntrs.id
-                        [mk_var "compute_vid"; mk_cint stmt_id; mk_cunknown])
+              (* check if our stmt_counter is deleted: it should be *)
+              mk_case_ns (mk_peek @@ mk_slice' D.nd_stmt_cntrs.id
+                            [mk_var "compute_vid"; mk_cint stmt_id; mk_cunknown]) "_"
                 (* if so, get bound vars from log *)
                 (mk_let
                   (fst_many @@ args_of_t_with_v c trig_name)
