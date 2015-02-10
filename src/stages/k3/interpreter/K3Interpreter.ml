@@ -712,6 +712,7 @@ let interpret_k3_program i =
     (* check if we should continue *)
     if msg_peers > 0 || src_peers > 0 then loop src_peers else ()
   in
+  Log.log (sp "Starting up interpreter") `Trace;
   loop 1;
   let prog_state = List.map (fun (i,x) -> i, x.prog_env) @@ list_of_hashtbl i.envs in
   (* Log program state *)
@@ -727,6 +728,7 @@ let init_k3_interpreter ?queue_type ~peers ~load_path ?(src_interval=0.002) type
   match peers with
   | []  -> failwith "interpret_k3_program: Peers list is empty!"
   | _   ->
+      Log.log (sp "Initializing interpreter") `Trace;
       (* Initialize an environment for each peer *)
       K3StdLib.g_load_path := load_path;
       let len = List.length peers in

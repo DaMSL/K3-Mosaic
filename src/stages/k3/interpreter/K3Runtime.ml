@@ -188,8 +188,10 @@ let network_has_work s = s.count > 0
 let run_scheduler ?(slice = max_int) s get_env_fn =
   let rec loop i =
     if i <= 0 || not (network_has_work s) then ()
-    else
+    else begin
       process_task s get_env_fn;
       loop (i-1)
-  in loop slice
+    end
+  in 
+  loop slice
 
