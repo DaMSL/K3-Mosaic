@@ -104,19 +104,25 @@ let rec eval_fun uuid f =
   let error = int_erroru uuid "eval_fun" in
   match f with
     | VFunction(arg, closure, body) ->
-        fun address sched_st (m_env, f_env) a ->
+        fun addr sched (m_env, f_env) a ->
           let new_env = m_env, bind_args uuid arg a closure in
-          let (m_env', _), result = eval_expr address sched_st new_env body in
+          let (m_env', _), result = eval_expr addr sched new_env body in
           (m_env', f_env), result
 
-    | VForeignFunction(arg, f) ->
-        fun _ _ (m_env, f_env) a ->
-          let new_env = m_env, (bind_args uuid arg a f_env) in
-          begin try
-            let (m_env', f_env'), result = f new_env in
-            (m_env', unbind_args uuid arg f_env'), result
-          with Failure x ->
-            raise @@ RuntimeError(uuid, x^"\n"^string_of_env (m_env, f_env)) end
+    | VForeignFunction(id, arg, f) ->
+        fun addr sched (m_env, f_env) a ->
+          (* override the default function for sleep *)
+          begin match id, sched, a with
+          | "sleep", Some s, VInt t -> R.sleep s addr (foi t /. 1000.) ;
+                                       (m_env, f_env), VTemp VUnit
+          | _ ->
+            let new_env = m_env, (bind_args uuid arg a f_env) in
+            begin try
+              let (m_env', f_env'), result = f new_env in
+              (m_env', unbind_args uuid arg f_env'), result
+            with Failure x ->
+              raise @@ RuntimeError(uuid, x^"\n"^string_of_env (m_env, f_env)) end
+          end
 
    | _ -> error "eval_fun: Non-function value"
 

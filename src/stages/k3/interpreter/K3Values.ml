@@ -164,7 +164,7 @@ and Value : sig
       | VMap of value_t ValueMap.t
       | VMultimap of ValueMMap.t
       | VFunction of arg_t * local_env_t * expr_t (* closure *)
-      | VForeignFunction of arg_t * foreign_func_t
+      | VForeignFunction of id_t * arg_t * foreign_func_t
       | VAddress of address
       | VTarget of id_t
       | VIndirect of value_t ref
@@ -228,7 +228,7 @@ and ValueUtils : (sig val v_to_list : Value.value_t -> Value.value_t list
       | VMap _
       | VMultimap _             -> paren @@ s_of_col v
       | VFunction (a, _, b)     -> paren @@ Printf.sprintf "%s -> %s" (string_of_arg a) (string_of_expr b)
-      | VForeignFunction (a, _) -> paren @@ string_of_arg a
+      | VForeignFunction (i, a, _) -> paren @@ string_of_arg a
       | VAddress (ip, port)     -> paren @@ ip^":"^ string_of_int port
       | VTarget id              -> paren @@ id
       | VIndirect ind           -> paren @@ repr_of_value !ind
@@ -283,7 +283,7 @@ let rec print_value ?(mark_points=[]) v =
     | VMap _ as vs            -> print_collection "[|" "|]" vs
     | VMultimap _ as vs       -> print_collection "[||" "||]" vs
     | VFunction _             -> ps "<fun>"
-    | VForeignFunction (a, _) -> ps "<foreignfun>"
+    | VForeignFunction (_, a, _) -> ps "<foreignfun>"
     | VAddress (ip,port)      -> ps (ip^":"^ string_of_int port)
     | VTarget id              -> ps ("<"^id^">")
     | VIndirect ind           -> pretty_tag_str CutHint "" "ind" [lazy_value !ind]

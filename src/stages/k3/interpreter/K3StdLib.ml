@@ -9,11 +9,11 @@ open K3.AST
 (* load path for load_csv *)
 let g_load_path = ref ""
 
-let float_temp x = VTemp(VFloat(x))
-let string_temp x = VTemp(VString(x))
-let int_temp x = VTemp(VInt(x))
-let bool_temp x = VTemp(VBool(x))
-let unit_temp = VTemp(VUnit)
+let float_temp x  = VTemp(VFloat x)
+let string_temp x = VTemp(VString x)
+let int_temp x    = VTemp(VInt x)
+let bool_temp x   = VTemp(VBool x)
+let unit_temp     = VTemp VUnit
 
 (* static hashtable for storing functions efficiently *)
 type entry_t = type_t * arg_t * foreign_func_t
@@ -369,6 +369,6 @@ let _ = Hashtbl.add func_table name (decl, wrap_args args, fn)
 
 (* function-lookup functions *)
 let lookup id = Hashtbl.find func_table id
-let lookup_value id = let (_,a,f) = lookup id in VForeignFunction (a,f)
+let lookup_value id = let (_,a,f) = lookup id in VForeignFunction (id,a,f)
 let lookup_type id = let (t,_,_) = lookup id in t
 

@@ -192,6 +192,6 @@ let run_scheduler ?(slice = max_int) s get_env_fn =
       process_task s get_env_fn;
       loop (i-1)
     end
-  in 
+  in
   loop slice
 

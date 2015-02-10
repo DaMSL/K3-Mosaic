@@ -43,7 +43,7 @@ and Value : sig
       | VMap of value_t ValueMap.t
       | VMultimap of ValueMMap.t
       | VFunction of arg_t * local_env_t * expr_t (* closure *)
-      | VForeignFunction of arg_t * foreign_func_t
+      | VForeignFunction of id_t * arg_t * foreign_func_t
       | VAddress of address
       | VTarget of id_t
       | VIndirect of value_t ref

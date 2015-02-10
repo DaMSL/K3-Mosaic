@@ -12,6 +12,8 @@ val schedule_trigger : scheduler_state -> value_t -> value_t -> value_t -> unit
 
 val schedule_event : scheduler_state -> resource_bindings_t -> id_t -> address -> value_t list -> unit
 
+val sleep : scheduler_state -> address -> float -> unit
+
 (* Runtime control helpers *)
 
 val network_has_work : scheduler_state ->  bool
