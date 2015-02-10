@@ -34,20 +34,27 @@ let peers_num ps =
   create_ds "peers_num" (mut t_int) ~init
 
 (* specifies the job of a node: master/switch/node *)
+let job_none   = (-1)
 let job_master = 0
 let job_switch = 1
 let job_node   = 2
 let job_timer  = 3
 let job = create_ds "job" (mut t_int) ~init:(mk_cint 0)
 
+let job_of_str = function
+  | "master" -> job_master
+  | "switch" -> job_switch
+  | "node"   -> job_node
+  | "timer"  -> job_timer
+  | _        -> job_none
+
 let jobs (ps:peer_t list) =
   let e = ["addr", t_addr; "job", t_int] in
   let t = wrap_tmap' @@ snd_many e in
   let init = k3_container_of_list t @@
-    List.map (fun (a,r) -> mk_tuple [mk_caddress a; mk_cstring r]) ps
+    List.map (fun (a,r) -> mk_tuple [mk_caddress a; mk_cint @@ job_of_str r]) ps
   in
   create_ds "jobs" t ~e ~init
-
 
 (* create k3 globals for the address and peers *)
 let globals (ps:peer_t list) =
