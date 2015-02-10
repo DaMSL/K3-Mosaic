@@ -34,19 +34,23 @@ let peers_num ps =
   create_ds "peers_num" (mut t_int) ~init
 
 (* specifies the job of a node: master/switch/node *)
-let job_none   = (-1)
-let job_master = 0
-let job_switch = 1
-let job_node   = 2
-let job_timer  = 3
+let job_none_v   = -1
+let job_master_v = 0
+let job_switch_v = 1
+let job_node_v   = 2
+let job_timer_v  = 3
 let job = create_ds "job" (mut t_int) ~init:(mk_cint 0)
+let job_master = create_ds "job_master" t_int ~init:(mk_cint job_master_v)
+let job_switch = create_ds "job_switch" t_int ~init:(mk_cint job_switch_v)
+let job_node   = create_ds "job_node" t_int ~init:(mk_cint job_node_v)
+let job_timer  = create_ds "job_timer" t_int ~init:(mk_cint job_timer_v)
 
 let job_of_str = function
-  | "master" -> job_master
-  | "switch" -> job_switch
-  | "node"   -> job_node
-  | "timer"  -> job_timer
-  | _        -> job_none
+  | "master" -> job_master_v
+  | "switch" -> job_switch_v
+  | "node"   -> job_node_v
+  | "timer"  -> job_timer_v
+  | _        -> job_none_v
 
 let jobs (ps:peer_t list) =
   let e = ["addr", t_addr; "job", t_int] in
@@ -57,10 +61,15 @@ let jobs (ps:peer_t list) =
   create_ds "jobs" t ~e ~init
 
 (* create k3 globals for the address and peers *)
-let globals (ps:peer_t list) =
-  [ decl_global me;          (* me *)
-    decl_global @@ peers ps; (* peers *)
-    decl_global @@ jobs ps ] (* jobs - not removed *)
+let globals (ps:peer_t list) = List.map decl_global
+  [ me;          (* me *)
+    job_master;
+    job_switch;
+    job_node;
+    job_timer;
+    peers ps; (* peers *)
+    jobs ps;
+  ] (* jobs - not removed *)
 
 (* cross-reference foreign functions *)
 let add_foreign_fn nm =

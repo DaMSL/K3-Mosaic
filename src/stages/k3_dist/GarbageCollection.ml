@@ -202,13 +202,13 @@ let rcv_req_gc_vid_nm = "rcv_req_gc_vid_nm"
 let rcv_req_gc_vid =
   mk_code_sink' rcv_req_gc_vid_nm unit_arg [] @@
   (* if we're a switch *)
-  mk_if (mk_or (mk_eq (mk_var G.job.id) @@ mk_cint G.job_switch) @@
-                mk_eq (mk_var G.job.id) @@ mk_cint G.job_master)
+  mk_if (mk_or (mk_eq (mk_var G.job.id) @@ mk_var G.job_switch.id) @@
+                mk_eq (mk_var G.job.id) @@ mk_var G.job_master.id)
     (* send our min vid: this would be much faster with a min function *)
     (mk_send ms_rcv_gc_vid_nm (mk_var master_addr.id)
       [mk_min_max "min_vid" "vid" t_vid mk_lt (mk_var TS.sw_highest_vid.id) sw_ack_log]) @@
     (* else, if we're a node *)
-    mk_if (mk_eq (mk_var G.job.id) @@ mk_cint G.job_node)
+    mk_if (mk_eq (mk_var G.job.id) @@ mk_var G.job_node.id)
       (* send out node min vid: much faster if we had a min function *)
       (mk_send ms_rcv_gc_vid_nm (mk_var master_addr.id)
         [mk_min_max "min_vid" "vid" t_vid mk_lt max_vid_k3 D.nd_stmt_cntrs])
@@ -229,7 +229,7 @@ let ms_send_gc_req =
 let ms_gc_init =
   let init =
     (* start gc process for master *)
-    mk_if (mk_eq (mk_var G.job.id) @@ mk_cint G.job_master )
+    mk_if (mk_eq (mk_var G.job.id) @@ mk_var G.job_master.id )
       (mk_send T.tm_insert_timer_trig_nm (mk_var D.timer_addr.id)
         [mk_var ms_gc_interval.id; mk_cint @@ T.num_of_trig D.ms_send_gc_req_nm; G.me_var])
       mk_cunit

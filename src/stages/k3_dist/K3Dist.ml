@@ -136,7 +136,7 @@ let master_addr =
     mk_case_sn
       (mk_peek @@ mk_filter
         (mk_lambda' jobs.e @@
-          mk_eq (mk_var "job") @@ mk_cint G.job_master) @@
+          mk_eq (mk_var "job") @@ mk_var G.job_master.id) @@
         mk_var jobs.id)
       "master"
       (mk_var "master") @@
@@ -151,7 +151,7 @@ let timer_addr =
     mk_case_sn
       (mk_peek @@ mk_filter
         (mk_lambda' (G.jobs []).e @@
-          mk_eq (mk_var "job") @@ mk_cint G.job_timer) @@
+          mk_eq (mk_var "job") @@ mk_var G.job_timer.id) @@
         mk_var jobs.id)
       "timer"
       (mk_var "timer") @@
@@ -163,7 +163,7 @@ let nodes =
   let jobs = G.jobs [] in
   let init =
     mk_filter
-      (mk_lambda' jobs.e @@ mk_eq (mk_var "job") @@ mk_cint G.job_node) @@
+      (mk_lambda' jobs.e @@ mk_eq (mk_var "job") @@ mk_var G.job_node.id) @@
       mk_var jobs.id
   in
   let e = ["address", t_addr] in
