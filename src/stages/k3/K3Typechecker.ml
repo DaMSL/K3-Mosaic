@@ -137,7 +137,7 @@ let canonical_value_of_type vt =
 
 (* Type comparison primitives *)
 
-let rec assignable t_l t_r = match t_l.typ, t_r.typ with
+let rec assignable ?(unknown_ok=false) t_l t_r = match t_l.typ, t_r.typ with
   | TMaybe t_lm, TMaybe t_rm -> assignable t_lm t_rm
   | TTuple t_ls, TTuple t_rs ->
       List.length t_ls = List.length t_rs && List.for_all2 assignable t_ls t_rs
@@ -153,6 +153,7 @@ let rec assignable t_l t_r = match t_l.typ, t_r.typ with
   | TFloat, TInt              -> true
   (* handle lambdas with _ arguments *)
   | TUnknown, _               -> true
+  | _, TUnknown when unknown_ok -> true
   | TTop, _ 
   | _, TTop                   -> true
   | _ when t_l.typ = t_r.typ  -> true
@@ -333,7 +334,7 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
       | IfThenElse ->
           let t_p, t_t, t_e = bind 0, bind 1, bind 2 in
           if canonical TBool === t_p then
-              if t_t === t_e then t_t
+              if assignable ~unknown_ok:true t_t t_e then t_t
               else t_erroru (TMismatch(t_t, t_e,"")) ()
           else t_erroru (TMismatch(canonical TBool, t_p,"")) ()
 
