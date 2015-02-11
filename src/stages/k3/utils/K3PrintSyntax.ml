@@ -236,7 +236,7 @@ let rec lazy_expr c expr =
   (* many instructions need to wrap the same way *)
   in let wrap e = match U.tag_of_expr expr with
     Insert _ | Iterate | Map | Filter | Flatten | Send | Delete _ | Update _ |
-    Aggregate | GroupByAggregate -> wrap_hov 2 e
+    Aggregate | GroupByAggregate | Assign _ | Let _ -> wrap_hov 2 e
     | IfThenElse -> wrap_hov 0 e
     | _ -> id_fn e
   in let out = match U.tag_of_expr expr with
