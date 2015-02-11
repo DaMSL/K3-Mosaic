@@ -188,7 +188,7 @@ let default_cmd_line_params () = {
     k3new_folds       = false;
     load_path         = "";
     use_multiindex    = false;
-    enable_gc         = false;
+    enable_gc         = true;
     src_interval      = 0.002;
   }
 
@@ -586,7 +586,7 @@ let param_specs = Arg.align
       "         For k3new: output folds instead of ext and map";
   "--use_idx", Arg.Unit (fun () -> cmd_line_params.use_multiindex <- true),
       "         Use multiindex maps";
-  "--gc", Arg.Unit (fun () -> cmd_line_params.enable_gc <- true),
+  "--nogc", Arg.Unit (fun () -> cmd_line_params.enable_gc <- false),
       "         Use garbage collection";
 
   (* Debugging parameters *)

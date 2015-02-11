@@ -989,7 +989,7 @@ let declare_global_vars c partmap ast =
   TS.global_vars @
   K3Ring.global_vars @
   K3Route.global_vars c.p partmap @
-  (if c.enable_gc then GC.global_vars else [])
+  (if c.enable_gc then GC.global_vars c else [])
 
 let declare_global_funcs c partmap ast =
   nd_log_master_write ::
@@ -1057,7 +1057,8 @@ let gen_dist ?(force_correctives=false) ?(use_multiindex=false) ?(enable_gc=fals
     (mk_flow @@
       (if c.enable_gc then GC.triggers c else []) @
       TS.triggers sw_driver_trig_nm @
-      Timer.triggers @
+      Timer.triggers c @
+      [sw_driver_trig c] @
       proto_trigs @
       send_corrective_trigs c @
       demux_trigs ast)::    (* per-map basis *)

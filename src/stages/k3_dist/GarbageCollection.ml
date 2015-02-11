@@ -224,27 +224,27 @@ let ms_send_gc_req =
     mk_var G.peers.id
 
 (* master: init code *)
-let ms_gc_init =
+let ms_gc_init c =
   let init =
     (* start gc process for master *)
     mk_if (mk_eq (mk_var D.job.id) @@ mk_var D.job_master.id )
       (mk_send T.tm_insert_timer_trig_nm (mk_var D.timer_addr.id)
-        [mk_var ms_gc_interval.id; mk_cint @@ T.num_of_trig D.ms_send_gc_req_nm; G.me_var])
+        [mk_var ms_gc_interval.id; mk_cint @@ T.num_of_trig c D.ms_send_gc_req_nm; G.me_var])
       mk_cunit
   in
   create_ds "ms_gc_init" t_unit ~init
 
 (* --- End of code --- *)
 
-let global_vars =
-  [decl_global master_addr;
-   decl_global sw_max_ack_vid;
-   decl_global sw_ack_log;
-   decl_global ms_gc_interval;
-   decl_global ms_gc_vid_map;
-   decl_global ms_gc_vid_ctr;
-   decl_global ms_num_gc_expected;
-   decl_global ms_gc_init;
+let global_vars c = List.map decl_global
+  [master_addr;
+   sw_max_ack_vid;
+   sw_ack_log;
+   ms_gc_interval;
+   ms_gc_vid_map;
+   ms_gc_vid_ctr;
+   ms_num_gc_expected;
+   ms_gc_init c;
   ]
 
 let triggers c =

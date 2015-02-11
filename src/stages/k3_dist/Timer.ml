@@ -11,13 +11,12 @@ module G = K3Global
 module Std = K3StdLib
 
 (* list of trigs that can be notified *)
-let timer_trigs =
-  D.ms_send_gc_req_nm ::
-  []
+let timer_trigs c =
+  (if c.enable_gc then [D.ms_send_gc_req_nm] else [])
 
 (* obtain the timer id of a trigger in timer_trigs *)
-let num_of_trig trig =
-  List.assoc trig @@ insert_index_snd timer_trigs
+let num_of_trig c trig =
+  List.assoc trig @@ insert_index_snd @@ timer_trigs c
 
 (* We really want to use an ordered map, but we currently don't have that *)
 let tm_timer_list =
@@ -26,14 +25,14 @@ let tm_timer_list =
 
 (* Check the time and dispatch any triggers *)
 let tm_check_time_trig_nm = "tm_check_time"
-let tm_check_time_trig =
+let tm_check_time_trig c =
   (* dispatch code for triggers *)
   let dispatch_code =
     List.fold_right (fun (id, trig) acc ->
       mk_if (mk_eq (mk_var "trig_id") @@ mk_cint id)
         (mk_send trig (mk_var "address") [mk_cunit])
         acc)
-      (insert_index_fst timer_trigs)
+      (insert_index_fst @@ timer_trigs c)
       mk_cunit
   in
   mk_code_sink' tm_check_time_trig_nm unit_arg [] @@
@@ -80,8 +79,8 @@ let global_vars = [
   decl_global tm_timer_list;
 ]
 
-let triggers = [
+let triggers c = [
   tm_insert_timer_trig;
-  tm_check_time_trig;
+  tm_check_time_trig c;
 ]
 
