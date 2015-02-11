@@ -129,54 +129,82 @@ let args_of_t_as_vars_with_v ?(vid="vid") c trig_nm =
 
 (**** global data structures ****)
 
+(* specifies the job of a node: master/switch/node *)
+let job_none_v   = -1
+let job_master_v = 0
+let job_switch_v = 1
+let job_node_v   = 2
+let job_timer_v  = 3
+
+let job_master = create_ds "job_master" t_int ~init:(mk_cint job_master_v)
+let job_switch = create_ds "job_switch" t_int ~init:(mk_cint job_switch_v)
+let job_node   = create_ds "job_node" t_int ~init:(mk_cint job_node_v)
+let job_timer  = create_ds "job_timer" t_int ~init:(mk_cint job_timer_v)
+
+let job =
+  let init =
+    mk_if (mk_eq (mk_var G.role.id) @@ mk_cstring "master") (mk_var job_master.id) @@
+    mk_if (mk_eq (mk_var G.role.id) @@ mk_cstring "switch") (mk_var job_switch.id) @@
+    mk_if (mk_eq (mk_var G.role.id) @@ mk_cstring "node")   (mk_var job_node.id)   @@
+    mk_if (mk_eq (mk_var G.role.id) @@ mk_cstring "timer")  (mk_var job_timer.id)  @@
+    mk_error "failed to find proper role"
+  in
+  create_ds "job" (mut t_int) ~init
+
+let job_of_str = function
+  | "master" -> job_master_v
+  | "switch" -> job_switch_v
+  | "node"   -> job_node_v
+  | "timer"  -> job_timer_v
+  | _        -> job_none_v
+
+(* this must be created for the specific run *)
+(* we fill it dynamically in the interpreter *)
+let jobs =
+  let e = ["addr", t_addr; "job", t_int] in
+  let t = wrap_tmap' @@ snd_many e in
+  create_ds "jobs" t ~e
+
 (* address of master node *)
 let master_addr =
-  let jobs = G.jobs [] in
   let init =
     mk_case_sn
       (mk_peek @@ mk_filter
         (mk_lambda' jobs.e @@
-          mk_eq (mk_var "job") @@ mk_var G.job_master.id) @@
+          mk_eq (mk_var "job") @@ mk_var job_master.id) @@
         mk_var jobs.id)
       "master"
-      (mk_var "master") @@
+      (mk_fst @@ mk_var "master") @@
       mk_error "no master found"
   in
   create_ds "master_addr" (mut t_addr) ~init
 
 (* address of timer peer *)
 let timer_addr =
-  let jobs = G.jobs [] in
   let init =
     mk_case_sn
       (mk_peek @@ mk_filter
-        (mk_lambda' (G.jobs []).e @@
-          mk_eq (mk_var "job") @@ mk_var G.job_timer.id) @@
+        (mk_lambda' jobs.e @@
+          mk_eq (mk_var "job") @@ mk_var job_timer.id) @@
         mk_var jobs.id)
       "timer"
-      (mk_var "timer") @@
+      (mk_fst @@ mk_var "timer") @@
       mk_error "no timer peer found"
   in
   create_ds "timer_addr" (mut t_addr) ~init
 
 let nodes =
-  let jobs = G.jobs [] in
   let init =
-    mk_filter
-      (mk_lambda' jobs.e @@ mk_eq (mk_var "job") @@ mk_var G.job_node.id) @@
-      mk_var jobs.id
+    mk_fst_many (snd_many jobs.e) @@
+      mk_filter
+        (mk_lambda' jobs.e @@ mk_eq (mk_var "job") @@ mk_var job_node.id) @@
+        mk_var jobs.id
   in
   let e = ["address", t_addr] in
   create_ds "nodes" (mut @@ wrap_tbag' @@ snd_many e) ~e ~init
 
 let num_peers =
-  let init =
-    mk_agg
-      (mk_lambda (wrap_args ["acc", t_int; "_", t_addr]) @@
-        mk_add (mk_var "acc") @@ mk_cint 1)
-      (mk_cint 0) @@
-      mk_var (G.peers []).id
-  in
+  let init = mk_size_slow G.peers in
   create_ds "num_peers" (mut t_int) ~init
 
 (**** Protocol Init code ****)
@@ -456,6 +484,12 @@ let global_vars c dict =
   in
   let l =
     [ g_init_vid;
+      job_master;
+      job_switch;
+      job_node;
+      job_timer;
+      job;
+      jobs;  (* inserted dynamically by interpreter *)
       master_addr;
       timer_addr;
       nodes;
@@ -474,7 +508,6 @@ let global_vars c dict =
   in
   List.map decl_global l
 
-
 (* foreign functions *)
 let declare_foreign_functions =
   [ mk_foreign_fn "hash_addr" t_addr t_int;
@@ -482,7 +515,7 @@ let declare_foreign_functions =
     mk_foreign_fn "hash_float" t_float t_int;
     mk_foreign_fn "hash_string" t_string t_int;
     mk_foreign_fn "hash_date" t_date t_int;
-    mk_foreign_fn "error" t_unit t_unknown;
+    mk_foreign_fn "error" t_string t_unknown;
     mk_foreign_fn "parse_sql_date" t_string t_int;
     mk_foreign_fn "int_of_float" t_float t_int;
     mk_foreign_fn "float_of_int" t_int t_float;

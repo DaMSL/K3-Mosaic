@@ -45,7 +45,7 @@ let eval_test_expr peers decl_prog expr =
   let tdecl_prog, t_env, trig_env, _ = type_bindings_of_program decl_prog in
   (* get the value environment from the interpreter, excluding the trigger
    * functions. if we pass an environment, use that *)
-  let _, val_env = env_of_program (K3Runtime.init_scheduler_state peers) tdecl_prog in
+  let _, val_env = env_of_program ~peers ~role:"" (K3Runtime.init_scheduler_state peers) tdecl_prog in
   eval_test_expr_env tdecl_prog t_env trig_env val_env expr
 
 (* Tests *)

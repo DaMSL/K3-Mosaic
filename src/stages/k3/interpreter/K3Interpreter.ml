@@ -16,6 +16,7 @@ module KP = K3Printing
 module R = K3Runtime
 module C = K3Consumption
 module SR = K3Streams.ResourceFSM
+module D = K3Dist
 
 (* Generic helpers *)
 
@@ -585,25 +586,35 @@ let prepare_sinks sched_st env fp =
     ) env fp
 
 (* Builds a trigger, global value and function environment (ie frames) *)
-let env_of_program ?address sched_st k3_program =
+let env_of_program ?address ~role ~peers sched_st k3_program =
   let me_addr = match address with
     | None   -> Constants.default_address
     | Some a -> a in
-  let env_of_declaration ((trig_env, (m_env, f_env)) as env) (d,_) =
-    match d with
+  let env_of_declaration (trig_env, (m_env, f_env as penv) as env) (d,_) = match d with
     | K3.AST.Global (id, t, init_opt) ->
         let (rm_env, rf_env), init_val = match id, init_opt with
-          | _, Some e ->
-            let renv, reval = eval_expr me_addr (Some sched_st) (m_env, f_env) e
-            in renv, value_of_eval reval
 
           (* substitute the proper address expression for 'me' *)
           | id, _ when id = K3Global.me.id ->
-              let renv, reval =
-                eval_expr me_addr (Some sched_st) (m_env, f_env) @@ mk_caddress me_addr
-              in renv, value_of_eval reval
+              penv, VAddress me_addr
 
-          | _, None -> (m_env, f_env), default_value t
+          (* substitute for peers *)
+          | id, _ when id = K3Global.peers.id ->
+              penv, VSet (List.map (fun x -> VAddress x) @@ fst_many peers)
+
+          | id, _ when id = K3Global.role.id ->
+              penv, VString role
+
+          (* hack to support dist *)
+          | id, _ when id = D.jobs.id ->
+              let m = ValueMap.of_list @@
+                List.map (fun (k,v) -> VAddress k, VInt(D.job_of_str v)) peers in
+              penv, VMap m
+
+          | _, Some e -> second value_of_eval @@
+              eval_expr me_addr (Some sched_st) penv e
+
+          | _, None -> penv, default_value t
         in
         trig_env, ((IdMap.add id (ref init_val) rm_env), rf_env)
 
@@ -680,8 +691,8 @@ let interpreter_event_loop role k3_program =
    | None        -> get_role role error
 
 (* returns address, (event_loop_t, environment) *)
-let initialize_peer sched_st address role k3_program =
-  let prog_env = env_of_program sched_st k3_program ~address in
+let initialize_peer sched_st ~address ~role ~peers k3_program =
+  let prog_env = env_of_program sched_st ~address ~role ~peers k3_program in
   address, (interpreter_event_loop role k3_program, prog_env)
 
 let interpret_k3_program i =
@@ -739,11 +750,11 @@ let init_k3_interpreter ?queue_type ~peers ~load_path ?(src_interval=0.002) type
       K3StdLib.g_load_path := load_path;
       let len = List.length peers in
       let envs = Hashtbl.create len in
-      List.iter (fun (addr, role) ->
+      List.iter (fun (address, role) ->
                  (* event_loop_t * program_env_t *)
           let _, ((res_env, fsm_env, instrs), prog_env) =
-            initialize_peer scheduler addr role typed_prog in
-          Hashtbl.replace envs addr {res_env; fsm_env; prog_env; instrs; disp_env=C.def_dispatcher}
+            initialize_peer scheduler ~address ~role ~peers typed_prog in
+          Hashtbl.replace envs address {res_env; fsm_env; prog_env; instrs; disp_env=C.def_dispatcher}
       ) peers;
       {scheduler; peer_list=peers; envs; last_s_time=0.; src_interval}
 

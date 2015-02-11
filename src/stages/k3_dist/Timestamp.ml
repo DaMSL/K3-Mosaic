@@ -16,25 +16,24 @@ module P = ProgInfo
 
 (* the address of the next switch in the chain *)
 let sw_next_switch_addr =
-  let jobs = G.jobs [] in
   let init =
     mk_let ["addr_list"]
       (* get a total ordering: sort ascending by address *)
       (mk_sort
-        (mk_lambda' ["addr1", t_vid; "addr2", t_vid] @@ mk_lt (mk_var "addr1") @@
+        (mk_lambda' ["addr1", t_addr; "addr2", t_addr] @@ mk_lt (mk_var "addr1") @@
           mk_var "addr2") @@
         (* project out addr only *)
-        mk_map (mk_lambda' jobs.e @@ mk_var "addr") @@
+        mk_map (mk_lambda' D.jobs.e @@ mk_var "addr") @@
           (* get all the switches *)
           mk_filter
-            (mk_lambda' jobs.e @@ mk_or (mk_eq (mk_var G.job.id) @@ mk_var G.job_switch.id) @@
-                                         mk_eq (mk_var G.job.id) @@ mk_var G.job_master.id) @@
-            mk_var jobs.id) @@
+            (mk_lambda' D.jobs.e @@ mk_or (mk_eq (mk_var D.job.id) @@ mk_var D.job_switch.id) @@
+                                         mk_eq (mk_var D.job.id) @@ mk_var D.job_master.id) @@
+            mk_var D.jobs.id) @@
     (* bind the first entry of the list (default option) *)
     mk_case_ns (mk_peek @@ mk_var "addr_list") "first_addr"
       (mk_error "no addresses in addr_list") @@
       (* fold and find the entry after the one that matches ours *)
-      mk_agg
+      mk_snd @@ mk_agg
         (mk_assoc_lambda' ["take", t_bool; "result", t_addr] ["x", t_addr] @@
           mk_if (mk_var "take")
             (mk_tuple [mk_cfalse; mk_var "x"]) @@
@@ -113,7 +112,7 @@ let sw_gen_vid =
 (* only the master starts the protocol *)
 let ms_init =
   let init =
-    mk_if (mk_eq (mk_var G.job.id) @@ mk_var G.job_master.id)
+    mk_if (mk_eq (mk_var D.job.id) @@ mk_var D.job_master.id)
       (mk_send sw_rcv_token_nm (mk_var sw_next_switch_addr.id) [min_vid_k3])
       mk_cunit
   in

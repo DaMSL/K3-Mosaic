@@ -469,7 +469,7 @@ let test params inputs =
     match input with
     | K3TestData(ExprTest _ as x) -> test_expressions params.peers fname x
     | K3TestData((ProgTest _ | NetworkTest _) as x) ->
-        let globals_k3 = K3Global.globals params.peers in
+        let globals_k3 = K3Global.globals in
         test_program params.peers globals_k3 (interpret_k3 params) fname x
     | x -> error @@ "testing not yet implemented for "^string_of_data x
   in List.iter2 test_fn params.input_files inputs

@@ -100,7 +100,7 @@ let ms_gc_vid_ctr = create_ds "ms_gc_vid_ctr" (mut t_int) ~init:(mk_cint 0)
 
 (* master: number of expected responses *)
 let ms_num_gc_expected =
-  let init = mk_size_slow @@ G.peers [] in
+  let init = mk_size_slow @@ G.peers in
   create_ds "ms_num_gc_expected" (mut t_int) ~init
 
 (* function to perform garbage collection *)
@@ -166,7 +166,6 @@ let do_gc c =
 let ms_rcv_gc_vid_nm = "ms_rcv_gc_vid"
 let ms_rcv_gc_vid =
   let data, min_vid = "data", "min_vid" in
-  let peers = G.peers [] in
   mk_code_sink' ms_rcv_gc_vid_nm
     [data, wrap_ttuple @@ snd_many ms_gc_vid_map.e] [] @@
     mk_block [
@@ -187,9 +186,9 @@ let ms_rcv_gc_vid =
             (* clear the data struct *)
             mk_assign ms_gc_vid_map.id @@ mk_empty ms_gc_vid_map.t;
             (* send gc notices *)
-            mk_iter (mk_lambda' peers.e @@
-              mk_send do_gc_nm (mk_var @@ fst @@ hd @@ peers.e) [mk_cunit]) @@
-              mk_var peers.id;
+            mk_iter (mk_lambda' G.peers.e @@
+              mk_send do_gc_nm (mk_var @@ fst @@ hd @@ G.peers.e) [mk_cunit]) @@
+              mk_var G.peers.id;
             (* tell timer to ping us in X seconds *)
             mk_send D.ms_send_gc_req_nm (mk_var D.timer_addr.id) [mk_var ms_gc_interval.id];
           ])
@@ -202,13 +201,13 @@ let rcv_req_gc_vid_nm = "rcv_req_gc_vid_nm"
 let rcv_req_gc_vid =
   mk_code_sink' rcv_req_gc_vid_nm unit_arg [] @@
   (* if we're a switch *)
-  mk_if (mk_or (mk_eq (mk_var G.job.id) @@ mk_var G.job_switch.id) @@
-                mk_eq (mk_var G.job.id) @@ mk_var G.job_master.id)
+  mk_if (mk_or (mk_eq (mk_var D.job.id) @@ mk_var D.job_switch.id) @@
+                mk_eq (mk_var D.job.id) @@ mk_var D.job_master.id)
     (* send our min vid: this would be much faster with a min function *)
     (mk_send ms_rcv_gc_vid_nm (mk_var master_addr.id)
       [mk_min_max "min_vid" "vid" t_vid mk_lt (mk_var TS.sw_highest_vid.id) sw_ack_log]) @@
     (* else, if we're a node *)
-    mk_if (mk_eq (mk_var G.job.id) @@ mk_var G.job_node.id)
+    mk_if (mk_eq (mk_var D.job.id) @@ mk_var D.job_node.id)
       (* send out node min vid: much faster if we had a min function *)
       (mk_send ms_rcv_gc_vid_nm (mk_var master_addr.id)
         [mk_min_max "min_vid" "vid" t_vid mk_lt max_vid_k3 D.nd_stmt_cntrs])
@@ -218,18 +217,17 @@ let rcv_req_gc_vid =
 (* master: trigger to request gc vids *)
 (* called by the timer *)
 let ms_send_gc_req =
-  let peers = G.peers [] in
   mk_code_sink' D.ms_send_gc_req_nm unit_arg [] @@
   mk_iter
-    (mk_lambda' peers.e @@
-      mk_send rcv_req_gc_vid_nm (mk_var @@ fst @@ hd @@ peers.e) [mk_cunit]) @@
-    mk_var peers.id
+    (mk_lambda' G.peers.e @@
+      mk_send rcv_req_gc_vid_nm (mk_var @@ fst @@ hd @@ G.peers.e) [mk_cunit]) @@
+    mk_var G.peers.id
 
 (* master: init code *)
 let ms_gc_init =
   let init =
     (* start gc process for master *)
-    mk_if (mk_eq (mk_var G.job.id) @@ mk_var G.job_master.id )
+    mk_if (mk_eq (mk_var D.job.id) @@ mk_var D.job_master.id )
       (mk_send T.tm_insert_timer_trig_nm (mk_var D.timer_addr.id)
         [mk_var ms_gc_interval.id; mk_cint @@ T.num_of_trig D.ms_send_gc_req_nm; G.me_var])
       mk_cunit
