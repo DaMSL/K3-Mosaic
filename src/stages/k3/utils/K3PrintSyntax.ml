@@ -195,16 +195,18 @@ let rec lazy_expr c expr =
   let arith_paren e = match U.tag_of_expr e with
     | Mult | Add -> lazy_paren
     | _ -> id_fn in
-  (* we're more sensitive for left side *)
+  (* for things like Just *)
+  let paren_r e = match U.tag_of_expr e with
+    | Nothing _ | Just | Const _ | Tuple | Var _ | Empty _ | Singleton _ -> id_fn
+    | _ -> lazy_paren in
+(* we're more sensitive for left side *)
  let paren_l e = match U.tag_of_expr e with
-    | CaseOf _   -> lazy_paren
-    | IfThenElse -> lazy_paren
-    | Let _      -> lazy_paren
+    | Just | CaseOf _ | IfThenElse | Let _ -> lazy_paren
     | _          -> id_fn in
  let arith_paren_l e = match U.tag_of_expr e with
-    | CaseOf _   -> lazy_paren
-    | IfThenElse -> lazy_paren
-    | Let _      -> lazy_paren
+    | CaseOf _
+    | IfThenElse
+    | Let _
     | _          -> arith_paren e
   (* for == and != *)
   in let logic_paren e = match U.tag_of_expr e with
@@ -242,8 +244,7 @@ let rec lazy_expr c expr =
   | Var id     -> lps id
   | Tuple      -> let es = U.decompose_tuple expr in
     lazy_paren @@ lps_list CutHint (lazy_expr c) es
-  | Just       -> let e = U.decompose_just expr in
-    lps "just " <| lazy_expr c e
+  | Just       -> let e = U.decompose_just expr in lps "just " <| paren_r e (lazy_expr c e)
   | Nothing vt -> lps "nothing:" <| lsp () <| lazy_type c vt
   | Empty t    -> lazy_collection_vt c t.typ [] <| lsp () <|
                   lps ":" <| lsp () <| lazy_type c t
@@ -338,8 +339,8 @@ let rec lazy_expr c expr =
     wrap_indent (lps "then" <| lsp () <| lazy_expr c e2) <| lsp () <|
     wrap_indent (lps "else" <| lsp () <| lazy_expr c e3)
   | CaseOf x -> let e1, e2, e3 = U.decompose_caseof expr in
-    wrap_indent (lps "case" <| lsp () <| lazy_expr c e1 <| lsp () <| lps "of" <| lsp () <| 
-    wrap_indent (lazy_brace (lps ("just "^x^" ->") <| lsp () <| lazy_expr c e2)) <| lsp () <| 
+    wrap_indent (lps "case" <| lsp () <| lazy_expr c e1 <| lsp () <| lps "of" <| lsp () <|
+    wrap_indent (lazy_brace (lps ("just "^x^" ->") <| lsp () <| lazy_expr c e2)) <| lsp () <|
     wrap_indent (lazy_brace (lps "nothing ->" <| lsp () <| lazy_expr c e3)))
   | Map -> let p = U.decompose_map expr in
     lps "map" <| lcut () <| lazy_paren @@ expr_sub p
