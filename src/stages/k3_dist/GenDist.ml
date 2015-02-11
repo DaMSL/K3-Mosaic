@@ -527,7 +527,7 @@ let sw_send_fetch_fn c s_rhs_lhs s_rhs trig_name =
     mk_pop buf "args"
       (mk_error @@ "unexpected missing arguments in "^buf) @@
       (* decompose args *)
-      mk_let (fst_many @@ args_of_t_with_v c trig_name)
+      mk_let (fst_many @@ P.args_of_t c.p trig_name)
         (mk_var "args") @@
       mk_block @@
         send_completes_for_stmts_with_no_fetch @
@@ -998,12 +998,12 @@ let declare_global_funcs c partmap ast =
   nd_log_read_geq ::
   nd_check_stmt_cntr_index ::
   nd_filter_corrective_list ::
+  K3Ring.functions @
   (if not c.use_multiindex then emit_frontier_fns c else []) @
   (List.map (nd_add_delta_to_buf c |- hd |- snd) @@ P.uniq_types_and_maps c.p) @
   (if c.enable_gc then TS.functions else []) @
   K3Route.functions c.p partmap @
-  K3Shuffle.functions c @
-  K3Ring.functions
+  K3Shuffle.functions c
 
 (* Generate all the code for a specific trigger *)
 let gen_dist_for_t c ast trig corr_maps =

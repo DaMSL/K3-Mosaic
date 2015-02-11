@@ -54,7 +54,7 @@ let sw_token_vid_list =
   create_ds "sw_token_vid_list" (wrap_tlist' @@ snd_many e) ~e
 
 (* highest seen vid *)
-let sw_highest_vid = create_ds "sw_highest_vid" t_vid
+let sw_highest_vid = create_ds "sw_highest_vid" (mut t_vid)
 
 (* trigger for when we receive the token *)
 let sw_rcv_token_nm = "sw_rcv_token"

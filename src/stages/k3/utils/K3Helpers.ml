@@ -559,7 +559,7 @@ let index_e id_t s =
 let unit_arg = ["_", t_unit]
 
 (* code to count the size of a collection *)
-let mk_size_slow col = mk_fst @@ mk_agg
+let mk_size_slow col = mk_agg
   (mk_assoc_lambda' ["count", t_int] col.e @@ mk_add (mk_var "count") @@ mk_cint 1)
   (mk_cint 0) @@
   mk_var col.id
