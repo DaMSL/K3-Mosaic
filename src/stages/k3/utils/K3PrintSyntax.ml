@@ -236,8 +236,8 @@ let rec lazy_expr c expr =
   (* many instructions need to wrap the same way *)
   in let wrap e = match U.tag_of_expr expr with
     Insert _ | Iterate | Map | Filter | Flatten | Send | Delete _ | Update _ |
-    Aggregate | GroupByAggregate | Assign _ | Let _ -> wrap_hov 2 e
-    | IfThenElse -> wrap_hov 0 e
+    Aggregate | GroupByAggregate | Assign _ | Combine -> wrap_hov 2 e
+    | IfThenElse | Let _ | BindAs _ -> wrap_hov 0 e
     | _ -> id_fn e
   in let out = match U.tag_of_expr expr with
   | Const con  -> lazy_const c con
@@ -376,14 +376,14 @@ let rec lazy_expr c expr =
   | Assign _ -> let l, r = U.decompose_assign expr in
     lps l <| lps " <- " <| lazy_expr c r
   | BindAs _ -> let l, id, r = U.decompose_bind expr in
-    lps "bind" <| lsp () <| lazy_expr c l <| lsp () <| lps "as" <| lsp () <| lps id <|
+    wrap_indent (lps "bind" <| lsp () <| lazy_expr c l <| lsp () <| lps "as" <| lsp () <| lps id) <|
       lsp () <| lps "in" <| lsp () <| lazy_expr c r
   | Let _ -> let ids, bound, bexpr = U.decompose_let expr in
     let wrap_paren = match ids with [_] -> id_fn | _ -> lazy_paren in
-    wrap_hov 0 (wrap_indent
+    wrap_indent
       (lps "let" <| lsp () <| wrap_paren (lps_list NoCut lps ids) <| lps " =" <|
       lsp () <| lazy_expr c bound <| lsp ())
-      <| lps "in" <| lsp () <| lcut () <| lazy_expr c bexpr)
+      <| lps "in" <| lsp () <| lcut () <| lazy_expr c bexpr
   | Send -> let e1, e2, es = U.decompose_send expr in
     wrap_indent (lps "send" <| lazy_paren (expr_pair (e1, e2) <| lps ", " <|
       lps_list CutHint (tuple_no_paren c) es))

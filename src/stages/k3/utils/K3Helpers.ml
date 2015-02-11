@@ -564,7 +564,7 @@ let mk_size_slow col = mk_agg
   (mk_cint 0) @@
   mk_var col.id
 
-let mk_min_max v v' v_t comp_fn zero col = mk_fst @@ mk_agg
+let mk_min_max v v' v_t comp_fn zero col = mk_agg
   (mk_assoc_lambda' [v, v_t] col.e @@
     mk_if (comp_fn (mk_var v) @@ mk_var v')
       (mk_var v) @@

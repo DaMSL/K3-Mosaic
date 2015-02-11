@@ -45,7 +45,7 @@ let sw_max_ack_vid = create_ds "sw_max_ack_vid" (mut t_vid) ~init:min_vid_k3
 (* switch: trigger for receiving an ack from a node *)
 let sw_ack_rcv_trig_nm = "sw_ack_rcv"
 let sw_ack_rcv_trig =
-  let ack_trig_args = ["vid", t_vid; "address", t_addr] in
+  let ack_trig_args = ["address", t_addr; "vid", t_vid] in
   let old_set, old_val = "old_set", "old_val" in
   mk_code_sink' sw_ack_rcv_trig_nm ack_trig_args [] @@
   (* look for this ack in the log *)
@@ -92,8 +92,8 @@ let ms_gc_interval = create_ds "ms_gc_interval" (mut t_int) ~init:(mk_cint 300)
 
 (* master: store the max vid received from each switch *)
 let ms_gc_vid_map =
-  let e = ["address", t_addr; "max_vid", t_vid] in
-  create_ds "ms_gc_vid_map" (wrap_tmap' @@ snd_many e) ~e
+  let e = ["address", t_addr; "vid", t_vid] in
+  create_ds "ms_gc_vid_map" (mut @@ wrap_tmap' @@ snd_many e) ~e
 
 (* master: counter for number of responses *)
 let ms_gc_vid_ctr = create_ds "ms_gc_vid_ctr" (mut t_int) ~init:(mk_cint 0)
@@ -124,19 +124,19 @@ let do_gc c =
       else id_fn, ds.id
     in
     let temp = "temp" in
+    (* delete any entry with a lower or matching vid *)
+    mk_let [temp] (mk_empty t') @@
+    do_bind @@
     (* if we're in a map ds, we need to get the frontier at min_vid *)
     (match ds.map_id with
       | Some map_id ->
           mk_let ["frontier"]
             (map_latest_vid_vals c (mk_var id) None map_id ~keep_vid:true ~vid_nm:min_vid)
       | _ -> id_fn) @@
-    (* delete any entry with a lower or matching vid *)
-    mk_let [temp] (mk_empty t') @@
     mk_block @@
       (* add < vid to temporary collection *)
-      (do_bind @@
-        mk_iter
-          (mk_lambda' ds.e @@
+      (mk_iter
+        (mk_lambda' ds.e @@
             mk_if (mk_lt (mk_var vid) @@ mk_var min_vid)
               (mk_insert temp @@ ids_to_vars @@ fst_many ds.e) @@
               mk_cunit) @@
@@ -148,7 +148,9 @@ let do_gc c =
         mk_var temp) ::
       (* if we have a mosaic map, insert back the frontier *)
       (if ds.map_id <> None then
-        [mk_combine (mk_var "frontier") @@ mk_var "id"]
+        [mk_iter (mk_lambda' ["val", wrap_ttuple @@ snd_many ds.e] @@
+            mk_insert id [mk_var "val"]) @@
+          mk_var "frontier"]
       else [])
   in
   mk_code_sink' do_gc_nm [min_vid, t_vid] [] @@
@@ -179,7 +181,7 @@ let ms_rcv_gc_vid =
         (* if so ... *)
         (mk_let [min_vid]
           (* get the min vid *)
-          (mk_min_max "min_vid" "vid" t_vid mk_lt min_vid_k3 ms_gc_vid_map) @@
+          (mk_min_max min_vid "vid" t_vid mk_lt min_vid_k3 ms_gc_vid_map) @@
           mk_block [
             (* clear the counter *)
             mk_assign ms_gc_vid_ctr.id @@ mk_cint 0;
@@ -187,7 +189,7 @@ let ms_rcv_gc_vid =
             mk_assign ms_gc_vid_map.id @@ mk_empty ms_gc_vid_map.t;
             (* send gc notices *)
             mk_iter (mk_lambda' G.peers.e @@
-              mk_send do_gc_nm (mk_var @@ fst @@ hd @@ G.peers.e) [mk_cunit]) @@
+              mk_send do_gc_nm (mk_var @@ fst @@ hd @@ G.peers.e) [mk_var min_vid]) @@
               mk_var G.peers.id;
             (* tell timer to ping us in X seconds *)
             mk_send D.ms_send_gc_req_nm (mk_var D.timer_addr.id) [mk_var ms_gc_interval.id];
@@ -197,7 +199,7 @@ let ms_rcv_gc_vid =
     ]
 
 (* all nodes/switches: respond to request for vid info *)
-let rcv_req_gc_vid_nm = "rcv_req_gc_vid_nm"
+let rcv_req_gc_vid_nm = "rcv_req_gc_vid"
 let rcv_req_gc_vid =
   mk_code_sink' rcv_req_gc_vid_nm unit_arg [] @@
   (* if we're a switch *)
@@ -205,12 +207,13 @@ let rcv_req_gc_vid =
                 mk_eq (mk_var D.job.id) @@ mk_var D.job_master.id)
     (* send our min vid: this would be much faster with a min function *)
     (mk_send ms_rcv_gc_vid_nm (mk_var master_addr.id)
-      [mk_min_max "min_vid" "vid" t_vid mk_lt (mk_var TS.sw_highest_vid.id) sw_ack_log]) @@
+      [G.me_var; mk_min_max "min_vid" "vid" t_vid mk_lt (mk_var TS.sw_highest_vid.id) sw_ack_log]) @@
     (* else, if we're a node *)
     mk_if (mk_eq (mk_var D.job.id) @@ mk_var D.job_node.id)
       (* send out node min vid: much faster if we had a min function *)
       (mk_send ms_rcv_gc_vid_nm (mk_var master_addr.id)
-        [mk_min_max "min_vid" "vid" t_vid mk_lt max_vid_k3 D.nd_stmt_cntrs])
+        (* default is max_vid, to allow anything to go on *)
+        [G.me_var; mk_min_max "min_vid" "vid" t_vid mk_lt max_vid_k3 D.nd_stmt_cntrs])
       (* else, do nothing *)
       mk_cunit
 

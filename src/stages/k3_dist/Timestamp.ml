@@ -93,7 +93,7 @@ let sw_gen_vid =
   (* if we have a vid, pop it *)
   mk_case_ns (mk_peek @@ mk_var sw_token_vid_list.id) vid_num
     (* if we have no vid available, return none *)
-    (mk_nothing t_vid) @@
+    (mk_nothing @@ wrap_tmaybe t_vid) @@
     (* else *)
     mk_let [num_new] (mk_sub (mk_snd @@ mk_var vid_num) @@ mk_cint 1) @@
     mk_let [vid_new] (vid_increment ~vid_expr:(mk_fst @@ mk_var vid_num) ()) @@

@@ -154,7 +154,7 @@ let rec assignable ?(unknown_ok=false) t_l t_r = match t_l.typ, t_r.typ with
   (* handle lambdas with _ arguments *)
   | TUnknown, _               -> true
   | _, TUnknown when unknown_ok -> true
-  | TTop, _ 
+  | TTop, _
   | _, TTop                   -> true
   | _ when t_l.typ = t_r.typ  -> true
   | _                         -> false
@@ -528,7 +528,7 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
           match taddr.typ with
           | TAddress ->
               if ttarget === targs then t_unit
-              else t_erroru (TMismatch(target, targs, "")) ()
+              else t_erroru (TMismatch(ttarget, targs, "")) ()
           | _ -> t_erroru (TBad(taddr, "not an address")) ()
 
   in attach_type current_type
