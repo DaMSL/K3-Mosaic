@@ -411,7 +411,7 @@ let channel_format c = function
   | JSON -> "json"
 
 let lazy_channel c chan_t chan_f = match chan_t with
-  | File s -> lps @@ "file(\""^s^"\", "^channel_format c chan_f^")"
+  | File s -> lps @@ "sfile(\""^s^"\", "^channel_format c chan_f^")"
   | Network(str, port) -> lps @@ "socket(\""^str^"\":"^string_of_int port^")"
 
 let rec lazy_resource_pattern c = function
@@ -422,7 +422,7 @@ let rec lazy_resource_pattern c = function
   | Repeat(rp, _) -> lazy_resource_pattern c rp <| lps "*"
 
 let lazy_stream c = function
-  | RandomStream i -> lps "random" <| lazy_paren (lps @@ string_of_int i)
+  | RandomStream i -> lps "srandom" <| lazy_paren (lps @@ string_of_int i)
   | ConstStream e  -> lps "stream" <| lazy_paren (lazy_expr c e)
 
 let lazy_resource c r =
@@ -430,17 +430,17 @@ let lazy_resource c r =
   match r with
   | Handle(t, chan_t, chan_f) -> common t <| lazy_channel c chan_t chan_f
   | Stream(t, st) -> common t <| lazy_stream c st
-  | Pattern(pat) -> lps "pattern " <| lazy_resource_pattern c pat
+  | Pattern(pat) -> lps "spattern " <| lazy_resource_pattern c pat
 
 let lazy_flow c = function
   | Source(Code(id, arg, vars, expr))
   | Sink(Code(id, arg, vars, expr)) -> lazy_trigger c id arg vars expr
   | Source(Resource(id, r)) ->
-      lps ("source "^id^" : ") <| lazy_resource c r
+      lps ("ssource "^id^" : ") <| lazy_resource c r
   | Sink(Resource(id, r)) ->
-      lps ("sink "^id^" : ") <| lazy_resource c r
+      lps ("ssink "^id^" : ") <| lazy_resource c r
   | BindFlow(id1, id2) -> lps @@ "bindflow "^id1^" -> "^id2
-  | Instruction(Consume id) -> lps @@ "consume "^id
+  | Instruction(Consume id) -> lps @@ "sconsume "^id
 
 let lazy_flow_program c fas = lps_list ~sep:"" CutHint (lazy_flow c |- fst) fas
 
@@ -452,9 +452,9 @@ let lazy_declaration c d =
     end in
     wrap_hov 2 (lps @@ "declare "^id^" :" <| lsp () <| lazy_type c t <| end_part)
   | Role(id, fprog) ->
-      lps ("role "^id^" ") <| lazy_box_brace (lazy_flow_program c fprog)
+      lps ("srole "^id^" ") <| lazy_box_brace (lazy_flow_program c fprog)
   | Flow fprog -> lazy_flow_program c fprog
-  | DefaultRole id -> lps ("default role "^id)
+  | DefaultRole id -> lps ("sdefault srole "^id)
   | Foreign(id, t) -> lps ("foreign "^id^" :") <| lsp () <| lazy_type c t
   in
   wrap_hv 0 out <| lcut ()
@@ -506,11 +506,11 @@ let string_of_program_test ?uuid_highlight ptest =
   in
   match ptest with
   | NetworkTest(p, checklist) ->
-      Printf.sprintf "%s\n\nnetwork expected\n\n%s"
+      Printf.sprintf "%s\n\nsnetwork sexpected\n\n%s"
         (string_of_program ?uuid_highlight p)
         (String.concat ",\n\n" @@ list_map string_of_test_expr checklist)
   | ProgTest(p, checklist) ->
-      Printf.sprintf "%s\n\nexpected\n\n%s"
+      Printf.sprintf "%s\n\nsexpected\n\n%s"
         (string_of_program ?uuid_highlight p)
         (String.concat ",\n\n" @@ list_map string_of_test_expr checklist)
   | ExprTest _ -> failwith "can't print an expression test"
