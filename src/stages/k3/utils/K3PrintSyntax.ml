@@ -237,7 +237,7 @@ let rec lazy_expr c expr =
   in let wrap e = match U.tag_of_expr expr with
     Insert _ | Iterate | Map | Filter | Flatten | Send | Delete _ | Update _ |
     Aggregate | GroupByAggregate | Assign _ | Combine -> wrap_hov 2 e
-    | IfThenElse | Let _ | BindAs _ -> wrap_hov 0 e
+    | IfThenElse | Let _ | BindAs _ | CaseOf _ -> wrap_hov 0 e
     | _ -> id_fn e
   in let out = match U.tag_of_expr expr with
   | Const con  -> lazy_const c con

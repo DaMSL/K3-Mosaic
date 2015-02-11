@@ -3,6 +3,7 @@ open Util
 open K3Helpers
 open K3Dist
 module P = ProgInfo
+module D = K3Dist
 
 let map_latest_val_code p map_id =
   let map_ids_types_vid = P.map_ids_types_with_v_for p map_id in
@@ -42,7 +43,7 @@ let map_latest_val_code p map_id =
         ["_"; "_project_"]
         (mk_agg
           inner_assoc
-          (mk_tuple [min_vid_k3; mk_empty set_type]) @@
+          (mk_tuple [mk_var D.g_min_vid.id; mk_empty set_type]) @@
           mk_var mapn_deref) @@
         mk_var "_project_"
     else
@@ -57,7 +58,7 @@ let map_latest_val_code p map_id =
             mk_tuple @@ ids_to_vars map_ids_no_val)
           (* find the highest vid *)
           inner_assoc
-          (mk_tuple [min_vid_k3; mk_empty set_type]) @@
+          (mk_tuple [mk_var D.g_min_vid.id; mk_empty set_type]) @@
           mk_var mapn_deref
   in code, mk_empty set_type
 

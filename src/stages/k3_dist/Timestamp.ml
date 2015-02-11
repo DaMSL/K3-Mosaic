@@ -113,7 +113,7 @@ let sw_gen_vid =
 let ms_init =
   let init =
     mk_if (mk_eq (mk_var D.job.id) @@ mk_var D.job_master.id)
-      (mk_send sw_rcv_token_nm (mk_var sw_next_switch_addr.id) [min_vid_k3])
+    (mk_send sw_rcv_token_nm (mk_var sw_next_switch_addr.id) [mk_var D.g_min_vid.id])
       mk_cunit
   in
   create_ds "ts_init" t_unit ~init

@@ -121,7 +121,6 @@ rule tokenize = parse
     | "->"  { RARROW }
     | "<-"  { LARROW }
     | "<->" { LRARROW }
-    | "=>"  { RASSOC }
     | ':'   { COLON }
     | '\\'  { BACKSLASH }
 

@@ -487,7 +487,6 @@ let vid_increment ?(vid_expr=mk_var "vid") () =
   mk_tuple [mk_subscript 1 vid_expr; mk_add (mk_subscript 2 vid_expr) (mk_cint 1)]
 
 let min_vid_k3 = mk_tuple [mk_cint 0; mk_cint 0]
-let max_vid_k3 = mk_tuple [mk_cint max_int; mk_cint max_int]
 
 (* id function for maps *)
 let mk_id tuple_types =

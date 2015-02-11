@@ -431,6 +431,7 @@ let sw_send_fetch_fn c s_rhs_lhs s_rhs trig_name =
           s_no_rhs
   in
   let send_puts =
+    let address = "addr" in
     if null s_rhs_lhs then [] else
     let stmt_id_cnt_type = wrap_tbag' [t_stmt_id; t_int] in
     (* send puts
@@ -438,16 +439,16 @@ let sw_send_fetch_fn c s_rhs_lhs s_rhs trig_name =
     * specific IP *)
     [mk_iter
       (mk_lambda'
-        ["address", t_addr; "stmt_id_cnt_list", stmt_id_cnt_type] @@
+        [address, t_addr; "stmt_id_cnt_list", stmt_id_cnt_type] @@
         mk_block @@
           (* send rcv_put *)
           (mk_send
             (rcv_put_name_of_t trig_name)
-            (mk_var "address") @@
+            (mk_var address) @@
             G.me_var :: mk_var "stmt_id_cnt_list"::
               args_of_t_as_vars_with_v c trig_name) ::
           if c.enable_gc then
-            [GC.sw_ack_init_code ~addr_nm:"address" ~vid_nm:"vid"] else []
+            [GC.sw_ack_init_code ~addr_nm:address ~vid_nm:"vid"] else []
       ) @@
       mk_gbagg
         (mk_assoc_lambda' (* grouping func -- assoc because of gbagg tuple *)

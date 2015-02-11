@@ -40,12 +40,13 @@ let sw_ack_log =
   create_ds "sw_ack_log" (wrap_tmap' @@ snd_many e) ~e
 
 (* switch: max acknowledged vid *)
-let sw_max_ack_vid = create_ds "sw_max_ack_vid" (mut t_vid) ~init:min_vid_k3
+let sw_max_ack_vid = create_ds "sw_max_ack_vid" (mut t_vid) ~init:(mk_var D.g_min_vid.id)
 
 (* switch: trigger for receiving an ack from a node *)
 let sw_ack_rcv_trig_nm = "sw_ack_rcv"
 let sw_ack_rcv_trig =
-  let ack_trig_args = ["address", t_addr; "vid", t_vid] in
+  let address = "addr" in
+  let ack_trig_args = [address, t_addr; "vid", t_vid] in
   let old_set, old_val = "old_set", "old_val" in
   mk_code_sink' sw_ack_rcv_trig_nm ack_trig_args [] @@
   (* look for this ack in the log *)
@@ -55,7 +56,7 @@ let sw_ack_rcv_trig =
     (mk_let [old_set] (mk_snd @@ mk_var "old_val") @@
       mk_block [
         (* remove the ack *)
-        mk_delete old_set [mk_var "address"];
+        mk_delete old_set [mk_var address];
         (* check if we need to delete the whole entry *)
         mk_case_ns (mk_peek' old_set) "_"
           (* delete the entry if nothing is left in the set *)
@@ -92,7 +93,7 @@ let ms_gc_interval = create_ds "ms_gc_interval" (mut t_int) ~init:(mk_cint 300)
 
 (* master: store the max vid received from each switch *)
 let ms_gc_vid_map =
-  let e = ["address", t_addr; "vid", t_vid] in
+  let e = ["addr", t_addr; "vid", t_vid] in
   create_ds "ms_gc_vid_map" (mut @@ wrap_tmap' @@ snd_many e) ~e
 
 (* master: counter for number of responses *)
@@ -181,7 +182,7 @@ let ms_rcv_gc_vid =
         (* if so ... *)
         (mk_let [min_vid]
           (* get the min vid *)
-          (mk_min_max min_vid "vid" t_vid mk_lt min_vid_k3 ms_gc_vid_map) @@
+          (mk_min_max min_vid "vid" t_vid mk_lt (mk_var D.g_min_vid.id) ms_gc_vid_map) @@
           mk_block [
             (* clear the counter *)
             mk_assign ms_gc_vid_ctr.id @@ mk_cint 0;
@@ -213,7 +214,7 @@ let rcv_req_gc_vid =
       (* send out node min vid: much faster if we had a min function *)
       (mk_send ms_rcv_gc_vid_nm (mk_var master_addr.id)
         (* default is max_vid, to allow anything to go on *)
-        [G.me_var; mk_min_max "min_vid" "vid" t_vid mk_lt max_vid_k3 D.nd_stmt_cntrs])
+        [G.me_var; mk_min_max "min_vid" "vid" t_vid mk_lt (mk_var D.g_max_vid.id) D.nd_stmt_cntrs])
       (* else, do nothing *)
       mk_cunit
 

@@ -129,6 +129,13 @@ let args_of_t_as_vars_with_v ?(vid="vid") c trig_nm =
 
 (**** global data structures ****)
 
+let g_min_vid = create_ds "g_min_vid" t_vid ~init:min_vid_k3
+let g_max_vid =
+  let init =
+    let max = mk_apply' "get_max_int" mk_cunit in
+    mk_tuple [max; max] in
+  create_ds "g_max_vid" t_vid ~init
+
 (* specifies the job of a node: master/switch/node *)
 let job_none_v   = -1
 let job_master_v = 0
@@ -449,7 +456,7 @@ let frontier_fn c map_id =
     mk_fst @@
       mk_agg
         common_vid_lambda
-        (mk_tuple [mk_empty m_t_v_bag; min_vid_k3])
+        (mk_tuple [mk_empty m_t_v_bag; mk_var g_min_vid.id])
         (mk_var "input_map")
   | _ ->
       mk_flatten @@ mk_map
@@ -464,7 +471,7 @@ let frontier_fn c map_id =
             mk_tuple @@ ids_to_vars @@ fst_many m_id_t_no_val)
           (* get the maximum vid that's less than our current vid *)
           common_vid_lambda
-          (mk_tuple [mk_empty m_t_v_bag; min_vid_k3])
+          (mk_tuple [mk_empty m_t_v_bag; mk_var g_min_vid.id])
           (mk_var "input_map")
   in
   mk_global_fn (frontier_name c map_id) ["vid", t_vid; "input_map", m_t_v_bag] [m_t_v_bag] @@
@@ -484,6 +491,8 @@ let global_vars c dict =
   in
   let l =
     [ g_init_vid;
+      g_min_vid;
+      g_max_vid;
       job_master;
       job_switch;
       job_node;

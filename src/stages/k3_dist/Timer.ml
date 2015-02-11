@@ -20,7 +20,7 @@ let num_of_trig c trig =
 
 (* We really want to use an ordered map, but we currently don't have that *)
 let tm_timer_list =
-  let e = ["time", t_int; "trig_id", t_int; "address", t_addr] in
+  let e = ["time", t_int; "trig_id", t_int; "addr", t_addr] in
   create_ds "tm_timer_list" (mut @@ wrap_tlist' @@ snd_many e) ~e
 
 (* Check the time and dispatch any triggers *)
@@ -30,7 +30,7 @@ let tm_check_time_trig c =
   let dispatch_code =
     List.fold_right (fun (id, trig) acc ->
       mk_if (mk_eq (mk_var "trig_id") @@ mk_cint id)
-        (mk_send trig (mk_var "address") [mk_cunit])
+        (mk_send trig (mk_var "addr") [mk_cunit])
         acc)
       (insert_index_fst @@ timer_trigs c)
       mk_cunit

@@ -38,6 +38,7 @@ let add_foreign_fn nm =
 
 (* k3 stdlib *)
 let stdlib = List.map add_foreign_fn [
+  "get_max_int";
   "divf";
   "maxi";
   "maxif";
