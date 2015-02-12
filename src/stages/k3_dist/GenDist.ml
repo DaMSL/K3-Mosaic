@@ -313,7 +313,6 @@ let nd_filter_corrective_list =
 (**** protocol code ****)
 
 (* The driver trigger: loop over the trigger data structures as long as we have spare vids *)
-let sw_driver_trig_nm = "sw_driver_trig"
 let sw_driver_trig (c:config) =
   let trig_id = "trig_id" in
   (* dispatch code by trigger ids, for the trig buffers *)
@@ -333,22 +332,22 @@ let sw_driver_trig (c:config) =
   mk_code_sink' sw_driver_trig_nm unit_arg [] @@
   mk_case_ns (mk_apply' TS.sw_gen_vid_nm mk_cunit) "vid"
     (* if we don't have a vid, set state to waiting for vid *)
-    (mk_assign D.sw_state.id @@ mk_cint D.sw_state_wait_vid) @@
+    (mk_assign D.sw_state.id @@ mk_var D.sw_state_wait_vid.id) @@
     (* else *)
     mk_pop D.sw_trig_buf_idx.id trig_id
       (* empty: no message to send -- set state to idle *)
-      (mk_assign D.sw_state.id @@ mk_cint D.sw_state_idle) @@
+      (mk_assign D.sw_state.id @@ mk_var D.sw_state_idle.id) @@
       (* have a msg *)
       mk_block [
         (* set state to sending *)
-        mk_assign D.sw_state.id @@ mk_cint D.sw_state_sending;
+        mk_assign D.sw_state.id @@ mk_var D.sw_state_sending.id;
         (* send the msg using dispatch code *)
         dispatch_code;
         (* recurse, trying to get another message *)
         mk_send sw_driver_trig_nm G.me_var [mk_cunit];
       ]
 
-(* The start trigger puts the message in a trig buffer and calls the driver *)
+(* The start trigger puts the message in a trig buffer *)
 let sw_start_trig (c:config) trig =
   let args_t = snd_many @@ P.args_of_t c.p trig in
   let args = ["args", wrap_ttuple args_t] in
@@ -360,8 +359,6 @@ let sw_start_trig (c:config) trig =
       mk_insert D.sw_trig_buf_idx.id [mk_cint @@ P.trigger_id_for_name c.p trig];
       (* increment counters for msgs to get vids *)
       mk_assign TS.sw_need_vid_ctr.id @@ mk_add (mk_var TS.sw_need_vid_ctr.id) @@ mk_cint 1;
-      (* call the driver trigger *)
-      mk_send sw_driver_trig_nm G.me_var [mk_cunit];
     ]
 
 (* sending fetches is done from functions now *)
@@ -985,6 +982,7 @@ let emit_frontier_fns c =
   List.map (frontier_fn c) fns
 
 let declare_global_vars c partmap ast =
+  Protocol.global_vars @
   D.global_vars c (ModifyAst.map_inits_from_ast c ast) @
   Timer.global_vars @
   TS.global_vars @
@@ -1002,7 +1000,7 @@ let declare_global_funcs c partmap ast =
   K3Ring.functions @
   (if not c.use_multiindex then emit_frontier_fns c else []) @
   (List.map (nd_add_delta_to_buf c |- hd |- snd) @@ P.uniq_types_and_maps c.p) @
-  (if c.enable_gc then TS.functions else []) @
+  TS.functions @
   K3Route.functions c.p partmap @
   K3Shuffle.functions c
 
@@ -1056,8 +1054,9 @@ let gen_dist ?(force_correctives=false) ?(use_multiindex=false) ?(enable_gc=fals
     declare_global_funcs c partmap ast @
     proto_funcs @
     (mk_flow @@
+      Protocol.triggers c @
       (if c.enable_gc then GC.triggers c else []) @
-      TS.triggers sw_driver_trig_nm @
+      TS.triggers @
       Timer.triggers c @
       [sw_driver_trig c] @
       proto_trigs @
@@ -1065,7 +1064,5 @@ let gen_dist ?(force_correctives=false) ?(use_multiindex=false) ?(enable_gc=fals
       demux_trigs ast)::    (* per-map basis *)
       roles_of ast
   in
-  (* order foreign functions first *)
-  let foreign, rest = List.partition (U.is_foreign) prog in
-  snd @@ U.renumber_program_ids (foreign @ rest)
+  snd @@ U.renumber_program_ids prog
 

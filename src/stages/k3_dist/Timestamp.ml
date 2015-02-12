@@ -58,7 +58,7 @@ let sw_highest_vid = create_ds "sw_highest_vid" (mut t_vid)
 
 (* trigger for when we receive the token *)
 let sw_rcv_token_nm = "sw_rcv_token"
-let sw_rcv_token_trig driver_trig_nm =
+let sw_rcv_token_trig =
   mk_code_sink' sw_rcv_token_nm ["vid", t_vid] [] @@
   (* if we have stuff to number *)
   mk_if (mk_gt (mk_var sw_need_vid_ctr.id) @@ mk_cint 0)
@@ -78,8 +78,8 @@ let sw_rcv_token_trig driver_trig_nm =
         (* send on the token *)
         mk_send sw_rcv_token_nm (mk_var sw_next_switch_addr.id) [mk_var "next_vid"];
         (* if we've been waiting for a vid, start the driver *)
-        mk_if (mk_eq (mk_var D.sw_state.id) @@ mk_cint D.sw_state_wait_vid)
-          (mk_send driver_trig_nm G.me_var [mk_cunit])
+        mk_if (mk_eq (mk_var D.sw_state.id) @@ mk_var D.sw_state_wait_vid.id)
+          (mk_send D.sw_driver_trig_nm G.me_var [mk_cunit])
           mk_cunit;
       ]) @@
     (* if we have nothing to number, pass the token on as is *)
@@ -111,12 +111,9 @@ let sw_gen_vid =
 
 (* only the master starts the protocol *)
 let ms_init =
-  let init =
     mk_if (mk_eq (mk_var D.job.id) @@ mk_var D.job_master.id)
     (mk_send sw_rcv_token_nm (mk_var sw_next_switch_addr.id) [mk_var D.g_min_vid.id])
       mk_cunit
-  in
-  create_ds "ts_init" t_unit ~init
 
 (* --- End of code --- *)
 
@@ -125,18 +122,9 @@ let global_vars =
     decl_global sw_need_vid_ctr;
     decl_global sw_token_vid_list;
     decl_global sw_highest_vid;
-    decl_global ms_init;
   ]
 
 let functions = [sw_gen_vid]
 
-let triggers driver_trig =
-  [ sw_rcv_token_trig driver_trig ]
-
-
-
-
-
-
-
-
+let triggers =
+  [ sw_rcv_token_trig ]

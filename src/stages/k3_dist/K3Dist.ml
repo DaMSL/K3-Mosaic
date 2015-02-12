@@ -129,6 +129,10 @@ let args_of_t_as_vars_with_v ?(vid="vid") c trig_nm =
 
 (**** global data structures ****)
 
+let num_peers =
+  let init = mk_size_slow G.peers in
+  create_ds "num_peers" (mut t_int) ~init
+
 let g_min_vid = create_ds "g_min_vid" t_vid ~init:min_vid_k3
 let g_max_vid =
   let init =
@@ -137,11 +141,11 @@ let g_max_vid =
   create_ds "g_max_vid" t_vid ~init
 
 (* specifies the job of a node: master/switch/node *)
-let job_none_v   = -1
 let job_master_v = 0
 let job_switch_v = 1
 let job_node_v   = 2
 let job_timer_v  = 3
+let job_none_v   = 4
 
 let job_master = create_ds "job_master" t_int ~init:(mk_cint job_master_v)
 let job_switch = create_ds "job_switch" t_int ~init:(mk_cint job_switch_v)
@@ -169,50 +173,28 @@ let job_of_str = function
 (* we fill it dynamically in the interpreter *)
 let jobs =
   let e = ["addr", t_addr; "job", t_int] in
-  let t = wrap_tmap' @@ snd_many e in
+  let t = mut @@ wrap_tmap' @@ snd_many e in
   create_ds "jobs" t ~e
 
 (* address of master node *)
-let master_addr =
-  let init =
-    mk_case_sn
-      (mk_peek @@ mk_filter
-        (mk_lambda' jobs.e @@
-          mk_eq (mk_var "job") @@ mk_var job_master.id) @@
-        mk_var jobs.id)
-      "master"
-      (mk_fst @@ mk_var "master") @@
-      mk_error "no master found"
-  in
-  create_ds "master_addr" (mut t_addr) ~init
+let master_addr = create_ds "master_addr" (mut t_addr)
 
 (* address of timer peer *)
-let timer_addr =
-  let init =
-    mk_case_sn
-      (mk_peek @@ mk_filter
-        (mk_lambda' jobs.e @@
-          mk_eq (mk_var "job") @@ mk_var job_timer.id) @@
-        mk_var jobs.id)
-      "timer"
-      (mk_fst @@ mk_var "timer") @@
-      mk_error "no timer peer found"
-  in
-  create_ds "timer_addr" (mut t_addr) ~init
+let timer_addr = create_ds "timer_addr" (mut t_addr)
 
 let nodes =
-  let init =
-    mk_fst_many (snd_many jobs.e) @@
-      mk_filter
-        (mk_lambda' jobs.e @@ mk_eq (mk_var "job") @@ mk_var job_node.id) @@
-        mk_var jobs.id
-  in
-  let e = ["address", t_addr] in
-  create_ds "nodes" (mut @@ wrap_tbag' @@ snd_many e) ~e ~init
+  let e = ["addr", t_addr] in
+  create_ds "nodes" (mut @@ wrap_tbag' @@ snd_many e) ~e
 
-let num_peers =
-  let init = mk_size_slow G.peers in
-  create_ds "num_peers" (mut t_int) ~init
+let switches =
+  let e = ["addr", t_addr] in
+  create_ds "switches" (mut @@ wrap_tbag' @@ snd_many e) ~e
+
+let sw_driver_trig_nm = "sw_driver_trig"
+
+(* timing data structures *)
+let ms_start_time = create_ds "ms_start_time" @@ mut t_int
+let ms_end_time = create_ds "ms_end_time" @@ mut t_int
 
 (**** Protocol Init code ****)
 
@@ -321,10 +303,11 @@ let maps c =
  * 0: idle
  * 1: sending
  * 2: waiting for vid *)
-let sw_state_idle = 0
-let sw_state_sending = 1
-let sw_state_wait_vid = 2
-let sw_state = create_ds "sw_state" (mut t_int) ~init:(mk_cint 0)
+let sw_state_pre_init = create_ds "sw_state_pre_init" t_int ~init:(mk_cint 0)
+let sw_state_idle     = create_ds "sw_state_idle"     t_int ~init:(mk_cint 1)
+let sw_state_sending  = create_ds "sw_state_sending"  t_int ~init:(mk_cint 2)
+let sw_state_wait_vid = create_ds "sw_state_wait_vid" t_int ~init:(mk_cint 3)
+let sw_state = create_ds "sw_state" (mut t_int) ~init:(mk_var sw_state_pre_init.id)
 
 (* buffers for insert/delete -- we need a per-trigger list *)
 (* these buffers don't inlude a vid, unlike the logs in the nodes *)
@@ -502,12 +485,19 @@ let global_vars c dict =
       master_addr;
       timer_addr;
       nodes;
+      switches;
       num_peers;
       map_ids c;
       nd_stmt_cntrs;
       nd_log_master;
+      sw_state_pre_init;
+      sw_state_idle;
+      sw_state_sending;
+      sw_state_wait_vid;
       sw_state;
       sw_trig_buf_idx;
+      ms_start_time;
+      ms_end_time;
     ] @
     sw_trig_bufs c @
     log_ds c @

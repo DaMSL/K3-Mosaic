@@ -580,3 +580,6 @@ let mk_pop col_nm bind_nm fail success =
       success
     ]
 
+(* increment a stateful variable *)
+let mk_incr nm = mk_assign nm @@ mk_add (mk_var nm) @@ mk_cint 1
+let mk_decr nm = mk_assign nm @@ mk_sub (mk_var nm) @@ mk_cint 1
