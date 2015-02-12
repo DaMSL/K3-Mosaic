@@ -145,7 +145,7 @@ let do_gc c =
       (* delete values from ds *)
       (mk_iter
         (mk_lambda' ["val", wrap_ttuple @@ snd_many ds.e] @@
-          do_bind @@ mk_delete id [mk_var "val"]) @@
+          mk_delete id [mk_var "val"]) @@
         mk_var temp) ::
       (* if we have a mosaic map, insert back the frontier *)
       (if ds.map_id <> None then
