@@ -351,7 +351,7 @@ let sw_driver_trig (c:config) =
 let sw_start_trig (c:config) trig =
   let args_t = snd_many @@ P.args_of_t c.p trig in
   let args = ["args", wrap_ttuple args_t] in
-  mk_code_sink' trig args [] @@
+  mk_code_sink' ("sw_"^trig) args [] @@
     mk_block [
       (* insert args into trig buffer *)
       mk_insert (D.sw_trig_buf_prefix^trig) [mk_var "args"];
@@ -972,8 +972,27 @@ let demux_trigs ast =
 
 (* we take the existing default role and prepend it with a one-shot to
  * call out on-init function *)
-let roles_of ast =
-  List.filter (fun d -> U.is_role d || U.is_def_role d) ast
+let roles_of (ast:program_t) =
+  let role = List.find U.is_role ast in
+  let flows = match fst role with
+    | Role(_, fs) -> fs | _ -> failwith "not a role"
+  in
+  let len = String.length "demux_" in
+  let flows = List.map (function
+    | BindFlow(x, nm), y -> BindFlow(x, "sw_insert_"^str_drop len nm), y
+    | x -> x) flows in
+  (* extra flows for master *)
+  let ms_flows = List.map (fun x -> x, []) [
+     Source(Resource("init", Stream(t_unit, ConstStream mk_cunit)));
+     BindFlow("init", Protocol.ms_send_addr_self_nm);
+     Instruction(Consume("init"));
+    ]
+  in List.map (fun x -> x, []) [
+    Role("master", ms_flows @ flows);
+    Role("switch", flows);
+    Role("timer", []);
+    Role("node", []);
+  ]
 
 (* Generate all the frontier functions *)
 let emit_frontier_fns c =
@@ -1053,16 +1072,15 @@ let gen_dist ?(force_correctives=false) ?(use_multiindex=false) ?(enable_gc=fals
     declare_global_vars c partmap ast @
     declare_global_funcs c partmap ast @
     proto_funcs @
-    (mk_flow @@
+    [mk_flow @@
       Protocol.triggers c @
       (if c.enable_gc then GC.triggers c else []) @
       TS.triggers @
       Timer.triggers c @
       [sw_driver_trig c] @
       proto_trigs @
-      send_corrective_trigs c @
-      demux_trigs ast)::    (* per-map basis *)
-      roles_of ast
+      send_corrective_trigs c] @
+    roles_of ast
   in
   snd @@ U.renumber_program_ids prog
 
