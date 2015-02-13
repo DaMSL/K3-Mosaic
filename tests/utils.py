@@ -49,3 +49,9 @@ def get_os():
     else:
         return "windows"
 
+def concat(s_list):
+    res = ""
+    for s in s_list:
+        if s is not None:
+            res = res + " " + str(s)
+    return res
