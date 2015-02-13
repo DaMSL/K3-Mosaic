@@ -341,16 +341,14 @@ let print_k3_test_program = function
       (* get the folded expressions comparing values for latest vid.
        * These go in the expected statements at the end *)
       let tests_by_map = GenTest.expected_code_all_maps meta in
-      let drop_roles =
-        List.filter (fun d -> not (is_role d || is_def_role d)) in
-      let p', test_vals =
+      let test_vals =
         (* get the test values from the dbtoaster trace if available *)
         if not @@ null cmd_line_params.trace_files then
           (* we only care about the code part *)
           let tests_by_map = List.map (fun (nm, (code, empty)) ->
             nm, code) tests_by_map
           in
-          let role_s, maplist =
+          let _, maplist =
             let trace_file = at cmd_line_params.trace_files idx in
             FromTrace.string_of_file trace_file ~is_dist:true
           in
@@ -367,21 +365,16 @@ let print_k3_test_program = function
           (* add the produced test roles and trigger *)
           (* debug *)
           (* filter out all role stuff in the original generated ast *)
-          let new_p =
-            try drop_roles p @ parse_k3_prog role_s
-            with x -> print_endline role_s; raise x
-          in
-          new_p, tests_vals
+          tests_vals
+      else failwith "no trace file"
 
         (* use the order files to simulate the system *)
-        else if not @@ null cmd_line_params.order_files then
+        (*else if not @@ null cmd_line_params.order_files then
           let order_file = at cmd_line_params.order_files idx in
           let events = FromTrace.events_of_order_file order_file in
-          let role_s = FromTrace.string_of_test_role ~is_dist:false events in
           (* Note that we take the single-site version here *)
           (* debug *)
-          print_endline @@ role_s;
-          let p' = drop_roles orig_p @ parse_k3_prog role_s in
+          let p' = orig_p @ parse_k3_prog role_s in
           (* run the interpreter on our code *)
           let params = default_cmd_line_params () in
           let _, (_, (env, _)) =
@@ -409,9 +402,9 @@ let print_k3_test_program = function
 
         else
           (* we don't have a trace file or order file for final value tests *)
-          p, list_map (fun (_, (e,_)) -> e, FileExpr "dummy") tests_by_map
+          p, list_map (fun (_, (e,_)) -> e, FileExpr "dummy") tests_by_map *)
       in
-      let prog_test = NetworkTest(p', test_vals) in
+      let prog_test = NetworkTest(p, test_vals) in
       let _, prog_test = renumber_test_program_ids prog_test in
       let prog_test = typed_program_test prog_test in
       print_endline @@ PS.string_of_program_test prog_test

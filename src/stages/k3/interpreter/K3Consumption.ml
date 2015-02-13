@@ -34,60 +34,55 @@ let r_comma = Str.regexp ","
 
 (* pull (parse/generate) a single value out of a source *)
 let pull_source id t res in_chan =
-  let tuple_val, signature =
-    match t.typ with
+  let tuple_val, signature = match t.typ with
+    | TUnit      -> false, [TUnit]
     | TBool      -> false, [TBool]
     | TInt       -> false, [TInt]
     | TDate      -> false, [TDate]
     | TFloat     -> false, [TFloat]
     | TString    -> false, [TString]
     | TTuple ts  -> true,  List.map unwrap_t ts
-    | _          -> raise @@ ResourceError id
-        in
-  begin
-    (*print_endline ("Pulling from source "^id);*)
-    match res, in_chan with
-    | Handle(t, File _, CSV), In(Some chan) ->
-      begin try
-        (* parse the lines *)
-        let next_record = Str.split r_comma (input_line chan) in
-        let fields = List.map2 value_of_string signature next_record in
-        let r = if tuple_val then VTuple fields else List.hd fields in
-        Some r
-      with
-        | Invalid_argument _ -> raise @@ ResourceError id
-        | End_of_file        -> None
-      end
-
-    | Stream(t, RandomStream _), InRand index ->
-        if !index <= 0 then None
-        else
-          let rec random_val t = match t.typ with
-            | TBool      -> VBool(Random.bool ())
-            | TInt       -> VInt(Random.int max_int)
-            | TDate      -> VInt(Random.int max_int)
-            | TFloat     -> VFloat(Random.float max_float)
-            | TTuple ts  -> VTuple(List.map random_val ts)
-            | _          -> raise @@ ResourceError id
-          in index := !index - 1;
-          Some(random_val t)
-
-     (* a constant stream *)
-     | Stream(t, ConstStream _), InConst exp_l_ref ->
-         begin match !exp_l_ref with
-          | [] -> None
-          | e::es ->
-              exp_l_ref := es;
-              let v = try K3Values.value_of_const_expr e
-                      with Failure s ->
-                        let err = Printf.sprintf "%s: we can't handle an expression of %s"
-                          id  (K3Printing.flat_string_of_expr e) in
-                        raise @@ ResourceError err
-              in Some v
-         end
-
-          | _ -> raise (ResourceError id)
-  end
+    | _          -> raise @@ ResourceError(id^": unhandled source type")
+  in
+  (*print_endline ("Pulling from source "^id);*)
+  match res, in_chan with
+  | Handle(t, File _, CSV), In(Some chan) ->
+    begin try
+      (* parse the lines *)
+      let next_record = Str.split r_comma (input_line chan) in
+      let fields = List.map2 value_of_string signature next_record in
+      let r = if tuple_val then VTuple fields else List.hd fields in
+      Some r
+    with
+      | Invalid_argument _ -> raise @@ ResourceError(id^": problem with file")
+      | End_of_file        -> None
+    end
+  | Stream(t, RandomStream _), InRand index ->
+      if !index <= 0 then None
+      else
+        let rec random_val t = match t.typ with
+          | TBool      -> VBool(Random.bool ())
+          | TInt       -> VInt(Random.int max_int)
+          | TDate      -> VInt(Random.int max_int)
+          | TFloat     -> VFloat(Random.float max_float)
+          | TTuple ts  -> VTuple(List.map random_val ts)
+          | _          -> raise @@ ResourceError(id^": unhandled random type")
+        in index := !index - 1;
+        Some(random_val t)
+    (* a constant stream *)
+    | Stream(t, ConstStream _), InConst exp_l_ref ->
+        begin match !exp_l_ref with
+        | []    -> None
+        | e::es ->
+            exp_l_ref := es;
+            let v = try K3Values.value_of_const_expr e
+                    with Failure s ->
+                      let err = Printf.sprintf "%s: we can't handle an expression of %s"
+                        id  (K3Printing.flat_string_of_expr e) in
+                      raise @@ ResourceError err
+            in Some v
+        end
+    | _ -> raise @@ ResourceError (id^": not a proper source")
 
 (* Determines resources to be opened and closed between two instructions.
  * All file handles are reset between instructions.

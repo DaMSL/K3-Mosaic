@@ -983,7 +983,8 @@ let roles_of (ast:program_t) =
     | x -> x) flows in
   (* extra flows for master *)
   let ms_flows = List.map (fun x -> x, []) [
-     Source(Resource("init", Stream(t_unit, ConstStream mk_cunit)));
+     Source(Resource("init",
+       Stream(t_unit, ConstStream(mk_singleton (wrap_tlist t_unit) [mk_cunit]))));
      BindFlow("init", Protocol.ms_send_addr_self_nm);
      Instruction(Consume("init"));
     ]

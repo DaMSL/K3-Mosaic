@@ -192,6 +192,7 @@ declaration :
     | flow_program  { Flow($1) }
 
     | ROLE IDENTIFIER LBRACE flow_program RBRACE   { Role($2, $4) }
+    | ROLE IDENTIFIER LBRACE RBRACE                { Role($2, []) }
     | DEFAULT ROLE IDENTIFIER                      { DefaultRole($3) }
 
     /* Error handling */
