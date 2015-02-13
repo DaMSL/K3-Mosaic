@@ -533,11 +533,11 @@ and threaded_eval address sched_st ienv texprs =
 (* Declaration interpretation *)
 
 (* Returns a default value for every type in the language *)
-let rec default_value t = default_base_value t.typ
+let rec default_value id t = default_base_value id t.typ
 
 and default_collection_value ct et = v_empty_of_t ct
 
-and default_base_value bt =
+and default_base_value id bt =
   let error = int_error "default_base_value" in
   match bt with
   | TTop | TUnknown     -> VUnknown
@@ -549,12 +549,12 @@ and default_base_value bt =
   | TFloat              -> VFloat 0.0
   | TString             -> VString ""
   | TMaybe   vt         -> VOption None
-  | TTuple   ft         -> VTuple (List.map default_value ft)
+  | TTuple   ft         -> VTuple(List.map (default_value id) ft)
   | TCollection (ct,et) -> default_collection_value ct et
-  | TIndirect vt        -> VIndirect(ref @@ default_base_value vt.typ)
-  | TAddress            -> error "no default value for an address"
-  | TTarget bt          -> error "no default value for a target"
-  | TFunction _         -> error "no default value for a function"
+  | TIndirect vt        -> VIndirect(ref @@ default_base_value id vt.typ)
+  | TAddress            -> error @@ "no default value for an address for "^id
+  | TTarget bt          -> error @@ "no default value for a target "^id
+  | TFunction _         -> error @@ "no default value for a function "^id
 
 (* Returns a foreign function evaluator *)
 let dispatch_foreign id = K3StdLib.lookup_value id
@@ -563,7 +563,7 @@ let dispatch_foreign id = K3StdLib.lookup_value id
  * of the trigger *)
 let prepare_trigger sched_st id arg local_decls body =
   fun address (m_env, f_env) args ->
-    let default (id,t,_) = id, ref @@ default_value t in
+    let default (id,t,_) = id, ref @@ default_value id t in
     let new_vals = List.map default local_decls in
     let local_env = add_from_list m_env new_vals, f_env in
     let _, reval = (eval_fun (-1) @@ VFunction(arg, IdMap.empty, body)) address
@@ -614,7 +614,7 @@ let env_of_program ?address ~role ~peers sched_st k3_program =
           | _, Some e -> second value_of_eval @@
               eval_expr me_addr (Some sched_st) penv e
 
-          | _, None -> penv, default_value t
+          | id, None -> penv, default_value id t
         in
         trig_env, ((IdMap.add id (ref init_val) rm_env), rf_env)
 
@@ -729,7 +729,7 @@ let interpret_k3_program i =
     (* check if we should continue *)
     if msg_peers > 0 || src_peers > 0 then loop src_peers else ()
   in
-  Log.log (sp "Starting up interpreter") `Trace;
+  Log.log (sp "Starting up interpreter\n") `Trace;
   loop 1;
   let prog_state = List.map (fun (i,x) -> i, x.prog_env) @@ list_of_hashtbl i.envs in
   (* Log program state *)
@@ -745,7 +745,7 @@ let init_k3_interpreter ?queue_type ~peers ~load_path ?(src_interval=0.002) type
   match peers with
   | []  -> failwith "interpret_k3_program: Peers list is empty!"
   | _   ->
-      Log.log (sp "Initializing interpreter") `Trace;
+      Log.log (sp "Initializing interpreter\n") `Trace;
       (* Initialize an environment for each peer *)
       K3StdLib.g_load_path := load_path;
       let len = List.length peers in
