@@ -180,15 +180,35 @@ let jobs =
 let master_addr = create_ds "master_addr" (mut t_addr)
 
 (* address of timer peer *)
-let timer_addr = create_ds "timer_addr" (mut t_addr)
+let timer_addr =
+  let d_init =
+    mk_case_sn
+      (mk_peek @@ mk_filter
+        (mk_lambda' jobs.e @@
+          mk_eq (mk_var "job") @@ mk_var job_timer.id) @@
+        mk_var jobs.id)
+      "timer"
+      (mk_fst @@ mk_var "timer") @@
+      mk_error "no timer peer found" in
+  create_ds "timer_addr" (mut t_addr) ~d_init
 
 let nodes =
+  let d_init =
+    mk_fst_many (snd_many jobs.e) @@
+      mk_filter
+        (mk_lambda' jobs.e @@ mk_eq (mk_var job.id) @@ mk_var job_node.id) @@
+        mk_var jobs.id in
   let e = ["addr", t_addr] in
-  create_ds "nodes" (mut @@ wrap_tbag' @@ snd_many e) ~e
+  create_ds "nodes" (mut @@ wrap_tbag' @@ snd_many e) ~e ~d_init
 
 let switches =
+  let d_init =
+    mk_fst_many (snd_many jobs.e) @@
+      mk_filter
+        (mk_lambda' jobs.e @@ mk_eq (mk_var job.id) @@ mk_var job_node.id) @@
+        mk_var jobs.id in
   let e = ["addr", t_addr] in
-  create_ds "switches" (mut @@ wrap_tbag' @@ snd_many e) ~e
+  create_ds "switches" (mut @@ wrap_tbag' @@ snd_many e) ~e ~d_init
 
 let sw_driver_trig_nm = "sw_driver_trig"
 

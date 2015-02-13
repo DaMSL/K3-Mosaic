@@ -16,7 +16,7 @@ module P = ProgInfo
 
 (* the address of the next switch in the chain *)
 let sw_next_switch_addr =
-  let init =
+  let d_init =
     mk_let ["addr_list"]
       (* get a total ordering: sort ascending by address *)
       (mk_sort
@@ -43,7 +43,7 @@ let sw_next_switch_addr =
         (mk_tuple [mk_cfalse; mk_var "first_addr"]) @@
         mk_var "addr_list"
   in
-  create_ds "sw_next_switch_addr" (mut t_addr) ~init
+  create_ds "sw_next_switch_addr" (mut t_addr) ~d_init
 
 (* how many msgs need a vid *)
 let sw_need_vid_ctr = create_ds "sw_need_vid_cntr" (mut t_int) ~init:(mk_cint 0)

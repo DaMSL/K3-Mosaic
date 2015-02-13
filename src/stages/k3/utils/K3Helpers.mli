@@ -288,12 +288,15 @@ type data_struct = { id: string;
                      e: (string * type_t) list;
                      t: type_t;
                      init: expr_t option;
+                     (* init that isn't used right away *)
+                     d_init:expr_t option;
                      map_id: int option;
                    }
 
-val create_ds : ?e:(string * type_t) list -> ?init:expr_t -> ?map_id:int -> string -> type_t -> data_struct
+val create_ds : ?e:(string * type_t) list -> ?init:expr_t -> ?d_init:expr_t -> ?map_id:int -> string -> type_t -> data_struct
 
 val decl_global : data_struct -> declaration_t * annotation_t
+val delayed_init : data_struct -> expr_t
 
 (* add to id,type list *)
 val id_t_add : string -> (string * 'a) list -> (string * 'a) list

@@ -552,7 +552,7 @@ and default_base_value id bt =
   | TTuple   ft         -> VTuple(List.map (default_value id) ft)
   | TCollection (ct,et) -> default_collection_value ct et
   | TIndirect vt        -> VIndirect(ref @@ default_base_value id vt.typ)
-  | TAddress            -> error @@ "no default value for an address for "^id
+  | TAddress            -> VAddress("0.0.0.0", 0)
   | TTarget bt          -> error @@ "no default value for a target "^id
   | TFunction _         -> error @@ "no default value for a function "^id
 

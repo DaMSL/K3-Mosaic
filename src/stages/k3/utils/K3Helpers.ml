@@ -529,17 +529,23 @@ type data_struct = { id: string;
                      e: (string * type_t) list;
                      t: type_t;
                      init: expr_t option;
+                     (* init that isn't used right away *)
+                     d_init:expr_t option;
                      map_id: int option;
                    }
 
-let create_ds ?e ?init ?map_id id t =
+let create_ds ?e ?init ?d_init ?map_id id t =
   let e = unwrap_option [] e in
-  {id; t; e; init; map_id}
+  {id; t; e; init; d_init; map_id}
 
 (* utility functions *)
 let decl_global x = match x.init with
   | Some init -> mk_global_val_init x.id x.t init
   | None      -> mk_global_val x.id x.t
+
+let delayed_init x = match x.d_init with
+  | Some init -> mk_assign x.id init
+  | None      -> failwith "no delayed init"
 
 (* convenience function to add to ids in names *)
 let id_t_add x id_t = List.map (fun (id,t) -> id^x, t) id_t
