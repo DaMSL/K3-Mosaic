@@ -68,18 +68,18 @@ let parse_port p =
   try let r = int_of_string p in if r > 65535 then error () else r
   with Failure _ -> error()
 
+let ident = "[a-zA-Z_][a-zA-Z0-9_]*" (* legal identifier *)
+let num = "[0-9]+"
+let ip = Printf.sprintf "%s.%s.%s.%s" num num num num
+let r = Str.regexp @@
+  Printf.sprintf "\\(%s\\|localhost\\):\\(%s\\)/\\(%s\\)" ip num ident
+
 (* ip-role format is 'ip:port/role' *)
 let parse_ip_role ipr_str =
-  let ident = "[a-zA-Z_][a-zA-Z0-9_]*" in (* legal identifier *)
-  let num = "[0-9]+" in
-  let ip = num^"\\."^num^"\\."^num^"\\."^num in
-  let r = Str.regexp @:
-    Printf.sprintf "\\(%s\\|localhost\\)\\(:%s\\)/\\(%s\\)" ip num ident
-  in
   let error () = invalid_arg "invalid ip string format" in
   if Str.string_match r ipr_str 0 then
     match r_groups ipr_str ~r ~n:3 with
-    | [Some ip; Some port; Some role] -> (ip, parse_port @@ str_drop 1 port), str_drop 1 role
+    | [Some ip; Some port; Some role] -> (ip, parse_port port), role
     | _                               -> error ()
   else error ()
 
