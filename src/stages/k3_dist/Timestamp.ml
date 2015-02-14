@@ -26,8 +26,7 @@ let sw_next_switch_addr =
         mk_map (mk_lambda' D.jobs.e @@ mk_var "addr") @@
           (* get all the switches *)
           mk_filter
-            (mk_lambda' D.jobs.e @@ mk_or (mk_eq (mk_var D.job.id) @@ mk_var D.job_switch.id) @@
-                                         mk_eq (mk_var D.job.id) @@ mk_var D.job_master.id) @@
+            (mk_lambda' D.jobs.e @@ mk_leq (mk_var D.job.id) @@ mk_var D.job_switch.id) @@
             mk_var D.jobs.id) @@
     (* bind the first entry of the list (default option) *)
     mk_case_ns (mk_peek @@ mk_var "addr_list") "first_addr"

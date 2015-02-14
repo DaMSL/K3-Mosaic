@@ -280,8 +280,8 @@ let rec print_value ?(mark_points=[]) v =
     | VSet _ as vs            -> print_collection "{" "}" vs
     | VBag _ as vs            -> print_collection "{|" "|}" vs
     | VList _ as vs           -> print_collection "[" "]" vs
-    | VMap _ as vs            -> print_collection "[|" "|]" vs
-    | VMultimap _ as vs       -> print_collection "[||" "||]" vs
+    | VMap _ as vs            -> print_collection "[:" ":]" vs
+    | VMultimap _ as vs       -> print_collection "[|" "|]" vs
     | VFunction _             -> ps "<fun>"
     | VForeignFunction (_, a, _) -> ps "<foreignfun>"
     | VAddress (ip,port)      -> ps (ip^":"^ string_of_int port)
@@ -362,7 +362,7 @@ let v_peek err_fn c = match c with
   | VList m     -> IList.peek m
   | VMap m      -> maybe None (some |- map_to_tuple) @@ ValueMap.peek m
   | VMultimap m -> ValueMMap.peek m
-  | _ -> err_fn "v_peek" "not a collection"
+  | v -> err_fn "v_peek" @@ Printf.sprintf "not a collection: %s" @@ string_of_value v
 
 let v_combine err_fn x y = match x, y with
   | VSet m,  VSet m'          -> VSet(ISet.combine m m')
@@ -378,7 +378,7 @@ let v_fold err_fn f acc = function
   | VList m     -> IList.fold f acc m
   | VMap m      -> ValueMap.fold (fun k v acc -> f acc @@ VTuple[k;v]) m acc
   | VMultimap m -> ValueMMap.fold f acc m
-  | _ -> err_fn "v_fold" "not a collection"
+  | v -> err_fn "v_fold" @@ Printf.sprintf "not a collection: %s" @@ string_of_value v
 
 let v_iter err_fn f = function
   | VSet m      -> ISet.iter f m
@@ -386,7 +386,7 @@ let v_iter err_fn f = function
   | VList m     -> IList.iter f m
   | VMap m      -> ValueMap.iter (fun k v -> f (VTuple[k;v])) m
   | VMultimap m -> ValueMMap.iter f m
-  | _ -> err_fn "v_iter" "not a collection"
+  | v -> err_fn "v_iter" @@ Printf.sprintf "not a collection: %s" @@ string_of_value v
 
 let v_insert err_fn x m = match x, m with
   | _, VSet m             -> VSet(ISet.insert x m)
@@ -394,7 +394,8 @@ let v_insert err_fn x m = match x, m with
   | _, VList m            -> VList(IList.insert x m)
   | VTuple[k;v], VMap m   -> VMap(ValueMap.add k v m)
   | _, VMultimap m        -> VMultimap(ValueMMap.insert x m)
-  | _ -> err_fn "v_insert" "invalid input"
+  | v, c -> err_fn "v_insert" @@ Printf.sprintf "invalid input: insert: %s\ninto: %s"
+              (string_of_value v) (string_of_value c)
 
 let v_delete err_fn x m = match x, m with
   | _, VSet m             -> VSet(ISet.delete x m)
@@ -402,7 +403,8 @@ let v_delete err_fn x m = match x, m with
   | _, VList m            -> VList(IList.delete x m)
   | VTuple [k; v], VMap m -> VMap(ValueMap.remove k m)
   | _, VMultimap m        -> VMultimap(ValueMMap.delete x m)
-  | _ -> err_fn "v_delete" "invalid input"
+  | v, c -> err_fn "v_delete" @@ Printf.sprintf "invalid input: delete: %s\nfrom: %s"
+              (string_of_value v) (string_of_value c)
 
 let v_update err_fn oldv newv c = match oldv, newv, c with
   | _,_,VSet m                         -> VSet(ISet.update oldv newv m)
@@ -410,16 +412,18 @@ let v_update err_fn oldv newv c = match oldv, newv, c with
   | _,_,VList m                        -> VList(IList.update oldv newv m)
   | VTuple[k;v], VTuple[k';v'], VMap m -> VMap(ValueMap.update k v k' v' m)
   | _,_, VMultimap m                   -> VMultimap(ValueMMap.update oldv newv m)
-  | _ -> err_fn "v_update" "not a collection"
+  | v,v',c -> err_fn "v_update" @@ Printf.sprintf "invalid input: update: %s\nfrom: %s\nin: %s"
+              (string_of_value v) (string_of_value v') (string_of_value c)
 
-let v_empty err_fn ?(no_multimap=false) = function
+let v_empty err_fn ?(no_map=false) ?(no_multimap=false) = function
   | VSet _      -> VSet(ISet.empty)
   | VBag _      -> VBag(ValueBag.empty)
   | VList _     -> VList(IList.empty)
+  | VMap _      when no_map      -> VBag(ValueBag.empty)
+  | VMultimap _ when no_multimap -> VBag(ValueBag.empty)
   | VMap _      -> VMap(ValueMap.empty)
-  | VMultimap m -> if no_multimap then VBag(ValueBag.empty)
-                   else VMultimap(ValueMMap.from_mmap m)
-  | _ -> err_fn "v_empty" "not a collection"
+  | VMultimap m -> VMultimap(ValueMMap.from_mmap m)
+  | c -> err_fn "v_empty" @@ Printf.sprintf "invalid input: %s" (string_of_value c)
 
 let v_empty_of_t = function
   | TSet        -> VSet(ISet.empty)
@@ -430,6 +434,7 @@ let v_empty_of_t = function
 
 (* sort only applies to list *)
 let v_sort err_fn f = function
+  | VSet m  -> VList(IList.sort f @@ IList.of_list @@ ISet.to_list m)
   | VList m -> VList(IList.sort f m)
   | _ -> err_fn "v_sort" "not a list"
 

@@ -339,12 +339,12 @@ and eval_expr (address:address) sched_st cenv texpr =
 
     (* Collection transformers *)
 
-    (* Keeps the same type *)
+    (* Keeps the same type, except for maps*)
     | Map ->
         begin match child_values cenv with
           | nenv, [f; col] ->
             let f' = eval_fn f address sched_st in
-            let zero = v_empty error ~no_multimap:true col in
+            let zero = v_empty error ~no_map:true ~no_multimap:true col in
             let env, c' = v_fold error (fun (env, acc) x ->
               let env', y = f' env x in
               env', v_insert error (value_of_eval y) acc
