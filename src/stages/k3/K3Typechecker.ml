@@ -448,6 +448,8 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
             t_erroru (TMismatch(targ, expected1, "Sort function arg")) () else
           if not (canonical TBool === tret) then
             t_erroru (TMismatch(canonical TBool, tret, "Sort function result")) () else
+          if not (tcol = TList) then
+            t_erroru (TMsg "can only sort on a list") () else
           canonical @@ TCollection(TList, telem)
 
       | Slice ->

@@ -515,6 +515,11 @@ let mk_convert_col src_t dest_t col =
     (mk_empty dest_t)
     col
 
+(* supply only the col part of the dst type *)
+let mk_convert_col' src_t dest_col_t col =
+  let t_c, t_elem = unwrap_tcol src_t in
+  mk_convert_col src_t {src_t with typ=TCollection(dest_col_t, t_elem)} col
+
 let mk_peek_or_zero e = mk_case_ns (mk_peek e) "x"
   (mk_cint 0) (mk_var "x")
 
@@ -589,3 +594,4 @@ let mk_pop col_nm bind_nm fail success =
 (* increment a stateful variable *)
 let mk_incr nm = mk_assign nm @@ mk_add (mk_var nm) @@ mk_cint 1
 let mk_decr nm = mk_assign nm @@ mk_sub (mk_var nm) @@ mk_cint 1
+
