@@ -332,11 +332,10 @@ let get_map_bindings_in_stmt (p:prog_data_t) (stmt_id:stmt_id_t)
   (* make sure we only take bindings not including the value *)
   let lmap_bindings = find_lmap_bindings_in_stmt p stmt_id lmap in
   let rmap_bindings = find_rmap_bindings_in_stmt p stmt_id rmap in
-  List.flatten @@ List.map
+  IntIntSet.of_list @@ List.flatten @@ List.map
     (fun (id, index) ->
       try [index, List.assoc id rmap_bindings]
-      with Not_found -> []
-    )
+      with Not_found -> [])
     lmap_bindings
 
 (* get a list of unique types for maps (no vid) the map *)

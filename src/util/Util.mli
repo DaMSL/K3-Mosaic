@@ -1,4 +1,5 @@
 module IntSet : sig include Set.S with type elt = int end
+module IntIntSet : sig include Set.S with type elt = int * int end
 module IntMap : sig include Map.S with type key = int end
 module StrMap : sig include Map.S with type key = string end
 

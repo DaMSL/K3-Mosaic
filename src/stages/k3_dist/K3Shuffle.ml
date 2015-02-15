@@ -12,17 +12,20 @@ open K3Route
 (* Part of the name is the binding pattern. So long as the combination of
  * binding patterns is the same, we can use the same shuffle function *)
 let shuffle_for p rhs_map_id lhs_map_id bindings =
-  let binds = List.map (fun (r, l) -> Printf.sprintf "%dt%d" r l) bindings in
+  let binds = List.map (fun (r, l) -> Printf.sprintf "%dt%d" r l) @@
+    IntIntSet.elements bindings in
   let bind_s = String.concat "_" binds in
   let bind_s = if bind_s = "" then "" else "_bind_"^bind_s in
   Printf.sprintf "shuffle_%s_to_%s%s" (map_name_of p rhs_map_id) (map_name_of p lhs_map_id) bind_s
 
 let find_shuffle_by_binding shuffle_fns r l b =
-  match List.partition (fun fn -> fn.rmap = r && fn.lmap = l && fn.binding = b) shuffle_fns with
+  match List.partition (fun fn -> fn.rmap = r && fn.lmap = l && IntIntSet.equal fn.binding b) shuffle_fns with
+  | [], _       -> raise Not_found
   | [is], isnot -> is, isnot
-  | _           -> raise Not_found
+  | _, _        -> failwith "too many functions"
 
 let gen_shuffle_fn p rmap lmap bindings fn_name =
+  let bindings = IntIntSet.elements bindings in
   let tuple_types_unwrap = map_types_with_v_for p rmap in
   let tuple_types = wrap_ttuple tuple_types_unwrap in
   let many_tuples_type = wrap_t_of_map tuple_types in
@@ -100,13 +103,15 @@ let gen_shuffle_fn p rmap lmap bindings fn_name =
 
 (* generate all meta information about functions *)
 let gen_meta p =
+  let g_meta = ref [] in
   let gen_trig_meta trig =
     let trig_data = s_and_over_stmts_in_t p rhs_lhs_of_stmt trig in
-    List.fold_left
+    let meta = List.fold_left
       (fun acc_meta (stmt, (rmap, lmap)) ->
         let binding = get_map_bindings_in_stmt p stmt rmap lmap in
         try
-          let fn, others = find_shuffle_by_binding acc_meta rmap lmap binding in
+          let fn, others =
+            find_shuffle_by_binding acc_meta rmap lmap binding in
           let fn = {fn with stmts=IntSet.add stmt fn.stmts} in
           fn :: others
         with Not_found ->
@@ -114,9 +119,12 @@ let gen_meta p =
           let stmts = IntSet.singleton stmt in
           let fn = {name; rmap; lmap; binding; stmts} in
           fn :: acc_meta)
-      [] trig_data
+      !g_meta trig_data
+    in
+    g_meta := meta
   in
-  List.flatten @@ for_all_trigs p @@ gen_trig_meta
+  ignore(for_all_trigs p @@ gen_trig_meta);
+  !g_meta
 
 (* generate all shuffle functions *)
 let functions c =
@@ -125,8 +133,13 @@ let functions c =
 (* external function to find a shuffle function *)
 let find_shuffle_nm c s rmap lmap =
   try
-    let f = List.find (fun x -> x.rmap = rmap && x.lmap = lmap && IntSet.mem s x.stmts) c.shuffle_meta
-    in f.name
+    let fs = List.filter (fun x ->
+      x.rmap = rmap && x.lmap = lmap && IntSet.mem s x.stmts) c.shuffle_meta in
+    begin match fs with
+    | [] -> failwith "missing shuffle fn"
+    | [f] -> f.name
+    | _   -> failwith @@ Printf.sprintf "%d duplicate functions" (List.length fs)
+    end
   with
     Not_found -> failwith @@
       Printf.sprintf "Couldn't find shuffle for stmt %d, rmap %d, lmap %d" s rmap lmap

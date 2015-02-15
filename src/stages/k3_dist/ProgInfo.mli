@@ -1,6 +1,7 @@
 (* Utility functions to get data out of the specialized K3 program data
  * structure *)
 
+open Util
 open K3.AST
 
 exception Bad_data of string
@@ -122,7 +123,7 @@ val slice_key_from_bound : prog_data_t ->
  * showing how a lhs map variable corresponds to a rhs variable
  * starting at 0 index *)
 val get_map_bindings_in_stmt : prog_data_t -> stmt_id_t -> map_id_t -> map_id_t
--> (int * int) list
+-> IntIntSet.t
 
 (* get a list of unique types for maps (no vid) and their map ids *
  * @param type_fn allows to select a different type function for uniqueness *)

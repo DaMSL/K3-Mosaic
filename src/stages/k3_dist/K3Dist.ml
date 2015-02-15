@@ -13,7 +13,7 @@ type shuffle_fn_entry = {
   stmts : IntSet.t;
   rmap : map_id_t;
   lmap : map_id_t;
-  binding : (int * int) list; (* rmap idx, lmap idx *)
+  binding : IntIntSet.t; (* rmap idx, lmap idx *)
   name : string;
 }
 
