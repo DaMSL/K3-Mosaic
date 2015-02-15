@@ -27,7 +27,6 @@ if [ ! -d "./bin" ]; then mkdir bin; fi
 ocamlbuild -use-ocamlfind Driver.native -build-dir ./bin $@
 if [ -f "./bin/src/Driver.native" ]
 then echo "#!/bin/bash" > ./bin/k3
-     echo "export BOLT_CONFIG=$SCRIPTPATH/bolt.cfg" >> ./bin/k3
      echo "$SCRIPTPATH/bin/src/Driver.native \$@" >> ./bin/k3
      chmod +x ./bin/k3
 fi

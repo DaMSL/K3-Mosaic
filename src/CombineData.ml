@@ -99,7 +99,7 @@ let combine_data files combined_t =
     print_endline @@ to_string j line files combined_t;
     loop ()
   in loop ();
-  Printf.printf "-1 | %s" (String.concat "|" @@ List.map default_val combined_t)
+  print_string @@ String.concat "|" @@ "-1" :: (tl @@ List.map default_val combined_t)
 
 let get_sep ss =
   let s = hd ss in

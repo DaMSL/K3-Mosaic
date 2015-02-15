@@ -280,8 +280,9 @@ let map_ids c =
 (* adds an int for trigger selector *)
 let combine_trig_args c =
   let t_data = P.for_all_trigs c.p @@
-    fun t -> P.trigger_id_for_name c.p t, t, P.args_of_t c.p t
+    fun t -> P.trigger_id_for_name c.p t, "sw_"^t, P.args_of_t c.p t
   in
+  let sort t = List.sort (fun x y -> fst x - fst y) t in
   let types, map, _ =
     List.fold_left (fun (types, map, sz) (tid, tnm, targs) -> 
       let rem_ts, used_ts, tmap, sz =
@@ -296,10 +297,10 @@ let combine_trig_args c =
           | y::ys -> ys@no,  y::used_ts, (fst y)::tmap, sz
         ) (types, [], [], sz) targs
       in
-      rem_ts@used_ts, (tid, tnm, List.rev tmap)::map, sz
+      sort @@ rem_ts@used_ts, (tid, tnm, List.rev tmap)::map, sz
     ) ([], [], 1) t_data
   in
-  t_int :: (snd_many @@ List.sort (fun x y -> fst x - fst y) types), map
+  t_int :: (snd_many @@ sort types), map
 
 (* global containing mapping of trig id to trig_name *)
 let trig_ids_id = "trig_ids"
