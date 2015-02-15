@@ -9,6 +9,18 @@ import six
 import re
 from utils import check_exists, check_error, print_system, concat
 
+def get_nice_name(path):
+    (first, last) = os.path.split(path)
+    (last, _) = os.path.splitext(last)
+    (first, middle) = os.path.split(first)
+
+    matchobj = re.match('query(.*)', last)
+    if matchobj:
+        nice_name = middle + matchobj.group(1)
+    else:
+        nice_name = last
+    return nice_name
+
 def run(target_file,
         num_nodes=1,
         queue_type="global",
@@ -16,12 +28,15 @@ def run(target_file,
         verbose=True,
         distrib=False,
         use_idx=False,
-        enable_gc=True
+        enable_gc=True,
+        new_k3=True,
+        folds_only=True
         ):
 
     to_root = ".."
     script_path = os.path.abspath(os.path.dirname(__file__))
     target_file = os.path.abspath(target_file)
+    nice_name = get_nice_name(target_file)
     root_path = os.path.join(script_path, to_root)
     dbtoaster_dir = os.path.join(root_path, "external/dbtoaster")
     dbtoaster_name = "bin/dbtoaster_release"
@@ -33,11 +48,13 @@ def run(target_file,
     saved_dir = os.path.abspath(os.path.curdir)
     trace_file = os.path.join(saved_dir, "temp.trace")
     m3_file = os.path.join(saved_dir, "temp.m3")
-    k3_file = os.path.join(saved_dir, "temp.k3")
-    k3_file2 = os.path.join(saved_dir, "temp2.k3")
-    k3_file3 = os.path.join(saved_dir, "temp3.k3")
-    k3dist_file = os.path.join(saved_dir, "temp.k3dist")
-    data_file = os.path.join(saved_dir, "temp.data")
+    k3_file = os.path.join(saved_dir, "temp.k3o")
+    k3_file2 = os.path.join(saved_dir, "temp2.k3o")
+    k3_file3 = os.path.join(saved_dir, "temp3.k3o")
+    k3dist_file = os.path.join(saved_dir, nice_name + ".k3o")
+    data_file = os.path.join(saved_dir, nice_name + ".csv")
+    k3new_file = os.path.join(saved_dir, nice_name + ".k3")
+    k3new_part_file = os.path.join(saved_dir, nice_name + ".part")
     error_file = os.path.join(saved_dir, "temp.err")
     part_file = os.path.join(saved_dir, "temp.part")
     output_file = os.path.join(saved_dir, "temp.out")
@@ -46,6 +63,7 @@ def run(target_file,
     check_exists("k3o", k3o)
     if distrib:
         check_exists("partmap_tool", partmap_tool)
+        check_exists("combine_data", combine_tool)
 
     # change to dbtoaster path (dbtoaster needs it)
     if verbose:
@@ -144,6 +162,18 @@ def run(target_file,
         # always add the master and timer
         peer_list = ["-n localhost:40000/master", "localhost:50000/timer"] + node_list
         peer_cmd = ','.join(peer_list)
+
+        if new_k3:
+            # convert to the new k3 file format
+            fold_cmd = ""
+            if folds_only:
+                fold_cmd = '--k3new_folds'
+
+            six.print_("\nConverting to new k3 file format...")
+            cmd = concat([k3o, "-i k3 -l k3new", fold_cmd, "--datafile", data_file, k3dist_file, ">", k3new_file, "2>", error_file])
+            print_system(cmd, verbose)
+            if check_error(error_file, verbose, False):
+                return False
 
         # run the k3 driver on the input
         cmd = concat([k3o, "--test", peer_cmd, "-q", queue_type, load_path, k3dist_file, ">", output_file, "2>", error_file])

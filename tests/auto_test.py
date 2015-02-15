@@ -40,6 +40,8 @@ def run():
                         default=False, help="Use multi index maps")
     parser.add_argument('--gc', action='store_true', dest='enable_gc',
                         default=False, help="Enable garbage collector")
+    parser.add_argument('--no_new', action='store_false', dest='new_k3',
+                        default=True, help="Create k3new file")
 
     args = parser.parse_args()
 
@@ -78,7 +80,7 @@ def run():
         if verbose:
             six.print_("")
         if not args.distributed:
-            res = dist_test.run(test_file, verbose=verbose, distrib=False) 
+            res = dist_test.run(test_file, verbose=verbose, distrib=False)
         else:
             res = dist_test.run(test_file,
                                 num_nodes=args.num_nodes,
@@ -87,7 +89,8 @@ def run():
                                 verbose=verbose,
                                 distrib=True,
                                 use_idx=args.use_idx,
-                                enable_gc=args.enable_gc)
+                                enable_gc=args.enable_gc,
+                                new_k3=args.new_k3)
         # check if a test failed
         if not res:
             six.print_("[ERROR]")
