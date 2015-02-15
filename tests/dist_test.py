@@ -52,7 +52,7 @@ def run(target_file,
     k3_file2 = os.path.join(saved_dir, "temp2.k3o")
     k3_file3 = os.path.join(saved_dir, "temp3.k3o")
     k3dist_file = os.path.join(saved_dir, nice_name + ".k3o")
-    data_file = os.path.join(saved_dir, nice_name + ".csv")
+    data_file = nice_name + ".csv"
     k3new_file = os.path.join(saved_dir, nice_name + ".k3")
     k3new_part_file = os.path.join(saved_dir, nice_name + ".part")
     error_file = os.path.join(saved_dir, "temp.err")

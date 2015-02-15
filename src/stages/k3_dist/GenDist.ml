@@ -988,19 +988,19 @@ let nd_do_corrective_trigs c s_rhs ast trig_name corrective_maps =
 let roles_of c (ast:program_t) =
   (* extra flows for master *)
   let ms_flows = List.map mk_no_anno [
-     Source(Resource("init",
+     Source(Resource("master",
        Stream(t_unit, ConstStream(mk_singleton (wrap_tlist t_unit) [mk_cunit]))));
-     BindFlow("init", Proto.ms_send_addr_self_nm);
-     Instruction(Consume("init")); ] in
+     BindFlow("master", Proto.ms_send_addr_self_nm);
+     Instruction(Consume("master")); ] in
   let sw_flows = List.map mk_no_anno [
-    Source(Resource("src",
+    Source(Resource("switch",
       Handle(wrap_ttuple @@ fst @@ combine_trig_args c,
         File c.stream_file,
         CSV)));
-    BindFlow("src", sw_demux_nm); ]
+    BindFlow("switch", sw_demux_nm); ]
   in
   List.map mk_no_anno [
-    Role("master", ms_flows @ sw_flows);
+    Role("master", ms_flows);
     Role("switch", sw_flows);
     Role("timer", []);
     Role("node", []);

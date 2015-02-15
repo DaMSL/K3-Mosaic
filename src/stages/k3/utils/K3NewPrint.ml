@@ -22,7 +22,7 @@ let lhov i = [lazy (obv i)]
 let lv i = [lazy (obx i)]   (* open vertical box *)
 let lcb () = [lazy (cb ())]     (* close box *)
 (*let lhv 2 = [lazy (obc 2)]*)
-let lcut () = [lazy (pbsi 0 !indent)] (* print nothing or split line *)
+let lcut () = [lazy (pbsi 0 0)] (* print nothing or split line *)
 let lind () = [lazy (indent := !indent + 2; pbsi 1 !indent)] (* print break with indent or space *)
 let undo_indent () = [lazy (indent := !indent - 2)]
 let lsp () = [lazy (pbsi 1 !indent)] (* print space or split line *)
@@ -67,6 +67,13 @@ let default_config = {
                      }
 
 let verbose_types_config = default_config
+
+let typecheck e =
+  try 
+    T.type_of_expr e
+  with T.TypeError _ -> 
+    (* try to deduce expression type if missing *)
+    T.type_of_expr @@ T.deduce_expr_type ~override:false [] [] e
 
 (* light type checking for expressions we create *)
 let light_type c e =
@@ -164,7 +171,7 @@ let rec lazy_base_type ?(brace=true) ?(mut=false) ?(empty=false) c ~in_col t =
   | TMaybe(vt)   -> wrap(lps "option " <| lazy_type c ~in_col vt)
   | TAddress     -> wrap @@ lps "address" (* ? *)
   | TTarget bt   -> wrap (lps "target" <| lazy_type c ~in_col bt)
-  | TUnknown     -> wrap @@ lps "unknown"
+  | TUnknown     -> wrap @@ lps "()"
   | TTop         -> wrap @@ lps "top"
   | TIndirect vt -> wrap (lps "ind " <| lazy_type c ~in_col vt)
   | TTuple(vts)  -> (* tuples become records *)
@@ -537,7 +544,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
   | Singleton _ ->
     (* Singletons are sometimes typed with unknowns (if read from a file) *)
     let e = U.decompose_singleton expr in
-    let t = T.type_of_expr expr in
+    let t = typecheck expr in
     lazy_collection_vt c t @@ lazy_expr c e
   | Combine ->
     let rec assemble_list c e =  (* print out in list format *)
@@ -673,7 +680,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
       let ids, bound, bexpr = U.decompose_let expr in
       begin match ids with
         | [id] -> (* let *)
-          lps "let" <| lsp () <| lps "id" <| lsp () <| lps "=" <| lsp () <|
+          lps "let" <| lsp () <| lps id <| lsp () <| lps "=" <| lsp () <|
           wrap_indent (lazy_expr c bound) <| lsp () <| lps "in" <| lsp () <|
           wrap_indent (lazy_expr c bexpr)
         | _   ->  (* bind deconstruct *)
@@ -844,7 +851,7 @@ let rec lazy_resource_pattern c = function
 
 let lazy_stream c = function
   | RandomStream i -> lps "random" <| lazy_paren (lps @@ string_of_int i)
-  | ConstStream e  -> lps "stream" <| lazy_paren (lazy_expr c e)
+  | ConstStream e  -> lps "value" <| lazy_paren (lazy_expr c e)
 
 let lazy_resource c r =
   let common t = lazy_type c t <| lps " = " in
@@ -853,15 +860,18 @@ let lazy_resource c r =
   | Stream(t, st) -> common t <| lazy_stream c st
   | Pattern(pat) -> lps "pattern " <| lazy_resource_pattern c pat
 
-let lazy_flow c = function
-  | Source(Code(id, arg, vars, expr))
-  | Sink(Code(id, arg, vars, expr)) -> lazy_trigger c id arg vars expr
-  | Source(Resource(id, r)) ->
-      lps ("source "^id^" : ") <| lazy_resource c r
-  | Sink(Resource(id, r)) ->
-      lps ("sink "^id^" : ") <| lazy_resource c r
-  | BindFlow(id1, id2) -> lps @@ "bind "^id1^" -> "^id2
-  | Instruction(Consume id) -> lps @@ "consume "^id
+let lazy_flow c e =
+  let out =
+    match e with
+    | Source(Code(id, arg, vars, expr))
+    | Sink(Code(id, arg, vars, expr)) -> lazy_trigger c id arg vars expr
+    | Source(Resource(id, r)) ->
+        lps ("source "^id^" : ") <| lazy_resource c r
+    | Sink(Resource(id, r)) ->
+        lps ("sink "^id^" : ") <| lazy_resource c r
+    | BindFlow(id1, id2) -> lps @@ "feed "^id1^" |> "^id2
+    | Instruction(Consume id) -> []
+  in out <| lcut () <| lcut ()
 
 let lazy_flow_program c fas = lps_list ~sep:"" CutHint (lazy_flow c |- fst) fas
 
@@ -881,13 +891,12 @@ let lazy_declaration c d =
             lps " =" <| lsp () <| lazy_expr c e
     end in
     (lps @@ "declare "^id^" :" <| lsp () <| lazy_type c t <| end_part)
-  | Role(id, fprog) ->
-      lps ("role "^id^" ") <| lazy_box_brace (lazy_flow_program c fprog)
+  | Role(id, fprog) -> lazy_flow_program c fprog
   | Flow fprog -> lazy_flow_program c fprog
   | DefaultRole id -> lps ("default role "^id)
   | Foreign(id, t) -> lps ("declare "^id^" :") <| lsp () <| lazy_type c t
   in
-  wrap_hov 0 out <| lcut ()
+  wrap_hov 0 out <| lcut () <| lcut ()
 
 let wrap_f = wrap_formatter ~margin:80
 
@@ -903,16 +912,9 @@ module StringSet = Set.Make(struct type t=string let compare=String.compare end)
 
 (* remove/convert functions that are renamed in k3new *)
 let filter_incompatible prog =
-  let r_demux = Str.regexp "^demux_.*" in
-  let filter_trigs fl =
-    filter_map (fun ((s,_) as trig) -> match s with
-      | Sink(Code(id, _, _, _)) when r_match r_demux id -> None
-      | _ -> Some trig
-    ) fl
-  in
   let r_hash = Str.regexp "^hash.*" in
   let drop_globals = List.fold_left (flip StringSet.add) StringSet.empty
-    ["error"; "divf"; "mod"; "float_of_int"; "int_of_float"; "get_max_int"; "parse_sql_date"; "peers"; "pmap_input" ]
+    ["error"; "divf"; "mod"; "float_of_int"; "int_of_float"; "get_max_int"; "parse_sql_date"; "peers"; ]
   in
   filter_map (fun ((d,a) as dec) ->
     (* we don't want the monomorphic hash functions *)
@@ -920,8 +922,6 @@ let filter_incompatible prog =
     | Foreign(id, _)   when StringSet.mem id drop_globals -> None
     | Foreign(id, _)   when r_match r_hash id             -> None
     | Global(id, _, _) when StringSet.mem id drop_globals -> None
-    | Flow(fl)      -> Some((Flow(filter_trigs fl), a))
-    | Role _        -> None
     | DefaultRole _ -> None
     | _             -> Some dec
   ) prog
@@ -931,10 +931,8 @@ let filter_incompatible prog =
 let string_of_program ?(map_to_fold=false) prog (env, trig_env) =
   let config = {env; trig_env; map_to_fold} in
   wrap_f @@ fun () ->
-    let l = lps_list ~sep:"" CutHint (lazy_declaration config |- fst) prog in
-    obx 0;  (* vertical box *)
-    force_list l;
-    cb
+    let l = wrap_hv 0 (lps_list ~sep:"" CutHint (lazy_declaration config |- fst) prog) in
+    force_list l
 
 let r_insert = Str.regexp "^insert_\\(.+\\)$"
 let r_insert_bad = Str.regexp "^insert_.*\\(do\\|send\\|rcv\\)"

@@ -109,7 +109,7 @@ let type_of_expr e =
   let extract_type = function
     Type t -> t | _ -> error "Invalid type annotation" InvalidTypeAnnotation in
   let type_annotations = List.filter is_type_annotation (meta_of_expr e) in
-  match type_annotations with
+  match nub type_annotations with
     | []  -> error "Untyped expression" UntypedExpression
     | [x] -> extract_type x
     | l   -> error "Multiple possible types" @@ MultiplePossibleTypes(

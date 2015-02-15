@@ -206,7 +206,7 @@ let switches =
   let d_init =
     mk_fst_many (snd_many jobs.e) @@
       mk_filter
-        (mk_lambda' jobs.e @@ mk_eq (mk_var job.id) @@ mk_var job_node.id) @@
+        (mk_lambda' jobs.e @@ mk_eq (mk_var job.id) @@ mk_var job_switch.id) @@
         mk_var jobs.id in
   let e = ["addr", t_addr] in
   create_ds "switches" (mut @@ wrap_tbag' @@ snd_many e) ~e ~d_init
