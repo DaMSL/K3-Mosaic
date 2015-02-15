@@ -66,7 +66,7 @@ let to_string i line files combined_t : string=
   (* create default values *)
   let full_line = Array.of_list @@ List.map default_val combined_t in
   (* replace via shuffling *)
-  List.iter2 (fun e place -> full_line.(place + 1) <- e) elems file.shuffle_map;
+  List.iter2 (fun e place -> full_line.(place) <- e) elems file.shuffle_map;
   full_line.(0) <- soi file.trig_id;
   String.concat "|" @@ Array.to_list full_line
 

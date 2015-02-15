@@ -277,6 +277,7 @@ let map_ids c =
   create_ds "map_ids" t ~e ~init
 
 (* combine all the trig args into a minimal set *)
+(* adds an int for trigger selector *)
 let combine_trig_args c =
   let t_data = P.for_all_trigs c.p @@
     fun t -> P.trigger_id_for_name c.p t, t, P.args_of_t c.p t
@@ -296,9 +297,9 @@ let combine_trig_args c =
         ) (types, [], [], sz) targs
       in
       rem_ts@used_ts, (tid, tnm, List.rev tmap)::map, sz
-    ) ([], [], 0) t_data
+    ) ([], [], 1) t_data
   in
-  snd_many @@ List.sort (fun x y -> fst x - fst y) types, map
+  t_int :: (snd_many @@ List.sort (fun x y -> fst x - fst y) types), map
 
 (* global containing mapping of trig id to trig_name *)
 let trig_ids_id = "trig_ids"

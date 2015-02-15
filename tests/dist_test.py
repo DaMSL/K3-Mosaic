@@ -6,6 +6,7 @@
 
 import os
 import six
+import re
 from utils import check_exists, check_error, print_system, concat
 
 def run(target_file,
@@ -27,6 +28,7 @@ def run(target_file,
     dbtoaster = os.path.join(dbtoaster_dir, dbtoaster_name)
     k3o = os.path.join(root_path, "bin/k3")
     partmap_tool = os.path.join(root_path, "bin/partmap_tool")
+    combine_tool = os.path.join(root_path, "bin/combine_data")
 
     saved_dir = os.path.abspath(os.path.curdir)
     trace_file = os.path.join(saved_dir, "temp.trace")
@@ -35,6 +37,7 @@ def run(target_file,
     k3_file2 = os.path.join(saved_dir, "temp2.k3")
     k3_file3 = os.path.join(saved_dir, "temp3.k3")
     k3dist_file = os.path.join(saved_dir, "temp.k3dist")
+    data_file = os.path.join(saved_dir, "temp.data")
     error_file = os.path.join(saved_dir, "temp.err")
     part_file = os.path.join(saved_dir, "temp.part")
     output_file = os.path.join(saved_dir, "temp.out")
@@ -83,6 +86,17 @@ def run(target_file,
     if check_error(error_file, verbose) or check_error(k3_file, verbose, True):
         return False
 
+    # get the files we're using
+    s = open(k3_file, 'r').read()
+    matches = re.findall(r'\("(.+)", csv\)', s)
+    if matches is None:
+        six.print_("failed to find file references")
+        return False
+
+    read_files = []
+    for m in matches:
+        read_files += [os.path.join(dbtoaster_dir, m)]
+
     load_path = concat(["--load_path", dbtoaster_dir])
 
     # execution diverges from here
@@ -109,9 +123,14 @@ def run(target_file,
         if check_error(part_file, verbose, True):
             return False
 
+        # combine the data files
+        cmd = concat([combine_tool, "--k3", k3dist_file] + read_files + ['>', data_file, '2>', error_file])
+        print_system(cmd, verbose)
+        if check_error(error_file, verbose):
+            return False
+
         # create another k3 distributed file (with partition map)
-        cmd = concat([k3o, "-p -i m3 -l k3disttest", m3_file, create_cmd, "-m", part_file, idx_cmd, gc_cmd]
-                + [">", k3dist_file, "2>", error_file])
+        cmd = concat([k3o, "-p -i m3 -l k3disttest", m3_file, create_cmd, "-m", part_file, idx_cmd, gc_cmd, "--sfile", data_file] + [">", k3dist_file, "2>", error_file])
         print_system(cmd, verbose)
         if check_error(error_file, verbose) or check_error(k3dist_file, verbose, True):
             return False

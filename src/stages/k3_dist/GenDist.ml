@@ -369,7 +369,6 @@ let sw_start_fn (c:config) trig =
 let sw_demux_nm = "sw_demux"
 let sw_demux c =
   let combo_t, t_arg_map = D.combine_trig_args c in
-  let combo_t = t_int :: combo_t in
   let sentry_code =
     mk_if (mk_eq (mk_fst @@ mk_var "args") (mk_cint @@ -1))
       Proto.sw_seen_sentry @@
@@ -379,6 +378,7 @@ let sw_demux c =
   List.fold_right (fun (t_id, _, arg_indices) acc ->
     mk_if (mk_eq (mk_fst @@ mk_var "args") @@ mk_cint t_id)
       (mk_apply' ("sw_"^P.trigger_name_for_id c.p t_id) @@
+        (* add 1 for tuple access *)
         mk_tuple @@ List.map (fun i -> mk_subscript (i+1) @@ mk_var "args") arg_indices)
       acc)
     t_arg_map
@@ -1089,6 +1089,7 @@ let gen_dist ?(use_multiindex=false) ?(enable_gc=false) ?(stream_file="XXX") p p
       (if c.enable_gc then GC.triggers c else []) @
       TS.triggers @
       Timer.triggers c @
+      [sw_demux c] @
       [sw_driver_trig c] @
       proto_trigs @
       send_corrective_trigs c] @
