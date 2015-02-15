@@ -12,6 +12,8 @@ module KH = K3Helpers
 
 exception MissingType of int * string
 
+let indent = ref 0
+
 let force_list = List.iter force
 
 (* lazy functions *)
@@ -20,9 +22,10 @@ let lhov i = [lazy (obv i)]
 let lv i = [lazy (obx i)]   (* open vertical box *)
 let lcb () = [lazy (cb ())]     (* close box *)
 (*let lhv 2 = [lazy (obc 2)]*)
-let lcut () = [lazy (pbsi 0 0)] (* print nothing or split line *)
-let lind () = [lazy (pbsi 1 2)] (* print break with indent or space *)
-let lsp () = [lazy (pbsi 1 0)] (* print space or split line *)
+let lcut () = [lazy (pbsi 0 !indent)] (* print nothing or split line *)
+let lind () = [lazy (indent := !indent + 2; pbsi 1 !indent)] (* print break with indent or space *)
+let undo_indent () = [lazy (indent := !indent - 2)]
+let lsp () = [lazy (pbsi 1 !indent)] (* print space or split line *)
 let lps s = [lazy (ps s)]      (* print string *)
 let lps_list ?(sep=", ") cut_t f l =
   [lazy (ps_list ~sep:sep cut_t (force_list |- f) l)]
@@ -40,11 +43,12 @@ let lbox b f = b <| f <| lcb ()
 let wrap_hv i f = lbox (lhv i) f
 let wrap_hov i f = lbox (lhov i) f
 let wrap_indent f = wrap_hov 2 f
+(* let wrap_indent f = f (* lind () <| f <| undo_indent () *) *)
 
 let lazy_concat ?(sep=lsp) f l =
   let len = List.length l - 1 in
   let l2 = list_populate (fun _ -> sep ()) 0 len in
-  wrap_hov 0 @@ List.flatten @@ list_intersperse (List.map f l) l2
+  List.flatten @@ list_intersperse (List.map f l) l2
 
 (* separator for lazy_concat *)
 let lcomma () = lps "," <| lsp ()
@@ -74,9 +78,9 @@ let light_type c e =
     exit 1
 
 (* Get a binding id from a number *)
-let id_of_num i = Printf.sprintf "_b%d_" i
+let id_of_num i = Printf.sprintf "b%d" i
 (* Get a record id from a number *)
-let record_id_of_num ?(prefix="r") i = Printf.sprintf "_%s%d_" prefix i
+let record_id_of_num ?(prefix="r") i = Printf.sprintf "%s%d" prefix i
 
 (* Add record ids to a list *)
 let add_record_ids ?prefix l =
@@ -420,8 +424,7 @@ and handle_lambda c ~expr_info ~prefix_fn arg e =
   let final_exec bindings arg in_record =
     let binds = bindings <| deep_bind ~in_record c arg in
     (* for curried arguments, we deep bind at a deeper level *)
-    write_lambda arg in_record <| lind () <|
-      wrap_hov 0 @@
+    write_lambda arg in_record <| 
       (* for the final expr, we may need to wrap the output in a record *)
         binds <| lazy_expr c (prefix_fn e) ~expr_info:(ANonLambda, out_rec)
   in
@@ -623,8 +626,8 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
       | _ -> function_application c e1 [e2]
     end
   | Block -> let es = U.decompose_block expr in
-    lps "(" <| lind () <|
-    wrap_hv 0 (lps_list ~sep:";" CutHint (lazy_expr c) es <| lsp ())
+    lps "(" <| wrap_indent (
+    wrap_hv 0 (lps_list ~sep:";" CutHint (wrap_hov 0 |- lazy_expr c) es <| lsp ()))
       <| lps ")"
 
   | IfThenElse -> let e1, e2, e3 = U.decompose_ifthenelse expr in
@@ -735,7 +738,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
   | Subscript _ -> let i, tup = U.decompose_subscript expr in
       let t = KH.unwrap_ttuple @@ T.type_of_expr tup in
       let id_t = add_record_ids t in
-      let id = fst @@ at id_t i in
+      let id = fst @@ at id_t (i-1) in
       (lazy_paren @@ lazy_expr c tup) <| lps "." <| lps id
 
   | SliceIdx(idx, comp) -> let col, pat = U.decompose_slice expr in
@@ -797,7 +800,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
   match snd expr_info with
   | OutRec ->
     begin match U.tag_of_expr expr with
-    | Lambda _ -> wrap @@ analyze ()
+    | Lambda _ -> analyze ()
       (* don't wrap a lambda itself *)
     | _ ->
         (* check the type of the expression *)
@@ -808,21 +811,21 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
           end
         in
         begin match t.typ with
-        | TTuple _ -> wrap @@ analyze ()
+        | TTuple _ -> analyze ()
         | _        -> lazy_expr ~expr_info:((fst expr_info, Out))
                         ~prefix_fn c @@ light_type c @@ KH.mk_tuple ~force:true [expr]
         end
     end
-  | _ -> wrap @@ analyze ()
+  | _ -> analyze ()
 
 let lazy_trigger c id arg vars expr =
   let is_block expr = match U.tag_of_expr expr with Block -> true | _ -> false in
   let indent f = if is_block expr
                then lps " " <| f
-               else lind () <| lbox (lhov 0) f in
-  lps ("trigger "^id) <| lps " : " <|
+               else wrap_indent f in
+  wrap_indent (lps ("trigger "^id) <| lps " : " <|
   lazy_type ~in_col:false c @@ KH.type_of_arg arg <| lsp () <|
-  lps "=" <| indent (lazy_expr c @@ KH.mk_lambda arg expr) <| lcut ()
+  lps "=" <| lsp () <| lazy_expr c @@ KH.mk_lambda arg expr <| lcut ())
 
 let channel_format c = function
   | CSV  -> "csv"
@@ -877,14 +880,14 @@ let lazy_declaration c d =
           with Failure _ -> (* normal global *)
             lps " =" <| lsp () <| lazy_expr c e
     end in
-    wrap_hov 2 (lps @@ "declare "^id^" :" <| lsp () <| lazy_type c t <| end_part)
+    (lps @@ "declare "^id^" :" <| lsp () <| lazy_type c t <| end_part)
   | Role(id, fprog) ->
       lps ("role "^id^" ") <| lazy_box_brace (lazy_flow_program c fprog)
   | Flow fprog -> lazy_flow_program c fprog
   | DefaultRole id -> lps ("default role "^id)
   | Foreign(id, t) -> lps ("declare "^id^" :") <| lsp () <| lazy_type c t
   in
-  wrap_hv 0 out <| lcut ()
+  wrap_hov 0 out <| lcut ()
 
 let wrap_f = wrap_formatter ~margin:80
 
