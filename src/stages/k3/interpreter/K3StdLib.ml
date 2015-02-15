@@ -359,7 +359,7 @@ let decl = wrap_tfunc (wrap_ttuple @@ snd_many args) ret
 let _ = Hashtbl.add func_table name (decl, wrap_args args, fn)
 
 (* shutdown *)
-let name = "ShutDown"
+let name = "haltEngine"
 let args = unit_arg
 let ret = t_unit
 let fn e = e, VTemp VUnit

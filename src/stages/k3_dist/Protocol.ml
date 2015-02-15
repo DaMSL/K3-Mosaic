@@ -135,7 +135,7 @@ let ms_send_addr_self =
 let shutdown_trig_nm = "shutdown_trig"
 let shutdown_trig =
   mk_code_sink' shutdown_trig_nm unit_arg [] @@
-  mk_apply' "ShutDown" mk_cunit
+  mk_apply' "haltEngine" mk_cunit
 
 let ms_rcv_node_done_cnt =
   create_ds "ms_rcv_node_done_cnt" (mut t_int) ~init:(mk_cint 0)

@@ -52,7 +52,7 @@ let stdlib = List.map add_foreign_fn [
   "load_csv_bag";
   "now_int";
   "sleep";
-  "ShutDown";
+  "haltEngine";
 ]
 
 let add_globals_k3 k3_globals ds = k3_globals@ds
