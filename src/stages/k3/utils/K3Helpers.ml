@@ -379,8 +379,8 @@ let vars_to_ids = List.map (fun x -> match U.tag_of_expr x with
   | _               -> failwith "Not a var or unknown")
 
 (* check if a collection is empty *)
-let mk_is_empty collection typ =
-  mk_eq collection @@ mk_empty typ
+let mk_is_empty collection ifyes ifnot =
+  mk_case_sn (mk_peek collection) "_" ifyes ifnot
 
 (* checks if a member of a collection is present *)
 let mk_has_member collection pattern typ =

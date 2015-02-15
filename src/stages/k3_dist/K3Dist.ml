@@ -210,6 +210,14 @@ let switches =
   let e = ["addr", t_addr] in
   create_ds "switches" (mut @@ wrap_tbag' @@ snd_many e) ~e ~d_init
 
+let num_switches =
+  let d_init = mk_size_slow switches in
+  create_ds "num_switches" (mut t_int) ~d_init
+
+let num_nodes =
+  let d_init = mk_size_slow nodes in
+  create_ds "num_nodes" (mut t_int) ~d_init
+
 let sw_driver_trig_nm = "sw_driver_trig"
 
 (* timing data structures *)
@@ -327,7 +335,16 @@ let sw_state_pre_init = create_ds "sw_state_pre_init" t_int ~init:(mk_cint 0)
 let sw_state_idle     = create_ds "sw_state_idle"     t_int ~init:(mk_cint 1)
 let sw_state_sending  = create_ds "sw_state_sending"  t_int ~init:(mk_cint 2)
 let sw_state_wait_vid = create_ds "sw_state_wait_vid" t_int ~init:(mk_cint 3)
+let sw_state_done     = create_ds "sw_state_done"     t_int ~init:(mk_cint 4)
 let sw_state = create_ds "sw_state" (mut t_int) ~init:(mk_var sw_state_pre_init.id)
+
+(* State of the node:
+  * 0: normal
+  * 1: done (look for being done)
+*)
+let nd_state_normal = create_ds "nd_state_normal" t_int ~init:(mk_cint 0)
+let nd_state_done   = create_ds "nd_state_done"   t_int ~init:(mk_cint 1)
+let nd_state = create_ds "nd_state" (mut t_int) ~init:(mk_var nd_state_normal.id)
 
 (* buffers for insert/delete -- we need a per-trigger list *)
 (* these buffers don't inlude a vid, unlike the logs in the nodes *)
@@ -507,13 +524,19 @@ let global_vars c dict =
       nodes;
       switches;
       num_peers;
+      num_switches;
+      num_nodes;
       map_ids c;
       nd_stmt_cntrs;
       nd_log_master;
+      nd_state_normal;
+      nd_state_done;
+      nd_state;
       sw_state_pre_init;
       sw_state_idle;
       sw_state_sending;
       sw_state_wait_vid;
+      sw_state_done;
       sw_state;
       sw_trig_buf_idx;
       ms_start_time;

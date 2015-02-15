@@ -246,7 +246,7 @@ let gen_route_fn p map_id =
           mk_flatten @@ mk_map
             (* for every domain element in the domain *)
             (mk_lambda (wrap_args ["domain_element", t_int]) @@
-              mk_if (mk_is_empty (mk_var "prev_cart_prod") free_cart_prod_type)
+              mk_is_empty (mk_var "prev_cart_prod")
                 (mk_singleton free_cart_prod_type
                   [mk_singleton inner_cart_prod_type
                     [mk_var "i"; mk_var "domain_element"]]) @@
@@ -291,8 +291,7 @@ let gen_route_fn p map_id =
           (mk_empty output_type) @@
           mk_var "free_cart_prod"
       ) @@
-    mk_if
-      (mk_is_empty (mk_var "sorted_ip_list") @@ sorted_ip_list_type)
+    mk_is_empty (mk_var "sorted_ip_list")
       (mk_singleton output_type
         [mk_apply' "get_ring_node" @@ mk_tuple (* empty ip list *)
           [mk_var "bound_bucket"; mk_var "max_val"]]) @@

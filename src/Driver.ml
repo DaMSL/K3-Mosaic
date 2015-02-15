@@ -429,7 +429,7 @@ let print_k3_test_program = function
             (fun d -> not (is_role d || is_def_role d)) p in
           (* add the produced test roles and trigger *)
           (* debug *)
-          (*print_endline code_s;*)
+          print_endline code_s;
           let s = parse_k3_prog code_s in
           let new_p = filter_p @ s in
           new_p, tests_vals

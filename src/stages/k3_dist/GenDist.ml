@@ -135,13 +135,16 @@ let nd_check_stmt_cntr_index =
           (* delete it and return true *)
           (mk_block [
             mk_delete nd_stmt_cntrs.id [mk_var lookup];
+            (* code to check if we're done *)
+            Proto.nd_delete_stmt_ctrs;
             mk_ctrue ])
           (* else return false *)
           mk_cfalse]) @@
       (* else: no value in the counter *)
       mk_block [
         (* Initialize if the push arrives before the put. *)
-        mk_insert nd_stmt_cntrs.id @@ part_pat_as_vars @ [mk_cint(-1)];
+        Proto.nd_insert_stmt_cntr @@
+          mk_insert nd_stmt_cntrs.id @@ part_pat_as_vars @ [mk_cint(-1)];
         mk_cbool false ]
 
 (* add_delta_to_buffer *)
@@ -620,7 +623,8 @@ mk_code_sink'
                   mk_cunit @@
                   P.stmts_of_t c.p trig_name) @@
                 mk_cunit ]) @@
-          mk_insert D.nd_stmt_cntrs.id @@ pat @@ mk_var "count") @@
+          Proto.nd_insert_stmt_cntr @@
+            mk_insert D.nd_stmt_cntrs.id @@ pat @@ mk_var "count") @@
         mk_var "stmt_id_cnt_list") ::
       (if c.enable_gc then [GC.nd_ack_send_code ~addr_nm:"sender_ip" ~vid_nm:"vid"] else [])
 
@@ -909,8 +913,8 @@ List.map
           mk_iter
             (mk_lambda' ["compute_vid", t_vid] @@
               (* check if our stmt_counter is deleted: it should be *)
-              mk_case_ns (mk_peek @@ mk_slice' D.nd_stmt_cntrs.id
-                            [mk_var "compute_vid"; mk_cint stmt_id; mk_cunknown]) "_"
+              mk_is_empty (mk_slice' D.nd_stmt_cntrs.id
+                            [mk_var "compute_vid"; mk_cint stmt_id; mk_cunknown])
                 (* if so, get bound vars from log *)
                 (mk_let
                   (fst_many @@ args_of_t_with_v c trig_name)
