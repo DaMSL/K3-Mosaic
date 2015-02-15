@@ -379,7 +379,7 @@ let sw_demux c =
   List.fold_right (fun (t_id, _, arg_indices) acc ->
     mk_if (mk_eq (mk_fst @@ mk_var "args") @@ mk_cint t_id)
       (mk_apply' ("sw_"^P.trigger_name_for_id c.p t_id) @@
-        mk_tuple @@ List.map (fun i -> mk_subscript i @@ mk_var "args") arg_indices)
+        mk_tuple @@ List.map (fun i -> mk_subscript (i+1) @@ mk_var "args") arg_indices)
       acc)
     t_arg_map
     sentry_code

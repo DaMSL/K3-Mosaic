@@ -5,3 +5,5 @@ open K3Route
 
 exception ProcessingFailed of string
 val gen_dist : ?use_multiindex:bool -> ?enable_gc:bool -> ?stream_file:string -> prog_data_t -> part_map_t -> program_t -> program_t
+
+val sw_demux_nm : id_t

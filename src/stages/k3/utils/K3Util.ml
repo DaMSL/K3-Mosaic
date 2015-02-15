@@ -142,6 +142,13 @@ let decompose_update e = match tag_of_expr e, sub_tree e with
 
 let decompose_role (d,_) = match d with
   Role (id, fp) -> (id, fp) | _ -> failwith "not a role"
+let decompose_trig (t,_) = match t with
+  | Sink(Code(id, args, _, expr)) -> id, args, expr
+  | _ -> failwith "not a trigger"
+let decompose_global_fn (g,_) = match g with
+  | Global(id, t, Some e) -> id, t, e
+  | _ -> failwith "not a global fn"
+  
 
 (* decompose if we have a tuple, otherwise return e *)
 let extract_if_tuple e = try decompose_tuple e with Failure _ -> [e]

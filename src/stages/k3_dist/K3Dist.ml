@@ -301,17 +301,18 @@ let combine_trig_args c =
   snd_many @@ List.sort (fun x y -> fst x - fst y) types, map
 
 (* global containing mapping of trig id to trig_name *)
+let trig_ids_id = "trig_ids"
 let trig_ids c = 
   let inner_t = wrap_tlist t_int in
   let e = ["trig_id", t_int; "trig_name", t_string; "indices", inner_t] in
-  let t = wrap_tmap' @@ snd_many e in
+  let t = wrap_tbag' @@ snd_many e in
   let init =
     let _, map = combine_trig_args c in
     let ts = List.map (fun (id, nm, l) ->
       mk_tuple [mk_cint id; mk_cstring nm;
         k3_container_of_list inner_t @@ List.map mk_cint l]) map in
     k3_container_of_list t ts in
-  create_ds "trig_ids" t ~e ~init
+  create_ds trig_ids_id t ~e ~init
 
 (* stmt_cntrs - (vid, stmt_id, counter) *)
 (* TODO: change to mmap with index on vid, stmt *)

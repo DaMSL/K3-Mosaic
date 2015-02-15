@@ -69,6 +69,9 @@ val decompose_update : expr_t -> id_t * expr_t * expr_t
 val decompose_indirect : expr_t -> expr_t
 
 val decompose_role : declaration_t * 'a -> id_t * flow_program_t
+val decompose_trig : flow_statement_t * 'a -> id_t * arg_t * expr_t
+val decompose_global_fn : declaration_t * 'a -> id_t * type_t * expr_t
+
 
 (* decompose if we have a tuple, otherwise return e *)
 val extract_if_tuple : expr_t -> expr_t list
