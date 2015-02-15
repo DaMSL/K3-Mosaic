@@ -159,8 +159,8 @@ def run(target_file,
             port = 60000 + (i * 10000)
             node_list += ['localhost:{0}/node'.format(port)]
 
-        # always add the master and timer
-        peer_list = ["-n localhost:40000/master", "localhost:50000/timer"] + node_list
+        # always add the master, switch and timer
+        peer_list = ["-n localhost:40000/master", "localhost:50000/timer", "localhost:60000/switch"] + node_list
         peer_cmd = ','.join(peer_list)
 
         if new_k3:
@@ -169,11 +169,16 @@ def run(target_file,
             if folds_only:
                 fold_cmd = '--k3new_folds'
 
-            six.print_("\nConverting to new k3 file format...")
+            six.print_("Converting to new k3 file format...")
             cmd = concat([k3o, "-i k3 -l k3new", fold_cmd, "--datafile", data_file, k3dist_file, ">", k3new_file, "2>", error_file])
             print_system(cmd, verbose)
             if check_error(error_file, verbose, False):
                 return False
+
+            # create k3_new partmap
+            six.print_("Creating k3new partition map...\n")
+            cmd = concat([partmap_tool, k3dist_file, "--k3new -n", num_nodes, ">", k3new_part_file])
+            print_system(cmd, verbose)
 
         # run the k3 driver on the input
         cmd = concat([k3o, "--test", peer_cmd, "-q", queue_type, load_path, k3dist_file, ">", output_file, "2>", error_file])
