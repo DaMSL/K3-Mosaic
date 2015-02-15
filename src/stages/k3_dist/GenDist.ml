@@ -42,6 +42,7 @@ module T = K3Typechecker
 module R = K3Route
 module P = ProgInfo
 module TS = Timestamp
+module Proto = Protocol
 
 exception ProcessingFailed of string;;
 
@@ -136,7 +137,7 @@ let nd_check_stmt_cntr_index =
           (mk_block [
             mk_delete nd_stmt_cntrs.id [mk_var lookup];
             (* code to check if we're done *)
-            Proto.nd_delete_stmt_ctrs;
+            Proto.nd_delete_stmt_cntr;
             mk_ctrue ])
           (* else return false *)
           mk_cfalse]) @@
@@ -351,10 +352,10 @@ let sw_driver_trig (c:config) =
       ]
 
 (* The start trigger puts the message in a trig buffer *)
-let sw_start_trig (c:config) trig =
+let sw_start_fn (c:config) trig =
   let args_t = snd_many @@ P.args_of_t c.p trig in
   let args = ["args", wrap_ttuple args_t] in
-  mk_code_sink' ("sw_"^trig) args [] @@
+  mk_global_fn ("sw_"^trig) args [] @@
     mk_block [
       (* insert args into trig buffer *)
       mk_insert (D.sw_trig_buf_prefix^trig) [mk_var "args"];
@@ -364,7 +365,26 @@ let sw_start_trig (c:config) trig =
       mk_assign TS.sw_need_vid_ctr.id @@ mk_add (mk_var TS.sw_need_vid_ctr.id) @@ mk_cint 1;
     ]
 
-(* sending fetches is done from functions now *)
+(* the demux trigger takes the single stream and demuxes it *)
+let sw_demux_nm = "sw_demux"
+let sw_demux c =
+  let combo_t, t_arg_map = D.combine_trig_args c in
+  let combo_t = t_int :: combo_t in
+  let sentry_code =
+    mk_if (mk_eq (mk_fst @@ mk_var "args") (mk_cint @@ -1))
+      Proto.sw_seen_sentry @@
+      mk_error @@ "unidentified trig id"
+  in
+  mk_code_sink' sw_demux_nm ["args", wrap_ttuple combo_t] [] @@
+  List.fold_right (fun (t_id, _, arg_indices) acc ->
+    mk_if (mk_eq (mk_fst @@ mk_var "args") @@ mk_cint t_id)
+      (mk_apply' ("sw_"^P.trigger_name_for_id c.p t_id) @@
+        mk_tuple @@ List.map (fun i -> mk_subscript i @@ mk_var "args") arg_indices)
+      acc)
+    t_arg_map
+    sentry_code
+
+(* sending fetches is done from functions *)
 (* each function takes a vid to plant in the arguments, which are in the trig buffers *)
 let sw_send_fetch_fn c s_rhs_lhs s_rhs trig_name =
   let send_fetches_of_rhs_maps  =
@@ -963,38 +983,25 @@ let nd_do_corrective_trigs c s_rhs ast trig_name corrective_maps =
   in
   List.map do_corrective_trig s_rhs
 
-(* this is hardwired for the m3tok3 module, which produces demux triggers *)
-let demux_trigs ast =
-  let trigs = U.triggers_of_program ast in
-  let demux_s = "demux_" in
-  let demux_ts =
-    List.filter (fun c ->
-      String.sub (U.id_of_code c) 0 (String.length demux_s) = demux_s)
-      trigs
-  (* assume all demux are flow sinks too *)
-  in List.map (fun c -> mk_no_anno @@ Sink(c)) demux_ts
-
 (* we take the existing default role and prepend it with a one-shot to
  * call out on-init function *)
-let roles_of (ast:program_t) =
-  let role = List.find U.is_role ast in
-  let flows = match fst role with
-    | Role(_, fs) -> fs | _ -> failwith "not a role"
-  in
-  let len = String.length "demux_" in
-  let flows = List.map (function
-    | BindFlow(x, nm), y -> BindFlow(x, "sw_insert_"^str_drop len nm), y
-    | x -> x) flows in
+let roles_of c (ast:program_t) =
   (* extra flows for master *)
-  let ms_flows = List.map (fun x -> x, []) [
+  let ms_flows = List.map mk_no_anno [
      Source(Resource("init",
        Stream(t_unit, ConstStream(mk_singleton (wrap_tlist t_unit) [mk_cunit]))));
-     BindFlow("init", Protocol.ms_send_addr_self_nm);
-     Instruction(Consume("init"));
-    ]
-  in List.map (fun x -> x, []) [
-    Role("master", ms_flows @ flows);
-    Role("switch", flows);
+     BindFlow("init", Proto.ms_send_addr_self_nm);
+     Instruction(Consume("init")); ] in
+  let sw_flows = List.map mk_no_anno [
+    Source(Resource("src",
+      Handle(wrap_ttuple @@ fst @@ combine_trig_args c,
+        File c.stream_file,
+        CSV)));
+    BindFlow("src", sw_demux_nm); ]
+  in
+  List.map mk_no_anno [
+    Role("master", ms_flows @ sw_flows);
+    Role("switch", sw_flows);
     Role("timer", []);
     Role("node", []);
   ]
@@ -1006,7 +1013,7 @@ let emit_frontier_fns c =
   List.map (frontier_fn c) fns
 
 let declare_global_vars c partmap ast =
-  Protocol.global_vars @
+  Proto.global_vars @
   D.global_vars c (ModifyAst.map_inits_from_ast c ast) @
   Timer.global_vars @
   TS.global_vars @
@@ -1037,11 +1044,11 @@ let gen_dist_for_t c ast trig corr_maps =
   (* (stmt_id,rhs_map_id,lhs_map_id) list *)
   let s_rhs_lhs = P.s_and_over_stmts_in_t c.p P.rhs_lhs_of_stmt trig in
   (* functions *)
-  let functions =
-    [sw_send_fetch_fn c s_rhs_lhs s_rhs trig]
-  in
+  let functions = [
+    sw_start_fn c trig;
+    sw_send_fetch_fn c s_rhs_lhs s_rhs trig
+  ] in
   let trigs =
-    sw_start_trig c trig ::
     (if null s_rhs then [] else
       [nd_rcv_put_trig c trig;
       nd_rcv_fetch_trig c trig])@
@@ -1055,16 +1062,16 @@ let gen_dist_for_t c ast trig corr_maps =
 
 (* Function to generate the whole distributed program *)
 (* @param force_correctives Attempt to create dist code that encourages correctives *)
-let gen_dist ?(force_correctives=false) ?(use_multiindex=false) ?(enable_gc=false) p partmap ast =
+let gen_dist ?(use_multiindex=false) ?(enable_gc=false) ?(stream_file="XXX") p partmap ast =
   (* collect all map access patterns for creating indexed maps *)
   let c = {
       p;
       shuffle_meta=K3Shuffle.gen_meta p;
       mapn_idxs=StrMap.empty;
       use_multiindex;
-      force_correctives;
       enable_gc;
       map_idxs = M.get_map_access_patterns_ids p ast;
+      stream_file;
     } in
   let potential_corr_maps = maps_potential_corrective c in
   (* regular trigs then insert entries into shuffle fn table *)
@@ -1078,14 +1085,14 @@ let gen_dist ?(force_correctives=false) ?(use_multiindex=false) ?(enable_gc=fals
     declare_global_funcs c partmap ast @
     proto_funcs @
     [mk_flow @@
-      Protocol.triggers c @
+      Proto.triggers c @
       (if c.enable_gc then GC.triggers c else []) @
       TS.triggers @
       Timer.triggers c @
       [sw_driver_trig c] @
       proto_trigs @
       send_corrective_trigs c] @
-    roles_of ast
+    roles_of c ast
   in
   snd @@ U.renumber_program_ids prog
 

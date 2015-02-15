@@ -25,8 +25,9 @@ type config = {
   mapn_idxs : IndexSet.t StrMap.t;
   shuffle_meta : shuffle_fn_entry list;
   use_multiindex : bool;
-  force_correctives : bool;
   enable_gc : bool;
+  (* a file to use as the stream to switches *)
+  stream_file : string;
 }
 
 let string_of_map_idxs c map_idxs =
@@ -273,7 +274,44 @@ let map_ids c =
         mk_tuple [mk_cint i;
                   mk_cstring @@ P.map_name_of c.p i;
                   mk_cint @@ List.length @@ P.map_types_for c.p i] in
-  create_ds map_ids_id t ~e ~init
+  create_ds "map_ids" t ~e ~init
+
+(* combine all the trig args into a minimal set *)
+let combine_trig_args c =
+  let t_data = P.for_all_trigs c.p @@
+    fun t -> P.trigger_id_for_name c.p t, t, P.args_of_t c.p t
+  in
+  let types, map, _ =
+    List.fold_left (fun (types, map, sz) (tid, tnm, targs) -> 
+      let rem_ts, used_ts, tmap, sz =
+        (* fold over the args *)
+        List.fold_left (fun (rem_ts, used_ts, tmap, sz) (_, t) ->
+          (* look for a spare type *)
+          let yes, no = List.partition ((=) t |- snd) rem_ts in
+          match yes with
+          (* no match found, so add a type *)
+          | []    -> rem_ts, (sz, t)::used_ts, sz::tmap, sz+1
+          (* found a match, so add it to our map *)
+          | y::ys -> ys@no,  y::used_ts, (fst y)::tmap, sz
+        ) (types, [], [], sz) targs
+      in
+      rem_ts@used_ts, (tid, tnm, List.rev tmap)::map, sz
+    ) ([], [], 0) t_data
+  in
+  snd_many @@ List.sort (fun x y -> fst x - fst y) types, map
+
+(* global containing mapping of trig id to trig_name *)
+let trig_ids c = 
+  let inner_t = wrap_tlist t_int in
+  let e = ["trig_id", t_int; "trig_name", t_string; "indices", inner_t] in
+  let t = wrap_tmap' @@ snd_many e in
+  let init =
+    let _, map = combine_trig_args c in
+    let ts = List.map (fun (id, nm, l) ->
+      mk_tuple [mk_cint id; mk_cstring nm;
+        k3_container_of_list inner_t @@ List.map mk_cint l]) map in
+    k3_container_of_list t ts in
+  create_ds "trig_ids" t ~e ~init
 
 (* stmt_cntrs - (vid, stmt_id, counter) *)
 (* TODO: change to mmap with index on vid, stmt *)
@@ -527,6 +565,7 @@ let global_vars c dict =
       num_switches;
       num_nodes;
       map_ids c;
+      trig_ids c;
       nd_stmt_cntrs;
       nd_log_master;
       nd_state_normal;

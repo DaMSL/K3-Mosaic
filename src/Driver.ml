@@ -156,13 +156,13 @@ type parameters = {
     mutable order_files   : string list;
 
     mutable queue_type   : K3Runtime.queue_type; (* type of queue for interpreter *)
-    mutable force_correctives : bool; (* Force correctives being generated *)
     mutable k3new_data_file : string;
     mutable k3new_folds : bool;   (* output fold instead of map/ext *)
     mutable load_path : string;    (* path for the interpreter to load csv files from *)
     mutable use_multiindex : bool; (* whether to generate code that uses multiindex maps *)
     mutable enable_gc : bool;
     mutable src_interval : float;   (* interval (s) between the interpreter feeding sources *)
+    mutable stream_file : string;  (* file to stream from (into switches) *)
   }
 
 let default_cmd_line_params () = {
@@ -183,13 +183,13 @@ let default_cmd_line_params () = {
     order_files       = [];
 
     queue_type        = K3Runtime.PerNodeQ;
-    force_correctives = false;
     k3new_data_file   = "default.k3";
     k3new_folds       = false;
     load_path         = "";
     use_multiindex    = false;
     enable_gc         = true;
     src_interval      = 0.002;
+    stream_file       = "input.csv";
   }
 
 let cmd_line_params = default_cmd_line_params ()
@@ -468,10 +468,10 @@ let test params inputs =
   in List.iter2 test_fn params.input_files inputs
 
 let transform_to_k3_dist params p proginfo =
-  let force_correctives = params.force_correctives in
   let use_multiindex = params.use_multiindex in
   let enable_gc = params.enable_gc in
-  GenDist.gen_dist ~force_correctives ~use_multiindex ~enable_gc proginfo params.partition_map p
+  let stream_file = params.stream_file in
+  GenDist.gen_dist ~use_multiindex ~enable_gc ~stream_file proginfo params.partition_map p
 
 let process_inputs params =
   let proc_fn f = match params.in_lang, !(params.action) with
@@ -596,12 +596,12 @@ let param_specs = Arg.align
     | "node"   -> K3Runtime.PerNodeQ
     | x        -> error @@ "Unknown parameter "^x),
       "         Queue type: global/node/trigger";
-  "--force", Arg.Unit (fun () -> cmd_line_params.force_correctives <- true),
-      "         Force distributed compilation to produce more correctives";
   "--load_path", Arg.String (fun s -> cmd_line_params.load_path <- s),
       "         Path for interpreter to load files from";
   "--src_int", Arg.Float (fun f -> cmd_line_params.src_interval <- f),
       "         Interval between feeding in sources";
+  "--sfile", Arg.String (fun s -> cmd_line_params.stream_file <- s),
+      "         Path for stream file";
   ])
 
 let usage_msg =

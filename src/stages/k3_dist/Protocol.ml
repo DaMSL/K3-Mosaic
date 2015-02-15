@@ -147,8 +147,8 @@ let ms_shutdown =
   mk_if (mk_geq (mk_var ms_rcv_node_done_cnt.id) @@ mk_var D.num_nodes.id)
     (* notify everyone to shut down *)
     (mk_iter (mk_lambda' ["addr", t_addr] @@
-        mk_send "shutdown_trig" mk_cunit)
-      mk_var D.peers.id)
+        mk_send shutdown_trig_nm (mk_var "addr") [mk_cunit]) @@
+      mk_var G.peers.id)
     (* else, do nothing -- wait for shutdown count to be reached *)
     mk_cunit
 
@@ -160,7 +160,7 @@ let ms_rcv_node_done =
   mk_if (mk_var "done")
     (mk_block [
       (* increment count *)
-      mk_incr ms_rcv_node_done_cnt;
+      mk_incr ms_rcv_node_done_cnt.id;
       (* if hit number *)
       mk_if (mk_geq (mk_var ms_rcv_node_done_cnt.id) @@ mk_var D.num_nodes.id)
         (mk_block [
@@ -169,12 +169,12 @@ let ms_rcv_node_done =
           (* sleep for a little to make sure *)
           mk_apply' "sleep" @@ mk_cint 5000;
           (* send ourselves a message to shutdown *)
-          mk_send "ms_shutdown" G.me_var mk_cunit;
+          mk_send ms_shutdown_nm G.me_var [mk_cunit];
         ])
         mk_cunit;
     ]) @@
     (* else, a node is taking back its done state *)
-    mk_decr ms_rcv_noe_done_cnt
+    mk_decr ms_rcv_node_done_cnt.id
 
 let nd_rcv_done_nm = "nd_rcv_done"
 let nd_rcv_done =
@@ -183,22 +183,22 @@ let nd_rcv_done =
     (* set done state *)
     mk_assign D.nd_state.id @@ mk_var D.nd_state_done.id;
     (* check stmt_cntrs for emptiness, in case we won't see it elsewhere *)
-    mk_is_empty (mk_var D.stmt_cntrs.id)
-      (mk_send ms_rcv_node_done.id (mk_var D.master_addr.id) mk_ctrue)
+    mk_is_empty (mk_var D.nd_stmt_cntrs.id)
+      (mk_send ms_rcv_node_done_nm (mk_var D.master_addr.id) [mk_ctrue])
       mk_cunit;
   ]
 
 (* code for when nodes insert into stmt_cntrs *)
 let nd_insert_stmt_cntr insert_stmt =
   (* if we're empty before insert *)
-  mk_is_empty (mk_var D.stmt_cntrs.id)
+  mk_is_empty (mk_var D.nd_stmt_cntrs.id)
     (* if we're in the done state *)
-    (mk_if (mk_eq (mk_var D.nd_state.id) @@ mk_var D.nd_state_done)
+    (mk_if (mk_eq (mk_var D.nd_state.id) @@ mk_var D.nd_state_done.id)
       (mk_block [
         (* do insert *)
         insert_stmt;
         (* send undo to master *)
-        mk_send ms_rcv_node_done.id (mk_var D.master_addr.id) mk_cfalse; ])
+        mk_send ms_rcv_node_done_nm (mk_var D.master_addr.id) [mk_cfalse]; ])
       mk_cunit)
     (* else, just insert *)
     insert_stmt
@@ -206,11 +206,11 @@ let nd_insert_stmt_cntr insert_stmt =
 (* Code for after deletion from stmt_cntrs *)
 let nd_delete_stmt_cntr =
   (* if we're empty after delete *)
-  mk_is_empty (mk_var D.stmt_cntrs.id)
+  mk_is_empty (mk_var D.nd_stmt_cntrs.id)
     (* if we're in the done state *)
-    (mk_if (mk_eq (mk_var D.nd_state.id) @@ mk_var D.nd_state_done)
+    (mk_if (mk_eq (mk_var D.nd_state.id) @@ mk_var D.nd_state_done.id)
       (* send to master *)
-      (mk_send ms_rcv_node_done.id (mk_var D.master_addr.id) mk_ctrue)
+    (mk_send ms_rcv_node_done_nm (mk_var D.master_addr.id) [mk_ctrue])
       mk_cunit)
     mk_cunit
 
@@ -225,16 +225,16 @@ let ms_rcv_switch_done =
     (* if we've received from all the switches *)
     mk_if (mk_geq (mk_var ms_rcv_switch_done_cnt.id) @@ mk_var D.num_switches.id)
       (mk_iter (mk_lambda' ["addr", t_addr] @@
-          mk_send nd_rcv_done_nm (mk_var "addr") mk_cunit)
+          mk_send nd_rcv_done_nm (mk_var "addr") [mk_cunit]) @@
         mk_var D.nodes.id)
       mk_cunit;
   ]
 
 (* code for when switches see the sentry *)
-let sw_see_sentry =
+let sw_seen_sentry =
   mk_block [
     mk_assign D.sw_state.id @@ mk_var D.sw_state_done.id;
-    mk_send ms_rcv_switch_done_nm (mk_var D.master_addr.id) mk_cunit;
+    mk_send ms_rcv_switch_done_nm (mk_var D.master_addr.id) [mk_cunit];
   ]
 
 let global_vars = List.map decl_global [

@@ -109,8 +109,7 @@ let initialize_resources resource_env resource_impl_env d =
   let open_channel_impl id =
     match handle_of_resource resource_env id with
       | Some(source, Handle (_, File (filename), _)) ->
-        if source then [id, In(Some(open_in @@
-          !K3StdLib.g_load_path^Filename.dir_sep^filename))]
+        if source then [id, In(Some(open_in filename))]
         else [id, Out(Some(open_out filename))]
 
       | Some(_, Stream(_, ConstStream e)) ->

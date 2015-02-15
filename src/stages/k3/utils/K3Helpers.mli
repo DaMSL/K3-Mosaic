@@ -183,7 +183,7 @@ val ids_to_vars : id_t list -> expr_t list
 val vars_to_ids : expr_t list -> id_t list
 
 (* check if a collection is empty *)
-val mk_is_empty : expr_t -> type_t -> expr_t
+val mk_is_empty : expr_t -> expr_t -> expr_t -> expr_t
 
 (* macro to check if a collection has a specific member *)
 val mk_has_member : expr_t -> expr_t list -> type_t -> expr_t
