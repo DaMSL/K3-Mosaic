@@ -69,9 +69,9 @@ let default_config = {
 let verbose_types_config = default_config
 
 let typecheck e =
-  try 
+  try
     T.type_of_expr e
-  with T.TypeError _ -> 
+  with T.TypeError _ ->
     (* try to deduce expression type if missing *)
     T.type_of_expr @@ T.deduce_expr_type ~override:false [] [] e
 
@@ -431,7 +431,7 @@ and handle_lambda c ~expr_info ~prefix_fn arg e =
   let final_exec bindings arg in_record =
     let binds = bindings <| deep_bind ~in_record c arg in
     (* for curried arguments, we deep bind at a deeper level *)
-    write_lambda arg in_record <| 
+    write_lambda arg in_record <|
       (* for the final expr, we may need to wrap the output in a record *)
         binds <| lazy_expr c (prefix_fn e) ~expr_info:(ANonLambda, out_rec)
   in
@@ -685,7 +685,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
           wrap_indent (lazy_expr c bexpr)
         | _   ->  (* bind deconstruct *)
           lps "bind" <| lsp () <| wrap_indent(lazy_expr c bound) <| lsp () <| lps "as" <| lsp () <|
-          lsp () <| lps_list NoCut lps ids <| lsp () <| lps "in" <| lsp () <|
+          lazy_paren (lps_list NoCut lps ids) <| lsp () <| lps "in" <| lsp () <|
           wrap_indent (lazy_expr c bexpr)
       end
 
@@ -985,5 +985,9 @@ let add_sources p envs filename =
 (* envs are the typechecking environments to allow us to do incremental typechecking *)
 let string_of_dist_program ?(file="default.txt") ?map_to_fold (p, envs) =
   let p' = filter_incompatible p in
+  "include \"Core/Builtins.k3\"\n"^
+  "include \"Annotation/Map.k3\"\n"^
+  "include \"Annotation/Set.k3\"\n"^
+  "include \"Annotation/Seq.k3\"\n"^
   string_of_program ?map_to_fold p' envs ^ add_sources p' envs file
 
