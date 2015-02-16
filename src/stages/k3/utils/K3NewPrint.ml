@@ -328,7 +328,7 @@ let is_id_lambda e =
 (* Variable names to translate *)
 module StringMap = Map.Make(struct type t = string let compare = String.compare end)
 let var_translate = List.fold_left (fun acc (x,y) -> StringMap.add x y acc) StringMap.empty @@
-  ["int_of_float", "truncate"; "float_of_int", "real_of_int"; "peers", "my_peers"]
+  ["int_of_float", "truncate"; "float_of_int", "real_of_int"]
 
 type in_record = InRec | In
 type out_record = OutRec | Out
@@ -684,9 +684,11 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
           wrap_indent (lazy_expr c bound) <| lsp () <| lps "in" <| lsp () <|
           wrap_indent (lazy_expr c bexpr)
         | _   ->  (* bind deconstruct *)
-          lps "bind" <| lsp () <| wrap_indent(lazy_expr c bound) <| lsp () <| lps "as" <| lsp () <|
-          lazy_paren (lps_list NoCut lps ids) <| lsp () <| lps "in" <| lsp () <|
-          wrap_indent (lazy_expr c bexpr)
+            let ids' = concat_record_str @@ add_record_ids ids in
+            lps "bind" <| lsp () <| wrap_indent(lazy_expr c bound) <| lsp () <|
+            lps "as" <| lsp () <| lps "{" <| lps_list NoCut lps ids' <|
+            lps "}" <| lsp () <| lps "in" <| lsp () <|
+            wrap_indent (lazy_expr c bexpr)
       end
 
   | Iterate -> let lambda, col = U.decompose_iterate expr in
