@@ -367,11 +367,9 @@ let decl = wrap_tfunc (wrap_ttuple @@ snd_many args) ret
 let _ = Hashtbl.add func_table name (decl, wrap_args args, fn)
 
 (* error function ---------- *)
-let fn env = match arg_of_env "s" env with
-  | VString s -> failwith @@ "Error function called: "^s
-  | _         -> invalid_arg "error"
+let fn env = failwith @@ "Error function called: "
 let name = "error"
-let args = ["s", t_string]
+let args = unit_arg
 let ret = t_unknown
 let decl = wrap_tfunc (wrap_ttuple @@ snd_many args) ret
 let _ = Hashtbl.add func_table name (decl, wrap_args args, fn)

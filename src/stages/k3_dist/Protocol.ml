@@ -55,7 +55,7 @@ let ms_rcv_jobs_ack =
 (* receive jobs, and calculate all dependent variables *)
 let rcv_jobs_nm = "rcv_jobs"
 let rcv_jobs =
-  mk_code_sink' rcv_jobs_nm ["jobs_in", D.jobs.t] [] @@
+  mk_code_sink' rcv_jobs_nm ["jobs_in", immut D.jobs.t] [] @@
   mk_block [
     (* write the jobs table *)
     mk_assign D.jobs.id @@ mk_var "jobs_in";

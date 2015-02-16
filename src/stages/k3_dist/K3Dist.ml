@@ -599,7 +599,6 @@ let declare_foreign_functions =
     mk_foreign_fn "hash_float" t_float t_int;
     mk_foreign_fn "hash_string" t_string t_int;
     mk_foreign_fn "hash_date" t_date t_int;
-    mk_foreign_fn "error" t_string t_unknown;
     mk_foreign_fn "parse_sql_date" t_string t_int;
     mk_foreign_fn "int_of_float" t_float t_int;
     mk_foreign_fn "float_of_int" t_int t_float;

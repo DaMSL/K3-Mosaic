@@ -238,7 +238,7 @@ let ms_gc_init c =
 (* --- End of code --- *)
 
 let global_vars _ = List.map decl_global
-  [master_addr;
+  [
    sw_max_ack_vid;
    sw_ack_log;
    ms_gc_interval;

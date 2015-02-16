@@ -19,6 +19,7 @@ let preserve_mut t f = {t with typ=f t.typ}
 
 (* change immutable type to mutable *)
 let mut t = {t with mut=true}
+let immut t = {t with mut=false}
 
 (* A type for simple K3 types *)
 let t_bool = canonical TBool
@@ -523,7 +524,8 @@ let mk_convert_col' src_t dest_col_t col =
 let mk_peek_or_zero e = mk_case_ns (mk_peek e) "x"
   (mk_cint 0) (mk_var "x")
 
-let mk_error s = mk_apply (mk_var "error") @@ mk_cstring s
+let mk_error s = mk_apply (mk_var "error") @@
+  mk_apply (mk_var "print") @@ mk_cstring s
 
 let mk_peek_or_error s e = mk_case_ns (mk_peek e) "x"
   (mk_error s) @@

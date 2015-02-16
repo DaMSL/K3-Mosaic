@@ -37,6 +37,7 @@ val min_vid_k3 : expr_t
 
 (* convert a type to mutable *)
 val mut : type_t -> type_t
+val immut : type_t -> type_t
 
 
 (* wrap in a specific type *)
