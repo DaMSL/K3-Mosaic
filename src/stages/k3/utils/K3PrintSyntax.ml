@@ -244,7 +244,8 @@ let rec lazy_expr c expr =
   | Var id     -> lps id
   | Tuple      -> let es = U.decompose_tuple expr in
     lazy_paren @@ lps_list CutHint (lazy_expr c) es
-  | Just       -> let e = U.decompose_just expr in lps "just " <| paren_r e (lazy_expr c e)
+  | Just       -> let e = U.decompose_just expr in
+    lps "just " <| paren_r e (lazy_expr c e)
   | Nothing vt -> lps "nothing:" <| lsp () <| lazy_type c vt
   | Empty t    -> lazy_collection_vt c t.typ [] <| lsp () <|
                   lps ":" <| lsp () <| lazy_type c t

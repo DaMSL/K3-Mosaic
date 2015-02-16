@@ -493,11 +493,14 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
                | _          -> id_fn
                end
     | _     -> id_fn in
-  (* we're more sensitive for left side *)
- (*let paren_l e = match U.tag_of_expr e with*)
-    (*| IfThenElse -> lazy_paren*)
-    (*| Apply when is_apply_let e -> lazy_paren*)
-    (*| _ -> id_fn in*)
+(* for things like .map *)
+ let paren_l e = match U.tag_of_expr e with
+    | Just | CaseOf _ | IfThenElse | Let _ -> lazy_paren
+    | _          -> id_fn in
+  let paren_r e = match U.tag_of_expr e with
+    | Nothing _ | Just | Const _ | Tuple | Var _
+    | Empty _ | Singleton _ -> id_fn
+    | _                     -> lazy_paren in
  let arith_paren_l e = match U.tag_of_expr e with
     | IfThenElse -> lazy_paren
     | Let _      -> lazy_paren
@@ -546,7 +549,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
         lps (id^":") <| lazy_expr c e) id_es
     in lazy_brace inner
   | Just -> let e = U.decompose_just expr in
-    lps "Some " <| lazy_expr c e
+    lps "Some " <| paren_r e (lazy_expr c e)
   | Nothing vt -> lps "None " <| if vt.mut then lps "mut" else lps "immut"
   | Empty vt   -> lps "empty " <| lazy_type ~empty:true c ~in_col:false vt
   | Singleton _ ->
@@ -713,9 +716,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
     apply_method c ~name:"iterate" ~col ~args:[lambda] ~arg_info:[ALambda [InRec], Out]
 
   | Map ->
-      if c.map_to_fold then
-        fold_of_map_ext c expr
-
+      if c.map_to_fold then fold_of_map_ext c expr
       else (* normal map *)
         let lambda, col = U.decompose_map expr in
         apply_method c ~name:"map" ~col ~args:[lambda] ~arg_info:[ALambda [InRec], OutRec]
@@ -766,7 +767,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
       let t = KH.unwrap_ttuple @@ T.type_of_expr tup in
       let id_t = add_record_ids t in
       let id = fst @@ at id_t (i-1) in
-      (lazy_paren @@ lazy_expr c tup) <| lps "." <| lps id
+      (paren_l tup @@ lazy_expr c tup) <| lps "." <| lps id
 
   | SliceIdx(idx, comp) -> let col, pat = U.decompose_slice expr in
     let ts = KH.unwrap_ttuple @@ snd @@ KH.unwrap_tcol @@
