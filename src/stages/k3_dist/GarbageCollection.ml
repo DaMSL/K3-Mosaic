@@ -167,7 +167,7 @@ let do_gc c =
 
 (* master switch trigger to receive and add to the max vid map *)
 let ms_rcv_gc_vid_nm = "ms_rcv_gc_vid"
-let ms_rcv_gc_vid =
+let ms_rcv_gc_vid c =
   let data, min_vid = "data", "min_vid" in
   mk_code_sink' ms_rcv_gc_vid_nm
     [data, wrap_ttuple @@ snd_many ms_gc_vid_map.e] [] @@
@@ -193,7 +193,8 @@ let ms_rcv_gc_vid =
               mk_send do_gc_nm (mk_var @@ fst @@ hd @@ G.peers.e) [mk_var min_vid]) @@
               mk_var G.peers.id;
             (* tell timer to ping us in X seconds *)
-            mk_send D.ms_send_gc_req_nm (mk_var D.timer_addr.id) [mk_var ms_gc_interval.id];
+            mk_send T.tm_insert_timer_trig_nm (mk_var D.timer_addr.id)
+              [mk_var ms_gc_interval.id; mk_cint @@ T.num_of_trig c D.ms_send_gc_req_nm; G.me_var]
           ])
         (* if not enough responses, do nothing *)
         mk_cunit
@@ -249,7 +250,7 @@ let global_vars _ = List.map decl_global
 
 let triggers c =
   [sw_ack_rcv_trig;
-   ms_rcv_gc_vid;
+   ms_rcv_gc_vid c;
    rcv_req_gc_vid;
    ms_send_gc_req;
    do_gc c;
