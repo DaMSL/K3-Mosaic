@@ -890,7 +890,7 @@ let lazy_declaration c d =
           with Failure _ -> (* normal global *)
             lps " =" <| lsp () <| lazy_expr c e
     end in
-    (lps @@ "declare "^id^" :" <| lsp () <| lazy_type c t <| end_part)
+    wrap_indent (lps @@ "declare "^id^" :" <| lsp () <| lazy_type c t <| end_part)
   | Role(id, fprog) -> lazy_flow_program c fprog
   | Flow fprog -> lazy_flow_program c fprog
   | DefaultRole id -> lps ("default role "^id)
@@ -919,8 +919,7 @@ let filter_incompatible prog =
   filter_map (fun ((d,a) as dec) ->
     (* we don't want the monomorphic hash functions *)
     match d with
-    | Foreign(id, _)   when StringSet.mem id drop_globals -> None
-    | Foreign(id, _)   when r_match r_hash id             -> None
+    | Foreign(id, _)   -> None
     | Global(id, _, _) when StringSet.mem id drop_globals -> None
     | DefaultRole _ -> None
     | _             -> Some dec
