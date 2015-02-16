@@ -328,7 +328,7 @@ let is_id_lambda e =
 (* Variable names to translate *)
 module StringMap = Map.Make(struct type t = string let compare = String.compare end)
 let var_translate = List.fold_left (fun acc (x,y) -> StringMap.add x y acc) StringMap.empty @@
-  ["int_of_float", "truncate"; "float_of_int", "real_of_int"]
+  ["int_of_float", "truncate"; "float_of_int", "real_of_int"; "peers", "my_peers"]
 
 type in_record = InRec | In
 type out_record = OutRec | Out
@@ -665,7 +665,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
       end
     in
     let wrap_ret x = if project then x <| lps ".i" else x in
-    lps "case" <| lsp () <| lazy_expr c e1 <| lsp () <| lps "of" <| lsp () <|
+    lps "case" <| lsp () <| wrap_ret (lazy_expr c e1) <| lsp () <| lps "of" <| lsp () <|
     wrap_indent (lazy_brace (lps ("Some "^x^" ->") <| lsp () <|
       wrap_ret (lazy_expr c e2))) <|
     wrap_indent (lazy_brace (lps "None ->" <| lsp () <| lazy_expr c e3))
@@ -737,7 +737,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
     (* find out if our accumulator is a collection type *)
     apply_method c ~name:"groupBy" ~col ~args:[lam1; lam2; acc]
       ~arg_info:[ALambda [InRec], Out; ALambda [In; InRec], Out; ANonLambda, Out]
-  | Sort -> let col, lambda = U.decompose_sort expr in
+  | Sort -> let lambda, col = U.decompose_sort expr in
     apply_method c ~name:"sort" ~col ~args:[lambda] ~arg_info:[ALambda [InRec; InRec], Out]
       ~prefix_fn:(fun e -> light_type c @@ KH.mk_if e (KH.mk_cint (-1)) @@ KH.mk_cint 1)
   | Peek -> let col = U.decompose_peek expr in
@@ -992,5 +992,7 @@ let string_of_dist_program ?(file="default.txt") ?map_to_fold (p, envs) =
   "include \"Annotation/Map.k3\"\n"^
   "include \"Annotation/Set.k3\"\n"^
   "include \"Annotation/Seq.k3\"\n"^
+  "declare my_peers : collection { i:address } @ {Collection} =\n"^
+  "  peers.fold (\\acc -> (\\x -> (acc.insert {i:x.addr}; acc))) empty { i:address} @ Collection\n"^
   string_of_program ?map_to_fold p' envs ^ add_sources p' envs file
 
