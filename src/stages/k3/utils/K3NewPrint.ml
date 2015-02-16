@@ -181,7 +181,7 @@ let rec lazy_base_type ?(brace=true) ?(mut=false) ?(empty=false) c ~in_col t =
       let inner = lazy_concat ~sep:lcomma (fun (id, vt) ->
         lps (id^":") <| lazy_type c ~in_col:false vt) rec_vts in
       let wrap = if brace then lazy_brace else id_fn in
-      wrap (lsp () <| inner <| lsp ())
+      wrap_mut (wrap (lsp () <| inner <| lsp ()))
   | TCollection(ct, vt) -> wrap (
     (if not empty then lps "collection " else [])
     <| lazy_type c ~in_col:true vt <| lps " @ " <| lazy_col ct)
