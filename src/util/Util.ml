@@ -3,6 +3,7 @@
 let _ = Random.self_init ()
 
 module IntSet = Set.Make(struct type t = int let compare = (-) end)
+module StrSet = Set.Make(struct type t = string let compare = String.compare end)
 module IntIntSet = Set.Make(struct type t = int * int let compare = compare end)
 module IntMap = Map.Make(struct type t = int let compare = (-) end)
 module StrMap = Map.Make(struct type t = string let compare = String.compare end)

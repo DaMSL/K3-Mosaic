@@ -58,12 +58,14 @@ type config = {
                 env:T.type_bindings_t;  (* type bindings for environment *)
                 trig_env:T.type_bindings_t;
                 map_to_fold:bool;       (* convert maps and ext to fold, due to k3new limitations *)
+                project:StrSet.t;       (* need to project further down *)
               }
 
 let default_config = {
                        env = [];
                        trig_env = [];
                        map_to_fold = false;
+                       project = StrSet.empty;
                      }
 
 let verbose_types_config = default_config
@@ -531,7 +533,13 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
   (* begin analysis of tags *)
   let analyze () = match U.tag_of_expr expr with
   | Const con -> lazy_const c con
-  | Var id    -> begin try lps @@ StringMap.find id var_translate with Not_found -> lps id end
+  | Var id    ->
+      begin try lps @@ StringMap.find id var_translate
+      with Not_found ->
+        (* check if we need to do projection *)
+        if StrSet.mem id c.project then lps id <| lps ".i"
+        else lps id
+      end
   | Tuple     -> let es = U.decompose_tuple expr in
     let id_es = add_record_ids es in
     let inner = lazy_concat ~sep:lcomma (fun (id, e) ->
@@ -642,10 +650,11 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
     wrap_indent (lps "then" <| lsp () <| lazy_expr c e2) <| lsp () <|
     wrap_indent (lps "else" <| lsp () <| lazy_expr c e3)
 
-  | CaseOf x ->
+  | CaseOf id ->
     let e1, e2, e3 = U.decompose_caseof expr in
     (* HACK to make peek work: records of one element still need projection *)
-    (* NOTE: caseOf will only work on peek if peek is the first expr inside *)
+    (* NOTE: caseOf will only work on peek if peek is the first expr inside,
+     * and projection will only work if the expression is very simple *)
     let project =
       begin match U.tag_of_expr e1 with
       | Peek ->
@@ -664,13 +673,18 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
       | _ -> false
       end
     in
-    let wrap_ret x = if project then x <| lps ".i" else x in
-    lps "case" <| lsp () <| wrap_ret (lazy_expr c e1) <| lsp () <| lps "of" <| lsp () <|
-    wrap_indent (lazy_brace (lps ("Some "^x^" ->") <| lsp () <|
-      wrap_ret (lazy_expr c e2))) <|
+    let c' = {c with project=StrSet.remove id c.project} in
+    let c' =
+      (* if we're projecting, let future expressions know *)
+      if project && id <> "_" then {c' with project=StrSet.add id c'.project}
+      else c' in
+    lps "case" <| lsp () <| lazy_expr c e1 <| lsp () <| lps "of" <| lsp () <|
+    wrap_indent (lazy_brace (lps ("Some "^id^" ->") <| lsp () <|
+      lazy_expr c' e2)) <|
     wrap_indent (lazy_brace (lps "None ->" <| lsp () <| lazy_expr c e3))
 
   | BindAs _ -> let bind, id, r = U.decompose_bind expr in
+    let c = {c with project=StrSet.remove id c.project} in
     lps "bind" <| lsp () <| wrap_indent(lazy_expr c bind) <| lsp () <| lps "as" <| lsp () <|
     lps "ind" <| lsp () <| lps id <| lsp () <| lps "in" <| lsp () <|
     wrap_indent (lazy_expr c r)
@@ -678,6 +692,10 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
   | Let _ ->
       (* let can be either bind (destruct tuples) or let in new k3 *)
       let ids, bound, bexpr = U.decompose_let expr in
+      (* remove ids that need projection *)
+      let c =
+        {c with project=List.fold_left (fun acc x -> StrSet.remove x acc) c.project ids}
+      in
       begin match ids with
         | [id] -> (* let *)
           lps "let" <| lsp () <| lps id <| lsp () <| lps "=" <| lsp () <|
@@ -932,7 +950,7 @@ let filter_incompatible prog =
 (* print a K3 program in syntax *)
 (* We get the typechecking environments so we can do incremental typechecking where needed *)
 let string_of_program ?(map_to_fold=false) prog (env, trig_env) =
-  let config = {env; trig_env; map_to_fold} in
+  let config = {default_config with env; trig_env; map_to_fold} in
   wrap_f @@ fun () ->
     let l = wrap_hv 0 (lps_list ~sep:"" CutHint (lazy_declaration config |- fst) prog) in
     force_list l
