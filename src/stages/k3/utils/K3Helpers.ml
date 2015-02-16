@@ -568,7 +568,7 @@ let modify_e id_t val_l =
 let index_e id_t s =
   List.assoc s @@ insert_index_snd @@ fst_many id_t
 
-let unit_arg = ["_", t_unit]
+let unit_arg = ["_u", t_unit]
 
 (* code to count the size of a collection *)
 let mk_size_slow col = mk_agg
