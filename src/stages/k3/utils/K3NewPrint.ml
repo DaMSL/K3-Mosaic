@@ -495,8 +495,8 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
     | _     -> id_fn in
 (* for things like .map *)
  let paren_l e = match U.tag_of_expr e with
-    | Just | CaseOf _ | IfThenElse | Let _ -> lazy_paren
-    | _          -> id_fn in
+    | Var _ | Const _ -> id_fn
+    | _ -> lazy_paren in
   let paren_r e = match U.tag_of_expr e with
     | Nothing _ | Just | Const _ | Tuple | Var _
     | Empty _ | Singleton _ -> id_fn
