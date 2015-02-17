@@ -42,6 +42,10 @@ def run():
                         default=False, help="Enable garbage collector")
     parser.add_argument('--no_new', action='store_false', dest='new_k3',
                         default=True, help="Create k3new file")
+    parser.add_argument('--no-deletes', action='store_false', dest='gen_deletes',
+                        default=True, help="Create delete triggers")
+    parser.add_argument('--no-correctives', action='store_false', dest='gen_correctives',
+                        default=True, help="Create corrective triggers")
 
     args = parser.parse_args()
 
@@ -90,7 +94,10 @@ def run():
                                 distrib=True,
                                 use_idx=args.use_idx,
                                 enable_gc=args.enable_gc,
-                                new_k3=args.new_k3)
+                                new_k3=args.new_k3,
+                                gen_deletes=args.gen_deletes,
+                                gen_correctives=args.gen_correctives
+                                )
         # check if a test failed
         if not res:
             six.print_("[ERROR]")

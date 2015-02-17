@@ -30,7 +30,9 @@ def run(target_file,
         use_idx=False,
         enable_gc=True,
         new_k3=True,
-        folds_only=True
+        folds_only=True,
+        gen_deletes=True,
+        gen_correctives=True
         ):
 
     to_root = ".."
@@ -127,9 +129,12 @@ def run(target_file,
 
         idx_cmd = "--use_idx" if use_idx else None
         gc_cmd  = "--gc" if enable_gc else None
+        delete_cmd = "--no-deletes" if not gen_deletes else None
+        corrective_cmd = "--no-correctives" if not gen_correctives else None
+        options = concat ([create_cmd, idx_cmd, gc_cmd, delete_cmd, corrective_cmd])
 
         # create a k3 distributed file (without a partition map)
-        cmd = concat([k3o, "-p -i m3 -l k3disttest", m3_file, create_cmd, idx_cmd, gc_cmd] +
+        cmd = concat([k3o, "-p -i m3 -l k3disttest", m3_file, options] +
                 ['>', k3dist_file, "2>", error_file])
         print_system(cmd, verbose)
         if check_error(error_file, verbose) or check_error(k3dist_file, verbose, True):
@@ -148,7 +153,7 @@ def run(target_file,
             return False
 
         # create another k3 distributed file (with partition map)
-        cmd = concat([k3o, "-p -i m3 -l k3disttest", m3_file, create_cmd, "-m", part_file, idx_cmd, gc_cmd, "--sfile", data_file] + [">", k3dist_file, "2>", error_file])
+        cmd = concat([k3o, "-p -i m3 -l k3disttest", m3_file, options, "-m", part_file, "--sfile", data_file] + [">", k3dist_file, "2>", error_file])
         print_system(cmd, verbose)
         if check_error(error_file, verbose) or check_error(k3dist_file, verbose, True):
             return False

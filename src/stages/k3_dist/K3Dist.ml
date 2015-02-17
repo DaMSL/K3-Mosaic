@@ -28,6 +28,8 @@ type config = {
   enable_gc : bool;
   (* a file to use as the stream to switches *)
   stream_file : string;
+  gen_deletes : bool;
+  gen_correctives : bool;
 }
 
 let string_of_map_idxs c map_idxs =
@@ -279,7 +281,7 @@ let map_ids c =
 (* combine all the trig args into a minimal set *)
 (* adds an int for trigger selector *)
 let combine_trig_args c =
-  let t_data = P.for_all_trigs c.p @@
+  let t_data = P.for_all_trigs ~deletes:c.gen_deletes c.p @@
     fun t -> P.trigger_id_for_name c.p t, "sw_"^t, P.args_of_t c.p t
   in
   let sort t = List.sort (fun x y -> fst x - fst y) t in
@@ -338,7 +340,7 @@ let log_ds c : data_struct list =
     let e = args_of_t_with_v c trig in
     create_ds (nd_log_for_t trig) (wrap_tbag' @@ snd_many e) ~e
   in
-  P.for_all_trigs c.p log_struct_for
+  P.for_all_trigs ~deletes:c.gen_deletes c.p log_struct_for
 
 (* create a map structure: used for both maps and buffers *)
 let make_map_decl c map_name map_id =
@@ -391,7 +393,7 @@ let nd_state = create_ds "nd_state" (mut t_int) ~init:(mk_var nd_state_normal.id
 (* these buffers don't inlude a vid, unlike the logs in the nodes *)
 let sw_trig_buf_prefix = "sw_buf_"
 let sw_trig_bufs (c:config) =
-  P.for_all_trigs c.p @@ fun t ->
+  P.for_all_trigs ~deletes:c.gen_deletes c.p @@ fun t ->
     create_ds (sw_trig_buf_prefix^t) (wrap_tlist' @@ snd_many @@ P.args_of_t c.p t)
 
 (* list for next message -- contains trigger id *)

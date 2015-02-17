@@ -87,8 +87,11 @@ let get_trig_list (p:prog_data_t) =
   let l = List.map (fun (_, name, _, _) -> name) @@ get_trig_data p in
   List.filter relevant_trig l
 
-let for_all_trigs (p:prog_data_t) f =
-  List.map (fun t -> f t) @@ get_trig_list p
+let for_all_trigs ?(deletes=true) (p:prog_data_t) f =
+  let l_delete = String.length "delete" in
+  let filter = if deletes then id_fn
+               else List.filter ((<>) "delete" |- str_take l_delete) in
+  List.map (fun t -> f t) @@ filter @@ get_trig_list p
 
 let find_trigger (p:prog_data_t) (tname:string) =
   try List.find (fun (_, name, _, _) -> name = tname) @@ get_trig_data p

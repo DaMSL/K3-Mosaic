@@ -161,6 +161,9 @@ type parameters = {
     mutable load_path : string;    (* path for the interpreter to load csv files from *)
     mutable use_multiindex : bool; (* whether to generate code that uses multiindex maps *)
     mutable enable_gc : bool;
+    mutable gen_deletes : bool;
+    mutable gen_correctives : bool;
+
     mutable src_interval : float;   (* interval (s) between the interpreter feeding sources *)
     mutable stream_file : string;  (* file to stream from (into switches) *)
   }
@@ -188,6 +191,9 @@ let default_cmd_line_params () = {
     load_path         = "";
     use_multiindex    = false;
     enable_gc         = true;
+    gen_deletes       = true;
+    gen_correctives   = true;
+
     src_interval      = 0.002;
     stream_file       = "input.csv";
   }
@@ -471,7 +477,10 @@ let transform_to_k3_dist params p proginfo =
   let use_multiindex = params.use_multiindex in
   let enable_gc = params.enable_gc in
   let stream_file = params.stream_file in
-  GenDist.gen_dist ~use_multiindex ~enable_gc ~stream_file proginfo params.partition_map p
+  let gen_deletes = params.gen_deletes in
+  let gen_correctives = params.gen_correctives in
+  GenDist.gen_dist ~use_multiindex ~enable_gc ~stream_file ~gen_deletes ~gen_correctives
+    proginfo params.partition_map p
 
 let process_inputs params =
   let proc_fn f = match params.in_lang, !(params.action) with
@@ -581,6 +590,10 @@ let param_specs = Arg.align
       "         Use multiindex maps";
   "--nogc", Arg.Unit (fun () -> cmd_line_params.enable_gc <- false),
       "         Use garbage collection";
+  "--no-deletes", Arg.Unit (fun () -> cmd_line_params.gen_deletes <- false),
+      "         Generate deletes";
+  "--no-correctives", Arg.Unit (fun () -> cmd_line_params.gen_correctives <- false),
+      "         Generate correctives";
 
   (* Debugging parameters *)
 

@@ -331,7 +331,7 @@ let sw_driver_trig (c:config) =
         (* else, continue *)
         acc)
     (mk_error "mismatch on trigger id") @@
-    P.for_all_trigs c.p (fun x -> P.trigger_id_for_name c.p x, x)
+    P.for_all_trigs ~deletes:c.gen_deletes c.p (fun x -> P.trigger_id_for_name c.p x, x)
   in
   mk_code_sink' sw_driver_trig_nm unit_arg [] @@
   mk_case_ns (mk_apply' TS.sw_gen_vid_nm mk_cunit) "vid"
@@ -783,7 +783,7 @@ let send_corrective_trigs c =
         List.filter
           (fun (trig, stmt_id) -> P.stmt_has_rhs_map c.p stmt_id map_id) @@
           List.flatten @@
-            P.for_all_trigs c.p
+            P.for_all_trigs ~deletes:c.gen_deletes c.p
               (fun trig ->
                 List.map (fun stmt -> trig, stmt) @@ P.stmts_of_t c.p trig) in
     (* turn the ocaml list into a literal k3 list *)
@@ -1023,8 +1023,8 @@ let declare_global_vars c partmap ast =
 
 let declare_global_funcs c partmap ast =
   nd_log_master_write ::
-  (P.for_all_trigs c.p @@ nd_log_write c) @
-  (P.for_all_trigs c.p @@ nd_log_get_bound c) @
+  (P.for_all_trigs ~deletes:c.gen_deletes c.p @@ nd_log_write c) @
+  (P.for_all_trigs ~deletes:c.gen_deletes c.p @@ nd_log_get_bound c) @
   nd_log_read_geq ::
   nd_check_stmt_cntr_index ::
   nd_filter_corrective_list ::
@@ -1062,7 +1062,12 @@ let gen_dist_for_t c ast trig corr_maps =
 
 (* Function to generate the whole distributed program *)
 (* @param force_correctives Attempt to create dist code that encourages correctives *)
-let gen_dist ?(use_multiindex=false) ?(enable_gc=false) ?(stream_file="XXX") p partmap ast =
+let gen_dist ?(use_multiindex=false)
+             ?(enable_gc=false)
+             ?(stream_file="XXX")
+             ?(gen_deletes=true)
+             ?(gen_correctives=true)
+             p partmap ast =
   (* collect all map access patterns for creating indexed maps *)
   let c = {
       p;
@@ -1072,12 +1077,15 @@ let gen_dist ?(use_multiindex=false) ?(enable_gc=false) ?(stream_file="XXX") p p
       enable_gc;
       map_idxs = M.get_map_access_patterns_ids p ast;
       stream_file;
+      gen_deletes;
+      gen_correctives;
     } in
   let potential_corr_maps = maps_potential_corrective c in
   (* regular trigs then insert entries into shuffle fn table *)
   let proto_trigs, proto_funcs =
     (fun (a,b) -> List.flatten a, List.flatten b) @@ list_unzip @@
-      P.for_all_trigs c.p @@ fun t -> gen_dist_for_t c ast t potential_corr_maps
+      P.for_all_trigs ~deletes:c.gen_deletes c.p @@
+        fun t -> gen_dist_for_t c ast t potential_corr_maps
   in
   let prog =
     D.declare_foreign_functions @
