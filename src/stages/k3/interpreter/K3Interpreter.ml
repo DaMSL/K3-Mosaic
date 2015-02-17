@@ -495,11 +495,10 @@ and eval_expr (address:address) sched_st cenv texpr =
       (* get the sender's address from global variable "me" *)
       begin match sched_st, parts with
         | Some s, [target; addr; arg] ->
-            let e = expr_of_value uuid in
-            (* log our send *)
-            let send_code = K3Helpers.mk_send_raw (e target) (e addr) @@ e arg in
-            let send_str  = K3PrintSyntax.string_of_expr send_code in
-            Log.log (send_str^"\n") ~name:"K3Interpreter.Msg" `Debug;
+            let sov = string_of_value in
+            let send_str =
+              Printf.sprintf "send(%s, %s, %s)\n" (sov target) (sov addr) (sov arg) in
+            Log.log send_str ~name:"K3Interpreter.Msg" `Debug;
 
             (* create a new level on the queues *)
             schedule_trigger s target addr arg;
