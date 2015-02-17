@@ -221,10 +221,10 @@ let nd_add_delta_to_buf c map_id =
                 (if c.use_multiindex then
                   mk_slice_idx' ~idx ~comp:EQ (mk_var tmap_deref) @@
                     vars_v_no_val @ [mk_cunknown]
-                else
-                  (mk_slice' tmap_deref @@
-                    vars_v_no_val @ [mk_cunknown])) @@
-                  mk_empty @@ wrap_t_of_map' types_v) @@
+                  else
+                    (mk_slice' tmap_deref @@
+                      vars_v_no_val @ [mk_cunknown])) @@
+                mk_empty @@ wrap_t_of_map' types_v) @@
             mk_case_sn
               (mk_peek @@ mk_var lookup_value) "val"
               (* then just update the value *)
@@ -892,7 +892,7 @@ let nd_do_complete_trigs c ast trig_name =
       (args_of_t_with_v c trig_name) [] @@
     let lmap = P.lhs_map_of_stmt c.p stmt_id in
     let send_to =
-        if List.exists ((=) lmap) @@ maps_potential_corrective c
+        if c.gen_correctives && List.exists ((=) lmap) @@ maps_potential_corrective c
         then Some(send_corrective_name_of_t c lmap)
         else None
     in
@@ -1027,9 +1027,9 @@ let declare_global_funcs c partmap ast =
   (P.for_all_trigs ~deletes:c.gen_deletes c.p @@ nd_log_get_bound c) @
   nd_log_read_geq ::
   nd_check_stmt_cntr_index ::
-  nd_filter_corrective_list ::
+  if c.gen_correctives then [nd_filter_corrective_list] else [] @
   K3Ring.functions @
-  (if not c.use_multiindex then emit_frontier_fns c else []) @
+  (if c.use_multiindex then [] else emit_frontier_fns c) @
   (List.map (nd_add_delta_to_buf c |- hd |- snd) @@ P.uniq_types_and_maps c.p) @
   TS.functions @
   K3Route.functions c.p partmap @
@@ -1049,14 +1049,18 @@ let gen_dist_for_t c ast trig corr_maps =
     sw_send_fetch_fn c s_rhs_lhs s_rhs trig
   ] in
   let trigs =
-    (if null s_rhs then [] else
+    begin if null s_rhs then []
+    else
       [nd_rcv_put_trig c trig;
-      nd_rcv_fetch_trig c trig])@
+      nd_rcv_fetch_trig c trig]
+    end @
     nd_send_push_stmt_map_trig c s_rhs_lhs trig@
     nd_rcv_push_trig c s_rhs trig @
     nd_do_complete_trigs c ast trig @
-    nd_rcv_correctives_trig c s_rhs_corr trig @
-    nd_do_corrective_trigs c s_rhs_corr ast trig corr_maps
+    if c.gen_correctives then
+      nd_rcv_correctives_trig c s_rhs_corr trig @
+      nd_do_corrective_trigs c s_rhs_corr ast trig corr_maps
+    else []
   in
   trigs, functions
 
@@ -1100,7 +1104,8 @@ let gen_dist ?(use_multiindex=false)
       [sw_demux c] @
       [sw_driver_trig c] @
       proto_trigs @
-      send_corrective_trigs c] @
+      if c.gen_correctives then send_corrective_trigs c
+      else []] @
     roles_of c ast
   in
   snd @@ U.renumber_program_ids prog
