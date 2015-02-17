@@ -294,23 +294,36 @@ let string_of_value ?mark_points v = wrap_formatter (fun () -> print_value ?mark
 (* Environment stringification *)
 let print_binding (id,v) = ob(); ps (id^" = "); pc(); print_value v; cb(); fnl()
 
+let map_to_tuple (k,v) = VTuple[k;v]
+let mmap_to_tuple x = VTuple x
+
+let v_peek err_fn c = match c with
+  | VSet m      -> ISet.peek m
+  | VBag m      -> ValueBag.peek m
+  | VList m     -> IList.peek m
+  | VMap m      -> maybe None (some |- map_to_tuple) @@ ValueMap.peek m
+  | VMultimap m -> ValueMMap.peek m
+  | v -> err_fn "v_peek" @@ Printf.sprintf "not a collection: %s" @@ string_of_value v
+
 (* for a map structure *)
-let print_binding_m id v = ob(); ps (id^" = "); pc(); print_value v; cb(); fnl()
+let print_binding_m ?(skip_functions=true) ?(skip_empty=true) id v =
+  let dummy x y = None in
+  (* check for conditions *)
+  let rec check_print = function
+    | (VFunction _ | VForeignFunction _)                 when skip_functions -> false
+    | (VSet _ | VBag _ | VList _ | VMap _ | VMultimap _) when skip_empty && v_peek dummy v = None -> false
+    | VIndirect x -> check_print !x
+    | _ -> true
+  in
+  if check_print v then begin ob(); ps (id^" = "); pc(); print_value v; cb(); fnl() end
+  else ()
 
 let print_frame frame = IdMap.iter print_binding_m frame
 
-let print_env skip_functions (globals, frames) =
-  let filter_m e = IdMap.filter
-    (fun _ -> function
-      | VFunction _        -> false
-      | VForeignFunction _ -> false
-      | _                  -> true)
-    e in
+let print_env ?skip_functions ?skip_empty (globals, frames) =
   ps @@ Printf.sprintf "----Globals(%i)----" @@ IdMap.cardinal globals; fnl();
   let global_m = IdMap.map (!) globals in
-  let global_m' = if not skip_functions then global_m
-                  else filter_m global_m in
-  IdMap.iter print_binding_m global_m'
+  IdMap.iter (print_binding_m ?skip_functions ?skip_empty) global_m
 
 let print_trigger_env env =
   ps @@ Printf.sprintf "----Triggers(%i)----" @@ IdMap.cardinal env; fnl();
@@ -318,10 +331,10 @@ let print_trigger_env env =
 
 let print_program_env (trigger_env, val_env) =
   (* print_trigger_env trigger_env; *)
-  print_env true val_env
+  print_env ~skip_functions:true val_env
 
-let string_of_env ?(skip_functions=true) (env:env_t) =
-  wrap_formatter (fun () -> print_env skip_functions env)
+let string_of_env ?skip_functions ?skip_empty (env:env_t) =
+  wrap_formatter (fun () -> print_env ?skip_functions ?skip_empty env)
 
 let string_of_program_env env = wrap_formatter (fun () -> print_program_env env)
 
@@ -351,18 +364,7 @@ let rec value_of_const_expr e = match tag_of_expr e with
 
 (* Global collection functions for values *)
 
-let map_to_tuple (k,v) = VTuple[k;v]
-let mmap_to_tuple x = VTuple x
-
 type 'a t_err_fn = (string -> string -> 'a)
-
-let v_peek err_fn c = match c with
-  | VSet m      -> ISet.peek m
-  | VBag m      -> ValueBag.peek m
-  | VList m     -> IList.peek m
-  | VMap m      -> maybe None (some |- map_to_tuple) @@ ValueMap.peek m
-  | VMultimap m -> ValueMMap.peek m
-  | v -> err_fn "v_peek" @@ Printf.sprintf "not a collection: %s" @@ string_of_value v
 
 let v_combine err_fn x y = match x, y with
   | VSet m,  VSet m'          -> VSet(ISet.combine m m')
