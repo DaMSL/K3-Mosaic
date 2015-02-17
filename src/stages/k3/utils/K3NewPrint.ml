@@ -493,6 +493,10 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
                | _          -> id_fn
                end
     | _     -> id_fn in
+(* for a stmt of a block *)
+ let paren_stmt e = match U.tag_of_expr e with
+   | IfThenElse | CaseOf _ | Apply -> lazy_paren
+   | _ -> id_fn in
 (* for things like .map *)
  let paren_l e = match U.tag_of_expr e with
     | Var _ | Const _ -> id_fn
@@ -644,9 +648,9 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
       | _ -> function_application c e1 [e2]
     end
   | Block -> let es = U.decompose_block expr in
-    lps "(" <| wrap_indent (
-    wrap_hv 0 (lps_list ~sep:";" CutHint (wrap_hov 0 |- lazy_expr c) es <| lsp ()))
-      <| lps ")"
+    lazy_paren @@ wrap_indent (wrap_hv 0 @@ 
+      lps_list ~sep:";" CutHint (fun e ->
+        wrap_hov 0 @@ paren_stmt e @@ lazy_expr c e) es)
 
   | IfThenElse -> let e1, e2, e3 = U.decompose_ifthenelse expr in
     wrap_indent (lps "if " <| lazy_expr c e1) <| lsp () <|
