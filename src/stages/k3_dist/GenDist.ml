@@ -1019,7 +1019,7 @@ let declare_global_vars c partmap ast =
   TS.global_vars @
   K3Ring.global_vars @
   K3Route.global_vars c.p partmap @
-  (if c.enable_gc then GC.global_vars c else [])
+  begin if c.enable_gc then GC.global_vars c else [] end
 
 let declare_global_funcs c partmap ast =
   nd_log_master_write ::
@@ -1027,9 +1027,9 @@ let declare_global_funcs c partmap ast =
   (P.for_all_trigs ~deletes:c.gen_deletes c.p @@ nd_log_get_bound c) @
   nd_log_read_geq ::
   nd_check_stmt_cntr_index ::
-  if c.gen_correctives then [nd_filter_corrective_list] else [] @
+  begin if c.gen_correctives then [nd_filter_corrective_list] else [] end @
   K3Ring.functions @
-  (if c.use_multiindex then [] else emit_frontier_fns c) @
+  begin if c.use_multiindex then [] else emit_frontier_fns c end @
   (List.map (nd_add_delta_to_buf c |- hd |- snd) @@ P.uniq_types_and_maps c.p) @
   TS.functions @
   K3Route.functions c.p partmap @
