@@ -878,7 +878,12 @@ let rec lazy_resource_pattern c = function
 
 let lazy_stream c = function
   | RandomStream i -> lps "random" <| lazy_paren (lps @@ string_of_int i)
-  | ConstStream e  -> lps "value" <| lazy_paren (lazy_expr c e)
+  (* k3o must put a collection here, and k3 expects a value, so extract it *)
+  | ConstStream e  -> 
+      begin match KH.list_of_k3_container e with
+      | [e] -> lps "value" <| lazy_paren (lazy_expr c e)
+      | _   -> failwith "cannot translate stream to k3new"
+      end
 
 let lazy_resource c r =
   let common t = lazy_type c t <| lps " = " in
@@ -894,10 +899,8 @@ let lazy_flow c e =
     | Sink(Code(id, arg, vars, expr)) -> lazy_trigger c id arg vars expr
     | Source(Resource(id, r)) ->
         lps ("source "^id^" : ") <| lazy_resource c r
-    | Sink(Resource(id, r)) ->
-        lps ("sink "^id^" : ") <| lazy_resource c r
     | BindFlow(id1, id2) -> lps @@ "feed "^id1^" |> "^id2
-    | Instruction(Consume id) -> []
+    | _ -> []
   in out <| lcut () <| lcut ()
 
 let lazy_flow_program c fas = lps_list ~sep:"" CutHint (lazy_flow c |- fst) fas
@@ -920,7 +923,7 @@ let lazy_declaration c d =
     wrap_indent (lps @@ "declare "^id^" :" <| lsp () <| lazy_type c t <| end_part)
   | Role(id, fprog) -> lazy_flow_program c fprog
   | Flow fprog -> lazy_flow_program c fprog
-  | DefaultRole id -> lps ("default role "^id)
+  | DefaultRole id -> []
   | Foreign(id, t) -> lps ("declare "^id^" :") <| lsp () <| lazy_type c t
   in
   wrap_hov 0 out <| lcut () <| lcut ()
