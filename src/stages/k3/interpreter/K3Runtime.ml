@@ -45,6 +45,8 @@ let error t =
  *    on the queue.
  *)
 
+module AddrSet = Set.Make(struct type t = address let compare = compare end)
+
 type task_t   = id_t * value_t
 type n_task_t = Task of task_t
               | Sleep of float (* wakeup time *)
@@ -64,14 +66,18 @@ type queue_type = GlobalQ | PerNodeQ
 type scheduler_state = {
   mutable events_processed : int;
   queue : queue_t;
-  mutable count : int;
+  mutable msg_count : int;
+  mutable active_peers : AddrSet.t;
+  mutable active_peer_count : int;
 }
 
 let init_scheduler_state ?(queue_type=PerNodeQ)
                          ~peers =
   {
     events_processed = 0;
-    count = 0;
+    msg_count = 0;
+    active_peers = AddrSet.of_list @@ fst_many peers;
+    active_peer_count = List.length peers;
     queue = begin match queue_type with
      | GlobalQ     -> Global(Q.create ())
      | PerNodeQ    ->
@@ -86,7 +92,7 @@ let init_scheduler_state ?(queue_type=PerNodeQ)
 
 (* Scheduling at the lowest level *)
 let schedule_task s address task =
-  s.count <- succ s.count;
+  s.msg_count <- succ s.msg_count;
   match s.queue with
   | Global q  -> Q.push (address, task) q
   | PerNode pn ->
@@ -105,6 +111,11 @@ let sleep s address t = match s.queue with
         with Not_found -> error INVALID_NODE_QUEUE
       in
       Queue.push (Sleep(Sys.time () +. t)) nodeq
+
+(* halt a node *)
+let halt s address =
+  s.active_peers <- AddrSet.remove address s.active_peers;
+  s.active_peer_count <- pred s.active_peer_count
 
 let schedule_trigger s v_target v_address args =
   match v_target, v_address with
@@ -146,7 +157,7 @@ let next_idx arr idx =
   let idx' = idx + 1 in
   if idx' >= Array.length arr then 0 else idx'
 
-let decr_count s = s.count <- pred s.count
+let decr_count s = s.msg_count <- pred s.msg_count
 
 let process_task s prog_env_fn = match s.queue with
   | Global q  ->
@@ -162,7 +173,8 @@ let process_task s prog_env_fn = match s.queue with
         let cont () = loop (next_idx q.arr q.last) (n-1) in
         if n = 0 then () else
         let addr, nodeq = q.arr.(idx) in
-        if Queue.is_empty nodeq then cont ()
+        (* skip if q is empty or if we're inactive *)
+        if Queue.is_empty nodeq || not(AddrSet.mem addr s.active_peers) then cont ()
         else
           begin match Queue.peek nodeq with
           | Sleep t ->
@@ -182,16 +194,16 @@ let process_task s prog_env_fn = match s.queue with
 
 (* Scheduler toplevel methods *)
 
-let network_has_work s = s.count > 0
+let network_has_work s = s.msg_count > 0 && s.active_peer_count > 0
 
 (* address is ignored for global queue *)
 let run_scheduler ?(slice = max_int) s get_env_fn =
   let rec loop i =
-    if i <= 0 || not (network_has_work s) then ()
+    if i >= slice || not (network_has_work s) then i
     else begin
       process_task s get_env_fn;
-      loop (i-1)
+      loop @@ i+1
     end
   in
-  loop slice
+  loop 0
 

@@ -114,10 +114,13 @@ let rec eval_fun uuid f =
 
     | VForeignFunction(id, arg, f) ->
         fun addr sched env a ->
-          (* override the default function for sleep *)
           begin match id, sched, a with
+          (* override the default function for sleep *)
           | "sleep", Some s, VInt t -> R.sleep s addr (foi t /. 1000.) ;
                                        env, VTemp VUnit
+          | "haltEngine", Some s, _ -> 
+              Log.log ("shutting down "^string_of_address addr) ();
+              R.halt s addr; env, VTemp VUnit
           | _ ->
             let new_env = {env with locals=bind_args uuid arg a env.locals} in
             begin try
@@ -690,14 +693,14 @@ let interpret_k3_program i =
   let rec loop last_src_peers =
     (* number of peers with messages *)
     let msg_peers =
-      if R.network_has_work i.scheduler then
+      if R.network_has_work i.scheduler then begin
         (* func to return program env *)
         let prog_env_fn addr =
           Log.log (sp "Node %s: consuming messages\n" @@ string_of_address addr) `Trace;
           (Hashtbl.find i.envs addr).prog_env
         in
-        run_scheduler ~slice:1 i.scheduler prog_env_fn; 1
-      else 0
+        run_scheduler ~slice:1 i.scheduler prog_env_fn
+      end else 0
     in
     let t = Sys.time () in
     let src_peers =

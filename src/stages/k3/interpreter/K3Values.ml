@@ -151,10 +151,10 @@ and Value : sig
   and trigger_env_t = (address -> env_t -> value_t -> unit) IdMap.t
   (* keep track of what was modified *)
   and env_t = {
-        triggers:trigger_env_t;
-        globals:global_env_t;
-        locals:local_env_t;
-        accessed:StrSet.t ref;
+        triggers: trigger_env_t;
+        globals:  global_env_t;
+        locals:   local_env_t;
+        accessed: StrSet.t ref;
       }
 
   and value_t
