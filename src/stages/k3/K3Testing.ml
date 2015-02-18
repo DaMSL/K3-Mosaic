@@ -161,7 +161,7 @@ let unify_envs (envs : (address * env_t) list) =
         acc env.globals)
       IdMap.empty envs
   in
-  {globals=unified_env; locals=IdMap.empty; triggers=IdMap.empty} (* no frames *)
+  {default_env with globals=unified_env} (* no frames *)
 
 (* test a program and comare it to the expected output. Takes an interpretation
  * function that expects an untyped AST (this takes care of handling any extra

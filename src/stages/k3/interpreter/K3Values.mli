@@ -33,6 +33,7 @@ and Value : sig
         triggers:trigger_env_t;
         globals:global_env_t;
         locals:local_env_t;
+        accessed:StrSet.t ref;
       }
   and value_t
       = VMax
@@ -66,6 +67,8 @@ and ValueComp : sig val compare_v : Value.value_t -> Value.value_t -> int
 
 open Value
 
+val default_env : env_t
+
 (* Value comparison *)
 val equal_values : value_t -> value_t -> bool
 val compare_values : (int -> int -> bool) -> value_t -> value_t -> bool
@@ -78,11 +81,13 @@ val repr_of_value : value_t -> string
 val string_of_value : ?mark_points:int list -> value_t -> string
 
 (* Environment stringification *)
-val print_env : ?skip_functions:bool -> ?skip_empty:bool -> env_t -> unit
-val print_program_env : env_t -> unit
+val print_env : ?skip_functions:bool ->
+                ?skip_empty:bool ->
+                ?accessed_only:bool -> env_t -> unit
 
-val string_of_env : ?skip_functions:bool -> ?skip_empty:bool -> env_t -> string
-val string_of_program_env : env_t -> string
+val string_of_env : ?skip_functions:bool ->
+                    ?skip_empty:bool ->
+                    ?accessed_only:bool -> env_t -> string
 
 (* Conversion between values and other types *)
 val value_of_const : constant_t -> value_t

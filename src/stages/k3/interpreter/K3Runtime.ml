@@ -130,6 +130,8 @@ let invoke_trigger s address env trigger_id arg =
   | Global q  -> Q.increase_level q
   | _         -> ()
   end;
+  (* reset the access env *)
+  (env.accessed) := StrSet.empty;
   let trig = IdMap.find trigger_id env.triggers in
   begin try trig address env arg
     (* re-raise exception with trig name *)

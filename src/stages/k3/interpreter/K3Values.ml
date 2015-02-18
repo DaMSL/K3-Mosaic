@@ -149,10 +149,12 @@ and Value : sig
   * scheduler_state (parametrized here to prevent circular inclusion), the
   * environment, value_t of arguments, and produce unit *)
   and trigger_env_t = (address -> env_t -> value_t -> unit) IdMap.t
+  (* keep track of what was modified *)
   and env_t = {
         triggers:trigger_env_t;
         globals:global_env_t;
         locals:local_env_t;
+        accessed:StrSet.t ref;
       }
 
   and value_t
@@ -184,6 +186,7 @@ and ValueUtils : (sig val v_to_list : Value.value_t -> Value.value_t list
                       val repr_of_value : Value.value_t -> string
                   end) = struct
   open Value
+
     (* Value stringification *)
     let v_to_list = function
       | VBag m  -> ValueBag.to_list m
@@ -248,6 +251,14 @@ open Value
 
 include ValueUtils
 
+  let default_env = {
+    triggers=IdMap.empty;
+    globals=IdMap.empty;
+    locals=IdMap.empty;
+    accessed=ref StrSet.empty;
+  }
+
+
 (* mark_points are optional sorted counts of where we want markings *)
 let rec print_value ?(mark_points=[]) v =
   let count = ref 0 in
@@ -311,9 +322,10 @@ let v_peek err_fn c = match c with
 let print_binding_m ?(skip_functions=true) ?(skip_empty=true) id v =
   let dummy x y = None in
   (* check for conditions *)
-  let rec check_print = function
+  let rec check_print v' =
+    match v' with
     | (VFunction _ | VForeignFunction _)                 when skip_functions -> false
-    | (VSet _ | VBag _ | VList _ | VMap _ | VMultimap _) when skip_empty && v_peek dummy v = None -> false
+    | (VSet _ | VBag _ | VList _ | VMap _ | VMultimap _) when skip_empty && v_peek dummy v' = None -> false
     | VIndirect x -> check_print !x
     | _ -> true
   in
@@ -322,23 +334,22 @@ let print_binding_m ?(skip_functions=true) ?(skip_empty=true) id v =
 
 let print_frame frame = IdMap.iter print_binding_m frame
 
-let print_env ?skip_functions ?skip_empty env =
+let print_env ?skip_functions ?skip_empty ?(accessed_only=true) env =
   ps @@ Printf.sprintf "----Globals(%i)----" @@ IdMap.cardinal env.globals; fnl();
-  let deref f x y = f x !y in
-  IdMap.iter (deref @@ print_binding_m ?skip_functions ?skip_empty) env.globals
+  let print id v =
+    let action () = print_binding_m ?skip_functions ?skip_empty id !v in
+    if accessed_only then
+      if StrSet.mem id !(env.accessed) then action () else ()
+    else action ()
+  in
+  IdMap.iter print env.globals
 
 let print_trigger_env env =
   ps @@ Printf.sprintf "----Triggers(%i)----" @@ IdMap.cardinal env.triggers; fnl();
   IdMap.iter (fun id _ -> ps id; fnl()) env.triggers
 
-let print_program_env env =
-  (* print_trigger_env trigger_env; *)
-  print_env ~skip_functions:true env
-
-let string_of_env ?skip_functions ?skip_empty (env:env_t) =
-  wrap_formatter (fun () -> print_env ?skip_functions ?skip_empty env)
-
-let string_of_program_env env = wrap_formatter (fun () -> print_program_env env)
+let string_of_env ?skip_functions ?skip_empty ?accessed_only (env:env_t) =
+  wrap_formatter (fun () -> print_env ?skip_functions ?skip_empty ?accessed_only env)
 
 (* conversion of things to values *)
 let value_of_const = function

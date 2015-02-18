@@ -34,7 +34,7 @@ let int_erroru uuid ?extra fn_name s =
   (match extra with
   | Some (address, env) ->
     Log.log (sp ">>>> Peer %s\n" @@ string_of_address address) `Error;
-    Log.log (sp "%s\n" @@ string_of_env env) `Error
+    Log.log (sp "%s\n" @@ string_of_env ~skip_empty:false ~accessed_only:false env) `Error
   | _ -> ());
   raise @@ RuntimeError(uuid, msg)
 
@@ -46,6 +46,7 @@ let lookup id env =
   try
     VTemp(hd @@ IdMap.find id env.locals)
   with Not_found ->
+    (env.accessed) := StrSet.add id !(env.accessed);
     VDeclared(IdMap.find id env.globals)
 
 let env_modify id env f =
@@ -57,6 +58,7 @@ let env_modify id env f =
     with Not_found -> (* look in globals *)
       try
         let rv = IdMap.find id env.globals in
+        (env.accessed) := StrSet.add id !(env.accessed);
         rv := f !rv;
         env
       with Not_found ->
@@ -122,7 +124,8 @@ let rec eval_fun uuid f =
               let env', result = f new_env in
               {env' with locals=unbind_args uuid arg env'.locals}, result
             with Failure x ->
-              raise @@ RuntimeError(uuid, x^"\n"^string_of_env env) end
+              raise @@ RuntimeError(uuid, x^"\n"^
+                string_of_env ~skip_empty:false ~accessed_only:false env) end
           end
 
    | _ -> error "eval_fun: Non-function value"
@@ -610,8 +613,7 @@ let env_of_program ?address ~role ~peers sched_st k3_program =
     | _ -> env
   in
   (* triggers, (variables, arg frames) *)
-  let init_env = {triggers=IdMap.empty; globals=IdMap.empty; locals=IdMap.empty} in
-  List.fold_left env_of_declaration init_env k3_program
+  List.fold_left env_of_declaration default_env k3_program
 
 
 (* Instruction interpretation *)
@@ -720,7 +722,7 @@ let interpret_k3_program i =
   (* Log program state *)
   List.iter (fun (addr, e) ->
     Log.log (sp ">>>> Peer %s\n" (string_of_address addr)) `Trace;
-    Log.log (sp "%s\n" (string_of_program_env e)) `Trace;
+    Log.log (sp "%s\n" (string_of_env e ~accessed_only:false)) `Trace;
   ) prog_state;
   prog_state
 
