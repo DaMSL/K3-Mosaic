@@ -604,12 +604,6 @@ let env_of_program ?address ~role ~peers sched_st k3_program =
           | id, _ when id = K3Global.role.id ->
               penv, VString role
 
-          (* hack to support dist *)
-          | id, _ when id = D.jobs.id ->
-              let m = ValueMap.of_list @@
-                List.map (fun (k,v) -> VAddress k, VInt(D.job_of_str v)) peers in
-              penv, VMap m
-
           | _, Some e -> second value_of_eval @@
               eval_expr me_addr (Some sched_st) penv e
 
