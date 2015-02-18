@@ -30,8 +30,6 @@ def run():
                         default=False, help="Distributed test")
     parser.add_argument('-n', '--nodes', action='store', type=int, dest='num_nodes',
                         default=1, help="Number of data nodes")
-    parser.add_argument('-q', '--queue', action='store', dest='queue_type',
-                        default="global", help="Queue type: global/trigger/node")
     parser.add_argument('-o', '--order', action='store', dest='order_file',
                         default=None, help="Use an order file instead of creating a trace")
     parser.add_argument('-v', '--verbose', action='store_true', dest='verbose',
@@ -88,7 +86,6 @@ def run():
         else:
             res = dist_test.run(test_file,
                                 num_nodes=args.num_nodes,
-                                queue_type=args.queue_type,
                                 order_file=args.order_file,
                                 verbose=verbose,
                                 distrib=True,

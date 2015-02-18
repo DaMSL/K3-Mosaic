@@ -23,7 +23,6 @@ def get_nice_name(path):
 
 def run(target_file,
         num_nodes=1,
-        queue_type="global",
         order_file=None,
         verbose=True,
         distrib=False,
@@ -121,6 +120,8 @@ def run(target_file,
 
     # execution diverges from here
     if distrib:
+        queue_type = "node"
+
         # string for k3 distributed file creation: either use a trace file or an order file
         if not order_file:
             create_cmd = concat(["--trace", trace_file])
@@ -201,6 +202,7 @@ def run(target_file,
 
     else: # not distrib
         # convert again to check for any loopback malformations
+        queue_type = "global"
         cmd = concat([k3o, "-p -i k3 -l k3", k3_file, ">", k3_file2, "2>", error_file])
         print_system(cmd, verbose)
         if check_error(error_file, verbose) or check_error(k3_file2, verbose, True):
