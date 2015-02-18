@@ -45,7 +45,8 @@ let eval_test_expr peers decl_prog expr =
   let tdecl_prog, t_env, trig_env, _ = type_bindings_of_program decl_prog in
   (* get the value environment from the interpreter, excluding the trigger
    * functions. if we pass an environment, use that *)
-  let _, val_env = env_of_program ~peers ~role:"" (K3Runtime.init_scheduler_state peers) tdecl_prog in
+  let val_env =
+    env_of_program ~peers ~role:"" (K3Runtime.init_scheduler_state peers) tdecl_prog in
   eval_test_expr_env tdecl_prog t_env trig_env val_env expr
 
 (* Tests *)
@@ -104,7 +105,7 @@ let test_expressions peers file_name = function
 let env_deref_refs env = List.rev_map (fun (id, v) -> (id, !v)) env
 
 let extract_first_env = function
-  | (addr, (_, (env, _)))::_ -> (env, IdMap.empty)
+  | (addr, env)::_ -> env
   | [] -> invalid_arg "no environment"
 
 let unify_tuple_lists id l1 l2 =
@@ -150,17 +151,17 @@ let unify_values id r_newval = function
     | _,_                      -> Some r_newval
 
 (* unify the environments of different nodes *)
-let unify_envs (envs : (address * program_env_t) list) =
+let unify_envs (envs : (address * env_t) list) =
   (* fold over all the nodes. we discard triggers and frames *)
   let unified_env =
     (* ignore triggers and frames *)
-    List.fold_left (fun acc (addr, (_, (m_env, _))) ->
+    List.fold_left (fun acc (addr, env) ->
       IdMap.fold (fun id newval acc' ->
-        map_modify (unify_values id newval) id acc'
-      ) acc m_env
-    ) IdMap.empty envs
+          map_modify (unify_values id newval) id acc')
+        acc env.globals)
+      IdMap.empty envs
   in
-  (unified_env, IdMap.empty) (* no frames *)
+  {globals=unified_env; locals=IdMap.empty; triggers=IdMap.empty} (* no frames *)
 
 (* test a program and comare it to the expected output. Takes an interpretation
  * function that expects an untyped AST (this takes care of handling any extra
@@ -170,8 +171,8 @@ let test_program peers globals_k3 interpret_fn file_name test =
   let op_fn, program, tests = match test with
     (* for a single-site test, we just extract the env. For multi-site, we unify
      * the environments, and rename all node variables to be node_var (TODO) *)
-    | ProgTest (prog, checkl)    -> extract_first_env, prog, checkl
-    | NetworkTest (prog, checkl) -> unify_envs, prog, checkl
+    | ProgTest(prog, checkl)    -> extract_first_env, prog, checkl
+    | NetworkTest(prog, checkl) -> unify_envs, prog, checkl
     | _ -> failwith "unsupported test"
   in
   let node_envs = interpret_fn program in
@@ -183,7 +184,7 @@ let test_program peers globals_k3 interpret_fn file_name test =
   (* ) node_envs;*)
 
   (* unify the node value environments if needed *)
-  let (v_env:env_t) = op_fn node_envs in
+  let v_env = op_fn node_envs in
 
   (* debug - print the unified env *)
   (*Printf.printf "Unified environment:\n";*)

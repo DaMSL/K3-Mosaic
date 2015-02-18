@@ -42,21 +42,21 @@ let int_error = int_erroru (-1)
 
 (* Environment helpers *)
 
-let lookup id (mutable_env, frame_env) =
+let lookup id env =
   try
-    VTemp(hd @@ IdMap.find id frame_env)
+    VTemp(hd @@ IdMap.find id env.locals)
   with Not_found ->
-    VDeclared(IdMap.find id mutable_env)
+    VDeclared(IdMap.find id env.globals)
 
-let env_modify id (env:env_t) f =
+let env_modify id env f =
   try
-    begin match IdMap.find id @@ snd env with
-    | v::vs -> second (IdMap.add id @@ f v::vs) env
+    begin match IdMap.find id env.locals with
+    | v::vs -> {env with locals=IdMap.add id (f v::vs) env.locals}
     | []    -> failwith "unexpected"
     end
     with Not_found -> (* look in globals *)
       try
-        let rv = IdMap.find id @@ fst env in
+        let rv = IdMap.find id env.globals in
         rv := f !rv;
         env
       with Not_found ->
@@ -105,24 +105,24 @@ let rec eval_fun uuid f =
   let error = int_erroru uuid "eval_fun" in
   match f with
     | VFunction(arg, closure, body) ->
-        fun addr sched (m_env, f_env) a ->
-          let new_env = m_env, bind_args uuid arg a closure in
-          let (m_env', _), result = eval_expr addr sched new_env body in
-          (m_env', f_env), result
+        fun addr sched env a ->
+          let new_env = {env with locals=bind_args uuid arg a closure} in
+          let env', result = eval_expr addr sched new_env body in
+          {env' with locals=env.locals}, result
 
     | VForeignFunction(id, arg, f) ->
-        fun addr sched (m_env, f_env) a ->
+        fun addr sched env a ->
           (* override the default function for sleep *)
           begin match id, sched, a with
           | "sleep", Some s, VInt t -> R.sleep s addr (foi t /. 1000.) ;
-                                       (m_env, f_env), VTemp VUnit
+                                       env, VTemp VUnit
           | _ ->
-            let new_env = m_env, (bind_args uuid arg a f_env) in
+            let new_env = {env with locals=bind_args uuid arg a env.locals} in
             begin try
-              let (m_env', f_env'), result = f new_env in
-              (m_env', unbind_args uuid arg f_env'), result
+              let env', result = f new_env in
+              {env' with locals=unbind_args uuid arg env'.locals}, result
             with Failure x ->
-              raise @@ RuntimeError(uuid, x^"\n"^string_of_env (m_env, f_env)) end
+              raise @@ RuntimeError(uuid, x^"\n"^string_of_env env) end
           end
 
    | _ -> error "eval_fun: Non-function value"
@@ -261,7 +261,7 @@ and eval_expr (address:address) sched_st cenv texpr =
     (* Control flow *)
     | Lambda a ->
       let body = List.nth children 0
-      in cenv, VTemp(VFunction(a, snd cenv, body))
+      in cenv, VTemp(VFunction(a, cenv.locals, body))
 
     | Apply ->
         begin match child_values cenv with
@@ -297,10 +297,10 @@ and eval_expr (address:address) sched_st cenv texpr =
         let penv, pred = child_value cenv 0 in
         begin match pred with
         | VOption(Some v) ->
-            let penv = second (env_add x v) penv in
+            let penv = {penv with locals=env_add x v penv.locals} in
             let penv, v = eval_expr address sched_st penv @@
               List.nth children 1 in
-            second (env_remove x) penv, v
+            {penv with locals=env_remove x penv.locals}, v
         | VOption None    ->
             eval_expr address sched_st penv @@ List.nth children 2
         | _ -> error name "non-maybe predicate"
@@ -310,13 +310,13 @@ and eval_expr (address:address) sched_st cenv texpr =
         let penv, pred = child_value cenv 0 in
         begin match pred with
         | VIndirect rv ->
-          let penv = second (env_add x !rv) penv in
+          let penv = {penv with locals=env_add x !rv penv.locals} in
           let penv, ret = eval_expr address sched_st penv @@ List.nth children 1
           in
           (* update bound value *)
           let v = value_of_eval @@ lookup x penv in
           rv := v;
-          second (env_remove x) penv, ret
+          {penv with locals=env_remove x penv.locals}, ret
         | _ -> error name "non-indirect predicate"
         end
 
@@ -325,12 +325,12 @@ and eval_expr (address:address) sched_st cenv texpr =
         begin match ids, bound with
         | [id], _  ->
             let env = if id = "_" then env
-                      else second (env_add id bound) env in
+                      else {env with locals=env_add id bound env.locals} in
             eval_expr address sched_st env @@ List.nth children 1
         | _, VTuple vs ->
             let env = List.fold_left2 (fun acc_env id v ->
               if id = "_" then acc_env
-              else second (env_add id v) acc_env)
+              else {acc_env with locals=env_add id v acc_env.locals})
               env ids vs
             in
             eval_expr address sched_st env @@ List.nth children 1
@@ -561,12 +561,12 @@ let dispatch_foreign id = K3StdLib.lookup_value id
 (* Returns a trigger evaluator function to serve as a simulation
  * of the trigger *)
 let prepare_trigger sched_st id arg local_decls body =
-  fun address (m_env, f_env) args ->
+  fun address env args ->
     let default (id,t,_) = id, ref @@ default_value id t in
-    let new_vals = List.map default local_decls in
-    let local_env = add_from_list m_env new_vals, f_env in
-    let _, reval = (eval_fun (-1) @@ VFunction(arg, IdMap.empty, body)) address
-                   (Some sched_st) local_env args in
+    let new_vals  = List.map default local_decls in
+    let local_env = {env with globals=add_from_list env.globals new_vals} in
+    let _, reval  = (eval_fun (-1) @@ VFunction(arg, IdMap.empty, body)) address
+                    (Some sched_st) local_env args in
     match value_of_eval reval with
       | VUnit -> ()
       | _ -> int_error "prepare_trigger" @@ "trigger "^id^" returns non-unit"
@@ -574,51 +574,43 @@ let prepare_trigger sched_st id arg local_decls body =
 (* add code sinks to the trigger environment *)
 let prepare_sinks sched_st env fp =
   List.fold_left
-    (fun ((trig_env, (m_env, f_env)) as env) (fs,a) -> match fs with
-    | Sink(Resource _) ->
-      failwith "sink resource interpretation not supported"
-
+    (fun e (fs,a) -> match fs with
+    | Sink(Resource _) -> failwith "sink resource interpretation not supported"
     | Sink(Code(id, arg, locals, body)) ->
-      IdMap.add id (prepare_trigger sched_st id arg locals body) trig_env, (m_env, f_env)
-
-    | _ -> env
-    ) env fp
+        {e with triggers=IdMap.add id (prepare_trigger sched_st id arg locals body) e.triggers}
+    | _ -> e)
+    env fp
 
 (* Builds a trigger, global value and function environment (ie frames) *)
 let env_of_program ?address ~role ~peers sched_st k3_program =
   let me_addr = match address with
     | None   -> Constants.default_address
     | Some a -> a in
-  let env_of_declaration (trig_env, (m_env, f_env as penv) as env) (d,_) = match d with
+  let env_of_declaration env (d,_) = match d with
     | K3.AST.Global (id, t, init_opt) ->
-        let (rm_env, rf_env), init_val = match id, init_opt with
+        let rf_env, init_val = match id, init_opt with
 
           (* substitute the proper address expression for 'me' *)
-          | id, _ when id = K3Global.me.id ->
-              penv, VAddress me_addr
+          | id, _ when id = K3Global.me.id -> env, VAddress me_addr
 
           (* substitute for peers *)
           | id, _ when id = K3Global.peers.id ->
-              penv, VSet (List.map (fun x -> VAddress x) @@ fst_many peers)
+              env, VSet (List.map (fun x -> VAddress x) @@ fst_many peers)
 
-          | id, _ when id = K3Global.role.id ->
-              penv, VString role
+          | id, _ when id = K3Global.role.id -> env, VString role
 
-          | _, Some e -> second value_of_eval @@
-              eval_expr me_addr (Some sched_st) penv e
+          | _, Some e -> second value_of_eval @@ eval_expr me_addr (Some sched_st) env e
 
-          | id, None -> penv, default_value id t
+          | id, None -> env, default_value id t
         in
-        trig_env, ((IdMap.add id (ref init_val) rm_env), rf_env)
-
-    | Foreign (id,_) -> trig_env, (IdMap.add id (ref @@ dispatch_foreign id) m_env, f_env)
-
+        {env with globals=IdMap.add id (ref init_val) env.globals; locals=rf_env.locals}
+    | Foreign (id,_) ->
+        {env with globals=IdMap.add id (ref @@ dispatch_foreign id) env.globals}
     | Flow fp -> prepare_sinks sched_st env fp
-
     | _ -> env
   in
   (* triggers, (variables, arg frames) *)
-  let init_env = IdMap.empty, (IdMap.empty, IdMap.empty) in
+  let init_env = {triggers=IdMap.empty; globals=IdMap.empty; locals=IdMap.empty} in
   List.fold_left env_of_declaration init_env k3_program
 
 
@@ -627,7 +619,7 @@ let env_of_program ?address ~role ~peers sched_st k3_program =
 type environments = {
   res_env : resource_env_t;
   fsm_env : SR.fsm_env_t;  (* really the dispatcher's fsm *)
-  prog_env : program_env_t;
+  prog_env : env_t;
   mutable instrs : instruction_t list; (* role instructions *)
   mutable disp_env : dispatcher_t;
 }

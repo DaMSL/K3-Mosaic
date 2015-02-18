@@ -124,22 +124,20 @@ let schedule_event s src_bindings src_id src_address events =
 
 (* Scheduler execution *)
 
-let invoke_trigger s address (trigger_env, val_env) trigger_id arg =
+let invoke_trigger s address env trigger_id arg =
   (* add a level to the global queue *)
   begin match s.queue with
   | Global q  -> Q.increase_level q
   | _         -> ()
   end;
-  let trig = IdMap.find trigger_id trigger_env in
-  begin try trig address val_env arg
+  let trig = IdMap.find trigger_id env.triggers in
+  begin try trig address env arg
     (* re-raise exception with trig name *)
   with RuntimeError(id, msg) -> raise @@
     RuntimeError(id, Printf.sprintf "In trigger %s: %s" trigger_id msg) end;
   (* log the state for this trigger *)
-  Log.log (sp "Trigger %s@%s\nargs = %s\n%s"
-    trigger_id (string_of_address address)
-    (string_of_value arg) (string_of_env val_env))
-    ~name:"K3Runtime.TriggerState" `Debug;
+  Log.log (sp "\nTrigger %s@%s\nargs = %s\n%s" trigger_id (string_of_address address)
+    (string_of_value arg) @@ string_of_env env) ~name:"K3Runtime.TriggerState" `Debug;
   s.events_processed <- succ s.events_processed
 
 let next_idx arr idx =

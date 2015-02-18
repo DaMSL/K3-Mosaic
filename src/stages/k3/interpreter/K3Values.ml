@@ -144,7 +144,16 @@ and Value : sig
   (* the global env needs to be separate for closures *)
   and local_env_t = value_t list IdMap.t
   and global_env_t = (value_t ref) IdMap.t
-  and env_t = global_env_t * local_env_t
+  (* trigger env is where we store the trigger functions. These functions take the
+  * address,
+  * scheduler_state (parametrized here to prevent circular inclusion), the
+  * environment, value_t of arguments, and produce unit *)
+  and trigger_env_t = (address -> env_t -> value_t -> unit) IdMap.t
+  and env_t = {
+        triggers:trigger_env_t;
+        globals:global_env_t;
+        locals:local_env_t;
+      }
 
   and value_t
       = VMax
@@ -239,13 +248,6 @@ open Value
 
 include ValueUtils
 
-(* trigger env is where we store the trigger functions. These functions take the
- * address,
- * scheduler_state (parametrized here to prevent circular inclusion), the
- * environment, value_t of arguments, and produce unit *)
-type trigger_env_t = (address -> env_t -> value_t -> unit) IdMap.t
-type program_env_t = trigger_env_t * env_t
-
 (* mark_points are optional sorted counts of where we want markings *)
 let rec print_value ?(mark_points=[]) v =
   let count = ref 0 in
@@ -320,18 +322,18 @@ let print_binding_m ?(skip_functions=true) ?(skip_empty=true) id v =
 
 let print_frame frame = IdMap.iter print_binding_m frame
 
-let print_env ?skip_functions ?skip_empty (globals, frames) =
-  ps @@ Printf.sprintf "----Globals(%i)----" @@ IdMap.cardinal globals; fnl();
-  let global_m = IdMap.map (!) globals in
-  IdMap.iter (print_binding_m ?skip_functions ?skip_empty) global_m
+let print_env ?skip_functions ?skip_empty env =
+  ps @@ Printf.sprintf "----Globals(%i)----" @@ IdMap.cardinal env.globals; fnl();
+  let deref f x y = f x !y in
+  IdMap.iter (deref @@ print_binding_m ?skip_functions ?skip_empty) env.globals
 
 let print_trigger_env env =
   ps @@ Printf.sprintf "----Triggers(%i)----" @@ IdMap.cardinal env; fnl();
   IdMap.iter (fun id _ -> ps id; fnl()) env
 
-let print_program_env (trigger_env, val_env) =
+let print_program_env env =
   (* print_trigger_env trigger_env; *)
-  print_env ~skip_functions:true val_env
+  print_env ~skip_functions:true env
 
 let string_of_env ?skip_functions ?skip_empty (env:env_t) =
   wrap_formatter (fun () -> print_env ?skip_functions ?skip_empty env)

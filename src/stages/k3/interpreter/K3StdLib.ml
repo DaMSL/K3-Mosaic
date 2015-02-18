@@ -20,7 +20,7 @@ type entry_t = type_t * arg_t * foreign_func_t
 let (func_table : ((id_t, entry_t) Hashtbl.t)) = Hashtbl.create 10
 
 (* retreive arguments from environment *)
-let arg_of_env id (_,e) = hd @@ IdMap.find id e
+let arg_of_env id env = hd @@ IdMap.find id env.locals
 
 (* ------- Hashing Functions ------- *)
 (* hash_float *)
