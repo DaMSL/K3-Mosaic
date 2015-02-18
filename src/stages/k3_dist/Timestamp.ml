@@ -26,7 +26,7 @@ let sw_next_switch_addr =
         mk_map (mk_lambda' D.jobs.e @@ mk_var "addr") @@
           (* get all the switches *)
           mk_filter
-            (mk_lambda' D.jobs.e @@ mk_leq (mk_var D.job.id) @@ mk_var D.job_switch.id) @@
+            (mk_lambda' D.jobs.e @@ mk_eq (mk_var D.job.id) @@ mk_var D.job_switch.id) @@
             (* convert to list *)
             mk_convert_col' D.jobs.t TList @@
               mk_var D.jobs.id) @@
@@ -111,10 +111,8 @@ let sw_gen_vid =
     ]
 
 (* only the master starts the protocol *)
-let ms_init =
-    mk_if (mk_eq (mk_var D.job.id) @@ mk_var D.job_master.id)
-    (mk_send sw_rcv_token_nm (mk_var sw_next_switch_addr.id) [mk_var D.g_min_vid.id])
-      mk_cunit
+let ms_init = mk_send sw_rcv_token_nm (mk_var sw_next_switch_addr.id)
+  [mk_var D.g_min_vid.id]
 
 (* --- End of code --- *)
 

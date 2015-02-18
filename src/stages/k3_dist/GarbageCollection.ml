@@ -228,13 +228,10 @@ let ms_send_gc_req =
       mk_send rcv_req_gc_vid_nm (mk_var @@ fst @@ hd @@ G.peers.e) [mk_cunit]) @@
     mk_var G.peers.id
 
-(* master: init code *)
+(* master: start the gc process *)
 let ms_gc_init c =
-    (* start gc process for master *)
-    mk_if (mk_eq (mk_var D.job.id) @@ mk_var D.job_master.id )
-      (mk_send T.tm_insert_timer_trig_nm (mk_var D.timer_addr.id)
-        [mk_var ms_gc_interval.id; mk_cint @@ T.num_of_trig c D.ms_send_gc_req_nm; G.me_var])
-      mk_cunit
+  mk_send T.tm_insert_timer_trig_nm (mk_var D.timer_addr.id)
+    [mk_var ms_gc_interval.id; mk_cint @@ T.num_of_trig c D.ms_send_gc_req_nm; G.me_var]
 
 (* --- End of code --- *)
 

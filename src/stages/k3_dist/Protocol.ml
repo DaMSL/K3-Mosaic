@@ -19,36 +19,51 @@ module TS = Timestamp
 
 (**** init code to fill out jobs map ****)
 
+let ms_rcv_sw_init_ack_cnt = create_ds "ms_rcv_sw_init_ack_cnt" (mut t_int) ~init:(mk_cint 0)
+let ms_rcv_sw_init_ack_nm = "ms_rcv_sw_init_ack"
+let ms_rcv_sw_init_ack c = 
+  mk_code_sink' ms_rcv_sw_init_ack_nm unit_arg [] @@
+  mk_block [
+    (* increment counter *)
+    mk_incr ms_rcv_sw_init_ack_cnt.id;
+    mk_if (mk_geq (mk_var ms_rcv_sw_init_ack_cnt.id) @@ mk_var D.num_switches.id)
+      (mk_block [
+        (* start timing *)
+        mk_assign D.ms_start_time.id @@ mk_apply' "now_int" mk_cunit;
+        (* master initiates timestamp protocol *)
+        TS.ms_init;
+        (* master initiates gc protocol *)
+        GC.ms_gc_init c; ])
+      mk_cunit;
+  ]
+
 let sw_rcv_init_nm = "sw_rcv_init"
-let sw_rcv_init c =
+let sw_rcv_init =
   mk_code_sink' sw_rcv_init_nm unit_arg [] @@
   mk_block [
-    (* set to idle state *)
-    mk_assign D.sw_state.id @@ mk_var D.sw_state_idle.id;
-    (* if master, start timing *)
-    mk_if (mk_eq (mk_var D.job.id) @@ mk_var D.job_master.id)
-      (mk_assign D.ms_start_time.id @@ mk_apply' "now_int" mk_cunit)
+    (* set to idle state if we're still in pre_init *)
+    mk_if (mk_eq (mk_var D.sw_state.id) @@ mk_var D.sw_state_pre_init.id)
+      (mk_assign D.sw_state.id @@ mk_var D.sw_state_idle.id) @@
       mk_cunit;
     (* start driver for all switches *)
     mk_send D.sw_driver_trig_nm G.me_var [mk_cunit];
-    (* master initiates timestamp protocol *)
-    TS.ms_init;
-    (* master initiates gc protocol *)
-    GC.ms_gc_init c;
+    (* ack to master *)
+    mk_send ms_rcv_sw_init_ack_nm (mk_var D.master_addr.id) [mk_cunit];
   ]
 
 let ms_rcv_jobs_ack_cnt = create_ds "ms_rcv_jobs_ack_cnt" (mut t_int) ~init:(mk_cint 0)
-let ms_rcv_jobs_ack_nm = "rcv_jobs_ack"
+let ms_rcv_jobs_ack_nm = "ms_rcv_jobs_ack"
 let ms_rcv_jobs_ack =
   mk_code_sink' ms_rcv_jobs_ack_nm unit_arg [] @@
   mk_block [
     mk_incr ms_rcv_jobs_ack_cnt.id;
     (* if we've receive all acks *)
     mk_if (mk_geq (mk_var ms_rcv_jobs_ack_cnt.id) @@ mk_var D.num_peers.id)
-      (* tell switches to init *)
-      (mk_iter (mk_lambda' ["addr", t_addr] @@
-          mk_send sw_rcv_init_nm (mk_var "addr") [mk_cunit]) @@
-        mk_var D.switches.id) @@
+      (mk_block [
+        (* tell switches to init *)
+        mk_iter (mk_lambda' ["addr", t_addr] @@
+            mk_send sw_rcv_init_nm (mk_var "addr") [mk_cunit]) @@
+          mk_var D.switches.id]) @@
       mk_cunit
   ]
 
@@ -238,6 +253,7 @@ let sw_seen_sentry =
   ]
 
 let global_vars = List.map decl_global [
+  ms_rcv_sw_init_ack_cnt;
   ms_rcv_jobs_ack_cnt;
   ms_rcv_job_cnt;
   ms_rcv_node_done_cnt;
@@ -245,7 +261,8 @@ let global_vars = List.map decl_global [
 ]
 
 let triggers c = [
-  sw_rcv_init c;
+  ms_rcv_sw_init_ack c;
+  sw_rcv_init;
   ms_rcv_jobs_ack;
   rcv_jobs;
   ms_rcv_job;

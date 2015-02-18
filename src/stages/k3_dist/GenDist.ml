@@ -997,7 +997,8 @@ let roles_of c (ast:program_t) =
       Handle(wrap_ttuple @@ fst @@ combine_trig_args c,
         File c.stream_file,
         CSV)));
-    BindFlow("switch", sw_demux_nm); ]
+    BindFlow("switch", sw_demux_nm);
+    Instruction(Consume("switch")); ]
   in
   List.map mk_no_anno [
     Role("master", ms_flows);

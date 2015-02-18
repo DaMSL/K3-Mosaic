@@ -23,14 +23,15 @@ type resource_impl_env_t = (id_t * channel_impl_t) list
 
 (* Evaluation methods *)
 let value_of_string t v = match t with
-  | TInt    -> VInt(int_of_string v)
+  | TInt    -> VInt(ios v)
   | TDate   -> VInt(int_of_sql_date v)
-  | TFloat  -> VFloat(float_of_string v)
-  | TBool   -> VBool(bool_of_string v)
+  | TFloat  -> VFloat(fos v)
+  | TBool   -> VBool(bos v)
   | TString -> VString v
   | _       -> invalid_arg "Unknown value"
 
 let r_comma = Str.regexp ","
+let r_pipe  = Str.regexp "|"
 
 (* pull (parse/generate) a single value out of a source *)
 let pull_source id t res in_chan =
@@ -49,7 +50,7 @@ let pull_source id t res in_chan =
   | Handle(t, File _, CSV), In(Some chan) ->
     begin try
       (* parse the lines *)
-      let next_record = Str.split r_comma (input_line chan) in
+      let next_record = Str.split r_pipe (input_line chan) in
       let fields = List.map2 value_of_string signature next_record in
       let r = if tuple_val then VTuple fields else List.hd fields in
       Some r
