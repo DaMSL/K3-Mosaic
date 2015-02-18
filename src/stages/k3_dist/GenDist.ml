@@ -109,7 +109,7 @@ let nd_log_read_geq =
 (* if so, deletes the counter *)
 let nd_check_stmt_cntr_index_nm = "nd_check_stmt_cntr_index"
 let nd_check_stmt_cntr_index =
-  let lookup = "lookup" in
+  let lookup = "lookup_value" in
   let part_pat = list_drop_end 1 nd_stmt_cntrs.e in
   let counter = fst @@ hd @@ list_take_end 1 nd_stmt_cntrs.e in
   let part_pat_as_vars = ids_to_vars @@ fst_many part_pat in
