@@ -161,11 +161,11 @@ def run(target_file,
         # create node list
         node_list = []
         for i in range(num_nodes):
-            port = 60000 + (i * 10000)
+            port = 10 + (i * 10)
             node_list += ['localhost:{0}/node'.format(port)]
 
         # always add the master, switch and timer
-        peer_list = ["-n localhost:40000/master", "localhost:50000/timer", "localhost:60000/switch"] + node_list
+        peer_list = ["-n localhost:0/master", "localhost:1/switch", "localhost:3/timer", ] + node_list
         peer_cmd = ','.join(peer_list)
 
         if new_k3:
