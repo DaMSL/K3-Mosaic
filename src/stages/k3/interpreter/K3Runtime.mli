@@ -18,7 +18,7 @@ val sleep : scheduler_state -> address -> float -> unit
 
 val network_has_work : scheduler_state ->  bool
 
-val run_scheduler : ?slice:int -> scheduler_state -> (address -> program_env_t) -> unit
+val run_scheduler : ?slice:int -> scheduler_state -> (address -> env_t) -> unit
 
 val init_scheduler_state :
   ?queue_type:queue_type ->

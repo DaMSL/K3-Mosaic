@@ -24,7 +24,16 @@ and Value : sig
   (* an env_t is global values and frames (functional environment) *)
   and local_env_t = value_t list IdMap.t
   and global_env_t = (value_t ref) IdMap.t
-  and env_t = global_env_t * local_env_t
+  (* trigger env is where we store the trigger functions. These functions take the
+  * address,
+  * scheduler_state (parametrized here to prevent circular inclusion), the
+  * environment, value_t of arguments, and produce unit *)
+  and trigger_env_t = (address -> env_t -> value_t -> unit) IdMap.t
+  and env_t = {
+        triggers:trigger_env_t;
+        globals:global_env_t;
+        locals:local_env_t;
+      }
   and value_t
       = VMax
       | VMin
@@ -57,14 +66,6 @@ and ValueComp : sig val compare_v : Value.value_t -> Value.value_t -> int
 
 open Value
 
-(* trigger env is where we store the trigger functions. These functions take the
- * address,
- * scheduler_state (parametrized here to prevent circular inclusion), the
- * environment, value_t of arguments, and produce unit *)
-type trigger_env_t = (address -> env_t -> value_t -> unit) IdMap.t
-
-type program_env_t = trigger_env_t * env_t
-
 (* Value comparison *)
 val equal_values : value_t -> value_t -> bool
 val compare_values : (int -> int -> bool) -> value_t -> value_t -> bool
@@ -78,10 +79,10 @@ val string_of_value : ?mark_points:int list -> value_t -> string
 
 (* Environment stringification *)
 val print_env : ?skip_functions:bool -> ?skip_empty:bool -> env_t -> unit
-val print_program_env : program_env_t -> unit
+val print_program_env : env_t -> unit
 
 val string_of_env : ?skip_functions:bool -> ?skip_empty:bool -> env_t -> string
-val string_of_program_env : program_env_t -> string
+val string_of_program_env : env_t -> string
 
 (* Conversion between values and other types *)
 val value_of_const : constant_t -> value_t
