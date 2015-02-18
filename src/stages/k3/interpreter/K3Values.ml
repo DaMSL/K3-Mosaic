@@ -270,10 +270,12 @@ let rec print_value ?(mark_points=[]) v =
       | xs                    -> xs
     in
     let lazy_value v = lazy(loop v ~mark_points) in
-    let print_collection lb rb vs =
+    let print_collection ?(sort=false) lb rb vs =
+      let sort_fn = if sort then List.sort ValueComp.compare_v else id_fn in
       pretty_tag_str ~lb:lb ~rb:rb ~sep:"; " CutHint "" ""
-        (List.map lazy_value @@ List.sort ValueComp.compare_v @@ ValueUtils.v_to_list vs)
+        (List.map lazy_value @@ sort_fn @@ ValueUtils.v_to_list vs)
     in
+    let sort = true in
     match v with
     | VUnknown                -> ps "??"
     | VMax                    -> ps "VMax"
@@ -290,11 +292,11 @@ let rec print_value ?(mark_points=[]) v =
     | VOption None            -> ps "None"
     | VOption vopt            -> pretty_tag_str CutHint "" "Some"
                                    [lazy_value (unwrap_some vopt)]
-    | VSet _ as vs            -> print_collection "{" "}" vs
-    | VBag _ as vs            -> print_collection "{|" "|}" vs
+    | VSet _ as vs            -> print_collection ~sort "{" "}" vs
+    | VBag _ as vs            -> print_collection ~sort "{|" "|}" vs
     | VList _ as vs           -> print_collection "[" "]" vs
-    | VMap _ as vs            -> print_collection "[:" ":]" vs
-    | VMultimap _ as vs       -> print_collection "[|" "|]" vs
+    | VMap _ as vs            -> print_collection ~sort "[:" ":]" vs
+    | VMultimap _ as vs       -> print_collection ~sort "[|" "|]" vs
     | VFunction _             -> ps "<fun>"
     | VForeignFunction (_, a, _) -> ps "<foreignfun>"
     | VAddress (ip,port)      -> ps (ip^":"^ string_of_int port)
@@ -342,7 +344,7 @@ let print_env ?skip_functions ?skip_empty ?(accessed_only=true) env =
       if StrSet.mem id !(env.accessed) then action () else ()
     else action ()
   in
-  IdMap.iter print env.globals
+  IdMap.iter print env.globals; fnl ()
 
 let print_trigger_env env =
   ps @@ Printf.sprintf "----Triggers(%i)----" @@ IdMap.cardinal env.triggers; fnl();
