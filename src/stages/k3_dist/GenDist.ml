@@ -107,6 +107,7 @@ let nd_log_read_geq =
 
 (* function to check to see if we should send a do_complete message *)
 (* if so, deletes the counter *)
+(* params: vid, stmt, count_to_change *)
 let nd_check_stmt_cntr_index_nm = "nd_check_stmt_cntr_index"
 let nd_check_stmt_cntr_index =
   let lookup = "lookup_value" in
@@ -114,38 +115,38 @@ let nd_check_stmt_cntr_index =
   let counter = fst @@ hd @@ list_take_end 1 nd_stmt_cntrs.e in
   let part_pat_as_vars = ids_to_vars @@ fst_many part_pat in
   let query_pat = part_pat_as_vars @ [mk_cunknown] in
+  let add_to_count = "add_to_count" in
+  let cntr_index = index_e nd_stmt_cntrs.e "counter" in
   mk_global_fn nd_check_stmt_cntr_index_nm
-    part_pat
+    (part_pat @ [add_to_count, t_int])
     [t_bool] @@ (* return whether we should send the do_complete *)
     (* check if the counter exists *)
     mk_case_sn
       (mk_peek @@ mk_slice' nd_stmt_cntrs.id query_pat) lookup
-      (mk_block [
-        mk_update nd_stmt_cntrs.id
-          [mk_var lookup]
-          [mk_let
-            (fst_many nd_stmt_cntrs.e)
-            (mk_var lookup) @@
-            mk_tuple @@
-              part_pat_as_vars @
-              [mk_sub (mk_var counter) (mk_cint 1)]];
+      (* calculate new_count *)
+      (mk_let ["new_count"]
+        (mk_add (mk_var add_to_count) @@ mk_subscript cntr_index @@ mk_var lookup) @@
         (* if the counter is 0 *)
         mk_if
-          (mk_eq (mk_cint 0) @@ mk_subscript (index_e D.nd_stmt_cntrs.e "counter") @@
-            mk_var lookup)
-          (* delete it and return true *)
+          (mk_eq (mk_cint 0) @@ mk_subscript cntr_index @@ mk_var lookup)
           (mk_block [
+            (* delete the counter *)
             mk_delete nd_stmt_cntrs.id [mk_var lookup];
             (* code to check if we're done *)
             Proto.nd_delete_stmt_cntr;
-            mk_ctrue ])
-          (* else return false *)
-          mk_cfalse]) @@
+            (* return true *)
+            mk_ctrue ]) @@
+          (* else, write the result *)
+          mk_block [
+            mk_update nd_stmt_cntrs.id [mk_var lookup]
+              [mk_fst (mk_var lookup); mk_snd (mk_var lookup); mk_var "new_count"];
+            (* return false *)
+            mk_cfalse]) @@
       (* else: no value in the counter *)
       mk_block [
-        (* Initialize if the push arrives before the put. *)
+        (* Initialize *)
         Proto.nd_insert_stmt_cntr @@
-          mk_insert nd_stmt_cntrs.id @@ part_pat_as_vars @ [mk_cint(-1)];
+          mk_insert nd_stmt_cntrs.id @@ part_pat_as_vars @ [mk_var add_to_count];
         mk_cbool false ]
 
 (* add_delta_to_buffer *)
@@ -624,35 +625,22 @@ mk_code_sink'
     (mk_iter
       (mk_lambda'
         ["stmt_id", t_stmt_id; "count", t_int] @@
-        mk_case_sn
-          (mk_peek @@ mk_slice' D.nd_stmt_cntrs.id @@ pat mk_cunknown) "old_val"
-          (mk_let ["_"; "_"; "old_count"]
-            (mk_var "old_val") @@
-            (* update the count *)
-            mk_let ["new_count"]
-              (mk_add (mk_var "old_count") @@ mk_var "count") @@
-            mk_block [
-              mk_update
-                D.nd_stmt_cntrs.id
-                (pat @@ mk_var "old_count") @@
-                 pat @@ mk_var "new_count";
-              mk_if
-                (mk_eq (mk_var "new_count") @@ mk_cint 0)
-                (* we need to create a possible send for each statement in the trigger *)
-                (List.fold_left (fun acc_code stmt_id ->
-                  mk_if
-                    (mk_eq (mk_var "stmt_id") @@ mk_cint stmt_id)
-                    (* TODO: change to function *)
-                    (mk_send
-                      (do_complete_name_of_t trig_name stmt_id) G.me_var @@
-                      args_of_t_as_vars_with_v c trig_name) @@
-                    acc_code)
-                  mk_cunit @@
-                  P.stmts_of_t c.p trig_name) @@
-                mk_cunit ]) @@
-          Proto.nd_insert_stmt_cntr @@
-            mk_insert D.nd_stmt_cntrs.id @@ pat @@ mk_var "count") @@
-        mk_var "stmt_id_cnt_list") ::
+        mk_if
+          (mk_apply' nd_check_stmt_cntr_index_nm @@
+            mk_tuple [mk_var "vid"; mk_var "stmt_id"; mk_var "count"])
+          (* we need to create a possible send for each statement in the trigger *)
+          (List.fold_left (fun acc_code stmt_id ->
+            mk_if
+              (mk_eq (mk_var "stmt_id") @@ mk_cint stmt_id)
+              (* TODO: change to function *)
+              (mk_send
+                (do_complete_name_of_t trig_name stmt_id) G.me_var @@
+                args_of_t_as_vars_with_v c trig_name) @@
+              acc_code)
+            mk_cunit @@
+            P.stmts_of_t c.p trig_name) @@
+          mk_cunit) @@
+      mk_var "stmt_id_cnt_list") ::
       (if c.enable_gc then [GC.nd_ack_send_code ~addr_nm:"sender_ip" ~vid_nm:"vid"] else [])
 
 
@@ -753,7 +741,7 @@ List.fold_left
          (* check and update statment counters to see if we should send a do_complete *)
          mk_if
            (mk_apply' nd_check_stmt_cntr_index_nm @@
-             mk_tuple [mk_var "vid"; mk_cint stmt_id])
+             mk_tuple [mk_var "vid"; mk_cint stmt_id; mk_cint @@ -1])
            (* Send to local do_complete *)
            (* TODO: switch to function *)
            (mk_send (do_complete_name_of_t trig_name stmt_id) G.me_var @@

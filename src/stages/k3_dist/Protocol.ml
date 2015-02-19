@@ -222,14 +222,14 @@ let nd_insert_stmt_cntr insert_stmt =
 
 (* Code for after deletion from stmt_cntrs *)
 let nd_delete_stmt_cntr =
-  (* if we're empty after delete *)
-  mk_is_empty (mk_var D.nd_stmt_cntrs.id)
-    (* if we're in the done state *)
-    ~y:(mk_if (mk_eq (mk_var D.nd_state.id) @@ mk_var D.nd_state_done.id)
-         (* send to master *)
-         (mk_send ms_rcv_node_done_nm (mk_var D.master_addr.id) [mk_ctrue])
-           mk_cunit)
-    ~n:mk_cunit
+  (* if we're in the done state *)
+  mk_if (mk_eq (mk_var D.nd_state.id) @@ mk_var D.nd_state_done.id)
+    (* if we're empty after delete *)
+    (mk_is_empty (mk_var D.nd_stmt_cntrs.id)
+      (* send to master *)
+      ~y:(mk_send ms_rcv_node_done_nm (mk_var D.master_addr.id) [mk_ctrue])
+      ~n:mk_cunit) @@
+    mk_cunit
 
 let ms_rcv_switch_done_cnt =
   create_ds "ms_rcv_switch_done_cnt" (mut t_int) ~init:(mk_cint 0)

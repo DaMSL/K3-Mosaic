@@ -566,7 +566,7 @@ let modify_e id_t val_l =
   id_t
 
 let index_e id_t s =
-  List.assoc s @@ insert_index_snd @@ fst_many id_t
+  List.assoc s @@ insert_index_snd ~first:1 @@ fst_many id_t
 
 let unit_arg = ["_u", t_unit]
 
