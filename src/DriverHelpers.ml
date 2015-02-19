@@ -27,7 +27,7 @@ let parse parsefn lexfn lexbuf =
   with
   | Parsing.Parse_error -> handle_local_parse_error lexbuf
   | Failure(msg) -> handle_parse_error ~msg:msg lexbuf
-  | Pervasives.Exit -> raise Parsing.Parse_error
+  | Pervasives.Exit -> handle_local_parse_error lexbuf
 
 let parse_program parsefn lexfn file =
   let in_chan = try open_in file
@@ -35,7 +35,7 @@ let parse_program parsefn lexfn file =
   let lexbuf =
     try Lexing.from_channel in_chan
     with Failure _ -> handle_lexer_error () in
-  let prog = parsefn lexfn lexbuf in
+  let prog = parse parsefn lexfn lexbuf in
     close_in in_chan;
     prog
 
