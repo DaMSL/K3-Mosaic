@@ -341,15 +341,19 @@ let sw_driver_trig (c:config) =
     mk_pop D.sw_trig_buf_idx.id trig_id
       (* empty: no message to send -- set state to idle *)
       (mk_assign D.sw_state.id @@ mk_var D.sw_state_idle.id) @@
-      (* have a msg *)
-      mk_block [
-        (* set state to sending *)
-        mk_assign D.sw_state.id @@ mk_var D.sw_state_sending.id;
-        (* send the msg using dispatch code *)
-        dispatch_code;
-        (* recurse, trying to get another message *)
-        mk_send sw_driver_trig_nm G.me_var [mk_cunit];
-      ]
+      (* we have a msg *)
+      (* if it's the sentry, act *)
+      mk_if (mk_eq (mk_var trig_id) @@ mk_cint (-1))
+        Proto.sw_seen_sentry @@
+        (* else *)
+        mk_block [
+          (* set state to sending *)
+          mk_assign D.sw_state.id @@ mk_var D.sw_state_sending.id;
+          (* send the msg using dispatch code *)
+          dispatch_code;
+          (* recurse, trying to get another message *)
+          mk_send sw_driver_trig_nm G.me_var [mk_cunit];
+        ]
 
 (* The start trigger puts the message in a trig buffer *)
 let sw_start_fn (c:config) trig =
@@ -370,8 +374,9 @@ let sw_demux_nm = "sw_demux"
 let sw_demux c =
   let combo_t, t_arg_map = D.combine_trig_args c in
   let sentry_code =
+    (* stash the sentry index in the queue *)
     mk_if (mk_eq (mk_fst @@ mk_var "args") (mk_cint @@ -1))
-      Proto.sw_seen_sentry @@
+      (mk_insert D.sw_trig_buf_idx.id [mk_cint @@ -1]) @@
       mk_error @@ "unidentified trig id"
   in
   mk_code_sink' sw_demux_nm ["args", wrap_ttuple combo_t] [] @@
