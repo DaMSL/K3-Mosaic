@@ -938,19 +938,17 @@ List.map
               mk_is_empty (mk_slice' D.nd_stmt_cntrs.id
                             [mk_var "compute_vid"; mk_cint stmt_id; mk_cunknown])
                 (* if so, get bound vars from log *)
-                (mk_let
-                  (fst_many @@ args_of_t_with_v c trig_name)
-                  (mk_apply'
-                    (nd_log_get_bound_for trig_name) @@
-                    mk_var "compute_vid") @@
-                  (* send them to do_corrective *)
-                  (* TODO: change to function *)
-                  mk_send
-                    (do_corrective_name_of_t c trig_name stmt_id rmap) G.me_var @@
-                    args_of_t_as_vars_with_v ~vid:"compute_vid" c trig_name @
-                      [mk_var "delta_tuples"]) @@
+                ~y:(mk_let (fst_many @@ args_of_t_with_v c trig_name)
+                     (mk_apply'
+                       (nd_log_get_bound_for trig_name) @@ mk_var "compute_vid") @@
+                   (* send them to do_corrective *)
+                   (* TODO: change to function *)
+                   mk_send
+                     (do_corrective_name_of_t c trig_name stmt_id rmap) G.me_var @@
+                     args_of_t_as_vars_with_v ~vid:"compute_vid" c trig_name @
+                       [mk_var "delta_tuples"])
                 (* else *)
-                mk_cunit
+                ~n:mk_cunit
             ) @@
             mk_var "compute_vids"
         ]

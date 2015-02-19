@@ -247,16 +247,16 @@ let gen_route_fn p map_id =
             (* for every domain element in the domain *)
             (mk_lambda (wrap_args ["domain_element", t_int]) @@
               mk_is_empty (mk_var "prev_cart_prod")
-                (mk_singleton free_cart_prod_type
-                  [mk_singleton inner_cart_prod_type
-                    [mk_var "i"; mk_var "domain_element"]]) @@
-                mk_map
-                  (* add current element to every previous sublist *)
-                  (mk_lambda' ["rest_tup", inner_cart_prod_type] @@
-                    mk_combine (mk_var "rest_tup") @@
-                      mk_singleton inner_cart_prod_type
-                        [mk_var "i"; mk_var "domain_element"]) @@
-                  mk_var "prev_cart_prod") @@
+                ~y:(mk_singleton free_cart_prod_type
+                     [mk_singleton inner_cart_prod_type
+                       [mk_var "i"; mk_var "domain_element"]])
+                ~n:(mk_map
+                     (* add current element to every previous sublist *)
+                     (mk_lambda' ["rest_tup", inner_cart_prod_type] @@
+                       mk_combine (mk_var "rest_tup") @@
+                         mk_singleton inner_cart_prod_type
+                           [mk_var "i"; mk_var "domain_element"]) @@
+                    mk_var "prev_cart_prod")) @@
             mk_var "domain")
         (mk_empty free_cart_prod_type) @@
         mk_var "free_domains") @@
@@ -292,11 +292,10 @@ let gen_route_fn p map_id =
           mk_var "free_cart_prod"
       ) @@
     mk_is_empty (mk_var "sorted_ip_list")
-      (mk_singleton output_type
-        [mk_apply' "get_ring_node" @@ mk_tuple (* empty ip list *)
-          [mk_var "bound_bucket"; mk_var "max_val"]]) @@
-      mk_fst_many sorted_ip_inner_type @@
-        mk_var "sorted_ip_list"
+      ~y:(mk_singleton output_type
+           [mk_apply' "get_ring_node" @@ mk_tuple (* empty ip list *)
+             [mk_var "bound_bucket"; mk_var "max_val"]])
+      ~n:(mk_fst_many sorted_ip_inner_type @@ mk_var "sorted_ip_list")
 
 (* create all code needed for route functions, including foreign funcs*)
 let global_vars p partmap =

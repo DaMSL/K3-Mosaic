@@ -21,7 +21,7 @@ module TS = Timestamp
 
 let ms_rcv_sw_init_ack_cnt = create_ds "ms_rcv_sw_init_ack_cnt" (mut t_int) ~init:(mk_cint 0)
 let ms_rcv_sw_init_ack_nm = "ms_rcv_sw_init_ack"
-let ms_rcv_sw_init_ack c = 
+let ms_rcv_sw_init_ack c =
   mk_code_sink' ms_rcv_sw_init_ack_nm unit_arg [] @@
   mk_block [
     (* increment counter *)
@@ -201,35 +201,35 @@ let nd_rcv_done =
     mk_assign D.nd_state.id @@ mk_var D.nd_state_done.id;
     (* check stmt_cntrs for emptiness, in case we won't see it elsewhere *)
     mk_is_empty (mk_var D.nd_stmt_cntrs.id)
-      (mk_send ms_rcv_node_done_nm (mk_var D.master_addr.id) [mk_ctrue])
-      mk_cunit;
+      ~y:(mk_send ms_rcv_node_done_nm (mk_var D.master_addr.id) [mk_ctrue])
+      ~n:mk_cunit;
   ]
 
 (* code for when nodes insert into stmt_cntrs *)
 let nd_insert_stmt_cntr insert_stmt =
-  (* if we're empty before insert *)
+  (* if stmt_cntrs are empty before insert *)
   mk_is_empty (mk_var D.nd_stmt_cntrs.id)
     (* if we're in the done state *)
-    (mk_if (mk_eq (mk_var D.nd_state.id) @@ mk_var D.nd_state_done.id)
-      (mk_block [
-        (* do insert *)
-        insert_stmt;
-        (* send undo to master *)
-        mk_send ms_rcv_node_done_nm (mk_var D.master_addr.id) [mk_cfalse]; ])
-      mk_cunit)
+    ~y:(mk_if (mk_eq (mk_var D.nd_state.id) @@ mk_var D.nd_state_done.id)
+         (mk_block [
+           (* do insert *)
+           insert_stmt;
+           (* send undo to master *)
+           mk_send ms_rcv_node_done_nm (mk_var D.master_addr.id) [mk_cfalse]; ])
+         mk_cunit)
     (* else, just insert *)
-    insert_stmt
+    ~n:insert_stmt
 
 (* Code for after deletion from stmt_cntrs *)
 let nd_delete_stmt_cntr =
   (* if we're empty after delete *)
   mk_is_empty (mk_var D.nd_stmt_cntrs.id)
     (* if we're in the done state *)
-    (mk_if (mk_eq (mk_var D.nd_state.id) @@ mk_var D.nd_state_done.id)
-      (* send to master *)
-    (mk_send ms_rcv_node_done_nm (mk_var D.master_addr.id) [mk_ctrue])
-      mk_cunit)
-    mk_cunit
+    ~y:(mk_if (mk_eq (mk_var D.nd_state.id) @@ mk_var D.nd_state_done.id)
+         (* send to master *)
+         (mk_send ms_rcv_node_done_nm (mk_var D.master_addr.id) [mk_ctrue])
+           mk_cunit)
+    ~n:mk_cunit
 
 let ms_rcv_switch_done_cnt =
   create_ds "ms_rcv_switch_done_cnt" (mut t_int) ~init:(mk_cint 0)
