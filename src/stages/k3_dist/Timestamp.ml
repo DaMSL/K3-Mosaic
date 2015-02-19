@@ -66,9 +66,7 @@ let sw_rcv_token_trig =
     (* add to the vid we got the number of needed vids *)
     (mk_let ["next_vid"]
       (mk_tuple [mk_fst @@ mk_var "vid";
-                  mk_sub (mk_add (mk_snd @@ mk_var "vid") @@
-                  mk_var sw_need_vid_ctr.id) @@
-                        mk_cint 1]) @@
+                  (mk_add (mk_snd @@ mk_var "vid") @@ mk_var sw_need_vid_ctr.id)]) @@
       mk_block [
         (* reserve a block of vids *)
         mk_insert sw_token_vid_list.id @@ [mk_var "vid"; mk_var sw_need_vid_ctr.id];
