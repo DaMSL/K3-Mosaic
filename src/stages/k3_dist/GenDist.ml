@@ -324,10 +324,7 @@ let sw_driver_trig (c:config) =
     List.fold_left (fun acc (id, nm) ->
       (* check if we match on the id *)
       mk_if (mk_eq (mk_var trig_id) @@ mk_cint id)
-        (* if so, pop the next trigger args *)
-        (mk_pop (sw_trig_buf_prefix^nm) "trig_args"
-          (mk_error @@ "missing trigger "^nm^" args") @@
-          mk_apply' (send_fetch_name_of_t nm) @@ mk_var "trig_args")
+        (mk_apply' (send_fetch_name_of_t nm) @@ mk_var "vid")
         (* else, continue *)
         acc)
     (mk_error "mismatch on trigger id") @@
