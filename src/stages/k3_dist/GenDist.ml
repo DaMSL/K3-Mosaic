@@ -115,7 +115,7 @@ let nd_check_stmt_cntr_index =
   let counter = fst @@ hd @@ list_take_end 1 nd_stmt_cntrs.e in
   let part_pat_as_vars = ids_to_vars @@ fst_many part_pat in
   let query_pat = part_pat_as_vars @ [mk_cunknown] in
-  let add_to_count = "add_to_count" in
+  let add_to_count, new_count = "add_to_count", "new_count" in
   let cntr_index = index_e nd_stmt_cntrs.e "counter" in
   mk_global_fn nd_check_stmt_cntr_index_nm
     (part_pat @ [add_to_count, t_int])
@@ -124,11 +124,11 @@ let nd_check_stmt_cntr_index =
     mk_case_sn
       (mk_peek @@ mk_slice' nd_stmt_cntrs.id query_pat) lookup
       (* calculate new_count *)
-      (mk_let ["new_count"]
+      (mk_let [new_count]
         (mk_add (mk_var add_to_count) @@ mk_subscript cntr_index @@ mk_var lookup) @@
         (* if the counter is 0 *)
         mk_if
-          (mk_eq (mk_cint 0) @@ mk_subscript cntr_index @@ mk_var lookup)
+          (mk_eq (mk_cint 0) @@ mk_var new_count)
           (mk_block [
             (* delete the counter *)
             mk_delete nd_stmt_cntrs.id [mk_var lookup];
@@ -139,7 +139,7 @@ let nd_check_stmt_cntr_index =
           (* else, write the result *)
           mk_block [
             mk_update nd_stmt_cntrs.id [mk_var lookup]
-              [mk_fst (mk_var lookup); mk_snd (mk_var lookup); mk_var "new_count"];
+              [mk_fst (mk_var lookup); mk_snd (mk_var lookup); mk_var new_count];
             (* return false *)
             mk_cfalse]) @@
       (* else: no value in the counter *)
