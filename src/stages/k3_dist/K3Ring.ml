@@ -16,11 +16,19 @@ let id_node_no_hash = fst @@ List.split id_t_node_no_hash
 let t_node = snd @@ List.split id_t_node
 let t_ring = wrap_tlist' t_node
 
-let node_ring = create_ds "node_ring" (mut t_ring )
+let add_node_nm = "add_node"
+
+let node_ring = create_ds "node_ring" (mut t_ring)
+
+let ring_init =
+  let address = hd @@ fst_many @@ D.nodes.e in
+  mk_iter (mk_lambda' D.nodes.e @@
+      mk_apply (mk_var add_node_nm) @@ mk_var address) @@
+    mk_var "nodes"
+
 let replicas = create_ds "replicas" (mut t_int) ~init:(mk_cint 8)
 
 (* function to add a node in the consistent hashing ring *)
-let add_node_nm = "add_node"
 let add_node_fn =
   mk_global_fn add_node_nm id_t_node_no_hash [] @@
   mk_let ["rng"]
@@ -76,15 +84,6 @@ let get_ring_node_fn =
       (* take the first node *)
       mk_peek_or_error "empty node ring" @@ mk_var node_ring.id) @@
     mk_var "addr"
-
-(* global initialization *)
-let init_ring =
-  let init =
-    mk_iter (mk_lambda' D.nodes.e @@
-      mk_apply (mk_var add_node_nm) @@ mk_var "address") @@
-      mk_var "nodes"
-  in
-  create_ds "init_ring" t_unit ~init
 
 let functions =
   [ add_node_fn;

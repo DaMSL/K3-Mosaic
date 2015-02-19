@@ -88,6 +88,8 @@ let rcv_jobs =
     (* set switches *)
     delayed_init D.switches;
     delayed_init D.num_switches;
+    (* add to node ring *)
+    K3Ring.ring_init;
     (* ack the msg *)
     mk_send ms_rcv_jobs_ack_nm (mk_var D.master_addr.id) [mk_cunit];
   ]
