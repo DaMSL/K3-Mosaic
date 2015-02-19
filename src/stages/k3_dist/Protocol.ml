@@ -209,14 +209,14 @@ let nd_rcv_done =
 let nd_insert_stmt_cntr insert_stmt =
   (* if stmt_cntrs are empty before insert *)
   mk_is_empty (mk_var D.nd_stmt_cntrs.id)
-    (* if we're in the done state *)
-    ~y:(mk_if (mk_eq (mk_var D.nd_state.id) @@ mk_var D.nd_state_done.id)
-         (mk_block [
-           (* do insert *)
-           insert_stmt;
-           (* send undo to master *)
-           mk_send ms_rcv_node_done_nm (mk_var D.master_addr.id) [mk_cfalse]; ])
-         mk_cunit)
+    ~y:(mk_block [
+          (* do insert *)
+          insert_stmt;
+          (* if we're in done state *)
+          mk_if (mk_eq (mk_var D.nd_state.id) @@ mk_var D.nd_state_done.id)
+            (* send undo to master *)
+            (mk_send ms_rcv_node_done_nm (mk_var D.master_addr.id) [mk_cfalse]; )
+            mk_cunit])
     (* else, just insert *)
     ~n:insert_stmt
 

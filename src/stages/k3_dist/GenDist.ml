@@ -331,26 +331,29 @@ let sw_driver_trig (c:config) =
     P.for_all_trigs ~deletes:c.gen_deletes c.p (fun x -> P.trigger_id_for_name c.p x, x)
   in
   mk_code_sink' sw_driver_trig_nm unit_arg [] @@
-  mk_case_ns (mk_apply' TS.sw_gen_vid_nm mk_cunit) "vid"
-    (* if we don't have a vid, set state to waiting for vid *)
-    (mk_assign D.sw_state.id @@ mk_var D.sw_state_wait_vid.id) @@
-    (* else *)
-    mk_pop D.sw_trig_buf_idx.id trig_id
-      (* empty: no message to send -- set state to idle *)
-      (mk_assign D.sw_state.id @@ mk_var D.sw_state_idle.id) @@
-      (* we have a msg *)
-      (* if it's the sentry, act *)
-      mk_if (mk_eq (mk_var trig_id) @@ mk_cint (-1))
-        Proto.sw_seen_sentry @@
-        (* else *)
-        mk_block [
-          (* set state to sending *)
-          mk_assign D.sw_state.id @@ mk_var D.sw_state_sending.id;
-          (* send the msg using dispatch code *)
-          dispatch_code;
-          (* recurse, trying to get another message *)
-          mk_send sw_driver_trig_nm G.me_var [mk_cunit];
-        ]
+  (* if we're done, do nothing *)
+  mk_if (mk_eq (mk_var D.sw_state.id) @@ mk_var D.sw_state_done.id)
+    mk_cunit @@
+    mk_case_ns (mk_apply' TS.sw_gen_vid_nm mk_cunit) "vid"
+      (* if we don't have a vid, set state to waiting for vid *)
+      (mk_assign D.sw_state.id @@ mk_var D.sw_state_wait_vid.id) @@
+      (* else *)
+      mk_pop D.sw_trig_buf_idx.id trig_id
+        (* empty: no message to send -- set state to idle *)
+        (mk_assign D.sw_state.id @@ mk_var D.sw_state_idle.id) @@
+        (* we have a msg *)
+        (* if it's the sentry, act *)
+        mk_if (mk_eq (mk_var trig_id) @@ mk_cint (-1))
+          Proto.sw_seen_sentry @@
+          (* else *)
+          mk_block [
+            (* set state to sending *)
+            mk_assign D.sw_state.id @@ mk_var D.sw_state_sending.id;
+            (* send the msg using dispatch code *)
+            dispatch_code;
+            (* recurse, trying to get another message *)
+            mk_send sw_driver_trig_nm G.me_var [mk_cunit];
+          ]
 
 (* The start trigger puts the message in a trig buffer *)
 let sw_start_fn (c:config) trig =
@@ -363,7 +366,7 @@ let sw_start_fn (c:config) trig =
       (* insert trig id into trig index buffer *)
       mk_insert D.sw_trig_buf_idx.id [mk_cint @@ P.trigger_id_for_name c.p trig];
       (* increment counters for msgs to get vids *)
-      mk_assign TS.sw_need_vid_ctr.id @@ mk_add (mk_var TS.sw_need_vid_ctr.id) @@ mk_cint 1;
+      mk_incr TS.sw_need_vid_ctr.id;
     ]
 
 (* the demux trigger takes the single stream and demuxes it *)
@@ -373,7 +376,9 @@ let sw_demux c =
   let sentry_code =
     (* stash the sentry index in the queue *)
     mk_if (mk_eq (mk_fst @@ mk_var "args") (mk_cint @@ -1))
-      (mk_insert D.sw_trig_buf_idx.id [mk_cint @@ -1]) @@
+      (mk_block [
+        mk_insert D.sw_trig_buf_idx.id [mk_cint @@ -1];
+        mk_incr TS.sw_need_vid_ctr.id; ]) @@
       mk_error @@ "unidentified trig id"
   in
   mk_code_sink' sw_demux_nm ["args", wrap_ttuple combo_t] [] @@
