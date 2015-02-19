@@ -171,24 +171,25 @@ let process_task s prog_env_fn = match s.queue with
       (* round-robin *)
       let rec loop idx n =
         let cont () = loop (next_idx q.arr q.last) (n-1) in
-        if n = 0 then () else
-        let addr, nodeq = q.arr.(idx) in
-        (* skip if q is empty or if we're inactive *)
-        if Queue.is_empty nodeq || not(AddrSet.mem addr s.active_peers) then cont ()
+        if n = 0 then q.last <- idx
         else
-          begin match Queue.peek nodeq with
-          | Sleep t ->
-              if Sys.time () > t then begin
+          let addr, nodeq = q.arr.(idx) in
+          (* skip if q is empty or if we're inactive *)
+          if Queue.is_empty nodeq || not (AddrSet.mem addr s.active_peers) then cont ()
+          else begin match Queue.peek nodeq with
+            | Sleep t ->
+                if Sys.time () > t then begin
+                  decr_count s;
+                  ignore @@ Queue.pop nodeq;
+                  q.last <- idx
+                end else cont ()
+            | Task (id, arg) ->
                 decr_count s;
-                ignore @@ Queue.pop nodeq
-              end else cont ()
-          | Task (id, arg) ->
-              decr_count s;
-              ignore @@ Queue.pop nodeq;
-              (* save last executed *)
-              q.last <- idx;
-              invoke_trigger s addr (prog_env_fn addr) id arg
-          end
+                ignore @@ Queue.pop nodeq;
+                (* save last executed *)
+                q.last <- idx;
+                invoke_trigger s addr (prog_env_fn addr) id arg
+            end
       in
       loop (next_idx q.arr q.last) @@ Array.length q.arr
 
