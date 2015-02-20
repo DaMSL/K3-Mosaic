@@ -110,7 +110,12 @@ let sleep s address t = match s.queue with
         try Hashtbl.find pn.h address
         with Not_found -> error INVALID_NODE_QUEUE
       in
-      Queue.push (Sleep(Sys.time () +. t)) nodeq
+      let q = Queue.create () in
+      (* move all entries to another q *)
+      Queue.transfer nodeq q;
+      Queue.push (Sleep(Sys.time () +. t)) nodeq;
+      (* move them back *)
+      Queue.transfer q nodeq
 
 (* halt a node *)
 let halt s address =
