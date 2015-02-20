@@ -25,7 +25,19 @@
  *
  * Ordering invariant: the arrival of packets between a pair of nodes must be
  * ordered in one instance: correctives must arrive after the original push of
- * data. Otherwise, the corrective will be erased.
+ * read data. Otherwise, the corrective will be erased.
+ *
+ * Protocol Description:
+ * ---------------------
+ * - Every put packet from a switch to a node must be acked. However, this can be done
+ *   asynchronously since it's only needed for GC. A GC initiation request from master
+ *   leads to each node sending the latest processed vid to the switch that sent him said
+ *   vid. This reduces bandwidth requirements greatly.
+ * - For GC purposes, we must keep track of when a vid and its resulting correctives are done.
+ *   Again, because it's only needed for GC, at master's GC initiation, all nodes send the nodes
+ *   that sent them correctives numbers signifying how many nodes they passed on correctives to.
+ *   When receiving said message, the originating node deducts one for every received message. The
+ *   result should be 0 before we count this vid as having fully completed and being ready for GC.
  *)
 
 open Util
