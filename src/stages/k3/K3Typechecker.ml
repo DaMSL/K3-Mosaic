@@ -81,6 +81,7 @@ let check_tag_arity tag children =
     | Aggregate         -> 3
     | GroupByAggregate  -> 4
     | Sort              -> 2
+    | Size              -> 1
 
     | Slice      -> 2
     | SliceIdx _ -> 2
@@ -451,6 +452,11 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
           if not (tcol = TList) then
             t_erroru (TMsg "can only sort on a list") () else
           canonical @@ TCollection(TList, telem)
+
+      | Size ->
+          let tcol = bind 0 in
+          ignore(try unwrap_tcol tcol with Failure _ -> t_erroru (not_collection tcol) ());
+          t_int
 
       | Slice ->
           let tcol', tpat = bind 0, bind 1 in

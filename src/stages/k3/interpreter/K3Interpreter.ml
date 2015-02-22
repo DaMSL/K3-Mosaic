@@ -25,6 +25,9 @@ let sp = Printf.sprintf
 
 let debug = ref false
 let debug_env = ref false
+(* debug *)
+let num_iters = 100000
+let iters = ref 0
 
 (* Prettified error handling *)
 let int_erroru uuid ?extra fn_name s =
@@ -118,7 +121,7 @@ let rec eval_fun uuid f =
           (* override the default function for sleep *)
           | "sleep", Some s, VInt t -> R.sleep s addr (foi t /. 1000.) ;
                                        env, VTemp VUnit
-          | "haltEngine", Some s, _ -> 
+          | "haltEngine", Some s, _ ->
               Log.log ("shutting down "^string_of_address addr) ();
               R.halt s addr; env, VTemp VUnit
           | _ ->
@@ -454,6 +457,10 @@ and eval_expr (address:address) sched_st cenv texpr =
       | _ -> error name "bad values"
       end
 
+    | Size ->
+        let nenv, c = child_value cenv 0 in
+        nenv, VTemp(v_size error c)
+
     | Subscript i ->
       begin match child_values cenv with
       | renv, [VTuple l] -> renv, VTemp(at l (i-1))
@@ -691,6 +698,9 @@ let interpret_k3_program i =
    *  @last_src_peers: how many peers had active sources
    *)
   let rec loop last_src_peers =
+    incr iters;
+    if !iters >= num_iters then begin
+      Log.log ("finished "^soi !iters^" iterations. stop.\n") () end else
     (* number of peers with messages *)
     let msg_peers =
       if R.network_has_work i.scheduler then begin
@@ -731,6 +741,7 @@ let interpret_k3_program i =
 
 (* Initialize an interpreter given the parameters *)
 let init_k3_interpreter ?queue_type ~peers ~load_path ?(src_interval=0.002) typed_prog =
+  Log.log (sp "Initializing scheduler\n") `Trace;
   let scheduler = init_scheduler_state ?queue_type ~peers in
   match peers with
   | []  -> failwith "interpret_k3_program: Peers list is empty!"
@@ -747,4 +758,5 @@ let init_k3_interpreter ?queue_type ~peers ~load_path ?(src_interval=0.002) type
           Hashtbl.replace envs address {res_env; fsm_env; prog_env; instrs; disp_env=C.def_dispatcher}
       ) peers;
       {scheduler; peer_list=peers; envs; last_s_time=0.; src_interval}
+
 

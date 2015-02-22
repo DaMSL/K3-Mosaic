@@ -39,7 +39,7 @@ let iter2 = List.iter2
 
 exception Mismatch of int
 
-let compare f x y = 
+let compare f x y =
   let lx, ly = List.length x, List.length y in
   if lx <> ly then lx - ly
   else
@@ -48,3 +48,5 @@ let compare f x y =
                   if v <> 0 then raise (Mismatch v)) x y;
      0
   with Mismatch v -> v
+
+let size l = List.length l

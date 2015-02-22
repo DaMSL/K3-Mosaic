@@ -355,6 +355,8 @@ let rec lazy_expr c expr =
     lps "groupby" <| lazy_paren @@ expr_quad q
   | Sort -> let p = U.decompose_sort expr in
     lps "sort" <| lazy_paren @@ expr_sub p
+  | Size -> let p = U.decompose_size expr in
+    lps "csize" <| lazy_paren @@ lazy_expr c p
   | Subscript _ -> let i, te = U.decompose_subscript expr in
     paren_l te (lazy_expr c te) <| lps "." <| lps "[" <| lps (soi i) <| lps "]"
   | Peek -> let col = U.decompose_peek expr in

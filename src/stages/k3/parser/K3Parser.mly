@@ -127,7 +127,7 @@
 
 %token MAP ITERATE FILTER FLATTEN
 %token AGGREGATE GROUPBYAGGREGATE
-%token SORT RANK
+%token SORT RANK SIZE
 
 %token PEEK
 
@@ -670,6 +670,7 @@ transformers :
         mkexpr GroupByAggregate [$3; $5; $7; $9]
     }
     | SORT LPAREN expr COMMA expr RPAREN { mkexpr Sort [$3; $5] }
+    | SIZE LPAREN expr RPAREN            { mkexpr Size [$3] }
 
     /* Error handling */
     | expr CONCAT error { print_error("Expected expression for combine") }

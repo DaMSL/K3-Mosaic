@@ -763,6 +763,8 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
   | Sort -> let lambda, col = U.decompose_sort expr in
     apply_method c ~name:"sort" ~col ~args:[lambda] ~arg_info:[ALambda [InRec; InRec], Out]
       ~prefix_fn:(fun e -> light_type c @@ KH.mk_if e (KH.mk_cint (-1)) @@ KH.mk_cint 1)
+  | Size -> let col = U.decompose_size expr in
+    apply_method c ~name:"size" ~col ~args:[] ~arg_info:[]
   | Peek -> let col = U.decompose_peek expr in
     (* peeks return options and need to be pattern matched *)
       lazy_paren @@ apply_method c ~name:"peek" ~col ~args:[light_type c @@ KH.mk_cunit] ~arg_info:[ANonLambda, Out]

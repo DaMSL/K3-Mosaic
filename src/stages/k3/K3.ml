@@ -97,6 +97,7 @@ type expr_tag_t
     | Empty     of type_t
     | Singleton of type_t
     | Combine
+    | Size
 
     | Range     of container_type_t
 

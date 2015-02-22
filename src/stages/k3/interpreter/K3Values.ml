@@ -455,6 +455,13 @@ let v_sort err_fn f = function
   | VList m -> VList(IList.sort f m)
   | _ -> err_fn "v_sort" "not a list"
 
+let v_size err_fn f = function
+  | VSet m      -> VInt(ISet.size m)
+  | VList m     -> VInt(IList.size m)
+  | VMap m      -> VInt(ValueMap.cardinal m)
+  | VBag m      -> VInt(ValueBag.size m)
+  | VMultimap m -> VInt(ValueMMap.size m)
+
 let v_singleton err_fn elem c = match elem, c with
   | _,TSet                   -> VSet(ISet.singleton elem)
   | _,TBag                   -> VBag(ValueBag.singleton elem)

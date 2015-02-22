@@ -251,6 +251,8 @@ let mk_gbagg group_fun agg_fun init collection =
 let mk_sort compare_fun collection =
     mk_stree Sort [compare_fun; collection]
 
+let mk_size col = mk_stree Size [col]
+
 let mk_subscript i tuple = mk_stree (Subscript i) [tuple]
 
 (* generic version of slice used by multiple functions *)
@@ -534,6 +536,7 @@ let mk_peek_or_error s e = mk_case_ns (mk_peek e) "x"
 (* data structure record to standardize manipulation *)
 type data_struct = { id: string;
                      e: (string * type_t) list;
+                     ee: (string * type_t) list list;
                      t: type_t;
                      init: expr_t option;
                      (* init that isn't used right away *)
@@ -541,9 +544,8 @@ type data_struct = { id: string;
                      map_id: int option;
                    }
 
-let create_ds ?e ?init ?d_init ?map_id id t =
-  let e = unwrap_option [] e in
-  {id; t; e; init; d_init; map_id}
+let create_ds ?(e=[]) ?(ee=[]) ?init ?d_init ?map_id id t =
+  {id; t; e; ee; init; d_init; map_id}
 
 (* utility functions *)
 let decl_global x = match x.init with
@@ -571,10 +573,7 @@ let index_e id_t s =
 let unit_arg = ["_u", t_unit]
 
 (* code to count the size of a collection *)
-let mk_size_slow col = mk_agg
-  (mk_assoc_lambda' ["count", t_int] col.e @@ mk_add (mk_var "count") @@ mk_cint 1)
-  (mk_cint 0) @@
-  mk_var col.id
+let mk_size_slow col = mk_size (mk_var col.id)
 
 let mk_min_max v v' v_t comp_fn zero col = mk_agg
   (mk_assoc_lambda' [v, v_t] col.e @@
@@ -596,4 +595,18 @@ let mk_pop col_nm bind_nm fail success =
 (* increment a stateful variable *)
 let mk_incr nm = mk_assign nm @@ mk_add (mk_var nm) @@ mk_cint 1
 let mk_decr nm = mk_assign nm @@ mk_sub (mk_var nm) @@ mk_cint 1
+
+(* delete one entry in a data structure *)
+let mk_delete_one ds slice =
+  mk_case_ns (mk_peek @@ mk_slice' ds.id slice) "lookup_data"
+    mk_cunit @@
+    mk_delete ds.id [mk_var "lookup_data"]
+
+(* for maps *)
+let mk_upsert_with ds nm ~k ~default ~v  =
+  let slice = (mk_tuple k)::[mk_cunknown] in
+  mk_case_ns (mk_peek @@ mk_slice' ds.id slice) nm
+    (mk_insert ds.id @@ (mk_tuple k)::[mk_tuple default]) @@
+    mk_update ds.id [mk_var nm] @@ (mk_tuple k)::[mk_tuple v]
+    
 

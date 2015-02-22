@@ -18,6 +18,7 @@ module type S = sig
   val update : elt -> elt -> t -> t
   val peek : t -> elt option
   val count : elt -> t -> int
+  val size : t -> int
   val intersect : t -> t -> t
   val union : t -> t -> t
   val to_list : t -> elt list
@@ -84,6 +85,8 @@ module Make(Ord : ICommon.OrderedKeyType) = struct
     | _, Some x      -> Some x
     | _              -> None
   ) l r
+
+  let size h = HMap.fold (fun _ c acc -> acc + c) h 0
 
   let of_list l = List.fold_left (fun acc x -> insert x acc) empty l
 

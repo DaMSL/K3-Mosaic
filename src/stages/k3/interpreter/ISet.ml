@@ -50,3 +50,5 @@ let compare f x y = try
                   if v <> 0 then raise (Mismatch v)) (sort x) (sort y);
      0
   with Mismatch v -> v
+
+let size c = List.length c

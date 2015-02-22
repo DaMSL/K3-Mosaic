@@ -144,6 +144,7 @@ val mk_agg : expr_t -> expr_t -> expr_t -> expr_t
 val mk_agg_fst : expr_t -> expr_t -> expr_t
 val mk_gbagg : expr_t -> expr_t -> expr_t -> expr_t -> expr_t
 val mk_sort : expr_t -> expr_t -> expr_t
+val mk_size : expr_t -> expr_t
 val mk_subscript : int -> expr_t -> expr_t
 
 val mk_peek : expr_t -> expr_t
@@ -296,7 +297,7 @@ type data_struct = { id: string;
                      map_id: int option;
                    }
 
-val create_ds : ?e:(string * type_t) list -> ?init:expr_t -> ?d_init:expr_t -> ?map_id:int -> string -> type_t -> data_struct
+val create_ds : ?e:(string * type_t) list -> ?ee:(string * type_t) list list -> ?init:expr_t -> ?d_init:expr_t -> ?map_id:int -> string -> type_t -> data_struct
 
 val decl_global : data_struct -> declaration_t * annotation_t
 val delayed_init : data_struct -> expr_t
@@ -324,3 +325,8 @@ val mk_pop : string -> string -> expr_t -> expr_t -> expr_t
 
 val mk_incr : string -> expr_t
 val mk_decr : string -> expr_t
+
+(* delete using a slice with unknowns *)
+val mk_delete_one : data_struct -> expr_t list -> expr_t
+
+val mk_upsert_with : data_struct -> id_t -> k:expr_t list -> default:expr_t list -> v:expr_t list -> expr_t

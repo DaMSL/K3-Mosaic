@@ -26,6 +26,7 @@ module type S = sig
   val peek : t -> elt option
   val to_list : t -> elt list
   val compare : t -> t -> int
+  val size : t -> int
   val to_string : t -> string
   val string_of_content : content -> string
 end
@@ -175,6 +176,8 @@ module Make(OrdKey: ICommon.OrderedKeyType) = struct
       let b = snd @@ MMap.choose map in
       InnerBag.peek b
     with Not_found -> None
+
+  let size mm = fold (fun acc x -> acc + 1) 0 mm
 
   let to_list mm = fold (fun acc x -> x::acc) [] mm
 
