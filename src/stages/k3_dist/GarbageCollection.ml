@@ -49,7 +49,7 @@ let sw_ack_rcv_trig =
   let ack_trig_args = [address, t_addr; "vid", t_vid] in
   let old_set, old_val = "old_set", "old_val" in
   mk_code_sink' sw_ack_rcv_trig_nm ack_trig_args [] @@
-  (* look for this ack in the log *)
+  (* lookup this ack in the log *)
   mk_case_sn
     (mk_peek @@ mk_slice' sw_ack_log.id [mk_var "vid"; mk_cunknown])
     old_val
@@ -60,7 +60,11 @@ let sw_ack_rcv_trig =
         (* check if we need to delete the whole entry *)
         mk_case_ns (mk_peek' old_set) "_"
           (* delete the entry if nothing is left in the set *)
-          (mk_delete sw_ack_log.id [mk_var old_val]) @@
+          (mk_block [
+            mk_delete sw_ack_log.id [mk_var old_val];
+            (* check for end of protocol *)
+            Proto.sw_check_last_ack
+          ]) @@
           (* insert shrunk set otherwise *)
           mk_insert sw_ack_log.id [mk_fst' old_val; mk_var old_set]
       ]) @@

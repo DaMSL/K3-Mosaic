@@ -286,7 +286,7 @@ let combine_trig_args c =
   in
   let sort t = List.sort (fun x y -> fst x - fst y) t in
   let types, map, _ =
-    List.fold_left (fun (types, map, sz) (tid, tnm, targs) -> 
+    List.fold_left (fun (types, map, sz) (tid, tnm, targs) ->
       let rem_ts, used_ts, tmap, sz =
         (* fold over the args *)
         List.fold_left (fun (rem_ts, used_ts, tmap, sz) (_, t) ->
@@ -306,7 +306,7 @@ let combine_trig_args c =
 
 (* global containing mapping of trig id to trig_name *)
 let trig_ids_id = "trig_ids"
-let trig_ids c = 
+let trig_ids c =
   let inner_t = wrap_tlist t_int in
   let e = ["trig_id", t_int; "trig_name", t_string; "indices", inner_t] in
   let t = wrap_tbag' @@ snd_many e in
@@ -318,11 +318,19 @@ let trig_ids c =
     k3_container_of_list t ts in
   create_ds trig_ids_id t ~e ~init
 
+(* not a real ds. only inside stmt_cntrs *)
+let nd_stmt_cntrs_corr_map =
+  let e = ["hop", t_int; "corr_ctr", t_int] in
+  create_ds "sc_corr_map" (wrap_tmap' @@ snd_many e) ~e
+
 (* stmt_cntrs - (vid, stmt_id, counter) *)
-(* TODO: change to mmap with index on vid, stmt *)
+(* 1st counter: count messages received until do_complete *)
+(* 2nd counter: map from hop to counter *)
 let nd_stmt_cntrs =
-  let e = ["vid", t_vid; "stmt_id", t_int; "counter", t_int] in
-  create_ds "nd_stmt_cntrs" (wrap_tbag' @@ snd_many e) ~e
+  let ee = [["vid", t_vid; "stmt_id", t_int]; ["counter", t_int; "corr_map", wrap_tmap' @@ snd_many nd_stmt_cntrs_corr_map.e]] in
+  let e = list_zip ["vid_stmt_id"; "ctr_corrs"] @@
+    List.map (wrap_ttuple |- snd_many) ee in
+  create_ds "nd_stmt_cntrs" (wrap_tmap' @@ snd_many e) ~e
 
 (* master log *)
 (* TODO: change to ordered DS, like ordered map *)

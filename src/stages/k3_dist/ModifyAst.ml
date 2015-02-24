@@ -369,7 +369,7 @@ let modify_map_add_vid (c:config) ast stmt =
 
 (* this delta extraction is very brittle, since it's tailored to the way the M3
  * to K3 calculations are written. *)
-let delta_action c ast stmt m_target_trigger ~corrective =
+let delta_action c ast stmt after_fn ~corrective =
   let lmap = P.lhs_map_of_stmt c.p stmt in
   let lmap_types = P.map_types_with_v_for c.p lmap in
   let lmap_type = wrap_t_of_map @@ wrap_ttuple lmap_types in
@@ -403,13 +403,8 @@ let delta_action c ast stmt m_target_trigger ~corrective =
                 (mk_var @@ P.map_name_of c.p lmap)::
                 (if corrective then mk_ctrue else mk_cfalse)::full_vars]
             @
-            (* do we need to send to another trigger *)
-            begin match m_target_trigger with
-            | None   -> []
-            | Some t ->
-              (* TODO: turn to function? *)
-              [mk_send t K3Global.me_var @@ full_vars]
-            end
+            (* do we need to send to another trigger (or do some other function) *)
+            after_fn full_vars
 
   | Iterate -> (* more complex modification *)
     (* col2 contains the calculation code, lambda2 is the delta addition *)
@@ -456,12 +451,8 @@ let delta_action c ast stmt m_target_trigger ~corrective =
                   if corrective then mk_ctrue else mk_cfalse;
                   mk_var "vid";
                   mk_var delta_v_name]] @
-      begin match m_target_trigger with
-      | None   -> []
-      | Some t ->
-        [mk_send (* send to a (corrective) target *)
-          t K3Global.me_var [mk_var "vid"; mk_var delta_v_name]]
-      end
+      (* send to target trig, or do something else *)
+      after_fn [mk_var "vid"; mk_var delta_v_name]
 
   | _ -> raise @@ UnhandledModification(
      Printf.sprintf "Bad tag [%d]: %s" (U.id_of_expr expr) @@ PR.string_of_expr expr)
@@ -474,14 +465,14 @@ let rename_var old_var_name new_var_name ast =
     | _ -> e
 
 (* return a modified version of the original ast for stmt s *)
-let modify_ast_for_s (c:config) ast stmt trig send_to_trig =
+let modify_ast_for_s (c:config) ast stmt trig after_fn =
   let ast = ast_for_s_t c ast stmt trig in
   let ast = modify_map_add_vid c ast stmt in
-  let ast = delta_action c ast stmt send_to_trig ~corrective:false in
+  let ast = delta_action c ast stmt after_fn ~corrective:false in
   ast
 
 (* return a modified version of the corrective update *)
-let modify_corr_ast c ast map stmt trig send_to_trig =
+let modify_corr_ast c ast map stmt trig after_fn =
   let args, corr_stmt, ast = corr_ast_for_m_s c ast map stmt trig in
   let ast = modify_map_add_vid c ast stmt in
-  args, delta_action c ast corr_stmt send_to_trig ~corrective:true
+  args, delta_action c ast corr_stmt after_fn ~corrective:true
