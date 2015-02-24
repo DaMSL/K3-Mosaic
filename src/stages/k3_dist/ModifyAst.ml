@@ -452,7 +452,7 @@ let delta_action c ast stmt after_fn ~corrective =
                   mk_var "vid";
                   mk_var delta_v_name]] @
       (* send to target trig, or do something else *)
-      after_fn [mk_var "vid"; mk_var delta_v_name]
+      after_fn [mk_var delta_v_name]
 
   | _ -> raise @@ UnhandledModification(
      Printf.sprintf "Bad tag [%d]: %s" (U.id_of_expr expr) @@ PR.string_of_expr expr)

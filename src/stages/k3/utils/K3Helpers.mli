@@ -293,6 +293,7 @@ val mk_lookup' : id_t -> expr_t list -> expr_t
 (* data structure record to standardize manipulation *)
 type data_struct = { id: string;
                      e: (string * type_t) list;
+                     ee: (string * type_t) list list;
                      t: type_t;
                      init: expr_t option;
                      (* init that isn't used right away *)

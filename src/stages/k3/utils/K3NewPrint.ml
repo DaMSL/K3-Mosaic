@@ -944,7 +944,6 @@ module StringSet = Set.Make(struct type t=string let compare=String.compare end)
 
 (* remove/convert functions that are renamed in k3new *)
 let filter_incompatible prog =
-  let r_hash = Str.regexp "^hash.*" in
   let drop_globals = List.fold_left (flip StringSet.add) StringSet.empty
     ["error"; "divf"; "mod"; "float_of_int"; "int_of_float"; "get_max_int"; "parse_sql_date"; "peers"; ]
   in

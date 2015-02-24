@@ -44,7 +44,7 @@ let sw_max_ack_vid = create_ds "sw_max_ack_vid" (mut t_vid) ~init:(mk_var D.g_mi
 
 (* switch: trigger for receiving an ack from a node *)
 let sw_ack_rcv_trig_nm = "sw_ack_rcv"
-let sw_ack_rcv_trig =
+let sw_ack_rcv_trig sw_check_last_ack_fn =
   let address = "addr" in
   let ack_trig_args = [address, t_addr; "vid", t_vid] in
   let old_set, old_val = "old_set", "old_val" in
@@ -63,7 +63,7 @@ let sw_ack_rcv_trig =
           (mk_block [
             mk_delete sw_ack_log.id [mk_var old_val];
             (* check for end of protocol *)
-            Proto.sw_check_last_ack
+            sw_check_last_ack_fn
           ]) @@
           (* insert shrunk set otherwise *)
           mk_insert sw_ack_log.id [mk_fst' old_val; mk_var old_set]
@@ -249,8 +249,8 @@ let global_vars _ = List.map decl_global
    ms_num_gc_expected;
   ]
 
-let triggers c =
-  [sw_ack_rcv_trig;
+let triggers c sw_check_last_ack_fn =
+  [sw_ack_rcv_trig sw_check_last_ack_fn;
    ms_rcv_gc_vid c;
    rcv_req_gc_vid;
    ms_send_gc_req;
