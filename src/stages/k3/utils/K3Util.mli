@@ -63,6 +63,7 @@ val decompose_singleton : expr_t -> expr_t
 val decompose_slice : expr_t -> expr_t * expr_t
 val decompose_sliceidx : expr_t -> expr_t * expr_t
 val decompose_sort : expr_t -> expr_t * expr_t
+val decompose_size : expr_t -> expr_t
 val decompose_subscript : expr_t -> int * expr_t
 val decompose_tuple : expr_t -> expr_t list
 val decompose_update : expr_t -> id_t * expr_t * expr_t

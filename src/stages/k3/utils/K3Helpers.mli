@@ -287,6 +287,9 @@ val mk_peek_or_zero : expr_t -> expr_t
 
 val mk_peek_or_error : string -> expr_t -> expr_t
 
+val mk_lookup : expr_t -> expr_t list -> expr_t
+val mk_lookup' : id_t -> expr_t list -> expr_t
+
 (* data structure record to standardize manipulation *)
 type data_struct = { id: string;
                      e: (string * type_t) list;
@@ -329,4 +332,4 @@ val mk_decr : string -> expr_t
 (* delete using a slice with unknowns *)
 val mk_delete_one : data_struct -> expr_t list -> expr_t
 
-val mk_upsert_with : data_struct -> id_t -> k:expr_t list -> default:expr_t list -> v:expr_t list -> expr_t
+val mk_upsert_with : data_struct -> id_t -> k:expr_t list -> default:expr_t -> v:expr_t -> expr_t

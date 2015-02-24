@@ -383,7 +383,7 @@ let vars_to_ids = List.map (fun x -> match U.tag_of_expr x with
 
 (* check if a collection is empty *)
 let mk_is_empty collection ~y ~n =
-  mk_case_ns (mk_peek collection) "_" y n
+  mk_if (mk_eq (mk_cint 0) (mk_size collection)) y n
 
 (* checks if a member of a collection is present *)
 let mk_has_member collection pattern typ =
@@ -533,6 +533,9 @@ let mk_peek_or_error s e = mk_case_ns (mk_peek e) "x"
   (mk_error s) @@
   mk_var "x"
 
+let mk_lookup col pat = mk_peek @@ mk_slice col pat
+let mk_lookup' col pat = mk_peek @@ mk_slice' col pat
+
 (* data structure record to standardize manipulation *)
 type data_struct = { id: string;
                      e: (string * type_t) list;
@@ -606,7 +609,6 @@ let mk_delete_one ds slice =
 let mk_upsert_with ds nm ~k ~default ~v  =
   let slice = (mk_tuple k)::[mk_cunknown] in
   mk_case_ns (mk_peek @@ mk_slice' ds.id slice) nm
-    (mk_insert ds.id @@ (mk_tuple k)::[mk_tuple default]) @@
-    mk_update ds.id [mk_var nm] @@ (mk_tuple k)::[mk_tuple v]
-    
+    (mk_insert ds.id [mk_tuple k; default]) @@
+    mk_update ds.id [mk_var nm] [mk_tuple k; v]
 
