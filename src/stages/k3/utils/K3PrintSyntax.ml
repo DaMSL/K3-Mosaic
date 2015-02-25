@@ -237,7 +237,6 @@ let rec lazy_expr c expr =
   in let wrap e = match U.tag_of_expr expr with
     Insert _ | Iterate | Map | Filter | Flatten | Send | Delete _ | Update _ |
     Aggregate | GroupByAggregate | Assign _ | Combine -> wrap_hov 2 e
-    | IfThenElse | Let _ | BindAs _ | CaseOf _ -> wrap_hov 0 e
     | _ -> id_fn e
   in let out = match U.tag_of_expr expr with
   | Const con  -> lazy_const c con
@@ -331,7 +330,7 @@ let rec lazy_expr c expr =
     wrap_indent (lazy_expr c e1 <| lcut () <| modify_arg @@ lazy_expr c e2)
   | Block -> let es = U.decompose_block expr in
     lps "do {" <| lind () <|
-    wrap_hv 0 (lps_list ~sep:";" CutHint (lazy_expr c) es <| lsp ())
+    wrap_hv 0 (lps_list ~sep:";" CutHint (fun e -> wrap_hov 0 (lazy_expr c e)) es <| lsp ())
       <| lps "}"
   | Iterate -> let p = U.decompose_iterate expr in
     lps "iterate" <| lcut () <| lazy_paren @@ expr_sub p
