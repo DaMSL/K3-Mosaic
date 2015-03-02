@@ -369,14 +369,13 @@ let modify_map_add_vid (c:config) ast stmt =
 
 (* this delta extraction is very brittle, since it's tailored to the way the M3
  * to K3 calculations are written. *)
-let delta_action c ast stmt after_fn ~corrective =
+let delta_action c ast stmt after_fn =
   let lmap = P.lhs_map_of_stmt c.p stmt in
   let lmap_types = P.map_types_with_v_for c.p lmap in
   let lmap_type = wrap_t_of_map @@ wrap_ttuple lmap_types in
   (* we need to know how the map is accessed in the statement. *)
   let lmap_bindings = P.find_lmap_bindings_in_stmt c.p stmt lmap in
-  let lmap_bind_ids_v = P.map_ids_add_v @@ fst_many lmap_bindings
-  in
+  let lmap_bind_ids_v = P.map_ids_add_v @@ fst_many lmap_bindings in
   (* let existing_out_tier = ..., which we remove *)
   let id, bound, expr = U.decompose_let ast in
   if id <> ["existing_out_tier"] then failwith "sanity check fail: expected existing_out_tier" else
@@ -385,33 +384,19 @@ let delta_action c ast stmt after_fn ~corrective =
     (* simple modification - sending a single tuple of data *)
     (* this is something like prod_ret_x's let *)
       let delta_names, bound, expr = U.decompose_let expr in
-      let full_names = lmap_bind_ids_v @ delta_names in
-      let full_vars =
-          P.map_add_v (mk_var "vid") @@
-            [mk_singleton lmap_type @@ ids_to_vars full_names]
-      in
+      let full_names = fst_many lmap_bindings @ delta_names in
+      let full_vars = mk_singleton lmap_type @@ ids_to_vars full_names in
       (* modify the delta itself *)
       mk_let delta_names
-        bound @@ (* contains original calculation code *)
-        mk_block @@
-          [ (* we add the delta to all following vids,
-              * and we send it for correctives *)
-            mk_apply'
-            (D.nd_add_delta_to_buf_nm c lmap) @@
-              (* create a single tuple to send *)
-              mk_tuple @@
-                (mk_var @@ P.map_name_of c.p lmap)::
-                (if corrective then mk_ctrue else mk_cfalse)::full_vars]
-            @
-            (* do we need to send to another trigger (or do some other function) *)
-            after_fn full_vars
+        (* contains original computation code *)
+        bound @@ after_fn full_vars
 
   | Iterate -> (* more complex modification *)
     (* col2 contains the calculation code, lambda2 is the delta addition *)
     let lambda2, col2 = U.decompose_iterate expr in
     let params2, _ = U.decompose_lambda lambda2 in
-    let delta_name = "__delta_values__" in
-    let delta_v_name = "__delta_with_vid__" in
+    let delta_name = "_delta_values_" in
+    let delta_v_name = "_delta_with_vid_" in
     let delta_ids_types = U.typed_vars_of_arg params2 in
     let delta_ids = fst_many delta_ids_types in
     let delta_last_id = hd @@ list_take_end 1 delta_ids in
@@ -419,41 +404,8 @@ let delta_action c ast stmt after_fn ~corrective =
     let slice_vars = ids_to_vars @@ fst_many slice_ids_types in
     (* col2 contains the calculation code *)
     mk_let [delta_name] col2 @@
-    (* project vid into collection, adding any repeat values along the way *)
-    mk_let [delta_v_name]
-      (mk_agg
-        (mk_assoc_lambda'
-          ["acc", lmap_type]
-          delta_ids_types @@
-            mk_let ["slice"]
-            (mk_slice' "acc" @@
-              (ids_to_vars @@ lmap_bind_ids_v) @ [mk_cunknown]) @@
-            mk_case_ns (mk_peek @@ mk_var "slice") "slice_d"
-              (* if we don't have this value, just insert *)
-              (mk_block [
-                mk_insert "acc" @@ ids_to_vars @@ lmap_bind_ids_v@[delta_last_id];
-                mk_var "acc"]) @@
-              (* otherwise add *)
-              mk_block [
-                mk_let
-                  (fst_many slice_ids_types) (mk_var "slice_d") @@
-                mk_update "acc"
-                  slice_vars @@
-                  list_drop_end 1 slice_vars @
-                    [mk_add (list_last slice_vars) @@ mk_var delta_last_id];
-                     mk_var "acc"])
-        (mk_empty lmap_type) @@
-        mk_var delta_name) @@
-    mk_block @@
-      (* add delta values to all following vids *)
-      [mk_apply' (D.nd_add_delta_to_buf_nm c lmap) @@
-        mk_tuple [mk_var @@ P.map_name_of c.p lmap;
-                  if corrective then mk_ctrue else mk_cfalse;
-                  mk_var "vid";
-                  mk_var delta_v_name]] @
-      (* send to target trig, or do something else *)
-      after_fn [mk_var delta_v_name]
-
+      (* any function *)
+      after_fn (mk_var delta_name)
   | _ -> raise @@ UnhandledModification(
      Printf.sprintf "Bad tag [%d]: %s" (U.id_of_expr expr) @@ PR.string_of_expr expr)
 
@@ -468,11 +420,11 @@ let rename_var old_var_name new_var_name ast =
 let modify_ast_for_s (c:config) ast stmt trig after_fn =
   let ast = ast_for_s_t c ast stmt trig in
   let ast = modify_map_add_vid c ast stmt in
-  let ast = delta_action c ast stmt after_fn ~corrective:false in
+  let ast = delta_action c ast stmt after_fn in
   ast
 
 (* return a modified version of the corrective update *)
 let modify_corr_ast c ast map stmt trig after_fn =
   let args, corr_stmt, ast = corr_ast_for_m_s c ast map stmt trig in
   let ast = modify_map_add_vid c ast stmt in
-  args, delta_action c ast corr_stmt after_fn ~corrective:true
+  args, delta_action c ast corr_stmt after_fn

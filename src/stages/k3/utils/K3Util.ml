@@ -141,6 +141,8 @@ let decompose_tuple e = match tag_of_expr e with
   Tuple -> sub_tree e  | _ -> failwith "not a Tuple"
 let decompose_update e = match tag_of_expr e, sub_tree e with
   Update x, [e0; e1] -> x, e0, e1 | _ -> failwith "not an Update"
+let decompose_var e = match tag_of_expr e with
+  Var id -> id | _ -> failwith "not a Var"
 
 let decompose_role (d,_) = match d with
   Role (id, fp) -> (id, fp) | _ -> failwith "not a role"

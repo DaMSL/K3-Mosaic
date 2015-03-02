@@ -237,11 +237,11 @@ let map_types_no_val_for p map = list_drop_end 1 @@ map_types_for p map
 let map_types_add_v ts = t_vid::ts
 let map_types_with_v_for p map = map_types_add_v @@ map_types_for p map
 
-let def_map = "__map_"
+let def_map = "map_"
 let def_vid = "vid"
 
 (* create ids to reference the map vars *)
-(* ["__map_0",type; "__map_1",type; ... "__map_val",type ] *)
+(* ["map_0",type; "map_1",type; ... "map_val",type ] *)
 let map_ids_types_for ?(prefix=def_map) p map_id =
   let ts = map_types_for p map_id in
   let id_ts = types_to_ids_types prefix ts in
@@ -352,3 +352,9 @@ let uniq_types_and_maps ?(type_fn=map_types_for) (p:prog_data_t)  =
   let fns = ref [] in
   Hashtbl.iter (fun t maps -> fns := (t, maps) :: !fns) hash;
   !fns
+
+let map_ds_of_id ?(vid=false) p map_id =
+  let nm = map_name_of p map_id in
+  let e = if vid then map_ids_types_with_v_for p map_id
+          else map_ids_types_for p map_id in
+  create_ds nm (wrap_t_of_map' @@ snd_many e) ~e

@@ -183,8 +183,6 @@ let ms_rcv_node_done =
         (mk_block [
           (* update end time *)
           mk_assign D.ms_end_time.id @@ mk_apply' "now_int" mk_cunit;
-          (* sleep for a little to make sure *)
-          mk_apply' "sleep" @@ mk_cint 5000;
           (* send ourselves a message to shutdown *)
           mk_send ms_shutdown_nm G.me_var [mk_cunit];
         ])
@@ -204,21 +202,6 @@ let nd_rcv_done =
       ~y:(mk_send ms_rcv_node_done_nm (mk_var D.master_addr.id) [mk_ctrue])
       ~n:mk_cunit;
   ]
-
-(* code for when nodes insert into stmt_cntrs *)
-let nd_insert_stmt_cntr insert_stmt =
-  (* if stmt_cntrs are empty before insert *)
-  mk_is_empty (mk_var D.nd_stmt_cntrs.id)
-    ~y:(mk_block [
-          (* do insert *)
-          insert_stmt;
-          (* if we're in done state *)
-          mk_if (mk_eq (mk_var D.nd_state.id) @@ mk_var D.nd_state_done.id)
-            (* send undo to master *)
-            (mk_send ms_rcv_node_done_nm (mk_var D.master_addr.id) [mk_cfalse]; )
-            mk_cunit])
-    (* else, just insert *)
-    ~n:insert_stmt
 
 (* Code for after deletion from stmt_cntrs *)
 let nd_delete_stmt_cntr =

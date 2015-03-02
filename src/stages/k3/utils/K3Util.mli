@@ -67,6 +67,7 @@ val decompose_size : expr_t -> expr_t
 val decompose_subscript : expr_t -> int * expr_t
 val decompose_tuple : expr_t -> expr_t list
 val decompose_update : expr_t -> id_t * expr_t * expr_t
+val decompose_var : expr_t -> id_t
 val decompose_indirect : expr_t -> expr_t
 
 val decompose_role : declaration_t * 'a -> id_t * flow_program_t

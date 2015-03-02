@@ -151,6 +151,11 @@ let list_replace r r' l =
     | []    -> List.rev acc
   in loop [] l
 
+let list_replace_i n r l =
+  (* handle negative lengths *)
+  let n' = if n < 0 then List.length l + n else n in
+  List.mapi (fun i x -> if i=n' then r else x) l
+
 let list_modify n f l =
   let rec loop i acc = function
     | x::xs when i = 0 -> List.rev_append acc @@ (f x)::xs

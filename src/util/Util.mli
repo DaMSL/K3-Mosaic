@@ -99,6 +99,11 @@ val list_remove : 'a -> 'a list -> 'a list
 (* replace efficiently inside a list *)
 val list_replace : 'a -> 'a -> 'a list -> 'a list
 
+(* replace at an index
+ * negative numbers count from end
+ *)
+val list_replace_i : int -> 'a -> 'a list -> 'a list
+
 (* modify a specific position in a list *)
 val list_modify : int -> ('a -> 'a) -> 'a list -> 'a list
 

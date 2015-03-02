@@ -3,6 +3,7 @@
 
 open Util
 open K3.AST
+open K3Helpers
 
 exception Bad_data of string
 
@@ -129,3 +130,5 @@ val get_map_bindings_in_stmt : prog_data_t -> stmt_id_t -> map_id_t -> map_id_t
  * @param type_fn allows to select a different type function for uniqueness *)
 
 val uniq_types_and_maps : ?type_fn:(prog_data_t -> map_id_t -> type_t list) -> prog_data_t -> (type_t list * map_id_t list) list
+
+val map_ds_of_id : ?vid:bool -> prog_data_t -> map_id_t -> data_struct

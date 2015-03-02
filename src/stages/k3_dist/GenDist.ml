@@ -145,10 +145,9 @@ let nd_check_stmt_cntr_index =
       (* else: no value in the counter *)
       mk_block [
         (* Initialize *)
-        Proto.nd_insert_stmt_cntr @@
-          mk_insert nd_stmt_cntrs.id @@
+        mk_insert nd_stmt_cntrs.id @@
             part_pat_as_vars @ [mk_tuple [mk_var add_to_count; mk_empty nd_stmt_cntrs_corr_map.t]];
-        mk_cbool false ; mk_tuple [mk_var new_count]
+        mk_cbool false;
       ]
 
 (* add_delta_to_buffer *)
@@ -163,37 +162,34 @@ let nd_check_stmt_cntr_index =
  * If we need another value, it must be handled via message from
  * m3tok3 *)
 let nd_add_delta_to_buf c map_id =
-  let func_name = D.nd_add_delta_to_buf_nm c map_id in
-  let delta_tuples_nm = "delta_tuples" in
-  let ids_types_arg = P.map_ids_types_for ~prefix:"__arg_" c.p map_id in
-  let ids_types_arg_v = P.map_ids_types_add_v ~vid:"vid_arg" ids_types_arg in
-  let ids_types_v = P.map_ids_types_with_v_for c.p map_id in
-  let types_v = snd_many ids_types_v in
-  let len_types_v = List.length types_v in
-  let vars_v = ids_to_vars @@ fst_many ids_types_v in
-  let vars_arg_v = ids_to_vars @@ fst_many ids_types_arg_v in
-  let vars_no_val = list_drop_end 1 @@
-    ids_to_vars @@ fst_many @@ P.map_ids_types_for c.p map_id in
-  let idx = D.make_into_index vars_no_val in
-  let vars_v_no_val = list_drop_end 1 vars_v in
-  let vars_val = hd @@ list_take_end 1 vars_v in
-  let vars_arg_val = hd @@ list_take_end 1 vars_arg_v in
-  let vars_arg_no_v_no_val =
-    ids_to_vars @@ fst_many @@ list_drop_end 1 ids_types_arg in
-  let t_val = hd @@ list_take_end 1 types_v in
-  let id_val = hd @@ list_take_end 1 @@ fst_many @@ ids_types_v in
-  let lookup_value, update_value = "lookup_value", "update_value" in
+  let delta_tuples, lookup_value, update_value = "delta_tuples", "lookup_value", "update_value" in
   let corrective, target_map = "corrective", "target_map" in
+  let map_ds = P.map_ds_of_id c.p map_id in
+  let map_ds_v = P.map_ds_of_id ~vid:true c.p map_id in
+  let id_t_delta = id_t_add "_delta" map_ds.e in
+  let vars_delta_unknown =
+    P.map_add_v mk_cunknown @@ list_replace_i (-1) mk_cunknown @@ ids_to_vars @@ fst_many id_t_delta in
+  let vars_delta_val = list_last @@ ids_to_vars @@ fst_many id_t_delta in
+  let vars_no_val = list_drop_end 1 @@ ids_to_vars @@ fst_many map_ds.e in
+  let idx = D.make_into_index vars_no_val in
+  let vars_v = ids_to_vars @@ fst_many map_ds_v.e in
+  let vars_val = list_last vars_v in
+  let t_val = snd @@ list_last @@ map_ds.e in
+  let id_val = fst @@ list_last @@ map_ds.e in
   let tmap_deref = target_map^"_d" in
-  let update_vars = list_drop_end 1 vars_v @ [mk_var update_value] in
   let zero = match t_val.typ with
     | TInt   -> mk_cint 0
     | TFloat -> mk_cfloat 0.
     | _ -> failwith @@ "Unhandled type "^K3PrintSyntax.string_of_type t_val
   in
+  let pat e =
+    list_replace_i (-1) e @@ modify_e map_ds_v.e ["vid", mk_var "min_vid"]
+  in
+  let min_vid_pat = pat mk_cunknown in
+  let update_vars = pat @@ mk_var update_value in
   let regular_delta =
     mk_let [lookup_value]
-      (map_latest_vid_vals c (mk_var tmap_deref)
+      (map_latest_vid_vals ~vid_nm:"min_vid" c (mk_var tmap_deref)
         (Some(vars_no_val @ [mk_cunknown])) map_id ~keep_vid:true) @@
       mk_let [update_value]
         (* get either 0 to add or the value we read *)
@@ -201,18 +197,18 @@ let nd_add_delta_to_buf c map_id =
           mk_case_ns
             (mk_peek @@ mk_var lookup_value) "val"
             zero @@
-            mk_subscript len_types_v @@ mk_var "val") @@
+            mk_subscript (List.length map_ds_v.e) @@ mk_var "val") @@
         mk_insert tmap_deref update_vars
   in
-  mk_global_fn func_name
+  mk_global_fn (D.nd_add_delta_to_buf_nm c map_id)
     (* corrective: whether this is a corrective delta *)
-    ([target_map, wrap_tind @@ wrap_t_map_idx' c map_id types_v;
+    ([target_map, wrap_tind @@ wrap_t_map_idx' c map_id (snd_many map_ds_v.e);
       corrective, t_bool; "min_vid", t_vid;
-      delta_tuples_nm, wrap_t_of_map' types_v])
+      delta_tuples, map_ds.t])
     [t_unit] @@
     mk_block @@
       [mk_iter  (* loop over values in delta tuples *)
-        (mk_lambda' ids_types_v @@
+        (mk_lambda' map_ds.e @@
           (* careful to put bind in proper place *)
           mk_bind (mk_var target_map) tmap_deref @@
           (* this part is just for correctives:
@@ -222,50 +218,46 @@ let nd_add_delta_to_buf c map_id =
               (mk_if
                 (mk_var corrective)
                 (if c.use_multiindex then
-                  mk_slice_idx' ~idx ~comp:EQ (mk_var tmap_deref) @@
-                    vars_v_no_val @ [mk_cunknown]
-                  else
-                    (mk_slice' tmap_deref @@
-                      vars_v_no_val @ [mk_cunknown])) @@
-                mk_empty @@ wrap_t_of_map' types_v) @@
+                  mk_slice_idx' ~idx ~comp:EQ (mk_var tmap_deref) min_vid_pat
+                 else
+                  mk_slice' tmap_deref @@
+                    list_replace_i (-1) mk_cunknown min_vid_pat) @@
+                mk_empty map_ds_v.t) @@
             mk_case_sn
               (mk_peek @@ mk_var lookup_value) "val"
               (* then just update the value *)
               (mk_let [update_value]
-                (mk_add (mk_var id_val) @@ mk_subscript len_types_v @@ mk_var "val") @@
+                (mk_add (mk_var id_val) @@ mk_subscript (List.length map_ds_v.e) @@ mk_var "val") @@
                 mk_insert tmap_deref update_vars)
               (* else, if it's just a regular delta, read the frontier *)
               regular_delta) @@
-        mk_var delta_tuples_nm
+        mk_var delta_tuples
       ;
       (* add to future values *)
+      (* TODO: optimize *)
       mk_iter (* loop over values in the delta tuples *)
-        (mk_lambda' ids_types_arg_v @@
+        (mk_lambda' id_t_delta @@
           mk_let ["filtered"]
-          (* careful to put bind in proper place *)
           (mk_bind (mk_var target_map) tmap_deref @@
             (* slice for all values > vid with same key *)
             if c.use_multiindex then
-              mk_slice_idx' ~idx ~comp:GTA (mk_var tmap_deref) @@
-                P.map_add_v (mk_var "min_vid") @@ vars_arg_no_v_no_val@[mk_cunknown]
+              mk_slice_idx' ~idx ~comp:GTA (mk_var tmap_deref) vars_delta_unknown
             else
-              mk_filter (* only greater vid for this part *)
-                (mk_lambda' ids_types_v @@
+              mk_filter
+                (mk_lambda' map_ds_v.e @@
                   mk_gt (mk_var "vid") @@ mk_var "min_vid") @@
                 (* slice w/o vid and value *)
-                mk_slice' tmap_deref @@
-                  P.map_add_v mk_cunknown @@ vars_arg_no_v_no_val@[mk_cunknown]) @@
+                mk_slice' tmap_deref vars_delta_unknown) @@
           mk_iter
-            (mk_lambda' ids_types_v @@
+            (mk_lambda' map_ds_v.e @@
               (* careful to put bind in proper place *)
               mk_bind (mk_var target_map) tmap_deref @@
                 mk_update tmap_deref
-                  vars_v @@
-                  vars_v_no_val @ [mk_add vars_val vars_arg_val]
-            ) @@
-            mk_var "filtered"
-        ) @@
-        mk_var delta_tuples_nm]
+                  (ids_to_vars @@ fst_many @@ map_ds_v.e) @@
+                  list_replace_i (-1) (mk_add vars_val vars_delta_val) vars_v) @@
+            mk_var "filtered") @@
+        mk_var delta_tuples]
+
 (*
  * Return list of corrective statements we need to execute by checking
  * which statements were performed after time x that used a particular map
@@ -445,7 +437,7 @@ let sw_send_fetch_fn c s_rhs_lhs s_rhs trig_name =
             acc_code@
             [mk_iter
               (mk_lambda' ["ip", t_addr] @@
-                mk_send (do_complete_trig_name) (mk_var "ip") @@
+                mk_send do_complete_trig_name (mk_var "ip") @@
                   args_of_t_as_vars_with_v c trig_name
               ) @@
               mk_apply (mk_var route_fn) @@
@@ -621,7 +613,6 @@ mk_code_sink'
   (["sender_ip", t_addr; "stmt_id_cnt_list", wrap_t_of_map' [t_stmt_id; t_int]]@
       (args_of_t_with_v c trig_name))
   [] @@
-  let pat x = modify_e D.nd_stmt_cntrs.e ["counter", x] in
   mk_block @@
     (mk_iter
       (mk_lambda'
@@ -897,6 +888,52 @@ let send_corrective_fns c =
   in
   List.flatten @@ List.map send_correctives @@ maps_potential_corrective c
 
+(* function to update the stmt_counters for correctives *)
+let nd_update_stmt_cntr_corr_map_nm = "nd_update_stmt_cntr_corr_map"
+let nd_update_stmt_cntr_corr_map =
+  let lookup_pat = [mk_var "vid"; mk_var "stmt_id"] in
+  mk_global_fn nd_update_stmt_cntr_corr_map_nm
+  ["vid", t_vid; "stmt_id", t_stmt_id; "hop", t_int; "count", t_int; "root", t_bool] [] @@
+    (* we need to decrement the hop's value by 1, and increment the next hop's values by the count *)
+    mk_upsert_with nd_stmt_cntrs "lkup" ~k:lookup_pat
+      ~default:(mk_error "nd_rcv_corr_done: missing stmt_cntrs value")
+      ~v:(mk_let [nd_stmt_cntrs_corr_map.id] (mk_snd @@ mk_snd @@ mk_var "lkup") @@
+            mk_block [
+              (* increment the next hop by count *)
+              mk_upsert_with nd_stmt_cntrs_corr_map "lkup2"
+                (* if no value, set it to the count *)
+                ~k:[mk_var "hop"] ~default:(mk_var "count")
+                (* otherwise, add the count *)
+                ~v:(mk_add (mk_snd @@ mk_var "lkup2") @@ mk_var "count");
+              (* check if this is from the root of the corrective tree *)
+              mk_if (mk_var "root")
+                (* return as is *)
+                mk_cunit @@
+                (* else if the current hop is 0, delete it *)
+                mk_case_ns (mk_peek @@ mk_slice' nd_stmt_cntrs_corr_map.id [mk_var "hop"; mk_cunknown]) "lkup2"
+                  (* if no entry, set to -1 *)
+                  (mk_insert nd_stmt_cntrs_corr_map.id [mk_var "hop"; mk_cint @@ -1]) @@
+                  (* else, calculate new corr count *)
+                  mk_let ["new_corr_cnt"] (mk_sub (mk_snd @@ mk_var "lkup2") @@ mk_cint 1) @@
+                  (* if we've hit 0 *)
+                  mk_if (mk_eq (mk_var "new_corr_cnt") @@ mk_cint 0)
+                    (* delete the entry altogether *)
+                    (mk_delete nd_stmt_cntrs_corr_map.id @@ [mk_var "lkup2"]) @@
+                    (* else, save the decremented entry *)
+                    mk_update nd_stmt_cntrs_corr_map.id [mk_var "lkup2"] [mk_var "hop"; mk_var "new_corr_cnt"];
+              (* set the new tuple *)
+              mk_tuple [mk_fst @@ mk_snd @@ mk_var "lkup"; mk_var nd_stmt_cntrs_corr_map.id]
+            ])
+
+(*
+ * shared coded btw do_complete and do_corrective
+ * we add the delta to all following vids
+ * *)
+let do_add_delta c e lmap ~corrective =
+  mk_apply' (D.nd_add_delta_to_buf_nm c lmap) @@ mk_tuple @@
+    [mk_var @@ P.map_name_of c.p lmap;
+      if corrective then mk_ctrue else mk_cfalse; mk_var "vid"; e]
+
 (* trigger versions of do_complete *)
 let nd_do_complete_trigs c trig_name =
   let do_complete_trig stmt_id =
@@ -912,36 +949,33 @@ let nd_do_complete_fns c ast trig_name =
   let do_complete_fn stmt_id =
     mk_global_fn (do_complete_name_of_t trig_name stmt_id) (args_of_t_with_v c trig_name) [] @@
     let lmap = P.lhs_map_of_stmt c.p stmt_id in
+    let fst_hop = mk_cint 1 in
     (* piece of block of code to be executed when the computation is done *)
-    let after_fn tuples =
-        if c.gen_correctives && List.exists ((=) lmap) @@ maps_potential_corrective c
+    let after_fn tup_ds =
+      mk_block [
+        (* add delta *)
+        do_add_delta c tup_ds lmap ~corrective:false;
+        (if c.gen_correctives && List.exists ((=) lmap) @@ maps_potential_corrective c
         then
           let send_corr_t = send_corrective_name_of_t c lmap in
-          [mk_let ["sent_msgs"]
+          mk_let ["sent_msgs"]
             (* we apply send_correctives with our original address, stmt_id, original vid and hop
              * we double up on vid since send_correctives is also called for do_corrective,
              * which must send the new vid to be calculated as well as the original complete's vid
              *)
             (mk_apply' send_corr_t @@
-              mk_tuple @@ [G.me_var; mk_cint stmt_id; mk_var "vid"; mk_cint 1; mk_var "vid"] @ tuples) @@
-            (* update the corrective counters for hop 1 to the number of msgs *)
-            mk_upsert_with nd_stmt_cntrs "lkup" ~k:[mk_var "vid"; mk_cint stmt_id]
-              ~default:(mk_error "missing stmt_cntrs value in do_complete")
-              ~v:(mk_let [nd_stmt_cntrs_corr_map.id] (mk_snd @@ mk_snd @@ mk_var "lkup") @@
-                   mk_block [
-                     mk_upsert_with nd_stmt_cntrs_corr_map "lkup2"
-                       ~k:[mk_cint 1] ~default:(mk_var "sent_msgs")
-                       ~v:(mk_add (mk_snd @@ mk_var "lkup2") @@ mk_var "sent_msgs");
-                     mk_tuple [mk_fst @@ mk_snd @@ mk_var "lkup" ; mk_var nd_stmt_cntrs_corr_map.id]
-                   ])
-            ]
+              mk_tuple @@ [G.me_var; mk_cint stmt_id; mk_var "vid"; fst_hop; mk_var "vid"; tup_ds]) @@
+            (* update the corrective counters for hop 1 to the number of msgs. true: is a root *)
+            mk_apply' nd_update_stmt_cntr_corr_map_nm @@
+              mk_tuple [mk_var "vid"; mk_cint stmt_id; fst_hop; mk_var "sent_msgs"; mk_ctrue]
         else
           (* if we have nothing to send, we can delete our stmt_cntr entry right away *)
-          [
+          mk_block [
             mk_delete_one nd_stmt_cntrs [mk_tuple [mk_var "vid"; mk_cint stmt_id]; mk_cunknown];
             (* check if we're done *)
             Proto.nd_delete_stmt_cntr;
-          ]
+          ])
+      ]
     in
     M.modify_ast_for_s c ast stmt_id trig_name after_fn
 in
@@ -951,45 +985,21 @@ List.map do_complete_fn @@ P.stmts_of_t c.p trig_name
 let nd_rcv_corr_done_nm = "nd_rcv_corr_done"
 let nd_rcv_corr_done =
   let lookup_pat = [mk_var "vid"; mk_var "stmt_id"] in
-  mk_code_sink' nd_rcv_corr_done_nm
-  ["vid", t_vid; "stmt_id", t_stmt_id; "hop", t_int; "count", t_int] [] @@
+  let args = ["vid", t_vid; "stmt_id", t_stmt_id; "hop", t_int; "count", t_int] in
+  mk_code_sink' nd_rcv_corr_done_nm args [] @@
     mk_block [
-      (* we need to decrement the hop's value by 1, and increment the next hop's values by the count *)
-      mk_upsert_with nd_stmt_cntrs "lkup" ~k:lookup_pat
-        ~default:(mk_error "nd_rcv_corr_done: missing stmt_cntrs value")
-        ~v:(mk_let [nd_stmt_cntrs_corr_map.id] (mk_snd @@ mk_snd @@ mk_var "lkup") @@
-              mk_block [
-                (* increment the next hop by count *)
-                mk_upsert_with nd_stmt_cntrs_corr_map "lkup2"
-                  (* if no value, set it to the count *)
-                  ~k:[mk_var "hop"] ~default:(mk_var "count")
-                  (* otherwise, add the count *)
-                  ~v:(mk_add (mk_snd @@ mk_var "lkup2") @@ mk_var "count");
-                (* if the current hop is 0, delete it *)
-                mk_case_ns (mk_peek @@ mk_slice' nd_stmt_cntrs_corr_map.id [mk_var "hop"; mk_cunknown]) "lkup2"
-                  (* if no entry, set to -1 *)
-                  (mk_insert nd_stmt_cntrs_corr_map.id [mk_var "hop"; mk_cint @@ -1]) @@
-                  (* else, calculate new corr count *)
-                  mk_let ["new_corr_cnt"] (mk_sub (mk_snd @@ mk_var "lkup2") @@ mk_cint 1) @@
-                  (* if we've hit 0 *)
-                  mk_if (mk_eq (mk_var "new_corr_cnt") @@ mk_cint 0)
-                    (* delete the entry altogether *)
-                    (mk_delete nd_stmt_cntrs_corr_map.id @@ [mk_var "lkup2"]) @@
-                    (* else, save the decremented entry *)
-                    mk_update nd_stmt_cntrs_corr_map.id [mk_var "lkup2"] [mk_var "hop"; mk_var "new_corr_cnt"];
-              (* return the new tuple *)
-              mk_tuple [mk_fst @@ mk_snd @@ mk_var "lkup"; mk_var nd_stmt_cntrs_corr_map.id]
-              ]);
-    (* check if the corr_cnt structure is empty. If so, we can delete the whole entry *)
-    mk_case_ns (mk_lookup' nd_stmt_cntrs.id lookup_pat) "lkup"
-      (mk_error @@ nd_rcv_corr_done_nm^": expected stmt_cntr value") @@
-      (* if the corr_cnt map is empty *)
-      mk_is_empty (mk_snd @@ mk_snd @@ mk_var "lkup")
-        ~n:mk_cunit
-        ~y:(mk_block [
-            (* delete the whole stmt_cntr entry *)
-            mk_delete nd_stmt_cntrs.id [mk_var "lkup"];
-            Proto.nd_delete_stmt_cntr])
+      (* update the corrective map. false: not a root of the corrective tree *)
+      mk_apply' nd_update_stmt_cntr_corr_map_nm @@ mk_tuple @@ (ids_to_vars @@ fst_many args) @ [mk_cfalse];
+      (* check if the corr_cnt structure is empty. If so, we can delete the whole entry *)
+      mk_case_ns (mk_lookup' nd_stmt_cntrs.id lookup_pat) "lkup"
+        (mk_error @@ nd_rcv_corr_done_nm^": expected stmt_cntr value") @@
+        (* if the corr_cnt map is empty *)
+        mk_is_empty (mk_snd @@ mk_snd @@ mk_var "lkup")
+          ~n:mk_cunit
+          ~y:(mk_block [
+              (* delete the whole stmt_cntr entry *)
+              mk_delete nd_stmt_cntrs.id [mk_var "lkup"];
+              Proto.nd_delete_stmt_cntr])
     ]
 
 (* receive_correctives:
@@ -1060,27 +1070,33 @@ let nd_rcv_correctives_trig c s_rhs trig_name = List.map
  * value. Instead, it adds to the value that already resides at a specific
  * vid and propagates. *)
 let nd_do_corrective_fns c s_rhs ast trig_name corrective_maps =
-  let do_corrective_trig (stmt_id, map_id) =
+  let do_corrective_fn (stmt_id, map_id) =
     let tuple_typ = wrap_t_of_map' @@ P.map_types_with_v_for c.p map_id in
     mk_global_fn (do_corrective_name_of_t c trig_name stmt_id map_id)
       (orig_vals @ args_of_t_with_v c trig_name @ ["delta_tuples", tuple_typ])
-      [] @@ (* locals *)
+      [] @@
         let lmap = P.lhs_map_of_stmt c.p stmt_id in
         let send_corr_fn = send_corrective_name_of_t c lmap in
-        let after_fn tup_l =
-          if List.exists ((=) lmap) corrective_maps
-          (* send correctives with hop + 1, and return the num of correctives *)
-          then [mk_apply' send_corr_fn @@ mk_tuple @@
-                 (modify_e orig_vals ["hop", mk_add (mk_cint 1) @@ mk_var "hop"]) @ tup_l]
-          (* if we have no more correctives, return 0 *)
-          else [mk_cint 0]
-        in
         let args, ast =
-          M.modify_corr_ast c ast map_id stmt_id trig_name after_fn in
-        let args_v = P.map_ids_types_add_v ~vid:"_" args in
-        mk_iter (mk_lambda' args_v ast) @@ mk_var "delta_tuples"
+          M.modify_corr_ast c ast map_id stmt_id trig_name id_fn
+        in
+        mk_let ["new_tuples"]
+          (mk_map (mk_lambda' args ast) @@ mk_var "delta_tuples") @@
+          mk_block [
+            (* add delta *)
+            do_add_delta c (mk_var "new_tuples") lmap ~corrective:true;
+            (* send correctives *)
+            if List.exists ((=) lmap) corrective_maps
+            (* send correctives with hop + 1, and return the num of correctives *)
+            then mk_apply' send_corr_fn @@ mk_tuple @@
+                   (modify_e orig_vals ["hop", mk_add (mk_cint 1) @@ mk_var "hop"]) @ [mk_var "new_tuples"]
+            (* if we have no more correctives, return 0 *)
+            else mk_cint 0
+          ]
+
+
   in
-  List.map do_corrective_trig s_rhs
+  List.map do_corrective_fn s_rhs
 
 (* we take the existing default role and prepend it with a one-shot to
  * call out on-init function *)
@@ -1127,6 +1143,7 @@ let declare_global_funcs c partmap ast =
   (P.for_all_trigs ~deletes:c.gen_deletes c.p @@ nd_log_get_bound c) @
   nd_log_read_geq ::
   nd_check_stmt_cntr_index ::
+  nd_update_stmt_cntr_corr_map ::
   begin if c.gen_correctives then [nd_filter_corrective_list] else [] end @
   K3Ring.functions @
   begin if c.use_multiindex then [] else emit_frontier_fns c end @
@@ -1149,22 +1166,22 @@ let gen_dist_for_t c ast trig corr_maps =
     sw_send_fetch_fn c s_rhs_lhs s_rhs trig;
   ] @
    nd_do_complete_fns c ast trig @
-   if c.gen_correctives then
+   (if c.gen_correctives then
      nd_do_corrective_fns c s_rhs_corr ast trig corr_maps
-   else []
+   else [])
   in
   let trigs =
-    begin if null s_rhs then []
+    (if null s_rhs then []
     else
       [nd_rcv_put_trig c trig;
-      nd_rcv_fetch_trig c trig]
-    end @
-    nd_send_push_stmt_map_trig c s_rhs_lhs trig@
+      nd_rcv_fetch_trig c trig])
+    @
+    nd_send_push_stmt_map_trig c s_rhs_lhs trig @
     nd_rcv_push_trig c s_rhs trig @
     nd_do_complete_trigs c trig @
-    if c.gen_correctives then
+    (if c.gen_correctives then
       nd_rcv_correctives_trig c s_rhs_corr trig
-    else []
+    else [])
   in
   trigs, functions
 
@@ -1199,6 +1216,7 @@ let gen_dist ?(use_multiindex=false)
     D.declare_foreign_functions @
     declare_global_vars c partmap ast @
     declare_global_funcs c partmap ast @
+    (if c.gen_correctives then send_corrective_fns c else []) @
     proto_funcs @
     [mk_flow @@
       Proto.triggers c @
@@ -1210,7 +1228,6 @@ let gen_dist ?(use_multiindex=false)
        nd_rcv_corr_done] @
       proto_trigs
     ] @
-    if c.gen_correctives then send_corrective_fns c else [] @
     roles_of c ast
   in
   snd @@ U.renumber_program_ids prog

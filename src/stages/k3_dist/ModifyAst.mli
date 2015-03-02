@@ -12,12 +12,12 @@ val get_map_access_patterns_ids : prog_data_t -> program_t -> IndexSet.t IntMap.
 
 (* Modify an AST for having version ids, sending the delta to a trigger etc *)
 val modify_ast_for_s : config -> program_t -> stmt_id_t ->
-  trig_name_t -> (expr_t list -> expr_t list) -> expr_t
+  trig_name_t -> (expr_t -> expr_t) -> expr_t
 
 (* Modify a corrective AST for having version ids. Returns arguments to use for
  * calling the AST *)
 val modify_corr_ast : config -> program_t ->
-  map_id_t -> stmt_id_t -> trig_name_t -> (expr_t list -> expr_t list) ->
+  map_id_t -> stmt_id_t -> trig_name_t -> (expr_t -> expr_t) ->
     (id_t * type_t) list * expr_t
 
 (* return global ast for map declarations, adding the vid *)

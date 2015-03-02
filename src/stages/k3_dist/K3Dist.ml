@@ -96,10 +96,6 @@ let add_index_pat id pat_kind_l c =
 
 let t_vid_list = wrap_tlist t_vid
 
-(* what the generic type of the global maps is *)
-let wrap_t_of_map = wrap_tbag
-let wrap_t_of_map' = wrap_tbag'
-
 (* wrap with the index type of the map, if requested *)
 let wrap_t_map_idx c map_id =
   if c.use_multiindex then
