@@ -699,8 +699,10 @@ let interpret_k3_program i =
    *)
   let rec loop last_src_peers =
     incr iters;
-    if !iters >= num_iters then begin
-      Log.log ("finished "^soi !iters^" iterations. stop.\n") () end else
+    (* debug *)
+    (* Log.log (Printf.sprintf "%d iterations\n" !iters) ();
+       if !iters >= num_iters then begin
+         Log.log ("finished "^soi !iters^" iterations. stop.\n") () end else *)
     (* number of peers with messages *)
     let msg_peers =
       if R.network_has_work i.scheduler then begin
