@@ -186,7 +186,7 @@ let ms_rcv_gc_vid c =
         (* if so ... *)
         (mk_let [min_vid]
           (* get the min vid *)
-          (mk_min_max min_vid "vid" t_vid mk_lt (mk_var D.g_min_vid.id) ms_gc_vid_map) @@
+          (mk_min_max min_vid (mk_var "vid") t_vid mk_lt (mk_var D.g_min_vid.id) ms_gc_vid_map) @@
           mk_block [
             (* clear the counter *)
             mk_assign ms_gc_vid_ctr.id @@ mk_cint 0;
@@ -213,13 +213,14 @@ let rcv_req_gc_vid =
                 mk_eq (mk_var D.job.id) @@ mk_var D.job_master.id)
     (* send our min vid: this would be much faster with a min function *)
     (mk_send ms_rcv_gc_vid_nm (mk_var master_addr.id)
-      [G.me_var; mk_min_max "min_vid" "vid" t_vid mk_lt (mk_var TS.sw_highest_vid.id) sw_ack_log]) @@
+      [G.me_var; mk_min_max "min_vid" (mk_var "vid") t_vid mk_lt (mk_var TS.sw_highest_vid.id) sw_ack_log]) @@
     (* else, if we're a node *)
     mk_if (mk_eq (mk_var D.job.id) @@ mk_var D.job_node.id)
       (* send out node min vid: much faster if we had a min function *)
       (mk_send ms_rcv_gc_vid_nm (mk_var master_addr.id)
         (* default is max_vid, to allow anything to go on *)
-        [G.me_var; mk_min_max "min_vid" "vid" t_vid mk_lt (mk_var D.g_max_vid.id) D.nd_stmt_cntrs])
+        [G.me_var; mk_min_max "min_vid" (mk_fst @@ mk_var "vid_stmt_id") 
+          t_vid mk_lt (mk_var D.g_max_vid.id) D.nd_stmt_cntrs])
       (* else, do nothing *)
       mk_cunit
 

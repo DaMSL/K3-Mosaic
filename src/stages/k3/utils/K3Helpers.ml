@@ -568,11 +568,20 @@ let id_t_add x id_t = List.map (fun (id,t) -> id^x, t) id_t
 
 (* modify e values of id_t format and convert any remaining values to vars *)
 let modify_e id_t val_l =
-  let m = strmap_of_list val_l in
-  List.map (fun (s, _) ->
-    try StrMap.find s m
-    with Not_found -> mk_var s)
-  id_t
+  let map = strmap_of_list val_l in
+  (* check for unused *)
+  let set = StrSet.of_list @@ fst_many val_l in
+  let set, res =
+    List.fold_left (fun (acc_set, acc) (s, _) ->
+      try
+        let acc_set' = StrSet.remove s acc_set in
+        acc_set', StrMap.find s map::acc
+      with Not_found -> acc_set, mk_var s::acc)
+    (set, [])
+    id_t
+  in
+  if StrSet.cardinal set <> 0 then failwith "modify_e: not all changes used"
+  else List.rev res
 
 let index_e id_t s =
   List.assoc s @@ insert_index_snd ~first:1 @@ fst_many id_t
@@ -584,9 +593,9 @@ let mk_size_slow col = mk_size (mk_var col.id)
 
 let mk_min_max v v' v_t comp_fn zero col = mk_agg
   (mk_assoc_lambda' [v, v_t] col.e @@
-    mk_if (comp_fn (mk_var v) @@ mk_var v')
+    mk_if (comp_fn (mk_var v) v')
       (mk_var v) @@
-      mk_var v')
+      v')
   zero @@
   mk_var col.id
 
