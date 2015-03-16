@@ -75,11 +75,6 @@ let rcv_jobs =
     (* write the jobs table *)
     mk_assign D.jobs.id @@ mk_var "jobs_in";
     (* init the things that depend on jobs *)
-    (* if we're a switch *)
-    mk_if (mk_leq (mk_var D.job.id) @@ mk_var D.job_switch.id)
-      (* set next switch addr *)
-      (delayed_init TS.sw_next_switch_addr)
-      mk_cunit;
     (* set timer addr *)
     delayed_init D.timer_addr;
     (* set nodes *)
@@ -88,6 +83,11 @@ let rcv_jobs =
     (* set switches *)
     delayed_init D.switches;
     delayed_init D.num_switches;
+    (* if we're a switch *)
+    mk_if (mk_leq (mk_var D.job.id) @@ mk_var D.job_switch.id)
+      (* set next switch addr *)
+      (delayed_init TS.sw_next_switch_addr)
+      mk_cunit;
     (* add to node ring *)
     K3Ring.ring_init;
     (* ack the msg *)

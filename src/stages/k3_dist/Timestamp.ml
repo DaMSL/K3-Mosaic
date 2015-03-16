@@ -20,16 +20,10 @@ let sw_next_switch_addr =
     mk_let ["addr_list"]
       (* get a total ordering: sort ascending by address *)
       (mk_sort
-        (mk_lambda' ["addr1", t_addr; "addr2", t_addr] @@ mk_lt (mk_var "addr1") @@
-          mk_var "addr2") @@
-        (* project out addr only *)
-        mk_map (mk_lambda' D.jobs.e @@ mk_var "addr") @@
-          (* get all the switches *)
-          mk_filter
-            (mk_lambda' D.jobs.e @@ mk_eq (mk_var D.job.id) @@ mk_var D.job_switch.id) @@
-            (* convert to list *)
-            mk_convert_col' D.jobs.t TList @@
-              mk_var D.jobs.id) @@
+        (mk_lambda' ["addr1", t_addr; "addr2", t_addr] @@
+          mk_lt (mk_var "addr1") @@ mk_var "addr2") @@
+        (* convert to list *)
+        mk_convert_col' D.switches.t TList @@ mk_var D.switches.id) @@
     (* bind the first entry of the list (default option) *)
     mk_case_ns (mk_peek @@ mk_var "addr_list") "first_addr"
       (mk_error "no addresses in addr_list") @@
