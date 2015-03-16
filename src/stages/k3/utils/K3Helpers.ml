@@ -514,11 +514,12 @@ let rec type_of_arg = function
 let mk_convert_col src_t dest_t col =
   let t_c, t_elem = unwrap_tcol src_t in
   mk_agg
-    (mk_lambda
-      (wrap_args ["acc_conv", dest_t; "x", t_elem]) @@
-      mk_combine
-          (mk_singleton dest_t [mk_var "x"]) @@
-          mk_var "acc_conv")
+    (mk_lambda'
+      ["acc_conv", dest_t; "x", t_elem] @@
+      mk_block [
+        mk_insert "acc_conv" [mk_var "x"];
+        mk_var "acc_conv"
+      ])
     (mk_empty dest_t)
     col
 
