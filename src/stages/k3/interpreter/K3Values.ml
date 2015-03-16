@@ -337,14 +337,18 @@ let print_binding_m ?(skip_functions=true) ?(skip_empty=true) id v =
 let print_frame frame = IdMap.iter print_binding_m frame
 
 let print_env ?skip_functions ?skip_empty ?(accessed_only=true) env =
-  ps @@ Printf.sprintf "----Globals(%i)----" @@ IdMap.cardinal env.globals; fnl();
   let print id v =
-    let action () = print_binding_m ?skip_functions ?skip_empty id !v in
+    let action () = print_binding_m ?skip_functions ?skip_empty id v in
     if accessed_only then
       if StrSet.mem id !(env.accessed) then action () else ()
     else action ()
   in
-  IdMap.iter print env.globals; fnl ()
+  ps "----Globals----"; fnl();
+  IdMap.iter (fun k v -> print k !v) env.globals;
+  if not @@ IdMap.is_empty env.locals then
+    fnl(); ps "----Locals----"; fnl();
+    IdMap.iter (fun k v -> print k @@ hd v) env.locals;
+  fnl ()
 
 let print_trigger_env env =
   ps @@ Printf.sprintf "----Triggers(%i)----" @@ IdMap.cardinal env.triggers; fnl();
