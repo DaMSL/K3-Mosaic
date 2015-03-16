@@ -1120,7 +1120,8 @@ let nd_do_corrective_fns c s_rhs ast trig_name corrective_maps =
             if List.exists ((=) lmap) corrective_maps
             (* send correctives with hop + 1, and return the num of correctives *)
             then mk_apply' send_corr_fn @@ mk_tuple @@
-                   (modify_e orig_vals ["hop", mk_add (mk_cint 1) @@ mk_var "hop"]) @ [mk_var "new_tuples"]
+                   (modify_e orig_vals ["hop", mk_add (mk_cint 1) @@ mk_var "hop"]) @
+                   [mk_var "vid"; mk_var "new_tuples"]
             (* if we have no more correctives, return 0 *)
             else mk_cint 0
           ]
