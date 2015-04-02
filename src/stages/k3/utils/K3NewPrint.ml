@@ -1007,7 +1007,7 @@ let add_sources p envs filename =
   in
   let flow = mk_flow [code] in
   let source_s = "source s1 : "^string_of_value_type (wrap_ttuple @@ snd_many arg_ids')^
-    " = file \""^filename^"\" k3\n" in
+    " = file \""^filename^"\" psv\n" in
   let feed_s   = "feed s1 |> switch_main\n" in
   string_of_program [flow] envs ^ source_s ^ feed_s
 
