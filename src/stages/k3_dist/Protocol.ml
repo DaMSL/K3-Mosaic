@@ -26,7 +26,7 @@ let ms_rcv_sw_init_ack c =
   mk_block [
     (* increment counter *)
     mk_incr ms_rcv_sw_init_ack_cnt.id;
-    mk_if (mk_geq (mk_var ms_rcv_sw_init_ack_cnt.id) @@ mk_var D.num_switches.id)
+    mk_if (mk_eq (mk_var ms_rcv_sw_init_ack_cnt.id) @@ mk_var D.num_switches.id)
       (mk_block [
         (* start timing *)
         mk_assign D.ms_start_time.id @@ mk_apply' "now_int" mk_cunit;
@@ -58,7 +58,7 @@ let ms_rcv_jobs_ack =
   mk_block [
     mk_incr ms_rcv_jobs_ack_cnt.id;
     (* if we've receive all acks *)
-    mk_if (mk_geq (mk_var ms_rcv_jobs_ack_cnt.id) @@ mk_var D.num_peers.id)
+    mk_if (mk_eq (mk_var ms_rcv_jobs_ack_cnt.id) @@ mk_var D.num_peers.id)
       (mk_block [
         (* tell switches to init *)
         mk_iter (mk_lambda' ["addr", t_addr] @@
@@ -107,7 +107,7 @@ let ms_rcv_job =
     mk_assign ms_rcv_job_cnt.id @@
       mk_add (mk_var ms_rcv_job_cnt.id) (mk_cint 1);
     (* if we've received all the answers *)
-    mk_if (mk_geq (mk_var ms_rcv_job_cnt.id) @@ mk_var D.num_peers.id)
+    mk_if (mk_eq (mk_var ms_rcv_job_cnt.id) @@ mk_var D.num_peers.id)
       (* send our jobs to everyone *)
       (mk_iter
         (mk_lambda' G.peers.e @@
@@ -161,7 +161,7 @@ let ms_shutdown_nm = "ms_shutdown"
 let ms_shutdown =
   mk_code_sink' ms_shutdown_nm unit_arg [] @@
   (* double check that we're done *)
-  mk_if (mk_geq (mk_var ms_rcv_node_done_cnt.id) @@ mk_var D.num_nodes.id)
+  mk_if (mk_eq (mk_var ms_rcv_node_done_cnt.id) @@ mk_var D.num_nodes.id)
     (* notify everyone to shut down *)
     (mk_iter (mk_lambda' ["addr", t_addr] @@
         mk_send shutdown_trig_nm (mk_var "addr") [mk_cunit]) @@
@@ -179,7 +179,7 @@ let ms_rcv_node_done =
       (* increment count *)
       mk_incr ms_rcv_node_done_cnt.id;
       (* if hit number *)
-      mk_if (mk_geq (mk_var ms_rcv_node_done_cnt.id) @@ mk_var D.num_nodes.id)
+      mk_if (mk_eq (mk_var ms_rcv_node_done_cnt.id) @@ mk_var D.num_nodes.id)
         (mk_block [
           (* update end time *)
           mk_assign D.ms_end_time.id @@ mk_apply' "now_int" mk_cunit;
@@ -223,7 +223,7 @@ let ms_rcv_switch_done =
     (* increment the count *)
     mk_incr ms_rcv_switch_done_cnt.id;
     (* if we've received from all the switches *)
-    mk_if (mk_geq (mk_var ms_rcv_switch_done_cnt.id) @@ mk_var D.num_switches.id)
+    mk_if (mk_eq (mk_var ms_rcv_switch_done_cnt.id) @@ mk_var D.num_switches.id)
       (mk_iter (mk_lambda' ["addr", t_addr] @@
           mk_send nd_rcv_done_nm (mk_var "addr") [mk_cunit]) @@
         mk_var D.nodes.id)

@@ -58,12 +58,14 @@ let sw_ack_rcv_trig sw_check_last_ack_fn =
         (* remove the ack *)
         mk_delete old_set [mk_var address];
         (* check if we need to delete the whole entry *)
-        mk_case_ns (mk_peek' old_set) "_"
+        mk_if (mk_eq (mk_cint 0) @@ mk_size @@ mk_var old_set)
           (* delete the entry if nothing is left in the set *)
           (mk_block [
             mk_delete sw_ack_log.id [mk_var old_val];
-            (* check for end of protocol *)
-            sw_check_last_ack_fn
+            (* check for end of protocol, if ack_log is empty *)
+            mk_if (mk_eq (mk_cint 0) @@ mk_size @@ mk_var sw_ack_log.id)
+              sw_check_last_ack_fn
+              mk_cunit
           ]) @@
           (* insert shrunk set otherwise *)
           mk_insert sw_ack_log.id [mk_fst' old_val; mk_var old_set]
@@ -219,7 +221,7 @@ let rcv_req_gc_vid =
       (* send out node min vid: much faster if we had a min function *)
       (mk_send ms_rcv_gc_vid_nm (mk_var master_addr.id)
         (* default is max_vid, to allow anything to go on *)
-        [G.me_var; mk_min_max "min_vid" (mk_fst @@ mk_var "vid_stmt_id") 
+        [G.me_var; mk_min_max "min_vid" (mk_fst @@ mk_var "vid_stmt_id")
           t_vid mk_lt (mk_var D.g_max_vid.id) D.nd_stmt_cntrs])
       (* else, do nothing *)
       mk_cunit
