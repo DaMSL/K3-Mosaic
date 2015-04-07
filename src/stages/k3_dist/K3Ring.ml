@@ -50,7 +50,7 @@ let add_node_fn =
     mk_assign node_ring.id @@
       mk_sort
         (mk_assoc_lambda' (id_t_node_for "hash1") (id_t_node_for "hash2") @@
-          mk_gt (mk_var "hash1") @@ mk_var "hash2") @@
+          mk_lt (mk_var "hash1") @@ mk_var "hash2") @@
         mk_var node_ring.id
   ]
 
@@ -59,31 +59,32 @@ let add_node_fn =
  * value, which is 2^30 *)
 (* NOTE: this would be much better with a binary search, or using a multiindex with
  * a 'just bigger than' query *)
+(* TODO: switch to better data structure *)
 let get_ring_node_nm = "get_ring_node"
 let get_ring_node_fn =
   let results = "results" in
   mk_global_fn get_ring_node_nm
   ["data", t_int; "max_val", t_int] [t_addr] @@
-  mk_let ["scaled"]
-    (mk_apply (mk_var "int_of_float") @@
-      mk_mult
-        (mk_apply (mk_var "float_of_int") @@
-          mk_apply (mk_var "get_max_int") mk_cunit) @@
-        mk_apply (mk_var "divf") @@ mk_tuple
-          [mk_apply (mk_var "float_of_int") @@ mk_var "data";
-           mk_apply (mk_var "float_of_int") @@ mk_var "max_val"]) @@
-  mk_let [results]
-    (mk_filter (* filter to only hashes greater than data *)
-      (mk_lambda' id_t_node @@
-        mk_geq (mk_var "hash") @@ mk_var "scaled") @@
-      mk_var node_ring.id) @@
-  mk_let (List.map (function ("addr", _) -> "addr" | _ -> "_") id_t_node)
-    (* if we have results, peek to get the min. otherwise, take the first node *)
-    (mk_case_sn (mk_peek' results) "x"
-      (mk_var "x") @@
-      (* take the first node *)
-      mk_peek_or_error "empty node ring" @@ mk_var node_ring.id) @@
-    mk_var "addr"
+    mk_let ["scaled"]
+      (mk_apply (mk_var "int_of_float") @@
+        mk_mult
+          (mk_apply (mk_var "float_of_int") @@
+            mk_apply (mk_var "get_max_int") mk_cunit) @@
+          mk_apply (mk_var "divf") @@ mk_tuple
+            [mk_apply (mk_var "float_of_int") @@ mk_var "data";
+            mk_apply (mk_var "float_of_int") @@ mk_var "max_val"]) @@
+    mk_let [results]
+      (mk_filter (* filter to only hashes greater than data *)
+        (mk_lambda' id_t_node @@
+          mk_geq (mk_var "hash") @@ mk_var "scaled") @@
+        mk_var node_ring.id) @@
+    mk_let (List.map (function ("addr", _) -> "addr" | _ -> "_") id_t_node)
+      (* if we have results, peek to get the min. otherwise, take the first node *)
+      (mk_case_sn (mk_peek' results) "x"
+        (mk_var "x") @@
+        (* take the first node *)
+        mk_peek_or_error "empty node ring" @@ mk_var node_ring.id) @@
+      mk_var "addr"
 
 let functions =
   [ add_node_fn;
