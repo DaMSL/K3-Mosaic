@@ -11,6 +11,16 @@ module U = K3Util
  * that in K3Helpers, the base for ranges cannot be changed from 0. This should
  * be sorted out in the future *)
 
+(* Explanation: we route via the following algorithm:
+  * Take key (x,y,z) and hash each component.
+  * For each component, limit to a certain maximum using mod.
+  * Combine the components algebraically with x + y*x + z*y*x.
+  * This gives us a mapping within the cube x,y,z, that is partially consistent with a square x,y. Even for values
+    where z > 0, the splits in x and y correspond between the cube and the square.
+  * Map the result to a node, in our case using consistent hashing:
+  * Scale the result to the entire hashable range, and find a corresponding node on the clock.
+  *)
+
 (* route function name *)
 let route_for p map_id =
   let m_t = P.map_types_no_val_for p map_id in
