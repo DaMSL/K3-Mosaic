@@ -447,11 +447,10 @@ and eval_expr (address:address) sched_st cenv texpr =
           (* Comparator application propagates an environment *)
           let nenv, r = f' !env (VTuple([v1; v2])) in
           env := nenv;
-          match v1 = v2, value_of_eval r with
-          | true, _             -> 0
-          | false, VBool(true)  -> -1
-          | false, VBool(false) -> 1
-          | _, _ -> error "Sort" "non-boolean sort result"
+          match value_of_eval r with
+          | VBool true  -> -1
+          | VBool false -> 1
+          | _ -> error "Sort" "non-boolean sort result"
         in
         !env, VTemp(v_sort error sort_fn c)
       | _ -> error name "bad values"
