@@ -54,6 +54,8 @@ let stdlib = List.map add_foreign_fn [
   "sleep";
   "haltEngine";
   "error";
+  "print_env";
+  "log";
 ]
 
 let add_globals_k3 k3_globals ds = k3_globals@ds

@@ -345,9 +345,10 @@ let print_env ?skip_functions ?skip_empty ?(accessed_only=true) env =
   in
   ps "----Globals----"; fnl();
   IdMap.iter (fun k v -> print k !v) env.globals;
-  if not @@ IdMap.is_empty env.locals then
-    fnl(); ps "----Locals----"; fnl();
-    IdMap.iter (fun k v -> print k @@ hd v) env.locals;
+  if not @@ IdMap.is_empty env.locals then begin
+      fnl(); ps "----Locals----"; fnl();
+      IdMap.iter (fun k v -> print k @@ hd v) env.locals
+    end;
   fnl ()
 
 let print_trigger_env env =
