@@ -805,7 +805,8 @@ let send_corrective_fns c =
       ~n:
       (* loop over corrective list and act for specific statements *)
       (* return the number of messages *)
-      (* we need to add a vid value to reduce the number of shuffle instantiations *)
+      (* we need to add a vid value here to reduce the number of needed shuffle instantiations,
+       * so we don't have shuffles with vid as well as ones without *)
       (mk_let [delta_tuples2.id]
         (mk_map (mk_lambda' map_ds.e @@ mk_tuple @@
                   (mk_var g_min_vid.id)::(ids_to_vars @@ fst_many map_ds.e)) @@
@@ -1065,11 +1066,15 @@ let nd_rcv_correctives_trig c s_rhs trig_name = List.map
         mk_let ["sent_msgs"]
           (mk_agg
             (mk_assoc_lambda' ["acc_count", t_int] ["compute_vid", t_vid] @@
-              mk_case_ns (mk_lookup' D.nd_stmt_cntrs.id
-                [mk_tuple [mk_var "compute_vid"; mk_cint stmt_id]; mk_cunknown]) "lkup"
-                (mk_error "nd_rcv_corrective: failed to find entry in stmt_cntrs for corrective") @@
+              (* get the stmt counter *)
+              mk_let ["cntr"]
+                (mk_case_ns (mk_lookup' D.nd_stmt_cntrs.id
+                  [mk_tuple [mk_var "compute_vid"; mk_cint stmt_id]; mk_cunknown]) "lkup"
+                  (* 0 if we have no value *)
+                  (mk_cint 0) @@
+                  mk_fst @@ mk_snd @@ mk_var "lkup") @@
                 (* check if our stmt_counter is 0 *)
-                mk_if (mk_eq (mk_fst @@ mk_snd @@ mk_var "lkup") @@ mk_cint 0)
+                mk_if (mk_eq (mk_var "cntr") @@ mk_cint 0)
                   (* if so, get bound vars from log *)
                   (mk_let (fst_many @@ args_of_t_with_v c trig_name)
                     (mk_apply'
@@ -1125,8 +1130,6 @@ let nd_do_corrective_fns c s_rhs ast trig_name corrective_maps =
             (* if we have no more correctives, return 0 *)
             else mk_cint 0
           ]
-
-
   in
   List.map do_corrective_fn s_rhs
 
