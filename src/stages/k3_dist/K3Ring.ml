@@ -39,13 +39,15 @@ let add_node_fn =
         mk_tuple @@
           ids_to_vars id_node_no_hash @
             (* hash the address, then add a number and hash again *)
-            [mk_apply (mk_var "hash_int") @@
-              mk_add (mk_var "i") @@ mk_apply (mk_var "hash_addr") @@ mk_var "addr"]) @@
+            [mk_apply (mk_var "abs") @@ mk_apply (mk_var "hash_int") @@
+              mk_add
+                (mk_mult (mk_var "i") @@ mk_cint 2683) @@
+                mk_apply (mk_var "hash_addr") @@ mk_var "addr"]) @@
       mk_var "rng") @@
   mk_block [
     (* insert the new elements *)
     mk_assign node_ring.id @@
-      mk_combine (mk_var "new_elems") @@ mk_var node_ring.id;
+      mk_combine (mk_var node_ring.id) @@ mk_var "new_elems";
     (* sort by hash *)
     mk_assign node_ring.id @@
       mk_sort

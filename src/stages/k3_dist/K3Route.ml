@@ -30,6 +30,7 @@ let route_for p map_id =
 let t_two_ints = [t_int; t_int]
 let t_list_two_ints = wrap_tlist' t_two_ints
 let dim_bounds_type = wrap_tlist' t_two_ints
+(* TODO: change to map *)
 let pmap_types = wrap_tlist' t_two_ints
 let pmap_per_map_types = [t_map_id; pmap_types]
 let full_pmap_types = wrap_tlist' pmap_per_map_types
@@ -209,7 +210,7 @@ let gen_route_fn p map_id =
                   (* we hash first. This could seem like it destroys locality,
                     * but it really doesn't, since we're only concerned about
                     * point locality *)
-                  [mk_apply (mk_var hash_func) @@ mk_var id_unwrap;
+                  [mk_apply (mk_var "abs") @@ mk_apply (mk_var hash_func) @@ mk_var id_unwrap;
                   mk_snd @@ mk_var "peek_slice"]
               ) @@
               mk_mult
