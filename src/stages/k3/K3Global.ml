@@ -30,36 +30,11 @@ let globals = List.map decl_global
   ] (* jobs - not removed *)
 
 (* cross-reference foreign functions *)
-let add_foreign_fn nm =
-  try
-    let t,_,_ = K3StdLib.lookup nm in
-    mk_foreign_short nm t
-  with Not_found -> failwith @@ "foreign function "^nm^" not found in stdlib"
-
-(* k3 stdlib *)
-let stdlib = List.map add_foreign_fn [
-  "get_max_int";
-  "divf";
-  "abs";
-  "maxi";
-  "maxif";
-  "reciprocali";
-  "reciprocal";
-  "regex_match_int";
-  "substring";
-  "print";
-  "string_of_float";
-  "date_part";
-  "load_csv_bag";
-  "now_int";
-  "sleep";
-  "haltEngine";
-  "error";
-  "print_env";
-  "log";
-]
+let add_foreign_fns () =
+  let l = K3StdLib.funcs () in
+  List.map (fun (nm, v) -> mk_foreign_short nm @@ fst3 v) l
 
 let add_globals_k3 k3_globals ds = k3_globals@ds
-let add_globals peers ds = add_globals_k3 (globals @ stdlib) ds
+let add_globals peers ds = add_globals_k3 (globals @ add_foreign_fns ()) ds
 let remove_globals peers ds = list_drop (List.length globals) ds
 

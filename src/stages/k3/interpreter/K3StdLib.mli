@@ -10,3 +10,5 @@ val g_load_path : string ref
 val lookup : id_t -> entry_t
 val lookup_value : id_t -> value_t
 val lookup_type : id_t -> type_t
+
+val funcs : unit -> (string * entry_t) list

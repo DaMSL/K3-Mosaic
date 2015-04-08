@@ -405,3 +405,5 @@ let lookup id = Hashtbl.find func_table id
 let lookup_value id = let (_,a,f) = lookup id in VForeignFunction (id,a,f)
 let lookup_type id = let (t,_,_) = lookup id in t
 
+let funcs () = Hashtbl.fold (fun k v acc -> (k,v)::acc) func_table []
+
