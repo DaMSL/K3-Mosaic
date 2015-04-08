@@ -457,20 +457,25 @@ and handle_lambda c ~expr_info ~prefix_fn arg e =
 (* create a fold instead of a map or ext (for typechecking reasons) *)
 (* expects a lambda expression, and collection expression inside a map/flattenMap *)
 and fold_of_map_ext c expr =
-  let self_t_out = T.type_of_expr expr in
+  let open KH in
+  let t_out = T.type_of_expr expr in
   (* customize for the different operations *)
-  let (lambda, col), wrap_fn, suffix, t_out = match U.tag_of_expr expr with
-    | Map     -> U.decompose_map expr, KH.mk_singleton self_t_out |- singleton, "map", self_t_out
-    | Flatten -> U.decompose_map @@ U.decompose_flatten expr, id_fn, "ext", self_t_out
+  let (lambda, col), suffix = match U.tag_of_expr expr with
+    | Map     -> U.decompose_map expr, "map"
+    | Flatten -> U.decompose_map @@ U.decompose_flatten expr, "ext"
     | _       -> failwith "Can only convert flatten-map or map to fold"
   in
-  let empty = KH.mk_empty t_out in
   let args, body = U.decompose_lambda lambda in
-  let acc_id = "__acc_"^suffix in
+  let acc_id = "_acc"^suffix in
   let acc_arg = AVar (acc_id, t_out) in
   let args' = ATuple [acc_arg; args] in
-  let body' = KH.mk_combine (KH.mk_var acc_id) (wrap_fn body) in
-  lazy_expr c @@ light_type c @@ KH.mk_agg (KH.mk_lambda args' body') empty col
+  let body' = match U.tag_of_expr expr with
+    | Map     -> mk_block [ mk_insert acc_id [body]; mk_var acc_id ]
+    | Flatten -> KH.mk_combine (KH.mk_var acc_id) body
+    | _       -> failwith "Can only convert flatten-map or map to fold"
+  in
+  lazy_expr c @@ light_type c @@
+    KH.mk_agg (KH.mk_lambda args' body') (mk_empty t_out) col
 
 (* printing expressions *)
 (* argnums: lambda only   -- number of expected arguments *)
@@ -648,7 +653,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
       | _ -> function_application c e1 [e2]
     end
   | Block -> let es = U.decompose_block expr in
-    lazy_paren @@ wrap_indent (wrap_hv 0 @@ 
+    lazy_paren @@ wrap_indent (wrap_hv 0 @@
       lps_list ~sep:";" CutHint (fun e ->
         wrap_hov 0 @@ paren_stmt e @@ lazy_expr c e) es)
 
@@ -879,7 +884,7 @@ let rec lazy_resource_pattern c = function
 let lazy_stream c = function
   | RandomStream i -> lps "random" <| lazy_paren (lps @@ string_of_int i)
   (* k3o must put a collection here, and k3 expects a value, so extract it *)
-  | ConstStream e  -> 
+  | ConstStream e  ->
       begin match KH.list_of_k3_container e with
       | [e] -> lps "value" <| lazy_paren (lazy_expr c e)
       | _   -> failwith "cannot translate stream to k3new"
