@@ -40,6 +40,7 @@ let add_foreign_fn nm =
 let stdlib = List.map add_foreign_fn [
   "get_max_int";
   "divf";
+  "abs";
   "maxi";
   "maxif";
   "reciprocali";

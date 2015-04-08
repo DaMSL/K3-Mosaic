@@ -21,6 +21,7 @@ let (func_table : ((id_t, entry_t) Hashtbl.t)) = Hashtbl.create 10
 
 (* retreive arguments from environment *)
 let arg_of_env id env = hd @@ IdMap.find id env.locals
+let args_of_env ids env = List.map (hd |- flip IdMap.find env.locals) ids
 
 (* ------- Hashing Functions ------- *)
 (* hash_float *)
@@ -121,16 +122,23 @@ let _ = Hashtbl.add func_table
   divi_name (divi_decl, divi_args, divi_fn)
 
 (* mod *)
-let mod_fn e =
+let fn e =
   match arg_of_env "x" e, arg_of_env "y" e with
   | VInt x, VInt y -> e, int_temp @@ x mod y
   | _ -> invalid_arg "mod"
+let name = "mod"
+let decl = wrap_tfunc (wrap_ttuple [t_int;t_int]) t_int
+let args = ["x", t_int; "y", t_int]
+let _ = Hashtbl.add func_table name (decl, wrap_args args, fn)
 
-let mod_name = "mod"
-let mod_decl = wrap_tfunc (wrap_ttuple [t_int;t_int]) t_int
-let mod_args = wrap_args ["x", t_int; "y", t_int]
-let _ = Hashtbl.add func_table
-  mod_name (mod_decl, mod_args, mod_fn)
+let name = "abs"
+let args = ["x", t_int]
+let ret  = t_int
+let fn e = match args_of_env (fst_many args) e with
+  | [VInt x] -> e, int_temp @@ abs x
+  | _        -> invalid_arg name
+let decl = wrap_tfunc (wrap_ttuple @@ snd_many args) ret
+let _ = Hashtbl.add func_table name (decl, wrap_args args, fn)
 
 (* reciprocal *)
 let name = "reciprocali"
