@@ -898,36 +898,36 @@ let nd_update_stmt_cntr_corr_map =
       mk_if (mk_var "create")
         (mk_insert nd_stmt_cntrs.id [mk_tuple lookup_pat; mk_tuple [mk_cint 0; mk_empty nd_stmt_cntrs_corr_map.t]])
         mk_cunit;
-    (* we need to decrement the hop's value by 1, and increment the next hop's values by the count *)
-    mk_upsert_with nd_stmt_cntrs "lkup" ~k:lookup_pat
-      ~default:(mk_error "nd_rcv_corr_done: missing stmt_cntrs value")
-      ~v:(mk_let [nd_stmt_cntrs_corr_map.id] (mk_snd @@ mk_snd @@ mk_var "lkup") @@
-            mk_block [
-              (* increment the next hop by count *)
-              mk_upsert_with nd_stmt_cntrs_corr_map "lkup2"
-                (* if no value, set it to the count *)
-                ~k:[mk_var "hop"] ~default:(mk_var "count")
-                (* otherwise, add the count *)
-                ~v:(mk_add (mk_snd @@ mk_var "lkup2") @@ mk_var "count");
-              (* check if this is from the root of the corrective tree *)
-              mk_if (mk_var "root")
-                (* return as is *)
-                mk_cunit @@
-                (* else if the current hop is 0, delete it *)
-                mk_case_ns (mk_peek @@ mk_slice' nd_stmt_cntrs_corr_map.id [mk_var "hop"; mk_cunknown]) "lkup2"
-                  (* if no entry, set to -1 *)
-                  (mk_insert nd_stmt_cntrs_corr_map.id [mk_var "hop"; mk_cint @@ -1]) @@
-                  (* else, calculate new corr count *)
-                  mk_let ["new_corr_cnt"] (mk_sub (mk_snd @@ mk_var "lkup2") @@ mk_cint 1) @@
-                  (* if we've hit 0 *)
-                  mk_if (mk_eq (mk_var "new_corr_cnt") @@ mk_cint 0)
-                    (* delete the entry altogether *)
-                    (mk_delete nd_stmt_cntrs_corr_map.id @@ [mk_var "lkup2"]) @@
-                    (* else, save the decremented entry *)
-                    mk_update nd_stmt_cntrs_corr_map.id [mk_var "lkup2"] [mk_var "hop"; mk_var "new_corr_cnt"];
-              (* set the new tuple *)
-              mk_tuple [mk_fst @@ mk_snd @@ mk_var "lkup"; mk_var nd_stmt_cntrs_corr_map.id]
-            ])
+      (* we need to decrement the hop's value by 1, and increment the next hop's values by the count *)
+      mk_upsert_with nd_stmt_cntrs "lkup" ~k:lookup_pat
+        ~default:(mk_error "nd_rcv_corr_done: missing stmt_cntrs value")
+        ~v:(mk_let [nd_stmt_cntrs_corr_map.id] (mk_snd @@ mk_snd @@ mk_var "lkup") @@
+              mk_block [
+                (* increment the next hop by count *)
+                mk_upsert_with nd_stmt_cntrs_corr_map "lkup2"
+                  (* if no value, set it to the count *)
+                  ~k:[mk_var "hop"] ~default:(mk_var "count")
+                  (* otherwise, add the count *)
+                  ~v:(mk_add (mk_snd @@ mk_var "lkup2") @@ mk_var "count");
+                (* check if this is from the root of the corrective tree *)
+                mk_if (mk_var "root")
+                  (* return as is *)
+                  mk_cunit @@
+                  (* else if the current hop is 0, delete it *)
+                  mk_case_ns (mk_peek @@ mk_slice' nd_stmt_cntrs_corr_map.id [mk_var "hop"; mk_cunknown]) "lkup2"
+                    (* if no entry, set to -1 *)
+                    (mk_insert nd_stmt_cntrs_corr_map.id [mk_var "hop"; mk_cint @@ -1]) @@
+                    (* else, calculate new corr count *)
+                    mk_let ["new_corr_cnt"] (mk_sub (mk_snd @@ mk_var "lkup2") @@ mk_cint 1) @@
+                    (* if we've hit 0 *)
+                    mk_if (mk_eq (mk_var "new_corr_cnt") @@ mk_cint 0)
+                      (* delete the entry altogether *)
+                      (mk_delete nd_stmt_cntrs_corr_map.id @@ [mk_var "lkup2"]) @@
+                      (* else, save the decremented entry *)
+                      mk_update nd_stmt_cntrs_corr_map.id [mk_var "lkup2"] [mk_var "hop"; mk_var "new_corr_cnt"];
+                (* set the new tuple *)
+                mk_tuple [mk_fst @@ mk_snd @@ mk_var "lkup"; mk_var nd_stmt_cntrs_corr_map.id]
+              ])
     ]
 
 (*
@@ -957,6 +957,13 @@ let nd_do_complete_fns c ast trig_name =
     let lmap = P.lhs_map_of_stmt c.p stmt_id in
     let fst_hop = mk_cint 1 in
     (* piece of block of code to be executed when the computation is done *)
+    let stmt_cntr_delete =
+      (* if we have nothing to send, we can delete our stmt_cntr entry right away *)
+      mk_block [
+        mk_delete_one nd_stmt_cntrs [mk_tuple [mk_var "vid"; mk_cint stmt_id]; mk_cunknown];
+        (* check if we're done *)
+        Proto.nd_delete_stmt_cntr;
+      ] in
     let after_fn tup_ds =
       mk_block [
         (* add delta *)
@@ -977,23 +984,23 @@ let nd_do_complete_fns c ast trig_name =
               mk_apply' nd_update_stmt_cntr_corr_map_nm @@
                 mk_tuple [mk_var "vid"; mk_cint stmt_id; fst_hop; mk_var "sent_msgs"; mk_ctrue; mk_cbool create]
             in
-            if has_rhs then update_corr_code false
+            if has_rhs then
+              mk_if (mk_eq (mk_var "sent_msgs") @@ mk_cint 0)
+                (* if our sent_msgs is 0, we need to delete the stmt cntr entry *)
+                stmt_cntr_delete @@
+                (* otherwise we need to update the corrective counters *)
+                update_corr_code false
             else
-              (* if we have no rhs maps, we may not need to update anything *)
+              (* if we have no rhs maps, we may not need to update anything, since no stmt cntr entry was created *)
               mk_if (mk_eq (mk_var "sent_msgs") @@ mk_cint 0)
                 mk_cunit @@
                 (* else, update and create a stmt counter *)
                 update_corr_code true
+        (* no correctives are possible *)
         else
           (* if we have no rhs maps, do nothing *)
           if not has_rhs then mk_cunit
-          else
-            (* if we have nothing to send, we can delete our stmt_cntr entry right away *)
-            mk_block [
-              mk_delete_one nd_stmt_cntrs [mk_tuple [mk_var "vid"; mk_cint stmt_id]; mk_cunknown];
-              (* check if we're done *)
-              Proto.nd_delete_stmt_cntr;
-            ])
+          else stmt_cntr_delete)
       ]
     in
     M.modify_ast_for_s c ast stmt_id trig_name after_fn
