@@ -111,7 +111,7 @@ let nd_log_read_geq_nm = "nd_log_read_geq"
 let nd_log_read_geq =
   mk_global_fn nd_log_read_geq_nm
   ["vid2", t_vid]
-  [wrap_tbag' @@ snd_many nd_log_master.e] @@
+  [nd_log_master.t] @@
   mk_filter
     (* get only >= vids *)
     (mk_lambda' nd_log_master.e @@ mk_geq (mk_var "vid") @@ mk_var "vid2") @@
@@ -274,9 +274,6 @@ let nd_filter_corrective_list =
   ["request_vid", t_vid; "trig_stmt_list", trig_stmt_list_t]
   [return_type]
   @@
-  mk_let ["log_entries"]
-    (mk_apply (* list of triggers >= vid *)
-      (mk_var nd_log_read_geq_nm) @@ mk_var "request_vid") @@
   (* convert to bag *)
   mk_convert_col (wrap_tlist' return_type_base) return_type @@
     (* group the list by stmt_ids *)
@@ -288,25 +285,18 @@ let nd_filter_corrective_list =
           mk_insert "vid_list" [mk_var "vid"];
           mk_var "vid_list" ])
       (mk_empty t_vid_list) @@
-      let vid_stmt_id_t  = ["vid", t_vid; "stmt_id", t_stmt_id] in
-      let vid_stmt_col_t = wrap_tlist' @@ snd_many vid_stmt_id_t in
       mk_sort (* sort so early vids are generally sent out first *)
         (* get a list of vid, stmt_id pairs *)
         (** this is really a map, but make it a fold to convert to a list *)
         (mk_assoc_lambda' (* compare func *)
           ["vid1", t_vid; "stmt1", t_stmt_id]
           ["vid2", t_vid; "stmt2", t_stmt_id] @@
-          mk_lt (mk_var "vid1") @@ mk_var "vid2")
-        (mk_agg
-          (mk_assoc_lambda'
-            ["acc", vid_stmt_col_t]
-            D.nd_log_master.e @@
-            (* convert to vid, stmt *)
-            mk_block [
-              mk_insert "acc" @@ ids_to_vars @@ fst_many vid_stmt_id_t;
-              mk_var "acc" ])
-          (mk_empty vid_stmt_col_t) @@
-          mk_var "log_entries")
+          mk_lt (mk_var "vid1") @@ mk_var "vid2") @@
+        (* convert to list so we can sort *)
+        mk_convert_col nd_log_master.t (wrap_tlist' @@ snd_many nd_log_master.e) @@
+          (* list of triggers >= vid *)
+          mk_apply
+            (mk_var nd_log_read_geq_nm) @@ mk_var "request_vid"
 
 (**** protocol code ****)
 
@@ -664,8 +654,7 @@ let nd_send_push_stmt_map_trig c s_rhs_lhs trig_name =
            * else can stop us before we send the push *)
           mk_apply
             (mk_var nd_log_master_write_nm) @@
-            mk_tuple [mk_var "vid"; mk_cint @@
-              P.trigger_id_for_name c.p trig_name; mk_cint stmt_id] ;
+            mk_tuple [mk_var "vid"; mk_cint stmt_id] ;
           mk_iter
             (mk_lambda'
               ["ip",t_addr;"tuples", wrap_t_of_map' rhs_map_types] @@

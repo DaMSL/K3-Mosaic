@@ -329,10 +329,14 @@ let nd_stmt_cntrs =
   create_ds "nd_stmt_cntrs" (wrap_tmap' @@ snd_many e) ~e
 
 (* master log *)
-(* TODO: change to ordered DS, like ordered map *)
+(* TODO: change to *ordered* map *)
+(* the master log shows which statements we pushed data for
+ * filter_corrective_list calls nd_log_read_geq to figure out which
+ * correctives should be sent *)
+(* This is coarse-grain corrective control. *)
 let nd_log_master =
-  let e = ["vid", t_vid; "trig_id", t_trig_id; "stmt_id", t_stmt_id] in
-  create_ds "nd_log_master" (wrap_tbag' @@ snd_many e) ~e
+  let e  = ["vid", t_vid; "stmt_id", t_stmt_id] in
+  create_ds "nd_log_master" (wrap_tmap' @@ snd_many e) ~e
 
 (* names for log *)
 let nd_log_for_t t = "nd_log_"^t
