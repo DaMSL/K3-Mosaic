@@ -879,7 +879,7 @@ let send_corrective_fns c =
                     (mk_var "acc_count") @@
                     mk_var "ips_vids")
                 acc_code)
-            (mk_cint 0) (* base case *)
+            (mk_var "acc_count") (* base case *)
             trigs_stmts_with_matching_rhs_map)
             (* base number of msgs *)
           (mk_cint 0) @@
