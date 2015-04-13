@@ -341,8 +341,9 @@ let nd_log_for_t t = "nd_log_"^t
 (* TODO: change to maps on vid *)
 let log_ds c : data_struct list =
   let log_struct_for trig =
-    let e = args_of_t_with_v c trig in
-    create_ds (nd_log_for_t trig) (wrap_tbag' @@ snd_many e) ~e
+    let e' = args_of_t c.p trig in
+    let e  = ["vid", t_vid; "args", wrap_ttuple @@ snd_many e'] in
+    create_ds (nd_log_for_t trig) (wrap_tmap' @@ snd_many e) ~e
   in
   P.for_all_trigs ~deletes:c.gen_deletes c.p log_struct_for
 

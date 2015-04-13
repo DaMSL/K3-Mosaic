@@ -91,19 +91,18 @@ let nd_log_write_for p trig_nm = "nd_log_write_"^trig_nm (* varies with bound *)
 let nd_log_write c t =
   mk_global_fn (nd_log_write_for c.p t) (args_of_t_with_v c t) [] @@
   (* write bound to trigger_specific log *)
-  mk_insert (D.nd_log_for_t t) @@ args_of_t_as_vars_with_v c t
+  mk_insert (D.nd_log_for_t t) [mk_var "vid"; mk_tuple @@ args_of_t_as_vars c t]
 
 (* get bound args *)
 (* TODO: make into map *)
 let nd_log_get_bound_for trig_nm = "nd_log_get_bound_"^trig_nm
 let nd_log_get_bound c t =
-  let id_t = args_of_t_with_v c t in
   (* create a pattern for selecting vid alone *)
-  let pat = List.map (function ("vid",_) -> mk_var "vid" | _ -> mk_cunknown) id_t in
+  let pat = [mk_var "vid"; mk_cunknown] in
   mk_global_fn (nd_log_get_bound_for t)
     ["vid", t_vid]
-    (arg_types_of_t_with_v c t) @@
-    mk_peek_or_error "failed to find log" @@
+    (arg_types_of_t c t) @@
+    mk_snd @@ mk_peek_or_error "failed to find log" @@
       mk_slice' (D.nd_log_for_t t) pat
 
 (* log_read_geq -- get list of (t, vid) >= vid2 *)
@@ -852,7 +851,7 @@ let send_corrective_fns c =
                       (mk_lambda' ["vid", t_vid] @@
                         (* get bound vars from log so we can calculate shuffle *)
                         mk_let
-                          (fst_many @@ args_of_t_with_v c target_trig)
+                          (fst_many @@ P.args_of_t c.p target_trig)
                           (mk_apply
                             (mk_var @@ nd_log_get_bound_for target_trig) @@
                             mk_var "vid") @@
@@ -1076,7 +1075,7 @@ let nd_rcv_correctives_trig c s_rhs trig_name = List.map
                 (* check if our stmt_counter is 0 *)
                 mk_if (mk_eq (mk_var "cntr") @@ mk_cint 0)
                   (* if so, get bound vars from log *)
-                  (mk_let (fst_many @@ args_of_t_with_v c trig_name)
+                  (mk_let (fst_many @@ P.args_of_t c.p trig_name)
                     (mk_apply'
                       (nd_log_get_bound_for trig_name) @@ mk_var "compute_vid") @@
                     (* do_corrective, return number of msgs *)
