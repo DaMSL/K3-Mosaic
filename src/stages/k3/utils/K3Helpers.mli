@@ -34,6 +34,7 @@ val t_vid : type_t
 
 val vid_increment : ?vid_expr:expr_t -> unit -> expr_t
 val min_vid_k3 : expr_t
+val start_vid_k3 : expr_t
 
 (* convert a type to mutable *)
 val mut : type_t -> type_t

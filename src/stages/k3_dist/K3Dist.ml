@@ -138,6 +138,7 @@ let g_max_vid =
     let max = mk_apply' "get_max_int" mk_cunit in
     mk_tuple [max; max] in
   create_ds "g_max_vid" t_vid ~init
+let g_start_vid = create_ds "g_start_vid" t_vid ~init:start_vid_k3
 
 (* specifies the job of a node: master/switch/node *)
 let job_master_v = 0
@@ -565,6 +566,7 @@ let global_vars c dict =
     [ g_init_vid;
       g_min_vid;
       g_max_vid;
+      g_start_vid;
       job_master;
       job_switch;
       job_node;

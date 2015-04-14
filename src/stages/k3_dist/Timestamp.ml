@@ -104,7 +104,7 @@ let sw_gen_vid =
 
 (* only the master starts the protocol *)
 let ms_init = mk_send sw_rcv_token_nm (mk_var sw_next_switch_addr.id)
-  [mk_var D.g_min_vid.id]
+  [mk_var D.g_start_vid.id]
 
 (* --- End of code --- *)
 
