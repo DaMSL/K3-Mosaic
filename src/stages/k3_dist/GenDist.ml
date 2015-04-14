@@ -227,7 +227,7 @@ let nd_add_delta_to_buf c map_id =
               (* then just update the value *)
               (mk_let [update_value]
                 (mk_add (mk_var id_val) @@ mk_subscript (List.length map_ds_v.e) @@ mk_var "val") @@
-                mk_insert tmap_deref update_vars)
+                mk_update tmap_deref [mk_var "val"] update_vars)
               (* else, if it's just a regular delta, read the frontier *)
               regular_delta) @@
         mk_var delta_tuples
