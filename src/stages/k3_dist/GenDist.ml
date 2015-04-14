@@ -749,7 +749,7 @@ let orig_vals = ["orig_addr", t_addr; "orig_stmt_id", t_stmt_id; "orig_vid", t_v
  *
  * We must make sure that we only send the delta once. However, all vids can be sent
  * for execution together.
- * We return the number of messages sent out
+ * We return the number of messages sent out. NOT the number of vids.
  *)
 let send_corrective_fns c =
   (* for a given lhs map which we just changed, find all statements containing the
@@ -874,8 +874,8 @@ let send_corrective_fns c =
                           (ids_to_vars @@ fst_many orig_vals) @
                           [mk_var "corrective_vid"; mk_fst @@ mk_var "vid_send_list_tup";
                                                     mk_snd @@ mk_var "vid_send_list_tup"];
-                        mk_add (mk_var "acc_count") @@
-                          mk_size @@ mk_fst @@ mk_var "vid_send_list_tup"])
+                        mk_add (mk_var "acc_count") @@ mk_cint 1
+                      ])
                     (mk_var "acc_count") @@
                     mk_var "ips_vids")
                 acc_code)
@@ -900,7 +900,7 @@ let nd_update_stmt_cntr_corr_map =
         mk_cunit;
       (* we need to decrement the hop's value by 1, and increment the next hop's values by the count *)
       mk_upsert_with nd_stmt_cntrs "lkup" ~k:lookup_pat
-        ~default:(mk_error "nd_rcv_corr_done: missing stmt_cntrs value")
+        ~default:(mk_error @@ Printf.sprintf "%s: missing stmt_cntrs value" nd_update_stmt_cntr_corr_map_nm)
         ~v:(mk_let [nd_stmt_cntrs_corr_map.id] (mk_snd @@ mk_snd @@ mk_var "lkup") @@
               mk_block [
                 (* increment the next hop by count *)
