@@ -1243,7 +1243,6 @@ let gen_dist ?(use_multiindex=false)
         fun t -> gen_dist_for_t c ast t potential_corr_maps
   in
   let prog =
-    D.declare_foreign_functions @
     declare_global_vars c partmap ast @
     declare_global_funcs c partmap ast @
     (if c.gen_correctives then send_corrective_fns c else []) @

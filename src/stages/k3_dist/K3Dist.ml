@@ -603,18 +603,3 @@ let global_vars c dict =
   in
   List.map decl_global l
 
-(* foreign functions *)
-let declare_foreign_functions =
-  [ mk_foreign_fn "hash_addr" t_addr t_int;
-    mk_foreign_fn "hash_int" t_int t_int;
-    mk_foreign_fn "hash_float" t_float t_int;
-    mk_foreign_fn "hash_string" t_string t_int;
-    mk_foreign_fn "hash_date" t_date t_int;
-    mk_foreign_fn "parse_sql_date" t_string t_int;
-    mk_foreign_fn "int_of_float" t_float t_int;
-    mk_foreign_fn "float_of_int" t_int t_float;
-    mk_foreign_fn "get_max_int" t_unit t_int;
-    mk_foreign_fn "mod" (wrap_ttuple [t_int; t_int]) t_int;
-  ]
-
-
