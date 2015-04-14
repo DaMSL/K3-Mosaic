@@ -375,7 +375,6 @@ let delta_action c ast stmt after_fn =
   let lmap_type = wrap_t_of_map @@ wrap_ttuple lmap_types in
   (* we need to know how the map is accessed in the statement. *)
   let lmap_bindings = P.find_lmap_bindings_in_stmt c.p stmt lmap in
-  let lmap_bind_ids_v = P.map_ids_add_v @@ fst_many lmap_bindings in
   (* let existing_out_tier = ..., which we remove *)
   let id, bound, expr = U.decompose_let ast in
   if id <> ["existing_out_tier"] then failwith "sanity check fail: expected existing_out_tier" else
@@ -393,15 +392,8 @@ let delta_action c ast stmt after_fn =
 
   | Iterate -> (* more complex modification *)
     (* col2 contains the calculation code, lambda2 is the delta addition *)
-    let lambda2, col2 = U.decompose_iterate expr in
-    let params2, _ = U.decompose_lambda lambda2 in
+    let _, col2 = U.decompose_iterate expr in
     let delta_name = "_delta_values_" in
-    let delta_v_name = "_delta_with_vid_" in
-    let delta_ids_types = U.typed_vars_of_arg params2 in
-    let delta_ids = fst_many delta_ids_types in
-    let delta_last_id = hd @@ list_take_end 1 delta_ids in
-    let slice_ids_types = types_to_ids_types "sl" lmap_types in
-    let slice_vars = ids_to_vars @@ fst_many slice_ids_types in
     (* col2 contains the calculation code *)
     mk_let [delta_name] col2 @@
       (* any function *)
