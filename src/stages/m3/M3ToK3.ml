@@ -283,12 +283,10 @@ let apply_external_lambda fn in_x_ts out_t =
 let mk_project ?(id="projected_field") width idx ret_t expr =
   let rec build_tuple w =
     if w >= width then []
-    else (
-      if w = idx then K.AVar(id, KH.canonical ret_t)
-                  else K.AIgnored
-    ) :: (build_tuple (w+1))
+    else
+      (if w = idx then id else "_") :: (build_tuple @@ w+1)
   in
-  KH.mk_apply (KH.mk_lambda (K.ATuple(build_tuple 0)) (KH.mk_var id)) expr
+  KH.mk_let (build_tuple 0) expr @@ KH.mk_var id
 
 (* translate a slice using the names of the bound keys and the names
  * of all keys, to figure out which should be 'unknown' *)
