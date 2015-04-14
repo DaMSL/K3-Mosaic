@@ -379,7 +379,7 @@ let name = "print_env"
 let args = unit_arg
 let ret = t_unit
 let fn e =
-  Log.log (string_of_env ~accessed_only:false e) `Debug;
+  Log.log (string_of_env ~accessed_only:false ~skip_empty:false e) `Debug;
   e, VTemp VUnit
 let decl = wrap_tfunc (wrap_ttuple @@ snd_many args) ret
 let _ = Hashtbl.add func_table name (decl, wrap_args args, fn)
