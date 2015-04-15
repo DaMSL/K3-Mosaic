@@ -204,9 +204,7 @@ let rec lazy_expr c expr =
     | Just | CaseOf _ | IfThenElse | Let _ -> lazy_paren
     | _          -> id_fn in
  let arith_paren_l e = match U.tag_of_expr e with
-    | CaseOf _
-    | IfThenElse
-    | Let _
+    | Just | CaseOf _ | IfThenElse | Let _ -> lazy_paren
     | _          -> arith_paren e
   (* for == and != *)
   in let logic_paren e = match U.tag_of_expr e with
@@ -293,11 +291,10 @@ let rec lazy_expr c expr =
       | Const(CInt(-1)) -> true
       | _ -> false
     end in
-    begin match expr_type_is_bool e1, is_neg with
-      | true, _ -> arith_paren_pair "&" (e1, e2)
-      | false, true -> lps "-" <| lazy_expr c e2 (* just a minus *)
-      | _ -> arith_paren_pair "*" (e1, e2)
-    end
+    if expr_type_is_bool e1 then arith_paren_pair "&" (e1, e2)
+    else if is_neg then lps "-" <| lazy_expr c e2 (* just a minus *)
+    else arith_paren_pair "*" (e1, e2)
+
   | Neg -> let e = U.decompose_neg expr in
     let sym = if expr_type_is_bool e then "!" else "-" in
     begin match U.tag_of_expr e with
