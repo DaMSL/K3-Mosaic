@@ -930,6 +930,17 @@ let nd_update_stmt_cntr_corr_map =
               ])
     ]
 
+(* call from do_complete when done to check if fully done *)
+let nd_complete_stmt_cntr_check_nm = "nd_complete_stmt_cntr_check"
+let nd_complete_stmt_cntr_check =
+  mk_global_fn nd_complete_stmt_cntr_check_nm ["vid", t_vid; "stmt_id", t_stmt_id] [] @@
+  (* if we have nothing to send, we can delete our stmt_cntr entry right away *)
+  mk_block [
+    mk_delete_one nd_stmt_cntrs [mk_tuple [mk_var "vid"; mk_var "stmt_id"]; mk_cunknown];
+    (* check if we're done *)
+    Proto.nd_delete_stmt_cntr;
+  ]
+
 (*
  * shared coded btw do_complete and do_corrective
  * we add the delta to all following vids
@@ -956,14 +967,6 @@ let nd_do_complete_fns c ast trig_name =
     mk_global_fn (do_complete_name_of_t trig_name stmt_id) (args_of_t_with_v c trig_name) [] @@
     let lmap = P.lhs_map_of_stmt c.p stmt_id in
     let fst_hop = mk_cint 1 in
-    (* piece of block of code to be executed when the computation is done *)
-    let stmt_cntr_delete =
-      (* if we have nothing to send, we can delete our stmt_cntr entry right away *)
-      mk_block [
-        mk_delete_one nd_stmt_cntrs [mk_tuple [mk_var "vid"; mk_cint stmt_id]; mk_cunknown];
-        (* check if we're done *)
-        Proto.nd_delete_stmt_cntr;
-      ] in
     let after_fn tup_ds =
       mk_block [
         (* add delta *)
@@ -987,7 +990,7 @@ let nd_do_complete_fns c ast trig_name =
             if has_rhs then
               mk_if (mk_eq (mk_var "sent_msgs") @@ mk_cint 0)
                 (* if our sent_msgs is 0, we need to delete the stmt cntr entry *)
-                stmt_cntr_delete @@
+                (mk_apply' nd_complete_stmt_cntr_check_nm @@ mk_tuple [mk_var "vid"; mk_cint stmt_id]) @@
                 (* otherwise we need to update the corrective counters *)
                 update_corr_code false
             else
@@ -1000,7 +1003,7 @@ let nd_do_complete_fns c ast trig_name =
         else
           (* if we have no rhs maps, do nothing *)
           if not has_rhs then mk_cunit
-          else stmt_cntr_delete)
+          else mk_apply' nd_complete_stmt_cntr_check_nm @@ mk_tuple [mk_var "vid"; mk_cint stmt_id])
       ]
     in
     M.modify_ast_for_s c ast stmt_id trig_name after_fn
@@ -1173,6 +1176,7 @@ let declare_global_funcs c partmap ast =
   (P.for_all_trigs ~deletes:c.gen_deletes c.p @@ nd_log_get_bound c) @
   nd_log_read_geq ::
   nd_check_stmt_cntr_index ::
+  nd_complete_stmt_cntr_check ::
   nd_update_stmt_cntr_corr_map ::
   begin if c.gen_correctives then [nd_filter_corrective_list] else [] end @
   K3Ring.functions @
