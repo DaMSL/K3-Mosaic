@@ -156,9 +156,10 @@ let block_nth exp i = match U.tag_of_expr exp with
 (* return the AST for a given stmt *)
 let ast_for_s_t c ast (stmt:P.stmt_id_t) (trig:P.trig_name_t) =
   let trig_decl = U.trigger_of_program trig ast in
-  let trig_ast = U.expr_of_code trig_decl in
-  let s_idx = stmt_idx_in_t c trig stmt in
-  block_nth trig_ast s_idx
+  let args      = U.args_of_code trig_decl in
+  let trig_ast  = U.expr_of_code trig_decl in
+  let s_idx     = stmt_idx_in_t c trig stmt in
+  args, block_nth trig_ast s_idx
 
 let ast_for_s c ast (stmt:P.stmt_id_t) =
   let trig = P.trigger_of_stmt c.p stmt in
@@ -391,13 +392,41 @@ let delta_action c ast stmt after_fn =
         bound @@ after_fn full_vars
 
   | Iterate -> (* more complex modification *)
-    (* col2 contains the calculation code, lambda2 is the delta addition *)
-    let _, col2 = U.decompose_iterate expr in
+    (* col contains the calculation code, lambda is the delta addition *)
+    let lambda, col = U.decompose_iterate expr in
+    (* we need to handle the possibility of having narrow tuples. we take our info from the insert
+     * iteration, comparing the iterate lambda args and the insert statement *)
+    let lam_id_t = U.typed_vars_of_lambda lambda in
+    let lam_id = fst_many lam_id_t in
+    let lmap_name = P.map_name_of c.p lmap in
+    (* lambda to find the insert ids *)
+    let find_insert_vars acc x =
+      if acc <> [] then acc else
+      try
+        let id, y = U.decompose_insert x in
+        if id <> lmap_name then acc else
+        vars_to_ids @@ U.decompose_tuple y
+      with Failure _ -> acc in
+    (* get all ids from insert expression *)
+    let insert_ids = Tree.fold_tree_th_bu find_insert_vars [] lambda in
+    if null insert_ids then
+      failwith "modifyast: Failed to find ids in insert expression" else
+    let wrap_map =
+      (* drop the vid and value *)
+      let common_ids = list_drop 1 @@ list_drop_end 1 insert_ids in
+      if not @@ ListAsSet.seteq common_ids lam_id then
+        (* wrap with a map that restores the value name *)
+        let ids = common_ids @ list_take_end 1 lam_id in
+        mk_map
+          (mk_lambda' lam_id_t @@ mk_tuple @@ ids_to_vars ids)
+      else id_fn (* no need to wrap *)
+    in
     let delta_name = "_delta_values_" in
     (* col2 contains the calculation code *)
-    mk_let [delta_name] col2 @@
+    mk_let [delta_name] (wrap_map col) @@
       (* any function *)
       after_fn (mk_var delta_name)
+
   | _ -> raise @@ UnhandledModification(
      Printf.sprintf "Bad tag [%d]: %s" (U.id_of_expr expr) @@ PR.string_of_expr expr)
 
@@ -410,7 +439,7 @@ let rename_var old_var_name new_var_name ast =
 
 (* return a modified version of the original ast for stmt s *)
 let modify_ast_for_s (c:config) ast stmt trig after_fn =
-  let ast = ast_for_s_t c ast stmt trig in
+  let _, ast = ast_for_s_t c ast stmt trig in
   let ast = modify_map_add_vid c ast stmt in
   let ast = delta_action c ast stmt after_fn in
   ast

@@ -36,36 +36,39 @@ let sub_tree t = snd (decompose_tree t)
 
 (* Tree traversals *)
 
-let fold_tree td_f bu_f td_init bu_init t =
+(* used by other functions *)
+let fold_tree_inner td_f bu_f td_init bu_init t =
   let rec ft_aux td t =
     let n_td = td_f td t
     in begin match sub_tree t with
-        | [] -> bu_f n_td [bu_init] t
-        | c -> bu_f n_td (List.map (ft_aux n_td) c) t
+        | [] -> bu_f n_td bu_init t
+        | c  -> bu_f n_td (List.map (ft_aux n_td) c) t
       end
   in ft_aux td_init t
+
+let fold_tree td_f bu_f td_init bu_init t =
+  fold_tree_inner td_f bu_f td_init [bu_init] t
 
 (* for tree modifications, bottom-up direction starts with no init *)
 let fold_tree1 td_f bu_f td_init t =
-  let rec ft_aux td t =
-    let n_td = td_f td t
-    in begin match sub_tree t with
-        | [] -> bu_f n_td [] t
-        | c -> bu_f n_td (List.map (ft_aux n_td) c) t
-      end
-  in ft_aux td_init t
+  fold_tree_inner td_f bu_f td_init [] t
 
-let fold_tree_thread td_f bu_f td_init bu_init t =
-  let rec ft_aux td t =
+let fold_tree_bu fn init t =
+  fold_tree (fun _ _ -> ()) (fun _ xs t -> fn xs t) () init t
+
+(* threaded fold *)
+let fold_tree_th td_f bu_f td_init bu_init t =
+  let rec loop (td, bu) t =
     let n_td = td_f td t in
-    let recur acc ch =
-      let r = ft_aux (fst acc) ch in (fst r, (snd acc)@[snd r])
-    in
-      begin match snd (decompose_tree t) with
-        | [] -> bu_f (n_td, [bu_init]) t
-        | c -> bu_f (List.fold_left recur (n_td, []) c) t
-      end
-  in ft_aux td_init t
+    begin match snd (decompose_tree t) with
+    | [] -> bu_f n_td bu t
+    | ch -> let td, bu = List.fold_left loop (n_td, bu) ch in
+            bu_f td bu t
+    end
+  in loop (td_init, bu_init) t
+
+let fold_tree_th_bu bu_f bu_init t =
+  snd @@ fold_tree_th (fun _ _ -> ()) (fun _ bu t -> (), bu_f bu t) () bu_init t
 
 (* Lazy tree folding *)
 let fold_tree_lazy td_f bu_f td_init bu_init t =
@@ -103,7 +106,7 @@ let modify_tree_bu_with_path_and_msgs e fn =
      let msg_children = List.split msg_children in
      let tree = mk_tree (data, snd msg_children) in
      fn tree (fst msg_children) (list_drop 1 path)  in
-  snd @: fold_tree1 (fun n_td t -> t::n_td) rebuild_tree [] e
+  snd @@ fold_tree1 (fun n_td t -> t::n_td) rebuild_tree [] e
 
 (* Trees with tuple metadata *)
 
