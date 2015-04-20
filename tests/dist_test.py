@@ -1,11 +1,10 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 #
 # Test a distributed SQL query
 #
 
 import os
-import six
 import re
 from utils import check_exists, check_error, print_system, concat
 
@@ -68,7 +67,7 @@ def run(target_file,
 
     # change to dbtoaster path (dbtoaster needs it)
     if verbose:
-        six.print_("cd {0}".format(dbtoaster_dir))
+        print("cd {0}".format(dbtoaster_dir))
     os.chdir(dbtoaster_dir)
 
     # run dbtoaster to get interpreted updates
@@ -96,7 +95,7 @@ def run(target_file,
 
     # change directory back
     if verbose:
-        six.print_("cd {0}".format(saved_dir))
+        print("cd {0}".format(saved_dir))
     os.chdir(saved_dir)
 
     # create a single-site k3o file
@@ -109,7 +108,7 @@ def run(target_file,
     s = open(k3_file, 'r').read()
     matches = re.findall(r'\("(.+)", csv\)', s)
     if matches is None:
-        six.print_("failed to find file references")
+        print("failed to find file references")
         return False
 
     read_files = []
@@ -175,14 +174,14 @@ def run(target_file,
             if folds_only:
                 fold_cmd = '--k3new_folds'
 
-            six.print_("Converting to new k3 file format...")
+            print("Converting to new k3 file format...")
             cmd = concat([k3o, "-i k3 -l k3new", fold_cmd, "--datafile", data_file, k3dist_file, ">", k3new_file, "2>", error_file])
             print_system(cmd, verbose)
             if check_error(error_file, verbose, False):
                 return False
 
             # create k3_new partmap
-            six.print_("Creating k3new partition map...\n")
+            print("Creating k3new partition map...\n")
             cmd = concat([partmap_tool, k3dist_file, "--k3new -n", num_nodes, ">", k3new_part_file])
             print_system(cmd, verbose)
 
@@ -196,7 +195,7 @@ def run(target_file,
         with open(error_file, 'r') as f:
             buf = f.read()
             if verbose:
-                six.print_(buf)
+                print(buf)
 
         return True
 
@@ -223,6 +222,6 @@ def run(target_file,
         with open(output_file, 'r') as f:
             buf = f.read()
             if verbose:
-                six.print_(buf)
+                print(buf)
         return True
 

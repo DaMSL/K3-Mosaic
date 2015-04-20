@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 #
 # Unit test k3-mosaic execution.
@@ -10,7 +10,6 @@
 import argparse
 import os
 import sys
-import six
 
 import dist_test
 
@@ -78,9 +77,9 @@ def run():
     verbose = args.verbose or len(test_list) == 1
     # run either one test or many tests
     for index, test_file in enumerate(test_list):
-        six.print_("[{0}] Testing {1}... ".format(index, test_file), end="")
+        print("[{0}] Testing {1}... ".format(index, test_file), end="")
         if verbose:
-            six.print_("")
+            print("")
         if not args.distributed:
             res = dist_test.run(test_file, verbose=verbose, distrib=False)
         else:
@@ -97,16 +96,16 @@ def run():
                                 )
         # check if a test failed
         if not res:
-            six.print_("[ERROR]")
+            print("[ERROR]")
             failed += 1
         else:
-            six.print_("[PASSED]")
+            print("[PASSED]")
 
     if failed > 0:
-        six.print_("Failed {0}/{1} tests".format(failed, len(test_list)))
+        print("Failed {0}/{1} tests".format(failed, len(test_list)))
         sys.exit(1)
     else:
-        six.print_("Passed {0} test(s)".format(len(test_list)))
+        print("Passed {0} test(s)".format(len(test_list)))
 
 if __name__ == '__main__':
     run()
