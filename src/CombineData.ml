@@ -54,8 +54,9 @@ let r_comma   = Str.regexp ","
 let d         = "[0-9]"
 let r_date    = Str.regexp (Printf.sprintf "%s%s%s%s-%s%s-%s%s" d d d d d d d d)
 let r_float   = Str.regexp (Printf.sprintf "%s*\\.%s*" d d)
-let r_int     = Str.regexp @@ "[0-9]*"
-let r_bool    = Str.regexp @@ "true|false"
+let r_int     = Str.regexp "[0-9]*"
+let r_bool    = Str.regexp "true|false"
+let r_small   = Str.regexp {|\(.+\)_small\(\..+\)|}
 
 let to_string i line files combined_t : string=
   let file = files.(i) in
@@ -148,9 +149,16 @@ let _ =
   let files = List.map (fun name ->
     let data = read_file_lines name in
     let name = Filename.basename name in
+    (* check if we have _small in the name *)
+    let name = match r_groups ~r:r_small ~n:2 name with
+      | [Some x; Some y] -> x^y
+      | _                -> name in
     let trig_name = "sw_insert_"^String.uppercase @@ Filename.chop_extension name in
     (* lookup in trig_map *)
-    let trig_id, shuffle_map = List.assoc trig_name trig_map in
+    let trig_id, shuffle_map =
+      try List.assoc trig_name trig_map
+      with Not_found -> failwith @@ Printf.sprintf "Couldn't find %s in trig map" trig_name
+    in
     let sep  = get_sep data in
     let types = get_types sep data
     in {data; name; trig_name; sep; types; trig_id; shuffle_map})
