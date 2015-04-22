@@ -156,7 +156,7 @@ let block_nth exp i = match U.tag_of_expr exp with
 (* return the AST for a given stmt *)
 let ast_for_s_t c ast (stmt:P.stmt_id_t) (trig:P.trig_name_t) =
   let trig_decl = U.trigger_of_program trig ast in
-  let args      = U.args_of_code trig_decl in
+  let args      = U.typed_vars_of_arg @@ U.args_of_code trig_decl in
   let trig_ast  = U.expr_of_code trig_decl in
   let s_idx     = stmt_idx_in_t c trig stmt in
   args, block_nth trig_ast s_idx
@@ -370,7 +370,7 @@ let modify_map_add_vid (c:config) ast stmt =
 
 (* this delta extraction is very brittle, since it's tailored to the way the M3
  * to K3 calculations are written. *)
-let delta_action c ast stmt after_fn =
+let delta_action c ast args stmt after_fn =
   let lmap = P.lhs_map_of_stmt c.p stmt in
   let lmap_types = P.map_types_with_v_for c.p lmap in
   let lmap_type = wrap_t_of_map @@ wrap_ttuple lmap_types in
@@ -396,6 +396,7 @@ let delta_action c ast stmt after_fn =
     let lambda, col = U.decompose_iterate expr in
     (* we need to handle the possibility of having narrow tuples. we take our info from the insert
      * iteration, comparing the iterate lambda args and the insert statement *)
+    (* we also need to filter out deltas that have 0 values, as they don't contribute anything *)
     let lam_id_t = U.typed_vars_of_lambda lambda in
     let lam_id = fst_many lam_id_t in
     let lmap_name = P.map_name_of c.p lmap in
@@ -411,19 +412,31 @@ let delta_action c ast stmt after_fn =
     let insert_ids = Tree.fold_tree_th_bu find_insert_vars [] lambda in
     if null insert_ids then
       failwith "modifyast: Failed to find ids in insert expression" else
+    (* drop the vid and value *)
+    let common_ids = list_drop 1 @@ list_drop_end 1 insert_ids in
+    let ids = common_ids @ list_take_end 1 lam_id in
+    (* lookup the id first in the iterate lambda, then in the trigger args, to get types *)
+    let lookup_id s =
+      try List.find ((=) s |- fst) lam_id_t
+      with Not_found ->
+          List.find ((=) s |- fst) args
+    in
+    let id_ts = List.map lookup_id ids in
     let wrap_map =
-      (* drop the vid and value *)
-      let common_ids = list_drop 1 @@ list_drop_end 1 insert_ids in
       if not @@ ListAsSet.seteq common_ids lam_id then
         (* wrap with a map that restores the value name *)
-        let ids = common_ids @ list_take_end 1 lam_id in
         mk_map
           (mk_lambda' lam_id_t @@ mk_tuple @@ ids_to_vars ids)
       else id_fn (* no need to wrap *)
     in
+    (* deltas with 0 value should be filtered out *)
+    let wrap_filter =
+      mk_filter
+        (mk_lambda' id_ts @@ mk_neq (mk_cint 0) @@ mk_var @@ list_last ids)
+    in
     let delta_name = "_delta_values_" in
     (* col2 contains the calculation code *)
-    mk_let [delta_name] (wrap_map col) @@
+    mk_let [delta_name] (wrap_filter @@ wrap_map col) @@
       (* any function *)
       after_fn (mk_var delta_name)
 
@@ -439,13 +452,13 @@ let rename_var old_var_name new_var_name ast =
 
 (* return a modified version of the original ast for stmt s *)
 let modify_ast_for_s (c:config) ast stmt trig after_fn =
-  let _, ast = ast_for_s_t c ast stmt trig in
+  let args, ast = ast_for_s_t c ast stmt trig in
   let ast = modify_map_add_vid c ast stmt in
-  let ast = delta_action c ast stmt after_fn in
+  let ast = delta_action c ast args stmt after_fn in
   ast
 
 (* return a modified version of the corrective update *)
 let modify_corr_ast c ast map stmt trig after_fn =
   let args, corr_stmt, ast = corr_ast_for_m_s c ast map stmt trig in
   let ast = modify_map_add_vid c ast stmt in
-  args, delta_action c ast corr_stmt after_fn
+  args, delta_action c ast args corr_stmt after_fn
