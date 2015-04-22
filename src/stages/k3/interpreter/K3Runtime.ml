@@ -155,7 +155,7 @@ let invoke_trigger s address env trigger_id arg =
     RuntimeError(id, Printf.sprintf "In trigger %s: %s" trigger_id msg) end;
   (* log the state for this trigger *)
   Log.log (sp "\nTrigger %s@%s\nargs = %s\n%s" trigger_id (string_of_address address)
-    (string_of_value arg) @@ string_of_env env) ~name:"K3Runtime.TriggerState" `Debug;
+    (string_of_value arg) @@ string_of_env ~skip_empty:false env) ~name:"K3Runtime.TriggerState" `Debug;
   s.events_processed <- succ s.events_processed
 
 let next_idx arr idx =
