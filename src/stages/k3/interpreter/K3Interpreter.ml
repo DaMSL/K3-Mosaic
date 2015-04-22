@@ -724,14 +724,15 @@ let interpret_k3_program i =
             count + 1
           end else count)
         i.envs 0
-      (* if it's not time for a source, use last count *)
-      end else last_src_peers
+      (* if it's not time for a source, use 1 to get to next time *)
+      end else 1
     in
     (* check if we should continue *)
     if msg_peers > 0 || src_peers > 0 then loop src_peers else ()
   in
   Log.log (sp "Starting up interpreter\n") `Trace;
   loop 1;
+  Log.log (sp "Finished execution\n") `Trace;
   let prog_state = List.map (fun (i,x) -> i, x.prog_env) @@ list_of_hashtbl i.envs in
   (* Log program state *)
   List.iter (fun (addr, e) ->
@@ -745,7 +746,7 @@ let init_k3_interpreter ?queue_type ~peers ~load_path ?(src_interval=0.002) type
   Log.log (sp "Initializing scheduler\n") `Trace;
   let scheduler = init_scheduler_state ?queue_type ~peers in
   match peers with
-  | []  -> failwith "interpret_k3_program: Peers list is empty!"
+  | []  -> failwith "init_k3_program: Peers list is empty!"
   | _   ->
       Log.log (sp "Initializing interpreter\n") `Trace;
       (* Initialize an environment for each peer *)
