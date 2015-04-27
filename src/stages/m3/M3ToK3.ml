@@ -52,7 +52,7 @@ let mk_k3_collection (base_ivars:K.base_type_t list)
   let ivars = List.map canon base_ivars in
   let ovars = List.map canon base_ovars in
   let v = canon base_v in
-  let wrap = KH.wrap_tbag' in
+  let wrap = KH.wrap_t_of_map' in
   wrap @@
     match ivars, ovars with
     | [], [] -> [v]
@@ -73,7 +73,7 @@ let m3_map_to_k3_map (m3_map: M3.map_t) : K.declaration_t =
         (* initial value *)
         let ivc = if null ivar_types && null ovar_types then
           Some(KH.mk_singleton
-            (KH.wrap_tbag @@ KH.canonical element_type) @@
+            (KH.wrap_t_of_map @@ KH.canonical element_type) @@
               [init_val_from_type @@ KH.canonical element_type])
           else None
         in
@@ -208,11 +208,9 @@ let apply_lambda v_el el body =
   result is wrapped in a Singleton collection. *)
 let apply_lambda_to_expr lambda_e lambda_t expr =
   let _, lambda_body = KU.decompose_lambda lambda_e in
-  let lambda_rett =
-    KH.canonical @@ K.TCollection(K.TBag, KH.canonical lambda_t) in
   match KU.arg_of_lambda lambda_e, KU.tag_of_expr lambda_body with
   | (Some(K.AVar _)), K.Tuple ->
-        KH.mk_singleton lambda_rett [KH.mk_apply lambda_e expr]
+        KH.mk_singleton (KH.wrap_t_of_map lambda_t) [KH.mk_apply lambda_e expr]
   | (Some(K.AVar _)), _       -> KH.mk_apply lambda_e expr
   | (Some(K.ATuple _)), _     -> KH.mk_map lambda_e expr
   | _ -> error "M3ToK3: Invalid arguments to apply_lambda_to_expr."
@@ -880,7 +878,7 @@ let rec calc_to_k3_expr meta ?(generate_init = false) theta_vars_k calc :
               (lift_outs_el @ [KU.id_of_var @@ fst lift_ret_ve, snd lift_ret_ve])
               lift_body
           in
-          let expr = apply_lambda_to_expr lift_lambda K.TInt lift_e
+          let expr = apply_lambda_to_expr lift_lambda KH.t_int lift_e
           in
           (lift_outs_el @ extra_ve, (ret_ve, KH.t_int), expr), nm
 
@@ -905,7 +903,7 @@ let rec calc_to_k3_expr meta ?(generate_init = false) theta_vars_k calc :
                   [KU.id_of_var @@ fst exists_ret_ve, snd exists_ret_ve])
               exists_body
           in
-          let expr = apply_lambda_to_expr exists_lambda K.TInt exists_e in
+          let expr = apply_lambda_to_expr exists_lambda KH.t_int exists_e in
           (exists_outs_el, (ret_ve, KH.t_int), expr), nm
 
         (***** END EXISTS HACK *****)
