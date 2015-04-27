@@ -143,10 +143,10 @@ let unify_values id r_newval = function
     let err _ s = failwith @@ Printf.sprintf "(unify_values):%s" s in
     let v, v' = unwrap_ind oldval, unwrap_ind newval in
     match unwrap_ind oldval, unwrap_ind newval with
-    | VSet _, VSet _           -> some @@ wrap_ind @@ v_combine err v v'
-    | VBag _, VBag _           -> some @@ wrap_ind @@ v_combine err v v'
-    | VList _, VList _         -> some @@ wrap_ind @@ v_combine err v v'
-    | VMap _, VMap _           -> some @@ wrap_ind @@ v_combine err v v'
+    | VSet _, VSet _
+    | VBag _, VBag _
+    | VList _, VList _
+    | VMap _, VMap _
     | VMultimap _, VMultimap _ -> some @@ wrap_ind @@ v_combine err v v'
     | _,_                      -> Some r_newval
 

@@ -296,12 +296,12 @@ let update_maps maps events =
 
 (* dump a map into a string *)
 let dump_map mapname = function
-    | SingletonMap m -> "{|"^SingletonMap.val_s m^"|}"
+    | SingletonMap m -> "{"^SingletonMap.val_s m^"}"
     | OutputMap m    ->
         let s = OutputMap.val_s m in
         (* if our map is empty, we need the types *)
-        if s = "" then "{||} : {|"^OutputMap.types_s m^"|}"
-        else "{|"^OutputMap.val_s m^"|}"
+        if s = "" then "{} : {"^OutputMap.types_s m^"}"
+        else "{"^OutputMap.val_s m^"}"
 
 (* return the dimensions of the map *)
 let map_dims = function
