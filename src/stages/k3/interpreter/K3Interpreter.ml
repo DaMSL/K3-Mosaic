@@ -198,14 +198,7 @@ and eval_expr (address:address) sched_st cenv texpr =
     (* Collection constructors *)
     | Empty ct ->
         let ctype, _ = unwrap_tcol ct in
-        cenv, VTemp(
-            match ctype with
-            | TSet           -> VSet(ISet.empty)
-            | TBag           -> VBag(ValueBag.empty)
-            | TList          -> VList(IList.empty)
-            | TMap           -> VMap(ValueMap.empty)
-            | TMultimap idxs -> VMultimap(ValueMMap.init idxs)
-        )
+        cenv, VTemp(v_empty_of_t ctype)
 
     | Singleton ct ->
         let nenv, element = child_value cenv 0 in
@@ -214,15 +207,7 @@ and eval_expr (address:address) sched_st cenv texpr =
 
     | Combine ->
         begin match child_values cenv with
-          | nenv, [left; right] -> nenv, VTemp(
-            begin match left, right with
-            | VList v1, VList v2         -> VList(IList.combine v1 v2)
-            | VSet v1,  VSet v2          -> VSet(ISet.combine v1 v2)
-            | VBag v1,  VBag v2          -> VBag(ValueBag.combine v1 v2)
-            | VMap v1,  VMap v2          -> VMap(ValueMap.combine v1 v2)
-            | VMultimap v1, VMultimap v2 -> VMultimap(ValueMMap.combine v1 v2)
-            | _ -> error name "mismatching or non-collections"
-            end)
+          | nenv, [left; right] -> nenv, VTemp(v_combine error left right)
           | _      -> error name "missing sub-components"
         end
 
@@ -240,7 +225,7 @@ and eval_expr (address:address) sched_st cenv texpr =
           in
           let l = Array.to_list (Array.init steps init_fn) in
           let reval = VTemp(match c_t with
-            | TSet  -> VSet(ISet.of_list l)
+            | TSet  -> VSet(ValueSet.of_list l)
             | TBag  -> VBag(ValueBag.of_list l)
             | TList -> VList(IList.of_list l)
             | TMap
@@ -607,7 +592,7 @@ let env_of_program ?address ~role ~peers sched_st k3_program =
 
           (* substitute for peers *)
           | id, _ when id = K3Global.peers.id ->
-              env, VSet (List.map (fun x -> VAddress x) @@ fst_many peers)
+              env, VSet (ValueSet.of_list @@ List.map (fun x -> VAddress x) @@ fst_many peers)
 
           | id, _ when id = K3Global.role.id -> env, VString role
 

@@ -17,6 +17,8 @@ and ValueMMap : sig include IMultimap.S with type elt = Value.value_t end
 
 and ValueBag : sig include IBag.S with type elt = Value.value_t end
 
+and ValueSet : sig include ISet.S with type elt = Value.value_t end
+
 and Value : sig
   type eval_t = VDeclared of value_t ref | VTemp of value_t
   and foreign_func_t = env_t -> env_t * eval_t
@@ -47,7 +49,7 @@ and Value : sig
       | VString of string
       | VTuple of value_t list
       | VOption of value_t option
-      | VSet of value_t ISet.t
+      | VSet of ValueSet.t
       | VBag of ValueBag.t
       | VList of value_t IList.t
       | VMap of value_t ValueMap.t

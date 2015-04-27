@@ -51,6 +51,10 @@ and ValueBag : IBag.S with type elt = Value.value_t
                       and type t = int HashMap.Make(OrderedKey).t
                          = IBag.Make(OrderedKey)
 
+and ValueSet : ISet.S with type elt = Value.value_t
+                      and type t = unit HashMap.Make(OrderedKey).t
+                         = ISet.Make(OrderedKey)
+
 and ValueMMap : IMultimap.S with type elt = Value.value_t
                              and type InnerBag.elt = Value.value_t
                              and type InnerBag.t = int HashMap.Make(OrderedKey).t
@@ -92,7 +96,7 @@ and ValueComp : (sig val compare_v : Value.value_t -> Value.value_t -> int
                          if r <> 0 then raise (Mismatch r)) vs vs'; 0
           with Mismatch r -> r end
       | VOption(Some v), VOption(Some v') -> compare_v v v'
-      | VSet v, VSet v' -> ISet.compare compare_v v v'
+      | VSet v, VSet v' -> ValueSet.compare v v'
       | VBag v, VBag v' -> ValueBag.compare v v'
       | VList v, VList v' -> IList.compare compare_v v v'
       | VMap v, VMap v' -> ValueMap.compare compare_v v v'
@@ -122,7 +126,7 @@ and ValueComp : (sig val compare_v : Value.value_t -> Value.value_t -> int
       | VTuple vs       -> col_hash List.fold_left vs
       | VOption(Some v) -> hash v
       | VIndirect v     -> hash !v
-      | VSet v          -> col_hash ISet.fold v
+      | VSet v          -> col_hash ValueSet.fold v
       | VBag v          -> col_hash ValueBag.fold v
       | VList v         -> col_hash IList.fold v
       | VMap v          -> map_hash ValueMap.fold v
@@ -169,7 +173,7 @@ and Value : sig
       | VString of string
       | VTuple of value_t list
       | VOption of value_t option
-      | VSet of value_t ISet.t
+      | VSet of ValueSet.t
       | VBag of ValueBag.t
       | VList of value_t IList.t
       | VMap of value_t ValueMap.t
@@ -190,7 +194,7 @@ and ValueUtils : (sig val v_to_list : Value.value_t -> Value.value_t list
     (* Value stringification *)
     let v_to_list = function
       | VBag m  -> ValueBag.to_list m
-      | VSet m  -> ISet.to_list m
+      | VSet m  -> ValueSet.to_list m
       | VList m -> IList.to_list m
       | VMap vs -> List.map (fun (k,v) -> VTuple[k;v]) @@ ValueMap.to_list vs
       | VMultimap vs -> ValueMMap.to_list vs
@@ -313,7 +317,7 @@ let map_to_tuple (k,v) = VTuple[k;v]
 let mmap_to_tuple x = VTuple x
 
 let v_peek err_fn c = match c with
-  | VSet m      -> ISet.peek m
+  | VSet m      -> ValueSet.peek m
   | VBag m      -> ValueBag.peek m
   | VList m     -> IList.peek m
   | VMap m      -> maybe None (some |- map_to_tuple) @@ ValueMap.peek m
@@ -387,7 +391,7 @@ let rec value_of_const_expr e = match tag_of_expr e with
 type 'a t_err_fn = (string -> string -> 'a)
 
 let v_combine err_fn x y = match x, y with
-  | VSet m,  VSet m'          -> VSet(ISet.combine m m')
+  | VSet m,  VSet m'          -> VSet(ValueSet.combine m m')
   | VBag m,  VBag m'          -> VBag(ValueBag.combine m m')
   | VList m, VList m'         -> VList(IList.combine m m')
   | VMap m,  VMap m'          -> VMap(ValueMap.combine m m')
@@ -395,7 +399,7 @@ let v_combine err_fn x y = match x, y with
   | _ -> err_fn "v_combine" "mismatch in collections"
 
 let v_fold err_fn f acc = function
-  | VSet m      -> ISet.fold f acc m
+  | VSet m      -> ValueSet.fold f acc m
   | VBag m      -> ValueBag.fold f acc m
   | VList m     -> IList.fold f acc m
   | VMap m      -> ValueMap.fold (fun k v acc -> f acc @@ VTuple[k;v]) m acc
@@ -403,7 +407,7 @@ let v_fold err_fn f acc = function
   | v -> err_fn "v_fold" @@ Printf.sprintf "not a collection: %s" @@ string_of_value v
 
 let v_iter err_fn f = function
-  | VSet m      -> ISet.iter f m
+  | VSet m      -> ValueSet.iter f m
   | VBag m      -> ValueBag.iter f m
   | VList m     -> IList.iter f m
   | VMap m      -> ValueMap.iter (fun k v -> f (VTuple[k;v])) m
@@ -411,7 +415,7 @@ let v_iter err_fn f = function
   | v -> err_fn "v_iter" @@ Printf.sprintf "not a collection: %s" @@ string_of_value v
 
 let v_insert err_fn x m = match x, m with
-  | _, VSet m             -> VSet(ISet.insert x m)
+  | _, VSet m             -> VSet(ValueSet.insert x m)
   | _, VBag m             -> VBag(ValueBag.insert x m)
   | _, VList m            -> VList(IList.insert x m)
   | VTuple[k;v], VMap m   -> VMap(ValueMap.add k v m)
@@ -420,7 +424,7 @@ let v_insert err_fn x m = match x, m with
               (string_of_value v) (string_of_value c)
 
 let v_delete err_fn x m = match x, m with
-  | _, VSet m             -> VSet(ISet.delete x m)
+  | _, VSet m             -> VSet(ValueSet.delete x m)
   | _, VBag m             -> VBag(ValueBag.delete x m)
   | _, VList m            -> VList(IList.delete x m)
   | VTuple [k; v], VMap m -> VMap(ValueMap.remove k m)
@@ -429,7 +433,7 @@ let v_delete err_fn x m = match x, m with
               (string_of_value v) (string_of_value c)
 
 let v_update err_fn oldv newv c = match oldv, newv, c with
-  | _,_,VSet m                         -> VSet(ISet.update oldv newv m)
+  | _,_,VSet m                         -> VSet(ValueSet.update oldv newv m)
   | _,_,VBag m                         -> VBag(ValueBag.update oldv newv m)
   | _,_,VList m                        -> VList(IList.update oldv newv m)
   | VTuple[k;v], VTuple[k';v'], VMap m -> VMap(ValueMap.update k v k' v' m)
@@ -438,7 +442,7 @@ let v_update err_fn oldv newv c = match oldv, newv, c with
               (string_of_value v) (string_of_value v') (string_of_value c)
 
 let v_empty err_fn ?(no_map=false) ?(no_multimap=false) = function
-  | VSet _      -> VSet(ISet.empty)
+  | VSet _      -> VSet(ValueSet.empty)
   | VBag _      -> VBag(ValueBag.empty)
   | VList _     -> VList(IList.empty)
   | VMap _      when no_map      -> VBag(ValueBag.empty)
@@ -448,7 +452,7 @@ let v_empty err_fn ?(no_map=false) ?(no_multimap=false) = function
   | c -> err_fn "v_empty" @@ Printf.sprintf "invalid input: %s" (string_of_value c)
 
 let v_empty_of_t = function
-  | TSet        -> VSet(ISet.empty)
+  | TSet        -> VSet(ValueSet.empty)
   | TBag        -> VBag(ValueBag.empty)
   | TList       -> VList(IList.empty)
   | TMap        -> VMap(ValueMap.empty)
@@ -456,12 +460,12 @@ let v_empty_of_t = function
 
 (* sort only applies to list *)
 let v_sort err_fn f = function
-  | VSet m  -> VList(IList.sort f @@ IList.of_list @@ ISet.to_list m)
+  | VSet m  -> VList(IList.sort f @@ IList.of_list @@ ValueSet.to_list m)
   | VList m -> VList(IList.sort f m)
   | _ -> err_fn "v_sort" "not a list"
 
 let v_size err_fn = function
-  | VSet m      -> VInt(ISet.size m)
+  | VSet m      -> VInt(ValueSet.size m)
   | VList m     -> VInt(IList.size m)
   | VMap m      -> VInt(ValueMap.cardinal m)
   | VBag m      -> VInt(ValueBag.size m)
@@ -469,7 +473,7 @@ let v_size err_fn = function
   | _           -> err_fn "vsize" "not a collection"
 
 let v_singleton err_fn elem c = match elem, c with
-  | _,TSet                   -> VSet(ISet.singleton elem)
+  | _,TSet                   -> VSet(ValueSet.singleton elem)
   | _,TBag                   -> VBag(ValueBag.singleton elem)
   | _,TList                  -> VList(IList.singleton elem)
   | VTuple[k;v], TMap        -> VMap(ValueMap.singleton k v)
@@ -489,7 +493,7 @@ let match_pattern pat_v v =
   | _, _ -> match_or_unknown pat_v v
 
 let v_slice err_fn pat = function
-  | VSet m         -> VSet(ISet.filter (match_pattern pat) m)
+  | VSet m         -> VSet(ValueSet.filter (match_pattern pat) m)
   | VBag m         -> VBag(ValueBag.filter (match_pattern pat) m)
   | VList m        -> VList(IList.filter (match_pattern pat) m)
   | VMap m         -> VMap(ValueMap.filter (fun k v ->
