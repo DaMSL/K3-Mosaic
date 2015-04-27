@@ -106,7 +106,7 @@ let wrap_t_map_idx c map_id =
       prerr_string @@ "Map_idxs:\n"^string_of_map_idxs c c.map_idxs;
       failwith @@ "Failed to find map index for map id "^P.map_name_of c.p map_id
   else
-    wrap_tbag
+    wrap_tset
 
 let wrap_t_map_idx' c map_id = wrap_t_map_idx c map_id |- wrap_ttuple
 
