@@ -46,18 +46,22 @@ def run(target_file,
     combine_tool = os.path.join(root_path, "bin/combine_data")
 
     saved_dir = os.path.abspath(os.path.curdir)
-    trace_file = os.path.join(saved_dir, "temp.trace")
-    m3_file = os.path.join(saved_dir, "temp.m3")
-    k3_file = os.path.join(saved_dir, "temp.k3o")
-    k3_file2 = os.path.join(saved_dir, "temp2.k3o")
-    k3_file3 = os.path.join(saved_dir, "temp3.k3o")
-    k3dist_file = os.path.join(saved_dir, nice_name + ".k3o")
+    temp_dir = os.path.join(saved_dir, "temp/")
+    trace_file = os.path.join(temp_dir, "temp.trace")
+    m3_file = os.path.join(temp_dir, "temp.m3")
+    k3_file = os.path.join(temp_dir, "temp.k3o")
+    k3_file2 = os.path.join(temp_dir, "temp2.k3o")
+    k3_file3 = os.path.join(temp_dir, "temp3.k3o")
+    k3dist_file = os.path.join(temp_dir, nice_name + ".k3o")
     data_file = nice_name + ".csv"
-    k3new_file = os.path.join(saved_dir, nice_name + ".k3")
-    k3new_part_file = os.path.join(saved_dir, nice_name + ".part")
-    error_file = os.path.join(saved_dir, "temp.err")
-    part_file = os.path.join(saved_dir, "temp.part")
-    output_file = os.path.join(saved_dir, "temp.out")
+    k3new_file = os.path.join(temp_dir, nice_name + ".k3")
+    k3new_part_file = os.path.join(temp_dir, nice_name + ".part")
+    error_file = os.path.join(temp_dir, "temp.err")
+    part_file = os.path.join(temp_dir, "temp.part")
+    output_file = os.path.join(temp_dir, "temp.out")
+
+    if not os.path.exists(temp_dir):
+        os.makedirs(temp_dir)
 
     check_exists("dbtoaster", dbtoaster)
     check_exists("k3o", k3o)
