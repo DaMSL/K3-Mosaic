@@ -12,6 +12,8 @@ module KH = K3Helpers
 
 exception MissingType of int * string
 
+let indent = ref 0
+
 let force_list = List.iter force
 
 (* lazy functions *)
@@ -21,8 +23,9 @@ let lv i = [lazy (obx i)]   (* open vertical box *)
 let lcb () = [lazy (cb ())]     (* close box *)
 (*let lhv 2 = [lazy (obc 2)]*)
 let lcut () = [lazy (pbsi 0 0)] (* print nothing or split line *)
-let lind () = [lazy (pbsi 1 2)] (* print break with indent or space *)
-let lsp () = [lazy (pbsi 1 0)] (* print space or split line *)
+let lind () = [lazy (indent := !indent + 2; pbsi 1 !indent)] (* print break with indent or space *)
+let undo_indent () = [lazy (indent := !indent - 2)]
+let lsp () = [lazy (pbsi 1 !indent)] (* print space or split line *)
 let lps s = [lazy (ps s)]      (* print string *)
 let lps_list ?(sep=", ") cut_t f l =
   [lazy (ps_list ~sep:sep cut_t (force_list |- f) l)]
@@ -40,11 +43,12 @@ let lbox b f = b <| f <| lcb ()
 let wrap_hv i f = lbox (lhv i) f
 let wrap_hov i f = lbox (lhov i) f
 let wrap_indent f = wrap_hov 2 f
+(* let wrap_indent f = f (* lind () <| f <| undo_indent () *) *)
 
 let lazy_concat ?(sep=lsp) f l =
   let len = List.length l - 1 in
   let l2 = list_populate (fun _ -> sep ()) 0 len in
-  wrap_hov 0 @@ List.flatten @@ list_intersperse (List.map f l) l2
+  List.flatten @@ list_intersperse (List.map f l) l2
 
 (* separator for lazy_concat *)
 let lcomma () = lps "," <| lsp ()
@@ -54,15 +58,24 @@ type config = {
                 env:T.type_bindings_t;  (* type bindings for environment *)
                 trig_env:T.type_bindings_t;
                 map_to_fold:bool;       (* convert maps and ext to fold, due to k3new limitations *)
+                project:StrSet.t;       (* need to project further down *)
               }
 
 let default_config = {
                        env = [];
                        trig_env = [];
                        map_to_fold = false;
+                       project = StrSet.empty;
                      }
 
 let verbose_types_config = default_config
+
+let typecheck e =
+  try
+    T.type_of_expr e
+  with T.TypeError _ ->
+    (* try to deduce expression type if missing *)
+    T.type_of_expr @@ T.deduce_expr_type ~override:false [] [] e
 
 (* light type checking for expressions we create *)
 let light_type c e =
@@ -74,9 +87,9 @@ let light_type c e =
     exit 1
 
 (* Get a binding id from a number *)
-let id_of_num i = Printf.sprintf "_b%d_" i
+let id_of_num i = Printf.sprintf "b%d" i
 (* Get a record id from a number *)
-let record_id_of_num ?(prefix="r") i = Printf.sprintf "_%s%d_" prefix i
+let record_id_of_num ?(prefix="r") i = Printf.sprintf "%s%d" prefix i
 
 (* Add record ids to a list *)
 let add_record_ids ?prefix l =
@@ -160,7 +173,7 @@ let rec lazy_base_type ?(brace=true) ?(mut=false) ?(empty=false) c ~in_col t =
   | TMaybe(vt)   -> wrap(lps "option " <| lazy_type c ~in_col vt)
   | TAddress     -> wrap @@ lps "address" (* ? *)
   | TTarget bt   -> wrap (lps "target" <| lazy_type c ~in_col bt)
-  | TUnknown     -> wrap @@ lps "unknown"
+  | TUnknown     -> wrap @@ lps "()"
   | TTop         -> wrap @@ lps "top"
   | TIndirect vt -> wrap (lps "ind " <| lazy_type c ~in_col vt)
   | TTuple(vts)  -> (* tuples become records *)
@@ -168,7 +181,7 @@ let rec lazy_base_type ?(brace=true) ?(mut=false) ?(empty=false) c ~in_col t =
       let inner = lazy_concat ~sep:lcomma (fun (id, vt) ->
         lps (id^":") <| lazy_type c ~in_col:false vt) rec_vts in
       let wrap = if brace then lazy_brace else id_fn in
-      wrap (lsp () <| inner <| lsp ())
+      wrap_mut (wrap (lsp () <| inner <| lsp ()))
   | TCollection(ct, vt) -> wrap (
     (if not empty then lps "collection " else [])
     <| lazy_type c ~in_col:true vt <| lps " @ " <| lazy_col ct)
@@ -420,8 +433,7 @@ and handle_lambda c ~expr_info ~prefix_fn arg e =
   let final_exec bindings arg in_record =
     let binds = bindings <| deep_bind ~in_record c arg in
     (* for curried arguments, we deep bind at a deeper level *)
-    write_lambda arg in_record <| lind () <|
-      wrap_hov 0 @@
+    write_lambda arg in_record <|
       (* for the final expr, we may need to wrap the output in a record *)
         binds <| lazy_expr c (prefix_fn e) ~expr_info:(ANonLambda, out_rec)
   in
@@ -445,20 +457,25 @@ and handle_lambda c ~expr_info ~prefix_fn arg e =
 (* create a fold instead of a map or ext (for typechecking reasons) *)
 (* expects a lambda expression, and collection expression inside a map/flattenMap *)
 and fold_of_map_ext c expr =
-  let self_t_out = T.type_of_expr expr in
+  let open KH in
+  let t_out = T.type_of_expr expr in
   (* customize for the different operations *)
-  let (lambda, col), wrap_fn, suffix, t_out = match U.tag_of_expr expr with
-    | Map -> U.decompose_map expr, KH.mk_singleton self_t_out, "map", self_t_out
-    | Flatten -> U.decompose_map @@ U.decompose_flatten expr, id_fn, "ext", self_t_out
+  let (lambda, col), suffix = match U.tag_of_expr expr with
+    | Map     -> U.decompose_map expr, "map"
+    | Flatten -> U.decompose_map @@ U.decompose_flatten expr, "ext"
     | _       -> failwith "Can only convert flatten-map or map to fold"
   in
-  let empty = KH.mk_empty t_out in
   let args, body = U.decompose_lambda lambda in
-  let acc_id = "__acc_"^suffix in
+  let acc_id = "_acc"^suffix in
   let acc_arg = AVar (acc_id, t_out) in
   let args' = ATuple [acc_arg; args] in
-  let body' = KH.mk_combine (KH.mk_var acc_id) (wrap_fn body) in
-  lazy_expr c @@ light_type c @@ KH.mk_agg (KH.mk_lambda args' body') empty col
+  let body' = match U.tag_of_expr expr with
+    | Map     -> mk_block [ mk_insert acc_id [body]; mk_var acc_id ]
+    | Flatten -> KH.mk_combine (KH.mk_var acc_id) body
+    | _       -> failwith "Can only convert flatten-map or map to fold"
+  in
+  lazy_expr c @@ light_type c @@
+    KH.mk_agg (KH.mk_lambda args' body') (mk_empty t_out) col
 
 (* printing expressions *)
 (* argnums: lambda only   -- number of expected arguments *)
@@ -481,11 +498,18 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
                | _          -> id_fn
                end
     | _     -> id_fn in
-  (* we're more sensitive for left side *)
- (*let paren_l e = match U.tag_of_expr e with*)
-    (*| IfThenElse -> lazy_paren*)
-    (*| Apply when is_apply_let e -> lazy_paren*)
-    (*| _ -> id_fn in*)
+(* for a stmt of a block *)
+ let paren_stmt e = match U.tag_of_expr e with
+   | IfThenElse | CaseOf _ | Apply -> lazy_paren
+   | _ -> id_fn in
+(* for things like .map *)
+ let paren_l e = match U.tag_of_expr e with
+    | Var _ | Const _ -> id_fn
+    | _ -> lazy_paren in
+  let paren_r e = match U.tag_of_expr e with
+    | Nothing _ | Just | Const _ | Tuple | Var _
+    | Empty _ | Singleton _ -> id_fn
+    | _                     -> lazy_paren in
  let arith_paren_l e = match U.tag_of_expr e with
     | IfThenElse -> lazy_paren
     | Let _      -> lazy_paren
@@ -514,27 +538,33 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
   (* many instructions need to wrap the same way *)
   in let wrap e = match U.tag_of_expr expr with
     | Insert _ | Iterate | Map | Filter | Flatten | Send | Delete _ | Update _
-    | Aggregate | GroupByAggregate -> wrap_hv 2 e
-    | IfThenElse -> wrap_hv 0 e
+    | Aggregate | GroupByAggregate -> wrap_hov 2 e
+    | IfThenElse -> wrap_hov 0 e
     | _ -> id_fn e
   in
   (* begin analysis of tags *)
   let analyze () = match U.tag_of_expr expr with
   | Const con -> lazy_const c con
-  | Var id    -> begin try lps @@ StringMap.find id var_translate with Not_found -> lps id end
+  | Var id    ->
+      begin try lps @@ StringMap.find id var_translate
+      with Not_found ->
+        (* check if we need to do projection *)
+        if StrSet.mem id c.project then lps id <| lps ".i"
+        else lps id
+      end
   | Tuple     -> let es = U.decompose_tuple expr in
     let id_es = add_record_ids es in
     let inner = lazy_concat ~sep:lcomma (fun (id, e) ->
         lps (id^":") <| lazy_expr c e) id_es
     in lazy_brace inner
   | Just -> let e = U.decompose_just expr in
-    lps "Some " <| lazy_expr c e
+    lps "Some " <| paren_r e (lazy_expr c e)
   | Nothing vt -> lps "None " <| if vt.mut then lps "mut" else lps "immut"
   | Empty vt   -> lps "empty " <| lazy_type ~empty:true c ~in_col:false vt
   | Singleton _ ->
     (* Singletons are sometimes typed with unknowns (if read from a file) *)
     let e = U.decompose_singleton expr in
-    let t = T.type_of_expr expr in
+    let t = typecheck expr in
     lazy_collection_vt c t @@ lazy_expr c e
   | Combine ->
     let rec assemble_list c e =  (* print out in list format *)
@@ -623,19 +653,20 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
       | _ -> function_application c e1 [e2]
     end
   | Block -> let es = U.decompose_block expr in
-    lps "(" <| lind () <|
-    wrap_hv 0 (lps_list ~sep:";" CutHint (lazy_expr c) es <| lsp ())
-      <| lps ")"
+    lazy_paren @@ wrap_indent (wrap_hv 0 @@
+      lps_list ~sep:";" CutHint (fun e ->
+        wrap_hov 0 @@ paren_stmt e @@ lazy_expr c e) es)
 
   | IfThenElse -> let e1, e2, e3 = U.decompose_ifthenelse expr in
     wrap_indent (lps "if " <| lazy_expr c e1) <| lsp () <|
     wrap_indent (lps "then" <| lsp () <| lazy_expr c e2) <| lsp () <|
     wrap_indent (lps "else" <| lsp () <| lazy_expr c e3)
 
-  | CaseOf x ->
+  | CaseOf id ->
     let e1, e2, e3 = U.decompose_caseof expr in
     (* HACK to make peek work: records of one element still need projection *)
-    (* NOTE: caseOf will only work on peek if peek is the first expr inside *)
+    (* NOTE: caseOf will only work on peek if peek is the first expr inside,
+     * and projection will only work if the expression is very simple *)
     let project =
       begin match U.tag_of_expr e1 with
       | Peek ->
@@ -654,13 +685,18 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
       | _ -> false
       end
     in
-    let wrap_ret x = if project then x <| lps ".i" else x in
+    let c' = {c with project=StrSet.remove id c.project} in
+    let c' =
+      (* if we're projecting, let future expressions know *)
+      if project && id <> "_" then {c' with project=StrSet.add id c'.project}
+      else c' in
     lps "case" <| lsp () <| lazy_expr c e1 <| lsp () <| lps "of" <| lsp () <|
-    wrap_indent (lazy_brace (lps ("Some "^x^" ->") <| lsp () <|
-      wrap_ret (lazy_expr c e2))) <|
+    wrap_indent (lazy_brace (lps ("Some "^id^" ->") <| lsp () <|
+      lazy_expr c' e2)) <|
     wrap_indent (lazy_brace (lps "None ->" <| lsp () <| lazy_expr c e3))
 
   | BindAs _ -> let bind, id, r = U.decompose_bind expr in
+    let c = {c with project=StrSet.remove id c.project} in
     lps "bind" <| lsp () <| wrap_indent(lazy_expr c bind) <| lsp () <| lps "as" <| lsp () <|
     lps "ind" <| lsp () <| lps id <| lsp () <| lps "in" <| lsp () <|
     wrap_indent (lazy_expr c r)
@@ -668,24 +704,28 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
   | Let _ ->
       (* let can be either bind (destruct tuples) or let in new k3 *)
       let ids, bound, bexpr = U.decompose_let expr in
+      (* remove ids that need projection *)
+      let c =
+        {c with project=List.fold_left (fun acc x -> StrSet.remove x acc) c.project ids}
+      in
       begin match ids with
         | [id] -> (* let *)
-          lps "let" <| lsp () <| lps "id" <| lsp () <| lps "=" <| lsp () <|
+          lps "let" <| lsp () <| lps id <| lsp () <| lps "=" <| lsp () <|
           wrap_indent (lazy_expr c bound) <| lsp () <| lps "in" <| lsp () <|
           wrap_indent (lazy_expr c bexpr)
         | _   ->  (* bind deconstruct *)
-          lps "bind" <| lsp () <| wrap_indent(lazy_expr c bound) <| lsp () <| lps "as" <| lsp () <|
-          lsp () <| lps_list NoCut lps ids <| lsp () <| lps "in" <| lsp () <|
-          wrap_indent (lazy_expr c bexpr)
+            let ids' = concat_record_str @@ add_record_ids ids in
+            lps "bind" <| lsp () <| wrap_indent(lazy_expr c bound) <| lsp () <|
+            lps "as" <| lsp () <| lps "{" <| lps_list NoCut lps ids' <|
+            lps "}" <| lsp () <| lps "in" <| lsp () <|
+            wrap_indent (lazy_expr c bexpr)
       end
 
   | Iterate -> let lambda, col = U.decompose_iterate expr in
     apply_method c ~name:"iterate" ~col ~args:[lambda] ~arg_info:[ALambda [InRec], Out]
 
   | Map ->
-      if c.map_to_fold then
-        fold_of_map_ext c expr
-
+      if c.map_to_fold then fold_of_map_ext c expr
       else (* normal map *)
         let lambda, col = U.decompose_map expr in
         apply_method c ~name:"map" ~col ~args:[lambda] ~arg_info:[ALambda [InRec], OutRec]
@@ -725,9 +765,11 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
     (* find out if our accumulator is a collection type *)
     apply_method c ~name:"groupBy" ~col ~args:[lam1; lam2; acc]
       ~arg_info:[ALambda [InRec], Out; ALambda [In; InRec], Out; ANonLambda, Out]
-  | Sort -> let col, lambda = U.decompose_sort expr in
+  | Sort -> let lambda, col = U.decompose_sort expr in
     apply_method c ~name:"sort" ~col ~args:[lambda] ~arg_info:[ALambda [InRec; InRec], Out]
       ~prefix_fn:(fun e -> light_type c @@ KH.mk_if e (KH.mk_cint (-1)) @@ KH.mk_cint 1)
+  | Size -> let col = U.decompose_size expr in
+    apply_method c ~name:"size" ~col ~args:[KH.mk_cunit] ~arg_info:[ANonLambda, Out]
   | Peek -> let col = U.decompose_peek expr in
     (* peeks return options and need to be pattern matched *)
       lazy_paren @@ apply_method c ~name:"peek" ~col ~args:[light_type c @@ KH.mk_cunit] ~arg_info:[ANonLambda, Out]
@@ -735,8 +777,8 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
   | Subscript _ -> let i, tup = U.decompose_subscript expr in
       let t = KH.unwrap_ttuple @@ T.type_of_expr tup in
       let id_t = add_record_ids t in
-      let id = fst @@ at id_t i in
-      (lazy_paren @@ lazy_expr c tup) <| lps "." <| lps id
+      let id = fst @@ at id_t (i-1) in
+      (paren_l tup @@ lazy_expr c tup) <| lps "." <| lps id
 
   | SliceIdx(idx, comp) -> let col, pat = U.decompose_slice expr in
     let ts = KH.unwrap_ttuple @@ snd @@ KH.unwrap_tcol @@
@@ -797,7 +839,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
   match snd expr_info with
   | OutRec ->
     begin match U.tag_of_expr expr with
-    | Lambda _ -> wrap @@ analyze ()
+    | Lambda _ -> analyze ()
       (* don't wrap a lambda itself *)
     | _ ->
         (* check the type of the expression *)
@@ -808,28 +850,28 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
           end
         in
         begin match t.typ with
-        | TTuple _ -> wrap @@ analyze ()
+        | TTuple _ -> analyze ()
         | _        -> lazy_expr ~expr_info:((fst expr_info, Out))
                         ~prefix_fn c @@ light_type c @@ KH.mk_tuple ~force:true [expr]
         end
     end
-  | _ -> wrap @@ analyze ()
+  | _ -> analyze ()
 
 let lazy_trigger c id arg vars expr =
   let is_block expr = match U.tag_of_expr expr with Block -> true | _ -> false in
   let indent f = if is_block expr
                then lps " " <| f
-               else lind () <| lbox (lhov 0) f in
-  lps ("trigger "^id) <| lps " : " <|
+               else wrap_indent f in
+  wrap_indent (lps ("trigger "^id) <| lps " : " <|
   lazy_type ~in_col:false c @@ KH.type_of_arg arg <| lsp () <|
-  lps "=" <| indent (lazy_expr c @@ KH.mk_lambda arg expr) <| lcut ()
+  lps "=" <| lsp () <| lazy_expr c @@ KH.mk_lambda arg expr <| lcut ())
 
 let channel_format c = function
-  | CSV  -> "csv"
+  | CSV  -> "psv"
   | JSON -> "json"
 
 let lazy_channel c chan_t chan_f = match chan_t with
-  | File s -> lps @@ "file(\""^s^"\", "^channel_format c chan_f^")"
+  | File s -> lps @@ Printf.sprintf "file \"%s\" %s" s (channel_format c chan_f)
   | Network(str, port) -> lps @@ "socket(\""^str^"\":"^string_of_int port^")"
 
 let rec lazy_resource_pattern c = function
@@ -841,7 +883,12 @@ let rec lazy_resource_pattern c = function
 
 let lazy_stream c = function
   | RandomStream i -> lps "random" <| lazy_paren (lps @@ string_of_int i)
-  | ConstStream e  -> lps "stream" <| lazy_paren (lazy_expr c e)
+  (* k3o must put a collection here, and k3 expects a value, so extract it *)
+  | ConstStream e  ->
+      begin match KH.list_of_k3_container e with
+      | [e] -> lps "value" <| lazy_paren (lazy_expr c e)
+      | _   -> failwith "cannot translate stream to k3new"
+      end
 
 let lazy_resource c r =
   let common t = lazy_type c t <| lps " = " in
@@ -850,15 +897,16 @@ let lazy_resource c r =
   | Stream(t, st) -> common t <| lazy_stream c st
   | Pattern(pat) -> lps "pattern " <| lazy_resource_pattern c pat
 
-let lazy_flow c = function
-  | Source(Code(id, arg, vars, expr))
-  | Sink(Code(id, arg, vars, expr)) -> lazy_trigger c id arg vars expr
-  | Source(Resource(id, r)) ->
-      lps ("source "^id^" : ") <| lazy_resource c r
-  | Sink(Resource(id, r)) ->
-      lps ("sink "^id^" : ") <| lazy_resource c r
-  | BindFlow(id1, id2) -> lps @@ "bind "^id1^" -> "^id2
-  | Instruction(Consume id) -> lps @@ "consume "^id
+let lazy_flow c e =
+  let out =
+    match e with
+    | Source(Code(id, arg, vars, expr))
+    | Sink(Code(id, arg, vars, expr)) -> lazy_trigger c id arg vars expr
+    | Source(Resource(id, r)) ->
+        lps ("source "^id^" : ") <| lazy_resource c r
+    | BindFlow(id1, id2) -> lps @@ "feed "^id1^" |> "^id2
+    | _ -> []
+  in out <| lcut () <| lcut ()
 
 let lazy_flow_program c fas = lps_list ~sep:"" CutHint (lazy_flow c |- fst) fas
 
@@ -877,14 +925,13 @@ let lazy_declaration c d =
           with Failure _ -> (* normal global *)
             lps " =" <| lsp () <| lazy_expr c e
     end in
-    wrap_hov 2 (lps @@ "declare "^id^" :" <| lsp () <| lazy_type c t <| end_part)
-  | Role(id, fprog) ->
-      lps ("role "^id^" ") <| lazy_box_brace (lazy_flow_program c fprog)
+    wrap_indent (lps @@ "declare "^id^" :" <| lsp () <| lazy_type c t <| end_part)
+  | Role(id, fprog) -> lazy_flow_program c fprog
   | Flow fprog -> lazy_flow_program c fprog
-  | DefaultRole id -> lps ("default role "^id)
+  | DefaultRole id -> []
   | Foreign(id, t) -> lps ("declare "^id^" :") <| lsp () <| lazy_type c t
   in
-  wrap_hv 0 out <| lcut ()
+  wrap_hov 0 out <| lcut () <| lcut ()
 
 let wrap_f = wrap_formatter ~margin:80
 
@@ -900,25 +947,14 @@ module StringSet = Set.Make(struct type t=string let compare=String.compare end)
 
 (* remove/convert functions that are renamed in k3new *)
 let filter_incompatible prog =
-  let r_demux = Str.regexp "^demux_.*" in
-  let filter_trigs fl =
-    filter_map (fun ((s,_) as trig) -> match s with
-      | Sink(Code(id, _, _, _)) when r_match r_demux id -> None
-      | _ -> Some trig
-    ) fl
-  in
-  let r_hash = Str.regexp "^hash.*" in
   let drop_globals = List.fold_left (flip StringSet.add) StringSet.empty
-    ["error"; "divf"; "mod"; "float_of_int"; "int_of_float"; "get_max_int"; "parse_sql_date"; "peers"; "pmap_input" ]
+    ["error"; "divf"; "mod"; "float_of_int"; "int_of_float"; "get_max_int"; "parse_sql_date"; "peers"; ]
   in
   filter_map (fun ((d,a) as dec) ->
     (* we don't want the monomorphic hash functions *)
     match d with
-    | Foreign(id, _)   when StringSet.mem id drop_globals -> None
-    | Foreign(id, _)   when r_match r_hash id             -> None
+    | Foreign(id, _)   -> None
     | Global(id, _, _) when StringSet.mem id drop_globals -> None
-    | Flow(fl)      -> Some((Flow(filter_trigs fl), a))
-    | Role _        -> None
     | DefaultRole _ -> None
     | _             -> Some dec
   ) prog
@@ -926,12 +962,10 @@ let filter_incompatible prog =
 (* print a K3 program in syntax *)
 (* We get the typechecking environments so we can do incremental typechecking where needed *)
 let string_of_program ?(map_to_fold=false) prog (env, trig_env) =
-  let config = {env; trig_env; map_to_fold} in
+  let config = {default_config with env; trig_env; map_to_fold} in
   wrap_f @@ fun () ->
-    let l = lps_list ~sep:"" CutHint (lazy_declaration config |- fst) prog in
-    obx 0;  (* vertical box *)
-    force_list l;
-    cb
+    let l = wrap_hv 0 (lps_list ~sep:"" CutHint (lazy_declaration config |- fst) prog) in
+    force_list l
 
 let r_insert = Str.regexp "^insert_\\(.+\\)$"
 let r_insert_bad = Str.regexp "^insert_.*\\(do\\|send\\|rcv\\)"
@@ -965,10 +999,10 @@ let add_sources p envs filename =
     mk_code_sink "switch_main" (wrap_args arg_ids') [] @@
       List.fold_left (fun acc_code (trig_id, trig_ts) ->
         let handle_args =
-            mk_tuple @@ List.map convert_date @@ List.map (first mk_var) trig_ts
+          List.map convert_date @@ List.map (first mk_var) trig_ts
         in
         mk_if (mk_eq (mk_var "trigger_id") @@ mk_cstring trig_id)
-          (mk_send (mk_ctarget @@ trig_id) K3Global.me_var handle_args)
+          (mk_send trig_id K3Global.me_var handle_args)
           acc_code
         )
         mk_cunit
@@ -976,7 +1010,7 @@ let add_sources p envs filename =
   in
   let flow = mk_flow [code] in
   let source_s = "source s1 : "^string_of_value_type (wrap_ttuple @@ snd_many arg_ids')^
-    " = file \""^filename^"\" k3\n" in
+    " = file \""^filename^"\" psv\n" in
   let feed_s   = "feed s1 |> switch_main\n" in
   string_of_program [flow] envs ^ source_s ^ feed_s
 
@@ -984,5 +1018,11 @@ let add_sources p envs filename =
 (* envs are the typechecking environments to allow us to do incremental typechecking *)
 let string_of_dist_program ?(file="default.txt") ?map_to_fold (p, envs) =
   let p' = filter_incompatible p in
+  "include \"Core/Builtins.k3\"\n"^
+  "include \"Annotation/Map.k3\"\n"^
+  "include \"Annotation/Set.k3\"\n"^
+  "include \"Annotation/Seq.k3\"\n"^
+  "declare my_peers : collection { i:address } @ {Collection} =\n"^
+  "  peers.fold (\\acc -> (\\x -> (acc.insert {i:x.addr}; acc))) empty { i:address} @ Collection\n"^
   string_of_program ?map_to_fold p' envs ^ add_sources p' envs file
 

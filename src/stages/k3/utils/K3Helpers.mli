@@ -31,14 +31,14 @@ val t_trig_id : type_t
 val t_stmt_id : type_t
 val t_map_id : type_t
 val t_vid : type_t
-val t_vid_mut : type_t
 
-(* create a global vid comparison function *)
-type vid_op = VEq | VNeq | VGt | VLt | VGeq | VLeq
-val mk_global_vid_op : id_t -> vid_op -> declaration_t * annotation_t
+val vid_increment : ?vid_expr:expr_t -> unit -> expr_t
+val min_vid_k3 : expr_t
+val start_vid_k3 : expr_t
 
 (* convert a type to mutable *)
 val mut : type_t -> type_t
+val immut : type_t -> type_t
 
 
 (* wrap in a specific type *)
@@ -60,6 +60,8 @@ val wrap_tind_mut : type_t -> type_t
 val wrap_tmaybe : type_t -> type_t
 val wrap_tmaybes : type_t list -> type_t list
 val wrap_tfunc : type_t -> type_t -> type_t
+val wrap_t_of_map : type_t -> type_t
+val wrap_t_of_map' : type_t list -> type_t
 
 (* wrap a single layer of arguments *)
 val wrap_args : (id_t * type_t) list -> arg_t
@@ -107,7 +109,7 @@ val mk_nothing : type_t -> expr_t
 val mk_nothing_m : type_t -> expr_t
 
 val mk_empty : type_t -> expr_t
-val mk_singleton : type_t -> expr_t -> expr_t
+val mk_singleton : type_t -> expr_t list -> expr_t
 val mk_combine : expr_t -> expr_t -> expr_t
 val mk_range : container_type_t -> expr_t -> expr_t -> expr_t -> expr_t
 
@@ -129,6 +131,7 @@ val mk_gt : expr_t -> expr_t -> expr_t
 val mk_lambda : arg_t -> expr_t -> expr_t
 val mk_lambda' : (id_t * type_t) list -> expr_t -> expr_t
 val mk_apply : expr_t -> expr_t -> expr_t
+val mk_apply' : id_t -> expr_t -> expr_t
 val mk_block : expr_t list -> expr_t
 val mk_iter : expr_t -> expr_t -> expr_t
 val mk_if : expr_t -> expr_t -> expr_t -> expr_t
@@ -144,23 +147,27 @@ val mk_agg : expr_t -> expr_t -> expr_t -> expr_t
 val mk_agg_fst : expr_t -> expr_t -> expr_t
 val mk_gbagg : expr_t -> expr_t -> expr_t -> expr_t -> expr_t
 val mk_sort : expr_t -> expr_t -> expr_t
+val mk_size : expr_t -> expr_t
 val mk_subscript : int -> expr_t -> expr_t
 
 val mk_peek : expr_t -> expr_t
-val mk_slice : expr_t -> expr_t -> expr_t
-val mk_slice' : expr_t -> expr_t list -> expr_t
+(* avoid having to use a mk_var *)
+val mk_peek' : id_t -> expr_t
+val mk_slice : expr_t -> expr_t list -> expr_t
+val mk_slice' : id_t -> expr_t list -> expr_t
 (* int list list: specify index to use
    expr_t: list of integer values specifying GT, LT, EQ *)
 val mk_slice_idx : idx:index_t -> comp:comp_t -> expr_t -> expr_t -> expr_t
 val mk_slice_idx' : idx:index_t -> comp:comp_t -> expr_t -> expr_t list -> expr_t
-val mk_insert : id_t -> expr_t -> expr_t
-val mk_delete : id_t -> expr_t -> expr_t
-val mk_update : id_t -> expr_t -> expr_t -> expr_t
+val mk_insert : id_t -> expr_t list -> expr_t
+val mk_delete : id_t -> expr_t list -> expr_t
+val mk_update : id_t -> expr_t list -> expr_t list -> expr_t
 val mk_update_slice : id_t -> expr_t list -> expr_t -> expr_t
 
 val mk_ind : expr_t -> expr_t
 val mk_assign : id_t -> expr_t -> expr_t
-val mk_send : expr_t -> expr_t -> expr_t -> expr_t
+val mk_send : id_t -> expr_t -> expr_t list -> expr_t
+val mk_send_raw: expr_t -> expr_t -> expr_t -> expr_t
 
 (* smart role constructors *)
 val mk_const_stream : id_t -> type_t -> expr_t list -> flow_statement_t *
@@ -181,12 +188,10 @@ val ids_to_vars : id_t list -> expr_t list
 val vars_to_ids : expr_t list -> id_t list
 
 (* check if a collection is empty *)
-val mk_is_empty : expr_t -> type_t -> expr_t
+val mk_is_empty : expr_t -> y:expr_t -> n:expr_t -> expr_t
 
 (* macro to check if a collection has a specific member *)
-val mk_has_member : expr_t -> expr_t -> type_t -> expr_t
-
-val mk_has_member' : expr_t -> expr_t list -> type_t -> expr_t
+val mk_has_member : expr_t -> expr_t list -> type_t -> expr_t
 
 (* macro to create a trigger *)
 val mk_code_sink : id_t -> arg_t -> (id_t * type_t * annotation_t) list
@@ -232,12 +237,14 @@ val mk_let : id_t list -> expr_t -> expr_t -> expr_t
 
 (* macro similar to fst *)
 val mk_fst: expr_t -> expr_t
+val mk_fst': id_t -> expr_t
 
 (* macro similar to snd *)
 val mk_snd: expr_t -> expr_t
+val mk_snd': id_t -> expr_t
 
 (* like fst, but for a collection with a tuple of any size *)
-val project_from_col : type_t list -> expr_t -> total:int -> choice:int -> expr_t
+val project_from_col : type_t list -> expr_t -> choice:int -> expr_t
 
 (* macro similar to fst but for a collection *)
 val mk_fst_many: type_t list -> expr_t -> expr_t
@@ -277,21 +284,56 @@ val type_of_arg: arg_t -> type_t
 (* convert the type of a collection *)
 val mk_convert_col : type_t -> type_t -> expr_t -> expr_t
 
+val mk_convert_col' : type_t -> container_type_t -> expr_t -> expr_t
+
 val mk_peek_or_zero : expr_t -> expr_t
 
-val mk_peek_or_error : expr_t -> expr_t
+val mk_peek_or_error : string -> expr_t -> expr_t
+
+val mk_lookup : expr_t -> expr_t list -> expr_t
+val mk_lookup' : id_t -> expr_t list -> expr_t
 
 (* data structure record to standardize manipulation *)
 type data_struct = { id: string;
                      e: (string * type_t) list;
+                     ee: (string * type_t) list list;
                      t: type_t;
                      init: expr_t option;
+                     (* init that isn't used right away *)
+                     d_init:expr_t option;
+                     map_id: int option;
                    }
 
+val create_ds : ?e:(string * type_t) list -> ?ee:(string * type_t) list list -> ?init:expr_t -> ?d_init:expr_t -> ?map_id:int -> string -> type_t -> data_struct
+
 val decl_global : data_struct -> declaration_t * annotation_t
+val delayed_init : data_struct -> expr_t
 
 (* add to id,type list *)
 val id_t_add : string -> (string * 'a) list -> (string * 'a) list
 
 (* modify values of id_t format and convert any remaining values to vars *)
 val modify_e : (string * 'a) list -> (string * expr_t) list -> expr_t list
+
+(* find the index of a member of an id_t *)
+val index_e : (string * 'a) list -> string -> int
+
+(* easy access to unit argument for functions/triggers *)
+val unit_arg : (string * type_t) list
+
+(* easy to use error function macro *)
+val mk_error : string -> expr_t
+
+val mk_size_slow : data_struct -> expr_t
+
+val mk_min_max : string -> expr_t -> type_t -> (expr_t -> expr_t -> expr_t) -> expr_t -> data_struct -> expr_t
+
+val mk_pop : string -> string -> expr_t -> expr_t -> expr_t
+
+val mk_incr : string -> expr_t
+val mk_decr : string -> expr_t
+
+(* delete using a slice with unknowns *)
+val mk_delete_one : data_struct -> expr_t list -> expr_t
+
+val mk_upsert_with : data_struct -> id_t -> k:expr_t list -> default:expr_t -> v:expr_t -> expr_t

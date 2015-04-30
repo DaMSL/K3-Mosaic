@@ -19,6 +19,7 @@ let preserve_mut t f = {t with typ=f t.typ}
 
 (* change immutable type to mutable *)
 let mut t = {t with mut=true}
+let immut t = {t with mut=false}
 
 (* A type for simple K3 types *)
 let t_bool = canonical TBool
@@ -77,6 +78,10 @@ let wrap_tmaybe t = canonical @@ TMaybe t
 let wrap_tmaybes ts = List.map wrap_tmaybe ts
 
 let wrap_tfunc tin tout = canonical @@ TFunction(tin, tout)
+
+(* what the generic type of the global maps is *)
+let wrap_t_of_map  = wrap_tset
+let wrap_t_of_map' = wrap_tset'
 
 (* wrap a function argument *)
 let wrap_args id_typ =
@@ -174,7 +179,7 @@ let mk_nothing_m typ = mk_nothing @@ wrap_tmaybe typ
 
 let mk_empty val_type = mk_stree (Empty val_type) []
 
-let mk_singleton val_type x = mk_stree (Singleton val_type) [x]
+let mk_singleton val_type x = mk_stree (Singleton val_type) [mk_tuple x]
 
 let mk_combine x y = mk_stree Combine [x;y]
 
@@ -213,6 +218,8 @@ let mk_lambda' argl expr = mk_lambda (wrap_args argl) expr
 
 let mk_apply lambda input = mk_stree Apply [lambda; input]
 
+let mk_apply' fn input = mk_apply (mk_var fn) input
+
 let mk_block statements = mk_stree Block statements
 
 let mk_iter iter_fun collection =
@@ -248,6 +255,8 @@ let mk_gbagg group_fun agg_fun init collection =
 let mk_sort compare_fun collection =
     mk_stree Sort [compare_fun; collection]
 
+let mk_size col = mk_stree Size [col]
+
 let mk_subscript i tuple = mk_stree (Subscript i) [tuple]
 
 (* generic version of slice used by multiple functions *)
@@ -263,9 +272,9 @@ let mk_slice_gen tag collection pattern =
   else
     mk_stree tag [collection; pattern]
 
-let mk_slice collection pattern = mk_slice_gen Slice collection pattern
+let mk_slice collection pattern = mk_slice_gen Slice collection @@ mk_tuple pattern
 
-let mk_slice' collection pattern = mk_slice collection @@ mk_tuple pattern
+let mk_slice' collection pattern = mk_slice (mk_var collection) pattern
 
 (* l_idx is the list of indices to use, made of ocaml ints *)
 (* l_comp is the pattern of gt, le, eq expressed as GTA, GT, EQ, LT, LTA *)
@@ -275,22 +284,24 @@ let mk_slice_idx ~idx ~comp col pat =
 let mk_slice_idx' ~idx ~comp col pat =
   mk_slice_idx ~idx ~comp col @@ mk_tuple pat
 
-let mk_insert col x = mk_stree (Insert col) [x]
+let mk_insert col x = mk_stree (Insert col) [mk_tuple x]
 
-let mk_delete col x = mk_stree (Delete col) [x]
+let mk_delete col x = mk_stree (Delete col) [mk_tuple x]
 
 let mk_update col old_val new_val =
-    mk_stree (Update col) [old_val; new_val]
+    mk_stree (Update col) [mk_tuple old_val; mk_tuple new_val]
 
 let mk_peek col = mk_stree Peek [col]
+
+let mk_peek' col = mk_peek (mk_var col)
 
 (* handle the common case of updating a peek on a slice *)
 let mk_update_slice col slice new_val =
   mk_case_ns
-    (mk_peek @@ mk_slice' (mk_var col) slice)
+    (mk_peek @@ mk_slice' col slice)
     "__slice"
     mk_cunit @@
-    mk_update col (mk_var "__slice") new_val
+    mk_update col [mk_var "__slice"] [new_val]
 
 let mk_ind v = mk_stree Indirect [v]
 
@@ -298,7 +309,9 @@ let mk_ind v = mk_stree Indirect [v]
 let mk_assign left right = mk_stree (Assign left) [right]
 
 (* target:TTarget(T) address:TAdress args:T *)
-let mk_send target address args = mk_stree Send [target; address; args]
+let mk_send target address args = mk_stree Send [mk_ctarget target; address; mk_tuple args]
+
+let mk_send_raw target addr args = mk_stree Send [target; addr; args]
 
 (* A let that assigns multiple variables simultaneously.
  * For breaking up tuples and passing multiple values out of functions.
@@ -307,20 +320,33 @@ let mk_send target address args = mk_stree Send [target; address; args]
 let mk_let var_ids tuple_val expr =
   mk_stree (Let(var_ids)) [tuple_val; expr]
 
+(* ----- Converting between ocaml lists and k3 containers ----- *)
+
+let rec list_of_k3_container e =
+  match U.tag_of_expr e with
+  | Combine -> let l, r = U.decompose_combine e in
+      list_of_k3_container l @ list_of_k3_container r
+  | Empty _ -> []
+  | Singleton _ -> [U.decompose_singleton e]
+  | _ -> invalid_arg "not a k3 list"
+
+let rec k3_container_of_list typ = function
+  | []    -> mk_empty typ
+  | [x]   -> mk_singleton typ [x]
+  | x::xs -> mk_combine (k3_container_of_list typ [x]) @@
+    k3_container_of_list typ xs
+
 (* convenience function to aggregate starting with the first item *)
 (* NOTE: will run the first item twice *)
 let mk_agg_fst agg_fn col =
-  mk_agg agg_fn (mk_case_sn (mk_peek col) "__case" (mk_var "__case") (mk_apply (mk_var "error") mk_cunit)) col
+  mk_agg agg_fn
+    (mk_case_sn (mk_peek col) "__case"
+      (mk_var "__case") @@
+      mk_apply' "error" @@ mk_cstring "error with mk_agg_fst") col
 
 (* Macros to make role related stuff *)
-let mk_const_stream id typ l =
+let mk_const_stream id typ (l:expr_t list) =
     (* copy from K3Util to prevent circularity *)
-    let rec k3_container_of_list typ = function
-    | [] -> mk_empty typ
-    | [x] -> mk_singleton typ x
-    | x::xs -> mk_combine (k3_container_of_list typ [x]) @@
-        k3_container_of_list typ xs
-    in
     mk_no_anno @@
     Source(Resource(id, Stream(typ,
         ConstStream(k3_container_of_list (wrap_tlist typ) l))))
@@ -360,16 +386,14 @@ let vars_to_ids = List.map (fun x -> match U.tag_of_expr x with
   | _               -> failwith "Not a var or unknown")
 
 (* check if a collection is empty *)
-let mk_is_empty collection typ =
-  mk_eq collection @@ mk_empty typ
+let mk_is_empty collection ~y ~n =
+  mk_if (mk_eq (mk_cint 0) (mk_size collection)) y n
 
 (* checks if a member of a collection is present *)
 let mk_has_member collection pattern typ =
   mk_neq
     (mk_slice collection pattern)
     (mk_empty typ)
-
-let mk_has_member' col pat typ = mk_has_member col (mk_tuple pat) typ
 
 let mk_code_sink name args locals code =
   mk_no_anno @@ Sink(Code(name, args, locals, code))
@@ -413,23 +437,19 @@ let mk_assoc_lambda arg1 arg2 expr = mk_lambda (ATuple[arg1; arg2]) expr
 let mk_assoc_lambda' arg1 arg2 expr = mk_lambda (ATuple[wrap_args arg1; wrap_args arg2]) expr
 
 let mk_fst tuple = mk_subscript 1 tuple
+let mk_fst' tuple = mk_subscript 1 (mk_var tuple)
 
 let mk_snd tuple = mk_subscript 2 tuple
+let mk_snd' tuple = mk_subscript 2 (mk_var tuple)
 
-let project_from_col tuple_types col ~total ~choice =
-  let l = create_range 1 total in
-  let l = List.map (fun i -> "__"^soi i) l in
-  let c = "__"^soi choice in
-  let id_ts = list_zip l tuple_types in
+let project_from_col tuple_types col ~choice =
   mk_map
-    (mk_lambda' id_ts @@ mk_var c) @@
+    (mk_lambda' ["x", wrap_ttuple tuple_types] @@ mk_subscript choice @@ mk_var "x") @@
     col
 
-let mk_fst_many tuple_types collection =
-  project_from_col tuple_types collection ~total:2 ~choice:1
+let mk_fst_many t col = project_from_col t col ~choice:1
 
-let mk_snd_many tuple_types collection =
-  project_from_col tuple_types collection ~total:2 ~choice:2
+let mk_snd_many t col = project_from_col t col ~choice:2
 
 
 (* Functions to manipulate tuples in K3 code *)
@@ -463,46 +483,18 @@ let t_trig_id = t_int (* In K3, triggers are always handled by numerical id *)
 let t_stmt_id = t_int
 let t_map_id = t_int
 
-(* for vids *)
+(* --- vids --- *)
               (* epoch, count, switch hash *)
-let vid_types = [t_int; t_int; t_int]
-let vid_mut_types = [t_int_mut; t_int_mut; t_int_mut]
+let vid_types = [t_int; t_int]
+let vid_id_t = ["epoch", t_int; "count", t_int]
 let t_vid = wrap_ttuple vid_types
-let t_vid_mut = wrap_ttuple vid_mut_types
 
-(* functions for comparing vids *)
-(* vid format: (epoch, counter, switch hash) *)
-type vid_op = VEq | VNeq | VGt | VLt | VGeq | VLeq
-let mk_global_vid_op name tag =
-  let lvid_id_t = types_to_ids_types "l" vid_types in
-  let lvid_id = fst @@ List.split lvid_id_t in
-  let rvid_id_t = types_to_ids_types "r" vid_types in
-  let rvid_id = fst @@ List.split rvid_id_t in
-  let arg_pair = wrap_args_deep [wrap_args lvid_id_t; wrap_args rvid_id_t] in
-  let arg_types = wrap_ttuple [wrap_ttuple vid_types; wrap_ttuple vid_types] in
-  let op f i =
-    let nth_l = List.nth lvid_id in let nth_r = List.nth rvid_id in
-    f (mk_var @@ nth_l i) (mk_var @@ nth_r i) in
-  let mk_vid_eq = mk_and (op mk_eq 0) @@ mk_and (op mk_eq 1) (op mk_eq 2) in
-  let mk_vid_neq = mk_not mk_vid_eq in
-  let mk_vid_lt = mk_or (op mk_lt 0) @@
-                    mk_and (op mk_eq 0) @@
-                      mk_or (op mk_lt 1) @@
-                        mk_and (op mk_eq 1) (op mk_lt 2) in
-  let mk_vid_geq = mk_not mk_vid_lt in
-  let mk_vid_gt = mk_or (op mk_gt 0) @@
-                    mk_and (op mk_eq 0) @@
-                      mk_or (op mk_gt 1) @@
-                        mk_and (op mk_eq 1) (op mk_gt 2) in
-  let mk_vid_leq = mk_not mk_vid_gt in
-  mk_global_fn_raw name arg_pair arg_types t_bool @@
-    match tag with
-    | VEq -> mk_vid_eq
-    | VNeq -> mk_vid_neq
-    | VGt -> mk_vid_gt
-    | VGeq -> mk_vid_geq
-    | VLt -> mk_vid_lt
-    | VLeq -> mk_vid_leq
+(* increment a vid. assume "vid" *)
+let vid_increment ?(vid_expr=mk_var "vid") () =
+  mk_tuple [mk_subscript 1 vid_expr; mk_add (mk_subscript 2 vid_expr) (mk_cint 1)]
+
+let min_vid_k3 = mk_tuple [mk_cint 0; mk_cint 0]
+let start_vid_k3 = mk_tuple [mk_cint 0; mk_cint 1]
 
 (* id function for maps *)
 let mk_id tuple_types =
@@ -513,22 +505,6 @@ let mk_id tuple_types =
     mk_lambda' ids_types @@
       mk_tuple @@ ids_to_vars @@ fst_many @@ ids_types
 
-(* ----- Converting between ocaml lists and k3 containers ----- *)
-
-let rec list_of_k3_container e =
-  match U.tag_of_expr e with
-  | Combine -> let l, r = U.decompose_combine e in
-      list_of_k3_container l @ list_of_k3_container r
-  | Empty _ -> []
-  | Singleton _ -> [U.decompose_singleton e]
-  | _ -> invalid_arg "not a k3 list"
-
-let rec k3_container_of_list typ = function
-  | [] -> mk_empty typ
-  | [x] -> mk_singleton typ x
-  | x::xs -> mk_combine (k3_container_of_list typ [x]) @@
-    k3_container_of_list typ xs
-
 (* convert an arg to a type *)
 let rec type_of_arg = function
   | AIgnored     -> t_unknown (* who cares *)
@@ -537,42 +513,124 @@ let rec type_of_arg = function
   | ATuple xs    -> wrap_ttuple @@ List.map type_of_arg xs
 
 let mk_convert_col src_t dest_t col =
+  if src_t = dest_t then col else
   let t_c, t_elem = unwrap_tcol src_t in
   mk_agg
-    (mk_lambda
-      (wrap_args ["acc_conv", dest_t; "x", t_elem]) @@
-      mk_combine
-          (mk_singleton dest_t @@ mk_var "x") @@
-          mk_var "acc_conv")
+    (mk_lambda'
+      ["acc_conv", dest_t; "x", t_elem] @@
+      mk_block [
+        mk_insert "acc_conv" [mk_var "x"];
+        mk_var "acc_conv"
+      ])
     (mk_empty dest_t)
     col
+
+(* supply only the col part of the dst type *)
+let mk_convert_col' src_t dest_col_t col =
+  let t_c, t_elem = unwrap_tcol src_t in
+  mk_convert_col src_t {src_t with typ=TCollection(dest_col_t, t_elem)} col
 
 let mk_peek_or_zero e = mk_case_ns (mk_peek e) "x"
   (mk_cint 0) (mk_var "x")
 
-let mk_peek_or_error e = mk_case_ns (mk_peek e) "x"
-  (mk_apply (mk_var "error") mk_cunit) (mk_var "x")
+let mk_error s = mk_apply (mk_var "error") @@
+  mk_apply (mk_var "print") @@ mk_cstring s
+
+let mk_peek_or_error s e = mk_case_ns (mk_peek e) "x"
+  (mk_error s) @@
+  mk_var "x"
+
+let mk_lookup col pat = mk_peek @@ mk_slice col pat
+let mk_lookup' col pat = mk_peek @@ mk_slice' col pat
 
 (* data structure record to standardize manipulation *)
 type data_struct = { id: string;
                      e: (string * type_t) list;
+                     ee: (string * type_t) list list;
                      t: type_t;
                      init: expr_t option;
+                     (* init that isn't used right away *)
+                     d_init:expr_t option;
+                     map_id: int option;
                    }
+
+let create_ds ?(e=[]) ?(ee=[]) ?init ?d_init ?map_id id t =
+  {id; t; e; ee; init; d_init; map_id}
 
 (* utility functions *)
 let decl_global x = match x.init with
   | Some init -> mk_global_val_init x.id x.t init
   | None      -> mk_global_val x.id x.t
 
+let delayed_init x = match x.d_init with
+  | Some init -> mk_assign x.id init
+  | None      -> failwith "no delayed init"
+
 (* convenience function to add to ids in names *)
 let id_t_add x id_t = List.map (fun (id,t) -> id^x, t) id_t
 
 (* modify e values of id_t format and convert any remaining values to vars *)
 let modify_e id_t val_l =
-  let m = strmap_of_list val_l in
-  List.map (fun (s, _) ->
-    try StrMap.find s m
-    with Not_found -> mk_var s)
-  id_t
+  let map = strmap_of_list val_l in
+  (* check for unused *)
+  let set = StrSet.of_list @@ fst_many val_l in
+  let set, res =
+    List.fold_left (fun (acc_set, acc) (s, _) ->
+      try
+        let acc_set' = StrSet.remove s acc_set in
+        acc_set', StrMap.find s map::acc
+      with Not_found -> acc_set, mk_var s::acc)
+    (set, [])
+    id_t
+  in
+  if StrSet.cardinal set <> 0 then failwith "modify_e: not all changes used"
+  else List.rev res
+
+let index_e id_t s =
+  List.assoc s @@ insert_index_snd ~first:1 @@ fst_many id_t
+
+let unit_arg = ["_u", t_unit]
+
+(* code to count the size of a collection *)
+let mk_size_slow col = mk_size (mk_var col.id)
+
+let mk_min_max v v' v_t comp_fn zero col = mk_agg
+  (mk_assoc_lambda' [v, v_t] col.e @@
+    mk_if (comp_fn (mk_var v) v')
+      (mk_var v) @@
+      v')
+  zero @@
+  mk_var col.id
+
+(* pop off the front of a list *)
+let mk_pop col_nm bind_nm fail success =
+  mk_case_ns (mk_peek' col_nm) bind_nm
+    fail @@
+    mk_block [
+      mk_delete col_nm [mk_var bind_nm];
+      success
+    ]
+
+(* increment a stateful variable *)
+let mk_incr nm = mk_assign nm @@ mk_add (mk_var nm) @@ mk_cint 1
+let mk_decr nm = mk_assign nm @@ mk_sub (mk_var nm) @@ mk_cint 1
+
+(* delete one entry in a data structure *)
+let mk_delete_one ds slice =
+  mk_case_ns (mk_peek @@ mk_slice' ds.id slice) "lookup_data"
+    mk_cunit @@
+    mk_delete ds.id [mk_var "lookup_data"]
+
+(* for maps *)
+let mk_upsert_with ds nm ~k ~default ~v  =
+  (* for error, we special case *)
+  let is_error e = try
+    "error" = U.decompose_var @@ fst @@ U.decompose_apply e
+    with Failure _ -> false
+  in
+  let check e g = if is_error e then e else g in
+  let slice = (mk_tuple k)::[mk_cunknown] in
+  mk_case_ns (mk_peek @@ mk_slice' ds.id slice) nm
+    (check default @@ mk_insert ds.id [mk_tuple k; default]) @@
+    check v @@ mk_update ds.id [mk_var nm] [mk_tuple k; v]
 

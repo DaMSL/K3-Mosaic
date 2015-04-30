@@ -51,6 +51,10 @@ and ValueBag : IBag.S with type elt = Value.value_t
                       and type t = int HashMap.Make(OrderedKey).t
                          = IBag.Make(OrderedKey)
 
+and ValueSet : ISet.S with type elt = Value.value_t
+                      and type t = unit HashMap.Make(OrderedKey).t
+                         = ISet.Make(OrderedKey)
+
 and ValueMMap : IMultimap.S with type elt = Value.value_t
                              and type InnerBag.elt = Value.value_t
                              and type InnerBag.t = int HashMap.Make(OrderedKey).t
@@ -92,7 +96,7 @@ and ValueComp : (sig val compare_v : Value.value_t -> Value.value_t -> int
                          if r <> 0 then raise (Mismatch r)) vs vs'; 0
           with Mismatch r -> r end
       | VOption(Some v), VOption(Some v') -> compare_v v v'
-      | VSet v, VSet v' -> ISet.compare compare_v v v'
+      | VSet v, VSet v' -> ValueSet.compare v v'
       | VBag v, VBag v' -> ValueBag.compare v v'
       | VList v, VList v' -> IList.compare compare_v v v'
       | VMap v, VMap v' -> ValueMap.compare compare_v v v'
@@ -122,7 +126,7 @@ and ValueComp : (sig val compare_v : Value.value_t -> Value.value_t -> int
       | VTuple vs       -> col_hash List.fold_left vs
       | VOption(Some v) -> hash v
       | VIndirect v     -> hash !v
-      | VSet v          -> col_hash ISet.fold v
+      | VSet v          -> col_hash ValueSet.fold v
       | VBag v          -> col_hash ValueBag.fold v
       | VList v         -> col_hash IList.fold v
       | VMap v          -> map_hash ValueMap.fold v
@@ -144,7 +148,18 @@ and Value : sig
   (* the global env needs to be separate for closures *)
   and local_env_t = value_t list IdMap.t
   and global_env_t = (value_t ref) IdMap.t
-  and env_t = global_env_t * local_env_t
+  (* trigger env is where we store the trigger functions. These functions take the
+  * address,
+  * scheduler_state (parametrized here to prevent circular inclusion), the
+  * environment, value_t of arguments, and produce unit *)
+  and trigger_env_t = (address -> env_t -> value_t -> unit) IdMap.t
+  (* keep track of what was modified *)
+  and env_t = {
+        triggers: trigger_env_t;
+        globals:  global_env_t;
+        locals:   local_env_t;
+        accessed: StrSet.t ref;
+      }
 
   and value_t
       = VMax
@@ -158,13 +173,13 @@ and Value : sig
       | VString of string
       | VTuple of value_t list
       | VOption of value_t option
-      | VSet of value_t ISet.t
+      | VSet of ValueSet.t
       | VBag of ValueBag.t
       | VList of value_t IList.t
       | VMap of value_t ValueMap.t
       | VMultimap of ValueMMap.t
       | VFunction of arg_t * local_env_t * expr_t (* closure *)
-      | VForeignFunction of arg_t * foreign_func_t
+      | VForeignFunction of id_t * arg_t * foreign_func_t
       | VAddress of address
       | VTarget of id_t
       | VIndirect of value_t ref
@@ -175,10 +190,11 @@ and ValueUtils : (sig val v_to_list : Value.value_t -> Value.value_t list
                       val repr_of_value : Value.value_t -> string
                   end) = struct
   open Value
+
     (* Value stringification *)
     let v_to_list = function
       | VBag m  -> ValueBag.to_list m
-      | VSet m  -> ISet.to_list m
+      | VSet m  -> ValueSet.to_list m
       | VList m -> IList.to_list m
       | VMap vs -> List.map (fun (k,v) -> VTuple[k;v]) @@ ValueMap.to_list vs
       | VMultimap vs -> ValueMMap.to_list vs
@@ -228,7 +244,7 @@ and ValueUtils : (sig val v_to_list : Value.value_t -> Value.value_t list
       | VMap _
       | VMultimap _             -> paren @@ s_of_col v
       | VFunction (a, _, b)     -> paren @@ Printf.sprintf "%s -> %s" (string_of_arg a) (string_of_expr b)
-      | VForeignFunction (a, _) -> paren @@ string_of_arg a
+      | VForeignFunction (i, a, _) -> paren @@ string_of_arg a
       | VAddress (ip, port)     -> paren @@ ip^":"^ string_of_int port
       | VTarget id              -> paren @@ id
       | VIndirect ind           -> paren @@ repr_of_value !ind
@@ -239,12 +255,13 @@ open Value
 
 include ValueUtils
 
-(* trigger env is where we store the trigger functions. These functions take the
- * address,
- * scheduler_state (parametrized here to prevent circular inclusion), the
- * environment, value_t of arguments, and produce unit *)
-type trigger_env_t = (address -> env_t -> value_t -> unit) IdMap.t
-type program_env_t = trigger_env_t * env_t
+  let default_env = {
+    triggers=IdMap.empty;
+    globals=IdMap.empty;
+    locals=IdMap.empty;
+    accessed=ref StrSet.empty;
+  }
+
 
 (* mark_points are optional sorted counts of where we want markings *)
 let rec print_value ?(mark_points=[]) v =
@@ -257,10 +274,12 @@ let rec print_value ?(mark_points=[]) v =
       | xs                    -> xs
     in
     let lazy_value v = lazy(loop v ~mark_points) in
-    let print_collection lb rb vs =
+    let print_collection ?(sort=false) lb rb vs =
+      let sort_fn = if sort then List.sort ValueComp.compare_v else id_fn in
       pretty_tag_str ~lb:lb ~rb:rb ~sep:"; " CutHint "" ""
-        (List.map lazy_value @@ List.sort ValueComp.compare_v @@ ValueUtils.v_to_list vs)
+        (List.map lazy_value @@ sort_fn @@ ValueUtils.v_to_list vs)
     in
+    let sort = true in
     match v with
     | VUnknown                -> ps "??"
     | VMax                    -> ps "VMax"
@@ -277,13 +296,13 @@ let rec print_value ?(mark_points=[]) v =
     | VOption None            -> ps "None"
     | VOption vopt            -> pretty_tag_str CutHint "" "Some"
                                    [lazy_value (unwrap_some vopt)]
-    | VSet _ as vs            -> print_collection "{" "}" vs
-    | VBag _ as vs            -> print_collection "{|" "|}" vs
+    | VSet _ as vs            -> print_collection ~sort "{" "}" vs
+    | VBag _ as vs            -> print_collection ~sort "{|" "|}" vs
     | VList _ as vs           -> print_collection "[" "]" vs
-    | VMap _ as vs            -> print_collection "[|" "|]" vs
-    | VMultimap _ as vs       -> print_collection "[||" "||]" vs
+    | VMap _ as vs            -> print_collection ~sort "[:" ":]" vs
+    | VMultimap _ as vs       -> print_collection ~sort "[|" "|]" vs
     | VFunction _             -> ps "<fun>"
-    | VForeignFunction (a, _) -> ps "<foreignfun>"
+    | VForeignFunction (_, a, _) -> ps "<foreignfun>"
     | VAddress (ip,port)      -> ps (ip^":"^ string_of_int port)
     | VTarget id              -> ps ("<"^id^">")
     | VIndirect ind           -> pretty_tag_str CutHint "" "ind" [lazy_value !ind]
@@ -294,36 +313,54 @@ let string_of_value ?mark_points v = wrap_formatter (fun () -> print_value ?mark
 (* Environment stringification *)
 let print_binding (id,v) = ob(); ps (id^" = "); pc(); print_value v; cb(); fnl()
 
+let map_to_tuple (k,v) = VTuple[k;v]
+let mmap_to_tuple x = VTuple x
+
+let v_peek err_fn c = match c with
+  | VSet m      -> ValueSet.peek m
+  | VBag m      -> ValueBag.peek m
+  | VList m     -> IList.peek m
+  | VMap m      -> maybe None (some |- map_to_tuple) @@ ValueMap.peek m
+  | VMultimap m -> ValueMMap.peek m
+  | v -> err_fn "v_peek" @@ Printf.sprintf "not a collection: %s" @@ string_of_value v
+
 (* for a map structure *)
-let print_binding_m id v = ob(); ps (id^" = "); pc(); print_value v; cb(); fnl()
+let print_binding_m ?(skip_functions=true) ?(skip_empty=true) id v =
+  let dummy x y = None in
+  (* check for conditions *)
+  let rec check_print v' =
+    match v' with
+    | (VFunction _ | VForeignFunction _)                 when skip_functions -> false
+    | (VSet _ | VBag _ | VList _ | VMap _ | VMultimap _) when skip_empty && v_peek dummy v' = None -> false
+    | VIndirect x -> check_print !x
+    | _ -> true
+  in
+  if check_print v then begin ob(); ps (id^" = "); pc(); print_value v; cb(); fnl() end
+  else ()
 
 let print_frame frame = IdMap.iter print_binding_m frame
 
-let print_env skip_functions (globals, frames) =
-  let filter_m e = IdMap.filter
-    (fun _ -> function
-      | VFunction _        -> false
-      | VForeignFunction _ -> false
-      | _                  -> true)
-    e in
-  ps @@ Printf.sprintf "----Globals(%i)----" @@ IdMap.cardinal globals; fnl();
-  let global_m = IdMap.map (!) globals in
-  let global_m' = if not skip_functions then global_m
-                  else filter_m global_m in
-  IdMap.iter print_binding_m global_m'
+let print_env ?skip_functions ?skip_empty ?(accessed_only=true) env =
+  let print id v =
+    let action () = print_binding_m ?skip_functions ?skip_empty id v in
+    if accessed_only then
+      if StrSet.mem id !(env.accessed) then action () else ()
+    else action ()
+  in
+  ps "----Globals----"; fnl();
+  IdMap.iter (fun k v -> print k !v) env.globals;
+  if not @@ IdMap.is_empty env.locals then begin
+      fnl(); ps "----Locals----"; fnl();
+      IdMap.iter (fun k v -> print k @@ hd v) env.locals
+    end;
+  fnl ()
 
 let print_trigger_env env =
-  ps @@ Printf.sprintf "----Triggers(%i)----" @@ IdMap.cardinal env; fnl();
-  IdMap.iter (fun id _ -> ps id; fnl()) env
+  ps @@ Printf.sprintf "----Triggers(%i)----" @@ IdMap.cardinal env.triggers; fnl();
+  IdMap.iter (fun id _ -> ps id; fnl()) env.triggers
 
-let print_program_env (trigger_env, val_env) =
-  (* print_trigger_env trigger_env; *)
-  print_env true val_env
-
-let string_of_env ?(skip_functions=true) (env:env_t) =
-  wrap_formatter (fun () -> print_env skip_functions env)
-
-let string_of_program_env env = wrap_formatter (fun () -> print_program_env env)
+let string_of_env ?skip_functions ?skip_empty ?accessed_only (env:env_t) =
+  wrap_formatter (fun () -> print_env ?skip_functions ?skip_empty ?accessed_only env)
 
 (* conversion of things to values *)
 let value_of_const = function
@@ -351,21 +388,10 @@ let rec value_of_const_expr e = match tag_of_expr e with
 
 (* Global collection functions for values *)
 
-let map_to_tuple (k,v) = VTuple[k;v]
-let mmap_to_tuple x = VTuple x
-
 type 'a t_err_fn = (string -> string -> 'a)
 
-let v_peek err_fn c = match c with
-  | VSet m      -> ISet.peek m
-  | VBag m      -> ValueBag.peek m
-  | VList m     -> IList.peek m
-  | VMap m      -> maybe None (some |- map_to_tuple) @@ ValueMap.peek m
-  | VMultimap m -> ValueMMap.peek m
-  | _ -> err_fn "v_peek" "not a collection"
-
 let v_combine err_fn x y = match x, y with
-  | VSet m,  VSet m'          -> VSet(ISet.combine m m')
+  | VSet m,  VSet m'          -> VSet(ValueSet.combine m m')
   | VBag m,  VBag m'          -> VBag(ValueBag.combine m m')
   | VList m, VList m'         -> VList(IList.combine m m')
   | VMap m,  VMap m'          -> VMap(ValueMap.combine m m')
@@ -373,56 +399,60 @@ let v_combine err_fn x y = match x, y with
   | _ -> err_fn "v_combine" "mismatch in collections"
 
 let v_fold err_fn f acc = function
-  | VSet m      -> ISet.fold f acc m
+  | VSet m      -> ValueSet.fold f acc m
   | VBag m      -> ValueBag.fold f acc m
   | VList m     -> IList.fold f acc m
   | VMap m      -> ValueMap.fold (fun k v acc -> f acc @@ VTuple[k;v]) m acc
   | VMultimap m -> ValueMMap.fold f acc m
-  | _ -> err_fn "v_fold" "not a collection"
+  | v -> err_fn "v_fold" @@ Printf.sprintf "not a collection: %s" @@ string_of_value v
 
 let v_iter err_fn f = function
-  | VSet m      -> ISet.iter f m
+  | VSet m      -> ValueSet.iter f m
   | VBag m      -> ValueBag.iter f m
   | VList m     -> IList.iter f m
   | VMap m      -> ValueMap.iter (fun k v -> f (VTuple[k;v])) m
   | VMultimap m -> ValueMMap.iter f m
-  | _ -> err_fn "v_iter" "not a collection"
+  | v -> err_fn "v_iter" @@ Printf.sprintf "not a collection: %s" @@ string_of_value v
 
 let v_insert err_fn x m = match x, m with
-  | _, VSet m             -> VSet(ISet.insert x m)
+  | _, VSet m             -> VSet(ValueSet.insert x m)
   | _, VBag m             -> VBag(ValueBag.insert x m)
   | _, VList m            -> VList(IList.insert x m)
   | VTuple[k;v], VMap m   -> VMap(ValueMap.add k v m)
   | _, VMultimap m        -> VMultimap(ValueMMap.insert x m)
-  | _ -> err_fn "v_insert" "invalid input"
+  | v, c -> err_fn "v_insert" @@ Printf.sprintf "invalid input: insert: %s\ninto: %s"
+              (string_of_value v) (string_of_value c)
 
 let v_delete err_fn x m = match x, m with
-  | _, VSet m             -> VSet(ISet.delete x m)
+  | _, VSet m             -> VSet(ValueSet.delete x m)
   | _, VBag m             -> VBag(ValueBag.delete x m)
   | _, VList m            -> VList(IList.delete x m)
   | VTuple [k; v], VMap m -> VMap(ValueMap.remove k m)
   | _, VMultimap m        -> VMultimap(ValueMMap.delete x m)
-  | _ -> err_fn "v_delete" "invalid input"
+  | v, c -> err_fn "v_delete" @@ Printf.sprintf "invalid input: delete: %s\nfrom: %s"
+              (string_of_value v) (string_of_value c)
 
 let v_update err_fn oldv newv c = match oldv, newv, c with
-  | _,_,VSet m                         -> VSet(ISet.update oldv newv m)
+  | _,_,VSet m                         -> VSet(ValueSet.update oldv newv m)
   | _,_,VBag m                         -> VBag(ValueBag.update oldv newv m)
   | _,_,VList m                        -> VList(IList.update oldv newv m)
   | VTuple[k;v], VTuple[k';v'], VMap m -> VMap(ValueMap.update k v k' v' m)
   | _,_, VMultimap m                   -> VMultimap(ValueMMap.update oldv newv m)
-  | _ -> err_fn "v_update" "not a collection"
+  | v,v',c -> err_fn "v_update" @@ Printf.sprintf "invalid input: update: %s\nfrom: %s\nin: %s"
+              (string_of_value v) (string_of_value v') (string_of_value c)
 
-let v_empty err_fn ?(no_multimap=false) = function
-  | VSet _      -> VSet(ISet.empty)
+let v_empty err_fn ?(no_map=false) ?(no_multimap=false) = function
+  | VSet _      -> VSet(ValueSet.empty)
   | VBag _      -> VBag(ValueBag.empty)
   | VList _     -> VList(IList.empty)
+  | VMap _      when no_map      -> VBag(ValueBag.empty)
+  | VMultimap _ when no_multimap -> VBag(ValueBag.empty)
   | VMap _      -> VMap(ValueMap.empty)
-  | VMultimap m -> if no_multimap then VBag(ValueBag.empty)
-                   else VMultimap(ValueMMap.from_mmap m)
-  | _ -> err_fn "v_empty" "not a collection"
+  | VMultimap m -> VMultimap(ValueMMap.from_mmap m)
+  | c -> err_fn "v_empty" @@ Printf.sprintf "invalid input: %s" (string_of_value c)
 
 let v_empty_of_t = function
-  | TSet        -> VSet(ISet.empty)
+  | TSet        -> VSet(ValueSet.empty)
   | TBag        -> VBag(ValueBag.empty)
   | TList       -> VList(IList.empty)
   | TMap        -> VMap(ValueMap.empty)
@@ -430,11 +460,20 @@ let v_empty_of_t = function
 
 (* sort only applies to list *)
 let v_sort err_fn f = function
+  | VSet m  -> VList(IList.sort f @@ IList.of_list @@ ValueSet.to_list m)
   | VList m -> VList(IList.sort f m)
   | _ -> err_fn "v_sort" "not a list"
 
+let v_size err_fn = function
+  | VSet m      -> VInt(ValueSet.size m)
+  | VList m     -> VInt(IList.size m)
+  | VMap m      -> VInt(ValueMap.cardinal m)
+  | VBag m      -> VInt(ValueBag.size m)
+  | VMultimap m -> VInt(ValueMMap.size m)
+  | _           -> err_fn "vsize" "not a collection"
+
 let v_singleton err_fn elem c = match elem, c with
-  | _,TSet                   -> VSet(ISet.singleton elem)
+  | _,TSet                   -> VSet(ValueSet.singleton elem)
   | _,TBag                   -> VBag(ValueBag.singleton elem)
   | _,TList                  -> VList(IList.singleton elem)
   | VTuple[k;v], TMap        -> VMap(ValueMap.singleton k v)
@@ -454,7 +493,7 @@ let match_pattern pat_v v =
   | _, _ -> match_or_unknown pat_v v
 
 let v_slice err_fn pat = function
-  | VSet m         -> VSet(ISet.filter (match_pattern pat) m)
+  | VSet m         -> VSet(ValueSet.filter (match_pattern pat) m)
   | VBag m         -> VBag(ValueBag.filter (match_pattern pat) m)
   | VList m        -> VList(IList.filter (match_pattern pat) m)
   | VMap m         -> VMap(ValueMap.filter (fun k v ->

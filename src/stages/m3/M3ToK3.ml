@@ -52,7 +52,7 @@ let mk_k3_collection (base_ivars:K.base_type_t list)
   let ivars = List.map canon base_ivars in
   let ovars = List.map canon base_ovars in
   let v = canon base_v in
-  let wrap = KH.wrap_tbag' in
+  let wrap = KH.wrap_t_of_map' in
   wrap @@
     match ivars, ovars with
     | [], [] -> [v]
@@ -73,8 +73,8 @@ let m3_map_to_k3_map (m3_map: M3.map_t) : K.declaration_t =
         (* initial value *)
         let ivc = if null ivar_types && null ovar_types then
           Some(KH.mk_singleton
-                (KH.wrap_tbag @@ KH.canonical element_type) @@
-                init_val_from_type @@ KH.canonical element_type)
+            (KH.wrap_t_of_map @@ KH.canonical element_type) @@
+              [init_val_from_type @@ KH.canonical element_type])
           else None
         in
         map_name,
@@ -208,11 +208,9 @@ let apply_lambda v_el el body =
   result is wrapped in a Singleton collection. *)
 let apply_lambda_to_expr lambda_e lambda_t expr =
   let _, lambda_body = KU.decompose_lambda lambda_e in
-  let lambda_rett =
-    KH.canonical @@ K.TCollection(K.TBag, KH.canonical lambda_t) in
   match KU.arg_of_lambda lambda_e, KU.tag_of_expr lambda_body with
   | (Some(K.AVar _)), K.Tuple ->
-        KH.mk_singleton lambda_rett @@ KH.mk_apply lambda_e expr
+        KH.mk_singleton (KH.wrap_t_of_map lambda_t) [KH.mk_apply lambda_e expr]
   | (Some(K.AVar _)), _       -> KH.mk_apply lambda_e expr
   | (Some(K.ATuple _)), _     -> KH.mk_map lambda_e expr
   | _ -> error "M3ToK3: Invalid arguments to apply_lambda_to_expr."
@@ -283,17 +281,15 @@ let apply_external_lambda fn in_x_ts out_t =
 let mk_project ?(id="projected_field") width idx ret_t expr =
   let rec build_tuple w =
     if w >= width then []
-    else (
-      if w = idx then K.AVar(id, KH.canonical ret_t)
-                  else K.AIgnored
-    ) :: (build_tuple (w+1))
+    else
+      (if w = idx then id else "_") :: (build_tuple @@ w+1)
   in
-  KH.mk_apply (KH.mk_lambda (K.ATuple(build_tuple 0)) (KH.mk_var id)) expr
+  KH.mk_let (build_tuple 0) expr @@ KH.mk_var id
 
 (* translate a slice using the names of the bound keys and the names
  * of all keys, to figure out which should be 'unknown' *)
 let mk_slice collection all_keys bound_keys =
-  KH.mk_slice' collection @@
+  KH.mk_slice collection @@
     List.map (fun x ->
         if List.mem x bound_keys then KH.mk_var x
         else KH.mk_cunknown)
@@ -314,7 +310,7 @@ let mk_lookup collection bag_t keys key_types =
         (KH.mk_var "unwrapped_value")
 
 let mk_test_member collection keys key_types val_type =
-  KH.mk_has_member' collection
+  KH.mk_has_member collection
     (KH.ids_to_vars @@ keys @ ["_"])
     (KH.wrap_ttuple_mut (key_types @ [val_type]))
 
@@ -324,23 +320,22 @@ let mk_tuple_arg keys keys_tl v vt = K.ATuple(List.map2 mk_arg keys keys_tl @ [m
 
 let mk_lambda keys keys_tl v vt body = KH.mk_lambda (mk_tuple_arg keys keys_tl v vt) body;;
 
-let mk_var_tuple keys v = KH.mk_tuple @@ KH.ids_to_vars (keys@[v])
+let mk_var_tuple keys v = KH.ids_to_vars (keys@[v])
 
-let mk_val_tuple keys v = KH.mk_tuple @@ (KH.ids_to_vars keys)@[v]
+let mk_val_tuple keys v = (KH.ids_to_vars keys)@[v]
 
 let mk_update col bag_t ivars ivar_t ovars ovar_t new_val =
 (* new_val might (and in fact, usually will) depend on the col, so
     we need to evaluate it and save it to a variable before clearing the
     existing elements out of the col *)
-  let colv = KH.mk_var col in
   let new_val_var = KH.mk_var "update_value" in
   let update_block = match ivars, ovars with
     | [], [] ->
         KH.mk_block [
           KH.mk_iter
             (KH.mk_lambda (mk_arg "value" bag_t) @@
-              KH.mk_delete col @@ KH.mk_var "value") @@
-            KH.mk_slice colv (KH.mk_tuple [KH.mk_cunknown]);
+              KH.mk_delete col [KH.mk_var "value"]) @@
+            KH.mk_slice' col [KH.mk_cunknown];
           KH.mk_insert col (mk_val_tuple [] new_val_var)
         ]
     | [], _  ->
@@ -348,7 +343,7 @@ let mk_update col bag_t ivars ivar_t ovars ovar_t new_val =
           KH.mk_iter
             (mk_lambda ovars ovar_t "value" bag_t @@
               KH.mk_delete col (mk_var_tuple ovars "value")) @@
-            mk_slice colv ovars ovars;
+            mk_slice (KH.mk_var col) ovars ovars;
           KH.mk_insert col (mk_val_tuple ovars new_val_var)
         ]
     | _, []  ->
@@ -356,7 +351,7 @@ let mk_update col bag_t ivars ivar_t ovars ovar_t new_val =
           KH.mk_iter
             (mk_lambda ivars ivar_t "value" bag_t @@
               KH.mk_delete col (mk_var_tuple ivars "value")) @@
-            mk_slice colv ivars ivars;
+            mk_slice (KH.mk_var col) ivars ivars;
           KH.mk_insert col (mk_val_tuple ivars new_val_var)
         ]
     | _      -> failwith "FullPC unsupported"
@@ -883,7 +878,7 @@ let rec calc_to_k3_expr meta ?(generate_init = false) theta_vars_k calc :
               (lift_outs_el @ [KU.id_of_var @@ fst lift_ret_ve, snd lift_ret_ve])
               lift_body
           in
-          let expr = apply_lambda_to_expr lift_lambda K.TInt lift_e
+          let expr = apply_lambda_to_expr lift_lambda KH.t_int lift_e
           in
           (lift_outs_el @ extra_ve, (ret_ve, KH.t_int), expr), nm
 
@@ -908,7 +903,7 @@ let rec calc_to_k3_expr meta ?(generate_init = false) theta_vars_k calc :
                   [KU.id_of_var @@ fst exists_ret_ve, snd exists_ret_ve])
               exists_body
           in
-          let expr = apply_lambda_to_expr exists_lambda K.TInt exists_e in
+          let expr = apply_lambda_to_expr exists_lambda KH.t_int exists_e in
           (exists_outs_el, (ret_ve, KH.t_int), expr), nm
 
         (***** END EXISTS HACK *****)
@@ -1248,8 +1243,7 @@ let m3_stmt_to_k3_stmt (meta: meta_t) ?(generate_init = false)
                                      (List.map KH.canonical lhs_outs_kt))@
                        [KU.id_of_var rhs_ret_ve, rhs_ret_vt])
                       (KH.mk_delete mapn
-                                    (KH.mk_tuple (lhs_outs_el@
-                                                  [rhs_ret_ve]))))
+                                    (lhs_outs_el@ [rhs_ret_ve])))
               old_slice;
            update_body
          ]
@@ -1259,12 +1253,12 @@ let m3_stmt_to_k3_stmt (meta: meta_t) ?(generate_init = false)
    (* of the input variables of the lhs collection, and for each of them *)
    (* we update the corresponding output tier. *)
    let statement_expr =
-     let args = 
+     let args =
        (list_zip (List.map KU.id_of_var lhs_ins_el) @@ List.map KH.canonical lhs_ins_kt)@
          [KU.id_of_var existing_out_tier, out_tier_t]
      in
      match lhs_ins_el with
-     | [] -> KH.mk_let (fst_many args) lhs_collection coll_update_expr 
+     | [] -> KH.mk_let (fst_many args) lhs_collection coll_update_expr
      | _  -> KH.mk_iter (KH.mk_lambda' args coll_update_expr) lhs_collection
    in
    statement_expr, nm
@@ -1326,17 +1320,13 @@ let csv_adaptor_to_k3 (name_prefix: string)
       (if with_deletions then (del_var, T.TInt) :: relv else relv)
   in
   let child_params =
-    KH.mk_tuple
-      (List.map (fun (vn, vt) ->
-        match vt with
-          | T.TDate -> KH.mk_apply (KH.mk_var "parse_sql_date") (KH.mk_var vn)
-          | _ -> (KH.mk_var vn)
-      ) relv)
+    List.map (fun (vn, vt) -> match vt with
+      | T.TDate -> KH.mk_apply (KH.mk_var "parse_sql_date") @@ KH.mk_var vn
+      | _       -> KH.mk_var vn
+    ) relv
   in
   let send_to_event evt =
-    KH.mk_send (KH.mk_const (K.CTarget(Schema.name_of_event evt)))
-               (KH.mk_var "me")
-               (child_params)
+    KH.mk_send (Schema.name_of_event evt) (KH.mk_var "me") child_params
   in
   let k3_code =
     if with_deletions then
@@ -1472,7 +1462,7 @@ let m3_to_k3 ?(generate_init = false) ?(role = "client")
                   mk_map
                     (mk_lambda' id_ts @@
                       mk_tuple @@ vars@[mk_cint 1])
-                  (mk_apply (mk_var "load_csv_bag") @@ mk_cstring f))
+                  (mk_apply (mk_var "load_csv_set") @@ mk_cstring f))
 
             | _ -> failwith "Table relations that aren't filesources are unsuppored"
             end

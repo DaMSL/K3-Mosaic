@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 #
 # Unit test k3-mosaic execution.
@@ -10,7 +10,6 @@
 import argparse
 import os
 import sys
-import six
 
 import dist_test
 
@@ -30,12 +29,6 @@ def run():
                         default=False, help="Distributed test")
     parser.add_argument('-n', '--nodes', action='store', type=int, dest='num_nodes',
                         default=1, help="Number of data nodes")
-    parser.add_argument('-q', '--queue', action='store', dest='queue_type',
-                        default="global", help="Queue type: global/trigger/node")
-    parser.add_argument('-r', '--force', action='store', dest='force_correctives',
-                        default=False, help="Force correctives")
-    parser.add_argument('-x', '--shuffle', action='store', dest='shuffle',
-                        default=False, help="Shuffle the queues")
     parser.add_argument('-o', '--order', action='store', dest='order_file',
                         default=None, help="Use an order file instead of creating a trace")
     parser.add_argument('-v', '--verbose', action='store_true', dest='verbose',
@@ -44,6 +37,12 @@ def run():
                         default=False, help="Use multi index maps")
     parser.add_argument('--gc', action='store_true', dest='enable_gc',
                         default=False, help="Enable garbage collector")
+    parser.add_argument('--no_new', action='store_false', dest='new_k3',
+                        default=True, help="Create k3new file")
+    parser.add_argument('--no-deletes', action='store_false', dest='gen_deletes',
+                        default=True, help="Create delete triggers")
+    parser.add_argument('--no-correctives', action='store_false', dest='gen_correctives',
+                        default=True, help="Create corrective triggers")
 
     args = parser.parse_args()
 
@@ -78,34 +77,35 @@ def run():
     verbose = args.verbose or len(test_list) == 1
     # run either one test or many tests
     for index, test_file in enumerate(test_list):
-        six.print_("[{0}] Testing {1}... ".format(index, test_file), end="")
+        print("[{0}] Testing {1}... ".format(index, test_file), end="")
         if verbose:
-            six.print_("")
+            print("")
         if not args.distributed:
-            res = dist_test.run(test_file, verbose=verbose, distrib=False) 
+            res = dist_test.run(test_file, verbose=verbose, distrib=False)
         else:
             res = dist_test.run(test_file,
                                 num_nodes=args.num_nodes,
-                                queue_type=args.queue_type,
-                                do_shuffle=args.shuffle,
-                                force_correctives=args.force_correctives,
                                 order_file=args.order_file,
                                 verbose=verbose,
                                 distrib=True,
                                 use_idx=args.use_idx,
-                                enable_gc=args.enable_gc)
+                                enable_gc=args.enable_gc,
+                                new_k3=args.new_k3,
+                                gen_deletes=args.gen_deletes,
+                                gen_correctives=args.gen_correctives
+                                )
         # check if a test failed
         if not res:
-            six.print_("[ERROR]")
+            print("[ERROR]")
             failed += 1
         else:
-            six.print_("[PASSED]")
+            print("[PASSED]")
 
     if failed > 0:
-        six.print_("Failed {0}/{1} tests".format(failed, len(test_list)))
+        print("Failed {0}/{1} tests".format(failed, len(test_list)))
         sys.exit(1)
     else:
-        six.print_("Passed {0} test(s)".format(len(test_list)))
+        print("Passed {0} test(s)".format(len(test_list)))
 
 if __name__ == '__main__':
     run()

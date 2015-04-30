@@ -48,24 +48,24 @@ rule tokenize = parse
     | sl_comment    { tokenize lexbuf }
     | ml_comment_st { comment 1 lexbuf }
 
-    | "expected" { EXPECTED }
-    | "network"  { NETWORK }
+    | "sexpected" { EXPECTED }
+    | "snetwork"  { NETWORK }
 
     | "declare"  { DECLARE }
     | "foreign"  { FOREIGN }
     | "trigger"  { TRIGGER }
-    | "role"     { ROLE }
-    | "default"  { DEFAULT }
+    | "srole"    { ROLE }
+    | "sdefault" { DEFAULT }
 
-    | "source"   { SOURCE }
-    | "sink"     { SINK }
-    | "file"     { FILE }
+    | "ssource"   { SOURCE }
+    | "ssink"     { SINK }
+    | "sfile"     { FILE }
     | "socket"   { SOCKET }
-    | "random"   { RANDOM }
+    | "srandom"  { RANDOM }
     | "stream"   { STREAM }
-    | "bindflow"     { BINDFLOW }
-    | "pattern"  { PATTERN }
-    | "consume"  { CONSUME }
+    | "bindflow" { BINDFLOW }
+    | "spattern"  { PATTERN }
+    | "sconsume"  { CONSUME }
 
     | "()"      { UNIT }
     | '_'       { UNKNOWN }
@@ -121,7 +121,6 @@ rule tokenize = parse
     | "->"  { RARROW }
     | "<-"  { LARROW }
     | "<->" { LRARROW }
-    | "=>"  { RASSOC }
     | ':'   { COLON }
     | '\\'  { BACKSLASH }
 
@@ -157,6 +156,7 @@ rule tokenize = parse
     | "fold"      { AGGREGATE }
     | "groupby"   { GROUPBYAGGREGATE }
     | "sort"      { SORT }
+    | "csize"     { SIZE }
 
     | "peek" { PEEK }
 

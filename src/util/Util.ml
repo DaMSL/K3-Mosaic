@@ -3,6 +3,8 @@
 let _ = Random.self_init ()
 
 module IntSet = Set.Make(struct type t = int let compare = (-) end)
+module StrSet = Set.Make(struct type t = string let compare = String.compare end)
+module IntIntSet = Set.Make(struct type t = int * int let compare = compare end)
 module IntMap = Map.Make(struct type t = int let compare = (-) end)
 module StrMap = Map.Make(struct type t = string let compare = String.compare end)
 
@@ -148,6 +150,11 @@ let list_replace r r' l =
     | x::xs -> loop (x::acc) xs
     | []    -> List.rev acc
   in loop [] l
+
+let list_replace_i n r l =
+  (* handle negative lengths *)
+  let n' = if n < 0 then List.length l + n else n in
+  List.mapi (fun i x -> if i=n' then r else x) l
 
 let list_modify n f l =
   let rec loop i acc = function
@@ -417,6 +424,8 @@ let is_some = function None -> false | Some _ -> true
 (* unwrap a some. Fail if not a Some *)
 let unwrap_some = function None -> failwith "Not a Some" | Some x -> x
 
+let unwrap_option def = function None -> def | Some x -> x
+
 let maybe def f = function None -> def | Some x -> f x
 
 let maybe_f def f = function None -> def () | Some x -> f x
@@ -530,6 +539,12 @@ let hashtbl_combine h h' combine_fn =
       Hashtbl.add h k v'
   ) h'
 
+let list_of_hashtbl h = Hashtbl.fold (fun k v acc -> (k,v)::acc) h []
+
+let hashtbl_of_list l =
+  let h = Hashtbl.create 10 in
+  List.iter (fun (k,v) -> Hashtbl.add h k v) l;
+  h
 
 let intset_of_list l =
   List.fold_left (fun acc x -> IntSet.add x acc) IntSet.empty l

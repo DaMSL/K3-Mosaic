@@ -6,6 +6,7 @@ open K3Dist
 module U = K3Util
 module P = ProgInfo
 module PR = K3Printing
+module D = K3Dist
 
 exception InvalidAst of string
 
@@ -82,13 +83,13 @@ let map_indices_add_vid idxs =
 (* TODO: add index for future, and for pinpoint access *)
 
 (* convert to a per-mapid representation *)
-let get_map_access_patterns_ids c ast =
+let get_map_access_patterns_ids p ast =
   let pats = get_map_access_patterns ast in
   let pats = StrMap.fold (fun nm v acc ->
-      IntMap.add (ProgInfo.map_id_of_name c.p nm) v acc)
+      IntMap.add (ProgInfo.map_id_of_name p nm) v acc)
     pats IntMap.empty in
   (* add in the patterns for singletons *)
-  let map_types = P.for_all_maps c.p (fun id -> id, P.map_types_for c.p id) in
+  let map_types = P.for_all_maps p (fun id -> id, P.map_types_for p id) in
   let singleton_maps = List.filter (function (_,[_]) -> true | _ -> false) map_types in
   let pats = List.fold_left (fun acc (id,_) ->
                IntMap.add id (IndexSet.singleton @@ OrdIdx([],IntSet.empty)) acc)
@@ -101,15 +102,15 @@ let get_map_access_patterns_ids c ast =
 (* inserts a reference to the default vid var for that node *)
 let rec add_vid_to_init_val types e =
   let add = add_vid_to_init_val types in
-  let vid_var = mk_var init_vid.id in
+  let vid_var = mk_var g_init_vid.id in
   match U.tag_of_expr e with
   | Combine -> let x, y = U.decompose_combine e in
       mk_combine (add x) (add y)
   | Empty t -> mk_empty types
   | Singleton t -> let x = U.decompose_singleton e in
-      mk_singleton types (add x)
+      mk_singleton types [add x]
   | Tuple -> let xs = U.decompose_tuple e in
-      mk_tuple (P.map_add_v vid_var xs)
+      mk_tuple @@ P.map_add_v vid_var xs
   (* this should only be encountered if there's no tuple *)
   | Const _ | Var _ -> mk_tuple @@ P.map_add_v vid_var [e]
   | _ -> failwith "add_vid_to_init_val: unhandled modification"
@@ -155,9 +156,10 @@ let block_nth exp i = match U.tag_of_expr exp with
 (* return the AST for a given stmt *)
 let ast_for_s_t c ast (stmt:P.stmt_id_t) (trig:P.trig_name_t) =
   let trig_decl = U.trigger_of_program trig ast in
-  let trig_ast = U.expr_of_code trig_decl in
-  let s_idx = stmt_idx_in_t c trig stmt in
-  block_nth trig_ast s_idx
+  let args      = U.args_of_code trig_decl in
+  let trig_ast  = U.expr_of_code trig_decl in
+  let s_idx     = stmt_idx_in_t c trig stmt in
+  args, block_nth trig_ast s_idx
 
 let ast_for_s c ast (stmt:P.stmt_id_t) =
   let trig = P.trigger_of_stmt c.p stmt in
@@ -190,6 +192,7 @@ let corr_ast_for_m_s c ast map stmt trig =
 exception UnhandledModification of string
 
 (* modify a lambda to have a vid included in its arguments *)
+(* TODO: add support for LET *)
 let add_vid_to_lambda_args lambda =
   let vid_avar = AVar("vid", t_vid) in
   let args, body = U.decompose_lambda lambda in
@@ -224,7 +227,7 @@ let modify_map_add_vid (c:config) ast stmt =
   let var_vid    = mk_var "vid" in
   (* add a vid to a tuple *)
   let modify_tuple e =
-    mk_tuple @@ P.map_add_v var_vid @@ U.extract_if_tuple e
+    P.map_add_v var_vid @@ U.extract_if_tuple e
   in
   (* Sometimes we only find out that a node needs to have a vid from a higher
    * vid in the tree, and we need to add it top-down. The main use for this
@@ -238,16 +241,15 @@ let modify_map_add_vid (c:config) ast stmt =
         let _, body = U.decompose_lambda e in
         mk_lambda args @@ add_vid_from_above body
     | Map -> let lambda, col = U.decompose_map e in
-        mk_map
-          (add_vid_from_above lambda) col
+        mk_map (add_vid_from_above lambda) col
     | Combine -> let x, y = U.decompose_combine e in
         mk_combine (add_vid_from_above x) (add_vid_from_above y)
     | Singleton t -> let x = U.decompose_singleton e in
-        mk_singleton t @@ add_vid_from_above x
+        mk_singleton t [add_vid_from_above x]
     | Apply -> (* this should be a let *)
         let lambda, input = U.decompose_apply e in
         mk_apply (add_vid_from_above lambda) input
-    | _ -> modify_tuple e
+    | _ -> mk_tuple @@ modify_tuple e
     (* TODO: handle combining more variables *)
   in
   (* modify a direct map read, such as in a slice or a peek. col is the
@@ -283,7 +285,7 @@ let modify_map_add_vid (c:config) ast stmt =
     (* a lambda simply passes through a message *)
     | Lambda _ -> get_msg 0, e
 
-    | Insert _ -> let (col, elem) = U.decompose_insert e in
+    | Insert _ -> let col, elem = U.decompose_insert e in
         NopMsg, mk_insert col @@ modify_tuple elem
 
     (* deletes need to be removed, since we have versioning ie. we don't delete
@@ -346,10 +348,10 @@ let modify_map_add_vid (c:config) ast stmt =
     | Var name when List.mem name map_names -> AddVidMsg, e
 
     (* if any statements in a block requested deletion, delete
-     * those statements *)
+     * those statements - they're not relevant *)
     | Block -> let ss = U.decompose_block e in
       let s_msg = list_zip ss msgs in
-      let ss' = fst @@ List.split @@
+      let ss' = fst_many @@
         List.filter (fun (_, msg) -> msg <> DelMsg) s_msg in
       NopMsg, mk_block ss'
 
@@ -368,14 +370,12 @@ let modify_map_add_vid (c:config) ast stmt =
 
 (* this delta extraction is very brittle, since it's tailored to the way the M3
  * to K3 calculations are written. *)
-let delta_action c ast stmt m_target_trigger ~corrective =
+let delta_action c ast stmt after_fn =
   let lmap = P.lhs_map_of_stmt c.p stmt in
-  let lmap_types = P.map_types_with_v_for c.p lmap in
-  let lmap_type = wrap_t_of_map @@ wrap_ttuple lmap_types in
+  let lmap_id_t = P.map_ids_types_for c.p lmap in
+  let lmap_col_t = wrap_t_of_map @@ wrap_ttuple @@ snd_many lmap_id_t in
   (* we need to know how the map is accessed in the statement. *)
   let lmap_bindings = P.find_lmap_bindings_in_stmt c.p stmt lmap in
-  let lmap_bind_ids_v = P.map_ids_add_v @@ fst_many lmap_bindings
-  in
   (* let existing_out_tier = ..., which we remove *)
   let id, bound, expr = U.decompose_let ast in
   if id <> ["existing_out_tier"] then failwith "sanity check fail: expected existing_out_tier" else
@@ -384,94 +384,84 @@ let delta_action c ast stmt m_target_trigger ~corrective =
     (* simple modification - sending a single tuple of data *)
     (* this is something like prod_ret_x's let *)
       let delta_names, bound, expr = U.decompose_let expr in
-      let full_names = lmap_bind_ids_v @ delta_names in
-      let full_vars =
-          P.map_add_v (mk_var "vid") @@
-            [mk_singleton lmap_type @@ mk_tuple @@ ids_to_vars full_names]
-      in
+      let full_names = fst_many lmap_bindings @ delta_names in
+      let lmap_v_col_t = wrap_t_of_map @@ wrap_ttuple @@ P.map_types_with_v_for c.p lmap in
+      let full_vars = mk_singleton lmap_v_col_t @@ ids_to_vars full_names in
       (* modify the delta itself *)
       mk_let delta_names
-        bound @@ (* contains original calculation code *)
-        mk_block @@
-          [ (* we add the delta to all following vids,
-              * and we send it for correctives *)
-            mk_apply
-            (mk_var @@ add_delta_to_map c lmap) @@
-              (* create a single tuple to send *)
-              mk_tuple @@
-                (mk_var @@ P.map_name_of c.p lmap)::
-                mk_cbool (if corrective then true else false)::full_vars]
-            @
-            (* do we need to send to another trigger *)
-            begin match m_target_trigger with
-            | None   -> []
-            | Some t ->
-              [mk_send
-                (mk_ctarget t)
-                K3Global.me_var @@
-                mk_tuple @@ full_vars]
-            end
+        (* contains original computation code *)
+        bound @@ after_fn full_vars
 
   | Iterate -> (* more complex modification *)
-    (* col2 contains the calculation code, lambda2 is the delta addition *)
-    let lambda2, col2 = U.decompose_iterate expr in
-    let params2, _ = U.decompose_lambda lambda2 in
-    let delta_name = "__delta_values__" in
-    let delta_v_name = "__delta_with_vid__" in
-    let delta_ids_types = U.typed_vars_of_arg params2 in
-    let delta_ids = fst_many delta_ids_types in
-    let delta_last_id = hd @@ list_take_end 1 delta_ids in
-    let slice_ids_types = types_to_ids_types "sl" lmap_types in
-    let slice_vars = ids_to_vars @@ fst_many slice_ids_types in
+    (* col contains the calculation code, lambda is the delta addition *)
+    let lambda, col = U.decompose_iterate expr in
+    (* we need to handle the possibility of having narrow tuples. we take our info from the insert
+     * iteration, comparing the iterate lambda args and the insert statement *)
+    let lam_id_t = U.typed_vars_of_lambda lambda in
+    let lam_id = fst_many lam_id_t in
+    let lmap_name = P.map_name_of c.p lmap in
+    (* lambda to find the insert ids *)
+    let find_insert_vars acc x =
+      if acc <> [] then acc else
+      try
+        let id, y = U.decompose_insert x in
+        if id <> lmap_name then acc else
+        vars_to_ids @@ U.decompose_tuple y
+      with Failure _ -> acc in
+    (* get all ids from insert expression *)
+    let insert_ids = Tree.fold_tree_th_bu find_insert_vars [] lambda in
+    if null insert_ids then
+      failwith "modifyast: Failed to find ids in insert expression" else
+    let wrap_map =
+      (* drop the vid and value *)
+      let common_ids = list_drop 1 @@ list_drop_end 1 insert_ids in
+      if not @@ ListAsSet.seteq common_ids lam_id then
+        (* wrap with a map that restores the value name *)
+        let ids = common_ids @ list_take_end 1 lam_id in
+        mk_map
+          (mk_lambda' lam_id_t @@ mk_tuple @@ ids_to_vars ids)
+      else id_fn (* no need to wrap *)
+    in
+    (* if we have a concat operation, we need to enforce uniqueness with addition for the same key *)
+    let has_concat =
+      let find_concat found x =
+        if found || U.tag_of_expr x = Combine then true else false in
+      Tree.fold_tree_th_bu find_concat false expr in
+    (* this wrapper is either a conversion to the outside or a uniqueness operation *)
+    let wrap_out col_e =
+      let wrap_uniq col_e =
+        let last_id, last_t = list_last lmap_id_t in
+        let lmap_t_no_val = P.map_types_no_val_for c.p lmap in
+        let subscript_rng = create_range 1 @@ List.length lmap_t_no_val in
+        let subs = List.map (flip mk_subscript @@ mk_var "g") subscript_rng in
+        (* convert the gbagg to a set *)
+        mk_agg
+          (mk_assoc_lambda' ["acc", lmap_col_t] ["g", wrap_ttuple lmap_t_no_val; "val", last_t] @@
+            mk_block [
+              (* combine the tuple with val *)
+              mk_insert "acc" @@ subs @ [mk_var "val"];
+              mk_var "acc" ])
+          (mk_empty lmap_col_t) @@
+          (* group for uniqueness *)
+          mk_gbagg
+            (* group by key *)
+            (mk_lambda' lmap_id_t @@
+              mk_tuple @@ ids_to_vars @@ fst_many @@ list_drop_end 1 lmap_id_t)
+            (* add is our combination operator *)
+            (mk_assoc_lambda' ["acc", last_t] lmap_id_t @@
+              mk_add (mk_var "acc") @@ mk_var @@ last_id)
+            (mk_cint 0)
+            col_e
+      in
+      (* we need to convert the bags to the external type *)
+      let wrap_convert col_e = mk_convert_col (wrap_tbag' @@ snd_many lmap_id_t) lmap_col_t col_e in
+      if has_concat then wrap_uniq col_e else wrap_convert col_e
+    in
+    let delta_name = "delta_values" in
     (* col2 contains the calculation code *)
-    mk_let [delta_name] col2 @@
-    (* project vid into collection, adding any repeat values along the way *)
-    mk_let [delta_v_name]
-      (mk_agg
-        (mk_assoc_lambda'
-          ["acc", lmap_type]
-          delta_ids_types @@
-            mk_let ["slice"]
-            (mk_slice
-              (mk_var "acc") @@
-              mk_tuple @@ (ids_to_vars @@ lmap_bind_ids_v) @ [mk_cunknown]) @@
-            mk_case_ns (mk_peek @@ mk_var "slice") "slice_d"
-              (* if we don't have this value, just insert *)
-              (mk_block [
-                mk_insert "acc" @@
-                  mk_tuple @@ ids_to_vars @@ lmap_bind_ids_v@[delta_last_id];
-                mk_var "acc"])
-              (* otherwise add *)
-              (mk_block [
-                mk_let
-                  (fst_many slice_ids_types)
-                  (mk_var "slice_d") @@
-                mk_update "acc"
-                  (mk_tuple slice_vars) @@
-                  mk_tuple @@ list_drop_end 1 slice_vars @
-                    [mk_add
-                      (list_last slice_vars) @@
-                      mk_var delta_last_id];
-                mk_var "acc"]))
-        (mk_empty lmap_type) @@
-        mk_var delta_name) @@
-    mk_block @@
-      (* add delta values to all following vids *)
-      [mk_apply
-        (mk_var @@ add_delta_to_map c lmap) @@
-        mk_tuple @@
-          (mk_var @@ P.map_name_of c.p lmap)::
-            mk_cbool (if corrective then true else false)::
-            [mk_var "vid"; mk_var delta_v_name]]
-      @
-      begin match m_target_trigger with
-      | None -> []
-      | Some t ->
-        [mk_send (* send to a (corrective) target *)
-          (mk_ctarget t)
-          K3Global.me_var @@
-          mk_tuple [mk_var "vid"; mk_var delta_v_name]]
-      end
+    mk_let [delta_name] (wrap_out @@ wrap_map col) @@
+      (* any function *)
+      after_fn (mk_var delta_name)
 
   | _ -> raise @@ UnhandledModification(
      Printf.sprintf "Bad tag [%d]: %s" (U.id_of_expr expr) @@ PR.string_of_expr expr)
@@ -484,14 +474,14 @@ let rename_var old_var_name new_var_name ast =
     | _ -> e
 
 (* return a modified version of the original ast for stmt s *)
-let modify_ast_for_s (c:config) ast stmt trig send_to_trig =
-  let ast = ast_for_s_t c ast stmt trig in
+let modify_ast_for_s (c:config) ast stmt trig after_fn =
+  let _, ast = ast_for_s_t c ast stmt trig in
   let ast = modify_map_add_vid c ast stmt in
-  let ast = delta_action c ast stmt send_to_trig ~corrective:false in
+  let ast = delta_action c ast stmt after_fn in
   ast
 
 (* return a modified version of the corrective update *)
-let modify_corr_ast c ast map stmt trig send_to_trig =
+let modify_corr_ast c ast map stmt trig after_fn =
   let args, corr_stmt, ast = corr_ast_for_m_s c ast map stmt trig in
   let ast = modify_map_add_vid c ast stmt in
-  args, delta_action c ast corr_stmt send_to_trig ~corrective:true
+  args, delta_action c ast corr_stmt after_fn

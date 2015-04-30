@@ -133,15 +133,26 @@ let decompose_sliceidx e = match tag_of_expr e, sub_tree e with
   SliceIdx _, [e0; e1] -> e0, e1 | _ -> failwith "not a Slice"
 let decompose_sort e = match tag_of_expr e, sub_tree e with
   Sort, [e0; e1] -> e0, e1 | _ -> failwith "not a Sort"
+let decompose_size e = match tag_of_expr e, sub_tree e with
+  Size, [e0] -> e0 | _ -> failwith "not a Size"
 let decompose_subscript e = match tag_of_expr e, sub_tree e with
   Subscript i, [e0] -> i, e0 | _ -> failwith "not a subscript"
 let decompose_tuple e = match tag_of_expr e with
   Tuple -> sub_tree e  | _ -> failwith "not a Tuple"
 let decompose_update e = match tag_of_expr e, sub_tree e with
   Update x, [e0; e1] -> x, e0, e1 | _ -> failwith "not an Update"
+let decompose_var e = match tag_of_expr e with
+  Var id -> id | _ -> failwith "not a Var"
 
 let decompose_role (d,_) = match d with
   Role (id, fp) -> (id, fp) | _ -> failwith "not a role"
+let decompose_trig (t,_) = match t with
+  | Sink(Code(id, args, _, expr)) -> id, args, expr
+  | _ -> failwith "not a trigger"
+let decompose_global_fn (g,_) = match g with
+  | Global(id, t, Some e) -> id, t, e
+  | _ -> failwith "not a global fn"
+  
 
 (* decompose if we have a tuple, otherwise return e *)
 let extract_if_tuple e = try decompose_tuple e with Failure _ -> [e]
@@ -330,10 +341,10 @@ let renumber_test_program_ids ?(start=0) test_p =
       | FileExpr _ ->
           let n, e' = renumber_expr_ids ~start:num e in
           n, (e', check_e)
-      | InlineExpr e2 ->
+      | InlineExpr (nm, e2) ->
           let n, e'  = renumber_expr_ids ~start:num e in
           let n, e2' = renumber_expr_ids ~start:n e2 in
-          n, (e', InlineExpr e2')
+          n, (e', InlineExpr(nm, e2'))
     ) start_num l
   in
   let proc p testl =

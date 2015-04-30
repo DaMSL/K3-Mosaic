@@ -2,7 +2,6 @@
 ../external/dbtoaster/examples/queries/simple/r_bigsumstar.sql
 ../external/dbtoaster/examples/queries/simple/r_btimesacorrelated.sql
 ../external/dbtoaster/examples/queries/simple/r_count.sql
-../external/dbtoaster/examples/queries/simple/r_deepscoping.sql
 ../external/dbtoaster/examples/queries/simple/r_gbasumb.sql
 ../external/dbtoaster/examples/queries/simple/r_impossibleineq.sql
 ../external/dbtoaster/examples/queries/simple/r_ineqandeq.sql

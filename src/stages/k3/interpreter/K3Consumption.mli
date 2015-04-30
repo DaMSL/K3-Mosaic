@@ -4,6 +4,8 @@ open K3Values
 open K3Streams
 open K3Streams.ResourceFSM
 
+type dispatcher_t
+
 type channel_impl_t =
   | In  of in_channel option
   | Out of out_channel option
@@ -12,16 +14,16 @@ type channel_impl_t =
 
 type resource_impl_env_t = (id_t * channel_impl_t) list
 
-val run_dispatcher :
-  K3Runtime.scheduler_state -> address
-  -> resource_env_t -> resource_impl_env_t -> dispatcher_t
-  -> resource_impl_env_t
+val def_dispatcher : dispatcher_t
 
-(* TODO:
-val initialize_demultiplexer :
-  resource_env_t -> resource_demultiplexer -> resource_impl_env_t
+val is_running : dispatcher_t -> bool
 
-val run_demultiplexer :
-  resource_demultiplexer -> state_id option -> id_t -> value_t
-  -> value_t option * state_id option * id_t list
-*)
+val init_dispatcher : resource_env_t -> dispatcher_t -> fsm_t -> dispatcher_t
+
+val run_step :
+  (resource_bindings_t -> input -> K3Values.Value.value_t list -> 'a)
+  -> dispatcher_t
+  -> resource_env_t
+  -> fsm_t
+  -> bool
+

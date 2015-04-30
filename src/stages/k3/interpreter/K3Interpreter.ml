@@ -13,15 +13,21 @@ open K3Consumption
 open K3Runtime
 
 module KP = K3Printing
+module R = K3Runtime
+module C = K3Consumption
+module SR = K3Streams.ResourceFSM
+module D = K3Dist
 
 (* Generic helpers *)
 
 (* set to true to debug *)
+let sp = Printf.sprintf
+
 let debug = ref false
 let debug_env = ref false
-
-type breakpoint_t = K3Runtime.breakpoint_t
-let sp = Printf.sprintf
+(* debug *)
+let num_iters = 100000
+let iters = ref 0
 
 (* Prettified error handling *)
 let int_erroru uuid ?extra fn_name s =
@@ -31,7 +37,7 @@ let int_erroru uuid ?extra fn_name s =
   (match extra with
   | Some (address, env) ->
     Log.log (sp ">>>> Peer %s\n" @@ string_of_address address) `Error;
-    Log.log (sp "%s\n" @@ string_of_env env) `Error
+    Log.log (sp "%s\n" @@ string_of_env ~skip_empty:false ~accessed_only:false env) `Error
   | _ -> ());
   raise @@ RuntimeError(uuid, msg)
 
@@ -39,21 +45,23 @@ let int_error = int_erroru (-1)
 
 (* Environment helpers *)
 
-let lookup id (mutable_env, frame_env) =
+let lookup id env =
   try
-    VTemp(hd @@ IdMap.find id frame_env)
+    VTemp(hd @@ IdMap.find id env.locals)
   with Not_found ->
-    VDeclared(IdMap.find id mutable_env)
+    (env.accessed) := StrSet.add id !(env.accessed);
+    VDeclared(IdMap.find id env.globals)
 
-let env_modify id (env:env_t) f =
+let env_modify id env f =
   try
-    begin match IdMap.find id @@ snd env with
-    | v::vs -> second (IdMap.add id @@ f v::vs) env
+    begin match IdMap.find id env.locals with
+    | v::vs -> {env with locals=IdMap.add id (f v::vs) env.locals}
     | []    -> failwith "unexpected"
     end
     with Not_found -> (* look in globals *)
       try
-        let rv = IdMap.find id @@ fst env in
+        let rv = IdMap.find id env.globals in
+        (env.accessed) := StrSet.add id !(env.accessed);
         rv := f !rv;
         env
       with Not_found ->
@@ -102,19 +110,29 @@ let rec eval_fun uuid f =
   let error = int_erroru uuid "eval_fun" in
   match f with
     | VFunction(arg, closure, body) ->
-        fun address sched_st (m_env, f_env) a ->
-          let new_env = m_env, bind_args uuid arg a closure in
-          let (m_env', _), result = eval_expr address sched_st new_env body in
-          (m_env', f_env), result
+        fun addr sched env a ->
+          let new_env = {env with locals=bind_args uuid arg a closure} in
+          let env', result = eval_expr addr sched new_env body in
+          {env' with locals=env.locals}, result
 
-    | VForeignFunction(arg, f) ->
-        fun _ _ (m_env, f_env) a ->
-          let new_env = m_env, (bind_args uuid arg a f_env) in
-          begin try
-            let (m_env', f_env'), result = f new_env in
-            (m_env', unbind_args uuid arg f_env'), result
-          with Failure x ->
-            raise @@ RuntimeError(uuid, x^"\n"^string_of_env (m_env, f_env)) end
+    | VForeignFunction(id, arg, f) ->
+        fun addr sched env a ->
+          begin match id, sched, a with
+          (* override the default function for sleep *)
+          | "sleep", Some s, VInt t -> R.sleep s addr (foi t /. 1000.) ;
+                                       env, VTemp VUnit
+          | "haltEngine", Some s, _ ->
+              Log.log ("shutting down "^string_of_address addr) ();
+              R.halt s addr; env, VTemp VUnit
+          | _ ->
+            let new_env = {env with locals=bind_args uuid arg a env.locals} in
+            begin try
+              let env', result = f new_env in
+              {env' with locals=unbind_args uuid arg env'.locals}, result
+            with Failure x ->
+              raise @@ RuntimeError(uuid, x^"\n"^
+                string_of_env ~skip_empty:false ~accessed_only:false env) end
+          end
 
    | _ -> error "eval_fun: Non-function value"
 
@@ -180,14 +198,7 @@ and eval_expr (address:address) sched_st cenv texpr =
     (* Collection constructors *)
     | Empty ct ->
         let ctype, _ = unwrap_tcol ct in
-        cenv, VTemp(
-            match ctype with
-            | TSet           -> VSet(ISet.empty)
-            | TBag           -> VBag(ValueBag.empty)
-            | TList          -> VList(IList.empty)
-            | TMap           -> VMap(ValueMap.empty)
-            | TMultimap idxs -> VMultimap(ValueMMap.init idxs)
-        )
+        cenv, VTemp(v_empty_of_t ctype)
 
     | Singleton ct ->
         let nenv, element = child_value cenv 0 in
@@ -196,15 +207,7 @@ and eval_expr (address:address) sched_st cenv texpr =
 
     | Combine ->
         begin match child_values cenv with
-          | nenv, [left; right] -> nenv, VTemp(
-            begin match left, right with
-            | VList v1, VList v2         -> VList(IList.combine v1 v2)
-            | VSet v1,  VSet v2          -> VSet(ISet.combine v1 v2)
-            | VBag v1,  VBag v2          -> VBag(ValueBag.combine v1 v2)
-            | VMap v1,  VMap v2          -> VMap(ValueMap.combine v1 v2)
-            | VMultimap v1, VMultimap v2 -> VMultimap(ValueMMap.combine v1 v2)
-            | _ -> error name "mismatching or non-collections"
-            end)
+          | nenv, [left; right] -> nenv, VTemp(v_combine error left right)
           | _      -> error name "missing sub-components"
         end
 
@@ -222,7 +225,7 @@ and eval_expr (address:address) sched_st cenv texpr =
           in
           let l = Array.to_list (Array.init steps init_fn) in
           let reval = VTemp(match c_t with
-            | TSet  -> VSet(ISet.of_list l)
+            | TSet  -> VSet(ValueSet.of_list l)
             | TBag  -> VBag(ValueBag.of_list l)
             | TList -> VList(IList.of_list l)
             | TMap
@@ -252,7 +255,7 @@ and eval_expr (address:address) sched_st cenv texpr =
     (* Control flow *)
     | Lambda a ->
       let body = List.nth children 0
-      in cenv, VTemp(VFunction(a, snd cenv, body))
+      in cenv, VTemp(VFunction(a, cenv.locals, body))
 
     | Apply ->
         begin match child_values cenv with
@@ -288,10 +291,10 @@ and eval_expr (address:address) sched_st cenv texpr =
         let penv, pred = child_value cenv 0 in
         begin match pred with
         | VOption(Some v) ->
-            let penv = second (env_add x v) penv in
+            let penv = {penv with locals=env_add x v penv.locals} in
             let penv, v = eval_expr address sched_st penv @@
               List.nth children 1 in
-            second (env_remove x) penv, v
+            {penv with locals=env_remove x penv.locals}, v
         | VOption None    ->
             eval_expr address sched_st penv @@ List.nth children 2
         | _ -> error name "non-maybe predicate"
@@ -301,13 +304,13 @@ and eval_expr (address:address) sched_st cenv texpr =
         let penv, pred = child_value cenv 0 in
         begin match pred with
         | VIndirect rv ->
-          let penv = second (env_add x !rv) penv in
+          let penv = {penv with locals=env_add x !rv penv.locals} in
           let penv, ret = eval_expr address sched_st penv @@ List.nth children 1
           in
           (* update bound value *)
           let v = value_of_eval @@ lookup x penv in
           rv := v;
-          second (env_remove x) penv, ret
+          {penv with locals=env_remove x penv.locals}, ret
         | _ -> error name "non-indirect predicate"
         end
 
@@ -316,12 +319,12 @@ and eval_expr (address:address) sched_st cenv texpr =
         begin match ids, bound with
         | [id], _  ->
             let env = if id = "_" then env
-                      else second (env_add id bound) env in
+                      else {env with locals=env_add id bound env.locals} in
             eval_expr address sched_st env @@ List.nth children 1
         | _, VTuple vs ->
             let env = List.fold_left2 (fun acc_env id v ->
               if id = "_" then acc_env
-              else second (env_add id v) acc_env)
+              else {acc_env with locals=env_add id v acc_env.locals})
               env ids vs
             in
             eval_expr address sched_st env @@ List.nth children 1
@@ -330,12 +333,12 @@ and eval_expr (address:address) sched_st cenv texpr =
 
     (* Collection transformers *)
 
-    (* Keeps the same type *)
+    (* Keeps the same type, except for maps*)
     | Map ->
         begin match child_values cenv with
           | nenv, [f; col] ->
             let f' = eval_fn f address sched_st in
-            let zero = v_empty error ~no_multimap:true col in
+            let zero = v_empty error ~no_map:true ~no_multimap:true col in
             let env, c' = v_fold error (fun (env, acc) x ->
               let env', y = f' env x in
               env', v_insert error (value_of_eval y) acc
@@ -429,15 +432,18 @@ and eval_expr (address:address) sched_st cenv texpr =
           (* Comparator application propagates an environment *)
           let nenv, r = f' !env (VTuple([v1; v2])) in
           env := nenv;
-          match v1 = v2, value_of_eval r with
-          | true, _             -> 0
-          | false, VBool(true)  -> -1
-          | false, VBool(false) -> 1
-          | _, _ -> error "Sort" "non-boolean sort result"
+          match value_of_eval r with
+          | VBool true  -> -1
+          | VBool false -> 1
+          | _ -> error "Sort" "non-boolean sort result"
         in
         !env, VTemp(v_sort error sort_fn c)
       | _ -> error name "bad values"
       end
+
+    | Size ->
+        let nenv, c = child_value cenv 0 in
+        nenv, VTemp(v_size error c)
 
     | Subscript i ->
       begin match child_values cenv with
@@ -485,22 +491,15 @@ and eval_expr (address:address) sched_st cenv texpr =
       let renv, parts = child_values cenv in
       (* get the sender's address from global variable "me" *)
       begin match sched_st, parts with
-        | Some s, [target;addr;arg] ->
-            let e = expr_of_value uuid in
-            (* log our send *)
-            let send_code = K3Helpers.mk_send (e target) (e addr) (e arg) in
-            let send_str = K3PrintSyntax.string_of_expr send_code in
-            Log.log (send_str^"\n") ~name:"K3Interpreter.Msg" `Debug;
+        | Some s, [target; addr; arg] ->
+            let sov = string_of_value in
+            let send_str =
+              Printf.sprintf "send(%s, %s, %s)\n" (sov target) (sov addr) (sov arg) in
+            Log.log send_str ~name:"K3Interpreter.Msg" `Debug;
 
-            (* check if we need to buffer our triggers for shuffling *)
-            if K3Runtime.use_shuffle_tasks s then
-              (* buffer trigger for later shuffle *)
-              (buffer_trigger s target addr arg address;
-              renv, VTemp VUnit)
-            else
-              (* create a new level on the queues *)
-              (schedule_trigger s target addr arg;
-              renv, VTemp VUnit)
+            (* create a new level on the queues *)
+            schedule_trigger s target addr arg;
+            renv, VTemp VUnit
         | None, _ -> error "Send" "missing scheduler"
         | _, _    -> error "Send" "bad values"
       end
@@ -512,8 +511,11 @@ and eval_expr (address:address) sched_st cenv texpr =
       env_modify x fenv @@ const v, VTemp VUnit
 
     in
-    if !debug then Printf.printf "tag: %s, uuid: %d, val: %s\n" name uuid (string_of_value @@ value_of_eval valout);
-    if !debug_env then Printf.printf "env: %s\n" (string_of_env ~skip_functions:true envout);
+    if !debug then
+      Printf.printf "tag: %s, uuid: %d, val: %s\n" name uuid (string_of_value @@ value_of_eval valout);
+    if !debug_env then
+      Printf.printf "env: %s\n" (string_of_env ~skip_functions:true envout);
+
     envout, valout
 
 and threaded_eval address sched_st ienv texprs =
@@ -527,11 +529,11 @@ and threaded_eval address sched_st ienv texprs =
 (* Declaration interpretation *)
 
 (* Returns a default value for every type in the language *)
-let rec default_value t = default_base_value t.typ
+let rec default_value id t = default_base_value id t.typ
 
 and default_collection_value ct et = v_empty_of_t ct
 
-and default_base_value bt =
+and default_base_value id bt =
   let error = int_error "default_base_value" in
   match bt with
   | TTop | TUnknown     -> VUnknown
@@ -543,12 +545,12 @@ and default_base_value bt =
   | TFloat              -> VFloat 0.0
   | TString             -> VString ""
   | TMaybe   vt         -> VOption None
-  | TTuple   ft         -> VTuple (List.map default_value ft)
+  | TTuple   ft         -> VTuple(List.map (default_value id) ft)
   | TCollection (ct,et) -> default_collection_value ct et
-  | TIndirect vt        -> VIndirect(ref @@ default_base_value vt.typ)
-  | TAddress            -> error "no default value for an address"
-  | TTarget bt          -> error "no default value for a target"
-  | TFunction _         -> error "no default value for a function"
+  | TIndirect vt        -> VIndirect(ref @@ default_base_value id vt.typ)
+  | TAddress            -> VAddress("0.0.0.0", 0)
+  | TTarget bt          -> error @@ "no default value for a target "^id
+  | TFunction _         -> error @@ "no default value for a function "^id
 
 (* Returns a foreign function evaluator *)
 let dispatch_foreign id = K3StdLib.lookup_value id
@@ -556,12 +558,12 @@ let dispatch_foreign id = K3StdLib.lookup_value id
 (* Returns a trigger evaluator function to serve as a simulation
  * of the trigger *)
 let prepare_trigger sched_st id arg local_decls body =
-  fun address (m_env, f_env) args ->
-    let default (id,t,_) = id, ref @@ default_value t in
-    let new_vals = List.map default local_decls in
-    let local_env = add_from_list m_env new_vals, f_env in
-    let _, reval = (eval_fun (-1) @@ VFunction(arg, IdMap.empty, body)) address
-                   (Some sched_st) local_env args in
+  fun address env args ->
+    let default (id,t,_) = id, ref @@ default_value id t in
+    let new_vals  = List.map default local_decls in
+    let local_env = {env with globals=add_from_list env.globals new_vals} in
+    let _, reval  = (eval_fun (-1) @@ VFunction(arg, IdMap.empty, body)) address
+                    (Some sched_st) local_env args in
     match value_of_eval reval with
       | VUnit -> ()
       | _ -> int_error "prepare_trigger" @@ "trigger "^id^" returns non-unit"
@@ -569,187 +571,179 @@ let prepare_trigger sched_st id arg local_decls body =
 (* add code sinks to the trigger environment *)
 let prepare_sinks sched_st env fp =
   List.fold_left
-    (fun ((trig_env, (m_env, f_env)) as env) (fs,a) -> match fs with
-    | Sink(Resource _) ->
-      failwith "sink resource interpretation not supported"
-
+    (fun e (fs,a) -> match fs with
+    | Sink(Resource _) -> failwith "sink resource interpretation not supported"
     | Sink(Code(id, arg, locals, body)) ->
-      IdMap.add id (prepare_trigger sched_st id arg locals body) trig_env, (m_env, f_env)
-
-    | _ -> env
-    ) env fp
+        {e with triggers=IdMap.add id (prepare_trigger sched_st id arg locals body) e.triggers}
+    | _ -> e)
+    env fp
 
 (* Builds a trigger, global value and function environment (ie frames) *)
-let env_of_program ?address sched_st k3_program =
+let env_of_program ?address ~role ~peers sched_st k3_program =
   let me_addr = match address with
     | None   -> Constants.default_address
     | Some a -> a in
-  let env_of_declaration ((trig_env, (m_env, f_env)) as env) (d,_) =
-    match d with
+  let env_of_declaration env (d,_) = match d with
     | K3.AST.Global (id, t, init_opt) ->
-        let (rm_env, rf_env), init_val = match id, init_opt with
-          | _, Some e ->
-            let renv, reval = eval_expr me_addr (Some sched_st) (m_env, f_env) e
-            in renv, value_of_eval reval
+        let rf_env, init_val = match id, init_opt with
 
           (* substitute the proper address expression for 'me' *)
-          | id, _ when id = K3Global.me_name ->
-              let renv, reval = eval_expr me_addr (Some sched_st) (m_env, f_env) @@ mk_caddress me_addr
-              in renv, value_of_eval reval
+          | id, _ when id = K3Global.me.id -> env, VAddress me_addr
 
-          | _, None -> (m_env, f_env), default_value t
+          (* substitute for peers *)
+          | id, _ when id = K3Global.peers.id ->
+              env, VSet (ValueSet.of_list @@ List.map (fun x -> VAddress x) @@ fst_many peers)
+
+          | id, _ when id = K3Global.role.id -> env, VString role
+
+          | _, Some e -> second value_of_eval @@ eval_expr me_addr (Some sched_st) env e
+
+          | id, None -> env, default_value id t
         in
-        trig_env, ((IdMap.add id (ref init_val) rm_env), rf_env)
-
-    | Foreign (id,_) -> trig_env, (IdMap.add id (ref @@ dispatch_foreign id) m_env, f_env)
-
+        {env with globals=IdMap.add id (ref init_val) env.globals; locals=rf_env.locals}
+    | Foreign (id,_) ->
+        {env with globals=IdMap.add id (ref @@ dispatch_foreign id) env.globals}
     | Flow fp -> prepare_sinks sched_st env fp
-
     | _ -> env
   in
   (* triggers, (variables, arg frames) *)
-  let init_env = IdMap.empty, (IdMap.empty, IdMap.empty) in
-  List.fold_left env_of_declaration init_env k3_program
+  List.fold_left env_of_declaration default_env k3_program
 
 
 (* Instruction interpretation *)
 
-(* consume messages to a specific node *)
-let consume_msgs ?(slice = max_int) sched_st env address =
-  let log_node s = Log.log (sp "Node %s: %s\n" (string_of_address address) s) `Trace in
-  log_node "consuming messages\n";
-  let status = run_scheduler ~slice sched_st address env in
-  status
-
-(* consume sources ie. evaluate instructions *)
-let consume_sources sched_st env address (res_env, d_env) (ri_env, instrs) =
-  let log_node s = Log.log (sp "Node %s: %s\n" (string_of_address address) s) `Trace in
-  match instrs with
-  | []              -> NormalExec, (ri_env, [])
-  | (Consume id)::t ->
-    log_node @@ sp "consuming from event loop: %s\n" id;
-    try let i = List.assoc id d_env in
-        let r = run_dispatcher sched_st address res_env ri_env i in
-        (*let status = run_scheduler sched_st address env in*)
-        NormalExec, (r, t)
-    with Not_found ->
-      int_error "consume_sources" @@ "no event loop found for "^id
-
-(* Program interpretation *)
-let interpreter_event_loop role_opt k3_program =
-  let error s =
-    int_error "interpreter_event_loop" s in
- let roles, default_role = extended_roles_of_program k3_program in
-  let get_role role fail_f = try List.assoc role roles with Not_found ->
-    fail_f @@ "No role "^role^" found in k3 program"
-  in match role_opt, default_role with
-   | Some x, Some (_,y) -> get_role x (fun _ -> y)
-   | Some x, None       -> get_role x error
-   | None, Some (_,y)   -> y
-   | None, None         -> error "No roles specified or found for K3 program"
-
-(* returns address, (event_loop_t, environment) *)
-let initialize_peer sched_st address role_opt k3_program =
-  let prog_env = env_of_program sched_st k3_program ~address in
-    initialize_scheduler sched_st address prog_env;
-    address, (interpreter_event_loop role_opt k3_program, prog_env)
+type environments = {
+  res_env : resource_env_t;
+  fsm_env : SR.fsm_env_t;  (* really the dispatcher's fsm *)
+  prog_env : env_t;
+  mutable instrs : instruction_t list; (* role instructions *)
+  mutable disp_env : dispatcher_t;
+}
 
 (* preserve the state of the interpreter *)
 type interpreter_t = {
-  scheduler : scheduler_state;
+  scheduler : R.scheduler_state;
   (* metadata including remaining resources and instructions *)
-  peer_meta : (address, resource_impl_env_t * instruction_t list) Hashtbl.t;
   peer_list : K3Global.peer_t list;
-  envs : (address * (resource_env_t * dispatcher_env_t * program_env_t)) list;
+  envs : (address, environments) Hashtbl.t;
+
+  (* how often (in sec) to consume a source *)
+  src_interval : float;
+  mutable last_s_time : float;
 }
 
-type status_t = K3Runtime.status_t
-
-let interpret_k3_program {scheduler; peer_meta; peer_list; envs} =
-  (* Continue running until all peers have finished their instructions,
-   * and all messages have been processed *)
-  let rec loop (status:status_t) =
-    if status = NormalExec then
-      (* find and process every peer that has a message to process. This way we make sure we
-       * don't inject new sources until all messages are processed *)
-      let message_peers, status' =
-        (* for global queueing, we don't loop. Instead, we run for only one
-         * iteration, since each trigger needs a different environment *)
-        if K3Runtime.use_global_queueing scheduler then
-          if network_has_work scheduler then
-            let addr = next_global_address scheduler in
-            let _,_,prog_env = List.assoc addr envs in
-            match consume_msgs ~slice:1 scheduler prog_env addr with
-            | BreakPoint bp -> 1, BreakPoint bp
-            | NormalExec    -> 1, status
-          else 0, status
-        else
-          (* do one cycle over all the nodes *)
-          List.fold_left (fun (count, stat) (addr,_,_) ->
-            if node_has_work scheduler addr then
-              let _,_,prog_env = List.assoc addr envs in
-              match consume_msgs scheduler prog_env addr with
-              | BreakPoint bp -> count + 1, BreakPoint bp
-              | NormalExec    -> count + 1, stat
-            else count, stat
-          ) (0, status) peer_list
-      in
-      (*Printf.printf "msgs: %d\n" message_peers;*)
-      if message_peers > 0  && not (K3Runtime.use_shuffle_tasks scheduler) then loop status'
-      else
-        (* now deal with sources *)
-        let source_peers, (status':status_t) =
-          Hashtbl.fold (fun addr (ri_env, insts) (count, stat) ->
-            if insts <> [] then
-              let res_env, de, env = List.assoc addr envs in
-              let status, eval =
-                consume_sources scheduler env addr (res_env, de) (ri_env, insts)
-              in
-              Hashtbl.replace peer_meta addr eval;
-              match status with
-              | BreakPoint bp -> count + 1, BreakPoint bp
-              | NormalExec    -> count + 1, stat
-            else count, stat
-          ) peer_meta (0, status')
-        in
-        (*Printf.printf "sources: %d, msgs: %d\n" source_peers message_peers;*)
-        if source_peers > 0 || message_peers > 0 then loop status'
-        else status'
-    else status
+(* consume sources ie. evaluate instructions *)
+let consume_sources sched_st address env =
+  let log_node s = Log.log (sp "Node %s: %s\n" (string_of_address address) s) `Trace in
+  (* function to pass to consumer *)
+  let schedule_fn src_bindings src_id events =
+    schedule_event sched_st src_bindings src_id address events
   in
-  let (result:status_t) = loop NormalExec in
-  let prog_state = List.map (fun (addr, (_,_,e)) -> addr, e) envs in
-  (* We only print if we finished execution *)
-  if result = NormalExec then
-    (* Log program state *)
-    List.iter (fun (addr, e) ->
-      Log.log (sp ">>>> Peer %s\n" (string_of_address addr)) `Trace;
-      Log.log (sp "%s\n" (string_of_program_env e)) `Trace;
-    ) prog_state;
-  result, prog_state
+  match env.instrs with
+  | []                 -> failwith "consume_sources: missing instructions"
+  | Consume id :: rest ->
+    let fsm = List.assoc id env.fsm_env in
+    let rec loop () =
+      log_node @@ sp "consuming from event loop: %s\n" id;
+      (* check if we're in the middle of running the dispatcher *)
+      if C.is_running env.disp_env then
+        (* take another step in this stream, and check if we're done *)
+        if C.run_step schedule_fn env.disp_env env.res_env fsm then ()
+        else env.instrs <- rest
+      else
+        (* create a new stream *)
+        try
+          let disp_env = C.init_dispatcher env.res_env env.disp_env fsm in
+          env.disp_env <- disp_env;
+          loop ()
+        with Not_found ->
+          int_error "consume_sources" @@ "no event loop found for "^id
+    in loop ()
+
+(* Program interpretation *)
+let interpreter_event_loop role k3_program =
+  let error s =
+    int_error "interpreter_event_loop" s in
+ let roles, default_role = extended_roles_of_program k3_program in
+ let get_role role fail_f = try List.assoc role roles with Not_found ->
+    fail_f @@ "No role "^role^" found in k3 program"
+ in match default_role with
+   | Some (_, y) -> get_role role @@ const y
+   | None        -> get_role role error
+
+(* returns address, (event_loop_t, environment) *)
+let initialize_peer sched_st ~address ~role ~peers k3_program =
+  let prog_env = env_of_program sched_st ~address ~role ~peers k3_program in
+  address, (interpreter_event_loop role k3_program, prog_env)
+
+let interpret_k3_program i =
+  (* Continue running until all peers have finished their instructions,
+   * and all messages have been processed
+   *  @last_src_peers: how many peers had active sources
+   *)
+  let rec loop last_src_peers =
+    incr iters;
+    (* debug *)
+    (* Log.log (Printf.sprintf "%d iterations\n" !iters) ();
+       if !iters >= num_iters then begin
+         Log.log ("finished "^soi !iters^" iterations. stop.\n") () end else *)
+    (* number of peers with messages *)
+    let msg_peers =
+      if R.network_has_work i.scheduler then begin
+        (* func to return program env *)
+        let prog_env_fn addr =
+          Log.log (sp "Node %s: consuming messages\n" @@ string_of_address addr) `Trace;
+          (Hashtbl.find i.envs addr).prog_env
+        in
+        run_scheduler ~slice:1 i.scheduler prog_env_fn
+      end else 0
+    in
+    let t = Sys.time () in
+    let src_peers =
+      (* is it time to scan for sources again ? *)
+      if t -. i.last_s_time >= i.src_interval then begin
+        i.last_s_time <- t;
+        Hashtbl.fold (fun addr env count ->
+          if env.instrs <> [] then begin
+            consume_sources i.scheduler addr env;
+            count + 1
+          end else count)
+        i.envs 0
+      (* if it's not time for a source, use 1 to get to next time *)
+      end else 1
+    in
+    (* check if we should continue *)
+    if msg_peers > 0 || src_peers > 0 then loop src_peers else ()
+  in
+  Log.log (sp "Starting up interpreter\n") `Trace;
+  loop 1;
+  Log.log (sp "Finished execution\n") `Trace;
+  let prog_state = List.map (fun (i,x) -> i, x.prog_env) @@ list_of_hashtbl i.envs in
+  (* Log program state *)
+  List.iter (fun (addr, e) ->
+    Log.log (sp ">>>> Peer %s\n" (string_of_address addr)) `Trace;
+    Log.log (sp "%s\n" (string_of_env e ~accessed_only:false)) `Trace;
+  ) prog_state;
+  prog_state
 
 (* Initialize an interpreter given the parameters *)
-let init_k3_interpreter ?shuffle_tasks
-                        ?breakpoints
-                        ?(queue_type=GlobalQ)
-                        ~run_length
-                        ~peers
-                        ~load_path
-                        typed_prog =
-  let s = init_scheduler_state ?shuffle_tasks ?breakpoints ~queue_type ~run_length () in
+let init_k3_interpreter ?queue_type ~peers ~load_path ?(src_interval=0.002) typed_prog =
+  Log.log (sp "Initializing scheduler\n") `Trace;
+  let scheduler = init_scheduler_state ?queue_type ~peers in
   match peers with
-  | []  -> failwith "interpret_k3_program: Peers list is empty!"
+  | []  -> failwith "init_k3_program: Peers list is empty!"
   | _   ->
+      Log.log (sp "Initializing interpreter\n") `Trace;
       (* Initialize an environment for each peer *)
       K3StdLib.g_load_path := load_path;
-      let peer_meta = Hashtbl.create @@ List.length peers in
-      let envs = List.map (fun (addr, role_opt, _) ->
+      let len = List.length peers in
+      let envs = Hashtbl.create len in
+      List.iter (fun (address, role) ->
                  (* event_loop_t * program_env_t *)
-          let _, ((res_env, d_env, instrs), prog_env) =
-            initialize_peer s addr role_opt typed_prog
-          in Hashtbl.replace peer_meta addr ([], instrs);
-          addr, (res_env, d_env, prog_env)
-        ) peers
-      in
-      {scheduler=s; peer_meta=peer_meta; peer_list=peers; envs=envs}
+          let _, ((res_env, fsm_env, instrs), prog_env) =
+            initialize_peer scheduler ~address ~role ~peers typed_prog in
+          Hashtbl.replace envs address {res_env; fsm_env; prog_env; instrs; disp_env=C.def_dispatcher}
+      ) peers;
+      {scheduler; peer_list=peers; envs; last_s_time=0.; src_interval}
+
 

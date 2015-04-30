@@ -1,4 +1,16 @@
-language: c
+sudo: false
+language: python
+python: "3.4"
+addons:
+  apt:
+    sources:
+      - avsm
+    packages:
+      - ocaml
+      - ocaml-native-compilers
+      - camlp4-extra
+      - opam
+      - time
 script:
   - bash -ex .travis-ci.sh
 os:

@@ -127,7 +127,7 @@
 
 %token MAP ITERATE FILTER FLATTEN
 %token AGGREGATE GROUPBYAGGREGATE
-%token SORT RANK
+%token SORT RANK SIZE
 
 %token PEEK
 
@@ -139,7 +139,7 @@
 %token SEND
 
 %token ANNOTATE
-%token RASSOC EFFECT PARALLEL
+%token EFFECT PARALLEL
 
 %token <string> IDENTIFIER IP
 
@@ -192,6 +192,7 @@ declaration :
     | flow_program  { Flow($1) }
 
     | ROLE IDENTIFIER LBRACE flow_program RBRACE   { Role($2, $4) }
+    | ROLE IDENTIFIER LBRACE RBRACE                { Role($2, []) }
     | DEFAULT ROLE IDENTIFIER                      { DefaultRole($3) }
 
     /* Error handling */
@@ -319,8 +320,6 @@ annotation :
 data_annotation :
     | positions RARROW positions       { Constraint,  FunDep($1, Positions($3)) }
     | positions RARROW TIMES           { Constraint,  FunDep($1, Element) }
-    | positions RASSOC positions       { Constraint,  MVFunDep($1, Positions($3)) }
-    | positions RASSOC TIMES           { Constraint,  MVFunDep($1, Element) }
     | "key" LPAREN positions RPAREN    { Constraint,  FunDep($3, Element) }
     | "index" LPAREN positions RPAREN  { Constraint,  MVFunDep($3, Element) }
     | "unique" LPAREN positions RPAREN { Constraint,  Unique($3) }
@@ -448,11 +447,13 @@ expr :
 
 ;
 
+id_unknown :
+    | UNKNOWN { "_" }
+    | IDENTIFIER { $1 }
+
 id_list :
-    | UNKNOWN    { ["_"] }
-    | IDENTIFIER { [$1] }
-    | UNKNOWN COMMA id_list { "_" :: $3 }
-    | IDENTIFIER COMMA id_list { $1 :: $3 }
+    | id_unknown { [$1] }
+    | id_unknown COMMA id_list { $1 :: $3 }
 ;
 
 expr_list :
@@ -481,10 +482,9 @@ value_typed_identifier_list :
 ;
 
 arg :
+    | LPAREN arg_list RPAREN  { if List.length $2 == 1 then List.hd $2 else ATuple($2) }
     | UNKNOWN { AIgnored }
     | value_typed_identifier  { AVar(fst $1, snd $1) }
-    | JUST arg                { AMaybe($2) }
-    | LPAREN arg_list RPAREN  { if List.length $2 == 1 then List.hd $2 else ATuple($2) }
 ;
 
 arg_list :
@@ -585,13 +585,13 @@ conditional :
 ;
 
 case :
-    | CASE expr OF LBRACE JUST IDENTIFIER RARROW expr RBRACE LBRACE NOTHING RARROW expr RBRACE
+    | CASE expr OF LBRACE JUST id_unknown RARROW expr RBRACE LBRACE NOTHING RARROW expr RBRACE
       { mk_case_sn $2 $6 $8 $13 }
-    | CASE expr OF LBRACE NOTHING RARROW expr RBRACE LBRACE JUST IDENTIFIER RARROW expr RBRACE
+    | CASE expr OF LBRACE NOTHING RARROW expr RBRACE LBRACE JUST id_unknown RARROW expr RBRACE
       { mk_case_sn $2 $11 $7 $13 }
 
     /* Error handling */
-    | CASE expr OF LBRACE JUST IDENTIFIER RARROW expr { case_error "nothing case" }
+    | CASE expr OF LBRACE JUST id_unknown RARROW expr { case_error "nothing case" }
     | CASE expr OF LBRACE NOTHING RARROW expr { case_error "just case" }
     | CASE expr OF error { case_error "expr" }
     | CASE error { case_error "predicate" }
@@ -617,7 +617,6 @@ bind :
 lambda :
      | BACKSLASH arg RARROW expr { mkexpr (Lambda($2)) [$4] }
      /* Alternative syntax for indicating non-tuple output */
-     | BACKSLASH arg RASSOC expr { mkexpr (Lambda($2)) [$4] }
 
      /* Error handling */
      | BACKSLASH arg RARROW error { lambda_error "body" }
@@ -671,6 +670,7 @@ transformers :
         mkexpr GroupByAggregate [$3; $5; $7; $9]
     }
     | SORT LPAREN expr COMMA expr RPAREN { mkexpr Sort [$3; $5] }
+    | SIZE LPAREN expr RPAREN            { mkexpr Size [$3] }
 
     /* Error handling */
     | expr CONCAT error { print_error("Expected expression for combine") }
@@ -743,7 +743,6 @@ named_expr_list :
 ;
 
 check_expr :
-    | expr          { InlineExpr($1) }
-    | FILE STRING   { FileExpr($2) }
+    | IDENTIFIER COLON expr          { InlineExpr($1, $3) }
 ;
 

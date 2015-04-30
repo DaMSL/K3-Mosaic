@@ -249,14 +249,14 @@ module RelEvent = struct
       in
       let vals_inner = list_map (fun evt -> concat_mv ", " evt.vals) group in
       let vals = "["^String.concat "; " vals_inner^"]" in
-      num - 1, Printf.sprintf "source %s : %s = stream(%s)\n\
+      num - 1, Printf.sprintf "ssource %s : %s = stream(%s)\n\
                       bindflow %s -> %s"
                       src types vals
                       src (to_s evt)
     ) len groups
     in
     let _, consume_s = mapfold (fun num group ->
-      num - 1, Printf.sprintf "consume %s" (src num)
+      num - 1, Printf.sprintf "sconsume %s" (src num)
     ) len groups
     in
     src_s@consume_s
@@ -296,12 +296,12 @@ let update_maps maps events =
 
 (* dump a map into a string *)
 let dump_map mapname = function
-    | SingletonMap m -> "{|"^SingletonMap.val_s m^"|}"
+    | SingletonMap m -> "{"^SingletonMap.val_s m^"}"
     | OutputMap m    ->
         let s = OutputMap.val_s m in
         (* if our map is empty, we need the types *)
-        if s = "" then "{||} : {|"^OutputMap.types_s m^"|}"
-        else "{|"^OutputMap.val_s m^"|}"
+        if s = "" then "{} : {"^OutputMap.types_s m^"}"
+        else "{"^OutputMap.val_s m^"}"
 
 (* return the dimensions of the map *)
 let map_dims = function
@@ -506,9 +506,9 @@ let strings_of_test_role ~is_dist events =
         RelEvent.stream_s events@
       ["}";
        "role node {";
-       "  source s_dummy : int = stream([1])";
+       "  ssource s_dummy : int = stream([1])";
        "  bindflow s_dummy -> node_dummy";
-       "  consume s_dummy";
+       "  sconsume s_dummy";
        "}"
       ])::
        "default role switch"::
@@ -516,16 +516,16 @@ let strings_of_test_role ~is_dist events =
   else (* single-site *)
     if events <> [] then
       (str_make @:
-        "role switch {"::
+        "srole switch {"::
         RelEvent.stream_s events@
         "}"::[])::
-        "default role switch\n"::
+        "sdefault srole switch\n"::
         []
     else ["trigger dummy(x:int) {} = ()\n\n\
-            role switch {\n\
-            source dummy : int = stream([1])\n\
+            srole switch {\n\
+            ssource dummy : int = stream([1])\n\
             bindflow dummy -> dummy\n\
-            consume dummy\n\
+            sconsume dummy\n\
             }\n\
            default role switch\n"]
 

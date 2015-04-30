@@ -195,16 +195,16 @@ let rec lazy_expr c expr =
   let arith_paren e = match U.tag_of_expr e with
     | Mult | Add -> lazy_paren
     | _ -> id_fn in
-  (* we're more sensitive for left side *)
+  (* for things like Just *)
+  let paren_r e = match U.tag_of_expr e with
+    | Nothing _ | Just | Const _ | Tuple | Var _ | Empty _ | Singleton _ -> id_fn
+    | _ -> lazy_paren in
+(* we're more sensitive for left side *)
  let paren_l e = match U.tag_of_expr e with
-    | CaseOf _   -> lazy_paren
-    | IfThenElse -> lazy_paren
-    | Let _      -> lazy_paren
+    | Just | CaseOf _ | IfThenElse | Let _ -> lazy_paren
     | _          -> id_fn in
  let arith_paren_l e = match U.tag_of_expr e with
-    | CaseOf _   -> lazy_paren
-    | IfThenElse -> lazy_paren
-    | Let _      -> lazy_paren
+    | Just | CaseOf _ | IfThenElse | Let _ -> lazy_paren
     | _          -> arith_paren e
   (* for == and != *)
   in let logic_paren e = match U.tag_of_expr e with
@@ -234,8 +234,7 @@ let rec lazy_expr c expr =
   (* many instructions need to wrap the same way *)
   in let wrap e = match U.tag_of_expr expr with
     Insert _ | Iterate | Map | Filter | Flatten | Send | Delete _ | Update _ |
-    Aggregate | GroupByAggregate -> wrap_hov 2 e
-    | IfThenElse -> wrap_hov 0 e
+    Aggregate | GroupByAggregate | Assign _ | Combine -> wrap_hov 2 e
     | _ -> id_fn e
   in let out = match U.tag_of_expr expr with
   | Const con  -> lazy_const c con
@@ -243,7 +242,7 @@ let rec lazy_expr c expr =
   | Tuple      -> let es = U.decompose_tuple expr in
     lazy_paren @@ lps_list CutHint (lazy_expr c) es
   | Just       -> let e = U.decompose_just expr in
-    lps "just " <| lazy_expr c e
+    lps "just " <| paren_r e (lazy_expr c e)
   | Nothing vt -> lps "nothing:" <| lsp () <| lazy_type c vt
   | Empty t    -> lazy_collection_vt c t.typ [] <| lsp () <|
                   lps ":" <| lsp () <| lazy_type c t
@@ -292,11 +291,10 @@ let rec lazy_expr c expr =
       | Const(CInt(-1)) -> true
       | _ -> false
     end in
-    begin match expr_type_is_bool e1, is_neg with
-      | true, _ -> arith_paren_pair "&" (e1, e2)
-      | false, true -> lps "-" <| lazy_expr c e2 (* just a minus *)
-      | _ -> arith_paren_pair "*" (e1, e2)
-    end
+    if expr_type_is_bool e1 then arith_paren_pair "&" (e1, e2)
+    else if is_neg then lps "-" <| lazy_expr c e2 (* just a minus *)
+    else arith_paren_pair "*" (e1, e2)
+
   | Neg -> let e = U.decompose_neg expr in
     let sym = if expr_type_is_bool e then "!" else "-" in
     begin match U.tag_of_expr e with
@@ -329,7 +327,7 @@ let rec lazy_expr c expr =
     wrap_indent (lazy_expr c e1 <| lcut () <| modify_arg @@ lazy_expr c e2)
   | Block -> let es = U.decompose_block expr in
     lps "do {" <| lind () <|
-    wrap_hv 0 (lps_list ~sep:";" CutHint (lazy_expr c) es <| lsp ())
+    wrap_hv 0 (lps_list ~sep:";" CutHint (fun e -> wrap_hov 0 (lazy_expr c e)) es <| lsp ())
       <| lps "}"
   | Iterate -> let p = U.decompose_iterate expr in
     lps "iterate" <| lcut () <| lazy_paren @@ expr_sub p
@@ -338,8 +336,8 @@ let rec lazy_expr c expr =
     wrap_indent (lps "then" <| lsp () <| lazy_expr c e2) <| lsp () <|
     wrap_indent (lps "else" <| lsp () <| lazy_expr c e3)
   | CaseOf x -> let e1, e2, e3 = U.decompose_caseof expr in
-    wrap_indent (lps "case" <| lsp () <| lazy_expr c e1 <| lsp () <| lps "of" <| lsp () <| 
-    wrap_indent (lazy_brace (lps ("just "^x^" ->") <| lsp () <| lazy_expr c e2)) <| lsp () <| 
+    wrap_indent (lps "case" <| lsp () <| lazy_expr c e1 <| lsp () <| lps "of" <| lsp () <|
+    wrap_indent (lazy_brace (lps ("just "^x^" ->") <| lsp () <| lazy_expr c e2)) <| lsp () <|
     wrap_indent (lazy_brace (lps "nothing ->" <| lsp () <| lazy_expr c e3)))
   | Map -> let p = U.decompose_map expr in
     lps "map" <| lcut () <| lazy_paren @@ expr_sub p
@@ -353,6 +351,8 @@ let rec lazy_expr c expr =
     lps "groupby" <| lazy_paren @@ expr_quad q
   | Sort -> let p = U.decompose_sort expr in
     lps "sort" <| lazy_paren @@ expr_sub p
+  | Size -> let p = U.decompose_size expr in
+    lps "csize" <| lazy_paren @@ lazy_expr c p
   | Subscript _ -> let i, te = U.decompose_subscript expr in
     paren_l te (lazy_expr c te) <| lps "." <| lps "[" <| lps (soi i) <| lps "]"
   | Peek -> let col = U.decompose_peek expr in
@@ -375,14 +375,14 @@ let rec lazy_expr c expr =
   | Assign _ -> let l, r = U.decompose_assign expr in
     lps l <| lps " <- " <| lazy_expr c r
   | BindAs _ -> let l, id, r = U.decompose_bind expr in
-    lps "bind" <| lsp () <| lazy_expr c l <| lsp () <| lps "as" <| lsp () <| lps id <|
+    wrap_indent (lps "bind" <| lsp () <| lazy_expr c l <| lsp () <| lps "as" <| lsp () <| lps id) <|
       lsp () <| lps "in" <| lsp () <| lazy_expr c r
   | Let _ -> let ids, bound, bexpr = U.decompose_let expr in
     let wrap_paren = match ids with [_] -> id_fn | _ -> lazy_paren in
-    wrap_hov 0 (wrap_indent
+    wrap_indent
       (lps "let" <| lsp () <| wrap_paren (lps_list NoCut lps ids) <| lps " =" <|
       lsp () <| lazy_expr c bound <| lsp ())
-      <| lps "in" <| lsp () <| lcut () <| lazy_expr c bexpr)
+      <| lps "in" <| lsp () <| lcut () <| lazy_expr c bexpr
   | Send -> let e1, e2, es = U.decompose_send expr in
     wrap_indent (lps "send" <| lazy_paren (expr_pair (e1, e2) <| lps ", " <|
       lps_list CutHint (tuple_no_paren c) es))
@@ -410,7 +410,7 @@ let channel_format c = function
   | JSON -> "json"
 
 let lazy_channel c chan_t chan_f = match chan_t with
-  | File s -> lps @@ "file(\""^s^"\", "^channel_format c chan_f^")"
+  | File s -> lps @@ "sfile(\""^s^"\", "^channel_format c chan_f^")"
   | Network(str, port) -> lps @@ "socket(\""^str^"\":"^string_of_int port^")"
 
 let rec lazy_resource_pattern c = function
@@ -421,7 +421,7 @@ let rec lazy_resource_pattern c = function
   | Repeat(rp, _) -> lazy_resource_pattern c rp <| lps "*"
 
 let lazy_stream c = function
-  | RandomStream i -> lps "random" <| lazy_paren (lps @@ string_of_int i)
+  | RandomStream i -> lps "srandom" <| lazy_paren (lps @@ string_of_int i)
   | ConstStream e  -> lps "stream" <| lazy_paren (lazy_expr c e)
 
 let lazy_resource c r =
@@ -429,17 +429,17 @@ let lazy_resource c r =
   match r with
   | Handle(t, chan_t, chan_f) -> common t <| lazy_channel c chan_t chan_f
   | Stream(t, st) -> common t <| lazy_stream c st
-  | Pattern(pat) -> lps "pattern " <| lazy_resource_pattern c pat
+  | Pattern(pat) -> lps "spattern " <| lazy_resource_pattern c pat
 
 let lazy_flow c = function
   | Source(Code(id, arg, vars, expr))
   | Sink(Code(id, arg, vars, expr)) -> lazy_trigger c id arg vars expr
   | Source(Resource(id, r)) ->
-      lps ("source "^id^" : ") <| lazy_resource c r
+      lps ("ssource "^id^" : ") <| lazy_resource c r
   | Sink(Resource(id, r)) ->
-      lps ("sink "^id^" : ") <| lazy_resource c r
+      lps ("ssink "^id^" : ") <| lazy_resource c r
   | BindFlow(id1, id2) -> lps @@ "bindflow "^id1^" -> "^id2
-  | Instruction(Consume id) -> lps @@ "consume "^id
+  | Instruction(Consume id) -> lps @@ "sconsume "^id
 
 let lazy_flow_program c fas = lps_list ~sep:"" CutHint (lazy_flow c |- fst) fas
 
@@ -451,9 +451,9 @@ let lazy_declaration c d =
     end in
     wrap_hov 2 (lps @@ "declare "^id^" :" <| lsp () <| lazy_type c t <| end_part)
   | Role(id, fprog) ->
-      lps ("role "^id^" ") <| lazy_box_brace (lazy_flow_program c fprog)
+      lps ("srole "^id^" ") <| lazy_box_brace (lazy_flow_program c fprog)
   | Flow fprog -> lazy_flow_program c fprog
-  | DefaultRole id -> lps ("default role "^id)
+  | DefaultRole id -> lps ("sdefault srole "^id)
   | Foreign(id, t) -> lps ("foreign "^id^" :") <| lsp () <| lazy_type c t
   in
   wrap_hv 0 out <| lcut ()
@@ -495,7 +495,7 @@ let string_of_program_test ?uuid_highlight ptest =
   (* print a check_expr *)
   let string_of_check_expr = function
       | FileExpr s -> "file "^s
-      | InlineExpr e -> string_of_expr ?uuid_highlight e
+      | InlineExpr (nm,e) -> nm^" : "^string_of_expr ?uuid_highlight e
   in
   (* print a test expression *)
   let string_of_test_expr (e, check_e) =
@@ -505,11 +505,11 @@ let string_of_program_test ?uuid_highlight ptest =
   in
   match ptest with
   | NetworkTest(p, checklist) ->
-      Printf.sprintf "%s\n\nnetwork expected\n\n%s"
+      Printf.sprintf "%s\n\nsnetwork sexpected\n\n%s"
         (string_of_program ?uuid_highlight p)
         (String.concat ",\n\n" @@ list_map string_of_test_expr checklist)
   | ProgTest(p, checklist) ->
-      Printf.sprintf "%s\n\nexpected\n\n%s"
+      Printf.sprintf "%s\n\nsexpected\n\n%s"
         (string_of_program ?uuid_highlight p)
         (String.concat ",\n\n" @@ list_map string_of_test_expr checklist)
   | ExprTest _ -> failwith "can't print an expression test"

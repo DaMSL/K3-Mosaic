@@ -1,4 +1,6 @@
 module IntSet : sig include Set.S with type elt = int end
+module StrSet : sig include Set.S with type elt = string end
+module IntIntSet : sig include Set.S with type elt = int * int end
 module IntMap : sig include Map.S with type key = int end
 module StrMap : sig include Map.S with type key = string end
 
@@ -96,6 +98,11 @@ val list_remove : 'a -> 'a list -> 'a list
 
 (* replace efficiently inside a list *)
 val list_replace : 'a -> 'a -> 'a list -> 'a list
+
+(* replace at an index
+ * negative numbers count from end
+ *)
+val list_replace_i : int -> 'a -> 'a list -> 'a list
 
 (* modify a specific position in a list *)
 val list_modify : int -> ('a -> 'a) -> 'a list -> 'a list
@@ -199,6 +206,8 @@ val is_some : 'a option -> bool
 (* unwrap a some. Fail if not a Some *)
 val unwrap_some : 'a option -> 'a
 
+val unwrap_option : 'a -> 'a option -> 'a
+
 val maybe : 'a -> ('b -> 'a) -> 'b option -> 'a
 
 val maybe_f : (unit -> 'a) -> ('b -> 'a) -> 'b option -> 'a
@@ -249,6 +258,9 @@ val hashtbl_replace : ('a, 'b) Hashtbl.t -> 'a -> ('b option -> 'b) -> unit
 
 (* combine hashtables *)
 val hashtbl_combine : ('a, 'b) Hashtbl.t -> ('a, 'b) Hashtbl.t -> ('b -> 'b -> 'b) -> unit
+
+val list_of_hashtbl : ('a, 'b) Hashtbl.t -> ('a * 'b) list
+val hashtbl_of_list : ('a * 'b) list -> ('a, 'b) Hashtbl.t
 
 val intset_of_list : int list -> IntSet.t
 val intmap_of_list : (int * 'a) list -> 'a IntMap.t

@@ -1,54 +1,77 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 #
 # Test a distributed SQL query
 #
 
 import os
-import six
-from utils import check_exists, check_error, print_system
+import re
+from utils import check_exists, check_error, print_system, concat
+
+def get_nice_name(path):
+    (first, last) = os.path.split(path)
+    (last, _) = os.path.splitext(last)
+    (first, middle) = os.path.split(first)
+
+    matchobj = re.match('query(.*)', last)
+    if matchobj:
+        nice_name = middle + matchobj.group(1)
+    else:
+        nice_name = last
+    return nice_name
 
 def run(target_file,
         num_nodes=1,
-        queue_type="global",
-        do_shuffle=False,
-        force_correctives=False,
-        order_file="",
+        order_file=None,
         verbose=True,
         distrib=False,
         use_idx=False,
-        enable_gc=False
+        enable_gc=True,
+        new_k3=True,
+        folds_only=True,
+        gen_deletes=True,
+        gen_correctives=True
         ):
 
     to_root = ".."
     script_path = os.path.abspath(os.path.dirname(__file__))
     target_file = os.path.abspath(target_file)
+    nice_name = get_nice_name(target_file)
     root_path = os.path.join(script_path, to_root)
     dbtoaster_dir = os.path.join(root_path, "external/dbtoaster")
     dbtoaster_name = "bin/dbtoaster_release"
     dbtoaster = os.path.join(dbtoaster_dir, dbtoaster_name)
     k3o = os.path.join(root_path, "bin/k3")
     partmap_tool = os.path.join(root_path, "bin/partmap_tool")
+    combine_tool = os.path.join(root_path, "bin/combine_data")
 
     saved_dir = os.path.abspath(os.path.curdir)
-    trace_file = os.path.join(saved_dir, "temp.trace")
-    m3_file = os.path.join(saved_dir, "temp.m3")
-    k3_file = os.path.join(saved_dir, "temp.k3")
-    k3_file2 = os.path.join(saved_dir, "temp2.k3")
-    k3_file3 = os.path.join(saved_dir, "temp3.k3")
-    k3dist_file = os.path.join(saved_dir, "temp.k3dist")
-    error_file = os.path.join(saved_dir, "temp.err")
-    part_file = os.path.join(saved_dir, "temp.part")
-    output_file = os.path.join(saved_dir, "temp.out")
+    temp_dir = os.path.join(saved_dir, "temp/")
+    trace_file = os.path.join(temp_dir, "temp.trace")
+    m3_file = os.path.join(temp_dir, "temp.m3")
+    k3_file = os.path.join(temp_dir, "temp.k3o")
+    k3_file2 = os.path.join(temp_dir, "temp2.k3o")
+    k3_file3 = os.path.join(temp_dir, "temp3.k3o")
+    k3dist_file = os.path.join(temp_dir, nice_name + ".k3o")
+    data_file = nice_name + ".csv"
+    k3new_file = os.path.join(temp_dir, nice_name + ".k3")
+    k3new_part_file = os.path.join(temp_dir, nice_name + ".part")
+    error_file = os.path.join(temp_dir, "temp.err")
+    part_file = os.path.join(temp_dir, "temp.part")
+    output_file = os.path.join(temp_dir, "temp.out")
+
+    if not os.path.exists(temp_dir):
+        os.makedirs(temp_dir)
 
     check_exists("dbtoaster", dbtoaster)
     check_exists("k3o", k3o)
     if distrib:
         check_exists("partmap_tool", partmap_tool)
+        check_exists("combine_data", combine_tool)
 
     # change to dbtoaster path (dbtoaster needs it)
     if verbose:
-        six.print_("cd {0}".format(dbtoaster_dir))
+        print("cd {0}".format(dbtoaster_dir))
     os.chdir(dbtoaster_dir)
 
     # run dbtoaster to get interpreted updates
@@ -56,8 +79,8 @@ def run(target_file,
     debug_flags = ['PRINT-VERBOSE', 'LOG-INTERPRETER-UPDATES', 'LOG-INTERPRETER-TRIGGERS', 'LOG-M3']
     for f in debug_flags:
         debug_cmd += ' -d ' + f
-    cmd = '{dbtoaster_name} {debug_cmd} {target_file} > {trace_file} 2> {error_file}' \
-          .format(**locals())
+
+    cmd = concat([dbtoaster_name, debug_cmd, target_file, ">", trace_file, "2>", error_file])
     print_system(cmd, verbose)
     if check_error(error_file, verbose):
         os.chdir(saved_dir)
@@ -68,8 +91,7 @@ def run(target_file,
         src_lang = "distm3"
     else:
         src_lang = "m3"
-    cmd = '{dbtoaster_name} -l {src_lang} -d PRINT-VERBOSE {target_file} > {m3_file} 2> {error_file}' \
-          .format(**locals())
+    cmd = concat([dbtoaster_name, "-l", src_lang, "-d", "PRINT-VERBOSE", target_file, ">", m3_file, "2>", error_file])
     print_system(cmd, verbose)
     if check_error(error_file, verbose):
         os.chdir(saved_dir)
@@ -77,45 +99,65 @@ def run(target_file,
 
     # change directory back
     if verbose:
-        six.print_("cd {0}".format(saved_dir))
+        print("cd {0}".format(saved_dir))
     os.chdir(saved_dir)
 
     # create a single-site k3o file
-    cmd = "{k3o} -p -i m3 -l k3 {m3_file} > {k3_file} 2> {error_file}".format(**locals())
+    cmd = concat([k3o, "-p -i m3 -l k3", m3_file, ">", k3_file, "2>", error_file])
     print_system(cmd, verbose)
     if check_error(error_file, verbose) or check_error(k3_file, verbose, True):
         return False
 
-    load_path = "--load_path {0}".format(dbtoaster_dir)
+    # get the files we're using
+    s = open(k3_file, 'r').read()
+    matches = re.findall(r'\("(.+)", csv\)', s)
+    if matches is None:
+        print("failed to find file references")
+        return False
+
+    read_files = []
+    for m in matches:
+        read_files += [os.path.join(dbtoaster_dir, m)]
+
+    load_path = concat(["--load_path", dbtoaster_dir])
 
     # execution diverges from here
     if distrib:
+        queue_type = "node"
+
         # string for k3 distributed file creation: either use a trace file or an order file
         if not order_file:
-            create_cmd = "--trace {0}".format(trace_file)
+            create_cmd = concat(["--trace", trace_file])
         else:
-            create_cmd = "--order {0}".format(order_file)
+            create_cmd = concat(["--order", order_file])
 
-        force_cmd = "--force" if force_correctives else ""
-        idx_cmd = "--use_idx" if use_idx else ""
-        gc_cmd = "--gc" if enable_gc else ""
+        idx_cmd = "--use_idx" if use_idx else None
+        gc_cmd  = "--gc" if enable_gc else None
+        delete_cmd = "--no-deletes" if not gen_deletes else None
+        corrective_cmd = "--no-correctives" if not gen_correctives else None
+        options = concat ([create_cmd, idx_cmd, gc_cmd, delete_cmd, corrective_cmd])
 
         # create a k3 distributed file (without a partition map)
-        cmd = ('{k3o} -p -i m3 -l k3disttest {m3_file} {create_cmd} {force_cmd} {idx_cmd} {gc_cmd}'
-            + ' > {k3dist_file} 2> {error_file}').format(**locals())
+        cmd = concat([k3o, "-p -i m3 -l k3disttest", m3_file, options] +
+                ['>', k3dist_file, "2>", error_file])
         print_system(cmd, verbose)
         if check_error(error_file, verbose) or check_error(k3dist_file, verbose, True):
             return False
 
         # create a partition map
-        cmd = "{partmap_tool} {k3dist_file} -n {num_nodes} > {part_file}".format(**locals())
+        cmd = concat([partmap_tool, k3dist_file, "-n", num_nodes, ">", part_file])
         print_system(cmd, verbose)
         if check_error(part_file, verbose, True):
             return False
 
+        # combine the data files
+        cmd = concat([combine_tool, "--k3", k3dist_file] + read_files + ['>', data_file, '2>', error_file])
+        print_system(cmd, verbose)
+        if check_error(error_file, verbose):
+            return False
+
         # create another k3 distributed file (with partition map)
-        cmd = ("{k3o} -p -i m3 -l k3disttest {m3_file} {create_cmd} -m {part_file} {force_cmd} {idx_cmd} {gc_cmd}"
-            + "> {k3dist_file} 2> {error_file}").format(**locals())
+        cmd = concat([k3o, "-p -i m3 -l k3disttest", m3_file, options, "-m", part_file, "--sfile", data_file] + [">", k3dist_file, "2>", error_file])
         print_system(cmd, verbose)
         if check_error(error_file, verbose) or check_error(k3dist_file, verbose, True):
             return False
@@ -123,16 +165,32 @@ def run(target_file,
         # create node list
         node_list = []
         for i in range(num_nodes):
-            port = 50000 + (i * 10000)
-            node_list += ['127.0.0.1:{0}/node'.format(port)]
+            port = 10 + (i * 10)
+            node_list += ['localhost:{0}/node'.format(port)]
 
-        peer_list = ["-n localhost:40000/switch"] + node_list
+        # always add the master, switch and timer
+        peer_list = ["-n localhost:0/master", "localhost:1/switch", "localhost:3/timer", ] + node_list
         peer_cmd = ','.join(peer_list)
-        shuffle_cmd = "--shuffle" if do_shuffle else ""
+
+        if new_k3:
+            # convert to the new k3 file format
+            fold_cmd = ""
+            if folds_only:
+                fold_cmd = '--k3new_folds'
+
+            print("Converting to new k3 file format...")
+            cmd = concat([k3o, "-i k3 -l k3new", fold_cmd, "--datafile", data_file, k3dist_file, ">", k3new_file, "2>", error_file])
+            print_system(cmd, verbose)
+            if check_error(error_file, verbose, False):
+                return False
+
+            # create k3_new partmap
+            print("Creating k3new partition map...\n")
+            cmd = concat([partmap_tool, k3dist_file, "--k3new -n", num_nodes, ">", k3new_part_file])
+            print_system(cmd, verbose)
 
         # run the k3 driver on the input
-        cmd = '{k3o} --test {peer_cmd} -q {queue_type} {shuffle_cmd} {load_path} {k3dist_file} > {output_file} 2> {error_file}' \
-            .format(**locals())
+        cmd = concat([k3o, "--test", peer_cmd, "-q", queue_type, load_path, k3dist_file, ">", output_file, "2>", error_file])
         print_system(cmd, verbose)
         if check_error(error_file, verbose, True):
             return False
@@ -141,26 +199,26 @@ def run(target_file,
         with open(error_file, 'r') as f:
             buf = f.read()
             if verbose:
-                six.print_(buf)
+                print(buf)
 
         return True
 
     else: # not distrib
         # convert again to check for any loopback malformations
-        cmd = "{k3o} -p -i k3 -l k3 {k3_file} > {k3_file2} 2> {error_file}".format(**locals())
+        queue_type = "global"
+        cmd = concat([k3o, "-p -i k3 -l k3", k3_file, ">", k3_file2, "2>", error_file])
         print_system(cmd, verbose)
         if check_error(error_file, verbose) or check_error(k3_file2, verbose, True):
             return False
 
         # convert to a test
-        cmd = "{k3o} -p -i m3 -l k3test --trace {trace_file} {m3_file} > {k3_file3} 2> {error_file}" \
-            .format(**locals())
+        cmd = concat([k3o, "-p -i m3 -l k3test --trace", trace_file, m3_file, ">", k3_file3, "2>", error_file])
         print_system(cmd, verbose)
         if check_error(error_file, verbose) or check_error(k3_file, verbose, True):
             return False
 
         # run the k3 driver on the input to get test results
-        cmd = "{k3o} --test {k3_file3} {load_path} >{output_file} 2> {error_file}".format(**locals())
+        cmd = concat([k3o, "--test", k3_file3, load_path, ">", output_file, "2>", error_file])
         print_system(cmd, verbose)
         if check_error(error_file, verbose):
             return False
@@ -168,6 +226,6 @@ def run(target_file,
         with open(output_file, 'r') as f:
             buf = f.read()
             if verbose:
-                six.print_(buf)
+                print(buf)
         return True
 

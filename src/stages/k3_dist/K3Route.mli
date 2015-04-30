@@ -10,6 +10,8 @@ val k3_partition_map_of_list : prog_data_t -> part_map_t -> expr_t
 
 exception NoHashFunction of base_type_t
 
-val gen_route_code : prog_data_t -> part_map_t ->
+val functions : prog_data_t -> part_map_t ->
+  (declaration_t * annotation_t) list
+val global_vars : prog_data_t -> part_map_t ->
   (declaration_t * annotation_t) list
 

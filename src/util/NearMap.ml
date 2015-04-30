@@ -41,6 +41,7 @@ module type S =
     val map: ('a -> 'b) -> 'a t -> 'b t
     val mapi: (key -> 'a -> 'b) -> 'a t -> 'b t
     val to_list : 'a t -> (key * 'a) list
+    val of_list : (key * 'a) list -> 'a t
     val peek : 'a t -> (key * 'a) option
     val combine : 'a t -> 'a t -> 'a t
     val update : key -> 'a -> key -> 'a -> 'a t -> 'a t
@@ -368,6 +369,7 @@ module Make(Ord: OrderedType) = struct
     let choose = min_binding
 
     let to_list m = fold (fun k v acc -> (k,v)::acc) m []
+    let of_list l = List.fold_left (fun acc (k, v) -> add k v acc) empty l
 
     let peek m = try Some(choose m) with Not_found -> None
 

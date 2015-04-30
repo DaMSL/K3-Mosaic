@@ -21,7 +21,7 @@ type test_t =
 let group name tests = TestGroup(name, tests)
 let case name assertion = TestCase(name, assertion)
 
-let (@:) f x = f x
+let (@@) f x = f x
 
 let (@=:?) actual expected = AssertTypeEquals(expected, actual)
 let (@=?)  actual expected = AssertValueEquals(expected, actual)
@@ -34,18 +34,19 @@ let parse_expr s = K3Parser.expr K3Lexer.tokenize (Lexing.from_string s)
  * and an expression *)
 let eval_test_expr_env tdecl_prog t_env trig_env val_env expr =
   let typed_expr = deduce_expr_type trig_env t_env expr in
-  value_of_eval @: snd @:
+  value_of_eval @@ snd @@
     eval_expr ("localhost", 1) None val_env typed_expr
 
 (* we pass in an optional interpreter environment, a program for type bindings,
  * and an expression *)
-let eval_test_expr decl_prog expr =
+let eval_test_expr peers decl_prog expr =
   (* get the type bindings from the typechecker so we have an environment for
    * typechecking *)
   let tdecl_prog, t_env, trig_env, _ = type_bindings_of_program decl_prog in
   (* get the value environment from the interpreter, excluding the trigger
    * functions. if we pass an environment, use that *)
-  let _, val_env = env_of_program (K3Runtime.init_scheduler_state ()) tdecl_prog in
+  let val_env =
+    env_of_program ~peers ~role:"" (K3Runtime.init_scheduler_state peers) tdecl_prog in
   eval_test_expr_env tdecl_prog t_env trig_env val_env expr
 
 (* Tests *)
@@ -72,30 +73,30 @@ let run_tests ?(indent="") test =
         passed, indent ^ name ^ ": " ^ result_string
     )
     | TestGroup(name, tests) ->
-        let passed, ss = list_unzip @: List.map (loop @: "  "^indent) tests in
+        let passed, ss = list_unzip @@ List.map (loop @@ "  "^indent) tests in
         List.exists id_fn passed, indent^name^":\n"^String.concat "\n" ss
   in
   loop "" test
 
 let print_tests tests =
-  let passed, ss = list_unzip @: List.map run_tests tests in
+  let passed, ss = list_unzip @@ List.map run_tests tests in
   let passed = List.for_all id_fn passed in
   let s = String.concat "\n" ss in
   if passed then print_endline s
-  else prerr_endline @: "ERROR: "^s
+  else prerr_endline @@ "ERROR: "^s
 
 (* Driver methods *)
 let check_as_expr ce = match ce with
-  | InlineExpr e -> e
-  | FileExpr (fp) -> parse_expr @: read_file fp
+  | InlineExpr (nm, e) -> nm, e
+  | FileExpr (fp)      -> fp, parse_expr @@ read_file fp
 
-let test_expressions file_name = function
+let test_expressions peers file_name = function
   | ExprTest expr_tests ->
-    let test_cases = snd @:
+    let test_cases = snd @@
       List.fold_left (fun (i, test_acc) (decls, e, x) ->
-        let name = file_name^" "^(string_of_int i) in
-        let test_case = case name @:
-          eval_test_expr decls e @=? eval_test_expr decls @: check_as_expr x
+        let name, expr = check_as_expr x in
+        let test_case  = case name @@
+          eval_test_expr peers decls e @=? eval_test_expr peers decls expr
         in i+1, test_acc@[test_case]
       ) (0, []) expr_tests
     in print_tests test_cases
@@ -104,7 +105,7 @@ let test_expressions file_name = function
 let env_deref_refs env = List.rev_map (fun (id, v) -> (id, !v)) env
 
 let extract_first_env = function
-  | (addr, (_, (env, _)))::_ -> (env, IdMap.empty)
+  | (addr, env)::_ -> env
   | [] -> invalid_arg "no environment"
 
 let unify_tuple_lists id l1 l2 =
@@ -117,12 +118,12 @@ let unify_tuple_lists id l1 l2 =
     (* check that our lists are disjoint *)
     (*let tuple_remove_value = function*)
       (*| VTuple tuplist -> VTuple(list_drop_end 1 tuplist)*)
-      (*| _ -> failwith @: Printf.sprintf "%s is not a tuple!" id*)
+      (*| _ -> failwith @@ Printf.sprintf "%s is not a tuple!" id*)
     (*in*)
     (*let l1' = List.rev_map tuple_remove_value l1 in*)
     (*let l2' = List.rev_map tuple_remove_value l2 in*)
     (*if LAS.inter l1' l2' <> []*)
-    (*then failwith @: Printf.sprintf "In %s, lists not disjoint!" id*)
+    (*then failwith @@ Printf.sprintf "In %s, lists not disjoint!" id*)
     (*else LAS.union l1 l2*)
     LAS.union l1 l2
 
@@ -142,36 +143,36 @@ let unify_values id r_newval = function
     let err _ s = failwith @@ Printf.sprintf "(unify_values):%s" s in
     let v, v' = unwrap_ind oldval, unwrap_ind newval in
     match unwrap_ind oldval, unwrap_ind newval with
-    | VSet _, VSet _           -> some @@ wrap_ind @@ v_combine err v v'
-    | VBag _, VBag _           -> some @@ wrap_ind @@ v_combine err v v'
-    | VList _, VList _         -> some @@ wrap_ind @@ v_combine err v v'
-    | VMap _, VMap _           -> some @@ wrap_ind @@ v_combine err v v'
+    | VSet _, VSet _
+    | VBag _, VBag _
+    | VList _, VList _
+    | VMap _, VMap _
     | VMultimap _, VMultimap _ -> some @@ wrap_ind @@ v_combine err v v'
     | _,_                      -> Some r_newval
 
 (* unify the environments of different nodes *)
-let unify_envs (envs : (address * program_env_t) list) =
+let unify_envs (envs : (address * env_t) list) =
   (* fold over all the nodes. we discard triggers and frames *)
   let unified_env =
     (* ignore triggers and frames *)
-    List.fold_left (fun acc (addr, (_, (m_env, _))) ->
+    List.fold_left (fun acc (addr, env) ->
       IdMap.fold (fun id newval acc' ->
-        map_modify (unify_values id newval) id acc'
-      ) acc m_env
-    ) IdMap.empty envs
+          map_modify (unify_values id newval) id acc')
+        acc env.globals)
+      IdMap.empty envs
   in
-  (unified_env, IdMap.empty) (* no frames *)
+  {default_env with globals=unified_env} (* no frames *)
 
 (* test a program and comare it to the expected output. Takes an interpretation
  * function that expects an untyped AST (this takes care of handling any extra
  * information needed by the interpreter) also takes a program_test data
  * structure indicating the kind of test desired *)
-let test_program globals_k3 interpret_fn file_name test =
+let test_program peers globals_k3 interpret_fn file_name test =
   let op_fn, program, tests = match test with
     (* for a single-site test, we just extract the env. For multi-site, we unify
      * the environments, and rename all node variables to be node_var (TODO) *)
-    | ProgTest (prog, checkl)    -> extract_first_env, prog, checkl
-    | NetworkTest (prog, checkl) -> unify_envs, prog, checkl
+    | ProgTest(prog, checkl)    -> extract_first_env, prog, checkl
+    | NetworkTest(prog, checkl) -> unify_envs, prog, checkl
     | _ -> failwith "unsupported test"
   in
   let node_envs = interpret_fn program in
@@ -179,15 +180,15 @@ let test_program globals_k3 interpret_fn file_name test =
   (* print out the environments *)
   (*List.iter (fun (addr, env) -> *)
     (*Printf.printf "Environment for %s\n" (K3Printing.string_of_address addr); *)
-    (*print_endline @: K3Values.string_of_program_env env*)
+    (*print_endline @@ K3Values.string_of_program_env env*)
   (* ) node_envs;*)
 
   (* unify the node value environments if needed *)
-  let (v_env:env_t) = op_fn node_envs in
+  let v_env = op_fn node_envs in
 
   (* debug - print the unified env *)
   (*Printf.printf "Unified environment:\n";*)
-  (*print_endline @: K3Values.string_of_env ~skip_functions:false v_env;*)
+  (*print_endline @@ K3Values.string_of_env ~skip_functions:false v_env;*)
 
   let numbered_tests = insert_index_fst ~first:1 tests in
   let prog_globals = K3Global.add_globals_k3 globals_k3 program in
@@ -195,10 +196,10 @@ let test_program globals_k3 interpret_fn file_name test =
    * typechecking *)
   let tdecl_prog, t_env, trig_env, _ = type_bindings_of_program prog_globals in
   let test_cases = list_map (fun (i, (lexp, rexp)) ->
-      let name = file_name^"_"^soi i in
+      let name, expr = check_as_expr rexp in
       let v1 = eval_test_expr_env tdecl_prog t_env trig_env v_env lexp in
-      let v2 = eval_test_expr [] @: check_as_expr rexp in
-      case name @: v1 @=? v2
+      let v2 = eval_test_expr peers [] expr in
+      case name @@ v1 @=? v2
     ) numbered_tests
   in print_tests test_cases
 

@@ -63,12 +63,17 @@ val decompose_singleton : expr_t -> expr_t
 val decompose_slice : expr_t -> expr_t * expr_t
 val decompose_sliceidx : expr_t -> expr_t * expr_t
 val decompose_sort : expr_t -> expr_t * expr_t
+val decompose_size : expr_t -> expr_t
 val decompose_subscript : expr_t -> int * expr_t
 val decompose_tuple : expr_t -> expr_t list
 val decompose_update : expr_t -> id_t * expr_t * expr_t
+val decompose_var : expr_t -> id_t
 val decompose_indirect : expr_t -> expr_t
 
 val decompose_role : declaration_t * 'a -> id_t * flow_program_t
+val decompose_trig : flow_statement_t * 'a -> id_t * arg_t * expr_t
+val decompose_global_fn : declaration_t * 'a -> id_t * type_t * expr_t
+
 
 (* decompose if we have a tuple, otherwise return e *)
 val extract_if_tuple : expr_t -> expr_t list

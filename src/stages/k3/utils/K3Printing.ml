@@ -115,6 +115,7 @@ let string_of_tag_type = function
     | Aggregate        -> "Aggregate"
     | GroupByAggregate -> "GroupByAggregate"
     | Sort             -> "Sort"
+    | Size             -> "Size"
     | Subscript n      -> "Subscript"^soi n
 
     | Slice            -> "Slice"

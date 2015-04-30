@@ -27,7 +27,6 @@ if [ ! -d "./bin" ]; then mkdir bin; fi
 ocamlbuild -use-ocamlfind Driver.byte -build-dir ./bin -tag debug $@
 if [ -f "./bin/src/Driver.byte" ]
 then echo "#!/bin/bash" > ./bin/k3
-     echo "export BOLT_CONFIG=$SCRIPTPATH/bolt.cfg" >> ./bin/k3
      echo "ocamlrun -b $SCRIPTPATH/bin/src/Driver.byte \$@" >> ./bin/k3
      chmod +x ./bin/k3
 fi

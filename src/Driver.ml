@@ -65,37 +65,22 @@ let string_of_data = function
 (* Evaluation option setters *)
 let parse_port p =
   let error () = invalid_arg ("invalid port: "^p) in
-  try let r = int_of_string p in if r > 65535 then error() else r
+  try let r = int_of_string p in if r > 65535 then error () else r
   with Failure _ -> error()
 
-(* ip-role format is 'alias=ip:port/role' *)
+let ident = "[a-zA-Z_][a-zA-Z0-9_]*" (* legal identifier *)
+let num = "[0-9]+"
+let ip = Printf.sprintf "%s.%s.%s.%s" num num num num
+let r = Str.regexp @@
+  Printf.sprintf "\\(%s\\|localhost\\):\\(%s\\)/\\(%s\\)" ip num ident
+
+(* ip-role format is 'ip:port/role' *)
 let parse_ip_role ipr_str =
-  let ident = "[a-zA-Z_][a-zA-Z0-9_]*" in (* legal identifier *)
-  let num = "[0-9]+" in
-  let ip = num^"\\."^num^"\\."^num^"\\."^num in
-  let r = Str.regexp @@
-    "\\("^ident^"=\\)?\\("^ip^"\\|localhost\\)\\(:"^num^"\\)?\\(/"^ident^"\\)?"
-  in
   let error () = invalid_arg "invalid ip string format" in
   if Str.string_match r ipr_str 0 then
-    let ms = List.map (fun i ->
-        try some @@ Str.matched_group i ipr_str
-        with Not_found -> None
-      ) [1;2;3;4]
-    in
-    let alias = match at ms 0 with
-    | None   -> None
-    | Some x -> some @@ str_drop_end 1 x (* get rid of extra char *)
-    in
-    let role = match at ms 3 with
-    | None   -> None
-    | Some x -> some @@ str_drop 1 x (* get rid of extra char *)
-    in
-    match at ms 1, at ms 2 with (* ip, port *)
-    | None, None         -> error ()
-    | Some ip, None      -> (ip, default_port), role, alias
-    | None, Some port    -> (default_ip, parse_port @@ str_drop 1 port), role, alias
-    | Some ip, Some port -> (ip, parse_port @@ str_drop 1 port), role, alias
+    match r_groups ipr_str ~r ~n:3 with
+    | [Some ip; Some port; Some role] -> (ip, parse_port port), role
+    | _                               -> error ()
   else error ()
 
 let string_of_lang_descs descs i =
@@ -171,14 +156,16 @@ type parameters = {
     mutable order_files   : string list;
 
     mutable queue_type   : K3Runtime.queue_type; (* type of queue for interpreter *)
-    mutable shuffle_tasks : bool; (* Shuffle tasks from different node
-                                    to simulate network delay *)
-    mutable force_correctives : bool; (* Force correctives being generated *)
     mutable k3new_data_file : string;
     mutable k3new_folds : bool;   (* output fold instead of map/ext *)
     mutable load_path : string;    (* path for the interpreter to load csv files from *)
     mutable use_multiindex : bool; (* whether to generate code that uses multiindex maps *)
     mutable enable_gc : bool;
+    mutable gen_deletes : bool;
+    mutable gen_correctives : bool;
+
+    mutable src_interval : float;   (* interval (s) between the interpreter feeding sources *)
+    mutable stream_file : string;  (* file to stream from (into switches) *)
   }
 
 let default_cmd_line_params () = {
@@ -198,14 +185,17 @@ let default_cmd_line_params () = {
     trace_files       = [];
     order_files       = [];
 
-    queue_type        = K3Runtime.GlobalQ;
-    shuffle_tasks     = default_shuffle_tasks;
-    force_correctives = false;
+    queue_type        = K3Runtime.PerNodeQ;
     k3new_data_file   = "default.k3";
     k3new_folds       = false;
     load_path         = "";
     use_multiindex    = false;
-    enable_gc         = false;
+    enable_gc         = true;
+    gen_deletes       = true;
+    gen_correctives   = true;
+
+    src_interval      = 0.002;
+    stream_file       = "input.csv";
   }
 
 let cmd_line_params = default_cmd_line_params ()
@@ -313,13 +303,12 @@ let interpret_k3 params prog = let p = params in
   let tp, envs = typed_program_with_globals prog in
   let open K3Interpreter in
   try
-    let interp = init_k3_interpreter tp ~run_length:p.run_length
-                                        ~peers:p.peers
-                                        ~shuffle_tasks:p.shuffle_tasks
+    let interp = init_k3_interpreter tp ~peers:p.peers
                                         ~queue_type:p.queue_type
                                         ~load_path:p.load_path
+                                        ~src_interval:p.src_interval
     in
-    snd @@ interpret_k3_program interp
+    interpret_k3_program interp
   with RuntimeError (uuid,str) -> handle_interpret_error (K3Data tp) (uuid,str)
 
 let interpret params inputs =
@@ -358,47 +347,40 @@ let print_k3_test_program = function
       (* get the folded expressions comparing values for latest vid.
        * These go in the expected statements at the end *)
       let tests_by_map = GenTest.expected_code_all_maps meta in
-      let drop_roles =
-        List.filter (fun d -> not (is_role d || is_def_role d)) in
-      let p', test_vals =
+      let test_vals =
         (* get the test values from the dbtoaster trace if available *)
         if not @@ null cmd_line_params.trace_files then
           (* we only care about the code part *)
           let tests_by_map = List.map (fun (nm, (code, empty)) ->
             nm, code) tests_by_map
           in
-          let role_s, maplist =
+          let _, maplist =
             let trace_file = at cmd_line_params.trace_files idx in
             FromTrace.string_of_file trace_file ~is_dist:true
           in
            (* debug *)
            (* List.iter (fun (nm, code) -> print_endline code) maplist; *)
           let map_final_l =
-            list_map (fun (nm, code) -> nm, parse_k3_expr code) maplist in
+            List.map (fun (nm, code) -> nm, parse_k3_expr code) maplist in
           (* join according to map name *)
           let map_tests_join = assoc_join map_final_l tests_by_map in
           let tests_vals =
-            list_map (fun (_, (final, e)) -> e, InlineExpr final)
+            List.map (fun (n, (final, e)) -> e, InlineExpr (n, final))
               map_tests_join
           in
           (* add the produced test roles and trigger *)
           (* debug *)
           (* filter out all role stuff in the original generated ast *)
-          let new_p = 
-            try drop_roles p @ parse_k3_prog role_s
-            with x -> print_endline role_s; raise x
-          in
-          new_p, tests_vals
+          tests_vals
+      else failwith "no trace file"
 
         (* use the order files to simulate the system *)
-        else if not @@ null cmd_line_params.order_files then
+        (*else if not @@ null cmd_line_params.order_files then
           let order_file = at cmd_line_params.order_files idx in
           let events = FromTrace.events_of_order_file order_file in
-          let role_s = FromTrace.string_of_test_role ~is_dist:false events in
           (* Note that we take the single-site version here *)
           (* debug *)
-          print_endline @@ role_s;
-          let p' = drop_roles orig_p @ parse_k3_prog role_s in
+          let p' = orig_p @ parse_k3_prog role_s in
           (* run the interpreter on our code *)
           let params = default_cmd_line_params () in
           let _, (_, (env, _)) =
@@ -426,9 +408,9 @@ let print_k3_test_program = function
 
         else
           (* we don't have a trace file or order file for final value tests *)
-          p, list_map (fun (_, (e,_)) -> e, FileExpr "dummy") tests_by_map
+          p, list_map (fun (_, (e,_)) -> e, FileExpr "dummy") tests_by_map *)
       in
-      let prog_test = NetworkTest(p', test_vals) in
+      let prog_test = NetworkTest(p, test_vals) in
       let _, prog_test = renumber_test_program_ids prog_test in
       let prog_test = typed_program_test prog_test in
       print_endline @@ PS.string_of_program_test prog_test
@@ -444,16 +426,16 @@ let print_k3_test_program = function
            (* debug *)
             (*List.iter (fun (nm, code) -> print_endline code) maplist; *)
           let map_final_l = list_map (fun (nm, code) ->
-            K3Helpers.mk_var nm, parse_k3_expr code
+            K3Helpers.mk_var nm, nm, parse_k3_expr code
           ) maplist in
-          let tests_vals = list_map (fun (nm, e) ->
-            nm, InlineExpr e) map_final_l in
+          let tests_vals = list_map (fun (nmv, nm, e) ->
+            nmv, InlineExpr(nm, e)) map_final_l in
           (* filter our all role stuff in the original generated ast *)
           let filter_p = List.filter
             (fun d -> not (is_role d || is_def_role d)) p in
           (* add the produced test roles and trigger *)
           (* debug *)
-          (*print_endline code_s;*)
+          print_endline code_s;
           let s = parse_k3_prog code_s in
           let new_p = filter_p @ s in
           new_p, tests_vals
@@ -484,18 +466,21 @@ let print params inputs =
 let test params inputs =
   let test_fn fname input =
     match input with
-    | K3TestData(ExprTest _ as x) -> test_expressions fname x
+    | K3TestData(ExprTest _ as x) -> test_expressions params.peers fname x
     | K3TestData((ProgTest _ | NetworkTest _) as x) ->
-        let globals_k3 = K3Global.globals params.peers in
-        test_program globals_k3 (interpret_k3 params) fname x
+        let globals_k3 = K3Global.globals in
+        test_program params.peers globals_k3 (interpret_k3 params) fname x
     | x -> error @@ "testing not yet implemented for "^string_of_data x
   in List.iter2 test_fn params.input_files inputs
 
 let transform_to_k3_dist params p proginfo =
-  let force_correctives = params.force_correctives in
   let use_multiindex = params.use_multiindex in
   let enable_gc = params.enable_gc in
-  GenDist.gen_dist ~force_correctives ~use_multiindex ~enable_gc proginfo params.partition_map p
+  let stream_file = params.stream_file in
+  let gen_deletes = params.gen_deletes in
+  let gen_correctives = params.gen_correctives in
+  GenDist.gen_dist ~use_multiindex ~enable_gc ~stream_file ~gen_deletes ~gen_correctives
+    proginfo params.partition_map p
 
 let process_inputs params =
   let proc_fn f = match params.in_lang, !(params.action) with
@@ -556,8 +541,7 @@ let load_peer file =
   if (List.length line_lst) = 0 then
     error "Empty node file"
   else
-    cmd_line_params.peers
-      <- (List.map parse_ip_role line_lst)
+    cmd_line_params.peers <- List.map parse_ip_role line_lst
 
 let load_partition_map file =
   let str = read_file file in
@@ -604,8 +588,12 @@ let param_specs = Arg.align
       "         For k3new: output folds instead of ext and map";
   "--use_idx", Arg.Unit (fun () -> cmd_line_params.use_multiindex <- true),
       "         Use multiindex maps";
-  "--gc", Arg.Unit (fun () -> cmd_line_params.enable_gc <- true),
+  "--nogc", Arg.Unit (fun () -> cmd_line_params.enable_gc <- false),
       "         Use garbage collection";
+  "--no-deletes", Arg.Unit (fun () -> cmd_line_params.gen_deletes <- false),
+      "         Generate deletes";
+  "--no-correctives", Arg.Unit (fun () -> cmd_line_params.gen_correctives <- false),
+      "         Generate correctives";
 
   (* Debugging parameters *)
 
@@ -617,17 +605,16 @@ let param_specs = Arg.align
   "             Print verbose output (context specific)";
   (* Interpreter related *)
   "-q", Arg.String (fun q -> cmd_line_params.queue_type <- match q with
-    | "global"  -> K3Runtime.GlobalQ
-    | "node"    -> K3Runtime.PerNodeQ
-    | "trigger" -> K3Runtime.PerTriggerQ
-    | x         -> error @@ "Unknown parameter "^x),
+    | "global" -> K3Runtime.GlobalQ
+    | "node"   -> K3Runtime.PerNodeQ
+    | x        -> error @@ "Unknown parameter "^x),
       "         Queue type: global/node/trigger";
-  "--shuffle", Arg.Unit (fun () -> cmd_line_params.shuffle_tasks <- true),
-      "         Shuffle tasks to simulate network delays";
-  "--force", Arg.Unit (fun () -> cmd_line_params.force_correctives <- true),
-      "         Force distributed compilation to produce more correctives";
   "--load_path", Arg.String (fun s -> cmd_line_params.load_path <- s),
       "         Path for interpreter to load files from";
+  "--src_int", Arg.Float (fun f -> cmd_line_params.src_interval <- f),
+      "         Interval between feeding in sources";
+  "--sfile", Arg.String (fun s -> cmd_line_params.stream_file <- s),
+      "         Path for stream file";
   ])
 
 let usage_msg =

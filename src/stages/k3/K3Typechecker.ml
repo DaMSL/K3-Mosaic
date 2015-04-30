@@ -81,6 +81,7 @@ let check_tag_arity tag children =
     | Aggregate         -> 3
     | GroupByAggregate  -> 4
     | Sort              -> 2
+    | Size              -> 1
 
     | Slice      -> 2
     | SliceIdx _ -> 2
@@ -109,7 +110,7 @@ let type_of_expr e =
   let extract_type = function
     Type t -> t | _ -> error "Invalid type annotation" InvalidTypeAnnotation in
   let type_annotations = List.filter is_type_annotation (meta_of_expr e) in
-  match type_annotations with
+  match nub type_annotations with
     | []  -> error "Untyped expression" UntypedExpression
     | [x] -> extract_type x
     | l   -> error "Multiple possible types" @@ MultiplePossibleTypes(
@@ -137,7 +138,7 @@ let canonical_value_of_type vt =
 
 (* Type comparison primitives *)
 
-let rec assignable t_l t_r = match t_l.typ, t_r.typ with
+let rec assignable ?(unknown_ok=false) t_l t_r = match t_l.typ, t_r.typ with
   | TMaybe t_lm, TMaybe t_rm -> assignable t_lm t_rm
   | TTuple t_ls, TTuple t_rs ->
       List.length t_ls = List.length t_rs && List.for_all2 assignable t_ls t_rs
@@ -153,7 +154,8 @@ let rec assignable t_l t_r = match t_l.typ, t_r.typ with
   | TFloat, TInt              -> true
   (* handle lambdas with _ arguments *)
   | TUnknown, _               -> true
-  | TTop, _ 
+  | _, TUnknown when unknown_ok -> true
+  | TTop, _
   | _, TTop                   -> true
   | _ when t_l.typ = t_r.typ  -> true
   | _                         -> false
@@ -333,7 +335,7 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
       | IfThenElse ->
           let t_p, t_t, t_e = bind 0, bind 1, bind 2 in
           if canonical TBool === t_p then
-              if t_t === t_e then t_t
+              if assignable ~unknown_ok:true t_t t_e then t_t
               else t_erroru (TMismatch(t_t, t_e,"")) ()
           else t_erroru (TMismatch(canonical TBool, t_p,"")) ()
 
@@ -447,7 +449,14 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
             t_erroru (TMismatch(targ, expected1, "Sort function arg")) () else
           if not (canonical TBool === tret) then
             t_erroru (TMismatch(canonical TBool, tret, "Sort function result")) () else
+          if not (tcol = TList) then
+            t_erroru (TMsg "can only sort on a list") () else
           canonical @@ TCollection(TList, telem)
+
+      | Size ->
+          let tcol = bind 0 in
+          ignore(try unwrap_tcol tcol with Failure _ -> t_erroru (not_collection tcol) ());
+          t_int
 
       | Slice ->
           let tcol', tpat = bind 0, bind 1 in
@@ -527,7 +536,7 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
           match taddr.typ with
           | TAddress ->
               if ttarget === targs then t_unit
-              else t_erroru (TMismatch(target, targs, "")) ()
+              else t_erroru (TMismatch(ttarget, targs, "")) ()
           | _ -> t_erroru (TBad(taddr, "not an address")) ()
 
   in attach_type current_type
@@ -746,12 +755,12 @@ let deduce_program_test_type prog_test =
           (* can't check if it's a file *)
           let expr_t = deduce_expr_type trig_env env expr in
           expr_t, check_expr
-      | InlineExpr e ->
+      | InlineExpr (nm, e) ->
           (* create a dummy equals to check both expressions *)
           let e_test = mk_eq expr e in
           let e_test_t = deduce_expr_type trig_env env e_test in
           let e_l, e_r = decompose_eq e_test_t in
-          e_l, InlineExpr e_r
+          e_l, InlineExpr (nm, e_r)
       ) testl
     in p', testl'
   in

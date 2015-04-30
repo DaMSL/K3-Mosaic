@@ -21,17 +21,22 @@ val fold_tree :
   ('td -> 'bu list -> 'a tree_t -> 'bu) ->
   'td -> 'bu -> 'a tree_t -> 'bu
 
+val fold_tree_bu :
+  ('bu list -> 'a tree_t -> 'bu) -> 'bu -> 'a tree_t -> 'bu
+
 (* takes no init value for bottom up *)
 val fold_tree1 :
   ('td -> 'a tree_t -> 'td) ->
   ('td -> 'bu list -> 'a tree_t -> 'bu) ->
   'td -> 'a tree_t -> 'bu
 
-
-val fold_tree_thread :
+val fold_tree_th :
   ('td -> 'a tree_t -> 'td) ->
-  ('td * 'bu list -> 'a tree_t -> 'td * 'bu) ->
+  ('td -> 'bu -> 'a tree_t -> 'td * 'bu) ->
   'td -> 'bu -> 'a tree_t -> 'td * 'bu
+
+val fold_tree_th_bu :
+  ('bu -> 'a tree_t -> 'bu) -> 'bu -> 'a tree_t -> 'bu
 
 val fold_tree_lazy :
   ('td Lazy.t -> 'a tree_t -> 'td) ->

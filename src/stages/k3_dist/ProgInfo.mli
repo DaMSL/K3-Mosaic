@@ -1,7 +1,9 @@
 (* Utility functions to get data out of the specialized K3 program data
  * structure *)
 
+open Util
 open K3.AST
+open K3Helpers
 
 exception Bad_data of string
 
@@ -31,7 +33,7 @@ val string_of_prog_data: prog_data_t -> string
 
 (* Utility functions using this data structure *)
 val get_trig_list : prog_data_t -> trig_name_t list
-val for_all_trigs : prog_data_t -> (trig_name_t -> 'a) -> 'a list
+val for_all_trigs : ?deletes:bool -> prog_data_t -> (trig_name_t -> 'a) -> 'a list
 val get_stmt_list : prog_data_t -> stmt_id_t list
 val for_all_stmts : prog_data_t -> (stmt_id_t -> 'a) -> 'a list
 val get_map_list : prog_data_t -> map_id_t list
@@ -122,9 +124,11 @@ val slice_key_from_bound : prog_data_t ->
  * showing how a lhs map variable corresponds to a rhs variable
  * starting at 0 index *)
 val get_map_bindings_in_stmt : prog_data_t -> stmt_id_t -> map_id_t -> map_id_t
--> (int * int) list
+-> IntIntSet.t
 
 (* get a list of unique types for maps (no vid) and their map ids *
  * @param type_fn allows to select a different type function for uniqueness *)
 
 val uniq_types_and_maps : ?type_fn:(prog_data_t -> map_id_t -> type_t list) -> prog_data_t -> (type_t list * map_id_t list) list
+
+val map_ds_of_id : ?vid:bool -> ?bag:bool -> prog_data_t -> map_id_t -> data_struct

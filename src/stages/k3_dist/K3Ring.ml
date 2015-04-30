@@ -4,8 +4,11 @@ open Util
 open K3.AST
 open K3Helpers
 
-(* address, role, name, hash *)
-let id_t_node_for hash_name = K3Global.peers_id_type @ [hash_name, t_int]
+module D = K3Dist
+module G = K3Global
+
+(* address, job, hash *)
+let id_t_node_for hash_name = G.peers.e @ [hash_name, t_int]
 let id_t_node = id_t_node_for "hash"
 let id_t_node_no_hash = list_drop_end 1 id_t_node
 let id_node = fst @@ List.split id_t_node
@@ -13,164 +16,85 @@ let id_node_no_hash = fst @@ List.split id_t_node_no_hash
 let t_node = snd @@ List.split id_t_node
 let t_ring = wrap_tlist' t_node
 
-let node_ring_nm = "node_ring"
-let node_ring_code =
-  let c = mk_global_val node_ring_nm t_ring
-  in mk_anno_sort c [2] (* sort by 3rd field *)
+let add_node_nm = "add_node"
 
-let replicas_nm = "replicas"
-let replicas_code = mk_global_val_init replicas_nm (wrap_tset t_int) @@
-  mk_singleton (wrap_tset t_int) (mk_cint 8)
+let node_ring = create_ds "node_ring" (mut t_ring)
 
-let ring_foreign_funcs =
-  mk_foreign_fn "hash_int" t_int t_int ::
-  mk_foreign_fn "hash_addr" t_addr t_int ::
-  mk_foreign_fn "int_of_float" t_float t_int::
-  mk_foreign_fn "float_of_int" t_int t_float ::
-  mk_foreign_fn "get_max_int" t_unit t_int ::
-  []
+let ring_init =
+  let address = hd @@ fst_many @@ D.nodes.e in
+  mk_iter (mk_lambda' D.nodes.e @@
+      mk_apply (mk_var add_node_nm) @@ mk_var address) @@
+    mk_var "nodes"
 
-(* function to set the number of replicas *)
-let set_replicas_code =
-  let var_replicas = mk_var replicas_nm in
-  mk_global_fn "set_replicas"
-  ["n", t_int] [t_unit] @@
-    mk_update replicas_nm (mk_peek_or_error var_replicas) (mk_var "n")
-
-let add_node_name = "add_node"
+let replicas = create_ds "replicas" (mut t_int) ~init:(mk_cint 8)
 
 (* function to add a node in the consistent hashing ring *)
-let add_node_code =
-  mk_global_fn add_node_name
-  id_t_node_no_hash [t_unit] @@
+let add_node_fn =
+  mk_global_fn add_node_nm id_t_node_no_hash [] @@
   mk_let ["rng"]
-    (mk_range TList
-      (mk_cint 1) (mk_cint 1) @@
-        mk_peek_or_error @@
-          mk_slice (mk_var replicas_nm) mk_cunknown) @@
+    (mk_range TList (mk_cint 1) (mk_cint 1) @@ mk_var replicas.id) @@
   mk_let ["new_elems"]
     (mk_map
-      (mk_lambda (wrap_args ["i", t_int]) @@
+      (mk_lambda' ["i", t_int] @@
         mk_tuple @@
           ids_to_vars id_node_no_hash @
-            [mk_apply (mk_var "hash_int") @@
-                mk_add (mk_var "i") @@
-                    (mk_apply (mk_var "hash_addr") @@ mk_var "addr")
-            ]
-      ) @@
-      mk_var "rng"
-    ) @@
-  mk_block
-  [ mk_iter (* insert each new element *)
-      (mk_lambda
-        (wrap_args ["x", wrap_ttuple t_node]) @@
-        mk_insert
-          node_ring_nm @@
-          mk_var "x"
-      ) @@
-      (mk_var "new_elems")
-    ;
-    (* sort by the hash *)
-    mk_let ["temp_ring"]
-      (mk_sort
-        (mk_assoc_lambda
-          (wrap_args @@ id_t_node_for "hash1")
-          (wrap_args @@ id_t_node_for "hash2") @@
-          mk_gt (mk_var "hash1") (mk_var "hash2"))
-        (mk_var node_ring_nm)
-      ) @@
-    (* delete everything in the ring and insert the contents of the temp ring.
-     * This wouldn't be necessary if we had annotations that worked *)
-    mk_block
-    [
-      mk_iter
-        (mk_lambda (wrap_args ["node", wrap_ttuple t_node]) @@
-          mk_delete node_ring_nm @@
-            (mk_var "node")
-        ) @@
-        (mk_var node_ring_nm)
-      ;
-      mk_iter
-        (mk_lambda (wrap_args ["node", wrap_ttuple t_node]) @@
-          mk_insert node_ring_nm @@
-            (mk_var "node")
-        ) @@
-        (mk_var "temp_ring")
-    ]
+            (* hash the address, then add a number and hash again *)
+            [mk_apply (mk_var "abs") @@ mk_apply (mk_var "hash_int") @@
+              mk_add
+                (mk_mult (mk_var "i") @@ mk_cint 2683) @@
+                mk_apply (mk_var "hash_addr") @@ mk_var "addr"]) @@
+      mk_var "rng") @@
+  mk_block [
+    (* insert the new elements *)
+    mk_assign node_ring.id @@
+      mk_combine (mk_var node_ring.id) @@ mk_var "new_elems";
+    (* sort by hash *)
+    mk_assign node_ring.id @@
+      mk_sort
+        (mk_assoc_lambda' (id_t_node_for "hash1") (id_t_node_for "hash2") @@
+          mk_lt (mk_var "hash1") @@ mk_var "hash2") @@
+        mk_var node_ring.id
   ]
-
-
-let remove_node_code =
-  mk_global_fn "remove_node"
-  id_t_node_no_hash [t_unit] @@
-    mk_let ["nodes_to_delete"]
-        (mk_slice (mk_var node_ring_nm) @@
-        mk_tuple @@ ids_to_vars id_node_no_hash @ [mk_cunknown]
-        ) @@
-    mk_iter
-        (mk_lambda (wrap_args ["x", wrap_ttuple t_node]) @@
-        mk_delete node_ring_nm (mk_var "x")
-        ) @@
-        mk_var "nodes_to_delete"
 
 (* function to get the node for an int. Returns the node's address *)
 (* note about scaling: ocaml's hash function's range is 0 to the maximum hash
  * value, which is 2^30 *)
-let get_ring_node_code =
-  let results_nm = "results" in
-  let results = mk_var results_nm in
-  mk_global_fn "get_ring_node"
+(* NOTE: this would be much better with a binary search, or using a multiindex with
+ * a 'just bigger than' query *)
+(* TODO: switch to better data structure *)
+let get_ring_node_nm = "get_ring_node"
+let get_ring_node_fn =
+  let results = "results" in
+  mk_global_fn get_ring_node_nm
   ["data", t_int; "max_val", t_int] [t_addr] @@
-  mk_let ["scaled"]
-    (mk_apply (mk_var "int_of_float") @@
-      mk_mult
-        (mk_apply (mk_var "float_of_int") @@
-          mk_apply (mk_var "get_max_int") mk_cunit) @@
-        mk_apply (mk_var "divf") @@ mk_tuple
-          [mk_apply (mk_var "float_of_int") @@ mk_var "data";
-          mk_apply (mk_var "float_of_int") @@ mk_var "max_val"]
-    ) @@
-  mk_let [results_nm]
-    (mk_filter (* filter to only hashes greater than data *)
-      (mk_lambda
-        (wrap_args @@ id_t_node) @@
-        mk_geq (mk_var "hash") (mk_var "scaled")
-      ) @@
-      mk_var node_ring_nm
-    ) @@
-  mk_let (List.map (function ("addr", _) -> "addr" | _ -> "_") id_t_node)
-    (* if we have results, peek. otherwise, take the first node *)
-    (mk_case_sn (mk_peek results) "res_val"
-      (mk_var "res_val")
-      (mk_peek_or_error @@ mk_var node_ring_nm)) @@
-    mk_var "addr"
+    mk_let ["scaled"]
+      (mk_apply (mk_var "int_of_float") @@
+        mk_mult
+          (mk_apply (mk_var "float_of_int") @@
+            mk_apply (mk_var "get_max_int") mk_cunit) @@
+          mk_apply (mk_var "divf") @@ mk_tuple
+            [mk_apply (mk_var "float_of_int") @@ mk_var "data";
+            mk_apply (mk_var "float_of_int") @@ mk_var "max_val"]) @@
+    mk_let [results]
+      (mk_filter (* filter to only hashes greater than data *)
+        (mk_lambda' id_t_node @@
+          mk_geq (mk_var "hash") @@ mk_var "scaled") @@
+        mk_var node_ring.id) @@
+    mk_let (List.map (function ("addr", _) -> "addr" | _ -> "_") id_t_node)
+      (* if we have results, peek to get the min. otherwise, take the first node *)
+      (mk_case_sn (mk_peek' results) "x"
+        (mk_var "x") @@
+        (* take the first node *)
+        mk_peek_or_error "empty node ring" @@ mk_var node_ring.id) @@
+      mk_var "addr"
 
-(* k3 function to get all of the nodes in the node ring *)
-let get_all_uniq_nodes_nm = "get_all_uniq_nodes"
-let get_all_nodes_code =
-  let t_ring_bag = wrap_tbag @@ snd @@ unwrap_tcol t_ring in
-  mk_global_fn get_all_uniq_nodes_nm
-  ["_", t_unit] [wrap_tbag t_addr] @@
-  mk_fst_many [t_addr; t_unit] @@ (* project out just the sorted value *)
-    mk_gbagg
-      (mk_lambda (wrap_args id_t_node) @@
-        mk_var "addr")
-      (mk_lambda (wrap_args ["_", t_unit; "_", wrap_ttuple t_node]) @@ mk_cunit)
-      (mk_cunit) @@
-      mk_convert_col t_ring t_ring_bag @@
-        mk_var node_ring_nm
+let functions =
+  [ add_node_fn;
+    get_ring_node_fn;
+  ]
 
-
-let gen_ring_code =
-  ring_foreign_funcs @
-  node_ring_code ::
-  replicas_code ::
-  set_replicas_code ::
-  add_node_code ::
-  remove_node_code ::
-  get_ring_node_code ::
-  get_all_nodes_code ::
-  []
-
-
-
+let global_vars =
+  List.map decl_global
+  [ node_ring;
+    replicas
+  ]
