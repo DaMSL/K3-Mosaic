@@ -7,7 +7,7 @@ open K3Streams.ResourceFSM
 type dispatcher_t
 
 type channel_impl_t =
-  | In  of in_channel option
+  | In  of int ref * in_channel option (* count, channel *)
   | Out of out_channel option
   | InConst of expr_t list ref
   | InRand of int ref

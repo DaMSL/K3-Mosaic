@@ -14,7 +14,7 @@ open K3Helpers
 exception ResourceError of id_t
 
 type channel_impl_t =
-  | In  of in_channel option
+  | In  of int ref * in_channel option (* count, channel *)
   | Out of out_channel option
   | InConst of expr_t list ref
   | InRand of int ref
@@ -45,17 +45,21 @@ let pull_source id t res in_chan =
     | TTuple ts  -> true,  List.map unwrap_t ts
     | _          -> raise @@ ResourceError(id^": unhandled source type")
   in
+  let sig_len = List.length signature in
   (*print_endline ("Pulling from source "^id);*)
   match res, in_chan with
-  | Handle(t, File s, CSV), In(Some chan) ->
+  | Handle(t, File f, CSV), In(cnt, Some chan) ->
     begin try
       (* parse the lines *)
       let next_record = Str.split r_pipe (input_line chan) in
+      if List.length next_record <> sig_len then
+        raise @@ ResourceError(Printf.sprintf "%s: file %s, line %d, expected %d items but got %d" id f !cnt sig_len @@ List.length next_record);
       let fields = List.map2 value_of_string signature next_record in
       let r = if tuple_val then VTuple fields else List.hd fields in
-      Some r
+      incr cnt; Some r
     with
-      | Invalid_argument _ -> raise @@ ResourceError(id^": problem with file "^s)
+      | Invalid_argument _ -> raise @@
+          ResourceError(Printf.sprintf "%s: problem parsing file %s at line %d" id f !cnt)
       | End_of_file        -> None
     end
   | Stream(t, RandomStream _), InRand index ->
@@ -110,7 +114,7 @@ let initialize_resources resource_env resource_impl_env d =
   let open_channel_impl id =
     match handle_of_resource resource_env id with
       | Some(source, Handle (_, File (filename), _)) ->
-        if source then [id, In(Some(open_in filename))]
+        if source then [id, In(ref 0, Some(open_in filename))]
         else [id, Out(Some(open_out filename))]
 
       | Some(_, Stream(_, ConstStream e)) ->
@@ -125,7 +129,7 @@ let initialize_resources resource_env resource_impl_env d =
   in
   let close_channel_impl id =
     try match List.assoc id resource_impl_env with
-      | In(Some c) -> close_in c
+      | In(_, Some c) -> close_in c
       | Out(Some c) -> close_out c
       | _ -> ()
     with Not_found -> ()
