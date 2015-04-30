@@ -201,7 +201,7 @@ type declaration_t
 type program_t = (declaration_t * annotation_t) list
 
 (* Testing *)
-type check_expr_t = FileExpr of string | InlineExpr of expr_t
+type check_expr_t = FileExpr of string | InlineExpr of string * expr_t
 
 type program_test_t =
     | ProgTest    of program_t * (expr_t * check_expr_t) list

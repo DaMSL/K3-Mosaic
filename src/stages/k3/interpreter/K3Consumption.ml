@@ -47,7 +47,7 @@ let pull_source id t res in_chan =
   in
   (*print_endline ("Pulling from source "^id);*)
   match res, in_chan with
-  | Handle(t, File _, CSV), In(Some chan) ->
+  | Handle(t, File s, CSV), In(Some chan) ->
     begin try
       (* parse the lines *)
       let next_record = Str.split r_pipe (input_line chan) in
@@ -55,7 +55,7 @@ let pull_source id t res in_chan =
       let r = if tuple_val then VTuple fields else List.hd fields in
       Some r
     with
-      | Invalid_argument _ -> raise @@ ResourceError(id^": problem with file")
+      | Invalid_argument _ -> raise @@ ResourceError(id^": problem with file "^s)
       | End_of_file        -> None
     end
   | Stream(t, RandomStream _), InRand index ->

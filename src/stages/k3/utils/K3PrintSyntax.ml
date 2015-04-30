@@ -495,7 +495,7 @@ let string_of_program_test ?uuid_highlight ptest =
   (* print a check_expr *)
   let string_of_check_expr = function
       | FileExpr s -> "file "^s
-      | InlineExpr e -> string_of_expr ?uuid_highlight e
+      | InlineExpr (nm,e) -> nm^" : "^string_of_expr ?uuid_highlight e
   in
   (* print a test expression *)
   let string_of_test_expr (e, check_e) =

@@ -361,11 +361,11 @@ let print_k3_test_program = function
            (* debug *)
            (* List.iter (fun (nm, code) -> print_endline code) maplist; *)
           let map_final_l =
-            list_map (fun (nm, code) -> nm, parse_k3_expr code) maplist in
+            List.map (fun (nm, code) -> nm, parse_k3_expr code) maplist in
           (* join according to map name *)
           let map_tests_join = assoc_join map_final_l tests_by_map in
           let tests_vals =
-            list_map (fun (_, (final, e)) -> e, InlineExpr final)
+            List.map (fun (n, (final, e)) -> e, InlineExpr (n, final))
               map_tests_join
           in
           (* add the produced test roles and trigger *)
@@ -426,10 +426,10 @@ let print_k3_test_program = function
            (* debug *)
             (*List.iter (fun (nm, code) -> print_endline code) maplist; *)
           let map_final_l = list_map (fun (nm, code) ->
-            K3Helpers.mk_var nm, parse_k3_expr code
+            K3Helpers.mk_var nm, nm, parse_k3_expr code
           ) maplist in
-          let tests_vals = list_map (fun (nm, e) ->
-            nm, InlineExpr e) map_final_l in
+          let tests_vals = list_map (fun (nmv, nm, e) ->
+            nmv, InlineExpr(nm, e)) map_final_l in
           (* filter our all role stuff in the original generated ast *)
           let filter_p = List.filter
             (fun d -> not (is_role d || is_def_role d)) p in

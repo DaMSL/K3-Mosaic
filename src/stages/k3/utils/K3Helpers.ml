@@ -513,6 +513,7 @@ let rec type_of_arg = function
   | ATuple xs    -> wrap_ttuple @@ List.map type_of_arg xs
 
 let mk_convert_col src_t dest_t col =
+  if src_t = dest_t then col else
   let t_c, t_elem = unwrap_tcol src_t in
   mk_agg
     (mk_lambda'

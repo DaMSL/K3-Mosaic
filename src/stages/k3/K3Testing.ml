@@ -21,7 +21,7 @@ type test_t =
 let group name tests = TestGroup(name, tests)
 let case name assertion = TestCase(name, assertion)
 
-let (@:) f x = f x
+let (@@) f x = f x
 
 let (@=:?) actual expected = AssertTypeEquals(expected, actual)
 let (@=?)  actual expected = AssertValueEquals(expected, actual)
@@ -34,7 +34,7 @@ let parse_expr s = K3Parser.expr K3Lexer.tokenize (Lexing.from_string s)
  * and an expression *)
 let eval_test_expr_env tdecl_prog t_env trig_env val_env expr =
   let typed_expr = deduce_expr_type trig_env t_env expr in
-  value_of_eval @: snd @:
+  value_of_eval @@ snd @@
     eval_expr ("localhost", 1) None val_env typed_expr
 
 (* we pass in an optional interpreter environment, a program for type bindings,
@@ -73,30 +73,30 @@ let run_tests ?(indent="") test =
         passed, indent ^ name ^ ": " ^ result_string
     )
     | TestGroup(name, tests) ->
-        let passed, ss = list_unzip @: List.map (loop @: "  "^indent) tests in
+        let passed, ss = list_unzip @@ List.map (loop @@ "  "^indent) tests in
         List.exists id_fn passed, indent^name^":\n"^String.concat "\n" ss
   in
   loop "" test
 
 let print_tests tests =
-  let passed, ss = list_unzip @: List.map run_tests tests in
+  let passed, ss = list_unzip @@ List.map run_tests tests in
   let passed = List.for_all id_fn passed in
   let s = String.concat "\n" ss in
   if passed then print_endline s
-  else prerr_endline @: "ERROR: "^s
+  else prerr_endline @@ "ERROR: "^s
 
 (* Driver methods *)
 let check_as_expr ce = match ce with
-  | InlineExpr e -> e
-  | FileExpr (fp) -> parse_expr @: read_file fp
+  | InlineExpr (nm, e) -> nm, e
+  | FileExpr (fp)      -> fp, parse_expr @@ read_file fp
 
 let test_expressions peers file_name = function
   | ExprTest expr_tests ->
-    let test_cases = snd @:
+    let test_cases = snd @@
       List.fold_left (fun (i, test_acc) (decls, e, x) ->
-        let name = file_name^" "^(string_of_int i) in
-        let test_case = case name @:
-          eval_test_expr peers decls e @=? eval_test_expr peers decls @: check_as_expr x
+        let name, expr = check_as_expr x in
+        let test_case  = case name @@
+          eval_test_expr peers decls e @=? eval_test_expr peers decls expr
         in i+1, test_acc@[test_case]
       ) (0, []) expr_tests
     in print_tests test_cases
@@ -118,12 +118,12 @@ let unify_tuple_lists id l1 l2 =
     (* check that our lists are disjoint *)
     (*let tuple_remove_value = function*)
       (*| VTuple tuplist -> VTuple(list_drop_end 1 tuplist)*)
-      (*| _ -> failwith @: Printf.sprintf "%s is not a tuple!" id*)
+      (*| _ -> failwith @@ Printf.sprintf "%s is not a tuple!" id*)
     (*in*)
     (*let l1' = List.rev_map tuple_remove_value l1 in*)
     (*let l2' = List.rev_map tuple_remove_value l2 in*)
     (*if LAS.inter l1' l2' <> []*)
-    (*then failwith @: Printf.sprintf "In %s, lists not disjoint!" id*)
+    (*then failwith @@ Printf.sprintf "In %s, lists not disjoint!" id*)
     (*else LAS.union l1 l2*)
     LAS.union l1 l2
 
@@ -180,7 +180,7 @@ let test_program peers globals_k3 interpret_fn file_name test =
   (* print out the environments *)
   (*List.iter (fun (addr, env) -> *)
     (*Printf.printf "Environment for %s\n" (K3Printing.string_of_address addr); *)
-    (*print_endline @: K3Values.string_of_program_env env*)
+    (*print_endline @@ K3Values.string_of_program_env env*)
   (* ) node_envs;*)
 
   (* unify the node value environments if needed *)
@@ -188,7 +188,7 @@ let test_program peers globals_k3 interpret_fn file_name test =
 
   (* debug - print the unified env *)
   (*Printf.printf "Unified environment:\n";*)
-  (*print_endline @: K3Values.string_of_env ~skip_functions:false v_env;*)
+  (*print_endline @@ K3Values.string_of_env ~skip_functions:false v_env;*)
 
   let numbered_tests = insert_index_fst ~first:1 tests in
   let prog_globals = K3Global.add_globals_k3 globals_k3 program in
@@ -196,10 +196,10 @@ let test_program peers globals_k3 interpret_fn file_name test =
    * typechecking *)
   let tdecl_prog, t_env, trig_env, _ = type_bindings_of_program prog_globals in
   let test_cases = list_map (fun (i, (lexp, rexp)) ->
-      let name = file_name^"_"^soi i in
+      let name, expr = check_as_expr rexp in
       let v1 = eval_test_expr_env tdecl_prog t_env trig_env v_env lexp in
-      let v2 = eval_test_expr peers [] @: check_as_expr rexp in
-      case name @: v1 @=? v2
+      let v2 = eval_test_expr peers [] expr in
+      case name @@ v1 @=? v2
     ) numbered_tests
   in print_tests test_cases
 

@@ -353,8 +353,9 @@ let uniq_types_and_maps ?(type_fn=map_types_for) (p:prog_data_t)  =
   Hashtbl.iter (fun t maps -> fns := (t, maps) :: !fns) hash;
   !fns
 
-let map_ds_of_id ?(vid=false) p map_id =
+let map_ds_of_id ?(vid=false) ?(bag=false) p map_id =
   let nm = map_name_of p map_id in
   let e = if vid then map_ids_types_with_v_for p map_id
           else map_ids_types_for p map_id in
-  create_ds nm (wrap_t_of_map' @@ snd_many e) ~e
+  let wrap = if bag then wrap_tbag' else wrap_t_of_map' in
+  create_ds nm (wrap @@ snd_many e) ~e

@@ -341,10 +341,10 @@ let renumber_test_program_ids ?(start=0) test_p =
       | FileExpr _ ->
           let n, e' = renumber_expr_ids ~start:num e in
           n, (e', check_e)
-      | InlineExpr e2 ->
+      | InlineExpr (nm, e2) ->
           let n, e'  = renumber_expr_ids ~start:num e in
           let n, e2' = renumber_expr_ids ~start:n e2 in
-          n, (e', InlineExpr e2')
+          n, (e', InlineExpr(nm, e2'))
     ) start_num l
   in
   let proc p testl =

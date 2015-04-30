@@ -743,7 +743,6 @@ named_expr_list :
 ;
 
 check_expr :
-    | expr          { InlineExpr($1) }
-    | FILE STRING   { FileExpr($2) }
+    | IDENTIFIER COLON expr          { InlineExpr($1, $3) }
 ;
 

@@ -372,8 +372,8 @@ let modify_map_add_vid (c:config) ast stmt =
  * to K3 calculations are written. *)
 let delta_action c ast stmt after_fn =
   let lmap = P.lhs_map_of_stmt c.p stmt in
-  let lmap_types = P.map_types_with_v_for c.p lmap in
-  let lmap_type = wrap_t_of_map @@ wrap_ttuple lmap_types in
+  let lmap_id_t = P.map_ids_types_for c.p lmap in
+  let lmap_col_t = wrap_t_of_map @@ wrap_ttuple @@ snd_many lmap_id_t in
   (* we need to know how the map is accessed in the statement. *)
   let lmap_bindings = P.find_lmap_bindings_in_stmt c.p stmt lmap in
   (* let existing_out_tier = ..., which we remove *)
@@ -385,7 +385,8 @@ let delta_action c ast stmt after_fn =
     (* this is something like prod_ret_x's let *)
       let delta_names, bound, expr = U.decompose_let expr in
       let full_names = fst_many lmap_bindings @ delta_names in
-      let full_vars = mk_singleton lmap_type @@ ids_to_vars full_names in
+      let lmap_v_col_t = wrap_t_of_map @@ wrap_ttuple @@ P.map_types_with_v_for c.p lmap in
+      let full_vars = mk_singleton lmap_v_col_t @@ ids_to_vars full_names in
       (* modify the delta itself *)
       mk_let delta_names
         (* contains original computation code *)
@@ -421,9 +422,44 @@ let delta_action c ast stmt after_fn =
           (mk_lambda' lam_id_t @@ mk_tuple @@ ids_to_vars ids)
       else id_fn (* no need to wrap *)
     in
-    let delta_name = "_delta_values_" in
+    (* if we have a concat operation, we need to enforce uniqueness with addition for the same key *)
+    let has_concat =
+      let find_concat found x =
+        if found || U.tag_of_expr x = Combine then true else false in
+      Tree.fold_tree_th_bu find_concat false expr in
+    (* this wrapper is either a conversion to the outside or a uniqueness operation *)
+    let wrap_out col_e =
+      let wrap_uniq col_e =
+        let last_id, last_t = list_last lmap_id_t in
+        let lmap_t_no_val = P.map_types_no_val_for c.p lmap in
+        let subscript_rng = create_range 1 @@ List.length lmap_t_no_val in
+        let subs = List.map (flip mk_subscript @@ mk_var "g") subscript_rng in
+        (* convert the gbagg to a set *)
+        mk_agg
+          (mk_assoc_lambda' ["acc", lmap_col_t] ["g", wrap_ttuple lmap_t_no_val; "val", last_t] @@
+            mk_block [
+              (* combine the tuple with val *)
+              mk_insert "acc" @@ subs @ [mk_var "val"];
+              mk_var "acc" ])
+          (mk_empty lmap_col_t) @@
+          (* group for uniqueness *)
+          mk_gbagg
+            (* group by key *)
+            (mk_lambda' lmap_id_t @@
+              mk_tuple @@ ids_to_vars @@ fst_many @@ list_drop_end 1 lmap_id_t)
+            (* add is our combination operator *)
+            (mk_assoc_lambda' ["acc", last_t] lmap_id_t @@
+              mk_add (mk_var "acc") @@ mk_var @@ last_id)
+            (mk_cint 0)
+            col_e
+      in
+      (* we need to convert the bags to the external type *)
+      let wrap_convert col_e = mk_convert_col (wrap_tbag' @@ snd_many lmap_id_t) lmap_col_t col_e in
+      if has_concat then wrap_uniq col_e else wrap_convert col_e
+    in
+    let delta_name = "delta_values" in
     (* col2 contains the calculation code *)
-    mk_let [delta_name] (wrap_map col) @@
+    mk_let [delta_name] (wrap_out @@ wrap_map col) @@
       (* any function *)
       after_fn (mk_var delta_name)
 

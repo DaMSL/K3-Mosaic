@@ -755,12 +755,12 @@ let deduce_program_test_type prog_test =
           (* can't check if it's a file *)
           let expr_t = deduce_expr_type trig_env env expr in
           expr_t, check_expr
-      | InlineExpr e ->
+      | InlineExpr (nm, e) ->
           (* create a dummy equals to check both expressions *)
           let e_test = mk_eq expr e in
           let e_test_t = deduce_expr_type trig_env env e_test in
           let e_l, e_r = decompose_eq e_test_t in
-          e_l, InlineExpr e_r
+          e_l, InlineExpr (nm, e_r)
       ) testl
     in p', testl'
   in
