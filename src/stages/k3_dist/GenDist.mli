@@ -3,7 +3,6 @@ open K3.AST
 open ProgInfo
 open K3Route
 
-exception ProcessingFailed of string
 val gen_dist : ?use_multiindex:bool ->
                ?enable_gc:bool -> 
                ?stream_file:string ->

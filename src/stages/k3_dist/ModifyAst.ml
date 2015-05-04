@@ -100,20 +100,25 @@ let get_map_access_patterns_ids p ast =
 (* change the initialization values of global maps to have the vid as well *)
 (* receives the new types to put in and the starting expression to change *)
 (* inserts a reference to the default vid var for that node *)
-let rec add_vid_to_init_val types e =
-  let add = add_vid_to_init_val types in
+let rec add_vid_to_init_val col_vid_t col_id_ts e =
+  let add = add_vid_to_init_val col_vid_t col_id_ts in
   let vid_var = mk_var g_init_vid.id in
   match U.tag_of_expr e with
   | Combine -> let x, y = U.decompose_combine e in
       mk_combine (add x) (add y)
-  | Empty t -> mk_empty types
+  | Empty t -> mk_empty col_vid_t
   | Singleton t -> let x = U.decompose_singleton e in
-      mk_singleton types [add x]
+      mk_singleton col_vid_t [add x]
   | Tuple -> let xs = U.decompose_tuple e in
       mk_tuple @@ P.map_add_v vid_var xs
   (* this should only be encountered if there's no tuple *)
   | Const _ | Var _ -> mk_tuple @@ P.map_add_v vid_var [e]
-  | _ -> failwith "add_vid_to_init_val: unhandled modification"
+  (* modify loading from a file *)
+  | Apply ->
+      mk_map (mk_lambda' col_id_ts @@
+        mk_tuple @@ (mk_var g_min_vid.id)::(ids_to_vars @@ fst_many col_id_ts))
+        e
+  | _ -> U.dist_fail e "add_vid_to_init_val: unhandled modification"
 
 (* add a vid to global value map declarations *)
 let get_global_map_inits c = function
@@ -121,12 +126,13 @@ let get_global_map_inits c = function
   | Global(name, typ, m_expr),_ ->
     begin try
       let map_id = P.map_id_of_name c.p name in
+      let e' = P.map_ids_types_for c.p map_id in
       let e  = P.map_ids_types_with_v_for c.p map_id in
       let t = wrap_t_map_idx' c map_id @@ snd_many e in
       begin match m_expr with
         | None     -> []
                       (* add a vid *)
-        | Some exp -> [map_id, mk_ind @@ add_vid_to_init_val t exp]
+        | Some exp -> [map_id, mk_ind @@ add_vid_to_init_val t e' exp]
       end
     with Not_found -> [] end
   | _ -> []

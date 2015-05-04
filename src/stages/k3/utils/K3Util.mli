@@ -4,6 +4,9 @@ open K3.Annotation
 
 (* AST *)
 
+exception DistributeError of int * string
+val dist_fail : expr_t -> string -> 'a
+
 val id_of_expr : expr_t -> int
 val tag_of_expr : expr_t -> expr_tag_t
 val meta_of_expr : expr_t -> annotation_t

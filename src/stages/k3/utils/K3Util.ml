@@ -5,10 +5,15 @@ open Tree
 open K3.AST
 open K3.Annotation
 
+exception DistributeError of int * string
+
 (* AST accessors *)
 let id_of_expr e = fst (fst_data e)
 let tag_of_expr e = snd (fst_data e)
 let meta_of_expr e = snd_data e
+
+(* function to fail *)
+let dist_fail e s = raise @@ DistributeError(id_of_expr e, s)
 
 (* Get all components of an expression node *)
 let details_of_expr (e:expr_t) =

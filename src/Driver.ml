@@ -201,10 +201,10 @@ let default_cmd_line_params () = {
 let cmd_line_params = default_cmd_line_params ()
 
 
-let handle_type_error p (uuid, name, msg) =
-  let s = K3TypeError.string_of_error msg in
-  prerr_endline "----Type error----";
-  prerr_endline @@ "Error("^(string_of_int uuid)^"): "^name^": "^s;
+let handle_error heading p uuid ?name msg =
+  let n = match name with Some nm -> nm^": " | _ -> "" in
+  prerr_endline heading;
+  prerr_endline @@ "Error("^(string_of_int uuid)^"): "^n^msg;
   (match p with
   | K3Data p | K3DistData(p,_,_)->
       if cmd_line_params.debug_info then
@@ -215,15 +215,10 @@ let handle_type_error p (uuid, name, msg) =
     PS.string_of_program_test ~uuid_highlight:uuid p_test);
   exit 1
 
-let handle_interpret_error p (uuid,error) =
-  prerr_endline "----Interpreter error----";
-  prerr_endline @@ "Error("^(string_of_int uuid)^"): "^error;
-  (match p with
-  | K3Data p | K3DistData(p,_,_)->
-      prerr_endline @@ PS.string_of_program ~uuid_highlight:uuid p
-  | K3TestData p_test -> prerr_endline @@
-    PS.string_of_program_test ~uuid_highlight:uuid p_test);
-  exit 1
+let handle_type_error p uuid nm msg    = handle_error "----Type Error----" p uuid ~name:nm @@
+                                         K3TypeError.string_of_error msg
+let handle_interpret_error p uuid msg  = handle_error "----Interpreter Error----" p uuid msg
+let handle_distribute_error p uuid msg = handle_error "----Distribute Error----" p uuid msg
 
 (* Program parsers *)
 let parse_program_from_string parsefn lexfn str =
@@ -248,7 +243,7 @@ let typed_program_with_globals p =
   try
     let p, env, trig_env, _ = type_bindings_of_program p' in
     p, (env, trig_env)
-  with TypeError (a,b,c) -> handle_type_error (K3Data p') (a,b,c)
+  with TypeError (a,b,c) -> handle_type_error (K3Data p') a b c
 
 let typed_program_test_with_globals prog_test =
   let add_g p =
@@ -260,14 +255,14 @@ let typed_program_test_with_globals prog_test =
       let p_t = ProgTest(p', testl) in
       begin
         try deduce_program_test_type p_t
-        with TypeError (a,b,c) -> handle_type_error (K3TestData p_t) (a,b,c)
+        with TypeError (a,b,c) -> handle_type_error (K3TestData p_t) a b c
       end
   | NetworkTest(p, testl) ->
       let p' = add_g p in
       let p_t = NetworkTest(p', testl) in
       begin
         try deduce_program_test_type p_t
-        with TypeError (a,b,c) -> handle_type_error (K3TestData p_t) (a,b,c)
+        with TypeError (a,b,c) -> handle_type_error (K3TestData p_t)  a b c
       end
   | ExprTest(p_ts) -> failwith "expr_test unhandled"
 
@@ -309,7 +304,7 @@ let interpret_k3 params prog = let p = params in
                                         ~src_interval:p.src_interval
     in
     interpret_k3_program interp
-  with RuntimeError (uuid,str) -> handle_interpret_error (K3Data tp) (uuid,str)
+  with RuntimeError (uuid,str) -> handle_interpret_error (K3Data tp) uuid str
 
 let interpret params inputs =
   let f = function
@@ -474,13 +469,11 @@ let test params inputs =
   in List.iter2 test_fn params.input_files inputs
 
 let transform_to_k3_dist params p proginfo =
-  let use_multiindex = params.use_multiindex in
-  let enable_gc = params.enable_gc in
-  let stream_file = params.stream_file in
-  let gen_deletes = params.gen_deletes in
-  let gen_correctives = params.gen_correctives in
-  GenDist.gen_dist ~use_multiindex ~enable_gc ~stream_file ~gen_deletes ~gen_correctives
-    proginfo params.partition_map p
+  let {use_multiindex; enable_gc; stream_file; gen_deletes; gen_correctives} = params in
+  try
+    GenDist.gen_dist ~use_multiindex ~enable_gc ~stream_file ~gen_deletes ~gen_correctives
+      proginfo params.partition_map p
+  with DistributeError(uuid, s) -> handle_distribute_error (K3Data p) uuid s
 
 let process_inputs params =
   let proc_fn f = match params.in_lang, !(params.action) with

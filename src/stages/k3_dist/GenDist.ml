@@ -57,8 +57,6 @@ module P = ProgInfo
 module TS = Timestamp
 module Proto = Protocol
 
-exception ProcessingFailed of string;;
-
 (* global trigger names needed for generated triggers and sends *)
 let send_fetch_name_of_t trig_nm = "sw_"^trig_nm^"_send_fetch"
 let rcv_fetch_name_of_t trig_nm = "nd_"^trig_nm^"_rcv_fetch"
