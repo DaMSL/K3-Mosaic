@@ -25,7 +25,7 @@ let param_specs = Arg.align [
 let usage_msg = "Enter data files"
 
 let default_val = function
-  | TString -> ""
+  | TString -> " "
   | TInt    -> "0"
   | TFloat  -> "0.0"
   | TBool   -> "false"
