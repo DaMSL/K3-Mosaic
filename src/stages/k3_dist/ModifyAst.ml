@@ -114,7 +114,7 @@ let rec add_vid_to_init_val col_vid_t col_id_ts e =
   (* this should only be encountered if there's no tuple *)
   | Const _ | Var _ -> mk_tuple @@ P.map_add_v vid_var [e]
   (* modify loading from a file *)
-  | Apply ->
+  | Map ->
       mk_map (mk_lambda' col_id_ts @@
         mk_tuple @@ (mk_var g_min_vid.id)::(ids_to_vars @@ fst_many col_id_ts))
         e
