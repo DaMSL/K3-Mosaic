@@ -226,7 +226,6 @@ let modify_map_add_vid (c:config) ast stmt =
   let lmap_name  = P.map_name_of c.p lmap in
   let lmap_types = P.map_types_with_v_for c.p lmap in
   let maps_n_id  = maps_with_existing_out_tier stmt in
-  let map_names  = fst_many maps_n_id in
   (* names of maps with one dimension in this statement *)
   let maps_n_1d  = fst_many @@ List.filter
     (fun (_, m) -> null @@ P.map_types_no_val_for c.p m) maps_n_id in
@@ -234,29 +233,6 @@ let modify_map_add_vid (c:config) ast stmt =
   (* add a vid to a tuple *)
   let modify_tuple e =
     P.map_add_v var_vid @@ U.extract_if_tuple e
-  in
-  (* Sometimes we only find out that a node needs to have a vid from a higher
-   * vid in the tree, and we need to add it top-down. The main use for this
-   * right now is for combine *)
-  let rec add_vid_from_above e =
-    match U.tag_of_expr e with
-    | Flatten ->
-        let body = U.decompose_flatten e in
-        mk_flatten @@ add_vid_from_above body
-    | Lambda args ->
-        let _, body = U.decompose_lambda e in
-        mk_lambda args @@ add_vid_from_above body
-    | Map -> let lambda, col = U.decompose_map e in
-        mk_map (add_vid_from_above lambda) col
-    | Combine -> let x, y = U.decompose_combine e in
-        mk_combine (add_vid_from_above x) (add_vid_from_above y)
-    | Singleton t -> let x = U.decompose_singleton e in
-        mk_singleton t [add_vid_from_above x]
-    | Apply -> (* this should be a let *)
-        let lambda, input = U.decompose_apply e in
-        mk_apply (add_vid_from_above lambda) input
-    | _ -> mk_tuple @@ modify_tuple e
-    (* TODO: handle combining more variables *)
   in
   (* modify a direct map read, such as in a slice or a peek. col is the
    * collection, pat_m is an option pattern (for slice) *)
@@ -280,17 +256,15 @@ let modify_map_add_vid (c:config) ast stmt =
     | _ -> raise (UnhandledModification ("Cannot handle non-var in slice"))
   in
 
-  (* we return a message to the higher levels in the tree,
-   * and the new tree node *)
+  (* we need messages between levels. For example, if we have a Delete that we
+   * want to prune out, that whole branch needs to be removed *)
   let rec modify e msgs path =
     let get_msg i = at msgs i in
-    let msg_vid i = if null msgs then false else at msgs i = AddVidMsg in
     let msg_del i = if null msgs then false else at msgs i = DelMsg in
     match U.tag_of_expr e with
 
     (* a lambda simply passes through a message *)
     | Lambda _ -> get_msg 0, e
-
     | Insert _ -> let col, elem = U.decompose_insert e in
         NopMsg, mk_insert col @@ modify_tuple elem
 
@@ -311,22 +285,13 @@ let modify_map_add_vid (c:config) ast stmt =
       NopMsg, modify_map_read c col pat_m
 
     | Iterate ->
-      let (lambda, col) = U.decompose_iterate e in
       (* if our lambda requests a deletion, we delete *)
       if msg_del 0 then DelMsg, e
-      (* if our collection added a vid, we need to do it in the lambda *)
-      else if msg_vid 1 then
-        let lambda' = add_vid_to_lambda_args lambda in
-        NopMsg, mk_iter lambda' col
       else NopMsg, e
 
     (* handle the case of map, which appears in some files *)
-    | Map -> let (lambda, col) = U.decompose_map e in
-      if msg_vid 1 then
-        (* if our collection added a vid, we need to do it in the lambda *)
-        let mod_lambda = add_vid_to_lambda_args lambda in
-        NopMsg, mk_map mod_lambda col
-      else NopMsg, e
+    (*| Map -> let (lambda, col) = U.decompose_map e in
+      NopMsg, e*)
 
     (* handle a case of a lambda applied to an lmap (i.e. a let statement *)
     (* in this case, we modify the types of the lambda vars themselves *)
@@ -342,16 +307,6 @@ let modify_map_add_vid (c:config) ast stmt =
             | _ -> raise (UnhandledModification("At Apply: "^PR.string_of_expr e)) end
         | _ -> NopMsg, e
       end
-
-    | Combine -> let x, y = U.decompose_combine e in
-      begin match msg_vid 0, msg_vid 1 with
-      | true, true -> AddVidMsg, e
-      | true, _    -> AddVidMsg, mk_combine x @@ add_vid_from_above y
-      | _, true    -> AddVidMsg, mk_combine (add_vid_from_above x) y
-      | _, _       -> NopMsg, e
-      end
-
-    | Var name when List.mem name map_names -> AddVidMsg, e
 
     (* if any statements in a block requested deletion, delete
      * those statements - they're not relevant *)
