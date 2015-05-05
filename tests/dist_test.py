@@ -38,9 +38,7 @@ def run(target_file,
     target_file = os.path.abspath(target_file)
     nice_name = get_nice_name(target_file)
     root_path = os.path.join(script_path, to_root)
-    dbtoaster_dir = os.path.join(root_path, "external/dbtoaster")
-    dbtoaster_name = "bin/dbtoaster_release"
-    dbtoaster = os.path.join(dbtoaster_dir, dbtoaster_name)
+    dbtoaster = os.path.join(script_path, "dbtoaster_release")
     k3o = os.path.join(root_path, "bin/k3")
     partmap_tool = os.path.join(root_path, "bin/partmap_tool")
     combine_tool = os.path.join(root_path, "bin/combine_data")
@@ -69,18 +67,14 @@ def run(target_file,
         check_exists("partmap_tool", partmap_tool)
         check_exists("combine_data", combine_tool)
 
-    # change to dbtoaster path (dbtoaster needs it)
-    if verbose:
-        print("cd {0}".format(dbtoaster_dir))
-    os.chdir(dbtoaster_dir)
-
     # run dbtoaster to get interpreted updates
+    os.chdir(script_path)
     debug_cmd = ''
     debug_flags = ['PRINT-VERBOSE', 'LOG-INTERPRETER-UPDATES', 'LOG-INTERPRETER-TRIGGERS', 'LOG-M3']
     for f in debug_flags:
         debug_cmd += ' -d ' + f
 
-    cmd = concat([dbtoaster_name, debug_cmd, target_file, ">", trace_file, "2>", error_file])
+    cmd = concat([dbtoaster, debug_cmd, target_file, ">", trace_file, "2>", error_file])
     print_system(cmd, verbose)
     if check_error(error_file, verbose):
         os.chdir(saved_dir)
@@ -91,35 +85,32 @@ def run(target_file,
         src_lang = "distm3"
     else:
         src_lang = "m3"
-    cmd = concat([dbtoaster_name, "-l", src_lang, "-d", "PRINT-VERBOSE", target_file, ">", m3_file, "2>", error_file])
+    cmd = concat([dbtoaster, "-l", src_lang, "-d", "PRINT-VERBOSE", target_file, ">", m3_file, "2>", error_file])
     print_system(cmd, verbose)
     if check_error(error_file, verbose):
         os.chdir(saved_dir)
         return False
 
-    # change directory back
-    if verbose:
-        print("cd {0}".format(saved_dir))
-    os.chdir(saved_dir)
-
     # create a single-site k3o file
     cmd = concat([k3o, "-p -i m3 -l k3", m3_file, ">", k3_file, "2>", error_file])
     print_system(cmd, verbose)
     if check_error(error_file, verbose) or check_error(k3_file, verbose, True):
+        os.chdir(saved_dir)
         return False
 
-    # get the files we're using
+    # scan for the files we're using
     s = open(k3_file, 'r').read()
     matches = re.findall(r'\("(.+)", csv\)', s)
     if matches is None:
         print("failed to find file references")
+        os.chdir(saved_dir)
         return False
 
     read_files = []
     for m in matches:
-        read_files += [os.path.join(dbtoaster_dir, m)]
+        read_files += [os.path.join(script_path, m)]
 
-    load_path = concat(["--load_path", dbtoaster_dir])
+    load_path = concat(["--load_path", script_path])
 
     # execution diverges from here
     if distrib:
@@ -142,24 +133,28 @@ def run(target_file,
                 ['>', k3dist_file, "2>", error_file])
         print_system(cmd, verbose)
         if check_error(error_file, verbose) or check_error(k3dist_file, verbose, True):
+            os.chdir(saved_dir)
             return False
 
         # create a partition map
         cmd = concat([partmap_tool, k3dist_file, "-n", num_nodes, ">", part_file])
         print_system(cmd, verbose)
         if check_error(part_file, verbose, True):
+            os.chdir(saved_dir)
             return False
 
         # combine the data files
         cmd = concat([combine_tool, "--k3", k3dist_file] + read_files + ['>', data_file, '2>', error_file])
         print_system(cmd, verbose)
         if check_error(error_file, verbose):
+            os.chdir(saved_dir)
             return False
 
         # create another k3 distributed file (with partition map)
         cmd = concat([k3o, "-p -i m3 -l k3disttest", m3_file, options, "-m", part_file, "--sfile", data_file] + [">", k3dist_file, "2>", error_file])
         print_system(cmd, verbose)
         if check_error(error_file, verbose) or check_error(k3dist_file, verbose, True):
+            os.chdir(saved_dir)
             return False
 
         # create node list
@@ -182,6 +177,7 @@ def run(target_file,
             cmd = concat([k3o, "-i k3 -l k3new", fold_cmd, "--datafile", data_file, k3dist_file, ">", k3new_file, "2>", error_file])
             print_system(cmd, verbose)
             if check_error(error_file, verbose, False):
+                os.chdir(saved_dir)
                 return False
 
             # create k3_new partmap
@@ -193,6 +189,7 @@ def run(target_file,
         cmd = concat([k3o, "--test", peer_cmd, "-q", queue_type, load_path, k3dist_file, ">", output_file, "2>", error_file])
         print_system(cmd, verbose)
         if check_error(error_file, verbose, True):
+            os.chdir(saved_dir)
             return False
 
         # no error. print the file
@@ -201,6 +198,7 @@ def run(target_file,
             if verbose:
                 print(buf)
 
+        os.chdir(saved_dir)
         return True
 
     else: # not distrib
@@ -209,23 +207,27 @@ def run(target_file,
         cmd = concat([k3o, "-p -i k3 -l k3", k3_file, ">", k3_file2, "2>", error_file])
         print_system(cmd, verbose)
         if check_error(error_file, verbose) or check_error(k3_file2, verbose, True):
+            os.chdir(saved_dir)
             return False
 
         # convert to a test
         cmd = concat([k3o, "-p -i m3 -l k3test --trace", trace_file, m3_file, ">", k3_file3, "2>", error_file])
         print_system(cmd, verbose)
         if check_error(error_file, verbose) or check_error(k3_file, verbose, True):
+            os.chdir(saved_dir)
             return False
 
         # run the k3 driver on the input to get test results
         cmd = concat([k3o, "--test", k3_file3, load_path, ">", output_file, "2>", error_file])
         print_system(cmd, verbose)
         if check_error(error_file, verbose):
+            os.chdir(saved_dir)
             return False
         # no error. print the file
         with open(output_file, 'r') as f:
             buf = f.read()
             if verbose:
                 print(buf)
+        os.chdir(saved_dir)
         return True
 

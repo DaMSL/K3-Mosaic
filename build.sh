@@ -8,16 +8,12 @@ popd > /dev/null
 cd $SCRIPTPATH
 
 # check for dbtoaster
-if [ ! -f "./external/dbtoaster/bin/dbtoaster_release" ]
+if [ ! -f "./tests/dbtoaster_release" ]
 then
-  if [ ! -d "./external/dbtoaster/bin" ]
-  then
-      mkdir "./external/dbtoaster/bin"
-  fi
   cd external/dbtoaster_src
   echo "Building DBToaster..."
   make bin/dbtoaster
-  cp bin/dbtoaster* ../dbtoaster/bin
+  cp bin/dbtoaster* $SCRIPTPATH/tests
   cd $SCRIPTPATH
 fi
 

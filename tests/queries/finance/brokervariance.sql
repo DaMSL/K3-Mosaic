@@ -1,5 +1,5 @@
 CREATE STREAM bids(t FLOAT, id INT, broker_id INT, volume FLOAT, price FLOAT)
-  FROM FILE 'examples/data/finance.csv'
+  FROM FILE 'data/finance.csv'
   LINE DELIMITED orderbook (book := 'bids', brokers := '10', 
                             deterministic := 'yes');
 

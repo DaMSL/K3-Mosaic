@@ -1,4 +1,4 @@
-INCLUDE 'examples/queries/tpch/schemas_small.sql';
+INCLUDE 'queries/tpch/schemas_small.sql';
 
 SELECT supp_nation, cust_nation, l_year, SUM(volume) as revenue
 FROM (

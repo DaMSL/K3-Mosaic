@@ -1,5 +1,5 @@
 CREATE STREAM R(A int, B int) 
-  FROM FILE 'examples/data/simple/r.dat' LINE DELIMITED
+  FROM FILE 'data/simple/r.dat' LINE DELIMITED
   CSV ();
 
 SELECT A FROM R r1 WHERE EXISTS (SELECT R2.A FROM R r2);

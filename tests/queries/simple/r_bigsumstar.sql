@@ -1,5 +1,5 @@
 CREATE STREAM R(A int, B int) 
-  FROM FILE 'examples/data/simple/r.dat' LINE DELIMITED csv;
+  FROM FILE 'data/simple/r.dat' LINE DELIMITED csv;
 
 SELECT r1.A, SUM(r1.B + r2.B + r3.B + r4.B)
 FROM R r1, R r2, R r3, R r4
