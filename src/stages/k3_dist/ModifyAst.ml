@@ -236,13 +236,11 @@ let modify_map_add_vid (c:config) ast stmt =
   in
   (* modify a direct map read, such as in a slice or a peek. col is the
    * collection, pat_m is an option pattern (for slice) *)
-  let modify_map_read c col pat_m =
-  match U.tag_of_expr col with
+  let modify_map_read c col pat_m = match U.tag_of_expr col with
     | Var id ->
       let m = try List.assoc id maps_n_id (* includes existing_out_tier *)
-              with Not_found -> raise @@ UnhandledModification(
-                "No "^id^ " map found in stmt "^string_of_int stmt)
-      in
+              with Not_found -> U.dist_fail col @@
+                Printf.sprintf "No %s map found in stmt %d" id stmt in
       let buf_col =
         (* if this isn't the lmap (in which case it's stored locally)
          * adjust the name of the map to be a buffer *)
@@ -253,7 +251,7 @@ let modify_map_add_vid (c:config) ast stmt =
       mk_bind buf_col "__x" @@
       map_latest_vid_vals c (mk_var "__x") pat_m m ~keep_vid:false
 
-    | _ -> raise (UnhandledModification ("Cannot handle non-var in slice"))
+    | _ -> U.dist_fail col "Cannot handle non-var in slice"
   in
 
   (* we need messages between levels. For example, if we have a Delete that we
@@ -286,12 +284,7 @@ let modify_map_add_vid (c:config) ast stmt =
 
     | Iterate ->
       (* if our lambda requests a deletion, we delete *)
-      if msg_del 0 then DelMsg, e
-      else NopMsg, e
-
-    (* handle the case of map, which appears in some files *)
-    (*| Map -> let (lambda, col) = U.decompose_map e in
-      NopMsg, e*)
+      if msg_del 0 then DelMsg, e else NopMsg, e
 
     (* handle a case of a lambda applied to an lmap (i.e. a let statement *)
     (* in this case, we modify the types of the lambda vars themselves *)
