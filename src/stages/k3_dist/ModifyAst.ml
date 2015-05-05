@@ -235,23 +235,28 @@ let modify_map_add_vid (c:config) ast stmt =
     P.map_add_v var_vid @@ U.extract_if_tuple e
   in
   (* modify a direct map read, such as in a slice or a peek. col is the
-   * collection, pat_m is an option pattern (for slice) *)
-  let modify_map_read c col pat_m = match U.tag_of_expr col with
+   * collection, pat_m is an option pattern (for slice),
+   * expr_m is a default expression. if we have a default expression, we don't fail *)
+  let modify_map_read c col pat_m expr_m =
+    (* we either fail or return the default expression, if given one *)
+    let err_or_ret s = maybe_f (fun () -> U.dist_fail col s) id_fn expr_m in
+    match U.tag_of_expr col with
     | Var id ->
-      let m = try List.assoc id maps_n_id (* includes existing_out_tier *)
-              with Not_found -> U.dist_fail col @@
-                Printf.sprintf "No %s map found in stmt %d" id stmt in
-      let buf_col =
-        (* if this isn't the lmap (in which case it's stored locally)
-         * adjust the name of the map to be a buffer *)
-        if id <> lmap_alias && id <> lmap_name then
-          mk_var @@ P.buf_of_stmt_map stmt id
-        else col in
-      (* get the latest vid values for this map *)
-      mk_bind buf_col "__x" @@
-      map_latest_vid_vals c (mk_var "__x") pat_m m ~keep_vid:false
+        begin try
+          (* includes existing_out_tier *)
+          let map = List.assoc id maps_n_id in
+          let buf_col =
+            (* if this isn't the lmap (in which case it's stored locally)
+            * adjust the name of the map to be a buffer *)
+            if id <> lmap_alias && id <> lmap_name then
+              mk_var @@ P.buf_of_stmt_map stmt id
+            else col in
+          (* get the latest vid values for this map *)
+          mk_bind buf_col "__x" @@
+            map_latest_vid_vals c (mk_var "__x") pat_m map ~keep_vid:false
+        with Not_found -> err_or_ret @@ Printf.sprintf "No %s map found in stmt %d" id stmt end
 
-    | _ -> U.dist_fail col "Cannot handle non-var in slice"
+    | _ -> err_or_ret "Cannot handle non-var in slice"
   in
 
   (* we need messages between levels. For example, if we have a Delete that we
@@ -280,11 +285,16 @@ let modify_map_add_vid (c:config) ast stmt =
         pat in
       let pat_m = if has_bound then Some pat else None
       in
-      NopMsg, modify_map_read c col pat_m
+      NopMsg, modify_map_read c col pat_m None
 
     | Iterate ->
       (* if our lambda requests a deletion, we delete *)
       if msg_del 0 then DelMsg, e else NopMsg, e
+
+    | Map ->
+        let lam, col = U.decompose_map e in
+        let col' = modify_map_read c col None @@ Some col in
+        NopMsg, mk_map lam col'
 
     (* handle a case of a lambda applied to an lmap (i.e. a let statement *)
     (* in this case, we modify the types of the lambda vars themselves *)
@@ -315,7 +325,7 @@ let modify_map_add_vid (c:config) ast stmt =
       | Var name when List.mem name maps_n_1d ->
           (* we use the same function as Seek, except we don't supply a pattern
           * (no bound vars) *)
-          NopMsg, mk_peek @@ modify_map_read c col None
+          NopMsg, mk_peek @@ modify_map_read c col None None
       | _ -> NopMsg, e
       end
 
