@@ -46,7 +46,7 @@ def run(target_file,
     saved_dir = os.path.abspath(os.path.curdir)
     temp_dir = os.path.join(saved_dir, "temp/")
     trace_file = os.path.join(temp_dir, "temp.trace")
-    m3_file = os.path.join(temp_dir, "temp.m3")
+    m3_file = os.path.join(temp_dir, nice_name + ".m3")
     k3_file = os.path.join(temp_dir, "temp.k3o")
     k3_file2 = os.path.join(temp_dir, "temp2.k3o")
     k3_file3 = os.path.join(temp_dir, "temp3.k3o")
