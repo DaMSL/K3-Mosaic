@@ -316,6 +316,7 @@ let modify_map_add_vid (c:config) ast stmt =
     | Block -> let ss = U.decompose_block e in
       let s_msg = list_zip ss msgs in
       begin match fst_many @@ List.filter (fun (_, msg) -> msg <> DelMsg) s_msg with
+      | []  -> DelMsg, mk_block ss
       | [s] -> NopMsg, s
       | ss  -> NopMsg, mk_block ss
       end
