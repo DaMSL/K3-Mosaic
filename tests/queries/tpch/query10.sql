@@ -1,4 +1,4 @@
-INCLUDE 'queries/tpch/schemas.sql';
+INCLUDE 'queries/tpch/schemas_small.sql';
 
 SELECT  c.custkey, c.name, 
         c.acctbal,

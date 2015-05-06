@@ -1,4 +1,4 @@
-INCLUDE 'queries/tpch/schemas.sql'; 
+INCLUDE 'queries/tpch/schemas_small.sql'; 
 
 SELECT SUM(l.extendedprice * (1 - l.discount) ) AS revenue
 FROM lineitem l, part p
