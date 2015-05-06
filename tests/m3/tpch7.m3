@@ -1,0 +1,3239 @@
+-------------------- SOURCES --------------------
+CREATE STREAM LINEITEM(LINEITEM_ORDERKEY int, LINEITEM_PARTKEY int, LINEITEM_SUPPKEY int, LINEITEM_LINENUMBER int, LINEITEM_QUANTITY float, LINEITEM_EXTENDEDPRICE float, LINEITEM_DISCOUNT float, LINEITEM_TAX float, LINEITEM_RETURNFLAG string, LINEITEM_LINESTATUS string, LINEITEM_SHIPDATE date, LINEITEM_COMMITDATE date, LINEITEM_RECEIPTDATE date, LINEITEM_SHIPINSTRUCT string, LINEITEM_SHIPMODE string, LINEITEM_COMMENT string)
+  FROM FILE 'data/tpch/lineitem_small.csv' LINE DELIMITED
+  CSV(delimiter := '|');
+
+CREATE STREAM ORDERS(ORDERS_ORDERKEY int, ORDERS_CUSTKEY int, ORDERS_ORDERSTATUS string, ORDERS_TOTALPRICE float, ORDERS_ORDERDATE date, ORDERS_ORDERPRIORITY string, ORDERS_CLERK string, ORDERS_SHIPPRIORITY int, ORDERS_COMMENT string)
+  FROM FILE 'data/tpch/orders_small.csv' LINE DELIMITED
+  CSV(delimiter := '|');
+
+CREATE STREAM CUSTOMER(CUSTOMER_CUSTKEY int, CUSTOMER_NAME string, CUSTOMER_ADDRESS string, CUSTOMER_NATIONKEY int, CUSTOMER_PHONE string, CUSTOMER_ACCTBAL float, CUSTOMER_MKTSEGMENT string, CUSTOMER_COMMENT string)
+  FROM FILE 'data/tpch/customer.csv' LINE DELIMITED
+  CSV(delimiter := '|');
+
+CREATE STREAM SUPPLIER(SUPPLIER_SUPPKEY int, SUPPLIER_NAME string, SUPPLIER_ADDRESS string, SUPPLIER_NATIONKEY int, SUPPLIER_PHONE string, SUPPLIER_ACCTBAL float, SUPPLIER_COMMENT string)
+  FROM FILE 'data/tpch/supplier.csv' LINE DELIMITED
+  CSV(delimiter := '|');
+
+CREATE TABLE NATION(NATION_NATIONKEY int, NATION_NAME string, NATION_REGIONKEY int, NATION_COMMENT string)
+  FROM FILE 'data/tpch/nation.csv' LINE DELIMITED
+  CSV(delimiter := '|');
+
+--------------------- MAPS ----------------------
+DECLARE MAP REVENUE(float)[]
+[SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+   SHIPPING_L_YEAR:int] := 
+AggSum([SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+          SHIPPING_L_YEAR:int], 
+  (AggSum([SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+             SHIPPING_L_YEAR:int, SHIPPING_VOLUME:float], 
+     (SUPPLIER(S_SUPPKEY:int, S_NAME:string, S_ADDRESS:string,
+                 S_NATIONKEY:int, S_PHONE:string, S_ACCTBAL:float,
+                 S_COMMENT:string) *
+       LINEITEM(L_ORDERKEY:int, L_PARTKEY:int, S_SUPPKEY:int,
+                  L_LINENUMBER:int, L_QUANTITY:float, L_EXTENDEDPRICE:float,
+                  L_DISCOUNT:float, L_TAX:float, L_RETURNFLAG:string,
+                  L_LINESTATUS:string, L_SHIPDATE:date, L_COMMITDATE:date,
+                  L_RECEIPTDATE:date, L_SHIPINSTRUCT:string,
+                  L_SHIPMODE:string, L_COMMENT:string) *
+       (SHIPPING_VOLUME:float ^=
+         (((-1 * L_DISCOUNT:float) + 1) * L_EXTENDEDPRICE:float)) *
+       (SHIPPING_L_YEAR:int ^= {[date_part:int]('year', L_SHIPDATE:date)}) *
+       ORDERS(L_ORDERKEY:int, O_CUSTKEY:int, O_ORDERSTATUS:string,
+                O_TOTALPRICE:float, O_ORDERDATE:date, O_ORDERPRIORITY:string,
+                O_CLERK:string, O_SHIPPRIORITY:int, O_COMMENT:string) *
+       CUSTOMER(O_CUSTKEY:int, C_NAME:string, C_ADDRESS:string,
+                  C_NATIONKEY:int, C_PHONE:string, C_ACCTBAL:float,
+                  C_MKTSEGMENT:string, C_COMMENT:string) *
+       NATION(S_NATIONKEY:int, N1_NAME:string, N1_REGIONKEY:int,
+                N1_COMMENT:string) *
+       (SHIPPING_SUPP_NATION:string ^= N1_NAME:string) *
+       NATION(C_NATIONKEY:int, N2_NAME:string, N2_REGIONKEY:int,
+                N2_COMMENT:string) *
+       (SHIPPING_CUST_NATION:string ^= N2_NAME:string) *
+       AggSum([], 
+         ((__sql_inline_or_1:int ^=
+            (({N1_NAME:string = 'FRANCE'} * {N2_NAME:string = 'GERMANY'}) +
+              ({N1_NAME:string = 'GERMANY'} * {N2_NAME:string = 'FRANCE'}))) *
+           {__sql_inline_or_1:int > 0})) *
+       {L_SHIPDATE:date >= DATE('1995-1-1')} *
+       {L_SHIPDATE:date <= DATE('1996-12-31')})) *
+    SHIPPING_VOLUME:float));
+
+DECLARE MAP REVENUE_mCUSTOMER11(float)[]
+[SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+   SHIPPING_L_YEAR:int, REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int,
+   REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int] := 
+AggSum([SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+          SHIPPING_L_YEAR:int, REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int,
+          REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int], 
+  (SUPPLIER(S_SUPPKEY:int, S_NAME:string, S_ADDRESS:string, S_NATIONKEY:int,
+              S_PHONE:string, S_ACCTBAL:float, S_COMMENT:string) *
+    LINEITEM(L_ORDERKEY:int, L_PARTKEY:int, S_SUPPKEY:int, L_LINENUMBER:int,
+               L_QUANTITY:float, L_EXTENDEDPRICE:float, L_DISCOUNT:float,
+               L_TAX:float, L_RETURNFLAG:string, L_LINESTATUS:string,
+               L_SHIPDATE:date, L_COMMITDATE:date, L_RECEIPTDATE:date,
+               L_SHIPINSTRUCT:string, L_SHIPMODE:string, L_COMMENT:string) *
+    (SHIPPING_L_YEAR:int ^= {[date_part:int]('year', L_SHIPDATE:date)}) *
+    ORDERS(L_ORDERKEY:int, REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int,
+             O_ORDERSTATUS:string, O_TOTALPRICE:float, O_ORDERDATE:date,
+             O_ORDERPRIORITY:string, O_CLERK:string, O_SHIPPRIORITY:int,
+             O_COMMENT:string) *
+    NATION(S_NATIONKEY:int, N1_NAME:string, N1_REGIONKEY:int,
+             N1_COMMENT:string) *
+    (SHIPPING_SUPP_NATION:string ^= N1_NAME:string) *
+    NATION(REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, N2_NAME:string,
+             N2_REGIONKEY:int, N2_COMMENT:string) *
+    (SHIPPING_CUST_NATION:string ^= N2_NAME:string) *
+    (__sql_inline_or_1:int ^=
+      (({N1_NAME:string = 'FRANCE'} * {N2_NAME:string = 'GERMANY'}) +
+        ({N1_NAME:string = 'GERMANY'} * {N2_NAME:string = 'FRANCE'}))) *
+    {__sql_inline_or_1:int > 0} * {L_SHIPDATE:date >= DATE('1995-1-1')} *
+    {L_SHIPDATE:date <= DATE('1996-12-31')} * L_DISCOUNT:float *
+    L_EXTENDEDPRICE:float));
+
+DECLARE MAP REVENUE_mCUSTOMER11_mORDERS1(float)[]
+[SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+   SHIPPING_L_YEAR:int, REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int,
+   REVENUE_mCUSTOMER11_mORDERSORDERS_ORDERKEY:int] := 
+AggSum([SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+          SHIPPING_L_YEAR:int, REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int,
+          REVENUE_mCUSTOMER11_mORDERSORDERS_ORDERKEY:int], 
+  (SUPPLIER(S_SUPPKEY:int, S_NAME:string, S_ADDRESS:string, S_NATIONKEY:int,
+              S_PHONE:string, S_ACCTBAL:float, S_COMMENT:string) *
+    LINEITEM(REVENUE_mCUSTOMER11_mORDERSORDERS_ORDERKEY:int, L_PARTKEY:int,
+               S_SUPPKEY:int, L_LINENUMBER:int, L_QUANTITY:float,
+               L_EXTENDEDPRICE:float, L_DISCOUNT:float, L_TAX:float,
+               L_RETURNFLAG:string, L_LINESTATUS:string, L_SHIPDATE:date,
+               L_COMMITDATE:date, L_RECEIPTDATE:date, L_SHIPINSTRUCT:string,
+               L_SHIPMODE:string, L_COMMENT:string) *
+    (SHIPPING_L_YEAR:int ^= {[date_part:int]('year', L_SHIPDATE:date)}) *
+    NATION(S_NATIONKEY:int, N1_NAME:string, N1_REGIONKEY:int,
+             N1_COMMENT:string) *
+    (SHIPPING_SUPP_NATION:string ^= N1_NAME:string) *
+    NATION(REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, N2_NAME:string,
+             N2_REGIONKEY:int, N2_COMMENT:string) *
+    (SHIPPING_CUST_NATION:string ^= N2_NAME:string) *
+    (__sql_inline_or_1:int ^=
+      (({N1_NAME:string = 'FRANCE'} * {N2_NAME:string = 'GERMANY'}) +
+        ({N1_NAME:string = 'GERMANY'} * {N2_NAME:string = 'FRANCE'}))) *
+    {__sql_inline_or_1:int > 0} * {L_SHIPDATE:date >= DATE('1995-1-1')} *
+    {L_SHIPDATE:date <= DATE('1996-12-31')} * L_DISCOUNT:float *
+    L_EXTENDEDPRICE:float));
+
+DECLARE MAP REVENUE_mCUSTOMER11_mORDERS1_mSUPPLIER1(float)[]
+[SHIPPING_L_YEAR:int, REVENUE_mCUSTOMER11_mORDERSORDERS_ORDERKEY:int,
+   REVENUE_mCUSTOMER11_mORDERS1_mSUPPLIERSUPPLIER_SUPPKEY:int] := 
+AggSum([SHIPPING_L_YEAR:int, REVENUE_mCUSTOMER11_mORDERSORDERS_ORDERKEY:int,
+          REVENUE_mCUSTOMER11_mORDERS1_mSUPPLIERSUPPLIER_SUPPKEY:int], 
+  (LINEITEM(REVENUE_mCUSTOMER11_mORDERSORDERS_ORDERKEY:int, L_PARTKEY:int,
+              REVENUE_mCUSTOMER11_mORDERS1_mSUPPLIERSUPPLIER_SUPPKEY:int,
+              L_LINENUMBER:int, L_QUANTITY:float, L_EXTENDEDPRICE:float,
+              L_DISCOUNT:float, L_TAX:float, L_RETURNFLAG:string,
+              L_LINESTATUS:string, L_SHIPDATE:date, L_COMMITDATE:date,
+              L_RECEIPTDATE:date, L_SHIPINSTRUCT:string, L_SHIPMODE:string,
+              L_COMMENT:string) *
+    (SHIPPING_L_YEAR:int ^= {[date_part:int]('year', L_SHIPDATE:date)}) *
+    {L_SHIPDATE:date >= DATE('1995-1-1')} *
+    {L_SHIPDATE:date <= DATE('1996-12-31')} * L_DISCOUNT:float *
+    L_EXTENDEDPRICE:float));
+
+DECLARE MAP REVENUE_mCUSTOMER11_mLINEITEM4(int)[]
+[SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+   REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int,
+   REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_SUPPKEY:int] := 
+AggSum([SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+          REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int,
+          REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_SUPPKEY:int], 
+  (SUPPLIER(REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_SUPPKEY:int, S_NAME:string,
+              S_ADDRESS:string, S_NATIONKEY:int, S_PHONE:string,
+              S_ACCTBAL:float, S_COMMENT:string) *
+    NATION(S_NATIONKEY:int, N1_NAME:string, N1_REGIONKEY:int,
+             N1_COMMENT:string) *
+    (SHIPPING_SUPP_NATION:string ^= N1_NAME:string) *
+    NATION(REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, N2_NAME:string,
+             N2_REGIONKEY:int, N2_COMMENT:string) *
+    (SHIPPING_CUST_NATION:string ^= N2_NAME:string) *
+    (__sql_inline_or_1:int ^=
+      (({N1_NAME:string = 'FRANCE'} * {N2_NAME:string = 'GERMANY'}) +
+        ({N1_NAME:string = 'GERMANY'} * {N2_NAME:string = 'FRANCE'}))) *
+    {__sql_inline_or_1:int > 0}));
+
+DECLARE MAP REVENUE_mCUSTOMER11_mLINEITEM5(int)[]
+[REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int,
+   REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_ORDERKEY:int] := 
+AggSum([REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int,
+          REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_ORDERKEY:int], 
+  ORDERS(REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_ORDERKEY:int,
+           REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int, O_ORDERSTATUS:string,
+           O_TOTALPRICE:float, O_ORDERDATE:date, O_ORDERPRIORITY:string,
+           O_CLERK:string, O_SHIPPRIORITY:int, O_COMMENT:string));
+
+DECLARE MAP REVENUE_mCUSTOMER11_mSUPPLIER1(float)[]
+[SHIPPING_L_YEAR:int, REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int,
+   REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_SUPPKEY:int] := 
+AggSum([SHIPPING_L_YEAR:int, REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int,
+          REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_SUPPKEY:int], 
+  (LINEITEM(L_ORDERKEY:int, L_PARTKEY:int,
+              REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_SUPPKEY:int,
+              L_LINENUMBER:int, L_QUANTITY:float, L_EXTENDEDPRICE:float,
+              L_DISCOUNT:float, L_TAX:float, L_RETURNFLAG:string,
+              L_LINESTATUS:string, L_SHIPDATE:date, L_COMMITDATE:date,
+              L_RECEIPTDATE:date, L_SHIPINSTRUCT:string, L_SHIPMODE:string,
+              L_COMMENT:string) *
+    (SHIPPING_L_YEAR:int ^= {[date_part:int]('year', L_SHIPDATE:date)}) *
+    ORDERS(L_ORDERKEY:int, REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int,
+             O_ORDERSTATUS:string, O_TOTALPRICE:float, O_ORDERDATE:date,
+             O_ORDERPRIORITY:string, O_CLERK:string, O_SHIPPRIORITY:int,
+             O_COMMENT:string) *
+    {L_SHIPDATE:date >= DATE('1995-1-1')} *
+    {L_SHIPDATE:date <= DATE('1996-12-31')} * L_DISCOUNT:float *
+    L_EXTENDEDPRICE:float));
+
+DECLARE MAP REVENUE_mCUSTOMER11_mSUPPLIER2(int)[]
+[SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+   REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int,
+   REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int] := 
+AggSum([SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+          REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int,
+          REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int], 
+  (NATION(REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int,
+            N1_NAME:string, N1_REGIONKEY:int, N1_COMMENT:string) *
+    (SHIPPING_SUPP_NATION:string ^= N1_NAME:string) *
+    NATION(REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, N2_NAME:string,
+             N2_REGIONKEY:int, N2_COMMENT:string) *
+    (SHIPPING_CUST_NATION:string ^= N2_NAME:string) *
+    (__sql_inline_or_1:int ^=
+      (({N1_NAME:string = 'FRANCE'} * {N2_NAME:string = 'GERMANY'}) +
+        ({N1_NAME:string = 'GERMANY'} * {N2_NAME:string = 'FRANCE'}))) *
+    {__sql_inline_or_1:int > 0}));
+
+DECLARE MAP REVENUE_mCUSTOMER12(float)[]
+[SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+   SHIPPING_L_YEAR:int, REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int,
+   REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int] := 
+AggSum([SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+          SHIPPING_L_YEAR:int, REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int,
+          REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int], 
+  (SUPPLIER(S_SUPPKEY:int, S_NAME:string, S_ADDRESS:string, S_NATIONKEY:int,
+              S_PHONE:string, S_ACCTBAL:float, S_COMMENT:string) *
+    LINEITEM(L_ORDERKEY:int, L_PARTKEY:int, S_SUPPKEY:int, L_LINENUMBER:int,
+               L_QUANTITY:float, L_EXTENDEDPRICE:float, L_DISCOUNT:float,
+               L_TAX:float, L_RETURNFLAG:string, L_LINESTATUS:string,
+               L_SHIPDATE:date, L_COMMITDATE:date, L_RECEIPTDATE:date,
+               L_SHIPINSTRUCT:string, L_SHIPMODE:string, L_COMMENT:string) *
+    (SHIPPING_L_YEAR:int ^= {[date_part:int]('year', L_SHIPDATE:date)}) *
+    ORDERS(L_ORDERKEY:int, REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int,
+             O_ORDERSTATUS:string, O_TOTALPRICE:float, O_ORDERDATE:date,
+             O_ORDERPRIORITY:string, O_CLERK:string, O_SHIPPRIORITY:int,
+             O_COMMENT:string) *
+    NATION(S_NATIONKEY:int, N1_NAME:string, N1_REGIONKEY:int,
+             N1_COMMENT:string) *
+    (SHIPPING_SUPP_NATION:string ^= N1_NAME:string) *
+    NATION(REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, N2_NAME:string,
+             N2_REGIONKEY:int, N2_COMMENT:string) *
+    (__sql_inline_or_1:int ^=
+      (({N1_NAME:string = 'FRANCE'} * {N2_NAME:string = 'GERMANY'}) +
+        ({N1_NAME:string = 'GERMANY'} * {N2_NAME:string = 'FRANCE'}))) *
+    (SHIPPING_CUST_NATION:string ^= N2_NAME:string) *
+    {__sql_inline_or_1:int > 0} * {L_SHIPDATE:date >= DATE('1995-1-1')} *
+    {L_SHIPDATE:date <= DATE('1996-12-31')} * L_EXTENDEDPRICE:float));
+
+DECLARE MAP REVENUE_mCUSTOMER12_mORDERS1(float)[]
+[SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+   SHIPPING_L_YEAR:int, REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int,
+   REVENUE_mCUSTOMER12_mORDERSORDERS_ORDERKEY:int] := 
+AggSum([SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+          SHIPPING_L_YEAR:int, REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int,
+          REVENUE_mCUSTOMER12_mORDERSORDERS_ORDERKEY:int], 
+  (SUPPLIER(S_SUPPKEY:int, S_NAME:string, S_ADDRESS:string, S_NATIONKEY:int,
+              S_PHONE:string, S_ACCTBAL:float, S_COMMENT:string) *
+    LINEITEM(REVENUE_mCUSTOMER12_mORDERSORDERS_ORDERKEY:int, L_PARTKEY:int,
+               S_SUPPKEY:int, L_LINENUMBER:int, L_QUANTITY:float,
+               L_EXTENDEDPRICE:float, L_DISCOUNT:float, L_TAX:float,
+               L_RETURNFLAG:string, L_LINESTATUS:string, L_SHIPDATE:date,
+               L_COMMITDATE:date, L_RECEIPTDATE:date, L_SHIPINSTRUCT:string,
+               L_SHIPMODE:string, L_COMMENT:string) *
+    (SHIPPING_L_YEAR:int ^= {[date_part:int]('year', L_SHIPDATE:date)}) *
+    NATION(S_NATIONKEY:int, N1_NAME:string, N1_REGIONKEY:int,
+             N1_COMMENT:string) *
+    (SHIPPING_SUPP_NATION:string ^= N1_NAME:string) *
+    NATION(REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, N2_NAME:string,
+             N2_REGIONKEY:int, N2_COMMENT:string) *
+    (__sql_inline_or_1:int ^=
+      (({N1_NAME:string = 'FRANCE'} * {N2_NAME:string = 'GERMANY'}) +
+        ({N1_NAME:string = 'GERMANY'} * {N2_NAME:string = 'FRANCE'}))) *
+    (SHIPPING_CUST_NATION:string ^= N2_NAME:string) *
+    {__sql_inline_or_1:int > 0} * {L_SHIPDATE:date >= DATE('1995-1-1')} *
+    {L_SHIPDATE:date <= DATE('1996-12-31')} * L_EXTENDEDPRICE:float));
+
+DECLARE MAP REVENUE_mCUSTOMER12_mORDERS1_mSUPPLIER1(float)[]
+[SHIPPING_L_YEAR:int, REVENUE_mCUSTOMER12_mORDERSORDERS_ORDERKEY:int,
+   REVENUE_mCUSTOMER12_mORDERS1_mSUPPLIERSUPPLIER_SUPPKEY:int] := 
+AggSum([SHIPPING_L_YEAR:int, REVENUE_mCUSTOMER12_mORDERSORDERS_ORDERKEY:int,
+          REVENUE_mCUSTOMER12_mORDERS1_mSUPPLIERSUPPLIER_SUPPKEY:int], 
+  (LINEITEM(REVENUE_mCUSTOMER12_mORDERSORDERS_ORDERKEY:int, L_PARTKEY:int,
+              REVENUE_mCUSTOMER12_mORDERS1_mSUPPLIERSUPPLIER_SUPPKEY:int,
+              L_LINENUMBER:int, L_QUANTITY:float, L_EXTENDEDPRICE:float,
+              L_DISCOUNT:float, L_TAX:float, L_RETURNFLAG:string,
+              L_LINESTATUS:string, L_SHIPDATE:date, L_COMMITDATE:date,
+              L_RECEIPTDATE:date, L_SHIPINSTRUCT:string, L_SHIPMODE:string,
+              L_COMMENT:string) *
+    (SHIPPING_L_YEAR:int ^= {[date_part:int]('year', L_SHIPDATE:date)}) *
+    {L_SHIPDATE:date >= DATE('1995-1-1')} *
+    {L_SHIPDATE:date <= DATE('1996-12-31')} * L_EXTENDEDPRICE:float));
+
+DECLARE MAP REVENUE_mCUSTOMER12_mSUPPLIER1(float)[]
+[SHIPPING_L_YEAR:int, REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int,
+   REVENUE_mCUSTOMER12_mSUPPLIERSUPPLIER_SUPPKEY:int] := 
+AggSum([SHIPPING_L_YEAR:int, REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int,
+          REVENUE_mCUSTOMER12_mSUPPLIERSUPPLIER_SUPPKEY:int], 
+  (LINEITEM(L_ORDERKEY:int, L_PARTKEY:int,
+              REVENUE_mCUSTOMER12_mSUPPLIERSUPPLIER_SUPPKEY:int,
+              L_LINENUMBER:int, L_QUANTITY:float, L_EXTENDEDPRICE:float,
+              L_DISCOUNT:float, L_TAX:float, L_RETURNFLAG:string,
+              L_LINESTATUS:string, L_SHIPDATE:date, L_COMMITDATE:date,
+              L_RECEIPTDATE:date, L_SHIPINSTRUCT:string, L_SHIPMODE:string,
+              L_COMMENT:string) *
+    (SHIPPING_L_YEAR:int ^= {[date_part:int]('year', L_SHIPDATE:date)}) *
+    ORDERS(L_ORDERKEY:int, REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int,
+             O_ORDERSTATUS:string, O_TOTALPRICE:float, O_ORDERDATE:date,
+             O_ORDERPRIORITY:string, O_CLERK:string, O_SHIPPRIORITY:int,
+             O_COMMENT:string) *
+    {L_SHIPDATE:date >= DATE('1995-1-1')} *
+    {L_SHIPDATE:date <= DATE('1996-12-31')} * L_EXTENDEDPRICE:float));
+
+DECLARE MAP REVENUE_mORDERS11(float)[]
+[SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+   SHIPPING_L_YEAR:int, REVENUE_mORDERSORDERS_CUSTKEY:int,
+   REVENUE_mORDERSORDERS_ORDERKEY:int] := 
+AggSum([SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+          SHIPPING_L_YEAR:int, REVENUE_mORDERSORDERS_CUSTKEY:int,
+          REVENUE_mORDERSORDERS_ORDERKEY:int], 
+  (SUPPLIER(S_SUPPKEY:int, S_NAME:string, S_ADDRESS:string, S_NATIONKEY:int,
+              S_PHONE:string, S_ACCTBAL:float, S_COMMENT:string) *
+    LINEITEM(REVENUE_mORDERSORDERS_ORDERKEY:int, L_PARTKEY:int,
+               S_SUPPKEY:int, L_LINENUMBER:int, L_QUANTITY:float,
+               L_EXTENDEDPRICE:float, L_DISCOUNT:float, L_TAX:float,
+               L_RETURNFLAG:string, L_LINESTATUS:string, L_SHIPDATE:date,
+               L_COMMITDATE:date, L_RECEIPTDATE:date, L_SHIPINSTRUCT:string,
+               L_SHIPMODE:string, L_COMMENT:string) *
+    (SHIPPING_L_YEAR:int ^= {[date_part:int]('year', L_SHIPDATE:date)}) *
+    CUSTOMER(REVENUE_mORDERSORDERS_CUSTKEY:int, C_NAME:string,
+               C_ADDRESS:string, C_NATIONKEY:int, C_PHONE:string,
+               C_ACCTBAL:float, C_MKTSEGMENT:string, C_COMMENT:string) *
+    NATION(S_NATIONKEY:int, N1_NAME:string, N1_REGIONKEY:int,
+             N1_COMMENT:string) *
+    (SHIPPING_SUPP_NATION:string ^= N1_NAME:string) *
+    NATION(C_NATIONKEY:int, N2_NAME:string, N2_REGIONKEY:int,
+             N2_COMMENT:string) *
+    (SHIPPING_CUST_NATION:string ^= N2_NAME:string) *
+    (__sql_inline_or_1:int ^=
+      (({N1_NAME:string = 'FRANCE'} * {N2_NAME:string = 'GERMANY'}) +
+        ({N1_NAME:string = 'GERMANY'} * {N2_NAME:string = 'FRANCE'}))) *
+    {__sql_inline_or_1:int > 0} * {L_SHIPDATE:date >= DATE('1995-1-1')} *
+    {L_SHIPDATE:date <= DATE('1996-12-31')} * L_DISCOUNT:float *
+    L_EXTENDEDPRICE:float));
+
+DECLARE MAP REVENUE_mORDERS11_mLINEITEM4(int)[]
+[SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+   REVENUE_mORDERSORDERS_CUSTKEY:int,
+   REVENUE_mORDERS11_mLINEITEMLINEITEM_SUPPKEY:int] := 
+AggSum([SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+          REVENUE_mORDERSORDERS_CUSTKEY:int,
+          REVENUE_mORDERS11_mLINEITEMLINEITEM_SUPPKEY:int], 
+  (SUPPLIER(REVENUE_mORDERS11_mLINEITEMLINEITEM_SUPPKEY:int, S_NAME:string,
+              S_ADDRESS:string, S_NATIONKEY:int, S_PHONE:string,
+              S_ACCTBAL:float, S_COMMENT:string) *
+    CUSTOMER(REVENUE_mORDERSORDERS_CUSTKEY:int, C_NAME:string,
+               C_ADDRESS:string, C_NATIONKEY:int, C_PHONE:string,
+               C_ACCTBAL:float, C_MKTSEGMENT:string, C_COMMENT:string) *
+    NATION(S_NATIONKEY:int, N1_NAME:string, N1_REGIONKEY:int,
+             N1_COMMENT:string) *
+    (SHIPPING_SUPP_NATION:string ^= N1_NAME:string) *
+    NATION(C_NATIONKEY:int, N2_NAME:string, N2_REGIONKEY:int,
+             N2_COMMENT:string) *
+    (SHIPPING_CUST_NATION:string ^= N2_NAME:string) *
+    (__sql_inline_or_1:int ^=
+      (({N1_NAME:string = 'FRANCE'} * {N2_NAME:string = 'GERMANY'}) +
+        ({N1_NAME:string = 'GERMANY'} * {N2_NAME:string = 'FRANCE'}))) *
+    {__sql_inline_or_1:int > 0}));
+
+DECLARE MAP REVENUE_mORDERS11_mSUPPLIER2(int)[]
+[SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+   REVENUE_mORDERSORDERS_CUSTKEY:int,
+   REVENUE_mORDERS11_mSUPPLIERSUPPLIER_NATIONKEY:int] := 
+AggSum([SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+          REVENUE_mORDERSORDERS_CUSTKEY:int,
+          REVENUE_mORDERS11_mSUPPLIERSUPPLIER_NATIONKEY:int], 
+  (CUSTOMER(REVENUE_mORDERSORDERS_CUSTKEY:int, C_NAME:string,
+              C_ADDRESS:string, C_NATIONKEY:int, C_PHONE:string,
+              C_ACCTBAL:float, C_MKTSEGMENT:string, C_COMMENT:string) *
+    NATION(REVENUE_mORDERS11_mSUPPLIERSUPPLIER_NATIONKEY:int, N1_NAME:string,
+             N1_REGIONKEY:int, N1_COMMENT:string) *
+    (SHIPPING_SUPP_NATION:string ^= N1_NAME:string) *
+    NATION(C_NATIONKEY:int, N2_NAME:string, N2_REGIONKEY:int,
+             N2_COMMENT:string) *
+    (SHIPPING_CUST_NATION:string ^= N2_NAME:string) *
+    (__sql_inline_or_1:int ^=
+      (({N1_NAME:string = 'FRANCE'} * {N2_NAME:string = 'GERMANY'}) +
+        ({N1_NAME:string = 'GERMANY'} * {N2_NAME:string = 'FRANCE'}))) *
+    {__sql_inline_or_1:int > 0}));
+
+DECLARE MAP REVENUE_mORDERS12(float)[]
+[SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+   SHIPPING_L_YEAR:int, REVENUE_mORDERSORDERS_CUSTKEY:int,
+   REVENUE_mORDERSORDERS_ORDERKEY:int] := 
+AggSum([SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+          SHIPPING_L_YEAR:int, REVENUE_mORDERSORDERS_CUSTKEY:int,
+          REVENUE_mORDERSORDERS_ORDERKEY:int], 
+  (SUPPLIER(S_SUPPKEY:int, S_NAME:string, S_ADDRESS:string, S_NATIONKEY:int,
+              S_PHONE:string, S_ACCTBAL:float, S_COMMENT:string) *
+    LINEITEM(REVENUE_mORDERSORDERS_ORDERKEY:int, L_PARTKEY:int,
+               S_SUPPKEY:int, L_LINENUMBER:int, L_QUANTITY:float,
+               L_EXTENDEDPRICE:float, L_DISCOUNT:float, L_TAX:float,
+               L_RETURNFLAG:string, L_LINESTATUS:string, L_SHIPDATE:date,
+               L_COMMITDATE:date, L_RECEIPTDATE:date, L_SHIPINSTRUCT:string,
+               L_SHIPMODE:string, L_COMMENT:string) *
+    (SHIPPING_L_YEAR:int ^= {[date_part:int]('year', L_SHIPDATE:date)}) *
+    CUSTOMER(REVENUE_mORDERSORDERS_CUSTKEY:int, C_NAME:string,
+               C_ADDRESS:string, C_NATIONKEY:int, C_PHONE:string,
+               C_ACCTBAL:float, C_MKTSEGMENT:string, C_COMMENT:string) *
+    NATION(S_NATIONKEY:int, N1_NAME:string, N1_REGIONKEY:int,
+             N1_COMMENT:string) *
+    (SHIPPING_SUPP_NATION:string ^= N1_NAME:string) *
+    NATION(C_NATIONKEY:int, N2_NAME:string, N2_REGIONKEY:int,
+             N2_COMMENT:string) *
+    (__sql_inline_or_1:int ^=
+      (({N1_NAME:string = 'FRANCE'} * {N2_NAME:string = 'GERMANY'}) +
+        ({N1_NAME:string = 'GERMANY'} * {N2_NAME:string = 'FRANCE'}))) *
+    (SHIPPING_CUST_NATION:string ^= N2_NAME:string) *
+    {__sql_inline_or_1:int > 0} * {L_SHIPDATE:date >= DATE('1995-1-1')} *
+    {L_SHIPDATE:date <= DATE('1996-12-31')} * L_EXTENDEDPRICE:float));
+
+DECLARE MAP REVENUE_mLINEITEM4(int)[]
+[SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+   REVENUE_mLINEITEMLINEITEM_ORDERKEY:int,
+   REVENUE_mLINEITEMLINEITEM_SUPPKEY:int] := 
+AggSum([SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+          REVENUE_mLINEITEMLINEITEM_ORDERKEY:int,
+          REVENUE_mLINEITEMLINEITEM_SUPPKEY:int], 
+  (SUPPLIER(REVENUE_mLINEITEMLINEITEM_SUPPKEY:int, S_NAME:string,
+              S_ADDRESS:string, S_NATIONKEY:int, S_PHONE:string,
+              S_ACCTBAL:float, S_COMMENT:string) *
+    ORDERS(REVENUE_mLINEITEMLINEITEM_ORDERKEY:int, O_CUSTKEY:int,
+             O_ORDERSTATUS:string, O_TOTALPRICE:float, O_ORDERDATE:date,
+             O_ORDERPRIORITY:string, O_CLERK:string, O_SHIPPRIORITY:int,
+             O_COMMENT:string) *
+    CUSTOMER(O_CUSTKEY:int, C_NAME:string, C_ADDRESS:string, C_NATIONKEY:int,
+               C_PHONE:string, C_ACCTBAL:float, C_MKTSEGMENT:string,
+               C_COMMENT:string) *
+    NATION(S_NATIONKEY:int, N1_NAME:string, N1_REGIONKEY:int,
+             N1_COMMENT:string) *
+    (SHIPPING_SUPP_NATION:string ^= N1_NAME:string) *
+    NATION(C_NATIONKEY:int, N2_NAME:string, N2_REGIONKEY:int,
+             N2_COMMENT:string) *
+    (SHIPPING_CUST_NATION:string ^= N2_NAME:string) *
+    (__sql_inline_or_1:int ^=
+      (({N1_NAME:string = 'FRANCE'} * {N2_NAME:string = 'GERMANY'}) +
+        ({N1_NAME:string = 'GERMANY'} * {N2_NAME:string = 'FRANCE'}))) *
+    {__sql_inline_or_1:int > 0}));
+
+DECLARE MAP REVENUE_mLINEITEM4_mSUPPLIER1(int)[]
+[SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+   REVENUE_mLINEITEMLINEITEM_ORDERKEY:int,
+   REVENUE_mLINEITEM4_mSUPPLIERSUPPLIER_NATIONKEY:int] := 
+AggSum([SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+          REVENUE_mLINEITEMLINEITEM_ORDERKEY:int,
+          REVENUE_mLINEITEM4_mSUPPLIERSUPPLIER_NATIONKEY:int], 
+  (ORDERS(REVENUE_mLINEITEMLINEITEM_ORDERKEY:int, O_CUSTKEY:int,
+            O_ORDERSTATUS:string, O_TOTALPRICE:float, O_ORDERDATE:date,
+            O_ORDERPRIORITY:string, O_CLERK:string, O_SHIPPRIORITY:int,
+            O_COMMENT:string) *
+    CUSTOMER(O_CUSTKEY:int, C_NAME:string, C_ADDRESS:string, C_NATIONKEY:int,
+               C_PHONE:string, C_ACCTBAL:float, C_MKTSEGMENT:string,
+               C_COMMENT:string) *
+    NATION(REVENUE_mLINEITEM4_mSUPPLIERSUPPLIER_NATIONKEY:int,
+             N1_NAME:string, N1_REGIONKEY:int, N1_COMMENT:string) *
+    (SHIPPING_SUPP_NATION:string ^= N1_NAME:string) *
+    NATION(C_NATIONKEY:int, N2_NAME:string, N2_REGIONKEY:int,
+             N2_COMMENT:string) *
+    (__sql_inline_or_1:int ^=
+      (({N1_NAME:string = 'FRANCE'} * {N2_NAME:string = 'GERMANY'}) +
+        ({N1_NAME:string = 'GERMANY'} * {N2_NAME:string = 'FRANCE'}))) *
+    (SHIPPING_CUST_NATION:string ^= N2_NAME:string) *
+    {__sql_inline_or_1:int > 0}));
+
+DECLARE MAP REVENUE_mSUPPLIER11(float)[]
+[SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+   SHIPPING_L_YEAR:int, REVENUE_mSUPPLIERSUPPLIER_NATIONKEY:int,
+   REVENUE_mSUPPLIERSUPPLIER_SUPPKEY:int] := 
+AggSum([SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+          SHIPPING_L_YEAR:int, REVENUE_mSUPPLIERSUPPLIER_NATIONKEY:int,
+          REVENUE_mSUPPLIERSUPPLIER_SUPPKEY:int], 
+  (LINEITEM(L_ORDERKEY:int, L_PARTKEY:int,
+              REVENUE_mSUPPLIERSUPPLIER_SUPPKEY:int, L_LINENUMBER:int,
+              L_QUANTITY:float, L_EXTENDEDPRICE:float, L_DISCOUNT:float,
+              L_TAX:float, L_RETURNFLAG:string, L_LINESTATUS:string,
+              L_SHIPDATE:date, L_COMMITDATE:date, L_RECEIPTDATE:date,
+              L_SHIPINSTRUCT:string, L_SHIPMODE:string, L_COMMENT:string) *
+    (SHIPPING_L_YEAR:int ^= {[date_part:int]('year', L_SHIPDATE:date)}) *
+    ORDERS(L_ORDERKEY:int, O_CUSTKEY:int, O_ORDERSTATUS:string,
+             O_TOTALPRICE:float, O_ORDERDATE:date, O_ORDERPRIORITY:string,
+             O_CLERK:string, O_SHIPPRIORITY:int, O_COMMENT:string) *
+    CUSTOMER(O_CUSTKEY:int, C_NAME:string, C_ADDRESS:string, C_NATIONKEY:int,
+               C_PHONE:string, C_ACCTBAL:float, C_MKTSEGMENT:string,
+               C_COMMENT:string) *
+    NATION(REVENUE_mSUPPLIERSUPPLIER_NATIONKEY:int, N1_NAME:string,
+             N1_REGIONKEY:int, N1_COMMENT:string) *
+    (SHIPPING_SUPP_NATION:string ^= N1_NAME:string) *
+    NATION(C_NATIONKEY:int, N2_NAME:string, N2_REGIONKEY:int,
+             N2_COMMENT:string) *
+    (SHIPPING_CUST_NATION:string ^= N2_NAME:string) *
+    (__sql_inline_or_1:int ^=
+      (({N1_NAME:string = 'FRANCE'} * {N2_NAME:string = 'GERMANY'}) +
+        ({N1_NAME:string = 'GERMANY'} * {N2_NAME:string = 'FRANCE'}))) *
+    {__sql_inline_or_1:int > 0} * {L_SHIPDATE:date >= DATE('1995-1-1')} *
+    {L_SHIPDATE:date <= DATE('1996-12-31')} * L_DISCOUNT:float *
+    L_EXTENDEDPRICE:float));
+
+DECLARE MAP REVENUE_mSUPPLIER12(float)[]
+[SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+   SHIPPING_L_YEAR:int, REVENUE_mSUPPLIERSUPPLIER_NATIONKEY:int,
+   REVENUE_mSUPPLIERSUPPLIER_SUPPKEY:int] := 
+AggSum([SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+          SHIPPING_L_YEAR:int, REVENUE_mSUPPLIERSUPPLIER_NATIONKEY:int,
+          REVENUE_mSUPPLIERSUPPLIER_SUPPKEY:int], 
+  (LINEITEM(L_ORDERKEY:int, L_PARTKEY:int,
+              REVENUE_mSUPPLIERSUPPLIER_SUPPKEY:int, L_LINENUMBER:int,
+              L_QUANTITY:float, L_EXTENDEDPRICE:float, L_DISCOUNT:float,
+              L_TAX:float, L_RETURNFLAG:string, L_LINESTATUS:string,
+              L_SHIPDATE:date, L_COMMITDATE:date, L_RECEIPTDATE:date,
+              L_SHIPINSTRUCT:string, L_SHIPMODE:string, L_COMMENT:string) *
+    (SHIPPING_L_YEAR:int ^= {[date_part:int]('year', L_SHIPDATE:date)}) *
+    ORDERS(L_ORDERKEY:int, O_CUSTKEY:int, O_ORDERSTATUS:string,
+             O_TOTALPRICE:float, O_ORDERDATE:date, O_ORDERPRIORITY:string,
+             O_CLERK:string, O_SHIPPRIORITY:int, O_COMMENT:string) *
+    CUSTOMER(O_CUSTKEY:int, C_NAME:string, C_ADDRESS:string, C_NATIONKEY:int,
+               C_PHONE:string, C_ACCTBAL:float, C_MKTSEGMENT:string,
+               C_COMMENT:string) *
+    NATION(REVENUE_mSUPPLIERSUPPLIER_NATIONKEY:int, N1_NAME:string,
+             N1_REGIONKEY:int, N1_COMMENT:string) *
+    (SHIPPING_SUPP_NATION:string ^= N1_NAME:string) *
+    NATION(C_NATIONKEY:int, N2_NAME:string, N2_REGIONKEY:int,
+             N2_COMMENT:string) *
+    (__sql_inline_or_1:int ^=
+      (({N1_NAME:string = 'FRANCE'} * {N2_NAME:string = 'GERMANY'}) +
+        ({N1_NAME:string = 'GERMANY'} * {N2_NAME:string = 'FRANCE'}))) *
+    (SHIPPING_CUST_NATION:string ^= N2_NAME:string) *
+    {__sql_inline_or_1:int > 0} * {L_SHIPDATE:date >= DATE('1995-1-1')} *
+    {L_SHIPDATE:date <= DATE('1996-12-31')} * L_EXTENDEDPRICE:float));
+
+-------------------- QUERIES --------------------
+DECLARE QUERY REVENUE := REVENUE(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int];
+
+------------------- TRIGGERS --------------------
+ON + LINEITEM(LINEITEM_ORDERKEY:int, LINEITEM_PARTKEY:int, LINEITEM_SUPPKEY:int, LINEITEM_LINENUMBER:int, LINEITEM_QUANTITY:float, LINEITEM_EXTENDEDPRICE:float, LINEITEM_DISCOUNT:float, LINEITEM_TAX:float, LINEITEM_RETURNFLAG:string, LINEITEM_LINESTATUS:string, LINEITEM_SHIPDATE:date, LINEITEM_COMMITDATE:date, LINEITEM_RECEIPTDATE:date, LINEITEM_SHIPINSTRUCT:string, LINEITEM_SHIPMODE:string, LINEITEM_COMMENT:string) {
+   REVENUE(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int] += 
+  ((SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  REVENUE_mLINEITEM4(int)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     LINEITEM_ORDERKEY:int, LINEITEM_SUPPKEY:int] *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  ((-1 * LINEITEM_DISCOUNT:float) + 1) * LINEITEM_EXTENDEDPRICE:float);
+   REVENUE_mCUSTOMER11(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int] += 
+  ((SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} *
+  REVENUE_mCUSTOMER11_mLINEITEM4(int)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, LINEITEM_SUPPKEY:int] *
+  REVENUE_mCUSTOMER11_mLINEITEM5(int)[]
+  [REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int, LINEITEM_ORDERKEY:int] *
+  LINEITEM_DISCOUNT:float * LINEITEM_EXTENDEDPRICE:float);
+   REVENUE_mCUSTOMER11_mORDERS1(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, LINEITEM_ORDERKEY:int] += 
+  ((SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} *
+  REVENUE_mCUSTOMER11_mLINEITEM4(int)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, LINEITEM_SUPPKEY:int] *
+  LINEITEM_DISCOUNT:float * LINEITEM_EXTENDEDPRICE:float);
+   REVENUE_mCUSTOMER11_mORDERS1_mSUPPLIER1(float)[][SHIPPING_L_YEAR:int, LINEITEM_ORDERKEY:int, LINEITEM_SUPPKEY:int] += 
+  ((SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} * LINEITEM_DISCOUNT:float *
+  LINEITEM_EXTENDEDPRICE:float);
+   REVENUE_mCUSTOMER11_mSUPPLIER1(float)[][SHIPPING_L_YEAR:int, REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int, LINEITEM_SUPPKEY:int] += 
+  ((SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} *
+  REVENUE_mCUSTOMER11_mLINEITEM5(int)[]
+  [REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int, LINEITEM_ORDERKEY:int] *
+  LINEITEM_DISCOUNT:float * LINEITEM_EXTENDEDPRICE:float);
+   REVENUE_mCUSTOMER12(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int] += 
+  ((SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} *
+  REVENUE_mCUSTOMER11_mLINEITEM4(int)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, LINEITEM_SUPPKEY:int] *
+  REVENUE_mCUSTOMER11_mLINEITEM5(int)[]
+  [REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int, LINEITEM_ORDERKEY:int] *
+  LINEITEM_EXTENDEDPRICE:float);
+   REVENUE_mCUSTOMER12_mORDERS1(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, LINEITEM_ORDERKEY:int] += 
+  ((SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} *
+  REVENUE_mCUSTOMER11_mLINEITEM4(int)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, LINEITEM_SUPPKEY:int] *
+  LINEITEM_EXTENDEDPRICE:float);
+   REVENUE_mCUSTOMER12_mORDERS1_mSUPPLIER1(float)[][SHIPPING_L_YEAR:int, LINEITEM_ORDERKEY:int, LINEITEM_SUPPKEY:int] += 
+  ((SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} *
+  LINEITEM_EXTENDEDPRICE:float);
+   REVENUE_mCUSTOMER12_mSUPPLIER1(float)[][SHIPPING_L_YEAR:int, REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int, LINEITEM_SUPPKEY:int] += 
+  ((SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} *
+  REVENUE_mCUSTOMER11_mLINEITEM5(int)[]
+  [REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int, LINEITEM_ORDERKEY:int] *
+  LINEITEM_EXTENDEDPRICE:float);
+   REVENUE_mORDERS11(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, REVENUE_mORDERSORDERS_CUSTKEY:int, LINEITEM_ORDERKEY:int] += 
+  ((SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} *
+  REVENUE_mORDERS11_mLINEITEM4(int)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     REVENUE_mORDERSORDERS_CUSTKEY:int, LINEITEM_SUPPKEY:int] *
+  LINEITEM_DISCOUNT:float * LINEITEM_EXTENDEDPRICE:float);
+   REVENUE_mORDERS12(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, REVENUE_mORDERSORDERS_CUSTKEY:int, LINEITEM_ORDERKEY:int] += 
+  ((SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} *
+  REVENUE_mORDERS11_mLINEITEM4(int)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     REVENUE_mORDERSORDERS_CUSTKEY:int, LINEITEM_SUPPKEY:int] *
+  LINEITEM_EXTENDEDPRICE:float);
+   REVENUE_mSUPPLIER11(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, REVENUE_mSUPPLIERSUPPLIER_NATIONKEY:int, LINEITEM_SUPPKEY:int] += 
+  ((SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} *
+  REVENUE_mLINEITEM4_mSUPPLIER1(int)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     LINEITEM_ORDERKEY:int, REVENUE_mSUPPLIERSUPPLIER_NATIONKEY:int] *
+  LINEITEM_DISCOUNT:float * LINEITEM_EXTENDEDPRICE:float);
+   REVENUE_mSUPPLIER12(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, REVENUE_mSUPPLIERSUPPLIER_NATIONKEY:int, LINEITEM_SUPPKEY:int] += 
+  ((SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} *
+  REVENUE_mLINEITEM4_mSUPPLIER1(int)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     LINEITEM_ORDERKEY:int, REVENUE_mSUPPLIERSUPPLIER_NATIONKEY:int] *
+  LINEITEM_EXTENDEDPRICE:float);
+}
+
+ON - LINEITEM(LINEITEM_ORDERKEY:int, LINEITEM_PARTKEY:int, LINEITEM_SUPPKEY:int, LINEITEM_LINENUMBER:int, LINEITEM_QUANTITY:float, LINEITEM_EXTENDEDPRICE:float, LINEITEM_DISCOUNT:float, LINEITEM_TAX:float, LINEITEM_RETURNFLAG:string, LINEITEM_LINESTATUS:string, LINEITEM_SHIPDATE:date, LINEITEM_COMMITDATE:date, LINEITEM_RECEIPTDATE:date, LINEITEM_SHIPINSTRUCT:string, LINEITEM_SHIPMODE:string, LINEITEM_COMMENT:string) {
+   REVENUE(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int] += 
+  ((SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  REVENUE_mLINEITEM4(int)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     LINEITEM_ORDERKEY:int, LINEITEM_SUPPKEY:int] *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  LINEITEM_EXTENDEDPRICE:float * {(-1 + LINEITEM_DISCOUNT:float)});
+   REVENUE_mCUSTOMER11(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int] += 
+  ((SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} *
+  REVENUE_mCUSTOMER11_mLINEITEM4(int)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, LINEITEM_SUPPKEY:int] *
+  REVENUE_mCUSTOMER11_mLINEITEM5(int)[]
+  [REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int, LINEITEM_ORDERKEY:int] * -1 *
+  LINEITEM_DISCOUNT:float * LINEITEM_EXTENDEDPRICE:float);
+   REVENUE_mCUSTOMER11_mORDERS1(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, LINEITEM_ORDERKEY:int] += 
+  ((SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} *
+  REVENUE_mCUSTOMER11_mLINEITEM4(int)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, LINEITEM_SUPPKEY:int] *
+  -1 * LINEITEM_DISCOUNT:float * LINEITEM_EXTENDEDPRICE:float);
+   REVENUE_mCUSTOMER11_mORDERS1_mSUPPLIER1(float)[][SHIPPING_L_YEAR:int, LINEITEM_ORDERKEY:int, LINEITEM_SUPPKEY:int] += 
+  ((SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} * -1 *
+  LINEITEM_DISCOUNT:float * LINEITEM_EXTENDEDPRICE:float);
+   REVENUE_mCUSTOMER11_mSUPPLIER1(float)[][SHIPPING_L_YEAR:int, REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int, LINEITEM_SUPPKEY:int] += 
+  ((SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} *
+  REVENUE_mCUSTOMER11_mLINEITEM5(int)[]
+  [REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int, LINEITEM_ORDERKEY:int] * -1 *
+  LINEITEM_DISCOUNT:float * LINEITEM_EXTENDEDPRICE:float);
+   REVENUE_mCUSTOMER12(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int] += 
+  ((SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} *
+  REVENUE_mCUSTOMER11_mLINEITEM4(int)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, LINEITEM_SUPPKEY:int] *
+  REVENUE_mCUSTOMER11_mLINEITEM5(int)[]
+  [REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int, LINEITEM_ORDERKEY:int] * -1 *
+  LINEITEM_EXTENDEDPRICE:float);
+   REVENUE_mCUSTOMER12_mORDERS1(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, LINEITEM_ORDERKEY:int] += 
+  ((SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} *
+  REVENUE_mCUSTOMER11_mLINEITEM4(int)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, LINEITEM_SUPPKEY:int] *
+  -1 * LINEITEM_EXTENDEDPRICE:float);
+   REVENUE_mCUSTOMER12_mORDERS1_mSUPPLIER1(float)[][SHIPPING_L_YEAR:int, LINEITEM_ORDERKEY:int, LINEITEM_SUPPKEY:int] += 
+  ((SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} * -1 *
+  LINEITEM_EXTENDEDPRICE:float);
+   REVENUE_mCUSTOMER12_mSUPPLIER1(float)[][SHIPPING_L_YEAR:int, REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int, LINEITEM_SUPPKEY:int] += 
+  ((SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} *
+  REVENUE_mCUSTOMER11_mLINEITEM5(int)[]
+  [REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int, LINEITEM_ORDERKEY:int] * -1 *
+  LINEITEM_EXTENDEDPRICE:float);
+   REVENUE_mORDERS11(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, REVENUE_mORDERSORDERS_CUSTKEY:int, LINEITEM_ORDERKEY:int] += 
+  ((SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} *
+  REVENUE_mORDERS11_mLINEITEM4(int)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     REVENUE_mORDERSORDERS_CUSTKEY:int, LINEITEM_SUPPKEY:int] *
+  -1 * LINEITEM_DISCOUNT:float * LINEITEM_EXTENDEDPRICE:float);
+   REVENUE_mORDERS12(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, REVENUE_mORDERSORDERS_CUSTKEY:int, LINEITEM_ORDERKEY:int] += 
+  ((SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} *
+  REVENUE_mORDERS11_mLINEITEM4(int)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     REVENUE_mORDERSORDERS_CUSTKEY:int, LINEITEM_SUPPKEY:int] *
+  -1 * LINEITEM_EXTENDEDPRICE:float);
+   REVENUE_mSUPPLIER11(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, REVENUE_mSUPPLIERSUPPLIER_NATIONKEY:int, LINEITEM_SUPPKEY:int] += 
+  ((SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} *
+  REVENUE_mLINEITEM4_mSUPPLIER1(int)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     LINEITEM_ORDERKEY:int, REVENUE_mSUPPLIERSUPPLIER_NATIONKEY:int] *
+  -1 * LINEITEM_DISCOUNT:float * LINEITEM_EXTENDEDPRICE:float);
+   REVENUE_mSUPPLIER12(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, REVENUE_mSUPPLIERSUPPLIER_NATIONKEY:int, LINEITEM_SUPPKEY:int] += 
+  ((SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} *
+  REVENUE_mLINEITEM4_mSUPPLIER1(int)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     LINEITEM_ORDERKEY:int, REVENUE_mSUPPLIERSUPPLIER_NATIONKEY:int] *
+  -1 * LINEITEM_EXTENDEDPRICE:float);
+}
+
+ON + ORDERS(ORDERS_ORDERKEY:int, ORDERS_CUSTKEY:int, ORDERS_ORDERSTATUS:string, ORDERS_TOTALPRICE:float, ORDERS_ORDERDATE:date, ORDERS_ORDERPRIORITY:string, ORDERS_CLERK:string, ORDERS_SHIPPRIORITY:int, ORDERS_COMMENT:string) {
+   REVENUE(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int] += 
+  ((REVENUE_mORDERS11(float)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     SHIPPING_L_YEAR:int, ORDERS_CUSTKEY:int, ORDERS_ORDERKEY:int] *
+   -1) +
+  REVENUE_mORDERS12(float)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     SHIPPING_L_YEAR:int, ORDERS_CUSTKEY:int, ORDERS_ORDERKEY:int]);
+   REVENUE_mCUSTOMER11(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, ORDERS_CUSTKEY:int] += 
+  REVENUE_mCUSTOMER11_mORDERS1(float)[]
+[SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+   SHIPPING_L_YEAR:int, REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int,
+   ORDERS_ORDERKEY:int];
+   REVENUE_mCUSTOMER11_mLINEITEM5(int)[][ORDERS_CUSTKEY:int, ORDERS_ORDERKEY:int] += 1;
+   REVENUE_mCUSTOMER11_mSUPPLIER1(float)[][SHIPPING_L_YEAR:int, ORDERS_CUSTKEY:int, REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_SUPPKEY:int] += 
+  REVENUE_mCUSTOMER11_mORDERS1_mSUPPLIER1(float)[]
+[SHIPPING_L_YEAR:int, ORDERS_ORDERKEY:int,
+   REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_SUPPKEY:int];
+   REVENUE_mCUSTOMER12(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, ORDERS_CUSTKEY:int] += 
+  REVENUE_mCUSTOMER12_mORDERS1(float)[]
+[SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+   SHIPPING_L_YEAR:int, REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int,
+   ORDERS_ORDERKEY:int];
+   REVENUE_mCUSTOMER12_mSUPPLIER1(float)[][SHIPPING_L_YEAR:int, ORDERS_CUSTKEY:int, REVENUE_mCUSTOMER12_mSUPPLIERSUPPLIER_SUPPKEY:int] += 
+  REVENUE_mCUSTOMER12_mORDERS1_mSUPPLIER1(float)[]
+[SHIPPING_L_YEAR:int, ORDERS_ORDERKEY:int,
+   REVENUE_mCUSTOMER12_mSUPPLIERSUPPLIER_SUPPKEY:int];
+   REVENUE_mLINEITEM4(int)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, ORDERS_ORDERKEY:int, REVENUE_mLINEITEMLINEITEM_SUPPKEY:int] += 
+  REVENUE_mORDERS11_mLINEITEM4(int)[]
+[SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+   ORDERS_CUSTKEY:int, REVENUE_mLINEITEMLINEITEM_SUPPKEY:int];
+   REVENUE_mLINEITEM4_mSUPPLIER1(int)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, ORDERS_ORDERKEY:int, REVENUE_mLINEITEM4_mSUPPLIERSUPPLIER_NATIONKEY:int] += 
+  REVENUE_mORDERS11_mSUPPLIER2(int)[]
+[SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+   ORDERS_CUSTKEY:int, REVENUE_mLINEITEM4_mSUPPLIERSUPPLIER_NATIONKEY:int];
+   REVENUE_mSUPPLIER11(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, REVENUE_mSUPPLIERSUPPLIER_NATIONKEY:int, REVENUE_mSUPPLIERSUPPLIER_SUPPKEY:int] += 
+  (REVENUE_mCUSTOMER11_mORDERS1_mSUPPLIER1(float)[]
+ [SHIPPING_L_YEAR:int, ORDERS_ORDERKEY:int,
+    REVENUE_mSUPPLIERSUPPLIER_SUPPKEY:int] *
+  REVENUE_mORDERS11_mSUPPLIER2(int)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     ORDERS_CUSTKEY:int, REVENUE_mSUPPLIERSUPPLIER_NATIONKEY:int]);
+   REVENUE_mSUPPLIER12(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, REVENUE_mSUPPLIERSUPPLIER_NATIONKEY:int, REVENUE_mSUPPLIERSUPPLIER_SUPPKEY:int] += 
+  (REVENUE_mCUSTOMER12_mORDERS1_mSUPPLIER1(float)[]
+ [SHIPPING_L_YEAR:int, ORDERS_ORDERKEY:int,
+    REVENUE_mSUPPLIERSUPPLIER_SUPPKEY:int] *
+  REVENUE_mORDERS11_mSUPPLIER2(int)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     ORDERS_CUSTKEY:int, REVENUE_mSUPPLIERSUPPLIER_NATIONKEY:int]);
+}
+
+ON - ORDERS(ORDERS_ORDERKEY:int, ORDERS_CUSTKEY:int, ORDERS_ORDERSTATUS:string, ORDERS_TOTALPRICE:float, ORDERS_ORDERDATE:date, ORDERS_ORDERPRIORITY:string, ORDERS_CLERK:string, ORDERS_SHIPPRIORITY:int, ORDERS_COMMENT:string) {
+   REVENUE(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int] += 
+  (REVENUE_mORDERS11(float)[]
+ [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+    SHIPPING_L_YEAR:int, ORDERS_CUSTKEY:int, ORDERS_ORDERKEY:int] +
+  (REVENUE_mORDERS12(float)[]
+   [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+      SHIPPING_L_YEAR:int, ORDERS_CUSTKEY:int, ORDERS_ORDERKEY:int] *
+    -1));
+   REVENUE_mCUSTOMER11(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, ORDERS_CUSTKEY:int] += 
+  (REVENUE_mCUSTOMER11_mORDERS1(float)[]
+ [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+    SHIPPING_L_YEAR:int, REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int,
+    ORDERS_ORDERKEY:int] *
+  -1);
+   REVENUE_mCUSTOMER11_mLINEITEM5(int)[][ORDERS_CUSTKEY:int, ORDERS_ORDERKEY:int] += -1;
+   REVENUE_mCUSTOMER11_mSUPPLIER1(float)[][SHIPPING_L_YEAR:int, ORDERS_CUSTKEY:int, REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_SUPPKEY:int] += 
+  (REVENUE_mCUSTOMER11_mORDERS1_mSUPPLIER1(float)[]
+ [SHIPPING_L_YEAR:int, ORDERS_ORDERKEY:int,
+    REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_SUPPKEY:int] *
+  -1);
+   REVENUE_mCUSTOMER12(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, ORDERS_CUSTKEY:int] += 
+  (REVENUE_mCUSTOMER12_mORDERS1(float)[]
+ [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+    SHIPPING_L_YEAR:int, REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int,
+    ORDERS_ORDERKEY:int] *
+  -1);
+   REVENUE_mCUSTOMER12_mSUPPLIER1(float)[][SHIPPING_L_YEAR:int, ORDERS_CUSTKEY:int, REVENUE_mCUSTOMER12_mSUPPLIERSUPPLIER_SUPPKEY:int] += 
+  (REVENUE_mCUSTOMER12_mORDERS1_mSUPPLIER1(float)[]
+ [SHIPPING_L_YEAR:int, ORDERS_ORDERKEY:int,
+    REVENUE_mCUSTOMER12_mSUPPLIERSUPPLIER_SUPPKEY:int] *
+  -1);
+   REVENUE_mLINEITEM4(int)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, ORDERS_ORDERKEY:int, REVENUE_mLINEITEMLINEITEM_SUPPKEY:int] += 
+  (REVENUE_mORDERS11_mLINEITEM4(int)[]
+ [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+    ORDERS_CUSTKEY:int, REVENUE_mLINEITEMLINEITEM_SUPPKEY:int] *
+  -1);
+   REVENUE_mLINEITEM4_mSUPPLIER1(int)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, ORDERS_ORDERKEY:int, REVENUE_mLINEITEM4_mSUPPLIERSUPPLIER_NATIONKEY:int] += 
+  (REVENUE_mORDERS11_mSUPPLIER2(int)[]
+ [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+    ORDERS_CUSTKEY:int, REVENUE_mLINEITEM4_mSUPPLIERSUPPLIER_NATIONKEY:int] *
+  -1);
+   REVENUE_mSUPPLIER11(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, REVENUE_mSUPPLIERSUPPLIER_NATIONKEY:int, REVENUE_mSUPPLIERSUPPLIER_SUPPKEY:int] += 
+  (REVENUE_mCUSTOMER11_mORDERS1_mSUPPLIER1(float)[]
+ [SHIPPING_L_YEAR:int, ORDERS_ORDERKEY:int,
+    REVENUE_mSUPPLIERSUPPLIER_SUPPKEY:int] *
+  REVENUE_mORDERS11_mSUPPLIER2(int)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     ORDERS_CUSTKEY:int, REVENUE_mSUPPLIERSUPPLIER_NATIONKEY:int] *
+  -1);
+   REVENUE_mSUPPLIER12(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, REVENUE_mSUPPLIERSUPPLIER_NATIONKEY:int, REVENUE_mSUPPLIERSUPPLIER_SUPPKEY:int] += 
+  (REVENUE_mCUSTOMER12_mORDERS1_mSUPPLIER1(float)[]
+ [SHIPPING_L_YEAR:int, ORDERS_ORDERKEY:int,
+    REVENUE_mSUPPLIERSUPPLIER_SUPPKEY:int] *
+  REVENUE_mORDERS11_mSUPPLIER2(int)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     ORDERS_CUSTKEY:int, REVENUE_mSUPPLIERSUPPLIER_NATIONKEY:int] *
+  -1);
+}
+
+ON + CUSTOMER(CUSTOMER_CUSTKEY:int, CUSTOMER_NAME:string, CUSTOMER_ADDRESS:string, CUSTOMER_NATIONKEY:int, CUSTOMER_PHONE:string, CUSTOMER_ACCTBAL:float, CUSTOMER_MKTSEGMENT:string, CUSTOMER_COMMENT:string) {
+   REVENUE(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int] += 
+  ((REVENUE_mCUSTOMER11(float)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     SHIPPING_L_YEAR:int, CUSTOMER_NATIONKEY:int, CUSTOMER_CUSTKEY:int] *
+   -1) +
+  REVENUE_mCUSTOMER12(float)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     SHIPPING_L_YEAR:int, CUSTOMER_NATIONKEY:int, CUSTOMER_CUSTKEY:int]);
+   REVENUE_mORDERS11(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, CUSTOMER_CUSTKEY:int, REVENUE_mORDERSORDERS_ORDERKEY:int] += 
+  REVENUE_mCUSTOMER11_mORDERS1(float)[]
+[SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+   SHIPPING_L_YEAR:int, CUSTOMER_NATIONKEY:int,
+   REVENUE_mORDERSORDERS_ORDERKEY:int];
+   REVENUE_mORDERS11_mLINEITEM4(int)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, CUSTOMER_CUSTKEY:int, REVENUE_mORDERS11_mLINEITEMLINEITEM_SUPPKEY:int] += 
+  REVENUE_mCUSTOMER11_mLINEITEM4(int)[]
+[SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+   CUSTOMER_NATIONKEY:int, REVENUE_mORDERS11_mLINEITEMLINEITEM_SUPPKEY:int];
+   REVENUE_mORDERS11_mSUPPLIER2(int)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, CUSTOMER_CUSTKEY:int, REVENUE_mORDERS11_mSUPPLIERSUPPLIER_NATIONKEY:int] += 
+  REVENUE_mCUSTOMER11_mSUPPLIER2(int)[]
+[SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+   CUSTOMER_NATIONKEY:int, REVENUE_mORDERS11_mSUPPLIERSUPPLIER_NATIONKEY:int];
+   REVENUE_mORDERS12(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, CUSTOMER_CUSTKEY:int, REVENUE_mORDERSORDERS_ORDERKEY:int] += 
+  REVENUE_mCUSTOMER12_mORDERS1(float)[]
+[SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+   SHIPPING_L_YEAR:int, CUSTOMER_NATIONKEY:int,
+   REVENUE_mORDERSORDERS_ORDERKEY:int];
+   REVENUE_mLINEITEM4(int)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, REVENUE_mLINEITEMLINEITEM_ORDERKEY:int, REVENUE_mLINEITEMLINEITEM_SUPPKEY:int] += 
+  (REVENUE_mCUSTOMER11_mLINEITEM4(int)[]
+ [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+    CUSTOMER_NATIONKEY:int, REVENUE_mLINEITEMLINEITEM_SUPPKEY:int] *
+  REVENUE_mCUSTOMER11_mLINEITEM5(int)[]
+  [CUSTOMER_CUSTKEY:int, REVENUE_mLINEITEMLINEITEM_ORDERKEY:int]);
+   REVENUE_mLINEITEM4_mSUPPLIER1(int)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, REVENUE_mLINEITEMLINEITEM_ORDERKEY:int, REVENUE_mLINEITEM4_mSUPPLIERSUPPLIER_NATIONKEY:int] += 
+  (REVENUE_mCUSTOMER11_mLINEITEM5(int)[]
+ [CUSTOMER_CUSTKEY:int, REVENUE_mLINEITEMLINEITEM_ORDERKEY:int] *
+  REVENUE_mCUSTOMER11_mSUPPLIER2(int)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     CUSTOMER_NATIONKEY:int,
+     REVENUE_mLINEITEM4_mSUPPLIERSUPPLIER_NATIONKEY:int]);
+   REVENUE_mSUPPLIER11(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, REVENUE_mSUPPLIERSUPPLIER_NATIONKEY:int, REVENUE_mSUPPLIERSUPPLIER_SUPPKEY:int] += 
+  (REVENUE_mCUSTOMER11_mSUPPLIER1(float)[]
+ [SHIPPING_L_YEAR:int, CUSTOMER_CUSTKEY:int,
+    REVENUE_mSUPPLIERSUPPLIER_SUPPKEY:int] *
+  REVENUE_mCUSTOMER11_mSUPPLIER2(int)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     CUSTOMER_NATIONKEY:int, REVENUE_mSUPPLIERSUPPLIER_NATIONKEY:int]);
+   REVENUE_mSUPPLIER12(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, REVENUE_mSUPPLIERSUPPLIER_NATIONKEY:int, REVENUE_mSUPPLIERSUPPLIER_SUPPKEY:int] += 
+  (REVENUE_mCUSTOMER12_mSUPPLIER1(float)[]
+ [SHIPPING_L_YEAR:int, CUSTOMER_CUSTKEY:int,
+    REVENUE_mSUPPLIERSUPPLIER_SUPPKEY:int] *
+  REVENUE_mCUSTOMER11_mSUPPLIER2(int)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     CUSTOMER_NATIONKEY:int, REVENUE_mSUPPLIERSUPPLIER_NATIONKEY:int]);
+}
+
+ON - CUSTOMER(CUSTOMER_CUSTKEY:int, CUSTOMER_NAME:string, CUSTOMER_ADDRESS:string, CUSTOMER_NATIONKEY:int, CUSTOMER_PHONE:string, CUSTOMER_ACCTBAL:float, CUSTOMER_MKTSEGMENT:string, CUSTOMER_COMMENT:string) {
+   REVENUE(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int] += 
+  (REVENUE_mCUSTOMER11(float)[]
+ [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+    SHIPPING_L_YEAR:int, CUSTOMER_NATIONKEY:int, CUSTOMER_CUSTKEY:int] +
+  (REVENUE_mCUSTOMER12(float)[]
+   [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+      SHIPPING_L_YEAR:int, CUSTOMER_NATIONKEY:int, CUSTOMER_CUSTKEY:int] *
+    -1));
+   REVENUE_mORDERS11(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, CUSTOMER_CUSTKEY:int, REVENUE_mORDERSORDERS_ORDERKEY:int] += 
+  (REVENUE_mCUSTOMER11_mORDERS1(float)[]
+ [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+    SHIPPING_L_YEAR:int, CUSTOMER_NATIONKEY:int,
+    REVENUE_mORDERSORDERS_ORDERKEY:int] *
+  -1);
+   REVENUE_mORDERS11_mLINEITEM4(int)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, CUSTOMER_CUSTKEY:int, REVENUE_mORDERS11_mLINEITEMLINEITEM_SUPPKEY:int] += 
+  (REVENUE_mCUSTOMER11_mLINEITEM4(int)[]
+ [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+    CUSTOMER_NATIONKEY:int, REVENUE_mORDERS11_mLINEITEMLINEITEM_SUPPKEY:int] *
+  -1);
+   REVENUE_mORDERS11_mSUPPLIER2(int)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, CUSTOMER_CUSTKEY:int, REVENUE_mORDERS11_mSUPPLIERSUPPLIER_NATIONKEY:int] += 
+  (REVENUE_mCUSTOMER11_mSUPPLIER2(int)[]
+ [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+    CUSTOMER_NATIONKEY:int, REVENUE_mORDERS11_mSUPPLIERSUPPLIER_NATIONKEY:int] *
+  -1);
+   REVENUE_mORDERS12(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, CUSTOMER_CUSTKEY:int, REVENUE_mORDERSORDERS_ORDERKEY:int] += 
+  (REVENUE_mCUSTOMER12_mORDERS1(float)[]
+ [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+    SHIPPING_L_YEAR:int, CUSTOMER_NATIONKEY:int,
+    REVENUE_mORDERSORDERS_ORDERKEY:int] *
+  -1);
+   REVENUE_mLINEITEM4(int)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, REVENUE_mLINEITEMLINEITEM_ORDERKEY:int, REVENUE_mLINEITEMLINEITEM_SUPPKEY:int] += 
+  (REVENUE_mCUSTOMER11_mLINEITEM4(int)[]
+ [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+    CUSTOMER_NATIONKEY:int, REVENUE_mLINEITEMLINEITEM_SUPPKEY:int] *
+  REVENUE_mCUSTOMER11_mLINEITEM5(int)[]
+  [CUSTOMER_CUSTKEY:int, REVENUE_mLINEITEMLINEITEM_ORDERKEY:int] * -1);
+   REVENUE_mLINEITEM4_mSUPPLIER1(int)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, REVENUE_mLINEITEMLINEITEM_ORDERKEY:int, REVENUE_mLINEITEM4_mSUPPLIERSUPPLIER_NATIONKEY:int] += 
+  (REVENUE_mCUSTOMER11_mLINEITEM5(int)[]
+ [CUSTOMER_CUSTKEY:int, REVENUE_mLINEITEMLINEITEM_ORDERKEY:int] *
+  REVENUE_mCUSTOMER11_mSUPPLIER2(int)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     CUSTOMER_NATIONKEY:int,
+     REVENUE_mLINEITEM4_mSUPPLIERSUPPLIER_NATIONKEY:int] *
+  -1);
+   REVENUE_mSUPPLIER11(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, REVENUE_mSUPPLIERSUPPLIER_NATIONKEY:int, REVENUE_mSUPPLIERSUPPLIER_SUPPKEY:int] += 
+  (REVENUE_mCUSTOMER11_mSUPPLIER1(float)[]
+ [SHIPPING_L_YEAR:int, CUSTOMER_CUSTKEY:int,
+    REVENUE_mSUPPLIERSUPPLIER_SUPPKEY:int] *
+  REVENUE_mCUSTOMER11_mSUPPLIER2(int)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     CUSTOMER_NATIONKEY:int, REVENUE_mSUPPLIERSUPPLIER_NATIONKEY:int] *
+  -1);
+   REVENUE_mSUPPLIER12(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, REVENUE_mSUPPLIERSUPPLIER_NATIONKEY:int, REVENUE_mSUPPLIERSUPPLIER_SUPPKEY:int] += 
+  (REVENUE_mCUSTOMER12_mSUPPLIER1(float)[]
+ [SHIPPING_L_YEAR:int, CUSTOMER_CUSTKEY:int,
+    REVENUE_mSUPPLIERSUPPLIER_SUPPKEY:int] *
+  REVENUE_mCUSTOMER11_mSUPPLIER2(int)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     CUSTOMER_NATIONKEY:int, REVENUE_mSUPPLIERSUPPLIER_NATIONKEY:int] *
+  -1);
+}
+
+ON + SUPPLIER(SUPPLIER_SUPPKEY:int, SUPPLIER_NAME:string, SUPPLIER_ADDRESS:string, SUPPLIER_NATIONKEY:int, SUPPLIER_PHONE:string, SUPPLIER_ACCTBAL:float, SUPPLIER_COMMENT:string) {
+   REVENUE(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int] += 
+  ((REVENUE_mSUPPLIER11(float)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     SHIPPING_L_YEAR:int, SUPPLIER_NATIONKEY:int, SUPPLIER_SUPPKEY:int] *
+   -1) +
+  REVENUE_mSUPPLIER12(float)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     SHIPPING_L_YEAR:int, SUPPLIER_NATIONKEY:int, SUPPLIER_SUPPKEY:int]);
+   REVENUE_mCUSTOMER11(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int] += 
+  (REVENUE_mCUSTOMER11_mSUPPLIER1(float)[]
+ [SHIPPING_L_YEAR:int, REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int,
+    SUPPLIER_SUPPKEY:int] *
+  REVENUE_mCUSTOMER11_mSUPPLIER2(int)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, SUPPLIER_NATIONKEY:int]);
+   REVENUE_mCUSTOMER11_mORDERS1(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, REVENUE_mCUSTOMER11_mORDERSORDERS_ORDERKEY:int] += 
+  (REVENUE_mCUSTOMER11_mORDERS1_mSUPPLIER1(float)[]
+ [SHIPPING_L_YEAR:int, REVENUE_mCUSTOMER11_mORDERSORDERS_ORDERKEY:int,
+    SUPPLIER_SUPPKEY:int] *
+  REVENUE_mCUSTOMER11_mSUPPLIER2(int)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, SUPPLIER_NATIONKEY:int]);
+   REVENUE_mCUSTOMER11_mLINEITEM4(int)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, SUPPLIER_SUPPKEY:int] += 
+  REVENUE_mCUSTOMER11_mSUPPLIER2(int)[]
+[SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+   REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, SUPPLIER_NATIONKEY:int];
+   REVENUE_mCUSTOMER12(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int] += 
+  (REVENUE_mCUSTOMER12_mSUPPLIER1(float)[]
+ [SHIPPING_L_YEAR:int, REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int,
+    SUPPLIER_SUPPKEY:int] *
+  REVENUE_mCUSTOMER11_mSUPPLIER2(int)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, SUPPLIER_NATIONKEY:int]);
+   REVENUE_mCUSTOMER12_mORDERS1(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, REVENUE_mCUSTOMER12_mORDERSORDERS_ORDERKEY:int] += 
+  (REVENUE_mCUSTOMER12_mORDERS1_mSUPPLIER1(float)[]
+ [SHIPPING_L_YEAR:int, REVENUE_mCUSTOMER12_mORDERSORDERS_ORDERKEY:int,
+    SUPPLIER_SUPPKEY:int] *
+  REVENUE_mCUSTOMER11_mSUPPLIER2(int)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, SUPPLIER_NATIONKEY:int]);
+   REVENUE_mORDERS11(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, REVENUE_mORDERSORDERS_CUSTKEY:int, REVENUE_mORDERSORDERS_ORDERKEY:int] += 
+  (REVENUE_mCUSTOMER11_mORDERS1_mSUPPLIER1(float)[]
+ [SHIPPING_L_YEAR:int, REVENUE_mORDERSORDERS_ORDERKEY:int,
+    SUPPLIER_SUPPKEY:int] *
+  REVENUE_mORDERS11_mSUPPLIER2(int)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     REVENUE_mORDERSORDERS_CUSTKEY:int, SUPPLIER_NATIONKEY:int]);
+   REVENUE_mORDERS11_mLINEITEM4(int)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, REVENUE_mORDERSORDERS_CUSTKEY:int, SUPPLIER_SUPPKEY:int] += 
+  REVENUE_mORDERS11_mSUPPLIER2(int)[]
+[SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+   REVENUE_mORDERSORDERS_CUSTKEY:int, SUPPLIER_NATIONKEY:int];
+   REVENUE_mORDERS12(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, REVENUE_mORDERSORDERS_CUSTKEY:int, REVENUE_mORDERSORDERS_ORDERKEY:int] += 
+  (REVENUE_mCUSTOMER12_mORDERS1_mSUPPLIER1(float)[]
+ [SHIPPING_L_YEAR:int, REVENUE_mORDERSORDERS_ORDERKEY:int,
+    SUPPLIER_SUPPKEY:int] *
+  REVENUE_mORDERS11_mSUPPLIER2(int)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     REVENUE_mORDERSORDERS_CUSTKEY:int, SUPPLIER_NATIONKEY:int]);
+   REVENUE_mLINEITEM4(int)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, REVENUE_mLINEITEMLINEITEM_ORDERKEY:int, SUPPLIER_SUPPKEY:int] += 
+  REVENUE_mLINEITEM4_mSUPPLIER1(int)[]
+[SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+   REVENUE_mLINEITEMLINEITEM_ORDERKEY:int, SUPPLIER_NATIONKEY:int];
+}
+
+ON - SUPPLIER(SUPPLIER_SUPPKEY:int, SUPPLIER_NAME:string, SUPPLIER_ADDRESS:string, SUPPLIER_NATIONKEY:int, SUPPLIER_PHONE:string, SUPPLIER_ACCTBAL:float, SUPPLIER_COMMENT:string) {
+   REVENUE(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int] += 
+  (REVENUE_mSUPPLIER11(float)[]
+ [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+    SHIPPING_L_YEAR:int, SUPPLIER_NATIONKEY:int, SUPPLIER_SUPPKEY:int] +
+  (REVENUE_mSUPPLIER12(float)[]
+   [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+      SHIPPING_L_YEAR:int, SUPPLIER_NATIONKEY:int, SUPPLIER_SUPPKEY:int] *
+    -1));
+   REVENUE_mCUSTOMER11(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int] += 
+  (REVENUE_mCUSTOMER11_mSUPPLIER1(float)[]
+ [SHIPPING_L_YEAR:int, REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int,
+    SUPPLIER_SUPPKEY:int] *
+  REVENUE_mCUSTOMER11_mSUPPLIER2(int)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, SUPPLIER_NATIONKEY:int] *
+  -1);
+   REVENUE_mCUSTOMER11_mORDERS1(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, REVENUE_mCUSTOMER11_mORDERSORDERS_ORDERKEY:int] += 
+  (REVENUE_mCUSTOMER11_mORDERS1_mSUPPLIER1(float)[]
+ [SHIPPING_L_YEAR:int, REVENUE_mCUSTOMER11_mORDERSORDERS_ORDERKEY:int,
+    SUPPLIER_SUPPKEY:int] *
+  REVENUE_mCUSTOMER11_mSUPPLIER2(int)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, SUPPLIER_NATIONKEY:int] *
+  -1);
+   REVENUE_mCUSTOMER11_mLINEITEM4(int)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, SUPPLIER_SUPPKEY:int] += 
+  (REVENUE_mCUSTOMER11_mSUPPLIER2(int)[]
+ [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+    REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, SUPPLIER_NATIONKEY:int] *
+  -1);
+   REVENUE_mCUSTOMER12(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int] += 
+  (REVENUE_mCUSTOMER12_mSUPPLIER1(float)[]
+ [SHIPPING_L_YEAR:int, REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int,
+    SUPPLIER_SUPPKEY:int] *
+  REVENUE_mCUSTOMER11_mSUPPLIER2(int)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, SUPPLIER_NATIONKEY:int] *
+  -1);
+   REVENUE_mCUSTOMER12_mORDERS1(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, REVENUE_mCUSTOMER12_mORDERSORDERS_ORDERKEY:int] += 
+  (REVENUE_mCUSTOMER12_mORDERS1_mSUPPLIER1(float)[]
+ [SHIPPING_L_YEAR:int, REVENUE_mCUSTOMER12_mORDERSORDERS_ORDERKEY:int,
+    SUPPLIER_SUPPKEY:int] *
+  REVENUE_mCUSTOMER11_mSUPPLIER2(int)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, SUPPLIER_NATIONKEY:int] *
+  -1);
+   REVENUE_mORDERS11(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, REVENUE_mORDERSORDERS_CUSTKEY:int, REVENUE_mORDERSORDERS_ORDERKEY:int] += 
+  (REVENUE_mCUSTOMER11_mORDERS1_mSUPPLIER1(float)[]
+ [SHIPPING_L_YEAR:int, REVENUE_mORDERSORDERS_ORDERKEY:int,
+    SUPPLIER_SUPPKEY:int] *
+  REVENUE_mORDERS11_mSUPPLIER2(int)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     REVENUE_mORDERSORDERS_CUSTKEY:int, SUPPLIER_NATIONKEY:int] *
+  -1);
+   REVENUE_mORDERS11_mLINEITEM4(int)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, REVENUE_mORDERSORDERS_CUSTKEY:int, SUPPLIER_SUPPKEY:int] += 
+  (REVENUE_mORDERS11_mSUPPLIER2(int)[]
+ [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+    REVENUE_mORDERSORDERS_CUSTKEY:int, SUPPLIER_NATIONKEY:int] *
+  -1);
+   REVENUE_mORDERS12(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, REVENUE_mORDERSORDERS_CUSTKEY:int, REVENUE_mORDERSORDERS_ORDERKEY:int] += 
+  (REVENUE_mCUSTOMER12_mORDERS1_mSUPPLIER1(float)[]
+ [SHIPPING_L_YEAR:int, REVENUE_mORDERSORDERS_ORDERKEY:int,
+    SUPPLIER_SUPPKEY:int] *
+  REVENUE_mORDERS11_mSUPPLIER2(int)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     REVENUE_mORDERSORDERS_CUSTKEY:int, SUPPLIER_NATIONKEY:int] *
+  -1);
+   REVENUE_mLINEITEM4(int)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, REVENUE_mLINEITEMLINEITEM_ORDERKEY:int, SUPPLIER_SUPPKEY:int] += 
+  (REVENUE_mLINEITEM4_mSUPPLIER1(int)[]
+ [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+    REVENUE_mLINEITEMLINEITEM_ORDERKEY:int, SUPPLIER_NATIONKEY:int] *
+  -1);
+}
+
+ON SYSTEM READY {
+   REVENUE_mCUSTOMER11_mSUPPLIER2(int)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int] := 
+  AggSum([SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+          REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int,
+          REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int], 
+  (NATION(REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int,
+            N1_NAME:string, N1_REGIONKEY:int, N1_COMMENT:string) *
+    (SHIPPING_SUPP_NATION:string ^= N1_NAME:string) *
+    NATION(REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, N2_NAME:string,
+             N2_REGIONKEY:int, N2_COMMENT:string) *
+    (SHIPPING_CUST_NATION:string ^= N2_NAME:string) *
+    (__sql_inline_or_1:int ^=
+      (({N1_NAME:string = 'FRANCE'} * {N2_NAME:string = 'GERMANY'}) +
+        ({N1_NAME:string = 'GERMANY'} * {N2_NAME:string = 'FRANCE'}))) *
+    {__sql_inline_or_1:int > 0}));
+}
+
+CORRECT REVENUE_mLINEITEM4[][delta_SHIPPING_SUPP_NATION:string,delta_SHIPPING_CUST_NATION:string,delta_REVENUE_mLINEITEMLINEITEM_ORDERKEY:int,delta_REVENUE_mLINEITEMLINEITEM_SUPPKEY:int] += delta_REVENUE_mLINEITEM4:int FOR ON + LINEITEM(LINEITEM_ORDERKEY:int, LINEITEM_PARTKEY:int, LINEITEM_SUPPKEY:int, LINEITEM_LINENUMBER:int, LINEITEM_QUANTITY:float, LINEITEM_EXTENDEDPRICE:float, LINEITEM_DISCOUNT:float, LINEITEM_TAX:float, LINEITEM_RETURNFLAG:string, LINEITEM_LINESTATUS:string, LINEITEM_SHIPDATE:date, LINEITEM_COMMITDATE:date, LINEITEM_RECEIPTDATE:date, LINEITEM_SHIPINSTRUCT:string, LINEITEM_SHIPMODE:string, LINEITEM_COMMENT:string) {
+   REVENUE(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int] += 
+  ({LINEITEM_SUPPKEY:int = delta_REVENUE_mLINEITEMLINEITEM_SUPPKEY:int} *
+  {LINEITEM_ORDERKEY:int = delta_REVENUE_mLINEITEMLINEITEM_ORDERKEY:int} *
+  (SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  ((-1 * LINEITEM_DISCOUNT:float) + 1) * delta_REVENUE_mLINEITEM4:int *
+  LINEITEM_EXTENDEDPRICE:float);
+}
+
+CORRECT REVENUE_mCUSTOMER11_mLINEITEM4[][delta_SHIPPING_SUPP_NATION:string,delta_SHIPPING_CUST_NATION:string,delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int,delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_SUPPKEY:int] += delta_REVENUE_mCUSTOMER11_mLINEITEM4:int FOR ON + LINEITEM(LINEITEM_ORDERKEY:int, LINEITEM_PARTKEY:int, LINEITEM_SUPPKEY:int, LINEITEM_LINENUMBER:int, LINEITEM_QUANTITY:float, LINEITEM_EXTENDEDPRICE:float, LINEITEM_DISCOUNT:float, LINEITEM_TAX:float, LINEITEM_RETURNFLAG:string, LINEITEM_LINESTATUS:string, LINEITEM_SHIPDATE:date, LINEITEM_COMMITDATE:date, LINEITEM_RECEIPTDATE:date, LINEITEM_SHIPINSTRUCT:string, LINEITEM_SHIPMODE:string, LINEITEM_COMMENT:string) {
+   REVENUE_mCUSTOMER11(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int] += 
+  ({LINEITEM_SUPPKEY:int =
+ delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_SUPPKEY:int} *
+  (SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} *
+  REVENUE_mCUSTOMER11_mLINEITEM5(int)[]
+  [REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int, LINEITEM_ORDERKEY:int] *
+  delta_REVENUE_mCUSTOMER11_mLINEITEM4:int * LINEITEM_DISCOUNT:float *
+  LINEITEM_EXTENDEDPRICE:float);
+   REVENUE_mCUSTOMER11_mORDERS1(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, LINEITEM_ORDERKEY:int] += 
+  ({LINEITEM_SUPPKEY:int =
+ delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_SUPPKEY:int} *
+  (SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} *
+  delta_REVENUE_mCUSTOMER11_mLINEITEM4:int * LINEITEM_DISCOUNT:float *
+  LINEITEM_EXTENDEDPRICE:float);
+   REVENUE_mCUSTOMER12(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int] += 
+  ({LINEITEM_SUPPKEY:int =
+ delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_SUPPKEY:int} *
+  (SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} *
+  REVENUE_mCUSTOMER11_mLINEITEM5(int)[]
+  [REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int, LINEITEM_ORDERKEY:int] *
+  delta_REVENUE_mCUSTOMER11_mLINEITEM4:int * LINEITEM_EXTENDEDPRICE:float);
+   REVENUE_mCUSTOMER12_mORDERS1(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, LINEITEM_ORDERKEY:int] += 
+  ({LINEITEM_SUPPKEY:int =
+ delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_SUPPKEY:int} *
+  (SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} *
+  delta_REVENUE_mCUSTOMER11_mLINEITEM4:int * LINEITEM_EXTENDEDPRICE:float);
+}
+
+CORRECT REVENUE_mCUSTOMER11_mLINEITEM5[][delta_REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int,delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_ORDERKEY:int] += delta_REVENUE_mCUSTOMER11_mLINEITEM5:int FOR ON + LINEITEM(LINEITEM_ORDERKEY:int, LINEITEM_PARTKEY:int, LINEITEM_SUPPKEY:int, LINEITEM_LINENUMBER:int, LINEITEM_QUANTITY:float, LINEITEM_EXTENDEDPRICE:float, LINEITEM_DISCOUNT:float, LINEITEM_TAX:float, LINEITEM_RETURNFLAG:string, LINEITEM_LINESTATUS:string, LINEITEM_SHIPDATE:date, LINEITEM_COMMITDATE:date, LINEITEM_RECEIPTDATE:date, LINEITEM_SHIPINSTRUCT:string, LINEITEM_SHIPMODE:string, LINEITEM_COMMENT:string) {
+   REVENUE_mCUSTOMER11(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, delta_REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int] += 
+  ({LINEITEM_ORDERKEY:int =
+ delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_ORDERKEY:int} *
+  (SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} *
+  REVENUE_mCUSTOMER11_mLINEITEM4(int)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, LINEITEM_SUPPKEY:int] *
+  delta_REVENUE_mCUSTOMER11_mLINEITEM5:int * LINEITEM_DISCOUNT:float *
+  LINEITEM_EXTENDEDPRICE:float);
+   REVENUE_mCUSTOMER11_mSUPPLIER1(float)[][SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int, LINEITEM_SUPPKEY:int] += 
+  ({LINEITEM_ORDERKEY:int =
+ delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_ORDERKEY:int} *
+  (SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} *
+  delta_REVENUE_mCUSTOMER11_mLINEITEM5:int * LINEITEM_DISCOUNT:float *
+  LINEITEM_EXTENDEDPRICE:float);
+   REVENUE_mCUSTOMER12(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, delta_REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int] += 
+  ({LINEITEM_ORDERKEY:int =
+ delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_ORDERKEY:int} *
+  (SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} *
+  REVENUE_mCUSTOMER11_mLINEITEM4(int)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, LINEITEM_SUPPKEY:int] *
+  delta_REVENUE_mCUSTOMER11_mLINEITEM5:int * LINEITEM_EXTENDEDPRICE:float);
+   REVENUE_mCUSTOMER12_mSUPPLIER1(float)[][SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int, LINEITEM_SUPPKEY:int] += 
+  ({LINEITEM_ORDERKEY:int =
+ delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_ORDERKEY:int} *
+  (SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} *
+  delta_REVENUE_mCUSTOMER11_mLINEITEM5:int * LINEITEM_EXTENDEDPRICE:float);
+}
+
+CORRECT REVENUE_mCUSTOMER11_mLINEITEM4[][delta_SHIPPING_SUPP_NATION:string,delta_SHIPPING_CUST_NATION:string,delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int,delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_SUPPKEY:int] += delta_REVENUE_mCUSTOMER11_mLINEITEM4:int FOR ON + LINEITEM(LINEITEM_ORDERKEY:int, LINEITEM_PARTKEY:int, LINEITEM_SUPPKEY:int, LINEITEM_LINENUMBER:int, LINEITEM_QUANTITY:float, LINEITEM_EXTENDEDPRICE:float, LINEITEM_DISCOUNT:float, LINEITEM_TAX:float, LINEITEM_RETURNFLAG:string, LINEITEM_LINESTATUS:string, LINEITEM_SHIPDATE:date, LINEITEM_COMMITDATE:date, LINEITEM_RECEIPTDATE:date, LINEITEM_SHIPINSTRUCT:string, LINEITEM_SHIPMODE:string, LINEITEM_COMMENT:string) {
+   REVENUE_mCUSTOMER11(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int] += 
+  ({LINEITEM_SUPPKEY:int =
+ delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_SUPPKEY:int} *
+  (SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} *
+  REVENUE_mCUSTOMER11_mLINEITEM5(int)[]
+  [REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int, LINEITEM_ORDERKEY:int] *
+  delta_REVENUE_mCUSTOMER11_mLINEITEM4:int * LINEITEM_DISCOUNT:float *
+  LINEITEM_EXTENDEDPRICE:float);
+   REVENUE_mCUSTOMER11_mORDERS1(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, LINEITEM_ORDERKEY:int] += 
+  ({LINEITEM_SUPPKEY:int =
+ delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_SUPPKEY:int} *
+  (SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} *
+  delta_REVENUE_mCUSTOMER11_mLINEITEM4:int * LINEITEM_DISCOUNT:float *
+  LINEITEM_EXTENDEDPRICE:float);
+   REVENUE_mCUSTOMER12(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int] += 
+  ({LINEITEM_SUPPKEY:int =
+ delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_SUPPKEY:int} *
+  (SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} *
+  REVENUE_mCUSTOMER11_mLINEITEM5(int)[]
+  [REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int, LINEITEM_ORDERKEY:int] *
+  delta_REVENUE_mCUSTOMER11_mLINEITEM4:int * LINEITEM_EXTENDEDPRICE:float);
+   REVENUE_mCUSTOMER12_mORDERS1(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, LINEITEM_ORDERKEY:int] += 
+  ({LINEITEM_SUPPKEY:int =
+ delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_SUPPKEY:int} *
+  (SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} *
+  delta_REVENUE_mCUSTOMER11_mLINEITEM4:int * LINEITEM_EXTENDEDPRICE:float);
+}
+
+CORRECT REVENUE_mCUSTOMER11_mLINEITEM5[][delta_REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int,delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_ORDERKEY:int] += delta_REVENUE_mCUSTOMER11_mLINEITEM5:int FOR ON + LINEITEM(LINEITEM_ORDERKEY:int, LINEITEM_PARTKEY:int, LINEITEM_SUPPKEY:int, LINEITEM_LINENUMBER:int, LINEITEM_QUANTITY:float, LINEITEM_EXTENDEDPRICE:float, LINEITEM_DISCOUNT:float, LINEITEM_TAX:float, LINEITEM_RETURNFLAG:string, LINEITEM_LINESTATUS:string, LINEITEM_SHIPDATE:date, LINEITEM_COMMITDATE:date, LINEITEM_RECEIPTDATE:date, LINEITEM_SHIPINSTRUCT:string, LINEITEM_SHIPMODE:string, LINEITEM_COMMENT:string) {
+   REVENUE_mCUSTOMER11(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, delta_REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int] += 
+  ({LINEITEM_ORDERKEY:int =
+ delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_ORDERKEY:int} *
+  (SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} *
+  REVENUE_mCUSTOMER11_mLINEITEM4(int)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, LINEITEM_SUPPKEY:int] *
+  delta_REVENUE_mCUSTOMER11_mLINEITEM5:int * LINEITEM_DISCOUNT:float *
+  LINEITEM_EXTENDEDPRICE:float);
+   REVENUE_mCUSTOMER11_mSUPPLIER1(float)[][SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int, LINEITEM_SUPPKEY:int] += 
+  ({LINEITEM_ORDERKEY:int =
+ delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_ORDERKEY:int} *
+  (SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} *
+  delta_REVENUE_mCUSTOMER11_mLINEITEM5:int * LINEITEM_DISCOUNT:float *
+  LINEITEM_EXTENDEDPRICE:float);
+   REVENUE_mCUSTOMER12(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, delta_REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int] += 
+  ({LINEITEM_ORDERKEY:int =
+ delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_ORDERKEY:int} *
+  (SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} *
+  REVENUE_mCUSTOMER11_mLINEITEM4(int)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, LINEITEM_SUPPKEY:int] *
+  delta_REVENUE_mCUSTOMER11_mLINEITEM5:int * LINEITEM_EXTENDEDPRICE:float);
+   REVENUE_mCUSTOMER12_mSUPPLIER1(float)[][SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int, LINEITEM_SUPPKEY:int] += 
+  ({LINEITEM_ORDERKEY:int =
+ delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_ORDERKEY:int} *
+  (SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} *
+  delta_REVENUE_mCUSTOMER11_mLINEITEM5:int * LINEITEM_EXTENDEDPRICE:float);
+}
+
+CORRECT REVENUE_mCUSTOMER11_mLINEITEM4[][delta_SHIPPING_SUPP_NATION:string,delta_SHIPPING_CUST_NATION:string,delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int,delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_SUPPKEY:int] += delta_REVENUE_mCUSTOMER11_mLINEITEM4:int FOR ON + LINEITEM(LINEITEM_ORDERKEY:int, LINEITEM_PARTKEY:int, LINEITEM_SUPPKEY:int, LINEITEM_LINENUMBER:int, LINEITEM_QUANTITY:float, LINEITEM_EXTENDEDPRICE:float, LINEITEM_DISCOUNT:float, LINEITEM_TAX:float, LINEITEM_RETURNFLAG:string, LINEITEM_LINESTATUS:string, LINEITEM_SHIPDATE:date, LINEITEM_COMMITDATE:date, LINEITEM_RECEIPTDATE:date, LINEITEM_SHIPINSTRUCT:string, LINEITEM_SHIPMODE:string, LINEITEM_COMMENT:string) {
+   REVENUE_mCUSTOMER11(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int] += 
+  ({LINEITEM_SUPPKEY:int =
+ delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_SUPPKEY:int} *
+  (SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} *
+  REVENUE_mCUSTOMER11_mLINEITEM5(int)[]
+  [REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int, LINEITEM_ORDERKEY:int] *
+  delta_REVENUE_mCUSTOMER11_mLINEITEM4:int * LINEITEM_DISCOUNT:float *
+  LINEITEM_EXTENDEDPRICE:float);
+   REVENUE_mCUSTOMER11_mORDERS1(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, LINEITEM_ORDERKEY:int] += 
+  ({LINEITEM_SUPPKEY:int =
+ delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_SUPPKEY:int} *
+  (SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} *
+  delta_REVENUE_mCUSTOMER11_mLINEITEM4:int * LINEITEM_DISCOUNT:float *
+  LINEITEM_EXTENDEDPRICE:float);
+   REVENUE_mCUSTOMER12(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int] += 
+  ({LINEITEM_SUPPKEY:int =
+ delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_SUPPKEY:int} *
+  (SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} *
+  REVENUE_mCUSTOMER11_mLINEITEM5(int)[]
+  [REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int, LINEITEM_ORDERKEY:int] *
+  delta_REVENUE_mCUSTOMER11_mLINEITEM4:int * LINEITEM_EXTENDEDPRICE:float);
+   REVENUE_mCUSTOMER12_mORDERS1(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, LINEITEM_ORDERKEY:int] += 
+  ({LINEITEM_SUPPKEY:int =
+ delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_SUPPKEY:int} *
+  (SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} *
+  delta_REVENUE_mCUSTOMER11_mLINEITEM4:int * LINEITEM_EXTENDEDPRICE:float);
+}
+
+CORRECT REVENUE_mCUSTOMER11_mLINEITEM5[][delta_REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int,delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_ORDERKEY:int] += delta_REVENUE_mCUSTOMER11_mLINEITEM5:int FOR ON + LINEITEM(LINEITEM_ORDERKEY:int, LINEITEM_PARTKEY:int, LINEITEM_SUPPKEY:int, LINEITEM_LINENUMBER:int, LINEITEM_QUANTITY:float, LINEITEM_EXTENDEDPRICE:float, LINEITEM_DISCOUNT:float, LINEITEM_TAX:float, LINEITEM_RETURNFLAG:string, LINEITEM_LINESTATUS:string, LINEITEM_SHIPDATE:date, LINEITEM_COMMITDATE:date, LINEITEM_RECEIPTDATE:date, LINEITEM_SHIPINSTRUCT:string, LINEITEM_SHIPMODE:string, LINEITEM_COMMENT:string) {
+   REVENUE_mCUSTOMER11(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, delta_REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int] += 
+  ({LINEITEM_ORDERKEY:int =
+ delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_ORDERKEY:int} *
+  (SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} *
+  REVENUE_mCUSTOMER11_mLINEITEM4(int)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, LINEITEM_SUPPKEY:int] *
+  delta_REVENUE_mCUSTOMER11_mLINEITEM5:int * LINEITEM_DISCOUNT:float *
+  LINEITEM_EXTENDEDPRICE:float);
+   REVENUE_mCUSTOMER11_mSUPPLIER1(float)[][SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int, LINEITEM_SUPPKEY:int] += 
+  ({LINEITEM_ORDERKEY:int =
+ delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_ORDERKEY:int} *
+  (SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} *
+  delta_REVENUE_mCUSTOMER11_mLINEITEM5:int * LINEITEM_DISCOUNT:float *
+  LINEITEM_EXTENDEDPRICE:float);
+   REVENUE_mCUSTOMER12(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, delta_REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int] += 
+  ({LINEITEM_ORDERKEY:int =
+ delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_ORDERKEY:int} *
+  (SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} *
+  REVENUE_mCUSTOMER11_mLINEITEM4(int)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, LINEITEM_SUPPKEY:int] *
+  delta_REVENUE_mCUSTOMER11_mLINEITEM5:int * LINEITEM_EXTENDEDPRICE:float);
+   REVENUE_mCUSTOMER12_mSUPPLIER1(float)[][SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int, LINEITEM_SUPPKEY:int] += 
+  ({LINEITEM_ORDERKEY:int =
+ delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_ORDERKEY:int} *
+  (SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} *
+  delta_REVENUE_mCUSTOMER11_mLINEITEM5:int * LINEITEM_EXTENDEDPRICE:float);
+}
+
+CORRECT REVENUE_mCUSTOMER11_mLINEITEM4[][delta_SHIPPING_SUPP_NATION:string,delta_SHIPPING_CUST_NATION:string,delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int,delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_SUPPKEY:int] += delta_REVENUE_mCUSTOMER11_mLINEITEM4:int FOR ON + LINEITEM(LINEITEM_ORDERKEY:int, LINEITEM_PARTKEY:int, LINEITEM_SUPPKEY:int, LINEITEM_LINENUMBER:int, LINEITEM_QUANTITY:float, LINEITEM_EXTENDEDPRICE:float, LINEITEM_DISCOUNT:float, LINEITEM_TAX:float, LINEITEM_RETURNFLAG:string, LINEITEM_LINESTATUS:string, LINEITEM_SHIPDATE:date, LINEITEM_COMMITDATE:date, LINEITEM_RECEIPTDATE:date, LINEITEM_SHIPINSTRUCT:string, LINEITEM_SHIPMODE:string, LINEITEM_COMMENT:string) {
+   REVENUE_mCUSTOMER11(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int] += 
+  ({LINEITEM_SUPPKEY:int =
+ delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_SUPPKEY:int} *
+  (SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} *
+  REVENUE_mCUSTOMER11_mLINEITEM5(int)[]
+  [REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int, LINEITEM_ORDERKEY:int] *
+  delta_REVENUE_mCUSTOMER11_mLINEITEM4:int * LINEITEM_DISCOUNT:float *
+  LINEITEM_EXTENDEDPRICE:float);
+   REVENUE_mCUSTOMER11_mORDERS1(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, LINEITEM_ORDERKEY:int] += 
+  ({LINEITEM_SUPPKEY:int =
+ delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_SUPPKEY:int} *
+  (SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} *
+  delta_REVENUE_mCUSTOMER11_mLINEITEM4:int * LINEITEM_DISCOUNT:float *
+  LINEITEM_EXTENDEDPRICE:float);
+   REVENUE_mCUSTOMER12(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int] += 
+  ({LINEITEM_SUPPKEY:int =
+ delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_SUPPKEY:int} *
+  (SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} *
+  REVENUE_mCUSTOMER11_mLINEITEM5(int)[]
+  [REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int, LINEITEM_ORDERKEY:int] *
+  delta_REVENUE_mCUSTOMER11_mLINEITEM4:int * LINEITEM_EXTENDEDPRICE:float);
+   REVENUE_mCUSTOMER12_mORDERS1(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, LINEITEM_ORDERKEY:int] += 
+  ({LINEITEM_SUPPKEY:int =
+ delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_SUPPKEY:int} *
+  (SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} *
+  delta_REVENUE_mCUSTOMER11_mLINEITEM4:int * LINEITEM_EXTENDEDPRICE:float);
+}
+
+CORRECT REVENUE_mCUSTOMER11_mLINEITEM5[][delta_REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int,delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_ORDERKEY:int] += delta_REVENUE_mCUSTOMER11_mLINEITEM5:int FOR ON + LINEITEM(LINEITEM_ORDERKEY:int, LINEITEM_PARTKEY:int, LINEITEM_SUPPKEY:int, LINEITEM_LINENUMBER:int, LINEITEM_QUANTITY:float, LINEITEM_EXTENDEDPRICE:float, LINEITEM_DISCOUNT:float, LINEITEM_TAX:float, LINEITEM_RETURNFLAG:string, LINEITEM_LINESTATUS:string, LINEITEM_SHIPDATE:date, LINEITEM_COMMITDATE:date, LINEITEM_RECEIPTDATE:date, LINEITEM_SHIPINSTRUCT:string, LINEITEM_SHIPMODE:string, LINEITEM_COMMENT:string) {
+   REVENUE_mCUSTOMER11(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, delta_REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int] += 
+  ({LINEITEM_ORDERKEY:int =
+ delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_ORDERKEY:int} *
+  (SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} *
+  REVENUE_mCUSTOMER11_mLINEITEM4(int)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, LINEITEM_SUPPKEY:int] *
+  delta_REVENUE_mCUSTOMER11_mLINEITEM5:int * LINEITEM_DISCOUNT:float *
+  LINEITEM_EXTENDEDPRICE:float);
+   REVENUE_mCUSTOMER11_mSUPPLIER1(float)[][SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int, LINEITEM_SUPPKEY:int] += 
+  ({LINEITEM_ORDERKEY:int =
+ delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_ORDERKEY:int} *
+  (SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} *
+  delta_REVENUE_mCUSTOMER11_mLINEITEM5:int * LINEITEM_DISCOUNT:float *
+  LINEITEM_EXTENDEDPRICE:float);
+   REVENUE_mCUSTOMER12(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, delta_REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int] += 
+  ({LINEITEM_ORDERKEY:int =
+ delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_ORDERKEY:int} *
+  (SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} *
+  REVENUE_mCUSTOMER11_mLINEITEM4(int)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, LINEITEM_SUPPKEY:int] *
+  delta_REVENUE_mCUSTOMER11_mLINEITEM5:int * LINEITEM_EXTENDEDPRICE:float);
+   REVENUE_mCUSTOMER12_mSUPPLIER1(float)[][SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int, LINEITEM_SUPPKEY:int] += 
+  ({LINEITEM_ORDERKEY:int =
+ delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_ORDERKEY:int} *
+  (SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} *
+  delta_REVENUE_mCUSTOMER11_mLINEITEM5:int * LINEITEM_EXTENDEDPRICE:float);
+}
+
+CORRECT REVENUE_mORDERS11_mLINEITEM4[][delta_SHIPPING_SUPP_NATION:string,delta_SHIPPING_CUST_NATION:string,delta_REVENUE_mORDERSORDERS_CUSTKEY:int,delta_REVENUE_mORDERS11_mLINEITEMLINEITEM_SUPPKEY:int] += delta_REVENUE_mORDERS11_mLINEITEM4:int FOR ON + LINEITEM(LINEITEM_ORDERKEY:int, LINEITEM_PARTKEY:int, LINEITEM_SUPPKEY:int, LINEITEM_LINENUMBER:int, LINEITEM_QUANTITY:float, LINEITEM_EXTENDEDPRICE:float, LINEITEM_DISCOUNT:float, LINEITEM_TAX:float, LINEITEM_RETURNFLAG:string, LINEITEM_LINESTATUS:string, LINEITEM_SHIPDATE:date, LINEITEM_COMMITDATE:date, LINEITEM_RECEIPTDATE:date, LINEITEM_SHIPINSTRUCT:string, LINEITEM_SHIPMODE:string, LINEITEM_COMMENT:string) {
+   REVENUE_mORDERS11(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mORDERSORDERS_CUSTKEY:int, LINEITEM_ORDERKEY:int] += 
+  ({LINEITEM_SUPPKEY:int =
+ delta_REVENUE_mORDERS11_mLINEITEMLINEITEM_SUPPKEY:int} *
+  (SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} *
+  delta_REVENUE_mORDERS11_mLINEITEM4:int * LINEITEM_DISCOUNT:float *
+  LINEITEM_EXTENDEDPRICE:float);
+   REVENUE_mORDERS12(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mORDERSORDERS_CUSTKEY:int, LINEITEM_ORDERKEY:int] += 
+  ({LINEITEM_SUPPKEY:int =
+ delta_REVENUE_mORDERS11_mLINEITEMLINEITEM_SUPPKEY:int} *
+  (SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} *
+  delta_REVENUE_mORDERS11_mLINEITEM4:int * LINEITEM_EXTENDEDPRICE:float);
+}
+
+CORRECT REVENUE_mORDERS11_mLINEITEM4[][delta_SHIPPING_SUPP_NATION:string,delta_SHIPPING_CUST_NATION:string,delta_REVENUE_mORDERSORDERS_CUSTKEY:int,delta_REVENUE_mORDERS11_mLINEITEMLINEITEM_SUPPKEY:int] += delta_REVENUE_mORDERS11_mLINEITEM4:int FOR ON + LINEITEM(LINEITEM_ORDERKEY:int, LINEITEM_PARTKEY:int, LINEITEM_SUPPKEY:int, LINEITEM_LINENUMBER:int, LINEITEM_QUANTITY:float, LINEITEM_EXTENDEDPRICE:float, LINEITEM_DISCOUNT:float, LINEITEM_TAX:float, LINEITEM_RETURNFLAG:string, LINEITEM_LINESTATUS:string, LINEITEM_SHIPDATE:date, LINEITEM_COMMITDATE:date, LINEITEM_RECEIPTDATE:date, LINEITEM_SHIPINSTRUCT:string, LINEITEM_SHIPMODE:string, LINEITEM_COMMENT:string) {
+   REVENUE_mORDERS11(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mORDERSORDERS_CUSTKEY:int, LINEITEM_ORDERKEY:int] += 
+  ({LINEITEM_SUPPKEY:int =
+ delta_REVENUE_mORDERS11_mLINEITEMLINEITEM_SUPPKEY:int} *
+  (SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} *
+  delta_REVENUE_mORDERS11_mLINEITEM4:int * LINEITEM_DISCOUNT:float *
+  LINEITEM_EXTENDEDPRICE:float);
+   REVENUE_mORDERS12(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mORDERSORDERS_CUSTKEY:int, LINEITEM_ORDERKEY:int] += 
+  ({LINEITEM_SUPPKEY:int =
+ delta_REVENUE_mORDERS11_mLINEITEMLINEITEM_SUPPKEY:int} *
+  (SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} *
+  delta_REVENUE_mORDERS11_mLINEITEM4:int * LINEITEM_EXTENDEDPRICE:float);
+}
+
+CORRECT REVENUE_mLINEITEM4_mSUPPLIER1[][delta_SHIPPING_SUPP_NATION:string,delta_SHIPPING_CUST_NATION:string,delta_REVENUE_mLINEITEMLINEITEM_ORDERKEY:int,delta_REVENUE_mLINEITEM4_mSUPPLIERSUPPLIER_NATIONKEY:int] += delta_REVENUE_mLINEITEM4_mSUPPLIER1:int FOR ON + LINEITEM(LINEITEM_ORDERKEY:int, LINEITEM_PARTKEY:int, LINEITEM_SUPPKEY:int, LINEITEM_LINENUMBER:int, LINEITEM_QUANTITY:float, LINEITEM_EXTENDEDPRICE:float, LINEITEM_DISCOUNT:float, LINEITEM_TAX:float, LINEITEM_RETURNFLAG:string, LINEITEM_LINESTATUS:string, LINEITEM_SHIPDATE:date, LINEITEM_COMMITDATE:date, LINEITEM_RECEIPTDATE:date, LINEITEM_SHIPINSTRUCT:string, LINEITEM_SHIPMODE:string, LINEITEM_COMMENT:string) {
+   REVENUE_mSUPPLIER11(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mLINEITEM4_mSUPPLIERSUPPLIER_NATIONKEY:int, LINEITEM_SUPPKEY:int] += 
+  ({LINEITEM_ORDERKEY:int = delta_REVENUE_mLINEITEMLINEITEM_ORDERKEY:int} *
+  (SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} *
+  delta_REVENUE_mLINEITEM4_mSUPPLIER1:int * LINEITEM_DISCOUNT:float *
+  LINEITEM_EXTENDEDPRICE:float);
+   REVENUE_mSUPPLIER12(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mLINEITEM4_mSUPPLIERSUPPLIER_NATIONKEY:int, LINEITEM_SUPPKEY:int] += 
+  ({LINEITEM_ORDERKEY:int = delta_REVENUE_mLINEITEMLINEITEM_ORDERKEY:int} *
+  (SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} *
+  delta_REVENUE_mLINEITEM4_mSUPPLIER1:int * LINEITEM_EXTENDEDPRICE:float);
+}
+
+CORRECT REVENUE_mLINEITEM4_mSUPPLIER1[][delta_SHIPPING_SUPP_NATION:string,delta_SHIPPING_CUST_NATION:string,delta_REVENUE_mLINEITEMLINEITEM_ORDERKEY:int,delta_REVENUE_mLINEITEM4_mSUPPLIERSUPPLIER_NATIONKEY:int] += delta_REVENUE_mLINEITEM4_mSUPPLIER1:int FOR ON + LINEITEM(LINEITEM_ORDERKEY:int, LINEITEM_PARTKEY:int, LINEITEM_SUPPKEY:int, LINEITEM_LINENUMBER:int, LINEITEM_QUANTITY:float, LINEITEM_EXTENDEDPRICE:float, LINEITEM_DISCOUNT:float, LINEITEM_TAX:float, LINEITEM_RETURNFLAG:string, LINEITEM_LINESTATUS:string, LINEITEM_SHIPDATE:date, LINEITEM_COMMITDATE:date, LINEITEM_RECEIPTDATE:date, LINEITEM_SHIPINSTRUCT:string, LINEITEM_SHIPMODE:string, LINEITEM_COMMENT:string) {
+   REVENUE_mSUPPLIER11(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mLINEITEM4_mSUPPLIERSUPPLIER_NATIONKEY:int, LINEITEM_SUPPKEY:int] += 
+  ({LINEITEM_ORDERKEY:int = delta_REVENUE_mLINEITEMLINEITEM_ORDERKEY:int} *
+  (SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} *
+  delta_REVENUE_mLINEITEM4_mSUPPLIER1:int * LINEITEM_DISCOUNT:float *
+  LINEITEM_EXTENDEDPRICE:float);
+   REVENUE_mSUPPLIER12(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mLINEITEM4_mSUPPLIERSUPPLIER_NATIONKEY:int, LINEITEM_SUPPKEY:int] += 
+  ({LINEITEM_ORDERKEY:int = delta_REVENUE_mLINEITEMLINEITEM_ORDERKEY:int} *
+  (SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} *
+  delta_REVENUE_mLINEITEM4_mSUPPLIER1:int * LINEITEM_EXTENDEDPRICE:float);
+}
+
+CORRECT REVENUE_mLINEITEM4[][delta_SHIPPING_SUPP_NATION:string,delta_SHIPPING_CUST_NATION:string,delta_REVENUE_mLINEITEMLINEITEM_ORDERKEY:int,delta_REVENUE_mLINEITEMLINEITEM_SUPPKEY:int] += delta_REVENUE_mLINEITEM4:int FOR ON - LINEITEM(LINEITEM_ORDERKEY:int, LINEITEM_PARTKEY:int, LINEITEM_SUPPKEY:int, LINEITEM_LINENUMBER:int, LINEITEM_QUANTITY:float, LINEITEM_EXTENDEDPRICE:float, LINEITEM_DISCOUNT:float, LINEITEM_TAX:float, LINEITEM_RETURNFLAG:string, LINEITEM_LINESTATUS:string, LINEITEM_SHIPDATE:date, LINEITEM_COMMITDATE:date, LINEITEM_RECEIPTDATE:date, LINEITEM_SHIPINSTRUCT:string, LINEITEM_SHIPMODE:string, LINEITEM_COMMENT:string) {
+   REVENUE(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int] += 
+  ({LINEITEM_SUPPKEY:int = delta_REVENUE_mLINEITEMLINEITEM_SUPPKEY:int} *
+  {LINEITEM_ORDERKEY:int = delta_REVENUE_mLINEITEMLINEITEM_ORDERKEY:int} *
+  (SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  delta_REVENUE_mLINEITEM4:int * LINEITEM_EXTENDEDPRICE:float *
+  {(-1 + LINEITEM_DISCOUNT:float)});
+}
+
+CORRECT REVENUE_mCUSTOMER11_mLINEITEM4[][delta_SHIPPING_SUPP_NATION:string,delta_SHIPPING_CUST_NATION:string,delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int,delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_SUPPKEY:int] += delta_REVENUE_mCUSTOMER11_mLINEITEM4:int FOR ON - LINEITEM(LINEITEM_ORDERKEY:int, LINEITEM_PARTKEY:int, LINEITEM_SUPPKEY:int, LINEITEM_LINENUMBER:int, LINEITEM_QUANTITY:float, LINEITEM_EXTENDEDPRICE:float, LINEITEM_DISCOUNT:float, LINEITEM_TAX:float, LINEITEM_RETURNFLAG:string, LINEITEM_LINESTATUS:string, LINEITEM_SHIPDATE:date, LINEITEM_COMMITDATE:date, LINEITEM_RECEIPTDATE:date, LINEITEM_SHIPINSTRUCT:string, LINEITEM_SHIPMODE:string, LINEITEM_COMMENT:string) {
+   REVENUE_mCUSTOMER11(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int] += 
+  ({LINEITEM_SUPPKEY:int =
+ delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_SUPPKEY:int} *
+  (SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} *
+  REVENUE_mCUSTOMER11_mLINEITEM5(int)[]
+  [REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int, LINEITEM_ORDERKEY:int] * -1 *
+  delta_REVENUE_mCUSTOMER11_mLINEITEM4:int * LINEITEM_DISCOUNT:float *
+  LINEITEM_EXTENDEDPRICE:float);
+   REVENUE_mCUSTOMER11_mORDERS1(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, LINEITEM_ORDERKEY:int] += 
+  ({LINEITEM_SUPPKEY:int =
+ delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_SUPPKEY:int} *
+  (SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} * -1 *
+  delta_REVENUE_mCUSTOMER11_mLINEITEM4:int * LINEITEM_DISCOUNT:float *
+  LINEITEM_EXTENDEDPRICE:float);
+   REVENUE_mCUSTOMER12(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int] += 
+  ({LINEITEM_SUPPKEY:int =
+ delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_SUPPKEY:int} *
+  (SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} *
+  REVENUE_mCUSTOMER11_mLINEITEM5(int)[]
+  [REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int, LINEITEM_ORDERKEY:int] * -1 *
+  delta_REVENUE_mCUSTOMER11_mLINEITEM4:int * LINEITEM_EXTENDEDPRICE:float);
+   REVENUE_mCUSTOMER12_mORDERS1(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, LINEITEM_ORDERKEY:int] += 
+  ({LINEITEM_SUPPKEY:int =
+ delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_SUPPKEY:int} *
+  (SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} * -1 *
+  delta_REVENUE_mCUSTOMER11_mLINEITEM4:int * LINEITEM_EXTENDEDPRICE:float);
+}
+
+CORRECT REVENUE_mCUSTOMER11_mLINEITEM5[][delta_REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int,delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_ORDERKEY:int] += delta_REVENUE_mCUSTOMER11_mLINEITEM5:int FOR ON - LINEITEM(LINEITEM_ORDERKEY:int, LINEITEM_PARTKEY:int, LINEITEM_SUPPKEY:int, LINEITEM_LINENUMBER:int, LINEITEM_QUANTITY:float, LINEITEM_EXTENDEDPRICE:float, LINEITEM_DISCOUNT:float, LINEITEM_TAX:float, LINEITEM_RETURNFLAG:string, LINEITEM_LINESTATUS:string, LINEITEM_SHIPDATE:date, LINEITEM_COMMITDATE:date, LINEITEM_RECEIPTDATE:date, LINEITEM_SHIPINSTRUCT:string, LINEITEM_SHIPMODE:string, LINEITEM_COMMENT:string) {
+   REVENUE_mCUSTOMER11(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, delta_REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int] += 
+  ({LINEITEM_ORDERKEY:int =
+ delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_ORDERKEY:int} *
+  (SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} *
+  REVENUE_mCUSTOMER11_mLINEITEM4(int)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, LINEITEM_SUPPKEY:int] *
+  -1 * delta_REVENUE_mCUSTOMER11_mLINEITEM5:int * LINEITEM_DISCOUNT:float *
+  LINEITEM_EXTENDEDPRICE:float);
+   REVENUE_mCUSTOMER11_mSUPPLIER1(float)[][SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int, LINEITEM_SUPPKEY:int] += 
+  ({LINEITEM_ORDERKEY:int =
+ delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_ORDERKEY:int} *
+  (SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} * -1 *
+  delta_REVENUE_mCUSTOMER11_mLINEITEM5:int * LINEITEM_DISCOUNT:float *
+  LINEITEM_EXTENDEDPRICE:float);
+   REVENUE_mCUSTOMER12(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, delta_REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int] += 
+  ({LINEITEM_ORDERKEY:int =
+ delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_ORDERKEY:int} *
+  (SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} *
+  REVENUE_mCUSTOMER11_mLINEITEM4(int)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, LINEITEM_SUPPKEY:int] *
+  -1 * delta_REVENUE_mCUSTOMER11_mLINEITEM5:int *
+  LINEITEM_EXTENDEDPRICE:float);
+   REVENUE_mCUSTOMER12_mSUPPLIER1(float)[][SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int, LINEITEM_SUPPKEY:int] += 
+  ({LINEITEM_ORDERKEY:int =
+ delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_ORDERKEY:int} *
+  (SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} * -1 *
+  delta_REVENUE_mCUSTOMER11_mLINEITEM5:int * LINEITEM_EXTENDEDPRICE:float);
+}
+
+CORRECT REVENUE_mCUSTOMER11_mLINEITEM4[][delta_SHIPPING_SUPP_NATION:string,delta_SHIPPING_CUST_NATION:string,delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int,delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_SUPPKEY:int] += delta_REVENUE_mCUSTOMER11_mLINEITEM4:int FOR ON - LINEITEM(LINEITEM_ORDERKEY:int, LINEITEM_PARTKEY:int, LINEITEM_SUPPKEY:int, LINEITEM_LINENUMBER:int, LINEITEM_QUANTITY:float, LINEITEM_EXTENDEDPRICE:float, LINEITEM_DISCOUNT:float, LINEITEM_TAX:float, LINEITEM_RETURNFLAG:string, LINEITEM_LINESTATUS:string, LINEITEM_SHIPDATE:date, LINEITEM_COMMITDATE:date, LINEITEM_RECEIPTDATE:date, LINEITEM_SHIPINSTRUCT:string, LINEITEM_SHIPMODE:string, LINEITEM_COMMENT:string) {
+   REVENUE_mCUSTOMER11(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int] += 
+  ({LINEITEM_SUPPKEY:int =
+ delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_SUPPKEY:int} *
+  (SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} *
+  REVENUE_mCUSTOMER11_mLINEITEM5(int)[]
+  [REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int, LINEITEM_ORDERKEY:int] * -1 *
+  delta_REVENUE_mCUSTOMER11_mLINEITEM4:int * LINEITEM_DISCOUNT:float *
+  LINEITEM_EXTENDEDPRICE:float);
+   REVENUE_mCUSTOMER11_mORDERS1(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, LINEITEM_ORDERKEY:int] += 
+  ({LINEITEM_SUPPKEY:int =
+ delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_SUPPKEY:int} *
+  (SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} * -1 *
+  delta_REVENUE_mCUSTOMER11_mLINEITEM4:int * LINEITEM_DISCOUNT:float *
+  LINEITEM_EXTENDEDPRICE:float);
+   REVENUE_mCUSTOMER12(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int] += 
+  ({LINEITEM_SUPPKEY:int =
+ delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_SUPPKEY:int} *
+  (SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} *
+  REVENUE_mCUSTOMER11_mLINEITEM5(int)[]
+  [REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int, LINEITEM_ORDERKEY:int] * -1 *
+  delta_REVENUE_mCUSTOMER11_mLINEITEM4:int * LINEITEM_EXTENDEDPRICE:float);
+   REVENUE_mCUSTOMER12_mORDERS1(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, LINEITEM_ORDERKEY:int] += 
+  ({LINEITEM_SUPPKEY:int =
+ delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_SUPPKEY:int} *
+  (SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} * -1 *
+  delta_REVENUE_mCUSTOMER11_mLINEITEM4:int * LINEITEM_EXTENDEDPRICE:float);
+}
+
+CORRECT REVENUE_mCUSTOMER11_mLINEITEM5[][delta_REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int,delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_ORDERKEY:int] += delta_REVENUE_mCUSTOMER11_mLINEITEM5:int FOR ON - LINEITEM(LINEITEM_ORDERKEY:int, LINEITEM_PARTKEY:int, LINEITEM_SUPPKEY:int, LINEITEM_LINENUMBER:int, LINEITEM_QUANTITY:float, LINEITEM_EXTENDEDPRICE:float, LINEITEM_DISCOUNT:float, LINEITEM_TAX:float, LINEITEM_RETURNFLAG:string, LINEITEM_LINESTATUS:string, LINEITEM_SHIPDATE:date, LINEITEM_COMMITDATE:date, LINEITEM_RECEIPTDATE:date, LINEITEM_SHIPINSTRUCT:string, LINEITEM_SHIPMODE:string, LINEITEM_COMMENT:string) {
+   REVENUE_mCUSTOMER11(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, delta_REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int] += 
+  ({LINEITEM_ORDERKEY:int =
+ delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_ORDERKEY:int} *
+  (SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} *
+  REVENUE_mCUSTOMER11_mLINEITEM4(int)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, LINEITEM_SUPPKEY:int] *
+  -1 * delta_REVENUE_mCUSTOMER11_mLINEITEM5:int * LINEITEM_DISCOUNT:float *
+  LINEITEM_EXTENDEDPRICE:float);
+   REVENUE_mCUSTOMER11_mSUPPLIER1(float)[][SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int, LINEITEM_SUPPKEY:int] += 
+  ({LINEITEM_ORDERKEY:int =
+ delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_ORDERKEY:int} *
+  (SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} * -1 *
+  delta_REVENUE_mCUSTOMER11_mLINEITEM5:int * LINEITEM_DISCOUNT:float *
+  LINEITEM_EXTENDEDPRICE:float);
+   REVENUE_mCUSTOMER12(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, delta_REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int] += 
+  ({LINEITEM_ORDERKEY:int =
+ delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_ORDERKEY:int} *
+  (SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} *
+  REVENUE_mCUSTOMER11_mLINEITEM4(int)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, LINEITEM_SUPPKEY:int] *
+  -1 * delta_REVENUE_mCUSTOMER11_mLINEITEM5:int *
+  LINEITEM_EXTENDEDPRICE:float);
+   REVENUE_mCUSTOMER12_mSUPPLIER1(float)[][SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int, LINEITEM_SUPPKEY:int] += 
+  ({LINEITEM_ORDERKEY:int =
+ delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_ORDERKEY:int} *
+  (SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} * -1 *
+  delta_REVENUE_mCUSTOMER11_mLINEITEM5:int * LINEITEM_EXTENDEDPRICE:float);
+}
+
+CORRECT REVENUE_mCUSTOMER11_mLINEITEM4[][delta_SHIPPING_SUPP_NATION:string,delta_SHIPPING_CUST_NATION:string,delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int,delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_SUPPKEY:int] += delta_REVENUE_mCUSTOMER11_mLINEITEM4:int FOR ON - LINEITEM(LINEITEM_ORDERKEY:int, LINEITEM_PARTKEY:int, LINEITEM_SUPPKEY:int, LINEITEM_LINENUMBER:int, LINEITEM_QUANTITY:float, LINEITEM_EXTENDEDPRICE:float, LINEITEM_DISCOUNT:float, LINEITEM_TAX:float, LINEITEM_RETURNFLAG:string, LINEITEM_LINESTATUS:string, LINEITEM_SHIPDATE:date, LINEITEM_COMMITDATE:date, LINEITEM_RECEIPTDATE:date, LINEITEM_SHIPINSTRUCT:string, LINEITEM_SHIPMODE:string, LINEITEM_COMMENT:string) {
+   REVENUE_mCUSTOMER11(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int] += 
+  ({LINEITEM_SUPPKEY:int =
+ delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_SUPPKEY:int} *
+  (SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} *
+  REVENUE_mCUSTOMER11_mLINEITEM5(int)[]
+  [REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int, LINEITEM_ORDERKEY:int] * -1 *
+  delta_REVENUE_mCUSTOMER11_mLINEITEM4:int * LINEITEM_DISCOUNT:float *
+  LINEITEM_EXTENDEDPRICE:float);
+   REVENUE_mCUSTOMER11_mORDERS1(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, LINEITEM_ORDERKEY:int] += 
+  ({LINEITEM_SUPPKEY:int =
+ delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_SUPPKEY:int} *
+  (SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} * -1 *
+  delta_REVENUE_mCUSTOMER11_mLINEITEM4:int * LINEITEM_DISCOUNT:float *
+  LINEITEM_EXTENDEDPRICE:float);
+   REVENUE_mCUSTOMER12(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int] += 
+  ({LINEITEM_SUPPKEY:int =
+ delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_SUPPKEY:int} *
+  (SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} *
+  REVENUE_mCUSTOMER11_mLINEITEM5(int)[]
+  [REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int, LINEITEM_ORDERKEY:int] * -1 *
+  delta_REVENUE_mCUSTOMER11_mLINEITEM4:int * LINEITEM_EXTENDEDPRICE:float);
+   REVENUE_mCUSTOMER12_mORDERS1(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, LINEITEM_ORDERKEY:int] += 
+  ({LINEITEM_SUPPKEY:int =
+ delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_SUPPKEY:int} *
+  (SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} * -1 *
+  delta_REVENUE_mCUSTOMER11_mLINEITEM4:int * LINEITEM_EXTENDEDPRICE:float);
+}
+
+CORRECT REVENUE_mCUSTOMER11_mLINEITEM5[][delta_REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int,delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_ORDERKEY:int] += delta_REVENUE_mCUSTOMER11_mLINEITEM5:int FOR ON - LINEITEM(LINEITEM_ORDERKEY:int, LINEITEM_PARTKEY:int, LINEITEM_SUPPKEY:int, LINEITEM_LINENUMBER:int, LINEITEM_QUANTITY:float, LINEITEM_EXTENDEDPRICE:float, LINEITEM_DISCOUNT:float, LINEITEM_TAX:float, LINEITEM_RETURNFLAG:string, LINEITEM_LINESTATUS:string, LINEITEM_SHIPDATE:date, LINEITEM_COMMITDATE:date, LINEITEM_RECEIPTDATE:date, LINEITEM_SHIPINSTRUCT:string, LINEITEM_SHIPMODE:string, LINEITEM_COMMENT:string) {
+   REVENUE_mCUSTOMER11(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, delta_REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int] += 
+  ({LINEITEM_ORDERKEY:int =
+ delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_ORDERKEY:int} *
+  (SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} *
+  REVENUE_mCUSTOMER11_mLINEITEM4(int)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, LINEITEM_SUPPKEY:int] *
+  -1 * delta_REVENUE_mCUSTOMER11_mLINEITEM5:int * LINEITEM_DISCOUNT:float *
+  LINEITEM_EXTENDEDPRICE:float);
+   REVENUE_mCUSTOMER11_mSUPPLIER1(float)[][SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int, LINEITEM_SUPPKEY:int] += 
+  ({LINEITEM_ORDERKEY:int =
+ delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_ORDERKEY:int} *
+  (SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} * -1 *
+  delta_REVENUE_mCUSTOMER11_mLINEITEM5:int * LINEITEM_DISCOUNT:float *
+  LINEITEM_EXTENDEDPRICE:float);
+   REVENUE_mCUSTOMER12(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, delta_REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int] += 
+  ({LINEITEM_ORDERKEY:int =
+ delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_ORDERKEY:int} *
+  (SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} *
+  REVENUE_mCUSTOMER11_mLINEITEM4(int)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, LINEITEM_SUPPKEY:int] *
+  -1 * delta_REVENUE_mCUSTOMER11_mLINEITEM5:int *
+  LINEITEM_EXTENDEDPRICE:float);
+   REVENUE_mCUSTOMER12_mSUPPLIER1(float)[][SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int, LINEITEM_SUPPKEY:int] += 
+  ({LINEITEM_ORDERKEY:int =
+ delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_ORDERKEY:int} *
+  (SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} * -1 *
+  delta_REVENUE_mCUSTOMER11_mLINEITEM5:int * LINEITEM_EXTENDEDPRICE:float);
+}
+
+CORRECT REVENUE_mCUSTOMER11_mLINEITEM4[][delta_SHIPPING_SUPP_NATION:string,delta_SHIPPING_CUST_NATION:string,delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int,delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_SUPPKEY:int] += delta_REVENUE_mCUSTOMER11_mLINEITEM4:int FOR ON - LINEITEM(LINEITEM_ORDERKEY:int, LINEITEM_PARTKEY:int, LINEITEM_SUPPKEY:int, LINEITEM_LINENUMBER:int, LINEITEM_QUANTITY:float, LINEITEM_EXTENDEDPRICE:float, LINEITEM_DISCOUNT:float, LINEITEM_TAX:float, LINEITEM_RETURNFLAG:string, LINEITEM_LINESTATUS:string, LINEITEM_SHIPDATE:date, LINEITEM_COMMITDATE:date, LINEITEM_RECEIPTDATE:date, LINEITEM_SHIPINSTRUCT:string, LINEITEM_SHIPMODE:string, LINEITEM_COMMENT:string) {
+   REVENUE_mCUSTOMER11(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int] += 
+  ({LINEITEM_SUPPKEY:int =
+ delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_SUPPKEY:int} *
+  (SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} *
+  REVENUE_mCUSTOMER11_mLINEITEM5(int)[]
+  [REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int, LINEITEM_ORDERKEY:int] * -1 *
+  delta_REVENUE_mCUSTOMER11_mLINEITEM4:int * LINEITEM_DISCOUNT:float *
+  LINEITEM_EXTENDEDPRICE:float);
+   REVENUE_mCUSTOMER11_mORDERS1(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, LINEITEM_ORDERKEY:int] += 
+  ({LINEITEM_SUPPKEY:int =
+ delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_SUPPKEY:int} *
+  (SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} * -1 *
+  delta_REVENUE_mCUSTOMER11_mLINEITEM4:int * LINEITEM_DISCOUNT:float *
+  LINEITEM_EXTENDEDPRICE:float);
+   REVENUE_mCUSTOMER12(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int] += 
+  ({LINEITEM_SUPPKEY:int =
+ delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_SUPPKEY:int} *
+  (SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} *
+  REVENUE_mCUSTOMER11_mLINEITEM5(int)[]
+  [REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int, LINEITEM_ORDERKEY:int] * -1 *
+  delta_REVENUE_mCUSTOMER11_mLINEITEM4:int * LINEITEM_EXTENDEDPRICE:float);
+   REVENUE_mCUSTOMER12_mORDERS1(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, LINEITEM_ORDERKEY:int] += 
+  ({LINEITEM_SUPPKEY:int =
+ delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_SUPPKEY:int} *
+  (SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} * -1 *
+  delta_REVENUE_mCUSTOMER11_mLINEITEM4:int * LINEITEM_EXTENDEDPRICE:float);
+}
+
+CORRECT REVENUE_mCUSTOMER11_mLINEITEM5[][delta_REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int,delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_ORDERKEY:int] += delta_REVENUE_mCUSTOMER11_mLINEITEM5:int FOR ON - LINEITEM(LINEITEM_ORDERKEY:int, LINEITEM_PARTKEY:int, LINEITEM_SUPPKEY:int, LINEITEM_LINENUMBER:int, LINEITEM_QUANTITY:float, LINEITEM_EXTENDEDPRICE:float, LINEITEM_DISCOUNT:float, LINEITEM_TAX:float, LINEITEM_RETURNFLAG:string, LINEITEM_LINESTATUS:string, LINEITEM_SHIPDATE:date, LINEITEM_COMMITDATE:date, LINEITEM_RECEIPTDATE:date, LINEITEM_SHIPINSTRUCT:string, LINEITEM_SHIPMODE:string, LINEITEM_COMMENT:string) {
+   REVENUE_mCUSTOMER11(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, delta_REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int] += 
+  ({LINEITEM_ORDERKEY:int =
+ delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_ORDERKEY:int} *
+  (SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} *
+  REVENUE_mCUSTOMER11_mLINEITEM4(int)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, LINEITEM_SUPPKEY:int] *
+  -1 * delta_REVENUE_mCUSTOMER11_mLINEITEM5:int * LINEITEM_DISCOUNT:float *
+  LINEITEM_EXTENDEDPRICE:float);
+   REVENUE_mCUSTOMER11_mSUPPLIER1(float)[][SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int, LINEITEM_SUPPKEY:int] += 
+  ({LINEITEM_ORDERKEY:int =
+ delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_ORDERKEY:int} *
+  (SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} * -1 *
+  delta_REVENUE_mCUSTOMER11_mLINEITEM5:int * LINEITEM_DISCOUNT:float *
+  LINEITEM_EXTENDEDPRICE:float);
+   REVENUE_mCUSTOMER12(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, delta_REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int] += 
+  ({LINEITEM_ORDERKEY:int =
+ delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_ORDERKEY:int} *
+  (SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} *
+  REVENUE_mCUSTOMER11_mLINEITEM4(int)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, LINEITEM_SUPPKEY:int] *
+  -1 * delta_REVENUE_mCUSTOMER11_mLINEITEM5:int *
+  LINEITEM_EXTENDEDPRICE:float);
+   REVENUE_mCUSTOMER12_mSUPPLIER1(float)[][SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int, LINEITEM_SUPPKEY:int] += 
+  ({LINEITEM_ORDERKEY:int =
+ delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_ORDERKEY:int} *
+  (SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} * -1 *
+  delta_REVENUE_mCUSTOMER11_mLINEITEM5:int * LINEITEM_EXTENDEDPRICE:float);
+}
+
+CORRECT REVENUE_mORDERS11_mLINEITEM4[][delta_SHIPPING_SUPP_NATION:string,delta_SHIPPING_CUST_NATION:string,delta_REVENUE_mORDERSORDERS_CUSTKEY:int,delta_REVENUE_mORDERS11_mLINEITEMLINEITEM_SUPPKEY:int] += delta_REVENUE_mORDERS11_mLINEITEM4:int FOR ON - LINEITEM(LINEITEM_ORDERKEY:int, LINEITEM_PARTKEY:int, LINEITEM_SUPPKEY:int, LINEITEM_LINENUMBER:int, LINEITEM_QUANTITY:float, LINEITEM_EXTENDEDPRICE:float, LINEITEM_DISCOUNT:float, LINEITEM_TAX:float, LINEITEM_RETURNFLAG:string, LINEITEM_LINESTATUS:string, LINEITEM_SHIPDATE:date, LINEITEM_COMMITDATE:date, LINEITEM_RECEIPTDATE:date, LINEITEM_SHIPINSTRUCT:string, LINEITEM_SHIPMODE:string, LINEITEM_COMMENT:string) {
+   REVENUE_mORDERS11(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mORDERSORDERS_CUSTKEY:int, LINEITEM_ORDERKEY:int] += 
+  ({LINEITEM_SUPPKEY:int =
+ delta_REVENUE_mORDERS11_mLINEITEMLINEITEM_SUPPKEY:int} *
+  (SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} * -1 *
+  delta_REVENUE_mORDERS11_mLINEITEM4:int * LINEITEM_DISCOUNT:float *
+  LINEITEM_EXTENDEDPRICE:float);
+   REVENUE_mORDERS12(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mORDERSORDERS_CUSTKEY:int, LINEITEM_ORDERKEY:int] += 
+  ({LINEITEM_SUPPKEY:int =
+ delta_REVENUE_mORDERS11_mLINEITEMLINEITEM_SUPPKEY:int} *
+  (SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} * -1 *
+  delta_REVENUE_mORDERS11_mLINEITEM4:int * LINEITEM_EXTENDEDPRICE:float);
+}
+
+CORRECT REVENUE_mORDERS11_mLINEITEM4[][delta_SHIPPING_SUPP_NATION:string,delta_SHIPPING_CUST_NATION:string,delta_REVENUE_mORDERSORDERS_CUSTKEY:int,delta_REVENUE_mORDERS11_mLINEITEMLINEITEM_SUPPKEY:int] += delta_REVENUE_mORDERS11_mLINEITEM4:int FOR ON - LINEITEM(LINEITEM_ORDERKEY:int, LINEITEM_PARTKEY:int, LINEITEM_SUPPKEY:int, LINEITEM_LINENUMBER:int, LINEITEM_QUANTITY:float, LINEITEM_EXTENDEDPRICE:float, LINEITEM_DISCOUNT:float, LINEITEM_TAX:float, LINEITEM_RETURNFLAG:string, LINEITEM_LINESTATUS:string, LINEITEM_SHIPDATE:date, LINEITEM_COMMITDATE:date, LINEITEM_RECEIPTDATE:date, LINEITEM_SHIPINSTRUCT:string, LINEITEM_SHIPMODE:string, LINEITEM_COMMENT:string) {
+   REVENUE_mORDERS11(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mORDERSORDERS_CUSTKEY:int, LINEITEM_ORDERKEY:int] += 
+  ({LINEITEM_SUPPKEY:int =
+ delta_REVENUE_mORDERS11_mLINEITEMLINEITEM_SUPPKEY:int} *
+  (SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} * -1 *
+  delta_REVENUE_mORDERS11_mLINEITEM4:int * LINEITEM_DISCOUNT:float *
+  LINEITEM_EXTENDEDPRICE:float);
+   REVENUE_mORDERS12(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mORDERSORDERS_CUSTKEY:int, LINEITEM_ORDERKEY:int] += 
+  ({LINEITEM_SUPPKEY:int =
+ delta_REVENUE_mORDERS11_mLINEITEMLINEITEM_SUPPKEY:int} *
+  (SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} * -1 *
+  delta_REVENUE_mORDERS11_mLINEITEM4:int * LINEITEM_EXTENDEDPRICE:float);
+}
+
+CORRECT REVENUE_mLINEITEM4_mSUPPLIER1[][delta_SHIPPING_SUPP_NATION:string,delta_SHIPPING_CUST_NATION:string,delta_REVENUE_mLINEITEMLINEITEM_ORDERKEY:int,delta_REVENUE_mLINEITEM4_mSUPPLIERSUPPLIER_NATIONKEY:int] += delta_REVENUE_mLINEITEM4_mSUPPLIER1:int FOR ON - LINEITEM(LINEITEM_ORDERKEY:int, LINEITEM_PARTKEY:int, LINEITEM_SUPPKEY:int, LINEITEM_LINENUMBER:int, LINEITEM_QUANTITY:float, LINEITEM_EXTENDEDPRICE:float, LINEITEM_DISCOUNT:float, LINEITEM_TAX:float, LINEITEM_RETURNFLAG:string, LINEITEM_LINESTATUS:string, LINEITEM_SHIPDATE:date, LINEITEM_COMMITDATE:date, LINEITEM_RECEIPTDATE:date, LINEITEM_SHIPINSTRUCT:string, LINEITEM_SHIPMODE:string, LINEITEM_COMMENT:string) {
+   REVENUE_mSUPPLIER11(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mLINEITEM4_mSUPPLIERSUPPLIER_NATIONKEY:int, LINEITEM_SUPPKEY:int] += 
+  ({LINEITEM_ORDERKEY:int = delta_REVENUE_mLINEITEMLINEITEM_ORDERKEY:int} *
+  (SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} * -1 *
+  delta_REVENUE_mLINEITEM4_mSUPPLIER1:int * LINEITEM_DISCOUNT:float *
+  LINEITEM_EXTENDEDPRICE:float);
+   REVENUE_mSUPPLIER12(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mLINEITEM4_mSUPPLIERSUPPLIER_NATIONKEY:int, LINEITEM_SUPPKEY:int] += 
+  ({LINEITEM_ORDERKEY:int = delta_REVENUE_mLINEITEMLINEITEM_ORDERKEY:int} *
+  (SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} * -1 *
+  delta_REVENUE_mLINEITEM4_mSUPPLIER1:int * LINEITEM_EXTENDEDPRICE:float);
+}
+
+CORRECT REVENUE_mLINEITEM4_mSUPPLIER1[][delta_SHIPPING_SUPP_NATION:string,delta_SHIPPING_CUST_NATION:string,delta_REVENUE_mLINEITEMLINEITEM_ORDERKEY:int,delta_REVENUE_mLINEITEM4_mSUPPLIERSUPPLIER_NATIONKEY:int] += delta_REVENUE_mLINEITEM4_mSUPPLIER1:int FOR ON - LINEITEM(LINEITEM_ORDERKEY:int, LINEITEM_PARTKEY:int, LINEITEM_SUPPKEY:int, LINEITEM_LINENUMBER:int, LINEITEM_QUANTITY:float, LINEITEM_EXTENDEDPRICE:float, LINEITEM_DISCOUNT:float, LINEITEM_TAX:float, LINEITEM_RETURNFLAG:string, LINEITEM_LINESTATUS:string, LINEITEM_SHIPDATE:date, LINEITEM_COMMITDATE:date, LINEITEM_RECEIPTDATE:date, LINEITEM_SHIPINSTRUCT:string, LINEITEM_SHIPMODE:string, LINEITEM_COMMENT:string) {
+   REVENUE_mSUPPLIER11(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mLINEITEM4_mSUPPLIERSUPPLIER_NATIONKEY:int, LINEITEM_SUPPKEY:int] += 
+  ({LINEITEM_ORDERKEY:int = delta_REVENUE_mLINEITEMLINEITEM_ORDERKEY:int} *
+  (SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} * -1 *
+  delta_REVENUE_mLINEITEM4_mSUPPLIER1:int * LINEITEM_DISCOUNT:float *
+  LINEITEM_EXTENDEDPRICE:float);
+   REVENUE_mSUPPLIER12(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mLINEITEM4_mSUPPLIERSUPPLIER_NATIONKEY:int, LINEITEM_SUPPKEY:int] += 
+  ({LINEITEM_ORDERKEY:int = delta_REVENUE_mLINEITEMLINEITEM_ORDERKEY:int} *
+  (SHIPPING_L_YEAR:int ^= {[date_part:int]('year', LINEITEM_SHIPDATE:date)}) *
+  {LINEITEM_SHIPDATE:date >= DATE('1995-1-1')} *
+  {LINEITEM_SHIPDATE:date <= DATE('1996-12-31')} * -1 *
+  delta_REVENUE_mLINEITEM4_mSUPPLIER1:int * LINEITEM_EXTENDEDPRICE:float);
+}
+
+CORRECT REVENUE_mORDERS11[][delta_SHIPPING_SUPP_NATION:string,delta_SHIPPING_CUST_NATION:string,delta_SHIPPING_L_YEAR:int,delta_REVENUE_mORDERSORDERS_CUSTKEY:int,delta_REVENUE_mORDERSORDERS_ORDERKEY:int] += delta_REVENUE_mORDERS11:float FOR ON + ORDERS(ORDERS_ORDERKEY:int, ORDERS_CUSTKEY:int, ORDERS_ORDERSTATUS:string, ORDERS_TOTALPRICE:float, ORDERS_ORDERDATE:date, ORDERS_ORDERPRIORITY:string, ORDERS_CLERK:string, ORDERS_SHIPPRIORITY:int, ORDERS_COMMENT:string) {
+   REVENUE(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, delta_SHIPPING_L_YEAR:int] += 
+  ({ORDERS_ORDERKEY:int = delta_REVENUE_mORDERSORDERS_ORDERKEY:int} *
+  {ORDERS_CUSTKEY:int = delta_REVENUE_mORDERSORDERS_CUSTKEY:int} * -1 *
+  delta_REVENUE_mORDERS11:float);
+}
+
+CORRECT REVENUE_mORDERS12[][delta_SHIPPING_SUPP_NATION:string,delta_SHIPPING_CUST_NATION:string,delta_SHIPPING_L_YEAR:int,delta_REVENUE_mORDERSORDERS_CUSTKEY:int,delta_REVENUE_mORDERSORDERS_ORDERKEY:int] += delta_REVENUE_mORDERS12:float FOR ON + ORDERS(ORDERS_ORDERKEY:int, ORDERS_CUSTKEY:int, ORDERS_ORDERSTATUS:string, ORDERS_TOTALPRICE:float, ORDERS_ORDERDATE:date, ORDERS_ORDERPRIORITY:string, ORDERS_CLERK:string, ORDERS_SHIPPRIORITY:int, ORDERS_COMMENT:string) {
+   REVENUE(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, delta_SHIPPING_L_YEAR:int] += 
+  ({ORDERS_ORDERKEY:int = delta_REVENUE_mORDERSORDERS_ORDERKEY:int} *
+  {ORDERS_CUSTKEY:int = delta_REVENUE_mORDERSORDERS_CUSTKEY:int} *
+  delta_REVENUE_mORDERS12:float);
+}
+
+CORRECT REVENUE_mCUSTOMER11_mORDERS1[][delta_SHIPPING_SUPP_NATION:string,delta_SHIPPING_CUST_NATION:string,delta_SHIPPING_L_YEAR:int,delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int,delta_REVENUE_mCUSTOMER11_mORDERSORDERS_ORDERKEY:int] += delta_REVENUE_mCUSTOMER11_mORDERS1:float FOR ON + ORDERS(ORDERS_ORDERKEY:int, ORDERS_CUSTKEY:int, ORDERS_ORDERSTATUS:string, ORDERS_TOTALPRICE:float, ORDERS_ORDERDATE:date, ORDERS_ORDERPRIORITY:string, ORDERS_CLERK:string, ORDERS_SHIPPRIORITY:int, ORDERS_COMMENT:string) {
+   REVENUE_mCUSTOMER11(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, delta_SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, ORDERS_CUSTKEY:int] += 
+  ({ORDERS_ORDERKEY:int = delta_REVENUE_mCUSTOMER11_mORDERSORDERS_ORDERKEY:int} *
+  delta_REVENUE_mCUSTOMER11_mORDERS1:float);
+}
+
+CORRECT REVENUE_mCUSTOMER11_mORDERS1_mSUPPLIER1[][delta_SHIPPING_L_YEAR:int,delta_REVENUE_mCUSTOMER11_mORDERSORDERS_ORDERKEY:int,delta_REVENUE_mCUSTOMER11_mORDERS1_mSUPPLIERSUPPLIER_SUPPKEY:int] += delta_REVENUE_mCUSTOMER11_mORDERS1_mSUPPLIER1:float FOR ON + ORDERS(ORDERS_ORDERKEY:int, ORDERS_CUSTKEY:int, ORDERS_ORDERSTATUS:string, ORDERS_TOTALPRICE:float, ORDERS_ORDERDATE:date, ORDERS_ORDERPRIORITY:string, ORDERS_CLERK:string, ORDERS_SHIPPRIORITY:int, ORDERS_COMMENT:string) {
+   REVENUE_mCUSTOMER11_mSUPPLIER1(float)[][delta_SHIPPING_L_YEAR:int, ORDERS_CUSTKEY:int, delta_REVENUE_mCUSTOMER11_mORDERS1_mSUPPLIERSUPPLIER_SUPPKEY:int] += 
+  ({ORDERS_ORDERKEY:int = delta_REVENUE_mCUSTOMER11_mORDERSORDERS_ORDERKEY:int} *
+  delta_REVENUE_mCUSTOMER11_mORDERS1_mSUPPLIER1:float);
+   REVENUE_mSUPPLIER11(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, delta_SHIPPING_L_YEAR:int, REVENUE_mSUPPLIERSUPPLIER_NATIONKEY:int, delta_REVENUE_mCUSTOMER11_mORDERS1_mSUPPLIERSUPPLIER_SUPPKEY:int] += 
+  ({ORDERS_ORDERKEY:int = delta_REVENUE_mCUSTOMER11_mORDERSORDERS_ORDERKEY:int} *
+  REVENUE_mORDERS11_mSUPPLIER2(int)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     ORDERS_CUSTKEY:int, REVENUE_mSUPPLIERSUPPLIER_NATIONKEY:int] *
+  delta_REVENUE_mCUSTOMER11_mORDERS1_mSUPPLIER1:float);
+}
+
+CORRECT REVENUE_mCUSTOMER12_mORDERS1[][delta_SHIPPING_SUPP_NATION:string,delta_SHIPPING_CUST_NATION:string,delta_SHIPPING_L_YEAR:int,delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int,delta_REVENUE_mCUSTOMER12_mORDERSORDERS_ORDERKEY:int] += delta_REVENUE_mCUSTOMER12_mORDERS1:float FOR ON + ORDERS(ORDERS_ORDERKEY:int, ORDERS_CUSTKEY:int, ORDERS_ORDERSTATUS:string, ORDERS_TOTALPRICE:float, ORDERS_ORDERDATE:date, ORDERS_ORDERPRIORITY:string, ORDERS_CLERK:string, ORDERS_SHIPPRIORITY:int, ORDERS_COMMENT:string) {
+   REVENUE_mCUSTOMER12(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, delta_SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, ORDERS_CUSTKEY:int] += 
+  ({ORDERS_ORDERKEY:int = delta_REVENUE_mCUSTOMER12_mORDERSORDERS_ORDERKEY:int} *
+  delta_REVENUE_mCUSTOMER12_mORDERS1:float);
+}
+
+CORRECT REVENUE_mCUSTOMER12_mORDERS1_mSUPPLIER1[][delta_SHIPPING_L_YEAR:int,delta_REVENUE_mCUSTOMER12_mORDERSORDERS_ORDERKEY:int,delta_REVENUE_mCUSTOMER12_mORDERS1_mSUPPLIERSUPPLIER_SUPPKEY:int] += delta_REVENUE_mCUSTOMER12_mORDERS1_mSUPPLIER1:float FOR ON + ORDERS(ORDERS_ORDERKEY:int, ORDERS_CUSTKEY:int, ORDERS_ORDERSTATUS:string, ORDERS_TOTALPRICE:float, ORDERS_ORDERDATE:date, ORDERS_ORDERPRIORITY:string, ORDERS_CLERK:string, ORDERS_SHIPPRIORITY:int, ORDERS_COMMENT:string) {
+   REVENUE_mCUSTOMER12_mSUPPLIER1(float)[][delta_SHIPPING_L_YEAR:int, ORDERS_CUSTKEY:int, delta_REVENUE_mCUSTOMER12_mORDERS1_mSUPPLIERSUPPLIER_SUPPKEY:int] += 
+  ({ORDERS_ORDERKEY:int = delta_REVENUE_mCUSTOMER12_mORDERSORDERS_ORDERKEY:int} *
+  delta_REVENUE_mCUSTOMER12_mORDERS1_mSUPPLIER1:float);
+   REVENUE_mSUPPLIER12(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, delta_SHIPPING_L_YEAR:int, REVENUE_mSUPPLIERSUPPLIER_NATIONKEY:int, delta_REVENUE_mCUSTOMER12_mORDERS1_mSUPPLIERSUPPLIER_SUPPKEY:int] += 
+  ({ORDERS_ORDERKEY:int = delta_REVENUE_mCUSTOMER12_mORDERSORDERS_ORDERKEY:int} *
+  REVENUE_mORDERS11_mSUPPLIER2(int)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     ORDERS_CUSTKEY:int, REVENUE_mSUPPLIERSUPPLIER_NATIONKEY:int] *
+  delta_REVENUE_mCUSTOMER12_mORDERS1_mSUPPLIER1:float);
+}
+
+CORRECT REVENUE_mORDERS11_mLINEITEM4[][delta_SHIPPING_SUPP_NATION:string,delta_SHIPPING_CUST_NATION:string,delta_REVENUE_mORDERSORDERS_CUSTKEY:int,delta_REVENUE_mORDERS11_mLINEITEMLINEITEM_SUPPKEY:int] += delta_REVENUE_mORDERS11_mLINEITEM4:int FOR ON + ORDERS(ORDERS_ORDERKEY:int, ORDERS_CUSTKEY:int, ORDERS_ORDERSTATUS:string, ORDERS_TOTALPRICE:float, ORDERS_ORDERDATE:date, ORDERS_ORDERPRIORITY:string, ORDERS_CLERK:string, ORDERS_SHIPPRIORITY:int, ORDERS_COMMENT:string) {
+   REVENUE_mLINEITEM4(int)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, ORDERS_ORDERKEY:int, delta_REVENUE_mORDERS11_mLINEITEMLINEITEM_SUPPKEY:int] += 
+  ({ORDERS_CUSTKEY:int = delta_REVENUE_mORDERSORDERS_CUSTKEY:int} *
+  delta_REVENUE_mORDERS11_mLINEITEM4:int);
+}
+
+CORRECT REVENUE_mORDERS11_mSUPPLIER2[][delta_SHIPPING_SUPP_NATION:string,delta_SHIPPING_CUST_NATION:string,delta_REVENUE_mORDERSORDERS_CUSTKEY:int,delta_REVENUE_mORDERS11_mSUPPLIERSUPPLIER_NATIONKEY:int] += delta_REVENUE_mORDERS11_mSUPPLIER2:int FOR ON + ORDERS(ORDERS_ORDERKEY:int, ORDERS_CUSTKEY:int, ORDERS_ORDERSTATUS:string, ORDERS_TOTALPRICE:float, ORDERS_ORDERDATE:date, ORDERS_ORDERPRIORITY:string, ORDERS_CLERK:string, ORDERS_SHIPPRIORITY:int, ORDERS_COMMENT:string) {
+   REVENUE_mLINEITEM4_mSUPPLIER1(int)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, ORDERS_ORDERKEY:int, delta_REVENUE_mORDERS11_mSUPPLIERSUPPLIER_NATIONKEY:int] += 
+  ({ORDERS_CUSTKEY:int = delta_REVENUE_mORDERSORDERS_CUSTKEY:int} *
+  delta_REVENUE_mORDERS11_mSUPPLIER2:int);
+   REVENUE_mSUPPLIER11(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mORDERS11_mSUPPLIERSUPPLIER_NATIONKEY:int, REVENUE_mSUPPLIERSUPPLIER_SUPPKEY:int] += 
+  ({ORDERS_CUSTKEY:int = delta_REVENUE_mORDERSORDERS_CUSTKEY:int} *
+  REVENUE_mCUSTOMER11_mORDERS1_mSUPPLIER1(float)[]
+  [SHIPPING_L_YEAR:int, ORDERS_ORDERKEY:int,
+     REVENUE_mSUPPLIERSUPPLIER_SUPPKEY:int] *
+  delta_REVENUE_mORDERS11_mSUPPLIER2:int);
+   REVENUE_mSUPPLIER12(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mORDERS11_mSUPPLIERSUPPLIER_NATIONKEY:int, REVENUE_mSUPPLIERSUPPLIER_SUPPKEY:int] += 
+  ({ORDERS_CUSTKEY:int = delta_REVENUE_mORDERSORDERS_CUSTKEY:int} *
+  REVENUE_mCUSTOMER12_mORDERS1_mSUPPLIER1(float)[]
+  [SHIPPING_L_YEAR:int, ORDERS_ORDERKEY:int,
+     REVENUE_mSUPPLIERSUPPLIER_SUPPKEY:int] *
+  delta_REVENUE_mORDERS11_mSUPPLIER2:int);
+}
+
+CORRECT REVENUE_mCUSTOMER11_mORDERS1_mSUPPLIER1[][delta_SHIPPING_L_YEAR:int,delta_REVENUE_mCUSTOMER11_mORDERSORDERS_ORDERKEY:int,delta_REVENUE_mCUSTOMER11_mORDERS1_mSUPPLIERSUPPLIER_SUPPKEY:int] += delta_REVENUE_mCUSTOMER11_mORDERS1_mSUPPLIER1:float FOR ON + ORDERS(ORDERS_ORDERKEY:int, ORDERS_CUSTKEY:int, ORDERS_ORDERSTATUS:string, ORDERS_TOTALPRICE:float, ORDERS_ORDERDATE:date, ORDERS_ORDERPRIORITY:string, ORDERS_CLERK:string, ORDERS_SHIPPRIORITY:int, ORDERS_COMMENT:string) {
+   REVENUE_mCUSTOMER11_mSUPPLIER1(float)[][delta_SHIPPING_L_YEAR:int, ORDERS_CUSTKEY:int, delta_REVENUE_mCUSTOMER11_mORDERS1_mSUPPLIERSUPPLIER_SUPPKEY:int] += 
+  ({ORDERS_ORDERKEY:int = delta_REVENUE_mCUSTOMER11_mORDERSORDERS_ORDERKEY:int} *
+  delta_REVENUE_mCUSTOMER11_mORDERS1_mSUPPLIER1:float);
+   REVENUE_mSUPPLIER11(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, delta_SHIPPING_L_YEAR:int, REVENUE_mSUPPLIERSUPPLIER_NATIONKEY:int, delta_REVENUE_mCUSTOMER11_mORDERS1_mSUPPLIERSUPPLIER_SUPPKEY:int] += 
+  ({ORDERS_ORDERKEY:int = delta_REVENUE_mCUSTOMER11_mORDERSORDERS_ORDERKEY:int} *
+  REVENUE_mORDERS11_mSUPPLIER2(int)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     ORDERS_CUSTKEY:int, REVENUE_mSUPPLIERSUPPLIER_NATIONKEY:int] *
+  delta_REVENUE_mCUSTOMER11_mORDERS1_mSUPPLIER1:float);
+}
+
+CORRECT REVENUE_mORDERS11_mSUPPLIER2[][delta_SHIPPING_SUPP_NATION:string,delta_SHIPPING_CUST_NATION:string,delta_REVENUE_mORDERSORDERS_CUSTKEY:int,delta_REVENUE_mORDERS11_mSUPPLIERSUPPLIER_NATIONKEY:int] += delta_REVENUE_mORDERS11_mSUPPLIER2:int FOR ON + ORDERS(ORDERS_ORDERKEY:int, ORDERS_CUSTKEY:int, ORDERS_ORDERSTATUS:string, ORDERS_TOTALPRICE:float, ORDERS_ORDERDATE:date, ORDERS_ORDERPRIORITY:string, ORDERS_CLERK:string, ORDERS_SHIPPRIORITY:int, ORDERS_COMMENT:string) {
+   REVENUE_mLINEITEM4_mSUPPLIER1(int)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, ORDERS_ORDERKEY:int, delta_REVENUE_mORDERS11_mSUPPLIERSUPPLIER_NATIONKEY:int] += 
+  ({ORDERS_CUSTKEY:int = delta_REVENUE_mORDERSORDERS_CUSTKEY:int} *
+  delta_REVENUE_mORDERS11_mSUPPLIER2:int);
+   REVENUE_mSUPPLIER11(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mORDERS11_mSUPPLIERSUPPLIER_NATIONKEY:int, REVENUE_mSUPPLIERSUPPLIER_SUPPKEY:int] += 
+  ({ORDERS_CUSTKEY:int = delta_REVENUE_mORDERSORDERS_CUSTKEY:int} *
+  REVENUE_mCUSTOMER11_mORDERS1_mSUPPLIER1(float)[]
+  [SHIPPING_L_YEAR:int, ORDERS_ORDERKEY:int,
+     REVENUE_mSUPPLIERSUPPLIER_SUPPKEY:int] *
+  delta_REVENUE_mORDERS11_mSUPPLIER2:int);
+   REVENUE_mSUPPLIER12(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mORDERS11_mSUPPLIERSUPPLIER_NATIONKEY:int, REVENUE_mSUPPLIERSUPPLIER_SUPPKEY:int] += 
+  ({ORDERS_CUSTKEY:int = delta_REVENUE_mORDERSORDERS_CUSTKEY:int} *
+  REVENUE_mCUSTOMER12_mORDERS1_mSUPPLIER1(float)[]
+  [SHIPPING_L_YEAR:int, ORDERS_ORDERKEY:int,
+     REVENUE_mSUPPLIERSUPPLIER_SUPPKEY:int] *
+  delta_REVENUE_mORDERS11_mSUPPLIER2:int);
+}
+
+CORRECT REVENUE_mCUSTOMER12_mORDERS1_mSUPPLIER1[][delta_SHIPPING_L_YEAR:int,delta_REVENUE_mCUSTOMER12_mORDERSORDERS_ORDERKEY:int,delta_REVENUE_mCUSTOMER12_mORDERS1_mSUPPLIERSUPPLIER_SUPPKEY:int] += delta_REVENUE_mCUSTOMER12_mORDERS1_mSUPPLIER1:float FOR ON + ORDERS(ORDERS_ORDERKEY:int, ORDERS_CUSTKEY:int, ORDERS_ORDERSTATUS:string, ORDERS_TOTALPRICE:float, ORDERS_ORDERDATE:date, ORDERS_ORDERPRIORITY:string, ORDERS_CLERK:string, ORDERS_SHIPPRIORITY:int, ORDERS_COMMENT:string) {
+   REVENUE_mCUSTOMER12_mSUPPLIER1(float)[][delta_SHIPPING_L_YEAR:int, ORDERS_CUSTKEY:int, delta_REVENUE_mCUSTOMER12_mORDERS1_mSUPPLIERSUPPLIER_SUPPKEY:int] += 
+  ({ORDERS_ORDERKEY:int = delta_REVENUE_mCUSTOMER12_mORDERSORDERS_ORDERKEY:int} *
+  delta_REVENUE_mCUSTOMER12_mORDERS1_mSUPPLIER1:float);
+   REVENUE_mSUPPLIER12(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, delta_SHIPPING_L_YEAR:int, REVENUE_mSUPPLIERSUPPLIER_NATIONKEY:int, delta_REVENUE_mCUSTOMER12_mORDERS1_mSUPPLIERSUPPLIER_SUPPKEY:int] += 
+  ({ORDERS_ORDERKEY:int = delta_REVENUE_mCUSTOMER12_mORDERSORDERS_ORDERKEY:int} *
+  REVENUE_mORDERS11_mSUPPLIER2(int)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     ORDERS_CUSTKEY:int, REVENUE_mSUPPLIERSUPPLIER_NATIONKEY:int] *
+  delta_REVENUE_mCUSTOMER12_mORDERS1_mSUPPLIER1:float);
+}
+
+CORRECT REVENUE_mORDERS11_mSUPPLIER2[][delta_SHIPPING_SUPP_NATION:string,delta_SHIPPING_CUST_NATION:string,delta_REVENUE_mORDERSORDERS_CUSTKEY:int,delta_REVENUE_mORDERS11_mSUPPLIERSUPPLIER_NATIONKEY:int] += delta_REVENUE_mORDERS11_mSUPPLIER2:int FOR ON + ORDERS(ORDERS_ORDERKEY:int, ORDERS_CUSTKEY:int, ORDERS_ORDERSTATUS:string, ORDERS_TOTALPRICE:float, ORDERS_ORDERDATE:date, ORDERS_ORDERPRIORITY:string, ORDERS_CLERK:string, ORDERS_SHIPPRIORITY:int, ORDERS_COMMENT:string) {
+   REVENUE_mLINEITEM4_mSUPPLIER1(int)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, ORDERS_ORDERKEY:int, delta_REVENUE_mORDERS11_mSUPPLIERSUPPLIER_NATIONKEY:int] += 
+  ({ORDERS_CUSTKEY:int = delta_REVENUE_mORDERSORDERS_CUSTKEY:int} *
+  delta_REVENUE_mORDERS11_mSUPPLIER2:int);
+   REVENUE_mSUPPLIER11(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mORDERS11_mSUPPLIERSUPPLIER_NATIONKEY:int, REVENUE_mSUPPLIERSUPPLIER_SUPPKEY:int] += 
+  ({ORDERS_CUSTKEY:int = delta_REVENUE_mORDERSORDERS_CUSTKEY:int} *
+  REVENUE_mCUSTOMER11_mORDERS1_mSUPPLIER1(float)[]
+  [SHIPPING_L_YEAR:int, ORDERS_ORDERKEY:int,
+     REVENUE_mSUPPLIERSUPPLIER_SUPPKEY:int] *
+  delta_REVENUE_mORDERS11_mSUPPLIER2:int);
+   REVENUE_mSUPPLIER12(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mORDERS11_mSUPPLIERSUPPLIER_NATIONKEY:int, REVENUE_mSUPPLIERSUPPLIER_SUPPKEY:int] += 
+  ({ORDERS_CUSTKEY:int = delta_REVENUE_mORDERSORDERS_CUSTKEY:int} *
+  REVENUE_mCUSTOMER12_mORDERS1_mSUPPLIER1(float)[]
+  [SHIPPING_L_YEAR:int, ORDERS_ORDERKEY:int,
+     REVENUE_mSUPPLIERSUPPLIER_SUPPKEY:int] *
+  delta_REVENUE_mORDERS11_mSUPPLIER2:int);
+}
+
+CORRECT REVENUE_mORDERS11[][delta_SHIPPING_SUPP_NATION:string,delta_SHIPPING_CUST_NATION:string,delta_SHIPPING_L_YEAR:int,delta_REVENUE_mORDERSORDERS_CUSTKEY:int,delta_REVENUE_mORDERSORDERS_ORDERKEY:int] += delta_REVENUE_mORDERS11:float FOR ON - ORDERS(ORDERS_ORDERKEY:int, ORDERS_CUSTKEY:int, ORDERS_ORDERSTATUS:string, ORDERS_TOTALPRICE:float, ORDERS_ORDERDATE:date, ORDERS_ORDERPRIORITY:string, ORDERS_CLERK:string, ORDERS_SHIPPRIORITY:int, ORDERS_COMMENT:string) {
+   REVENUE(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, delta_SHIPPING_L_YEAR:int] += 
+  ({ORDERS_ORDERKEY:int = delta_REVENUE_mORDERSORDERS_ORDERKEY:int} *
+  {ORDERS_CUSTKEY:int = delta_REVENUE_mORDERSORDERS_CUSTKEY:int} *
+  delta_REVENUE_mORDERS11:float);
+}
+
+CORRECT REVENUE_mORDERS12[][delta_SHIPPING_SUPP_NATION:string,delta_SHIPPING_CUST_NATION:string,delta_SHIPPING_L_YEAR:int,delta_REVENUE_mORDERSORDERS_CUSTKEY:int,delta_REVENUE_mORDERSORDERS_ORDERKEY:int] += delta_REVENUE_mORDERS12:float FOR ON - ORDERS(ORDERS_ORDERKEY:int, ORDERS_CUSTKEY:int, ORDERS_ORDERSTATUS:string, ORDERS_TOTALPRICE:float, ORDERS_ORDERDATE:date, ORDERS_ORDERPRIORITY:string, ORDERS_CLERK:string, ORDERS_SHIPPRIORITY:int, ORDERS_COMMENT:string) {
+   REVENUE(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, delta_SHIPPING_L_YEAR:int] += 
+  ({ORDERS_ORDERKEY:int = delta_REVENUE_mORDERSORDERS_ORDERKEY:int} *
+  {ORDERS_CUSTKEY:int = delta_REVENUE_mORDERSORDERS_CUSTKEY:int} * -1 *
+  delta_REVENUE_mORDERS12:float);
+}
+
+CORRECT REVENUE_mCUSTOMER11_mORDERS1[][delta_SHIPPING_SUPP_NATION:string,delta_SHIPPING_CUST_NATION:string,delta_SHIPPING_L_YEAR:int,delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int,delta_REVENUE_mCUSTOMER11_mORDERSORDERS_ORDERKEY:int] += delta_REVENUE_mCUSTOMER11_mORDERS1:float FOR ON - ORDERS(ORDERS_ORDERKEY:int, ORDERS_CUSTKEY:int, ORDERS_ORDERSTATUS:string, ORDERS_TOTALPRICE:float, ORDERS_ORDERDATE:date, ORDERS_ORDERPRIORITY:string, ORDERS_CLERK:string, ORDERS_SHIPPRIORITY:int, ORDERS_COMMENT:string) {
+   REVENUE_mCUSTOMER11(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, delta_SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, ORDERS_CUSTKEY:int] += 
+  ({ORDERS_ORDERKEY:int = delta_REVENUE_mCUSTOMER11_mORDERSORDERS_ORDERKEY:int} *
+  -1 * delta_REVENUE_mCUSTOMER11_mORDERS1:float);
+}
+
+CORRECT REVENUE_mCUSTOMER11_mORDERS1_mSUPPLIER1[][delta_SHIPPING_L_YEAR:int,delta_REVENUE_mCUSTOMER11_mORDERSORDERS_ORDERKEY:int,delta_REVENUE_mCUSTOMER11_mORDERS1_mSUPPLIERSUPPLIER_SUPPKEY:int] += delta_REVENUE_mCUSTOMER11_mORDERS1_mSUPPLIER1:float FOR ON - ORDERS(ORDERS_ORDERKEY:int, ORDERS_CUSTKEY:int, ORDERS_ORDERSTATUS:string, ORDERS_TOTALPRICE:float, ORDERS_ORDERDATE:date, ORDERS_ORDERPRIORITY:string, ORDERS_CLERK:string, ORDERS_SHIPPRIORITY:int, ORDERS_COMMENT:string) {
+   REVENUE_mCUSTOMER11_mSUPPLIER1(float)[][delta_SHIPPING_L_YEAR:int, ORDERS_CUSTKEY:int, delta_REVENUE_mCUSTOMER11_mORDERS1_mSUPPLIERSUPPLIER_SUPPKEY:int] += 
+  ({ORDERS_ORDERKEY:int = delta_REVENUE_mCUSTOMER11_mORDERSORDERS_ORDERKEY:int} *
+  -1 * delta_REVENUE_mCUSTOMER11_mORDERS1_mSUPPLIER1:float);
+   REVENUE_mSUPPLIER11(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, delta_SHIPPING_L_YEAR:int, REVENUE_mSUPPLIERSUPPLIER_NATIONKEY:int, delta_REVENUE_mCUSTOMER11_mORDERS1_mSUPPLIERSUPPLIER_SUPPKEY:int] += 
+  ({ORDERS_ORDERKEY:int = delta_REVENUE_mCUSTOMER11_mORDERSORDERS_ORDERKEY:int} *
+  REVENUE_mORDERS11_mSUPPLIER2(int)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     ORDERS_CUSTKEY:int, REVENUE_mSUPPLIERSUPPLIER_NATIONKEY:int] *
+  -1 * delta_REVENUE_mCUSTOMER11_mORDERS1_mSUPPLIER1:float);
+}
+
+CORRECT REVENUE_mCUSTOMER12_mORDERS1[][delta_SHIPPING_SUPP_NATION:string,delta_SHIPPING_CUST_NATION:string,delta_SHIPPING_L_YEAR:int,delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int,delta_REVENUE_mCUSTOMER12_mORDERSORDERS_ORDERKEY:int] += delta_REVENUE_mCUSTOMER12_mORDERS1:float FOR ON - ORDERS(ORDERS_ORDERKEY:int, ORDERS_CUSTKEY:int, ORDERS_ORDERSTATUS:string, ORDERS_TOTALPRICE:float, ORDERS_ORDERDATE:date, ORDERS_ORDERPRIORITY:string, ORDERS_CLERK:string, ORDERS_SHIPPRIORITY:int, ORDERS_COMMENT:string) {
+   REVENUE_mCUSTOMER12(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, delta_SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, ORDERS_CUSTKEY:int] += 
+  ({ORDERS_ORDERKEY:int = delta_REVENUE_mCUSTOMER12_mORDERSORDERS_ORDERKEY:int} *
+  -1 * delta_REVENUE_mCUSTOMER12_mORDERS1:float);
+}
+
+CORRECT REVENUE_mCUSTOMER12_mORDERS1_mSUPPLIER1[][delta_SHIPPING_L_YEAR:int,delta_REVENUE_mCUSTOMER12_mORDERSORDERS_ORDERKEY:int,delta_REVENUE_mCUSTOMER12_mORDERS1_mSUPPLIERSUPPLIER_SUPPKEY:int] += delta_REVENUE_mCUSTOMER12_mORDERS1_mSUPPLIER1:float FOR ON - ORDERS(ORDERS_ORDERKEY:int, ORDERS_CUSTKEY:int, ORDERS_ORDERSTATUS:string, ORDERS_TOTALPRICE:float, ORDERS_ORDERDATE:date, ORDERS_ORDERPRIORITY:string, ORDERS_CLERK:string, ORDERS_SHIPPRIORITY:int, ORDERS_COMMENT:string) {
+   REVENUE_mCUSTOMER12_mSUPPLIER1(float)[][delta_SHIPPING_L_YEAR:int, ORDERS_CUSTKEY:int, delta_REVENUE_mCUSTOMER12_mORDERS1_mSUPPLIERSUPPLIER_SUPPKEY:int] += 
+  ({ORDERS_ORDERKEY:int = delta_REVENUE_mCUSTOMER12_mORDERSORDERS_ORDERKEY:int} *
+  -1 * delta_REVENUE_mCUSTOMER12_mORDERS1_mSUPPLIER1:float);
+   REVENUE_mSUPPLIER12(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, delta_SHIPPING_L_YEAR:int, REVENUE_mSUPPLIERSUPPLIER_NATIONKEY:int, delta_REVENUE_mCUSTOMER12_mORDERS1_mSUPPLIERSUPPLIER_SUPPKEY:int] += 
+  ({ORDERS_ORDERKEY:int = delta_REVENUE_mCUSTOMER12_mORDERSORDERS_ORDERKEY:int} *
+  REVENUE_mORDERS11_mSUPPLIER2(int)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     ORDERS_CUSTKEY:int, REVENUE_mSUPPLIERSUPPLIER_NATIONKEY:int] *
+  -1 * delta_REVENUE_mCUSTOMER12_mORDERS1_mSUPPLIER1:float);
+}
+
+CORRECT REVENUE_mORDERS11_mLINEITEM4[][delta_SHIPPING_SUPP_NATION:string,delta_SHIPPING_CUST_NATION:string,delta_REVENUE_mORDERSORDERS_CUSTKEY:int,delta_REVENUE_mORDERS11_mLINEITEMLINEITEM_SUPPKEY:int] += delta_REVENUE_mORDERS11_mLINEITEM4:int FOR ON - ORDERS(ORDERS_ORDERKEY:int, ORDERS_CUSTKEY:int, ORDERS_ORDERSTATUS:string, ORDERS_TOTALPRICE:float, ORDERS_ORDERDATE:date, ORDERS_ORDERPRIORITY:string, ORDERS_CLERK:string, ORDERS_SHIPPRIORITY:int, ORDERS_COMMENT:string) {
+   REVENUE_mLINEITEM4(int)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, ORDERS_ORDERKEY:int, delta_REVENUE_mORDERS11_mLINEITEMLINEITEM_SUPPKEY:int] += 
+  ({ORDERS_CUSTKEY:int = delta_REVENUE_mORDERSORDERS_CUSTKEY:int} * -1 *
+  delta_REVENUE_mORDERS11_mLINEITEM4:int);
+}
+
+CORRECT REVENUE_mORDERS11_mSUPPLIER2[][delta_SHIPPING_SUPP_NATION:string,delta_SHIPPING_CUST_NATION:string,delta_REVENUE_mORDERSORDERS_CUSTKEY:int,delta_REVENUE_mORDERS11_mSUPPLIERSUPPLIER_NATIONKEY:int] += delta_REVENUE_mORDERS11_mSUPPLIER2:int FOR ON - ORDERS(ORDERS_ORDERKEY:int, ORDERS_CUSTKEY:int, ORDERS_ORDERSTATUS:string, ORDERS_TOTALPRICE:float, ORDERS_ORDERDATE:date, ORDERS_ORDERPRIORITY:string, ORDERS_CLERK:string, ORDERS_SHIPPRIORITY:int, ORDERS_COMMENT:string) {
+   REVENUE_mLINEITEM4_mSUPPLIER1(int)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, ORDERS_ORDERKEY:int, delta_REVENUE_mORDERS11_mSUPPLIERSUPPLIER_NATIONKEY:int] += 
+  ({ORDERS_CUSTKEY:int = delta_REVENUE_mORDERSORDERS_CUSTKEY:int} * -1 *
+  delta_REVENUE_mORDERS11_mSUPPLIER2:int);
+   REVENUE_mSUPPLIER11(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mORDERS11_mSUPPLIERSUPPLIER_NATIONKEY:int, REVENUE_mSUPPLIERSUPPLIER_SUPPKEY:int] += 
+  ({ORDERS_CUSTKEY:int = delta_REVENUE_mORDERSORDERS_CUSTKEY:int} *
+  REVENUE_mCUSTOMER11_mORDERS1_mSUPPLIER1(float)[]
+  [SHIPPING_L_YEAR:int, ORDERS_ORDERKEY:int,
+     REVENUE_mSUPPLIERSUPPLIER_SUPPKEY:int] *
+  -1 * delta_REVENUE_mORDERS11_mSUPPLIER2:int);
+   REVENUE_mSUPPLIER12(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mORDERS11_mSUPPLIERSUPPLIER_NATIONKEY:int, REVENUE_mSUPPLIERSUPPLIER_SUPPKEY:int] += 
+  ({ORDERS_CUSTKEY:int = delta_REVENUE_mORDERSORDERS_CUSTKEY:int} *
+  REVENUE_mCUSTOMER12_mORDERS1_mSUPPLIER1(float)[]
+  [SHIPPING_L_YEAR:int, ORDERS_ORDERKEY:int,
+     REVENUE_mSUPPLIERSUPPLIER_SUPPKEY:int] *
+  -1 * delta_REVENUE_mORDERS11_mSUPPLIER2:int);
+}
+
+CORRECT REVENUE_mCUSTOMER11_mORDERS1_mSUPPLIER1[][delta_SHIPPING_L_YEAR:int,delta_REVENUE_mCUSTOMER11_mORDERSORDERS_ORDERKEY:int,delta_REVENUE_mCUSTOMER11_mORDERS1_mSUPPLIERSUPPLIER_SUPPKEY:int] += delta_REVENUE_mCUSTOMER11_mORDERS1_mSUPPLIER1:float FOR ON - ORDERS(ORDERS_ORDERKEY:int, ORDERS_CUSTKEY:int, ORDERS_ORDERSTATUS:string, ORDERS_TOTALPRICE:float, ORDERS_ORDERDATE:date, ORDERS_ORDERPRIORITY:string, ORDERS_CLERK:string, ORDERS_SHIPPRIORITY:int, ORDERS_COMMENT:string) {
+   REVENUE_mCUSTOMER11_mSUPPLIER1(float)[][delta_SHIPPING_L_YEAR:int, ORDERS_CUSTKEY:int, delta_REVENUE_mCUSTOMER11_mORDERS1_mSUPPLIERSUPPLIER_SUPPKEY:int] += 
+  ({ORDERS_ORDERKEY:int = delta_REVENUE_mCUSTOMER11_mORDERSORDERS_ORDERKEY:int} *
+  -1 * delta_REVENUE_mCUSTOMER11_mORDERS1_mSUPPLIER1:float);
+   REVENUE_mSUPPLIER11(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, delta_SHIPPING_L_YEAR:int, REVENUE_mSUPPLIERSUPPLIER_NATIONKEY:int, delta_REVENUE_mCUSTOMER11_mORDERS1_mSUPPLIERSUPPLIER_SUPPKEY:int] += 
+  ({ORDERS_ORDERKEY:int = delta_REVENUE_mCUSTOMER11_mORDERSORDERS_ORDERKEY:int} *
+  REVENUE_mORDERS11_mSUPPLIER2(int)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     ORDERS_CUSTKEY:int, REVENUE_mSUPPLIERSUPPLIER_NATIONKEY:int] *
+  -1 * delta_REVENUE_mCUSTOMER11_mORDERS1_mSUPPLIER1:float);
+}
+
+CORRECT REVENUE_mORDERS11_mSUPPLIER2[][delta_SHIPPING_SUPP_NATION:string,delta_SHIPPING_CUST_NATION:string,delta_REVENUE_mORDERSORDERS_CUSTKEY:int,delta_REVENUE_mORDERS11_mSUPPLIERSUPPLIER_NATIONKEY:int] += delta_REVENUE_mORDERS11_mSUPPLIER2:int FOR ON - ORDERS(ORDERS_ORDERKEY:int, ORDERS_CUSTKEY:int, ORDERS_ORDERSTATUS:string, ORDERS_TOTALPRICE:float, ORDERS_ORDERDATE:date, ORDERS_ORDERPRIORITY:string, ORDERS_CLERK:string, ORDERS_SHIPPRIORITY:int, ORDERS_COMMENT:string) {
+   REVENUE_mLINEITEM4_mSUPPLIER1(int)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, ORDERS_ORDERKEY:int, delta_REVENUE_mORDERS11_mSUPPLIERSUPPLIER_NATIONKEY:int] += 
+  ({ORDERS_CUSTKEY:int = delta_REVENUE_mORDERSORDERS_CUSTKEY:int} * -1 *
+  delta_REVENUE_mORDERS11_mSUPPLIER2:int);
+   REVENUE_mSUPPLIER11(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mORDERS11_mSUPPLIERSUPPLIER_NATIONKEY:int, REVENUE_mSUPPLIERSUPPLIER_SUPPKEY:int] += 
+  ({ORDERS_CUSTKEY:int = delta_REVENUE_mORDERSORDERS_CUSTKEY:int} *
+  REVENUE_mCUSTOMER11_mORDERS1_mSUPPLIER1(float)[]
+  [SHIPPING_L_YEAR:int, ORDERS_ORDERKEY:int,
+     REVENUE_mSUPPLIERSUPPLIER_SUPPKEY:int] *
+  -1 * delta_REVENUE_mORDERS11_mSUPPLIER2:int);
+   REVENUE_mSUPPLIER12(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mORDERS11_mSUPPLIERSUPPLIER_NATIONKEY:int, REVENUE_mSUPPLIERSUPPLIER_SUPPKEY:int] += 
+  ({ORDERS_CUSTKEY:int = delta_REVENUE_mORDERSORDERS_CUSTKEY:int} *
+  REVENUE_mCUSTOMER12_mORDERS1_mSUPPLIER1(float)[]
+  [SHIPPING_L_YEAR:int, ORDERS_ORDERKEY:int,
+     REVENUE_mSUPPLIERSUPPLIER_SUPPKEY:int] *
+  -1 * delta_REVENUE_mORDERS11_mSUPPLIER2:int);
+}
+
+CORRECT REVENUE_mCUSTOMER12_mORDERS1_mSUPPLIER1[][delta_SHIPPING_L_YEAR:int,delta_REVENUE_mCUSTOMER12_mORDERSORDERS_ORDERKEY:int,delta_REVENUE_mCUSTOMER12_mORDERS1_mSUPPLIERSUPPLIER_SUPPKEY:int] += delta_REVENUE_mCUSTOMER12_mORDERS1_mSUPPLIER1:float FOR ON - ORDERS(ORDERS_ORDERKEY:int, ORDERS_CUSTKEY:int, ORDERS_ORDERSTATUS:string, ORDERS_TOTALPRICE:float, ORDERS_ORDERDATE:date, ORDERS_ORDERPRIORITY:string, ORDERS_CLERK:string, ORDERS_SHIPPRIORITY:int, ORDERS_COMMENT:string) {
+   REVENUE_mCUSTOMER12_mSUPPLIER1(float)[][delta_SHIPPING_L_YEAR:int, ORDERS_CUSTKEY:int, delta_REVENUE_mCUSTOMER12_mORDERS1_mSUPPLIERSUPPLIER_SUPPKEY:int] += 
+  ({ORDERS_ORDERKEY:int = delta_REVENUE_mCUSTOMER12_mORDERSORDERS_ORDERKEY:int} *
+  -1 * delta_REVENUE_mCUSTOMER12_mORDERS1_mSUPPLIER1:float);
+   REVENUE_mSUPPLIER12(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, delta_SHIPPING_L_YEAR:int, REVENUE_mSUPPLIERSUPPLIER_NATIONKEY:int, delta_REVENUE_mCUSTOMER12_mORDERS1_mSUPPLIERSUPPLIER_SUPPKEY:int] += 
+  ({ORDERS_ORDERKEY:int = delta_REVENUE_mCUSTOMER12_mORDERSORDERS_ORDERKEY:int} *
+  REVENUE_mORDERS11_mSUPPLIER2(int)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     ORDERS_CUSTKEY:int, REVENUE_mSUPPLIERSUPPLIER_NATIONKEY:int] *
+  -1 * delta_REVENUE_mCUSTOMER12_mORDERS1_mSUPPLIER1:float);
+}
+
+CORRECT REVENUE_mORDERS11_mSUPPLIER2[][delta_SHIPPING_SUPP_NATION:string,delta_SHIPPING_CUST_NATION:string,delta_REVENUE_mORDERSORDERS_CUSTKEY:int,delta_REVENUE_mORDERS11_mSUPPLIERSUPPLIER_NATIONKEY:int] += delta_REVENUE_mORDERS11_mSUPPLIER2:int FOR ON - ORDERS(ORDERS_ORDERKEY:int, ORDERS_CUSTKEY:int, ORDERS_ORDERSTATUS:string, ORDERS_TOTALPRICE:float, ORDERS_ORDERDATE:date, ORDERS_ORDERPRIORITY:string, ORDERS_CLERK:string, ORDERS_SHIPPRIORITY:int, ORDERS_COMMENT:string) {
+   REVENUE_mLINEITEM4_mSUPPLIER1(int)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, ORDERS_ORDERKEY:int, delta_REVENUE_mORDERS11_mSUPPLIERSUPPLIER_NATIONKEY:int] += 
+  ({ORDERS_CUSTKEY:int = delta_REVENUE_mORDERSORDERS_CUSTKEY:int} * -1 *
+  delta_REVENUE_mORDERS11_mSUPPLIER2:int);
+   REVENUE_mSUPPLIER11(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mORDERS11_mSUPPLIERSUPPLIER_NATIONKEY:int, REVENUE_mSUPPLIERSUPPLIER_SUPPKEY:int] += 
+  ({ORDERS_CUSTKEY:int = delta_REVENUE_mORDERSORDERS_CUSTKEY:int} *
+  REVENUE_mCUSTOMER11_mORDERS1_mSUPPLIER1(float)[]
+  [SHIPPING_L_YEAR:int, ORDERS_ORDERKEY:int,
+     REVENUE_mSUPPLIERSUPPLIER_SUPPKEY:int] *
+  -1 * delta_REVENUE_mORDERS11_mSUPPLIER2:int);
+   REVENUE_mSUPPLIER12(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mORDERS11_mSUPPLIERSUPPLIER_NATIONKEY:int, REVENUE_mSUPPLIERSUPPLIER_SUPPKEY:int] += 
+  ({ORDERS_CUSTKEY:int = delta_REVENUE_mORDERSORDERS_CUSTKEY:int} *
+  REVENUE_mCUSTOMER12_mORDERS1_mSUPPLIER1(float)[]
+  [SHIPPING_L_YEAR:int, ORDERS_ORDERKEY:int,
+     REVENUE_mSUPPLIERSUPPLIER_SUPPKEY:int] *
+  -1 * delta_REVENUE_mORDERS11_mSUPPLIER2:int);
+}
+
+CORRECT REVENUE_mCUSTOMER11[][delta_SHIPPING_SUPP_NATION:string,delta_SHIPPING_CUST_NATION:string,delta_SHIPPING_L_YEAR:int,delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int,delta_REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int] += delta_REVENUE_mCUSTOMER11:float FOR ON + CUSTOMER(CUSTOMER_CUSTKEY:int, CUSTOMER_NAME:string, CUSTOMER_ADDRESS:string, CUSTOMER_NATIONKEY:int, CUSTOMER_PHONE:string, CUSTOMER_ACCTBAL:float, CUSTOMER_MKTSEGMENT:string, CUSTOMER_COMMENT:string) {
+   REVENUE(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, delta_SHIPPING_L_YEAR:int] += 
+  ({CUSTOMER_CUSTKEY:int = delta_REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int} *
+  {CUSTOMER_NATIONKEY:int = delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int} *
+  -1 * delta_REVENUE_mCUSTOMER11:float);
+}
+
+CORRECT REVENUE_mCUSTOMER12[][delta_SHIPPING_SUPP_NATION:string,delta_SHIPPING_CUST_NATION:string,delta_SHIPPING_L_YEAR:int,delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int,delta_REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int] += delta_REVENUE_mCUSTOMER12:float FOR ON + CUSTOMER(CUSTOMER_CUSTKEY:int, CUSTOMER_NAME:string, CUSTOMER_ADDRESS:string, CUSTOMER_NATIONKEY:int, CUSTOMER_PHONE:string, CUSTOMER_ACCTBAL:float, CUSTOMER_MKTSEGMENT:string, CUSTOMER_COMMENT:string) {
+   REVENUE(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, delta_SHIPPING_L_YEAR:int] += 
+  ({CUSTOMER_CUSTKEY:int = delta_REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int} *
+  {CUSTOMER_NATIONKEY:int = delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int} *
+  delta_REVENUE_mCUSTOMER12:float);
+}
+
+CORRECT REVENUE_mCUSTOMER11_mORDERS1[][delta_SHIPPING_SUPP_NATION:string,delta_SHIPPING_CUST_NATION:string,delta_SHIPPING_L_YEAR:int,delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int,delta_REVENUE_mCUSTOMER11_mORDERSORDERS_ORDERKEY:int] += delta_REVENUE_mCUSTOMER11_mORDERS1:float FOR ON + CUSTOMER(CUSTOMER_CUSTKEY:int, CUSTOMER_NAME:string, CUSTOMER_ADDRESS:string, CUSTOMER_NATIONKEY:int, CUSTOMER_PHONE:string, CUSTOMER_ACCTBAL:float, CUSTOMER_MKTSEGMENT:string, CUSTOMER_COMMENT:string) {
+   REVENUE_mORDERS11(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, delta_SHIPPING_L_YEAR:int, CUSTOMER_CUSTKEY:int, delta_REVENUE_mCUSTOMER11_mORDERSORDERS_ORDERKEY:int] += 
+  ({CUSTOMER_NATIONKEY:int = delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int} *
+  delta_REVENUE_mCUSTOMER11_mORDERS1:float);
+}
+
+CORRECT REVENUE_mCUSTOMER11_mLINEITEM4[][delta_SHIPPING_SUPP_NATION:string,delta_SHIPPING_CUST_NATION:string,delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int,delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_SUPPKEY:int] += delta_REVENUE_mCUSTOMER11_mLINEITEM4:int FOR ON + CUSTOMER(CUSTOMER_CUSTKEY:int, CUSTOMER_NAME:string, CUSTOMER_ADDRESS:string, CUSTOMER_NATIONKEY:int, CUSTOMER_PHONE:string, CUSTOMER_ACCTBAL:float, CUSTOMER_MKTSEGMENT:string, CUSTOMER_COMMENT:string) {
+   REVENUE_mORDERS11_mLINEITEM4(int)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, CUSTOMER_CUSTKEY:int, delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_SUPPKEY:int] += 
+  ({CUSTOMER_NATIONKEY:int = delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int} *
+  delta_REVENUE_mCUSTOMER11_mLINEITEM4:int);
+   REVENUE_mLINEITEM4(int)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, REVENUE_mLINEITEMLINEITEM_ORDERKEY:int, delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_SUPPKEY:int] += 
+  ({CUSTOMER_NATIONKEY:int = delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int} *
+  REVENUE_mCUSTOMER11_mLINEITEM5(int)[]
+  [CUSTOMER_CUSTKEY:int, REVENUE_mLINEITEMLINEITEM_ORDERKEY:int] *
+  delta_REVENUE_mCUSTOMER11_mLINEITEM4:int);
+}
+
+CORRECT REVENUE_mCUSTOMER11_mSUPPLIER2[][delta_SHIPPING_SUPP_NATION:string,delta_SHIPPING_CUST_NATION:string,delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int,delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int] += delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int FOR ON + CUSTOMER(CUSTOMER_CUSTKEY:int, CUSTOMER_NAME:string, CUSTOMER_ADDRESS:string, CUSTOMER_NATIONKEY:int, CUSTOMER_PHONE:string, CUSTOMER_ACCTBAL:float, CUSTOMER_MKTSEGMENT:string, CUSTOMER_COMMENT:string) {
+   REVENUE_mORDERS11_mSUPPLIER2(int)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, CUSTOMER_CUSTKEY:int, delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int] += 
+  ({CUSTOMER_NATIONKEY:int = delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int} *
+  delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int);
+   REVENUE_mLINEITEM4_mSUPPLIER1(int)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, REVENUE_mLINEITEMLINEITEM_ORDERKEY:int, delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int] += 
+  ({CUSTOMER_NATIONKEY:int = delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int} *
+  REVENUE_mCUSTOMER11_mLINEITEM5(int)[]
+  [CUSTOMER_CUSTKEY:int, REVENUE_mLINEITEMLINEITEM_ORDERKEY:int] *
+  delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int);
+   REVENUE_mSUPPLIER11(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int, REVENUE_mSUPPLIERSUPPLIER_SUPPKEY:int] += 
+  ({CUSTOMER_NATIONKEY:int = delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int} *
+  REVENUE_mCUSTOMER11_mSUPPLIER1(float)[]
+  [SHIPPING_L_YEAR:int, CUSTOMER_CUSTKEY:int,
+     REVENUE_mSUPPLIERSUPPLIER_SUPPKEY:int] *
+  delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int);
+   REVENUE_mSUPPLIER12(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int, REVENUE_mSUPPLIERSUPPLIER_SUPPKEY:int] += 
+  ({CUSTOMER_NATIONKEY:int = delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int} *
+  REVENUE_mCUSTOMER12_mSUPPLIER1(float)[]
+  [SHIPPING_L_YEAR:int, CUSTOMER_CUSTKEY:int,
+     REVENUE_mSUPPLIERSUPPLIER_SUPPKEY:int] *
+  delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int);
+}
+
+CORRECT REVENUE_mCUSTOMER12_mORDERS1[][delta_SHIPPING_SUPP_NATION:string,delta_SHIPPING_CUST_NATION:string,delta_SHIPPING_L_YEAR:int,delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int,delta_REVENUE_mCUSTOMER12_mORDERSORDERS_ORDERKEY:int] += delta_REVENUE_mCUSTOMER12_mORDERS1:float FOR ON + CUSTOMER(CUSTOMER_CUSTKEY:int, CUSTOMER_NAME:string, CUSTOMER_ADDRESS:string, CUSTOMER_NATIONKEY:int, CUSTOMER_PHONE:string, CUSTOMER_ACCTBAL:float, CUSTOMER_MKTSEGMENT:string, CUSTOMER_COMMENT:string) {
+   REVENUE_mORDERS12(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, delta_SHIPPING_L_YEAR:int, CUSTOMER_CUSTKEY:int, delta_REVENUE_mCUSTOMER12_mORDERSORDERS_ORDERKEY:int] += 
+  ({CUSTOMER_NATIONKEY:int = delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int} *
+  delta_REVENUE_mCUSTOMER12_mORDERS1:float);
+}
+
+CORRECT REVENUE_mCUSTOMER11_mLINEITEM4[][delta_SHIPPING_SUPP_NATION:string,delta_SHIPPING_CUST_NATION:string,delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int,delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_SUPPKEY:int] += delta_REVENUE_mCUSTOMER11_mLINEITEM4:int FOR ON + CUSTOMER(CUSTOMER_CUSTKEY:int, CUSTOMER_NAME:string, CUSTOMER_ADDRESS:string, CUSTOMER_NATIONKEY:int, CUSTOMER_PHONE:string, CUSTOMER_ACCTBAL:float, CUSTOMER_MKTSEGMENT:string, CUSTOMER_COMMENT:string) {
+   REVENUE_mORDERS11_mLINEITEM4(int)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, CUSTOMER_CUSTKEY:int, delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_SUPPKEY:int] += 
+  ({CUSTOMER_NATIONKEY:int = delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int} *
+  delta_REVENUE_mCUSTOMER11_mLINEITEM4:int);
+   REVENUE_mLINEITEM4(int)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, REVENUE_mLINEITEMLINEITEM_ORDERKEY:int, delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_SUPPKEY:int] += 
+  ({CUSTOMER_NATIONKEY:int = delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int} *
+  REVENUE_mCUSTOMER11_mLINEITEM5(int)[]
+  [CUSTOMER_CUSTKEY:int, REVENUE_mLINEITEMLINEITEM_ORDERKEY:int] *
+  delta_REVENUE_mCUSTOMER11_mLINEITEM4:int);
+}
+
+CORRECT REVENUE_mCUSTOMER11_mLINEITEM5[][delta_REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int,delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_ORDERKEY:int] += delta_REVENUE_mCUSTOMER11_mLINEITEM5:int FOR ON + CUSTOMER(CUSTOMER_CUSTKEY:int, CUSTOMER_NAME:string, CUSTOMER_ADDRESS:string, CUSTOMER_NATIONKEY:int, CUSTOMER_PHONE:string, CUSTOMER_ACCTBAL:float, CUSTOMER_MKTSEGMENT:string, CUSTOMER_COMMENT:string) {
+   REVENUE_mLINEITEM4(int)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_ORDERKEY:int, REVENUE_mLINEITEMLINEITEM_SUPPKEY:int] += 
+  ({CUSTOMER_CUSTKEY:int = delta_REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int} *
+  REVENUE_mCUSTOMER11_mLINEITEM4(int)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     CUSTOMER_NATIONKEY:int, REVENUE_mLINEITEMLINEITEM_SUPPKEY:int] *
+  delta_REVENUE_mCUSTOMER11_mLINEITEM5:int);
+   REVENUE_mLINEITEM4_mSUPPLIER1(int)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_ORDERKEY:int, REVENUE_mLINEITEM4_mSUPPLIERSUPPLIER_NATIONKEY:int] += 
+  ({CUSTOMER_CUSTKEY:int = delta_REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int} *
+  REVENUE_mCUSTOMER11_mSUPPLIER2(int)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     CUSTOMER_NATIONKEY:int,
+     REVENUE_mLINEITEM4_mSUPPLIERSUPPLIER_NATIONKEY:int] *
+  delta_REVENUE_mCUSTOMER11_mLINEITEM5:int);
+}
+
+CORRECT REVENUE_mCUSTOMER11_mLINEITEM5[][delta_REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int,delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_ORDERKEY:int] += delta_REVENUE_mCUSTOMER11_mLINEITEM5:int FOR ON + CUSTOMER(CUSTOMER_CUSTKEY:int, CUSTOMER_NAME:string, CUSTOMER_ADDRESS:string, CUSTOMER_NATIONKEY:int, CUSTOMER_PHONE:string, CUSTOMER_ACCTBAL:float, CUSTOMER_MKTSEGMENT:string, CUSTOMER_COMMENT:string) {
+   REVENUE_mLINEITEM4(int)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_ORDERKEY:int, REVENUE_mLINEITEMLINEITEM_SUPPKEY:int] += 
+  ({CUSTOMER_CUSTKEY:int = delta_REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int} *
+  REVENUE_mCUSTOMER11_mLINEITEM4(int)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     CUSTOMER_NATIONKEY:int, REVENUE_mLINEITEMLINEITEM_SUPPKEY:int] *
+  delta_REVENUE_mCUSTOMER11_mLINEITEM5:int);
+   REVENUE_mLINEITEM4_mSUPPLIER1(int)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_ORDERKEY:int, REVENUE_mLINEITEM4_mSUPPLIERSUPPLIER_NATIONKEY:int] += 
+  ({CUSTOMER_CUSTKEY:int = delta_REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int} *
+  REVENUE_mCUSTOMER11_mSUPPLIER2(int)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     CUSTOMER_NATIONKEY:int,
+     REVENUE_mLINEITEM4_mSUPPLIERSUPPLIER_NATIONKEY:int] *
+  delta_REVENUE_mCUSTOMER11_mLINEITEM5:int);
+}
+
+CORRECT REVENUE_mCUSTOMER11_mSUPPLIER2[][delta_SHIPPING_SUPP_NATION:string,delta_SHIPPING_CUST_NATION:string,delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int,delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int] += delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int FOR ON + CUSTOMER(CUSTOMER_CUSTKEY:int, CUSTOMER_NAME:string, CUSTOMER_ADDRESS:string, CUSTOMER_NATIONKEY:int, CUSTOMER_PHONE:string, CUSTOMER_ACCTBAL:float, CUSTOMER_MKTSEGMENT:string, CUSTOMER_COMMENT:string) {
+   REVENUE_mORDERS11_mSUPPLIER2(int)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, CUSTOMER_CUSTKEY:int, delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int] += 
+  ({CUSTOMER_NATIONKEY:int = delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int} *
+  delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int);
+   REVENUE_mLINEITEM4_mSUPPLIER1(int)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, REVENUE_mLINEITEMLINEITEM_ORDERKEY:int, delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int] += 
+  ({CUSTOMER_NATIONKEY:int = delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int} *
+  REVENUE_mCUSTOMER11_mLINEITEM5(int)[]
+  [CUSTOMER_CUSTKEY:int, REVENUE_mLINEITEMLINEITEM_ORDERKEY:int] *
+  delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int);
+   REVENUE_mSUPPLIER11(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int, REVENUE_mSUPPLIERSUPPLIER_SUPPKEY:int] += 
+  ({CUSTOMER_NATIONKEY:int = delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int} *
+  REVENUE_mCUSTOMER11_mSUPPLIER1(float)[]
+  [SHIPPING_L_YEAR:int, CUSTOMER_CUSTKEY:int,
+     REVENUE_mSUPPLIERSUPPLIER_SUPPKEY:int] *
+  delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int);
+   REVENUE_mSUPPLIER12(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int, REVENUE_mSUPPLIERSUPPLIER_SUPPKEY:int] += 
+  ({CUSTOMER_NATIONKEY:int = delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int} *
+  REVENUE_mCUSTOMER12_mSUPPLIER1(float)[]
+  [SHIPPING_L_YEAR:int, CUSTOMER_CUSTKEY:int,
+     REVENUE_mSUPPLIERSUPPLIER_SUPPKEY:int] *
+  delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int);
+}
+
+CORRECT REVENUE_mCUSTOMER11_mSUPPLIER1[][delta_SHIPPING_L_YEAR:int,delta_REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int,delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_SUPPKEY:int] += delta_REVENUE_mCUSTOMER11_mSUPPLIER1:float FOR ON + CUSTOMER(CUSTOMER_CUSTKEY:int, CUSTOMER_NAME:string, CUSTOMER_ADDRESS:string, CUSTOMER_NATIONKEY:int, CUSTOMER_PHONE:string, CUSTOMER_ACCTBAL:float, CUSTOMER_MKTSEGMENT:string, CUSTOMER_COMMENT:string) {
+   REVENUE_mSUPPLIER11(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, delta_SHIPPING_L_YEAR:int, REVENUE_mSUPPLIERSUPPLIER_NATIONKEY:int, delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_SUPPKEY:int] += 
+  ({CUSTOMER_CUSTKEY:int = delta_REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int} *
+  REVENUE_mCUSTOMER11_mSUPPLIER2(int)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     CUSTOMER_NATIONKEY:int, REVENUE_mSUPPLIERSUPPLIER_NATIONKEY:int] *
+  delta_REVENUE_mCUSTOMER11_mSUPPLIER1:float);
+}
+
+CORRECT REVENUE_mCUSTOMER11_mSUPPLIER2[][delta_SHIPPING_SUPP_NATION:string,delta_SHIPPING_CUST_NATION:string,delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int,delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int] += delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int FOR ON + CUSTOMER(CUSTOMER_CUSTKEY:int, CUSTOMER_NAME:string, CUSTOMER_ADDRESS:string, CUSTOMER_NATIONKEY:int, CUSTOMER_PHONE:string, CUSTOMER_ACCTBAL:float, CUSTOMER_MKTSEGMENT:string, CUSTOMER_COMMENT:string) {
+   REVENUE_mORDERS11_mSUPPLIER2(int)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, CUSTOMER_CUSTKEY:int, delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int] += 
+  ({CUSTOMER_NATIONKEY:int = delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int} *
+  delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int);
+   REVENUE_mLINEITEM4_mSUPPLIER1(int)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, REVENUE_mLINEITEMLINEITEM_ORDERKEY:int, delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int] += 
+  ({CUSTOMER_NATIONKEY:int = delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int} *
+  REVENUE_mCUSTOMER11_mLINEITEM5(int)[]
+  [CUSTOMER_CUSTKEY:int, REVENUE_mLINEITEMLINEITEM_ORDERKEY:int] *
+  delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int);
+   REVENUE_mSUPPLIER11(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int, REVENUE_mSUPPLIERSUPPLIER_SUPPKEY:int] += 
+  ({CUSTOMER_NATIONKEY:int = delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int} *
+  REVENUE_mCUSTOMER11_mSUPPLIER1(float)[]
+  [SHIPPING_L_YEAR:int, CUSTOMER_CUSTKEY:int,
+     REVENUE_mSUPPLIERSUPPLIER_SUPPKEY:int] *
+  delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int);
+   REVENUE_mSUPPLIER12(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int, REVENUE_mSUPPLIERSUPPLIER_SUPPKEY:int] += 
+  ({CUSTOMER_NATIONKEY:int = delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int} *
+  REVENUE_mCUSTOMER12_mSUPPLIER1(float)[]
+  [SHIPPING_L_YEAR:int, CUSTOMER_CUSTKEY:int,
+     REVENUE_mSUPPLIERSUPPLIER_SUPPKEY:int] *
+  delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int);
+}
+
+CORRECT REVENUE_mCUSTOMER12_mSUPPLIER1[][delta_SHIPPING_L_YEAR:int,delta_REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int,delta_REVENUE_mCUSTOMER12_mSUPPLIERSUPPLIER_SUPPKEY:int] += delta_REVENUE_mCUSTOMER12_mSUPPLIER1:float FOR ON + CUSTOMER(CUSTOMER_CUSTKEY:int, CUSTOMER_NAME:string, CUSTOMER_ADDRESS:string, CUSTOMER_NATIONKEY:int, CUSTOMER_PHONE:string, CUSTOMER_ACCTBAL:float, CUSTOMER_MKTSEGMENT:string, CUSTOMER_COMMENT:string) {
+   REVENUE_mSUPPLIER12(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, delta_SHIPPING_L_YEAR:int, REVENUE_mSUPPLIERSUPPLIER_NATIONKEY:int, delta_REVENUE_mCUSTOMER12_mSUPPLIERSUPPLIER_SUPPKEY:int] += 
+  ({CUSTOMER_CUSTKEY:int = delta_REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int} *
+  REVENUE_mCUSTOMER11_mSUPPLIER2(int)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     CUSTOMER_NATIONKEY:int, REVENUE_mSUPPLIERSUPPLIER_NATIONKEY:int] *
+  delta_REVENUE_mCUSTOMER12_mSUPPLIER1:float);
+}
+
+CORRECT REVENUE_mCUSTOMER11_mSUPPLIER2[][delta_SHIPPING_SUPP_NATION:string,delta_SHIPPING_CUST_NATION:string,delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int,delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int] += delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int FOR ON + CUSTOMER(CUSTOMER_CUSTKEY:int, CUSTOMER_NAME:string, CUSTOMER_ADDRESS:string, CUSTOMER_NATIONKEY:int, CUSTOMER_PHONE:string, CUSTOMER_ACCTBAL:float, CUSTOMER_MKTSEGMENT:string, CUSTOMER_COMMENT:string) {
+   REVENUE_mORDERS11_mSUPPLIER2(int)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, CUSTOMER_CUSTKEY:int, delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int] += 
+  ({CUSTOMER_NATIONKEY:int = delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int} *
+  delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int);
+   REVENUE_mLINEITEM4_mSUPPLIER1(int)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, REVENUE_mLINEITEMLINEITEM_ORDERKEY:int, delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int] += 
+  ({CUSTOMER_NATIONKEY:int = delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int} *
+  REVENUE_mCUSTOMER11_mLINEITEM5(int)[]
+  [CUSTOMER_CUSTKEY:int, REVENUE_mLINEITEMLINEITEM_ORDERKEY:int] *
+  delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int);
+   REVENUE_mSUPPLIER11(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int, REVENUE_mSUPPLIERSUPPLIER_SUPPKEY:int] += 
+  ({CUSTOMER_NATIONKEY:int = delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int} *
+  REVENUE_mCUSTOMER11_mSUPPLIER1(float)[]
+  [SHIPPING_L_YEAR:int, CUSTOMER_CUSTKEY:int,
+     REVENUE_mSUPPLIERSUPPLIER_SUPPKEY:int] *
+  delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int);
+   REVENUE_mSUPPLIER12(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int, REVENUE_mSUPPLIERSUPPLIER_SUPPKEY:int] += 
+  ({CUSTOMER_NATIONKEY:int = delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int} *
+  REVENUE_mCUSTOMER12_mSUPPLIER1(float)[]
+  [SHIPPING_L_YEAR:int, CUSTOMER_CUSTKEY:int,
+     REVENUE_mSUPPLIERSUPPLIER_SUPPKEY:int] *
+  delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int);
+}
+
+CORRECT REVENUE_mCUSTOMER11[][delta_SHIPPING_SUPP_NATION:string,delta_SHIPPING_CUST_NATION:string,delta_SHIPPING_L_YEAR:int,delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int,delta_REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int] += delta_REVENUE_mCUSTOMER11:float FOR ON - CUSTOMER(CUSTOMER_CUSTKEY:int, CUSTOMER_NAME:string, CUSTOMER_ADDRESS:string, CUSTOMER_NATIONKEY:int, CUSTOMER_PHONE:string, CUSTOMER_ACCTBAL:float, CUSTOMER_MKTSEGMENT:string, CUSTOMER_COMMENT:string) {
+   REVENUE(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, delta_SHIPPING_L_YEAR:int] += 
+  ({CUSTOMER_CUSTKEY:int = delta_REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int} *
+  {CUSTOMER_NATIONKEY:int = delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int} *
+  delta_REVENUE_mCUSTOMER11:float);
+}
+
+CORRECT REVENUE_mCUSTOMER12[][delta_SHIPPING_SUPP_NATION:string,delta_SHIPPING_CUST_NATION:string,delta_SHIPPING_L_YEAR:int,delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int,delta_REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int] += delta_REVENUE_mCUSTOMER12:float FOR ON - CUSTOMER(CUSTOMER_CUSTKEY:int, CUSTOMER_NAME:string, CUSTOMER_ADDRESS:string, CUSTOMER_NATIONKEY:int, CUSTOMER_PHONE:string, CUSTOMER_ACCTBAL:float, CUSTOMER_MKTSEGMENT:string, CUSTOMER_COMMENT:string) {
+   REVENUE(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, delta_SHIPPING_L_YEAR:int] += 
+  ({CUSTOMER_CUSTKEY:int = delta_REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int} *
+  {CUSTOMER_NATIONKEY:int = delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int} *
+  -1 * delta_REVENUE_mCUSTOMER12:float);
+}
+
+CORRECT REVENUE_mCUSTOMER11_mORDERS1[][delta_SHIPPING_SUPP_NATION:string,delta_SHIPPING_CUST_NATION:string,delta_SHIPPING_L_YEAR:int,delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int,delta_REVENUE_mCUSTOMER11_mORDERSORDERS_ORDERKEY:int] += delta_REVENUE_mCUSTOMER11_mORDERS1:float FOR ON - CUSTOMER(CUSTOMER_CUSTKEY:int, CUSTOMER_NAME:string, CUSTOMER_ADDRESS:string, CUSTOMER_NATIONKEY:int, CUSTOMER_PHONE:string, CUSTOMER_ACCTBAL:float, CUSTOMER_MKTSEGMENT:string, CUSTOMER_COMMENT:string) {
+   REVENUE_mORDERS11(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, delta_SHIPPING_L_YEAR:int, CUSTOMER_CUSTKEY:int, delta_REVENUE_mCUSTOMER11_mORDERSORDERS_ORDERKEY:int] += 
+  ({CUSTOMER_NATIONKEY:int = delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int} *
+  -1 * delta_REVENUE_mCUSTOMER11_mORDERS1:float);
+}
+
+CORRECT REVENUE_mCUSTOMER11_mLINEITEM4[][delta_SHIPPING_SUPP_NATION:string,delta_SHIPPING_CUST_NATION:string,delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int,delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_SUPPKEY:int] += delta_REVENUE_mCUSTOMER11_mLINEITEM4:int FOR ON - CUSTOMER(CUSTOMER_CUSTKEY:int, CUSTOMER_NAME:string, CUSTOMER_ADDRESS:string, CUSTOMER_NATIONKEY:int, CUSTOMER_PHONE:string, CUSTOMER_ACCTBAL:float, CUSTOMER_MKTSEGMENT:string, CUSTOMER_COMMENT:string) {
+   REVENUE_mORDERS11_mLINEITEM4(int)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, CUSTOMER_CUSTKEY:int, delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_SUPPKEY:int] += 
+  ({CUSTOMER_NATIONKEY:int = delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int} *
+  -1 * delta_REVENUE_mCUSTOMER11_mLINEITEM4:int);
+   REVENUE_mLINEITEM4(int)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, REVENUE_mLINEITEMLINEITEM_ORDERKEY:int, delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_SUPPKEY:int] += 
+  ({CUSTOMER_NATIONKEY:int = delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int} *
+  REVENUE_mCUSTOMER11_mLINEITEM5(int)[]
+  [CUSTOMER_CUSTKEY:int, REVENUE_mLINEITEMLINEITEM_ORDERKEY:int] * -1 *
+  delta_REVENUE_mCUSTOMER11_mLINEITEM4:int);
+}
+
+CORRECT REVENUE_mCUSTOMER11_mSUPPLIER2[][delta_SHIPPING_SUPP_NATION:string,delta_SHIPPING_CUST_NATION:string,delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int,delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int] += delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int FOR ON - CUSTOMER(CUSTOMER_CUSTKEY:int, CUSTOMER_NAME:string, CUSTOMER_ADDRESS:string, CUSTOMER_NATIONKEY:int, CUSTOMER_PHONE:string, CUSTOMER_ACCTBAL:float, CUSTOMER_MKTSEGMENT:string, CUSTOMER_COMMENT:string) {
+   REVENUE_mORDERS11_mSUPPLIER2(int)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, CUSTOMER_CUSTKEY:int, delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int] += 
+  ({CUSTOMER_NATIONKEY:int = delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int} *
+  -1 * delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int);
+   REVENUE_mLINEITEM4_mSUPPLIER1(int)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, REVENUE_mLINEITEMLINEITEM_ORDERKEY:int, delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int] += 
+  ({CUSTOMER_NATIONKEY:int = delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int} *
+  REVENUE_mCUSTOMER11_mLINEITEM5(int)[]
+  [CUSTOMER_CUSTKEY:int, REVENUE_mLINEITEMLINEITEM_ORDERKEY:int] * -1 *
+  delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int);
+   REVENUE_mSUPPLIER11(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int, REVENUE_mSUPPLIERSUPPLIER_SUPPKEY:int] += 
+  ({CUSTOMER_NATIONKEY:int = delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int} *
+  REVENUE_mCUSTOMER11_mSUPPLIER1(float)[]
+  [SHIPPING_L_YEAR:int, CUSTOMER_CUSTKEY:int,
+     REVENUE_mSUPPLIERSUPPLIER_SUPPKEY:int] *
+  -1 * delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int);
+   REVENUE_mSUPPLIER12(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int, REVENUE_mSUPPLIERSUPPLIER_SUPPKEY:int] += 
+  ({CUSTOMER_NATIONKEY:int = delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int} *
+  REVENUE_mCUSTOMER12_mSUPPLIER1(float)[]
+  [SHIPPING_L_YEAR:int, CUSTOMER_CUSTKEY:int,
+     REVENUE_mSUPPLIERSUPPLIER_SUPPKEY:int] *
+  -1 * delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int);
+}
+
+CORRECT REVENUE_mCUSTOMER12_mORDERS1[][delta_SHIPPING_SUPP_NATION:string,delta_SHIPPING_CUST_NATION:string,delta_SHIPPING_L_YEAR:int,delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int,delta_REVENUE_mCUSTOMER12_mORDERSORDERS_ORDERKEY:int] += delta_REVENUE_mCUSTOMER12_mORDERS1:float FOR ON - CUSTOMER(CUSTOMER_CUSTKEY:int, CUSTOMER_NAME:string, CUSTOMER_ADDRESS:string, CUSTOMER_NATIONKEY:int, CUSTOMER_PHONE:string, CUSTOMER_ACCTBAL:float, CUSTOMER_MKTSEGMENT:string, CUSTOMER_COMMENT:string) {
+   REVENUE_mORDERS12(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, delta_SHIPPING_L_YEAR:int, CUSTOMER_CUSTKEY:int, delta_REVENUE_mCUSTOMER12_mORDERSORDERS_ORDERKEY:int] += 
+  ({CUSTOMER_NATIONKEY:int = delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int} *
+  -1 * delta_REVENUE_mCUSTOMER12_mORDERS1:float);
+}
+
+CORRECT REVENUE_mCUSTOMER11_mLINEITEM4[][delta_SHIPPING_SUPP_NATION:string,delta_SHIPPING_CUST_NATION:string,delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int,delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_SUPPKEY:int] += delta_REVENUE_mCUSTOMER11_mLINEITEM4:int FOR ON - CUSTOMER(CUSTOMER_CUSTKEY:int, CUSTOMER_NAME:string, CUSTOMER_ADDRESS:string, CUSTOMER_NATIONKEY:int, CUSTOMER_PHONE:string, CUSTOMER_ACCTBAL:float, CUSTOMER_MKTSEGMENT:string, CUSTOMER_COMMENT:string) {
+   REVENUE_mORDERS11_mLINEITEM4(int)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, CUSTOMER_CUSTKEY:int, delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_SUPPKEY:int] += 
+  ({CUSTOMER_NATIONKEY:int = delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int} *
+  -1 * delta_REVENUE_mCUSTOMER11_mLINEITEM4:int);
+   REVENUE_mLINEITEM4(int)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, REVENUE_mLINEITEMLINEITEM_ORDERKEY:int, delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_SUPPKEY:int] += 
+  ({CUSTOMER_NATIONKEY:int = delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int} *
+  REVENUE_mCUSTOMER11_mLINEITEM5(int)[]
+  [CUSTOMER_CUSTKEY:int, REVENUE_mLINEITEMLINEITEM_ORDERKEY:int] * -1 *
+  delta_REVENUE_mCUSTOMER11_mLINEITEM4:int);
+}
+
+CORRECT REVENUE_mCUSTOMER11_mLINEITEM5[][delta_REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int,delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_ORDERKEY:int] += delta_REVENUE_mCUSTOMER11_mLINEITEM5:int FOR ON - CUSTOMER(CUSTOMER_CUSTKEY:int, CUSTOMER_NAME:string, CUSTOMER_ADDRESS:string, CUSTOMER_NATIONKEY:int, CUSTOMER_PHONE:string, CUSTOMER_ACCTBAL:float, CUSTOMER_MKTSEGMENT:string, CUSTOMER_COMMENT:string) {
+   REVENUE_mLINEITEM4(int)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_ORDERKEY:int, REVENUE_mLINEITEMLINEITEM_SUPPKEY:int] += 
+  ({CUSTOMER_CUSTKEY:int = delta_REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int} *
+  REVENUE_mCUSTOMER11_mLINEITEM4(int)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     CUSTOMER_NATIONKEY:int, REVENUE_mLINEITEMLINEITEM_SUPPKEY:int] *
+  -1 * delta_REVENUE_mCUSTOMER11_mLINEITEM5:int);
+   REVENUE_mLINEITEM4_mSUPPLIER1(int)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_ORDERKEY:int, REVENUE_mLINEITEM4_mSUPPLIERSUPPLIER_NATIONKEY:int] += 
+  ({CUSTOMER_CUSTKEY:int = delta_REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int} *
+  REVENUE_mCUSTOMER11_mSUPPLIER2(int)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     CUSTOMER_NATIONKEY:int,
+     REVENUE_mLINEITEM4_mSUPPLIERSUPPLIER_NATIONKEY:int] *
+  -1 * delta_REVENUE_mCUSTOMER11_mLINEITEM5:int);
+}
+
+CORRECT REVENUE_mCUSTOMER11_mLINEITEM5[][delta_REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int,delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_ORDERKEY:int] += delta_REVENUE_mCUSTOMER11_mLINEITEM5:int FOR ON - CUSTOMER(CUSTOMER_CUSTKEY:int, CUSTOMER_NAME:string, CUSTOMER_ADDRESS:string, CUSTOMER_NATIONKEY:int, CUSTOMER_PHONE:string, CUSTOMER_ACCTBAL:float, CUSTOMER_MKTSEGMENT:string, CUSTOMER_COMMENT:string) {
+   REVENUE_mLINEITEM4(int)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_ORDERKEY:int, REVENUE_mLINEITEMLINEITEM_SUPPKEY:int] += 
+  ({CUSTOMER_CUSTKEY:int = delta_REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int} *
+  REVENUE_mCUSTOMER11_mLINEITEM4(int)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     CUSTOMER_NATIONKEY:int, REVENUE_mLINEITEMLINEITEM_SUPPKEY:int] *
+  -1 * delta_REVENUE_mCUSTOMER11_mLINEITEM5:int);
+   REVENUE_mLINEITEM4_mSUPPLIER1(int)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, delta_REVENUE_mCUSTOMER11_mLINEITEMLINEITEM_ORDERKEY:int, REVENUE_mLINEITEM4_mSUPPLIERSUPPLIER_NATIONKEY:int] += 
+  ({CUSTOMER_CUSTKEY:int = delta_REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int} *
+  REVENUE_mCUSTOMER11_mSUPPLIER2(int)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     CUSTOMER_NATIONKEY:int,
+     REVENUE_mLINEITEM4_mSUPPLIERSUPPLIER_NATIONKEY:int] *
+  -1 * delta_REVENUE_mCUSTOMER11_mLINEITEM5:int);
+}
+
+CORRECT REVENUE_mCUSTOMER11_mSUPPLIER2[][delta_SHIPPING_SUPP_NATION:string,delta_SHIPPING_CUST_NATION:string,delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int,delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int] += delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int FOR ON - CUSTOMER(CUSTOMER_CUSTKEY:int, CUSTOMER_NAME:string, CUSTOMER_ADDRESS:string, CUSTOMER_NATIONKEY:int, CUSTOMER_PHONE:string, CUSTOMER_ACCTBAL:float, CUSTOMER_MKTSEGMENT:string, CUSTOMER_COMMENT:string) {
+   REVENUE_mORDERS11_mSUPPLIER2(int)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, CUSTOMER_CUSTKEY:int, delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int] += 
+  ({CUSTOMER_NATIONKEY:int = delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int} *
+  -1 * delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int);
+   REVENUE_mLINEITEM4_mSUPPLIER1(int)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, REVENUE_mLINEITEMLINEITEM_ORDERKEY:int, delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int] += 
+  ({CUSTOMER_NATIONKEY:int = delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int} *
+  REVENUE_mCUSTOMER11_mLINEITEM5(int)[]
+  [CUSTOMER_CUSTKEY:int, REVENUE_mLINEITEMLINEITEM_ORDERKEY:int] * -1 *
+  delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int);
+   REVENUE_mSUPPLIER11(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int, REVENUE_mSUPPLIERSUPPLIER_SUPPKEY:int] += 
+  ({CUSTOMER_NATIONKEY:int = delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int} *
+  REVENUE_mCUSTOMER11_mSUPPLIER1(float)[]
+  [SHIPPING_L_YEAR:int, CUSTOMER_CUSTKEY:int,
+     REVENUE_mSUPPLIERSUPPLIER_SUPPKEY:int] *
+  -1 * delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int);
+   REVENUE_mSUPPLIER12(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int, REVENUE_mSUPPLIERSUPPLIER_SUPPKEY:int] += 
+  ({CUSTOMER_NATIONKEY:int = delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int} *
+  REVENUE_mCUSTOMER12_mSUPPLIER1(float)[]
+  [SHIPPING_L_YEAR:int, CUSTOMER_CUSTKEY:int,
+     REVENUE_mSUPPLIERSUPPLIER_SUPPKEY:int] *
+  -1 * delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int);
+}
+
+CORRECT REVENUE_mCUSTOMER11_mSUPPLIER1[][delta_SHIPPING_L_YEAR:int,delta_REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int,delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_SUPPKEY:int] += delta_REVENUE_mCUSTOMER11_mSUPPLIER1:float FOR ON - CUSTOMER(CUSTOMER_CUSTKEY:int, CUSTOMER_NAME:string, CUSTOMER_ADDRESS:string, CUSTOMER_NATIONKEY:int, CUSTOMER_PHONE:string, CUSTOMER_ACCTBAL:float, CUSTOMER_MKTSEGMENT:string, CUSTOMER_COMMENT:string) {
+   REVENUE_mSUPPLIER11(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, delta_SHIPPING_L_YEAR:int, REVENUE_mSUPPLIERSUPPLIER_NATIONKEY:int, delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_SUPPKEY:int] += 
+  ({CUSTOMER_CUSTKEY:int = delta_REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int} *
+  REVENUE_mCUSTOMER11_mSUPPLIER2(int)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     CUSTOMER_NATIONKEY:int, REVENUE_mSUPPLIERSUPPLIER_NATIONKEY:int] *
+  -1 * delta_REVENUE_mCUSTOMER11_mSUPPLIER1:float);
+}
+
+CORRECT REVENUE_mCUSTOMER11_mSUPPLIER2[][delta_SHIPPING_SUPP_NATION:string,delta_SHIPPING_CUST_NATION:string,delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int,delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int] += delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int FOR ON - CUSTOMER(CUSTOMER_CUSTKEY:int, CUSTOMER_NAME:string, CUSTOMER_ADDRESS:string, CUSTOMER_NATIONKEY:int, CUSTOMER_PHONE:string, CUSTOMER_ACCTBAL:float, CUSTOMER_MKTSEGMENT:string, CUSTOMER_COMMENT:string) {
+   REVENUE_mORDERS11_mSUPPLIER2(int)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, CUSTOMER_CUSTKEY:int, delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int] += 
+  ({CUSTOMER_NATIONKEY:int = delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int} *
+  -1 * delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int);
+   REVENUE_mLINEITEM4_mSUPPLIER1(int)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, REVENUE_mLINEITEMLINEITEM_ORDERKEY:int, delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int] += 
+  ({CUSTOMER_NATIONKEY:int = delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int} *
+  REVENUE_mCUSTOMER11_mLINEITEM5(int)[]
+  [CUSTOMER_CUSTKEY:int, REVENUE_mLINEITEMLINEITEM_ORDERKEY:int] * -1 *
+  delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int);
+   REVENUE_mSUPPLIER11(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int, REVENUE_mSUPPLIERSUPPLIER_SUPPKEY:int] += 
+  ({CUSTOMER_NATIONKEY:int = delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int} *
+  REVENUE_mCUSTOMER11_mSUPPLIER1(float)[]
+  [SHIPPING_L_YEAR:int, CUSTOMER_CUSTKEY:int,
+     REVENUE_mSUPPLIERSUPPLIER_SUPPKEY:int] *
+  -1 * delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int);
+   REVENUE_mSUPPLIER12(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int, REVENUE_mSUPPLIERSUPPLIER_SUPPKEY:int] += 
+  ({CUSTOMER_NATIONKEY:int = delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int} *
+  REVENUE_mCUSTOMER12_mSUPPLIER1(float)[]
+  [SHIPPING_L_YEAR:int, CUSTOMER_CUSTKEY:int,
+     REVENUE_mSUPPLIERSUPPLIER_SUPPKEY:int] *
+  -1 * delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int);
+}
+
+CORRECT REVENUE_mCUSTOMER12_mSUPPLIER1[][delta_SHIPPING_L_YEAR:int,delta_REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int,delta_REVENUE_mCUSTOMER12_mSUPPLIERSUPPLIER_SUPPKEY:int] += delta_REVENUE_mCUSTOMER12_mSUPPLIER1:float FOR ON - CUSTOMER(CUSTOMER_CUSTKEY:int, CUSTOMER_NAME:string, CUSTOMER_ADDRESS:string, CUSTOMER_NATIONKEY:int, CUSTOMER_PHONE:string, CUSTOMER_ACCTBAL:float, CUSTOMER_MKTSEGMENT:string, CUSTOMER_COMMENT:string) {
+   REVENUE_mSUPPLIER12(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, delta_SHIPPING_L_YEAR:int, REVENUE_mSUPPLIERSUPPLIER_NATIONKEY:int, delta_REVENUE_mCUSTOMER12_mSUPPLIERSUPPLIER_SUPPKEY:int] += 
+  ({CUSTOMER_CUSTKEY:int = delta_REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int} *
+  REVENUE_mCUSTOMER11_mSUPPLIER2(int)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     CUSTOMER_NATIONKEY:int, REVENUE_mSUPPLIERSUPPLIER_NATIONKEY:int] *
+  -1 * delta_REVENUE_mCUSTOMER12_mSUPPLIER1:float);
+}
+
+CORRECT REVENUE_mCUSTOMER11_mSUPPLIER2[][delta_SHIPPING_SUPP_NATION:string,delta_SHIPPING_CUST_NATION:string,delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int,delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int] += delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int FOR ON - CUSTOMER(CUSTOMER_CUSTKEY:int, CUSTOMER_NAME:string, CUSTOMER_ADDRESS:string, CUSTOMER_NATIONKEY:int, CUSTOMER_PHONE:string, CUSTOMER_ACCTBAL:float, CUSTOMER_MKTSEGMENT:string, CUSTOMER_COMMENT:string) {
+   REVENUE_mORDERS11_mSUPPLIER2(int)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, CUSTOMER_CUSTKEY:int, delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int] += 
+  ({CUSTOMER_NATIONKEY:int = delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int} *
+  -1 * delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int);
+   REVENUE_mLINEITEM4_mSUPPLIER1(int)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, REVENUE_mLINEITEMLINEITEM_ORDERKEY:int, delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int] += 
+  ({CUSTOMER_NATIONKEY:int = delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int} *
+  REVENUE_mCUSTOMER11_mLINEITEM5(int)[]
+  [CUSTOMER_CUSTKEY:int, REVENUE_mLINEITEMLINEITEM_ORDERKEY:int] * -1 *
+  delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int);
+   REVENUE_mSUPPLIER11(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int, REVENUE_mSUPPLIERSUPPLIER_SUPPKEY:int] += 
+  ({CUSTOMER_NATIONKEY:int = delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int} *
+  REVENUE_mCUSTOMER11_mSUPPLIER1(float)[]
+  [SHIPPING_L_YEAR:int, CUSTOMER_CUSTKEY:int,
+     REVENUE_mSUPPLIERSUPPLIER_SUPPKEY:int] *
+  -1 * delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int);
+   REVENUE_mSUPPLIER12(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int, REVENUE_mSUPPLIERSUPPLIER_SUPPKEY:int] += 
+  ({CUSTOMER_NATIONKEY:int = delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int} *
+  REVENUE_mCUSTOMER12_mSUPPLIER1(float)[]
+  [SHIPPING_L_YEAR:int, CUSTOMER_CUSTKEY:int,
+     REVENUE_mSUPPLIERSUPPLIER_SUPPKEY:int] *
+  -1 * delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int);
+}
+
+CORRECT REVENUE_mSUPPLIER11[][delta_SHIPPING_SUPP_NATION:string,delta_SHIPPING_CUST_NATION:string,delta_SHIPPING_L_YEAR:int,delta_REVENUE_mSUPPLIERSUPPLIER_NATIONKEY:int,delta_REVENUE_mSUPPLIERSUPPLIER_SUPPKEY:int] += delta_REVENUE_mSUPPLIER11:float FOR ON + SUPPLIER(SUPPLIER_SUPPKEY:int, SUPPLIER_NAME:string, SUPPLIER_ADDRESS:string, SUPPLIER_NATIONKEY:int, SUPPLIER_PHONE:string, SUPPLIER_ACCTBAL:float, SUPPLIER_COMMENT:string) {
+   REVENUE(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, delta_SHIPPING_L_YEAR:int] += 
+  ({SUPPLIER_SUPPKEY:int = delta_REVENUE_mSUPPLIERSUPPLIER_SUPPKEY:int} *
+  {SUPPLIER_NATIONKEY:int = delta_REVENUE_mSUPPLIERSUPPLIER_NATIONKEY:int} *
+  -1 * delta_REVENUE_mSUPPLIER11:float);
+}
+
+CORRECT REVENUE_mSUPPLIER12[][delta_SHIPPING_SUPP_NATION:string,delta_SHIPPING_CUST_NATION:string,delta_SHIPPING_L_YEAR:int,delta_REVENUE_mSUPPLIERSUPPLIER_NATIONKEY:int,delta_REVENUE_mSUPPLIERSUPPLIER_SUPPKEY:int] += delta_REVENUE_mSUPPLIER12:float FOR ON + SUPPLIER(SUPPLIER_SUPPKEY:int, SUPPLIER_NAME:string, SUPPLIER_ADDRESS:string, SUPPLIER_NATIONKEY:int, SUPPLIER_PHONE:string, SUPPLIER_ACCTBAL:float, SUPPLIER_COMMENT:string) {
+   REVENUE(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, delta_SHIPPING_L_YEAR:int] += 
+  ({SUPPLIER_SUPPKEY:int = delta_REVENUE_mSUPPLIERSUPPLIER_SUPPKEY:int} *
+  {SUPPLIER_NATIONKEY:int = delta_REVENUE_mSUPPLIERSUPPLIER_NATIONKEY:int} *
+  delta_REVENUE_mSUPPLIER12:float);
+}
+
+CORRECT REVENUE_mCUSTOMER11_mSUPPLIER1[][delta_SHIPPING_L_YEAR:int,delta_REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int,delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_SUPPKEY:int] += delta_REVENUE_mCUSTOMER11_mSUPPLIER1:float FOR ON + SUPPLIER(SUPPLIER_SUPPKEY:int, SUPPLIER_NAME:string, SUPPLIER_ADDRESS:string, SUPPLIER_NATIONKEY:int, SUPPLIER_PHONE:string, SUPPLIER_ACCTBAL:float, SUPPLIER_COMMENT:string) {
+   REVENUE_mCUSTOMER11(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, delta_SHIPPING_L_YEAR:int, REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, delta_REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int] += 
+  ({SUPPLIER_SUPPKEY:int =
+ delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_SUPPKEY:int} *
+  REVENUE_mCUSTOMER11_mSUPPLIER2(int)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, SUPPLIER_NATIONKEY:int] *
+  delta_REVENUE_mCUSTOMER11_mSUPPLIER1:float);
+}
+
+CORRECT REVENUE_mCUSTOMER11_mSUPPLIER2[][delta_SHIPPING_SUPP_NATION:string,delta_SHIPPING_CUST_NATION:string,delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int,delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int] += delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int FOR ON + SUPPLIER(SUPPLIER_SUPPKEY:int, SUPPLIER_NAME:string, SUPPLIER_ADDRESS:string, SUPPLIER_NATIONKEY:int, SUPPLIER_PHONE:string, SUPPLIER_ACCTBAL:float, SUPPLIER_COMMENT:string) {
+   REVENUE_mCUSTOMER11(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int] += 
+  ({SUPPLIER_NATIONKEY:int =
+ delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int} *
+  REVENUE_mCUSTOMER11_mSUPPLIER1(float)[]
+  [SHIPPING_L_YEAR:int, REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int,
+     SUPPLIER_SUPPKEY:int] *
+  delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int);
+   REVENUE_mCUSTOMER11_mORDERS1(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, REVENUE_mCUSTOMER11_mORDERSORDERS_ORDERKEY:int] += 
+  ({SUPPLIER_NATIONKEY:int =
+ delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int} *
+  REVENUE_mCUSTOMER11_mORDERS1_mSUPPLIER1(float)[]
+  [SHIPPING_L_YEAR:int, REVENUE_mCUSTOMER11_mORDERSORDERS_ORDERKEY:int,
+     SUPPLIER_SUPPKEY:int] *
+  delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int);
+   REVENUE_mCUSTOMER11_mLINEITEM4(int)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, SUPPLIER_SUPPKEY:int] += 
+  ({SUPPLIER_NATIONKEY:int =
+ delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int} *
+  delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int);
+   REVENUE_mCUSTOMER12(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int] += 
+  ({SUPPLIER_NATIONKEY:int =
+ delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int} *
+  REVENUE_mCUSTOMER12_mSUPPLIER1(float)[]
+  [SHIPPING_L_YEAR:int, REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int,
+     SUPPLIER_SUPPKEY:int] *
+  delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int);
+   REVENUE_mCUSTOMER12_mORDERS1(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, REVENUE_mCUSTOMER12_mORDERSORDERS_ORDERKEY:int] += 
+  ({SUPPLIER_NATIONKEY:int =
+ delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int} *
+  REVENUE_mCUSTOMER12_mORDERS1_mSUPPLIER1(float)[]
+  [SHIPPING_L_YEAR:int, REVENUE_mCUSTOMER12_mORDERSORDERS_ORDERKEY:int,
+     SUPPLIER_SUPPKEY:int] *
+  delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int);
+}
+
+CORRECT REVENUE_mCUSTOMER11_mORDERS1_mSUPPLIER1[][delta_SHIPPING_L_YEAR:int,delta_REVENUE_mCUSTOMER11_mORDERSORDERS_ORDERKEY:int,delta_REVENUE_mCUSTOMER11_mORDERS1_mSUPPLIERSUPPLIER_SUPPKEY:int] += delta_REVENUE_mCUSTOMER11_mORDERS1_mSUPPLIER1:float FOR ON + SUPPLIER(SUPPLIER_SUPPKEY:int, SUPPLIER_NAME:string, SUPPLIER_ADDRESS:string, SUPPLIER_NATIONKEY:int, SUPPLIER_PHONE:string, SUPPLIER_ACCTBAL:float, SUPPLIER_COMMENT:string) {
+   REVENUE_mCUSTOMER11_mORDERS1(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, delta_SHIPPING_L_YEAR:int, REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, delta_REVENUE_mCUSTOMER11_mORDERSORDERS_ORDERKEY:int] += 
+  ({SUPPLIER_SUPPKEY:int =
+ delta_REVENUE_mCUSTOMER11_mORDERS1_mSUPPLIERSUPPLIER_SUPPKEY:int} *
+  REVENUE_mCUSTOMER11_mSUPPLIER2(int)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, SUPPLIER_NATIONKEY:int] *
+  delta_REVENUE_mCUSTOMER11_mORDERS1_mSUPPLIER1:float);
+   REVENUE_mORDERS11(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, delta_SHIPPING_L_YEAR:int, REVENUE_mORDERSORDERS_CUSTKEY:int, delta_REVENUE_mCUSTOMER11_mORDERSORDERS_ORDERKEY:int] += 
+  ({SUPPLIER_SUPPKEY:int =
+ delta_REVENUE_mCUSTOMER11_mORDERS1_mSUPPLIERSUPPLIER_SUPPKEY:int} *
+  REVENUE_mORDERS11_mSUPPLIER2(int)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     REVENUE_mORDERSORDERS_CUSTKEY:int, SUPPLIER_NATIONKEY:int] *
+  delta_REVENUE_mCUSTOMER11_mORDERS1_mSUPPLIER1:float);
+}
+
+CORRECT REVENUE_mCUSTOMER11_mSUPPLIER2[][delta_SHIPPING_SUPP_NATION:string,delta_SHIPPING_CUST_NATION:string,delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int,delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int] += delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int FOR ON + SUPPLIER(SUPPLIER_SUPPKEY:int, SUPPLIER_NAME:string, SUPPLIER_ADDRESS:string, SUPPLIER_NATIONKEY:int, SUPPLIER_PHONE:string, SUPPLIER_ACCTBAL:float, SUPPLIER_COMMENT:string) {
+   REVENUE_mCUSTOMER11(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int] += 
+  ({SUPPLIER_NATIONKEY:int =
+ delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int} *
+  REVENUE_mCUSTOMER11_mSUPPLIER1(float)[]
+  [SHIPPING_L_YEAR:int, REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int,
+     SUPPLIER_SUPPKEY:int] *
+  delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int);
+   REVENUE_mCUSTOMER11_mORDERS1(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, REVENUE_mCUSTOMER11_mORDERSORDERS_ORDERKEY:int] += 
+  ({SUPPLIER_NATIONKEY:int =
+ delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int} *
+  REVENUE_mCUSTOMER11_mORDERS1_mSUPPLIER1(float)[]
+  [SHIPPING_L_YEAR:int, REVENUE_mCUSTOMER11_mORDERSORDERS_ORDERKEY:int,
+     SUPPLIER_SUPPKEY:int] *
+  delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int);
+   REVENUE_mCUSTOMER11_mLINEITEM4(int)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, SUPPLIER_SUPPKEY:int] += 
+  ({SUPPLIER_NATIONKEY:int =
+ delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int} *
+  delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int);
+   REVENUE_mCUSTOMER12(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int] += 
+  ({SUPPLIER_NATIONKEY:int =
+ delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int} *
+  REVENUE_mCUSTOMER12_mSUPPLIER1(float)[]
+  [SHIPPING_L_YEAR:int, REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int,
+     SUPPLIER_SUPPKEY:int] *
+  delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int);
+   REVENUE_mCUSTOMER12_mORDERS1(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, REVENUE_mCUSTOMER12_mORDERSORDERS_ORDERKEY:int] += 
+  ({SUPPLIER_NATIONKEY:int =
+ delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int} *
+  REVENUE_mCUSTOMER12_mORDERS1_mSUPPLIER1(float)[]
+  [SHIPPING_L_YEAR:int, REVENUE_mCUSTOMER12_mORDERSORDERS_ORDERKEY:int,
+     SUPPLIER_SUPPKEY:int] *
+  delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int);
+}
+
+CORRECT REVENUE_mCUSTOMER11_mSUPPLIER2[][delta_SHIPPING_SUPP_NATION:string,delta_SHIPPING_CUST_NATION:string,delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int,delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int] += delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int FOR ON + SUPPLIER(SUPPLIER_SUPPKEY:int, SUPPLIER_NAME:string, SUPPLIER_ADDRESS:string, SUPPLIER_NATIONKEY:int, SUPPLIER_PHONE:string, SUPPLIER_ACCTBAL:float, SUPPLIER_COMMENT:string) {
+   REVENUE_mCUSTOMER11(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int] += 
+  ({SUPPLIER_NATIONKEY:int =
+ delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int} *
+  REVENUE_mCUSTOMER11_mSUPPLIER1(float)[]
+  [SHIPPING_L_YEAR:int, REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int,
+     SUPPLIER_SUPPKEY:int] *
+  delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int);
+   REVENUE_mCUSTOMER11_mORDERS1(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, REVENUE_mCUSTOMER11_mORDERSORDERS_ORDERKEY:int] += 
+  ({SUPPLIER_NATIONKEY:int =
+ delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int} *
+  REVENUE_mCUSTOMER11_mORDERS1_mSUPPLIER1(float)[]
+  [SHIPPING_L_YEAR:int, REVENUE_mCUSTOMER11_mORDERSORDERS_ORDERKEY:int,
+     SUPPLIER_SUPPKEY:int] *
+  delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int);
+   REVENUE_mCUSTOMER11_mLINEITEM4(int)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, SUPPLIER_SUPPKEY:int] += 
+  ({SUPPLIER_NATIONKEY:int =
+ delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int} *
+  delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int);
+   REVENUE_mCUSTOMER12(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int] += 
+  ({SUPPLIER_NATIONKEY:int =
+ delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int} *
+  REVENUE_mCUSTOMER12_mSUPPLIER1(float)[]
+  [SHIPPING_L_YEAR:int, REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int,
+     SUPPLIER_SUPPKEY:int] *
+  delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int);
+   REVENUE_mCUSTOMER12_mORDERS1(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, REVENUE_mCUSTOMER12_mORDERSORDERS_ORDERKEY:int] += 
+  ({SUPPLIER_NATIONKEY:int =
+ delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int} *
+  REVENUE_mCUSTOMER12_mORDERS1_mSUPPLIER1(float)[]
+  [SHIPPING_L_YEAR:int, REVENUE_mCUSTOMER12_mORDERSORDERS_ORDERKEY:int,
+     SUPPLIER_SUPPKEY:int] *
+  delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int);
+}
+
+CORRECT REVENUE_mCUSTOMER12_mSUPPLIER1[][delta_SHIPPING_L_YEAR:int,delta_REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int,delta_REVENUE_mCUSTOMER12_mSUPPLIERSUPPLIER_SUPPKEY:int] += delta_REVENUE_mCUSTOMER12_mSUPPLIER1:float FOR ON + SUPPLIER(SUPPLIER_SUPPKEY:int, SUPPLIER_NAME:string, SUPPLIER_ADDRESS:string, SUPPLIER_NATIONKEY:int, SUPPLIER_PHONE:string, SUPPLIER_ACCTBAL:float, SUPPLIER_COMMENT:string) {
+   REVENUE_mCUSTOMER12(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, delta_SHIPPING_L_YEAR:int, REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, delta_REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int] += 
+  ({SUPPLIER_SUPPKEY:int =
+ delta_REVENUE_mCUSTOMER12_mSUPPLIERSUPPLIER_SUPPKEY:int} *
+  REVENUE_mCUSTOMER11_mSUPPLIER2(int)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, SUPPLIER_NATIONKEY:int] *
+  delta_REVENUE_mCUSTOMER12_mSUPPLIER1:float);
+}
+
+CORRECT REVENUE_mCUSTOMER11_mSUPPLIER2[][delta_SHIPPING_SUPP_NATION:string,delta_SHIPPING_CUST_NATION:string,delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int,delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int] += delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int FOR ON + SUPPLIER(SUPPLIER_SUPPKEY:int, SUPPLIER_NAME:string, SUPPLIER_ADDRESS:string, SUPPLIER_NATIONKEY:int, SUPPLIER_PHONE:string, SUPPLIER_ACCTBAL:float, SUPPLIER_COMMENT:string) {
+   REVENUE_mCUSTOMER11(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int] += 
+  ({SUPPLIER_NATIONKEY:int =
+ delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int} *
+  REVENUE_mCUSTOMER11_mSUPPLIER1(float)[]
+  [SHIPPING_L_YEAR:int, REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int,
+     SUPPLIER_SUPPKEY:int] *
+  delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int);
+   REVENUE_mCUSTOMER11_mORDERS1(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, REVENUE_mCUSTOMER11_mORDERSORDERS_ORDERKEY:int] += 
+  ({SUPPLIER_NATIONKEY:int =
+ delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int} *
+  REVENUE_mCUSTOMER11_mORDERS1_mSUPPLIER1(float)[]
+  [SHIPPING_L_YEAR:int, REVENUE_mCUSTOMER11_mORDERSORDERS_ORDERKEY:int,
+     SUPPLIER_SUPPKEY:int] *
+  delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int);
+   REVENUE_mCUSTOMER11_mLINEITEM4(int)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, SUPPLIER_SUPPKEY:int] += 
+  ({SUPPLIER_NATIONKEY:int =
+ delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int} *
+  delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int);
+   REVENUE_mCUSTOMER12(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int] += 
+  ({SUPPLIER_NATIONKEY:int =
+ delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int} *
+  REVENUE_mCUSTOMER12_mSUPPLIER1(float)[]
+  [SHIPPING_L_YEAR:int, REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int,
+     SUPPLIER_SUPPKEY:int] *
+  delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int);
+   REVENUE_mCUSTOMER12_mORDERS1(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, REVENUE_mCUSTOMER12_mORDERSORDERS_ORDERKEY:int] += 
+  ({SUPPLIER_NATIONKEY:int =
+ delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int} *
+  REVENUE_mCUSTOMER12_mORDERS1_mSUPPLIER1(float)[]
+  [SHIPPING_L_YEAR:int, REVENUE_mCUSTOMER12_mORDERSORDERS_ORDERKEY:int,
+     SUPPLIER_SUPPKEY:int] *
+  delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int);
+}
+
+CORRECT REVENUE_mCUSTOMER12_mORDERS1_mSUPPLIER1[][delta_SHIPPING_L_YEAR:int,delta_REVENUE_mCUSTOMER12_mORDERSORDERS_ORDERKEY:int,delta_REVENUE_mCUSTOMER12_mORDERS1_mSUPPLIERSUPPLIER_SUPPKEY:int] += delta_REVENUE_mCUSTOMER12_mORDERS1_mSUPPLIER1:float FOR ON + SUPPLIER(SUPPLIER_SUPPKEY:int, SUPPLIER_NAME:string, SUPPLIER_ADDRESS:string, SUPPLIER_NATIONKEY:int, SUPPLIER_PHONE:string, SUPPLIER_ACCTBAL:float, SUPPLIER_COMMENT:string) {
+   REVENUE_mCUSTOMER12_mORDERS1(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, delta_SHIPPING_L_YEAR:int, REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, delta_REVENUE_mCUSTOMER12_mORDERSORDERS_ORDERKEY:int] += 
+  ({SUPPLIER_SUPPKEY:int =
+ delta_REVENUE_mCUSTOMER12_mORDERS1_mSUPPLIERSUPPLIER_SUPPKEY:int} *
+  REVENUE_mCUSTOMER11_mSUPPLIER2(int)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, SUPPLIER_NATIONKEY:int] *
+  delta_REVENUE_mCUSTOMER12_mORDERS1_mSUPPLIER1:float);
+   REVENUE_mORDERS12(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, delta_SHIPPING_L_YEAR:int, REVENUE_mORDERSORDERS_CUSTKEY:int, delta_REVENUE_mCUSTOMER12_mORDERSORDERS_ORDERKEY:int] += 
+  ({SUPPLIER_SUPPKEY:int =
+ delta_REVENUE_mCUSTOMER12_mORDERS1_mSUPPLIERSUPPLIER_SUPPKEY:int} *
+  REVENUE_mORDERS11_mSUPPLIER2(int)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     REVENUE_mORDERSORDERS_CUSTKEY:int, SUPPLIER_NATIONKEY:int] *
+  delta_REVENUE_mCUSTOMER12_mORDERS1_mSUPPLIER1:float);
+}
+
+CORRECT REVENUE_mCUSTOMER11_mSUPPLIER2[][delta_SHIPPING_SUPP_NATION:string,delta_SHIPPING_CUST_NATION:string,delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int,delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int] += delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int FOR ON + SUPPLIER(SUPPLIER_SUPPKEY:int, SUPPLIER_NAME:string, SUPPLIER_ADDRESS:string, SUPPLIER_NATIONKEY:int, SUPPLIER_PHONE:string, SUPPLIER_ACCTBAL:float, SUPPLIER_COMMENT:string) {
+   REVENUE_mCUSTOMER11(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int] += 
+  ({SUPPLIER_NATIONKEY:int =
+ delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int} *
+  REVENUE_mCUSTOMER11_mSUPPLIER1(float)[]
+  [SHIPPING_L_YEAR:int, REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int,
+     SUPPLIER_SUPPKEY:int] *
+  delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int);
+   REVENUE_mCUSTOMER11_mORDERS1(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, REVENUE_mCUSTOMER11_mORDERSORDERS_ORDERKEY:int] += 
+  ({SUPPLIER_NATIONKEY:int =
+ delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int} *
+  REVENUE_mCUSTOMER11_mORDERS1_mSUPPLIER1(float)[]
+  [SHIPPING_L_YEAR:int, REVENUE_mCUSTOMER11_mORDERSORDERS_ORDERKEY:int,
+     SUPPLIER_SUPPKEY:int] *
+  delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int);
+   REVENUE_mCUSTOMER11_mLINEITEM4(int)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, SUPPLIER_SUPPKEY:int] += 
+  ({SUPPLIER_NATIONKEY:int =
+ delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int} *
+  delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int);
+   REVENUE_mCUSTOMER12(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int] += 
+  ({SUPPLIER_NATIONKEY:int =
+ delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int} *
+  REVENUE_mCUSTOMER12_mSUPPLIER1(float)[]
+  [SHIPPING_L_YEAR:int, REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int,
+     SUPPLIER_SUPPKEY:int] *
+  delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int);
+   REVENUE_mCUSTOMER12_mORDERS1(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, REVENUE_mCUSTOMER12_mORDERSORDERS_ORDERKEY:int] += 
+  ({SUPPLIER_NATIONKEY:int =
+ delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int} *
+  REVENUE_mCUSTOMER12_mORDERS1_mSUPPLIER1(float)[]
+  [SHIPPING_L_YEAR:int, REVENUE_mCUSTOMER12_mORDERSORDERS_ORDERKEY:int,
+     SUPPLIER_SUPPKEY:int] *
+  delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int);
+}
+
+CORRECT REVENUE_mCUSTOMER11_mORDERS1_mSUPPLIER1[][delta_SHIPPING_L_YEAR:int,delta_REVENUE_mCUSTOMER11_mORDERSORDERS_ORDERKEY:int,delta_REVENUE_mCUSTOMER11_mORDERS1_mSUPPLIERSUPPLIER_SUPPKEY:int] += delta_REVENUE_mCUSTOMER11_mORDERS1_mSUPPLIER1:float FOR ON + SUPPLIER(SUPPLIER_SUPPKEY:int, SUPPLIER_NAME:string, SUPPLIER_ADDRESS:string, SUPPLIER_NATIONKEY:int, SUPPLIER_PHONE:string, SUPPLIER_ACCTBAL:float, SUPPLIER_COMMENT:string) {
+   REVENUE_mCUSTOMER11_mORDERS1(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, delta_SHIPPING_L_YEAR:int, REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, delta_REVENUE_mCUSTOMER11_mORDERSORDERS_ORDERKEY:int] += 
+  ({SUPPLIER_SUPPKEY:int =
+ delta_REVENUE_mCUSTOMER11_mORDERS1_mSUPPLIERSUPPLIER_SUPPKEY:int} *
+  REVENUE_mCUSTOMER11_mSUPPLIER2(int)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, SUPPLIER_NATIONKEY:int] *
+  delta_REVENUE_mCUSTOMER11_mORDERS1_mSUPPLIER1:float);
+   REVENUE_mORDERS11(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, delta_SHIPPING_L_YEAR:int, REVENUE_mORDERSORDERS_CUSTKEY:int, delta_REVENUE_mCUSTOMER11_mORDERSORDERS_ORDERKEY:int] += 
+  ({SUPPLIER_SUPPKEY:int =
+ delta_REVENUE_mCUSTOMER11_mORDERS1_mSUPPLIERSUPPLIER_SUPPKEY:int} *
+  REVENUE_mORDERS11_mSUPPLIER2(int)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     REVENUE_mORDERSORDERS_CUSTKEY:int, SUPPLIER_NATIONKEY:int] *
+  delta_REVENUE_mCUSTOMER11_mORDERS1_mSUPPLIER1:float);
+}
+
+CORRECT REVENUE_mORDERS11_mSUPPLIER2[][delta_SHIPPING_SUPP_NATION:string,delta_SHIPPING_CUST_NATION:string,delta_REVENUE_mORDERSORDERS_CUSTKEY:int,delta_REVENUE_mORDERS11_mSUPPLIERSUPPLIER_NATIONKEY:int] += delta_REVENUE_mORDERS11_mSUPPLIER2:int FOR ON + SUPPLIER(SUPPLIER_SUPPKEY:int, SUPPLIER_NAME:string, SUPPLIER_ADDRESS:string, SUPPLIER_NATIONKEY:int, SUPPLIER_PHONE:string, SUPPLIER_ACCTBAL:float, SUPPLIER_COMMENT:string) {
+   REVENUE_mORDERS11(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mORDERSORDERS_CUSTKEY:int, REVENUE_mORDERSORDERS_ORDERKEY:int] += 
+  ({SUPPLIER_NATIONKEY:int =
+ delta_REVENUE_mORDERS11_mSUPPLIERSUPPLIER_NATIONKEY:int} *
+  REVENUE_mCUSTOMER11_mORDERS1_mSUPPLIER1(float)[]
+  [SHIPPING_L_YEAR:int, REVENUE_mORDERSORDERS_ORDERKEY:int,
+     SUPPLIER_SUPPKEY:int] *
+  delta_REVENUE_mORDERS11_mSUPPLIER2:int);
+   REVENUE_mORDERS11_mLINEITEM4(int)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, delta_REVENUE_mORDERSORDERS_CUSTKEY:int, SUPPLIER_SUPPKEY:int] += 
+  ({SUPPLIER_NATIONKEY:int =
+ delta_REVENUE_mORDERS11_mSUPPLIERSUPPLIER_NATIONKEY:int} *
+  delta_REVENUE_mORDERS11_mSUPPLIER2:int);
+   REVENUE_mORDERS12(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mORDERSORDERS_CUSTKEY:int, REVENUE_mORDERSORDERS_ORDERKEY:int] += 
+  ({SUPPLIER_NATIONKEY:int =
+ delta_REVENUE_mORDERS11_mSUPPLIERSUPPLIER_NATIONKEY:int} *
+  REVENUE_mCUSTOMER12_mORDERS1_mSUPPLIER1(float)[]
+  [SHIPPING_L_YEAR:int, REVENUE_mORDERSORDERS_ORDERKEY:int,
+     SUPPLIER_SUPPKEY:int] *
+  delta_REVENUE_mORDERS11_mSUPPLIER2:int);
+}
+
+CORRECT REVENUE_mORDERS11_mSUPPLIER2[][delta_SHIPPING_SUPP_NATION:string,delta_SHIPPING_CUST_NATION:string,delta_REVENUE_mORDERSORDERS_CUSTKEY:int,delta_REVENUE_mORDERS11_mSUPPLIERSUPPLIER_NATIONKEY:int] += delta_REVENUE_mORDERS11_mSUPPLIER2:int FOR ON + SUPPLIER(SUPPLIER_SUPPKEY:int, SUPPLIER_NAME:string, SUPPLIER_ADDRESS:string, SUPPLIER_NATIONKEY:int, SUPPLIER_PHONE:string, SUPPLIER_ACCTBAL:float, SUPPLIER_COMMENT:string) {
+   REVENUE_mORDERS11(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mORDERSORDERS_CUSTKEY:int, REVENUE_mORDERSORDERS_ORDERKEY:int] += 
+  ({SUPPLIER_NATIONKEY:int =
+ delta_REVENUE_mORDERS11_mSUPPLIERSUPPLIER_NATIONKEY:int} *
+  REVENUE_mCUSTOMER11_mORDERS1_mSUPPLIER1(float)[]
+  [SHIPPING_L_YEAR:int, REVENUE_mORDERSORDERS_ORDERKEY:int,
+     SUPPLIER_SUPPKEY:int] *
+  delta_REVENUE_mORDERS11_mSUPPLIER2:int);
+   REVENUE_mORDERS11_mLINEITEM4(int)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, delta_REVENUE_mORDERSORDERS_CUSTKEY:int, SUPPLIER_SUPPKEY:int] += 
+  ({SUPPLIER_NATIONKEY:int =
+ delta_REVENUE_mORDERS11_mSUPPLIERSUPPLIER_NATIONKEY:int} *
+  delta_REVENUE_mORDERS11_mSUPPLIER2:int);
+   REVENUE_mORDERS12(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mORDERSORDERS_CUSTKEY:int, REVENUE_mORDERSORDERS_ORDERKEY:int] += 
+  ({SUPPLIER_NATIONKEY:int =
+ delta_REVENUE_mORDERS11_mSUPPLIERSUPPLIER_NATIONKEY:int} *
+  REVENUE_mCUSTOMER12_mORDERS1_mSUPPLIER1(float)[]
+  [SHIPPING_L_YEAR:int, REVENUE_mORDERSORDERS_ORDERKEY:int,
+     SUPPLIER_SUPPKEY:int] *
+  delta_REVENUE_mORDERS11_mSUPPLIER2:int);
+}
+
+CORRECT REVENUE_mCUSTOMER12_mORDERS1_mSUPPLIER1[][delta_SHIPPING_L_YEAR:int,delta_REVENUE_mCUSTOMER12_mORDERSORDERS_ORDERKEY:int,delta_REVENUE_mCUSTOMER12_mORDERS1_mSUPPLIERSUPPLIER_SUPPKEY:int] += delta_REVENUE_mCUSTOMER12_mORDERS1_mSUPPLIER1:float FOR ON + SUPPLIER(SUPPLIER_SUPPKEY:int, SUPPLIER_NAME:string, SUPPLIER_ADDRESS:string, SUPPLIER_NATIONKEY:int, SUPPLIER_PHONE:string, SUPPLIER_ACCTBAL:float, SUPPLIER_COMMENT:string) {
+   REVENUE_mCUSTOMER12_mORDERS1(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, delta_SHIPPING_L_YEAR:int, REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, delta_REVENUE_mCUSTOMER12_mORDERSORDERS_ORDERKEY:int] += 
+  ({SUPPLIER_SUPPKEY:int =
+ delta_REVENUE_mCUSTOMER12_mORDERS1_mSUPPLIERSUPPLIER_SUPPKEY:int} *
+  REVENUE_mCUSTOMER11_mSUPPLIER2(int)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, SUPPLIER_NATIONKEY:int] *
+  delta_REVENUE_mCUSTOMER12_mORDERS1_mSUPPLIER1:float);
+   REVENUE_mORDERS12(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, delta_SHIPPING_L_YEAR:int, REVENUE_mORDERSORDERS_CUSTKEY:int, delta_REVENUE_mCUSTOMER12_mORDERSORDERS_ORDERKEY:int] += 
+  ({SUPPLIER_SUPPKEY:int =
+ delta_REVENUE_mCUSTOMER12_mORDERS1_mSUPPLIERSUPPLIER_SUPPKEY:int} *
+  REVENUE_mORDERS11_mSUPPLIER2(int)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     REVENUE_mORDERSORDERS_CUSTKEY:int, SUPPLIER_NATIONKEY:int] *
+  delta_REVENUE_mCUSTOMER12_mORDERS1_mSUPPLIER1:float);
+}
+
+CORRECT REVENUE_mORDERS11_mSUPPLIER2[][delta_SHIPPING_SUPP_NATION:string,delta_SHIPPING_CUST_NATION:string,delta_REVENUE_mORDERSORDERS_CUSTKEY:int,delta_REVENUE_mORDERS11_mSUPPLIERSUPPLIER_NATIONKEY:int] += delta_REVENUE_mORDERS11_mSUPPLIER2:int FOR ON + SUPPLIER(SUPPLIER_SUPPKEY:int, SUPPLIER_NAME:string, SUPPLIER_ADDRESS:string, SUPPLIER_NATIONKEY:int, SUPPLIER_PHONE:string, SUPPLIER_ACCTBAL:float, SUPPLIER_COMMENT:string) {
+   REVENUE_mORDERS11(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mORDERSORDERS_CUSTKEY:int, REVENUE_mORDERSORDERS_ORDERKEY:int] += 
+  ({SUPPLIER_NATIONKEY:int =
+ delta_REVENUE_mORDERS11_mSUPPLIERSUPPLIER_NATIONKEY:int} *
+  REVENUE_mCUSTOMER11_mORDERS1_mSUPPLIER1(float)[]
+  [SHIPPING_L_YEAR:int, REVENUE_mORDERSORDERS_ORDERKEY:int,
+     SUPPLIER_SUPPKEY:int] *
+  delta_REVENUE_mORDERS11_mSUPPLIER2:int);
+   REVENUE_mORDERS11_mLINEITEM4(int)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, delta_REVENUE_mORDERSORDERS_CUSTKEY:int, SUPPLIER_SUPPKEY:int] += 
+  ({SUPPLIER_NATIONKEY:int =
+ delta_REVENUE_mORDERS11_mSUPPLIERSUPPLIER_NATIONKEY:int} *
+  delta_REVENUE_mORDERS11_mSUPPLIER2:int);
+   REVENUE_mORDERS12(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mORDERSORDERS_CUSTKEY:int, REVENUE_mORDERSORDERS_ORDERKEY:int] += 
+  ({SUPPLIER_NATIONKEY:int =
+ delta_REVENUE_mORDERS11_mSUPPLIERSUPPLIER_NATIONKEY:int} *
+  REVENUE_mCUSTOMER12_mORDERS1_mSUPPLIER1(float)[]
+  [SHIPPING_L_YEAR:int, REVENUE_mORDERSORDERS_ORDERKEY:int,
+     SUPPLIER_SUPPKEY:int] *
+  delta_REVENUE_mORDERS11_mSUPPLIER2:int);
+}
+
+CORRECT REVENUE_mLINEITEM4_mSUPPLIER1[][delta_SHIPPING_SUPP_NATION:string,delta_SHIPPING_CUST_NATION:string,delta_REVENUE_mLINEITEMLINEITEM_ORDERKEY:int,delta_REVENUE_mLINEITEM4_mSUPPLIERSUPPLIER_NATIONKEY:int] += delta_REVENUE_mLINEITEM4_mSUPPLIER1:int FOR ON + SUPPLIER(SUPPLIER_SUPPKEY:int, SUPPLIER_NAME:string, SUPPLIER_ADDRESS:string, SUPPLIER_NATIONKEY:int, SUPPLIER_PHONE:string, SUPPLIER_ACCTBAL:float, SUPPLIER_COMMENT:string) {
+   REVENUE_mLINEITEM4(int)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, delta_REVENUE_mLINEITEMLINEITEM_ORDERKEY:int, SUPPLIER_SUPPKEY:int] += 
+  ({SUPPLIER_NATIONKEY:int =
+ delta_REVENUE_mLINEITEM4_mSUPPLIERSUPPLIER_NATIONKEY:int} *
+  delta_REVENUE_mLINEITEM4_mSUPPLIER1:int);
+}
+
+CORRECT REVENUE_mSUPPLIER11[][delta_SHIPPING_SUPP_NATION:string,delta_SHIPPING_CUST_NATION:string,delta_SHIPPING_L_YEAR:int,delta_REVENUE_mSUPPLIERSUPPLIER_NATIONKEY:int,delta_REVENUE_mSUPPLIERSUPPLIER_SUPPKEY:int] += delta_REVENUE_mSUPPLIER11:float FOR ON - SUPPLIER(SUPPLIER_SUPPKEY:int, SUPPLIER_NAME:string, SUPPLIER_ADDRESS:string, SUPPLIER_NATIONKEY:int, SUPPLIER_PHONE:string, SUPPLIER_ACCTBAL:float, SUPPLIER_COMMENT:string) {
+   REVENUE(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, delta_SHIPPING_L_YEAR:int] += 
+  ({SUPPLIER_SUPPKEY:int = delta_REVENUE_mSUPPLIERSUPPLIER_SUPPKEY:int} *
+  {SUPPLIER_NATIONKEY:int = delta_REVENUE_mSUPPLIERSUPPLIER_NATIONKEY:int} *
+  delta_REVENUE_mSUPPLIER11:float);
+}
+
+CORRECT REVENUE_mSUPPLIER12[][delta_SHIPPING_SUPP_NATION:string,delta_SHIPPING_CUST_NATION:string,delta_SHIPPING_L_YEAR:int,delta_REVENUE_mSUPPLIERSUPPLIER_NATIONKEY:int,delta_REVENUE_mSUPPLIERSUPPLIER_SUPPKEY:int] += delta_REVENUE_mSUPPLIER12:float FOR ON - SUPPLIER(SUPPLIER_SUPPKEY:int, SUPPLIER_NAME:string, SUPPLIER_ADDRESS:string, SUPPLIER_NATIONKEY:int, SUPPLIER_PHONE:string, SUPPLIER_ACCTBAL:float, SUPPLIER_COMMENT:string) {
+   REVENUE(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, delta_SHIPPING_L_YEAR:int] += 
+  ({SUPPLIER_SUPPKEY:int = delta_REVENUE_mSUPPLIERSUPPLIER_SUPPKEY:int} *
+  {SUPPLIER_NATIONKEY:int = delta_REVENUE_mSUPPLIERSUPPLIER_NATIONKEY:int} *
+  -1 * delta_REVENUE_mSUPPLIER12:float);
+}
+
+CORRECT REVENUE_mCUSTOMER11_mSUPPLIER1[][delta_SHIPPING_L_YEAR:int,delta_REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int,delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_SUPPKEY:int] += delta_REVENUE_mCUSTOMER11_mSUPPLIER1:float FOR ON - SUPPLIER(SUPPLIER_SUPPKEY:int, SUPPLIER_NAME:string, SUPPLIER_ADDRESS:string, SUPPLIER_NATIONKEY:int, SUPPLIER_PHONE:string, SUPPLIER_ACCTBAL:float, SUPPLIER_COMMENT:string) {
+   REVENUE_mCUSTOMER11(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, delta_SHIPPING_L_YEAR:int, REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, delta_REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int] += 
+  ({SUPPLIER_SUPPKEY:int =
+ delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_SUPPKEY:int} *
+  REVENUE_mCUSTOMER11_mSUPPLIER2(int)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, SUPPLIER_NATIONKEY:int] *
+  -1 * delta_REVENUE_mCUSTOMER11_mSUPPLIER1:float);
+}
+
+CORRECT REVENUE_mCUSTOMER11_mSUPPLIER2[][delta_SHIPPING_SUPP_NATION:string,delta_SHIPPING_CUST_NATION:string,delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int,delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int] += delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int FOR ON - SUPPLIER(SUPPLIER_SUPPKEY:int, SUPPLIER_NAME:string, SUPPLIER_ADDRESS:string, SUPPLIER_NATIONKEY:int, SUPPLIER_PHONE:string, SUPPLIER_ACCTBAL:float, SUPPLIER_COMMENT:string) {
+   REVENUE_mCUSTOMER11(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int] += 
+  ({SUPPLIER_NATIONKEY:int =
+ delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int} *
+  REVENUE_mCUSTOMER11_mSUPPLIER1(float)[]
+  [SHIPPING_L_YEAR:int, REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int,
+     SUPPLIER_SUPPKEY:int] *
+  -1 * delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int);
+   REVENUE_mCUSTOMER11_mORDERS1(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, REVENUE_mCUSTOMER11_mORDERSORDERS_ORDERKEY:int] += 
+  ({SUPPLIER_NATIONKEY:int =
+ delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int} *
+  REVENUE_mCUSTOMER11_mORDERS1_mSUPPLIER1(float)[]
+  [SHIPPING_L_YEAR:int, REVENUE_mCUSTOMER11_mORDERSORDERS_ORDERKEY:int,
+     SUPPLIER_SUPPKEY:int] *
+  -1 * delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int);
+   REVENUE_mCUSTOMER11_mLINEITEM4(int)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, SUPPLIER_SUPPKEY:int] += 
+  ({SUPPLIER_NATIONKEY:int =
+ delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int} * -1 *
+  delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int);
+   REVENUE_mCUSTOMER12(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int] += 
+  ({SUPPLIER_NATIONKEY:int =
+ delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int} *
+  REVENUE_mCUSTOMER12_mSUPPLIER1(float)[]
+  [SHIPPING_L_YEAR:int, REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int,
+     SUPPLIER_SUPPKEY:int] *
+  -1 * delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int);
+   REVENUE_mCUSTOMER12_mORDERS1(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, REVENUE_mCUSTOMER12_mORDERSORDERS_ORDERKEY:int] += 
+  ({SUPPLIER_NATIONKEY:int =
+ delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int} *
+  REVENUE_mCUSTOMER12_mORDERS1_mSUPPLIER1(float)[]
+  [SHIPPING_L_YEAR:int, REVENUE_mCUSTOMER12_mORDERSORDERS_ORDERKEY:int,
+     SUPPLIER_SUPPKEY:int] *
+  -1 * delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int);
+}
+
+CORRECT REVENUE_mCUSTOMER11_mORDERS1_mSUPPLIER1[][delta_SHIPPING_L_YEAR:int,delta_REVENUE_mCUSTOMER11_mORDERSORDERS_ORDERKEY:int,delta_REVENUE_mCUSTOMER11_mORDERS1_mSUPPLIERSUPPLIER_SUPPKEY:int] += delta_REVENUE_mCUSTOMER11_mORDERS1_mSUPPLIER1:float FOR ON - SUPPLIER(SUPPLIER_SUPPKEY:int, SUPPLIER_NAME:string, SUPPLIER_ADDRESS:string, SUPPLIER_NATIONKEY:int, SUPPLIER_PHONE:string, SUPPLIER_ACCTBAL:float, SUPPLIER_COMMENT:string) {
+   REVENUE_mCUSTOMER11_mORDERS1(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, delta_SHIPPING_L_YEAR:int, REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, delta_REVENUE_mCUSTOMER11_mORDERSORDERS_ORDERKEY:int] += 
+  ({SUPPLIER_SUPPKEY:int =
+ delta_REVENUE_mCUSTOMER11_mORDERS1_mSUPPLIERSUPPLIER_SUPPKEY:int} *
+  REVENUE_mCUSTOMER11_mSUPPLIER2(int)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, SUPPLIER_NATIONKEY:int] *
+  -1 * delta_REVENUE_mCUSTOMER11_mORDERS1_mSUPPLIER1:float);
+   REVENUE_mORDERS11(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, delta_SHIPPING_L_YEAR:int, REVENUE_mORDERSORDERS_CUSTKEY:int, delta_REVENUE_mCUSTOMER11_mORDERSORDERS_ORDERKEY:int] += 
+  ({SUPPLIER_SUPPKEY:int =
+ delta_REVENUE_mCUSTOMER11_mORDERS1_mSUPPLIERSUPPLIER_SUPPKEY:int} *
+  REVENUE_mORDERS11_mSUPPLIER2(int)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     REVENUE_mORDERSORDERS_CUSTKEY:int, SUPPLIER_NATIONKEY:int] *
+  -1 * delta_REVENUE_mCUSTOMER11_mORDERS1_mSUPPLIER1:float);
+}
+
+CORRECT REVENUE_mCUSTOMER11_mSUPPLIER2[][delta_SHIPPING_SUPP_NATION:string,delta_SHIPPING_CUST_NATION:string,delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int,delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int] += delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int FOR ON - SUPPLIER(SUPPLIER_SUPPKEY:int, SUPPLIER_NAME:string, SUPPLIER_ADDRESS:string, SUPPLIER_NATIONKEY:int, SUPPLIER_PHONE:string, SUPPLIER_ACCTBAL:float, SUPPLIER_COMMENT:string) {
+   REVENUE_mCUSTOMER11(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int] += 
+  ({SUPPLIER_NATIONKEY:int =
+ delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int} *
+  REVENUE_mCUSTOMER11_mSUPPLIER1(float)[]
+  [SHIPPING_L_YEAR:int, REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int,
+     SUPPLIER_SUPPKEY:int] *
+  -1 * delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int);
+   REVENUE_mCUSTOMER11_mORDERS1(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, REVENUE_mCUSTOMER11_mORDERSORDERS_ORDERKEY:int] += 
+  ({SUPPLIER_NATIONKEY:int =
+ delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int} *
+  REVENUE_mCUSTOMER11_mORDERS1_mSUPPLIER1(float)[]
+  [SHIPPING_L_YEAR:int, REVENUE_mCUSTOMER11_mORDERSORDERS_ORDERKEY:int,
+     SUPPLIER_SUPPKEY:int] *
+  -1 * delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int);
+   REVENUE_mCUSTOMER11_mLINEITEM4(int)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, SUPPLIER_SUPPKEY:int] += 
+  ({SUPPLIER_NATIONKEY:int =
+ delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int} * -1 *
+  delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int);
+   REVENUE_mCUSTOMER12(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int] += 
+  ({SUPPLIER_NATIONKEY:int =
+ delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int} *
+  REVENUE_mCUSTOMER12_mSUPPLIER1(float)[]
+  [SHIPPING_L_YEAR:int, REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int,
+     SUPPLIER_SUPPKEY:int] *
+  -1 * delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int);
+   REVENUE_mCUSTOMER12_mORDERS1(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, REVENUE_mCUSTOMER12_mORDERSORDERS_ORDERKEY:int] += 
+  ({SUPPLIER_NATIONKEY:int =
+ delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int} *
+  REVENUE_mCUSTOMER12_mORDERS1_mSUPPLIER1(float)[]
+  [SHIPPING_L_YEAR:int, REVENUE_mCUSTOMER12_mORDERSORDERS_ORDERKEY:int,
+     SUPPLIER_SUPPKEY:int] *
+  -1 * delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int);
+}
+
+CORRECT REVENUE_mCUSTOMER11_mSUPPLIER2[][delta_SHIPPING_SUPP_NATION:string,delta_SHIPPING_CUST_NATION:string,delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int,delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int] += delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int FOR ON - SUPPLIER(SUPPLIER_SUPPKEY:int, SUPPLIER_NAME:string, SUPPLIER_ADDRESS:string, SUPPLIER_NATIONKEY:int, SUPPLIER_PHONE:string, SUPPLIER_ACCTBAL:float, SUPPLIER_COMMENT:string) {
+   REVENUE_mCUSTOMER11(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int] += 
+  ({SUPPLIER_NATIONKEY:int =
+ delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int} *
+  REVENUE_mCUSTOMER11_mSUPPLIER1(float)[]
+  [SHIPPING_L_YEAR:int, REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int,
+     SUPPLIER_SUPPKEY:int] *
+  -1 * delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int);
+   REVENUE_mCUSTOMER11_mORDERS1(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, REVENUE_mCUSTOMER11_mORDERSORDERS_ORDERKEY:int] += 
+  ({SUPPLIER_NATIONKEY:int =
+ delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int} *
+  REVENUE_mCUSTOMER11_mORDERS1_mSUPPLIER1(float)[]
+  [SHIPPING_L_YEAR:int, REVENUE_mCUSTOMER11_mORDERSORDERS_ORDERKEY:int,
+     SUPPLIER_SUPPKEY:int] *
+  -1 * delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int);
+   REVENUE_mCUSTOMER11_mLINEITEM4(int)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, SUPPLIER_SUPPKEY:int] += 
+  ({SUPPLIER_NATIONKEY:int =
+ delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int} * -1 *
+  delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int);
+   REVENUE_mCUSTOMER12(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int] += 
+  ({SUPPLIER_NATIONKEY:int =
+ delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int} *
+  REVENUE_mCUSTOMER12_mSUPPLIER1(float)[]
+  [SHIPPING_L_YEAR:int, REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int,
+     SUPPLIER_SUPPKEY:int] *
+  -1 * delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int);
+   REVENUE_mCUSTOMER12_mORDERS1(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, REVENUE_mCUSTOMER12_mORDERSORDERS_ORDERKEY:int] += 
+  ({SUPPLIER_NATIONKEY:int =
+ delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int} *
+  REVENUE_mCUSTOMER12_mORDERS1_mSUPPLIER1(float)[]
+  [SHIPPING_L_YEAR:int, REVENUE_mCUSTOMER12_mORDERSORDERS_ORDERKEY:int,
+     SUPPLIER_SUPPKEY:int] *
+  -1 * delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int);
+}
+
+CORRECT REVENUE_mCUSTOMER12_mSUPPLIER1[][delta_SHIPPING_L_YEAR:int,delta_REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int,delta_REVENUE_mCUSTOMER12_mSUPPLIERSUPPLIER_SUPPKEY:int] += delta_REVENUE_mCUSTOMER12_mSUPPLIER1:float FOR ON - SUPPLIER(SUPPLIER_SUPPKEY:int, SUPPLIER_NAME:string, SUPPLIER_ADDRESS:string, SUPPLIER_NATIONKEY:int, SUPPLIER_PHONE:string, SUPPLIER_ACCTBAL:float, SUPPLIER_COMMENT:string) {
+   REVENUE_mCUSTOMER12(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, delta_SHIPPING_L_YEAR:int, REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, delta_REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int] += 
+  ({SUPPLIER_SUPPKEY:int =
+ delta_REVENUE_mCUSTOMER12_mSUPPLIERSUPPLIER_SUPPKEY:int} *
+  REVENUE_mCUSTOMER11_mSUPPLIER2(int)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, SUPPLIER_NATIONKEY:int] *
+  -1 * delta_REVENUE_mCUSTOMER12_mSUPPLIER1:float);
+}
+
+CORRECT REVENUE_mCUSTOMER11_mSUPPLIER2[][delta_SHIPPING_SUPP_NATION:string,delta_SHIPPING_CUST_NATION:string,delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int,delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int] += delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int FOR ON - SUPPLIER(SUPPLIER_SUPPKEY:int, SUPPLIER_NAME:string, SUPPLIER_ADDRESS:string, SUPPLIER_NATIONKEY:int, SUPPLIER_PHONE:string, SUPPLIER_ACCTBAL:float, SUPPLIER_COMMENT:string) {
+   REVENUE_mCUSTOMER11(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int] += 
+  ({SUPPLIER_NATIONKEY:int =
+ delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int} *
+  REVENUE_mCUSTOMER11_mSUPPLIER1(float)[]
+  [SHIPPING_L_YEAR:int, REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int,
+     SUPPLIER_SUPPKEY:int] *
+  -1 * delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int);
+   REVENUE_mCUSTOMER11_mORDERS1(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, REVENUE_mCUSTOMER11_mORDERSORDERS_ORDERKEY:int] += 
+  ({SUPPLIER_NATIONKEY:int =
+ delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int} *
+  REVENUE_mCUSTOMER11_mORDERS1_mSUPPLIER1(float)[]
+  [SHIPPING_L_YEAR:int, REVENUE_mCUSTOMER11_mORDERSORDERS_ORDERKEY:int,
+     SUPPLIER_SUPPKEY:int] *
+  -1 * delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int);
+   REVENUE_mCUSTOMER11_mLINEITEM4(int)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, SUPPLIER_SUPPKEY:int] += 
+  ({SUPPLIER_NATIONKEY:int =
+ delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int} * -1 *
+  delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int);
+   REVENUE_mCUSTOMER12(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int] += 
+  ({SUPPLIER_NATIONKEY:int =
+ delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int} *
+  REVENUE_mCUSTOMER12_mSUPPLIER1(float)[]
+  [SHIPPING_L_YEAR:int, REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int,
+     SUPPLIER_SUPPKEY:int] *
+  -1 * delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int);
+   REVENUE_mCUSTOMER12_mORDERS1(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, REVENUE_mCUSTOMER12_mORDERSORDERS_ORDERKEY:int] += 
+  ({SUPPLIER_NATIONKEY:int =
+ delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int} *
+  REVENUE_mCUSTOMER12_mORDERS1_mSUPPLIER1(float)[]
+  [SHIPPING_L_YEAR:int, REVENUE_mCUSTOMER12_mORDERSORDERS_ORDERKEY:int,
+     SUPPLIER_SUPPKEY:int] *
+  -1 * delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int);
+}
+
+CORRECT REVENUE_mCUSTOMER12_mORDERS1_mSUPPLIER1[][delta_SHIPPING_L_YEAR:int,delta_REVENUE_mCUSTOMER12_mORDERSORDERS_ORDERKEY:int,delta_REVENUE_mCUSTOMER12_mORDERS1_mSUPPLIERSUPPLIER_SUPPKEY:int] += delta_REVENUE_mCUSTOMER12_mORDERS1_mSUPPLIER1:float FOR ON - SUPPLIER(SUPPLIER_SUPPKEY:int, SUPPLIER_NAME:string, SUPPLIER_ADDRESS:string, SUPPLIER_NATIONKEY:int, SUPPLIER_PHONE:string, SUPPLIER_ACCTBAL:float, SUPPLIER_COMMENT:string) {
+   REVENUE_mCUSTOMER12_mORDERS1(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, delta_SHIPPING_L_YEAR:int, REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, delta_REVENUE_mCUSTOMER12_mORDERSORDERS_ORDERKEY:int] += 
+  ({SUPPLIER_SUPPKEY:int =
+ delta_REVENUE_mCUSTOMER12_mORDERS1_mSUPPLIERSUPPLIER_SUPPKEY:int} *
+  REVENUE_mCUSTOMER11_mSUPPLIER2(int)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, SUPPLIER_NATIONKEY:int] *
+  -1 * delta_REVENUE_mCUSTOMER12_mORDERS1_mSUPPLIER1:float);
+   REVENUE_mORDERS12(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, delta_SHIPPING_L_YEAR:int, REVENUE_mORDERSORDERS_CUSTKEY:int, delta_REVENUE_mCUSTOMER12_mORDERSORDERS_ORDERKEY:int] += 
+  ({SUPPLIER_SUPPKEY:int =
+ delta_REVENUE_mCUSTOMER12_mORDERS1_mSUPPLIERSUPPLIER_SUPPKEY:int} *
+  REVENUE_mORDERS11_mSUPPLIER2(int)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     REVENUE_mORDERSORDERS_CUSTKEY:int, SUPPLIER_NATIONKEY:int] *
+  -1 * delta_REVENUE_mCUSTOMER12_mORDERS1_mSUPPLIER1:float);
+}
+
+CORRECT REVENUE_mCUSTOMER11_mSUPPLIER2[][delta_SHIPPING_SUPP_NATION:string,delta_SHIPPING_CUST_NATION:string,delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int,delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int] += delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int FOR ON - SUPPLIER(SUPPLIER_SUPPKEY:int, SUPPLIER_NAME:string, SUPPLIER_ADDRESS:string, SUPPLIER_NATIONKEY:int, SUPPLIER_PHONE:string, SUPPLIER_ACCTBAL:float, SUPPLIER_COMMENT:string) {
+   REVENUE_mCUSTOMER11(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int] += 
+  ({SUPPLIER_NATIONKEY:int =
+ delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int} *
+  REVENUE_mCUSTOMER11_mSUPPLIER1(float)[]
+  [SHIPPING_L_YEAR:int, REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int,
+     SUPPLIER_SUPPKEY:int] *
+  -1 * delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int);
+   REVENUE_mCUSTOMER11_mORDERS1(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, REVENUE_mCUSTOMER11_mORDERSORDERS_ORDERKEY:int] += 
+  ({SUPPLIER_NATIONKEY:int =
+ delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int} *
+  REVENUE_mCUSTOMER11_mORDERS1_mSUPPLIER1(float)[]
+  [SHIPPING_L_YEAR:int, REVENUE_mCUSTOMER11_mORDERSORDERS_ORDERKEY:int,
+     SUPPLIER_SUPPKEY:int] *
+  -1 * delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int);
+   REVENUE_mCUSTOMER11_mLINEITEM4(int)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, SUPPLIER_SUPPKEY:int] += 
+  ({SUPPLIER_NATIONKEY:int =
+ delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int} * -1 *
+  delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int);
+   REVENUE_mCUSTOMER12(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int] += 
+  ({SUPPLIER_NATIONKEY:int =
+ delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int} *
+  REVENUE_mCUSTOMER12_mSUPPLIER1(float)[]
+  [SHIPPING_L_YEAR:int, REVENUE_mCUSTOMERCUSTOMER_CUSTKEY:int,
+     SUPPLIER_SUPPKEY:int] *
+  -1 * delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int);
+   REVENUE_mCUSTOMER12_mORDERS1(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, REVENUE_mCUSTOMER12_mORDERSORDERS_ORDERKEY:int] += 
+  ({SUPPLIER_NATIONKEY:int =
+ delta_REVENUE_mCUSTOMER11_mSUPPLIERSUPPLIER_NATIONKEY:int} *
+  REVENUE_mCUSTOMER12_mORDERS1_mSUPPLIER1(float)[]
+  [SHIPPING_L_YEAR:int, REVENUE_mCUSTOMER12_mORDERSORDERS_ORDERKEY:int,
+     SUPPLIER_SUPPKEY:int] *
+  -1 * delta_REVENUE_mCUSTOMER11_mSUPPLIER2:int);
+}
+
+CORRECT REVENUE_mCUSTOMER11_mORDERS1_mSUPPLIER1[][delta_SHIPPING_L_YEAR:int,delta_REVENUE_mCUSTOMER11_mORDERSORDERS_ORDERKEY:int,delta_REVENUE_mCUSTOMER11_mORDERS1_mSUPPLIERSUPPLIER_SUPPKEY:int] += delta_REVENUE_mCUSTOMER11_mORDERS1_mSUPPLIER1:float FOR ON - SUPPLIER(SUPPLIER_SUPPKEY:int, SUPPLIER_NAME:string, SUPPLIER_ADDRESS:string, SUPPLIER_NATIONKEY:int, SUPPLIER_PHONE:string, SUPPLIER_ACCTBAL:float, SUPPLIER_COMMENT:string) {
+   REVENUE_mCUSTOMER11_mORDERS1(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, delta_SHIPPING_L_YEAR:int, REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, delta_REVENUE_mCUSTOMER11_mORDERSORDERS_ORDERKEY:int] += 
+  ({SUPPLIER_SUPPKEY:int =
+ delta_REVENUE_mCUSTOMER11_mORDERS1_mSUPPLIERSUPPLIER_SUPPKEY:int} *
+  REVENUE_mCUSTOMER11_mSUPPLIER2(int)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, SUPPLIER_NATIONKEY:int] *
+  -1 * delta_REVENUE_mCUSTOMER11_mORDERS1_mSUPPLIER1:float);
+   REVENUE_mORDERS11(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, delta_SHIPPING_L_YEAR:int, REVENUE_mORDERSORDERS_CUSTKEY:int, delta_REVENUE_mCUSTOMER11_mORDERSORDERS_ORDERKEY:int] += 
+  ({SUPPLIER_SUPPKEY:int =
+ delta_REVENUE_mCUSTOMER11_mORDERS1_mSUPPLIERSUPPLIER_SUPPKEY:int} *
+  REVENUE_mORDERS11_mSUPPLIER2(int)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     REVENUE_mORDERSORDERS_CUSTKEY:int, SUPPLIER_NATIONKEY:int] *
+  -1 * delta_REVENUE_mCUSTOMER11_mORDERS1_mSUPPLIER1:float);
+}
+
+CORRECT REVENUE_mORDERS11_mSUPPLIER2[][delta_SHIPPING_SUPP_NATION:string,delta_SHIPPING_CUST_NATION:string,delta_REVENUE_mORDERSORDERS_CUSTKEY:int,delta_REVENUE_mORDERS11_mSUPPLIERSUPPLIER_NATIONKEY:int] += delta_REVENUE_mORDERS11_mSUPPLIER2:int FOR ON - SUPPLIER(SUPPLIER_SUPPKEY:int, SUPPLIER_NAME:string, SUPPLIER_ADDRESS:string, SUPPLIER_NATIONKEY:int, SUPPLIER_PHONE:string, SUPPLIER_ACCTBAL:float, SUPPLIER_COMMENT:string) {
+   REVENUE_mORDERS11(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mORDERSORDERS_CUSTKEY:int, REVENUE_mORDERSORDERS_ORDERKEY:int] += 
+  ({SUPPLIER_NATIONKEY:int =
+ delta_REVENUE_mORDERS11_mSUPPLIERSUPPLIER_NATIONKEY:int} *
+  REVENUE_mCUSTOMER11_mORDERS1_mSUPPLIER1(float)[]
+  [SHIPPING_L_YEAR:int, REVENUE_mORDERSORDERS_ORDERKEY:int,
+     SUPPLIER_SUPPKEY:int] *
+  -1 * delta_REVENUE_mORDERS11_mSUPPLIER2:int);
+   REVENUE_mORDERS11_mLINEITEM4(int)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, delta_REVENUE_mORDERSORDERS_CUSTKEY:int, SUPPLIER_SUPPKEY:int] += 
+  ({SUPPLIER_NATIONKEY:int =
+ delta_REVENUE_mORDERS11_mSUPPLIERSUPPLIER_NATIONKEY:int} * -1 *
+  delta_REVENUE_mORDERS11_mSUPPLIER2:int);
+   REVENUE_mORDERS12(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mORDERSORDERS_CUSTKEY:int, REVENUE_mORDERSORDERS_ORDERKEY:int] += 
+  ({SUPPLIER_NATIONKEY:int =
+ delta_REVENUE_mORDERS11_mSUPPLIERSUPPLIER_NATIONKEY:int} *
+  REVENUE_mCUSTOMER12_mORDERS1_mSUPPLIER1(float)[]
+  [SHIPPING_L_YEAR:int, REVENUE_mORDERSORDERS_ORDERKEY:int,
+     SUPPLIER_SUPPKEY:int] *
+  -1 * delta_REVENUE_mORDERS11_mSUPPLIER2:int);
+}
+
+CORRECT REVENUE_mORDERS11_mSUPPLIER2[][delta_SHIPPING_SUPP_NATION:string,delta_SHIPPING_CUST_NATION:string,delta_REVENUE_mORDERSORDERS_CUSTKEY:int,delta_REVENUE_mORDERS11_mSUPPLIERSUPPLIER_NATIONKEY:int] += delta_REVENUE_mORDERS11_mSUPPLIER2:int FOR ON - SUPPLIER(SUPPLIER_SUPPKEY:int, SUPPLIER_NAME:string, SUPPLIER_ADDRESS:string, SUPPLIER_NATIONKEY:int, SUPPLIER_PHONE:string, SUPPLIER_ACCTBAL:float, SUPPLIER_COMMENT:string) {
+   REVENUE_mORDERS11(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mORDERSORDERS_CUSTKEY:int, REVENUE_mORDERSORDERS_ORDERKEY:int] += 
+  ({SUPPLIER_NATIONKEY:int =
+ delta_REVENUE_mORDERS11_mSUPPLIERSUPPLIER_NATIONKEY:int} *
+  REVENUE_mCUSTOMER11_mORDERS1_mSUPPLIER1(float)[]
+  [SHIPPING_L_YEAR:int, REVENUE_mORDERSORDERS_ORDERKEY:int,
+     SUPPLIER_SUPPKEY:int] *
+  -1 * delta_REVENUE_mORDERS11_mSUPPLIER2:int);
+   REVENUE_mORDERS11_mLINEITEM4(int)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, delta_REVENUE_mORDERSORDERS_CUSTKEY:int, SUPPLIER_SUPPKEY:int] += 
+  ({SUPPLIER_NATIONKEY:int =
+ delta_REVENUE_mORDERS11_mSUPPLIERSUPPLIER_NATIONKEY:int} * -1 *
+  delta_REVENUE_mORDERS11_mSUPPLIER2:int);
+   REVENUE_mORDERS12(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mORDERSORDERS_CUSTKEY:int, REVENUE_mORDERSORDERS_ORDERKEY:int] += 
+  ({SUPPLIER_NATIONKEY:int =
+ delta_REVENUE_mORDERS11_mSUPPLIERSUPPLIER_NATIONKEY:int} *
+  REVENUE_mCUSTOMER12_mORDERS1_mSUPPLIER1(float)[]
+  [SHIPPING_L_YEAR:int, REVENUE_mORDERSORDERS_ORDERKEY:int,
+     SUPPLIER_SUPPKEY:int] *
+  -1 * delta_REVENUE_mORDERS11_mSUPPLIER2:int);
+}
+
+CORRECT REVENUE_mCUSTOMER12_mORDERS1_mSUPPLIER1[][delta_SHIPPING_L_YEAR:int,delta_REVENUE_mCUSTOMER12_mORDERSORDERS_ORDERKEY:int,delta_REVENUE_mCUSTOMER12_mORDERS1_mSUPPLIERSUPPLIER_SUPPKEY:int] += delta_REVENUE_mCUSTOMER12_mORDERS1_mSUPPLIER1:float FOR ON - SUPPLIER(SUPPLIER_SUPPKEY:int, SUPPLIER_NAME:string, SUPPLIER_ADDRESS:string, SUPPLIER_NATIONKEY:int, SUPPLIER_PHONE:string, SUPPLIER_ACCTBAL:float, SUPPLIER_COMMENT:string) {
+   REVENUE_mCUSTOMER12_mORDERS1(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, delta_SHIPPING_L_YEAR:int, REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, delta_REVENUE_mCUSTOMER12_mORDERSORDERS_ORDERKEY:int] += 
+  ({SUPPLIER_SUPPKEY:int =
+ delta_REVENUE_mCUSTOMER12_mORDERS1_mSUPPLIERSUPPLIER_SUPPKEY:int} *
+  REVENUE_mCUSTOMER11_mSUPPLIER2(int)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     REVENUE_mCUSTOMERCUSTOMER_NATIONKEY:int, SUPPLIER_NATIONKEY:int] *
+  -1 * delta_REVENUE_mCUSTOMER12_mORDERS1_mSUPPLIER1:float);
+   REVENUE_mORDERS12(float)[][SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string, delta_SHIPPING_L_YEAR:int, REVENUE_mORDERSORDERS_CUSTKEY:int, delta_REVENUE_mCUSTOMER12_mORDERSORDERS_ORDERKEY:int] += 
+  ({SUPPLIER_SUPPKEY:int =
+ delta_REVENUE_mCUSTOMER12_mORDERS1_mSUPPLIERSUPPLIER_SUPPKEY:int} *
+  REVENUE_mORDERS11_mSUPPLIER2(int)[]
+  [SHIPPING_SUPP_NATION:string, SHIPPING_CUST_NATION:string,
+     REVENUE_mORDERSORDERS_CUSTKEY:int, SUPPLIER_NATIONKEY:int] *
+  -1 * delta_REVENUE_mCUSTOMER12_mORDERS1_mSUPPLIER1:float);
+}
+
+CORRECT REVENUE_mORDERS11_mSUPPLIER2[][delta_SHIPPING_SUPP_NATION:string,delta_SHIPPING_CUST_NATION:string,delta_REVENUE_mORDERSORDERS_CUSTKEY:int,delta_REVENUE_mORDERS11_mSUPPLIERSUPPLIER_NATIONKEY:int] += delta_REVENUE_mORDERS11_mSUPPLIER2:int FOR ON - SUPPLIER(SUPPLIER_SUPPKEY:int, SUPPLIER_NAME:string, SUPPLIER_ADDRESS:string, SUPPLIER_NATIONKEY:int, SUPPLIER_PHONE:string, SUPPLIER_ACCTBAL:float, SUPPLIER_COMMENT:string) {
+   REVENUE_mORDERS11(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mORDERSORDERS_CUSTKEY:int, REVENUE_mORDERSORDERS_ORDERKEY:int] += 
+  ({SUPPLIER_NATIONKEY:int =
+ delta_REVENUE_mORDERS11_mSUPPLIERSUPPLIER_NATIONKEY:int} *
+  REVENUE_mCUSTOMER11_mORDERS1_mSUPPLIER1(float)[]
+  [SHIPPING_L_YEAR:int, REVENUE_mORDERSORDERS_ORDERKEY:int,
+     SUPPLIER_SUPPKEY:int] *
+  -1 * delta_REVENUE_mORDERS11_mSUPPLIER2:int);
+   REVENUE_mORDERS11_mLINEITEM4(int)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, delta_REVENUE_mORDERSORDERS_CUSTKEY:int, SUPPLIER_SUPPKEY:int] += 
+  ({SUPPLIER_NATIONKEY:int =
+ delta_REVENUE_mORDERS11_mSUPPLIERSUPPLIER_NATIONKEY:int} * -1 *
+  delta_REVENUE_mORDERS11_mSUPPLIER2:int);
+   REVENUE_mORDERS12(float)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, SHIPPING_L_YEAR:int, delta_REVENUE_mORDERSORDERS_CUSTKEY:int, REVENUE_mORDERSORDERS_ORDERKEY:int] += 
+  ({SUPPLIER_NATIONKEY:int =
+ delta_REVENUE_mORDERS11_mSUPPLIERSUPPLIER_NATIONKEY:int} *
+  REVENUE_mCUSTOMER12_mORDERS1_mSUPPLIER1(float)[]
+  [SHIPPING_L_YEAR:int, REVENUE_mORDERSORDERS_ORDERKEY:int,
+     SUPPLIER_SUPPKEY:int] *
+  -1 * delta_REVENUE_mORDERS11_mSUPPLIER2:int);
+}
+
+CORRECT REVENUE_mLINEITEM4_mSUPPLIER1[][delta_SHIPPING_SUPP_NATION:string,delta_SHIPPING_CUST_NATION:string,delta_REVENUE_mLINEITEMLINEITEM_ORDERKEY:int,delta_REVENUE_mLINEITEM4_mSUPPLIERSUPPLIER_NATIONKEY:int] += delta_REVENUE_mLINEITEM4_mSUPPLIER1:int FOR ON - SUPPLIER(SUPPLIER_SUPPKEY:int, SUPPLIER_NAME:string, SUPPLIER_ADDRESS:string, SUPPLIER_NATIONKEY:int, SUPPLIER_PHONE:string, SUPPLIER_ACCTBAL:float, SUPPLIER_COMMENT:string) {
+   REVENUE_mLINEITEM4(int)[][delta_SHIPPING_SUPP_NATION:string, delta_SHIPPING_CUST_NATION:string, delta_REVENUE_mLINEITEMLINEITEM_ORDERKEY:int, SUPPLIER_SUPPKEY:int] += 
+  ({SUPPLIER_NATIONKEY:int =
+ delta_REVENUE_mLINEITEM4_mSUPPLIERSUPPLIER_NATIONKEY:int} * -1 *
+  delta_REVENUE_mLINEITEM4_mSUPPLIER1:int);
+}
