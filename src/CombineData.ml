@@ -24,13 +24,7 @@ let param_specs = Arg.align [
 
 let usage_msg = "Enter data files"
 
-let default_val = function
-  | TString -> " "
-  | TInt    -> "0"
-  | TFloat  -> "0.0"
-  | TBool   -> "false"
-  | TDate   -> "1900-01-01"
-  | _       -> failwith "unhandled type"
+let default_val _ = ""
 
 type sep_t = Comma | Pipe
 

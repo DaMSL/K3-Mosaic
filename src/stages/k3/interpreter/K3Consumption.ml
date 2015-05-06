@@ -22,13 +22,17 @@ type channel_impl_t =
 type resource_impl_env_t = (id_t * channel_impl_t) list
 
 (* Evaluation methods *)
-let value_of_string t v = match t with
-  | TInt    -> VInt(ios v)
-  | TDate   -> VInt(int_of_sql_date v)
-  | TFloat  -> VFloat(fos v)
-  | TBool   -> VBool(bos v)
-  | TString -> VString v
-  | _       -> invalid_arg "Unknown value"
+let value_of_string t v = match t, v with
+  | TInt, ""   -> VInt(0)
+  | TInt, _    -> VInt(ios v)
+  | TDate, ""  -> VInt(19000101)
+  | TDate, _   -> VInt(int_of_sql_date v)
+  | TFloat, "" -> VFloat(0.)
+  | TFloat, _  -> VFloat(fos v)
+  | TBool, ""  -> VBool(false)
+  | TBool, _   -> VBool(bos v)
+  | TString, _ -> VString v
+  | _          -> invalid_arg "Unknown value"
 
 let r_comma = Str.regexp ","
 let r_pipe  = Str.regexp "|"
@@ -51,10 +55,13 @@ let pull_source id t res in_chan =
   | Handle(t, File f, CSV), In(cnt, Some chan) ->
     begin try
       (* parse the lines *)
-      let next_record = Str.split r_pipe (input_line chan) in
-      if List.length next_record <> sig_len then
-        raise @@ ResourceError(Printf.sprintf "%s: file %s, line %d, expected %d items but got %d" id f !cnt sig_len @@ List.length next_record);
-      let fields = List.map2 value_of_string signature next_record in
+      let l = input_line chan in
+      let r = Str.split r_pipe l in
+      let r = if l.[0] = '|' then ""::r else r in
+      let r = if l.[String.length l - 1] = '|' then r@[""] else r in
+      if List.length r <> sig_len then
+        raise @@ ResourceError(Printf.sprintf "%s: file %s, line %d, expected %d items but got %d" id f !cnt sig_len @@ List.length r);
+      let fields = List.map2 value_of_string signature r in
       let r = if tuple_val then VTuple fields else List.hd fields in
       incr cnt; Some r
     with
