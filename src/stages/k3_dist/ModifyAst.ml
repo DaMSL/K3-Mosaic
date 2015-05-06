@@ -210,7 +210,7 @@ let add_vid_to_lambda_args lambda =
 
 (* messages about possible modifications to the ast for map accesses *)
 (* these are passed around while folding over the tree *)
-type msg_t = AddVidMsg | NopMsg | DelMsg
+type msg_t = NopMsg | DelMsg
 
 (* the maps here have a buffer suffix *)
 
@@ -315,9 +315,10 @@ let modify_map_add_vid (c:config) ast stmt =
      * those statements - they're not relevant *)
     | Block -> let ss = U.decompose_block e in
       let s_msg = list_zip ss msgs in
-      let ss' = fst_many @@
-        List.filter (fun (_, msg) -> msg <> DelMsg) s_msg in
-      NopMsg, mk_block ss'
+      begin match fst_many @@ List.filter (fun (_, msg) -> msg <> DelMsg) s_msg with
+      | [s] -> NopMsg, s
+      | ss  -> NopMsg, mk_block ss
+      end
 
     | Peek -> let col = U.decompose_peek e in
       begin match U.tag_of_expr col with

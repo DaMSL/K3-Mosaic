@@ -5,7 +5,6 @@ open ProgInfo
 open K3Dist
 
 exception InvalidAst of string
-exception UnhandledModification of string
 
 (* Scan an ast for map access patterns *)
 val get_map_access_patterns_ids : prog_data_t -> program_t -> IndexSet.t IntMap.t
