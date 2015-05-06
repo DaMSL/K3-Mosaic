@@ -278,28 +278,15 @@ let map_ids c =
 (* combine all the trig args into a minimal set *)
 (* adds an int for trigger selector *)
 let combine_trig_args c =
-  let t_data = P.for_all_trigs ~deletes:c.gen_deletes c.p @@
-    fun t -> P.trigger_id_for_name c.p t, "sw_"^t, P.args_of_t c.p t
-  in
-  let sort t = List.sort (fun x y -> fst x - fst y) t in
-  let types, map, _ =
-    List.fold_left (fun (types, map, sz) (tid, tnm, targs) ->
-      let rem_ts, used_ts, tmap, sz =
-        (* fold over the args *)
-        List.fold_left (fun (rem_ts, used_ts, tmap, sz) (_, t) ->
-          (* look for a spare type *)
-          let yes, no = List.partition ((=) t |- snd) rem_ts in
-          match yes with
-          (* no match found, so add a type *)
-          | []    -> rem_ts, (sz, t)::used_ts, sz::tmap, sz+1
-          (* found a match, so add it to our map *)
-          | y::ys -> ys@no,  y::used_ts, (fst y)::tmap, sz
-        ) (types, [], [], sz) targs
-      in
-      sort @@ rem_ts@used_ts, (tid, tnm, List.rev tmap)::map, sz
-    ) ([], [], 1) t_data
-  in
-  t_int :: (snd_many @@ sort types), map
+  let trigs = List.sort String.compare @@
+    P.for_all_trigs ~deletes:false c.p id_fn in
+  let ts = t_int :: (List.flatten @@ List.map (snd_many |- P.args_of_t c.p) trigs) in
+  let map = List.rev @@ fst @@ List.fold_left (fun (acc, i) t ->
+      let len = List.length @@ P.args_of_t c.p t in
+      (P.trigger_id_for_name c.p t, "sw_"^t, create_range i len)::acc, i + len)
+    ([], 1)
+    trigs in
+  ts, map
 
 (* global containing mapping of trig id to trig_name *)
 let trig_ids_id = "trig_ids"
@@ -443,7 +430,7 @@ let get_idx idx map_id =
  * - keep_vid indicates whether we need to remove the vid from the result collection
  *   (we usually need it removed only for modifying ast). While we remove the vid, we also
  *   convert to a bag (again, for modify_ast, to prevent losing duplicates)
- *) 
+ *)
 let map_latest_vid_vals ?(vid_nm="vid") c slice_col m_pat map_id ~keep_vid : expr_t =
   (* function to remove the vid from the collection in this case, we also convert to a bag *)
   let remove_vid_if_needed = if keep_vid then id_fn else
