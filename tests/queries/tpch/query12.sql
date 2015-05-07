@@ -1,4 +1,4 @@
-INCLUDE 'queries/tpch/schemas.sql';
+INCLUDE 'queries/tpch/schemas_small.sql';
 
 SELECT l.shipmode, 
        SUM(CASE WHEN o.orderpriority IN LIST ('1-URGENT', '2-HIGH')
