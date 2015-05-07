@@ -399,7 +399,9 @@ let delta_action c ast stmt after_fn =
         let last_id, last_t = list_last lmap_id_t in
         let lmap_t_no_val = P.map_types_no_val_for c.p lmap in
         let subscript_rng = create_range 1 @@ List.length lmap_t_no_val in
-        let subs = List.map (flip mk_subscript @@ mk_var "g") subscript_rng in
+        let subs = match subscript_rng with
+          | [_] -> [mk_var "g"]
+          | _   -> List.map (flip mk_subscript @@ mk_var "g") subscript_rng in
         (* convert the gbagg to a set *)
         mk_agg
           (mk_assoc_lambda' ["acc", lmap_col_t] ["g", wrap_ttuple lmap_t_no_val; "val", last_t] @@
