@@ -65,11 +65,14 @@ queries/tpch/query8.sql
 queries/tpch/query9.sql
 queries/tpch/query10.sql
 queries/tpch/query11.sql
+queries/tpch/query11a.sql
 queries/tpch/query12.sql
 queries/tpch/query14.sql
 queries/tpch/query16.sql
 queries/tpch/query17.sql
+queries/tpch/query18a.sql
 queries/tpch/query19.sql
 queries/tpch/query20.sql
 queries/tpch/query21.sql
 queries/tpch/query22.sql
+queries/tpch/query22a.sql

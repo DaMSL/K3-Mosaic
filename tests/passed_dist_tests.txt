@@ -30,4 +30,4 @@ queries/simple/rs_simple.sql
 queries/simple/rs_stringjoin.sql
 queries/simple/rst.sql
 queries/simple/rstar.sql
-queries/tpch/query3_small.sql
+queries/tpch/query3.sql
