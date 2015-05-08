@@ -30,7 +30,8 @@ def run(target_file,
         new_k3=True,
         folds_only=True,
         gen_deletes=True,
-        gen_correctives=True
+        gen_correctives=True,
+        run_interp=True
         ):
 
     to_root = ".."
@@ -185,18 +186,19 @@ def run(target_file,
             cmd = concat([partmap_tool, k3dist_file, "--k3new -n", num_nodes, ">", k3new_part_file])
             print_system(cmd, verbose)
 
-        # run the k3 driver on the input
-        cmd = concat([k3o, "--test", peer_cmd, "-q", queue_type, load_path, k3dist_file, ">", output_file, "2>", error_file])
-        print_system(cmd, verbose)
-        if check_error(error_file, verbose, True):
-            os.chdir(saved_dir)
-            return False
+        if run_interp:
+            # run the k3 driver on the input
+            cmd = concat([k3o, "--test", peer_cmd, "-q", queue_type, load_path, k3dist_file, ">", output_file, "2>", error_file])
+            print_system(cmd, verbose)
+            if check_error(error_file, verbose, True):
+                os.chdir(saved_dir)
+                return False
 
-        # no error. print the file
-        with open(error_file, 'r') as f:
-            buf = f.read()
-            if verbose:
-                print(buf)
+            # no error. print the file
+            with open(error_file, 'r') as f:
+                buf = f.read()
+                if verbose:
+                    print(buf)
 
         os.chdir(saved_dir)
         return True
@@ -218,16 +220,18 @@ def run(target_file,
             return False
 
         # run the k3 driver on the input to get test results
-        cmd = concat([k3o, "--test", k3_file3, load_path, ">", output_file, "2>", error_file])
-        print_system(cmd, verbose)
-        if check_error(error_file, verbose):
-            os.chdir(saved_dir)
-            return False
-        # no error. print the file
-        with open(output_file, 'r') as f:
-            buf = f.read()
-            if verbose:
-                print(buf)
+        if run_interp:
+            cmd = concat([k3o, "--test", k3_file3, load_path, ">", output_file, "2>", error_file])
+            print_system(cmd, verbose)
+            if check_error(error_file, verbose):
+                os.chdir(saved_dir)
+                return False
+            # no error. print the file
+            with open(output_file, 'r') as f:
+                buf = f.read()
+                if verbose:
+                    print(buf)
+
         os.chdir(saved_dir)
         return True
 

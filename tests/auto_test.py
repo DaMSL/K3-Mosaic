@@ -43,6 +43,8 @@ def run():
                         default=True, help="Create delete triggers")
     parser.add_argument('--no-correctives', action='store_false', dest='gen_correctives',
                         default=True, help="Create corrective triggers")
+    parser.add_argument('--no-interp', action='store_false', dest='run_interp',
+                        default=True, help="Run the interpreter")
 
     args = parser.parse_args()
 
@@ -92,7 +94,8 @@ def run():
                                 enable_gc=args.enable_gc,
                                 new_k3=args.new_k3,
                                 gen_deletes=args.gen_deletes,
-                                gen_correctives=args.gen_correctives
+                                gen_correctives=args.gen_correctives,
+                                run_interp=args.run_interp
                                 )
         # check if a test failed
         if not res:
