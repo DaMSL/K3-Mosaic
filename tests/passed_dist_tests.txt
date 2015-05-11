@@ -31,7 +31,6 @@ queries/simple/rs_stringjoin.sql
 queries/simple/rst.sql
 queries/simple/rstar.sql
 queries/tpch/query3.sql
-queries/tpch/query4.sql
 queries/tpch/query11a.sql
 queries/tpch/query12.sql
 queries/tpch/query14.sql
