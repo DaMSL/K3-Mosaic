@@ -34,4 +34,5 @@ queries/tpch/query3.sql
 queries/tpch/query11a.sql
 queries/tpch/query12.sql
 queries/tpch/query14.sql
+queries/tpch/query18a.sql
 queries/tpch/query19.sql
