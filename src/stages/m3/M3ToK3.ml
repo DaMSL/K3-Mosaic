@@ -209,10 +209,11 @@ let apply_lambda v_el el body =
 let apply_lambda_to_expr lambda_e lambda_t expr =
   let _, lambda_body = KU.decompose_lambda lambda_e in
   match KU.arg_of_lambda lambda_e, KU.tag_of_expr lambda_body with
-  | (Some(K.AVar _)), K.Tuple ->
-        KH.mk_singleton (KH.wrap_t_of_map lambda_t) [KH.mk_apply lambda_e expr]
-  | (Some(K.AVar _)), _       -> KH.mk_apply lambda_e expr
-  | (Some(K.ATuple _)), _     -> KH.mk_map lambda_e expr
+  | Some(K.AVar(id,_)), K.Tuple ->
+        KH.mk_singleton (KH.wrap_t_of_map lambda_t) @@
+          [KH.mk_let [id] expr lambda_body]
+  | Some(K.AVar(id,_)), _       -> KH.mk_let [id] expr lambda_body
+  | Some(K.ATuple _), _         -> KH.mk_map lambda_e expr
   | _ -> error "M3ToK3: Invalid arguments to apply_lambda_to_expr."
 
 (**[project_fn from_v_el to_v_el]
