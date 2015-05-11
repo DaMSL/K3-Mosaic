@@ -216,7 +216,7 @@ type msg_t = NopMsg | DelMsg
 
 (* add vid to all map accesses. This is a complicated function that
  * has to dig through the entire AST, but it's pretty resilient *)
-let modify_map_add_vid (c:config) ast stmt =
+let modify_dist (c:config) ast stmt =
   let lmap_alias = "existing_out_tier" in
   let lmap = P.lhs_map_of_stmt c.p stmt in
   let maps_with_existing_out_tier stmt =
@@ -291,7 +291,15 @@ let modify_map_add_vid (c:config) ast stmt =
       (* if our lambda requests a deletion, we delete *)
       if msg_del 0 then DelMsg, e else NopMsg, e
 
+    | Combine ->
+        (* could be combining global maps *)
+        let l, r = U.decompose_combine e in
+        let l' = modify_map_read c l None @@ Some l in
+        let r' = modify_map_read c r None @@ Some r in
+        NopMsg, mk_combine l' r'
+
     | Map ->
+        (* could be mapping over a global map *)
         let lam, col = U.decompose_map e in
         let col' = modify_map_read c col None @@ Some col in
         NopMsg, mk_map lam col'
@@ -330,6 +338,11 @@ let modify_map_add_vid (c:config) ast stmt =
           NopMsg, mk_peek @@ modify_map_read c col None None
       | _ -> NopMsg, e
       end
+
+    (* we need to change all singletons into bags *)
+    | Singleton t -> let e' = U.decompose_singleton e in
+      let _, elem_t = unwrap_tcol t in
+      NopMsg, mk_singleton (wrap_tbag elem_t) [e']
 
     | _ -> NopMsg, e
   in Tree.modify_tree_bu_with_path_and_msgs ast modify
@@ -444,12 +457,12 @@ let rename_var old_var_name new_var_name ast =
 (* return a modified version of the original ast for stmt s *)
 let modify_ast_for_s (c:config) ast stmt trig after_fn =
   let _, ast = ast_for_s_t c ast stmt trig in
-  let ast = modify_map_add_vid c ast stmt in
+  let ast = modify_dist c ast stmt in
   let ast = delta_action c ast stmt after_fn in
   ast
 
 (* return a modified version of the corrective update *)
 let modify_corr_ast c ast map stmt trig after_fn =
   let args, corr_stmt, ast = corr_ast_for_m_s c ast map stmt trig in
-  let ast = modify_map_add_vid c ast stmt in
+  let ast = modify_dist c ast stmt in
   args, delta_action c ast corr_stmt after_fn
