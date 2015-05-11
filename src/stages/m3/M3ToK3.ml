@@ -655,9 +655,9 @@ let meta_append_init_keys meta init_keys = meta@[init_keys]
                      - the K3 expression itself *)
 let rec calc_to_k3_expr meta ?(generate_init = false) theta_vars_k calc :
   ((K.id_t * K.type_t) list * (K.expr_t * K.type_t) * K.expr_t) * meta_t =
-  let rcr = calc_to_k3_expr meta  ~generate_init:generate_init theta_vars_k in
+  let rcr = calc_to_k3_expr meta  ~generate_init theta_vars_k in
   let rcr2 meta2 =
-    calc_to_k3_expr meta2 ~generate_init:generate_init theta_vars_k in
+    calc_to_k3_expr meta2 ~generate_init theta_vars_k in
 
   let ins, outs = schema_of_expr calc in
   let ins_k = fst_many ins in
@@ -725,8 +725,7 @@ let rec calc_to_k3_expr meta ?(generate_init = false) theta_vars_k calc :
                     theta_vars_k
               in
               let (init_outs_el, (init_ret_ve, init_ret_vt), init_expr), nm_1 =
-                calc_to_k3_expr meta ~generate_init:generate_init
-                                      init_theta_vars_k init_calc
+                calc_to_k3_expr meta ~generate_init init_theta_vars_k init_calc
               in
               let init_outs_k = fst_many init_outs_el in
 
@@ -983,7 +982,7 @@ let rec calc_to_k3_expr meta ?(generate_init = false) theta_vars_k calc :
       (* their return values have numerical types *)
       let prepare_fn (old_meta, old_scope) c =
         let (e_outs_el, e_ret_ve, e), new_meta =
-          calc_to_k3_expr old_meta ~generate_init:generate_init old_scope c
+          calc_to_k3_expr old_meta ~generate_init old_scope c
         in
         let new_scope = ListAsSet.union old_scope @@ fst_many e_outs_el in
         (e_outs_el, e_ret_ve, e), (new_meta, new_scope)
@@ -1187,8 +1186,8 @@ let m3_stmt_to_k3_stmt (meta: meta_t) ?(generate_init = false)
         in
         (rhs_outs_el, rhs_ret_ve, incr_expr), nm
    in
-   let (rhs_outs_ids, rhs_outs_t) = List.split rhs_outs_el_and_ty in
-   let (rhs_outs_el) = List.map KH.mk_var rhs_outs_ids in
+   let rhs_outs_ids, rhs_outs_t = List.split rhs_outs_el_and_ty in
+   let rhs_outs_el = List.map KH.mk_var rhs_outs_ids in
 
    (* Make sure that the lhs collection and the incr_expr have *)
    (* the same schema. *)
@@ -1222,31 +1221,29 @@ let m3_stmt_to_k3_stmt (meta: meta_t) ?(generate_init = false)
         | _  -> KH.mk_iter (KH.mk_lambda' args single_update_expr) incr_expr
       in
 
-      if ( update_type = Plan.UpdateStmt ||
-           free_lhs_outs_el = [] ||
-           Debug.active "UNSAFE-REPLACE" ) then
+      if update_type = Plan.UpdateStmt ||
+         free_lhs_outs_el = [] ||
+         Debug.active "UNSAFE-REPLACE" then
         update_body
       else
-        let old_slice = (
+        let old_slice =
           if ListAsSet.seteq lhs_outs_el free_lhs_outs_el
           then existing_out_tier
-          else (
+          else
             let bound_out_names =
               ListAsSet.diff (KH.vars_to_ids lhs_outs_el)
-                             (KH.vars_to_ids free_lhs_outs_el)
-            in
-              mk_slice existing_out_tier (KH.vars_to_ids lhs_outs_el) bound_out_names
-          )
-        ) in
-          KH.mk_block [
-            KH.mk_iter
-              (KH.mk_lambda' ((List.combine (List.map KU.id_of_var lhs_outs_el)
-                                     (List.map KH.canonical lhs_outs_kt))@
-                       [KU.id_of_var rhs_ret_ve, rhs_ret_vt])
-                      (KH.mk_delete mapn
-                                    (lhs_outs_el@ [rhs_ret_ve])))
-              old_slice;
-           update_body
+                             (KH.vars_to_ids free_lhs_outs_el) in
+            mk_slice existing_out_tier (KH.vars_to_ids lhs_outs_el) bound_out_names
+        in
+        KH.mk_block [
+          KH.mk_iter
+            (KH.mk_lambda' ((List.combine (List.map KU.id_of_var lhs_outs_el)
+                                    (List.map KH.canonical lhs_outs_kt))@
+                      [KU.id_of_var rhs_ret_ve, rhs_ret_vt])
+                    (KH.mk_delete mapn
+                                  (lhs_outs_el@ [rhs_ret_ve])))
+            old_slice;
+          update_body
          ]
     in
 
