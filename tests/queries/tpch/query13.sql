@@ -1,4 +1,4 @@
-INCLUDE 'queries/tpch/schemas.sql';
+INCLUDE 'queries/tpch/schemas_small.sql';
 
 SELECT c_count, COUNT(*) AS custdist
 FROM (  

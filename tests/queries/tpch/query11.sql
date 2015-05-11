@@ -1,4 +1,4 @@
-INCLUDE 'queries/tpch/schemas.sql';
+INCLUDE 'queries/tpch/schemas_small.sql';
 
 SELECT p.partkey, SUM(p.value) AS QUERY11
 FROM
