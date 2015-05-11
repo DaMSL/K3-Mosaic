@@ -79,13 +79,20 @@ let check_prefix name prefix =
   let len = String.length prefix in
   if String.sub name 0 len = prefix then true else false
 
-let relevant_trig t =
-  check_prefix t "insert_" || check_prefix t "delete_"
+type trig_kinds = AllTrigs | InsertTrigs | DeleteTrigs
+
+let is_delete_t t = check_prefix t "delete_"
+let is_insert_t t = check_prefix t "insert_"
+
+let relevant_trig ?(kind=AllTrigs) t = match kind with
+  | AllTrigs    -> is_delete_t t || is_insert_t t
+  | InsertTrigs -> is_insert_t t
+  | DeleteTrigs -> is_delete_t t
 
 (* only non-corrective triggers *)
-let get_trig_list (p:prog_data_t) =
+let get_trig_list ?(kind=AllTrigs) (p:prog_data_t) =
   let l = List.map (fun (_, name, _, _) -> name) @@ get_trig_data p in
-  List.filter relevant_trig l
+  List.filter (relevant_trig ~kind) l
 
 let for_all_trigs ?(deletes=true) (p:prog_data_t) f =
   let l_delete = String.length "delete" in

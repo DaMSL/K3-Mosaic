@@ -732,12 +732,17 @@ List.fold_left
 
 
 (* list of trig, stmt with a map on the rhs that's also on the lhs. These are
- * the potential corrective maps *)
-let maps_potential_corrective c =
-  let lhs_maps = ListAsSet.uniq @@ P.for_all_stmts c.p @@ P.lhs_map_of_stmt c.p in
-  let rhs_maps = ListAsSet.uniq @@ List.flatten @@
-    P.for_all_stmts c.p @@ P.rhs_maps_of_stmt c.p in
-  ListAsSet.inter lhs_maps rhs_maps
+ * the potential corrective maps.
+ * Inserts and Deletes really have 2 different graphs, so we return both *)
+let maps_potential_corrective p =
+  let insert_ts = P.get_trig_list ~kind:P.InsertTrigs p in
+  let delete_ts = P.get_trig_list ~kind:P.DeleteTrigs p in
+  let get_maps f = ListAsSet.uniq |- List.flatten |- List.map f |- List.flatten
+    |- List.map (P.stmts_of_t p) in
+  let lhs_maps = get_maps (singleton |- P.lhs_map_of_stmt p) in
+  let rhs_maps = get_maps (P.rhs_maps_of_stmt p) in
+  let intersect_maps ts = ListAsSet.inter (lhs_maps ts) (rhs_maps ts) in
+  intersect_maps insert_ts, intersect_maps delete_ts
 
 (* original values commonly used to send back to original do_complete *)
 let orig_vals = ["orig_addr", t_addr; "orig_stmt_id", t_stmt_id; "orig_vid", t_vid; "hop", t_int]
@@ -888,7 +893,9 @@ let send_corrective_fns c =
           (mk_cint 0) @@
           mk_var "corrective_list")
     in
-    List.flatten @@ List.map send_correctives @@ maps_potential_corrective c
+    List.flatten @@ List.map send_correctives @@
+      (* combine maps from insert and delete *)
+      ListAsSet.union (fst c.corr_maps) (snd c.corr_maps)
 
 (* function to update the stmt_counters for correctives *)
 let nd_update_stmt_cntr_corr_map_nm = "nd_update_stmt_cntr_corr_map"
@@ -947,7 +954,7 @@ let nd_complete_stmt_cntr_check =
 (*
  * shared coded btw do_complete and do_corrective
  * we add the delta to all following vids
- * *)
+ *)
 let do_add_delta c e lmap ~corrective =
   mk_apply' (D.nd_add_delta_to_buf_nm c lmap) @@ mk_tuple @@
     [mk_var @@ P.map_name_of c.p lmap;
@@ -964,17 +971,18 @@ in
 List.map do_complete_trig @@ P.stmts_without_rhs_maps_in_t c.p trig_name
 
 (* function versions of do_complete *)
-let nd_do_complete_fns c ast trig_name =
+let nd_do_complete_fns c ast trig_name corr_maps =
   (* @has_rhs: whether this statement has rhs maps *)
   let do_complete_fn has_rhs stmt_id =
-    mk_global_fn (do_complete_name_of_t trig_name stmt_id) (args_of_t_with_v c trig_name) [] @@
+    mk_global_fn (do_complete_name_of_t trig_name stmt_id)
+      (args_of_t_with_v c trig_name) [] @@
     let lmap = P.lhs_map_of_stmt c.p stmt_id in
     let fst_hop = mk_cint 1 in
     let after_fn tup_ds =
       mk_block [
         (* add delta *)
         do_add_delta c tup_ds lmap ~corrective:false;
-        (if c.gen_correctives && List.exists ((=) lmap) @@ maps_potential_corrective c
+        (if c.gen_correctives && List.exists ((=) lmap) corr_maps
         then
           let send_corr_t = send_corrective_name_of_t c lmap in
           mk_let ["sent_msgs"]
@@ -1100,7 +1108,7 @@ let nd_rcv_correctives_trig c s_rhs trig_name = List.map
   s_rhs
 ;;
 
-(* do corrective triggers *)
+(* do corrective functions *)
 (* very similar to do_complete, but we only have to do it for certain
  * (stmt, map) combinations.
  * Do_corrective , unlike do_complete, doesn't need to add to an earlier vid
@@ -1194,11 +1202,13 @@ let declare_global_funcs c partmap ast =
   K3Shuffle.functions c
 
 (* Generate all the code for a specific trigger *)
-let gen_dist_for_t c ast trig corr_maps =
+let gen_dist_for_t c ast trig =
   (* (stmt_id, rhs_map_id)list *)
   let s_rhs = P.s_and_over_stmts_in_t c.p P.rhs_maps_of_stmt trig in
+  (* for delete trigs, access different corrective list *)
+  let access = if P.is_insert_t trig then fst else snd in
   (* stmts that can be involved in correctives *)
-  let s_rhs_corr = List.filter (fun (s, map) -> List.mem map corr_maps) s_rhs in
+  let s_rhs_corr = List.filter (fun (s, map) -> List.mem map @@ access c.corr_maps) s_rhs in
   (* (stmt_id,rhs_map_id,lhs_map_id) list *)
   let s_rhs_lhs = P.s_and_over_stmts_in_t c.p P.rhs_lhs_of_stmt trig in
   (* functions *)
@@ -1206,9 +1216,9 @@ let gen_dist_for_t c ast trig corr_maps =
     sw_start_fn c trig;
     sw_send_fetch_fn c s_rhs_lhs s_rhs trig;
   ] @
-   nd_do_complete_fns c ast trig @
+   nd_do_complete_fns c ast trig (access c.corr_maps) @
    (if c.gen_correctives then
-     nd_do_corrective_fns c s_rhs_corr ast trig corr_maps
+     nd_do_corrective_fns c s_rhs_corr ast trig (access c.corr_maps)
    else [])
   in
   let trigs =
@@ -1245,13 +1255,13 @@ let gen_dist ?(use_multiindex=false)
       stream_file;
       gen_deletes;
       gen_correctives;
+      corr_maps = maps_potential_corrective p;
     } in
-  let potential_corr_maps = maps_potential_corrective c in
   (* regular trigs then insert entries into shuffle fn table *)
   let proto_trigs, proto_funcs =
     (fun (a,b) -> List.flatten a, List.flatten b) @@ list_unzip @@
       P.for_all_trigs ~deletes:c.gen_deletes c.p @@
-        fun t -> gen_dist_for_t c ast t potential_corr_maps
+        fun t -> gen_dist_for_t c ast t
   in
   let prog =
     declare_global_vars c partmap ast @

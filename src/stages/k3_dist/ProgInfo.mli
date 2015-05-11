@@ -31,8 +31,12 @@ val string_of_stmt_data: stmt_data_t -> string
 val string_of_trig_data: trig_data_t -> string
 val string_of_prog_data: prog_data_t -> string
 
+type trig_kinds = AllTrigs | InsertTrigs | DeleteTrigs
+
 (* Utility functions using this data structure *)
-val get_trig_list : prog_data_t -> trig_name_t list
+val is_delete_t : trig_name_t -> bool
+val is_insert_t : trig_name_t -> bool
+val get_trig_list : ?kind:trig_kinds -> prog_data_t -> trig_name_t list
 val for_all_trigs : ?deletes:bool -> prog_data_t -> (trig_name_t -> 'a) -> 'a list
 val get_stmt_list : prog_data_t -> stmt_id_t list
 val for_all_stmts : prog_data_t -> (stmt_id_t -> 'a) -> 'a list

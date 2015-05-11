@@ -30,6 +30,7 @@ type config = {
   stream_file : string;
   gen_deletes : bool;
   gen_correctives : bool;
+  corr_maps : map_id_t list * map_id_t list;
 }
 
 let string_of_map_idxs c map_idxs =
