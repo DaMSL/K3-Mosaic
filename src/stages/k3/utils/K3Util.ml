@@ -157,7 +157,7 @@ let decompose_trig (t,_) = match t with
 let decompose_global_fn (g,_) = match g with
   | Global(id, t, Some e) -> id, t, e
   | _ -> failwith "not a global fn"
-  
+
 
 (* decompose if we have a tuple, otherwise return e *)
 let extract_if_tuple e = try decompose_tuple e with Failure _ -> [e]
