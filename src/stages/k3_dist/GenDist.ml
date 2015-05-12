@@ -364,9 +364,9 @@ let sw_demux c =
       mk_error @@ "unidentified trig id"
   in
   mk_code_sink' sw_demux_nm ["args", wrap_ttuple combo_t] [] @@
-  List.fold_right (fun (t_id, _, arg_indices) acc ->
+  List.fold_right (fun (t_id, t_nm, arg_indices) acc ->
     mk_if (mk_eq (mk_fst @@ mk_var "args") @@ mk_cint t_id)
-      (mk_apply' ("sw_"^P.trigger_name_for_id c.p t_id) @@
+      (mk_apply' t_nm @@
         (* add 1 for tuple access *)
         mk_tuple @@ List.map (fun i -> mk_subscript (i+1) @@ mk_var "args") arg_indices)
       acc)

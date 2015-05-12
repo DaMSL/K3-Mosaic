@@ -279,12 +279,12 @@ let map_ids c =
 (* combine all the trig args into a minimal set *)
 (* adds an int for trigger selector *)
 let combine_trig_args c =
-  let trigs = List.sort String.compare @@
-    P.for_all_trigs ~deletes:false c.p id_fn in
-  let ts = t_int :: (List.flatten @@ List.map (snd_many |- P.args_of_t c.p) trigs) in
-  let map = List.rev @@ fst @@ List.fold_left (fun (acc, i) t ->
+  let trigs x = List.sort String.compare @@ P.get_trig_list ~kind:x c.p in
+  let trigs = insert_index_snd @@ trigs P.InsertTrigs @ trigs P.DeleteTrigs in
+  let ts = t_int :: (List.flatten @@ List.map (snd_many |- P.args_of_t c.p |- fst) trigs) in
+  let map = List.rev @@ fst @@ List.fold_left (fun (acc, i) (t, idx) ->
       let len = List.length @@ P.args_of_t c.p t in
-      (P.trigger_id_for_name c.p t, "sw_"^t, create_range i len)::acc, i + len)
+      (idx, "sw_"^t, create_range i len)::acc, i + len)
     ([], 1)
     trigs in
   ts, map
