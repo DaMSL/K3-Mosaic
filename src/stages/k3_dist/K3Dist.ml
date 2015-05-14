@@ -280,7 +280,7 @@ let map_ids c =
 (* adds an int for trigger selector *)
 let combine_trig_args c =
   let trigs x = List.sort String.compare @@ P.get_trig_list ~kind:x c.p in
-  let trigs = insert_index_snd @@ trigs P.InsertTrigs @ trigs P.DeleteTrigs in
+  let trigs = insert_index_snd @@ trigs P.InsertTrigs (* @ trigs P.DeleteTrigs *) in
   let ts = t_int :: (List.flatten @@ List.map (snd_many |- P.args_of_t c.p |- fst) trigs) in
   let map = List.rev @@ fst @@ List.fold_left (fun (acc, i) (t, idx) ->
       let len = List.length @@ P.args_of_t c.p t in
