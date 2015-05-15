@@ -371,13 +371,7 @@ let maps c =
 let sw_seen_sentry    = create_ds "sw_seen_sentry" (mut t_bool) ~init:mk_cfalse
 let sw_init           = create_ds "sw_init" (mut t_bool) ~init:mk_cfalse
 
-(* State of the node:
-  * 0: normal
-  * 1: done (look for being done)
-*)
-let nd_state_normal = create_ds "nd_state_normal" t_int ~init:(mk_cint 0)
-let nd_state_done   = create_ds "nd_state_done"   t_int ~init:(mk_cint 1)
-let nd_state = create_ds "nd_state" (mut t_int) ~init:(mk_var nd_state_normal.id)
+let nd_rcvd_sys_done = create_ds "nd_rcvd_sys_done" (mut t_bool) ~init:mk_cfalse
 
 (* buffers for insert/delete -- we need a per-trigger list *)
 (* these buffers don't inlude a vid, unlike the logs in the nodes *)
@@ -572,9 +566,7 @@ let global_vars c dict =
       trig_ids c;
       nd_stmt_cntrs;
       nd_log_master;
-      nd_state_normal;
-      nd_state_done;
-      nd_state;
+      nd_rcvd_sys_done;
       sw_init;
       sw_seen_sentry;
       sw_trig_buf_idx;
