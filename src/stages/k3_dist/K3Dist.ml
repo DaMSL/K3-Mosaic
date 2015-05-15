@@ -368,18 +368,8 @@ let maps c =
   in
   P.for_all_maps c.p do_map
 
-(* State of switch:
- * 0: idle
- * 1: sending
- * 2: waiting for vid *)
-let sw_state_pre_init = create_ds "sw_state_pre_init" t_int ~init:(mk_cint 0)
-let sw_state_idle     = create_ds "sw_state_idle"     t_int ~init:(mk_cint 1)
-let sw_state_sending  = create_ds "sw_state_sending"  t_int ~init:(mk_cint 2)
-let sw_state_wait_vid = create_ds "sw_state_wait_vid" t_int ~init:(mk_cint 3)
-let sw_state_done     = create_ds "sw_state_done"     t_int ~init:(mk_cint 4)
-let sw_state = create_ds "sw_state" (mut t_int) ~init:(mk_var sw_state_pre_init.id)
-
 let sw_seen_sentry    = create_ds "sw_seen_sentry" (mut t_bool) ~init:mk_cfalse
+let sw_init           = create_ds "sw_init" (mut t_bool) ~init:mk_cfalse
 
 (* State of the node:
   * 0: normal
@@ -585,12 +575,8 @@ let global_vars c dict =
       nd_state_normal;
       nd_state_done;
       nd_state;
-      sw_state_pre_init;
-      sw_state_idle;
-      sw_state_sending;
-      sw_state_wait_vid;
-      sw_state_done;
-      sw_state;
+      sw_init;
+      sw_seen_sentry;
       sw_trig_buf_idx;
       ms_start_time;
       ms_end_time;
