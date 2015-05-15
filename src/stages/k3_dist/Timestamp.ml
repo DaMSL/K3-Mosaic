@@ -53,7 +53,7 @@ let sw_highest_vid = create_ds "sw_highest_vid" (mut t_vid)
 
 (* trigger for when we receive the token *)
 let sw_rcv_token_nm = "sw_rcv_token"
-let sw_rcv_token_trig =
+let sw_rcv_token_trig sw_check_done =
   mk_code_sink' sw_rcv_token_nm ["vid", t_vid] [] @@
   (* if we have stuff to number *)
   mk_if (mk_gt (mk_var sw_need_vid_ctr.id) @@ mk_cint 0)
@@ -62,18 +62,18 @@ let sw_rcv_token_trig =
       (mk_tuple [mk_fst @@ mk_var "vid";
                   (mk_add (mk_snd @@ mk_var "vid") @@ mk_var sw_need_vid_ctr.id)]) @@
       mk_block [
+        (* send on the token *)
+        mk_send sw_rcv_token_nm (mk_var sw_next_switch_addr.id) [mk_var "next_vid"];
         (* reserve a block of vids *)
         mk_insert sw_token_vid_list.id @@ [mk_var "vid"; mk_var sw_need_vid_ctr.id];
         (* clear counter of msgs needing vid *)
         mk_assign sw_need_vid_ctr.id @@ mk_cint 0;
         (* update highest seen vid *)
         mk_assign sw_highest_vid.id @@ mk_var "next_vid";
-        (* send on the token *)
-        mk_send sw_rcv_token_nm (mk_var sw_next_switch_addr.id) [mk_var "next_vid"];
-        (* if we've been waiting for a vid, start the driver *)
-        mk_if (mk_eq (mk_var D.sw_state.id) @@ mk_var D.sw_state_wait_vid.id)
-          (mk_send D.sw_driver_trig_nm G.me_var [mk_cunit])
-          mk_cunit;
+        (* check for switch end *)
+        sw_check_done;
+        (* start the driver *)
+        mk_send D.sw_driver_trig_nm G.me_var [mk_cunit]
       ]) @@
     (* if we have nothing to number, pass the token on as is *)
     mk_send sw_rcv_token_nm (mk_var sw_next_switch_addr.id) [mk_var "vid"]
@@ -117,5 +117,5 @@ let global_vars =
 
 let functions = [sw_gen_vid]
 
-let triggers =
-  [ sw_rcv_token_trig ]
+let triggers sw_check_done =
+  [ sw_rcv_token_trig sw_check_done ]

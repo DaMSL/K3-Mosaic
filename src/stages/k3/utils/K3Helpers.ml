@@ -622,15 +622,25 @@ let mk_delete_one ds slice =
     mk_delete ds.id [mk_var "lookup_data"]
 
 (* for maps *)
+(* add a default entry or perform an operation (v) on the slice (nm) *)
 let mk_upsert_with ds nm ~k ~default ~v  =
-  (* for error, we special case *)
+  (* to allow error by default, we special case *)
   let is_error e = try
     "error" = U.decompose_var @@ fst @@ U.decompose_apply e
     with Failure _ -> false
   in
   let check e g = if is_error e then e else g in
-  let slice = (mk_tuple k)::[mk_cunknown] in
+  let slice = [mk_tuple k; mk_cunknown] in
   mk_case_ns (mk_peek @@ mk_slice' ds.id slice) nm
     (check default @@ mk_insert ds.id [mk_tuple k; default]) @@
     check v @@ mk_update ds.id [mk_var nm] [mk_tuple k; v]
+
+(* modify (v) the slice (nm) or delete it (delcond) *)
+let mk_delete_with ds nm ~k ~delcond ~v  =
+  let slice = [mk_tuple k; mk_cunknown] in
+  mk_case_sn (mk_peek @@ mk_slice' ds.id slice) nm
+    (mk_if delcond
+      (mk_delete ds.id [mk_var nm]) @@
+      mk_update ds.id [mk_var nm] [mk_tuple k; v])
+    mk_cunit
 

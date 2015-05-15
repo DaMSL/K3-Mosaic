@@ -230,14 +230,23 @@ let ms_rcv_switch_done =
       mk_cunit;
   ]
 
-(* code for when switch gets last ack after seeing sentry *)
-let sw_check_last_ack =
-  mk_if (mk_eq (mk_var D.sw_state.id) @@ mk_var D.sw_state_done.id)
+(* check that the switch is done with its work *)
+let sw_check_done =
+  mk_if
+    (mk_and
+      (mk_eq (mk_var TS.sw_need_vid_ctr.id) @@ mk_cint 0) @@
+      mk_and
+        (mk_eq (mk_var GC.sw_num_ack.id) @@ mk_var GC.sw_num_sent.id) @@
+         mk_eq (mk_var D.sw_seen_sentry.id) mk_ctrue)
     (mk_send ms_rcv_switch_done_nm (mk_var D.master_addr.id) [mk_cunit])
     mk_cunit
 
 (* code for when switches see the sentry *)
-let sw_seen_sentry = mk_assign D.sw_state.id @@ mk_var D.sw_state_done.id
+let sw_seen_sentry =
+  mk_block [
+    mk_assign D.sw_seen_sentry.id mk_ctrue;
+    sw_check_done
+  ]
 
 let global_vars = List.map decl_global [
   ms_rcv_sw_init_ack_cnt;
@@ -254,8 +263,6 @@ let triggers c = [
   rcv_jobs;
   ms_rcv_job;
   rcv_master_addr;
-  ms_send_addr_self;
-  shutdown_trig;
   ms_shutdown;
   ms_rcv_node_done;
   nd_rcv_done;

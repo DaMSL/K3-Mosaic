@@ -464,8 +464,7 @@ let sw_send_fetch_fn c s_rhs_lhs s_rhs trig_name =
             G.me_var :: mk_var stmt_cnt_list.id ::
               args_of_t_as_vars_with_v c trig_name) ::
           if c.enable_gc then
-            [GC.sw_ack_init_code ~addr_nm:address ~vid_nm:"vid"] else []
-      ) @@
+            [GC.sw_update_send ~vid_nm:"vid"] else []) @@
       mk_gbagg
         (mk_assoc_lambda' (* grouping func -- assoc because of gbagg tuple *)
           ["ip", t_addr; "stmt_id", t_stmt_id]
@@ -1270,8 +1269,8 @@ let gen_dist ?(use_multiindex=false)
     proto_funcs @
     [mk_flow @@
       Proto.triggers c @
-      (if c.enable_gc then GC.triggers c Proto.sw_check_last_ack else []) @
-      TS.triggers @
+      (if c.enable_gc then GC.triggers c Proto.sw_check_done else []) @
+      TS.triggers Proto.sw_check_done @
       Timer.triggers c @
       [sw_demux c;
        sw_driver_trig c;

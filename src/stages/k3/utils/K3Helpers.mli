@@ -337,3 +337,5 @@ val mk_decr : string -> expr_t
 val mk_delete_one : data_struct -> expr_t list -> expr_t
 
 val mk_upsert_with : data_struct -> id_t -> k:expr_t list -> default:expr_t -> v:expr_t -> expr_t
+
+val mk_delete_with : data_struct -> id_t -> k:expr_t list -> delcond:expr_t -> v:expr_t -> expr_t

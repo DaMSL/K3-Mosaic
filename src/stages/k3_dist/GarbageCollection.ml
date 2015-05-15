@@ -34,60 +34,38 @@ module TS = Timestamp
 
 (* --- Acks between switches and nodes --- *)
 
-(* Switch acks: track which nodes replied with an ack *)
-let sw_ack_log =
-  let e = ["vid", t_vid; "addresses", wrap_tset t_addr] in
-  create_ds "sw_ack_log" (wrap_tmap' @@ snd_many e) ~e
+(* Switch acks: track how many nodes replied with an ack *)
+let sw_num_ack  = create_ds "sw_num_ack"  (mut t_int)
+let sw_num_sent = create_ds "sw_num_sent" (mut t_int)
+(* vids and numbers of sent at that vid *)
+let sw_ack_log  =
+  let e = ["vid", t_vid; "count", t_int] in
+  create_ds "sw_ack_log" (wrap_tmap' @@ snd_many e)
 
 (* switch: max acknowledged vid *)
 let sw_max_ack_vid = create_ds "sw_max_ack_vid" (mut t_vid) ~init:(mk_var D.g_min_vid.id)
 
 (* switch: trigger for receiving an ack from a node *)
 let sw_ack_rcv_trig_nm = "sw_ack_rcv"
-let sw_ack_rcv_trig sw_check_last_ack_fn =
+let sw_ack_rcv_trig sw_check_done =
   let address = "addr" in
   let ack_trig_args = [address, t_addr; "vid", t_vid] in
-  let old_set, old_val = "old_set", "old_val" in
   mk_code_sink' sw_ack_rcv_trig_nm ack_trig_args [] @@
-  (* lookup this ack in the log *)
-  mk_case_sn
-    (mk_peek @@ mk_slice' sw_ack_log.id [mk_var "vid"; mk_cunknown])
-    old_val
-    (mk_let [old_set] (mk_snd @@ mk_var "old_val") @@
-      mk_block [
-        (* remove the ack *)
-        mk_delete old_set [mk_var address];
-        (* check if we need to delete the whole entry *)
-        mk_if (mk_eq (mk_cint 0) @@ mk_size @@ mk_var old_set)
-          (* delete the entry if nothing is left in the set *)
-          (mk_block [
-            mk_delete sw_ack_log.id [mk_var old_val];
-            (* check for end of protocol, if ack_log is empty *)
-            mk_if (mk_eq (mk_cint 0) @@ mk_size @@ mk_var sw_ack_log.id)
-              sw_check_last_ack_fn
-              mk_cunit
-          ]) @@
-          (* insert shrunk set otherwise *)
-          mk_insert sw_ack_log.id [mk_fst' old_val; mk_var old_set]
-      ]) @@
-    mk_error "ack received but no msg sent"  (* entry doesn't exist so it's an error *)
+  (* increment ack num *)
+  mk_block [
+    mk_incr sw_num_ack.id;
+    mk_delete_with sw_ack_log "x" ~k:[mk_var "vid"] ~delcond:(mk_eq (mk_snd @@ mk_var "x") @@ mk_cint 0)
+      ~v:(mk_sub (mk_snd @@ mk_var "x") @@ mk_cint 1);
+    sw_check_done
+  ]
 
-(* switch: insert a record into the switch ack log, waiting for ack (in GenDist.send_put) *)
-let sw_ack_init_code ~addr_nm ~vid_nm =
-  let old_val, old_set = "old_val", "old_set" in
-  let inner_t = snd @@ list_last sw_ack_log.e in
-  mk_case_sn
-    (mk_peek @@ mk_slice' sw_ack_log.id [mk_var vid_nm; mk_cunknown])
-    old_val
-    (mk_let [old_set] (mk_snd @@ mk_var old_val) @@
-      mk_block [
-        (* insert the ack entry *)
-        mk_insert old_set [mk_var addr_nm];
-        (* insert the set back in the ack log *)
-        mk_insert sw_ack_log.id [mk_var vid_nm; mk_var old_set];
-      ]) @@
-    (* else, insert a singleton value into ack log *)
-    mk_insert sw_ack_log.id [mk_var vid_nm; mk_singleton inner_t [mk_var addr_nm]]
+(* switch: code to update send data structures *)
+let sw_update_send ~vid_nm =
+  mk_block [
+    mk_incr sw_num_sent.id;
+    (* increment vid on sw_ack_log *)
+    mk_upsert_with sw_ack_log "x" ~k:[mk_var vid_nm] ~default:(mk_cint 0) ~v:(mk_add (mk_snd (mk_var "x")) @@ mk_cint 1)
+  ]
 
 (* node: code to be incorporated in GenDist.rcv_put *)
 (* send ack to switch *)
@@ -162,9 +140,7 @@ let do_gc c =
   in
   mk_code_sink' do_gc_nm [min_vid, t_vid] [] @@
     mk_block @@
-      [ (* clean switch data structures *)
-        gc_std sw_ack_log;
-        (* clean node data structures *)
+      [ (* clean node data structures *)
         gc_std D.nd_log_master;
       ] @
       List.map gc_std (D.log_ds c) @
@@ -244,16 +220,18 @@ let ms_gc_init c =
 
 let global_vars _ = List.map decl_global
   [
-   sw_max_ack_vid;
+   sw_num_ack;
+   sw_num_sent;
    sw_ack_log;
+   sw_max_ack_vid;
    ms_gc_interval;
    ms_gc_vid_map;
    ms_gc_vid_ctr;
    ms_num_gc_expected;
   ]
 
-let triggers c sw_check_last_ack_fn =
-  [sw_ack_rcv_trig sw_check_last_ack_fn;
+let triggers c sw_check_done =
+  [sw_ack_rcv_trig sw_check_done;
    ms_rcv_gc_vid c;
    rcv_req_gc_vid;
    ms_send_gc_req;
