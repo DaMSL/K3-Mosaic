@@ -313,29 +313,29 @@ let sw_driver_trig (c:config) =
     P.for_all_trigs ~deletes:c.gen_deletes c.p (fun x -> P.trigger_id_for_name c.p x, x)
   in
   mk_code_sink' sw_driver_trig_nm unit_arg [] @@
-  (* if we're done, do nothing *)
-  mk_if (mk_eq (mk_var D.sw_state.id) @@ mk_var D.sw_state_done.id)
-    mk_cunit @@
-    mk_case_ns (mk_apply' TS.sw_gen_vid_nm mk_cunit) "vid"
-      (* if we don't have a vid, set state to waiting for vid *)
-      (mk_assign D.sw_state.id @@ mk_var D.sw_state_wait_vid.id) @@
+  (* if we're initialized and somebody wants a vid *)
+  mk_if
+    (mk_and
+      (mk_var D.sw_init.id) @@
+       mk_gt (mk_size_slow D.sw_trig_buf_idx) @@ mk_cint 0)
+    (mk_case_ns (mk_apply' TS.sw_gen_vid_nm mk_cunit) "vid"
+      mk_cunit @@
       (* else *)
       mk_pop D.sw_trig_buf_idx.id trig_id
-        (* empty: no message to send -- set state to idle *)
-        (mk_assign D.sw_state.id @@ mk_var D.sw_state_idle.id) @@
+        (* empty: no message to send *)
+        mk_cunit @@
         (* we have a msg *)
         (* if it's the sentry, act *)
         mk_if (mk_eq (mk_var trig_id) @@ mk_cint (-1))
           Proto.sw_seen_sentry @@
           (* else *)
           mk_block [
-            (* set state to sending *)
-            mk_assign D.sw_state.id @@ mk_var D.sw_state_sending.id;
             (* send the msg using dispatch code *)
             dispatch_code;
             (* recurse, trying to get another message *)
             mk_send sw_driver_trig_nm G.me_var [mk_cunit];
-          ]
+          ])
+    mk_cunit
 
 (* The start trigger puts the message in a trig buffer *)
 let sw_start_fn (c:config) trig =

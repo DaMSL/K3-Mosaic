@@ -40,7 +40,7 @@ let sw_num_sent = create_ds "sw_num_sent" (mut t_int)
 (* vids and numbers of sent at that vid *)
 let sw_ack_log  =
   let e = ["vid", t_vid; "count", t_int] in
-  create_ds "sw_ack_log" (wrap_tmap' @@ snd_many e)
+  create_ds "sw_ack_log" (wrap_tmap' @@ snd_many e) ~e
 
 (* switch: max acknowledged vid *)
 let sw_max_ack_vid = create_ds "sw_max_ack_vid" (mut t_vid) ~init:(mk_var D.g_min_vid.id)

@@ -41,10 +41,7 @@ let sw_rcv_init_nm = "sw_rcv_init"
 let sw_rcv_init =
   mk_code_sink' sw_rcv_init_nm unit_arg [] @@
   mk_block [
-    (* set to idle state if we're still in pre_init *)
-    mk_if (mk_eq (mk_var D.sw_state.id) @@ mk_var D.sw_state_pre_init.id)
-      (mk_assign D.sw_state.id @@ mk_var D.sw_state_idle.id) @@
-      mk_cunit;
+    mk_assign D.sw_init.id mk_ctrue;
     (* start driver for all switches *)
     mk_send D.sw_driver_trig_nm G.me_var [mk_cunit];
     (* ack to master *)
@@ -263,6 +260,8 @@ let triggers c = [
   rcv_jobs;
   ms_rcv_job;
   rcv_master_addr;
+  ms_send_addr_self;
+  shutdown_trig;
   ms_shutdown;
   ms_rcv_node_done;
   nd_rcv_done;
