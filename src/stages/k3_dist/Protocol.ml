@@ -231,7 +231,7 @@ let ms_rcv_switch_done =
 let sw_check_done =
   mk_if
     (mk_and
-      (mk_eq (mk_var TS.sw_need_vid_ctr.id) @@ mk_cint 0) @@
+      (mk_eq (mk_size_slow D.sw_trig_buf_idx) @@ mk_cint 0) @@
       mk_and
         (mk_eq (mk_var GC.sw_num_ack.id) @@ mk_var GC.sw_num_sent.id) @@
          mk_eq (mk_var D.sw_seen_sentry.id) mk_ctrue)
