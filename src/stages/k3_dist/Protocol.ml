@@ -193,7 +193,7 @@ let nd_rcv_done =
   mk_code_sink' nd_rcv_done_nm unit_arg [] @@
   mk_block [
     (* set done state *)
-    mk_assign D.nd_state.id @@ mk_var D.nd_state_done.id;
+    mk_assign D.nd_rcvd_sys_done.id mk_ctrue;
     (* check stmt_cntrs for emptiness, in case we won't see it elsewhere *)
     mk_is_empty (mk_var D.nd_stmt_cntrs.id)
       ~y:(mk_send ms_rcv_node_done_nm (mk_var D.master_addr.id) [mk_ctrue])
@@ -203,7 +203,7 @@ let nd_rcv_done =
 (* Code for after deletion from stmt_cntrs *)
 let nd_delete_stmt_cntr =
   (* if we're in the done state *)
-  mk_if (mk_eq (mk_var D.nd_state.id) @@ mk_var D.nd_state_done.id)
+  mk_if (mk_var D.nd_rcvd_sys_done.id)
     (* if we're empty after delete *)
     (mk_is_empty (mk_var D.nd_stmt_cntrs.id)
       (* send to master *)
