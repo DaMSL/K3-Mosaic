@@ -42,9 +42,6 @@ let sw_ack_log  =
   let e = ["vid", t_vid; "count", t_int] in
   create_ds "sw_ack_log" (wrap_tmap' @@ snd_many e) ~e
 
-(* switch: max acknowledged vid *)
-let sw_max_ack_vid = create_ds "sw_max_ack_vid" (mut t_vid) ~init:(mk_var D.g_min_vid.id)
-
 (* switch: trigger for receiving an ack from a node *)
 let sw_ack_rcv_trig_nm = "sw_ack_rcv"
 let sw_ack_rcv_trig sw_check_done =
@@ -64,7 +61,7 @@ let sw_update_send ~vid_nm =
   mk_block [
     mk_incr sw_num_sent.id;
     (* increment vid on sw_ack_log *)
-    mk_upsert_with sw_ack_log "x" ~k:[mk_var vid_nm] ~default:(mk_cint 0) ~v:(mk_add (mk_snd (mk_var "x")) @@ mk_cint 1)
+    mk_upsert_with sw_ack_log "x" ~k:[mk_var vid_nm] ~default:(mk_cint 1) ~v:(mk_add (mk_snd @@ mk_var "x") @@ mk_cint 1)
   ]
 
 (* node: code to be incorporated in GenDist.rcv_put *)
@@ -223,7 +220,6 @@ let global_vars _ = List.map decl_global
    sw_num_ack;
    sw_num_sent;
    sw_ack_log;
-   sw_max_ack_vid;
    ms_gc_interval;
    ms_gc_vid_map;
    ms_gc_vid_ctr;
