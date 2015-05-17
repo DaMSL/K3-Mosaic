@@ -241,7 +241,7 @@ let ms_rcv_switch_done =
 let sw_check_done =
   mk_if
     (mk_and
-      (mk_not @@ mk_var nd_sent_done.id) @@
+      (mk_not @@ mk_var sw_sent_done.id) @@
       mk_and
         (mk_eq (mk_size_slow D.sw_trig_buf_idx) @@ mk_cint 0) @@
         mk_and
@@ -251,7 +251,7 @@ let sw_check_done =
       (* send *)
       mk_send ms_rcv_switch_done_nm (mk_var D.master_addr.id) [mk_cunit];
       (* mark as sent *)
-      mk_assign nd_sent_done.id mk_ctrue])
+      mk_assign sw_sent_done.id mk_ctrue])
     mk_cunit
 
 (* code for when switches see the sentry *)
