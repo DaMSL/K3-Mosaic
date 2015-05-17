@@ -138,6 +138,9 @@ let ms_send_addr_self =
 
 (**** shutdown protocol ****)
 
+let nd_sent_done = create_ds "nd_sent_done" (mut t_bool) ~init:mk_cfalse
+let sw_sent_done = create_ds "sw_sent_done" (mut t_bool) ~init:mk_cfalse
+
 (**** protocol plan ****
  * Switches see sentry and tell master
  * Master notifies nodes
@@ -166,7 +169,7 @@ let ms_shutdown =
     (* else, do nothing -- wait for shutdown count to be reached *)
     mk_cunit
 
-(* master: receive notification that nodes' stmt_cntrs are empty *)
+(* master: receive notification that nodes are done with their work (stmt_cntrs empty) *)
 let ms_rcv_node_done_nm = "ms_rcv_node_done"
 let ms_rcv_node_done =
   mk_code_sink' ms_rcv_node_done_nm ["done", t_bool] [] @@
@@ -188,28 +191,35 @@ let ms_rcv_node_done =
     (* else, a node is taking back its done state *)
     mk_decr ms_rcv_node_done_cnt.id
 
+(* whether a node should notify the master that it's done *)
+let nd_notify_ms_done =
+  (* check stmt_cntrs for emptiness *)
+  mk_if
+    (mk_and
+      (* we haven't sent yet *)
+      (mk_not @@ mk_var nd_sent_done.id) @@
+      (* no stmt_cntrs *)
+      mk_eq (mk_size_slow D.nd_stmt_cntrs) @@ mk_cint 0)
+    (mk_block [
+      (* notify master *)
+      mk_send ms_rcv_node_done_nm (mk_var D.master_addr.id) [mk_ctrue];
+      (* mark as done *)
+      mk_assign nd_sent_done.id mk_ctrue]) @@
+    mk_cunit
+
 let nd_rcv_done_nm = "nd_rcv_done"
 let nd_rcv_done =
   mk_code_sink' nd_rcv_done_nm unit_arg [] @@
   mk_block [
     (* set done state *)
     mk_assign D.nd_rcvd_sys_done.id mk_ctrue;
-    (* check stmt_cntrs for emptiness, in case we won't see it elsewhere *)
-    mk_is_empty (mk_var D.nd_stmt_cntrs.id)
-      ~y:(mk_send ms_rcv_node_done_nm (mk_var D.master_addr.id) [mk_ctrue])
-      ~n:mk_cunit;
+    nd_notify_ms_done
   ]
 
 (* Code for after deletion from stmt_cntrs *)
 let nd_delete_stmt_cntr =
-  (* if we're in the done state *)
-  mk_if (mk_var D.nd_rcvd_sys_done.id)
-    (* if we're empty after delete *)
-    (mk_is_empty (mk_var D.nd_stmt_cntrs.id)
-      (* send to master *)
-      ~y:(mk_send ms_rcv_node_done_nm (mk_var D.master_addr.id) [mk_ctrue])
-      ~n:mk_cunit) @@
-    mk_cunit
+  (* if we're received system done and we haven't already sent done *)
+  mk_if (mk_var D.nd_rcvd_sys_done.id) nd_notify_ms_done mk_cunit
 
 let ms_rcv_switch_done_cnt =
   create_ds "ms_rcv_switch_done_cnt" (mut t_int) ~init:(mk_cint 0)
@@ -231,11 +241,17 @@ let ms_rcv_switch_done =
 let sw_check_done =
   mk_if
     (mk_and
-      (mk_eq (mk_size_slow D.sw_trig_buf_idx) @@ mk_cint 0) @@
+      (mk_not @@ mk_var nd_sent_done.id) @@
       mk_and
-        (mk_eq (mk_var GC.sw_num_ack.id) @@ mk_var GC.sw_num_sent.id) @@
-         mk_eq (mk_var D.sw_seen_sentry.id) mk_ctrue)
-    (mk_send ms_rcv_switch_done_nm (mk_var D.master_addr.id) [mk_cunit])
+        (mk_eq (mk_size_slow D.sw_trig_buf_idx) @@ mk_cint 0) @@
+        mk_and
+          (mk_eq (mk_var GC.sw_num_ack.id) @@ mk_var GC.sw_num_sent.id) @@
+          mk_eq (mk_var D.sw_seen_sentry.id) mk_ctrue)
+    (mk_block [
+      (* send *)
+      mk_send ms_rcv_switch_done_nm (mk_var D.master_addr.id) [mk_cunit];
+      (* mark as sent *)
+      mk_assign nd_sent_done.id mk_ctrue])
     mk_cunit
 
 (* code for when switches see the sentry *)
@@ -246,6 +262,8 @@ let sw_seen_sentry =
   ]
 
 let global_vars = List.map decl_global [
+  nd_sent_done;
+  sw_sent_done;
   ms_rcv_sw_init_ack_cnt;
   ms_rcv_jobs_ack_cnt;
   ms_rcv_job_cnt;
