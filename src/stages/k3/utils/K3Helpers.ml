@@ -554,7 +554,16 @@ type data_struct = { id: string;
                      map_id: int option;
                    }
 
+(* also add default values if missing *)
 let create_ds ?(e=[]) ?(ee=[]) ?init ?d_init ?map_id id t =
+  let init = if is_some init then init
+             else match t.typ with
+               | TBool   -> some @@ mk_cfalse
+               | TInt    -> some @@ mk_cint 0
+               | TFloat  -> some @@ mk_cfloat 0.
+               | TString -> some @@ mk_cstring ""
+               | _       -> None
+  in
   {id; t; e; ee; init; d_init; map_id}
 
 (* utility functions *)
