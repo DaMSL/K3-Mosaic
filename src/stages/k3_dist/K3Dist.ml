@@ -471,6 +471,7 @@ let frontier_fn c map_id =
   let map_vid = "map_vid" in
   let m_id_t_v = P.map_ids_types_with_v_for ~vid:"map_vid" c.p map_id in
   let m_t_v = wrap_ttuple @@ snd_many @@ m_id_t_v in
+  let m_t_v_calc_map = wrap_t_calc m_t_v in
   let m_t_v_map = wrap_t_of_map m_t_v in
   let m_id_t_no_val = P.map_ids_types_no_val_for c.p map_id in
   (* create a function name per type signature *)
@@ -479,7 +480,7 @@ let frontier_fn c map_id =
   (* a routine common to both methods of slicing *)
   let common_vid_lambda =
     mk_assoc_lambda
-      (wrap_args ["acc", m_t_v_map; max_vid, t_vid])
+      (wrap_args ["acc", m_t_v_calc_map; max_vid, t_vid])
       (wrap_args m_id_t_v)
       (mk_if
         (* if the map vid is less than current vid *)
@@ -497,7 +498,7 @@ let frontier_fn c map_id =
           mk_if
             (mk_gt (mk_var map_vid) @@ mk_var max_vid)
             (mk_tuple
-              [mk_singleton m_t_v_map @@ ids_to_vars @@ fst_many m_id_t_v;
+              [mk_singleton m_t_v_calc_map @@ ids_to_vars @@ fst_many m_id_t_v;
               mk_var map_vid]) @@
             (* else keep the same accumulator and max_vid *)
             mk_tuple [mk_var "acc"; mk_var max_vid])
@@ -511,13 +512,13 @@ let frontier_fn c map_id =
     mk_fst @@
       mk_agg
         common_vid_lambda
-        (mk_tuple [mk_empty m_t_v_map; mk_var g_min_vid.id])
+        (mk_tuple [mk_empty m_t_v_calc_map; mk_var g_min_vid.id])
         (mk_var "input_map")
   | _ ->
       mk_flatten @@ mk_map
         (mk_assoc_lambda
           (wrap_args ["_", wrap_ttuple @@ snd_many m_id_t_no_val]) (* group *)
-          (wrap_args ["project", m_t_v_map; "_", t_vid]) @@
+          (wrap_args ["project", m_t_v_calc_map; "_", t_vid]) @@
           mk_var "project"
         ) @@
         mk_gbagg
@@ -526,10 +527,10 @@ let frontier_fn c map_id =
             mk_tuple @@ ids_to_vars @@ fst_many m_id_t_no_val)
           (* get the maximum vid that's less than our current vid *)
           common_vid_lambda
-          (mk_tuple [mk_empty m_t_v_map; mk_var g_min_vid.id])
+          (mk_tuple [mk_empty m_t_v_calc_map; mk_var g_min_vid.id])
           (mk_var "input_map")
   in
-  mk_global_fn (frontier_name c map_id) ["vid", t_vid; "input_map", m_t_v_map] [m_t_v_map] @@
+  mk_global_fn (frontier_name c map_id) ["vid", t_vid; "input_map", m_t_v_map] [m_t_v_calc_map] @@
       action
 
 (* End of frontier function code *)

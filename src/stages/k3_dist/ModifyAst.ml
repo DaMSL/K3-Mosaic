@@ -352,7 +352,7 @@ let modify_dist (c:config) ast stmt =
 let delta_action c ast stmt after_fn =
   let lmap = P.lhs_map_of_stmt c.p stmt in
   let lmap_id_t = P.map_ids_types_for c.p lmap in
-  let lmap_col_t = wrap_t_of_map @@ wrap_ttuple @@ snd_many lmap_id_t in
+  let lmap_col_t = wrap_t_calc @@ wrap_ttuple @@ snd_many lmap_id_t in
   (* we need to know how the map is accessed in the statement. *)
   let lmap_bindings = P.find_lmap_bindings_in_stmt c.p stmt lmap in
   (* let existing_out_tier = ..., which we remove *)
@@ -364,7 +364,7 @@ let delta_action c ast stmt after_fn =
     (* this is something like prod_ret_x's let *)
       let delta_names, bound, expr = U.decompose_let expr in
       let full_names = fst_many lmap_bindings @ delta_names in
-      let lmap_v_col_t = wrap_t_of_map @@ wrap_ttuple @@ P.map_types_with_v_for c.p lmap in
+      let lmap_v_col_t = wrap_t_calc @@ wrap_ttuple @@ P.map_types_with_v_for c.p lmap in
       let full_vars = mk_singleton lmap_v_col_t @@ ids_to_vars full_names in
       (* modify the delta itself *)
       mk_let delta_names
@@ -415,7 +415,7 @@ let delta_action c ast stmt after_fn =
         let subs = match subscript_rng with
           | [_] -> [mk_var "g"]
           | _   -> List.map (flip mk_subscript @@ mk_var "g") subscript_rng in
-        (* convert the gbagg to a set *)
+        (* convert the gbagg to external type *)
         mk_agg
           (mk_assoc_lambda' ["acc", lmap_col_t] ["g", wrap_ttuple lmap_t_no_val; "val", last_t] @@
             mk_block [

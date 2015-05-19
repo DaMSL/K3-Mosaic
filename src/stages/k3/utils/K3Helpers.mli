@@ -62,6 +62,8 @@ val wrap_tmaybes : type_t list -> type_t list
 val wrap_tfunc : type_t -> type_t -> type_t
 val wrap_t_of_map : type_t -> type_t
 val wrap_t_of_map' : type_t list -> type_t
+val wrap_t_calc : type_t -> type_t
+val wrap_t_calc' : type_t list -> type_t
 
 (* wrap a single layer of arguments *)
 val wrap_args : (id_t * type_t) list -> arg_t

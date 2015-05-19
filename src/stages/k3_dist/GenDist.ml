@@ -161,7 +161,7 @@ let nd_check_stmt_cntr_index =
 let nd_add_delta_to_buf c map_id =
   let delta_tuples, lookup_value, update_value = "delta_tuples", "lookup_value", "update_value" in
   let corrective, target_map = "corrective", "target_map" in
-  let map_ds = P.map_ds_of_id c.p map_id in
+  let map_ds = P.map_ds_of_id ~calc:true c.p map_id in
   let map_ds_v = P.map_ds_of_id ~vid:true c.p map_id in
   let id_t_delta = id_t_add "_delta" map_ds.e in
   let vars_delta_unknown =
@@ -505,7 +505,7 @@ let sw_send_fetch_fn c s_rhs_lhs s_rhs trig_name =
               let route_key = P.partial_key_from_bound c.p stmt_id rhs_map_id in
               (* we need the types for creating empty rhs tuples *)
               let rhs_map_types = P.map_types_with_v_for c.p rhs_map_id in
-              let tuple_types = wrap_t_of_map' rhs_map_types in
+              let tuple_types = wrap_t_calc' rhs_map_types in
               mk_combine
                 acc_code @@
                 mk_let ["sender_count"]
@@ -659,7 +659,7 @@ let nd_send_push_stmt_map_trig c s_rhs_lhs trig_name =
             mk_tuple [mk_var "vid"; mk_cint stmt_id] ;
           mk_iter
             (mk_lambda'
-              ["ip",t_addr;"tuples", wrap_t_of_map' rhs_map_types] @@
+              ["ip", t_addr;"tuples", wrap_t_calc' rhs_map_types] @@
               mk_send
                 (rcv_push_name_of_t c trig_name stmt_id rhs_map_id)
                 (mk_var "ip") @@
@@ -698,7 +698,7 @@ List.fold_left
     acc_code @
     [mk_code_sink'
       (rcv_push_name_of_t c trig_name stmt_id read_map_id)
-      (("tuples", wrap_t_of_map' tuple_types)::
+      (("tuples", wrap_t_calc' tuple_types)::
         args_of_t_with_v c trig_name)
       [] @@ (* locals *)
       (* save the tuples *)
@@ -779,9 +779,9 @@ let send_corrective_fns c =
         trigs_stmts_with_matching_rhs_map
     in
     match trigs_stmts_with_matching_rhs_map with [] -> [] | _ ->
-    let map_ds = P.map_ds_of_id c.p map_id in
+    let map_ds = P.map_ds_of_id ~calc:true c.p map_id in
     let tuple_type = wrap_ttuple @@ snd_many map_ds.e in
-    let delta_tuples2 = {(P.map_ds_of_id ~vid:true c.p map_id) with id="delta_tuples2"}
+    let delta_tuples2 = {(P.map_ds_of_id ~calc:true ~vid:true c.p map_id) with id="delta_tuples2"}
     in
     singleton @@ mk_global_fn (send_corrective_name_of_t c map_id)
     (orig_vals @ ["corrective_vid", t_vid; "delta_tuples", map_ds.t])
@@ -1059,7 +1059,7 @@ let nd_rcv_correctives_trig c s_rhs trig_name = List.map
       (* we always send back acks to the original address, stmt_id, vid tuple *)
         (orig_vals @
         ["vid", t_vid; "compute_vids", t_vid_list;
-         "delta_tuples", wrap_t_of_map' @@ P.map_types_for c.p rmap])
+         "delta_tuples", wrap_t_calc' @@ P.map_types_for c.p rmap])
       [] @@ (* locals *)
       mk_block [
         (* accumulate delta for this vid and all following vids. This is a very
@@ -1115,7 +1115,7 @@ let nd_rcv_correctives_trig c s_rhs trig_name = List.map
  * vid and propagates. *)
 let nd_do_corrective_fns c s_rhs ast trig_name corrective_maps =
   let do_corrective_fn (stmt_id, map_id) =
-    let tuple_typ = wrap_t_of_map' @@ P.map_types_for c.p map_id in
+    let tuple_typ = wrap_t_calc' @@ P.map_types_for c.p map_id in
     mk_global_fn (do_corrective_name_of_t c trig_name stmt_id map_id)
       (orig_vals @ args_of_t_with_v c trig_name @ ["delta_tuples", tuple_typ])
       [t_int] @@

@@ -83,6 +83,10 @@ let wrap_tfunc tin tout = canonical @@ TFunction(tin, tout)
 let wrap_t_of_map  = wrap_tset
 let wrap_t_of_map' = wrap_tset'
 
+(* what the generic type of data carried around is *)
+let wrap_t_calc  = wrap_tbag
+let wrap_t_calc' = wrap_tbag'
+
 (* wrap a function argument *)
 let wrap_args id_typ =
   let wrap_args_inner = function

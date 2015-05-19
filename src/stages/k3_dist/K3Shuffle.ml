@@ -28,7 +28,7 @@ let gen_shuffle_fn p rmap lmap bindings fn_name =
   let bindings = IntIntSet.elements bindings in
   let tuple_types_unwrap = map_types_with_v_for p rmap in
   let tuple_types = wrap_ttuple tuple_types_unwrap in
-  let many_tuples_type = wrap_t_of_map tuple_types in
+  let many_tuples_type = wrap_t_calc tuple_types in
   let base_result_type = [t_addr; many_tuples_type] in
   let result_types = wrap_tbag' base_result_type in
   let all_targets_type = wrap_tbag' base_result_type in
@@ -62,7 +62,7 @@ let gen_shuffle_fn p rmap lmap bindings fn_name =
            * be done for empty packets *)
           (mk_map
             (mk_lambda (wrap_args ["ip", t_addr]) @@
-              mk_tuple [mk_var "ip"; mk_empty @@ wrap_t_of_map tuple_types]
+              mk_tuple [mk_var "ip"; mk_empty @@ wrap_t_calc tuple_types]
             ) @@
             mk_apply
               (mk_var @@ route_for p lmap) @@
