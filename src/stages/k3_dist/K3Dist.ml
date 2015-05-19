@@ -276,32 +276,22 @@ let map_ids c =
                   mk_cint @@ List.length @@ P.map_types_for c.p i] in
   create_ds "map_ids" t ~e ~init
 
-(* combine all the trig args into a minimal set *)
-(* adds an int for trigger selector *)
+(* combine all the trig args *)
+(* adds a string for trigger selector and an int for deletes (1=insert) *)
 let combine_trig_args c =
-  let trigs x = List.sort String.compare @@ P.get_trig_list ~kind:x c.p in
-  let trigs = insert_index_snd @@ trigs P.InsertTrigs (* @ trigs P.DeleteTrigs *) in
-  let ts = t_int :: (List.flatten @@ List.map (snd_many |- P.args_of_t c.p |- fst) trigs) in
-  let map = List.rev @@ fst @@ List.fold_left (fun (acc, i) (t, idx) ->
-      let len = List.length @@ P.args_of_t c.p t in
-      (idx, "sw_"^t, create_range i len)::acc, i + len)
-    ([], 1)
-    trigs in
+  (* handle non-symmetric triggers (some maps can only be deleted from) *)
+  let trim = str_drop (String.length "delete_") in
+  let t_args = List.map (fun t -> trim t, snd_many @@ P.args_of_t c.p t) @@ P.get_trig_list c.p in
+  let h = Hashtbl.create 100 in
+  List.iter (fun (t, arg) -> Hashtbl.replace h t arg) t_args;
+  let t_args = List.sort (fun x y -> String.compare (fst x) (fst y)) @@ list_of_hashtbl h in
+  let ts = t_string :: t_int :: (List.flatten @@ List.map snd t_args) in
+  let map = List.rev @@ fst @@ List.fold_left (fun (acc, i) (t, args) ->
+      let len = List.length args in
+      (t, create_range i len)::acc, i + len)
+    ([], 2) (* start from 2 because of multiplexer and insert/delete selector *)
+    t_args in
   ts, map
-
-(* global containing mapping of trig id to trig_name *)
-let trig_ids_id = "trig_ids"
-let trig_ids c =
-  let inner_t = wrap_tlist t_int in
-  let e = ["trig_id", t_int; "trig_name", t_string; "indices", inner_t] in
-  let t = wrap_tbag' @@ snd_many e in
-  let init =
-    let _, map = combine_trig_args c in
-    let ts = List.map (fun (id, nm, l) ->
-      mk_tuple [mk_cint id; mk_cstring nm;
-        k3_container_of_list inner_t @@ List.map mk_cint l]) map in
-    k3_container_of_list t ts in
-  create_ds trig_ids_id t ~e ~init
 
 (* not a real ds. only inside stmt_cntrs *)
 let nd_stmt_cntrs_corr_map =
@@ -564,7 +554,6 @@ let global_vars c dict =
       num_switches;
       num_nodes;
       map_ids c;
-      trig_ids c;
       nd_stmt_cntrs;
       nd_log_master;
       nd_rcvd_sys_done;

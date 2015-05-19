@@ -357,18 +357,23 @@ let sw_demux c =
   let combo_t, t_arg_map = D.combine_trig_args c in
   let sentry_code =
     (* stash the sentry index in the queue *)
-    mk_if (mk_eq (mk_fst @@ mk_var "args") (mk_cint @@ -1))
+    mk_if (mk_eq (mk_fst @@ mk_var "args") (mk_cstring ""))
       (mk_block [
         mk_insert D.sw_trig_buf_idx.id [mk_cint @@ -1];
         mk_incr TS.sw_need_vid_ctr.id; ]) @@
       mk_error @@ "unidentified trig id"
   in
   mk_code_sink' sw_demux_nm ["args", wrap_ttuple combo_t] [] @@
-  List.fold_right (fun (t_id, t_nm, arg_indices) acc ->
-    mk_if (mk_eq (mk_fst @@ mk_var "args") @@ mk_cint t_id)
-      (mk_apply' t_nm @@
+  List.fold_right (fun (t, arg_indices) acc ->
+    let apply s =
+      (mk_apply' (s^t) @@
         (* add 1 for tuple access *)
         mk_tuple @@ List.map (fun i -> mk_subscript (i+1) @@ mk_var "args") arg_indices)
+    in
+    mk_if (mk_eq (mk_fst @@ mk_var "args") @@ mk_cstring t)
+      (mk_if (mk_eq (mk_snd @@ mk_var "args") @@ mk_cint 1)
+        (apply "sw_insert_") @@
+         apply "sw_delete_")
       acc)
     t_arg_map
     sentry_code
