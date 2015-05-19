@@ -41,6 +41,7 @@ let r_date    = Str.regexp (Printf.sprintf "%s%s%s%s-%s%s-%s%s" d d d d d d d d)
 let r_float   = Str.regexp (Printf.sprintf "%s*\\.%s*" d d)
 let r_int     = Str.regexp "[0-9]*"
 let r_bool    = Str.regexp "true|false"
+let r_file    = Str.regexp {|\(.+\)_.*\(\..*\)|}
 
 let split_line sep r_sep line =
   let last  = if line.[String.length line - 1] = sep then [""] else [] in
@@ -59,15 +60,19 @@ let get_defaults sep r_sep line =
 let _ =
   parse_cmd_line();
   if params.data_files = [] then print_endline usage_msg else
+  let files = List.sort String.compare params.data_files in
   let data_l = List.map (fun path ->
       let handle = open_in path in
-      let name   = String.uppercase @@ Filename.chop_extension @@ Filename.basename path in
+      let s = String.uppercase @@ Filename.chop_extension @@ Filename.basename path in
+      (* we don't allow anything under underscore *)
+      let name =
+        if String.contains s '_' then String.sub s 0 (String.index s '_')
+        else s in
       let sample = input_line handle in
       let sep, r_sep    = if String.contains sample '|' then '|', r_pipe else ',', r_comma in
       let defs   = get_defaults sep r_sep sample in
       seek_in handle 0; (* rewind handle *)
-      {name; handle; sep; r_sep; defs})
-    params.data_files in
+      {name; handle; sep; r_sep; defs}) files in
   let data_arr = Array.of_list data_l in
   (* array representing remaining data *)
   let remain = Array.of_list @@ create_range 0 @@ List.length data_l in

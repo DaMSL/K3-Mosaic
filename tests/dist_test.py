@@ -145,7 +145,7 @@ def run(target_file,
             return False
 
         # combine the data files
-        cmd = concat([combine_tool, "--k3", k3dist_file] + read_files + ['>', data_file, '2>', error_file])
+        cmd = concat([combine_tool] + read_files + ['>', data_file, '2>', error_file])
         print_system(cmd, verbose)
         if check_error(error_file, verbose):
             os.chdir(saved_dir)
