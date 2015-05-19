@@ -135,4 +135,4 @@ val get_map_bindings_in_stmt : prog_data_t -> stmt_id_t -> map_id_t -> map_id_t
 
 val uniq_types_and_maps : ?type_fn:(prog_data_t -> map_id_t -> type_t list) -> prog_data_t -> (type_t list * map_id_t list) list
 
-val map_ds_of_id : ?vid:bool -> ?bag:bool -> prog_data_t -> map_id_t -> data_struct
+val map_ds_of_id : ?vid:bool -> ?calc:bool -> prog_data_t -> map_id_t -> data_struct
