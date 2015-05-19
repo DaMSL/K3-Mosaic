@@ -6,6 +6,7 @@
 
 import os
 import re
+import platform
 from utils import check_exists, check_error, print_system, concat
 
 def get_nice_name(path):
@@ -39,7 +40,13 @@ def run(target_file,
     target_file = os.path.abspath(target_file)
     nice_name = get_nice_name(target_file)
     root_path = os.path.join(script_path, to_root)
-    dbtoaster = os.path.join(script_path, "dbtoaster_release")
+    if platform.system() == 'Linux':
+        dbtoaster = os.path.join(script_path, "dbtoaster_linux")
+    elif platform.system() == 'Darwin':
+        dbtoaster = os.path.join(script_path, "dbtoaster_osx")
+    else:
+        print("Failed to determine OS")
+        return False
     k3o = os.path.join(root_path, "bin/k3")
     partmap_tool = os.path.join(root_path, "bin/partmap_tool")
     combine_tool = os.path.join(root_path, "bin/combine_data")
