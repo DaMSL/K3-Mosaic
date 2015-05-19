@@ -7,16 +7,6 @@ popd > /dev/null
 
 cd $SCRIPTPATH
 
-# check for dbtoaster
-if [ ! -f "./tests/dbtoaster_release" ]
-then
-  cd external/dbtoaster_src
-  echo "Building DBToaster..."
-  make bin/dbtoaster
-  cp bin/dbtoaster* $SCRIPTPATH/tests
-  cd $SCRIPTPATH
-fi
-
 if [ ! -d "./bin" ]; then mkdir bin; fi
 
 # driver

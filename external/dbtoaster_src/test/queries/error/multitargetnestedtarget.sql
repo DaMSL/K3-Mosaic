@@ -1,1 +1,0 @@
-SELECT (SELECT 2 as A, 1 AS B) as A;
