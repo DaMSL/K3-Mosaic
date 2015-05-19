@@ -45,7 +45,7 @@ let mvos typ s = match typ with
   | TString -> let len = String.length s in
                if s.[len-1]='"' && s.[0]='"' then
                   String(String.sub s 1 (len-2))
-               else String s
+               else invalid_arg @: s^" is not a string"
   | TBool   -> Bool(bos s)
 
 let mvos_many types ss = List.map2 mvos types ss
