@@ -9,6 +9,7 @@
 <external>: not_hygienic
 <bin>: not_hygienic
 <deps>: -traverse
+<tests>: not_hygienic
 
 true: use_str
 true: use_unix
