@@ -41,9 +41,9 @@ def run(target_file,
     nice_name = get_nice_name(target_file)
     root_path = os.path.join(script_path, to_root)
     if platform.system() == 'Linux':
-        dbtoaster = os.path.join(script_path, "dbt_linux", "dbtoaster_release")
+        dbtoaster = os.path.join(script_path, "dbtoaster_linux")
     elif platform.system() == 'Darwin':
-        dbtoaster = os.path.join(script_path, "dbt_osx", "dbtoaster_release")
+        dbtoaster = os.path.join(script_path, "dbtoaster_osx")
     else:
         print("Failed to determine OS")
         return False
