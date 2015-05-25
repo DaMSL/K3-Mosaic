@@ -99,3 +99,54 @@ CREATE TABLE REGION (
   FROM FILE 'data/tpch/region.csv'
   LINE DELIMITED CSV (delimiter := '|');
 
+CREATE STREAM AGENDA (
+        src           VARCHAR,
+        event         INT,
+        acctbal       DECIMAL,
+        address       VARCHAR(40),
+        availqty      INT,
+        brand         CHAR(10),
+        clerk         CHAR(15),
+        comment       VARCHAR(199),
+        commitdate    DATE,
+        container     CHAR(10),
+        custkey       INT,
+        discount      DECIMAL,
+        extendedprice DECIMAL,
+        linenumber    INT,
+        linestatus    CHAR(1),
+        mfgr          CHAR(25),
+        mktsegment    CHAR(10),
+        name          VARCHAR(55),
+        nationkey     INT,
+        orderdate     DATE,
+        orderkey      INT,
+        orderpriority CHAR(15),
+        orderstatus   CHAR(1),
+        partkey       INT,
+        phone         CHAR(15),
+        quantity      DECIMAL,
+        receiptdate   DATE,
+        regionkey     INT,
+        retailprice   DECIMAL,
+        returnflag    CHAR(1),
+        shipdate      DATE,
+        shipinstruct  CHAR(25),
+        shipmode      CHAR(10),
+        shippriority  INT,
+        size          INT,
+        suppkey       INT,
+        supplycost    DECIMAL,
+        tax           DECIMAL,
+        totalprice    DECIMAL,
+        type          VARCHAR(25)
+    )
+  FROM FILE 'data/tpch/agenda.csv'
+  LINE DELIMITED AGENDA (delimiter := '|', mux := '0', event := '1', mapping :=
+    'CUSTOMER:12,19,5,20,26,4,18,9;
+     LINEITEM:22,25,37,15,27,14,13,39,31,16,32,10,28,33,34,9;
+     PARTSUPP:25,37,6,38,9;
+     PART:25,19,17,7,41,36,11,30,9;
+     SUPPLIER:37,19,5,20,26,4,9;
+     ORDERS:22,12,24,40,21,23,8,35,9');
+
