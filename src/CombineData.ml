@@ -115,5 +115,5 @@ let _ =
         loop remain'
   in loop remain;
   (* sentry line *)
-  print_string @@ String.concat "|" @@
-    "" :: "1" :: (List.flatten @@ List.map (fun x -> x.defs) data_l)
+  print_string @@ String.concat "|" defaults
+    
