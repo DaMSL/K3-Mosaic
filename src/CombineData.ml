@@ -36,9 +36,9 @@ type file_data = {
 
 let default_val_of_t t = match t.typ with
   | TBool   -> "false"
-  | TDate
-  | TInt    -> "0"
-  | TFloat  -> "0.0"
+  | TDate   -> "1900-01-01"
+  | TInt
+  | TFloat  -> "0"
   | TString -> ""
   | _       -> failwith "unhandled type"
 

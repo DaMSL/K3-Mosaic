@@ -65,8 +65,8 @@ let pull_source id t res in_chan =
       let r = if tuple_val then VTuple fields else List.hd fields in
       incr cnt; Some r
     with
-      | Invalid_argument _ -> raise @@
-          ResourceError(Printf.sprintf "%s: problem parsing file %s at line %d" id f !cnt)
+      | Invalid_argument s -> raise @@
+          ResourceError(Printf.sprintf "%s: problem parsing file %s at line %d: %s" id f !cnt s)
       | End_of_file        -> None
     end
   | Stream(t, RandomStream _), InRand index ->
