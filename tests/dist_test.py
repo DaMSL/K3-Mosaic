@@ -38,6 +38,8 @@ def run(target_file,
     to_root = ".."
     script_path = os.path.abspath(os.path.dirname(__file__))
     target_file = os.path.abspath(target_file)
+    target_path, _ = os.path.split(target_file)
+    agenda_file = os.path.join(target_path, "schemas.sql")
     nice_name = get_nice_name(target_file)
     root_path = os.path.join(script_path, to_root)
     if platform.system() == 'Linux':
@@ -71,6 +73,7 @@ def run(target_file,
 
     check_exists("dbtoaster", dbtoaster)
     check_exists("k3o", k3o)
+    check_exists("agenda file", agenda_file)
     if distrib:
         check_exists("partmap_tool", partmap_tool)
         check_exists("combine_data", combine_tool)
@@ -136,8 +139,10 @@ def run(target_file,
         corrective_cmd = "--no-correctives" if not gen_correctives else None
         options = concat ([create_cmd, idx_cmd, gc_cmd, delete_cmd, corrective_cmd])
 
+        agenda_cmd = "--agenda "+ agenda_file
+
         # create a k3 distributed file (without a partition map)
-        cmd = concat([k3o, "-p -i m3 -l k3disttest", m3_file, options] +
+        cmd = concat([k3o, "-p -i m3 -l k3disttest", m3_file, agenda_cmd, options] +
                 ['>', k3dist_file, "2>", error_file])
         print_system(cmd, verbose)
         if check_error(error_file, verbose) or check_error(k3dist_file, verbose, True):
@@ -152,14 +157,14 @@ def run(target_file,
             return False
 
         # combine the data files
-        cmd = concat([combine_tool] + read_files + ['>', data_file, '2>', error_file])
+        cmd = concat([combine_tool] + read_files + [agenda_cmd, '>', data_file, '2>', error_file])
         print_system(cmd, verbose)
         if check_error(error_file, verbose):
             os.chdir(saved_dir)
             return False
 
         # create another k3 distributed file (with partition map)
-        cmd = concat([k3o, "-p -i m3 -l k3disttest", m3_file, options, "-m", part_file, "--sfile", data_file] + [">", k3dist_file, "2>", error_file])
+        cmd = concat([k3o, "-p -i m3 -l k3disttest", m3_file, agenda_cmd, options, "-m", part_file, "--sfile", data_file] + [">", k3dist_file, "2>", error_file])
         print_system(cmd, verbose)
         if check_error(error_file, verbose) or check_error(k3dist_file, verbose, True):
             os.chdir(saved_dir)

@@ -165,7 +165,8 @@ type parameters = {
     mutable gen_correctives : bool;
 
     mutable src_interval : float;   (* interval (s) between the interpreter feeding sources *)
-    mutable stream_file : string;  (* file to stream from (into switches) *)
+    mutable stream_file : string;   (* file to stream from (into switches) *)
+    mutable agenda_map : K3Dist.mapping_t;
   }
 
 let default_cmd_line_params () = {
@@ -196,6 +197,7 @@ let default_cmd_line_params () = {
 
     src_interval      = 0.002;
     stream_file       = "input.csv";
+    agenda_map        = K3Dist.default_mapping;
   }
 
 let cmd_line_params = default_cmd_line_params ()
@@ -469,9 +471,11 @@ let test params inputs =
   in List.iter2 test_fn params.input_files inputs
 
 let transform_to_k3_dist params p proginfo =
-  let {use_multiindex; enable_gc; stream_file; gen_deletes; gen_correctives} = params in
+  let {use_multiindex; enable_gc; stream_file;
+       gen_deletes; gen_correctives; agenda_map} = params in
   try
-    GenDist.gen_dist ~use_multiindex ~enable_gc ~stream_file ~gen_deletes ~gen_correctives
+    GenDist.gen_dist ~use_multiindex ~enable_gc ~stream_file
+      ~gen_deletes ~gen_correctives ~agenda_map
       proginfo params.partition_map p
   with DistributeError(uuid, s) -> handle_distribute_error (K3Data p) uuid s
 
@@ -542,6 +546,7 @@ let load_partition_map file =
   let prog = parse_program_from_string K3Parser.program K3Lexer.tokenize str_full
   in cmd_line_params.partition_map <- K3Route.list_of_k3_partition_map prog
 
+
 (* Argument descriptions *)
 let param_specs = Arg.align
 
@@ -608,6 +613,8 @@ let param_specs = Arg.align
       "         Interval between feeding in sources";
   "--sfile", Arg.String (fun s -> cmd_line_params.stream_file <- s),
       "         Path for stream file";
+  "--agenda", Arg.String (fun s -> cmd_line_params.agenda_map <- K3Dist.load_mapping_file s),
+      "         Agenda to read from";
   ])
 
 let usage_msg =

@@ -357,20 +357,20 @@ let sw_demux c =
   let combo_t, t_arg_map = D.combine_trig_args c in
   let sentry_code =
     (* stash the sentry index in the queue *)
-    mk_if (mk_eq (mk_fst @@ mk_var "args") (mk_cstring ""))
+    mk_if (mk_eq (mk_fst @@ mk_var "args") @@ mk_cstring "")
       (mk_block [
         mk_insert D.sw_trig_buf_idx.id [mk_cint @@ -1];
-        mk_incr TS.sw_need_vid_ctr.id; ]) @@
+        mk_incr TS.sw_need_vid_ctr.id]) @@
       mk_error @@ "unidentified trig id"
   in
   mk_code_sink' sw_demux_nm ["args", wrap_ttuple combo_t] [] @@
-  List.fold_right (fun (t, arg_indices) acc ->
+  StrMap.fold (fun trig arg_indices acc ->
     let apply s =
-      (mk_apply' (s^t) @@
+      (mk_apply' (s^trig) @@
         (* add 1 for tuple access *)
         mk_tuple @@ List.map (fun i -> mk_subscript (i+1) @@ mk_var "args") arg_indices)
     in
-    mk_if (mk_eq (mk_fst @@ mk_var "args") @@ mk_cstring t)
+    mk_if (mk_eq (mk_fst @@ mk_var "args") @@ mk_cstring trig)
       (mk_if (mk_eq (mk_snd @@ mk_var "args") @@ mk_cint 1)
         (apply "sw_insert_") @@
          apply "sw_delete_")
@@ -733,7 +733,6 @@ List.fold_left
              mk_tuple @@ args_of_t_as_vars_with_v c trig_name)
            mk_cunit ] ])
   [] s_rhs
-
 
 (* list of trig, stmt with a map on the rhs that's also on the lhs. These are
  * the potential corrective maps.
@@ -1247,19 +1246,21 @@ let gen_dist ?(use_multiindex=false)
              ?(stream_file="XXX")
              ?(gen_deletes=true)
              ?(gen_correctives=true)
+             ~agenda_map
              p partmap ast =
-  (* collect all map access patterns for creating indexed maps *)
   let c = {
       p;
       shuffle_meta=K3Shuffle.gen_meta p;
       mapn_idxs=StrMap.empty;
       use_multiindex;
       enable_gc;
+      (* collect all map access patterns for creating indexed maps *)
       map_idxs = M.get_map_access_patterns_ids p ast;
-      stream_file;
       gen_deletes;
       gen_correctives;
       corr_maps = maps_potential_corrective p;
+      stream_file;
+      agenda_map;
     } in
   (* regular trigs then insert entries into shuffle fn table *)
   let proto_trigs, proto_funcs =

@@ -9,6 +9,56 @@ module P = ProgInfo
 
 module IdMap = Map.Make(struct type t = id_t let compare = String.compare end)
 
+(* an agenda mapping type *)
+type mapping_t = type_t list * int list StrMap.t
+
+let default_mapping = [], StrMap.empty
+
+let string_of_mapping ((l, m):mapping_t) =
+  Printf.sprintf "type:\n %s,\n map:\n %s"
+    (String.concat ", " @@ List.map K3PrintSyntax.string_of_type l)
+    (String.concat "\n" @@ StrMap.fold (fun k v acc -> (Printf.sprintf "%s => %s" k @@ string_of_int_list v)::acc) m [])
+
+(* load a mapping file *)
+let load_mapping_file file : mapping_t =
+  let open Str in
+  let open Printf in
+  let sp = "\\([ \n\t]\\)" in
+  let any = "\\(.\\|\n\\)" in
+  let r_agenda = regexp @@ sprintf
+    "^CREATE STREAM AGENDA (\\(%s+\\))%s+FROM\\(%s+\\)LINE DELIMITED AGENDA ([^)]+mapping[^']+'\\([^']+\\)'" any sp any in
+  let r_semi, r_comma = regexp (sprintf ";%s*" sp), regexp (sprintf ",%s*" sp) in
+  let r_colon = regexp @@ sprintf ":%s*" sp in
+  let file_s = read_file file in
+  let tup_s, map_s =
+    try
+      ignore(search_forward r_agenda file_s 0);
+      String.trim @@ matched_group 1 file_s, String.trim @@ matched_group 6 file_s
+    with Not_found -> failwith "Couldn't find mapping in agenda file" in
+  let map = List.fold_left (fun acc s -> match split r_colon s with
+    | [nm; nums] ->
+          let nums = split r_comma nums in
+          StrMap.add nm (List.map ios nums) acc
+    | _ -> failwith "Bad format for agenda map") StrMap.empty @@
+    split r_semi map_s in
+  (* now get the tuple types *)
+  let r_sp = regexp @@ sprintf "%s+" sp in
+  let tup_types = List.map (fun s -> match split r_sp @@ String.trim s with
+    | [k;v] -> v
+    | l     -> failwith @@ "Bad agenda format: " ^ String.concat "/" l) @@
+    Str.split r_comma tup_s in
+  (* check for prefix *)
+  let prefix s v = str_take (String.length v) (String.uppercase s) = v in
+  let tup_types = List.map (fun s ->
+    if prefix s "VARCHAR" || prefix s "CHAR" then t_string else
+    if prefix s "INT" then t_int else
+    if prefix s "DATE" then t_date else
+    if prefix s "DECIMAL" then t_float else
+    failwith @@ "unrecognized mapping type "^s)
+    tup_types in
+  tup_types, map
+
+
 type shuffle_fn_entry = {
   stmts : IntSet.t;
   rmap : map_id_t;
@@ -26,11 +76,13 @@ type config = {
   shuffle_meta : shuffle_fn_entry list;
   use_multiindex : bool;
   enable_gc : bool;
-  (* a file to use as the stream to switches *)
-  stream_file : string;
   gen_deletes : bool;
   gen_correctives : bool;
   corr_maps : map_id_t list * map_id_t list;
+  (* a file to use as the stream to switches *)
+  stream_file : string;
+  (* a mapping for agenda *)
+  agenda_map : mapping_t;
 }
 
 let string_of_map_idxs c map_idxs =
@@ -276,22 +328,12 @@ let map_ids c =
                   mk_cint @@ List.length @@ P.map_types_for c.p i] in
   create_ds "map_ids" t ~e ~init
 
-(* combine all the trig args *)
 (* adds a string for trigger selector and an int for deletes (1=insert) *)
-let combine_trig_args c =
-  (* handle non-symmetric triggers (some maps can only be deleted from) *)
-  let trim = str_drop (String.length "delete_") in
-  let t_args = List.map (fun t -> trim t, snd_many @@ P.args_of_t c.p t) @@ P.get_trig_list c.p in
-  let h = Hashtbl.create 100 in
-  List.iter (fun (t, arg) -> Hashtbl.replace h t arg) t_args;
-  let t_args = List.sort (fun x y -> String.compare (fst x) (fst y)) @@ list_of_hashtbl h in
-  let ts = t_string :: t_int :: (List.flatten @@ List.map snd t_args) in
-  let map = List.rev @@ fst @@ List.fold_left (fun (acc, i) (t, args) ->
-      let len = List.length args in
-      (t, create_range i len)::acc, i + len)
-    ([], 2) (* start from 2 because of multiplexer and insert/delete selector *)
-    t_args in
-  ts, map
+let combine_trig_args c = 
+  let suffix = str_drop (String.length "delete_") in
+  (* get only the relevant parts *)
+  let trigs = StrSet.of_list @@ List.map suffix @@ P.get_trig_list c.p in
+  second (StrMap.filter @@ fun k _ -> StrSet.mem k trigs) c.agenda_map
 
 (* not a real ds. only inside stmt_cntrs *)
 let nd_stmt_cntrs_corr_map =

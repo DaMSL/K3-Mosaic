@@ -10,16 +10,21 @@ let _ = Random.self_init ()
 
 type params = {
   mutable data_files : string list;
+  mutable agenda_map : K3Dist.mapping_t;
 }
 
 let params = {
   data_files = [];
+  agenda_map = K3Dist.default_mapping;
 }
 
 let param_specs = Arg.align [
+  "--agenda",
+    Arg.String (fun s -> params.agenda_map <- K3Dist.load_mapping_file s),
+    "      Agenda file";
   ]
 
-let usage_msg = "Enter data files"
+let usage_msg = "Enter data files and agenda"
 
 type file_data = {
   name : string;
@@ -28,6 +33,14 @@ type file_data = {
   sep : char;
   defs : string list;
 }
+
+let default_val_of_t t = match t.typ with
+  | TBool   -> "false"
+  | TDate
+  | TInt    -> "0"
+  | TFloat  -> "0.0"
+  | TString -> ""
+  | _       -> failwith "unhandled type"
 
 let parse_cmd_line () =
   Arg.parse param_specs
@@ -60,6 +73,7 @@ let get_defaults sep r_sep line =
 let _ =
   parse_cmd_line();
   if params.data_files = [] then print_endline usage_msg else
+    if params.agenda_map = K3Dist.default_mapping then print_endline usage_msg else
   let files = List.sort String.compare params.data_files in
   let data_l = List.map (fun path ->
       let handle = open_in path in
@@ -68,6 +82,7 @@ let _ =
       let name =
         if String.contains s '_' then String.sub s 0 (String.index s '_')
         else s in
+      (* note: this isn't necessary now, but we'll leave it in anyway *)
       let sample = input_line handle in
       let sep, r_sep    = if String.contains sample '|' then '|', r_pipe else ',', r_comma in
       let defs   = get_defaults sep r_sep sample in
@@ -76,6 +91,7 @@ let _ =
   let data_arr = Array.of_list data_l in
   (* array representing remaining data *)
   let remain = Array.of_list @@ create_range 0 @@ List.length data_l in
+  let defaults = List.map default_val_of_t @@ fst params.agenda_map in
   let rec loop remain =
     if Array.length remain = 0 then () else
       (* choose at random from the remain array *)
@@ -83,13 +99,14 @@ let _ =
       (* access in data array *)
       let datum  = data_arr.(choice) in
       try
-        let in_line = input_line datum.handle in
-        let out_l =
-          datum.name :: "1" ::
-          (List.flatten @@ List.mapi (fun i x ->
-            if i = choice then split_line x.sep x.r_sep in_line
-            else x.defs) data_l)
-        in
+        let in_line = split_line datum.sep datum.r_sep @@ input_line datum.handle in
+        let out_a = Array.of_list defaults in
+        out_a.(0) <- datum.name;
+        out_a.(1) <- "1";
+        let mapping = StrMap.find datum.name @@ snd params.agenda_map in
+        (* map values to their proper places *)
+        List.iter2 (fun s i -> out_a.(i) <- s) in_line mapping;
+        let out_l = Array.to_list out_a in
         print_endline @@ String.concat "|" out_l;
         loop remain
       with End_of_file ->
