@@ -126,6 +126,7 @@ let canonical_value_of_type vt =
     | TUnknown              -> mk_cint 0
     | TUnit                 -> mk_cunit
     | TBool                 -> mk_cbool false
+    | TDate
     | TInt                  -> mk_cint 0
     | TFloat                -> mk_cfloat 0.
     | TString               -> mk_cstring ""

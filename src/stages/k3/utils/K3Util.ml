@@ -240,8 +240,6 @@ let id_of_role (d, _) = match d with
   Role (id, _) | DefaultRole id -> id
   | _ -> failwith "not a role or defaultrole"
 
-
-
 (* Expression extraction *)
 
 (* Returns all subexpressions matching a given predicate *)
