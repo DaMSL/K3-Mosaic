@@ -169,11 +169,9 @@ fi
 
 dbtoaster_cmd="$BINDIR/dbtoaster_release $new_args"
 [ $log_dbtoaster -eq 1 ] && { echo $dbtoaster_cmd; }
-echo $dbtoaster_cmd
 eval $dbtoaster_cmd;
 
 [ "$compile_log" ] && { echo $compile_log; }
-echo $compile_cmd
 eval $compile_cmd;
 
 # Delete any temporary files 
