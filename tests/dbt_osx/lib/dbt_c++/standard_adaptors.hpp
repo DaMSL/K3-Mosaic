@@ -3,7 +3,9 @@
 
 #include <string>
 #include <list>
+#include <vector>
 #include <map>
+#include <unordered_map>
 
 #include <boost/shared_ptr.hpp>
 #include "boost/tuple/tuple.hpp"
@@ -20,43 +22,84 @@ namespace dbtoaster {
 
     struct csv_adaptor : public stream_adaptor
     {
-      relation_id_t id;
-      event_type type;
       string schema;
       string delimiter;
-      
       boost::shared_ptr<event_t> saved_event;
+      unsigned int order_before;
 
-      csv_adaptor(relation_id_t _id);
+      // event info
+      relation_id_t id;
+      event_type e_type;
+
+      bool valid_event;
+      bool insert;
+      event_args_t event_args;
+
+      csv_adaptor(relation_id_t _id) :
+        schema(""), delimiter(","), id(_id), e_type(insert_tuple) {}
       csv_adaptor(relation_id_t _id, string sch);
       csv_adaptor(relation_id_t i, int num_params,
                   const pair<string,string> params[]);
 
-      void parse_params(int num_params, const pair<string, string> params[]);
-      virtual string parse_schema(string s);
+      virtual void init_insert();
+
       void validate_schema();
 
-      // Interpret the schema.
-      tuple<bool, bool, event_args_t> interpret_event(const string& schema,
-                                                      const string& data);
-      void process(const string& data, boost::shared_ptr<list<event_t> > dest);
+      string parse_schema(const string &s);
 
-      void finalize(boost::shared_ptr<list<event_t> > dest);      
-      bool has_buffered_events();      
-      void get_buffered_events(boost::shared_ptr<list<event_t> > dest);
-      
+      virtual void parse_params(int num_params, const pair<string, string> params[]);
+
+      void interpret_field(const char c, std::istringstream &iss);
+
+      // Interpret the schema.
+      void interpret_event(const string& schema, const string& data);
+
+      void process(const string& data, boost::shared_ptr<list<event_t> > dest) override;
+
+      void finalize(boost::shared_ptr<list<event_t> > dest) override;
+
+      bool has_buffered_events() override;
+
+      void get_buffered_events(boost::shared_ptr<list<event_t> > dest) override;
+    };
+
+    struct agenda_adaptor : public csv_adaptor
+    {
+      agenda_adaptor(relation_id_t _id, string sch);
+      agenda_adaptor(relation_id_t i, int num_params, const pair<string,string> params[]);
+      agenda_adaptor(string sch);
+
+      // schema info
+      int mux_field;
+      int e_type_field;
+      std::unordered_map<relation_id_t, std::vector<int> > mapping;
+
+      void init_insert() override;
+
+      void parse_params(int num_params, const pair<string, string> params[]) override;
+
+      void process(const string& data, boost::shared_ptr<list<event_t> > dest) override;
+
+      relation_id_t get_relation_id(string &name) {
+        auto it = relation_ids.find(name);
+        if (it == relation_ids.end()) return -1;
+        else return it->second;
+      }
+
+      // we need a map of name to id
+      static map<string, relation_id_t> relation_ids;
     };
 
     // Replay adaptors are CSV adaptors prepended with an integer denoting the
     // event type. The adaptor internally adjusts the schema, allowing it to
     // be used with the same parameters as a standard CSV adaptor.
     struct replay_adaptor : public csv_adaptor {
-		replay_adaptor(relation_id_t i);
-		replay_adaptor(relation_id_t i, string sch);
-		replay_adaptor(relation_id_t i, int num_params,
-					 const pair<string,string> params[]);
+                replay_adaptor(relation_id_t i);
+                replay_adaptor(relation_id_t i, string sch);
+                replay_adaptor(relation_id_t i, int num_params,
+                                         const pair<string,string> params[]);
 
-		string parse_schema(string s);
+                string parse_schema(string s);
     };
   }
 
@@ -111,7 +154,7 @@ namespace dbtoaster {
         order_book_adaptor(relation_id_t sid, int nb, order_book_type t);
         order_book_adaptor(relation_id_t sid, int num_params,
                            pair<string, string> params[]);
-						   
+
         bool parse_error(const string& data, int field);
 
         // Expected message format: t, id, action, volume, price
@@ -120,9 +163,9 @@ namespace dbtoaster {
                              boost::shared_ptr<list<event_t> > dest);
         void process(const string& data, boost::shared_ptr<list<event_t> > dest);
 
-        void finalize(boost::shared_ptr<list<event_t> > dest) {}        
-        bool has_buffered_events() { return false; }        
-        void get_buffered_events(boost::shared_ptr<list<event_t> > dest) {}         
+        void finalize(boost::shared_ptr<list<event_t> > dest) {}
+        bool has_buffered_events() { return false; }
+        void get_buffered_events(boost::shared_ptr<list<event_t> > dest) {}
       };
 
       // Command line initialization of orderbook datasets.
@@ -144,11 +187,11 @@ namespace dbtoaster {
 
         int get_bids_stream_id() { return get_stream_id("bids"); }
         int get_asks_stream_id() { return get_stream_id("asks"); }
-		
-		map<string, int>& get_stream_identifiers() { 
+
+                map<string, int>& get_stream_identifiers() {
           return stream_identifiers;
         }
-        
+
       };
     }
   }
