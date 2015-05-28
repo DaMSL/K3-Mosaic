@@ -1,4 +1,3 @@
-CREATE STREAM R(A int, B int) 
-  FROM FILE 'data/simple/r.dat' LINE DELIMITED csv;
+INCLUDE 'queries/simple/schemas.sql';
 
 SELECT SUM(1) FROM (SELECT SUM(1) FROM R) r;

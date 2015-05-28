@@ -1,5 +1,3 @@
-CREATE STREAM R(A float, B float) 
-  FROM FILE 'data/simple/r.dat' LINE DELIMITED
-  CSV ();
+INCLUDE 'queries/simple/schemas.sql';
 
 SELECT SUM(A)/(1+SUM(B)) FROM R

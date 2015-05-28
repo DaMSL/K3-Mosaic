@@ -1,6 +1,4 @@
-CREATE STREAM R(A int, B int)
-FROM FILE 'data/simple/r.dat' LINE DELIMITED
-CSV ();
+INCLUDE 'queries/simple/schemas.sql';
 
 SELECT r3.C FROM (
   SELECT r2.C, COUNT(*) FROM (

@@ -1,8 +1,4 @@
-CREATE STREAM R(A int, B int) FROM FILE 'data/simple/r.dat' LINE DELIMITED CSV();
-
-CREATE STREAM S(B int, C int) FROM FILE 'data/simple/s.dat' LINE DELIMITED CSV();
-
-CREATE STREAM T(C int, D int) FROM FILE 'data/simple/t.dat' LINE DELIMITED CSV();
+INCLUDE 'queries/simple/schemas.sql';
 
 SELECT 
   t1.*, 

@@ -1,5 +1,3 @@
-CREATE STREAM R(A int, B int)
-FROM FILE 'data/simple/r.dat' LINE DELIMITED
-CSV ();
+INCLUDE 'queries/simple/schemas.sql';
 
 SELECT A+SUM(1) FROM R GROUP BY A,B

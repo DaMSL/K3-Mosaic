@@ -1,5 +1,4 @@
-CREATE STREAM R(A int, B int)
-FROM FILE 'data/simple/r.dat' LINE DELIMITED csv;
+INCLUDE 'queries/simple/schemas.sql';
 
 SELECT C
 FROM (SELECT R.A, COUNT(*) as C FROM R GROUP BY A) s

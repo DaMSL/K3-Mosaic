@@ -1,6 +1,4 @@
-CREATE STREAM R(A int, B int) 
-  FROM FILE 'data/simple/r.dat' LINE DELIMITED
-  CSV ();
+INCLUDE 'queries/simple/schemas.sql';
 
 SELECT r1.B, SUM(r1.A * r2.A)
 FROM R r1, R r2 

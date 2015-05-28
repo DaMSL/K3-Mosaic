@@ -1,10 +1,3 @@
-CREATE STREAM R(A int, B int) 
-  FROM FILE 'data/simple/r.dat' LINE DELIMITED csv;
-
-CREATE STREAM S(B int, C int) 
-  FROM FILE 'data/simple/s.dat' LINE DELIMITED csv;
-
-CREATE STREAM T(C int, D int)
-  FROM FILE 'data/simple/t.dat' LINE DELIMITED csv;
+INCLUDE 'queries/simple/schemas.sql';
 
 SELECT sum(A*D) AS AtimesD FROM R,S,T WHERE R.B=S.B AND S.C=T.C;

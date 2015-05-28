@@ -1,5 +1,3 @@
-CREATE STREAM R(A int, B int)
-FROM FILE 'data/simple/r.dat' LINE DELIMITED
-CSV ();
+INCLUDE 'queries/simple/schemas.sql';
 
 SELECT R1.* FROM R r1 NATURAL JOIN R r2;

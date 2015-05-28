@@ -1,5 +1,3 @@
-CREATE STREAM R(A int, B int)
-FROM FILE 'data/simple/r.dat' LINE DELIMITED
-CSV ();
+INCLUDE 'queries/simple/schemas.sql';
 
 SELECT SUM(A) FROM R WHERE A = B AND A <= B
