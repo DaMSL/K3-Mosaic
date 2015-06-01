@@ -141,7 +141,7 @@ CREATE STREAM AGENDA (
         totalprice    DECIMAL,
         type          VARCHAR(25)
     )
-  FROM FILE 'data/tpch/agenda.csv'
+  FROM FILE 'agenda.csv'
   LINE DELIMITED AGENDA (delimiter := '|', mux := '0', event := '1', mapping :=
     'CUSTOMER:10,17,3,18,24,2,16,7;
      LINEITEM:20,23,35,13,25,12,11,37,29,14,30,8,26,31,32,7;
