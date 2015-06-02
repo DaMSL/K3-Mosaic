@@ -16,7 +16,7 @@ CREATE STREAM AGENDA (
     D     INT
   ) 
   FROM FILE 'agenda.csv'
-  LINE DELIMITED AGENDA (delimiter := '|', mapping :=
+  LINE DELIMITED AGENDA (delimiter := '|', mux := '0', event := '1', mapping :=
     'R:2,3;
      S:3,4;
      T:4,5');
