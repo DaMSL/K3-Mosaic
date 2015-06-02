@@ -1180,6 +1180,9 @@ let emit_frontier_fns c =
   List.map (frontier_fn c) fns
 
 let declare_global_vars c partmap ast =
+  (* dummy switch path variable. Will be filled at cpp stage *)
+  decl_global
+    (create_ds "switch_path" t_string ~init:(mk_cstring "agenda.csv")) ::
   Proto.global_vars @
   D.global_vars c (ModifyAst.map_inits_from_ast c ast) @
   Timer.global_vars @
