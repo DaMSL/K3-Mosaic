@@ -115,5 +115,5 @@ let _ =
         loop remain'
   in loop remain;
   (* sentry line *)
-  print_string @@ String.concat "|" defaults
+  print_endline @@ String.concat "|" defaults
     
