@@ -88,8 +88,20 @@ let light_type c e =
 
 (* Get a binding id from a number *)
 let id_of_num i = Printf.sprintf "b%d" i
-(* Get a record id from a number *)
-let record_id_of_num ?(prefix="r") i = Printf.sprintf "%s%d" prefix i
+
+let abc_str = "abcdefghijklmnopqrstuvwxyz"
+
+(* Get a record id from a number
+ * we use a scheme of a..z, za, zb..zz, zza..
+ *)
+let record_id_of_num ?(prefix="r") i =
+  let rec s_of_i acc i =
+    if i <= String.length abc_str then
+      Printf.sprintf "%s%c" acc (abc_str.[i-1])
+    else
+      s_of_i (acc ^ "z") (i-String.length abc_str)
+  in
+  prefix ^ (s_of_i "" i)
 
 (* Add record ids to a list *)
 let add_record_ids ?prefix l =
