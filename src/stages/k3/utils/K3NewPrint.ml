@@ -342,7 +342,10 @@ let is_id_lambda e =
 (* Variable names to translate *)
 module StringMap = Map.Make(struct type t = string let compare = String.compare end)
 let var_translate = List.fold_left (fun acc (x,y) -> StringMap.add x y acc) StringMap.empty @@
-  ["int_of_float", "truncate"; "float_of_int", "real_of_int"; "peers", "my_peers"]
+  ["int_of_float", "truncate";
+   "float_of_int", "real_of_int";
+   "peers", "my_peers";
+   "parse_sql_date", "tpch_date"]
 
 type in_record = InRec | In
 type out_record = OutRec | Out
@@ -547,13 +550,14 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
         | _     -> false
         end
     with T.TypeError(_,_,_) -> false (* assume additive *)
+  in
   (* many instructions need to wrap the same way *)
-  in let wrap e = match U.tag_of_expr expr with
+  (* in let wrap e = match U.tag_of_expr expr with
     | Insert _ | Iterate | Map | Filter | Flatten | Send | Delete _ | Update _
     | Aggregate | GroupByAggregate -> wrap_hov 2 e
     | IfThenElse -> wrap_hov 0 e
     | _ -> id_fn e
-  in
+  in *)
   (* begin analysis of tags *)
   let analyze () = match U.tag_of_expr expr with
   | Const con -> lazy_const c con
@@ -870,10 +874,10 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
   | _ -> analyze ()
 
 let lazy_trigger c id arg vars expr =
-  let is_block expr = match U.tag_of_expr expr with Block -> true | _ -> false in
+  (*let is_block expr = match U.tag_of_expr expr with Block -> true | _ -> false in
   let indent f = if is_block expr
                then lps " " <| f
-               else wrap_indent f in
+               else wrap_indent f in*)
   wrap_indent (lps ("trigger "^id) <| lps " : " <|
   lazy_type ~in_col:false c @@ KH.type_of_arg arg <| lsp () <|
   lps "=" <| lsp () <| lazy_expr c @@ KH.mk_lambda arg expr <| lcut ())
@@ -980,53 +984,6 @@ let string_of_program ?(map_to_fold=false) prog (env, trig_env) =
     let l = wrap_hv 0 (lps_list ~sep:"" CutHint (lazy_declaration config |- fst) prog) in
     force_list l
 
-let r_insert = Str.regexp "^insert_\\(.+\\)$"
-let r_insert_bad = Str.regexp "^insert_.*\\(do\\|send\\|rcv\\)"
-
-(* add sources and feeds to the program *)
-(* expects a distributed program *)
-let add_sources p envs filename =
-  let open K3Helpers in
-  (* finds all insert triggers and concatenates arguments *)
-  let is_insert s     = r_match r_insert s && not @@ r_match r_insert_bad s in
-  let insert_trigs    = List.filter (is_insert |- U.id_of_code) @@
-    U.triggers_of_program p in
-  match insert_trigs with [] -> "" | _ -> (* check for no insert trigs *)
-  (* Get lexicographical order so we know where the arguments belong *)
-  let insert_trigs    = List.sort (fun x y ->
-    String.compare (U.id_of_code x) (U.id_of_code y)) insert_trigs in
-  let t_arg_id_ts      = List.map (fun t ->
-                          let t' = U.id_of_code t in t',
-                          List.mapi (fun i ty -> t'^"_arg"^soi i, ty) @@
-                          unwrap_ttuple @@
-                          KH.type_of_arg @@ U.args_of_code t)
-                        insert_trigs in
-  let arg_id_ts = List.concat @@ List.map snd t_arg_id_ts in
-  (* add a demultiplexing argument *)
-  let arg_ids'       = ("trigger_id", t_string)::arg_id_ts in
-  let convert_date (var, t) =
-    if t = t_date then
-    mk_apply (mk_var "parse_sql_date") var else var in
-  (* write the demultiplexing trigger *)
-  let code =
-    mk_code_sink "switch_main" (wrap_args arg_ids') [] @@
-      List.fold_left (fun acc_code (trig_id, trig_ts) ->
-        let handle_args =
-          List.map convert_date @@ List.map (first mk_var) trig_ts
-        in
-        mk_if (mk_eq (mk_var "trigger_id") @@ mk_cstring trig_id)
-          (mk_send trig_id K3Global.me_var handle_args)
-          acc_code
-        )
-        mk_cunit
-        t_arg_id_ts
-  in
-  let flow = mk_flow [code] in
-  let source_s = "source s1 : "^string_of_value_type (wrap_ttuple @@ snd_many arg_ids')^
-    " = file \""^filename^"\" psv\n" in
-  let feed_s   = "feed s1 |> switch_main\n" in
-  string_of_program [flow] envs ^ source_s ^ feed_s
-
 (* print a new k3 program with added sources and feeds *)
 (* envs are the typechecking environments to allow us to do incremental typechecking *)
 let string_of_dist_program ?(file="default.txt") ?map_to_fold (p, envs) =
@@ -1037,5 +994,5 @@ let string_of_dist_program ?(file="default.txt") ?map_to_fold (p, envs) =
   "include \"Annotation/Seq.k3\"\n"^
   "declare my_peers : collection { i:address } @ {Collection} =\n"^
   "  peers.fold (\\acc -> (\\x -> (acc.insert {i:x.addr}; acc))) empty { i:address} @ Collection\n"^
-  string_of_program ?map_to_fold p' envs ^ add_sources p' envs file
+  string_of_program ?map_to_fold p' envs
 

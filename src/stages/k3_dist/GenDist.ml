@@ -57,6 +57,10 @@ module P = ProgInfo
 module TS = Timestamp
 module Proto = Protocol
 
+let str_of_date_t t = match t.typ with
+  | TDate -> {t with typ = TString}
+  | x -> t
+
 (* global trigger names needed for generated triggers and sends *)
 let send_fetch_name_of_t trig_nm = "sw_"^trig_nm^"_send_fetch"
 let rcv_fetch_name_of_t trig_nm = "nd_"^trig_nm^"_rcv_fetch"
@@ -355,6 +359,12 @@ let sw_start_fn (c:config) trig =
 let sw_demux_nm = "sw_demux"
 let sw_demux c =
   let combo_t, t_arg_map = D.combine_trig_args c in
+  let combo_arr_t = Array.of_list combo_t in
+  (* for dates, we need to parse to int *)
+  let convert_date i =
+    if combo_arr_t.(i).typ == TDate then mk_apply' "parse_sql_date"
+    else id_fn
+  in
   let sentry_code =
     (* stash the sentry index in the queue *)
     mk_if (mk_eq (mk_fst @@ mk_var "args") @@ mk_cstring "")
@@ -363,12 +373,13 @@ let sw_demux c =
         mk_incr TS.sw_need_vid_ctr.id]) @@
       mk_error @@ "unidentified trig id"
   in
-  mk_code_sink' sw_demux_nm ["args", wrap_ttuple combo_t] [] @@
+  mk_code_sink' sw_demux_nm ["args", wrap_ttuple @@ List.map str_of_date_t combo_t] [] @@
   StrMap.fold (fun trig arg_indices acc ->
     let apply s =
       (mk_apply' (s^trig) @@
         (* add 1 for tuple access *)
-        mk_tuple @@ List.map (fun i -> mk_subscript (i+1) @@ mk_var "args") arg_indices)
+        mk_tuple @@ List.map (fun i -> 
+          convert_date i @@ mk_subscript (i+1) @@ mk_var "args") arg_indices)
     in
     mk_if (mk_eq (mk_fst @@ mk_var "args") @@ mk_cstring trig)
       (mk_if (mk_eq (mk_snd @@ mk_var "args") @@ mk_cint 1)
@@ -1160,7 +1171,7 @@ let roles_of c (ast:program_t) =
      Instruction(Consume("master")); ] in
   let sw_flows = List.map mk_no_anno [
     Source(Resource("switch",
-      Handle(wrap_ttuple @@ fst @@ combine_trig_args c,
+      Handle(wrap_ttuple @@ List.map str_of_date_t @@ fst @@ combine_trig_args c,
         File c.stream_file,
         CSV)));
     BindFlow("switch", sw_demux_nm);
