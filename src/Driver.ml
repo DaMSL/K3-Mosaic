@@ -139,34 +139,34 @@ let action_specs action_param = setter_specs action_param action_descriptions
 
 (* Driver parameters *)
 type parameters = {
-    action                : action_t ref;
-    test_mode             : test_mode_t ref;
-    mutable in_lang       : in_lang_t;
-    mutable out_lang      : out_lang_t;
-    mutable search_paths  : string list;
-    mutable input_files   : string list;
-    mutable peers         : K3Global.peer_t list;
-    mutable default_peer  : bool; (* whether we're using the default peer *)
-    mutable partition_map : K3Route.part_map_t;
-    mutable run_length    : int64;
-    mutable print_types   : bool; (* TODO                                    : change to a debug flag *)
-    mutable debug_info    : bool;
-    mutable verbose       : bool;
-    mutable trace_files   : string list;
-    mutable order_files   : string list;
+    action:                action_t ref;
+    test_mode:             test_mode_t ref;
+    mutable in_lang:       in_lang_t;
+    mutable out_lang:      out_lang_t;
+    mutable search_paths:  string list;
+    mutable input_files:   string list;
+    mutable peers:         K3Global.peer_t list;
+    mutable default_peer:  bool; (* whether we're using the default peer *)
+    mutable partition_map: K3Route.part_map_t;
+    mutable run_length:    int64;
+    mutable print_types:   bool; (* TODO                                    : change to a debug flag *)
+    mutable debug_info:    bool;
+    mutable verbose:       bool;
+    mutable trace_files:   string list;
+    mutable order_files:   string list;
 
-    mutable queue_type   : K3Runtime.queue_type; (* type of queue for interpreter *)
-    mutable k3new_data_file : string;
-    mutable k3new_folds : bool;   (* output fold instead of map/ext *)
-    mutable load_path : string;    (* path for the interpreter to load csv files from *)
-    mutable use_multiindex : bool; (* whether to generate code that uses multiindex maps *)
-    mutable enable_gc : bool;
-    mutable gen_deletes : bool;
-    mutable gen_correctives : bool;
+    mutable queue_type:      K3Runtime.queue_type; (* type of queue for interpreter *)
+    mutable k3new_data_file: string;
+    mutable k3new_folds:     bool;   (* output fold instead of map/ext *)
+    mutable load_path:       string;    (* path for the interpreter to load csv files from *)
+    mutable map_type:        K3Dist.map_type; (* whether to generate code that uses multiindex maps *)
+    mutable enable_gc:       bool;
+    mutable gen_deletes:     bool;
+    mutable gen_correctives: bool;
 
-    mutable src_interval : float;   (* interval (s) between the interpreter feeding sources *)
-    mutable stream_file : string;   (* file to stream from (into switches) *)
-    mutable agenda_map : K3Dist.mapping_t;
+    mutable src_interval:    float;   (* interval (s) between the interpreter feeding sources *)
+    mutable stream_file:     string;   (* file to stream from (into switches) *)
+    mutable agenda_map:      K3Dist.mapping_t;
   }
 
 let default_cmd_line_params () = {
@@ -190,7 +190,7 @@ let default_cmd_line_params () = {
     k3new_data_file   = "default.k3";
     k3new_folds       = false;
     load_path         = "";
-    use_multiindex    = false;
+    map_type          = K3Dist.MapSet;
     enable_gc         = true;
     gen_deletes       = true;
     gen_correctives   = true;
@@ -471,10 +471,10 @@ let test params inputs =
   in List.iter2 test_fn params.input_files inputs
 
 let transform_to_k3_dist params p proginfo =
-  let {use_multiindex; enable_gc; stream_file;
+  let {map_type; enable_gc; stream_file;
        gen_deletes; gen_correctives; agenda_map} = params in
   try
-    GenDist.gen_dist ~use_multiindex ~enable_gc ~stream_file
+    GenDist.gen_dist ~map_type ~stream_file
       ~gen_deletes ~gen_correctives ~agenda_map
       proginfo params.partition_map p
   with DistributeError(uuid, s) -> handle_distribute_error (K3Data p) uuid s
@@ -584,8 +584,10 @@ let param_specs = Arg.align
       "file     Specify a k3new data file";
   "--k3new_folds", Arg.Unit (fun () -> cmd_line_params.k3new_folds <- true),
       "         For k3new: output folds instead of ext and map";
-  "--use_idx", Arg.Unit (fun () -> cmd_line_params.use_multiindex <- true),
+  "--map_idx", Arg.Unit (fun () -> cmd_line_params.map_type <- K3Dist.MapMultiIndex),
       "         Use multiindex maps";
+  "--map_vmap", Arg.Unit (fun () -> cmd_line_params.map_type <- K3Dist.MapVMap),
+      "         Use vmaps";
   "--nogc", Arg.Unit (fun () -> cmd_line_params.enable_gc <- false),
       "         Use garbage collection";
   "--no-deletes", Arg.Unit (fun () -> cmd_line_params.gen_deletes <- false),

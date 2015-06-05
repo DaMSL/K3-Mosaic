@@ -42,6 +42,7 @@ type container_type_t
     | TBag
     | TList
     | TMap
+    | TVMap (* nlogn lookups *)
     | TMultimap of IndexSet.t
 
 type base_type_t

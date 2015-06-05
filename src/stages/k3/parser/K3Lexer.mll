@@ -97,6 +97,8 @@ rule tokenize = parse
     | "|]"  { RBRACKETBAR }
     | "[:"  { LBRACKETCOLON }
     | ":]"  { RBRACKETCOLON }
+    | "[<"  { LBRACKETLT }
+    | ">]"  { RBRACKETLT }
     | "|"   { BAR }
 
     | '-' { NEG }
