@@ -67,6 +67,10 @@ type shuffle_fn_entry = {
   name : string;
 }
 
+type map_type = MapSet 
+              | MapMultiIndex
+              | MapVMap
+
 type config = {
   p : P.prog_data_t;
   (* a mapping from K3 map ids to index sets we build up as we slice *)
@@ -74,14 +78,14 @@ type config = {
   (* a mapping from new map names to index sets we build up as we slice *)
   mapn_idxs : IndexSet.t StrMap.t;
   shuffle_meta : shuffle_fn_entry list;
-  use_multiindex : bool;
-  enable_gc : bool;
+  map_type : map_type;
   gen_deletes : bool;
   gen_correctives : bool;
+  (* optimize figuring out corrective map possiblities *)
   corr_maps : map_id_t list * map_id_t list;
   (* a file to use as the stream to switches *)
   stream_file : string;
-  (* a mapping for agenda *)
+  (* a mapping for agenda: how the relations map to agenda indices *)
   agenda_map : mapping_t;
 }
 
@@ -104,62 +108,20 @@ let make_into_index l =
   let l' = List.map vid_shift @@ fst_many @@ insert_index_fst l in
   OrdIdx(add_vid_idx l', IntSet.of_list l')
 
-(*
-(* add an index to the config structure and update it *)
-let add_index id (idx_set_kind_l:(IntSet.t * index_kind) list) (c:config) =
-  let cur_idx = try IdMap.find id c.map_idxs with Not_found -> [] in
-  let rec loop cur_idx' = function
-    | [] -> cur_idx'
-    | (idx_set, kind)::tail ->
-        (* look for a matching index column set and add to it *)
-        let found, idx_src' = mapfold (fun found idx ->
-          if IntSet.equal idx.mm_indices idx_set then
-            (* iterate with sub-indices *)
-            let mm_submaps = loop idx.mm_submaps tail in
-            (* change to ordered type if requested *)
-            true, match kind with
-              | Ordered -> {idx with mm_submaps; mm_idx_kind=Ordered}
-              | _       -> {idx with mm_submaps}
-
-          else found, idx)
-          false cur_idx'
-        in
-        if found then cur_idx'
-        else (* if not found, add the index *)
-          { mm_indices = idx_set;
-            mm_comp_fn = None;
-            mm_idx_kind = kind;
-            mm_submaps = loop [] tail; (* empty current index *)
-          }::idx_src'
-  in
-  let idx_l' = loop cur_idx idx_set_kind_l in
-  c.map_idxs <- IdMap.add id idx_l' c.map_idxs
-
-(* add an index from a k3 pattern *)
-let add_index_pat id pat_kind_l c =
-  let idx_set_of_pat pat =
-    insert_index_fst 0 pat
-    |> List.filter (fun (_,x) ->
-        match U.tag_of_expr x with Const(CUnknown) -> false | _ -> true)
-    |> fst_many |> intset_of_list
-  in
-  let idx_kind_l = List.map (first idx_set_of_pat) pat_kind_l in
-  add_index id idx_kind_l c
-*)
-
 let t_vid_list = wrap_tlist t_vid
 
 (* wrap with the index type of the map, if requested *)
-let wrap_t_map_idx c map_id =
-  if c.use_multiindex then
-    try
+let wrap_t_map_idx c map_id = match c.map_type with
+  | MapMultiIndex ->
+    begin try
       let idxs = IntMap.find map_id c.map_idxs in
       wrap_tmmap idxs
     with Not_found ->
       prerr_string @@ "Map_idxs:\n"^string_of_map_idxs c c.map_idxs;
       failwith @@ "Failed to find map index for map id "^P.map_name_of c.p map_id
-  else
-    wrap_t_of_map
+    end
+
+  | MapSet -> wrap_t_of_map
 
 let wrap_t_map_idx' c map_id = wrap_t_map_idx c map_id |- wrap_ttuple
 
@@ -467,7 +429,8 @@ let map_latest_vid_vals ?(vid_nm="vid") c slice_col m_pat map_id ~keep_vid : exp
     | Some pat -> pat
     | None     -> List.map (const mk_cunknown) @@ P.map_types_for c.p map_id
   in
-  if c.use_multiindex then
+  match c.map_type with
+  | MapMultiIndex ->
     (* create the corresponding index for the pattern *)
     let idx  = fst_many @@
       List.filter (fun (_,x) -> U.tag_of_expr x <> Const(CUnknown)) @@
@@ -480,7 +443,7 @@ let map_latest_vid_vals ?(vid_nm="vid") c slice_col m_pat map_id ~keep_vid : exp
       (* the multimap layer implements extra eq key filtering *)
       (mk_slice_idx' ~idx ~comp:LT slice_col @@ mk_var vid_nm::pat)
 
-  else (* no multiindex *)
+  | MapSet -> (* no multiindex *)
     (* create a function name per type signature *)
     let access_k3 =
       (* slice with an unknown for the vid so we only get the effect of

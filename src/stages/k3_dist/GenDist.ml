@@ -214,9 +214,10 @@ let nd_add_delta_to_buf c map_id =
             mk_let [lookup_value]
               (mk_if
                 (mk_var corrective)
-                (if c.use_multiindex then
-                  mk_slice_idx' ~idx ~comp:EQ (mk_var tmap_deref) min_vid_pat
-                 else
+                (match c.map_type with
+                 | MapMultiIndex ->
+                   mk_slice_idx' ~idx ~comp:EQ (mk_var tmap_deref) min_vid_pat
+                 | MapSet ->
                   mk_slice' tmap_deref @@
                     list_replace_i (-1) mk_cunknown min_vid_pat) @@
                 mk_empty map_ds_v.t) @@
@@ -237,9 +238,10 @@ let nd_add_delta_to_buf c map_id =
           mk_let ["filtered"]
           (mk_bind (mk_var target_map) tmap_deref @@
             (* slice for all values > vid with same key *)
-            if c.use_multiindex then
+            match c.map_type with
+            | MapMultiIndex ->
               mk_slice_idx' ~idx ~comp:GTA (mk_var tmap_deref) vars_delta_unknown
-            else
+            | MapSet ->
               mk_filter
                 (mk_lambda' map_ds_v.e @@
                   mk_gt (mk_var "vid") @@ mk_var "min_vid") @@
@@ -368,7 +370,8 @@ let sw_demux c =
     let apply s =
       (mk_apply' (s^trig) @@
         (* add 1 for tuple access *)
-        mk_tuple @@ List.map (fun i -> mk_subscript (i+1) @@ mk_var "args") arg_indices)
+        mk_tuple @@ List.map
+          (fun i -> mk_subscript (i+1) @@ mk_var "args") arg_indices)
     in
     mk_if (mk_eq (mk_fst @@ mk_var "args") @@ mk_cstring trig)
       (mk_if (mk_eq (mk_snd @@ mk_var "args") @@ mk_cint 1)
@@ -468,8 +471,7 @@ let sw_send_fetch_fn c s_rhs_lhs s_rhs trig_name =
             (mk_var address) @@
             G.me_var :: mk_var stmt_cnt_list.id ::
               args_of_t_as_vars_with_v c trig_name) ::
-          if c.enable_gc then
-            [GC.sw_update_send ~vid_nm:"vid"] else []) @@
+            [GC.sw_update_send ~vid_nm:"vid"]) @@
       mk_gbagg
         (mk_assoc_lambda' (* grouping func -- assoc because of gbagg tuple *)
           ["ip", t_addr; "stmt_id", t_stmt_id]
@@ -609,8 +611,8 @@ mk_code_sink'
   (["sender_ip", t_addr; stmt_cnt_list.id, stmt_cnt_list.t]@
       (args_of_t_with_v c trig_name))
   [] @@
-  mk_block @@
-    (mk_iter
+  mk_block
+    [mk_iter
       (mk_lambda'
         ["stmt_id", t_stmt_id; "count", t_int] @@
         mk_if
@@ -627,8 +629,8 @@ mk_code_sink'
             mk_cunit @@
             P.stmts_of_t c.p trig_name) @@
           mk_cunit) @@
-      mk_var stmt_cnt_list.id) ::
-      (if c.enable_gc then [GC.nd_ack_send_code ~addr_nm:"sender_ip" ~vid_nm:"vid"] else [])
+        mk_var stmt_cnt_list.id ;
+      GC.nd_ack_send_code ~addr_nm:"sender_ip" ~vid_nm:"vid"]
 
 
 (* Trigger_send_push_stmt_map
@@ -1189,7 +1191,7 @@ let declare_global_vars c partmap ast =
   TS.global_vars @
   K3Ring.global_vars @
   K3Route.global_vars c.p partmap @
-  begin if c.enable_gc then GC.global_vars c else [] end
+  GC.global_vars c
 
 let declare_global_funcs c partmap ast =
   nd_log_master_write ::
@@ -1201,7 +1203,9 @@ let declare_global_funcs c partmap ast =
   nd_update_stmt_cntr_corr_map ::
   begin if c.gen_correctives then [nd_filter_corrective_list] else [] end @
   K3Ring.functions @
-  begin if c.use_multiindex then [] else emit_frontier_fns c end @
+  begin match c.map_type with
+    | MapMultiIndex -> []
+    | MapSet -> emit_frontier_fns c end @
   (List.map (nd_add_delta_to_buf c |- hd |- snd) @@ P.uniq_types_and_maps c.p) @
   TS.functions @
   K3Route.functions c.p partmap @
@@ -1244,19 +1248,17 @@ let gen_dist_for_t c ast trig =
 
 (* Function to generate the whole distributed program *)
 (* @param force_correctives Attempt to create dist code that encourages correctives *)
-let gen_dist ?(use_multiindex=false)
-             ?(enable_gc=false)
-             ?(stream_file="XXX")
-             ?(gen_deletes=true)
+let gen_dist ?(gen_deletes=true)
              ?(gen_correctives=true)
+             ~stream_file
+             ~map_type
              ~agenda_map
              p partmap ast =
   let c = {
       p;
       shuffle_meta=K3Shuffle.gen_meta p;
       mapn_idxs=StrMap.empty;
-      use_multiindex;
-      enable_gc;
+      map_type;
       (* collect all map access patterns for creating indexed maps *)
       map_idxs = M.get_map_access_patterns_ids p ast;
       gen_deletes;
@@ -1278,7 +1280,7 @@ let gen_dist ?(use_multiindex=false)
     proto_funcs @
     [mk_flow @@
       Proto.triggers c @
-      (if c.enable_gc then GC.triggers c Proto.sw_check_done else []) @
+      GC.triggers c Proto.sw_check_done @
       TS.triggers Proto.sw_check_done @
       Timer.triggers c @
       [sw_demux c;

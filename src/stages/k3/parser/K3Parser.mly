@@ -106,7 +106,8 @@
 
 %token LPAREN RPAREN COMMA SEMICOLON PERIOD
 
-%token LBRACE RBRACE LBRACEBAR RBRACEBAR LBRACKET RBRACKET LBRACKETBAR RBRACKETBAR BAR LBRACKETCOLON RBRACKETCOLON
+%token LBRACE RBRACE LBRACEBAR RBRACEBAR LBRACKET RBRACKET 
+%token LBRACKETBAR RBRACKETBAR BAR LBRACKETCOLON RBRACKETCOLON LBRACKETLT RBRACKETLT
 
 %token NEG PLUS MINUS TIMES DIVIDE MODULO HASH
 
@@ -377,6 +378,8 @@ collection_type :
     | LBRACEBAR type_expr_tuple RBRACEBAR { TCollection(TBag, $2) }
     | LBRACKETCOLON type_expr RBRACKETCOLON { TCollection(TMap, $2) }
     | LBRACKETCOLON type_expr_tuple RBRACKETCOLON { TCollection(TMap, $2) }
+    | LBRACKETLT type_expr RBRACKETLT { TCollection(TVMap, $2) }
+    | LBRACKETLT type_expr_tuple RBRACKETLT { TCollection(TVMap, $2) }
     | LBRACKET type_expr RBRACKET { TCollection(TList, $2) }
     | LBRACKET type_expr_tuple RBRACKET { TCollection(TList, $2) }
 ;
@@ -513,16 +516,21 @@ collection :
     | LBRACKETBAR RBRACKETBAR COLON type_expr     { build_collection [] $4 }
     | LBRACKET RBRACKET COLON type_expr           { build_collection [] $4 }
     | LBRACKETCOLON RBRACKETCOLON COLON type_expr { build_collection [] $4 }
+    | LBRACKETLT RBRACKETLT COLON type_expr       { build_collection [] $4 }
 
     | LBRACE RBRACE error       { print_error "missing type for empty set"}
     | LBRACEBAR RBRACEBAR error { print_error "missing type for empty bag"}
+    | LBRACKETBAR RBRACKETBAR error { print_error "missing type for empty multimap"}
     | LBRACKET RBRACKET error   { print_error "missing type for empty list"}
+    | LBRACKETCOLON RBRACKETCOLON error   { print_error "missing type for empty map"}
+    | LBRACKETLT RBRACKETLT error   { print_error "missing type for empty vmap"}
 
     | LBRACE expr_seq RBRACE                       { build_collection $2 (mk_unknown_collection TSet) }
     | LBRACEBAR expr_seq RBRACEBAR                 { build_collection $2 (mk_unknown_collection TBag) }
     | LBRACKETBAR expr_seq BAR indices RBRACKETBAR { build_collection $2 (mk_unknown_collection (TMultimap $4)) }
     | LBRACKET expr_seq RBRACKET                   { build_collection $2 (mk_unknown_collection TList) }
     | LBRACKETCOLON expr_seq RBRACKETCOLON         { build_collection $2 (mk_unknown_collection TMap) }
+    | LBRACKETLT expr_seq RBRACKETLT               { build_collection $2 (mk_unknown_collection TVMap) }
 ;
 
 variable :

@@ -11,8 +11,7 @@ module G = K3Global
 module Std = K3StdLib
 
 (* list of trigs that can be notified *)
-let timer_trigs c =
-  (if c.enable_gc then [D.ms_send_gc_req_nm] else [])
+let timer_trigs _ = [D.ms_send_gc_req_nm]
 
 (* obtain the timer id of a trigger in timer_trigs *)
 let num_of_trig c trig =
