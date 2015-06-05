@@ -161,6 +161,21 @@ let rec assignable ?(unknown_ok=false) t_l t_r = match t_l.typ, t_r.typ with
   | _ when t_l.typ = t_r.typ  -> true
   | _                         -> false
 
+let rec unify l r = match l.typ, r.typ with
+  | TVar x, y -> l.typ <- TLink r
+  | y, TVar x -> r.typ <- TLink l
+  | TMaybe x, TMaybe y -> unify x y
+  | TTuple x, TTuple y -> List.iter unify x y
+  | TCollection(c,x), TCollection(d,y) when c = d -> unify x y
+  | TTarget x, TTarget y -> unify x y
+  | TFunction(a,b), TFunction(c,d) -> unify a b; unify c d
+  | TIndirect x, TIndirect y -> unify x y
+  | TUnivar _, _ -> raise Unify("Univar found")
+  | x, y when x = y -> ()
+  | _ -> raise Unify("Type mismatch")
+
+
+
 (* takes mutability into account *)
 and passable t_l t_r =
   if t_l.mut && not t_r.mut then false

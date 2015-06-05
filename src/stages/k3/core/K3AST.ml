@@ -47,7 +47,9 @@ type container_type_t
 
 type base_type_t
     = TTop
-    | TUnknown
+    | TUnivar       of type_t list * type_t (* universal type *)
+    | TVar          of string
+    | TLink         of type_t
     | TUnit
     | TBool
     | TByte
@@ -64,7 +66,7 @@ type base_type_t
     | TIndirect     of type_t
 
 and type_t = {
-  typ: base_type_t;
+  mutable typ: base_type_t;
   mut: bool;
   anno: annotation_t;
 }

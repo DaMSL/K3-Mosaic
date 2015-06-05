@@ -32,10 +32,10 @@ let t_float_mut = mut t_int
 let t_byte = canonical TByte
 let t_string = canonical TString
 let t_unit = canonical TUnit
-let t_unknown = canonical TUnknown
 let t_top = canonical TTop
 let t_addr = canonical TAddress
 let t_addr_mut = mut t_addr
+let t_var s = canonical @@ TVar s
 
 (* wrap a type in an immutable tuple *)
 let wrap_ttuple typ = match typ with
@@ -82,6 +82,8 @@ let wrap_tmaybe t = canonical @@ TMaybe t
 let wrap_tmaybes ts = List.map wrap_tmaybe ts
 
 let wrap_tfunc tin tout = canonical @@ TFunction(tin, tout)
+
+let wrap_t_uni t_l t = canonical @@ TUnivar(t_l, t)
 
 (* what the generic type of the global maps is *)
 let wrap_t_of_map  = wrap_tset
