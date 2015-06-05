@@ -62,6 +62,7 @@ let string_of_container_type t_c = match t_c with
     | TBag  -> "TBag"
     | TList -> "TList"
     | TMap  -> "TMap"
+    | TVMap -> "TVMap"
     | TMultimap ss -> "TMultimap("^string_of_index_set ss^")"
 
 let string_of_const cn = match cn with
