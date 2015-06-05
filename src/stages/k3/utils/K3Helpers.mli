@@ -53,6 +53,8 @@ val wrap_tbag : type_t -> type_t
 val wrap_tbag' : type_t list -> type_t
 val wrap_tmap : type_t -> type_t
 val wrap_tmap' : type_t list -> type_t
+val wrap_tvmap : type_t -> type_t
+val wrap_tvmap' : type_t list -> type_t
 val wrap_tmmap : IndexSet.t -> type_t -> type_t
 val wrap_tmmap' : IndexSet.t -> type_t list -> type_t
 val wrap_tind : type_t -> type_t

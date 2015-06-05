@@ -102,6 +102,7 @@ let lazy_collection _ ct eval = match ct with
     | TBag  -> lps "{|" <| eval <| lps "|}"
     | TList -> lps "[" <| eval <| lps "]"
     | TMap  -> lps "[:" <| eval <| lps ":]"
+    | TVMap -> lps "[<" <| eval <| lps ">]"
     | TMultimap idxs -> begin match eval with
         | [] -> lps "[| |]"
         | _  -> lps "[|" <| eval <| lsp () <| lps "|"  <| lazy_indices idxs <| lps "|]"

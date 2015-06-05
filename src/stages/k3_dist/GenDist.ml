@@ -217,9 +217,9 @@ let nd_add_delta_to_buf c map_id =
                 (match c.map_type with
                  | MapMultiIndex ->
                    mk_slice_idx' ~idx ~comp:EQ (mk_var tmap_deref) min_vid_pat
-                 | MapSet ->
-                  mk_slice' tmap_deref @@
-                    list_replace_i (-1) mk_cunknown min_vid_pat) @@
+                 | MapSet | MapVMap ->
+                   mk_slice' tmap_deref @@
+                     list_replace_i (-1) mk_cunknown min_vid_pat) @@
                 mk_empty map_ds_v.t) @@
             mk_case_sn
               (mk_peek @@ mk_var lookup_value) "val"
@@ -245,7 +245,7 @@ let nd_add_delta_to_buf c map_id =
               mk_filter
                 (mk_lambda' map_ds_v.e @@
                   mk_gt (mk_var "vid") @@ mk_var "min_vid") @@
-                (* slice w/o vid and value *)
+                (* slice for all vid and value *)
                 mk_slice' tmap_deref vars_delta_unknown) @@
           mk_iter
             (mk_lambda' map_ds_v.e @@
@@ -1204,8 +1204,9 @@ let declare_global_funcs c partmap ast =
   begin if c.gen_correctives then [nd_filter_corrective_list] else [] end @
   K3Ring.functions @
   begin match c.map_type with
-    | MapMultiIndex -> []
-    | MapSet -> emit_frontier_fns c end @
+    | MapMultiIndex | MapVMap -> []
+    | MapSet -> emit_frontier_fns c
+  end @
   (List.map (nd_add_delta_to_buf c |- hd |- snd) @@ P.uniq_types_and_maps c.p) @
   TS.functions @
   K3Route.functions c.p partmap @
