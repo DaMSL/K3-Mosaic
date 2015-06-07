@@ -292,6 +292,8 @@ let mk_slice_idx ~idx ~comp col pat =
 let mk_slice_idx' ~idx ~comp col pat =
   mk_slice_idx ~idx ~comp col @@ mk_tuple pat
 
+let mk_slice_frontier vid col pat = mk_slice_gen SliceFrontier col @@ mk_tuple [vid; pat]
+
 let mk_insert col x = mk_stree (Insert col) [mk_tuple x]
 
 let mk_delete col x = mk_stree (Delete col) [mk_tuple x]

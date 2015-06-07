@@ -85,9 +85,13 @@ let check_tag_arity tag children =
 
     | Slice      -> 2
     | SliceIdx _ -> 2
+    | SliceFrontier -> 2
     | Insert _  -> 1
-    | Delete _  -> 1
     | Update _  -> 2
+    | UpsertWith _ -> 3
+    | UpdateSuffix _ -> 1
+    | Delete _  -> 1
+    | DeletePrefix _ -> 1
     | Peek      -> 1
 
     | Assign _ -> 1
@@ -168,9 +172,7 @@ and passable t_l t_r =
 
 let (===) = assignable
 
-
 let (<~) = passable
-
 
 (* Whether a type contains TUnknown somewhere ie. it's not a fully known type *)
 let rec is_unknown_t t = match t.typ with
@@ -462,10 +464,19 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
       | Slice ->
           let tcol', tpat = bind 0, bind 1 in
           let tcol, telem =
+            try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') () in
+          (* order to take care of possible unknowns in pattern *)
+          if not (tpat === telem) then t_erroru (TMismatch(tpat, telem, "pattern")) ()
+          else tcol'
+
+      | SliceFrontier ->
+          let tcol', tpat = bind 0, bind 1 in
+          let tcol, telem =
             try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') ()  in
-          (* take care of possible unknowns in pattern *)
-          if tpat === telem then tcol'
-          else t_erroru (TMismatch(tpat, telem, "pattern")) ()
+          if not (tpat === telem) then t_erroru (TMismatch(tpat, telem, "pattern")) () else
+          let tpat_fst = hd @@ unwrap_ttuple tpat in
+          if not (tpat_fst = t_vid) then t_erroru (TMismatch(t_vid, tpat_fst, "vid")) () else
+          tcol'
 
       | SliceIdx(idx, comp) ->
           let tcol', tpat = bind 0, bind 1 in
@@ -500,6 +511,30 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
           if not (telem === tnew) then t_erroru (TMismatch(telem, tnew, "new value")) () else
           t_unit
 
+      | UpdateSuffix id ->
+          let tcol' = try List.assoc id env
+                    with Not_found -> t_erroru (TMsg(id^" not found")) () in
+          let tcol, telem =
+            try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') () in
+          let tnew = bind 0 in
+          if not (telem = tnew) then t_erroru (TMismatch(telem, tnew, "new value")) () else
+          let tfst = hd @@ unwrap_ttuple tnew in
+          if not (tfst == t_vid) then t_erroru (TMismatch(tfst, t_vid, "vid")) () else
+          t_unit
+
+      | UpsertWith id ->
+          let tcol' = try List.assoc id env
+                    with Not_found -> t_erroru (TMsg(id^" not found")) () in
+          let tcol, telem =
+            try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') () in
+          let tkey, tlam_insert, tlam_update = bind 0, bind 1, bind 2 in
+          if not (telem === tkey) then t_erroru (TMismatch(telem, tkey, "key")) () else
+          let tlam_insert' = wrap_tfunc t_unit telem in
+          if not (tlam_insert === tlam_insert') then t_erroru (TMismatch(tlam_insert, tlam_insert', "insert lambda")) () else
+          let tlam_update' = wrap_tfunc telem telem in
+          if not (tlam_update === tlam_update') then t_erroru (TMismatch(tlam_update, tlam_update', "update lambda")) () else
+          t_unit
+
       | Delete id ->
           let tcol' = try List.assoc id env
                     with Not_found -> t_erroru (TMsg(id^" not found")) () in
@@ -508,6 +543,17 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
           let told = bind 0 in
           if telem === told then t_unit
           else t_erroru (TMismatch(telem, told, "")) ()
+
+      | DeletePrefix id ->
+          let tcol' = try List.assoc id env
+                      with Not_found -> t_erroru (TMsg(id^" not found")) () in
+          let tcol, telem =
+            try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') () in
+          let told = bind 0 in
+          if not (telem === told) then t_erroru (TMismatch(telem, told, "")) () else
+          let tfst = hd @@ unwrap_ttuple told in
+          if not (tfst == t_vid) then t_erroru (TMismatch(tfst, t_vid, "vid")) () else
+          t_unit
 
       | Peek ->
           let tcol' = bind 0 in

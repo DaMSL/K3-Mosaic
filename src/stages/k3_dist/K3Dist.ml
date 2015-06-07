@@ -67,7 +67,7 @@ type shuffle_fn_entry = {
   name : string;
 }
 
-type map_type = MapSet 
+type map_type = MapSet
               | MapMultiIndex
               | MapVMap
 

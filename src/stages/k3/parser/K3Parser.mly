@@ -120,7 +120,7 @@
 %token COLON
 
 %token QUESTION
-%token INSERT UPDATE DELETE
+%token INSERT UPDATE DELETE UPSERT_WITH UPDATE_SUFFIX DELETE_PREFIX
 
 %token GETS COLONGETS
 
@@ -637,6 +637,7 @@ tuple_index :
 access :
     | expr LBRACKET tuple access_comp index RBRACKET { mkexpr (SliceIdx($5, $4)) [$1; $3] }
     | expr LBRACKET tuple RBRACKET { mkexpr Slice [$1; $3] }
+    | expr LBRACE tuple RBRACE { mkexpr SliceFrontier [$1; $3] }
     | PEEK LPAREN expr RPAREN { mkexpr Peek [$3] }
 ;
 
@@ -650,10 +651,14 @@ access_comp :
 mutation :
     /* Inserts, deletes and sends use a vararg function syntax for their value/payload */
     | INSERT LPAREN IDENTIFIER COMMA tuple RPAREN { mkexpr (Insert $3) [$5] }
+    | UPSERT_WITH LPAREN IDENTIFIER COMMA tuple COMMA expr COMMA expr RPAREN { mkexpr (UpsertWith $3) [$5; $7; $9] }
+
     | DELETE LPAREN IDENTIFIER COMMA tuple RPAREN { mkexpr (Delete $3) [$5] }
+    | DELETE_PREFIX LPAREN IDENTIFIER COMMA tuple RPAREN { mkexpr (DeletePrefix $3) [$5] }
 
     /* Updates must explicitly specify their new/old value as a tuple */
     | UPDATE LPAREN IDENTIFIER COMMA expr COMMA expr RPAREN { mkexpr (Update $3) [$5; $7] }
+    | UPDATE_SUFFIX LPAREN IDENTIFIER COMMA expr RPAREN { mkexpr (UpdateSuffix $3) [$5] }
 
     | IDENTIFIER LARROW expr { mkexpr (Assign $1) [$3] }
 

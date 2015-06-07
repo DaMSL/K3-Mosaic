@@ -177,8 +177,11 @@ rule tokenize = parse
     | "send" { SEND }
 
     | "insert" { INSERT }
+    | "upsert_with" { UPSERT_WITH }
+    | "update_suffix" { UPDATE_SUFFIX }
     | "update" { UPDATE }
     | "delete" { DELETE }
+    | "delete_prefix" { DELETE_PREFIX }
 
     | '@' { ANNOTATE }
 

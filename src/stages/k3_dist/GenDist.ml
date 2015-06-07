@@ -1161,6 +1161,10 @@ let nd_do_corrective_fns c s_rhs ast trig_name corrective_maps =
   in
   List.map do_corrective_fn s_rhs
 
+let str_of_date_t t = match t.typ with
+  | TDate -> {t with typ = TString}
+  | x -> t
+
 (* we take the existing default role and prepend it with a one-shot to
  * call out on-init function *)
 let roles_of c (ast:program_t) =

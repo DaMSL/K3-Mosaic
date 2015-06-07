@@ -130,9 +130,13 @@ type expr_tag_t
     | Peek
     | Slice
     | SliceIdx of index_t * comp_t
+    | SliceFrontier        (* slice with a frontier at a vid *)
     | Insert of id_t
-    | Delete of id_t
     | Update of id_t
+    | UpsertWith of id_t   (* insert with a default handler *)
+    | UpdateSuffix of id_t (* update past a vid *)
+    | Delete of id_t
+    | DeletePrefix of id_t (* delete before a certain vid. save frontier *)
 
     | Assign of id_t
     | Indirect
