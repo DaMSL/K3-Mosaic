@@ -15,6 +15,9 @@ module rec ValueMap : sig include NearMap.S with type key = Value.value_t end
 
 and ValueMMap : sig include IMultimap.S with type elt = Value.value_t end
 
+and ValueVMap : sig include IVMap.S with type key = Value.value_t
+                                    and  type vid = Value.value_t end
+
 and ValueBag : sig include IBag.S with type elt = Value.value_t end
 
 and ValueSet : sig include ISet.S with type elt = Value.value_t end
@@ -53,6 +56,7 @@ and Value : sig
       | VBag of ValueBag.t
       | VList of value_t IList.t
       | VMap of value_t ValueMap.t
+      | VVmap of value_t ValueVMap.t
       | VMultimap of ValueMMap.t
       | VFunction of arg_t * local_env_t * expr_t (* closure *)
       | VForeignFunction of id_t * arg_t * foreign_func_t

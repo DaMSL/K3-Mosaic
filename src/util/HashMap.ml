@@ -9,6 +9,7 @@ module type S = sig
     val singleton : key -> 'a -> 'a t
     val is_empty : 'a t -> bool
     val add : key -> 'a -> 'a t -> 'a t
+    val update_with : key -> ('a option -> 'a option) -> 'a t -> 'a t
     val remove : key -> 'a t -> 'a t
     val find : key -> 'a t -> 'a
     val combine : 'a t -> 'a t -> 'a t
@@ -50,11 +51,22 @@ module Make(Ord : OrderedType) = struct
 
   let add k v m =
     let h = Ord.hash k in
-    try
-      let im = IntMap.find h m in
-      IntMap.add h (WrapMap.add k v im) m
-    with Not_found ->
-      IntMap.add h (WrapMap.singleton k v) m
+    let innermap  = try IntMap.find h m with Not_found -> WrapMap.empty in
+    let innermap' = WrapMap.add k v innermap in
+    IntMap.add h innermap' m
+
+  let update_with k f m =
+    let h = Ord.hash k in
+    let innermap  = try IntMap.find h m with Not_found -> WrapMap.empty in
+    let oldv      = try some @@ WrapMap.find k innermap with Not_found -> None in
+    match f oldv with
+    | None ->
+        let innermap' = WrapMap.remove k innermap in
+        if WrapMap.is_empty innermap' then IntMap.remove h m
+        else IntMap.add h innermap' m
+    | Some v ->
+        let innermap' = WrapMap.add k v innermap in
+        IntMap.add h innermap' m
 
   let remove k m =
     let h = Ord.hash k in

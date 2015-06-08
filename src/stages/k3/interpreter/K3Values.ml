@@ -43,13 +43,19 @@ module rec OrderedKey : ICommon.OrderedKeyType = struct
           Value.VTuple(filter_by_index_t ~anti_set:(mset, v) idx l)
       | _ -> invalid_arg "not a vtuple"
     let to_string = ValueUtils.repr_of_value
-    end
+end
 
 and ValueMap : NearMap.S with type key = Value.value_t = NearMap.Make(OrderedKey)
+
+and ValueVMap : IVMap.S with type key = Value.value_t
+                        and  type vid = Value.value_t = IVMap.Make(OrderedKey)(OrderedKey)
+
+and ValueHashMap : HashMap.S with type key = Value.value_t = HashMap.Make(OrderedKey)
 
 and ValueBag : IBag.S with type elt = Value.value_t
                       and type t = int HashMap.Make(OrderedKey).t
                          = IBag.Make(OrderedKey)
+
 
 and ValueSet : ISet.S with type elt = Value.value_t
                       and type t = unit HashMap.Make(OrderedKey).t
@@ -177,6 +183,7 @@ and Value : sig
       | VBag of ValueBag.t
       | VList of value_t IList.t
       | VMap of value_t ValueMap.t
+      | VVmap of value_t ValueVMap.t
       | VMultimap of ValueMMap.t
       | VFunction of arg_t * local_env_t * expr_t (* closure *)
       | VForeignFunction of id_t * arg_t * foreign_func_t
