@@ -13,16 +13,21 @@ module type S = sig
   val add : vid -> key -> 'a -> 'a t -> 'a t
   val singleton : vid -> key -> 'a -> 'a t
   val remove : vid -> key -> 'a t -> 'a t
+  val remove_prefix : vid -> 'a t -> 'a t
   val combine : 'a t -> 'a t -> 'a t
   val fold : (vid -> key -> 'a -> 'b -> 'b) -> 'a t -> 'b -> 'b
   val map : (vid -> key -> 'a -> 'b) -> 'a t -> 'b t
   val iter : (vid -> key -> 'a -> unit) -> 'a t -> unit
   val filter : (vid -> key -> 'a -> bool) -> 'a t -> 'a t
   val update : vid -> key -> 'a -> 'a -> 'a t -> 'a t
+  val update_with : vid -> key -> ('a option -> 'a option) -> 'a t -> 'a t
+  val update_suffix : vid -> key -> ('a -> 'a ) -> 'a t -> 'a t
   val peek : 'a t -> (vid * key * 'a) option
   val to_list : 'a t -> (vid * key * 'a) list
   val compare : ('a -> 'a -> int) -> 'a t -> 'a t -> int
   val size : 'a t -> int
+  val frontier_point: vid -> key -> 'a t -> 'a
+  val frontier_slice: vid -> 'a t -> (key * 'a) list
 end
 
 module Make(OrdVid: ICommon.OrderedKeyType)(OrdKey: ICommon.OrderedKeyType) = struct
@@ -55,15 +60,6 @@ module Make(OrdVid: ICommon.OrderedKeyType)(OrdKey: ICommon.OrderedKeyType) = st
           else Some vidmap'
     ) m
 
-  (* update from a certain vid onwards *)
-  let update_suffix vid k f m =
-    HMap.map (fun k vidmap ->
-      VIDMap.map (fun vid' v ->
-        if OrdVid.compare vid' vid > 0 then f v
-        else vid'
-      ) vidmap
-    ) m
-
   (* get the frontier at a specific key *)
   let frontier_point vid k m =
     let vidmap = HMap.find k m in
@@ -71,8 +67,22 @@ module Make(OrdVid: ICommon.OrderedKeyType)(OrdKey: ICommon.OrderedKeyType) = st
 
   (* get the frontier for a slice (must read entire domain) *)
   let frontier_slice vid m =
-    HMap.map (fun k vidmap ->
-      k, VIDMap.find_lt vid vidmap) m
+    HMap.fold (fun k vidmap acc ->
+      try
+        (k, VIDMap.find_lt vid vidmap)::acc
+      with Not_found -> acc
+    ) m []
+
+  (* for GC: save a frontier and delete all before *)
+  let remove_prefix vid m =
+    let slice = frontier_slice vid m in
+    let m' = HMap.map (fun k vidmap ->
+      VIDMap.filter (fun vid' v -> OrdVid.compare vid' vid > 0) vidmap
+    ) m in
+    (* add back the saved frontier. set vid to the one given *)
+    List.fold_left (fun acc (k, v) ->
+      add vid k v acc
+    ) m' slice
 
   let singleton vid k v = HMap.singleton k (VIDMap.singleton vid v)
 
@@ -108,6 +118,13 @@ module Make(OrdVid: ICommon.OrderedKeyType)(OrdKey: ICommon.OrderedKeyType) = st
 
   let map f m =
     fold (fun vid k v acc -> add vid k (f vid k v) acc) m empty
+
+  (* update from a certain vid onwards *)
+  let update_suffix (vid:OrdVid.t) (k:OrdKey.t) (f:'a -> 'a) (m:'a t) : 'a t =
+    map (fun vid' k' v ->
+      if OrdKey.compare k' k = 0 && OrdVid.compare vid' vid >=0 then f v
+      else v) m
+
 
   let iter f m = fold (fun vid k v _ -> f vid k v) m ()
 
