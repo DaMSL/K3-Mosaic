@@ -39,7 +39,7 @@ let not_collection_bt t = BTBad(t, "not a collection")
 let error_tuple_small n tl t = TBad(t, Printf.sprintf "tuple has size %d but subscript %d" tl n)
 let wrong_let_size t = TBad(t, "wrong size for let")
 
-let t_error uuid name msg () = raise @@ TypeError(uuid, name, msg)
+let t_error uuid name msg = raise @@ TypeError(uuid, name, msg)
 
 let check_tag_arity tag children =
   let length = List.length children in
@@ -109,7 +109,7 @@ let (+++) f g = fun t x -> f (g t x) x
 
 (* Type extraction primitives *)
 let type_of_expr e =
-  let error s err = t_error (id_of_expr e) s err () in
+  let error s err = t_error (id_of_expr e) s err in
   let is_type_annotation a = match a with Type _ -> true | _ -> false in
   let extract_type = function
     Type t -> t | _ -> error "Invalid type annotation" InvalidTypeAnnotation in
@@ -202,7 +202,7 @@ let deduce_constant_type id trig_env c =
         begin try
           let typ = List.assoc id trig_env in
           typ.typ
-        with Not_found -> t_erroru name (TMsg("Trigger "^id^" not found")) () end
+        with Not_found -> t_erroru name (TMsg("Trigger "^id^" not found")) end
   in canonical constant_type
 
 let rec gen_arg_bindings = function
@@ -228,20 +228,20 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
         let t = type_of_expr ch in
         let t_e = match t.typ with
           | TMaybe mt -> mt
-          | _         -> t_erroru (not_maybe t) () in
+          | _         -> t_erroru (not_maybe t) in
         (x, t_e) :: env
     | BindAs x, Some ch, 1 ->
         let t = type_of_expr ch in
         let t_e = match t.typ with
           | TIndirect it -> it
-          | _            -> t_erroru (not_ind t) () in
+          | _            -> t_erroru (not_ind t) in
         (x, t_e) :: env
     | Let xs, Some ch, 1 ->
         let t = type_of_expr ch in
         let ts = match t.typ with
           | TTuple ts when List.length ts = List.length xs -> ts
           | _         when List.length xs = 1              -> [t]
-          | _                                              -> t_erroru (wrong_let_size t) ()
+          | _                                              -> t_erroru (wrong_let_size t)
         in
         (* remove unknowns from binding *)
         (List.filter ((<>) "_" |- fst) @@ list_zip xs ts) @ env
@@ -268,9 +268,9 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
   let common_ops () =
     let tfun, tcol' = bind 0, bind 1 in
     let targ, tret =
-      try unwrap_tfun tfun with Failure _ -> t_erroru (not_function tfun) () in
+      try unwrap_tfun tfun with Failure _ -> t_erroru (not_function tfun) in
     let tcol, telem =
-      try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') ()  in
+      try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') in
     tfun, tcol', targ, tret, tcol, telem
   in
 
@@ -279,7 +279,7 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
       | Const c -> deduce_constant_type uuid trig_env c
       | Var id  -> begin
           try List.assoc id env
-          with Not_found -> t_erroru (TMsg(id^" not found")) ()
+          with Not_found -> t_erroru (TMsg(id^" not found"))
         end
       | Tuple       ->
           let child_types = List.map type_of_expr typed_children in
@@ -288,28 +288,28 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
       | Nothing t   -> t
       | Empty t     -> t
       | Singleton t ->
-          let t_c, t_e = try unwrap_tcol t with Failure _ -> t_erroru (not_collection t) () in
+          let t_c, t_e = try unwrap_tcol t with Failure _ -> t_erroru (not_collection t) in
           let t_ne = bind 0 in
           (* we disregard the element part of the singleton ast because it's not needed *)
           canonical @@ TCollection(t_c, t_ne)
 
       | Combine ->
           let t0, t1 = bind 0, bind 1 in
-          let _ = try unwrap_tcol t0 with Failure _ -> t_erroru (not_collection t0) () in
-          let _ = try unwrap_tcol t1 with Failure _ -> t_erroru (not_collection t1) () in
-          if not (t0 === t1) then t_erroru (TMismatch(t0, t1,"")) ()
+          let _ = try unwrap_tcol t0 with Failure _ -> t_erroru (not_collection t0) in
+          let _ = try unwrap_tcol t1 with Failure _ -> t_erroru (not_collection t1) in
+          if not (t0 === t1) then t_erroru (TMismatch(t0, t1,""))
           else (* Avoid unknowns *)
             if is_unknown_t t0 then t1 else t0
 
       | Range t_c ->
           let start, stride, steps = bind 0, bind 1, bind 2 in
-          if not (steps.typ = TInt) then t_erroru (BTMismatch(TInt, steps.typ,"steps:")) () else
+          if not (steps.typ = TInt) then t_erroru (BTMismatch(TInt, steps.typ,"steps:")) else
           let t_e = match start.typ, stride.typ with
             | TInt, TInt     -> TInt
             | TFloat, TInt
             | TInt, TFloat
             | TFloat, TFloat -> TFloat
-            | _ -> t_erroru (TMsg("start/stride types are bad")) ()
+            | _ -> t_erroru (TMsg("start/stride types are bad"))
           in canonical @@ TCollection(t_c, canonical t_e)
 
       | Add | Mult ->
@@ -320,33 +320,33 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
             | TFloat, TInt   -> TFloat
             | TInt, TInt     -> TInt
             | TBool, TBool   -> TBool
-            | _ -> t_erroru (TMismatch(t_l, t_r, "")) ()
+            | _ -> t_erroru (TMismatch(t_l, t_r, ""))
           in canonical result_type
 
       | Neg ->
           let t0 = bind 0 in
           begin match t0.typ with
           | TBool | TInt | TFloat -> t0
-          | _ -> t_erroru (not_collection t0) ()
+          | _ -> t_erroru (not_collection t0)
           end
 
       | Eq | Lt | Neq | Leq ->
           let t_l, t_r = bind 0, bind 1 in
           if t_l === t_r then t_bool
-          else t_erroru (TMismatch(t_l, t_r, "")) ()
+          else t_erroru (TMismatch(t_l, t_r, ""))
 
       | IfThenElse ->
           let t_p, t_t, t_e = bind 0, bind 1, bind 2 in
           if canonical TBool === t_p then
               if assignable ~unknown_ok:true t_t t_e then t_t
-              else t_erroru (TMismatch(t_t, t_e,"")) ()
-          else t_erroru (TMismatch(canonical TBool, t_p,"")) ()
+              else t_erroru (TMismatch(t_t, t_e,""))
+          else t_erroru (TMismatch(canonical TBool, t_p,""))
 
       | CaseOf id ->
           (* the expression was handled in the prelude *)
           let t_s, t_n = bind 1, bind 2 in
           if t_n === t_s then t_s
-          else t_erroru (TMismatch(t_n, t_s, "case branches")) ()
+          else t_erroru (TMismatch(t_n, t_s, "case branches"))
 
         (* handled in the prelude *)
       | BindAs _ -> bind 1
@@ -358,7 +358,7 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
           let rec validate_block components = match components with
             | e :: [] -> type_of_expr e
             | h :: t when type_of_expr h  === canonical TUnit -> validate_block t
-            | _       -> t_erroru (TMsg("Bad or non-TUnit expression")) ()
+            | _       -> t_erroru (TMsg("Bad or non-TUnit expression"))
           in validate_block typed_children
 
       | Lambda t_a ->
@@ -367,80 +367,80 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
 
       | Apply ->
           let t_f, t_a = bind 0, bind 1 in
-          let t_e, t_r = try unwrap_tfun t_f with Failure _ -> t_erroru (not_function t_f) () in
+          let t_e, t_r = try unwrap_tfun t_f with Failure _ -> t_erroru (not_function t_f) in
           if t_e <~ t_a then t_r
-          else t_erroru (TMismatch(t_e, t_a, "")) ()
+          else t_erroru (TMismatch(t_e, t_a, ""))
 
       | Subscript n ->
           let t_e = bind 0 in
           begin match t_e.typ with
           | TTuple l when n <= List.length l -> at l (n - 1)
-          | TTuple l -> t_erroru (error_tuple_small n (List.length l) t_e) ()
-          | _ -> t_erroru (not_tuple t_e) ()
+          | TTuple l -> t_erroru (error_tuple_small n (List.length l) t_e)
+          | _ -> t_erroru (not_tuple t_e)
           end
 
       | Iterate ->
           let _, _, targ, tret, _, telem = common_ops () in
           if not (tret === canonical TUnit)
-              then t_erroru (TMismatch(tret, canonical TUnit, "return val:")) () else
+              then t_erroru (TMismatch(tret, canonical TUnit, "return val:")) else
           if targ <~ telem then canonical TUnit
-          else t_erroru (TMismatch(targ, telem, "element:")) ()
+          else t_erroru (TMismatch(targ, telem, "element:"))
 
       | Map ->
           let _, tcol', targ, tret, tcol, telem = common_ops () in
           if targ <~ telem then match tcol with
             | TMap | TMultimap _ -> wrap_tbag tret
             | _ -> canonical @@ TCollection(tcol, tret)
-          else t_erroru (TMismatch(targ, telem, "element:")) ()
+          else t_erroru (TMismatch(targ, telem, "element:"))
 
       | Filter ->
           let _, tcol', targ, tret, tcol, telem = common_ops () in
           if not (targ <~ telem) then
-            t_erroru (TMismatch(targ, telem, "predicate:")) () else
+            t_erroru (TMismatch(targ, telem, "predicate:")) else
           if not (canonical TBool === tret) then
-            t_erroru (TMismatch(canonical TBool, tret, "")) () else
+            t_erroru (TMismatch(canonical TBool, tret, "")) else
           tcol'
 
       | Flatten ->
           let tcol'' = bind 0 in
           let tcol, telem =
-            try unwrap_tcol tcol'' with Failure _ -> t_erroru (not_collection tcol'') () in
+            try unwrap_tcol tcol'' with Failure _ -> t_erroru (not_collection tcol'') in
           let _ =
-            try unwrap_tcol telem with Failure _ -> t_erroru (not_collection telem) () in
+            try unwrap_tcol telem with Failure _ -> t_erroru (not_collection telem) in
           begin match tcol with
-          | TMap | TMultimap _ -> t_erroru (TBad (tcol'', "can't flatten a Map")) ()
+          | TMap | TMultimap _ -> t_erroru (TBad (tcol'', "can't flatten a Map"))
           | _ -> telem
           end
 
       | Aggregate ->
           let tfun, tzero, tcol' = bind 0, bind 1, bind 2 in
           let targ, tret =
-            try unwrap_tfun tfun with Failure _ -> t_erroru (not_function tfun) () in
+            try unwrap_tfun tfun with Failure _ -> t_erroru (not_function tfun) in
           let tcol, telem =
-            try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') ()  in
+            try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') in
           let expected1 = wrap_ttuple [tzero; telem] in
           if not (targ <~ expected1)
-              then t_erroru (TMismatch(targ, expected1, "")) () else
+              then t_erroru (TMismatch(targ, expected1, "")) else
           let expected2 = canonical @@ TTuple[tret; telem] in
           if not (targ <~ expected2)
-              then t_erroru (TMismatch(targ, expected2, "")) () else
+              then t_erroru (TMismatch(targ, expected2, "")) else
           tzero
 
       | GroupByAggregate ->
           let tgrp, tagg, tzero, tcol' = bind 0, bind 1, bind 2, bind 3 in
           let tgarg, tgret =
-            try unwrap_tfun tgrp with Failure _ -> t_erroru (not_function tgrp) () in
+            try unwrap_tfun tgrp with Failure _ -> t_erroru (not_function tgrp) in
           let taarg, taret =
-            try unwrap_tfun tagg with Failure _ -> t_erroru (not_function tagg) () in
+            try unwrap_tfun tagg with Failure _ -> t_erroru (not_function tagg) in
           let tcol, telem =
-            try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') ()  in
+            try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') in
           if not (tgarg <~ telem) then
-            t_erroru (TMismatch(tgarg, telem, "grouping func:")) () else
+            t_erroru (TMismatch(tgarg, telem, "grouping func:")) else
           let expected1 = wrap_ttuple [tzero; telem] in
           if not (taarg <~ expected1) then
-            t_erroru (TMismatch(taarg, expected1, "agg func:")) () else
+            t_erroru (TMismatch(taarg, expected1, "agg func:")) else
           if not (tzero <~ taret) then
-            t_erroru (TMismatch(taret, tzero, "agg func:")) ()
+            t_erroru (TMismatch(taret, tzero, "agg func:"))
           else canonical @@
             TCollection(tcol, wrap_ttuple [tgret; taret])
 
@@ -449,127 +449,127 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
 
           let expected1 = wrap_ttuple [telem; telem] in
           if not (targ <~ expected1) then
-            t_erroru (TMismatch(targ, expected1, "Sort function arg")) () else
+            t_erroru (TMismatch(targ, expected1, "Sort function arg")) else
           if not (canonical TBool === tret) then
-            t_erroru (TMismatch(canonical TBool, tret, "Sort function result")) () else
+            t_erroru (TMismatch(canonical TBool, tret, "Sort function result")) else
           if not (tcol = TList) then
-            t_erroru (TMsg "can only sort on a list") () else
+            t_erroru (TMsg "can only sort on a list") else
           canonical @@ TCollection(TList, telem)
 
       | Size ->
           let tcol = bind 0 in
-          ignore(try unwrap_tcol tcol with Failure _ -> t_erroru (not_collection tcol) ());
+          ignore(try unwrap_tcol tcol with Failure _ -> t_erroru (not_collection tcol));
           t_int
 
       | Slice ->
           let tcol', tpat = bind 0, bind 1 in
           let tcol, telem =
-            try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') () in
+            try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') in
           (* order to take care of possible unknowns in pattern *)
-          if not (tpat === telem) then t_erroru (TMismatch(tpat, telem, "pattern")) ()
+          if not (tpat === telem) then t_erroru (TMismatch(tpat, telem, "pattern"))
           else tcol'
 
       | SliceFrontier ->
           let tcol', tpat = bind 0, bind 1 in
           let tcol, telem =
-            try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') ()  in
-          if not (tcol = TVMap) then t_erroru (TMismatch(tcol', wrap_tvmap telem, "collection type")) () else
-          if not (tpat === telem) then t_erroru (TMismatch(tpat, telem, "pattern")) () else
+            try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') in
+          if not (tcol = TVMap) then t_erroru (TMismatch(tcol', wrap_tvmap telem, "collection type")) else
+          if not (tpat === telem) then t_erroru (TMismatch(tpat, telem, "pattern")) else
           let tpat_fst = hd @@ unwrap_ttuple tpat in
-          if not (tpat_fst = t_vid) then t_erroru (TMismatch(t_vid, tpat_fst, "vid")) () else
+          if not (tpat_fst = t_vid) then t_erroru (TMismatch(t_vid, tpat_fst, "vid")) else
           tcol'
 
       | SliceIdx(idx, comp) ->
           let tcol', tpat = bind 0, bind 1 in
           let tcol, telem =
-            try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') ()  in
+            try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') in
           begin match tcol with
           | TMultimap mmidx when IndexSet.mem idx mmidx -> ()
-          | TMultimap _ -> t_erroru (TMsg "slice mismatch on multimap") ()
-          | _ -> t_erroru (TBad(tcol', "not a multimap")) ()
+          | TMultimap _ -> t_erroru (TMsg "slice mismatch on multimap")
+          | _ -> t_erroru (TBad(tcol', "not a multimap"))
           end;
           (* indexing returns a bag *)
           (* take care of possible unknowns in pattern *)
           if tpat === telem then wrap_tbag telem
-          else t_erroru (TMismatch(tpat, telem, "pattern")) ()
+          else t_erroru (TMismatch(tpat, telem, "pattern"))
 
       | Insert id ->
           let tcol' = try List.assoc id env
-                    with Not_found -> t_erroru (TMsg(id^" not found")) () in
+                      with Not_found -> t_erroru (TMsg(id^" not found")) in
           let tcol, telem =
-            try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') () in
+            try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') in
           let telem' = bind 0 in
           if telem === telem' then t_unit
-          else t_erroru (TMismatch(telem, telem', "")) ()
+          else t_erroru (TMismatch(telem, telem', ""))
 
       | Update id ->
           let tcol' = try List.assoc id env
-                    with Not_found -> t_erroru (TMsg(id^" not found")) () in
+                    with Not_found -> t_erroru (TMsg(id^" not found")) in
           let tcol, telem =
-            try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') () in
+            try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') in
           let told, tnew = bind 0, bind 1 in
-          if not (telem === told) then t_erroru (TMismatch(telem, told, "old value")) () else
-          if not (telem === tnew) then t_erroru (TMismatch(telem, tnew, "new value")) () else
+          if not (telem === told) then t_erroru (TMismatch(telem, told, "old value")) else
+          if not (telem === tnew) then t_erroru (TMismatch(telem, tnew, "new value")) else
           t_unit
 
       | UpdateSuffix id ->
           let tcol' = try List.assoc id env
-                    with Not_found -> t_erroru (TMsg(id^" not found")) () in
+                    with Not_found -> t_erroru (TMsg(id^" not found")) in
           let tcol, telem =
-            try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') () in
-          if not (tcol = TVMap) then t_erroru (TMismatch(tcol', wrap_tvmap telem, "collection type")) () else
+            try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') in
+          if not (tcol = TVMap) then t_erroru (TMismatch(tcol', wrap_tvmap telem, "collection type")) else
           let tnew = bind 0 in
-          if not (telem = tnew) then t_erroru (TMismatch(telem, tnew, "new value")) () else
+          if not (telem = tnew) then t_erroru (TMismatch(telem, tnew, "new value")) else
           let tfst = hd @@ unwrap_ttuple tnew in
-          if not (tfst == t_vid) then t_erroru (TMismatch(tfst, t_vid, "vid")) () else
+          if not (tfst == t_vid) then t_erroru (TMismatch(tfst, t_vid, "vid")) else
           t_unit
 
       | UpsertWith id ->
           let tcol' = try List.assoc id env
-                    with Not_found -> t_erroru (TMsg(id^" not found")) () in
+                    with Not_found -> t_erroru (TMsg(id^" not found")) in
           let tcol, telem =
-            try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') () in
+            try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') in
           let tkey, tlam_insert, tlam_update = bind 0, bind 1, bind 2 in
-          if not (telem === tkey) then t_erroru (TMismatch(telem, tkey, "key")) () else
+          if not (telem === tkey) then t_erroru (TMismatch(telem, tkey, "key")) else
           let tlam_insert' = wrap_tfunc t_unit telem in
-          if not (tlam_insert === tlam_insert') then t_erroru (TMismatch(tlam_insert, tlam_insert', "insert lambda")) () else
+          if not (tlam_insert === tlam_insert') then t_erroru (TMismatch(tlam_insert, tlam_insert', "insert lambda")) else
           let tlam_update' = wrap_tfunc telem telem in
-          if not (tlam_update === tlam_update') then t_erroru (TMismatch(tlam_update, tlam_update', "update lambda")) () else
+          if not (tlam_update === tlam_update') then t_erroru (TMismatch(tlam_update, tlam_update', "update lambda")) else
           t_unit
 
       | Delete id ->
           let tcol' = try List.assoc id env
-                    with Not_found -> t_erroru (TMsg(id^" not found")) () in
+                    with Not_found -> t_erroru (TMsg(id^" not found")) in
           let tcol, telem =
-            try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') () in
+            try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') in
           let told = bind 0 in
           if telem === told then t_unit
-          else t_erroru (TMismatch(telem, told, "")) ()
+          else t_erroru (TMismatch(telem, told, ""))
 
       | DeletePrefix id ->
           let tcol' = try List.assoc id env
-                      with Not_found -> t_erroru (TMsg(id^" not found")) () in
+                      with Not_found -> t_erroru (TMsg(id^" not found")) in
           let tcol, telem =
-            try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') () in
-          if not (tcol = TVMap) then t_erroru (TMismatch(tcol', wrap_tvmap telem, "collection type")) () else
+            try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') in
+          if not (tcol = TVMap) then t_erroru (TMismatch(tcol', wrap_tvmap telem, "collection type")) else
           let told = bind 0 in
-          if not (telem === told) then t_erroru (TMismatch(telem, told, "")) () else
+          if not (telem === told) then t_erroru (TMismatch(telem, told, "")) else
           let tfst = hd @@ unwrap_ttuple told in
-          if not (tfst == t_vid) then t_erroru (TMismatch(tfst, t_vid, "vid")) () else
+          if not (tfst == t_vid) then t_erroru (TMismatch(tfst, t_vid, "vid")) else
           t_unit
 
       | Peek ->
           let tcol' = bind 0 in
           let tcol, telem =
-            try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') () in
+            try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') in
           wrap_tmaybe telem
 
       | Assign id ->
           let tl = try List.assoc id env
-                        with Not_found -> t_erroru (TMsg(id^" not found")) () in
+                        with Not_found -> t_erroru (TMsg(id^" not found")) in
           let tr = bind 0 in
-          if not (tl === tr) then t_erroru (TMismatch(tl, tr, "")) () else
-          if not tl.mut then t_erroru (TMsg(id^" is not mutable")) () else
+          if not (tl === tr) then t_erroru (TMismatch(tl, tr, "")) else
+          if not tl.mut then t_erroru (TMsg(id^" is not mutable")) else
           t_unit
 
       (* Add a layer of indirection *)
@@ -581,13 +581,13 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
           let target, taddr, targs = bind 0, bind 1, bind 2 in
           let ttarget = match target.typ with
               | TTarget t -> t
-              | _         -> t_erroru (TBad(target, "not a target")) ()
+              | _         -> t_erroru (TBad(target, "not a target"))
           in
           match taddr.typ with
           | TAddress ->
               if ttarget === targs then t_unit
-              else t_erroru (TMismatch(ttarget, targs, "")) ()
-          | _ -> t_erroru (TBad(taddr, "not an address")) ()
+              else t_erroru (TMismatch(ttarget, targs, ""))
+          | _ -> t_erroru (TBad(taddr, "not an address"))
 
   in attach_type current_type
 
@@ -604,7 +604,7 @@ let check_trigger_type trig_env env id args locals body rebuild_f =
       (* add annotations *)
       let new_locals = List.map (fun (i,vt,meta) -> (i, vt, (Type(vt)::meta))) locals
       in ((rebuild_f id args new_locals typed_body), self_bindings :: env)
-  | _     -> t_error (-1) name (TMismatch(t_unit, t_b, "trigger return type")) ()
+  | _     -> t_error (-1) name (TMismatch(t_unit, t_b, "trigger return type"))
 
 
 (* Flow program type deduction *)
@@ -629,9 +629,9 @@ let type_of_resource (env:(id_t * type_t list) list) r = match r with
     let uuid = id_of_expr e in
     let tcol' = type_of_expr @@ deduce_expr_type [] [] e in
     let tcol, telem =
-      try unwrap_tcol tcol' with Failure _ -> t_error uuid "Stream" (not_collection tcol') () in
+      try unwrap_tcol tcol' with Failure _ -> t_error uuid "Stream" (not_collection tcol') in
     if not (t === telem)
-      then t_error uuid "stream" (TMismatch(t, telem, "resource type")) ()
+      then t_error uuid "stream" (TMismatch(t, telem, "resource type"))
       else [t]
   | Stream(t, _) -> [t]
   | Pattern p -> types_of_pattern env p
@@ -657,17 +657,17 @@ let typecheck_bind src_types trig_arg_types =
 let bound_resource_type error_prefix resource_env src_id =
   try List.assoc src_id resource_env
   with Not_found ->
-    t_error (-1) error_prefix (TMsg("Could not find resource named "^src_id)) ()
+    t_error (-1) error_prefix (TMsg("Could not find resource named "^src_id))
 
 let arg_type_of_trigger error_prefix trig_env trig_id =
   try
     let t = List.assoc trig_id trig_env in
     begin match t.typ with
       | TTarget arg_t -> [arg_t]
-      | _ -> t_error (-1) error_prefix (TMsg "Invalid trigger argument type") ()
+      | _ -> t_error (-1) error_prefix (TMsg "Invalid trigger argument type")
     end
   with Not_found ->
-    t_error (-1) error_prefix (TMsg("Could not find trigger named "^trig_id)) ()
+    t_error (-1) error_prefix (TMsg("Could not find trigger named "^trig_id))
 
 let typecheck_flow env trig_env resource_env fp =
   let check_code_type name id args locals body rebuild_f =
@@ -692,7 +692,7 @@ let typecheck_flow env trig_env resource_env fp =
         let error_msg = typecheck_bind src_types trig_arg_type in
         begin match error_msg with
           | None -> fs, env
-          | Some(msg) -> t_error (-1) error_preamble msg ()
+          | Some(msg) -> t_error (-1) error_preamble msg
         end
 
       | _ -> fs, env
@@ -704,7 +704,7 @@ let typecheck_flow env trig_env resource_env fp =
 let types_of_endpoints endpoint_l =
   let error_if_dup k v l =
     if not(List.mem_assoc k l) then (k,v)::l
-    else t_error (-1) ("Endpoint("^k^")") (TMsg("Found duplicate endpoint named "^k)) ()
+    else t_error (-1) ("Endpoint("^k^")") (TMsg("Found duplicate endpoint named "^k))
   in
   List.fold_left (fun env ep -> match ep with
       | Resource(id,r) -> error_if_dup id (type_of_resource env r) env
@@ -721,7 +721,7 @@ let trigger_types_of_program p =
   let env = types_of_endpoints (triggers_of_program p) in
   List.map (fun (id, tl) -> match tl with
       | [x] -> (id,x)
-      | _ -> t_error (-1) ("Endpoint("^id^")") (TMsg("Multiple types resolved")) ()
+      | _ -> t_error (-1) ("Endpoint("^id^")") (TMsg("Multiple types resolved"))
     ) env
 
 (* Returns a list of role ids, and source resources defined in that role.
@@ -757,7 +757,7 @@ let type_bindings_of_program prog =
           let expr_type = type_of_expr typed_init in
           if not (expr_type === t) then t_error (-1) i
               (TMismatch(expr_type, t,
-                  "Mismatch in global type declaration.")) ()
+                  "Mismatch in global type declaration."))
           else
           Global(i, t, Some typed_init), (i, t) :: env
 
@@ -766,11 +766,11 @@ let type_bindings_of_program prog =
         | Foreign(i, t) ->
             begin try let t_f = K3StdLib.lookup_type i in
               if not (t = t_f) then t_error (-1) i
-                (TMismatch(t, t_f, "Mismatch in foreign function type.")) ()
+                (TMismatch(t, t_f, "Mismatch in foreign function type."))
               else
                 (Foreign(i, t), (i, t) :: env)
             with Not_found ->
-              t_error (-1) i (TMsg "Foreign function not found") () end
+              t_error (-1) i (TMsg "Foreign function not found") end
 
         | Flow fp ->
           let nfp, nenv = typecheck_flow env trig_env resource_env fp
@@ -779,14 +779,14 @@ let type_bindings_of_program prog =
         | Role(id,fp) ->
           let role_resource_env =
             try List.assoc id rresource_env with Not_found ->
-              t_error (-1) "Invalid role" (TMsg("No role named "^id^" found")) ()
+              t_error (-1) "Invalid role" (TMsg("No role named "^id^" found"))
           in
           let nfp,nenv = typecheck_flow env trig_env role_resource_env fp
           in (Role(id, nfp), nenv)
 
         | DefaultRole id ->
           if List.mem_assoc id rresource_env then (DefaultRole(id), env)
-          else t_error (-1) "Invalid default role" (TMsg("No role named "^id^" found")) ()
+          else t_error (-1) "Invalid default role" (TMsg("No role named "^id^" found"))
 
       in (nprog@[nd, (Type(t_unit)::meta)]), nenv
     ) ([], []) prog
