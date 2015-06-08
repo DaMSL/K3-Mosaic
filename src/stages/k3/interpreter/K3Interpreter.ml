@@ -22,6 +22,7 @@ module D = K3Dist
 
 (* set to true to debug *)
 let sp = Printf.sprintf
+let sov = string_of_value
 
 let debug = ref false
 let debug_env = ref false
@@ -141,6 +142,15 @@ and eval_expr (address:address) sched_st cenv texpr =
     let error = int_erroru uuid ~extra:(address, cenv) in
     let eval_fn = eval_fun uuid in
 
+    let rec threaded_eval address sched_st ienv texprs =
+        match texprs with
+        | [] -> (ienv, [])
+        | h :: t ->
+            let nenv, nval = eval_expr address sched_st ienv h in
+            let lenv, vals = threaded_eval address sched_st nenv t in
+            (lenv, nval :: vals)
+    in
+
     let child_value env i =
       let renv, reval = eval_expr address sched_st env @@ List.nth children i
       in renv, value_of_eval reval
@@ -151,132 +161,53 @@ and eval_expr (address:address) sched_st cenv texpr =
       in renv, List.map value_of_eval revals
     in
 
+    let temp x = VTemp x in
+
     (* TODO: byte and string types for binary and comparison operations *)
-    let eval_binop bool_op int_op float_op =
+    let eval_binop l r  bool_op int_op float_op =
       let error = int_erroru uuid "eval_binop" in
-      let fenv, vals = child_values cenv in fenv, VTemp(
-        match vals with
-        | [VBool b1;  VBool b2]  -> VBool(bool_op b1 b2)
-        | [VInt i1;   VInt i2]   -> VInt(int_op i1 i2)
-        | [VInt i1;   VFloat f2] -> VFloat(float_op (foi i1) f2)
-        | [VFloat f1; VInt i2]   -> VFloat(float_op f1 (foi i2))
-        | [VFloat f1; VFloat f2] -> VFloat(float_op f1 f2)
+      temp @@ match l, r with
+        | VBool b1,  VBool b2  -> VBool(bool_op b1 b2)
+        | VInt i1,   VInt i2   -> VInt(int_op i1 i2)
+        | VInt i1,   VFloat f2 -> VFloat(float_op (foi i1) f2)
+        | VFloat f1, VInt i2   -> VFloat(float_op f1 (foi i2))
+        | VFloat f1, VFloat f2 -> VFloat(float_op f1 f2)
         | _ -> error "non-matching values"
-        )
     in
 
-    let eval_eq_op ~neq =
+    let eval_eq_op l r ~neq =
       let f = if neq then not else id_fn in
-      match child_values cenv with
-      | fenv, [l; r] -> fenv, VTemp(VBool(f @@ equal_values l r))
-      | _ -> error "eval_eq_op" "bad input"
+      temp @@ VBool(f @@ equal_values l r)
     in
 
-    let eval_cmpop cmp_op =
-      match child_values cenv with
-        | fenv, [v1; v2] -> fenv, VTemp(VBool(compare_values cmp_op v1 v2))
-        | _ -> error "eval_cmpop" "missing values"
+    let eval_cmpop l r cmp_op =
+      temp @@ VBool(compare_values cmp_op l r)
     in
 
     let name = KP.string_of_tag_type tag in
 
     (* Start of evaluator *)
     let envout, valout = match tag with
-    | Const c   -> cenv, VTemp(value_of_const c)
-    | Var id    -> begin
-        try cenv, lookup id cenv
-        with Not_found -> error "Var" @@ "id "^id^" not found"
-        end
-    | Tuple     -> let fenv, vals = child_values cenv in
-                   fenv, VTemp(VTuple vals)
-    | Just      ->
-      let renv, rval = child_value cenv 0
-      in (renv, VTemp(VOption (Some rval)))
-
-    | Nothing _ -> cenv, VTemp(VOption None)
-
-    (* Collection constructors *)
-    | Empty ct ->
-        let ctype, _ = unwrap_tcol ct in
-        cenv, VTemp(v_empty_of_t ctype)
-
-    | Singleton ct ->
-        let nenv, element = child_value cenv 0 in
-        let ctype, _ = unwrap_tcol ct in
-        cenv, VTemp(v_singleton error element ctype)
-
-    | Combine ->
-        begin match child_values cenv with
-          | nenv, [left; right] -> nenv, VTemp(v_combine error left right)
-          | _      -> error name "missing sub-components"
-        end
-
-    | Range c_t ->
-      begin match child_values cenv with
-        | renv, [start; stride; VInt steps] ->
-          let init_fn i =
-            let f = float_of_int in
-            match start, stride with
-            | VInt x,   VInt y   -> VInt(x + i * y)
-            | VInt x,   VFloat y -> VFloat((f x) +. ((f i) *. y))
-            | VFloat x, VInt y   -> VFloat(x +. ((f i) *. (f y)))
-            | VFloat x, VFloat y -> VFloat(x +. ((f i) *. y))
-            | _, _ -> error name "mismatching start and stride"
-          in
-          let l = Array.to_list (Array.init steps init_fn) in
-          let reval = VTemp(match c_t with
-            | TSet  -> VSet(ValueSet.of_list l)
-            | TBag  -> VBag(ValueBag.of_list l)
-            | TList -> VList(IList.of_list l)
-            | TMap
-            | TMultimap _ -> error name "cannot have map")
-          in renv, reval
-        | _ -> error name "invalid format"
-      end
-
-    (* Arithmetic and comparators *)
-    | Add  -> eval_binop (||) (+) (+.)
-    | Mult -> eval_binop (&&) ( * ) ( *. )
-
-    | Neg ->
-        let fenv, vals = child_values cenv in fenv, VTemp(
-          match vals with
-          | [VBool b]  -> VBool(not b)
-          | [VInt i]   -> VInt(-i)
-          | [VFloat f] -> VFloat(-. f)
-          | _ -> error "Neg" "invalid value"
-        )
-
-    | Eq  -> eval_eq_op ~neq:false
-    | Lt  -> eval_cmpop (<)
-    | Neq -> eval_eq_op ~neq:true
-    | Leq -> eval_cmpop (<=)
 
     (* Control flow *)
+    (* First we list expressions that don't need the environment *)
     | Lambda a ->
       let body = List.nth children 0
       in cenv, VTemp(VFunction(a, cenv.locals, body))
 
-    | Apply ->
-        begin match child_values cenv with
-          | aenv, [f; a] ->
-            let renv, reval = (eval_fn f) address sched_st aenv a
-            in renv, VTemp(value_of_eval reval)
-          | _ -> error "Apply" "bad format"
-        end
+    | Const c -> cenv, temp @@ value_of_const c
 
-    | Block ->
-        let fenv, vals = threaded_eval address sched_st cenv children
-        in fenv, list_last vals
+    | Var id  ->
+        begin try cenv, lookup id cenv
+        with Not_found -> error "Var" @@ "id "^id^" not found" end
 
-    | Iterate ->
-        begin match child_values cenv with
-          | nenv, [f;c] ->
-              let f' = eval_fn f address sched_st in
-              v_fold error (fun env x -> fst @@ f' env x) nenv c, VTemp VUnit
-          | _ -> error name "bad format"
-        end
+    | Nothing _ -> cenv, temp @@ VOption None
 
+    | Empty ct ->
+        let ctype, _ = unwrap_tcol ct in
+        cenv, temp @@ v_empty_of_t ctype
+
+    (* Conditional execution *)
     | IfThenElse ->
         let penv, pred = child_value cenv 0 in
         begin match pred with
@@ -287,6 +218,7 @@ and eval_expr (address:address) sched_st cenv texpr =
         | _ -> error name "non-boolean predicate"
         end
 
+    (* Conditional execution *)
     | CaseOf x ->
         let penv, pred = child_value cenv 0 in
         begin match pred with
@@ -300,6 +232,7 @@ and eval_expr (address:address) sched_st cenv texpr =
         | _ -> error name "non-maybe predicate"
         end
 
+    (* Special ordered execution required *)
     | BindAs x ->
         let penv, pred = child_value cenv 0 in
         begin match pred with
@@ -314,6 +247,7 @@ and eval_expr (address:address) sched_st cenv texpr =
         | _ -> error name "non-indirect predicate"
         end
 
+    (* Special ordered execution required *)
     | Let ids ->
         let env, bound = child_value cenv 0 in
         begin match ids, bound with
@@ -331,42 +265,90 @@ and eval_expr (address:address) sched_st cenv texpr =
         | _ -> error name "bad let destruction"
         end
 
-    (* Collection transformers *)
+    (* Then we deal with standard environment modifiers *)
+    | _ ->
+      let nenv, res = child_values cenv in
+    match tag, res with
 
-    (* Keeps the same type, except for maps*)
-    | Map ->
-        begin match child_values cenv with
-          | nenv, [f; col] ->
-            let f' = eval_fn f address sched_st in
-            let zero = v_empty error ~no_map:true ~no_multimap:true col in
-            let env, c' = v_fold error (fun (env, acc) x ->
-              let env', y = f' env x in
-              env', v_insert error (value_of_eval y) acc
-            ) (nenv, zero) col
-            in
-            env, VTemp c'
-          | _ -> error name "bad format"
-        end
+    | Tuple, vals  -> nenv, temp @@ VTuple vals
+    | Just, [rval] -> nenv, temp @@ VOption (Some rval)
 
-    | Filter ->
-        begin match child_values cenv with
-          | nenv, [p; col] ->
-            let p' = eval_fn p address sched_st in
-            let zero = v_empty error col in
-            let env, c' = v_fold error (fun (env, acc) x ->
-              let env', filter = p' env x in
-              match value_of_eval filter with
-              | VBool true  -> env', v_insert error x acc
-              | VBool false -> env', acc
-              | _           -> error name "non boolean predicate"
-            ) (nenv, zero) col
-            in
-            env, VTemp c'
-          | _ -> error name "bad format"
-        end
+    | Singleton ct, [elem] ->
+        let ctype, _ = unwrap_tcol ct in
+        nenv, temp @@ v_singleton error elem ctype
 
-    | Flatten ->
-        let nenv, c = child_value cenv 0 in
+    | Combine, [left; right] ->
+        nenv, temp @@ v_combine error left right
+
+    | Range c_t, [start; stride; VInt steps] ->
+        let init_fn i =
+          let f = float_of_int in
+          match start, stride with
+          | VInt x,   VInt y   -> VInt(x + i * y)
+          | VInt x,   VFloat y -> VFloat((f x) +. ((f i) *. y))
+          | VFloat x, VInt y   -> VFloat(x +. ((f i) *. (f y)))
+          | VFloat x, VFloat y -> VFloat(x +. ((f i) *. y))
+          | _, _ -> error name "mismatching start and stride"
+        in
+        let l = Array.to_list (Array.init steps init_fn) in
+        let reval = temp @@ match c_t with
+          | TSet  -> VSet(ValueSet.of_list l)
+          | TBag  -> VBag(ValueBag.of_list l)
+          | TList -> VList(IList.of_list l)
+          | TVMap | TMap | TMultimap _ -> error name "cannot have map"
+        in nenv, reval
+
+    (* Arithmetic and comparators *)
+    | Add, [l;r] -> nenv, eval_binop l r (||) (+) (+.)
+    | Mult,[l;r] -> nenv, eval_binop l r (&&) ( * ) ( *. )
+
+    | Neg, [x] ->
+        nenv, temp @@ begin match x with
+          | VBool b  -> VBool(not b)
+          | VInt i   -> VInt(-i)
+          | VFloat f -> VFloat(-. f)
+          | _        -> error "Neg" "invalid value"
+          end
+
+    | Eq,  [l;r] -> nenv, eval_eq_op l r ~neq:false
+    | Lt,  [l;r] -> nenv, eval_cmpop l r (<)
+    | Neq, [l;r] -> nenv, eval_eq_op l r ~neq:true
+    | Leq, [l;r] -> nenv, eval_cmpop l r (<=)
+
+    | Apply, [f; a] ->
+        let renv, reval = (eval_fn f) address sched_st nenv a
+        in renv, temp @@ value_of_eval reval
+
+    | Block, vals -> nenv, temp @@ list_last vals
+
+    | Iterate, [f; c] ->
+        let f' = eval_fn f address sched_st in
+        v_fold error (fun env x -> fst @@ f' env x) nenv c, temp VUnit
+
+    | Map, [f; col] ->
+        let f' = eval_fn f address sched_st in
+        let zero = v_empty error ~no_map:true ~no_multimap:true col in
+        let env, c' = v_fold error (fun (env, acc) x ->
+          let env', y = f' env x in
+          env', v_insert error (value_of_eval y) acc
+        ) (nenv, zero) col
+        in
+        env, temp c'
+
+    | Filter, [p; col] ->
+        let p' = eval_fn p address sched_st in
+        let zero = v_empty error col in
+        let env, c' = v_fold error (fun (env, acc) x ->
+          let env', filter = p' env x in
+          match value_of_eval filter with
+          | VBool true  -> env', v_insert error x acc
+          | VBool false -> env', acc
+          | _           -> error name "non boolean predicate"
+        ) (nenv, zero) col
+        in
+        env, temp c'
+
+    | Flatten, [c] ->
         let zero = match v_peek error c with
           | Some m -> v_empty error m
           (* the container is empty, so we must use the types *)
@@ -377,56 +359,46 @@ and eval_expr (address:address) sched_st cenv texpr =
         let new_col = v_fold error (fun acc x -> v_combine error x acc) zero c in
         nenv, VTemp new_col
 
-    | Aggregate ->
-        begin match child_values cenv with
-          | nenv, [f; zero; col] ->
-            let f' = eval_fn f address sched_st in
-            let renv, rval = v_fold error (fun (env, acc) x ->
-                let renv, reval = f' env (VTuple [acc; x]) in
-                renv, value_of_eval reval
-              )
-              (nenv, zero)
-              col
-            in renv, VTemp rval
-          | _ -> error "Aggregate" "bad format"
-        end
+    | Aggregate, [f; zero; col] ->
+        let f' = eval_fn f address sched_st in
+        let renv, rval = v_fold error (fun (env, acc) x ->
+            let renv, reval = f' env (VTuple [acc; x]) in
+            renv, value_of_eval reval
+          )
+          (nenv, zero)
+          col
+        in renv, VTemp rval
 
-    | GroupByAggregate ->
-        begin match child_values cenv with
-          | nenv, [g; f; zero; col] ->
-            let g' = eval_fn g address sched_st in
-            let f' = eval_fn f address sched_st in
-            (* result type *)
-            let empty = v_empty error ~no_multimap:true col in
+    | GroupByAggregate, [g; f; zero; col] ->
+        let g' = eval_fn g address sched_st in
+        let f' = eval_fn f address sched_st in
+        (* result type *)
+        let empty = v_empty error ~no_multimap:true col in
 
-            (* use hashtable for maximum performance *)
-            let r_env = ref nenv in
-            let h = Hashtbl.create 100 in
-            v_iter error (fun x ->
-                let env, key = second value_of_eval @@ g' !r_env x in
-                (* common to both cases below *)
-                let apply_and_update acc =
-                  let env', acc' = f' env @@ VTuple[acc; x] in
-                  Hashtbl.replace h key @@ value_of_eval acc';
-                  r_env := env'
-                in
-                try
-                  let acc = Hashtbl.find h key in
-                  apply_and_update acc
-                with Not_found ->
-                  apply_and_update zero
-              ) col;
-            (* insert into result collection *)
-            !r_env, VTemp(Hashtbl.fold (fun k v acc ->
-                v_insert error (VTuple [k;v]) acc
-              ) h empty)
-          | _ -> error "GroupByAggregate" "bad format"
-        end
+        (* use hashtable for maximum performance *)
+        let r_env = ref nenv in
+        let h = Hashtbl.create 100 in
+        v_iter error (fun x ->
+            let env, key = second value_of_eval @@ g' !r_env x in
+            (* common to both cases below *)
+            let apply_and_update acc =
+              let env', acc' = f' env @@ VTuple[acc; x] in
+              Hashtbl.replace h key @@ value_of_eval acc';
+              r_env := env'
+            in
+            try
+              let acc = Hashtbl.find h key in
+              apply_and_update acc
+            with Not_found ->
+              apply_and_update zero
+          ) col;
+        (* insert into result collection *)
+        !r_env, temp @@ Hashtbl.fold (fun k v acc ->
+          v_insert error (VTuple [k;v]) acc
+        ) h empty
 
-    | Sort -> (* only applies to list *)
-      begin match child_values cenv with
-      | renv, [f; c] ->
-        let env = ref renv in
+    | Sort, [f; c] -> (* only applies to list *)
+        let env = ref nenv in
         let f' = eval_fn f address sched_st in
         let sort_fn v1 v2 =
           (* Comparator application propagates an environment *)
@@ -437,94 +409,73 @@ and eval_expr (address:address) sched_st cenv texpr =
           | VBool false -> 1
           | _ -> error "Sort" "non-boolean sort result"
         in
-        !env, VTemp(v_sort error sort_fn c)
-      | _ -> error name "bad values"
-      end
+        !env, temp @@ v_sort error sort_fn c
 
-    | Size ->
-        let nenv, c = child_value cenv 0 in
-        nenv, VTemp(v_size error c)
+    | Size, [c] -> nenv, temp @@ v_size error c
 
-    | Subscript i ->
-      begin match child_values cenv with
-      | renv, [VTuple l] -> renv, VTemp(at l (i-1))
-      | _                -> error "Subscript" "bad tuple"
-      end
+    | Subscript i, [VTuple l] -> nenv, temp @@ at l (i-1)
 
     (* Collection accessors and modifiers *)
-    | Slice ->
-      begin match child_values cenv with
-        | renv, [c; pat] -> renv, VTemp(v_slice error pat c)
-        | _       -> error "Slice" "bad values"
-      end
+    | Slice, [c; pat] -> nenv, temp @@ v_slice error pat c
 
-    | SliceIdx(idx, comp) ->
-      begin match child_values cenv with
-        | renv, [c; pat] -> renv, VTemp(v_slice_idx error idx comp pat c)
-        | _       -> error "SliceIdx" "bad values"
-      end
+    | SliceIdx(idx, comp), [c; pat] ->
+        nenv, temp @@ v_slice_idx error idx comp pat c
 
-    | Peek ->
-      let renv, c = child_value cenv 0 in
-      (* a hack while peek still uses unsafe semantics *)
-      renv, VTemp(VOption(v_peek error c))
+    | SliceFrontier, [c; pat]->
+         nenv, temp @@ v_slice_frontier error pat c
 
-    | Insert col_id ->
-        let renv, v = child_value cenv 0 in
-        (env_modify col_id renv @@ fun col -> v_insert error v col), VTemp VUnit
+    | Peek, [c] -> nenv, temp @@ VOption(v_peek error c)
 
-    | Update col_id ->
-        begin match child_values cenv with
-          | renv, [oldv; newv] ->
-              (env_modify col_id renv @@
-                fun col -> v_update error oldv newv col), VTemp VUnit
-          | _ -> error "Update" "bad format"
-        end
+    | Insert col_id, [v] ->
+        (env_modify col_id nenv @@ fun col -> v_insert error v col), temp VUnit
 
-    | Delete col_id ->
-        let renv, v = child_value cenv 0 in
-        (env_modify col_id renv @@
+    | Update col_id, [oldv; newv]->
+        (env_modify col_id nenv @@
+          fun col -> v_update error oldv newv col), temp VUnit
+
+    | UpsertWith col_id, [key; lam_none; lam_some] ->
+        (env_modify col_id nenv @@
+          fun col -> v_upsert_with error col key lam_none lam_some), temp VUnit
+
+    | UpdateSuffix col_id, [newv] ->
+        (env_modify col_id nenv @@
+          fun col -> v_update_suffix error col newv), VTemp VUnit
+
+    | Delete col_id, [v] ->
+        (env_modify col_id nenv @@
           fun col -> v_delete error v col), VTemp VUnit
 
+    | DeletePrefix col_id, [v] ->
+        (env_modify col_id nenv @@
+          fun col -> v_delete error v col), temp VUnit
+
     (* Messaging *)
-    | Send ->
-      let renv, parts = child_values cenv in
-      (* get the sender's address from global variable "me" *)
-      begin match sched_st, parts with
-        | Some s, [target; addr; arg] ->
-            let sov = string_of_value in
+    | Send, [target; addr; arg] ->
+      begin match sched_st with
+        | Some s ->
             let send_str =
               Printf.sprintf "send(%s, %s, %s)\n" (sov target) (sov addr) (sov arg) in
             Log.log send_str ~name:"K3Interpreter.Msg" `Debug;
 
             (* create a new level on the queues *)
             schedule_trigger s target addr arg;
-            renv, VTemp VUnit
-        | None, _ -> error "Send" "missing scheduler"
-        | _, _    -> error "Send" "bad values"
+            nenv, temp VUnit
+        | None -> error name "missing scheduler"
       end
 
-    | Indirect -> let fenv, v = child_value cenv 0 in
-      fenv, VTemp(VIndirect(ref v))
+    | Indirect, [v] -> nenv, temp @@ VIndirect(ref v)
 
-    | Assign x -> let fenv, v = child_value cenv 0 in
-      env_modify x fenv @@ const v, VTemp VUnit
+    | Assign x, [v] -> env_modify x nenv @@ const v, temp VUnit
+
+    | _ -> error name "incorrect arguments"
 
     in
     if !debug then
-      Printf.printf "tag: %s, uuid: %d, val: %s\n" name uuid (string_of_value @@ value_of_eval valout);
+      Printf.printf "tag: %s, uuid: %d, val: %s\n" name uuid (sov @@ value_of_eval valout);
     if !debug_env then
       Printf.printf "env: %s\n" (string_of_env ~skip_functions:true envout);
 
     envout, valout
-
-and threaded_eval address sched_st ienv texprs =
-    match texprs with
-    | [] -> (ienv, [])
-    | h :: t ->
-        let nenv, nval = eval_expr address sched_st ienv h in
-        let lenv, vals = threaded_eval address sched_st nenv t in
-        (lenv, nval :: vals)
 
 (* Declaration interpretation *)
 
