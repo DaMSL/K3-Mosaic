@@ -267,9 +267,9 @@ and eval_expr (address:address) sched_st cenv texpr =
 
     (* Then we deal with standard environment modifiers *)
     | _ ->
-      let nenv, res = child_values cenv in
-    match tag, res with
+    let nenv, res = child_values cenv in
 
+    match tag, res with
     | Tuple, vals  -> nenv, temp @@ VTuple vals
     | Just, [rval] -> nenv, temp @@ VOption (Some rval)
 
@@ -433,21 +433,27 @@ and eval_expr (address:address) sched_st cenv texpr =
         (env_modify col_id nenv @@
           fun col -> v_update error oldv newv col), temp VUnit
 
+    (* we can't modify the environment within the lambda *)
     | UpsertWith col_id, [key; lam_none; lam_some] ->
-        (env_modify col_id nenv @@
-          fun col -> v_upsert_with error col key lam_none lam_some), temp VUnit
+        let f  = value_of_eval |- snd |- eval_fn lam_none address sched_st nenv in
+        let f' = value_of_eval |- snd |- eval_fn lam_some address sched_st nenv in
+        let renv = env_modify col_id nenv @@
+          fun col -> v_upsert_with error key f f' col in
+        renv, temp VUnit
 
-    | UpdateSuffix col_id, [newv] ->
+    (* we can't modify the environment within the lambda *)
+    | UpdateSuffix col_id, [key; lam_update] ->
+        let f = value_of_eval |- snd |- eval_fn lam_update address sched_st nenv in
         (env_modify col_id nenv @@
-          fun col -> v_update_suffix error col newv), VTemp VUnit
+          fun col -> v_update_suffix error key f col), VTemp VUnit
 
     | Delete col_id, [v] ->
         (env_modify col_id nenv @@
           fun col -> v_delete error v col), VTemp VUnit
 
-    | DeletePrefix col_id, [v] ->
+    | DeletePrefix col_id, [key] ->
         (env_modify col_id nenv @@
-          fun col -> v_delete error v col), temp VUnit
+          fun col -> v_delete_prefix error key col), temp VUnit
 
     (* Messaging *)
     | Send, [target; addr; arg] ->

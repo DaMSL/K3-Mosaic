@@ -89,7 +89,7 @@ let check_tag_arity tag children =
     | Insert _  -> 1
     | Update _  -> 2
     | UpsertWith _ -> 3
-    | UpdateSuffix _ -> 1
+    | UpdateSuffix _ -> 2
     | Delete _  -> 1
     | DeletePrefix _ -> 1
     | Peek      -> 1
@@ -518,10 +518,12 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
           let tcol, telem =
             try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') in
           if not (tcol = TVMap) then t_erroru (TMismatch(tcol', wrap_tvmap telem, "collection type")) else
-          let tnew = bind 0 in
+          let tnew, tlam_update = bind 0, bind 1 in
           if not (telem = tnew) then t_erroru (TMismatch(telem, tnew, "new value")) else
           let tfst = hd @@ unwrap_ttuple tnew in
           if not (tfst == t_vid) then t_erroru (TMismatch(tfst, t_vid, "vid")) else
+          let tlam_update' = wrap_tfunc telem telem in
+          if not (tlam_update === tlam_update') then t_erroru (TMismatch(tlam_update, tlam_update', "update lambda")) else
           t_unit
 
       | UpsertWith id ->

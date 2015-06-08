@@ -3,6 +3,12 @@ open K3.AST
 module KP = K3Printing
 
 (* ------ Multimap functions ------ *)
+(* NOTE: remove_prefix: we delete up to and including vid, and keep a frontier at vid
+ *       update_suffix: updates the vid and all following vids
+ *       frontier: gets values < the vid only
+ * Check if these are correct!
+ *)
+
 
 module type S = sig
   type 'a t
@@ -19,15 +25,15 @@ module type S = sig
   val map : (vid -> key -> 'a -> 'b) -> 'a t -> 'b t
   val iter : (vid -> key -> 'a -> unit) -> 'a t -> unit
   val filter : (vid -> key -> 'a -> bool) -> 'a t -> 'a t
-  val update : vid -> key -> 'a -> 'a -> 'a t -> 'a t
+  val update : vid -> key -> 'a -> vid -> key -> 'a -> 'a t -> 'a t
   val update_with : vid -> key -> ('a option -> 'a option) -> 'a t -> 'a t
   val update_suffix : vid -> key -> ('a -> 'a ) -> 'a t -> 'a t
   val peek : 'a t -> (vid * key * 'a) option
   val to_list : 'a t -> (vid * key * 'a) list
   val compare : ('a -> 'a -> int) -> 'a t -> 'a t -> int
   val size : 'a t -> int
-  val frontier_point: vid -> key -> 'a t -> 'a
-  val frontier_slice: vid -> 'a t -> (key * 'a) list
+  val frontier_point: vid -> key -> 'a t -> 'a t
+  val frontier_slice: vid -> 'a t -> 'a t
 end
 
 module Make(OrdVid: ICommon.OrderedKeyType)(OrdKey: ICommon.OrderedKeyType) = struct
@@ -39,7 +45,7 @@ module Make(OrdVid: ICommon.OrderedKeyType)(OrdKey: ICommon.OrderedKeyType) = st
   type vid = OrdVid.t
   type key = OrdKey.t
 
-  let empty = HMap.empty
+  let empty : 'a VIDMap.t HMap.t = HMap.empty
 
   let is_empty mm = mm = empty
 
@@ -60,31 +66,20 @@ module Make(OrdVid: ICommon.OrderedKeyType)(OrdKey: ICommon.OrderedKeyType) = st
           else Some vidmap'
     ) m
 
-  (* get the frontier at a specific key *)
-  let frontier_point vid k m =
-    let vidmap = HMap.find k m in
-    VIDMap.find_lt vid vidmap
-
   (* get the frontier for a slice (must read entire domain) *)
   let frontier_slice vid m =
     HMap.fold (fun k vidmap acc ->
       try
-        (k, VIDMap.find_lt vid vidmap)::acc
+        add vid k (VIDMap.find_lt vid vidmap) acc
       with Not_found -> acc
-    ) m []
-
-  (* for GC: save a frontier and delete all before *)
-  let remove_prefix vid m =
-    let slice = frontier_slice vid m in
-    let m' = HMap.map (fun k vidmap ->
-      VIDMap.filter (fun vid' v -> OrdVid.compare vid' vid > 0) vidmap
-    ) m in
-    (* add back the saved frontier. set vid to the one given *)
-    List.fold_left (fun acc (k, v) ->
-      add vid k v acc
-    ) m' slice
+    ) m empty
 
   let singleton vid k v = HMap.singleton k (VIDMap.singleton vid v)
+
+  (* get the frontier at a specific key *)
+  let frontier_point vid k m =
+    let vidmap = HMap.find k m in
+    singleton vid k @@ VIDMap.find_lt vid vidmap
 
   let remove vid k m =
     HMap.update_with k (function
@@ -111,6 +106,14 @@ module Make(OrdVid: ICommon.OrderedKeyType)(OrdKey: ICommon.OrderedKeyType) = st
     | Some x, _ -> Some x
     | _         -> None) m m'
 
+  (* for GC: save a frontier and delete all before *)
+  let remove_prefix vid (m: 'a t) =
+    let slice = frontier_slice vid m in
+    let m' = HMap.map (fun k vidmap ->
+      VIDMap.filter (fun vid' v -> OrdVid.compare vid' vid > 0) vidmap
+    ) m in
+    combine m' slice
+
   let fold f m zero =
     HMap.fold (fun k vidm acc ->
       VIDMap.fold (fun vid v acc' -> f vid k v acc') vidm acc
@@ -125,7 +128,6 @@ module Make(OrdVid: ICommon.OrderedKeyType)(OrdKey: ICommon.OrderedKeyType) = st
       if OrdKey.compare k' k = 0 && OrdVid.compare vid' vid >=0 then f v
       else v) m
 
-
   let iter f m = fold (fun vid k v _ -> f vid k v) m ()
 
   let filter f m =
@@ -133,9 +135,9 @@ module Make(OrdVid: ICommon.OrderedKeyType)(OrdKey: ICommon.OrderedKeyType) = st
       if f vid k v then add vid k v acc else acc
     ) m empty
 
-  let update vid k oldv newv m =
-    let m' = remove vid k m in
-    add vid k newv m'
+  let update t k v t' k' v' m =
+    let m' = remove t k m in
+    add t' k' v' m'
 
   let peek m = match HMap.peek m with
     | None -> None
