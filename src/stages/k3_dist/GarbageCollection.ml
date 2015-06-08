@@ -61,7 +61,7 @@ let sw_update_send ~vid_nm =
   mk_block [
     mk_incr sw_num_sent.id;
     (* increment vid on sw_ack_log *)
-    mk_upsert_with sw_ack_log "x" ~k:[mk_var vid_nm] ~default:(mk_cint 1) ~v:(mk_add (mk_snd @@ mk_var "x") @@ mk_cint 1)
+    mk_upsert_with_sim sw_ack_log "x" ~k:[mk_var vid_nm] ~default:(mk_cint 1) ~v:(mk_add (mk_snd @@ mk_var "x") @@ mk_cint 1)
   ]
 
 (* node: code to be incorporated in GenDist.rcv_put *)

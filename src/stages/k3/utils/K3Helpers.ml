@@ -292,14 +292,27 @@ let mk_slice_idx ~idx ~comp col pat =
 let mk_slice_idx' ~idx ~comp col pat =
   mk_slice_idx ~idx ~comp col @@ mk_tuple pat
 
-let mk_slice_frontier vid col pat = mk_slice_gen SliceFrontier col @@ mk_tuple [vid; pat]
+(* first part of pat contains the vid *)
+let mk_slice_frontier col pat =
+  mk_slice_gen SliceFrontier col @@ mk_tuple [mk_tuple pat]
 
 let mk_insert col x = mk_stree (Insert col) [mk_tuple x]
 
+(* key contains dummy value *)
+let mk_upsert_with col key lam_empty lam_full =
+  mk_stree (UpsertWith col) [mk_tuple key; lam_empty; lam_full]
+
 let mk_delete col x = mk_stree (Delete col) [mk_tuple x]
+
+(* first part of key contains the vid. Also contains dummy value *)
+let mk_delete_prefix col x = mk_stree (DeletePrefix col) [mk_tuple x]
 
 let mk_update col old_val new_val =
     mk_stree (Update col) [mk_tuple old_val; mk_tuple new_val]
+
+(* first part of new val contains the vid *)
+let mk_update_suffix col new_val =
+    mk_stree (UpdateSuffix col) [mk_tuple new_val]
 
 let mk_peek col = mk_stree Peek [col]
 
@@ -642,7 +655,7 @@ let mk_delete_one ds slice =
 
 (* for maps *)
 (* add a default entry or perform an operation (v) on the slice (nm) *)
-let mk_upsert_with ds nm ~k ~default ~v  =
+let mk_upsert_with_sim ds nm ~k ~default ~v  =
   (* to allow error by default, we special case *)
   let is_error e = try
     "error" = U.decompose_var @@ fst @@ U.decompose_apply e

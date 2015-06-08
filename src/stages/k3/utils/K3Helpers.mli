@@ -163,10 +163,14 @@ val mk_slice' : id_t -> expr_t list -> expr_t
    expr_t: list of integer values specifying GT, LT, EQ *)
 val mk_slice_idx : idx:index_t -> comp:comp_t -> expr_t -> expr_t -> expr_t
 val mk_slice_idx' : idx:index_t -> comp:comp_t -> expr_t -> expr_t list -> expr_t
+val mk_slice_frontier : expr_t -> expr_t list -> expr_t
 val mk_insert : id_t -> expr_t list -> expr_t
+val mk_upsert_with : id_t -> expr_t list -> expr_t -> expr_t -> expr_t
 val mk_delete : id_t -> expr_t list -> expr_t
+val mk_delete_prefix : id_t -> expr_t list -> expr_t
 val mk_update : id_t -> expr_t list -> expr_t list -> expr_t
 val mk_update_slice : id_t -> expr_t list -> expr_t -> expr_t
+val mk_update_suffix : id_t -> expr_t list -> expr_t
 
 val mk_ind : expr_t -> expr_t
 val mk_assign : id_t -> expr_t -> expr_t
@@ -340,6 +344,6 @@ val mk_decr : string -> expr_t
 (* delete using a slice with unknowns *)
 val mk_delete_one : data_struct -> expr_t list -> expr_t
 
-val mk_upsert_with : data_struct -> id_t -> k:expr_t list -> default:expr_t -> v:expr_t -> expr_t
+val mk_upsert_with_sim : data_struct -> id_t -> k:expr_t list -> default:expr_t -> v:expr_t -> expr_t
 
 val mk_delete_with : data_struct -> id_t -> k:expr_t list -> delcond:expr_t -> v:expr_t -> expr_t

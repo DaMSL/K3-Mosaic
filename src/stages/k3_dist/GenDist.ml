@@ -924,12 +924,12 @@ let nd_update_stmt_cntr_corr_map =
         (mk_insert nd_stmt_cntrs.id [mk_tuple lookup_pat; mk_tuple [mk_cint 0; mk_empty nd_stmt_cntrs_corr_map.t]])
         mk_cunit;
       (* we need to decrement the hop's value by 1, and increment the next hop's values by the count *)
-      mk_upsert_with nd_stmt_cntrs "lkup" ~k:lookup_pat
+      mk_upsert_with_sim nd_stmt_cntrs "lkup" ~k:lookup_pat
         ~default:(mk_error @@ Printf.sprintf "%s: missing stmt_cntrs value" nd_update_stmt_cntr_corr_map_nm)
         ~v:(mk_let [nd_stmt_cntrs_corr_map.id] (mk_snd @@ mk_snd @@ mk_var "lkup") @@
               mk_block [
                 (* increment the next hop by count *)
-                mk_upsert_with nd_stmt_cntrs_corr_map "lkup2"
+                mk_upsert_with_sim nd_stmt_cntrs_corr_map "lkup2"
                   (* if no value, set it to the count *)
                   ~k:[mk_var "hop"] ~default:(mk_var "count")
                   (* otherwise, add the count *)

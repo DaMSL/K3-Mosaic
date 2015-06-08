@@ -473,6 +473,7 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
           let tcol', tpat = bind 0, bind 1 in
           let tcol, telem =
             try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') ()  in
+          if not (tcol = TVMap) then t_erroru (TMismatch(tcol', wrap_tvmap telem, "collection type")) () else
           if not (tpat === telem) then t_erroru (TMismatch(tpat, telem, "pattern")) () else
           let tpat_fst = hd @@ unwrap_ttuple tpat in
           if not (tpat_fst = t_vid) then t_erroru (TMismatch(t_vid, tpat_fst, "vid")) () else
@@ -516,6 +517,7 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
                     with Not_found -> t_erroru (TMsg(id^" not found")) () in
           let tcol, telem =
             try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') () in
+          if not (tcol = TVMap) then t_erroru (TMismatch(tcol', wrap_tvmap telem, "collection type")) () else
           let tnew = bind 0 in
           if not (telem = tnew) then t_erroru (TMismatch(telem, tnew, "new value")) () else
           let tfst = hd @@ unwrap_ttuple tnew in
@@ -549,6 +551,7 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
                       with Not_found -> t_erroru (TMsg(id^" not found")) () in
           let tcol, telem =
             try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') () in
+          if not (tcol = TVMap) then t_erroru (TMismatch(tcol', wrap_tvmap telem, "collection type")) () else
           let told = bind 0 in
           if not (telem === told) then t_erroru (TMismatch(telem, told, "")) () else
           let tfst = hd @@ unwrap_ttuple told in
