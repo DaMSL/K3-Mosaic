@@ -820,21 +820,24 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
                       ~arg_info:[ANonLambda, Out] in
     (* to handle the case where we have a full slice over a vmap, we need to look ahead *)
     let tag = U.tag_of_expr col in
-    begin match tag with
-    | Slice | SliceFrontier ->
-        let col, pat = U.decompose_slice expr in
-        (* turn pat into a list. drop the value *)
-        let pat  = fst @@ breakdown_pat pat in
-        let pat' = list_drop_end 1 pat in
-        (* check if we have a specific value *)
-        if List.for_all (not |- is_unknown) pat' then
-          let name = if tag = SliceFrontier then "lookup" else "lookup_precise" in
-          apply_method c ~name ~col ~args:[hd pat; KH.mk_tuple (tl pat)]
-            ~arg_info:[ANonLambda, Out; ANonLambda, Out]
-        else normal ()
+    let col_t = fst @@ KH.unwrap_tcol @@ T.type_of_expr col in
+    (* common pattern for vmap lookups *)
+    let handle_slice_vmap decomp_fn name =
+      let col, pat = decomp_fn expr in
+      (* turn pat into a list. drop the value *)
+      let pat  = fst @@ breakdown_pat pat in
+      let pat' = list_drop_end 1 pat in
+      (* check if we have a specific value *)
+      if List.for_all (not |- is_unknown) pat' then
+        apply_method c ~name ~col ~args:[hd pat; KH.mk_tuple (tl pat)]
+          ~arg_info:[ANonLambda, Out; ANonLambda, Out]
+      else normal ()
+    in
+    begin match col_t, tag with
+    | TVMap, Slice         -> handle_slice_vmap U.decompose_slice "lookup_precise"
+    | TVMap, SliceFrontier -> handle_slice_vmap U.decompose_slice_frontier "lookup"
     | _ -> normal ()
     end
-
 
   | Subscript _ -> let i, tup = U.decompose_subscript expr in
       let t = KH.unwrap_ttuple @@ T.type_of_expr tup in
