@@ -121,26 +121,12 @@ let error () = lps "???"
 
 let lazy_bracket_list f l = lazy_bracket (lps_list NoCut f l)
 
-let lazy_index idx =
-  lps "Index" <| lazy_paren (
-    match idx with
-    | HashIdx s    -> lps "hashkey=" <| lazy_bracket_list (lps |- soi) (IntSet.elements s)
-    | OrdIdx(l, s) ->
-        let eq_set = if IntSet.is_empty s then []
-                    else lps "," <| lsp () <| lps "eq=" <|
-                          lazy_bracket_list (lps |- soi) (IntSet.elements s)
-        in
-        lps "key=" <| lazy_bracket_list (lps |- soi) l <| eq_set)
-
-let lazy_indices is = List.flatten @@ List.map lazy_index @@ IndexSet.elements is
-
 let lazy_col = function
   | TSet        -> lps "{ Set }"
   | TBag        -> lps "{ Collection }"
   | TList       -> lps "{ Seq }"
   | TMap        -> lps "{ Map }"
   | TVMap       -> lps "{ VMap }"
-  | TMultimap s -> lps "{ MultiIndex, " <| lazy_indices s <| lps " }"
 
 let lazy_control_anno c = function
   | Effect ids -> lps "effect " <| lazy_paren @@
@@ -317,6 +303,13 @@ let rec extract_slice e =
       tup, (KH.mk_let ids bound) |- sub_expr
   | _ -> failwith "extract_slice unhandled expression"
 
+(* We return the pattern breakdown: a list, and a lambda forming the internal structure *)
+let breakdown_pat pat = match U.tag_of_expr pat with
+  | Tuple -> U.decompose_tuple pat, id_fn
+  (* if we have a let, we need a proper tuple extraction *)
+  | Let _ -> extract_slice pat
+  | _     -> [pat], id_fn
+
 (* identify if a lambda is an id lambda *)
 let is_id_lambda e =
   (* get a flat list of only the first level of ids *)
@@ -352,6 +345,10 @@ type in_record = InRec | In
 type out_record = OutRec | Out
 type arg_info  = ALambda of in_record list | ANonLambda
 type arg_info_l = (arg_info * out_record) list
+
+let is_unknown c = match U.tag_of_expr c with
+  | Const CUnknown -> true
+  | _              -> false
 
 (* create a deep bind for lambdas, triggers, and let statements
  * -depth allows to skip one depth level of binding
@@ -497,37 +494,28 @@ and fold_of_map_ext c expr =
  * @frontier: for a vmap, can change to a frontier lookup
  *)
 and filter_of_slice ~frontier c col pat =
-    let es, lam_fn = match U.tag_of_expr pat with
-      | Tuple -> U.decompose_tuple pat, id_fn
-      (* if we have a let, we need a proper tuple extraction *)
-      | Let _ -> extract_slice pat
-      | _     -> [pat], id_fn
+  let es, lam_fn = breakdown_pat pat in
+  let ts = List.map T.type_of_expr es in
+  let id_e = add_record_ids es in
+  let id_t = add_record_ids ts in
+  (* find the non-unknown slices *)
+  let filter_e = List.filter (not |- is_unknown |- snd) id_e in
+  if null filter_e then lazy_expr c col (* no slice needed *)
+  else
+    (* adjust filter_e for frontier (remove vid) *)
+    let filter_e' = if frontier then tl filter_e else filter_e in
+    let do_eq (id, v) = KH.mk_eq (KH.mk_var id) v in
+    let lambda = light_type c @@
+      KH.mk_lambda' id_t @@
+        lam_fn @@ (* apply an inner lambda constructor *)
+        List.fold_right (fun x acc ->
+          KH.mk_and acc @@ do_eq x
+        )
+        (tl filter_e')
+        (do_eq @@ hd filter_e')
     in
-    let ts = List.map T.type_of_expr es in
-    let id_e = add_record_ids es in
-    let id_t = add_record_ids ts in
-    (* find the non-unknown slices *)
-    let filter_e = List.filter (fun (_,c) ->
-      match U.tag_of_expr c with
-      | Const CUnknown -> false
-      | _              -> true)
-      id_e in
-    if null filter_e then lazy_expr c col (* no slice needed *)
-    else
-      (* adjust filter_e for frontier (remove vid) *)
-      let filter_e' = if frontier then tl filter_e else filter_e in
-      let do_eq (id, v) = KH.mk_eq (KH.mk_var id) v in
-      let lambda = light_type c @@
-        KH.mk_lambda' id_t @@
-          lam_fn @@ (* apply an inner lambda constructor *)
-          List.fold_right (fun x acc ->
-            KH.mk_and acc @@ do_eq x
-          )
-          (tl filter_e')
-          (do_eq @@ hd filter_e')
-      in
-      let args = if frontier then [snd @@ hd filter_e; lambda] else [lambda] in
-      apply_method c ~name:"filter" ~col ~args ~arg_info:[ALambda[InRec], Out]
+    let args = if frontier then [snd @@ hd filter_e; lambda] else [lambda] in
+    apply_method c ~name:"filter" ~col ~args ~arg_info:[ALambda[InRec], Out]
 
 (* printing expressions *)
 (* argnums: lambda only   -- number of expected arguments *)
@@ -814,18 +802,39 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
     (* find out if our accumulator is a collection type *)
     apply_method c ~name:"fold" ~col ~args:[lambda; acc]
       ~arg_info:[ALambda [In; InRec], Out; ANonLambda, Out]
+
   | GroupByAggregate -> let lam1, lam2, acc, col = U.decompose_gbagg expr in
     (* find out if our accumulator is a collection type *)
     apply_method c ~name:"groupBy" ~col ~args:[lam1; lam2; acc]
       ~arg_info:[ALambda [InRec], Out; ALambda [In; InRec], Out; ANonLambda, Out]
+
   | Sort -> let lambda, col = U.decompose_sort expr in
     apply_method c ~name:"sort" ~col ~args:[lambda] ~arg_info:[ALambda [InRec; InRec], Out]
       ~prefix_fn:(fun e -> light_type c @@ KH.mk_if e (KH.mk_cint (-1)) @@ KH.mk_cint 1)
+
   | Size -> let col = U.decompose_size expr in
     apply_method c ~name:"size" ~col ~args:[KH.mk_cunit] ~arg_info:[ANonLambda, Out]
+
   | Peek -> let col = U.decompose_peek expr in
-    (* peeks return options and need to be pattern matched *)
-      lazy_paren @@ apply_method c ~name:"peek" ~col ~args:[light_type c @@ KH.mk_cunit] ~arg_info:[ANonLambda, Out]
+    let normal () = lazy_paren @@ apply_method c ~name:"peek" ~col ~args:[light_type c @@ KH.mk_cunit]
+                      ~arg_info:[ANonLambda, Out] in
+    (* to handle the case where we have a full slice over a vmap, we need to look ahead *)
+    let tag = U.tag_of_expr col in
+    begin match tag with
+    | Slice | SliceFrontier ->
+        let col, pat = U.decompose_slice expr in
+        (* turn pat into a list. drop the value *)
+        let pat  = fst @@ breakdown_pat pat in
+        let pat' = list_drop_end 1 pat in
+        (* check if we have a specific value *)
+        if List.for_all (not |- is_unknown) pat' then
+          let name = if tag = SliceFrontier then "lookup" else "lookup_precise" in
+          apply_method c ~name ~col ~args:[hd pat; KH.mk_tuple (tl pat)]
+            ~arg_info:[ANonLambda, Out; ANonLambda, Out]
+        else normal ()
+    | _ -> normal ()
+    end
+
 
   | Subscript _ -> let i, tup = U.decompose_subscript expr in
       let t = KH.unwrap_ttuple @@ T.type_of_expr tup in
@@ -833,21 +842,15 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
       let id = fst @@ at id_t (i-1) in
       (paren_l tup @@ lazy_expr c tup) <| lps "." <| lps id
 
-  | SliceIdx(idx, comp) -> let col, pat = U.decompose_slice expr in
-    let ts = KH.unwrap_ttuple @@ snd @@ KH.unwrap_tcol @@
-             T.type_of_expr col in
-    let ids  = fst_many @@ add_record_ids ts in
-    let ids' = U.filter_by_index_t idx ids in
-    let name = String.concat "_" @@ "slice_by"::ids' in
-    apply_method c ~name ~col ~args:[pat] ~arg_info:[ANonLambda, Out]
-
   | SliceFrontier ->
       (* this only works on a vmap, so we can assume we have a vmap *)
       let col, pat = U.decompose_slice_frontier expr in
       filter_of_slice ~frontier:true c col pat
 
-  | Slice -> let col, pat = U.decompose_slice expr in
+  | Slice ->
+      let col, pat = U.decompose_slice expr in
       filter_of_slice ~frontier:false c col pat
+
   | Insert _ -> let col, x = U.decompose_insert expr in
     lps col <| apply_method_nocol c ~name:"insert" ~args:[x]
       ~arg_info:[ANonLambda,OutRec]

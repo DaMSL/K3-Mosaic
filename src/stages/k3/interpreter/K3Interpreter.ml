@@ -295,7 +295,7 @@ and eval_expr (address:address) sched_st cenv texpr =
           | TSet  -> VSet(ValueSet.of_list l)
           | TBag  -> VBag(ValueBag.of_list l)
           | TList -> VList(IList.of_list l)
-          | TVMap | TMap | TMultimap _ -> error name "cannot have map"
+          | TVMap | TMap -> error name "cannot have map"
         in nenv, reval
 
     (* Arithmetic and comparators *)
@@ -417,9 +417,6 @@ and eval_expr (address:address) sched_st cenv texpr =
 
     (* Collection accessors and modifiers *)
     | Slice, [c; pat] -> nenv, temp @@ v_slice error pat c
-
-    | SliceIdx(idx, comp), [c; pat] ->
-        nenv, temp @@ v_slice_idx error idx comp pat c
 
     | SliceFrontier, [c; pat]->
          nenv, temp @@ v_slice_frontier error pat c

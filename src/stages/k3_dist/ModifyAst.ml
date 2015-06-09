@@ -12,91 +12,6 @@ exception InvalidAst of string
 
 (* --- Map declarations --- *)
 
-(* find all access patterns on maps in the code. We could probably get this info from
- * dbtoaster, but it's not hard to just get it here *)
-let get_map_access_patterns ast : IndexSet.t StrMap.t =
-  (* for top-down, get any existing_out_tier value *)
-  let td_fn out_tier n = match U.tag_of_expr n with
-    | Let ["existing_out_tier"] ->
-        begin match U.tag_of_expr @@ snd3 @@ U.decompose_let n with
-        | Var x -> Some x
-        | _     -> failwith "No var assigned to existing_out_tier"
-        end
-    | _ -> out_tier
-  in
-  (* for bottom-up, get access patterns *)
-  let bu_fn out_tier bu_results n =
-      (* merge 2 values for a map *)
-      let merge_fn k ma mb = match ma, mb with
-        | Some x, None
-        | None, Some x     -> Some x
-        | Some xs, Some ys -> Some (IndexSet.union xs ys)
-        | _                -> None
-      in
-      (* combine the bottom-up results *)
-      let map = List.fold_left (fun acc x ->
-        StrMap.merge merge_fn acc x) StrMap.empty bu_results in
-      match U.tag_of_expr n with
-      | Slice  ->
-          let col, pat = U.decompose_slice n in
-          (* get tuple pattern *)
-          let pat = U.unwrap_tuple pat |> insert_index_fst
-                 |> List.filter (fun (_,x) -> U.tag_of_expr x <> Const CUnknown)
-                 |> fst_many |> IntSet.of_list
-          in
-          let add_to_map k =
-             begin try
-               let v = StrMap.find k map in
-               StrMap.add k (IndexSet.add (HashIdx pat) v) map
-             with Not_found ->
-               StrMap.add k (IndexSet.singleton @@ HashIdx pat) map
-             end
-          in
-          begin match U.tag_of_expr col, out_tier with
-          | Var "existing_out_tier", Some id -> add_to_map id
-          | Var "existing_out_tier", _       -> failwith "missing existing out tier binding"
-          | Var k, _ -> add_to_map k
-          | _        -> map
-          end
-      | _      -> map
-  in
-  U.fold_over_exprs (fun acc t ->
-    Tree.fold_tree td_fn bu_fn None acc t
-  ) StrMap.empty ast
-
-(* Convert map indices from non-vid versions to be ordered and handle vid *)
-(* vid is always the last thing to be matched on *)
-let map_indices_add_vid idxs =
-  let map_idx_add_vid = function
-    | HashIdx s    ->
-        let l = List.map vid_shift @@ IntSet.elements s in
-        OrdIdx (add_vid_idx l, IntSet.of_list l)
-    | OrdIdx(l,eq) ->
-        let eq' = IntSet.of_list @@ List.map vid_shift @@ IntSet.elements eq in
-        OrdIdx (add_vid_idx (List.map vid_shift l), eq')
-  in
-  let add_vid_all_idxs is =
-    IndexSet.fold (fun x acc -> IndexSet.add (map_idx_add_vid x) acc) is IndexSet.empty
-  in
-  IntMap.map add_vid_all_idxs idxs
-
-(* TODO: add index for future, and for pinpoint access *)
-
-(* convert to a per-mapid representation *)
-let get_map_access_patterns_ids p ast =
-  let pats = get_map_access_patterns ast in
-  let pats = StrMap.fold (fun nm v acc ->
-      IntMap.add (ProgInfo.map_id_of_name p nm) v acc)
-    pats IntMap.empty in
-  (* add in the patterns for singletons *)
-  let map_types = P.for_all_maps p (fun id -> id, P.map_types_for p id) in
-  let singleton_maps = List.filter (function (_,[_]) -> true | _ -> false) map_types in
-  let pats = List.fold_left (fun acc (id,_) ->
-               IntMap.add id (IndexSet.singleton @@ OrdIdx([],IntSet.empty)) acc)
-             pats singleton_maps
-  in
-  map_indices_add_vid pats
-
 (* change the initialization values of global maps to have the vid as well *)
 (* receives the new types to put in and the starting expression to change *)
 (* inserts a reference to the default vid var for that node *)
@@ -128,7 +43,7 @@ let get_global_map_inits c = function
       let map_id = P.map_id_of_name c.p name in
       let e' = P.map_ids_types_for c.p map_id in
       let e  = P.map_ids_types_with_v_for c.p map_id in
-      let t = wrap_t_map_idx' c map_id @@ snd_many e in
+      let t = wrap_t_of_map' c.map_type @@ snd_many e in
       begin match m_expr with
         | None     -> []
                       (* add a vid *)
@@ -313,7 +228,7 @@ let modify_dist (c:config) ast stmt =
             | ([arg_id, t],b) -> NopMsg,
               mk_apply
                 (mk_lambda
-                  (wrap_args [arg_id, wrap_t_of_map @@ wrap_ttuple lmap_types]) b)
+                  (wrap_args [arg_id, wrap_t_of_map' c.map_type lmap_types]) b)
                 arg
             | _ -> raise (UnhandledModification("At Apply: "^PR.string_of_expr e)) end
         | _ -> NopMsg, e

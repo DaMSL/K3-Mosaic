@@ -84,7 +84,6 @@ let check_tag_arity tag children =
     | Size              -> 1
 
     | Slice      -> 2
-    | SliceIdx _ -> 2
     | SliceFrontier -> 2
     | Insert _  -> 1
     | Update _  -> 2
@@ -389,7 +388,7 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
       | Map ->
           let _, tcol', targ, tret, tcol, telem = common_ops () in
           if targ <~ telem then match tcol with
-            | TMap | TMultimap _ -> wrap_tbag tret
+            | TMap -> wrap_tbag tret
             | _ -> canonical @@ TCollection(tcol, tret)
           else t_erroru (TMismatch(targ, telem, "element:"))
 
@@ -408,7 +407,7 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
           let _ =
             try unwrap_tcol telem with Failure _ -> t_erroru (not_collection telem) in
           begin match tcol with
-          | TMap | TMultimap _ -> t_erroru (TBad (tcol'', "can't flatten a Map"))
+          | TMap -> t_erroru (TBad (tcol'', "can't flatten a Map"))
           | _ -> telem
           end
 
@@ -478,20 +477,6 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
           let tpat_fst = hd @@ unwrap_ttuple tpat in
           if not (tpat_fst = t_vid) then t_erroru (TMismatch(t_vid, tpat_fst, "vid")) else
           tcol'
-
-      | SliceIdx(idx, comp) ->
-          let tcol', tpat = bind 0, bind 1 in
-          let tcol, telem =
-            try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') in
-          begin match tcol with
-          | TMultimap mmidx when IndexSet.mem idx mmidx -> ()
-          | TMultimap _ -> t_erroru (TMsg "slice mismatch on multimap")
-          | _ -> t_erroru (TBad(tcol', "not a multimap"))
-          end;
-          (* indexing returns a bag *)
-          (* take care of possible unknowns in pattern *)
-          if tpat === telem then wrap_tbag telem
-          else t_erroru (TMismatch(tpat, telem, "pattern"))
 
       | Insert id ->
           let tcol' = try List.assoc id env

@@ -138,8 +138,6 @@ let decompose_slice e = match tag_of_expr e, sub_tree e with
   Slice, [e0; e1] -> e0, e1 | _ -> failwith "not a Slice"
 let decompose_slice_frontier e = match tag_of_expr e, sub_tree e with
   SliceFrontier, [e0; e1] -> e0, e1 | _ -> failwith "not a SliceFrontier"
-let decompose_sliceidx e = match tag_of_expr e, sub_tree e with
-  SliceIdx _, [e0; e1] -> e0, e1 | _ -> failwith "not a Slice"
 let decompose_sort e = match tag_of_expr e, sub_tree e with
   Sort, [e0; e1] -> e0, e1 | _ -> failwith "not a Sort"
 let decompose_size e = match tag_of_expr e, sub_tree e with
@@ -395,9 +393,4 @@ let fold_over_exprs f zero p =
     | Global(_, _, Some e) -> f acc e
     | _                    -> acc
   ) zero p
-
-
-let filter_by_index_t ?anti_set idx l = match idx with
-  | HashIdx s    -> list_filter_idxs_by_set ?anti_set s l
-  | OrdIdx(il,_) -> list_filter_idxs_by_list ?anti_set il l
 

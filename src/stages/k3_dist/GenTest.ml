@@ -5,12 +5,12 @@ open K3Dist
 module P = ProgInfo
 module D = K3Dist
 
-let map_latest_val_code p map_id =
+let map_latest_val_code mt p map_id =
   let map_ids_types_vid = P.map_ids_types_with_v_for p map_id in
   let map_ids_types = P.map_ids_types_for p map_id in
   let map_ids = fst_many map_ids_types in
   let map_types = snd_many map_ids_types in
-  let set_type = wrap_t_of_map' @@ map_types in
+  let set_type = wrap_t_of_map' mt map_types in
   let map_ids_types_no_val = P.map_ids_types_no_val_for p map_id in
   let map_ids_no_val = fst_many map_ids_types_no_val in
   let inner_assoc =
@@ -63,6 +63,6 @@ let map_latest_val_code p map_id =
   in code, mk_empty set_type
 
 (* code for every map *)
-let expected_code_all_maps p =
+let expected_code_all_maps mt p =
   let mapl = P.get_map_list p in
-  list_map (fun m -> P.map_name_of p m, map_latest_val_code p m) mapl
+  list_map (fun m -> P.map_name_of p m, map_latest_val_code mt p m) mapl

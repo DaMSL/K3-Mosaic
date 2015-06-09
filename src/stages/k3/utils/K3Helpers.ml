@@ -70,10 +70,6 @@ let wrap_tmap' = function
 let wrap_tvmap typ = wrap_tcol TVMap typ
 let wrap_tvmap' tl = wrap_tvmap @@ wrap_ttuple tl
 
-(* wrap a type in a multimap *)
-let wrap_tmmap idxs typ = wrap_tcol (TMultimap idxs) typ
-let wrap_tmmap' idxs tl = wrap_tmmap idxs @@ wrap_ttuple tl
-
 (* wrap a type in a mutable indirection *)
 let wrap_tind t = canonical @@ TIndirect t
 let wrap_tind_mut t = mut @@ wrap_tind t
@@ -82,14 +78,6 @@ let wrap_tmaybe t = canonical @@ TMaybe t
 let wrap_tmaybes ts = List.map wrap_tmaybe ts
 
 let wrap_tfunc tin tout = canonical @@ TFunction(tin, tout)
-
-(* what the generic type of the global maps is *)
-let wrap_t_of_map  = wrap_tset
-let wrap_t_of_map' = wrap_tset'
-
-(* what the generic type of data carried around is *)
-let wrap_t_calc  = wrap_tbag
-let wrap_t_calc' = wrap_tbag'
 
 (* wrap a function argument *)
 let wrap_args id_typ =
@@ -283,14 +271,6 @@ let mk_slice_gen tag collection pattern =
 let mk_slice collection pattern = mk_slice_gen Slice collection @@ mk_tuple pattern
 
 let mk_slice' collection pattern = mk_slice (mk_var collection) pattern
-
-(* l_idx is the list of indices to use, made of ocaml ints *)
-(* l_comp is the pattern of gt, le, eq expressed as GTA, GT, EQ, LT, LTA *)
-let mk_slice_idx ~idx ~comp col pat =
-  mk_slice_gen (SliceIdx(idx, comp)) col pat
-
-let mk_slice_idx' ~idx ~comp col pat =
-  mk_slice_idx ~idx ~comp col @@ mk_tuple pat
 
 (* first part of pat contains the vid *)
 let mk_slice_frontier col pat =

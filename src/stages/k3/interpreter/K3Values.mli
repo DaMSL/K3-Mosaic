@@ -13,8 +13,6 @@ val map_modify : ('a option -> 'a option) -> id_t -> 'a IdMap.t -> 'a IdMap.t
 
 module rec ValueMap : sig include NearMap.S with type key = Value.value_t end
 
-and ValueMMap : sig include IMultimap.S with type elt = Value.value_t end
-
 and ValueVMap : sig include IVMap.S with type key = Value.value_t
                                     and  type vid = Value.value_t end
 
@@ -57,7 +55,6 @@ and Value : sig
       | VList of value_t IList.t
       | VMap of value_t ValueMap.t
       | VVMap of value_t ValueVMap.t
-      | VMultimap of ValueMMap.t
       | VFunction of arg_t * local_env_t * expr_t (* closure *)
       | VForeignFunction of id_t * arg_t * foreign_func_t
       | VAddress of address
@@ -120,4 +117,3 @@ val v_size : value_t t_err_fn -> value_t -> value_t
 val v_singleton : value_t t_err_fn -> value_t -> container_type_t -> value_t
 val v_slice : value_t t_err_fn -> value_t -> value_t -> value_t
 val v_slice_frontier : value_t t_err_fn -> value_t -> value_t -> value_t
-val v_slice_idx : value_t t_err_fn -> index_t -> comp_t -> value_t -> value_t -> value_t

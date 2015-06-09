@@ -55,17 +55,11 @@ val wrap_tmap : type_t -> type_t
 val wrap_tmap' : type_t list -> type_t
 val wrap_tvmap : type_t -> type_t
 val wrap_tvmap' : type_t list -> type_t
-val wrap_tmmap : IndexSet.t -> type_t -> type_t
-val wrap_tmmap' : IndexSet.t -> type_t list -> type_t
 val wrap_tind : type_t -> type_t
 val wrap_tind_mut : type_t -> type_t
 val wrap_tmaybe : type_t -> type_t
 val wrap_tmaybes : type_t list -> type_t list
 val wrap_tfunc : type_t -> type_t -> type_t
-val wrap_t_of_map : type_t -> type_t
-val wrap_t_of_map' : type_t list -> type_t
-val wrap_t_calc : type_t -> type_t
-val wrap_t_calc' : type_t list -> type_t
 
 (* wrap a single layer of arguments *)
 val wrap_args : (id_t * type_t) list -> arg_t
@@ -161,8 +155,6 @@ val mk_slice : expr_t -> expr_t list -> expr_t
 val mk_slice' : id_t -> expr_t list -> expr_t
 (* int list list: specify index to use
    expr_t: list of integer values specifying GT, LT, EQ *)
-val mk_slice_idx : idx:index_t -> comp:comp_t -> expr_t -> expr_t -> expr_t
-val mk_slice_idx' : idx:index_t -> comp:comp_t -> expr_t -> expr_t list -> expr_t
 val mk_slice_frontier : expr_t -> expr_t list -> expr_t
 val mk_insert : id_t -> expr_t list -> expr_t
 val mk_upsert_with : id_t -> expr_t list -> expr_t -> expr_t -> expr_t

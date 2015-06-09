@@ -52,7 +52,7 @@ let mk_k3_collection (base_ivars:K.base_type_t list)
   let ivars = List.map canon base_ivars in
   let ovars = List.map canon base_ovars in
   let v = canon base_v in
-  let wrap = KH.wrap_t_of_map' in
+  let wrap = KH.wrap_tset' in
   wrap @@
     match ivars, ovars with
     | [], [] -> [v]
@@ -73,7 +73,7 @@ let m3_map_to_k3_map (m3_map: M3.map_t) : K.declaration_t =
         (* initial value *)
         let ivc = if null ivar_types && null ovar_types then
           Some(KH.mk_singleton
-            (KH.wrap_t_of_map @@ KH.canonical element_type) @@
+            (KH.wrap_tset @@ KH.canonical element_type) @@
               [init_val_from_type @@ KH.canonical element_type])
           else None
         in
@@ -210,7 +210,7 @@ let apply_lambda_to_expr lambda_e lambda_t expr =
   let _, lambda_body = KU.decompose_lambda lambda_e in
   match KU.arg_of_lambda lambda_e, KU.tag_of_expr lambda_body with
   | Some(K.AVar(id,_)), K.Tuple ->
-        KH.mk_singleton (KH.wrap_t_of_map lambda_t) @@
+        KH.mk_singleton (KH.wrap_tset lambda_t) @@
           [KH.mk_let [id] expr lambda_body]
   | Some(K.AVar(id,_)), _       -> KH.mk_let [id] expr lambda_body
   | Some(K.ATuple _), _         -> KH.mk_map lambda_e expr

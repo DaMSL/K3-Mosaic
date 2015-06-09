@@ -146,8 +146,7 @@ let unify_values id r_newval = function
     | VSet _, VSet _
     | VBag _, VBag _
     | VList _, VList _
-    | VMap _, VMap _
-    | VMultimap _, VMultimap _ -> some @@ wrap_ind @@ v_combine err v v'
+    | VMap _, VMap _ -> some @@ wrap_ind @@ v_combine err v v'
     | _,_                      -> Some r_newval
 
 (* unify the environments of different nodes *)

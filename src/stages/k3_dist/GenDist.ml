@@ -165,14 +165,13 @@ let nd_check_stmt_cntr_index =
 let nd_add_delta_to_buf c map_id =
   let delta_tuples, lookup_value, update_value = "delta_tuples", "lookup_value", "update_value" in
   let corrective, target_map = "corrective", "target_map" in
-  let map_ds = P.map_ds_of_id ~calc:true c.p map_id in
-  let map_ds_v = P.map_ds_of_id ~vid:true c.p map_id in
+  let map_ds = D.map_ds_of_id ~calc:true c map_id in
+  let map_ds_v = D.map_ds_of_id ~vid:true c map_id in
   let id_t_delta = id_t_add "_delta" map_ds.e in
   let vars_delta_unknown =
     P.map_add_v mk_cunknown @@ list_replace_i (-1) mk_cunknown @@ ids_to_vars @@ fst_many id_t_delta in
   let vars_delta_val = list_last @@ ids_to_vars @@ fst_many id_t_delta in
   let vars_no_val = list_drop_end 1 @@ ids_to_vars @@ fst_many map_ds.e in
-  let idx = D.make_into_index vars_no_val in
   let vars_v = ids_to_vars @@ fst_many map_ds_v.e in
   let vars_val = list_last vars_v in
   let t_val = snd @@ list_last @@ map_ds.e in
@@ -203,7 +202,7 @@ let nd_add_delta_to_buf c map_id =
   in
   mk_global_fn (D.nd_add_delta_to_buf_nm c map_id)
     (* corrective: whether this is a corrective delta *)
-    ([target_map, wrap_tind @@ wrap_t_map_idx' c map_id (snd_many map_ds_v.e);
+    ([target_map, wrap_tind @@ wrap_t_of_map' c.map_type (snd_many map_ds_v.e);
       corrective, t_bool; "min_vid", t_vid;
       delta_tuples, map_ds.t])
     [t_unit] @@
@@ -218,11 +217,7 @@ let nd_add_delta_to_buf c map_id =
             mk_let [lookup_value]
               (mk_if
                 (mk_var corrective)
-                (match c.map_type with
-                 | MapMultiIndex ->
-                   mk_slice_idx' ~idx ~comp:EQ (mk_var tmap_deref) min_vid_pat
-                 | MapSet | MapVMap ->
-                   mk_slice' tmap_deref @@
+                (mk_slice' tmap_deref @@
                      list_replace_i (-1) mk_cunknown min_vid_pat) @@
                 mk_empty map_ds_v.t) @@
             mk_case_sn
@@ -252,8 +247,6 @@ let nd_add_delta_to_buf c map_id =
               (* slice for all values > vid with same key *)
               match c.map_type with
               | MapVMap -> failwith "shouldn't be here"
-              | MapMultiIndex ->
-                mk_slice_idx' ~idx ~comp:GTA (mk_var tmap_deref) vars_delta_unknown
               | MapSet ->
                 mk_filter
                   (mk_lambda' map_ds_v.e @@
@@ -804,9 +797,9 @@ let send_corrective_fns c =
         trigs_stmts_with_matching_rhs_map
     in
     match trigs_stmts_with_matching_rhs_map with [] -> [] | _ ->
-    let map_ds = P.map_ds_of_id ~calc:true c.p map_id in
+    let map_ds = D.map_ds_of_id ~calc:true c map_id in
     let tuple_type = wrap_ttuple @@ snd_many map_ds.e in
-    let delta_tuples2 = {(P.map_ds_of_id ~calc:true ~vid:true c.p map_id) with id="delta_tuples2"}
+    let delta_tuples2 = {(D.map_ds_of_id ~calc:true ~vid:true c map_id) with id="delta_tuples2"}
     in
     singleton @@ mk_global_fn (send_corrective_name_of_t c map_id)
     (orig_vals @ ["corrective_vid", t_vid; "delta_tuples", map_ds.t])
@@ -1227,7 +1220,7 @@ let declare_global_funcs c partmap ast =
   begin if c.gen_correctives then [nd_filter_corrective_list] else [] end @
   K3Ring.functions @
   begin match c.map_type with
-    | MapMultiIndex | MapVMap -> []
+    | MapVMap -> []
     | MapSet -> emit_frontier_fns c
   end @
   (List.map (nd_add_delta_to_buf c |- hd |- snd) @@ P.uniq_types_and_maps c.p) @
@@ -1282,10 +1275,8 @@ let gen_dist ?(gen_deletes=true)
   let c = {
       p;
       shuffle_meta=K3Shuffle.gen_meta p;
-      mapn_idxs=StrMap.empty;
       map_type;
       (* collect all map access patterns for creating indexed maps *)
-      map_idxs = M.get_map_access_patterns_ids p ast;
       gen_deletes;
       gen_correctives;
       corr_maps = maps_potential_corrective p;

@@ -68,15 +68,10 @@ type shuffle_fn_entry = {
 }
 
 type map_type = MapSet
-              | MapMultiIndex
               | MapVMap
 
 type config = {
   p : P.prog_data_t;
-  (* a mapping from K3 map ids to index sets we build up as we slice *)
-  map_idxs : IndexSet.t IntMap.t;
-  (* a mapping from new map names to index sets we build up as we slice *)
-  mapn_idxs : IndexSet.t StrMap.t;
   shuffle_meta : shuffle_fn_entry list;
   map_type : map_type;
   gen_deletes : bool;
@@ -89,41 +84,32 @@ type config = {
   agenda_map : mapping_t;
 }
 
-let string_of_map_idxs c map_idxs =
-  let b = Buffer.create 100 in
-  IntMap.iter (fun map_id idx ->
-    Printf.bprintf b "map %s:\n" @@ P.map_name_of c.p map_id;
-    IndexSet.iter (Printf.bprintf b "%s\n" |- K3Printing.string_of_index) idx
-  ) map_idxs;
-  Buffer.contents b
+(* what the generic type of the global maps is *)
+let wrap_t_of_map = function
+  | MapSet  -> wrap_tset
+  | MapVMap -> wrap_tvmap
+
+let wrap_t_of_map' mt = wrap_t_of_map mt |- wrap_ttuple
+
+(* what the generic type of data carried around is *)
+let wrap_t_calc  = wrap_tbag
+let wrap_t_calc' = wrap_tbag'
+
+(* get a ds representing a map *)
+(* @calc: have the type of inner calculation *)
+let map_ds_of_id ?(vid=false) ?(calc=false) c map_id =
+  let nm = map_name_of c.p map_id in
+  let e = if vid then map_ids_types_with_v_for c.p map_id
+          else map_ids_types_for c.p map_id in
+  let wrap = if calc then wrap_t_calc' else wrap_t_of_map' c.map_type in
+  create_ds nm (wrap @@ snd_many e) ~e
 
 (* location of vid in tuples *)
 let vid_idx = 0
 let vid_shift = (+) 1
 let add_vid_idx l = l @ [vid_idx]
 
-(* generic function to turn a list of tuple elements into an index. Puts the vid last *)
-(* NOTE: takes a list not including vid and value *)
-let make_into_index l =
-  let l' = List.map vid_shift @@ fst_many @@ insert_index_fst l in
-  OrdIdx(add_vid_idx l', IntSet.of_list l')
-
 let t_vid_list = wrap_tlist t_vid
-
-(* wrap with the index type of the map, if requested *)
-let wrap_t_map_idx c map_id = match c.map_type with
-  | MapMultiIndex ->
-    begin try
-      let idxs = IntMap.find map_id c.map_idxs in
-      wrap_tmmap idxs
-    with Not_found ->
-      prerr_string @@ "Map_idxs:\n"^string_of_map_idxs c c.map_idxs;
-      failwith @@ "Failed to find map index for map id "^P.map_name_of c.p map_id
-    end
-  | MapSet  -> wrap_t_of_map
-  | MapVMap -> wrap_tvmap
-
-let wrap_t_map_idx' c map_id = wrap_t_map_idx c map_id |- wrap_ttuple
 
 (* global declaration of default vid to put into every map *)
 let g_init_vid =
@@ -337,7 +323,7 @@ let log_ds c : data_struct list =
 (* create a map structure: used for both maps and buffers *)
 let make_map_decl c map_name map_id =
   let e = P.map_ids_types_with_v_for c.p map_id in
-  let t' = wrap_t_map_idx' c map_id @@ snd_many e in
+  let t' = wrap_t_of_map' c.map_type @@ snd_many e in
   (* for indirections, we need to create initial values *)
   let init = mk_ind @@ mk_empty t' in
   create_ds map_name (wrap_tind t') ~e ~init ~map_id
@@ -398,10 +384,6 @@ let frontier_name c map_id =
   "frontier_"^String.concat "_" @@
     List.map K3PrintSyntax.string_of_type m_t
 
-let get_idx idx map_id =
-  try IntMap.find map_id idx
-  with Not_found -> failwith @@ "Failed to find index for map "^soi map_id
-
 (* Get the latest vals up to a certain vid
  * - This is needed both for sending a push, and for modifying a local slice
  * operation, as well as for GC
@@ -433,20 +415,7 @@ let map_latest_vid_vals ?(vid_nm="vid") c slice_col m_pat map_id ~keep_vid : exp
     | None     -> List.map (const mk_cunknown) @@ P.map_types_for c.p map_id
   in
   match c.map_type with
-  | MapMultiIndex ->
-    (* create the corresponding index for the pattern *)
-    let idx  = fst_many @@
-      List.filter (fun (_,x) -> U.tag_of_expr x <> Const(CUnknown)) @@
-      insert_index_fst @@ P.map_add_v mk_cunknown pat
-    in
-    let idx' = add_vid_idx idx in (* vid is always matched last in the index *)
-    let idx = OrdIdx(idx', IntSet.of_list idx) in
-    convert @@
-      (* filter out anything that doesn't have the same parameters *)
-      (* the multimap layer implements extra eq key filtering *)
-      (mk_slice_idx' ~idx ~comp:LT slice_col @@ mk_var vid_nm::pat)
-
-  | MapSet -> (* no multiindex *)
+  | MapSet ->
     (* create a function name per type signature *)
     let access_k3 =
       (* slice with an unknown for the vid so we only get the effect of
@@ -466,14 +435,14 @@ let map_latest_vid_vals ?(vid_nm="vid") c slice_col m_pat map_id ~keep_vid : exp
 (* This is needed both for sending a push, and for modifying a local slice
  * operation, as well as for GC *)
 (* Returns the type pattern for the function, and the function itself *)
-(* NOTE: this is only necessary when not using multiindexes *)
+(* NOTE: this is only necessary when not using more sophisticated maps *)
 let frontier_fn c map_id =
   let max_vid = "max_vid" in
   let map_vid = "map_vid" in
   let m_id_t_v = P.map_ids_types_with_v_for ~vid:"map_vid" c.p map_id in
   let m_t_v = wrap_ttuple @@ snd_many @@ m_id_t_v in
   let m_t_v_calc_map = wrap_t_calc m_t_v in
-  let m_t_v_map = wrap_t_of_map m_t_v in
+  let m_t_v_map = wrap_t_of_map c.map_type m_t_v in
   let m_id_t_no_val = P.map_ids_types_no_val_for c.p map_id in
   (* create a function name per type signature *)
   (* if we have bound variables, we should slice first. Otherwise,

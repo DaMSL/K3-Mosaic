@@ -85,28 +85,12 @@ let string_of_int_list s = String.concat ", " @@ List.map soi s
 let lazy_keyset  s = lazy_bracket @@ lps @@ string_of_int_set s
 let lazy_keylist s = lazy_bracket @@ lps @@ string_of_int_list s
 
-let lazy_index = function
-  | HashIdx s    -> lps "#" <| lazy_keyset s
-  | OrdIdx(l, s) ->
-      let eq_set = if IntSet.is_empty s then []
-                   else lps "," <| lsp () <| lazy_keyset s
-      in
-      lazy_keylist l <| eq_set
-
-let lazy_indices xs = List.flatten @@
-  list_intercalate_lazy (fun () -> lsp () <| lps "|" <| lsp ()) @@
-  List.map lazy_index @@ IndexSet.elements xs
-
 let lazy_collection _ ct eval = match ct with
     | TSet  -> lps "{" <| eval <| lps "}"
     | TBag  -> lps "{|" <| eval <| lps "|}"
     | TList -> lps "[" <| eval <| lps "]"
     | TMap  -> lps "[:" <| eval <| lps ":]"
     | TVMap -> lps "[<" <| eval <| lps ">]"
-    | TMultimap idxs -> begin match eval with
-        | [] -> lps "[| |]"
-        | _  -> lps "[|" <| eval <| lsp () <| lps "|"  <| lazy_indices idxs <| lps "|]"
-        end
 
 let rec lazy_base_type c ~in_col ?(no_paren=false) ?(paren_complex=false) t =
   let wrap_complex x = if paren_complex then lps "(" <| x <| lps ")" else x in
@@ -234,8 +218,9 @@ let rec lazy_expr c expr =
     | _ -> lazy_expr c e
   (* many instructions need to wrap the same way *)
   in let wrap e = match U.tag_of_expr expr with
-    Insert _ | Iterate | Map | Filter | Flatten | Send | Delete _ | Update _ |
-    Aggregate | GroupByAggregate | Assign _ | Combine -> wrap_hov 2 e
+    | Insert _ | Iterate | Map | Filter | Flatten | Send | Delete _
+    | Update _ | UpdateSuffix _ | UpsertWith _ | DeletePrefix _
+    | Aggregate | GroupByAggregate | Assign _ | Combine -> wrap_hov 2 e
     | _ -> id_fn e
   in let out = match U.tag_of_expr expr with
   | Const con  -> lazy_const c con
@@ -362,10 +347,6 @@ let rec lazy_expr c expr =
     wrap_if_var col (lazy_expr c col) <| lazy_bracket @@ tuple_no_paren c pat
   | SliceFrontier -> let col, pat = U.decompose_slice_frontier expr in
     wrap_if_var col (lazy_expr c col) <| lazy_brace @@ tuple_no_paren c pat
-  | SliceIdx(idx, comp) -> let col, pat = U.decompose_sliceidx expr in
-    let comp_s = match comp with GT -> lps ">" | LT -> lps "<" | EQ -> [] | LTA -> lps "<<" | GTA -> lps ">>" in
-    wrap_if_var col (lazy_expr c col) <|
-    lazy_bracket (tuple_no_paren c pat <| lsp () <| lps "|" <| comp_s <| lsp () <| lazy_index idx)
   | Insert _ -> let l, r = U.decompose_insert expr in
     lps "insert" <| lazy_paren
       (lps l <| lps " ," <| lsp () <| lazy_expr c r)

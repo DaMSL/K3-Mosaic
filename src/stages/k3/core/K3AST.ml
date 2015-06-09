@@ -24,26 +24,12 @@ include ASTCommon
 (* Annotations *)
 type annotation_t
 
-(* LTA/GTA: all less than/gt *)
-type comp_t = LTA | LT | EQ | GT | GTA
-
-(* multimap index *)
-type index_t = HashIdx of IntSet.t
-              (* 2: set of eq keys *)
-             | OrdIdx of int list * IntSet.t
-
-val index_t_cmp : index_t -> index_t -> int
-
-module IndexSet : sig include Set.S with type elt = index_t end
-module IndexMap : sig include Map.S with type key = index_t end
-
 type container_type_t
     = TSet
     | TBag
     | TList
     | TMap
     | TVMap (* nlogn lookups *)
-    | TMultimap of IndexSet.t
 
 type base_type_t
     = TTop
@@ -130,7 +116,6 @@ type expr_tag_t
 
     | Peek
     | Slice
-    | SliceIdx of index_t * comp_t
     | SliceFrontier        (* slice with a frontier at a vid *)
     | Insert of id_t
     | Update of id_t

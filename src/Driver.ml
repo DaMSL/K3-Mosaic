@@ -339,11 +339,11 @@ let print_k3_program ?(no_roles=false) f = function
   | _ -> error "Cannot print this type of data"
 
 (* create and print a k3 program with an expected section *)
-let print_k3_test_program = function
+let print_k3_test_program params = function
   | idx, K3DistData (p, meta, orig_p) ->
       (* get the folded expressions comparing values for latest vid.
        * These go in the expected statements at the end *)
-      let tests_by_map = GenTest.expected_code_all_maps meta in
+      let tests_by_map = GenTest.expected_code_all_maps params.map_type meta in
       let test_vals =
         (* get the test values from the dbtoaster trace if available *)
         if not @@ null cmd_line_params.trace_files then
@@ -456,7 +456,7 @@ let print params inputs =
                                ~map_to_fold:params.k3new_folds
                                ~file:params.k3new_data_file)
                                |- snd
-    | K3Test | K3DistTest -> print_k3_test_program
+    | K3Test | K3DistTest -> print_k3_test_program params
   in List.iter print_fn idx_inputs
 
 (* Test actions *)
@@ -584,8 +584,6 @@ let param_specs = Arg.align
       "file     Specify a k3new data file";
   "--k3new-folds", Arg.Unit (fun () -> cmd_line_params.k3new_folds <- true),
       "         For k3new: output folds instead of ext and map";
-  "--map-idx", Arg.Unit (fun () -> cmd_line_params.map_type <- K3Dist.MapMultiIndex),
-      "         Use multiindex maps";
   "--map-vmap", Arg.Unit (fun () -> cmd_line_params.map_type <- K3Dist.MapVMap),
       "         Use vmaps";
   "--nogc", Arg.Unit (fun () -> cmd_line_params.enable_gc <- false),

@@ -370,10 +370,6 @@ annotated_collection_type :
 collection_type :
     | LBRACE type_expr RBRACE { TCollection(TSet, $2) }
     | LBRACE type_expr_tuple RBRACE { TCollection(TSet, $2) }
-    | LBRACKETBAR type_expr BAR indices RBRACKETBAR { TCollection(TMultimap $4, $2) }
-    | LBRACKETBAR type_expr_tuple BAR indices RBRACKETBAR { TCollection(TMultimap $4, $2) }
-    | LBRACKETBAR type_expr BAR error { print_error "invalid indices" }
-    | LBRACKETBAR type_expr_tuple BAR error { print_error "invalid indices" }
     | LBRACEBAR type_expr RBRACEBAR { TCollection(TBag, $2) }
     | LBRACEBAR type_expr_tuple RBRACEBAR { TCollection(TBag, $2) }
     | LBRACKETCOLON type_expr RBRACKETCOLON { TCollection(TMap, $2) }
@@ -382,23 +378,6 @@ collection_type :
     | LBRACKETLT type_expr_tuple RBRACKETLT { TCollection(TVMap, $2) }
     | LBRACKET type_expr RBRACKET { TCollection(TList, $2) }
     | LBRACKET type_expr_tuple RBRACKET { TCollection(TList, $2) }
-;
-
-indices :
-    | index BAR indices { IndexSet.add $1 $3 }
-    | index             { IndexSet.singleton $1 }
-
-index :
-    | HASH LBRACKET key_list RBRACKET                              { HashIdx (IntSet.of_list $3) }
-    | LBRACKET key_list RBRACKET COMMA LBRACKET key_list RBRACKET  { OrdIdx($2, IntSet.of_list $6) }
-    | LBRACKET key_list RBRACKET COMMA LBRACKET error              { print_error "Invalid equality set" }
-    | LBRACKET key_list RBRACKET                                   { OrdIdx($2, IntSet.empty) }
-    | LBRACKET error                                               { print_error "Invalid index" }
-;
-
-key_list :
-    | INTEGER COMMA key_list { $1::$3 }
-    | INTEGER                { [$1] }
 ;
 
 /* Expressions */
@@ -520,14 +499,12 @@ collection :
 
     | LBRACE RBRACE error       { print_error "missing type for empty set"}
     | LBRACEBAR RBRACEBAR error { print_error "missing type for empty bag"}
-    | LBRACKETBAR RBRACKETBAR error { print_error "missing type for empty multimap"}
     | LBRACKET RBRACKET error   { print_error "missing type for empty list"}
     | LBRACKETCOLON RBRACKETCOLON error   { print_error "missing type for empty map"}
     | LBRACKETLT RBRACKETLT error   { print_error "missing type for empty vmap"}
 
     | LBRACE expr_seq RBRACE                       { build_collection $2 (mk_unknown_collection TSet) }
     | LBRACEBAR expr_seq RBRACEBAR                 { build_collection $2 (mk_unknown_collection TBag) }
-    | LBRACKETBAR expr_seq BAR indices RBRACKETBAR { build_collection $2 (mk_unknown_collection (TMultimap $4)) }
     | LBRACKET expr_seq RBRACKET                   { build_collection $2 (mk_unknown_collection TList) }
     | LBRACKETCOLON expr_seq RBRACKETCOLON         { build_collection $2 (mk_unknown_collection TMap) }
     | LBRACKETLT expr_seq RBRACKETLT               { build_collection $2 (mk_unknown_collection TVMap) }
@@ -635,18 +612,10 @@ tuple_index :
     | expr PERIOD LBRACKET INTEGER RBRACKET { mkexpr (Subscript $4) [$1] }
 
 access :
-    | expr LBRACKET tuple access_comp index RBRACKET { mkexpr (SliceIdx($5, $4)) [$1; $3] }
     | expr LBRACKET tuple RBRACKET { mkexpr Slice [$1; $3] }
     | expr LBRACE tuple RBRACE { mkexpr SliceFrontier [$1; $3] }
     | PEEK LPAREN expr RPAREN { mkexpr Peek [$3] }
 ;
-
-access_comp :
-    | BAR GT GT { GTA }
-    | BAR GT    { GT }
-    | BAR LT LT { LTA }
-    | BAR LT    { LT }
-    | BAR       { EQ }
 
 mutation :
     /* Inserts, deletes and sends use a vararg function syntax for their value/payload */

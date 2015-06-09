@@ -66,7 +66,6 @@ val decompose_send : expr_t -> expr_t * expr_t * (expr_t list)
 val decompose_singleton : expr_t -> expr_t
 val decompose_slice : expr_t -> expr_t * expr_t
 val decompose_slice_frontier : expr_t -> expr_t * expr_t
-val decompose_sliceidx : expr_t -> expr_t * expr_t
 val decompose_sort : expr_t -> expr_t * expr_t
 val decompose_size : expr_t -> expr_t
 val decompose_subscript : expr_t -> int * expr_t
@@ -165,6 +164,4 @@ val unwrap_tuple : expr_t -> expr_t list
 
 (* Fold over all expression trees in a program (triggers, globals) *)
 val fold_over_exprs : ('a -> expr_t -> 'a) -> 'a -> program_t -> 'a
-
-val filter_by_index_t : ?anti_set:IntSet.t * 'a -> index_t -> 'a list -> 'a list
 
