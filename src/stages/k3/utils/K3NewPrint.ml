@@ -511,8 +511,10 @@ and filter_of_slice ~frontier c col pat =
         List.fold_right (fun x acc ->
           KH.mk_and acc @@ do_eq x
         )
-        (tl filter_e')
-        (do_eq @@ hd filter_e')
+        (try tl filter_e'
+         with Invalid_argument _ -> [])
+        (try do_eq @@ hd filter_e'
+         with Invalid_argument _ -> light_type c KH.mk_ctrue)
     in
     let args = if frontier then [snd @@ hd filter_e; lambda] else [lambda] in
     apply_method c ~name:"filter" ~col ~args ~arg_info:[ALambda[InRec], Out]
