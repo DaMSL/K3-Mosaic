@@ -815,7 +815,9 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
       ~prefix_fn:(fun e -> light_type c @@ KH.mk_if e (KH.mk_cint (-1)) @@ KH.mk_cint 1)
 
   | Size -> let col = U.decompose_size expr in
-    apply_method c ~name:"size" ~col ~args:[light_type c KH.mk_cunit]
+    let name = if fst @@ KH.unwrap_tcol @@ T.type_of_expr col = TVMap
+      then "total_size" else "size" in
+    apply_method c ~name ~col ~args:[light_type c KH.mk_cunit]
       ~arg_info:[ANonLambda, Out]
 
   | Peek -> let col = U.decompose_peek expr in

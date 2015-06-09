@@ -270,7 +270,17 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
       try unwrap_tfun tfun with Failure _ -> t_erroru (not_function tfun) in
     let tcol, telem =
       try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') in
+    if tcol = TVMap then t_erroru @@ TBad(tcol', "cannot be a VMap") else
     tfun, tcol', targ, tret, tcol, telem
+  in
+
+  let check_vmap col_t tup_t =
+    if col_t = TVMap then
+      match unwrap_ttuple tup_t with
+      | [] | [_] -> t_erroru @@ TBad(tup_t, "improper element types for vmap")
+      | t::_ when t === t_vid -> ()
+      | t::_ -> t_erroru @@ TMismatch(t, t_vid, "vmap element")
+    else ()
   in
 
   let current_type =
@@ -289,6 +299,7 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
       | Singleton t ->
           let t_c, t_e = try unwrap_tcol t with Failure _ -> t_erroru (not_collection t) in
           let t_ne = bind 0 in
+          check_vmap t_c t_ne;
           (* we disregard the element part of the singleton ast because it's not needed *)
           canonical @@ TCollection(t_c, t_ne)
 
@@ -338,14 +349,14 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
           let t_p, t_t, t_e = bind 0, bind 1, bind 2 in
           if canonical TBool === t_p then
               if assignable ~unknown_ok:true t_t t_e then t_t
-              else t_erroru (TMismatch(t_t, t_e,""))
-          else t_erroru (TMismatch(canonical TBool, t_p,""))
+              else t_erroru @@ TMismatch(t_t, t_e,"")
+          else t_erroru @@ TMismatch(canonical TBool, t_p,"")
 
       | CaseOf id ->
           (* the expression was handled in the prelude *)
           let t_s, t_n = bind 1, bind 2 in
           if t_n === t_s then t_s
-          else t_erroru (TMismatch(t_n, t_s, "case branches"))
+          else t_erroru @@ TMismatch(t_n, t_s, "case branches")
 
         (* handled in the prelude *)
       | BindAs _ -> bind 1
@@ -407,7 +418,7 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
           let _ =
             try unwrap_tcol telem with Failure _ -> t_erroru (not_collection telem) in
           begin match tcol with
-          | TMap -> t_erroru (TBad (tcol'', "can't flatten a Map"))
+          | TMap | TVMap -> t_erroru (TBad (tcol'', "can't flatten a Map"))
           | _ -> telem
           end
 
@@ -417,6 +428,7 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
             try unwrap_tfun tfun with Failure _ -> t_erroru (not_function tfun) in
           let tcol, telem =
             try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') in
+          if tcol = TVMap then t_erroru @@ TBad(tcol', "cannot run on vmap") else
           let expected1 = wrap_ttuple [tzero; telem] in
           if not (targ <~ expected1)
               then t_erroru (TMismatch(targ, expected1, "")) else
@@ -433,6 +445,7 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
             try unwrap_tfun tagg with Failure _ -> t_erroru (not_function tagg) in
           let tcol, telem =
             try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') in
+          if tcol = TVMap then t_erroru @@ TBad(tcol', "cannot run on vmap") else
           if not (tgarg <~ telem) then
             t_erroru (TMismatch(tgarg, telem, "grouping func:")) else
           let expected1 = wrap_ttuple [tzero; telem] in
@@ -465,17 +478,21 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
           let tcol, telem =
             try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') in
           (* order to take care of possible unknowns in pattern *)
-          if not (tpat === telem) then t_erroru (TMismatch(tpat, telem, "pattern"))
-          else tcol'
+          if tcol = TVMap then
+            let telem_v = wrap_ttuple @@ t_vid :: unwrap_ttuple telem in
+            if not (tpat === telem_v) then t_erroru (TMismatch(tpat, telem_v, "vmap pattern"))
+            else tcol'
+          else (* any data structure *)
+            if not (tpat === telem) then t_erroru (TMismatch(tpat, telem, "pattern"))
+            else tcol'
 
       | SliceFrontier ->
           let tcol', tpat = bind 0, bind 1 in
           let tcol, telem =
             try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') in
           if not (tcol = TVMap) then t_erroru (TMismatch(tcol', wrap_tvmap telem, "collection type")) else
-          if not (tpat === telem) then t_erroru (TMismatch(tpat, telem, "pattern")) else
-          let tpat_fst = hd @@ unwrap_ttuple tpat in
-          if not (tpat_fst === t_vid) then t_erroru (TMismatch(t_vid, tpat_fst, "vid")) else
+          let telem_v = wrap_ttuple @@ t_vid :: unwrap_ttuple telem in
+          if not (tpat === telem_v) then t_erroru @@ TMismatch(tpat, telem, "vmap pattern") else
           tcol'
 
       | Insert id ->
