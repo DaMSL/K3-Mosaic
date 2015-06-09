@@ -80,6 +80,7 @@ let rec list_drop len li = match li with
 
 (* split list into before and after *)
 let list_split len l =
+  let len = if len < 0 then List.length l + len else len in
   let rec split len acc = function
     | [] -> acc, []
     | x::xs when len = 0 -> List.rev (x::acc), xs

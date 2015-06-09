@@ -295,13 +295,15 @@ let update_maps maps events =
   ) maps events
 
 (* dump a map into a string *)
-let dump_map mapname = function
-    | SingletonMap m -> "{"^SingletonMap.val_s m^"}"
-    | OutputMap m    ->
-        let s = OutputMap.val_s m in
-        (* if our map is empty, we need the types *)
-        if s = "" then "{} : {"^OutputMap.types_s m^"}"
-        else "{"^OutputMap.val_s m^"}"
+let dump_map mapname m =
+  let open K3Dist in
+  match m with
+  | SingletonMap m -> wrap_string_map @@ SingletonMap.val_s m
+  | OutputMap m    ->
+      let s = OutputMap.val_s m in
+      (* if our map is empty, we need the types *)
+      if s = "" then (wrap_string_map "") ^ " : " ^ (wrap_string_map @@ OutputMap.types_s m)
+      else wrap_string_map @@ OutputMap.val_s m
 
 (* return the dimensions of the map *)
 let map_dims = function

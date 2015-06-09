@@ -239,8 +239,7 @@ let nd_add_delta_to_buf c map_id =
             mk_update_suffix tmap_deref
               (mk_var "min_vid"::(ids_to_vars @@ fst_many id_t_delta)) @@
               mk_lambda' map_ds_v.e @@
-                mk_add (list_last @@ ids_to_vars @@ fst_many map_ds_v.e) @@
-                       list_last @@ ids_to_vars @@ fst_many id_t_delta
+                mk_tuple @@ list_replace_i (-1) (mk_add vars_val vars_delta_val) vars_v
           else
             mk_let ["filtered"]
             (mk_bind (mk_var target_map) tmap_deref @@

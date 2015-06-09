@@ -89,6 +89,8 @@ let wrap_t_of_map = function
   | MapSet  -> wrap_tset
   | MapVMap -> wrap_tvmap
 
+let wrap_string_map s = "[<"^s^">]"
+
 let wrap_t_of_map' mt = wrap_t_of_map mt |- wrap_ttuple
 
 (* what the generic type of data carried around is *)
