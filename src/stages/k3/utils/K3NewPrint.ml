@@ -813,11 +813,12 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
       ~prefix_fn:(fun e -> light_type c @@ KH.mk_if e (KH.mk_cint (-1)) @@ KH.mk_cint 1)
 
   | Size -> let col = U.decompose_size expr in
-    apply_method c ~name:"size" ~col ~args:[KH.mk_cunit] ~arg_info:[ANonLambda, Out]
+    apply_method c ~name:"size" ~col ~args:[light_type c KH.mk_cunit]
+      ~arg_info:[ANonLambda, Out]
 
   | Peek -> let col = U.decompose_peek expr in
-    let normal () = lazy_paren @@ apply_method c ~name:"peek" ~col ~args:[light_type c @@ KH.mk_cunit]
-                      ~arg_info:[ANonLambda, Out] in
+    let normal () = lazy_paren @@ apply_method c ~name:"peek" ~col
+      ~args:[light_type c @@ KH.mk_cunit] ~arg_info:[ANonLambda, Out] in
     (* to handle the case where we have a full slice over a vmap, we need to look ahead *)
     let tag = U.tag_of_expr col in
     let col_t = fst @@ KH.unwrap_tcol @@ T.type_of_expr col in
@@ -872,7 +873,8 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
   | UpdateSuffix _ -> let col, key, lambda = U.decompose_update_suffix expr in
     begin match U.unwrap_tuple key with
     | vid::key ->
-      lps col <| apply_method_nocol c ~name:"update_suffix" ~args:[vid; KH.mk_tuple key; lambda]
+        lps col <| apply_method_nocol c ~name:"update_suffix"
+        ~args:[vid; light_type c @@ KH.mk_tuple key; lambda]
         ~arg_info:[ANonLambda,OutRec; ANonLambda,OutRec; ALambda[In;InRec],OutRec]
     | _ -> failwith "UpdateSuffix: bad key"
     end
