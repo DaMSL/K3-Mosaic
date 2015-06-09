@@ -365,7 +365,7 @@ let sw_demux c =
   let combo_arr_t = Array.of_list combo_t in
   (* for dates, we need to parse to int *)
   let convert_date i =
-    if combo_arr_t.(i).typ == TDate then mk_apply' "parse_sql_date"
+    if combo_arr_t.(i).typ = TDate then mk_apply' "parse_sql_date"
     else id_fn
   in
   let sentry_code =

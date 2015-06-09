@@ -35,6 +35,12 @@ let id_fn a = a
 
 let (|-) = compose
 
+let pequal = (==)
+
+type never
+
+let (==) = assert false
+
 let pair x y = (x,y)
 
 let null l = match l with [] -> true | _ -> false

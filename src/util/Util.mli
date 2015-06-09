@@ -25,6 +25,11 @@ val flip : ('a -> 'b -> 'c) -> 'b -> 'a -> 'c
 val id_fn : 'a -> 'a
 val (|-) : ('b -> 'c) -> ('a -> 'b) -> ('a -> 'c)
 
+val pequal : 'a -> 'a -> bool
+
+type never
+val (==) : 'a -> 'a -> never
+
 val pair : ('a -> 'b -> 'a * 'b)
 
 (* whether a list is empty *)
