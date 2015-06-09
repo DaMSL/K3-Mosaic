@@ -156,6 +156,7 @@ rule tokenize = parse
     | "filter"    { FILTER }
     | "flatten"   { FLATTEN }
     | "fold"      { AGGREGATE }
+    | "vfold"     { AGGREGATEV }
     | "groupby"   { GROUPBYAGGREGATE }
     | "sort"      { SORT }
     | "csize"     { SIZE }

@@ -127,7 +127,7 @@
 %token DO
 
 %token MAP ITERATE FILTER FLATTEN
-%token AGGREGATE GROUPBYAGGREGATE
+%token AGGREGATE AGGREGATEV GROUPBYAGGREGATE
 %token SORT RANK SIZE
 
 %token PEEK
@@ -619,17 +619,17 @@ access :
 
 mutation :
     /* Inserts, deletes and sends use a vararg function syntax for their value/payload */
-    | INSERT LPAREN IDENTIFIER COMMA tuple RPAREN { mkexpr (Insert $3) [$5] }
-    | UPSERT_WITH LPAREN IDENTIFIER COMMA tuple COMMA expr COMMA expr RPAREN { mkexpr (UpsertWith $3) [$5; $7; $9] }
+    | INSERT LPAREN variable COMMA tuple RPAREN { mkexpr Insert [mk_var $3; $5] }
+    | UPSERT_WITH LPAREN variable COMMA tuple COMMA expr COMMA expr RPAREN { mkexpr UpsertWith [mk_var $3; $5; $7; $9] }
 
-    | DELETE LPAREN IDENTIFIER COMMA tuple RPAREN { mkexpr (Delete $3) [$5] }
-    | DELETE_PREFIX LPAREN IDENTIFIER COMMA tuple RPAREN { mkexpr (DeletePrefix $3) [$5] }
+    | DELETE LPAREN variable COMMA tuple RPAREN { mkexpr Delete [mk_var $3; $5] }
+    | DELETE_PREFIX LPAREN variable COMMA tuple RPAREN { mkexpr DeletePrefix [mk_var $3; $5] }
 
     /* Updates must explicitly specify their new/old value as a tuple */
-    | UPDATE LPAREN IDENTIFIER COMMA expr COMMA expr RPAREN { mkexpr (Update $3) [$5; $7] }
-    | UPDATE_SUFFIX LPAREN IDENTIFIER COMMA expr COMMA expr RPAREN { mkexpr (UpdateSuffix $3) [$5; $7] }
+    | UPDATE LPAREN variable COMMA expr COMMA expr RPAREN { mkexpr Update [mk_var $3; $5; $7] }
+    | UPDATE_SUFFIX LPAREN variable COMMA expr COMMA expr RPAREN { mkexpr UpdateSuffix [mk_var $3; $5; $7] }
 
-    | IDENTIFIER LARROW expr { mkexpr (Assign $1) [$3] }
+    | variable LARROW expr { mkexpr Assign [mk_var $1; $3] }
 
     /* Error handling */
     | INSERT LPAREN expr error { value_error 2 }
@@ -648,6 +648,7 @@ transformers :
     | FILTER LPAREN expr COMMA expr RPAREN                { mkexpr Filter [$3; $5] }
     | FLATTEN LPAREN expr RPAREN                          { mkexpr Flatten [$3] }
     | AGGREGATE LPAREN expr COMMA expr COMMA expr RPAREN  { mkexpr Aggregate [$3; $5; $7] }
+    | AGGREGATEV LPAREN expr COMMA expr COMMA expr RPAREN  { mkexpr AggregateV [$3; $5; $7] }
     | GROUPBYAGGREGATE LPAREN expr COMMA expr COMMA expr COMMA expr RPAREN {
         mkexpr GroupByAggregate [$3; $5; $7; $9]
     }

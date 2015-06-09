@@ -245,6 +245,9 @@ let mk_flatten collection = mk_stree Flatten [collection]
 let mk_agg agg_fn init collection =
     mk_stree Aggregate [agg_fn; init; collection]
 
+let mk_aggv agg_fn init collection =
+    mk_stree AggregateV [agg_fn; init; collection]
+
 let mk_gbagg group_fun agg_fun init collection =
     mk_stree GroupByAggregate [group_fun; agg_fun; init; collection]
 
@@ -276,23 +279,23 @@ let mk_slice' collection pattern = mk_slice (mk_var collection) pattern
 let mk_slice_frontier col pat =
   mk_slice_gen SliceFrontier col @@ mk_tuple pat
 
-let mk_insert col x = mk_stree (Insert col) [mk_tuple x]
+let mk_insert col x = mk_stree Insert [mk_var col; mk_tuple x]
 
 (* key contains dummy value *)
 let mk_upsert_with col key lam_empty lam_full =
-  mk_stree (UpsertWith col) [mk_tuple key; lam_empty; lam_full]
+  mk_stree UpsertWith [mk_var col; mk_tuple key; lam_empty; lam_full]
 
-let mk_delete col x = mk_stree (Delete col) [mk_tuple x]
+let mk_delete col x = mk_stree Delete [mk_var col; mk_tuple x]
 
 (* first part of key contains the vid. Also contains dummy value *)
-let mk_delete_prefix col x = mk_stree (DeletePrefix col) [mk_tuple x]
+let mk_delete_prefix col x = mk_stree DeletePrefix [mk_var col; mk_tuple x]
 
 let mk_update col old_val new_val =
-    mk_stree (Update col) [mk_tuple old_val; mk_tuple new_val]
+  mk_stree Update [mk_var col; mk_tuple old_val; mk_tuple new_val]
 
 (* first part of new val contains the vid *)
 let mk_update_suffix col key lambda =
-  mk_stree (UpdateSuffix col) [mk_tuple key; lambda]
+  mk_stree UpdateSuffix [mk_var col; mk_tuple key; lambda]
 
 let mk_peek col = mk_stree Peek [col]
 
@@ -309,7 +312,7 @@ let mk_update_slice col slice new_val =
 let mk_ind v = mk_stree Indirect [v]
 
 (* left: TRef, right: T/TRef *)
-let mk_assign left right = mk_stree (Assign left) [right]
+let mk_assign left right = mk_stree Assign [mk_var left; right]
 
 (* target:TTarget(T) address:TAdress args:T *)
 let mk_send target address args = mk_stree Send [mk_ctarget target; address; mk_tuple args]

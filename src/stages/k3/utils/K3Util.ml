@@ -70,10 +70,15 @@ let decompose_add e = match tag_of_expr e, sub_tree e with
   Add, [e0; e1] -> e0, e1 | _ -> failwith "not Add"
 let decompose_aggregate e = match tag_of_expr e, sub_tree e with
   Aggregate, [e0; e1; e2] -> e0, e1, e2 | _ -> failwith "not Aggregate"
+let decompose_aggregatev e = match tag_of_expr e, sub_tree e with
+  AggregateV, [e0; e1; e2; e3] -> e0, e1, e2, e3 | _ -> failwith "not AggregateV"
 let decompose_apply e = match tag_of_expr e, sub_tree e with
   Apply, [e0; e1] -> (e0, e1) | _ -> failwith "not Apply"
-let decompose_assign e = match tag_of_expr e, sub_tree e with
-  Assign x, [e0] -> x, e0 | _ -> failwith "not Assign"
+let decompose_assign e =
+  match tag_of_expr e, sub_tree e with
+  | Assign, [x; e0] ->
+      begin match tag_of_expr x with Var i -> i, e0 | _ -> failwith "non-var in Assign" end
+  | _ -> failwith "not Assign"
 let decompose_block e = match tag_of_expr e with
   Block -> sub_tree e | _ -> failwith "not a Block"
 let decompose_caseof e = match tag_of_expr e, sub_tree e with
@@ -85,9 +90,13 @@ let decompose_combine e = match tag_of_expr e, sub_tree e with
 let decompose_const e = match tag_of_expr e with
   Const c -> c | _ -> failwith "not a Combine"
 let decompose_delete e = match tag_of_expr e, sub_tree e with
-  Delete x, [e0] -> x, e0 | _ -> failwith "not a Delete"
+  | Delete, [x; e0] ->
+      begin match tag_of_expr x with Var i -> i, e0 | _ -> failwith "non-var in Delete" end
+  | _ -> failwith "not a Delete"
 let decompose_delete_prefix e = match tag_of_expr e, sub_tree e with
-  DeletePrefix x, [e0] -> x, e0 | _ -> failwith "not a DeletePrefix"
+  | DeletePrefix, [x; e0] ->
+      begin match tag_of_expr x with Var i -> i, e0 | _ -> failwith "non-var in DeletePrefix" end
+  | _ -> failwith "not a DeletePrefix"
 let decompose_eq e = match tag_of_expr e, sub_tree e with
   Eq, [e0; e1] -> e0, e1 | _ -> failwith "not an Equals"
 let decompose_filter e = match tag_of_expr e, sub_tree e with
@@ -102,7 +111,9 @@ let decompose_ifthenelse e = match tag_of_expr e, sub_tree e with
 let decompose_indirect e = match tag_of_expr e, sub_tree e with
   Indirect, [e0] -> e0 | _ -> failwith "not an Indirect"
 let decompose_insert e = match tag_of_expr e, sub_tree e with
-  Insert x, [e0] -> x, e0 | _ -> failwith "not a Insert"
+  | Insert, [x; e0] ->
+      begin match tag_of_expr x with Var i -> i, e0 | _ -> failwith "non-var in Insert" end
+  | _ -> failwith "not a Insert"
 let decompose_iterate e = match tag_of_expr e, sub_tree e with
   Iterate, [e0; e1] -> e0, e1 | _ -> failwith "not a Iterate"
 let decompose_just e = match tag_of_expr e, sub_tree e with
@@ -147,11 +158,16 @@ let decompose_subscript e = match tag_of_expr e, sub_tree e with
 let decompose_tuple e = match tag_of_expr e with
   Tuple -> sub_tree e  | _ -> failwith "not a Tuple"
 let decompose_update e = match tag_of_expr e, sub_tree e with
-  Update x, [e0; e1] -> x, e0, e1 | _ -> failwith "not an Update"
+  | Update, [x; e0; e1] ->
+      begin match tag_of_expr x with Var i -> i, e0, e1 | _ -> failwith "non-var in Update" end
+  | _ -> failwith "not an Update"
 let decompose_update_suffix e = match tag_of_expr e, sub_tree e with
-  UpdateSuffix x, [e0; e1] -> x, e0, e1 | _ -> failwith "not an UpdateSuffix"
+  | UpdateSuffix, [x; e0; e1] ->
+      begin match tag_of_expr x with Var i -> i, e0, e1 | _ -> failwith "non-var in UpdateSuffix" end
+  | _ -> failwith "not an UpdateSuffix"
 let decompose_upsert_with e = match tag_of_expr e, sub_tree e with
-  | UpsertWith x, [key; lam_no; lam_yes] -> x, key, lam_no, lam_yes
+  | UpsertWith, [x; key; lam_no; lam_yes] ->
+      begin match tag_of_expr x with Var i -> i, key, lam_no, lam_yes | _ -> failwith "non-var in UpdateWith" end
   | _ -> failwith "not an UpsertWith"
 let decompose_var e = match tag_of_expr e with
   Var id -> id | _ -> failwith "not a Var"
@@ -164,7 +180,6 @@ let decompose_trig (t,_) = match t with
 let decompose_global_fn (g,_) = match g with
   | Global(id, t, Some e) -> id, t, e
   | _ -> failwith "not a global fn"
-
 
 (* decompose if we have a tuple, otherwise return e *)
 let extract_if_tuple e = try decompose_tuple e with Failure _ -> [e]

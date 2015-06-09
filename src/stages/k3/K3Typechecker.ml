@@ -79,21 +79,22 @@ let check_tag_arity tag children =
     | Filter            -> 2
     | Flatten           -> 1
     | Aggregate         -> 3
+    | AggregateV        -> 4
     | GroupByAggregate  -> 4
     | Sort              -> 2
     | Size              -> 1
 
     | Slice      -> 2
     | SliceFrontier -> 2
-    | Insert _  -> 1
-    | Update _  -> 2
-    | UpsertWith _ -> 3
-    | UpdateSuffix _ -> 2
-    | Delete _  -> 1
-    | DeletePrefix _ -> 1
+    | Insert  -> 2
+    | Update  -> 3
+    | UpsertWith -> 4
+    | UpdateSuffix -> 3
+    | Delete  -> 2
+    | DeletePrefix -> 2
     | Peek      -> 1
 
-    | Assign _ -> 1
+    | Assign -> 2
     | Indirect -> 1
 
     | Send -> 3
@@ -282,9 +283,15 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
       | t::_ -> t_erroru @@ TMismatch(t, t_vid, "vmap element")
     else ()
   in
+  let check_vmap_pat col_t elem_t pat =
+    if col_t = TVMap then
+      let elem_v = wrap_ttuple @@ t_vid :: unwrap_ttuple elem_t in
+      if not (pat === elem_v) then t_erroru @@ TMismatch(pat, elem_v, "vmap pattern") else ()
+    else
+      if not (pat === elem_t) then t_erroru @@ TMismatch(pat, elem_t, "pattern") else ()
+  in
 
-  let current_type =
-      match tag with
+  let current_type = match tag with
       | Const c -> deduce_constant_type uuid trig_env c
       | Var id  -> begin
           try List.assoc id env
@@ -422,8 +429,15 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
           | _ -> telem
           end
 
-      | Aggregate ->
-          let tfun, tzero, tcol' = bind 0, bind 1, bind 2 in
+      | Aggregate | AggregateV ->
+          let tfun, tzero, tcol' =
+            if tag = AggregateV then
+              let vid = bind 0 in
+              if not (vid === t_vid) then t_erroru @@ TMismatch(vid, t_vid, "required vid")
+              else bind 1, bind 2, bind 3
+            else (* Aggregate *)
+              bind 0, bind 1, bind 2
+          in
           let targ, tret =
             try unwrap_tfun tfun with Failure _ -> t_erroru (not_function tfun) in
           let tcol, telem =
@@ -491,75 +505,59 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
           let tcol, telem =
             try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') in
           if not (tcol = TVMap) then t_erroru (TMismatch(tcol', wrap_tvmap telem, "collection type")) else
-          let telem_v = wrap_ttuple @@ t_vid :: unwrap_ttuple telem in
-          if not (tpat === telem_v) then t_erroru @@ TMismatch(tpat, telem, "vmap pattern") else
+          check_vmap_pat tcol telem tpat;
           tcol'
 
-      | Insert id ->
-          let tcol' = try List.assoc id env
-                      with Not_found -> t_erroru (TMsg(id^" not found")) in
+      | Insert ->
+          let tcol', telem' = bind 0, bind 1 in
           let tcol, telem =
             try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') in
-          let telem' = bind 0 in
-          if telem === telem' then t_unit
-          else t_erroru (TMismatch(telem, telem', ""))
-
-      | Update id ->
-          let tcol' = try List.assoc id env
-                    with Not_found -> t_erroru (TMsg(id^" not found")) in
-          let tcol, telem =
-            try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') in
-          let told, tnew = bind 0, bind 1 in
-          if not (telem === told) then t_erroru (TMismatch(telem, told, "old value")) else
-          if not (telem === tnew) then t_erroru (TMismatch(telem, tnew, "new value")) else
+          check_vmap_pat tcol telem telem';
           t_unit
 
-      | UpdateSuffix id ->
-          let tcol' = try List.assoc id env
-                    with Not_found -> t_erroru (TMsg(id^" not found")) in
+      | Update ->
+          let tcol', told, tnew = bind 0, bind 1, bind 2 in
+          let tcol, telem =
+            try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') in
+          check_vmap_pat tcol telem told;
+          check_vmap_pat tcol telem tnew;
+          t_unit
+
+      | UpdateSuffix ->
+          let tcol', tnew, tlam_update = bind 0, bind 1, bind 2 in
           let tcol, telem =
             try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') in
           if not (tcol = TVMap) then t_erroru (TMismatch(tcol', wrap_tvmap telem, "collection type")) else
-          let tnew, tlam_update = bind 0, bind 1 in
           if not (telem === tnew) then t_erroru (TMismatch(telem, tnew, "new value")) else
-          let tfst = hd @@ unwrap_ttuple tnew in
-          if not (tfst === t_vid) then t_erroru (TMismatch(tfst, t_vid, "vid")) else
+          check_vmap_pat tcol telem tnew;
           let tlam_update' = wrap_tfunc telem telem in
           if not (tlam_update === tlam_update') then t_erroru (TMismatch(tlam_update, tlam_update', "update lambda")) else
           t_unit
 
-      | UpsertWith id ->
-          let tcol' = try List.assoc id env
-                    with Not_found -> t_erroru (TMsg(id^" not found")) in
+      | UpsertWith ->
+          let tcol', tkey, tlam_insert, tlam_update = bind 0, bind 1, bind 2, bind 3 in
           let tcol, telem =
             try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') in
-          let tkey, tlam_insert, tlam_update = bind 0, bind 1, bind 2 in
-          if not (telem === tkey) then t_erroru (TMismatch(telem, tkey, "key")) else
+          check_vmap_pat tcol telem tkey;
           let tlam_insert' = wrap_tfunc t_unit telem in
           if not (tlam_insert === tlam_insert') then t_erroru (TMismatch(tlam_insert, tlam_insert', "insert lambda")) else
           let tlam_update' = wrap_tfunc telem telem in
           if not (tlam_update === tlam_update') then t_erroru (TMismatch(tlam_update, tlam_update', "update lambda")) else
           t_unit
 
-      | Delete id ->
-          let tcol' = try List.assoc id env
-                    with Not_found -> t_erroru (TMsg(id^" not found")) in
+      | Delete ->
+          let tcol', told = bind 0, bind 1 in
           let tcol, telem =
             try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') in
-          let told = bind 0 in
-          if telem === told then t_unit
-          else t_erroru (TMismatch(telem, told, ""))
+          check_vmap_pat tcol telem told;
+          t_unit
 
-      | DeletePrefix id ->
-          let tcol' = try List.assoc id env
-                      with Not_found -> t_erroru (TMsg(id^" not found")) in
+      | DeletePrefix ->
+          let tcol', told = bind 0, bind 1 in
           let tcol, telem =
             try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') in
           if not (tcol = TVMap) then t_erroru (TMismatch(tcol', wrap_tvmap telem, "collection type")) else
-          let told = bind 0 in
-          if not (telem === told) then t_erroru (TMismatch(telem, told, "")) else
-          let tfst = hd @@ unwrap_ttuple told in
-          if not (tfst === t_vid) then t_erroru (TMismatch(tfst, t_vid, "vid")) else
+          check_vmap_pat tcol telem told;
           t_unit
 
       | Peek ->
@@ -568,12 +566,10 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
             try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') in
           wrap_tmaybe telem
 
-      | Assign id ->
-          let tl = try List.assoc id env
-                        with Not_found -> t_erroru (TMsg(id^" not found")) in
-          let tr = bind 0 in
-          if not (tl === tr) then t_erroru (TMismatch(tl, tr, "")) else
-          if not tl.mut then t_erroru (TMsg(id^" is not mutable")) else
+      | Assign ->
+          let tl, tr = bind 0, bind 1 in
+          if not (tl === tr) then t_erroru @@ TMismatch(tl, tr, "") else
+          if not tl.mut then t_erroru @@ TBad(tl, "not mutable") else
           t_unit
 
       (* Add a layer of indirection *)

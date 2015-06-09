@@ -98,6 +98,7 @@ let string_of_tag_type = function
     | Filter           -> "Filter"
     | Flatten          -> "Flatten"
     | Aggregate        -> "Aggregate"
+    | AggregateV       -> "AggregateV"
     | GroupByAggregate -> "GroupByAggregate"
     | Sort             -> "Sort"
     | Size             -> "Size"
@@ -105,16 +106,16 @@ let string_of_tag_type = function
 
     | Slice            -> "Slice"
     | SliceFrontier    -> "SliceFrontier"
-    | Insert x         -> "Insert "^x
-    | Update x         -> "Update "^x
-    | UpdateSuffix x   -> "UpdateSuffix "^x
-    | UpsertWith x     -> "UpsertWith "^x
-    | Delete x         -> "Delete "^x
-    | DeletePrefix x   -> "DeletePrefix "^x
+    | Insert           -> "Insert"
+    | Update           -> "Update"
+    | UpdateSuffix     -> "UpdateSuffix"
+    | UpsertWith       -> "UpsertWith"
+    | Delete           -> "Delete"
+    | DeletePrefix     -> "DeletePrefix"
     | Peek             -> "Peek"
 
     | Indirect         -> "Indirect"
-    | Assign x         -> "Assign"^x
+    | Assign           -> "Assign"
 
     | Send             -> "Send"
 

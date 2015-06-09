@@ -111,20 +111,21 @@ type expr_tag_t
     | Filter
     | Flatten
     | Aggregate
+    | AggregateV     (* vmap version of aggregate *)
     | GroupByAggregate
     | Sort
 
     | Peek
     | Slice
-    | SliceFrontier        (* slice with a frontier at a vid *)
-    | Insert of id_t
-    | Update of id_t
-    | UpsertWith of id_t   (* insert with a default handler *)
-    | UpdateSuffix of id_t (* update past a vid *)
-    | Delete of id_t
-    | DeletePrefix of id_t (* delete before a certain vid. save frontier *)
+    | SliceFrontier  (* slice with a frontier at a vid *)
+    | Insert
+    | Update
+    | UpsertWith     (* insert with a default handler *)
+    | UpdateSuffix   (* update past a vid *)
+    | Delete
+    | DeletePrefix   (* delete before a certain vid. save frontier *)
 
-    | Assign of id_t
+    | Assign
     | Indirect
     | BindAs of id_t
     | Let of id_t list

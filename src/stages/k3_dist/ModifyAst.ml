@@ -183,12 +183,12 @@ let modify_dist (c:config) ast stmt =
 
     (* a lambda simply passes through a message *)
     | Lambda _ -> get_msg 0, e
-    | Insert _ -> let col, elem = U.decompose_insert e in
+    | Insert -> let col, elem = U.decompose_insert e in
         NopMsg, mk_insert col @@ modify_tuple elem
 
     (* deletes need to be removed, since we have versioning ie. we don't delete
      * anything *)
-    | Delete _ -> DelMsg, e
+    | Delete -> DelMsg, e
 
     | Slice ->
       (* If we have any bound variable, we should slice on those *)

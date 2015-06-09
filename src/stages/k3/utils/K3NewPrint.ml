@@ -805,6 +805,11 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
     apply_method c ~name:"fold" ~col ~args:[lambda; acc]
       ~arg_info:[ALambda [In; InRec], Out; ANonLambda, Out]
 
+  | AggregateV -> let vid, lambda, acc, col = U.decompose_aggregatev expr in
+    (* find out if our accumulator is a collection type *)
+    apply_method c ~name:"fold" ~col ~args:[vid; lambda; acc]
+      ~arg_info:[ANonLambda, Out; ALambda [In; InRec], Out; ANonLambda, Out]
+
   | GroupByAggregate -> let lam1, lam2, acc, col = U.decompose_gbagg expr in
     (* find out if our accumulator is a collection type *)
     apply_method c ~name:"groupBy" ~col ~args:[lam1; lam2; acc]
@@ -859,22 +864,22 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
       let col, pat = U.decompose_slice expr in
       filter_of_slice ~frontier:false c col pat
 
-  | Insert _ -> let col, x = U.decompose_insert expr in
+  | Insert -> let col, x = U.decompose_insert expr in
     lps col <| apply_method_nocol c ~name:"insert" ~args:[x]
       ~arg_info:[ANonLambda,OutRec]
-  | Delete _ -> let col, x = U.decompose_delete expr in
+  | Delete -> let col, x = U.decompose_delete expr in
     lps col <| apply_method_nocol c ~name:"erase" ~args:[x]
       ~arg_info:[ANonLambda,OutRec]
 
-  | DeletePrefix _ -> let col, x = U.decompose_delete_prefix expr in
+  | DeletePrefix -> let col, x = U.decompose_delete_prefix expr in
     lps col <| apply_method_nocol c ~name:"erase_prefix" ~args:[x]
       ~arg_info:[ANonLambda,OutRec]
 
-  | Update _ -> let col, oldx, newx = U.decompose_update expr in
+  | Update -> let col, oldx, newx = U.decompose_update expr in
     lps col <| apply_method_nocol c ~name:"update" ~args:[oldx;newx]
       ~arg_info:[ANonLambda,OutRec; ANonLambda,OutRec]
 
-  | UpdateSuffix _ -> let col, key, lambda = U.decompose_update_suffix expr in
+  | UpdateSuffix -> let col, key, lambda = U.decompose_update_suffix expr in
     begin match U.unwrap_tuple key with
     | vid::key ->
         lps col <| apply_method_nocol c ~name:"update_suffix"
@@ -883,11 +888,11 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
     | _ -> failwith "UpdateSuffix: bad key"
     end
 
-  | UpsertWith _ -> let col, key, lam_no, lam_yes = U.decompose_upsert_with expr in
+  | UpsertWith -> let col, key, lam_no, lam_yes = U.decompose_upsert_with expr in
     lps col <| apply_method_nocol  c ~name:"upsert_with" ~args:[key; lam_no; lam_yes]
       ~arg_info:[ANonLambda,OutRec; ALambda[In],OutRec; ALambda[InRec],OutRec]
 
-  | Assign _ -> let l, r = U.decompose_assign expr in
+  | Assign -> let l, r = U.decompose_assign expr in
     lps l <| lsp () <| lps "=" <| lsp () <| lazy_expr c r
 
   | Indirect -> let x = U.decompose_indirect expr in
