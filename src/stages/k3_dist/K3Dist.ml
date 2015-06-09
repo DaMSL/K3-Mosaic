@@ -120,8 +120,8 @@ let wrap_t_map_idx c map_id = match c.map_type with
       prerr_string @@ "Map_idxs:\n"^string_of_map_idxs c c.map_idxs;
       failwith @@ "Failed to find map index for map id "^P.map_name_of c.p map_id
     end
-
-  | MapSet -> wrap_t_of_map
+  | MapSet  -> wrap_t_of_map
+  | MapVMap -> wrap_tvmap
 
 let wrap_t_map_idx' c map_id = wrap_t_map_idx c map_id |- wrap_ttuple
 
@@ -414,8 +414,11 @@ let get_idx idx map_id =
  *)
 let map_latest_vid_vals ?(vid_nm="vid") c slice_col m_pat map_id ~keep_vid : expr_t =
   (* function to remove the vid from the collection in this case, we also convert to a bag *)
-  let remove_vid_if_needed = if keep_vid then id_fn else
-    let m_id_t = P.map_ids_types_for c.p map_id in
+  let convert =
+    let m_id_t =
+      (* either keep or remove vid *)
+      if keep_vid then P.map_ids_types_with_v_for c.p map_id
+      else P.map_ids_types_for c.p map_id in
     let m_id_t_v = P.map_ids_types_with_v_for c.p map_id in
     let m_bag_t  = wrap_tbag' @@ snd_many m_id_t in
     mk_agg
@@ -438,7 +441,7 @@ let map_latest_vid_vals ?(vid_nm="vid") c slice_col m_pat map_id ~keep_vid : exp
     in
     let idx' = add_vid_idx idx in (* vid is always matched last in the index *)
     let idx = OrdIdx(idx', IntSet.of_list idx) in
-    remove_vid_if_needed @@
+    convert @@
       (* filter out anything that doesn't have the same parameters *)
       (* the multimap layer implements extra eq key filtering *)
       (mk_slice_idx' ~idx ~comp:LT slice_col @@ mk_var vid_nm::pat)
@@ -454,7 +457,10 @@ let map_latest_vid_vals ?(vid_nm="vid") c slice_col m_pat map_id ~keep_vid : exp
       mk_apply (mk_var @@ frontier_name c map_id) @@
         mk_tuple [mk_var vid_nm; access_k3]
     in
-    if keep_vid then simple_app else remove_vid_if_needed simple_app
+    if keep_vid then simple_app else convert simple_app
+
+  | MapVMap -> (* VMap *)
+    convert @@ mk_slice_frontier slice_col @@ (mk_var vid_nm)::pat
 
 (* Create a function for getting the latest vals up to a certain vid *)
 (* This is needed both for sending a push, and for modifying a local slice

@@ -4,7 +4,7 @@ module KP = K3Printing
 
 (* ------ Multimap functions ------ *)
 (* NOTE: remove_prefix: we delete up to and including vid, and keep a frontier at vid
- *       update_suffix: updates the vid and all following vids
+ *       update_suffix: updates the > vid and all following vids
  *       frontier: gets values < the vid only
  * Check if these are correct!
  *)
@@ -125,7 +125,7 @@ module Make(OrdVid: ICommon.OrderedKeyType)(OrdKey: ICommon.OrderedKeyType) = st
   (* update from a certain vid onwards *)
   let update_suffix (vid:OrdVid.t) (k:OrdKey.t) (f:'a -> 'a) (m:'a t) : 'a t =
     map (fun vid' k' v ->
-      if OrdKey.compare k' k = 0 && OrdVid.compare vid' vid >=0 then f v
+      if OrdKey.compare k' k > 0 && OrdVid.compare vid' vid >=0 then f v
       else v) m
 
   let iter f m = fold (fun vid k v _ -> f vid k v) m ()

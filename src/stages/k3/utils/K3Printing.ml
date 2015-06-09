@@ -120,10 +120,14 @@ let string_of_tag_type = function
     | Subscript n      -> "Subscript"^soi n
 
     | Slice            -> "Slice"
+    | SliceFrontier    -> "SliceFrontier"
     | SliceIdx(s,c)    -> "SliceIdx("^string_of_index s^", "^string_of_comp c^")"
     | Insert x         -> "Insert "^x
     | Update x         -> "Update "^x
+    | UpdateSuffix x   -> "UpdateSuffix "^x
+    | UpsertWith x     -> "UpsertWith "^x
     | Delete x         -> "Delete "^x
+    | DeletePrefix x   -> "DeletePrefix "^x
     | Peek             -> "Peek"
 
     | Indirect         -> "Indirect"

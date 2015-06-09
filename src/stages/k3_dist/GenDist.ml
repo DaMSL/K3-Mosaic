@@ -236,29 +236,38 @@ let nd_add_delta_to_buf c map_id =
         mk_var delta_tuples
       ;
       (* add to future values *)
-      (* TODO: optimize *)
       mk_iter (* loop over values in the delta tuples *)
         (mk_lambda' id_t_delta @@
-          mk_let ["filtered"]
-          (mk_bind (mk_var target_map) tmap_deref @@
-            (* slice for all values > vid with same key *)
-            match c.map_type with
-            | MapMultiIndex ->
-              mk_slice_idx' ~idx ~comp:GTA (mk_var tmap_deref) vars_delta_unknown
-            | MapSet ->
-              mk_filter
-                (mk_lambda' map_ds_v.e @@
-                  mk_gt (mk_var "vid") @@ mk_var "min_vid") @@
-                (* slice for all vid and value *)
-                mk_slice' tmap_deref vars_delta_unknown) @@
-          mk_iter
-            (mk_lambda' map_ds_v.e @@
-              (* careful to put bind in proper place *)
-              mk_bind (mk_var target_map) tmap_deref @@
-                mk_update tmap_deref
-                  (ids_to_vars @@ fst_many @@ map_ds_v.e) @@
-                  list_replace_i (-1) (mk_add vars_val vars_delta_val) vars_v) @@
-            mk_var "filtered") @@
+          if c.map_type = MapVMap then
+            (* VMap supports direct manipulation *)
+            mk_bind (mk_var target_map) tmap_deref @@
+            mk_update_suffix tmap_deref
+              (mk_var "min_vid"::(ids_to_vars @@ fst_many id_t_delta)) @@
+              mk_lambda' map_ds_v.e @@
+                mk_add (list_last @@ ids_to_vars @@ fst_many map_ds_v.e) @@
+                       list_last @@ ids_to_vars @@ fst_many id_t_delta
+          else
+            mk_let ["filtered"]
+            (mk_bind (mk_var target_map) tmap_deref @@
+              (* slice for all values > vid with same key *)
+              match c.map_type with
+              | MapVMap -> failwith "shouldn't be here"
+              | MapMultiIndex ->
+                mk_slice_idx' ~idx ~comp:GTA (mk_var tmap_deref) vars_delta_unknown
+              | MapSet ->
+                mk_filter
+                  (mk_lambda' map_ds_v.e @@
+                    mk_gt (mk_var "vid") @@ mk_var "min_vid") @@
+                  (* slice for all vid and value *)
+                  mk_slice' tmap_deref vars_delta_unknown) @@
+            mk_iter
+              (mk_lambda' map_ds_v.e @@
+                (* careful to put bind in proper place *)
+                mk_bind (mk_var target_map) tmap_deref @@
+                  mk_update tmap_deref
+                    (ids_to_vars @@ fst_many @@ map_ds_v.e) @@
+                    list_replace_i (-1) (mk_add vars_val vars_delta_val) vars_v) @@
+              mk_var "filtered") @@
         mk_var delta_tuples]
 
 (*

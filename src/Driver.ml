@@ -582,11 +582,11 @@ let param_specs = Arg.align
   "--datafile", Arg.String (fun file ->
     cmd_line_params.k3new_data_file <- file),
       "file     Specify a k3new data file";
-  "--k3new_folds", Arg.Unit (fun () -> cmd_line_params.k3new_folds <- true),
+  "--k3new-folds", Arg.Unit (fun () -> cmd_line_params.k3new_folds <- true),
       "         For k3new: output folds instead of ext and map";
-  "--map_idx", Arg.Unit (fun () -> cmd_line_params.map_type <- K3Dist.MapMultiIndex),
+  "--map-idx", Arg.Unit (fun () -> cmd_line_params.map_type <- K3Dist.MapMultiIndex),
       "         Use multiindex maps";
-  "--map_vmap", Arg.Unit (fun () -> cmd_line_params.map_type <- K3Dist.MapVMap),
+  "--map-vmap", Arg.Unit (fun () -> cmd_line_params.map_type <- K3Dist.MapVMap),
       "         Use vmaps";
   "--nogc", Arg.Unit (fun () -> cmd_line_params.enable_gc <- false),
       "         Use garbage collection";

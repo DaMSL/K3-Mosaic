@@ -139,6 +139,7 @@ let lazy_col = function
   | TBag        -> lps "{ Collection }"
   | TList       -> lps "{ Seq }"
   | TMap        -> lps "{ Map }"
+  | TVMap       -> lps "{ VMap }"
   | TMultimap s -> lps "{ MultiIndex, " <| lazy_indices s <| lps " }"
 
 let lazy_control_anno c = function
@@ -492,6 +493,42 @@ and fold_of_map_ext c expr =
   lazy_expr c @@ light_type c @@
     KH.mk_agg (KH.mk_lambda args' body') (mk_empty t_out) col
 
+(* convert a slice to a filter function.
+ * @frontier: for a vmap, can change to a frontier lookup
+ *)
+and filter_of_slice ~frontier c col pat =
+    let es, lam_fn = match U.tag_of_expr pat with
+      | Tuple -> U.decompose_tuple pat, id_fn
+      (* if we have a let, we need a proper tuple extraction *)
+      | Let _ -> extract_slice pat
+      | _     -> [pat], id_fn
+    in
+    let ts = List.map T.type_of_expr es in
+    let id_e = add_record_ids es in
+    let id_t = add_record_ids ts in
+    (* find the non-unknown slices *)
+    let filter_e = List.filter (fun (_,c) ->
+      match U.tag_of_expr c with
+      | Const CUnknown -> false
+      | _              -> true)
+      id_e in
+    if null filter_e then lazy_expr c col (* no slice needed *)
+    else
+      (* adjust filter_e for frontier (remove vid) *)
+      let filter_e' = if frontier then tl filter_e else filter_e in
+      let do_eq (id, v) = KH.mk_eq (KH.mk_var id) v in
+      let lambda = light_type c @@
+        KH.mk_lambda' id_t @@
+          lam_fn @@ (* apply an inner lambda constructor *)
+          List.fold_right (fun x acc ->
+            KH.mk_and acc @@ do_eq x
+          )
+          (tl filter_e')
+          (do_eq @@ hd filter_e')
+      in
+      let args = if frontier then [snd @@ hd filter_e; lambda] else [lambda] in
+      apply_method c ~name:"filter" ~col ~args ~arg_info:[ALambda[InRec], Out]
+
 (* printing expressions *)
 (* argnums: lambda only   -- number of expected arguments *)
 (* prefix_fn: lambda only -- modify the lambda with a prefix *)
@@ -804,49 +841,46 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
     let name = String.concat "_" @@ "slice_by"::ids' in
     apply_method c ~name ~col ~args:[pat] ~arg_info:[ANonLambda, Out]
 
+  | SliceFrontier ->
+      (* this only works on a vmap, so we can assume we have a vmap *)
+      let col, pat = U.decompose_slice_frontier expr in
+      filter_of_slice ~frontier:true c col pat
+
   | Slice -> let col, pat = U.decompose_slice expr in
-    let es, lam_fn = match U.tag_of_expr pat with
-      | Tuple -> U.decompose_tuple pat, id_fn
-      (* if we have a let, we need a proper tuple extraction *)
-      | Let _ -> extract_slice pat
-      | _     -> [pat], id_fn
-    in
-    let ts = List.map T.type_of_expr es in
-    let id_e = add_record_ids es in
-    let id_t = add_record_ids ts in
-    (* find the non-unknown slices *)
-    let filter_e = List.filter (fun (_,c) ->
-      match U.tag_of_expr c with
-      | Const CUnknown -> false
-      | _              -> true)
-      id_e
-    in
-    if null filter_e then lazy_expr c col (* no slice needed *)
-    else
-      let do_eq (id, v) = KH.mk_eq (KH.mk_var id) v in
-      let lambda = light_type c @@
-        KH.mk_lambda' id_t @@
-          lam_fn @@ (* apply an inner lambda constructor *)
-          List.fold_right (fun x acc ->
-            KH.mk_and acc (do_eq x)
-          )
-          (tl filter_e)
-          (do_eq @@ hd filter_e)
-      in
-      apply_method c ~name:"filter" ~col ~args:[lambda] ~arg_info:[ALambda[InRec], Out]
+      filter_of_slice ~frontier:false c col pat
   | Insert _ -> let col, x = U.decompose_insert expr in
     lps col <| apply_method_nocol c ~name:"insert" ~args:[x]
       ~arg_info:[ANonLambda,OutRec]
   | Delete _ -> let col, x = U.decompose_delete expr in
     lps col <| apply_method_nocol c ~name:"erase" ~args:[x]
       ~arg_info:[ANonLambda,OutRec]
+
+  | DeletePrefix _ -> let col, x = U.decompose_delete_prefix expr in
+    lps col <| apply_method_nocol c ~name:"erase_prefix" ~args:[x]
+      ~arg_info:[ANonLambda,OutRec]
+
   | Update _ -> let col, oldx, newx = U.decompose_update expr in
     lps col <| apply_method_nocol c ~name:"update" ~args:[oldx;newx]
       ~arg_info:[ANonLambda,OutRec; ANonLambda,OutRec]
+
+  | UpdateSuffix _ -> let col, key, lambda = U.decompose_update_suffix expr in
+    begin match U.unwrap_tuple key with
+    | vid::key ->
+      lps col <| apply_method_nocol c ~name:"update_suffix" ~args:[vid; KH.mk_tuple key; lambda]
+        ~arg_info:[ANonLambda,OutRec; ANonLambda,OutRec; ALambda[In;InRec],OutRec]
+    | _ -> failwith "UpdateSuffix: bad key"
+    end
+
+  | UpsertWith _ -> let col, key, lam_no, lam_yes = U.decompose_upsert_with expr in
+    lps col <| apply_method_nocol  c ~name:"upsert_with" ~args:[key; lam_no; lam_yes]
+      ~arg_info:[ANonLambda,OutRec; ALambda[In],OutRec; ALambda[InRec],OutRec]
+
   | Assign _ -> let l, r = U.decompose_assign expr in
     lps l <| lsp () <| lps "=" <| lsp () <| lazy_expr c r
+
   | Indirect -> let x = U.decompose_indirect expr in
     lps "ind" <| lsp () <| lazy_expr c x
+
   | Send -> let target, addr, args = U.decompose_send expr in
     wrap_indent @@ lazy_paren (expr_pair (target, addr)) <| lps "<- " <|
       lps_list CutHint (lazy_expr c) args

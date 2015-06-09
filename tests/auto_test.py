@@ -33,10 +33,8 @@ def run():
                         default=None, help="Use an order file instead of creating a trace")
     parser.add_argument('-v', '--verbose', action='store_true', dest='verbose',
                         default=False, help="See test results in detail")
-    parser.add_argument('--idx', action='store_true', dest='use_idx',
-                        default=False, help="Use multi index maps")
-    parser.add_argument('--gc', action='store_true', dest='enable_gc',
-                        default=False, help="Enable garbage collector")
+    parser.add_argument('-m', '--map', action='store', dest='map_type',
+                        default='set', help="Use set/vmap/idx maps")
     parser.add_argument('--no_new', action='store_false', dest='new_k3',
                         default=True, help="Create k3new file")
     parser.add_argument('--no-deletes', action='store_false', dest='gen_deletes',
@@ -90,12 +88,11 @@ def run():
                                 order_file=args.order_file,
                                 verbose=verbose,
                                 distrib=True,
-                                use_idx=args.use_idx,
-                                enable_gc=args.enable_gc,
                                 new_k3=args.new_k3,
                                 gen_deletes=args.gen_deletes,
                                 gen_correctives=args.gen_correctives,
-                                run_interp=args.run_interp
+                                run_interp=args.run_interp,
+                                map_type=args.map_type
                                 )
         # check if a test failed
         if not res:

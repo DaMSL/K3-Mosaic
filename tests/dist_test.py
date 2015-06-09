@@ -26,12 +26,11 @@ def run(target_file,
         order_file=None,
         verbose=True,
         distrib=False,
-        use_idx=False,
-        enable_gc=True,
         new_k3=True,
         folds_only=True,
         gen_deletes=True,
         gen_correctives=True,
+        map_type="set",
         run_interp=True
         ):
 
@@ -96,7 +95,8 @@ def run(target_file,
         src_lang = "distm3"
     else:
         src_lang = "m3"
-    cmd = concat([dbtoaster, "-l", src_lang, "-d", "PRINT-VERBOSE", target_file, ">", m3_file, "2>", error_file])
+    cmd = concat([dbtoaster, "-l", src_lang, "-d", "PRINT-VERBOSE", target_file,
+          ">", m3_file, "2>", error_file])
     print_system(cmd, verbose)
     if check_error(error_file, verbose):
         os.chdir(saved_dir)
@@ -126,18 +126,22 @@ def run(target_file,
     # execution diverges from here
     if distrib:
         queue_type = "node"
+        options = ""
 
         # string for k3 distributed file creation: either use a trace file or an order file
-        if not order_file:
-            create_cmd = concat(["--trace", trace_file])
+        if order_file:
+            options += concat(["--order", order_file, " "])
         else:
-            create_cmd = concat(["--order", order_file])
+            options += concat(["--trace", trace_file, " "])
 
-        idx_cmd = "--use_idx" if use_idx else None
-        gc_cmd  = "--gc" if enable_gc else None
-        delete_cmd = "--no-deletes" if not gen_deletes else None
-        corrective_cmd = "--no-correctives" if not gen_correctives else None
-        options = concat ([create_cmd, idx_cmd, gc_cmd, delete_cmd, corrective_cmd])
+        if map_type == "vmap":
+            options += "--map-vmap "
+        if map_type == "idx":
+            options += "--map-idx "
+        if not gen_deletes:
+            options += "--no-deletes "
+        if not gen_correctives:
+            options += "--no-correctives "
 
         agenda_cmd = "--agenda "+ agenda_file
 
@@ -157,14 +161,17 @@ def run(target_file,
             return False
 
         # combine the data files
-        cmd = concat([combine_tool] + read_files + [agenda_cmd, '>', data_file, '2>', error_file])
+        cmd = concat([combine_tool] + read_files +
+                [agenda_cmd, '>', data_file, '2>', error_file])
         print_system(cmd, verbose)
         if check_error(error_file, verbose):
             os.chdir(saved_dir)
             return False
 
         # create another k3 distributed file (with partition map)
-        cmd = concat([k3o, "-p -i m3 -l k3disttest", m3_file, agenda_cmd, options, "-m", part_file, "--sfile", data_file] + [">", k3dist_file, "2>", error_file])
+        cmd = concat([k3o, "-p -i m3 -l k3disttest", m3_file, agenda_cmd,
+              options, "-m", part_file, "--sfile", data_file,
+              ">", k3dist_file, "2>", error_file])
         print_system(cmd, verbose)
         if check_error(error_file, verbose) or check_error(k3dist_file, verbose, True):
             os.chdir(saved_dir)
@@ -184,10 +191,11 @@ def run(target_file,
             # convert to the new k3 file format
             fold_cmd = ""
             if folds_only:
-                fold_cmd = '--k3new_folds'
+                fold_cmd += '--k3new-folds '
 
             print("Converting to new k3 file format...")
-            cmd = concat([k3o, "-i k3 -l k3new", fold_cmd, "--datafile", data_file, k3dist_file, ">", k3new_file, "2>", error_file])
+            cmd = concat([k3o, "-i k3 -l k3new", fold_cmd, "--datafile",
+                  data_file, k3dist_file, ">", k3new_file, "2>", error_file])
             print_system(cmd, verbose)
             if check_error(error_file, verbose, False):
                 os.chdir(saved_dir)
@@ -195,12 +203,14 @@ def run(target_file,
 
             # create k3_new partmap
             print("Creating k3new partition map...\n")
-            cmd = concat([partmap_tool, k3dist_file, "--k3new -n", num_nodes, ">", k3new_part_file])
+            cmd = concat([partmap_tool, k3dist_file, "--k3new -n",
+                  num_nodes, ">", k3new_part_file])
             print_system(cmd, verbose)
 
         if run_interp:
             # run the k3 driver on the input
-            cmd = concat([k3o, "--test", peer_cmd, "-q", queue_type, load_path, k3dist_file, ">", output_file, "2>", error_file])
+            cmd = concat([k3o, "--test", peer_cmd, "-q", queue_type, load_path,
+                  k3dist_file, ">", output_file, "2>", error_file])
             print_system(cmd, verbose)
             if check_error(error_file, verbose, True):
                 os.chdir(saved_dir)

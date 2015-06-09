@@ -294,7 +294,7 @@ let mk_slice_idx' ~idx ~comp col pat =
 
 (* first part of pat contains the vid *)
 let mk_slice_frontier col pat =
-  mk_slice_gen SliceFrontier col @@ mk_tuple [mk_tuple pat]
+  mk_slice_gen SliceFrontier col @@ mk_tuple pat
 
 let mk_insert col x = mk_stree (Insert col) [mk_tuple x]
 
@@ -311,8 +311,8 @@ let mk_update col old_val new_val =
     mk_stree (Update col) [mk_tuple old_val; mk_tuple new_val]
 
 (* first part of new val contains the vid *)
-let mk_update_suffix col new_val =
-    mk_stree (UpdateSuffix col) [mk_tuple new_val]
+let mk_update_suffix col key lambda =
+  mk_stree (UpdateSuffix col) [mk_tuple key; lambda]
 
 let mk_peek col = mk_stree Peek [col]
 

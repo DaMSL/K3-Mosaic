@@ -360,6 +360,8 @@ let rec lazy_expr c expr =
     lps "peek" <| lazy_paren @@ lazy_expr c col
   | Slice -> let col, pat = U.decompose_slice expr in
     wrap_if_var col (lazy_expr c col) <| lazy_bracket @@ tuple_no_paren c pat
+  | SliceFrontier -> let col, pat = U.decompose_slice_frontier expr in
+    wrap_if_var col (lazy_expr c col) <| lazy_brace @@ tuple_no_paren c pat
   | SliceIdx(idx, comp) -> let col, pat = U.decompose_sliceidx expr in
     let comp_s = match comp with GT -> lps ">" | LT -> lps "<" | EQ -> [] | LTA -> lps "<<" | GTA -> lps ">>" in
     wrap_if_var col (lazy_expr c col) <|
@@ -367,10 +369,17 @@ let rec lazy_expr c expr =
   | Insert _ -> let l, r = U.decompose_insert expr in
     lps "insert" <| lazy_paren
       (lps l <| lps " ," <| lsp () <| lazy_expr c r)
+  | UpsertWith _ -> let col, key, lam_no, lam_yes = U.decompose_upsert_with expr in
+    lps "upsert_with" <| lazy_paren
+      (lps col <| lps " ," <| lsp () <| expr_triple (key,lam_no,lam_yes))
   | Delete _ -> let l, r = U.decompose_delete expr in
     lps "delete" <| lazy_paren (lps l <| lps " , " <| lazy_expr c r)
+  | DeletePrefix _ -> let l, r = U.decompose_delete_prefix expr in
+    lps "delete_prefix" <| lazy_paren (lps l <| lps " , " <| lazy_expr c r)
   | Update _ -> let l, o, n = U.decompose_update expr in
     lps "update" <| lazy_paren (lps l <| lps " , " <| expr_pair (o,n))
+  | UpdateSuffix _ -> let col, key, lam = U.decompose_update_suffix expr in
+    lps "update_suffix" <| lazy_paren (lps col <| lps " , " <| expr_pair (key, lam))
   | Indirect -> let x = U.decompose_indirect expr in
     lps "ind" <| lsp () <| paren_l x @@ lazy_expr c x
   | Assign _ -> let l, r = U.decompose_assign expr in

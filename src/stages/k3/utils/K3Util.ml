@@ -86,6 +86,8 @@ let decompose_const e = match tag_of_expr e with
   Const c -> c | _ -> failwith "not a Combine"
 let decompose_delete e = match tag_of_expr e, sub_tree e with
   Delete x, [e0] -> x, e0 | _ -> failwith "not a Delete"
+let decompose_delete_prefix e = match tag_of_expr e, sub_tree e with
+  DeletePrefix x, [e0] -> x, e0 | _ -> failwith "not a DeletePrefix"
 let decompose_eq e = match tag_of_expr e, sub_tree e with
   Eq, [e0; e1] -> e0, e1 | _ -> failwith "not an Equals"
 let decompose_filter e = match tag_of_expr e, sub_tree e with
@@ -134,6 +136,8 @@ let decompose_singleton e = match tag_of_expr e, sub_tree e with
   Singleton vt, [e0] -> e0 | _ -> failwith "not a Singleton"
 let decompose_slice e = match tag_of_expr e, sub_tree e with
   Slice, [e0; e1] -> e0, e1 | _ -> failwith "not a Slice"
+let decompose_slice_frontier e = match tag_of_expr e, sub_tree e with
+  SliceFrontier, [e0; e1] -> e0, e1 | _ -> failwith "not a SliceFrontier"
 let decompose_sliceidx e = match tag_of_expr e, sub_tree e with
   SliceIdx _, [e0; e1] -> e0, e1 | _ -> failwith "not a Slice"
 let decompose_sort e = match tag_of_expr e, sub_tree e with
@@ -146,6 +150,11 @@ let decompose_tuple e = match tag_of_expr e with
   Tuple -> sub_tree e  | _ -> failwith "not a Tuple"
 let decompose_update e = match tag_of_expr e, sub_tree e with
   Update x, [e0; e1] -> x, e0, e1 | _ -> failwith "not an Update"
+let decompose_update_suffix e = match tag_of_expr e, sub_tree e with
+  UpdateSuffix x, [e0; e1] -> x, e0, e1 | _ -> failwith "not an UpdateSuffix"
+let decompose_upsert_with e = match tag_of_expr e, sub_tree e with
+  | UpsertWith x, [key; lam_no; lam_yes] -> x, key, lam_no, lam_yes
+  | _ -> failwith "not an UpsertWith"
 let decompose_var e = match tag_of_expr e with
   Var id -> id | _ -> failwith "not a Var"
 
