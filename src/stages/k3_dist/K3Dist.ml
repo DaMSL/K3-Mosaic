@@ -97,14 +97,31 @@ let wrap_t_of_map' mt = wrap_t_of_map mt |- wrap_ttuple
 let wrap_t_calc  = wrap_tbag
 let wrap_t_calc' = wrap_tbag'
 
+(* split a map's types into key, value. For vmaps, remove the vid *)
+let map_t_split' map_type ts =
+  let k, v = list_split (-1) ts in
+  match map_type with
+  | MapSet  -> k, v
+  | MapVMap -> tl k, v
+
 (* get a ds representing a map *)
 (* @calc: have the type of inner calculation *)
+(* @vid: keep the vid *)
 let map_ds_of_id ?(vid=false) ?(calc=false) c map_id =
   let nm = map_name_of c.p map_id in
   let e = if vid then map_ids_types_with_v_for c.p map_id
           else map_ids_types_for c.p map_id in
   let wrap = if calc then wrap_t_calc' else wrap_t_of_map' c.map_type in
-  create_ds nm (wrap @@ snd_many e) ~e
+  let e, ee =
+    (* real external map *)
+    if not calc && vid then
+      let k, v = map_t_split' c.map_type e in
+      let e = ["key", wrap_ttuple @@ snd_many k; "value", wrap_ttuple @@ snd_many v] in
+      let ee = [k; v] in
+      e, ee
+    else e, []
+  in
+  create_ds nm (wrap @@ snd_many e) ~e ~ee
 
 (* location of vid in tuples *)
 let vid_idx = 0
