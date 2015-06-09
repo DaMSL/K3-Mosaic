@@ -475,7 +475,7 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
           if not (tcol = TVMap) then t_erroru (TMismatch(tcol', wrap_tvmap telem, "collection type")) else
           if not (tpat === telem) then t_erroru (TMismatch(tpat, telem, "pattern")) else
           let tpat_fst = hd @@ unwrap_ttuple tpat in
-          if not (tpat_fst = t_vid) then t_erroru (TMismatch(t_vid, tpat_fst, "vid")) else
+          if not (tpat_fst === t_vid) then t_erroru (TMismatch(t_vid, tpat_fst, "vid")) else
           tcol'
 
       | Insert id ->
@@ -504,9 +504,9 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
             try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') in
           if not (tcol = TVMap) then t_erroru (TMismatch(tcol', wrap_tvmap telem, "collection type")) else
           let tnew, tlam_update = bind 0, bind 1 in
-          if not (telem = tnew) then t_erroru (TMismatch(telem, tnew, "new value")) else
+          if not (telem === tnew) then t_erroru (TMismatch(telem, tnew, "new value")) else
           let tfst = hd @@ unwrap_ttuple tnew in
-          if not (tfst == t_vid) then t_erroru (TMismatch(tfst, t_vid, "vid")) else
+          if not (tfst === t_vid) then t_erroru (TMismatch(tfst, t_vid, "vid")) else
           let tlam_update' = wrap_tfunc telem telem in
           if not (tlam_update === tlam_update') then t_erroru (TMismatch(tlam_update, tlam_update', "update lambda")) else
           t_unit
@@ -542,7 +542,7 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
           let told = bind 0 in
           if not (telem === told) then t_erroru (TMismatch(telem, told, "")) else
           let tfst = hd @@ unwrap_ttuple told in
-          if not (tfst == t_vid) then t_erroru (TMismatch(tfst, t_vid, "vid")) else
+          if not (tfst === t_vid) then t_erroru (TMismatch(tfst, t_vid, "vid")) else
           t_unit
 
       | Peek ->
