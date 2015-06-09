@@ -549,7 +549,9 @@ let v_slice_frontier err_fn pat m =
       let t, k = split_tkv v in
       (* point lookup or slice lookup? *)
       if not @@ List.mem VUnknown (unwrap_vtuple k) then
-        VVMap(ValueVMap.frontier_point t k m)
+        try
+          VVMap(ValueVMap.frontier_point t k m)
+        with Not_found -> VVMap(ValueVMap.empty)
       else
         VVMap(
           ValueVMap.filter (fun _ _ v -> match_pattern pat v) @@
