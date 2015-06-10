@@ -85,13 +85,20 @@ let ms_num_gc_expected =
   let init = mk_size_slow @@ G.peers in
   create_ds "ms_num_gc_expected" (mut t_int) ~init
 
-(* function to perform garbage collection *)
+(* data structures needing gc *)
+let ds_to_gc c =
+  D.nd_log_master ::
+  D.log_ds c @
+  D.map_buffers c @
+  D.maps c
+
+(* functions to perform garbage collection *)
 (* NOTE: TODO: for now, we use an intermediate ds. A filterInPlace would be better *)
 (* NOTE: to be efficient, we need blind write optimization on write (delete) *)
 let do_gc_nm = "do_gc"
 (* to search for a vid field *)
 let r_vid = Str.regexp ".*vid.*"
-let do_gc c =
+let do_gc_fns c =
   let min_vid = "min_gc_vid" in
   (* standard gc code for general data structures *)
   let gc_std ds =
@@ -106,43 +113,44 @@ let do_gc c =
       else id_fn, ds.id
     in
     let temp = "temp" in
-    (* delete any entry with a lower or matching vid *)
-    mk_let [temp] (mk_empty t') @@
-    do_bind @@
-    (* if we're in a map ds, we need to get the frontier at min_vid *)
-    (match ds.map_id with
-      | Some map_id ->
-          mk_let ["frontier"]
-            (map_latest_vid_vals c (mk_var id) None map_id ~keep_vid:true ~vid_nm:min_vid)
-      | _ -> id_fn) @@
-    mk_block @@
-      (* add < vid to temporary collection *)
-      (mk_iter
-        (mk_lambda' ds.e @@
-            mk_if (mk_lt (mk_var vid) @@ mk_var min_vid)
-              (mk_insert temp @@ ids_to_vars @@ fst_many ds.e) @@
-              mk_cunit) @@
-          mk_var id) ::
-      (* delete values from ds *)
-      (mk_iter
-        (mk_lambda' ["val", wrap_ttuple @@ snd_many ds.e] @@
-          mk_delete id [mk_var "val"]) @@
-        mk_var temp) ::
-      (* if we have a mosaic map, insert back the frontier *)
-      (if ds.map_id <> None then
-        [mk_iter (mk_lambda' ["val", wrap_ttuple @@ snd_many ds.e] @@
-            mk_insert id [mk_var "val"]) @@
-          mk_var "frontier"]
-      else [])
+    let fn_nm = "do_gc_"^ds.id in
+    mk_global_fn fn_nm [min_vid, t_vid] [] @@
+      (* delete any entry with a lower or matching vid *)
+      mk_let [temp] (mk_empty t') @@
+      do_bind @@
+      (* if we're in a map ds, we need to get the frontier at min_vid *)
+      (match ds.map_id with
+        | Some map_id ->
+            mk_let ["frontier"]
+              (map_latest_vid_vals c (mk_var id) None map_id ~keep_vid:true ~vid_nm:min_vid)
+        | _ -> id_fn) @@
+      mk_block @@
+        (* add < vid to temporary collection *)
+        (mk_iter
+          (mk_lambda' ds.e @@
+              mk_if (mk_lt (mk_var vid) @@ mk_var min_vid)
+                (mk_insert temp @@ ids_to_vars @@ fst_many ds.e) @@
+                mk_cunit) @@
+            mk_var id) ::
+        (* delete values from ds *)
+        (mk_iter
+          (mk_lambda' ["val", wrap_ttuple @@ snd_many ds.e] @@
+            mk_delete id [mk_var "val"]) @@
+          mk_var temp) ::
+        (* if we have a mosaic map, insert back the frontier *)
+        (if ds.map_id <> None then
+          [mk_iter (mk_lambda' ["val", wrap_ttuple @@ snd_many ds.e] @@
+              mk_insert id [mk_var "val"]) @@
+            mk_var "frontier"]
+        else [])
   in
+  List.map gc_std @@ ds_to_gc c
+
+let do_gc_trig c =
+  let min_vid = "min_gc_vid" in
   mk_code_sink' do_gc_nm [min_vid, t_vid] [] @@
     mk_block @@
-      [ (* clean node data structures *)
-        gc_std D.nd_log_master;
-      ] @
-      List.map gc_std (D.log_ds c) @
-      List.map gc_std (D.map_buffers c) @
-      List.map gc_std (D.maps c)
+      List.map (fun ds -> mk_apply' ("do_gc_"^ds.id) (mk_tuple [mk_var min_vid])) @@ ds_to_gc c
 
 (* master switch trigger to receive and add to the max vid map *)
 let ms_rcv_gc_vid_nm = "ms_rcv_gc_vid"
@@ -226,10 +234,13 @@ let global_vars _ = List.map decl_global
    ms_num_gc_expected;
   ]
 
+let functions c =
+  do_gc_fns c
+
 let triggers c sw_check_done =
   [sw_ack_rcv_trig sw_check_done;
    ms_rcv_gc_vid c;
    rcv_req_gc_vid;
    ms_send_gc_req;
-   do_gc c;
+   do_gc_trig c;
   ]

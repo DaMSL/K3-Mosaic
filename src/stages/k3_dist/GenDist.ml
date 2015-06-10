@@ -378,7 +378,7 @@ let sw_demux c =
     let apply s =
       (mk_apply' (s^trig) @@
         (* add 1 for tuple access *)
-        mk_tuple @@ List.map (fun i -> 
+        mk_tuple @@ List.map (fun i ->
           convert_date i @@ mk_subscript (i+1) @@ mk_var "args") arg_indices)
     in
     mk_if (mk_eq (mk_fst @@ mk_var "args") @@ mk_cstring trig)
@@ -1216,7 +1216,8 @@ let declare_global_funcs c partmap ast =
   (List.map (nd_add_delta_to_buf c |- hd |- snd) @@ P.uniq_types_and_maps c.p) @
   TS.functions @
   K3Route.functions c.p partmap @
-  K3Shuffle.functions c
+  K3Shuffle.functions c @
+  GC.functions c
 
 (* Generate all the code for a specific trigger *)
 let gen_dist_for_t c ast trig =

@@ -329,7 +329,7 @@ let map_ids c =
   create_ds "map_ids" t ~e ~init
 
 (* adds a string for trigger selector and an int for deletes (1=insert) *)
-let combine_trig_args c = 
+let combine_trig_args c =
   let suffix = str_drop (String.length "delete_") in
   (* get only the relevant parts *)
   let trigs = StrSet.of_list @@ List.map suffix @@ P.get_trig_list c.p in
