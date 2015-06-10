@@ -107,21 +107,30 @@ let map_t_split' map_type ts =
 (* get a ds representing a map *)
 (* @calc: have the type of inner calculation *)
 (* @vid: keep the vid *)
-let map_ds_of_id ?(vid=false) ?(calc=false) c map_id =
-  let nm = map_name_of c.p map_id in
+let map_ds_of_id ?name ?(suffix="") ~vid ~calc c map_id =
+  let nm = unwrap_option (map_name_of c.p map_id) name in
   let e = if vid then map_ids_types_with_v_for c.p map_id
           else map_ids_types_for c.p map_id in
+  let e = List.map (first @@ fun x -> x^suffix) e in
   let wrap = if calc then wrap_t_calc' else wrap_t_of_map' c.map_type in
-  let e, ee =
+  let e, ee, t, init =
     (* real external map *)
     if not calc && vid then
       let k, v = map_t_split' c.map_type e in
-      let e = ["key", wrap_ttuple @@ snd_many k; "value", wrap_ttuple @@ snd_many v] in
+      let e = ["key"^suffix, wrap_ttuple @@ snd_many k; "value"^suffix, wrap_ttuple @@ snd_many v] in
       let ee = [k; v] in
-      e, ee
-    else e, []
+      let t = wrap @@ snd_many e in
+      let init = mk_ind @@ mk_empty t in
+      e, ee, t, init
+    else
+      let t = wrap @@ snd_many e in
+      e, [], t, mk_empty t
   in
-  create_ds nm (wrap @@ snd_many e) ~e ~ee
+  create_ds nm t ~e ~ee ~init
+
+(* create a map structure: used for both maps and buffers *)
+let make_map_decl c name map_id =
+  map_ds_of_id ~name ~vid:true ~calc:false c map_id
 
 (* location of vid in tuples *)
 let vid_idx = 0
@@ -338,14 +347,6 @@ let log_ds c : data_struct list =
     create_ds (nd_log_for_t trig) (wrap_tmap' @@ snd_many e) ~e
   in
   P.for_all_trigs ~deletes:c.gen_deletes c.p log_struct_for
-
-(* create a map structure: used for both maps and buffers *)
-let make_map_decl c map_name map_id =
-  let e = P.map_ids_types_with_v_for c.p map_id in
-  let t' = wrap_t_of_map' c.map_type @@ snd_many e in
-  (* for indirections, we need to create initial values *)
-  let init = mk_ind @@ mk_empty t' in
-  create_ds map_name (wrap_tind t') ~e ~init ~map_id
 
 (* Buffer versions of maps per statement (to prevent mixing values) *)
 (* NOTE: doesn't contain special inits from AST *)
