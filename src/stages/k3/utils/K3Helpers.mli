@@ -142,6 +142,7 @@ val mk_map : expr_t -> expr_t -> expr_t
 val mk_filter : expr_t -> expr_t -> expr_t
 val mk_flatten : expr_t -> expr_t
 val mk_agg : expr_t -> expr_t -> expr_t -> expr_t
+val mk_aggv : expr_t -> expr_t -> expr_t -> expr_t
 val mk_agg_fst : expr_t -> expr_t -> expr_t
 val mk_gbagg : expr_t -> expr_t -> expr_t -> expr_t -> expr_t
 val mk_sort : expr_t -> expr_t -> expr_t
@@ -302,9 +303,10 @@ type data_struct = { id: string;
                      (* init that isn't used right away *)
                      d_init:expr_t option;
                      map_id: int option;
+                     global: bool;
                    }
 
-val create_ds : ?e:(string * type_t) list -> ?ee:(string * type_t) list list -> ?init:expr_t -> ?d_init:expr_t -> ?map_id:int -> string -> type_t -> data_struct
+val create_ds : ?e:(string * type_t) list -> ?ee:(string * type_t) list list -> ?init:expr_t -> ?d_init:expr_t -> ?map_id:int -> ?global:bool -> string -> type_t -> data_struct
 
 val decl_global : data_struct -> declaration_t * annotation_t
 val delayed_init : data_struct -> expr_t

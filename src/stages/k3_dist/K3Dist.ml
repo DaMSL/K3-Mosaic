@@ -67,8 +67,7 @@ type shuffle_fn_entry = {
   name : string;
 }
 
-type map_type = MapSet
-              | MapVMap
+type map_type = MapVMap
 
 type config = {
   p : P.prog_data_t;
@@ -86,7 +85,6 @@ type config = {
 
 (* what the generic type of the global maps is *)
 let wrap_t_of_map = function
-  | MapSet  -> wrap_tset
   | MapVMap -> wrap_tvmap
 
 let wrap_string_map s = "[<"^s^">]"
@@ -98,27 +96,30 @@ let wrap_t_calc  = wrap_tbag
 let wrap_t_calc' = wrap_tbag'
 
 (* split a map's types into key, value. For vmaps, remove the vid *)
-let map_t_split' map_type ts =
+let map_t_split' ts =
   let k, v = list_split (-1) ts in
-  match map_type with
-  | MapSet  -> k, v
-  | MapVMap -> tl k, v
+  k, v
 
 (* get a ds representing a map *)
 (* @calc: have the type of inner calculation *)
 (* @vid: keep the vid *)
-let map_ds_of_id ?name ?(suffix="") ~vid ~calc c map_id =
+let map_ds_of_id ?name ?(suffix="") ~vid ~global c map_id =
   let nm = unwrap_option (map_name_of c.p map_id) name in
-  let e = if vid then map_ids_types_with_v_for c.p map_id
+  let e = if vid && not global then map_ids_types_with_v_for c.p map_id
           else map_ids_types_for c.p map_id in
   let e = List.map (first @@ fun x -> x^suffix) e in
-  let wrap = if calc then wrap_t_calc' else wrap_t_of_map' c.map_type in
+  let wrap = if global then wrap_t_of_map' c.map_type else wrap_t_calc' in
   let e, ee, t, init =
     (* real external map *)
-    if not calc && vid then
-      let k, v = map_t_split' c.map_type e in
-      let e = ["key"^suffix, wrap_ttuple @@ snd_many k; "value"^suffix, wrap_ttuple @@ snd_many v] in
-      let ee = [k; v] in
+    if global then
+      let k, v = map_t_split' e in
+      let e, ee =
+        if k = [] then
+          ["value"^suffix, wrap_ttuple @@ snd_many v], [v]
+        else
+          ["key"^suffix, wrap_ttuple @@ snd_many k; "value"^suffix, wrap_ttuple @@ snd_many v],
+          [k; v]
+      in
       let t = wrap @@ snd_many e in
       let init = mk_ind @@ mk_empty t in
       e, ee, t, init
@@ -126,11 +127,50 @@ let map_ds_of_id ?name ?(suffix="") ~vid ~calc c map_id =
       let t = wrap @@ snd_many e in
       e, [], t, mk_empty t
   in
-  create_ds nm t ~e ~ee ~init
+  create_ds nm t ~e ~ee ~init ~global ~map_id
 
 (* create a map structure: used for both maps and buffers *)
 let make_map_decl c name map_id =
-  map_ds_of_id ~name ~vid:true ~calc:false c map_id
+  map_ds_of_id ~name ~vid:true ~global:true c map_id
+
+(* create a list of access expressions, types even for deep data structures *)
+let flatten_ds_e ?(vid_nm="vid") ds =
+  if ds.ee = [] then List.map (fun (x,y) -> mk_var x, y) ds.e
+  else
+    let wrap l = (mk_var vid_nm, t_vid)::l in
+    wrap @@ List.flatten @@
+      List.map2 (fun (id,_) idts ->
+        List.mapi (fun i (_, t) ->
+          mk_subscript i @@ mk_var id, t
+        ) idts
+      ) ds.e ds.ee
+
+(* turn a flat pattern into a potentially deep pattern *)
+let pat_of_flat ds flat =
+  if ds.ee = [] then flat
+  else
+    let lengths = List.map List.length ds.ee in
+    let grouped = list_group lengths flat in
+    List.map mk_tuple grouped
+
+let drop_val l = list_drop_end 1 l
+let get_val  l = list_take_end 1 l
+let drop_vid l = tl l
+
+(* convert a global map to a bag type for calculation *)
+let calc_of_map_t c ?(vid_nm="vid") ~keep_vid map_id col =
+  let ds = map_ds_of_id ~global:false ~vid:false c map_id in
+  let flat = flatten_ds_e ds ~vid_nm in
+  let bag_t = snd_many flat in
+  let remove_vid = if keep_vid then id_fn else drop_vid in
+  mk_aggv
+    (mk_lambda' (["acc", wrap_ttuple bag_t; "vid", t_vid] @ ds.e) @@
+      mk_block [
+          mk_insert "acc" @@ remove_vid @@ fst_many flat;
+          mk_var "acc"
+      ])
+    (mk_empty @@ wrap_t_calc' bag_t) @@
+    col
 
 (* location of vid in tuples *)
 let vid_idx = 0
@@ -396,14 +436,6 @@ let nd_add_delta_to_buf_nm c map_id =
 
 (* --- Begin frontier function code --- *)
 
-(* the function name for the frontier function *)
-(* takes the types of the map *)
-(* NOTE: assumes the first type is vid *)
-let frontier_name c map_id =
-  let m_t = P.map_types_for c.p map_id in
-  "frontier_"^String.concat "_" @@
-    List.map K3PrintSyntax.string_of_type m_t
-
 (* Get the latest vals up to a certain vid
  * - This is needed both for sending a push, and for modifying a local slice
  * operation, as well as for GC
@@ -415,113 +447,13 @@ let frontier_name c map_id =
  *   convert to a bag (again, for modify_ast, to prevent losing duplicates)
  *)
 let map_latest_vid_vals ?(vid_nm="vid") c slice_col m_pat map_id ~keep_vid : expr_t =
-  (* function to remove the vid from the collection in this case, we also convert to a bag *)
-  let convert =
-    let m_id_t =
-      (* either keep or remove vid *)
-      if keep_vid then P.map_ids_types_with_v_for c.p map_id
-      else P.map_ids_types_for c.p map_id in
-    let m_id_t_v = P.map_ids_types_with_v_for c.p map_id in
-    let m_bag_t  = wrap_tbag' @@ snd_many m_id_t in
-    mk_agg
-      (mk_assoc_lambda' ["acc", m_bag_t] m_id_t_v @@
-        (mk_block [
-          mk_insert "acc" @@ ids_to_vars @@ fst_many m_id_t;
-          mk_var "acc"]))
-      (mk_empty m_bag_t)
-  in
+  let map_ds = map_ds_of_id ~vid:true ~global:true c map_id in
+  let convert col = calc_of_map_t c ~vid_nm ~keep_vid map_id col in
   let pat = match m_pat with
-    | Some pat -> pat
-    | None     -> List.map (const mk_cunknown) @@ P.map_types_for c.p map_id
+    | Some pat -> pat_of_flat map_ds pat
+    | None     -> List.map (const mk_cunknown) map_ds.e
   in
-  match c.map_type with
-  | MapSet ->
-    (* create a function name per type signature *)
-    let access_k3 =
-      (* slice with an unknown for the vid so we only get the effect of
-      * any bound variables *)
-      mk_slice slice_col @@ P.map_add_v mk_cunknown pat
-    in
-    let simple_app =
-      mk_apply (mk_var @@ frontier_name c map_id) @@
-        mk_tuple [mk_var vid_nm; access_k3]
-    in
-    if keep_vid then simple_app else convert simple_app
-
-  | MapVMap -> (* VMap *)
-    convert @@ mk_slice_frontier slice_col @@ (mk_var vid_nm)::pat
-
-(* Create a function for getting the latest vals up to a certain vid *)
-(* This is needed both for sending a push, and for modifying a local slice
- * operation, as well as for GC *)
-(* Returns the type pattern for the function, and the function itself *)
-(* NOTE: this is only necessary when not using more sophisticated maps *)
-let frontier_fn c map_id =
-  let max_vid = "max_vid" in
-  let map_vid = "map_vid" in
-  let m_id_t_v = P.map_ids_types_with_v_for ~vid:"map_vid" c.p map_id in
-  let m_t_v = wrap_ttuple @@ snd_many @@ m_id_t_v in
-  let m_t_v_calc_map = wrap_t_calc m_t_v in
-  let m_t_v_map = wrap_t_of_map c.map_type m_t_v in
-  let m_id_t_no_val = P.map_ids_types_no_val_for c.p map_id in
-  (* create a function name per type signature *)
-  (* if we have bound variables, we should slice first. Otherwise,
-      we don't need a slice *)
-  (* a routine common to both methods of slicing *)
-  let common_vid_lambda =
-    mk_assoc_lambda
-      (wrap_args ["acc", m_t_v_calc_map; max_vid, t_vid])
-      (wrap_args m_id_t_v)
-      (mk_if
-        (* if the map vid is less than current vid *)
-        (mk_lt (mk_var map_vid) @@ mk_var "vid")
-        (* if the map vid is equal to the max_vid, we add add it to our
-        * accumulator and use the same max_vid *)
-        (mk_if
-          (mk_eq (mk_var map_vid) @@ mk_var max_vid)
-          (mk_block [
-            mk_insert "acc" @@ ids_to_vars @@ fst_many m_id_t_v;
-            mk_tuple [mk_var "acc"; mk_var max_vid]
-          ]) @@
-          (* else if map vid is greater than max_vid, make a new
-          * collection and set a new max_vid *)
-          mk_if
-            (mk_gt (mk_var map_vid) @@ mk_var max_vid)
-            (mk_tuple
-              [mk_singleton m_t_v_calc_map @@ ids_to_vars @@ fst_many m_id_t_v;
-              mk_var map_vid]) @@
-            (* else keep the same accumulator and max_vid *)
-            mk_tuple [mk_var "acc"; mk_var max_vid])
-        (* else keep the same acc and max_vid *)
-        (mk_tuple [mk_var "acc"; mk_var max_vid]))
-  in
-  (* a regular fold is enough if we have no keys *)
-  (* get the maximum vid that's less than our current vid *)
-  let action = match m_id_t_no_val with
-  | [] ->
-    mk_fst @@
-      mk_agg
-        common_vid_lambda
-        (mk_tuple [mk_empty m_t_v_calc_map; mk_var g_min_vid.id])
-        (mk_var "input_map")
-  | _ ->
-      mk_flatten @@ mk_map
-        (mk_assoc_lambda
-          (wrap_args ["_", wrap_ttuple @@ snd_many m_id_t_no_val]) (* group *)
-          (wrap_args ["project", m_t_v_calc_map; "_", t_vid]) @@
-          mk_var "project"
-        ) @@
-        mk_gbagg
-          (mk_lambda (wrap_args m_id_t_v) @@
-            (* group by the keys (not vid, not values) *)
-            mk_tuple @@ ids_to_vars @@ fst_many m_id_t_no_val)
-          (* get the maximum vid that's less than our current vid *)
-          common_vid_lambda
-          (mk_tuple [mk_empty m_t_v_calc_map; mk_var g_min_vid.id])
-          (mk_var "input_map")
-  in
-  mk_global_fn (frontier_name c map_id) ["vid", t_vid; "input_map", m_t_v_map] [m_t_v_calc_map] @@
-      action
+  convert @@ mk_slice_frontier slice_col @@ mk_var vid_nm :: pat
 
 (* End of frontier function code *)
 

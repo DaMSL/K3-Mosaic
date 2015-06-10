@@ -527,11 +527,12 @@ let v_singleton err_fn elem c = match elem, c with
 let match_or_unknown v1 v2 = match v1 with
   | VUnknown -> true | _        -> v1 = v2
 
-let match_pattern pat_v v = match pat_v, v with
+let rec match_pattern pat_v v = match pat_v, v with
+  | VUnknown, _ -> true
   | VTuple pat_f, VTuple v_f ->
-    (try List.for_all2 match_or_unknown pat_f v_f
+    (try List.for_all2 match_pattern pat_f v_f
       with Invalid_argument _ -> false)
-  | _, _ -> match_or_unknown pat_v v
+  | x, y -> ValueComp.compare_v x y = 0
 
 let v_slice err_fn pat = function
   | VSet m         -> VSet(ValueSet.filter (match_pattern pat) m)

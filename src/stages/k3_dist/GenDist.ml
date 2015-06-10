@@ -181,24 +181,13 @@ let nd_add_delta_to_buf c map_id =
     | TFloat -> mk_cfloat 0.
     | _ -> failwith @@ "Unhandled type "^K3PrintSyntax.string_of_type t_val
   in
+  (* flat pattern to read ds *)
+  let real_pat = D.flatten_ds_e ~vid_nm:"min_vid" map_real tmap_deref in
+  let delta_pat = D.flatten_ds_e map_delta in
   let pat e =
     list_replace_i (-1) e @@ modify_e map_real.e ["vid", mk_var "min_vid"]
   in
-  let min_vid_pat = pat mk_cunknown in
   let update_vars = pat @@ mk_var update_value in
-  let regular_delta =
-    mk_let [lookup_value]
-      (map_latest_vid_vals ~vid_nm:"min_vid" c (mk_var tmap_deref)
-        (Some(vars_no_val @ [mk_cunknown])) map_id ~keep_vid:true) @@
-      mk_let [update_value]
-        (* get either 0 to add or the value we read *)
-        (mk_add (mk_var id_val) @@
-          mk_case_ns
-            (mk_peek @@ mk_var lookup_value) "val"
-            zero @@
-            mk_subscript (List.length map_real.e) @@ mk_var "val") @@
-        mk_insert tmap_deref update_vars
-  in
   mk_global_fn (D.nd_add_delta_to_buf_nm c map_id)
     (* corrective: whether this is a corrective delta *)
     ([target_map, wrap_tind map_real.t;
@@ -213,20 +202,29 @@ let nd_add_delta_to_buf c map_id =
           (* this part is just for correctives:
             * We need to check if there's a value at the particular version id
             * If so, we must add the value directly *)
-            mk_let [lookup_value]
-              (mk_if
-                (mk_var corrective)
-                (mk_slice' tmap_deref @@
-                     list_replace_i (-1) mk_cunknown min_vid_pat) @@
-                mk_empty map_real.t) @@
-            mk_case_sn
-              (mk_peek @@ mk_var lookup_value) "val"
-              (* then just update the value *)
-              (mk_let [update_value]
-                (mk_add (mk_var id_val) @@ mk_subscript (List.length map_real.e) @@ mk_var "val") @@
-                mk_update tmap_deref [mk_var "val"] update_vars)
-              (* else, if it's just a regular delta, read the frontier *)
-              regular_delta) @@
+            mk_if
+              (mk_var corrective)
+              (* corrective case *)
+              (mk_case_sn
+                (mk_peek @@
+                  mk_slice' tmap_deref @@
+                    D.drop_val (fst_many real_pat) :: mk_cunknown) "val"
+                (* then just update the value *)
+                (mk_update tmap_deref [mk_var "val"] @@ mk_tuple @@
+                  (D.drop_val @@ fst_many real_pat) @ [mk_add (get_val real_pat) @@ get_val delta_pat]) @@
+                mk_error "failed to find value in corrective") @@
+              (* regular delta case -- read the frontier *)
+              mk_let [lookup_value]
+                (map_latest_vid_vals ~vid_nm:"min_vid" c (mk_var tmap_deref)
+                  (Some(vars_no_val @ [mk_cunknown])) map_id ~keep_vid:true) @@
+                mk_let [update_value]
+                  (* get either 0 to add or the value we read *)
+                  (mk_add (mk_var id_val) @@
+                    mk_case_ns
+                      (mk_peek @@ mk_var lookup_value) "val"
+                      zero @@
+                      mk_subscript (List.length map_real.e) @@ mk_var "val") @@
+                  mk_insert tmap_deref update_vars) @@
         mk_var delta_tuples
       ;
       (* add to future values *)

@@ -558,19 +558,21 @@ type data_struct = { id: string;
                      (* init that isn't used right away *)
                      d_init:expr_t option;
                      map_id: int option;
+                     global: bool; (* real global ds *)
                    }
 
 (* also add default values if missing *)
-let create_ds ?(e=[]) ?(ee=[]) ?init ?d_init ?map_id id t =
-  let init = if is_some init then init
-             else match t.typ with
-               | TBool   -> some @@ mk_cfalse
-               | TInt    -> some @@ mk_cint 0
-               | TFloat  -> some @@ mk_cfloat 0.
-               | TString -> some @@ mk_cstring ""
-               | _       -> None
+let create_ds ?(e=[]) ?(ee=[]) ?init ?d_init ?map_id ?(global=false) id t =
+  let init =
+    if is_some init then init
+    else match t.typ with
+      | TBool   -> some @@ mk_cfalse
+      | TInt    -> some @@ mk_cint 0
+      | TFloat  -> some @@ mk_cfloat 0.
+      | TString -> some @@ mk_cstring ""
+      | _       -> None
   in
-  {id; t; e; ee; init; d_init; map_id}
+  {id; t; e; ee; init; d_init; map_id; global}
 
 (* utility functions *)
 let decl_global x = match x.init with
