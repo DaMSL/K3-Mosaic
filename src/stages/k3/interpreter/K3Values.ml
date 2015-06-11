@@ -515,12 +515,11 @@ let v_size err_fn = function
   | _           -> err_fn "vsize" "not a collection"
 
 let v_singleton err_fn elem c = match elem, c with
-  | _,TSet                   -> VSet(ValueSet.singleton elem)
-  | _,TBag                   -> VBag(ValueBag.singleton elem)
-  | _,TList                  -> VList(IList.singleton elem)
-  | VTuple[k;v], TMap        -> VMap(ValueMap.singleton k v)
-  | VTuple(t::kv), TVMap     -> let k,v = split_kv kv in
-                                VVMap(ValueVMap.singleton t k v)
+  | _,TSet                       -> VSet(ValueSet.singleton elem)
+  | _,TBag                       -> VBag(ValueBag.singleton elem)
+  | _,TList                      -> VList(IList.singleton elem)
+  | VTuple[k;v], TMap            -> VMap(ValueMap.singleton k v)
+  | VTuple[t;VTuple[k;v]], TVMap -> VVMap(ValueVMap.singleton t k v)
   | _ -> err_fn "v_singleton" "not a collection"
 
 (* for v_slice *)

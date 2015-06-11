@@ -172,9 +172,13 @@ let drop_val l = list_drop_end 1 l
 let drop_val' l = fst_many @@ list_drop_end 1 l
 let get_val  l = hd @@ list_take_end 1 l
 let get_val' l = fst @@ hd @@ list_take_end 1 l
+let get_vid' l = fst @@ hd l
 let drop_vid l = tl l
+let drop_vid' l = fst_many @@ tl l
 let unknown_val l = drop_val' l @ [mk_cunknown]
+let vid_and_unknowns l = List.mapi (fun i x -> if i > 0 then mk_cunknown else x) l
 let new_val l x = drop_val' l @ [x]
+let new_vid' s l = (mk_var s) :: drop_vid' l
 
 (* convert a global map to a bag type for calculation *)
 let calc_of_map_t c ?(vid_nm="vid") ~keep_vid map_id col =
