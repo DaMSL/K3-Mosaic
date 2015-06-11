@@ -176,7 +176,8 @@ let get_vid' l = fst @@ hd l
 let drop_vid l = tl l
 let drop_vid' l = fst_many @@ tl l
 let unknown_val l = drop_val' l @ [mk_cunknown]
-let vid_and_unknowns l = List.mapi (fun i x -> if i > 0 then mk_cunknown else x) l
+let vid_and_unknowns l = List.mapi (fun i (x,y) -> if i > 0 then mk_cunknown,y else x,y) l
+let vid_and_unknowns' l = fst_many @@ vid_and_unknowns l
 let new_val l x = drop_val' l @ [x]
 let new_vid' s l = (mk_var s) :: drop_vid' l
 

@@ -99,55 +99,75 @@ let do_gc_nm = "do_gc"
 (* to search for a vid field *)
 let r_vid = Str.regexp ".*vid.*"
 let do_gc_fns c =
-  let min_vid = "min_gc_vid" in
+  let min_vid = "gc_vid" in
   (* standard gc code for general data structures *)
   let gc_std ds =
-    (* look for any entry in the ds containing vid *)
-    let vid = fst @@ List.find (r_match r_vid |- fst) ds.e in
-    let t' = unwrap_tind ds.t in
-    (* handle the possiblity of indirections *)
-    let do_bind, id =
-      if is_tind ds.t then
-        let unwrap = ds.id^"_unwrap" in
-        (fun x -> mk_bind (mk_var ds.id) unwrap x), unwrap
-      else id_fn, ds.id
+    let fn_nm = "do_gc_"^ds.id
     in
-    let temp = "temp" in
-    let fn_nm = "do_gc_"^ds.id in
     mk_global_fn fn_nm [min_vid, t_vid] [] @@
-      (* delete any entry with a lower or matching vid *)
-      mk_let [temp] (mk_empty t') @@
-      do_bind @@
-      (* if we're in a map ds, we need to get the frontier at min_vid *)
-      (match ds.map_id with
-        | Some map_id ->
-            mk_let ["frontier"]
-              (map_latest_vid_vals c (mk_var id) None map_id ~keep_vid:true ~vid_nm:min_vid)
-        | _ -> id_fn) @@
-      mk_block @@
-        (* add < vid to temporary collection *)
-        (mk_iter
-          (mk_lambda' ds.e @@
-              mk_if (mk_lt (mk_var vid) @@ mk_var min_vid)
-                (mk_insert temp @@ ids_to_vars @@ fst_many ds.e) @@
-                mk_cunit) @@
-            mk_var id) ::
-        (* delete values from ds *)
-        (mk_iter
-          (mk_lambda' ["val", wrap_ttuple @@ snd_many ds.e] @@
-            mk_delete id [mk_var "val"]) @@
-          mk_var temp) ::
-        (* if we have a mosaic map, insert back the frontier *)
-        (if ds.map_id <> None then
-          [mk_iter (mk_lambda' ["val", wrap_ttuple @@ snd_many ds.e] @@
-              mk_insert id [mk_var "val"]) @@
-            mk_var "frontier"]
-        else [])
+      match ds.map_id with
+      | Some _ ->
+          let ds_d = ds.id^"_d" in
+          let pat = D.flatten_ds_e ~vid_nm:min_vid ds in
+          let do_bind = mk_bind (mk_var ds.id) ds_d in
+          (* save frontier *)
+          mk_let ["frontier"]
+            (* local bind to prevent bind-in-bind *)
+            (do_bind @@
+              mk_slice_frontier (mk_var ds_d) @@ vid_and_unknowns' pat) @@
+          mk_block [
+            (* delete all prefixes in ds *)
+            mk_iter
+              (mk_lambda' ds.e @@
+                do_bind @@
+                mk_delete_prefix ds_d @@ fst_many pat) @@
+              mk_var "frontier";
+            (* insert back frontier into ds *)
+            mk_aggv
+              (mk_assoc_lambda' ["_", t_unit] ds.e @@
+                do_bind @@
+                mk_block [
+                  mk_insert ds_d (new_vid' "vid" pat);
+                  mk_cunit
+                ])
+              mk_cunit @@
+              mk_var "frontier"
+          ]
+      | None -> (* non-map ds *)
+        (* look for any entry in the ds containing vid *)
+        let vid = fst @@ List.find (r_match r_vid |- fst) ds.e in
+        let t' = unwrap_tind ds.t in
+        (* handle the possiblity of indirections *)
+        let do_bind, id =
+          if is_tind ds.t then
+            let unwrap = ds.id^"_unwrap" in
+            (fun x -> mk_bind (mk_var ds.id) unwrap x), unwrap
+          else id_fn, ds.id
+        in
+        let temp = "temp" in
+        (* delete any entry with a lower or matching vid *)
+        mk_let [temp] (mk_empty t') @@
+        do_bind @@
+        mk_block
+          (* add < vid to temporary collection *)
+          [mk_iter
+            (mk_lambda' ds.e @@
+                mk_if (mk_lt (mk_var vid) @@ mk_var min_vid)
+                  (mk_insert temp @@ ids_to_vars @@ fst_many ds.e) @@
+                  mk_cunit) @@
+              mk_var id
+          ;
+          (* delete values from ds *)
+           mk_iter
+            (mk_lambda' ["val", wrap_ttuple @@ snd_many ds.e] @@
+              mk_delete id [mk_var "val"]) @@
+            mk_var temp
+          ]
   in
   List.map gc_std @@ ds_to_gc c
 
 let do_gc_trig c =
-  let min_vid = "min_gc_vid" in
+  let min_vid = "gc_vid" in
   mk_code_sink' do_gc_nm [min_vid, t_vid] [] @@
     mk_block @@
       List.map (fun ds -> mk_apply' ("do_gc_"^ds.id) (mk_tuple [mk_var min_vid])) @@ ds_to_gc c
