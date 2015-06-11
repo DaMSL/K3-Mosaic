@@ -165,33 +165,23 @@ let nd_check_stmt_cntr_index =
 let nd_add_delta_to_buf c map_id =
   let delta_tuples, lookup_value, update_value = "delta_tuples", "lookup_value", "update_value" in
   let corrective, target_map = "corrective", "target_map" in
-  let map_delta = D.map_ds_of_id ~suffix:"_d" ~calc:true c map_id in
-  let map_real = D.map_ds_of_id ~vid:true c map_id in
-  let vars_delta_unknown =
-    P.map_add_v mk_cunknown @@ list_replace_i (-1) mk_cunknown @@ ids_to_vars @@ fst_many map_delta in
-  let vars_delta_val = list_last @@ ids_to_vars @@ fst_many map_delta in
-  let vars_no_val = list_drop_end 1 @@ ids_to_vars @@ fst_many map_delta.e in
-  let vars_v = ids_to_vars @@ fst_many map_real.e in
-  let vars_val = list_last vars_v in
-  let t_val = snd @@ list_last @@ map_delta.e in
-  let id_val = fst @@ list_last @@ map_delta.e in
   let tmap_deref = target_map^"_d" in
+  let map_delta = D.map_ds_of_id c map_id ~global:false ~suffix:"_d" ~vid:false in
+  let map_real  = D.map_ds_of_id c map_id ~vid:true ~global:true in
+  (* flat pattern to read ds *)
+  let real_pat  = D.flatten_ds_e map_real in
+  let delta_pat = D.flatten_ds_e map_delta in
+  (* function version of real pat (uses an expression) *)
+  let real_pat_f e = D.flatten_ds_e ~expr:e map_real in
+  let t_val = snd @@ get_val real_pat in
   let zero = match t_val.typ with
     | TInt   -> mk_cint 0
     | TFloat -> mk_cfloat 0.
     | _ -> failwith @@ "Unhandled type "^K3PrintSyntax.string_of_type t_val
   in
-  (* flat pattern to read ds *)
-  let real_pat = D.flatten_ds_e ~vid_nm:"min_vid" map_real tmap_deref in
-  let delta_pat = D.flatten_ds_e map_delta in
-  let pat e =
-    list_replace_i (-1) e @@ modify_e map_real.e ["vid", mk_var "min_vid"]
-  in
-  let update_vars = pat @@ mk_var update_value in
   mk_global_fn (D.nd_add_delta_to_buf_nm c map_id)
     (* corrective: whether this is a corrective delta *)
-    ([target_map, wrap_tind map_real.t;
-      corrective, t_bool; "min_vid", t_vid;
+    ([target_map, map_real.t; corrective, t_bool; "vid", t_vid;
       delta_tuples, map_delta.t])
     [t_unit] @@
     mk_block @@
@@ -208,55 +198,35 @@ let nd_add_delta_to_buf c map_id =
               (mk_case_sn
                 (mk_peek @@
                   mk_slice' tmap_deref @@
-                    D.drop_val (fst_many real_pat) :: mk_cunknown) "val"
+                    D.unknown_val real_pat) "val"
                 (* then just update the value *)
-                (mk_update tmap_deref [mk_var "val"] @@ mk_tuple @@
-                  (D.drop_val @@ fst_many real_pat) @ [mk_add (get_val real_pat) @@ get_val delta_pat]) @@
+                (mk_update tmap_deref [mk_var "val"] @@
+                  (D.drop_val' real_pat) @
+                     [mk_add (get_val' @@ real_pat_f @@ mk_var "val") @@
+                     get_val' delta_pat]) @@
                 mk_error "failed to find value in corrective") @@
-              (* regular delta case -- read the frontier *)
-              mk_let [lookup_value]
-                (map_latest_vid_vals ~vid_nm:"min_vid" c (mk_var tmap_deref)
-                  (Some(vars_no_val @ [mk_cunknown])) map_id ~keep_vid:true) @@
-                mk_let [update_value]
-                  (* get either 0 to add or the value we read *)
-                  (mk_add (mk_var id_val) @@
-                    mk_case_ns
-                      (mk_peek @@ mk_var lookup_value) "val"
-                      zero @@
-                      mk_subscript (List.length map_real.e) @@ mk_var "val") @@
-                  mk_insert tmap_deref update_vars) @@
+              (* regular case -- read the frontier *)
+              mk_let [update_value]
+                (mk_add
+                  (get_val' delta_pat) @@
+                  mk_case_ns
+                    (mk_peek @@
+                      map_latest_vid_vals c (mk_var tmap_deref)
+                      (some @@ D.unknown_val real_pat) map_id ~keep_vid:false) "val"
+                     zero @@
+                     D.get_val' @@ real_pat_f @@ mk_var "val") @@
+                mk_insert tmap_deref @@ new_val real_pat @@ mk_var update_value) @@
         mk_var delta_tuples
       ;
-      (* add to future values *)
+      (* add to future values for both correctives and regular updates *)
       mk_iter (* loop over values in the delta tuples *)
-        (mk_lambda' id_t_delta @@
-          if c.map_type = MapVMap then
-            (* VMap supports direct manipulation *)
-            mk_bind (mk_var target_map) tmap_deref @@
-            mk_update_suffix tmap_deref
-              (mk_var "min_vid"::(ids_to_vars @@ fst_many id_t_delta)) @@
-              mk_lambda' map_real.e @@
-                mk_tuple @@ list_replace_i (-1) (mk_add vars_val vars_delta_val) vars_v
-          else
-            mk_let ["filtered"]
-            (mk_bind (mk_var target_map) tmap_deref @@
-              (* slice for all values > vid with same key *)
-              match c.map_type with
-              | MapVMap -> failwith "shouldn't be here"
-              | MapSet ->
-                mk_filter
-                  (mk_lambda' map_real.e @@
-                    mk_gt (mk_var "vid") @@ mk_var "min_vid") @@
-                  (* slice for all vid and value *)
-                  mk_slice' tmap_deref vars_delta_unknown) @@
-            mk_iter
-              (mk_lambda' map_real.e @@
-                (* careful to put bind in proper place *)
-                mk_bind (mk_var target_map) tmap_deref @@
-                  mk_update tmap_deref
-                    (ids_to_vars @@ fst_many @@ map_real.e) @@
-                    list_replace_i (-1) (mk_add vars_val vars_delta_val) vars_v) @@
-              mk_var "filtered") @@
+        (mk_lambda' map_delta.e @@
+          (* VMap supports shortcut manipulation *)
+          mk_bind (mk_var target_map) tmap_deref @@
+          mk_update_suffix tmap_deref (fst_many real_pat) @@
+            mk_lambda' map_real.e @@
+              mk_tuple @@ new_val real_pat @@
+              mk_add (get_val' delta_pat) @@ get_val' real_pat) @@
         mk_var delta_tuples]
 
 (*
@@ -793,9 +763,10 @@ let send_corrective_fns c =
         trigs_stmts_with_matching_rhs_map
     in
     match trigs_stmts_with_matching_rhs_map with [] -> [] | _ ->
-    let map_ds = D.map_ds_of_id ~calc:true c map_id in
+    let map_ds = D.map_ds_of_id ~global:false c map_id ~vid:false in
     let tuple_type = wrap_ttuple @@ snd_many map_ds.e in
-    let delta_tuples2 = {(D.map_ds_of_id ~calc:true ~vid:true c map_id) with id="delta_tuples2"}
+    let delta_tuples2 =
+      D.map_ds_of_id ~global:false ~vid:true c map_id ~name:"delta_tuples2"
     in
     singleton @@ mk_global_fn (send_corrective_name_of_t c map_id)
     (orig_vals @ ["corrective_vid", t_vid; "delta_tuples", map_ds.t])
@@ -1187,12 +1158,6 @@ let roles_of c (ast:program_t) =
     Role("node", []);
   ]
 
-(* Generate all the frontier functions *)
-let emit_frontier_fns c =
-  (* get a representative map of each type *)
-  let fns = List.map (hd |- snd) @@ P.uniq_types_and_maps c.p in
-  List.map (frontier_fn c) fns
-
 let declare_global_vars c partmap ast =
   (* dummy switch path variable. Will be filled at cpp stage *)
   decl_global
@@ -1215,10 +1180,6 @@ let declare_global_funcs c partmap ast =
   nd_update_stmt_cntr_corr_map ::
   begin if c.gen_correctives then [nd_filter_corrective_list] else [] end @
   K3Ring.functions @
-  begin match c.map_type with
-    | MapVMap -> []
-    | MapSet -> emit_frontier_fns c
-  end @
   (List.map (nd_add_delta_to_buf c |- hd |- snd) @@ P.uniq_types_and_maps c.p) @
   TS.functions @
   K3Route.functions c.p partmap @

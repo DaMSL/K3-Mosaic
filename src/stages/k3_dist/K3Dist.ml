@@ -107,7 +107,7 @@ let map_ds_of_id ?name ?(suffix="") ~vid ~global c map_id =
   let nm = unwrap_option (map_name_of c.p map_id) name in
   let e = if vid && not global then map_ids_types_with_v_for c.p map_id
           else map_ids_types_for c.p map_id in
-  let e = List.map (first @@ fun x -> x^suffix) e in
+  let e = List.map (first @@ fun x -> x) e in
   let wrap = if global then wrap_t_of_map' c.map_type else wrap_t_calc' in
   let e, ee, t, init =
     (* real external map *)
@@ -117,7 +117,7 @@ let map_ds_of_id ?name ?(suffix="") ~vid ~global c map_id =
         if k = [] then
           ["value"^suffix, wrap_ttuple @@ snd_many v], [v]
         else
-          ["key"^suffix, wrap_ttuple @@ snd_many k; "value"^suffix, wrap_ttuple @@ snd_many v],
+          ["key", wrap_ttuple @@ snd_many k; "value"^suffix, wrap_ttuple @@ snd_many v],
           [k; v]
       in
       let t = wrap @@ snd_many e in
@@ -134,16 +134,29 @@ let make_map_decl c name map_id =
   map_ds_of_id ~name ~vid:true ~global:true c map_id
 
 (* create a list of access expressions, types even for deep data structures *)
-let flatten_ds_e ?(vid_nm="vid") ds =
-  if ds.ee = [] then List.map (fun (x,y) -> mk_var x, y) ds.e
+(* we can either assume that we're in a loop named after ds.e or work off of
+ * an expression *)
+let flatten_ds_e ?(vid_nm="vid") ?expr ds =
+  if ds.ee = [] then
+    List.map (first @@ fun x -> if x="vid" then mk_var vid_nm else mk_var x)
+      ds.e
   else
+    let e = insert_index_fst ds.e in
     let wrap l = (mk_var vid_nm, t_vid)::l in
     wrap @@ List.flatten @@
-      List.map2 (fun (id,_) idts ->
-        List.mapi (fun i (_, t) ->
-          mk_subscript i @@ mk_var id, t
-        ) idts
-      ) ds.e ds.ee
+      List.map2 (fun (j, (id,t)) idts ->
+        match idts with
+        | [_] ->
+          (* either direct or subscript access *)
+          let access = maybe (mk_var id) (fun e -> mk_subscript j e) expr in
+          [access, t]
+        | _   ->
+          List.mapi (fun i (_, t) ->
+            (* either direct or subscript access *)
+            let access = maybe (mk_var id) (fun e -> mk_subscript i e) expr in
+            mk_subscript i @@ access, t
+          ) idts
+      ) e ds.ee
 
 (* turn a flat pattern into a potentially deep pattern *)
 let pat_of_flat ds flat =
@@ -153,9 +166,15 @@ let pat_of_flat ds flat =
     let grouped = list_group lengths flat in
     List.map mk_tuple grouped
 
+let pat_of_flat' ds flat = pat_of_flat ds @@ fst_many flat
+
 let drop_val l = list_drop_end 1 l
-let get_val  l = list_take_end 1 l
+let drop_val' l = fst_many @@ list_drop_end 1 l
+let get_val  l = hd @@ list_take_end 1 l
+let get_val' l = fst @@ hd @@ list_take_end 1 l
 let drop_vid l = tl l
+let unknown_val l = drop_val' l @ [mk_cunknown]
+let new_val l x = drop_val' l @ [x]
 
 (* convert a global map to a bag type for calculation *)
 let calc_of_map_t c ?(vid_nm="vid") ~keep_vid map_id col =
