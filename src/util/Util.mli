@@ -99,7 +99,7 @@ val tl : 'a list -> 'a list
 val list_last : 'a list -> 'a
 
 (* group a list according to an int list *)
-val list_group : int list -> 'a list -> 'a list list
+val clump : int list -> 'a list -> 'a list list
 
 (* replicate a value into a list *)
 val replicate : int -> 'a -> 'a list

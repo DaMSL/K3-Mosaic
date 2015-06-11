@@ -140,14 +140,14 @@ let rec list_last xs = match xs with
   | [x]   -> x
   | _::xs -> list_last xs
 
-let list_group grp_l l =
+let clump grp_l l =
   let rec loop grp l acc = match grp, l, acc with
-    | [], [], _ -> acc
-    | [], _, _ | _, [], _ -> failwith "wrong group lengths"
-    | x::xs, y::ys, []      when x > 1 -> loop (x-1::xs) ys [[y]]
-    | x::xs, y::ys, zs::zss when x > 1 -> loop (x-1::xs) ys ((y::zs)::zss)
-    | _::xs, y::ys, []                 -> loop xs ys ([]::[[y]])
-    | _::xs, y::ys, zs::zss            -> loop xs ys ([]::(y::zs)::zss)
+    | [], [], _
+    | [0], _, _                        -> acc
+    | 0::xs, ys, zs                    -> loop xs ys ([]::zs)
+    | x::xs, y::ys, []      when x > 0 -> loop (x-1::xs) ys [[y]]
+    | x::xs, y::ys, zs::zss when x > 0 -> loop (x-1::xs) ys ((y::zs)::zss)
+    | _ -> failwith "invalid input"
   in
   List.rev @@ List.map List.rev @@ loop grp_l l []
 

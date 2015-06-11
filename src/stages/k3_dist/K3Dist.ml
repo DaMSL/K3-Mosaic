@@ -163,7 +163,7 @@ let pat_of_flat ds flat =
   if ds.ee = [] then flat
   else
     let lengths = List.map List.length ds.ee in
-    let grouped = list_group lengths flat in
+    let grouped = clump lengths flat in
     List.map mk_tuple grouped
 
 let pat_of_flat' ds flat = pat_of_flat ds @@ fst_many flat
