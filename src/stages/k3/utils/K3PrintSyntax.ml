@@ -334,7 +334,7 @@ let rec lazy_expr c expr =
   | Aggregate -> let t = U.decompose_aggregate expr in
     lps "fold" <| lcut () <| lazy_paren @@ expr_triple t
   | AggregateV -> let t = U.decompose_aggregatev expr in
-    lps "vfold" <| lcut () <| lazy_paren @@ expr_quad t
+    lps "vfold" <| lcut () <| lazy_paren @@ expr_triple t
   | GroupByAggregate -> let q = U.decompose_gbagg expr in
     lps "groupby" <| lazy_paren @@ expr_quad q
   | Sort -> let p = U.decompose_sort expr in

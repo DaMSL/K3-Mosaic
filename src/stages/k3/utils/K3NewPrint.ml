@@ -805,10 +805,10 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
     apply_method c ~name:"fold" ~col ~args:[lambda; acc]
       ~arg_info:[ALambda [In; InRec], Out; ANonLambda, Out]
 
-  | AggregateV -> let vid, lambda, acc, col = U.decompose_aggregatev expr in
+  | AggregateV -> let lambda, acc, col = U.decompose_aggregatev expr in
     (* find out if our accumulator is a collection type *)
-    apply_method c ~name:"fold" ~col ~args:[vid; lambda; acc]
-      ~arg_info:[ANonLambda, Out; ALambda [In; InRec], Out; ANonLambda, Out]
+    apply_method c ~name:"fold" ~col ~args:[lambda; acc]
+      ~arg_info:[ALambda [In; In; InRec], Out; ANonLambda, Out]
 
   | GroupByAggregate -> let lam1, lam2, acc, col = U.decompose_gbagg expr in
     (* find out if our accumulator is a collection type *)

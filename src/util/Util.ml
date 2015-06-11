@@ -43,6 +43,9 @@ let (==) = assert false
 
 let pair x y = (x,y)
 
+let map_pair f (x,y) = (f x, f y)
+let map_triple f (x,y,z) = (f x, f y, f z)
+
 let null l = match l with [] -> true | _ -> false
 
 let at l i = List.nth l i

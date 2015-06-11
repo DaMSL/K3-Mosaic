@@ -79,7 +79,7 @@ let check_tag_arity tag children =
     | Filter            -> 2
     | Flatten           -> 1
     | Aggregate         -> 3
-    | AggregateV        -> 4
+    | AggregateV        -> 3
     | GroupByAggregate  -> 4
     | Sort              -> 2
     | Size              -> 1
@@ -430,23 +430,18 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
           end
 
       | Aggregate | AggregateV ->
-          let tfun, tzero, tcol' =
-            if tag = AggregateV then
-              let vid = bind 0 in
-              if not (vid === t_vid) then t_erroru @@ TMismatch(vid, t_vid, "required vid")
-              else bind 1, bind 2, bind 3
-            else (* Aggregate *)
-              bind 0, bind 1, bind 2
-          in
+          let tfun, tzero, tcol' = bind 0, bind 1, bind 2 in
           let targ, tret =
             try unwrap_tfun tfun with Failure _ -> t_erroru (not_function tfun) in
           let tcol, telem =
             try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') in
           if tcol = TVMap then t_erroru @@ TBad(tcol', "cannot run on vmap") else
-          let expected1 = wrap_ttuple [tzero; telem] in
+          let expected1, expected2 = map_pair wrap_ttuple @@
+              if tag = Aggregate then [tzero; telem], [tret; telem]
+              else (* aggv *) [t_int; tzero; telem], [t_int; tret; telem]
+          in
           if not (targ <~ expected1)
               then t_erroru (TMismatch(targ, expected1, "")) else
-          let expected2 = canonical @@ TTuple[tret; telem] in
           if not (targ <~ expected2)
               then t_erroru (TMismatch(targ, expected2, "")) else
           tzero

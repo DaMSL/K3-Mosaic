@@ -71,7 +71,7 @@ let decompose_add e = match tag_of_expr e, sub_tree e with
 let decompose_aggregate e = match tag_of_expr e, sub_tree e with
   Aggregate, [e0; e1; e2] -> e0, e1, e2 | _ -> failwith "not Aggregate"
 let decompose_aggregatev e = match tag_of_expr e, sub_tree e with
-  AggregateV, [e0; e1; e2; e3] -> e0, e1, e2, e3 | _ -> failwith "not AggregateV"
+  AggregateV, [e0; e1; e2] -> e0, e1, e2 | _ -> failwith "not AggregateV"
 let decompose_apply e = match tag_of_expr e, sub_tree e with
   Apply, [e0; e1] -> (e0, e1) | _ -> failwith "not Apply"
 let decompose_assign e =

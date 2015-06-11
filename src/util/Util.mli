@@ -32,6 +32,9 @@ val (==) : 'a -> 'a -> never
 
 val pair : ('a -> 'b -> 'a * 'b)
 
+val map_pair : ('a -> 'b) -> 'a * 'a -> 'b * 'b
+val map_triple : ('a -> 'b) -> 'a * 'a * 'a -> 'b * 'b * 'b
+
 (* whether a list is empty *)
 val null : 'a list -> bool
 

@@ -35,7 +35,7 @@ val is_peek : expr_t -> bool
 (* AST constructors / destructors *)
 val decompose_add : expr_t -> expr_t * expr_t
 val decompose_aggregate : expr_t -> expr_t * expr_t * expr_t
-val decompose_aggregatev : expr_t -> expr_t * expr_t * expr_t * expr_t
+val decompose_aggregatev : expr_t -> expr_t * expr_t * expr_t
 val decompose_apply : expr_t -> expr_t * expr_t
 val decompose_assign : expr_t -> id_t * expr_t
 val decompose_block : expr_t -> expr_t list
