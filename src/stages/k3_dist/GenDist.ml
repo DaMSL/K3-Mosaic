@@ -181,7 +181,7 @@ let nd_add_delta_to_buf c map_id =
   in
   mk_global_fn (D.nd_add_delta_to_buf_nm c map_id)
     (* corrective: whether this is a corrective delta *)
-    ([target_map, map_real.t; corrective, t_bool; "vid", t_vid;
+    ([target_map, wrap_tind map_real.t; corrective, t_bool; "vid", t_vid;
       delta_tuples, map_delta.t])
     [t_unit] @@
     mk_block @@
@@ -197,8 +197,7 @@ let nd_add_delta_to_buf c map_id =
               (* corrective case *)
               (mk_case_sn
                 (mk_peek @@
-                  mk_slice' tmap_deref @@
-                    D.unknown_val real_pat) "val"
+                  mk_slice' tmap_deref @@ D.unknown_val real_pat) "val"
                 (* then just update the value *)
                 (mk_update tmap_deref [mk_var "val"] @@
                   (D.drop_val' real_pat) @

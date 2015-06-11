@@ -37,6 +37,7 @@ let rec add_vid_to_init_val col_vid_t col_id_ts e =
 
 (* add a vid to global value map declarations *)
 let get_global_map_inits c = function
+  (* TODO: handle this gracefully for maps *)
   (* filter to have only map declarations *)
   | Global(name, typ, m_expr),_ ->
     begin try

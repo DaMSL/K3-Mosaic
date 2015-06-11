@@ -575,9 +575,11 @@ let create_ds ?(e=[]) ?(ee=[]) ?init ?d_init ?map_id ?(global=false) id t =
   {id; t; e; ee; init; d_init; map_id; global}
 
 (* utility functions *)
-let decl_global x = match x.init with
-  | Some init -> mk_global_val_init x.id x.t init
-  | None      -> mk_global_val x.id x.t
+let decl_global x =
+  let wrap = if x.global then wrap_tind else id_fn in
+  match x.init with
+  | Some init -> mk_global_val_init x.id (wrap x.t) init
+  | None      -> mk_global_val x.id (wrap x.t)
 
 let delayed_init x = match x.d_init with
   | Some init -> mk_assign x.id init

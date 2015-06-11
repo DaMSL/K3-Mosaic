@@ -96,9 +96,7 @@ let wrap_t_calc  = wrap_tbag
 let wrap_t_calc' = wrap_tbag'
 
 (* split a map's types into key, value. For vmaps, remove the vid *)
-let map_t_split' ts =
-  let k, v = list_split (-1) ts in
-  k, v
+let map_t_split' ts = list_split (-1) ts
 
 (* get a ds representing a map *)
 (* @calc: have the type of inner calculation *)
@@ -107,8 +105,14 @@ let map_ds_of_id ?name ?(suffix="") ~vid ~global c map_id =
   let nm = unwrap_option (map_name_of c.p map_id) name in
   let e = if vid && not global then map_ids_types_with_v_for c.p map_id
           else map_ids_types_for c.p map_id in
-  let e = List.map (first @@ fun x -> x) e in
   let wrap = if global then wrap_t_of_map' c.map_type else wrap_t_calc' in
+  (* suffix added only to last value *)
+  let add_suffix l =
+    let k, v = list_split (-1) l in
+    let v' = List.map (first @@ fun x -> x^suffix) v in
+    k @ v'
+  in
+  let e = add_suffix e in
   let e, ee, t, init =
     (* real external map *)
     if global then
@@ -117,7 +121,8 @@ let map_ds_of_id ?name ?(suffix="") ~vid ~global c map_id =
         if k = [] then
           ["value"^suffix, wrap_ttuple @@ snd_many v], [v]
         else
-          ["key", wrap_ttuple @@ snd_many k; "value"^suffix, wrap_ttuple @@ snd_many v],
+          ["key", wrap_ttuple @@ snd_many k;
+           "value"^suffix, wrap_ttuple @@ snd_many v],
           [k; v]
       in
       let t = wrap @@ snd_many e in
