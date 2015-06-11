@@ -90,11 +90,11 @@ let rec list_drop len li = match li with
 (* split list into before and after *)
 let list_split len l =
   let len = if len < 0 then List.length l + len else len in
-  let rec split len acc = function
-    | [] -> acc, []
-    | x::xs when len = 0 -> List.rev (x::acc), xs
-    | x::xs -> split (len-1) (x::acc) xs
-  in split len [] l
+  let rec loop len acc = function
+    | [] -> List.rev acc, []
+    | x::xs when len > 0 -> loop (len-1) (x::acc) xs
+    | xs -> List.rev acc, xs
+  in loop len [] l
 
 (* take the last x elements of a list *)
 let list_take_end len li = list_drop (List.length li - len) li
