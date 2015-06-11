@@ -39,7 +39,7 @@ let pequal = (==)
 
 type never
 
-let (==) = assert false
+let (==) x y = failwith "Should never run"
 
 let pair x y = (x,y)
 
