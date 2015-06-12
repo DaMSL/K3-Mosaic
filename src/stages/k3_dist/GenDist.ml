@@ -163,18 +163,21 @@ let nd_check_stmt_cntr_index =
  * If we need another value, it must be handled via message from
  * m3tok3 *)
 let nd_add_delta_to_buf c map_id =
-  let delta_tuples, lookup_value, update_value = "delta_tuples", "lookup_value", "update_value" in
-  let corrective, target_map = "corrective", "target_map" in
-  let tmap_deref = target_map^"_d" in
+  let delta_tuples, lookup_value, update_value, corrective, target_map, tmap_deref =
+    "delta_tuples", "lookup_value", "update_value", "corrective", "target_map", "target_map_d" in
   let map_delta = D.map_ds_of_id c map_id ~global:false ~suffix:"_d" ~vid:false in
   let map_real  = D.map_ds_of_id c map_id ~vid:true ~global:true in
   (* flat pattern to read ds *)
-  let real_pat  = D.flatten_ds_e map_real in
-  let delta_pat = D.flatten_ds_e map_delta in
+  let real_pat  = D.pat_of_ds map_real in
+  let delta_pat = D.pat_of_ds map_delta in
+  (* a pattern mapping real map with delta vars *)
+  let real_delta_pat = pat_of_flat_e map_real ~add_vid:true @@ fst_many delta_pat in
   (* function version of real pat (uses an expression) *)
-  let real_pat_f e = D.flatten_ds_e ~expr:e map_real in
-  let t_val = snd @@ get_val real_pat in
-  let zero = match t_val.typ with
+  let real_pat_f e = D.pat_of_ds ~expr:e map_real in
+  let calc_pat_f e = D.pat_of_ds ~expr:e map_delta in
+  let zero =
+    let t_val = snd @@ get_val real_pat in
+    match t_val.typ with
     | TInt   -> mk_cint 0
     | TFloat -> mk_cfloat 0.
     | _ -> failwith @@ "Unhandled type "^K3PrintSyntax.string_of_type t_val
@@ -197,24 +200,25 @@ let nd_add_delta_to_buf c map_id =
               (* corrective case *)
               (mk_case_sn
                 (mk_peek @@
-                  mk_slice' tmap_deref @@ D.unknown_val real_pat) "val"
+                  mk_slice' tmap_deref @@ D.unknown_val real_delta_pat) "val"
                 (* then just update the value *)
-                (mk_update tmap_deref [mk_var "val"] @@
-                  (D.drop_val' real_pat) @
-                     [mk_add (get_val' @@ real_pat_f @@ mk_var "val") @@
-                     get_val' delta_pat]) @@
+                (mk_update tmap_deref
+                  (fst_many @@ real_pat_f @@ mk_var "val") @@
+                  D.new_val real_delta_pat @@
+                     mk_add (get_val' @@ real_pat_f @@ mk_var "val") @@
+                            get_val' delta_pat) @@
                 mk_error "failed to find value in corrective") @@
-              (* regular case -- read the frontier *)
+              (* if regular case -- read the frontier *)
               mk_let [update_value]
                 (mk_add
                   (get_val' delta_pat) @@
                   mk_case_ns
                     (mk_peek @@
                       map_latest_vid_vals c (mk_var tmap_deref)
-                      (some @@ D.unknown_val real_pat) map_id ~keep_vid:false) "val"
+                        (some @@ D.unknown_val' delta_pat) map_id ~keep_vid:false) "val"
                      zero @@
-                     D.get_val' @@ real_pat_f @@ mk_var "val") @@
-                mk_insert tmap_deref @@ new_val real_pat @@ mk_var update_value) @@
+                     D.get_val' @@ calc_pat_f @@ mk_var "val") @@
+                mk_insert tmap_deref @@ new_val real_delta_pat @@ mk_var update_value) @@
         mk_var delta_tuples
       ;
       (* add to future values for both correctives and regular updates *)
@@ -222,10 +226,12 @@ let nd_add_delta_to_buf c map_id =
         (mk_lambda' map_delta.e @@
           (* VMap supports shortcut manipulation *)
           mk_bind (mk_var target_map) tmap_deref @@
-          mk_update_suffix tmap_deref (fst_many real_pat) @@
+          mk_update_suffix tmap_deref real_delta_pat @@
             mk_lambda' map_real.e @@
-              mk_tuple @@ new_val real_pat @@
-              mk_add (get_val' delta_pat) @@ get_val' real_pat) @@
+              mk_tuple @@
+                new_val (drop_vid' real_pat) @@
+                  mk_add (get_val' real_pat) @@
+                          get_val real_delta_pat) @@
         mk_var delta_tuples]
 
 (*

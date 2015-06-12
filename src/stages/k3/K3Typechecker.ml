@@ -435,15 +435,17 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
             try unwrap_tfun tfun with Failure _ -> t_erroru (not_function tfun) in
           let tcol, telem =
             try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') in
-          if tcol = TVMap then t_erroru @@ TBad(tcol', "cannot run on vmap") else
-          let expected1, expected2 = map_pair wrap_ttuple @@
-              if tag = Aggregate then [tzero; telem], [tret; telem]
-              else (* aggv *) [t_int; tzero; telem], [t_int; tret; telem]
+          let expected1 = wrap_ttuple @@
+            match tag, tcol with
+            | Aggregate,  TVMap -> t_erroru @@ TBad(tcol', "cannot run on vmap")
+            | Aggregate,  _     -> [tzero; telem]
+            | AggregateV, TVMap -> [tzero; t_vid; telem]
+            | _                 -> t_erroru @@ TBad(tcol', "must have a vmap")
           in
+          if not (tzero === tret)
+            then t_erroru (TMismatch(tzero, tret, "lambda return and agg")) else
           if not (targ <~ expected1)
-              then t_erroru (TMismatch(targ, expected1, "")) else
-          if not (targ <~ expected2)
-              then t_erroru (TMismatch(targ, expected2, "")) else
+            then t_erroru (TMismatch(targ, expected1, "lambda arg")) else
           tzero
 
       | GroupByAggregate ->
@@ -522,11 +524,12 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
           let tcol', tnew, tlam_update = bind 0, bind 1, bind 2 in
           let tcol, telem =
             try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') in
-          if not (tcol = TVMap) then t_erroru (TMismatch(tcol', wrap_tvmap telem, "collection type")) else
-          if not (telem === tnew) then t_erroru (TMismatch(telem, tnew, "new value")) else
+          if not (tcol = TVMap) then
+            t_erroru (TMismatch(tcol', wrap_tvmap telem, "collection type")) else
           check_vmap_pat tcol telem tnew;
           let tlam_update' = wrap_tfunc telem telem in
-          if not (tlam_update === tlam_update') then t_erroru (TMismatch(tlam_update, tlam_update', "update lambda")) else
+          if not (tlam_update === tlam_update') then
+            t_erroru (TMismatch(tlam_update, tlam_update', "update lambda")) else
           t_unit
 
       | UpsertWith ->

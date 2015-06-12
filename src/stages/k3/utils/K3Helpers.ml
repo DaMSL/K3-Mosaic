@@ -559,10 +559,11 @@ type data_struct = { id: string;
                      d_init:expr_t option;
                      map_id: int option;
                      global: bool; (* real global ds *)
+                     vid: bool; (* contains vids *)
                    }
 
 (* also add default values if missing *)
-let create_ds ?(e=[]) ?(ee=[]) ?init ?d_init ?map_id ?(global=false) id t =
+let create_ds ?(e=[]) ?(ee=[]) ?init ?d_init ?map_id ?(global=false) ?(vid=false) id t =
   let init =
     if is_some init then init
     else match t.typ with
@@ -572,7 +573,7 @@ let create_ds ?(e=[]) ?(ee=[]) ?init ?d_init ?map_id ?(global=false) id t =
       | TString -> some @@ mk_cstring ""
       | _       -> None
   in
-  {id; t; e; ee; init; d_init; map_id; global}
+  {id; t; e; ee; init; d_init; map_id; global; vid}
 
 (* utility functions *)
 let decl_global x =

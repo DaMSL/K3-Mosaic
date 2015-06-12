@@ -64,6 +64,8 @@ val third3  : ('c -> 'd) -> 'a * 'b * 'c -> 'a * 'b * 'd
 
 val singleton : 'a -> 'a list
 
+val list_sum : ('a -> int) -> 'a list -> int
+
 (* take the first x values of a list *)
 val list_take : int -> 'a list -> 'a list
 

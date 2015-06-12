@@ -108,7 +108,7 @@ let do_gc_fns c =
       match ds.map_id with
       | Some _ ->
           let ds_d = ds.id^"_d" in
-          let pat = D.flatten_ds_e ~vid_nm:min_vid ds in
+          let pat = D.pat_of_ds ~vid_nm:min_vid ds in
           let do_bind = mk_bind (mk_var ds.id) ds_d in
           (* save frontier *)
           mk_let ["frontier"]

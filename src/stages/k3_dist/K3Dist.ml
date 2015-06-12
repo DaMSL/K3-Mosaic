@@ -132,46 +132,68 @@ let map_ds_of_id ?name ?(suffix="") ~vid ~global c map_id =
       let t = wrap @@ snd_many e in
       e, [], t, mk_empty t
   in
-  create_ds nm t ~e ~ee ~init ~global ~map_id
+  create_ds nm t ~e ~ee ~init ~global ~map_id ~vid
 
 (* create a map structure: used for both maps and buffers *)
 let make_map_decl c name map_id =
   map_ds_of_id ~name ~vid:true ~global:true c map_id
 
+(* turn a flat pattern into a potentially deep pattern *)
+let pat_of_flat wrap_tup vid_fn ds flat =
+  if ds.ee = [] then flat
+  else
+    let l_flat = List.length flat in
+    let l_ee = list_sum List.length ds.ee in
+    if l_flat <> l_ee then failwith @@
+      Printf.sprintf "flat[%d], ee[%d]. Length mismatch for map %s" l_flat l_ee ds.id;
+    let lengths = List.map List.length ds.ee in
+    let clumped = clump lengths flat in
+    vid_fn @@ List.map wrap_tup clumped
+
+let pat_of_flat_e ?(vid_nm="vid") ~add_vid ds flat =
+  let vid_fn = if add_vid then (fun l -> (mk_var vid_nm)::l) else id_fn in
+  pat_of_flat mk_tuple vid_fn ds flat
+
+let pat_of_flat_t ~add_vid ds flat =
+  let vid_fn = if add_vid then (fun l -> t_vid::l) else id_fn in
+  pat_of_flat wrap_ttuple vid_fn ds flat
+
 (* create a list of access expressions, types even for deep data structures *)
 (* we can either assume that we're in a loop named after ds.e or work off of
  * an expression *)
-let flatten_ds_e ?(vid_nm="vid") ?expr ds =
+let pat_of_ds ?(flatten=false) ?(vid_nm="vid") ?expr ?(drop_vid=false) ds =
   if ds.ee = [] then
-    List.map (first @@ fun x -> if x="vid" then mk_var vid_nm else mk_var x)
-      ds.e
+    let e = insert_index_fst ds.e in
+    filter_map (fun (i, (x,y)) -> match x, expr with
+      | "vid", _ when drop_vid -> None
+      | "vid", _               -> Some(mk_var vid_nm, y)
+      | _, Some e              -> Some(mk_subscript i e, y)
+      | _, _                   -> Some(mk_var x, y))
+      e
   else
     let e = insert_index_fst ds.e in
-    let wrap l = (mk_var vid_nm, t_vid)::l in
-    wrap @@ List.flatten @@
-      List.map2 (fun (j, (id,t)) idts ->
-        match idts with
-        | [_] ->
-          (* either direct or subscript access *)
-          let access = maybe (mk_var id) (fun e -> mk_subscript j e) expr in
-          [access, t]
-        | _   ->
-          List.mapi (fun i (_, t) ->
+    let l =
+      List.flatten @@
+        List.map2 (fun (j, (id,t)) idts ->
+          match idts with
+          | [_] ->
             (* either direct or subscript access *)
-            let access = maybe (mk_var id) (fun e -> mk_subscript i e) expr in
-            mk_subscript i @@ access, t
-          ) idts
-      ) e ds.ee
-
-(* turn a flat pattern into a potentially deep pattern *)
-let pat_of_flat ds flat =
-  if ds.ee = [] then flat
-  else
-    let lengths = List.map List.length ds.ee in
-    let grouped = clump lengths flat in
-    List.map mk_tuple grouped
-
-let pat_of_flat' ds flat = pat_of_flat ds @@ fst_many flat
+            let access = maybe (mk_var id) (fun e -> mk_subscript (j+1) e) expr in
+            [access, t]
+          | _   ->
+            List.mapi (fun i (_, t) ->
+              (* either direct or subscript access *)
+              let access = maybe (mk_var id) (fun e -> mk_subscript (j+1) e) expr in
+              mk_subscript (i+1) @@ access, t
+            ) idts
+        ) e ds.ee
+    in
+    if flatten then l
+    else
+      let e, t = list_unzip l in
+      let e = pat_of_flat_e ~vid_nm ~add_vid:(not drop_vid) ds e in
+      let t = pat_of_flat_t ~add_vid:(not drop_vid) ds t in
+      list_zip e t
 
 let drop_val l = list_drop_end 1 l
 let drop_val' l = fst_many @@ list_drop_end 1 l
@@ -180,25 +202,27 @@ let get_val' l = fst @@ hd @@ list_take_end 1 l
 let get_vid' l = fst @@ hd l
 let drop_vid l = tl l
 let drop_vid' l = fst_many @@ tl l
-let unknown_val l = drop_val' l @ [mk_cunknown]
+let unknown_val l = drop_val l @ [mk_cunknown]
+let unknown_val' l = drop_val' l @ [mk_cunknown]
 let vid_and_unknowns l = List.mapi (fun i (x,y) -> if i > 0 then mk_cunknown,y else x,y) l
 let vid_and_unknowns' l = fst_many @@ vid_and_unknowns l
-let new_val l x = drop_val' l @ [x]
+let new_val l x = drop_val l @ [x]
+let new_val' l x = drop_val' l @ [x]
 let new_vid' s l = (mk_var s) :: drop_vid' l
 
 (* convert a global map to a bag type for calculation *)
 let calc_of_map_t c ?(vid_nm="vid") ~keep_vid map_id col =
-  let ds = map_ds_of_id ~global:false ~vid:false c map_id in
-  let flat = flatten_ds_e ds ~vid_nm in
-  let bag_t = snd_many flat in
-  let remove_vid = if keep_vid then id_fn else drop_vid in
+  let map_ds  = map_ds_of_id ~global:true ~vid:false c map_id in
+  let calc_ds = map_ds_of_id ~global:false ~vid:keep_vid c map_id in
+  let map_pat = pat_of_ds ~drop_vid:true map_ds in
+  let map_flat = pat_of_ds ~drop_vid:(not keep_vid) ~flatten:true ~expr:(mk_var "vals") map_ds in
   mk_aggv
-    (mk_lambda' (["acc", wrap_ttuple bag_t; "vid", t_vid] @ ds.e) @@
+    (mk_lambda' (["acc", calc_ds.t; "vid", t_vid; "vals", wrap_ttuple @@ snd_many map_pat]) @@
       mk_block [
-          mk_insert "acc" @@ remove_vid @@ fst_many flat;
+          mk_insert "acc" @@ fst_many map_flat;
           mk_var "acc"
       ])
-    (mk_empty @@ wrap_t_calc' bag_t) @@
+    (mk_empty @@ calc_ds.t) @@
     col
 
 (* location of vid in tuples *)
@@ -479,7 +503,7 @@ let map_latest_vid_vals ?(vid_nm="vid") c slice_col m_pat map_id ~keep_vid : exp
   let map_ds = map_ds_of_id ~vid:true ~global:true c map_id in
   let convert col = calc_of_map_t c ~vid_nm ~keep_vid map_id col in
   let pat = match m_pat with
-    | Some pat -> pat_of_flat map_ds pat
+    | Some pat -> pat_of_flat_e map_ds ~add_vid:false pat
     | None     -> List.map (const mk_cunknown) map_ds.e
   in
   convert @@ mk_slice_frontier slice_col @@ mk_var vid_nm :: pat
