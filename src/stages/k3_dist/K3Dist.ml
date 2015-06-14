@@ -151,11 +151,11 @@ let pat_of_flat wrap_tup vid_fn ds flat =
     vid_fn @@ List.map wrap_tup clumped
 
 let pat_of_flat_e ?(vid_nm="vid") ~add_vid ds flat =
-  let vid_fn = if add_vid then (fun l -> (mk_var vid_nm)::l) else id_fn in
+  let vid_fn l = if add_vid then mk_var vid_nm :: l else l in
   pat_of_flat mk_tuple vid_fn ds flat
 
 let pat_of_flat_t ~add_vid ds flat =
-  let vid_fn = if add_vid then (fun l -> t_vid::l) else id_fn in
+  let vid_fn l = if add_vid then t_vid::l else l in
   pat_of_flat wrap_ttuple vid_fn ds flat
 
 (* create a list of access expressions, types even for deep data structures *)
@@ -188,7 +188,9 @@ let pat_of_ds ?(flatten=false) ?(vid_nm="vid") ?expr ?(drop_vid=false) ds =
             ) idts
         ) e ds.ee
     in
-    if flatten then l
+    if flatten then
+      if drop_vid then l
+      else (mk_var vid_nm, t_vid) :: l
     else
       let e, t = list_unzip l in
       let e = pat_of_flat_e ~vid_nm ~add_vid:(not drop_vid) ds e in
@@ -215,14 +217,16 @@ let calc_of_map_t c ?(vid_nm="vid") ~keep_vid map_id col =
   let map_ds  = map_ds_of_id ~global:true ~vid:false c map_id in
   let calc_ds = map_ds_of_id ~global:false ~vid:keep_vid c map_id in
   let map_pat = pat_of_ds ~drop_vid:true map_ds in
-  let map_flat = pat_of_ds ~drop_vid:(not keep_vid) ~flatten:true ~expr:(mk_var "vals") map_ds in
+  let map_flat =
+    pat_of_ds ~drop_vid:(not keep_vid) ~flatten:true ~expr:(mk_var "vals") map_ds in
   mk_aggv
-    (mk_lambda' (["acc", calc_ds.t; "vid", t_vid; "vals", wrap_ttuple @@ snd_many map_pat]) @@
+    (mk_lambda'
+      (["acc", calc_ds.t; "vid", t_vid; "vals", wrap_ttuple @@ snd_many map_pat]) @@
       mk_block [
           mk_insert "acc" @@ fst_many map_flat;
           mk_var "acc"
       ])
-    (mk_empty @@ calc_ds.t) @@
+    (mk_empty calc_ds.t) @@
     col
 
 (* location of vid in tuples *)

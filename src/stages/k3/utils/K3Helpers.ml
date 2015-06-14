@@ -442,6 +442,12 @@ let mk_assoc_lambda arg1 arg2 expr = mk_lambda (ATuple[arg1; arg2]) expr
 
 let mk_assoc_lambda' arg1 arg2 expr = mk_lambda (ATuple[wrap_args arg1; wrap_args arg2]) expr
 
+let mk_lambda2 arg1 arg2 expr = mk_lambda (ATuple[arg1; arg2]) expr
+let mk_lambda2' a1 a2 expr = mk_lambda2 (wrap_args a1) (wrap_args a2) expr
+
+let mk_lambda3 arg1 arg2 arg3 expr = mk_lambda (ATuple[arg1; arg2; arg3]) expr
+let mk_lambda3' a1 a2 a3 expr = mk_lambda3 (wrap_args a1) (wrap_args a2) (wrap_args a3) expr
+
 let mk_fst tuple = mk_subscript 1 tuple
 let mk_fst' tuple = mk_subscript 1 (mk_var tuple)
 
