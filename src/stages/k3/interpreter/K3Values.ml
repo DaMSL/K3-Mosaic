@@ -422,11 +422,11 @@ let v_fold err_fn f acc = function
   | VBag m      -> ValueBag.fold f acc m
   | VList m     -> IList.fold f acc m
   | VMap m      -> ValueMap.fold (fun k v acc -> f acc @@ encode_tuple (k,v)) m acc
-  | VVMap m     -> ValueVMap.fold (fun _ _ v acc -> f acc v) m acc
+  | VVMap m     -> ValueVMap.fold (fun _ k v acc -> f acc @@ VTuple[k;v]) m acc
   | v -> err_fn "v_fold" @@ Printf.sprintf "not a collection: %s" @@ string_of_value v
 
 let v_foldv err_fn f acc = function
-  | VVMap m     -> ValueVMap.fold (fun vid _ v acc -> f acc vid v) m acc
+  | VVMap m     -> ValueVMap.fold (fun vid k v acc -> f acc vid @@ VTuple[k;v]) m acc
   | v -> err_fn "v_foldv" @@ Printf.sprintf "not a supported collection: %s" @@ string_of_value v
 
 let v_iter err_fn f = function
@@ -434,36 +434,36 @@ let v_iter err_fn f = function
   | VBag m      -> ValueBag.iter f m
   | VList m     -> IList.iter f m
   | VMap m      -> ValueMap.iter (fun k v -> f @@ encode_tuple (k,v)) m
-  | VVMap m     -> ValueVMap.iter (fun _ _ v -> f v) m
+  | VVMap m     -> ValueVMap.iter (fun _ k v -> f @@ VTuple [k;v]) m
   | v -> err_fn "v_iter" @@ Printf.sprintf "not a collection: %s" @@ string_of_value v
 
 let v_insert err_fn x m = match x, m with
-  | _, VSet m                      -> VSet(ValueSet.insert x m)
-  | _, VBag m                      -> VBag(ValueBag.insert x m)
-  | _, VList m                     -> VList(IList.insert x m)
-  | VTuple[k;v], VMap m            -> VMap(ValueMap.add k v m)
-  | VTuple[t;VTuple[k;v]], VVMap m -> VVMap(ValueVMap.add t k v m)
-  | VTuple[t;v], VVMap m           -> VVMap(ValueVMap.add t VUnit v m)
-  | v, c                           -> err_fn "v_insert" @@
+  | _, VSet m              -> VSet(ValueSet.insert x m)
+  | _, VBag m              -> VBag(ValueBag.insert x m)
+  | _, VList m             -> VList(IList.insert x m)
+  | VTuple[k;v], VMap m    -> VMap(ValueMap.add k v m)
+  | VTuple[t;k;v], VVMap m -> VVMap(ValueVMap.add t k v m)
+  | VTuple[t;v], VVMap m   -> VVMap(ValueVMap.add t VUnit v m)
+  | v, c                   -> err_fn "v_insert" @@
     Printf.sprintf "invalid input: insert: %s\ninto: %s" (sov v) (sov c)
 
 let v_delete err_fn x m = match x, m with
-  | _, VSet m                       -> VSet(ValueSet.delete x m)
-  | _, VBag m                       -> VBag(ValueBag.delete x m)
-  | _, VList m                      -> VList(IList.delete x m)
-  | VTuple [k; v], VMap m           -> VMap(ValueMap.remove k m)
-  | VTuple [t;VTuple[k;_]], VVMap m -> VVMap(ValueVMap.remove t k m)
-  | VTuple [t;_], VVMap m           -> VVMap(ValueVMap.remove t VUnit m)
-  | v, c                            -> err_fn "v_delete" @@
+  | _, VSet m               -> VSet(ValueSet.delete x m)
+  | _, VBag m               -> VBag(ValueBag.delete x m)
+  | _, VList m              -> VList(IList.delete x m)
+  | VTuple [k; v], VMap m   -> VMap(ValueMap.remove k m)
+  | VTuple [t;k;_], VVMap m -> VVMap(ValueVMap.remove t k m)
+  | VTuple [t;_], VVMap m   -> VVMap(ValueVMap.remove t VUnit m)
+  | v, c                    -> err_fn "v_delete" @@
     Printf.sprintf "invalid input: delete: %s\nfrom: %s" (sov v) (sov c)
 
 let v_update err_fn oldv newv c = match oldv, newv, c with
-  | _,_,VSet m                                    -> VSet(ValueSet.update oldv newv m)
-  | _,_,VBag m                                    -> VBag(ValueBag.update oldv newv m)
-  | _,_,VList m                                   -> VList(IList.update oldv newv m)
-  | VTuple[k;v], VTuple[k';v'], VMap m            -> VMap(ValueMap.update k v k' v' m)
-  | VTuple[k;v], VTuple[t;VTuple[k';v']], VVMap m -> VVMap(ValueVMap.update t k v k' v' m)
-  | VTuple[v], VTuple[t;v'], VVMap m              -> VVMap(ValueVMap.update t VUnit v VUnit v' m)
+  | _,_,VSet m                            -> VSet(ValueSet.update oldv newv m)
+  | _,_,VBag m                            -> VBag(ValueBag.update oldv newv m)
+  | _,_,VList m                           -> VList(IList.update oldv newv m)
+  | VTuple[k;v], VTuple[k';v'], VMap m    -> VMap(ValueMap.update k v k' v' m)
+  | VTuple[k;v], VTuple[t;k';v'], VVMap m -> VVMap(ValueVMap.update t k v k' v' m)
+  | VTuple[v], VTuple[t;v'], VVMap m      -> VVMap(ValueVMap.update t VUnit v VUnit v' m)
   | v,v',c -> err_fn "v_update" @@ Printf.sprintf
     "invalid input: update: %s\nfrom: %s\nin: %s" (sov v) (sov v') (sov c)
 
@@ -475,12 +475,12 @@ let v_upsert_with err_fn key lam_none lam_some col =
   in
   (* TODO: implement for other types *)
   match key, col with
-  | VTuple [t;VTuple[k;v]], VVMap m -> update t k v m
+  | VTuple [t;k;v], VVMap m -> update t k v m
   | VTuple [t;v], VVMap m           -> update t VUnit v m
   | _ -> failwith "v_upsert_with: unsupported"
 
 let v_update_suffix err_fn key f col = match key, col with
-  | VTuple[t;VTuple[k;_]], VVMap m -> VVMap(ValueVMap.update_suffix t k f m)
+  | VTuple[t;k;_], VVMap m -> VVMap(ValueVMap.update_suffix t k f m)
   | VTuple[t;_], VVMap m           -> VVMap(ValueVMap.update_suffix t VUnit f m)
   | _ -> failwith "v_update_suffix: only supported on vmap"
 
@@ -523,7 +523,7 @@ let v_singleton err_fn elem c = match elem, c with
   | _,TBag                       -> VBag(ValueBag.singleton elem)
   | _,TList                      -> VList(IList.singleton elem)
   | VTuple[k;v], TMap            -> VMap(ValueMap.singleton k v)
-  | VTuple[t;VTuple[k;v]], TVMap -> VVMap(ValueVMap.singleton t k v)
+  | VTuple[t;k;v], TVMap -> VVMap(ValueVMap.singleton t k v)
   | VTuple[t;v], TVMap           -> VVMap(ValueVMap.singleton t VUnit v)
   | _ -> err_fn "v_singleton" "not a collection"
 
@@ -549,7 +549,7 @@ let v_slice err_fn pat = function
   | _ -> err_fn "v_slice" "not a collection"
 
 let v_slice_frontier err_fn pat m = match m, pat with
-  | VVMap m, VTuple[t;VTuple[k;v]]  ->
+  | VVMap m, VTuple[t;k;v]  ->
       (* point lookup or slice lookup? *)
       if not @@ List.mem VUnknown(unwrap_vtuple k) then
         try

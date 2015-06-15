@@ -275,7 +275,7 @@ and eval_expr (address:address) sched_st cenv texpr =
     let nenv, res = child_values cenv in
 
     match tag, res with
-    | Tuple,[vals]  -> nenv, temp vals
+    | Tuple,[v]  -> nenv, temp v
     | Tuple,(_::_ as vals) -> nenv, temp @@ VTuple vals
     | Just, [rval]  -> nenv, temp @@ VOption (Some rval)
 
@@ -488,7 +488,8 @@ and eval_expr (address:address) sched_st cenv texpr =
     | Assign, [_; v] -> env_modify (get_id ()) nenv @@ const v, temp VUnit
 
 
-    | _ -> error name "incorrect arguments"
+    | _, args -> error name @@
+      "incorrect arguments: "^String.concat "," @@ List.map repr_of_value args
 
     in
     if !debug then
