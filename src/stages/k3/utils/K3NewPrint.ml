@@ -986,8 +986,7 @@ let lazy_declaration c d =
           try
             let lam, s = U.decompose_apply e in
             begin match U.tag_of_expr lam, U.tag_of_expr s with
-            | Var "load_csv_bag", Const(CString f)
-            | Var "load_csv_set", Const(CString f) -> lps (Printf.sprintf "@@LoadFile(%s)" f) <| lcut ()
+            | Var "load_csv_col", Const(CString f) -> lps (Printf.sprintf "@@LoadFile(%s)" f) <| lcut ()
             | _ -> failwith "Not found"
             end
           with Failure _ -> (* normal global *)
