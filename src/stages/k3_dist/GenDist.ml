@@ -203,7 +203,7 @@ let nd_add_delta_to_buf c map_id =
                   mk_slice' tmap_deref @@ D.unknown_val real_delta_pat) "val"
                 (* then just update the value *)
                 (mk_update tmap_deref
-                  (fst_many @@ real_pat_f @@ mk_var "val") @@
+                  [mk_var "val"] @@
                   D.new_val real_delta_pat @@
                      mk_add (get_val' @@ real_pat_f @@ mk_var "val") @@
                             get_val' delta_pat) @@

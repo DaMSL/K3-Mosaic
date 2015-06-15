@@ -25,7 +25,7 @@ module type S = sig
   val map : (vid -> key -> 'a -> 'b) -> 'a t -> 'b t
   val iter : (vid -> key -> 'a -> unit) -> 'a t -> unit
   val filter : (vid -> key -> 'a -> bool) -> 'a t -> 'a t
-  val update : vid -> key -> 'a -> vid -> key -> 'a -> 'a t -> 'a t
+  val update : vid -> key -> 'a -> key -> 'a -> 'a t -> 'a t
   val update_with : vid -> key -> ('a option -> 'a option) -> 'a t -> 'a t
   val update_suffix : vid -> key -> ('a -> 'a ) -> 'a t -> 'a t
   val peek : 'a t -> (vid * key * 'a) option
@@ -135,9 +135,9 @@ module Make(OrdVid: ICommon.OrderedKeyType)(OrdKey: ICommon.OrderedKeyType) = st
       if f vid k v then add vid k v acc else acc
     ) m empty
 
-  let update t k v t' k' v' m =
+  let update t k v k' v' m =
     let m' = remove t k m in
-    add t' k' v' m'
+    add t k' v' m'
 
   let peek m = match HMap.peek m with
     | None -> None

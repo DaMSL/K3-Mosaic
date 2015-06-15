@@ -275,8 +275,9 @@ and eval_expr (address:address) sched_st cenv texpr =
     let nenv, res = child_values cenv in
 
     match tag, res with
-    | Tuple, vals  -> nenv, temp @@ VTuple vals
-    | Just, [rval] -> nenv, temp @@ VOption (Some rval)
+    | Tuple,[vals]  -> nenv, temp vals
+    | Tuple,(_::_ as vals) -> nenv, temp @@ VTuple vals
+    | Just, [rval]  -> nenv, temp @@ VOption (Some rval)
 
     | Singleton ct, [elem] ->
         let ctype, _ = unwrap_tcol ct in
@@ -368,6 +369,16 @@ and eval_expr (address:address) sched_st cenv texpr =
         let f' = eval_fn f address sched_st in
         let renv, rval = v_fold error (fun (env, acc) x ->
             let renv, reval = f' env (VTuple [acc; x]) in
+            renv, value_of_eval reval
+          )
+          (nenv, zero)
+          col
+        in renv, VTemp rval
+
+    | AggregateV, [f; zero; col] ->
+        let f' = eval_fn f address sched_st in
+        let renv, rval = v_foldv error (fun (env, acc) vid x ->
+            let renv, reval = f' env (VTuple [acc; vid; x]) in
             renv, value_of_eval reval
           )
           (nenv, zero)

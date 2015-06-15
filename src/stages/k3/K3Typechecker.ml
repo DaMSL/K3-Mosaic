@@ -517,6 +517,7 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
           let tcol, telem =
             try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') in
           check_vmap_pat tcol telem tnew;
+          if not (told === telem) then t_erroru @@ TMismatch(told, telem, "old value") else
           t_unit
 
       | UpdateSuffix ->

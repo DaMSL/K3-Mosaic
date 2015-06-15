@@ -103,6 +103,7 @@ type 'a t_err_fn = (string -> string -> 'a)
 val v_peek : value_t option t_err_fn -> value_t -> value_t option
 val v_combine : value_t t_err_fn -> value_t -> value_t -> value_t
 val v_fold : 'a t_err_fn -> ('a -> value_t -> 'a) -> 'a -> value_t -> 'a
+val v_foldv : 'a t_err_fn -> ('a -> value_t -> value_t -> 'a) -> 'a -> value_t -> 'a
 val v_iter : unit t_err_fn -> (value_t -> unit) -> value_t -> unit
 val v_insert : value_t t_err_fn -> value_t -> value_t -> value_t
 val v_delete : value_t t_err_fn -> value_t -> value_t -> value_t
