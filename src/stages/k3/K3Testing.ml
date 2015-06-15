@@ -9,6 +9,7 @@ open K3Values
 open K3Values.Value
 open K3Interpreter
 module LAS = ListAsSet
+module K3V = K3Values
 
 type assertion_t =
     AssertTypeEquals of type_t * type_t
@@ -114,17 +115,6 @@ let unify_tuple_lists id l1 l2 =
   match id with
   | "pmap_data" | "node_ring" | "peers" -> LAS.union l1 l2
   | _ ->
-    (* can't use disjointness since nodes copy over maps to work with them *)
-    (* check that our lists are disjoint *)
-    (*let tuple_remove_value = function*)
-      (*| VTuple tuplist -> VTuple(list_drop_end 1 tuplist)*)
-      (*| _ -> failwith @@ Printf.sprintf "%s is not a tuple!" id*)
-    (*in*)
-    (*let l1' = List.rev_map tuple_remove_value l1 in*)
-    (*let l2' = List.rev_map tuple_remove_value l2 in*)
-    (*if LAS.inter l1' l2' <> []*)
-    (*then failwith @@ Printf.sprintf "In %s, lists not disjoint!" id*)
-    (*else LAS.union l1 l2*)
     LAS.union l1 l2
 
 (* unify the values of the same ids in different environments *)
@@ -142,12 +132,8 @@ let unify_values id r_newval = function
     in
     let err _ s = failwith @@ Printf.sprintf "(unify_values):%s" s in
     let v, v' = unwrap_ind oldval, unwrap_ind newval in
-    match unwrap_ind oldval, unwrap_ind newval with
-    | VSet _, VSet _
-    | VBag _, VBag _
-    | VList _, VList _
-    | VMap _, VMap _ -> some @@ wrap_ind @@ v_combine err v v'
-    | _,_                      -> Some r_newval
+    if K3V.matching_collections v v' then some @@ wrap_ind @@ v_combine err v v'
+    else Some r_newval
 
 (* unify the environments of different nodes *)
 let unify_envs (envs : (address * env_t) list) =
@@ -177,10 +163,12 @@ let test_program peers globals_k3 interpret_fn file_name test =
   let node_envs = interpret_fn program in
 
   (* print out the environments *)
-  (*List.iter (fun (addr, env) -> *)
-    (*Printf.printf "Environment for %s\n" (K3Printing.string_of_address addr); *)
-    (*print_endline @@ K3Values.string_of_program_env env*)
-  (* ) node_envs;*)
+  (* debug
+  List.iter (fun (addr, env) ->
+    Printf.printf "Environment for %s\n" (K3Printing.string_of_address addr);
+    print_endline @@ K3Values.string_of_env ~skip_functions:true ~skip_empty:false ~accessed_only:false env
+  ) node_envs;
+  *)
 
   (* unify the node value environments if needed *)
   let v_env = op_fn node_envs in

@@ -72,6 +72,9 @@ open Value
 
 val default_env : env_t
 
+(* if we have 2 collection values that match *)
+val matching_collections : value_t -> value_t -> bool
+
 (* Value comparison *)
 val equal_values : value_t -> value_t -> bool
 val compare_values : (int -> int -> bool) -> value_t -> value_t -> bool

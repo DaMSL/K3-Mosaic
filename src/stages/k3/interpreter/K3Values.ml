@@ -251,6 +251,14 @@ open Value
 
 include ValueUtils
 
+let matching_collections v v' = match v, v' with
+  | VList _, VList _
+  | VBag _, VBag _
+  | VSet _, VSet _
+  | VMap _, VMap _
+  | VVMap _, VVMap _ -> true
+  | _ -> false
+
 let unwrap_vtuple = function VTuple x -> x | x -> [x]
 let encode_tuple (k,v)    = VTuple[k;v]
 let mencode_tuple x       = VTuple x
@@ -350,7 +358,6 @@ let find_inequality a b =
 let remove_unit k v = match k with
   | VUnit -> v
   | _     -> VTuple[k;v]
-
 
 let v_peek err_fn c = match c with
   | VSet m  -> ValueSet.peek m
