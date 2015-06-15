@@ -214,6 +214,14 @@ let rec gen_arg_bindings = function
 (* fill_in: check at each node whether we already have a type annotation.
  * If so, don't go any further down *)
 let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
+  (* If not overriding, see if we've already got a type *)
+  let has_type e =
+    try ignore @@ type_of_expr e; true
+    with TypeError(_, _, UntypedExpression) -> false
+         | _                                -> true
+  in
+  if has_type utexpr && not override then utexpr else
+
   let ((uuid, tag), aux), untyped_children = decompose_tree utexpr in
   let name = K3Printing.string_of_tag_type tag in
   let t_erroru = t_error uuid name in (* pre-curry the type error *)
@@ -247,18 +255,9 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
         (List.filter ((<>) "_" |- fst) @@ list_zip xs ts) @ env
     | _ -> env
   in
-  (* If not overriding, find those children for which we have no type already *)
-  let has_type ch =
-    try ignore @@ type_of_expr ch; true
-    with TypeError(_, _, UntypedExpression) -> false
-          | _                                -> true
-  in
   let typed_children = List.rev @@ fst @@ List.fold_left (fun (acc, i) ch ->
-      if override || not @@ has_type ch
-      then
-        let ch' = deduce_expr_type ~override trig_env (env_proc_fn (hd' acc) i) ch
-        in ch'::acc, i+1
-      else ch::acc,  i+1)
+      let ch' = deduce_expr_type ~override trig_env (env_proc_fn (hd' acc) i) ch
+      in ch'::acc, i+1)
     ([], 0)
     untyped_children
   in
