@@ -165,14 +165,14 @@ let nd_check_stmt_cntr_index =
 let nd_add_delta_to_buf c map_id =
   let delta_tuples, lookup_value, update_value, corrective, target_map, tmap_deref =
     "delta_tuples", "lookup_value", "update_value", "corrective", "target_map", "target_map_d" in
-  let map_delta = D.map_ds_of_id c map_id ~global:false ~suffix:"_d" ~vid:true in
+  let map_delta = D.map_ds_of_id c map_id ~global:false ~suffix:"_d" ~vid:false in
   let map_real  = D.map_ds_of_id c map_id ~global:true in
   (* flat pattern to read ds *)
   let real_pat  = D.pat_of_ds map_real in
   let delta_pat = D.pat_of_ds map_delta in
   (* a pattern mapping real map with delta vars *)
   let real_delta_pat =
-    pat_of_flat_e map_real ~has_vid:true ~add_vid:true @@ fst_many delta_pat in
+    pat_of_flat_e map_real ~has_vid:false ~add_vid:true @@ fst_many delta_pat in
   (* function version of real pat (uses an expression) *)
   let real_pat_f e = D.pat_of_ds ~expr:e map_real in
   let calc_pat_f e = D.pat_of_ds ~expr:e map_delta in

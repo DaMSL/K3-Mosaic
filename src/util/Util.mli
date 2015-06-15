@@ -275,6 +275,8 @@ val hashtbl_combine : ('a, 'b) Hashtbl.t -> ('a, 'b) Hashtbl.t -> ('b -> 'b -> '
 val list_of_hashtbl : ('a, 'b) Hashtbl.t -> ('a * 'b) list
 val hashtbl_of_list : ('a * 'b) list -> ('a, 'b) Hashtbl.t
 
+val strcatmap : ?sep:string -> ('a -> string) -> 'a list -> string
+
 val intset_of_list : int list -> IntSet.t
 val intmap_of_list : (int * 'a) list -> 'a IntMap.t
 val strmap_of_list : (string * 'a) list -> 'a StrMap.t

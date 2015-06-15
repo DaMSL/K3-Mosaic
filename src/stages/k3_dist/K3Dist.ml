@@ -113,6 +113,21 @@ let read_e ~vid ~global e = if vid && not global then ("vid", t_vid)::e else e
 
 let ds_e ds = read_e ~vid:ds.vid ~global:ds.global ds.e
 
+let string_of_pat pat =
+  let open K3PrintSyntax in
+  strcatmap (fun (e,t) -> "("^string_of_expr e^", "^string_of_type t^")") pat
+
+let string_of_pat_e pat = strcatmap K3PrintSyntax.string_of_expr pat
+
+let string_of_ds ds =
+  Printf.sprintf "{id:%s; e:%s; ee:%s; t:%s; global:%b; vid:%b}"
+  ds.id
+  (String.concat ", " @@ List.map (fun (s,t) -> s^", "^K3PrintSyntax.string_of_type t) ds.e)
+  (String.concat ", " @@ List.map (fun stl -> ("["^String.concat ", " (List.map (fun (s,t) -> s^", "^K3PrintSyntax.string_of_type t) stl) ^"]")) ds.ee)
+  (K3PrintSyntax.string_of_type ds.t)
+  ds.global
+  ds.vid
+
 (* get a ds representing a map *)
 (* @calc: have the type of inner calculation *)
 (* @vid: keep the vid *)
@@ -155,14 +170,15 @@ let make_map_decl c name map_id =
   map_ds_of_id ~name ~vid:true ~global:true c map_id
 
 (* turn a flat pattern into a potentially deep pattern *)
-let pat_of_flat ~has_vid wrap_tup vid_fn ds flat =
+let pat_of_flat typ ~has_vid wrap_tup vid_fn ds flat =
   if ds.ee = [] then flat
   else
     let flat = if has_vid then tl flat else flat in
     let l_flat = List.length flat in
     let l_ee = list_sum List.length ds.ee in
     if l_flat <> l_ee then failwith @@
-      Printf.sprintf "flat[%d], ee[%d]. Length mismatch for map %s" l_flat l_ee ds.id;
+      Printf.sprintf "%s: flat[%d], ee[%d], has_vid[%b]. Length mismatch for map %s. ds=%s"
+        typ l_flat l_ee has_vid ds.id (string_of_ds ds);
     let lengths = List.map List.length ds.ee in
     let clumped = clump lengths flat in
     vid_fn @@ List.map wrap_tup clumped
@@ -173,11 +189,13 @@ let pat_of_flat_e ?(vid_nm="vid") ~add_vid ?(has_vid=false) ds flat =
     | true, _    -> mk_var vid_nm :: l
     | _          -> l
   in
-  pat_of_flat ~has_vid mk_tuple vid_fn ds flat
+  try
+    pat_of_flat "e" ~has_vid mk_tuple vid_fn ds flat
+  with Failure s -> raise @@ Failure(s^", "^string_of_pat_e flat)
 
 let pat_of_flat_t ~add_vid ?(has_vid=false) ds flat =
   let vid_fn l = if add_vid then t_vid::l else l in
-  pat_of_flat ~has_vid wrap_ttuple vid_fn ds flat
+  pat_of_flat "t" ~has_vid wrap_ttuple vid_fn ds flat
 
 (* create a list of access expressions, types even for deep data structures *)
 (* we can either assume that we're in a loop named after ds.e or work off of
@@ -194,11 +212,13 @@ let pat_of_ds ?(flatten=false) ?(vid_nm="vid") ?expr ?(drop_vid=false) ds =
     | Some x -> add_vid [x, snd @@ hd @@ ds.e]
   else if ds.ee = [] then
   (* one layered ds *)
-    let e = insert_index_fst ds.e in
-    add_vid @@
-    List.map (fun (i, (x,y)) -> match expr with
+    let e = if ds.vid then (vid_nm, t_vid)::ds.e else ds.e in
+    let e = insert_index_fst e in
+    let e = List.map (fun (i, (x,y)) -> match expr with
       | Some e -> mk_subscript (i+1) e, y
       | _      -> mk_var x, y) e
+    in
+    if drop_vid then tl e else e
   else
     let e = insert_index_fst ds.e in
     let l =

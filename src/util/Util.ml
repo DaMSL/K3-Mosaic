@@ -569,6 +569,9 @@ let hashtbl_of_list l =
   List.iter (fun (k,v) -> Hashtbl.add h k v) l;
   h
 
+(* common functionatlity *)
+let strcatmap ?(sep=", ") f l = String.concat sep @@ List.map f l
+
 let intset_of_list l =
   List.fold_left (fun acc x -> IntSet.add x acc) IntSet.empty l
 
@@ -580,4 +583,3 @@ let strmap_of_list l =
 
 let string_of_int_list l = String.concat ", " @@ List.map soi l
 let string_of_int_set  s = String.concat ", " @@ List.map soi @@ IntSet.elements s
-
