@@ -334,12 +334,30 @@ let sov = string_of_value
 (* Environment stringification *)
 let print_binding (id,v) = ob(); ps (id^" = "); pc(); print_value v; cb(); fnl()
 
+(* Value comparison. *)
+let equal_values a b = ValueComp.compare_v a b = 0
+
+let compare_values f a b = f (ValueComp.compare_v a b) 0
+
+(* Value comparison. Returns a partial list of inequality positions if there are any *)
+let find_inequality a b =
+  ValueComp.reset_counter ();
+  if ValueComp.compare_v a b <> 0 then
+    Some(ValueComp.get_counter ())
+  else None
+
+(* vmaps need to remove unit key and keep the value *)
+let remove_unit k v = match k with
+  | VUnit -> v
+  | _     -> VTuple[k;v]
+
+
 let v_peek err_fn c = match c with
-  | VSet m      -> ValueSet.peek m
-  | VBag m      -> ValueBag.peek m
-  | VList m     -> IList.peek m
-  | VMap m      -> maybe None (some |- encode_tuple)  @@ ValueMap.peek m
-  | VVMap m     -> maybe None (some |- thd3) @@ ValueVMap.peek m
+  | VSet m  -> ValueSet.peek m
+  | VBag m  -> ValueBag.peek m
+  | VList m -> IList.peek m
+  | VMap m  -> maybe None (some |- encode_tuple)  @@ ValueMap.peek m
+  | VVMap m -> maybe None (fun (_,k,v) -> some @@ remove_unit k v) @@ ValueVMap.peek m
   | v -> err_fn "v_peek" @@ Printf.sprintf "not a collection: %s" @@ string_of_value v
 
 (* for a map structure *)
@@ -422,11 +440,11 @@ let v_fold err_fn f acc = function
   | VBag m      -> ValueBag.fold f acc m
   | VList m     -> IList.fold f acc m
   | VMap m      -> ValueMap.fold (fun k v acc -> f acc @@ encode_tuple (k,v)) m acc
-  | VVMap m     -> ValueVMap.fold (fun _ k v acc -> f acc @@ VTuple[k;v]) m acc
+  | VVMap m     -> ValueVMap.fold (fun _ k v acc -> f acc @@ remove_unit k v) m acc
   | v -> err_fn "v_fold" @@ Printf.sprintf "not a collection: %s" @@ string_of_value v
 
 let v_foldv err_fn f acc = function
-  | VVMap m     -> ValueVMap.fold (fun vid k v acc -> f acc vid @@ VTuple[k;v]) m acc
+  | VVMap m     -> ValueVMap.fold (fun vid k v acc -> f acc vid @@ remove_unit k v) m acc
   | v -> err_fn "v_foldv" @@ Printf.sprintf "not a supported collection: %s" @@ string_of_value v
 
 let v_iter err_fn f = function
@@ -434,7 +452,7 @@ let v_iter err_fn f = function
   | VBag m      -> ValueBag.iter f m
   | VList m     -> IList.iter f m
   | VMap m      -> ValueMap.iter (fun k v -> f @@ encode_tuple (k,v)) m
-  | VVMap m     -> ValueVMap.iter (fun _ k v -> f @@ VTuple [k;v]) m
+  | VVMap m     -> ValueVMap.iter (fun _ k v -> f @@ remove_unit k v) m
   | v -> err_fn "v_iter" @@ Printf.sprintf "not a collection: %s" @@ string_of_value v
 
 let v_insert err_fn x m = match x, m with
@@ -566,18 +584,6 @@ let v_slice_frontier err_fn pat m = match m, pat with
       with Not_found -> VVMap(ValueVMap.empty) end
 
   | _ -> err_fn "v_slice_frontier" "bad input"
-
-(* Value comparison. *)
-let equal_values a b = ValueComp.compare_v a b = 0
-
-let compare_values f a b = f (ValueComp.compare_v a b) 0
-
-(* Value comparison. Returns a partial list of inequality positions if there are any *)
-let find_inequality a b =
-  ValueComp.reset_counter ();
-  if ValueComp.compare_v a b <> 0 then
-    Some(ValueComp.get_counter ())
-  else None
 
 let rec type_of_value uuid value =
   let get_typ v = type_of_value uuid v in

@@ -177,7 +177,8 @@ and eval_expr (address:address) sched_st cenv texpr =
         | VInt i1,   VFloat f2 -> VFloat(float_op (foi i1) f2)
         | VFloat f1, VInt i2   -> VFloat(float_op f1 (foi i2))
         | VFloat f1, VFloat f2 -> VFloat(float_op f1 f2)
-        | _ -> error "non-matching values"
+        | x, y -> error @@
+            Printf.sprintf "non-matching values: %s and %s" (sov x) (sov y)
     in
 
     let eval_eq_op l r ~neq =
