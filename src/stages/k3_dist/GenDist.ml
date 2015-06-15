@@ -84,8 +84,8 @@ let do_corrective_name_of_t c trig_nm stmt_id map_id =
 (* TODO: make into ordered map *)
 let nd_log_master_write_nm = "nd_log_master_write"
 let nd_log_master_write =
-  mk_global_fn nd_log_master_write_nm D.nd_log_master.e [] @@
-    mk_insert D.nd_log_master.id @@ ids_to_vars @@ fst_many D.nd_log_master.e
+  mk_global_fn nd_log_master_write_nm (ds_e D.nd_log_master) [] @@
+    mk_insert D.nd_log_master.id @@ ids_to_vars @@ fst_many @@ ds_e D.nd_log_master
 
 (* log_write - save the trigger's arguments *)
 (* TODO: make into map, and reduce args for space *)
@@ -116,7 +116,7 @@ let nd_log_read_geq =
   [nd_log_master.t] @@
   mk_filter
     (* get only >= vids *)
-    (mk_lambda' nd_log_master.e @@ mk_geq (mk_var "vid") @@ mk_var "vid2") @@
+    (mk_lambda' (ds_e nd_log_master) @@ mk_geq (mk_var "vid") @@ mk_var "vid2") @@
     mk_var nd_log_master.id
 
 (* function to check to see if we should execute a do_complete *)
@@ -165,13 +165,14 @@ let nd_check_stmt_cntr_index =
 let nd_add_delta_to_buf c map_id =
   let delta_tuples, lookup_value, update_value, corrective, target_map, tmap_deref =
     "delta_tuples", "lookup_value", "update_value", "corrective", "target_map", "target_map_d" in
-  let map_delta = D.map_ds_of_id c map_id ~global:false ~suffix:"_d" ~vid:false in
-  let map_real  = D.map_ds_of_id c map_id ~vid:true ~global:true in
+  let map_delta = D.map_ds_of_id c map_id ~global:false ~suffix:"_d" ~vid:true in
+  let map_real  = D.map_ds_of_id c map_id ~global:true in
   (* flat pattern to read ds *)
   let real_pat  = D.pat_of_ds map_real in
   let delta_pat = D.pat_of_ds map_delta in
   (* a pattern mapping real map with delta vars *)
-  let real_delta_pat = pat_of_flat_e map_real ~add_vid:true @@ fst_many delta_pat in
+  let real_delta_pat =
+    pat_of_flat_e map_real ~has_vid:true ~add_vid:true @@ fst_many delta_pat in
   (* function version of real pat (uses an expression) *)
   let real_pat_f e = D.pat_of_ds ~expr:e map_real in
   let calc_pat_f e = D.pat_of_ds ~expr:e map_delta in
@@ -189,7 +190,7 @@ let nd_add_delta_to_buf c map_id =
     [t_unit] @@
     mk_block @@
       [mk_iter  (* loop over values in delta tuples *)
-        (mk_lambda' map_delta.e @@
+        (mk_lambda' (ds_e map_delta) @@
           (* careful to put bind in proper place *)
           mk_bind (mk_var target_map) tmap_deref @@
           (* this part is just for correctives:
@@ -223,11 +224,11 @@ let nd_add_delta_to_buf c map_id =
       ;
       (* add to future values for both correctives and regular updates *)
       mk_iter (* loop over values in the delta tuples *)
-        (mk_lambda' map_delta.e @@
+        (mk_lambda' (ds_e map_delta) @@
           (* VMap supports shortcut manipulation *)
           mk_bind (mk_var target_map) tmap_deref @@
           mk_update_suffix tmap_deref real_delta_pat @@
-            mk_lambda' map_real.e @@
+            mk_lambda' (ds_e map_real) @@
               mk_tuple @@
                 new_val (drop_vid' real_pat) @@
                   mk_add (get_val' real_pat) @@
@@ -270,7 +271,7 @@ let nd_filter_corrective_list =
           ["vid2", t_vid; "stmt2", t_stmt_id] @@
           mk_lt (mk_var "vid1") @@ mk_var "vid2") @@
         (* convert to list so we can sort *)
-        mk_convert_col nd_log_master.t (wrap_tlist' @@ snd_many nd_log_master.e) @@
+        mk_convert_col nd_log_master.t (wrap_tlist' @@ snd_many @@ ds_e nd_log_master) @@
           (* list of triggers >= vid *)
           mk_apply
             (mk_var nd_log_read_geq_nm) @@ mk_var "request_vid"
@@ -680,7 +681,7 @@ List.fold_left
   (fun acc_code (stmt_id, read_map_id) ->
     let rbuf_name = P.buf_of_stmt_map_id c.p stmt_id read_map_id in
     let rbuf_deref = "buf_d" in
-    let map_ds = map_ds_of_id ~global:true ~vid:true c read_map_id in
+    let map_ds = map_ds_of_id ~global:true c read_map_id in
     let tup_ds = map_ds_of_id ~global:false ~vid:true c read_map_id in
     let tup_pat = pat_of_ds ~expr:(mk_var "tuple") tup_ds in
     let map_pat = pat_of_flat_e ~add_vid:true ~has_vid:true map_ds @@ fst_many tup_pat in
@@ -698,7 +699,7 @@ List.fold_left
           mk_tuple @@ args_of_t_as_vars_with_v c trig_name
         ;
          mk_iter
-          (mk_lambda' ["tuple", wrap_ttuple @@ snd_many tup_ds.e] @@
+          (mk_lambda' ["tuple", wrap_ttuple @@ snd_many (ds_e tup_ds)] @@
             (* be careful with bind placement *)
             mk_bind (mk_var rbuf_name) rbuf_deref @@
             mk_case_sn
@@ -766,7 +767,7 @@ let send_corrective_fns c =
     in
     match trigs_stmts_with_matching_rhs_map with [] -> [] | _ ->
     let map_ds = D.map_ds_of_id ~global:false c map_id ~vid:false in
-    let tuple_type = wrap_ttuple @@ snd_many map_ds.e in
+    let tuple_type = wrap_ttuple @@ snd_many (ds_e map_ds) in
     let delta_tuples2 =
       D.map_ds_of_id ~global:false ~vid:true c map_id ~name:"delta_tuples2"
     in
@@ -790,8 +791,8 @@ let send_corrective_fns c =
       (* we need to add a vid value here to reduce the number of needed shuffle instantiations,
        * so we don't have shuffles with vid as well as ones without *)
       (mk_let [delta_tuples2.id]
-        (mk_map (mk_lambda' map_ds.e @@ mk_tuple @@
-                  (mk_var g_min_vid.id)::(ids_to_vars @@ fst_many map_ds.e)) @@
+        (mk_map (mk_lambda' (ds_e map_ds) @@ mk_tuple @@
+                  (mk_var g_min_vid.id)::(ids_to_vars @@ fst_many @@ ds_e map_ds)) @@
           mk_var "delta_tuples") @@
       mk_agg
         (mk_assoc_lambda'
@@ -843,8 +844,8 @@ let send_corrective_fns c =
                           (mk_lambda' ["ip", t_addr; "tuples", delta_tuples2.t] @@
                               mk_tuple [mk_var "ip"; mk_var "vid";
                                 (* get rid of vid NOTE: to reduce number of shuffles *)
-                                  mk_map (mk_lambda' delta_tuples2.e @@
-                                      mk_tuple @@ ids_to_vars @@ fst_many map_ds.e) @@
+                                  mk_map (mk_lambda' (ds_e delta_tuples2) @@
+                                      mk_tuple @@ ids_to_vars @@ fst_many @@ ds_e map_ds) @@
                                     mk_var "tuples"]) @@
                           mk_apply'
                             shuffle_fn @@ mk_tuple @@

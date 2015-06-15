@@ -304,11 +304,15 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
       | Nothing t   -> t
       | Empty t     -> t
       | Singleton t ->
+          (* TODO: change type for vmap *)
           let t_c, t_e = try unwrap_tcol t with Failure _ -> t_erroru (not_collection t) in
           let t_ne = bind 0 in
           check_vmap t_c t_ne;
+          (* adjust type for vmap *)
+          let t_ne' =
+            if t_c = TVMap then wrap_ttuple @@ tl @@ unwrap_ttuple t_ne else t_ne in
           (* we disregard the element part of the singleton ast because it's not needed *)
-          canonical @@ TCollection(t_c, t_ne)
+          canonical @@ TCollection(t_c, t_ne')
 
       | Combine ->
           let t0, t1 = bind 0, bind 1 in

@@ -109,13 +109,18 @@ let wrap_t_calc' = wrap_tbag'
 (* split a map's types into key, value. For vmaps, remove the vid *)
 let map_t_split' ts = list_split (-1) ts
 
+let read_e ~vid ~global e = if vid && not global then ("vid", t_vid)::e else e
+
+let ds_e ds = read_e ~vid:ds.vid ~global:ds.global ds.e
+
 (* get a ds representing a map *)
 (* @calc: have the type of inner calculation *)
 (* @vid: keep the vid *)
-let map_ds_of_id ?name ?(suffix="") ~vid ~global c map_id =
+(* @global: always has vid (indirectly) *)
+let map_ds_of_id ?name ?(suffix="") ?(vid=true) ~global c map_id =
+  let vid = if global then true else vid in
   let nm = unwrap_option (map_name_of c.p map_id) name in
-  let e = if vid && not global then map_ids_types_with_v_for c.p map_id
-          else map_ids_types_for c.p map_id in
+  let e = map_ids_types_for c.p map_id in
   let wrap = if global then wrap_t_of_map' c.map_type else wrap_t_calc' in
   (* suffix added only to last value *)
   let add_suffix l =
@@ -136,11 +141,11 @@ let map_ds_of_id ?name ?(suffix="") ~vid ~global c map_id =
            "value"^suffix, wrap_ttuple @@ snd_many v],
           [k; v]
       in
-      let t = wrap @@ snd_many e in
+      let t = wrap @@ snd_many @@ read_e ~vid ~global e in
       let init = mk_ind @@ mk_empty t in
       e, ee, t, init
     else
-      let t = wrap @@ snd_many e in
+      let t = wrap @@ snd_many @@ read_e ~vid ~global e in
       e, [], t, mk_empty t
   in
   create_ds nm t ~e ~ee ~init ~global ~map_id ~vid
@@ -178,14 +183,22 @@ let pat_of_flat_t ~add_vid ?(has_vid=false) ds flat =
 (* we can either assume that we're in a loop named after ds.e or work off of
  * an expression *)
 let pat_of_ds ?(flatten=false) ?(vid_nm="vid") ?expr ?(drop_vid=false) ds =
-  if ds.ee = [] then
+  let add_vid l =
+    if ds.vid && not drop_vid then (mk_var vid_nm, t_vid)::l
+    else l
+  in
+  if List.length ds.e = 1 then
+  (* value but no key *)
+    match expr with
+    | None   -> add_vid [first mk_var @@ hd ds.e]
+    | Some x -> add_vid [x, snd @@ hd @@ ds.e]
+  else if ds.ee = [] then
+  (* one layered ds *)
     let e = insert_index_fst ds.e in
-    filter_map (fun (i, (x,y)) -> match x, expr with
-      | "vid", _ when drop_vid -> None
-      | _, Some e              -> Some(mk_subscript (i+1) e, y)
-      | "vid", _               -> Some(mk_var vid_nm, y)
-      | _, _                   -> Some(mk_var x, y))
-      e
+    add_vid @@
+    List.map (fun (i, (x,y)) -> match expr with
+      | Some e -> mk_subscript (i+1) e, y
+      | _      -> mk_var x, y) e
   else
     let e = insert_index_fst ds.e in
     let l =
@@ -204,9 +217,7 @@ let pat_of_ds ?(flatten=false) ?(vid_nm="vid") ?expr ?(drop_vid=false) ds =
             ) idts
         ) e ds.ee
     in
-    if flatten then
-      if drop_vid then l
-      else (mk_var vid_nm, t_vid) :: l
+    if flatten then add_vid l
     else
       let e, t = list_unzip l in
       let e = pat_of_flat_e ~vid_nm ~add_vid:(not drop_vid) ds e in
@@ -230,7 +241,7 @@ let new_vid' s l = (mk_var s) :: drop_vid' l
 
 (* convert a global map to a bag type for calculation *)
 let calc_of_map_t c ~keep_vid map_id col =
-  let map_ds  = map_ds_of_id ~global:true ~vid:false c map_id in
+  let map_ds  = map_ds_of_id ~global:true c map_id in
   let calc_ds = map_ds_of_id ~global:false ~vid:keep_vid c map_id in
   let map_pat = pat_of_ds ~drop_vid:true map_ds in
   let map_flat =
@@ -326,7 +337,7 @@ let timer_addr =
   let d_init =
     mk_case_sn
       (mk_peek @@ mk_filter
-        (mk_lambda' jobs.e @@
+        (mk_lambda' (ds_e jobs) @@
           mk_eq (mk_var "job") @@ mk_var job_timer.id) @@
         mk_var jobs.id)
       "timer"
@@ -336,18 +347,18 @@ let timer_addr =
 
 let nodes =
   let d_init =
-    mk_fst_many (snd_many jobs.e) @@
+    mk_fst_many (snd_many @@ ds_e jobs) @@
       mk_filter
-        (mk_lambda' jobs.e @@ mk_eq (mk_var job.id) @@ mk_var job_node.id) @@
+        (mk_lambda' (ds_e jobs) @@ mk_eq (mk_var job.id) @@ mk_var job_node.id) @@
         mk_var jobs.id in
   let e = ["addr", t_addr] in
   create_ds "nodes" (mut @@ wrap_tbag' @@ snd_many e) ~e ~d_init
 
 let switches =
   let d_init =
-    mk_fst_many (snd_many jobs.e) @@
+    mk_fst_many (snd_many @@ ds_e jobs) @@
       mk_filter
-        (mk_lambda' jobs.e @@ mk_eq (mk_var job.id) @@ mk_var job_switch.id) @@
+        (mk_lambda' (ds_e jobs) @@ mk_eq (mk_var job.id) @@ mk_var job_switch.id) @@
         mk_var jobs.id in
   let e = ["addr", t_addr] in
   create_ds "switches" (mut @@ wrap_tbag' @@ snd_many e) ~e ~d_init
@@ -433,7 +444,7 @@ let nd_stmt_cntrs_corr_map =
 (* 1st counter: count messages received until do_complete *)
 (* 2nd counter: map from hop to counter *)
 let nd_stmt_cntrs =
-  let ee = [["vid", t_vid; "stmt_id", t_int]; ["counter", t_int; "corr_map", wrap_tmap' @@ snd_many nd_stmt_cntrs_corr_map.e]] in
+  let ee = [["vid", t_vid; "stmt_id", t_int]; ["counter", t_int; "corr_map", wrap_tmap' @@ snd_many @@ ds_e nd_stmt_cntrs_corr_map]] in
   let e = list_zip ["vid_stmt_id"; "ctr_corrs"] @@
     List.map (wrap_ttuple |- snd_many) ee in
   create_ds "nd_stmt_cntrs" (wrap_tmap' @@ snd_many e) ~e
@@ -520,11 +531,11 @@ let nd_add_delta_to_buf_nm c map_id =
  *   convert to a bag (again, for modify_ast, to prevent losing duplicates)
  *)
 let map_latest_vid_vals ?(vid_nm="vid") c slice_col m_pat map_id ~keep_vid : expr_t =
-  let map_ds = map_ds_of_id ~vid:true ~global:true c map_id in
+  let map_ds = map_ds_of_id ~global:true c map_id in
   let convert col = calc_of_map_t c ~keep_vid map_id col in
   let pat = match m_pat with
     | Some pat -> pat_of_flat_e map_ds ~add_vid:false pat
-    | None     -> List.map (const mk_cunknown) map_ds.e
+    | None     -> List.map (const mk_cunknown) (ds_e map_ds)
   in
   convert @@ mk_slice_frontier slice_col @@ mk_var vid_nm :: pat
 

@@ -118,7 +118,7 @@ let do_gc_fns c =
           mk_block [
             (* delete all prefixes in ds. min_vid comes from pattern *)
             mk_aggv
-              (mk_lambda3' ["_", t_unit] ["_", t_vid] ds.e @@
+              (mk_lambda3' ["_", t_unit] ["_", t_vid] (ds_e ds) @@
                 do_bind @@
                 mk_block [
                   mk_delete_prefix map_deref @@ fst_many pat;
@@ -128,7 +128,7 @@ let do_gc_fns c =
               mk_var "frontier";
             (* insert back frontier into ds *)
             mk_aggv
-              (mk_lambda3' ["_", t_unit] ["vid", t_vid] ds.e @@
+              (mk_lambda3' ["_", t_unit] ["vid", t_vid] (ds_e ds) @@
                 do_bind @@
                 mk_block [
                   mk_insert map_deref (new_vid' "vid" pat);
@@ -139,7 +139,7 @@ let do_gc_fns c =
           ]
       | None -> (* non-map ds *)
         (* look for any entry in the ds containing vid *)
-        let vid = fst @@ List.find (r_match r_vid |- fst) ds.e in
+        let vid = fst @@ List.find (r_match r_vid |- fst) (ds_e ds) in
         let t' = unwrap_tind ds.t in
         (* handle the possiblity of indirections *)
         let do_bind, id =
@@ -155,15 +155,15 @@ let do_gc_fns c =
         mk_block
           (* add < vid to temporary collection *)
           [mk_iter
-            (mk_lambda' ds.e @@
+            (mk_lambda' (ds_e ds) @@
                 mk_if (mk_lt (mk_var vid) @@ mk_var min_vid)
-                  (mk_insert temp @@ ids_to_vars @@ fst_many ds.e) @@
+                  (mk_insert temp @@ ids_to_vars @@ fst_many (ds_e ds)) @@
                   mk_cunit) @@
               mk_var id
           ;
           (* delete values from ds *)
            mk_iter
-            (mk_lambda' ["val", wrap_ttuple @@ snd_many ds.e] @@
+            (mk_lambda' ["val", wrap_ttuple @@ snd_many (ds_e ds)] @@
               mk_delete id [mk_var "val"]) @@
             mk_var temp
           ]
