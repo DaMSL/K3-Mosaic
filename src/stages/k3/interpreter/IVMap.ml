@@ -5,7 +5,7 @@ module KP = K3Printing
 (* ------ Multimap functions ------ *)
 (* NOTE: remove_prefix: we delete up to and including vid, and keep a frontier at vid
  *       update_suffix: updates the > vid and all following vids
- *       frontier: gets values < the vid only
+ *       frontier: gets values <= the vid only
  * Check if these are correct!
  *)
 
@@ -70,7 +70,7 @@ module Make(OrdVid: ICommon.OrderedKeyType)(OrdKey: ICommon.OrderedKeyType) = st
   let frontier_slice vid m =
     HMap.fold (fun k vidmap acc ->
       try
-        add vid k (VIDMap.find_lt vid vidmap) acc
+        add vid k (VIDMap.find_lteq vid vidmap) acc
       with Not_found -> acc
     ) m empty
 
@@ -79,7 +79,7 @@ module Make(OrdVid: ICommon.OrderedKeyType)(OrdKey: ICommon.OrderedKeyType) = st
   (* get the frontier at a specific key *)
   let frontier_point vid k m =
     let vidmap = HMap.find k m in
-    singleton vid k @@ VIDMap.find_lt vid vidmap
+    singleton vid k @@ VIDMap.find_lteq vid vidmap
 
   let remove vid k m =
     HMap.update_with k (function
@@ -110,7 +110,7 @@ module Make(OrdVid: ICommon.OrderedKeyType)(OrdKey: ICommon.OrderedKeyType) = st
   let remove_prefix vid (m: 'a t) =
     let slice = frontier_slice vid m in
     let m' = HMap.map (fun k vidmap ->
-      VIDMap.filter (fun vid' v -> OrdVid.compare vid' vid > 0) vidmap
+      VIDMap.filter (fun vid' v -> OrdVid.compare vid' vid <= 0) vidmap
     ) m in
     combine m' slice
 
@@ -125,7 +125,7 @@ module Make(OrdVid: ICommon.OrderedKeyType)(OrdKey: ICommon.OrderedKeyType) = st
   (* update from a certain vid onwards *)
   let update_suffix (vid:OrdVid.t) (k:OrdKey.t) (f:'a -> 'a) (m:'a t) : 'a t =
     map (fun vid' k' v ->
-      if OrdKey.compare k' k > 0 && OrdVid.compare vid' vid >=0 then f v
+      if OrdKey.compare k' k = 0 && OrdVid.compare vid' vid > 0 then f v
       else v) m
 
   let iter f m = fold (fun vid k v _ -> f vid k v) m ()
