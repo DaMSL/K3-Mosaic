@@ -679,16 +679,15 @@ let nd_rcv_push_trig c s_rhs trig_name =
 List.fold_left
   (fun acc_code (stmt_id, read_map_id) ->
     let rbuf_name = P.buf_of_stmt_map_id c.p stmt_id read_map_id in
-    let rbuf_deref = rbuf_name^"_d" in
-    let tuple_types = P.map_types_with_v_for c.p read_map_id in
-    (* remove value from tuple so we can do a slice *)
-    let tuple_id_t = types_to_ids_types "_tup" tuple_types in
-    let tuple_vars_no_val =
-      ids_to_vars @@ (list_drop_end 1 @@ fst_many tuple_id_t) @ ["_"] in
+    let rbuf_deref = "buf_d" in
+    let map_ds = map_ds_of_id ~global:true ~vid:true c read_map_id in
+    let tup_ds = map_ds_of_id ~global:false ~vid:true c read_map_id in
+    let tup_pat = pat_of_ds ~expr:(mk_var "tuple") tup_ds in
+    let map_pat = pat_of_flat_e ~add_vid:true ~has_vid:true map_ds @@ fst_many tup_pat in
     acc_code @
     [mk_code_sink'
       (rcv_push_name_of_t c trig_name stmt_id read_map_id)
-      (("tuples", wrap_t_calc' tuple_types)::
+      (("tuples", tup_ds.t)::
         args_of_t_with_v c trig_name)
       [] @@ (* locals *)
       (* save the tuples *)
@@ -699,15 +698,13 @@ List.fold_left
           mk_tuple @@ args_of_t_as_vars_with_v c trig_name
         ;
          mk_iter
-          (mk_lambda'
-            ["tuple", wrap_ttuple tuple_types] @@
-            (* be very careful with bind placement *)
+          (mk_lambda' ["tuple", wrap_ttuple @@ snd_many tup_ds.e] @@
+            (* be careful with bind placement *)
             mk_bind (mk_var rbuf_name) rbuf_deref @@
-            mk_let (fst_many tuple_id_t) (mk_var "tuple") @@
             mk_case_sn
-              (mk_peek @@ mk_slice' rbuf_deref tuple_vars_no_val) "vals"
-              (mk_update rbuf_deref [mk_var "vals"] [mk_var "tuple"]) @@
-              mk_insert rbuf_deref [mk_var "tuple"]) @@
+              (mk_peek @@ mk_slice' rbuf_deref @@ unknown_val map_pat) "vals"
+              (mk_update rbuf_deref [mk_var "vals"] map_pat) @@
+              mk_insert rbuf_deref map_pat) @@
           mk_var "tuples" ;
          (* update and check statment counters to see if we should send a do_complete *)
          mk_if

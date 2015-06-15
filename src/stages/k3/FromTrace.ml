@@ -296,7 +296,7 @@ let update_maps maps events =
 
 (* dump a map into a string *)
 let dump_map ~is_dist mapname m =
-  let wrap = if is_dist then K3Dist.wrap_string_map else M3ToK3.wrap_string_map in
+  let wrap = M3ToK3.wrap_string_map in
   match m with
   | SingletonMap m -> wrap @@ SingletonMap.val_s m
   | OutputMap m    ->

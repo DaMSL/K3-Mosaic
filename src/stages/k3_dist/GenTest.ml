@@ -6,6 +6,7 @@ module P = ProgInfo
 module D = K3Dist
 
 let map_latest_val_code mt p map_id =
+  let c = {D.default_config with p} in
   let map_ids_types_vid = P.map_ids_types_with_v_for p map_id in
   let map_ids_types = P.map_ids_types_for p map_id in
   let map_ids = fst_many map_ids_types in
@@ -45,7 +46,8 @@ let map_latest_val_code mt p map_id =
         (mk_agg
           inner_assoc
           (mk_tuple [mk_var D.g_min_vid.id; mk_empty set_type]) @@
-          mk_var mapn_deref) @@
+          D.calc_of_map_t c ~keep_vid:true map_id @@
+            mk_var mapn_deref) @@
         mk_var project
     else
       mk_flatten @@ mk_map
@@ -60,7 +62,8 @@ let map_latest_val_code mt p map_id =
           (* find the highest vid *)
           inner_assoc
           (mk_tuple [mk_var D.g_min_vid.id; mk_empty set_type]) @@
-          mk_var mapn_deref
+          D.calc_of_map_t c ~keep_vid:true map_id @@
+            mk_var mapn_deref
   in code, mk_empty set_type
 
 (* code for every map *)

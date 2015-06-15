@@ -516,7 +516,6 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
           let tcol', told, tnew = bind 0, bind 1, bind 2 in
           let tcol, telem =
             try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') in
-          check_vmap_pat tcol telem told;
           check_vmap_pat tcol telem tnew;
           t_unit
 

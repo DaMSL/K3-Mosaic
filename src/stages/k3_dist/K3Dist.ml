@@ -83,6 +83,17 @@ type config = {
   agenda_map : mapping_t;
 }
 
+let default_config = {
+  p = [], [], [];
+  shuffle_meta = [];
+  map_type = MapVMap;
+  gen_deletes = true;
+  gen_correctives = true;
+  corr_maps = [], [];
+  stream_file = "";
+  agenda_map = [], StrMap.empty;
+}
+
 (* what the generic type of the global maps is *)
 let wrap_t_of_map = function
   | MapVMap -> wrap_tvmap
@@ -139,9 +150,10 @@ let make_map_decl c name map_id =
   map_ds_of_id ~name ~vid:true ~global:true c map_id
 
 (* turn a flat pattern into a potentially deep pattern *)
-let pat_of_flat wrap_tup vid_fn ds flat =
+let pat_of_flat ~has_vid wrap_tup vid_fn ds flat =
   if ds.ee = [] then flat
   else
+    let flat = if has_vid then tl flat else flat in
     let l_flat = List.length flat in
     let l_ee = list_sum List.length ds.ee in
     if l_flat <> l_ee then failwith @@
@@ -150,13 +162,17 @@ let pat_of_flat wrap_tup vid_fn ds flat =
     let clumped = clump lengths flat in
     vid_fn @@ List.map wrap_tup clumped
 
-let pat_of_flat_e ?(vid_nm="vid") ~add_vid ds flat =
-  let vid_fn l = if add_vid then mk_var vid_nm :: l else l in
-  pat_of_flat mk_tuple vid_fn ds flat
+let pat_of_flat_e ?(vid_nm="vid") ~add_vid ?(has_vid=false) ds flat =
+  let vid_fn l = match add_vid, has_vid with
+    | true, true -> hd flat :: l
+    | true, _    -> mk_var vid_nm :: l
+    | _          -> l
+  in
+  pat_of_flat ~has_vid mk_tuple vid_fn ds flat
 
-let pat_of_flat_t ~add_vid ds flat =
+let pat_of_flat_t ~add_vid ?(has_vid=false) ds flat =
   let vid_fn l = if add_vid then t_vid::l else l in
-  pat_of_flat wrap_ttuple vid_fn ds flat
+  pat_of_flat ~has_vid wrap_ttuple vid_fn ds flat
 
 (* create a list of access expressions, types even for deep data structures *)
 (* we can either assume that we're in a loop named after ds.e or work off of
@@ -166,8 +182,8 @@ let pat_of_ds ?(flatten=false) ?(vid_nm="vid") ?expr ?(drop_vid=false) ds =
     let e = insert_index_fst ds.e in
     filter_map (fun (i, (x,y)) -> match x, expr with
       | "vid", _ when drop_vid -> None
+      | _, Some e              -> Some(mk_subscript (i+1) e, y)
       | "vid", _               -> Some(mk_var vid_nm, y)
-      | _, Some e              -> Some(mk_subscript i e, y)
       | _, _                   -> Some(mk_var x, y))
       e
   else
@@ -213,7 +229,7 @@ let new_val' l x = drop_val' l @ [x]
 let new_vid' s l = (mk_var s) :: drop_vid' l
 
 (* convert a global map to a bag type for calculation *)
-let calc_of_map_t c ?(vid_nm="vid") ~keep_vid map_id col =
+let calc_of_map_t c ~keep_vid map_id col =
   let map_ds  = map_ds_of_id ~global:true ~vid:false c map_id in
   let calc_ds = map_ds_of_id ~global:false ~vid:keep_vid c map_id in
   let map_pat = pat_of_ds ~drop_vid:true map_ds in
@@ -505,7 +521,7 @@ let nd_add_delta_to_buf_nm c map_id =
  *)
 let map_latest_vid_vals ?(vid_nm="vid") c slice_col m_pat map_id ~keep_vid : expr_t =
   let map_ds = map_ds_of_id ~vid:true ~global:true c map_id in
-  let convert col = calc_of_map_t c ~vid_nm ~keep_vid map_id col in
+  let convert col = calc_of_map_t c ~keep_vid map_id col in
   let pat = match m_pat with
     | Some pat -> pat_of_flat_e map_ds ~add_vid:false pat
     | None     -> List.map (const mk_cunknown) map_ds.e
