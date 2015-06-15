@@ -81,10 +81,10 @@ let typecheck e =
 let light_type c e =
   try
      T.deduce_expr_type ~override:false c.trig_env c.env e
-  with T.TypeError (uuid, name, err) ->
+  with T.TypeError (uuid, name, err) as exc ->
     prerr_string @@ Printf.sprintf "Typechecker Error @%d: %s\n%s\n\n%s" uuid name
       (K3TypeError.string_of_error err) (K3PrintSyntax.string_of_expr ~uuid_highlight:uuid e);
-    exit 1
+    raise exc
 
 (* Get a binding id from a number *)
 let id_of_num i = Printf.sprintf "b%d" i
