@@ -880,7 +880,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
       ~arg_info:[ANonLambda,OutRec; ANonLambda,OutRec]
 
   | UpdateSuffix -> let col, key, lambda = U.decompose_update_suffix expr in
-    begin match U.unwrap_tuple key with
+    begin match U.decompose_tuple key with
     | vid::key ->
         lps col <| apply_method_nocol c ~name:"update_suffix"
         ~args:[vid; light_type c @@ KH.mk_tuple key; lambda]
