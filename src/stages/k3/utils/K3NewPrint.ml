@@ -312,6 +312,9 @@ let maybe_vmap c col pat fun_no fun_yes =
     | _         -> failwith "missing vid in pattern for vmap"
   else fun_no pat
 
+(* check if a collection is a vmap *)
+let is_vmap col = fst @@ KH.unwrap_tcol @@ T.type_of_expr col = TVMap
+
 (* We return the pattern breakdown: a list, and a lambda forming the internal structure *)
 let breakdown_pat pat = match U.tag_of_expr pat with
   | Tuple -> U.decompose_tuple pat, id_fn
@@ -501,6 +504,7 @@ and fold_of_map_ext c expr =
 
 (* convert a slice to a filter function.
  * @frontier: for a vmap, can change to a frontier lookup
+ * NOTE: a direct lookup should be picked up by Peek(Slice(x,_)) matching
  *)
 and filter_of_slice ~frontier c col pat =
   let es, lam_fn = breakdown_pat pat in
@@ -509,7 +513,8 @@ and filter_of_slice ~frontier c col pat =
   let id_t = add_record_ids ts in
   (* find the non-unknown slices *)
   let filter_e = List.filter (not |- is_unknown |- snd) id_e in
-  if null filter_e then lazy_expr c col (* no slice needed *)
+  (* obvious optimization - no slice needed *)
+  if null filter_e && not frontier then lazy_expr c col
   else
     (* adjust filter_e for frontier (remove vid) *)
     let filter_e' = if frontier then tl filter_e else filter_e in
@@ -525,8 +530,10 @@ and filter_of_slice ~frontier c col pat =
         (try do_eq @@ hd filter_e'
          with Invalid_argument _ -> light_type c KH.mk_ctrue)
     in
-    let args = if frontier then [snd @@ hd filter_e; lambda] else [lambda] in
-    apply_method c ~name:"filter" ~col ~args ~arg_info:[ALambda[InRec], Out]
+    let args, arg_info =
+      if frontier then [snd @@ hd filter_e; lambda], [ANonLambda, OutRec; ALambda[InRec], Out]
+      else [lambda], [ALambda[InRec], Out] in
+    apply_method c ~name:"filter" ~col ~args ~arg_info
 
 (* printing expressions *)
 (* argnums: lambda only   -- number of expected arguments *)
@@ -810,8 +817,9 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
         end
 
   | Aggregate -> let lambda, acc, col = U.decompose_aggregate expr in
+    let name = if is_vmap col then "fold_all" else "fold" in
     (* find out if our accumulator is a collection type *)
-    apply_method c ~name:"fold" ~col ~args:[lambda; acc]
+    apply_method c ~name ~col ~args:[lambda; acc]
       ~arg_info:[ALambda [In; InRec], Out; ANonLambda, Out]
 
   | AggregateV -> let lambda, acc, col = U.decompose_aggregatev expr in
@@ -829,32 +837,35 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
       ~prefix_fn:(fun e -> light_type c @@ KH.mk_if e (KH.mk_cint (-1)) @@ KH.mk_cint 1)
 
   | Size -> let col = U.decompose_size expr in
-    let name = if fst @@ KH.unwrap_tcol @@ T.type_of_expr col = TVMap
-      then "total_size" else "size" in
+    let name = if is_vmap col then "total_size" else "size" in
     apply_method c ~name ~col ~args:[light_type c KH.mk_cunit]
       ~arg_info:[ANonLambda, Out]
 
   | Peek -> let col = U.decompose_peek expr in
-    let normal () = lazy_paren @@ apply_method c ~name:"peek" ~col
+    (* normal peek applications *)
+    let name = if is_vmap col then "peek_now" else "peek" in
+    let normal () = lazy_paren @@ apply_method c ~name ~col
       ~args:[light_type c @@ KH.mk_cunit] ~arg_info:[ANonLambda, Out] in
+
     (* to handle the case where we have a full slice over a vmap, we need to look ahead *)
     let tag = U.tag_of_expr col in
     let col_t = fst @@ KH.unwrap_tcol @@ T.type_of_expr col in
+
     (* common pattern for vmap lookups *)
     let handle_slice_vmap decomp_fn name =
       let col', pat = decomp_fn col in
       (* turn pat into a list. drop the value *)
       let pat  = fst @@ breakdown_pat pat in
       let pat' = list_drop_end 1 pat in
-      (* check if we have a specific value *)
+      (* check if we have a specific value rather than an open slice pattern *)
       if List.for_all (not |- is_unknown) pat' then
         apply_method c ~name ~col:col' ~args:[hd pat; KH.mk_tuple (tl pat)]
           ~arg_info:[ANonLambda, Out; ANonLambda, Out]
       else normal ()
     in
     begin match col_t, tag with
-    | TVMap, Slice         -> handle_slice_vmap U.decompose_slice "lookup_precise"
-    | TVMap, SliceFrontier -> handle_slice_vmap U.decompose_slice_frontier "lookup"
+    | TVMap, Slice         -> handle_slice_vmap U.decompose_slice "lookup"
+    | TVMap, SliceFrontier -> handle_slice_vmap U.decompose_slice_frontier "lookup_before"
     | _ -> normal ()
     end
 
