@@ -303,6 +303,15 @@ let rec extract_slice e =
       tup, (KH.mk_let ids bound) |- sub_expr
   | _ -> failwith "extract_slice unhandled expression"
 
+(* for vmaps, we encode many of our functions with just a vid inside a tuple. Extract
+  * this for the API *)
+let maybe_vmap c col pat fun_no fun_yes =
+  let col, _ = KH.unwrap_tcol @@ T.type_of_expr col in
+  match col, U.decompose_tuple pat with
+  | TVMap, vid::rest -> fun_yes vid (light_type c @@ KH.mk_tuple rest)
+  | TVMap, _         -> failwith "missing vid in pattern for vmap"
+  | _                -> fun_no pat
+
 (* We return the pattern breakdown: a list, and a lambda forming the internal structure *)
 let breakdown_pat pat = match U.tag_of_expr pat with
   | Tuple -> U.decompose_tuple pat, id_fn
@@ -644,7 +653,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
       | _, false -> arith_paren_pair "+" (e1, e2)
       | _, true -> arith_paren_pair "or" (e1, e2)
     end
-  | Mult -> let (e1, e2) = U.decompose_mult expr in
+  | Mult -> let e1, e2 = U.decompose_mult expr in
     let is_neg = begin match U.tag_of_expr e1 with
       | Neg -> let e = U.decompose_neg e1 in
         begin match U.tag_of_expr e with
@@ -865,35 +874,52 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
       filter_of_slice ~frontier:false c col pat
 
   | Insert -> let col, x = U.decompose_insert expr in
-    lps col <| apply_method_nocol c ~name:"insert" ~args:[x]
-      ~arg_info:[ANonLambda,OutRec]
+    maybe_vmap c col x
+      (fun x -> lazy_expr c col <| apply_method_nocol c ~name:"insert" ~args:[x]
+          ~arg_info:[ANonLambda,OutRec])
+      (fun vid x -> lazy_expr c col <| apply_method_nocol c ~name:"insert" ~args:[vid;x]
+          ~arg_info:[ANonLambda, OutRec; ANonLambda,OutRec])
   | Delete -> let col, x = U.decompose_delete expr in
-    lps col <| apply_method_nocol c ~name:"erase" ~args:[x]
-      ~arg_info:[ANonLambda,OutRec]
+    maybe_vmap c col x
+      (fun x -> lazy_expr c col <| apply_method_nocol c ~name:"erase" ~args:[x]
+        ~arg_info:[ANonLambda,OutRec])
+      (fun vid x -> lazy_expr c col <| apply_method_nocol c ~name:"erase" ~args:[vid;x]
+        ~arg_info:[ANonLambda,OutRec; ANonLambda,OutRec])
 
   | DeletePrefix -> let col, x = U.decompose_delete_prefix expr in
-    lps col <| apply_method_nocol c ~name:"erase_prefix" ~args:[x]
-      ~arg_info:[ANonLambda,OutRec]
+    maybe_vmap c col x
+      (fun x -> lazy_expr c col <| apply_method_nocol c ~name:"erase_prefix" ~args:[x]
+        ~arg_info:[ANonLambda,OutRec])
+      (fun vid x -> lazy_expr c col <| apply_method_nocol c ~name:"erase_prefix" ~args:[vid;x]
+        ~arg_info:[ANonLambda, OutRec; ANonLambda,OutRec])
 
   | Update -> let col, oldx, newx = U.decompose_update expr in
-    lps col <| apply_method_nocol c ~name:"update" ~args:[oldx;newx]
-      ~arg_info:[ANonLambda,OutRec; ANonLambda,OutRec]
+    maybe_vmap c col newx
+      (fun newx ->
+        lazy_expr c col <| apply_method_nocol c ~name:"update" ~args:[oldx;newx]
+        ~arg_info:[ANonLambda,OutRec; ANonLambda,OutRec])
+      (fun vid newx ->
+        lazy_expr c col <| apply_method_nocol c ~name:"update" ~args:[vid;oldx;newx]
+        ~arg_info:[ANonLambda,OutRec; ANonLambda,OutRec; ANonLambda,OutRec])
 
   | UpdateSuffix -> let col, key, lambda = U.decompose_update_suffix expr in
     begin match U.decompose_tuple key with
     | vid::key ->
-        lps col <| apply_method_nocol c ~name:"update_suffix"
+        lazy_expr c col <| apply_method_nocol c ~name:"update_suffix"
         ~args:[vid; light_type c @@ KH.mk_tuple key; lambda]
         ~arg_info:[ANonLambda,OutRec; ANonLambda,OutRec; ALambda[In;InRec],OutRec]
     | _ -> failwith "UpdateSuffix: bad key"
     end
 
   | UpsertWith -> let col, key, lam_no, lam_yes = U.decompose_upsert_with expr in
-    lps col <| apply_method_nocol  c ~name:"upsert_with" ~args:[key; lam_no; lam_yes]
-      ~arg_info:[ANonLambda,OutRec; ALambda[In],OutRec; ALambda[InRec],OutRec]
+    maybe_vmap c col key
+      (fun key -> lazy_expr c col <| apply_method_nocol  c ~name:"upsert_with" ~args:[key; lam_no; lam_yes]
+        ~arg_info:[ANonLambda,OutRec; ALambda[In],OutRec; ALambda[InRec],OutRec])
+      (fun vid key -> lazy_expr c col <| apply_method_nocol  c ~name:"upsert_with" ~args:[vid; key; lam_no; lam_yes]
+        ~arg_info:[ANonLambda, OutRec; ANonLambda,OutRec; ALambda[In],OutRec; ALambda[InRec],OutRec])
 
   | Assign -> let l, r = U.decompose_assign expr in
-    lps l <| lsp () <| lps "=" <| lsp () <| lazy_expr c r
+    lazy_expr c l <| lsp () <| lps "=" <| lsp () <| lazy_expr c r
 
   | Indirect -> let x = U.decompose_indirect expr in
     lps "ind" <| lsp () <| lazy_expr c x

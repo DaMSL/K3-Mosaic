@@ -351,22 +351,22 @@ let rec lazy_expr c expr =
     wrap_if_var col (lazy_expr c col) <| lazy_brace @@ tuple_no_paren c pat
   | Insert -> let l, r = U.decompose_insert expr in
     lps "insert" <| lazy_paren
-      (lps l <| lps " ," <| lsp () <| lazy_expr c r)
+      (lazy_expr c l <| lps " ," <| lsp () <| lazy_expr c r)
   | UpsertWith -> let col, key, lam_no, lam_yes = U.decompose_upsert_with expr in
     lps "upsert_with" <| lazy_paren
-      (lps col <| lps " ," <| lsp () <| expr_triple (key,lam_no,lam_yes))
+      (lazy_expr c col <| lps " ," <| lsp () <| expr_triple (key,lam_no,lam_yes))
   | Delete -> let l, r = U.decompose_delete expr in
-    lps "delete" <| lazy_paren (lps l <| lps " , " <| lazy_expr c r)
+    lps "delete" <| lazy_paren (lazy_expr c l <| lps " , " <| lazy_expr c r)
   | DeletePrefix -> let l, r = U.decompose_delete_prefix expr in
-    lps "delete_prefix" <| lazy_paren (lps l <| lps " , " <| lazy_expr c r)
+    lps "delete_prefix" <| lazy_paren (lazy_expr c l <| lps " , " <| lazy_expr c r)
   | Update -> let l, o, n = U.decompose_update expr in
-    lps "update" <| lazy_paren (lps l <| lps " , " <| expr_pair (o,n))
+    lps "update" <| lazy_paren (lazy_expr c l <| lps " , " <| expr_pair (o,n))
   | UpdateSuffix -> let col, key, lam = U.decompose_update_suffix expr in
-    lps "update_suffix" <| lazy_paren (lps col <| lps " , " <| expr_pair (key, lam))
+    lps "update_suffix" <| lazy_paren (lazy_expr c col <| lps " , " <| expr_pair (key, lam))
   | Indirect -> let x = U.decompose_indirect expr in
     lps "ind" <| lsp () <| paren_l x @@ lazy_expr c x
   | Assign -> let l, r = U.decompose_assign expr in
-    lps l <| lps " <- " <| lazy_expr c r
+    lazy_expr c l <| lps " <- " <| lazy_expr c r
   | BindAs _ -> let l, id, r = U.decompose_bind expr in
     wrap_indent (lps "bind" <| lsp () <| lazy_expr c l <| lsp () <| lps "as" <| lsp () <| lps id) <|
       lsp () <| lps "in" <| lsp () <| lazy_expr c r

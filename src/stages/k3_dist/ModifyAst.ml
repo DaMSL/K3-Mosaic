@@ -185,7 +185,7 @@ let modify_dist (c:config) ast stmt =
     (* a lambda simply passes through a message *)
     | Lambda _ -> get_msg 0, e
     | Insert -> let col, elem = U.decompose_insert e in
-        NopMsg, mk_insert col @@ modify_tuple elem
+        NopMsg, mk_insert (U.decompose_var col) @@ modify_tuple elem
 
     (* deletes need to be removed, since we have versioning ie. we don't delete
      * anything *)
@@ -300,6 +300,7 @@ let delta_action c ast stmt after_fn =
       if acc <> [] then acc else
       try
         let id, y = U.decompose_insert x in
+        let id = U.decompose_var id in
         if id <> lmap_name then acc else
         vars_to_ids @@ U.decompose_tuple y
       with Failure _ -> acc in
