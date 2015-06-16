@@ -540,6 +540,7 @@ and filter_of_slice ~frontier c col pat =
 (* prefix_fn: lambda only -- modify the lambda with a prefix *)
 (* expr_info: additional info about the expression in the form of an arg_info structure *)
 and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
+
   let expr_pair ?(sep=lps "," <| lsp ()) ?(wl=id_fn) ?(wr=id_fn) (e1, e2) =
     wl(lazy_expr c e1) <| sep <| wr(lazy_expr c e2) in
   (* handle parentheses:
@@ -624,7 +625,17 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
     (* Singletons are sometimes typed with unknowns (if read from a file) *)
     let e = U.decompose_singleton expr in
     let t = typecheck expr in
-    lazy_collection_vt c t @@ lazy_expr c e
+    (* for vmaps, we need to convert to a sequence with empty *)
+    if is_vmap expr then
+      let e' =
+        let open KH in
+        mk_let ["x"] (mk_empty t) @@
+          mk_block [
+            mk_insert "x" [e];
+            mk_var "x" ] in
+      lazy_expr c @@ light_type c e'
+    else
+      lazy_collection_vt c t @@ lazy_expr c e
   | Combine ->
     let rec assemble_list c e =  (* print out in list format *)
       let l, r = U.decompose_combine e in
@@ -640,15 +651,18 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
           lazy_expr c l2
         | _ -> error () (* type error *)
       end in
-    let (e1, e2) = U.decompose_combine expr in
+    let e1, e2 = U.decompose_combine expr in
     (* wrap the left side of the combine if it's needed *)
+    (* for vmaps, we can't use sugared syntax. Must have ugly expressions *)
     begin match U.tag_of_expr e1, U.tag_of_expr e2 with
-      | Singleton vt, Combine | Singleton vt, Singleton _
-      | Singleton vt, Empty _ ->
-        let t = T.type_of_expr expr in
-        lazy_collection_vt c t @@ assemble_list c expr
+      | Singleton vt, Combine
+      | Singleton vt, Singleton _
+      | Singleton vt, Empty _ when not @@ is_vmap e1 && not @@ is_vmap e2 ->
+          let t = T.type_of_expr expr in
+          lazy_collection_vt c t @@ assemble_list c expr
       | _ -> apply_method c ~name:"combine" ~col:e1 ~args:[e2] ~arg_info:[ANonLambda, Out]
     end
+
   | Range ct -> let st, str, num = U.decompose_range expr in
     (* newk3 range only has the last number *)
     let range_type = KH.canonical @@ TFunction(KH.t_int, KH.wrap_tlist KH.t_int) in
@@ -1077,6 +1091,7 @@ let string_of_dist_program ?(file="default.txt") ?map_to_fold (p, envs) =
   let p' = filter_incompatible p in
   "include \"Core/Builtins.k3\"\n"^
   "include \"Annotation/Map.k3\"\n"^
+  "include \"Annotation/Maps/VMap.k3\"\n"^
   "include \"Annotation/Set.k3\"\n"^
   "include \"Annotation/Seq.k3\"\n"^
   "declare my_peers : collection { i:address } @ {Collection} =\n"^
