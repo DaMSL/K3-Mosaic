@@ -307,10 +307,10 @@ let rec extract_slice e =
   * this for the API *)
 let maybe_vmap c col pat fun_no fun_yes =
   let col, _ = KH.unwrap_tcol @@ T.type_of_expr col in
-  match col, U.decompose_tuple pat with
-  | TVMap, vid::rest -> fun_yes vid (light_type c @@ KH.mk_tuple rest)
-  | TVMap, _         -> failwith "missing vid in pattern for vmap"
-  | _                -> fun_no pat
+  if col = TVMap then match U.decompose_tuple pat with
+    | vid::rest -> fun_yes vid (light_type c @@ KH.mk_tuple rest)
+    | _         -> failwith "missing vid in pattern for vmap"
+  else fun_no pat
 
 (* We return the pattern breakdown: a list, and a lambda forming the internal structure *)
 let breakdown_pat pat = match U.tag_of_expr pat with
