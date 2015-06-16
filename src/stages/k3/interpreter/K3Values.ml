@@ -354,17 +354,12 @@ let find_inequality a b =
     Some(ValueComp.get_counter ())
   else None
 
-(* vmaps need to remove unit key and keep the value *)
-let remove_unit k v = match k with
-  | VUnit -> v
-  | _     -> VTuple[k;v]
-
 let v_peek err_fn c = match c with
   | VSet m  -> ValueSet.peek m
   | VBag m  -> ValueBag.peek m
   | VList m -> IList.peek m
   | VMap m  -> maybe None (some |- encode_tuple)  @@ ValueMap.peek m
-  | VVMap m -> maybe None (fun (_,k,v) -> some @@ remove_unit k v) @@ ValueVMap.peek m
+  | VVMap m -> maybe None (fun (_,k,v) -> some @@ VTuple[k;v]) @@ ValueVMap.peek m
   | v -> err_fn "v_peek" @@ Printf.sprintf "not a collection: %s" @@ string_of_value v
 
 (* for a map structure *)
@@ -447,11 +442,11 @@ let v_fold err_fn f acc = function
   | VBag m      -> ValueBag.fold f acc m
   | VList m     -> IList.fold f acc m
   | VMap m      -> ValueMap.fold (fun k v acc -> f acc @@ encode_tuple (k,v)) m acc
-  | VVMap m     -> ValueVMap.fold (fun _ k v acc -> f acc @@ remove_unit k v) m acc
+  | VVMap m     -> ValueVMap.fold (fun _ k v acc -> f acc @@ VTuple[k;v]) m acc
   | v -> err_fn "v_fold" @@ Printf.sprintf "not a collection: %s" @@ string_of_value v
 
 let v_foldv err_fn f acc = function
-  | VVMap m     -> ValueVMap.fold (fun vid k v acc -> f acc vid @@ remove_unit k v) m acc
+  | VVMap m     -> ValueVMap.fold (fun vid k v acc -> f acc vid @@ VTuple[k;v]) m acc
   | v -> err_fn "v_foldv" @@ Printf.sprintf "not a supported collection: %s" @@ string_of_value v
 
 let v_iter err_fn f = function
@@ -459,7 +454,7 @@ let v_iter err_fn f = function
   | VBag m      -> ValueBag.iter f m
   | VList m     -> IList.iter f m
   | VMap m      -> ValueMap.iter (fun k v -> f @@ encode_tuple (k,v)) m
-  | VVMap m     -> ValueVMap.iter (fun _ k v -> f @@ remove_unit k v) m
+  | VVMap m     -> ValueVMap.iter (fun _ k v -> f @@ VTuple[k;v]) m
   | v -> err_fn "v_iter" @@ Printf.sprintf "not a collection: %s" @@ string_of_value v
 
 let v_insert err_fn x m = match x, m with
@@ -468,7 +463,6 @@ let v_insert err_fn x m = match x, m with
   | _, VList m             -> VList(IList.insert x m)
   | VTuple[k;v], VMap m    -> VMap(ValueMap.add k v m)
   | VTuple[t;k;v], VVMap m -> VVMap(ValueVMap.add t k v m)
-  | VTuple[t;v], VVMap m   -> VVMap(ValueVMap.add t VUnit v m)
   | v, c                   -> err_fn "v_insert" @@
     Printf.sprintf "invalid input: insert: %s\ninto: %s" (sov v) (sov c)
 
@@ -478,7 +472,6 @@ let v_delete err_fn x m = match x, m with
   | _, VList m              -> VList(IList.delete x m)
   | VTuple [k; v], VMap m   -> VMap(ValueMap.remove k m)
   | VTuple [t;k;_], VVMap m -> VVMap(ValueVMap.remove t k m)
-  | VTuple [t;_], VVMap m   -> VVMap(ValueVMap.remove t VUnit m)
   | v, c                    -> err_fn "v_delete" @@
     Printf.sprintf "invalid input: delete: %s\nfrom: %s" (sov v) (sov c)
 
@@ -488,7 +481,6 @@ let v_update err_fn oldv newv c = match oldv, newv, c with
   | _,_,VList m                           -> VList(IList.update oldv newv m)
   | VTuple[k;v], VTuple[k';v'], VMap m    -> VMap(ValueMap.update k v k' v' m)
   | VTuple[k;v], VTuple[t;k';v'], VVMap m -> VVMap(ValueVMap.update t k v k' v' m)
-  | VTuple[v], VTuple[t;v'], VVMap m      -> VVMap(ValueVMap.update t VUnit v VUnit v' m)
   | v,v',c -> err_fn "v_update" @@ Printf.sprintf
     "invalid input: update: %s\nfrom: %s\nin: %s" (sov v) (sov v') (sov c)
 
@@ -501,17 +493,14 @@ let v_upsert_with err_fn key lam_none lam_some col =
   (* TODO: implement for other types *)
   match key, col with
   | VTuple [t;k;v], VVMap m -> update t k v m
-  | VTuple [t;v], VVMap m           -> update t VUnit v m
   | _ -> failwith "v_upsert_with: unsupported"
 
 let v_update_suffix err_fn key f col = match key, col with
   | VTuple[t;k;_], VVMap m -> VVMap(ValueVMap.update_suffix t k f m)
-  | VTuple[t;_], VVMap m           -> VVMap(ValueVMap.update_suffix t VUnit f m)
   | _ -> failwith "v_update_suffix: only supported on vmap"
 
 let v_delete_prefix err_fn key col = match key, col with
   | VTuple[t;_;_], VVMap m -> VVMap(ValueVMap.remove_prefix t m)
-  | VTuple[t;_],   VVMap m -> VVMap(ValueVMap.remove_prefix t m)
   | _ -> failwith "v_update_suffix: only supported on vmap"
 
 let v_empty err_fn ?(no_map=false) ?(no_multimap=false) = function
@@ -544,12 +533,11 @@ let v_size err_fn = function
   | _           -> err_fn "vsize" "not a collection"
 
 let v_singleton err_fn elem c = match elem, c with
-  | _,TSet                       -> VSet(ValueSet.singleton elem)
-  | _,TBag                       -> VBag(ValueBag.singleton elem)
-  | _,TList                      -> VList(IList.singleton elem)
-  | VTuple[k;v], TMap            -> VMap(ValueMap.singleton k v)
+  | _,TSet               -> VSet(ValueSet.singleton elem)
+  | _,TBag               -> VBag(ValueBag.singleton elem)
+  | _,TList              -> VList(IList.singleton elem)
+  | VTuple[k;v], TMap    -> VMap(ValueMap.singleton k v)
   | VTuple[t;k;v], TVMap -> VVMap(ValueVMap.singleton t k v)
-  | VTuple[t;v], TVMap           -> VVMap(ValueVMap.singleton t VUnit v)
   | _ -> err_fn "v_singleton" "not a collection"
 
 (* for v_slice *)
@@ -584,11 +572,6 @@ let v_slice_frontier err_fn pat m = match m, pat with
         VVMap(
           ValueVMap.filter (fun _ _ v -> match_pattern pat v) @@
             ValueVMap.frontier_slice t m)
-
-  | VVMap m, VTuple[t;_] ->
-      begin try
-        VVMap(ValueVMap.frontier_point t VUnit m)
-      with Not_found -> VVMap(ValueVMap.empty) end
 
   | _ -> err_fn "v_slice_frontier" "bad input"
 

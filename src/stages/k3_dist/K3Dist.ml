@@ -109,7 +109,12 @@ let wrap_t_calc' = wrap_tbag'
 (* split a map's types into key, value. For vmaps, remove the vid *)
 let map_t_split' ts = list_split (-1) ts
 
-let read_e ~vid ~global e = if vid && not global then ("vid", t_vid)::e else e
+let read_e ~vid ~global e =
+  if vid && not global then ("vid", t_vid)::e
+  else if global && List.length e = 1 then
+      (* add a unit key for the case of no key *)
+      ("_", t_unit)::e
+  else e
 
 let ds_e ds = read_e ~vid:ds.vid ~global:ds.global ds.e
 
@@ -170,7 +175,7 @@ let make_map_decl c name map_id =
   map_ds_of_id ~name ~vid:true ~global:true c map_id
 
 (* turn a flat pattern into a potentially deep pattern *)
-let pat_of_flat typ ~has_vid wrap_tup vid_fn ds flat =
+let pat_of_flat typ ~has_vid wrap_tup vid_fn unit_pat unit_ds ds flat =
   if ds.ee = [] then flat
   else
     let flat = if has_vid then tl flat else flat in
@@ -179,7 +184,11 @@ let pat_of_flat typ ~has_vid wrap_tup vid_fn ds flat =
     if l_flat <> l_ee then failwith @@
       Printf.sprintf "%s: flat[%d], ee[%d], has_vid[%b]. Length mismatch for map %s. ds=%s"
         typ l_flat l_ee has_vid ds.id (string_of_ds ds);
-    let lengths = List.map List.length ds.ee in
+    let flat, ds_ee =
+      (* add unit for pure value maps *)
+      if l_ee = 1 && ds.global then unit_pat :: flat, [unit_ds]::ds.ee
+      else flat, ds.ee in
+    let lengths = List.map List.length ds_ee in
     let clumped = clump lengths flat in
     vid_fn @@ List.map wrap_tup clumped
 
@@ -190,12 +199,12 @@ let pat_of_flat_e ?(vid_nm="vid") ~add_vid ?(has_vid=false) ds flat =
     | _          -> l
   in
   try
-    pat_of_flat "e" ~has_vid mk_tuple vid_fn ds flat
+    pat_of_flat "e" ~has_vid mk_tuple vid_fn mk_cunit ("_", t_unit) ds flat
   with Failure s -> raise @@ Failure(s^", "^string_of_pat_e flat)
 
 let pat_of_flat_t ~add_vid ?(has_vid=false) ds flat =
   let vid_fn l = if add_vid then t_vid::l else l in
-  pat_of_flat "t" ~has_vid wrap_ttuple vid_fn ds flat
+  pat_of_flat "t" ~has_vid wrap_ttuple vid_fn t_unit ("_", t_unit) ds flat
 
 (* create a list of access expressions, types even for deep data structures *)
 (* we can either assume that we're in a loop named after ds.e or work off of
@@ -208,7 +217,10 @@ let pat_of_ds ?(flatten=false) ?(vid_nm="vid") ?expr ?(drop_vid=false) ds =
   if List.length ds.e = 1 then
   (* value but no key *)
     match expr with
+    | None when ds.global && not flatten -> add_vid [mk_cunit, t_unit; first mk_var @@ hd ds.e]
     | None   -> add_vid [first mk_var @@ hd ds.e]
+    | Some x when ds.global && flatten -> add_vid [mk_subscript 2 x, snd @@ hd @@ ds.e]
+    | Some x when ds.global -> add_vid [mk_cunit, t_unit; mk_subscript 2 x, snd @@ hd @@ ds.e]
     | Some x -> add_vid [x, snd @@ hd @@ ds.e]
   else if ds.ee = [] then
   (* one layered ds *)
