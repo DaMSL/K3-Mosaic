@@ -140,8 +140,7 @@ let do_gc_fns c =
             (mk_assoc_lambda' ["acc", t'] ["val", wrap_ttuple @@ snd_many ds.e] @@
               mk_block [
                 mk_delete "acc" [mk_var "val"];
-                mk_var "acc"
-              ])
+                mk_var "acc"])
             (mk_var id) @@
             mk_var temp) @@
         (* if this is a global map, insert back the frontier *)

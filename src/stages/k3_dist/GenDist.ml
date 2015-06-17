@@ -255,10 +255,10 @@ let nd_add_delta_to_buf c map_id =
                 (mk_assoc_lambda' ["acc2", map_ds_v.t] map_ds_v.e @@
                   (* careful to put bind in proper place *)
                   mk_block [
-                    mk_update "acc"
+                    mk_update "acc2"
                       (ids_to_vars @@ fst_many @@ map_ds_v.e) @@
                       list_replace_i (-1) (mk_add vars_val vars_delta_val) vars_v;
-                    mk_var "acc"])
+                    mk_var "acc2"])
                 (mk_var "acc") @@
                 mk_var "filtered")
              (mk_var "tmap_deref2") @@
