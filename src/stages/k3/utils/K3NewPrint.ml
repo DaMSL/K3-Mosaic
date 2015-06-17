@@ -990,7 +990,6 @@ let string_of_dist_program ?(file="default.txt") ?map_to_fold (p, envs) =
   let p' = filter_incompatible p in
   "include \"Core/Builtins.k3\"\n"^
   "include \"Annotation/Map.k3\"\n"^
-  "include \"Annotation/VMap.k3\"\n"^
   "include \"Annotation/Set.k3\"\n"^
   "include \"Annotation/Seq.k3\"\n\n"^
   "declare my_peers : collection { i:address } @ {Collection} =\n"^
