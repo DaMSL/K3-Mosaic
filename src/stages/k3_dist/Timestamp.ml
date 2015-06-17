@@ -59,8 +59,7 @@ let sw_rcv_token_trig sw_check_done =
   mk_if (mk_gt (mk_var sw_need_vid_ctr.id) @@ mk_cint 0)
     (* add to the vid we got the number of needed vids *)
     (mk_let ["next_vid"]
-      (mk_tuple [mk_fst @@ mk_var "vid";
-                  (mk_add (mk_snd @@ mk_var "vid") @@ mk_var sw_need_vid_ctr.id)]) @@
+      (mk_vid_add (mk_var "vid") @@ mk_var sw_need_vid_ctr.id) @@
       mk_block [
         (* send on the token *)
         mk_send sw_rcv_token_nm (mk_var sw_next_switch_addr.id) [mk_var "next_vid"];

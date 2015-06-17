@@ -297,9 +297,19 @@ let t_vid_list = wrap_tlist t_vid
 
 (* global declaration of default vid to put into every map *)
 let g_init_vid =
-                      (* epoch=0, counter=0 *)
-  let init = mk_tuple [mk_cint 0; mk_cint 0] in
+                      (* counter=0 *)
+  let init = mk_tuple [mk_cint 0] in
   create_ds "g_init_vid" t_vid ~init
+
+let g_min_vid = create_ds "g_min_vid" t_vid ~init:min_vid_k3
+let g_max_vid =
+  let init =
+    let max = mk_apply' "get_max_int" mk_cunit in
+    mk_tuple [max] in
+  create_ds "g_max_vid" t_vid ~init
+let g_start_vid = create_ds "g_start_vid" t_vid ~init:start_vid_k3
+
+let mk_vid_add curr add = mk_add curr add
 
 (* trigger argument manipulation convenience functions *)
 let arg_types_of_t c trig_nm = snd_many @@ P.args_of_t c.p trig_nm
@@ -316,14 +326,6 @@ let args_of_t_as_vars_with_v ?(vid="vid") c trig_nm =
 let num_peers =
   let init = mk_size_slow G.peers in
   create_ds "num_peers" (mut t_int) ~init
-
-let g_min_vid = create_ds "g_min_vid" t_vid ~init:min_vid_k3
-let g_max_vid =
-  let init =
-    let max = mk_apply' "get_max_int" mk_cunit in
-    mk_tuple [max; max] in
-  create_ds "g_max_vid" t_vid ~init
-let g_start_vid = create_ds "g_start_vid" t_vid ~init:start_vid_k3
 
 (* specifies the job of a node: master/switch/node *)
 let job_master_v = 0

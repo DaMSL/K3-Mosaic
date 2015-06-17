@@ -497,16 +497,16 @@ let t_map_id = t_int
 
 (* --- vids --- *)
               (* epoch, count, switch hash *)
-let vid_types = [t_int; t_int]
-let vid_id_t = ["epoch", t_int; "count", t_int]
+let vid_types = [t_int]
+let vid_id_t = ["vid", t_int]
 let t_vid = wrap_ttuple vid_types
 
 (* increment a vid. assume "vid" *)
 let vid_increment ?(vid_expr=mk_var "vid") () =
-  mk_tuple [mk_subscript 1 vid_expr; mk_add (mk_subscript 2 vid_expr) (mk_cint 1)]
+  mk_tuple [mk_add vid_expr (mk_cint 1)]
 
-let min_vid_k3 = mk_tuple [mk_cint 0; mk_cint 0]
-let start_vid_k3 = mk_tuple [mk_cint 0; mk_cint 1]
+let min_vid_k3 = mk_tuple [mk_cint 0]
+let start_vid_k3 = mk_tuple [mk_cint 1]
 
 (* id function for maps *)
 let mk_id tuple_types =
