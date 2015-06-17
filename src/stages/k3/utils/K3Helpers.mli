@@ -298,6 +298,8 @@ val mk_peek_or_error : string -> expr_t -> expr_t
 val mk_lookup : expr_t -> expr_t list -> expr_t
 val mk_lookup' : id_t -> expr_t list -> expr_t
 
+val default_value_of_t : type_t -> expr_t
+
 (* data structure record to standardize manipulation *)
 type data_struct = { id: string;
                      e: (string * type_t) list;

@@ -869,23 +869,29 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
 
     (* to handle the case where we have a full slice over a vmap, we need to look ahead *)
     let tag = U.tag_of_expr col in
-    let col_t = fst @@ KH.unwrap_tcol @@ T.type_of_expr col in
+    let col_t, elem_t = KH.unwrap_tcol @@ T.type_of_expr col in
 
     (* common pattern for vmap lookups *)
-    let handle_slice_vmap decomp_fn name =
+    let handle_vmap_lookup decomp_fn name =
       let col', pat = decomp_fn col in
       (* turn pat into a list. drop the value *)
       let pat  = fst @@ breakdown_pat pat in
-      let pat' = list_drop_end 1 pat in
+      let pat2 = list_drop_end 1 pat in
       (* check if we have a specific value rather than an open slice pattern *)
-      if List.for_all (not |- is_unknown) pat' then
-        apply_method c ~name ~col:col' ~args:[hd pat; KH.mk_tuple (tl pat)]
-          ~arg_info:[ANonLambda, Out; ANonLambda, Out]
+      if List.for_all (not |- is_unknown) pat2 then
+        (* create a default value for the last member of the slice tuple since k3new can't
+         * handle unknowns *)
+        let tval = list_last @@ KH.unwrap_ttuple elem_t in
+        let pat3 = pat2 @ [KH.default_value_of_t tval] in
+        apply_method c ~name ~col:col'
+          ~args:[hd pat3; light_type c @@ KH.mk_tuple @@ tl pat3]
+          ~arg_info:[vid_out_arg; ANonLambda, Out]
       else normal ()
     in
+    (* TODO: this can be expanded to regular maps as well *)
     begin match col_t, tag with
-    | TVMap, Slice         -> handle_slice_vmap U.decompose_slice "lookup"
-    | TVMap, SliceFrontier -> handle_slice_vmap U.decompose_slice_frontier "lookup_before"
+    | TVMap, Slice         -> handle_vmap_lookup U.decompose_slice "lookup"
+    | TVMap, SliceFrontier -> handle_vmap_lookup U.decompose_slice_frontier "lookup_before"
     | _ -> normal ()
     end
 

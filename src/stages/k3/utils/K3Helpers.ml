@@ -555,6 +555,20 @@ let mk_peek_or_error s e = mk_case_ns (mk_peek e) "x"
 let mk_lookup col pat = mk_peek @@ mk_slice col pat
 let mk_lookup' col pat = mk_peek @@ mk_slice' col pat
 
+let rec default_value_of_t t = match t.typ with
+  | TUnit         -> mk_cunit
+  | TBool         -> mk_cfalse
+  | TInt          -> mk_cint 0
+  | TDate         -> mk_cint 0
+  | TFloat        -> mk_cfloat 0.
+  | TString       -> mk_cstring ""
+  | TMaybe t      -> mk_nothing t
+  | TTuple l      -> mk_tuple @@ List.map default_value_of_t l
+  | TCollection _ -> mk_empty t
+  | TAddress      -> mk_caddress ("0.0.0.0", 1)
+  | TIndirect t   -> mk_ind @@ default_value_of_t t
+  | _ -> invalid_arg "no default value for type"
+
 (* data structure record to standardize manipulation *)
 type data_struct = { id: string;
                      e: (string * type_t) list;
@@ -573,12 +587,7 @@ type data_struct = { id: string;
 let create_ds ?(e=[]) ?(ee=[]) ?init ?d_init ?map_id ?(global=false) ?(vid=false) id t =
   let init =
     if is_some init then init
-    else match t.typ with
-      | TBool   -> some @@ mk_cfalse
-      | TInt    -> some @@ mk_cint 0
-      | TFloat  -> some @@ mk_cfloat 0.
-      | TString -> some @@ mk_cstring ""
-      | _       -> None
+    else some @@ default_value_of_t t
   in
   {id; t; e; ee; init; d_init; map_id; global; vid}
 
