@@ -77,7 +77,7 @@ let wrap_tind_mut t = mut @@ wrap_tind t
 let wrap_tmaybe t = canonical @@ TMaybe t
 let wrap_tmaybes ts = List.map wrap_tmaybe ts
 
-let wrap_tfunc tin tout = canonical @@ TFunction(tin, tout)
+let wrap_tfunc tin tout = canonical @@ TFunction(tin, immut tout)
 
 (* what the generic type of the global maps is *)
 let wrap_t_of_map  = mut |- wrap_tset

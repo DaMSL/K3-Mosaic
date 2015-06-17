@@ -361,7 +361,7 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
 
       | Lambda t_a ->
           let t_r = bind 0 in
-          canonical @@ TFunction(type_of_arg t_a, t_r)
+          canonical @@ TFunction(type_of_arg t_a, immut t_r)
 
       | Apply ->
           let t_f, t_a = bind 0, bind 1 in
