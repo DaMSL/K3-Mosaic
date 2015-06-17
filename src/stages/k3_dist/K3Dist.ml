@@ -311,6 +311,9 @@ let g_start_vid = create_ds "g_start_vid" t_vid ~init:start_vid_k3
 
 let mk_vid_add curr add = mk_add curr add
 
+(* whether a vid is a tuple or a non-tuple value *)
+let is_vid_tuple = false
+
 (* trigger argument manipulation convenience functions *)
 let arg_types_of_t c trig_nm = snd_many @@ P.args_of_t c.p trig_nm
 let arg_names_of_t c trig_nm = fst_many @@ P.args_of_t c.p trig_nm

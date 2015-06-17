@@ -353,10 +353,16 @@ let var_translate = List.fold_left (fun acc (x,y) -> StringMap.add x y acc) Stri
    "peers", "my_peers";
    "parse_sql_date", "tpch_date"]
 
+  (* descriptions of how to pass variables. {In,Out}Rec implies that even if we see a non-tuple
+   * value, we should turn it into a record (with an 'i' label). This is necessary because of the
+   * record restriction in newk3, which states that everything in a collection must be a record *)
 type in_record = InRec | In
 type out_record = OutRec | Out
 type arg_info  = ALambda of in_record list | ANonLambda
 type arg_info_l = (arg_info * out_record) list
+
+let vid_out_arg = ANonLambda, if K3Dist.is_vid_tuple then OutRec else Out
+let vid_in_arg  = if K3Dist.is_vid_tuple then InRec else In
 
 let is_unknown c = match U.tag_of_expr c with
   | Const CUnknown -> true
@@ -531,7 +537,7 @@ and filter_of_slice ~frontier c col pat =
          with Invalid_argument _ -> light_type c KH.mk_ctrue)
     in
     let args, arg_info =
-      if frontier then [snd @@ hd filter_e; lambda], [ANonLambda, OutRec; ALambda[InRec], Out]
+      if frontier then [snd @@ hd filter_e; lambda], [vid_out_arg; ALambda[InRec], Out]
       else [lambda], [ALambda[InRec], Out] in
     apply_method c ~name:"filter" ~col ~args ~arg_info
 
@@ -839,7 +845,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
   | AggregateV -> let lambda, acc, col = U.decompose_aggregatev expr in
     (* find out if our accumulator is a collection type *)
     apply_method c ~name:"fold" ~col ~args:[lambda; acc]
-      ~arg_info:[ALambda [In; In; InRec], Out; ANonLambda, Out]
+      ~arg_info:[ALambda [In; vid_in_arg; InRec], Out; ANonLambda, Out]
 
   | GroupByAggregate -> let lam1, lam2, acc, col = U.decompose_gbagg expr in
     (* find out if our accumulator is a collection type *)
@@ -903,20 +909,20 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
       (fun x -> lazy_expr c col <| apply_method_nocol c ~name:"insert" ~args:[x]
           ~arg_info:[ANonLambda,OutRec])
       (fun vid x -> lazy_expr c col <| apply_method_nocol c ~name:"insert" ~args:[vid;x]
-          ~arg_info:[ANonLambda, OutRec; ANonLambda,OutRec])
+          ~arg_info:[vid_out_arg; ANonLambda,OutRec])
   | Delete -> let col, x = U.decompose_delete expr in
     maybe_vmap c col x
       (fun x -> lazy_expr c col <| apply_method_nocol c ~name:"erase" ~args:[x]
         ~arg_info:[ANonLambda,OutRec])
       (fun vid x -> lazy_expr c col <| apply_method_nocol c ~name:"erase" ~args:[vid;x]
-        ~arg_info:[ANonLambda,OutRec; ANonLambda,OutRec])
+        ~arg_info:[vid_out_arg; ANonLambda,OutRec])
 
   | DeletePrefix -> let col, x = U.decompose_delete_prefix expr in
     maybe_vmap c col x
       (fun x -> lazy_expr c col <| apply_method_nocol c ~name:"erase_prefix" ~args:[x]
         ~arg_info:[ANonLambda,OutRec])
       (fun vid x -> lazy_expr c col <| apply_method_nocol c ~name:"erase_prefix" ~args:[vid;x]
-        ~arg_info:[ANonLambda, OutRec; ANonLambda,OutRec])
+        ~arg_info:[vid_out_arg; ANonLambda,OutRec])
 
   | Update -> let col, oldx, newx = U.decompose_update expr in
     maybe_vmap c col newx
@@ -925,14 +931,14 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
         ~arg_info:[ANonLambda,OutRec; ANonLambda,OutRec])
       (fun vid newx ->
         lazy_expr c col <| apply_method_nocol c ~name:"update" ~args:[vid;oldx;newx]
-        ~arg_info:[ANonLambda,OutRec; ANonLambda,OutRec; ANonLambda,OutRec])
+        ~arg_info:[vid_out_arg; ANonLambda,OutRec; ANonLambda,OutRec])
 
   | UpdateSuffix -> let col, key, lambda = U.decompose_update_suffix expr in
     begin match U.decompose_tuple key with
     | vid::key ->
         lazy_expr c col <| apply_method_nocol c ~name:"update_suffix"
         ~args:[vid; light_type c @@ KH.mk_tuple key; lambda]
-        ~arg_info:[ANonLambda,OutRec; ANonLambda,OutRec; ALambda[In;InRec],OutRec]
+        ~arg_info:[vid_out_arg; ANonLambda,OutRec; ALambda[In;InRec],OutRec]
     | _ -> failwith "UpdateSuffix: bad key"
     end
 
@@ -941,7 +947,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
       (fun key -> lazy_expr c col <| apply_method_nocol  c ~name:"upsert_with" ~args:[key; lam_no; lam_yes]
         ~arg_info:[ANonLambda,OutRec; ALambda[In],OutRec; ALambda[InRec],OutRec])
       (fun vid key -> lazy_expr c col <| apply_method_nocol  c ~name:"upsert_with" ~args:[vid; key; lam_no; lam_yes]
-        ~arg_info:[ANonLambda, OutRec; ANonLambda,OutRec; ALambda[In],OutRec; ALambda[InRec],OutRec])
+        ~arg_info:[vid_out_arg; ANonLambda,OutRec; ALambda[In],OutRec; ALambda[InRec],OutRec])
 
   | Assign -> let l, r = U.decompose_assign expr in
     lazy_expr c l <| lsp () <| lps "=" <| lsp () <| lazy_expr c r
