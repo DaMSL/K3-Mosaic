@@ -190,7 +190,7 @@ let nd_add_delta_to_buf c map_id =
   let update_vars = pat @@ mk_var update_value in
   let regular_delta =
     mk_let [lookup_value]
-      (map_latest_vid_vals ~vid_nm:"min_vid" c (mk_var tmap_deref)
+      (map_latest_vid_vals ~vid_nm:"min_vid" c (mk_var "acc")
         (Some(vars_no_val @ [mk_cunknown])) map_id ~keep_vid:true) @@
       mk_let [update_value]
         (* get either 0 to add or the value we read *)
@@ -199,7 +199,7 @@ let nd_add_delta_to_buf c map_id =
             (mk_peek @@ mk_var lookup_value) "val"
             zero @@
             mk_subscript (List.length map_ds_v.e) @@ mk_var "val") @@
-        mk_insert tmap_deref update_vars
+        mk_insert "acc" update_vars
   in
   mk_global_fn (D.nd_add_delta_to_buf_nm c map_id)
     (* corrective: whether this is a corrective delta *)
@@ -207,57 +207,62 @@ let nd_add_delta_to_buf c map_id =
       corrective, t_bool; "min_vid", t_vid;
       delta_tuples, map_ds.t])
     [t_unit] @@
-    mk_block @@
-      [mk_iter  (* loop over values in delta tuples *)
-        (mk_lambda' map_ds.e @@
-          (* careful to put bind in proper place *)
-          mk_bind (mk_var target_map) tmap_deref @@
-          (* this part is just for correctives:
-            * We need to check if there's a value at the particular version id
-            * If so, we must add the value directly *)
-            mk_let [lookup_value]
-              (mk_if
-                (mk_var corrective)
+      mk_bind (mk_var target_map) tmap_deref @@
+        mk_assign tmap_deref @@
+          mk_let ["tmap_deref2"]
+            (mk_agg
+              (mk_assoc_lambda' ["acc", map_ds_v.t] map_ds.e @@
+                (* careful to put bind in proper place *)
+                (* this part is just for correctives:
+                  * We need to check if there's a value at the particular version id
+                  * If so, we must add the value directly *)
+                  mk_block [
+                    mk_let [lookup_value]
+                      (mk_if
+                        (mk_var corrective)
+                        (if c.use_multiindex then
+                          mk_slice_idx' ~idx ~comp:EQ (mk_var "acc") min_vid_pat
+                        else
+                          mk_slice' "acc" @@
+                            list_replace_i (-1) mk_cunknown min_vid_pat) @@
+                        mk_empty map_ds_v.t) @@
+                    mk_case_sn
+                      (mk_peek @@ mk_var lookup_value) "val"
+                      (* then just update the value *)
+                      (mk_let [update_value]
+                        (mk_add (mk_var id_val) @@ mk_subscript (List.length map_ds_v.e) @@ mk_var "val") @@
+                        mk_update "acc" [mk_var "val"] update_vars)
+                      (* else, if it's just a regular delta, read the frontier *)
+                      regular_delta;
+                    mk_var "acc"])
+              (mk_var tmap_deref) @@
+              mk_var delta_tuples) @@
+          (* add to future values *)
+          (* TODO: optimize *)
+          mk_agg
+            (mk_assoc_lambda' ["acc", map_ds_v.t] id_t_delta @@
+              mk_let ["filtered"]
+                (* slice for all values > vid with same key *)
                 (if c.use_multiindex then
-                  mk_slice_idx' ~idx ~comp:EQ (mk_var tmap_deref) min_vid_pat
-                 else
-                  mk_slice' tmap_deref @@
-                    list_replace_i (-1) mk_cunknown min_vid_pat) @@
-                mk_empty map_ds_v.t) @@
-            mk_case_sn
-              (mk_peek @@ mk_var lookup_value) "val"
-              (* then just update the value *)
-              (mk_let [update_value]
-                (mk_add (mk_var id_val) @@ mk_subscript (List.length map_ds_v.e) @@ mk_var "val") @@
-                mk_update tmap_deref [mk_var "val"] update_vars)
-              (* else, if it's just a regular delta, read the frontier *)
-              regular_delta) @@
-        mk_var delta_tuples
-      ;
-      (* add to future values *)
-      (* TODO: optimize *)
-      mk_iter (* loop over values in the delta tuples *)
-        (mk_lambda' id_t_delta @@
-          mk_let ["filtered"]
-          (mk_bind (mk_var target_map) tmap_deref @@
-            (* slice for all values > vid with same key *)
-            if c.use_multiindex then
-              mk_slice_idx' ~idx ~comp:GTA (mk_var tmap_deref) vars_delta_unknown
-            else
-              mk_filter
-                (mk_lambda' map_ds_v.e @@
-                  mk_gt (mk_var "vid") @@ mk_var "min_vid") @@
-                (* slice w/o vid and value *)
-                mk_slice' tmap_deref vars_delta_unknown) @@
-          mk_iter
-            (mk_lambda' map_ds_v.e @@
-              (* careful to put bind in proper place *)
-              mk_bind (mk_var target_map) tmap_deref @@
-                mk_update tmap_deref
-                  (ids_to_vars @@ fst_many @@ map_ds_v.e) @@
-                  list_replace_i (-1) (mk_add vars_val vars_delta_val) vars_v) @@
-            mk_var "filtered") @@
-        mk_var delta_tuples]
+                  mk_slice_idx' ~idx ~comp:GTA (mk_var "acc") vars_delta_unknown
+                else
+                  mk_filter
+                    (mk_lambda' map_ds_v.e @@
+                      mk_gt (mk_var "vid") @@ mk_var "min_vid") @@
+                    (* slice w/o vid and value *)
+                    mk_slice' "acc" vars_delta_unknown) @@
+              mk_agg
+                (mk_assoc_lambda' ["acc2", map_ds_v.t] map_ds_v.e @@
+                  (* careful to put bind in proper place *)
+                  mk_block [
+                    mk_update "acc"
+                      (ids_to_vars @@ fst_many @@ map_ds_v.e) @@
+                      list_replace_i (-1) (mk_add vars_val vars_delta_val) vars_v;
+                    mk_var "acc"])
+                (mk_var "acc") @@
+                mk_var "filtered")
+             (mk_var "tmap_deref2") @@
+            mk_var delta_tuples
 
 (*
  * Return list of corrective statements we need to execute by checking
@@ -665,6 +670,7 @@ let nd_send_push_stmt_map_trig c s_rhs_lhs trig_name =
         (send_push_name_of_t c trig_name stmt_id rhs_map_id)
         (args_of_t_with_v c trig_name)
         [] @@ (* locals *)
+        (* don't convert this to fold b/c we only read *)
         mk_bind (mk_var rhs_map_name) rhsm_deref @@
         mk_block [
           (* save this particular statement execution in the master log
@@ -707,6 +713,7 @@ List.fold_left
     let rbuf_name = P.buf_of_stmt_map_id c.p stmt_id read_map_id in
     let rbuf_deref = rbuf_name^"_d" in
     let tuple_types = P.map_types_with_v_for c.p read_map_id in
+    let rbuf_type = wrap_t_of_map' tuple_types in
     (* remove value from tuple so we can do a slice *)
     let tuple_id_t = types_to_ids_types "_tup" tuple_types in
     let tuple_vars_no_val =
@@ -724,25 +731,30 @@ List.fold_left
         [mk_apply' (nd_log_write_for c trig_name) @@
           mk_tuple @@ args_of_t_as_vars_with_v c trig_name
         ;
-         mk_iter
-          (mk_lambda'
-            ["tuple", wrap_ttuple tuple_types] @@
-            (* be very careful with bind placement *)
-            mk_bind (mk_var rbuf_name) rbuf_deref @@
-            mk_let (fst_many tuple_id_t) (mk_var "tuple") @@
-            mk_case_sn
-              (mk_peek @@ mk_slice' rbuf_deref tuple_vars_no_val) "vals"
-              (mk_update rbuf_deref [mk_var "vals"] [mk_var "tuple"]) @@
-              mk_insert rbuf_deref [mk_var "tuple"]) @@
-          mk_var "tuples" ;
-         (* update and check statment counters to see if we should send a do_complete *)
-         mk_if
-           (mk_apply' nd_check_stmt_cntr_index_nm @@
-             mk_tuple [mk_var "vid"; mk_cint stmt_id; mk_cint @@ -1])
-           (* Send to local do_complete *)
-           (mk_apply' (do_complete_name_of_t trig_name stmt_id) @@
-             mk_tuple @@ args_of_t_as_vars_with_v c trig_name)
-           mk_cunit ] ])
+        mk_bind (mk_var rbuf_name) rbuf_deref @@
+         mk_assign rbuf_deref @@
+          mk_agg
+            (mk_assoc_lambda'
+              ["acc", rbuf_type]
+              ["tuple", wrap_ttuple tuple_types] @@
+              (* be very careful with bind placement *)
+              mk_let (fst_many tuple_id_t) (mk_var "tuple") @@
+                mk_block [
+                  mk_case_sn
+                    (mk_peek @@ mk_slice' "acc" tuple_vars_no_val) "vals"
+                    (mk_update "acc" [mk_var "vals"] [mk_var "tuple"]) @@
+                    mk_insert "acc" [mk_var "tuple"];
+                  mk_var "acc"])
+            (mk_var rbuf_deref) @@
+            mk_var "tuples" ;
+          (* update and check statment counters to see if we should send a do_complete *)
+          mk_if
+            (mk_apply' nd_check_stmt_cntr_index_nm @@
+              mk_tuple [mk_var "vid"; mk_cint stmt_id; mk_cint @@ -1])
+            (* Send to local do_complete *)
+            (mk_apply' (do_complete_name_of_t trig_name stmt_id) @@
+              mk_tuple @@ args_of_t_as_vars_with_v c trig_name)
+            mk_cunit ] ])
   [] s_rhs
 
 (* list of trig, stmt with a map on the rhs that's also on the lhs. These are

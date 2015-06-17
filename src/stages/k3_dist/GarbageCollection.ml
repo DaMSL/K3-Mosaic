@@ -114,35 +114,46 @@ let do_gc_fns c =
     in
     let temp = "temp" in
     let fn_nm = "do_gc_"^ds.id in
+    (* delete any entry with a lower vid *)
     mk_global_fn fn_nm [min_vid, t_vid] [] @@
-      (* delete any entry with a lower or matching vid *)
-      mk_let [temp] (mk_empty t') @@
-      do_bind @@
+      do_bind @@ mk_assign id @@
       (* if we're in a map ds, we need to get the frontier at min_vid *)
       (match ds.map_id with
         | Some map_id ->
             mk_let ["frontier"]
               (map_latest_vid_vals c (mk_var id) None map_id ~keep_vid:true ~vid_nm:min_vid)
         | _ -> id_fn) @@
-      mk_block @@
         (* add < vid to temporary collection *)
-        (mk_iter
-          (mk_lambda' ds.e @@
-              mk_if (mk_lt (mk_var vid) @@ mk_var min_vid)
-                (mk_insert temp @@ ids_to_vars @@ fst_many ds.e) @@
-                mk_cunit) @@
-            mk_var id) ::
-        (* delete values from ds *)
-        (mk_iter
-          (mk_lambda' ["val", wrap_ttuple @@ snd_many ds.e] @@
-            mk_delete id [mk_var "val"]) @@
-          mk_var temp) ::
-        (* if we have a mosaic map, insert back the frontier *)
-        (if ds.map_id <> None then
-          [mk_iter (mk_lambda' ["val", wrap_ttuple @@ snd_many ds.e] @@
-              mk_insert id [mk_var "val"]) @@
-            mk_var "frontier"]
-        else [])
+        mk_let [temp]
+          (mk_agg
+            (mk_assoc_lambda' ["acc", t'] ds.e @@
+              mk_block [
+                mk_if (mk_lt (mk_var vid) @@ mk_var min_vid)
+                  (mk_insert "acc" @@ ids_to_vars @@ fst_many ds.e) @@
+                  mk_cunit;
+                mk_var "acc"])
+            (mk_empty t') @@
+            mk_var id) @@
+        (* delete values from ds using values from temp *)
+        mk_let ["remainder"]
+          (mk_agg
+            (mk_assoc_lambda' ["acc", t'] ["val", wrap_ttuple @@ snd_many ds.e] @@
+              mk_block [
+                mk_delete "acc" [mk_var "val"];
+                mk_var "acc"
+              ])
+            (mk_var id) @@
+            mk_var temp) @@
+        (* if this is a global map, insert back the frontier *)
+        if ds.map_id <> None then
+          mk_agg
+            (mk_assoc_lambda' ["acc", t'] ["val", wrap_ttuple @@ snd_many ds.e] @@
+              mk_block [
+                mk_insert "acc" [mk_var "val"];
+                mk_var "acc"])
+            (mk_var "remainder") @@
+            mk_var "frontier"
+        else mk_var "remainder"
   in
   List.map gc_std @@ ds_to_gc c
 

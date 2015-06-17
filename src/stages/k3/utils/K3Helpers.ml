@@ -80,8 +80,8 @@ let wrap_tmaybes ts = List.map wrap_tmaybe ts
 let wrap_tfunc tin tout = canonical @@ TFunction(tin, tout)
 
 (* what the generic type of the global maps is *)
-let wrap_t_of_map  = wrap_tset
-let wrap_t_of_map' = wrap_tset'
+let wrap_t_of_map  = mut |- wrap_tset
+let wrap_t_of_map' = mut |- wrap_tset'
 
 (* what the generic type of data carried around is *)
 let wrap_t_calc  = wrap_tbag
