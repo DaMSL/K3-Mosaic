@@ -509,21 +509,22 @@ and fold_of_map_ext c expr =
     KH.mk_agg (KH.mk_lambda args' body') (mk_empty t_out) col
 
 (* convert a slice to a filter function.
- * @frontier: for a vmap, can change to a frontier lookup
- * NOTE: a direct lookup should be picked up by Peek(Slice(x,_)) matching
+ * @frontier: For a vmap, change to a frontier lookup
+ *            A vmap cannot ever have a regular slice
+ * NOTE: a precise lookup should be picked up by Peek(Slice(x,_)) matching
  *)
 and filter_of_slice ~frontier c col pat =
   let es, lam_fn = breakdown_pat pat in
-  let ts = List.map T.type_of_expr es in
-  let id_e = add_record_ids es in
+  (* prepare record info *)
+  let vid_e, es' = if frontier then some @@ hd es, tl es else None, es in
+  let ts = List.map T.type_of_expr es' in
+  let id_e = add_record_ids es' in
   let id_t = add_record_ids ts in
   (* find the non-unknown slices *)
   let filter_e = List.filter (not |- is_unknown |- snd) id_e in
   (* obvious optimization - no slice needed *)
   if null filter_e && not frontier then lazy_expr c col
   else
-    (* adjust filter_e for frontier (remove vid) *)
-    let filter_e' = if frontier then tl filter_e else filter_e in
     let do_eq (id, v) = KH.mk_eq (KH.mk_var id) v in
     let lambda = light_type c @@
       KH.mk_lambda' id_t @@
@@ -531,13 +532,13 @@ and filter_of_slice ~frontier c col pat =
         List.fold_right (fun x acc ->
           KH.mk_and acc @@ do_eq x
         )
-        (try tl filter_e'
+        (try tl filter_e
          with Invalid_argument _ -> [])
-        (try do_eq @@ hd filter_e'
+        (try do_eq @@ hd filter_e
          with Invalid_argument _ -> light_type c KH.mk_ctrue)
     in
     let args, arg_info =
-      if frontier then [snd @@ hd filter_e; lambda], [vid_out_arg; ALambda[InRec], Out]
+      if frontier then [unwrap_some vid_e; lambda], [vid_out_arg; ALambda[InRec], Out]
       else [lambda], [ALambda[InRec], Out] in
     apply_method c ~name:"filter" ~col ~args ~arg_info
 
@@ -844,7 +845,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
 
   | AggregateV -> let lambda, acc, col = U.decompose_aggregatev expr in
     (* find out if our accumulator is a collection type *)
-    apply_method c ~name:"fold" ~col ~args:[lambda; acc]
+    apply_method c ~name:"fold_all" ~col ~args:[lambda; acc]
       ~arg_info:[ALambda [In; vid_in_arg; InRec], Out; ANonLambda, Out]
 
   | GroupByAggregate -> let lam1, lam2, acc, col = U.decompose_gbagg expr in
