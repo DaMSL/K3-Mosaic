@@ -945,7 +945,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
     | vid::key ->
         lazy_expr c col <| apply_method_nocol c ~name:"update_suffix"
         ~args:[vid; light_type c @@ KH.mk_tuple key; lambda]
-        ~arg_info:[vid_out_arg; ANonLambda,OutRec; ALambda[In;InRec],OutRec]
+        ~arg_info:[vid_out_arg; ANonLambda,OutRec; ALambda[vid_in_arg;InRec],OutRec]
     | _ -> failwith "UpdateSuffix: bad key"
     end
 

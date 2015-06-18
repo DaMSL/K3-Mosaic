@@ -228,7 +228,7 @@ let nd_add_delta_to_buf c map_id =
           (* VMap supports shortcut manipulation *)
           mk_bind (mk_var target_map) tmap_deref @@
           mk_update_suffix tmap_deref real_delta_pat @@
-            mk_lambda' (ds_e map_real) @@
+            mk_lambda2' ["v", t_vid] (ds_e map_real) @@
               mk_tuple @@
                 new_val (drop_vid' real_pat) @@
                   mk_add (get_val' real_pat) @@

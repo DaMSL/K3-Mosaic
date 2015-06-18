@@ -530,7 +530,7 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
           if not (tcol = TVMap) then
             t_erroru (TMismatch(tcol', wrap_tvmap telem, "collection type")) else
           check_vmap_pat tcol telem tnew;
-          let tlam_update' = wrap_tfunc telem telem in
+          let tlam_update' = wrap_tfunc (wrap_ttuple @@ t_vid :: [telem]) telem in
           if not (tlam_update === tlam_update') then
             t_erroru (TMismatch(tlam_update, tlam_update', "update lambda")) else
           t_unit
