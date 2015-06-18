@@ -384,6 +384,8 @@ let ids_to_vars = List.map (function
   | "_" -> mk_cunknown
   | x   -> mk_var x)
 
+let ids_to_vars' l = ids_to_vars @@ fst_many l
+
 let vars_to_ids = List.map (fun x -> match U.tag_of_expr x with
   | Const(CUnknown) -> "_"
   | Var id          -> id
