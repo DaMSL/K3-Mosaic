@@ -557,20 +557,21 @@ let v_slice err_fn pat = function
   | VList m        -> VList(IList.filter (match_pattern pat) m)
   | VMap m         -> VMap(ValueMap.filter (fun k v ->
                         match_pattern pat @@ encode_tuple (k,v)) m)
-  | VVMap m        -> VVMap(ValueVMap.filter (fun _ _ v ->
-                        match_pattern pat v) m)
+  | VVMap m        -> VVMap(ValueVMap.filter (fun t k v ->
+                        match_pattern pat (VTuple [t;k;v])) m)
   | _ -> err_fn "v_slice" "not a collection"
 
 let v_slice_frontier err_fn pat m = match m, pat with
   | VVMap m, VTuple[t;k;v]  ->
       (* point lookup or slice lookup? *)
-      if not @@ List.mem VUnknown(unwrap_vtuple k) then
+      if not @@ List.mem VUnknown @@ unwrap_vtuple k then
         try
+          (* point lookup *)
           VVMap(ValueVMap.frontier_point t k m)
         with Not_found -> VVMap(ValueVMap.empty)
       else
         VVMap(
-          ValueVMap.filter (fun _ _ v -> match_pattern pat v) @@
+          ValueVMap.filter (fun _ k' v' -> match_pattern (VTuple[k;v]) (VTuple[k';v'])) @@
             ValueVMap.frontier_slice t m)
 
   | _ -> err_fn "v_slice_frontier" "bad input"
