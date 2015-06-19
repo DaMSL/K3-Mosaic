@@ -586,7 +586,9 @@ letin :
     | LET IDENTIFIER GETS expr IN expr              { mk_let [$2] $4 $6 }
 
     | LET LPAREN id_list RPAREN GETS expr IN error   { print_error "Let body error" }
-    | LET LPAREN id_list RPAREN GETS error            { print_error "Let binding target error" }
+    | LET IDENTIFIER GETS expr IN error              { print_error "Let body error" }
+    | LET LPAREN id_list RPAREN GETS error           { print_error "Let binding target error" }
+    | LET IDENTIFIER GETS error                      { print_error "Let binding target error" }
     | LET error                                      { print_error "Let binding error" }
 
 bind :
