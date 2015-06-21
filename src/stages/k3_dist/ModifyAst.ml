@@ -154,7 +154,10 @@ let get_global_map_inits c = function
               match U.decompose_const arg with
               | CString f ->
                   let table = Filename.chop_extension @@ Filename.basename f in
-                  mk_apply (mk_var "load_csv_set") @@ mk_var @@ table^"_path"
+                  mk_apply (mk_var "load_csv_set2") @@
+                    mk_tuple [mk_var @@ table^"_path"; 
+                              (* witness type so the function knows what to return *)
+                              mk_empty (wrap_tset' @@ ProgInfo.map_types_no_val_for c.p map_id)]
               | _ -> failwith "bad filename"
             else e
           with Failure _ -> e)

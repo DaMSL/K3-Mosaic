@@ -401,13 +401,14 @@ let rec deep_bind ?top_expr ~in_record c arg_n =
   in loop 0 arg_n
 
 (* Apply a method -- the lambda part *)
-and apply_method_nocol ?prefix_fn c ~name ~args ~arg_info =
+and apply_method_nocol ?(dot=true) ?prefix_fn c ~name ~args ~arg_info =
   let wrap_if_big e = match U.tag_of_expr e with
       | Var _ | Const _ | Tuple | Empty _ -> id_fn
       | _ -> lazy_paren
   in
   let args' = list_zip args arg_info in
-  lps ("."^name) <| lsp () <|
+  let dot_s = if dot then "." else "" in
+  lps (dot_s^name) <| lsp () <|
     lazy_concat (fun (e, info) ->
       wrap_if_big e @@ lazy_expr ~expr_info:info ?prefix_fn c e) args'
 
@@ -668,17 +669,21 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
       | Var "divf" -> do_pair_paren "/"
       | Var "mod"  -> do_pair_paren "%"
       (* convert load_csv to right format *)
-      | Var "load_csv_set" ->
-          begin match U.tag_of_expr e2 with
+      | Var "load_csv_set2" ->
+          let tup = U.unwrap_tuple e2 in
+          begin match List.map U.tag_of_expr tup with
           (* get name of var to extract table name *)
-          | Var x -> 
+          | [Var x; col] ->
               begin match Str.split r_underscore x with
               | [table;_] ->
-                  lazy_expr c @@
                   let open KH in
-                  mk_apply (mk_var (String.uppercase table^"LoaderRP")) @@
-                          light_type c @@
-                          mk_singleton (wrap_tbag t_string) [mk_var x]
+                  let args =
+                    List.map (light_type c) @@
+                    [ mk_singleton (wrap_tbag t_string) [mk_var x];
+                      (* get the witness collection *)
+                      list_last tup] in
+                  let loader = String.uppercase table^"LoaderRP" in
+                  apply_method_nocol c ~dot:false ~name:loader ~args ~arg_info:[ANonLambda, Out; ANonLambda, Out]
               | _ -> failwith "bad arg to load_csv_set"
               end
           | _ -> failwith "bad arg to load_csv_set2"
