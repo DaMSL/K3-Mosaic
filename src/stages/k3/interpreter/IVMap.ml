@@ -175,7 +175,8 @@ let test =
   assert (n === m);
 
   let m =
-    VM.add 2 1 "2-1" @@ VM.add 1 10 "1-10" @@ VM.add 3 20 "3-20" @@ VM.add 1 20 "1-20" m
+    VM.of_list [2,1,"2-1"; 1,10,"1-10"; 3,20,"3-20"; 1,20,"1-20"; 4,1,"4-1";
+                15,1,"15-1"]
   in
   let n = VM.frontier_point 10 20 m in
   let o = VM.singleton 3 20 "3-20" in
@@ -184,6 +185,10 @@ let test =
   let n = VM.frontier_slice 2 m in
   let o = VM.of_list [1, 20, "1-20"; 1, 10, "1-10"; 2, 1, "2-1"] in
   assert (n === o);
+
+  let n = VM.update_suffix 2 1 (fun s -> s^"boo") m in
+  let o = VM.add 4 1 "4-1boo" @@ VM.add 15 1 "15-1boo" @@ VM.remove 4 1 @@ VM.remove 15 1 m in
+  assert (n === o)
 
 
 
