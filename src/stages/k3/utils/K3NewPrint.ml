@@ -1014,11 +1014,22 @@ let string_of_program ?(map_to_fold=false) prog (env, trig_env) =
 (* envs are the typechecking environments to allow us to do incremental typechecking *)
 let string_of_dist_program ?(file="default.txt") ?map_to_fold (p, envs) =
   let p' = filter_incompatible p in
-  "include \"Core/Builtins.k3\"\n"^
-  "include \"Annotation/Map.k3\"\n"^
-  "include \"Annotation/Set.k3\"\n"^
-  "include \"Annotation/Seq.k3\"\n\n"^
-  "declare my_peers : collection { i:address } @ {Collection} =\n"^
-  "  peers.fold (\\acc -> (\\x -> (acc.insert {i:x.addr}; acc))) empty { i:address} @ Collection\n"^
-  string_of_program ?map_to_fold p' envs
+"\
+include \"Core/Builtins.k3\"
+include \"Annotation/Map.k3\"
+include \"Annotation/Set.k3\"
+include \"Annotation/Seq.k3\"
+
+declare my_peers : collection { i:address } @ {Collection} =
+  peers.fold (\\acc -> (\\x -> (acc.insert {i:x.addr}; acc))) empty { i:address} @ Collection
+
+@:CArgs 2
+declare NATIONLoaderP : collection {path: string} @Collection -> collection {ra:int, rb:string, rc:int, rd:string} @Set -> ()
+  with effects \\_ -> \\_ -> io
+
+@:CArgs 2
+declare REGIONLoaderP : collection {path: string} @Collection -> collection {ra:int, rb:string, rc:int} @Set -> ()
+  with effects \\_ -> \\_ -> io
+
+"^ string_of_program ?map_to_fold p' envs
 
