@@ -64,6 +64,22 @@ let get_map_access_patterns ast : IndexSet.t StrMap.t =
     Tree.fold_tree td_fn bu_fn None acc t
   ) StrMap.empty ast
 
+(* find any loaders in the ast *)
+let loader_tables ast =
+  let bu_fn acc e =
+    try
+      let fn, arg = U.decompose_apply e in
+      if U.decompose_var fn = "load_csv_set" then
+        match U.decompose_const arg with
+        | CString f -> (Filename.chop_extension @@ Filename.basename f, f)::acc
+        | _ -> failwith "bad filename"
+      else acc
+    with Failure _ -> acc
+  in
+  U.fold_over_exprs (fun acc t ->
+    Tree.fold_tree_th_bu bu_fn acc t
+  ) [] ast
+
 (* Convert map indices from non-vid versions to be ordered and handle vid *)
 (* vid is always the last thing to be matched on *)
 let map_indices_add_vid idxs =
@@ -129,12 +145,28 @@ let get_global_map_inits c = function
       let e' = P.map_ids_types_for c.p map_id in
       let e  = P.map_ids_types_with_v_for c.p map_id in
       let t = wrap_t_map_idx' c map_id @@ snd_many e in
+      (* change load csv to use a variable *)
+      let change_load_csv e =
+        Tree.modify_tree_bu e (fun e ->
+          try
+            let fn, arg = U.decompose_apply e in
+            if U.decompose_var fn = "load_csv_set" then
+              match U.decompose_const arg with
+              | CString f ->
+                  let table = Filename.chop_extension @@ Filename.basename f in
+                  mk_apply (mk_var "load_csv_set") @@ mk_var @@ table^"_path"
+              | _ -> failwith "bad filename"
+            else e
+          with Failure _ -> e)
+      in
       begin match m_expr with
         | None     -> []
                       (* add a vid *)
-        | Some exp -> [map_id, mk_ind @@ add_vid_to_init_val t e' exp]
+        | Some exp -> 
+            let exp' = change_load_csv exp in
+            [map_id, mk_ind @@ add_vid_to_init_val t e' exp']
       end
-    with Not_found -> [] end
+    with Not_found | ProgInfo.Bad_data _ -> [] end
   | _ -> []
 
 (* return ast for map initializations, adding the vid *)
