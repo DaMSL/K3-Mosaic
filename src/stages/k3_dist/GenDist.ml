@@ -193,23 +193,9 @@ let nd_add_delta_to_buf c map_id =
         (mk_lambda' (ds_e map_delta) @@
           (* careful to put bind in proper place *)
           mk_bind (mk_var target_map) tmap_deref @@
-          (* this part is just for correctives:
-            * We need to check if there's a value at the particular version id
-            * If so, we must add the value directly *)
-            mk_if
-              (mk_var corrective)
-              (* corrective case *)
-              (mk_case_sn
-                (mk_peek @@
-                  mk_slice' tmap_deref @@ D.unknown_val real_delta_pat) "val"
-                (* then just update the value *)
-                (mk_update tmap_deref
-                  [mk_var "val"] @@
-                  D.new_val real_delta_pat @@
-                     mk_add (get_val' @@ real_pat_f @@ mk_var "val") @@
-                            get_val' delta_pat) @@
-                mk_error "failed to find value in corrective") @@
-              (* if regular case -- read the frontier *)
+              (* read the frontier, in the case of correctives, it'll either read
+               * the value at the vid, or the frontier in case the original update
+               * was empty (due to missing input data) *)
               mk_let [update_value]
                 (mk_add
                   (get_val' delta_pat) @@
