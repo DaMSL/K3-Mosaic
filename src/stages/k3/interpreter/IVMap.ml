@@ -30,6 +30,7 @@ module type S = sig
   val update_suffix : vid -> key -> ('a -> 'a ) -> 'a t -> 'a t
   val peek : 'a t -> (vid * key * 'a) option
   val to_list : 'a t -> (vid * key * 'a) list
+  val of_list : (vid * key * 'a) list -> 'a t
   val compare : ('a -> 'a -> int) -> 'a t -> 'a t -> int
   val size : 'a t -> int
   val frontier_point: vid -> key -> 'a t -> 'a t
@@ -70,7 +71,8 @@ module Make(OrdVid: ICommon.OrderedKeyType)(OrdKey: ICommon.OrderedKeyType) = st
   let frontier_slice vid m =
     HMap.fold (fun k vidmap acc ->
       try
-        add vid k (VIDMap.find_lteq vid vidmap) acc
+        let vid', v = VIDMap.find_lteq vid vidmap in
+        add vid' k v acc
       with Not_found -> acc
     ) m empty
 
@@ -79,7 +81,8 @@ module Make(OrdVid: ICommon.OrderedKeyType)(OrdKey: ICommon.OrderedKeyType) = st
   (* get the frontier at a specific key *)
   let frontier_point vid k m =
     let vidmap = HMap.find k m in
-    singleton vid k @@ VIDMap.find_lteq vid vidmap
+    let vid', v = VIDMap.find_lteq vid vidmap in
+    singleton vid' k v
 
   let remove vid k m =
     HMap.update_with k (function
@@ -149,7 +152,41 @@ module Make(OrdVid: ICommon.OrderedKeyType)(OrdKey: ICommon.OrderedKeyType) = st
 
   let to_list mm = fold (fun vid k v acc -> (vid, k, v)::acc) mm []
 
+  let of_list l =
+    List.fold_left (fun acc (vid, k, v) -> add vid k v acc) empty l
+
   let compare f m m' =
     HMap.compare (fun a b -> VIDMap.compare f a b) m m'
 
 end
+
+(*** testing ***)
+
+module Int =
+  struct type t = int let compare = (-) let hash = Hashtbl.hash let to_string = soi end
+
+module VM = Make(Int)(Int)
+
+let test =
+  let (===) x y = VM.compare (String.compare) x y = 0 in
+
+  let m = VM.add 1 1 "1-1" @@ VM.empty in
+  let n = VM.singleton 1 1 "1-1" in
+  assert (n === m);
+
+  let m =
+    VM.add 2 1 "2-1" @@ VM.add 1 10 "1-10" @@ VM.add 3 20 "3-20" @@ VM.add 1 20 "1-20" m
+  in
+  let n = VM.frontier_point 10 20 m in
+  let o = VM.singleton 3 20 "3-20" in
+  assert (n === o);
+
+  let n = VM.frontier_slice 2 m in
+  let o = VM.of_list [1, 20, "1-20"; 1, 10, "1-10"; 2, 1, "2-1"] in
+  assert (n === o);
+
+
+
+
+
+

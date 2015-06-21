@@ -34,10 +34,10 @@ module type S =
     val choose: 'a t -> (key * 'a)
     val split: key -> 'a t -> 'a t * 'a option * 'a t
     val find: key -> 'a t -> 'a
-    val find_gt: key -> 'a t -> 'a
-    val find_gteq: key -> 'a t -> 'a
-    val find_lt: key -> 'a t -> 'a
-    val find_lteq: key -> 'a t -> 'a
+    val find_gt: key -> 'a t -> key * 'a
+    val find_gteq: key -> 'a t -> key * 'a
+    val find_lt: key -> 'a t -> key * 'a
+    val find_lteq: key -> 'a t -> key * 'a
     val find_range : key -> key -> 'a t -> 'a list
     val map: ('a -> 'b) -> 'a t -> 'b t
     val mapi: (key -> 'a -> 'b) -> 'a t -> 'b t
@@ -125,7 +125,7 @@ module Make(Ord: OrderedType) = struct
       let rec loop last m =
         match m, last with
         | Empty, None   -> raise Not_found
-        | Empty, Some (_,d) -> d
+        | Empty, Some x -> x
         | Node(l, v, d, r, _), _ ->
             let op, s, t = match comp with
               | `GT   -> (>),  l, r

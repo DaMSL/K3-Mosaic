@@ -495,8 +495,17 @@ let v_upsert_with err_fn key lam_none lam_some col =
   | VTuple [t;k;v], VVMap m -> update t k v m
   | _ -> failwith "v_upsert_with: unsupported"
 
+let dummy_tuple = VTuple(List.map (const VUnit) @@ create_range 1 20)
+
 let v_update_suffix err_fn key f col = match key, col with
-  | VTuple[t;k;_], VVMap m -> VVMap(ValueVMap.update_suffix t k f m)
+  | VTuple[t;k;_], VVMap m ->
+      let dummy = VInt 0 in
+      (* translate the function: impedance mismatch *)
+      let f' v =
+        let ret = f @@ VTuple [dummy; VTuple [dummy_tuple; v]] in
+        list_last @@ unwrap_vtuple ret
+      in
+      VVMap(ValueVMap.update_suffix t k f' m)
   | _ -> failwith "v_update_suffix: only supported on vmap"
 
 let v_delete_prefix err_fn key col = match key, col with
