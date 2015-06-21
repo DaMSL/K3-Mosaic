@@ -193,19 +193,46 @@ let nd_add_delta_to_buf c map_id =
         (mk_lambda' (ds_e map_delta) @@
           (* careful to put bind in proper place *)
           mk_bind (mk_var target_map) tmap_deref @@
-              (* read the frontier, in the case of correctives, it'll either read
-               * the value at the vid, or the frontier in case the original update
-               * was empty (due to missing input data) *)
-              mk_let [update_value]
-                (mk_add
-                  (get_val' delta_pat) @@
-                  mk_case_ns
-                    (mk_peek @@
-                      map_latest_vid_vals c (mk_var tmap_deref)
-                        (some @@ D.unknown_val' delta_pat) map_id ~keep_vid:false) "val"
-                     zero @@
-                     D.get_val' @@ calc_pat_f @@ mk_var "val") @@
-                mk_insert tmap_deref @@ new_val real_delta_pat @@ mk_var update_value) @@
+          mk_let ["regular_read"]
+          (* this part is just for correctives:
+            * We need to check if there's a value at the particular version id
+            * If so, we must add the value directly *)
+            (mk_if
+              (mk_var corrective)
+              (* corrective case *)
+              (mk_case_sn
+                (mk_peek @@
+                  mk_slice' tmap_deref @@ D.unknown_val real_delta_pat) "val"
+                (* then just update the value *)
+                (mk_block [
+                  mk_update tmap_deref
+                    [mk_var "val"] @@
+                    D.new_val real_delta_pat @@
+                      mk_add (get_val' @@ real_pat_f @@ mk_var "val") @@
+                              get_val' delta_pat
+                  ;
+                  mk_cfalse])
+                (* in the else case, we need to still do a regular read because
+                 * there may not have been an initial write due to empty lookups on rhs
+                 * maps *)
+                mk_ctrue) @@
+              (* non-corrective so do regular read *)
+              mk_ctrue) @@
+          mk_if
+            (mk_var "regular_read")
+            (* if regular case -- read the frontier *)
+            (mk_let [update_value]
+              (mk_add
+                (get_val' delta_pat) @@
+                mk_case_ns
+                  (mk_peek @@
+                    map_latest_vid_vals c (mk_var tmap_deref)
+                      (some @@ D.unknown_val' delta_pat) map_id ~keep_vid:false) "val"
+                   zero @@
+                   D.get_val' @@ calc_pat_f @@ mk_var "val") @@
+              mk_insert tmap_deref @@ new_val real_delta_pat @@ mk_var update_value) @@
+            (* else done *)
+            mk_cunit) @@
         mk_var delta_tuples
       ;
       (* add to future values for both correctives and regular updates *)
