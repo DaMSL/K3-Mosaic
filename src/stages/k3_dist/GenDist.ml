@@ -696,7 +696,7 @@ List.fold_left
     let rbuf_deref = "buf_d" in
     let map_ds = map_ds_of_id ~global:true c read_map_id in
     let tup_ds = map_ds_of_id ~global:false ~vid:true c read_map_id in
-    let tup_pat = pat_of_ds ~expr:(mk_var "tuple") tup_ds in
+    let tup_pat = pat_of_ds tup_ds in
     let map_pat = pat_of_flat_e ~add_vid:true ~has_vid:true map_ds @@ fst_many tup_pat in
     acc_code @
     [mk_code_sink'
@@ -712,7 +712,7 @@ List.fold_left
           mk_tuple @@ args_of_t_as_vars_with_v c trig_name
         ;
          mk_iter
-          (mk_lambda' ["tuple", wrap_ttuple @@ snd_many (ds_e tup_ds)] @@
+          (mk_lambda' (ds_e tup_ds) @@
             (* be careful with bind placement *)
             mk_bind (mk_var rbuf_name) rbuf_deref @@
             mk_case_sn
