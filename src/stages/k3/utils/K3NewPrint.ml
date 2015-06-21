@@ -1024,11 +1024,11 @@ declare my_peers : collection { i:address } @ {Collection} =
   peers.fold (\\acc -> (\\x -> (acc.insert {i:x.addr}; acc))) empty { i:address} @ Collection
 
 @:CArgs 2
-declare NATIONLoaderP : collection {path: string} @Collection -> collection {ra:int, rb:string, rc:int, rd:string} @Set -> ()
+declare NATIONLoaderRP : collection {path: string} @Collection -> collection {ra:int, rb:string, rc:int, rd:string} @Set -> ()
   with effects \\_ -> \\_ -> io
 
 @:CArgs 2
-declare REGIONLoaderP : collection {path: string} @Collection -> collection {ra:int, rb:string, rc:int} @Set -> ()
+declare REGIONLoaderRP : collection {path: string} @Collection -> collection {ra:int, rb:string, rc:int} @Set -> ()
   with effects \\_ -> \\_ -> io
 
 "^ string_of_program ?map_to_fold p' envs
