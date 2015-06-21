@@ -16,6 +16,8 @@ let indent = ref 0
 
 let force_list = List.iter force
 
+let r_underscore = Str.regexp "_"
+
 (* lazy functions *)
 let lhv i = [lazy (obc i)]     (* open box *)
 let lhov i = [lazy (obv i)]
@@ -665,6 +667,22 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
       (* divide becomes an infix operator *)
       | Var "divf" -> do_pair_paren "/"
       | Var "mod"  -> do_pair_paren "%"
+      (* convert load_csv to right format *)
+      | Var "load_csv_set" ->
+          begin match U.tag_of_expr e2 with
+          (* get name of var to extract table name *)
+          | Var x -> 
+              begin match Str.split r_underscore x with
+              | [table;_] ->
+                  lazy_expr c @@
+                  let open KH in
+                  mk_apply (mk_var (String.uppercase table^"LoaderRP")) @@
+                          light_type c @@
+                          mk_singleton (wrap_tbag t_string) [mk_var x]
+              | _ -> failwith "bad arg to load_csv_set"
+              end
+          | _ -> failwith "bad arg to load_csv_set2"
+          end
       (* function application *)
       | _ -> function_application c e1 [e2]
     end
