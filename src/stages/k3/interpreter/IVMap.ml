@@ -5,7 +5,9 @@ module KP = K3Printing
 (* ------ Multimap functions ------ *)
 (* NOTE: remove_prefix: we delete up to and including vid, and keep a frontier at vid
  *       update_suffix: updates the > vid and all following vids
- *       frontier: gets values <= the vid only
+ *       frontier: gets values < the vid only
+ *         this is critical to prevent fetch/push from reading data that was updated in the
+ *         same step, but isn't supposed to be available yet.
  * Check if these are correct!
  *)
 
@@ -81,7 +83,7 @@ module Make(OrdVid: ICommon.OrderedKeyType)(OrdKey: ICommon.OrderedKeyType) = st
   (* get the frontier at a specific key *)
   let frontier_point vid k m =
     let vidmap = HMap.find k m in
-    let vid', v = VIDMap.find_lteq vid vidmap in
+    let vid', v = VIDMap.find_lt vid vidmap in
     singleton vid' k v
 
   let remove vid k m =
@@ -113,7 +115,7 @@ module Make(OrdVid: ICommon.OrderedKeyType)(OrdKey: ICommon.OrderedKeyType) = st
   let remove_prefix vid (m: 'a t) =
     let slice = frontier_slice vid m in
     let m' = HMap.map (fun k vidmap ->
-      VIDMap.filter (fun vid' v -> OrdVid.compare vid' vid <= 0) vidmap
+      VIDMap.filter (fun vid' v -> OrdVid.compare vid' vid < 0) vidmap
     ) m in
     combine m' slice
 
