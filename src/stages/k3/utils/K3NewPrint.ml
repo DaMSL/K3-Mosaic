@@ -349,7 +349,9 @@ let var_translate = List.fold_left (fun acc (x,y) -> StringMap.add x y acc) Stri
   ["int_of_float", "truncate";
    "float_of_int", "real_of_int";
    "peers", "my_peers";
-   "parse_sql_date", "tpch_date"]
+   "parse_sql_date", "tpch_date";
+   "maxi", "max";
+   "maxif", "max"]
 
 type in_record = InRec | In
 type out_record = OutRec | Out
@@ -670,6 +672,8 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
       (* divide becomes an infix operator *)
       | Var "divf" -> do_pair_paren "/"
       | Var "mod"  -> do_pair_paren "%"
+      | Var "reciprocali"
+      | Var "reciprocal" -> arith_paren_pair "/" (light_type c @@ KH.mk_cint 1, e2)
       (* convert load_csv to right format *)
       | Var "load_csv_set2" ->
           let tup = U.unwrap_tuple e2 in
