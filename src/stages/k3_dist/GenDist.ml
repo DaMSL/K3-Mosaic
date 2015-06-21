@@ -1221,7 +1221,7 @@ let emit_frontier_fns c =
   let fns = List.map (hd |- snd) @@ P.uniq_types_and_maps c.p in
   List.map (frontier_fn c) fns
 
-(* loader vars for ast. unused except by new print *)
+(* loader vars for ast *)
 let gen_loader_vars ast =
   let tables = ModifyAst.loader_tables ast in
   List.map (fun (s, f) ->

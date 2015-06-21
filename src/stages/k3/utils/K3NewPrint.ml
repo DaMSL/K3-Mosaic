@@ -61,6 +61,7 @@ type config = {
                 trig_env:T.type_bindings_t;
                 map_to_fold:bool;       (* convert maps and ext to fold, due to k3new limitations *)
                 project:StrSet.t;       (* need to project further down *)
+                singleton_id:string;
               }
 
 let default_config = {
@@ -68,6 +69,7 @@ let default_config = {
                        trig_env = [];
                        map_to_fold = false;
                        project = StrSet.empty;
+                       singleton_id="i";
                      }
 
 let verbose_types_config = default_config
@@ -106,10 +108,10 @@ let record_id_of_num ?(prefix="r") i =
   prefix ^ (s_of_i "" i)
 
 (* Add record ids to a list *)
-let add_record_ids ?prefix l =
+let add_record_ids c ?prefix l =
   match l with
   | []    -> failwith "No list to add record ids to"
-  | [x]   -> ["i", x]
+  | [x]   -> [c.singleton_id, x]
   | [x;y] -> ["key", x; "value", y] (* to make gbaggs easy *)
   | _     ->
     let i_l = insert_index_fst ~first:1 l in
@@ -173,7 +175,7 @@ let rec lazy_base_type ?(brace=true) ?(mut=false) ?(empty=false) c ~in_col t =
   let wrap_mut f = if mut && not empty then lps "mut " <| f else f in
   let wrap_single f =
     let wrap = if brace then lazy_brace else id_fn in
-    if in_col then wrap(lps "i:" <| f) else f
+    if in_col then wrap(lps (c.singleton_id^":") <| f) else f
   in
   let wrap = wrap_single |- wrap_mut in
   match t with
@@ -191,7 +193,7 @@ let rec lazy_base_type ?(brace=true) ?(mut=false) ?(empty=false) c ~in_col t =
   | TTop         -> wrap @@ lps "top"
   | TIndirect vt -> wrap (lps "ind " <| lazy_type c ~in_col vt)
   | TTuple(vts)  -> (* tuples become records *)
-      let rec_vts = add_record_ids vts in
+      let rec_vts = add_record_ids c vts in
       let inner = lazy_concat ~sep:lcomma (fun (id, vt) ->
         lps (id^":") <| lazy_type c ~in_col:false vt) rec_vts in
       let wrap = if brace then lazy_brace else id_fn in
@@ -383,7 +385,7 @@ let rec deep_bind ?top_expr ~in_record c arg_n =
         (* only produce binds if we're deeper than specified depth *)
         (if d < 0 then [] else
           let args_id = List.map get_id_of_arg args in
-          let rec_ids = List.filter ((<>) "_" |- snd) @@ add_record_ids args_id in
+          let rec_ids = List.filter ((<>) "_" |- snd) @@ add_record_ids c args_id in
           (* filter out all the ignored ids *)
           begin match rec_ids with
           | []      -> [] (* if there's nothing to bind, skip it *)
@@ -572,7 +574,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
         else lps id
       end
   | Tuple     -> let es = U.decompose_tuple expr in
-    let id_es = add_record_ids es in
+    let id_es = add_record_ids c es in
     let inner = lazy_concat ~sep:lcomma (fun (id, e) ->
         lps (id^":") <| lazy_expr c e) id_es
     in lazy_brace inner
@@ -683,7 +685,8 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
                       (* get the witness collection *)
                       list_last tup] in
                   let loader = String.uppercase table^"LoaderRP" in
-                  apply_method_nocol c ~dot:false ~name:loader ~args ~arg_info:[ANonLambda, Out; ANonLambda, Out]
+                  apply_method_nocol {c with singleton_id = "path"}
+                    ~dot:false ~name:loader ~args ~arg_info:[ANonLambda, Out; ANonLambda, Out]
               | _ -> failwith "bad arg to load_csv_set"
               end
           | _ -> failwith "bad arg to load_csv_set2"
@@ -753,7 +756,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
           wrap_indent (lazy_expr c bound) <| lsp () <| lps "in" <| lsp () <|
           wrap_indent (lazy_expr c bexpr)
         | _   ->  (* bind deconstruct *)
-            let ids' = concat_record_str @@ add_record_ids ids in
+            let ids' = concat_record_str @@ add_record_ids c ids in
             lps "bind" <| lsp () <| wrap_indent(lazy_expr c bound) <| lsp () <|
             lps "as" <| lsp () <| lps "{" <| lps_list NoCut lps ids' <|
             lps "}" <| lsp () <| lps "in" <| lsp () <|
@@ -815,14 +818,14 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
 
   | Subscript _ -> let i, tup = U.decompose_subscript expr in
       let t = KH.unwrap_ttuple @@ T.type_of_expr tup in
-      let id_t = add_record_ids t in
+      let id_t = add_record_ids c t in
       let id = fst @@ at id_t (i-1) in
       (paren_l tup @@ lazy_expr c tup) <| lps "." <| lps id
 
   | SliceIdx(idx, comp) -> let col, pat = U.decompose_slice expr in
     let ts = KH.unwrap_ttuple @@ snd @@ KH.unwrap_tcol @@
              T.type_of_expr col in
-    let ids  = fst_many @@ add_record_ids ts in
+    let ids  = fst_many @@ add_record_ids c ts in
     let ids' = U.filter_by_index_t idx ids in
     let name = String.concat "_" @@ "slice_by"::ids' in
     apply_method c ~name ~col ~args:[pat] ~arg_info:[ANonLambda, Out]
@@ -835,8 +838,8 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
       | _     -> [pat], id_fn
     in
     let ts = List.map T.type_of_expr es in
-    let id_e = add_record_ids es in
-    let id_t = add_record_ids ts in
+    let id_e = add_record_ids c es in
+    let id_t = add_record_ids c ts in
     (* find the non-unknown slices *)
     let filter_e = List.filter (fun (_,c) ->
       match U.tag_of_expr c with
