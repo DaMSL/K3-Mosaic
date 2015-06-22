@@ -509,7 +509,7 @@ let v_update_suffix err_fn key f col = match key, col with
   | _ -> failwith "v_update_suffix: only supported on vmap"
 
 let v_delete_prefix err_fn key col = match key, col with
-  | VTuple[t;_;_], VVMap m -> VVMap(ValueVMap.remove_prefix t m)
+  | VTuple[t;k;_], VVMap m -> VVMap(ValueVMap.remove_prefix t k m)
   | _ -> failwith "v_update_suffix: only supported on vmap"
 
 let v_empty err_fn ?(no_map=false) ?(no_multimap=false) = function

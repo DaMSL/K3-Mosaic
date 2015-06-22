@@ -111,11 +111,10 @@ let do_gc_fns c =
           let pat   = D.pat_of_ds ~vid_nm:min_vid ds in
           (* local bind to prevent bind-in-bind *)
           let do_bind = mk_bind (mk_var ds.id) map_deref in
-          (* save frontier *)
+          (* get frontier *)
           mk_let ["frontier"]
             (do_bind @@
               mk_slice_frontier (mk_var map_deref) @@ vid_and_unknowns' pat) @@
-          mk_block [
             (* delete all prefixes in ds. min_vid comes from pattern *)
             mk_aggv
               (mk_lambda3' ["_", t_unit] ["_", t_vid] (ds_e ds) @@
@@ -125,18 +124,7 @@ let do_gc_fns c =
                   mk_cunit
                 ])
               mk_cunit @@
-              mk_var "frontier";
-            (* insert back frontier into ds *)
-            mk_aggv
-              (mk_lambda3' ["_", t_unit] ["vid", t_vid] (ds_e ds) @@
-                do_bind @@
-                mk_block [
-                  mk_insert map_deref (new_vid' "vid" pat);
-                  mk_cunit
-                ])
-              mk_cunit @@
               mk_var "frontier"
-          ]
       | None -> (* non-map ds *)
         (* look for any entry in the ds containing vid *)
         let vid = fst @@ List.find (r_match r_vid |- fst) (ds_e ds) in
