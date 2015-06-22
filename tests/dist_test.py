@@ -32,7 +32,8 @@ def run(target_file,
         folds_only=True,
         gen_deletes=True,
         gen_correctives=True,
-        run_interp=True
+        run_interp=True,
+        workdir="temp"
         ):
 
     to_root = ".."
@@ -54,7 +55,7 @@ def run(target_file,
     combine_tool = os.path.join(root_path, "bin/combine_data")
 
     saved_dir = os.path.abspath(os.path.curdir)
-    temp_dir = os.path.join(saved_dir, "temp/")
+    temp_dir = os.path.join(saved_dir, workdir)
     trace_file = os.path.join(temp_dir, "temp.trace")
     m3_file = os.path.join(temp_dir, nice_name + ".m3")
     k3_file = os.path.join(temp_dir, "temp.k3o")

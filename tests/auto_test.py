@@ -45,6 +45,8 @@ def run():
                         default=True, help="Create corrective triggers")
     parser.add_argument('--no-interp', action='store_false', dest='run_interp',
                         default=True, help="Run the interpreter")
+    parser.add_argument('--workdir', action='store', type=str, dest='workdir',
+                        default="temp", help="Directory to store work files")
 
     args = parser.parse_args()
 
@@ -95,7 +97,8 @@ def run():
                                 new_k3=args.new_k3,
                                 gen_deletes=args.gen_deletes,
                                 gen_correctives=args.gen_correctives,
-                                run_interp=args.run_interp
+                                run_interp=args.run_interp,
+                                workdir=args.workdir
                                 )
         # check if a test failed
         if not res:
