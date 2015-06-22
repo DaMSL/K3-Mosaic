@@ -716,10 +716,12 @@ List.fold_left
          mk_assign rbuf_deref @@
          mk_agg
           (mk_lambda2' ["acc", map_ds.t] (ds_e tup_ds) @@
-            mk_case_sn
-              (mk_peek @@ mk_slice' rbuf_deref @@ unknown_val map_pat) "vals"
-              (mk_update "acc" [mk_var "vals"] map_pat) @@
-              mk_insert "acc" map_pat)
+            mk_block [
+              mk_case_sn
+                (mk_peek @@ mk_slice' rbuf_deref @@ unknown_val map_pat) "vals"
+                (mk_update "acc" [mk_var "vals"] map_pat) @@
+                mk_insert "acc" map_pat;
+              mk_var "acc" ])
           (mk_var rbuf_deref) @@
           mk_var "tuples" ;
          (* update and check statment counters to see if we should send a do_complete *)

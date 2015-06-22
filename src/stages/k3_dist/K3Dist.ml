@@ -96,7 +96,7 @@ let default_config = {
 
 (* what the generic type of the global maps is *)
 let wrap_t_of_map = function
-  | MapVMap -> wrap_tvmap
+  | MapVMap -> mut |- wrap_tvmap
 
 let wrap_string_map s = "[<"^s^">]"
 
@@ -494,7 +494,7 @@ let nd_stmt_cntrs =
 (* This is coarse-grain corrective control. *)
 let nd_log_master =
   let e  = ["vid", t_vid; "stmt_id", t_stmt_id] in
-  create_ds "nd_log_master" (mut @@ wrap_tset' @@ snd_many e) ~e
+  create_ds "nd_log_master" (wrap_tset' @@ snd_many e) ~e
 
 (* names for log *)
 let nd_log_for_t t = "nd_log_"^t
@@ -505,7 +505,7 @@ let log_ds c : data_struct list =
   let log_struct_for trig =
     let e' = args_of_t c.p trig in
     let e  = ["vid", t_vid; "args", wrap_ttuple @@ snd_many e'] in
-    create_ds (nd_log_for_t trig) (mut @@ wrap_tmap' @@ snd_many e) ~e
+    create_ds (nd_log_for_t trig) (wrap_tmap' @@ snd_many e) ~e
   in
   P.for_all_trigs ~deletes:c.gen_deletes c.p log_struct_for
 
