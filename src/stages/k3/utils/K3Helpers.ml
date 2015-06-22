@@ -77,7 +77,7 @@ let wrap_tind_mut t = mut @@ wrap_tind t
 let wrap_tmaybe t = canonical @@ TMaybe t
 let wrap_tmaybes ts = List.map wrap_tmaybe ts
 
-let wrap_tfunc tin tout = canonical @@ TFunction(tin, tout)
+let wrap_tfunc tin tout = canonical @@ TFunction(tin, immut tout)
 
 (* wrap a function argument *)
 let wrap_args id_typ =
@@ -385,6 +385,8 @@ let mk_role id flowprog = mk_no_anno @@ Role (id, flowprog)
 let ids_to_vars = List.map (function
   | "_" -> mk_cunknown
   | x   -> mk_var x)
+
+let ids_to_vars' l = ids_to_vars @@ fst_many l
 
 let vars_to_ids = List.map (fun x -> match U.tag_of_expr x with
   | Const(CUnknown) -> "_"

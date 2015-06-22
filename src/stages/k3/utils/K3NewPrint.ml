@@ -1106,7 +1106,7 @@ let string_of_dist_program ?(file="default.txt") ?map_to_fold (p, envs) =
   "include \"Annotation/Map.k3\"\n"^
   "include \"Annotation/Maps/VMap.k3\"\n"^
   "include \"Annotation/Set.k3\"\n"^
-  "include \"Annotation/Seq.k3\"\n"^
+  "include \"Annotation/Seq.k3\"\n\n"^
   "declare my_peers : collection { i:address } @ {Collection} =\n"^
   "  peers.fold (\\acc -> (\\x -> (acc.insert {i:x.addr}; acc))) empty { i:address} @ Collection\n"^
   string_of_program ?map_to_fold p' envs

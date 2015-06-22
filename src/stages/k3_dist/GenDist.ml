@@ -188,65 +188,65 @@ let nd_add_delta_to_buf c map_id =
     ([target_map, wrap_tind map_real.t; corrective, t_bool; "vid", t_vid;
       delta_tuples, map_delta.t])
     [t_unit] @@
-    mk_block @@
-      [mk_iter  (* loop over values in delta tuples *)
-        (mk_lambda' (ds_e map_delta) @@
-          (* careful to put bind in proper place *)
-          mk_bind (mk_var target_map) tmap_deref @@
-          mk_let ["regular_read"]
-          (* this part is just for correctives:
-            * We need to check if there's a value at the particular version id
-            * If so, we must add the value directly *)
-            (mk_if
-              (mk_var corrective)
-              (* corrective case *)
-              (mk_case_sn
-                (mk_peek @@
-                  mk_slice' tmap_deref @@ D.unknown_val real_delta_pat) "val"
-                (* then just update the value *)
-                (mk_block [
-                  mk_update tmap_deref
-                    [mk_var "val"] @@
-                    D.new_val real_delta_pat @@
-                      mk_add (get_val' @@ real_pat_f @@ mk_var "val") @@
-                              get_val' delta_pat
-                  ;
-                  mk_cfalse])
-                (* in the else case, we need to still do a regular read because
-                 * there may not have been an initial write due to empty lookups on rhs
-                 * maps *)
-                mk_ctrue) @@
-              (* non-corrective so do regular read *)
-              mk_ctrue) @@
-          mk_if
-            (mk_var "regular_read")
-            (* if regular case -- read the frontier *)
-            (mk_let [update_value]
-              (mk_add
-                (get_val' delta_pat) @@
-                mk_case_ns
+    mk_bind (mk_var target_map) tmap_deref @@
+      mk_assign tmap_deref @@
+        mk_agg
+          (mk_lambda2' ["acc", map_real.t] (ds_e map_delta) @@
+            mk_let ["regular_read"]
+            (* this part is just for correctives:
+              * We need to check if there's a value at the particular version id
+              * If so, we must add the value directly *)
+              (mk_if
+                (mk_var corrective)
+                (* corrective case *)
+                (mk_case_sn
                   (mk_peek @@
-                    map_latest_vid_vals c (mk_var tmap_deref)
-                      (some @@ D.unknown_val' delta_pat) map_id ~keep_vid:false) "val"
-                   zero @@
-                   D.get_val' @@ calc_pat_f @@ mk_var "val") @@
-              mk_insert tmap_deref @@ new_val real_delta_pat @@ mk_var update_value) @@
-            (* else done *)
-            mk_cunit) @@
-        mk_var delta_tuples
-      ;
-      (* add to future values for both correctives and regular updates *)
-      mk_iter (* loop over values in the delta tuples *)
-        (mk_lambda' (ds_e map_delta) @@
-          (* VMap supports shortcut manipulation *)
-          mk_bind (mk_var target_map) tmap_deref @@
-          mk_update_suffix tmap_deref real_delta_pat @@
-            mk_lambda2' ["v", t_vid] (ds_e map_real) @@
-              mk_tuple @@
-                new_val (drop_vid' real_pat) @@
-                  mk_add (get_val' real_pat) @@
-                          get_val real_delta_pat) @@
-        mk_var delta_tuples]
+                    mk_slice' "acc" @@ D.unknown_val real_delta_pat) "val"
+                  (* then just update the value *)
+                  (mk_block [
+                    mk_update "acc"
+                      [mk_var "val"] @@
+                      D.new_val real_delta_pat @@
+                        mk_add (get_val' @@ real_pat_f @@ mk_var "val") @@
+                                get_val' delta_pat;
+                    mk_cfalse])
+                  (* in the else case, we need to still do a regular read because
+                  * there may not have been an initial write due to empty lookups on rhs
+                  * maps *)
+                  mk_ctrue) @@
+                (* non-corrective so do regular read *)
+                mk_ctrue) @@
+
+          (* add to future values for both correctives and regular updates *)
+            mk_let ["acc2"]
+              (mk_block [
+                mk_update_suffix "acc" real_delta_pat @@
+                  mk_lambda2' ["v", t_vid] (ds_e map_real) @@
+                    mk_tuple @@
+                      new_val (drop_vid' real_pat) @@
+                        mk_add (get_val' real_pat) @@
+                                get_val real_delta_pat;
+                mk_var "acc"]) @@
+
+            mk_if
+              (mk_var "regular_read")
+              (* if regular case -- read the frontier and add delta *)
+              (mk_let [update_value]
+                (mk_add
+                  (get_val' delta_pat) @@
+                  mk_case_ns
+                    (mk_peek @@
+                      map_latest_vid_vals c (mk_var "acc2")
+                        (some @@ D.unknown_val' delta_pat) map_id ~keep_vid:false) "val"
+                    zero @@
+                    D.get_val' @@ calc_pat_f @@ mk_var "val") @@
+                mk_block [
+                  mk_insert "acc2" @@ new_val real_delta_pat @@ mk_var update_value;
+                  mk_var "acc2"]) @@
+              (* else done *)
+              mk_var "acc2")
+            (mk_var tmap_deref) @@
+          mk_var delta_tuples
 
 (*
  * Return list of corrective statements we need to execute by checking
@@ -653,6 +653,7 @@ let nd_send_push_stmt_map_trig c s_rhs_lhs trig_name =
         (send_push_name_of_t c trig_name stmt_id rhs_map_id)
         (args_of_t_with_v c trig_name)
         [] @@ (* locals *)
+        (* don't convert this to fold b/c we only read *)
         mk_bind (mk_var rhs_map_name) rhsm_deref @@
         mk_block [
           (* save this particular statement execution in the master log
@@ -711,14 +712,15 @@ List.fold_left
         [mk_apply' (nd_log_write_for c trig_name) @@
           mk_tuple @@ args_of_t_as_vars_with_v c trig_name
         ;
-         mk_iter
-          (mk_lambda' (ds_e tup_ds) @@
-            (* be careful with bind placement *)
-            mk_bind (mk_var rbuf_name) rbuf_deref @@
+        mk_bind (mk_var rbuf_name) rbuf_deref @@
+         mk_assign rbuf_deref @@
+         mk_agg
+          (mk_lambda2' ["acc", map_ds.t] (ds_e tup_ds) @@
             mk_case_sn
               (mk_peek @@ mk_slice' rbuf_deref @@ unknown_val map_pat) "vals"
-              (mk_update rbuf_deref [mk_var "vals"] map_pat) @@
-              mk_insert rbuf_deref map_pat) @@
+              (mk_update "acc" [mk_var "vals"] map_pat) @@
+              mk_insert "acc" map_pat)
+          (mk_var rbuf_deref) @@
           mk_var "tuples" ;
          (* update and check statment counters to see if we should send a do_complete *)
          mk_if
@@ -782,46 +784,26 @@ let send_corrective_fns c =
     let map_ds = D.map_ds_of_id ~global:false c map_id ~vid:false in
     let tuple_type = wrap_ttuple @@ snd_many (ds_e map_ds) in
     let delta_tuples2 =
-      D.map_ds_of_id ~global:false ~vid:true c map_id ~name:"delta_tuples2"
-    in
-    singleton @@ mk_global_fn (send_corrective_name_of_t c map_id)
-    (orig_vals @ ["corrective_vid", t_vid; "delta_tuples", map_ds.t])
-    (* return the number of new correctives generated *)
-    [t_int] @@
-    (* the corrective list tells us which statements were fetched
-     * from us and when *)
-    mk_let ["corrective_list"] (* (stmt_id * vid list) list *)
-      (mk_apply'
-        nd_filter_corrective_list_nm @@
-        mk_tuple (* feed in list of possible stmts *)
-          [mk_var "corrective_vid"; trig_stmt_k3_list]) @@
-    (* if corrective list isn't empty, add vid inside delta tuples *)
-    mk_is_empty (mk_var "corrective_list")
-      ~y:(mk_cint 0)
-      ~n:
-      (* loop over corrective list and act for specific statements *)
-      (* return the number of messages *)
-      (* we need to add a vid value here to reduce the number of needed shuffle instantiations,
-       * so we don't have shuffles with vid as well as ones without *)
-      (mk_let [delta_tuples2.id]
-        (mk_map (mk_lambda' (ds_e map_ds) @@ mk_tuple @@
-                  (mk_var g_min_vid.id)::(ids_to_vars @@ fst_many @@ ds_e map_ds)) @@
-          mk_var "delta_tuples") @@
-      mk_agg
-        (mk_assoc_lambda'
-          ["acc_count", t_int] ["stmt_id", t_stmt_id; "vid_list", t_vid_list] @@
-          List.fold_left
-            (* loop over all possible read map matches *)
-            (fun acc_code (target_trig, target_stmt) ->
+      D.map_ds_of_id ~global:false ~vid:true c map_id ~name:"delta_tuples2" in
+    let args' = orig_vals @ ["corrective_vid", t_vid] in
+    let args = args' @ ["delta_tuples", map_ds.t] in
+    let sub_args = args' @ ["delta_tuples2", delta_tuples2.t; "vid_list", t_vid_list] in
+    let fn_nm = send_corrective_name_of_t c map_id in
+    let sub_fn_nm stmt = fn_nm^"_"^soi stmt in
+
+    (* create sub functions for each stmt_id possible, to aid compilation *)
+    let sub_fns =
+      List.map
+        (fun (target_trig, target_stmt) ->
               (* we already have the map vars for the rhs map in the
                 * tuples. Now we try to get some more for the lhs map *)
               let target_map = P.lhs_map_of_stmt c.p target_stmt in
               let key = P.partial_key_from_bound c.p target_stmt target_map in
               let shuffle_fn = K3Shuffle.find_shuffle_nm c target_stmt map_id target_map in
-              mk_if (* if match, send data *)
-                (mk_eq (mk_var "stmt_id") @@ mk_cint target_stmt)
-                (* save the grouped sends *)
-                (mk_let ["ips_vids"]
+
+              mk_global_fn (sub_fn_nm target_stmt) sub_args
+              [t_int] @@ (* return num of sends *)
+                mk_let ["ips_vids"]
                   (mk_gbagg
                     (* group by the IPs. We want all the vids we'll need to
                       * execute, and we concatenate the tuples since we're
@@ -884,8 +866,43 @@ let send_corrective_fns c =
                                                     mk_snd @@ mk_var "vid_send_list_tup"];
                         mk_add (mk_var "acc_count") @@ mk_cint 1
                       ])
-                    (mk_var "acc_count") @@
+                    (mk_cint 0) @@
                     mk_var "ips_vids")
+        trigs_stmts_with_matching_rhs_map
+    in
+    let fn = mk_global_fn fn_nm args
+    (* return the number of new correctives generated *)
+    [t_int] @@
+    (* the corrective list tells us which statements were fetched
+     * from us and when *)
+    mk_let ["corrective_list"] (* (stmt_id * vid list) list *)
+      (mk_apply'
+        nd_filter_corrective_list_nm @@
+        mk_tuple (* feed in list of possible stmts *)
+          [mk_var "corrective_vid"; trig_stmt_k3_list]) @@
+    (* if corrective list isn't empty, add vid inside delta tuples *)
+    mk_is_empty (mk_var "corrective_list")
+      ~y:(mk_cint 0)
+      ~n:
+      (* loop over corrective list and act for specific statements *)
+      (* return the number of messages *)
+      (* we need to add a vid value here to reduce the number of needed shuffle instantiations,
+       * so we don't have shuffles with vid as well as ones without *)
+      (mk_let [delta_tuples2.id]
+        (mk_map (mk_lambda' (ds_e map_ds) @@ mk_tuple @@
+                  (mk_var g_min_vid.id)::(ids_to_vars' @@ ds_e map_ds)) @@
+          mk_var "delta_tuples") @@
+      mk_agg
+        (mk_assoc_lambda'
+          ["acc_count", t_int] ["stmt_id", t_stmt_id; "vid_list", t_vid_list] @@
+          List.fold_left
+            (* loop over all possible read map matches *)
+            (fun acc_code (_, target_stmt) ->
+              mk_if (* if match, send data *)
+                (mk_eq (mk_var "stmt_id") @@ mk_cint target_stmt)
+                (* call the specific function for this statement *)
+                (mk_add (mk_var "acc_count") @@
+                  mk_apply' (sub_fn_nm target_stmt) @@ mk_tuple @@ ids_to_vars' sub_args)
                 acc_code)
             (mk_var "acc_count") (* base case *)
             trigs_stmts_with_matching_rhs_map)
@@ -893,9 +910,11 @@ let send_corrective_fns c =
           (mk_cint 0) @@
           mk_var "corrective_list")
     in
-    List.flatten @@ List.map send_correctives @@
-      (* combine maps from insert and delete *)
-      ListAsSet.union (fst c.corr_maps) (snd c.corr_maps)
+    sub_fns @ [fn]
+  in
+  List.flatten @@ List.map send_correctives @@
+    (* combine maps from insert and delete *)
+    ListAsSet.union (fst c.corr_maps) (snd c.corr_maps)
 
 (* function to update the stmt_counters for correctives *)
 let nd_update_stmt_cntr_corr_map_nm = "nd_update_stmt_cntr_corr_map"

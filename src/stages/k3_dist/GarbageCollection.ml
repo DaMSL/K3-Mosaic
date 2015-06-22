@@ -112,34 +112,26 @@ let do_gc_fns c =
           (* local bind to prevent bind-in-bind *)
           let do_bind = mk_bind (mk_var ds.id) map_deref in
           (* get frontier *)
+          do_bind @@
+            mk_assign map_deref @@
           mk_let ["frontier"]
-            (do_bind @@
-              mk_slice_frontier (mk_var map_deref) @@ vid_and_unknowns' pat) @@
+            (mk_slice_frontier (mk_var map_deref) @@ vid_and_unknowns' pat) @@
             (* delete all prefixes in ds. min_vid comes from pattern *)
             mk_aggv
-              (mk_lambda3' ["_", t_unit] ["_", t_vid] (ds_e ds) @@
-                do_bind @@
+              (mk_lambda3' ["acc", ds.t] ["_", t_vid] (ds_e ds) @@
                 mk_block [
-                  mk_delete_prefix map_deref @@ fst_many pat;
-                  mk_cunit
-                ])
-              mk_cunit @@
+                  mk_delete_prefix "acc" @@ fst_many pat;
+                  mk_var "acc"]
+                )
+              (mk_var map_deref) @@
               mk_var "frontier"
       | None -> (* non-map ds *)
         (* look for any entry in the ds containing vid *)
         let vid = fst @@ List.find (r_match r_vid |- fst) (ds_e ds) in
-        let t' = unwrap_tind ds.t in
-        (* handle the possiblity of indirections *)
-        let do_bind, id =
-          if is_tind ds.t then
-            let unwrap = ds.id^"_unwrap" in
-            (fun x -> mk_bind (mk_var ds.id) unwrap x), unwrap
-          else id_fn, ds.id
-        in
+        let t' = ds.t in
         let temp = "temp" in
         (* delete any entry with a lower or matching vid *)
         mk_let [temp] (mk_empty t') @@
-        do_bind @@
         mk_block
           (* add < vid to temporary collection *)
           [mk_iter
@@ -147,12 +139,12 @@ let do_gc_fns c =
                 mk_if (mk_lt (mk_var vid) @@ mk_var min_vid)
                   (mk_insert temp @@ ids_to_vars @@ fst_many (ds_e ds)) @@
                   mk_cunit) @@
-              mk_var id
+              mk_var ds.id
           ;
           (* delete values from ds *)
            mk_iter
             (mk_lambda' ["val", wrap_ttuple @@ snd_many (ds_e ds)] @@
-              mk_delete id [mk_var "val"]) @@
+              mk_delete ds.id [mk_var "val"]) @@
             mk_var temp
           ]
   in
