@@ -31,23 +31,30 @@ let loader_tables ast =
 (* change the initialization values of global maps to have the vid as well *)
 (* receives the new types to put in and the starting expression to change *)
 (* inserts a reference to the default vid var for that node *)
-let add_vid_to_init_val col_vid_t col_id_ts ~add_unit e =
+let add_vid_to_init_val ds old_ds ~add_unit e =
   let vid_var = mk_var g_init_vid.id in
   let add_u l = if add_unit then mk_cunit :: l else l in
   let rec loop e = match U.tag_of_expr e with
     | Combine -> let x, y = U.decompose_combine e in
         mk_combine (loop x) (loop y)
-    | Empty t -> mk_empty col_vid_t
+    | Empty t -> mk_empty ds.t
     | Singleton t -> let x = U.decompose_singleton e in
-        mk_singleton col_vid_t [loop x]
+        mk_singleton ds.t [loop x]
     | Tuple -> let xs = U.decompose_tuple e in
         mk_tuple @@ P.map_add_v vid_var xs
     (* this should only be encountered if there's no tuple *)
     | Const _ | Var _ -> mk_tuple @@ P.map_add_v vid_var @@ add_u [e]
     (* modify loading from a file *)
     | Map ->
-        mk_map (mk_lambda' col_id_ts @@
-          mk_tuple @@ (mk_var g_min_vid.id)::(ids_to_vars @@ fst_many col_id_ts))
+        let old_pat = pat_of_ds old_ds in
+        let new_pat = pat_of_flat_e ~add_vid:true ~vid_nm:g_min_vid.id
+                        ~has_vid:false ds @@ fst_many old_pat in
+          mk_agg (mk_lambda2' ["acc", ds.t] (ds_e old_ds) @@
+          mk_block [
+            mk_insert "acc" new_pat;
+            mk_var "acc"
+          ])
+          (mk_empty ds.t)
           e
     | _ -> U.dist_fail e "add_vid_to_init_val: unhandled modification"
   in loop e
@@ -80,7 +87,9 @@ let get_global_map_inits c = function
       in
       begin match m_expr with
         | None   -> []
-        | Some e -> [map_id, mk_ind @@ add_vid_to_init_val ds.t (ds_e ds) ~add_unit @@ change_load_csv e]
+        | Some e ->
+            let old_ds = map_ds_of_id ~global:false ~vid:false c map_id in
+            [map_id, mk_ind @@ add_vid_to_init_val ds old_ds ~add_unit @@ change_load_csv e]
                     (* add a vid *)
       end
     with Not_found | ProgInfo.Bad_data _ -> [] end
