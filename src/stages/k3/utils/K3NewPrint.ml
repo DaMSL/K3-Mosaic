@@ -1030,7 +1030,7 @@ declare NATIONLoaderRP : collection {path: string} @Collection -> collection {ra
   with effects \\_ -> \\_ -> io
 
 @:CArgs 2
-declare REGIONLoaderRP : collection {path: string} @Collection -> collection {ra:int, rb:string, rc:int} @Set -> ()
+declare REGIONLoaderRP : collection {path: string} @Collection -> collection {ra:int, rb:string, rc:string} @Set -> ()
   with effects \\_ -> \\_ -> io
 
 "^ string_of_program ?map_to_fold p' envs
