@@ -119,7 +119,9 @@ let add_record_ids c ?prefix l =
 
 (* Add record ids to a string *)
 let concat_record_str ?(sep=":") l =
-  List.map (fun (s,x) -> Printf.sprintf "%s%s%s" s sep x) l
+  List.map (fun (s,x) -> Printf.sprintf "%s%s%s" s sep x) @@
+  (* remove any ignored fields *)
+  List.filter (fun (_,x) -> x <> "_") l
 
 let error () = lps "???"
 
