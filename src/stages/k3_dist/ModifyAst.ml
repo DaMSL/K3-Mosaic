@@ -10,6 +10,22 @@ module D = K3Dist
 
 exception InvalidAst of string
 
+(* find any loaders in the ast *)
+let loader_tables ast =
+  let bu_fn acc e =
+    try
+      let fn, arg = U.decompose_apply e in
+      if U.decompose_var fn = K3StdLib.csv_loader_name then
+        match U.decompose_const arg with
+        | CString f -> (Filename.chop_extension @@ Filename.basename f, f)::acc
+        | _ -> failwith "bad filename"
+      else acc
+    with Failure _ -> acc
+  in
+  U.fold_over_exprs (fun acc t ->
+    Tree.fold_tree_th_bu bu_fn acc t
+  ) [] ast
+
 (* --- Map declarations --- *)
 
 (* change the initialization values of global maps to have the vid as well *)
@@ -45,12 +61,29 @@ let get_global_map_inits c = function
       let map_id = P.map_id_of_name c.p name in
       let ds = map_ds_of_id ~global:true c map_id in
       let add_unit = List.length ds.e = 1 in
+      (* change load_csv to use a witness variable *)
+      let change_load_csv e =
+        Tree.modify_tree_bu e (fun e ->
+          try
+            let fn, arg = U.decompose_apply e in
+            if U.decompose_var fn = K3StdLib.csv_loader_name then
+              match U.decompose_const arg with
+              | CString f ->
+                  let table = Filename.chop_extension @@ Filename.basename f in
+                  mk_apply (mk_var @@ K3StdLib.csv_loader_name^"2") @@
+                    mk_tuple [mk_var @@ table^"_path"; 
+                              (* witness type so the function knows what to return *)
+                              mk_empty (wrap_tset' @@ ProgInfo.map_types_no_val_for c.p map_id)]
+              | _ -> failwith "bad filename"
+            else e
+          with Failure _ -> e)
+      in
       begin match m_expr with
         | None   -> []
-        | Some e -> [map_id, mk_ind @@ add_vid_to_init_val ds.t (ds_e ds) ~add_unit e]
+        | Some e -> [map_id, mk_ind @@ add_vid_to_init_val ds.t (ds_e ds) ~add_unit @@ change_load_csv e]
                     (* add a vid *)
       end
-    with Not_found -> [] end
+    with Not_found | ProgInfo.Bad_data _ -> [] end
   | _ -> []
 
 (* return ast for map initializations, adding the vid *)

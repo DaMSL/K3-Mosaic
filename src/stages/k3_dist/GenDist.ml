@@ -1195,10 +1195,18 @@ let roles_of c (ast:program_t) =
     Role("node", []);
   ]
 
+(* loader vars for ast *)
+let gen_loader_vars ast =
+  let tables = ModifyAst.loader_tables ast in
+  List.map (fun (s, f) ->
+    mk_global_val_init (s^"_path") t_string @@ mk_cstring f) tables
+
 let declare_global_vars c partmap ast =
   (* dummy switch path variable. Will be filled at cpp stage *)
   decl_global
     (create_ds "switch_path" t_string ~init:(mk_cstring "agenda.csv")) ::
+  (* path variables for any csv loaders *)
+  gen_loader_vars ast @
   Proto.global_vars @
   D.global_vars c (ModifyAst.map_inits_from_ast c ast) @
   Timer.global_vars @

@@ -333,15 +333,10 @@ let read_data line =
     else if r_match r_float s then VFloat(fos s)
     else VString s) line
 
-(* csv loading function *)
-let name = "load_csv_col"
-let args = ["file", t_string]
-let ret  = wrap_tbag t_top
-let err_fn s s' = failwith @@ "load_csv: "^s^" "^s'
-let fn e =
+let load_csv_fn err_fn args e =
   let aoe = List.map (fun x -> arg_of_env (fst x) e) args in
   match aoe with
-  | [VString f] ->
+  | (VString f)::_ ->
     let chan = open_in (!g_load_path^Filename.dir_sep^f) in
     let rec loop v =
       try
@@ -350,11 +345,27 @@ let fn e =
         loop (v_insert err_fn (VTuple l) v)
       with End_of_file -> v
     in
-    let cont = loop (v_empty_of_t TBag) in
+    let cont = loop (v_empty_of_t TSet) in
     close_in chan;
     e, VTemp(cont)
 
   | _ -> invalid_arg name
+
+(* csv loading function *)
+let csv_loader_name = "load_csv_col"
+let args = ["file", t_string]
+let ret  = wrap_tbag t_top
+let err_fn s s' = failwith @@ "load_csv: "^s^" "^s'
+let fn e = load_csv_fn err_fn args e
+let decl = wrap_tfunc (wrap_ttuple @@ snd_many args) ret
+let _ = Hashtbl.add func_table csv_loader_name (decl, wrap_args args, fn)
+
+(* csv loading function, with dummy witness type var *)
+let name = "load_csv_col2"
+let args = ["file", t_string; "emptyCol", wrap_tset t_top]
+let ret  = wrap_tbag t_top
+let err_fn s s' = failwith @@ name^": "^s^" "^s'
+let fn e = load_csv_fn err_fn args e
 let decl = wrap_tfunc (wrap_ttuple @@ snd_many args) ret
 let _ = Hashtbl.add func_table name (decl, wrap_args args, fn)
 

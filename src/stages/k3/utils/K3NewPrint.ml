@@ -16,6 +16,8 @@ let indent = ref 0
 
 let force_list = List.iter force
 
+let r_underscore = Str.regexp "_"
+
 (* lazy functions *)
 let lhv i = [lazy (obc i)]     (* open box *)
 let lhov i = [lazy (obv i)]
@@ -59,6 +61,7 @@ type config = {
                 trig_env:T.type_bindings_t;
                 map_to_fold:bool;       (* convert maps and ext to fold, due to k3new limitations *)
                 project:StrSet.t;       (* need to project further down *)
+                singleton_id:string;
               }
 
 let default_config = {
@@ -66,6 +69,7 @@ let default_config = {
                        trig_env = [];
                        map_to_fold = false;
                        project = StrSet.empty;
+                       singleton_id="i";
                      }
 
 let verbose_types_config = default_config
@@ -104,10 +108,10 @@ let record_id_of_num ?(prefix="r") i =
   prefix ^ (s_of_i "" i)
 
 (* Add record ids to a list *)
-let add_record_ids ?prefix l =
+let add_record_ids c ?prefix l =
   match l with
   | []    -> failwith "No list to add record ids to"
-  | [x]   -> ["i", x]
+  | [x]   -> [c.singleton_id, x]
   | [x;y] -> ["key", x; "value", y] (* to make gbaggs easy *)
   | _     ->
     let i_l = insert_index_fst ~first:1 l in
@@ -158,7 +162,7 @@ let rec lazy_base_type ?(brace=true) ?(mut=false) ?(empty=false) c ~in_col t =
   let wrap_mut f = if mut && not empty then lps "mut " <| f else f in
   let wrap_single f =
     let wrap = if brace then lazy_brace else id_fn in
-    if in_col then wrap(lps "i:" <| f) else f
+    if in_col then wrap(lps (c.singleton_id^":") <| f) else f
   in
   let wrap = wrap_single |- wrap_mut in
   match t with
@@ -176,7 +180,7 @@ let rec lazy_base_type ?(brace=true) ?(mut=false) ?(empty=false) c ~in_col t =
   | TTop         -> wrap @@ lps "top"
   | TIndirect vt -> wrap (lps "ind " <| lazy_type c ~in_col vt)
   | TTuple(vts)  -> (* tuples become records *)
-      let rec_vts = add_record_ids vts in
+      let rec_vts = add_record_ids c vts in
       let inner = lazy_concat ~sep:lcomma (fun (id, vt) ->
         lps (id^":") <| lazy_type c ~in_col:false vt) rec_vts in
       let wrap = if brace then lazy_brace else id_fn in
@@ -197,11 +201,9 @@ let rec lazy_arg c drop_tuple_paren = function
 let lazy_id_type c (id,t) = lps (id^" : ") <| lazy_type c t
 
 let lazy_const c v =
-  let remove_float_dot s =
+  let add_float_zero s =
     let l = String.length s in
-    if s.[l - 1] = '.' then
-      str_take (l-1) s
-    else s
+    if s.[l - 1] = '.' then s^"0" else s
   in
   match v with
   | CUnknown       -> lps "_"
@@ -209,7 +211,7 @@ let lazy_const c v =
   | CBool true     -> lps "true"
   | CBool false    -> lps "false"
   | CInt i         -> lps @@ string_of_int i
-  | CFloat f       -> lps @@ remove_float_dot @@ string_of_float f
+  | CFloat f       -> lps @@ add_float_zero @@ string_of_float f
   | CString s      -> lps @@ Printf.sprintf "\"%s\"" (String.escaped s)
   | CAddress(s, i) -> lps @@ Printf.sprintf "%s:%d" s i
   | CTarget id     -> lps id
@@ -351,7 +353,9 @@ let var_translate = List.fold_left (fun acc (x,y) -> StringMap.add x y acc) Stri
   ["int_of_float", "truncate";
    "float_of_int", "real_of_int";
    "peers", "my_peers";
-   "parse_sql_date", "tpch_date"]
+   "parse_sql_date", "tpch_date";
+   "maxi", "max";
+   "maxif", "max"]
 
   (* descriptions of how to pass variables. {In,Out}Rec implies that even if we see a non-tuple
    * value, we should turn it into a record (with an 'i' label). This is necessary because of the
@@ -397,7 +401,7 @@ let rec deep_bind ?top_expr ~in_record c arg_n =
         (* only produce binds if we're deeper than specified depth *)
         (if d < 0 then [] else
           let args_id = List.map get_id_of_arg args in
-          let rec_ids = List.filter ((<>) "_" |- snd) @@ add_record_ids args_id in
+          let rec_ids = List.filter ((<>) "_" |- snd) @@ add_record_ids c args_id in
           (* filter out all the ignored ids *)
           begin match rec_ids with
           | []      -> [] (* if there's nothing to bind, skip it *)
@@ -415,13 +419,14 @@ let rec deep_bind ?top_expr ~in_record c arg_n =
   in loop 0 arg_n
 
 (* Apply a method -- the lambda part *)
-and apply_method_nocol ?prefix_fn c ~name ~args ~arg_info =
+and apply_method_nocol ?(dot=true) ?prefix_fn c ~name ~args ~arg_info =
   let wrap_if_big e = match U.tag_of_expr e with
       | Var _ | Const _ | Tuple | Empty _ -> id_fn
       | _ -> lazy_paren
   in
   let args' = list_zip args arg_info in
-  lps ("."^name) <| lsp () <|
+  let dot_s = if dot then "." else "" in
+  lps (dot_s^name) <| lsp () <|
     lazy_concat (fun (e, info) ->
       wrap_if_big e @@ lazy_expr ~expr_info:info ?prefix_fn c e) args'
 
@@ -518,8 +523,8 @@ and filter_of_slice ~frontier c col pat =
   (* prepare record info *)
   let vid_e, es' = if frontier then some @@ hd es, tl es else None, es in
   let ts = List.map T.type_of_expr es' in
-  let id_e = add_record_ids es' in
-  let id_t = add_record_ids ts in
+  let id_e = add_record_ids c es' in
+  let id_t = add_record_ids c ts in
   (* find the non-unknown slices *)
   let filter_e = List.filter (not |- is_unknown |- snd) id_e in
   (* obvious optimization - no slice needed *)
@@ -620,7 +625,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
         else lps id
       end
   | Tuple     -> let es = U.decompose_tuple expr in
-    let id_es = add_record_ids es in
+    let id_es = add_record_ids c es in
     let inner = lazy_concat ~sep:lcomma (fun (id, e) ->
         lps (id^":") <| lazy_expr c e) id_es
     in lazy_brace inner
@@ -729,6 +734,29 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
       (* divide becomes an infix operator *)
       | Var "divf" -> do_pair_paren "/"
       | Var "mod"  -> do_pair_paren "%"
+      | Var "reciprocali"
+      | Var "reciprocal" -> arith_paren_pair "/" (light_type c @@ KH.mk_cint 1, e2)
+      (* convert load_csv to right format *)
+      | Var s when s = K3StdLib.csv_loader_name^"2" ->
+          let tup = U.unwrap_tuple e2 in
+          begin match List.map U.tag_of_expr tup with
+          (* get name of var to extract table name *)
+          | [Var x; col] ->
+              begin match Str.split r_underscore x with
+              | [table;_] ->
+                  let open KH in
+                  let args =
+                    List.map (light_type c) @@
+                    [ mk_singleton (wrap_tbag t_string) [mk_var x];
+                      (* get the witness collection *)
+                      list_last tup] in
+                  let loader = String.uppercase table^"LoaderRP" in
+                  apply_method_nocol {c with singleton_id = "path"}
+                    ~dot:false ~name:loader ~args ~arg_info:[ANonLambda, Out; ANonLambda, Out]
+              | _ -> failwith "bad arg to load_csv_col"
+              end
+          | _ -> failwith "bad arg to load_csv_col2"
+          end
       (* function application *)
       | _ -> function_application c e1 [e2]
     end
@@ -794,7 +822,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
           wrap_indent (lazy_expr c bound) <| lsp () <| lps "in" <| lsp () <|
           wrap_indent (lazy_expr c bexpr)
         | _   ->  (* bind deconstruct *)
-            let ids' = concat_record_str @@ add_record_ids ids in
+            let ids' = concat_record_str @@ add_record_ids c ids in
             lps "bind" <| lsp () <| wrap_indent(lazy_expr c bound) <| lsp () <|
             lps "as" <| lsp () <| lps "{" <| lps_list NoCut lps ids' <|
             lps "}" <| lsp () <| lps "in" <| lsp () <|
@@ -898,7 +926,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
 
   | Subscript _ -> let i, tup = U.decompose_subscript expr in
       let t = KH.unwrap_ttuple @@ T.type_of_expr tup in
-      let id_t = add_record_ids t in
+      let id_t = add_record_ids c t in
       let id = fst @@ at id_t (i-1) in
       (paren_l tup @@ lazy_expr c tup) <| lps "." <| lps id
 
@@ -1102,12 +1130,23 @@ let string_of_program ?(map_to_fold=false) prog (env, trig_env) =
 (* envs are the typechecking environments to allow us to do incremental typechecking *)
 let string_of_dist_program ?(file="default.txt") ?map_to_fold (p, envs) =
   let p' = filter_incompatible p in
-  "include \"Core/Builtins.k3\"\n"^
-  "include \"Annotation/Map.k3\"\n"^
-  "include \"Annotation/Maps/VMap.k3\"\n"^
-  "include \"Annotation/Set.k3\"\n"^
-  "include \"Annotation/Seq.k3\"\n\n"^
-  "declare my_peers : collection { i:address } @ {Collection} =\n"^
-  "  peers.fold (\\acc -> (\\x -> (acc.insert {i:x.addr}; acc))) empty { i:address} @ Collection\n"^
-  string_of_program ?map_to_fold p' envs
+"\
+include \"Core/Builtins.k3\"
+include \"Annotation/Map.k3\"
+include \"Annotation/Maps/VMap.k3\"
+include \"Annotation/Set.k3\"
+include \"Annotation/Seq.k3\"
+
+declare my_peers : collection { i:address } @ {Collection} =
+  peers.fold (\\acc -> (\\x -> (acc.insert {i:x.addr}; acc))) empty { i:address} @ Collection
+
+@:CArgs 2
+declare NATIONLoaderRP : collection {path: string} @Collection -> collection {ra:int, rb:string, rc:int, rd:string} @Set -> ()
+  with effects \\_ -> \\_ -> io
+
+@:CArgs 2
+declare REGIONLoaderRP : collection {path: string} @Collection -> collection {ra:int, rb:string, rc:int} @Set -> ()
+  with effects \\_ -> \\_ -> io
+
+"^ string_of_program ?map_to_fold p' envs
 

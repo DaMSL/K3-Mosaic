@@ -1464,9 +1464,9 @@ let m3_to_k3 ?(generate_init = false) ?(role = "client")
                   mk_map
                     (mk_lambda' id_ts @@
                       mk_tuple @@ vars@[mk_cint 1])
-                  (mk_apply (mk_var "load_csv_col") @@ mk_cstring f))
+                  (mk_apply (mk_var K3StdLib.csv_loader_name) @@ mk_cstring f))
 
-            | _ -> failwith "Table relations that aren't filesources are unsuppored"
+            | _ -> failwith "Table relations that aren't filesources are unsupported"
             end
           with Not_found -> x end
       | x -> x

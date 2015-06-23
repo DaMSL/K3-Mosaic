@@ -12,3 +12,5 @@ val lookup_value : id_t -> value_t
 val lookup_type : id_t -> type_t
 
 val funcs : unit -> (string * entry_t) list
+
+val csv_loader_name : string
