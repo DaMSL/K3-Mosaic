@@ -214,11 +214,9 @@ let rec lazy_arg c drop_tuple_paren = function
 let lazy_id_type c (id,t) = lps (id^" : ") <| lazy_type c t
 
 let lazy_const c v =
-  let remove_float_dot s =
+  let add_float_zero s =
     let l = String.length s in
-    if s.[l - 1] = '.' then
-      str_take (l-1) s
-    else s
+    if s.[l - 1] = '.' then s^"0" else s
   in
   match v with
   | CUnknown       -> lps "_"
@@ -226,7 +224,7 @@ let lazy_const c v =
   | CBool true     -> lps "true"
   | CBool false    -> lps "false"
   | CInt i         -> lps @@ string_of_int i
-  | CFloat f       -> lps @@ remove_float_dot @@ string_of_float f
+  | CFloat f       -> lps @@ add_float_zero @@ string_of_float f
   | CString s      -> lps @@ Printf.sprintf "\"%s\"" (String.escaped s)
   | CAddress(s, i) -> lps @@ Printf.sprintf "%s:%d" s i
   | CTarget id     -> lps id
