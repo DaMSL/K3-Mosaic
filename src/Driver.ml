@@ -160,7 +160,6 @@ type parameters = {
     mutable k3new_folds:     bool;   (* output fold instead of map/ext *)
     mutable load_path:       string;    (* path for the interpreter to load csv files from *)
     mutable map_type:        K3Dist.map_type; (* whether to generate code that uses multiindex maps *)
-    mutable enable_gc:       bool;
     mutable gen_deletes:     bool;
     mutable gen_correctives: bool;
 
@@ -191,7 +190,6 @@ let default_cmd_line_params () = {
     k3new_folds       = false;
     load_path         = "";
     map_type          = K3Dist.MapVMap;
-    enable_gc         = true;
     gen_deletes       = true;
     gen_correctives   = true;
 
@@ -471,7 +469,7 @@ let test params inputs =
   in List.iter2 test_fn params.input_files inputs
 
 let transform_to_k3_dist params p proginfo =
-  let {map_type; enable_gc; stream_file;
+  let {map_type; stream_file;
        gen_deletes; gen_correctives; agenda_map} = params in
   try
     GenDist.gen_dist ~map_type ~stream_file
@@ -586,8 +584,6 @@ let param_specs = Arg.align
       "         For k3new: output folds instead of ext and map";
   "--map-vmap", Arg.Unit (fun () -> cmd_line_params.map_type <- K3Dist.MapVMap),
       "         Use vmaps";
-  "--nogc", Arg.Unit (fun () -> cmd_line_params.enable_gc <- false),
-      "         Use garbage collection";
   "--no-deletes", Arg.Unit (fun () -> cmd_line_params.gen_deletes <- false),
       "         Generate deletes";
   "--no-correctives", Arg.Unit (fun () -> cmd_line_params.gen_correctives <- false),
