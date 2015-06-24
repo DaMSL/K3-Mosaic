@@ -154,7 +154,8 @@ let do_gc_trig c =
   let min_vid = "gc_vid" in
   mk_code_sink' do_gc_nm [min_vid, t_vid] [] @@
     mk_block @@
-      List.map (fun ds -> mk_apply' ("do_gc_"^ds.id) (mk_tuple [mk_var min_vid])) @@ ds_to_gc c
+      (mk_apply' "print" @@ mk_cstring "Starting GC") ::
+      (List.map (fun ds -> mk_apply' ("do_gc_"^ds.id) @@ mk_tuple [mk_var min_vid]) @@ ds_to_gc c)
 
 (* master switch trigger to receive and add to the max vid map *)
 let ms_rcv_gc_vid_nm = "ms_rcv_gc_vid"

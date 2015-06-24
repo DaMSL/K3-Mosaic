@@ -163,7 +163,7 @@ type parameters = {
     mutable gen_deletes:     bool;
     mutable gen_correctives: bool;
 
-    mutable src_interval:    float;   (* interval (s) between the interpreter feeding sources *)
+    mutable src_interval:    int;     (* interval (ms) between the interpreter feeding sources *)
     mutable interp_arg_file: string;  (* args to pass to the interpreter *)
 
     mutable stream_file:     string;   (* file to stream from (into switches) *)
@@ -195,7 +195,7 @@ let default_cmd_line_params () = {
     gen_deletes       = true;
     gen_correctives   = true;
 
-    src_interval      = 0.002;
+    src_interval      = 2;
     interp_arg_file   = "";
 
     stream_file       = "input.csv";
@@ -304,7 +304,7 @@ let interpret_k3 params prog = let p = params in
     let interp = init_k3_interpreter tp ~peers:p.peers
                                         ~queue_type:p.queue_type
                                         ~load_path:p.load_path
-                                        ~src_interval:p.src_interval
+                                        ~src_interval:(foi p.src_interval /. 1000.)
                                         ~interp_file:p.interp_arg_file
     in
     interpret_k3_program interp
@@ -611,7 +611,7 @@ let param_specs = Arg.align
       "         Queue type: global/node/trigger";
   "--load_path", Arg.String (fun s -> cmd_line_params.load_path <- s),
       "         Path for interpreter to load files from";
-  "--src_int", Arg.Float (fun f -> cmd_line_params.src_interval <- f),
+  "--msg_interval", Arg.Int (fun x -> cmd_line_params.src_interval <- x),
       "         Interval between feeding in sources";
   "--sfile", Arg.String (fun s -> cmd_line_params.stream_file <- s),
       "         Path for stream file";

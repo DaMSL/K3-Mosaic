@@ -34,7 +34,8 @@ def run(target_file,
         map_type="set",
         workdir="temp",
         run_interp=True,
-        gc_interval=20000
+        gc_interval=20000,
+        msg_interval=2
         ):
 
     to_root = ".."
@@ -218,10 +219,11 @@ def run(target_file,
                 json.dump(j, f)
 
             json_cmd = ("--interp_args " + json_file)
+            msg_cmd  = ("--msg_interval " + str(msg_interval))
 
             # run the k3 driver on the input
             cmd = concat([k3o, "--test", peer_cmd, "-q", queue_type, load_path, json_cmd,
-                  k3dist_file, ">", output_file, "2>", error_file])
+                  msg_cmd, k3dist_file, ">", output_file, "2>", error_file])
             print_system(cmd, verbose)
             if check_error(error_file, verbose, True):
                 os.chdir(saved_dir)

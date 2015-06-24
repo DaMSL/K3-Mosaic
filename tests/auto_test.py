@@ -47,6 +47,8 @@ def run():
                         default="temp", help="Directory to store work files")
     parser.add_argument('--gc_interval', action='store',
                         default=20000, type=int, help="Change gc interval")
+    parser.add_argument('--msg_interval', action='store',
+                        default=20000, type=int, help="Change gc interval")
 
     args = parser.parse_args()
 
@@ -98,7 +100,8 @@ def run():
                                 map_type=args.map_type,
                                 workdir=args.workdir,
                                 run_interp=args.run_interp,
-                                gc_interval=args.gc_interval
+                                gc_interval=args.gc_interval,
+                                msg_interval=args.msg_interval
                                 )
         # check if a test failed
         if not res:
