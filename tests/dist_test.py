@@ -214,7 +214,7 @@ def run(target_file,
 
         if run_interp:
             # create a json file
-            j  = {"gc_interval":gc_interval}
+            j  = {"ms_gc_interval":gc_interval}
             with open(json_file, 'w') as f:
                 json.dump(j, f)
 
