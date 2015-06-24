@@ -2,7 +2,7 @@ open Util
 open K3.AST
 module KP = K3Printing
 
-(* ------ Multimap functions ------ *)
+(* ------ VMap functions ------ *)
 (* NOTE: remove_prefix: we delete up to and including vid, and keep a frontier at vid
  *       update_suffix: updates the > vid and all following vids
  *       frontier: gets values < the vid only

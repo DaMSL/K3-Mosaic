@@ -370,9 +370,11 @@ type arg_info_l = (arg_info * out_record) list
 let vid_out_arg = ANonLambda, if K3Dist.is_vid_tuple then OutRec else Out
 let vid_in_arg  = if K3Dist.is_vid_tuple then InRec else In
 
-let is_unknown c = match U.tag_of_expr c with
-  | Const CUnknown -> true
-  | _              -> false
+let is_unknown e =
+  match U.tag_of_expr e with Const CUnknown -> true | _ -> false
+
+let is_tuple e =
+  match U.tag_of_expr e with Tuple -> true | _ -> false
 
 (* create a deep bind for lambdas, triggers, and let statements
  * -depth allows to skip one depth level of binding
@@ -385,7 +387,7 @@ let rec deep_bind ?top_expr ~in_record c arg_n =
     let bind_text i = match top_expr, d with
       | Some e, d
           when d=0 -> lazy_expr c e
-      | _              -> lps @@ id_of_num i
+      | _          -> lps @@ id_of_num i
     in
     match a with
       (* pretend to unwrap a record *)
@@ -521,33 +523,45 @@ and fold_of_map_ext c expr =
  * NOTE: a precise lookup should be picked up by Peek(Slice(x,_)) matching
  *)
 and filter_of_slice ~frontier c col pat =
+  let tup_t = snd @@ KH.unwrap_tcol @@ T.type_of_expr col in
   let es, lam_fn = breakdown_pat pat in
-  (* prepare record info *)
-  let vid_e, es' = if frontier then some @@ hd es, tl es else None, es in
-  let ts = List.map T.type_of_expr es' in
-  let id_e = add_record_ids c es' in
-  let id_t = add_record_ids c ts in
-  (* find the non-unknown slices *)
-  let filter_e = List.filter (not |- is_unknown |- snd) id_e in
-  (* obvious optimization - no slice needed *)
-  if null filter_e && not frontier then lazy_expr c col
-  else
-    let do_eq (id, v) = KH.mk_eq (KH.mk_var id) v in
-    let lambda = light_type c @@
-      KH.mk_lambda' id_t @@
-        lam_fn @@ (* apply an inner lambda constructor *)
-        List.fold_right (fun x acc ->
-          KH.mk_and acc @@ do_eq x
-        )
-        (try tl filter_e
-         with Invalid_argument _ -> [])
-        (try do_eq @@ hd filter_e
-         with Invalid_argument _ -> light_type c KH.mk_ctrue)
+  let vid_e, es = if frontier then some @@ hd es, tl es else None, es in
+
+  (* prepare record info, and allow deep slice patterns *)
+  let rec loop es : ((expr_t -> expr_t) * expr_t) list =
+    let i_e = insert_index_fst ~first:1 es in
+    (* find the non-unknown slices *)
+    let i_e = List.filter (not |- is_unknown |- snd) i_e in
+    let s_e = List.map (first KH.mk_subscript) i_e in
+    (* find if there are any tuples inside the pattern *)
+    let tups, no_tups = List.partition (is_tuple |- snd) s_e in
+    (* handle the tuples by recursing over them *)
+    let tups = List.flatten @@ List.map (fun (subst,e) ->
+      let deep = loop @@ U.unwrap_tuple e in
+      List.map (fun (s,e) -> s |- subst , e) deep
+    ) tups
     in
-    let args, arg_info =
-      if frontier then [unwrap_some vid_e; lambda], [vid_out_arg; ALambda[InRec], Out]
-      else [lambda], [ALambda[InRec], Out] in
-    apply_method c ~name:"filter" ~col ~args ~arg_info
+    no_tups @ tups
+  in
+  let s_es = loop es in
+  (* obvious optimization - no slice needed *)
+  if null s_es && not frontier then lazy_expr c col else
+  let do_eq e (sub_fn, v) = KH.mk_eq (sub_fn e) v in
+  let nm = "_t" in
+  let lambda = light_type c @@
+    KH.mk_lambda' [nm, tup_t] @@
+      lam_fn @@ (* apply an inner lambda constructor *)
+      List.fold_right
+        (fun x acc -> KH.mk_and acc @@ do_eq (KH.mk_var nm) x)
+        (try tl s_es
+          with Invalid_argument _ -> [])
+        (try do_eq (KH.mk_var nm) @@ hd s_es
+          with Invalid_argument _ -> light_type c KH.mk_ctrue)
+  in
+  let args, arg_info =
+    if frontier then [unwrap_some vid_e; lambda], [vid_out_arg; ALambda[InRec], Out]
+    else [lambda], [ALambda[InRec], Out] in
+  apply_method c ~name:"filter" ~col ~args ~arg_info
 
 (* printing expressions *)
 (* argnums: lambda only   -- number of expected arguments *)
