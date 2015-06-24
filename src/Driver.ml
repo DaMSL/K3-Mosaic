@@ -164,6 +164,8 @@ type parameters = {
     mutable gen_correctives: bool;
 
     mutable src_interval:    float;   (* interval (s) between the interpreter feeding sources *)
+    mutable interp_arg_file: string;  (* args to pass to the interpreter *)
+
     mutable stream_file:     string;   (* file to stream from (into switches) *)
     mutable agenda_map:      K3Dist.mapping_t;
   }
@@ -194,12 +196,13 @@ let default_cmd_line_params () = {
     gen_correctives   = true;
 
     src_interval      = 0.002;
+    interp_arg_file   = "";
+
     stream_file       = "input.csv";
     agenda_map        = K3Dist.default_mapping;
   }
 
 let cmd_line_params = default_cmd_line_params ()
-
 
 let handle_error heading p uuid ?name msg =
   let n = match name with Some nm -> nm^": " | _ -> "" in
@@ -302,6 +305,7 @@ let interpret_k3 params prog = let p = params in
                                         ~queue_type:p.queue_type
                                         ~load_path:p.load_path
                                         ~src_interval:p.src_interval
+                                        ~interp_file:p.interp_arg_file
     in
     interpret_k3_program interp
   with RuntimeError (uuid,str) -> handle_interpret_error (K3Data tp) uuid str
@@ -588,6 +592,8 @@ let param_specs = Arg.align
       "         Generate deletes";
   "--no-correctives", Arg.Unit (fun () -> cmd_line_params.gen_correctives <- false),
       "         Generate correctives";
+  "--interp_args", Arg.String (fun s -> cmd_line_params.interp_arg_file <- s),
+      "         Load json arg file for interpretation";
 
   (* Debugging parameters *)
 

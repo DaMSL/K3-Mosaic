@@ -1,3 +1,4 @@
+PKG yojson
 B bin
 B bin/src
 B bin/src/util

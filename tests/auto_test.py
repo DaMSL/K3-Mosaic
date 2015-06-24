@@ -45,6 +45,8 @@ def run():
                         default=True, help="Run the interpreter")
     parser.add_argument('--workdir', action='store', type=str, dest='workdir',
                         default="temp", help="Directory to store work files")
+    parser.add_argument('--gc_interval', action='store',
+                        default=20000, type=int, help="Change gc interval")
 
     args = parser.parse_args()
 
@@ -93,9 +95,10 @@ def run():
                                 new_k3=args.new_k3,
                                 gen_deletes=args.gen_deletes,
                                 gen_correctives=args.gen_correctives,
-                                run_interp=args.run_interp,
                                 map_type=args.map_type,
-                                workdir=args.workdir
+                                workdir=args.workdir,
+                                run_interp=args.run_interp,
+                                gc_interval=args.gc_interval
                                 )
         # check if a test failed
         if not res:

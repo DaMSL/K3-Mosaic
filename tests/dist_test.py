@@ -7,6 +7,7 @@
 import os
 import re
 import platform
+import json
 from utils import check_exists, check_error, print_system, concat
 
 def get_nice_name(path):
@@ -32,7 +33,8 @@ def run(target_file,
         gen_correctives=True,
         map_type="set",
         workdir="temp",
-        run_interp=True
+        run_interp=True,
+        gc_interval=20000
         ):
 
     to_root = ".."
@@ -67,6 +69,7 @@ def run(target_file,
     error_file = os.path.join(temp_dir, "temp.err")
     part_file = os.path.join(temp_dir, "temp.part")
     output_file = os.path.join(temp_dir, "temp.out")
+    json_file = os.path.join(temp_dir, "temp.json")
 
     if not os.path.exists(temp_dir):
         os.makedirs(temp_dir)
@@ -209,8 +212,15 @@ def run(target_file,
             print_system(cmd, verbose)
 
         if run_interp:
+            # create a json file
+            j  = {"gc_interval":gc_interval}
+            with open(json_file, 'w') as f:
+                json.dump(j, f)
+
+            json_cmd = ("--interp_args " + json_file)
+
             # run the k3 driver on the input
-            cmd = concat([k3o, "--test", peer_cmd, "-q", queue_type, load_path,
+            cmd = concat([k3o, "--test", peer_cmd, "-q", queue_type, load_path, json_cmd,
                   k3dist_file, ">", output_file, "2>", error_file])
             print_system(cmd, verbose)
             if check_error(error_file, verbose, True):
