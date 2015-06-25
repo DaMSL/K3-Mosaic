@@ -500,7 +500,6 @@ let nd_log_master =
 let nd_log_for_t t = "nd_log_"^t
 
 (* log data structures *)
-(* TODO: change to maps on vid *)
 let log_ds c : data_struct list =
   let log_struct_for trig =
     let e' = args_of_t c.p trig in

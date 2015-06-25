@@ -153,6 +153,7 @@ let do_gc_trig c =
   let min_vid = "gc_vid" in
   mk_code_sink' do_gc_nm [min_vid, t_vid] [] @@
     mk_block @@
+      (* (mk_apply' "print_env" mk_cunit) :: (* debug *) *)
       (mk_apply' "print" @@ mk_cstring "Starting GC") ::
       (List.map (fun ds -> mk_apply' ("do_gc_"^ds.id) @@ mk_tuple [mk_var min_vid]) @@ ds_to_gc c)
 
@@ -184,7 +185,7 @@ let ms_rcv_gc_vid c =
               (mk_block [ (* then *)
                 (* send gc notices to nodes only *)
                 (* NOTE: currently there's no need to send do_gc to the switches. If that changes, this check needs
-                 * to change as well *)
+                 * to change as wel *)
                 mk_iter (mk_lambda' D.jobs.e @@
                     mk_if (mk_eq (mk_var "job") @@ mk_var "job_node")
                       (mk_send do_gc_nm (mk_var "addr") [mk_var min_vid])
