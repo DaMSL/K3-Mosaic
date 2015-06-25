@@ -51,7 +51,7 @@ let sw_ack_rcv_trig sw_check_done =
   (* increment ack num *)
   mk_block [
     mk_incr sw_num_ack.id;
-    mk_delete_with sw_ack_log "x" ~k:[mk_var "vid"] ~delcond:(mk_eq (mk_snd @@ mk_var "x") @@ mk_cint 0)
+    mk_delete_with sw_ack_log "x" ~k:[mk_var "vid"] ~delcond:(mk_eq (mk_snd @@ mk_var "x") @@ mk_cint 1)
       ~v:(mk_sub (mk_snd @@ mk_var "x") @@ mk_cint 1);
     sw_check_done
   ]
@@ -82,8 +82,9 @@ let ms_gc_vid_ctr = create_ds "ms_gc_vid_ctr" (mut t_int) ~init:(mk_cint 0)
 
 (* master: number of expected responses *)
 let ms_num_gc_expected =
-  let init = mk_size_slow @@ G.peers in
-  create_ds "ms_num_gc_expected" (mut t_int) ~init
+  (* delayed init after we have num of switched and nodes *)
+  let d_init = mk_add (mk_var D.num_switches.id) @@ mk_var D.num_nodes.id in
+  create_ds "ms_num_gc_expected" (mut t_int) ~d_init
 
 (* data structures needing gc *)
 let ds_to_gc c =
@@ -132,21 +133,16 @@ let do_gc_fns c =
         let temp = "temp" in
         (* delete any entry with a lower or matching vid *)
         mk_let [temp] (mk_empty t') @@
-        mk_block
-          (* add < vid to temporary collection *)
-          [mk_iter
-            (mk_lambda' (ds_e ds) @@
-                mk_if (mk_lt (mk_var vid) @@ mk_var min_vid)
-                  (mk_insert temp @@ ids_to_vars @@ fst_many (ds_e ds)) @@
-                  mk_cunit) @@
+        mk_assign ds.id @@
+        mk_agg
+          (mk_lambda2' ["acc", ds.t] (ds_e ds) @@
+            mk_if (mk_geq (mk_var vid) @@ mk_var min_vid)
+                  (mk_block [
+                    mk_insert "acc" @@ ids_to_vars @@ fst_many @@ ds_e ds;
+                    mk_var "acc"]) @@
+                  mk_var "acc")
+              (mk_empty ds.t) @@
               mk_var ds.id
-          ;
-          (* delete values from ds *)
-           mk_iter
-            (mk_lambda' ["val", wrap_ttuple @@ snd_many (ds_e ds)] @@
-              mk_delete ds.id [mk_var "val"]) @@
-            mk_var temp
-          ]
   in
   List.map gc_std @@ ds_to_gc c
 
@@ -170,11 +166,11 @@ let ms_rcv_gc_vid c =
       mk_assign ms_gc_vid_ctr.id @@
         mk_add (mk_var ms_gc_vid_ctr.id) @@ mk_cint 1;
       (* check if we have enough responses *)
-      mk_if (mk_geq (mk_var ms_gc_vid_ctr.id) @@ mk_var ms_num_gc_expected.id)
+      mk_if (mk_eq (mk_var ms_gc_vid_ctr.id) @@ mk_var ms_num_gc_expected.id)
         (* if so ... *)
         (mk_let [min_vid]
           (* get the min vid *)
-          (mk_min_max min_vid (mk_var "vid") t_vid mk_lt (mk_var D.g_min_vid.id) ms_gc_vid_map) @@
+          (mk_min_max min_vid (mk_var "vid") t_vid mk_lt (mk_var D.g_max_vid.id) ms_gc_vid_map) @@
           mk_block [
             (* clear the counter *)
             mk_assign ms_gc_vid_ctr.id @@ mk_cint 0;
@@ -206,7 +202,7 @@ let rcv_req_gc_vid =
     mk_if (mk_eq (mk_var D.job.id) @@ mk_var D.job_node.id)
       (* send out node min vid: much faster if we had a min function *)
       (mk_send ms_rcv_gc_vid_nm (mk_var master_addr.id)
-        (* default is max_vid, to allow anything to go on *)
+        (* default is max_vid (infinity), to allow anything to go on *)
         [G.me_var; mk_min_max "min_vid" (mk_fst @@ mk_var "vid_stmt_id")
           t_vid mk_lt (mk_var D.g_max_vid.id) D.nd_stmt_cntrs])
       (* else, do nothing *)
@@ -217,9 +213,11 @@ let rcv_req_gc_vid =
 let ms_send_gc_req =
   mk_code_sink' D.ms_send_gc_req_nm unit_arg [] @@
   mk_iter
-    (mk_lambda' G.peers.e @@
-      mk_send rcv_req_gc_vid_nm (mk_var @@ fst @@ hd @@ G.peers.e) [mk_cunit]) @@
-    mk_var G.peers.id
+    (mk_lambda' D.switches.e @@
+      let addr_var = mk_var @@ fst @@ hd @@ D.switches.e in
+      mk_send rcv_req_gc_vid_nm addr_var [mk_cunit]) @@
+    (* send to all switches and nodes *)
+    (mk_combine (mk_var D.switches.id) @@ mk_var D.nodes.id)
 
 (* master: start the gc process *)
 let ms_gc_init c =
