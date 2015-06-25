@@ -12,10 +12,10 @@ let log ?name s _ = match !logging, !channel with
 | true, None   -> let c = open_out file in
                   channel := Some c;
                   incr log_cnt;
-                  output_string c s
+                  output_string c (Lazy.force s)
 | true, Some c ->
     incr log_cnt;
-    output_string c s;
+    output_string c (Lazy.force s);
     if !log_cnt >= log_flush_cnt then begin
       log_cnt := 0;
       flush c

@@ -49,6 +49,9 @@ def run():
                         default=20000, type=int, help="Change gc interval (ms)")
     parser.add_argument('--msg_interval', action='store',
                         default=2, type=int, help="Change message interval (ms)")
+    parser.add_argument('--no-log', action='store_false', dest='logging',
+                        default=True, help="Disable logging")
+
 
     args = parser.parse_args()
 
@@ -87,7 +90,7 @@ def run():
         if verbose:
             print("")
         if not args.distributed:
-            res = dist_test.run(test_file, verbose=verbose, distrib=False)
+            res = dist_test.run(test_file, verbose=verbose, distrib=False, logging=args.logging)
         else:
             res = dist_test.run(test_file,
                                 num_nodes=args.num_nodes,
@@ -101,7 +104,8 @@ def run():
                                 workdir=args.workdir,
                                 run_interp=args.run_interp,
                                 gc_interval=args.gc_interval,
-                                msg_interval=args.msg_interval
+                                msg_interval=args.msg_interval,
+                                logging=args.logging
                                 )
         # check if a test failed
         if not res:

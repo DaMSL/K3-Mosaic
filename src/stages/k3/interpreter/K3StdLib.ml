@@ -268,7 +268,7 @@ let _ = Hashtbl.add func_table
   print_name (print_decl, print_args, print_fn)
 
 let fn e = match arg_of_env "s" e with
-  | VString s -> Log.log (s^"\n") `Debug; e, unit_temp
+  | VString s -> Log.log (lazy (s^"\n")) `Debug; e, unit_temp
   | _         -> invalid_arg "log_fn"
 let name = "log"
 let decl = wrap_tfunc t_string t_unit
@@ -390,7 +390,7 @@ let name = "print_env"
 let args = unit_arg
 let ret = t_unit
 let fn e =
-  Log.log (string_of_env ~accessed_only:false ~skip_empty:false e) `Debug;
+  Log.log (lazy (string_of_env ~accessed_only:false ~skip_empty:false e)) `Debug;
   e, VTemp VUnit
 let decl = wrap_tfunc (wrap_ttuple @@ snd_many args) ret
 let _ = Hashtbl.add func_table name (decl, wrap_args args, fn)

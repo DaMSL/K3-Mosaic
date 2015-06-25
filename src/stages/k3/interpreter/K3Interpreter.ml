@@ -33,12 +33,12 @@ let iters = ref 0
 (* Prettified error handling *)
 let int_erroru uuid ?extra fn_name s =
   let msg = fn_name^": "^s in
-  let rs = "interpreter: "^msg in
+  let rs = lazy ("interpreter: "^msg) in
   Log.log rs `Error;
   (match extra with
   | Some (address, env) ->
-    Log.log (sp ">>>> Peer %s\n" @@ string_of_address address) `Error;
-    Log.log (sp "%s\n" @@ string_of_env ~skip_empty:false ~accessed_only:false env) `Error
+    Log.log (lazy (sp ">>>> Peer %s\n" @@ string_of_address address)) `Error;
+    Log.log (lazy (sp "%s\n" @@ string_of_env ~skip_empty:false ~accessed_only:false env)) `Error
   | _ -> ());
   raise @@ RuntimeError(uuid, msg)
 
@@ -123,7 +123,7 @@ let rec eval_fun uuid f =
           | "sleep", Some s, VInt t -> R.sleep s addr (foi t /. 1000.) ;
                                        env, VTemp VUnit
           | "haltEngine", Some s, _ ->
-              Log.log ("shutting down "^string_of_address addr) ();
+              Log.log (lazy ("shutting down "^string_of_address addr)) ();
               R.halt s addr; env, VTemp VUnit
           | _ ->
             let new_env = {env with locals=bind_args uuid arg a env.locals} in
@@ -445,7 +445,7 @@ and eval_expr (address:address) sched_st cenv texpr =
       begin match sched_st with
         | Some s ->
             let send_str =
-              Printf.sprintf "send(%s, %s, %s)\n" (sov target) (sov addr) (sov arg) in
+              lazy (Printf.sprintf "send(%s, %s, %s)\n" (sov target) (sov addr) (sov arg)) in
             Log.log send_str ~name:"K3Interpreter.Msg" `Debug;
 
             (* create a new level on the queues *)
@@ -625,7 +625,7 @@ type interpreter_t = {
 
 (* consume sources ie. evaluate instructions *)
 let consume_sources sched_st address env =
-  let log_node s = Log.log (sp "Node %s: %s\n" (string_of_address address) s) `Trace in
+  let log_node s = Log.log (lazy (sp "Node %s: %s\n" (string_of_address address) s)) `Trace in
   (* function to pass to consumer *)
   let schedule_fn src_bindings src_id events =
     schedule_event sched_st src_bindings src_id address events
@@ -683,7 +683,7 @@ let interpret_k3_program i =
       if R.network_has_work i.scheduler then begin
         (* func to return program env *)
         let prog_env_fn addr =
-          Log.log (sp "Node %s: consuming messages\n" @@ string_of_address addr) `Trace;
+          Log.log (lazy (sp "Node %s: consuming messages\n" @@ string_of_address addr)) `Trace;
           (Hashtbl.find i.envs addr).prog_env
         in
         run_scheduler ~slice:1 i.scheduler prog_env_fn
@@ -706,22 +706,22 @@ let interpret_k3_program i =
     (* check if we should continue *)
     if msg_peers > 0 || src_peers > 0 then loop src_peers
     else
-      Log.log (sp "Interpreter shutting down. msg_peers[%d], src_peers[%d]\n" msg_peers src_peers) `Trace
+      Log.log (lazy (sp "Interpreter shutting down. msg_peers[%d], src_peers[%d]\n" msg_peers src_peers)) `Trace
   in
-  Log.log (sp "Starting up interpreter\n") `Trace;
+  Log.log (lazy (sp "Starting up interpreter\n")) `Trace;
   loop 1;
-  Log.log (sp "Finished execution\n") `Trace;
+  Log.log (lazy (sp "Finished execution\n")) `Trace;
   let prog_state = List.map (fun (i,x) -> i, x.prog_env) @@ list_of_hashtbl i.envs in
   (* Log program state *)
   List.iter (fun (addr, e) ->
-    Log.log (sp ">>>> Peer %s\n" (string_of_address addr)) `Trace;
-    Log.log (sp "%s\n" (string_of_env e ~accessed_only:false)) `Trace;
+    Log.log (lazy (sp ">>>> Peer %s\n" @@ string_of_address addr)) `Trace;
+    Log.log (lazy (sp "%s\n" @@ string_of_env e ~accessed_only:false)) `Trace;
   ) prog_state;
   prog_state
 
 (* Initialize an interpreter given the parameters *)
 let init_k3_interpreter ?queue_type ?(src_interval=0.002) ~peers ~load_path ~interp_file typed_prog =
-  Log.log (sp "Initializing scheduler\n") `Trace;
+  Log.log (lazy (sp "Initializing scheduler\n")) `Trace;
   let scheduler = init_scheduler_state ?queue_type ~peers in
   let json =
     if interp_file <> "" then
@@ -731,7 +731,7 @@ let init_k3_interpreter ?queue_type ?(src_interval=0.002) ~peers ~load_path ~int
   match peers with
   | []  -> failwith "init_k3_program: Peers list is empty!"
   | _   ->
-      Log.log (sp "Initializing interpreter\n") `Trace;
+      Log.log (lazy (sp "Initializing interpreter\n")) `Trace;
       (* Initialize an environment for each peer *)
       K3StdLib.g_load_path := load_path;
       let len = List.length peers in

@@ -166,6 +166,7 @@ type parameters = {
     mutable load_path:       string;  (* path for the interpreter to load csv files from *)
     mutable src_interval:    int;     (* interval (ms) between the interpreter feeding sources *)
     mutable interp_arg_file: string;  (* args to override k3 globals in interpreter (json) *)
+    mutable logging:         bool;    (* do we log to a file *)
 
     (* k3new options *)
     mutable k3new_data_file: string;
@@ -195,6 +196,7 @@ let default_cmd_line_params () = {
 
     src_interval      = 2;
     interp_arg_file   = "";
+    logging           = true;
 
     stream_file       = "input.csv";
     agenda_map        = K3Dist.default_mapping;
@@ -293,7 +295,10 @@ let repl params inputs = ()
 let compile params inputs = ()
 
 (* Interpret actions *)
-let interpret_k3 params prog = let p = params in
+let interpret_k3 params prog =
+  let p = params in
+  if not params.logging then Log.set false else Log.set true;
+
   (* this not only adds type info, it adds the globals which are crucial
     * for interpretation *)
   let tp, envs = typed_program_with_globals prog in
@@ -569,6 +574,8 @@ let param_specs = Arg.align
       "         Path for stream file";
   "--agenda", Arg.String (fun s -> cmd_line_params.agenda_map <- K3Dist.load_mapping_file s),
       "         Agenda to read from";
+  "--no-log", Arg.Unit (fun () -> cmd_line_params.logging <- false),
+      "         Disable logging";
   ])
 
 let usage_msg =
