@@ -119,7 +119,7 @@ module Make(OrdVid: ICommon.OrderedKeyType)(OrdKey: ICommon.OrderedKeyType) = st
       if OrdVid.compare t vid <= 0 then begin
         (match !keep with
         | None    -> keep := Some(t,v)
-        | Some (t',v') -> if OrdVid.compare t' t > 0 then keep := Some(t',v'));
+        | Some (t',v') -> if OrdVid.compare t t' > 0 then keep := Some(t, v));
         false
       end else true) vidmap
     in
@@ -201,6 +201,10 @@ let test =
 
   let n = VM.update_suffix 2 1 (fun s -> s^"boo") m in
   let o = VM.add 4 1 "4-1boo" @@ VM.add 15 1 "15-1boo" @@ VM.remove 4 1 @@ VM.remove 15 1 m in
+  assert (n === o);
+
+  let n = VM.remove_prefix 5 1 m in
+  let o = VM.remove 2 1 m in
   assert (n === o)
 
 
