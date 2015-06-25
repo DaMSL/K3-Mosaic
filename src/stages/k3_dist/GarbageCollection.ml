@@ -80,6 +80,9 @@ let ms_gc_vid_map =
 (* master: counter for number of responses *)
 let ms_gc_vid_ctr = create_ds "ms_gc_vid_ctr" (mut t_int) ~init:(mk_cint 0)
 
+(* master: keep track of last gc vid so we don't issue an unneeded gc *)
+let ms_last_gc_vid = create_ds "ms_last_gc_vid" (mut t_vid) ~init:(mk_var D.g_min_vid.id)
+
 (* master: number of expected responses *)
 let ms_num_gc_expected =
   (* delayed init after we have num of switched and nodes *)
@@ -176,10 +179,16 @@ let ms_rcv_gc_vid c =
             mk_assign ms_gc_vid_ctr.id @@ mk_cint 0;
             (* clear the data struct *)
             mk_assign ms_gc_vid_map.id @@ mk_empty ms_gc_vid_map.t;
-            (* send gc notices *)
-            mk_iter (mk_lambda' G.peers.e @@
-              mk_send do_gc_nm (mk_var @@ fst @@ hd @@ G.peers.e) [mk_var min_vid]) @@
-              mk_var G.peers.id;
+            (* if we've advanced since last gc *)
+            mk_if (mk_gt (mk_var min_vid) @@ mk_var ms_last_gc_vid.id)
+              (mk_block [ (* then *)
+                (* send gc notices *)
+                mk_iter (mk_lambda' G.peers.e @@
+                    mk_send do_gc_nm (mk_var @@ fst @@ hd @@ G.peers.e) [mk_var min_vid]) @@
+                  mk_var G.peers.id;
+                (* overwrite last gc vid *)
+                mk_assign ms_last_gc_vid.id @@ mk_var min_vid; ])
+              mk_cunit; (* else nothing *)
             (* tell timer to ping us in X seconds *)
             mk_send T.tm_insert_timer_trig_nm (mk_var D.timer_addr.id)
               [mk_var ms_gc_interval.id; mk_cint @@ T.num_of_trig c D.ms_send_gc_req_nm; G.me_var]
@@ -234,6 +243,7 @@ let global_vars _ = List.map decl_global
    ms_gc_interval;
    ms_gc_vid_map;
    ms_gc_vid_ctr;
+   ms_last_gc_vid;
    ms_num_gc_expected;
   ]
 
