@@ -182,10 +182,14 @@ let ms_rcv_gc_vid c =
             (* if we've advanced since last gc *)
             mk_if (mk_gt (mk_var min_vid) @@ mk_var ms_last_gc_vid.id)
               (mk_block [ (* then *)
-                (* send gc notices *)
-                mk_iter (mk_lambda' G.peers.e @@
-                    mk_send do_gc_nm (mk_var @@ fst @@ hd @@ G.peers.e) [mk_var min_vid]) @@
-                  mk_var G.peers.id;
+                (* send gc notices to nodes only *)
+                (* NOTE: currently there's no need to send do_gc to the switches. If that changes, this check needs
+                 * to change as well *)
+                mk_iter (mk_lambda' D.jobs.e @@
+                    mk_if (mk_eq (mk_var "job") @@ mk_var "job_node")
+                      (mk_send do_gc_nm (mk_var "addr") [mk_var min_vid])
+                      mk_cunit) @@
+                  mk_var D.jobs.id;
                 (* overwrite last gc vid *)
                 mk_assign ms_last_gc_vid.id @@ mk_var min_vid; ])
               mk_cunit; (* else nothing *)
