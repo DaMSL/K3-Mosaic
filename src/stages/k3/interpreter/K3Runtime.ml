@@ -184,7 +184,6 @@ let process_task s prog_env_fn = match s.queue with
           else begin match Queue.peek nodeq with
             | Sleep t ->
                 if Sys.time () > t then begin
-                  decr_count s;
                   ignore @@ Queue.pop nodeq;
                   q.last <- idx
                 end else cont ()

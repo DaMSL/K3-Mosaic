@@ -704,7 +704,9 @@ let interpret_k3_program i =
       end else 1
     in
     (* check if we should continue *)
-    if msg_peers > 0 || src_peers > 0 then loop src_peers else ()
+    if msg_peers > 0 || src_peers > 0 then loop src_peers
+    else
+      Log.log (sp "Interpreter shutting down. msg_peers[%d], src_peers[%d]\n" msg_peers src_peers) `Trace
   in
   Log.log (sp "Starting up interpreter\n") `Trace;
   loop 1;
