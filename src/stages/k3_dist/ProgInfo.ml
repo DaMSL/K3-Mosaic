@@ -5,74 +5,119 @@ open K3Printing
 
 exception Bad_data of string;;
 
+(* Make the types distinct so we don't mix them up *)
+module type DATA = sig
+  type t
+  val to_s : t -> string
+  val eq : t -> t -> bool
+end
+
+module type SDATA = sig
+  include DATA
+  val of_s : string -> t
+end
+
+module type IDATA = sig
+  include DATA
+  val of_i : int -> t
+end
+
+module StringBased = struct
+  type t = string
+  let to_s s = s
+  let eq x y = String.compare x y = 0
+  let of_s s = s
+end
+
+module IntBased = struct
+  type t = int
+  let to_s = soi
+  let eq x y  = x - y = 0
+  let of_i x = x
+end
+
+module Stmt : IDATA = struct
+  include IntBased
+end
+
+module Map : IDATA = struct
+  include IntBased
+end
+
+module Trig : IDATA = struct
+  include IntBased
+end
+
+module TrigN : SDATA = struct
+  include StringBased
+end
+
+module MapN : SDATA = struct
+  include StringBased
+end
+
 (* data structure needed after extraction from the k3 program *)
-type stmt_id_t = int
-type trig_id_t = int
-type trig_name_t = string
-type map_id_t = int
+
 (* id, position in map's args *)
-type map_var_binding_t = id_t * int
+type map_var_binding_t = string * int
 
 type stmt_data_t
   (* stmt_id, trig_id, lhs_map, lhs_map_binding, rhs_maps_with_bindings *)
-  = stmt_id_t * trig_id_t * map_id_t * map_var_binding_t list *
-    (map_id_t * map_var_binding_t list) list
+  = {
+    sid : Stmt.t;
+    trig : Trig.t;
+    lmap : Map.t;
+    lbind : map_var_binding_t list;
+    rbinds : (Map.t * map_var_binding_t list) list;
+  }
 
 type trig_data_t
   (* trig_id, name, bound_args, stmts *)
-  = trig_id_t * string * (id_t * type_t) list * stmt_id_t list
+  = {
+    tid : Trig.t;
+    tname : TrigN.t;
+    args : (id_t * type_t) list;
+    stmts : Stmt.t list;
+  }
 
   (* map_id, map_name, parameters *)
-type map_data_t = map_id_t * string * type_t list
+type map_data_t = {
+  mid : Map.t;
+  mname : MapN.t;
+  params : type_t list;
+  is_table : bool;
+}
 
-type prog_data_t = trig_data_t list * stmt_data_t list * map_data_t list
+type prog_data_t =
+  {
+    trigs: trig_data_t list;
+    stmts: stmt_data_t list;
+    maps: map_data_t list;
+    tables : Map.t list;
+  }
 
-let string_of_var (vn, vt) = vn^":"^(string_of_type vt)
+let sp = Printf.sprintf
 
-let string_of_binding (vn, idx) = vn^":"^(string_of_int idx)
-let string_of_bindings bl =
-  (String.concat ", " (List.map string_of_binding bl))
-let string_of_map (map, bl) =
-  (string_of_int map) ^ "[" ^ (string_of_bindings bl) ^ "]"
+let string_of_var (vn, vt)      = sp "%s:%s" vn (string_of_type vt)
+let string_of_binding (vn, idx) = sp "%s:%d" vn idx
+let string_of_bindings bl       = strcatmap string_of_binding bl
+let string_of_map (map, bl)     = sp "%s[%s]" (Map.to_s map) (string_of_bindings bl)
+let string_of_map_data {mid; mname; params; is_table} :string =
+  sp "%s(%s%s)[%s]" (MapN.to_s mname) (Map.to_s mid) (if is_table then ", table" else "")
+    (strcatmap string_of_type params)
 
-let string_of_map_data ((map_id, map_name, tl):map_data_t):string =
-  map_name ^ "(" ^ (string_of_int map_id) ^ ")[" ^
-  (String.concat ", " (List.map string_of_type tl))^"]"
+let string_of_stmt_data {sid; trig; lmap; lbind; rbinds} : string =
+  sp "%s::%s : %s <- %s" (Trig.to_s trig) (Stmt.to_s sid)
+    (string_of_map (lmap, lbind)) (strcatmap string_of_map rbinds)
 
+let string_of_trig_data {tid; tname; args; stmts} : string =
+  sp "%s(%s)[%s] : %s" (TrigN.to_s tname) (Trig.to_s tid) (strcatmap string_of_var args) (strcatmap Stmt.to_s stmts)
 
-let string_of_stmt_data ((stmt_id, trig_id, lhs_map, lhs_map_binding,
-                         rhs_maps_with_bindings):stmt_data_t):string =
-  ( (string_of_int trig_id)^"::"^(string_of_int stmt_id)^" : "^
-    (string_of_map (lhs_map, lhs_map_binding))^" <<== "^
-    (String.concat "; " (List.map string_of_map rhs_maps_with_bindings))
-  )
-
-let string_of_trig_data ((trig_id, name, bound_args, stmts):trig_data_t):string=
-  ( name^"("^(string_of_int trig_id)^") ["^
-    (String.concat ", " (List.map string_of_var bound_args))^
-    "] : "^
-    (String.concat ", " (List.map string_of_int stmts))
-  )
-
-let string_of_prog_data ((trig_data, stmt_data, map_data):prog_data_t): string =
-  ( "--- Triggers ---\n"^
-    (String.concat "\n" (List.map string_of_trig_data trig_data))^
-    "\n\n--- Statements ---\n"^
-    (String.concat "\n" (List.map string_of_stmt_data stmt_data))^
-    "\n\n--- Maps ---\n"^
-    (String.concat "\n" (List.map string_of_map_data map_data))^
-    "\n" )
-
-
-(* --- helper functions to get information from the data structure --- *)
-let get_trig_data (p:prog_data_t) = match p with
-  (trig, _, _) -> trig
-
-let get_stmt_data (p:prog_data_t) = match p with
-  (_, stmt, _) -> stmt
-
-let get_map_data (p:prog_data_t) = match p with
-  (_, _, map) -> map
+let string_of_prog_data {trigs; stmts; maps}: string =
+  sp "--- Triggers ---\n%s\n\n--- Statements ---\n%s\n\n--- Maps ---\n%s\n"
+    (strcatmap ~sep:"\n" string_of_trig_data trigs)
+    (strcatmap ~sep:"\n" string_of_stmt_data stmts)
+    (strcatmap ~sep:"\n" string_of_map_data maps)
 
 (* function to check if a trigger is a delete/insert trigger *)
 let check_prefix name prefix =
@@ -84,110 +129,109 @@ type trig_kinds = AllTrigs | InsertTrigs | DeleteTrigs
 let is_delete_t t = check_prefix t "delete_"
 let is_insert_t t = check_prefix t "insert_"
 
-let relevant_trig ?(kind=AllTrigs) t = match kind with
-  | AllTrigs    -> is_delete_t t || is_insert_t t
+let relevant_trig ?(kind=AllTrigs) t =
+  let t = TrigN.to_s t in
+  match kind with
+  | AllTrigs    -> is_delete_t t || is_insert_t t || t = "system_ready_event"
   | InsertTrigs -> is_insert_t t
   | DeleteTrigs -> is_delete_t t
 
 (* only non-corrective triggers *)
 let get_trig_list ?(kind=AllTrigs) (p:prog_data_t) =
-  let l = List.map (fun (_, name, _, _) -> name) @@ get_trig_data p in
+  let l = List.map (fun x -> x.tname) p.trigs in
   List.filter (relevant_trig ~kind) l
 
 let for_all_trigs ?(deletes=true) (p:prog_data_t) f =
   let l_delete = String.length "delete" in
   let filter = if deletes then id_fn
-               else List.filter ((<>) "delete" |- str_take l_delete) in
-  List.map (fun t -> f t) @@ filter @@ get_trig_list p
+               else List.filter ((<>) "delete" |- str_take l_delete |- TrigN.to_s) in
+  List.map f @@ filter @@ get_trig_list p
 
-let find_trigger (p:prog_data_t) (tname:string) =
-  try List.find (fun (_, name, _, _) -> name = tname) @@ get_trig_data p
+let find_trigger (p:prog_data_t) tname =
+  try List.find (fun t -> TrigN.eq t.tname tname) p.trigs
   with
-    Not_found -> raise (Bad_data ("No "^tname^" trigger found"))
+    Not_found -> raise (Bad_data ("No "^TrigN.to_s tname^" trigger found"))
 
-let trigger_id_for_name p (trig_name:trig_name_t) =
-  let (id, _, _, _) = find_trigger p trig_name in
-  id
-
-let trigger_name_for_id p (trig_id:trig_id_t) =
-  try let (_, name, _, _) =
-        List.find (fun (id, _, _, _) -> id = trig_id) @@ get_trig_data p
-      in name
+let find_trigger_by_id (p:prog_data_t) tid =
+  try List.find (fun t -> Trig.eq t.tid tid) p.trigs
   with
-    Not_found -> raise (Bad_data ("No trigger "^string_of_int trig_id^" found"))
+    Not_found -> raise (Bad_data ("No trigger "^Trig.to_s tid^" found"))
 
+let trigger_id_for_name p trig_name = (find_trigger p trig_name).tid
+
+let trigger_name_for_id p trig_id = (find_trigger_by_id p trig_id).tname
 
 (* only non-corrective triggers *)
-let get_stmt_list (p:prog_data_t) =
-  let l = List.map (fun (s,t,_,_,_) -> (s,trigger_name_for_id p t)) @@ get_stmt_data p in
-  fst @@ List.split @@ List.filter (relevant_trig |- snd) l
+let get_stmt_list ?kind (p:prog_data_t) =
+  let l = List.map (fun s -> s.sid, trigger_name_for_id p s.trig) p.stmts in
+  fst @@ List.split @@ List.filter (relevant_trig ?kind |- snd) l
 
-let for_all_stmts (p:prog_data_t) f =
-  List.map (fun s -> f s) @@ get_stmt_list p
+let for_all_stmts p f = List.map f @@ get_stmt_list p
 
-let get_map_list (p:prog_data_t) =
-  List.map (fun (id, _, _) -> id) @@ get_map_data p
+(* by default, we exclude tables (static maps that don't change) *)
+let get_map_list ?(tables=false) p = List.map (fun m -> m.mid) @@ p.maps
 
-let for_all_maps (p:prog_data_t) f =
-  List.map (fun m -> f m) @@ get_map_list p
+let for_all_maps ?tables p f = List.map f @@ get_map_list ?tables p
 
-let find_map (p:prog_data_t) (map_id:map_id_t) =
-  try List.find (fun (id, _, _) -> id = map_id) @@ get_map_data p
+let find_map p map_id =
+  try List.find (fun m -> Map.eq m.mid map_id) p.maps
   with
-    Not_found -> raise (Bad_data ("No "^(string_of_int map_id)^" map_id found"))
+    Not_found -> raise (Bad_data ("No "^Map.to_s map_id^" map_id found"))
 
-let find_map_by_name (p:prog_data_t) str =
-  try List.find (fun (_, s, _) -> s = str) @@ get_map_data p
+let find_map_by_name p nm =
+  try List.find (fun m -> MapN.eq m.mname nm) p.maps
   with
-    Not_found -> raise (Bad_data ("No "^str^" map name found"))
+    Not_found -> raise (Bad_data ("No "^MapN.to_s nm^" map name found"))
 
-let find_stmt (p:prog_data_t) (stmt_id:stmt_id_t) =
-  try List.find (fun (id, _, _, _, _) -> id = stmt_id) @@ get_stmt_data p
+let find_stmt p stmt_id =
+  try List.find (fun s -> Stmt.eq s.sid stmt_id) p.stmts
   with
-    Not_found -> raise (Bad_data ("No "^(string_of_int stmt_id)^" stmt_id found"))
+    Not_found -> raise (Bad_data ("No "^Stmt.to_s stmt_id^" stmt_id found"))
 
+let args_of_t p trig_name = (find_trigger p trig_name).args
 
-let args_of_t (p:prog_data_t) (trig_name:trig_name_t) =
-  let (_, _, args, _) = find_trigger p trig_name in
-  args
-
-let stmts_of_t (p:prog_data_t) trig_name =
-  let (_, _, _, stmts) = find_trigger p trig_name in
-  stmts
+let stmts_of_t p trig_name = (find_trigger p trig_name).stmts
 
 (* map a function over stmts in a trigger in a specific way *)
-let map_over_stmts_in_t (p:prog_data_t) func map_func trig_name =
+let map_over_stmts_in_t p func map_func trig_name =
   let stmts = stmts_of_t p trig_name in
   List.flatten @@ List.map
     (fun stmt -> List.map (map_func trig_name stmt) @@ func p stmt)
     stmts
 
 (* output (stmt_id, x) list. Guaranteed to be in stmt order *)
-let s_and_over_stmts_in_t (p:prog_data_t) func trig_name =
-    map_over_stmts_in_t p func (fun _ stmt x -> (stmt, x)) trig_name
+let s_and_over_stmts_in_t p func trig_name =
+  map_over_stmts_in_t p func (fun _ stmt x -> stmt, x) trig_name
 
-let rhs_maps_of_stmt (p:prog_data_t) (stmt_id:stmt_id_t) =
-  let (_, _, _, _, maplist) = find_stmt p stmt_id in
-  nub @@ fst_many maplist
+let remove_table_maps p l =
+    List.filter (fun m -> not @@ List.exists (Map.eq m) p.tables) l
 
-let stmts_rhs_maps (p:prog_data_t) =
+let rhs_maps_of_stmt ?(tables=false) p stmt_id =
+  let l = (find_stmt p stmt_id).rbinds in
+  let l = nub @@ fst_many l in
+  if tables then l
+  else remove_table_maps p l
+
+let stmts_rhs_maps ?(tables=false) p =
   List.flatten @@
-  List.map (fun (stmt, _, _, _, rmaplist) ->
-    let maplist = nub @@ fst_many rmaplist in
-    List.map (fun map -> stmt, map) maplist
-  )
-  (get_stmt_data p)
+    List.map (fun s ->
+      let maplist = nub @@ fst_many s.rbinds in
+      let maplist = if tables then maplist else remove_table_maps p maplist in
+      List.map (fun map -> s.sid, map) maplist
+    )
+    p.stmts
 
-let stmts_lhs_maps (p:prog_data_t) =
-  List.map (fun (stmt, _, lmap, _, _) -> stmt, lmap) @@ get_stmt_data p
+let stmts_lhs_maps p = List.map (fun s -> s.sid, s.lmap) @@ p.stmts
 
 let for_all_stmts_rhs_maps p f = List.map f @@ stmts_rhs_maps p
 
-let stmt_has_rhs_map p stmt_id rhs_map_id =
-  let (_, _, _, _, maplist) = find_stmt p stmt_id in
-  List.exists (fun (map_id, _) -> map_id = rhs_map_id) maplist
+let stmt_has_rhs_map ?tables p stmt_id rhs_map_id =
+  let rmaps = rhs_maps_of_stmt ?tables p stmt_id in
+  List.exists (fun m -> Map.eq m rhs_map_id) rmaps
 
-let stmts_rhs_map_inner (p:prog_data_t) (t:trig_name_t) ~op =
+(* TODO: -- GOT UP TO HERE -- *)
+
+let stmts_rhs_map_inner p (t:trig_name_t) ~op =
   let stmt_data = get_stmt_data p in
   let _, _, _, trig_stmt_ids = find_trigger p t in
   filter_map
