@@ -362,7 +362,7 @@ let _ = Hashtbl.add func_table csv_loader_name (decl, wrap_args args, fn)
 
 (* csv loading function, with dummy witness type var *)
 let name = "load_csv_col2"
-let args = ["file", t_string; "emptyCol", wrap_tset t_top]
+let args = ["file", t_string; "emptyCol", wrap_tbag t_top]
 let ret  = wrap_tbag t_top
 let err_fn s s' = failwith @@ name^": "^s^" "^s'
 let fn e = load_csv_fn err_fn args e

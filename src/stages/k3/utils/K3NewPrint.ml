@@ -1154,11 +1154,11 @@ include \"Annotation/Set.k3\"
 include \"Annotation/Seq.k3\"
 
 @:CArgs 2
-declare NATIONLoaderRP : collection {path: string} @Collection -> collection {ra:int, rb:string, rc:int, rd:string} @Set -> collection {ra:int, rb:string, rc:int, rd:string} @Set
+declare NATIONLoaderRP : collection {path: string} @Collection -> collection {ra:int, rb:string, rc:int, rd:string} @Collection -> collection {ra:int, rb:string, rc:int, rd:string} @Collection
   with effects \\_ -> \\_ -> io
 
 @:CArgs 2
-declare REGIONLoaderRP : collection {path: string} @Collection -> collection {ra:int, rb:string, rc:string} @Set -> collection {ra:int, rb:string, rc:string} @Set
+declare REGIONLoaderRP : collection {path: string} @Collection -> collection {ra:int, rb:string, rc:string} @Collection -> collection {ra:int, rb:string, rc:string} @Collection
   with effects \\_ -> \\_ -> io
 
 declare my_peers : collection { i:address } @ {Collection} =
