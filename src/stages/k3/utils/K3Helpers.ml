@@ -39,9 +39,9 @@ let t_addr_mut = mut t_addr
 
 (* wrap a type in an immutable tuple *)
 let wrap_ttuple typ = match typ with
+  | []     -> canonical @@ TUnit
   | [h]    -> h
   | h::t   -> canonical @@ TTuple(typ)
-  | _      -> invalid_arg "No tuple to wrap"
 let wrap_ttuple_mut typ = mut @@ wrap_ttuple typ
 
 (* general collection wrap function *)
@@ -162,9 +162,9 @@ let mk_caddress a = mk_const @@ CAddress a
 let mk_var id = mk_stree (Var(id)) []
 
 let mk_tuple ?(force=false) items = match items with
+  | []  when not force -> mk_cunit
   | [i] when not force -> i
-  | i::is -> mk_stree Tuple items
-  | _     -> invalid_arg "Nothing to use mk_tuple on"
+  | _                  -> mk_stree Tuple items
 
 let mk_just x = mk_stree Just [x]
 
@@ -508,7 +508,8 @@ let vid_increment ?(vid_expr=mk_var "vid") () =
   mk_tuple [mk_add vid_expr (mk_cint 1)]
 
 let min_vid_k3 = mk_tuple [mk_cint 0]
-let start_vid_k3 = mk_tuple [mk_cint 1]
+let sys_r_e_vid_k3 = mk_tuple [mk_cint 1]
+let start_vid_k3 = mk_tuple [mk_cint 2]
 
 (* id function for maps *)
 let mk_id tuple_types =

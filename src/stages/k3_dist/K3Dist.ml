@@ -9,6 +9,8 @@ module P = ProgInfo
 
 module IdMap = Map.Make(struct type t = id_t let compare = String.compare end)
 
+let sys_r_e = "system_ready_event"
+
 (* an agenda mapping type *)
 type mapping_t = type_t list * int list StrMap.t
 

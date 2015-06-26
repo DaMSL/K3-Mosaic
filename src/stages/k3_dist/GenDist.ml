@@ -541,12 +541,18 @@ let sw_send_fetch_fn c s_rhs_lhs s_rhs trig_name =
   let buf = D.sw_trig_buf_prefix^trig_name in
   mk_global_fn
     (send_fetch_name_of_t trig_name) ["vid", t_vid] [] @@
-    (* pop an argument out of the buffers *)
-    mk_pop buf "args"
-      (mk_error @@ "unexpected missing arguments in "^buf) @@
-      (* decompose args *)
-      mk_let (fst_many @@ P.args_of_t c.p trig_name)
-        (mk_var "args") @@
+    let handle_args e =
+      (* handle the case of no arguments (system_ready) *)
+      if P.args_of_t c.p trig_name = [] then
+        (* pop an argument out of the buffers *)
+        mk_pop buf "args"
+          (mk_error @@ "unexpected missing arguments in "^buf) @@
+          (* decompose args *)
+          mk_let (fst_many @@ P.args_of_t c.p trig_name)
+            (mk_var "args") e
+      else e
+    in
+    handle_args @@
       mk_block @@
         send_completes_for_stmts_with_no_fetch @
         send_puts @
@@ -1291,13 +1297,17 @@ let gen_dist ?(gen_deletes=true)
       P.for_all_trigs ~deletes:c.gen_deletes c.p @@
         fun t -> gen_dist_for_t c ast t
   in
+  let sys_ready =
+    try ignore(ProgInfo.find_trigger p "system_ready_event"); true
+    with Not_found -> false in
+
   let prog =
     declare_global_vars c partmap ast @
     declare_global_funcs c partmap ast @
     (if c.gen_correctives then send_corrective_fns c else []) @
     proto_funcs @
     [mk_flow @@
-      Proto.triggers c @
+      Proto.triggers c ~sys_ready @
       GC.triggers c Proto.sw_check_done @
       TS.triggers Proto.sw_check_done @
       Timer.triggers c @

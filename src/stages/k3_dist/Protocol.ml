@@ -48,19 +48,45 @@ let sw_rcv_init =
     mk_send ms_rcv_sw_init_ack_nm (mk_var D.master_addr.id) [mk_cunit];
   ]
 
+let ms_sys_r_e_barrier_cnt =
+  create_ds "ms_sys_r_e_barrier_cnt" (mut t_int) ~init:(mk_cint 0)
+
+(* master: barrier for system_ready_event. *)
+let ms_sys_r_e_barrier_nm = "ms_"^D.sys_r_e^"_barrier"
+let ms_sys_r_e_barrier =
+  mk_code_sink' ms_sys_r_e_barrier_nm unit_arg [] @@
+    mk_incr ms_sys_r_e_barrier_cnt.id;
+    mk_if (mk_eq (mk_var ms_sys_r_e_barrier_cnt.id) @@ mk_var D.num_nodes.id)
+      (* continue with switch init *)
+      (* else, tell switches to init *)
+      (mk_iter (mk_lambda' ["addr", t_addr] @@
+          mk_send sw_rcv_init_nm (mk_var "addr") [mk_cunit]) @@
+        mk_var D.switches.id)
+      mk_cunit
+
+(* switch: system ready event handling. should only be created when we have
+ * system_ready_event code *)
+let sw_sys_r_e_nm = "sw_"^D.sys_r_e
+let sw_sys_r_e () =
+  mk_code_sink' sw_system_ready_event_nm unit_arg [] @@
+    mk_apply' (send_fetch_name_of_t D.sys_r_e) sys_r_e_vid_k3
+
 let ms_rcv_jobs_ack_cnt = create_ds "ms_rcv_jobs_ack_cnt" (mut t_int) ~init:(mk_cint 0)
 let ms_rcv_jobs_ack_nm = "ms_rcv_jobs_ack"
-let ms_rcv_jobs_ack =
+let ms_rcv_jobs_ack ~sys_ready =
   mk_code_sink' ms_rcv_jobs_ack_nm unit_arg [] @@
   mk_block [
     mk_incr ms_rcv_jobs_ack_cnt.id;
     (* if we've receive all acks *)
     mk_if (mk_eq (mk_var ms_rcv_jobs_ack_cnt.id) @@ mk_var D.num_peers.id)
-      (mk_block [
-        (* tell switches to init *)
-        mk_iter (mk_lambda' ["addr", t_addr] @@
-            mk_send sw_rcv_init_nm (mk_var "addr") [mk_cunit]) @@
-          mk_var D.switches.id]) @@
+        (* if we have a sys_ready event, we need to activate that first *)
+        (if sys_ready then
+          mk_send sw_sys_r_e_nm (mk_var TS.sw_next_switch_addr.id) []
+        else 
+          (* else, tell switches to init *)
+          mk_iter (mk_lambda' ["addr", t_addr] @@
+              mk_send sw_rcv_init_nm (mk_var "addr") [mk_cunit]) @@
+            mk_var D.switches.id) @@
       mk_cunit
   ]
 
@@ -276,10 +302,10 @@ let global_vars = List.map decl_global [
   ms_rcv_switch_done_cnt;
 ]
 
-let triggers c = [
+let triggers c ~sys_ready = [
   ms_rcv_sw_init_ack c;
   sw_rcv_init;
-  ms_rcv_jobs_ack;
+  ms_rcv_jobs_ack ~sys_ready;
   rcv_jobs;
   ms_rcv_job;
   rcv_master_addr;
