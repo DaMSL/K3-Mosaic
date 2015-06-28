@@ -67,107 +67,252 @@ type shuffle_fn_entry = {
   name : string;
 }
 
+type map_type = MapVMap
+
 type config = {
   p : P.prog_data_t;
-  (* a mapping from K3 map ids to index sets we build up as we slice *)
-  map_idxs : IndexSet.t IntMap.t;
-  (* a mapping from new map names to index sets we build up as we slice *)
-  mapn_idxs : IndexSet.t StrMap.t;
   shuffle_meta : shuffle_fn_entry list;
-  use_multiindex : bool;
-  enable_gc : bool;
+  map_type : map_type;
   gen_deletes : bool;
   gen_correctives : bool;
+  (* optimize figuring out corrective map possiblities *)
   corr_maps : map_id_t list * map_id_t list;
   (* a file to use as the stream to switches *)
   stream_file : string;
-  (* a mapping for agenda *)
+  (* a mapping for agenda: how the relations map to agenda indices *)
   agenda_map : mapping_t;
 }
 
-let string_of_map_idxs c map_idxs =
-  let b = Buffer.create 100 in
-  IntMap.iter (fun map_id idx ->
-    Printf.bprintf b "map %s:\n" @@ P.map_name_of c.p map_id;
-    IndexSet.iter (Printf.bprintf b "%s\n" |- K3Printing.string_of_index) idx
-  ) map_idxs;
-  Buffer.contents b
+let default_config = {
+  p = [], [], [];
+  shuffle_meta = [];
+  map_type = MapVMap;
+  gen_deletes = true;
+  gen_correctives = true;
+  corr_maps = [], [];
+  stream_file = "";
+  agenda_map = [], StrMap.empty;
+}
+
+(* what the generic type of the global maps is *)
+let wrap_t_of_map = function
+  | MapVMap -> mut |- wrap_tvmap
+
+let wrap_string_map s = "[<"^s^">]"
+
+let wrap_t_of_map' mt = wrap_t_of_map mt |- wrap_ttuple
+
+(* what the generic type of data carried around is *)
+let wrap_t_calc  = wrap_tbag
+let wrap_t_calc' = wrap_tbag'
+
+(* split a map's types into key, value. For vmaps, remove the vid *)
+let map_t_split' ts = list_split (-1) ts
+
+let read_e ~vid ~global e =
+  if vid && not global then ("vid", t_vid)::e
+  else if global && List.length e = 1 then
+      (* add a unit key for the case of no key *)
+      ("_", t_unit)::e
+  else e
+
+let ds_e ds = read_e ~vid:ds.vid ~global:ds.global ds.e
+
+let string_of_pat pat =
+  let open K3PrintSyntax in
+  strcatmap (fun (e,t) -> "("^string_of_expr e^", "^string_of_type t^")") pat
+
+let string_of_pat_e pat = strcatmap K3PrintSyntax.string_of_expr pat
+
+let string_of_ds ds =
+  Printf.sprintf "{id:%s; e:%s; ee:%s; t:%s; global:%b; vid:%b}"
+  ds.id
+  (String.concat ", " @@ List.map (fun (s,t) -> s^", "^K3PrintSyntax.string_of_type t) ds.e)
+  (String.concat ", " @@ List.map (fun stl -> ("["^String.concat ", " (List.map (fun (s,t) -> s^", "^K3PrintSyntax.string_of_type t) stl) ^"]")) ds.ee)
+  (K3PrintSyntax.string_of_type ds.t)
+  ds.global
+  ds.vid
+
+(* get a ds representing a map *)
+(* @calc: have the type of inner calculation *)
+(* @vid: keep the vid *)
+(* @global: always has vid (indirectly) *)
+let map_ds_of_id ?name ?(suffix="") ?(vid=true) ~global c map_id =
+  let vid = if global then true else vid in
+  let nm = unwrap_option (map_name_of c.p map_id) name in
+  let e = map_ids_types_for c.p map_id in
+  let wrap = if global then wrap_t_of_map' c.map_type else wrap_t_calc' in
+  (* suffix added only to last value *)
+  let add_suffix l =
+    let k, v = list_split (-1) l in
+    let v' = List.map (first @@ fun x -> x^suffix) v in
+    k @ v'
+  in
+  let e = add_suffix e in
+  let e, ee, t, init =
+    (* real external map *)
+    if global then
+      let k, v = map_t_split' e in
+      let e, ee =
+        if k = [] then
+          ["value"^suffix, wrap_ttuple @@ snd_many v], [v]
+        else
+          ["key", wrap_ttuple @@ snd_many k;
+           "value"^suffix, wrap_ttuple @@ snd_many v],
+          [k; v]
+      in
+      let t = wrap @@ snd_many @@ read_e ~vid ~global e in
+      let init = mk_ind @@ mk_empty t in
+      e, ee, t, init
+    else
+      let t = wrap @@ snd_many @@ read_e ~vid ~global e in
+      e, [], t, mk_empty t
+  in
+  create_ds nm t ~e ~ee ~init ~global ~map_id ~vid
+
+(* create a map structure: used for both maps and buffers *)
+let make_map_decl c name map_id =
+  map_ds_of_id ~name ~vid:true ~global:true c map_id
+
+(* turn a flat pattern into a potentially deep pattern *)
+let pat_of_flat typ ~has_vid wrap_tup vid_fn unit_pat unit_ds ds flat =
+  if ds.ee = [] then flat
+  else
+    let flat = if has_vid then tl flat else flat in
+    let l_flat = List.length flat in
+    let l_ee = list_sum List.length ds.ee in
+    if l_flat <> l_ee then failwith @@
+      Printf.sprintf "%s: flat[%d], ee[%d], has_vid[%b]. Length mismatch for map %s. ds=%s"
+        typ l_flat l_ee has_vid ds.id (string_of_ds ds);
+    let flat, ds_ee =
+      (* add unit for pure value maps *)
+      if l_ee = 1 && ds.global then unit_pat :: flat, [unit_ds]::ds.ee
+      else flat, ds.ee in
+    let lengths = List.map List.length ds_ee in
+    let clumped = clump lengths flat in
+    vid_fn @@ List.map wrap_tup clumped
+
+let pat_of_flat_e ?(vid_nm="vid") ~add_vid ?(has_vid=false) ds flat =
+  let vid_fn l = match add_vid, has_vid with
+    | true, true -> hd flat :: l
+    | true, _    -> mk_var vid_nm :: l
+    | _          -> l
+  in
+  try
+    pat_of_flat "e" ~has_vid mk_tuple vid_fn mk_cunit ("_", t_unit) ds flat
+  with Failure s -> raise @@ Failure(s^", "^string_of_pat_e flat)
+
+let pat_of_flat_t ~add_vid ?(has_vid=false) ds flat =
+  let vid_fn l = if add_vid then t_vid::l else l in
+  pat_of_flat "t" ~has_vid wrap_ttuple vid_fn t_unit ("_", t_unit) ds flat
+
+(* create a list of access expressions, types even for deep data structures *)
+(* we can either assume that we're in a loop named after ds.e or work off of
+ * an expression *)
+let pat_of_ds ?(flatten=false) ?(vid_nm="vid") ?expr ?(drop_vid=false) ds =
+  let add_vid l =
+    if ds.vid && not drop_vid then (mk_var vid_nm, t_vid)::l
+    else l
+  in
+  if List.length ds.e = 1 then
+  (* value but no key *)
+    match expr with
+    | None when ds.global && not flatten -> add_vid [mk_cunit, t_unit; first mk_var @@ hd ds.e]
+    | None   -> add_vid [first mk_var @@ hd ds.e]
+    | Some x when ds.global && flatten -> add_vid [mk_subscript 2 x, snd @@ hd @@ ds.e]
+    | Some x when ds.global -> add_vid [mk_cunit, t_unit; mk_subscript 2 x, snd @@ hd @@ ds.e]
+    | Some x -> add_vid [x, snd @@ hd @@ ds.e]
+  else if ds.ee = [] then
+  (* one layered ds *)
+    let e = if ds.vid then (vid_nm, t_vid)::ds.e else ds.e in
+    let e = insert_index_fst e in
+    let e = List.map (fun (i, (x,y)) -> match expr with
+      | Some e -> mk_subscript (i+1) e, y
+      | _      -> mk_var x, y) e
+    in
+    if drop_vid then tl e else e
+  else
+    let e = insert_index_fst ds.e in
+    let l =
+      List.flatten @@
+        List.map2 (fun (j, (id,t)) idts ->
+          match idts with
+          | [_] ->
+            (* either direct or subscript access *)
+            let access = maybe (mk_var id) (fun e -> mk_subscript (j+1) e) expr in
+            [access, t]
+          | _   ->
+            List.mapi (fun i (_, t) ->
+              (* either direct or subscript access *)
+              let access = maybe (mk_var id) (fun e -> mk_subscript (j+1) e) expr in
+              mk_subscript (i+1) @@ access, t
+            ) idts
+        ) e ds.ee
+    in
+    if flatten then add_vid l
+    else
+      let e, t = list_unzip l in
+      let e = pat_of_flat_e ~vid_nm ~add_vid:(not drop_vid) ds e in
+      let t = pat_of_flat_t ~add_vid:(not drop_vid) ds t in
+      list_zip e t
+
+let drop_val l = list_drop_end 1 l
+let drop_val' l = fst_many @@ list_drop_end 1 l
+let get_val  l = hd @@ list_take_end 1 l
+let get_val' l = fst @@ hd @@ list_take_end 1 l
+let get_vid' l = fst @@ hd l
+let drop_vid l = tl l
+let drop_vid' l = fst_many @@ tl l
+let unknown_val l = drop_val l @ [mk_cunknown]
+let unknown_val' l = drop_val' l @ [mk_cunknown]
+let vid_and_unknowns l = List.mapi (fun i (x,y) -> if i > 0 then mk_cunknown,y else x,y) l
+let vid_and_unknowns' l = fst_many @@ vid_and_unknowns l
+let new_val l x = drop_val l @ [x]
+let new_val' l x = drop_val' l @ [x]
+let new_vid' s l = (mk_var s) :: drop_vid' l
+
+(* convert a global map to a bag type for calculation *)
+let calc_of_map_t c ~keep_vid map_id col =
+  let map_ds  = map_ds_of_id ~global:true c map_id in
+  let calc_ds = map_ds_of_id ~global:false ~vid:keep_vid c map_id in
+  let map_pat = pat_of_ds ~drop_vid:true map_ds in
+  let map_flat =
+    pat_of_ds ~drop_vid:(not keep_vid) ~flatten:true ~expr:(mk_var "vals") map_ds in
+  mk_aggv
+    (mk_lambda'
+      (["acc", calc_ds.t; "vid", t_vid; "vals", wrap_ttuple @@ snd_many map_pat]) @@
+      mk_block [
+          mk_insert "acc" @@ fst_many map_flat;
+          mk_var "acc"
+      ])
+    (mk_empty calc_ds.t) @@
+    col
 
 (* location of vid in tuples *)
 let vid_idx = 0
 let vid_shift = (+) 1
 let add_vid_idx l = l @ [vid_idx]
 
-(* generic function to turn a list of tuple elements into an index. Puts the vid last *)
-(* NOTE: takes a list not including vid and value *)
-let make_into_index l =
-  let l' = List.map vid_shift @@ fst_many @@ insert_index_fst l in
-  OrdIdx(add_vid_idx l', IntSet.of_list l')
-
-(*
-(* add an index to the config structure and update it *)
-let add_index id (idx_set_kind_l:(IntSet.t * index_kind) list) (c:config) =
-  let cur_idx = try IdMap.find id c.map_idxs with Not_found -> [] in
-  let rec loop cur_idx' = function
-    | [] -> cur_idx'
-    | (idx_set, kind)::tail ->
-        (* look for a matching index column set and add to it *)
-        let found, idx_src' = mapfold (fun found idx ->
-          if IntSet.equal idx.mm_indices idx_set then
-            (* iterate with sub-indices *)
-            let mm_submaps = loop idx.mm_submaps tail in
-            (* change to ordered type if requested *)
-            true, match kind with
-              | Ordered -> {idx with mm_submaps; mm_idx_kind=Ordered}
-              | _       -> {idx with mm_submaps}
-
-          else found, idx)
-          false cur_idx'
-        in
-        if found then cur_idx'
-        else (* if not found, add the index *)
-          { mm_indices = idx_set;
-            mm_comp_fn = None;
-            mm_idx_kind = kind;
-            mm_submaps = loop [] tail; (* empty current index *)
-          }::idx_src'
-  in
-  let idx_l' = loop cur_idx idx_set_kind_l in
-  c.map_idxs <- IdMap.add id idx_l' c.map_idxs
-
-(* add an index from a k3 pattern *)
-let add_index_pat id pat_kind_l c =
-  let idx_set_of_pat pat =
-    insert_index_fst 0 pat
-    |> List.filter (fun (_,x) ->
-        match U.tag_of_expr x with Const(CUnknown) -> false | _ -> true)
-    |> fst_many |> intset_of_list
-  in
-  let idx_kind_l = List.map (first idx_set_of_pat) pat_kind_l in
-  add_index id idx_kind_l c
-*)
-
 let t_vid_list = wrap_tlist t_vid
-
-(* wrap with the index type of the map, if requested *)
-let wrap_t_map_idx c map_id =
-  if c.use_multiindex then
-    try
-      let idxs = IntMap.find map_id c.map_idxs in
-      wrap_tmmap idxs
-    with Not_found ->
-      prerr_string @@ "Map_idxs:\n"^string_of_map_idxs c c.map_idxs;
-      failwith @@ "Failed to find map index for map id "^P.map_name_of c.p map_id
-  else
-    wrap_t_of_map
-
-let wrap_t_map_idx' c map_id = wrap_t_map_idx c map_id |- wrap_ttuple
 
 (* global declaration of default vid to put into every map *)
 let g_init_vid =
-                      (* epoch=0, counter=0 *)
-  let init = mk_tuple [mk_cint 0; mk_cint 0] in
+                      (* counter=0 *)
+  let init = mk_tuple [mk_cint 0] in
   create_ds "g_init_vid" t_vid ~init
+
+let g_min_vid = create_ds "g_min_vid" t_vid ~init:min_vid_k3
+let g_max_vid =
+  let init =
+    let max = mk_apply' "get_max_int" mk_cunit in
+    mk_tuple [max] in
+  create_ds "g_max_vid" t_vid ~init
+let g_start_vid = create_ds "g_start_vid" t_vid ~init:start_vid_k3
+
+let mk_vid_add curr add = mk_add curr add
+
+(* whether a vid is a tuple or a non-tuple value *)
+let is_vid_tuple = false
 
 (* trigger argument manipulation convenience functions *)
 let arg_types_of_t c trig_nm = snd_many @@ P.args_of_t c.p trig_nm
@@ -184,14 +329,6 @@ let args_of_t_as_vars_with_v ?(vid="vid") c trig_nm =
 let num_peers =
   let init = mk_size_slow G.peers in
   create_ds "num_peers" (mut t_int) ~init
-
-let g_min_vid = create_ds "g_min_vid" t_vid ~init:min_vid_k3
-let g_max_vid =
-  let init =
-    let max = mk_apply' "get_max_int" mk_cunit in
-    mk_tuple [max; max] in
-  create_ds "g_max_vid" t_vid ~init
-let g_start_vid = create_ds "g_start_vid" t_vid ~init:start_vid_k3
 
 (* specifies the job of a node: master/switch/node *)
 let job_master_v = 0
@@ -237,7 +374,7 @@ let timer_addr =
   let d_init =
     mk_case_sn
       (mk_peek @@ mk_filter
-        (mk_lambda' jobs.e @@
+        (mk_lambda' (ds_e jobs) @@
           mk_eq (mk_var "job") @@ mk_var job_timer.id) @@
         mk_var jobs.id)
       "timer"
@@ -247,18 +384,18 @@ let timer_addr =
 
 let nodes =
   let d_init =
-    mk_fst_many (snd_many jobs.e) @@
+    mk_fst_many (snd_many @@ ds_e jobs) @@
       mk_filter
-        (mk_lambda' jobs.e @@ mk_eq (mk_var job.id) @@ mk_var job_node.id) @@
+        (mk_lambda' (ds_e jobs) @@ mk_eq (mk_var job.id) @@ mk_var job_node.id) @@
         mk_var jobs.id in
   let e = ["addr", t_addr] in
   create_ds "nodes" (mut @@ wrap_tbag' @@ snd_many e) ~e ~d_init
 
 let switches =
   let d_init =
-    mk_fst_many (snd_many jobs.e) @@
+    mk_fst_many (snd_many @@ ds_e jobs) @@
       mk_filter
-        (mk_lambda' jobs.e @@ mk_eq (mk_var job.id) @@ mk_var job_switch.id) @@
+        (mk_lambda' (ds_e jobs) @@ mk_eq (mk_var job.id) @@ mk_var job_switch.id) @@
         mk_var jobs.id in
   let e = ["addr", t_addr] in
   create_ds "switches" (mut @@ wrap_tbag' @@ snd_many e) ~e ~d_init
@@ -344,7 +481,7 @@ let nd_stmt_cntrs_corr_map =
 (* 1st counter: count messages received until do_complete *)
 (* 2nd counter: map from hop to counter *)
 let nd_stmt_cntrs =
-  let ee = [["vid", t_vid; "stmt_id", t_int]; ["counter", t_int; "corr_map", wrap_tmap' @@ snd_many nd_stmt_cntrs_corr_map.e]] in
+  let ee = [["vid", t_vid; "stmt_id", t_int]; ["counter", t_int; "corr_map", wrap_tmap' @@ snd_many @@ ds_e nd_stmt_cntrs_corr_map]] in
   let e = list_zip ["vid_stmt_id"; "ctr_corrs"] @@
     List.map (wrap_ttuple |- snd_many) ee in
   create_ds "nd_stmt_cntrs" (wrap_tmap' @@ snd_many e) ~e
@@ -363,7 +500,6 @@ let nd_log_master =
 let nd_log_for_t t = "nd_log_"^t
 
 (* log data structures *)
-(* TODO: change to maps on vid *)
 let log_ds c : data_struct list =
   let log_struct_for trig =
     let e' = args_of_t c.p trig in
@@ -371,14 +507,6 @@ let log_ds c : data_struct list =
     create_ds (nd_log_for_t trig) (mut @@ wrap_tmap' @@ snd_many e) ~e
   in
   P.for_all_trigs ~deletes:c.gen_deletes c.p log_struct_for
-
-(* create a map structure: used for both maps and buffers *)
-let make_map_decl c map_name map_id =
-  let e = P.map_ids_types_with_v_for c.p map_id in
-  let t' = wrap_t_map_idx' c map_id @@ snd_many e in
-  (* for indirections, we need to create initial values *)
-  let init = mk_ind @@ mk_empty t' in
-  create_ds map_name (wrap_tind t') ~e ~init ~map_id
 
 (* Buffer versions of maps per statement (to prevent mixing values) *)
 (* NOTE: doesn't contain special inits from AST *)
@@ -428,18 +556,6 @@ let nd_add_delta_to_buf_nm c map_id =
 
 (* --- Begin frontier function code --- *)
 
-(* the function name for the frontier function *)
-(* takes the types of the map *)
-(* NOTE: assumes the first type is vid *)
-let frontier_name c map_id =
-  let m_t = P.map_types_for c.p map_id in
-  "frontier_"^String.concat "_" @@
-    List.map K3PrintSyntax.string_of_type m_t
-
-let get_idx idx map_id =
-  try IntMap.find map_id idx
-  with Not_found -> failwith @@ "Failed to find index for map "^soi map_id
-
 (* Get the latest vals up to a certain vid
  * - This is needed both for sending a push, and for modifying a local slice
  * operation, as well as for GC
@@ -451,119 +567,13 @@ let get_idx idx map_id =
  *   convert to a bag (again, for modify_ast, to prevent losing duplicates)
  *)
 let map_latest_vid_vals ?(vid_nm="vid") c slice_col m_pat map_id ~keep_vid : expr_t =
-  (* function to remove the vid from the collection in this case, we also convert to a bag *)
-  let remove_vid_if_needed = if keep_vid then id_fn else
-    let m_id_t = P.map_ids_types_for c.p map_id in
-    let m_id_t_v = P.map_ids_types_with_v_for c.p map_id in
-    let m_bag_t  = wrap_tbag' @@ snd_many m_id_t in
-    mk_agg
-      (mk_assoc_lambda' ["acc", m_bag_t] m_id_t_v @@
-        (mk_block [
-          mk_insert "acc" @@ ids_to_vars @@ fst_many m_id_t;
-          mk_var "acc"]))
-      (mk_empty m_bag_t)
-  in
+  let map_ds = map_ds_of_id ~global:true c map_id in
+  let convert col = calc_of_map_t c ~keep_vid map_id col in
   let pat = match m_pat with
-    | Some pat -> pat
-    | None     -> List.map (const mk_cunknown) @@ P.map_types_for c.p map_id
+    | Some pat -> pat_of_flat_e map_ds ~add_vid:false pat
+    | None     -> List.map (const mk_cunknown) (ds_e map_ds)
   in
-  if c.use_multiindex then
-    (* create the corresponding index for the pattern *)
-    let idx  = fst_many @@
-      List.filter (fun (_,x) -> U.tag_of_expr x <> Const(CUnknown)) @@
-      insert_index_fst @@ P.map_add_v mk_cunknown pat
-    in
-    let idx' = add_vid_idx idx in (* vid is always matched last in the index *)
-    let idx = OrdIdx(idx', IntSet.of_list idx) in
-    remove_vid_if_needed @@
-      (* filter out anything that doesn't have the same parameters *)
-      (* the multimap layer implements extra eq key filtering *)
-      (mk_slice_idx' ~idx ~comp:LT slice_col @@ mk_var vid_nm::pat)
-
-  else (* no multiindex *)
-    (* create a function name per type signature *)
-    let access_k3 =
-      (* slice with an unknown for the vid so we only get the effect of
-      * any bound variables *)
-      mk_slice slice_col @@ P.map_add_v mk_cunknown pat
-    in
-    let simple_app =
-      mk_apply (mk_var @@ frontier_name c map_id) @@
-        mk_tuple [mk_var vid_nm; access_k3]
-    in
-    if keep_vid then simple_app else remove_vid_if_needed simple_app
-
-(* Create a function for getting the latest vals up to a certain vid *)
-(* This is needed both for sending a push, and for modifying a local slice
- * operation, as well as for GC *)
-(* Returns the type pattern for the function, and the function itself *)
-(* NOTE: this is only necessary when not using multiindexes *)
-let frontier_fn c map_id =
-  let max_vid = "max_vid" in
-  let map_vid = "map_vid" in
-  let m_id_t_v = P.map_ids_types_with_v_for ~vid:"map_vid" c.p map_id in
-  let m_t_v = wrap_ttuple @@ snd_many @@ m_id_t_v in
-  let m_t_v_calc_map = wrap_t_calc m_t_v in
-  let m_t_v_map = wrap_t_of_map m_t_v in
-  let m_id_t_no_val = P.map_ids_types_no_val_for c.p map_id in
-  (* create a function name per type signature *)
-  (* if we have bound variables, we should slice first. Otherwise,
-      we don't need a slice *)
-  (* a routine common to both methods of slicing *)
-  let common_vid_lambda =
-    mk_assoc_lambda
-      (wrap_args ["acc", m_t_v_calc_map; max_vid, t_vid])
-      (wrap_args m_id_t_v)
-      (mk_if
-        (* if the map vid is less than current vid *)
-        (mk_lt (mk_var map_vid) @@ mk_var "vid")
-        (* if the map vid is equal to the max_vid, we add add it to our
-        * accumulator and use the same max_vid *)
-        (mk_if
-          (mk_eq (mk_var map_vid) @@ mk_var max_vid)
-          (mk_block [
-            mk_insert "acc" @@ ids_to_vars @@ fst_many m_id_t_v;
-            mk_tuple [mk_var "acc"; mk_var max_vid]
-          ]) @@
-          (* else if map vid is greater than max_vid, make a new
-          * collection and set a new max_vid *)
-          mk_if
-            (mk_gt (mk_var map_vid) @@ mk_var max_vid)
-            (mk_tuple
-              [mk_singleton m_t_v_calc_map @@ ids_to_vars @@ fst_many m_id_t_v;
-              mk_var map_vid]) @@
-            (* else keep the same accumulator and max_vid *)
-            mk_tuple [mk_var "acc"; mk_var max_vid])
-        (* else keep the same acc and max_vid *)
-        (mk_tuple [mk_var "acc"; mk_var max_vid]))
-  in
-  (* a regular fold is enough if we have no keys *)
-  (* get the maximum vid that's less than our current vid *)
-  let action = match m_id_t_no_val with
-  | [] ->
-    mk_fst @@
-      mk_agg
-        common_vid_lambda
-        (mk_tuple [mk_empty m_t_v_calc_map; mk_var g_min_vid.id])
-        (mk_var "input_map")
-  | _ ->
-      mk_flatten @@ mk_map
-        (mk_assoc_lambda
-          (wrap_args ["_", wrap_ttuple @@ snd_many m_id_t_no_val]) (* group *)
-          (wrap_args ["project", m_t_v_calc_map; "_", t_vid]) @@
-          mk_var "project"
-        ) @@
-        mk_gbagg
-          (mk_lambda (wrap_args m_id_t_v) @@
-            (* group by the keys (not vid, not values) *)
-            mk_tuple @@ ids_to_vars @@ fst_many m_id_t_no_val)
-          (* get the maximum vid that's less than our current vid *)
-          common_vid_lambda
-          (mk_tuple [mk_empty m_t_v_calc_map; mk_var g_min_vid.id])
-          (mk_var "input_map")
-  in
-  mk_global_fn (frontier_name c map_id) ["vid", t_vid; "input_map", m_t_v_map] [m_t_v_calc_map] @@
-      action
+  convert @@ mk_slice_frontier slice_col @@ mk_var vid_nm :: pat
 
 (* End of frontier function code *)
 

@@ -51,7 +51,7 @@ let sw_ack_rcv_trig sw_check_done =
   (* increment ack num *)
   mk_block [
     mk_incr sw_num_ack.id;
-    mk_delete_with sw_ack_log "x" ~k:[mk_var "vid"] ~delcond:(mk_eq (mk_snd @@ mk_var "x") @@ mk_cint 0)
+    mk_delete_with sw_ack_log "x" ~k:[mk_var "vid"] ~delcond:(mk_eq (mk_snd @@ mk_var "x") @@ mk_cint 1)
       ~v:(mk_sub (mk_snd @@ mk_var "x") @@ mk_cint 1);
     sw_check_done
   ]
@@ -61,7 +61,7 @@ let sw_update_send ~vid_nm =
   mk_block [
     mk_incr sw_num_sent.id;
     (* increment vid on sw_ack_log *)
-    mk_upsert_with sw_ack_log "x" ~k:[mk_var vid_nm] ~default:(mk_cint 1) ~v:(mk_add (mk_snd @@ mk_var "x") @@ mk_cint 1)
+    mk_upsert_with_sim sw_ack_log "x" ~k:[mk_var vid_nm] ~default:(mk_cint 1) ~v:(mk_add (mk_snd @@ mk_var "x") @@ mk_cint 1)
   ]
 
 (* node: code to be incorporated in GenDist.rcv_put *)
@@ -80,10 +80,14 @@ let ms_gc_vid_map =
 (* master: counter for number of responses *)
 let ms_gc_vid_ctr = create_ds "ms_gc_vid_ctr" (mut t_int) ~init:(mk_cint 0)
 
+(* master: keep track of last gc vid so we don't issue an unneeded gc *)
+let ms_last_gc_vid = create_ds "ms_last_gc_vid" (mut t_vid) ~init:(mk_var D.g_min_vid.id)
+
 (* master: number of expected responses *)
 let ms_num_gc_expected =
-  let init = mk_size_slow @@ G.peers in
-  create_ds "ms_num_gc_expected" (mut t_int) ~init
+  (* delayed init after we have num of switched and nodes *)
+  let d_init = mk_add (mk_var D.num_switches.id) @@ mk_var D.num_nodes.id in
+  create_ds "ms_num_gc_expected" (mut t_int) ~d_init
 
 (* data structures needing gc *)
 let ds_to_gc c =
@@ -99,68 +103,59 @@ let do_gc_nm = "do_gc"
 (* to search for a vid field *)
 let r_vid = Str.regexp ".*vid.*"
 let do_gc_fns c =
-  let min_vid = "min_gc_vid" in
+  let min_vid = "gc_vid" in
   (* standard gc code for general data structures *)
   let gc_std ds =
-    (* look for any entry in the ds containing vid *)
-    let vid = fst @@ List.find (r_match r_vid |- fst) ds.e in
-    let t' = unwrap_tind ds.t in
-    (* handle the possiblity of indirections *)
-    let do_bind, id =
-      if is_tind ds.t then
-        let unwrap = ds.id^"_unwrap" in
-        (fun x -> mk_bind (mk_var ds.id) unwrap x), unwrap
-      else id_fn, ds.id
+    let fn_nm = "do_gc_"^ds.id
     in
-    let temp = "temp" in
-    let fn_nm = "do_gc_"^ds.id in
-    (* delete any entry with a lower vid *)
     mk_global_fn fn_nm [min_vid, t_vid] [] @@
-      do_bind @@ mk_assign id @@
-      (* if we're in a map ds, we need to get the frontier at min_vid *)
-      (match ds.map_id with
-        | Some map_id ->
-            mk_let ["frontier"]
-              (map_latest_vid_vals c (mk_var id) None map_id ~keep_vid:true ~vid_nm:min_vid)
-        | _ -> id_fn) @@
-        (* add < vid to temporary collection *)
-        mk_let [temp]
-          (mk_agg
-            (mk_assoc_lambda' ["acc", t'] ds.e @@
-              mk_block [
-                mk_if (mk_lt (mk_var vid) @@ mk_var min_vid)
-                  (mk_insert "acc" @@ ids_to_vars @@ fst_many ds.e) @@
-                  mk_cunit;
-                mk_var "acc"])
-            (mk_empty t') @@
-            mk_var id) @@
-        (* delete values from ds using values from temp *)
-        mk_let ["remainder"]
-          (mk_agg
-            (mk_assoc_lambda' ["acc", t'] ["val", wrap_ttuple @@ snd_many ds.e] @@
-              mk_block [
-                mk_delete "acc" [mk_var "val"];
-                mk_var "acc"])
-            (mk_var id) @@
-            mk_var temp) @@
-        (* if this is a global map, insert back the frontier *)
-        if ds.map_id <> None then
-          mk_agg
-            (mk_assoc_lambda' ["acc", t'] ["val", wrap_ttuple @@ snd_many ds.e] @@
-              mk_block [
-                mk_insert "acc" [mk_var "val"];
-                mk_var "acc"])
-            (mk_var "remainder") @@
-            mk_var "frontier"
-        else mk_var "remainder"
+      match ds.map_id with
+      | Some _ ->
+          let map_deref = "map_d" in
+          let pat   = D.pat_of_ds ~vid_nm:min_vid ds in
+          (* local bind to prevent bind-in-bind *)
+          let do_bind = mk_bind (mk_var ds.id) map_deref in
+          (* get frontier *)
+          do_bind @@
+            mk_assign map_deref @@
+          mk_let ["frontier"]
+            (mk_slice_frontier (mk_var map_deref) @@ vid_and_unknowns' pat) @@
+            (* delete all prefixes in ds. min_vid comes from pattern *)
+            mk_aggv
+              (mk_lambda3' ["acc", ds.t] ["_", t_vid] (ds_e ds) @@
+                mk_block [
+                  mk_delete_prefix "acc" @@ fst_many pat;
+                  mk_var "acc"]
+                )
+              (mk_var map_deref) @@
+              mk_var "frontier"
+      | None -> (* non-map ds *)
+        (* look for any entry in the ds containing vid *)
+        let vid = fst @@ List.find (r_match r_vid |- fst) (ds_e ds) in
+        let t' = ds.t in
+        let temp = "temp" in
+        (* delete any entry with a lower or matching vid *)
+        mk_let [temp] (mk_empty t') @@
+        mk_assign ds.id @@
+        mk_agg
+          (mk_lambda2' ["acc", ds.t] (ds_e ds) @@
+            mk_if (mk_geq (mk_var vid) @@ mk_var min_vid)
+                  (mk_block [
+                    mk_insert "acc" @@ ids_to_vars @@ fst_many @@ ds_e ds;
+                    mk_var "acc"]) @@
+                  mk_var "acc")
+              (mk_empty ds.t) @@
+              mk_var ds.id
   in
   List.map gc_std @@ ds_to_gc c
 
 let do_gc_trig c =
-  let min_vid = "min_gc_vid" in
+  let min_vid = "gc_vid" in
   mk_code_sink' do_gc_nm [min_vid, t_vid] [] @@
     mk_block @@
-      List.map (fun ds -> mk_apply' ("do_gc_"^ds.id) (mk_tuple [mk_var min_vid])) @@ ds_to_gc c
+      (* (mk_apply' "print_env" mk_cunit) :: (* debug *) *)
+      (mk_apply' "print" @@ mk_cstring "Starting GC") ::
+      (List.map (fun ds -> mk_apply' ("do_gc_"^ds.id) @@ mk_tuple [mk_var min_vid]) @@ ds_to_gc c)
 
 (* master switch trigger to receive and add to the max vid map *)
 let ms_rcv_gc_vid_nm = "ms_rcv_gc_vid"
@@ -175,20 +170,30 @@ let ms_rcv_gc_vid c =
       mk_assign ms_gc_vid_ctr.id @@
         mk_add (mk_var ms_gc_vid_ctr.id) @@ mk_cint 1;
       (* check if we have enough responses *)
-      mk_if (mk_geq (mk_var ms_gc_vid_ctr.id) @@ mk_var ms_num_gc_expected.id)
+      mk_if (mk_eq (mk_var ms_gc_vid_ctr.id) @@ mk_var ms_num_gc_expected.id)
         (* if so ... *)
         (mk_let [min_vid]
           (* get the min vid *)
-          (mk_min_max min_vid (mk_var "vid") t_vid mk_lt (mk_var D.g_min_vid.id) ms_gc_vid_map) @@
+          (mk_min_max min_vid (mk_var "vid") t_vid mk_lt (mk_var D.g_max_vid.id) ms_gc_vid_map) @@
           mk_block [
             (* clear the counter *)
             mk_assign ms_gc_vid_ctr.id @@ mk_cint 0;
             (* clear the data struct *)
             mk_assign ms_gc_vid_map.id @@ mk_empty ms_gc_vid_map.t;
-            (* send gc notices *)
-            mk_iter (mk_lambda' G.peers.e @@
-              mk_send do_gc_nm (mk_var @@ fst @@ hd @@ G.peers.e) [mk_var min_vid]) @@
-              mk_var G.peers.id;
+            (* if we've advanced since last gc *)
+            mk_if (mk_gt (mk_var min_vid) @@ mk_var ms_last_gc_vid.id)
+              (mk_block [ (* then *)
+                (* send gc notices to nodes only *)
+                (* NOTE: currently there's no need to send do_gc to the switches. If that changes, this check needs
+                 * to change as wel *)
+                mk_iter (mk_lambda' D.jobs.e @@
+                    mk_if (mk_eq (mk_var "job") @@ mk_var "job_node")
+                      (mk_send do_gc_nm (mk_var "addr") [mk_var min_vid])
+                      mk_cunit) @@
+                  mk_var D.jobs.id;
+                (* overwrite last gc vid *)
+                mk_assign ms_last_gc_vid.id @@ mk_var min_vid; ])
+              mk_cunit; (* else nothing *)
             (* tell timer to ping us in X seconds *)
             mk_send T.tm_insert_timer_trig_nm (mk_var D.timer_addr.id)
               [mk_var ms_gc_interval.id; mk_cint @@ T.num_of_trig c D.ms_send_gc_req_nm; G.me_var]
@@ -211,7 +216,7 @@ let rcv_req_gc_vid =
     mk_if (mk_eq (mk_var D.job.id) @@ mk_var D.job_node.id)
       (* send out node min vid: much faster if we had a min function *)
       (mk_send ms_rcv_gc_vid_nm (mk_var master_addr.id)
-        (* default is max_vid, to allow anything to go on *)
+        (* default is max_vid (infinity), to allow anything to go on *)
         [G.me_var; mk_min_max "min_vid" (mk_fst @@ mk_var "vid_stmt_id")
           t_vid mk_lt (mk_var D.g_max_vid.id) D.nd_stmt_cntrs])
       (* else, do nothing *)
@@ -222,9 +227,11 @@ let rcv_req_gc_vid =
 let ms_send_gc_req =
   mk_code_sink' D.ms_send_gc_req_nm unit_arg [] @@
   mk_iter
-    (mk_lambda' G.peers.e @@
-      mk_send rcv_req_gc_vid_nm (mk_var @@ fst @@ hd @@ G.peers.e) [mk_cunit]) @@
-    mk_var G.peers.id
+    (mk_lambda' D.switches.e @@
+      let addr_var = mk_var @@ fst @@ hd @@ D.switches.e in
+      mk_send rcv_req_gc_vid_nm addr_var [mk_cunit]) @@
+    (* send to all switches and nodes *)
+    (mk_combine (mk_var D.switches.id) @@ mk_var D.nodes.id)
 
 (* master: start the gc process *)
 let ms_gc_init c =
@@ -241,6 +248,7 @@ let global_vars _ = List.map decl_global
    ms_gc_interval;
    ms_gc_vid_map;
    ms_gc_vid_ctr;
+   ms_last_gc_vid;
    ms_num_gc_expected;
   ]
 

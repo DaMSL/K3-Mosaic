@@ -16,30 +16,12 @@ include ASTCommonImpl
 (* Annotations *)
 type annotation_t = Annotation.annotation_t
 
-(* LTA: All LT *)
-type comp_t = LTA | LT | EQ | GT | GTA
-
-(* multimap index *)
-type index_t = HashIdx of IntSet.t
-             | OrdIdx of int list * IntSet.t
-
-let index_t_cmp x y = match x, y with
-  | HashIdx s, HashIdx s'         -> IntSet.compare s s'
-  (* we deliberately ignore the equality set, which is extra info *)
-  | OrdIdx(l, e),  OrdIdx(l', e') -> compare l l'
-  | OrdIdx _, HashIdx _           -> -1
-  | HashIdx _, OrdIdx _           -> 1
-
-module IndexSet = Set.Make(struct type t = index_t let compare = index_t_cmp end)
-module IndexMap = Map.Make(struct type t = index_t let compare = index_t_cmp end)
-
-
 type container_type_t
     = TSet
     | TBag
     | TList
     | TMap
-    | TMultimap of IndexSet.t
+    | TVMap
 
 type base_type_t
     = TTop
@@ -123,17 +105,21 @@ type expr_tag_t
     | Filter
     | Flatten
     | Aggregate
+    | AggregateV       (* vmap version *)
     | GroupByAggregate
     | Sort
 
     | Peek
     | Slice
-    | SliceIdx of index_t * comp_t
-    | Insert of id_t
-    | Delete of id_t
-    | Update of id_t
+    | SliceFrontier        (* slice with a frontier for < vid *)
+    | Insert
+    | Update
+    | UpsertWith    (* update with a default handler *)
+    | UpdateSuffix  (* update values > vid *)
+    | Delete
+    | DeletePrefix  (* delete <= a certain vid. save frontier at vid *)
 
-    | Assign of id_t
+    | Assign
     | Indirect
     | BindAs of id_t
     | Let of id_t list

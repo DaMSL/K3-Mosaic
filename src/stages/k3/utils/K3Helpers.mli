@@ -53,17 +53,13 @@ val wrap_tbag : type_t -> type_t
 val wrap_tbag' : type_t list -> type_t
 val wrap_tmap : type_t -> type_t
 val wrap_tmap' : type_t list -> type_t
-val wrap_tmmap : IndexSet.t -> type_t -> type_t
-val wrap_tmmap' : IndexSet.t -> type_t list -> type_t
+val wrap_tvmap : type_t -> type_t
+val wrap_tvmap' : type_t list -> type_t
 val wrap_tind : type_t -> type_t
 val wrap_tind_mut : type_t -> type_t
 val wrap_tmaybe : type_t -> type_t
 val wrap_tmaybes : type_t list -> type_t list
 val wrap_tfunc : type_t -> type_t -> type_t
-val wrap_t_of_map : type_t -> type_t
-val wrap_t_of_map' : type_t list -> type_t
-val wrap_t_calc : type_t -> type_t
-val wrap_t_calc' : type_t list -> type_t
 
 (* wrap a single layer of arguments *)
 val wrap_args : (id_t * type_t) list -> arg_t
@@ -132,6 +128,10 @@ val mk_gt : expr_t -> expr_t -> expr_t
 
 val mk_lambda : arg_t -> expr_t -> expr_t
 val mk_lambda' : (id_t * type_t) list -> expr_t -> expr_t
+val mk_lambda2 : arg_t -> arg_t -> expr_t -> expr_t
+val mk_lambda2' : (id_t * type_t) list -> (id_t * type_t) list -> expr_t -> expr_t
+val mk_lambda3 : arg_t -> arg_t -> arg_t -> expr_t -> expr_t
+val mk_lambda3' : (id_t * type_t) list -> (id_t * type_t) list -> (id_t * type_t) list -> expr_t -> expr_t
 val mk_apply : expr_t -> expr_t -> expr_t
 val mk_apply' : id_t -> expr_t -> expr_t
 val mk_block : expr_t list -> expr_t
@@ -146,6 +146,7 @@ val mk_map : expr_t -> expr_t -> expr_t
 val mk_filter : expr_t -> expr_t -> expr_t
 val mk_flatten : expr_t -> expr_t
 val mk_agg : expr_t -> expr_t -> expr_t -> expr_t
+val mk_aggv : expr_t -> expr_t -> expr_t -> expr_t
 val mk_agg_fst : expr_t -> expr_t -> expr_t
 val mk_gbagg : expr_t -> expr_t -> expr_t -> expr_t -> expr_t
 val mk_sort : expr_t -> expr_t -> expr_t
@@ -159,12 +160,14 @@ val mk_slice : expr_t -> expr_t list -> expr_t
 val mk_slice' : id_t -> expr_t list -> expr_t
 (* int list list: specify index to use
    expr_t: list of integer values specifying GT, LT, EQ *)
-val mk_slice_idx : idx:index_t -> comp:comp_t -> expr_t -> expr_t -> expr_t
-val mk_slice_idx' : idx:index_t -> comp:comp_t -> expr_t -> expr_t list -> expr_t
+val mk_slice_frontier : expr_t -> expr_t list -> expr_t
 val mk_insert : id_t -> expr_t list -> expr_t
+val mk_upsert_with : id_t -> expr_t list -> expr_t -> expr_t -> expr_t
 val mk_delete : id_t -> expr_t list -> expr_t
+val mk_delete_prefix : id_t -> expr_t list -> expr_t
 val mk_update : id_t -> expr_t list -> expr_t list -> expr_t
 val mk_update_slice : id_t -> expr_t list -> expr_t -> expr_t
+val mk_update_suffix : id_t -> expr_t list -> expr_t -> expr_t
 
 val mk_ind : expr_t -> expr_t
 val mk_assign : id_t -> expr_t -> expr_t
@@ -296,6 +299,8 @@ val mk_peek_or_error : string -> expr_t -> expr_t
 val mk_lookup : expr_t -> expr_t list -> expr_t
 val mk_lookup' : id_t -> expr_t list -> expr_t
 
+val default_value_of_t : type_t -> expr_t
+
 (* data structure record to standardize manipulation *)
 type data_struct = { id: string;
                      e: (string * type_t) list;
@@ -303,11 +308,13 @@ type data_struct = { id: string;
                      t: type_t;
                      init: expr_t option;
                      (* init that isn't used right away *)
-                     d_init:expr_t option;
+                     d_init: expr_t option;
                      map_id: int option;
+                     global: bool;
+                     vid: bool;
                    }
 
-val create_ds : ?e:(string * type_t) list -> ?ee:(string * type_t) list list -> ?init:expr_t -> ?d_init:expr_t -> ?map_id:int -> string -> type_t -> data_struct
+val create_ds : ?e:(string * type_t) list -> ?ee:(string * type_t) list list -> ?init:expr_t -> ?d_init:expr_t -> ?map_id:int -> ?global:bool -> ?vid:bool -> string -> type_t -> data_struct
 
 val decl_global : data_struct -> declaration_t * annotation_t
 val delayed_init : data_struct -> expr_t
@@ -339,6 +346,6 @@ val mk_decr : string -> expr_t
 (* delete using a slice with unknowns *)
 val mk_delete_one : data_struct -> expr_t list -> expr_t
 
-val mk_upsert_with : data_struct -> id_t -> k:expr_t list -> default:expr_t -> v:expr_t -> expr_t
+val mk_upsert_with_sim : data_struct -> id_t -> k:expr_t list -> default:expr_t -> v:expr_t -> expr_t
 
 val mk_delete_with : data_struct -> id_t -> k:expr_t list -> delcond:expr_t -> v:expr_t -> expr_t

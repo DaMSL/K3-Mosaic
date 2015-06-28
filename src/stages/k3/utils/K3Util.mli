@@ -35,20 +35,22 @@ val is_peek : expr_t -> bool
 (* AST constructors / destructors *)
 val decompose_add : expr_t -> expr_t * expr_t
 val decompose_aggregate : expr_t -> expr_t * expr_t * expr_t
+val decompose_aggregatev : expr_t -> expr_t * expr_t * expr_t
 val decompose_apply : expr_t -> expr_t * expr_t
-val decompose_assign : expr_t -> id_t * expr_t
+val decompose_assign : expr_t -> expr_t * expr_t
 val decompose_block : expr_t -> expr_t list
 val decompose_combine : expr_t -> expr_t * expr_t
 val decompose_const : expr_t -> constant_t
 val decompose_caseof : expr_t -> expr_t * expr_t * expr_t
 val decompose_bind : expr_t -> expr_t * id_t * expr_t
-val decompose_delete : expr_t -> id_t * expr_t
+val decompose_delete : expr_t -> expr_t * expr_t
+val decompose_delete_prefix : expr_t -> expr_t * expr_t
 val decompose_eq : expr_t -> expr_t * expr_t
 val decompose_filter : expr_t -> expr_t * expr_t
 val decompose_flatten : expr_t -> expr_t
 val decompose_gbagg : expr_t -> expr_t * expr_t * expr_t * expr_t
 val decompose_ifthenelse : expr_t -> expr_t * expr_t * expr_t
-val decompose_insert : expr_t -> id_t * expr_t
+val decompose_insert : expr_t -> expr_t * expr_t
 val decompose_iterate : expr_t -> expr_t * expr_t
 val decompose_just : expr_t -> expr_t
 val decompose_lambda : expr_t -> arg_t * expr_t
@@ -64,12 +66,14 @@ val decompose_range : expr_t -> expr_t * expr_t * expr_t
 val decompose_send : expr_t -> expr_t * expr_t * (expr_t list)
 val decompose_singleton : expr_t -> expr_t
 val decompose_slice : expr_t -> expr_t * expr_t
-val decompose_sliceidx : expr_t -> expr_t * expr_t
+val decompose_slice_frontier : expr_t -> expr_t * expr_t
 val decompose_sort : expr_t -> expr_t * expr_t
 val decompose_size : expr_t -> expr_t
 val decompose_subscript : expr_t -> int * expr_t
 val decompose_tuple : expr_t -> expr_t list
-val decompose_update : expr_t -> id_t * expr_t * expr_t
+val decompose_update : expr_t -> expr_t * expr_t * expr_t
+val decompose_update_suffix : expr_t -> expr_t * expr_t * expr_t
+val decompose_upsert_with : expr_t -> expr_t * expr_t * expr_t * expr_t
 val decompose_var : expr_t -> id_t
 val decompose_indirect : expr_t -> expr_t
 
@@ -161,6 +165,4 @@ val unwrap_tuple : expr_t -> expr_t list
 
 (* Fold over all expression trees in a program (triggers, globals) *)
 val fold_over_exprs : ('a -> expr_t -> 'a) -> 'a -> program_t -> 'a
-
-val filter_by_index_t : ?anti_set:IntSet.t * 'a -> index_t -> 'a list -> 'a list
 

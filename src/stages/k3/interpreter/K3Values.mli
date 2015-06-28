@@ -13,7 +13,8 @@ val map_modify : ('a option -> 'a option) -> id_t -> 'a IdMap.t -> 'a IdMap.t
 
 module rec ValueMap : sig include NearMap.S with type key = Value.value_t end
 
-and ValueMMap : sig include IMultimap.S with type elt = Value.value_t end
+and ValueVMap : sig include IVMap.S with type key = Value.value_t
+                                    and  type vid = Value.value_t end
 
 and ValueBag : sig include IBag.S with type elt = Value.value_t end
 
@@ -53,7 +54,7 @@ and Value : sig
       | VBag of ValueBag.t
       | VList of value_t IList.t
       | VMap of value_t ValueMap.t
-      | VMultimap of ValueMMap.t
+      | VVMap of value_t ValueVMap.t
       | VFunction of arg_t * local_env_t * expr_t (* closure *)
       | VForeignFunction of id_t * arg_t * foreign_func_t
       | VAddress of address
@@ -70,6 +71,9 @@ and ValueComp : sig val compare_v : Value.value_t -> Value.value_t -> int
 open Value
 
 val default_env : env_t
+
+(* if we have 2 collection values that match *)
+val matching_collections : value_t -> value_t -> bool
 
 (* Value comparison *)
 val equal_values : value_t -> value_t -> bool
@@ -102,14 +106,18 @@ type 'a t_err_fn = (string -> string -> 'a)
 val v_peek : value_t option t_err_fn -> value_t -> value_t option
 val v_combine : value_t t_err_fn -> value_t -> value_t -> value_t
 val v_fold : 'a t_err_fn -> ('a -> value_t -> 'a) -> 'a -> value_t -> 'a
+val v_foldv : 'a t_err_fn -> ('a -> value_t -> value_t -> 'a) -> 'a -> value_t -> 'a
 val v_iter : unit t_err_fn -> (value_t -> unit) -> value_t -> unit
 val v_insert : value_t t_err_fn -> value_t -> value_t -> value_t
 val v_delete : value_t t_err_fn -> value_t -> value_t -> value_t
+val v_delete_prefix : value_t t_err_fn -> value_t -> value_t -> value_t
 val v_update : value_t t_err_fn -> value_t -> value_t -> value_t -> value_t
+val v_update_suffix : value_t t_err_fn -> value_t -> (value_t -> value_t) -> value_t -> value_t
+val v_upsert_with : value_t t_err_fn -> value_t -> (value_t -> value_t) -> (value_t -> value_t) -> value_t -> value_t
 val v_empty : value_t t_err_fn -> ?no_map: bool -> ?no_multimap : bool -> value_t -> value_t
 val v_empty_of_t : container_type_t -> value_t
 val v_sort : value_t t_err_fn -> (value_t -> value_t -> int) -> value_t -> value_t
 val v_size : value_t t_err_fn -> value_t -> value_t
 val v_singleton : value_t t_err_fn -> value_t -> container_type_t -> value_t
 val v_slice : value_t t_err_fn -> value_t -> value_t -> value_t
-val v_slice_idx : value_t t_err_fn -> index_t -> comp_t -> value_t -> value_t -> value_t
+val v_slice_frontier : value_t t_err_fn -> value_t -> value_t -> value_t

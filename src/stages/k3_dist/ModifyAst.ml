@@ -10,66 +10,12 @@ module D = K3Dist
 
 exception InvalidAst of string
 
-(* --- Map declarations --- *)
-
-(* find all access patterns on maps in the code. We could probably get this info from
- * dbtoaster, but it's not hard to just get it here *)
-let get_map_access_patterns ast : IndexSet.t StrMap.t =
-  (* for top-down, get any existing_out_tier value *)
-  let td_fn out_tier n = match U.tag_of_expr n with
-    | Let ["existing_out_tier"] ->
-        begin match U.tag_of_expr @@ snd3 @@ U.decompose_let n with
-        | Var x -> Some x
-        | _     -> failwith "No var assigned to existing_out_tier"
-        end
-    | _ -> out_tier
-  in
-  (* for bottom-up, get access patterns *)
-  let bu_fn out_tier bu_results n =
-      (* merge 2 values for a map *)
-      let merge_fn k ma mb = match ma, mb with
-        | Some x, None
-        | None, Some x     -> Some x
-        | Some xs, Some ys -> Some (IndexSet.union xs ys)
-        | _                -> None
-      in
-      (* combine the bottom-up results *)
-      let map = List.fold_left (fun acc x ->
-        StrMap.merge merge_fn acc x) StrMap.empty bu_results in
-      match U.tag_of_expr n with
-      | Slice  ->
-          let col, pat = U.decompose_slice n in
-          (* get tuple pattern *)
-          let pat = U.unwrap_tuple pat |> insert_index_fst
-                 |> List.filter (fun (_,x) -> U.tag_of_expr x <> Const CUnknown)
-                 |> fst_many |> IntSet.of_list
-          in
-          let add_to_map k =
-             begin try
-               let v = StrMap.find k map in
-               StrMap.add k (IndexSet.add (HashIdx pat) v) map
-             with Not_found ->
-               StrMap.add k (IndexSet.singleton @@ HashIdx pat) map
-             end
-          in
-          begin match U.tag_of_expr col, out_tier with
-          | Var "existing_out_tier", Some id -> add_to_map id
-          | Var "existing_out_tier", _       -> failwith "missing existing out tier binding"
-          | Var k, _ -> add_to_map k
-          | _        -> map
-          end
-      | _      -> map
-  in
-  U.fold_over_exprs (fun acc t ->
-    Tree.fold_tree td_fn bu_fn None acc t
-  ) StrMap.empty ast
-
 (* find any loaders in the ast *)
 let loader_tables ast =
   let bu_fn acc e =
     try
       let fn, arg = U.decompose_apply e in
-      if U.decompose_var fn = "load_csv_set" then
+      if U.decompose_var fn = K3StdLib.csv_loader_name then
         match U.decompose_const arg with
         | CString f -> (Filename.chop_extension @@ Filename.basename f, f)::acc
         | _ -> failwith "bad filename"
@@ -80,94 +26,71 @@ let loader_tables ast =
     Tree.fold_tree_th_bu bu_fn acc t
   ) [] ast
 
-(* Convert map indices from non-vid versions to be ordered and handle vid *)
-(* vid is always the last thing to be matched on *)
-let map_indices_add_vid idxs =
-  let map_idx_add_vid = function
-    | HashIdx s    ->
-        let l = List.map vid_shift @@ IntSet.elements s in
-        OrdIdx (add_vid_idx l, IntSet.of_list l)
-    | OrdIdx(l,eq) ->
-        let eq' = IntSet.of_list @@ List.map vid_shift @@ IntSet.elements eq in
-        OrdIdx (add_vid_idx (List.map vid_shift l), eq')
-  in
-  let add_vid_all_idxs is =
-    IndexSet.fold (fun x acc -> IndexSet.add (map_idx_add_vid x) acc) is IndexSet.empty
-  in
-  IntMap.map add_vid_all_idxs idxs
-
-(* TODO: add index for future, and for pinpoint access *)
-
-(* convert to a per-mapid representation *)
-let get_map_access_patterns_ids p ast =
-  let pats = get_map_access_patterns ast in
-  let pats = StrMap.fold (fun nm v acc ->
-      IntMap.add (ProgInfo.map_id_of_name p nm) v acc)
-    pats IntMap.empty in
-  (* add in the patterns for singletons *)
-  let map_types = P.for_all_maps p (fun id -> id, P.map_types_for p id) in
-  let singleton_maps = List.filter (function (_,[_]) -> true | _ -> false) map_types in
-  let pats = List.fold_left (fun acc (id,_) ->
-               IntMap.add id (IndexSet.singleton @@ OrdIdx([],IntSet.empty)) acc)
-             pats singleton_maps
-  in
-  map_indices_add_vid pats
+(* --- Map declarations --- *)
 
 (* change the initialization values of global maps to have the vid as well *)
 (* receives the new types to put in and the starting expression to change *)
 (* inserts a reference to the default vid var for that node *)
-let rec add_vid_to_init_val col_vid_t col_id_ts e =
-  let add = add_vid_to_init_val col_vid_t col_id_ts in
+let add_vid_to_init_val ds old_ds ~add_unit e =
   let vid_var = mk_var g_init_vid.id in
-  match U.tag_of_expr e with
-  | Combine -> let x, y = U.decompose_combine e in
-      mk_combine (add x) (add y)
-  | Empty t -> mk_empty col_vid_t
-  | Singleton t -> let x = U.decompose_singleton e in
-      mk_singleton col_vid_t [add x]
-  | Tuple -> let xs = U.decompose_tuple e in
-      mk_tuple @@ P.map_add_v vid_var xs
-  (* this should only be encountered if there's no tuple *)
-  | Const _ | Var _ -> mk_tuple @@ P.map_add_v vid_var [e]
-  (* modify loading from a file *)
-  | Map ->
-      mk_map (mk_lambda' col_id_ts @@
-        mk_tuple @@ (mk_var g_min_vid.id)::(ids_to_vars @@ fst_many col_id_ts))
-        e
-  | _ -> U.dist_fail e "add_vid_to_init_val: unhandled modification"
+  let add_u l = if add_unit then mk_cunit :: l else l in
+  let rec loop e = match U.tag_of_expr e with
+    | Combine -> let x, y = U.decompose_combine e in
+        mk_combine (loop x) (loop y)
+    | Empty t -> mk_empty ds.t
+    | Singleton t -> let x = U.decompose_singleton e in
+        mk_singleton ds.t [loop x]
+    | Tuple -> let xs = U.decompose_tuple e in
+        mk_tuple @@ P.map_add_v vid_var xs
+    (* this should only be encountered if there's no tuple *)
+    | Const _ | Var _ -> mk_tuple @@ P.map_add_v vid_var @@ add_u [e]
+    (* modify loading from a file *)
+    | Map ->
+        let old_pat = pat_of_ds old_ds in
+        let new_pat = pat_of_flat_e ~add_vid:true ~vid_nm:g_min_vid.id
+                        ~has_vid:false ds @@ fst_many old_pat in
+          mk_agg (mk_lambda2' ["acc", ds.t] (ds_e old_ds) @@
+          mk_block [
+            mk_insert "acc" new_pat;
+            mk_var "acc"
+          ])
+          (mk_empty ds.t)
+          e
+    | _ -> U.dist_fail e "add_vid_to_init_val: unhandled modification"
+  in loop e
 
 (* add a vid to global value map declarations *)
 let get_global_map_inits c = function
+  (* TODO: handle this gracefully for maps *)
   (* filter to have only map declarations *)
   | Global(name, typ, m_expr),_ ->
     begin try
       let map_id = P.map_id_of_name c.p name in
-      let e' = P.map_ids_types_for c.p map_id in
-      let e  = P.map_ids_types_with_v_for c.p map_id in
-      let t = wrap_t_map_idx' c map_id @@ snd_many e in
-      (* change load csv to use a variable *)
+      let ds = map_ds_of_id ~global:true c map_id in
+      let add_unit = List.length ds.e = 1 in
+      (* change load_csv to use a witness variable *)
       let change_load_csv e =
         Tree.modify_tree_bu e (fun e ->
           try
             let fn, arg = U.decompose_apply e in
-            if U.decompose_var fn = "load_csv_set" then
+            if U.decompose_var fn = K3StdLib.csv_loader_name then
               match U.decompose_const arg with
               | CString f ->
                   let table = Filename.chop_extension @@ Filename.basename f in
-                  mk_apply (mk_var "load_csv_set2") @@
+                  mk_apply (mk_var @@ K3StdLib.csv_loader_name^"2") @@
                     mk_tuple [mk_var @@ table^"_path"; 
                               (* witness type so the function knows what to return *)
-                              mk_empty (wrap_tset' @@ ProgInfo.map_types_no_val_for c.p map_id)]
+                              mk_empty (M3ToK3.wrap_map' @@ ProgInfo.map_types_no_val_for c.p map_id)]
               | _ -> failwith "bad filename"
             else e
           with Failure _ -> e)
       in
       begin match m_expr with
-        | None     -> []
-                      (* add a vid *)
-        | Some exp -> 
-            let exp' = change_load_csv exp in
-            [map_id, mk_ind @@ add_vid_to_init_val t e' exp']
+        | None   -> []
+        | Some e ->
+            let old_ds = map_ds_of_id ~global:false ~vid:false c map_id in
+            [map_id, mk_ind @@ add_vid_to_init_val ds old_ds ~add_unit @@ change_load_csv e]
+                    (* add a vid *)
       end
     with Not_found | ProgInfo.Bad_data _ -> [] end
   | _ -> []
@@ -303,12 +226,12 @@ let modify_dist (c:config) ast stmt =
 
     (* a lambda simply passes through a message *)
     | Lambda _ -> get_msg 0, e
-    | Insert _ -> let col, elem = U.decompose_insert e in
-        NopMsg, mk_insert col @@ modify_tuple elem
+    | Insert -> let col, elem = U.decompose_insert e in
+        NopMsg, mk_insert (U.decompose_var col) @@ modify_tuple elem
 
     (* deletes need to be removed, since we have versioning ie. we don't delete
      * anything *)
-    | Delete _ -> DelMsg, e
+    | Delete -> DelMsg, e
 
     | Slice ->
       (* If we have any bound variable, we should slice on those *)
@@ -348,7 +271,7 @@ let modify_dist (c:config) ast stmt =
             | ([arg_id, t],b) -> NopMsg,
               mk_apply
                 (mk_lambda
-                  (wrap_args [arg_id, wrap_t_of_map @@ wrap_ttuple lmap_types]) b)
+                  (wrap_args [arg_id, wrap_t_of_map' c.map_type lmap_types]) b)
                 arg
             | _ -> raise (UnhandledModification("At Apply: "^PR.string_of_expr e)) end
         | _ -> NopMsg, e
@@ -419,6 +342,7 @@ let delta_action c ast stmt after_fn =
       if acc <> [] then acc else
       try
         let id, y = U.decompose_insert x in
+        let id = U.decompose_var id in
         if id <> lmap_name then acc else
         vars_to_ids @@ U.decompose_tuple y
       with Failure _ -> acc in

@@ -16,6 +16,10 @@ module KH = K3Helpers
 module KU = K3Util
 module KT = K3Typechecker
 
+let wrap_map  = KH.wrap_tbag
+let wrap_map' = KH.wrap_tbag'
+let wrap_string_map s = "{|"^s^"|}"
+
 exception M3ToK3Failure of
   Calculus.expr_t option *
   K.expr_t option *
@@ -52,7 +56,7 @@ let mk_k3_collection (base_ivars:K.base_type_t list)
   let ivars = List.map canon base_ivars in
   let ovars = List.map canon base_ovars in
   let v = canon base_v in
-  let wrap = KH.wrap_t_of_map' in
+  let wrap = wrap_map' in
   wrap @@
     match ivars, ovars with
     | [], [] -> [v]
@@ -73,7 +77,7 @@ let m3_map_to_k3_map (m3_map: M3.map_t) : K.declaration_t =
         (* initial value *)
         let ivc = if null ivar_types && null ovar_types then
           Some(KH.mk_singleton
-            (KH.wrap_t_of_map @@ KH.canonical element_type) @@
+            (wrap_map @@ KH.canonical element_type) @@
               [init_val_from_type @@ KH.canonical element_type])
           else None
         in
@@ -210,7 +214,7 @@ let apply_lambda_to_expr lambda_e lambda_t expr =
   let _, lambda_body = KU.decompose_lambda lambda_e in
   match KU.arg_of_lambda lambda_e, KU.tag_of_expr lambda_body with
   | Some(K.AVar(id,_)), K.Tuple ->
-        KH.mk_singleton (KH.wrap_t_of_map lambda_t) @@
+        KH.mk_singleton (wrap_map lambda_t) @@
           [KH.mk_let [id] expr lambda_body]
   | Some(K.AVar(id,_)), _       -> KH.mk_let [id] expr lambda_body
   | Some(K.ATuple _), _         -> KH.mk_map lambda_e expr
@@ -1460,9 +1464,9 @@ let m3_to_k3 ?(generate_init = false) ?(role = "client")
                   mk_map
                     (mk_lambda' id_ts @@
                       mk_tuple @@ vars@[mk_cint 1])
-                  (mk_apply (mk_var "load_csv_set") @@ mk_cstring f))
+                  (mk_apply (mk_var K3StdLib.csv_loader_name) @@ mk_cstring f))
 
-            | _ -> failwith "Table relations that aren't filesources are unsuppored"
+            | _ -> failwith "Table relations that aren't filesources are unsupported"
             end
           with Not_found -> x end
       | x -> x

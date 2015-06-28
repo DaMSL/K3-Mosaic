@@ -45,7 +45,7 @@ let mvos typ s = match typ with
   | TString -> let len = String.length s in
                if s.[len-1]='"' && s.[0]='"' then
                   String(String.sub s 1 (len-2))
-               else invalid_arg @: s^" is not a string"
+               else invalid_arg @@ s^" is not a string"
   | TBool   -> Bool(bos s)
 
 let mvos_many types ss = List.map2 mvos types ss
@@ -97,7 +97,7 @@ module SingletonMap = struct
 
   let to_s map = map.name^"-Singleton"
 
-  let val_s map = String.concat "" @: "("::somv map.v::[")"]
+  let val_s map = String.concat "" @@ "("::somv map.v::[")"]
 end
 
 module OutputMap = struct
@@ -274,11 +274,11 @@ let update_maps maps events =
   List.fold_left (fun acc evt ->
     Hashtbl.fold (fun mapname eff_list acc' ->
       let map = try StringMap.find mapname acc'
-        with Not_found -> failwith @: "Couldn't find "^mapname
+        with Not_found -> failwith @@ "Couldn't find "^mapname
       in
       List.fold_left (fun acc'' (op, ivars, ovars, v) ->
         (* debug *)
-        (*print_endline @: mapname^" "^concat_f "," ovars^":= "^sof v;*)
+        (*print_endline @@ mapname^" "^concat_f "," ovars^":= "^sof v;*)
         let m' = match map, op with
         | SingletonMap m, (RelEvent.Insert | RelEvent.System_Ready) ->
             SingletonMap(SingletonMap.set_s m ivars ovars v)
@@ -295,13 +295,15 @@ let update_maps maps events =
   ) maps events
 
 (* dump a map into a string *)
-let dump_map mapname = function
-    | SingletonMap m -> "{"^SingletonMap.val_s m^"}"
-    | OutputMap m    ->
-        let s = OutputMap.val_s m in
-        (* if our map is empty, we need the types *)
-        if s = "" then "{} : {"^OutputMap.types_s m^"}"
-        else "{"^OutputMap.val_s m^"}"
+let dump_map ~is_dist mapname m =
+  let wrap = M3ToK3.wrap_string_map in
+  match m with
+  | SingletonMap m -> wrap @@ SingletonMap.val_s m
+  | OutputMap m    ->
+      let s = OutputMap.val_s m in
+      (* if our map is empty, we need the types *)
+      if s = "" then (wrap "") ^ " : " ^ (wrap @@ OutputMap.types_s m)
+      else wrap @@ OutputMap.val_s m
 
 (* return the dimensions of the map *)
 let map_dims = function
@@ -327,7 +329,7 @@ let r_colon = Str.regexp ":"
  * after splitting is that we'll have a member with only a single quote inside. *)
 let r_quote = Str.regexp "^[^\"]*\"[^\"]*$"
 let correct_for_strings ss =
-  List.rev @: fst @: List.fold_left (fun (acc, concat) s ->
+  List.rev @@ fst @@ List.fold_left (fun (acc, concat) s ->
     let has_quote = r_match r_quote s in
     match concat, has_quote, acc with
     | false, false, _ -> s::acc, false
@@ -353,7 +355,7 @@ let parse_trace file =
             maps, line+1, sys_ready, events, str
 
         | [_; _; Some ivars; _] when ivars <> "" ->
-            failwith @: "input vars unsupported at line "^soi line
+            failwith @@ "input vars unsupported at line "^soi line
 
         | [Some mapname; Some maptype; _; None] ->
             let newmap = SingletonMap(SingletonMap.init mapname maptype) in
@@ -364,17 +366,17 @@ let parse_trace file =
             let newmap =
               let ovars_s = Str.split r_comma ovars in
               let ovars', otypes =
-                List.split @: list_map (fun v ->
+                List.split @@ list_map (fun v ->
                   match Str.split r_colon v with
                   | [x;y] -> (x,y)
-                  | _     -> failwith @: "incorrect data at line "^soi line)
+                  | _     -> failwith @@ "incorrect data at line "^soi line)
                 ovars_s in
               OutputMap(OutputMap.init mapname maptype ovars' otypes)
             in
             let maps' = StringMap.add mapname newmap maps in
             maps', line+1, sys_ready, events, ""
 
-        | _ -> failwith @: "couldn't extract map details at line "^soi line
+        | _ -> failwith @@ "couldn't extract map details at line "^soi line
 
       else
       (* parse system ready *)
@@ -390,52 +392,52 @@ let parse_trace file =
       else
       (* parse an event *)
       let m = r_groups str ~n:4 ~r:r_event in
-      if not @: null m then
+      if not @@ null m then
         match m with
         | [Some op; Some relname; Some id_types; Some vals] ->
             let id_types = Str.split r_comma id_types in
             let id_types = List.map (Str.split r_colon) id_types in
             let types = List.map (function
               | _::y::_ -> y
-              | _       -> failwith @: "Bad data at line "^soi line)
+              | _       -> failwith @@ "Bad data at line "^soi line)
             id_types in
-            let vals = correct_for_strings @: Str.split r_semi vals in
+            let vals = correct_for_strings @@ Str.split r_semi vals in
             let evt = RelEvent.init op relname types vals in
             maps, line+1, sys_ready, evt::events, acc_str
 
-        | _ -> failwith @: "invalid input for ON at line "^soi line
+        | _ -> failwith @@ "invalid input for ON at line "^soi line
       else
       (* parse an update *)
       let m = r_groups str ~n:4 ~r:r_update in
-      if not @: null m then match m with
+      if not @@ null m then match m with
         | [Some mapname; Some ivars; Some ovars; Some v] ->
             let ivars = if ivars = "-" then []
-              else correct_for_strings @: Str.split r_semi ivars in
+              else correct_for_strings @@ Str.split r_semi ivars in
             let ovars = if ovars = "-" then []
-              else correct_for_strings @: Str.split r_semi ovars in
+              else correct_for_strings @@ Str.split r_semi ovars in
             begin match events with
-            | []    -> failwith @: "No event to update at line "^soi line
+            | []    -> failwith @@ "No event to update at line "^soi line
             | e::es ->
                 let e' = RelEvent.add_effect e mapname ivars ovars v in
                 maps, line+1, sys_ready, e'::es, acc_str
             end
-        | _ -> failwith @: "error in update at line "^soi line
+        | _ -> failwith @@ "error in update at line "^soi line
       else
       (* parse a remove *)
       let m = r_groups str ~n:3 ~r:r_remove in
-      if not @: null m then match m with
+      if not @@ null m then match m with
           | (Some mapname)::(Some ivars)::(Some ovars)::_ ->
             let ivars = if ivars = "-" then []
-                        else correct_for_strings @: Str.split r_semi ivars in
+                        else correct_for_strings @@ Str.split r_semi ivars in
             let ovars = if ovars = "-" then []
-                        else correct_for_strings @: Str.split r_semi ovars in
+                        else correct_for_strings @@ Str.split r_semi ovars in
             begin match events with
-            | []    -> failwith @: "No event to update at line "^soi line
+            | []    -> failwith @@ "No event to update at line "^soi line
             | e::es ->
                 let e' = RelEvent.del_effect e mapname ivars ovars in
                 maps, line+1, sys_ready, e'::es, acc_str
             end
-          | _ -> failwith @: "error in remove at line "^soi line
+          | _ -> failwith @@ "error in remove at line "^soi line
       else
         maps, line+1, sys_ready, events, acc_str
     ) (StringMap.empty, 1, false, [], "") lines
@@ -448,7 +450,7 @@ let parse_trace file =
     else begin
       (* reverse the effect lists *)
       Hashtbl.iter (fun mapname efflist ->
-        Hashtbl.replace e.RelEvent.effects mapname @: List.rev efflist
+        Hashtbl.replace e.RelEvent.effects mapname @@ List.rev efflist
       ) e.RelEvent.effects;
       Some e
     end
@@ -464,11 +466,11 @@ let string_of_go_trig ~has_sys_ready events =
   let len = List.length events in
   let s2 = list_mapi (fun (i, x) ->
     let last = if i >= len - 1 then true else false in
-    Printf.sprintf "  %s\n" @: RelEvent.dispatch_s x ~last
+    Printf.sprintf "  %s\n" @@ RelEvent.dispatch_s x ~last
   ) events
   in
   let s2 = s2@["}\n"] in
-  String.concat "" @: s@s2
+  String.concat "" @@ s@s2
 
 (* parse an order file, which is an alternative to a trace file *)
 let events_of_order_file file =
@@ -479,7 +481,7 @@ let events_of_order_file file =
   let r_int = Str.regexp "^-?[0-9]+$" in
   let r_date = Str.regexp "^[0-9]+-[0-9]+-[0-9]+$" in
   List.map (fun line ->
-    if not @: Str.string_match r_line line 0 then
+    if not @@ Str.string_match r_line line 0 then
       failwith "Bad order file syntax"
     else
       let g i = Str.matched_group i line in
@@ -494,13 +496,13 @@ let events_of_order_file file =
           "string"
       ) argl in
       (* debug *)
-      (*Printf.printf "%s\n%s\n" args @: String.concat ", " types;*)
+      (*Printf.printf "%s\n%s\n" args @@ String.concat ", " types;*)
       RelEvent.init op name types argl
   ) lines
 
 let strings_of_test_role ~is_dist events =
   if is_dist then
-    (str_make @:
+    (str_make @@
       "trigger node_dummy(x:int) {} = ()"::
       "role switch {"::
         RelEvent.stream_s events@
@@ -515,7 +517,7 @@ let strings_of_test_role ~is_dist events =
       []
   else (* single-site *)
     if events <> [] then
-      (str_make @:
+      (str_make @@
         "srole switch {"::
         RelEvent.stream_s events@
         "}"::[])::
@@ -530,12 +532,12 @@ let strings_of_test_role ~is_dist events =
            default role switch\n"]
 
 let string_of_test_role ~is_dist events =
-  str_make @: strings_of_test_role ~is_dist events
+  str_make @@ strings_of_test_role ~is_dist events
 
 (* convert the maps to a list *)
-let string_of_maps maps =
+let string_of_maps ~is_dist maps =
   StringMap.fold (fun name mapdata acc ->
-    (name, dump_map name mapdata)::acc
+    (name, dump_map ~is_dist name mapdata)::acc
   ) maps []
 
 (* get the names and dimensions of maps *)
@@ -547,7 +549,7 @@ let map_names_and_dims maps =
 (* combine the map strings (left string, right string) into their final form *)
 let dump_map_strings maps =
   let maps' = list_map (fun (left_s, right_s) ->
-    String.concat "" @: left_s::" = "::[right_s]
+    String.concat "" @@ left_s::" = "::[right_s]
   ) maps
   in
   String.concat ", " maps'
@@ -556,11 +558,11 @@ let dump_map_strings maps =
 let string_of_file file ~is_dist =
   let events, maps, sys_ready = parse_trace file in
   (* debug *)
-  (*print_endline @: String.concat ", " @: fst_many @: string_of_maps maps;*)
+  (*print_endline @@ String.concat ", " @@ fst_many @@ string_of_maps maps;*)
   (* update all maps with the event data *)
   let maps = update_maps maps events in
   (* list of all maps and their data *)
-  let mapl = string_of_maps maps in
+  let mapl = string_of_maps ~is_dist maps in
   (*let trig_s = string_of_go_trig ~has_sys_ready:sys_ready events in*)
   let role_s = strings_of_test_role ~is_dist events in
   (* return the tree components we have to add *)

@@ -80,8 +80,13 @@ let rcv_jobs =
     (* set switches *)
     delayed_init D.switches;
     delayed_init D.num_switches;
-    (* if we're a switch *)
-    mk_if (mk_leq (mk_var D.job.id) @@ mk_var D.job_switch.id)
+    (* if we're master *)
+    mk_if (mk_eq (mk_var D.job.id) @@ mk_var D.job_master.id)
+      (delayed_init GC.ms_num_gc_expected)
+      mk_cunit;
+    (* if we're a switch or master *)
+    mk_if (mk_or (mk_eq (mk_var D.job.id) @@ mk_var D.job_switch.id) @@
+                  mk_eq (mk_var D.job.id) @@ mk_var D.job_master.id)
       (* set next switch addr *)
       (delayed_init TS.sw_next_switch_addr)
       mk_cunit;

@@ -85,10 +85,10 @@ let typecheck e =
 let light_type c e =
   try
      T.deduce_expr_type ~override:false c.trig_env c.env e
-  with T.TypeError (uuid, name, err) ->
+  with T.TypeError (uuid, name, err) as exc ->
     prerr_string @@ Printf.sprintf "Typechecker Error @%d: %s\n%s\n\n%s" uuid name
       (K3TypeError.string_of_error err) (K3PrintSyntax.string_of_expr ~uuid_highlight:uuid e);
-    exit 1
+    raise exc
 
 (* Get a binding id from a number *)
 let id_of_num i = Printf.sprintf "b%d" i
@@ -119,31 +119,20 @@ let add_record_ids c ?prefix l =
 
 (* Add record ids to a string *)
 let concat_record_str ?(sep=":") l =
-  List.map (fun (s,x) -> Printf.sprintf "%s%s%s" s sep x) l
+  List.map (fun (s,x) -> Printf.sprintf "%s%s%s" s sep x) @@
+  (* remove any ignored fields *)
+  List.filter (fun (_,x) -> x <> "_") l
 
 let error () = lps "???"
 
 let lazy_bracket_list f l = lazy_bracket (lps_list NoCut f l)
-
-let lazy_index idx =
-  lps "Index" <| lazy_paren (
-    match idx with
-    | HashIdx s    -> lps "hashkey=" <| lazy_bracket_list (lps |- soi) (IntSet.elements s)
-    | OrdIdx(l, s) ->
-        let eq_set = if IntSet.is_empty s then []
-                    else lps "," <| lsp () <| lps "eq=" <|
-                          lazy_bracket_list (lps |- soi) (IntSet.elements s)
-        in
-        lps "key=" <| lazy_bracket_list (lps |- soi) l <| eq_set)
-
-let lazy_indices is = List.flatten @@ List.map lazy_index @@ IndexSet.elements is
 
 let lazy_col = function
   | TSet        -> lps "{ Set }"
   | TBag        -> lps "{ Collection }"
   | TList       -> lps "{ Seq }"
   | TMap        -> lps "{ Map }"
-  | TMultimap s -> lps "{ MultiIndex, " <| lazy_indices s <| lps " }"
+  | TVMap       -> lps "{ VMap }"
 
 let lazy_control_anno c = function
   | Effect ids -> lps "effect " <| lazy_paren @@
@@ -318,6 +307,25 @@ let rec extract_slice e =
       tup, (KH.mk_let ids bound) |- sub_expr
   | _ -> failwith "extract_slice unhandled expression"
 
+(* for vmaps, we encode many of our functions with just a vid inside a tuple. Extract
+  * this for the API *)
+let maybe_vmap c col pat fun_no fun_yes =
+  let col, _ = KH.unwrap_tcol @@ T.type_of_expr col in
+  if col = TVMap then match U.decompose_tuple pat with
+    | vid::rest -> fun_yes vid (light_type c @@ KH.mk_tuple rest)
+    | _         -> failwith "missing vid in pattern for vmap"
+  else fun_no pat
+
+(* check if a collection is a vmap *)
+let is_vmap col = fst @@ KH.unwrap_tcol @@ T.type_of_expr col = TVMap
+
+(* We return the pattern breakdown: a list, and a lambda forming the internal structure *)
+let breakdown_pat pat = match U.tag_of_expr pat with
+  | Tuple -> U.decompose_tuple pat, id_fn
+  (* if we have a let, we need a proper tuple extraction *)
+  | Let _ -> extract_slice pat
+  | _     -> [pat], id_fn
+
 (* identify if a lambda is an id lambda *)
 let is_id_lambda e =
   (* get a flat list of only the first level of ids *)
@@ -351,10 +359,22 @@ let var_translate = List.fold_left (fun acc (x,y) -> StringMap.add x y acc) Stri
    "maxi", "max";
    "maxif", "max"]
 
+  (* descriptions of how to pass variables. {In,Out}Rec implies that even if we see a non-tuple
+   * value, we should turn it into a record (with an 'i' label). This is necessary because of the
+   * record restriction in newk3, which states that everything in a collection must be a record *)
 type in_record = InRec | In
 type out_record = OutRec | Out
 type arg_info  = ALambda of in_record list | ANonLambda
 type arg_info_l = (arg_info * out_record) list
+
+let vid_out_arg = ANonLambda, if K3Dist.is_vid_tuple then OutRec else Out
+let vid_in_arg  = if K3Dist.is_vid_tuple then InRec else In
+
+let is_unknown e =
+  match U.tag_of_expr e with Const CUnknown -> true | _ -> false
+
+let is_tuple e =
+  match U.tag_of_expr e with Tuple -> true | _ -> false
 
 (* create a deep bind for lambdas, triggers, and let statements
  * -depth allows to skip one depth level of binding
@@ -367,7 +387,7 @@ let rec deep_bind ?top_expr ~in_record c arg_n =
     let bind_text i = match top_expr, d with
       | Some e, d
           when d=0 -> lazy_expr c e
-      | _              -> lps @@ id_of_num i
+      | _          -> lps @@ id_of_num i
     in
     match a with
       (* pretend to unwrap a record *)
@@ -497,11 +517,58 @@ and fold_of_map_ext c expr =
   lazy_expr c @@ light_type c @@
     KH.mk_agg (KH.mk_lambda args' body') (mk_empty t_out) col
 
+(* convert a slice to a filter function.
+ * @frontier: For a vmap, change to a frontier lookup
+ *            A vmap cannot ever have a regular slice
+ * NOTE: a precise lookup should be picked up by Peek(Slice(x,_)) matching
+ *)
+and filter_of_slice ~frontier c col pat =
+  let tup_t = snd @@ KH.unwrap_tcol @@ T.type_of_expr col in
+  let es, lam_fn = breakdown_pat pat in
+  let vid_e, es = if frontier then some @@ hd es, tl es else None, es in
+
+  (* prepare record info, and allow deep slice patterns *)
+  let rec loop es : ((expr_t -> expr_t) * expr_t) list =
+    let i_e = insert_index_fst ~first:1 es in
+    (* find the non-unknown slices *)
+    let i_e = List.filter (not |- is_unknown |- snd) i_e in
+    let s_e = List.map (first KH.mk_subscript) i_e in
+    (* find if there are any tuples inside the pattern *)
+    let tups, no_tups = List.partition (is_tuple |- snd) s_e in
+    (* handle the tuples by recursing over them *)
+    let tups = List.flatten @@ List.map (fun (subst,e) ->
+      let deep = loop @@ U.unwrap_tuple e in
+      List.map (fun (s,e) -> s |- subst , e) deep
+    ) tups
+    in
+    no_tups @ tups
+  in
+  let s_es = loop es in
+  (* obvious optimization - no slice needed *)
+  if null s_es && not frontier then lazy_expr c col else
+  let do_eq e (sub_fn, v) = KH.mk_eq (sub_fn e) v in
+  let nm = "_t" in
+  let lambda = light_type c @@
+    KH.mk_lambda' [nm, tup_t] @@
+      lam_fn @@ (* apply an inner lambda constructor *)
+      List.fold_right
+        (fun x acc -> KH.mk_and acc @@ do_eq (KH.mk_var nm) x)
+        (try tl s_es
+          with Invalid_argument _ -> [])
+        (try do_eq (KH.mk_var nm) @@ hd s_es
+          with Invalid_argument _ -> light_type c KH.mk_ctrue)
+  in
+  let args, arg_info =
+    if frontier then [unwrap_some vid_e; lambda], [vid_out_arg; ALambda[InRec], Out]
+    else [lambda], [ALambda[InRec], Out] in
+  apply_method c ~name:"filter" ~col ~args ~arg_info
+
 (* printing expressions *)
 (* argnums: lambda only   -- number of expected arguments *)
 (* prefix_fn: lambda only -- modify the lambda with a prefix *)
 (* expr_info: additional info about the expression in the form of an arg_info structure *)
 and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
+
   let expr_pair ?(sep=lps "," <| lsp ()) ?(wl=id_fn) ?(wr=id_fn) (e1, e2) =
     wl(lazy_expr c e1) <| sep <| wr(lazy_expr c e2) in
   (* handle parentheses:
@@ -586,7 +653,17 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
     (* Singletons are sometimes typed with unknowns (if read from a file) *)
     let e = U.decompose_singleton expr in
     let t = typecheck expr in
-    lazy_collection_vt c t @@ lazy_expr c e
+    (* for vmaps, we need to convert to a sequence with empty *)
+    if is_vmap expr then
+      let e' =
+        let open KH in
+        mk_let ["x"] (mk_empty t) @@
+          mk_block [
+            mk_insert "x" [e];
+            mk_var "x" ] in
+      lazy_expr c @@ light_type c e'
+    else
+      lazy_collection_vt c t @@ lazy_expr c e
   | Combine ->
     let rec assemble_list c e =  (* print out in list format *)
       let l, r = U.decompose_combine e in
@@ -602,15 +679,18 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
           lazy_expr c l2
         | _ -> error () (* type error *)
       end in
-    let (e1, e2) = U.decompose_combine expr in
+    let e1, e2 = U.decompose_combine expr in
     (* wrap the left side of the combine if it's needed *)
+    (* for vmaps, we can't use sugared syntax. Must have ugly expressions *)
     begin match U.tag_of_expr e1, U.tag_of_expr e2 with
-      | Singleton vt, Combine | Singleton vt, Singleton _
-      | Singleton vt, Empty _ ->
-        let t = T.type_of_expr expr in
-        lazy_collection_vt c t @@ assemble_list c expr
+      | Singleton vt, Combine
+      | Singleton vt, Singleton _
+      | Singleton vt, Empty _ when not @@ is_vmap e1 && not @@ is_vmap e2 ->
+          let t = T.type_of_expr expr in
+          lazy_collection_vt c t @@ assemble_list c expr
       | _ -> apply_method c ~name:"combine" ~col:e1 ~args:[e2] ~arg_info:[ANonLambda, Out]
     end
+
   | Range ct -> let st, str, num = U.decompose_range expr in
     (* newk3 range only has the last number *)
     let range_type = KH.canonical @@ TFunction(KH.t_int, KH.wrap_tlist KH.t_int) in
@@ -622,7 +702,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
       | _, false -> arith_paren_pair "+" (e1, e2)
       | _, true -> arith_paren_pair "or" (e1, e2)
     end
-  | Mult -> let (e1, e2) = U.decompose_mult expr in
+  | Mult -> let e1, e2 = U.decompose_mult expr in
     let is_neg = begin match U.tag_of_expr e1 with
       | Neg -> let e = U.decompose_neg e1 in
         begin match U.tag_of_expr e with
@@ -673,7 +753,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
       | Var "reciprocali"
       | Var "reciprocal" -> arith_paren_pair "/" (light_type c @@ KH.mk_cint 1, e2)
       (* convert load_csv to right format *)
-      | Var "load_csv_set2" ->
+      | Var s when s = K3StdLib.csv_loader_name^"2" ->
           let tup = U.unwrap_tuple e2 in
           begin match List.map U.tag_of_expr tup with
           (* get name of var to extract table name *)
@@ -689,9 +769,9 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
                   let loader = String.uppercase table^"LoaderRP" in
                   apply_method_nocol {c with singleton_id = "path"}
                     ~dot:false ~name:loader ~args ~arg_info:[ANonLambda, Out; ANonLambda, Out]
-              | _ -> failwith "bad arg to load_csv_set"
+              | _ -> failwith "bad arg to load_csv_col"
               end
-          | _ -> failwith "bad arg to load_csv_set2"
+          | _ -> failwith "bad arg to load_csv_col2"
           end
       (* function application *)
       | _ -> function_application c e1 [e2]
@@ -802,21 +882,63 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
         end
 
   | Aggregate -> let lambda, acc, col = U.decompose_aggregate expr in
+    let name = if is_vmap col then "fold_all" else "fold" in
     (* find out if our accumulator is a collection type *)
-    apply_method c ~name:"fold" ~col ~args:[lambda; acc]
+    apply_method c ~name ~col ~args:[lambda; acc]
       ~arg_info:[ALambda [In; InRec], Out; ANonLambda, Out]
+
+  | AggregateV -> let lambda, acc, col = U.decompose_aggregatev expr in
+    (* find out if our accumulator is a collection type *)
+    apply_method c ~name:"fold_all" ~col ~args:[lambda; acc]
+      ~arg_info:[ALambda [In; vid_in_arg; InRec], Out; ANonLambda, Out]
+
   | GroupByAggregate -> let lam1, lam2, acc, col = U.decompose_gbagg expr in
     (* find out if our accumulator is a collection type *)
     apply_method c ~name:"groupBy" ~col ~args:[lam1; lam2; acc]
       ~arg_info:[ALambda [InRec], Out; ALambda [In; InRec], Out; ANonLambda, Out]
+
   | Sort -> let lambda, col = U.decompose_sort expr in
     apply_method c ~name:"sort" ~col ~args:[lambda] ~arg_info:[ALambda [InRec; InRec], Out]
       ~prefix_fn:(fun e -> light_type c @@ KH.mk_if e (KH.mk_cint (-1)) @@ KH.mk_cint 1)
+
   | Size -> let col = U.decompose_size expr in
-    apply_method c ~name:"size" ~col ~args:[KH.mk_cunit] ~arg_info:[ANonLambda, Out]
+    let name = if is_vmap col then "total_size" else "size" in
+    apply_method c ~name ~col ~args:[light_type c KH.mk_cunit]
+      ~arg_info:[ANonLambda, Out]
+
   | Peek -> let col = U.decompose_peek expr in
-    (* peeks return options and need to be pattern matched *)
-      lazy_paren @@ apply_method c ~name:"peek" ~col ~args:[light_type c @@ KH.mk_cunit] ~arg_info:[ANonLambda, Out]
+    (* normal peek applications *)
+    let name = if is_vmap col then "peek_now" else "peek" in
+    let normal () = lazy_paren @@ apply_method c ~name ~col
+      ~args:[light_type c @@ KH.mk_cunit] ~arg_info:[ANonLambda, Out] in
+
+    (* to handle the case where we have a full slice over a vmap, we need to look ahead *)
+    let tag = U.tag_of_expr col in
+    let col_t, elem_t = KH.unwrap_tcol @@ T.type_of_expr col in
+
+    (* common pattern for vmap lookups *)
+    let handle_vmap_lookup decomp_fn name =
+      let col', pat = decomp_fn col in
+      (* turn pat into a list. drop the value *)
+      let pat  = fst @@ breakdown_pat pat in
+      let pat2 = list_drop_end 1 pat in
+      (* check if we have a specific value rather than an open slice pattern *)
+      if List.for_all (not |- is_unknown) pat2 then
+        (* create a default value for the last member of the slice tuple since k3new can't
+         * handle unknowns *)
+        let tval = list_last @@ KH.unwrap_ttuple elem_t in
+        let pat3 = pat2 @ [KH.default_value_of_t tval] in
+        apply_method c ~name ~col:col'
+          ~args:[hd pat3; light_type c @@ KH.mk_tuple @@ tl pat3]
+          ~arg_info:[vid_out_arg; ANonLambda, Out]
+      else normal ()
+    in
+    (* TODO: this can be expanded to regular maps as well *)
+    begin match col_t, tag with
+    | TVMap, Slice         -> handle_vmap_lookup U.decompose_slice "lookup"
+    | TVMap, SliceFrontier -> handle_vmap_lookup U.decompose_slice_frontier "lookup_before"
+    | _ -> normal ()
+    end
 
   | Subscript _ -> let i, tup = U.decompose_subscript expr in
       let t = KH.unwrap_ttuple @@ T.type_of_expr tup in
@@ -824,57 +946,66 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
       let id = fst @@ at id_t (i-1) in
       (paren_l tup @@ lazy_expr c tup) <| lps "." <| lps id
 
-  | SliceIdx(idx, comp) -> let col, pat = U.decompose_slice expr in
-    let ts = KH.unwrap_ttuple @@ snd @@ KH.unwrap_tcol @@
-             T.type_of_expr col in
-    let ids  = fst_many @@ add_record_ids c ts in
-    let ids' = U.filter_by_index_t idx ids in
-    let name = String.concat "_" @@ "slice_by"::ids' in
-    apply_method c ~name ~col ~args:[pat] ~arg_info:[ANonLambda, Out]
+  | SliceFrontier ->
+      (* this only works on a vmap, so we can assume we have a vmap *)
+      let col, pat = U.decompose_slice_frontier expr in
+      filter_of_slice ~frontier:true c col pat
 
-  | Slice -> let col, pat = U.decompose_slice expr in
-    let es, lam_fn = match U.tag_of_expr pat with
-      | Tuple -> U.decompose_tuple pat, id_fn
-      (* if we have a let, we need a proper tuple extraction *)
-      | Let _ -> extract_slice pat
-      | _     -> [pat], id_fn
-    in
-    let ts = List.map T.type_of_expr es in
-    let id_e = add_record_ids c es in
-    let id_t = add_record_ids c ts in
-    (* find the non-unknown slices *)
-    let filter_e = List.filter (fun (_,c) ->
-      match U.tag_of_expr c with
-      | Const CUnknown -> false
-      | _              -> true)
-      id_e
-    in
-    if null filter_e then lazy_expr c col (* no slice needed *)
-    else
-      let do_eq (id, v) = KH.mk_eq (KH.mk_var id) v in
-      let lambda = light_type c @@
-        KH.mk_lambda' id_t @@
-          lam_fn @@ (* apply an inner lambda constructor *)
-          List.fold_right (fun x acc ->
-            KH.mk_and acc (do_eq x)
-          )
-          (tl filter_e)
-          (do_eq @@ hd filter_e)
-      in
-      apply_method c ~name:"filter" ~col ~args:[lambda] ~arg_info:[ALambda[InRec], Out]
-  | Insert _ -> let col, x = U.decompose_insert expr in
-    lps col <| apply_method_nocol c ~name:"insert" ~args:[x]
-      ~arg_info:[ANonLambda,OutRec]
-  | Delete _ -> let col, x = U.decompose_delete expr in
-    lps col <| apply_method_nocol c ~name:"erase" ~args:[x]
-      ~arg_info:[ANonLambda,OutRec]
-  | Update _ -> let col, oldx, newx = U.decompose_update expr in
-    lps col <| apply_method_nocol c ~name:"update" ~args:[oldx;newx]
-      ~arg_info:[ANonLambda,OutRec; ANonLambda,OutRec]
-  | Assign _ -> let l, r = U.decompose_assign expr in
-    lps l <| lsp () <| lps "=" <| lsp () <| lazy_expr c r
+  | Slice ->
+      let col, pat = U.decompose_slice expr in
+      filter_of_slice ~frontier:false c col pat
+
+  | Insert -> let col, x = U.decompose_insert expr in
+    maybe_vmap c col x
+      (fun x -> lazy_expr c col <| apply_method_nocol c ~name:"insert" ~args:[x]
+          ~arg_info:[ANonLambda,OutRec])
+      (fun vid x -> lazy_expr c col <| apply_method_nocol c ~name:"insert" ~args:[vid;x]
+          ~arg_info:[vid_out_arg; ANonLambda,OutRec])
+  | Delete -> let col, x = U.decompose_delete expr in
+    maybe_vmap c col x
+      (fun x -> lazy_expr c col <| apply_method_nocol c ~name:"erase" ~args:[x]
+        ~arg_info:[ANonLambda,OutRec])
+      (fun vid x -> lazy_expr c col <| apply_method_nocol c ~name:"erase" ~args:[vid;x]
+        ~arg_info:[vid_out_arg; ANonLambda,OutRec])
+
+  | DeletePrefix -> let col, x = U.decompose_delete_prefix expr in
+    maybe_vmap c col x
+      (fun x -> lazy_expr c col <| apply_method_nocol c ~name:"erase_prefix" ~args:[x]
+        ~arg_info:[ANonLambda,OutRec])
+      (fun vid x -> lazy_expr c col <| apply_method_nocol c ~name:"erase_prefix" ~args:[vid;x]
+        ~arg_info:[vid_out_arg; ANonLambda,OutRec])
+
+  | Update -> let col, oldx, newx = U.decompose_update expr in
+    maybe_vmap c col newx
+      (fun newx ->
+        lazy_expr c col <| apply_method_nocol c ~name:"update" ~args:[oldx;newx]
+        ~arg_info:[ANonLambda,OutRec; ANonLambda,OutRec])
+      (fun vid newx ->
+        lazy_expr c col <| apply_method_nocol c ~name:"update" ~args:[vid;oldx;newx]
+        ~arg_info:[vid_out_arg; ANonLambda,OutRec; ANonLambda,OutRec])
+
+  | UpdateSuffix -> let col, key, lambda = U.decompose_update_suffix expr in
+    begin match U.decompose_tuple key with
+    | vid::key ->
+        lazy_expr c col <| apply_method_nocol c ~name:"update_suffix"
+        ~args:[vid; light_type c @@ KH.mk_tuple key; lambda]
+        ~arg_info:[vid_out_arg; ANonLambda,OutRec; ALambda[vid_in_arg;InRec],OutRec]
+    | _ -> failwith "UpdateSuffix: bad key"
+    end
+
+  | UpsertWith -> let col, key, lam_no, lam_yes = U.decompose_upsert_with expr in
+    maybe_vmap c col key
+      (fun key -> lazy_expr c col <| apply_method_nocol  c ~name:"upsert_with" ~args:[key; lam_no; lam_yes]
+        ~arg_info:[ANonLambda,OutRec; ALambda[In],OutRec; ALambda[InRec],OutRec])
+      (fun vid key -> lazy_expr c col <| apply_method_nocol  c ~name:"upsert_with" ~args:[vid; key; lam_no; lam_yes]
+        ~arg_info:[vid_out_arg; ANonLambda,OutRec; ALambda[In],OutRec; ALambda[InRec],OutRec])
+
+  | Assign -> let l, r = U.decompose_assign expr in
+    lazy_expr c l <| lsp () <| lps "=" <| lsp () <| lazy_expr c r
+
   | Indirect -> let x = U.decompose_indirect expr in
     lps "ind" <| lsp () <| lazy_expr c x
+
   | Send -> let target, addr, args = U.decompose_send expr in
     wrap_indent @@ lazy_paren (expr_pair (target, addr)) <| lps "<- " <|
       lps_list CutHint (lazy_expr c) args
@@ -963,8 +1094,7 @@ let lazy_declaration c d =
           try
             let lam, s = U.decompose_apply e in
             begin match U.tag_of_expr lam, U.tag_of_expr s with
-            | Var "load_csv_bag", Const(CString f)
-            | Var "load_csv_set", Const(CString f) -> lps (Printf.sprintf "@@LoadFile(%s)" f) <| lcut ()
+            | Var "load_csv_col", Const(CString f) -> lps (Printf.sprintf "@@LoadFile(%s)" f) <| lcut ()
             | _ -> failwith "Not found"
             end
           with Failure _ -> (* normal global *)
@@ -1019,15 +1149,16 @@ let string_of_dist_program ?(file="default.txt") ?map_to_fold (p, envs) =
 "\
 include \"Core/Builtins.k3\"
 include \"Annotation/Map.k3\"
+include \"Annotation/Maps/VMap.k3\"
 include \"Annotation/Set.k3\"
 include \"Annotation/Seq.k3\"
 
 @:CArgs 2
-declare NATIONLoaderRP : collection {path: string} @Collection -> collection {ra:int, rb:string, rc:int, rd:string} @Set -> collection {ra:int, rb:string, rc:int, rd:string} @Set
+declare NATIONLoaderRP : collection {path: string} @Collection -> collection {ra:int, rb:string, rc:int, rd:string} @Collection -> collection {ra:int, rb:string, rc:int, rd:string} @Collection
   with effects \\_ -> \\_ -> io
 
 @:CArgs 2
-declare REGIONLoaderRP : collection {path: string} @Collection -> collection {ra:int, rb:string, rc:string} @Set -> collection {ra:int, rb:string, rc:string} @Set
+declare REGIONLoaderRP : collection {path: string} @Collection -> collection {ra:int, rb:string, rc:string} @Collection -> collection {ra:int, rb:string, rc:string} @Collection
   with effects \\_ -> \\_ -> io
 
 declare my_peers : collection { i:address } @ {Collection} =

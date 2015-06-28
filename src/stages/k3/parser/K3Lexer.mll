@@ -97,6 +97,8 @@ rule tokenize = parse
     | "|]"  { RBRACKETBAR }
     | "[:"  { LBRACKETCOLON }
     | ":]"  { RBRACKETCOLON }
+    | "[<"  { LBRACKETLT }
+    | ">]"  { RBRACKETLT }
     | "|"   { BAR }
 
     | '-' { NEG }
@@ -154,6 +156,7 @@ rule tokenize = parse
     | "filter"    { FILTER }
     | "flatten"   { FLATTEN }
     | "fold"      { AGGREGATE }
+    | "vfold"     { AGGREGATEV }
     | "groupby"   { GROUPBYAGGREGATE }
     | "sort"      { SORT }
     | "csize"     { SIZE }
@@ -175,8 +178,11 @@ rule tokenize = parse
     | "send" { SEND }
 
     | "insert" { INSERT }
+    | "upsert_with" { UPSERT_WITH }
+    | "update_suffix" { UPDATE_SUFFIX }
     | "update" { UPDATE }
     | "delete" { DELETE }
+    | "delete_prefix" { DELETE_PREFIX }
 
     | '@' { ANNOTATE }
 

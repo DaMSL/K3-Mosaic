@@ -25,7 +25,15 @@ val flip : ('a -> 'b -> 'c) -> 'b -> 'a -> 'c
 val id_fn : 'a -> 'a
 val (|-) : ('b -> 'c) -> ('a -> 'b) -> ('a -> 'c)
 
+val pequal : 'a -> 'a -> bool
+
+type never
+val (==) : 'a -> 'a -> never
+
 val pair : ('a -> 'b -> 'a * 'b)
+
+val map_pair : ('a -> 'b) -> 'a * 'a -> 'b * 'b
+val map_triple : ('a -> 'b) -> 'a * 'a * 'a -> 'b * 'b * 'b
 
 (* whether a list is empty *)
 val null : 'a list -> bool
@@ -55,6 +63,8 @@ val second3 : ('b -> 'd) -> 'a * 'b * 'c -> 'a * 'd * 'c
 val third3  : ('c -> 'd) -> 'a * 'b * 'c -> 'a * 'b * 'd
 
 val singleton : 'a -> 'a list
+
+val list_sum : ('a -> int) -> 'a list -> int
 
 (* take the first x values of a list *)
 val list_take : int -> 'a list -> 'a list
@@ -89,6 +99,9 @@ val tl : 'a list -> 'a list
 
 (* take the last member of a list *)
 val list_last : 'a list -> 'a
+
+(* group a list according to an int list *)
+val clump : int list -> 'a list -> 'a list list
 
 (* replicate a value into a list *)
 val replicate : int -> 'a -> 'a list
@@ -261,6 +274,8 @@ val hashtbl_combine : ('a, 'b) Hashtbl.t -> ('a, 'b) Hashtbl.t -> ('b -> 'b -> '
 
 val list_of_hashtbl : ('a, 'b) Hashtbl.t -> ('a * 'b) list
 val hashtbl_of_list : ('a * 'b) list -> ('a, 'b) Hashtbl.t
+
+val strcatmap : ?sep:string -> ('a -> string) -> 'a list -> string
 
 val intset_of_list : int list -> IntSet.t
 val intmap_of_list : (int * 'a) list -> 'a IntMap.t

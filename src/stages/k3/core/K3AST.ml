@@ -24,25 +24,12 @@ include ASTCommon
 (* Annotations *)
 type annotation_t
 
-(* LTA/GTA: all less than/gt *)
-type comp_t = LTA | LT | EQ | GT | GTA
-
-(* multimap index *)
-type index_t = HashIdx of IntSet.t
-              (* 2: set of eq keys *)
-             | OrdIdx of int list * IntSet.t
-
-val index_t_cmp : index_t -> index_t -> int
-
-module IndexSet : sig include Set.S with type elt = index_t end
-module IndexMap : sig include Map.S with type key = index_t end
-
 type container_type_t
     = TSet
     | TBag
     | TList
     | TMap
-    | TMultimap of IndexSet.t
+    | TVMap (* nlogn lookups *)
 
 type base_type_t
     = TTop
@@ -124,17 +111,21 @@ type expr_tag_t
     | Filter
     | Flatten
     | Aggregate
+    | AggregateV     (* vmap version of aggregate *)
     | GroupByAggregate
     | Sort
 
     | Peek
     | Slice
-    | SliceIdx of index_t * comp_t
-    | Insert of id_t
-    | Delete of id_t
-    | Update of id_t
+    | SliceFrontier  (* slice with a frontier at a vid *)
+    | Insert
+    | Update
+    | UpsertWith     (* insert with a default handler *)
+    | UpdateSuffix   (* update past a vid *)
+    | Delete
+    | DeletePrefix   (* delete before a certain vid. save frontier *)
 
-    | Assign of id_t
+    | Assign
     | Indirect
     | BindAs of id_t
     | Let of id_t list

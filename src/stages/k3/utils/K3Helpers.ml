@@ -66,9 +66,9 @@ let wrap_tmap' = function
   | [k; v] -> wrap_tmap @@ wrap_ttuple [k; v]
   | _      -> failwith "wrap_tmap': wrong number of arguments"
 
-(* wrap a type in a multimap *)
-let wrap_tmmap idxs typ = wrap_tcol (TMultimap idxs) typ
-let wrap_tmmap' idxs tl = wrap_tmmap idxs @@ wrap_ttuple tl
+(* wrap a type in a vmap *)
+let wrap_tvmap typ = wrap_tcol TVMap typ
+let wrap_tvmap' tl = wrap_tvmap @@ wrap_ttuple tl
 
 (* wrap a type in a mutable indirection *)
 let wrap_tind t = canonical @@ TIndirect t
@@ -78,14 +78,6 @@ let wrap_tmaybe t = canonical @@ TMaybe t
 let wrap_tmaybes ts = List.map wrap_tmaybe ts
 
 let wrap_tfunc tin tout = canonical @@ TFunction(tin, immut tout)
-
-(* what the generic type of the global maps is *)
-let wrap_t_of_map  = mut |- wrap_tset
-let wrap_t_of_map' = mut |- wrap_tset'
-
-(* what the generic type of data carried around is *)
-let wrap_t_calc  = wrap_tbag
-let wrap_t_calc' = wrap_tbag'
 
 (* wrap a function argument *)
 let wrap_args id_typ =
@@ -253,6 +245,9 @@ let mk_flatten collection = mk_stree Flatten [collection]
 let mk_agg agg_fn init collection =
     mk_stree Aggregate [agg_fn; init; collection]
 
+let mk_aggv agg_fn init collection =
+    mk_stree AggregateV [agg_fn; init; collection]
+
 let mk_gbagg group_fun agg_fun init collection =
     mk_stree GroupByAggregate [group_fun; agg_fun; init; collection]
 
@@ -280,20 +275,27 @@ let mk_slice collection pattern = mk_slice_gen Slice collection @@ mk_tuple patt
 
 let mk_slice' collection pattern = mk_slice (mk_var collection) pattern
 
-(* l_idx is the list of indices to use, made of ocaml ints *)
-(* l_comp is the pattern of gt, le, eq expressed as GTA, GT, EQ, LT, LTA *)
-let mk_slice_idx ~idx ~comp col pat =
-  mk_slice_gen (SliceIdx(idx, comp)) col pat
+(* first part of pat contains the vid *)
+let mk_slice_frontier col pat =
+  mk_slice_gen SliceFrontier col @@ mk_tuple pat
 
-let mk_slice_idx' ~idx ~comp col pat =
-  mk_slice_idx ~idx ~comp col @@ mk_tuple pat
+let mk_insert col x = mk_stree Insert [mk_var col; mk_tuple x]
 
-let mk_insert col x = mk_stree (Insert col) [mk_tuple x]
+(* key contains dummy value *)
+let mk_upsert_with col key lam_empty lam_full =
+  mk_stree UpsertWith [mk_var col; mk_tuple key; lam_empty; lam_full]
 
-let mk_delete col x = mk_stree (Delete col) [mk_tuple x]
+let mk_delete col x = mk_stree Delete [mk_var col; mk_tuple x]
+
+(* first part of key contains the vid. Also contains dummy value *)
+let mk_delete_prefix col x = mk_stree DeletePrefix [mk_var col; mk_tuple x]
 
 let mk_update col old_val new_val =
-    mk_stree (Update col) [mk_tuple old_val; mk_tuple new_val]
+  mk_stree Update [mk_var col; mk_tuple old_val; mk_tuple new_val]
+
+(* first part of new val contains the vid *)
+let mk_update_suffix col key lambda =
+  mk_stree UpdateSuffix [mk_var col; mk_tuple key; lambda]
 
 let mk_peek col = mk_stree Peek [col]
 
@@ -310,7 +312,7 @@ let mk_update_slice col slice new_val =
 let mk_ind v = mk_stree Indirect [v]
 
 (* left: TRef, right: T/TRef *)
-let mk_assign left right = mk_stree (Assign left) [right]
+let mk_assign left right = mk_stree Assign [mk_var left; right]
 
 (* target:TTarget(T) address:TAdress args:T *)
 let mk_send target address args = mk_stree Send [mk_ctarget target; address; mk_tuple args]
@@ -442,6 +444,12 @@ let mk_assoc_lambda arg1 arg2 expr = mk_lambda (ATuple[arg1; arg2]) expr
 
 let mk_assoc_lambda' arg1 arg2 expr = mk_lambda (ATuple[wrap_args arg1; wrap_args arg2]) expr
 
+let mk_lambda2 arg1 arg2 expr = mk_lambda (ATuple[arg1; arg2]) expr
+let mk_lambda2' a1 a2 expr = mk_lambda2 (wrap_args a1) (wrap_args a2) expr
+
+let mk_lambda3 arg1 arg2 arg3 expr = mk_lambda (ATuple[arg1; arg2; arg3]) expr
+let mk_lambda3' a1 a2 a3 expr = mk_lambda3 (wrap_args a1) (wrap_args a2) (wrap_args a3) expr
+
 let mk_fst tuple = mk_subscript 1 tuple
 let mk_fst' tuple = mk_subscript 1 (mk_var tuple)
 
@@ -491,16 +499,16 @@ let t_map_id = t_int
 
 (* --- vids --- *)
               (* epoch, count, switch hash *)
-let vid_types = [t_int; t_int]
-let vid_id_t = ["epoch", t_int; "count", t_int]
+let vid_types = [t_int]
+let vid_id_t = ["vid", t_int]
 let t_vid = wrap_ttuple vid_types
 
 (* increment a vid. assume "vid" *)
 let vid_increment ?(vid_expr=mk_var "vid") () =
-  mk_tuple [mk_subscript 1 vid_expr; mk_add (mk_subscript 2 vid_expr) (mk_cint 1)]
+  mk_tuple [mk_add vid_expr (mk_cint 1)]
 
-let min_vid_k3 = mk_tuple [mk_cint 0; mk_cint 0]
-let start_vid_k3 = mk_tuple [mk_cint 0; mk_cint 1]
+let min_vid_k3 = mk_tuple [mk_cint 0]
+let start_vid_k3 = mk_tuple [mk_cint 1]
 
 (* id function for maps *)
 let mk_id tuple_types =
@@ -549,6 +557,20 @@ let mk_peek_or_error s e = mk_case_ns (mk_peek e) "x"
 let mk_lookup col pat = mk_peek @@ mk_slice col pat
 let mk_lookup' col pat = mk_peek @@ mk_slice' col pat
 
+let rec default_value_of_t t = match t.typ with
+  | TUnit         -> mk_cunit
+  | TBool         -> mk_cfalse
+  | TInt          -> mk_cint 0
+  | TDate         -> mk_cint 0
+  | TFloat        -> mk_cfloat 0.
+  | TString       -> mk_cstring ""
+  | TMaybe t      -> mk_nothing t
+  | TTuple l      -> mk_tuple @@ List.map default_value_of_t l
+  | TCollection _ -> mk_empty t
+  | TAddress      -> mk_caddress ("0.0.0.0", 1)
+  | TIndirect t   -> mk_ind @@ default_value_of_t t
+  | _ -> invalid_arg "no default value for type"
+
 (* data structure record to standardize manipulation *)
 type data_struct = { id: string;
                      e: (string * type_t) list;
@@ -558,24 +580,25 @@ type data_struct = { id: string;
                      (* init that isn't used right away *)
                      d_init:expr_t option;
                      map_id: int option;
+                     global: bool; (* real global ds *)
+                     vid: bool; (* contains vids *)
                    }
 
+
 (* also add default values if missing *)
-let create_ds ?(e=[]) ?(ee=[]) ?init ?d_init ?map_id id t =
-  let init = if is_some init then init
-             else match t.typ with
-               | TBool   -> some @@ mk_cfalse
-               | TInt    -> some @@ mk_cint 0
-               | TFloat  -> some @@ mk_cfloat 0.
-               | TString -> some @@ mk_cstring ""
-               | _       -> None
+let create_ds ?(e=[]) ?(ee=[]) ?init ?d_init ?map_id ?(global=false) ?(vid=false) id t =
+  let init =
+    if is_some init then init
+    else some @@ default_value_of_t t
   in
-  {id; t; e; ee; init; d_init; map_id}
+  {id; t; e; ee; init; d_init; map_id; global; vid}
 
 (* utility functions *)
-let decl_global x = match x.init with
-  | Some init -> mk_global_val_init x.id x.t init
-  | None      -> mk_global_val x.id x.t
+let decl_global x =
+  let wrap = if x.global then wrap_tind else id_fn in
+  match x.init with
+  | Some init -> mk_global_val_init x.id (wrap x.t) init
+  | None      -> mk_global_val x.id (wrap x.t)
 
 let delayed_init x = match x.d_init with
   | Some init -> mk_assign x.id init
@@ -638,7 +661,7 @@ let mk_delete_one ds slice =
 
 (* for maps *)
 (* add a default entry or perform an operation (v) on the slice (nm) *)
-let mk_upsert_with ds nm ~k ~default ~v  =
+let mk_upsert_with_sim ds nm ~k ~default ~v  =
   (* to allow error by default, we special case *)
   let is_error e = try
     "error" = U.decompose_var @@ fst @@ U.decompose_apply e

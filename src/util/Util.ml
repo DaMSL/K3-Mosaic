@@ -35,7 +35,16 @@ let id_fn a = a
 
 let (|-) = compose
 
+let pequal = (==)
+
+type never
+
+let (==) x y = failwith "Should never run"
+
 let pair x y = (x,y)
+
+let map_pair f (x,y) = (f x, f y)
+let map_triple f (x,y,z) = (f x, f y, f z)
 
 let null l = match l with [] -> true | _ -> false
 
@@ -62,6 +71,8 @@ let third3  f (x,y,z) = x, y, f z
 
 let singleton x = [x]
 
+let list_sum f l = List.fold_left (fun acc x -> acc + f x) 0 l
+
 (* take the first x elements of a list *)
 let list_take len li =
   let rec take len2 li2 acc_list =
@@ -80,11 +91,12 @@ let rec list_drop len li = match li with
 
 (* split list into before and after *)
 let list_split len l =
-  let rec split len acc = function
-    | [] -> acc, []
-    | x::xs when len = 0 -> List.rev (x::acc), xs
-    | x::xs -> split (len-1) (x::acc) xs
-  in split len [] l
+  let len = if len < 0 then List.length l + len else len in
+  let rec loop len acc = function
+    | [] -> List.rev acc, []
+    | x::xs when len > 0 -> loop (len-1) (x::acc) xs
+    | xs -> List.rev acc, xs
+  in loop len [] l
 
 (* take the last x elements of a list *)
 let list_take_end len li = list_drop (List.length li - len) li
@@ -129,6 +141,17 @@ let rec list_last xs = match xs with
   | []    -> failwith "empty list"
   | [x]   -> x
   | _::xs -> list_last xs
+
+let clump grp_l l =
+  let rec loop grp l acc = match grp, l, acc with
+    | [], [], _
+    | [0], _, _                        -> acc
+    | 0::xs, ys, zs                    -> loop xs ys ([]::zs)
+    | x::xs, y::ys, []      when x > 0 -> loop (x-1::xs) ys [[y]]
+    | x::xs, y::ys, zs::zss when x > 0 -> loop (x-1::xs) ys ((y::zs)::zss)
+    | _ -> failwith "invalid input"
+  in
+  List.rev @@ List.map List.rev @@ loop grp_l l []
 
 let replicate n x =
   let rec loop n acc = match n with
@@ -546,6 +569,9 @@ let hashtbl_of_list l =
   List.iter (fun (k,v) -> Hashtbl.add h k v) l;
   h
 
+(* common functionatlity *)
+let strcatmap ?(sep=", ") f l = String.concat sep @@ List.map f l
+
 let intset_of_list l =
   List.fold_left (fun acc x -> IntSet.add x acc) IntSet.empty l
 
@@ -557,4 +583,3 @@ let strmap_of_list l =
 
 let string_of_int_list l = String.concat ", " @@ List.map soi l
 let string_of_int_set  s = String.concat ", " @@ List.map soi @@ IntSet.elements s
-

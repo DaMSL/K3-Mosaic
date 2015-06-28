@@ -8,9 +8,9 @@ export OCAMLRUNPARAM=b
 opam init
 eval `opam config env`
 opam install ocamlfind
+opam install yojson
 
 ./build_opt.sh
 ./build_utils.sh
-tests/auto_test.py -l tests/passed_local_tests.txt
-tests/auto_test.py -d -l tests/passed_dist_tests.txt
-#tests/auto_test.py -d -f external/dbtoaster/examples/queries/tpch/query1.sql
+tests/auto_test.py -l tests/passed_local_tests.txt --no-log
+tests/auto_test.py -d -l tests/passed_dist_tests.txt --no-log

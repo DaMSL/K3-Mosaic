@@ -33,10 +33,8 @@ def run():
                         default=None, help="Use an order file instead of creating a trace")
     parser.add_argument('-v', '--verbose', action='store_true', dest='verbose',
                         default=False, help="See test results in detail")
-    parser.add_argument('--idx', action='store_true', dest='use_idx',
-                        default=False, help="Use multi index maps")
-    parser.add_argument('--gc', action='store_true', dest='enable_gc',
-                        default=False, help="Enable garbage collector")
+    parser.add_argument('-m', '--map', action='store', dest='map_type',
+                        default='set', help="Use set/vmap/idx maps")
     parser.add_argument('--no_new', action='store_false', dest='new_k3',
                         default=True, help="Create k3new file")
     parser.add_argument('--no-deletes', action='store_false', dest='gen_deletes',
@@ -47,6 +45,13 @@ def run():
                         default=True, help="Run the interpreter")
     parser.add_argument('--workdir', action='store', type=str, dest='workdir',
                         default="temp", help="Directory to store work files")
+    parser.add_argument('--gc_interval', action='store',
+                        default=20000, type=int, help="Change gc interval (ms)")
+    parser.add_argument('--msg_interval', action='store',
+                        default=2, type=int, help="Change message interval (ms)")
+    parser.add_argument('--no-log', action='store_false', dest='logging',
+                        default=True, help="Disable logging")
+
 
     args = parser.parse_args()
 
@@ -85,20 +90,22 @@ def run():
         if verbose:
             print("")
         if not args.distributed:
-            res = dist_test.run(test_file, verbose=verbose, distrib=False)
+            res = dist_test.run(test_file, verbose=verbose, distrib=False, logging=args.logging)
         else:
             res = dist_test.run(test_file,
                                 num_nodes=args.num_nodes,
                                 order_file=args.order_file,
                                 verbose=verbose,
                                 distrib=True,
-                                use_idx=args.use_idx,
-                                enable_gc=args.enable_gc,
                                 new_k3=args.new_k3,
                                 gen_deletes=args.gen_deletes,
                                 gen_correctives=args.gen_correctives,
+                                map_type=args.map_type,
+                                workdir=args.workdir,
                                 run_interp=args.run_interp,
-                                workdir=args.workdir
+                                gc_interval=args.gc_interval,
+                                msg_interval=args.msg_interval,
+                                logging=args.logging
                                 )
         # check if a test failed
         if not res:

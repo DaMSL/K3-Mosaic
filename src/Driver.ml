@@ -139,34 +139,38 @@ let action_specs action_param = setter_specs action_param action_descriptions
 
 (* Driver parameters *)
 type parameters = {
-    action                : action_t ref;
-    test_mode             : test_mode_t ref;
-    mutable in_lang       : in_lang_t;
-    mutable out_lang      : out_lang_t;
-    mutable search_paths  : string list;
-    mutable input_files   : string list;
-    mutable peers         : K3Global.peer_t list;
-    mutable default_peer  : bool; (* whether we're using the default peer *)
-    mutable partition_map : K3Route.part_map_t;
-    mutable run_length    : int64;
-    mutable print_types   : bool; (* TODO                                    : change to a debug flag *)
-    mutable debug_info    : bool;
-    mutable verbose       : bool;
-    mutable trace_files   : string list;
-    mutable order_files   : string list;
+    action:                action_t ref;
+    test_mode:             test_mode_t ref;
+    mutable in_lang:       in_lang_t;
+    mutable out_lang:      out_lang_t;
+    mutable input_files:   string list;
+    mutable peers:         K3Global.peer_t list;
+    mutable default_peer:  bool; (* whether we're using the default peer *)
+    mutable debug_info:    bool;
+    mutable verbose:       bool;
 
-    mutable queue_type   : K3Runtime.queue_type; (* type of queue for interpreter *)
-    mutable k3new_data_file : string;
-    mutable k3new_folds : bool;   (* output fold instead of map/ext *)
-    mutable load_path : string;    (* path for the interpreter to load csv files from *)
-    mutable use_multiindex : bool; (* whether to generate code that uses multiindex maps *)
-    mutable enable_gc : bool;
-    mutable gen_deletes : bool;
-    mutable gen_correctives : bool;
+    (* k3 generation options *)
+    mutable partition_map: K3Route.part_map_t;
+    mutable trace_files:   string list;
 
-    mutable src_interval : float;   (* interval (s) between the interpreter feeding sources *)
-    mutable stream_file : string;   (* file to stream from (into switches) *)
-    mutable agenda_map : K3Dist.mapping_t;
+    (* k3dist generation options *)
+    mutable map_type:        K3Dist.map_type; (* UNUSED whether to generate code that uses vmaps (no other option now)*)
+    mutable gen_deletes:     bool;
+    mutable gen_correctives: bool;
+    mutable agenda_map:      K3Dist.mapping_t; (* mapping from agenda to stream sources *)
+    mutable stream_file:     string;
+      (* file to stream from (into switches). UNUSED -- we splice a varialbe (stream_path) instead *)
+
+    (* interpreter options *)
+    mutable queue_type:      K3Runtime.queue_type; (* type of queue for interpreter *)
+    mutable load_path:       string;  (* path for the interpreter to load csv files from *)
+    mutable src_interval:    int;     (* interval (ms) between the interpreter feeding sources *)
+    mutable interp_arg_file: string;  (* args to override k3 globals in interpreter (json) *)
+    mutable logging:         bool;    (* do we log to a file *)
+
+    (* k3new options *)
+    mutable k3new_data_file: string;
+    mutable k3new_folds:     bool;   (* output fold instead of map/ext *)
   }
 
 let default_cmd_line_params () = {
@@ -174,34 +178,31 @@ let default_cmd_line_params () = {
     test_mode         = ref ProgramTest;
     in_lang           = K3in;
     out_lang          = K3;
-    search_paths      = default_search_paths;
     input_files       = [];
     peers             = default_peers;
     default_peer      = true;
     partition_map     = [];
-    run_length        = default_run_length;
-    print_types       = default_print_types;
     debug_info        = default_debug_info;
     verbose           = default_verbose;
     trace_files       = [];
-    order_files       = [];
 
     queue_type        = K3Runtime.PerNodeQ;
     k3new_data_file   = "default.k3";
     k3new_folds       = false;
     load_path         = "";
-    use_multiindex    = false;
-    enable_gc         = true;
+    map_type          = K3Dist.MapVMap;
     gen_deletes       = true;
     gen_correctives   = true;
 
-    src_interval      = 0.002;
+    src_interval      = 2;
+    interp_arg_file   = "";
+    logging           = true;
+
     stream_file       = "input.csv";
     agenda_map        = K3Dist.default_mapping;
   }
 
 let cmd_line_params = default_cmd_line_params ()
-
 
 let handle_error heading p uuid ?name msg =
   let n = match name with Some nm -> nm^": " | _ -> "" in
@@ -294,7 +295,10 @@ let repl params inputs = ()
 let compile params inputs = ()
 
 (* Interpret actions *)
-let interpret_k3 params prog = let p = params in
+let interpret_k3 params prog =
+  let p = params in
+  if not params.logging then Log.set false else Log.set true;
+
   (* this not only adds type info, it adds the globals which are crucial
     * for interpretation *)
   let tp, envs = typed_program_with_globals prog in
@@ -303,7 +307,8 @@ let interpret_k3 params prog = let p = params in
     let interp = init_k3_interpreter tp ~peers:p.peers
                                         ~queue_type:p.queue_type
                                         ~load_path:p.load_path
-                                        ~src_interval:p.src_interval
+                                        ~src_interval:(foi p.src_interval /. 1000.)
+                                        ~interp_file:p.interp_arg_file
     in
     interpret_k3_program interp
   with RuntimeError (uuid,str) -> handle_interpret_error (K3Data tp) uuid str
@@ -339,11 +344,11 @@ let print_k3_program ?(no_roles=false) f = function
   | _ -> error "Cannot print this type of data"
 
 (* create and print a k3 program with an expected section *)
-let print_k3_test_program = function
+let print_k3_test_program params = function
   | idx, K3DistData (p, meta, orig_p) ->
       (* get the folded expressions comparing values for latest vid.
        * These go in the expected statements at the end *)
-      let tests_by_map = GenTest.expected_code_all_maps meta in
+      let tests_by_map = GenTest.expected_code_all_maps params.map_type meta in
       let test_vals =
         (* get the test values from the dbtoaster trace if available *)
         if not @@ null cmd_line_params.trace_files then
@@ -371,41 +376,6 @@ let print_k3_test_program = function
           tests_vals
       else failwith "no trace file"
 
-        (* use the order files to simulate the system *)
-        (*else if not @@ null cmd_line_params.order_files then
-          let order_file = at cmd_line_params.order_files idx in
-          let events = FromTrace.events_of_order_file order_file in
-          (* Note that we take the single-site version here *)
-          (* debug *)
-          let p' = orig_p @ parse_k3_prog role_s in
-          (* run the interpreter on our code *)
-          let params = default_cmd_line_params () in
-          let _, (_, (env, _)) =
-            hd @@ interpret_k3 params p' in (* assume one node *)
-          (* match the maps with their values *)
-          let tests_vals =
-            List.map (fun (name, (exp_code, empty)) ->
-              let v =
-                try !(IdMap.find name env)
-                with Not_found -> failwith "Missing map in environment"
-              in
-              (* deal with empty sets. In these cases, we don't have the types *)
-              let res = match v with
-              | VSet [] -> empty
-              | _       -> expr_of_value 0 v
-              in
-              exp_code, InlineExpr res
-            ) tests_by_map
-          in
-          (* now create a distributed version *)
-          let role_dist_s =
-            FromTrace.string_of_test_role ~is_dist:true events in
-          let p' = drop_roles p @ parse_k3_prog role_dist_s in
-          p', tests_vals
-
-        else
-          (* we don't have a trace file or order file for final value tests *)
-          p, list_map (fun (_, (e,_)) -> e, FileExpr "dummy") tests_by_map *)
       in
       let prog_test = NetworkTest(p, test_vals) in
       let _, prog_test = renumber_test_program_ids prog_test in
@@ -456,7 +426,7 @@ let print params inputs =
                                ~map_to_fold:params.k3new_folds
                                ~file:params.k3new_data_file)
                                |- snd
-    | K3Test | K3DistTest -> print_k3_test_program
+    | K3Test | K3DistTest -> print_k3_test_program params
   in List.iter print_fn idx_inputs
 
 (* Test actions *)
@@ -471,10 +441,10 @@ let test params inputs =
   in List.iter2 test_fn params.input_files inputs
 
 let transform_to_k3_dist params p proginfo =
-  let {use_multiindex; enable_gc; stream_file;
+  let {map_type; stream_file;
        gen_deletes; gen_correctives; agenda_map} = params in
   try
-    GenDist.gen_dist ~use_multiindex ~enable_gc ~stream_file
+    GenDist.gen_dist ~map_type ~stream_file
       ~gen_deletes ~gen_correctives ~agenda_map
       proginfo params.partition_map p
   with DistributeError(uuid, s) -> handle_distribute_error (K3Data p) uuid s
@@ -559,16 +529,10 @@ let param_specs = Arg.align
       "lang     Set the compiler's input language";
   "-l", Arg.String (fun l -> cmd_line_params.out_lang <- parse_out_lang l),
       "lang     Set the compiler's output language";
-  "-I", Arg.String (fun p ->
-      cmd_line_params.search_paths <- cmd_line_params.search_paths @ [p]),
-      "dir      Include a directory in the module search path";
 
   (* Interpreter and evaluation parameters *)
   "-n", Arg.String append_peers,
       "[addr]   Append addresses to the peer list";
-  "--steps", Arg.String (fun len ->
-      cmd_line_params.run_length <- Int64.of_string len),
-      "int64    Set program run length in # of messages";
   "-m", Arg.String load_partition_map,
       "file     Load a partition map from a file";
   "--peers", Arg.String load_peer,
@@ -576,27 +540,22 @@ let param_specs = Arg.align
   "--trace", Arg.String (fun file ->
     cmd_line_params.trace_files <- cmd_line_params.trace_files @ [file]),
       "file     Load a DBToaster trace file";
-  "--order", Arg.String (fun file ->
-    cmd_line_params.order_files <- cmd_line_params.order_files @ [file]),
-      "file     Load a map order file";
   "--datafile", Arg.String (fun file ->
     cmd_line_params.k3new_data_file <- file),
       "file     Specify a k3new data file";
-  "--k3new_folds", Arg.Unit (fun () -> cmd_line_params.k3new_folds <- true),
+  "--k3new-folds", Arg.Unit (fun () -> cmd_line_params.k3new_folds <- true),
       "         For k3new: output folds instead of ext and map";
-  "--use_idx", Arg.Unit (fun () -> cmd_line_params.use_multiindex <- true),
-      "         Use multiindex maps";
-  "--nogc", Arg.Unit (fun () -> cmd_line_params.enable_gc <- false),
-      "         Use garbage collection";
+  "--map-vmap", Arg.Unit (fun () -> cmd_line_params.map_type <- K3Dist.MapVMap),
+      "         Use vmaps";
   "--no-deletes", Arg.Unit (fun () -> cmd_line_params.gen_deletes <- false),
       "         Generate deletes";
   "--no-correctives", Arg.Unit (fun () -> cmd_line_params.gen_correctives <- false),
       "         Generate correctives";
+  "--interp_args", Arg.String (fun s -> cmd_line_params.interp_arg_file <- s),
+      "         Load json arg file for interpretation";
 
   (* Debugging parameters *)
 
-  "-t", Arg.Unit (fun () -> cmd_line_params.print_types <- true),
-      "         Print types as part of output";
   "-d", Arg.Unit (fun () -> cmd_line_params.debug_info  <- true),
       "         Print debug info (context specific)";
   "-v", Arg.Unit (fun () -> cmd_line_params.verbose <- true),
@@ -609,12 +568,14 @@ let param_specs = Arg.align
       "         Queue type: global/node/trigger";
   "--load_path", Arg.String (fun s -> cmd_line_params.load_path <- s),
       "         Path for interpreter to load files from";
-  "--src_int", Arg.Float (fun f -> cmd_line_params.src_interval <- f),
+  "--msg_interval", Arg.Int (fun x -> cmd_line_params.src_interval <- x),
       "         Interval between feeding in sources";
   "--sfile", Arg.String (fun s -> cmd_line_params.stream_file <- s),
       "         Path for stream file";
   "--agenda", Arg.String (fun s -> cmd_line_params.agenda_map <- K3Dist.load_mapping_file s),
       "         Agenda to read from";
+  "--no-log", Arg.Unit (fun () -> cmd_line_params.logging <- false),
+      "         Disable logging";
   ])
 
 let usage_msg =

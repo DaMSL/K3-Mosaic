@@ -42,27 +42,12 @@ let string_of_address_and_role (addr, role_opt, alias_opt) =
 
 let wrap_brackets s = "["^s^"]"
 
-let string_of_index = function
-  | HashIdx s   -> "HashSet("^wrap_brackets @@ string_of_int_set s^")"
-  | OrdIdx(l,s) -> "OrdIdx("^(wrap_brackets @@ string_of_int_list l)^", "
-                            ^(wrap_brackets @@ string_of_int_set s)^")"
-
-let string_of_comp = function GT -> "GT" | LT -> "LT" | EQ -> "EQ" | LTA -> "LTA" | GTA -> "GTA"
-
-let string_of_index_set idxs =
-  String.concat ", " @@ List.map string_of_index @@ IndexSet.elements idxs
-
-let string_of_index_map f m =
-  String.concat ", " @@ List.map (fun (k,v) ->
-    Printf.sprintf "(%s => %s)" (string_of_index k) (f v)) @@
-      IndexMap.bindings m
-
 let string_of_container_type t_c = match t_c with
     | TSet  -> "TSet"
     | TBag  -> "TBag"
     | TList -> "TList"
     | TMap  -> "TMap"
-    | TMultimap ss -> "TMultimap("^string_of_index_set ss^")"
+    | TVMap -> "TVMap"
 
 let string_of_const cn = match cn with
     | CUnit          -> "CUnit"
@@ -113,20 +98,24 @@ let string_of_tag_type = function
     | Filter           -> "Filter"
     | Flatten          -> "Flatten"
     | Aggregate        -> "Aggregate"
+    | AggregateV       -> "AggregateV"
     | GroupByAggregate -> "GroupByAggregate"
     | Sort             -> "Sort"
     | Size             -> "Size"
     | Subscript n      -> "Subscript"^soi n
 
     | Slice            -> "Slice"
-    | SliceIdx(s,c)    -> "SliceIdx("^string_of_index s^", "^string_of_comp c^")"
-    | Insert x         -> "Insert "^x
-    | Update x         -> "Update "^x
-    | Delete x         -> "Delete "^x
+    | SliceFrontier    -> "SliceFrontier"
+    | Insert           -> "Insert"
+    | Update           -> "Update"
+    | UpdateSuffix     -> "UpdateSuffix"
+    | UpsertWith       -> "UpsertWith"
+    | Delete           -> "Delete"
+    | DeletePrefix     -> "DeletePrefix"
     | Peek             -> "Peek"
 
     | Indirect         -> "Indirect"
-    | Assign x         -> "Assign"^x
+    | Assign           -> "Assign"
 
     | Send             -> "Send"
 

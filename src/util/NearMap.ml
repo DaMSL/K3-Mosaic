@@ -14,6 +14,7 @@ module type S =
     val is_empty: 'a t -> bool
     val mem:  key -> 'a t -> bool
     val add: key -> 'a -> 'a t -> 'a t
+    val update_with: key -> ('a option -> 'a option) -> 'a t -> 'a t
     val singleton: key -> 'a -> 'a t
     val remove: key -> 'a t -> 'a t
     val merge:
@@ -33,10 +34,10 @@ module type S =
     val choose: 'a t -> (key * 'a)
     val split: key -> 'a t -> 'a t * 'a option * 'a t
     val find: key -> 'a t -> 'a
-    val find_gt: key -> 'a t -> 'a
-    val find_gteq: key -> 'a t -> 'a
-    val find_lt: key -> 'a t -> 'a
-    val find_lteq: key -> 'a t -> 'a
+    val find_gt: key -> 'a t -> key * 'a
+    val find_gteq: key -> 'a t -> key * 'a
+    val find_lt: key -> 'a t -> key * 'a
+    val find_lteq: key -> 'a t -> key * 'a
     val find_range : key -> key -> 'a t -> 'a list
     val map: ('a -> 'b) -> 'a t -> 'b t
     val mapi: (key -> 'a -> 'b) -> 'a t -> 'b t
@@ -124,7 +125,7 @@ module Make(Ord: OrderedType) = struct
       let rec loop last m =
         match m, last with
         | Empty, None   -> raise Not_found
-        | Empty, Some (_,d) -> d
+        | Empty, Some x -> x
         | Node(l, v, d, r, _), _ ->
             let op, s, t = match comp with
               | `GT   -> (>),  l, r
@@ -195,6 +196,13 @@ module Make(Ord: OrderedType) = struct
             bal (remove x l) v d r
           else
             bal l v d (remove x r)
+
+    let update_with key f m =
+      let v = try Some(find key m)
+              with Not_found -> None in
+      match f v with
+      | None   -> remove key m
+      | Some v -> add key v m
 
     let rec iter f = function
         Empty -> ()

@@ -106,7 +106,8 @@
 
 %token LPAREN RPAREN COMMA SEMICOLON PERIOD
 
-%token LBRACE RBRACE LBRACEBAR RBRACEBAR LBRACKET RBRACKET LBRACKETBAR RBRACKETBAR BAR LBRACKETCOLON RBRACKETCOLON
+%token LBRACE RBRACE LBRACEBAR RBRACEBAR LBRACKET RBRACKET
+%token LBRACKETBAR RBRACKETBAR BAR LBRACKETCOLON RBRACKETCOLON LBRACKETLT RBRACKETLT
 
 %token NEG PLUS MINUS TIMES DIVIDE MODULO HASH
 
@@ -119,14 +120,14 @@
 %token COLON
 
 %token QUESTION
-%token INSERT UPDATE DELETE
+%token INSERT UPDATE DELETE UPSERT_WITH UPDATE_SUFFIX DELETE_PREFIX
 
 %token GETS COLONGETS
 
 %token DO
 
 %token MAP ITERATE FILTER FLATTEN
-%token AGGREGATE GROUPBYAGGREGATE
+%token AGGREGATE AGGREGATEV GROUPBYAGGREGATE
 %token SORT RANK SIZE
 
 %token PEEK
@@ -369,33 +370,14 @@ annotated_collection_type :
 collection_type :
     | LBRACE type_expr RBRACE { TCollection(TSet, $2) }
     | LBRACE type_expr_tuple RBRACE { TCollection(TSet, $2) }
-    | LBRACKETBAR type_expr BAR indices RBRACKETBAR { TCollection(TMultimap $4, $2) }
-    | LBRACKETBAR type_expr_tuple BAR indices RBRACKETBAR { TCollection(TMultimap $4, $2) }
-    | LBRACKETBAR type_expr BAR error { print_error "invalid indices" }
-    | LBRACKETBAR type_expr_tuple BAR error { print_error "invalid indices" }
     | LBRACEBAR type_expr RBRACEBAR { TCollection(TBag, $2) }
     | LBRACEBAR type_expr_tuple RBRACEBAR { TCollection(TBag, $2) }
     | LBRACKETCOLON type_expr RBRACKETCOLON { TCollection(TMap, $2) }
     | LBRACKETCOLON type_expr_tuple RBRACKETCOLON { TCollection(TMap, $2) }
+    | LBRACKETLT type_expr RBRACKETLT { TCollection(TVMap, $2) }
+    | LBRACKETLT type_expr_tuple RBRACKETLT { TCollection(TVMap, $2) }
     | LBRACKET type_expr RBRACKET { TCollection(TList, $2) }
     | LBRACKET type_expr_tuple RBRACKET { TCollection(TList, $2) }
-;
-
-indices :
-    | index BAR indices { IndexSet.add $1 $3 }
-    | index             { IndexSet.singleton $1 }
-
-index :
-    | HASH LBRACKET key_list RBRACKET                              { HashIdx (IntSet.of_list $3) }
-    | LBRACKET key_list RBRACKET COMMA LBRACKET key_list RBRACKET  { OrdIdx($2, IntSet.of_list $6) }
-    | LBRACKET key_list RBRACKET COMMA LBRACKET error              { print_error "Invalid equality set" }
-    | LBRACKET key_list RBRACKET                                   { OrdIdx($2, IntSet.empty) }
-    | LBRACKET error                                               { print_error "Invalid index" }
-;
-
-key_list :
-    | INTEGER COMMA key_list { $1::$3 }
-    | INTEGER                { [$1] }
 ;
 
 /* Expressions */
@@ -467,7 +449,7 @@ expr_seq :
 ;
 
 tuple :
-    | expr_list { if List.length $1 == 1 then List.hd $1 else mkexpr Tuple $1 }
+    | expr_list { if List.length $1 = 1 then List.hd $1 else mkexpr Tuple $1 }
 ;
 
 value_typed_identifier :
@@ -482,7 +464,7 @@ value_typed_identifier_list :
 ;
 
 arg :
-    | LPAREN arg_list RPAREN  { if List.length $2 == 1 then List.hd $2 else ATuple($2) }
+    | LPAREN arg_list RPAREN  { if List.length $2 = 1 then List.hd $2 else ATuple($2) }
     | UNKNOWN { AIgnored }
     | value_typed_identifier  { AVar(fst $1, snd $1) }
 ;
@@ -513,16 +495,19 @@ collection :
     | LBRACKETBAR RBRACKETBAR COLON type_expr     { build_collection [] $4 }
     | LBRACKET RBRACKET COLON type_expr           { build_collection [] $4 }
     | LBRACKETCOLON RBRACKETCOLON COLON type_expr { build_collection [] $4 }
+    | LBRACKETLT RBRACKETLT COLON type_expr       { build_collection [] $4 }
 
     | LBRACE RBRACE error       { print_error "missing type for empty set"}
     | LBRACEBAR RBRACEBAR error { print_error "missing type for empty bag"}
     | LBRACKET RBRACKET error   { print_error "missing type for empty list"}
+    | LBRACKETCOLON RBRACKETCOLON error   { print_error "missing type for empty map"}
+    | LBRACKETLT RBRACKETLT error   { print_error "missing type for empty vmap"}
 
     | LBRACE expr_seq RBRACE                       { build_collection $2 (mk_unknown_collection TSet) }
     | LBRACEBAR expr_seq RBRACEBAR                 { build_collection $2 (mk_unknown_collection TBag) }
-    | LBRACKETBAR expr_seq BAR indices RBRACKETBAR { build_collection $2 (mk_unknown_collection (TMultimap $4)) }
     | LBRACKET expr_seq RBRACKET                   { build_collection $2 (mk_unknown_collection TList) }
     | LBRACKETCOLON expr_seq RBRACKETCOLON         { build_collection $2 (mk_unknown_collection TMap) }
+    | LBRACKETLT expr_seq RBRACKETLT               { build_collection $2 (mk_unknown_collection TVMap) }
 ;
 
 variable :
@@ -601,7 +586,9 @@ letin :
     | LET IDENTIFIER GETS expr IN expr              { mk_let [$2] $4 $6 }
 
     | LET LPAREN id_list RPAREN GETS expr IN error   { print_error "Let body error" }
-    | LET LPAREN id_list RPAREN GETS error            { print_error "Let binding target error" }
+    | LET IDENTIFIER GETS expr IN error              { print_error "Let body error" }
+    | LET LPAREN id_list RPAREN GETS error           { print_error "Let binding target error" }
+    | LET IDENTIFIER GETS error                      { print_error "Let binding target error" }
     | LET error                                      { print_error "Let binding error" }
 
 bind :
@@ -627,27 +614,24 @@ tuple_index :
     | expr PERIOD LBRACKET INTEGER RBRACKET { mkexpr (Subscript $4) [$1] }
 
 access :
-    | expr LBRACKET tuple access_comp index RBRACKET { mkexpr (SliceIdx($5, $4)) [$1; $3] }
     | expr LBRACKET tuple RBRACKET { mkexpr Slice [$1; $3] }
+    | expr LBRACE tuple RBRACE { mkexpr SliceFrontier [$1; $3] }
     | PEEK LPAREN expr RPAREN { mkexpr Peek [$3] }
 ;
 
-access_comp :
-    | BAR GT GT { GTA }
-    | BAR GT    { GT }
-    | BAR LT LT { LTA }
-    | BAR LT    { LT }
-    | BAR       { EQ }
-
 mutation :
     /* Inserts, deletes and sends use a vararg function syntax for their value/payload */
-    | INSERT LPAREN IDENTIFIER COMMA tuple RPAREN { mkexpr (Insert $3) [$5] }
-    | DELETE LPAREN IDENTIFIER COMMA tuple RPAREN { mkexpr (Delete $3) [$5] }
+    | INSERT LPAREN variable COMMA tuple RPAREN { mkexpr Insert [mk_var $3; $5] }
+    | UPSERT_WITH LPAREN variable COMMA tuple COMMA expr COMMA expr RPAREN { mkexpr UpsertWith [mk_var $3; $5; $7; $9] }
+
+    | DELETE LPAREN variable COMMA tuple RPAREN { mkexpr Delete [mk_var $3; $5] }
+    | DELETE_PREFIX LPAREN variable COMMA tuple RPAREN { mkexpr DeletePrefix [mk_var $3; $5] }
 
     /* Updates must explicitly specify their new/old value as a tuple */
-    | UPDATE LPAREN IDENTIFIER COMMA expr COMMA expr RPAREN { mkexpr (Update $3) [$5; $7] }
+    | UPDATE LPAREN variable COMMA expr COMMA expr RPAREN { mkexpr Update [mk_var $3; $5; $7] }
+    | UPDATE_SUFFIX LPAREN variable COMMA expr COMMA expr RPAREN { mkexpr UpdateSuffix [mk_var $3; $5; $7] }
 
-    | IDENTIFIER LARROW expr { mkexpr (Assign $1) [$3] }
+    | variable LARROW expr { mkexpr Assign [mk_var $1; $3] }
 
     /* Error handling */
     | INSERT LPAREN expr error { value_error 2 }
@@ -666,6 +650,7 @@ transformers :
     | FILTER LPAREN expr COMMA expr RPAREN                { mkexpr Filter [$3; $5] }
     | FLATTEN LPAREN expr RPAREN                          { mkexpr Flatten [$3] }
     | AGGREGATE LPAREN expr COMMA expr COMMA expr RPAREN  { mkexpr Aggregate [$3; $5; $7] }
+    | AGGREGATEV LPAREN expr COMMA expr COMMA expr RPAREN  { mkexpr AggregateV [$3; $5; $7] }
     | GROUPBYAGGREGATE LPAREN expr COMMA expr COMMA expr COMMA expr RPAREN {
         mkexpr GroupByAggregate [$3; $5; $7; $9]
     }

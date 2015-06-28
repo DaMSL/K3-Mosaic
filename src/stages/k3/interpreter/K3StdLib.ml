@@ -268,7 +268,7 @@ let _ = Hashtbl.add func_table
   print_name (print_decl, print_args, print_fn)
 
 let fn e = match arg_of_env "s" e with
-  | VString s -> Log.log (s^"\n") `Debug; e, unit_temp
+  | VString s -> Log.log (lazy (s^"\n")) `Debug; e, unit_temp
   | _         -> invalid_arg "log_fn"
 let name = "log"
 let decl = wrap_tfunc t_string t_unit
@@ -352,18 +352,18 @@ let load_csv_fn err_fn args e =
   | _ -> invalid_arg name
 
 (* csv loading function *)
-let name = "load_csv_set"
+let csv_loader_name = "load_csv_col"
 let args = ["file", t_string]
-let ret  = wrap_tset t_top
+let ret  = wrap_tbag t_top
 let err_fn s s' = failwith @@ "load_csv: "^s^" "^s'
 let fn e = load_csv_fn err_fn args e
 let decl = wrap_tfunc (wrap_ttuple @@ snd_many args) ret
-let _ = Hashtbl.add func_table name (decl, wrap_args args, fn)
+let _ = Hashtbl.add func_table csv_loader_name (decl, wrap_args args, fn)
 
 (* csv loading function, with dummy witness type var *)
-let name = "load_csv_set2"
-let args = ["file", t_string; "emptyCol", wrap_tset t_top]
-let ret  = wrap_tset t_top
+let name = "load_csv_col2"
+let args = ["file", t_string; "emptyCol", wrap_tbag t_top]
+let ret  = wrap_tbag t_top
 let err_fn s s' = failwith @@ name^": "^s^" "^s'
 let fn e = load_csv_fn err_fn args e
 let decl = wrap_tfunc (wrap_ttuple @@ snd_many args) ret
@@ -390,7 +390,7 @@ let name = "print_env"
 let args = unit_arg
 let ret = t_unit
 let fn e =
-  Log.log (string_of_env ~accessed_only:false ~skip_empty:false e) `Debug;
+  Log.log (lazy (string_of_env ~accessed_only:false ~skip_empty:false e)) `Debug;
   e, VTemp VUnit
 let decl = wrap_tfunc (wrap_ttuple @@ snd_many args) ret
 let _ = Hashtbl.add func_table name (decl, wrap_args args, fn)

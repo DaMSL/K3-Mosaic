@@ -9,7 +9,7 @@ cd $SCRIPTPATH
 if [ ! -d "./bin" ]; then mkdir bin; fi
 
 # partition map tool
-ocamlbuild PartMapTool.native -build-dir ./bin $@
+ocamlbuild -use-ocamlfind PartMapTool.native -build-dir ./bin $@
 if [ -f "./bin/src/PartMapTool.native" ]
 then echo "#!/bin/bash" > ./bin/partmap_tool
      echo "$SCRIPTPATH/bin/src/PartMapTool.native \$@" >> ./bin/partmap_tool
@@ -17,7 +17,7 @@ then echo "#!/bin/bash" > ./bin/partmap_tool
 fi
 
 # log sanitization tool
-ocamlbuild SanitizeLog.native -build-dir ./bin $@
+ocamlbuild -use-ocamlfind SanitizeLog.native -build-dir ./bin $@
 if [ -f "./bin/src/SanitizeLog.native" ]
 then echo "#!/bin/bash" > ./bin/sanitize_log
      echo "$SCRIPTPATH/bin/src/SanitizeLog.native \$@" >> ./bin/sanitize_log
@@ -25,7 +25,7 @@ then echo "#!/bin/bash" > ./bin/sanitize_log
 fi
 
 # data combining tool
-ocamlbuild CombineData.native -build-dir ./bin $@
+ocamlbuild -use-ocamlfind CombineData.native -build-dir ./bin $@
 if [ -f "./bin/src/CombineData.native" ]
 then echo "#!/bin/bash" > ./bin/combine_data
      echo "$SCRIPTPATH/bin/src/CombineData.native \$@" >> ./bin/combine_data
