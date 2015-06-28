@@ -34,6 +34,7 @@ val t_vid : type_t
 
 val vid_increment : ?vid_expr:expr_t -> unit -> expr_t
 val min_vid_k3 : expr_t
+val sys_init_vid_k3 : expr_t
 val start_vid_k3 : expr_t
 
 (* convert a type to mutable *)
@@ -349,3 +350,7 @@ val mk_delete_one : data_struct -> expr_t list -> expr_t
 val mk_upsert_with_sim : data_struct -> id_t -> k:expr_t list -> default:expr_t -> v:expr_t -> expr_t
 
 val mk_delete_with : data_struct -> id_t -> k:expr_t list -> delcond:expr_t -> v:expr_t -> expr_t
+
+val mk_counter : id_t -> data_struct
+
+val mk_barrier : id_t -> ctr:id_t -> total:expr_t -> after:expr_t -> flow_statement_t * annotation_t

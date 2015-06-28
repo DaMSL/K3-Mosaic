@@ -9,7 +9,7 @@ module P = ProgInfo
 
 module IdMap = Map.Make(struct type t = id_t let compare = String.compare end)
 
-let sys_r_e = "system_ready_event"
+let sys_init = "system_ready_event"
 
 (* an agenda mapping type *)
 type mapping_t = type_t list * int list StrMap.t
@@ -555,6 +555,23 @@ let nd_add_delta_to_buf_nm c map_id =
   "nd_add_delta_to_"^String.concat "_" @@
     List.map K3PrintSyntax.string_of_type t
 
+(*** trigger names ***)
+let send_fetch_name_of_t trig_nm = "sw_"^trig_nm^"_send_fetch"
+let rcv_fetch_name_of_t trig_nm = "nd_"^trig_nm^"_rcv_fetch"
+let rcv_put_name_of_t trig_nm = "nd_"^trig_nm^"_rcv_put"
+let send_push_name_of_t c trig_nm stmt_id map_id =
+  "nd_"^trig_nm^"_send_push_s"^soi stmt_id^"_m_"^P.map_name_of c.p map_id
+let rcv_push_name_of_t c trig_nm stmt_id map_id =
+  "nd_"^trig_nm^"_rcv_push_s"^soi stmt_id^"_m_"^P.map_name_of c.p map_id
+let send_corrective_name_of_t c map_id =
+  "nd_"^P.map_name_of c.p map_id^"_send_correctives"
+let do_complete_name_of_t trig_nm stmt_id =
+  "nd_"^trig_nm^"_do_complete_s"^string_of_int stmt_id
+let rcv_corrective_name_of_t c trig_nm stmt_id map_id =
+  trig_nm^"_rcv_corrective_s"^string_of_int stmt_id^"_m_"^P.map_name_of c.p map_id
+let do_corrective_name_of_t c trig_nm stmt_id map_id =
+  trig_nm^"_do_corrective_s"^string_of_int stmt_id^"_m_"^P.map_name_of c.p map_id
+
 
 (* --- Begin frontier function code --- *)
 
@@ -578,6 +595,16 @@ let map_latest_vid_vals ?(vid_nm="vid") c slice_col m_pat map_id ~keep_vid : exp
   convert @@ mk_slice_frontier slice_col @@ mk_var vid_nm :: pat
 
 (* End of frontier function code *)
+
+(* --- Useful functions --- *)
+
+let mk_send_all ds target payload =
+  mk_iter (mk_lambda' (ds_e ds) @@
+      mk_send target (mk_var "addr") payload) @@
+    mk_var nodes.id 
+
+let mk_send_all_nodes target payload = mk_send_all nodes target payload
+let mk_send_all_switches target payload = mk_send_all switches target payload
 
 (**** End of code ****)
 

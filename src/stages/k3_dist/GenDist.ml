@@ -61,23 +61,6 @@ let str_of_date_t t = match t.typ with
   | TDate -> {t with typ = TString}
   | x -> t
 
-(* global trigger names needed for generated triggers and sends *)
-let send_fetch_name_of_t trig_nm = "sw_"^trig_nm^"_send_fetch"
-let rcv_fetch_name_of_t trig_nm = "nd_"^trig_nm^"_rcv_fetch"
-let rcv_put_name_of_t trig_nm = "nd_"^trig_nm^"_rcv_put"
-let send_push_name_of_t c trig_nm stmt_id map_id =
-  "nd_"^trig_nm^"_send_push_s"^soi stmt_id^"_m_"^P.map_name_of c.p map_id
-let rcv_push_name_of_t c trig_nm stmt_id map_id =
-  "nd_"^trig_nm^"_rcv_push_s"^soi stmt_id^"_m_"^P.map_name_of c.p map_id
-let send_corrective_name_of_t c map_id =
-  "nd_"^P.map_name_of c.p map_id^"_send_correctives"
-let do_complete_name_of_t trig_nm stmt_id =
-  "nd_"^trig_nm^"_do_complete_s"^string_of_int stmt_id
-let rcv_corrective_name_of_t c trig_nm stmt_id map_id =
-  trig_nm^"_rcv_corrective_s"^string_of_int stmt_id^"_m_"^P.map_name_of c.p map_id
-let do_corrective_name_of_t c trig_nm stmt_id map_id =
-  trig_nm^"_do_corrective_s"^string_of_int stmt_id^"_m_"^P.map_name_of c.p map_id
-
 (**** global functions ****)
 
 (* write to master log *)

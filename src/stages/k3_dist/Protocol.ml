@@ -48,28 +48,30 @@ let sw_rcv_init =
     mk_send ms_rcv_sw_init_ack_nm (mk_var D.master_addr.id) [mk_cunit];
   ]
 
-let ms_sys_r_e_barrier_cnt =
-  create_ds "ms_sys_r_e_barrier_cnt" (mut t_int) ~init:(mk_cint 0)
+let ms_sys_init_barrier_cnt = mk_counter "ms_sys_init_barrier_cnt"
+
+let ms_tell_sw_to_init =
+  mk_iter (mk_lambda' ["addr", t_addr] @@
+      mk_send sw_rcv_init_nm (mk_var "addr") [mk_cunit]) @@
+    mk_var D.switches.id
 
 (* master: barrier for system_ready_event. *)
-let ms_sys_r_e_barrier_nm = "ms_"^D.sys_r_e^"_barrier"
-let ms_sys_r_e_barrier =
-  mk_code_sink' ms_sys_r_e_barrier_nm unit_arg [] @@
-    mk_incr ms_sys_r_e_barrier_cnt.id;
-    mk_if (mk_eq (mk_var ms_sys_r_e_barrier_cnt.id) @@ mk_var D.num_nodes.id)
-      (* continue with switch init *)
-      (* else, tell switches to init *)
-      (mk_iter (mk_lambda' ["addr", t_addr] @@
-          mk_send sw_rcv_init_nm (mk_var "addr") [mk_cunit]) @@
-        mk_var D.switches.id)
-      mk_cunit
+let ms_sys_init_barrier_nm = "ms_"^D.sys_init^"_barrier"
+let ms_sys_init_barrier =
+  mk_barrier ms_sys_init_barrier_nm ~ctr:ms_sys_init_barrier_cnt.id
+    ~total:(mk_var D.num_nodes.id) ~after:ms_tell_sw_to_init
 
-(* switch: system ready event handling. should only be created when we have
+(* switch: system ready event handling.
+ * before the queues turn on, bypass them and send the fetch for sys_read_evt
+ * should only be created when we have
  * system_ready_event code *)
-let sw_sys_r_e_nm = "sw_"^D.sys_r_e
-let sw_sys_r_e () =
-  mk_code_sink' sw_system_ready_event_nm unit_arg [] @@
-    mk_apply' (send_fetch_name_of_t D.sys_r_e) sys_r_e_vid_k3
+let sw_sys_init_nm = "sw_"^D.sys_init
+let sw_sys_init () =
+  mk_code_sink' sw_sys_init_nm unit_arg [] @@
+  mk_block [
+    mk_apply' (D.send_fetch_name_of_t D.sys_init) sys_init_vid_k3;
+    mk_send_all_nodes nd_sys_init_barrier_nm [mk_cunit]
+  ]
 
 let ms_rcv_jobs_ack_cnt = create_ds "ms_rcv_jobs_ack_cnt" (mut t_int) ~init:(mk_cint 0)
 let ms_rcv_jobs_ack_nm = "ms_rcv_jobs_ack"
@@ -81,12 +83,10 @@ let ms_rcv_jobs_ack ~sys_ready =
     mk_if (mk_eq (mk_var ms_rcv_jobs_ack_cnt.id) @@ mk_var D.num_peers.id)
         (* if we have a sys_ready event, we need to activate that first *)
         (if sys_ready then
-          mk_send sw_sys_r_e_nm (mk_var TS.sw_next_switch_addr.id) []
-        else 
+          mk_send sw_sys_init_nm (mk_var TS.sw_next_switch_addr.id) []
+        else
           (* else, tell switches to init *)
-          mk_iter (mk_lambda' ["addr", t_addr] @@
-              mk_send sw_rcv_init_nm (mk_var "addr") [mk_cunit]) @@
-            mk_var D.switches.id) @@
+          ms_tell_sw_to_init) @@
       mk_cunit
   ]
 
@@ -185,8 +185,7 @@ let shutdown_trig =
   mk_code_sink' shutdown_trig_nm unit_arg [] @@
   mk_apply' "haltEngine" mk_cunit
 
-let ms_rcv_node_done_cnt =
-  create_ds "ms_rcv_node_done_cnt" (mut t_int) ~init:(mk_cint 0)
+let ms_rcv_node_done_cnt = mk_counter "ms_rcv_node_done_cnt"
 
 let ms_shutdown_nm = "ms_shutdown"
 let ms_shutdown =

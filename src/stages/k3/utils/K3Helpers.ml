@@ -508,7 +508,7 @@ let vid_increment ?(vid_expr=mk_var "vid") () =
   mk_tuple [mk_add vid_expr (mk_cint 1)]
 
 let min_vid_k3 = mk_tuple [mk_cint 0]
-let sys_r_e_vid_k3 = mk_tuple [mk_cint 1]
+let sys_init_vid_k3 = mk_tuple [mk_cint 1]
 let start_vid_k3 = mk_tuple [mk_cint 2]
 
 (* id function for maps *)
@@ -683,3 +683,14 @@ let mk_delete_with ds nm ~k ~delcond ~v  =
       mk_update ds.id [mk_var nm] [mk_tuple k; v])
     mk_cunit
 
+let mk_counter nm = create_ds nm (mut t_int) ~init:(mk_cint 0)
+
+let mk_barrier nm ~ctr ~total ~after =
+  mk_code_sink' nm unit_arg [] @@
+    mk_block [
+      mk_incr ctr;
+      mk_if (mk_eq (mk_var ctr) total)
+        (* continue with switch init *)
+        after
+        mk_cunit
+    ]
