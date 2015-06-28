@@ -323,6 +323,10 @@ let sw_driver_trig (c:config) =
           Proto.sw_seen_sentry @@
           (* else *)
           mk_block [
+            (* for debugging, sleep if we've been asked to *)
+            mk_if (mk_neq (mk_var D.sw_driver_sleep.id) @@ mk_cint 0)
+              (mk_apply' "sleep" (mk_var D.sw_driver_sleep.id))
+              mk_cunit;
             (* send the msg using dispatch code *)
             dispatch_code;
             (* recurse, trying to get another message *)
