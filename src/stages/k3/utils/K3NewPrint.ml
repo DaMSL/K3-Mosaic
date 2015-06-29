@@ -571,24 +571,15 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
 
   let expr_pair ?(sep=lps "," <| lsp ()) ?(wl=id_fn) ?(wr=id_fn) (e1, e2) =
     wl(lazy_expr c e1) <| sep <| wr(lazy_expr c e2) in
-  (* handle parentheses:
-     - If a sub-element is mult or add, we wrap it.
-     - If a left sub-element is 'ifthenelse' or a 'let', we wrap it.
-     - For a == or !=, we also wrap sub- ==/!= *)
-  let arith_paren e = match U.tag_of_expr e with
-    | Mult
-    | Add   -> lazy_paren
-    | Apply -> let e1, _ = U.decompose_apply e in
-               begin match U.tag_of_expr e1 with
-               | Var "divf" -> lazy_paren
-               | Var "mod"  -> lazy_paren
-               | _          -> id_fn
-               end
-    | _     -> id_fn in
 (* for a stmt of a block *)
  let paren_stmt e = match U.tag_of_expr e with
    | IfThenElse | CaseOf _ | Apply -> lazy_paren
    | _ -> id_fn in
+ let is_neg e = match U.tag_of_expr e with
+   | Const(CInt i) when i < 0 -> true
+   | Const(CFloat f) when f < 0. -> true
+   | _ -> false
+ in
 (* for things like .map *)
  let paren_l e = match U.tag_of_expr e with
     | Var _ | Const _ -> id_fn
@@ -597,19 +588,26 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
     | Nothing _ | Just | Const _ | Tuple | Var _
     | Empty _ | Singleton _ -> id_fn
     | _                     -> lazy_paren in
- let arith_paren_l e = match U.tag_of_expr e with
-    | IfThenElse -> lazy_paren
-    | Let _      -> lazy_paren
-    | _          -> arith_paren e
+ let arith_paren e = match U.tag_of_expr e with
+    | Mult | Add -> lazy_paren
+    | Apply -> let e1, _ = U.decompose_apply e in
+               begin match U.tag_of_expr e1 with
+               | Var "divf" -> lazy_paren
+               | Var "mod"  -> lazy_paren
+               | _          -> lazy_paren
+               end
+    | Const x when is_neg e -> lazy_paren
+    | Const _ | Var _ -> id_fn
+    | _ -> lazy_paren
   (* for == and != *)
   in let logic_paren e = match U.tag_of_expr e with
     | Eq | Neq -> lazy_paren
     | _        -> arith_paren e (* arith ast is used for logic *)
   in let logic_paren_l e = match U.tag_of_expr e with
     | Eq | Neq -> lazy_paren
-    | _        -> arith_paren_l e
+    | _        -> arith_paren e
   in let arith_paren_pair sym (el, er) =
-    let wrapl = arith_paren_l el in
+    let wrapl = arith_paren el in
     let wrapr = arith_paren er in
     expr_pair ~sep:(lsp () <| lps sym <| lsp ()) ~wl:wrapl ~wr:wrapr (el, er)
   in let logic_paren_pair sym (el, er) =
