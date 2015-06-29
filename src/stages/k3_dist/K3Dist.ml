@@ -79,6 +79,8 @@ type config = {
   gen_correctives : bool;
   (* optimize figuring out corrective map possiblities *)
   corr_maps : map_id_t list * map_id_t list;
+  (* whether there's a sys_ready_event trigger *)
+  sys_init : bool;
   (* a file to use as the stream to switches *)
   stream_file : string;
   (* a mapping for agenda: how the relations map to agenda indices *)
@@ -92,6 +94,7 @@ let default_config = {
   gen_deletes = true;
   gen_correctives = true;
   corr_maps = [], [];
+  sys_init = false;
   stream_file = "";
   agenda_map = [], StrMap.empty;
 }
@@ -533,8 +536,6 @@ let maps c =
 let sw_seen_sentry    = create_ds "sw_seen_sentry" (mut t_bool) ~init:mk_cfalse
 let sw_init           = create_ds "sw_init" (mut t_bool) ~init:mk_cfalse
 
-let nd_rcvd_sys_done = create_ds "nd_rcvd_sys_done" (mut t_bool) ~init:mk_cfalse
-
 (* buffers for insert/delete -- we need a per-trigger list *)
 (* these buffers don't inlude a vid, unlike the logs in the nodes *)
 let sw_trig_buf_prefix = "sw_buf_"
@@ -598,13 +599,14 @@ let map_latest_vid_vals ?(vid_nm="vid") c slice_col m_pat map_id ~keep_vid : exp
 
 (* --- Useful functions --- *)
 
-let mk_send_all ds target payload =
+let mk_send_all ds trig payload =
   mk_iter (mk_lambda' (ds_e ds) @@
-      mk_send target (mk_var "addr") payload) @@
-    mk_var nodes.id 
+      mk_send trig (mk_var "addr") payload) @@
+    mk_var ds.id 
 
-let mk_send_all_nodes target payload = mk_send_all nodes target payload
-let mk_send_all_switches target payload = mk_send_all switches target payload
+let mk_send_all_nodes trig payload = mk_send_all nodes trig payload
+let mk_send_all_switches trig payload = mk_send_all switches trig payload
+let mk_send_all_peers trig payload = mk_send_all G.peers trig payload
 
 (**** End of code ****)
 
@@ -637,7 +639,6 @@ let global_vars c dict =
       map_ids c;
       nd_stmt_cntrs;
       nd_log_master;
-      nd_rcvd_sys_done;
       sw_init;
       sw_seen_sentry;
       sw_trig_buf_idx;

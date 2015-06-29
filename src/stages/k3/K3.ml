@@ -204,8 +204,8 @@ end
 module rec AST : ( ASTType with type annotation_t = Annotation.annotation_t )
 = GenericAST(Annotation)
 
-and Annotation : ( AnnotationType with type type_t = AST.type_t
-                                   and type expr_t = AST.expr_t )
+and Annotation : ( AnnotationType with type type_t := AST.type_t
+                                   and type expr_t := AST.expr_t )
 = struct
 
 include ASTCommonImpl

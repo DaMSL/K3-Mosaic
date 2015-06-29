@@ -10,5 +10,6 @@ module GenericAST :
 
 (* Default, untyped AST construction *)
 module rec AST : ( ASTType with type annotation_t = Annotation.annotation_t )
-and Annotation : ( AnnotationType with type type_t = AST.type_t
-                                   and type expr_t = AST.expr_t )
+and Annotation : ( AnnotationType with type type_t := AST.type_t
+                                   and type expr_t := AST.expr_t
+                                   and type id_t   := AST.id_t)

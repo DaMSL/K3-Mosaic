@@ -353,4 +353,13 @@ val mk_delete_with : data_struct -> id_t -> k:expr_t list -> delcond:expr_t -> v
 
 val mk_counter : id_t -> data_struct
 
-val mk_barrier : id_t -> ctr:id_t -> total:expr_t -> after:expr_t -> flow_statement_t * annotation_t
+val mk_bool_ds : ?init:expr_t -> id_t -> data_struct
+
+val mk_barrier :
+  ?args:(id_t * type_t) list ->
+  ?pre:expr_t list ->
+  id_t ->
+  ctr:id_t ->
+  total:expr_t ->
+  after:expr_t ->
+  flow_statement_t * annotation_t

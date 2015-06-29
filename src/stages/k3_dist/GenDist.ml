@@ -526,14 +526,13 @@ let sw_send_fetch_fn c s_rhs_lhs s_rhs trig_name =
     (send_fetch_name_of_t trig_name) ["vid", t_vid] [] @@
     let handle_args e =
       (* handle the case of no arguments (system_ready) *)
-      if P.args_of_t c.p trig_name = [] then
-        (* pop an argument out of the buffers *)
+      if P.args_of_t c.p trig_name = [] then e
+      else (* pop an argument out of the buffers *)
         mk_pop buf "args"
           (mk_error @@ "unexpected missing arguments in "^buf) @@
           (* decompose args *)
           mk_let (fst_many @@ P.args_of_t c.p trig_name)
             (mk_var "args") e
-      else e
     in
     handle_args @@
       mk_block @@
@@ -952,13 +951,13 @@ let nd_update_stmt_cntr_corr_map =
 
 (* call from do_complete when done to check if fully done *)
 let nd_complete_stmt_cntr_check_nm = "nd_complete_stmt_cntr_check"
-let nd_complete_stmt_cntr_check =
+let nd_complete_stmt_cntr_check c =
   mk_global_fn nd_complete_stmt_cntr_check_nm ["vid", t_vid; "stmt_id", t_stmt_id] [] @@
   (* if we have nothing to send, we can delete our stmt_cntr entry right away *)
   mk_block [
     mk_delete_one nd_stmt_cntrs [mk_tuple [mk_var "vid"; mk_var "stmt_id"]; mk_cunknown];
     (* check if we're done *)
-    Proto.nd_delete_stmt_cntr;
+    Proto.nd_post_delete_stmt_cntr c;
   ]
 
 (*
@@ -1034,7 +1033,7 @@ in
 
 (* rcv notification of a corrective finish from other nodes *)
 let nd_rcv_corr_done_nm = "nd_rcv_corr_done"
-let nd_rcv_corr_done =
+let nd_rcv_corr_done c =
   let lookup_pat = [mk_tuple [mk_var "vid"; mk_var "stmt_id"]; mk_cunknown] in
   let args = ["vid", t_vid; "stmt_id", t_stmt_id; "hop", t_int; "count", t_int] in
   mk_code_sink' nd_rcv_corr_done_nm args [] @@
@@ -1050,7 +1049,7 @@ let nd_rcv_corr_done =
           ~y:(mk_block [
               (* delete the whole stmt_cntr entry *)
               mk_delete nd_stmt_cntrs.id [mk_var "lkup"];
-              Proto.nd_delete_stmt_cntr])
+              Proto.nd_post_delete_stmt_cntr c])
     ]
 
 (* receive_correctives:
@@ -1196,7 +1195,7 @@ let declare_global_vars c partmap ast =
     (create_ds "switch_path" t_string ~init:(mk_cstring "agenda.csv")) ::
   (* path variables for any csv loaders *)
   gen_loader_vars ast @
-  Proto.global_vars @
+  Proto.global_vars c @
   D.global_vars c (ModifyAst.map_inits_from_ast c ast) @
   Timer.global_vars @
   TS.global_vars @
@@ -1210,7 +1209,7 @@ let declare_global_funcs c partmap ast =
   (P.for_all_trigs ~deletes:c.gen_deletes c.p @@ nd_log_get_bound c) @
   nd_log_read_geq ::
   nd_check_stmt_cntr_index ::
-  nd_complete_stmt_cntr_check ::
+  nd_complete_stmt_cntr_check c ::
   nd_update_stmt_cntr_corr_map ::
   begin if c.gen_correctives then [nd_filter_corrective_list] else [] end @
   K3Ring.functions @
@@ -1263,6 +1262,9 @@ let gen_dist ?(gen_deletes=true)
              ~map_type
              ~agenda_map
              p partmap ast =
+  let sys_init =
+    try ignore(P.find_trigger p "system_ready_event"); true
+    with Not_found | P.Bad_data _ -> false in
   let c = {
       p;
       shuffle_meta=K3Shuffle.gen_meta p;
@@ -1271,6 +1273,7 @@ let gen_dist ?(gen_deletes=true)
       gen_deletes;
       gen_correctives;
       corr_maps = maps_potential_corrective p;
+      sys_init;
       stream_file;
       agenda_map;
     } in
@@ -1280,23 +1283,19 @@ let gen_dist ?(gen_deletes=true)
       P.for_all_trigs ~deletes:c.gen_deletes c.p @@
         fun t -> gen_dist_for_t c ast t
   in
-  let sys_ready =
-    try ignore(ProgInfo.find_trigger p "system_ready_event"); true
-    with Not_found -> false in
-
   let prog =
     declare_global_vars c partmap ast @
     declare_global_funcs c partmap ast @
     (if c.gen_correctives then send_corrective_fns c else []) @
     proto_funcs @
     [mk_flow @@
-      Proto.triggers c ~sys_ready @
+      Proto.triggers c @
       GC.triggers c Proto.sw_check_done @
       TS.triggers Proto.sw_check_done @
       Timer.triggers c @
       [sw_demux c;
        sw_driver_trig c;
-       nd_rcv_corr_done] @
+       nd_rcv_corr_done c] @
       proto_trigs
     ] @
     roles_of c ast
