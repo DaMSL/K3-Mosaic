@@ -1205,8 +1205,8 @@ let declare_global_vars c partmap ast =
 
 let declare_global_funcs c partmap ast =
   nd_log_master_write ::
-  (P.for_all_trigs ~deletes:c.gen_deletes c.p @@ nd_log_write c) @
-  (P.for_all_trigs ~deletes:c.gen_deletes c.p @@ nd_log_get_bound c) @
+  (P.for_all_trigs ~sys_init:true ~deletes:c.gen_deletes c.p @@ nd_log_write c) @
+  (P.for_all_trigs ~sys_init:true ~deletes:c.gen_deletes c.p @@ nd_log_get_bound c) @
   nd_log_read_geq ::
   nd_check_stmt_cntr_index ::
   nd_complete_stmt_cntr_check c ::
@@ -1280,8 +1280,7 @@ let gen_dist ?(gen_deletes=true)
   (* regular trigs then insert entries into shuffle fn table *)
   let proto_trigs, proto_funcs =
     (fun (a,b) -> List.flatten a, List.flatten b) @@ list_unzip @@
-      P.for_all_trigs ~deletes:c.gen_deletes c.p @@
-        fun t -> gen_dist_for_t c ast t
+      P.for_all_trigs ~sys_init:true ~deletes:c.gen_deletes c.p @@ gen_dist_for_t c ast
   in
   let prog =
     declare_global_vars c partmap ast @
