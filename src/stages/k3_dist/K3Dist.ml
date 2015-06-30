@@ -9,6 +9,8 @@ module P = ProgInfo
 
 module IdMap = Map.Make(struct type t = id_t let compare = String.compare end)
 
+let sys_init = "system_ready_event"
+
 (* an agenda mapping type *)
 type mapping_t = type_t list * int list StrMap.t
 
@@ -77,6 +79,8 @@ type config = {
   gen_correctives : bool;
   (* optimize figuring out corrective map possiblities *)
   corr_maps : map_id_t list * map_id_t list;
+  (* whether there's a sys_ready_event trigger *)
+  sys_init : bool;
   (* a file to use as the stream to switches *)
   stream_file : string;
   (* a mapping for agenda: how the relations map to agenda indices *)
@@ -90,6 +94,7 @@ let default_config = {
   gen_deletes = true;
   gen_correctives = true;
   corr_maps = [], [];
+  sys_init = false;
   stream_file = "";
   agenda_map = [], StrMap.empty;
 }
@@ -509,7 +514,7 @@ let log_ds c : data_struct list =
     let e  = ["vid", t_vid; "args", wrap_ttuple @@ snd_many e'] in
     create_ds (nd_log_for_t trig) (mut @@ wrap_tmap' @@ snd_many e) ~e
   in
-  P.for_all_trigs ~deletes:c.gen_deletes c.p log_struct_for
+  P.for_all_trigs ~sys_init:true ~deletes:c.gen_deletes c.p log_struct_for
 
 (* Buffer versions of maps per statement (to prevent mixing values) *)
 (* NOTE: doesn't contain special inits from AST *)
@@ -534,13 +539,11 @@ let maps c =
 let sw_seen_sentry    = create_ds "sw_seen_sentry" (mut t_bool) ~init:mk_cfalse
 let sw_init           = create_ds "sw_init" (mut t_bool) ~init:mk_cfalse
 
-let nd_rcvd_sys_done = create_ds "nd_rcvd_sys_done" (mut t_bool) ~init:mk_cfalse
-
 (* buffers for insert/delete -- we need a per-trigger list *)
 (* these buffers don't inlude a vid, unlike the logs in the nodes *)
 let sw_trig_buf_prefix = "sw_buf_"
 let sw_trig_bufs (c:config) =
-  P.for_all_trigs ~deletes:c.gen_deletes c.p @@ fun t ->
+  P.for_all_trigs ~sys_init:true ~deletes:c.gen_deletes c.p @@ fun t ->
     create_ds (sw_trig_buf_prefix^t) (wrap_tlist' @@ snd_many @@ P.args_of_t c.p t)
 
 (* list for next message -- contains trigger id *)
@@ -555,6 +558,23 @@ let nd_add_delta_to_buf_nm c map_id =
   let t = P.map_types_for c.p map_id in
   "nd_add_delta_to_"^String.concat "_" @@
     List.map K3PrintSyntax.string_of_type t
+
+(*** trigger names ***)
+let send_fetch_name_of_t trig_nm = "sw_"^trig_nm^"_send_fetch"
+let rcv_fetch_name_of_t trig_nm = "nd_"^trig_nm^"_rcv_fetch"
+let rcv_put_name_of_t trig_nm = "nd_"^trig_nm^"_rcv_put"
+let send_push_name_of_t c trig_nm stmt_id map_id =
+  "nd_"^trig_nm^"_send_push_s"^soi stmt_id^"_m_"^P.map_name_of c.p map_id
+let rcv_push_name_of_t c trig_nm stmt_id map_id =
+  "nd_"^trig_nm^"_rcv_push_s"^soi stmt_id^"_m_"^P.map_name_of c.p map_id
+let send_corrective_name_of_t c map_id =
+  "nd_"^P.map_name_of c.p map_id^"_send_correctives"
+let do_complete_name_of_t trig_nm stmt_id =
+  "nd_"^trig_nm^"_do_complete_s"^string_of_int stmt_id
+let rcv_corrective_name_of_t c trig_nm stmt_id map_id =
+  trig_nm^"_rcv_corrective_s"^string_of_int stmt_id^"_m_"^P.map_name_of c.p map_id
+let do_corrective_name_of_t c trig_nm stmt_id map_id =
+  trig_nm^"_do_corrective_s"^string_of_int stmt_id^"_m_"^P.map_name_of c.p map_id
 
 
 (* --- Begin frontier function code --- *)
@@ -579,6 +599,17 @@ let map_latest_vid_vals ?(vid_nm="vid") c slice_col m_pat map_id ~keep_vid : exp
   convert @@ mk_slice_frontier slice_col @@ mk_var vid_nm :: pat
 
 (* End of frontier function code *)
+
+(* --- Useful functions --- *)
+
+let mk_send_all ds trig payload =
+  mk_iter (mk_lambda' (ds_e ds) @@
+      mk_send trig (mk_var "addr") payload) @@
+    mk_var ds.id 
+
+let mk_send_all_nodes trig payload = mk_send_all nodes trig payload
+let mk_send_all_switches trig payload = mk_send_all switches trig payload
+let mk_send_all_peers trig payload = mk_send_all G.peers trig payload
 
 (**** End of code ****)
 
@@ -611,7 +642,6 @@ let global_vars c dict =
       map_ids c;
       nd_stmt_cntrs;
       nd_log_master;
-      nd_rcvd_sys_done;
       sw_init;
       sw_seen_sentry;
       sw_trig_buf_idx;

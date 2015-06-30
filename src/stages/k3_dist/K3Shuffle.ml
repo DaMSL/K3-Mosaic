@@ -123,7 +123,7 @@ let gen_meta p =
     in
     g_meta := meta
   in
-  ignore(for_all_trigs p @@ gen_trig_meta);
+  ignore(for_all_trigs ~sys_init:true p @@ gen_trig_meta);
   !g_meta
 
 (* generate all shuffle functions *)
