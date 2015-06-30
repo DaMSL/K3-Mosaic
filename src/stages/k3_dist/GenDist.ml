@@ -1130,28 +1130,26 @@ let nd_do_corrective_fns c s_rhs ast trig_name corrective_maps =
       (orig_vals @ args_of_t_with_v c trig_name @ ["delta_tuples", tuple_typ])
       [t_int] @@
         let lmap = P.lhs_map_of_stmt c.p stmt_id in
-        let lmap_id_t = P.map_ids_types_for c.p lmap in
         let send_corr_fn = send_corrective_name_of_t c lmap in
         let args, ast =
           M.modify_corr_ast c ast map_id stmt_id trig_name id_fn
         in
         mk_let ["new_tuples"]
-          (* filter out delta tuples that have 0 value *)
-          (mk_filter (mk_lambda' lmap_id_t @@
-            mk_neq (mk_cint 0) @@ mk_var @@ fst @@ list_last lmap_id_t) @@
-            mk_flatten @@ mk_map (mk_lambda' args ast) @@ mk_var "delta_tuples") @@
-              mk_block [
-                (* add delta *)
-                do_add_delta c (mk_var "new_tuples") lmap ~corrective:true;
-                (* send correctives *)
-                if List.exists ((=) lmap) corrective_maps
-                (* send correctives with hop + 1, and return the num of correctives *)
-                then mk_apply' send_corr_fn @@ mk_tuple @@
-                      (modify_e orig_vals ["hop", mk_add (mk_cint 1) @@ mk_var "hop"]) @
-                      [mk_var "vid"; mk_var "new_tuples"]
-                (* if we have no more correctives, return 0 *)
-                else mk_cint 0
-              ]
+        (* We *can't* filter out 0 values, because they may add to a map
+         * that didn't have any value, and initialize a value at that key *)
+          (mk_flatten @@ mk_map (mk_lambda' args ast) @@ mk_var "delta_tuples") @@
+            mk_block [
+              (* add delta *)
+              do_add_delta c (mk_var "new_tuples") lmap ~corrective:true;
+              (* send correctives *)
+              if List.exists ((=) lmap) corrective_maps
+              (* send correctives with hop + 1, and return the num of correctives *)
+              then mk_apply' send_corr_fn @@ mk_tuple @@
+                    (modify_e orig_vals ["hop", mk_add (mk_cint 1) @@ mk_var "hop"]) @
+                    [mk_var "vid"; mk_var "new_tuples"]
+              (* if we have no more correctives, return 0 *)
+              else mk_cint 0
+            ]
   in
   List.map do_corrective_fn s_rhs
 
