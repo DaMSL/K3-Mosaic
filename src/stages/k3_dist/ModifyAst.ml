@@ -80,7 +80,7 @@ let get_global_map_inits c = function
                   mk_apply (mk_var @@ K3StdLib.csv_loader_name^"2") @@
                     mk_tuple [mk_var @@ table^"_path"; 
                               (* witness type so the function knows what to return *)
-                              mk_empty (wrap_tset' @@ ProgInfo.map_types_no_val_for c.p map_id)]
+                              mk_empty (M3ToK3.wrap_map' @@ ProgInfo.map_types_no_val_for c.p map_id)]
               | _ -> failwith "bad filename"
             else e
           with Failure _ -> e)

@@ -419,6 +419,9 @@ let sw_driver_trig_nm = "sw_driver_trig"
 let ms_start_time = create_ds "ms_start_time" @@ mut t_int
 let ms_end_time = create_ds "ms_end_time" @@ mut t_int
 
+(* for debugging, driver pause *)
+let sw_driver_sleep = create_ds "sw_driver_sleep" @@ mut t_int
+
 (**** Protocol Init code ****)
 
 let ms_init_counter = create_ds "ms_init_counter" (mut t_int) ~init:(mk_cint 0)
@@ -644,6 +647,7 @@ let global_vars c dict =
       sw_trig_buf_idx;
       ms_start_time;
       ms_end_time;
+      sw_driver_sleep;
     ] @
     sw_trig_bufs c @
     log_ds c @

@@ -306,6 +306,10 @@ let sw_driver_trig (c:config) =
           Proto.sw_seen_sentry @@
           (* else *)
           mk_block [
+            (* for debugging, sleep if we've been asked to *)
+            mk_if (mk_neq (mk_var D.sw_driver_sleep.id) @@ mk_cint 0)
+              (mk_apply' "sleep" (mk_var D.sw_driver_sleep.id))
+              mk_cunit;
             (* send the msg using dispatch code *)
             dispatch_code;
             (* recurse, trying to get another message *)
@@ -343,7 +347,7 @@ let sw_demux c =
       (mk_block [
         mk_insert D.sw_trig_buf_idx.id [mk_cint @@ -1];
         mk_incr TS.sw_need_vid_ctr.id]) @@
-      mk_error @@ "unidentified trig id"
+      mk_cunit
   in
   mk_code_sink' sw_demux_nm ["args", wrap_ttuple @@ List.map str_of_date_t combo_t] [] @@
   StrMap.fold (fun trig arg_indices acc ->
