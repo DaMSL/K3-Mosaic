@@ -907,6 +907,7 @@ let send_corrective_fns c =
     ListAsSet.union (fst c.corr_maps) (snd c.corr_maps)
 
 (* function to update the stmt_counters for correctives *)
+(* current hop = hop - 1. next hop = hop *)
 let nd_update_stmt_cntr_corr_map_nm = "nd_update_stmt_cntr_corr_map"
 let nd_update_stmt_cntr_corr_map =
   let lookup_pat = [mk_var "vid"; mk_var "stmt_id"] in
@@ -923,27 +924,34 @@ let nd_update_stmt_cntr_corr_map =
         ~v:(mk_let [nd_stmt_cntrs_corr_map.id] (mk_snd @@ mk_snd @@ mk_var "lkup") @@
               mk_block [
                 (* increment the next hop by count *)
-                mk_upsert_with_sim nd_stmt_cntrs_corr_map "lkup2"
-                  (* if no value, set it to the count *)
-                  ~k:[mk_var "hop"] ~default:(mk_var "count")
-                  (* otherwise, add the count *)
-                  ~v:(mk_add (mk_snd @@ mk_var "lkup2") @@ mk_var "count");
-                (* check if this is from the root of the corrective tree *)
-                mk_if (mk_var "root")
-                  (* return as is *)
-                  mk_cunit @@
-                  (* else if the current hop is 0, delete it *)
-                  mk_case_ns (mk_peek @@ mk_slice' nd_stmt_cntrs_corr_map.id [mk_var "hop"; mk_cunknown]) "lkup2"
-                    (* if no entry, set to -1 *)
-                    (mk_insert nd_stmt_cntrs_corr_map.id [mk_var "hop"; mk_cint @@ -1]) @@
+                mk_case_ns (mk_peek @@ mk_slice' nd_stmt_cntrs_corr_map.id [mk_var "hop"; mk_cunknown]) "lkup2"
+                    (* if no entry, set to count *)
+                    (mk_insert nd_stmt_cntrs_corr_map.id [mk_var "hop"; mk_var "count"]) @@
                     (* else, calculate new corr count *)
-                    mk_let ["new_corr_cnt"] (mk_sub (mk_snd @@ mk_var "lkup2") @@ mk_cint 1) @@
+                    mk_let ["new_corr_cnt"] (mk_add (mk_snd @@ mk_var "lkup2") @@ mk_var "count") @@
                     (* if we've hit 0 *)
                     mk_if (mk_eq (mk_var "new_corr_cnt") @@ mk_cint 0)
                       (* delete the entry altogether *)
                       (mk_delete nd_stmt_cntrs_corr_map.id @@ [mk_var "lkup2"]) @@
-                      (* else, save the decremented entry *)
+                      (* else, save the incremented entry *)
                       mk_update nd_stmt_cntrs_corr_map.id [mk_var "lkup2"] [mk_var "hop"; mk_var "new_corr_cnt"];
+                (* check if this is from the root of the corrective tree *)
+                mk_if (mk_var "root")
+                  (* return as is *)
+                  mk_cunit @@
+                  mk_let ["hop2"] (mk_sub (mk_var "hop") @@ mk_cint 1) @@
+                  (* else update the current hop *)
+                  mk_case_ns (mk_peek @@ mk_slice' nd_stmt_cntrs_corr_map.id [mk_var "hop2"; mk_cunknown]) "lkup2"
+                    (* if no entry, set to -1 *)
+                    (mk_insert nd_stmt_cntrs_corr_map.id [mk_var "hop2"; mk_cint @@ -1]) @@
+                    (* else, calculate new corr count *)
+                    mk_let ["new_corr_cnt"] (mk_sub (mk_snd @@ mk_var "lkup2") @@ mk_cint 1) @@
+                    (* if we've hit 0, *)
+                    mk_if (mk_eq (mk_var "new_corr_cnt") @@ mk_cint 0)
+                      (* delete the entry *)
+                      (mk_delete nd_stmt_cntrs_corr_map.id @@ [mk_var "lkup2"]) @@
+                      (* else, save the decremented entry *)
+                      mk_update nd_stmt_cntrs_corr_map.id [mk_var "lkup2"] [mk_var "hop2"; mk_var "new_corr_cnt"];
                 (* set the new tuple *)
                 mk_tuple [mk_fst @@ mk_snd @@ mk_var "lkup"; mk_var nd_stmt_cntrs_corr_map.id]
               ])
@@ -987,6 +995,7 @@ let nd_do_complete_fns c ast trig_name corr_maps =
       (args_of_t_with_v c trig_name) [] @@
     let lmap = P.lhs_map_of_stmt c.p stmt_id in
     let fst_hop = mk_cint 1 in
+    let snd_hop = mk_cint 2 in
     let after_fn tup_ds =
       mk_block [
         (* add delta *)
@@ -995,12 +1004,12 @@ let nd_do_complete_fns c ast trig_name corr_maps =
         then
           let send_corr_t = send_corrective_name_of_t c lmap in
           mk_let ["sent_msgs"]
-            (* we apply send_correctives with our original address, stmt_id, original vid and hop
+            (* we apply send_correctives with our original address, stmt_id, original vid and hop + 1
              * we double up on vid since send_correctives is also called for do_corrective,
              * which must send the new vid to be calculated as well as the original complete's vid
              *)
             (mk_apply' send_corr_t @@
-              mk_tuple @@ [G.me_var; mk_cint stmt_id; mk_var "vid"; fst_hop; mk_var "vid"; tup_ds]) @@
+              mk_tuple @@ [G.me_var; mk_cint stmt_id; mk_var "vid"; snd_hop; mk_var "vid"; tup_ds]) @@
             (* update the corrective counters for hop 1 to the number of msgs.
              * true: is a root, bool: create an entry *)
             let update_corr_code create =
