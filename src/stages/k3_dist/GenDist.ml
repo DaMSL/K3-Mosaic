@@ -321,7 +321,7 @@ let sw_driver_trig (c:config) =
 let sw_start_fn (c:config) trig =
   let args_t = snd_many @@ P.args_of_t c.p trig in
   let args = ["args", wrap_ttuple args_t] in
-  mk_global_fn ("sw_"^trig) args [] @@
+  mk_global_fn ("sw_start_"^trig) args [] @@
     mk_block [
       (* insert args into trig buffer *)
       mk_insert (D.sw_trig_buf_prefix^trig) [mk_var "args"];
@@ -359,8 +359,8 @@ let sw_demux c =
     in
     mk_if (mk_eq (mk_fst @@ mk_var "args") @@ mk_cstring trig)
       (mk_if (mk_eq (mk_snd @@ mk_var "args") @@ mk_cint 1)
-        (apply "sw_insert_") @@
-         apply "sw_delete_")
+        (apply "sw_start_insert_") @@
+         apply "sw_start_delete_")
       acc)
     t_arg_map
     sentry_code
