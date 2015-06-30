@@ -918,23 +918,26 @@ let nd_update_stmt_cntr_corr_map =
       mk_if (mk_var "create")
         (mk_insert nd_stmt_cntrs.id [mk_tuple lookup_pat; mk_tuple [mk_cint 0; mk_empty nd_stmt_cntrs_corr_map.t]])
         mk_cunit;
-      (* we need to decrement the hop's value by 1, and increment the next hop's values by the count *)
+      (* we need to decrement the previous hop's value by 1, and increment the hop's values by the count (if it's not 0) *)
       mk_upsert_with_sim nd_stmt_cntrs "lkup" ~k:lookup_pat
         ~default:(mk_error @@ Printf.sprintf "%s: missing stmt_cntrs value" nd_update_stmt_cntr_corr_map_nm)
         ~v:(mk_let [nd_stmt_cntrs_corr_map.id] (mk_snd @@ mk_snd @@ mk_var "lkup") @@
               mk_block [
-                (* increment the next hop by count *)
-                mk_case_ns (mk_peek @@ mk_slice' nd_stmt_cntrs_corr_map.id [mk_var "hop"; mk_cunknown]) "lkup2"
-                    (* if no entry, set to count *)
-                    (mk_insert nd_stmt_cntrs_corr_map.id [mk_var "hop"; mk_var "count"]) @@
-                    (* else, calculate new corr count *)
-                    mk_let ["new_corr_cnt"] (mk_add (mk_snd @@ mk_var "lkup2") @@ mk_var "count") @@
-                    (* if we've hit 0 *)
-                    mk_if (mk_eq (mk_var "new_corr_cnt") @@ mk_cint 0)
-                      (* delete the entry altogether *)
-                      (mk_delete nd_stmt_cntrs_corr_map.id @@ [mk_var "lkup2"]) @@
-                      (* else, save the incremented entry *)
-                      mk_update nd_stmt_cntrs_corr_map.id [mk_var "lkup2"] [mk_var "hop"; mk_var "new_corr_cnt"];
+                (* only do this part if count isn't 0 *)
+                mk_if (mk_eq (mk_var "count") @@ mk_cint 0)
+                  mk_cunit @@
+                  (* increment the next hop by count *)
+                  mk_case_ns (mk_peek @@ mk_slice' nd_stmt_cntrs_corr_map.id [mk_var "hop"; mk_cunknown]) "lkup2"
+                      (* if no entry, set to count *)
+                      (mk_insert nd_stmt_cntrs_corr_map.id [mk_var "hop"; mk_var "count"]) @@
+                      (* else, calculate new corr count *)
+                      mk_let ["new_corr_cnt"] (mk_add (mk_snd @@ mk_var "lkup2") @@ mk_var "count") @@
+                      (* if we've hit 0 *)
+                      mk_if (mk_eq (mk_var "new_corr_cnt") @@ mk_cint 0)
+                        (* delete the entry altogether *)
+                        (mk_delete nd_stmt_cntrs_corr_map.id @@ [mk_var "lkup2"]) @@
+                        (* else, save the incremented entry *)
+                        mk_update nd_stmt_cntrs_corr_map.id [mk_var "lkup2"] [mk_var "hop"; mk_var "new_corr_cnt"];
                 (* check if this is from the root of the corrective tree *)
                 mk_if (mk_var "root")
                   (* return as is *)
