@@ -1146,6 +1146,7 @@ let string_of_dist_program ?(file="default.txt") ?map_to_fold (p, envs) =
   let p' = filter_incompatible p in
 "\
 include \"Core/Builtins.k3\"
+include \"Core/Log.k3\"
 include \"Annotation/Map.k3\"
 include \"Annotation/Maps/VMap.k3\"
 include \"Annotation/Set.k3\"
