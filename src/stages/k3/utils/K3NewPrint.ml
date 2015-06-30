@@ -748,7 +748,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
       (* divide becomes an infix operator *)
       | Var "divf" -> do_pair_paren "/"
       | Var "mod"  -> do_pair_paren "%"
-      | Var "reciprocali"
+      | Var "reciprocali" -> arith_paren_pair "/" (light_type c @@ KH.mk_cfloat 1.0, e2)
       | Var "reciprocal" -> arith_paren_pair "/" (light_type c @@ KH.mk_cint 1, e2)
       (* convert load_csv to right format *)
       | Var s when s = K3StdLib.csv_loader_name^"2" ->
