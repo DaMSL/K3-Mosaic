@@ -364,7 +364,7 @@ let sw_demux c =
       (mk_block [
         mk_insert D.sw_trig_buf_idx.id [mk_cint @@ -1];
         mk_incr TS.sw_need_vid_ctr.id]) @@
-      mk_error @@ "unidentified trig id"
+      mk_cunit
   in
   mk_code_sink' sw_demux_nm ["args", wrap_ttuple @@ List.map str_of_date_t combo_t] [] @@
   StrMap.fold (fun trig arg_indices acc ->
