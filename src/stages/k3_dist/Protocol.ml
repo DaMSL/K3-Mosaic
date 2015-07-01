@@ -42,7 +42,7 @@ let sw_rcv_init =
     (* start driver for all switches *)
     mk_send D.sw_driver_trig_nm G.me_var [mk_cunit];
     (* ack to master *)
-    mk_send ms_rcv_sw_init_ack_nm (mk_var D.master_addr.id) [mk_cunit];
+    D.mk_send_master ms_rcv_sw_init_ack_nm;
   ]
 
 let ms_sys_init_barrier_cnt = mk_counter "ms_sys_init_barrier_cnt"
@@ -66,7 +66,7 @@ let nd_sys_init_check_barrier =
       mk_eq (mk_size_slow D.nd_stmt_cntrs) @@ mk_cint 0)
     (mk_block [
       (* send and update flag *)
-      mk_send ms_sys_init_barrier_nm (mk_var D.master_addr.id) [mk_cunit];
+      D.mk_send_master ms_sys_init_barrier_nm;
       mk_assign nd_sys_init_barrier_req.id mk_cfalse])
     mk_cunit
 
@@ -133,7 +133,7 @@ let rcv_jobs =
     (* add to node ring *)
     K3Ring.ring_init;
     (* ack the msg *)
-    mk_send ms_rcv_jobs_ack_nm (mk_var D.master_addr.id) [mk_cunit];
+    D.mk_send_master ms_rcv_jobs_ack_nm;
   ]
 
 (* receive the role from everybody *)
@@ -220,7 +220,7 @@ let nd_done_check_barrier =
       mk_eq (mk_size_slow D.nd_stmt_cntrs) @@ mk_cint 0)
     (mk_block [
       (* notify master *)
-      mk_send ms_rcv_node_done_nm (mk_var D.master_addr.id) [mk_cunit];
+      D.mk_send_master ms_rcv_node_done_nm;
       (* mark as done *)
       mk_assign nd_sys_done_req.id mk_cfalse]) @@
     mk_cunit
@@ -263,7 +263,7 @@ let sw_check_done =
           mk_eq (mk_var D.sw_seen_sentry.id) mk_ctrue)
     (mk_block [
       (* send *)
-      mk_send ms_rcv_switch_done_nm (mk_var D.master_addr.id) [mk_cunit];
+      D.mk_send_master ms_rcv_switch_done_nm;
       (* mark as sent *)
       mk_assign sw_sent_done.id mk_ctrue])
     mk_cunit

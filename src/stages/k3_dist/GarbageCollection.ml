@@ -89,6 +89,16 @@ let ms_num_gc_expected =
   let d_init = mk_add (mk_var D.num_switches.id) @@ mk_var D.num_nodes.id in
   create_ds "ms_num_gc_expected" (mut t_int) ~d_init
 
+let ms_gc_done_barrier_ctr = mk_counter "ms_gc_done_barrier_ctr"
+
+(* NOTE: gc barrier is only on nodes *)
+let ms_gc_done_barrier_nm = "ms_gc_done_barrier"
+let ms_gc_done_barrier c = mk_barrier ms_gc_done_barrier_nm ~ctr:ms_gc_done_barrier_ctr.id
+  ~total:(mk_var D.num_nodes.id)
+  ~after:(* tell timer to ping us in X seconds *)
+         (mk_send T.tm_insert_timer_trig_nm (mk_var D.timer_addr.id)
+           [mk_var ms_gc_interval.id; mk_cint @@ T.num_of_trig c D.ms_send_gc_req_nm; G.me_var])
+
 (* data structures needing gc *)
 let ds_to_gc c =
   D.nd_log_master ::
@@ -109,7 +119,7 @@ let do_gc_fns c =
     let fn_nm = "do_gc_"^ds.id
     in
     mk_global_fn fn_nm [min_vid, t_vid] [] @@
-      match ds.map_id with
+    match ds.map_id with
       | Some _ ->
           let map_deref = "map_d" in
           let pat   = D.pat_of_ds ~vid_nm:min_vid ds in
@@ -155,7 +165,8 @@ let do_gc_trig c =
     mk_block @@
       (* (mk_apply' "print_env" mk_cunit) :: (* debug *) *)
       (mk_apply' "print" @@ mk_cstring "Starting GC") ::
-      (List.map (fun ds -> mk_apply' ("do_gc_"^ds.id) @@ mk_tuple [mk_var min_vid]) @@ ds_to_gc c)
+      (List.map (fun ds -> mk_apply' ("do_gc_"^ds.id) @@ mk_tuple [mk_var min_vid]) @@ ds_to_gc c) @
+      [D.mk_send_master ms_gc_done_barrier_nm]
 
 (* master switch trigger to receive and add to the max vid map *)
 let ms_rcv_gc_vid_nm = "ms_rcv_gc_vid"
@@ -186,17 +197,10 @@ let ms_rcv_gc_vid c =
                 (* send gc notices to nodes only *)
                 (* NOTE: currently there's no need to send do_gc to the switches. If that changes, this check needs
                  * to change as wel *)
-                mk_iter (mk_lambda' D.jobs.e @@
-                    mk_if (mk_eq (mk_var "job") @@ mk_var "job_node")
-                      (mk_send do_gc_nm (mk_var "addr") [mk_var min_vid])
-                      mk_cunit) @@
-                  mk_var D.jobs.id;
+                mk_send_all_nodes do_gc_nm [mk_var min_vid];
                 (* overwrite last gc vid *)
                 mk_assign ms_last_gc_vid.id @@ mk_var min_vid; ])
               mk_cunit; (* else nothing *)
-            (* tell timer to ping us in X seconds *)
-            mk_send T.tm_insert_timer_trig_nm (mk_var D.timer_addr.id)
-              [mk_var ms_gc_interval.id; mk_cint @@ T.num_of_trig c D.ms_send_gc_req_nm; G.me_var]
           ])
         (* if not enough responses, do nothing *)
         mk_cunit
@@ -210,14 +214,15 @@ let rcv_req_gc_vid =
   mk_if (mk_or (mk_eq (mk_var D.job.id) @@ mk_var D.job_switch.id) @@
                 mk_eq (mk_var D.job.id) @@ mk_var D.job_master.id)
     (* send our min vid: this would be much faster with a min function *)
-    (mk_send ms_rcv_gc_vid_nm (mk_var master_addr.id)
-      [G.me_var; mk_min_max "min_vid" (mk_var "vid") t_vid mk_lt (mk_var TS.sw_highest_vid.id) sw_ack_log]) @@
+    (D.mk_send_master ms_rcv_gc_vid_nm
+      ~payload:[G.me_var;
+        mk_min_max "min_vid" (mk_var "vid") t_vid mk_lt (mk_var TS.sw_highest_vid.id) sw_ack_log]) @@
     (* else, if we're a node *)
     mk_if (mk_eq (mk_var D.job.id) @@ mk_var D.job_node.id)
       (* send out node min vid: much faster if we had a min function *)
-      (mk_send ms_rcv_gc_vid_nm (mk_var master_addr.id)
+      (mk_send_master ms_rcv_gc_vid_nm
         (* default is max_vid (infinity), to allow anything to go on *)
-        [G.me_var; mk_min_max "min_vid" (mk_fst @@ mk_var "vid_stmt_id")
+        ~payload:[G.me_var; mk_min_max "min_vid" (mk_fst @@ mk_var "vid_stmt_id")
           t_vid mk_lt (mk_var D.g_max_vid.id) D.nd_stmt_cntrs])
       (* else, do nothing *)
       mk_cunit
@@ -250,6 +255,7 @@ let global_vars _ = List.map decl_global
    ms_gc_vid_ctr;
    ms_last_gc_vid;
    ms_num_gc_expected;
+   ms_gc_done_barrier_ctr;
   ]
 
 let functions c =
@@ -260,5 +266,6 @@ let triggers c sw_check_done =
    ms_rcv_gc_vid c;
    rcv_req_gc_vid;
    ms_send_gc_req;
+   ms_gc_done_barrier c;
    do_gc_trig c;
   ]

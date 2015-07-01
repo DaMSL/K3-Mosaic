@@ -619,11 +619,14 @@ let map_latest_vid_vals ?(vid_nm="vid") c slice_col m_pat map_id ~keep_vid : exp
 let mk_send_all ds trig payload =
   mk_iter (mk_lambda' (ds_e ds) @@
       mk_send trig (mk_var "addr") payload) @@
-    mk_var ds.id 
+    mk_var ds.id
 
 let mk_send_all_nodes trig payload = mk_send_all nodes trig payload
 let mk_send_all_switches trig payload = mk_send_all switches trig payload
 let mk_send_all_peers trig payload = mk_send_all G.peers trig payload
+
+let mk_send_master ?(payload=[mk_cunit]) trig =
+  mk_send trig (mk_var master_addr.id) payload
 
 (**** End of code ****)
 
