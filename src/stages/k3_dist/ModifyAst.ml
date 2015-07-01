@@ -10,7 +10,7 @@ module D = K3Dist
 
 exception InvalidAst of string
 
-(* find any loaders in the ast *)
+(* find any csv loaders in the ast *)
 let loader_tables ast =
   let bu_fn acc e =
     try
@@ -261,6 +261,16 @@ let modify_dist (c:config) ast stmt =
         let lam, col = U.decompose_map e in
         let col' = modify_map_read c col None @@ Some col in
         NopMsg, mk_map lam col'
+
+    | GroupByAggregate ->
+        let lam1, lam2, zero, col = U.decompose_gbagg e in
+        let col' = modify_map_read c col None (Some col) in
+        NopMsg, mk_gbagg lam1 lam2 zero col'
+
+    | Aggregate ->
+        let lam, zero, col = U.decompose_aggregate e in
+        let col' = modify_map_read c col None (Some col) in
+        NopMsg, mk_agg lam zero col'
 
     (* handle a case of a lambda applied to an lmap (i.e. a let statement *)
     (* in this case, we modify the types of the lambda vars themselves *)
