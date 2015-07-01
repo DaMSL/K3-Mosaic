@@ -17,7 +17,12 @@ let unit_temp     = VTemp VUnit
 
 (* static hashtable for storing functions efficiently *)
 type entry_t = type_t * arg_t * foreign_func_t
-let (func_table : ((id_t, entry_t) Hashtbl.t)) = Hashtbl.create 10
+let func_table : ((id_t, entry_t) Hashtbl.t) = Hashtbl.create 10
+
+(* add a function to the table. default is a unit dummy function *)
+let add_fn ?(args=unit_arg) ?(ret=t_unit) ?(fn=fun env -> env, unit_temp) nm =
+  let decl = wrap_tfunc (wrap_ttuple @@ snd_many args) ret in
+  Hashtbl.add func_table nm (decl, wrap_args args, fn)
 
 (* retreive arguments from environment *)
 let arg_of_env id env = hd @@ IdMap.find id env.locals
@@ -386,26 +391,21 @@ let decl = wrap_tfunc (wrap_ttuple @@ snd_many args) ret
 let _ = Hashtbl.add func_table name (decl, wrap_args args, fn)
 
 (* print env *)
-let name = "print_env"
-let args = unit_arg
-let ret = t_unit
-let fn e =
-  Log.log (lazy (string_of_env ~accessed_only:false ~skip_empty:false e)) `Debug;
-  e, VTemp VUnit
-let decl = wrap_tfunc (wrap_ttuple @@ snd_many args) ret
-let _ = Hashtbl.add func_table name (decl, wrap_args args, fn)
+let () = add_fn "print_env"
+  ~fn:(fun e ->
+    Log.log (lazy (string_of_env ~accessed_only:false ~skip_empty:false e)) `Debug;
+    e, VTemp VUnit)
 
-(* shutdown *)
-let name = "haltEngine"
-let args = unit_arg
-let ret = t_unit
-let fn e = e, VTemp VUnit
-let decl = wrap_tfunc (wrap_ttuple @@ snd_many args) ret
-let _ = Hashtbl.add func_table name (decl, wrap_args args, fn)
+(* jemalloc dummy functions *)
+let () = add_fn "jemallocStart"
+let () = add_fn "jemallocStop"
+
+(* shutdown - dummy here. implemented in Runtime *)
+let () = add_fn "haltEngine"
 
 (* error function ---------- *)
-let fn env = failwith @@ "Error function called: "
 let name = "error"
+let fn env = failwith @@ "Error function called: "
 let args = unit_arg
 let ret = t_unknown
 let decl = wrap_tfunc (wrap_ttuple @@ snd_many args) ret
