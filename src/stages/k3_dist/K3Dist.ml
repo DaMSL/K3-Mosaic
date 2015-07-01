@@ -576,6 +576,20 @@ let rcv_corrective_name_of_t c trig_nm stmt_id map_id =
 let do_corrective_name_of_t c trig_nm stmt_id map_id =
   trig_nm^"_do_corrective_s"^string_of_int stmt_id^"_m_"^P.map_name_of c.p map_id
 
+(* calling all functions for profiling *)
+let profile_funcs_start =
+  mk_block [
+    mk_apply' "jemallocStart" mk_cunit;
+    mk_apply' "tcmallocStart" mk_cunit;
+    mk_apply' "pcmStart" mk_cunit;
+  ]
+
+let profile_funcs_stop =
+  mk_block [
+    mk_apply' "jemallocStop" mk_cunit;
+    mk_apply' "tcmallocStop" mk_cunit;
+    mk_apply' "pcmStop" mk_cunit;
+  ]
 
 (* --- Begin frontier function code --- *)
 

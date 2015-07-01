@@ -182,7 +182,10 @@ let sw_sent_done = create_ds "sw_sent_done" (mut t_bool) ~init:mk_cfalse
 let shutdown_trig_nm = "shutdown_trig"
 let shutdown_trig =
   mk_code_sink' shutdown_trig_nm unit_arg [] @@
-  mk_apply' "haltEngine" mk_cunit
+  mk_block [
+    D.profile_funcs_stop;
+    mk_apply' "haltEngine" mk_cunit;
+  ]
 
 let ms_rcv_node_done_cnt = mk_counter "ms_rcv_node_done_cnt"
 
@@ -273,6 +276,9 @@ let sw_seen_sentry =
     sw_check_done
   ]
 
+(* global call for init of profiling *)
+let init_profiling = create_ds "init_profiling" t_unit ~init:D.profile_funcs_start
+
 let global_vars c =
   List.map decl_global @@
   (if c.sys_init then [
@@ -280,6 +286,7 @@ let global_vars c =
     nd_sys_init_barrier_req;
   ] else []) @
   [
+    init_profiling;
     nd_sys_done_req;
     nd_sent_done;
     sw_sent_done;
