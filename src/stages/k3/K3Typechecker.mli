@@ -12,6 +12,7 @@ type event_type_bindings_t = (id_t * (id_t * (type_t list)) list) list
 
 type error_type =
     | TMismatch of type_t * type_t * string
+    | FunMismatch of type_t * type_t list * string
     | BTMismatch of base_type_t * base_type_t * string
     | TBad of type_t * string
     | BTBad of base_type_t * string

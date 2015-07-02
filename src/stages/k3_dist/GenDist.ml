@@ -353,7 +353,7 @@ let sw_demux c =
   mk_code_sink' sw_demux_nm ["args", wrap_ttuple @@ List.map str_of_date_t combo_t] [] @@
   StrMap.fold (fun trig arg_indices acc ->
     let apply s =
-      mk_apply' (s^trig) @@
+      mk_apply' (s^trig) @@ singleton @@ mk_tuple @@
         (* add 1 for tuple access *)
         List.map (fun i ->
           convert_date i @@ mk_subscript (i+1) @@ mk_var "args") arg_indices
