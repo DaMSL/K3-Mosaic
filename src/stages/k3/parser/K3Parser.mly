@@ -349,8 +349,8 @@ base_type_expr :
     | LPAREN type_expr_tuple RPAREN { $2 }
     | MAYBE type_expr               { wrap_tmaybe $2 }
     | INDIRECT type_expr            { wrap_tind $2 }
-    | fn_type_expr_list             { let is, o = list_split (-1) $1 in
-                                      wrap_tfunc is (hd o) }
+    | type_expr RARROW fn_type_expr_list { let is, o = list_split (-1) ($1::$3) in
+                                           wrap_tfunc is (hd o) }
     | TYPE                          { canonical $1 }
     | annotated_collection_type     { let c, anno = $1 in { (canonical c) with anno} }
 ;
