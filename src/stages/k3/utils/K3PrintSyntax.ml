@@ -117,7 +117,7 @@ let rec lazy_base_type c ~in_col ?(no_paren=false) ?(paren_complex=false) t =
   | TIndirect vt        -> lps "ind " <| wrap_complex (lazy_type c ~in_col ~paren_complex:true vt)
   | TFunction(its, ot)   ->
       wrap_complex @@
-        lps_list ~sep:(" -> ") CutHint (lazy_type c ~in_col:false) (its@[ot])
+        lps_list ~sep:(" -> ") CutHint (lazy_type c ~in_col:false ~paren_complex:true) (its@[ot])
 
 (* TODO: annotations *)
 (* paren_complex: surround by paren if we're a complex type for clarity *)
