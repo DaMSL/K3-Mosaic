@@ -177,6 +177,8 @@
 
 %left COLON
 
+%nonassoc UMINUS
+
 %%
 
 program :
@@ -340,29 +342,13 @@ positions : integer_list { $1 };
 /* Types */
 
 type_expr :
+    | type_expr RARROW fn_type_expr_list %prec UMINUS { let is, o = list_split (-1) ($1::$3) in
+                                           match (hd o).typ with
+                                           | TFunction(is', o') -> wrap_tfunc (is@is') o'
+                                           | _ -> wrap_tfunc is (hd o)
+                                         }
     | LPAREN type_expr RPAREN { $2 }
-    | MUT base_type_expr      { mut $2 }
-    | base_type_expr          { $1 }
-;
-
-base_type_expr :
-    | type_expr RARROW fn_type_expr_list { let is, o = list_split (-1) ($1::$3) in
-                                           wrap_tfunc is (hd o) }
-    | LPAREN type_expr_tuple RPAREN { $2 }
-    | MAYBE type_expr               { wrap_tmaybe $2 }
-    | INDIRECT type_expr            { wrap_tind $2 }
-    | TYPE                          { canonical $1 }
-    | annotated_collection_type     { let c, anno = $1 in { (canonical c) with anno} }
-;
-
-/* Used by function to prevent more functions at top level */
-type_expr_no_fun :
-    | LPAREN type_expr_no_fun RPAREN { $2 }
-    | MUT base_type_expr_no_fun      { mut $2 }
-    | base_type_expr_no_fun          { $1 }
-;
-
-base_type_expr_no_fun :
+    | MUT type_expr      { mut $2 }
     | LPAREN type_expr_tuple RPAREN { $2 }
     | MAYBE type_expr               { wrap_tmaybe $2 }
     | INDIRECT type_expr            { wrap_tind $2 }
@@ -371,8 +357,8 @@ base_type_expr_no_fun :
 ;
 
 fn_type_expr_list :
-    | type_expr_no_fun RARROW fn_type_expr_list  { $1 :: $3 }
-    | type_expr_no_fun                           { [$1] }
+    | type_expr RARROW fn_type_expr_list  { $1 :: $3 }
+    | type_expr                           { [$1] }
 ;
 
 type_expr_tuple :

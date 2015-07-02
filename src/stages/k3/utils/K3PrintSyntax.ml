@@ -51,6 +51,14 @@ let wrap_hv i f = lbox (lhv i) f
 let wrap_hov i f = lbox (lhov i) f
 let wrap_indent f = wrap_hov 2 f
 
+let lazy_concat ?(sep=lsp) f l =
+  let len = List.length l - 1 in
+  let l2 = list_populate (fun _ -> sep ()) 0 len in
+  List.flatten @@ list_intersperse (List.map f l) l2
+
+(* separator for lazy_concat *)
+let lcomma () = lps "," <| lsp ()
+
 let error s = lps @@ "???: "^s
 
 let lazy_control_anno c = function
@@ -102,7 +110,7 @@ let rec lazy_base_type c ~in_col ?(no_paren=false) ?(paren_complex=false) t =
   | TDate      -> lps "date"
   | TFloat     -> lps "float"
   | TString    -> lps "string"
-  | TMaybe vt  -> lps "maybe " <| wrap_complex (lazy_type c ~in_col ~paren_complex:true vt)
+  | TMaybe vt  -> wrap_complex (lps "maybe " <| lazy_type c ~in_col ~paren_complex:true vt)
   | TTuple vts ->
       (* if we're top level of a collection, drop the parentheses *)
       (* for verbose types, we leave them in. We also leave them for mutables *)
@@ -114,10 +122,11 @@ let rec lazy_base_type c ~in_col ?(no_paren=false) ?(paren_complex=false) t =
   | TTarget t           -> lps "target" <| lazy_type c ~in_col t
   | TUnknown            -> lps "unknown"
   | TTop                -> lps "top"
-  | TIndirect vt        -> lps "ind " <| wrap_complex (lazy_type c ~in_col ~paren_complex:true vt)
+  | TIndirect vt        -> wrap_complex (lps "ind " <| lazy_type c ~in_col ~paren_complex:true vt)
   | TFunction(its, ot)   ->
       wrap_complex @@
-        lps_list ~sep:(" -> ") CutHint (lazy_type c ~in_col:false ~paren_complex:true) (its@[ot])
+        lazy_concat ~sep:(fun () -> lsp () <| lps "->" <| lsp ())
+        (lazy_type c ~in_col:false ~paren_complex:true) (its@[ot])
 
 (* TODO: annotations *)
 (* paren_complex: surround by paren if we're a complex type for clarity *)
