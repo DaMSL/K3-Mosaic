@@ -775,7 +775,7 @@ let type_bindings_of_program prog =
 
         | Foreign(i, t) ->
             begin try let t_f = K3StdLib.lookup_type i in
-              if not (t = t_f) then t_error (-1) i
+              if not (t <~ t_f) then t_error (-1) i
                 (TMismatch(t, t_f, "Mismatch in foreign function type."))
               else
                 (Foreign(i, t), (i, t) :: env)
