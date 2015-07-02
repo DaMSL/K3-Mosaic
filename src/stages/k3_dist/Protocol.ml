@@ -28,7 +28,7 @@ let ms_rcv_sw_init_ack c =
     ~after:
       (mk_block [
         (* start timing *)
-        mk_assign D.ms_start_time.id @@ mk_apply' "now_int" mk_cunit;
+        mk_assign D.ms_start_time.id @@ mk_apply' "now_int" [mk_cunit];
         (* master initiates timestamp protocol *)
         TS.ms_init;
         (* master initiates gc protocol *)
@@ -88,7 +88,7 @@ let sw_sys_init_nm = "sw_"^D.sys_init
 let sw_sys_init =
   mk_code_sink' sw_sys_init_nm unit_arg [] @@
   mk_block [
-    mk_apply' (D.send_fetch_name_of_t D.sys_init) sys_init_vid_k3;
+    mk_apply' (D.send_fetch_name_of_t D.sys_init) [sys_init_vid_k3];
     D.mk_send_all_nodes nd_sys_init_barrier_nm [mk_cunit]
   ]
 
@@ -184,7 +184,7 @@ let shutdown_trig =
   mk_code_sink' shutdown_trig_nm unit_arg [] @@
   mk_block [
     D.profile_funcs_stop;
-    mk_apply' "haltEngine" mk_cunit;
+    mk_apply' "haltEngine" [mk_cunit];
   ]
 
 let ms_rcv_node_done_cnt = mk_counter "ms_rcv_node_done_cnt"
@@ -202,7 +202,7 @@ let ms_rcv_node_done =
     ~ctr:ms_rcv_node_done_cnt.id ~total:(mk_var D.num_nodes.id) ~after:
       (mk_block [
         (* update end time *)
-        mk_assign D.ms_end_time.id @@ mk_apply' "now_int" mk_cunit;
+        mk_assign D.ms_end_time.id @@ mk_apply' "now_int" [mk_cunit];
         (* send ourselves a message to shutdown *)
         mk_send ms_shutdown_nm G.me_var [mk_cunit];
       ])

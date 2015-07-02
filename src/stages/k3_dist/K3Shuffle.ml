@@ -61,44 +61,40 @@ let gen_shuffle_fn p rmap lmap bindings fn_name =
           (* in shuffle on empty case, we prepare all the routing that must
            * be done for empty packets *)
           (mk_map
-            (mk_lambda (wrap_args ["ip", t_addr]) @@
-              mk_tuple [mk_var "ip"; mk_empty @@ wrap_t_calc tuple_types]
-            ) @@
-            mk_apply
-              (mk_var @@ route_for p lmap) @@
-                mk_tuple @@ mk_cint lmap ::
+            (mk_lambda' ["ip", t_addr] @@
+              mk_tuple [mk_var "ip"; mk_empty @@ wrap_t_calc tuple_types]) @@
+            mk_apply'
+              (route_for p lmap) @@
+                mk_cint lmap ::
                   if pred then ids_to_vars @@ fst_many l_key_ids_types
-                  else [mk_cunit]
-          ) @@
+                  else [mk_cunit]) @@
           mk_empty all_targets_type
         ) @@
       mk_gbagg (* sort by IPs *)
-        (mk_lambda (wrap_args ["ip", t_addr; "tuple", many_tuples_type]) @@
-          mk_var "ip" (* grouping func *)
-        )
+        (* grouping func *)
+        (mk_lambda' ["ip", t_addr; "tuple", many_tuples_type] @@ mk_var "ip")
         (* we don't need uniqueness here since tuples are supposed to be unique
          * as it is *)
-        (mk_assoc_lambda (wrap_args ["acc", many_tuples_type])
-          (wrap_args ["ip", t_addr; "tuple", many_tuples_type]) @@
-          mk_combine (mk_var "tuple") @@ mk_var "acc"
-        )
-        (mk_empty @@ many_tuples_type) @@ (* [] *)
+        (mk_assoc_lambda' ["acc", many_tuples_type]
+          ["ip", t_addr; "tuple", many_tuples_type] @@
+          mk_combine (mk_var "tuple") @@ mk_var "acc")
+        (mk_empty many_tuples_type) @@ (* [] *)
         mk_combine
           (mk_var "all_targets") @@
           mk_flatten @@
           mk_map
-            (mk_lambda (wrap_args ["r_tuple", tuple_types]) @@
+            (mk_lambda' ["r_tuple", tuple_types] @@
               (* start with partial l_key and build up an l_key using data
                * from the tuple, that can be used for routing *)
               mk_destruct_tuple "r_tuple" tuple_types_unwrap id_r @@
                 (mk_map
-                  (mk_lambda (wrap_args ["ip", t_addr]) @@
+                  (mk_lambda' ["ip", t_addr] @@
                     mk_tuple [mk_var "ip";
                       mk_singleton many_tuples_type [mk_var "r_tuple"]]) @@
-                  mk_apply (* route each full l_key *)
-                    (mk_var @@ route_for p lmap) @@
-                      mk_tuple @@ mk_cint lmap :: if pred then full_lkey_vars
-                                                  else [mk_cunit])) @@
+                  mk_apply' (* route each full l_key *)
+                    (route_for p lmap) @@
+                      mk_cint lmap :: if pred then full_lkey_vars
+                                              else [mk_cunit])) @@
             mk_var tuples
 
 (* generate all meta information about functions *)
@@ -136,7 +132,7 @@ let find_shuffle_nm c s rmap lmap =
     let fs = List.filter (fun x ->
       x.rmap = rmap && x.lmap = lmap && IntSet.mem s x.stmts) c.shuffle_meta in
     begin match fs with
-    | [] -> failwith "missing shuffle fn"
+    | []  -> failwith "missing shuffle fn"
     | [f] -> f.name
     | _   -> failwith @@ Printf.sprintf "%d duplicate functions" (List.length fs)
     end

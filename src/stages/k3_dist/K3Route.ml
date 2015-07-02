@@ -167,7 +167,7 @@ let gen_route_fn p map_id =
     ["_", t_int; "_", t_unit]
     [output_type] @@ (* return *)
       mk_singleton output_type
-        [mk_apply' "get_ring_node" @@ mk_tuple [mk_cint 1; mk_cint 1]]
+        [mk_apply' "get_ring_node" [mk_cint 1; mk_cint 1]]
 
   | _  -> (* we have keys *)
   mk_global_fn (route_for p map_id)
@@ -184,7 +184,7 @@ let gen_route_fn p map_id =
 
     (* calculate the dim bounds ie. the bucket sizes when linearizing *)
     mk_let ["dim_bounds"; "max_val"]
-      (mk_apply (mk_var "calc_dim_bounds") @@ mk_var "pmap") @@
+      (mk_apply' "calc_dim_bounds" [mk_var "pmap"]) @@
     (* calc_bound_bucket *)
     (* we calculate the contribution of the bound components *)
     mk_let ["bound_bucket"]
@@ -205,14 +205,13 @@ let gen_route_fn p map_id =
             (mk_case_ns (mk_peek @@ mk_var "pmap_slice") "peek_slice"
               (mk_cint 0) @@
               mk_let ["value"]
-              (mk_apply (mk_var "mod") @@
-                mk_tuple
+              (mk_apply (mk_var "mod")
                   (* we hash first. This could seem like it destroys locality,
                     * but it really doesn't, since we're only concerned about
                     * point locality *)
-                  [mk_apply (mk_var "abs") @@ mk_apply (mk_var hash_func) @@ mk_var id_unwrap;
-                  mk_snd @@ mk_var "peek_slice"]
-              ) @@
+                  [mk_apply' "abs" @@ singleton @@
+                    mk_apply' hash_func [mk_var id_unwrap];
+                  mk_snd @@ mk_var "peek_slice"]) @@
               mk_mult
                 (mk_var "value") @@
                 mk_snd @@ mk_peek_or_error ("can't find "^soi index^" in dim_bounds") @@
@@ -231,7 +230,7 @@ let gen_route_fn p map_id =
           mk_combine
           (mk_if
             (* we only care about indices that are nothing *)
-            (mk_neq (mk_var @@ id_x) @@ mk_nothing type_x)
+            (mk_neq (mk_var id_x) @@ mk_nothing type_x)
             (mk_empty free_dims_type) @@
             mk_slice' "pmap" [mk_cint x; mk_cunknown]
           ) acc_code
@@ -242,21 +241,18 @@ let gen_route_fn p map_id =
     (* a list of ranges from 0 to the bucket size, for every free variable *)
     mk_let ["free_domains"]
       (mk_map
-        (mk_lambda (wrap_args ["i", t_int; "b_i", t_int]) @@
+        (mk_lambda' ["i", t_int; "b_i", t_int] @@
           mk_tuple [mk_var "i"; mk_range TList
-            (mk_cint 0) (mk_cint 1) @@
-            (mk_var "b_i")]
-        ) @@
-        mk_var "free_dims"
-      ) @@
+            (mk_cint 0) (mk_cint 1) @@ mk_var "b_i"]) @@
+        mk_var "free_dims") @@
     (* calculate the cartesian product to get every possible bucket *)
     mk_let ["free_cart_prod"]
       (mk_agg
-        (mk_assoc_lambda (wrap_args ["prev_cart_prod", free_cart_prod_type])
-          (wrap_args ["i", t_int; "domain", wrap_tlist t_int]) @@
+        (mk_assoc_lambda' ["prev_cart_prod", free_cart_prod_type]
+          ["i", t_int; "domain", wrap_tlist t_int] @@
           mk_flatten @@ mk_map
             (* for every domain element in the domain *)
-            (mk_lambda (wrap_args ["domain_element", t_int]) @@
+            (mk_lambda' ["domain_element", t_int] @@
               mk_is_empty (mk_var "prev_cart_prod")
                 ~y:(mk_singleton free_cart_prod_type
                      [mk_singleton inner_cart_prod_type
@@ -276,18 +272,17 @@ let gen_route_fn p map_id =
     (* TODO: this can be turned into sets *)
     mk_let ["sorted_ip_list"]
       (mk_gbagg
-        (mk_lambda (wrap_args ["ip", t_addr]) @@ mk_var "ip")
-        (mk_lambda (wrap_args ["_", t_unit; "_", t_unit]) mk_cunit)
+        (mk_lambda' ["ip", t_addr] @@ mk_var "ip")
+        (mk_lambda' ["_", t_unit; "_", t_unit] mk_cunit)
         mk_cunit @@
         (* convert to bag *)
         mk_agg
-          (mk_lambda
-             (wrap_args ["acc_ips", output_type;
-                         "free_bucket", free_bucket_type]) @@
+          (mk_lambda'
+             ["acc_ips", output_type; "free_bucket", free_bucket_type] @@
               mk_combine
                 (mk_var "acc_ips") @@
                 mk_singleton output_type
-                  [mk_apply' "get_ring_node" @@ mk_tuple
+                  [mk_apply' "get_ring_node"
                     [mk_agg
                       (mk_assoc_lambda' ["acc", t_int]
                                         ["i", t_int; "val", t_int] @@
@@ -304,7 +299,7 @@ let gen_route_fn p map_id =
       ) @@
     mk_is_empty (mk_var "sorted_ip_list")
       ~y:(mk_singleton output_type
-           [mk_apply' "get_ring_node" @@ mk_tuple (* empty ip list *)
+           [mk_apply' "get_ring_node" (* empty ip list *)
              [mk_var "bound_bucket"; mk_var "max_val"]])
       ~n:(mk_fst_many sorted_ip_inner_type @@ mk_var "sorted_ip_list")
 

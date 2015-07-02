@@ -39,7 +39,7 @@ let tm_check_time_trig c =
       mk_cunit @@ (* if empty, stop *)
       mk_if
         (* if we've passed the timer time *)
-        (mk_geq (mk_apply' "now_int" mk_cunit) @@ mk_fst @@ mk_var "timer")
+        (mk_geq (mk_apply' "now_int" [mk_cunit]) @@ mk_fst @@ mk_var "timer")
         (mk_block [
           (* delete this entry *)
           mk_delete tm_timer_list.id [mk_var "timer"];
@@ -51,7 +51,7 @@ let tm_check_time_trig c =
         (* else, wake ourselves in 1 second *)
         mk_block [
           mk_send tm_check_time_trig_nm G.me_var [mk_cunit];
-          mk_apply' "sleep" @@ mk_cint 1000;
+          mk_apply' "sleep" [mk_cint 1000];
         ]
 
 (* trig to insert a timer into the timer list. Send time from now *)
@@ -62,7 +62,7 @@ let tm_insert_timer_trig =
     (* insert the new entry *)
     mk_insert tm_timer_list.id @@
       modify_e tm_timer_list.e
-       ["time", mk_add (mk_var "time") @@ mk_apply' "now_int" mk_cunit];
+       ["time", mk_add (mk_var "time") @@ mk_apply' "now_int" [mk_cunit]];
     (* sort the list *)
     mk_assign tm_timer_list.id @@
       (* NOTE: if we had an ordered map, we wouldn't need this slow sort *)

@@ -115,8 +115,9 @@ let rec lazy_base_type c ~in_col ?(no_paren=false) ?(paren_complex=false) t =
   | TUnknown            -> lps "unknown"
   | TTop                -> lps "top"
   | TIndirect vt        -> lps "ind " <| wrap_complex (lazy_type c ~in_col ~paren_complex:true vt)
-  | TFunction(it, ot)   ->
-      wrap_complex (lazy_type c ~in_col:false it <| lps " -> " <| lazy_type c ~in_col:false ot)
+  | TFunction(its, ot)   ->
+      wrap_complex @@
+        lps_list ~sep:(" -> ") CutHint (lazy_type c ~in_col:false) (its@[ot])
 
 (* TODO: annotations *)
 (* paren_complex: surround by paren if we're a complex type for clarity *)
@@ -305,12 +306,10 @@ let rec lazy_expr c expr =
       wrap_indent (lazy_paren (lps "\\" <| lazy_arg c false arg <|
       lps " ->" <| lind () <|
         wrap_hov 0 (lazy_expr c e)))
-  | Apply -> let e1, e2 = U.decompose_apply expr in
-    let modify_arg = match U.tag_of_expr e2 with
-      | Tuple -> id_fn
-      | _     -> lazy_paren
-    in
-    wrap_indent (lazy_expr c e1 <| lcut () <| modify_arg @@ lazy_expr c e2)
+  | Apply -> let fn, args = U.decompose_apply expr in
+    wrap_indent
+      (lazy_expr c fn <| lcut () <| lazy_paren
+        (lps_list CutHint (lazy_expr c) args))
   | Block -> let es = U.decompose_block expr in
     lps "do {" <| lind () <|
     wrap_hv 0 (lps_list ~sep:";" CutHint (fun e -> wrap_hov 0 (lazy_expr c e)) es <| lsp ())
