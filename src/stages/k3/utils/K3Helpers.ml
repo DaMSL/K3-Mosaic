@@ -77,7 +77,7 @@ let wrap_tind_mut t = mut @@ wrap_tind t
 let wrap_tmaybe t = canonical @@ TMaybe t
 let wrap_tmaybes ts = List.map wrap_tmaybe ts
 
-let wrap_tfunc tin tout = canonical @@ TFunction(tin, immut tout)
+let wrap_tfunc tinl tout = canonical @@ TFunction(tinl, immut tout)
 
 (* wrap a function argument *)
 let wrap_args id_typ =
@@ -212,7 +212,7 @@ let mk_lambda argt expr = mk_stree (Lambda(argt)) [expr]
 
 let mk_lambda' argl expr = mk_lambda (wrap_args argl) expr
 
-let mk_apply lambda input = mk_stree Apply [lambda; input]
+let mk_apply lambda input = mk_stree Apply (lambda :: input)
 
 let mk_apply' fn input = mk_apply (mk_var fn) input
 

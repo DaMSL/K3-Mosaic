@@ -309,7 +309,7 @@ let g_init_vid =
 let g_min_vid = create_ds "g_min_vid" t_vid ~init:min_vid_k3
 let g_max_vid =
   let init =
-    let max = mk_apply' "get_max_int" mk_cunit in
+    let max = mk_apply' "get_max_int" [mk_cunit] in
     mk_tuple [max] in
   create_ds "g_max_vid" t_vid ~init
 let g_start_vid = create_ds "g_start_vid" t_vid ~init:start_vid_k3
@@ -579,16 +579,16 @@ let do_corrective_name_of_t c trig_nm stmt_id map_id =
 (* calling all functions for profiling *)
 let profile_funcs_start =
   mk_block [
-    mk_apply' "jemallocStart" mk_cunit;
-    mk_apply' "tcmallocStart" mk_cunit;
-    mk_apply' "pcmStart" mk_cunit;
+    mk_apply' "jemallocStart" [mk_cunit];
+    mk_apply' "tcmallocStart" [mk_cunit];
+    mk_apply' "pcmStart" [mk_cunit];
   ]
 
 let profile_funcs_stop =
   mk_block [
-    mk_apply' "jemallocStop" mk_cunit;
-    mk_apply' "tcmallocStop" mk_cunit;
-    mk_apply' "pcmStop" mk_cunit;
+    mk_apply' "jemallocStop" [mk_cunit];
+    mk_apply' "tcmallocStop" [mk_cunit];
+    mk_apply' "pcmStop" [mk_cunit];
   ]
 
 (* --- Begin frontier function code --- *)
@@ -619,7 +619,7 @@ let map_latest_vid_vals ?(vid_nm="vid") c slice_col m_pat map_id ~keep_vid : exp
 let mk_send_all ds trig payload =
   mk_iter (mk_lambda' (ds_e ds) @@
       mk_send trig (mk_var "addr") payload) @@
-    mk_var ds.id 
+    mk_var ds.id
 
 let mk_send_all_nodes trig payload = mk_send_all nodes trig payload
 let mk_send_all_switches trig payload = mk_send_all switches trig payload

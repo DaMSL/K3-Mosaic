@@ -46,7 +46,7 @@ type base_type_t
     | TCollection   of container_type_t * type_t
     | TAddress
     | TTarget       of type_t
-    | TFunction     of type_t * type_t
+    | TFunction     of type_t list * type_t
     | TIndirect     of type_t
 
 and type_t = {

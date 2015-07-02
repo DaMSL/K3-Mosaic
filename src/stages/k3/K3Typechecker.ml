@@ -65,7 +65,7 @@ let check_tag_arity tag children =
     | Leq   -> 2
 
     | Lambda _    -> 1
-    | Apply       -> 2
+    | Apply       -> length
     | Subscript _ -> 1
 
     | Block         -> length
@@ -150,7 +150,9 @@ let rec assignable ?(unknown_ok=false) t_l t_r = match t_l.typ, t_r.typ with
   | TCollection(t_lc, t_le), TCollection(t_rc, t_re) ->
       t_lc = t_rc && assignable t_le t_re
   | TFunction(it, ot), TFunction(it', ot') ->
-      assignable it it' && assignable ot ot' && it.mut = it'.mut && ot.mut = ot'.mut
+      List.length it = List.length it' &&
+      List.for_all2 (fun t t' -> assignable t t' && t.mut = t'.mut) &&
+      assignable ot ot' && ot.mut = ot'.mut
   | TIndirect t, TIndirect t' -> assignable t t'
   | TDate, TInt               -> true
   | TInt, TDate               -> true

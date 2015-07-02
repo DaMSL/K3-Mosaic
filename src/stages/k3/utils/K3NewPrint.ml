@@ -190,7 +190,8 @@ let rec lazy_base_type ?(brace=true) ?(mut=false) ?(empty=false) c ~in_col t =
   | TCollection(ct, vt) -> wrap (
     (if not empty then lps "collection " else [])
     <| lazy_type c ~in_col:true vt <| lps " @ " <| lazy_col ct)
-  | TFunction(it, ot) -> lazy_type c it <| lps " -> " <| lazy_type c ot
+  | TFunction(itl, ot) ->
+      lps_list ~sep:" -> " CutHint (lazy_type c) (itl@[ot])
 
 and lazy_type ?empty ?(in_col=false) c {typ; mut; anno} =
   lazy_base_type ?empty ~in_col ~mut c typ
@@ -450,8 +451,7 @@ and function_application c fun_e l_e =
   let fun_e = match tag with
   | Var x when str_take 4 x = "hash" ->
          U.expr_of_details id (Var "hash") anns children
-  | _ -> fun_e
-  in
+  | _ -> fun_e in
   let print_fn e = match U.tag_of_expr e with
     | Var _ | Const _ | Tuple   -> lazy_expr c e
     | _                         -> lazy_paren @@ lazy_expr c e
@@ -691,7 +691,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
 
   | Range ct -> let st, str, num = U.decompose_range expr in
     (* newk3 range only has the last number *)
-    let range_type = KH.canonical @@ TFunction(KH.t_int, KH.wrap_tlist KH.t_int) in
+    let range_type = KH.canonical @@ TFunction([KH.t_int], KH.wrap_tlist KH.t_int) in
     function_application c (U.attach_type range_type @@ KH.mk_var "range") [num]
   | Add -> let (e1, e2) = U.decompose_add expr in
     begin match U.tag_of_expr e2, expr_type_is_bool e1 with
@@ -737,33 +737,30 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
   | Lambda arg ->
       let _, e = U.decompose_lambda expr in
       handle_lambda c ~prefix_fn ~expr_info arg e
-  | Apply -> let e1, e2 = U.decompose_apply expr in
-    let do_pair_paren sym =
-      begin match U.decompose_tuple e2 with
-        | [x; y] -> arith_paren_pair sym (x, y)
-        | _      -> failwith "malformed tuple"
-      end
+  | Apply -> let fn, args = U.decompose_apply expr in
+    let do_pair_paren sym = match args with
+      | [x; y] -> arith_paren_pair sym (x, y)
+      | _      -> failwith "not a pair"
     in
-    begin match U.tag_of_expr e1 with (* can be let *)
+    begin match U.tag_of_expr fn, args with (* can be let *)
       (* divide becomes an infix operator *)
-      | Var "divf" -> do_pair_paren "/"
-      | Var "mod"  -> do_pair_paren "%"
-      | Var "reciprocali" -> arith_paren_pair "/" (light_type c @@ KH.mk_cfloat 1.0, e2)
-      | Var "reciprocal" -> arith_paren_pair "/" (light_type c @@ KH.mk_cint 1, e2)
+      | Var "divf", _     -> do_pair_paren "/"
+      | Var "mod", _      -> do_pair_paren "%"
+      | Var "reciprocali", [e] -> arith_paren_pair "/" (light_type c @@ KH.mk_cfloat 1.0, e)
+      | Var "reciprocal", [e]  -> arith_paren_pair "/" (light_type c @@ KH.mk_cint 1, e)
       (* convert load_csv to right format *)
-      | Var s when s = K3StdLib.csv_loader_name^"2" ->
-          let tup = U.unwrap_tuple e2 in
-          begin match List.map U.tag_of_expr tup with
+      | Var s, _ when s = K3StdLib.csv_loader_name^"2" ->
+          begin match List.map U.tag_of_expr args with
           (* get name of var to extract table name *)
           | [Var x; col] ->
               begin match Str.split r_underscore x with
-              | [table;_] ->
+              | [table; _] ->
                   let open KH in
                   let args =
                     List.map (light_type c) @@
                     [ mk_singleton (wrap_tbag t_string) [mk_var x];
                       (* get the witness collection *)
-                      list_last tup] in
+                      list_last args] in
                   let loader = String.uppercase table^"LoaderRP" in
                   apply_method_nocol {c with singleton_id = "path"}
                     ~dot:false ~name:loader ~args ~arg_info:[ANonLambda, Out; ANonLambda, Out]
@@ -772,7 +769,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
           | _ -> failwith "bad arg to load_csv_col2"
           end
       (* function application *)
-      | _ -> function_application c e1 [e2]
+      | _ -> function_application c fn args
     end
   | Block -> let es = U.decompose_block expr in
     lazy_paren @@ wrap_indent (wrap_hv 0 @@
@@ -1085,20 +1082,12 @@ let lazy_flow_program c fas = lps_list ~sep:"" CutHint (lazy_flow c |- fst) fas
 
 let lazy_declaration c d =
   let out = match d with
-  | Global(id, t, expr) -> let end_part = begin match expr with
-      | None -> []
-      | Some e ->
-          (* handle the special case of the csv loader *)
-          try
-            let lam, s = U.decompose_apply e in
-            begin match U.tag_of_expr lam, U.tag_of_expr s with
-            | Var "load_csv_col", Const(CString f) -> lps (Printf.sprintf "@@LoadFile(%s)" f) <| lcut ()
-            | _ -> failwith "Not found"
-            end
-          with Failure _ -> (* normal global *)
-            lps " =" <| lsp () <| lazy_expr c e
-    end in
-    wrap_indent (lps @@ "declare "^id^" :" <| lsp () <| lazy_type c t <| end_part)
+  | Global(id, t, expr) ->
+      let end_part = match expr with
+        | None   -> []
+        | Some e -> lps " =" <| lsp () <| lazy_expr c e
+      in
+      wrap_indent (lps @@ "declare "^id^" :" <| lsp () <| lazy_type c t <| end_part)
   | Role(id, fprog) -> lazy_flow_program c fprog
   | Flow fprog -> lazy_flow_program c fprog
   | DefaultRole id -> []

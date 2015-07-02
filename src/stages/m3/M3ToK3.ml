@@ -281,7 +281,7 @@ let apply_external_lambda fn in_x_ts out_t =
              fn (KS.string_of_type @@ KH.wrap_ttuple @@ fst_many @@ in_x_ts)
                 (KS.string_of_type out_t)
   in
-  KH.mk_apply (KH.mk_var fname) (KH.mk_tuple @@ snd_many in_x_ts)
+  KH.mk_apply (KH.mk_var fname) (snd_many in_x_ts)
 
 let mk_project ?(id="projected_field") width idx ret_t expr =
   let rec build_tuple w =
@@ -1323,7 +1323,7 @@ let csv_adaptor_to_k3 (name_prefix: string)
   in
   let child_params =
     List.map (fun (vn, vt) -> match vt with
-      | T.TDate -> KH.mk_apply (KH.mk_var "parse_sql_date") @@ KH.mk_var vn
+      | T.TDate -> KH.mk_apply (KH.mk_var "parse_sql_date") [KH.mk_var vn]
       | _       -> KH.mk_var vn
     ) relv
   in
@@ -1464,7 +1464,7 @@ let m3_to_k3 ?(generate_init = false) ?(role = "client")
                   mk_map
                     (mk_lambda' id_ts @@
                       mk_tuple @@ vars@[mk_cint 1])
-                  (mk_apply (mk_var K3StdLib.csv_loader_name) @@ mk_cstring f))
+                  (mk_apply (mk_var K3StdLib.csv_loader_name) [mk_cstring f]))
 
             | _ -> failwith "Table relations that aren't filesources are unsupported"
             end

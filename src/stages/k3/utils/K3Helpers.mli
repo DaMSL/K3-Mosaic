@@ -60,7 +60,7 @@ val wrap_tind : type_t -> type_t
 val wrap_tind_mut : type_t -> type_t
 val wrap_tmaybe : type_t -> type_t
 val wrap_tmaybes : type_t list -> type_t list
-val wrap_tfunc : type_t -> type_t -> type_t
+val wrap_tfunc : type_t list -> type_t -> type_t
 
 (* wrap a single layer of arguments *)
 val wrap_args : (id_t * type_t) list -> arg_t
@@ -133,8 +133,8 @@ val mk_lambda2 : arg_t -> arg_t -> expr_t -> expr_t
 val mk_lambda2' : (id_t * type_t) list -> (id_t * type_t) list -> expr_t -> expr_t
 val mk_lambda3 : arg_t -> arg_t -> arg_t -> expr_t -> expr_t
 val mk_lambda3' : (id_t * type_t) list -> (id_t * type_t) list -> (id_t * type_t) list -> expr_t -> expr_t
-val mk_apply : expr_t -> expr_t -> expr_t
-val mk_apply' : id_t -> expr_t -> expr_t
+val mk_apply : expr_t -> expr_t list -> expr_t
+val mk_apply' : id_t -> expr_t list -> expr_t
 val mk_block : expr_t list -> expr_t
 val mk_iter : expr_t -> expr_t -> expr_t
 val mk_if : expr_t -> expr_t -> expr_t -> expr_t
