@@ -1345,7 +1345,7 @@ let csv_adaptor_to_k3 (name_prefix: string)
         [],
         k3_code
       ))),
-      KH.type_of_arg @@ KH.wrap_args args
+      KH.wrap_ttuple @@ KH.type_of_arg @@ KH.wrap_args args
     )
 ;;
 
@@ -1420,7 +1420,6 @@ let m3_to_k3 ?(generate_init = false) ?(role = "client")
         M3.queries = m3_prog_tlqs; M3.db = m3_database
       } = m3_program in
   (* declaration for parsing sql date *)
-  let sql_func = KH.(mk_foreign_fn "parse_sql_date" t_string t_int) in
   let k3_prog_schema = List.map m3_map_to_k3_map !m3_prog_schema in
   let k3_prog_env = List.map (function
       | K.Global(id, ty, _) -> id, ty
@@ -1488,7 +1487,6 @@ let m3_to_k3 ?(generate_init = false) ?(role = "client")
   let k3_prog_client_role =
     add_empty @@ k3_prog_sources @ k3_prog_bindings @ k3_prog_consumes
   in
-  sql_func::
   (add_empty @@
     k3_prog_schema @
     [ K.Flow(k3_prog_trigs @ k3_prog_demux) ] @

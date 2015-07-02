@@ -1033,7 +1033,7 @@ let lazy_trigger c id arg vars expr =
                then lps " " <| f
                else wrap_indent f in*)
   wrap_indent (lps ("trigger "^id) <| lps " : " <|
-  lazy_type ~in_col:false c @@ KH.type_of_arg arg <| lsp () <|
+  lazy_type ~in_col:false c @@ KH.wrap_ttuple @@ KH.type_of_arg arg <| lsp () <|
   lps "=" <| lsp () <| lazy_expr c @@ KH.mk_lambda arg expr <| lcut ())
 
 let channel_format c = function

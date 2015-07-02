@@ -151,7 +151,7 @@ let rec assignable ?(unknown_ok=false) t_l t_r = match t_l.typ, t_r.typ with
       t_lc = t_rc && assignable t_le t_re
   | TFunction(it, ot), TFunction(it', ot') ->
       List.length it = List.length it' &&
-      List.for_all2 (fun t t' -> assignable t t' && t.mut = t'.mut) &&
+      List.for_all2 (fun t t' -> assignable t t' && t.mut = t'.mut) it it' &&
       assignable ot ot' && ot.mut = ot'.mut
   | TIndirect t, TIndirect t' -> assignable t t'
   | TDate, TInt               -> true
@@ -181,7 +181,7 @@ let rec is_unknown_t t = match t.typ with
   | TMaybe t_m          -> is_unknown_t t_m
   | TTuple(t_s)         -> List.exists is_unknown_t t_s
   | TCollection(_, t_e) -> is_unknown_t t_e
-  | TFunction(it, ot)   -> is_unknown_t it || is_unknown_t ot
+  | TFunction(it, ot)   -> List.exists is_unknown_t it || is_unknown_t ot
   | TIndirect(t_e)      -> is_unknown_t t_e
   | TUnknown            -> true
   | _                   -> false
@@ -388,10 +388,16 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
           canonical @@ TFunction(type_of_arg t_a, immut t_r)
 
       | Apply ->
-          let t_f, t_a = bind 0, bind 1 in
-          let t_e, t_r = try unwrap_tfun t_f with Failure _ -> t_erroru (not_function t_f) in
-          if t_e <~ t_a then t_r
-          else t_erroru (TMismatch(t_e, t_a, ""))
+          begin match List.map type_of_expr typed_children with
+          | t_f::t_args ->
+              let t_es, t_r =
+                try unwrap_tfun t_f with Failure _ -> t_erroru (not_function t_f)
+              in
+              if List.for_all2 (<~) t_es t_args then t_r
+              else t_erroru (TMismatch(wrap_ttuple t_es, wrap_ttuple t_args, ""))
+
+          | _ -> t_erroru (TMsg("Bad arguments to apply"))
+          end
 
       | Subscript n ->
           let t_e = bind 0 in
@@ -404,21 +410,21 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
       | Iterate ->
           let _, _, targ, tret, _, telem = common_ops () in
           if not (tret === canonical TUnit)
-              then t_erroru (TMismatch(tret, canonical TUnit, "return val:")) else
-          if targ <~ telem then canonical TUnit
-          else t_erroru (TMismatch(targ, telem, "element:"))
+            then t_erroru (TMismatch(tret, canonical TUnit, "return val:")) else
+          if hd targ <~ telem then canonical TUnit
+          else t_erroru (TMismatch(hd targ, telem, "element:"))
 
       | Map ->
           let _, tcol', targ, tret, tcol, telem = common_ops () in
-          if targ <~ telem then match tcol with
+          if hd targ <~ telem then match tcol with
             | TMap -> wrap_tbag tret
             | _ -> canonical @@ TCollection(tcol, tret)
-          else t_erroru (TMismatch(targ, telem, "element:"))
+          else t_erroru (TMismatch(hd targ, telem, "element:"))
 
       | Filter ->
           let _, tcol', targ, tret, tcol, telem = common_ops () in
-          if not (targ <~ telem) then
-            t_erroru (TMismatch(targ, telem, "predicate:")) else
+          if not (hd targ <~ telem) then
+            t_erroru (TMismatch(hd targ, telem, "predicate:")) else
           if not (canonical TBool === tret) then
             t_erroru (TMismatch(canonical TBool, tret, "")) else
           tcol'
@@ -440,17 +446,17 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
             try unwrap_tfun tfun with Failure _ -> t_erroru (not_function tfun) in
           let tcol, telem =
             try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') in
-          let expected1 = wrap_ttuple @@
+          let expected1 =
             match tag, tcol with
             | Aggregate,  TVMap -> t_erroru @@ TBad(tcol', "cannot run on vmap")
             | Aggregate,  _     -> [tzero; telem]
             | AggregateV, TVMap -> [tzero; t_vid; telem]
             | _                 -> t_erroru @@ TBad(tcol', "must have a vmap")
           in
-          if not (tzero === tret)
-            then t_erroru (TMismatch(tzero, tret, "lambda return and agg")) else
-          if not (targ <~ expected1)
-            then t_erroru (TMismatch(targ, expected1, "lambda arg")) else
+          if not (tzero === tret) then
+            t_erroru (TMismatch(tzero, tret, "lambda return and agg")) else
+          if not @@ List.for_all2 (<~) targ expected1 then
+            t_erroru (TMismatch(wrap_ttuple targ, wrap_ttuple expected1, "lambda arg")) else
           tzero
 
       | GroupByAggregate ->
@@ -462,11 +468,11 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
           let tcol, telem =
             try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') in
           if tcol = TVMap then t_erroru @@ TBad(tcol', "cannot run on vmap") else
-          if not (tgarg <~ telem) then
-            t_erroru (TMismatch(tgarg, telem, "grouping func:")) else
-          let expected1 = wrap_ttuple [tzero; telem] in
-          if not (taarg <~ expected1) then
-            t_erroru (TMismatch(taarg, expected1, "agg func:")) else
+          if not (hd tgarg <~ telem) then
+            t_erroru (TMismatch(hd tgarg, telem, "grouping func:")) else
+          let expected1 = [tzero; telem] in
+          if not @@ List.for_all2 (<~) taarg expected1 then
+            t_erroru (TMismatch(wrap_ttuple taarg, wrap_ttuple expected1, "agg func:")) else
           if not (tzero <~ taret) then
             t_erroru (TMismatch(taret, tzero, "agg func:"))
           else canonical @@
@@ -475,9 +481,9 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
       | Sort ->
           let tfun, tcol', targ, tret, tcol, telem = common_ops () in
 
-          let expected1 = wrap_ttuple [telem; telem] in
-          if not (targ <~ expected1) then
-            t_erroru (TMismatch(targ, expected1, "Sort function arg")) else
+          let expected1 = [telem; telem] in
+          if not @@ List.for_all2 (<~) targ expected1 then
+            t_erroru (TMismatch(wrap_ttuple targ, wrap_ttuple expected1, "Sort function arg")) else
           if not (canonical TBool === tret) then
             t_erroru (TMismatch(canonical TBool, tret, "Sort function result")) else
           if not (tcol = TList) then
@@ -532,7 +538,7 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
           if not (tcol = TVMap) then
             t_erroru (TMismatch(tcol', wrap_tvmap telem, "collection type")) else
           check_vmap_pat tcol telem tnew;
-          let tlam_update' = wrap_tfunc (wrap_ttuple @@ t_vid :: [telem]) telem in
+          let tlam_update' = wrap_tfunc (t_vid :: [telem]) telem in
           if not (tlam_update === tlam_update') then
             t_erroru (TMismatch(tlam_update, tlam_update', "update lambda")) else
           t_unit
@@ -542,9 +548,9 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
           let tcol, telem =
             try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') in
           check_vmap_pat tcol telem tkey;
-          let tlam_insert' = wrap_tfunc t_unit telem in
+          let tlam_insert' = wrap_tfunc [t_unit] telem in
           if not (tlam_insert === tlam_insert') then t_erroru (TMismatch(tlam_insert, tlam_insert', "insert lambda")) else
-          let tlam_update' = wrap_tfunc telem telem in
+            let tlam_update' = wrap_tfunc [telem] telem in
           if not (tlam_update === tlam_update') then t_erroru (TMismatch(tlam_update, tlam_update', "update lambda")) else
           t_unit
 
@@ -596,7 +602,7 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
 
 let check_trigger_type trig_env env id args locals body rebuild_f =
   let name           = "Trigger("^id^")" in
-  let self_bindings  = id, canonical @@ TTarget(type_of_arg args) in
+  let self_bindings  = id, canonical @@ TTarget(wrap_ttuple @@ type_of_arg args) in
   let arg_bindings   = gen_arg_bindings args in
   let local_bindings = List.map (fun x -> fst3 x, snd3 x) locals in
   let inner_env = self_bindings :: arg_bindings @ local_bindings @ env in
@@ -712,7 +718,7 @@ let types_of_endpoints endpoint_l =
   List.fold_left (fun env ep -> match ep with
       | Resource(id,r) -> error_if_dup id (type_of_resource env r) env
       | Code(id, args, locals, body) ->
-          let t = canonical @@ TTarget(type_of_arg args) in
+          let t = canonical @@ TTarget(wrap_ttuple @@ type_of_arg args) in
           error_if_dup id [t] env
     ) [] endpoint_l
 

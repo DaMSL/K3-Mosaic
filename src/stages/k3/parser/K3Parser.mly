@@ -349,13 +349,19 @@ base_type_expr :
     | LPAREN type_expr_tuple RPAREN { $2 }
     | MAYBE type_expr               { wrap_tmaybe $2 }
     | INDIRECT type_expr            { wrap_tind $2 }
-    | type_expr RARROW type_expr    { wrap_tfunc $1 $3 }
+    | fn_type_expr_list             { let is, o = list_split (-1) $1 in
+                                      wrap_tfunc is (hd o) }
     | TYPE                          { canonical $1 }
     | annotated_collection_type     { let c, anno = $1 in { (canonical c) with anno} }
 ;
 
 type_expr_tuple :
     | type_expr_list { wrap_ttuple $1 }
+
+fn_type_expr_list :
+    | type_expr                           { [$1] }
+    | type_expr RARROW fn_type_expr_list  { $1 :: $3 }
+;
 
 type_expr_list :
     | type_expr                       { [$1] }
@@ -416,7 +422,7 @@ expr :
       }
 
     /* Function application and let notation */
-    | expr LPAREN tuple RPAREN                      { mk_apply $1 $3 }
+    | expr LPAREN expr_list RPAREN                      { mk_apply $1 $3 }
 
     /* TODO: more error handling */
     | SEND LPAREN IDENTIFIER COMMA address COMMA error { print_error "Invalid send argument" }

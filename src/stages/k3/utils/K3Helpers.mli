@@ -77,7 +77,7 @@ val unwrap_col : base_type_t -> container_type_t * type_t
 
 val unwrap_tcol : type_t -> container_type_t * type_t
 
-val unwrap_tfun : type_t -> type_t * type_t
+val unwrap_tfun : type_t -> type_t list * type_t
 
 val unwrap_t : type_t -> base_type_t
 
@@ -215,17 +215,15 @@ val mk_global_val_init :
 
 (* macro to generate a global function with more control over args *)
 val mk_global_fn_raw:
-  id_t -> arg_t -> type_t -> type_t -> expr_t ->
-    declaration_t * annotation_t
+  id_t -> arg_t -> type_t list -> type_t -> expr_t -> declaration_t * annotation_t
 
 (* macro to create a global function *)
 val mk_global_fn :
-  id_t -> (id_t * type_t) list -> type_t list ->
-  expr_t -> declaration_t * annotation_t
+  id_t -> (id_t * type_t) list -> type_t list -> expr_t -> declaration_t * annotation_t
 
 (* macro to declare a foreign function *)
 val mk_foreign_fn :
-  id_t -> type_t -> type_t -> declaration_t * annotation_t
+  id_t -> type_t list -> type_t -> declaration_t * annotation_t
 
 (* macro to declare a foreign function given a type *)
 val mk_foreign_short : id_t -> type_t -> declaration_t * annotation_t
@@ -286,7 +284,7 @@ val list_of_k3_container : expr_t -> expr_t list
 val k3_container_of_list : type_t -> expr_t list -> expr_t
 
 (* convert arg to value type *)
-val type_of_arg: arg_t -> type_t
+val type_of_arg: arg_t -> type_t list
 
 (* convert the type of a collection *)
 val mk_convert_col : type_t -> type_t -> expr_t -> expr_t
