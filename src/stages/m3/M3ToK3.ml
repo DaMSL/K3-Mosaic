@@ -837,9 +837,9 @@ let rec calc_to_k3_expr meta ?(generate_init = false) theta_vars_k calc :
                   gb_aggsum_e
               in
               let flatten_fn =
-                KH.mk_lambda (K.ATuple [
+                KH.mk_lambda (K.ATuple [K.ATuple [
                   KH.wrap_args agg_vars_el;
-                  KH.wrap_args [KU.id_of_var @@ fst ret_ve, snd ret_ve]])
+                  KH.wrap_args [KU.id_of_var @@ fst ret_ve, snd ret_ve]]])
                 (KH.mk_tuple @@
                   List.map (KH.mk_var |- fst) agg_vars_el @ [fst ret_ve])
               in

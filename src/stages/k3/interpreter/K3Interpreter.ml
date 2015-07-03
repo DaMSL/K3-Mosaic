@@ -480,7 +480,7 @@ and eval_expr (address:address) sched_st cenv texpr =
 
     (* we can't modify the environment within the lambda *)
     | UpdateSuffix, [_; key; lam_update] ->
-        let f x = value_of_eval @@ snd @@ eval_fn lam_update address sched_st nenv [x] in
+        let f x = value_of_eval @@ snd @@ eval_fn lam_update address sched_st nenv (unwrap_vtuple x) in
         (env_modify (get_id ()) nenv @@
           fun col -> v_update_suffix error key f col), VTemp VUnit
 
