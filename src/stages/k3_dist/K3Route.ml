@@ -124,7 +124,7 @@ let pmap_data = "pmap_data"
 let global_pmaps =
   mk_global_val_init pmap_data full_pmap_types @@
     mk_map
-      (mk_lambda (wrap_args ["map_name", t_string; "map_types", pmap_types]) @@
+      (mk_lambda' ["map_name", t_string; "map_types", pmap_types] @@
         mk_tuple
           [mk_fst @@ mk_peek_or_error "can't find map in map_ids" @@
               mk_slice' K3Dist.map_ids_id
