@@ -458,11 +458,9 @@ let sw_send_fetch_fn c s_rhs_lhs s_rhs trig_name =
               args_of_t_as_vars_with_v c trig_name) ::
             [GC.sw_update_send ~vid_nm:"vid"]) @@
       mk_gbagg
-        (mk_assoc_lambda' (* grouping func -- assoc because of gbagg tuple *)
-          ["ip", t_addr; "stmt_id", t_stmt_id]
-          ["count", t_int] @@
-          mk_var "ip"
-        )
+        (mk_lambda' (* grouping func *)
+          ["ip_stmt_id", wrap_ttuple [t_addr; t_stmt_id]; "count", t_int] @@
+          mk_subscript 1 @@ mk_var "ip_stmt_id")
         (mk_assoc_lambda' (* agg func *)
           ["acc", stmt_cnt_list.t]
           ["ip_and_stmt_id", wrap_ttuple [t_addr; t_stmt_id]; "count", t_int] @@
@@ -503,7 +501,7 @@ let sw_send_fetch_fn c s_rhs_lhs s_rhs trig_name =
                 mk_let ["sender_count"]
                   (* count up the number of IPs received from route *)
                   (mk_agg
-                    (mk_lambda'
+                    (mk_lambda''
                       ["count", t_int; "ip", t_addr] @@
                       mk_add (mk_var "count") @@ mk_cint 1)
                     (mk_cint 0) @@
@@ -814,7 +812,7 @@ let send_corrective_fns c =
                               (* eliminate dups *)
                               mk_fst_many [tuple_type; t_unit] @@ mk_gbagg
                                 (mk_lambda' ["tuple", tuple_type] @@ mk_var "tuple")
-                                (mk_lambda' ["_", t_unit; "_", tuple_type] mk_cunit)
+                                (mk_lambda'' ["_", t_unit; "_", tuple_type] mk_cunit)
                                 mk_cunit @@
                                 mk_combine (mk_var "acc_tuples") @@ mk_var "tuples"]])
                     (mk_tuple [mk_empty t_vid_list; mk_empty map_ds.t]) @@

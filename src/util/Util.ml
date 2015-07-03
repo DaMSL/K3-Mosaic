@@ -271,6 +271,8 @@ let list_map f l = List.rev @: List.rev_map f l
 let list_mapi f l = List.rev @: snd @: List.fold_left
   (fun (i,acc) x -> i+1, (f (i,x))::acc) (0,[]) l
 
+let list_forall2 f x y = try List.for_all2 f x y with Invalid_argument _ -> false
+
 (* a cross between a map and a fold. Can only map the current list, but also
  * gets another value to play with, and no need to project out the temporary
  * value *)

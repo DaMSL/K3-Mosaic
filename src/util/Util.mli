@@ -154,6 +154,9 @@ val list_map : ('a -> 'b) -> 'a list -> 'b list
 (* get an index with every item in a map *)
 val list_mapi : (int * 'a -> 'b) -> 'a list -> 'b list
 
+(* doesn't throw exceptions *)
+val list_forall2 : ('a -> 'b -> bool) -> 'a list -> 'b list -> bool
+
 (* a cross between a map and a fold. Can only map the current list, but also
  * gets another value to play with, and no need to project out the temporary
  * value *)

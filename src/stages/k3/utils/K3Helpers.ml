@@ -213,7 +213,8 @@ let mk_lambda argt expr = mk_stree (Lambda(argt)) [expr]
 (* deep matching on tuples *)
 let mk_lambda' argl expr = mk_lambda (wrap_args_deep argl) expr
 
-(* no deep matching *)
+(* no deep matching. this is needed by higher order functions that don't
+ * loop over a data structure directly, such as fold or groupby *)
 let mk_lambda'' argl expr = mk_lambda (wrap_args argl) expr
 
 let mk_apply lambda input = mk_stree Apply (lambda :: input)
@@ -542,7 +543,7 @@ let mk_convert_col src_t dest_t col =
   if src_t = dest_t then col else
   let t_c, t_elem = unwrap_tcol src_t in
   mk_agg
-    (mk_lambda'
+    (mk_lambda''
       ["acc_conv", dest_t; "x", t_elem] @@
       mk_block [
         mk_insert "acc_conv" [mk_var "x"];

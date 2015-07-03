@@ -147,12 +147,11 @@ let canonical_value_of_type vt =
 let rec assignable ?(unknown_ok=false) t_l t_r = match t_l.typ, t_r.typ with
   | TMaybe t_lm, TMaybe t_rm -> assignable t_lm t_rm
   | TTuple t_ls, TTuple t_rs ->
-      List.length t_ls = List.length t_rs && List.for_all2 assignable t_ls t_rs
+      list_forall2 assignable t_ls t_rs
   | TCollection(t_lc, t_le), TCollection(t_rc, t_re) ->
       t_lc = t_rc && assignable t_le t_re
   | TFunction(it, ot), TFunction(it', ot') ->
-      List.length it = List.length it' &&
-      List.for_all2 (fun t t' -> assignable t t' && t.mut = t'.mut) it it' &&
+      list_forall2 (fun t t' -> assignable t t' && t.mut = t'.mut) it it' &&
       assignable ot ot' && ot.mut = ot'.mut
   | TIndirect t, TIndirect t' -> assignable t t'
   | TDate, TInt               -> true
@@ -394,7 +393,7 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
               let t_es, t_r =
                 try unwrap_tfun t_f with Failure _ -> t_erroru (not_function t_f)
               in
-              if List.for_all2 (<~) t_es t_args then t_r
+              if list_forall2 (<~) t_es t_args then t_r
               else t_erroru (FunMismatch(t_f, t_args, ""))
 
           | _ -> t_erroru (TMsg("Bad arguments to apply"))
@@ -459,7 +458,7 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
           in
           if not (tzero === tret) then
             t_erroru (TMismatch(tzero, tret, "lambda return and agg")) else
-          if not (wrap_ttuple targ <~ wrap_ttuple expected1) then
+          if not (list_forall2 (<~) targ expected1) then
             t_erroru (TMismatch(wrap_ttuple targ, wrap_ttuple expected1, "lambda arg")) else
           tzero
 
@@ -472,10 +471,10 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
           let tcol, telem =
             try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') in
           if tcol = TVMap then t_erroru @@ TBad(tcol', "cannot run on vmap") else
-          if not (wrap_ttuple tgarg <~ telem) then
+          if not (hd tgarg <~ telem) then
             t_erroru (TMismatch(hd tgarg, telem, "grouping func:")) else
           let expected1 = [tzero; telem] in
-          if not (wrap_ttuple taarg <~ wrap_ttuple expected1) then
+          if not (list_forall2 (<~) taarg expected1) then
             t_erroru (TMismatch(wrap_ttuple taarg, wrap_ttuple expected1, "agg func:")) else
           if not (tzero <~ taret) then
             t_erroru (TMismatch(taret, tzero, "agg func:"))

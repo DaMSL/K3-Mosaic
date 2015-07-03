@@ -284,7 +284,7 @@ let calc_of_map_t c ~keep_vid map_id col =
   let map_flat =
     pat_of_ds ~drop_vid:(not keep_vid) ~flatten:true ~expr:(mk_var "vals") map_ds in
   mk_aggv
-    (mk_lambda'
+    (mk_lambda''
       (["acc", calc_ds.t; "vid", t_vid; "vals", wrap_ttuple @@ snd_many map_pat]) @@
       mk_block [
           mk_insert "acc" @@ fst_many map_flat;

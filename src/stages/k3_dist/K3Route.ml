@@ -273,11 +273,11 @@ let gen_route_fn p map_id =
     mk_let ["sorted_ip_list"]
       (mk_gbagg
         (mk_lambda' ["ip", t_addr] @@ mk_var "ip")
-        (mk_lambda' ["_", t_unit; "_", t_unit] mk_cunit)
+        (mk_lambda'' ["_", t_unit; "_", t_unit] mk_cunit)
         mk_cunit @@
         (* convert to bag *)
         mk_agg
-          (mk_lambda'
+          (mk_lambda''
              ["acc_ips", output_type; "free_bucket", free_bucket_type] @@
               mk_combine
                 (mk_var "acc_ips") @@
