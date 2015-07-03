@@ -149,7 +149,7 @@ let invoke_trigger s address env trigger_id arg =
   (* reset the access env *)
   (env.accessed) := StrSet.empty;
   let trig = IdMap.find trigger_id env.triggers in
-  begin try trig address env @@ unwrap_vtuple arg
+  begin try trig address env [arg]
     (* re-raise exception with trig name *)
   with RuntimeError(id, msg) -> raise @@
     RuntimeError(id, Printf.sprintf "In trigger %s: %s" trigger_id msg) end;

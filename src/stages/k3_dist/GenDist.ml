@@ -382,7 +382,7 @@ let sw_send_fetch_fn c s_rhs_lhs s_rhs trig_name =
     if null s_rhs then []
     else
     [mk_iter
-      (mk_lambda'
+      (mk_lambda''
         ["ip", t_addr; stmt_map_ids.id, stmt_map_ids.t] @@
         mk_send (rcv_fetch_name_of_t trig_name) (mk_var "ip") @@
           mk_var stmt_map_ids.id ::

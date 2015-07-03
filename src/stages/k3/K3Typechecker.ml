@@ -412,19 +412,22 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
           let _, _, targ, tret, _, telem = common_ops () in
           if not (tret === canonical TUnit)
             then t_erroru (TMismatch(tret, canonical TUnit, "return val:")) else
-          if wrap_ttuple targ <~ telem then canonical TUnit
-          else t_erroru (TMismatch(wrap_ttuple targ, telem, "element:"))
+          if not (hd targ <~ telem) then
+            t_erroru (TMismatch(hd targ, telem, "element:")) else
+          canonical TUnit
 
       | Map ->
           let _, tcol', targ, tret, tcol, telem = common_ops () in
-          if wrap_ttuple targ <~ telem then match tcol with
-            | TMap -> wrap_tbag tret
-            | _ -> canonical @@ TCollection(tcol, tret)
-          else t_erroru (TMismatch(hd targ, telem, "element:"))
+          if not (hd targ <~ telem) then
+            t_erroru (TMismatch(hd targ, telem, "element:")) else
+          begin match tcol with
+          | TMap -> wrap_tbag tret
+          | _    -> canonical @@ TCollection(tcol, tret)
+          end
 
       | Filter ->
           let _, tcol', targ, tret, tcol, telem = common_ops () in
-          if not (wrap_ttuple targ <~ telem) then
+          if not (hd targ <~ telem) then
             t_erroru (TMismatch(hd targ, telem, "predicate:")) else
           if not (canonical TBool === tret) then
             t_erroru (TMismatch(canonical TBool, tret, "")) else

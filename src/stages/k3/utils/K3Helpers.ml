@@ -210,7 +210,16 @@ let mk_gt left right = mk_not (mk_leq left right)
 
 let mk_lambda argt expr = mk_stree (Lambda(argt)) [expr]
 
-let mk_lambda' argl expr = mk_lambda (wrap_args argl) expr
+(* deep matching on tuples *)
+let mk_lambda' argl expr =
+  let arg =
+    if List.length argl = 1 then wrap_args argl
+    else ATuple[wrap_args argl]
+  in
+  mk_lambda arg expr
+
+(* no deep matching *)
+let mk_lambda'' argl expr = mk_lambda (wrap_args argl) expr
 
 let mk_apply lambda input = mk_stree Apply (lambda :: input)
 

@@ -129,6 +129,8 @@ val mk_gt : expr_t -> expr_t -> expr_t
 
 val mk_lambda : arg_t -> expr_t -> expr_t
 val mk_lambda' : (id_t * type_t) list -> expr_t -> expr_t
+(* deep matching on tuples *)
+val mk_lambda'' : (id_t * type_t) list -> expr_t -> expr_t
 val mk_lambda2 : arg_t -> arg_t -> expr_t -> expr_t
 val mk_lambda2' : (id_t * type_t) list -> (id_t * type_t) list -> expr_t -> expr_t
 val mk_lambda3 : arg_t -> arg_t -> arg_t -> expr_t -> expr_t

@@ -472,7 +472,7 @@ value_typed_identifier_list :
 ;
 
 arg :
-    | LPAREN arg_list RPAREN  { if List.length $2 = 1 then List.hd $2 else ATuple($2) }
+    | LPAREN arg_list RPAREN  { ATuple($2) }
     | UNKNOWN { AIgnored }
     | value_typed_identifier  { AVar(fst $1, snd $1) }
 ;

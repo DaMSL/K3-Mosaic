@@ -90,18 +90,23 @@ let env_remove i env =
 (* l: level *)
 let rec bind_args l uuid arg vs env =
   let error = int_erroru uuid "bind_args" in
-  match arg, vs with
-  | AIgnored, _                 -> env
-  | AVar(i, _), [v]             -> env_add i v env
-  | AMaybe a', [VOption(Some v')] -> bind_args (l+1) uuid a' [v'] env
-  | AMaybe _,  [VOption None]     -> error "missing VOption value"
-  | ATuple args, _ when l=0     -> list_fold2 (fun acc a v ->
+  try
+    begin match arg, vs with
+    | AIgnored, _                 -> env
+    | AVar(i, _), [v]             -> env_add i v env
+    | AMaybe a', [VOption(Some v')] -> bind_args (l+1) uuid a' [v'] env
+    | AMaybe _,  [VOption None]     -> error "missing VOption value"
+    | ATuple args, _ when l=0     -> list_fold2 (fun acc a v ->
                                     bind_args (l+1) uuid a [v] acc) env args vs
-  | ATuple args, [VTuple vs]    -> list_fold2 (fun acc a v ->
-                                    bind_args (l+1) uuid a [v] acc) env args vs
-  | ATuple _, _                 -> error "bad tuple value"
-  | AMaybe _, _                 -> error "bad maybe value"
-  | _                           -> error "bind args: bad values"
+    | ATuple args, [VTuple vs]    -> list_fold2 (fun acc a v ->
+                                      bind_args (l+1) uuid a [v] acc) env args vs
+    | ATuple _, _                 -> error "bad tuple value"
+    | AMaybe _, _                 -> error "bad maybe value"
+    | _                           -> error @@ sp "bind args: bad values.\n Args:%s\n Values:%s\n"
+                                       (KP.flat_string_of_arg arg) (strcatmap string_of_value vs)
+    end
+  with Invalid_argument _ -> error @@ sp "bind args: values length mismatch.\n Args:%s Values:%s\n"
+                               (KP.flat_string_of_arg arg) (strcatmap string_of_value vs)
 
 let rec unbind_args uuid arg env =
   match arg with
@@ -334,13 +339,13 @@ and eval_expr (address:address) sched_st cenv texpr =
 
     | Iterate, [f; c] ->
         let f' = eval_fn f address sched_st in
-        v_fold error (fun env x -> fst @@ f' env @@ unwrap_vtuple x) nenv c, temp VUnit
+        v_fold error (fun env x -> fst @@ f' env [x]) nenv c, temp VUnit
 
     | Map, [f; col] ->
         let f' = eval_fn f address sched_st in
         let zero = v_empty error ~no_map:true ~no_multimap:true col in
         let env, c' = v_fold error (fun (env, acc) x ->
-          let env', y = f' env @@ unwrap_vtuple x in
+          let env', y = f' env [x] in
           env', v_insert error (value_of_eval y) acc
         ) (nenv, zero) col
         in
@@ -350,7 +355,7 @@ and eval_expr (address:address) sched_st cenv texpr =
         let p' = eval_fn p address sched_st in
         let zero = v_empty error col in
         let env, c' = v_fold error (fun (env, acc) x ->
-          let env', filter = p' env @@ unwrap_vtuple x in
+          let env', filter = p' env [x] in
           match value_of_eval filter with
           | VBool true  -> env', v_insert error x acc
           | VBool false -> env', acc
@@ -535,12 +540,15 @@ let dispatch_foreign id = K3StdLib.lookup_value id
 (* Returns a trigger evaluator function to serve as a simulation
  * of the trigger *)
 let prepare_trigger sched_st id arg local_decls body =
+  let default (id,t,_) = id, ref @@ default_value id t in
+  let new_vals  = List.map default local_decls in
+  (* add a level of wrapping to the argument binder so that when we do the first layer
+   * which handles lists of arguments, it only takes one argument *)
+  let vfun = VFunction(ATuple[arg], IdMap.empty, body) in
+
   fun address env args ->
-    let default (id,t,_) = id, ref @@ default_value id t in
-    let new_vals  = List.map default local_decls in
     let local_env = {env with globals=add_from_list env.globals new_vals} in
-    let _, reval  = (eval_fun (-1) @@ VFunction(arg, IdMap.empty, body)) address
-                    (Some sched_st) local_env args in
+    let _, reval  = eval_fun (-1) vfun address (Some sched_st) local_env args in
     match value_of_eval reval with
       | VUnit -> ()
       | _ -> int_error "prepare_trigger" @@ "trigger "^id^" returns non-unit"

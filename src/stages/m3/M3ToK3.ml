@@ -338,7 +338,7 @@ let mk_update col bag_t ivars ivar_t ovars ovar_t new_val =
     | [], [] ->
         KH.mk_block [
           KH.mk_iter
-            (KH.mk_lambda (mk_arg "value" bag_t) @@
+            (KH.mk_lambda' ["value", KH.canonical bag_t] @@
               KH.mk_delete col [KH.mk_var "value"]) @@
             KH.mk_slice' col [KH.mk_cunknown];
           KH.mk_insert col (mk_val_tuple [] new_val_var)
@@ -346,7 +346,7 @@ let mk_update col bag_t ivars ivar_t ovars ovar_t new_val =
     | [], _  ->
         KH.mk_block [
           KH.mk_iter
-            (mk_lambda ovars ovar_t "value" bag_t @@
+            (KH.mk_lambda' ((list_zip ovars @@ List.map KH.canonical ovar_t) @ ["value", KH.canonical bag_t]) @@
               KH.mk_delete col (mk_var_tuple ovars "value")) @@
             mk_slice (KH.mk_var col) ovars ovars;
           KH.mk_insert col (mk_val_tuple ovars new_val_var)
@@ -354,7 +354,7 @@ let mk_update col bag_t ivars ivar_t ovars ovar_t new_val =
     | _, []  ->
         KH.mk_block [
           KH.mk_iter
-            (mk_lambda ivars ivar_t "value" bag_t @@
+            (KH.mk_lambda' ((list_zip ivars @@ List.map KH.canonical ivar_t) @ ["value", KH.canonical bag_t]) @@
               KH.mk_delete col (mk_var_tuple ivars "value")) @@
             mk_slice (KH.mk_var col) ivars ivars;
           KH.mk_insert col (mk_val_tuple ivars new_val_var)
