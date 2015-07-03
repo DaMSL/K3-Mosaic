@@ -93,8 +93,8 @@ let wrap_args id_typ =
 let wrap_args_deep id_arg =
   match id_arg with
   | []  -> invalid_arg "Nothing to wrap in wrap_args_deep"
-  | [x] -> x
-  | xs  -> ATuple xs
+  | [_] -> wrap_args id_arg
+  | _  -> ATuple[wrap_args id_arg]
 
 (* wrap function arguments, turning tmaybes to amaybes *)
 let wrap_args_maybe id_typ =
@@ -211,12 +211,7 @@ let mk_gt left right = mk_not (mk_leq left right)
 let mk_lambda argt expr = mk_stree (Lambda(argt)) [expr]
 
 (* deep matching on tuples *)
-let mk_lambda' argl expr =
-  let arg =
-    if List.length argl = 1 then wrap_args argl
-    else ATuple[wrap_args argl]
-  in
-  mk_lambda arg expr
+let mk_lambda' argl expr = mk_lambda (wrap_args_deep argl) expr
 
 (* no deep matching *)
 let mk_lambda'' argl expr = mk_lambda (wrap_args argl) expr
@@ -415,7 +410,7 @@ let mk_has_member collection pattern typ =
 let mk_code_sink name args locals code =
   mk_no_anno @@ Sink(Code(name, args, locals, code))
 
-let mk_code_sink' name args locals code = mk_code_sink name (wrap_args args) locals code
+let mk_code_sink' name args locals code = mk_code_sink name (wrap_args_deep args) locals code
 
 let mk_global_fn_raw name input_arg input_types output_types expr =
   mk_no_anno @@

@@ -100,8 +100,6 @@ let rec bind_args l uuid arg vs env =
                                     bind_args (l+1) uuid a [v] acc) env args vs
     | ATuple args, [VTuple vs]    -> list_fold2 (fun acc a v ->
                                       bind_args (l+1) uuid a [v] acc) env args vs
-    | ATuple _, _                 -> error "bad tuple value"
-    | AMaybe _, _                 -> error "bad maybe value"
     | _                           -> error @@ sp "bind args: bad values.\n Args:%s\n Values:%s\n"
                                        (KP.flat_string_of_arg arg) (strcatmap string_of_value vs)
     end
@@ -544,7 +542,7 @@ let prepare_trigger sched_st id arg local_decls body =
   let new_vals  = List.map default local_decls in
   (* add a level of wrapping to the argument binder so that when we do the first layer
    * which handles lists of arguments, it only takes one argument *)
-  let vfun = VFunction(ATuple[arg], IdMap.empty, body) in
+  let vfun = VFunction(arg, IdMap.empty, body) in
 
   fun address env args ->
     let local_env = {env with globals=add_from_list env.globals new_vals} in

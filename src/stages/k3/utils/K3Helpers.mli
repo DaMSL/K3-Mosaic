@@ -66,7 +66,7 @@ val wrap_tfunc : type_t list -> type_t -> type_t
 val wrap_args : (id_t * type_t) list -> arg_t
 
 (* wrap multiple layers of arguments *)
-val wrap_args_deep : arg_t list -> arg_t
+val wrap_args_deep : (id_t * type_t) list -> arg_t
 
 (* wrap arguments, turning maybe types to maybe argument types *)
 val wrap_args_maybe : (id_t * type_t) list -> arg_t

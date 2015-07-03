@@ -606,7 +606,7 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
 
 let check_trigger_type trig_env env id args locals body rebuild_f =
   let name           = "Trigger("^id^")" in
-  let self_bindings  = id, canonical @@ TTarget(wrap_ttuple @@ type_of_arg args) in
+  let self_bindings  = id, canonical @@ TTarget(hd @@ type_of_arg args) in
   let arg_bindings   = gen_arg_bindings args in
   let local_bindings = List.map (fun x -> fst3 x, snd3 x) locals in
   let inner_env = self_bindings :: arg_bindings @ local_bindings @ env in
