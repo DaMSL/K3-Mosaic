@@ -403,7 +403,7 @@ and eval_expr (address:address) sched_st cenv texpr =
         let r_env = ref nenv in
         let h = Hashtbl.create 100 in
         v_iter error (fun x ->
-            let env, key = second value_of_eval @@ g' !r_env @@ unwrap_vtuple x in
+          let env, key = second value_of_eval @@ g' !r_env [x] in
             (* common to both cases below *)
             let apply_and_update acc =
               let env', acc' = f' env [acc; x] in
@@ -473,14 +473,14 @@ and eval_expr (address:address) sched_st cenv texpr =
 
     (* we can't modify the environment within the lambda *)
     | UpsertWith, [_; key; lam_none; lam_some] ->
-        let f lam x = value_of_eval @@ snd @@ eval_fn lam address sched_st nenv (unwrap_vtuple x) in
+        let f lam x = value_of_eval @@ snd @@ eval_fn lam address sched_st nenv [x] in
         let renv = env_modify (get_id ()) nenv @@
           fun col -> v_upsert_with error key (f lam_none) (f lam_some) col in
         renv, temp VUnit
 
     (* we can't modify the environment within the lambda *)
     | UpdateSuffix, [_; key; lam_update] ->
-        let f x = value_of_eval @@ snd @@ eval_fn lam_update address sched_st nenv (unwrap_vtuple x) in
+        let f x = value_of_eval @@ snd @@ eval_fn lam_update address sched_st nenv [x] in
         (env_modify (get_id ()) nenv @@
           fun col -> v_update_suffix error key f col), VTemp VUnit
 
