@@ -43,6 +43,8 @@ val fold_tree_lazy :
   ('td Lazy.t -> ('bu Lazy.t) list -> 'a tree_t -> 'bu) ->
   'td -> 'bu -> 'a tree_t -> 'bu
 
+val iter_tree : ('a tree_t -> unit) -> 'a tree_t -> unit
+
 (* modify a tree using a single modification function *)
 val modify_tree_bu :
   'a tree_t -> ('a tree_t -> 'a tree_t) -> 'a tree_t

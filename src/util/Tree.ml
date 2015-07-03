@@ -70,6 +70,8 @@ let fold_tree_th td_f bu_f td_init bu_init t =
 let fold_tree_th_bu bu_f bu_init t =
   snd @@ fold_tree_th (fun _ _ -> ()) (fun _ bu t -> (), bu_f bu t) () bu_init t
 
+let iter_tree f t = fold_tree_th_bu (fun () t -> f t) () t
+
 (* Lazy tree folding *)
 let fold_tree_lazy td_f bu_f td_init bu_init t =
   let rec ft_aux td t =
