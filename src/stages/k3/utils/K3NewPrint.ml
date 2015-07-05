@@ -871,7 +871,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
       ~arg_info:[[0], false; [1], false; [], false]
 
   | Sort -> let lambda, col = U.decompose_sort expr in
-    apply_method c ~name:"sort" ~col ~args:[lambda] ~arg_info:[[0; 0], false]
+    apply_method c ~name:"sort" ~col ~args:[lambda] ~arg_info:[[0; 1], false]
       ~prefix_fn:(fun e -> light_type c @@ KH.mk_if e (KH.mk_cint (-1)) @@ KH.mk_cint 1)
 
   | Size -> let col = U.decompose_size expr in
