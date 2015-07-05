@@ -11,7 +11,7 @@ type 'a tree_t
 let mk_tree (data, children) =
     match children with
     | [] -> Leaf(data)
-    | _ -> Node(data, children)
+    | _  -> Node(data, children)
 
 let decompose_tree t =
     match t with

@@ -8,8 +8,6 @@ module U = K3Util
 (* Annotation manipulation *)
 let mk_no_anno a = (a, [])
 
-let mk_anno_sort (a,annos) xs = (a, annos@[Data(Constraint, Ordered xs)])
-
 (* Type manipulation functions ------------- *)
 
 (* the default type *)
@@ -707,3 +705,4 @@ let mk_barrier ?(args=unit_arg) ?(pre=[]) nm ~ctr ~total ~after =
         after
         mk_cunit
     ]
+

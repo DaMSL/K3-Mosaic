@@ -127,7 +127,7 @@ let do_gc_fns c =
           let do_bind = mk_bind (mk_var ds.id) map_deref in
           (* get frontier *)
           do_bind @@
-            mk_assign map_deref @@
+            mk_assign map_deref @@ U.add_property "Move" @@
           mk_let ["frontier"]
             (mk_slice_frontier (mk_var map_deref) @@ vid_and_unknowns' pat) @@
             (* delete all prefixes in ds. min_vid comes from pattern *)
@@ -146,7 +146,7 @@ let do_gc_fns c =
         let temp = "temp" in
         (* delete any entry with a lower or matching vid *)
         mk_let [temp] (mk_empty t') @@
-        mk_assign ds.id @@
+        mk_assign ds.id @@ U.add_property "Move" @@
         mk_agg
           (mk_lambda2' ["acc", ds.t] (ds_e ds) @@
             mk_if (mk_geq (mk_var vid) @@ mk_var min_vid)
