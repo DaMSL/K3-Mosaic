@@ -23,7 +23,7 @@ let node_ring = create_ds "node_ring" (mut t_ring)
 let ring_init =
   let address = hd @@ fst_many @@ D.nodes.e in
   mk_iter (mk_lambda' D.nodes.e @@
-      mk_apply (mk_var add_node_nm) @@ mk_var address) @@
+      mk_apply (mk_var add_node_nm) [mk_var address]) @@
     mk_var "nodes"
 
 let replicas = create_ds "replicas" (mut t_int) ~init:(mk_cint 8)
@@ -39,10 +39,10 @@ let add_node_fn =
         mk_tuple @@
           ids_to_vars id_node_no_hash @
             (* hash the address, then add a number and hash again *)
-            [mk_apply (mk_var "abs") @@ mk_apply (mk_var "hash_int") @@
+            [mk_apply' "abs" @@ singleton @@ mk_apply' "hash_int" @@ singleton @@
               mk_add
                 (mk_mult (mk_var "i") @@ mk_cint 2683) @@
-                mk_apply (mk_var "hash_addr") @@ mk_var "addr"]) @@
+                mk_apply' "hash_addr" [mk_var "addr"]]) @@
       mk_var "rng") @@
   mk_block [
     (* insert the new elements *)
@@ -68,13 +68,13 @@ let get_ring_node_fn =
   mk_global_fn get_ring_node_nm
   ["data", t_int; "max_val", t_int] [t_addr] @@
     mk_let ["scaled"]
-      (mk_apply (mk_var "int_of_float") @@
+      (mk_apply' "int_of_float" @@ singleton @@
         mk_mult
-          (mk_apply (mk_var "float_of_int") @@
-            mk_apply (mk_var "get_max_int") mk_cunit) @@
-          mk_apply (mk_var "divf") @@ mk_tuple
-            [mk_apply (mk_var "float_of_int") @@ mk_var "data";
-            mk_apply (mk_var "float_of_int") @@ mk_var "max_val"]) @@
+          (mk_apply' "float_of_int" @@ singleton @@
+            mk_apply' "get_max_int" [mk_cunit]) @@
+          mk_apply' "divf"
+            [mk_apply' "float_of_int" [mk_var "data"];
+            mk_apply' "float_of_int" [mk_var "max_val"]]) @@
     mk_let [results]
       (mk_filter (* filter to only hashes greater than data *)
         (mk_lambda' id_t_node @@

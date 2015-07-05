@@ -281,7 +281,7 @@ let apply_external_lambda fn in_x_ts out_t =
              fn (KS.string_of_type @@ KH.wrap_ttuple @@ fst_many @@ in_x_ts)
                 (KS.string_of_type out_t)
   in
-  KH.mk_apply (KH.mk_var fname) (KH.mk_tuple @@ snd_many in_x_ts)
+  KH.mk_apply (KH.mk_var fname) (snd_many in_x_ts)
 
 let mk_project ?(id="projected_field") width idx ret_t expr =
   let rec build_tuple w =
@@ -338,7 +338,7 @@ let mk_update col bag_t ivars ivar_t ovars ovar_t new_val =
     | [], [] ->
         KH.mk_block [
           KH.mk_iter
-            (KH.mk_lambda (mk_arg "value" bag_t) @@
+            (KH.mk_lambda' ["value", KH.canonical bag_t] @@
               KH.mk_delete col [KH.mk_var "value"]) @@
             KH.mk_slice' col [KH.mk_cunknown];
           KH.mk_insert col (mk_val_tuple [] new_val_var)
@@ -346,7 +346,7 @@ let mk_update col bag_t ivars ivar_t ovars ovar_t new_val =
     | [], _  ->
         KH.mk_block [
           KH.mk_iter
-            (mk_lambda ovars ovar_t "value" bag_t @@
+            (KH.mk_lambda' ((list_zip ovars @@ List.map KH.canonical ovar_t) @ ["value", KH.canonical bag_t]) @@
               KH.mk_delete col (mk_var_tuple ovars "value")) @@
             mk_slice (KH.mk_var col) ovars ovars;
           KH.mk_insert col (mk_val_tuple ovars new_val_var)
@@ -354,7 +354,7 @@ let mk_update col bag_t ivars ivar_t ovars ovar_t new_val =
     | _, []  ->
         KH.mk_block [
           KH.mk_iter
-            (mk_lambda ivars ivar_t "value" bag_t @@
+            (KH.mk_lambda' ((list_zip ivars @@ List.map KH.canonical ivar_t) @ ["value", KH.canonical bag_t]) @@
               KH.mk_delete col (mk_var_tuple ivars "value")) @@
             mk_slice (KH.mk_var col) ivars ivars;
           KH.mk_insert col (mk_val_tuple ivars new_val_var)
@@ -837,9 +837,9 @@ let rec calc_to_k3_expr meta ?(generate_init = false) theta_vars_k calc :
                   gb_aggsum_e
               in
               let flatten_fn =
-                KH.mk_lambda (K.ATuple [
+                KH.mk_lambda (K.ATuple [K.ATuple [
                   KH.wrap_args agg_vars_el;
-                  KH.wrap_args [KU.id_of_var @@ fst ret_ve, snd ret_ve]])
+                  KH.wrap_args [KU.id_of_var @@ fst ret_ve, snd ret_ve]]])
                 (KH.mk_tuple @@
                   List.map (KH.mk_var |- fst) agg_vars_el @ [fst ret_ve])
               in
@@ -1323,7 +1323,7 @@ let csv_adaptor_to_k3 (name_prefix: string)
   in
   let child_params =
     List.map (fun (vn, vt) -> match vt with
-      | T.TDate -> KH.mk_apply (KH.mk_var "parse_sql_date") @@ KH.mk_var vn
+      | T.TDate -> KH.mk_apply (KH.mk_var "parse_sql_date") [KH.mk_var vn]
       | _       -> KH.mk_var vn
     ) relv
   in
@@ -1345,7 +1345,7 @@ let csv_adaptor_to_k3 (name_prefix: string)
         [],
         k3_code
       ))),
-      KH.type_of_arg @@ KH.wrap_args args
+      KH.wrap_ttuple @@ KH.type_of_arg @@ KH.wrap_args args
     )
 ;;
 
@@ -1420,7 +1420,6 @@ let m3_to_k3 ?(generate_init = false) ?(role = "client")
         M3.queries = m3_prog_tlqs; M3.db = m3_database
       } = m3_program in
   (* declaration for parsing sql date *)
-  let sql_func = KH.(mk_foreign_fn "parse_sql_date" t_string t_int) in
   let k3_prog_schema = List.map m3_map_to_k3_map !m3_prog_schema in
   let k3_prog_env = List.map (function
       | K.Global(id, ty, _) -> id, ty
@@ -1464,7 +1463,7 @@ let m3_to_k3 ?(generate_init = false) ?(role = "client")
                   mk_map
                     (mk_lambda' id_ts @@
                       mk_tuple @@ vars@[mk_cint 1])
-                  (mk_apply (mk_var K3StdLib.csv_loader_name) @@ mk_cstring f))
+                  (mk_apply (mk_var K3StdLib.csv_loader_name) [mk_cstring f]))
 
             | _ -> failwith "Table relations that aren't filesources are unsupported"
             end
@@ -1488,7 +1487,6 @@ let m3_to_k3 ?(generate_init = false) ?(role = "client")
   let k3_prog_client_role =
     add_empty @@ k3_prog_sources @ k3_prog_bindings @ k3_prog_consumes
   in
-  sql_func::
   (add_empty @@
     k3_prog_schema @
     [ K.Flow(k3_prog_trigs @ k3_prog_demux) ] @

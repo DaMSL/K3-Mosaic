@@ -51,10 +51,9 @@ let map_latest_val_code mt p map_id =
         mk_var project
     else
       mk_flatten @@ mk_map
-        (mk_lambda2'
-          ["_", t_unit]
-          ["_", t_unit; project, set_type] @@
-          mk_var project) @@
+        (mk_lambda'
+          ["x", wrap_ttuple [wrap_ttuple (snd_many map_ids_types_no_val) ; wrap_ttuple [t_vid; set_type]]] @@
+          mk_subscript 2 @@ mk_subscript 2 @@ mk_var "x") @@
         mk_gbagg
           (* group by the keys excluding the vid *)
           (mk_lambda' map_ids_types_vid @@

@@ -20,7 +20,7 @@ let sw_next_switch_addr =
     mk_let ["addr_list"]
       (* get a total ordering: sort ascending by address *)
       (mk_sort
-        (mk_lambda' ["addr1", t_addr; "addr2", t_addr] @@
+        (mk_lambda'' ["addr1", t_addr; "addr2", t_addr] @@
           mk_lt (mk_var "addr1") @@ mk_var "addr2") @@
         (* convert to list *)
         mk_convert_col' D.switches.t TList @@ mk_var D.switches.id) @@

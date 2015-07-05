@@ -14,9 +14,9 @@ exception InvalidAst of string
 let loader_tables ast =
   let bu_fn acc e =
     try
-      let fn, arg = U.decompose_apply e in
+      let fn, args = U.decompose_apply e in
       if U.decompose_var fn = K3StdLib.csv_loader_name then
-        match U.decompose_const arg with
+        match U.decompose_const (hd args) with
         | CString f -> (Filename.chop_extension @@ Filename.basename f, f)::acc
         | _ -> failwith "bad filename"
       else acc
@@ -72,15 +72,16 @@ let get_global_map_inits c = function
       let change_load_csv e =
         Tree.modify_tree_bu e (fun e ->
           try
-            let fn, arg = U.decompose_apply e in
+            let fn, args = U.decompose_apply e in
             if U.decompose_var fn = K3StdLib.csv_loader_name then
-              match U.decompose_const arg with
+              match U.decompose_const (hd args) with
               | CString f ->
                   let table = Filename.chop_extension @@ Filename.basename f in
-                  mk_apply (mk_var @@ K3StdLib.csv_loader_name^"2") @@
-                    mk_tuple [mk_var @@ table^"_path"; 
-                              (* witness type so the function knows what to return *)
-                              mk_empty (M3ToK3.wrap_map' @@ ProgInfo.map_types_no_val_for c.p map_id)]
+                  mk_apply (mk_var @@ K3StdLib.csv_loader_name^"2")
+                    [mk_var @@ table^"_path";
+                      (* witness type so the function knows what to return *)
+                      mk_empty (M3ToK3.wrap_map' @@
+                        ProgInfo.map_types_no_val_for c.p map_id)]
               | _ -> failwith "bad filename"
             else e
           with Failure _ -> e)
@@ -274,18 +275,19 @@ let modify_dist (c:config) ast stmt =
 
     (* handle a case of a lambda applied to an lmap (i.e. a let statement *)
     (* in this case, we modify the types of the lambda vars themselves *)
-    | Apply  -> let (lambda, arg) = U.decompose_apply e in
-      begin match U.tag_of_expr arg with
-        | Var id when id = lmap_name ->
-          begin match (U.typed_vars_of_lambda lambda, snd @@ U.decompose_lambda lambda) with
-            | ([arg_id, t],b) -> NopMsg,
-              mk_apply
-                (mk_lambda
-                  (wrap_args [arg_id, wrap_t_of_map' c.map_type lmap_types]) b)
-                arg
-            | _ -> raise (UnhandledModification("At Apply: "^PR.string_of_expr e)) end
-        | _ -> NopMsg, e
-      end
+    | Apply  ->
+        let lambda, args = U.decompose_apply e in
+        begin match U.tag_of_expr (hd args) with
+          | Var id when id = lmap_name ->
+            begin match (U.typed_vars_of_lambda lambda, snd @@ U.decompose_lambda lambda) with
+              | ([arg_id, t],b) -> NopMsg,
+                mk_apply
+                  (mk_lambda
+                    (wrap_args [arg_id, wrap_t_of_map' c.map_type lmap_types]) b)
+                  args
+              | _ -> raise (UnhandledModification("At Apply: "^PR.string_of_expr e)) end
+          | _ -> NopMsg, e
+        end
 
     (* if any statements in a block requested deletion, delete
      * those statements - they're not relevant *)

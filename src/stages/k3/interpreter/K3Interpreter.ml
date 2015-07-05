@@ -86,18 +86,25 @@ let env_remove i env =
   with Not_found -> env
 
 
-(* Given an arg_t and a value_t, bind the values to their corresponding argument names. *)
-let rec bind_args uuid arg v env =
+(* Given an arg_t and a value_t list, bind the values to their corresponding argument names. *)
+(* l: level *)
+let rec bind_args l uuid arg vs env =
   let error = int_erroru uuid "bind_args" in
-  match arg, v with
-  | AIgnored, _                 -> env
-  | AVar(i, _), _               -> env_add i v env
-  | AMaybe a', VOption(Some v') -> bind_args uuid a' v' env
-  | AMaybe _,  VOption None     -> error "missing VOption value"
-  | AMaybe _, _                 -> error "improper maybe value"
-  | ATuple args, VTuple vs      -> list_fold2 (fun acc a v ->
-                                     bind_args uuid a v acc) env args vs
-  | ATuple _, _                 -> error "bad tuple value"
+  try
+    begin match arg, vs with
+    | AIgnored, _                 -> env
+    | AVar(i, _), [v]             -> env_add i v env
+    | AMaybe a', [VOption(Some v')] -> bind_args (l+1) uuid a' [v'] env
+    | AMaybe _,  [VOption None]     -> error "missing VOption value"
+    | ATuple args, _ when l=0     -> list_fold2 (fun acc a v ->
+                                    bind_args (l+1) uuid a [v] acc) env args vs
+    | ATuple args, [VTuple vs]    -> list_fold2 (fun acc a v ->
+                                      bind_args (l+1) uuid a [v] acc) env args vs
+    | _                           -> error @@ sp "bind args: bad values.\n Args:%s\n Values:%s\n"
+                                       (KP.flat_string_of_arg arg) (strcatmap string_of_value vs)
+    end
+  with Invalid_argument _ -> error @@ sp "bind args: values length mismatch.\n Args:%s Values:%s\n"
+                               (KP.flat_string_of_arg arg) (strcatmap string_of_value vs)
 
 let rec unbind_args uuid arg env =
   match arg with
@@ -111,22 +118,22 @@ let rec eval_fun uuid f =
   let error = int_erroru uuid "eval_fun" in
   match f with
     | VFunction(arg, closure, body) ->
-        fun addr sched env a ->
-          let new_env = {env with locals=bind_args uuid arg a closure} in
+        fun addr sched env al ->
+          let new_env = {env with locals=bind_args 0 uuid arg al closure} in
           let env', result = eval_expr addr sched new_env body in
           {env' with locals=env.locals}, result
 
     | VForeignFunction(id, arg, f) ->
-        fun addr sched env a ->
-          begin match id, sched, a with
+        fun addr sched env al ->
+          begin match id, sched, al with
           (* override the default function for sleep *)
-          | "sleep", Some s, VInt t -> R.sleep s addr (foi t /. 1000.) ;
+          | "sleep", Some s, [VInt t] -> R.sleep s addr (foi t /. 1000.) ;
                                        env, VTemp VUnit
           | "haltEngine", Some s, _ ->
               Log.log (lazy ("shutting down "^string_of_address addr)) ();
               R.halt s addr; env, VTemp VUnit
           | _ ->
-            let new_env = {env with locals=bind_args uuid arg a env.locals} in
+            let new_env = {env with locals=bind_args 0 uuid arg al env.locals} in
             begin try
               let env', result = f new_env in
               {env' with locals=unbind_args uuid arg env'.locals}, result
@@ -322,21 +329,21 @@ and eval_expr (address:address) sched_st cenv texpr =
     | Neq, [l;r] -> nenv, eval_eq_op l r ~neq:true
     | Leq, [l;r] -> nenv, eval_cmpop l r (<=)
 
-    | Apply, [f; a] ->
-        let renv, reval = (eval_fn f) address sched_st nenv a
+    | Apply, (f::args) ->
+        let renv, reval = (eval_fn f) address sched_st nenv args
         in renv, temp @@ value_of_eval reval
 
     | Block, vals -> nenv, temp @@ list_last vals
 
     | Iterate, [f; c] ->
         let f' = eval_fn f address sched_st in
-        v_fold error (fun env x -> fst @@ f' env x) nenv c, temp VUnit
+        v_fold error (fun env x -> fst @@ f' env [x]) nenv c, temp VUnit
 
     | Map, [f; col] ->
         let f' = eval_fn f address sched_st in
         let zero = v_empty error ~no_map:true ~no_multimap:true col in
         let env, c' = v_fold error (fun (env, acc) x ->
-          let env', y = f' env x in
+          let env', y = f' env [x] in
           env', v_insert error (value_of_eval y) acc
         ) (nenv, zero) col
         in
@@ -346,7 +353,7 @@ and eval_expr (address:address) sched_st cenv texpr =
         let p' = eval_fn p address sched_st in
         let zero = v_empty error col in
         let env, c' = v_fold error (fun (env, acc) x ->
-          let env', filter = p' env x in
+          let env', filter = p' env [x] in
           match value_of_eval filter with
           | VBool true  -> env', v_insert error x acc
           | VBool false -> env', acc
@@ -369,7 +376,7 @@ and eval_expr (address:address) sched_st cenv texpr =
     | Aggregate, [f; zero; col] ->
         let f' = eval_fn f address sched_st in
         let renv, rval = v_fold error (fun (env, acc) x ->
-            let renv, reval = f' env (VTuple [acc; x]) in
+            let renv, reval = f' env [acc; x] in
             renv, value_of_eval reval
           )
           (nenv, zero)
@@ -379,7 +386,7 @@ and eval_expr (address:address) sched_st cenv texpr =
     | AggregateV, [f; zero; col] ->
         let f' = eval_fn f address sched_st in
         let renv, rval = v_foldv error (fun (env, acc) vid x ->
-            let renv, reval = f' env (VTuple [acc; vid; x]) in
+            let renv, reval = f' env [acc; vid; x] in
             renv, value_of_eval reval
           )
           (nenv, zero)
@@ -396,10 +403,10 @@ and eval_expr (address:address) sched_st cenv texpr =
         let r_env = ref nenv in
         let h = Hashtbl.create 100 in
         v_iter error (fun x ->
-            let env, key = second value_of_eval @@ g' !r_env x in
+          let env, key = second value_of_eval @@ g' !r_env [x] in
             (* common to both cases below *)
             let apply_and_update acc =
-              let env', acc' = f' env @@ VTuple[acc; x] in
+              let env', acc' = f' env [acc; x] in
               Hashtbl.replace h key @@ value_of_eval acc';
               r_env := env'
             in
@@ -419,7 +426,7 @@ and eval_expr (address:address) sched_st cenv texpr =
         let f' = eval_fn f address sched_st in
         let sort_fn v1 v2 =
           (* Comparator application propagates an environment *)
-          let nenv, r = f' !env (VTuple([v1; v2])) in
+          let nenv, r = f' !env [v1; v2] in
           env := nenv;
           match value_of_eval r with
           | VBool true  -> -1
@@ -466,15 +473,14 @@ and eval_expr (address:address) sched_st cenv texpr =
 
     (* we can't modify the environment within the lambda *)
     | UpsertWith, [_; key; lam_none; lam_some] ->
-        let f  = value_of_eval |- snd |- eval_fn lam_none address sched_st nenv in
-        let f' = value_of_eval |- snd |- eval_fn lam_some address sched_st nenv in
+        let f lam x = value_of_eval @@ snd @@ eval_fn lam address sched_st nenv [x] in
         let renv = env_modify (get_id ()) nenv @@
-          fun col -> v_upsert_with error key f f' col in
+          fun col -> v_upsert_with error key (f lam_none) (f lam_some) col in
         renv, temp VUnit
 
     (* we can't modify the environment within the lambda *)
     | UpdateSuffix, [_; key; lam_update] ->
-        let f = value_of_eval |- snd |- eval_fn lam_update address sched_st nenv in
+        let f x = value_of_eval @@ snd @@ eval_fn lam_update address sched_st nenv (unwrap_vtuple x) in
         (env_modify (get_id ()) nenv @@
           fun col -> v_update_suffix error key f col), VTemp VUnit
 
@@ -532,12 +538,15 @@ let dispatch_foreign id = K3StdLib.lookup_value id
 (* Returns a trigger evaluator function to serve as a simulation
  * of the trigger *)
 let prepare_trigger sched_st id arg local_decls body =
+  let default (id,t,_) = id, ref @@ default_value id t in
+  let new_vals  = List.map default local_decls in
+  (* add a level of wrapping to the argument binder so that when we do the first layer
+   * which handles lists of arguments, it only takes one argument *)
+  let vfun = VFunction(arg, IdMap.empty, body) in
+
   fun address env args ->
-    let default (id,t,_) = id, ref @@ default_value id t in
-    let new_vals  = List.map default local_decls in
     let local_env = {env with globals=add_from_list env.globals new_vals} in
-    let _, reval  = (eval_fun (-1) @@ VFunction(arg, IdMap.empty, body)) address
-                    (Some sched_st) local_env args in
+    let _, reval  = eval_fun (-1) vfun address (Some sched_st) local_env args in
     match value_of_eval reval with
       | VUnit -> ()
       | _ -> int_error "prepare_trigger" @@ "trigger "^id^" returns non-unit"

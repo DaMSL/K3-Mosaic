@@ -51,6 +51,14 @@ let wrap_hv i f = lbox (lhv i) f
 let wrap_hov i f = lbox (lhov i) f
 let wrap_indent f = wrap_hov 2 f
 
+let lazy_concat ?(sep=lsp) f l =
+  let len = List.length l - 1 in
+  let l2 = list_populate (fun _ -> sep ()) 0 len in
+  List.flatten @@ list_intersperse (List.map f l) l2
+
+(* separator for lazy_concat *)
+let lcomma () = lps "," <| lsp ()
+
 let error s = lps @@ "???: "^s
 
 let lazy_control_anno c = function
@@ -102,7 +110,7 @@ let rec lazy_base_type c ~in_col ?(no_paren=false) ?(paren_complex=false) t =
   | TDate      -> lps "date"
   | TFloat     -> lps "float"
   | TString    -> lps "string"
-  | TMaybe vt  -> lps "maybe " <| wrap_complex (lazy_type c ~in_col ~paren_complex:true vt)
+  | TMaybe vt  -> wrap_complex (lps "maybe " <| lazy_type c ~in_col ~paren_complex:true vt)
   | TTuple vts ->
       (* if we're top level of a collection, drop the parentheses *)
       (* for verbose types, we leave them in. We also leave them for mutables *)
@@ -114,9 +122,11 @@ let rec lazy_base_type c ~in_col ?(no_paren=false) ?(paren_complex=false) t =
   | TTarget t           -> lps "target" <| lazy_type c ~in_col t
   | TUnknown            -> lps "unknown"
   | TTop                -> lps "top"
-  | TIndirect vt        -> lps "ind " <| wrap_complex (lazy_type c ~in_col ~paren_complex:true vt)
-  | TFunction(it, ot)   ->
-      wrap_complex (lazy_type c ~in_col:false it <| lps " -> " <| lazy_type c ~in_col:false ot)
+  | TIndirect vt        -> wrap_complex (lps "ind " <| lazy_type c ~in_col ~paren_complex:true vt)
+  | TFunction(its, ot)   ->
+      wrap_complex @@
+        lazy_concat ~sep:(fun () -> lsp () <| lps "->" <| lsp ())
+        (lazy_type c ~in_col:false ~paren_complex:true) (its@[ot])
 
 (* TODO: annotations *)
 (* paren_complex: surround by paren if we're a complex type for clarity *)
@@ -305,12 +315,10 @@ let rec lazy_expr c expr =
       wrap_indent (lazy_paren (lps "\\" <| lazy_arg c false arg <|
       lps " ->" <| lind () <|
         wrap_hov 0 (lazy_expr c e)))
-  | Apply -> let e1, e2 = U.decompose_apply expr in
-    let modify_arg = match U.tag_of_expr e2 with
-      | Tuple -> id_fn
-      | _     -> lazy_paren
-    in
-    wrap_indent (lazy_expr c e1 <| lcut () <| modify_arg @@ lazy_expr c e2)
+  | Apply -> let fn, args = U.decompose_apply expr in
+    wrap_indent
+      (lazy_expr c fn <| lcut () <| lazy_paren
+        (lps_list CutHint (lazy_expr c) args))
   | Block -> let es = U.decompose_block expr in
     lps "do {" <| lind () <|
     wrap_hv 0 (lps_list ~sep:";" CutHint (fun e -> wrap_hov 0 (lazy_expr c e)) es <| lsp ())

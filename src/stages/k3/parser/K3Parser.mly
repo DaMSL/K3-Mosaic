@@ -177,6 +177,8 @@
 
 %left COLON
 
+%nonassoc UMINUS
+
 %%
 
 program :
@@ -340,22 +342,28 @@ positions : integer_list { $1 };
 /* Types */
 
 type_expr :
+    | type_expr RARROW fn_type_expr_list %prec UMINUS { let is, o = list_split (-1) ($1::$3) in
+                                           match (hd o).typ with
+                                           | TFunction(is', o') -> wrap_tfunc (is@is') o'
+                                           | _ -> wrap_tfunc is (hd o)
+                                         }
     | LPAREN type_expr RPAREN { $2 }
-    | MUT base_type_expr      { mut $2 }
-    | base_type_expr          { $1 }
-;
-
-base_type_expr :
+    | MUT type_expr      { mut $2 }
     | LPAREN type_expr_tuple RPAREN { $2 }
     | MAYBE type_expr               { wrap_tmaybe $2 }
     | INDIRECT type_expr            { wrap_tind $2 }
-    | type_expr RARROW type_expr    { wrap_tfunc $1 $3 }
     | TYPE                          { canonical $1 }
     | annotated_collection_type     { let c, anno = $1 in { (canonical c) with anno} }
 ;
 
+fn_type_expr_list :
+    | type_expr RARROW fn_type_expr_list  { $1 :: $3 }
+    | type_expr                           { [$1] }
+;
+
 type_expr_tuple :
     | type_expr_list { wrap_ttuple $1 }
+;
 
 type_expr_list :
     | type_expr                       { [$1] }
@@ -416,7 +424,7 @@ expr :
       }
 
     /* Function application and let notation */
-    | expr LPAREN tuple RPAREN                      { mk_apply $1 $3 }
+    | expr LPAREN expr_list RPAREN                      { mk_apply $1 $3 }
 
     /* TODO: more error handling */
     | SEND LPAREN IDENTIFIER COMMA address COMMA error { print_error "Invalid send argument" }
@@ -464,7 +472,7 @@ value_typed_identifier_list :
 ;
 
 arg :
-    | LPAREN arg_list RPAREN  { if List.length $2 = 1 then List.hd $2 else ATuple($2) }
+    | LPAREN arg_list RPAREN  { ATuple($2) }
     | UNKNOWN { AIgnored }
     | value_typed_identifier  { AVar(fst $1, snd $1) }
 ;
