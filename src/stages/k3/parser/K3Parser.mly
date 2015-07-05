@@ -362,8 +362,8 @@ collection_type :
 ;
 
 anno_expr :
-    | expr                                        { $1 }
     | expr ANNOTATE LBRACE annotations RBRACE     { K3Util.add_annos $4 $1 }
+    | expr                                        { $1 }
 ;
 
 /* Expressions */

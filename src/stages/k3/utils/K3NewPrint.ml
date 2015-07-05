@@ -986,7 +986,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
   let props = U.properties_of_expr expr in
   let analyze () =
     if props <> [] then
-      lazy_paren (analyze ()) <| lps "@: " <| lps_list NoCut lps props
+      lazy_paren (analyze ()) <| lps " @: " <| lps_list NoCut lps props
     else analyze ()
   in
   (* check if we need to wrap our output in a tuple (record) *)
