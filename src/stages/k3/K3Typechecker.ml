@@ -485,7 +485,7 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
           let tfun, tcol', targ, tret, tcol, telem = common_ops () in
 
           let expected1 = [telem; telem] in
-          if not (wrap_ttuple targ <~ wrap_ttuple expected1) then
+          if not (list_forall2 (<~) targ expected1) then
             t_erroru (TMismatch(wrap_ttuple targ, wrap_ttuple expected1, "Sort function arg")) else
           if not (canonical TBool === tret) then
             t_erroru (TMismatch(canonical TBool, tret, "Sort function result")) else
