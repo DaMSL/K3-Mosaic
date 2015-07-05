@@ -284,7 +284,7 @@ let calc_of_map_t c ~keep_vid map_id col =
   let map_flat =
     pat_of_ds ~drop_vid:(not keep_vid) ~flatten:true ~expr:(mk_var "vals") map_ds in
   mk_aggv
-    (mk_lambda'
+    (mk_lambda''
       (["acc", calc_ds.t; "vid", t_vid; "vals", wrap_ttuple @@ snd_many map_pat]) @@
       mk_block [
           mk_insert "acc" @@ fst_many map_flat;
@@ -309,7 +309,7 @@ let g_init_vid =
 let g_min_vid = create_ds "g_min_vid" t_vid ~init:min_vid_k3
 let g_max_vid =
   let init =
-    let max = mk_apply' "get_max_int" mk_cunit in
+    let max = mk_apply' "get_max_int" [mk_cunit] in
     mk_tuple [max] in
   create_ds "g_max_vid" t_vid ~init
 let g_start_vid = create_ds "g_start_vid" t_vid ~init:start_vid_k3
@@ -579,16 +579,16 @@ let do_corrective_name_of_t c trig_nm stmt_id map_id =
 (* calling all functions for profiling *)
 let profile_funcs_start =
   mk_block [
-    mk_apply' "jemallocStart" mk_cunit;
-    mk_apply' "tcmallocStart" mk_cunit;
-    mk_apply' "pcmStart" mk_cunit;
+    mk_apply' "jemallocStart" [mk_cunit];
+    mk_apply' "tcmallocStart" [mk_cunit];
+    mk_apply' "pcmStart" [mk_cunit];
   ]
 
 let profile_funcs_stop =
   mk_block [
-    mk_apply' "jemallocStop" mk_cunit;
-    mk_apply' "tcmallocStop" mk_cunit;
-    mk_apply' "pcmStop" mk_cunit;
+    mk_apply' "jemallocStop" [mk_cunit];
+    mk_apply' "tcmallocStop" [mk_cunit];
+    mk_apply' "pcmStop" [mk_cunit];
   ]
 
 (* --- Begin frontier function code --- *)

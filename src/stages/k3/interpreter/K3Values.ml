@@ -144,7 +144,7 @@ and Value : sig
   * address,
   * scheduler_state (parametrized here to prevent circular inclusion), the
   * environment, value_t of arguments, and produce unit *)
-  and trigger_env_t = (address -> env_t -> value_t -> unit) IdMap.t
+  and trigger_env_t = (address -> env_t -> value_t list -> unit) IdMap.t
   (* keep track of what was modified *)
   and env_t = {
         triggers: trigger_env_t;

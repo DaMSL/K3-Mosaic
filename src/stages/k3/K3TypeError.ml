@@ -13,6 +13,10 @@ let string_of_error = function
       P.string_of_base_type t1^"\nBut an expression was expected of type "^
       P.string_of_base_type t2
 
+  | FunMismatch(fn, ts, s) -> s^"The applied function has type "^
+      P.string_of_type fn^"\nBut the arguments have types "^
+      strcatmap P.string_of_type ts
+
   | TBad(t, s)        -> "Bad type "^P.string_of_type t^": "^s
   | BTBad(t, s)       -> "Bad type "^P.string_of_base_type t^": "^s
   | TMsg(s)           -> s

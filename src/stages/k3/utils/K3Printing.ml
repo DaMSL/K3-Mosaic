@@ -321,7 +321,7 @@ and print_base_type c t =
     | TTuple t_l            -> my_tag (btt t) @@ List.map (lazy_type c) t_l
     | TCollection(t_c, t_e) -> my_tag (btt t) [lps (string_of_container_type t_c); lazy_type c t_e]
     | TTarget t'            -> my_tag (btt t) [lazy_type c t']
-    | TFunction(it, ot)     -> my_tag (btt t) [lazy_type c it; lazy_type c ot]
+    | TFunction(itl, ot)    -> my_tag (btt t) @@ List.map (lazy_type c) @@ itl @ [ot]
     | _                     -> term_tag @@ btt t
 
 and print_type c mt =
