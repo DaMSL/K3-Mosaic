@@ -134,32 +134,6 @@ let lazy_col = function
   | TMap        -> lps "{ Map }"
   | TVMap       -> lps "{ VMap }"
 
-let lazy_control_anno c = function
-  | Effect ids -> lps "effect " <| lazy_paren @@
-      lps_list NoCut lps ids
-  | Parallel i -> lps "parallel " <| lazy_paren (lps @@ string_of_int i)
-
-let lazy_data_anno c a =
-  let positions ps = lps_list NoCut (lps |- string_of_int) ps in
-  match a with
-  | FunDep (ps, Element) -> lps "key " <| lazy_paren (positions ps)
-  | FunDep (ps, Positions ps2) -> positions ps <| lps "->" <| positions ps2
-  | MVFunDep (ps, Element) -> lps "index " <| lazy_paren (positions ps)
-  | MVFunDep (ps, Positions ps2) -> positions ps <| lps "=>" <| positions ps2
-  | Unique ps -> lps "unique " <| lazy_paren (positions ps)
-  | Ordered ps -> lps "ordered " <| lazy_paren (positions ps)
-  | Sequential -> lps "sequential"
-  | RandomAccess -> lps "randomaccess"
-
-let lazy_anno c = function
-  | Data(r,a)    -> lazy_data_anno c a
-  | Control(r,a) -> lazy_control_anno c a
-  | _ -> []
-
-let lazy_annos c = function
-  | [] -> []
-  | annos -> lps "@ " <| lazy_brace @@ lps_list ~sep:"; " NoCut (lazy_anno c) annos
-
 let rec lazy_base_type ?(brace=true) ?(mut=false) ?(empty=false) c ~in_col t =
   let wrap_mut f = if mut && not empty then lps "mut " <| f else f in
   let wrap_single f =
@@ -1007,6 +981,13 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=(ANonLambda,Out)) c expr =
   | Send -> let target, addr, args = U.decompose_send expr in
     wrap_indent @@ lazy_paren (expr_pair (target, addr)) <| lps "<- " <|
       lps_list CutHint (lazy_expr c) args
+  in
+  (* check if we need to write a property *)
+  let props = U.properties_of_expr expr in
+  let analyze () =
+    if props <> [] then
+      lazy_paren (analyze ()) <| lps "@: " <| lps_list NoCut lps props
+    else analyze ()
   in
   (* check if we need to wrap our output in a tuple (record) *)
   match snd expr_info with

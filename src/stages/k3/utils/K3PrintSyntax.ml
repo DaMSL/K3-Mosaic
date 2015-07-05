@@ -53,31 +53,9 @@ let wrap_indent f = wrap_hov 2 f
 
 let error s = lps @@ "???: "^s
 
-let lazy_control_anno c = function
-  | Effect ids -> lps "effect " <| lazy_paren @@
-      lps_list NoCut lps ids
-  | Parallel i -> lps "parallel " <| lazy_paren (lps @@ string_of_int i)
-
-let lazy_data_anno c a =
-  let positions ps = lps_list NoCut (lps |- string_of_int) ps in
-  match a with
-  | FunDep (ps, Element) -> lps "key " <| lazy_paren (positions ps)
-  | FunDep (ps, Positions ps2) -> positions ps <| lps "->" <| positions ps2
-  | MVFunDep (ps, Element) -> lps "index " <| lazy_paren (positions ps)
-  | MVFunDep (ps, Positions ps2) -> positions ps <| lps "=>" <| positions ps2
-  | Unique ps -> lps "unique " <| lazy_paren (positions ps)
-  | Ordered ps -> lps "ordered " <| lazy_paren (positions ps)
-  | Sequential -> lps "sequential"
-  | RandomAccess -> lps "randomaccess"
-
-let lazy_anno c = function
-  | Data(r,a)    -> lazy_data_anno c a
-  | Control(r,a) -> lazy_control_anno c a
-  | _ -> []
-
-let lazy_annos c = function
+(*let lazy_annos c = function
   | [] -> []
-  | annos -> lps "@ " <| lazy_brace @@ lps_list ~sep:"; " NoCut (lazy_anno c) annos
+  | annos -> lps "@ " <| lazy_brace @@ lps_list ~sep:"; " NoCut (lazy_anno c) annos*)
 
 let string_of_int_set s  = String.concat ", " @@ List.map soi @@ IntSet.elements s
 let string_of_int_list s = String.concat ", " @@ List.map soi s
@@ -380,10 +358,17 @@ let rec lazy_expr c expr =
     wrap_indent (lps "send" <| lazy_paren (expr_pair (e1, e2) <| lps ", " <|
       lps_list CutHint (tuple_no_paren c) es))
   in
+  let out = wrap out in
+  (* check for annotations *)
+  let props = U.properties_of_expr expr in
+  let out =
+    if props <> [] then lazy_paren out <| lps "@ {" <| lps_list NoCut lps props <| lps "}"
+    else out
+  in
   (* if we asked to highlight a uuid, do so now *)
   match c.uuid with
-  | Some i when i = U.id_of_expr expr -> lps "%" <| wrap out
-  | _ -> wrap out
+  | Some i when i = U.id_of_expr expr -> lps "%" <| out
+  | _ -> out
 
 let lazy_trigger c id arg vars expr =
   let is_block expr = match U.tag_of_expr expr with

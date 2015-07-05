@@ -12,6 +12,17 @@ let id_of_expr e = fst (fst_data e)
 let tag_of_expr e = snd (fst_data e)
 let meta_of_expr e = snd_data e
 
+let add_annos (anno:annotation_t) (e:expr_t) =
+  let n, ch = decompose_tree e in
+  let cur_anno = snd n in
+  mk_tree ((fst n, anno@cur_anno), ch)
+
+let add_property s e = add_annos [Property s] e
+
+let properties_of_expr e =
+  let get_property = function Property s -> [s] | _ -> [] in
+  List.flatten @@ List.map get_property @@ meta_of_expr e
+
 (* function to fail *)
 let dist_fail e s = raise @@ DistributeError(id_of_expr e, s)
 

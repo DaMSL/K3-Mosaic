@@ -172,7 +172,7 @@ let nd_add_delta_to_buf c map_id =
       delta_tuples, map_delta.t])
     [t_unit] @@
     mk_bind (mk_var target_map) tmap_deref @@
-      mk_assign tmap_deref @@
+      mk_assign tmap_deref @@ U.add_property "Move" @@
         mk_agg
           (mk_lambda2' ["acc", map_real.t] (ds_e map_delta) @@
             mk_let ["regular_read"]
@@ -705,7 +705,7 @@ List.fold_left
           mk_tuple @@ args_of_t_as_vars_with_v c trig_name
         ;
         mk_bind (mk_var rbuf_name) rbuf_deref @@
-         mk_assign rbuf_deref @@
+         mk_assign rbuf_deref @@ U.add_property "Move" @@
          mk_agg
           (mk_lambda2' ["acc", map_ds.t] (ds_e tup_ds) @@
             mk_block [
