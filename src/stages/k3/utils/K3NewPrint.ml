@@ -173,12 +173,12 @@ let rec lazy_base_type ?(brace=true) ?(mut=false) ?(empty=false) c ~in_col t =
   | TDate        -> wrap @@ lps "int"
   | TFloat       -> wrap @@ lps "real"
   | TString      -> wrap @@ lps "string"
-  | TMaybe(vt)   -> wrap(lps "option " <| lazy_type c ~in_col vt)
+  | TMaybe(vt)   -> lazy_paren (wrap (lps "option " <| lazy_type c ~in_col vt))
   | TAddress     -> wrap @@ lps "address" (* ? *)
   | TTarget bt   -> wrap (lps "target" <| lazy_type c ~in_col bt)
   | TUnknown     -> wrap @@ lps "()"
   | TTop         -> wrap @@ lps "top"
-  | TIndirect vt -> wrap (lps "ind " <| lazy_type c ~in_col vt)
+  | TIndirect vt -> lazy_paren (wrap (lps "ind " <| lazy_type c ~in_col vt))
   | TTuple(vts)  -> (* tuples become records *)
       let rec_vts = add_record_ids c vts in
       let inner = lazy_concat ~sep:lcomma (fun (id, vt) ->
@@ -235,6 +235,12 @@ type arg_num
     | NMaybe    of int * arg_num
     | NTuple    of int * arg_num list
 
+let rec string_of_anum = function
+  | NIgnored -> "(_)"
+  | NVar(i, id, t) -> Printf.sprintf "NVar(%d, %s)" i id
+  | NMaybe(i, arg) -> Printf.sprintf "NMaybe(%d, %s)" i (string_of_anum arg)
+  | NTuple(i, args) -> Printf.sprintf "NTuple(%d, %s)" i (strcatmap string_of_anum args)
+
 (* get an id for the argument at the shallow level for trigger or lambda *)
 let shallow_bind_id ~in_record = function
   | NIgnored        -> "_"
@@ -274,23 +280,11 @@ let rec value_type_of_arg_num = function
   | NMaybe(_, a')   -> KH.canonical (TMaybe(value_type_of_arg_num a'))
   | NTuple(_, args) -> KH.canonical (TTuple(List.map value_type_of_arg_num args))
 
-(* Break args down for lambdas with multiple values *)
-let break_args = function
-  | NTuple(_,args) -> args
-  | _              -> failwith "Can't break args"
-
-(* Break args down for lambdas with multiple values *)
-let peel_arg = function
-  | NTuple(_,[x])     -> x, None
-  | NTuple(a,x::xs)   -> x, Some(NTuple(a, xs))
-  | x                 -> x, None
-
 (* this is how we translate tuples to arguments *)
 let list_of_top_args = function
-  | NTuple(_, [_]) as x -> [x]
+  (*| NTuple(_, [_]) as x -> [x]*)
   | NTuple(_, xs)  -> xs
   | x              -> [x]
-
 
 (* code to unwrap an option type *)
 (* project: add a projection out of a record *)
@@ -378,18 +372,10 @@ let is_tuple e =
   match U.tag_of_expr e with Tuple -> true | _ -> false
 
 (* create a deep bind for lambdas, triggers, and let statements
- * -depth allows to skip one depth level of binding
- * -top_expr allows us to use an expression at the top bind
- * -top_rec indicates that the first level of binding should be to a record *)
-let rec deep_bind ?top_expr ~in_record c arg_n =
+ * -in_record indicates that the first level of binding should be a record *)
+let rec deep_bind ~in_record c arg_n =
   let rec loop d a =
     let record = in_record && d=0 in (* do we want a record now *)
-    (* we allow binding an expression at the top level *)
-    let bind_text i = match top_expr, d with
-      | Some e, d
-          when d=0 -> lazy_expr c e
-      | _          -> lps @@ id_of_num i
-    in
     match a with
       (* pretend to unwrap a record *)
     | NVar(i, id, vt) when record ->
@@ -413,13 +399,13 @@ let rec deep_bind ?top_expr ~in_record c arg_n =
           | rec_ids ->
             let args_rec = concat_record_str rec_ids in
             let sub_ids = lazy_concat ~sep:lcomma lps args_rec in
-            lps "bind " <| bind_text i <| lps " as {" <| sub_ids <| lps "} in "
+            lps "bind " <| lps @@ id_of_num i <| lps " as {" <| sub_ids <| lps "} in "
             <| lcut () end)  <|
         (* rest of the binds *)
         List.flatten @@ List.map (loop @@ d+1) args
   | NMaybe(i, arg)  ->
       if d < 0 then [] else
-        lps "let " <| lps (get_id_of_arg arg) <| lps " = " <| unwrap_option (bind_text i) <|
+        lps "let " <| lps (get_id_of_arg arg) <| lps " = " <| unwrap_option (lps @@ id_of_num i) <|
         lps " in" <| lsp () <| loop (d+1) arg
   in loop 0 arg_n
 
@@ -483,7 +469,7 @@ and handle_lambda c ?(expr_info=([],false)) ~prefix_fn arg e =
   in loop 0 [] arg_l
 
 
-(* create a fold instead of a map or ext (for typechecking reasons) *)
+(* create a fold instead of a map or ext (for new k3 typechecking reasons) *)
 (* expects a lambda expression, and collection expression inside a map/flattenMap *)
 and fold_of_map_ext c expr =
   let open KH in
@@ -497,7 +483,11 @@ and fold_of_map_ext c expr =
   let args, body = U.decompose_lambda lambda in
   let acc_id = "_acc"^suffix in
   let acc_arg = AVar (acc_id, t_out) in
-  let args' = ATuple [acc_arg; args] in
+  (* because map needs a deep tuple match, we need to remove that for fold *)
+  let args' = match args with
+    | ATuple xs -> xs
+    | x         -> [x] in
+  let args' = ATuple(acc_arg :: args') in
   let body' = match U.tag_of_expr expr with
     | Map     -> mk_block [ mk_insert acc_id [body]; mk_var acc_id ]
     | Flatten -> KH.mk_combine (KH.mk_var acc_id) body
