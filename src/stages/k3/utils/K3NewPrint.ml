@@ -815,7 +815,13 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
           handle_lookup_with ~vmap:true ~decomp_fn:U.decompose_slice_frontier "lookup_with4_before" col t_elem
       | TMap,  Slice when is_lookup_pat (snd(U.decompose_slice col)) ->
           handle_lookup_with "lookup_with4" col t_elem
-      | _                    -> normal ()
+      | _  ->
+          (* peek_with *)
+          let args =
+            [light_type c @@ KH.mk_lambda' ["_", KH.t_unit] e_none;
+             light_type c @@ KH.mk_lambda' [id, t_elem] e_some] in
+          let arg_info = [[], false; [0], false] in
+          apply_method c ~name:"peek_with" ~col ~args ~arg_info
       end
 
       (* exceptions indicate mismatch *)
