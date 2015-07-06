@@ -345,11 +345,19 @@ let is_unknown e =
 let is_tuple e =
   match U.tag_of_expr e with Tuple -> true | _ -> false
 
+(* check whether a pattern matches the criteria for being a lookup:
+ * no unknown except for the value *)
 let is_lookup_pat pat =
+  let pat = KH.mk_tuple @@ list_drop_end 1 @@ U.unwrap_tuple pat in
+  not @@ Tree.fold_tree_th_bu (fun acc e -> is_unknown e || acc) false pat
+
+(* change a pattern to have a default value (last element) *)
+(* since k3new can't handle unknowns *)
+let pat_default_last ~col pat =
+  let _, elem_t = KH.unwrap_tcol @@ T.type_of_expr col in
+  let tval = list_last @@ KH.unwrap_ttuple elem_t in
   let pat = list_drop_end 1 @@ U.unwrap_tuple pat in
-  let unknown = ref false in
-  iter_tree (fun e -> if is_unknown e then unknown := true) pat;
-  not !unknown
+  pat @ [KH.default_value_of_t tval]
 
 and lookup_pat_of_slice col pat =
     let col_t, elem_t = KH.unwrap_tcol @@ T.type_of_expr col in
@@ -754,14 +762,15 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
     wrap_indent (lps "else" <| lsp () <| lazy_expr c e3)
 
   | CaseOf id ->
-    let e1, e2, e3 = U.decompose_caseof expr in
+    let e1, e_some, e_none = U.decompose_caseof expr in
     (* check for alias patterns (lookup_with) *)
-    begin try
+(*    begin try
       (* check for a case(peek(slice(...)) *)
       let col = U.decompose_peek e1 in
       let col, pat = U.decompose_slice col in
       let col', elem = KH.unwrap_tcol col in
-      let t1, t2, t3 = T.type_of_expr e1, T.type_of_expr e_some, T.type_of_expr e_none in
+      let t1, t_some, t_none =
+        T.type_of_expr e1, T.type_of_expr e_some, T.type_of_expr e_none in
       if t2 = t_unit && t3 = t_unit && is_lookup_pat pat then
         (* we can use lookup_with2 *)
         let pat' = lookup_pat_of_slice col pat in
@@ -773,32 +782,33 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
 
       else failwith "Mismatch"
 
-    with _ -> 
-    (* HACK to make peek work: records of one element still need projection *)
-    (* NOTE: caseOf will only work on peek if peek is the first expr inside,
-     * and projection will only work if the expression is very simple *)
-    let project =
-      try
-        let col = U.decompose_peek e1 in
-        (* get the type of the collection.
-         * If it's a singleton type, we need to add projection *)
-        let _, elem_t = KH.unwrap_tcol @@ T.type_of_expr col in
-        begin match elem_t.typ with
-          | TTuple _             -> false
-          | _ when snd expr_info -> false (* we need a record output *)
-          | _                    -> true
-        end
-      with _ -> false
-    in
-    let c' = {c with project=StrSet.remove id c.project} in
-    let c' =
-      (* if we're projecting, let future expressions know *)
-      if project && id <> "_" then {c' with project=StrSet.add id c'.project}
-      else c' in
-    lps "case" <| lsp () <| lazy_expr c e1 <| lsp () <| lps "of" <| lsp () <|
-    wrap_indent (lazy_brace (lps ("Some "^id^" ->") <| lsp () <|
-      lazy_expr c' e2)) <|
-    wrap_indent (lazy_brace (lps "None ->" <| lsp () <| lazy_expr c e3))
+    with _ -> (* exceptions indicate mismatch *) *)
+      (* HACK to make peek work: records of one element still need projection *)
+      (* NOTE: caseOf will only work on peek if peek is the first expr inside,
+      * and projection will only work if the expression is very simple *)
+      let project =
+        try
+          let col = U.decompose_peek e1 in
+          (* get the type of the collection.
+          * If it's a singleton type, we need to add projection *)
+          let _, elem_t = KH.unwrap_tcol @@ T.type_of_expr col in
+          begin match elem_t.typ with
+            | TTuple _             -> false
+            | _ when snd expr_info -> false (* we need a record output *)
+            | _                    -> true
+          end
+        with _ -> false
+      in
+      let c' = {c with project=StrSet.remove id c.project} in
+      let c' =
+        (* if we're projecting, let future expressions know *)
+        if project && id <> "_" then {c' with project=StrSet.add id c'.project}
+        else c' in
+      lps "case" <| lsp () <| lazy_expr c e1 <| lsp () <| lps "of" <| lsp () <|
+      wrap_indent (lazy_brace (lps ("Some "^id^" ->") <| lsp () <|
+        lazy_expr c' e_some)) <|
+      wrap_indent (lazy_brace (lps "None ->" <| lsp () <| lazy_expr c e_none))
+      (* end *)
 
   | BindAs _ -> let bind, id, r = U.decompose_bind expr in
     let c = {c with project=StrSet.remove id c.project} in
@@ -898,28 +908,32 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
     let tag = U.tag_of_expr col in
     let col_t, elem_t = KH.unwrap_tcol @@ T.type_of_expr col in
 
-    (* common pattern for vmap lookups *)
-    let handle_vmap_lookup decomp_fn name =
-      let col', pat = decomp_fn col in
-      (* turn pat into a list. drop the value *)
-      let pat  = fst @@ breakdown_pat pat in
-      let pat = list_drop_end 1 pat in
+    (* common patterns for lookups *)
+    let handle_vmap_lookup ?(decomp_fn=U.decompose_slice) name col =
+      let col, pat = decomp_fn col in
       (* check if we have a specific value rather than an open slice pattern *)
-      if List.for_all (not |- is_unknown) pat2 then
-        (* create a default value for the last member of the slice tuple since k3new can't
-         * handle unknowns *)
-        let tval = list_last @@ KH.unwrap_ttuple elem_t in
-        let pat = pat @ [KH.default_value_of_t tval] in
-        apply_method c ~name ~col:col'
-          ~args:[hd pat; light_type c @@ KH.mk_tuple @@ tl pat]
+      if is_lookup_pat pat then
+        (* create a default value for the last member of the slice *)
+        let pat = pat_default_last ~col pat in
+        apply_method c ~name ~col ~args:[hd pat; light_type c @@ KH.mk_tuple @@ tl pat]
           ~arg_info:[vid_out_arg; [], false]
+      else normal ()
+    in
+    let handle_lookup name col =
+      let col, pat = U.decompose_slice col in
+      (* check if we have a specific value rather than an open slice pattern *)
+      if is_lookup_pat pat then
+        (* create a default value for the last member of the slice *)
+        let pat = pat_default_last ~col pat in
+        apply_method c ~name ~col ~args:[light_type c @@ KH.mk_tuple @@ pat] ~arg_info:[[], false]
       else normal ()
     in
     (* TODO: this can be expanded to regular maps as well *)
     begin match col_t, tag with
-    | TVMap, Slice         -> handle_vmap_lookup U.decompose_slice "lookup"
-    | TVMap, SliceFrontier -> handle_vmap_lookup U.decompose_slice_frontier "lookup_before"
-    | _ -> normal ()
+    | TVMap, Slice         -> handle_vmap_lookup "lookup" col
+    | TVMap, SliceFrontier -> handle_vmap_lookup ~decomp_fn:U.decompose_slice_frontier "lookup_before" col
+    | TMap, Slice          -> handle_lookup "lookup" col
+    | _                    -> normal ()
     end
 
   | Subscript _ -> let i, tup = U.decompose_subscript expr in
