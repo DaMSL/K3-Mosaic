@@ -10,6 +10,42 @@ module D = K3Dist
 
 exception InvalidAst of string
 
+(* find unused arguments in triggers *)
+let unused_trig_args ast =
+  let rec toplevel_args = function
+    | ATuple args -> List.flatten @@ List.map toplevel_args args
+    | AVar(x,_) -> [x]
+    | _ -> failwith "unexpected non-standard arg in dbtoaster k3 code"
+  in
+  (* for a single trigger *)
+  let unused_args trig_flow =
+    let args = StrSet.of_list @@ toplevel_args @@ U.args_of_code trig_flow in
+    (* remove var ids from set *)
+    let remove_fn a t = match U.tag_of_expr t with
+      | Var id -> StrSet.remove id a
+      | _      -> a
+    in
+    Tree.fold_tree_th_bu remove_fn args (U.expr_of_code trig_flow)
+  in
+  let l = 
+    List.map (fun (nm, t) -> P.remove_trig_prefix nm, unused_args t) @@
+    List.filter (fun (nm, _) -> P.is_insert_t nm || P.is_delete_t nm) @@
+    List.map (fun t -> U.id_of_code t, t) @@
+    U.triggers_of_program ast
+  in
+  (* combine insert and delete trigs *)
+  List.fold_left (fun acc (nm, set) ->
+    try
+      let s  = StrMap.find nm acc in
+      let s' = StrSet.inter s set in
+      StrMap.add nm s' acc
+    with Not_found ->
+      StrMap.add nm set acc) StrMap.empty l
+
+let string_of_unused_trig_args (m:StrSet.t StrMap.t) =
+  let l = list_of_strmap m in
+  strcatmap (fun (k,v) -> k^" => ("^(String.concat ", " @@ StrSet.elements v)^")") l
+
 (* find any csv loaders in the ast *)
 let loader_tables ast =
   let bu_fn acc e =

@@ -1274,6 +1274,8 @@ let gen_dist ?(gen_deletes=true)
   let sys_init =
     try ignore(P.find_trigger p "system_ready_event"); true
     with Not_found | P.Bad_data _ -> false in
+  let unused_trig_args = M.unused_trig_args ast in
+  (* print_endline @@ M.string_of_unused_trig_args unused_trig_args; *)
   let c = {
       p;
       shuffle_meta=K3Shuffle.gen_meta p;
@@ -1285,6 +1287,7 @@ let gen_dist ?(gen_deletes=true)
       sys_init;
       stream_file;
       agenda_map;
+      unused_trig_args;
     } in
   (* regular trigs then insert entries into shuffle fn table *)
   let proto_trigs, proto_funcs =
