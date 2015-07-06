@@ -997,7 +997,7 @@ let channel_format c = function
   | JSON -> "json"
 
 let lazy_channel c chan_t chan_f = match chan_t with
-  | File s -> lps @@ Printf.sprintf "file \"%s\" %s" s (channel_format c chan_f)
+  | File _ -> lps @@ Printf.sprintf "filemxsq switch_mux_inputs %s" s (channel_format c chan_f)
   | Network(str, port) -> lps @@ "socket(\""^str^"\":"^string_of_int port^")"
 
 let rec lazy_resource_pattern c = function
@@ -1104,6 +1104,9 @@ declare NATIONLoaderRP : collection {path: string} @Collection -> collection {ra
 @:CArgs 2
 declare REGIONLoaderRP : collection {path: string} @Collection -> collection {ra:int, rb:string, rc:string} @Collection -> collection {ra:int, rb:string, rc:string} @Collection
   with effects \\_ -> \\_ -> io
+
+typedef filechunks = collection {path: string} @Collection
+declare switch_mux_inputs : collection {seq: filechunks} @Collection
 
 declare my_peers : collection { i:address } @ {Collection} =
   peers.fold (\\acc -> (\\x -> (acc.insert {i:x.addr}; acc))) empty { i:address} @ Collection
