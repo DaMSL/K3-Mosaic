@@ -353,13 +353,7 @@ let is_lookup_pat pat =
 
 (* change a pattern to have a default value (last element) *)
 (* since k3new can't handle unknowns *)
-let pat_default_last ~col pat =
-  let _, elem_t = KH.unwrap_tcol @@ T.type_of_expr col in
-  let tval = list_last @@ KH.unwrap_ttuple elem_t in
-  let pat = list_drop_end 1 @@ U.unwrap_tuple pat in
-  pat @ [KH.default_value_of_t tval]
-
-and lookup_pat_of_slice col pat =
+let lookup_pat_of_slice ~col pat =
     let col_t, elem_t = KH.unwrap_tcol @@ T.type_of_expr col in
     (* since this is a lookup, we can turn pat into a list. drop the value *)
     let pat = fst @@ breakdown_pat pat in
@@ -763,26 +757,8 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
 
   | CaseOf id ->
     let e1, e_some, e_none = U.decompose_caseof expr in
-    (* check for alias patterns (lookup_with) *)
-(*    begin try
-      (* check for a case(peek(slice(...)) *)
-      let col = U.decompose_peek e1 in
-      let col, pat = U.decompose_slice col in
-      let col', elem = KH.unwrap_tcol col in
-      let t1, t_some, t_none =
-        T.type_of_expr e1, T.type_of_expr e_some, T.type_of_expr e_none in
-      if t2 = t_unit && t3 = t_unit && is_lookup_pat pat then
-        (* we can use lookup_with2 *)
-        let pat' = lookup_pat_of_slice col pat in
-        apply_method c "lookup_with2" ~col
-          ~args:[light_type c @@ KH.mk_tuple pat';
-                 light_type c @@ KH.mk_lambda' ["_", KH.t_unit] e_none;
-                 light_type c @@ KH.mk_lambda' [id, t1] e_some]
-          ~arg_info:[ANonLambda, Out; ALambda [In], Out; ALambda [InRec], Out]
 
-      else failwith "Mismatch"
-
-    with _ -> (* exceptions indicate mismatch *) *)
+    let normal () = (* normal case printout *)
       (* HACK to make peek work: records of one element still need projection *)
       (* NOTE: caseOf will only work on peek if peek is the first expr inside,
       * and projection will only work if the expression is very simple *)
@@ -808,7 +784,43 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
       wrap_indent (lazy_brace (lps ("Some "^id^" ->") <| lsp () <|
         lazy_expr c' e_some)) <|
       wrap_indent (lazy_brace (lps "None ->" <| lsp () <| lazy_expr c e_none))
-      (* end *)
+    in
+    (* common pattern for lookup_with *)
+    let handle_lookup_with ?(decomp_fn=U.decompose_slice) ?(vmap=false) name col t_elem =
+      let col, pat = decomp_fn col in
+      (* NOTE: we don't check for lookup_pat. We assume that's already been done *)
+      (* we CAN use lookup_with4 *)
+      let pat = lookup_pat_of_slice ~col pat in
+      let arg' =
+        [light_type c @@ KH.mk_lambda' ["_", KH.t_unit] e_none;
+          light_type c @@ KH.mk_lambda' [id, t_elem] e_some] in
+      let args, arg_info =
+        if vmap then
+          [hd pat; light_type c @@ KH.mk_tuple @@ tl pat] @ arg',
+            [vid_out_arg; [], false; [], false; [0], false]
+        else
+          [light_type c @@ KH.mk_tuple pat] @ arg',
+            [[], false; [], false; [0], false] in
+      apply_method c ~name ~col ~args ~arg_info
+    in
+    (* check for lookup_with *)
+    begin try
+      (* check for a case(peek(slice(...)) *)
+      let col = U.decompose_peek e1 in
+      let col_t, t_elem = KH.unwrap_tcol @@ T.type_of_expr col in
+      begin match col_t, U.tag_of_expr col with
+      | TVMap, Slice when is_lookup_pat (snd (U.decompose_slice col)) ->
+          handle_lookup_with ~vmap:true "lookup_with4" col t_elem
+      | TVMap, SliceFrontier when is_lookup_pat (snd (U.decompose_slice_frontier col)) ->
+          handle_lookup_with ~vmap:true ~decomp_fn:U.decompose_slice_frontier "lookup_with4_before" col t_elem
+      | TMap,  Slice when is_lookup_pat (snd(U.decompose_slice col)) ->
+          handle_lookup_with "lookup_with4" col t_elem
+      | _                    -> normal ()
+      end
+
+      (* exceptions indicate mismatch *)
+      with _ -> normal ()
+    end
 
   | BindAs _ -> let bind, id, r = U.decompose_bind expr in
     let c = {c with project=StrSet.remove id c.project} in
@@ -900,39 +912,32 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
 
   | Peek -> let col = U.decompose_peek expr in
     (* normal peek applications *)
-    let name = if is_vmap col then "peek_now" else "peek" in
-    let normal () = lazy_paren @@ apply_method c ~name ~col
+    let normal () =
+      let name = if is_vmap col then "peek_now" else "peek" in
+      lazy_paren @@ apply_method c ~name ~col
       ~args:[light_type c @@ KH.mk_cunit] ~arg_info:[[], false] in
 
     (* to handle the case where we have a full slice over a vmap, we need to look ahead *)
     let tag = U.tag_of_expr col in
-    let col_t, elem_t = KH.unwrap_tcol @@ T.type_of_expr col in
+    let col_t, _ = KH.unwrap_tcol @@ T.type_of_expr col in
 
     (* common patterns for lookups *)
-    let handle_vmap_lookup ?(decomp_fn=U.decompose_slice) name col =
+    let handle_lookup ?(decomp_fn=U.decompose_slice) ?(vmap=false) name col =
       let col, pat = decomp_fn col in
       (* check if we have a specific value rather than an open slice pattern *)
       if is_lookup_pat pat then
         (* create a default value for the last member of the slice *)
-        let pat = pat_default_last ~col pat in
-        apply_method c ~name ~col ~args:[hd pat; light_type c @@ KH.mk_tuple @@ tl pat]
-          ~arg_info:[vid_out_arg; [], false]
+        let pat = lookup_pat_of_slice ~col pat in
+        let args, arg_info =
+          if vmap then [hd pat; light_type c @@ KH.mk_tuple @@ tl pat], [vid_out_arg; [], false]
+          else [light_type c @@ KH.mk_tuple pat], [[], false] in
+        apply_method c ~name ~col ~args ~arg_info
       else normal ()
     in
-    let handle_lookup name col =
-      let col, pat = U.decompose_slice col in
-      (* check if we have a specific value rather than an open slice pattern *)
-      if is_lookup_pat pat then
-        (* create a default value for the last member of the slice *)
-        let pat = pat_default_last ~col pat in
-        apply_method c ~name ~col ~args:[light_type c @@ KH.mk_tuple @@ pat] ~arg_info:[[], false]
-      else normal ()
-    in
-    (* TODO: this can be expanded to regular maps as well *)
     begin match col_t, tag with
-    | TVMap, Slice         -> handle_vmap_lookup "lookup" col
-    | TVMap, SliceFrontier -> handle_vmap_lookup ~decomp_fn:U.decompose_slice_frontier "lookup_before" col
-    | TMap, Slice          -> handle_lookup "lookup" col
+    | TVMap, Slice         -> handle_lookup ~vmap:true "lookup" col
+    | TVMap, SliceFrontier -> handle_lookup ~vmap:true ~decomp_fn:U.decompose_slice_frontier "lookup_before" col
+    | TMap,  Slice         -> handle_lookup "lookup" col
     | _                    -> normal ()
     end
 
