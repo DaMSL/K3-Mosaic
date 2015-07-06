@@ -583,5 +583,7 @@ let intmap_of_list l =
 let strmap_of_list l =
   List.fold_left (fun acc (k,v) -> StrMap.add k v acc) StrMap.empty l
 
+let list_of_strmap m = StrMap.fold (fun k v acc -> (k,v)::acc) m []
+
 let string_of_int_list l = String.concat ", " @@ List.map soi l
 let string_of_int_set  s = String.concat ", " @@ List.map soi @@ IntSet.elements s

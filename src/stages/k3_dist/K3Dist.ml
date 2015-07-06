@@ -85,6 +85,8 @@ type config = {
   stream_file : string;
   (* a mapping for agenda: how the relations map to agenda indices *)
   agenda_map : mapping_t;
+  (* unused trig args, calculated once *)
+  unused_trig_args : StrSet.t StrMap.t;
 }
 
 let default_config = {
@@ -97,6 +99,7 @@ let default_config = {
   sys_init = false;
   stream_file = "";
   agenda_map = [], StrMap.empty;
+  unused_trig_args = StrMap.empty;
 }
 
 (* what the generic type of the global maps is *)
@@ -319,12 +322,23 @@ let mk_vid_add curr add = mk_add curr add
 (* whether a vid is a tuple or a non-tuple value *)
 let is_vid_tuple = false
 
+(* reduce trig arguments to those that are actually used by the code *)
+let filter_t_args c trig args =
+  let set =
+    try StrMap.find (P.remove_trig_prefix trig) c.unused_trig_args
+    with Not_found -> StrSet.empty
+  in
+  List.filter (fun (id,_) -> not @@ StrSet.mem id set) args
+
+(* function that filters out unused arguments in trigger *)
+let args_of_t c trig = filter_t_args c trig @@ P.args_of_t c.p trig
+
 (* trigger argument manipulation convenience functions *)
-let arg_types_of_t c trig_nm = snd_many @@ P.args_of_t c.p trig_nm
-let arg_names_of_t c trig_nm = fst_many @@ P.args_of_t c.p trig_nm
+let arg_types_of_t c trig_nm = snd_many @@ args_of_t c trig_nm
+let arg_names_of_t c trig_nm = fst_many @@ args_of_t c trig_nm
 let args_of_t_as_vars c trig_nm = ids_to_vars (arg_names_of_t c trig_nm)
 
-let args_of_t_with_v ?(vid="vid") c trig_nm = (vid, t_vid)::P.args_of_t c.p trig_nm
+let args_of_t_with_v ?(vid="vid") c trig_nm = (vid, t_vid)::args_of_t c trig_nm
 let arg_types_of_t_with_v c trig_nm = t_vid::arg_types_of_t c trig_nm
 let args_of_t_as_vars_with_v ?(vid="vid") c trig_nm =
   mk_var vid::args_of_t_as_vars c trig_nm
@@ -510,7 +524,7 @@ let nd_log_for_t t = "nd_log_"^t
 (* log data structures *)
 let log_ds c : data_struct list =
   let log_struct_for trig =
-    let e' = args_of_t c.p trig in
+    let e' = args_of_t c trig in
     let e  = ["vid", t_vid; "args", wrap_ttuple @@ snd_many e'] in
     create_ds (nd_log_for_t trig) (mut @@ wrap_tmap' @@ snd_many e) ~e
   in
@@ -544,7 +558,7 @@ let sw_init           = create_ds "sw_init" (mut t_bool) ~init:mk_cfalse
 let sw_trig_buf_prefix = "sw_buf_"
 let sw_trig_bufs (c:config) =
   P.for_all_trigs ~sys_init:true ~deletes:c.gen_deletes c.p @@ fun t ->
-    create_ds (sw_trig_buf_prefix^t) (wrap_tlist' @@ snd_many @@ P.args_of_t c.p t)
+    create_ds (sw_trig_buf_prefix^t) (wrap_tlist' @@ snd_many @@ args_of_t c t)
 
 (* list for next message -- contains trigger id *)
 let sw_trig_buf_idx =
