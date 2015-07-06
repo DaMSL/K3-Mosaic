@@ -1282,7 +1282,7 @@ let gen_dist ?(gen_deletes=true)
       let args = fst_many @@ P.args_of_t p ("insert_"^trig_nm) in
       let args = list_zip args l in
       let unused =
-        begin try StrMap.find ("insert_"^trig_nm) unused_trig_args
+        begin try StrMap.find trig_nm unused_trig_args
         with Not_found -> StrSet.empty end in
       let args = List.filter (fun (nm,_) -> not @@ StrSet.mem nm unused) args in
       snd @@ list_unzip args

@@ -27,11 +27,23 @@ let unused_trig_args ast =
     in
     Tree.fold_tree_th_bu remove_fn args (U.expr_of_code trig_flow)
   in
-    strmap_of_list @@
-    List.map (fun (nm, t) -> nm, unused_args t) @@
+  let l =
+    List.map (fun (nm, t) -> P.remove_trig_prefix nm, unused_args t) @@
     List.filter (fun (nm, _) -> P.is_insert_t nm || P.is_delete_t nm) @@
     List.map (fun t -> U.id_of_code t, t) @@
     U.triggers_of_program ast
+  in
+  (* combine insert and delete trigs, and take their intersection. The reason we do this is that
+   * in the rare case of some variables used by one of insert/delete, we don't have a clean enough
+   * separation between the two (e.g. in agenda_mapping) to really handle them seprately, and getting
+   * their intersection should be useful enough *)
+  List.fold_left (fun (acc:StrSet.t StrMap.t) (nm, set) ->
+    try
+      let s  = StrMap.find nm acc in
+      let s' = StrSet.inter s set in
+      StrMap.add nm s' acc
+    with Not_found ->
+      StrMap.add nm set acc) StrMap.empty l
 
 let string_of_unused_trig_args (m:StrSet.t StrMap.t) =
   let l = list_of_strmap m in
