@@ -77,15 +77,13 @@ let sw_rcv_token_trig sw_check_done =
     (* if we have nothing to number, pass the token on as is *)
     mk_send sw_rcv_token_nm (mk_var sw_next_switch_addr.id) [mk_var "vid"]
 
-(* generate a vid, or pause *)
-let sw_gen_vid_nm = "sw_gen_vid"
-let sw_gen_vid =
-  let vid_num, vid_new, num_new = "vid_num", "vid_new", "num_new" in
-  mk_global_fn sw_gen_vid_nm ["_", t_unit] [wrap_tmaybe t_vid] @@
+(* code inlined into driver *)
+let sw_gen_vid none some =
+  let vid_num, vid_new, num_new = "vid_num", "vid", "num_new" in
   (* if we have a vid, pop it *)
   mk_case_ns (mk_peek @@ mk_var sw_token_vid_list.id) vid_num
-    (* if we have no vid available, return none *)
-    (mk_nothing @@ wrap_tmaybe t_vid) @@
+    (* if we have no vid available, do the none *)
+    none @@
     (* else *)
     mk_let [num_new] (mk_sub (mk_snd @@ mk_var vid_num) @@ mk_cint 1) @@
     mk_let [vid_new] (vid_increment ~vid_expr:(mk_fst @@ mk_var vid_num) ()) @@
@@ -97,8 +95,8 @@ let sw_gen_vid =
         (* else, decrement the num and increment the vid *)
         mk_update sw_token_vid_list.id [mk_var vid_num]
           [mk_var vid_new; mk_var num_new];
-      (* return the vid *)
-      mk_just @@ mk_fst @@ mk_var vid_num
+      (* continue with code *)
+      some
     ]
 
 (* only the master starts the protocol *)
@@ -114,7 +112,7 @@ let global_vars =
     decl_global sw_highest_vid;
   ]
 
-let functions = [sw_gen_vid]
+let functions = []
 
 let triggers sw_check_done =
   [ sw_rcv_token_trig sw_check_done ]

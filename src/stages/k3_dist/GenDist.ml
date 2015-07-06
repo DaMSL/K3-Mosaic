@@ -294,9 +294,8 @@ let sw_driver_trig (c:config) =
     (mk_and
       (mk_var D.sw_init.id) @@
        mk_gt (mk_size_slow D.sw_trig_buf_idx) @@ mk_cint 0)
-    (mk_case_ns (mk_apply' TS.sw_gen_vid_nm [mk_cunit]) "vid"
-      mk_cunit @@
-      (* else *)
+    (TS.sw_gen_vid mk_cunit @@
+      (* else -- we have a vid *)
       mk_pop D.sw_trig_buf_idx.id trig_id
         (* empty: no message to send *)
         mk_cunit @@
