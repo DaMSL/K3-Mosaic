@@ -10,13 +10,52 @@ module D = K3Dist
 
 exception InvalidAst of string
 
+(* find unused arguments in triggers *)
+let unused_trig_args ast =
+  let rec toplevel_args = function
+    | ATuple args -> List.flatten @@ List.map toplevel_args args
+    | AVar(x,_) -> [x]
+    | _ -> failwith "unexpected non-standard arg in dbtoaster k3 code"
+  in
+  (* for a single trigger *)
+  let unused_args trig_flow =
+    let args = StrSet.of_list @@ toplevel_args @@ U.args_of_code trig_flow in
+    (* remove var ids from set *)
+    let remove_fn a t = match U.tag_of_expr t with
+      | Var id -> StrSet.remove id a
+      | _      -> a
+    in
+    Tree.fold_tree_th_bu remove_fn args (U.expr_of_code trig_flow)
+  in
+  let l =
+    List.map (fun (nm, t) -> P.remove_trig_prefix nm, unused_args t) @@
+    List.filter (fun (nm, _) -> P.is_insert_t nm || P.is_delete_t nm) @@
+    List.map (fun t -> U.id_of_code t, t) @@
+    U.triggers_of_program ast
+  in
+  (* combine insert and delete trigs, and take their intersection. The reason we do this is that
+   * in the rare case of some variables used by one of insert/delete, we don't have a clean enough
+   * separation between the two (e.g. in agenda_mapping) to really handle them seprately, and getting
+   * their intersection should be useful enough *)
+  List.fold_left (fun (acc:StrSet.t StrMap.t) (nm, set) ->
+    try
+      let s  = StrMap.find nm acc in
+      let s' = StrSet.inter s set in
+      StrMap.add nm s' acc
+    with Not_found ->
+      StrMap.add nm set acc) StrMap.empty l
+
+let string_of_unused_trig_args (m:StrSet.t StrMap.t) =
+  let l = list_of_strmap m in
+  strcatmap (fun (k,v) -> k^" => ("^(String.concat ", " @@ StrSet.elements v)^")") l
+
 (* find any csv loaders in the ast *)
 let loader_tables ast =
   let bu_fn acc e =
     try
-      let fn, arg = U.decompose_apply e in
+      let fn, args = U.decompose_apply e in
       if U.decompose_var fn = K3StdLib.csv_loader_name then
-        match U.decompose_const arg with
+        match U.decompose_const (hd args) with
         | CString f -> (Filename.chop_extension @@ Filename.basename f, f)::acc
         | _ -> failwith "bad filename"
       else acc
@@ -72,15 +111,16 @@ let get_global_map_inits c = function
       let change_load_csv e =
         Tree.modify_tree_bu e (fun e ->
           try
-            let fn, arg = U.decompose_apply e in
+            let fn, args = U.decompose_apply e in
             if U.decompose_var fn = K3StdLib.csv_loader_name then
-              match U.decompose_const arg with
+              match U.decompose_const (hd args) with
               | CString f ->
                   let table = Filename.chop_extension @@ Filename.basename f in
-                  mk_apply (mk_var @@ K3StdLib.csv_loader_name^"2") @@
-                    mk_tuple [mk_var @@ table^"_path"; 
-                              (* witness type so the function knows what to return *)
-                              mk_empty (M3ToK3.wrap_map' @@ ProgInfo.map_types_no_val_for c.p map_id)]
+                  mk_apply (mk_var @@ K3StdLib.csv_loader_name^"2")
+                    [mk_var @@ table^"_path";
+                      (* witness type so the function knows what to return *)
+                      mk_empty (M3ToK3.wrap_map' @@
+                        ProgInfo.map_types_no_val_for c.p map_id)]
               | _ -> failwith "bad filename"
             else e
           with Failure _ -> e)
@@ -274,18 +314,19 @@ let modify_dist (c:config) ast stmt =
 
     (* handle a case of a lambda applied to an lmap (i.e. a let statement *)
     (* in this case, we modify the types of the lambda vars themselves *)
-    | Apply  -> let (lambda, arg) = U.decompose_apply e in
-      begin match U.tag_of_expr arg with
-        | Var id when id = lmap_name ->
-          begin match (U.typed_vars_of_lambda lambda, snd @@ U.decompose_lambda lambda) with
-            | ([arg_id, t],b) -> NopMsg,
-              mk_apply
-                (mk_lambda
-                  (wrap_args [arg_id, wrap_t_of_map' c.map_type lmap_types]) b)
-                arg
-            | _ -> raise (UnhandledModification("At Apply: "^PR.string_of_expr e)) end
-        | _ -> NopMsg, e
-      end
+    | Apply  ->
+        let lambda, args = U.decompose_apply e in
+        begin match U.tag_of_expr (hd args) with
+          | Var id when id = lmap_name ->
+            begin match (U.typed_vars_of_lambda lambda, snd @@ U.decompose_lambda lambda) with
+              | ([arg_id, t],b) -> NopMsg,
+                mk_apply
+                  (mk_lambda
+                    (wrap_args [arg_id, wrap_t_of_map' c.map_type lmap_types]) b)
+                  args
+              | _ -> raise (UnhandledModification("At Apply: "^PR.string_of_expr e)) end
+          | _ -> NopMsg, e
+        end
 
     (* if any statements in a block requested deletion, delete
      * those statements - they're not relevant *)

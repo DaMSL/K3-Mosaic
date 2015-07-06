@@ -127,7 +127,7 @@ let do_gc_fns c =
           let do_bind = mk_bind (mk_var ds.id) map_deref in
           (* get frontier *)
           do_bind @@
-            mk_assign map_deref @@
+            mk_assign map_deref @@ U.add_property "Move" @@
           mk_let ["frontier"]
             (mk_slice_frontier (mk_var map_deref) @@ vid_and_unknowns' pat) @@
             (* delete all prefixes in ds. min_vid comes from pattern *)
@@ -146,7 +146,7 @@ let do_gc_fns c =
         let temp = "temp" in
         (* delete any entry with a lower or matching vid *)
         mk_let [temp] (mk_empty t') @@
-        mk_assign ds.id @@
+        mk_assign ds.id @@ U.add_property "Move" @@
         mk_agg
           (mk_lambda2' ["acc", ds.t] (ds_e ds) @@
             mk_if (mk_geq (mk_var vid) @@ mk_var min_vid)
@@ -164,8 +164,8 @@ let do_gc_trig c =
   mk_code_sink' do_gc_nm [min_vid, t_vid] [] @@
     mk_block @@
       (* (mk_apply' "print_env" mk_cunit) :: (* debug *) *)
-      (mk_apply' "print" @@ mk_cstring "Starting GC") ::
-      (List.map (fun ds -> mk_apply' ("do_gc_"^ds.id) @@ mk_tuple [mk_var min_vid]) @@ ds_to_gc c) @
+      (mk_apply' "print" [mk_cstring "Starting GC"]) ::
+      (List.map (fun ds -> mk_apply' ("do_gc_"^ds.id) [mk_var min_vid]) @@ ds_to_gc c) @
       [D.mk_send_master ms_gc_done_barrier_nm]
 
 (* master switch trigger to receive and add to the max vid map *)

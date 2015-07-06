@@ -84,6 +84,7 @@ type trig_kinds = AllTrigs | InsertTrigs | DeleteTrigs
 let is_delete_t t = check_prefix t "delete_"
 let is_insert_t t = check_prefix t "insert_"
 let is_sys_init_t t = t = "system_ready_event"
+let remove_trig_prefix t = str_drop (String.length "delete_") t
 
 let relevant_trig ?(kind=AllTrigs) t = match kind with
   | AllTrigs    -> is_delete_t t || is_insert_t t || is_sys_init_t t

@@ -172,7 +172,7 @@ let nd_add_delta_to_buf c map_id =
       delta_tuples, map_delta.t])
     [t_unit] @@
     mk_bind (mk_var target_map) tmap_deref @@
-      mk_assign tmap_deref @@
+      mk_assign tmap_deref @@ U.add_property "Move" @@
         mk_agg
           (mk_lambda2' ["acc", map_real.t] (ds_e map_delta) @@
             mk_let ["regular_read"]
@@ -270,7 +270,7 @@ let nd_filter_corrective_list =
         mk_convert_col nd_log_master.t (wrap_tlist' @@ snd_many @@ ds_e nd_log_master) @@
           (* list of triggers >= vid *)
           mk_apply
-            (mk_var nd_log_read_geq_nm) @@ mk_var "request_vid"
+            (mk_var nd_log_read_geq_nm) [mk_var "request_vid"]
 
 (**** protocol code ****)
 
@@ -282,7 +282,7 @@ let sw_driver_trig (c:config) =
     List.fold_left (fun acc (id, nm) ->
       (* check if we match on the id *)
       mk_if (mk_eq (mk_var trig_id) @@ mk_cint id)
-        (mk_apply' (send_fetch_name_of_t nm) @@ mk_var "vid")
+        (mk_apply' (send_fetch_name_of_t nm) [mk_var "vid"])
         (* else, continue *)
         acc)
     (mk_error "mismatch on trigger id") @@
@@ -294,7 +294,7 @@ let sw_driver_trig (c:config) =
     (mk_and
       (mk_var D.sw_init.id) @@
        mk_gt (mk_size_slow D.sw_trig_buf_idx) @@ mk_cint 0)
-    (mk_case_ns (mk_apply' TS.sw_gen_vid_nm mk_cunit) "vid"
+    (mk_case_ns (mk_apply' TS.sw_gen_vid_nm [mk_cunit]) "vid"
       mk_cunit @@
       (* else *)
       mk_pop D.sw_trig_buf_idx.id trig_id
@@ -308,7 +308,7 @@ let sw_driver_trig (c:config) =
           mk_block [
             (* for debugging, sleep if we've been asked to *)
             mk_if (mk_neq (mk_var D.sw_driver_sleep.id) @@ mk_cint 0)
-              (mk_apply' "sleep" (mk_var D.sw_driver_sleep.id))
+              (mk_apply' "sleep" [mk_var D.sw_driver_sleep.id])
               mk_cunit;
             (* send the msg using dispatch code *)
             dispatch_code;
@@ -317,9 +317,9 @@ let sw_driver_trig (c:config) =
           ])
     mk_cunit
 
-(* The start trigger puts the message in a trig buffer *)
+(* The start function puts the message in a trig buffer *)
 let sw_start_fn (c:config) trig =
-  let args_t = snd_many @@ P.args_of_t c.p trig in
+  let args_t = snd_many @@ D.args_of_t c trig in
   let args = ["args", wrap_ttuple args_t] in
   mk_global_fn ("sw_start_"^trig) args [] @@
     mk_block [
@@ -338,7 +338,8 @@ let sw_demux c =
   let combo_arr_t = Array.of_list combo_t in
   (* for dates, we need to parse to int *)
   let convert_date i =
-    if combo_arr_t.(i).typ = TDate then mk_apply' "parse_sql_date"
+    if combo_arr_t.(i).typ = TDate then
+      mk_apply' "parse_sql_date" |- singleton
     else id_fn
   in
   let sentry_code =
@@ -352,10 +353,10 @@ let sw_demux c =
   mk_code_sink' sw_demux_nm ["args", wrap_ttuple @@ List.map str_of_date_t combo_t] [] @@
   StrMap.fold (fun trig arg_indices acc ->
     let apply s =
-      (mk_apply' (s^trig) @@
+      mk_apply' (s^trig) @@ singleton @@ mk_tuple @@
         (* add 1 for tuple access *)
-        mk_tuple @@ List.map (fun i ->
-          convert_date i @@ mk_subscript (i+1) @@ mk_var "args") arg_indices)
+        List.map (fun i ->
+          convert_date i @@ mk_subscript (i+1) @@ mk_var "args") arg_indices
     in
     mk_if (mk_eq (mk_fst @@ mk_var "args") @@ mk_cstring trig)
       (mk_if (mk_eq (mk_snd @@ mk_var "args") @@ mk_cint 1)
@@ -407,7 +408,7 @@ let sw_send_fetch_fn c s_rhs_lhs s_rhs trig_name =
                 (mk_lambda' ["ip", t_addr] @@
                   mk_tuple @@ [mk_cint stmt_id; mk_cint rhs_map_id; mk_var "ip"]) @@
                 mk_apply (mk_var route_fn) @@
-                  mk_tuple @@ (mk_cint rhs_map_id)::key)
+                  (mk_cint rhs_map_id)::key)
               acc_code
           )
           (mk_empty @@ wrap_tbag' [t_stmt_id; t_map_id; t_addr])
@@ -429,7 +430,7 @@ let sw_send_fetch_fn c s_rhs_lhs s_rhs trig_name =
                   args_of_t_as_vars_with_v c trig_name
               ) @@
               mk_apply (mk_var route_fn) @@
-                mk_tuple @@ (mk_cint lhs_map_id)::key
+                (mk_cint lhs_map_id)::key
             ]
         )
         [] @@
@@ -457,11 +458,9 @@ let sw_send_fetch_fn c s_rhs_lhs s_rhs trig_name =
               args_of_t_as_vars_with_v c trig_name) ::
             [GC.sw_update_send ~vid_nm:"vid"]) @@
       mk_gbagg
-        (mk_assoc_lambda' (* grouping func -- assoc because of gbagg tuple *)
-          ["ip", t_addr; "stmt_id", t_stmt_id]
-          ["count", t_int] @@
-          mk_var "ip"
-        )
+        (mk_lambda' (* grouping func *)
+          ["ip_stmt_id", wrap_ttuple [t_addr; t_stmt_id]; "count", t_int] @@
+          mk_subscript 1 @@ mk_var "ip_stmt_id")
         (mk_assoc_lambda' (* agg func *)
           ["acc", stmt_cnt_list.t]
           ["ip_and_stmt_id", wrap_ttuple [t_addr; t_stmt_id]; "count", t_int] @@
@@ -502,22 +501,21 @@ let sw_send_fetch_fn c s_rhs_lhs s_rhs trig_name =
                 mk_let ["sender_count"]
                   (* count up the number of IPs received from route *)
                   (mk_agg
-                    (mk_lambda'
+                    (mk_lambda''
                       ["count", t_int; "ip", t_addr] @@
                       mk_add (mk_var "count") @@ mk_cint 1)
                     (mk_cint 0) @@
-                    mk_apply
-                      (mk_var route_fn) @@ mk_tuple @@ mk_cint rhs_map_id::route_key) @@
+                    mk_apply'
+                      route_fn @@ mk_cint rhs_map_id::route_key) @@
                 mk_map
                   (mk_lambda'
                     ["ip", t_addr; "tuples", tuple_types] @@
                       mk_tuple [mk_var "ip"; mk_cint stmt_id; mk_var "sender_count"]) @@
-                  mk_apply
-                    (mk_var shuffle_fn) @@
-                    mk_tuple @@
-                        shuffle_key@
-                        [mk_empty tuple_types;
-                        mk_cbool true]
+                  mk_apply'
+                    shuffle_fn @@
+                      shuffle_key@
+                      [mk_empty tuple_types;
+                      mk_cbool true]
             )
             (mk_empty @@ wrap_tbag' [t_addr; t_stmt_id; t_int]) @@
             s_rhs_lhs]
@@ -530,12 +528,12 @@ let sw_send_fetch_fn c s_rhs_lhs s_rhs trig_name =
     (send_fetch_name_of_t trig_name) ["vid", t_vid] [] @@
     let handle_args e =
       (* handle the case of no arguments (system_ready) *)
-      if P.args_of_t c.p trig_name = [] then e
+      if D.args_of_t c trig_name = [] then e
       else (* pop an argument out of the buffers *)
         mk_pop buf "args"
           (mk_error @@ "unexpected missing arguments in "^buf) @@
           (* decompose args *)
-          mk_let (fst_many @@ P.args_of_t c.p trig_name)
+          mk_let (fst_many @@ D.args_of_t c trig_name)
             (mk_var "args") e
     in
     handle_args @@
@@ -564,8 +562,7 @@ let nd_rcv_fetch_trig c trig =
       (* save the bound variables for this trigger so they're available later *)
       mk_apply
         (mk_var @@ nd_log_write_for c trig) @@
-        mk_tuple @@
-          args_of_t_as_vars_with_v c trig ;
+        args_of_t_as_vars_with_v c trig ;
       (* invoke generated send pushes. *)
       mk_iter
         (mk_lambda'
@@ -606,14 +603,14 @@ mk_code_sink'
         ["stmt_id", t_stmt_id; "count", t_int] @@
         mk_if
           (mk_apply' nd_check_stmt_cntr_index_nm @@
-            mk_tuple [mk_var "vid"; mk_var "stmt_id"; mk_var "count"])
+            [mk_var "vid"; mk_var "stmt_id"; mk_var "count"])
           (* we need to create a possible send for each statement in the trigger *)
           (List.fold_left (fun acc_code stmt_id ->
             mk_if
               (mk_eq (mk_var "stmt_id") @@ mk_cint stmt_id)
               (mk_apply'
                 (do_complete_name_of_t trig_name stmt_id) @@
-                mk_tuple @@ args_of_t_as_vars_with_v c trig_name) @@
+                args_of_t_as_vars_with_v c trig_name) @@
               acc_code)
             mk_cunit @@
             P.stmts_of_t c.p trig_name) @@
@@ -651,9 +648,9 @@ let nd_send_push_stmt_map_trig c s_rhs_lhs trig_name =
           (* save this particular statement execution in the master log
            * Note that we need to do it here to make sure nothing
            * else can stop us before we send the push *)
-          mk_apply
-            (mk_var nd_log_master_write_nm) @@
-            mk_tuple [mk_var "vid"; mk_cint stmt_id] ;
+          mk_apply'
+            nd_log_master_write_nm @@
+            [mk_var "vid"; mk_cint stmt_id] ;
           mk_iter
             (mk_lambda'
               ["ip", t_addr;"tuples", wrap_t_calc' rhs_map_types] @@
@@ -661,9 +658,8 @@ let nd_send_push_stmt_map_trig c s_rhs_lhs trig_name =
                 (rcv_push_name_of_t c trig_name stmt_id rhs_map_id)
                 (mk_var "ip") @@
                 mk_var "tuples" :: args_of_t_as_vars_with_v c trig_name) @@
-            mk_apply
-              (mk_var shuffle_fn) @@
-              mk_tuple @@
+            mk_apply'
+              shuffle_fn @@
                 partial_key @
                 (* we need the latest vid data that's less than the current vid *)
                 [D.map_latest_vid_vals c (mk_var rhsm_deref)
@@ -702,10 +698,10 @@ List.fold_left
         (* save the bound variables for this vid. This is necessary for both the
          * sending and receiving nodes, which is why we're also doing it here *)
         [mk_apply' (nd_log_write_for c trig_name) @@
-          mk_tuple @@ args_of_t_as_vars_with_v c trig_name
+          args_of_t_as_vars_with_v c trig_name
         ;
         mk_bind (mk_var rbuf_name) rbuf_deref @@
-         mk_assign rbuf_deref @@
+         mk_assign rbuf_deref @@ U.add_property "Move" @@
          mk_agg
           (mk_lambda2' ["acc", map_ds.t] (ds_e tup_ds) @@
             mk_block [
@@ -719,10 +715,10 @@ List.fold_left
          (* update and check statment counters to see if we should send a do_complete *)
          mk_if
            (mk_apply' nd_check_stmt_cntr_index_nm @@
-             mk_tuple [mk_var "vid"; mk_cint stmt_id; mk_cint @@ -1])
+             [mk_var "vid"; mk_cint stmt_id; mk_cint @@ -1])
            (* Send to local do_complete *)
            (mk_apply' (do_complete_name_of_t trig_name stmt_id) @@
-             mk_tuple @@ args_of_t_as_vars_with_v c trig_name)
+             args_of_t_as_vars_with_v c trig_name)
            mk_cunit ] ])
   [] s_rhs
 
@@ -816,18 +812,20 @@ let send_corrective_fns c =
                               (* eliminate dups *)
                               mk_fst_many [tuple_type; t_unit] @@ mk_gbagg
                                 (mk_lambda' ["tuple", tuple_type] @@ mk_var "tuple")
-                                (mk_lambda' ["_", t_unit; "_", tuple_type] mk_cunit)
+                                (mk_lambda'' ["_", t_unit; "_", tuple_type] mk_cunit)
                                 mk_cunit @@
                                 mk_combine (mk_var "acc_tuples") @@ mk_var "tuples"]])
                     (mk_tuple [mk_empty t_vid_list; mk_empty map_ds.t]) @@
                     mk_flatten @@ mk_map
                       (mk_lambda' ["vid", t_vid] @@
                         (* get bound vars from log so we can calculate shuffle *)
-                        mk_let
-                          (fst_many @@ P.args_of_t c.p target_trig)
-                          (mk_apply
-                            (mk_var @@ nd_log_get_bound_for target_trig) @@
-                            mk_var "vid") @@
+                        let args = D.args_of_t c target_trig in
+                        (if args <> [] then
+                          mk_let
+                            (fst_many @@ D.args_of_t c target_trig)
+                            (mk_apply'
+                              (nd_log_get_bound_for target_trig) [mk_var "vid"])
+                        else id_fn) @@
                         (* insert vid into the ip, tuples output of shuffle *)
                         mk_map (* (ip * vid * tuple list) list *)
                           (mk_lambda' ["ip", t_addr; "tuples", delta_tuples2.t] @@
@@ -837,7 +835,7 @@ let send_corrective_fns c =
                                       mk_tuple @@ ids_to_vars @@ fst_many @@ ds_e map_ds) @@
                                     mk_var "tuples"]) @@
                           mk_apply'
-                            shuffle_fn @@ mk_tuple @@
+                            shuffle_fn @@
                               (* (ip * tuple list) list *)
                               key @ [mk_var "delta_tuples2"; mk_cbool false]) @@
                       mk_var "vid_list") @@
@@ -872,7 +870,7 @@ let send_corrective_fns c =
     mk_let ["corrective_list"] (* (stmt_id * vid list) list *)
       (mk_apply'
         nd_filter_corrective_list_nm @@
-        mk_tuple (* feed in list of possible stmts *)
+        (* feed in list of possible stmts *)
           [mk_var "corrective_vid"; trig_stmt_k3_list]) @@
     (* if corrective list isn't empty, add vid inside delta tuples *)
     mk_is_empty (mk_var "corrective_list")
@@ -896,7 +894,7 @@ let send_corrective_fns c =
                 (mk_eq (mk_var "stmt_id") @@ mk_cint target_stmt)
                 (* call the specific function for this statement *)
                 (mk_add (mk_var "acc_count") @@
-                  mk_apply' (sub_fn_nm target_stmt) @@ mk_tuple @@ ids_to_vars' sub_args)
+                  mk_apply' (sub_fn_nm target_stmt) @@ ids_to_vars' sub_args)
                 acc_code)
             (mk_var "acc_count") (* base case *)
             trigs_stmts_with_matching_rhs_map)
@@ -980,7 +978,7 @@ let nd_complete_stmt_cntr_check c =
  * we add the delta to all following vids
  *)
 let do_add_delta c e lmap ~corrective =
-  mk_apply' (D.nd_add_delta_to_buf_nm c lmap) @@ mk_tuple @@
+  mk_apply' (D.nd_add_delta_to_buf_nm c lmap) @@
     [mk_var @@ P.map_name_of c.p lmap;
       if corrective then mk_ctrue else mk_cfalse; mk_var "vid"; e]
 
@@ -990,7 +988,7 @@ let nd_do_complete_trigs c trig_name =
     let comp_nm = do_complete_name_of_t trig_name stmt_id in
     let args = args_of_t_with_v c trig_name in
     mk_code_sink' (comp_nm^"_trig") args [] @@
-    mk_apply' comp_nm @@ mk_tuple @@ ids_to_vars @@ fst_many args;
+    mk_apply' comp_nm @@ ids_to_vars @@ fst_many args;
 in
 List.map do_complete_trig @@ P.stmts_without_rhs_maps_in_t c.p trig_name
 
@@ -1016,17 +1014,18 @@ let nd_do_complete_fns c ast trig_name corr_maps =
              * which must send the new vid to be calculated as well as the original complete's vid
              *)
             (mk_apply' send_corr_t @@
-              mk_tuple @@ [G.me_var; mk_cint stmt_id; mk_var "vid"; snd_hop; mk_var "vid"; tup_ds]) @@
+              [G.me_var; mk_cint stmt_id; mk_var "vid"; snd_hop; mk_var "vid"; tup_ds]) @@
             (* update the corrective counters for hop 1 to the number of msgs.
              * true: is a root, bool: create an entry *)
             let update_corr_code create =
               mk_apply' nd_update_stmt_cntr_corr_map_nm @@
-                mk_tuple [mk_var "vid"; mk_cint stmt_id; fst_hop; mk_var "sent_msgs"; mk_ctrue; mk_cbool create]
+                [mk_var "vid"; mk_cint stmt_id; fst_hop; mk_var "sent_msgs"; mk_ctrue; mk_cbool create]
             in
             if has_rhs then
               mk_if (mk_eq (mk_var "sent_msgs") @@ mk_cint 0)
                 (* if our sent_msgs is 0, we need to delete the stmt cntr entry *)
-                (mk_apply' nd_complete_stmt_cntr_check_nm @@ mk_tuple [mk_var "vid"; mk_cint stmt_id]) @@
+                (mk_apply' nd_complete_stmt_cntr_check_nm
+                  [mk_var "vid"; mk_cint stmt_id]) @@
                 (* otherwise we need to update the corrective counters *)
                 update_corr_code false
             else
@@ -1039,7 +1038,7 @@ let nd_do_complete_fns c ast trig_name corr_maps =
         else
           (* if we have no rhs maps, do nothing *)
           if not has_rhs then mk_cunit
-          else mk_apply' nd_complete_stmt_cntr_check_nm @@ mk_tuple [mk_var "vid"; mk_cint stmt_id])
+          else mk_apply' nd_complete_stmt_cntr_check_nm [mk_var "vid"; mk_cint stmt_id])
       ]
     in
     M.modify_ast_for_s c ast stmt_id trig_name after_fn
@@ -1055,7 +1054,8 @@ let nd_rcv_corr_done c =
   mk_code_sink' nd_rcv_corr_done_nm args [] @@
     mk_block [
       (* update the corrective map. false: not a root of the corrective tree *)
-      mk_apply' nd_update_stmt_cntr_corr_map_nm @@ mk_tuple @@ (ids_to_vars @@ fst_many args) @ [mk_cfalse; mk_cfalse];
+      mk_apply' nd_update_stmt_cntr_corr_map_nm @@
+        (ids_to_vars @@ fst_many args) @ [mk_cfalse; mk_cfalse];
       (* check if the corr_cnt structure is empty. If so, we can delete the whole entry *)
       mk_case_ns (mk_lookup' nd_stmt_cntrs.id lookup_pat) "lkup"
         (mk_error @@ nd_rcv_corr_done_nm^": expected stmt_cntr value") @@
@@ -1094,8 +1094,7 @@ let nd_rcv_correctives_trig c s_rhs trig_name = List.map
         mk_apply'
           (D.nd_add_delta_to_buf_nm c rmap) @@
             (* pass the map indirection, false=not corrective *)
-            mk_tuple [mk_var buf_map_nm; mk_cbool false; mk_var "vid";
-                      mk_var "delta_tuples"];
+            [mk_var buf_map_nm; mk_cbool false; mk_var "vid"; mk_var "delta_tuples"];
         (* for every computation vid, only execute if we have all the updates *)
         mk_let ["sent_msgs"]
           (mk_agg
@@ -1110,14 +1109,16 @@ let nd_rcv_correctives_trig c s_rhs trig_name = List.map
                 (* check if our stmt_counter is 0 *)
                 mk_if (mk_eq (mk_var "cntr") @@ mk_cint 0)
                   (* if so, get bound vars from log *)
-                  (mk_let (fst_many @@ P.args_of_t c.p trig_name)
-                    (mk_apply'
-                      (nd_log_get_bound_for trig_name) @@ mk_var "compute_vid") @@
+                  (let args = fst_many @@ D.args_of_t c trig_name in
+                  (if args <> [] then
+                    mk_let args
+                      (mk_apply'
+                        (nd_log_get_bound_for trig_name) [mk_var "compute_vid"])
+                  else id_fn) @@
                     (* do_corrective, return number of msgs *)
                     mk_add (mk_var "acc_count") @@
                       mk_apply'
                         (do_corrective_name_of_t c trig_name stmt_id rmap) @@
-                        mk_tuple @@
                           (ids_to_vars @@ fst_many orig_vals) @
                           args_of_t_as_vars_with_v ~vid:"compute_vid" c trig_name @
                           [mk_var "delta_tuples"]) @@
@@ -1160,9 +1161,9 @@ let nd_do_corrective_fns c s_rhs ast trig_name corrective_maps =
               (* send correctives *)
               if List.exists ((=) lmap) corrective_maps
               (* send correctives with hop + 1, and return the num of correctives *)
-              then mk_apply' send_corr_fn @@ mk_tuple @@
-                    (modify_e orig_vals ["hop", mk_add (mk_cint 1) @@ mk_var "hop"]) @
-                    [mk_var "vid"; mk_var "new_tuples"]
+              then mk_apply' send_corr_fn @@
+                (modify_e orig_vals ["hop", mk_add (mk_cint 1) @@ mk_var "hop"]) @
+                [mk_var "vid"; mk_var "new_tuples"]
               (* if we have no more correctives, return 0 *)
               else mk_cint 0
             ]
@@ -1274,11 +1275,26 @@ let gen_dist ?(gen_deletes=true)
              ?(gen_correctives=true)
              ~stream_file
              ~map_type
-             ~agenda_map
+             ~(agenda_map: mapping_t)
              p partmap ast =
   let sys_init =
     try ignore(P.find_trigger p "system_ready_event"); true
     with Not_found | P.Bad_data _ -> false in
+  let unused_trig_args = M.unused_trig_args ast in
+
+  (* adjust agenda_map for unused trig args *)
+  let agenda_map = second (StrMap.mapi @@ fun trig_nm l ->
+    try
+      let args = fst_many @@ P.args_of_t p ("insert_"^trig_nm) in
+      let args = list_zip args l in
+      let unused =
+        begin try StrMap.find trig_nm unused_trig_args
+        with Not_found -> StrSet.empty end in
+      let args = List.filter (fun (nm,_) -> not @@ StrSet.mem nm unused) args in
+      snd @@ list_unzip args
+    (* trigger that's uninvolved in this query *)
+    with P.Bad_data _ -> l) agenda_map in
+
   let c = {
       p;
       shuffle_meta=K3Shuffle.gen_meta p;
@@ -1290,6 +1306,7 @@ let gen_dist ?(gen_deletes=true)
       sys_init;
       stream_file;
       agenda_map;
+      unused_trig_args;
     } in
   (* regular trigs then insert entries into shuffle fn table *)
   let proto_trigs, proto_funcs =

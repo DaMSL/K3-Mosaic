@@ -36,6 +36,7 @@ type trig_kinds = AllTrigs | InsertTrigs | DeleteTrigs
 (* Utility functions using this data structure *)
 val is_delete_t : trig_name_t -> bool
 val is_insert_t : trig_name_t -> bool
+val remove_trig_prefix : trig_name_t -> trig_name_t
 val get_trig_list : ?kind:trig_kinds -> prog_data_t -> trig_name_t list
 val for_all_trigs : ?sys_init:bool -> ?deletes:bool -> prog_data_t -> (trig_name_t -> 'a) -> 'a list
 val get_stmt_list : prog_data_t -> stmt_id_t list

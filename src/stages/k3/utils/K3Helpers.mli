@@ -4,8 +4,6 @@ open K3.AST
 open K3.Annotation
 
 val mk_no_anno : 'a -> 'a * annotation_t
-(* Wrap with sorted annotation. Give int list of positions to sort by *)
-val mk_anno_sort : 'a * annotation_t -> int list -> 'a * annotation_t
 
 (* easy access to K3 types *)
 val canonical : base_type_t -> type_t
@@ -60,13 +58,13 @@ val wrap_tind : type_t -> type_t
 val wrap_tind_mut : type_t -> type_t
 val wrap_tmaybe : type_t -> type_t
 val wrap_tmaybes : type_t list -> type_t list
-val wrap_tfunc : type_t -> type_t -> type_t
+val wrap_tfunc : type_t list -> type_t -> type_t
 
 (* wrap a single layer of arguments *)
 val wrap_args : (id_t * type_t) list -> arg_t
 
 (* wrap multiple layers of arguments *)
-val wrap_args_deep : arg_t list -> arg_t
+val wrap_args_deep : (id_t * type_t) list -> arg_t
 
 (* wrap arguments, turning maybe types to maybe argument types *)
 val wrap_args_maybe : (id_t * type_t) list -> arg_t
@@ -77,7 +75,7 @@ val unwrap_col : base_type_t -> container_type_t * type_t
 
 val unwrap_tcol : type_t -> container_type_t * type_t
 
-val unwrap_tfun : type_t -> type_t * type_t
+val unwrap_tfun : type_t -> type_t list * type_t
 
 val unwrap_t : type_t -> base_type_t
 
@@ -129,12 +127,14 @@ val mk_gt : expr_t -> expr_t -> expr_t
 
 val mk_lambda : arg_t -> expr_t -> expr_t
 val mk_lambda' : (id_t * type_t) list -> expr_t -> expr_t
+(* deep matching on tuples *)
+val mk_lambda'' : (id_t * type_t) list -> expr_t -> expr_t
 val mk_lambda2 : arg_t -> arg_t -> expr_t -> expr_t
 val mk_lambda2' : (id_t * type_t) list -> (id_t * type_t) list -> expr_t -> expr_t
 val mk_lambda3 : arg_t -> arg_t -> arg_t -> expr_t -> expr_t
 val mk_lambda3' : (id_t * type_t) list -> (id_t * type_t) list -> (id_t * type_t) list -> expr_t -> expr_t
-val mk_apply : expr_t -> expr_t -> expr_t
-val mk_apply' : id_t -> expr_t -> expr_t
+val mk_apply : expr_t -> expr_t list -> expr_t
+val mk_apply' : id_t -> expr_t list -> expr_t
 val mk_block : expr_t list -> expr_t
 val mk_iter : expr_t -> expr_t -> expr_t
 val mk_if : expr_t -> expr_t -> expr_t -> expr_t
@@ -215,17 +215,15 @@ val mk_global_val_init :
 
 (* macro to generate a global function with more control over args *)
 val mk_global_fn_raw:
-  id_t -> arg_t -> type_t -> type_t -> expr_t ->
-    declaration_t * annotation_t
+  id_t -> arg_t -> type_t list -> type_t -> expr_t -> declaration_t * annotation_t
 
 (* macro to create a global function *)
 val mk_global_fn :
-  id_t -> (id_t * type_t) list -> type_t list ->
-  expr_t -> declaration_t * annotation_t
+  id_t -> (id_t * type_t) list -> type_t list -> expr_t -> declaration_t * annotation_t
 
 (* macro to declare a foreign function *)
 val mk_foreign_fn :
-  id_t -> type_t -> type_t -> declaration_t * annotation_t
+  id_t -> type_t list -> type_t -> declaration_t * annotation_t
 
 (* macro to declare a foreign function given a type *)
 val mk_foreign_short : id_t -> type_t -> declaration_t * annotation_t
@@ -286,7 +284,7 @@ val list_of_k3_container : expr_t -> expr_t list
 val k3_container_of_list : type_t -> expr_t list -> expr_t
 
 (* convert arg to value type *)
-val type_of_arg: arg_t -> type_t
+val type_of_arg: arg_t -> type_t list
 
 (* convert the type of a collection *)
 val mk_convert_col : type_t -> type_t -> expr_t -> expr_t

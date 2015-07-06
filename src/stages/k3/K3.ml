@@ -38,7 +38,7 @@ type base_type_t
     | TCollection   of container_type_t * type_t
     | TAddress
     | TTarget       of type_t
-    | TFunction     of type_t * type_t
+    | TFunction     of type_t list * type_t
     | TIndirect     of type_t
 
 and mutable_t = bool
@@ -214,28 +214,8 @@ include ASTCommonImpl
 type type_t = AST.type_t
 type expr_t = AST.expr_t
 
-(* Unnamed tuple descriptor *)
-type positions = int list
-
-type dependency = Element | Positions of positions
-
-type rigidity_t = Constraint | Hint
-
-type data_annotation_t =
-  | FunDep   of positions * dependency
-  | MVFunDep of positions * dependency
-  | Unique   of positions
-  | Ordered  of positions
-  | Sequential
-  | RandomAccess
-
-type control_annotation_t =
-  | Effect of id_t list (* Variables ranged over by the effect *)
-  | Parallel of int     (* Degree of parallelism *)
-
 type k3_annotation_t =
-  | Data    of rigidity_t * data_annotation_t
-  | Control of rigidity_t * control_annotation_t
+  | Property of string
   | Type    of type_t
 
 type annotation_t = k3_annotation_t list

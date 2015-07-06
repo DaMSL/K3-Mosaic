@@ -8,8 +8,6 @@ module U = K3Util
 (* Annotation manipulation *)
 let mk_no_anno a = (a, [])
 
-let mk_anno_sort (a,annos) xs = (a, annos@[Data(Constraint, Ordered xs)])
-
 (* Type manipulation functions ------------- *)
 
 (* the default type *)
@@ -77,7 +75,7 @@ let wrap_tind_mut t = mut @@ wrap_tind t
 let wrap_tmaybe t = canonical @@ TMaybe t
 let wrap_tmaybes ts = List.map wrap_tmaybe ts
 
-let wrap_tfunc tin tout = canonical @@ TFunction(tin, immut tout)
+let wrap_tfunc tinl tout = canonical @@ TFunction(tinl, immut tout)
 
 (* wrap a function argument *)
 let wrap_args id_typ =
@@ -93,8 +91,8 @@ let wrap_args id_typ =
 let wrap_args_deep id_arg =
   match id_arg with
   | []  -> invalid_arg "Nothing to wrap in wrap_args_deep"
-  | [x] -> x
-  | xs  -> ATuple xs
+  | [_] -> wrap_args id_arg
+  | _  -> ATuple[wrap_args id_arg]
 
 (* wrap function arguments, turning tmaybes to amaybes *)
 let wrap_args_maybe id_typ =
@@ -210,9 +208,14 @@ let mk_gt left right = mk_not (mk_leq left right)
 
 let mk_lambda argt expr = mk_stree (Lambda(argt)) [expr]
 
-let mk_lambda' argl expr = mk_lambda (wrap_args argl) expr
+(* deep matching on tuples *)
+let mk_lambda' argl expr = mk_lambda (wrap_args_deep argl) expr
 
-let mk_apply lambda input = mk_stree Apply [lambda; input]
+(* no deep matching. this is needed by higher order functions that don't
+ * loop over a data structure directly, such as fold or groupby *)
+let mk_lambda'' argl expr = mk_lambda (wrap_args argl) expr
+
+let mk_apply lambda input = mk_stree Apply (lambda :: input)
 
 let mk_apply' fn input = mk_apply (mk_var fn) input
 
@@ -348,7 +351,7 @@ let mk_agg_fst agg_fn col =
   mk_agg agg_fn
     (mk_case_sn (mk_peek col) "__case"
       (mk_var "__case") @@
-      mk_apply' "error" @@ mk_cstring "error with mk_agg_fst") col
+      mk_apply' "error" [mk_cstring "error with mk_agg_fst"]) col
 
 (* Macros to make role related stuff *)
 let mk_const_stream id typ (l:expr_t list) =
@@ -406,7 +409,7 @@ let mk_has_member collection pattern typ =
 let mk_code_sink name args locals code =
   mk_no_anno @@ Sink(Code(name, args, locals, code))
 
-let mk_code_sink' name args locals code = mk_code_sink name (wrap_args args) locals code
+let mk_code_sink' name args locals code = mk_code_sink name (wrap_args_deep args) locals code
 
 let mk_global_fn_raw name input_arg input_types output_types expr =
   mk_no_anno @@
@@ -422,7 +425,7 @@ let mk_global_fn name input_names_and_types output_types expr =
   let output_types = if null output_types then [t_unit] else output_types in
   mk_global_fn_raw name
     (wrap_args input_names_and_types)
-    (wrap_ttuple @@ snd_many input_names_and_types)
+    (snd_many input_names_and_types)
     (wrap_ttuple output_types)
     expr
 
@@ -521,17 +524,24 @@ let mk_id tuple_types =
       mk_tuple @@ ids_to_vars @@ fst_many @@ ids_types
 
 (* convert an arg to a type *)
-let rec type_of_arg = function
-  | AIgnored     -> t_unknown (* who cares *)
-  | AVar (_, vt) -> vt
-  | AMaybe a     -> wrap_tmaybe @@ type_of_arg a
-  | ATuple xs    -> wrap_ttuple @@ List.map type_of_arg xs
+let type_of_arg a =
+  let rec loop = function
+    | AIgnored     -> t_unknown (* who cares *)
+    | AVar (_, vt) -> vt
+    | AMaybe a     -> wrap_tmaybe @@ loop a
+    | ATuple xs    -> wrap_ttuple @@ List.map loop xs
+  in match a with
+  (* first level is unwrapped *)
+  | AIgnored     -> [t_unknown]
+  | AVar (_, vt) -> [vt]
+  | AMaybe a     -> [wrap_tmaybe @@ loop a]
+  | ATuple xs    -> List.map loop xs
 
 let mk_convert_col src_t dest_t col =
   if src_t = dest_t then col else
   let t_c, t_elem = unwrap_tcol src_t in
   mk_agg
-    (mk_lambda'
+    (mk_lambda''
       ["acc_conv", dest_t; "x", t_elem] @@
       mk_block [
         mk_insert "acc_conv" [mk_var "x"];
@@ -548,8 +558,7 @@ let mk_convert_col' src_t dest_col_t col =
 let mk_peek_or_zero e = mk_case_ns (mk_peek e) "x"
   (mk_cint 0) (mk_var "x")
 
-let mk_error s = mk_apply (mk_var "error") @@
-  mk_apply (mk_var "print") @@ mk_cstring s
+let mk_error s = mk_apply' "error" [mk_apply' "print" [mk_cstring s]]
 
 let mk_peek_or_error s e = mk_case_ns (mk_peek e) "x"
   (mk_error s) @@
@@ -696,3 +705,4 @@ let mk_barrier ?(args=unit_arg) ?(pre=[]) nm ~ctr ~total ~after =
         after
         mk_cunit
     ]
+

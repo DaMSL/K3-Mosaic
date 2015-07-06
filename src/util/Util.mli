@@ -154,6 +154,9 @@ val list_map : ('a -> 'b) -> 'a list -> 'b list
 (* get an index with every item in a map *)
 val list_mapi : (int * 'a -> 'b) -> 'a list -> 'b list
 
+(* doesn't throw exceptions *)
+val list_forall2 : ('a -> 'b -> bool) -> 'a list -> 'b list -> bool
+
 (* a cross between a map and a fold. Can only map the current list, but also
  * gets another value to play with, and no need to project out the temporary
  * value *)
@@ -280,6 +283,7 @@ val strcatmap : ?sep:string -> ('a -> string) -> 'a list -> string
 val intset_of_list : int list -> IntSet.t
 val intmap_of_list : (int * 'a) list -> 'a IntMap.t
 val strmap_of_list : (string * 'a) list -> 'a StrMap.t
+val list_of_strmap :  'a StrMap.t -> (string * 'a) list
 
 val string_of_int_list : int list -> string
 val string_of_int_set  : IntSet.t -> string

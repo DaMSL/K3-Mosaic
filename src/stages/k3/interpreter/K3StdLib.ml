@@ -21,7 +21,7 @@ let func_table : ((id_t, entry_t) Hashtbl.t) = Hashtbl.create 10
 
 (* add a function to the table. default is a unit dummy function *)
 let add_fn ?(args=unit_arg) ?(ret=t_unit) ?(fn=fun env -> env, unit_temp) nm =
-  let decl = wrap_tfunc (wrap_ttuple @@ snd_many args) ret in
+  let decl = wrap_tfunc (snd_many args) ret in
   Hashtbl.add func_table nm (decl, wrap_args args, fn)
 
 (* retreive arguments from environment *)
@@ -36,7 +36,7 @@ let hash_float_fn e =
    | _ -> invalid_arg "hash_float"
 
 let hash_float_name = "hash_float"
-let hash_float_decl = wrap_tfunc t_float t_int
+let hash_float_decl = wrap_tfunc [t_float] t_int
 let hash_float_args = wrap_args ["f", t_float]
 let _ = Hashtbl.add
   func_table hash_float_name (hash_float_decl, hash_float_args, hash_float_fn)
@@ -48,7 +48,7 @@ let hash_int_fn e =
   | _ -> invalid_arg "hash_int"
 
 let hash_int_name = "hash_int"
-let hash_int_decl = wrap_tfunc t_int t_int
+let hash_int_decl = wrap_tfunc [t_int] t_int
 let hash_int_args = wrap_args ["i", t_int]
 let _ = Hashtbl.add func_table
   hash_int_name (hash_int_decl, hash_int_args, hash_int_fn)
@@ -60,7 +60,7 @@ let hash_date_fn e =
   | _ -> invalid_arg "hash_date"
 
 let f_name = "hash_date"
-let f_decl = wrap_tfunc t_date t_int
+let f_decl = wrap_tfunc [t_date] t_int
 let f_args = wrap_args ["d", t_date]
 let _ = Hashtbl.add func_table
   f_name (f_decl, f_args, hash_date_fn)
@@ -72,7 +72,7 @@ let hash_byte_fn e =
   | _ -> invalid_arg "hash_byte"
 
 let hash_byte_name = "hash_byte"
-let hash_byte_decl = wrap_tfunc t_byte t_byte
+let hash_byte_decl = wrap_tfunc [t_byte] t_byte
 let hash_byte_args = wrap_args ["b", t_byte]
 let _ = Hashtbl.add func_table
   hash_byte_name (hash_byte_decl, hash_byte_args, hash_byte_fn)
@@ -84,7 +84,7 @@ let hash_string_fn e =
   | _ -> invalid_arg "hash_string"
 
 let hash_string_name = "hash_string"
-let hash_string_decl = wrap_tfunc t_string t_int
+let hash_string_decl = wrap_tfunc [t_string] t_int
 let hash_string_args = wrap_args ["s", t_string]
 let _ = Hashtbl.add func_table
   hash_string_name (hash_string_decl, hash_string_args, hash_string_fn)
@@ -96,7 +96,7 @@ let hash_addr_fn e =
   | _ -> invalid_arg "hash_addr"
 
 let hash_addr_name = "hash_addr"
-let hash_addr_decl = wrap_tfunc t_addr t_int
+let hash_addr_decl = wrap_tfunc [t_addr] t_int
 let hash_addr_args = wrap_args ["addr", t_addr]
 let _ = Hashtbl.add func_table
   hash_addr_name (hash_addr_decl, hash_addr_args, hash_addr_fn)
@@ -110,7 +110,7 @@ let divf_fn e =
   | _ -> invalid_arg "divf"
 
 let divf_name = "divf"
-let divf_decl = wrap_tfunc (wrap_ttuple [t_float;t_float]) t_float
+let divf_decl = wrap_tfunc [t_float; t_float] t_float
 let divf_args = wrap_args ["x", t_float; "y", t_float]
 let _ = Hashtbl.add func_table divf_name (divf_decl, divf_args, divf_fn)
 
@@ -121,7 +121,7 @@ let divi_fn e =
   | _ -> invalid_arg "divi"
 
 let divi_name = "divi"
-let divi_decl = wrap_tfunc t_int t_int
+let divi_decl = wrap_tfunc [t_int] t_int
 let divi_args = wrap_args ["x", t_int; "y", t_int]
 let _ = Hashtbl.add func_table
   divi_name (divi_decl, divi_args, divi_fn)
@@ -132,7 +132,7 @@ let fn e =
   | VInt x, VInt y -> e, int_temp @@ x mod y
   | _ -> invalid_arg "mod"
 let name = "mod"
-let decl = wrap_tfunc (wrap_ttuple [t_int;t_int]) t_int
+let decl = wrap_tfunc [t_int; t_int] t_int
 let args = ["x", t_int; "y", t_int]
 let _ = Hashtbl.add func_table name (decl, wrap_args args, fn)
 
@@ -142,7 +142,7 @@ let ret  = t_int
 let fn e = match args_of_env (fst_many args) e with
   | [VInt x] -> e, int_temp @@ abs x
   | _        -> invalid_arg name
-let decl = wrap_tfunc (wrap_ttuple @@ snd_many args) ret
+let decl = wrap_tfunc (snd_many args) ret
 let _ = Hashtbl.add func_table name (decl, wrap_args args, fn)
 
 (* reciprocal *)
@@ -152,7 +152,7 @@ let fn e =
   match arg_of_env "x" e with
   | VInt x -> e, float_temp @@ 1. /. foi x
   | _      -> invalid_arg name
-let decl = wrap_tfunc (wrap_ttuple @@ snd_many args) t_float
+let decl = wrap_tfunc (snd_many args) t_float
 let _ = Hashtbl.add func_table name (decl, wrap_args args, fn)
 
 (* reciprocal *)
@@ -162,7 +162,7 @@ let fn e =
   match arg_of_env "x" e with
   | VFloat x -> e, float_temp @@ 1. /. x
   | _        -> invalid_arg name
-let decl = wrap_tfunc (wrap_ttuple @@ snd_many args) t_float
+let decl = wrap_tfunc (snd_many args) t_float
 let _ = Hashtbl.add func_table name (decl, wrap_args args, fn)
 
 (* max int *)
@@ -172,7 +172,7 @@ let fn e =
   | VInt x, VInt y -> e, int_temp @@ max x y
   | _ -> invalid_arg name
 let args = ["x", t_int; "y", t_int]
-let decl = wrap_tfunc (wrap_ttuple @@ snd_many args) t_int
+let decl = wrap_tfunc (snd_many args) t_int
 let _ = Hashtbl.add func_table name (decl, wrap_args args, fn)
 
 (* max int float *)
@@ -182,7 +182,7 @@ let fn e =
   | VInt x, VFloat y -> e, float_temp @@ max (foi x) y
   | _ -> invalid_arg name
 let args = ["x", t_int; "y", t_float]
-let decl = wrap_tfunc (wrap_ttuple @@ snd_many args) t_int
+let decl = wrap_tfunc (snd_many args) t_int
 let _ = Hashtbl.add func_table name (decl, wrap_args args, fn)
 
 (* maximum integer *)
@@ -193,7 +193,7 @@ let _ = Hashtbl.add func_table name (decl, wrap_args args, fn)
 let get_max_int_fn e = e, int_temp 0x40000000
 
 let get_max_int_name = "get_max_int"
-let get_max_int_decl = wrap_tfunc t_unit t_int
+let get_max_int_decl = wrap_tfunc [t_unit] t_int
 let get_max_int_args = wrap_args ["_", t_unit]
 let _ = Hashtbl.add func_table
   get_max_int_name (get_max_int_decl, get_max_int_args, get_max_int_fn)
@@ -208,7 +208,7 @@ let float_of_int_fn e =
   | _ -> invalid_arg "float_of_int_fn"
 
 let float_of_int_name = "float_of_int"
-let float_of_int_decl = wrap_tfunc t_int t_float
+let float_of_int_decl = wrap_tfunc [t_int] t_float
 let float_of_int_args = wrap_args ["i", t_int]
 let _ = Hashtbl.add func_table
   float_of_int_name (float_of_int_decl, float_of_int_args, float_of_int_fn)
@@ -220,7 +220,7 @@ let int_of_float_fn e =
   | _ -> invalid_arg "int_of_float_fn"
 
 let int_of_float_name = "int_of_float"
-let int_of_float_decl = wrap_tfunc t_float t_int
+let int_of_float_decl = wrap_tfunc [t_float] t_int
 let int_of_float_args = wrap_args ["f", t_float]
 let _ = Hashtbl.add func_table
   int_of_float_name (int_of_float_decl, int_of_float_args, int_of_float_fn)
@@ -232,7 +232,7 @@ let string_of_int_fn e =
   | _ -> invalid_arg "string_of_int_fn"
 
 let string_of_int_name = "string_of_int"
-let string_of_int_decl = wrap_tfunc t_int t_string
+let string_of_int_decl = wrap_tfunc [t_int] t_string
 let string_of_int_args = wrap_args ["i", t_int]
 let _ = Hashtbl.add func_table
   string_of_int_name (string_of_int_decl, string_of_int_args, string_of_int_fn)
@@ -244,7 +244,7 @@ let string_of_float_fn e =
   | _ -> invalid_arg "string_of_float_fn"
 
 let string_of_float_name = "string_of_float"
-let string_of_float_decl = wrap_tfunc t_float t_string
+let string_of_float_decl = wrap_tfunc [t_float] t_string
 let string_of_float_args = wrap_args ["f", t_float]
 let _ = Hashtbl.add func_table
   string_of_float_name (string_of_float_decl, string_of_float_args, string_of_float_fn)
@@ -257,7 +257,7 @@ let fn e =
   match aoe with
   | [VString s; VInt f; VInt t] -> e, string_temp @@ String.sub s f t
   | _ -> invalid_arg name
-let decl = wrap_tfunc (wrap_ttuple @@ snd_many args) t_string
+let decl = wrap_tfunc (snd_many args) t_string
 let _ = Hashtbl.add func_table name (decl, wrap_args args, fn)
 
 
@@ -267,7 +267,7 @@ let print_fn e =
   | VString s -> print_string s; e, unit_temp
   | _ -> invalid_arg "print_fn"
 let print_name = "print"
-let print_decl = wrap_tfunc t_string t_unit
+let print_decl = wrap_tfunc [t_string] t_unit
 let print_args = wrap_args ["s", t_string]
 let _ = Hashtbl.add func_table
   print_name (print_decl, print_args, print_fn)
@@ -276,7 +276,7 @@ let fn e = match arg_of_env "s" e with
   | VString s -> Log.log (lazy (s^"\n")) `Debug; e, unit_temp
   | _         -> invalid_arg "log_fn"
 let name = "log"
-let decl = wrap_tfunc t_string t_unit
+let decl = wrap_tfunc [t_string] t_unit
 let args = ["s", t_string]
 let _ = Hashtbl.add func_table name (decl, wrap_args args, fn)
 
@@ -286,7 +286,7 @@ let fn e =
   match arg_of_env "s" e with
   | VString s -> e, int_temp @@ int_of_sql_date s
   | _ -> invalid_arg "parse_sql_date"
-let decl = wrap_tfunc t_string t_int
+let decl = wrap_tfunc [t_string] t_int
 let args = wrap_args ["s", t_string]
 let _ = Hashtbl.add func_table name (decl, args, fn)
 
@@ -298,7 +298,7 @@ let fn e =
   match aoe with
   | [VString p; VInt d] -> e, int_temp @@ date_part p d
   | _ -> invalid_arg name
-let decl = wrap_tfunc (wrap_ttuple @@ snd_many args) t_int
+let decl = wrap_tfunc (snd_many args) t_int
 let _ = Hashtbl.add func_table name (decl, wrap_args args, fn)
 
 (* global table for regexes *)
@@ -319,7 +319,7 @@ let fn e =
     in
     int_temp @@ if Str.string_match r s 0 then 1 else 0
   | _      -> invalid_arg name
-let decl = wrap_tfunc (wrap_ttuple @@ snd_many args) t_int
+let decl = wrap_tfunc (snd_many args) t_int
 let _ = Hashtbl.add func_table name (decl, wrap_args args, fn)
 
 let r_pipe = Str.regexp "|"
@@ -362,7 +362,7 @@ let args = ["file", t_string]
 let ret  = wrap_tbag t_top
 let err_fn s s' = failwith @@ "load_csv: "^s^" "^s'
 let fn e = load_csv_fn err_fn args e
-let decl = wrap_tfunc (wrap_ttuple @@ snd_many args) ret
+let decl = wrap_tfunc (snd_many args) ret
 let _ = Hashtbl.add func_table csv_loader_name (decl, wrap_args args, fn)
 
 (* csv loading function, with dummy witness type var *)
@@ -371,7 +371,7 @@ let args = ["file", t_string; "emptyCol", wrap_tbag t_top]
 let ret  = wrap_tbag t_top
 let err_fn s s' = failwith @@ name^": "^s^" "^s'
 let fn e = load_csv_fn err_fn args e
-let decl = wrap_tfunc (wrap_ttuple @@ snd_many args) ret
+let decl = wrap_tfunc (snd_many args) ret
 let _ = Hashtbl.add func_table name (decl, wrap_args args, fn)
 
 (* get current time *)
@@ -379,7 +379,7 @@ let name = "now_int"
 let args = ["_", t_unit]
 let ret  = t_int
 let fn e = e, VTemp(VInt(iof @@ Sys.time () *. 1000.))
-let decl = wrap_tfunc (wrap_ttuple @@ snd_many args) ret
+let decl = wrap_tfunc (snd_many args) ret
 let _ = Hashtbl.add func_table name (decl, wrap_args args, fn)
 
 (* sleep in ms *)
@@ -387,7 +387,7 @@ let name = "sleep"
 let args = ["ms", t_int]
 let ret  = t_unit
 let fn e = e, VTemp VUnit
-let decl = wrap_tfunc (wrap_ttuple @@ snd_many args) ret
+let decl = wrap_tfunc (snd_many args) ret
 let _ = Hashtbl.add func_table name (decl, wrap_args args, fn)
 
 (* print env *)
@@ -412,7 +412,7 @@ let name = "error"
 let fn env = failwith @@ "Error function called: "
 let args = unit_arg
 let ret = t_unknown
-let decl = wrap_tfunc (wrap_ttuple @@ snd_many args) ret
+let decl = wrap_tfunc (snd_many args) ret
 let _ = Hashtbl.add func_table name (decl, wrap_args args, fn)
 
 (* function-lookup functions *)

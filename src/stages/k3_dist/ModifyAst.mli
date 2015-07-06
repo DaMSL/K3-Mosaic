@@ -6,6 +6,9 @@ open K3Dist
 
 exception InvalidAst of string
 
+val unused_trig_args : program_t -> StrSet.t StrMap.t
+val string_of_unused_trig_args : StrSet.t StrMap.t -> string
+
 (* Get all loader tables and load paths in the ast *)
 val loader_tables : program_t -> (id_t * string) list
 

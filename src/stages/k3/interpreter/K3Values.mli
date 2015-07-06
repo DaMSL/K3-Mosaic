@@ -31,7 +31,7 @@ and Value : sig
   * address,
   * scheduler_state (parametrized here to prevent circular inclusion), the
   * environment, value_t of arguments, and produce unit *)
-  and trigger_env_t = (address -> env_t -> value_t -> unit) IdMap.t
+  and trigger_env_t = (address -> env_t -> value_t list -> unit) IdMap.t
   and env_t = {
         triggers:trigger_env_t;
         globals:global_env_t;
@@ -81,6 +81,9 @@ val compare_values : (int -> int -> bool) -> value_t -> value_t -> bool
 
 (* Find inequalities and put their locations in a list *)
 val find_inequality : value_t -> value_t -> int option
+
+val unwrap_vtuple : value_t -> value_t list
+val wrap_vtuple : value_t list -> value_t
 
 (* Value stringification *)
 val repr_of_value : value_t -> string

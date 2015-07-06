@@ -14,6 +14,8 @@ val meta_of_expr : expr_t -> annotation_t
 val details_of_expr : expr_t -> int * expr_tag_t * annotation_t * expr_t list
 val expr_of_details : int -> expr_tag_t -> annotation_t -> expr_t list -> expr_t
 
+val add_annos : annotation_t -> expr_t -> expr_t
+
 (* Variable id extraction *)
 val vars_of_arg : arg_t -> id_t list
 val typed_vars_of_arg : arg_t -> (id_t * type_t) list
@@ -36,7 +38,7 @@ val is_peek : expr_t -> bool
 val decompose_add : expr_t -> expr_t * expr_t
 val decompose_aggregate : expr_t -> expr_t * expr_t * expr_t
 val decompose_aggregatev : expr_t -> expr_t * expr_t * expr_t
-val decompose_apply : expr_t -> expr_t * expr_t
+val decompose_apply : expr_t -> expr_t * expr_t list
 val decompose_assign : expr_t -> expr_t * expr_t
 val decompose_block : expr_t -> expr_t list
 val decompose_combine : expr_t -> expr_t * expr_t
@@ -166,3 +168,6 @@ val unwrap_tuple : expr_t -> expr_t list
 (* Fold over all expression trees in a program (triggers, globals) *)
 val fold_over_exprs : ('a -> expr_t -> 'a) -> 'a -> program_t -> 'a
 
+val add_property : string -> expr_t -> expr_t
+
+val properties_of_expr : expr_t -> string list

@@ -321,7 +321,7 @@ and print_base_type c t =
     | TTuple t_l            -> my_tag (btt t) @@ List.map (lazy_type c) t_l
     | TCollection(t_c, t_e) -> my_tag (btt t) [lps (string_of_container_type t_c); lazy_type c t_e]
     | TTarget t'            -> my_tag (btt t) [lazy_type c t']
-    | TFunction(it, ot)     -> my_tag (btt t) [lazy_type c it; lazy_type c ot]
+    | TFunction(itl, ot)    -> my_tag (btt t) @@ List.map (lazy_type c) @@ itl @ [ot]
     | _                     -> term_tag @@ btt t
 
 and print_type c mt =
@@ -482,33 +482,10 @@ and AnnotationStrings : StringifyAnnotations = struct
 
 open ASTStrings
 
-let string_of_rigidity r = match r with Constraint -> "Constraint" | _ -> "Hint"
-
-let string_of_data_annotation da =
-  let string_of_positions p = "["^(String.concat ";" (List.map string_of_int p))^"]" in
-  let string_of_dependency d = match d with
-    | Element -> "*"
-    | Positions p -> string_of_positions p
-  in
-  let my_tag tag p = tag^"("^(string_of_positions p)^")" in
-  match da with
-  | FunDep    (s,d) -> (string_of_positions s)^"->"^(string_of_dependency d)
-  | MVFunDep  (s,d) -> (string_of_positions s)^"=>"^(string_of_dependency d)
-  | Unique  p     -> my_tag "Unique" p
-  | Ordered p     -> my_tag "Ordered" p
-  | Sequential    -> "Sequential"
-  | RandomAccess  -> "RandomAccess"
-
-let string_of_control_annotation ca = match ca with
-  | Effect ids -> "Effect("^(String.concat "," ids)^")"
-  | Parallel deg -> "Parallel("^string_of_int deg^")"
-
-(* TODO: expose controls for printing type annotations on expressions *)
 let print_ast_annotation ?(show_type=false) a =
   let my_tag = pretty_tag_str CutHint "" in
   match a with
-  | Data (r,da) -> my_tag "Data" [lps (string_of_rigidity r); lps (string_of_data_annotation da)]
-  | Control (r,ca) -> my_tag "Control" [lps (string_of_rigidity r); lps (string_of_control_annotation ca)]
+  | Property s -> my_tag "Property" [lps s]
   | Type t when show_type -> my_tag "Type" [lazy (print_type def_c t)]
   | _ -> ()
 
