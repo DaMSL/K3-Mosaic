@@ -324,9 +324,9 @@ let is_vid_tuple = false
 
 (* reduce trig arguments to those that are actually used by the code *)
 let filter_t_args c trig args =
-  let set = 
+  let set =
     try StrMap.find trig c.unused_trig_args
-    with Not_found -> failwith @@ trig^" not found in unused_trig_args"
+    with Not_found -> StrSet.empty
   in
   List.filter (fun (id,_) -> not @@ StrSet.mem id set) args
 
@@ -558,7 +558,7 @@ let sw_init           = create_ds "sw_init" (mut t_bool) ~init:mk_cfalse
 let sw_trig_buf_prefix = "sw_buf_"
 let sw_trig_bufs (c:config) =
   P.for_all_trigs ~sys_init:true ~deletes:c.gen_deletes c.p @@ fun t ->
-    create_ds (sw_trig_buf_prefix^t) (wrap_tlist' @@ snd_many @@ P.args_of_t c.p t)
+    create_ds (sw_trig_buf_prefix^t) (wrap_tlist' @@ snd_many @@ args_of_t c t)
 
 (* list for next message -- contains trigger id *)
 let sw_trig_buf_idx =

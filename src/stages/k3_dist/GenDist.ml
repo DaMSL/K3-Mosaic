@@ -317,9 +317,9 @@ let sw_driver_trig (c:config) =
           ])
     mk_cunit
 
-(* The start trigger puts the message in a trig buffer *)
+(* The start function puts the message in a trig buffer *)
 let sw_start_fn (c:config) trig =
-  let args_t = snd_many @@ P.args_of_t c.p trig in
+  let args_t = snd_many @@ D.args_of_t c trig in
   let args = ["args", wrap_ttuple args_t] in
   mk_global_fn ("sw_start_"^trig) args [] @@
     mk_block [
@@ -528,12 +528,12 @@ let sw_send_fetch_fn c s_rhs_lhs s_rhs trig_name =
     (send_fetch_name_of_t trig_name) ["vid", t_vid] [] @@
     let handle_args e =
       (* handle the case of no arguments (system_ready) *)
-      if P.args_of_t c.p trig_name = [] then e
+      if D.args_of_t c trig_name = [] then e
       else (* pop an argument out of the buffers *)
         mk_pop buf "args"
           (mk_error @@ "unexpected missing arguments in "^buf) @@
           (* decompose args *)
-          mk_let (fst_many @@ P.args_of_t c.p trig_name)
+          mk_let (fst_many @@ D.args_of_t c trig_name)
             (mk_var "args") e
     in
     handle_args @@
@@ -820,7 +820,7 @@ let send_corrective_fns c =
                       (mk_lambda' ["vid", t_vid] @@
                         (* get bound vars from log so we can calculate shuffle *)
                         mk_let
-                          (fst_many @@ P.args_of_t c.p target_trig)
+                          (fst_many @@ D.args_of_t c target_trig)
                           (mk_apply'
                             (nd_log_get_bound_for target_trig) [mk_var "vid"]) @@
                         (* insert vid into the ip, tuples output of shuffle *)
@@ -1106,7 +1106,7 @@ let nd_rcv_correctives_trig c s_rhs trig_name = List.map
                 (* check if our stmt_counter is 0 *)
                 mk_if (mk_eq (mk_var "cntr") @@ mk_cint 0)
                   (* if so, get bound vars from log *)
-                  (mk_let (fst_many @@ P.args_of_t c.p trig_name)
+                  (mk_let (fst_many @@ D.args_of_t c trig_name)
                     (mk_apply'
                       (nd_log_get_bound_for trig_name) [mk_var "compute_vid"]) @@
                     (* do_corrective, return number of msgs *)
