@@ -819,10 +819,13 @@ let send_corrective_fns c =
                     mk_flatten @@ mk_map
                       (mk_lambda' ["vid", t_vid] @@
                         (* get bound vars from log so we can calculate shuffle *)
-                        mk_let
-                          (fst_many @@ D.args_of_t c target_trig)
-                          (mk_apply'
-                            (nd_log_get_bound_for target_trig) [mk_var "vid"]) @@
+                        let args = D.args_of_t c target_trig in
+                        (if args <> [] then
+                          mk_let
+                            (fst_many @@ D.args_of_t c target_trig)
+                            (mk_apply'
+                              (nd_log_get_bound_for target_trig) [mk_var "vid"])
+                        else id_fn) @@
                         (* insert vid into the ip, tuples output of shuffle *)
                         mk_map (* (ip * vid * tuple list) list *)
                           (mk_lambda' ["ip", t_addr; "tuples", delta_tuples2.t] @@
@@ -1106,9 +1109,12 @@ let nd_rcv_correctives_trig c s_rhs trig_name = List.map
                 (* check if our stmt_counter is 0 *)
                 mk_if (mk_eq (mk_var "cntr") @@ mk_cint 0)
                   (* if so, get bound vars from log *)
-                  (mk_let (fst_many @@ D.args_of_t c trig_name)
-                    (mk_apply'
-                      (nd_log_get_bound_for trig_name) [mk_var "compute_vid"]) @@
+                  (let args = fst_many @@ D.args_of_t c trig_name in
+                  (if args <> [] then
+                    mk_let args
+                      (mk_apply'
+                        (nd_log_get_bound_for trig_name) [mk_var "compute_vid"])
+                  else id_fn) @@
                     (* do_corrective, return number of msgs *)
                     mk_add (mk_var "acc_count") @@
                       mk_apply'
