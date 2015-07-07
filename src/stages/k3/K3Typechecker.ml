@@ -148,6 +148,8 @@ let rec assignable ?(unknown_ok=false) t_l t_r = match t_l.typ, t_r.typ with
   | TMaybe t_lm, TMaybe t_rm -> assignable t_lm t_rm
   | TTuple t_ls, TTuple t_rs ->
       list_forall2 assignable t_ls t_rs
+  | TCollection(TVMap(Some s), t_le), TCollection(TVMap(Some s'), t_re) ->
+      IntSetSet.equal s s' && assignable t_le t_re
   | TCollection(t_lc, t_le), TCollection(t_rc, t_re) ->
       t_lc = t_rc && assignable t_le t_re
   | TFunction(it, ot), TFunction(it', ot') ->
@@ -266,18 +268,20 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
   let attach_type t = mk_tree (((uuid, tag), Type t::aux), typed_children) in
   let bind n = type_of_expr @@ List.nth typed_children n in
 
+  let is_tvmap = function TVMap _ -> true | _ -> false in
+
   let common_ops () =
     let tfun, tcol' = bind 0, bind 1 in
     let targ, tret =
       try unwrap_tfun tfun with Failure _ -> t_erroru (not_function tfun) in
     let tcol, telem =
       try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') in
-    if tcol = TVMap then t_erroru @@ TBad(tcol', "cannot be a VMap") else
+    if is_tvmap tcol then t_erroru @@ TBad(tcol', "cannot be a VMap") else
     tfun, tcol', targ, tret, tcol, telem
   in
 
   let check_vmap col_t tup_t =
-    if col_t = TVMap then
+    if is_tvmap col_t then
       match unwrap_ttuple tup_t with
       | [] | [_] -> t_erroru @@ TBad(tup_t, "improper element types for vmap")
       | t::_ when t === t_vid -> ()
@@ -285,7 +289,7 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
     else ()
   in
   let check_vmap_pat col_t elem_t pat =
-    if col_t = TVMap then
+    if is_tvmap col_t then
       let elem_v = wrap_ttuple @@ t_vid :: unwrap_ttuple elem_t in
       if not (pat === elem_v) then t_erroru @@ TMismatch(pat, elem_v, "vmap pattern") else ()
     else
@@ -311,7 +315,7 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
           check_vmap t_c t_ne;
           (* adjust type for vmap *)
           let t_ne' =
-            if t_c = TVMap then wrap_ttuple @@ tl @@ unwrap_ttuple t_ne else t_ne in
+            if is_tvmap t_c then wrap_ttuple @@ tl @@ unwrap_ttuple t_ne else t_ne in
           (* we disregard the element part of the singleton ast because it's not needed *)
           canonical @@ TCollection(t_c, t_ne')
 
@@ -439,7 +443,7 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
           let _ =
             try unwrap_tcol telem with Failure _ -> t_erroru (not_collection telem) in
           begin match tcol with
-          | TMap | TVMap -> t_erroru (TBad (tcol'', "can't flatten a Map"))
+          | TMap | TVMap _ -> t_erroru (TBad (tcol'', "can't flatten a Map"))
           | _ -> telem
           end
 
@@ -451,9 +455,9 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
             try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') in
           let expected1 =
             match tag, tcol with
-            | Aggregate,  TVMap -> t_erroru @@ TBad(tcol', "cannot run on vmap")
-            | Aggregate,  _     -> [tzero; telem]
-            | AggregateV, TVMap -> [tzero; t_vid; telem]
+            | Aggregate,  TVMap _ -> t_erroru @@ TBad(tcol', "cannot run on vmap")
+            | Aggregate,  _       -> [tzero; telem]
+            | AggregateV, TVMap _ -> [tzero; t_vid; telem]
             | _                 -> t_erroru @@ TBad(tcol', "must have a vmap")
           in
           if not (tzero === tret) then
@@ -470,7 +474,7 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
             try unwrap_tfun tagg with Failure _ -> t_erroru (not_function tagg) in
           let tcol, telem =
             try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') in
-          if tcol = TVMap then t_erroru @@ TBad(tcol', "cannot run on vmap") else
+          if is_tvmap tcol then t_erroru @@ TBad(tcol', "cannot run on vmap") else
           if not (hd tgarg <~ telem) then
             t_erroru (TMismatch(hd tgarg, telem, "grouping func:")) else
           let expected1 = [tzero; telem] in
@@ -503,7 +507,7 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
           let tcol, telem =
             try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') in
           (* order to take care of possible unknowns in pattern *)
-          if tcol = TVMap then
+          if is_tvmap tcol then
             let telem_v = wrap_ttuple @@ t_vid :: unwrap_ttuple telem in
             if not (tpat === telem_v) then t_erroru (TMismatch(tpat, telem_v, "vmap pattern"))
             else tcol'
@@ -515,7 +519,7 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
           let tcol', tpat = bind 0, bind 1 in
           let tcol, telem =
             try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') in
-          if not (tcol = TVMap) then t_erroru (TMismatch(tcol', wrap_tvmap telem, "collection type")) else
+          if not (is_tvmap tcol) then t_erroru (TMismatch(tcol', wrap_tvmap telem, "collection type")) else
           check_vmap_pat tcol telem tpat;
           tcol'
 
@@ -538,7 +542,7 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
           let tcol', tnew, tlam_update = bind 0, bind 1, bind 2 in
           let tcol, telem =
             try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') in
-          if not (tcol = TVMap) then
+          if not (is_tvmap tcol) then
             t_erroru (TMismatch(tcol', wrap_tvmap telem, "collection type")) else
           check_vmap_pat tcol telem tnew;
           let tlam_update' = wrap_tfunc (t_vid :: [telem]) telem in
@@ -568,7 +572,7 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
           let tcol', told = bind 0, bind 1 in
           let tcol, telem =
             try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') in
-          if not (tcol = TVMap) then t_erroru (TMismatch(tcol', wrap_tvmap telem, "collection type")) else
+          if not (is_tvmap tcol) then t_erroru (TMismatch(tcol', wrap_tvmap telem, "collection type")) else
           check_vmap_pat tcol telem told;
           t_unit
 

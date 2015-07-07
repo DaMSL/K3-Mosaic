@@ -363,10 +363,22 @@ collection_type :
     | LBRACEBAR type_expr_tuple RBRACEBAR { TCollection(TBag, $2) }
     | LBRACKETCOLON type_expr RBRACKETCOLON { TCollection(TMap, $2) }
     | LBRACKETCOLON type_expr_tuple RBRACKETCOLON { TCollection(TMap, $2) }
-    | LBRACKETLT type_expr RBRACKETLT { TCollection(TVMap, $2) }
-    | LBRACKETLT type_expr_tuple RBRACKETLT { TCollection(TVMap, $2) }
+    | LBRACKETLT type_expr BAR int_list_list RBRACKETLT { TCollection(TVMap(Some(intsetset_of_list $4)), $2) }
+    | LBRACKETLT type_expr_tuple BAR int_list_list RBRACKETLT { TCollection(TVMap(Some(intsetset_of_list $4)), $2) }
+    | LBRACKETLT type_expr RBRACKETLT { TCollection(TVMap None, $2) }
+    | LBRACKETLT type_expr_tuple RBRACKETLT { TCollection(TVMap None, $2) }
     | LBRACKET type_expr RBRACKET { TCollection(TList, $2) }
     | LBRACKET type_expr_tuple RBRACKET { TCollection(TList, $2) }
+;
+
+int_list_list:
+    | int_list {[$1]}
+    | int_list SEMICOLON int_list_list { $1::$3 }
+;
+
+int_list:
+    | INTEGER {[$1]}
+    | INTEGER SEMICOLON int_list { $1::$3 }
 ;
 
 anno_expr :
@@ -501,7 +513,8 @@ collection :
     | LBRACEBAR expr_seq RBRACEBAR                 { build_collection $2 (mk_unknown_collection TBag) }
     | LBRACKET expr_seq RBRACKET                   { build_collection $2 (mk_unknown_collection TList) }
     | LBRACKETCOLON expr_seq RBRACKETCOLON         { build_collection $2 (mk_unknown_collection TMap) }
-    | LBRACKETLT expr_seq RBRACKETLT               { build_collection $2 (mk_unknown_collection TVMap) }
+    | LBRACKETLT expr_seq BAR int_list_list RBRACKETLT { build_collection $2 (mk_unknown_collection (TVMap(Some(intsetset_of_list $4)))) }
+    | LBRACKETLT expr_seq RBRACKETLT               { build_collection $2 (mk_unknown_collection (TVMap None)) }
 ;
 
 variable :

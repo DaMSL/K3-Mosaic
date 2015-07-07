@@ -65,8 +65,8 @@ let wrap_tmap' = function
   | _      -> failwith "wrap_tmap': wrong number of arguments"
 
 (* wrap a type in a vmap *)
-let wrap_tvmap typ = wrap_tcol TVMap typ
-let wrap_tvmap' tl = wrap_tvmap @@ wrap_ttuple tl
+let wrap_tvmap ?idx typ = wrap_tcol (TVMap idx) typ
+let wrap_tvmap' ?idx tl = wrap_tvmap ?idx @@ wrap_ttuple tl
 
 (* wrap a type in a mutable indirection *)
 let wrap_tind t = canonical @@ TIndirect t

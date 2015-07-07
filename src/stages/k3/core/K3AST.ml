@@ -29,7 +29,7 @@ type container_type_t
     | TBag
     | TList
     | TMap
-    | TVMap (* nlogn lookups *)
+    | TVMap of IntSetSet.t option (* indices *)
 
 type base_type_t
     = TTop

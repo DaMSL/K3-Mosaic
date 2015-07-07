@@ -76,7 +76,8 @@ let lazy_collection _ ct eval = match ct with
     | TBag  -> lps "{|" <| eval <| lps "|}"
     | TList -> lps "[" <| eval <| lps "]"
     | TMap  -> lps "[:" <| eval <| lps ":]"
-    | TVMap -> lps "[<" <| eval <| lps ">]"
+    | TVMap None -> lps "[<" <| eval <| lps ">]"
+    | TVMap(Some s) -> lps "[<" <| eval <| lps "|" <| lps (string_of_int_set_set s) <| lps ">]"
 
 let rec lazy_base_type c ~in_col ?(no_paren=false) ?(paren_complex=false) t =
   let wrap_complex x = if paren_complex then lps "(" <| x <| lps ")" else x in

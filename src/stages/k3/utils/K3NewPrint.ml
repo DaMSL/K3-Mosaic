@@ -130,7 +130,7 @@ let lazy_col = function
   | TBag        -> lps "{ Collection }"
   | TList       -> lps "{ Seq }"
   | TMap        -> lps "{ Map }"
-  | TVMap       -> lps "{ VMap }"
+  | TVMap _     -> lps "{ VMap }"
 
 let rec lazy_base_type ?(brace=true) ?(mut=false) ?(empty=false) c ~in_col t =
   let wrap_mut f = if mut && not empty then lps "mut " <| f else f in
@@ -285,13 +285,16 @@ let rec extract_slice e =
   * this for the API *)
 let maybe_vmap c col pat fun_no fun_yes =
   let col, _ = KH.unwrap_tcol @@ T.type_of_expr col in
-  if col = TVMap then match U.decompose_tuple pat with
+  match col with
+  | TVMap _ -> begin match U.decompose_tuple pat with
     | vid::rest -> fun_yes vid (light_type c @@ KH.mk_tuple rest)
     | _         -> failwith "missing vid in pattern for vmap"
-  else fun_no pat
+    end
+  | _ -> fun_no pat
 
 (* check if a collection is a vmap *)
-let is_vmap col = fst @@ KH.unwrap_tcol @@ T.type_of_expr col = TVMap
+let is_vmap col = match fst @@ KH.unwrap_tcol @@ T.type_of_expr col with
+                  | TVMap _ -> true | _ -> false
 
 (* We return the pattern breakdown: a list, and a lambda forming the internal structure *)
 let breakdown_pat pat = match U.tag_of_expr pat with
@@ -809,9 +812,9 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
       let col = U.decompose_peek e1 in
       let col_t, t_elem = KH.unwrap_tcol @@ T.type_of_expr col in
       begin match col_t, U.tag_of_expr col with
-      | TVMap, Slice when is_lookup_pat (snd (U.decompose_slice col)) ->
+      | TVMap _, Slice when is_lookup_pat (snd (U.decompose_slice col)) ->
           handle_lookup_with ~vmap:true "lookup_with4" col t_elem
-      | TVMap, SliceFrontier when is_lookup_pat (snd (U.decompose_slice_frontier col)) ->
+      | TVMap _, SliceFrontier when is_lookup_pat (snd (U.decompose_slice_frontier col)) ->
           handle_lookup_with ~vmap:true ~decomp_fn:U.decompose_slice_frontier "lookup_with4_before" col t_elem
       | TMap,  Slice when is_lookup_pat (snd(U.decompose_slice col)) ->
           handle_lookup_with "lookup_with4" col t_elem
@@ -941,8 +944,8 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
       else normal ()
     in
     begin match col_t, tag with
-    | TVMap, Slice         -> handle_lookup ~vmap:true "lookup" col
-    | TVMap, SliceFrontier -> handle_lookup ~vmap:true ~decomp_fn:U.decompose_slice_frontier "lookup_before" col
+    | TVMap _, Slice         -> handle_lookup ~vmap:true "lookup" col
+    | TVMap _, SliceFrontier -> handle_lookup ~vmap:true ~decomp_fn:U.decompose_slice_frontier "lookup_before" col
     | TMap,  Slice         -> handle_lookup "lookup" col
     | _                    -> normal ()
     end

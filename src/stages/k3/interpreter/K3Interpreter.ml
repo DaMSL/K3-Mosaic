@@ -309,7 +309,7 @@ and eval_expr (address:address) sched_st cenv texpr =
           | TSet  -> VSet(ValueSet.of_list l)
           | TBag  -> VBag(ValueBag.of_list l)
           | TList -> VList(IList.of_list l)
-          | TVMap | TMap -> error name "cannot have map"
+          | TVMap _ | TMap -> error name "cannot have map"
         in nenv, reval
 
     (* Arithmetic and comparators *)
