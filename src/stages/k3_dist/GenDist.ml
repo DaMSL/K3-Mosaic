@@ -702,7 +702,7 @@ List.fold_left
           (mk_lambda2' ["acc", map_ds.t] (ds_e tup_ds) @@
             mk_block [
               mk_case_sn
-                (mk_peek @@ mk_slice' rbuf_deref @@ unknown_val map_pat) "vals"
+                (mk_peek @@ mk_slice' "acc" @@ unknown_val map_pat) "vals"
                 (mk_update "acc" [mk_var "vals"] map_pat) @@
                 mk_insert "acc" map_pat;
               mk_var "acc" ])
