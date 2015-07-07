@@ -45,8 +45,8 @@ let print_maps_dims maps_dims =
 
 open K3Helpers
 
-let inner_type = wrap_tlist @@ wrap_ttuple [t_int; t_int]
-let pmap_types = wrap_tlist @@ wrap_ttuple [t_string; inner_type]
+let inner_type = wrap_tlist' [t_int; t_int]
+let pmap_types = wrap_tlist' [t_string; inner_type]
 
 (* convert map_sizes structure to k3 expressions *)
 let k3_of_maps_sizes maps_sizes =

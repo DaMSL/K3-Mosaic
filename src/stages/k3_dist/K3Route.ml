@@ -30,10 +30,10 @@ let route_for p map_id =
 let t_two_ints = [t_int; t_int]
 let t_list_two_ints = wrap_tlist' t_two_ints
 let dim_bounds_type = wrap_tlist' t_two_ints
-(* TODO: change to map *)
 let pmap_types = wrap_tlist' t_two_ints
 let pmap_per_map_types = [t_map_id; pmap_types]
-let full_pmap_types = wrap_tlist' pmap_per_map_types
+let full_pmap_types = wrap_tmap' pmap_per_map_types
+let full_pmap_input_types = wrap_tlist' pmap_per_map_types
 let free_dims_type = wrap_tlist' t_two_ints
 let free_domains_type = wrap_tlist' [t_int; wrap_tlist t_int]
 let inner_cart_prod_type = wrap_tlist' t_two_ints
@@ -83,7 +83,7 @@ let k3_partition_map_of_list p l =
     let k3_pmap = list_map (fun s ->
       mk_tuple [mk_cstring s; mk_empty pmap_types]
     ) map_names in
-    k3_container_of_list full_pmap_types k3_pmap
+    k3_container_of_list full_pmap_input_types k3_pmap
   else
     let one_map_to_k3 (m, ds) =
       let check_index i = let ts = map_types_for p @@ map_id_of_name p m
@@ -95,7 +95,7 @@ let k3_partition_map_of_list p l =
         ds
       in mk_tuple [mk_cstring m; k3_container_of_list pmap_types newdata] in
     let new_l = List.map one_map_to_k3 l in
-    k3_container_of_list full_pmap_types new_l
+    k3_container_of_list full_pmap_input_types new_l
 
 exception NoHashFunction of K3.AST.base_type_t
 
@@ -116,21 +116,24 @@ let hash_func_for typ =
 let pmap_input = "pmap_input"
 let global_pmap_input p partmap =
   mk_global_val_init pmap_input
-  (wrap_tlist @@ wrap_ttuple [t_string; pmap_types]) @@
+  (wrap_tlist' [t_string; pmap_types]) @@
   k3_partition_map_of_list p partmap
 
 (* convert human-readable map name to map id *)
 let pmap_data = "pmap_data"
 let global_pmaps =
   mk_global_val_init pmap_data full_pmap_types @@
-    mk_map
-      (mk_lambda' ["map_name", t_string; "map_types", pmap_types] @@
-        mk_tuple
-          [mk_fst @@ mk_peek_or_error "can't find map in map_ids" @@
-              mk_slice' K3Dist.map_ids_id
-                [mk_cunknown; mk_var "map_name"; mk_cunknown]
-          ; mk_var "map_types"]
-      ) @@
+    mk_agg
+      (mk_lambda2' ["acc", full_pmap_types] ["map_name", t_string; "map_types", pmap_types] @@
+        mk_block [
+          mk_insert "acc" @@
+            [mk_fst @@ mk_peek_or_error "can't find map in map_ids" @@
+                mk_slice' K3Dist.map_ids_id
+                  [mk_cunknown; mk_var "map_name"; mk_cunknown]
+            ; mk_var "map_types"];
+          mk_var "acc"]
+      )
+      (mk_empty full_pmap_types) @@
       mk_var "pmap_input"
 
 (* calculate the size of the bucket of each dimensioned we're partitioned on
