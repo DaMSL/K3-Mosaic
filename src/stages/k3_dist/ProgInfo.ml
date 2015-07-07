@@ -364,3 +364,26 @@ let uniq_types_and_maps ?(type_fn=map_types_for) (p:prog_data_t)  =
   Hashtbl.iter (fun t maps -> fns := (t, maps) :: !fns) hash;
   !fns
 
+let map_access_patterns (p:prog_data_t) =
+  let h = Hashtbl.create 40 in
+  let insert_from_bind t_args map binds =
+    (* iterate over lmap binds and get index *)
+    let idx = IntSet.of_list @@
+      List.flatten @@ List.map (fun (nm, i) ->
+        (* only count bound variabls (trig args) *)
+        if List.mem nm t_args then [i] else []) binds in
+    (* insert index into hashtable *)
+    hashtbl_replace h map (function
+      | None   -> IntSetSet.singleton idx
+      | Some x -> IntSetSet.add idx x)
+  in
+  for_all_trigs p @@ fun trig ->
+    let t_args = fst_many @@ args_of_t p trig in
+    let ss = List.map (find_stmt p) @@ stmts_of_t p trig in
+    List.iter (fun (_,_,lmap,lbinds,rbinds) ->
+      insert_from_bind t_args lmap lbinds;
+      List.iter (fun (rmap, rbind) ->
+        insert_from_bind t_args rmap rbind) rbinds
+    ) ss;
+  h
+
