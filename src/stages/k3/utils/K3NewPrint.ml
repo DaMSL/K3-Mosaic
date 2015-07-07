@@ -125,14 +125,46 @@ let error () = lps "???"
 
 let lazy_bracket_list f l = lazy_bracket (lps_list NoCut f l)
 
-let lazy_col = function
+(* print out multi_index. we only support hash indices *)
+let rec lazy_multi_index c ss elem_t =
+  (* unwrap all the tuples, and use the relevant record ids *)
+  let elem_t = KH.unwrap_ttuple elem_t in
+  let elem_t = List.map KH.unwrap_ttuple elem_t in
+  let no_extract = List.length (List.nth elem_t 0) = 1 in
+  let record_ids = List.map (add_record_ids c) elem_t in
+  let record_ids = add_record_ids c record_ids in
+  let record_ids = List.flatten @@ List.map (fun (nm, l) ->
+    if List.length l = 1 then [nm, snd @@ hd l]
+    else l) record_ids in
+
+  let index_ls = list_of_intsetset ss in
+  (* convert indices to record ids/types *)
+  let record_idxs = List.map (List.map (List.nth record_ids)) index_ls in
+
+  lps "{ MultiIndexVMap" <| lps "," <| lsp () <|
+  lps_list CutHint (fun idx ->
+    lps (if no_extract then "VMapIndex" else "VMapIndexE") <|
+    lazy_paren
+      (lps "key=[:> " <|
+        lps_list CutHint (fun (key, typ) -> lps key <| lps "=>" <| lazy_type c typ) idx <|
+        lps "]" <|
+       if no_extract then [] else
+       (lps "," <| lsp () <|
+        lps "extractors=[$#>" <| lsp () <|
+        lps_list CutHint (fun (key, _) -> lps key <| lps "=>" <| lps "\"key." <| lps key <|
+        lps "\"") idx <| lps "]")
+       ))
+  record_idxs <| lps "}"
+
+and lazy_col c col_t elem_t = match col_t with
   | TSet        -> lps "{ Set }"
   | TBag        -> lps "{ Collection }"
   | TList       -> lps "{ Seq }"
   | TMap        -> lps "{ Map }"
-  | TVMap _     -> lps "{ VMap }"
+  | TVMap None  -> lps "{ VMap }"
+  | TVMap(Some ss) -> lazy_multi_index c ss elem_t
 
-let rec lazy_base_type ?(brace=true) ?(mut=false) ?(empty=false) c ~in_col t =
+and lazy_base_type ?(brace=true) ?(mut=false) ?(empty=false) c ~in_col t =
   let wrap_mut f = if mut && not empty then lps "mut " <| f else f in
   let wrap_single f =
     let wrap = if brace then lazy_brace else id_fn in
@@ -161,7 +193,7 @@ let rec lazy_base_type ?(brace=true) ?(mut=false) ?(empty=false) c ~in_col t =
       wrap_mut (wrap (lsp () <| inner <| lsp ()))
   | TCollection(ct, vt) -> wrap (
     (if not empty then lps "collection " else [])
-    <| lazy_type c ~in_col:true vt <| lps " @ " <| lazy_col ct)
+    <| lazy_type c ~in_col:true vt <| lps " @ " <| lazy_col c ct vt)
   | TFunction(itl, ot) ->
       lps_list ~sep:" -> " CutHint (lazy_type c) (itl@[ot])
 
@@ -199,7 +231,7 @@ let lazy_collection_vt c vt eval = match vt.typ with
       let lazy_elem_list =
         lazy_base_type ~brace:false ~in_col:true ~mut c et.typ <| lps "|" <| lsp ()
       in
-      lps "{|" <| lazy_elem_list <| eval <| lps "|}" <| lps " @ " <| lazy_col ct
+      lps "{|" <| lazy_elem_list <| eval <| lps "|}" <| lps " @ " <| lazy_col c ct et
   | _ -> error () (* type error *)
 
 (* arg type with numbers included in tuples and maybes *)
