@@ -322,7 +322,7 @@ let modify_dist (c:config) ast stmt =
               | ([arg_id, t],b) -> NopMsg,
                 mk_apply
                   (mk_lambda
-                    (wrap_args [arg_id, wrap_t_of_map' c.map_type lmap_types]) b)
+                    (wrap_args [arg_id, wrap_t_of_map' c lmap lmap_types]) b)
                   args
               | _ -> raise (UnhandledModification("At Apply: "^PR.string_of_expr e)) end
           | _ -> NopMsg, e

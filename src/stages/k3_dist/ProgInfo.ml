@@ -377,13 +377,13 @@ let map_access_patterns (p:prog_data_t) =
       | None   -> IntSetSet.singleton idx
       | Some x -> IntSetSet.add idx x)
   in
-  for_all_trigs p @@ fun trig ->
+  ignore(for_all_trigs p @@ fun trig ->
     let t_args = fst_many @@ args_of_t p trig in
     let ss = List.map (find_stmt p) @@ stmts_of_t p trig in
     List.iter (fun (_,_,lmap,lbinds,rbinds) ->
       insert_from_bind t_args lmap lbinds;
       List.iter (fun (rmap, rbind) ->
         insert_from_bind t_args rmap rbind) rbinds
-    ) ss;
+    ) ss);
   h
 

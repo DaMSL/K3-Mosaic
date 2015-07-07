@@ -190,7 +190,7 @@ let default_cmd_line_params () = {
     k3new_data_file   = "default.k3";
     k3new_folds       = false;
     load_path         = "";
-    map_type          = K3Dist.MapVMap;
+    map_type          = K3Dist.MapMultiVMap;
     gen_deletes       = true;
     gen_correctives   = true;
 
@@ -547,6 +547,8 @@ let param_specs = Arg.align
       "         For k3new: output folds instead of ext and map";
   "--map-vmap", Arg.Unit (fun () -> cmd_line_params.map_type <- K3Dist.MapVMap),
       "         Use vmaps";
+  "--map-multi", Arg.Unit (fun () -> cmd_line_params.map_type <- K3Dist.MapMultiVMap),
+      "         Use multi-index vmaps";
   "--no-deletes", Arg.Unit (fun () -> cmd_line_params.gen_deletes <- false),
       "         Generate deletes";
   "--no-correctives", Arg.Unit (fun () -> cmd_line_params.gen_correctives <- false),

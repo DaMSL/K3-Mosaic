@@ -69,7 +69,9 @@ type shuffle_fn_entry = {
   name : string;
 }
 
-type map_type = MapVMap
+type map_type =
+  | MapVMap
+  | MapMultiVMap
 
 type config = {
   p : P.prog_data_t;
@@ -87,6 +89,8 @@ type config = {
   agenda_map : mapping_t;
   (* unused trig args, calculated once *)
   unused_trig_args : StrSet.t StrMap.t;
+  (* map slice indices for the program *)
+  map_indices: (int, IntSetSet.t) Hashtbl.t;
 }
 
 let default_config = {
@@ -100,15 +104,17 @@ let default_config = {
   stream_file = "";
   agenda_map = [], StrMap.empty;
   unused_trig_args = StrMap.empty;
+  map_indices = Hashtbl.create 10;
 }
 
 (* what the generic type of the global maps is *)
-let wrap_t_of_map = function
-  | MapVMap -> mut |- wrap_tvmap
+let wrap_t_of_map c map_id t = match c.map_type with
+  | MapVMap      -> mut @@ wrap_tvmap t
+  | MapMultiVMap -> mut @@ wrap_tvmap ~idx:(Hashtbl.find c.map_indices map_id) t
 
 let wrap_string_map s = "[<"^s^">]"
 
-let wrap_t_of_map' mt = wrap_t_of_map mt |- wrap_ttuple
+let wrap_t_of_map' c map_id t = wrap_t_of_map c map_id (wrap_ttuple t)
 
 (* what the generic type of data carried around is *)
 let wrap_t_calc  = wrap_tbag
@@ -149,7 +155,7 @@ let map_ds_of_id ?name ?(suffix="") ?(vid=true) ~global c map_id =
   let vid = if global then true else vid in
   let nm = unwrap_option (map_name_of c.p map_id) name in
   let e = map_ids_types_for c.p map_id in
-  let wrap = if global then wrap_t_of_map' c.map_type else wrap_t_calc' in
+  let wrap = if global then wrap_t_of_map' c map_id else wrap_t_calc' in
   (* suffix added only to last value *)
   let add_suffix l =
     let k, v = list_split (-1) l in

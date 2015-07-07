@@ -1303,6 +1303,7 @@ let gen_dist ?(gen_deletes=true)
       stream_file;
       agenda_map;
       unused_trig_args;
+      map_indices = P.map_access_patterns p;
     } in
   (* regular trigs then insert entries into shuffle fn table *)
   let proto_trigs, proto_funcs =
