@@ -510,11 +510,8 @@ let sw_send_fetch_fn c s_rhs_lhs s_rhs trig_name =
                   (mk_lambda'
                     ["ip", t_addr; "tuples", tuple_types] @@
                       mk_tuple [mk_var "ip"; mk_cint stmt_id; mk_var "sender_count"]) @@
-                  mk_apply'
-                    shuffle_fn @@
-                      shuffle_key@
-                      [mk_empty tuple_types;
-                      mk_cbool true]
+                  mk_apply' shuffle_fn @@
+                    shuffle_key @ [mk_cbool true; mk_empty tuple_types]
             )
             (mk_empty @@ wrap_tbag' [t_addr; t_stmt_id; t_int]) @@
             s_rhs_lhs]
@@ -659,10 +656,10 @@ let nd_send_push_stmt_map_trig c s_rhs_lhs trig_name =
                 mk_var "tuples" :: args_of_t_as_vars_with_v c trig_name) @@
             mk_apply'
               shuffle_fn @@
-                partial_key @
+                partial_key @ [mk_ctrue] @
                 (* we need the latest vid data that's less than the current vid *)
                 [D.map_latest_vid_vals c (mk_var rhsm_deref)
-                  (some slice_key) rhs_map_id ~keep_vid:true; mk_ctrue]]
+                  (some slice_key) rhs_map_id ~keep_vid:true]]
       ]) (* trigger *)
     [] s_rhs_lhs
 
@@ -836,7 +833,7 @@ let send_corrective_fns c =
                           mk_apply'
                             shuffle_fn @@
                               (* (ip * tuple list) list *)
-                              key @ [mk_var "delta_tuples2"; mk_cbool false]) @@
+                              key @ [mk_cfalse; mk_var "delta_tuples2"]) @@
                       mk_var "vid_list") @@
                   (* send to each ip, and count up the vids *)
                   mk_agg

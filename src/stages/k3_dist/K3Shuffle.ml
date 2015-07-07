@@ -52,8 +52,8 @@ let gen_shuffle_fn p rmap lmap bindings fn_name =
   let l_key_ids_types = types_to_ids_types id_l lkey_types in
   mk_global_fn fn_name
   ((if pred then l_key_ids_types else ["_", t_unit]) @
-    [tuples, many_tuples_type;
-    shuffle_on_empty, canonical TBool])
+    [shuffle_on_empty, canonical TBool;
+     tuples, many_tuples_type;])
     [result_types] @@ (* return *)
       mk_let ["all_targets"]
         (mk_if
