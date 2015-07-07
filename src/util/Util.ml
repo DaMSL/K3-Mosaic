@@ -588,6 +588,8 @@ let strmap_of_list l =
   List.fold_left (fun acc (k,v) -> StrMap.add k v acc) StrMap.empty l
 
 let list_of_strmap m = StrMap.fold (fun k v acc -> (k,v)::acc) m []
+let list_of_intset s = IntSet.fold (fun x acc -> x::acc) s []
+let list_of_intsetset s = IntSetSet.fold (fun x acc -> (list_of_intset x)::acc) s []
 
 let string_of_int_list l    = strcatmap soi l
 let string_of_int_set  s    = strcatmap soi @@ IntSet.elements s

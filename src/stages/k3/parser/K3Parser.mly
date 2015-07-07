@@ -378,7 +378,7 @@ int_list_list:
 
 int_list:
     | INTEGER {[$1]}
-    | INTEGER SEMICOLON int_list { $1::$3 }
+    | INTEGER COMMA int_list { $1::$3 }
 ;
 
 anno_expr :

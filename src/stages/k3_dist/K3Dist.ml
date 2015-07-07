@@ -90,7 +90,7 @@ type config = {
   (* unused trig args, calculated once *)
   unused_trig_args : StrSet.t StrMap.t;
   (* map slice indices for the program *)
-  map_indices: (int, IntSetSet.t) Hashtbl.t;
+  map_indices: (int, int * IntSetSet.t) Hashtbl.t;
 }
 
 let default_config = {
@@ -110,7 +110,7 @@ let default_config = {
 (* what the generic type of the global maps is *)
 let wrap_t_of_map c map_id t = match c.map_type with
   | MapVMap      -> mut @@ wrap_tvmap t
-  | MapMultiVMap -> mut @@ wrap_tvmap ~idx:(Hashtbl.find c.map_indices map_id) t
+  | MapMultiVMap -> mut @@ wrap_tvmap ~idx:(snd @@ Hashtbl.find c.map_indices map_id) t
 
 let wrap_string_map s = "[<"^s^">]"
 
@@ -122,6 +122,22 @@ let wrap_t_calc' = wrap_tbag'
 
 (* split a map's types into key, value. For vmaps, remove the vid *)
 let map_t_split' ts = list_split (-1) ts
+
+(* get a list of unique types for maps (no vid) *)
+(* type_fn allows one to modify the types used in the hashtable, eg. just keys *)
+let uniq_types_and_maps ?(uniq_indices=true) ?(type_fn=P.map_types_for) c =
+  let h   = Hashtbl.create 50 in
+  ignore (P.for_all_maps c.p @@ fun map_id ->
+    let t_elem = type_fn c.p map_id in
+    let index : int =
+      (* if we don't care about unique indices, use a zero value *)
+      if uniq_indices then
+        try fst @@ Hashtbl.find c.map_indices map_id with Not_found -> 0
+      else 0 in
+    (* get unique entries by indices and types *)
+    hashtbl_replace h (t_elem, index) @@
+      function None -> [map_id] | Some l -> map_id::l);
+  Hashtbl.fold (fun (t,i) maps acc -> (i, (t, maps))::acc) h []
 
 let read_e ~vid ~global e =
   if vid && not global then ("vid", t_vid)::e
@@ -576,8 +592,9 @@ let ms_send_gc_req_nm = "ms_send_gc_req"
 
 let nd_add_delta_to_buf_nm c map_id =
   let t = P.map_types_for c.p map_id in
-  "nd_add_delta_to_"^String.concat "_" @@
-    List.map K3PrintSyntax.string_of_type t
+  let (i, _) = Hashtbl.find c.map_indices map_id in
+  Printf.sprintf "nd_add_delta_to_%s%d"
+    (String.concat "_" @@ List.map K3PrintSyntax.string_of_type t) i
 
 (*** trigger names ***)
 let send_fetch_name_of_t trig_nm = "sw_"^trig_nm^"_send_fetch"

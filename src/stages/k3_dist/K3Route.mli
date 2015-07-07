@@ -1,6 +1,7 @@
 (* Routing functions *)
 open K3.AST
 open ProgInfo
+open K3Dist
 
 type part_map_t = (id_t * (int * int) list) list
 
@@ -10,7 +11,7 @@ val k3_partition_map_of_list : prog_data_t -> part_map_t -> expr_t
 
 exception NoHashFunction of base_type_t
 
-val functions : prog_data_t -> part_map_t ->
+val functions : K3Dist.config -> part_map_t ->
   (declaration_t * annotation_t) list
 val global_vars : prog_data_t -> part_map_t ->
   (declaration_t * annotation_t) list

@@ -145,6 +145,7 @@ let nd_check_stmt_cntr_index =
 (* NOTE: this function assumes the initial value is always 0.
  * If we need another value, it must be handled via message from
  * m3tok3 *)
+(* @idx: number to differentiate index pattern types *)
 let nd_add_delta_to_buf c map_id =
   let delta_tuples, lookup_value, update_value, corrective, target_map, tmap_deref =
     "delta_tuples", "lookup_value", "update_value", "corrective", "target_map", "target_map_d" in
@@ -1224,9 +1225,9 @@ let declare_global_funcs c partmap ast =
   nd_update_stmt_cntr_corr_map ::
   begin if c.gen_correctives then [nd_filter_corrective_list] else [] end @
   K3Ring.functions @
-  (List.map (nd_add_delta_to_buf c |- hd |- snd) @@ P.uniq_types_and_maps c.p) @
+  (List.map (fun (i, (_, maps)) -> nd_add_delta_to_buf c (hd maps)) @@ D.uniq_types_and_maps c) @
   TS.functions @
-  K3Route.functions c.p partmap @
+  K3Route.functions c partmap @
   K3Shuffle.functions c @
   GC.functions c
 

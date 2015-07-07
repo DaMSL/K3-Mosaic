@@ -4,6 +4,8 @@ open Util
 open K3.AST
 open K3Helpers
 open ProgInfo
+open K3Dist
+module D = K3Dist
 module P = ProgInfo
 module U = K3Util
 
@@ -313,8 +315,8 @@ let global_vars p partmap =
     global_pmaps;
   ]
 
-let functions p partmap =
+let functions c partmap =
   calc_dim_bounds_code ::
   (* create a route for each map type, using only the key types *)
-  (List.map (gen_route_fn p) @@ List.map (hd |- snd) @@
-    P.uniq_types_and_maps ~type_fn:P.map_types_no_val_for p)
+  (List.map (gen_route_fn c.p) @@ List.map (hd |- snd |- snd) @@
+    D.uniq_types_and_maps ~uniq_indices:false ~type_fn:P.map_types_no_val_for c)
