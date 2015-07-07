@@ -107,10 +107,15 @@ let default_config = {
   map_indices = Hashtbl.create 10;
 }
 
+let get_map_indices c map_id =
+  try some @@ Hashtbl.find c.map_indices map_id
+  with Not_found -> None
+
 (* what the generic type of the global maps is *)
-let wrap_t_of_map c map_id t = match c.map_type with
-  | MapVMap      -> mut @@ wrap_tvmap t
-  | MapMultiVMap -> mut @@ wrap_tvmap ~idx:(snd @@ Hashtbl.find c.map_indices map_id) t
+let wrap_t_of_map c map_id t = match c.map_type, get_map_indices c map_id with
+  | MapVMap, _
+  | MapMultiVMap, None -> mut @@ wrap_tvmap t
+  | MapMultiVMap, Some(_, idx) -> mut @@ wrap_tvmap ~idx t
 
 let wrap_string_map s = "[<"^s^">]"
 
@@ -131,8 +136,7 @@ let uniq_types_and_maps ?(uniq_indices=true) ?(type_fn=P.map_types_for) c =
     let t_elem = type_fn c.p map_id in
     let index : int =
       (* if we don't care about unique indices, use a zero value *)
-      if uniq_indices then
-        try fst @@ Hashtbl.find c.map_indices map_id with Not_found -> 0
+      if uniq_indices then maybe 0 fst @@ get_map_indices c map_id
       else 0 in
     (* get unique entries by indices and types *)
     hashtbl_replace h (t_elem, index) @@
@@ -592,9 +596,9 @@ let ms_send_gc_req_nm = "ms_send_gc_req"
 
 let nd_add_delta_to_buf_nm c map_id =
   let t = P.map_types_for c.p map_id in
-  let (i, _) = Hashtbl.find c.map_indices map_id in
-  Printf.sprintf "nd_add_delta_to_%s%d"
-    (String.concat "_" @@ List.map K3PrintSyntax.string_of_type t) i
+  let s = maybe "" (soi |- fst) @@ get_map_indices c map_id in
+  Printf.sprintf "nd_add_delta_to_%s%s"
+    (String.concat "_" @@ List.map K3PrintSyntax.string_of_type t) s
 
 (*** trigger names ***)
 let send_fetch_name_of_t trig_nm = "sw_"^trig_nm^"_send_fetch"

@@ -252,7 +252,7 @@ let modify_dist (c:config) ast stmt =
           (* get the latest vid values for this map *)
           mk_bind buf_col "__x" @@
             map_latest_vid_vals c (mk_var "__x") pat_m map ~keep_vid:false
-        with Not_found -> err_or_ret @@ Printf.sprintf "No %s map found in stmt %d" id stmt end
+        with Not_found -> err_or_ret @@ Printf.sprintf "No %s map found in stmt %d. lmap:%s" id stmt lmap_name end
 
     | _ -> err_or_ret "Cannot handle non-var in slice"
   in
