@@ -897,13 +897,13 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
 
             (* Slice on VMap and full lookup *)
             (fun () ->
-              if is_vmap col && 
+              if is_vmap col &&
                  D.is_lookup_pat (snd (U.decompose_slice col)) then
               handle_lookup_with ~vmap:true "lookup_with4" col t_elem e_none e_some
               else None);
 
             (* Slice frontier on VMap and full lookup *)
-            (fun () -> 
+            (fun () ->
               if is_vmap col &&
               D.is_lookup_pat (snd (U.decompose_slice_frontier col)) then
               handle_lookup_with ~vmap:true ~decomp_fn:U.decompose_slice_frontier
@@ -916,15 +916,15 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
               else None);
 
             (* Slice on VMap with partial key*)
-            (fun () -> 
+            (fun () ->
               if is_vmap col then
                 handle_slice_lookup_with col t_elem e_none e_some else None);
 
             (* Slice frontier on VMap with partial lookup *)
-            (fun () -> 
+            (fun () ->
               if is_vmap col then
-              handle_slice_lookup_with 
-                ~decomp_fn:U.decompose_slice_frontier 
+              handle_slice_lookup_with
+                ~decomp_fn:U.decompose_slice_frontier
                 col t_elem e_none e_some else None);
 
             (fun () ->
@@ -1033,8 +1033,8 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
       (* if we have only unknowns, then we must access the full map (ie. a fold) *)
       let as_fold = List.filter (not |- D.is_unknown) (U.unwrap_tuple pat) = [] in
       let name =
-        if as_fold then "fold"
-        else "fold_slice_by_"^slice_names c pat_no_vid in
+        if as_fold then "fold_vid"
+        else "fold_slice_vid_by_"^slice_names c pat_no_vid in
 
       let args, arg_info =
         if as_fold then
