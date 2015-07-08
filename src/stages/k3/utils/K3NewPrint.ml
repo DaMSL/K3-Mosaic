@@ -1148,14 +1148,16 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
     end
 
   | UpsertWith -> let col, key, lam_no, lam_yes = U.decompose_upsert_with expr in
-    maybe_vmap c col key
+    let key = lookup_pat_of_slice ~col key in
+    maybe_vmap c col (light_type c @@ KH.mk_tuple key)
       (fun key -> lazy_expr c col <| apply_method_nocol  c ~name:"upsert_with" ~args:[key; lam_no; lam_yes]
         ~arg_info:[[], true; [], true; [0], true])
       (fun vid key -> lazy_expr c col <| apply_method_nocol  c ~name:"upsert_with" ~args:[vid; key; lam_no; lam_yes]
         ~arg_info:[vid_out_arg; [], true; [], true; [0], true])
 
   | UpsertWithBefore -> let col, key, lam_no, lam_yes = U.decompose_upsert_with_before expr in
-    maybe_vmap c col key
+    let key = lookup_pat_of_slice ~col key in
+    maybe_vmap c col (light_type c @@ KH.mk_tuple key)
       (fun key -> lazy_expr c col <| apply_method_nocol  c ~name:"upsert_with_before" ~args:[key; lam_no; lam_yes]
         ~arg_info:[[], true; [], true; [0], true])
       (fun vid key -> lazy_expr c col <| apply_method_nocol  c ~name:"upsert_with_before" ~args:[vid; key; lam_no; lam_yes]
