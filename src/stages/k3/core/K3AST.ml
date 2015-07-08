@@ -29,7 +29,7 @@ type container_type_t
     | TBag
     | TList
     | TMap
-    | TVMap (* nlogn lookups *)
+    | TVMap of IntSetSet.t option (* indices *)
 
 type base_type_t
     = TTop
@@ -121,6 +121,7 @@ type expr_tag_t
     | Insert
     | Update
     | UpsertWith     (* insert with a default handler *)
+    | UpsertWithBefore (* insert with a default handler *)
     | UpdateSuffix   (* update past a vid *)
     | Delete
     | DeletePrefix   (* delete before a certain vid. save frontier *)

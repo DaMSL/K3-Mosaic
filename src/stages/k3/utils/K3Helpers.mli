@@ -52,8 +52,8 @@ val wrap_tbag : type_t -> type_t
 val wrap_tbag' : type_t list -> type_t
 val wrap_tmap : type_t -> type_t
 val wrap_tmap' : type_t list -> type_t
-val wrap_tvmap : type_t -> type_t
-val wrap_tvmap' : type_t list -> type_t
+val wrap_tvmap : ?idx:IntSetSet.t -> type_t -> type_t
+val wrap_tvmap' : ?idx:IntSetSet.t -> type_t list -> type_t
 val wrap_tind : type_t -> type_t
 val wrap_tind_mut : type_t -> type_t
 val wrap_tmaybe : type_t -> type_t
@@ -162,8 +162,10 @@ val mk_slice' : id_t -> expr_t list -> expr_t
 (* int list list: specify index to use
    expr_t: list of integer values specifying GT, LT, EQ *)
 val mk_slice_frontier : expr_t -> expr_t list -> expr_t
+val mk_slice_frontier' : id_t -> expr_t list -> expr_t
 val mk_insert : id_t -> expr_t list -> expr_t
 val mk_upsert_with : id_t -> expr_t list -> expr_t -> expr_t -> expr_t
+val mk_upsert_with_before : id_t -> expr_t list -> expr_t -> expr_t -> expr_t
 val mk_delete : id_t -> expr_t list -> expr_t
 val mk_delete_prefix : id_t -> expr_t list -> expr_t
 val mk_update : id_t -> expr_t list -> expr_t list -> expr_t

@@ -5,6 +5,7 @@ let _ = Random.self_init ()
 module IntSet = Set.Make(struct type t = int let compare = (-) end)
 module StrSet = Set.Make(struct type t = string let compare = String.compare end)
 module IntIntSet = Set.Make(struct type t = int * int let compare = compare end)
+module IntSetSet = Set.Make(struct type t = IntSet.t let compare = IntSet.compare end)
 module IntMap = Map.Make(struct type t = int let compare = (-) end)
 module StrMap = Map.Make(struct type t = string let compare = String.compare end)
 
@@ -577,6 +578,9 @@ let strcatmap ?(sep=", ") f l = String.concat sep @@ List.map f l
 let intset_of_list l =
   List.fold_left (fun acc x -> IntSet.add x acc) IntSet.empty l
 
+let intsetset_of_list l =
+  List.fold_left (fun acc x -> IntSetSet.add (intset_of_list x) acc) IntSetSet.empty l
+
 let intmap_of_list l =
   List.fold_left (fun acc (k,v) -> IntMap.add k v acc) IntMap.empty l
 
@@ -584,6 +588,9 @@ let strmap_of_list l =
   List.fold_left (fun acc (k,v) -> StrMap.add k v acc) StrMap.empty l
 
 let list_of_strmap m = StrMap.fold (fun k v acc -> (k,v)::acc) m []
+let list_of_intset s = IntSet.fold (fun x acc -> x::acc) s []
+let list_of_intsetset s = IntSetSet.fold (fun x acc -> (list_of_intset x)::acc) s []
 
-let string_of_int_list l = String.concat ", " @@ List.map soi l
-let string_of_int_set  s = String.concat ", " @@ List.map soi @@ IntSet.elements s
+let string_of_int_list l    = strcatmap soi l
+let string_of_int_set  s    = strcatmap soi @@ IntSet.elements s
+let string_of_int_set_set s = strcatmap ~sep:"; " string_of_int_set @@ IntSetSet.elements s

@@ -65,8 +65,8 @@ let wrap_tmap' = function
   | _      -> failwith "wrap_tmap': wrong number of arguments"
 
 (* wrap a type in a vmap *)
-let wrap_tvmap typ = wrap_tcol TVMap typ
-let wrap_tvmap' tl = wrap_tvmap @@ wrap_ttuple tl
+let wrap_tvmap ?idx typ = wrap_tcol (TVMap idx) typ
+let wrap_tvmap' ?idx tl = wrap_tvmap ?idx @@ wrap_ttuple tl
 
 (* wrap a type in a mutable indirection *)
 let wrap_tind t = canonical @@ TIndirect t
@@ -282,11 +282,17 @@ let mk_slice' collection pattern = mk_slice (mk_var collection) pattern
 let mk_slice_frontier col pat =
   mk_slice_gen SliceFrontier col @@ mk_tuple pat
 
+let mk_slice_frontier' col pat =
+  mk_slice_gen SliceFrontier (mk_var col) @@ mk_tuple pat
+
 let mk_insert col x = mk_stree Insert [mk_var col; mk_tuple x]
 
 (* key contains dummy value *)
 let mk_upsert_with col key lam_empty lam_full =
   mk_stree UpsertWith [mk_var col; mk_tuple key; lam_empty; lam_full]
+
+let mk_upsert_with_before col key lam_empty lam_full =
+  mk_stree UpsertWithBefore [mk_var col; mk_tuple key; lam_empty; lam_full]
 
 let mk_delete col x = mk_stree Delete [mk_var col; mk_tuple x]
 

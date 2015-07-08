@@ -43,11 +43,12 @@ let string_of_address_and_role (addr, role_opt, alias_opt) =
 let wrap_brackets s = "["^s^"]"
 
 let string_of_container_type t_c = match t_c with
-    | TSet  -> "TSet"
-    | TBag  -> "TBag"
-    | TList -> "TList"
-    | TMap  -> "TMap"
-    | TVMap -> "TVMap"
+    | TSet          -> "TSet"
+    | TBag          -> "TBag"
+    | TList         -> "TList"
+    | TMap          -> "TMap"
+    | TVMap(Some s) -> "TVMap("^string_of_int_set_set s^")"
+    | TVMap None    -> "TVMap"
 
 let string_of_const cn = match cn with
     | CUnit          -> "CUnit"
@@ -110,6 +111,7 @@ let string_of_tag_type = function
     | Update           -> "Update"
     | UpdateSuffix     -> "UpdateSuffix"
     | UpsertWith       -> "UpsertWith"
+    | UpsertWithBefore -> "UpsertWithBefore"
     | Delete           -> "Delete"
     | DeletePrefix     -> "DeletePrefix"
     | Peek             -> "Peek"

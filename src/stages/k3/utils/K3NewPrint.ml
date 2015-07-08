@@ -7,6 +7,8 @@ open K3.Annotation
 module U = K3Util
 module T = K3Typechecker
 module KH = K3Helpers
+module D = K3Dist
+module KP = K3PrintSyntax
 
 exception MissingType of int * string
 
@@ -125,14 +127,46 @@ let error () = lps "???"
 
 let lazy_bracket_list f l = lazy_bracket (lps_list NoCut f l)
 
-let lazy_col = function
+(* print out multi_index. we only support hash indices *)
+let rec lazy_multi_index c ss elem_t =
+  (* unwrap all the tuples, and use the relevant record ids *)
+  let elem_t = KH.unwrap_ttuple elem_t in
+  let elem_t = List.map KH.unwrap_ttuple elem_t in
+  let no_extract = List.length (List.nth elem_t 0) = 1 in
+  let record_ids = List.map (add_record_ids c) elem_t in
+  let record_ids = add_record_ids c record_ids in
+  let record_ids = List.flatten @@ List.map (fun (nm, l) ->
+    if List.length l = 1 then [nm, snd @@ hd l]
+    else l) record_ids in
+
+  let index_ls = list_of_intsetset ss in
+  (* convert indices to record ids/types *)
+  let record_idxs = List.map (List.map (List.nth record_ids)) index_ls in
+
+  lps "{ MultiIndexVMap" <| lps "," <| lsp () <|
+  lps_list CutHint (fun idx ->
+    lps (if no_extract then "VMapIndex" else "VMapIndexE") <|
+    lazy_paren
+      (lps "key=[:> " <|
+        lps_list CutHint (fun (key, typ) -> lps key <| lps "=>" <| lazy_type c typ) idx <|
+        lps "]" <|
+       if no_extract then [] else
+       (lps "," <| lsp () <|
+        lps "extractors=[$#>" <| lsp () <|
+        lps_list CutHint (fun (key, _) -> lps key <| lps "=>" <| lps "\"key." <| lps key <|
+        lps "\"") idx <| lps "]")
+       ))
+  record_idxs <| lps "}"
+
+and lazy_col c col_t elem_t = match col_t with
   | TSet        -> lps "{ Set }"
   | TBag        -> lps "{ Collection }"
   | TList       -> lps "{ Seq }"
   | TMap        -> lps "{ Map }"
-  | TVMap       -> lps "{ VMap }"
+  | TVMap None  -> lps "{ MultiIndexVMap }"
+  | TVMap(Some ss) -> lazy_multi_index c ss elem_t
 
-let rec lazy_base_type ?(brace=true) ?(mut=false) ?(empty=false) c ~in_col t =
+and lazy_base_type ?(brace=true) ?(mut=false) ?(empty=false) c ~in_col t =
   let wrap_mut f = if mut && not empty then lps "mut " <| f else f in
   let wrap_single f =
     let wrap = if brace then lazy_brace else id_fn in
@@ -161,7 +195,7 @@ let rec lazy_base_type ?(brace=true) ?(mut=false) ?(empty=false) c ~in_col t =
       wrap_mut (wrap (lsp () <| inner <| lsp ()))
   | TCollection(ct, vt) -> wrap (
     (if not empty then lps "collection " else [])
-    <| lazy_type c ~in_col:true vt <| lps " @ " <| lazy_col ct)
+    <| lazy_type c ~in_col:true vt <| lps " @ " <| lazy_col c ct vt)
   | TFunction(itl, ot) ->
       lps_list ~sep:" -> " CutHint (lazy_type c) (itl@[ot])
 
@@ -199,7 +233,7 @@ let lazy_collection_vt c vt eval = match vt.typ with
       let lazy_elem_list =
         lazy_base_type ~brace:false ~in_col:true ~mut c et.typ <| lps "|" <| lsp ()
       in
-      lps "{|" <| lazy_elem_list <| eval <| lps "|}" <| lps " @ " <| lazy_col ct
+      lps "{|" <| lazy_elem_list <| eval <| lps "|}" <| lps " @ " <| lazy_col c ct et
   | _ -> error () (* type error *)
 
 (* arg type with numbers included in tuples and maybes *)
@@ -281,17 +315,58 @@ let rec extract_slice e =
       tup, (KH.mk_let ids bound) |- sub_expr
   | _ -> failwith "extract_slice unhandled expression"
 
+(* create string representing types of a slice and a record *)
+let slice_names c pat =
+  (* focus on the relevant pattern *)
+  let pat' = U.unwrap_tuple @@ hd @@ pat in
+  let pat =
+    (* if we have a 1-member key, then we want to add record_ids
+     * to the full key,value pair. Otherwise, we want to add them
+     * to the internal tuple pattern *)
+    if List.length pat' = 1 then pat
+    else pat'
+  in
+  let pat = add_record_ids c pat in
+  let pat = List.filter (not |- D.is_unknown |- snd) pat in
+  String.concat "_" (fst_many pat)
+
+let is_tuple e = match U.tag_of_expr e with Tuple -> true | _ -> false
+
+(* get the important part of the pattern out: for a [key, value] it's
+ * the id function, but for [[a,b,c], value]] it's the inner tuple *)
+let meaningful_pat c pat =
+  if is_tuple @@ hd pat then hd pat
+  else light_type c @@ KH.mk_tuple pat
+
 (* for vmaps, we encode many of our functions with just a vid inside a tuple. Extract
   * this for the API *)
 let maybe_vmap c col pat fun_no fun_yes =
   let col, _ = KH.unwrap_tcol @@ T.type_of_expr col in
-  if col = TVMap then match U.decompose_tuple pat with
+  match col with
+  | TVMap _ -> begin match U.decompose_tuple pat with
     | vid::rest -> fun_yes vid (light_type c @@ KH.mk_tuple rest)
     | _         -> failwith "missing vid in pattern for vmap"
-  else fun_no pat
+    end
+  | _ -> fun_no pat
+
+(* try pattern matching a bunch of expressions *)
+let try_matching l =
+  let rec loop acc_fail = function
+    | x::xs -> begin match x () with
+                | None -> loop acc_fail xs
+                | Some x -> x
+                | exception (Failure s) -> loop (acc_fail^"; "^s) xs
+                | exception _ -> loop acc_fail xs
+               end
+    | [] -> failwith ("No match found: "^acc_fail)
+  in loop "" l
 
 (* check if a collection is a vmap *)
-let is_vmap col = fst @@ KH.unwrap_tcol @@ T.type_of_expr col = TVMap
+let is_vmap col = match fst @@ KH.unwrap_tcol @@ T.type_of_expr col with
+                  | TVMap _ -> true | _ -> false
+
+let is_map col = match fst @@ KH.unwrap_tcol @@ T.type_of_expr col with
+                  | TMap -> true | _ -> false
 
 (* We return the pattern breakdown: a list, and a lambda forming the internal structure *)
 let breakdown_pat pat = match U.tag_of_expr pat with
@@ -338,18 +413,6 @@ let var_translate = List.fold_left (fun acc (x,y) -> StringMap.add x y acc) Stri
    * record restriction in newk3, which states that everything in a collection must be a record *)
 let vid_out_arg = [], K3Dist.is_vid_tuple
 let vid_in_arg  = K3Dist.is_vid_tuple
-
-let is_unknown e =
-  match U.tag_of_expr e with Const CUnknown -> true | _ -> false
-
-let is_tuple e =
-  match U.tag_of_expr e with Tuple -> true | _ -> false
-
-(* check whether a pattern matches the criteria for being a lookup:
- * no unknown except for the value *)
-let is_lookup_pat pat =
-  let pat = KH.mk_tuple @@ list_drop_end 1 @@ U.unwrap_tuple pat in
-  not @@ Tree.fold_tree_th_bu (fun acc e -> is_unknown e || acc) false pat
 
 (* change a pattern to have a default value (last element) *)
 (* since k3new can't handle unknowns *)
@@ -502,7 +565,7 @@ and filter_of_slice ~frontier c col pat =
   let rec loop es : ((expr_t -> expr_t) * expr_t) list =
     let i_e = insert_index_fst ~first:1 es in
     (* find the non-unknown slices *)
-    let i_e = List.filter (not |- is_unknown |- snd) i_e in
+    let i_e = List.filter (not |- D.is_unknown |- snd) i_e in
     let s_e = List.map (first KH.mk_subscript) i_e in
     (* find if there are any tuples inside the pattern *)
     let tups, no_tups = List.partition (is_tuple |- snd) s_e in
@@ -614,6 +677,9 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
       end
   | Tuple     -> let es = U.decompose_tuple expr in
     let id_es = add_record_ids c es in
+    (* since we're never supposed to have unknowns here in newk3, we can just
+     * filter out unknowns after we added record ids *)
+    let id_es = List.filter (not |- D.is_unknown |- snd) id_es in
     let inner = lazy_concat ~sep:lcomma (fun (id, e) ->
         lps (id^":") <| lazy_expr c e) id_es
     in lazy_brace inner
@@ -780,53 +846,118 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
         (* if we're projecting, let future expressions know *)
         if project && id <> "_" then {c' with project=StrSet.add id c'.project}
         else c' in
-      lps "case" <| lsp () <| lazy_expr c e1 <| lsp () <| lps "of" <| lsp () <|
-      wrap_indent (lazy_brace (lps ("Some "^id^" ->") <| lsp () <|
-        lazy_expr c' e_some)) <|
-      wrap_indent (lazy_brace (lps "None ->" <| lsp () <| lazy_expr c e_none))
+      Some(
+        lps "case" <| lsp () <| lazy_expr c e1 <| lsp () <| lps "of" <| lsp () <|
+        wrap_indent (lazy_brace (lps ("Some "^id^" ->") <| lsp () <|
+          lazy_expr c' e_some)) <|
+        wrap_indent (lazy_brace (lps "None ->" <| lsp () <| lazy_expr c e_none)))
     in
     (* common pattern for lookup_with *)
-    let handle_lookup_with ?(decomp_fn=U.decompose_slice) ?(vmap=false) name col t_elem =
-      let col, pat = decomp_fn col in
-      (* NOTE: we don't check for lookup_pat. We assume that's already been done *)
-      (* we CAN use lookup_with4 *)
-      let pat = lookup_pat_of_slice ~col pat in
-      let arg' =
-        [light_type c @@ KH.mk_lambda' ["_", KH.t_unit] e_none;
-          light_type c @@ KH.mk_lambda' [id, t_elem] e_some] in
-      let args, arg_info =
-        if vmap then
-          [hd pat; light_type c @@ KH.mk_tuple @@ tl pat] @ arg',
-            [vid_out_arg; [], false; [], false; [0], false]
-        else
-          [light_type c @@ KH.mk_tuple pat] @ arg',
-            [[], false; [], false; [0], false] in
-      apply_method c ~name ~col ~args ~arg_info
+    let handle_lookup_with
+      ?(decomp_fn=U.decompose_slice)
+      ?(vmap=false)
+      name col t_elem e_none e_some =
+        let col, pat = decomp_fn col in
+        (* NOTE: we don't check for lookup_pat. We assume that's already been done *)
+        (* we CAN use lookup_with4 *)
+        let pat = lookup_pat_of_slice ~col pat in
+        let arg' =
+          [light_type c @@ KH.mk_lambda' ["_", KH.t_unit] e_none;
+            light_type c @@ KH.mk_lambda' [id, t_elem] e_some] in
+        let args, arg_info =
+          if vmap then
+            [hd pat; light_type c @@ KH.mk_tuple @@ tl pat] @ arg',
+              [vid_out_arg; [], false; [], false; [0], false]
+          else
+            [light_type c @@ KH.mk_tuple pat] @ arg',
+              [[], false; [], false; [0], false] in
+        some @@ apply_method c ~name ~col ~args ~arg_info
     in
-    (* check for lookup_with *)
-    begin try
-      (* check for a case(peek(slice(...)) *)
-      let col = U.decompose_peek e1 in
-      let col_t, t_elem = KH.unwrap_tcol @@ T.type_of_expr col in
-      begin match col_t, U.tag_of_expr col with
-      | TVMap, Slice when is_lookup_pat (snd (U.decompose_slice col)) ->
-          handle_lookup_with ~vmap:true "lookup_with4" col t_elem
-      | TVMap, SliceFrontier when is_lookup_pat (snd (U.decompose_slice_frontier col)) ->
-          handle_lookup_with ~vmap:true ~decomp_fn:U.decompose_slice_frontier "lookup_with4_before" col t_elem
-      | TMap,  Slice when is_lookup_pat (snd(U.decompose_slice col)) ->
-          handle_lookup_with "lookup_with4" col t_elem
-      | _  ->
-          (* peek_with *)
-          let args =
-            [light_type c @@ KH.mk_lambda' ["_", KH.t_unit] e_none;
-             light_type c @@ KH.mk_lambda' [id, t_elem] e_some] in
-          let arg_info = [[], false; [0], false] in
-          apply_method c ~name:"peek_with" ~col ~args ~arg_info
-      end
 
-      (* exceptions indicate mismatch *)
-      with _ -> normal ()
-    end
+    (* helper function to apply lookup_with on a secondary index *)
+    let handle_slice_lookup_with
+      ?(decomp_fn=U.decompose_slice)
+      col t_elem e_none e_some =
+        let col, pat = decomp_fn col in
+        let fn_pat = meaningful_pat c @@ tl @@ U.unwrap_tuple pat in
+        let name =
+          "lookup_with_before_by_" ^ (slice_names c @@ U.unwrap_tuple fn_pat) in
+        let arg' =
+          [light_type c @@ KH.mk_lambda' ["_", KH.t_unit] e_none;
+            light_type c @@ KH.mk_lambda' [id, t_elem] e_some] in
+        let args, arg_info =
+            [hd @@ U.unwrap_tuple pat; light_type c fn_pat] @ arg',
+              [vid_out_arg; [], false; [], false; [0], false] in
+        some @@ apply_method c ~name ~col ~args ~arg_info
+      in
+
+      (* check for a case(peek(slice(...)) *)
+      try_matching [
+        (fun () ->
+          let col = U.decompose_peek e1 in
+          let col_t, t_elem = KH.unwrap_tcol @@ T.type_of_expr col in
+          some @@ try_matching [
+
+            (* Slice on VMap and full lookup *)
+            (fun () ->
+              if is_vmap col &&
+                 D.is_lookup_pat (snd (U.decompose_slice col)) then
+              handle_lookup_with ~vmap:true "lookup_with4" col t_elem e_none e_some
+              else None);
+
+            (* Slice frontier on VMap and full lookup *)
+            (fun () ->
+              if is_vmap col &&
+              D.is_lookup_pat (snd (U.decompose_slice_frontier col)) then
+              handle_lookup_with ~vmap:true ~decomp_fn:U.decompose_slice_frontier
+                "lookup_with4_before" col t_elem e_none e_some
+              else None);
+
+            (* Slice on map and full lookup *)
+            (fun () ->
+              if is_map col &&
+                D.is_lookup_pat (snd(U.decompose_slice col)) then
+                handle_lookup_with "lookup_with4" col t_elem e_none e_some
+              else None);
+
+            (* Slice on VMap with partial key*)
+            (fun () ->
+              if is_vmap col then
+                handle_slice_lookup_with col t_elem e_none e_some else None);
+
+            (* Slice frontier on VMap with partial lookup *)
+            (fun () ->
+              if is_vmap col then
+              handle_slice_lookup_with
+                ~decomp_fn:U.decompose_slice_frontier
+                col t_elem e_none e_some else None);
+
+            (* AggregateV -> lookup_before *)
+            (* In order for an aggregatev to be here, it must have a full key *)
+            (fun () ->
+              (* we happen to have a bind here, so special case it *)
+              let e0, x, e1 = U.decompose_bind col in
+              let lambda, acc, col = U.decompose_aggregatev e1 in
+              let col_t, elem_t = KH.unwrap_tcol @@ T.type_of_expr col in
+              (* do bind here *)
+              Some (
+                lps "bind" <| lsp () <| lazy_expr c e0 <| lsp () <| lps "as"
+                <| lsp () <| lps "ind" <| lsp () <| lps x <| lsp () <|
+                lps "in" <| lsp () <|
+                (unwrap_some @@
+                  handle_lookup_with ~vmap:true ~decomp_fn:U.decompose_slice_frontier
+                  "lookup_with4_before" col elem_t e_none e_some)));
+
+            (fun () ->
+              (* peek_with *)
+              let args =
+                [light_type c @@ KH.mk_lambda' ["_", KH.t_unit] e_none;
+                light_type c @@ KH.mk_lambda' [id, t_elem] e_some] in
+              let arg_info = [[], false; [0], false] in
+              Some(apply_method c ~name:"peek_with" ~col ~args ~arg_info));
+          ]);
+
+        normal]
 
   | BindAs _ -> let bind, id, r = U.decompose_bind expr in
     let c = {c with project=StrSet.remove id c.project} in
@@ -896,11 +1027,48 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
     apply_method c ~name ~col ~args:[lambda; acc]
       ~arg_info:[[1], false; [], false]
 
-  | AggregateV -> let lambda, acc, col = U.decompose_aggregatev expr in
-    (* find out if our accumulator is a collection type *)
-    let in_recs = if vid_in_arg then [1;2] else [2] in
-    apply_method c ~name:"fold_all" ~col ~args:[lambda; acc]
-      ~arg_info:[in_recs, false; [], false]
+  | AggregateV ->
+    let lambda, acc, col = U.decompose_aggregatev expr in
+    let normal () =
+      let in_recs = if vid_in_arg then [1;2] else [2] in
+      some @@ apply_method c ~name:"fold_all" ~col ~args:[lambda; acc]
+        ~arg_info:[in_recs, false; [], false]
+    in
+    (* handle a case of fold_all(slice(...)) *)
+    let handle_slice () =
+      let col, pat = U.decompose_slice_frontier col in
+      (* TODO: simplify to lookup pat if possible *)
+      (*
+      if D.is_lookup_pat pat then
+        (* can use plain lookup *)
+        handle_lookup_with ~vmap:true ~decomp_fn:U.decompose_slice_frontier
+          "lookup_with4_before" col t_elem' e_none
+          (* create a mapping to a flat data structure *)
+          (KH.mk_let [id]
+            (KH.mk_apply' (D.flatten_fn_nm @@ KH.unwrap_ttuple t_elem)
+            [KH.mk_var id]) e_some)
+      else None *)
+      let vid = hd @@ U.unwrap_tuple pat in
+      let pat_no_vid = tl @@ U.unwrap_tuple pat in
+      let pat = meaningful_pat c pat_no_vid in
+      (* if we have only unknowns, then we must access the full map (ie. a fold) *)
+      let as_fold = List.filter (not |- D.is_unknown) (U.unwrap_tuple pat) = [] in
+      let name =
+        if as_fold then "fold_vid"
+        else "fold_slice_vid_by_"^slice_names c pat_no_vid in
+
+      let args, arg_info =
+        if as_fold then
+          [vid; lambda; acc], [[], false; [2], false; [], false]
+        else
+          [vid; light_type c pat; lambda; acc],
+          [[], false; [], true; [2], false; [], false] in
+      some @@ apply_method c ~name ~col ~args ~arg_info
+    in
+    try_matching [
+      handle_slice;
+      normal
+    ]
 
   | GroupByAggregate -> let lam1, lam2, acc, col = U.decompose_gbagg expr in
     (* find out if our accumulator is a collection type *)
@@ -931,7 +1099,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
     let handle_lookup ?(decomp_fn=U.decompose_slice) ?(vmap=false) name col =
       let col, pat = decomp_fn col in
       (* check if we have a specific value rather than an open slice pattern *)
-      if is_lookup_pat pat then
+      if D.is_lookup_pat pat then
         (* create a default value for the last member of the slice *)
         let pat = lookup_pat_of_slice ~col pat in
         let args, arg_info =
@@ -941,8 +1109,8 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
       else normal ()
     in
     begin match col_t, tag with
-    | TVMap, Slice         -> handle_lookup ~vmap:true "lookup" col
-    | TVMap, SliceFrontier -> handle_lookup ~vmap:true ~decomp_fn:U.decompose_slice_frontier "lookup_before" col
+    | TVMap _, Slice         -> handle_lookup ~vmap:true "lookup" col
+    | TVMap _, SliceFrontier -> handle_lookup ~vmap:true ~decomp_fn:U.decompose_slice_frontier "lookup_before" col
     | TMap,  Slice         -> handle_lookup "lookup" col
     | _                    -> normal ()
     end
@@ -1001,10 +1169,19 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
     end
 
   | UpsertWith -> let col, key, lam_no, lam_yes = U.decompose_upsert_with expr in
-    maybe_vmap c col key
+    let key = lookup_pat_of_slice ~col key in
+    maybe_vmap c col (light_type c @@ KH.mk_tuple key)
       (fun key -> lazy_expr c col <| apply_method_nocol  c ~name:"upsert_with" ~args:[key; lam_no; lam_yes]
         ~arg_info:[[], true; [], true; [0], true])
       (fun vid key -> lazy_expr c col <| apply_method_nocol  c ~name:"upsert_with" ~args:[vid; key; lam_no; lam_yes]
+        ~arg_info:[vid_out_arg; [], true; [], true; [0], true])
+
+  | UpsertWithBefore -> let col, key, lam_no, lam_yes = U.decompose_upsert_with_before expr in
+    let key = lookup_pat_of_slice ~col key in
+    maybe_vmap c col (light_type c @@ KH.mk_tuple key)
+      (fun key -> lazy_expr c col <| apply_method_nocol  c ~name:"upsert_with_before" ~args:[key; lam_no; lam_yes]
+        ~arg_info:[[], true; [], true; [0], true])
+      (fun vid key -> lazy_expr c col <| apply_method_nocol  c ~name:"upsert_with_before" ~args:[vid; key; lam_no; lam_yes]
         ~arg_info:[vid_out_arg; [], true; [], true; [0], true])
 
   | Assign -> let l, r = U.decompose_assign expr in
@@ -1154,6 +1331,7 @@ include \"Core/Builtins.k3\"
 include \"Core/Log.k3\"
 include \"Annotation/Map.k3\"
 include \"Annotation/Maps/VMap.k3\"
+include \"Annotation/MultiIndex/MultiIndexVMap.k3\"
 include \"Annotation/Set.k3\"
 include \"Annotation/Seq.k3\"
 

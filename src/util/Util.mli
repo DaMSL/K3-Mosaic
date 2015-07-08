@@ -1,6 +1,7 @@
 module IntSet : sig include Set.S with type elt = int end
 module StrSet : sig include Set.S with type elt = string end
 module IntIntSet : sig include Set.S with type elt = int * int end
+module IntSetSet : sig include Set.S with type elt = IntSet.t end
 module IntMap : sig include Map.S with type key = int end
 module StrMap : sig include Map.S with type key = string end
 
@@ -281,9 +282,13 @@ val hashtbl_of_list : ('a * 'b) list -> ('a, 'b) Hashtbl.t
 val strcatmap : ?sep:string -> ('a -> string) -> 'a list -> string
 
 val intset_of_list : int list -> IntSet.t
+val intsetset_of_list : int list list -> IntSetSet.t
 val intmap_of_list : (int * 'a) list -> 'a IntMap.t
 val strmap_of_list : (string * 'a) list -> 'a StrMap.t
-val list_of_strmap :  'a StrMap.t -> (string * 'a) list
+val list_of_strmap : 'a StrMap.t -> (string * 'a) list
+val list_of_intset : IntSet.t -> int list
+val list_of_intsetset : IntSetSet.t -> int list list
 
 val string_of_int_list : int list -> string
 val string_of_int_set  : IntSet.t -> string
+val string_of_int_set_set : IntSetSet.t -> string

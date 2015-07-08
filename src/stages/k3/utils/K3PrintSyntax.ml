@@ -71,12 +71,14 @@ let string_of_int_list s = String.concat ", " @@ List.map soi s
 let lazy_keyset  s = lazy_bracket @@ lps @@ string_of_int_set s
 let lazy_keylist s = lazy_bracket @@ lps @@ string_of_int_list s
 
-let lazy_collection _ ct eval = match ct with
+let lazy_collection ?(empty=false) _ ct eval = match ct with
     | TSet  -> lps "{" <| eval <| lps "}"
     | TBag  -> lps "{|" <| eval <| lps "|}"
     | TList -> lps "[" <| eval <| lps "]"
     | TMap  -> lps "[:" <| eval <| lps ":]"
-    | TVMap -> lps "[<" <| eval <| lps ">]"
+    | TVMap(Some s) when not empty ->
+        lps "[<" <| eval <| lps " | " <| lps (string_of_int_set_set s) <| lsp () <| lps ">]"
+    | TVMap _ -> lps "[<" <| eval <| lps ">]"
 
 let rec lazy_base_type c ~in_col ?(no_paren=false) ?(paren_complex=false) t =
   let wrap_complex x = if paren_complex then lps "(" <| x <| lps ")" else x in
@@ -139,8 +141,8 @@ let lazy_const c = function
   | CAddress(s, i) -> lps @@ s^":"^string_of_int i
   | CTarget(id)    -> lps id
 
-let lazy_collection_vt c bt eval = match bt with
-  | TCollection(ct, _) -> lazy_collection c ct eval
+let lazy_collection_vt ?(empty=false) c bt eval = match bt with
+  | TCollection(ct, _) -> lazy_collection ~empty c ct eval
   | _ -> error @@ K3Printing.string_of_base_type bt (* type error *)
 
 let wrap_if_var e = match U.tag_of_expr e with
@@ -207,7 +209,7 @@ let rec lazy_expr c expr =
   (* many instructions need to wrap the same way *)
   in let wrap e = match U.tag_of_expr expr with
     | Insert | Iterate | Map | Filter | Flatten | Send | Delete
-    | Update | UpdateSuffix | UpsertWith | DeletePrefix
+    | Update | UpdateSuffix | UpsertWith | UpsertWithBefore | DeletePrefix
     | Aggregate | AggregateV | GroupByAggregate | Assign | Combine -> wrap_hov 2 e
     | _ -> id_fn e
   in let out = match U.tag_of_expr expr with
@@ -218,7 +220,7 @@ let rec lazy_expr c expr =
   | Just       -> let e = U.decompose_just expr in
     lps "just " <| paren_r e (lazy_expr c e)
   | Nothing vt -> lps "nothing:" <| lsp () <| lazy_type c vt
-  | Empty t    -> lazy_collection_vt c t.typ [] <| lsp () <|
+  | Empty t    -> lazy_collection_vt ~empty:true c t.typ [] <| lsp () <|
                   lps ":" <| lsp () <| lazy_type c t
   | Singleton t -> let e = U.decompose_singleton expr in
     lazy_collection_vt c t.typ @@ tuple_no_paren c e
@@ -340,6 +342,9 @@ let rec lazy_expr c expr =
       (lazy_expr c l <| lps " ," <| lsp () <| lazy_expr c r)
   | UpsertWith -> let col, key, lam_no, lam_yes = U.decompose_upsert_with expr in
     lps "upsert_with" <| lazy_paren
+      (lazy_expr c col <| lps " ," <| lsp () <| expr_triple (key,lam_no,lam_yes))
+  | UpsertWithBefore -> let col, key, lam_no, lam_yes = U.decompose_upsert_with_before expr in
+    lps "upsert_with_before" <| lazy_paren
       (lazy_expr c col <| lps " ," <| lsp () <| expr_triple (key,lam_no,lam_yes))
   | Delete -> let l, r = U.decompose_delete expr in
     lps "delete" <| lazy_paren (lazy_expr c l <| lps " , " <| lazy_expr c r)

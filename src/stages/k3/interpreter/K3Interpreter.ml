@@ -176,7 +176,7 @@ and eval_expr (address:address) sched_st cenv texpr =
     let temp x = VTemp x in
 
     (* TODO: byte and string types for binary and comparison operations *)
-    let eval_binop l r  bool_op int_op float_op =
+    let eval_binop s l r  bool_op int_op float_op =
       let error = int_erroru uuid "eval_binop" in
       temp @@ match l, r with
         | VBool b1,  VBool b2  -> VBool(bool_op b1 b2)
@@ -185,7 +185,7 @@ and eval_expr (address:address) sched_st cenv texpr =
         | VFloat f1, VInt i2   -> VFloat(float_op f1 (foi i2))
         | VFloat f1, VFloat f2 -> VFloat(float_op f1 f2)
         | x, y -> error @@
-            Printf.sprintf "non-matching values: %s and %s" (sov x) (sov y)
+            Printf.sprintf "non-matching values for %s: %s and %s" s (sov x) (sov y)
     in
 
     let eval_eq_op l r ~neq =
@@ -309,12 +309,12 @@ and eval_expr (address:address) sched_st cenv texpr =
           | TSet  -> VSet(ValueSet.of_list l)
           | TBag  -> VBag(ValueBag.of_list l)
           | TList -> VList(IList.of_list l)
-          | TVMap | TMap -> error name "cannot have map"
+          | TVMap _ | TMap -> error name "cannot have map"
         in nenv, reval
 
     (* Arithmetic and comparators *)
-    | Add, [l;r] -> nenv, eval_binop l r (||) (+) (+.)
-    | Mult,[l;r] -> nenv, eval_binop l r (&&) ( * ) ( *. )
+    | Add, [l;r] -> nenv, eval_binop "add" l r (||) (+) (+.)
+    | Mult,[l;r] -> nenv, eval_binop "mult" l r (&&) ( * ) ( *. )
 
     | Neg, [x] ->
         nenv, temp @@ begin match x with
@@ -472,10 +472,11 @@ and eval_expr (address:address) sched_st cenv texpr =
           fun col -> v_update error oldv newv col), temp VUnit
 
     (* we can't modify the environment within the lambda *)
-    | UpsertWith, [_; key; lam_none; lam_some] ->
+    | (UpsertWith | UpsertWithBefore), [_; key; lam_none; lam_some] ->
         let f lam x = value_of_eval @@ snd @@ eval_fn lam address sched_st nenv [x] in
         let renv = env_modify (get_id ()) nenv @@
-          fun col -> v_upsert_with error key (f lam_none) (f lam_some) col in
+          fun col -> v_upsert_with error key ~frontier:(if tag = UpsertWithBefore then true else false )
+                       (f lam_none) (f lam_some) col in
         renv, temp VUnit
 
     (* we can't modify the environment within the lambda *)

@@ -70,7 +70,7 @@ let nd_ack_send_code ~addr_nm ~vid_nm =
   mk_send sw_ack_rcv_trig_nm (mk_var addr_nm) [G.me_var; mk_var vid_nm]
 
 (* master: gc delay in seconds *)
-let ms_gc_interval = create_ds "ms_gc_interval" (mut t_int) ~init:(mk_cint 20000)
+let ms_gc_interval = create_ds "ms_gc_interval" (mut t_int) ~init:(mk_cint 300000)
 
 (* master: store the max vid received from each switch *)
 let ms_gc_vid_map =

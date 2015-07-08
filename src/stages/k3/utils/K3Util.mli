@@ -16,6 +16,8 @@ val expr_of_details : int -> expr_tag_t -> annotation_t -> expr_t list -> expr_t
 
 val add_annos : annotation_t -> expr_t -> expr_t
 
+val unwrap_atuple : arg_t -> arg_t list
+
 (* Variable id extraction *)
 val vars_of_arg : arg_t -> id_t list
 val typed_vars_of_arg : arg_t -> (id_t * type_t) list
@@ -76,6 +78,7 @@ val decompose_tuple : expr_t -> expr_t list
 val decompose_update : expr_t -> expr_t * expr_t * expr_t
 val decompose_update_suffix : expr_t -> expr_t * expr_t * expr_t
 val decompose_upsert_with : expr_t -> expr_t * expr_t * expr_t * expr_t
+val decompose_upsert_with_before : expr_t -> expr_t * expr_t * expr_t * expr_t
 val decompose_var : expr_t -> id_t
 val decompose_indirect : expr_t -> expr_t
 

@@ -145,6 +145,7 @@ let nd_check_stmt_cntr_index =
 (* NOTE: this function assumes the initial value is always 0.
  * If we need another value, it must be handled via message from
  * m3tok3 *)
+(* @idx: number to differentiate index pattern types *)
 let nd_add_delta_to_buf c map_id =
   let delta_tuples, lookup_value, update_value, corrective, target_map, tmap_deref =
     "delta_tuples", "lookup_value", "update_value", "corrective", "target_map", "target_map_d" in
@@ -158,13 +159,22 @@ let nd_add_delta_to_buf c map_id =
     pat_of_flat_e map_real ~has_vid:false ~add_vid:true @@ fst_many delta_pat in
   (* function version of real pat (uses an expression) *)
   let real_pat_f e = D.pat_of_ds ~expr:e map_real in
-  let calc_pat_f e = D.pat_of_ds ~expr:e map_delta in
   let zero =
     let t_val = snd @@ get_val real_pat in
     match t_val.typ with
     | TInt   -> mk_cint 0
     | TFloat -> mk_cfloat 0.
     | _ -> failwith @@ "Unhandled type "^K3PrintSyntax.string_of_type t_val
+  in
+  let regular_read =
+    mk_block [
+      mk_upsert_with_before "acc2"
+        (D.unknown_val real_delta_pat)
+        (mk_lambda'' unit_arg @@ mk_tuple @@ drop_vid real_delta_pat) @@
+         mk_lambda' (ds_e map_real) @@
+          mk_tuple @@ drop_vid @@ new_val real_delta_pat @@
+            mk_add (get_val real_delta_pat) @@ get_val' real_pat;
+      mk_var "acc2"]
   in
   mk_global_fn (D.nd_add_delta_to_buf_nm c map_id)
     (* corrective: whether this is a corrective delta *)
@@ -175,31 +185,6 @@ let nd_add_delta_to_buf c map_id =
       mk_assign tmap_deref @@ U.add_property "Move" @@
         mk_agg
           (mk_lambda2' ["acc", map_real.t] (ds_e map_delta) @@
-            mk_let ["regular_read"]
-            (* this part is just for correctives:
-              * We need to check if there's a value at the particular version id
-              * If so, we must add the value directly *)
-              (mk_if
-                (mk_var corrective)
-                (* corrective case *)
-                (mk_case_sn
-                  (mk_peek @@
-                    mk_slice' "acc" @@ D.unknown_val real_delta_pat) "val"
-                  (* then just update the value *)
-                  (mk_block [
-                    mk_update "acc"
-                      [mk_var "val"] @@
-                      D.new_val real_delta_pat @@
-                        mk_add (get_val' @@ real_pat_f @@ mk_var "val") @@
-                                get_val' delta_pat;
-                    mk_cfalse])
-                  (* in the else case, we need to still do a regular read because
-                  * there may not have been an initial write due to empty lookups on rhs
-                  * maps *)
-                  mk_ctrue) @@
-                (* non-corrective so do regular read *)
-                mk_ctrue) @@
-
           (* add to future values for both correctives and regular updates *)
             mk_let ["acc2"]
               (mk_block [
@@ -211,25 +196,36 @@ let nd_add_delta_to_buf c map_id =
                                 get_val real_delta_pat;
                 mk_var "acc"]) @@
 
-            mk_if
-              (mk_var "regular_read")
-              (* if regular case -- read the frontier and add delta *)
-              (mk_let [update_value]
-                (mk_add
-                  (get_val' delta_pat) @@
-                  mk_case_ns
-                    (mk_peek @@
-                      map_latest_vid_vals c (mk_var "acc2")
-                        (some @@ D.unknown_val' delta_pat) map_id ~keep_vid:false) "val"
-                    zero @@
-                    D.get_val' @@ calc_pat_f @@ mk_var "val") @@
-                mk_block [
-                  mk_insert "acc2" @@ new_val real_delta_pat @@ mk_var update_value;
-                  mk_var "acc2"]) @@
-              (* else done *)
-              mk_var "acc2")
-            (mk_var tmap_deref) @@
-          mk_var delta_tuples
+            (* this part is just for correctives:
+              * We need to check if there's a value at the particular version id
+              * If so, we must add the value directly *)
+              mk_if
+                (mk_var corrective)
+                (* corrective case *)
+                (mk_let ["corr_do_update"; "val"]
+                  (mk_case_sn
+                    (mk_peek @@ mk_slice' "acc2" @@
+                      D.unknown_val real_delta_pat) "pval"
+                    (mk_tuple [mk_ctrue; mk_var "pval"])
+                    (mk_tuple [mk_cfalse; mk_tuple @@
+                                new_val (drop_vid real_delta_pat) zero]))
+                  (mk_if (mk_var "corr_do_update")
+                    (* then just update the value *)
+                    (mk_block [
+                      mk_update "acc2"
+                        [mk_var "val"] @@
+                        D.new_val real_delta_pat @@
+                          mk_add (get_val' @@ real_pat_f @@ mk_var "val") @@
+                                  get_val' delta_pat;
+                      mk_var "acc2"])
+                    (* in the else case, we need to still do a regular read because
+                     * there may not have been an initial write due to empty lookups on rhs
+                     * maps *)
+                    regular_read)) @@
+                (* non-corrective so do regular read *)
+                regular_read)
+      (mk_var tmap_deref) @@
+    mk_var delta_tuples
 
 (*
  * Return list of corrective statements we need to execute by checking
@@ -701,10 +697,7 @@ List.fold_left
          mk_agg
           (mk_lambda2' ["acc", map_ds.t] (ds_e tup_ds) @@
             mk_block [
-              mk_case_sn
-                (mk_peek @@ mk_slice' "acc" @@ unknown_val map_pat) "vals"
-                (mk_update "acc" [mk_var "vals"] map_pat) @@
-                mk_insert "acc" map_pat;
+              mk_insert "acc" map_pat;
               mk_var "acc" ])
           (mk_var rbuf_deref) @@
           mk_var "tuples" ;
@@ -925,34 +918,48 @@ let nd_update_stmt_cntr_corr_map =
                 mk_if (mk_eq (mk_var "count") @@ mk_cint 0)
                   mk_cunit @@
                   (* increment the next hop by count *)
-                  mk_case_ns (mk_peek @@ mk_slice' nd_stmt_cntrs_corr_map.id [mk_var "hop"; mk_cunknown]) "lkup2"
-                      (* if no entry, set to count *)
-                      (mk_insert nd_stmt_cntrs_corr_map.id [mk_var "hop"; mk_var "count"]) @@
+                  mk_let ["delete_entry"; "new_count"]
+                    (mk_case_ns
+                      (mk_peek @@ mk_slice'
+                          nd_stmt_cntrs_corr_map.id [mk_var "hop"; mk_cunknown]) "lkup2"
+                      (* if no entry, return count *)
+                      (mk_tuple [mk_cfalse; mk_var "count"])
                       (* else, calculate new corr count *)
-                      mk_let ["new_corr_cnt"] (mk_add (mk_snd @@ mk_var "lkup2") @@ mk_var "count") @@
-                      (* if we've hit 0 *)
-                      mk_if (mk_eq (mk_var "new_corr_cnt") @@ mk_cint 0)
-                        (* delete the entry altogether *)
-                        (mk_delete nd_stmt_cntrs_corr_map.id @@ [mk_var "lkup2"]) @@
-                        (* else, save the incremented entry *)
-                        mk_update nd_stmt_cntrs_corr_map.id [mk_var "lkup2"] [mk_var "hop"; mk_var "new_corr_cnt"];
+                      (mk_let ["new_corr_cnt"]
+                        (mk_add (mk_snd @@ mk_var "lkup2") @@ mk_var "count") @@
+                        (* if we've hit 0 *)
+                        mk_if (mk_eq (mk_var "new_corr_cnt") @@ mk_cint 0)
+                          (* delete the entry *)
+                          (mk_tuple [mk_ctrue; mk_cint 0])
+                          (* else, return the incremented entry *)
+                          (mk_tuple [mk_cfalse; mk_var "new_corr_cnt"])))
+                    (mk_if (mk_var "delete_entry")
+                      (mk_delete nd_stmt_cntrs_corr_map.id [mk_var "hop"; mk_cunknown])
+                      (mk_insert nd_stmt_cntrs_corr_map.id [mk_var "hop"; mk_var "new_count"]));
+
                 (* check if this is from the root of the corrective tree *)
                 mk_if (mk_var "root")
                   (* return as is *)
                   mk_cunit @@
                   mk_let ["hop2"] (mk_sub (mk_var "hop") @@ mk_cint 1) @@
                   (* else update the current hop *)
-                  mk_case_ns (mk_peek @@ mk_slice' nd_stmt_cntrs_corr_map.id [mk_var "hop2"; mk_cunknown]) "lkup2"
-                    (* if no entry, set to -1 *)
-                    (mk_insert nd_stmt_cntrs_corr_map.id [mk_var "hop2"; mk_cint @@ -1]) @@
-                    (* else, calculate new corr count *)
-                    mk_let ["new_corr_cnt"] (mk_sub (mk_snd @@ mk_var "lkup2") @@ mk_cint 1) @@
-                    (* if we've hit 0, *)
-                    mk_if (mk_eq (mk_var "new_corr_cnt") @@ mk_cint 0)
-                      (* delete the entry *)
-                      (mk_delete nd_stmt_cntrs_corr_map.id @@ [mk_var "lkup2"]) @@
-                      (* else, save the decremented entry *)
-                      mk_update nd_stmt_cntrs_corr_map.id [mk_var "lkup2"] [mk_var "hop2"; mk_var "new_corr_cnt"];
+                  mk_let ["delete_entry"; "new_count"]
+                    (mk_case_ns (mk_peek @@ mk_slice' nd_stmt_cntrs_corr_map.id [mk_var "hop2"; mk_cunknown]) "lkup2"
+                      (* if no entry, return -1 *)
+                      (mk_tuple [mk_cfalse; mk_cint @@ -1])
+                      (* else, calculate new corr count *)
+                      (mk_let ["new_corr_cnt"]
+                        (mk_sub (mk_snd @@ mk_var "lkup2") @@ mk_cint 1) @@
+                        (* if we've hit 0 *)
+                        mk_if (mk_eq (mk_var "new_corr_cnt") @@ mk_cint 0)
+                          (* delete the entry *)
+                          (mk_tuple [mk_ctrue; mk_cint 0])
+                          (* else, return the incremented entry *)
+                          (mk_tuple [mk_cfalse; mk_var "new_corr_cnt"])))
+                    (mk_if (mk_var "delete_entry")
+                      (mk_delete nd_stmt_cntrs_corr_map.id [mk_var "hop2"; mk_cunknown])
+                      (mk_insert nd_stmt_cntrs_corr_map.id [mk_var "hop2"; mk_var "new_count"]));
+
                 (* set the new tuple *)
                 mk_tuple [mk_fst @@ mk_snd @@ mk_var "lkup"; mk_var nd_stmt_cntrs_corr_map.id]
               ])
@@ -1025,7 +1032,8 @@ let nd_do_complete_fns c ast trig_name corr_maps =
                 (* otherwise we need to update the corrective counters *)
                 update_corr_code false
             else
-              (* if we have no rhs maps, we may not need to update anything, since no stmt cntr entry was created *)
+              (* if we have no rhs maps, we may not need to update anything,
+               * since no stmt cntr entry was created *)
               mk_if (mk_eq (mk_var "sent_msgs") @@ mk_cint 0)
                 mk_cunit @@
                 (* else, update and create a stmt counter *)
@@ -1166,6 +1174,15 @@ let nd_do_corrective_fns c s_rhs ast trig_name corrective_maps =
   in
   List.map do_corrective_fn s_rhs
 
+let flatteners c =
+  let l = snd_many @@ D.uniq_types_and_maps ~uniq_indices:false c in
+  List.map (fun (t, maps) ->
+    let map_ds = map_ds_of_id ~global:true ~vid:false c (hd maps) in
+    let pat = pat_of_ds ~flatten:true ~drop_vid:true ~expr:(mk_var "tuple") map_ds in
+    mk_global_fn ("flatten_"^strcatmap ~sep:"_" K3PrintSyntax.string_of_type t)
+    ["tuple", snd @@ unwrap_tcol map_ds.t] [wrap_ttuple t] @@
+    mk_tuple @@ fst_many pat) l
+
 let str_of_date_t t = match t.typ with
   | TDate -> {t with typ = TString}
   | x -> t
@@ -1215,6 +1232,7 @@ let declare_global_vars c partmap ast =
   GC.global_vars c
 
 let declare_global_funcs c partmap ast =
+  flatteners c @
   nd_log_master_write ::
   (P.for_all_trigs ~sys_init:true ~deletes:c.gen_deletes c.p @@ nd_log_write c) @
   (P.for_all_trigs ~sys_init:true ~deletes:c.gen_deletes c.p @@ nd_log_get_bound c) @
@@ -1224,9 +1242,9 @@ let declare_global_funcs c partmap ast =
   nd_update_stmt_cntr_corr_map ::
   begin if c.gen_correctives then [nd_filter_corrective_list] else [] end @
   K3Ring.functions @
-  (List.map (nd_add_delta_to_buf c |- hd |- snd) @@ P.uniq_types_and_maps c.p) @
+  (List.map (fun (i, (_, maps)) -> nd_add_delta_to_buf c (hd maps)) @@ D.uniq_types_and_maps c) @
   TS.functions @
-  K3Route.functions c.p partmap @
+  K3Route.functions c partmap @
   K3Shuffle.functions c @
   GC.functions c
 
@@ -1303,6 +1321,7 @@ let gen_dist ?(gen_deletes=true)
       stream_file;
       agenda_map;
       unused_trig_args;
+      map_indices = P.map_access_patterns p;
     } in
   (* regular trigs then insert entries into shuffle fn table *)
   let proto_trigs, proto_funcs =

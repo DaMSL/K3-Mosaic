@@ -352,15 +352,46 @@ let get_map_bindings_in_stmt (p:prog_data_t) (stmt_id:stmt_id_t)
       with Not_found -> [])
     lmap_bindings
 
-(* get a list of unique types for maps (no vid) the map *)
-(* type_fn allows one to modify the types used in the hashtable *)
-let uniq_types_and_maps ?(type_fn=map_types_for) (p:prog_data_t)  =
-  let hash = Hashtbl.create 50 in
-  ignore (for_all_maps p @@
-    fun map_id ->
-      hashtbl_replace hash (type_fn p map_id) @@
-        function None -> [map_id] | Some l -> map_id::l);
-  let fns = ref [] in
-  Hashtbl.iter (fun t maps -> fns := (t, maps) :: !fns) hash;
-  !fns
+module IntSetSetMap = Map.Make(struct type t = IntSetSet.t let compare = IntSetSet.compare end)
+
+let map_access_patterns (p:prog_data_t) =
+  let h = Hashtbl.create 40 in
+  let insert_from_bind t_args map binds =
+    (* iterate over lmap binds and get index *)
+    let map_ts = map_types_for p map in
+    let idx = 
+      List.flatten @@ List.map (fun (nm, i) ->
+        (* only count bound variabls (trig args) *)
+        if List.mem nm t_args then [i] else []) binds in
+    if idx <> [] &&
+      (* prune out indices that have entire key *)
+      List.length idx < List.length map_ts - 1 then
+      (* insert index into hashtable *)
+      let idx = IntSet.of_list idx in
+      hashtbl_replace h map (function
+        | None   -> IntSetSet.singleton idx
+        | Some x -> IntSetSet.add idx x)
+  in
+  ignore(for_all_trigs p @@ fun trig ->
+    let t_args = fst_many @@ args_of_t p trig in
+    let ss = List.map (find_stmt p) @@ stmts_of_t p trig in
+    List.iter (fun (_,_,lmap,lbinds,rbinds) ->
+      insert_from_bind t_args lmap lbinds;
+      List.iter (fun (rmap, rbind) ->
+        insert_from_bind t_args rmap rbind) rbinds
+    ) ss);
+  (* enumerate all patterns and number them *)
+  let pats = snd @@
+    Hashtbl.fold (fun nm pat (i,acc) ->
+      try ignore(IntSetSetMap.find pat acc); i, acc
+      with Not_found ->
+        i+1, IntSetSetMap.add pat i acc)
+    h (1, IntSetSetMap.empty)
+  in
+  let h2 = Hashtbl.create 40 in
+  (* create new hashtbl with number for the pattern *)
+  Hashtbl.iter (fun nm idx ->
+    let num = IntSetSetMap.find idx pats in
+    Hashtbl.add h2 nm (num, idx)) h;
+  h2
 

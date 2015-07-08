@@ -69,7 +69,9 @@ type shuffle_fn_entry = {
   name : string;
 }
 
-type map_type = MapVMap
+type map_type =
+  | MapVMap
+  | MapMultiVMap
 
 type config = {
   p : P.prog_data_t;
@@ -87,6 +89,8 @@ type config = {
   agenda_map : mapping_t;
   (* unused trig args, calculated once *)
   unused_trig_args : StrSet.t StrMap.t;
+  (* map slice indices for the program *)
+  map_indices: (int, int * IntSetSet.t) Hashtbl.t;
 }
 
 let default_config = {
@@ -100,15 +104,22 @@ let default_config = {
   stream_file = "";
   agenda_map = [], StrMap.empty;
   unused_trig_args = StrMap.empty;
+  map_indices = Hashtbl.create 10;
 }
 
+let get_map_indices c map_id =
+  try some @@ Hashtbl.find c.map_indices map_id
+  with Not_found -> None
+
 (* what the generic type of the global maps is *)
-let wrap_t_of_map = function
-  | MapVMap -> mut |- wrap_tvmap
+let wrap_t_of_map c map_id t = match c.map_type, get_map_indices c map_id with
+  | MapVMap, _
+  | MapMultiVMap, None -> mut @@ wrap_tvmap t
+  | MapMultiVMap, Some(_, idx) -> mut @@ wrap_tvmap ~idx t
 
 let wrap_string_map s = "[<"^s^">]"
 
-let wrap_t_of_map' mt = wrap_t_of_map mt |- wrap_ttuple
+let wrap_t_of_map' c map_id t = wrap_t_of_map c map_id (wrap_ttuple t)
 
 (* what the generic type of data carried around is *)
 let wrap_t_calc  = wrap_tbag
@@ -116,6 +127,21 @@ let wrap_t_calc' = wrap_tbag'
 
 (* split a map's types into key, value. For vmaps, remove the vid *)
 let map_t_split' ts = list_split (-1) ts
+
+(* get a list of unique types for maps (no vid) *)
+(* type_fn allows one to modify the types used in the hashtable, eg. just keys *)
+let uniq_types_and_maps ?(uniq_indices=true) ?(type_fn=P.map_types_for) c =
+  let h   = Hashtbl.create 50 in
+  ignore (P.for_all_maps c.p @@ fun map_id ->
+    let t_elem = type_fn c.p map_id in
+    let index : int =
+      (* if we don't care about unique indices, use a zero value *)
+      if uniq_indices then maybe 0 fst @@ get_map_indices c map_id
+      else 0 in
+    (* get unique entries by indices and types *)
+    hashtbl_replace h (t_elem, index) @@
+      function None -> [map_id] | Some l -> map_id::l);
+  Hashtbl.fold (fun (t,i) maps acc -> (i, (t, maps))::acc) h []
 
 let read_e ~vid ~global e =
   if vid && not global then ("vid", t_vid)::e
@@ -149,7 +175,7 @@ let map_ds_of_id ?name ?(suffix="") ?(vid=true) ~global c map_id =
   let vid = if global then true else vid in
   let nm = unwrap_option (map_name_of c.p map_id) name in
   let e = map_ids_types_for c.p map_id in
-  let wrap = if global then wrap_t_of_map' c.map_type else wrap_t_calc' in
+  let wrap = if global then wrap_t_of_map' c map_id else wrap_t_calc' in
   (* suffix added only to last value *)
   let add_suffix l =
     let k, v = list_split (-1) l in
@@ -263,6 +289,15 @@ let pat_of_ds ?(flatten=false) ?(vid_nm="vid") ?expr ?(drop_vid=false) ds =
       let e = pat_of_flat_e ~vid_nm ~add_vid:(not drop_vid) ds e in
       let t = pat_of_flat_t ~add_vid:(not drop_vid) ds t in
       list_zip e t
+
+let is_unknown e =
+  match U.tag_of_expr e with Const CUnknown -> true | _ -> false
+
+(* check whether a pattern matches the criteria for being a lookup:
+ * no unknown except for the value *)
+let is_lookup_pat pat =
+  let pat = mk_tuple @@ list_drop_end 1 @@ U.unwrap_tuple pat in
+  not @@ Tree.fold_tree_th_bu (fun acc e -> is_unknown e || acc) false pat
 
 let drop_val l = list_drop_end 1 l
 let drop_val' l = fst_many @@ list_drop_end 1 l
@@ -570,8 +605,12 @@ let ms_send_gc_req_nm = "ms_send_gc_req"
 
 let nd_add_delta_to_buf_nm c map_id =
   let t = P.map_types_for c.p map_id in
-  "nd_add_delta_to_"^String.concat "_" @@
-    List.map K3PrintSyntax.string_of_type t
+  let s = maybe "" (soi |- fst) @@ get_map_indices c map_id in
+  Printf.sprintf "nd_add_delta_to_%s%s"
+    (String.concat "_" @@ List.map K3PrintSyntax.string_of_type t) s
+
+let flatten_fn_nm t =
+  "flatten_"^strcatmap ~sep:"_" K3PrintSyntax.string_of_type t
 
 (*** trigger names ***)
 let send_fetch_name_of_t trig_nm = "sw_"^trig_nm^"_send_fetch"

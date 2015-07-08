@@ -34,7 +34,7 @@ def run():
     parser.add_argument('-v', '--verbose', action='store_true', dest='verbose',
                         default=False, help="See test results in detail")
     parser.add_argument('-m', '--map', action='store', dest='map_type',
-                        default='set', help="Use set/vmap/idx maps")
+                        default='set', help="Use vmap/multi maps")
     parser.add_argument('--no_new', action='store_false', dest='new_k3',
                         default=True, help="Create k3new file")
     parser.add_argument('--no-deletes', action='store_false', dest='gen_deletes',
@@ -51,6 +51,8 @@ def run():
                         default=2, type=int, help="Change message interval (ms)")
     parser.add_argument('--no-log', action='store_false', dest='logging',
                         default=True, help="Disable logging")
+    parser.add_argument('--no-multiidx', action='store_false', dest='multiidx',
+                        default=True, help="Disable multi-index maps")
 
 
     args = parser.parse_args()

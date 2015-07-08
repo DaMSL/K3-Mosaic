@@ -21,7 +21,7 @@ type container_type_t
     | TBag
     | TList
     | TMap
-    | TVMap
+    | TVMap of IntSetSet.t option
 
 type base_type_t
     = TTop
@@ -115,6 +115,7 @@ type expr_tag_t
     | Insert
     | Update
     | UpsertWith    (* update with a default handler *)
+    | UpsertWithBefore  (* update reading a frontier with a default handler *)
     | UpdateSuffix  (* update values > vid *)
     | Delete
     | DeletePrefix  (* delete <= a certain vid. save frontier at vid *)

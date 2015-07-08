@@ -31,7 +31,7 @@ def run(target_file,
         folds_only=True,
         gen_deletes=True,
         gen_correctives=True,
-        map_type="set",
+        map_type="vmap",
         workdir="temp",
         run_interp=True,
         gc_interval=20000,
@@ -142,8 +142,8 @@ def run(target_file,
 
         if map_type == "vmap":
             options += "--map-vmap "
-        if map_type == "idx":
-            options += "--map-idx "
+        if map_type == "multi":
+            options += "--map-multi "
         if not gen_deletes:
             options += "--no-deletes "
         if not gen_correctives:
