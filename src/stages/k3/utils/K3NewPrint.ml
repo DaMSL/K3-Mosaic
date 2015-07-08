@@ -163,7 +163,7 @@ and lazy_col c col_t elem_t = match col_t with
   | TBag        -> lps "{ Collection }"
   | TList       -> lps "{ Seq }"
   | TMap        -> lps "{ Map }"
-  | TVMap None  -> lps "{ VMap }"
+  | TVMap None  -> lps "{ MultiIndexVMap }"
   | TVMap(Some ss) -> lazy_multi_index c ss elem_t
 
 and lazy_base_type ?(brace=true) ?(mut=false) ?(empty=false) c ~in_col t =
@@ -364,6 +364,9 @@ let try_matching l =
 (* check if a collection is a vmap *)
 let is_vmap col = match fst @@ KH.unwrap_tcol @@ T.type_of_expr col with
                   | TVMap _ -> true | _ -> false
+
+let is_map col = match fst @@ KH.unwrap_tcol @@ T.type_of_expr col with
+                  | TMap -> true | _ -> false
 
 (* We return the pattern breakdown: a list, and a lambda forming the internal structure *)
 let breakdown_pat pat = match U.tag_of_expr pat with
@@ -911,7 +914,9 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
               else None);
 
             (* Slice on map and full lookup *)
-            (fun () -> if D.is_lookup_pat (snd(U.decompose_slice col)) then
+            (fun () ->
+              if is_map col &&
+                D.is_lookup_pat (snd(U.decompose_slice col)) then
                 handle_lookup_with "lookup_with4" col t_elem e_none e_some
               else None);
 
@@ -936,7 +941,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
               let col_t, elem_t = KH.unwrap_tcol @@ T.type_of_expr col in
               (* do bind here *)
               Some (
-                lps "bind" <| lsp () <| lazy_expr c e0 <| lsp () <| lps "as" 
+                lps "bind" <| lsp () <| lazy_expr c e0 <| lsp () <| lps "as"
                 <| lsp () <| lps "ind" <| lsp () <| lps x <| lsp () <|
                 lps "in" <| lsp () <|
                 (unwrap_some @@
@@ -1326,6 +1331,7 @@ include \"Core/Builtins.k3\"
 include \"Core/Log.k3\"
 include \"Annotation/Map.k3\"
 include \"Annotation/Maps/VMap.k3\"
+include \"Annotation/MultiIndex/MultiIndexVMap.k3\"
 include \"Annotation/Set.k3\"
 include \"Annotation/Seq.k3\"
 
