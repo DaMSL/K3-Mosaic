@@ -121,6 +121,7 @@ type expr_tag_t
     | Insert
     | Update
     | UpsertWith     (* insert with a default handler *)
+    | UpsertWithBefore (* insert with a default handler *)
     | UpdateSuffix   (* update past a vid *)
     | Delete
     | DeletePrefix   (* delete before a certain vid. save frontier *)

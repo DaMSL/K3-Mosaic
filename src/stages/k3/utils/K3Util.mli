@@ -78,6 +78,7 @@ val decompose_tuple : expr_t -> expr_t list
 val decompose_update : expr_t -> expr_t * expr_t * expr_t
 val decompose_update_suffix : expr_t -> expr_t * expr_t * expr_t
 val decompose_upsert_with : expr_t -> expr_t * expr_t * expr_t * expr_t
+val decompose_upsert_with_before : expr_t -> expr_t * expr_t * expr_t * expr_t
 val decompose_var : expr_t -> id_t
 val decompose_indirect : expr_t -> expr_t
 

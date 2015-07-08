@@ -484,9 +484,9 @@ let v_update err_fn oldv newv c = match oldv, newv, c with
   | v,v',c -> err_fn "v_update" @@ Printf.sprintf
     "invalid input: update: %s\nfrom: %s\nin: %s" (sov v) (sov v') (sov c)
 
-let v_upsert_with err_fn key lam_none lam_some col =
+let v_upsert_with ?frontier err_fn key lam_none lam_some col =
   let update t k v m =
-    VVMap(ValueVMap.update_with t k (function
+    VVMap(ValueVMap.update_with ?frontier t k (function
       | None    -> some @@ lam_none VUnit
       | Some v  -> some @@ lam_some v) m)
   in

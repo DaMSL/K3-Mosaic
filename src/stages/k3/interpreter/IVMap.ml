@@ -28,7 +28,7 @@ module type S = sig
   val iter : (vid -> key -> 'a -> unit) -> 'a t -> unit
   val filter : (vid -> key -> 'a -> bool) -> 'a t -> 'a t
   val update : vid -> key -> 'a -> key -> 'a -> 'a t -> 'a t
-  val update_with : vid -> key -> ('a option -> 'a option) -> 'a t -> 'a t
+  val update_with : ?frontier:bool -> vid -> key -> ('a option -> 'a option) -> 'a t -> 'a t
   val update_suffix : vid -> key -> ('a -> 'a ) -> 'a t -> 'a t
   val peek : 'a t -> (vid * key * 'a) option
   val to_list : 'a t -> (vid * key * 'a) list
@@ -57,14 +57,18 @@ module Make(OrdVid: ICommon.OrderedKeyType)(OrdKey: ICommon.OrderedKeyType) = st
       | None     -> some @@ VIDMap.singleton vid v
       | Some old -> some @@ VIDMap.add vid v old) m
 
-  let update_with vid k f m =
+  let update_with ?(frontier=false) (vid:vid) (k:key) (f:'a option -> 'a option) (m:'a t) : 'a t=
     HMap.update_with k (function
       | None -> begin match f None with
           | None   -> None
           | Some v -> some @@ VIDMap.singleton vid v
           end
       | Some vidmap ->
-          let vidmap' = VIDMap.update_with vid f vidmap in
+          let find_lt key m = snd @@ VIDMap.find_lt key m in
+          let fn =
+            if frontier then find_lt
+            else VIDMap.find in
+          let vidmap' = VIDMap.update_with ~fn vid f vidmap in
           if VIDMap.is_empty vidmap' then None
           else Some vidmap'
     ) m

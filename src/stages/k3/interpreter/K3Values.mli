@@ -116,7 +116,7 @@ val v_delete : value_t t_err_fn -> value_t -> value_t -> value_t
 val v_delete_prefix : value_t t_err_fn -> value_t -> value_t -> value_t
 val v_update : value_t t_err_fn -> value_t -> value_t -> value_t -> value_t
 val v_update_suffix : value_t t_err_fn -> value_t -> (value_t -> value_t) -> value_t -> value_t
-val v_upsert_with : value_t t_err_fn -> value_t -> (value_t -> value_t) -> (value_t -> value_t) -> value_t -> value_t
+val v_upsert_with : ?frontier:bool -> value_t t_err_fn -> value_t -> (value_t -> value_t) -> (value_t -> value_t) -> value_t -> value_t
 val v_empty : value_t t_err_fn -> ?no_map: bool -> ?no_multimap : bool -> value_t -> value_t
 val v_empty_of_t : container_type_t -> value_t
 val v_sort : value_t t_err_fn -> (value_t -> value_t -> int) -> value_t -> value_t

@@ -159,13 +159,15 @@ let nd_add_delta_to_buf c map_id =
     pat_of_flat_e map_real ~has_vid:false ~add_vid:true @@ fst_many delta_pat in
   (* function version of real pat (uses an expression) *)
   let real_pat_f e = D.pat_of_ds ~expr:e map_real in
-  let calc_pat_f e = D.pat_of_ds ~expr:e map_delta in
-  let zero =
-    let t_val = snd @@ get_val real_pat in
-    match t_val.typ with
-    | TInt   -> mk_cint 0
-    | TFloat -> mk_cfloat 0.
-    | _ -> failwith @@ "Unhandled type "^K3PrintSyntax.string_of_type t_val
+  let regular_read =
+    mk_block [
+      mk_upsert_with_before "acc2"
+        (D.unknown_val real_delta_pat)
+        (mk_lambda'' unit_arg @@ mk_tuple @@ drop_vid real_delta_pat) @@
+         mk_lambda' (ds_e map_real) @@
+          mk_tuple @@ drop_vid @@ new_val real_delta_pat @@
+            mk_add (get_val real_delta_pat) @@ get_val' real_pat;
+      mk_var "acc2"]
   in
   mk_global_fn (D.nd_add_delta_to_buf_nm c map_id)
     (* corrective: whether this is a corrective delta *)
@@ -176,31 +178,6 @@ let nd_add_delta_to_buf c map_id =
       mk_assign tmap_deref @@ U.add_property "Move" @@
         mk_agg
           (mk_lambda2' ["acc", map_real.t] (ds_e map_delta) @@
-            mk_let ["regular_read"]
-            (* this part is just for correctives:
-              * We need to check if there's a value at the particular version id
-              * If so, we must add the value directly *)
-              (mk_if
-                (mk_var corrective)
-                (* corrective case *)
-                (mk_case_sn
-                  (mk_peek @@
-                    mk_slice' "acc" @@ D.unknown_val real_delta_pat) "val"
-                  (* then just update the value *)
-                  (mk_block [
-                    mk_update "acc"
-                      [mk_var "val"] @@
-                      D.new_val real_delta_pat @@
-                        mk_add (get_val' @@ real_pat_f @@ mk_var "val") @@
-                                get_val' delta_pat;
-                    mk_cfalse])
-                  (* in the else case, we need to still do a regular read because
-                  * there may not have been an initial write due to empty lookups on rhs
-                  * maps *)
-                  mk_ctrue) @@
-                (* non-corrective so do regular read *)
-                mk_ctrue) @@
-
           (* add to future values for both correctives and regular updates *)
             mk_let ["acc2"]
               (mk_block [
@@ -212,24 +189,30 @@ let nd_add_delta_to_buf c map_id =
                                 get_val real_delta_pat;
                 mk_var "acc"]) @@
 
-            mk_if
-              (mk_var "regular_read")
-              (* if regular case -- read the frontier and add delta *)
-              (mk_let [update_value]
-                (mk_add
-                  (get_val' delta_pat) @@
-                  mk_case_ns
-                    (mk_peek @@
-                      mk_slice_frontier' "acc2" @@ D.unknown_val real_delta_pat) "val"
-                    zero @@
-                    D.get_val' @@ real_pat_f @@ mk_var "val") @@
-                mk_block [
-                  mk_insert "acc2" @@ new_val real_delta_pat @@ mk_var update_value;
-                  mk_var "acc2"]) @@
-              (* else done *)
-              mk_var "acc2")
-            (mk_var tmap_deref) @@
-          mk_var delta_tuples
+            (* this part is just for correctives:
+              * We need to check if there's a value at the particular version id
+              * If so, we must add the value directly *)
+              mk_if
+                (mk_var corrective)
+                (* corrective case *)
+                (mk_case_sn
+                  (mk_peek @@
+                    mk_slice' "acc2" @@ D.unknown_val real_delta_pat) "val"
+                  (* then just update the value *)
+                  (mk_block [
+                    mk_update "acc2"
+                      [mk_var "val"] @@
+                      D.new_val real_delta_pat @@
+                        mk_add (get_val' @@ real_pat_f @@ mk_var "val") @@
+                                get_val' delta_pat; mk_var "acc2"])
+                  (* in the else case, we need to still do a regular read because
+                  * there may not have been an initial write due to empty lookups on rhs
+                  * maps *)
+                  regular_read) @@
+                (* non-corrective so do regular read *)
+                regular_read)
+      (mk_var tmap_deref) @@
+    mk_var delta_tuples
 
 (*
  * Return list of corrective statements we need to execute by checking

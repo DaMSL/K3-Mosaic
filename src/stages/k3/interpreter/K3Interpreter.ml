@@ -472,10 +472,11 @@ and eval_expr (address:address) sched_st cenv texpr =
           fun col -> v_update error oldv newv col), temp VUnit
 
     (* we can't modify the environment within the lambda *)
-    | UpsertWith, [_; key; lam_none; lam_some] ->
+    | (UpsertWith | UpsertWithBefore), [_; key; lam_none; lam_some] ->
         let f lam x = value_of_eval @@ snd @@ eval_fn lam address sched_st nenv [x] in
         let renv = env_modify (get_id ()) nenv @@
-          fun col -> v_upsert_with error key (f lam_none) (f lam_some) col in
+          fun col -> v_upsert_with error key ~frontier:(if tag = UpsertWithBefore then true else false )
+                       (f lam_none) (f lam_some) col in
         renv, temp VUnit
 
     (* we can't modify the environment within the lambda *)

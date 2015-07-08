@@ -60,6 +60,9 @@
   let case_error case_class =
     print_error ("Invalid case "^case_class^" error")
 
+  let upsert_with_before_error c =
+    print_error ("Invalid upsert_with_before "^c^" error")
+
   let bind_error bind_class =
     print_error ("Invalid bind "^bind_class^" error")
 
@@ -120,7 +123,7 @@
 %token COLON
 
 %token QUESTION
-%token INSERT UPDATE DELETE UPSERT_WITH UPDATE_SUFFIX DELETE_PREFIX
+%token INSERT UPDATE DELETE UPSERT_WITH UPSERT_WITH_BEFORE UPDATE_SUFFIX DELETE_PREFIX
 
 %token GETS COLONGETS
 
@@ -629,7 +632,8 @@ access :
 mutation :
     /* Inserts, deletes and sends use a vararg function syntax for their value/payload */
     | INSERT LPAREN variable COMMA tuple RPAREN { mkexpr Insert [mk_var $3; $5] }
-    | UPSERT_WITH LPAREN variable COMMA tuple COMMA anno_expr COMMA anno_expr RPAREN { mkexpr UpsertWith [mk_var $3; $5; $7; $9] }
+    | UPSERT_WITH LPAREN variable COMMA LPAREN tuple RPAREN COMMA anno_expr COMMA anno_expr RPAREN { mkexpr UpsertWith [mk_var $3; $6; $9; $11] }
+    | UPSERT_WITH_BEFORE LPAREN variable COMMA LPAREN tuple RPAREN COMMA anno_expr COMMA anno_expr RPAREN { mkexpr UpsertWithBefore [mk_var $3; $6; $9; $11] }
 
     | DELETE LPAREN variable COMMA tuple RPAREN { mkexpr Delete [mk_var $3; $5] }
     | DELETE_PREFIX LPAREN variable COMMA tuple RPAREN { mkexpr DeletePrefix [mk_var $3; $5] }
@@ -641,6 +645,10 @@ mutation :
     | variable LARROW anno_expr { mkexpr Assign [mk_var $1; $3] }
 
     /* Error handling */
+    | UPSERT_WITH_BEFORE LPAREN variable COMMA tuple COMMA anno_expr COMMA error { upsert_with_before_error "lambda some"}
+    | UPSERT_WITH_BEFORE LPAREN variable COMMA tuple COMMA error { upsert_with_before_error "lambda none"}
+    | UPSERT_WITH_BEFORE LPAREN variable COMMA error { upsert_with_before_error "pattern" }
+    | UPSERT_WITH_BEFORE LPAREN error { upsert_with_before_error "collection" }
     | INSERT LPAREN anno_expr error { value_error 2 }
     | INSERT LPAREN error      { coll_error 1 }
     | UPDATE LPAREN anno_expr error { value_error 2 }

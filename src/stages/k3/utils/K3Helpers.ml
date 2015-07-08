@@ -291,6 +291,9 @@ let mk_insert col x = mk_stree Insert [mk_var col; mk_tuple x]
 let mk_upsert_with col key lam_empty lam_full =
   mk_stree UpsertWith [mk_var col; mk_tuple key; lam_empty; lam_full]
 
+let mk_upsert_with_before col key lam_empty lam_full =
+  mk_stree UpsertWithBefore [mk_var col; mk_tuple key; lam_empty; lam_full]
+
 let mk_delete col x = mk_stree Delete [mk_var col; mk_tuple x]
 
 (* first part of key contains the vid. Also contains dummy value *)
