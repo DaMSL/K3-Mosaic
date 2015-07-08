@@ -159,6 +159,13 @@ let nd_add_delta_to_buf c map_id =
     pat_of_flat_e map_real ~has_vid:false ~add_vid:true @@ fst_many delta_pat in
   (* function version of real pat (uses an expression) *)
   let real_pat_f e = D.pat_of_ds ~expr:e map_real in
+  let zero =
+    let t_val = snd @@ get_val real_pat in
+    match t_val.typ with
+    | TInt   -> mk_cint 0
+    | TFloat -> mk_cfloat 0.
+    | _ -> failwith @@ "Unhandled type "^K3PrintSyntax.string_of_type t_val
+  in
   let regular_read =
     mk_block [
       mk_upsert_with_before "acc2"
@@ -195,11 +202,13 @@ let nd_add_delta_to_buf c map_id =
               mk_if
                 (mk_var corrective)
                 (* corrective case *)
-                (mk_let ["corr_do_update", "val"]
+                (mk_let ["corr_do_update"; "val"]
                   (mk_case_sn
-                    (mk_peek @@ mk_slice' "acc2" @@ D.unknown_val real_delta_pat) "pval"
-                    (mk_tuple [mk_ctrue, mk_var "pval"])
-                    (mk_tuple [mk_cfalse, D.unknown_val real_delta_pat]))
+                    (mk_peek @@ mk_slice' "acc2" @@
+                      D.unknown_val real_delta_pat) "pval"
+                    (mk_tuple [mk_ctrue; mk_var "pval"])
+                    (mk_tuple [mk_cfalse; mk_tuple @@
+                                new_val (drop_vid real_delta_pat) zero]))
                   (mk_if (mk_var "corr_do_update")
                     (* then just update the value *)
                     (mk_block [
