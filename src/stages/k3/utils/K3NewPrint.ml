@@ -654,6 +654,9 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
       end
   | Tuple     -> let es = U.decompose_tuple expr in
     let id_es = add_record_ids c es in
+    (* since we're never supposed to have unknowns here in newk3, we can just
+     * filter out unknowns after we added record ids *)
+    let id_es = List.filter (not |- D.is_unknown |- snd) id_es in
     let inner = lazy_concat ~sep:lcomma (fun (id, e) ->
         lps (id^":") <| lazy_expr c e) id_es
     in lazy_brace inner
