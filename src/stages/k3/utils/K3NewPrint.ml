@@ -856,55 +856,69 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
               [[], false; [], false; [0], false] in
         some @@ apply_method c ~name ~col ~args ~arg_info
     in
-    (*let handle_fold_slice col pat e_none e_some =
-      let pat = U.unwrap_tuple pat in
-      let vid, pat = hd pat, tl pat in
-      let name = slice_names pat in
-      let name = "fold_slice_by_"^name in
-      let args = [vid] in
-      apply_method c ~name ~col ~args ~arg_info*)
 
-    (* check for lookup_with *)
+    (* helper function to apply lookup_with on a secondary index *)
+    let handle_slice_lookup_with
+      ?(decomp_fn=U.decompose_slice)
+      ?(vmap=false)
+      col t_elem e_none e_some =
+        let col, pat = decomp_fn col in
+        let fn_pat = if vmap then tl pat else pat in
+        let pat = lookup_pat_of_slice ~col pat in
+        let fn_name = "lookup_with_before_by_" ^ (slice_names fn_pat) in
+        let arg' =
+          [light_type c @@ KH.mk_lambda' ["_", KH.t_unit] e_none;
+            light_type c @@ KH.mk_lambda' [id, t_elem] e_some] in
+        let args, arg_info =
+          if vmap then
+            [hd pat; light_type c @@ KH.mk_tuple @@ tl pat] @ arg',
+              [vid_out_arg; [], false; [], false; [0], false]
+          else
+            [light_type c @@ KH.mk_tuple pat] @ arg',
+              [[], false; [], false; [0], false] in
+        some @@ apply_method c fn_name ~col ~args ~arg_info
+      in
+
       (* check for a case(peek(slice(...)) *)
       try_matching [
         (fun () ->
           let col = U.decompose_peek e1 in
           let col_t, t_elem = KH.unwrap_tcol @@ T.type_of_expr col in
           some @@ try_matching [
+
+            (* Slice on VMap and full lookup *)
             (fun () ->
               if D.is_lookup_pat (snd (U.decompose_slice col)) then
               handle_lookup_with ~vmap:true "lookup_with4" col t_elem e_none e_some
               else None);
+
+            (* Slice frontier on VMap and full lookup *)
             (fun () -> if D.is_lookup_pat (snd (U.decompose_slice_frontier col)) then
               handle_lookup_with ~vmap:true ~decomp_fn:U.decompose_slice_frontier
                 "lookup_with4_before" col t_elem e_none e_some
               else None);
+
+            (* Slice on map and full lookup *)
             (fun () -> if D.is_lookup_pat (snd(U.decompose_slice col)) then
                 handle_lookup_with "lookup_with4" col t_elem e_none e_some
               else None);
-            (fun () ->
-              let lam, zero, col = U.decompose_aggregatev col in
-              let col', pat = U.decompose_slice_frontier col in
-              let t_col, t_elem' = KH.unwrap_tcol @@ T.type_of_expr col in
-              if D.is_lookup_pat pat then
-                (* can use plain lookup *)
-                handle_lookup_with ~vmap:true ~decomp_fn:U.decompose_slice_frontier
-                  "lookup_with4_before" col t_elem' e_none
-                  (* create a mapping to a flat data structure *)
-                  (KH.mk_let [id]
-                    (KH.mk_apply' (D.flatten_fn_nm @@ KH.unwrap_ttuple t_elem)
-                    [KH.mk_var id]) e_some)
-              else None
-                (* can't turn into a lookup *)
-              (* handle_fold_slice col' pat e_none e_some = *));
-            (fun () ->
-              (* peek_with *)
-              let args =
-                [light_type c @@ KH.mk_lambda' ["_", KH.t_unit] e_none;
-                light_type c @@ KH.mk_lambda' [id, t_elem] e_some] in
-              let arg_info = [[], false; [0], false] in
-              Some(apply_method c ~name:"peek_with" ~col ~args ~arg_info))]);
-          normal]
+
+            (* Slice on VMap with partial key*)
+            (fun () -> handle_slice_lookup_with ~vmap:true col t_elem e_none e_some);
+
+            (* Slice frontier on VMap with partial lookup *)
+            (fun () -> handle_slice_lookup_with ~vmap:true ~decomp_fn:U.decompose_slice_frontier col t_elem e_none e_some)
+          ]);
+
+        (fun () ->
+          (* peek_with *)
+          let args =
+            [light_type c @@ KH.mk_lambda' ["_", KH.t_unit] e_none;
+            light_type c @@ KH.mk_lambda' [id, t_elem] e_some] in
+          let arg_info = [[], false; [0], false] in
+          Some(apply_method c ~name:"peek_with" ~col ~args ~arg_info));
+
+        normal]
 
   | BindAs _ -> let bind, id, r = U.decompose_bind expr in
     let c = {c with project=StrSet.remove id c.project} in
