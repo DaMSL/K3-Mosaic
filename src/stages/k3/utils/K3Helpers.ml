@@ -282,6 +282,9 @@ let mk_slice' collection pattern = mk_slice (mk_var collection) pattern
 let mk_slice_frontier col pat =
   mk_slice_gen SliceFrontier col @@ mk_tuple pat
 
+let mk_slice_frontier' col pat =
+  mk_slice_gen SliceFrontier (mk_var col) @@ mk_tuple pat
+
 let mk_insert col x = mk_stree Insert [mk_var col; mk_tuple x]
 
 (* key contains dummy value *)
