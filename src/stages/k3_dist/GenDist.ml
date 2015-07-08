@@ -159,26 +159,16 @@ let nd_add_delta_to_buf c map_id =
     pat_of_flat_e map_real ~has_vid:false ~add_vid:true @@ fst_many delta_pat in
   (* function version of real pat (uses an expression) *)
   let real_pat_f e = D.pat_of_ds ~expr:e map_real in
-  let zero =
-    let t_val = snd @@ get_val real_pat in
-    match t_val.typ with
-    | TInt   -> mk_cint 0
-    | TFloat -> mk_cfloat 0.
-    | _ -> failwith @@ "Unhandled type "^K3PrintSyntax.string_of_type t_val
-  in
   let regular_read =
-        mk_let [update_value]
-          (mk_add
-            (get_val' delta_pat) @@
-            mk_case_ns
-              (mk_peek @@
-                mk_slice_frontier' "acc2" @@ D.unknown_val real_delta_pat) "val"
-              zero @@
-              D.get_val' @@ real_pat_f @@ mk_var "val") @@
-          mk_block [
-            mk_insert "acc2" @@ new_val real_delta_pat @@ mk_var update_value;
-            mk_var "acc2"] in
-
+    mk_block [
+      mk_upsert_with_before "acc2"
+        (D.unknown_val real_delta_pat)
+        (mk_lambda'' unit_arg @@ mk_tuple @@ drop_vid real_delta_pat) @@
+         mk_lambda' (ds_e map_real) @@
+          mk_tuple @@ drop_vid @@ new_val real_delta_pat @@
+            mk_add (get_val real_delta_pat) @@ get_val' real_pat;
+      mk_var "acc2"]
+  in
   mk_global_fn (D.nd_add_delta_to_buf_nm c map_id)
     (* corrective: whether this is a corrective delta *)
     ([target_map, wrap_tind map_real.t; corrective, t_bool; "vid", t_vid;

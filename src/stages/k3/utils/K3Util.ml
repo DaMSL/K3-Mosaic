@@ -169,6 +169,8 @@ let decompose_update_suffix e = match tag_of_expr e, sub_tree e with
   UpdateSuffix, [x; e0; e1] -> x, e0, e1 | _ -> failwith "not an UpdateSuffix"
 let decompose_upsert_with e = match tag_of_expr e, sub_tree e with
   UpsertWith, [x; key; lam_no; lam_yes] -> x, key, lam_no, lam_yes | _ -> failwith "not UpsertWith"
+let decompose_upsert_with_before e = match tag_of_expr e, sub_tree e with
+  UpsertWithBefore, [x; key; lam_no; lam_yes] -> x, key, lam_no, lam_yes | _ -> failwith "not UpsertWithBefore"
 let decompose_var e = match tag_of_expr e with
   Var id -> id | _ -> failwith "not a Var"
 

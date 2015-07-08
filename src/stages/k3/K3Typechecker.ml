@@ -89,7 +89,7 @@ let check_tag_arity tag children =
     | SliceFrontier -> 2
     | Insert  -> 2
     | Update  -> 3
-    | UpsertWith -> 4
+    | UpsertWith | UpsertWithBefore -> 4
     | UpdateSuffix -> 3
     | Delete  -> 2
     | DeletePrefix -> 2
@@ -550,15 +550,17 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
             t_erroru (TMismatch(tlam_update, tlam_update', "update lambda")) else
           t_unit
 
-      | UpsertWith ->
+      | UpsertWith | UpsertWithBefore ->
           let tcol', tkey, tlam_insert, tlam_update = bind 0, bind 1, bind 2, bind 3 in
           let tcol, telem =
             try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') in
           check_vmap_pat tcol telem tkey;
           let tlam_insert' = wrap_tfunc [t_unit] telem in
-          if not (tlam_insert === tlam_insert') then t_erroru (TMismatch(tlam_insert, tlam_insert', "insert lambda")) else
-            let tlam_update' = wrap_tfunc [telem] telem in
-          if not (tlam_update === tlam_update') then t_erroru (TMismatch(tlam_update, tlam_update', "update lambda")) else
+          if not (tlam_insert === tlam_insert') then
+            t_erroru (TMismatch(tlam_insert, tlam_insert', "insert lambda")) else
+          let tlam_update' = wrap_tfunc [telem] telem in
+          if not (tlam_update === tlam_update') then
+            t_erroru (TMismatch(tlam_update, tlam_update', "update lambda")) else
           t_unit
 
       | Delete ->

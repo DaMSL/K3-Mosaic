@@ -111,6 +111,7 @@ let string_of_tag_type = function
     | Update           -> "Update"
     | UpdateSuffix     -> "UpdateSuffix"
     | UpsertWith       -> "UpsertWith"
+    | UpsertWithBefore -> "UpsertWithBefore"
     | Delete           -> "Delete"
     | DeletePrefix     -> "DeletePrefix"
     | Peek             -> "Peek"
