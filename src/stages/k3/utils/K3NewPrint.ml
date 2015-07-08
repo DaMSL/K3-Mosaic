@@ -328,14 +328,15 @@ let maybe_vmap c col pat fun_no fun_yes =
 
 (* try pattern matching a bunch of expressions *)
 let try_matching l =
-  let rec loop = function
+  let rec loop acc_fail = function
     | x::xs -> begin match x () with
-                | None -> loop xs
+                | None -> loop acc_fail xs
                 | Some x -> x
-                | exception _ -> loop xs
+                | exception (Failure s) -> loop (acc_fail^"; "^s) xs
+                | exception _ -> loop acc_fail xs
                end
-    | [] -> failwith "No match found"
-  in loop l
+    | [] -> failwith ("No match found: "^acc_fail)
+  in loop "" l
 
 (* check if a collection is a vmap *)
 let is_vmap col = match fst @@ KH.unwrap_tcol @@ T.type_of_expr col with
@@ -819,10 +820,11 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
         (* if we're projecting, let future expressions know *)
         if project && id <> "_" then {c' with project=StrSet.add id c'.project}
         else c' in
-      lps "case" <| lsp () <| lazy_expr c e1 <| lsp () <| lps "of" <| lsp () <|
-      wrap_indent (lazy_brace (lps ("Some "^id^" ->") <| lsp () <|
-        lazy_expr c' e_some)) <|
-      wrap_indent (lazy_brace (lps "None ->" <| lsp () <| lazy_expr c e_none))
+      Some(
+        lps "case" <| lsp () <| lazy_expr c e1 <| lsp () <| lps "of" <| lsp () <|
+        wrap_indent (lazy_brace (lps ("Some "^id^" ->") <| lsp () <|
+          lazy_expr c' e_some)) <|
+        wrap_indent (lazy_brace (lps "None ->" <| lsp () <| lazy_expr c e_none)))
     in
     (* create string representing types of a slice and a record *)
     let slice_names pat =
@@ -864,42 +866,45 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
 
     (* check for lookup_with *)
       (* check for a case(peek(slice(...)) *)
-      let col = U.decompose_peek e1 in
-      let col_t, t_elem = KH.unwrap_tcol @@ T.type_of_expr col in
       try_matching [
-        (fun () -> if D.is_lookup_pat (snd (U.decompose_slice col)) then
-          handle_lookup_with ~vmap:true "lookup_with4" col t_elem e_none e_some
-          else None);
-        (fun () -> if D.is_lookup_pat (snd (U.decompose_slice_frontier col)) then
-          handle_lookup_with ~vmap:true ~decomp_fn:U.decompose_slice_frontier
-            "lookup_with4_before" col t_elem e_none e_some
-          else None);
-        (fun () -> if D.is_lookup_pat (snd(U.decompose_slice col)) then
-            handle_lookup_with "lookup_with4" col t_elem e_none e_some
-          else None);
         (fun () ->
-          let lam, zero, col = U.decompose_aggregatev col in
-          let col', pat = U.decompose_slice_frontier col in
-          let t_col, t_elem' = KH.unwrap_tcol @@ T.type_of_expr col in
-          if D.is_lookup_pat pat then
-            (* can use plain lookup *)
-            handle_lookup_with ~vmap:true ~decomp_fn:U.decompose_slice_frontier
-              "lookup_with4_before" col t_elem' e_none
-              (* create a mapping to a flat data structure *)
-              (KH.mk_let [id]
-                (KH.mk_apply' (D.flatten_fn_nm @@ KH.unwrap_ttuple t_elem)
-                [KH.mk_var id]) e_some)
-          else None
-            (* can't turn into a lookup *)
-           (* handle_fold_slice col' pat e_none e_some = *));
-        (fun () ->
-          (* peek_with *)
-          let args =
-            [light_type c @@ KH.mk_lambda' ["_", KH.t_unit] e_none;
-             light_type c @@ KH.mk_lambda' [id, t_elem] e_some] in
-          let arg_info = [[], false; [0], false] in
-          Some(apply_method c ~name:"peek_with" ~col ~args ~arg_info));
-        (fun () -> Some(normal ()))]
+          let col = U.decompose_peek e1 in
+          let col_t, t_elem = KH.unwrap_tcol @@ T.type_of_expr col in
+          some @@ try_matching [
+            (fun () ->
+              if D.is_lookup_pat (snd (U.decompose_slice col)) then
+              handle_lookup_with ~vmap:true "lookup_with4" col t_elem e_none e_some
+              else None);
+            (fun () -> if D.is_lookup_pat (snd (U.decompose_slice_frontier col)) then
+              handle_lookup_with ~vmap:true ~decomp_fn:U.decompose_slice_frontier
+                "lookup_with4_before" col t_elem e_none e_some
+              else None);
+            (fun () -> if D.is_lookup_pat (snd(U.decompose_slice col)) then
+                handle_lookup_with "lookup_with4" col t_elem e_none e_some
+              else None);
+            (fun () ->
+              let lam, zero, col = U.decompose_aggregatev col in
+              let col', pat = U.decompose_slice_frontier col in
+              let t_col, t_elem' = KH.unwrap_tcol @@ T.type_of_expr col in
+              if D.is_lookup_pat pat then
+                (* can use plain lookup *)
+                handle_lookup_with ~vmap:true ~decomp_fn:U.decompose_slice_frontier
+                  "lookup_with4_before" col t_elem' e_none
+                  (* create a mapping to a flat data structure *)
+                  (KH.mk_let [id]
+                    (KH.mk_apply' (D.flatten_fn_nm @@ KH.unwrap_ttuple t_elem)
+                    [KH.mk_var id]) e_some)
+              else None
+                (* can't turn into a lookup *)
+              (* handle_fold_slice col' pat e_none e_some = *));
+            (fun () ->
+              (* peek_with *)
+              let args =
+                [light_type c @@ KH.mk_lambda' ["_", KH.t_unit] e_none;
+                light_type c @@ KH.mk_lambda' [id, t_elem] e_some] in
+              let arg_info = [[], false; [0], false] in
+              Some(apply_method c ~name:"peek_with" ~col ~args ~arg_info))]);
+          normal]
 
   | BindAs _ -> let bind, id, r = U.decompose_bind expr in
     let c = {c with project=StrSet.remove id c.project} in
