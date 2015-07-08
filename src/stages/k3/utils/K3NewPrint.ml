@@ -330,6 +330,14 @@ let slice_names c pat =
   let pat = List.filter (not |- D.is_unknown |- snd) pat in
   String.concat "_" (fst_many pat)
 
+let is_tuple e = match U.tag_of_expr e with Tuple -> true | _ -> false
+
+(* get the important part of the pattern out: for a [key, value] it's
+ * the id function, but for [[a,b,c], value]] it's the inner tuple *)
+let meaningful_pat c pat =
+  if is_tuple @@ hd pat then hd pat
+  else light_type c @@ KH.mk_tuple pat
+
 (* for vmaps, we encode many of our functions with just a vid inside a tuple. Extract
   * this for the API *)
 let maybe_vmap c col pat fun_no fun_yes =
@@ -402,9 +410,6 @@ let var_translate = List.fold_left (fun acc (x,y) -> StringMap.add x y acc) Stri
    * record restriction in newk3, which states that everything in a collection must be a record *)
 let vid_out_arg = [], K3Dist.is_vid_tuple
 let vid_in_arg  = K3Dist.is_vid_tuple
-
-let is_tuple e =
-  match U.tag_of_expr e with Tuple -> true | _ -> false
 
 (* change a pattern to have a default value (last element) *)
 (* since k3new can't handle unknowns *)
@@ -869,23 +874,18 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
     (* helper function to apply lookup_with on a secondary index *)
     let handle_slice_lookup_with
       ?(decomp_fn=U.decompose_slice)
-      ?(vmap=false)
       col t_elem e_none e_some =
         let col, pat = decomp_fn col in
-        let fn_pat = if vmap then tl pat else pat in
-        let pat = lookup_pat_of_slice ~col pat in
-        let fn_name = "lookup_with_before_by_" ^ (slice_names fn_pat) in
+        let fn_pat = meaningful_pat c @@ tl @@ U.unwrap_tuple pat in
+        let name =
+          "lookup_with_before_by_" ^ (slice_names c @@ U.unwrap_tuple fn_pat) in
         let arg' =
           [light_type c @@ KH.mk_lambda' ["_", KH.t_unit] e_none;
             light_type c @@ KH.mk_lambda' [id, t_elem] e_some] in
         let args, arg_info =
-          if vmap then
-            [hd pat; light_type c @@ KH.mk_tuple @@ tl pat] @ arg',
-              [vid_out_arg; [], false; [], false; [0], false]
-          else
-            [light_type c @@ KH.mk_tuple pat] @ arg',
-              [[], false; [], false; [0], false] in
-        some @@ apply_method c fn_name ~col ~args ~arg_info
+            [hd @@ U.unwrap_tuple pat; light_type c fn_pat] @ arg',
+              [vid_out_arg; [], false; [], false; [0], false] in
+        some @@ apply_method c ~name ~col ~args ~arg_info
       in
 
       (* check for a case(peek(slice(...)) *)
@@ -897,12 +897,15 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
 
             (* Slice on VMap and full lookup *)
             (fun () ->
-              if D.is_lookup_pat (snd (U.decompose_slice col)) then
+              if is_vmap col && 
+                 D.is_lookup_pat (snd (U.decompose_slice col)) then
               handle_lookup_with ~vmap:true "lookup_with4" col t_elem e_none e_some
               else None);
 
             (* Slice frontier on VMap and full lookup *)
-            (fun () -> if D.is_lookup_pat (snd (U.decompose_slice_frontier col)) then
+            (fun () -> 
+              if is_vmap col &&
+              D.is_lookup_pat (snd (U.decompose_slice_frontier col)) then
               handle_lookup_with ~vmap:true ~decomp_fn:U.decompose_slice_frontier
                 "lookup_with4_before" col t_elem e_none e_some
               else None);
@@ -913,19 +916,25 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
               else None);
 
             (* Slice on VMap with partial key*)
-            (fun () -> handle_slice_lookup_with ~vmap:true col t_elem e_none e_some);
+            (fun () -> 
+              if is_vmap col then
+                handle_slice_lookup_with col t_elem e_none e_some else None);
 
             (* Slice frontier on VMap with partial lookup *)
-            (fun () -> handle_slice_lookup_with ~vmap:true ~decomp_fn:U.decompose_slice_frontier col t_elem e_none e_some)
-          ]);
+            (fun () -> 
+              if is_vmap col then
+              handle_slice_lookup_with 
+                ~decomp_fn:U.decompose_slice_frontier 
+                col t_elem e_none e_some else None);
 
-        (fun () ->
-          (* peek_with *)
-          let args =
-            [light_type c @@ KH.mk_lambda' ["_", KH.t_unit] e_none;
-            light_type c @@ KH.mk_lambda' [id, t_elem] e_some] in
-          let arg_info = [[], false; [0], false] in
-          Some(apply_method c ~name:"peek_with" ~col ~args ~arg_info));
+            (fun () ->
+              (* peek_with *)
+              let args =
+                [light_type c @@ KH.mk_lambda' ["_", KH.t_unit] e_none;
+                light_type c @@ KH.mk_lambda' [id, t_elem] e_some] in
+              let arg_info = [[], false; [0], false] in
+              Some(apply_method c ~name:"peek_with" ~col ~args ~arg_info));
+          ]);
 
         normal]
 
@@ -1020,9 +1029,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
       else None *)
       let vid = hd @@ U.unwrap_tuple pat in
       let pat_no_vid = tl @@ U.unwrap_tuple pat in
-      let pat =
-        if is_tuple @@ hd pat_no_vid then hd pat_no_vid
-        else light_type c @@ KH.mk_tuple pat_no_vid in
+      let pat = meaningful_pat c pat_no_vid in
       (* if we have only unknowns, then we must access the full map (ie. a fold) *)
       let as_fold = List.filter (not |- D.is_unknown) (U.unwrap_tuple pat) = [] in
       let name =
