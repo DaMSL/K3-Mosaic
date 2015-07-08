@@ -315,6 +315,21 @@ let rec extract_slice e =
       tup, (KH.mk_let ids bound) |- sub_expr
   | _ -> failwith "extract_slice unhandled expression"
 
+(* create string representing types of a slice and a record *)
+let slice_names c pat =
+  (* focus on the relevant pattern *)
+  let pat' = U.unwrap_tuple @@ hd @@ pat in
+  let pat =
+    (* if we have a 1-member key, then we want to add record_ids
+     * to the full key,value pair. Otherwise, we want to add them
+     * to the internal tuple pattern *)
+    if List.length pat' = 1 then pat
+    else pat'
+  in
+  let pat = add_record_ids c pat in
+  let pat = List.filter (not |- D.is_unknown |- snd) pat in
+  String.concat "_" (fst_many pat)
+
 (* for vmaps, we encode many of our functions with just a vid inside a tuple. Extract
   * this for the API *)
 let maybe_vmap c col pat fun_no fun_yes =
@@ -829,15 +844,6 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
           lazy_expr c' e_some)) <|
         wrap_indent (lazy_brace (lps "None ->" <| lsp () <| lazy_expr c e_none)))
     in
-    (* create string representing types of a slice and a record *)
-    let slice_names pat =
-      (* focus on the relevant pattern *)
-      let pat = U.unwrap_tuple @@ hd @@ pat in
-      let pat = add_record_ids c pat in
-      let pat = List.filter (not |- D.is_unknown |- snd) pat in
-      String.concat "_" (fst_many pat)
-    in
-
     (* common pattern for lookup_with *)
     let handle_lookup_with
       ?(decomp_fn=U.decompose_slice)
@@ -991,11 +997,50 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
     apply_method c ~name ~col ~args:[lambda; acc]
       ~arg_info:[[1], false; [], false]
 
-  | AggregateV -> let lambda, acc, col = U.decompose_aggregatev expr in
-    (* find out if our accumulator is a collection type *)
-    let in_recs = if vid_in_arg then [1;2] else [2] in
-    apply_method c ~name:"fold_all" ~col ~args:[lambda; acc]
-      ~arg_info:[in_recs, false; [], false]
+  | AggregateV ->
+    let lambda, acc, col = U.decompose_aggregatev expr in
+    let normal () =
+      let in_recs = if vid_in_arg then [1;2] else [2] in
+      some @@ apply_method c ~name:"fold_all" ~col ~args:[lambda; acc]
+        ~arg_info:[in_recs, false; [], false]
+    in
+    (* handle a case of fold_all(slice(...)) *)
+    let handle_slice () =
+      let col, pat = U.decompose_slice_frontier col in
+      (* TODO: simplify to lookup pat if possible *)
+      (*
+      if D.is_lookup_pat pat then
+        (* can use plain lookup *)
+        handle_lookup_with ~vmap:true ~decomp_fn:U.decompose_slice_frontier
+          "lookup_with4_before" col t_elem' e_none
+          (* create a mapping to a flat data structure *)
+          (KH.mk_let [id]
+            (KH.mk_apply' (D.flatten_fn_nm @@ KH.unwrap_ttuple t_elem)
+            [KH.mk_var id]) e_some)
+      else None *)
+      let vid = hd @@ U.unwrap_tuple pat in
+      let pat_no_vid = tl @@ U.unwrap_tuple pat in
+      let pat =
+        if is_tuple @@ hd pat_no_vid then hd pat_no_vid
+        else light_type c @@ KH.mk_tuple pat_no_vid in
+      (* if we have only unknowns, then we must access the full map (ie. a fold) *)
+      let as_fold = List.filter (not |- D.is_unknown) (U.unwrap_tuple pat) = [] in
+      let name =
+        if as_fold then "fold"
+        else "fold_slice_by_"^slice_names c pat_no_vid in
+
+      let args, arg_info =
+        if as_fold then
+          [vid; lambda; acc], [[], false; [2], false; [], false]
+        else
+          [vid; light_type c pat; lambda; acc],
+          [[], false; [], true; [2], false; [], false] in
+      some @@ apply_method c ~name ~col ~args ~arg_info
+    in
+    try_matching [
+      handle_slice;
+      normal
+    ]
 
   | GroupByAggregate -> let lam1, lam2, acc, col = U.decompose_gbagg expr in
     (* find out if our accumulator is a collection type *)

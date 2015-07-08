@@ -42,6 +42,10 @@ let rec vars_of_arg arg =
     | AMaybe(a') -> vars_of_arg a'
     | ATuple(vt_l) -> List.concat (List.map vars_of_arg vt_l)
 
+let unwrap_atuple = function
+  | ATuple xs -> xs
+  | x         -> [x]
+
 let rec typed_vars_of_arg arg =
     match arg with
     | AIgnored -> []
