@@ -209,6 +209,16 @@ let test =
 
   let n = VM.remove_prefix 5 1 m in
   let o = VM.remove 2 1 m in
+  assert (n === o);
+
+  let n = VM.update_with ~frontier:true 3 20 (function None   -> Some("a")
+                                      | Some x -> Some(x^"boo")) m in
+  let o = VM.add 3 20 "1-20boo" m in
+  assert (n === o);
+
+  let n = VM.update_with 3 20 (function None   -> Some("a")
+                                      | Some x -> Some(x^"boo")) m in
+  let o = VM.add 3 20 "3-20boo" m in
   assert (n === o)
 
 
