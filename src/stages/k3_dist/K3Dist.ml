@@ -290,6 +290,15 @@ let pat_of_ds ?(flatten=false) ?(vid_nm="vid") ?expr ?(drop_vid=false) ds =
       let t = pat_of_flat_t ~add_vid:(not drop_vid) ds t in
       list_zip e t
 
+let is_unknown e =
+  match U.tag_of_expr e with Const CUnknown -> true | _ -> false
+
+(* check whether a pattern matches the criteria for being a lookup:
+ * no unknown except for the value *)
+let is_lookup_pat pat =
+  let pat = mk_tuple @@ list_drop_end 1 @@ U.unwrap_tuple pat in
+  not @@ Tree.fold_tree_th_bu (fun acc e -> is_unknown e || acc) false pat
+
 let drop_val l = list_drop_end 1 l
 let drop_val' l = fst_many @@ list_drop_end 1 l
 let get_val  l = hd @@ list_take_end 1 l
@@ -599,6 +608,9 @@ let nd_add_delta_to_buf_nm c map_id =
   let s = maybe "" (soi |- fst) @@ get_map_indices c map_id in
   Printf.sprintf "nd_add_delta_to_%s%s"
     (String.concat "_" @@ List.map K3PrintSyntax.string_of_type t) s
+
+let flatten_fn_nm t =
+  "flatten_"^strcatmap ~sep:"_" K3PrintSyntax.string_of_type t
 
 (*** trigger names ***)
 let send_fetch_name_of_t trig_nm = "sw_"^trig_nm^"_send_fetch"

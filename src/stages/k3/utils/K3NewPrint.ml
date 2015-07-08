@@ -7,6 +7,8 @@ open K3.Annotation
 module U = K3Util
 module T = K3Typechecker
 module KH = K3Helpers
+module D = K3Dist
+module KP = K3PrintSyntax
 
 exception MissingType of int * string
 
@@ -374,17 +376,8 @@ let var_translate = List.fold_left (fun acc (x,y) -> StringMap.add x y acc) Stri
 let vid_out_arg = [], K3Dist.is_vid_tuple
 let vid_in_arg  = K3Dist.is_vid_tuple
 
-let is_unknown e =
-  match U.tag_of_expr e with Const CUnknown -> true | _ -> false
-
 let is_tuple e =
   match U.tag_of_expr e with Tuple -> true | _ -> false
-
-(* check whether a pattern matches the criteria for being a lookup:
- * no unknown except for the value *)
-let is_lookup_pat pat =
-  let pat = KH.mk_tuple @@ list_drop_end 1 @@ U.unwrap_tuple pat in
-  not @@ Tree.fold_tree_th_bu (fun acc e -> is_unknown e || acc) false pat
 
 (* change a pattern to have a default value (last element) *)
 (* since k3new can't handle unknowns *)
@@ -537,7 +530,7 @@ and filter_of_slice ~frontier c col pat =
   let rec loop es : ((expr_t -> expr_t) * expr_t) list =
     let i_e = insert_index_fst ~first:1 es in
     (* find the non-unknown slices *)
-    let i_e = List.filter (not |- is_unknown |- snd) i_e in
+    let i_e = List.filter (not |- D.is_unknown |- snd) i_e in
     let s_e = List.map (first KH.mk_subscript) i_e in
     (* find if there are any tuples inside the pattern *)
     let tups, no_tups = List.partition (is_tuple |- snd) s_e in
@@ -820,8 +813,20 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
         lazy_expr c' e_some)) <|
       wrap_indent (lazy_brace (lps "None ->" <| lsp () <| lazy_expr c e_none))
     in
+    (* create string representing types of a slice and a record *)
+    let slice_names pat = 
+      (* focus on the relevant pattern *)
+      let pat = U.unwrap_tuple @@ hd @@ pat in
+      let pat = add_record_ids c pat in
+      let pat = List.filter (not |- D.is_unknown |- snd) pat in
+      String.concat "_" (fst_many pat)
+    in
+
     (* common pattern for lookup_with *)
-    let handle_lookup_with ?(decomp_fn=U.decompose_slice) ?(vmap=false) name col t_elem =
+    let handle_lookup_with
+      ?(decomp_fn=U.decompose_slice)
+      ?(vmap=false)
+      name col t_elem e_none e_some =
       let col, pat = decomp_fn col in
       (* NOTE: we don't check for lookup_pat. We assume that's already been done *)
       (* we CAN use lookup_with4 *)
@@ -838,18 +843,43 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
             [[], false; [], false; [0], false] in
       apply_method c ~name ~col ~args ~arg_info
     in
+    let handle_fold_slice col pat e_none e_some =
+      let pat = U.unwrap_tuple pat in
+      let vid, pat = hd pat, tl pat in
+      let name = slice_names pat in
+      let name = "fold_slice_by_"^name in
+      let args = [vid; 
+      apply_method c ~name ~col ~args ~arg_info
+
     (* check for lookup_with *)
     begin try
       (* check for a case(peek(slice(...)) *)
       let col = U.decompose_peek e1 in
       let col_t, t_elem = KH.unwrap_tcol @@ T.type_of_expr col in
       begin match col_t, U.tag_of_expr col with
-      | TVMap _, Slice when is_lookup_pat (snd (U.decompose_slice col)) ->
-          handle_lookup_with ~vmap:true "lookup_with4" col t_elem
-      | TVMap _, SliceFrontier when is_lookup_pat (snd (U.decompose_slice_frontier col)) ->
-          handle_lookup_with ~vmap:true ~decomp_fn:U.decompose_slice_frontier "lookup_with4_before" col t_elem
-      | TMap,  Slice when is_lookup_pat (snd(U.decompose_slice col)) ->
-          handle_lookup_with "lookup_with4" col t_elem
+      | TVMap _, Slice when D.is_lookup_pat (snd (U.decompose_slice col)) ->
+          handle_lookup_with ~vmap:true "lookup_with4" col t_elem e_none e_some
+      | TVMap _, SliceFrontier when D.is_lookup_pat (snd (U.decompose_slice_frontier col)) ->
+          handle_lookup_with ~vmap:true ~decomp_fn:U.decompose_slice_frontier
+            "lookup_with4_before" col t_elem e_none e_some
+      | TMap,  Slice when D.is_lookup_pat (snd(U.decompose_slice col)) ->
+          handle_lookup_with "lookup_with4" col t_elem e_none e_some
+
+      | _, AggregateV -> (* check for slice_fold *)
+          let lam, zero, col = U.decompose_aggregatev col in
+          let col', pat = U.decompose_slice_frontier col in
+          let t_col, t_elem' = KH.unwrap_tcol @@ T.type_of_expr col in
+          if D.is_lookup_pat pat then
+            (* can use plain lookup *)
+            handle_lookup_with ~vmap:true ~decomp_fn:U.decompose_slice_frontier
+              "lookup_with4_before" col t_elem' e_none
+              (* create a mapping to a flat data structure *)
+              (KH.mk_let [id]
+                (KH.mk_apply' (D.flatten_fn_nm @@ KH.unwrap_ttuple t_elem)
+                [KH.mk_var id]) e_some)
+          else (* can't turn into a lookup *)
+            handle_fold_slice col' pat e_none e_some =
+
       | _  ->
           (* peek_with *)
           let args =
@@ -966,7 +996,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
     let handle_lookup ?(decomp_fn=U.decompose_slice) ?(vmap=false) name col =
       let col, pat = decomp_fn col in
       (* check if we have a specific value rather than an open slice pattern *)
-      if is_lookup_pat pat then
+      if D.is_lookup_pat pat then
         (* create a default value for the last member of the slice *)
         let pat = lookup_pat_of_slice ~col pat in
         let args, arg_info =
