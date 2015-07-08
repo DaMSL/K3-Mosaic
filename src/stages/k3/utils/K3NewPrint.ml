@@ -927,6 +927,21 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
                 ~decomp_fn:U.decompose_slice_frontier
                 col t_elem e_none e_some else None);
 
+            (* AggregateV -> lookup_before *)
+            (* In order for an aggregatev to be here, it must have a full key *)
+            (fun () ->
+              (* we happen to have a bind here, so special case it *)
+              let e0, x, e1 = U.decompose_bind col in
+              let lambda, acc, col = U.decompose_aggregatev e1 in
+              let col_t, elem_t = KH.unwrap_tcol @@ T.type_of_expr col in
+              (* do bind here *)
+              Some (
+                lps "bind" <| lsp () <| lazy_expr c e0 <| lsp () <| lps "as" <| lsp () <|
+                  lps x <| lsp () <| lps "in" <| lsp () <|
+                (unwrap_some @@
+                  handle_lookup_with ~vmap:true ~decomp_fn:U.decompose_slice_frontier
+                  "lookup_with4_before" col elem_t e_none e_some)));
+
             (fun () ->
               (* peek_with *)
               let args =
