@@ -358,12 +358,16 @@ let map_access_patterns (p:prog_data_t) =
   let h = Hashtbl.create 40 in
   let insert_from_bind t_args map binds =
     (* iterate over lmap binds and get index *)
-    let idx = IntSet.of_list @@
+    let map_ts = map_types_for p map in
+    let idx = 
       List.flatten @@ List.map (fun (nm, i) ->
         (* only count bound variabls (trig args) *)
         if List.mem nm t_args then [i] else []) binds in
-    if idx <> IntSet.empty then
+    if idx <> [] &&
+      (* prune out indices that have entire key *)
+      List.length idx < List.length map_ts - 1 then
       (* insert index into hashtable *)
+      let idx = IntSet.of_list idx in
       hashtbl_replace h map (function
         | None   -> IntSetSet.singleton idx
         | Some x -> IntSetSet.add idx x)
@@ -376,14 +380,6 @@ let map_access_patterns (p:prog_data_t) =
       List.iter (fun (rmap, rbind) ->
         insert_from_bind t_args rmap rbind) rbinds
     ) ss);
-  (* for each map, make sure we have the lookup pattern (no value) *)
-  ignore(for_all_maps p @@ fun map ->
-    let idx = IntSet.of_list @@ fst_many @@
-      insert_index_fst @@ map_types_no_val_for p map in
-    if idx <> IntSet.empty then
-      hashtbl_replace h map (function
-        | None   -> IntSetSet.singleton idx
-        | Some x -> IntSetSet.add idx x));
   (* enumerate all patterns and number them *)
   let pats = snd @@
     Hashtbl.fold (fun nm pat (i,acc) ->
