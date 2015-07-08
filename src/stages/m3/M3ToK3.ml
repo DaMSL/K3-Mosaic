@@ -302,17 +302,11 @@ let mk_slice collection all_keys bound_keys =
     @ [KH.mk_cunknown]
 
 let mk_lookup collection bag_t keys key_types =
-  let wrapped_value = KH.mk_var "wrapped_lookup_value" in
-  KH.mk_let [KU.id_of_var wrapped_value]
-    (mk_slice collection keys keys) @@
-    KH.mk_case_ns
-      (KH.mk_peek wrapped_value)
-      "unwrapped_value"
-      (KH.mk_const @@ zero_of_type bag_t) @@
-      mk_project (List.length keys+1)
-        (List.length keys)
-        bag_t @@
-        (KH.mk_var "unwrapped_value")
+  KH.mk_case_ns
+    (KH.mk_peek @@ mk_slice collection keys keys)
+    "x"
+    (KH.mk_const @@ zero_of_type bag_t) @@
+    KH.mk_subscript (List.length keys + 1) (KH.mk_var "x")
 
 let mk_test_member collection keys key_types val_type =
   KH.mk_has_member collection
