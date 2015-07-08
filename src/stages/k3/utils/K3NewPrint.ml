@@ -864,8 +864,6 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
       let args = [vid] in
       apply_method c ~name ~col ~args ~arg_info*)
 
-    (* check for lookup_with *)
-      (* check for a case(peek(slice(...)) *)
       try_matching [
         (fun () ->
           let col = U.decompose_peek e1 in
@@ -882,7 +880,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
             (fun () -> if D.is_lookup_pat (snd(U.decompose_slice col)) then
                 handle_lookup_with "lookup_with4" col t_elem e_none e_some
               else None);
-            (fun () ->
+            (*(fun () ->
               let lam, zero, col = U.decompose_aggregatev col in
               let col', pat = U.decompose_slice_frontier col in
               let t_col, t_elem' = KH.unwrap_tcol @@ T.type_of_expr col in
@@ -894,9 +892,9 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
                   (KH.mk_let [id]
                     (KH.mk_apply' (D.flatten_fn_nm @@ KH.unwrap_ttuple t_elem)
                     [KH.mk_var id]) e_some)
-              else None
+              else None);*)
                 (* can't turn into a lookup *)
-              (* handle_fold_slice col' pat e_none e_some = *));
+              (* handle_fold_slice col' pat e_none e_some = *)
             (fun () ->
               (* peek_with *)
               let args =

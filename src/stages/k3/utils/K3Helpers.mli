@@ -162,6 +162,7 @@ val mk_slice' : id_t -> expr_t list -> expr_t
 (* int list list: specify index to use
    expr_t: list of integer values specifying GT, LT, EQ *)
 val mk_slice_frontier : expr_t -> expr_t list -> expr_t
+val mk_slice_frontier' : id_t -> expr_t list -> expr_t
 val mk_insert : id_t -> expr_t list -> expr_t
 val mk_upsert_with : id_t -> expr_t list -> expr_t -> expr_t -> expr_t
 val mk_delete : id_t -> expr_t list -> expr_t

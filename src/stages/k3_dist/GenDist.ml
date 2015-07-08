@@ -220,10 +220,9 @@ let nd_add_delta_to_buf c map_id =
                   (get_val' delta_pat) @@
                   mk_case_ns
                     (mk_peek @@
-                      map_latest_vid_vals c (mk_var "acc2")
-                        (some @@ D.unknown_val' delta_pat) map_id ~keep_vid:false) "val"
+                      mk_slice_frontier' "acc2" @@ D.unknown_val real_delta_pat) "val"
                     zero @@
-                    D.get_val' @@ calc_pat_f @@ mk_var "val") @@
+                    D.get_val' @@ real_pat_f @@ mk_var "val") @@
                 mk_block [
                   mk_insert "acc2" @@ new_val real_delta_pat @@ mk_var update_value;
                   mk_var "acc2"]) @@
