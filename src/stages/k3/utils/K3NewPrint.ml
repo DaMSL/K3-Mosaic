@@ -936,8 +936,9 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
               let col_t, elem_t = KH.unwrap_tcol @@ T.type_of_expr col in
               (* do bind here *)
               Some (
-                lps "bind" <| lsp () <| lazy_expr c e0 <| lsp () <| lps "as" <| lsp () <|
-                  lps x <| lsp () <| lps "in" <| lsp () <|
+                lps "bind" <| lsp () <| lazy_expr c e0 <| lsp () <| lps "as" 
+                <| lsp () <| lps "ind" <| lsp () <| lps x <| lsp () <|
+                lps "in" <| lsp () <|
                 (unwrap_some @@
                   handle_lookup_with ~vmap:true ~decomp_fn:U.decompose_slice_frontier
                   "lookup_with4_before" col elem_t e_none e_some)));
