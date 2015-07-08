@@ -1026,7 +1026,8 @@ let nd_do_complete_fns c ast trig_name corr_maps =
                 (* otherwise we need to update the corrective counters *)
                 update_corr_code false
             else
-              (* if we have no rhs maps, we may not need to update anything, since no stmt cntr entry was created *)
+              (* if we have no rhs maps, we may not need to update anything,
+               * since no stmt cntr entry was created *)
               mk_if (mk_eq (mk_var "sent_msgs") @@ mk_cint 0)
                 mk_cunit @@
                 (* else, update and create a stmt counter *)
@@ -1167,6 +1168,15 @@ let nd_do_corrective_fns c s_rhs ast trig_name corrective_maps =
   in
   List.map do_corrective_fn s_rhs
 
+let flatteners c =
+  let l = snd_many @@ D.uniq_types_and_maps ~uniq_indices:false c in
+  List.map (fun (t, maps) ->
+    let map_ds = map_ds_of_id ~global:true ~vid:false c (hd maps) in
+    let pat = pat_of_ds ~flatten:true ~drop_vid:true ~expr:(mk_var "tuple") map_ds in
+    mk_global_fn ("flatten_"^strcatmap ~sep:"_" K3PrintSyntax.string_of_type t)
+    ["tuple", snd @@ unwrap_tcol map_ds.t] [wrap_ttuple t] @@
+    mk_tuple @@ fst_many pat) l
+
 let str_of_date_t t = match t.typ with
   | TDate -> {t with typ = TString}
   | x -> t
@@ -1216,6 +1226,7 @@ let declare_global_vars c partmap ast =
   GC.global_vars c
 
 let declare_global_funcs c partmap ast =
+  flatteners c @
   nd_log_master_write ::
   (P.for_all_trigs ~sys_init:true ~deletes:c.gen_deletes c.p @@ nd_log_write c) @
   (P.for_all_trigs ~sys_init:true ~deletes:c.gen_deletes c.p @@ nd_log_get_bound c) @
