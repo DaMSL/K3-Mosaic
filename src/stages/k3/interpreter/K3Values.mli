@@ -111,10 +111,10 @@ val v_combine : value_t t_err_fn -> value_t -> value_t -> value_t
 val v_fold : 'a t_err_fn -> ('a -> value_t -> 'a) -> 'a -> value_t -> 'a
 val v_foldv : 'a t_err_fn -> ('a -> value_t -> value_t -> 'a) -> 'a -> value_t -> 'a
 val v_iter : unit t_err_fn -> (value_t -> unit) -> value_t -> unit
-val v_insert : value_t t_err_fn -> value_t -> value_t -> value_t
+val v_insert : ?vidkey:value_t -> value_t t_err_fn -> value_t -> value_t -> value_t
 val v_delete : value_t t_err_fn -> value_t -> value_t -> value_t
 val v_delete_prefix : value_t t_err_fn -> value_t -> value_t -> value_t
-val v_update : value_t t_err_fn -> value_t -> value_t -> value_t -> value_t
+val v_update : ?vidkey:value_t -> value_t t_err_fn -> value_t -> value_t -> value_t -> value_t
 val v_update_suffix : value_t t_err_fn -> value_t -> (value_t -> value_t) -> value_t -> value_t
 val v_upsert_with : ?frontier:bool -> value_t t_err_fn -> value_t -> (value_t -> value_t) -> (value_t -> value_t) -> value_t -> value_t
 val v_empty : value_t t_err_fn -> ?no_map: bool -> ?no_multimap : bool -> value_t -> value_t

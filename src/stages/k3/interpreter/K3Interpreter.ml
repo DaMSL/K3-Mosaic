@@ -473,11 +473,25 @@ and eval_expr (address:address) sched_st cenv texpr =
 
     (* we can't modify the environment within the lambda *)
     | (UpsertWith | UpsertWithBefore), [_; key; lam_none; lam_some] ->
-        let f lam x = value_of_eval @@ snd @@ eval_fn lam address sched_st nenv [x] in
-        let renv = env_modify (get_id ()) nenv @@
-          fun col -> v_upsert_with error key ~frontier:(if tag = UpsertWithBefore then true else false )
-                       (f lam_none) (f lam_some) col in
-        renv, temp VUnit
+        let col_id = get_id () in
+        let col = lookup col_id nenv in
+        let key = match key with
+          | VTuple xs -> VTuple(list_drop_end 1 xs @ [VUnknown])
+          | _ -> error "upsert_with" "not a tuple"
+        in
+        let slice_fn =
+          if tag = UpsertWith then v_slice else v_slice_frontier in
+        let slice = slice_fn error key @@ value_of_eval col in
+        begin match v_peek error slice with
+          | None   ->
+              let env, v = eval_fn lam_none address sched_st nenv [VUnit] in
+              (env_modify col_id env @@
+                fun col -> v_insert ~vidkey:key error (value_of_eval v) col), temp VUnit
+          | Some v ->
+              let env, v' = eval_fn lam_some address sched_st nenv [v] in
+              (env_modify (get_id ()) env @@
+                fun col -> v_update ~vidkey:key error v (value_of_eval v') col), temp VUnit
+        end
 
     (* we can't modify the environment within the lambda *)
     | UpdateSuffix, [_; key; lam_update] ->

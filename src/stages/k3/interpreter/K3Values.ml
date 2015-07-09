@@ -457,14 +457,23 @@ let v_iter err_fn f = function
   | VVMap m     -> ValueVMap.iter (fun _ k v -> f @@ VTuple[k;v]) m
   | v -> err_fn "v_iter" @@ Printf.sprintf "not a collection: %s" @@ string_of_value v
 
-let v_insert err_fn x m = match x, m with
+let v_insert ?vidkey err_fn x m =
+  let error v c = err_fn "v_insert" @@
+    Printf.sprintf "invalid input: insert: %s\ninto: %s" (sov v) (sov c)
+  in
+  match x, m with
   | _, VSet m              -> VSet(ValueSet.insert x m)
   | _, VBag m              -> VBag(ValueBag.insert x m)
   | _, VList m             -> VList(IList.insert x m)
   | VTuple[k;v], VMap m    -> VMap(ValueMap.add k v m)
   | VTuple[t;k;v], VVMap m -> VVMap(ValueVMap.add t k v m)
-  | v, c                   -> err_fn "v_insert" @@
-    Printf.sprintf "invalid input: insert: %s\ninto: %s" (sov v) (sov c)
+  | VTuple[k;v] as v', (VVMap m as c') ->
+      (* take the vid from the provided key *)
+      begin match vidkey with
+      | Some(VTuple(t::_)) -> VVMap(ValueVMap.add t k v m)
+      | _                  -> error v' c'
+      end
+  | v, c                   -> error v c
 
 let v_delete err_fn x m = match x, m with
   | _, VSet m               -> VSet(ValueSet.delete x m)
@@ -475,14 +484,23 @@ let v_delete err_fn x m = match x, m with
   | v, c                    -> err_fn "v_delete" @@
     Printf.sprintf "invalid input: delete: %s\nfrom: %s" (sov v) (sov c)
 
-let v_update err_fn oldv newv c = match oldv, newv, c with
+(* vidkey: sometimes we need to get the vid from another tuple for vmap *)
+let v_update ?vidkey err_fn oldv newv c =
+  let error v v' c = err_fn "v_update" @@ Printf.sprintf
+    "invalid input: update: %s\nfrom: %s\nin: %s" (sov v) (sov v') (sov c)
+  in
+  match oldv, newv, c with
   | _,_,VSet m                            -> VSet(ValueSet.update oldv newv m)
   | _,_,VBag m                            -> VBag(ValueBag.update oldv newv m)
   | _,_,VList m                           -> VList(IList.update oldv newv m)
   | VTuple[k;v], VTuple[k';v'], VMap m    -> VMap(ValueMap.update k v k' v' m)
   | VTuple[k;v], VTuple[t;k';v'], VVMap m -> VVMap(ValueVMap.update t k v k' v' m)
-  | v,v',c -> err_fn "v_update" @@ Printf.sprintf
-    "invalid input: update: %s\nfrom: %s\nin: %s" (sov v) (sov v') (sov c)
+  | VTuple[k;v] as v1, (VTuple[k';v'] as v2), (VVMap m as c) ->
+      begin match vidkey with
+      | Some(VTuple(t::_)) -> VVMap(ValueVMap.update t k v k' v' m)
+      | _                  -> error v1 v2 c
+      end
+  | v, v',c -> error v v' c
 
 let v_upsert_with ?frontier err_fn key lam_none lam_some col =
   let update t k v m =
