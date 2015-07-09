@@ -947,7 +947,7 @@ let nd_update_stmt_cntr_corr_map =
                           (* else, return the incremented entry *)
                           (mk_tuple [mk_cfalse; mk_var "new_corr_cnt"])))
                     (mk_if (mk_var "delete_entry")
-                      (mk_delete nd_stmt_cntrs_corr_map.id [mk_var "hop"; mk_cunknown])
+                      (mk_delete nd_stmt_cntrs_corr_map.id [mk_var "hop"; mk_cint 0])
                       (mk_insert nd_stmt_cntrs_corr_map.id [mk_var "hop"; mk_var "new_count"]));
 
                 (* check if this is from the root of the corrective tree *)
@@ -957,7 +957,9 @@ let nd_update_stmt_cntr_corr_map =
                   mk_let ["hop2"] (mk_sub (mk_var "hop") @@ mk_cint 1) @@
                   (* else update the current hop *)
                   mk_let ["delete_entry"; "new_count"]
-                    (mk_case_ns (mk_peek @@ mk_slice' nd_stmt_cntrs_corr_map.id [mk_var "hop2"; mk_cunknown]) "lkup2"
+                    (mk_case_ns
+                      (mk_peek @@ mk_slice' nd_stmt_cntrs_corr_map.id
+                                    [mk_var "hop2"; mk_cunknown]) "lkup2"
                       (* if no entry, return -1 *)
                       (mk_tuple [mk_cfalse; mk_cint @@ -1])
                       (* else, calculate new corr count *)
@@ -970,7 +972,7 @@ let nd_update_stmt_cntr_corr_map =
                           (* else, return the incremented entry *)
                           (mk_tuple [mk_cfalse; mk_var "new_corr_cnt"])))
                     (mk_if (mk_var "delete_entry")
-                      (mk_delete nd_stmt_cntrs_corr_map.id [mk_var "hop2"; mk_cunknown])
+                      (mk_delete nd_stmt_cntrs_corr_map.id [mk_var "hop2"; mk_cint 0])
                       (mk_insert nd_stmt_cntrs_corr_map.id [mk_var "hop2"; mk_var "new_count"]));
 
                 (* set the new tuple *)
