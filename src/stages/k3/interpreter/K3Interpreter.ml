@@ -482,15 +482,22 @@ and eval_expr (address:address) sched_st cenv texpr =
         let slice_fn =
           if tag = UpsertWith then v_slice else v_slice_frontier in
         let slice = slice_fn error key @@ value_of_eval col in
-        begin match v_peek error slice with
+        begin match v_peek ~vid:true error slice with
           | None   ->
               let env, v = eval_fn lam_none address sched_st nenv [VUnit] in
               (env_modify col_id env @@
                 fun col -> v_insert ~vidkey:key error (value_of_eval v) col), temp VUnit
           | Some v ->
-              let env, v' = eval_fn lam_some address sched_st nenv [v] in
+              (* handle the right vids for vmaps: if looking in the past, we need the actual
+               * vid of the old value, not the frontier vid *)
+              let v_no_vid, v = match v with
+                | VTuple [t;k;v'] when is_vmap (value_of_eval col) -> VTuple [k;v'], v
+                | _ when is_vmap (value_of_eval col) -> error "upsertwith" "bad value in vmap"
+                | _ -> v, v
+              in
+              let env, v' = eval_fn lam_some address sched_st nenv [v_no_vid] in
               (env_modify (get_id ()) env @@
-                fun col -> v_update ~vidkey:key error v (value_of_eval v') col), temp VUnit
+                fun col -> v_update ~vidkey:v error v_no_vid (value_of_eval v') col), temp VUnit
         end
 
     (* we can't modify the environment within the lambda *)

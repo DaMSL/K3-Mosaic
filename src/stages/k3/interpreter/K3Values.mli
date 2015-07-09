@@ -103,10 +103,11 @@ val value_of_const : constant_t -> value_t
 val value_of_const_expr : expr_t -> value_t
 val type_of_value : int -> value_t -> type_t
 val expr_of_value : int -> value_t -> expr_t
+val is_vmap : value_t -> bool
 
 (* Universal collection functions *)
 type 'a t_err_fn = (string -> string -> 'a)
-val v_peek : value_t option t_err_fn -> value_t -> value_t option
+val v_peek : ?vid:bool -> value_t option t_err_fn -> value_t -> value_t option
 val v_combine : value_t t_err_fn -> value_t -> value_t -> value_t
 val v_fold : 'a t_err_fn -> ('a -> value_t -> 'a) -> 'a -> value_t -> 'a
 val v_foldv : 'a t_err_fn -> ('a -> value_t -> value_t -> 'a) -> 'a -> value_t -> 'a

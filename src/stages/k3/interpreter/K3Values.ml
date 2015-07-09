@@ -354,12 +354,14 @@ let find_inequality a b =
     Some(ValueComp.get_counter ())
   else None
 
-let v_peek err_fn c = match c with
+let is_vmap = function VVMap _ -> true | _ -> false
+
+let v_peek ?(vid=false) err_fn c = match c with
   | VSet m  -> ValueSet.peek m
   | VBag m  -> ValueBag.peek m
   | VList m -> IList.peek m
   | VMap m  -> maybe None (some |- encode_tuple)  @@ ValueMap.peek m
-  | VVMap m -> maybe None (fun (_,k,v) -> some @@ VTuple[k;v]) @@ ValueVMap.peek m
+  | VVMap m -> maybe None (fun (t,k,v) -> some @@ if vid then VTuple[t;k;v] else VTuple[k;v]) @@ ValueVMap.peek m
   | v -> err_fn "v_peek" @@ Printf.sprintf "not a collection: %s" @@ string_of_value v
 
 (* for a map structure *)
@@ -486,8 +488,9 @@ let v_delete err_fn x m = match x, m with
 
 (* vidkey: sometimes we need to get the vid from another tuple for vmap *)
 let v_update ?vidkey err_fn oldv newv c =
-  let error v v' c = err_fn "v_update" @@ Printf.sprintf
-    "invalid input: update: %s\nfrom: %s\nin: %s" (sov v) (sov v') (sov c)
+  let error ?(x="") v v' c = err_fn "v_update" @@
+    Printf.sprintf
+    "invalid input: update: %s\nfrom: %s\nin: %s,\nextra: %s" (sov v) (sov v') (sov c) x
   in
   match oldv, newv, c with
   | _,_,VSet m                            -> VSet(ValueSet.update oldv newv m)
@@ -498,6 +501,7 @@ let v_update ?vidkey err_fn oldv newv c =
   | VTuple[k;v] as v1, (VTuple[k';v'] as v2), (VVMap m as c) ->
       begin match vidkey with
       | Some(VTuple(t::_)) -> VVMap(ValueVMap.update t k v k' v' m)
+      | Some x             -> error ~x:(sov x) v1 v2 c
       | _                  -> error v1 v2 c
       end
   | v, v',c -> error v v' c
