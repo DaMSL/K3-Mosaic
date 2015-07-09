@@ -484,6 +484,26 @@ and apply_method ?prefix_fn c ~name ~col ~args ~arg_info =
   | _     -> lazy_paren
     in f @@ lazy_expr c col <| apply_method_nocol c ~name ~args ~arg_info ?prefix_fn
 
+(* common pattern for lookup_with *)
+and handle_lookup_with
+  ?(decomp_fn=U.decompose_slice)
+  ?(vmap=false) c ~id name col t_elem e_none e_some =
+    let col, pat = decomp_fn col in
+    (* NOTE: we don't check for lookup_pat. We assume that's already been done *)
+    (* we CAN use lookup_with4 *)
+    let pat = lookup_pat_of_slice ~col pat in
+    let arg' =
+      [light_type c @@ KH.mk_lambda' ["_", KH.t_unit] e_none;
+        light_type c @@ KH.mk_lambda' [id, t_elem] e_some] in
+    let args, arg_info =
+      if vmap then
+        [hd pat; light_type c @@ KH.mk_tuple @@ tl pat] @ arg',
+          [vid_out_arg; [], false; [], false; [0], false]
+      else
+        [light_type c @@ KH.mk_tuple pat] @ arg',
+          [[], false; [], false; [0], false] in
+    some @@ apply_method c ~name ~col ~args ~arg_info
+
 (* apply a function to arguments *)
 and function_application c fun_e l_e =
   (* Check if we need to modify the function *)
@@ -852,28 +872,6 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
           lazy_expr c' e_some)) <|
         wrap_indent (lazy_brace (lps "None ->" <| lsp () <| lazy_expr c e_none)))
     in
-    (* common pattern for lookup_with *)
-    let handle_lookup_with
-      ?(decomp_fn=U.decompose_slice)
-      ?(vmap=false)
-      name col t_elem e_none e_some =
-        let col, pat = decomp_fn col in
-        (* NOTE: we don't check for lookup_pat. We assume that's already been done *)
-        (* we CAN use lookup_with4 *)
-        let pat = lookup_pat_of_slice ~col pat in
-        let arg' =
-          [light_type c @@ KH.mk_lambda' ["_", KH.t_unit] e_none;
-            light_type c @@ KH.mk_lambda' [id, t_elem] e_some] in
-        let args, arg_info =
-          if vmap then
-            [hd pat; light_type c @@ KH.mk_tuple @@ tl pat] @ arg',
-              [vid_out_arg; [], false; [], false; [0], false]
-          else
-            [light_type c @@ KH.mk_tuple pat] @ arg',
-              [[], false; [], false; [0], false] in
-        some @@ apply_method c ~name ~col ~args ~arg_info
-    in
-
     (* helper function to apply lookup_with on a secondary index *)
     let handle_slice_lookup_with
       ?(decomp_fn=U.decompose_slice)
@@ -902,14 +900,16 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
             (fun () ->
               if is_vmap col &&
                  D.is_lookup_pat (snd (U.decompose_slice col)) then
-              handle_lookup_with ~vmap:true "lookup_with4" col t_elem e_none e_some
+              handle_lookup_with c ~vmap:true ~id "lookup_with4" col
+                t_elem e_none e_some
               else None);
 
             (* Slice frontier on VMap and full lookup *)
             (fun () ->
               if is_vmap col &&
               D.is_lookup_pat (snd (U.decompose_slice_frontier col)) then
-              handle_lookup_with ~vmap:true ~decomp_fn:U.decompose_slice_frontier
+              handle_lookup_with c ~vmap:true ~id
+                ~decomp_fn:U.decompose_slice_frontier
                 "lookup_with4_before" col t_elem e_none e_some
               else None);
 
@@ -917,7 +917,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
             (fun () ->
               if is_map col &&
                 D.is_lookup_pat (snd(U.decompose_slice col)) then
-                handle_lookup_with "lookup_with4" col t_elem e_none e_some
+                handle_lookup_with c "lookup_with4" ~id col t_elem e_none e_some
               else None);
 
             (* Slice on VMap with partial key*)
@@ -945,7 +945,8 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
                 <| lsp () <| lps "ind" <| lsp () <| lps x <| lsp () <|
                 lps "in" <| lsp () <|
                 (unwrap_some @@
-                  handle_lookup_with ~vmap:true ~decomp_fn:U.decompose_slice_frontier
+                  handle_lookup_with c ~vmap:true ~id
+                  ~decomp_fn:U.decompose_slice_frontier
                   "lookup_with4_before" col elem_t e_none e_some)));
 
             (fun () ->
@@ -1036,7 +1037,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
     in
     (* handle a case of fold_all(slice(...)) *)
     let handle_slice () =
-      let col, pat = U.decompose_slice_frontier col in
+      let col', pat = U.decompose_slice_frontier col in
       (* TODO: simplify to lookup pat if possible *)
       (*
       if D.is_lookup_pat pat then
@@ -1051,19 +1052,30 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
       let vid = hd @@ U.unwrap_tuple pat in
       let pat_no_vid = tl @@ U.unwrap_tuple pat in
       let pat = meaningful_pat c pat_no_vid in
-      (* if we have only unknowns, then we must access the full map (ie. a fold) *)
-      let as_fold = List.filter (not |- D.is_unknown) (U.unwrap_tuple pat) = [] in
-      let name =
-        if as_fold then "fold_vid"
-        else "fold_slice_vid_by_"^slice_names c pat_no_vid in
+      let t_elem = snd @@ KH.unwrap_tcol @@ T.type_of_expr col in
+      (* check if we can just do a lookup *)
+      if D.is_lookup_pat pat then
+        handle_lookup_with c
+          ~decomp_fn:U.decompose_slice_frontier
+          ~vmap:true
+          ~id:"x"
+          "lookup_with4_before" col t_elem
+          (light_type c @@ KH.mk_empty @@ T.type_of_expr acc)
+          (KH.mk_singleton (T.type_of_expr acc) [KH.mk_var "x"])
+      else
+        (* if we have only unknowns, then we must access the full map (ie. a fold) *)
+        let as_fold = List.filter (not |- D.is_unknown) (U.unwrap_tuple pat) = [] in
+        let name =
+          if as_fold then "fold_vid"
+          else "fold_slice_vid_by_"^slice_names c pat_no_vid in
 
-      let args, arg_info =
-        if as_fold then
-          [vid; lambda; acc], [[], false; [2], false; [], false]
-        else
-          [vid; light_type c pat; lambda; acc],
-          [[], false; [], true; [2], false; [], false] in
-      some @@ apply_method c ~name ~col ~args ~arg_info
+        let args, arg_info =
+          if as_fold then
+            [vid; lambda; acc], [[], false; [2], false; [], false]
+          else
+            [vid; light_type c pat; lambda; acc],
+            [[], false; [], true; [2], false; [], false] in
+        some @@ apply_method c ~name ~col:col' ~args ~arg_info
     in
     try_matching [
       handle_slice;
