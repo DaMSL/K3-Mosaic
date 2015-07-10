@@ -418,15 +418,14 @@ let vid_in_arg  = K3Dist.is_vid_tuple
 
 (* change a pattern to have a default value (last element) *)
 (* since k3new can't handle unknowns *)
-let lookup_pat_of_slice ~col pat =
-    let col_t, elem_t = KH.unwrap_tcol @@ T.type_of_expr col in
-    (* since this is a lookup, we can turn pat into a list. drop the value *)
-    let pat = fst @@ breakdown_pat pat in
-    let pat = list_drop_end 1 pat in
-    (* create a default value for the last member of the slice tuple since k3new can't
-      * handle unknowns *)
-    let tval = list_last @@ KH.unwrap_ttuple elem_t in
-    pat @ [KH.default_value_of_t tval]
+let lookup_pat_of_slice ?(vid=false) ~col pat =
+  let col_t, elem_t = KH.unwrap_tcol @@ T.type_of_expr col in
+  let elem_t = KH.unwrap_ttuple elem_t in
+  let elem_t = if vid then KH.t_vid :: elem_t else elem_t in
+  (* since this is a lookup, we can turn pat into a list. drop the value *)
+  let pat = fst @@ breakdown_pat pat in
+  List.map2 (fun x t ->
+    if D.is_unknown x then KH.default_value_of_t t else x) pat elem_t
 
 (* create a deep bind for lambdas, triggers, and let statements
  * -in_record indicates that the first level of binding should be a record *)
@@ -496,7 +495,7 @@ and handle_lookup_with
     let col, pat = decomp_fn col in
     (* NOTE: we don't check for lookup_pat. We assume that's already been done *)
     (* we CAN use lookup_with4 *)
-    let pat = lookup_pat_of_slice ~col pat in
+    let pat = lookup_pat_of_slice ~vid:vmap ~col pat in
     let lam_args = maybe [id, t_elem] id_fn some_lam_args in
     let arg' =
       [light_type c @@ KH.mk_lambda' ["_", KH.t_unit] e_none;
@@ -1104,7 +1103,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
           let col, pat = U.decompose_slice_frontier col in
           let name = "lookup_with4_before_vid" in
           if not (D.is_lookup_pat pat) then None else
-          let pat = lookup_pat_of_slice ~col pat in
+          let pat = lookup_pat_of_slice ~vid:true ~col pat in
           let vid = hd pat in
           let pat = light_type c @@ KH.mk_tuple @@ tl pat in
           let args = [vid; pat; lam_none; lam_some] in
@@ -1129,7 +1128,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
       (* check if we have a specific value rather than an open slice pattern *)
       if D.is_lookup_pat pat then
         (* create a default value for the last member of the slice *)
-        let pat = lookup_pat_of_slice ~col pat in
+        let pat = lookup_pat_of_slice ~vid:vmap ~col pat in
         let args, arg_info =
           if vmap then [hd pat; light_type c @@ KH.mk_tuple @@ tl pat], [vid_out_arg; def_a]
           else [light_type c @@ KH.mk_tuple pat], [def_a] in
@@ -1197,7 +1196,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
     end
 
   | UpsertWith -> let col, key, lam_no, lam_yes = U.decompose_upsert_with expr in
-    let key = lookup_pat_of_slice ~col key in
+    let key = lookup_pat_of_slice ~vid:(is_vmap col) ~col key in
     maybe_vmap c col (light_type c @@ KH.mk_tuple key)
       (fun key -> lazy_expr c col <| apply_method_nocol  c ~name:"upsert_with" ~args:[key; lam_no; lam_yes]
         ~arg_info:[[], true; [], true; [0], true])
@@ -1205,7 +1204,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
         ~arg_info:[vid_out_arg; [], true; [], true; [0], true])
 
   | UpsertWithBefore -> let col, key, lam_no, lam_yes = U.decompose_upsert_with_before expr in
-    let key = lookup_pat_of_slice ~col key in
+    let key = lookup_pat_of_slice ~vid:(is_vmap col) ~col key in
     maybe_vmap c col (light_type c @@ KH.mk_tuple key)
       (fun key -> lazy_expr c col <| apply_method_nocol  c ~name:"upsert_with_before" ~args:[key; lam_no; lam_yes]
         ~arg_info:[[], true; [], true; [0], true])
