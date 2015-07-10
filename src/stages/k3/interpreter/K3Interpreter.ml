@@ -474,32 +474,31 @@ and eval_expr (address:address) sched_st cenv texpr =
           fun col -> v_update error oldv newv col), temp VUnit
 
     (* we can't modify the environment within the lambda *)
+    (* semantics for upsertwithbefore:
+      * if none results from lookup, update with key's vid
+      * if some x, delete the x and update with the new vid *)
     | (UpsertWith | UpsertWithBefore), [_; key; lam_none; lam_some] ->
         let col_id = get_id () in
-        let col = lookup col_id nenv in
+        let col = value_of_eval @@ lookup col_id nenv in
         let key = match key with
           | VTuple xs -> VTuple(list_drop_end 1 xs @ [VUnknown])
           | _ -> error "upsert_with" "not a tuple"
         in
         let slice_fn =
           if tag = UpsertWith then v_slice else v_slice_frontier in
-        let slice = slice_fn error key @@ value_of_eval col in
+        let slice = slice_fn error key col in
         begin match v_peek ~vid:true error slice with
           | None   ->
               let env, v = eval_fn lam_none address sched_st nenv [VUnit] in
               (env_modify col_id env @@
                 fun col -> v_insert ~vidkey:key error (value_of_eval v) col), temp VUnit
           | Some v ->
-              (* handle the right vids for vmaps: if looking in the past, we need the actual
-               * vid of the old value, not the frontier vid *)
-              let v_no_vid, v = match v with
-                | VTuple [t;k;v'] when is_vmap (value_of_eval col) -> VTuple [k;v'], v
-                | _ when is_vmap (value_of_eval col) -> error "upsertwith" "bad value in vmap"
-                | _ -> v, v
-              in
+              (* strip the vid for the lambda *)
+              let v_no_vid = if is_vmap col then strip_vid v else v in
               let env, v' = eval_fn lam_some address sched_st nenv [v_no_vid] in
+              let v' = value_of_eval v' in
               (env_modify (get_id ()) env @@
-                fun col -> v_update ~vidkey:v error v_no_vid (value_of_eval v') col), temp VUnit
+                fun col -> v_insert ~vidkey:key error v' col), temp VUnit
         end
 
     (* we can't modify the environment within the lambda *)

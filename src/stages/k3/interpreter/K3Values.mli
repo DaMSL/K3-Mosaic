@@ -104,6 +104,7 @@ val value_of_const_expr : expr_t -> value_t
 val type_of_value : int -> value_t -> type_t
 val expr_of_value : int -> value_t -> expr_t
 val is_vmap : value_t -> bool
+val strip_vid : value_t -> value_t
 
 (* Universal collection functions *)
 type 'a t_err_fn = (string -> string -> 'a)

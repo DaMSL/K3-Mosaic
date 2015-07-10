@@ -356,6 +356,10 @@ let find_inequality a b =
 
 let is_vmap = function VVMap _ -> true | _ -> false
 
+let strip_vid = function
+  | VTuple [t;k;v'] -> VTuple [k;v']
+  | v -> v
+
 let v_peek ?(vid=false) err_fn c = match c with
   | VSet m  -> ValueSet.peek m
   | VBag m  -> ValueBag.peek m
