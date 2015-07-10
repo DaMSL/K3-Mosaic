@@ -939,6 +939,11 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
               let e0, x, e1 = U.decompose_bind col in
               let lambda, acc, col = U.decompose_aggregatev e1 in
               let col_t, elem_t = KH.unwrap_tcol @@ T.type_of_expr col in
+              let e_some' =
+                KH.mk_let [id]
+                  (KH.mk_apply' (D.flatten_fn_nm @@ KH.unwrap_ttuple t_elem)
+                  [KH.mk_var id]) e_some
+              in
               (* do bind here *)
               Some (
                 lps "bind" <| lsp () <| lazy_expr c e0 <| lsp () <| lps "as"
@@ -947,7 +952,8 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
                 (unwrap_some @@
                   handle_lookup_with c ~vmap:true ~id
                   ~decomp_fn:U.decompose_slice_frontier
-                  "lookup_with4_before" col elem_t e_none e_some)));
+                  "lookup_with4_before" col elem_t
+                   e_none e_some')));
 
             (fun () ->
               (* peek_with *)
@@ -1038,17 +1044,6 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
     (* handle a case of fold_all(slice(...)) *)
     let handle_slice () =
       let col', pat = U.decompose_slice_frontier col in
-      (* TODO: simplify to lookup pat if possible *)
-      (*
-      if D.is_lookup_pat pat then
-        (* can use plain lookup *)
-        handle_lookup_with ~vmap:true ~decomp_fn:U.decompose_slice_frontier
-          "lookup_with4_before" col t_elem' e_none
-          (* create a mapping to a flat data structure *)
-          (KH.mk_let [id]
-            (KH.mk_apply' (D.flatten_fn_nm @@ KH.unwrap_ttuple t_elem)
-            [KH.mk_var id]) e_some)
-      else None *)
       let vid = hd @@ U.unwrap_tuple pat in
       let pat_no_vid = tl @@ U.unwrap_tuple pat in
       let pat = meaningful_pat c pat_no_vid in
