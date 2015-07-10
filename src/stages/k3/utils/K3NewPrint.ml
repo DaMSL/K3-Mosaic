@@ -487,14 +487,18 @@ and apply_method ?prefix_fn c ~name ~col ~args ~arg_info =
 (* common pattern for lookup_with *)
 and handle_lookup_with
   ?(decomp_fn=U.decompose_slice)
-  ?(vmap=false) c ~id name col t_elem e_none e_some =
+  ?(vmap=false)
+  ?some_lam_args
+  c ~id
+  name col t_elem e_none e_some =
     let col, pat = decomp_fn col in
     (* NOTE: we don't check for lookup_pat. We assume that's already been done *)
     (* we CAN use lookup_with4 *)
     let pat = lookup_pat_of_slice ~col pat in
+    let lam_args = maybe [id, t_elem] id_fn some_lam_args in
     let arg' =
       [light_type c @@ KH.mk_lambda' ["_", KH.t_unit] e_none;
-        light_type c @@ KH.mk_lambda' [id, t_elem] e_some] in
+        light_type c @@ KH.mk_lambda' lam_args e_some] in
     let args, arg_info =
       if vmap then
         [hd pat; light_type c @@ KH.mk_tuple @@ tl pat] @ arg',
@@ -969,11 +973,14 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
         (fun () ->
           let col = U.decompose_peek_vid e1 in
           let col_t, t_elem = KH.unwrap_tcol @@ T.type_of_expr col in
+          (* check that e_some just builds a singleton *)
+          let _ = U.decompose_singleton e_some in
           if is_vmap col &&
           D.is_lookup_pat (snd (U.decompose_slice_frontier col)) then
           handle_lookup_with c ~vmap:true ~id
             ~decomp_fn:U.decompose_slice_frontier
             "lookup_with4_before_vid" col t_elem e_none e_some
+            ~some_lam_args:["vid", KH.t_vid; id, t_elem]
           else None);
 
         normal]
