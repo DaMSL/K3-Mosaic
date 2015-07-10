@@ -16,6 +16,8 @@ let indent = ref 0
 
 let force_list = List.iter force
 
+let def_a = [], false
+
 let r_underscore = Str.regexp "_"
 
 (* lazy functions *)
@@ -502,10 +504,10 @@ and handle_lookup_with
     let args, arg_info =
       if vmap then
         [hd pat; light_type c @@ KH.mk_tuple @@ tl pat] @ arg',
-          [vid_out_arg; [], false; [], false; [0], false]
+          [vid_out_arg; def_a; def_a; [0], false]
       else
         [light_type c @@ KH.mk_tuple pat] @ arg',
-          [[], false; [], false; [0], false] in
+          [def_a; def_a; [0], false] in
     some @@ apply_method c ~name ~col ~args ~arg_info
 
 (* apply a function to arguments *)
@@ -750,7 +752,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
       | Singleton vt, Empty _ when not @@ is_vmap e1 && not @@ is_vmap e2 ->
           let t = T.type_of_expr expr in
           lazy_collection_vt c t @@ assemble_list c expr
-      | _ -> apply_method c ~name:"combine" ~col:e1 ~args:[e2] ~arg_info:[[], false]
+      | _ -> apply_method c ~name:"combine" ~col:e1 ~args:[e2] ~arg_info:[def_a]
     end
 
   | Range ct -> let st, str, num = U.decompose_range expr in
@@ -827,7 +829,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
                       list_last args] in
                   let loader = String.uppercase table^"LoaderRP" in
                   apply_method_nocol {c with singleton_id = "path"}
-                    ~dot:false ~name:loader ~args ~arg_info:[[], false; [], false]
+                    ~dot:false ~name:loader ~args ~arg_info:[def_a; def_a]
               | _ -> failwith "bad arg to load_csv_col"
               end
           | _ -> failwith "bad arg to load_csv_col2"
@@ -889,7 +891,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
             light_type c @@ KH.mk_lambda' [id, t_elem] e_some] in
         let args, arg_info =
             [hd @@ U.unwrap_tuple pat; light_type c fn_pat] @ arg',
-              [vid_out_arg; [], false; [], false; [0], false] in
+              [vid_out_arg; def_a; def_a; [0], false] in
         some @@ apply_method c ~name ~col ~args ~arg_info
       in
 
@@ -964,24 +966,9 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
               let args =
                 [light_type c @@ KH.mk_lambda' ["_", KH.t_unit] e_none;
                 light_type c @@ KH.mk_lambda' [id, t_elem] e_some] in
-              let arg_info = [[], false; [0], false] in
+              let arg_info = [def_a; [0], false] in
               Some(apply_method c ~name:"peek_with" ~col ~args ~arg_info));
           ]);
-
-        (* peek_vid is used to preserve the vid when important *)
-        (* case (peek_vid (slice_frontier ())) -> lookup_with4_before_vid *)
-        (fun () ->
-          let col = U.decompose_peek_vid e1 in
-          let col_t, t_elem = KH.unwrap_tcol @@ T.type_of_expr col in
-          (* check that e_some just builds a singleton *)
-          let _ = U.decompose_singleton e_some in
-          if is_vmap col &&
-          D.is_lookup_pat (snd (U.decompose_slice_frontier col)) then
-          handle_lookup_with c ~vmap:true ~id
-            ~decomp_fn:U.decompose_slice_frontier
-            "lookup_with4_before_vid" col t_elem e_none e_some
-            ~some_lam_args:["vid", KH.t_vid; id, t_elem]
-          else None);
 
         normal]
 
@@ -1043,7 +1030,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
         | Map ->
             let lambda, col = U.decompose_map e in
             apply_method c ~name:"ext" ~col ~args:[lambda; empty_c]
-              ~arg_info:[[0], false; [], false]
+              ~arg_info:[[0], false; def_a]
         | _   -> failwith "Unhandled Flatten without map"
         end
 
@@ -1051,14 +1038,14 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
     let name = if is_vmap col then "fold_all" else "fold" in
     (* find out if our accumulator is a collection type *)
     apply_method c ~name ~col ~args:[lambda; acc]
-      ~arg_info:[[1], false; [], false]
+      ~arg_info:[[1], false; def_a]
 
   | AggregateV ->
     let lambda, acc, col = U.decompose_aggregatev expr in
     let normal () =
       let in_recs = if vid_in_arg then [1;2] else [2] in
       some @@ apply_method c ~name:"fold_all" ~col ~args:[lambda; acc]
-        ~arg_info:[in_recs, false; [], false]
+        ~arg_info:[in_recs, false; def_a]
     in
     (* handle a case of fold_all(slice(...)) *)
     let handle_slice () =
@@ -1085,10 +1072,10 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
 
         let args, arg_info =
           if as_fold then
-            [vid; lambda; acc], [[], false; [2], false; [], false]
+            [vid; lambda; acc], [def_a; [2], false; def_a]
           else
             [vid; light_type c pat; lambda; acc],
-            [[], false; [], true; [2], false; [], false] in
+            [def_a; [], true; [2], false; def_a] in
         some @@ apply_method c ~name ~col:col' ~args ~arg_info
     in
     try_matching [
@@ -1099,7 +1086,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
   | GroupByAggregate -> let lam1, lam2, acc, col = U.decompose_gbagg expr in
     (* find out if our accumulator is a collection type *)
     apply_method c ~name:"groupBy" ~col ~args:[lam1; lam2; acc]
-      ~arg_info:[[0], false; [1], false; [], false]
+      ~arg_info:[[0], false; [1], false; def_a]
 
   | Sort -> let lambda, col = U.decompose_sort expr in
     apply_method c ~name:"sort" ~col ~args:[lambda] ~arg_info:[[0; 1], false]
@@ -1108,17 +1095,29 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
   | Size -> let col = U.decompose_size expr in
     let name = if is_vmap col then "total_size" else "size" in
     apply_method c ~name ~col ~args:[light_type c KH.mk_cunit]
-      ~arg_info:[[], false]
+      ~arg_info:[def_a]
 
-    (* peekvid should never be encountered directly. There's no analog in k3new *)
-  | PeekVid -> error ()
+  | PeekWithVid ->
+      try_matching [
+        (fun () ->
+          let col, lam_none, lam_some = U.decompose_peek_with_vid expr in
+          let col, pat = U.decompose_slice_frontier col in
+          let name = "lookup_with4_before_vid" in
+          if not (D.is_lookup_pat pat) then None else
+          let pat = lookup_pat_of_slice ~col pat in
+          let vid = hd pat in
+          let pat = light_type c @@ KH.mk_tuple @@ tl pat in
+          let args = [vid; pat; lam_none; lam_some] in
+          let arg_info = [def_a; def_a; def_a; [1], false] in
+          some @@ apply_method c ~name ~col ~args ~arg_info);
+      ]
 
   | Peek -> let col = U.decompose_peek expr in
     (* normal peek applications *)
     let normal () =
       let name = if is_vmap col then "peek_now" else "peek" in
       lazy_paren @@ apply_method c ~name ~col
-      ~args:[light_type c @@ KH.mk_cunit] ~arg_info:[[], false] in
+      ~args:[light_type c @@ KH.mk_cunit] ~arg_info:[def_a] in
 
     (* to handle the case where we have a full slice over a vmap, we need to look ahead *)
     let tag = U.tag_of_expr col in
@@ -1132,8 +1131,8 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
         (* create a default value for the last member of the slice *)
         let pat = lookup_pat_of_slice ~col pat in
         let args, arg_info =
-          if vmap then [hd pat; light_type c @@ KH.mk_tuple @@ tl pat], [vid_out_arg; [], false]
-          else [light_type c @@ KH.mk_tuple pat], [[], false] in
+          if vmap then [hd pat; light_type c @@ KH.mk_tuple @@ tl pat], [vid_out_arg; def_a]
+          else [light_type c @@ KH.mk_tuple pat], [def_a] in
         apply_method c ~name ~col ~args ~arg_info
       else normal ()
     in

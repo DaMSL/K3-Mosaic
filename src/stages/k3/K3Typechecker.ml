@@ -94,7 +94,7 @@ let check_tag_arity tag children =
     | Delete  -> 2
     | DeletePrefix -> 2
     | Peek      -> 1
-    | PeekVid   -> 1
+    | PeekWithVid -> 3
 
     | Assign -> 2
     | Indirect -> 1
@@ -585,12 +585,23 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
             try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') in
           wrap_tmaybe telem
 
-      | PeekVid ->
-          let tcol' = bind 0 in
+      | PeekWithVid ->
+          let tcol', tlam_none, tlam_some = bind 0, bind 1, bind 2 in
           let tcol, telem =
             try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') in
-          if not (is_tvmap tcol) then t_erroru (TMismatch(tcol', wrap_tvmap telem, "collection type")) else
-          wrap_tmaybe @@ wrap_ttuple @@ t_vid :: unwrap_ttuple telem
+          let tn_arg, tn_ret =
+            try unwrap_tfun tlam_none with Failure _ -> t_erroru (not_function tlam_none) in
+          let ts_arg, ts_ret =
+            try unwrap_tfun tlam_some with Failure _ -> t_erroru (not_function tlam_some) in
+          if not (is_tvmap tcol) then
+            t_erroru (TMismatch(tcol', wrap_tvmap telem, "collection type")) else
+          if not (tn_ret === ts_ret) then
+            t_erroru (TMismatch(tn_ret, ts_ret, "function return types")) else
+          if not (list_forall2 (<~) tn_arg [t_unit]) then
+            t_erroru (TMismatch(wrap_ttuple tn_arg, t_unit, "none lambda")) else
+          if not (list_forall2 (<~) ts_arg [t_vid; telem]) then
+            t_erroru (TMismatch(wrap_ttuple [t_vid; telem], wrap_ttuple ts_arg, "some lambda")) else
+          tn_ret
 
       | Assign ->
           let tl, tr = bind 0, bind 1 in

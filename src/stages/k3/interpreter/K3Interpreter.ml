@@ -447,7 +447,14 @@ and eval_expr (address:address) sched_st cenv texpr =
 
     | Peek, [c] -> nenv, temp @@ VOption(v_peek error c)
 
-    | PeekVid, [c] -> nenv, temp @@ VOption(v_peek ~vid:true error c)
+    | PeekWithVid, [c; lam_none; lam_some] ->
+        begin match v_peek ~vid:true error c with
+          | Some(VTuple(t::xs)) ->
+              eval_fn lam_some address sched_st nenv [t; VTuple xs]
+          | None ->
+              eval_fn lam_none address sched_st nenv [VUnit]
+          | _ -> error name "peekwithvid: bad value"
+        end
 
     (* Messaging *)
     | Send, [target; addr; arg] ->

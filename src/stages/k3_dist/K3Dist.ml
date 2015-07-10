@@ -244,7 +244,7 @@ let pat_of_flat_t ~add_vid ?(has_vid=false) ds flat =
 (* we can either assume that we're in a loop named after ds.e or work off of
  * an expression *)
 let pat_of_ds
-  ?(flatten=false) ?(vid_nm="vid") ?expr ?(drop_vid=false) ?(peek_vid=false)
+  ?(flatten=false) ?(vid_nm="vid") ?expr ?(drop_vid=false)
   ds =
   let add_vid l =
     if ds.vid && not drop_vid then (mk_var vid_nm, t_vid)::l
@@ -268,12 +268,7 @@ let pat_of_ds
     in
     if drop_vid then tl e else e
   else
-    (* adjust ds_ee and ds_e for peek_vid, which returns the vid *)
-    let ds_ee, ds_e =
-      if peek_vid then ["vid", t_vid]::ds.ee, ( "vid", t_vid )::ds.e
-      else ds.ee, ds.e
-    in
-    let e = insert_index_fst ds_e in
+    let e = insert_index_fst ds.e in
     let l =
       List.flatten @@
         List.map2 (fun (j, (id,t)) idts ->
@@ -288,10 +283,9 @@ let pat_of_ds
               let access = maybe (mk_var id) (fun e -> mk_subscript (j+1) e) expr in
               mk_subscript (i+1) @@ access, t
             ) idts
-        ) e ds_ee
+        ) e ds.ee
     in
-    if flatten then
-      if not peek_vid then add_vid l else l
+    if flatten then add_vid l
     else
       let e, t = list_unzip l in
       let e = pat_of_flat_e ~vid_nm ~add_vid:(not drop_vid) ds e in

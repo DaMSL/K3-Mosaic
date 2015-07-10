@@ -133,7 +133,7 @@
 %token AGGREGATE AGGREGATEV GROUPBYAGGREGATE
 %token SORT RANK SIZE
 
-%token PEEK PEEK_VID
+%token PEEK PEEK_WITH_VID
 
 %token IF THEN ELSE LET IN
 
@@ -627,7 +627,7 @@ access :
     | anno_expr LBRACKET tuple RBRACKET { mkexpr Slice [$1; $3] }
     | anno_expr LBRACE tuple RBRACE { mkexpr SliceFrontier [$1; $3] }
     | PEEK LPAREN anno_expr RPAREN { mkexpr Peek [$3] }
-    | PEEK_VID LPAREN anno_expr RPAREN { mkexpr PeekVid [$3] }
+    | PEEK_WITH_VID LPAREN anno_expr COMMA anno_expr COMMA anno_expr RPAREN { mkexpr PeekWithVid [$3; $5; $7] }
 ;
 
 mutation :

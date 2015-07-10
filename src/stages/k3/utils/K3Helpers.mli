@@ -155,7 +155,7 @@ val mk_size : expr_t -> expr_t
 val mk_subscript : int -> expr_t -> expr_t
 
 val mk_peek : expr_t -> expr_t
-val mk_peek_vid : expr_t -> expr_t
+val mk_peek_with_vid : expr_t -> expr_t -> expr_t -> expr_t
 (* avoid having to use a mk_var *)
 val mk_peek' : id_t -> expr_t
 val mk_slice : expr_t -> expr_t list -> expr_t

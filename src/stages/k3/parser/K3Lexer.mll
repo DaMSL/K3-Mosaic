@@ -162,7 +162,7 @@ rule tokenize = parse
     | "csize"     { SIZE }
 
     | "peek" { PEEK }
-    | "peek_vid" { PEEK_VID }
+    | "peek_with_vid" { PEEK_WITH_VID }
 
     | "if"   { IF }
     | "then" { THEN }
