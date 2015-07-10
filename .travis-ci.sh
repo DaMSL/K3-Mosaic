@@ -1,4 +1,3 @@
-
 echo OCaml version
 ocaml -version
 
