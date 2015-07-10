@@ -116,6 +116,7 @@ type expr_tag_t
     | Sort
 
     | Peek
+    | PeekVid       (* retain the vid for a vmap *)
     | Slice
     | SliceFrontier  (* slice with a frontier at a vid *)
     | Insert

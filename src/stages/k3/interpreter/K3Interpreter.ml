@@ -447,6 +447,8 @@ and eval_expr (address:address) sched_st cenv texpr =
 
     | Peek, [c] -> nenv, temp @@ VOption(v_peek error c)
 
+    | PeekVid, [c] -> nenv, temp @@ VOption(v_peek ~vid:true error c)
+
     (* Messaging *)
     | Send, [target; addr; arg] ->
       begin match sched_st with

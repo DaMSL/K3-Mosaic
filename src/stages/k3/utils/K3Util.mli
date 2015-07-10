@@ -66,6 +66,7 @@ val decompose_mult : expr_t -> expr_t * expr_t
 val decompose_neg : expr_t -> expr_t
 val decompose_neq : expr_t -> expr_t * expr_t
 val decompose_peek : expr_t -> expr_t
+val decompose_peek_vid : expr_t -> expr_t
 val decompose_range : expr_t -> expr_t * expr_t * expr_t
 val decompose_send : expr_t -> expr_t * expr_t * (expr_t list)
 val decompose_singleton : expr_t -> expr_t

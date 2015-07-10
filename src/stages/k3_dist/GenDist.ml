@@ -631,7 +631,7 @@ let nd_send_push_stmt_map_trig c s_rhs_lhs trig_name =
       let slice_key = P.slice_key_from_bound c.p stmt_id rhs_map_id in
       let map_delta = D.map_ds_of_id c rhs_map_id ~global:false in
       let map_real  = D.map_ds_of_id c rhs_map_id ~global:true in
-      let map_pat = D.pat_of_ds map_real ~flatten:true ~expr:(mk_var "tuple") in
+      let map_pat = D.pat_of_ds map_real ~peek_vid:true ~flatten:true ~expr:(mk_var "tuple") in
       (* a pattern mapping real map with delta vars *)
       acc_code @
       [mk_code_sink'
@@ -661,7 +661,7 @@ let nd_send_push_stmt_map_trig c s_rhs_lhs trig_name =
                   let slice_key =
                     mk_var "vid"::[mk_tuple @@ list_drop_end 1 slice_key]@[mk_cunknown] in
                   [mk_case_ns
-                    (mk_peek @@
+                    (mk_peek_vid @@
                       mk_slice_frontier (mk_var rhsm_deref) slice_key) "tuple"
                     (mk_empty map_delta.t) @@
                     mk_singleton map_delta.t @@ fst_many map_pat]

@@ -308,6 +308,8 @@ let mk_update_suffix col key lambda =
 
 let mk_peek col = mk_stree Peek [col]
 
+let mk_peek_vid col = mk_stree PeekVid [col]
+
 let mk_peek' col = mk_peek (mk_var col)
 
 (* handle the common case of updating a peek on a slice *)

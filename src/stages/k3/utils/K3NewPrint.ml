@@ -964,6 +964,18 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
               Some(apply_method c ~name:"peek_with" ~col ~args ~arg_info));
           ]);
 
+        (* peek_vid is used to preserve the vid when important *)
+        (* case (peek_vid (slice_frontier ())) -> lookup_with4_before_vid *)
+        (fun () ->
+          let col = U.decompose_peek_vid e1 in
+          let col_t, t_elem = KH.unwrap_tcol @@ T.type_of_expr col in
+          if is_vmap col &&
+          D.is_lookup_pat (snd (U.decompose_slice_frontier col)) then
+          handle_lookup_with c ~vmap:true ~id
+            ~decomp_fn:U.decompose_slice_frontier
+            "lookup_with4_before_vid" col t_elem e_none e_some
+          else None);
+
         normal]
 
   | BindAs _ -> let bind, id, r = U.decompose_bind expr in
@@ -1090,6 +1102,9 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
     let name = if is_vmap col then "total_size" else "size" in
     apply_method c ~name ~col ~args:[light_type c KH.mk_cunit]
       ~arg_info:[[], false]
+
+    (* peekvid should never be encountered directly. There's no analog in k3new *)
+  | PeekVid -> error ()
 
   | Peek -> let col = U.decompose_peek expr in
     (* normal peek applications *)

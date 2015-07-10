@@ -115,6 +115,7 @@ let string_of_tag_type = function
     | Delete           -> "Delete"
     | DeletePrefix     -> "DeletePrefix"
     | Peek             -> "Peek"
+    | PeekVid          -> "PeekVid"
 
     | Indirect         -> "Indirect"
     | Assign           -> "Assign"

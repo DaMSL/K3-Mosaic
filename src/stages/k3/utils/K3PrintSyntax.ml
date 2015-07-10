@@ -333,6 +333,8 @@ let rec lazy_expr c expr =
     paren_l te (lazy_expr c te) <| lps "." <| lps "[" <| lps (soi i) <| lps "]"
   | Peek -> let col = U.decompose_peek expr in
     lps "peek" <| lazy_paren @@ lazy_expr c col
+  | PeekVid -> let col = U.decompose_peek_vid expr in
+    lps "peek_vid" <| lazy_paren @@ lazy_expr c col
   | Slice -> let col, pat = U.decompose_slice expr in
     wrap_if_var col (lazy_expr c col) <| lazy_bracket @@ tuple_no_paren c pat
   | SliceFrontier -> let col, pat = U.decompose_slice_frontier expr in

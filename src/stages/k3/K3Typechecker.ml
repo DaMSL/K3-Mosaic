@@ -94,6 +94,7 @@ let check_tag_arity tag children =
     | Delete  -> 2
     | DeletePrefix -> 2
     | Peek      -> 1
+    | PeekVid   -> 1
 
     | Assign -> 2
     | Indirect -> 1
@@ -583,6 +584,13 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
           let tcol, telem =
             try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') in
           wrap_tmaybe telem
+
+      | PeekVid ->
+          let tcol' = bind 0 in
+          let tcol, telem =
+            try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') in
+          if not (is_tvmap tcol) then t_erroru (TMismatch(tcol', wrap_tvmap telem, "collection type")) else
+          wrap_tmaybe @@ wrap_ttuple @@ t_vid :: unwrap_ttuple telem
 
       | Assign ->
           let tl, tr = bind 0, bind 1 in

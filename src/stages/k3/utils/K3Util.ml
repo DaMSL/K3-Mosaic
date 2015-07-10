@@ -142,6 +142,8 @@ let decompose_neq e = match tag_of_expr e, sub_tree e with
   Neq, [e0; e1] -> e0, e1 | _ -> failwith "not a Neq"
 let decompose_peek e = match tag_of_expr e, sub_tree e with
   Peek, [e0] -> e0 | _ -> failwith "not a Peek"
+let decompose_peek_vid e = match tag_of_expr e, sub_tree e with
+  PeekVid, [e0] -> e0 | _ -> failwith "not a PeekVid"
 let decompose_range e = match tag_of_expr e, sub_tree e with
   Range _, [e0; e1; e2] -> e0, e1, e2 | _ -> failwith "not a Range"
 let decompose_send e =
