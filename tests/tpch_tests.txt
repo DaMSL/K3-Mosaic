@@ -5,8 +5,6 @@ queries/tpch/query4.sql
 queries/tpch/query5.sql
 queries/tpch/query6.sql
 queries/tpch/query7.sql
-queries/tpch/query8.sql
-queries/tpch/query9.sql
 queries/tpch/query10.sql
 queries/tpch/query11.sql
 queries/tpch/query12.sql
