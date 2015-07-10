@@ -110,7 +110,7 @@
 %token LPAREN RPAREN COMMA SEMICOLON PERIOD
 
 %token LBRACE RBRACE LBRACEBAR RBRACEBAR LBRACKET RBRACKET
-%token LBRACKETBAR RBRACKETBAR BAR LBRACKETCOLON RBRACKETCOLON LBRACKETLT RBRACKETLT
+%token LBRACKETBAR RBRACKETBAR BAR LBRACKETCOLON RBRACKETCOLON LBRACECOLON RBRACECOLON LBRACKETLT RBRACKETLT
 
 %token NEG PLUS MINUS TIMES DIVIDE MODULO HASH
 
@@ -366,6 +366,8 @@ collection_type :
     | LBRACEBAR type_expr_tuple RBRACEBAR { TCollection(TBag, $2) }
     | LBRACKETCOLON type_expr RBRACKETCOLON { TCollection(TMap, $2) }
     | LBRACKETCOLON type_expr_tuple RBRACKETCOLON { TCollection(TMap, $2) }
+    | LBRACECOLON type_expr RBRACECOLON { TCollection(TOrdMap, $2) }
+    | LBRACECOLON type_expr_tuple RBRACECOLON { TCollection(TOrdMap, $2) }
     | LBRACKETLT type_expr BAR int_list_list RBRACKETLT { TCollection(TVMap(Some(intsetset_of_list $4)), $2) }
     | LBRACKETLT type_expr_tuple BAR int_list_list RBRACKETLT { TCollection(TVMap(Some(intsetset_of_list $4)), $2) }
     | LBRACKETLT type_expr RBRACKETLT { TCollection(TVMap None, $2) }
@@ -504,18 +506,21 @@ collection :
     | LBRACKETBAR RBRACKETBAR COLON type_expr     { build_collection [] $4 }
     | LBRACKET RBRACKET COLON type_expr           { build_collection [] $4 }
     | LBRACKETCOLON RBRACKETCOLON COLON type_expr { build_collection [] $4 }
+    | LBRACECOLON RBRACECOLON COLON type_expr     { build_collection [] $4 }
     | LBRACKETLT RBRACKETLT COLON type_expr       { build_collection [] $4 }
 
     | LBRACE RBRACE error       { print_error "missing type for empty set"}
     | LBRACEBAR RBRACEBAR error { print_error "missing type for empty bag"}
     | LBRACKET RBRACKET error   { print_error "missing type for empty list"}
     | LBRACKETCOLON RBRACKETCOLON error   { print_error "missing type for empty map"}
+    | LBRACECOLON RBRACECOLON error   { print_error "missing type for empty ordmap"}
     | LBRACKETLT RBRACKETLT error   { print_error "missing type for empty vmap"}
 
     | LBRACE expr_seq RBRACE                       { build_collection $2 (mk_unknown_collection TSet) }
     | LBRACEBAR expr_seq RBRACEBAR                 { build_collection $2 (mk_unknown_collection TBag) }
     | LBRACKET expr_seq RBRACKET                   { build_collection $2 (mk_unknown_collection TList) }
     | LBRACKETCOLON expr_seq RBRACKETCOLON         { build_collection $2 (mk_unknown_collection TMap) }
+    | LBRACECOLON expr_seq RBRACECOLON             { build_collection $2 (mk_unknown_collection TOrdMap) }
     | LBRACKETLT expr_seq BAR int_list_list RBRACKETLT { build_collection $2 (mk_unknown_collection (TVMap(Some(intsetset_of_list $4)))) }
     | LBRACKETLT expr_seq RBRACKETLT               { build_collection $2 (mk_unknown_collection (TVMap None)) }
 ;

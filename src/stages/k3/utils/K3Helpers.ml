@@ -64,6 +64,12 @@ let wrap_tmap' = function
   | [k; v] -> wrap_tmap @@ wrap_ttuple [k; v]
   | _      -> failwith "wrap_tmap': wrong number of arguments"
 
+(* wrap a type in a map *)
+let wrap_tordmap t = wrap_tcol TOrdMap t
+let wrap_tordmap' = function
+  | [k; v] -> wrap_tordmap @@ wrap_ttuple [k; v]
+  | _      -> failwith "wrap_tordmap': wrong number of arguments"
+
 (* wrap a type in a vmap *)
 let wrap_tvmap ?idx typ = wrap_tcol (TVMap idx) typ
 let wrap_tvmap' ?idx tl = wrap_tvmap ?idx @@ wrap_ttuple tl

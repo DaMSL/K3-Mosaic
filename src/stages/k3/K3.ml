@@ -21,6 +21,7 @@ type container_type_t
     | TBag
     | TList
     | TMap
+    | TOrdMap
     | TVMap of IntSetSet.t option
 
 type base_type_t
