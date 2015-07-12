@@ -91,6 +91,8 @@ let decompose_apply e = match tag_of_expr e, sub_tree e with
   Apply, (e0::el) -> (e0, el) | _ -> failwith "not Apply"
 let decompose_assign e = match tag_of_expr e, sub_tree e with
   Assign, [x; e0] -> x, e0 | _ -> failwith "not Assign"
+let decompose_at_with e = match tag_of_expr e, sub_tree e with
+  AtWith, [e0; e1; e2; e3] -> e0, e1, e2, e3 | _ -> failwith "not AtWith"
 let decompose_block e = match tag_of_expr e with
   Block -> sub_tree e | _ -> failwith "not a Block"
 let decompose_caseof e = match tag_of_expr e, sub_tree e with
@@ -134,6 +136,8 @@ let decompose_lt e = match tag_of_expr e, sub_tree e with
   Lt, [e0; e1] -> e0, e1 | _ -> failwith "not a Lt"
 let decompose_map e = match tag_of_expr e, sub_tree e with
   Map, [e0; e1] -> e0, e1 | _ -> failwith "not a Map"
+let decompose_min_with e = match tag_of_expr e, sub_tree e with
+  MinWith, [e0; e1; e2] -> e0, e1, e2 | _ -> failwith "not MinWith"
 let decompose_mult e = match tag_of_expr e, sub_tree e with
   Mult, [e0; e1] -> e0, e1 | _ -> failwith "not a Mult"
 let decompose_neg e = match tag_of_expr e, sub_tree e with

@@ -90,6 +90,7 @@ and ValueComp : (sig val compare_v : Value.value_t -> Value.value_t -> int
       | VSet v, VSet v' -> ValueSet.compare v v'
       | VBag v, VBag v' -> ValueBag.compare v v'
       | VList v, VList v' -> IList.compare compare_v v v'
+      | VVector v, VVector v' -> IList.compare compare_v v v'
       | VMap v, VMap v' -> ValueMap.compare compare_v v v'
       | VVMap v, VVMap v' -> ValueVMap.compare compare_v v v'
       | VIndirect v, VIndirect v' -> compare_v !v !v'
@@ -121,6 +122,7 @@ and ValueComp : (sig val compare_v : Value.value_t -> Value.value_t -> int
       | VSet v          -> col_hash ValueSet.fold v
       | VBag v          -> col_hash ValueBag.fold v
       | VList v         -> col_hash IList.fold v
+      | VVector v       -> col_hash IList.fold v
       | VMap v          -> map_hash ValueMap.fold v
       | VVMap v         -> vmap_hash ValueVMap.fold v
       (* floats need to be hashed in a way that won't make them impossible to distinguish *)
@@ -168,6 +170,7 @@ and Value : sig
       | VSet of ValueSet.t
       | VBag of ValueBag.t
       | VList of value_t IList.t
+      | VVector of value_t IList.t
       | VMap of value_t ValueMap.t
       | VSortedMap of value_t ValueMap.t
       | VVMap of value_t ValueVMap.t
@@ -193,6 +196,7 @@ and ValueUtils : (sig val v_to_list : Value.value_t -> Value.value_t list
       | VBag m  -> ValueBag.to_list m
       | VSet m  -> ValueSet.to_list m
       | VList m -> IList.to_list m
+      | VVector m -> IList.to_list m
       | VMap m | VSortedMap m -> List.map map_to_tuple @@ ValueMap.to_list m
       | VVMap m -> List.map vmap_to_tuple @@ ValueVMap.to_list m
       | _ -> failwith "(v_to_list): not a collection"
@@ -212,6 +216,7 @@ and ValueUtils : (sig val v_to_list : Value.value_t -> Value.value_t list
       | VSet _             -> "VSet"
       | VBag _             -> "VBag"
       | VList _            -> "VList"
+      | VVector _            -> "VVector"
       | VMap _             -> "VMap"
       | VSortedMap _       -> "VSortedMap"
       | VVMap _            -> "VVMap"
@@ -236,7 +241,7 @@ and ValueUtils : (sig val v_to_list : Value.value_t -> Value.value_t list
       | VTuple vs               -> paren @@ String.concat ", " @@ List.map repr_of_value vs
       | VOption None            -> paren "None"
       | VOption(Some x)         -> paren @@ repr_of_value x
-      | VSet _ | VBag _ | VList _ | VMap _ | VVMap _ | VSortedMap _
+      | VSet _ | VBag _ | VList _ | VVector _ | VMap _ | VVMap _ | VSortedMap _
                                 -> paren @@ s_of_col v
       | VFunction (a, _, b)     -> paren @@ Printf.sprintf "%s -> %s" (string_of_arg a) (string_of_expr b)
       | VForeignFunction (i, a, _) -> paren @@ string_of_arg a
@@ -252,6 +257,7 @@ include ValueUtils
 
 let matching_collections v v' = match v, v' with
   | VList _, VList _
+  | VVector _, VVector _
   | VBag _, VBag _
   | VSet _, VSet _
   | VMap _, VMap _
@@ -327,6 +333,7 @@ let rec print_value ?(mark_points=[]) v =
     | VSet _ as vs            -> print_collection ~sort "{" "}" vs
     | VBag _ as vs            -> print_collection ~sort "{|" "|}" vs
     | VList _ as vs           -> print_collection "[" "]" vs
+    | VVector _ as vs         -> print_collection "[#" "#]" vs
     | VMap _ as vs            -> print_collection ~sort "[:" ":]" vs
     | VSortedMap _ as vs      -> print_collection ~sort "{:" ":}" vs
     | VVMap _ as vs           -> print_collection ~sort "[<" ">]" vs
@@ -365,9 +372,23 @@ let v_peek ?(vid=false) err_fn c = match c with
   | VSet m  -> ValueSet.peek m
   | VBag m  -> ValueBag.peek m
   | VList m -> IList.peek m
+  | VVector m -> IList.peek m
   | VMap m | VSortedMap m -> maybe None (some |- encode_tuple)  @@ ValueMap.peek m
   | VVMap m -> maybe None (fun (t,k,v) -> some @@ if vid then VTuple[t;k;v] else VTuple[k;v]) @@ ValueVMap.peek m
-  | v -> err_fn "v_peek" @@ Printf.sprintf "not a collection: %s" @@ string_of_value v
+  | v -> err_fn "v_peek" @@ Printf.sprintf "not a collection: %s" @@ sov v
+
+let v_at err_fn c idx = match c, idx with
+  | VVector m, VInt i -> begin try some @@ IList.at m i with Not_found -> None end
+  | VVector _, v -> err_fn "v_at" @@ Printf.sprintf "not an integer: %s" @@ sov v
+  | v, _ -> err_fn "v_at" @@ Printf.sprintf "not a vector: %s" @@ sov v
+
+let v_min err_fn c = match c with
+  | VSortedMap m ->
+      begin try
+        let k,v = ValueMap.min_binding m in
+        some @@ VTuple [k;v]
+    with Not_found -> None end
+  | v -> err_fn "v_min" @@ Printf.sprintf "not a sorted data structure: %s" @@ sov v
 
 (* for a map structure *)
 let print_binding_m ?(skip_functions=true) ?(skip_empty=true) id v =
@@ -376,7 +397,7 @@ let print_binding_m ?(skip_functions=true) ?(skip_empty=true) id v =
   let rec check_print v' =
     match v' with
     | (VFunction _ | VForeignFunction _) when skip_functions -> false
-    | (VSet _ | VBag _ | VList _ | VMap _ | VVMap _ | VSortedMap _)
+    | (VSet _ | VBag _ | VList _ | VVector _ | VMap _ | VVMap _ | VSortedMap _)
         when skip_empty && v_peek dummy v' = None -> false
     | VIndirect x -> check_print !x
     | _ -> true
@@ -440,6 +461,7 @@ let v_combine err_fn x y = match x, y with
   | VSet m,  VSet m'          -> VSet(ValueSet.combine m m')
   | VBag m,  VBag m'          -> VBag(ValueBag.combine m m')
   | VList m, VList m'         -> VList(IList.combine m m')
+  | VVector m, VVector m'     -> VVector(IList.combine m m')
   | VMap m,  VMap m'          -> VMap(ValueMap.combine m m')
   | VSortedMap m, VSortedMap m'     -> VSortedMap(ValueMap.combine m m')
   | VVMap m, VVMap m'         -> VVMap(ValueVMap.combine m m')
@@ -449,6 +471,7 @@ let v_fold err_fn f acc = function
   | VSet m      -> ValueSet.fold f acc m
   | VBag m      -> ValueBag.fold f acc m
   | VList m     -> IList.fold f acc m
+  | VVector m   -> IList.fold f acc m
   | VMap m
   | VSortedMap m   -> ValueMap.fold (fun k v acc -> f acc @@ encode_tuple (k,v)) m acc
   | VVMap m     -> ValueVMap.fold (fun _ k v acc -> f acc @@ VTuple[k;v]) m acc
@@ -462,6 +485,7 @@ let v_iter err_fn f = function
   | VSet m      -> ValueSet.iter f m
   | VBag m      -> ValueBag.iter f m
   | VList m     -> IList.iter f m
+  | VVector m   -> IList.iter f m
   | VMap m
   | VSortedMap m   -> ValueMap.iter (fun k v -> f @@ encode_tuple (k,v)) m
   | VVMap m     -> ValueVMap.iter (fun _ k v -> f @@ VTuple[k;v]) m
@@ -475,6 +499,7 @@ let v_insert ?vidkey err_fn x m =
   | _, VSet m              -> VSet(ValueSet.insert x m)
   | _, VBag m              -> VBag(ValueBag.insert x m)
   | _, VList m             -> VList(IList.insert x m)
+  | _, VVector m           -> VVector(IList.insert x m)
   | VTuple[k;v], VMap m    -> VMap(ValueMap.add k v m)
   | VTuple[k;v], VSortedMap m -> VSortedMap(ValueMap.add k v m)
   | VTuple[t;k;v], VVMap m -> VVMap(ValueVMap.add t k v m)
@@ -490,6 +515,7 @@ let v_delete err_fn x m = match x, m with
   | _, VSet m                -> VSet(ValueSet.delete x m)
   | _, VBag m                -> VBag(ValueBag.delete x m)
   | _, VList m               -> VList(IList.delete x m)
+  | _, VVector m             -> VVector(IList.delete x m)
   | VTuple [k; v], VMap m    -> VMap(ValueMap.remove k m)
   | VTuple [k; v], VSortedMap m -> VSortedMap(ValueMap.remove k m)
   | VTuple [t;k;_], VVMap m  -> VVMap(ValueVMap.remove t k m)
@@ -506,6 +532,7 @@ let v_update ?vidkey err_fn oldv newv c =
   | _,_,VSet m                            -> VSet(ValueSet.update oldv newv m)
   | _,_,VBag m                            -> VBag(ValueBag.update oldv newv m)
   | _,_,VList m                           -> VList(IList.update oldv newv m)
+  | _,_,VVector m                         -> VVector(IList.update oldv newv m)
   | VTuple[k;v], VTuple[k';v'], VMap m    -> VMap(ValueMap.update k v k' v' m)
   | VTuple[k;v], VTuple[k';v'], VSortedMap m -> VSortedMap(ValueMap.update k v k' v' m)
   | VTuple[k;v], VTuple[t;k';v'], VVMap m -> VVMap(ValueVMap.update t k v k' v' m)
@@ -538,6 +565,7 @@ let v_empty err_fn ?(no_map=false) ?(no_multimap=false) = function
   | VSet _      -> VSet(ValueSet.empty)
   | VBag _      -> VBag(ValueBag.empty)
   | VList _     -> VList(IList.empty)
+  | VVector _   -> VVector(IList.empty)
   | (VMap _ | VSortedMap _ ) when no_map -> VBag(ValueBag.empty)
   | VMap _      -> VMap(ValueMap.empty)
   | VSortedMap _   -> VSortedMap(ValueMap.empty)
@@ -548,6 +576,7 @@ let v_empty_of_t = function
   | TSet        -> VSet(ValueSet.empty)
   | TBag        -> VBag(ValueBag.empty)
   | TList       -> VList(IList.empty)
+  | TVector     -> VVector(IList.empty)
   | TMap        -> VMap(ValueMap.empty)
   | TSortedMap  -> VSortedMap(ValueMap.empty)
   | TVMap _     -> VVMap(ValueVMap.empty)
@@ -560,6 +589,7 @@ let v_sort err_fn f = function
 let v_size err_fn = function
   | VSet m      -> VInt(ValueSet.size m)
   | VList m     -> VInt(IList.size m)
+  | VVector m   -> VInt(IList.size m)
   | VMap m
   | VSortedMap m   -> VInt(ValueMap.cardinal m)
   | VVMap m     -> VInt(ValueVMap.size m)
@@ -570,6 +600,7 @@ let v_singleton err_fn elem c = match elem, c with
   | _,TSet                 -> VSet(ValueSet.singleton elem)
   | _,TBag                 -> VBag(ValueBag.singleton elem)
   | _,TList                -> VList(IList.singleton elem)
+  | _,TVector              -> VVector(IList.singleton elem)
   | VTuple[k;v], TMap      -> VMap(ValueMap.singleton k v)
   | VTuple[k;v], TSortedMap   -> VSortedMap(ValueMap.singleton k v)
   | VTuple[t;k;v], TVMap _ -> VVMap(ValueVMap.singleton t k v)
@@ -590,6 +621,7 @@ let v_slice err_fn pat = function
   | VSet m         -> VSet(ValueSet.filter (match_pattern pat) m)
   | VBag m         -> VBag(ValueBag.filter (match_pattern pat) m)
   | VList m        -> VList(IList.filter (match_pattern pat) m)
+  | VVector m      -> VVector(IList.filter (match_pattern pat) m)
   | VMap m         -> VMap(ValueMap.filter (fun k v ->
                         match_pattern pat @@ encode_tuple (k,v)) m)
   | VSortedMap m      -> VSortedMap(ValueMap.filter (fun k v ->
@@ -633,6 +665,7 @@ let rec type_of_value uuid value =
   | VBag _             -> wrap_tbag @@ col_get ()
   | VSet _             -> wrap_tset @@ col_get ()
   | VList _            -> wrap_tlist @@ col_get ()
+  | VVector _          -> wrap_tvector @@ col_get ()
   | VMap _             -> wrap_tmap @@ col_get ()
   | VSortedMap _       -> wrap_tsortedmap @@ col_get ()
   | VVMap _            -> wrap_tvmap @@ col_get ()
@@ -659,7 +692,7 @@ let rec expr_of_value uuid value =
   | VOption(None) -> mk_nothing t_unknown
   | VOption(Some v) -> mk_just @@ expr_of_value uuid v
   | VTuple vs -> mk_tuple @@ List.map (expr_of_value uuid) vs
-  | VSet _ | VList _ | VBag _ | VMap _ | VSortedMap _ | VVMap _ -> handle_cols value
+  | VSet _ | VList _ | VVector _ | VBag _ | VMap _ | VSortedMap _ | VVMap _ -> handle_cols value
   | VIndirect ind -> mk_ind @@ expr_of_value uuid !ind
   | VFunction _
   | VForeignFunction _ -> raise @@ RuntimeError (uuid,

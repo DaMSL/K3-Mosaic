@@ -93,6 +93,8 @@ rule tokenize = parse
     | "|}" { RBRACEBAR }
     | '['  { LBRACKET }
     | ']'  { RBRACKET }
+    | "[#"  { LBRACKETHASH }
+    | "#]"  { RBRACKETHASH }
     | "[|"  { LBRACKETBAR }
     | "|]"  { RBRACKETBAR }
     | "[:"  { LBRACKETCOLON }
@@ -163,6 +165,8 @@ rule tokenize = parse
     | "sort"      { SORT }
     | "csize"     { SIZE }
 
+    | "at_with" { AT_WITH }
+    | "min_with" { MIN_WITH }
     | "peek" { PEEK }
     | "peek_with_vid" { PEEK_WITH_VID }
 
