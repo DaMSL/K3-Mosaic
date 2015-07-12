@@ -5,7 +5,7 @@ open Tree
 open K3.AST
 open K3.Annotation
 
-exception MalformedTree
+exception MalformedTree of string
 
 type type_bindings_t = (id_t * type_t) list
 type event_type_bindings_t = (id_t * (id_t * (type_t list)) list) list
