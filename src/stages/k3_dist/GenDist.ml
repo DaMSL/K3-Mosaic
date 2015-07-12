@@ -867,8 +867,11 @@ let send_corrective_fns c =
           mk_var "delta_tuples") @@
       mk_agg
         (mk_assoc_lambda'
-          ["acc_count", t_int] ["stmt_id", t_stmt_id; "vid_list", t_vid_list] @@
-          List.fold_left
+          ["acc_count", t_int] ["stmt_id", t_stmt_id; "vid_set", t_vid_sortedset] @@
+          mk_let ["vid_list"]
+          (mk_agg (mk_lambda2' ["vid_acc", t_vid_list] ["v", t_vid] @@ mk_insert "vid_acc" [mk_var "v"])
+                  (mk_empty t_vid_list) @@ mk_var "vid_set")
+          (List.fold_left
             (* loop over all possible read map matches *)
             (fun acc_code (_, target_stmt) ->
               mk_if (* if match, send data *)
@@ -878,7 +881,7 @@ let send_corrective_fns c =
                   mk_apply' (sub_fn_nm target_stmt) @@ ids_to_vars' sub_args)
                 acc_code)
             (mk_var "acc_count") (* base case *)
-            trigs_stmts_with_matching_rhs_map)
+            trigs_stmts_with_matching_rhs_map))
             (* base number of msgs *)
           (mk_cint 0) @@
           mk_var "corrective_list")

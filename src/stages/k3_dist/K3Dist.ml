@@ -337,6 +337,7 @@ let vid_shift = (+) 1
 let add_vid_idx l = l @ [vid_idx]
 
 let t_vid_list = wrap_tlist t_vid
+let t_vid_sortedset = wrap_tsortedset t_vid
 
 (* global declaration of default vid to put into every map *)
 let g_init_vid =
