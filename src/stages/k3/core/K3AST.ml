@@ -122,7 +122,8 @@ type expr_tag_t
     | Peek
     | PeekWithVid       (* retain the vid for a vmap *)
     | Slice
-    | SliceFrontier  (* slice with a frontier at a vid *)
+    | SliceFrontier  (* slice with a frontier (lower bound) *)
+    | SliceUpperEq     (* slice with an upper bound *)
     | Insert
     | Update
     | UpsertWith     (* insert with a default handler *)

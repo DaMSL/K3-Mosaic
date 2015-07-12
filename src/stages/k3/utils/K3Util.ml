@@ -161,6 +161,8 @@ let decompose_slice e = match tag_of_expr e, sub_tree e with
   Slice, [e0; e1] -> e0, e1 | _ -> failwith "not a Slice"
 let decompose_slice_frontier e = match tag_of_expr e, sub_tree e with
   SliceFrontier, [e0; e1] -> e0, e1 | _ -> failwith "not a SliceFrontier"
+let decompose_slice_upper_eq e = match tag_of_expr e, sub_tree e with
+  SliceUpperEq, [e0; e1] -> e0, e1 | _ -> failwith "not a SliceUpperEq"
 let decompose_sort e = match tag_of_expr e, sub_tree e with
   Sort, [e0; e1] -> e0, e1 | _ -> failwith "not a Sort"
 let decompose_size e = match tag_of_expr e, sub_tree e with

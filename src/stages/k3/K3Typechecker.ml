@@ -87,6 +87,7 @@ let check_tag_arity tag children =
 
     | Slice      -> 2
     | SliceFrontier -> 2
+    | SliceUpperEq -> 2
     | Insert  -> 2
     | Update  -> 3
     | UpsertWith | UpsertWithBefore -> 4
@@ -273,7 +274,7 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
 
   let is_tvmap = function TVMap _ -> true | _ -> false in
   let is_tvector = function TVector -> true | _ -> false in
-  let is_sorted = function TSortedMap -> true | _ -> false in
+  let is_sorted = function TSortedMap | TVMap _ -> true | _ -> false in
 
   let common_ops () =
     let tfun, tcol' = bind 0, bind 1 in
@@ -523,7 +524,15 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
           let tcol', tpat = bind 0, bind 1 in
           let tcol, telem =
             try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') in
-          if not (is_tvmap tcol) then t_erroru (TMismatch(tcol', wrap_tvmap telem, "collection type")) else
+          if not (is_sorted tcol) then t_erroru (TMismatch(tcol', wrap_tvmap telem, "collection type")) else
+          check_vmap_pat tcol telem tpat;
+          tcol'
+
+      | SliceUpperEq ->
+          let tcol', tpat = bind 0, bind 1 in
+          let tcol, telem =
+            try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') in
+          if not (is_sorted tcol) then t_erroru (TMismatch(tcol', wrap_tvmap telem, "collection type")) else
           check_vmap_pat tcol telem tpat;
           tcol'
 
@@ -578,7 +587,7 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
           let tcol', told = bind 0, bind 1 in
           let tcol, telem =
             try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') in
-          if not (is_tvmap tcol) then t_erroru (TMismatch(tcol', wrap_tvmap telem, "collection type")) else
+          if not (is_sorted tcol) then t_erroru (TMismatch(tcol', wrap_tvmap telem, "collection type")) else
           check_vmap_pat tcol telem told;
           t_unit
 

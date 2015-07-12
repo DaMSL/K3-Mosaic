@@ -372,6 +372,9 @@ let is_vmap col = match fst @@ KH.unwrap_tcol @@ T.type_of_expr col with
 let is_map col = match fst @@ KH.unwrap_tcol @@ T.type_of_expr col with
                   | TSortedMap | TMap -> true | _ -> false
 
+let is_sorted_map col = match fst @@ KH.unwrap_tcol @@ T.type_of_expr col with
+                  | TSortedMap -> true | _ -> false
+
 (* We return the pattern breakdown: a list, and a lambda forming the internal structure *)
 let breakdown_pat pat = match U.tag_of_expr pat with
   | Tuple -> U.decompose_tuple pat, id_fn
@@ -922,7 +925,14 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
 
             (* Slice on map and full lookup *)
             (fun () ->
-              if is_map col &&
+              if is_sorted_map col &&
+                D.is_lookup_pat (snd(U.decompose_slice_upper_eq col)) then
+                handle_lookup_with c "upper_bound" ~id col t_elem e_none e_some
+              else None);
+
+            (* Slice on sortedmap with upper_bound *)
+            (fun () ->
+              if is_sorted_map col &&
                 D.is_lookup_pat (snd(U.decompose_slice col)) then
                 handle_lookup_with c "lookup_with4" ~id col t_elem e_none e_some
               else None);
@@ -1149,6 +1159,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
     | TVMap _, Slice           -> handle_lookup ~vmap:true "lookup" col
     | TVMap _, SliceFrontier   -> handle_lookup ~vmap:true ~decomp_fn:U.decompose_slice_frontier "lookup_before" col
     | (TMap | TSortedMap),  Slice -> handle_lookup "lookup" col
+    | TSortedMap,  SliceUpperEq -> handle_lookup "upper_bound" col
     | _                        -> normal ()
     end
 
@@ -1162,6 +1173,9 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
       (* this only works on a vmap, so we can assume we have a vmap *)
       let col, pat = U.decompose_slice_frontier expr in
       filter_of_slice ~frontier:true c col pat
+
+      (* no analog of a direct slice_upper_eq in k3new *)
+  | SliceUpperEq -> error ()
 
   | Slice ->
       let col, pat = U.decompose_slice expr in

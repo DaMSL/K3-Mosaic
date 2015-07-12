@@ -114,9 +114,10 @@ type expr_tag_t
     | AtWith
     | MinWith
     | Peek
-    | PeekWithVid       (* retain the vid for a vmap *)
+    | PeekWithVid    (* retain the vid for a vmap *)
     | Slice
-    | SliceFrontier        (* slice with a frontier for < vid *)
+    | SliceFrontier  (* slice with a frontier for < vid *)
+    | SliceUpperEq     (* slice with an upper bound *)
     | Insert
     | Update
     | UpsertWith    (* update with a default handler *)

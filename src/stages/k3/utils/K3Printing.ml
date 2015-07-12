@@ -109,6 +109,7 @@ let string_of_tag_type = function
 
     | Slice            -> "Slice"
     | SliceFrontier    -> "SliceFrontier"
+    | SliceUpperEq     -> "SliceUpperEq"
     | Insert           -> "Insert"
     | Update           -> "Update"
     | UpdateSuffix     -> "UpdateSuffix"

@@ -110,7 +110,7 @@
 %token LPAREN RPAREN COMMA SEMICOLON PERIOD
 
 %token LBRACE RBRACE LBRACEBAR RBRACEBAR LBRACKET RBRACKET LBRACKETHASH RBRACKETHASH
-%token LBRACKETBAR RBRACKETBAR BAR LBRACKETCOLON RBRACKETCOLON LBRACECOLON RBRACECOLON LBRACKETLT RBRACKETLT
+%token LBRACKETBAR RBRACKETBAR BAR LBRACKETCOLON RBRACKETCOLON LBRACECOLON RBRACECOLON LBRACKETLT RBRACKETLT LBRACKETGEQ
 
 %token NEG PLUS MINUS TIMES DIVIDE MODULO HASH
 
@@ -634,7 +634,8 @@ tuple_index :
 
 access :
     | anno_expr LBRACKET tuple RBRACKET { mkexpr Slice [$1; $3] }
-    | anno_expr LBRACE tuple RBRACE { mkexpr SliceFrontier [$1; $3] }
+    | anno_expr LBRACKETLT tuple RBRACKET { mkexpr SliceFrontier [$1; $3] }
+    | anno_expr LBRACKETGEQ tuple RBRACKET { mkexpr SliceUpperEq [$1; $3] }
     | PEEK LPAREN anno_expr RPAREN { mkexpr Peek [$3] }
     | PEEK_WITH_VID LPAREN anno_expr COMMA anno_expr COMMA anno_expr RPAREN { mkexpr PeekWithVid [$3; $5; $7] }
     | AT_WITH LPAREN anno_expr COMMA anno_expr COMMA anno_expr COMMA anno_expr RPAREN { mkexpr AtWith [$3; $5; $7; $9] }
