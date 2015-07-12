@@ -765,12 +765,14 @@ let send_corrective_fns c =
               (fun trig ->
                 List.map (fun stmt -> trig, stmt) @@ P.stmts_of_t c.p trig) in
     (* turn the ocaml list into a literal k3 list *)
+    let trig_stmt_k3_list_nm = "nd_corr_"^P.map_name_of c.p map_id^"_list" in
     let trig_stmt_k3_list =
-      let types = wrap_tbag' [t_trig_id; t_stmt_id] in
-      k3_container_of_list types @@ List.map
-        (fun (trig, stmt_id) ->
-          mk_tuple [mk_cint (P.trigger_id_for_name c.p trig); mk_cint stmt_id])
-        trigs_stmts_with_matching_rhs_map
+      let t = wrap_tbag' [t_trig_id; t_stmt_id] in
+      mk_global_val_init trig_stmt_k3_list_nm t @@
+        k3_container_of_list t @@ List.map
+          (fun (trig, stmt_id) ->
+            mk_tuple [mk_cint (P.trigger_id_for_name c.p trig); mk_cint stmt_id])
+          trigs_stmts_with_matching_rhs_map
     in
     match trigs_stmts_with_matching_rhs_map with [] -> [] | _ ->
     let map_ds = D.map_ds_of_id ~global:false c map_id ~vid:false in
@@ -793,6 +795,7 @@ let send_corrective_fns c =
               let key = P.partial_key_from_bound c.p target_stmt target_map in
               let shuffle_fn = K3Shuffle.find_shuffle_nm c target_stmt map_id target_map in
 
+              [trig_stmt_k3_list;
               mk_global_fn (sub_fn_nm target_stmt) sub_args
               [t_int] @@ (* return num of sends *)
                 mk_let ["ips_vids"]
@@ -861,7 +864,7 @@ let send_corrective_fns c =
                         mk_add (mk_var "acc_count") @@ mk_cint 1
                       ])
                     (mk_cint 0) @@
-                    mk_var "ips_vids")
+                    mk_var "ips_vids"])
         trigs_stmts_with_matching_rhs_map
     in
     let fn = mk_global_fn fn_nm args
@@ -873,7 +876,7 @@ let send_corrective_fns c =
       (mk_apply'
         nd_filter_corrective_list_nm @@
         (* feed in list of possible stmts *)
-          [mk_var "corrective_vid"; trig_stmt_k3_list]) @@
+          [mk_var "corrective_vid"; mk_var trig_stmt_k3_list_nm]) @@
     (* if corrective list isn't empty, add vid inside delta tuples *)
     mk_is_empty (mk_var "corrective_list")
       ~y:(mk_cint 0)
@@ -904,7 +907,7 @@ let send_corrective_fns c =
           (mk_cint 0) @@
           mk_var "corrective_list")
     in
-    sub_fns @ [fn]
+    (List.flatten sub_fns) @ [fn]
   in
   List.flatten @@ List.map send_correctives @@
     (* combine maps from insert and delete *)
