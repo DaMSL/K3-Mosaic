@@ -509,6 +509,7 @@ collection :
     | LBRACKET RBRACKET COLON type_expr           { build_collection [] $4 }
     | LBRACKETCOLON RBRACKETCOLON COLON type_expr { build_collection [] $4 }
     | LBRACECOLON RBRACECOLON COLON type_expr     { build_collection [] $4 }
+    | LBRACELT RBRACELT COLON type_expr           { build_collection [] $4 }
     | LBRACKETLT RBRACKETLT COLON type_expr       { build_collection [] $4 }
 
     | LBRACE RBRACE error       { print_error "missing type for empty set"}
@@ -518,14 +519,14 @@ collection :
     | LBRACECOLON RBRACECOLON error   { print_error "missing type for empty sortedmap"}
     | LBRACKETLT RBRACKETLT error   { print_error "missing type for empty vmap"}
 
-    | LBRACE expr_seq RBRACE                       { build_collection $2 (mk_unknown_collection TSet) }
-    | LBRACEBAR expr_seq RBRACEBAR                 { build_collection $2 (mk_unknown_collection TBag) }
-    | LBRACKET expr_seq RBRACKET                   { build_collection $2 (mk_unknown_collection TList) }
-    | LBRACKETCOLON expr_seq RBRACKETCOLON         { build_collection $2 (mk_unknown_collection TMap) }
-    | LBRACELT expr_seq RBRACELT                   { build_collection $2 (mk_unknown_collection TSortedMap) }
-    | LBRACECOLON expr_seq RBRACECOLON             { build_collection $2 (mk_unknown_collection TSortedSet) }
+    | LBRACE expr_seq RBRACE                           { build_collection $2 (mk_unknown_collection TSet) }
+    | LBRACEBAR expr_seq RBRACEBAR                     { build_collection $2 (mk_unknown_collection TBag) }
+    | LBRACKET expr_seq RBRACKET                       { build_collection $2 (mk_unknown_collection TList) }
+    | LBRACKETCOLON expr_seq RBRACKETCOLON             { build_collection $2 (mk_unknown_collection TMap) }
+    | LBRACELT expr_seq RBRACELT                       { build_collection $2 (mk_unknown_collection TSortedMap) }
+    | LBRACECOLON expr_seq RBRACECOLON                 { build_collection $2 (mk_unknown_collection TSortedSet) }
     | LBRACKETLT expr_seq BAR int_list_list RBRACKETLT { build_collection $2 (mk_unknown_collection (TVMap(Some(intsetset_of_list $4)))) }
-    | LBRACKETLT expr_seq RBRACKETLT               { build_collection $2 (mk_unknown_collection (TVMap None)) }
+    | LBRACKETLT expr_seq RBRACKETLT                   { build_collection $2 (mk_unknown_collection (TVMap None)) }
 ;
 
 variable :
