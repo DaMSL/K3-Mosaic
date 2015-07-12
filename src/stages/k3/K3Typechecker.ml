@@ -444,7 +444,7 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
           let _ =
             try unwrap_tcol telem with Failure _ -> t_erroru (not_collection telem) in
           begin match tcol with
-          | TMap | TVMap _ -> t_erroru (TBad (tcol'', "can't flatten a Map"))
+          | TMap | TVMap _ | TSortedMap -> t_erroru (TBad (tcol'', "can't flatten a Map"))
           | _ -> telem
           end
 

@@ -79,6 +79,9 @@ let lazy_collection ?(empty=false) _ ct eval = match ct with
     | TVMap(Some s) when not empty ->
         lps "[<" <| eval <| lps " | " <| lps (string_of_int_set_set s) <| lsp () <| lps ">]"
     | TVMap _ -> lps "[<" <| eval <| lps ">]"
+    | TArray  -> lps "[:" <| eval <| lps ":]"
+    | TSortedMap -> lps "[:" <| eval <| lps ":]"
+    | TSortedSet -> lps "[:" <| eval <| lps ":]"
 
 let rec lazy_base_type c ~in_col ?(no_paren=false) ?(paren_complex=false) t =
   let wrap_complex x = if paren_complex then lps "(" <| x <| lps ")" else x in

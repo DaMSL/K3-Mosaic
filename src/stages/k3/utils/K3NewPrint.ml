@@ -167,6 +167,9 @@ and lazy_col c col_t elem_t = match col_t with
   | TMap        -> lps "{ Map }"
   | TVMap None  -> lps "{ MultiIndexVMap }"
   | TVMap(Some ss) -> lazy_multi_index c ss elem_t
+  | TArray      -> lps "{ Map }"
+  | TSortedMap  -> lps "{ OrderedMap }"
+  | TSortedSet  -> lps "{ OrderedSet }"
 
 and lazy_base_type ?(brace=true) ?(mut=false) ?(empty=false) c ~in_col t =
   let wrap_mut f = if mut && not empty then lps "mut " <| f else f in

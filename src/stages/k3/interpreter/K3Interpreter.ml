@@ -309,7 +309,8 @@ and eval_expr (address:address) sched_st cenv texpr =
           | TSet  -> VSet(ValueSet.of_list l)
           | TBag  -> VBag(ValueBag.of_list l)
           | TList -> VList(IList.of_list l)
-          | TVMap _ | TMap -> error name "cannot have map"
+          | TVMap _ | TMap -> error name "range cannot enumerate map"
+          | TArray | TSortedMap | TSortedSet -> error name "unsupported collection type for range"
         in nenv, reval
 
     (* Arithmetic and comparators *)

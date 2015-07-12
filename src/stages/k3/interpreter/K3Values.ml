@@ -553,6 +553,7 @@ let v_empty_of_t = function
   | TList       -> VList(IList.empty)
   | TMap        -> VMap(ValueMap.empty)
   | TVMap _     -> VVMap(ValueVMap.empty)
+  | _           -> failwith "empty: unsupported collection type"
 
 (* sort only applies to list *)
 let v_sort err_fn f = function

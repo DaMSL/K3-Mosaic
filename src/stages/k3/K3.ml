@@ -22,6 +22,9 @@ type container_type_t
     | TList
     | TMap
     | TVMap of IntSetSet.t option
+    | TArray
+    | TSortedMap
+    | TSortedSet
 
 type base_type_t
     = TTop

@@ -68,6 +68,20 @@ let wrap_tmap' = function
 let wrap_tvmap ?idx typ = wrap_tcol (TVMap idx) typ
 let wrap_tvmap' ?idx tl = wrap_tvmap ?idx @@ wrap_ttuple tl
 
+(* wrap a type in an array *)
+let wrap_tarray typ = wrap_tcol TArray typ
+let wrap_tarray' tl = wrap_tarray @@ wrap_ttuple tl
+
+(* wrap a type in an array *)
+let wrap_tsortedset typ = wrap_tcol TSortedSet typ
+let wrap_tsortedset' tl = wrap_tsortedset @@ wrap_ttuple tl
+
+(* wrap a type in a sorted map *)
+let wrap_tsortedmap typ = wrap_tcol TSortedMap typ
+let wrap_tsortedmap' = function
+  | [k; v] -> wrap_tsortedmap @@ wrap_ttuple [k; v]
+  | _      -> failwith "wrap_tsortedmap': wrong number of arguments"
+
 (* wrap a type in a mutable indirection *)
 let wrap_tind t = canonical @@ TIndirect t
 let wrap_tind_mut t = mut @@ wrap_tind t
