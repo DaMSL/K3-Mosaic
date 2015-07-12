@@ -228,7 +228,6 @@ let nd_add_delta_to_buf c map_id =
  * which statements were performed after time x that used a particular map
  * The only reason for this function is that we may have the same stmt
  * needing to execute with different vids
- * Optimization TODO: check also by ranges within the map ie. more fine grain
  *)
 let nd_filter_corrective_list_nm = "nd_filter_corrective_list"
 let nd_filter_corrective_list =
@@ -241,12 +240,7 @@ let nd_filter_corrective_list =
     (mk_lambda2' ["acc", nd_log_master.t] ["_", t_trig_id; "stmt_id", t_stmt_id] @@
       mk_case_sn (mk_lookup' nd_log_master.id [mk_var "stmt_id", mk_empty @@ wrap_tsortedset' [t_vid]]) "vidset"
         (mk_block [
-          mk_insert "acc"
-            (* TODO: this filter should be a direct datastructure operation on the sorted set of vids. *)
-            [mk_filter @@
-              (* get only >= vids *)
-              (mk_lambda' ["vid2", t_vid] @@ mk_geq (mk_var "vid2") @@ mk_var "request_vid") @@
-              mk_var "vidset"];
+          mk_insert "acc" [mk_filter_geq (mk_var "vidset") [mk_var "request_vid"]];
           mk_var "acc"]) @@
         mk_var "acc")
     (mk_empty nd_log_master.t) @@
