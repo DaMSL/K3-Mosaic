@@ -296,7 +296,7 @@ val mk_convert_col : type_t -> type_t -> expr_t -> expr_t
 
 val mk_convert_col' : type_t -> container_type_t -> expr_t -> expr_t
 
-val mk_peek_or_zero : expr_t -> expr_t
+val mk_peek_or_zero : ?zero:expr_t -> expr_t -> expr_t
 
 val mk_peek_or_error : string -> expr_t -> expr_t
 

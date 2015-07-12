@@ -243,9 +243,7 @@ let pat_of_flat_t ~add_vid ?(has_vid=false) ds flat =
 (* create a list of access expressions, types even for deep data structures *)
 (* we can either assume that we're in a loop named after ds.e or work off of
  * an expression *)
-let pat_of_ds
-  ?(flatten=false) ?(vid_nm="vid") ?expr ?(drop_vid=false)
-  ds =
+let pat_of_ds ?(flatten=false) ?(vid_nm="vid") ?expr ?(drop_vid=false) ds =
   let add_vid l =
     if ds.vid && not drop_vid then (mk_var vid_nm, t_vid)::l
     else l
