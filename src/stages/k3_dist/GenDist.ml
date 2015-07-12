@@ -869,7 +869,8 @@ let send_corrective_fns c =
         (mk_assoc_lambda'
           ["acc_count", t_int] ["stmt_id", t_stmt_id; "vid_set", t_vid_sortedset] @@
           mk_let ["vid_list"]
-          (mk_agg (mk_lambda2' ["vid_acc", t_vid_list] ["v", t_vid] @@ mk_insert "vid_acc" [mk_var "v"])
+          (mk_agg (mk_lambda2' ["vid_acc", t_vid_list] ["v", t_vid] @@
+                    mk_block [mk_insert "vid_acc" [mk_var "v"]; mk_var "vid_acc"])
                   (mk_empty t_vid_list) @@ mk_var "vid_set")
           (List.fold_left
             (* loop over all possible read map matches *)
