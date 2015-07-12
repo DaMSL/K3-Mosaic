@@ -563,8 +563,9 @@ let mk_convert_col' src_t dest_col_t col =
   let t_c, t_elem = unwrap_tcol src_t in
   mk_convert_col src_t {src_t with typ=TCollection(dest_col_t, t_elem)} col
 
-let mk_peek_or_zero e = mk_case_ns (mk_peek e) "x"
-  (mk_cint 0) (mk_var "x")
+let mk_peek_or_zero ?(zero=(mk_cint 0)) e =
+  mk_case_ns (mk_peek e) "x"
+    zero (mk_var "x")
 
 let mk_error s = mk_apply' "error" [mk_apply' "print" [mk_cstring s]]
 
