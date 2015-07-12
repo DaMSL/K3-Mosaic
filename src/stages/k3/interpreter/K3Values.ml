@@ -93,7 +93,7 @@ and ValueComp : (sig val compare_v : Value.value_t -> Value.value_t -> int
       | VVector v, VVector v' -> IList.compare compare_v v v'
       | VMap v, VMap v' -> ValueMap.compare compare_v v v'
       | VSortedMap v, VSortedMap v' -> ValueMap.compare compare_v v v'
-      | VSortedSet v, VSortedSet v' -> ValueMap.compare compare_v v v'
+      | VSortedSet v, VSortedSet v' -> ValueSet.compare v v'
       | VVMap v, VVMap v' -> ValueVMap.compare compare_v v v'
       | VIndirect v, VIndirect v' -> compare_v !v !v'
       | VInt v, VInt v' -> v - v'
