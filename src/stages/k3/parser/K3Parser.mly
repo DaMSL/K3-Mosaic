@@ -522,7 +522,8 @@ collection :
     | LBRACEBAR expr_seq RBRACEBAR                 { build_collection $2 (mk_unknown_collection TBag) }
     | LBRACKET expr_seq RBRACKET                   { build_collection $2 (mk_unknown_collection TList) }
     | LBRACKETCOLON expr_seq RBRACKETCOLON         { build_collection $2 (mk_unknown_collection TMap) }
-    | LBRACECOLON expr_seq RBRACECOLON             { build_collection $2 (mk_unknown_collection TSortedMap) }
+    | LBRACELT expr_seq RBRACELT                   { build_collection $2 (mk_unknown_collection TSortedMap) }
+    | LBRACECOLON expr_seq RBRACECOLON             { build_collection $2 (mk_unknown_collection TSortedSet) }
     | LBRACKETLT expr_seq BAR int_list_list RBRACKETLT { build_collection $2 (mk_unknown_collection (TVMap(Some(intsetset_of_list $4)))) }
     | LBRACKETLT expr_seq RBRACKETLT               { build_collection $2 (mk_unknown_collection (TVMap None)) }
 ;
