@@ -42,6 +42,7 @@ val decompose_aggregate : expr_t -> expr_t * expr_t * expr_t
 val decompose_aggregatev : expr_t -> expr_t * expr_t * expr_t
 val decompose_apply : expr_t -> expr_t * expr_t list
 val decompose_assign : expr_t -> expr_t * expr_t
+val decompose_at_with : expr_t -> expr_t * expr_t * expr_t * expr_t
 val decompose_block : expr_t -> expr_t list
 val decompose_combine : expr_t -> expr_t * expr_t
 val decompose_const : expr_t -> constant_t
@@ -62,6 +63,7 @@ val decompose_leq : expr_t -> expr_t * expr_t
 val decompose_let : expr_t -> id_t list * expr_t * expr_t
 val decompose_lt : expr_t -> expr_t * expr_t
 val decompose_map : expr_t -> expr_t * expr_t
+val decompose_min_with : expr_t -> expr_t * expr_t * expr_t
 val decompose_mult : expr_t -> expr_t * expr_t
 val decompose_neg : expr_t -> expr_t
 val decompose_neq : expr_t -> expr_t * expr_t

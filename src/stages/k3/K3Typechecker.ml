@@ -89,6 +89,8 @@ let check_tag_arity tag children =
     | PeekWithVid   -> 3
     | Slice         -> 2
     | SliceFrontier -> 2
+    | AtWith        -> 4
+    | MinWith       -> 3
     | Insert        -> 2
     | Update        -> 3
     | UpsertWith | UpsertWithBefore -> 4
@@ -271,6 +273,8 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
   let bind n = type_of_expr @@ List.nth typed_children n in
 
   let is_tvmap = function TVMap _ -> true | _ -> false in
+  let is_tvector = function TVector -> true | _ -> false in
+  let is_sorted = function TSortedMap -> true | _ -> false in
 
   let common_ops () =
     let tfun, tcol' = bind 0, bind 1 in
@@ -547,6 +551,42 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
           if not (is_tvmap tcol) then t_erroru (TMismatch(tcol', wrap_tvmap telem, "collection type")) else
           check_vmap_pat tcol telem tpat;
           tcol'
+
+      | AtWith ->
+          let tcol', idx, tlam_none, tlam_some = bind 0, bind 1, bind 2, bind 3 in
+          let tcol, telem =
+            try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') in
+          let tn_arg, tn_ret =
+            try unwrap_tfun tlam_none with Failure _ -> t_erroru (not_function tlam_none) in
+          let ts_arg, ts_ret =
+            try unwrap_tfun tlam_some with Failure _ -> t_erroru (not_function tlam_some) in
+          if not (is_tvector tcol) then
+            t_erroru (TMismatch(tcol', wrap_tvector telem, "collection type")) else
+          if not (tn_ret === ts_ret) then
+            t_erroru (TMismatch(tn_ret, ts_ret, "function return types")) else
+          if not (list_forall2 (<~) tn_arg [t_unit]) then
+            t_erroru (TMismatch(wrap_ttuple tn_arg, t_unit, "none lambda")) else
+          if not (list_forall2 (<~) ts_arg [t_vid; telem]) then
+            t_erroru (TMismatch(wrap_ttuple [t_vid; telem], wrap_ttuple ts_arg, "some lambda")) else
+          tn_ret
+
+      | MinWith ->
+          let tcol', tlam_none, tlam_some = bind 0, bind 1, bind 2 in
+          let tcol, telem =
+            try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') in
+          let tn_arg, tn_ret =
+            try unwrap_tfun tlam_none with Failure _ -> t_erroru (not_function tlam_none) in
+          let ts_arg, ts_ret =
+            try unwrap_tfun tlam_some with Failure _ -> t_erroru (not_function tlam_some) in
+          if not (is_sorted tcol) then
+            t_erroru (TBad(tcol', "not a sorted type")) else
+          if not (tn_ret === ts_ret) then
+            t_erroru (TMismatch(tn_ret, ts_ret, "function return types")) else
+          if not (list_forall2 (<~) tn_arg [t_unit]) then
+            t_erroru (TMismatch(wrap_ttuple tn_arg, t_unit, "none lambda")) else
+          if not (list_forall2 (<~) ts_arg [t_vid; telem]) then
+            t_erroru (TMismatch(wrap_ttuple [t_vid; telem], wrap_ttuple ts_arg, "some lambda")) else
+          tn_ret
 
       | Insert ->
           let tcol', telem' = bind 0, bind 1 in

@@ -39,13 +39,14 @@ val start_vid_k3 : expr_t
 val mut : type_t -> type_t
 val immut : type_t -> type_t
 
-
 (* wrap in a specific type *)
 val wrap_ttuple : type_t list -> type_t
 val wrap_ttuple_mut : type_t list -> type_t
 val wrap_tlist : type_t -> type_t
 (* a version that wraps in a tuple if necessary *)
 val wrap_tlist' : type_t list -> type_t
+val wrap_tvector : type_t -> type_t
+val wrap_tvector' : type_t list -> type_t
 val wrap_tset : type_t -> type_t
 val wrap_tset' : type_t list -> type_t
 val wrap_tbag : type_t -> type_t
@@ -160,7 +161,9 @@ val mk_subscript : int -> expr_t -> expr_t
 
 val mk_peek : expr_t -> expr_t
 val mk_peek_with_vid : expr_t -> expr_t -> expr_t -> expr_t
-(* avoid having to use a mk_var *)
+val mk_at_with : expr_t -> expr_t -> expr_t -> expr_t -> expr_t
+val mk_min_with : expr_t -> expr_t -> expr_t -> expr_t
+
 val mk_peek' : id_t -> expr_t
 val mk_slice : expr_t -> expr_t list -> expr_t
 val mk_slice' : id_t -> expr_t list -> expr_t

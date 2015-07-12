@@ -109,8 +109,8 @@
 
 %token LPAREN RPAREN COMMA SEMICOLON PERIOD
 
-%token LBRACE RBRACE LBRACEBAR RBRACEBAR LBRACKET RBRACKET
-%token LBRACKETBAR RBRACKETBAR BAR LBRACKETCOLON RBRACKETCOLON LBRACECOLON RBRACECOLON LBRACKETLT RBRACKETLT LBRACELT RBRACELT
+%token LBRACE RBRACE LBRACKET RBRACKET
+%token BAR LBRACKETBAR RBRACKETBAR LBRACKETCOLON RBRACKETCOLON LBRACKETLT RBRACKETLT LBRACKETHASH RBRACKETHASH LBRACEBAR RBRACEBAR LBRACECOLON RBRACECOLON LBRACELT RBRACELT
 
 %token NEG PLUS MINUS TIMES DIVIDE MODULO HASH
 
@@ -133,7 +133,7 @@
 %token AGGREGATE AGGREGATEV GROUPBYAGGREGATE
 %token SORT RANK SIZE
 
-%token PEEK PEEK_WITH_VID
+%token PEEK PEEK_WITH_VID AT_WITH MIN_WITH
 
 %token IF THEN ELSE LET IN
 
@@ -372,6 +372,8 @@ collection_type :
     | LBRACKETLT type_expr_tuple BAR int_list_list RBRACKETLT { TCollection(TVMap(Some(intsetset_of_list $4)), $2) }
     | LBRACKETLT type_expr RBRACKETLT { TCollection(TVMap None, $2) }
     | LBRACKETLT type_expr_tuple RBRACKETLT { TCollection(TVMap None, $2) }
+    | LBRACKETHASH type_expr RBRACKETHASH { TCollection(TVector, $2) }
+    | LBRACKETHASH type_expr_tuple RBRACKETHASH { TCollection(TVector, $2) }
     | LBRACELT type_expr RBRACELT { TCollection(TSortedMap, $2) }
     | LBRACELT type_expr_tuple RBRACELT { TCollection(TSortedMap, $2) }
     | LBRACECOLON type_expr RBRACECOLON { TCollection(TSortedSet, $2) }
@@ -500,6 +502,7 @@ range :
     | LBRACE anno_expr COLON COLON anno_expr COLON COLON anno_expr RBRACE { mkexpr (Range(TSet)) [$2; $5; $8] }
     | LBRACEBAR anno_expr COLON COLON anno_expr COLON COLON anno_expr RBRACEBAR { mkexpr (Range(TBag)) [$2; $5; $8] }
     | LBRACKET anno_expr COLON COLON anno_expr COLON COLON anno_expr RBRACKET { mkexpr (Range(TList)) [$2; $5; $8] }
+    | LBRACKETHASH anno_expr COLON COLON anno_expr COLON COLON anno_expr RBRACKETHASH { mkexpr (Range(TVector)) [$2; $5; $8] }
 ;
 
 collection :
@@ -522,6 +525,7 @@ collection :
     | LBRACE expr_seq RBRACE                           { build_collection $2 (mk_unknown_collection TSet) }
     | LBRACEBAR expr_seq RBRACEBAR                     { build_collection $2 (mk_unknown_collection TBag) }
     | LBRACKET expr_seq RBRACKET                       { build_collection $2 (mk_unknown_collection TList) }
+    | LBRACKETHASH expr_seq RBRACKETHASH               { build_collection $2 (mk_unknown_collection TVector) }
     | LBRACKETCOLON expr_seq RBRACKETCOLON             { build_collection $2 (mk_unknown_collection TMap) }
     | LBRACELT expr_seq RBRACELT                       { build_collection $2 (mk_unknown_collection TSortedMap) }
     | LBRACECOLON expr_seq RBRACECOLON                 { build_collection $2 (mk_unknown_collection TSortedSet) }
@@ -637,6 +641,8 @@ access :
     | anno_expr LBRACE tuple RBRACE { mkexpr SliceFrontier [$1; $3] }
     | PEEK LPAREN anno_expr RPAREN { mkexpr Peek [$3] }
     | PEEK_WITH_VID LPAREN anno_expr COMMA anno_expr COMMA anno_expr RPAREN { mkexpr PeekWithVid [$3; $5; $7] }
+    | AT_WITH LPAREN anno_expr COMMA anno_expr COMMA anno_expr COMMA anno_expr RPAREN { mkexpr AtWith [$3; $5; $7; $9] }
+    | MIN_WITH LPAREN anno_expr COMMA anno_expr COMMA anno_expr RPAREN { mkexpr AtWith [$3; $5; $7] }
 ;
 
 mutation :

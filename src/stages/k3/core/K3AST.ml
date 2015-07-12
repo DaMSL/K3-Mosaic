@@ -31,6 +31,7 @@ type container_type_t
     | TMap
     | TSortedMap
     | TSortedSet
+    | TVector
     | TVMap of IntSetSet.t option (* indices *)
 
 type base_type_t
@@ -117,6 +118,8 @@ type expr_tag_t
     | GroupByAggregate
     | Sort
 
+    | AtWith
+    | MinWith
     | Peek
     | PeekWithVid       (* retain the vid for a vmap *)
     | Slice

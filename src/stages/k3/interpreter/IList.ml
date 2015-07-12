@@ -37,6 +37,8 @@ let update v v' b = list_replace v v' b
 
 let iter2 = List.iter2
 
+let at = List.nth
+
 exception Mismatch of int
 
 let compare f x y =

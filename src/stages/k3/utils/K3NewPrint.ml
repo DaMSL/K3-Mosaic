@@ -164,6 +164,7 @@ and lazy_col c col_t elem_t = match col_t with
   | TSet        -> lps "{ Set }"
   | TBag        -> lps "{ Collection }"
   | TList       -> lps "{ Seq }"
+  | TVector     -> lps "{ Collection }"
   | TMap        -> lps "{ Map }"
   | TVMap None  -> lps "{ MultiIndexVMap }"
   | TVMap(Some ss) -> lazy_multi_index c ss elem_t
@@ -1097,6 +1098,14 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
     let name = if is_vmap col then "total_size" else "size" in
     apply_method c ~name ~col ~args:[light_type c KH.mk_cunit]
       ~arg_info:[def_a]
+
+  | AtWith -> let col, idx, lam_none, lam_some = U.decompose_at_with expr in
+    apply_method c ~name:"at_with" ~col
+      ~args:[idx; lam_none; lam_some] ~arg_info:[def_a; def_a; [0], false]
+
+  | MinWith -> let col, lam_none, lam_some = U.decompose_min_with expr in
+    apply_method c ~name:"min_with" ~col
+      ~args:[lam_none; lam_some] ~arg_info:[def_a; [0], false]
 
   | PeekWithVid ->
       try_matching [

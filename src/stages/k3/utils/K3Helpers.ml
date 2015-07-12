@@ -78,6 +78,13 @@ let wrap_tsortedmap' = function
 let wrap_tsortedset typ = wrap_tcol TSortedSet typ
 let wrap_tsortedset' tl = wrap_tsortedset @@ wrap_ttuple tl
 
+let wrap_tvector t = wrap_tcol TVector t
+let wrap_tvector' t = wrap_tvector (wrap_ttuple t)
+
+(* wrap a type in a vmap *)
+let wrap_tvmap ?idx typ = wrap_tcol (TVMap idx) typ
+let wrap_tvmap' ?idx tl = wrap_tvmap ?idx @@ wrap_ttuple tl
+
 (* wrap a type in a mutable indirection *)
 let wrap_tind t = canonical @@ TIndirect t
 let wrap_tind_mut t = mut @@ wrap_tind t
@@ -273,9 +280,9 @@ let mk_subscript i tuple = mk_stree (Subscript i) [tuple]
 
 let mk_peek col = mk_stree Peek [col]
 
-let mk_peek_with_vid col lam_none lam_some = mk_stree PeekWithVid [col;lam_none;lam_some]
-
 let mk_peek' col = mk_peek (mk_var col)
+
+let mk_peek_with_vid col lam_none lam_some = mk_stree PeekWithVid [col;lam_none;lam_some]
 
 (* generic version of slice used by multiple functions *)
 let mk_slice_gen tag collection pattern =
@@ -300,6 +307,10 @@ let mk_slice_frontier col pat =
 
 let mk_slice_frontier' col pat =
   mk_slice_gen SliceFrontier (mk_var col) @@ mk_tuple pat
+
+let mk_at_with col idx lam_none lam_some = mk_stree AtWith [col; idx; lam_none; lam_some]
+
+let mk_min_with col lam_none lam_some = mk_stree MinWith [col; lam_none; lam_some]
 
 let mk_insert col x = mk_stree Insert [mk_var col; mk_tuple x]
 

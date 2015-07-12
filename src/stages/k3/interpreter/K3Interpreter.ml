@@ -309,6 +309,7 @@ and eval_expr (address:address) sched_st cenv texpr =
           | TSet  -> VSet(ValueSet.of_list l)
           | TBag  -> VBag(ValueBag.of_list l)
           | TList -> VList(IList.of_list l)
+          | TVector -> VVector(IList.of_list l)
           | _ -> error name "range: unsupported type"
         in nenv, reval
 
@@ -454,6 +455,22 @@ and eval_expr (address:address) sched_st cenv texpr =
           | None ->
               eval_fn lam_none address sched_st nenv [VUnit]
           | _ -> error name "peekwithvid: bad value"
+        end
+
+    | AtWith, [c; idx; lam_none; lam_some] ->
+        begin match v_at error c idx with
+          | Some x ->
+              eval_fn lam_some address sched_st nenv [x]
+          | None ->
+              eval_fn lam_none address sched_st nenv [VUnit]
+        end
+
+    | MinWith, [c; lam_none; lam_some] ->
+        begin match v_min error c with
+          | Some x ->
+              eval_fn lam_some address sched_st nenv [x]
+          | None ->
+              eval_fn lam_none address sched_st nenv [VUnit]
         end
 
     (* Messaging *)
