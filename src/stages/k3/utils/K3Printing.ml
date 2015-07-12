@@ -47,7 +47,7 @@ let string_of_container_type t_c = match t_c with
     | TBag          -> "TBag"
     | TList         -> "TList"
     | TMap          -> "TMap"
-    | TOrdMap       -> "TOrdMap"
+    | TSortedMap    -> "TSortedMap"
     | TVMap(Some s) -> "TVMap("^string_of_int_set_set s^")"
     | TVMap None    -> "TVMap"
 

@@ -76,7 +76,7 @@ let lazy_collection ?(empty=false) _ ct eval = match ct with
     | TBag    -> lps "{|" <| eval <| lps "|}"
     | TList   -> lps "[" <| eval <| lps "]"
     | TMap    -> lps "[:" <| eval <| lps ":]"
-    | TOrdMap -> lps "{:" <| eval <| lps ":}"
+    | TSortedMap -> lps "{:" <| eval <| lps ":}"
     | TVMap(Some s) when not empty ->
         lps "[<" <| eval <| lps " | " <| lps (string_of_int_set_set s) <| lsp () <| lps ">]"
     | TVMap _ -> lps "[<" <| eval <| lps ">]"

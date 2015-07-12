@@ -165,7 +165,7 @@ and lazy_col c col_t elem_t = match col_t with
   | TBag        -> lps "{ Collection }"
   | TList       -> lps "{ Seq }"
   | TMap        -> lps "{ Map }"
-  | TOrdMap     -> lps "{ OrderedMap }"
+  | TSortedMap  -> lps "{ SortedMap }"
   | TVMap None  -> lps "{ MultiIndexVMap }"
   | TVMap(Some ss) -> lazy_multi_index c ss elem_t
 
@@ -369,7 +369,7 @@ let is_vmap col = match fst @@ KH.unwrap_tcol @@ T.type_of_expr col with
                   | TVMap _ -> true | _ -> false
 
 let is_map col = match fst @@ KH.unwrap_tcol @@ T.type_of_expr col with
-                  | TOrdMap | TMap -> true | _ -> false
+                  | TSortedMap | TMap -> true | _ -> false
 
 (* We return the pattern breakdown: a list, and a lambda forming the internal structure *)
 let breakdown_pat pat = match U.tag_of_expr pat with
@@ -1139,7 +1139,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
     begin match col_t, tag with
     | TVMap _, Slice           -> handle_lookup ~vmap:true "lookup" col
     | TVMap _, SliceFrontier   -> handle_lookup ~vmap:true ~decomp_fn:U.decompose_slice_frontier "lookup_before" col
-    | (TMap | TOrdMap),  Slice -> handle_lookup "lookup" col
+    | (TMap | TSortedMap),  Slice -> handle_lookup "lookup" col
     | _                        -> normal ()
     end
 

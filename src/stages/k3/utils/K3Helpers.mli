@@ -52,8 +52,8 @@ val wrap_tbag : type_t -> type_t
 val wrap_tbag' : type_t list -> type_t
 val wrap_tmap : type_t -> type_t
 val wrap_tmap' : type_t list -> type_t
-val wrap_tordmap : type_t -> type_t
-val wrap_tordmap' : type_t list -> type_t
+val wrap_tsortedmap : type_t -> type_t
+val wrap_tsortedmap' : type_t list -> type_t
 val wrap_tvmap : ?idx:IntSetSet.t -> type_t -> type_t
 val wrap_tvmap' : ?idx:IntSetSet.t -> type_t list -> type_t
 val wrap_tind : type_t -> type_t
