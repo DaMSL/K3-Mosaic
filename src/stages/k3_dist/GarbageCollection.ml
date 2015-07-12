@@ -144,7 +144,7 @@ let do_gc_fns c =
         let t' = ds.t in
         let ds_ids = fst_many @@ ds_e ds in
         let temp = "temp" in
-        let agg_fn = if ds.id == nd_log_master.id
+        let agg_fn = if ds.id = nd_log_master.id
                      then mk_lambda2' ["acc", ds.t] (ds_e ds) @@
                             mk_block [
                               mk_insert "acc" [mk_var @@ hd ds_ids; mk_filter_geq' vid [mk_var min_vid]];
