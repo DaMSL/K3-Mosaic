@@ -29,7 +29,8 @@ type container_type_t
     | TBag
     | TList
     | TMap
-    | TSortedMap (* ordered map *)
+    | TSortedMap
+    | TSortedSet
     | TVMap of IntSetSet.t option (* indices *)
 
 type base_type_t

@@ -364,16 +364,18 @@ collection_type :
     | LBRACE type_expr_tuple RBRACE { TCollection(TSet, $2) }
     | LBRACEBAR type_expr RBRACEBAR { TCollection(TBag, $2) }
     | LBRACEBAR type_expr_tuple RBRACEBAR { TCollection(TBag, $2) }
+    | LBRACKET type_expr RBRACKET { TCollection(TList, $2) }
+    | LBRACKET type_expr_tuple RBRACKET { TCollection(TList, $2) }
     | LBRACKETCOLON type_expr RBRACKETCOLON { TCollection(TMap, $2) }
     | LBRACKETCOLON type_expr_tuple RBRACKETCOLON { TCollection(TMap, $2) }
-    | LBRACECOLON type_expr RBRACECOLON { TCollection(TSortedMap, $2) }
-    | LBRACECOLON type_expr_tuple RBRACECOLON { TCollection(TSortedMap, $2) }
     | LBRACKETLT type_expr BAR int_list_list RBRACKETLT { TCollection(TVMap(Some(intsetset_of_list $4)), $2) }
     | LBRACKETLT type_expr_tuple BAR int_list_list RBRACKETLT { TCollection(TVMap(Some(intsetset_of_list $4)), $2) }
     | LBRACKETLT type_expr RBRACKETLT { TCollection(TVMap None, $2) }
     | LBRACKETLT type_expr_tuple RBRACKETLT { TCollection(TVMap None, $2) }
-    | LBRACKET type_expr RBRACKET { TCollection(TList, $2) }
-    | LBRACKET type_expr_tuple RBRACKET { TCollection(TList, $2) }
+    | LBRACELT type_expr RBRACELT { TCollection(TSortedMap, $2) }
+    | LBRACELT type_expr_tuple RBRACELT { TCollection(TSortedMap, $2) }
+    | LBRACECOLON type_expr RBRACECOLON { TCollection(TSortedSet, $2) }
+    | LBRACECOLON type_expr_tuple RBRACECOLON { TCollection(TSortedSet, $2) }
 ;
 
 int_list_list:

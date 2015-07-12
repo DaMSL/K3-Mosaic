@@ -549,8 +549,9 @@ let v_empty_of_t = function
   | TBag        -> VBag(ValueBag.empty)
   | TList       -> VList(IList.empty)
   | TMap        -> VMap(ValueMap.empty)
-  | TSortedMap  -> VSortedMap(ValueMap.empty)
   | TVMap _     -> VVMap(ValueVMap.empty)
+  | TSortedMap  -> VSortedMap(ValueMap.empty)
+  | TSortedSet  -> failwith "SortedSet not implemented in the interpreter"
   | _           -> failwith "empty: unsupported collection type"
 
 (* sort only applies to list *)
@@ -568,12 +569,13 @@ let v_size err_fn = function
   | _           -> err_fn "vsize" "not a collection"
 
 let v_singleton err_fn elem c = match elem, c with
-  | _,TSet                 -> VSet(ValueSet.singleton elem)
-  | _,TBag                 -> VBag(ValueBag.singleton elem)
-  | _,TList                -> VList(IList.singleton elem)
-  | VTuple[k;v], TMap      -> VMap(ValueMap.singleton k v)
-  | VTuple[k;v], TSortedMap   -> VSortedMap(ValueMap.singleton k v)
-  | VTuple[t;k;v], TVMap _ -> VVMap(ValueVMap.singleton t k v)
+  | _,TSet                  -> VSet(ValueSet.singleton elem)
+  | _,TBag                  -> VBag(ValueBag.singleton elem)
+  | _,TList                 -> VList(IList.singleton elem)
+  | VTuple[k;v], TMap       -> VMap(ValueMap.singleton k v)
+  | VTuple[k;v], TSortedMap -> VSortedMap(ValueMap.singleton k v)
+  | VTuple[k;v], TSortedSet -> err_fn "v_singleton" "SortedSet not implemented"
+  | VTuple[t;k;v], TVMap _  -> VVMap(ValueVMap.singleton t k v)
   | _ -> err_fn "v_singleton" "not a collection"
 
 (* for v_slice *)
