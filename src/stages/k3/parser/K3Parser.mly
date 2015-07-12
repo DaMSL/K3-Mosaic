@@ -679,6 +679,7 @@ transformers :
     }
     | SORT LPAREN anno_expr COMMA anno_expr RPAREN { mkexpr Sort [$3; $5] }
     | SIZE LPAREN anno_expr RPAREN            { mkexpr Size [$3] }
+    | FILTERGEQ LPAREN anno_expr COMMA anno_expr RPAREN { mkexpr FilterGEQ [$3; $5] }
 
     /* Error handling */
     | anno_expr CONCAT error { print_error("Expected expression for combine") }

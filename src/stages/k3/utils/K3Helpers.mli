@@ -176,6 +176,7 @@ val mk_delete_prefix : id_t -> expr_t list -> expr_t
 val mk_update : id_t -> expr_t list -> expr_t list -> expr_t
 val mk_update_slice : id_t -> expr_t list -> expr_t -> expr_t
 val mk_update_suffix : id_t -> expr_t list -> expr_t -> expr_t
+val mk_filter_geq : id_t -> expr_t list -> expr_t
 
 val mk_ind : expr_t -> expr_t
 val mk_assign : id_t -> expr_t -> expr_t

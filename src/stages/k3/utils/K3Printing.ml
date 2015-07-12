@@ -107,6 +107,8 @@ let string_of_tag_type = function
     | Size             -> "Size"
     | Subscript n      -> "Subscript"^soi n
 
+    | Peek             -> "Peek"
+    | PeekWithVid      -> "PeekWithVid"
     | Slice            -> "Slice"
     | SliceFrontier    -> "SliceFrontier"
     | Insert           -> "Insert"
@@ -116,8 +118,7 @@ let string_of_tag_type = function
     | UpsertWithBefore -> "UpsertWithBefore"
     | Delete           -> "Delete"
     | DeletePrefix     -> "DeletePrefix"
-    | Peek             -> "Peek"
-    | PeekWithVid      -> "PeekWithVid"
+    | FilterGEQ        -> "FilterGEQ"
 
     | Indirect         -> "Indirect"
     | Assign           -> "Assign"

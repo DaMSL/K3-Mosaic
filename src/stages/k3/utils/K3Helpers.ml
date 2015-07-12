@@ -271,6 +271,12 @@ let mk_size col = mk_stree Size [col]
 
 let mk_subscript i tuple = mk_stree (Subscript i) [tuple]
 
+let mk_peek col = mk_stree Peek [col]
+
+let mk_peek_with_vid col lam_none lam_some = mk_stree PeekWithVid [col;lam_none;lam_some]
+
+let mk_peek' col = mk_peek (mk_var col)
+
 (* generic version of slice used by multiple functions *)
 let mk_slice_gen tag collection pattern =
   (* don't create a slice if we only have unknowns *)
@@ -316,11 +322,8 @@ let mk_update col old_val new_val =
 let mk_update_suffix col key lambda =
   mk_stree UpdateSuffix [mk_var col; mk_tuple key; lambda]
 
-let mk_peek col = mk_stree Peek [col]
-
-let mk_peek_with_vid col lam_none lam_some = mk_stree PeekWithVid [col;lam_none;lam_some]
-
-let mk_peek' col = mk_peek (mk_var col)
+let mk_filter_geq col filter_val =
+  mk_stree FilterGEQ [mk_var col; mk_tuple filter_val]
 
 (* handle the common case of updating a peek on a slice *)
 let mk_update_slice col slice new_val =

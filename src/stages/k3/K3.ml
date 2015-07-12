@@ -114,14 +114,15 @@ type expr_tag_t
     | Peek
     | PeekWithVid       (* retain the vid for a vmap *)
     | Slice
-    | SliceFrontier        (* slice with a frontier for < vid *)
+    | SliceFrontier     (* slice with a frontier for < vid *)
     | Insert
     | Update
-    | UpsertWith    (* update with a default handler *)
+    | UpsertWith        (* update with a default handler *)
     | UpsertWithBefore  (* update reading a frontier with a default handler *)
-    | UpdateSuffix  (* update values > vid *)
+    | UpdateSuffix      (* update values > vid *)
     | Delete
-    | DeletePrefix  (* delete <= a certain vid. save frontier at vid *)
+    | DeletePrefix      (* delete <= a certain vid. save frontier at vid *)
+    | FilterGEQ         (* filter >= a vid *)
 
     | Assign
     | Indirect

@@ -70,7 +70,7 @@ let nd_log_master_write =
   let ds_ids = fst_many ds_idt in
   let fn_idt = ["wstmt_id", t_stmt_id; "wvid", t_vid] in
   mk_global_fn nd_log_master_write_nm fn_idt [] @@
-    mk_upsert_with D.nd_log_master.id [mk_var "wstmt_id"]
+    mk_upsert_with D.nd_log_master.id (ids_to_vars @@ fst_many fn_idt)
       (mk_lambda'' unit_arg @@ mk_singleton (wrap_tsortedset' [t_vid]) [mk_var "wvid"])
       (mk_lambda' ds_idt @@
         let vidset_id = hd @@ tl @@ ds_ids in
@@ -239,7 +239,7 @@ let nd_filter_corrective_list =
   [nd_log_master.t] @@
   mk_agg
     (mk_lambda2' ["acc", nd_log_master.t] ["_", t_trig_id; "stmt_id", t_stmt_id] @@
-      mk_case_sn (mk_lookup' nd_log_master.id [mk_var "stmt_id"]) "vidset"
+      mk_case_sn (mk_lookup' nd_log_master.id [mk_var "stmt_id", mk_empty @@ wrap_tsortedset' [t_vid]]) "vidset"
         (mk_block [
           mk_insert "acc"
             (* TODO: this filter should be a direct datastructure operation on the sorted set of vids. *)

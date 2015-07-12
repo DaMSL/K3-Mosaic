@@ -1213,6 +1213,9 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
       (fun vid key -> lazy_expr c col <| apply_method_nocol  c ~name:"upsert_with_before" ~args:[vid; key; lam_no; lam_yes]
         ~arg_info:[vid_out_arg; [], true; [], true; [0], true])
 
+  | FilterGEQ -> let col, filter_val = U.decompose_filter_geq expr
+                 in lazy_expr c col <| apply_method c ~name:"filter_geq" ~col ~args:[filter_val] ~arg_info:[[], true]
+
   | Assign -> let l, r = U.decompose_assign expr in
     lazy_expr c l <| lsp () <| lps "=" <| lsp () <| lazy_expr c r
 
