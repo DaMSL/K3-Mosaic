@@ -164,7 +164,9 @@ and lazy_col c col_t elem_t = match col_t with
   | TSet        -> lps "{ Set }"
   | TBag        -> lps "{ Collection }"
   | TList       -> lps "{ Seq }"
+  | TVector     -> lps "{ Collection }"
   | TMap        -> lps "{ Map }"
+  | TSortedMap  -> lps "{ SortedMap }"
   | TVMap None  -> lps "{ MultiIndexVMap }"
   | TVMap(Some ss) -> lazy_multi_index c ss elem_t
 
@@ -368,7 +370,7 @@ let is_vmap col = match fst @@ KH.unwrap_tcol @@ T.type_of_expr col with
                   | TVMap _ -> true | _ -> false
 
 let is_map col = match fst @@ KH.unwrap_tcol @@ T.type_of_expr col with
-                  | TMap -> true | _ -> false
+                  | TSortedMap | TMap -> true | _ -> false
 
 (* We return the pattern breakdown: a list, and a lambda forming the internal structure *)
 let breakdown_pat pat = match U.tag_of_expr pat with
@@ -1096,6 +1098,14 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
     apply_method c ~name ~col ~args:[light_type c KH.mk_cunit]
       ~arg_info:[def_a]
 
+  | AtWith -> let col, idx, lam_none, lam_some = U.decompose_at_with expr in
+    apply_method c ~name:"at_with" ~col
+      ~args:[idx; lam_none; lam_some] ~arg_info:[def_a; def_a; [0], false]
+
+  | MinWith -> let col, lam_none, lam_some = U.decompose_min_with expr in
+    apply_method c ~name:"min_with" ~col
+      ~args:[lam_none; lam_some] ~arg_info:[def_a; [0], false]
+
   | PeekWithVid ->
       try_matching [
         (fun () ->
@@ -1136,10 +1146,10 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
       else normal ()
     in
     begin match col_t, tag with
-    | TVMap _, Slice         -> handle_lookup ~vmap:true "lookup" col
-    | TVMap _, SliceFrontier -> handle_lookup ~vmap:true ~decomp_fn:U.decompose_slice_frontier "lookup_before" col
-    | TMap,  Slice         -> handle_lookup "lookup" col
-    | _                    -> normal ()
+    | TVMap _, Slice           -> handle_lookup ~vmap:true "lookup" col
+    | TVMap _, SliceFrontier   -> handle_lookup ~vmap:true ~decomp_fn:U.decompose_slice_frontier "lookup_before" col
+    | (TMap | TSortedMap),  Slice -> handle_lookup "lookup" col
+    | _                        -> normal ()
     end
 
   | Subscript _ -> let i, tup = U.decompose_subscript expr in

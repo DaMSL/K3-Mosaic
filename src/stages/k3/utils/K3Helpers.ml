@@ -64,6 +64,15 @@ let wrap_tmap' = function
   | [k; v] -> wrap_tmap @@ wrap_ttuple [k; v]
   | _      -> failwith "wrap_tmap': wrong number of arguments"
 
+(* wrap a type in a map *)
+let wrap_tsortedmap t = wrap_tcol TSortedMap t
+let wrap_tsortedmap' = function
+  | [k; v] -> wrap_tsortedmap @@ wrap_ttuple [k; v]
+  | _      -> failwith "wrap_tsortedmap': wrong number of arguments"
+
+let wrap_tvector t = wrap_tcol TVector t
+let wrap_tvector' t = wrap_tvector (wrap_ttuple t)
+
 (* wrap a type in a vmap *)
 let wrap_tvmap ?idx typ = wrap_tcol (TVMap idx) typ
 let wrap_tvmap' ?idx tl = wrap_tvmap ?idx @@ wrap_ttuple tl
@@ -307,10 +316,13 @@ let mk_update_suffix col key lambda =
   mk_stree UpdateSuffix [mk_var col; mk_tuple key; lambda]
 
 let mk_peek col = mk_stree Peek [col]
+let mk_peek' col = mk_peek (mk_var col)
 
 let mk_peek_with_vid col lam_none lam_some = mk_stree PeekWithVid [col;lam_none;lam_some]
 
-let mk_peek' col = mk_peek (mk_var col)
+let mk_at_with col idx lam_none lam_some = mk_stree AtWith [col; idx; lam_none; lam_some]
+
+let mk_min_with col lam_none lam_some = mk_stree MinWith [col; lam_none; lam_some]
 
 (* handle the common case of updating a peek on a slice *)
 let mk_update_slice col slice new_val =

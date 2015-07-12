@@ -72,10 +72,12 @@ let lazy_keyset  s = lazy_bracket @@ lps @@ string_of_int_set s
 let lazy_keylist s = lazy_bracket @@ lps @@ string_of_int_list s
 
 let lazy_collection ?(empty=false) _ ct eval = match ct with
-    | TSet  -> lps "{" <| eval <| lps "}"
-    | TBag  -> lps "{|" <| eval <| lps "|}"
-    | TList -> lps "[" <| eval <| lps "]"
-    | TMap  -> lps "[:" <| eval <| lps ":]"
+    | TSet    -> lps "{" <| eval <| lps "}"
+    | TBag    -> lps "{|" <| eval <| lps "|}"
+    | TList   -> lps "[" <| eval <| lps "]"
+    | TVector -> lps "[#" <| eval <| lps "#]"
+    | TMap    -> lps "[:" <| eval <| lps ":]"
+    | TSortedMap -> lps "{:" <| eval <| lps ":}"
     | TVMap(Some s) when not empty ->
         lps "[<" <| eval <| lps " | " <| lps (string_of_int_set_set s) <| lsp () <| lps ">]"
     | TVMap _ -> lps "[<" <| eval <| lps ">]"
@@ -331,6 +333,10 @@ let rec lazy_expr c expr =
     lps "csize" <| lazy_paren @@ lazy_expr c p
   | Subscript _ -> let i, te = U.decompose_subscript expr in
     paren_l te (lazy_expr c te) <| lps "." <| lps "[" <| lps (soi i) <| lps "]"
+  | AtWith -> let col, idx, lam_none, lam_some = U.decompose_at_with expr in
+    lps "at_with" <| lcut () <| lazy_paren @@ expr_quad (col, idx, lam_none, lam_some)
+  | MinWith -> let col, lam_none, lam_some = U.decompose_min_with expr in
+    lps "min_with" <| lcut () <| lazy_paren @@ expr_triple (col, lam_none, lam_some)
   | Peek -> let col = U.decompose_peek expr in
     lps "peek" <| lazy_paren @@ lazy_expr c col
   | PeekWithVid -> let col, lam_none, lam_some = U.decompose_peek_with_vid expr in

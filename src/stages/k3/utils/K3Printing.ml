@@ -46,7 +46,9 @@ let string_of_container_type t_c = match t_c with
     | TSet          -> "TSet"
     | TBag          -> "TBag"
     | TList         -> "TList"
+    | TVector       -> "TVector"
     | TMap          -> "TMap"
+    | TSortedMap    -> "TSortedMap"
     | TVMap(Some s) -> "TVMap("^string_of_int_set_set s^")"
     | TVMap None    -> "TVMap"
 
@@ -115,6 +117,8 @@ let string_of_tag_type = function
     | Delete           -> "Delete"
     | DeletePrefix     -> "DeletePrefix"
     | Peek             -> "Peek"
+    | AtWith           -> "AtWith"
+    | MinWith          -> "MinWith"
     | PeekWithVid      -> "PeekWithVid"
 
     | Indirect         -> "Indirect"

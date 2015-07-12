@@ -53,7 +53,9 @@ and Value : sig
       | VSet of ValueSet.t
       | VBag of ValueBag.t
       | VList of value_t IList.t
+      | VVector of value_t IList.t
       | VMap of value_t ValueMap.t
+      | VSortedMap of value_t ValueMap.t
       | VVMap of value_t ValueVMap.t
       | VFunction of arg_t * local_env_t * expr_t (* closure *)
       | VForeignFunction of id_t * arg_t * foreign_func_t
@@ -118,7 +120,6 @@ val v_delete : value_t t_err_fn -> value_t -> value_t -> value_t
 val v_delete_prefix : value_t t_err_fn -> value_t -> value_t -> value_t
 val v_update : ?vidkey:value_t -> value_t t_err_fn -> value_t -> value_t -> value_t -> value_t
 val v_update_suffix : value_t t_err_fn -> value_t -> (value_t -> value_t) -> value_t -> value_t
-val v_upsert_with : ?frontier:bool -> value_t t_err_fn -> value_t -> (value_t -> value_t) -> (value_t -> value_t) -> value_t -> value_t
 val v_empty : value_t t_err_fn -> ?no_map: bool -> ?no_multimap : bool -> value_t -> value_t
 val v_empty_of_t : container_type_t -> value_t
 val v_sort : value_t t_err_fn -> (value_t -> value_t -> int) -> value_t -> value_t
@@ -126,3 +127,5 @@ val v_size : value_t t_err_fn -> value_t -> value_t
 val v_singleton : value_t t_err_fn -> value_t -> container_type_t -> value_t
 val v_slice : value_t t_err_fn -> value_t -> value_t -> value_t
 val v_slice_frontier : value_t t_err_fn -> value_t -> value_t -> value_t
+val v_at : value_t option t_err_fn -> value_t -> value_t -> value_t option
+val v_min : value_t option t_err_fn -> value_t -> value_t option
