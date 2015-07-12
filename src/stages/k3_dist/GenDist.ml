@@ -231,7 +231,7 @@ let nd_add_delta_to_buf c map_id =
  *)
 let nd_filter_corrective_list_nm = "nd_filter_corrective_list"
 let nd_filter_corrective_list =
-  let tsid_pair_t = [t_trig_id; t_stmt_id]
+  let tsid_pair_t = [t_trig_id; t_stmt_id] in
   let trig_stmt_list_t = wrap_tbag' tsid_pair_t in
   mk_global_fn nd_filter_corrective_list_nm
   ["request_vid", t_vid; "trig_stmt_list", trig_stmt_list_t]
