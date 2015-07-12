@@ -72,10 +72,11 @@ let lazy_keyset  s = lazy_bracket @@ lps @@ string_of_int_set s
 let lazy_keylist s = lazy_bracket @@ lps @@ string_of_int_list s
 
 let lazy_collection ?(empty=false) _ ct eval = match ct with
-    | TSet  -> lps "{" <| eval <| lps "}"
-    | TBag  -> lps "{|" <| eval <| lps "|}"
-    | TList -> lps "[" <| eval <| lps "]"
-    | TMap  -> lps "[:" <| eval <| lps ":]"
+    | TSet    -> lps "{" <| eval <| lps "}"
+    | TBag    -> lps "{|" <| eval <| lps "|}"
+    | TList   -> lps "[" <| eval <| lps "]"
+    | TMap    -> lps "[:" <| eval <| lps ":]"
+    | TSortedMap -> lps "{:" <| eval <| lps ":}"
     | TVMap(Some s) when not empty ->
         lps "[<" <| eval <| lps " | " <| lps (string_of_int_set_set s) <| lsp () <| lps ">]"
     | TVMap _ -> lps "[<" <| eval <| lps ">]"

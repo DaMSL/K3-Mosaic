@@ -21,6 +21,7 @@ type container_type_t
     | TBag
     | TList
     | TMap
+    | TSortedMap
     | TVMap of IntSetSet.t option
     | TArray
     | TSortedMap

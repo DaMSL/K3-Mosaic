@@ -456,7 +456,9 @@ let map_access_to_expr mapn ins outs map_ret_t theta_vars_k init_expr_opt =
       | [], [] ->
           (* No need to perform initial value computation. This should have *)
           (* already been initialized at system start-up. *)
-          KH.mk_peek_or_zero @@ KH.mk_var mapn
+          let zero = KH.default_value_of_t map_ret_kt in
+          KH.mk_peek_or_zero ~zero @@
+            KH.mk_var mapn
 
       | [], y -> begin match free_vars_k, init_expr_opt with
           | [], None ->
