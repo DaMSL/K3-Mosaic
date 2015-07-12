@@ -322,8 +322,9 @@ let mk_update col old_val new_val =
 let mk_update_suffix col key lambda =
   mk_stree UpdateSuffix [mk_var col; mk_tuple key; lambda]
 
-let mk_filter_geq col filter_val =
-  mk_stree FilterGEQ [mk_var col; mk_tuple filter_val]
+let mk_filter_geq collection filter_val = mk_stree FilterGEQ [collection; mk_tuple filter_val]
+
+let mk_filter_geq' col filter_val = mk_filter_geq (mk_var col) filter_val
 
 (* handle the common case of updating a peek on a slice *)
 let mk_update_slice col slice new_val =
