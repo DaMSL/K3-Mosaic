@@ -218,6 +218,8 @@ let rec lazy_expr c expr =
   in let out = match U.tag_of_expr expr with
   | Const con  -> lazy_const c con
   | Var id     -> lps id
+  | Ignore     -> let e = U.decompose_ignore expr in
+                  lps "ignore" <| lazy_paren @@ lazy_expr c e
   | Tuple      -> let es = U.decompose_tuple expr in
     lazy_paren @@ lps_list CutHint (lazy_expr c) es
   | Just       -> let e = U.decompose_just expr in

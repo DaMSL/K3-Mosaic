@@ -55,6 +55,7 @@ val decompose_filter : expr_t -> expr_t * expr_t
 val decompose_flatten : expr_t -> expr_t
 val decompose_gbagg : expr_t -> expr_t * expr_t * expr_t * expr_t
 val decompose_ifthenelse : expr_t -> expr_t * expr_t * expr_t
+val decompose_ignore : expr_t -> expr_t
 val decompose_insert : expr_t -> expr_t * expr_t
 val decompose_iterate : expr_t -> expr_t * expr_t
 val decompose_just : expr_t -> expr_t

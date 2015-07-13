@@ -105,6 +105,7 @@ val mk_cunit : expr_t
 val mk_caddress : address -> expr_t
 
 val mk_var : id_t -> expr_t
+val mk_ignore : expr_t -> expr_t
 val mk_tuple : ?force:bool -> expr_t list -> expr_t
 val mk_just : expr_t -> expr_t
 val mk_nothing : type_t -> expr_t

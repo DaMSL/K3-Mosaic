@@ -176,6 +176,8 @@ let mk_caddress a = mk_const @@ CAddress a
 
 let mk_var id = mk_stree (Var(id)) []
 
+let mk_ignore e = mk_stree Ignore [e]
+
 let mk_tuple ?(force=false) items = match items with
   | []  when not force -> mk_cunit
   | [i] when not force -> i

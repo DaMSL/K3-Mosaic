@@ -283,6 +283,7 @@ and eval_expr (address:address) sched_st cenv texpr =
     match tag, res with
     | Tuple,[v]  -> nenv, temp v
     | Tuple,(_::_ as vals) -> nenv, temp @@ VTuple vals
+    | Ignore, _     -> nenv, temp VUnit
     | Just, [rval]  -> nenv, temp @@ VOption (Some rval)
 
     | Singleton ct, [elem] ->

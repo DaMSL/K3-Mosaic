@@ -118,6 +118,8 @@ let decompose_gbagg e = match tag_of_expr e, sub_tree e with
   | _ -> failwith "not a GroupByAggregte"
 let decompose_ifthenelse e = match tag_of_expr e, sub_tree e with
   IfThenElse, [e0; e1; e2] -> e0, e1, e2 | _ -> failwith "not a IfThenElse"
+let decompose_ignore e = match tag_of_expr e, sub_tree e with
+  Ignore, [e0] -> e0 | _ -> failwith "not Ignore"
 let decompose_indirect e = match tag_of_expr e, sub_tree e with
   Indirect, [e0] -> e0 | _ -> failwith "not an Indirect"
 let decompose_insert e = match tag_of_expr e, sub_tree e with

@@ -48,6 +48,7 @@ let check_tag_arity tag children =
     | Const(_)  -> 0
     | Var(_)    -> 0
     | Tuple     -> length
+    | Ignore    -> 1
     | Just      -> 1
     | Nothing _ -> 0
 
@@ -311,6 +312,7 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
       | Tuple       ->
           let child_types = List.map type_of_expr typed_children in
           wrap_ttuple child_types
+      | Ignore      -> t_unit
       | Just        -> wrap_tmaybe @@ bind 0
       | Nothing t   -> t
       | Empty t     -> t

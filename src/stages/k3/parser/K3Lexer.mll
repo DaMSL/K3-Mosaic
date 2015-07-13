@@ -183,6 +183,7 @@ rule tokenize = parse
     | "in"   { IN }
     | "bind" { BIND }
     | "as"   { AS }
+    | "ignore" { IGNORE }
 
     | "send" { SEND }
 

@@ -114,7 +114,7 @@
 
 %token NEG PLUS MINUS TIMES DIVIDE MODULO HASH
 
-%token CONCAT
+%token CONCAT IGNORE
 
 %token AND OR NOT LT EQ LEQ NEQ GT GEQ
 
@@ -404,6 +404,7 @@ expr :
     | JUST anno_expr               { mk_just $2 }
     | NOTHING COLON type_expr { mk_nothing $3 }
 
+    | IGNORE LPAREN anno_expr RPAREN { mk_ignore $3 }
     | constant     { mk_const $1 }
     | collection   { $1 }
     | range        { $1 }

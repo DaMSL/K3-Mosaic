@@ -633,6 +633,7 @@ and filter_of_slice ~frontier c col pat =
  * signifying whether the result needs to be converted to a record the same way. In general,
  * only collection members ever need this functionality *)
 and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
+  let recur = lazy_expr ~prefix_fn ~expr_info c in
 
   let expr_pair ?(sep=lps "," <| lsp ()) ?(wl=id_fn) ?(wr=id_fn) (e1, e2) =
     wl(lazy_expr c e1) <| sep <| wr(lazy_expr c e2) in
@@ -711,6 +712,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
     let inner = lazy_concat ~sep:lcomma (fun (id, e) ->
         lps (id^":") <| lazy_expr c e) id_es
     in lazy_brace inner
+  | Ignore -> let e = U.decompose_ignore expr in recur e
   | Just -> let e = U.decompose_just expr in
     lps "Some " <| paren_r e (lazy_expr c e)
   | Nothing vt -> lps "None " <| if vt.mut then lps "mut" else lps "immut"

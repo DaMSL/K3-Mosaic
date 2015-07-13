@@ -74,6 +74,7 @@ let string_of_tag_type = function
     | Tuple            -> "Tuple"
     | Just             -> "Just"
     | Nothing _        -> "Nothing"
+    | Ignore           -> "Ignore"
 
     | Empty _          -> "Empty"
     | Singleton _      -> "Singleton"

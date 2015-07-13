@@ -75,6 +75,7 @@ type expr_tag_t
     = Const of constant_t
     | Var   of id_t
     | Tuple
+    | Ignore
 
     | Just
     | Nothing   of type_t
