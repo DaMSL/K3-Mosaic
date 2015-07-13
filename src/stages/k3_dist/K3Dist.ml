@@ -551,7 +551,7 @@ let nd_stmt_cntrs =
 (* This is coarse-grain corrective control. *)
 let nd_log_master =
   let e = ["stmt_id", t_stmt_id; "vid_set", wrap_tsortedset @@ t_vid] in
-  create_ds "nd_log_master" (mut @@ wrap_tsortedmap' @@ snd_many e) ~e
+  create_ds "nd_log_master" (mut @@ wrap_tmap' @@ snd_many e) ~e
 
 (* names for log *)
 let nd_log_for_t t = "nd_log_"^t
