@@ -9,7 +9,7 @@ open K3Printing
 open K3Helpers
 
 (* TODO: Make exceptions more informative for error reporting. *)
-exception MalformedTree
+exception MalformedTree of string
 
 type type_bindings_t = (id_t * type_t) list
 type event_type_bindings_t = (id_t * (id_t * (type_t list)) list) list
@@ -90,6 +90,7 @@ let check_tag_arity tag children =
     | PeekWithVid   -> 3
     | Slice         -> 2
     | SliceFrontier -> 2
+    | SliceUpperEq  -> 2
     | AtWith        -> 4
     | MinWith       -> 3
     | Insert        -> 2
@@ -236,7 +237,8 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
   let t_erroru = t_error uuid name in (* pre-curry the type error *)
 
   (* Check Tag Arity *)
-  if not @@ check_tag_arity tag untyped_children then raise MalformedTree else
+  if not @@ check_tag_arity tag untyped_children then
+    raise @@ MalformedTree (K3Printing.string_of_tag_type tag);
 
   (* Augment environments for children *)
   let env_proc_fn (last_ch:expr_t option) i = match tag, last_ch, i with
@@ -275,7 +277,7 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
 
   let is_tvmap = function TVMap _ -> true | _ -> false in
   let is_tvector = function TVector -> true | _ -> false in
-  let is_sorted = function TSortedMap -> true | _ -> false in
+  let is_sorted = function TSortedMap | TVMap _ -> true | _ -> false in
 
   let common_ops () =
     let tfun, tcol' = bind 0, bind 1 in
@@ -295,12 +297,12 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
       | t::_ -> t_erroru @@ TMismatch(t, t_vid, "vmap element")
     else ()
   in
-  let check_vmap_pat col_t elem_t pat =
+  let check_vmap_pat ?(msg="pattern") col_t elem_t pat =
     if is_tvmap col_t then
       let elem_v = wrap_ttuple @@ t_vid :: unwrap_ttuple elem_t in
-      if not (pat === elem_v) then t_erroru @@ TMismatch(pat, elem_v, "vmap pattern") else ()
+      if not (pat === elem_v) then t_erroru @@ TMismatch(pat, elem_v, "vmap "^msg) else ()
     else
-      if not (pat === elem_t) then t_erroru @@ TMismatch(pat, elem_t, "pattern") else ()
+      if not (pat === elem_t) then t_erroru @@ TMismatch(pat, elem_t, msg) else ()
   in
 
   let current_type = match tag with
@@ -550,7 +552,15 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
           let tcol', tpat = bind 0, bind 1 in
           let tcol, telem =
             try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') in
-          if not (is_tvmap tcol) then t_erroru (TMismatch(tcol', wrap_tvmap telem, "collection type")) else
+          if not (is_sorted tcol) then t_erroru (TMismatch(tcol', wrap_tvmap telem, "collection type")) else
+          check_vmap_pat tcol telem tpat;
+          tcol'
+
+      | SliceUpperEq ->
+          let tcol', tpat = bind 0, bind 1 in
+          let tcol, telem =
+            try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') in
+          if not (is_sorted tcol) then t_erroru (TMismatch(tcol', wrap_tvmap telem, "collection type")) else
           check_vmap_pat tcol telem tpat;
           tcol'
 
@@ -568,8 +578,8 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
             t_erroru (TMismatch(tn_ret, ts_ret, "function return types")) else
           if not (list_forall2 (<~) tn_arg [t_unit]) then
             t_erroru (TMismatch(wrap_ttuple tn_arg, t_unit, "none lambda")) else
-          if not (list_forall2 (<~) ts_arg [t_vid; telem]) then
-            t_erroru (TMismatch(wrap_ttuple [t_vid; telem], wrap_ttuple ts_arg, "some lambda")) else
+          if not (list_forall2 (<~) ts_arg [telem]) then
+            t_erroru (TMismatch(wrap_ttuple [telem], wrap_ttuple ts_arg, "some lambda")) else
           tn_ret
 
       | MinWith ->
@@ -586,8 +596,7 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
             t_erroru (TMismatch(tn_ret, ts_ret, "function return types")) else
           if not (list_forall2 (<~) tn_arg [t_unit]) then
             t_erroru (TMismatch(wrap_ttuple tn_arg, t_unit, "none lambda")) else
-          if not (list_forall2 (<~) ts_arg [t_vid; telem]) then
-            t_erroru (TMismatch(wrap_ttuple [t_vid; telem], wrap_ttuple ts_arg, "some lambda")) else
+          check_vmap_pat ~msg:"some lambda" tcol telem (wrap_ttuple ts_arg);
           tn_ret
 
       | Insert ->
@@ -648,7 +657,7 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
           let tcol', told = bind 0, bind 1 in
           let tcol, telem =
             try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') in
-          if not (is_tvmap tcol) then t_erroru (TMismatch(tcol', wrap_tvmap telem, "collection type")) else
+          if not (is_sorted tcol) then t_erroru (TMismatch(tcol', wrap_tvmap telem, "collection type")) else
           check_vmap_pat tcol telem told;
           t_unit
 

@@ -131,7 +131,7 @@ let rcv_jobs =
       (delayed_init TS.sw_next_switch_addr)
       mk_cunit;
     (* add to node ring *)
-    K3Ring.ring_init;
+    K3Ring.node_ring_init;
     (* ack the msg *)
     D.mk_send_master ms_rcv_jobs_ack_nm;
   ]

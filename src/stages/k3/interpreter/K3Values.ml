@@ -661,8 +661,18 @@ let v_slice_frontier err_fn pat m = match m, pat with
         VVMap(
           ValueVMap.filter (fun _ k' v' -> match_pattern (VTuple[k;v]) (VTuple[k';v'])) @@
             ValueVMap.frontier_slice t m)
+  | _ -> err_fn "v_slice_frontier" "unhandled or bad values"
 
-  | _ -> err_fn "v_slice_frontier" "bad input"
+let v_slice_upper_eq err_fn pat m = match m, pat with
+  (* check for lookup pattern *)
+  | VSortedMap m, VTuple[k;v] when not @@ List.mem VUnknown @@ unwrap_vtuple k ->
+        begin try
+          let k, v = ValueMap.find_gteq k m in
+          v_singleton err_fn (VTuple [k; v]) TSortedMap
+        with Not_found -> 
+          v_empty_of_t TSortedMap
+        end
+  | _ -> err_fn "v_slice_upper_eq" "bad or unhandled input"
 
 let rec type_of_value uuid value =
   let get_typ v = type_of_value uuid v in

@@ -104,6 +104,7 @@ rule tokenize = parse
     | "{<"  { LBRACELT }
     | ">}"  { RBRACELT }
     | "[<"  { LBRACKETLT }
+    | "[>="  { LBRACKETGEQ }
     | ">]"  { RBRACKETLT }
     | "|"   { BAR }
 

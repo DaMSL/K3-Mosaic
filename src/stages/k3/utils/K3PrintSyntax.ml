@@ -345,9 +345,11 @@ let rec lazy_expr c expr =
   | PeekWithVid -> let col, lam_none, lam_some = U.decompose_peek_with_vid expr in
     lps "peek_with_vid" <| lcut () <| lazy_paren @@ expr_triple (col, lam_none, lam_some)
   | Slice -> let col, pat = U.decompose_slice expr in
-    wrap_if_var col (lazy_expr c col) <| lazy_bracket @@ tuple_no_paren c pat
+    wrap_if_var col (lazy_expr c col) <| lazy_bracket (tuple_no_paren c pat)
   | SliceFrontier -> let col, pat = U.decompose_slice_frontier expr in
-    wrap_if_var col (lazy_expr c col) <| lazy_brace @@ tuple_no_paren c pat
+    wrap_if_var col (lazy_expr c col) <| lazy_bracket (lps "<" <| tuple_no_paren c pat)
+  | SliceUpperEq -> let col, pat = U.decompose_slice_upper_eq expr in
+    wrap_if_var col (lazy_expr c col) <| lazy_bracket (lps ">=" <| tuple_no_paren c pat)
   | Insert -> let l, r = U.decompose_insert expr in
     lps "insert" <| lazy_paren
       (lazy_expr c l <| lps " ," <| lsp () <| lazy_expr c r)

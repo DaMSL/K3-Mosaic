@@ -75,6 +75,7 @@ val decompose_send : expr_t -> expr_t * expr_t * (expr_t list)
 val decompose_singleton : expr_t -> expr_t
 val decompose_slice : expr_t -> expr_t * expr_t
 val decompose_slice_frontier : expr_t -> expr_t * expr_t
+val decompose_slice_upper_eq : expr_t -> expr_t * expr_t
 val decompose_sort : expr_t -> expr_t * expr_t
 val decompose_size : expr_t -> expr_t
 val decompose_subscript : expr_t -> int * expr_t

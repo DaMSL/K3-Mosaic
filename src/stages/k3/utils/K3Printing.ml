@@ -113,6 +113,7 @@ let string_of_tag_type = function
     | PeekWithVid      -> "PeekWithVid"
     | Slice            -> "Slice"
     | SliceFrontier    -> "SliceFrontier"
+    | SliceUpperEq     -> "SliceUpperEq"
     | AtWith           -> "AtWith"
     | MinWith          -> "MinWith"
     | Insert           -> "Insert"

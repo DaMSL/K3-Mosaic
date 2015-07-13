@@ -445,6 +445,9 @@ and eval_expr (address:address) sched_st cenv texpr =
     | SliceFrontier, [c; pat]->
          nenv, temp @@ v_slice_frontier error pat c
 
+    | SliceUpperEq, [c; pat]->
+         nenv, temp @@ v_slice_upper_eq error pat c
+
     | Peek, [c] -> nenv, temp @@ VOption(v_peek error c)
 
     | PeekWithVid, [c; lam_none; lam_some] ->
