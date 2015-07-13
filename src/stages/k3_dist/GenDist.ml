@@ -277,7 +277,7 @@ let sw_driver_trig (c:config) =
         (* we have a msg *)
         (* if it's the sentry, act *)
         mk_if (mk_eq (mk_var trig_id) @@ mk_cint (-1))
-          Proto.sw_seen_sentry @@
+          (Proto.sw_seen_sentry ~check_size:false) @@ (* don't check size *)
           (* else *)
           mk_block [
             (* for debugging, sleep if we've been asked to *)
@@ -1347,8 +1347,8 @@ let gen_dist ?(gen_deletes=true)
     proto_funcs @
     [mk_flow @@
       Proto.triggers c @
-      GC.triggers c Proto.sw_check_done @
-      TS.triggers Proto.sw_check_done @
+      GC.triggers c (Proto.sw_check_done ~check_size:true) @
+      TS.triggers (Proto.sw_check_done ~check_size:true) @
       Timer.triggers c @
       [sw_demux c;
        sw_driver_trig c;

@@ -252,12 +252,13 @@ let ms_rcv_switch_done =
     ~after:(D.mk_send_all_nodes nd_rcv_done_nm [mk_cunit])
 
 (* check that the switch is done with its work *)
-let sw_check_done =
+let sw_check_done ~check_size =
   mk_if
     (mk_and
       (mk_not @@ mk_var sw_sent_done.id) @@
-      mk_and
-        (mk_eq (mk_size_slow D.sw_trig_buf_idx) @@ mk_cint 0) @@
+      (if check_size then
+        mk_and
+          (mk_eq (mk_size_slow D.sw_trig_buf_idx) @@ mk_cint 0) else id_fn) @@
         mk_and
           (mk_eq (mk_var GC.sw_num_ack.id) @@ mk_var GC.sw_num_sent.id) @@
           mk_eq (mk_var D.sw_seen_sentry.id) mk_ctrue)
@@ -270,10 +271,10 @@ let sw_check_done =
 
 (* code for when switches see the sentry *)
 (* TODO: get rid of excess variable *)
-let sw_seen_sentry =
+let sw_seen_sentry ~check_size =
   mk_block [
     mk_assign D.sw_seen_sentry.id mk_ctrue;
-    sw_check_done
+    sw_check_done ~check_size
   ]
 
 (* global call for init of profiling *)
