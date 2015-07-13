@@ -70,7 +70,7 @@ let nd_log_master_write =
   let ds_ids = fst_many ds_idt in
   let fn_idt = ["wstmt_id", t_stmt_id; "wvid", t_vid] in
   mk_global_fn nd_log_master_write_nm fn_idt [] @@
-    mk_upsert_with D.nd_log_master.id [mk_var "wstmt_id"; mk_empty @@ wrap_tsortedset' [t_vid]]
+    mk_upsert_with D.nd_log_master.id [mk_var "wstmt_id"; mk_cunknown]
       (mk_lambda'' unit_arg @@ mk_tuple [mk_var "wstmt_id"; mk_singleton (wrap_tsortedset' [t_vid]) [mk_var "wvid"]])
       (mk_lambda' ds_idt @@
         let vidset_id = hd @@ tl @@ ds_ids in
