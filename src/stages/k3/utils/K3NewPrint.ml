@@ -715,7 +715,8 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
     let inner = lazy_concat ~sep:lcomma (fun (id, e) ->
         lps (id^":") <| lazy_expr c e) id_es
     in lazy_brace inner
-  | Ignore -> let e = U.decompose_ignore expr in recur e
+  | Ignore -> let e = U.decompose_ignore expr in
+      lps "ignore" <| lsp () <| recur e
   | Just -> let e = U.decompose_just expr in
     lps "Some " <| paren_r e (lazy_expr c e)
   | Nothing vt -> lps "None " <| if vt.mut then lps "mut" else lps "immut"
