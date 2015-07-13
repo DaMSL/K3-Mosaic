@@ -923,16 +923,17 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
                 "lookup_with4_before" col t_elem e_none e_some
               else None);
 
-            (* Slice on map and full lookup *)
+            (* Slice on sortedmap with upper_bound -- full lookup *)
             (fun () ->
               if is_sorted_map col &&
-                D.is_lookup_pat (snd(U.decompose_slice_upper_eq col)) then
-                handle_lookup_with c "upper_bound" ~id col t_elem e_none e_some
+                D.is_lookup_pat @@ snd @@ U.decompose_slice_upper_eq col then
+                handle_lookup_with c "upper_bound" ~id ~decomp_fn:U.decompose_slice_upper_eq
+                  col t_elem e_none e_some
               else None);
 
-            (* Slice on sortedmap with upper_bound *)
+            (* Slice on map and full lookup *)
             (fun () ->
-              if is_sorted_map col &&
+              if is_map col &&
                 D.is_lookup_pat (snd(U.decompose_slice col)) then
                 handle_lookup_with c "lookup_with4" ~id col t_elem e_none e_some
               else None);
