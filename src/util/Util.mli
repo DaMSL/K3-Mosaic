@@ -15,6 +15,8 @@ val fos : string -> float
 val bos : string -> bool
 val sob : bool -> string
 
+val sp : ('a, unit, string) format -> 'a
+
 val const : 'a -> 'b -> 'a
 
 type ('a, 'b) either_t = Left of 'a | Right of 'b

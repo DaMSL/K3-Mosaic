@@ -92,6 +92,8 @@ and ValueComp : (sig val compare_v : Value.value_t -> Value.value_t -> int
       | VList v, VList v' -> IList.compare compare_v v v'
       | VVector v, VVector v' -> IList.compare compare_v v v'
       | VMap v, VMap v' -> ValueMap.compare compare_v v v'
+      | VSortedMap v, VSortedMap v' -> ValueMap.compare compare_v v v'
+      | VSortedSet v, VSortedSet v' -> ValueSet.compare v v'
       | VVMap v, VVMap v' -> ValueVMap.compare compare_v v v'
       | VIndirect v, VIndirect v' -> compare_v !v !v'
       | VInt v, VInt v' -> v - v'
@@ -124,6 +126,8 @@ and ValueComp : (sig val compare_v : Value.value_t -> Value.value_t -> int
       | VList v         -> col_hash IList.fold v
       | VVector v       -> col_hash IList.fold v
       | VMap v          -> map_hash ValueMap.fold v
+      | VSortedMap v    -> map_hash ValueMap.fold v
+      | VSortedSet v    -> col_hash ValueSet.fold v
       | VVMap v         -> vmap_hash ValueVMap.fold v
       (* floats need to be hashed in a way that won't make them impossible to distinguish *)
       | VFloat v        -> let f, i = frexp v in
@@ -173,6 +177,7 @@ and Value : sig
       | VVector of value_t IList.t
       | VMap of value_t ValueMap.t
       | VSortedMap of value_t ValueMap.t
+      | VSortedSet of ValueSet.t
       | VVMap of value_t ValueVMap.t
       | VFunction of arg_t * local_env_t * expr_t (* closure *)
       | VForeignFunction of id_t * arg_t * foreign_func_t
@@ -194,7 +199,7 @@ and ValueUtils : (sig val v_to_list : Value.value_t -> Value.value_t list
     (* Value stringification *)
     let v_to_list = function
       | VBag m  -> ValueBag.to_list m
-      | VSet m  -> ValueSet.to_list m
+      | VSet m | VSortedSet m  -> ValueSet.to_list m
       | VList m -> IList.to_list m
       | VVector m -> IList.to_list m
       | VMap m | VSortedMap m -> List.map map_to_tuple @@ ValueMap.to_list m
@@ -219,6 +224,7 @@ and ValueUtils : (sig val v_to_list : Value.value_t -> Value.value_t list
       | VVector _            -> "VVector"
       | VMap _             -> "VMap"
       | VSortedMap _       -> "VSortedMap"
+      | VSortedSet _       -> "VSortedSet"
       | VVMap _            -> "VVMap"
       | VFunction _        -> "VFunction"
       | VForeignFunction _ -> "VForeignFunction"
@@ -230,7 +236,7 @@ and ValueUtils : (sig val v_to_list : Value.value_t -> Value.value_t list
       let s_of_col m = String.concat "; " @@ List.map repr_of_value @@
         List.sort ValueComp.compare_v @@
         v_to_list m in
-      let paren s = Printf.sprintf "(%s)" s in
+      let paren s = sp "(%s)" s in
       tag v ^
       match v with
       | VBool b                 -> paren @@ string_of_bool b
@@ -241,9 +247,9 @@ and ValueUtils : (sig val v_to_list : Value.value_t -> Value.value_t list
       | VTuple vs               -> paren @@ String.concat ", " @@ List.map repr_of_value vs
       | VOption None            -> paren "None"
       | VOption(Some x)         -> paren @@ repr_of_value x
-      | VSet _ | VBag _ | VList _ | VVector _ | VMap _ | VVMap _ | VSortedMap _
+      | VSet _ | VBag _ | VList _ | VVector _ | VMap _ | VVMap _ | VSortedMap _ | VSortedSet _
                                 -> paren @@ s_of_col v
-      | VFunction (a, _, b)     -> paren @@ Printf.sprintf "%s -> %s" (string_of_arg a) (string_of_expr b)
+      | VFunction (a, _, b)     -> paren @@ sp "%s -> %s" (string_of_arg a) (string_of_expr b)
       | VForeignFunction (i, a, _) -> paren @@ string_of_arg a
       | VAddress (ip, port)     -> paren @@ ip^":"^ string_of_int port
       | VTarget id              -> paren @@ id
@@ -262,6 +268,7 @@ let matching_collections v v' = match v, v' with
   | VSet _, VSet _
   | VMap _, VMap _
   | VSortedMap _, VSortedMap _
+  | VSortedSet _, VSortedSet _
   | VVMap _, VVMap _ -> true
   | _ -> false
 
@@ -323,7 +330,7 @@ let rec print_value ?(mark_points=[]) v =
     | VInt i                  -> ps @@ string_of_int i
     | VFloat f                -> ps @@ string_of_float f
     | VByte c                 -> ps @@ string_of_int (Char.code c)
-    | VString s               -> ps @@ Printf.sprintf "\"%s\"" @@
+    | VString s               -> ps @@ sp "\"%s\"" @@
                                    String.escaped s
     | VTuple vs               -> pretty_tag_str CutHint "" ""
                                    (List.map lazy_value vs)
@@ -335,7 +342,8 @@ let rec print_value ?(mark_points=[]) v =
     | VList _ as vs           -> print_collection "[" "]" vs
     | VVector _ as vs         -> print_collection "[#" "#]" vs
     | VMap _ as vs            -> print_collection ~sort "[:" ":]" vs
-    | VSortedMap _ as vs      -> print_collection ~sort "{:" ":}" vs
+    | VSortedMap _ as vs      -> print_collection ~sort "{<" ">}" vs
+    | VSortedSet _ as vs      -> print_collection ~sort "{:" ":}" vs
     | VVMap _ as vs           -> print_collection ~sort "[<" ">]" vs
     | VFunction _             -> ps "<fun>"
     | VForeignFunction (_, a, _) -> ps "<foreignfun>"
@@ -369,18 +377,18 @@ let strip_vid = function
   | v -> v
 
 let v_peek ?(vid=false) err_fn c = match c with
-  | VSet m  -> ValueSet.peek m
+  | VSet m | VSortedSet m -> ValueSet.peek m
   | VBag m  -> ValueBag.peek m
   | VList m -> IList.peek m
   | VVector m -> IList.peek m
   | VMap m | VSortedMap m -> maybe None (some |- encode_tuple)  @@ ValueMap.peek m
   | VVMap m -> maybe None (fun (t,k,v) -> some @@ if vid then VTuple[t;k;v] else VTuple[k;v]) @@ ValueVMap.peek m
-  | v -> err_fn "v_peek" @@ Printf.sprintf "not a collection: %s" @@ sov v
+  | v -> err_fn "v_peek" @@ sp "not a collection: %s" @@ sov v
 
 let v_at err_fn c idx = match c, idx with
   | VVector m, VInt i -> begin try some @@ IList.at m i with Not_found -> None end
-  | VVector _, v -> err_fn "v_at" @@ Printf.sprintf "not an integer: %s" @@ sov v
-  | v, _ -> err_fn "v_at" @@ Printf.sprintf "not a vector: %s" @@ sov v
+  | VVector _, v -> err_fn "v_at" @@ sp "not an integer: %s" @@ sov v
+  | v, _ -> err_fn "v_at" @@ sp "not a vector: %s" @@ sov v
 
 let v_min err_fn c = match c with
   | VSortedMap m ->
@@ -388,7 +396,7 @@ let v_min err_fn c = match c with
         let k,v = ValueMap.min_binding m in
         some @@ VTuple [k;v]
     with Not_found -> None end
-  | v -> err_fn "v_min" @@ Printf.sprintf "not a sorted data structure: %s" @@ sov v
+  | v -> err_fn "v_min" @@ sp "not a sorted data structure: %s" @@ sov v
 
 (* for a map structure *)
 let print_binding_m ?(skip_functions=true) ?(skip_empty=true) id v =
@@ -397,7 +405,7 @@ let print_binding_m ?(skip_functions=true) ?(skip_empty=true) id v =
   let rec check_print v' =
     match v' with
     | (VFunction _ | VForeignFunction _) when skip_functions -> false
-    | (VSet _ | VBag _ | VList _ | VVector _ | VMap _ | VVMap _ | VSortedMap _)
+    | (VSet _ | VBag _ | VList _ | VVector _ | VMap _ | VVMap _ | VSortedMap _ | VSortedSet _)
         when skip_empty && v_peek dummy v' = None -> false
     | VIndirect x -> check_print !x
     | _ -> true
@@ -423,7 +431,7 @@ let print_env ?skip_functions ?skip_empty ?(accessed_only=true) env =
   fnl ()
 
 let print_trigger_env env =
-  ps @@ Printf.sprintf "----Triggers(%i)----" @@ IdMap.cardinal env.triggers; fnl();
+  ps @@ sp "----Triggers(%i)----" @@ IdMap.cardinal env.triggers; fnl();
   IdMap.iter (fun id _ -> ps id; fnl()) env.triggers
 
 let string_of_env ?skip_functions ?skip_empty ?accessed_only (env:env_t) =
@@ -458,13 +466,14 @@ let rec value_of_const_expr e = match tag_of_expr e with
 type 'a t_err_fn = (string -> string -> 'a)
 
 let v_combine err_fn x y = match x, y with
-  | VSet m,  VSet m'          -> VSet(ValueSet.combine m m')
-  | VBag m,  VBag m'          -> VBag(ValueBag.combine m m')
-  | VList m, VList m'         -> VList(IList.combine m m')
-  | VVector m, VVector m'     -> VVector(IList.combine m m')
-  | VMap m,  VMap m'          -> VMap(ValueMap.combine m m')
-  | VSortedMap m, VSortedMap m'     -> VSortedMap(ValueMap.combine m m')
-  | VVMap m, VVMap m'         -> VVMap(ValueVMap.combine m m')
+  | VSet m,  VSet m'            -> VSet(ValueSet.combine m m')
+  | VBag m,  VBag m'            -> VBag(ValueBag.combine m m')
+  | VList m, VList m'           -> VList(IList.combine m m')
+  | VVector m, VVector m'       -> VVector(IList.combine m m')
+  | VMap m,  VMap m'            -> VMap(ValueMap.combine m m')
+  | VSortedMap m, VSortedMap m' -> VSortedMap(ValueMap.combine m m')
+  | VSortedSet m, VSortedSet m' -> VSortedSet(ValueSet.combine m m')
+  | VVMap m, VVMap m'           -> VVMap(ValueVMap.combine m m')
   | _ -> err_fn "v_combine" "mismatch in collections"
 
 let v_fold err_fn f acc = function
@@ -474,12 +483,13 @@ let v_fold err_fn f acc = function
   | VVector m   -> IList.fold f acc m
   | VMap m
   | VSortedMap m   -> ValueMap.fold (fun k v acc -> f acc @@ encode_tuple (k,v)) m acc
-  | VVMap m     -> ValueVMap.fold (fun _ k v acc -> f acc @@ VTuple[k;v]) m acc
-  | v -> err_fn "v_fold" @@ Printf.sprintf "not a collection: %s" @@ string_of_value v
+  | VSortedSet m   -> ValueSet.fold f acc m
+  | VVMap m        -> ValueVMap.fold (fun _ k v acc -> f acc @@ VTuple[k;v]) m acc
+  | v -> err_fn "v_fold" @@ sp "not a collection: %s" @@ string_of_value v
 
 let v_foldv err_fn f acc = function
   | VVMap m     -> ValueVMap.fold (fun vid k v acc -> f acc vid @@ VTuple[k;v]) m acc
-  | v -> err_fn "v_foldv" @@ Printf.sprintf "not a supported collection: %s" @@ string_of_value v
+  | v -> err_fn "v_foldv" @@ sp "not a supported collection: %s" @@ string_of_value v
 
 let v_iter err_fn f = function
   | VSet m      -> ValueSet.iter f m
@@ -488,21 +498,23 @@ let v_iter err_fn f = function
   | VVector m   -> IList.iter f m
   | VMap m
   | VSortedMap m   -> ValueMap.iter (fun k v -> f @@ encode_tuple (k,v)) m
+  | VSortedSet m   -> ValueSet.iter f m
   | VVMap m     -> ValueVMap.iter (fun _ k v -> f @@ VTuple[k;v]) m
-  | v -> err_fn "v_iter" @@ Printf.sprintf "not a collection: %s" @@ string_of_value v
+  | v -> err_fn "v_iter" @@ sp "not a collection: %s" @@ string_of_value v
 
 let v_insert ?vidkey err_fn x m =
   let error v c = err_fn "v_insert" @@
-    Printf.sprintf "invalid input: insert: %s\ninto: %s" (sov v) (sov c)
+    sp "invalid input: insert: %s\ninto: %s" (sov v) (sov c)
   in
   match x, m with
-  | _, VSet m              -> VSet(ValueSet.insert x m)
-  | _, VBag m              -> VBag(ValueBag.insert x m)
-  | _, VList m             -> VList(IList.insert x m)
+  | _, VSet m                 -> VSet(ValueSet.insert x m)
+  | _, VBag m                 -> VBag(ValueBag.insert x m)
+  | _, VList m                -> VList(IList.insert x m)
   | _, VVector m           -> VVector(IList.insert x m)
-  | VTuple[k;v], VMap m    -> VMap(ValueMap.add k v m)
+  | VTuple[k;v], VMap m       -> VMap(ValueMap.add k v m)
   | VTuple[k;v], VSortedMap m -> VSortedMap(ValueMap.add k v m)
-  | VTuple[t;k;v], VVMap m -> VVMap(ValueVMap.add t k v m)
+  | _, VSortedSet m           -> VSortedSet(ValueSet.insert x m)
+  | VTuple[t;k;v], VVMap m    -> VVMap(ValueVMap.add t k v m)
   | VTuple[k;v] as v', (VVMap m as c') ->
       (* take the vid from the provided key *)
       begin match vidkey with
@@ -512,29 +524,31 @@ let v_insert ?vidkey err_fn x m =
   | v, c                   -> error v c
 
 let v_delete err_fn x m = match x, m with
-  | _, VSet m                -> VSet(ValueSet.delete x m)
-  | _, VBag m                -> VBag(ValueBag.delete x m)
-  | _, VList m               -> VList(IList.delete x m)
+  | _, VSet m                   -> VSet(ValueSet.delete x m)
+  | _, VBag m                   -> VBag(ValueBag.delete x m)
+  | _, VList m                  -> VList(IList.delete x m)
   | _, VVector m             -> VVector(IList.delete x m)
-  | VTuple [k; v], VMap m    -> VMap(ValueMap.remove k m)
+  | VTuple [k; v], VMap m       -> VMap(ValueMap.remove k m)
   | VTuple [k; v], VSortedMap m -> VSortedMap(ValueMap.remove k m)
-  | VTuple [t;k;_], VVMap m  -> VVMap(ValueVMap.remove t k m)
-  | v, c                     -> err_fn "v_delete" @@
-    Printf.sprintf "invalid input: delete: %s\nfrom: %s" (sov v) (sov c)
+  | _, VSortedSet m             -> VSortedSet(ValueSet.delete x m)
+  | VTuple [t;k;_], VVMap m     -> VVMap(ValueVMap.remove t k m)
+  | v, c                        -> err_fn "v_delete" @@
+    sp "invalid input: delete: %s\nfrom: %s" (sov v) (sov c)
 
 (* vidkey: sometimes we need to get the vid from another tuple for vmap *)
 let v_update ?vidkey err_fn oldv newv c =
   let error ?(x="") v v' c = err_fn "v_update" @@
-    Printf.sprintf
-    "invalid input: update: %s\nfrom: %s\nin: %s,\nextra: %s" (sov v) (sov v') (sov c) x
+    sp "invalid input: update: %s\nfrom: %s\nin: %s,\nextra: %s"
+      (sov v) (sov v') (sov c) x
   in
   match oldv, newv, c with
-  | _,_,VSet m                            -> VSet(ValueSet.update oldv newv m)
-  | _,_,VBag m                            -> VBag(ValueBag.update oldv newv m)
-  | _,_,VList m                           -> VList(IList.update oldv newv m)
+  | _,_,VSet m                               -> VSet(ValueSet.update oldv newv m)
+  | _,_,VBag m                               -> VBag(ValueBag.update oldv newv m)
+  | _,_,VList m                              -> VList(IList.update oldv newv m)
   | _,_,VVector m                         -> VVector(IList.update oldv newv m)
-  | VTuple[k;v], VTuple[k';v'], VMap m    -> VMap(ValueMap.update k v k' v' m)
+  | VTuple[k;v], VTuple[k';v'], VMap m       -> VMap(ValueMap.update k v k' v' m)
   | VTuple[k;v], VTuple[k';v'], VSortedMap m -> VSortedMap(ValueMap.update k v k' v' m)
+  | _,_,VSortedSet m                         -> VSortedSet(ValueSet.update oldv newv m)
   | VTuple[k;v], VTuple[t;k';v'], VVMap m -> VVMap(ValueVMap.update t k v k' v' m)
   | VTuple[k;v] as v1, (VTuple[k';v'] as v2), (VVMap m as c) ->
       begin match vidkey with
@@ -562,15 +576,16 @@ let v_delete_prefix err_fn key col = match key, col with
   | _ -> failwith "v_update_suffix: only supported on vmap"
 
 let v_empty err_fn ?(no_map=false) ?(no_multimap=false) = function
-  | VSet _      -> VSet(ValueSet.empty)
-  | VBag _      -> VBag(ValueBag.empty)
-  | VList _     -> VList(IList.empty)
+  | VSet _         -> VSet(ValueSet.empty)
+  | VBag _         -> VBag(ValueBag.empty)
+  | VList _        -> VList(IList.empty)
   | VVector _   -> VVector(IList.empty)
   | (VMap _ | VSortedMap _ ) when no_map -> VBag(ValueBag.empty)
-  | VMap _      -> VMap(ValueMap.empty)
+  | VMap _         -> VMap(ValueMap.empty)
   | VSortedMap _   -> VSortedMap(ValueMap.empty)
-  | VVMap m     -> VVMap(ValueVMap.empty)
-  | c -> err_fn "v_empty" @@ Printf.sprintf "invalid input: %s" (string_of_value c)
+  | VSortedSet _   -> VSortedSet(ValueSet.empty)
+  | VVMap m        -> VVMap(ValueVMap.empty)
+  | c -> err_fn "v_empty" @@ sp "invalid input: %s" (string_of_value c)
 
 let v_empty_of_t = function
   | TSet        -> VSet(ValueSet.empty)
@@ -578,8 +593,9 @@ let v_empty_of_t = function
   | TList       -> VList(IList.empty)
   | TVector     -> VVector(IList.empty)
   | TMap        -> VMap(ValueMap.empty)
-  | TSortedMap  -> VSortedMap(ValueMap.empty)
   | TVMap _     -> VVMap(ValueVMap.empty)
+  | TSortedMap  -> VSortedMap(ValueMap.empty)
+  | TSortedSet  -> VSortedSet(ValueSet.empty)
 
 (* sort only applies to list *)
 let v_sort err_fn f = function
@@ -592,18 +608,20 @@ let v_size err_fn = function
   | VVector m   -> VInt(IList.size m)
   | VMap m
   | VSortedMap m   -> VInt(ValueMap.cardinal m)
+  | VSortedSet m   -> VInt(ValueSet.size m)
   | VVMap m     -> VInt(ValueVMap.size m)
   | VBag m      -> VInt(ValueBag.size m)
   | _           -> err_fn "vsize" "not a collection"
 
 let v_singleton err_fn elem c = match elem, c with
-  | _,TSet                 -> VSet(ValueSet.singleton elem)
-  | _,TBag                 -> VBag(ValueBag.singleton elem)
-  | _,TList                -> VList(IList.singleton elem)
+  | _,TSet                  -> VSet(ValueSet.singleton elem)
+  | _,TBag                  -> VBag(ValueBag.singleton elem)
+  | _,TList                 -> VList(IList.singleton elem)
   | _,TVector              -> VVector(IList.singleton elem)
-  | VTuple[k;v], TMap      -> VMap(ValueMap.singleton k v)
-  | VTuple[k;v], TSortedMap   -> VSortedMap(ValueMap.singleton k v)
-  | VTuple[t;k;v], TVMap _ -> VVMap(ValueVMap.singleton t k v)
+  | VTuple[k;v], TMap       -> VMap(ValueMap.singleton k v)
+  | VTuple[k;v], TSortedMap -> VSortedMap(ValueMap.singleton k v)
+  | _,TSortedSet            -> VSortedSet(ValueSet.singleton elem)
+  | VTuple[t;k;v], TVMap _  -> VVMap(ValueVMap.singleton t k v)
   | _ -> err_fn "v_singleton" "not a collection"
 
 (* for v_slice *)
@@ -624,8 +642,9 @@ let v_slice err_fn pat = function
   | VVector m      -> VVector(IList.filter (match_pattern pat) m)
   | VMap m         -> VMap(ValueMap.filter (fun k v ->
                         match_pattern pat @@ encode_tuple (k,v)) m)
-  | VSortedMap m      -> VSortedMap(ValueMap.filter (fun k v ->
+  | VSortedMap m   -> VSortedMap(ValueMap.filter (fun k v ->
                         match_pattern pat @@ encode_tuple (k,v)) m)
+  | VSortedSet m   -> VSortedSet(ValueSet.filter (match_pattern pat) m)
   | VVMap m        -> VVMap(ValueVMap.filter (fun t k v ->
                         match_pattern pat (VTuple [t;k;v])) m)
   | _ -> err_fn "v_slice" "not a collection"
@@ -678,6 +697,7 @@ let rec type_of_value uuid value =
   | VVector _          -> wrap_tvector @@ col_get ()
   | VMap _             -> wrap_tmap @@ col_get ()
   | VSortedMap _       -> wrap_tsortedmap @@ col_get ()
+  | VSortedSet _       -> wrap_tsortedset @@ col_get ()
   | VVMap _            -> wrap_tvmap @@ col_get ()
   | VIndirect ind      -> type_of_value uuid !ind
   | VFunction _
@@ -702,7 +722,7 @@ let rec expr_of_value uuid value =
   | VOption(None) -> mk_nothing t_unknown
   | VOption(Some v) -> mk_just @@ expr_of_value uuid v
   | VTuple vs -> mk_tuple @@ List.map (expr_of_value uuid) vs
-  | VSet _ | VList _ | VVector _ | VBag _ | VMap _ | VSortedMap _ | VVMap _ -> handle_cols value
+  | VSet _ | VList _ | VBag _ | VVector _ | VMap _ | VSortedMap _ | VSortedSet _ | VVMap _ -> handle_cols value
   | VIndirect ind -> mk_ind @@ expr_of_value uuid !ind
   | VFunction _
   | VForeignFunction _ -> raise @@ RuntimeError (uuid,

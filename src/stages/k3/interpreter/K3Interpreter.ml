@@ -21,7 +21,6 @@ module D = K3Dist
 (* Generic helpers *)
 
 (* set to true to debug *)
-let sp = Printf.sprintf
 let sov = string_of_value
 
 let debug = ref false
@@ -175,7 +174,6 @@ and eval_expr (address:address) sched_st cenv texpr =
 
     let temp x = VTemp x in
 
-    (* TODO: byte and string types for binary and comparison operations *)
     let eval_binop s l r  bool_op int_op float_op =
       let error = int_erroru uuid "eval_binop" in
       temp @@ match l, r with
@@ -285,6 +283,7 @@ and eval_expr (address:address) sched_st cenv texpr =
     match tag, res with
     | Tuple,[v]  -> nenv, temp v
     | Tuple,(_::_ as vals) -> nenv, temp @@ VTuple vals
+    | Ignore, _     -> nenv, temp VUnit
     | Just, [rval]  -> nenv, temp @@ VOption (Some rval)
 
     | Singleton ct, [elem] ->
@@ -541,6 +540,8 @@ and eval_expr (address:address) sched_st cenv texpr =
     | DeletePrefix, [_; key] ->
         (env_modify (get_id ()) nenv @@
           fun col -> v_delete_prefix error key col), temp VUnit
+
+    | FilterGEQ, _ -> error name "FilterGEQ not supported"
 
     | Assign, [_; v] -> env_modify (get_id ()) nenv @@ const v, temp VUnit
 

@@ -62,7 +62,7 @@ let ensure assertion = match assertion with
   | AssertValueEquals(expected, actual) ->
       match find_inequality expected actual with
       | None   -> true, "PASSED"
-      | Some x -> false, Printf.sprintf "FAILED: Expected %s, but got %s."
+      | Some x -> false, sp "FAILED: Expected %s, but got %s."
                 (string_of_value ~mark_points:[x] expected)
                 (string_of_value ~mark_points:[x] actual)
 
@@ -130,7 +130,7 @@ let unify_values id r_newval = function
     let wrap_ind x =
       match oldval with VIndirect _ -> ref (VIndirect(ref x)) | _ -> ref x
     in
-    let err _ s = failwith @@ Printf.sprintf "(unify_values):%s" s in
+    let err _ s = failwith @@ sp "(unify_values):%s" s in
     let v, v' = unwrap_ind oldval, unwrap_ind newval in
     if K3V.matching_collections v v' then some @@ wrap_ind @@ v_combine err v v'
     else Some r_newval

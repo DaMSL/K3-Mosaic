@@ -22,6 +22,7 @@ type container_type_t
     | TList
     | TMap
     | TSortedMap
+    | TSortedSet
     | TVector
     | TVMap of IntSetSet.t option
 
@@ -74,6 +75,7 @@ type expr_tag_t
     = Const of constant_t
     | Var   of id_t
     | Tuple
+    | Ignore
 
     | Just
     | Nothing   of type_t
@@ -120,11 +122,12 @@ type expr_tag_t
     | SliceUpperEq     (* slice with an upper bound *)
     | Insert
     | Update
-    | UpsertWith    (* update with a default handler *)
+    | UpsertWith        (* update with a default handler *)
     | UpsertWithBefore  (* update reading a frontier with a default handler *)
-    | UpdateSuffix  (* update values > vid *)
+    | UpdateSuffix      (* update values > vid *)
     | Delete
-    | DeletePrefix  (* delete <= a certain vid. save frontier at vid *)
+    | DeletePrefix      (* delete <= a certain vid. save frontier at vid *)
+    | FilterGEQ         (* filter >= a vid *)
 
     | Assign
     | Indirect

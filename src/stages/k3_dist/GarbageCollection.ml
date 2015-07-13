@@ -116,8 +116,7 @@ let do_gc_fns c =
   let min_vid = "gc_vid" in
   (* standard gc code for general data structures *)
   let gc_std ds =
-    let fn_nm = "do_gc_"^ds.id
-    in
+    let fn_nm = "do_gc_"^ds.id in
     mk_global_fn fn_nm [min_vid, t_vid] [] @@
     match ds.map_id with
       | Some _ ->
@@ -143,19 +142,24 @@ let do_gc_fns c =
         (* look for any entry in the ds containing vid *)
         let vid = fst @@ List.find (r_match r_vid |- fst) (ds_e ds) in
         let t' = ds.t in
+        let ds_ids = fst_many @@ ds_e ds in
         let temp = "temp" in
+        let agg_fn = if ds.id = nd_log_master.id
+                     then mk_lambda2' ["acc", ds.t] (ds_e ds) @@
+                            mk_block [
+                              mk_insert "acc" [mk_var @@ hd ds_ids; mk_filter_geq' vid [mk_var min_vid]];
+                              mk_var "acc"]
+                     else mk_lambda2' ["acc", ds.t] (ds_e ds) @@
+                            mk_if (mk_geq (mk_var vid) @@ mk_var min_vid)
+                              (mk_block [
+                                mk_insert "acc" @@ ids_to_vars @@ fst_many @@ ds_e ds;
+                                mk_var "acc"]) @@
+                              mk_var "acc"
+        in
         (* delete any entry with a lower or matching vid *)
         mk_let [temp] (mk_empty t') @@
         mk_assign ds.id @@ U.add_property "Move" @@
-        mk_agg
-          (mk_lambda2' ["acc", ds.t] (ds_e ds) @@
-            mk_if (mk_geq (mk_var vid) @@ mk_var min_vid)
-                  (mk_block [
-                    mk_insert "acc" @@ ids_to_vars @@ fst_many @@ ds_e ds;
-                    mk_var "acc"]) @@
-                  mk_var "acc")
-              (mk_empty ds.t) @@
-              mk_var ds.id
+        mk_agg agg_fn (mk_empty ds.t) @@ mk_var ds.id
   in
   List.map gc_std @@ ds_to_gc c
 

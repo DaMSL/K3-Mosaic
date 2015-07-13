@@ -77,10 +77,11 @@ let lazy_collection ?(empty=false) _ ct eval = match ct with
     | TList   -> lps "[" <| eval <| lps "]"
     | TVector -> lps "[#" <| eval <| lps "#]"
     | TMap    -> lps "[:" <| eval <| lps ":]"
-    | TSortedMap -> lps "{:" <| eval <| lps ":}"
     | TVMap(Some s) when not empty ->
         lps "[<" <| eval <| lps " | " <| lps (string_of_int_set_set s) <| lsp () <| lps ">]"
     | TVMap _ -> lps "[<" <| eval <| lps ">]"
+    | TSortedMap -> lps "{<" <| eval <| lps ">}"
+    | TSortedSet -> lps "{:" <| eval <| lps ":}"
 
 let rec lazy_base_type c ~in_col ?(no_paren=false) ?(paren_complex=false) t =
   let wrap_complex x = if paren_complex then lps "(" <| x <| lps ")" else x in
@@ -211,12 +212,14 @@ let rec lazy_expr c expr =
   (* many instructions need to wrap the same way *)
   in let wrap e = match U.tag_of_expr expr with
     | Insert | Iterate | Map | Filter | Flatten | Send | Delete
-    | Update | UpdateSuffix | UpsertWith | UpsertWithBefore | DeletePrefix
+    | Update | UpdateSuffix | UpsertWith | UpsertWithBefore | DeletePrefix | FilterGEQ
     | Aggregate | AggregateV | GroupByAggregate | Assign | Combine -> wrap_hov 2 e
     | _ -> id_fn e
   in let out = match U.tag_of_expr expr with
   | Const con  -> lazy_const c con
   | Var id     -> lps id
+  | Ignore     -> let e = U.decompose_ignore expr in
+                  lps "ignore" <| lazy_paren @@ lazy_expr c e
   | Tuple      -> let es = U.decompose_tuple expr in
     lazy_paren @@ lps_list CutHint (lazy_expr c) es
   | Just       -> let e = U.decompose_just expr in
@@ -364,6 +367,8 @@ let rec lazy_expr c expr =
     lps "update" <| lazy_paren (lazy_expr c l <| lps " , " <| expr_pair (o,n))
   | UpdateSuffix -> let col, key, lam = U.decompose_update_suffix expr in
     lps "update_suffix" <| lazy_paren (lazy_expr c col <| lps " , " <| expr_pair (key, lam))
+  | FilterGEQ -> let col, filter_val = U.decompose_filter_geq expr in
+    lps "filter_geq" <| lazy_paren (lazy_expr c col <| lps " , " <| lazy_expr c filter_val)
   | Indirect -> let x = U.decompose_indirect expr in
     lps "ind" <| lsp () <| paren_l x @@ lazy_expr c x
   | Assign -> let l, r = U.decompose_assign expr in
@@ -500,17 +505,17 @@ let string_of_program_test ?uuid_highlight ptest =
   in
   (* print a test expression *)
   let string_of_test_expr (e, check_e) =
-    Printf.sprintf "(%s) = %s"
+    sp "(%s) = %s"
       (string_of_expr ?uuid_highlight e) @@
       string_of_check_expr check_e
   in
   match ptest with
   | NetworkTest(p, checklist) ->
-      Printf.sprintf "%s\n\nsnetwork sexpected\n\n%s"
+      sp "%s\n\nsnetwork sexpected\n\n%s"
         (string_of_program ?uuid_highlight p)
         (String.concat ",\n\n" @@ list_map string_of_test_expr checklist)
   | ProgTest(p, checklist) ->
-      Printf.sprintf "%s\n\nsexpected\n\n%s"
+      sp "%s\n\nsexpected\n\n%s"
         (string_of_program ?uuid_highlight p)
         (String.concat ",\n\n" @@ list_map string_of_test_expr checklist)
   | ExprTest _ -> failwith "can't print an expression test"

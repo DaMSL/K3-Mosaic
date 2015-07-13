@@ -64,11 +64,19 @@ let wrap_tmap' = function
   | [k; v] -> wrap_tmap @@ wrap_ttuple [k; v]
   | _      -> failwith "wrap_tmap': wrong number of arguments"
 
-(* wrap a type in a map *)
-let wrap_tsortedmap t = wrap_tcol TSortedMap t
+(* wrap a type in a vmap *)
+let wrap_tvmap ?idx typ = wrap_tcol (TVMap idx) typ
+let wrap_tvmap' ?idx tl = wrap_tvmap ?idx @@ wrap_ttuple tl
+
+(* wrap a type in a sorted map *)
+let wrap_tsortedmap typ = wrap_tcol TSortedMap typ
 let wrap_tsortedmap' = function
   | [k; v] -> wrap_tsortedmap @@ wrap_ttuple [k; v]
   | _      -> failwith "wrap_tsortedmap': wrong number of arguments"
+
+(* wrap a type in an sorted set *)
+let wrap_tsortedset typ = wrap_tcol TSortedSet typ
+let wrap_tsortedset' tl = wrap_tsortedset @@ wrap_ttuple tl
 
 let wrap_tvector t = wrap_tcol TVector t
 let wrap_tvector' t = wrap_tvector (wrap_ttuple t)
@@ -167,6 +175,8 @@ let mk_cunit = mk_const CUnit
 let mk_caddress a = mk_const @@ CAddress a
 
 let mk_var id = mk_stree (Var(id)) []
+
+let mk_ignore e = mk_stree Ignore [e]
 
 let mk_tuple ?(force=false) items = match items with
   | []  when not force -> mk_cunit
@@ -270,6 +280,12 @@ let mk_size col = mk_stree Size [col]
 
 let mk_subscript i tuple = mk_stree (Subscript i) [tuple]
 
+let mk_peek col = mk_stree Peek [col]
+
+let mk_peek' col = mk_peek (mk_var col)
+
+let mk_peek_with_vid col lam_none lam_some = mk_stree PeekWithVid [col;lam_none;lam_some]
+
 (* generic version of slice used by multiple functions *)
 let mk_slice_gen tag collection pattern =
   (* don't create a slice if we only have unknowns *)
@@ -294,6 +310,10 @@ let mk_slice_frontier' col pat = mk_slice_frontier (mk_var col) pat
 let mk_slice_upper_eq col pat = mk_slice_gen SliceUpperEq col @@ mk_tuple pat
 let mk_slice_upper_eq' col pat = mk_slice_upper_eq (mk_var col) pat
 
+let mk_at_with col idx lam_none lam_some = mk_stree AtWith [col; idx; lam_none; lam_some]
+
+let mk_min_with col lam_none lam_some = mk_stree MinWith [col; lam_none; lam_some]
+
 let mk_insert col x = mk_stree Insert [mk_var col; mk_tuple x]
 
 (* key contains dummy value *)
@@ -315,14 +335,9 @@ let mk_update col old_val new_val =
 let mk_update_suffix col key lambda =
   mk_stree UpdateSuffix [mk_var col; mk_tuple key; lambda]
 
-let mk_peek col = mk_stree Peek [col]
-let mk_peek' col = mk_peek (mk_var col)
+let mk_filter_geq collection filter_val = mk_stree FilterGEQ [collection; mk_tuple filter_val]
 
-let mk_peek_with_vid col lam_none lam_some = mk_stree PeekWithVid [col;lam_none;lam_some]
-
-let mk_at_with col idx lam_none lam_some = mk_stree AtWith [col; idx; lam_none; lam_some]
-
-let mk_min_with col lam_none lam_some = mk_stree MinWith [col; lam_none; lam_some]
+let mk_filter_geq' col filter_val = mk_filter_geq (mk_var col) filter_val
 
 (* handle the common case of updating a peek on a slice *)
 let mk_update_slice col slice new_val =
@@ -672,13 +687,19 @@ let mk_min_max v v' v_t comp_fn zero col = mk_agg
   mk_var col.id
 
 (* pop off the front of a list *)
-let mk_pop col_nm bind_nm fail success =
+let mk_pop ?cond col_nm bind_nm fail success =
+  let action =
+    mk_block [
+      success;
+      (* delete should be last so we can bind by reference *)
+      mk_delete col_nm [mk_var bind_nm]
+    ]
+  in
   mk_case_ns (mk_peek' col_nm) bind_nm
     fail @@
-    mk_block [
-      mk_delete col_nm [mk_var bind_nm];
-      success
-    ]
+    match cond with
+    | None -> action
+    | Some cond -> mk_if cond action mk_cunit
 
 (* increment a stateful variable *)
 let mk_incr nm = mk_assign nm @@ mk_add (mk_var nm) @@ mk_cint 1

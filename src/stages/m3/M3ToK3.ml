@@ -277,7 +277,7 @@ let apply_external_lambda fn in_x_ts out_t =
     | "regexp_match", [K.TString; K.TString], K.TInt -> "regex_match_int"
     | "substring", [K.TString; K.TInt; K.TInt], K.TString -> "substring"
     | "date_part", [K.TString; K.TDate], K.TInt -> "date_part"
-    | _ -> failwith @@ Printf.sprintf "Unsupported extern lambda: %s: %s -> %s"
+    | _ -> failwith @@ sp "Unsupported extern lambda: %s: %s -> %s"
              fn (KS.string_of_type @@ KH.wrap_ttuple @@ fst_many @@ in_x_ts)
                 (KS.string_of_type out_t)
   in

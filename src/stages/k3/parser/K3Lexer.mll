@@ -101,6 +101,8 @@ rule tokenize = parse
     | ":]"  { RBRACKETCOLON }
     | "{:"  { LBRACECOLON }
     | ":}"  { RBRACECOLON }
+    | "{<"  { LBRACELT }
+    | ">}"  { RBRACELT }
     | "[<"  { LBRACKETLT }
     | "[>="  { LBRACKETGEQ }
     | ">]"  { RBRACKETLT }
@@ -182,6 +184,7 @@ rule tokenize = parse
     | "in"   { IN }
     | "bind" { BIND }
     | "as"   { AS }
+    | "ignore" { IGNORE }
 
     | "send" { SEND }
 
@@ -192,6 +195,7 @@ rule tokenize = parse
     | "update" { UPDATE }
     | "delete" { DELETE }
     | "delete_prefix" { DELETE_PREFIX }
+    | "filter_geq"    { FILTERGEQ }
 
     | '@' { ANNOTATE }
 

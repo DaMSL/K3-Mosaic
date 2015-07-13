@@ -56,6 +56,7 @@ and Value : sig
       | VVector of value_t IList.t
       | VMap of value_t ValueMap.t
       | VSortedMap of value_t ValueMap.t
+      | VSortedSet of ValueSet.t
       | VVMap of value_t ValueVMap.t
       | VFunction of arg_t * local_env_t * expr_t (* closure *)
       | VForeignFunction of id_t * arg_t * foreign_func_t
