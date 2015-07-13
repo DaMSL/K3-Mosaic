@@ -60,13 +60,13 @@ let pull_source id t res in_chan =
       let r = if l.[0] = '|' then ""::r else r in
       let r = if l.[String.length l - 1] = '|' then r@[""] else r in
       if List.length r <> sig_len then
-        raise @@ ResourceError(Printf.sprintf "%s: file %s, line %d, expected %d items but got %d" id f !cnt sig_len @@ List.length r);
+        raise @@ ResourceError(sp "%s: file %s, line %d, expected %d items but got %d" id f !cnt sig_len @@ List.length r);
       let fields = List.map2 value_of_string signature r in
       let r = if tuple_val then VTuple fields else List.hd fields in
       incr cnt; Some r
     with
       | Invalid_argument s -> raise @@
-          ResourceError(Printf.sprintf "%s: problem parsing file %s at line %d: %s" id f !cnt s)
+          ResourceError(sp "%s: problem parsing file %s at line %d: %s" id f !cnt s)
       | End_of_file        -> None
     end
   | Stream(t, RandomStream _), InRand index ->
@@ -89,7 +89,7 @@ let pull_source id t res in_chan =
             exp_l_ref := es;
             let v = try K3Values.value_of_const_expr e
                     with Failure s ->
-                      let err = Printf.sprintf "%s: we can't handle an expression of %s"
+                      let err = sp "%s: we can't handle an expression of %s"
                         id  (K3Printing.flat_string_of_expr e) in
                       raise @@ ResourceError err
             in Some v

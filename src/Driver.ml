@@ -17,8 +17,6 @@ open K3Testing
 open DriverHelpers
 
 (* Note these override module names *)
-module P = Printf
-
 module PS = K3PrintSyntax
 
 (* Helpers *)
@@ -70,9 +68,9 @@ let parse_port p =
 
 let ident = "[a-zA-Z_][a-zA-Z0-9_]*" (* legal identifier *)
 let num = "[0-9]+"
-let ip = Printf.sprintf "%s.%s.%s.%s" num num num num
+let ip = sp "%s.%s.%s.%s" num num num num
 let r = Str.regexp @@
-  Printf.sprintf "\\(%s\\|localhost\\):\\(%s\\)/\\(%s\\)" ip num ident
+  sp "\\(%s\\|localhost\\):\\(%s\\)/\\(%s\\)" ip num ident
 
 (* ip-role format is 'ip:port/role' *)
 let parse_ip_role ipr_str =

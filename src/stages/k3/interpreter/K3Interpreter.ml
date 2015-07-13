@@ -21,7 +21,6 @@ module D = K3Dist
 (* Generic helpers *)
 
 (* set to true to debug *)
-let sp = Printf.sprintf
 let sov = string_of_value
 
 let debug = ref false
@@ -175,7 +174,6 @@ and eval_expr (address:address) sched_st cenv texpr =
 
     let temp x = VTemp x in
 
-    (* TODO: byte and string types for binary and comparison operations *)
     let eval_binop s l r  bool_op int_op float_op =
       let error = int_erroru uuid "eval_binop" in
       temp @@ match l, r with

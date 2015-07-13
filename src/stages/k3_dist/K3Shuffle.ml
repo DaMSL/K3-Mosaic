@@ -12,11 +12,11 @@ open K3Route
 (* Part of the name is the binding pattern. So long as the combination of
  * binding patterns is the same, we can use the same shuffle function *)
 let shuffle_for p rhs_map_id lhs_map_id bindings =
-  let binds = List.map (fun (r, l) -> Printf.sprintf "%dt%d" r l) @@
+  let binds = List.map (fun (r, l) -> sp "%dt%d" r l) @@
     IntIntSet.elements bindings in
   let bind_s = String.concat "_" binds in
   let bind_s = if bind_s = "" then "" else "_bind_"^bind_s in
-  Printf.sprintf "shuffle_%s_to_%s%s" (map_name_of p rhs_map_id) (map_name_of p lhs_map_id) bind_s
+  sp "shuffle_%s_to_%s%s" (map_name_of p rhs_map_id) (map_name_of p lhs_map_id) bind_s
 
 let find_shuffle_by_binding shuffle_fns r l b =
   match List.partition (fun fn -> fn.rmap = r && fn.lmap = l && IntIntSet.equal fn.binding b) shuffle_fns with
@@ -134,9 +134,9 @@ let find_shuffle_nm c s rmap lmap =
     begin match fs with
     | []  -> failwith "missing shuffle fn"
     | [f] -> f.name
-    | _   -> failwith @@ Printf.sprintf "%d duplicate functions" (List.length fs)
+    | _   -> failwith @@ sp "%d duplicate functions" (List.length fs)
     end
   with
     Not_found -> failwith @@
-      Printf.sprintf "Couldn't find shuffle for stmt %d, rmap %d, lmap %d" s rmap lmap
+      sp "Couldn't find shuffle for stmt %d, rmap %d, lmap %d" s rmap lmap
 

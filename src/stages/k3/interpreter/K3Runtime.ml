@@ -9,7 +9,6 @@ open K3Util
 open K3Printing
 
 module Q = K3Queue
-let sp = Printf.sprintf
 
 (* consumeable id -> trigger id *)
 type source_bindings_t = (id_t * id_t) list
@@ -152,7 +151,7 @@ let invoke_trigger s address env trigger_id arg =
   begin try trig address env [arg]
     (* re-raise exception with trig name *)
   with RuntimeError(id, msg) -> raise @@
-    RuntimeError(id, Printf.sprintf "In trigger %s: %s" trigger_id msg) end;
+    RuntimeError(id, sp "In trigger %s: %s" trigger_id msg) end;
   (* log the state for this trigger *)
   Log.log (lazy (sp "\nTrigger %s@%s\nargs = %s\n%s" trigger_id (string_of_address address)
     (string_of_value arg) @@

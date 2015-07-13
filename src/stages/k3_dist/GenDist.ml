@@ -909,7 +909,7 @@ let nd_update_stmt_cntr_corr_map =
         mk_cunit;
       (* we need to decrement the previous hop's value by 1, and increment the hop's values by the count (if it's not 0) *)
       mk_upsert_with_sim nd_stmt_cntrs "lkup" ~k:lookup_pat
-        ~default:(mk_error @@ Printf.sprintf "%s: missing stmt_cntrs value" nd_update_stmt_cntr_corr_map_nm)
+        ~default:(mk_error @@ sp "%s: missing stmt_cntrs value" nd_update_stmt_cntr_corr_map_nm)
         ~v:(mk_let [nd_stmt_cntrs_corr_map.id] (mk_snd @@ mk_snd @@ mk_var "lkup") @@
               mk_block [
                 (* only do this part if count isn't 0 *)

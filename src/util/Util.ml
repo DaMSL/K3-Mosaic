@@ -19,6 +19,8 @@ let fos = float_of_string
 let bos = bool_of_string
 let sob = string_of_bool
 
+let sp = Printf.sprintf
+
 let const a _ = a
 
 (* Either type *)
