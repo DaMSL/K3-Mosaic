@@ -165,10 +165,10 @@ and lazy_col c col_t elem_t = match col_t with
   | TBag        -> lps "{ Collection }"
   | TList       -> lps "{ Seq }"
   | TVector     -> lps "{ Collection }"
-  | TMap        -> lps "{ Map }"
+  | TMap        -> lps "{ MapE }"
   | TVMap None  -> lps "{ MultiIndexVMap }"
   | TVMap(Some ss) -> lazy_multi_index c ss elem_t
-  | TSortedMap  -> lps "{ SortedMap }"
+  | TSortedMap  -> lps "{ SortedMapE }"
   | TSortedSet  -> lps "{ SortedSet }"
 
 and lazy_base_type ?(brace=true) ?(mut=false) ?(empty=false) c ~in_col t =
@@ -424,14 +424,18 @@ let vid_in_arg  = K3Dist.is_vid_tuple
 
 (* change a pattern to have a default value (last element) *)
 (* since k3new can't handle unknowns *)
+(* @map_e: replace all unknowns *except* the value, since we need to drop it *)
 let lookup_pat_of_slice ?(vid=false) ~col pat =
   let col_t, elem_t = KH.unwrap_tcol @@ T.type_of_expr col in
   let elem_t = KH.unwrap_ttuple elem_t in
   let elem_t = if vid then KH.t_vid :: elem_t else elem_t in
   (* since this is a lookup, we can turn pat into a list. drop the value *)
   let pat = fst @@ breakdown_pat pat in
-  List.map2 (fun x t ->
-    if D.is_unknown x then KH.default_value_of_t t else x) pat elem_t
+  let pat', elem_t =
+    if vid then pat, elem_t else list_drop_end 1 pat, list_drop_end 1 elem_t in
+  let pat' = List.map2 (fun x t ->
+    if D.is_unknown x then KH.default_value_of_t t else x) pat' elem_t in
+  if vid then pat' else pat'@[list_last pat]
 
 (* create a deep bind for lambdas, triggers, and let statements
  * -in_record indicates that the first level of binding should be a record *)
