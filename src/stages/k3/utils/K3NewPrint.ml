@@ -88,12 +88,12 @@ let light_type c e =
   try
      T.deduce_expr_type ~override:false c.trig_env c.env e
   with T.TypeError (uuid, name, err) as exc ->
-    prerr_string @@ Printf.sprintf "Typechecker Error @%d: %s\n%s\n\n%s" uuid name
+    prerr_string @@ sp "Typechecker Error @%d: %s\n%s\n\n%s" uuid name
       (K3TypeError.string_of_error err) (K3PrintSyntax.string_of_expr ~uuid_highlight:uuid e);
     raise exc
 
 (* Get a binding id from a number *)
-let id_of_num i = Printf.sprintf "b%d" i
+let id_of_num i = sp "b%d" i
 
 let abc_str = "abcdefghijklmnopqrstuvwxyz"
 
@@ -103,7 +103,7 @@ let abc_str = "abcdefghijklmnopqrstuvwxyz"
 let record_id_of_num ?(prefix="r") i =
   let rec s_of_i acc i =
     if i <= String.length abc_str then
-      Printf.sprintf "%s%c" acc (abc_str.[i-1])
+      sp "%s%c" acc (abc_str.[i-1])
     else
       s_of_i (acc ^ "z") (i-String.length abc_str)
   in
@@ -121,7 +121,7 @@ let add_record_ids c ?prefix l =
 
 (* Add record ids to a string *)
 let concat_record_str ?(sep=":") l =
-  List.map (fun (s,x) -> Printf.sprintf "%s%s%s" s sep x) @@
+  List.map (fun (s,x) -> sp "%s%s%s" s sep x) @@
   (* remove any ignored fields *)
   List.filter (fun (_,x) -> x <> "_") l
 
@@ -226,8 +226,8 @@ let lazy_const c v =
   | CBool false    -> lps "false"
   | CInt i         -> lps @@ string_of_int i
   | CFloat f       -> lps @@ add_float_zero @@ string_of_float f
-  | CString s      -> lps @@ Printf.sprintf "\"%s\"" (String.escaped s)
-  | CAddress(s, i) -> lps @@ Printf.sprintf "%s:%d" s i
+  | CString s      -> lps @@ sp "\"%s\"" (String.escaped s)
+  | CAddress(s, i) -> lps @@ sp "%s:%d" s i
   | CTarget id     -> lps id
 
 (* wrap a const collection expression with collection notation *)
@@ -249,10 +249,10 @@ type arg_num
     | NTuple    of int * arg_num list
 
 let rec string_of_anum = function
-  | NIgnored -> "(_)"
-  | NVar(i, id, t) -> Printf.sprintf "NVar(%d, %s)" i id
-  | NMaybe(i, arg) -> Printf.sprintf "NMaybe(%d, %s)" i (string_of_anum arg)
-  | NTuple(i, args) -> Printf.sprintf "NTuple(%d, %s)" i (strcatmap string_of_anum args)
+  | NIgnored        -> "(_)"
+  | NVar(i, id, t)  -> sp "NVar(%d, %s)" i id
+  | NMaybe(i, arg)  -> sp "NMaybe(%d, %s)" i (string_of_anum arg)
+  | NTuple(i, args) -> sp "NTuple(%d, %s)" i (strcatmap string_of_anum args)
 
 (* get an id for the argument at the shallow level for trigger or lambda *)
 let shallow_bind_id ~in_record = function
@@ -304,7 +304,7 @@ let list_of_top_args = function
 let unwrap_option ?(project=false) f =
   let p = if project then ".i" else "" in
   lps "case " <| f <| lps " of" <| lsp () <|
-  lps (Printf.sprintf "{ Some x -> x%s }" p) <| lsp () <|
+  lps (sp "{ Some x -> x%s }" p) <| lsp () <|
   lps "{ None -> error () }"
 
 (* A slice can have other statements inside it. We need to get the inner tuple
@@ -1275,7 +1275,7 @@ let channel_format c = function
   | JSON -> "json"
 
 let lazy_channel c chan_t chan_f = match chan_t with
-  | File s -> lps @@ Printf.sprintf "file \"%s\" %s" s (channel_format c chan_f)
+  | File s -> lps @@ sp "file \"%s\" %s" s (channel_format c chan_f)
   | Network(str, port) -> lps @@ "socket(\""^str^"\":"^string_of_int port^")"
 
 let rec lazy_resource_pattern c = function
