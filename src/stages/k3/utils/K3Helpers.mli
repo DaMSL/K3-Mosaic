@@ -349,7 +349,7 @@ val mk_size_slow : data_struct -> expr_t
 
 val mk_min_max : string -> expr_t -> type_t -> (expr_t -> expr_t -> expr_t) -> expr_t -> data_struct -> expr_t
 
-val mk_pop : string -> string -> expr_t -> expr_t -> expr_t
+val mk_pop : ?cond:expr_t -> string -> string -> expr_t -> expr_t -> expr_t
 
 val mk_incr : string -> expr_t
 val mk_decr : string -> expr_t

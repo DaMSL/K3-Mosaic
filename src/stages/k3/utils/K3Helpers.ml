@@ -685,13 +685,19 @@ let mk_min_max v v' v_t comp_fn zero col = mk_agg
   mk_var col.id
 
 (* pop off the front of a list *)
-let mk_pop col_nm bind_nm fail success =
+let mk_pop ?cond col_nm bind_nm fail success =
+  let action =
+    mk_block [
+      success;
+      (* delete should be last so we can bind by reference *)
+      mk_delete col_nm [mk_var bind_nm]
+    ]
+  in
   mk_case_ns (mk_peek' col_nm) bind_nm
     fail @@
-    mk_block [
-      mk_delete col_nm [mk_var bind_nm];
-      success
-    ]
+    match cond with
+    | None -> action
+    | Some cond -> mk_if cond action mk_cunit
 
 (* increment a stateful variable *)
 let mk_incr nm = mk_assign nm @@ mk_add (mk_var nm) @@ mk_cint 1

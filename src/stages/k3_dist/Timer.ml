@@ -41,12 +41,12 @@ let tm_check_time_trig c =
         (* if we've passed the timer time *)
         (mk_geq (mk_apply' "now_int" [mk_cunit]) @@ mk_fst @@ mk_var "timer")
         (mk_block [
-          (* delete this entry *)
-          mk_delete tm_timer_list.id [mk_var "timer"];
           (* activate the lambda and send ourselves a message *)
           mk_let (fst_many tm_timer_list.e) (mk_var "timer") dispatch_code;
           (* check for another expired timer *)
           mk_send tm_check_time_trig_nm G.me_var [mk_cunit];
+          (* delete this entry *)
+          mk_delete tm_timer_list.id [mk_var "timer"];
         ]) @@
         (* else, wake ourselves in 1 second *)
         mk_block [
