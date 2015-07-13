@@ -48,9 +48,10 @@ let string_of_container_type t_c = match t_c with
     | TList         -> "TList"
     | TVector       -> "TVector"
     | TMap          -> "TMap"
-    | TSortedMap    -> "TSortedMap"
     | TVMap(Some s) -> "TVMap("^string_of_int_set_set s^")"
     | TVMap None    -> "TVMap"
+    | TSortedMap    -> "TSortedMap"
+    | TSortedSet    -> "TSortedSet"
 
 let string_of_const cn = match cn with
     | CUnit          -> "CUnit"
@@ -107,8 +108,12 @@ let string_of_tag_type = function
     | Size             -> "Size"
     | Subscript n      -> "Subscript"^soi n
 
+    | Peek             -> "Peek"
+    | PeekWithVid      -> "PeekWithVid"
     | Slice            -> "Slice"
     | SliceFrontier    -> "SliceFrontier"
+    | AtWith           -> "AtWith"
+    | MinWith          -> "MinWith"
     | Insert           -> "Insert"
     | Update           -> "Update"
     | UpdateSuffix     -> "UpdateSuffix"
@@ -116,10 +121,7 @@ let string_of_tag_type = function
     | UpsertWithBefore -> "UpsertWithBefore"
     | Delete           -> "Delete"
     | DeletePrefix     -> "DeletePrefix"
-    | Peek             -> "Peek"
-    | AtWith           -> "AtWith"
-    | MinWith          -> "MinWith"
-    | PeekWithVid      -> "PeekWithVid"
+    | FilterGEQ        -> "FilterGEQ"
 
     | Indirect         -> "Indirect"
     | Assign           -> "Assign"

@@ -177,6 +177,8 @@ let decompose_upsert_with e = match tag_of_expr e, sub_tree e with
   UpsertWith, [x; key; lam_no; lam_yes] -> x, key, lam_no, lam_yes | _ -> failwith "not UpsertWith"
 let decompose_upsert_with_before e = match tag_of_expr e, sub_tree e with
   UpsertWithBefore, [x; key; lam_no; lam_yes] -> x, key, lam_no, lam_yes | _ -> failwith "not UpsertWithBefore"
+let decompose_filter_geq e = match tag_of_expr e, sub_tree e with
+  FilterGEQ, [x; filter_val] -> x, filter_val | _ -> failwith "not FilterGEQ"
 let decompose_var e = match tag_of_expr e with
   Var id -> id | _ -> failwith "not a Var"
 

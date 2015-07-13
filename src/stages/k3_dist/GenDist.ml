@@ -64,11 +64,18 @@ let str_of_date_t t = match t.typ with
 (**** global functions ****)
 
 (* write to master log *)
-(* TODO: make into ordered map *)
 let nd_log_master_write_nm = "nd_log_master_write"
 let nd_log_master_write =
-  mk_global_fn nd_log_master_write_nm (ds_e D.nd_log_master) [] @@
-    mk_insert D.nd_log_master.id @@ ids_to_vars @@ fst_many @@ ds_e D.nd_log_master
+  let ds_idt = ds_e D.nd_log_master in
+  let ds_ids = fst_many ds_idt in
+  let fn_idt = ["wstmt_id", t_stmt_id; "wvid", t_vid] in
+  mk_global_fn nd_log_master_write_nm fn_idt [] @@
+    mk_upsert_with D.nd_log_master.id [mk_var "wstmt_id"; mk_empty @@ wrap_tsortedset' [t_vid]]
+      (mk_lambda'' unit_arg @@ mk_tuple [mk_var "wstmt_id"; mk_singleton (wrap_tsortedset' [t_vid]) [mk_var "wvid"]])
+      (mk_lambda' ds_idt @@
+        let vidset_id = hd @@ tl @@ ds_ids in
+        mk_block [ mk_insert vidset_id [mk_var "wvid"]; mk_tuple @@ ids_to_vars ds_ids ])
+
 
 (* log_write - save the trigger's arguments *)
 (* TODO: make into map, and reduce args for space *)
@@ -90,17 +97,6 @@ let nd_log_get_bound c t =
     mk_snd @@ mk_peek_or_error "failed to find log" @@
       mk_slice' (D.nd_log_for_t t) pat
 
-(* log_read_geq -- get list of (t, vid) >= vid2 *)
-(* TODO: make ordered or some other DS *)
-let nd_log_read_geq_nm = "nd_log_read_geq"
-let nd_log_read_geq =
-  mk_global_fn nd_log_read_geq_nm
-  ["vid2", t_vid]
-  [nd_log_master.t] @@
-  mk_filter
-    (* get only >= vids *)
-    (mk_lambda' (ds_e nd_log_master) @@ mk_geq (mk_var "vid") @@ mk_var "vid2") @@
-    mk_var nd_log_master.id
 
 (* function to check to see if we should execute a do_complete *)
 (* params: vid, stmt, count_to_change *)
@@ -232,41 +228,24 @@ let nd_add_delta_to_buf c map_id =
  * which statements were performed after time x that used a particular map
  * The only reason for this function is that we may have the same stmt
  * needing to execute with different vids
- * Optimization TODO: check also by ranges within the map ie. more fine grain
  *)
 let nd_filter_corrective_list_nm = "nd_filter_corrective_list"
 let nd_filter_corrective_list =
-  let trig_stmt_list_t = wrap_tbag' [t_trig_id; t_stmt_id] in
-  let return_type_base = [t_stmt_id; t_vid_list] in
-  let return_type = wrap_tbag' return_type_base in
+  let tsid_pair_t = [t_trig_id; t_stmt_id] in
+  let trig_stmt_list_t = wrap_tbag' tsid_pair_t in
   mk_global_fn nd_filter_corrective_list_nm
-  (* (trigger_id, stmt_id) list *)
   ["request_vid", t_vid; "trig_stmt_list", trig_stmt_list_t]
-  [return_type]
-  @@
-  (* convert to bag *)
-  mk_convert_col (wrap_tlist' return_type_base) return_type @@
-    (* group the list by stmt_ids *)
-    mk_gbagg
-      (mk_lambda' ["_", t_vid; "stmt_id", t_stmt_id] @@ mk_var "stmt_id")
-      (mk_assoc_lambda'
-        ["vid_list", t_vid_list] ["vid", t_vid; "_", t_stmt_id] @@
-        mk_block [
-          mk_insert "vid_list" [mk_var "vid"];
-          mk_var "vid_list" ])
-      (mk_empty t_vid_list) @@
-      mk_sort (* sort so early vids are generally sent out first *)
-        (* get a list of vid, stmt_id pairs *)
-        (** this is really a map, but make it a fold to convert to a list *)
-        (mk_assoc_lambda' (* compare func *)
-          ["vid1", t_vid; "stmt1", t_stmt_id]
-          ["vid2", t_vid; "stmt2", t_stmt_id] @@
-          mk_lt (mk_var "vid1") @@ mk_var "vid2") @@
-        (* convert to list so we can sort *)
-        mk_convert_col nd_log_master.t (wrap_tlist' @@ snd_many @@ ds_e nd_log_master) @@
-          (* list of triggers >= vid *)
-          mk_apply
-            (mk_var nd_log_read_geq_nm) [mk_var "request_vid"]
+  [nd_log_master.t] @@
+  mk_agg
+    (mk_lambda2' ["acc", nd_log_master.t] ["_", t_trig_id; "stmt_id", t_stmt_id] @@
+      mk_case_sn (mk_lookup' nd_log_master.id [mk_var "stmt_id"; mk_empty @@ wrap_tsortedset' [t_vid]]) "vidset"
+        (mk_block [
+          mk_insert "acc" [mk_var "stmt_id"; mk_filter_geq (mk_snd @@ mk_var "vidset") [mk_var "request_vid"]];
+          mk_var "acc"]) @@
+        mk_var "acc")
+    (mk_empty nd_log_master.t) @@
+    mk_var "trig_stmt_list"
+
 
 (**** protocol code ****)
 
@@ -646,7 +625,7 @@ let nd_send_push_stmt_map_trig c s_rhs_lhs trig_name =
            * else can stop us before we send the push *)
           mk_apply'
             nd_log_master_write_nm @@
-            [mk_var "vid"; mk_cint stmt_id] ;
+            [mk_cint stmt_id; mk_var "vid"] ;
           mk_iter
             (mk_lambda'
               ["ip", t_addr;"tuples", wrap_t_calc' rhs_map_types] @@
@@ -795,8 +774,7 @@ let send_corrective_fns c =
               let key = P.partial_key_from_bound c.p target_stmt target_map in
               let shuffle_fn = K3Shuffle.find_shuffle_nm c target_stmt map_id target_map in
 
-              [trig_stmt_k3_list;
-              mk_global_fn (sub_fn_nm target_stmt) sub_args
+              [mk_global_fn (sub_fn_nm target_stmt) sub_args
               [t_int] @@ (* return num of sends *)
                 mk_let ["ips_vids"]
                   (mk_gbagg
@@ -872,7 +850,7 @@ let send_corrective_fns c =
     [t_int] @@
     (* the corrective list tells us which statements were fetched
      * from us and when *)
-    mk_let ["corrective_list"] (* (stmt_id * vid list) list *)
+    mk_let ["corrective_list"] (* (stmt_id * vid sortedset) map *)
       (mk_apply'
         nd_filter_corrective_list_nm @@
         (* feed in list of possible stmts *)
@@ -891,8 +869,12 @@ let send_corrective_fns c =
           mk_var "delta_tuples") @@
       mk_agg
         (mk_assoc_lambda'
-          ["acc_count", t_int] ["stmt_id", t_stmt_id; "vid_list", t_vid_list] @@
-          List.fold_left
+          ["acc_count", t_int] ["stmt_id", t_stmt_id; "vid_set", t_vid_sortedset] @@
+          mk_let ["vid_list"]
+          (mk_agg (mk_lambda2' ["vid_acc", t_vid_list] ["v", t_vid] @@
+                    mk_block [mk_insert "vid_acc" [mk_var "v"]; mk_var "vid_acc"])
+                  (mk_empty t_vid_list) @@ mk_var "vid_set")
+          (List.fold_left
             (* loop over all possible read map matches *)
             (fun acc_code (_, target_stmt) ->
               mk_if (* if match, send data *)
@@ -902,12 +884,12 @@ let send_corrective_fns c =
                   mk_apply' (sub_fn_nm target_stmt) @@ ids_to_vars' sub_args)
                 acc_code)
             (mk_var "acc_count") (* base case *)
-            trigs_stmts_with_matching_rhs_map)
+            trigs_stmts_with_matching_rhs_map))
             (* base number of msgs *)
           (mk_cint 0) @@
           mk_var "corrective_list")
     in
-    (List.flatten sub_fns) @ [fn]
+    (trig_stmt_k3_list :: List.flatten sub_fns) @ [fn]
   in
   List.flatten @@ List.map send_correctives @@
     (* combine maps from insert and delete *)
@@ -1254,7 +1236,6 @@ let declare_global_funcs c partmap ast =
   nd_log_master_write ::
   (P.for_all_trigs ~sys_init:true ~deletes:c.gen_deletes c.p @@ nd_log_write c) @
   (P.for_all_trigs ~sys_init:true ~deletes:c.gen_deletes c.p @@ nd_log_get_bound c) @
-  nd_log_read_geq ::
   nd_check_stmt_cntr_index ::
   nd_complete_stmt_cntr_check c ::
   nd_update_stmt_cntr_corr_map ::

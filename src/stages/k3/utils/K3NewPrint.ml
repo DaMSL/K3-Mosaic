@@ -166,9 +166,10 @@ and lazy_col c col_t elem_t = match col_t with
   | TList       -> lps "{ Seq }"
   | TVector     -> lps "{ Collection }"
   | TMap        -> lps "{ Map }"
-  | TSortedMap  -> lps "{ SortedMap }"
   | TVMap None  -> lps "{ MultiIndexVMap }"
   | TVMap(Some ss) -> lazy_multi_index c ss elem_t
+  | TSortedMap  -> lps "{ SortedMap }"
+  | TSortedSet  -> lps "{ SortedSet }"
 
 and lazy_base_type ?(brace=true) ?(mut=false) ?(empty=false) c ~in_col t =
   let wrap_mut f = if mut && not empty then lps "mut " <| f else f in
@@ -1221,6 +1222,9 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
       (fun vid key -> lazy_expr c col <| apply_method_nocol  c ~name:"upsert_with_before" ~args:[vid; key; lam_no; lam_yes]
         ~arg_info:[vid_out_arg; [], true; [], true; [0], true])
 
+  | FilterGEQ -> let col, filter_val = U.decompose_filter_geq expr
+                 in apply_method c ~name:"filter_geq" ~col ~args:[filter_val] ~arg_info:[[], true]
+
   | Assign -> let l, r = U.decompose_assign expr in
     lazy_expr c l <| lsp () <| lps "=" <| lsp () <| lazy_expr c r
 
@@ -1371,6 +1375,8 @@ include \"Annotation/Maps/VMap.k3\"
 include \"Annotation/MultiIndex/MultiIndexVMap.k3\"
 include \"Annotation/Set.k3\"
 include \"Annotation/Seq.k3\"
+include \"Annotation/Maps/SortedMap.k3\"
+include \"Annotation/Sets/SortedSet.k3\"
 
 @:CArgs 2
 declare NATIONLoaderRP : collection {path: string} @Collection -> collection {ra:int, rb:string, rc:int, rd:string} @Collection -> collection {ra:int, rb:string, rc:int, rd:string} @Collection

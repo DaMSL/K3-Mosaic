@@ -337,6 +337,7 @@ let vid_shift = (+) 1
 let add_vid_idx l = l @ [vid_idx]
 
 let t_vid_list = wrap_tlist t_vid
+let t_vid_sortedset = wrap_tsortedset t_vid
 
 (* global declaration of default vid to put into every map *)
 let g_init_vid =
@@ -544,14 +545,13 @@ let nd_stmt_cntrs =
   create_ds "nd_stmt_cntrs" (wrap_tmap' @@ snd_many e) ~e
 
 (* master log *)
-(* TODO: change to *ordered* map *)
 (* the master log shows which statements we pushed data for
  * filter_corrective_list calls nd_log_read_geq to figure out which
  * correctives should be sent *)
 (* This is coarse-grain corrective control. *)
 let nd_log_master =
-  let e  = ["vid", t_vid; "stmt_id", t_stmt_id] in
-  create_ds "nd_log_master" (mut @@ wrap_tset' @@ snd_many e) ~e
+  let e = ["stmt_id", t_stmt_id; "vid_set", wrap_tsortedset @@ t_vid] in
+  create_ds "nd_log_master" (mut @@ wrap_tsortedmap' @@ snd_many e) ~e
 
 (* names for log *)
 let nd_log_for_t t = "nd_log_"^t

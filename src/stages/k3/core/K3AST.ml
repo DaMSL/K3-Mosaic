@@ -29,7 +29,8 @@ type container_type_t
     | TBag
     | TList
     | TMap
-    | TSortedMap (* ordered map *)
+    | TSortedMap
+    | TSortedSet
     | TVector
     | TVMap of IntSetSet.t option (* indices *)
 
@@ -113,7 +114,7 @@ type expr_tag_t
     | Filter
     | Flatten
     | Aggregate
-    | AggregateV     (* vmap version of aggregate *)
+    | AggregateV        (* vmap version of aggregate *)
     | GroupByAggregate
     | Sort
 
@@ -122,14 +123,15 @@ type expr_tag_t
     | Peek
     | PeekWithVid       (* retain the vid for a vmap *)
     | Slice
-    | SliceFrontier  (* slice with a frontier at a vid *)
+    | SliceFrontier     (* slice with a frontier at a vid *)
     | Insert
     | Update
-    | UpsertWith     (* insert with a default handler *)
-    | UpsertWithBefore (* insert with a default handler *)
-    | UpdateSuffix   (* update past a vid *)
+    | UpsertWith        (* insert with a default handler *)
+    | UpsertWithBefore  (* insert with a default handler *)
+    | UpdateSuffix      (* update past a vid *)
     | Delete
-    | DeletePrefix   (* delete before a certain vid. save frontier *)
+    | DeletePrefix      (* delete before a certain vid. save frontier *)
+    | FilterGEQ         (* filter >= a vid *)
 
     | Assign
     | Indirect

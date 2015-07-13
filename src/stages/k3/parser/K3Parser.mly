@@ -109,8 +109,8 @@
 
 %token LPAREN RPAREN COMMA SEMICOLON PERIOD
 
-%token LBRACE RBRACE LBRACEBAR RBRACEBAR LBRACKET RBRACKET LBRACKETHASH RBRACKETHASH
-%token LBRACKETBAR RBRACKETBAR BAR LBRACKETCOLON RBRACKETCOLON LBRACECOLON RBRACECOLON LBRACKETLT RBRACKETLT
+%token LBRACE RBRACE LBRACKET RBRACKET
+%token BAR LBRACKETBAR RBRACKETBAR LBRACKETCOLON RBRACKETCOLON LBRACKETLT RBRACKETLT LBRACKETHASH RBRACKETHASH LBRACEBAR RBRACEBAR LBRACECOLON RBRACECOLON LBRACELT RBRACELT
 
 %token NEG PLUS MINUS TIMES DIVIDE MODULO HASH
 
@@ -123,7 +123,7 @@
 %token COLON
 
 %token QUESTION
-%token INSERT UPDATE DELETE UPSERT_WITH UPSERT_WITH_BEFORE UPDATE_SUFFIX DELETE_PREFIX
+%token INSERT UPDATE DELETE UPSERT_WITH UPSERT_WITH_BEFORE UPDATE_SUFFIX DELETE_PREFIX FILTERGEQ
 
 %token GETS COLONGETS
 
@@ -364,18 +364,20 @@ collection_type :
     | LBRACE type_expr_tuple RBRACE { TCollection(TSet, $2) }
     | LBRACEBAR type_expr RBRACEBAR { TCollection(TBag, $2) }
     | LBRACEBAR type_expr_tuple RBRACEBAR { TCollection(TBag, $2) }
+    | LBRACKET type_expr RBRACKET { TCollection(TList, $2) }
+    | LBRACKET type_expr_tuple RBRACKET { TCollection(TList, $2) }
     | LBRACKETCOLON type_expr RBRACKETCOLON { TCollection(TMap, $2) }
     | LBRACKETCOLON type_expr_tuple RBRACKETCOLON { TCollection(TMap, $2) }
-    | LBRACECOLON type_expr RBRACECOLON { TCollection(TSortedMap, $2) }
-    | LBRACECOLON type_expr_tuple RBRACECOLON { TCollection(TSortedMap, $2) }
     | LBRACKETLT type_expr BAR int_list_list RBRACKETLT { TCollection(TVMap(Some(intsetset_of_list $4)), $2) }
     | LBRACKETLT type_expr_tuple BAR int_list_list RBRACKETLT { TCollection(TVMap(Some(intsetset_of_list $4)), $2) }
     | LBRACKETLT type_expr RBRACKETLT { TCollection(TVMap None, $2) }
     | LBRACKETLT type_expr_tuple RBRACKETLT { TCollection(TVMap None, $2) }
-    | LBRACKET type_expr RBRACKET { TCollection(TList, $2) }
-    | LBRACKET type_expr_tuple RBRACKET { TCollection(TList, $2) }
     | LBRACKETHASH type_expr RBRACKETHASH { TCollection(TVector, $2) }
     | LBRACKETHASH type_expr_tuple RBRACKETHASH { TCollection(TVector, $2) }
+    | LBRACELT type_expr RBRACELT { TCollection(TSortedMap, $2) }
+    | LBRACELT type_expr_tuple RBRACELT { TCollection(TSortedMap, $2) }
+    | LBRACECOLON type_expr RBRACECOLON { TCollection(TSortedSet, $2) }
+    | LBRACECOLON type_expr_tuple RBRACECOLON { TCollection(TSortedSet, $2) }
 ;
 
 int_list_list:
@@ -510,6 +512,7 @@ collection :
     | LBRACKET RBRACKET COLON type_expr           { build_collection [] $4 }
     | LBRACKETCOLON RBRACKETCOLON COLON type_expr { build_collection [] $4 }
     | LBRACECOLON RBRACECOLON COLON type_expr     { build_collection [] $4 }
+    | LBRACELT RBRACELT COLON type_expr           { build_collection [] $4 }
     | LBRACKETLT RBRACKETLT COLON type_expr       { build_collection [] $4 }
 
     | LBRACE RBRACE error       { print_error "missing type for empty set"}
@@ -519,14 +522,15 @@ collection :
     | LBRACECOLON RBRACECOLON error   { print_error "missing type for empty sortedmap"}
     | LBRACKETLT RBRACKETLT error   { print_error "missing type for empty vmap"}
 
-    | LBRACE expr_seq RBRACE                       { build_collection $2 (mk_unknown_collection TSet) }
-    | LBRACEBAR expr_seq RBRACEBAR                 { build_collection $2 (mk_unknown_collection TBag) }
-    | LBRACKET expr_seq RBRACKET                   { build_collection $2 (mk_unknown_collection TList) }
-    | LBRACKETHASH expr_seq RBRACKETHASH           { build_collection $2 (mk_unknown_collection TVector) }
-    | LBRACKETCOLON expr_seq RBRACKETCOLON         { build_collection $2 (mk_unknown_collection TMap) }
-    | LBRACECOLON expr_seq RBRACECOLON             { build_collection $2 (mk_unknown_collection TSortedMap) }
+    | LBRACE expr_seq RBRACE                           { build_collection $2 (mk_unknown_collection TSet) }
+    | LBRACEBAR expr_seq RBRACEBAR                     { build_collection $2 (mk_unknown_collection TBag) }
+    | LBRACKET expr_seq RBRACKET                       { build_collection $2 (mk_unknown_collection TList) }
+    | LBRACKETHASH expr_seq RBRACKETHASH               { build_collection $2 (mk_unknown_collection TVector) }
+    | LBRACKETCOLON expr_seq RBRACKETCOLON             { build_collection $2 (mk_unknown_collection TMap) }
+    | LBRACELT expr_seq RBRACELT                       { build_collection $2 (mk_unknown_collection TSortedMap) }
+    | LBRACECOLON expr_seq RBRACECOLON                 { build_collection $2 (mk_unknown_collection TSortedSet) }
     | LBRACKETLT expr_seq BAR int_list_list RBRACKETLT { build_collection $2 (mk_unknown_collection (TVMap(Some(intsetset_of_list $4)))) }
-    | LBRACKETLT expr_seq RBRACKETLT               { build_collection $2 (mk_unknown_collection (TVMap None)) }
+    | LBRACKETLT expr_seq RBRACKETLT                   { build_collection $2 (mk_unknown_collection (TVMap None)) }
 ;
 
 variable :
@@ -683,6 +687,7 @@ transformers :
     }
     | SORT LPAREN anno_expr COMMA anno_expr RPAREN { mkexpr Sort [$3; $5] }
     | SIZE LPAREN anno_expr RPAREN            { mkexpr Size [$3] }
+    | FILTERGEQ LPAREN anno_expr COMMA anno_expr RPAREN { mkexpr FilterGEQ [$3; $5] }
 
     /* Error handling */
     | anno_expr CONCAT error { print_error("Expected expression for combine") }
