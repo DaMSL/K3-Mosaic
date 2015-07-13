@@ -663,6 +663,11 @@ let v_slice_frontier err_fn pat m = match m, pat with
             ValueVMap.frontier_slice t m)
   | _ -> err_fn "v_slice_frontier" "unhandled or bad values"
 
+(* only gather entries higher than given key *)
+let v_filter_geq err_fn pat m = match m, pat with
+  | VSortedSet m, _ -> VSortedSet(ValueSet.filter (fun v -> ValueComp.compare_v v pat >= 0) m)
+  | _ -> err_fn "v_filter_geq" "not implemented"
+
 let v_slice_upper_eq err_fn pat m = match m, pat with
   (* check for lookup pattern *)
   | VSortedMap m, VTuple[k;v] when not @@ List.mem VUnknown @@ unwrap_vtuple k ->

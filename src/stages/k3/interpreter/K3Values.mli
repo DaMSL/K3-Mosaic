@@ -128,6 +128,7 @@ val v_size : value_t t_err_fn -> value_t -> value_t
 val v_singleton : value_t t_err_fn -> value_t -> container_type_t -> value_t
 val v_slice : value_t t_err_fn -> value_t -> value_t -> value_t
 val v_slice_frontier : value_t t_err_fn -> value_t -> value_t -> value_t
+val v_filter_geq : value_t t_err_fn -> value_t -> value_t -> value_t
 val v_slice_upper_eq : value_t t_err_fn -> value_t -> value_t -> value_t
 val v_at : value_t option t_err_fn -> value_t -> value_t -> value_t option
 val v_min : value_t option t_err_fn -> value_t -> value_t option

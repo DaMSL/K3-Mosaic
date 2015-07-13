@@ -238,7 +238,7 @@ let nd_filter_corrective_list =
   [nd_log_master.t] @@
   mk_agg
     (mk_lambda2' ["acc", nd_log_master.t] ["_", t_trig_id; "stmt_id", t_stmt_id] @@
-      mk_case_sn (mk_lookup' nd_log_master.id [mk_var "stmt_id"; mk_empty @@ wrap_tsortedset' [t_vid]]) "vidset"
+      mk_case_sn (mk_lookup' nd_log_master.id [mk_var "stmt_id"; mk_cunknown]) "vidset"
         (mk_block [
           mk_insert "acc" [mk_var "stmt_id"; mk_filter_geq (mk_snd @@ mk_var "vidset") [mk_var "request_vid"]];
           mk_var "acc"]) @@

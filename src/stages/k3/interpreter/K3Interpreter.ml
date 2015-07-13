@@ -541,7 +541,7 @@ and eval_expr (address:address) sched_st cenv texpr =
         (env_modify (get_id ()) nenv @@
           fun col -> v_delete_prefix error key col), temp VUnit
 
-    | FilterGEQ, _ -> error name "FilterGEQ not supported"
+    | FilterGEQ, [col; key] -> nenv, temp @@ v_filter_geq error key col
 
     | Assign, [_; v] -> env_modify (get_id ()) nenv @@ const v, temp VUnit
 
