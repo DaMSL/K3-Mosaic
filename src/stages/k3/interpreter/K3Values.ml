@@ -596,7 +596,6 @@ let v_empty_of_t = function
   | TVMap _     -> VVMap(ValueVMap.empty)
   | TSortedMap  -> VSortedMap(ValueMap.empty)
   | TSortedSet  -> VSortedSet(ValueSet.empty)
-  | _           -> failwith "empty: unsupported collection type"
 
 (* sort only applies to list *)
 let v_sort err_fn f = function
