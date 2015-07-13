@@ -397,14 +397,20 @@ let sw_send_fetch_fn c s_rhs_lhs s_rhs trig_name =
         (fun acc_code (stmt_id, lhs_map_id, do_complete_trig_name) ->
           let route_fn = R.route_for c.p lhs_map_id in
           let key = P.partial_key_from_bound c.p stmt_id lhs_map_id in
-            acc_code@
-            [mk_iter
-              (mk_lambda' ["ip", t_addr] @@
-                mk_send do_complete_trig_name (mk_var "ip") @@
-                  args_of_t_as_vars_with_v c trig_name
-              ) @@
+            acc_code @
+            (* the first do_complete should ack the switch *)
+            [mk_ignore @@ mk_agg
+              (mk_lambda2' ["ack", t_bool] ["ip", t_addr] @@
+                mk_block [
+                  mk_send do_complete_trig_name (mk_var "ip") @@
+                    G.me_var::(mk_var "ack")::args_of_t_as_vars_with_v c trig_name;
+                  mk_cfalse ])
+              mk_ctrue @@
               mk_apply (mk_var route_fn) @@
                 (mk_cint lhs_map_id)::key
+            ;
+             (* stmts without puts need to reply *)
+             GC.sw_update_send ~vid_nm:"vid"
             ]
         )
         [] @@
@@ -697,7 +703,7 @@ List.fold_left
          mk_if
            (mk_apply' nd_check_stmt_cntr_index_nm @@
              [mk_var "vid"; mk_cint stmt_id; mk_cint @@ -1])
-           (* Send to local do_complete *)
+           (* apply local do_complete *)
            (mk_apply' (do_complete_name_of_t trig_name stmt_id) @@
              args_of_t_as_vars_with_v c trig_name)
            mk_cunit ] ])
@@ -989,9 +995,16 @@ let do_add_delta c e lmap ~corrective =
 let nd_do_complete_trigs c trig_name =
   let do_complete_trig stmt_id =
     let comp_nm = do_complete_name_of_t trig_name stmt_id in
-    let args = args_of_t_with_v c trig_name in
+    let args' = args_of_t_with_v c trig_name in
+    let args = ["sender_ip", t_addr; "ack", t_bool] @ args' in
     mk_code_sink' (comp_nm^"_trig") args [] @@
-    mk_apply' comp_nm @@ ids_to_vars @@ fst_many args;
+      mk_block [
+        mk_apply' comp_nm @@ ids_to_vars @@ fst_many @@ args';
+        (* if we're asked to acknowledge *)
+        mk_if (mk_var "ack")
+          (GC.nd_ack_send_code ~addr_nm:"sender_ip" ~vid_nm:"vid")
+          mk_cunit
+      ]
 in
 List.map do_complete_trig @@ P.stmts_without_rhs_maps_in_t c.p trig_name
 
