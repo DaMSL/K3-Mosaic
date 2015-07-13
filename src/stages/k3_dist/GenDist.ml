@@ -774,8 +774,7 @@ let send_corrective_fns c =
               let key = P.partial_key_from_bound c.p target_stmt target_map in
               let shuffle_fn = K3Shuffle.find_shuffle_nm c target_stmt map_id target_map in
 
-              [trig_stmt_k3_list;
-              mk_global_fn (sub_fn_nm target_stmt) sub_args
+              [mk_global_fn (sub_fn_nm target_stmt) sub_args
               [t_int] @@ (* return num of sends *)
                 mk_let ["ips_vids"]
                   (mk_gbagg
@@ -890,7 +889,7 @@ let send_corrective_fns c =
           (mk_cint 0) @@
           mk_var "corrective_list")
     in
-    (List.flatten sub_fns) @ [fn]
+    (trig_stmt_k3_list :: List.flatten sub_fns) @ [fn]
   in
   List.flatten @@ List.map send_correctives @@
     (* combine maps from insert and delete *)
