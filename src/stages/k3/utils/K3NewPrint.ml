@@ -160,16 +160,24 @@ let rec lazy_multi_index c ss elem_t =
        ))
   record_idxs <| lps "}"
 
+and lazy_mape c elem_t =
+  match KH.unwrap_ttuple elem_t with
+  | [k; v] ->
+    lazy_paren
+      (lps "key=[:> key=>" <| lazy_type c k <| lps "]," <| lsp () <|
+      lps "value=[:> value=>" <| lazy_type c v <| lps "]")
+  | _ -> error ()
+
 and lazy_col c col_t elem_t = match col_t with
-  | TSet        -> lps "{ Set }"
-  | TBag        -> lps "{ Collection }"
-  | TList       -> lps "{ Seq }"
-  | TVector     -> lps "{ Collection }"
-  | TMap        -> lps "{ MapE }"
-  | TVMap None  -> lps "{ MultiIndexVMap }"
+  | TSet        -> lps "{Set}"
+  | TBag        -> lps "{Collection}"
+  | TList       -> lps "{Seq}"
+  | TVector     -> lps "{Collection}"
+  | TMap        -> lps "{MapE" <| lazy_mape c elem_t <| lps "}"
+  | TVMap None  -> lps "{MultiIndexVMap}"
   | TVMap(Some ss) -> lazy_multi_index c ss elem_t
-  | TSortedMap  -> lps "{ SortedMapE }"
-  | TSortedSet  -> lps "{ SortedSet }"
+  | TSortedMap  -> lps "{SortedMapE" <| lazy_mape c elem_t <| lps "}"
+  | TSortedSet  -> lps "{SortedSet}"
 
 and lazy_base_type ?(brace=true) ?(mut=false) ?(empty=false) c ~in_col t =
   let wrap_mut f = if mut && not empty then lps "mut " <| f else f in
@@ -1392,12 +1400,12 @@ let string_of_dist_program ?(file="default.txt") ?map_to_fold (p, envs) =
 "\
 include \"Core/Builtins.k3\"
 include \"Core/Log.k3\"
-include \"Annotation/Map.k3\"
+include \"Annotation/Maps/MapE.k3\"
+include \"Annotation/Maps/SortedMapE.k3\"
 include \"Annotation/Maps/VMap.k3\"
 include \"Annotation/MultiIndex/MultiIndexVMap.k3\"
 include \"Annotation/Set.k3\"
 include \"Annotation/Seq.k3\"
-include \"Annotation/Maps/SortedMap.k3\"
 include \"Annotation/Sets/SortedSet.k3\"
 
 @:CArgs 2
