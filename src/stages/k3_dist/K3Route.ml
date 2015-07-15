@@ -67,16 +67,10 @@ let pmap =
   let t = wrap_ttuple @@ snd_many e in
   create_ds "pmap" t  ~e
 
-(* map from map_id to inner_pmap *)
-let pmap_data =
-  let e = ["map_id", t_int; pmap.id, pmap.t] in
-  let t = wrap_tmap' @@ snd_many e in
-  let init =
-    (* partition map as input by the user (with map names) *)
+let calc_dim_bounds =
+  mk_global_fn "calc_dim_bounds" ["pmap", inner_plist.t] [dim_bounds.t; t_int] @@
     (* calculate the size of the bucket of each dimensioned we're partitioned on
     * This is order-dependent in pmap *)
-    mk_let ["calc_dim_bounds"]
-    (mk_lambda' ["pmap", inner_plist.t] @@
       mk_agg
         (mk_lambda2'
           ["xs", dim_bounds.t; "acc_size", t_int]
@@ -87,8 +81,16 @@ let pmap_data =
               mk_var "xs";
               mk_mult (mk_var "bin_size") @@ mk_var "acc_size"]])
         (mk_tuple [mk_empty @@ dim_bounds.t; mk_cint 1]) @@
-        mk_var "pmap") @@
+        mk_var "pmap"
 
+(* map from map_id to inner_pmap *)
+let pmap_data =
+  let e = ["map_id", t_int; pmap.id, pmap.t] in
+  let t = wrap_tmap' @@ snd_many e in
+  let init =
+    (* partition map as input by the user (with map names) *)
+    (* calculate the size of the bucket of each dimensioned we're partitioned on
+    * This is order-dependent in pmap *)
     mk_agg
       (mk_lambda2' ["acc", t]
                    ["map_name", t_string; "map_types", inner_plist.t] @@
