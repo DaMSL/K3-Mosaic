@@ -716,7 +716,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
         lps (id^":") <| lazy_expr c e) id_es
     in lazy_brace inner
   | Ignore -> let e = U.decompose_ignore expr in
-      lps "ignore" <| lsp () <| recur e
+      lps "ignore" <| lsp () <| lazy_paren @@ recur e
   | Just -> let e = U.decompose_just expr in
     lps "Some " <| paren_r e (lazy_expr c e)
   | Nothing vt -> lps "None " <| if vt.mut then lps "mut" else lps "immut"
@@ -931,7 +931,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
             (fun () ->
               if is_sorted_map col &&
                 D.is_lookup_pat @@ snd @@ U.decompose_slice_upper_eq col then
-                handle_lookup_with c "upper_bound" ~id ~decomp_fn:U.decompose_slice_upper_eq
+                handle_lookup_with c "upper_bound_with" ~id ~decomp_fn:U.decompose_slice_upper_eq
                   col t_elem e_none e_some
               else None);
 
@@ -1161,11 +1161,11 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
       else normal ()
     in
     begin match col_t, tag with
-    | TVMap _, Slice           -> handle_lookup ~vmap:true "lookup" col
-    | TVMap _, SliceFrontier   -> handle_lookup ~vmap:true ~decomp_fn:U.decompose_slice_frontier "lookup_before" col
+    | TVMap _, Slice              -> handle_lookup ~vmap:true "lookup" col
+    | TVMap _, SliceFrontier      -> handle_lookup ~vmap:true ~decomp_fn:U.decompose_slice_frontier "lookup_before" col
     | (TMap | TSortedMap),  Slice -> handle_lookup "lookup" col
-    | TSortedMap,  SliceUpperEq -> handle_lookup "upper_bound" col
-    | _                        -> normal ()
+    | TSortedMap,  SliceUpperEq   -> handle_lookup "upper_bound_with" col
+    | _                           -> normal ()
     end
 
   | Subscript _ -> let i, tup = U.decompose_subscript expr in
