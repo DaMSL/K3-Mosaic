@@ -31,71 +31,98 @@ let gen_shuffle_fn p rmap lmap bindings fn_name =
   let many_tuples_type = wrap_t_calc tuple_types in
   let base_result_type = [t_addr; many_tuples_type] in
   let result_types = wrap_tbag' base_result_type in
-  let all_targets_type = wrap_tbag' base_result_type in
   (* deducts the last map type which is the value *)
   let lkey_types = wrap_tmaybes @@ map_types_no_val_for p lmap in
   (* lkey refers to the access pattern from trig args. rkey is from the tuples*)
-  let id_l = "lkey_" in let id_r = "rkey_" in
-  let to_rkey i = int_to_temp_id id_r i in
-  let to_lkey i = int_to_temp_id id_l i in
+  let id_l, id_r = "lkey_" , "rkey_" in
+  let to_rkey, to_lkey = int_to_temp_id id_r, int_to_temp_id id_l in
   let lmap_range = mk_tuple_range lkey_types in
-  let full_lkey_vars =
-    List.map (* use bindings to construct lkey. Also tuple -> just var *)
-      (fun x -> try mk_just @@ mk_var @@ to_rkey @@ adjust_key_id_for_v
-          (List.assoc x bindings)
-        with Not_found -> mk_var @@ to_lkey x)
-      lmap_range
-  in
+  (* use bindings to construct lkey. Also tuple -> just var *)
+  let full_key_vars = List.map (fun i ->
+      try `Rkey(adjust_key_id_for_v @@ List.assoc i bindings)
+      with Not_found -> `Lkey i)
+    lmap_range in
+  (* if we have all lkeys, we can lift the route and do it once *)
+  let all_lkeys =
+    List.for_all (function `Lkey _ -> true | _ -> false) full_key_vars in
+  let full_key_vars = List.map (function
+      | `Lkey i -> mk_var @@ to_lkey i
+      | `Rkey i -> mk_just @@ mk_var @@ to_rkey i) full_key_vars in
+
   (* functions to change behavior for non-key routes *)
   let pred = List.length lkey_types > 0 in
   let tuples, shuffle_on_empty = "tuples", "shuffle_on_empty" in
   let l_key_ids_types = types_to_ids_types id_l lkey_types in
+
   mk_global_fn fn_name
   ((if pred then l_key_ids_types else ["_", t_unit]) @
-    [shuffle_on_empty, canonical TBool;
-     tuples, many_tuples_type;])
-    [result_types] @@ (* return *)
-      mk_let ["all_targets"]
-        (mk_if
-          (mk_eq (mk_var shuffle_on_empty) @@ mk_cbool true)
-          (* in shuffle on empty case, we prepare all the routing that must
-           * be done for empty packets *)
-          (mk_map
-            (mk_lambda' ["ip", t_addr] @@
-              mk_tuple [mk_var "ip"; mk_empty @@ wrap_t_calc tuple_types]) @@
-            mk_apply'
-              (route_for p lmap) @@
-                mk_cint lmap ::
-                  if pred then ids_to_vars @@ fst_many l_key_ids_types
-                  else [mk_cunit]) @@
-          mk_empty all_targets_type
-        ) @@
-      mk_gbagg (* sort by IPs *)
-        (* grouping func *)
-        (mk_lambda' ["ip", t_addr; "tuple", many_tuples_type] @@ mk_var "ip")
-        (* we don't need uniqueness here since tuples are supposed to be unique
-         * as it is *)
-        (mk_assoc_lambda' ["acc", many_tuples_type]
-          ["ip", t_addr; "tuple", many_tuples_type] @@
-          mk_combine (mk_var "tuple") @@ mk_var "acc")
-        (mk_empty many_tuples_type) @@ (* [] *)
-        mk_combine
-          (mk_var "all_targets") @@
-          mk_flatten @@
-          mk_map
-            (mk_lambda' ["r_tuple", tuple_types] @@
-              (* start with partial l_key and build up an l_key using data
-               * from the tuple, that can be used for routing *)
-              mk_destruct_tuple "r_tuple" tuple_types_unwrap id_r @@
-                (mk_map
-                  (mk_lambda' ["ip", t_addr] @@
-                    mk_tuple [mk_var "ip";
-                      mk_singleton many_tuples_type [mk_var "r_tuple"]]) @@
+    [shuffle_on_empty, t_bool; tuples, many_tuples_type])
+    [result_types] @@
+
+      (* if we have only lkeys, we only need to route once *)
+      (if all_lkeys then
+        mk_let ["route_ips"]
+          (mk_apply' (route_for p lmap) @@
+            mk_cint lmap :: if pred then full_key_vars else [mk_cunit])
+      else id_fn) @@
+
+      (* legitimate targets from routing *)
+      mk_let ["normal_targets"]
+        (mk_flatten @@ mk_map
+          (mk_lambda' ["r_tuple", tuple_types] @@
+            (* start with partial l_key and build up an l_key using data
+              * from the tuple, that can be used for routing *)
+            mk_destruct_tuple "r_tuple" tuple_types_unwrap id_r @@
+              (mk_map
+                (mk_lambda' ["ip", t_addr] @@
+                  mk_tuple [mk_var "ip"; mk_ctrue; mk_var "r_tuple"]) @@
+                if all_lkeys then mk_var "route_ips"
+                else
                   mk_apply' (* route each full l_key *)
                     (route_for p lmap) @@
-                      mk_cint lmap :: if pred then full_lkey_vars
+                      mk_cint lmap :: if pred then full_key_vars
                                               else [mk_cunit])) @@
-            mk_var tuples
+          mk_var tuples) @@
+
+      (* extra targets for when we have to send all possible ips *)
+      mk_let ["all_targets"]
+        (mk_if (mk_var shuffle_on_empty)
+          (* if we get shuffle_on_empty, add empty targets for all ips *)
+          (mk_combine
+            (mk_var "normal_targets") @@
+            (* in shuffle on empty case, we prepare all the routing that must
+            * be done for empty packets *)
+            (mk_map
+              (mk_lambda' ["ip", t_addr] @@
+                mk_tuple [mk_var "ip"; mk_cfalse; default_value_of_t tuple_types]) @@
+              (if all_lkeys then mk_var "route_ips"
+              else
+                mk_apply'
+                  (route_for p lmap) @@
+                    mk_cint lmap ::
+                      if pred then ids_to_vars @@ fst_many l_key_ids_types
+                      else [mk_cunit]))) @@
+          (* else, just use normal targets *)
+          mk_var "normal_targets") @@
+
+      (* group by IPs *)
+      mk_gbagg
+        (* grouping func *)
+        (mk_lambda' ["ip", t_addr; "has_value", t_bool; "tuple", tuple_types] @@ mk_var "ip")
+        (* we don't need uniqueness here since tuples are supposed to be unique
+         * as it is *)
+        (mk_lambda2'
+          ["acc", many_tuples_type]
+          ["ip", t_addr; "has_value", t_bool; "tuple", tuple_types] @@
+          mk_block [
+            (* only insert if has_value, but we group regardless *)
+            mk_if (mk_var "has_value")
+              (mk_insert "acc" [mk_var "tuple"])
+              mk_cunit;
+            mk_var "acc" ])
+        (mk_empty many_tuples_type) @@
+        mk_var "all_targets"
+
 
 (* generate all meta information about functions *)
 let gen_meta p =
