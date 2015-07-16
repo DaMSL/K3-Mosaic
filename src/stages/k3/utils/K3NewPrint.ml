@@ -1409,7 +1409,9 @@ let string_of_dist_program ?(file="default.txt") ?map_to_fold (p, envs) =
 "\
 include \"Core/Builtins.k3\"
 include \"Core/Log.k3\"
+include \"Annotation/Map.k3\"
 include \"Annotation/Maps/MapE.k3\"
+include \"Annotation/Maps/SortedMap.k3\"
 include \"Annotation/Maps/SortedMapE.k3\"
 include \"Annotation/Maps/VMap.k3\"
 include \"Annotation/MultiIndex/MultiIndexVMap.k3\"
