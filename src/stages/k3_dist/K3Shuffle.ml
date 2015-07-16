@@ -60,12 +60,20 @@ let gen_shuffle_fn p rmap lmap bindings fn_name =
     [result_types] @@
 
       (* if we have only lkeys, we only need to route once *)
-      (if all_lkeys then
-        mk_let ["route_ips"]
+      if all_lkeys then
+        mk_let ["ips"]
           (mk_apply' (route_for p lmap) @@
-            mk_cint lmap :: if pred then full_key_vars else [mk_cunit])
-      else id_fn) @@
-
+            mk_cint lmap :: if pred then full_key_vars else [mk_cunit]) @@
+        (* try to be most efficient (move) for common case *)
+        mk_if (mk_eq (mk_size @@ mk_var "ips") @@ mk_cint 1)
+          (mk_singleton result_types
+            [mk_peek_or_error "whoops" @@ mk_var "ips"; mk_var "tuples"]) @@
+          mk_map
+            (mk_lambda' ["ip", t_addr] @@
+              mk_tuple [mk_var "ip"; mk_var "tuples"]) @@
+            mk_var "ips"
+      (* else, full shuffling *)
+      else
       (* legitimate targets from routing *)
       mk_let ["normal_targets"]
         (mk_flatten @@ mk_map
@@ -76,12 +84,10 @@ let gen_shuffle_fn p rmap lmap bindings fn_name =
               (mk_map
                 (mk_lambda' ["ip", t_addr] @@
                   mk_tuple [mk_var "ip"; mk_ctrue; mk_var "r_tuple"]) @@
-                if all_lkeys then mk_var "route_ips"
-                else
-                  mk_apply' (* route each full l_key *)
-                    (route_for p lmap) @@
-                      mk_cint lmap :: if pred then full_key_vars
-                                              else [mk_cunit])) @@
+                mk_apply' (* route each full l_key *)
+                  (route_for p lmap) @@
+                    mk_cint lmap :: if pred then full_key_vars
+                                            else [mk_cunit])) @@
           mk_var tuples) @@
 
       (* extra targets for when we have to send all possible ips *)
@@ -95,14 +101,11 @@ let gen_shuffle_fn p rmap lmap bindings fn_name =
             (mk_map
               (mk_lambda' ["ip", t_addr] @@
                 mk_tuple [mk_var "ip"; mk_cfalse; default_value_of_t tuple_types]) @@
-              (if all_lkeys then mk_var "route_ips"
-              else
-                mk_apply'
-                  (route_for p lmap) @@
-                    mk_cint lmap ::
-                      if pred then ids_to_vars @@ fst_many l_key_ids_types
-                      else [mk_cunit]))) @@
-          (* else, just use normal targets *)
+              mk_apply'
+                (route_for p lmap) @@
+                  mk_cint lmap ::
+                    if pred then ids_to_vars @@ fst_many l_key_ids_types
+                    else [mk_cunit])) @@
           mk_var "normal_targets") @@
 
       (* group by IPs *)
