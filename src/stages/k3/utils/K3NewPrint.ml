@@ -160,16 +160,24 @@ let rec lazy_multi_index c ss elem_t =
        ))
   record_idxs <| lps "}"
 
+and lazy_mape c elem_t =
+  match KH.unwrap_ttuple elem_t with
+  | [k; v] ->
+    lazy_paren
+      (lps "key=[:> key=>" <| lazy_type c k <| lps "]," <| lsp () <|
+      lps "value=[:> value=>" <| lazy_type c v <| lps "]")
+  | _ -> error ()
+
 and lazy_col c col_t elem_t = match col_t with
-  | TSet        -> lps "{ Set }"
-  | TBag        -> lps "{ Collection }"
-  | TList       -> lps "{ Seq }"
-  | TVector     -> lps "{ Collection }"
-  | TMap        -> lps "{ Map }"
-  | TVMap None  -> lps "{ MultiIndexVMap }"
+  | TSet        -> lps "{Set}"
+  | TBag        -> lps "{Collection}"
+  | TList       -> lps "{Seq}"
+  | TVector     -> lps "{Collection}"
+  | TMap        -> lps "{MapE" <| lazy_mape c elem_t <| lps "}"
+  | TVMap None  -> lps "{MultiIndexVMap}"
   | TVMap(Some ss) -> lazy_multi_index c ss elem_t
-  | TSortedMap  -> lps "{ SortedMap }"
-  | TSortedSet  -> lps "{ SortedSet }"
+  | TSortedMap  -> lps "{SortedMapE" <| lazy_mape c elem_t <| lps "}"
+  | TSortedSet  -> lps "{SortedSet}"
 
 and lazy_base_type ?(brace=true) ?(mut=false) ?(empty=false) c ~in_col t =
   let wrap_mut f = if mut && not empty then lps "mut " <| f else f in
@@ -424,14 +432,23 @@ let vid_in_arg  = K3Dist.is_vid_tuple
 
 (* change a pattern to have a default value (last element) *)
 (* since k3new can't handle unknowns *)
+(* @map_e: replace all unknowns *except* the value, since we need to drop it *)
 let lookup_pat_of_slice ?(vid=false) ~col pat =
   let col_t, elem_t = KH.unwrap_tcol @@ T.type_of_expr col in
   let elem_t = KH.unwrap_ttuple elem_t in
   let elem_t = if vid then KH.t_vid :: elem_t else elem_t in
   (* since this is a lookup, we can turn pat into a list. drop the value *)
   let pat = fst @@ breakdown_pat pat in
-  List.map2 (fun x t ->
-    if D.is_unknown x then KH.default_value_of_t t else x) pat elem_t
+  let pat', elem_t =
+    if vid then pat, elem_t else list_drop_end 1 pat, list_drop_end 1 elem_t in
+  let pat' = List.map2 (fun x t ->
+    if D.is_unknown x then KH.default_value_of_t t else x) pat' elem_t in
+  if vid then pat' else pat'@[list_last pat]
+
+(* remove the value of a pattern and replace with unknown *)
+let map_unknown_value c pat =
+  let pat = list_drop_end 1 @@ U.unwrap_tuple pat in
+  light_type c @@ KH.mk_tuple @@ pat @ [KH.mk_cunknown]
 
 (* create a deep bind for lambdas, triggers, and let statements
  * -in_record indicates that the first level of binding should be a record *)
@@ -1193,6 +1210,8 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
       (fun vid x -> lazy_expr c col <| apply_method_nocol c ~name:"insert" ~args:[vid;x]
           ~arg_info:[vid_out_arg; [], true])
   | Delete -> let col, x = U.decompose_delete expr in
+    (* get rid of the value for maps *)
+    let x = if is_map col then map_unknown_value c x else x in
     maybe_vmap c col x
       (fun x -> lazy_expr c col <| apply_method_nocol c ~name:"erase" ~args:[x]
         ~arg_info:[[],true])
@@ -1207,6 +1226,8 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
         ~arg_info:[vid_out_arg; [], true])
 
   | Update -> let col, oldx, newx = U.decompose_update expr in
+    (* get rid of the value for maps *)
+    let oldx = if is_map col then map_unknown_value c oldx else oldx in
     maybe_vmap c col newx
       (fun newx ->
         lazy_expr c col <| apply_method_nocol c ~name:"update" ~args:[oldx;newx]
@@ -1389,11 +1410,13 @@ let string_of_dist_program ?(file="default.txt") ?map_to_fold (p, envs) =
 include \"Core/Builtins.k3\"
 include \"Core/Log.k3\"
 include \"Annotation/Map.k3\"
+include \"Annotation/Maps/MapE.k3\"
+include \"Annotation/Maps/SortedMap.k3\"
+include \"Annotation/Maps/SortedMapE.k3\"
 include \"Annotation/Maps/VMap.k3\"
 include \"Annotation/MultiIndex/MultiIndexVMap.k3\"
 include \"Annotation/Set.k3\"
 include \"Annotation/Seq.k3\"
-include \"Annotation/Maps/SortedMap.k3\"
 include \"Annotation/Sets/SortedSet.k3\"
 
 @:CArgs 2
