@@ -445,6 +445,11 @@ let lookup_pat_of_slice ?(vid=false) ~col pat =
     if D.is_unknown x then KH.default_value_of_t t else x) pat' elem_t in
   if vid then pat' else pat'@[list_last pat]
 
+(* remove the value of a pattern and replace with unknown *)
+let map_unknown_value c pat =
+  let pat = list_drop_end 1 @@ U.unwrap_tuple pat in
+  light_type c @@ KH.mk_tuple @@ pat @ [KH.mk_cunknown]
+
 (* create a deep bind for lambdas, triggers, and let statements
  * -in_record indicates that the first level of binding should be a record *)
 let rec deep_bind ~in_record c arg_n =
@@ -1205,6 +1210,8 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
       (fun vid x -> lazy_expr c col <| apply_method_nocol c ~name:"insert" ~args:[vid;x]
           ~arg_info:[vid_out_arg; [], true])
   | Delete -> let col, x = U.decompose_delete expr in
+    (* get rid of the value for maps *)
+    let x = if is_map col then map_unknown_value c x else x in
     maybe_vmap c col x
       (fun x -> lazy_expr c col <| apply_method_nocol c ~name:"erase" ~args:[x]
         ~arg_info:[[],true])
@@ -1219,6 +1226,8 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
         ~arg_info:[vid_out_arg; [], true])
 
   | Update -> let col, oldx, newx = U.decompose_update expr in
+    (* get rid of the value for maps *)
+    let oldx = if is_map col then map_unknown_value c oldx else oldx in
     maybe_vmap c col newx
       (fun newx ->
         lazy_expr c col <| apply_method_nocol c ~name:"update" ~args:[oldx;newx]
