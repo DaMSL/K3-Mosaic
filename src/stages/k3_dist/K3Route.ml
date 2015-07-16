@@ -30,24 +30,90 @@ let route_for p map_id =
     List.map K3PrintSyntax.string_of_type m_t
 
 let t_two_ints = [t_int; t_int]
-let t_list_two_ints = wrap_tlist' t_two_ints
-let dim_bounds_type = wrap_tlist' t_two_ints
-let pmap_types = wrap_tlist' t_two_ints
-let pmap_per_map_types = [t_map_id; pmap_types]
-let full_pmap_types = wrap_tmap' pmap_per_map_types
-let full_pmap_input_types = wrap_tlist' pmap_per_map_types
-let free_dims_type = wrap_tlist' t_two_ints
-let free_domains_type = wrap_tlist' [t_int; wrap_tlist t_int]
 let inner_cart_prod_type = wrap_tlist' t_two_ints
 let free_cart_prod_type = wrap_tlist @@ wrap_tlist' t_two_ints
 let free_bucket_type = wrap_tlist' t_two_ints
 let sorted_ip_inner_type = [t_addr; t_unit]
-let sorted_ip_list_type = wrap_tbag' sorted_ip_inner_type
 let output_type = wrap_tbag t_addr
 
 (* map_parameter starts at 0 *)
 (*             map_name * (map_parameter * modulo)  *)
 type part_map_t = (id_t * (int * int) list) list
+
+let inner_pmap =
+  let e = ["pos", t_int; "mod", t_int] in
+  let t = wrap_tmap' @@ snd_many e in
+  create_ds "inner_pmap" t ~e
+
+(* list equal to inner_pmap *)
+let inner_plist =
+  let e = ["pos", t_int; "mod", t_int] in
+  let t = wrap_tlist' @@ snd_many e in
+  create_ds "inner_plist" t ~e
+
+let dim_bounds =
+  let e = ["dim", t_int; "bound", t_int] in
+  let t = wrap_tmap' @@ snd_many e in
+  create_ds "dim_bounds" t ~e
+
+let free_dims =
+  let e = ["dim", t_int; "bound", t_int] in
+  let t = wrap_tmap' @@ snd_many e in
+  create_ds "free_dims" t ~e
+
+let pmap =
+  let e = [inner_pmap.id, inner_pmap.t;
+           "dim_info", wrap_ttuple [dim_bounds.t; t_int]] in
+  let t = wrap_ttuple @@ snd_many e in
+  create_ds "pmap" t  ~e
+
+let calc_dim_bounds =
+  mk_global_fn "calc_dim_bounds" ["pmap", inner_plist.t] [dim_bounds.t; t_int] @@
+    (* calculate the size of the bucket of each dimensioned we're partitioned on
+    * This is order-dependent in pmap *)
+      mk_agg
+        (mk_lambda2'
+          ["xs", dim_bounds.t; "acc_size", t_int]
+          ["pos", t_int; "bin_size", t_int] @@
+          mk_block [
+            mk_insert "xs" [mk_var "pos"; mk_var "acc_size"];
+            mk_tuple [
+              mk_var "xs";
+              mk_mult (mk_var "bin_size") @@ mk_var "acc_size"]])
+        (mk_tuple [mk_empty @@ dim_bounds.t; mk_cint 1]) @@
+        mk_var "pmap"
+
+(* map from map_id to inner_pmap *)
+let pmap_data =
+  let e = ["map_id", t_int; pmap.id, pmap.t] in
+  let t = wrap_tmap' @@ snd_many e in
+  let init =
+    (* partition map as input by the user (with map names) *)
+    (* calculate the size of the bucket of each dimensioned we're partitioned on
+    * This is order-dependent in pmap *)
+    mk_agg
+      (mk_lambda2' ["acc", t]
+                   ["map_name", t_string; "map_types", inner_plist.t] @@
+        mk_block [
+          mk_insert "acc"
+            [mk_fst @@ mk_peek_or_error "can't find map in map_ids" @@
+              mk_slice' K3Dist.map_ids_id
+                  [mk_cunknown; mk_var "map_name"; mk_cunknown];
+            mk_tuple [
+              (* convert map_types to map *)
+              mk_convert_col inner_plist.t inner_pmap.t @@
+                mk_var "map_types";
+              (* pre-calculate dim bounds data *)
+              mk_apply' "calc_dim_bounds" [mk_var "map_types"]]
+            ]
+          ;
+          mk_var "acc"])
+      (mk_empty t) @@
+      mk_var "pmap_input"
+  in
+  create_ds "pmap_data" t ~e ~init
+
+(* convert human-readable map name to map id *)
 
 (* convert a k3 data structure with partition map data to an ocaml list with the
  * same data for easy manipulation *)
@@ -83,9 +149,9 @@ let k3_partition_map_of_list p l =
   if null l || fst (hd l) = "empty" then
     let map_names = for_all_maps p (map_name_of p) in
     let k3_pmap = list_map (fun s ->
-      mk_tuple [mk_cstring s; mk_empty pmap_types]
+      mk_tuple [mk_cstring s; mk_empty inner_plist.t]
     ) map_names in
-    k3_container_of_list full_pmap_input_types k3_pmap
+    k3_container_of_list inner_plist.t k3_pmap
   else
     let one_map_to_k3 (m, ds) =
       let check_index i = let ts = map_types_for p @@ map_id_of_name p m
@@ -95,9 +161,15 @@ let k3_partition_map_of_list p l =
         (fun (i, d) -> if check_index i then k3tuplize (i,d)
           else invalid_arg @@ "index "^string_of_int i^" out of range in map "^m)
         ds
-      in mk_tuple [mk_cstring m; k3_container_of_list pmap_types newdata] in
+      in mk_tuple [mk_cstring m; k3_container_of_list inner_plist.t newdata] in
     let new_l = List.map one_map_to_k3 l in
-    k3_container_of_list full_pmap_input_types new_l
+    k3_container_of_list inner_plist.t new_l
+
+let pmap_input p partmap =
+  let e = ["map", t_string; inner_plist.id, inner_plist.t] in
+  let t = wrap_tlist' @@ snd_many e in
+  let init = k3_partition_map_of_list p partmap in
+  create_ds "pmap_input" t ~e ~init
 
 exception NoHashFunction of K3.AST.base_type_t
 
@@ -113,47 +185,6 @@ let hash_func_for typ =
     | TTuple(vs)        -> "T_"^ String.concat "_" (List.map inner vs) ^"_t"
     | x                 -> raise @@ NoHashFunction x
   in "hash_"^inner typ
-
-(* partition map as input by the user (with map names) *)
-let pmap_input = "pmap_input"
-let global_pmap_input p partmap =
-  mk_global_val_init pmap_input
-  (wrap_tlist' [t_string; pmap_types]) @@
-  k3_partition_map_of_list p partmap
-
-(* convert human-readable map name to map id *)
-let pmap_data = "pmap_data"
-let global_pmaps =
-  mk_global_val_init pmap_data full_pmap_types @@
-    mk_agg
-      (mk_lambda2' ["acc", full_pmap_types] ["map_name", t_string; "map_types", pmap_types] @@
-        mk_block [
-          mk_insert "acc" @@
-            [mk_fst @@ mk_peek_or_error "can't find map in map_ids" @@
-                mk_slice' K3Dist.map_ids_id
-                  [mk_cunknown; mk_var "map_name"; mk_cunknown]
-            ; mk_var "map_types"];
-          mk_var "acc"]
-      )
-      (mk_empty full_pmap_types) @@
-      mk_var "pmap_input"
-
-(* calculate the size of the bucket of each dimensioned we're partitioned on
- * This is order-dependent in pmap *)
-let calc_dim_bounds_code =
-  mk_global_fn "calc_dim_bounds"
-  ["pmap", pmap_types] [dim_bounds_type; t_int] @@
-    mk_agg
-      (mk_assoc_lambda
-        (wrap_args ["xs", wrap_tlist @@ wrap_ttuple [t_int; t_int];
-          "acc_size", t_int])
-        (wrap_args ["pos", t_int; "bin_size", t_int]) @@
-        mk_tuple [mk_combine (mk_var "xs") @@
-          mk_singleton t_list_two_ints [mk_var "pos"; mk_var "acc_size"];
-          mk_mult (mk_var "bin_size") @@ mk_var "acc_size"])
-      (mk_tuple [mk_empty @@ wrap_tlist @@ wrap_ttuple [t_int; t_int];
-        mk_cint 1]) @@
-      mk_var "pmap"
 
 let gen_route_fn p map_id =
   let map_types = map_types_no_val_for p map_id in
@@ -179,17 +210,18 @@ let gen_route_fn p map_id =
     (("map_id", t_map_id)::types_to_ids_types prefix key_types)
     [output_type] @@ (* return *)
     (* get the info for the current map and bind it to "pmap" *)
-    mk_let ["pmap"]
+    mk_let ["pmap_lookup"]
     (mk_snd @@ mk_peek_or_error "can't find map_id in pmap_data" @@
-        mk_slice' pmap_data @@ [mk_var "map_id"; mk_cunknown]) @@
+        mk_slice' pmap_data.id @@ [mk_var "map_id"; mk_cunknown]) @@
+
+    (* deep bind *)
+    mk_let ["pmap"; "dim_info"] (mk_var "pmap_lookup") @@
+    mk_let ["dim_bounds"; "max_val"] (mk_var "dim_info") @@
 
     (* handle the case of no partitioning at all *)
-    mk_case_ns (mk_peek @@ mk_var "pmap") "_"
+    mk_if (mk_eq (mk_size (mk_var "pmap")) @@ mk_cint 0)
       (mk_var "nodes") @@
 
-    (* calculate the dim bounds ie. the bucket sizes when linearizing *)
-    mk_let ["dim_bounds"; "max_val"]
-      (mk_apply' "calc_dim_bounds" [mk_var "pmap"]) @@
     (* calc_bound_bucket *)
     (* we calculate the contribution of the bound components *)
     mk_let ["bound_bucket"]
@@ -227,24 +259,19 @@ let gen_route_fn p map_id =
       map_range
     ) @@
     (* now calculate the free parameters' contribution *)
-    mk_let ["free_dims"]
-      (List.fold_left
-        (fun acc_code x ->
+    mk_let ["free_dims"] (mk_empty free_dims.t) @@
+      mk_block @@
+        (List.map (fun x ->
           let type_x = List.nth key_types x in
           let id_x = to_id x in
-          mk_combine
-          (mk_if
-            (* we only care about indices that are nothing *)
-            (mk_neq (mk_var id_x) @@ mk_nothing type_x)
-            (mk_empty free_dims_type) @@
-            mk_slice' "pmap" [mk_cint x; mk_cunknown]
-          ) acc_code
-        )
-        (mk_empty free_dims_type)
-        (map_range)
-      ) @@
+          mk_if (mk_eq (mk_var id_x) @@ mk_nothing type_x)
+            (mk_insert "free_dims"
+              [mk_peek_or_error "failed to find pmap value" @@
+                mk_slice' "pmap" [mk_cint x; mk_cunknown]])
+            mk_cunit)
+        map_range) @
     (* a list of ranges from 0 to the bucket size, for every free variable *)
-    mk_let ["free_domains"]
+    singleton @@ mk_let ["free_domains"]
       (mk_map
         (mk_lambda' ["i", t_int; "b_i", t_int] @@
           mk_tuple [mk_var "i"; mk_range TList
@@ -310,13 +337,12 @@ let gen_route_fn p map_id =
 
 (* create all code needed for route functions, including foreign funcs*)
 let global_vars p partmap =
-  [
-    global_pmap_input p partmap;
-    global_pmaps;
+  List.map decl_global
+  [ pmap_input p partmap;
+    pmap_data;
   ]
 
 let functions c partmap =
-  calc_dim_bounds_code ::
   (* create a route for each map type, using only the key types *)
   (List.map (gen_route_fn c.p) @@ List.map (hd |- snd |- snd) @@
     D.uniq_types_and_maps ~uniq_indices:false ~type_fn:P.map_types_no_val_for c)

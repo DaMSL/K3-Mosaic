@@ -1241,6 +1241,7 @@ let declare_global_vars c partmap ast =
   Timer.global_vars @
   TS.global_vars @
   K3Ring.global_vars @
+  [K3Route.calc_dim_bounds] @ (* needed for global_vars *)
   K3Route.global_vars c.p partmap @
   GC.global_vars c
 
