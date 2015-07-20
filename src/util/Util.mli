@@ -90,6 +90,9 @@ val list_zip : 'a list -> 'b list -> ('a * 'b) list
 (* split a list of pairs into 2 lists *)
 val list_unzip : ('a * 'b) list -> ('a list * 'b list)
 
+(* fold up to last element, which is applied f_zero treatment *)
+val list_fold_to_last : ('acc -> 'a -> 'acc) -> ('a -> 'acc) -> 'a list -> 'acc
+
 val list_fold2 : ('acc -> 'b -> 'c -> 'acc) -> 'acc -> 'b list -> 'c list -> 'acc
 
 (* take the head of a list *)

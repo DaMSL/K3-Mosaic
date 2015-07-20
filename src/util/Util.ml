@@ -121,6 +121,11 @@ let list_unzip l =
     | (x,x')::xs -> loop (x::acc) (x'::acc') xs
   in loop [] [] l
 
+(* fold up to last element, which is applied zero treatment *)
+let list_fold_to_last f f_zero l =
+  let l, last = list_split (-1) l in
+  List.fold_left f (f_zero @@ List.hd last) l
+
 let list_fold2 f zero l1 l2 =
   let rec loop acc l1 l2 = match l1, l2 with
     | [], []       -> acc

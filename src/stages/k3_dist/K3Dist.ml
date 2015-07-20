@@ -167,6 +167,7 @@ let string_of_ds ds =
   ds.global
   ds.vid
 
+
 (* get a ds representing a map *)
 (* @calc: have the type of inner calculation *)
 (* @vid: keep the vid *)
@@ -472,6 +473,24 @@ let ms_end_time = create_ds "ms_end_time" @@ mut t_int
 (* for debugging, driver pause *)
 let sw_driver_sleep = create_ds "sw_driver_sleep" @@ mut t_int
 
+(**** No corrective mode ****)
+
+(* whether we're operating with correctives on *)
+let corrective_mode = create_ds "corrective_mode" t_bool ~init:mk_cfalse
+
+(* map stmt_id to lmap *)
+let nd_lmap_of_stmt_id c =
+  let e = ["stmt_id", t_int; "map_id", t_int] in
+  let t = wrap_tmap' @@ snd_many e in
+  let init = k3_container_of_list t @@
+    List.map (fun (x,y) ->
+      mk_tuple [mk_cint x; mk_cint y]) @@ P.stmts_lhs_maps c.p in
+  create_ds "nd_lmap_of_stmt_id" t ~e ~init
+
+let nd_rcv_fetch_buffer =
+  let e = ["vid", t_vid; "stmt_maps", wrap_tset' [t_int; t_int]] in
+  create_ds "nd_rcv_fetch_buffer" (wrap_tsortedmap' @@ snd_many e) ~e
+
 (**** Protocol Init code ****)
 
 let ms_init_counter = create_ds "ms_init_counter" (mut t_int) ~init:(mk_cint 0)
@@ -539,7 +558,10 @@ let nd_stmt_cntrs_corr_map =
 (* 1st counter: count messages received until do_complete *)
 (* 2nd counter: map from hop to counter *)
 let nd_stmt_cntrs =
-  let ee = [["vid", t_vid; "stmt_id", t_int]; ["counter", t_int; "corr_map", wrap_tmap' @@ snd_many @@ ds_e nd_stmt_cntrs_corr_map]] in
+  let ee =
+    [["vid", t_vid; "stmt_id", t_int];
+     ["counter", t_int;
+      "corr_map", wrap_tmap' @@ snd_many @@ ds_e nd_stmt_cntrs_corr_map]] in
   let e = list_zip ["vid_stmt_id"; "ctr_corrs"] @@
     List.map (wrap_ttuple |- snd_many) ee in
   create_ds "nd_stmt_cntrs" (wrap_tmap' @@ snd_many e) ~e
@@ -712,6 +734,7 @@ let global_vars c dict =
       map_ids c;
       nd_stmt_cntrs;
       nd_log_master;
+      nd_rcv_fetch_buffer;
       sw_init;
       sw_seen_sentry;
       sw_trig_buf_idx;
