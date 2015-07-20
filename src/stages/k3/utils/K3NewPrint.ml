@@ -447,13 +447,14 @@ let lookup_pat_of_slice ?(vid=false) ~col pat =
 
 (* remove the value of a pattern and replace with unknown *)
 (* if we're referencing a variable, we need to just project out the key *)
-let map_unknown_value c pat =
+let map_mk_unknown c get_key pat =
   let p = U.unwrap_tuple pat in
-  if List.length p = 1 then 
-    light_type c @@ KH.mk_subscript 1 pat
-  else
-    light_type c @@
-      KH.mk_tuple @@ (list_drop_end 1 p) @ [KH.mk_cunknown]
+  light_type c @@ match p with
+  | [_]   when get_key -> KH.mk_subscript 1 pat
+  | [_]                -> KH.mk_subscript 2 pat
+  | [x;_] when get_key -> KH.mk_tuple [x; KH.mk_cunknown]
+  | [_;x]              -> KH.mk_tuple [KH.mk_cunknown; x]
+  | _ -> failwith "bad pattern"
 
 (* create a deep bind for lambdas, triggers, and let statements
  * -in_record indicates that the first level of binding should be a record *)
@@ -1216,7 +1217,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
           ~arg_info:[vid_out_arg; [], true])
   | Delete -> let col, x = U.decompose_delete expr in
     (* get rid of the value for maps *)
-    let x = if is_map col then map_unknown_value c x else x in
+    let x = if is_map col then map_mk_unknown c true x else x in
     maybe_vmap c col x
       (fun x -> lazy_expr c col <| apply_method_nocol c ~name:"erase" ~args:[x]
         ~arg_info:[[],true])
@@ -1232,9 +1233,10 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
 
   | Update -> let col, oldx, newx = U.decompose_update expr in
     (* get rid of the value for maps *)
-    let oldx = if is_map col then map_unknown_value c oldx else oldx in
+    let oldx = if is_map col then map_mk_unknown c true oldx else oldx in
     maybe_vmap c col newx
       (fun newx ->
+        let newx = if is_map col then map_mk_unknown c false newx else newx in
         lazy_expr c col <| apply_method_nocol c ~name:"update" ~args:[oldx;newx]
         ~arg_info:[[], true; [], true])
       (fun vid newx ->
