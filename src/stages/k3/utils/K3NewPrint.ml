@@ -446,9 +446,14 @@ let lookup_pat_of_slice ?(vid=false) ~col pat =
   if vid then pat' else pat'@[list_last pat]
 
 (* remove the value of a pattern and replace with unknown *)
+(* if we're referencing a variable, we need to just project out the key *)
 let map_unknown_value c pat =
-  let pat = list_drop_end 1 @@ U.unwrap_tuple pat in
-  light_type c @@ KH.mk_tuple @@ pat @ [KH.mk_cunknown]
+  let p = U.unwrap_tuple pat in
+  if List.length p = 1 then 
+    light_type c @@ KH.mk_subscript 1 pat
+  else
+    light_type c @@
+      KH.mk_tuple @@ (list_drop_end 1 p) @ [KH.mk_cunknown]
 
 (* create a deep bind for lambdas, triggers, and let statements
  * -in_record indicates that the first level of binding should be a record *)
