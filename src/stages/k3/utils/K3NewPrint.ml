@@ -449,11 +449,11 @@ let lookup_pat_of_slice ?(vid=false) ~col pat =
 (* if we're referencing a variable, we need to just project out the key *)
 let map_mk_unknown c get_key pat =
   let p = U.unwrap_tuple pat in
-  light_type c @@ match p with
-  | [_]   when get_key -> KH.mk_subscript 1 pat
-  | [_]                -> KH.mk_subscript 2 pat
-  | [x;_] when get_key -> KH.mk_tuple [x; KH.mk_cunknown]
-  | [_;x]              -> KH.mk_tuple [KH.mk_cunknown; x]
+  light_type c @@ KH.mk_tuple @@ match p with
+  | [_]   when get_key -> [KH.mk_subscript 1 pat; KH.mk_cunknown]
+  | [_]                -> [KH.mk_cunknown; KH.mk_subscript 2 pat]
+  | [x;_] when get_key -> [x; KH.mk_cunknown]
+  | [_;x]              -> [KH.mk_cunknown; x]
   | _ -> failwith "bad pattern"
 
 (* create a deep bind for lambdas, triggers, and let statements
