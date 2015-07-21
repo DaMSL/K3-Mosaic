@@ -487,9 +487,13 @@ let nd_lmap_of_stmt_id c =
       mk_tuple [mk_cint x; mk_cint y]) @@ P.stmts_lhs_maps c.p in
   create_ds "nd_lmap_of_stmt_id" t ~e ~init
 
+let nd_rcv_fetch_buffer_inner =
+  let e = ["vid", t_vid; "stmt_id", t_int] in
+  create_ds "nd_rcv_fetch_buffer_inner" (wrap_tsortedmap' @@ snd_many e) ~e
+
 let nd_rcv_fetch_buffer =
-  let e = ["vid", t_vid; "stmt_maps", wrap_tset' [t_int; t_int]] in
-  create_ds "nd_rcv_fetch_buffer" (wrap_tsortedmap' @@ snd_many e) ~e
+  let e = ["map_id", t_int; "vid_stmt", nd_rcv_fetch_buffer_inner.t] in
+  create_ds "nd_rcv_fetch_buffer" (wrap_tmap' @@ snd_many e) ~e
 
 (**** Protocol Init code ****)
 
@@ -548,6 +552,14 @@ let combine_trig_args c =
   (* get only the relevant parts *)
   let trigs = StrSet.of_list @@ List.map suffix @@ P.get_trig_list c.p in
   second (StrMap.filter @@ fun k _ -> StrSet.mem k trigs) c.agenda_map
+
+let nd_stmt_cntrs_per_map_inner =
+  let e = ["vid", t_vid; "stmt_id", t_int] in
+  create_ds "nd_stmt_cntrs_per_map_inner" (wrap_tsortedmap' @@ snd_many e) ~e
+
+let nd_stmt_cntrs_per_map =
+  let e = ["map_id", t_int; "vid_stmt", nd_stmt_cntrs_per_map_inner.t] in
+  create_ds "nd_stmt_cntrs_per_map" (wrap_tmap' @@ snd_many e) ~e
 
 (* not a real ds. only inside stmt_cntrs *)
 let nd_stmt_cntrs_corr_map =
@@ -734,7 +746,9 @@ let global_vars c dict =
       map_ids c;
       nd_stmt_cntrs;
       nd_log_master;
+      corrective_mode;
       nd_rcv_fetch_buffer;
+      nd_lmap_of_stmt_id c;
       sw_init;
       sw_seen_sentry;
       sw_trig_buf_idx;
