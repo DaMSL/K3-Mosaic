@@ -14,7 +14,7 @@ type peer_t = (address * id_t)
 let me = create_ds "me" t_addr
 let me_var = mk_var me.id
 
-let role = create_ds "role" t_string
+let role = create_ds "role" @@ wrap_tset t_string
 
 let peers =
   let e = ["addr", t_addr] in
