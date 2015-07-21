@@ -1321,7 +1321,7 @@ let channel_format c = function
   | JSON -> "json"
 
 let lazy_channel c chan_t chan_f = match chan_t with
-  | File s -> lps @@ sp "file \"%s\" text %s" s (channel_format c chan_f)
+  | File s -> lps @@ sp "file switch_path text %s" s (channel_format c chan_f)
   | Network(str, port) -> lps @@ "socket(\""^str^"\":"^string_of_int port^")"
 
 let rec lazy_resource_pattern c = function
