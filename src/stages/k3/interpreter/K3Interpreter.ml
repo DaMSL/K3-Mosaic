@@ -641,7 +641,7 @@ let env_of_program ?address ?json ~role ~peers sched_st k3_program =
           | id, _ when id = K3Global.peers.id ->
               env, VSet (ValueSet.of_list @@ List.map (fun x -> VAddress x) @@ fst_many peers)
 
-          | id, _ when id = K3Global.role.id  -> env, VString role
+          | id, _ when id = K3Global.role.id  -> env, VSet(ValueSet.singleton (VString role))
 
           | id, Some e ->
               begin match lookup_json json id with
