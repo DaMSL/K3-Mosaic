@@ -476,7 +476,7 @@ let sw_driver_sleep = create_ds "sw_driver_sleep" @@ mut t_int
 (**** No corrective mode ****)
 
 (* whether we're operating with correctives on *)
-let corrective_mode = create_ds "corrective_mode" t_bool ~init:mk_cfalse
+let corrective_mode = create_ds "corrective_mode" t_bool ~init:mk_ctrue
 
 (* map stmt_id to lmap *)
 let nd_lmap_of_stmt_id c =
@@ -746,15 +746,17 @@ let global_vars c dict =
       map_ids c;
       nd_stmt_cntrs;
       nd_log_master;
-      corrective_mode;
-      nd_rcv_fetch_buffer;
-      nd_lmap_of_stmt_id c;
       sw_init;
       sw_seen_sentry;
       sw_trig_buf_idx;
       ms_start_time;
       ms_end_time;
       sw_driver_sleep;
+      (* for no-corrective mode *)
+      corrective_mode;
+      nd_rcv_fetch_buffer;
+      nd_stmt_cntrs_per_map;
+      nd_lmap_of_stmt_id c;
     ] @
     sw_trig_bufs c @
     log_ds c @

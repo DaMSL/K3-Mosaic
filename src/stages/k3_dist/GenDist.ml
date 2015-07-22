@@ -147,10 +147,10 @@ let nd_check_stmt_cntr_index c =
                   mk_tuple [mk_cint m;
                     mk_singleton D.nd_stmt_cntrs_per_map_inner.t
                     [mk_var "vid"; mk_var "stmt_id"]])
-                (mk_lambda' ["vid_stmt", D.nd_stmt_cntrs_per_map_inner.t] @@
+                (mk_lambda' D.nd_stmt_cntrs_per_map.e @@
                   mk_block [
                     mk_insert "vid_stmt" @@ [mk_var "vid"; mk_var "stmt_id"];
-                    mk_var "vid_stmt"]))
+                    mk_tuple @@ ids_to_vars @@ fst_many D.nd_stmt_cntrs_per_map.e]))
               acc)
           mk_cunit
           lmap_stmts;
@@ -580,7 +580,7 @@ let nd_rcv_fetch_trig c trig =
                     (mk_peek @@ mk_slice' D.nd_stmt_cntrs_per_map.id
                       [mk_var "map_id"; mk_cunknown]) "x"
                     (mk_var D.g_max_vid.id) @@
-                    mk_min_with (mk_var "x")
+                    mk_min_with (mk_snd @@ mk_var "x")
                     (* if empty, return max *)
                       (mk_lambda'' unit_arg @@ mk_var g_max_vid.id) @@
                       mk_lambda' nd_stmt_cntrs_per_map_inner.e @@ mk_var "vid")
@@ -606,8 +606,10 @@ let nd_rcv_fetch_trig c trig =
                   [mk_var "map_id"; mk_singleton D.nd_rcv_fetch_buffer_inner.t
                     [mk_var "vid"; mk_var "stmt_id"]])
                 (mk_lambda' nd_rcv_fetch_buffer.e @@
-                  mk_tuple [mk_var "map_id";
-                            mk_insert "vid_stmt" [mk_var "vid"; mk_var "stmt_id"]])) @@
+                  mk_block [
+                    mk_insert "vid_stmt" [mk_var "vid"; mk_var "stmt_id"];
+                    mk_tuple @@ ids_to_vars @@ fst_many @@ nd_rcv_fetch_buffer.e
+                  ])) @@
           mk_var stmt_map_ids.id
     ]
 
@@ -667,10 +669,9 @@ let nd_send_push_stmt_map_trig c s_rhs_lhs trig_name =
       let map_pat = D.pat_of_ds map_real ~flatten:true ~expr:(mk_var "tuple") in
       (* a pattern mapping real map with delta vars *)
       acc_code @
-      [mk_code_sink'
+      [mk_global_fn
         (send_push_name_of_t c trig_name stmt_id rhs_map_id)
-        (args_of_t_with_v c trig_name)
-        [] @@ (* locals *)
+        (args_of_t_with_v c trig_name) [] @@
         (* don't convert this to fold b/c we only read *)
         mk_bind (mk_var rhs_map_name) rhsm_deref @@
         mk_block [
@@ -1022,19 +1023,19 @@ let nd_update_stmt_cntr_corr_map =
 (* for no-corrective mode: execute buffered fetches *)
 let nd_exec_buffered_fetches_nm = "nd_exec_buffered_fetches"
 let nd_exec_buffered_fetches c =
-  let t_info = P.for_all_trigs c.p (fun t -> t, P.args_of_t c.p t, P.stmts_of_t c.p t) in
+  let t_info = P.for_all_trigs c.p (fun t -> t, D.args_of_t c t, P.stmts_of_t c.p t) in
   mk_global_fn nd_exec_buffered_fetches_nm ["vid", t_vid; "stmt_id", t_vid] [] @@
   (* get lmap id *)
-  mk_let ["lmap_id"]
-    (mk_peek_or_error "missing stmt_id" @@
+  mk_let ["map_id"]
+    (mk_snd @@ mk_peek_or_error "missing stmt_id" @@
       mk_slice' (D.nd_lmap_of_stmt_id c).id [mk_var "stmt_id"; mk_cunknown]) @@
   (* get the min_vid, check if we need to do delete on per-map stmt_cntrs *)
   mk_let ["min_vid"; "do_delete"]
     (mk_case_ns
-      (mk_peek @@ mk_slice' D.nd_stmt_cntrs_per_map.id [mk_var "lmap_id"; mk_cunknown])
+      (mk_peek @@ mk_slice' D.nd_stmt_cntrs_per_map.id [mk_var "map_id"; mk_cunknown])
       "x"
       (mk_tuple [mk_var D.g_max_vid.id; mk_cfalse]) @@
-      mk_min_with (mk_var "x")
+      mk_min_with (mk_snd @@ mk_var "x")
         (mk_lambda'' unit_arg @@ mk_tuple [mk_var D.g_max_vid.id; mk_cfalse]) @@
         mk_lambda' D.nd_stmt_cntrs_per_map_inner.e @@ mk_tuple [mk_var "vid"; mk_ctrue]) @@
   (* check if there are any pushes to send *)
@@ -1043,7 +1044,8 @@ let nd_exec_buffered_fetches c =
       (mk_peek @@ mk_slice' D.nd_rcv_fetch_buffer.id [mk_var "map_id"; mk_cunknown]) "x"
       mk_cfalse @@
       mk_case_ns
-        (mk_peek @@ mk_slice_lower' "x" [mk_var "vid"; mk_cunknown]) "_u" mk_cfalse mk_ctrue) @@
+        (mk_peek @@ mk_slice_lower (mk_snd @@ mk_var "x") [mk_var "vid"; mk_cunknown]) 
+        "_u" mk_cfalse mk_ctrue) @@
   mk_block [
     (* check if this is the min vid for the map in stmt_cntrs_per_map. if not, do nothing,
      * since we're not changing anything *)
@@ -1095,10 +1097,10 @@ let nd_exec_buffered_fetches c =
       (* delete the entry from the stmt_cntrs_per_map *)
       (mk_upsert_with D.nd_stmt_cntrs_per_map.id [mk_var "map_id"; mk_cunknown]
         (mk_lambda'' unit_arg @@ mk_error "whoops3") @@
-        mk_lambda' ["x", D.nd_stmt_cntrs_per_map_inner.t] @@
+        mk_lambda' D.nd_stmt_cntrs_per_map.e @@
           mk_block [
-            mk_delete "x" [mk_var "vid"; mk_cunknown];
-            mk_var "x"
+            mk_delete "vid_stmt" [mk_var "vid"; mk_cunknown];
+            mk_tuple @@ ids_to_vars @@ fst_many @@ D.nd_stmt_cntrs_per_map.e
           ])
       mk_cunit
   ]
@@ -1389,7 +1391,6 @@ let declare_global_funcs c partmap ast =
   (P.for_all_trigs ~sys_init:true ~deletes:c.gen_deletes c.p @@ nd_log_write c) @
   (P.for_all_trigs ~sys_init:true ~deletes:c.gen_deletes c.p @@ nd_log_get_bound c) @
   nd_check_stmt_cntr_index c ::
-  nd_complete_stmt_cntr_check c ::
   nd_update_stmt_cntr_corr_map ::
   begin if c.gen_correctives then [nd_filter_corrective_list] else [] end @
   K3Ring.functions @
@@ -1419,20 +1420,20 @@ let gen_dist_for_t c ast trig =
      nd_do_corrective_fns c s_rhs_corr ast trig (access c.corr_maps)
    else [])
   in
+  let functions2 = nd_send_push_stmt_map_trig c s_rhs_lhs trig in
   let trigs =
     (if null s_rhs then []
     else
       [nd_rcv_put_trig c trig;
       nd_rcv_fetch_trig c trig])
     @
-    nd_send_push_stmt_map_trig c s_rhs_lhs trig @
     nd_rcv_push_trig c s_rhs trig @
     nd_do_complete_trigs c trig @
     (if c.gen_correctives then
       nd_rcv_correctives_trig c s_rhs_corr trig
     else [])
   in
-  trigs, functions
+  trigs, functions, functions2
 
 (* Function to generate the whole distributed program *)
 (* @param force_correctives Attempt to create dist code that encourages correctives *)
@@ -1475,14 +1476,18 @@ let gen_dist ?(gen_deletes=true)
       map_indices = P.map_access_patterns p;
     } in
   (* regular trigs then insert entries into shuffle fn table *)
-  let proto_trigs, proto_funcs =
-    (fun (a,b) -> List.flatten a, List.flatten b) @@ list_unzip @@
+  let proto_trigs, proto_funcs, proto_funcs2 =
+    (fun (x,y,z) -> let a = List.flatten in a x, a y, a z) @@ list_unzip3 @@
       P.for_all_trigs ~sys_init:true ~deletes:c.gen_deletes c.p @@ gen_dist_for_t c ast
   in
   let prog =
     declare_global_vars c partmap ast @
     declare_global_funcs c partmap ast @
     (if c.gen_correctives then send_corrective_fns c else []) @
+    proto_funcs2 @
+    (* we need this here for scope *)
+    nd_exec_buffered_fetches c ::
+    nd_complete_stmt_cntr_check c ::
     proto_funcs @
     [mk_flow @@
       Proto.triggers c @
