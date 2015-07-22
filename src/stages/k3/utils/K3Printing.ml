@@ -112,7 +112,7 @@ let string_of_tag_type = function
     | Peek             -> "Peek"
     | PeekWithVid      -> "PeekWithVid"
     | Slice            -> "Slice"
-    | SliceFrontier    -> "SliceFrontier"
+    | SliceLower       -> "SliceLower"
     | SliceUpperEq     -> "SliceUpperEq"
     | AtWith           -> "AtWith"
     | MinWith          -> "MinWith"
@@ -124,6 +124,7 @@ let string_of_tag_type = function
     | Delete           -> "Delete"
     | DeletePrefix     -> "DeletePrefix"
     | FilterGEQ        -> "FilterGEQ"
+    | FilterLT         -> "FilterLT"
 
     | Indirect         -> "Indirect"
     | Assign           -> "Assign"

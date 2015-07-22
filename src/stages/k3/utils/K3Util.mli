@@ -52,6 +52,8 @@ val decompose_delete : expr_t -> expr_t * expr_t
 val decompose_delete_prefix : expr_t -> expr_t * expr_t
 val decompose_eq : expr_t -> expr_t * expr_t
 val decompose_filter : expr_t -> expr_t * expr_t
+val decompose_filter_geq : expr_t -> expr_t * expr_t
+val decompose_filter_lt : expr_t -> expr_t * expr_t
 val decompose_flatten : expr_t -> expr_t
 val decompose_gbagg : expr_t -> expr_t * expr_t * expr_t * expr_t
 val decompose_ifthenelse : expr_t -> expr_t * expr_t * expr_t
@@ -74,7 +76,7 @@ val decompose_range : expr_t -> expr_t * expr_t * expr_t
 val decompose_send : expr_t -> expr_t * expr_t * (expr_t list)
 val decompose_singleton : expr_t -> expr_t
 val decompose_slice : expr_t -> expr_t * expr_t
-val decompose_slice_frontier : expr_t -> expr_t * expr_t
+val decompose_slice_lower : expr_t -> expr_t * expr_t
 val decompose_slice_upper_eq : expr_t -> expr_t * expr_t
 val decompose_sort : expr_t -> expr_t * expr_t
 val decompose_size : expr_t -> expr_t
@@ -84,7 +86,6 @@ val decompose_update : expr_t -> expr_t * expr_t * expr_t
 val decompose_update_suffix : expr_t -> expr_t * expr_t * expr_t
 val decompose_upsert_with : expr_t -> expr_t * expr_t * expr_t * expr_t
 val decompose_upsert_with_before : expr_t -> expr_t * expr_t * expr_t * expr_t
-val decompose_filter_geq : expr_t -> expr_t * expr_t
 val decompose_var : expr_t -> id_t
 val decompose_indirect : expr_t -> expr_t
 

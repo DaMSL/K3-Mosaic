@@ -697,7 +697,7 @@ let map_latest_vid_vals ?(vid_nm="vid") c slice_col m_pat map_id ~keep_vid : exp
     | Some pat -> pat_of_flat_e map_ds ~add_vid:false pat
     | None     -> List.map (const mk_cunknown) (ds_e map_ds)
   in
-  convert @@ mk_slice_frontier slice_col @@ mk_var vid_nm :: pat
+  convert @@ mk_slice_lower slice_col @@ mk_var vid_nm :: pat
 
 (* End of frontier function code *)
 

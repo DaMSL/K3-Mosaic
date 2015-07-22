@@ -694,7 +694,7 @@ let nd_send_push_stmt_map_trig c s_rhs_lhs trig_name =
                   let slice_key =
                     mk_var "vid"::[mk_tuple @@ list_drop_end 1 slice_key]@[mk_cunknown] in
                   [mk_peek_with_vid
-                     (mk_slice_frontier (mk_var rhsm_deref) slice_key)
+                     (mk_slice_lower (mk_var rhsm_deref) slice_key)
                      (mk_lambda'' unit_arg @@ mk_empty map_delta.t) @@
                      mk_lambda'' ["vid", t_vid; "tuple", snd @@ unwrap_tcol @@ map_real.t] @@
                        mk_singleton map_delta.t @@ fst_many map_pat]
@@ -1043,7 +1043,7 @@ let nd_exec_buffered_fetches c =
       (mk_peek @@ mk_slice' D.nd_rcv_fetch_buffer.id [mk_var "map_id"; mk_cunknown]) "x"
       mk_cfalse @@
       mk_case_ns
-        (mk_peek @@ mk_slice_frontier' "x" [mk_var "vid"; mk_cunknown]) "_u" mk_cfalse mk_ctrue) @@
+        (mk_peek @@ mk_slice_lower' "x" [mk_var "vid"; mk_cunknown]) "_u" mk_cfalse mk_ctrue) @@
   mk_block [
     (* check if this is the min vid for the map in stmt_cntrs_per_map. if not, do nothing,
      * since we're not changing anything *)
@@ -1080,12 +1080,13 @@ let nd_exec_buffered_fetches c =
         mk_case_ns (mk_peek @@ mk_slice' D.nd_rcv_fetch_buffer.id
           [mk_var "map_id"; mk_cunknown]) "x"
           (mk_error "empty fetch buffer!") @@
-          mk_filter_lt (mk_snd @@ mk_var "x") [mk_var "min_vid"];
+          mk_filter_lt (mk_snd @@ mk_var "x") [mk_var "min_vid"; mk_cunknown];
         (* delete these entries from the fetch buffer *)
         mk_upsert_with D.nd_rcv_fetch_buffer.id [mk_var "map_id"; mk_cunknown]
           (mk_lambda'' unit_arg @@ mk_error "whoops4") @@
           mk_lambda' D.nd_rcv_fetch_buffer.e @@
-            mk_tuple [mk_var "map_id"; mk_filter_geq (mk_var "vid_stmt") [mk_var "min_vid"]]
+            mk_tuple [mk_var "map_id";
+              mk_filter_geq (mk_var "vid_stmt") [mk_var "min_vid"; mk_cunknown]]
       ])
       (* else do nothing *)
       mk_cunit
@@ -1387,7 +1388,7 @@ let declare_global_funcs c partmap ast =
   nd_log_master_write ::
   (P.for_all_trigs ~sys_init:true ~deletes:c.gen_deletes c.p @@ nd_log_write c) @
   (P.for_all_trigs ~sys_init:true ~deletes:c.gen_deletes c.p @@ nd_log_get_bound c) @
-  nd_check_stmt_cntr_index ::
+  nd_check_stmt_cntr_index c ::
   nd_complete_stmt_cntr_check c ::
   nd_update_stmt_cntr_corr_map ::
   begin if c.gen_correctives then [nd_filter_corrective_list] else [] end @

@@ -938,9 +938,9 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
             (* Slice frontier on VMap and full lookup *)
             (fun () ->
               if is_vmap col &&
-              D.is_lookup_pat (snd (U.decompose_slice_frontier col)) then
+              D.is_lookup_pat (snd (U.decompose_slice_lower col)) then
               handle_lookup_with c ~vmap:true ~id
-                ~decomp_fn:U.decompose_slice_frontier
+                ~decomp_fn:U.decompose_slice_lower
                 "lookup_with4_before" col t_elem e_none e_some
               else None);
 
@@ -968,7 +968,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
             (fun () ->
               if is_vmap col then
               handle_slice_lookup_with
-                ~decomp_fn:U.decompose_slice_frontier
+                ~decomp_fn:U.decompose_slice_lower
                 col t_elem e_none e_some else None);
 
             (* AggregateV -> lookup_before *)
@@ -990,7 +990,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
                 lps "in" <| lsp () <|
                 (unwrap_some @@
                   handle_lookup_with c ~vmap:true ~id
-                  ~decomp_fn:U.decompose_slice_frontier
+                  ~decomp_fn:U.decompose_slice_lower
                   "lookup_with4_before" col elem_t
                    e_none e_some')));
 
@@ -1082,7 +1082,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
     in
     (* handle a case of fold_all(slice(...)) *)
     let handle_slice () =
-      let col', pat = U.decompose_slice_frontier col in
+      let col', pat = U.decompose_slice_lower col in
       let vid = hd @@ U.unwrap_tuple pat in
       let pat_no_vid = tl @@ U.unwrap_tuple pat in
       let pat = meaningful_pat c pat_no_vid in
@@ -1090,7 +1090,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
       (* check if we can just do a lookup *)
       if D.is_lookup_pat pat then
         handle_lookup_with c
-          ~decomp_fn:U.decompose_slice_frontier
+          ~decomp_fn:U.decompose_slice_lower
           ~vmap:true
           ~id:"x"
           "lookup_with4_before" col t_elem
@@ -1142,7 +1142,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
       try_matching [
         (fun () ->
           let col, lam_none, lam_some = U.decompose_peek_with_vid expr in
-          let col, pat = U.decompose_slice_frontier col in
+          let col, pat = U.decompose_slice_lower col in
           let name = "lookup_with4_before_vid" in
           if not (D.is_lookup_pat pat) then None else
           let pat = lookup_pat_of_slice ~vid:true ~col pat in
@@ -1179,7 +1179,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
     in
     begin match col_t, tag with
     | TVMap _, Slice              -> handle_lookup ~vmap:true "lookup" col
-    | TVMap _, SliceFrontier      -> handle_lookup ~vmap:true ~decomp_fn:U.decompose_slice_frontier "lookup_before" col
+    | TVMap _, SliceLower      -> handle_lookup ~vmap:true ~decomp_fn:U.decompose_slice_lower "lookup_before" col
     | (TMap | TSortedMap),  Slice -> handle_lookup "lookup" col
     | TSortedMap,  SliceUpperEq   -> handle_lookup "upper_bound_with" col
     | _                           -> normal ()
@@ -1191,9 +1191,9 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
       let id = fst @@ at id_t (i-1) in
       (paren_l tup @@ lazy_expr c tup) <| lps "." <| lps id
 
-  | SliceFrontier ->
+  | SliceLower ->
       (* this only works on a vmap, so we can assume we have a vmap *)
-      let col, pat = U.decompose_slice_frontier expr in
+      let col, pat = U.decompose_slice_lower expr in
       filter_of_slice ~frontier:true c col pat
 
       (* no analog of a direct slice_upper_eq in k3new *)
@@ -1263,6 +1263,9 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
 
   | FilterGEQ -> let col, filter_val = U.decompose_filter_geq expr
                  in apply_method c ~name:"filter_geq" ~col ~args:[filter_val] ~arg_info:[[], true]
+
+  | FilterLT -> let col, filter_val = U.decompose_filter_lt expr
+                 in apply_method c ~name:"filter_lt" ~col ~args:[filter_val] ~arg_info:[[], true]
 
   | Assign -> let l, r = U.decompose_assign expr in
     lazy_expr c l <| lsp () <| lps "=" <| lsp () <| lazy_expr c r

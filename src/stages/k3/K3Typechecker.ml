@@ -36,6 +36,7 @@ let not_tuple t      = TBad(t, "not a tuple")
 let not_ind t        = TBad(t, "not an indirection")
 let not_function t   = TBad(t, "not a function")
 let not_collection t = TBad(t, "not a collection")
+let not_sorted_collection t = TBad(t, "not a sorted collection")
 let not_collection_bt t = BTBad(t, "not a collection")
 let error_tuple_small n tl t = TBad(t, Printf.sprintf "tuple has size %d but subscript %d" tl n)
 let wrong_let_size t = TBad(t, "wrong size for let")
@@ -89,7 +90,7 @@ let check_tag_arity tag children =
     | Peek          -> 1
     | PeekWithVid   -> 3
     | Slice         -> 2
-    | SliceFrontier -> 2
+    | SliceLower    -> 2
     | SliceUpperEq  -> 2
     | AtWith        -> 4
     | MinWith       -> 3
@@ -100,6 +101,7 @@ let check_tag_arity tag children =
     | Delete       -> 2
     | DeletePrefix -> 2
     | FilterGEQ    -> 2
+    | FilterLT     -> 2
 
     | Assign -> 2
     | Indirect -> 1
@@ -277,7 +279,7 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
 
   let is_tvmap = function TVMap _ -> true | _ -> false in
   let is_tvector = function TVector -> true | _ -> false in
-  let is_sorted = function TSortedMap | TVMap _ -> true | _ -> false in
+  let is_tsorted = function TSortedSet | TSortedMap | TVMap _ -> true | _ -> false in
 
   let common_ops () =
     let tfun, tcol' = bind 0, bind 1 in
@@ -548,11 +550,11 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
             if not (tpat === telem) then t_erroru (TMismatch(tpat, telem, "pattern"))
             else tcol'
 
-      | SliceFrontier ->
+      | SliceLower ->
           let tcol', tpat = bind 0, bind 1 in
           let tcol, telem =
             try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') in
-          if not (is_sorted tcol) then t_erroru (TMismatch(tcol', wrap_tvmap telem, "collection type")) else
+          if not @@ is_tsorted tcol then t_erroru @@ not_sorted_collection tcol' else
           check_vmap_pat tcol telem tpat;
           tcol'
 
@@ -560,7 +562,7 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
           let tcol', tpat = bind 0, bind 1 in
           let tcol, telem =
             try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') in
-          if not (is_sorted tcol) then t_erroru (TMismatch(tcol', wrap_tvmap telem, "collection type")) else
+          if not @@ is_tsorted tcol then t_erroru @@ not_sorted_collection tcol' else
           check_vmap_pat tcol telem tpat;
           tcol'
 
@@ -590,8 +592,7 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
             try unwrap_tfun tlam_none with Failure _ -> t_erroru (not_function tlam_none) in
           let ts_arg, ts_ret =
             try unwrap_tfun tlam_some with Failure _ -> t_erroru (not_function tlam_some) in
-          if not (is_sorted tcol) then
-            t_erroru (TBad(tcol', "not a sorted type")) else
+          if not @@ is_tsorted tcol then t_erroru @@ not_sorted_collection tcol' else
           if not (tn_ret === ts_ret) then
             t_erroru (TMismatch(tn_ret, ts_ret, "function return types")) else
           if not (list_forall2 (<~) tn_arg [t_unit]) then
@@ -639,10 +640,11 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
             t_erroru (TMismatch(tlam_update, tlam_update', "update lambda")) else
           t_unit
 
-      | FilterGEQ ->
+      | FilterGEQ | FilterLT ->
           let tcol', telem' = bind 0, bind 1 in
           let tcol, telem =
             try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') in
+          if not @@ is_tsorted tcol then t_erroru @@ not_sorted_collection tcol' else
           check_vmap_pat tcol telem telem';
           tcol'
 
@@ -657,7 +659,7 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
           let tcol', told = bind 0, bind 1 in
           let tcol, telem =
             try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') in
-          if not (is_sorted tcol) then t_erroru (TMismatch(tcol', wrap_tvmap telem, "collection type")) else
+          if not @@ is_tsorted tcol then t_erroru @@ not_sorted_collection tcol' else
           check_vmap_pat tcol telem told;
           t_unit
 
