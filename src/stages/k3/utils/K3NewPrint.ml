@@ -346,7 +346,9 @@ let slice_names c pat =
 let is_tuple e = match U.tag_of_expr e with Tuple -> true | _ -> false
 
 (* get the important part of the pattern out: for a [key, value] it's
- * the id function, but for [[a,b,c], value]] it's the inner tuple *)
+ * the id function, but for [[a,b,c], value]] it's the inner tuple.
+ * The asymmetry is caused by the fact that we need to preserve the full
+ * tuple (including value in the simple case) to get the right record ids *)
 let meaningful_pat c pat =
   if is_tuple @@ hd pat then hd pat
   else light_type c @@ KH.mk_tuple pat
@@ -1099,7 +1101,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
       let col', pat = U.decompose_slice_lower col in
       let vid = hd @@ U.unwrap_tuple pat in
       let pat_no_vid = tl @@ U.unwrap_tuple pat in
-      let pat = meaningful_pat c pat_no_vid in
+      let pat' = meaningful_pat c pat_no_vid in
       let t_elem = snd @@ KH.unwrap_tcol @@ T.type_of_expr col in
       (* check if we can just do a lookup *)
       if D.is_lookup_pat pat then
@@ -1112,7 +1114,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
           (KH.mk_singleton (T.type_of_expr acc) [KH.mk_var "x"])
       else
         (* if we have only unknowns, then we must access the full map (ie. a fold) *)
-        let as_fold = List.filter (not |- D.is_unknown) (U.unwrap_tuple pat) = [] in
+        let as_fold = List.filter (not |- D.is_unknown) (U.unwrap_tuple pat') = [] in
         let name =
           if as_fold then "fold_vid"
           else "fold_slice_vid_by_"^slice_names c pat_no_vid in
@@ -1121,7 +1123,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
           if as_fold then
             [vid; lambda; acc], [def_a; [2], false; def_a]
           else
-            [vid; light_type c pat; lambda; acc],
+            [vid; light_type c pat'; lambda; acc],
             [def_a; [], true; [2], false; def_a] in
         some @@ apply_method c ~name ~col:col' ~args ~arg_info
     in
