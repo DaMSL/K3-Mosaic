@@ -395,15 +395,16 @@ let job_none_v   = 4
 
 let job_master = create_ds "job_master" t_int ~init:(mk_cint job_master_v)
 let job_switch = create_ds "job_switch" t_int ~init:(mk_cint job_switch_v)
-let job_node   = create_ds "job_node" t_int ~init:(mk_cint job_node_v)
-let job_timer  = create_ds "job_timer" t_int ~init:(mk_cint job_timer_v)
+let job_node   = create_ds "job_node"   t_int ~init:(mk_cint job_node_v)
+let job_timer  = create_ds "job_timer"  t_int ~init:(mk_cint job_timer_v)
 
 let job =
   let init =
-    mk_if (mk_eq (mk_var G.role.id) @@ mk_cstring "master") (mk_var job_master.id) @@
-    mk_if (mk_eq (mk_var G.role.id) @@ mk_cstring "switch") (mk_var job_switch.id) @@
-    mk_if (mk_eq (mk_var G.role.id) @@ mk_cstring "node")   (mk_var job_node.id)   @@
-    mk_if (mk_eq (mk_var G.role.id) @@ mk_cstring "timer")  (mk_var job_timer.id)  @@
+    mk_let ["role2"] (mk_peek_or_error "bad role" @@ mk_var "role") @@
+    mk_if (mk_eq (mk_var "role2") @@ mk_cstring "master") (mk_var job_master.id) @@
+    mk_if (mk_eq (mk_var "role2") @@ mk_cstring "switch") (mk_var job_switch.id) @@
+    mk_if (mk_eq (mk_var "role2") @@ mk_cstring "node")   (mk_var job_node.id)   @@
+    mk_if (mk_eq (mk_var "role2") @@ mk_cstring "timer")  (mk_var job_timer.id)  @@
     mk_error "failed to find proper role"
   in
   create_ds "job" (mut t_int) ~init
