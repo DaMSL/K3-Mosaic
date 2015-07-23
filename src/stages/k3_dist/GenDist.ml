@@ -1023,7 +1023,8 @@ let nd_update_stmt_cntr_corr_map =
 (* for no-corrective mode: execute buffered fetches *)
 let nd_exec_buffered_fetches_nm = "nd_exec_buffered_fetches"
 let nd_exec_buffered_fetches c =
-  let t_info = P.for_all_trigs c.p (fun t -> t, D.args_of_t c t, P.stmts_with_rhs_maps_in_t c.p t) in
+  let t_info = P.for_all_trigs c.p
+    (fun t -> t, D.args_of_t c t, P.stmts_with_rhs_maps_in_t c.p t) in
   let t_info = List.filter (fun (_,_,x) -> x <> []) t_info in
   if t_info = [] then [] else singleton @@
   mk_global_fn nd_exec_buffered_fetches_nm ["vid", t_vid; "stmt_id", t_vid] [] @@
@@ -1061,9 +1062,10 @@ let nd_exec_buffered_fetches c =
               (* check if the stmts are in this trigger *)
               mk_if
                 (list_fold_to_last (fun acc s -> mk_or (mk_check_s s) acc) mk_check_s stmts)
-                (* pull arguments out of log *)
-                (mk_let (fst_many args) (mk_apply'
-                    (nd_log_get_bound_for t) [mk_var "vid"]) @@
+                (* pull arguments out of log (if needed) *)
+                ((if args = [] then id_fn else
+                  mk_let (fst_many args) (mk_apply'
+                    (nd_log_get_bound_for t) [mk_var "vid"])) @@
                 List.fold_left (fun acc s ->
                   mk_if (mk_eq (mk_var "stmt_id") @@ mk_cint s)
                     (let r_maps = P.rhs_maps_of_stmt c.p s in
