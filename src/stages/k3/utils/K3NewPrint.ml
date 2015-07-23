@@ -1312,7 +1312,9 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
               raise @@ MissingType(id, K3Printing.string_of_expr expr)
         in
         begin match t.typ with
-        | TTuple _ -> analyze () (* no need to wrap *)
+        (* unknown is for error function *)
+        | TTuple _
+        | TUnknown -> analyze () (* no need to wrap *)
         | _        -> lazy_expr ~expr_info:(fst expr_info, false)
                         ~prefix_fn c @@ light_type c @@ KH.mk_tuple ~force:true [expr]
         end
