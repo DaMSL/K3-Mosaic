@@ -39,8 +39,6 @@ def run():
                         default=True, help="Create k3new file")
     parser.add_argument('--no-deletes', action='store_false', dest='gen_deletes',
                         default=True, help="Create delete triggers")
-    parser.add_argument('--no-correctives', action='store_false', dest='gen_correctives',
-                        default=True, help="Create corrective triggers")
     parser.add_argument('--no-interp', action='store_false', dest='run_interp',
                         default=True, help="Run the interpreter")
     parser.add_argument('--workdir', action='store', type=str, dest='workdir',
@@ -53,6 +51,8 @@ def run():
                         default=True, help="Disable logging")
     parser.add_argument('--no-multiidx', action='store_false', dest='multiidx',
                         default=True, help="Disable multi-index maps")
+    parser.add_argument('--no-correctives', action='store_false', dest='correctives',
+                        default=True, help="Disable correctives")
 
 
     args = parser.parse_args()
@@ -101,13 +101,13 @@ def run():
                                 distrib=True,
                                 new_k3=args.new_k3,
                                 gen_deletes=args.gen_deletes,
-                                gen_correctives=args.gen_correctives,
                                 map_type=args.map_type,
                                 workdir=args.workdir,
                                 run_interp=args.run_interp,
                                 gc_interval=args.gc_interval,
                                 msg_interval=args.msg_interval,
-                                logging=args.logging
+                                logging=args.logging,
+                                correctives=args.correctives
                                 )
         # check if a test failed
         if not res:

@@ -759,7 +759,7 @@ List.fold_left
   [] s_rhs
 
 (* list of trig, stmt with a map on the rhs that's also on the lhs. These are
- * the potential corrective maps.
+ * the potential corrective maps and the potential read/write conflicts.
  * Inserts and Deletes really have 2 different graphs, so we return both *)
 let maps_potential_corrective p =
   let insert_ts = P.get_trig_list ~kind:P.InsertTrigs p in
@@ -1023,7 +1023,9 @@ let nd_update_stmt_cntr_corr_map =
 (* for no-corrective mode: execute buffered fetches *)
 let nd_exec_buffered_fetches_nm = "nd_exec_buffered_fetches"
 let nd_exec_buffered_fetches c =
-  let t_info = P.for_all_trigs c.p (fun t -> t, D.args_of_t c t, P.stmts_of_t c.p t) in
+  let t_info = P.for_all_trigs c.p (fun t -> t, D.args_of_t c t, P.stmts_with_rhs_maps_in_t c.p t) in
+  let t_info = List.filter (fun (_,_,x) -> x <> []) t_info in
+  if t_info = [] then [] else singleton @@
   mk_global_fn nd_exec_buffered_fetches_nm ["vid", t_vid; "stmt_id", t_vid] [] @@
   (* get lmap id *)
   mk_let ["map_id"]
@@ -1044,7 +1046,7 @@ let nd_exec_buffered_fetches c =
       (mk_peek @@ mk_slice' D.nd_rcv_fetch_buffer.id [mk_var "map_id"; mk_cunknown]) "x"
       mk_cfalse @@
       mk_case_ns
-        (mk_peek @@ mk_slice_lower (mk_snd @@ mk_var "x") [mk_var "vid"; mk_cunknown]) 
+        (mk_peek @@ mk_slice_lower (mk_snd @@ mk_var "x") [mk_var "vid"; mk_cunknown])
         "_u" mk_cfalse mk_ctrue) @@
   mk_block [
     (* check if this is the min vid for the map in stmt_cntrs_per_map. if not, do nothing,
@@ -1105,25 +1107,24 @@ let nd_exec_buffered_fetches c =
       mk_cunit
   ]
 
-
-
 (* call from do_complete when done to check if fully done *)
 let nd_complete_stmt_cntr_check_nm = "nd_complete_stmt_cntr_check"
 let nd_complete_stmt_cntr_check c =
   mk_global_fn nd_complete_stmt_cntr_check_nm ["vid", t_vid; "stmt_id", t_stmt_id] [] @@
   (* if we have nothing to send, we can delete our stmt_cntr entry right away *)
-  mk_block [
-    mk_delete nd_stmt_cntrs.id [mk_tuple [mk_var "vid"; mk_var "stmt_id"]; mk_cunknown];
+  mk_block @@
+    [mk_delete nd_stmt_cntrs.id
+      [mk_tuple [mk_var "vid"; mk_var "stmt_id"]; mk_cunknown]] @
     (* if we're in no-corrective mode, we need to execute batched fetches *)
-    mk_if (mk_var D.corrective_mode.id)
-      mk_cunit @@
-      mk_apply' nd_exec_buffered_fetches_nm [mk_var "vid"; mk_var "stmt_id"];
+    (if c.corr_maps = ([], []) then [] else singleton @@
+      mk_if (mk_var D.corrective_mode.id)
+        mk_cunit @@
+        mk_apply' nd_exec_buffered_fetches_nm [mk_var "vid"; mk_var "stmt_id"]) @
     (* check if we're done *)
-    Proto.nd_post_delete_stmt_cntr c
-  ]
+    [Proto.nd_post_delete_stmt_cntr c]
 
 (*
- * shared coded btw do_complete and do_corrective
+ * shared code btw do_complete and do_corrective
  * we add the delta to all following vids
  *)
 let do_add_delta c e lmap ~corrective =
@@ -1491,7 +1492,7 @@ let gen_dist ?(gen_deletes=true)
     (if c.gen_correctives then send_corrective_fns c else []) @
     proto_funcs2 @
     (* we need this here for scope *)
-    nd_exec_buffered_fetches c ::
+    nd_exec_buffered_fetches c @
     nd_complete_stmt_cntr_check c ::
     proto_funcs @
     [mk_flow @@
