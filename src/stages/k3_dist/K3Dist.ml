@@ -80,7 +80,7 @@ type config = {
   gen_deletes : bool;
   gen_correctives : bool;
   (* optimize figuring out corrective map possiblities *)
-  corr_maps : map_id_t list * map_id_t list;
+  corr_maps : map_id_t list;
   (* whether there's a sys_ready_event trigger *)
   sys_init : bool;
   (* a file to use as the stream to switches *)
@@ -99,7 +99,7 @@ let default_config = {
   map_type = MapVMap;
   gen_deletes = true;
   gen_correctives = true;
-  corr_maps = [], [];
+  corr_maps = [];
   sys_init = false;
   stream_file = "";
   agenda_map = [], StrMap.empty;
@@ -598,7 +598,7 @@ let log_ds c : data_struct list =
     let e  = ["vid", t_vid; "args", wrap_ttuple @@ snd_many e'] in
     create_ds (nd_log_for_t trig) (mut @@ wrap_tmap' @@ snd_many e) ~e
   in
-  P.for_all_trigs ~sys_init:true ~deletes:c.gen_deletes c.p log_struct_for
+  P.for_all_trigs ~sys_init:true ~delete:c.gen_deletes c.p log_struct_for
 
 (* Buffer versions of maps per statement (to prevent mixing values) *)
 (* NOTE: doesn't contain special inits from AST *)
@@ -627,7 +627,7 @@ let sw_init           = create_ds "sw_init" (mut t_bool) ~init:mk_cfalse
 (* these buffers don't inlude a vid, unlike the logs in the nodes *)
 let sw_trig_buf_prefix = "sw_buf_"
 let sw_trig_bufs (c:config) =
-  P.for_all_trigs ~sys_init:true ~deletes:c.gen_deletes c.p @@ fun t ->
+  P.for_all_trigs ~sys_init:true ~delete:c.gen_deletes c.p @@ fun t ->
     create_ds (sw_trig_buf_prefix^t) (wrap_tlist' @@ snd_many @@ args_of_t c t)
 
 (* list for next message -- contains trigger id *)

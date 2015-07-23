@@ -79,30 +79,23 @@ let check_prefix name prefix =
   let len = String.length prefix in
   if String.sub name 0 len = prefix then true else false
 
-type trig_kinds = AllTrigs | InsertTrigs | DeleteTrigs
-
+let is_correct_t t = check_prefix t "correct_"
 let is_delete_t t = check_prefix t "delete_"
 let is_insert_t t = check_prefix t "insert_"
 let is_sys_init_t t = t = "system_ready_event"
 let remove_trig_prefix t = str_drop (String.length "delete_") t
 
-let relevant_trig ?(kind=AllTrigs) t = match kind with
-  | AllTrigs    -> is_delete_t t || is_insert_t t || is_sys_init_t t
-  | InsertTrigs -> is_insert_t t
-  | DeleteTrigs -> is_delete_t t
+let relevant_trig ?(corrective=false) ?(sys_init=true) ?(delete=true) t =
+  is_insert_t t || (delete && is_delete_t t) ||
+  (corrective && is_correct_t t) || (sys_init && is_sys_init_t t)
 
 (* only non-corrective triggers *)
-let get_trig_list ?(kind=AllTrigs) (p:prog_data_t) =
+let get_trig_list ?corrective ?sys_init ?delete (p:prog_data_t) =
   let l = List.map (fun (_, name, _, _) -> name) @@ get_trig_data p in
-  List.filter (relevant_trig ~kind) l
+  List.filter (relevant_trig ?corrective ?sys_init ?delete) l
 
-let for_all_trigs ?(sys_init=false) ?(deletes=true) (p:prog_data_t) f =
-  let filter_fn = function
-    | "system_ready_event" when not sys_init -> false
-    | s when not deletes && is_delete_t s    -> false
-    | _                                      -> true
-  in
-  List.map f @@ List.filter filter_fn @@ get_trig_list p
+let for_all_trigs ?(corrective=false) ?(sys_init=false) ?(delete=true) (p:prog_data_t) f =
+  List.map f @@ get_trig_list ~corrective ~sys_init ~delete p
 
 let find_trigger (p:prog_data_t) (tname:string) =
   try List.find (fun (_, name, _, _) -> name = tname) @@ get_trig_data p
@@ -359,7 +352,7 @@ let map_access_patterns (p:prog_data_t) =
   let insert_from_bind t_args map binds =
     (* iterate over lmap binds and get index *)
     let map_ts = map_types_for p map in
-    let idx = 
+    let idx =
       List.flatten @@ List.map (fun (nm, i) ->
         (* only count bound variabls (trig args) *)
         if List.mem nm t_args then [i] else []) binds in
@@ -372,7 +365,7 @@ let map_access_patterns (p:prog_data_t) =
         | None   -> IntSetSet.singleton idx
         | Some x -> IntSetSet.add idx x)
   in
-  ignore(for_all_trigs p @@ fun trig ->
+  ignore(for_all_trigs ~sys_init:true ~corrective:true ~delete:true p @@ fun trig ->
     let t_args = fst_many @@ args_of_t p trig in
     let ss = List.map (find_stmt p) @@ stmts_of_t p trig in
     List.iter (fun (_,_,lmap,lbinds,rbinds) ->
