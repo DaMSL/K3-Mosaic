@@ -30,13 +30,13 @@ def run(target_file,
         new_k3=True,
         folds_only=True,
         gen_deletes=True,
-        gen_correctives=True,
         map_type="vmap",
         workdir="temp",
         run_interp=True,
         gc_interval=20000,
         msg_interval=2,
-        logging=True
+        logging=True,
+        correctives=True
         ):
 
     to_root = ".."
@@ -146,8 +146,6 @@ def run(target_file,
             options += "--map-multi "
         if not gen_deletes:
             options += "--no-deletes "
-        if not gen_correctives:
-            options += "--no-correctives "
 
         agenda_cmd = "--agenda "+ agenda_file
 
@@ -215,7 +213,10 @@ def run(target_file,
 
         if run_interp:
             # create a json file
-            j  = {"ms_gc_interval":gc_interval}
+            j = {}
+            j["ms_gc_interval"] = gc_interval
+            if not correctives:
+                j["corrective_mode"] = False
             with open(json_file, 'w') as f:
                 json.dump(j, f)
 

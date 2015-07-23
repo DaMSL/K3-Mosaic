@@ -304,8 +304,8 @@ let mk_slice collection pattern = mk_slice_gen Slice collection @@ mk_tuple patt
 let mk_slice' collection pattern = mk_slice (mk_var collection) pattern
 
 (* first part of pat contains the vid *)
-let mk_slice_frontier col pat = mk_slice_gen SliceFrontier col @@ mk_tuple pat
-let mk_slice_frontier' col pat = mk_slice_frontier (mk_var col) pat
+let mk_slice_lower col pat = mk_slice_gen SliceLower col @@ mk_tuple pat
+let mk_slice_lower' col pat = mk_slice_lower (mk_var col) pat
 
 let mk_slice_upper_eq col pat = mk_slice_gen SliceUpperEq col @@ mk_tuple pat
 let mk_slice_upper_eq' col pat = mk_slice_upper_eq (mk_var col) pat
@@ -336,8 +336,10 @@ let mk_update_suffix col key lambda =
   mk_stree UpdateSuffix [mk_var col; mk_tuple key; lambda]
 
 let mk_filter_geq collection filter_val = mk_stree FilterGEQ [collection; mk_tuple filter_val]
-
 let mk_filter_geq' col filter_val = mk_filter_geq (mk_var col) filter_val
+
+let mk_filter_lt collection filter_val = mk_stree FilterLT [collection; mk_tuple filter_val]
+let mk_filter_lt' col filter_val = mk_filter_lt (mk_var col) filter_val
 
 (* handle the common case of updating a peek on a slice *)
 let mk_update_slice col slice new_val =

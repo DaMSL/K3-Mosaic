@@ -196,6 +196,7 @@ rule tokenize = parse
     | "delete" { DELETE }
     | "delete_prefix" { DELETE_PREFIX }
     | "filter_geq"    { FILTERGEQ }
+    | "filter_lt"     { FILTERLT }
 
     | '@' { ANNOTATE }
 

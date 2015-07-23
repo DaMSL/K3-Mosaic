@@ -101,12 +101,18 @@ let nd_log_get_bound c t =
 (* function to check to see if we should execute a do_complete *)
 (* params: vid, stmt, count_to_change *)
 let nd_check_stmt_cntr_index_nm = "nd_check_stmt_cntr_index"
-let nd_check_stmt_cntr_index =
+let nd_check_stmt_cntr_index c =
   let lookup = "lookup_value" in
   let part_pat = ["vid", t_vid; "stmt_id", t_stmt_id] in
   let part_pat_as_vars = [mk_tuple @@ ids_to_vars @@ fst_many part_pat] in
   let query_pat = part_pat_as_vars @ [mk_cunknown] in
   let add_to_count, new_count = "add_to_count", "new_count" in
+  (* lmap -> stmts *)
+  let h = Hashtbl.create 20 in
+  List.iter (fun (s,m) ->
+    hashtbl_replace h m @@ function None -> [s] | Some s' -> s::s') @@
+    P.stmts_lhs_maps c.p;
+  let lmap_stmts = list_of_hashtbl h in
   mk_global_fn nd_check_stmt_cntr_index_nm
     (part_pat @ [add_to_count, t_int])
     [t_bool] @@ (* return whether we should send the do_complete *)
@@ -125,8 +131,29 @@ let nd_check_stmt_cntr_index =
       (* else: no value in the counter *)
       mk_block [
         (* Initialize *)
-        mk_insert nd_stmt_cntrs.id @@
-            part_pat_as_vars @ [mk_tuple [mk_var add_to_count; mk_empty nd_stmt_cntrs_corr_map.t]];
+        mk_insert nd_stmt_cntrs.id @@ part_pat_as_vars @
+          [mk_tuple [mk_var add_to_count; mk_empty nd_stmt_cntrs_corr_map.t]];
+        (* For no-corrective mode, add per-map *)
+        mk_if (mk_var D.corrective_mode.id) mk_cunit @@
+          List.fold_left (fun acc (m, ss) ->
+            let mk_check_s s = mk_eq (mk_var "stmt_id") @@ mk_cint s in
+            (* if we have any of the stmts with a given lmap *)
+            mk_if
+              (list_fold_to_last
+                (fun acc s -> mk_or (mk_check_s s) acc) mk_check_s ss)
+              (* add to per-map stmt counters *)
+              (mk_upsert_with D.nd_stmt_cntrs_per_map.id [mk_cint m; mk_cunknown]
+                (mk_lambda' unit_arg @@
+                  mk_tuple [mk_cint m;
+                    mk_singleton D.nd_stmt_cntrs_per_map_inner.t
+                    [mk_var "vid"; mk_var "stmt_id"]])
+                (mk_lambda' D.nd_stmt_cntrs_per_map.e @@
+                  mk_block [
+                    mk_insert "vid_stmt" @@ [mk_var "vid"; mk_var "stmt_id"];
+                    mk_tuple @@ ids_to_vars @@ fst_many D.nd_stmt_cntrs_per_map.e]))
+              acc)
+          mk_cunit
+          lmap_stmts;
         mk_cbool false;
       ]
 
@@ -341,7 +368,7 @@ let sw_demux c =
     sentry_code
 
 let stmt_map_ids =
-  let e = ["stmt", t_stmt_id; "map", t_map_id] in
+  let e = ["stmt_id", t_stmt_id; "map_id", t_map_id] in
   create_ds ~e "stmt_map_ids" @@ wrap_tbag' @@ snd_many e
 
 (* for puts *)
@@ -539,29 +566,52 @@ let nd_rcv_fetch_trig c trig =
       (* save the bound variables for this trigger so they're available later *)
       mk_apply
         (mk_var @@ nd_log_write_for c trig) @@
-        args_of_t_as_vars_with_v c trig ;
-      (* invoke generated send pushes. *)
+        args_of_t_as_vars_with_v c trig
+      ;
       mk_iter
-        (mk_lambda'
-          ["stmt_id", t_stmt_id; "map_id", t_map_id] @@
-          (* this send is not polymorphic. every fetch trigger expects
-            * the same set of bound variables. *)
-          List.fold_right
-            (fun stmt acc_code -> mk_if
-              (mk_eq (mk_var "stmt_id") @@ mk_cint stmt)
+          (mk_lambda' ["stmt_id", t_stmt_id; "map_id", t_map_id] @@
+            mk_if
+              (mk_or
+                (* check if we're in corrective mode *)
+                (mk_var D.corrective_mode.id) @@
+                (* or if the minimum entry in the stmt_cntrs has a higher vid *)
+                mk_lt (mk_var "vid") @@
+                  mk_case_ns
+                    (mk_peek @@ mk_slice' D.nd_stmt_cntrs_per_map.id
+                      [mk_var "map_id"; mk_cunknown]) "x"
+                    (mk_var D.g_max_vid.id) @@
+                    mk_min_with (mk_snd @@ mk_var "x")
+                    (* if empty, return max *)
+                      (mk_lambda'' unit_arg @@ mk_var g_max_vid.id) @@
+                      mk_lambda' nd_stmt_cntrs_per_map_inner.e @@ mk_var "vid")
+              (* then send the push right now *)
               (List.fold_right
-                (fun map_id acc_code2 -> mk_if
-                  (mk_eq (mk_var "map_id") @@ mk_cint map_id)
-                  (* TODO: change to function *)
-                  (mk_send (send_push_name_of_t c trig stmt map_id) G.me_var @@
-                    args_of_t_as_vars_with_v c trig)
-                  acc_code2)
-                (P.rhs_maps_of_stmt c.p stmt) @@
-                mk_error "nd_rcv_fetch: invalid map id")
-              acc_code)
-            (P.stmts_with_rhs_maps_in_t c.p trig) @@
-            mk_error "nd_rcv_fetch: invalid stmt id") @@
-        mk_var stmt_map_ids.id ]
+                (fun stmt acc_code -> mk_if
+                  (mk_eq (mk_var "stmt_id") @@ mk_cint stmt)
+                  (List.fold_right
+                    (fun map_id acc_code2 -> mk_if
+                      (mk_eq (mk_var "map_id") @@ mk_cint map_id)
+                      (mk_apply' (send_push_name_of_t c trig stmt map_id) @@
+                        args_of_t_as_vars_with_v c trig)
+                      acc_code2)
+                    (P.rhs_maps_of_stmt c.p stmt) @@
+                    mk_error "nd_rcv_fetch: invalid map id")
+                  acc_code)
+                (P.stmts_with_rhs_maps_in_t c.p trig) @@
+                mk_error "nd_rcv_fetch: invalid stmt id") @@
+              (* else, buffer the push *)
+              mk_upsert_with nd_rcv_fetch_buffer.id
+                [mk_var "map_id"; mk_cunknown]
+                (mk_lambda' unit_arg @@ mk_tuple
+                  [mk_var "map_id"; mk_singleton D.nd_rcv_fetch_buffer_inner.t
+                    [mk_var "vid"; mk_var "stmt_id"]])
+                (mk_lambda' nd_rcv_fetch_buffer.e @@
+                  mk_block [
+                    mk_insert "vid_stmt" [mk_var "vid"; mk_var "stmt_id"];
+                    mk_tuple @@ ids_to_vars @@ fst_many @@ nd_rcv_fetch_buffer.e
+                  ])) @@
+          mk_var stmt_map_ids.id
+    ]
 
 (* Receive Put trigger
  * --------------------------------------- *
@@ -619,10 +669,9 @@ let nd_send_push_stmt_map_trig c s_rhs_lhs trig_name =
       let map_pat = D.pat_of_ds map_real ~flatten:true ~expr:(mk_var "tuple") in
       (* a pattern mapping real map with delta vars *)
       acc_code @
-      [mk_code_sink'
+      [mk_global_fn
         (send_push_name_of_t c trig_name stmt_id rhs_map_id)
-        (args_of_t_with_v c trig_name)
-        [] @@ (* locals *)
+        (args_of_t_with_v c trig_name) [] @@
         (* don't convert this to fold b/c we only read *)
         mk_bind (mk_var rhs_map_name) rhsm_deref @@
         mk_block [
@@ -630,8 +679,7 @@ let nd_send_push_stmt_map_trig c s_rhs_lhs trig_name =
            * Note that we need to do it here to make sure nothing
            * else can stop us before we send the push *)
           mk_apply'
-            nd_log_master_write_nm @@
-            [mk_cint stmt_id; mk_var "vid"] ;
+            nd_log_master_write_nm @@ [mk_cint stmt_id; mk_var "vid"];
           mk_iter
             (mk_lambda'
               ["ip", t_addr;"tuples", wrap_t_calc' rhs_map_types] @@
@@ -642,11 +690,12 @@ let nd_send_push_stmt_map_trig c s_rhs_lhs trig_name =
             mk_apply'
               shuffle_fn @@
                 partial_key @ [mk_ctrue] @
+                (* check if we can use a lookup *)
                 (if D.is_lookup_pat (mk_tuple slice_key) then
                   let slice_key =
                     mk_var "vid"::[mk_tuple @@ list_drop_end 1 slice_key]@[mk_cunknown] in
                   [mk_peek_with_vid
-                     (mk_slice_frontier (mk_var rhsm_deref) slice_key)
+                     (mk_slice_lower (mk_var rhsm_deref) slice_key)
                      (mk_lambda'' unit_arg @@ mk_empty map_delta.t) @@
                      mk_lambda'' ["vid", t_vid; "tuple", snd @@ unwrap_tcol @@ map_real.t] @@
                        mk_singleton map_delta.t @@ fst_many map_pat]
@@ -710,7 +759,7 @@ List.fold_left
   [] s_rhs
 
 (* list of trig, stmt with a map on the rhs that's also on the lhs. These are
- * the potential corrective maps.
+ * the potential corrective maps and the potential read/write conflicts.
  * Inserts and Deletes really have 2 different graphs, so we return both *)
 let maps_potential_corrective p =
   let insert_ts = P.get_trig_list ~kind:P.InsertTrigs p in
@@ -971,19 +1020,113 @@ let nd_update_stmt_cntr_corr_map =
               ])
     ]
 
+(* for no-corrective mode: execute buffered fetches *)
+let nd_exec_buffered_fetches_nm = "nd_exec_buffered_fetches"
+let nd_exec_buffered_fetches c =
+  let t_info = P.for_all_trigs c.p
+    (fun t -> t, D.args_of_t c t, P.stmts_with_rhs_maps_in_t c.p t) in
+  let t_info = List.filter (fun (_,_,x) -> x <> []) t_info in
+  if t_info = [] then [] else singleton @@
+  mk_global_fn nd_exec_buffered_fetches_nm ["vid", t_vid; "stmt_id", t_vid] [] @@
+  (* get lmap id *)
+  mk_let ["map_id"]
+    (mk_snd @@ mk_peek_or_error "missing stmt_id" @@
+      mk_slice' (D.nd_lmap_of_stmt_id c).id [mk_var "stmt_id"; mk_cunknown]) @@
+  (* get the min_vid, check if we need to do delete on per-map stmt_cntrs *)
+  mk_let ["min_vid"; "do_delete"]
+    (mk_case_ns
+      (mk_peek @@ mk_slice' D.nd_stmt_cntrs_per_map.id [mk_var "map_id"; mk_cunknown])
+      "x"
+      (mk_tuple [mk_var D.g_max_vid.id; mk_cfalse]) @@
+      mk_min_with (mk_snd @@ mk_var "x")
+        (mk_lambda'' unit_arg @@ mk_tuple [mk_var D.g_max_vid.id; mk_cfalse]) @@
+        mk_lambda' D.nd_stmt_cntrs_per_map_inner.e @@ mk_tuple [mk_var "vid"; mk_ctrue]) @@
+  (* check if there are any pushes to send *)
+  mk_let ["pending_fetches"]
+    (mk_case_ns
+      (mk_peek @@ mk_slice' D.nd_rcv_fetch_buffer.id [mk_var "map_id"; mk_cunknown]) "x"
+      mk_cfalse @@
+      mk_case_ns
+        (mk_peek @@ mk_slice_lower (mk_snd @@ mk_var "x") [mk_var "vid"; mk_cunknown])
+        "_u" mk_cfalse mk_ctrue) @@
+  mk_block [
+    (* check if this is the min vid for the map in stmt_cntrs_per_map. if not, do nothing,
+     * since we're not changing anything *)
+    mk_if (mk_var "pending_fetches")
+      (mk_block [
+        (* execute any fetches that precede pending writes for a map *)
+          mk_iter (mk_lambda' nd_rcv_fetch_buffer_inner.e @@
+            (* check for all triggers *)
+            List.fold_left (fun acc (t, args, stmts) ->
+              let mk_check_s s = mk_eq (mk_var "stmt_id") @@ mk_cint s in
+              (* check if the stmts are in this trigger *)
+              mk_if
+                (list_fold_to_last (fun acc s -> mk_or (mk_check_s s) acc) mk_check_s stmts)
+                (* pull arguments out of log (if needed) *)
+                ((if args = [] then id_fn else
+                  mk_let (fst_many args) (mk_apply'
+                    (nd_log_get_bound_for t) [mk_var "vid"])) @@
+                List.fold_left (fun acc s ->
+                  mk_if (mk_eq (mk_var "stmt_id") @@ mk_cint s)
+                    (let r_maps = P.rhs_maps_of_stmt c.p s in
+                    List.fold_left (fun acc m ->
+                      mk_if (mk_eq (mk_var "map_id") @@ mk_cint m)
+                        (mk_apply' (send_push_name_of_t c t s m) @@
+                          args_of_t_as_vars_with_v c t)
+                        acc)
+                      mk_cunit
+                      r_maps)
+                    acc)
+                  mk_cunit
+                  stmts)
+                acc)
+              mk_cunit
+              t_info) @@
+        (* filter only those entries we can run *)
+        mk_case_ns (mk_peek @@ mk_slice' D.nd_rcv_fetch_buffer.id
+          [mk_var "map_id"; mk_cunknown]) "x"
+          (mk_error "empty fetch buffer!") @@
+          mk_filter_lt (mk_snd @@ mk_var "x") [mk_var "min_vid"; mk_cunknown];
+        (* delete these entries from the fetch buffer *)
+        mk_upsert_with D.nd_rcv_fetch_buffer.id [mk_var "map_id"; mk_cunknown]
+          (mk_lambda'' unit_arg @@ mk_error "whoops4") @@
+          mk_lambda' D.nd_rcv_fetch_buffer.e @@
+            mk_tuple [mk_var "map_id";
+              mk_filter_geq (mk_var "vid_stmt") [mk_var "min_vid"; mk_cunknown]]
+      ])
+      (* else do nothing *)
+      mk_cunit
+    ;
+    mk_if (mk_var "do_delete")
+      (* delete the entry from the stmt_cntrs_per_map *)
+      (mk_upsert_with D.nd_stmt_cntrs_per_map.id [mk_var "map_id"; mk_cunknown]
+        (mk_lambda'' unit_arg @@ mk_error "whoops3") @@
+        mk_lambda' D.nd_stmt_cntrs_per_map.e @@
+          mk_block [
+            mk_delete "vid_stmt" [mk_var "vid"; mk_cunknown];
+            mk_tuple @@ ids_to_vars @@ fst_many @@ D.nd_stmt_cntrs_per_map.e
+          ])
+      mk_cunit
+  ]
+
 (* call from do_complete when done to check if fully done *)
 let nd_complete_stmt_cntr_check_nm = "nd_complete_stmt_cntr_check"
 let nd_complete_stmt_cntr_check c =
   mk_global_fn nd_complete_stmt_cntr_check_nm ["vid", t_vid; "stmt_id", t_stmt_id] [] @@
   (* if we have nothing to send, we can delete our stmt_cntr entry right away *)
-  mk_block [
-    mk_delete_one nd_stmt_cntrs [mk_tuple [mk_var "vid"; mk_var "stmt_id"]; mk_cunknown];
+  mk_block @@
+    [mk_delete nd_stmt_cntrs.id
+      [mk_tuple [mk_var "vid"; mk_var "stmt_id"]; mk_cunknown]] @
+    (* if we're in no-corrective mode, we need to execute batched fetches *)
+    (if c.corr_maps = ([], []) then [] else singleton @@
+      mk_if (mk_var D.corrective_mode.id)
+        mk_cunit @@
+        mk_apply' nd_exec_buffered_fetches_nm [mk_var "vid"; mk_var "stmt_id"]) @
     (* check if we're done *)
-    Proto.nd_post_delete_stmt_cntr c;
-  ]
+    [Proto.nd_post_delete_stmt_cntr c]
 
 (*
- * shared coded btw do_complete and do_corrective
+ * shared code btw do_complete and do_corrective
  * we add the delta to all following vids
  *)
 let do_add_delta c e lmap ~corrective =
@@ -1024,33 +1167,38 @@ let nd_do_complete_fns c ast trig_name corr_maps =
         (if c.gen_correctives && List.exists ((=) lmap) corr_maps
         then
           let send_corr_t = send_corrective_name_of_t c lmap in
-          mk_let ["sent_msgs"]
-            (* we apply send_correctives with our original address, stmt_id, original vid and hop + 1
-             * we double up on vid since send_correctives is also called for do_corrective,
-             * which must send the new vid to be calculated as well as the original complete's vid
-             *)
-            (mk_apply' send_corr_t @@
-              [G.me_var; mk_cint stmt_id; mk_var "vid"; snd_hop; mk_var "vid"; tup_ds]) @@
-            (* update the corrective counters for hop 1 to the number of msgs.
-             * true: is a root, bool: create an entry *)
-            let update_corr_code create =
-              mk_apply' nd_update_stmt_cntr_corr_map_nm @@
-                [mk_var "vid"; mk_cint stmt_id; fst_hop; mk_var "sent_msgs"; mk_ctrue; mk_cbool create]
-            in
-            if has_rhs then
-              mk_if (mk_eq (mk_var "sent_msgs") @@ mk_cint 0)
-                (* if our sent_msgs is 0, we need to delete the stmt cntr entry *)
-                (mk_apply' nd_complete_stmt_cntr_check_nm
-                  [mk_var "vid"; mk_cint stmt_id]) @@
-                (* otherwise we need to update the corrective counters *)
-                update_corr_code false
-            else
-              (* if we have no rhs maps, we may not need to update anything,
-               * since no stmt cntr entry was created *)
-              mk_if (mk_eq (mk_var "sent_msgs") @@ mk_cint 0)
-                mk_cunit @@
-                (* else, update and create a stmt counter *)
-                update_corr_code true
+          (* don't do correctives in no-corrective mode *)
+          mk_if
+            (mk_var D.corrective_mode.id)
+            (mk_let ["sent_msgs"]
+              (* we apply send_correctives with our original address, stmt_id, original vid and hop + 1
+              * we double up on vid since send_correctives is also called for do_corrective,
+              * which must send the new vid to be calculated as well as the original complete's vid
+              *)
+              (mk_apply' send_corr_t @@
+                [G.me_var; mk_cint stmt_id; mk_var "vid"; snd_hop; mk_var "vid"; tup_ds]) @@
+              (* update the corrective counters for hop 1 to the number of msgs.
+              * true: is a root, bool: create an entry *)
+              let update_corr_code create =
+                mk_apply' nd_update_stmt_cntr_corr_map_nm @@
+                  [mk_var "vid"; mk_cint stmt_id; fst_hop; mk_var "sent_msgs"; mk_ctrue; mk_cbool create]
+              in
+              if has_rhs then
+                mk_if (mk_eq (mk_var "sent_msgs") @@ mk_cint 0)
+                  (* if our sent_msgs is 0, we need to delete the stmt cntr entry *)
+                  (mk_apply' nd_complete_stmt_cntr_check_nm
+                    [mk_var "vid"; mk_cint stmt_id]) @@
+                  (* otherwise we need to update the corrective counters *)
+                  update_corr_code false
+              else
+                (* if we have no rhs maps, we may not need to update anything,
+                * since no stmt cntr entry was created *)
+                mk_if (mk_eq (mk_var "sent_msgs") @@ mk_cint 0)
+                  mk_cunit @@
+                  (* else, update and create a stmt counter *)
+                  update_corr_code true)
+            (* if no-corrective mode *)
+            mk_cunit
         (* no correctives are possible *)
         else
           (* if we have no rhs maps, do nothing *)
@@ -1250,8 +1398,7 @@ let declare_global_funcs c partmap ast =
   nd_log_master_write ::
   (P.for_all_trigs ~sys_init:true ~deletes:c.gen_deletes c.p @@ nd_log_write c) @
   (P.for_all_trigs ~sys_init:true ~deletes:c.gen_deletes c.p @@ nd_log_get_bound c) @
-  nd_check_stmt_cntr_index ::
-  nd_complete_stmt_cntr_check c ::
+  nd_check_stmt_cntr_index c ::
   nd_update_stmt_cntr_corr_map ::
   begin if c.gen_correctives then [nd_filter_corrective_list] else [] end @
   K3Ring.functions @
@@ -1281,20 +1428,20 @@ let gen_dist_for_t c ast trig =
      nd_do_corrective_fns c s_rhs_corr ast trig (access c.corr_maps)
    else [])
   in
+  let functions2 = nd_send_push_stmt_map_trig c s_rhs_lhs trig in
   let trigs =
     (if null s_rhs then []
     else
       [nd_rcv_put_trig c trig;
       nd_rcv_fetch_trig c trig])
     @
-    nd_send_push_stmt_map_trig c s_rhs_lhs trig @
     nd_rcv_push_trig c s_rhs trig @
     nd_do_complete_trigs c trig @
     (if c.gen_correctives then
       nd_rcv_correctives_trig c s_rhs_corr trig
     else [])
   in
-  trigs, functions
+  trigs, functions, functions2
 
 (* Function to generate the whole distributed program *)
 (* @param force_correctives Attempt to create dist code that encourages correctives *)
@@ -1337,14 +1484,18 @@ let gen_dist ?(gen_deletes=true)
       map_indices = P.map_access_patterns p;
     } in
   (* regular trigs then insert entries into shuffle fn table *)
-  let proto_trigs, proto_funcs =
-    (fun (a,b) -> List.flatten a, List.flatten b) @@ list_unzip @@
+  let proto_trigs, proto_funcs, proto_funcs2 =
+    (fun (x,y,z) -> let a = List.flatten in a x, a y, a z) @@ list_unzip3 @@
       P.for_all_trigs ~sys_init:true ~deletes:c.gen_deletes c.p @@ gen_dist_for_t c ast
   in
   let prog =
     declare_global_vars c partmap ast @
     declare_global_funcs c partmap ast @
     (if c.gen_correctives then send_corrective_fns c else []) @
+    proto_funcs2 @
+    (* we need this here for scope *)
+    nd_exec_buffered_fetches c @
+    nd_complete_stmt_cntr_check c ::
     proto_funcs @
     [mk_flow @@
       Proto.triggers c @

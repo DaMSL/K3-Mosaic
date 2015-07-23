@@ -649,7 +649,7 @@ let v_slice err_fn pat = function
                         match_pattern pat (VTuple [t;k;v])) m)
   | _ -> err_fn "v_slice" "not a collection"
 
-let v_slice_frontier err_fn pat m = match m, pat with
+let v_slice_lower err_fn pat m = match m, pat with
   | VVMap m, VTuple[t;k;v]  ->
       (* point lookup or slice lookup? *)
       if not @@ List.mem VUnknown @@ unwrap_vtuple k then
@@ -661,12 +661,13 @@ let v_slice_frontier err_fn pat m = match m, pat with
         VVMap(
           ValueVMap.filter (fun _ k' v' -> match_pattern (VTuple[k;v]) (VTuple[k';v'])) @@
             ValueVMap.frontier_slice t m)
-  | _ -> err_fn "v_slice_frontier" "unhandled or bad values"
+  | _ -> err_fn "v_slice_lower" "unhandled or bad values"
 
-(* only gather entries higher than given key *)
-let v_filter_geq err_fn pat m = match m, pat with
-  | VSortedSet m, _ -> VSortedSet(ValueSet.filter (fun v -> ValueComp.compare_v v pat >= 0) m)
-  | _ -> err_fn "v_filter_geq" "not implemented"
+(* only gather entries gt/lt/geq than given key *)
+let v_filter_op err_fn op pat m = match m, pat with
+  | VSortedSet m, _ -> VSortedSet(ValueSet.filter (fun v -> op (ValueComp.compare_v v pat) 0) m)
+  | VSortedMap m, VTuple[k;_] -> VSortedMap(ValueMap.filter (fun k' _ -> op (ValueComp.compare_v k' k) 0) m)
+  | _ -> err_fn "v_filter_op" "not implemented"
 
 let v_slice_upper_eq err_fn pat m = match m, pat with
   (* check for lookup pattern *)

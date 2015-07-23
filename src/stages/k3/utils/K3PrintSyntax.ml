@@ -346,7 +346,7 @@ let rec lazy_expr c expr =
     lps "peek_with_vid" <| lcut () <| lazy_paren @@ expr_triple (col, lam_none, lam_some)
   | Slice -> let col, pat = U.decompose_slice expr in
     wrap_if_var col (lazy_expr c col) <| lazy_bracket (tuple_no_paren c pat)
-  | SliceFrontier -> let col, pat = U.decompose_slice_frontier expr in
+  | SliceLower -> let col, pat = U.decompose_slice_lower expr in
     wrap_if_var col (lazy_expr c col) <| lazy_bracket (lps "<" <| tuple_no_paren c pat)
   | SliceUpperEq -> let col, pat = U.decompose_slice_upper_eq expr in
     wrap_if_var col (lazy_expr c col) <| lazy_bracket (lps ">=" <| tuple_no_paren c pat)
@@ -369,6 +369,8 @@ let rec lazy_expr c expr =
     lps "update_suffix" <| lazy_paren (lazy_expr c col <| lps " , " <| expr_pair (key, lam))
   | FilterGEQ -> let col, filter_val = U.decompose_filter_geq expr in
     lps "filter_geq" <| lazy_paren (lazy_expr c col <| lps " , " <| lazy_expr c filter_val)
+  | FilterLT -> let col, filter_val = U.decompose_filter_lt expr in
+    lps "filter_lt" <| lazy_paren (lazy_expr c col <| lps " , " <| lazy_expr c filter_val)
   | Indirect -> let x = U.decompose_indirect expr in
     lps "ind" <| lsp () <| paren_l x @@ lazy_expr c x
   | Assign -> let l, r = U.decompose_assign expr in

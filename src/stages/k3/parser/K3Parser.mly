@@ -123,7 +123,7 @@
 %token COLON
 
 %token QUESTION
-%token INSERT UPDATE DELETE UPSERT_WITH UPSERT_WITH_BEFORE UPDATE_SUFFIX DELETE_PREFIX FILTERGEQ
+%token INSERT UPDATE DELETE UPSERT_WITH UPSERT_WITH_BEFORE UPDATE_SUFFIX DELETE_PREFIX FILTERGEQ FILTERLT
 
 %token GETS COLONGETS
 
@@ -639,7 +639,7 @@ tuple_index :
 
 access :
     | anno_expr LBRACKET tuple RBRACKET { mkexpr Slice [$1; $3] }
-    | anno_expr LBRACKETLT tuple RBRACKET { mkexpr SliceFrontier [$1; $3] }
+    | anno_expr LBRACKETLT tuple RBRACKET { mkexpr SliceLower [$1; $3] }
     | anno_expr LBRACKETGEQ tuple RBRACKET { mkexpr SliceUpperEq [$1; $3] }
     | PEEK LPAREN anno_expr RPAREN { mkexpr Peek [$3] }
     | PEEK_WITH_VID LPAREN anno_expr COMMA anno_expr COMMA anno_expr RPAREN { mkexpr PeekWithVid [$3; $5; $7] }
@@ -690,6 +690,7 @@ transformers :
     | SORT LPAREN anno_expr COMMA anno_expr RPAREN { mkexpr Sort [$3; $5] }
     | SIZE LPAREN anno_expr RPAREN            { mkexpr Size [$3] }
     | FILTERGEQ LPAREN anno_expr COMMA anno_expr RPAREN { mkexpr FilterGEQ [$3; $5] }
+    | FILTERLT LPAREN anno_expr COMMA anno_expr RPAREN { mkexpr FilterLT [$3; $5] }
 
     /* Error handling */
     | anno_expr CONCAT error { print_error("Expected expression for combine") }

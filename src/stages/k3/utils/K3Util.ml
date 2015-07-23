@@ -161,8 +161,8 @@ let decompose_singleton e = match tag_of_expr e, sub_tree e with
   Singleton vt, [e0] -> e0 | _ -> failwith "not a Singleton"
 let decompose_slice e = match tag_of_expr e, sub_tree e with
   Slice, [e0; e1] -> e0, e1 | _ -> failwith "not a Slice"
-let decompose_slice_frontier e = match tag_of_expr e, sub_tree e with
-  SliceFrontier, [e0; e1] -> e0, e1 | _ -> failwith "not a SliceFrontier"
+let decompose_slice_lower e = match tag_of_expr e, sub_tree e with
+  SliceLower, [e0; e1] -> e0, e1 | _ -> failwith "not a SliceLower"
 let decompose_slice_upper_eq e = match tag_of_expr e, sub_tree e with
   SliceUpperEq, [e0; e1] -> e0, e1 | _ -> failwith "not a SliceUpperEq"
 let decompose_sort e = match tag_of_expr e, sub_tree e with
@@ -183,6 +183,8 @@ let decompose_upsert_with_before e = match tag_of_expr e, sub_tree e with
   UpsertWithBefore, [x; key; lam_no; lam_yes] -> x, key, lam_no, lam_yes | _ -> failwith "not UpsertWithBefore"
 let decompose_filter_geq e = match tag_of_expr e, sub_tree e with
   FilterGEQ, [x; filter_val] -> x, filter_val | _ -> failwith "not FilterGEQ"
+let decompose_filter_lt e = match tag_of_expr e, sub_tree e with
+  FilterLT, [x; filter_val] -> x, filter_val | _ -> failwith "not FilterLT"
 let decompose_var e = match tag_of_expr e with
   Var id -> id | _ -> failwith "not a Var"
 

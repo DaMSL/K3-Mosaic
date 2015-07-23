@@ -442,8 +442,8 @@ and eval_expr (address:address) sched_st cenv texpr =
     (* Collection accessors and modifiers *)
     | Slice, [c; pat] -> nenv, temp @@ v_slice error pat c
 
-    | SliceFrontier, [c; pat]->
-         nenv, temp @@ v_slice_frontier error pat c
+    | SliceLower, [c; pat]->
+         nenv, temp @@ v_slice_lower error pat c
 
     | SliceUpperEq, [c; pat]->
          nenv, temp @@ v_slice_upper_eq error pat c
@@ -511,7 +511,7 @@ and eval_expr (address:address) sched_st cenv texpr =
           | _ -> error "upsert_with" "not a tuple"
         in
         let slice_fn =
-          if tag = UpsertWith then v_slice else v_slice_frontier in
+          if tag = UpsertWith then v_slice else v_slice_lower in
         let slice = slice_fn error key col in
         begin match v_peek ~vid:true error slice with
           | None   ->
@@ -541,7 +541,9 @@ and eval_expr (address:address) sched_st cenv texpr =
         (env_modify (get_id ()) nenv @@
           fun col -> v_delete_prefix error key col), temp VUnit
 
-    | FilterGEQ, [col; key] -> nenv, temp @@ v_filter_geq error key col
+    | FilterGEQ, [col; key] -> nenv, temp @@ v_filter_op error (fun (x:int) y -> x >= y) key col
+
+    | FilterLT, [col; key] -> nenv, temp @@ v_filter_op error (fun (x:int) y -> x < y) key col
 
     | Assign, [_; v] -> env_modify (get_id ()) nenv @@ const v, temp VUnit
 
