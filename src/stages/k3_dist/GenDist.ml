@@ -1030,7 +1030,7 @@ let nd_exec_buffered_fetches c =
     (mk_snd @@ mk_peek_or_error "missing stmt_id" @@
       mk_slice' (D.nd_lmap_of_stmt_id c).id [mk_var "stmt_id"; mk_cunknown]) @@
   (* get the min_vid, check if we need to do delete on per-map stmt_cntrs *)
-  mk_let ["min_vid"; "do_delete"]
+  mk_let ["min_vid"; "do_delete_stmt_cntrs"]
     (mk_case_ns
       (mk_peek @@ mk_slice' D.nd_stmt_cntrs_per_map.id [mk_var "map_id"; mk_cunknown])
       "x"
@@ -1044,7 +1044,7 @@ let nd_exec_buffered_fetches c =
       (mk_peek @@ mk_slice' D.nd_rcv_fetch_buffer.id [mk_var "map_id"; mk_cunknown]) "x"
       mk_cfalse @@
       mk_case_ns
-        (mk_peek @@ mk_slice_lower (mk_snd @@ mk_var "x") [mk_var "vid"; mk_cunknown])
+        (mk_peek @@ mk_slice_lower (mk_snd @@ mk_var "x") [mk_var "min_vid"; mk_cunknown])
         "_u" mk_cfalse mk_ctrue) @@
   mk_block [
     (* check if this is the min vid for the map in stmt_cntrs_per_map. if not, do nothing,
@@ -1094,7 +1094,7 @@ let nd_exec_buffered_fetches c =
       (* else do nothing *)
       mk_cunit
     ;
-    mk_if (mk_var "do_delete")
+    mk_if (mk_var "do_delete_stmt_cntrs")
       (* delete the entry from the stmt_cntrs_per_map *)
       (mk_upsert_with D.nd_stmt_cntrs_per_map.id [mk_var "map_id"; mk_cunknown]
         (mk_lambda'' unit_arg @@ mk_error "whoops3") @@
