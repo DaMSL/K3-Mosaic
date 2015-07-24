@@ -103,7 +103,7 @@ let calc_part num_nodes dims =
   in
   let l = loop initial_list 1 in
   (* remove partitions of 1 since they aren't really partitioning *)
-  List.filter (fun (_, i) -> if i = 1 then false else true) l
+  List.filter (fun (_, i) -> i <> 1) l
 
 let calc_part_maps num_nodes maps_dims =
   filter_map (fun (mapname, dim) ->
