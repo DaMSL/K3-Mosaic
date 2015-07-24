@@ -661,7 +661,14 @@ let v_slice_lower err_fn pat m = match m, pat with
         VVMap(
           ValueVMap.filter (fun _ k' v' -> match_pattern (VTuple[k;v]) (VTuple[k';v'])) @@
             ValueVMap.frontier_slice t m)
-  | _ -> err_fn "v_slice_lower" "unhandled or bad values"
+  | VSortedMap m, VTuple[k;v] when not @@ List.mem VUnknown @@ unwrap_vtuple k ->
+        begin try
+          let k, v = ValueMap.find_lt k m in
+          v_singleton err_fn (VTuple [k; v]) TSortedMap
+        with Not_found -> 
+          v_empty_of_t TSortedMap
+        end
+  | _ -> err_fn "v_slice_lower" (sp "unhandled or bad values: %s" @@ sov pat)
 
 (* only gather entries gt/lt/geq than given key *)
 let v_filter_op err_fn op pat m = match m, pat with
