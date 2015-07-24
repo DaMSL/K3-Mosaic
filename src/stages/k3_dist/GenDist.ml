@@ -1161,46 +1161,45 @@ let nd_do_complete_fns c ast trig_name corr_maps =
       mk_block [
         (* add delta *)
         do_add_delta c tup_ds lmap ~corrective:false;
-        (if c.gen_correctives && List.exists ((=) lmap) corr_maps
+        if c.gen_correctives && List.exists ((=) lmap) corr_maps
         then
           let send_corr_t = send_corrective_name_of_t c lmap in
-          (* don't do correctives in no-corrective mode *)
-          mk_if
-            (mk_var D.corrective_mode.id)
-            (mk_let ["sent_msgs"]
-              (* we apply send_correctives with our original address, stmt_id, original vid and hop + 1
-              * we double up on vid since send_correctives is also called for do_corrective,
-              * which must send the new vid to be calculated as well as the original complete's vid
-              *)
+          mk_let ["sent_msgs"]
+            (* we apply send_correctives with our original address, stmt_id, original vid and hop + 1
+            * we double up on vid since send_correctives is also called for do_corrective,
+            * which must send the new vid to be calculated as well as the original complete's vid
+            *)
+            (mk_if
+              (* don't do correctives in no-corrective mode *)
+              (mk_var D.corrective_mode.id)
               (mk_apply' send_corr_t @@
                 [G.me_var; mk_cint stmt_id; mk_var "vid"; snd_hop; mk_var "vid"; tup_ds]) @@
-              (* update the corrective counters for hop 1 to the number of msgs.
-              * true: is a root, bool: create an entry *)
-              let update_corr_code create =
-                mk_apply' nd_update_stmt_cntr_corr_map_nm @@
-                  [mk_var "vid"; mk_cint stmt_id; fst_hop; mk_var "sent_msgs"; mk_ctrue; mk_cbool create]
-              in
-              if has_rhs then
-                mk_if (mk_eq (mk_var "sent_msgs") @@ mk_cint 0)
-                  (* if our sent_msgs is 0, we need to delete the stmt cntr entry *)
-                  (mk_apply' nd_complete_stmt_cntr_check_nm
-                    [mk_var "vid"; mk_cint stmt_id]) @@
-                  (* otherwise we need to update the corrective counters *)
-                  update_corr_code false
-              else
-                (* if we have no rhs maps, we may not need to update anything,
-                * since no stmt cntr entry was created *)
-                mk_if (mk_eq (mk_var "sent_msgs") @@ mk_cint 0)
-                  mk_cunit @@
-                  (* else, update and create a stmt counter *)
-                  update_corr_code true)
-            (* if no-corrective mode *)
-            mk_cunit
+              mk_cint 0) @@
+            (* update the corrective counters for hop 1 to the number of msgs.
+            * true: is a root, bool: create an entry *)
+            let update_corr_code create =
+              mk_apply' nd_update_stmt_cntr_corr_map_nm @@
+                [mk_var "vid"; mk_cint stmt_id; fst_hop; mk_var "sent_msgs"; mk_ctrue; mk_cbool create]
+            in
+            if has_rhs then
+              mk_if (mk_eq (mk_var "sent_msgs") @@ mk_cint 0)
+                (* if our sent_msgs is 0, we need to delete the stmt cntr entry *)
+                (mk_apply' nd_complete_stmt_cntr_check_nm
+                  [mk_var "vid"; mk_cint stmt_id]) @@
+                (* otherwise we need to update the corrective counters *)
+                update_corr_code false
+            else
+              (* if we have no rhs maps, we may not need to update anything,
+              * since no stmt cntr entry was created *)
+              mk_if (mk_eq (mk_var "sent_msgs") @@ mk_cint 0)
+                mk_cunit @@
+                (* else, update and create a stmt counter *)
+                update_corr_code true
         (* no correctives are possible *)
         else
           (* if we have no rhs maps, do nothing *)
           if not has_rhs then mk_cunit
-          else mk_apply' nd_complete_stmt_cntr_check_nm [mk_var "vid"; mk_cint stmt_id])
+          else mk_apply' nd_complete_stmt_cntr_check_nm [mk_var "vid"; mk_cint stmt_id]
       ]
     in
     M.modify_ast_for_s c ast stmt_id trig_name after_fn
