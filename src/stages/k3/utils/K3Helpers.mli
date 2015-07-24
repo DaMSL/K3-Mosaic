@@ -378,3 +378,5 @@ val mk_barrier :
   total:expr_t ->
   after:expr_t ->
   flow_statement_t * annotation_t
+
+val mk_id_fn : data_struct -> expr_t

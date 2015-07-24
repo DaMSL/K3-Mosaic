@@ -68,10 +68,20 @@ let pmap =
   create_ds "pmap" t  ~e
 
 let calc_dim_bounds =
-  mk_global_fn "calc_dim_bounds" ["pmap", inner_plist.t] [dim_bounds.t; t_int] @@
+  mk_global_fn "calc_dim_bounds"
+    ["map_id", t_int; "pmap", inner_plist.t] [dim_bounds.t; t_int] @@
+    (* create full range for all dimensions *)
+    mk_let ["rng"]
+      (mk_range TList (mk_cint 0) (mk_cint 1) @@
+        mk_sub
+          (mk_subscript 3 @@ mk_peek_or_error "range" @@
+            mk_slice' D.map_ids_id
+              [mk_var "map_id"; mk_cunknown; mk_cunknown]) @@
+          mk_cint 1) @@
     (* calculate the size of the bucket of each dimensioned we're partitioned on
     * This is order-dependent in pmap *)
-      mk_agg
+    mk_let ["dims"; "final_size"]
+      (mk_agg
         (mk_lambda2'
           ["xs", dim_bounds.t; "acc_size", t_int]
           ["pos", t_int; "bin_size", t_int] @@
@@ -81,7 +91,30 @@ let calc_dim_bounds =
               mk_var "xs";
               mk_mult (mk_var "bin_size") @@ mk_var "acc_size"]])
         (mk_tuple [mk_empty @@ dim_bounds.t; mk_cint 1]) @@
-        mk_var "pmap"
+        mk_var "pmap") @@
+    (* fill in missing dimensions *)
+    mk_let ["dims"]
+      (mk_fst @@ mk_agg
+        (mk_lambda2'
+          ["xs", dim_bounds.t; "last", t_int] ["n", t_int] @@
+          (* read the number *)
+          mk_let ["next"]
+            (mk_case_ns
+              (mk_peek @@ mk_slice' "xs" [mk_var "n"; mk_cunknown]) "x"
+              (mk_var "last") @@
+              mk_snd @@ mk_var "x") @@
+          (* update the ds *)
+          mk_block [
+            mk_upsert_with "xs" [mk_var "n"; mk_cunknown]
+              (mk_lambda'' unit_arg @@ mk_tuple [mk_var "n"; mk_var "next"]) @@
+              mk_id_fn dim_bounds
+            ;
+            mk_tuple [mk_var "xs"; mk_var "next"]
+          ])
+        (mk_tuple [mk_var "dims"; mk_cint 1]) @@
+        mk_var "rng") @@
+    mk_tuple [mk_var "dims"; mk_var "final_size"]
+
 
 (* map from map_id to inner_pmap *)
 let pmap_data =
@@ -94,17 +127,19 @@ let pmap_data =
     mk_agg
       (mk_lambda2' ["acc", t]
                    ["map_name", t_string; "map_types", inner_plist.t] @@
+        mk_let ["map_id"]
+          (mk_fst @@ mk_peek_or_error "can't find map in map_ids" @@
+            mk_slice' K3Dist.map_ids_id
+              [mk_cunknown; mk_var "map_name"; mk_cunknown]) @@
         mk_block [
           mk_insert "acc"
-            [mk_fst @@ mk_peek_or_error "can't find map in map_ids" @@
-              mk_slice' K3Dist.map_ids_id
-                  [mk_cunknown; mk_var "map_name"; mk_cunknown];
-            mk_tuple [
-              (* convert map_types to map *)
-              mk_convert_col inner_plist.t inner_pmap.t @@
-                mk_var "map_types";
-              (* pre-calculate dim bounds data *)
-              mk_apply' "calc_dim_bounds" [mk_var "map_types"]]
+            [mk_var "map_id";
+              mk_tuple [
+                (* convert map_types to map *)
+                mk_convert_col inner_plist.t inner_pmap.t @@
+                  mk_var "map_types";
+                (* pre-calculate dim bounds data *)
+                mk_apply' "calc_dim_bounds" [mk_var "map_id"; mk_var "map_types"]]
             ]
           ;
           mk_var "acc"])
@@ -266,7 +301,7 @@ let gen_route_fn p map_id =
           let id_x = to_id x in
           mk_if (mk_eq (mk_var id_x) @@ mk_nothing type_x)
             (mk_insert "free_dims"
-              [mk_peek_or_error "failed to find pmap value" @@
+              [mk_peek_or_zero ~zero:(mk_tuple [mk_cint x; mk_cint 1]) @@
                 mk_slice' "pmap" [mk_cint x; mk_cunknown]])
             mk_cunit)
         map_range) @

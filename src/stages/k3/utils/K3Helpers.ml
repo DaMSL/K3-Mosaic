@@ -750,3 +750,6 @@ let mk_barrier ?(args=unit_arg) ?(pre=[]) nm ~ctr ~total ~after =
         mk_cunit
     ]
 
+(* create an id function *)
+let mk_id_fn ds = mk_lambda' ds.e @@ mk_tuple @@ ids_to_vars @@ fst_many ds.e
+
