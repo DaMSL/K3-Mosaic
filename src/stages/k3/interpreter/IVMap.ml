@@ -212,7 +212,7 @@ let test =
   let o = VM.singleton 3 20 "3-20" in
   assert (n === o);
 
-  let n = VM.frontier_slice 2 m in
+  let n = VM.frontier_slice 3 m in
   let o = VM.of_list [1, 20, "1-20"; 1, 10, "1-10"; 2, 1, "2-1"] in
   assert (n === o);
 
