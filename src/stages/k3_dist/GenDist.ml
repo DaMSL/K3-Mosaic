@@ -1051,7 +1051,7 @@ let nd_exec_buffered_fetches c =
       (mk_peek @@ mk_slice' D.nd_rcv_fetch_buffer.id [mk_var "map_id"; mk_cunknown]) "x"
       mk_cfalse @@
       mk_case_ns
-        (mk_peek @@ mk_slice_lt (mk_snd @@ mk_var "x") [mk_var "min_vid"; mk_cunknown])
+        (mk_peek @@ mk_slice_leq (mk_snd @@ mk_var "x") [mk_var "min_vid"; mk_cunknown])
         "_u" mk_cfalse mk_ctrue) @@
   mk_block [
     (* check if this is the min vid for the map in stmt_cntrs_per_map. if not, do nothing,
@@ -1090,13 +1090,13 @@ let nd_exec_buffered_fetches c =
         mk_case_ns (mk_peek @@ mk_slice' D.nd_rcv_fetch_buffer.id
           [mk_var "map_id"; mk_cunknown]) "x"
           (mk_error "empty fetch buffer!") @@
-          mk_filter_lt (mk_snd @@ mk_var "x") [mk_var "min_vid"; mk_cunknown];
+          mk_filter_leq (mk_snd @@ mk_var "x") [mk_var "min_vid"; mk_cunknown];
         (* delete these entries from the fetch buffer *)
         mk_upsert_with D.nd_rcv_fetch_buffer.id [mk_var "map_id"; mk_cunknown]
           (mk_lambda'' unit_arg @@ mk_error "whoops4") @@
           mk_lambda' D.nd_rcv_fetch_buffer.e @@
             mk_tuple [mk_var "map_id";
-              mk_filter_geq (mk_var "vid_stmt") [mk_var "min_vid"; mk_cunknown]]
+              mk_filter_gt (mk_var "vid_stmt") [mk_var "min_vid"; mk_cunknown]]
       ])
       (* else do nothing *)
       mk_cunit
