@@ -128,7 +128,7 @@ let do_gc_fns c =
           do_bind @@
             mk_assign map_deref @@ U.add_property "Move" @@
           mk_let ["frontier"]
-            (mk_slice_lower (mk_var map_deref) @@ vid_and_unknowns' pat) @@
+            (mk_slice_lt (mk_var map_deref) @@ vid_and_unknowns' pat) @@
             (* delete all prefixes in ds. min_vid comes from pattern *)
             mk_aggv
               (mk_lambda3' ["acc", ds.t] ["_", t_vid] (ds_e ds) @@

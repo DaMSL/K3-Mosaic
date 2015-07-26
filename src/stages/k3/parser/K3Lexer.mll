@@ -105,6 +105,8 @@ rule tokenize = parse
     | ">}"  { RBRACELT }
     | "[<"  { LBRACKETLT }
     | "[>="  { LBRACKETGEQ }
+    | "[<="  { LBRACKETLEQ }
+    | "[>"  { LBRACKETGT }
     | ">]"  { RBRACKETLT }
     | "|"   { BAR }
 
@@ -196,7 +198,9 @@ rule tokenize = parse
     | "delete" { DELETE }
     | "delete_prefix" { DELETE_PREFIX }
     | "filter_geq"    { FILTERGEQ }
+    | "filter_gt"     { FILTERGT }
     | "filter_lt"     { FILTERLT }
+    | "filter_leq"    { FILTERLEQ }
 
     | '@' { ANNOTATE }
 

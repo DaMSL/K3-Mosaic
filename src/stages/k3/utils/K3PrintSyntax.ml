@@ -212,7 +212,7 @@ let rec lazy_expr c expr =
   (* many instructions need to wrap the same way *)
   in let wrap e = match U.tag_of_expr expr with
     | Insert | Iterate | Map | Filter | Flatten | Send | Delete
-    | Update | UpdateSuffix | UpsertWith | UpsertWithBefore | DeletePrefix | FilterGEQ
+    | Update | UpdateSuffix | UpsertWith | UpsertWithBefore | DeletePrefix | FilterOp _
     | Aggregate | AggregateV | GroupByAggregate | Assign | Combine -> wrap_hov 2 e
     | _ -> id_fn e
   in let out = match U.tag_of_expr expr with
@@ -346,10 +346,11 @@ let rec lazy_expr c expr =
     lps "peek_with_vid" <| lcut () <| lazy_paren @@ expr_triple (col, lam_none, lam_some)
   | Slice -> let col, pat = U.decompose_slice expr in
     wrap_if_var col (lazy_expr c col) <| lazy_bracket (tuple_no_paren c pat)
-  | SliceLower -> let col, pat = U.decompose_slice_lower expr in
-    wrap_if_var col (lazy_expr c col) <| lazy_bracket (lps "<" <| tuple_no_paren c pat)
-  | SliceUpperEq -> let col, pat = U.decompose_slice_upper_eq expr in
-    wrap_if_var col (lazy_expr c col) <| lazy_bracket (lps ">=" <| tuple_no_paren c pat)
+  | SliceOp o ->
+      let lazy_op o = lps @@ match o with
+        | OGt -> ">" | OGeq -> ">=" | OLt  -> "<" | OLeq -> "<=" in
+      let _, col, pat = U.decompose_slice_op expr in
+      wrap_if_var col (lazy_expr c col) <| lazy_bracket (lazy_op o <| tuple_no_paren c pat)
   | Insert -> let l, r = U.decompose_insert expr in
     lps "insert" <| lazy_paren
       (lazy_expr c l <| lps " ," <| lsp () <| lazy_expr c r)
@@ -367,10 +368,12 @@ let rec lazy_expr c expr =
     lps "update" <| lazy_paren (lazy_expr c l <| lps " , " <| expr_pair (o,n))
   | UpdateSuffix -> let col, key, lam = U.decompose_update_suffix expr in
     lps "update_suffix" <| lazy_paren (lazy_expr c col <| lps " , " <| expr_pair (key, lam))
-  | FilterGEQ -> let col, filter_val = U.decompose_filter_geq expr in
-    lps "filter_geq" <| lazy_paren (lazy_expr c col <| lps " , " <| lazy_expr c filter_val)
-  | FilterLT -> let col, filter_val = U.decompose_filter_lt expr in
-    lps "filter_lt" <| lazy_paren (lazy_expr c col <| lps " , " <| lazy_expr c filter_val)
+  | FilterOp o ->
+      let str_op o = match o with
+        | OGt -> "gt" | OLt -> "lt" | OLeq -> "leq" | OGeq -> "geq" in
+      let _, col, filter_val = U.decompose_filter_op expr in
+    lps ("filter_"^str_op o) <|
+      lazy_paren (lazy_expr c col <| lps " , " <| lazy_expr c filter_val)
   | Indirect -> let x = U.decompose_indirect expr in
     lps "ind" <| lsp () <| paren_l x @@ lazy_expr c x
   | Assign -> let l, r = U.decompose_assign expr in

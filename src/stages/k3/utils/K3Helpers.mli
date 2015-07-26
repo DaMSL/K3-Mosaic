@@ -170,10 +170,14 @@ val mk_slice : expr_t -> expr_t list -> expr_t
 val mk_slice' : id_t -> expr_t list -> expr_t
 (* int list list: specify index to use
    expr_t: list of integer values specifying GT, LT, EQ *)
-val mk_slice_lower : expr_t -> expr_t list -> expr_t
-val mk_slice_lower' : id_t -> expr_t list -> expr_t
-val mk_slice_upper_eq : expr_t -> expr_t list -> expr_t
-val mk_slice_upper_eq' : id_t -> expr_t list -> expr_t
+val mk_slice_lt : expr_t -> expr_t list -> expr_t
+val mk_slice_lt' : id_t -> expr_t list -> expr_t
+val mk_slice_leq : expr_t -> expr_t list -> expr_t
+val mk_slice_leq' : id_t -> expr_t list -> expr_t
+val mk_slice_gt : expr_t -> expr_t list -> expr_t
+val mk_slice_gt' : id_t -> expr_t list -> expr_t
+val mk_slice_geq : expr_t -> expr_t list -> expr_t
+val mk_slice_geq' : id_t -> expr_t list -> expr_t
 val mk_insert : id_t -> expr_t list -> expr_t
 val mk_upsert_with : id_t -> expr_t list -> expr_t -> expr_t -> expr_t
 val mk_upsert_with_before : id_t -> expr_t list -> expr_t -> expr_t -> expr_t
@@ -182,10 +186,14 @@ val mk_delete_prefix : id_t -> expr_t list -> expr_t
 val mk_update : id_t -> expr_t list -> expr_t list -> expr_t
 val mk_update_slice : id_t -> expr_t list -> expr_t -> expr_t
 val mk_update_suffix : id_t -> expr_t list -> expr_t -> expr_t
+val mk_filter_gt : expr_t -> expr_t list -> expr_t
+val mk_filter_gt' : id_t -> expr_t list -> expr_t
 val mk_filter_geq : expr_t -> expr_t list -> expr_t
 val mk_filter_geq' : id_t -> expr_t list -> expr_t
 val mk_filter_lt : expr_t -> expr_t list -> expr_t
 val mk_filter_lt' : id_t -> expr_t list -> expr_t
+val mk_filter_leq : expr_t -> expr_t list -> expr_t
+val mk_filter_leq' : id_t -> expr_t list -> expr_t
 
 val mk_ind : expr_t -> expr_t
 val mk_assign : id_t -> expr_t -> expr_t

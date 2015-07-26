@@ -76,6 +76,8 @@ type constant_t
     | CAddress  of address
     | CTarget   of id_t             (* trigger name *)
 
+type op_t = OGt | OGeq | OLt | OLeq
+
 (* Expressions *)
 type expr_tag_t
     = Const of constant_t
@@ -123,9 +125,9 @@ type expr_tag_t
     | MinWith
     | Peek
     | PeekWithVid       (* retain the vid for a vmap *)
-    | Slice
-    | SliceLower       (* slice with a frontier at a vid *)
-    | SliceUpperEq
+    | Slice 
+    | SliceOp of op_t   (* slice with frontier (one value >, <, etc) *)
+    | FilterOp of op_t  (* all the values <, > etc *)
     | Insert
     | Update
     | UpsertWith        (* insert with a default handler *)
@@ -133,8 +135,6 @@ type expr_tag_t
     | UpdateSuffix      (* update past a vid *)
     | Delete
     | DeletePrefix      (* delete before a certain vid. save frontier *)
-    | FilterGEQ         (* filter >= a vid or a key *)
-    | FilterLT          (* filter < a vid or key *)
 
     | Assign
     | Indirect

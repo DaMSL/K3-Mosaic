@@ -90,18 +90,17 @@ let check_tag_arity tag children =
     | Peek          -> 1
     | PeekWithVid   -> 3
     | Slice         -> 2
-    | SliceLower    -> 2
-    | SliceUpperEq  -> 2
+    | SliceOp _     -> 2
     | AtWith        -> 4
     | MinWith       -> 3
     | Insert        -> 2
     | Update        -> 3
-    | UpsertWith | UpsertWithBefore -> 4
+    | UpsertWith
+    | UpsertWithBefore -> 4
     | UpdateSuffix -> 3
     | Delete       -> 2
     | DeletePrefix -> 2
-    | FilterGEQ    -> 2
-    | FilterLT     -> 2
+    | FilterOp _   -> 2
 
     | Assign -> 2
     | Indirect -> 1
@@ -550,15 +549,7 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
             if not (tpat === telem) then t_erroru (TMismatch(tpat, telem, "pattern"))
             else tcol'
 
-      | SliceLower ->
-          let tcol', tpat = bind 0, bind 1 in
-          let tcol, telem =
-            try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') in
-          if not @@ is_tsorted tcol then t_erroru @@ not_sorted_collection tcol' else
-          check_vmap_pat tcol telem tpat;
-          tcol'
-
-      | SliceUpperEq ->
+      | SliceOp _ ->
           let tcol', tpat = bind 0, bind 1 in
           let tcol, telem =
             try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') in
@@ -640,7 +631,7 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
             t_erroru (TMismatch(tlam_update, tlam_update', "update lambda")) else
           t_unit
 
-      | FilterGEQ | FilterLT ->
+      | FilterOp _ ->
           let tcol', telem' = bind 0, bind 1 in
           let tcol, telem =
             try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') in

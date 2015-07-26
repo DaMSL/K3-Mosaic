@@ -61,7 +61,7 @@ let get_ring_node_fn =
             [mk_apply' "float_of_int" [mk_var "data"];
             mk_apply' "float_of_int" [mk_var "max_val"]]) @@
     mk_case_sn
-      (mk_peek @@ mk_slice_upper_eq' node_ring.id [mk_var "scaled"; mk_cunknown])
+      (mk_peek @@ mk_slice_geq' node_ring.id [mk_var "scaled"; mk_cunknown])
       "val"
       (mk_snd @@ mk_var "val") @@
       (* if we haven't found, take the minimum *)

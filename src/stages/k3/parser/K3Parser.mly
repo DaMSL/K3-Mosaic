@@ -111,6 +111,7 @@
 
 %token LBRACE RBRACE LBRACKET RBRACKET
 %token BAR LBRACKETBAR RBRACKETBAR LBRACKETCOLON RBRACKETCOLON LBRACKETLT RBRACKETLT LBRACKETGEQ LBRACKETHASH RBRACKETHASH LBRACEBAR RBRACEBAR LBRACECOLON RBRACECOLON LBRACELT RBRACELT
+%token LBRACKETGT LBRACKETLEQ
 
 %token NEG PLUS MINUS TIMES DIVIDE MODULO HASH
 
@@ -123,7 +124,7 @@
 %token COLON
 
 %token QUESTION
-%token INSERT UPDATE DELETE UPSERT_WITH UPSERT_WITH_BEFORE UPDATE_SUFFIX DELETE_PREFIX FILTERGEQ FILTERLT
+%token INSERT UPDATE DELETE UPSERT_WITH UPSERT_WITH_BEFORE UPDATE_SUFFIX DELETE_PREFIX FILTERGEQ FILTERLT FILTERLEQ FILTERGT
 
 %token GETS COLONGETS
 
@@ -639,8 +640,10 @@ tuple_index :
 
 access :
     | anno_expr LBRACKET tuple RBRACKET { mkexpr Slice [$1; $3] }
-    | anno_expr LBRACKETLT tuple RBRACKET { mkexpr SliceLower [$1; $3] }
-    | anno_expr LBRACKETGEQ tuple RBRACKET { mkexpr SliceUpperEq [$1; $3] }
+    | anno_expr LBRACKETLT tuple RBRACKET { mkexpr (SliceOp OLt) [$1; $3] }
+    | anno_expr LBRACKETGT tuple RBRACKET { mkexpr (SliceOp OGt) [$1; $3] }
+    | anno_expr LBRACKETGEQ tuple RBRACKET { mkexpr (SliceOp OGeq) [$1; $3] }
+    | anno_expr LBRACKETLEQ tuple RBRACKET { mkexpr (SliceOp OLeq) [$1; $3] }
     | PEEK LPAREN anno_expr RPAREN { mkexpr Peek [$3] }
     | PEEK_WITH_VID LPAREN anno_expr COMMA anno_expr COMMA anno_expr RPAREN { mkexpr PeekWithVid [$3; $5; $7] }
     | AT_WITH LPAREN anno_expr COMMA anno_expr COMMA anno_expr COMMA anno_expr RPAREN { mkexpr AtWith [$3; $5; $7; $9] }
@@ -689,8 +692,10 @@ transformers :
     }
     | SORT LPAREN anno_expr COMMA anno_expr RPAREN { mkexpr Sort [$3; $5] }
     | SIZE LPAREN anno_expr RPAREN            { mkexpr Size [$3] }
-    | FILTERGEQ LPAREN anno_expr COMMA anno_expr RPAREN { mkexpr FilterGEQ [$3; $5] }
-    | FILTERLT LPAREN anno_expr COMMA anno_expr RPAREN { mkexpr FilterLT [$3; $5] }
+    | FILTERGEQ LPAREN anno_expr COMMA anno_expr RPAREN { mkexpr (FilterOp OGeq) [$3; $5] }
+    | FILTERLT LPAREN anno_expr COMMA anno_expr RPAREN { mkexpr (FilterOp OLt) [$3; $5] }
+    | FILTERGT LPAREN anno_expr COMMA anno_expr RPAREN { mkexpr (FilterOp OGt) [$3; $5] }
+    | FILTERLEQ LPAREN anno_expr COMMA anno_expr RPAREN { mkexpr (FilterOp OLeq) [$3; $5] }
 
     /* Error handling */
     | anno_expr CONCAT error { print_error("Expected expression for combine") }

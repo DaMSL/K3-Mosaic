@@ -487,9 +487,24 @@ let v_fold err_fn f acc = function
   | VVMap m        -> ValueVMap.fold (fun _ k v acc -> f acc @@ VTuple[k;v]) m acc
   | v -> err_fn "v_fold" @@ sp "not a collection: %s" @@ string_of_value v
 
+(* fold over values *)
+let rec fold_val f zero v =
+  let recur = fold_val f in
+  match v with
+  | VTuple l        -> f (List.fold_left recur zero l) v
+  | VOption(Some x) -> f (recur zero x) v
+  | VIndirect r     -> f (recur zero !r) v
+  | VSet _ | VBag _ | VList _ | VVector _
+  | VMap _ | VSortedMap _ | VSortedSet _
+  | VVMap _         -> v_fold (fun x y -> failwith "oops") recur zero v
+  | _               -> f zero v
+
 let v_foldv err_fn f acc = function
   | VVMap m     -> ValueVMap.fold (fun vid k v acc -> f acc vid @@ VTuple[k;v]) m acc
   | v -> err_fn "v_foldv" @@ sp "not a supported collection: %s" @@ string_of_value v
+
+let has_unknown v = fold_val (fun acc v -> v = VUnknown || acc) false v
+let no_unknown v = not @@ has_unknown v
 
 let v_iter err_fn f = function
   | VSet m      -> ValueSet.iter f m
@@ -635,57 +650,64 @@ let rec match_pattern pat_v v = match pat_v, v with
       with Invalid_argument _ -> false)
   | x, y -> ValueComp.compare_v x y = 0
 
-let v_slice err_fn pat = function
-  | VSet m         -> VSet(ValueSet.filter (match_pattern pat) m)
-  | VBag m         -> VBag(ValueBag.filter (match_pattern pat) m)
-  | VList m        -> VList(IList.filter (match_pattern pat) m)
-  | VVector m      -> VVector(IList.filter (match_pattern pat) m)
-  | VMap m         -> VMap(ValueMap.filter (fun k v ->
-                        match_pattern pat @@ encode_tuple (k,v)) m)
-  | VSortedMap m   -> VSortedMap(ValueMap.filter (fun k v ->
-                        match_pattern pat @@ encode_tuple (k,v)) m)
-  | VSortedSet m   -> VSortedSet(ValueSet.filter (match_pattern pat) m)
-  | VVMap m        -> VVMap(ValueVMap.filter (fun t k v ->
-                        match_pattern pat (VTuple [t;k;v])) m)
+let v_slice err_fn pat m = match m, pat with
+  | VSet m, _      -> VSet(ValueSet.filter (match_pattern pat) m)
+  | VBag m, _      -> VBag(ValueBag.filter (match_pattern pat) m)
+  | VList m, _     -> VList(IList.filter (match_pattern pat) m)
+  | VVector m, _   -> VVector(IList.filter (match_pattern pat) m)
+  | VMap m, VTuple[k;_] when no_unknown k ->
+      begin try let v = ValueMap.find k m in
+          VMap(ValueMap.singleton k v)
+      with Not_found -> VMap(ValueMap.empty) end
+  | VMap m, _      ->
+      VMap(ValueMap.filter (fun k v ->
+        match_pattern pat @@ encode_tuple (k,v)) m)
+  | VSortedMap m, VTuple[k;_] when no_unknown k   ->
+      begin try let v = ValueMap.find k m in
+          VSortedMap(ValueMap.singleton k v)
+      with Not_found -> VSortedMap(ValueMap.empty) end
+  | VSortedMap m, _ ->
+      VSortedMap(ValueMap.filter (fun k v ->
+        match_pattern pat @@ encode_tuple (k,v)) m)
+  | VSortedSet m, _ -> VSortedSet(ValueSet.filter (match_pattern pat) m)
+  | VVMap m, VTuple [t;k;_] when no_unknown k ->
+      VVMap(ValueVMap.frontier_point ~op:`EQ t k m)
+  | VVMap m, VTuple [t;k;_] ->
+      VVMap(ValueVMap.frontier_slice ~op:`EQ
+        ~filter_fn:(fun k' -> match_pattern k k') t m)
   | _ -> err_fn "v_slice" "not a collection"
 
-let v_slice_lower err_fn pat m = match m, pat with
-  | VVMap m, VTuple[t;k;v]  ->
-      (* point lookup or slice lookup? *)
-      if not @@ List.mem VUnknown @@ unwrap_vtuple k then
-        try
-          (* point lookup *)
-          VVMap(ValueVMap.frontier_point t k m)
-        with Not_found -> VVMap(ValueVMap.empty)
-      else
-        VVMap(
-          ValueVMap.filter (fun _ k' v' -> match_pattern (VTuple[k;v]) (VTuple[k';v'])) @@
-            ValueVMap.frontier_slice t m)
-  | VSortedMap m, VTuple[k;v] when not @@ List.mem VUnknown @@ unwrap_vtuple k ->
+
+let v_slice_op op err_fn pat m =
+  let find_fn = function
+    | `LT -> ValueMap.find_lt
+    | `LEQ -> ValueMap.find_lteq
+    | `GT -> ValueMap.find_gt
+    | `GEQ -> ValueMap.find_gteq
+    | `EQ -> failwith "eq not supported here"
+  in
+  match m, pat with
+    (* point lookup or slice lookup? *)
+  | VVMap m, VTuple[t;k;_] when no_unknown k ->
+      VVMap(ValueVMap.frontier_point ~op t k m)
+  | VVMap m, VTuple[t;k;_] ->
+      VVMap(ValueVMap.frontier_slice ~op
+        ~filter_fn:(fun k' -> match_pattern k k') t m)
+    (* slice_op only works with full key on sortedmap *)
+  | VSortedMap m, VTuple[k;_] when no_unknown k ->
         begin try
-          let k, v = ValueMap.find_lt k m in
-          v_singleton err_fn (VTuple [k; v]) TSortedMap
-        with Not_found -> 
-          v_empty_of_t TSortedMap
-        end
+          let k, v = (find_fn op) k m in
+          VSortedMap(ValueMap.singleton k v)
+        with Not_found -> VSortedMap(ValueMap.empty) end
   | _ -> err_fn "v_slice_lower" (sp "unhandled or bad values: %s" @@ sov pat)
 
-(* only gather entries gt/lt/geq than given key *)
+(* gather all entries gt/lt/geq/leq than given key *)
 let v_filter_op err_fn op pat m = match m, pat with
-  | VSortedSet m, _ -> VSortedSet(ValueSet.filter (fun v -> op (ValueComp.compare_v v pat) 0) m)
-  | VSortedMap m, VTuple[k;_] -> VSortedMap(ValueMap.filter (fun k' _ -> op (ValueComp.compare_v k' k) 0) m)
+  | VSortedSet m, _ ->
+      VSortedSet(ValueSet.filter (fun v -> op (ValueComp.compare_v v pat) 0) m)
+  | VSortedMap m, VTuple[k;_] ->
+      VSortedMap(ValueMap.filter (fun k' _ -> op (ValueComp.compare_v k' k) 0) m)
   | _ -> err_fn "v_filter_op" "not implemented"
-
-let v_slice_upper_eq err_fn pat m = match m, pat with
-  (* check for lookup pattern *)
-  | VSortedMap m, VTuple[k;v] when not @@ List.mem VUnknown @@ unwrap_vtuple k ->
-        begin try
-          let k, v = ValueMap.find_gteq k m in
-          v_singleton err_fn (VTuple [k; v]) TSortedMap
-        with Not_found -> 
-          v_empty_of_t TSortedMap
-        end
-  | _ -> err_fn "v_slice_upper_eq" "bad or unhandled input"
 
 let rec type_of_value uuid value =
   let get_typ v = type_of_value uuid v in

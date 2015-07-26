@@ -16,6 +16,7 @@ module type S = sig
   type 'a t
   type vid
   type key
+  type op = [`GT | `LT | `GEQ | `LEQ | `EQ]
   val empty : 'a t
   val is_empty : 'a t -> bool
   val add : vid -> key -> 'a -> 'a t -> 'a t
@@ -35,8 +36,8 @@ module type S = sig
   val of_list : (vid * key * 'a) list -> 'a t
   val compare : ('a -> 'a -> int) -> 'a t -> 'a t -> int
   val size : 'a t -> int
-  val frontier_point: vid -> key -> 'a t -> 'a t
-  val frontier_slice: vid -> 'a t -> 'a t
+  val frontier_point: ?op:op -> vid -> key -> 'a t -> 'a t
+  val frontier_slice: ?op:op -> ?filter_fn:(key -> bool) -> vid -> 'a t -> 'a t
 end
 
 module Make(OrdVid: ICommon.OrderedKeyType)(OrdKey: ICommon.OrderedKeyType) = struct
@@ -73,11 +74,21 @@ module Make(OrdVid: ICommon.OrderedKeyType)(OrdKey: ICommon.OrderedKeyType) = st
           else Some vidmap'
     ) m
 
+  type op = [`GT | `LT | `GEQ | `LEQ | `EQ]
+
+  let find_fn = function
+    | `LT  -> VIDMap.find_lt
+    | `LEQ -> VIDMap.find_lteq
+    | `GT  -> VIDMap.find_gt
+    | `GEQ -> VIDMap.find_gteq
+    | `EQ  -> (fun t m -> t, VIDMap.find t m)
+
   (* get the frontier for a slice (must read entire domain) *)
-  let frontier_slice vid m =
+  let frontier_slice ?(op=`LT) ?(filter_fn=const true) vid m =
     HMap.fold (fun k vidmap acc ->
+      if not (filter_fn k) then acc else
       try
-        let vid', v = VIDMap.find_lteq vid vidmap in
+        let vid', v = (find_fn op) vid vidmap in
         add vid' k v acc
       with Not_found -> acc
     ) m empty
@@ -85,10 +96,12 @@ module Make(OrdVid: ICommon.OrderedKeyType)(OrdKey: ICommon.OrderedKeyType) = st
   let singleton vid k v = HMap.singleton k (VIDMap.singleton vid v)
 
   (* get the frontier at a specific key *)
-  let frontier_point vid k m =
-    let vidmap = HMap.find k m in
-    let vid', v = VIDMap.find_lt vid vidmap in
-    singleton vid' k v
+  let frontier_point ?(op=`LT) vid k m =
+    try
+      let vidmap = HMap.find k m in
+      let vid', v = (find_fn op) vid vidmap in
+      singleton vid' k v
+    with Not_found -> empty
 
   let remove vid k m =
     HMap.update_with k (function

@@ -695,7 +695,7 @@ let nd_send_push_stmt_map_trig c s_rhs_lhs trig_name =
                   let slice_key =
                     mk_var "vid"::[mk_tuple @@ list_drop_end 1 slice_key]@[mk_cunknown] in
                   [mk_peek_with_vid
-                     (mk_slice_lower (mk_var rhsm_deref) slice_key)
+                     (mk_slice_lt (mk_var rhsm_deref) slice_key)
                      (mk_lambda'' unit_arg @@ mk_empty map_delta.t) @@
                      mk_lambda'' ["vid", t_vid; "tuple", snd @@ unwrap_tcol @@ map_real.t] @@
                        mk_singleton map_delta.t @@ fst_many map_pat]
@@ -1018,7 +1018,7 @@ let nd_update_stmt_cntr_corr_map =
     ]
 
 (* for no-corrective mode: execute buffered fetches *)
-(* we have a balance between reads and writes. Reads are buffered in the 
+(* we have a balance between reads and writes. Reads are buffered in the
  * buffered_fetches, and writes are tracked in the stmt_cntrs. We split both
  * per-map to give us better granularity barriers, though even better ones could
  * be made if we incorporate values within the maps somehow (we have the same issue
@@ -1051,7 +1051,7 @@ let nd_exec_buffered_fetches c =
       (mk_peek @@ mk_slice' D.nd_rcv_fetch_buffer.id [mk_var "map_id"; mk_cunknown]) "x"
       mk_cfalse @@
       mk_case_ns
-        (mk_peek @@ mk_slice_lower (mk_snd @@ mk_var "x") [mk_var "min_vid"; mk_cunknown])
+        (mk_peek @@ mk_slice_lt (mk_snd @@ mk_var "x") [mk_var "min_vid"; mk_cunknown])
         "_u" mk_cfalse mk_ctrue) @@
   mk_block [
     (* check if this is the min vid for the map in stmt_cntrs_per_map. if not, do nothing,

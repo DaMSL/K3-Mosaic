@@ -161,10 +161,16 @@ let decompose_singleton e = match tag_of_expr e, sub_tree e with
   Singleton vt, [e0] -> e0 | _ -> failwith "not a Singleton"
 let decompose_slice e = match tag_of_expr e, sub_tree e with
   Slice, [e0; e1] -> e0, e1 | _ -> failwith "not a Slice"
-let decompose_slice_lower e = match tag_of_expr e, sub_tree e with
-  SliceLower, [e0; e1] -> e0, e1 | _ -> failwith "not a SliceLower"
-let decompose_slice_upper_eq e = match tag_of_expr e, sub_tree e with
-  SliceUpperEq, [e0; e1] -> e0, e1 | _ -> failwith "not a SliceUpperEq"
+let decompose_slice_op e = match tag_of_expr e, sub_tree e with
+  SliceOp o, [e0; e1] -> o, e0, e1 | _ -> failwith "not a SliceOp"
+let decompose_slice_lt e = match tag_of_expr e, sub_tree e with
+  SliceOp(OLt), [e0; e1] -> e0, e1 | _ -> failwith "not a SliceLt"
+let decompose_slice_leq e = match tag_of_expr e, sub_tree e with
+  SliceOp(OLeq), [e0; e1] -> e0, e1 | _ -> failwith "not a SliceLeq"
+let decompose_slice_geq e = match tag_of_expr e, sub_tree e with
+  SliceOp(OGeq), [e0; e1] -> e0, e1 | _ -> failwith "not a SliceGeq"
+let decompose_slice_gt e = match tag_of_expr e, sub_tree e with
+  SliceOp(OGt), [e0; e1] -> e0, e1 | _ -> failwith "not a SliceGt"
 let decompose_sort e = match tag_of_expr e, sub_tree e with
   Sort, [e0; e1] -> e0, e1 | _ -> failwith "not a Sort"
 let decompose_size e = match tag_of_expr e, sub_tree e with
@@ -181,10 +187,16 @@ let decompose_upsert_with e = match tag_of_expr e, sub_tree e with
   UpsertWith, [x; key; lam_no; lam_yes] -> x, key, lam_no, lam_yes | _ -> failwith "not UpsertWith"
 let decompose_upsert_with_before e = match tag_of_expr e, sub_tree e with
   UpsertWithBefore, [x; key; lam_no; lam_yes] -> x, key, lam_no, lam_yes | _ -> failwith "not UpsertWithBefore"
+let decompose_filter_op e = match tag_of_expr e, sub_tree e with
+  FilterOp o, [x; filter_val] -> o, x, filter_val | _ -> failwith "not FilterOp"
+let decompose_filter_gt e = match tag_of_expr e, sub_tree e with
+  FilterOp(OGt), [x; filter_val] -> x, filter_val | _ -> failwith "not FilterGt"
 let decompose_filter_geq e = match tag_of_expr e, sub_tree e with
-  FilterGEQ, [x; filter_val] -> x, filter_val | _ -> failwith "not FilterGEQ"
+  FilterOp(OGeq), [x; filter_val] -> x, filter_val | _ -> failwith "not FilterGeq"
 let decompose_filter_lt e = match tag_of_expr e, sub_tree e with
-  FilterLT, [x; filter_val] -> x, filter_val | _ -> failwith "not FilterLT"
+  FilterOp(OLt), [x; filter_val] -> x, filter_val | _ -> failwith "not FilterLt"
+let decompose_filter_leq e = match tag_of_expr e, sub_tree e with
+  FilterOp(OLeq), [x; filter_val] -> x, filter_val | _ -> failwith "not FilterLeq"
 let decompose_var e = match tag_of_expr e with
   Var id -> id | _ -> failwith "not a Var"
 

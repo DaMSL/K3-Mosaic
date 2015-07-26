@@ -442,11 +442,10 @@ and eval_expr (address:address) sched_st cenv texpr =
     (* Collection accessors and modifiers *)
     | Slice, [c; pat] -> nenv, temp @@ v_slice error pat c
 
-    | SliceLower, [c; pat]->
-         nenv, temp @@ v_slice_lower error pat c
-
-    | SliceUpperEq, [c; pat]->
-         nenv, temp @@ v_slice_upper_eq error pat c
+    | SliceOp o, [c; pat]->
+        let op = match o with
+          OLt -> `LT | OGt -> `GT | OLeq -> `LEQ | OGeq -> `GEQ in
+        nenv, temp @@ v_slice_op op error pat c
 
     | Peek, [c] -> nenv, temp @@ VOption(v_peek error c)
 
@@ -511,7 +510,7 @@ and eval_expr (address:address) sched_st cenv texpr =
           | _ -> error "upsert_with" "not a tuple"
         in
         let slice_fn =
-          if tag = UpsertWith then v_slice else v_slice_lower in
+          if tag = UpsertWith then v_slice else v_slice_op `LT in
         let slice = slice_fn error key col in
         begin match v_peek ~vid:true error slice with
           | None   ->
@@ -541,9 +540,10 @@ and eval_expr (address:address) sched_st cenv texpr =
         (env_modify (get_id ()) nenv @@
           fun col -> v_delete_prefix error key col), temp VUnit
 
-    | FilterGEQ, [col; key] -> nenv, temp @@ v_filter_op error (fun (x:int) y -> x >= y) key col
-
-    | FilterLT, [col; key] -> nenv, temp @@ v_filter_op error (fun (x:int) y -> x < y) key col
+    | FilterOp o, [col; key] ->
+        let op : int -> int -> bool = match o with
+          OLt -> (<) | OGt -> (>) | OLeq -> (<=) | OGeq -> (>=) in
+        nenv, temp @@ v_filter_op error op key col
 
     | Assign, [_; v] -> env_modify (get_id ()) nenv @@ const v, temp VUnit
 

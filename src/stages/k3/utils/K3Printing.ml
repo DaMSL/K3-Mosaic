@@ -68,6 +68,12 @@ let string_of_stop_behavior_t s = match s with
     | UntilEmpty -> "UntilEmpty"
     | UntilEOF -> "UntilEOF"
 
+let string_of_op = function
+  | OGt -> "OGt"
+  | OGeq -> "OGeq"
+  | OLt -> "OLt"
+  | OLeq -> "OLeq"
+
 let string_of_tag_type = function
     | Const _          -> "Const"
     | Var _            -> "Var"
@@ -112,8 +118,7 @@ let string_of_tag_type = function
     | Peek             -> "Peek"
     | PeekWithVid      -> "PeekWithVid"
     | Slice            -> "Slice"
-    | SliceLower       -> "SliceLower"
-    | SliceUpperEq     -> "SliceUpperEq"
+    | SliceOp o        -> sp "SliceOp(%s)" (string_of_op o)
     | AtWith           -> "AtWith"
     | MinWith          -> "MinWith"
     | Insert           -> "Insert"
@@ -123,8 +128,7 @@ let string_of_tag_type = function
     | UpsertWithBefore -> "UpsertWithBefore"
     | Delete           -> "Delete"
     | DeletePrefix     -> "DeletePrefix"
-    | FilterGEQ        -> "FilterGEQ"
-    | FilterLT         -> "FilterLT"
+    | FilterOp o       -> sp "FilterOp(%s)" (string_of_op o)
 
     | Indirect         -> "Indirect"
     | Assign           -> "Assign"
