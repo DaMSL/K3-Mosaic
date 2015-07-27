@@ -344,7 +344,7 @@ let slice_names c pat =
   in
   let pat = add_record_ids c pat in
   let pat = List.filter (not |- D.is_unknown |- snd) pat in
-  String.concat "_" (fst_many pat)
+  String.concat "" (fst_many pat)
 
 let is_tuple e = match U.tag_of_expr e with Tuple -> true | _ -> false
 
