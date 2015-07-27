@@ -97,6 +97,9 @@ let id_of_num i = sp "b%d" i
 
 let abc_str = "abcdefghijklmnopqrstuvwxyz"
 
+let str_op o = match o with
+  | OGt -> "gt" | OLt -> "lt" | OLeq -> "leq" | OGeq -> "geq"
+
 (* Get a record id from a number
  * we use a scheme of a..z, za, zb..zz, zza..
  *)
@@ -365,7 +368,7 @@ let maybe_vmap c col pat fun_no fun_yes =
   | _ -> fun_no pat
 
 (* try pattern matching a bunch of expressions *)
-let try_matching l =
+let try_matching e l =
   let rec loop acc_fail = function
     | x::xs -> begin match x () with
                 | None -> loop acc_fail xs
@@ -373,18 +376,26 @@ let try_matching l =
                 | exception (Failure s) -> loop (acc_fail^"; "^s) xs
                 | exception _ -> loop acc_fail xs
                end
-    | [] -> failwith ("No match found: "^acc_fail)
+    | [] -> failwith @@ sp "No match found for %s: %s" (K3Printing.string_of_expr e) acc_fail
   in loop "" l
 
 (* check if a collection is a vmap *)
 let is_vmap col = match fst @@ KH.unwrap_tcol @@ T.type_of_expr col with
                   | TVMap _ -> true | _ -> false
 
+let verify_vmap c = if is_vmap c then () else failwith "Not a vmap"
+
 let is_map col = match fst @@ KH.unwrap_tcol @@ T.type_of_expr col with
                   | TSortedMap | TMap -> true | _ -> false
 
+let verify_map c = if is_map c then () else failwith "Not a map"
+
 let is_sorted_map col = match fst @@ KH.unwrap_tcol @@ T.type_of_expr col with
                   | TSortedMap -> true | _ -> false
+
+let verify_sorted_map c = if is_sorted_map c then () else failwith "Not a sorted map"
+
+let verify_lookup_pat p = if D.is_lookup_pat p then () else failwith "Not a lookup pattern"
 
 (* We return the pattern breakdown: a list, and a lambda forming the internal structure *)
 let breakdown_pat pat = match U.tag_of_expr pat with
@@ -518,19 +529,16 @@ and apply_method ?prefix_fn c ~name ~col ~args ~arg_info =
 
 (* common pattern for lookup_with *)
 and handle_lookup_with
-  ?(decomp_fn=U.decompose_slice)
-  ?(vmap=false)
-  ?some_lam_args
-  c ~id
-  name col t_elem e_none e_some =
-    let col, pat = decomp_fn col in
+  ?(vmap=false) ?some_lam_args c ~id
+  name col pat e_none e_some =
     (* NOTE: we don't check for lookup_pat. We assume that's already been done *)
     (* we CAN use lookup_with4 *)
+    let _, t_elem = KH.unwrap_tcol @@ T.type_of_expr col in
     let pat = lookup_pat_of_slice ~vid:vmap ~col pat in
     let lam_args = maybe [id, t_elem] id_fn some_lam_args in
     let arg' =
       [light_type c @@ KH.mk_lambda' ["_", KH.t_unit] e_none;
-        light_type c @@ KH.mk_lambda' lam_args e_some] in
+       light_type c @@ KH.mk_lambda' lam_args e_some] in
     let args, arg_info =
       if vmap then
         [hd pat; light_type c @@ KH.mk_tuple @@ tl pat] @ arg',
@@ -913,9 +921,8 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
     in
     (* helper function to apply lookup_with on a secondary index *)
     let handle_slice_lookup_with
-      ?(decomp_fn=U.decompose_slice)
-      col t_elem e_none e_some =
-        let col, pat = decomp_fn col in
+      col pat e_none e_some =
+        let _, t_elem = KH.unwrap_tcol @@ T.type_of_expr col in
         let fn_pat = meaningful_pat c @@ tl @@ U.unwrap_tuple pat in
         let name =
           "lookup_with_before_by_" ^ (slice_names c @@ U.unwrap_tuple fn_pat) in
@@ -929,92 +936,82 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
       in
 
       (* check for a case(peek(slice(...)) *)
-      try_matching [
+      try_matching expr [
         (fun () ->
           let col = U.decompose_peek e1 in
-          let col_t, t_elem = KH.unwrap_tcol @@ T.type_of_expr col in
-          some @@ try_matching [
+          some @@ try_matching col [
 
             (* Slice on VMap and full lookup *)
             (fun () ->
-              if is_vmap col &&
-                 D.is_lookup_pat (snd (U.decompose_slice col)) then
-              handle_lookup_with c ~vmap:true ~id "lookup_with4" col
-                t_elem e_none e_some
-              else None);
+              let col, pat = U.decompose_slice col in
+              verify_vmap col;
+              verify_lookup_pat pat;
+              handle_lookup_with c ~vmap:true ~id "lookup_with4"
+                col pat e_none e_some);
 
             (* Slice frontier on VMap and full lookup *)
             (fun () ->
-              if is_vmap col &&
-              D.is_lookup_pat (snd (U.decompose_slice_lt col)) then
-              handle_lookup_with c ~vmap:true ~id
-                ~decomp_fn:U.decompose_slice_lt
-                "lookup_with4_before" col t_elem e_none e_some
-              else None);
+              let col, pat = U.decompose_slice_lt col in
+              verify_vmap col;
+              verify_lookup_pat pat;
+              handle_lookup_with c ~vmap:true ~id "lookup_with4_before"
+                col pat e_none e_some);
 
-            (* Slice on sortedmap with upper_bound -- full lookup *)
+            (* Slice op on sortedmap -- full lookup *)
             (fun () ->
-              if is_sorted_map col &&
-                D.is_lookup_pat @@ snd @@ U.decompose_slice_geq col then
-                handle_lookup_with c "upper_bound_with" ~id
-                ~decomp_fn:U.decompose_slice_geq col t_elem e_none e_some
-              else None);
-
-            (* Slice on sortedmap with lower_bound -- full lookup *)
-            (fun () ->
-              if is_sorted_map col &&
-                D.is_lookup_pat @@ snd @@ U.decompose_slice_lt col then
-                  handle_lookup_with c "lower_bound_with" ~id
-                  ~decomp_fn:U.decompose_slice_lt col t_elem e_none e_some
-              else None);
+              let op, col, pat = U.decompose_slice_op col in
+              verify_sorted_map col;
+              verify_lookup_pat pat;
+              handle_lookup_with c ("lookup_"^str_op op^"_with") ~id
+                col pat e_none e_some);
 
             (* Slice on map and full lookup *)
             (fun () ->
-              if is_map col &&
-                D.is_lookup_pat (snd(U.decompose_slice col)) then
-                handle_lookup_with c "lookup_with4" ~id col t_elem e_none e_some
-              else None);
+              let col, pat = U.decompose_slice col in
+              verify_map col;
+              verify_lookup_pat pat;
+              handle_lookup_with c "lookup_with4" ~id col pat e_none e_some);
 
             (* Slice on VMap with partial key*)
             (fun () ->
-              if is_vmap col then
-                handle_slice_lookup_with col t_elem e_none e_some else None);
+              let col, pat = U.decompose_slice col in
+              verify_vmap col;
+              handle_slice_lookup_with col pat e_none e_some);
 
             (* Slice frontier on VMap with partial lookup *)
             (fun () ->
-              if is_vmap col then
-              handle_slice_lookup_with
-                ~decomp_fn:U.decompose_slice_lt
-                col t_elem e_none e_some else None);
+              let col, pat = U.decompose_slice_lt col in
+              verify_vmap col;
+              handle_slice_lookup_with col pat e_none e_some);
 
             (* AggregateV -> lookup_before *)
             (* In order for an aggregatev to be here, it must have a full key *)
             (fun () ->
               (* we happen to have a bind here, so special case it *)
+              let _, t_elem = KH.unwrap_tcol @@ T.type_of_expr col in
               let e0, x, e1 = U.decompose_bind col in
               let lambda, acc, col = U.decompose_aggregatev e1 in
-              let col_t, elem_t = KH.unwrap_tcol @@ T.type_of_expr col in
+              let col, pat = U.decompose_slice_lt col in
               let e_some' =
                 KH.mk_let [id]
                   (KH.mk_apply' (D.flatten_fn_nm @@ KH.unwrap_ttuple t_elem)
                   [KH.mk_var id]) e_some
               in
               (* do bind here *)
-              Some (
+              Some(
                 lps "bind" <| lsp () <| lazy_expr c e0 <| lsp () <| lps "as"
                 <| lsp () <| lps "ind" <| lsp () <| lps x <| lsp () <|
                 lps "in" <| lsp () <|
                 (unwrap_some @@
                   handle_lookup_with c ~vmap:true ~id
-                  ~decomp_fn:U.decompose_slice_lt
-                  "lookup_with4_before" col elem_t
-                   e_none e_some')));
+                  "lookup_with4_before" col pat e_none e_some')));
 
             (fun () ->
+              let _, t_elem = KH.unwrap_tcol @@ T.type_of_expr col in
               (* peek_with *)
               let args =
                 [light_type c @@ KH.mk_lambda' ["_", KH.t_unit] e_none;
-                light_type c @@ KH.mk_lambda' [id, t_elem] e_some] in
+                 light_type c @@ KH.mk_lambda' [id, t_elem] e_some] in
               let arg_info = [def_a; [0], false] in
               Some(apply_method c ~name:"peek_with" ~col ~args ~arg_info));
           ]);
@@ -1098,18 +1095,14 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
     in
     (* handle a case of fold_all(slice(...)) *)
     let handle_slice () =
-      let col', pat = U.decompose_slice_lt col in
+      let col, pat = U.decompose_slice_lt col in
       let vid = hd @@ U.unwrap_tuple pat in
       let pat_no_vid = tl @@ U.unwrap_tuple pat in
       let pat' = meaningful_pat c pat_no_vid in
-      let t_elem = snd @@ KH.unwrap_tcol @@ T.type_of_expr col in
       (* check if we can just do a lookup *)
       if D.is_lookup_pat pat then
-        handle_lookup_with c
-          ~decomp_fn:U.decompose_slice_lt
-          ~vmap:true
-          ~id:"x"
-          "lookup_with4_before" col t_elem
+        handle_lookup_with c ~vmap:true ~id:"x" "lookup_with4_before"
+        col pat
           (light_type c @@ KH.mk_empty @@ T.type_of_expr acc)
           (KH.mk_singleton (T.type_of_expr acc) [KH.mk_var "x"])
       else
@@ -1125,9 +1118,9 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
           else
             [vid; light_type c pat'; lambda; acc],
             [def_a; [], true; [2], false; def_a] in
-        some @@ apply_method c ~name ~col:col' ~args ~arg_info
+        some @@ apply_method c ~name ~col ~args ~arg_info
     in
-    try_matching [
+    try_matching expr [
       handle_slice;
       normal
     ]
@@ -1155,7 +1148,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
       ~args:[lam_none; lam_some] ~arg_info:[def_a; [0], false]
 
   | PeekWithVid ->
-      try_matching [
+      try_matching expr [
         (fun () ->
           let col, lam_none, lam_some = U.decompose_peek_with_vid expr in
           let col, pat = U.decompose_slice_lt col in
@@ -1209,11 +1202,11 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
       (paren_l tup @@ lazy_expr c tup) <| lps "." <| lps id
 
   | SliceOp(OLt) ->
-      (* this only works on a vmap, so we can assume we have a vmap *)
       let col, pat = U.decompose_slice_lt expr in
-      filter_of_slice ~frontier:true c col pat
+      if is_vmap col then
+        filter_of_slice ~frontier:true c col pat
+      else error ()
 
-      (* no analog of a direct slice_upper_eq in k3new *)
   | SliceOp(_) -> error ()
 
   | Slice ->
@@ -1279,15 +1272,9 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
       (fun vid key -> lazy_expr c col <| apply_method_nocol  c ~name:"upsert_with_before" ~args:[vid; key; lam_no; lam_yes]
         ~arg_info:[vid_out_arg; [], true; [], true; [0], true])
 
-  | FilterOp(OGeq) ->
-      let col, filter_val = U.decompose_filter_geq expr
-      in apply_method c ~name:"filter_geq" ~col ~args:[filter_val] ~arg_info:[[], true]
-
-  | FilterOp(OLt) ->
-      let col, filter_val = U.decompose_filter_lt expr
-      in apply_method c ~name:"filter_lt" ~col ~args:[filter_val] ~arg_info:[[], true]
-
-  | FilterOp(_) -> error ()
+  | FilterOp _ ->
+    let op, col, filter_val = U.decompose_filter_op expr
+    in apply_method c ~name:("filter_"^str_op op) ~col ~args:[filter_val] ~arg_info:[[], true]
 
   | Assign -> let l, r = U.decompose_assign expr in
     lazy_expr c l <| lsp () <| lps "=" <| lsp () <| lazy_expr c r
