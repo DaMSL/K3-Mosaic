@@ -574,8 +574,9 @@ let nd_rcv_fetch_trig c trig =
               (mk_or
                 (* check if we're in corrective mode *)
                 (mk_var D.corrective_mode.id) @@
-                (* or if the minimum entry in the stmt_cntrs has a higher vid *)
-                mk_lt (mk_var "vid") @@
+                (* or if the minimum entry in the stmt_cntrs has a >= vid
+                 * (we can read at the same vid since we read an earlier value *)
+                mk_leq (mk_var "vid") @@
                   mk_case_ns
                     (mk_peek @@ mk_slice' D.nd_stmt_cntrs_per_map.id
                       [mk_var "map_id"; mk_cunknown]) "x"
