@@ -1023,8 +1023,9 @@ let nd_update_stmt_cntr_corr_map =
  * per-map to give us better granularity barriers, though even better ones could
  * be made if we incorporate values within the maps somehow (we have the same issue
  * for correctives). In no-corrective mode, the only state that is legal is to read
- * before a write to the same map. We ensure this by checking the min_vid of the writes
- * and filtering all reads less than this min_vid. *)
+ * before or at the same time as a write to the same map (simultaneous reads read earlier
+ * values, which is ok). We ensure this by checking the min_vid of the writes
+ * and filtering all reads <= this min_vid. *)
 let nd_exec_buffered_fetches_nm = "nd_exec_buffered_fetches"
 let nd_exec_buffered_fetches c =
   let t_info = P.for_all_trigs c.p
