@@ -20,6 +20,8 @@ and ValueBag : sig include IBag.S with type elt = Value.value_t end
 
 and ValueSet : sig include ISet.S with type elt = Value.value_t end
 
+and ValueSSet : sig include NearSet.S with type elt = Value.value_t end
+
 and Value : sig
   type eval_t = VDeclared of value_t ref | VTemp of value_t
   and foreign_func_t = env_t -> env_t * eval_t
@@ -56,7 +58,7 @@ and Value : sig
       | VVector of value_t IList.t
       | VMap of value_t ValueMap.t
       | VSortedMap of value_t ValueMap.t
-      | VSortedSet of ValueSet.t
+      | VSortedSet of ValueSSet.t
       | VVMap of value_t ValueVMap.t
       | VFunction of arg_t * local_env_t * expr_t (* closure *)
       | VForeignFunction of id_t * arg_t * foreign_func_t
@@ -128,6 +130,6 @@ val v_size : value_t t_err_fn -> value_t -> value_t
 val v_singleton : value_t t_err_fn -> value_t -> container_type_t -> value_t
 val v_slice : value_t t_err_fn -> value_t -> value_t -> value_t
 val v_slice_op : [`LT|`LEQ|`GT|`GEQ|`EQ] -> value_t t_err_fn -> value_t -> value_t -> value_t
-val v_filter_op : value_t t_err_fn -> (int -> int -> bool) -> value_t -> value_t -> value_t
+val v_filter_op : value_t t_err_fn -> [`LT|`LEQ|`GT|`GEQ|`EQ] -> value_t -> value_t -> value_t
 val v_at : value_t option t_err_fn -> value_t -> value_t -> value_t option
 val v_min : value_t option t_err_fn -> value_t -> value_t option

@@ -541,8 +541,8 @@ and eval_expr (address:address) sched_st cenv texpr =
           fun col -> v_delete_prefix error key col), temp VUnit
 
     | FilterOp o, [col; key] ->
-        let op : int -> int -> bool = match o with
-          OLt -> (<) | OGt -> (>) | OLeq -> (<=) | OGeq -> (>=) in
+        let op = match o with
+          OLt -> `LT | OGt -> `GT | OLeq -> `LEQ | OGeq -> `GEQ in
         nenv, temp @@ v_filter_op error op key col
 
     | Assign, [_; v] -> env_modify (get_id ()) nenv @@ const v, temp VUnit
