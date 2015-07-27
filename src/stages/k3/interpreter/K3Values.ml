@@ -681,9 +681,9 @@ let v_slice err_fn pat m = match m, pat with
 let v_slice_op op err_fn pat m =
   let find_fn = function
     | `LT -> ValueMap.find_lt
-    | `LEQ -> ValueMap.find_lteq
+    | `LEQ -> ValueMap.find_leq
     | `GT -> ValueMap.find_gt
-    | `GEQ -> ValueMap.find_gteq
+    | `GEQ -> ValueMap.find_geq
     | `EQ -> failwith "eq not supported here"
   in
   match m, pat with

@@ -35,9 +35,13 @@ module type S =
     val split: key -> 'a t -> 'a t * 'a option * 'a t
     val find: key -> 'a t -> 'a
     val find_gt: key -> 'a t -> key * 'a
-    val find_gteq: key -> 'a t -> key * 'a
+    val find_geq: key -> 'a t -> key * 'a
     val find_lt: key -> 'a t -> key * 'a
-    val find_lteq: key -> 'a t -> key * 'a
+    val find_leq: key -> 'a t -> key * 'a
+    val filter_gt: key -> 'a t -> 'a t
+    val filter_geq: key -> 'a t -> 'a t
+    val filter_lt: key -> 'a t -> 'a t
+    val filter_leq: key -> 'a t -> 'a t
     val find_range : key -> key -> 'a t -> 'a list
     val map: ('a -> 'b) -> 'a t -> 'b t
     val mapi: (key -> 'a -> 'b) -> 'a t -> 'b t
@@ -120,6 +124,8 @@ module Make(Ord: OrderedType) = struct
           if c = 0 then d
           else find x (if c < 0 then l else r)
 
+    type comp = GT | GTEQ | LT | LTEQ
+
     (* find the one value just greater than/less than x *)
     let find_comp comp x m =
       let rec loop last m =
@@ -128,20 +134,20 @@ module Make(Ord: OrderedType) = struct
         | Empty, Some x -> x
         | Node(l, v, d, r, _), _ ->
             let op, s, t = match comp with
-              | `GT   -> (>),  l, r
-              | `GTEQ -> (>=), l, r
-              | `LT   -> (<),  r, l
-              | `LTEQ -> (<=), r, l
+              | GT   -> ((>):int -> int -> bool),  l, r
+              | GTEQ -> (>=), l, r
+              | LT   -> (<),  r, l
+              | LTEQ -> (<=), r, l
             in
             let c = Ord.compare v x in
             if op c 0 then loop (Some(v,d)) s
             else loop last t
       in loop None m
 
-    let find_gt x m = find_comp `GT x m
-    let find_lt x m = find_comp `LT x m
-    let find_gteq x m = find_comp `GTEQ x m
-    let find_lteq x m = find_comp `LTEQ x m
+    let find_gt x m = find_comp GT x m
+    let find_lt x m = find_comp LT x m
+    let find_geq x m = find_comp GTEQ x m
+    let find_leq x m = find_comp LTEQ x m
 
     (* find all values between x and y, exclusive *)
     let find_range x y m =
@@ -320,6 +326,28 @@ module Make(Ord: OrderedType) = struct
           let r' = filter p r in
           if pvd then join l' v d r' else concat l' r'
 
+    let filter_comp comp x m =
+      let rec loop = function
+        | Empty -> Empty
+        | Node(l, v, d, r, _) ->
+            let op, do_l, do_r, other =  match comp with
+              | GT   -> ((>):int -> int -> bool),  true, false, r
+              | GTEQ -> (>=), true, false, r
+              | LT   -> (<),  false, true, l
+              | LTEQ -> (<=), false, true, l
+            in
+            let c = Ord.compare v x in
+            if op c 0 then
+              join (if do_l then loop l else l) v d (if do_r then loop r else r)
+            else
+              loop other
+      in loop m
+
+    let filter_lt x m = filter_comp LT x m
+    let filter_gt x m = filter_comp GT x m
+    let filter_geq x m = filter_comp GTEQ x m
+    let filter_leq x m = filter_comp LTEQ x m
+
     let rec partition p = function
         Empty -> (Empty, Empty)
       | Node(l, v, d, r, _) ->
@@ -389,3 +417,33 @@ module Make(Ord: OrderedType) = struct
     let update oldk oldv k v m = add k v @@ remove oldk m
 
 end
+
+module Int = struct type t = int let compare = (-) end
+
+module VM = Make(Int)
+
+let test =
+  let (===) x y = VM.compare (String.compare) x y = 0 in
+
+  let m = VM.of_list
+    [2, "2"; 3, "3"; 4, "4"; 5, "5"; 10, "10"; 20, "20"; 30, "30"] in
+
+  let n = VM.filter_lt 4 m in
+  let o = VM.of_list [2, "2"; 3, "3"] in
+  assert (n === o);
+
+  let n = VM.filter_leq 3 m in
+  let o = VM.of_list [2, "2"; 3, "3"] in
+  assert (n === o);
+
+  let n = VM.filter_gt 10 m in
+  let o = VM.of_list [20, "20"; 30, "30"] in
+  assert (n === o);
+
+  let n = VM.filter_geq 10 m in
+  let o = VM.of_list [10, "10"; 20, "20"; 30, "30"] in
+  assert (n === o)
+
+
+
+

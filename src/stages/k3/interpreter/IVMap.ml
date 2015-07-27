@@ -78,9 +78,9 @@ module Make(OrdVid: ICommon.OrderedKeyType)(OrdKey: ICommon.OrderedKeyType) = st
 
   let find_fn = function
     | `LT  -> VIDMap.find_lt
-    | `LEQ -> VIDMap.find_lteq
+    | `LEQ -> VIDMap.find_leq
     | `GT  -> VIDMap.find_gt
-    | `GEQ -> VIDMap.find_gteq
+    | `GEQ -> VIDMap.find_geq
     | `EQ  -> (fun t m -> t, VIDMap.find t m)
 
   (* get the frontier for a slice (must read entire domain) *)
