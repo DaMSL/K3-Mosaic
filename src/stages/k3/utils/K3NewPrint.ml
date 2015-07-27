@@ -144,7 +144,7 @@ let rec lazy_multi_index c ss elem_t =
     if List.length l = 1 then [nm, snd @@ hd l]
     else l) record_ids in
 
-  let index_ls = list_of_intsetset ss in
+  let index_ls = List.map (List.sort (-)) @@ list_of_intsetset ss in
   (* convert indices to record ids/types *)
   let record_idxs = List.map (List.map (List.nth record_ids)) index_ls in
 
