@@ -1047,84 +1047,83 @@ let nd_exec_buffered_fetches c =
   mk_let ["map_id"]
     (mk_snd @@ mk_peek_or_error "missing stmt_id" @@
       mk_slice' (D.nd_lmap_of_stmt_id c).id [mk_var "stmt_id"; mk_cunknown]) @@
-  (* get the min_vid, check if we need to do delete on per-map stmt_cntrs *)
-  mk_let ["min_vid"; "do_delete_stmt_cntrs"]
-    (mk_case_ns
-      (mk_peek @@ mk_slice' D.nd_stmt_cntrs_per_map.id [mk_var "map_id"; mk_cunknown])
-      "x"
-      (mk_tuple [mk_var D.g_max_vid.id; mk_cfalse]) @@
-      mk_min_with (mk_snd @@ mk_var "x")
-        (mk_lambda'' unit_arg @@ mk_tuple [mk_var D.g_max_vid.id; mk_cfalse]) @@
-        mk_lambda' D.nd_stmt_cntrs_per_map_inner.e @@ mk_tuple [mk_var "vid"; mk_ctrue]) @@
-  (* check if there are any pushes to send *)
-  mk_let ["pending_fetches"]
-    (mk_case_ns
-      (mk_peek @@ mk_slice' D.nd_rcv_fetch_buffer.id [mk_var "map_id"; mk_cunknown]) "x"
-      mk_cfalse @@
-      mk_case_ns
-        (mk_peek @@ mk_slice_leq (mk_snd @@ mk_var "x") [mk_var "min_vid"; mk_cunknown])
-        "_u" mk_cfalse mk_ctrue) @@
   mk_block [
-    (* check if this is the min vid for the map in stmt_cntrs_per_map. if not, do nothing,
-     * since we're not changing anything *)
-    mk_if (mk_var "pending_fetches")
-      (mk_block [
-        (* execute any fetches that precede pending writes for a map *)
-          mk_iter (mk_lambda' nd_rcv_fetch_buffer_inner.e @@
-            mk_iter (mk_lambda'' ["stmt_id", t_stmt_id] @@
-              (* check for all triggers *)
-              List.fold_left (fun acc (t, args, stmts) ->
-                let mk_check_s s = mk_eq (mk_var "stmt_id") @@ mk_cint s in
-                (* check if the stmts are in this trigger *)
-                mk_if
-                  (list_fold_to_last (fun acc s -> mk_or (mk_check_s s) acc) mk_check_s stmts)
-                  (* pull arguments out of log (if needed) *)
-                  ((if args = [] then id_fn else
-                    mk_let (fst_many args) (mk_apply'
-                      (nd_log_get_bound_for t) [mk_var "vid"])) @@
-                  List.fold_left (fun acc s ->
-                    mk_if (mk_eq (mk_var "stmt_id") @@ mk_cint s)
-                      (let r_maps = P.rhs_maps_of_stmt c.p s in
-                      List.fold_left (fun acc m ->
-                        mk_if (mk_eq (mk_var "map_id") @@ mk_cint m)
-                          (mk_apply' (send_push_name_of_t c t s m) @@
-                            args_of_t_as_vars_with_v c t)
-                          acc)
-                        mk_cunit
-                        r_maps)
-                      acc)
-                    mk_cunit
-                    stmts)
-                  acc)
-                mk_cunit
-              t_info) @@
-              mk_var "stmt_ids") @@
-        (* filter only those entries we can run *)
-        mk_case_ns (mk_peek @@ mk_slice' D.nd_rcv_fetch_buffer.id
-          [mk_var "map_id"; mk_cunknown]) "x"
-          (mk_error "empty fetch buffer!") @@
-          mk_filter_leq (mk_snd @@ mk_var "x") [mk_var "min_vid"; mk_cunknown];
-        (* delete these entries from the fetch buffer *)
-        mk_upsert_with D.nd_rcv_fetch_buffer.id [mk_var "map_id"; mk_cunknown]
-          (mk_lambda'' unit_arg @@ mk_error "whoops4") @@
-          mk_lambda' D.nd_rcv_fetch_buffer.e @@
-            mk_tuple [mk_var "map_id";
-              mk_filter_gt (mk_var "vid_stmt") [mk_var "min_vid"; mk_cunknown]]
-      ])
-      (* else do nothing *)
-      mk_cunit
+    (* delete the entry from the stmt_cntrs_per_map. this has to be done before we
+     * get the min_vid *)
+    mk_upsert_with D.nd_stmt_cntrs_per_map.id [mk_var "map_id"; mk_cunknown]
+      (* default can create the entry -- it's ok to keep it around *)
+      (mk_lambda'' unit_arg @@ mk_tuple [mk_var "map_id"; mk_empty D.nd_stmt_cntrs_per_map_inner.t]) @@
+      mk_lambda' D.nd_stmt_cntrs_per_map.e @@
+        mk_block [
+          mk_delete "vid_stmt" [mk_var "vid"; mk_cunknown];
+          mk_tuple @@ ids_to_vars @@ fst_many @@ D.nd_stmt_cntrs_per_map.e
+        ]
     ;
-    mk_if (mk_var "do_delete_stmt_cntrs")
-      (* delete the entry from the stmt_cntrs_per_map *)
-      (mk_upsert_with D.nd_stmt_cntrs_per_map.id [mk_var "map_id"; mk_cunknown]
-        (mk_lambda'' unit_arg @@ mk_error "whoops3") @@
-        mk_lambda' D.nd_stmt_cntrs_per_map.e @@
-          mk_block [
-            mk_delete "vid_stmt" [mk_var "vid"; mk_cunknown];
-            mk_tuple @@ ids_to_vars @@ fst_many @@ D.nd_stmt_cntrs_per_map.e
-          ])
-      mk_cunit
-  ]
+    mk_let ["min_vid"]
+      (mk_case_ns
+        (mk_peek @@ mk_slice' D.nd_stmt_cntrs_per_map.id [mk_var "map_id"; mk_cunknown])
+        "x"
+        (mk_var D.g_max_vid.id) @@
+        mk_min_with (mk_snd @@ mk_var "x")
+          (mk_lambda'' unit_arg @@ mk_var D.g_max_vid.id) @@
+          mk_lambda' D.nd_stmt_cntrs_per_map_inner.e @@ mk_var "vid") @@
+    (* check if there are any pushes to send *)
+    mk_let ["pending_fetches"]
+      (mk_case_ns
+        (mk_peek @@ mk_slice' D.nd_rcv_fetch_buffer.id [mk_var "map_id"; mk_cunknown]) "x"
+        mk_cfalse @@
+        mk_case_ns
+          (mk_peek @@ mk_slice_leq (mk_snd @@ mk_var "x") [mk_var "min_vid"; mk_cunknown])
+          "_u" mk_cfalse mk_ctrue) @@
+      (* check if this is the min vid for the map in stmt_cntrs_per_map. if not, do nothing,
+      * since we're not changing anything *)
+      mk_if (mk_var "pending_fetches")
+        (mk_block [
+          (* execute any fetches that precede pending writes for a map *)
+            mk_iter (mk_lambda' nd_rcv_fetch_buffer_inner.e @@
+              mk_iter (mk_lambda'' ["stmt_id", t_stmt_id] @@
+                (* check for all triggers *)
+                List.fold_left (fun acc (t, args, stmts) ->
+                  let mk_check_s s = mk_eq (mk_var "stmt_id") @@ mk_cint s in
+                  (* check if the stmts are in this trigger *)
+                  mk_if
+                    (list_fold_to_last (fun acc s -> mk_or (mk_check_s s) acc) mk_check_s stmts)
+                    (* pull arguments out of log (if needed) *)
+                    ((if args = [] then id_fn else
+                      mk_let (fst_many args) (mk_apply'
+                        (nd_log_get_bound_for t) [mk_var "vid"])) @@
+                    List.fold_left (fun acc s ->
+                      mk_if (mk_eq (mk_var "stmt_id") @@ mk_cint s)
+                        (let r_maps = P.rhs_maps_of_stmt c.p s in
+                        List.fold_left (fun acc m ->
+                          mk_if (mk_eq (mk_var "map_id") @@ mk_cint m)
+                            (mk_apply' (send_push_name_of_t c t s m) @@
+                              args_of_t_as_vars_with_v c t)
+                            acc)
+                          mk_cunit
+                          r_maps)
+                        acc)
+                      mk_cunit
+                      stmts)
+                    acc)
+                  mk_cunit
+                t_info) @@
+                mk_var "stmt_ids") @@
+          (* filter only those entries we can run *)
+          mk_case_ns (mk_peek @@ mk_slice' D.nd_rcv_fetch_buffer.id
+            [mk_var "map_id"; mk_cunknown]) "x"
+            (mk_error "empty fetch buffer!") @@
+            mk_filter_leq (mk_snd @@ mk_var "x") [mk_var "min_vid"; mk_cunknown];
+          (* delete these entries from the fetch buffer *)
+          mk_upsert_with D.nd_rcv_fetch_buffer.id [mk_var "map_id"; mk_cunknown]
+            (mk_lambda'' unit_arg @@ mk_error "whoops4") @@
+            mk_lambda' D.nd_rcv_fetch_buffer.e @@
+              mk_tuple [mk_var "map_id";
+                mk_filter_gt (mk_var "vid_stmt") [mk_var "min_vid"; mk_cunknown]]
+        ])
+        (* else do nothing *)
+        mk_cunit
+    ]
 
 (* call from do_complete when done to check if fully done *)
 let nd_complete_stmt_cntr_check_nm = "nd_complete_stmt_cntr_check"
