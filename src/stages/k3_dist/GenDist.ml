@@ -605,10 +605,19 @@ let nd_rcv_fetch_trig c trig =
                 [mk_var "map_id"; mk_cunknown]
                 (mk_lambda' unit_arg @@ mk_tuple
                   [mk_var "map_id"; mk_singleton D.nd_rcv_fetch_buffer_inner.t
-                    [mk_var "vid"; mk_var "stmt_id"]])
+                    [mk_var "vid";
+                      mk_singleton D.nd_rcv_fetch_buffer_inner2.t [mk_var "stmt_id"]]])
                 (mk_lambda' nd_rcv_fetch_buffer.e @@
                   mk_block [
-                    mk_insert "vid_stmt" [mk_var "vid"; mk_var "stmt_id"];
+                    mk_upsert_with "vid_stmt" [mk_var "vid"; mk_cunknown]
+                      (mk_lambda'' unit_arg @@ mk_tuple
+                        [mk_var "vid"; mk_singleton D.nd_rcv_fetch_buffer_inner2.t
+                          [mk_var "stmt_id"]]) @@
+                       mk_lambda' nd_rcv_fetch_buffer_inner.e @@
+                        mk_block [
+                          mk_insert "stmt_ids" [mk_var "stmt_id"];
+                          mk_tuple @@ ids_to_vars @@ fst_many nd_rcv_fetch_buffer_inner.e]
+                    ;
                     mk_tuple @@ ids_to_vars @@ fst_many @@ nd_rcv_fetch_buffer.e
                   ])) @@
           mk_var stmt_map_ids.id
@@ -1062,32 +1071,34 @@ let nd_exec_buffered_fetches c =
       (mk_block [
         (* execute any fetches that precede pending writes for a map *)
           mk_iter (mk_lambda' nd_rcv_fetch_buffer_inner.e @@
-            (* check for all triggers *)
-            List.fold_left (fun acc (t, args, stmts) ->
-              let mk_check_s s = mk_eq (mk_var "stmt_id") @@ mk_cint s in
-              (* check if the stmts are in this trigger *)
-              mk_if
-                (list_fold_to_last (fun acc s -> mk_or (mk_check_s s) acc) mk_check_s stmts)
-                (* pull arguments out of log (if needed) *)
-                ((if args = [] then id_fn else
-                  mk_let (fst_many args) (mk_apply'
-                    (nd_log_get_bound_for t) [mk_var "vid"])) @@
-                List.fold_left (fun acc s ->
-                  mk_if (mk_eq (mk_var "stmt_id") @@ mk_cint s)
-                    (let r_maps = P.rhs_maps_of_stmt c.p s in
-                    List.fold_left (fun acc m ->
-                      mk_if (mk_eq (mk_var "map_id") @@ mk_cint m)
-                        (mk_apply' (send_push_name_of_t c t s m) @@
-                          args_of_t_as_vars_with_v c t)
-                        acc)
-                      mk_cunit
-                      r_maps)
-                    acc)
-                  mk_cunit
-                  stmts)
-                acc)
-              mk_cunit
+            mk_iter (mk_lambda'' ["stmt_id", t_stmt_id] @@
+              (* check for all triggers *)
+              List.fold_left (fun acc (t, args, stmts) ->
+                let mk_check_s s = mk_eq (mk_var "stmt_id") @@ mk_cint s in
+                (* check if the stmts are in this trigger *)
+                mk_if
+                  (list_fold_to_last (fun acc s -> mk_or (mk_check_s s) acc) mk_check_s stmts)
+                  (* pull arguments out of log (if needed) *)
+                  ((if args = [] then id_fn else
+                    mk_let (fst_many args) (mk_apply'
+                      (nd_log_get_bound_for t) [mk_var "vid"])) @@
+                  List.fold_left (fun acc s ->
+                    mk_if (mk_eq (mk_var "stmt_id") @@ mk_cint s)
+                      (let r_maps = P.rhs_maps_of_stmt c.p s in
+                      List.fold_left (fun acc m ->
+                        mk_if (mk_eq (mk_var "map_id") @@ mk_cint m)
+                          (mk_apply' (send_push_name_of_t c t s m) @@
+                            args_of_t_as_vars_with_v c t)
+                          acc)
+                        mk_cunit
+                        r_maps)
+                      acc)
+                    mk_cunit
+                    stmts)
+                  acc)
+                mk_cunit
               t_info) @@
+              mk_var "stmt_ids") @@
         (* filter only those entries we can run *)
         mk_case_ns (mk_peek @@ mk_slice' D.nd_rcv_fetch_buffer.id
           [mk_var "map_id"; mk_cunknown]) "x"

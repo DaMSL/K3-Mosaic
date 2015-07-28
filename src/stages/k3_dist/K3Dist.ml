@@ -488,8 +488,12 @@ let nd_lmap_of_stmt_id c =
       mk_tuple [mk_cint x; mk_cint y]) @@ P.stmts_lhs_maps c.p in
   create_ds "nd_lmap_of_stmt_id" t ~e ~init
 
+let nd_rcv_fetch_buffer_inner2 =
+  let e = ["stmt_id", t_stmt_id] in
+  create_ds "nd_rcv_fetch_buffer_inner2" (wrap_tset' @@ snd_many e) ~e
+
 let nd_rcv_fetch_buffer_inner =
-  let e = ["vid", t_vid; "stmt_id", t_int] in
+  let e = ["vid", t_vid; "stmt_ids", wrap_tset' [t_int]] in
   create_ds "nd_rcv_fetch_buffer_inner" (wrap_tsortedmap' @@ snd_many e) ~e
 
 let nd_rcv_fetch_buffer =
