@@ -258,27 +258,34 @@ let fn e =
   | [VString s; VInt f; VInt t] -> e, string_temp @@ String.sub s f t
   | _ -> invalid_arg name
 let decl = wrap_tfunc (snd_many args) t_string
-let _ = Hashtbl.add func_table name (decl, wrap_args args, fn)
+let () = Hashtbl.add func_table name (decl, wrap_args args, fn)
 
+let () =
+  let name = "concat" in
+  let args = ["x", t_string; "y", t_string] in
+  let fn env = match args_of_env (fst_many args) env with
+    | [VString x; VString y] -> env, string_temp @@ x ^ y
+    | _ -> invalid_arg name in
+  add_fn ~args ~ret:t_string ~fn name
 
 (* -------- print functions -------- *)
-let print_fn e =
-  match arg_of_env "s" e with
-  | VString s -> print_string s; e, unit_temp
-  | _ -> invalid_arg "print_fn"
-let print_name = "print"
-let print_decl = wrap_tfunc [t_string] t_unit
-let print_args = wrap_args ["s", t_string]
-let _ = Hashtbl.add func_table
-  print_name (print_decl, print_args, print_fn)
+let () =
+  let name = "print" in
+  let args = ["s", t_string] in
+  let fn env = match args_of_env (fst_many args) env with
+    | [VString s] -> print_endline s;
+                     env, unit_temp
+    | _ -> invalid_arg name in
+  add_fn ~args ~fn name
 
-let fn e = match arg_of_env "s" e with
-  | VString s -> Log.log (lazy (s^"\n")) `Debug; e, unit_temp
-  | _         -> invalid_arg "log_fn"
-let name = "log"
-let decl = wrap_tfunc [t_string] t_unit
-let args = ["s", t_string]
-let _ = Hashtbl.add func_table name (decl, wrap_args args, fn)
+let () =
+  let name = "log" in
+  let args = ["s", t_string] in
+  let fn env = match args_of_env (fst_many args) env with
+    | [VString s] -> Log.log (lazy (s^"\n")) `Debug;
+                     env, unit_temp
+    | _ -> invalid_arg name in
+  add_fn ~args ~fn name
 
 (* parse SQL date format *)
 let name = "parse_sql_date"

@@ -203,6 +203,11 @@ let ms_rcv_node_done =
       (mk_block [
         (* update end time *)
         mk_assign D.ms_end_time.id @@ mk_apply' "now_int" [mk_cunit];
+        mk_apply' "print"
+          [mk_apply' "concat"
+            [mk_cstring "Total time (ms): ";
+             mk_apply' "string_of_int"
+              [mk_sub (mk_var D.ms_end_time.id) @@ mk_var D.ms_start_time.id]]];
         (* send ourselves a message to shutdown *)
         mk_send ms_shutdown_nm G.me_var [mk_cunit];
       ])

@@ -434,6 +434,8 @@ module StringMap = Map.Make(struct type t = string let compare = String.compare 
 let var_translate = List.fold_left (fun acc (x,y) -> StringMap.add x y acc) StringMap.empty @@
   ["int_of_float", "truncate";
    "float_of_int", "real_of_int";
+   "string_of_int", "itos";
+   "float_of_int", "rtos";
    "peers", "my_peers";
    "parse_sql_date", "tpch_date";
    "maxi", "max";
@@ -857,6 +859,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
       | Var "mod", _      -> do_pair_paren "%"
       | Var "reciprocali", [e] -> arith_paren_pair "/" (light_type c @@ KH.mk_cfloat 1.0, e)
       | Var "reciprocal", [e]  -> arith_paren_pair "/" (light_type c @@ KH.mk_cint 1, e)
+      | Var "concat", _ -> do_pair_paren "++"
       (* convert load_csv to right format *)
       | Var s, _ when s = K3StdLib.csv_loader_name^"2" ->
           begin match List.map U.tag_of_expr args with
