@@ -435,7 +435,7 @@ let var_translate = List.fold_left (fun acc (x,y) -> StringMap.add x y acc) Stri
   ["int_of_float", "truncate";
    "float_of_int", "real_of_int";
    "string_of_int", "itos";
-   "float_of_int", "rtos";
+   "string_of_float", "rtos";
    "peers", "my_peers";
    "parse_sql_date", "tpch_date";
    "maxi", "max";
