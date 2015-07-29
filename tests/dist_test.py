@@ -36,7 +36,8 @@ def run(target_file,
         gc_interval=20000,
         msg_interval=2,
         logging=True,
-        correctives=True
+        correctives=True,
+        filemux=False
         ):
 
     to_root = ".."
@@ -193,12 +194,14 @@ def run(target_file,
 
         if new_k3:
             # convert to the new k3 file format
-            fold_cmd = ""
+            arg = ""
             if folds_only:
-                fold_cmd += '--k3new-folds '
+                arg += '--k3new-folds '
+            if filemux:
+                arg += '--filemux '
 
             print("Converting to new k3 file format...")
-            cmd = concat([k3o, "-i k3 -l k3new", fold_cmd, "--datafile",
+            cmd = concat([k3o, "-i k3 -l k3new", arg, "--datafile",
                   data_file, k3dist_file, ">", k3new_file, "2>", error_file])
             print_system(cmd, verbose)
             if check_error(error_file, verbose, False):

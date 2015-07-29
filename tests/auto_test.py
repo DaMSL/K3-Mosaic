@@ -53,7 +53,8 @@ def run():
                         default=True, help="Disable multi-index maps")
     parser.add_argument('--no-correctives', action='store_false', dest='correctives',
                         default=True, help="Disable correctives")
-
+    parser.add_argument('--filemux', action='store_true', dest='filemux',
+                        default=False, help="Enable filemux newprint")
 
     args = parser.parse_args()
 
@@ -107,7 +108,8 @@ def run():
                                 gc_interval=args.gc_interval,
                                 msg_interval=args.msg_interval,
                                 logging=args.logging,
-                                correctives=args.correctives
+                                correctives=args.correctives,
+                                filemux=args.filemux
                                 )
         # check if a test failed
         if not res:

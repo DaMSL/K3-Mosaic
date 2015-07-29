@@ -64,6 +64,7 @@ type config = {
                 map_to_fold:bool;       (* convert maps and ext to fold, due to k3new limitations *)
                 project:StrSet.t;       (* need to project further down *)
                 singleton_id:string;
+                use_filemux:bool;
               }
 
 let default_config = {
@@ -72,6 +73,7 @@ let default_config = {
                        map_to_fold = false;
                        project = StrSet.empty;
                        singleton_id="i";
+                       use_filemux=false;
                      }
 
 let verbose_types_config = default_config
@@ -1328,7 +1330,10 @@ let channel_format c = function
   | JSON -> "json"
 
 let lazy_channel c chan_t chan_f = match chan_t with
-  | File _ -> lps @@ sp "file switch_path text %s" (channel_format c chan_f)
+  | File _ when c.use_filemux ->
+      lps @@ sp "filemxsq switch_mux_inputs text %s" (channel_format c chan_f)
+  | File _ ->
+      lps @@ sp "file switch_path text %s" (channel_format c chan_f)
   | Network(str, port) -> lps @@ "socket(\""^str^"\":"^string_of_int port^")"
 
 let rec lazy_resource_pattern c = function
@@ -1365,7 +1370,7 @@ let lazy_flow c e =
     | _ -> []
   in out <| lcut () <| lcut ()
 
-let lazy_flow_program c fas = lps_list ~sep:"" CutHint (lazy_flow c |- fst) fas
+let lazy_flow_program c fas = lps_list ~sep:"" CutLine (lazy_flow c |- fst) fas
 
 let lazy_declaration c d =
   let out = match d with
@@ -1380,7 +1385,7 @@ let lazy_declaration c d =
   | DefaultRole id -> []
   | Foreign(id, t) -> lps ("declare "^id^" :") <| lsp () <| lazy_type c t
   in
-  wrap_hov 0 out <| lcut () <| lcut ()
+  wrap_hov 0 out <| lcut ()
 
 let wrap_f = wrap_formatter ~margin:80
 
@@ -1410,15 +1415,15 @@ let filter_incompatible prog =
 
 (* print a K3 program in syntax *)
 (* We get the typechecking environments so we can do incremental typechecking where needed *)
-let string_of_program ?(map_to_fold=false) prog (env, trig_env) =
-  let config = {default_config with env; trig_env; map_to_fold} in
+let string_of_program ?(map_to_fold=false) ?(use_filemux=false) prog (env, trig_env) =
+  let config = {default_config with env; trig_env; map_to_fold; use_filemux} in
   wrap_f @@ fun () ->
     let l = wrap_hv 0 (lps_list ~sep:"" CutHint (lazy_declaration config |- fst) prog) in
     force_list l
 
 (* print a new k3 program with added sources and feeds *)
 (* envs are the typechecking environments to allow us to do incremental typechecking *)
-let string_of_dist_program ?(file="default.txt") ?map_to_fold (p, envs) =
+let string_of_dist_program ?(file="default.txt") ?map_to_fold ?use_filemux (p, envs) =
   let p' = filter_incompatible p in
 "\
 include \"Core/Builtins.k3\"
@@ -1441,8 +1446,11 @@ declare NATIONLoaderRP : collection {path: string} @Collection -> collection {ra
 declare REGIONLoaderRP : collection {path: string} @Collection -> collection {ra:int, rb:string, rc:string} @Collection -> collection {ra:int, rb:string, rc:string} @Collection
   with effects \\_ -> \\_ -> io
 
+typedef filechunks = collection {path: string} @Collection
+declare switch_mux_inputs : collection {seq:filechunks} @Collection
+
 declare my_peers : collection { i:address } @ {Collection} =
   peers.fold (\\acc -> (\\x -> (acc.insert {i:x.addr}; acc))) empty { i:address} @ Collection
 
-"^ string_of_program ?map_to_fold p' envs
+"^ string_of_program ?map_to_fold ?use_filemux p' envs
 

@@ -137,38 +137,39 @@ let action_specs action_param = setter_specs action_param action_descriptions
 
 (* Driver parameters *)
 type parameters = {
-    action:                action_t ref;
-    test_mode:             test_mode_t ref;
-    mutable in_lang:       in_lang_t;
-    mutable out_lang:      out_lang_t;
-    mutable input_files:   string list;
-    mutable peers:         K3Global.peer_t list;
-    mutable default_peer:  bool; (* whether we're using the default peer *)
-    mutable debug_info:    bool;
-    mutable verbose:       bool;
+    action: action_t ref;
+    test_mode: test_mode_t ref;
+    mutable in_lang: in_lang_t;
+    mutable out_lang: out_lang_t;
+    mutable input_files: string list;
+    mutable peers: K3Global.peer_t list;
+    mutable default_peer: bool; (* whether we're using the default peer *)
+    mutable debug_info: bool;
+    mutable verbose: bool;
 
     (* k3 generation options *)
     mutable partition_map: K3Route.part_map_t;
-    mutable trace_files:   string list;
+    mutable trace_files: string list;
 
     (* k3dist generation options *)
-    mutable map_type:        K3Dist.map_type; (* UNUSED whether to generate code that uses vmaps (no other option now)*)
-    mutable gen_deletes:     bool;
+    mutable map_type: K3Dist.map_type; (* UNUSED whether to generate code that uses vmaps (no other option now)*)
+    mutable gen_deletes: bool;
     mutable gen_correctives: bool;
-    mutable agenda_map:      K3Dist.mapping_t; (* mapping from agenda to stream sources *)
-    mutable stream_file:     string;
+    mutable agenda_map: K3Dist.mapping_t; (* mapping from agenda to stream sources *)
+    mutable stream_file: string;
       (* file to stream from (into switches). UNUSED -- we splice a varialbe (stream_path) instead *)
 
     (* interpreter options *)
-    mutable queue_type:      K3Runtime.queue_type; (* type of queue for interpreter *)
-    mutable load_path:       string;  (* path for the interpreter to load csv files from *)
-    mutable src_interval:    int;     (* interval (ms) between the interpreter feeding sources *)
+    mutable queue_type: K3Runtime.queue_type; (* type of queue for interpreter *)
+    mutable load_path: string;  (* path for the interpreter to load csv files from *)
+    mutable src_interval: int;     (* interval (ms) between the interpreter feeding sources *)
     mutable interp_arg_file: string;  (* args to override k3 globals in interpreter (json) *)
-    mutable logging:         bool;    (* do we log to a file *)
+    mutable logging: bool;    (* do we log to a file *)
 
     (* k3new options *)
     mutable k3new_data_file: string;
-    mutable k3new_folds:     bool;   (* output fold instead of map/ext *)
+    mutable k3new_folds: bool;   (* output fold instead of map/ext *)
+    mutable use_filemux: bool;
   }
 
 let default_cmd_line_params () = {
@@ -198,6 +199,7 @@ let default_cmd_line_params () = {
 
     stream_file       = "input.csv";
     agenda_map        = K3Dist.default_mapping;
+    use_filemux       = false;
   }
 
 let cmd_line_params = default_cmd_line_params ()
@@ -420,10 +422,11 @@ let print params inputs =
   let print_fn = match params.out_lang with
     | AstK3 | AstK3Dist   -> print_k3_program (sofp |- fst) |- snd
     | K3 | K3Dist         -> print_k3_program (PS.string_of_program |- fst) |- snd
-    | K3New               -> print_k3_program ~no_roles:true (K3NewPrint.string_of_dist_program
-                               ~map_to_fold:params.k3new_folds
-                               ~file:params.k3new_data_file)
-                               |- snd
+    | K3New               -> print_k3_program ~no_roles:true
+       (K3NewPrint.string_of_dist_program
+         ~map_to_fold:params.k3new_folds
+         ~file:params.k3new_data_file
+         ~use_filemux:params.use_filemux) |- snd
     | K3Test | K3DistTest -> print_k3_test_program params
   in List.iter print_fn idx_inputs
 
@@ -576,6 +579,8 @@ let param_specs = Arg.align
       "         Agenda to read from";
   "--no-log", Arg.Unit (fun () -> cmd_line_params.logging <- false),
       "         Disable logging";
+  "--filemux", Arg.Unit (fun () -> cmd_line_params.use_filemux <- true),
+      "         Use filemux mechanism";
   ])
 
 let usage_msg =
