@@ -317,7 +317,11 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
           wrap_ttuple child_types
       | Ignore      -> t_unit
       | Just        -> wrap_tmaybe @@ bind 0
-      | Nothing t   -> t
+      | Nothing t   ->
+          let _ = match t.typ with
+            | TMaybe _ -> ()
+            | _        -> t_erroru (TBad(t, "not a maybe type")) in
+          t
       | Empty t     -> t
       | Singleton t ->
           let t_c, t_e = try unwrap_tcol t with Failure _ -> t_erroru (not_collection t) in
