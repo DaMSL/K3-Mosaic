@@ -226,7 +226,7 @@ let gen_route_fn p map_id =
   (* it's very important that the index for ranges start with 0, since we use
    * them for indexing *)
   let map_range = create_range 0 @@ List.length map_types in
-  let key_types = wrap_tmaybes map_types in
+  let key_types = wrap_tupmaybes map_types in
   let prefix = "key_" in
   let key_ids =
     fst @@ List.split @@ map_ids_types_no_val_for ~prefix:prefix p map_id in
@@ -268,7 +268,7 @@ let gen_route_fn p map_id =
         let hash_func = hash_func_for temp_type in
         mk_add
           (* check if we have a binding in this index *)
-          (mk_case_ns (mk_var temp_id) id_unwrap
+          (mk_case_tup_ns (mk_var temp_id) id_unwrap
             (mk_cint 0) @@ (* no contribution *)
             (* bind the slice for this index *)
             mk_let ["pmap_slice"]

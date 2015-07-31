@@ -30,7 +30,7 @@ let gen_shuffle_fn p rmap lmap bindings fn_name =
   let tuple_col_t = wrap_t_calc' tuple_types in
   let result_types = wrap_tbag' [t_addr; tuple_col_t] in
   (* deducts the last map type which is the value *)
-  let lkey_types = wrap_tmaybes @@ map_types_no_val_for p lmap in
+  let lkey_types = wrap_tupmaybes @@ map_types_no_val_for p lmap in
   (* lkey refers to the access pattern from trig args. rkey is from the tuples*)
   let id_l, id_r = "lkey_" , "rkey_" in
   let to_rkey, to_lkey = int_to_temp_id id_r, int_to_temp_id id_l in
@@ -45,7 +45,7 @@ let gen_shuffle_fn p rmap lmap bindings fn_name =
     List.for_all (function `Lkey _ -> true | _ -> false) full_key_vars' in
   let convert_keys l = List.map (function
       | `Lkey i -> mk_var @@ to_lkey i
-      | `Rkey i -> mk_just @@ mk_var @@ to_rkey i) l in
+      | `Rkey i -> mk_tup_just @@ mk_var @@ to_rkey i) l in
   let full_key_vars = convert_keys full_key_vars' in
   let used_rkeys =
     List.map (function `Rkey i -> mk_var @@ to_rkey i, at tuple_types i | _ -> failwith "whoops") @@

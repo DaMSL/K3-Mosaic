@@ -318,8 +318,8 @@ let var_list_from_bound (p:prog_data_t) (stmt_id:stmt_id_t) (map_id:map_id_t) =
 (* returns a k3 list of maybes that has the relevant map pattern *)
 let partial_key_from_bound (p:prog_data_t) stmt_id map_id =
   let result = List.map (fun (x, typ) ->
-      if x = "_" then mk_nothing (wrap_tmaybe typ)
-      else mk_just @@ mk_var x) @@
+      if x = "_" then mk_tup_nothing typ
+      else mk_tup_just @@ mk_var x) @@
     list_drop_end 1 @@ var_list_from_bound p stmt_id map_id
   in match result with [] -> [mk_const CUnit] | _ -> result
 

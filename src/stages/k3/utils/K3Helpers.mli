@@ -63,6 +63,9 @@ val wrap_tind : type_t -> type_t
 val wrap_tind_mut : type_t -> type_t
 val wrap_tmaybe : type_t -> type_t
 val wrap_tmaybes : type_t list -> type_t list
+(* our own version of maybes that uses tuples instead *)
+val wrap_tupmaybe : type_t -> type_t
+val wrap_tupmaybes : type_t list -> type_t list
 val wrap_tfunc : type_t list -> type_t -> type_t
 
 (* wrap a single layer of arguments *)
@@ -388,3 +391,8 @@ val mk_barrier :
   flow_statement_t * annotation_t
 
 val mk_id_fn : data_struct -> expr_t
+
+val mk_case_tup_sn : expr_t -> id_t -> expr_t -> expr_t -> expr_t
+val mk_case_tup_ns : expr_t -> id_t -> expr_t -> expr_t -> expr_t
+val mk_tup_just : expr_t -> expr_t
+val mk_tup_nothing : type_t -> expr_t

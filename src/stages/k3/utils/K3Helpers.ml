@@ -92,6 +92,9 @@ let wrap_tind_mut t = mut @@ wrap_tind t
 let wrap_tmaybe t = canonical @@ TMaybe t
 let wrap_tmaybes ts = List.map wrap_tmaybe ts
 
+let wrap_tupmaybe t = wrap_ttuple [t_bool; t]
+let wrap_tupmaybes ts = List.map wrap_tupmaybe ts
+
 let wrap_tfunc tinl tout = canonical @@ TFunction(tinl, immut tout)
 
 (* wrap a function argument *)
@@ -768,4 +771,17 @@ let mk_barrier ?(args=unit_arg) ?(pre=[]) nm ~ctr ~total ~after =
 
 (* create an id function *)
 let mk_id_fn ds = mk_lambda' ds.e @@ mk_tuple @@ ids_to_vars @@ fst_many ds.e
+
+(* case-like structure for tuple 'options' *)
+let mk_case_tup pred id ~none ~some =
+  mk_if (mk_fst pred)
+    (mk_let [id] (mk_snd pred) some)
+    none
+
+let mk_case_tup_sn pred id some none = mk_case_tup pred id ~none ~some
+let mk_case_tup_ns pred id none some = mk_case_tup pred id ~none ~some
+
+let mk_tup_just x = mk_tuple [mk_ctrue; x]
+
+let mk_tup_nothing typ = mk_tuple [mk_cfalse; default_value_of_t typ]
 
