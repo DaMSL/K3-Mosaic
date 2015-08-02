@@ -45,27 +45,32 @@ let inner_pmap =
   let t = wrap_tmap' @@ snd_many e in
   create_ds "inner_pmap" t ~e
 
-(* list equal to inner_pmap *)
+(* list equal to inner_pmap, to preserve ordering *)
 let inner_plist =
   let e = ["pos", t_int; "mod", t_int] in
   let t = wrap_tlist' @@ snd_many e in
   create_ds "inner_plist" t ~e
 
 let dim_bounds =
-  let e = ["dim", t_int; "bound", t_int] in
+  let e = ["dim", t_int; "bound_rng", wrap_ttuple [t_int; wrap_tlist' [t_int]]] in
   let t = wrap_tmap' @@ snd_many e in
   create_ds "dim_bounds" t ~e
 
 let free_dims =
-  let e = ["dim", t_int; "bound", t_int] in
-  let t = wrap_tmap' @@ snd_many e in
+  let e = ["dim", t_int] in
+  let t = wrap_tbag' @@ snd_many e in
   create_ds "free_dims" t ~e
 
 let pmap =
   let e = [inner_pmap.id, inner_pmap.t;
-           "dim_info", wrap_ttuple [dim_bounds.t; t_int]] in
+           "dim_bounds", dim_bounds.t;
+           "max", t_int] in
   let t = wrap_ttuple @@ snd_many e in
   create_ds "pmap" t  ~e
+
+let singleton_int =
+  let t = wrap_tlist t_int in
+  create_ds "singleton_int" t ~init:(mk_singleton t [mk_cint 1])
 
 let calc_dim_bounds =
   mk_global_fn "calc_dim_bounds"
@@ -86,7 +91,11 @@ let calc_dim_bounds =
           ["xs", dim_bounds.t; "acc_size", t_int]
           ["pos", t_int; "bin_size", t_int] @@
           mk_block [
-            mk_insert "xs" [mk_var "pos"; mk_var "acc_size"];
+            mk_insert "xs"
+              [mk_var "pos";
+                mk_tuple [
+                  mk_var "acc_size";
+                  mk_range TList (mk_cint 0) (mk_cint 1) @@ mk_var "bin_size"]];
             mk_tuple [
               mk_var "xs";
               mk_mult (mk_var "bin_size") @@ mk_var "acc_size"]])
@@ -102,11 +111,13 @@ let calc_dim_bounds =
             (mk_case_ns
               (mk_peek @@ mk_slice' "xs" [mk_var "n"; mk_cunknown]) "x"
               (mk_var "last") @@
-              mk_snd @@ mk_var "x") @@
+              mk_fst @@ mk_snd @@ mk_var "x") @@
           (* update the ds *)
           mk_block [
             mk_upsert_with "xs" [mk_var "n"; mk_cunknown]
-              (mk_lambda'' unit_arg @@ mk_tuple [mk_var "n"; mk_var "next"]) @@
+              (mk_lambda'' unit_arg @@
+                mk_tuple [mk_var "n"; mk_tuple [mk_var "next";
+                  mk_singleton (wrap_tlist t_int) [mk_cint 0]]]) @@
               mk_id_fn dim_bounds
             ;
             mk_tuple [mk_var "xs"; mk_var "next"]
@@ -131,16 +142,16 @@ let pmap_data =
           (mk_fst @@ mk_peek_or_error "can't find map in map_ids" @@
             mk_slice' K3Dist.map_ids_id
               [mk_cunknown; mk_var "map_name"; mk_cunknown]) @@
+        mk_let ["dim_bounds"; "size"]
+          (mk_apply' "calc_dim_bounds" [mk_var "map_id"; mk_var "map_types"]) @@
         mk_block [
           mk_insert "acc"
             [mk_var "map_id";
               mk_tuple [
                 (* convert map_types to map *)
-                mk_convert_col inner_plist.t inner_pmap.t @@
-                  mk_var "map_types";
-                (* pre-calculate dim bounds data *)
-                mk_apply' "calc_dim_bounds" [mk_var "map_id"; mk_var "map_types"]]
-            ]
+                mk_convert_col inner_plist.t inner_pmap.t @@ mk_var "map_types";
+                mk_var "dim_bounds";
+                mk_var "size"]]
           ;
           mk_var "acc"])
       (mk_empty t) @@
@@ -231,8 +242,9 @@ let gen_route_fn p map_id =
   let key_ids =
     fst @@ List.split @@ map_ids_types_no_val_for ~prefix:prefix p map_id in
   let to_id i = List.nth key_ids i in
-  match map_types with
+  let result_t = wrap_tset t_addr in
 
+  match map_types with
   | [] -> (* if no keys, for now we just route to one place *)
   mk_global_fn (route_for p map_id)
     ["_", t_int; "_", t_unit]
@@ -250,15 +262,14 @@ let gen_route_fn p map_id =
         mk_slice' pmap_data.id @@ [mk_var "map_id"; mk_cunknown]) @@
 
     (* deep bind *)
-    mk_let ["pmap"; "dim_info"] (mk_var "pmap_lookup") @@
-    mk_let ["dim_bounds"; "max_val"] (mk_var "dim_info") @@
+    mk_let ["pmap"; "dim_bounds"; "max_val"] (mk_var "pmap_lookup") @@
 
     (* handle the case of no partitioning at all *)
     mk_if (mk_eq (mk_size (mk_var "pmap")) @@ mk_cint 0)
       (mk_var "nodes") @@
 
-    (* calc_bound_bucket *)
-    (* we calculate the contribution of the bound components *)
+    mk_let ["free_dims"] (mk_empty @@ wrap_tbag t_int) @@
+    (* we calculate the contribution of the bound components, and add to the free_dims *)
     mk_let ["bound_bucket"]
     (List.fold_left
       (fun acc_code index ->
@@ -269,7 +280,10 @@ let gen_route_fn p map_id =
         mk_add
           (* check if we have a binding in this index *)
           (mk_case_tup_ns (mk_var temp_id) id_unwrap
-            (mk_cint 0) @@ (* no contribution *)
+            (mk_block [
+              mk_insert "free_dims" [mk_cint index];
+              mk_cint 0
+             ]) @@ (* no contribution *)
             (* bind the slice for this index *)
             mk_let ["pmap_slice"]
               (mk_slice' "pmap" [mk_cint index; mk_cunknown]) @@
@@ -286,94 +300,51 @@ let gen_route_fn p map_id =
                   mk_snd @@ mk_var "peek_slice"]) @@
               mk_mult
                 (mk_var "value") @@
-                mk_snd @@ mk_peek_or_error ("can't find "^soi index^" in dim_bounds") @@
+                mk_fst @@ mk_peek_or_error (sp "can't find %d in dim_bounds" index) @@
                     mk_slice' "dim_bounds" [mk_cint index; mk_cunknown])
           ) acc_code
       )
       (mk_cint 0)
       map_range
     ) @@
-    (* now calculate the free parameters' contribution *)
-    mk_let ["free_dims"] (mk_empty free_dims.t) @@
-      mk_block @@
-        (List.map (fun x ->
-          let type_x = List.nth key_types x in
-          let id_x = to_id x in
-          mk_if (mk_eq (mk_var id_x) @@ mk_nothing type_x)
-            (mk_insert "free_dims"
-              [mk_peek_or_zero ~zero:(mk_tuple [mk_cint x; mk_cint 1]) @@
-                mk_slice' "pmap" [mk_cint x; mk_cunknown]])
-            mk_cunit)
-        map_range) @
-    (* a list of ranges from 0 to the bucket size, for every free variable *)
-    singleton @@ mk_let ["free_domains"]
-      (mk_map
-        (mk_lambda' ["i", t_int; "b_i", t_int] @@
-          mk_tuple [mk_var "i"; mk_range TList
-            (mk_cint 0) (mk_cint 1) @@ mk_var "b_i"]) @@
-        mk_var "free_dims") @@
-    (* calculate the cartesian product to get every possible bucket *)
-    mk_let ["free_cart_prod"]
-      (mk_agg
-        (mk_assoc_lambda' ["prev_cart_prod", free_cart_prod_type]
-          ["i", t_int; "domain", wrap_tlist t_int] @@
-          mk_flatten @@ mk_map
-            (* for every domain element in the domain *)
-            (mk_lambda' ["domain_element", t_int] @@
-              mk_is_empty (mk_var "prev_cart_prod")
-                ~y:(mk_singleton free_cart_prod_type
-                     [mk_singleton inner_cart_prod_type
-                       [mk_var "i"; mk_var "domain_element"]])
-                ~n:(mk_map
-                     (* add current element to every previous sublist *)
-                     (mk_lambda' ["rest_tup", inner_cart_prod_type] @@
-                       mk_combine (mk_var "rest_tup") @@
-                         mk_singleton inner_cart_prod_type
-                           [mk_var "i"; mk_var "domain_element"]) @@
-                    mk_var "prev_cart_prod")) @@
-            mk_var "domain")
-        (mk_empty free_cart_prod_type) @@
-        mk_var "free_domains") @@
-    (* We now add in the value of the bound variables as a constant
-     * and calculate the result for every possibility *)
-    (* TODO: this can be turned into sets *)
-    mk_let ["sorted_ip_list"]
-      (mk_gbagg
-        (mk_lambda' ["ip", t_addr] @@ mk_var "ip")
-        (mk_lambda'' ["_", t_unit; "_", t_unit] mk_cunit)
-        mk_cunit @@
-        (* convert to bag *)
+    mk_let ["acc"] (mk_empty result_t) @@
+    (* convert to bag *)
+    mk_convert_col result_t (wrap_tbag t_addr) @@
+    (* loop over free_dims and get ips for cartesian product *)
+    (List.fold_left (fun acc_code index ->
+        let temp_id = to_id index in
+        mk_let ["dim_size"; "rng"]
+          (mk_if (mk_is_tup_nothing @@ mk_var temp_id)
+            (mk_snd @@
+              mk_peek_or_error "whoops" @@
+                mk_slice' "dim_bounds" [mk_cint index; mk_cunknown]) @@
+            mk_tuple [mk_cint 0; mk_var "singleton_int"]) @@
         mk_agg
-          (mk_lambda''
-             ["acc_ips", output_type; "free_bucket", free_bucket_type] @@
-              mk_combine
-                (mk_var "acc_ips") @@
-                mk_singleton output_type
-                  [mk_apply' "get_ring_node"
-                    [mk_agg
-                      (mk_assoc_lambda' ["acc", t_int]
-                                        ["i", t_int; "val", t_int] @@
-                        mk_add (mk_var "acc") @@
-                          mk_mult (mk_var "val") @@
-                            mk_snd @@
-                              mk_peek_or_error "can't find i in dim_bounds" @@
-                              mk_slice' "dim_bounds" [mk_var "i"; mk_cunknown])
-                      (mk_var "bound_bucket") @@ (* start with this const *)
-                      mk_var "free_bucket";
-                    mk_var "max_val"]])
-          (mk_empty output_type) @@
-          mk_var "free_cart_prod"
-      ) @@
-    mk_is_empty (mk_var "sorted_ip_list")
-      ~y:(mk_singleton output_type
-           [mk_apply' "get_ring_node" (* empty ip list *)
-             [mk_var "bound_bucket"; mk_var "max_val"]])
-      ~n:(mk_fst_many sorted_ip_inner_type @@ mk_var "sorted_ip_list")
+          (mk_lambda2' ["acc", result_t] ["x", t_int] @@
+            mk_let ["val"^soi index]
+              (* if we're free on this variable, contribute *)
+              (mk_if (mk_is_tup_nothing @@ mk_var temp_id)
+                (mk_mult (mk_var "x") @@ mk_var "dim_size") @@
+                mk_cint 0) acc_code)
+          (mk_var "acc") @@
+          mk_var "rng")
+      (* zero: insertion of ip *)
+      (mk_block [
+        mk_insert "acc"
+          [mk_apply' "get_ring_node"
+            (* add up all the values and the bound_bucket *)
+            [List.fold_left (fun acc x ->
+              mk_add (mk_var @@ "val"^soi x) acc) (mk_var "bound_bucket") map_range;
+              mk_var "max_val"]
+            ];
+        mk_var "acc"])
+    map_range)
 
 (* create all code needed for route functions, including foreign funcs*)
 let global_vars p partmap =
   List.map decl_global
-  [ pmap_input p partmap;
+  [ singleton_int;
+    pmap_input p partmap;
     pmap_data;
   ]
 

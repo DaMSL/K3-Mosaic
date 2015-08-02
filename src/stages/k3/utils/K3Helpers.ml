@@ -785,3 +785,4 @@ let mk_tup_just x = mk_tuple [mk_ctrue; x]
 
 let mk_tup_nothing typ = mk_tuple [mk_cfalse; default_value_of_t typ]
 
+let mk_is_tup_nothing x = (mk_not @@ mk_fst x)

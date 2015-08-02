@@ -396,3 +396,4 @@ val mk_case_tup_sn : expr_t -> id_t -> expr_t -> expr_t -> expr_t
 val mk_case_tup_ns : expr_t -> id_t -> expr_t -> expr_t -> expr_t
 val mk_tup_just : expr_t -> expr_t
 val mk_tup_nothing : type_t -> expr_t
+val mk_is_tup_nothing : expr_t -> expr_t
