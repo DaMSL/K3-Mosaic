@@ -320,10 +320,8 @@ let gen_route_fn p map_id =
         mk_agg
           (mk_lambda2' ["acc", result_t] ["x", t_int] @@
             mk_let ["val"^soi index]
-              (* if we're free on this variable, contribute *)
-              (mk_if (mk_is_tup_nothing @@ mk_var temp_id)
-                (mk_mult (mk_var "x") @@ mk_var "dim_size") @@
-                mk_cint 0) acc_code)
+              (mk_mult (mk_var "x") @@ mk_var "dim_size")
+            acc_code)
           (mk_var "acc") @@
           mk_var "rng")
       (* zero: insertion of ip *)
