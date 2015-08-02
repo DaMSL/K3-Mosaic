@@ -284,20 +284,18 @@ let gen_route_fn p map_id =
               mk_insert "free_dims" [mk_cint index];
               mk_cint 0
              ]) @@ (* no contribution *)
-            (* bind the slice for this index *)
-            mk_let ["pmap_slice"]
-              (mk_slice' "pmap" [mk_cint index; mk_cunknown]) @@
             (* check if we don't partition by this index *)
-            (mk_case_ns (mk_peek @@ mk_var "pmap_slice") "peek_slice"
+            (mk_case_ns (mk_peek @@
+                mk_slice' "pmap" [mk_cint index; mk_cunknown]) "peek_slice"
               (mk_cint 0) @@
               mk_let ["value"]
-              (mk_apply (mk_var "mod")
-                  (* we hash first. This could seem like it destroys locality,
-                    * but it really doesn't, since we're only concerned about
-                    * point locality *)
-                  [mk_apply' "abs" @@ singleton @@
-                    mk_apply' hash_func [mk_var id_unwrap];
-                  mk_snd @@ mk_var "peek_slice"]) @@
+                (mk_apply (mk_var "mod")
+                    (* we hash first. This could seem like it destroys locality,
+                      * but it really doesn't, since we're only concerned about
+                      * point locality *)
+                    [mk_apply' "abs" @@ singleton @@
+                      mk_apply' hash_func [mk_var id_unwrap];
+                    mk_snd @@ mk_var "peek_slice"]) @@
               mk_mult
                 (mk_var "value") @@
                 mk_fst @@ mk_peek_or_error (sp "can't find %d in dim_bounds" index) @@
