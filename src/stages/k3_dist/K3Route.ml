@@ -142,7 +142,7 @@ let pmap_data =
           (mk_fst @@ mk_peek_or_error "can't find map in map_ids" @@
             mk_slice' K3Dist.map_ids_id
               [mk_cunknown; mk_var "map_name"; mk_cunknown]) @@
-        mk_let ["dim_bounds"; "size"]
+        mk_let ["dim_bounds"; "last_size"]
           (mk_apply' "calc_dim_bounds" [mk_var "map_id"; mk_var "map_types"]) @@
         mk_block [
           mk_insert "acc"
@@ -151,7 +151,7 @@ let pmap_data =
                 (* convert map_types to map *)
                 mk_convert_col inner_plist.t inner_pmap.t @@ mk_var "map_types";
                 mk_var "dim_bounds";
-                mk_var "size"]]
+                mk_var "last_size"]]
           ;
           mk_var "acc"])
       (mk_empty t) @@
