@@ -1440,6 +1440,8 @@ include \"Annotation/MultiIndex/MultiIndexVMap.k3\"
 include \"Annotation/Set.k3\"
 include \"Annotation/Seq.k3\"
 include \"Annotation/Sets/SortedSet.k3\"
+include \"Core/MosaicBuiltins.k3\"
+
 
 @:CArgs 2
 declare NATIONLoaderRP : collection {path: string} @Collection -> collection {ra:int, rb:string, rc:int, rd:string} @Collection -> collection {ra:int, rb:string, rc:int, rd:string} @Collection
