@@ -242,7 +242,7 @@ let parse_test_file params = match !(params.test_mode) with
 (* Program transformers *)
 let typed_program_with_globals p =
   let p' =
-    K3Global.add_globals cmd_line_params.peers p in
+    K3StdLib.add_globals p in
   try
     let p, env, trig_env, _ = type_bindings_of_program p' in
     p, (env, trig_env)
@@ -250,7 +250,7 @@ let typed_program_with_globals p =
 
 let typed_program_test_with_globals prog_test =
   let add_g p =
-    K3Global.add_globals cmd_line_params.peers p
+    K3StdLib.add_globals p
   in
   match prog_test with
   | ProgTest(p, testl)    ->
@@ -273,14 +273,14 @@ let typed_program_test_with_globals prog_test =
 (* for most functions, we don't need the globals included *)
 let typed_program p =
   let p, envs = typed_program_with_globals p in
-  K3Global.remove_globals cmd_line_params.peers p, envs
+  K3StdLib.remove_globals p, envs
 
 
 (* don't include globals *)
 let typed_program_test prog_test =
   let prog_test' = typed_program_test_with_globals prog_test in
   let remove_g p =
-    K3Global.remove_globals cmd_line_params.peers p
+    K3StdLib.remove_globals p
   in
   match prog_test' with
   | ProgTest(p, tl)    -> ProgTest(remove_g p, tl)

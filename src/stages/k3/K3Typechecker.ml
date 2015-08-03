@@ -14,6 +14,8 @@ exception MalformedTree of string
 type type_bindings_t = (id_t * type_t) list
 type event_type_bindings_t = (id_t * (id_t * (type_t list)) list) list
 
+let lookup_type = ref (fun _ -> failwith "uninitialized")
+
 (* Internal type declarations *)
 (* has_type, expected_type, msg *)
 type error_type =
@@ -856,7 +858,7 @@ let type_bindings_of_program prog =
         | Global(i, t, None) -> (Global(i, t, None), (i, t) :: env)
 
         | Foreign(i, t) ->
-            begin try let t_f = K3StdLib.lookup_type i in
+            begin try let t_f = !lookup_type i in
               if not (t <~ t_f) then t_error (-1) i
                 (TMismatch(t, t_f, "Mismatch in foreign function type."))
               else

@@ -178,7 +178,7 @@ let test_program peers globals_k3 interpret_fn file_name test =
   (*print_endline @@ K3Values.string_of_env ~skip_functions:false v_env;*)
 
   let numbered_tests = insert_index_fst ~first:1 tests in
-  let prog_globals = K3Global.add_globals_k3 globals_k3 program in
+  let prog_globals = globals_k3 @ program in
   (* get the type bindings from the typechecker so we have an environment for
    * typechecking *)
   let tdecl_prog, t_env, trig_env, _ = type_bindings_of_program prog_globals in

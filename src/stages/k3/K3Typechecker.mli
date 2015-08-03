@@ -23,6 +23,8 @@ type error_type =
 
 exception TypeError of int * string * error_type
 
+val lookup_type : (id_t -> type_t) ref
+
 val t_error : int -> string -> error_type -> unit -> unit
 val type_of_expr: expr_t -> type_t
 

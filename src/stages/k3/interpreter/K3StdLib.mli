@@ -14,3 +14,8 @@ val lookup_type : id_t -> type_t
 val funcs : unit -> (string * entry_t) list
 
 val csv_loader_name : string
+
+val add_foreign_fns : unit -> program_t
+val add_globals : program_t -> program_t
+val remove_globals : program_t -> program_t
+
