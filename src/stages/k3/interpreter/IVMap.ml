@@ -24,7 +24,7 @@ module type S = sig
   val remove : vid -> key -> 'a t -> 'a t
   val remove_prefix : vid -> key -> 'a t -> 'a t
   val combine : 'a t -> 'a t -> 'a t
-  val fold : (vid -> key -> 'a -> 'b -> 'b) -> 'a t -> 'b -> 'b
+  val fold_all : (vid -> key -> 'a -> 'b -> 'b) -> 'a t -> 'b -> 'b
   val map : (vid -> key -> 'a -> 'b) -> 'a t -> 'b t
   val iter : (vid -> key -> 'a -> unit) -> 'a t -> unit
   val filter : (vid -> key -> 'a -> bool) -> 'a t -> 'a t
@@ -147,13 +147,13 @@ module Make(OrdVid: ICommon.OrderedKeyType)(OrdKey: ICommon.OrderedKeyType) = st
     in
     HMap.add key vidmap m
 
-  let fold f m zero =
+  let fold_all f m zero =
     HMap.fold (fun k vidm acc ->
       VIDMap.fold (fun vid v acc' -> f vid k v acc') vidm acc
     ) m zero
 
   let map f m =
-    fold (fun vid k v acc -> add vid k (f vid k v) acc) m empty
+    fold_all (fun vid k v acc -> add vid k (f vid k v) acc) m empty
 
   (* update from a certain vid onwards *)
   let update_suffix (vid:OrdVid.t) (k:OrdKey.t) (f:'a -> 'a) (m:'a t) : 'a t =
@@ -161,10 +161,10 @@ module Make(OrdVid: ICommon.OrderedKeyType)(OrdKey: ICommon.OrderedKeyType) = st
       if OrdKey.compare k' k = 0 && OrdVid.compare vid' vid > 0 then f v
       else v) m
 
-  let iter f m = fold (fun vid k v _ -> f vid k v) m ()
+  let iter f m = fold_all (fun vid k v _ -> f vid k v) m ()
 
   let filter f m =
-    fold (fun vid k v acc ->
+    fold_all (fun vid k v acc ->
       if f vid k v then add vid k v acc else acc
     ) m empty
 
@@ -178,9 +178,9 @@ module Make(OrdVid: ICommon.OrderedKeyType)(OrdKey: ICommon.OrderedKeyType) = st
       | None -> None
       | Some (vid, v) -> Some (vid, k, v)
 
-  let size m = fold (fun _ _ _ acc -> acc + 1) m 0
+  let size m = HMap.fold (fun _ m' acc -> acc + VIDMap.cardinal m') m 0
 
-  let to_list mm = fold (fun vid k v acc -> (vid, k, v)::acc) mm []
+  let to_list mm = fold_all (fun vid k v acc -> (vid, k, v)::acc) mm []
 
   let of_list l =
     List.fold_left (fun acc (vid, k, v) -> add vid k v acc) empty l

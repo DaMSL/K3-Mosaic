@@ -375,6 +375,11 @@ and eval_expr (address:address) sched_st cenv texpr =
 
     | Aggregate, [f; zero; col] ->
         let f' = eval_fn f address sched_st in
+        let zero = if is_vmap col then
+          match zero with
+          | VTuple [vid; z] -> 
+              v_slice
+
         let renv, rval = v_fold error (fun (env, acc) x ->
             let renv, reval = f' env [acc; x] in
             renv, value_of_eval reval

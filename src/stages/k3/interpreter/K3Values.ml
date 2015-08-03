@@ -131,7 +131,7 @@ and ValueComp : (sig val compare_v : Value.value_t -> Value.value_t -> int
       | VMap v          -> map_hash ValueMap.fold v
       | VSortedMap v    -> map_hash ValueMap.fold v
       | VSortedSet v    -> col_hashrev ValueSSet.fold v
-      | VVMap v         -> vmap_hash ValueVMap.fold v
+      | VVMap v         -> vmap_hash ValueVMap.fold_all v
       (* floats need to be hashed in a way that won't make them impossible to distinguish *)
       | VFloat v        -> let f, i = frexp v in
                            Hashtbl.hash i lxor (Hashtbl.hash @@ floor @@ f *. hash_mult)
@@ -489,8 +489,8 @@ let v_fold err_fn f acc = function
   | VMap m
   | VSortedMap m   -> ValueMap.fold (fun k v acc -> f acc @@ encode_tuple (k,v)) m acc
   | VSortedSet m   -> ValueSSet.fold (fun k acc -> f acc k) m acc
-  | VVMap m        -> ValueVMap.fold (fun _ k v acc -> f acc @@ VTuple[k;v]) m acc
-  | v -> err_fn "v_fold" @@ sp "not a collection: %s" @@ string_of_value v
+  | VVMap m        -> ValueVMap.fold_all (fun _ k v acc -> f acc @@ VTuple[k;v]) m acc
+  | v -> err_fn "v_fold" @@ sp "not a collection: %s" @@ sov v
 
 (* fold over values *)
 let rec fold_val f zero v =
@@ -505,7 +505,7 @@ let rec fold_val f zero v =
   | _               -> f zero v
 
 let v_foldv err_fn f acc = function
-  | VVMap m     -> ValueVMap.fold (fun vid k v acc -> f acc vid @@ VTuple[k;v]) m acc
+  | VVMap m     -> ValueVMap.fold_all (fun vid k v acc -> f acc vid @@ VTuple[k;v]) m acc
   | v -> err_fn "v_foldv" @@ sp "not a supported collection: %s" @@ string_of_value v
 
 let has_unknown v = fold_val (fun acc v -> v = VUnknown || acc) false v

@@ -461,24 +461,46 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
           | _ -> telem
           end
 
-      | Aggregate | AggregateV ->
+      | Aggregate ->
+          let tfun, tzero, tcol' = bind 0, bind 1, bind 2 in
+          let tcol, telem =
+            try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') in
+          (* vmap fold puts the vid in the zero *)
+          let tzero =
+            if is_tvmap tcol then
+              match unwrap_ttuple tzero with
+              | [t_vid'; t_z] -> 
+                  if not (t_vid' === t_vid) then
+                    t_erroru @@ TMismatch(t_vid', t_vid, "vid for vmap") 
+                  else t_z
+              | _ -> t_erroru @@ TBad(tzero, "no vid for vmap")
+            else tzero in
+          let targ, tret =
+            try unwrap_tfun tfun with Failure _ -> t_erroru (not_function tfun) in
+          let expected1 = [tzero; telem] in
+          if not (tzero === tret) then
+            t_erroru (TMismatch(tzero, tret, "lambda return and agg")) else
+          if not (list_forall2 (<~) targ expected1) then
+            t_erroru (TMismatch(wrap_ttuple targ, wrap_ttuple expected1, "lambda arg")) else
+          tzero
+
+      | AggregateV ->
           let tfun, tzero, tcol' = bind 0, bind 1, bind 2 in
           let targ, tret =
             try unwrap_tfun tfun with Failure _ -> t_erroru (not_function tfun) in
           let tcol, telem =
             try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') in
           let expected1 =
-            match tag, tcol with
-            | Aggregate,  TVMap _ -> t_erroru @@ TBad(tcol', "cannot run on vmap")
-            | Aggregate,  _       -> [tzero; telem]
-            | AggregateV, TVMap _ -> [tzero; t_vid; telem]
-            | _                 -> t_erroru @@ TBad(tcol', "must have a vmap")
+            match tcol with
+            | TVMap _ -> [tzero; t_vid; telem]
+            | _       -> t_erroru @@ TBad(tcol', "must have a vmap")
           in
           if not (tzero === tret) then
             t_erroru (TMismatch(tzero, tret, "lambda return and agg")) else
           if not (list_forall2 (<~) targ expected1) then
             t_erroru (TMismatch(wrap_ttuple targ, wrap_ttuple expected1, "lambda arg")) else
           tzero
+
 
       | GroupByAggregate ->
           let tgrp, tagg, tzero, tcol' = bind 0, bind 1, bind 2, bind 3 in
