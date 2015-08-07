@@ -27,14 +27,5 @@ let globals = List.map decl_global
   [ me;          (* me *)
     peers;       (* peers *)
     role;
-  ] (* jobs - not removed *)
-
-(* cross-reference foreign functions *)
-let add_foreign_fns () =
-  let l = K3StdLib.funcs () in
-  List.map (fun (nm, v) -> mk_foreign_short nm @@ fst3 v) l
-
-let add_globals_k3 k3_globals ds = k3_globals@ds
-let add_globals peers ds = add_globals_k3 (globals @ add_foreign_fns ()) ds
-let remove_globals peers ds = list_drop (List.length globals) ds
+  ]
 

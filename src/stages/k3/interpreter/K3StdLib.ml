@@ -397,6 +397,15 @@ let fn e = e, VTemp VUnit
 let decl = wrap_tfunc (snd_many args) ret
 let _ = Hashtbl.add func_table name (decl, wrap_args args, fn)
 
+(* builtin function for k3new routing *)
+let () =
+  add_fn "free_buckets_builtin"
+  ~args:["dim_bounds", K3Route.dim_bounds.t; "free_dims", K3Route.free_dims.t;
+         "get_ring_node", wrap_tfunc [t_int; t_int] t_addr;
+         "bound_bucket", t_int; "max_val", t_int]
+  ~ret:(wrap_tset t_addr)
+  ~fn:(fun _ -> failwith "not implemented")
+
 (* print env *)
 let () = add_fn "print_env"
   ~fn:(fun e ->
@@ -427,5 +436,16 @@ let lookup id = Hashtbl.find func_table id
 let lookup_value id = let (_,a,f) = lookup id in VForeignFunction (id,a,f)
 let lookup_type id = let (t,_,_) = lookup id in t
 
+(* avoid circular inclusion *)
+let () = K3Typechecker.lookup_type := lookup_type
+
 let funcs () = Hashtbl.fold (fun k v acc -> (k,v)::acc) func_table []
+
+(* cross-reference foreign functions *)
+let add_foreign_fns () =
+  let l = funcs () in
+  List.map (fun (nm, v) -> mk_foreign_short nm @@ fst3 v) l
+
+let add_globals ds = K3Global.globals @ add_foreign_fns () @ ds
+let remove_globals ds = list_drop (List.length K3Global.globals) ds
 

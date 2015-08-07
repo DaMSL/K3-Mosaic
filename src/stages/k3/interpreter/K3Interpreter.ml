@@ -17,6 +17,7 @@ module R = K3Runtime
 module C = K3Consumption
 module SR = K3Streams.ResourceFSM
 module D = K3Dist
+module U = K3Util
 
 (* Generic helpers *)
 
@@ -197,6 +198,18 @@ and eval_expr (address:address) sched_st cenv texpr =
 
     let name = KP.string_of_tag_type tag in
 
+    (* check if an expression is really 'is_empty' *)
+    let is_is_empty left e =
+      let check x y =
+        U.tag_of_expr x = Const(CInt 0) && U.tag_of_expr y = Size in
+      let l, r = U.decompose_eq e in
+      if left then check r l else check l r
+    in
+    let get_is_empty left e =
+      let l, r = U.decompose_eq e in
+      if left then U.decompose_size l else U.decompose_size r
+    in
+
     (* Start of evaluator *)
     let envout, valout = match tag with
 
@@ -275,6 +288,15 @@ and eval_expr (address:address) sched_st cenv texpr =
             eval_expr address sched_st env @@ List.nth children 1
         | _ -> error name "bad let destruction"
         end
+
+    (* check for a pattern of is_empty *)
+    | Eq when is_is_empty true texpr ->
+        let e, v = eval_expr address sched_st cenv @@ get_is_empty true texpr in
+        e, VTemp(v_is_empty error @@ value_of_eval v)
+
+    | Eq when is_is_empty false texpr ->
+        let e, v = eval_expr address sched_st cenv @@ get_is_empty false texpr in
+        e, VTemp(v_is_empty error @@ value_of_eval v)
 
     (* Then we deal with standard environment modifiers *)
     | _ ->

@@ -403,6 +403,17 @@ let v_min err_fn c = match c with
     with Not_found -> None end
   | v -> err_fn "v_min" @@ sp "not a sorted data structure: %s" @@ sov v
 
+let v_is_empty err_fn = function
+  | VSet m       -> VBool(ValueSet.is_empty m)
+  | VSortedSet m -> VBool(ValueSSet.is_empty m)
+  | VBag m       -> VBool(ValueBag.is_empty m)
+  | VList m
+  | VVector m    -> VBool(IList.is_empty m)
+  | VMap m
+  | VSortedMap m -> VBool(ValueMap.is_empty m)
+  | VVMap m      -> VBool(ValueVMap.is_empty m)
+  | v -> err_fn "v_is_empty" @@ sp "not a collection: %s" @@ sov v
+
 (* for a map structure *)
 let print_binding_m ?(skip_functions=true) ?(skip_empty=true) id v =
   let dummy x y = None in
