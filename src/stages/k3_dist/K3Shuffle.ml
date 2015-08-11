@@ -63,34 +63,40 @@ let gen_shuffle_fn p rmap lmap bindings fn_name =
 
       (* if we have only lkeys, we only need to route once *)
       if all_lkeys then
-        mk_let ["ips"]
-          (mk_apply' (route_for p lmap) @@
-            mk_cint lmap :: if pred then full_key_vars else [mk_cunit]) @@
         (* try to be most efficient (move) for common case *)
         mk_if (mk_eq (mk_size @@ mk_var "ips") @@ mk_cint 1)
           (mk_singleton result_types
             [mk_peek_or_error "whoops" @@ mk_var "ips"; mk_var "tuples"]) @@
-          mk_map
-            (mk_lambda' ["ip", t_addr] @@
-              mk_tuple [mk_var "ip"; mk_var "tuples"]) @@
-            mk_var "ips"
+          mk_agg
+            (mk_lambda2' ["acc_col", result_types] ["ip", t_addr] @@
+              mk_block [
+                mk_insert "acc_col" [mk_var "ip"; mk_var "tuples"];
+                mk_var "acc_col"
+              ])
+            (mk_empty result_types) @@
+            (* ips *)
+            (mk_apply' (route_for p lmap) @@
+              mk_cint lmap :: if pred then full_key_vars else [mk_cunit])
       (* else, full shuffling *)
       else
         mk_let ["normal_targets"]
-          (* add ips to grouped tuples *)
+          (* find ip of each group of tuples *)
           (mk_flatten @@ mk_map
             (mk_lambda' ["_u", wrap_ttuple @@ snd_many used_rkeys; "xs", tuple_col_t] @@
               mk_let ["x"] (mk_peek_or_error "whoops2" @@ mk_var "xs") @@
               mk_destruct_tuple "x" tuple_types id_r @@
-              mk_let ["ips"]
-                (mk_apply' (* route a sample tuple *)
+              (* add xs to ip for group *)
+              mk_agg
+                (mk_lambda2' ["acc", result_types] ["ip", t_addr] @@
+                  mk_block [
+                    mk_insert "acc" [mk_var "ip"; mk_var "xs"];
+                    mk_var "acc"
+                  ])
+                (mk_empty result_types) @@
+                (* ips from route *)
+                mk_apply' (* route a sample tuple *)
                   (route_for p lmap) @@
-                    mk_cint lmap :: if pred then full_key_vars
-                                            else [mk_cunit]) @@
-              mk_map (mk_lambda' ["ip", t_addr] @@
-                mk_tuple [mk_var "ip"; mk_var "xs"]) @@
-                mk_var "ips") @@
-
+                    mk_cint lmap :: if pred then full_key_vars else [mk_cunit]) @@
             (* group by meaningful rtuple ids *)
             mk_gbagg
               (mk_lambda'' ["x", wrap_ttuple tuple_types] @@

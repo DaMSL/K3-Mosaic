@@ -34,7 +34,7 @@ let inner_cart_prod_type = wrap_tlist' t_two_ints
 let free_cart_prod_type = wrap_tlist @@ wrap_tlist' t_two_ints
 let free_bucket_type = wrap_tlist' t_two_ints
 let sorted_ip_inner_type = [t_addr; t_unit]
-let output_type = wrap_tbag t_addr
+let output_type = wrap_tset t_addr
 
 (* map_parameter starts at 0 *)
 (*             map_name * (map_parameter * modulo)  *)
@@ -268,7 +268,7 @@ let gen_route_fn p map_id =
 
     (* handle the case of no partitioning at all *)
     mk_if (mk_eq (mk_size (mk_var "pmap")) @@ mk_cint 0)
-      (mk_var "nodes") @@
+      (mk_convert_col nodes.t (wrap_tset t_addr) @@ mk_var "nodes") @@
 
     mk_let ["free_dims"] (mk_empty @@ wrap_tbag t_int) @@
     (* we calculate the contribution of the bound components, and add to the free_dims *)
@@ -307,8 +307,6 @@ let gen_route_fn p map_id =
       (mk_cint 0)
       map_range
     ) @@
-    (* convert to bag *)
-    mk_convert_col result_t (wrap_tbag t_addr) @@
     (* check for builtin implementation *)
     mk_if (mk_var "builtin_route")
       (mk_apply' "free_buckets_builtin"
