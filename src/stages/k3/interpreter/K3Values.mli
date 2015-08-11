@@ -116,7 +116,8 @@ type 'a t_err_fn = (string -> string -> 'a)
 val v_peek : ?vid:bool -> value_t option t_err_fn -> value_t -> value_t option
 val v_combine : value_t t_err_fn -> value_t -> value_t -> value_t
 val v_fold : 'a t_err_fn -> ('a -> value_t -> 'a) -> 'a -> value_t -> 'a
-val v_foldv : 'a t_err_fn -> ('a -> value_t -> value_t -> 'a) -> 'a -> value_t -> 'a
+val v_fold_v : value_t -> 'a t_err_fn -> ('a -> value_t -> 'a) -> 'a -> value_t -> 'a
+val v_fold_all : 'a t_err_fn -> ('a -> value_t -> value_t -> 'a) -> 'a -> value_t -> 'a
 val v_iter : unit t_err_fn -> (value_t -> unit) -> value_t -> unit
 val v_insert : ?vidkey:value_t -> value_t t_err_fn -> value_t -> value_t -> value_t
 val v_delete : value_t t_err_fn -> value_t -> value_t -> value_t

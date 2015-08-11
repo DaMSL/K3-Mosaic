@@ -515,9 +515,13 @@ let rec fold_val f zero v =
   | VVMap _         -> v_fold (fun x y -> failwith "oops") recur zero v
   | _               -> f zero v
 
-let v_foldv err_fn f acc = function
+let v_fold_v vid err_fn f zero = function
+  | VVMap m -> ValueVMap.fold vid (fun k v acc -> f acc @@ VTuple[k;v]) m zero
+  | v -> err_fn "v_fold_v" @@ sp "not a supported collection: %s" @@ sov v
+
+let v_fold_all err_fn f acc = function
   | VVMap m     -> ValueVMap.fold_all (fun vid k v acc -> f acc vid @@ VTuple[k;v]) m acc
-  | v -> err_fn "v_foldv" @@ sp "not a supported collection: %s" @@ string_of_value v
+  | v -> err_fn "v_fold_all" @@ sp "not a supported collection: %s" @@ sov v
 
 let has_unknown v = fold_val (fun acc v -> v = VUnknown || acc) false v
 let no_unknown v = not @@ has_unknown v

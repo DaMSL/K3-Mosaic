@@ -471,9 +471,9 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
           let tzero =
             if is_tvmap tcol then
               match unwrap_ttuple tzero with
-              | [t_vid'; t_z] -> 
+              | [t_vid'; t_z] ->
                   if not (t_vid' === t_vid) then
-                    t_erroru @@ TMismatch(t_vid', t_vid, "vid for vmap") 
+                    t_erroru @@ TMismatch(t_vid', t_vid, "vid for vmap")
                   else t_z
               | _ -> t_erroru @@ TBad(tzero, "no vid for vmap")
             else tzero in

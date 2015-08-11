@@ -1086,10 +1086,13 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
         end
 
   | Aggregate -> let lambda, acc, col = U.decompose_aggregate expr in
-    let name = if is_vmap col then "fold_all" else "fold" in
+    let args, arg_info = match U.unwrap_tuple acc with
+      | vid::acc when is_vmap col -> [vid; lambda] @ acc, [def_a; [1], false; def_a]
+      | _ when is_vmap col -> failwith "Aggregate: missing vid in vmap fold"
+      | _ -> [lambda; acc], [[1], false; def_a]
+    in
     (* find out if our accumulator is a collection type *)
-    apply_method c ~name ~col ~args:[lambda; acc]
-      ~arg_info:[[1], false; def_a]
+    apply_method c ~name:"fold" ~col ~args ~arg_info
 
   | AggregateV ->
     let lambda, acc, col = U.decompose_aggregatev expr in

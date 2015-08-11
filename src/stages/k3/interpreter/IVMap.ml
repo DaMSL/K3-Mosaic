@@ -25,6 +25,7 @@ module type S = sig
   val remove_prefix : vid -> key -> 'a t -> 'a t
   val combine : 'a t -> 'a t -> 'a t
   val fold_all : (vid -> key -> 'a -> 'b -> 'b) -> 'a t -> 'b -> 'b
+  val fold : vid -> (key -> 'a -> 'b -> 'b) -> 'a t -> 'b -> 'b
   val map : (vid -> key -> 'a -> 'b) -> 'a t -> 'b t
   val iter : (vid -> key -> 'a -> unit) -> 'a t -> unit
   val filter : (vid -> key -> 'a -> bool) -> 'a t -> 'a t
@@ -150,6 +151,12 @@ module Make(OrdVid: ICommon.OrderedKeyType)(OrdKey: ICommon.OrderedKeyType) = st
   let fold_all f m zero =
     HMap.fold (fun k vidm acc ->
       VIDMap.fold (fun vid v acc' -> f vid k v acc') vidm acc
+    ) m zero
+
+  let fold vid f m zero =
+    HMap.fold (fun k vidm acc ->
+      try f k (snd @@ VIDMap.find_lt vid vidm) acc
+      with Not_found -> acc
     ) m zero
 
   let map f m =
