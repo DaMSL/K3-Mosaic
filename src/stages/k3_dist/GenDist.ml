@@ -379,6 +379,7 @@ let stmt_cnt_list =
 (* sending fetches is done from functions *)
 (* each function takes a vid to plant in the arguments, which are in the trig buffers *)
 let sw_send_fetch_fn c s_rhs_lhs s_rhs trig_name =
+  let stmt_map_addr_t = wrap_tbag' [t_stmt_id; t_map_id; t_addr] in
   let send_fetches_of_rhs_maps  =
     if null s_rhs then []
     else
@@ -405,9 +406,14 @@ let sw_send_fetch_fn c s_rhs_lhs s_rhs trig_name =
             let route_fn = R.route_for c.p rhs_map_id in
             let key = P.partial_key_from_bound c.p stmt_id rhs_map_id in
             mk_combine
-              (mk_map
-                (mk_lambda' ["ip", t_addr] @@
-                  mk_tuple @@ [mk_cint stmt_id; mk_cint rhs_map_id; mk_var "ip"]) @@
+              (mk_agg
+                (mk_lambda2' ["acc", stmt_map_addr_t] ["ip", t_addr] @@
+                  mk_block [
+                    mk_insert "acc"
+                      [mk_cint stmt_id; mk_cint rhs_map_id; mk_var "ip"];
+                    mk_var "acc"
+                  ])
+                (mk_empty stmt_map_addr_t) @@
                 mk_apply (mk_var route_fn) @@
                   (mk_cint rhs_map_id)::key)
               acc_code

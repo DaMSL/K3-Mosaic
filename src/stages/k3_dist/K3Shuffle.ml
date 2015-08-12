@@ -63,6 +63,9 @@ let gen_shuffle_fn p rmap lmap bindings fn_name =
 
       (* if we have only lkeys, we only need to route once *)
       if all_lkeys then
+        mk_let ["ips"]
+          (mk_apply' (route_for p lmap) @@
+            mk_cint lmap :: if pred then full_key_vars else [mk_cunit]) @@
         (* try to be most efficient (move) for common case *)
         mk_if (mk_eq (mk_size @@ mk_var "ips") @@ mk_cint 1)
           (mk_singleton result_types
@@ -74,9 +77,7 @@ let gen_shuffle_fn p rmap lmap bindings fn_name =
                 mk_var "acc_col"
               ])
             (mk_empty result_types) @@
-            (* ips *)
-            (mk_apply' (route_for p lmap) @@
-              mk_cint lmap :: if pred then full_key_vars else [mk_cunit])
+            mk_var "ips"
       (* else, full shuffling *)
       else
         mk_let ["normal_targets"]
@@ -117,9 +118,13 @@ let gen_shuffle_fn p rmap lmap bindings fn_name =
               (mk_var "normal_targets") @@
               (* in shuffle on empty case, we prepare all the routing that must
               * be done for empty packets *)
-              (mk_map
-                (mk_lambda' ["ip", t_addr] @@
-                  mk_tuple [mk_var "ip"; mk_empty tuple_col_t]) @@
+              (mk_agg
+                (mk_lambda2' ["acc", result_types] ["ip", t_addr] @@
+                  mk_block [
+                    mk_insert "acc" [mk_var "ip"; mk_empty tuple_col_t];
+                    mk_var "acc"
+                  ])
+                (mk_empty result_types) @@
                 mk_apply'
                   (route_for p lmap) @@
                     mk_cint lmap ::
