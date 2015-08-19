@@ -47,9 +47,6 @@ let gen_shuffle_fn p rmap lmap bindings fn_name =
       | `Lkey i -> mk_var @@ to_lkey i
       | `Rkey i -> mk_tup_just @@ mk_var @@ to_rkey i) l in
   let full_key_vars = convert_keys full_key_vars' in
-  let used_rkeys =
-    List.map (function `Rkey i -> mk_var @@ to_rkey i, at tuple_types i | _ -> failwith "whoops") @@
-    List.filter (function `Rkey _ -> true | _ -> false) full_key_vars' in
 
   (* functions to change behavior for non-key routes *)
   let pred = List.length lkey_types > 0 in
@@ -81,16 +78,16 @@ let gen_shuffle_fn p rmap lmap bindings fn_name =
       (* else, full shuffling *)
       else
         mk_let ["normal_targets"]
-          (* find ip of each group of tuples *)
+          (* find ip of each tuple *)
           (mk_flatten @@ mk_map
-            (mk_lambda' ["_u", wrap_ttuple @@ snd_many used_rkeys; "xs", tuple_col_t] @@
-              mk_let ["x"] (mk_peek_or_error "whoops2" @@ mk_var "xs") @@
+            (mk_lambda' ["x", wrap_ttuple tuple_types] @@
               mk_destruct_tuple "x" tuple_types id_r @@
               (* add xs to ip for group *)
               mk_agg
                 (mk_lambda2' ["acc", result_types] ["ip", t_addr] @@
                   mk_block [
-                    mk_insert "acc" [mk_var "ip"; mk_var "xs"];
+                    mk_insert "acc"
+                      [mk_var "ip"; mk_singleton tuple_col_t [mk_var "x"]];
                     mk_var "acc"
                   ])
                 (mk_empty result_types) @@
@@ -98,17 +95,7 @@ let gen_shuffle_fn p rmap lmap bindings fn_name =
                 mk_apply' (* route a sample tuple *)
                   (route_for p lmap) @@
                     mk_cint lmap :: if pred then full_key_vars else [mk_cunit]) @@
-            (* group by meaningful rtuple ids *)
-            mk_gbagg
-              (mk_lambda'' ["x", wrap_ttuple tuple_types] @@
-                mk_destruct_tuple "x" tuple_types id_r @@
-                mk_tuple @@ fst_many used_rkeys)
-              (mk_lambda2' ["acc", tuple_col_t] ["x", wrap_ttuple tuple_types] @@
-                mk_block [
-                  mk_insert "acc" [mk_var "x"];
-                  mk_var "acc"])
-              (mk_empty tuple_col_t) @@
-              mk_var "tuples") @@
+            mk_var "tuples") @@
 
         (* extra targets for when we have to send all possible ips *)
         mk_let ["all_targets"]
