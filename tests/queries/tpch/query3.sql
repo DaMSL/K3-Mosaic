@@ -1,4 +1,4 @@
-INCLUDE 'queries/tpch/schemas.sql';
+INCLUDE 'queries/tpch/schemas_small.sql';
 
 SELECT ORDERS.orderkey, 
        ORDERS.orderdate,
