@@ -330,7 +330,7 @@ and eval_expr (address:address) sched_st cenv texpr =
           | TSet  -> VSet(ValueSet.of_list l)
           | TBag  -> VBag(ValueBag.of_list l)
           | TList -> VList(IList.of_list l)
-          | TVector -> VVector(IList.of_list l)
+          | TVector -> VVector(IntMap.of_list @@ insert_index_fst l, steps)
           | _ -> error name "range: unsupported type"
         in nenv, reval
 

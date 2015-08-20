@@ -55,7 +55,7 @@ and Value : sig
       | VSet of ValueSet.t
       | VBag of ValueBag.t
       | VList of value_t IList.t
-      | VVector of value_t IList.t
+      | VVector of value_t IntMap.t * int
       | VMap of value_t ValueMap.t
       | VSortedMap of value_t ValueMap.t
       | VSortedSet of ValueSSet.t

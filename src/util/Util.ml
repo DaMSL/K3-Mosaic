@@ -6,8 +6,8 @@ module IntSet = Set.Make(struct type t = int let compare = (-) end)
 module StrSet = Set.Make(struct type t = string let compare = String.compare end)
 module IntIntSet = Set.Make(struct type t = int * int let compare = compare end)
 module IntSetSet = Set.Make(struct type t = IntSet.t let compare = IntSet.compare end)
-module IntMap = Map.Make(struct type t = int let compare = (-) end)
-module StrMap = Map.Make(struct type t = string let compare = String.compare end)
+module IntMap = NearMap.Make(struct type t = int let compare = (-) end)
+module StrMap = NearMap.Make(struct type t = string let compare = String.compare end)
 
 (* abbreviations for annoyingly long functions *)
 let foi = float_of_int
