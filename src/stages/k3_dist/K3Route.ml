@@ -308,11 +308,11 @@ let gen_route_fn p map_id =
       map_range
     ) @@
     (* check for builtin implementation *)
-    mk_if (mk_var "builtin_route")
+    (* mk_if (mk_var "builtin_route")
       (mk_apply' "free_buckets_builtin"
         [mk_var "dim_bounds"; mk_var "free_dims";
          mk_var "get_ring_node"; mk_var "bound_bucket";
-         mk_var "max_val"]) @@
+         mk_var "max_val"]) @@ *)
       snd @@
       (* loop over free_dims and get ips for cartesian product *)
       (List.fold_left (fun (num, acc_code) index ->
