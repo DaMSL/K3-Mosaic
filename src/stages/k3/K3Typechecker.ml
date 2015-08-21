@@ -276,12 +276,13 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
     untyped_children
   in
   let attach_type t = mk_tree (((uuid, tag), Type t::aux), typed_children) in
-  let bind n = type_of_expr @@ List.nth typed_children n in
 
   let is_tvmap = function TVMap _ -> true | _ -> false in
   let is_tvector = function TVector -> true | _ -> false in
   let is_tsorted = function TSortedSet | TSortedMap | TVMap _ -> true | _ -> false in
   let is_tmap = function TVMap _ | TSortedMap | TMap -> true | _ -> false in
+
+  let bind n = type_of_expr @@ List.nth typed_children n in
 
   let common_ops () =
     let tfun, tcol' = bind 0, bind 1 in
@@ -702,7 +703,13 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
               else t_erroru (TMismatch(ttarget, targs, ""))
           | _ -> t_erroru (TBad(taddr, "not an address"))
 
-  in attach_type current_type
+  in
+  begin try
+    let t_c, t_e = unwrap_tcol current_type in
+    if is_tmap t_c && List.length @@ unwrap_ttuple t_e <> 2 then
+      t_erroru @@ TBad(current_type, "Malformed map type")
+  with Failure _ -> () end;
+  attach_type current_type
 
 let check_trigger_type trig_env env id args locals body rebuild_f =
   let name           = "Trigger("^id^")" in
