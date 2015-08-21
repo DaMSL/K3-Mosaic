@@ -509,16 +509,19 @@ let sw_send_fetch_fn c s_rhs_lhs s_rhs trig_name =
               (* we need the types for creating empty rhs tuples *)
               let rhs_map_types = P.map_types_with_v_for c.p rhs_map_id in
               let tuple_types = wrap_t_calc' rhs_map_types in
+              let col_type = wrap_t_calc' [t_addr; t_stmt_id; t_int] in
               mk_combine
                 acc_code @@
                 mk_let ["sender_count"]
                   (* count up the number of IPs received from route *)
                   (mk_size @@ mk_apply'
                     route_fn @@ mk_cint rhs_map_id::route_key) @@
-                mk_map
-                  (mk_lambda'
-                    ["ip", t_addr; "tuples", tuple_types] @@
-                      mk_tuple [mk_var "ip"; mk_cint stmt_id; mk_var "sender_count"]) @@
+                mk_agg
+                  (mk_lambda2'
+                    ["acc", col_type] ["ip", t_addr; "tuples", tuple_types] @@
+                      mk_insert_block "acc"
+                        [mk_var "ip"; mk_cint stmt_id; mk_var "sender_count"])
+                  (mk_empty col_type) @@
                   mk_apply' shuffle_fn @@
                     shuffle_key @ [mk_cbool true; mk_empty tuple_types]
             )
@@ -874,14 +877,18 @@ let send_corrective_fns c =
                             (mk_apply'
                               (nd_log_get_bound_for target_trig) [mk_var "vid"])
                         else id_fn) @@
+                        let t_col = wrap_t_calc' [t_addr; t_vid; map_ds.t] in
                         (* insert vid into the ip, tuples output of shuffle *)
-                        mk_map (* (ip * vid * tuple list) list *)
-                          (mk_lambda' ["ip", t_addr; "tuples", delta_tuples2.t] @@
-                              mk_tuple [mk_var "ip"; mk_var "vid";
+                        mk_agg (* (ip * vid * tuple list) list *)
+                          (mk_lambda2'
+                            ["acc", t_col] ["ip", t_addr; "tuples", delta_tuples2.t] @@
+                              mk_insert_block "acc"
+                                [mk_var "ip"; mk_var "vid";
                                 (* get rid of vid NOTE: to reduce number of shuffles *)
                                   mk_map (mk_lambda' (ds_e delta_tuples2) @@
                                       mk_tuple @@ ids_to_vars @@ fst_many @@ ds_e map_ds) @@
-                                    mk_var "tuples"]) @@
+                                    mk_var "tuples"])
+                          (mk_empty t_col) @@
                           mk_apply'
                             shuffle_fn @@
                               (* (ip * tuple list) list *)
