@@ -513,13 +513,8 @@ let sw_send_fetch_fn c s_rhs_lhs s_rhs trig_name =
                 acc_code @@
                 mk_let ["sender_count"]
                   (* count up the number of IPs received from route *)
-                  (mk_agg
-                    (mk_lambda''
-                      ["count", t_int; "ip", t_addr] @@
-                      mk_add (mk_var "count") @@ mk_cint 1)
-                    (mk_cint 0) @@
-                    mk_apply'
-                      route_fn @@ mk_cint rhs_map_id::route_key) @@
+                  (mk_size @@ mk_apply'
+                    route_fn @@ mk_cint rhs_map_id::route_key) @@
                 mk_map
                   (mk_lambda'
                     ["ip", t_addr; "tuples", tuple_types] @@
