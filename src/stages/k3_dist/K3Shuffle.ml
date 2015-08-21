@@ -68,10 +68,6 @@ let gen_shuffle_fn p rmap lmap bindings fn_name =
         mk_let ["ips"]
           (mk_apply' (route_for p lmap) @@
             mk_cint lmap :: if pred then full_key_vars else [mk_cunit]) @@
-        (* try to be most efficient (move) for common case *)
-        mk_if (mk_eq (mk_size @@ mk_var "ips") @@ mk_cint 1)
-          (mk_singleton result_types
-            [mk_peek_or_error "whoops" @@ mk_var "ips"; mk_var "tuples"]) @@
           mk_agg
             (mk_lambda2' ["acc_col", result_types] ["ip", t_addr] @@
               mk_block [
