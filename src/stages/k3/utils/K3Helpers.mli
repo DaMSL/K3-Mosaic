@@ -397,3 +397,8 @@ val mk_case_tup_ns : expr_t -> id_t -> expr_t -> expr_t -> expr_t
 val mk_tup_just : expr_t -> expr_t
 val mk_tup_nothing : type_t -> expr_t
 val mk_is_tup_nothing : expr_t -> expr_t
+
+(* insert and var block, for usual insertion in a lambda *)
+(* @tuple: return a tuple starting with this expr list *)
+val mk_insert_block : ?tuple:expr_t list -> id_t -> expr_t list -> expr_t
+

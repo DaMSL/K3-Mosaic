@@ -786,3 +786,7 @@ let mk_tup_just x = mk_tuple [mk_ctrue; x]
 let mk_tup_nothing typ = mk_tuple [mk_cfalse; default_value_of_t typ]
 
 let mk_is_tup_nothing x = (mk_not @@ mk_fst x)
+
+(* insert and var block, for usual insertion in a lambda *)
+let mk_insert_block ?(tuple=[]) id x =
+  mk_block [mk_insert id x; mk_tuple @@ tuple @ [mk_var id]]
