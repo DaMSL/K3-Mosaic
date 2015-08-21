@@ -623,12 +623,11 @@ let v_delete_prefix err_fn key col = match key, col with
   | VTuple[t;k;_], VVMap m -> VVMap(ValueVMap.remove_prefix t k m)
   | _ -> failwith "v_update_suffix: only supported on vmap"
 
-let v_empty err_fn ?(no_map=false) ?(no_multimap=false) = function
+let v_empty err_fn = function
   | VSet _         -> VSet(ValueSet.empty)
   | VBag _         -> VBag(ValueBag.empty)
   | VList _        -> VList(IList.empty)
   | VVector _      -> VVector(IntMap.empty, 0)
-  | (VMap _ | VSortedMap _ ) when no_map -> VBag(ValueBag.empty)
   | VMap _         -> VMap(ValueMap.empty)
   | VSortedMap _   -> VSortedMap(ValueMap.empty)
   | VSortedSet _   -> VSortedSet(ValueSSet.empty)

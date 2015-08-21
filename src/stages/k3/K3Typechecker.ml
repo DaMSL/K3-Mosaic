@@ -281,6 +281,7 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
   let is_tvmap = function TVMap _ -> true | _ -> false in
   let is_tvector = function TVector -> true | _ -> false in
   let is_tsorted = function TSortedSet | TSortedMap | TVMap _ -> true | _ -> false in
+  let is_tmap = function TVMap _ | TSortedMap | TMap -> true | _ -> false in
 
   let common_ops () =
     let tfun, tcol' = bind 0, bind 1 in
@@ -339,9 +340,8 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
           let t0, t1 = bind 0, bind 1 in
           let _ = try unwrap_tcol t0 with Failure _ -> t_erroru (not_collection t0) in
           let _ = try unwrap_tcol t1 with Failure _ -> t_erroru (not_collection t1) in
-          if not (t0 === t1) then t_erroru (TMismatch(t0, t1,""))
-          else (* Avoid unknowns *)
-            if is_unknown_t t0 then t1 else t0
+          if not (t0 === t1) then t_erroru (TMismatch(t0, t1,"")) else
+          if is_unknown_t t0 then t1 else t0
 
       | Range t_c ->
           let start, stride, steps = bind 0, bind 1, bind 2 in
@@ -439,10 +439,7 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
           let _, tcol', targ, tret, tcol, telem = common_ops () in
           if not (hd targ <~ telem) then
             t_erroru (TMismatch(hd targ, telem, "element:")) else
-          begin match tcol with
-          | TMap -> wrap_tbag tret
-          | _    -> canonical @@ TCollection(tcol, tret)
-          end
+          canonical @@ TCollection(tcol, tret)
 
       | Filter ->
           let _, tcol', targ, tret, tcol, telem = common_ops () in
