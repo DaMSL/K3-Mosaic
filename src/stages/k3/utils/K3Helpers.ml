@@ -85,6 +85,10 @@ let wrap_tvector' t = wrap_tvector (wrap_ttuple t)
 let wrap_tvmap ?idx typ = wrap_tcol (TVMap idx) typ
 let wrap_tvmap' ?idx tl = wrap_tvmap ?idx @@ wrap_ttuple tl
 
+(* what the generic type of data carried around is *)
+let wrap_t_calc  = wrap_tbag
+let wrap_t_calc' = wrap_tbag'
+
 (* wrap a type in a mutable indirection *)
 let wrap_tind t = canonical @@ TIndirect t
 let wrap_tind_mut t = mut @@ wrap_tind t
@@ -515,9 +519,16 @@ let mk_fst' tuple = mk_subscript 1 (mk_var tuple)
 let mk_snd tuple = mk_subscript 2 tuple
 let mk_snd' tuple = mk_subscript 2 (mk_var tuple)
 
+(* insert and var block, for usual insertion in a lambda *)
+let mk_insert_block ?(tuple=[]) id x =
+  mk_block [mk_insert id x; mk_tuple @@ tuple @ [mk_var id]]
+
 let project_from_col tuple_types col ~choice =
-  mk_map
-    (mk_lambda' ["x", wrap_ttuple tuple_types] @@ mk_subscript choice @@ mk_var "x") @@
+  let t_col = wrap_t_calc' [hd tuple_types] in
+  mk_agg
+    (mk_lambda2' ["acc", t_col] ["x", wrap_ttuple tuple_types] @@
+      mk_insert_block "acc" [mk_subscript choice @@ mk_var "x"])
+    (mk_empty t_col) @@
     col
 
 let mk_fst_many t col = project_from_col t col ~choice:1
@@ -787,6 +798,3 @@ let mk_tup_nothing typ = mk_tuple [mk_cfalse; default_value_of_t typ]
 
 let mk_is_tup_nothing x = (mk_not @@ mk_fst x)
 
-(* insert and var block, for usual insertion in a lambda *)
-let mk_insert_block ?(tuple=[]) id x =
-  mk_block [mk_insert id x; mk_tuple @@ tuple @ [mk_var id]]

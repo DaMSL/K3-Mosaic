@@ -121,10 +121,6 @@ let wrap_string_map s = "[<"^s^">]"
 
 let wrap_t_of_map' c map_id t = wrap_t_of_map c map_id (wrap_ttuple t)
 
-(* what the generic type of data carried around is *)
-let wrap_t_calc  = wrap_tbag
-let wrap_t_calc' = wrap_tbag'
-
 (* split a map's types into key, value. For vmaps, remove the vid *)
 let map_t_split' ts = list_split (-1) ts
 
