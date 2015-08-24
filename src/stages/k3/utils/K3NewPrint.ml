@@ -1160,7 +1160,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
         (fun () ->
           let col, lam_none, lam_some = U.decompose_peek_with_vid expr in
           let col, pat = U.decompose_slice_lt col in
-          let name = "lookup_before_vid" in
+          let name = "lookup_before_with_vid" in
           if not (D.is_lookup_pat pat) then None else
           let pat = lookup_pat_of_slice ~vid:true ~col pat in
           let vid = hd pat in
