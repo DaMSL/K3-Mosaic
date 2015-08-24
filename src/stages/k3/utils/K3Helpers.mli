@@ -184,6 +184,7 @@ val mk_slice_gt' : id_t -> expr_t list -> expr_t
 val mk_slice_geq : expr_t -> expr_t list -> expr_t
 val mk_slice_geq' : id_t -> expr_t list -> expr_t
 val mk_insert : id_t -> expr_t list -> expr_t
+val mk_extend : id_t -> expr_t -> expr_t
 val mk_upsert_with : id_t -> expr_t list -> expr_t -> expr_t -> expr_t
 val mk_upsert_with_before : id_t -> expr_t list -> expr_t -> expr_t -> expr_t
 val mk_delete : id_t -> expr_t list -> expr_t

@@ -524,6 +524,10 @@ and eval_expr (address:address) sched_st cenv texpr =
         (env_modify (get_id ()) nenv @@
           fun col -> v_update error oldv newv col), temp VUnit
 
+    | Extend, [_; col'] ->
+        (env_modify (get_id ()) nenv @@
+          fun col -> v_combine error col col'), temp VUnit
+
     (* we can't modify the environment within the lambda *)
     (* semantics for upsertwithbefore:
       * if none results from lookup, update with key's vid

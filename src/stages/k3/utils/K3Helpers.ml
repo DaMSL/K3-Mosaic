@@ -329,6 +329,8 @@ let mk_min_with col lam_none lam_some = mk_stree MinWith [col; lam_none; lam_som
 
 let mk_insert col x = mk_stree Insert [mk_var col; mk_tuple x]
 
+let mk_extend col x = mk_stree Extend [mk_var col; x]
+
 (* key contains dummy value *)
 let mk_upsert_with col key lam_empty lam_full =
   mk_stree UpsertWith [mk_var col; mk_tuple key; lam_empty; lam_full]

@@ -124,7 +124,7 @@
 %token COLON
 
 %token QUESTION
-%token INSERT UPDATE DELETE UPSERT_WITH UPSERT_WITH_BEFORE UPDATE_SUFFIX DELETE_PREFIX FILTERGEQ FILTERLT FILTERLEQ FILTERGT
+%token EXTEND INSERT UPDATE DELETE UPSERT_WITH UPSERT_WITH_BEFORE UPDATE_SUFFIX DELETE_PREFIX FILTERGEQ FILTERLT FILTERLEQ FILTERGT
 
 %token GETS COLONGETS
 
@@ -652,6 +652,7 @@ access :
 
 mutation :
     /* Inserts, deletes and sends use a vararg function syntax for their value/payload */
+    | EXTEND LPAREN variable COMMA expr RPAREN { mkexpr Extend [mk_var $3; $5] }
     | INSERT LPAREN variable COMMA tuple RPAREN { mkexpr Insert [mk_var $3; $5] }
     | UPSERT_WITH LPAREN variable COMMA LPAREN tuple RPAREN COMMA anno_expr COMMA anno_expr RPAREN { mkexpr UpsertWith [mk_var $3; $6; $9; $11] }
     | UPSERT_WITH_BEFORE LPAREN variable COMMA LPAREN tuple RPAREN COMMA anno_expr COMMA anno_expr RPAREN { mkexpr UpsertWithBefore [mk_var $3; $6; $9; $11] }

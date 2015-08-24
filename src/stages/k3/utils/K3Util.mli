@@ -51,6 +51,7 @@ val decompose_bind : expr_t -> expr_t * id_t * expr_t
 val decompose_delete : expr_t -> expr_t * expr_t
 val decompose_delete_prefix : expr_t -> expr_t * expr_t
 val decompose_eq : expr_t -> expr_t * expr_t
+val decompose_extend : expr_t -> expr_t * expr_t
 val decompose_filter : expr_t -> expr_t * expr_t
 val decompose_filter_op : expr_t -> op_t * expr_t * expr_t
 val decompose_filter_geq : expr_t -> expr_t * expr_t

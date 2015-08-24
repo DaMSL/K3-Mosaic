@@ -1221,12 +1221,16 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
       let col, pat = U.decompose_slice expr in
       filter_of_slice ~frontier:false c col pat
 
+  | Extend -> let col, col' = U.decompose_extend expr in
+    apply_method c ~col ~name:"extend" ~args:[col'] ~arg_info:[def_a]
+
   | Insert -> let col, x = U.decompose_insert expr in
     maybe_vmap c col x
       (fun x -> lazy_expr c col <| apply_method_nocol c ~name:"insert" ~args:[x]
           ~arg_info:[[], true])
       (fun vid x -> lazy_expr c col <| apply_method_nocol c ~name:"insert" ~args:[vid;x]
           ~arg_info:[vid_out_arg; [], true])
+
   | Delete -> let col, x = U.decompose_delete expr in
     (* get rid of the value for maps *)
     let x = if is_map col then map_mk_unknown c true x else x in

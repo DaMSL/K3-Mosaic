@@ -128,6 +128,7 @@ type expr_tag_t
     | Slice 
     | SliceOp of op_t   (* slice with frontier (one value >, <, etc) *)
     | FilterOp of op_t  (* all the values <, > etc *)
+    | Extend
     | Insert
     | Update
     | UpsertWith        (* insert with a default handler *)

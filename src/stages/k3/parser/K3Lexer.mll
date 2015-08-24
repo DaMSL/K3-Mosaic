@@ -191,6 +191,7 @@ rule tokenize = parse
     | "send" { SEND }
 
     | "insert" { INSERT }
+    | "extend" { EXTEND }
     | "upsert_with" { UPSERT_WITH }
     | "upsert_with_before" { UPSERT_WITH_BEFORE }
     | "update_suffix" { UPDATE_SUFFIX }

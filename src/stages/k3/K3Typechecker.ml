@@ -96,6 +96,7 @@ let check_tag_arity tag children =
     | AtWith        -> 4
     | MinWith       -> 3
     | Insert        -> 2
+    | Extend        -> 2
     | Update        -> 3
     | UpsertWith
     | UpsertWithBefore -> 4
@@ -622,6 +623,13 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
           let tcol, telem =
             try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') in
           check_vmap_pat tcol telem telem';
+          t_unit
+
+      | Extend ->
+          let tcol1, tcol2 = bind 0, bind 1 in
+          let _ = try unwrap_tcol tcol1 with Failure _ -> t_erroru @@ not_collection tcol1 in
+          let _ = try ignore(unwrap_tcol tcol2) with Failure _ -> t_erroru @@ not_collection tcol2 in
+          if not (tcol1 === tcol2) then t_erroru @@ TMismatch(tcol1, tcol2, "") else
           t_unit
 
       | Update ->
