@@ -379,8 +379,10 @@ let stmt_cnt_list =
 (* sending fetches is done from functions *)
 (* each function takes a vid to plant in the arguments, which are in the trig buffers *)
 let sw_send_fetch_fn c s_rhs_lhs s_rhs trig_name =
-  let stmt_map_addr_t = wrap_tbag' [t_stmt_id; t_map_id; t_addr] in
   let send_fetches_of_rhs_maps  =
+    let ip_pat = [mk_var "ip"; mk_cunknown] in
+    let col_t = wrap_tbag' [t_stmt_id; t_map_id] in
+    let map_t = wrap_tmap' [t_addr; col_t] in
     if null s_rhs then []
     else
     [mk_iter
@@ -389,36 +391,24 @@ let sw_send_fetch_fn c s_rhs_lhs s_rhs trig_name =
         mk_send (rcv_fetch_name_of_t trig_name) (mk_var "ip") @@
           mk_var stmt_map_ids.id ::
           args_of_t_as_vars_with_v c trig_name) @@
-      mk_gbagg
-        (mk_lambda' (* Grouping function *)
-          ["stmt_id", t_stmt_id; "map_id", t_map_id; "ip", t_addr] @@
-          mk_var "ip")
-        (mk_assoc_lambda' (* Agg function *)
-          ["acc", wrap_tbag' [t_stmt_id; t_map_id]]
-          ["stmt_id", t_stmt_id; "map_id", t_map_id; "ip", t_addr] @@
-          mk_block [
-            mk_insert "acc" @@ [mk_var "stmt_id"; mk_var "map_id"];
-            mk_var "acc"])
-        (mk_empty @@ wrap_tbag' [t_stmt_id; t_map_id])
-        (* [] *) @@
         List.fold_left
           (fun acc_code (stmt_id, rhs_map_id) ->
             let route_fn = R.route_for c.p rhs_map_id in
             let key = P.partial_key_from_bound c.p stmt_id rhs_map_id in
-            mk_combine
-              (mk_agg
-                (mk_lambda2' ["acc", stmt_map_addr_t] ["ip", t_addr] @@
-                  mk_block [
-                    mk_insert "acc"
-                      [mk_cint stmt_id; mk_cint rhs_map_id; mk_var "ip"];
-                    mk_var "acc"
-                  ])
-                (mk_empty stmt_map_addr_t) @@
-                mk_apply (mk_var route_fn) @@
-                  (mk_cint rhs_map_id)::key)
-              acc_code
-          )
-          (mk_empty @@ wrap_tbag' [t_stmt_id; t_map_id; t_addr])
+            mk_agg
+              (mk_lambda2' ["acc", map_t] ["ip", t_addr] @@
+                mk_block [
+                  mk_upsert_with "acc" ip_pat
+                    (mk_lambda'' unit_arg @@ mk_tuple
+                      [mk_var "ip"; mk_singleton col_t [mk_cint stmt_id; mk_cint rhs_map_id]])
+                    (mk_lambda' ["ip", t_addr; "x", col_t] @@
+                      mk_insert_block ~tuple:[mk_var "ip"] "x"
+                        [mk_cint stmt_id; mk_cint rhs_map_id])
+                  ;
+                  mk_var "acc"])
+              acc_code @@
+              mk_apply (mk_var route_fn) @@ mk_cint rhs_map_id::key)
+          (mk_empty @@ map_t)
           s_rhs
     ]
   in
@@ -479,11 +469,7 @@ let sw_send_fetch_fn c s_rhs_lhs s_rhs trig_name =
           ["ip_and_stmt_id", wrap_ttuple [t_addr; t_stmt_id]; "count", t_int] @@
           mk_let (* break up because of the way inner gbagg forms tuples *)
             ["ip"; "stmt_id"] (mk_var "ip_and_stmt_id") @@
-            mk_combine
-              (mk_var "acc") @@
-              mk_singleton
-                stmt_cnt_list.t
-                [mk_var "stmt_id"; mk_var "count"])
+            mk_insert_block "acc" [mk_var "stmt_id"; mk_var "count"])
         (mk_empty @@ wrap_tbag' [t_stmt_id; t_int]) @@
         mk_gbagg (* inner gba *)
           (mk_lambda' (* group func *)
