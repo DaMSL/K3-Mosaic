@@ -426,16 +426,13 @@ let sw_send_fetch_fn c s_rhs_lhs s_rhs trig_name =
               (mk_lambda2' ["ack", t_bool] ["ip", t_addr] @@
                 mk_block [
                   mk_send do_complete_trig_name (mk_var "ip") @@
-                    G.me_var::(mk_var "ack")::args_of_t_as_vars_with_v c trig_name;
+                    G.me_var :: mk_var "ack" :: args_of_t_as_vars_with_v c trig_name;
                   mk_cfalse ])
               mk_ctrue @@
-              mk_apply (mk_var route_fn) @@
-                (mk_cint lhs_map_id)::key
+              mk_apply (mk_var route_fn) @@ mk_cint lhs_map_id::key
             ;
              (* stmts without puts need to reply *)
-             GC.sw_update_send ~vid_nm:"vid"
-            ]
-        )
+             GC.sw_update_send ~vid_nm:"vid" ])
         [] @@
         List.map
           (fun stmt_id ->
@@ -1388,6 +1385,8 @@ let gen_loader_vars ast =
     mk_global_val_init (s^"_path") t_string @@ mk_cstring f) tables
 
 let declare_global_vars c partmap ast =
+  (* TODO: dummy map currently needed for MapE generation *)
+  mk_global_val "dummy_map" (wrap_tmap' [t_addr; wrap_tbag' [t_int; t_int]]) ::
   (* dummy switch path variable. Will be filled at cpp stage *)
   decl_global
     (create_ds "switch_path" t_string ~init:(mk_cstring "agenda.csv")) ::
