@@ -1152,7 +1152,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
       ~args:[idx; lam_none; lam_some] ~arg_info:[def_a; def_a; [0], false]
 
   | MinWith -> let col, lam_none, lam_some = U.decompose_min_with expr in
-    apply_method c ~name:"min_with" ~col
+    apply_method c ~name:"min" ~col
       ~args:[lam_none; lam_some] ~arg_info:[def_a; [0], false]
 
   | PeekWithVid ->
