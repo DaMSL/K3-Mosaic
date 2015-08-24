@@ -1018,7 +1018,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
                 [light_type c @@ KH.mk_lambda' ["_", KH.t_unit] e_none;
                  light_type c @@ KH.mk_lambda' [id, t_elem] e_some] in
               let arg_info = [def_a; [0], false] in
-              Some(apply_method c ~name:"peek_with" ~col ~args ~arg_info));
+              Some(apply_method c ~name:"peek" ~col ~args ~arg_info));
           ]);
 
         normal]
