@@ -479,6 +479,7 @@ let sw_send_fetch_fn c s_rhs_lhs s_rhs trig_name =
               (mk_var "acc") @@
               mk_var "count")
           (mk_cint 0) @@ (* [] *)
+          let col_type = wrap_t_calc' [t_addr; t_stmt_id; t_int] in
           List.fold_left
             (fun acc_code (stmt_id, (rhs_map_id, lhs_map_id)) ->
               (* shuffle allows us to recreate the path the data will take from
@@ -492,23 +493,19 @@ let sw_send_fetch_fn c s_rhs_lhs s_rhs trig_name =
               (* we need the types for creating empty rhs tuples *)
               let rhs_map_types = P.map_types_with_v_for c.p rhs_map_id in
               let tuple_types = wrap_t_calc' rhs_map_types in
-              let col_type = wrap_t_calc' [t_addr; t_stmt_id; t_int] in
-              mk_combine
+              mk_let ["sender_count"]
+                (* count up the number of IPs received from route *)
+                (mk_size @@ mk_apply'
+                  route_fn @@ mk_cint rhs_map_id::route_key) @@
+              mk_agg
+                (mk_lambda2'
+                  ["acc", col_type] ["ip", t_addr; "tuples", tuple_types] @@
+                    mk_insert_block "acc"
+                      [mk_var "ip"; mk_cint stmt_id; mk_var "sender_count"])
                 acc_code @@
-                mk_let ["sender_count"]
-                  (* count up the number of IPs received from route *)
-                  (mk_size @@ mk_apply'
-                    route_fn @@ mk_cint rhs_map_id::route_key) @@
-                mk_agg
-                  (mk_lambda2'
-                    ["acc", col_type] ["ip", t_addr; "tuples", tuple_types] @@
-                      mk_insert_block "acc"
-                        [mk_var "ip"; mk_cint stmt_id; mk_var "sender_count"])
-                  (mk_empty col_type) @@
-                  mk_apply' shuffle_fn @@
-                    shuffle_key @ [mk_cbool true; mk_empty tuple_types]
-            )
-            (mk_empty @@ wrap_tbag' [t_addr; t_stmt_id; t_int]) @@
+                mk_apply' shuffle_fn @@
+                  shuffle_key @ [mk_cbool true; mk_empty tuple_types])
+            (mk_empty col_type)
             s_rhs_lhs]
   in
   (* Actual SendFetch function *)
@@ -848,7 +845,7 @@ let send_corrective_fns c =
                                 (mk_lambda' ["tuple", tuple_type] @@ mk_var "tuple")
                                 (mk_lambda'' ["_", t_unit; "_", tuple_type] mk_cunit)
                                 mk_cunit @@
-                                mk_combine (mk_var "acc_tuples") @@ mk_var "tuples"]])
+                                mk_extend_block "acc_tuples" @@ mk_var "tuples"]])
                     (mk_tuple [mk_empty t_vid_list; mk_empty map_ds.t]) @@
                     mk_flatten @@ mk_map
                       (mk_lambda' ["vid", t_vid] @@
