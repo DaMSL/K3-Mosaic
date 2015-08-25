@@ -512,24 +512,28 @@ let rec deep_bind ~in_record c arg_n =
   in loop 0 arg_n
 
 (* Apply a method -- the lambda part *)
-and apply_method_nocol ?(dot=true) ?prefix_fn c ~name ~args ~arg_info =
+(* @prop: add a property around the projection of the method *)
+and apply_method_nocol ?(dot=true) ?prefix_fn ?prop c ~name ~args ~arg_info =
   let wrap_if_big e = match U.tag_of_expr e with
       | Var _ | Const _ | Tuple | Empty _ -> id_fn
       | _ -> lazy_paren
   in
   let args' = list_zip args arg_info in
   let dot_s = if dot then "." else "" in
-  lps (dot_s^name) <| lsp () <|
+  let prop_s = maybe [] (fun s -> lsp () <| lps "@:" <| lps s <| lps ")") prop in
+  lps (dot_s^name) <| prop_s <| lsp () <|
     lazy_concat (fun (e, info) ->
       wrap_if_big e @@ lazy_expr ~expr_info:info ?prefix_fn c e) args'
 
 (* Apply a method to a collection *)
-and apply_method ?prefix_fn c ~name ~col ~args ~arg_info =
+(* @prop: add a property around the projection of the method *)
+and apply_method ?prefix_fn ?prop c ~name ~col ~args ~arg_info =
   (* we only need parens if we're not applying to a variable *)
   let f = match U.tag_of_expr col with
   | Var _ -> id_fn
-  | _     -> lazy_paren
-    in f @@ lazy_expr c col <| apply_method_nocol c ~name ~args ~arg_info ?prefix_fn
+  | _     -> lazy_paren in
+  let prop_paren = if is_some prop then lps "(" else [] in
+  prop_paren <| f (lazy_expr c col) <| apply_method_nocol c ~name ~args ~arg_info ?prop ?prefix_fn
 
 (* common pattern for lookup_with *)
 and handle_lookup_with
@@ -1086,13 +1090,16 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
         end
 
   | Aggregate -> let lambda, acc, col = U.decompose_aggregate expr in
-    let args, arg_info = match U.unwrap_tuple acc with
-      | vid::acc when is_vmap col -> [vid; lambda] @ acc, [def_a; [1], false; def_a]
+    let args, arg_info, acc = match U.unwrap_tuple acc with
+      | vid::acc when is_vmap col ->
+        [vid; lambda] @ acc,
+        [def_a; [1], false; def_a],
+        light_type c @@ KH.mk_tuple acc
       | _ when is_vmap col -> failwith "Aggregate: missing vid in vmap fold"
-      | _ -> [lambda; acc], [[1], false; def_a]
+      | _ -> [lambda; acc], [[1], false; def_a], acc
     in
     (* find out if our accumulator is a collection type *)
-    apply_method c ~name:"fold" ~col ~args ~arg_info
+    apply_method c ~prop:("AccumulatingTransformer") ~name:"fold" ~col ~args ~arg_info
 
   | AggregateV ->
     let lambda, acc, col = U.decompose_aggregatev expr in
@@ -1462,7 +1469,7 @@ typedef filechunks = collection {path: string} @Collection
 declare switch_mux_inputs : collection {seq:filechunks} @Collection
 
 declare my_peers : collection { i:address } @ {Collection} =
-  peers.fold (\\acc -> (\\x -> (acc.insert {i:x.addr}; acc))) empty { i:address} @ Collection
+  (peers.fold @: AccumulatingTransformer) (\\acc -> (\\x -> (acc.insert {i:x.addr}; acc))) empty { i:address} @ Collection
 
 "^ string_of_program ?map_to_fold ?use_filemux p' envs
 
