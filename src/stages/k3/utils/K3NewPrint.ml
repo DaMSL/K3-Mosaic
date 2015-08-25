@@ -612,8 +612,8 @@ and fold_of_map_ext c expr =
     | x         -> [x] in
   let args' = ATuple(acc_arg :: args') in
   let body' = match U.tag_of_expr expr with
-    | Map     -> mk_block [ mk_insert acc_id [body]; mk_var acc_id ]
-    | Flatten -> KH.mk_combine (KH.mk_var acc_id) body
+    | Map     -> mk_insert_block acc_id [body]
+    | Flatten -> mk_extend_block acc_id body
     | _       -> failwith "Can only convert flatten-map or map to fold"
   in
   lazy_expr c @@ light_type c @@
