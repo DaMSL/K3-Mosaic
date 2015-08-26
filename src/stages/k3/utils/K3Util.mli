@@ -188,3 +188,5 @@ val fold_over_exprs : ('a -> expr_t -> 'a) -> 'a -> program_t -> 'a
 val add_property : string -> expr_t -> expr_t
 
 val properties_of_expr : expr_t -> string list
+
+val last_exprs_identity : string -> expr_t -> bool

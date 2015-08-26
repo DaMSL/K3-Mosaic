@@ -439,3 +439,27 @@ let fold_over_exprs f zero p =
     | _                    -> acc
   ) zero p
 
+(* find the last expressions in an expression *)
+let last_exprs e =
+  let rec loop e = match tag_of_expr e with
+    | Block -> let ss = decompose_block e in
+      loop @@ list_last ss
+    | IfThenElse -> let _, e1, e2 = decompose_ifthenelse e in
+      loop e1 @ loop e2
+    | Let _ -> let _, _, e1 = decompose_let e in
+      loop e1
+    | BindAs _ -> let _, _, e1 = decompose_bind e in
+      loop e1
+    | CaseOf _ -> let _, e1, e2 = decompose_caseof e in
+      loop e1 @ loop e2
+    | _ -> [e]
+  in
+  loop e
+
+(* whether the last expressions are identity (same as the accumulator) *)
+let last_exprs_identity (id:string) e =
+  let es = last_exprs e in
+  List.for_all (fun e -> match tag_of_expr e with
+    | Var x when x = id -> true
+    | _ -> false) es
+

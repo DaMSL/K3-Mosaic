@@ -1090,16 +1090,17 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
         end
 
   | Aggregate -> let lambda, acc, col = U.decompose_aggregate expr in
-    let args, arg_info, acc = match U.unwrap_tuple acc with
+    let args, arg_info = match U.unwrap_tuple acc with
       | vid::acc when is_vmap col ->
-        [vid; lambda] @ acc,
-        [def_a; [1], false; def_a],
-        light_type c @@ KH.mk_tuple acc
+        [vid; lambda] @ acc, [def_a; [1], false; def_a]
       | _ when is_vmap col -> failwith "Aggregate: missing vid in vmap fold"
-      | _ -> [lambda; acc], [[1], false; def_a], acc
+      | _ -> [lambda; acc], [[1], false; def_a]
     in
+    let acc_id = hd @@ U.vars_of_lambda lambda in
+    let prop = if U.last_expr_identity acc_id lambda
+      then Some("AccumulatingTransformer") else None in
     (* find out if our accumulator is a collection type *)
-    apply_method c ~prop:("AccumulatingTransformer") ~name:"fold" ~col ~args ~arg_info
+    apply_method c ~prop ~name:"fold" ~col ~args ~arg_info
 
   | AggregateV ->
     let lambda, acc, col = U.decompose_aggregatev expr in
