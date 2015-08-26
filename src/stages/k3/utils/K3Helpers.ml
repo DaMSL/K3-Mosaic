@@ -154,9 +154,9 @@ let unwrap_tind t = match t.typ with
   | TIndirect vt -> vt
   | _            -> t
 
-let is_tind t = match t.typ with TIndirect _ -> true | _ -> false
-
-let is_tcol t = match t.typ with TCollection _ -> true | _ -> false
+let is_tind t = match t.typ with
+  | TIndirect _ -> true
+  | _           -> false
 
 (* Helper functions to create K3 AST nodes more easily *)
 

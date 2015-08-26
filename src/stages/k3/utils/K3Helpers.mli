@@ -95,7 +95,6 @@ val unwrap_ttuple : type_t -> type_t list
 val unwrap_tind : type_t -> type_t
 
 val is_tind : type_t -> bool
-val is_tcol : type_t -> bool
 
 (* simple functions that enable easy construction of AST trees *)
 val mk_const : constant_t -> expr_t
