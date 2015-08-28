@@ -258,21 +258,22 @@ let nd_add_delta_to_buf c map_id =
  *)
 let nd_filter_corrective_list_nm = "nd_filter_corrective_list"
 let nd_filter_corrective_list =
-  let tsid_pair_t = [t_trig_id; t_stmt_id] in
-  let trig_stmt_list_t = wrap_tbag' tsid_pair_t in
+  let trig_stmt_list =
+    let e = ["trig_id", t_trig_id; "t_stmt_id", t_stmt_id] in
+    create_ds "trig_stmt_list" ~e @@ wrap_tbag' @@ snd_many e
+  in
   mk_global_fn nd_filter_corrective_list_nm
-  ["request_vid", t_vid; "trig_stmt_list", trig_stmt_list_t]
+  ["request_vid", t_vid; trig_stmt_list.id, trig_stmt_list.t]
   [nd_log_master.t] @@
-  mk_agg
-    (mk_lambda2' ["acc", nd_log_master.t] ["_", t_trig_id; "stmt_id", t_stmt_id] @@
-      mk_case_sn (mk_lookup' nd_log_master.id [mk_var "stmt_id"; mk_cunknown]) "vidset"
-        (mk_block [
-          mk_insert "acc" [mk_var "stmt_id"; mk_filter_geq (mk_snd @@ mk_var "vidset") [mk_var "request_vid"]];
-          mk_var "acc"]) @@
-        mk_var "acc")
-    (mk_empty nd_log_master.t) @@
-    mk_var "trig_stmt_list"
-
+  mk_equijoin
+    (mk_var nd_log_master.id)
+    (mk_var trig_stmt_list.id)
+    (mk_lambda' nd_log_master.e @@ mk_var "stmt_id")
+    (mk_lambda' trig_stmt_list.e @@ mk_var "t_stmt_id")
+    (mk_lambda3' ["acc", nd_log_master.t] nd_log_master.e trig_stmt_list.e @@
+     mk_insert_block "acc"
+       [mk_var "stmt_id"; mk_filter_geq (mk_var "vid_set") [mk_var "request_vid"]]) @@
+    mk_empty nd_log_master.t
 
 (**** protocol code ****)
 

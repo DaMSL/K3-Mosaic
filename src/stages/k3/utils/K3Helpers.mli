@@ -162,6 +162,7 @@ val mk_aggv : expr_t -> expr_t -> expr_t -> expr_t
 val mk_agg_fst : expr_t -> expr_t -> expr_t
 val mk_gbagg : expr_t -> expr_t -> expr_t -> expr_t -> expr_t
 val mk_sort : expr_t -> expr_t -> expr_t
+val mk_equijoin : expr_t -> expr_t -> expr_t -> expr_t -> expr_t -> expr_t -> expr_t
 val mk_size : expr_t -> expr_t
 val mk_subscript : int -> expr_t -> expr_t
 

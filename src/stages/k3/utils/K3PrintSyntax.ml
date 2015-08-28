@@ -166,7 +166,7 @@ let rec lazy_expr c expr =
     w(le e1) <| sep () <| w(le e2) <| sep () <| w(le e3) <| sep () <| w(le e4) in
   let expr_6 ?(sep=sep) (e1,e2,e3,e4,e5,e6) =
     w(le e1) <| sep () <| w(le e2) <| sep () <| w(le e3) <| sep () <| w(le e4) <|
-      w(le e5) <| sep () <| w(le e6) in
+    sep () <| w(le e5) <| sep () <| w(le e6) in
   (* TODO: do comparisons also *)
   (* handle parentheses:
      - If a sub-element is mult or add, we wrap it.
