@@ -51,6 +51,7 @@ let inner_plist =
   let t = wrap_tlist' @@ snd_many e in
   create_ds "inner_plist" t ~e
 
+(* offset by 1. dim 0 is a default of 1, [0] for code generation purposes *)
 let dim_bounds =
   let e = ["dim", t_int; "bound_rng", wrap_ttuple [t_int; wrap_tlist' [t_int]]] in
   let t = wrap_tmap' @@ snd_many e in
@@ -80,11 +81,9 @@ let calc_dim_bounds =
     (* create full range for all dimensions *)
     mk_let ["rng"]
       (mk_range TList (mk_cint 0) (mk_cint 1) @@
-        mk_sub
-          (mk_subscript 3 @@ mk_peek_or_error "range" @@
-            mk_slice' D.map_ids_id
-              [mk_var "map_id"; mk_cunknown; mk_cunknown]) @@
-          mk_cint 1) @@
+        mk_subscript 3 @@ mk_peek_or_error "range" @@
+          mk_slice' D.map_ids_id
+            [mk_var "map_id"; mk_cunknown; mk_cunknown]) @@
     (* calculate the size of the bucket of each dimensioned we're partitioned on
     * This is order-dependent in pmap *)
     mk_let ["dims"; "final_size"]
@@ -94,7 +93,8 @@ let calc_dim_bounds =
           ["pos", t_int; "bin_size", t_int] @@
           mk_block [
             mk_insert "xs"
-              [mk_var "pos";
+              (* add 1 for allowing 0 to be the identity *)
+              [mk_add (mk_var "pos") @@ mk_cint 1;
                 mk_tuple [
                   mk_var "acc_size";
                   mk_range TList (mk_cint 0) (mk_cint 1) @@ mk_var "bin_size"]];
@@ -119,7 +119,7 @@ let calc_dim_bounds =
             mk_upsert_with "xs" [mk_var "n"; mk_cunknown]
               (mk_lambda'' unit_arg @@
                 mk_tuple [mk_var "n"; mk_tuple [mk_var "next";
-                  mk_singleton (wrap_tlist t_int) [mk_cint 0]]]) @@
+                  mk_singleton (wrap_tlist t_int) [mk_cint 1]]]) @@
               mk_id_fn dim_bounds
             ;
             mk_tuple [mk_var "xs"; mk_var "next"]
@@ -300,8 +300,8 @@ let gen_route_fn p map_id =
                     mk_snd @@ mk_var "peek_slice"]) @@
               mk_mult
                 (mk_var "value") @@
-                mk_fst @@ mk_peek_or_error (sp "can't find %d in dim_bounds" index) @@
-                    mk_slice' "dim_bounds" [mk_cint index; mk_cunknown])
+                mk_fst @@ mk_peek_or_error (sp "can't find %d in dim_bounds" @@ index + 1) @@
+                    mk_slice' "dim_bounds" [mk_cint @@ index + 1; mk_cunknown])
           ) acc_code
       )
       (mk_cint 0)
@@ -318,8 +318,12 @@ let gen_route_fn p map_id =
       (List.fold_left (fun (num, acc_code) index ->
           let temp_id = to_id index in
           num - 1,
+          mk_let ["index"]
+            (mk_if (mk_is_tup_nothing @@ mk_var temp_id)
+               (mk_cint @@ index + 1) @@
+               mk_cint 0) @@
             mk_case_ns
-              (mk_peek @@ mk_slice' "dim_bounds" [mk_cint index; mk_cunknown]) "x"
+              (mk_peek @@ mk_slice' "dim_bounds" [mk_var "index"; mk_cunknown]) "x"
               (mk_error "whoops") @@
               mk_let ["dim_size"; "rng"] (mk_snd @@ mk_var "x") @@
             mk_agg
@@ -328,9 +332,7 @@ let gen_route_fn p map_id =
                   (mk_mult (mk_var "x") @@ mk_var "dim_size")
                 acc_code)
               (if num = 1 then mk_empty result_t else mk_var "acc") @@
-              mk_if (mk_is_tup_nothing @@ mk_var temp_id)
-                (mk_var "rng") @@
-                mk_var "singleton_int")
+              mk_var "rng")
         (* zero: insertion of ip *)
         (List.length map_range, mk_block [
           mk_insert "acc"
