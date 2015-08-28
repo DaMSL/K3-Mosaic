@@ -414,11 +414,14 @@ and eval_expr (address:address) sched_st cenv texpr =
         let map_join loop_col loop_prj map f zero =
           let f' = eval_fn f address sched_st in
           let prj = eval_fn loop_prj address sched_st in
-          let renv, rval = v_fold error (fun (env, acc) x ->
+          let renv, rval = v_fold error (fun ((env, acc) as a) x ->
               let _, k = prj env [x] in
-              let y = v_slice error (VTuple[value_of_eval k; VUnknown]) map in
-              let renv, reval = f' env @@ [acc; y; x] in
-              renv, value_of_eval reval)
+              let my =
+                v_peek error @@
+                v_slice error (VTuple[value_of_eval k; VUnknown]) map in
+              match my with
+              | Some y -> second value_of_eval @@ f' env @@ [acc; y; x]
+              | None   -> a)
             (nenv, zero)
             loop_col
           in renv, VTemp rval
