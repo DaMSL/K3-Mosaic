@@ -177,7 +177,7 @@ and lazy_col c col_t elem_t = match col_t with
   | TSet        -> lps "{Set}"
   | TBag        -> lps "{Collection}"
   | TList       -> lps "{Seq}"
-  | TVector     -> lps "{Collection}"
+  | TVector     -> lps "{Vector}"
   | TMap        -> lps "{MapE" <| lazy_mape c elem_t <| lps "}"
   | TVMap None  -> lps "{MultiIndexVMap}"
   | TVMap(Some ss) -> lazy_multi_index c ss elem_t
