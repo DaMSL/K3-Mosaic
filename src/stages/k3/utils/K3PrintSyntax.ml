@@ -153,18 +153,20 @@ let wrap_if_var e = match U.tag_of_expr e with
   | _     -> lazy_paren
 
 let rec lazy_expr c expr =
-  let expr_pair ?(sep=lps "," <| lsp ()) ?(wl=id_fn) ?(wr=id_fn) (e1, e2) =
-    wl(lazy_expr c e1) <| sep <| wr(lazy_expr c e2) in
-  let expr_sub ?(sep=lps "," <| lsp ()) p =
-    expr_pair ~sep:sep ~wl:wrap_indent ~wr:(wrap_hov 0) p in
-  let expr_triple ?(sep=fun () -> lps "," <| lsp ()) (e1,e2,e3) =
-    let w = wrap_indent in
-    w(lazy_expr c e1) <| sep () <| w(lazy_expr c e2) <| sep () <| w(lazy_expr c
-    e3) in
-  let expr_quad ?(sep=fun () -> lps "," <| lsp ()) (e1,e2,e3,e4) =
-    let w = wrap_indent in
-    w(lazy_expr c e1) <| sep () <| w(lazy_expr c e2) <| sep () <| w(lazy_expr c
-    e3) <| sep () <| w(lazy_expr c e4) in
+  let w = wrap_indent in
+  let le = lazy_expr c in
+  let sep = fun () -> lps "," <| lsp () in
+  let expr_pair ?(sep=sep) ?(wl=id_fn) ?(wr=id_fn) (e1, e2) =
+    wl(le e1) <| sep () <| wr(le e2) in
+  let expr_sub ?(sep=sep) p =
+    expr_pair ~sep ~wl:wrap_indent ~wr:(wrap_hov 0) p in
+  let expr_triple ?(sep=sep) (e1,e2,e3) =
+    w(le e1) <| sep () <| w(le e2) <| sep () <| w(le e3) in
+  let expr_quad ?(sep=sep) (e1,e2,e3,e4) =
+    w(le e1) <| sep () <| w(le e2) <| sep () <| w(le e3) <| sep () <| w(le e4) in
+  let expr_6 ?(sep=sep) (e1,e2,e3,e4,e5,e6) =
+    w(le e1) <| sep () <| w(le e2) <| sep () <| w(le e3) <| sep () <| w(le e4) <|
+      w(le e5) <| sep () <| w(le e6) in
   (* TODO: do comparisons also *)
   (* handle parentheses:
      - If a sub-element is mult or add, we wrap it.
@@ -194,11 +196,11 @@ let rec lazy_expr c expr =
   in let arith_paren_pair sym (el, er) =
     let wrapl = arith_paren_l el in
     let wrapr = arith_paren er in
-    expr_pair ~sep:(lsp () <| lps sym <| lsp ()) ~wl:wrapl ~wr:wrapr (el, er)
+    expr_pair ~sep:(fun () -> lsp () <| lps sym <| lsp ()) ~wl:wrapl ~wr:wrapr (el, er)
   in let logic_paren_pair sym (el, er) =
     let wrapl = logic_paren_l el in
     let wrapr = logic_paren er in
-    expr_pair ~sep:(lsp () <| lps sym <| lsp ()) ~wl:wrapl ~wr:wrapr (el, er)
+    expr_pair ~sep:(fun () -> lsp () <| lps sym <| lsp ()) ~wl:wrapl ~wr:wrapr (el, er)
   in let expr_type_is_bool e =
     try begin match (T.type_of_expr e).typ with
         | TBool -> true
@@ -251,7 +253,7 @@ let rec lazy_expr c expr =
     | Singleton t, Combine | Singleton t, Singleton _
     | Singleton t, Empty _ ->
       lazy_collection_vt c t.typ @@ assemble_list c expr
-    | _ -> expr_pair ~sep:(lcut() <| lps "++" <| lcut()) ~wl:wrapl (e1, e2)
+    | _ -> expr_pair ~sep:(fun () -> lcut() <| lps "++" <| lcut()) ~wl:wrapl (e1, e2)
     end
   | Range ct -> let t = U.decompose_range expr in
     lazy_collection c ct @@ expr_triple ~sep:(fun () -> lps "::") t
@@ -332,6 +334,8 @@ let rec lazy_expr c expr =
     lps "groupby" <| lazy_paren @@ expr_quad q
   | Sort -> let p = U.decompose_sort expr in
     lps "sort" <| lazy_paren @@ expr_sub p
+  | Equijoin -> let p = U.decompose_equijoin expr in
+    lps "equijoin" <| lazy_paren @@ expr_6 p
   | Size -> let p = U.decompose_size expr in
     lps "csize" <| lazy_paren @@ lazy_expr c p
   | Subscript _ -> let i, te = U.decompose_subscript expr in

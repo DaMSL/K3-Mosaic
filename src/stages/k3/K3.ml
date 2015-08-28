@@ -114,6 +114,7 @@ type expr_tag_t
     | AggregateV       (* vmap version *)
     | GroupByAggregate
     | Sort
+    | Equijoin
 
     | AtWith
     | MinWith

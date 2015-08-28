@@ -124,7 +124,7 @@
 %token COLON
 
 %token QUESTION
-%token EXTEND INSERT UPDATE DELETE UPSERT_WITH UPSERT_WITH_BEFORE UPDATE_SUFFIX DELETE_PREFIX FILTERGEQ FILTERLT FILTERLEQ FILTERGT
+%token EQUIJOIN EXTEND INSERT UPDATE DELETE UPSERT_WITH UPSERT_WITH_BEFORE UPDATE_SUFFIX DELETE_PREFIX FILTERGEQ FILTERLT FILTERLEQ FILTERGT
 
 %token GETS COLONGETS
 
@@ -697,6 +697,8 @@ transformers :
     | FILTERLT LPAREN anno_expr COMMA anno_expr RPAREN { mkexpr (FilterOp OLt) [$3; $5] }
     | FILTERGT LPAREN anno_expr COMMA anno_expr RPAREN { mkexpr (FilterOp OGt) [$3; $5] }
     | FILTERLEQ LPAREN anno_expr COMMA anno_expr RPAREN { mkexpr (FilterOp OLeq) [$3; $5] }
+    | EQUIJOIN LPAREN anno_expr COMMA anno_expr COMMA anno_expr COMMA anno_expr COMMA anno_expr COMMA anno_expr RPAREN
+      { mkexpr Equijoin [$3; $5; $7; $9; $11; $13] }
 
     /* Error handling */
     | anno_expr CONCAT error { print_error("Expected expression for combine") }

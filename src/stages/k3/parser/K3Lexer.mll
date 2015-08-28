@@ -169,6 +169,7 @@ rule tokenize = parse
     | "groupby"   { GROUPBYAGGREGATE }
     | "sort"      { SORT }
     | "csize"     { SIZE }
+    | "equijoin"  { EQUIJOIN }
 
     | "at_with" { AT_WITH }
     | "min_with" { MIN_WITH }

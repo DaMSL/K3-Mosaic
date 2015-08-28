@@ -112,6 +112,7 @@ let string_of_tag_type = function
     | AggregateV       -> "AggregateV"
     | GroupByAggregate -> "GroupByAggregate"
     | Sort             -> "Sort"
+    | Equijoin         -> "Equijoin"
     | Size             -> "Size"
     | Subscript n      -> "Subscript"^soi n
 

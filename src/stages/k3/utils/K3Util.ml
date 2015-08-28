@@ -109,6 +109,8 @@ let decompose_delete_prefix e = match tag_of_expr e, sub_tree e with
   | DeletePrefix, [x; e0] -> x, e0 | _ -> failwith "not a DeletePrefix"
 let decompose_eq e = match tag_of_expr e, sub_tree e with
   Eq, [e0; e1] -> e0, e1 | _ -> failwith "not an Equals"
+let decompose_equijoin e = match tag_of_expr e, sub_tree e with
+  Equijoin, [e0; e1; e2; e3; e4; e5] -> e0, e1, e2, e3, e4, e5 | _ -> failwith "not an Equijoin"
 let decompose_extend e = match tag_of_expr e, sub_tree e with
   Extend, [x; e0] -> x, e0 | _ -> failwith "not an Extend"
 let decompose_filter e = match tag_of_expr e, sub_tree e with

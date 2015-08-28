@@ -88,6 +88,7 @@ let check_tag_arity tag children =
     | GroupByAggregate  -> 4
     | Sort              -> 2
     | Size              -> 1
+    | Equijoin          -> 6
 
     | Peek          -> 1
     | PeekWithVid   -> 3
@@ -240,9 +241,10 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
   let name = K3Printing.string_of_tag_type tag in
   let t_erroru = t_error uuid name in (* pre-curry the type error *)
 
+  let malformed_tree () = raise @@ MalformedTree (K3Printing.string_of_tag_type tag) in
+
   (* Check Tag Arity *)
-  if not @@ check_tag_arity tag untyped_children then
-    raise @@ MalformedTree (K3Printing.string_of_tag_type tag);
+  if not @@ check_tag_arity tag untyped_children then malformed_tree () else
 
   (* Augment environments for children *)
   let env_proc_fn (last_ch:expr_t option) i = match tag, last_ch, i with
@@ -533,6 +535,37 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
           if not (tcol = TList) then
             t_erroru (TMsg "can only sort on a list") else
           canonical @@ TCollection(TList, telem)
+
+      | Equijoin ->
+        begin match List.map type_of_expr typed_children with
+          | [tcol1; tcol2; tprj1; tprj2; tagg_fn; tzero] ->
+            let _, telem1 =
+              try unwrap_tcol tcol1 with Failure _ -> t_erroru @@ not_collection tcol1 in
+            let _, telem2 =
+              try unwrap_tcol tcol2 with Failure _ -> t_erroru @@ not_collection tcol2 in
+            let targ1, tret1 =
+              try unwrap_tfun tprj1 with Failure _ -> t_erroru @@ not_function tprj1 in
+            let targ2, tret2 =
+              try unwrap_tfun tprj2 with Failure _ -> t_erroru @@ not_function tprj2 in
+            if not (tret1 === tret2) then
+              t_erroru @@ TMismatch(tret1, tret2, "Projection return functions") else
+            if not (hd targ1 <~ telem1) then
+              t_erroru @@ TMismatch(hd targ1, telem1, "First projection function") else
+            if not (hd targ2 <~ telem2) then
+              t_erroru @@ TMismatch(hd targ2, telem1, "Second projection function") else
+            let targ3, tret3 =
+              try unwrap_tfun tagg_fn with Failure _ -> t_erroru @@ not_function tagg_fn in
+            let _ =
+              try unwrap_tcol tzero with Failure _ -> t_erroru @@ not_collection tzero in
+            let expected_targ3 = [tzero; wrap_ttuple targ1; wrap_ttuple targ2] in
+            if not (list_forall2 (<~) targ3 expected_targ3) then
+              t_erroru @@ TMismatch(wrap_ttuple targ3, wrap_ttuple expected_targ3, "agg func args") else
+            if not (tret3 === tzero) then
+              t_erroru @@ TMismatch(tret3, tzero, "agg func ret") else
+            tzero
+
+          | _ -> malformed_tree ()
+        end
 
       | Size ->
           let tcol = bind 0 in

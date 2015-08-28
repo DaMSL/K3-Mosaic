@@ -120,6 +120,7 @@ type expr_tag_t
     | AggregateV        (* vmap version of aggregate *)
     | GroupByAggregate
     | Sort
+    | Equijoin
 
     | AtWith
     | MinWith

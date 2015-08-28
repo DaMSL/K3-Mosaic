@@ -1094,6 +1094,11 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
     (* find out if our accumulator is a collection type *)
     apply_method c ~name:"fold" ~col ~args ~arg_info
 
+  | Equijoin -> let c1, c2, prj1, prj2, f, zero = U.decompose_equijoin expr in
+    apply_method c ~name:"equijoinf_kv" ~col:c1
+      ~args:[c2; prj2; f; zero]
+      ~arg_info:[def_a; [0], false; [1; 2], false; def_a]
+
   | AggregateV ->
     let lambda, acc, col = U.decompose_aggregatev expr in
     let normal () =

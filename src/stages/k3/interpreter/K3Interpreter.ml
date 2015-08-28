@@ -409,6 +409,26 @@ and eval_expr (address:address) sched_st cenv texpr =
           col
         in renv, VTemp rval
 
+    | Equijoin, [col1; col2; prj1; prj2; f; zero] ->
+        (* a join where one side is a map *)
+        let map_join loop_col loop_prj map f zero =
+          let f' = eval_fn f address sched_st in
+          let prj = eval_fn loop_prj address sched_st in
+          let renv, rval = v_fold error (fun (env, acc) x ->
+              let _, k = prj env [x] in
+              let y = v_slice error (VTuple[value_of_eval k; VUnknown]) map in
+              let renv, reval = f' env @@ [acc; y; x] in
+              renv, value_of_eval reval)
+            (nenv, zero)
+            loop_col
+          in renv, VTemp rval
+        in
+        begin match col1, col2 with
+        | (VMap _ | VSortedMap _), (VBag _ | VVector _) -> map_join col2 prj2 col1 f zero
+        | (VBag _ | VVector _), (VMap _ | VSortedMap _) -> map_join col1 prj1 col2 f zero
+        | _ -> error "Equijoin" "unhandled case"
+        end
+
     | AggregateV, [f; zero; col] ->
         let f' = eval_fn f address sched_st in
         let renv, rval = v_fold_all error (fun (env, acc) vid x ->

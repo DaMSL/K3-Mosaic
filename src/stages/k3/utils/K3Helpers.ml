@@ -281,7 +281,10 @@ let mk_gbagg group_fun agg_fun init collection =
     mk_stree GroupByAggregate [group_fun; agg_fun; init; collection]
 
 let mk_sort compare_fun collection =
-    mk_stree Sort [compare_fun; collection]
+  mk_stree Sort [compare_fun; collection]
+
+let mk_equijoin col1 col2 proj1 proj2 agg_fn zero =
+  mk_stree Equijoin [col1; col2; proj1; proj2; agg_fn; zero]
 
 let mk_size col = mk_stree Size [col]
 
