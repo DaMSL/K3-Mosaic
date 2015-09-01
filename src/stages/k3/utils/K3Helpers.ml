@@ -245,7 +245,10 @@ let mk_apply lambda input = mk_stree Apply (lambda :: input)
 
 let mk_apply' fn input = mk_apply (mk_var fn) input
 
-let mk_block statements = mk_stree Block statements
+let mk_block = function
+  | []  -> failwith "no statements in block"
+  | [x] -> x
+  | xs  -> mk_stree Block xs
 
 let mk_iter iter_fun collection =
     mk_stree Iterate [iter_fun; collection]
