@@ -308,37 +308,44 @@ let gen_route_fn p ?(precise=false) map_id =
       if precise then
         mk_apply' "get_ring_node" [mk_var "bound_bucket"; mk_var "max_val"]
       else
+        let len = List.length map_range in
         snd @@
         (* loop over all dims and get ips for cartesian product *)
-        (List.fold_left (fun (num, acc_code) index ->
-            let temp_id = to_id index in
+        (List.fold_left
+          (fun (num, acc_code) index ->
+            let add_idx s = s ^ soi index in
             num - 1,
             mk_let ["index"]
-              (mk_if (mk_is_tup_nothing @@ mk_var temp_id)
+              (mk_if (mk_is_tup_nothing @@ mk_var @@ to_id index)
                 (mk_cint @@ index + 1) @@
                 mk_cint 0) @@
               mk_case_ns
-                (mk_peek @@ mk_slice' "dim_bounds" [mk_var "index"; mk_cunknown]) "x"
+                (mk_peek @@ mk_slice' "dim_bounds" [mk_var "index"; mk_cunknown]) (add_idx "dr")
                 (mk_error "whoops") @@
-                mk_let ["dim_size"; "rng"] (mk_snd @@ mk_var "x") @@
-              mk_agg
-                (mk_lambda2' ["acc", result_t] ["x", t_int] @@
-                  mk_let ["val"^soi index]
-                    (mk_mult (mk_var "x") @@ mk_var "dim_size")
-                  acc_code)
-                (if num = 1 then mk_empty result_t else mk_var "acc") @@
-                mk_var "rng")
-          (* zero: insertion of ip *)
-          (List.length map_range, mk_block [
-            mk_insert "acc"
-              [mk_apply' "get_ring_node"
-                (* add up all the values and the bound_bucket *)
-                [List.fold_left (fun acc x ->
-                  mk_add (mk_var @@ "val"^soi x) acc) (mk_var "bound_bucket") map_range;
-                  mk_var "max_val"]
-                ];
-            mk_var "acc"])
-        map_range)
+                mk_let [add_idx "dim_size"; add_idx "rng"] (mk_snd @@ mk_var @@ add_idx "dr") @@
+                acc_code)
+          (len, snd @@
+            List.fold_left
+              (fun (num, acc_code) index ->
+                 let add_idx s = s ^ soi index in
+                 num - 1,
+                 mk_agg
+                  (mk_lambda2' ["acc", result_t] ["x", t_int] @@
+                    mk_let [add_idx "val"]
+                      (mk_mult (mk_var "x") @@ mk_var @@ add_idx "dim_size")
+                      acc_code)
+                  (if num = 1 then mk_empty result_t else mk_var "acc") @@
+                  mk_var @@ add_idx "rng")
+                (* zero: insertion of ip *)
+              (len, mk_insert_block "acc"
+                    [mk_apply' "get_ring_node"
+                      (* add up all the values and the bound_bucket *)
+                      [List.fold_left (fun acc x ->
+                        mk_add (mk_var @@ "val"^soi x) acc) (mk_var "bound_bucket") map_range;
+                        mk_var "max_val"]
+                    ])
+              map_range)
+          map_range)
 
 (* create all code needed for route functions, including foreign funcs*)
 let global_vars p partmap =
