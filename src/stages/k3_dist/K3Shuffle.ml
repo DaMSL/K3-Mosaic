@@ -109,7 +109,7 @@ let gen_shuffle_fn p rmap lmap bindings fn_name =
                 (* ip from route *)
                 mk_let ["ip"]
                   (mk_apply' (* route a sample tuple *)
-                    (route_for p lmap) @@
+                    (route_for ~precise:true p lmap) @@
                       mk_cint lmap :: if pred then full_key_vars else [mk_cunit]) @@
                 mk_upsert_with_block "acc" ip_pat
                   (mk_lambda'' unit_arg @@ mk_tuple [mk_var "ip"; mk_var "xs"]) @@
