@@ -261,12 +261,13 @@ let gen_route_fn p ?(precise=false) map_id =
       (("map_id", t_map_id)::types_to_ids_types prefix key_types)
       [output_type precise] @@ (* return *)
       (* get the info for the current map and bind it to "pmap" *)
-      mk_let ["pmap_lookup"]
-      (mk_snd @@ mk_peek_or_error "can't find map_id in pmap_data" @@
-        mk_slice' pmap_data.id @@ [mk_var "map_id"; mk_cunknown]) @@
+      mk_case_ns 
+        (mk_peek @@
+           mk_slice' pmap_data.id @@ [mk_var "map_id"; mk_cunknown]) "pmap_lookup"
+        (mk_error "can't find map_id in pmap_data") @@
 
       (* deep bind *)
-      mk_let ["pmap"; "dim_bounds"; "max_val"] (mk_var "pmap_lookup") @@
+      mk_let ["pmap"; "dim_bounds"; "max_val"] (mk_snd @@ mk_var "pmap_lookup") @@
 
       (* handle the case of no partitioning at all *)
       (if precise then id_fn else
