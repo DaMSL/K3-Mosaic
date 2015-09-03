@@ -299,7 +299,7 @@ let gen_route_fn p ?(precise=false) map_id =
                       mk_snd @@ mk_var "peek_slice"]) @@
                 mk_mult
                   (mk_var "value") @@
-                  mk_fst @@ mk_peek_or_error (sp "can't find %d in dim_bounds" @@ index + 1) @@
+                  mk_fst @@ mk_snd @@ mk_peek_or_error (sp "can't find %d in dim_bounds" @@ index + 1) @@
                       mk_slice' "dim_bounds" [mk_cint @@ index + 1; mk_cunknown])
             ) acc_code
         )
