@@ -261,7 +261,7 @@ let gen_route_fn p ?(precise=false) map_id =
       (("map_id", t_map_id)::types_to_ids_types prefix key_types)
       [output_type precise] @@ (* return *)
       (* get the info for the current map and bind it to "pmap" *)
-      mk_case_ns 
+      mk_case_ns
         (mk_peek @@
            mk_slice' pmap_data.id @@ [mk_var "map_id"; mk_cunknown]) "pmap_lookup"
         (mk_error "can't find map_id in pmap_data") @@
@@ -286,7 +286,7 @@ let gen_route_fn p ?(precise=false) map_id =
             (mk_case_tup_ns (mk_var temp_id) id_unwrap
               (mk_cint 0) @@ (* no contribution *)
               (* check if we don't partition by this index *)
-              (mk_case_ns (mk_peek @@
+               mk_case_ns (mk_peek @@
                   mk_slice' "pmap" [mk_cint index; mk_cunknown]) "peek_slice"
                 (mk_cint 0) @@
                 mk_let ["value"]
@@ -297,12 +297,11 @@ let gen_route_fn p ?(precise=false) map_id =
                       [mk_apply' "abs" @@ singleton @@
                         mk_apply' hash_func [mk_var id_unwrap];
                       mk_snd @@ mk_var "peek_slice"]) @@
-                mk_mult
-                  (mk_var "value") @@
-                  mk_fst @@ mk_snd @@ mk_peek_or_error (sp "can't find %d in dim_bounds" @@ index + 1) @@
-                      mk_slice' "dim_bounds" [mk_cint @@ index + 1; mk_cunknown])
-            ) acc_code
-        )
+                mk_case_ns (mk_peek @@
+                    mk_slice' "dim_bounds" [mk_cint @@ index + 1; mk_cunknown]) "x"
+                  (mk_error @@ sp "can't find %d in dim_bounds" @@ index + 1) @@
+                  mk_mult (mk_var "value") @@ mk_fst @@ mk_snd @@ mk_var "x")
+                acc_code)
         (mk_cint 0)
         map_range
       ) @@
