@@ -534,6 +534,9 @@ let mk_insert_block ?(tuple=[]) id x =
 let mk_extend_block ?(tuple=[]) id col =
   mk_block [mk_extend id col; mk_tuple @@ tuple @ [mk_var id]]
 
+let mk_upsert_with_block col key lam_empty lam_full =
+  mk_block [mk_upsert_with col key lam_empty lam_full; mk_var col]
+
 let project_from_col tuple_types col ~choice =
   let t_col = wrap_t_calc' [hd tuple_types] in
   mk_agg

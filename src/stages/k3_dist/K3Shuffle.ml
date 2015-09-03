@@ -87,21 +87,16 @@ let gen_shuffle_fn p rmap lmap bindings fn_name =
             mk_agg
               (mk_lambda2' ["acc", result_types] ["x", wrap_ttuple tuple_types] @@
                 mk_destruct_tuple "x" tuple_types id_r @@
-                (* fold over ips *)
-                mk_agg
-                  (mk_lambda2' ["acc", result_types] ["ip", t_addr] @@
-                    mk_block [
-                      mk_upsert_with "acc" ip_pat
-                        (mk_lambda'' unit_arg @@
-                          mk_tuple [mk_var "ip"; mk_singleton tuple_col_t [mk_var "x"]]) @@
-                        mk_lambda' ["ip", t_addr; "old", tuple_col_t] @@
-                          mk_insert_block ~tuple:[mk_var "ip"] "old" [mk_var "x"];
-                      mk_var "acc"])
-                  (mk_var "acc") @@
-                  (* ips from route *)
-                  mk_apply'
-                    (route_for p lmap) @@
-                      mk_cint lmap :: if pred then full_key_vars else [mk_cunit])
+                mk_let ["ip"]
+                    (mk_apply'
+                      (route_for ~precise:true p lmap) @@
+                      mk_cint lmap :: if pred then full_key_vars else [mk_cunit]) @@
+                mk_upsert_with_block "acc" ip_pat
+                  (mk_lambda'' unit_arg @@
+                    mk_tuple [mk_var "ip"; mk_singleton tuple_col_t [mk_var "x"]]) @@
+                  mk_lambda' ["ip", t_addr; "old", tuple_col_t] @@
+                    mk_insert_block ~tuple:[mk_var "ip"] "old" [mk_var "x"])
+                  (* ip from route -- we assume every piece of data can only go to one place *)
               (mk_empty result_types) @@
               mk_var "tuples"
           else
@@ -111,24 +106,15 @@ let gen_shuffle_fn p rmap lmap bindings fn_name =
               (mk_lambda2' ["acc", result_types] ["_u", wrap_ttuple @@ snd_many used_rkeys; "xs", tuple_col_t] @@
                 mk_let ["x"] (mk_peek_or_error "whoops2" @@ mk_var "xs") @@
                 mk_destruct_tuple "x" tuple_types id_r @@
-                (* add xs to ip for group *)
-                mk_agg
-                  (mk_lambda2' ["acc", result_types] ["ip", t_addr] @@
-                    mk_block [
-                      mk_upsert_with "acc" ip_pat
-                        (mk_lambda'' unit_arg @@ mk_tuple [mk_var "ip"; mk_var "xs"]) @@
-                        mk_lambda' ["ip", t_addr; "old", tuple_col_t] @@
-                          (* NOTE: we lack an in-place combine *)
-                          mk_tuple [mk_var "ip";
-                            mk_agg (mk_lambda2' ["acc", tuple_col_t] ["x", wrap_ttuple tuple_types] @@
-                              mk_insert_block "acc" [mk_var "x"]) (mk_var "old") @@ mk_var "xs"]
-                      ;
-                      mk_var "acc"])
-                  (mk_var "acc") @@
-                  (* ips from route *)
-                  mk_apply' (* route a sample tuple *)
+                (* ip from route *)
+                mk_let ["ip"]
+                  (mk_apply' (* route a sample tuple *)
                     (route_for p lmap) @@
-                      mk_cint lmap :: if pred then full_key_vars else [mk_cunit])
+                      mk_cint lmap :: if pred then full_key_vars else [mk_cunit]) @@
+                mk_upsert_with_block "acc" ip_pat
+                  (mk_lambda'' unit_arg @@ mk_tuple [mk_var "ip"; mk_var "xs"]) @@
+                   mk_lambda' ["ip", t_addr; "old", tuple_col_t] @@
+                    mk_extend_block ~tuple:[mk_var "ip"] "old" @@ mk_var "xs")
               (mk_empty result_types) @@
               (* group by meaningful rtuple ids *)
               mk_gbagg
