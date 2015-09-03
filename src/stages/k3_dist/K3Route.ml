@@ -70,10 +70,6 @@ let pmap =
   let t = wrap_ttuple @@ snd_many e in
   create_ds "pmap" t  ~e
 
-let singleton_int =
-  let t = wrap_tlist t_int in
-  create_ds "singleton_int" t ~init:(mk_singleton t [mk_cint 0])
-
 let builtin_route = create_ds "builtin_route" t_bool
 
 let calc_dim_bounds =
@@ -235,6 +231,15 @@ let hash_func_for typ =
     | x                 -> raise @@ NoHashFunction x
   in "hash_"^inner typ
 
+(* hack to make typechecker play nice. It unifies the lookups on dim_bounds *)
+let dim_bounds_fn =
+  mk_global_fn "dim_bounds_lookup_hack"
+    ["dim_bounds", dim_bounds.t; "value", t_int; "key", t_int] [t_int] @@
+    mk_case_ns (mk_peek @@
+        mk_slice' "dim_bounds" [mk_var "key"; mk_cunknown]) "x"
+      (mk_error @@ sp "can't find dim in dim_bounds") @@
+      mk_mult (mk_var "value") @@ mk_fst @@ mk_snd @@ mk_var "x"
+
 (* @precise: return a single address for bound vars only *)
 let gen_route_fn p ?(precise=false) map_id =
   let map_types = map_types_no_val_for p map_id in
@@ -297,10 +302,8 @@ let gen_route_fn p ?(precise=false) map_id =
                       [mk_apply' "abs" @@ singleton @@
                         mk_apply' hash_func [mk_var id_unwrap];
                       mk_snd @@ mk_var "peek_slice"]) @@
-                mk_case_ns (mk_peek @@
-                    mk_slice' "dim_bounds" [mk_cint @@ index + 1; mk_cunknown]) "x"
-                  (mk_error @@ sp "can't find %d in dim_bounds" @@ index + 1) @@
-                  mk_mult (mk_var "value") @@ mk_fst @@ mk_snd @@ mk_var "x")
+                mk_apply' "dim_bounds_lookup_hack"
+                  [mk_var "dim_bounds"; mk_var "value"; mk_cint @@ index + 1])
                 acc_code)
         (mk_cint 0)
         map_range
@@ -351,12 +354,12 @@ let gen_route_fn p ?(precise=false) map_id =
 let global_vars p partmap =
   List.map decl_global
   [ builtin_route;
-    singleton_int;
     pmap_input p partmap;
     pmap_data;
   ]
 
 let functions c partmap =
+  dim_bounds_fn ::
   (* create a route for each map type, using only the key types *)
   (List.flatten @@ List.map (fun m ->
     [gen_route_fn c.p m; gen_route_fn ~precise:true c.p m]) @@
