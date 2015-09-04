@@ -467,21 +467,16 @@ let sw_send_fetch_fn c s_rhs_lhs s_rhs trig_name =
             mk_agg
               (mk_lambda2'
                 ["acc", col_t] ["ip", t_addr; "tuples", tuple_types] @@
-                  mk_block [
-                    mk_upsert_with "acc" [mk_var "ip"; mk_cunknown]
-                      (mk_lambda'' unit_arg @@ mk_tuple
-                        [mk_var "ip"; mk_singleton stmt_cnt_list.t [mk_cint stmt_id; mk_var "sender_count"]])
-                      (mk_lambda' ["ip", t_addr; "x", stmt_cnt_list.t] @@
-                          mk_block [
-                            mk_upsert_with "x" [mk_cint stmt_id; mk_cunknown]
-                              (mk_lambda'' unit_arg @@ mk_tuple
-                                [mk_cint stmt_id; mk_var "sender_count"])
-                              (mk_lambda' ["stmt_id", t_stmt_id; "count", t_int] @@ mk_tuple
-                                [mk_cint stmt_id; mk_add (mk_var "count") @@ mk_var "sender_count"])
-                            ;
-                            mk_tuple [mk_var "ip"; mk_var "x"]])
-                    ;
-                    mk_var "acc"])
+                  mk_upsert_with_block "acc" [mk_var "ip"; mk_cunknown]
+                    (mk_lambda'' unit_arg @@ mk_tuple
+                       [mk_var "ip"; mk_singleton stmt_cnt_list.t
+                          [mk_cint stmt_id; mk_var "sender_count"]]) @@
+                    mk_lambda' ["ip_stmt_cnts", wrap_ttuple [t_addr; stmt_cnt_list.t]] @@
+                      mk_upsert_with_block "ip_stmt_cnts" ~path:[2] [mk_cint stmt_id; mk_cunknown]
+                        (mk_lambda'' unit_arg @@ mk_tuple
+                          [mk_cint stmt_id; mk_var "sender_count"]) @@
+                        mk_lambda' ["stmt_id", t_stmt_id; "count", t_int] @@ mk_tuple
+                          [mk_cint stmt_id; mk_add (mk_var "count") @@ mk_var "sender_count"])
               acc_code @@
               mk_apply' shuffle_fn @@
                 shuffle_key @ [mk_cbool true; mk_empty tuple_types])
