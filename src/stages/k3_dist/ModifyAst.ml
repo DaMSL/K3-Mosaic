@@ -89,10 +89,7 @@ let add_vid_to_init_val ds old_ds ~add_unit e =
         let new_pat = pat_of_flat_e ~add_vid:true ~vid_nm:g_min_vid.id
                         ~has_vid:false ds @@ fst_many old_pat in
           mk_agg (mk_lambda2' ["acc", ds.t] (ds_e old_ds) @@
-          mk_block [
-            mk_insert "acc" new_pat;
-            mk_var "acc"
-          ])
+            mk_insert_block "acc" new_pat)
           (mk_empty ds.t)
           e
     | _ -> U.dist_fail e "add_vid_to_init_val: unhandled modification"
@@ -428,10 +425,8 @@ let delta_action c ast stmt after_fn =
         (* convert the gbagg to external type *)
         mk_agg
           (mk_assoc_lambda' ["acc", lmap_col_t] ["g", wrap_ttuple lmap_t_no_val; "val", last_t] @@
-            mk_block [
-              (* combine the tuple with val *)
-              mk_insert "acc" @@ subs @ [mk_var "val"];
-              mk_var "acc" ])
+            (* combine the tuple with val *)
+            mk_insert_block "acc" @@ subs @ [mk_var "val"])
           (mk_empty lmap_col_t) @@
           (* group for uniqueness *)
           mk_gbagg

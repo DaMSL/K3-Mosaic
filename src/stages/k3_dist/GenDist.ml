@@ -67,15 +67,14 @@ let str_of_date_t t = match t.typ with
 let nd_log_master_write_nm = "nd_log_master_write"
 let nd_log_master_write =
   let ds_idt = ds_e D.nd_log_master in
-  let ds_ids = fst_many ds_idt in
+  let ds_ts  = snd_many ds_idt in
   let fn_idt = ["wstmt_id", t_stmt_id; "wvid", t_vid] in
   mk_global_fn nd_log_master_write_nm fn_idt [] @@
     mk_upsert_with D.nd_log_master.id [mk_var "wstmt_id"; mk_cunknown]
-      (mk_lambda'' unit_arg @@ mk_tuple [mk_var "wstmt_id"; mk_singleton (wrap_tsortedset' [t_vid]) [mk_var "wvid"]])
-      (mk_lambda' ds_idt @@
-        let vidset_id = hd @@ tl @@ ds_ids in
-        mk_block [ mk_insert vidset_id [mk_var "wvid"]; mk_tuple @@ ids_to_vars ds_ids ])
-
+      (mk_lambda'' unit_arg @@ mk_tuple
+         [mk_var "wstmt_id"; mk_singleton (wrap_tsortedset' [t_vid]) [mk_var "wvid"]])
+      (mk_lambda' ["x", wrap_ttuple ds_ts] @@
+         mk_insert_block "x" ~path:[2] [mk_var "wvid"])
 
 (* log_write - save the trigger's arguments *)
 (* TODO: make into map, and reduce args for space *)
@@ -146,11 +145,9 @@ let nd_check_stmt_cntr_index c =
                 (mk_lambda' unit_arg @@
                   mk_tuple [mk_cint m;
                     mk_singleton D.nd_stmt_cntrs_per_map_inner.t
-                    [mk_var "vid"; mk_var "stmt_id"]])
-                (mk_lambda' D.nd_stmt_cntrs_per_map.e @@
-                  mk_block [
-                    mk_insert "vid_stmt" @@ [mk_var "vid"; mk_var "stmt_id"];
-                    mk_tuple @@ ids_to_vars @@ fst_many D.nd_stmt_cntrs_per_map.e]))
+                      [mk_var "vid"; mk_var "stmt_id"]]) @@
+                mk_lambda' ["x", t_of_e D.nd_stmt_cntrs_per_map.e] @@
+                  mk_insert_block "x" ~path:[2] @@ [mk_var "vid"; mk_var "stmt_id"])
               acc)
           mk_cunit
           lmap_stmts;
@@ -394,15 +391,11 @@ let sw_send_fetch_fn c s_rhs_lhs s_rhs trig_name =
             let key = P.partial_key_from_bound c.p stmt_id rhs_map_id in
             mk_agg
               (mk_lambda2' ["acc", map_t] ["ip", t_addr] @@
-                mk_block [
-                  mk_upsert_with "acc" ip_pat
-                    (mk_lambda'' unit_arg @@ mk_tuple
-                      [mk_var "ip"; mk_singleton col_t [mk_cint stmt_id; mk_cint rhs_map_id]])
-                    (mk_lambda' ["ip", t_addr; "x", col_t] @@
-                      mk_insert_block ~tuple:[mk_var "ip"] "x"
-                        [mk_cint stmt_id; mk_cint rhs_map_id])
-                  ;
-                  mk_var "acc"])
+                mk_upsert_with_block "acc" ip_pat
+                  (mk_lambda'' unit_arg @@ mk_tuple
+                    [mk_var "ip"; mk_singleton col_t [mk_cint stmt_id; mk_cint rhs_map_id]])
+                  (mk_lambda' ["y", wrap_ttuple [t_addr; col_t]] @@
+                    mk_insert_block ~path:[2] "y" [mk_cint stmt_id; mk_cint rhs_map_id]))
               acc_code @@
               mk_apply (mk_var route_fn) @@ mk_cint rhs_map_id::key)
           (mk_empty @@ map_t)
@@ -572,25 +565,18 @@ let nd_rcv_fetch_trig c trig =
                 (P.stmts_with_rhs_maps_in_t c.p trig) @@
                 mk_error "nd_rcv_fetch: invalid stmt id") @@
               (* else, buffer the push *)
-              mk_upsert_with nd_rcv_fetch_buffer.id
-                [mk_var "map_id"; mk_cunknown]
+              mk_upsert_with nd_rcv_fetch_buffer.id [mk_var "map_id"; mk_cunknown]
                 (mk_lambda' unit_arg @@ mk_tuple
                   [mk_var "map_id"; mk_singleton D.nd_rcv_fetch_buffer_inner.t
                     [mk_var "vid";
-                      mk_singleton D.nd_rcv_fetch_buffer_inner2.t [mk_var "stmt_id"]]])
-                (mk_lambda' nd_rcv_fetch_buffer.e @@
-                  mk_block [
-                    mk_upsert_with "vid_stmt" [mk_var "vid"; mk_cunknown]
-                      (mk_lambda'' unit_arg @@ mk_tuple
-                        [mk_var "vid"; mk_singleton D.nd_rcv_fetch_buffer_inner2.t
-                          [mk_var "stmt_id"]]) @@
-                       mk_lambda' nd_rcv_fetch_buffer_inner.e @@
-                        mk_block [
-                          mk_insert "stmt_ids" [mk_var "stmt_id"];
-                          mk_tuple @@ ids_to_vars @@ fst_many nd_rcv_fetch_buffer_inner.e]
-                    ;
-                    mk_tuple @@ ids_to_vars @@ fst_many @@ nd_rcv_fetch_buffer.e
-                  ])) @@
+                      mk_singleton D.nd_rcv_fetch_buffer_inner2.t [mk_var "stmt_id"]]]) @@
+                mk_lambda' ["fetch_buf", t_of_e nd_rcv_fetch_buffer.e] @@
+                  mk_upsert_with_block "fetch_buf" ~path:[2] [mk_var "vid"; mk_cunknown]
+                    (mk_lambda'' unit_arg @@ mk_tuple
+                      [mk_var "vid"; mk_singleton D.nd_rcv_fetch_buffer_inner2.t
+                        [mk_var "stmt_id"]]) @@
+                      mk_lambda' ["inner", t_of_e nd_rcv_fetch_buffer_inner.e] @@
+                        mk_insert_block "inner" ~path:[2] [mk_var "stmt_id"]) @@
           mk_var stmt_map_ids.id
     ]
 
@@ -724,9 +710,7 @@ List.fold_left
          mk_assign rbuf_deref @@ U.add_property "Move" @@
          mk_agg
           (mk_lambda2' ["acc", map_ds.t] (ds_e tup_ds) @@
-            mk_block [
-              mk_insert "acc" map_pat;
-              mk_var "acc" ])
+            mk_insert_block "acc" map_pat)
           (mk_var rbuf_deref) @@
           mk_var "tuples" ;
          (* update and check statment counters to see if we should send a do_complete *)
@@ -820,7 +804,7 @@ let send_corrective_fns c =
                     (mk_lambda'
                       ["ip", t_addr; "vid", t_vid; "tuples", map_ds.t] @@
                         mk_var "ip")
-                    (mk_assoc_lambda'
+                    (mk_lambda2'
                       ["acc_vid", t_vid_list; "acc_tuples", map_ds.t]
                       ["ip", t_addr; "vid", t_vid; "tuples", map_ds.t] @@
                         mk_block [
@@ -907,12 +891,14 @@ let send_corrective_fns c =
                   (mk_var g_min_vid.id)::(ids_to_vars' @@ ds_e map_ds)) @@
           mk_var "delta_tuples") @@
       mk_agg
-        (mk_assoc_lambda'
+        (mk_lambda2'
           ["acc_count", t_int] ["stmt_id", t_stmt_id; "vid_set", t_vid_sortedset] @@
           mk_let ["vid_list"]
-          (mk_agg (mk_lambda2' ["vid_acc", t_vid_list] ["v", t_vid] @@
-                    mk_block [mk_insert "vid_acc" [mk_var "v"]; mk_var "vid_acc"])
-                  (mk_empty t_vid_list) @@ mk_var "vid_set")
+            (mk_agg
+              (mk_lambda2' ["vid_acc", t_vid_list] ["v", t_vid] @@
+                mk_insert_block "vid_acc" [mk_var "v"])
+              (mk_empty t_vid_list) @@
+              mk_var "vid_set")
           (List.fold_left
             (* loop over all possible read map matches *)
             (fun acc_code (_, target_stmt) ->

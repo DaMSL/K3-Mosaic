@@ -333,28 +333,32 @@ let mk_at_with col idx lam_none lam_some = mk_stree AtWith [col; idx; lam_none; 
 
 let mk_min_with col lam_none lam_some = mk_stree MinWith [col; lam_none; lam_some]
 
-let mk_insert col x = mk_stree Insert [mk_var col; mk_tuple x]
+(* mk a var acces + subscripting *)
+let mk_id_path id path =
+  List.fold_left (fun acc i -> mk_subscript i acc) (mk_var id) path
 
-let mk_extend col x = mk_stree Extend [mk_var col; x]
+let mk_insert ?(path=[]) id x = mk_stree Insert [mk_id_path id path; mk_tuple x]
+
+let mk_extend ?(path=[]) id x = mk_stree Extend [mk_id_path id path; x]
 
 (* key contains dummy value *)
-let mk_upsert_with col key lam_empty lam_full =
-  mk_stree UpsertWith [mk_var col; mk_tuple key; lam_empty; lam_full]
+let mk_upsert_with ?(path=[]) id key lam_empty lam_full =
+  mk_stree UpsertWith [mk_id_path id path; mk_tuple key; lam_empty; lam_full]
 
-let mk_upsert_with_before col key lam_empty lam_full =
-  mk_stree UpsertWithBefore [mk_var col; mk_tuple key; lam_empty; lam_full]
+let mk_upsert_with_before ?(path=[]) id key lam_empty lam_full =
+  mk_stree UpsertWithBefore [mk_id_path id path; mk_tuple key; lam_empty; lam_full]
 
-let mk_delete col x = mk_stree Delete [mk_var col; mk_tuple x]
+let mk_delete ?(path=[]) id x = mk_stree Delete [mk_id_path id path; mk_tuple x]
 
 (* first part of key contains the vid. Also contains dummy value *)
-let mk_delete_prefix col x = mk_stree DeletePrefix [mk_var col; mk_tuple x]
+let mk_delete_prefix ?(path=[]) id x = mk_stree DeletePrefix [mk_id_path id path; mk_tuple x]
 
-let mk_update col old_val new_val =
-  mk_stree Update [mk_var col; mk_tuple old_val; mk_tuple new_val]
+let mk_update ?(path=[]) id old_val new_val =
+  mk_stree Update [mk_id_path id path; mk_tuple old_val; mk_tuple new_val]
 
 (* first part of new val contains the vid *)
-let mk_update_suffix col key lambda =
-  mk_stree UpdateSuffix [mk_var col; mk_tuple key; lambda]
+let mk_update_suffix ?(path=[]) id key lambda =
+  mk_stree UpdateSuffix [mk_id_path id path; mk_tuple key; lambda]
 
 let mk_filter_gt collection filter_val =
   mk_stree (FilterOp OGt) [collection; mk_tuple filter_val]
@@ -528,14 +532,14 @@ let mk_snd tuple = mk_subscript 2 tuple
 let mk_snd' tuple = mk_subscript 2 (mk_var tuple)
 
 (* insert and var block, for usual insertion in a lambda *)
-let mk_insert_block ?(tuple=[]) id x =
-  mk_block [mk_insert id x; mk_tuple @@ tuple @ [mk_var id]]
+let mk_insert_block ?(path=[]) id x =
+  mk_block [mk_insert ~path id x; mk_var id]
 
-let mk_extend_block ?(tuple=[]) id col =
-  mk_block [mk_extend id col; mk_tuple @@ tuple @ [mk_var id]]
+let mk_extend_block ?(path=[]) id col =
+  mk_block [mk_extend ~path id col; mk_var id]
 
-let mk_upsert_with_block col key lam_empty lam_full =
-  mk_block [mk_upsert_with col key lam_empty lam_full; mk_var col]
+let mk_upsert_with_block ?(path=[]) id key lam_empty lam_full =
+  mk_block [mk_upsert_with ~path id key lam_empty lam_full; mk_var id]
 
 let project_from_col tuple_types col ~choice =
   let t_col = wrap_t_calc' [hd tuple_types] in
@@ -795,7 +799,9 @@ let mk_barrier ?(args=unit_arg) ?(pre=[]) nm ~ctr ~total ~after =
     ]
 
 (* create an id function *)
-let mk_id_fn ds = mk_lambda' ds.e @@ mk_tuple @@ ids_to_vars @@ fst_many ds.e
+let mk_id_fn ds = mk_lambda' ["x", wrap_ttuple @@ snd_many ds.e] @@ mk_var "x"
+
+let mk_id_fn' ts = mk_lambda' ["x", wrap_ttuple ts] @@ mk_var "x"
 
 (* case-like structure for tuple 'options' *)
 let mk_case_tup pred id ~none ~some =

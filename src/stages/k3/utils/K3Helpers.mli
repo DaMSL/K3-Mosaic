@@ -184,15 +184,15 @@ val mk_slice_gt : expr_t -> expr_t list -> expr_t
 val mk_slice_gt' : id_t -> expr_t list -> expr_t
 val mk_slice_geq : expr_t -> expr_t list -> expr_t
 val mk_slice_geq' : id_t -> expr_t list -> expr_t
-val mk_insert : id_t -> expr_t list -> expr_t
-val mk_extend : id_t -> expr_t -> expr_t
-val mk_upsert_with : id_t -> expr_t list -> expr_t -> expr_t -> expr_t
-val mk_upsert_with_before : id_t -> expr_t list -> expr_t -> expr_t -> expr_t
-val mk_delete : id_t -> expr_t list -> expr_t
-val mk_delete_prefix : id_t -> expr_t list -> expr_t
-val mk_update : id_t -> expr_t list -> expr_t list -> expr_t
+val mk_insert : ?path:int list -> id_t -> expr_t list -> expr_t
+val mk_extend : ?path:int list -> id_t -> expr_t -> expr_t
+val mk_upsert_with : ?path:int list -> id_t -> expr_t list -> expr_t -> expr_t -> expr_t
+val mk_upsert_with_before : ?path:int list -> id_t -> expr_t list -> expr_t -> expr_t -> expr_t
+val mk_delete : ?path:int list -> id_t -> expr_t list -> expr_t
+val mk_delete_prefix : ?path:int list -> id_t -> expr_t list -> expr_t
+val mk_update : ?path:int list -> id_t -> expr_t list -> expr_t list -> expr_t
+val mk_update_suffix : ?path:int list -> id_t -> expr_t list -> expr_t -> expr_t
 val mk_update_slice : id_t -> expr_t list -> expr_t -> expr_t
-val mk_update_suffix : id_t -> expr_t list -> expr_t -> expr_t
 val mk_filter_gt : expr_t -> expr_t list -> expr_t
 val mk_filter_gt' : id_t -> expr_t list -> expr_t
 val mk_filter_geq : expr_t -> expr_t list -> expr_t
@@ -395,6 +395,7 @@ val mk_barrier :
   flow_statement_t * annotation_t
 
 val mk_id_fn : data_struct -> expr_t
+val mk_id_fn' : type_t list -> expr_t
 
 val mk_case_tup_sn : expr_t -> id_t -> expr_t -> expr_t -> expr_t
 val mk_case_tup_ns : expr_t -> id_t -> expr_t -> expr_t -> expr_t
@@ -404,8 +405,8 @@ val mk_is_tup_nothing : expr_t -> expr_t
 
 (* insert and var block, for usual insertion in a lambda *)
 (* @tuple: return a tuple starting with this expr list *)
-val mk_insert_block : ?tuple:expr_t list -> id_t -> expr_t list -> expr_t
-val mk_extend_block : ?tuple:expr_t list -> id_t -> expr_t -> expr_t
-val mk_upsert_with_block : id_t -> expr_t list -> expr_t -> expr_t -> expr_t
+val mk_insert_block : ?path:int list -> id_t -> expr_t list -> expr_t
+val mk_extend_block : ?path:int list -> id_t -> expr_t -> expr_t
+val mk_upsert_with_block : ?path:int list -> id_t -> expr_t list -> expr_t -> expr_t -> expr_t
 
 

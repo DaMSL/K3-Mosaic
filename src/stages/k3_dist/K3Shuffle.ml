@@ -71,10 +71,7 @@ let gen_shuffle_fn p rmap lmap bindings fn_name =
             mk_cint lmap :: if pred then full_key_vars else [mk_cunit]) @@
           mk_agg
             (mk_lambda2' ["acc_col", result_types] ["ip", t_addr] @@
-              mk_block [
-                mk_insert "acc_col" [mk_var "ip"; mk_var "tuples"];
-                mk_var "acc_col"
-              ])
+              mk_insert_block "acc_col" [mk_var "ip"; mk_var "tuples"])
             (mk_empty result_types) @@
             mk_var "ips"
       (* else, full shuffling *)
@@ -94,8 +91,8 @@ let gen_shuffle_fn p rmap lmap bindings fn_name =
                 mk_upsert_with_block "acc" ip_pat
                   (mk_lambda'' unit_arg @@
                     mk_tuple [mk_var "ip"; mk_singleton tuple_col_t [mk_var "x"]]) @@
-                  mk_lambda' ["ip", t_addr; "old", tuple_col_t] @@
-                    mk_insert_block ~tuple:[mk_var "ip"] "old" [mk_var "x"])
+                  mk_lambda' ["y", wrap_ttuple [t_addr; tuple_col_t]] @@
+                    mk_insert_block ~path:[2] "y" [mk_var "x"])
                   (* ip from route -- we assume every piece of data can only go to one place *)
               (mk_empty result_types) @@
               mk_var "tuples"
@@ -113,8 +110,8 @@ let gen_shuffle_fn p rmap lmap bindings fn_name =
                       mk_cint lmap :: if pred then full_key_vars else [mk_cunit]) @@
                 mk_upsert_with_block "acc" ip_pat
                   (mk_lambda'' unit_arg @@ mk_tuple [mk_var "ip"; mk_var "xs"]) @@
-                   mk_lambda' ["ip", t_addr; "old", tuple_col_t] @@
-                    mk_extend_block ~tuple:[mk_var "ip"] "old" @@ mk_var "xs")
+                  mk_lambda' ["y", wrap_ttuple [t_addr; tuple_col_t]] @@
+                    mk_extend_block ~path:[2] "y" @@ mk_var "xs")
               (mk_empty result_types) @@
               (* group by meaningful rtuple ids *)
               mk_gbagg
@@ -122,9 +119,7 @@ let gen_shuffle_fn p rmap lmap bindings fn_name =
                   mk_destruct_tuple "x" tuple_types id_r @@
                   mk_tuple @@ fst_many used_rkeys)
                 (mk_lambda2' ["acc", tuple_col_t] ["x", wrap_ttuple tuple_types] @@
-                  mk_block [
-                    mk_insert "acc" [mk_var "x"];
-                    mk_var "acc"])
+                  mk_insert_block "acc" [mk_var "x"])
                 (mk_empty tuple_col_t) @@
                 mk_var "tuples") @@
 
@@ -136,7 +131,7 @@ let gen_shuffle_fn p rmap lmap bindings fn_name =
               mk_block [
                 mk_upsert_with "acc" ip_pat
                   (mk_lambda'' unit_arg @@ mk_tuple [mk_var "ip"; mk_empty tuple_col_t]) @@
-                  mk_lambda' ["ip", t_addr; "old", tuple_col_t] @@ mk_tuple [mk_var "ip"; mk_var "old"]
+                  mk_id_fn' [t_addr; tuple_col_t]
               ;
               mk_var "acc"])
             (mk_var "normal_targets") @@

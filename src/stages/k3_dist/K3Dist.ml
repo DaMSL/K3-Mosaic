@@ -148,6 +148,8 @@ let read_e ~vid ~global e =
 
 let ds_e ds = read_e ~vid:ds.vid ~global:ds.global ds.e
 
+let t_of_e e = wrap_ttuple @@ snd_many e
+
 let string_of_pat pat =
   let open K3PrintSyntax in
   strcatmap (fun (e,t) -> "("^string_of_expr e^", "^string_of_type t^")") pat
@@ -321,10 +323,7 @@ let calc_of_map_t c ~keep_vid map_id col =
   mk_aggv
     (mk_lambda''
       (["acc", calc_ds.t; "vid", t_vid; "vals", wrap_ttuple @@ snd_many map_pat]) @@
-      mk_block [
-          mk_insert "acc" @@ fst_many map_flat;
-          mk_var "acc"
-      ])
+      mk_insert_block "acc" @@ fst_many map_flat)
     (mk_empty calc_ds.t) @@
     col
 
