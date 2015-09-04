@@ -57,7 +57,7 @@ let lookup id env =
 let ro_path_lookup (path, id) env =
   let rec deep_lookup path v = match path, v with
     | [], _ -> v
-    | i::is, VTuple l -> deep_lookup is (at l i)
+    | i::is, VTuple l -> deep_lookup is (at l @@ i-1)
     | _ -> failwith "deep_lookup: not a tuple"
   in
   let v = match lookup id env with
