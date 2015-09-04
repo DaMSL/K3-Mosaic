@@ -607,3 +607,9 @@ let list_of_intsetset s = IntSetSet.fold (fun x acc -> (list_of_intset x)::acc) 
 let string_of_int_list l    = strcatmap soi l
 let string_of_int_set  s    = strcatmap soi @@ IntSet.elements s
 let string_of_int_set_set s = strcatmap ~sep:"; " string_of_int_set @@ IntSetSet.elements s
+
+let rec list_modify n f = function
+  | [] -> failwith "list_modify: not enough elements"
+  | x::xs when n = 0 -> f x::xs
+  | x::xs -> x::list_modify (n-1) f xs
+

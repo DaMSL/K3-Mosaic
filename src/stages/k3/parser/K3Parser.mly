@@ -652,24 +652,24 @@ access :
 
 mutation :
     /* Inserts, deletes and sends use a vararg function syntax for their value/payload */
-    | EXTEND LPAREN variable COMMA expr RPAREN { mkexpr Extend [mk_var $3; $5] }
-    | INSERT LPAREN variable COMMA tuple RPAREN { mkexpr Insert [mk_var $3; $5] }
-    | UPSERT_WITH LPAREN variable COMMA LPAREN tuple RPAREN COMMA anno_expr COMMA anno_expr RPAREN { mkexpr UpsertWith [mk_var $3; $6; $9; $11] }
-    | UPSERT_WITH_BEFORE LPAREN variable COMMA LPAREN tuple RPAREN COMMA anno_expr COMMA anno_expr RPAREN { mkexpr UpsertWithBefore [mk_var $3; $6; $9; $11] }
+    | EXTEND LPAREN anno_expr COMMA anno_expr RPAREN { mkexpr Extend [$3; $5] }
+    | INSERT LPAREN anno_expr COMMA tuple RPAREN { mkexpr Insert [$3; $5] }
+    | UPSERT_WITH LPAREN anno_expr COMMA LPAREN tuple RPAREN COMMA anno_expr COMMA anno_expr RPAREN { mkexpr UpsertWith [$3; $6; $9; $11] }
+    | UPSERT_WITH_BEFORE LPAREN anno_expr COMMA LPAREN tuple RPAREN COMMA anno_expr COMMA anno_expr RPAREN { mkexpr UpsertWithBefore [$3; $6; $9; $11] }
 
-    | DELETE LPAREN variable COMMA tuple RPAREN { mkexpr Delete [mk_var $3; $5] }
-    | DELETE_PREFIX LPAREN variable COMMA tuple RPAREN { mkexpr DeletePrefix [mk_var $3; $5] }
+    | DELETE LPAREN anno_expr COMMA tuple RPAREN { mkexpr Delete [$3; $5] }
+    | DELETE_PREFIX LPAREN anno_expr COMMA tuple RPAREN { mkexpr DeletePrefix [$3; $5] }
 
     /* Updates must explicitly specify their new/old value as a tuple */
-    | UPDATE LPAREN variable COMMA anno_expr COMMA anno_expr RPAREN { mkexpr Update [mk_var $3; $5; $7] }
-    | UPDATE_SUFFIX LPAREN variable COMMA anno_expr COMMA anno_expr RPAREN { mkexpr UpdateSuffix [mk_var $3; $5; $7] }
+    | UPDATE LPAREN anno_expr COMMA anno_expr COMMA anno_expr RPAREN { mkexpr Update [$3; $5; $7] }
+    | UPDATE_SUFFIX LPAREN anno_expr COMMA anno_expr COMMA anno_expr RPAREN { mkexpr UpdateSuffix [$3; $5; $7] }
 
     | variable LARROW anno_expr { mkexpr Assign [mk_var $1; $3] }
 
     /* Error handling */
-    | UPSERT_WITH_BEFORE LPAREN variable COMMA tuple COMMA anno_expr COMMA error { upsert_with_before_error "lambda some"}
-    | UPSERT_WITH_BEFORE LPAREN variable COMMA tuple COMMA error { upsert_with_before_error "lambda none"}
-    | UPSERT_WITH_BEFORE LPAREN variable COMMA error { upsert_with_before_error "pattern" }
+    | UPSERT_WITH_BEFORE LPAREN anno_expr COMMA tuple COMMA anno_expr COMMA error { upsert_with_before_error "lambda some"}
+    | UPSERT_WITH_BEFORE LPAREN anno_expr COMMA tuple COMMA error { upsert_with_before_error "lambda none"}
+    | UPSERT_WITH_BEFORE LPAREN anno_expr COMMA error { upsert_with_before_error "pattern" }
     | UPSERT_WITH_BEFORE LPAREN error { upsert_with_before_error "collection" }
     | INSERT LPAREN anno_expr error { value_error 2 }
     | INSERT LPAREN error      { coll_error 1 }
@@ -677,7 +677,7 @@ mutation :
     | UPDATE LPAREN error      { coll_error 1 }
     | DELETE LPAREN anno_expr error { value_error 2 }
     | DELETE LPAREN error      { coll_error 1 }
-    | anno_expr LARROW error        { assign_error "reference" }
+    | variable LARROW error        { assign_error "reference" }
 ;
 
 transformers :

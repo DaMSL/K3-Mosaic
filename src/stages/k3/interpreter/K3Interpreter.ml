@@ -53,17 +53,35 @@ let lookup id env =
     (env.accessed) := StrSet.add id !(env.accessed);
     VDeclared(IdMap.find id env.globals)
 
-let env_modify id env f =
+(* lookup that's read-only but allows for paths *)
+let ro_path_lookup (path, id) env =
+  let rec deep_lookup path v = match path, v with
+    | [], _ -> v
+    | i::is, VTuple l -> deep_lookup is (at l i)
+    | _ -> failwith "deep_lookup: not a tuple"
+  in
+  let v = match lookup id env with
+    | VTemp x -> x
+    | VDeclared x -> !x
+  in
+  deep_lookup path v
+
+let env_modify (path,id) env f =
+  let rec deep_modify path f v = match path, v with
+    | [], _ -> f v
+    | i::is, VTuple l -> VTuple(list_modify (i-1) (deep_modify is f) l)
+    | _ -> failwith "deep_modify: not a tuple"
+  in
   try
     begin match IdMap.find id env.locals with
-    | v::vs -> {env with locals=IdMap.add id (f v::vs) env.locals}
+    | v::vs -> {env with locals=IdMap.add id (deep_modify path f v::vs) env.locals}
     | []    -> failwith "unexpected"
     end
     with Not_found -> (* look in globals *)
       try
         let rv = IdMap.find id env.globals in
         (env.accessed) := StrSet.add id !(env.accessed);
-        rv := f !rv;
+        rv := deep_modify path f !rv;
         env
       with Not_found ->
         failwith @@ id^" not found in any environment"
@@ -149,9 +167,12 @@ and eval_expr (address:address) sched_st cenv texpr =
     let error = int_erroru uuid ~extra:(address, cenv) in
     let eval_fn = eval_fun uuid in
 
-    let get_id () = match tag_of_expr @@ hd children with
-      | Var id -> id
-      | _      -> failwith "bad lvar"
+    let id_path () =
+      let rec loop acc e = match tag_of_expr e with
+        | Var id      -> acc, id
+        | Subscript n -> loop (n::acc) @@ snd @@ U.decompose_subscript e
+        | _           -> failwith "bad lvar"
+      in loop [] @@ hd children
     in
 
     let rec threaded_eval address sched_st ienv texprs =
@@ -541,14 +562,14 @@ and eval_expr (address:address) sched_st cenv texpr =
 
     (* envronmental modifiers *)
     | Insert, [_; v] ->
-        (env_modify (get_id ()) nenv @@ fun col -> v_insert error v col), temp VUnit
+        (env_modify (id_path ()) nenv @@ fun col -> v_insert error v col), temp VUnit
 
     | Update, [_; oldv; newv]->
-        (env_modify (get_id ()) nenv @@
+        (env_modify (id_path ()) nenv @@
           fun col -> v_update error oldv newv col), temp VUnit
 
     | Extend, [_; col'] ->
-        (env_modify (get_id ()) nenv @@
+        (env_modify (id_path ()) nenv @@
           fun col -> v_combine error col col'), temp VUnit
 
     (* we can't modify the environment within the lambda *)
@@ -556,8 +577,8 @@ and eval_expr (address:address) sched_st cenv texpr =
       * if none results from lookup, update with key's vid
       * if some x, delete the x and update with the new vid *)
     | (UpsertWith | UpsertWithBefore), [_; key; lam_none; lam_some] ->
-        let col_id = get_id () in
-        let col = value_of_eval @@ lookup col_id nenv in
+        let col_id_path = id_path () in
+        let col = ro_path_lookup col_id_path nenv in
         let key = match key with
           | VTuple xs -> VTuple(list_drop_end 1 xs @ [VUnknown])
           | _ -> error "upsert_with" "not a tuple"
@@ -568,29 +589,29 @@ and eval_expr (address:address) sched_st cenv texpr =
         begin match v_peek ~vid:true error slice with
           | None   ->
               let env, v = eval_fn lam_none address sched_st nenv [VUnit] in
-              (env_modify col_id env @@
+              (env_modify col_id_path env @@
                 fun col -> v_insert ~vidkey:key error (value_of_eval v) col), temp VUnit
           | Some v ->
               (* strip the vid for the lambda *)
               let v_no_vid = if is_vmap col then strip_vid v else v in
               let env, v' = eval_fn lam_some address sched_st nenv [v_no_vid] in
               let v' = value_of_eval v' in
-              (env_modify (get_id ()) env @@
+              (env_modify (id_path ()) env @@
                 fun col -> v_insert ~vidkey:key error v' col), temp VUnit
         end
 
     (* we can't modify the environment within the lambda *)
     | UpdateSuffix, [_; key; lam_update] ->
         let f x = value_of_eval @@ snd @@ eval_fn lam_update address sched_st nenv (unwrap_vtuple x) in
-        (env_modify (get_id ()) nenv @@
+        (env_modify (id_path ()) nenv @@
           fun col -> v_update_suffix error key f col), VTemp VUnit
 
     | Delete, [_; v] ->
-        (env_modify (get_id ()) nenv @@
+        (env_modify (id_path ()) nenv @@
           fun col -> v_delete error v col), VTemp VUnit
 
     | DeletePrefix, [_; key] ->
-        (env_modify (get_id ()) nenv @@
+        (env_modify (id_path ()) nenv @@
           fun col -> v_delete_prefix error key col), temp VUnit
 
     | FilterOp o, [col; key] ->
@@ -598,8 +619,7 @@ and eval_expr (address:address) sched_st cenv texpr =
           OLt -> `LT | OGt -> `GT | OLeq -> `LEQ | OGeq -> `GEQ in
         nenv, temp @@ v_filter_op error op key col
 
-    | Assign, [_; v] -> env_modify (get_id ()) nenv @@ const v, temp VUnit
-
+    | Assign, [_; v] -> env_modify (id_path ()) nenv @@ const v, temp VUnit
 
     | _, args -> error name @@
       "incorrect arguments: "^String.concat "," @@ List.map repr_of_value args
