@@ -52,9 +52,11 @@ let inner_plist =
   let t = wrap_tlist' @@ snd_many e in
   create_ds "inner_plist" t ~e
 
+let rng = create_ds "rng" @@ wrap_tvector t_int
+
 (* offset by 1. dim 0 is a default of 1, [0] for code generation purposes *)
 let dim_bounds =
-  let e = ["dim", t_int; "bound_rng", wrap_ttuple [t_int; wrap_tlist' [t_int]]] in
+  let e = ["dim", t_int; "bound_rng", wrap_ttuple [t_int; rng.t]] in
   let t = wrap_tmap' @@ snd_many e in
   create_ds "dim_bounds" t ~e
 
@@ -75,12 +77,6 @@ let builtin_route = create_ds "builtin_route" t_bool
 let calc_dim_bounds =
   mk_global_fn "calc_dim_bounds"
     ["map_id", t_int; "pmap", inner_plist.t] [dim_bounds.t; t_int] @@
-    (* create full range for all dimensions *)
-    mk_let ["rng"]
-      (mk_range TList (mk_cint 0) (mk_cint 1) @@
-        mk_subscript 3 @@ mk_peek_or_error "range" @@
-          mk_slice' D.map_ids_id
-            [mk_var "map_id"; mk_cunknown; mk_cunknown]) @@
     (* calculate the size of the bucket of each dimensioned we're partitioned on
     * This is order-dependent in pmap *)
     mk_let ["dims"; "final_size"]
@@ -94,12 +90,20 @@ let calc_dim_bounds =
               [mk_add (mk_var "pos") @@ mk_cint 1;
                 mk_tuple [
                   mk_var "acc_size";
-                  mk_range TList (mk_cint 0) (mk_cint 1) @@ mk_var "bin_size"]];
+                  mk_convert_col (wrap_tlist t_int) rng.t @@
+                    mk_range TList (mk_cint 0) (mk_cint 1) @@ mk_var "bin_size"]];
             mk_tuple [
               mk_var "xs";
               mk_mult (mk_var "bin_size") @@ mk_var "acc_size"]])
         (mk_tuple [mk_empty @@ dim_bounds.t; mk_cint 1]) @@
         mk_var "pmap") @@
+    (* create full range for all dimensions *)
+    mk_let ["rng"]
+      (mk_convert_col (wrap_tlist t_int) rng.t @@
+        mk_range TList (mk_cint 0) (mk_cint 1) @@
+          mk_subscript 3 @@ mk_peek_or_error "range" @@
+            mk_slice' D.map_ids_id
+              [mk_var "map_id"; mk_cunknown; mk_cunknown]) @@
     (* fill in missing dimensions *)
     mk_let ["dims"]
       (mk_fst @@ mk_agg
@@ -116,7 +120,7 @@ let calc_dim_bounds =
             mk_upsert_with "xs" [mk_var "n"; mk_cunknown]
               (mk_lambda'' unit_arg @@
                 mk_tuple [mk_var "n"; mk_tuple [mk_var "next";
-                  mk_singleton (wrap_tlist t_int) [mk_cint 1]]]) @@
+                  mk_singleton rng.t [mk_cint 1]]]) @@
               mk_id_fn dim_bounds
             ;
             mk_tuple [mk_var "xs"; mk_var "next"]

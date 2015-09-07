@@ -516,6 +516,7 @@ collection :
     | LBRACECOLON RBRACECOLON COLON type_expr     { build_collection [] $4 }
     | LBRACELT RBRACELT COLON type_expr           { build_collection [] $4 }
     | LBRACKETLT RBRACKETLT COLON type_expr       { build_collection [] $4 }
+    | LBRACKETHASH RBRACKETHASH COLON type_expr   { build_collection [] $4 }
 
     | LBRACE RBRACE error       { print_error "missing type for empty set"}
     | LBRACEBAR RBRACEBAR error { print_error "missing type for empty bag"}
@@ -523,6 +524,7 @@ collection :
     | LBRACKETCOLON RBRACKETCOLON error   { print_error "missing type for empty map"}
     | LBRACECOLON RBRACECOLON error   { print_error "missing type for empty sortedmap"}
     | LBRACKETLT RBRACKETLT error   { print_error "missing type for empty vmap"}
+    | LBRACKETHASH RBRACKETHASH error   { print_error "missing type for empty vector"}
 
     | LBRACE expr_seq RBRACE                           { build_collection $2 (mk_unknown_collection TSet) }
     | LBRACEBAR expr_seq RBRACEBAR                     { build_collection $2 (mk_unknown_collection TBag) }

@@ -628,10 +628,7 @@ let mk_convert_col src_t dest_t col =
   mk_agg
     (mk_lambda''
       ["acc_conv", dest_t; "x", t_elem] @@
-      mk_block [
-        mk_insert "acc_conv" [mk_var "x"];
-        mk_var "acc_conv"
-      ])
+      mk_insert_block "acc_conv" [mk_var "x"])
     (mk_empty dest_t)
     col
 
