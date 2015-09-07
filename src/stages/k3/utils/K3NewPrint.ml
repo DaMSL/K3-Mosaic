@@ -436,7 +436,7 @@ let var_translate = List.fold_left (fun acc (x,y) -> StringMap.add x y acc) Stri
    "float_of_int", "real_of_int";
    "string_of_int", "itos";
    "string_of_float", "rtos";
-   "peers", "my_peers";
+   "peers", "my_peers2";
    "parse_sql_date", "tpch_date";
    "maxi", "max";
    "maxif", "max"]
@@ -1470,7 +1470,7 @@ declare REGIONLoaderRP : collection {path: string} @Collection -> collection {ra
 typedef filechunks = collection {path: string} @Collection
 declare switch_mux_inputs : collection {seq:filechunks} @Collection
 
-declare my_peers : collection { i:address } @ {Collection} =
+declare my_peers2 : collection { i:address } @ {Collection} =
   peers.fold (\\acc -> (\\x -> (acc.insert {i:x.addr}; acc))) empty { i:address} @ Collection
 
 "^ string_of_program ?map_to_fold ?use_filemux p' envs

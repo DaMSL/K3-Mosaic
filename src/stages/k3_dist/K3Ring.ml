@@ -8,7 +8,7 @@ module D = K3Dist
 module G = K3Global
 
 (* address, job, hash *)
-let id_t_node_for hash_name = G.peers.e @ [hash_name, t_int]
+let id_t_node_for hash_name = D.my_peers.e @ [hash_name, t_int]
 let id_t_node = id_t_node_for "hash"
 let id_t_node_no_hash = list_drop_end 1 id_t_node
 let id_node = fst @@ List.split id_t_node

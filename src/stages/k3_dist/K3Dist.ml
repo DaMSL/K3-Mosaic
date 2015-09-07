@@ -377,8 +377,19 @@ let args_of_t_as_vars_with_v ?(vid="vid") c trig_nm =
 
 (**** global data structures ****)
 
+let my_peers =
+  let e = ["addr", t_addr] in
+  let t = wrap_tvector' @@ snd_many e in
+  let init =
+    mk_convert_col (wrap_tlist t_addr) t @@
+    mk_sort (mk_lambda'' ["a1", t_addr; "a2", t_addr] @@
+              mk_lt (mk_var "a1") @@ mk_var "a2") @@
+    mk_convert_col G.peers.t (wrap_tlist t_addr) @@
+    mk_var "peers" in
+  create_ds "my_peers" ~init t ~e
+
 let num_peers =
-  let init = mk_size_slow G.peers in
+  let init = mk_size @@ mk_var my_peers.id in
   create_ds "num_peers" (mut t_int) ~init
 
 (* specifies the job of a node: master/switch/node *)
@@ -710,7 +721,7 @@ let mk_send_all ds trig payload =
 
 let mk_send_all_nodes trig payload = mk_send_all nodes trig payload
 let mk_send_all_switches trig payload = mk_send_all switches trig payload
-let mk_send_all_peers trig payload = mk_send_all G.peers trig payload
+let mk_send_all_peers trig payload = mk_send_all my_peers trig payload
 
 let mk_send_master ?(payload=[mk_cunit]) trig =
   mk_send trig (mk_var master_addr.id) payload
@@ -726,7 +737,8 @@ let global_vars c dict =
     with Not_found -> ds
   in
   let l =
-    [ g_init_vid;
+    [ my_peers;
+      g_init_vid;
       g_min_vid;
       g_max_vid;
       g_start_vid;
