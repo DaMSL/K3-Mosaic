@@ -1455,6 +1455,7 @@ include \"Annotation/MultiIndex/MultiIndexVMap.k3\"
 include \"Annotation/Set.k3\"
 include \"Annotation/Seq.k3\"
 include \"Annotation/Sets/SortedSet.k3\"
+include \"Annotation/Vector.k3\"
 include \"Core/MosaicBuiltins.k3\"
 
 
