@@ -329,7 +329,11 @@ let mk_slice_gt' col pat = mk_slice_gt (mk_var col) pat
 let mk_slice_geq col pat = mk_slice_gen (SliceOp OGeq) col @@ mk_tuple pat
 let mk_slice_geq' col pat = mk_slice_geq (mk_var col) pat
 
-let mk_at_with col idx lam_none lam_some = mk_stree AtWith [col; idx; lam_none; lam_some]
+let mk_error s = mk_apply' "error" [mk_apply' "print" [mk_cstring s]]
+
+let _err = mk_error "vector: out of bounds!"
+let mk_at_with ?(error=_err) col idx lam = mk_stree AtWith [col; idx; error; lam]
+let mk_at_with' ?error col idx lam = mk_at_with ?error (mk_var col) idx lam
 
 let mk_min_with col lam_none lam_some = mk_stree MinWith [col; lam_none; lam_some]
 
@@ -537,6 +541,9 @@ let mk_snd' tuple = mk_subscript 2 (mk_var tuple)
 let mk_insert_block ?(path=[]) id x =
   mk_block [mk_insert ~path id x; mk_var id]
 
+let mk_insert_at_block ?(path=[]) id idx x =
+  mk_block [mk_insert_at ~path id idx x; mk_var id]
+
 let mk_extend_block ?(path=[]) id col =
   mk_block [mk_extend ~path id col; mk_var id]
 
@@ -642,8 +649,6 @@ let mk_convert_col' src_t dest_col_t col =
 let mk_peek_or_zero ?(zero=(mk_cint 0)) e =
   mk_case_ns (mk_peek e) "x"
     zero (mk_var "x")
-
-let mk_error s = mk_apply' "error" [mk_apply' "print" [mk_cstring s]]
 
 let mk_peek_or_error s e = mk_case_ns (mk_peek e) "x"
   (mk_error s) @@

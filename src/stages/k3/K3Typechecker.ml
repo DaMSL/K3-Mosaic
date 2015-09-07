@@ -619,9 +619,10 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
           tcol'
 
       | AtWith ->
-          let tcol', idx, tlam_none, tlam_some = bind 0, bind 1, bind 2, bind 3 in
+          let tcol', tidx, tlam_none, tlam_some = bind 0, bind 1, bind 2, bind 3 in
           let tcol, telem =
             try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') in
+          if not (tidx === t_int) then t_erroru @@ TMismatch(tidx, t_int, "index") else
           let tn_arg, tn_ret =
             try unwrap_tfun tlam_none with Failure _ -> t_erroru (not_function tlam_none) in
           let ts_arg, ts_ret =

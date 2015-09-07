@@ -168,7 +168,8 @@ val mk_subscript : int -> expr_t -> expr_t
 
 val mk_peek : expr_t -> expr_t
 val mk_peek_with_vid : expr_t -> expr_t -> expr_t -> expr_t
-val mk_at_with : expr_t -> expr_t -> expr_t -> expr_t -> expr_t
+val mk_at_with : ?error:expr_t -> expr_t -> expr_t -> expr_t -> expr_t
+val mk_at_with' : ?error:expr_t -> id_t -> expr_t -> expr_t -> expr_t
 val mk_min_with : expr_t -> expr_t -> expr_t -> expr_t
 
 val mk_peek' : id_t -> expr_t
@@ -407,6 +408,7 @@ val mk_is_tup_nothing : expr_t -> expr_t
 (* insert and var block, for usual insertion in a lambda *)
 (* @tuple: return a tuple starting with this expr list *)
 val mk_insert_block : ?path:int list -> id_t -> expr_t list -> expr_t
+val mk_insert_at_block : ?path:int list -> id_t -> expr_t -> expr_t list -> expr_t
 val mk_extend_block : ?path:int list -> id_t -> expr_t -> expr_t
 val mk_upsert_with_block : ?path:int list -> id_t -> expr_t list -> expr_t -> expr_t -> expr_t
 
