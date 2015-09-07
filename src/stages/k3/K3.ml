@@ -125,6 +125,7 @@ type expr_tag_t
     | FilterOp of op_t    (* all the values <, > etc *)
     | Extend
     | Insert
+    | InsertAt
     | Update
     | UpsertWith        (* update with a default handler *)
     | UpsertWithBefore  (* update reading a frontier with a default handler *)

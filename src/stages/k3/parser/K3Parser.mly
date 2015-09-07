@@ -124,7 +124,7 @@
 %token COLON
 
 %token QUESTION
-%token EQUIJOIN EXTEND INSERT UPDATE DELETE UPSERT_WITH UPSERT_WITH_BEFORE UPDATE_SUFFIX DELETE_PREFIX FILTERGEQ FILTERLT FILTERLEQ FILTERGT
+%token EQUIJOIN EXTEND INSERT INSERT_AT UPDATE DELETE UPSERT_WITH UPSERT_WITH_BEFORE UPDATE_SUFFIX DELETE_PREFIX FILTERGEQ FILTERLT FILTERLEQ FILTERGT
 
 %token GETS COLONGETS
 
@@ -656,6 +656,7 @@ mutation :
     /* Inserts, deletes and sends use a vararg function syntax for their value/payload */
     | EXTEND LPAREN anno_expr COMMA anno_expr RPAREN { mkexpr Extend [$3; $5] }
     | INSERT LPAREN anno_expr COMMA tuple RPAREN { mkexpr Insert [$3; $5] }
+    | INSERT_AT LPAREN anno_expr COMMA anno_expr COMMA tuple RPAREN { mkexpr Insert [$3; $5; $7] }
     | UPSERT_WITH LPAREN anno_expr COMMA LPAREN tuple RPAREN COMMA anno_expr COMMA anno_expr RPAREN { mkexpr UpsertWith [$3; $6; $9; $11] }
     | UPSERT_WITH_BEFORE LPAREN anno_expr COMMA LPAREN tuple RPAREN COMMA anno_expr COMMA anno_expr RPAREN { mkexpr UpsertWithBefore [$3; $6; $9; $11] }
 

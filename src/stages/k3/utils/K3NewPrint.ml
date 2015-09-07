@@ -1236,6 +1236,9 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
       (fun vid x -> lazy_expr c col <| apply_method_nocol c ~name:"insert" ~args:[vid;x]
           ~arg_info:[vid_out_arg; [], true])
 
+  | InsertAt -> let col, idx, x = U.decompose_insert_at expr in
+    apply_method c ~name:"set" ~args:[idx; x] ~arg_info:[def_a; def_a] ~col
+
   | Delete -> let col, x = U.decompose_delete expr in
     (* get rid of the value for maps *)
     let x = if is_map col then map_mk_unknown c true x else x in

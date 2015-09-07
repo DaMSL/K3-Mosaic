@@ -128,6 +128,8 @@ let decompose_indirect e = match tag_of_expr e, sub_tree e with
   Indirect, [e0] -> e0 | _ -> failwith "not an Indirect"
 let decompose_insert e = match tag_of_expr e, sub_tree e with
   Insert, [x; e0] -> x, e0 | _ -> failwith "not an Insert"
+let decompose_insert_at e = match tag_of_expr e, sub_tree e with
+  InsertAt, [x; e0; e1] -> x, e0, e1 | _ -> failwith "not an InsertAt"
 let decompose_iterate e = match tag_of_expr e, sub_tree e with
   Iterate, [e0; e1] -> e0, e1 | _ -> failwith "not an Iterate"
 let decompose_just e = match tag_of_expr e, sub_tree e with

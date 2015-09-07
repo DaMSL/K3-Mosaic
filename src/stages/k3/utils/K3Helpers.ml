@@ -339,6 +339,8 @@ let mk_id_path id path =
 
 let mk_insert ?(path=[]) id x = mk_stree Insert [mk_id_path id path; mk_tuple x]
 
+let mk_insert_at ?(path=[]) id idx x = mk_stree InsertAt [mk_id_path id path; idx; mk_tuple x]
+
 let mk_extend ?(path=[]) id x = mk_stree Extend [mk_id_path id path; x]
 
 (* key contains dummy value *)

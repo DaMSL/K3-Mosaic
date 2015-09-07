@@ -126,11 +126,12 @@ type expr_tag_t
     | MinWith
     | Peek
     | PeekWithVid       (* retain the vid for a vmap *)
-    | Slice 
+    | Slice
     | SliceOp of op_t   (* slice with frontier (one value >, <, etc) *)
     | FilterOp of op_t  (* all the values <, > etc *)
     | Extend
     | Insert
+    | InsertAt
     | Update
     | UpsertWith        (* insert with a default handler *)
     | UpsertWithBefore  (* insert with a default handler *)
