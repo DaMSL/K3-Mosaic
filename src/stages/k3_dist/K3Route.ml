@@ -68,7 +68,7 @@ let free_dims =
 let pmap =
   let e = [inner_pmap.id, inner_pmap.t;
            "dim_bounds", dim_bounds.t;
-           "max", t_int] in
+           "max_val", t_int] in
   let t = wrap_ttuple @@ snd_many e in
   create_ds "pmap" t  ~e
 
@@ -132,8 +132,8 @@ let calc_dim_bounds =
 
 (* map from map_id to inner_pmap *)
 let pmap_data =
-  let e = ["map_id", t_int; pmap.id, pmap.t] in
-  let t = wrap_tmap' @@ snd_many e in
+  let e = [pmap.id, pmap.t] in
+  let t = wrap_tvector' @@ snd_many e in
   let init =
     (* partition map as input by the user (with map names) *)
     (* calculate the size of the bucket of each dimensioned we're partitioned on
@@ -147,13 +147,11 @@ let pmap_data =
               [mk_cunknown; mk_var "map_name"; mk_cunknown]) @@
         mk_let ["dim_bounds"; "last_size"]
           (mk_apply' "calc_dim_bounds" [mk_var "map_id"; mk_var "map_types"]) @@
-        mk_insert_block "acc"
-          [mk_var "map_id";
-            mk_tuple [
-              (* convert map_types to map *)
-              mk_convert_col inner_plist.t inner_pmap.t @@ mk_var "map_types";
-              mk_var "dim_bounds";
-              mk_var "last_size"]])
+        mk_insert_at_block "acc" (mk_var "map_id")
+          (* convert map_types to map *)
+          [mk_convert_col inner_plist.t inner_pmap.t @@ mk_var "map_types";
+          mk_var "dim_bounds";
+          mk_var "last_size"])
       (mk_empty t) @@
       mk_var "pmap_input"
   in
@@ -267,89 +265,87 @@ let gen_route_fn p ?(precise=false) map_id =
       (("map_id", t_map_id)::types_to_ids_types prefix key_types)
       [output_type precise] @@ (* return *)
       (* get the info for the current map and bind it to "pmap" *)
-      mk_case_ns
-        (mk_peek @@
-           mk_slice' pmap_data.id @@ [mk_var "map_id"; mk_cunknown]) "pmap_lookup"
-        (mk_error "can't find map_id in pmap_data") @@
+      mk_at_with' pmap_data.id (mk_var "map_id") @@
+        mk_lambda' ["pmap_data", pmap.t] @@
 
-      (* deep bind *)
-      mk_let ["pmap"; "dim_bounds"; "max_val"] (mk_snd @@ mk_var "pmap_lookup") @@
+        (* deep bind *)
+        mk_let ["pmap"; "dim_bounds"; "max_val"] (mk_var "pmap_data") @@
 
-      (* handle the case of no partitioning at all *)
-      (if precise then id_fn else
-        mk_if (mk_eq (mk_size @@ mk_var "pmap") @@ mk_cint 0)
-          (mk_convert_col nodes.t (wrap_tset t_addr) @@ mk_var "nodes")) @@
+        (* handle the case of no partitioning at all *)
+        (if precise then id_fn else
+          mk_if (mk_eq (mk_size @@ mk_var "pmap") @@ mk_cint 0)
+            (mk_convert_col nodes.t (wrap_tset t_addr) @@ mk_var "nodes")) @@
 
-      mk_let ["bound_bucket"]
-      (List.fold_left
-        (fun acc_code index ->
-          let temp_id = to_id index in
-          let id_unwrap = temp_id^"_unwrap" in
-          let temp_type = List.nth map_types index in
-          let hash_func = hash_func_for temp_type in
-          mk_add
-            (* check if we have a binding in this index *)
-            (mk_case_tup_ns (mk_var temp_id) id_unwrap
-              (mk_cint 0) @@ (* no contribution *)
-              (* check if we don't partition by this index *)
-               mk_case_ns (mk_peek @@
-                  mk_slice' "pmap" [mk_cint index; mk_cunknown]) "peek_slice"
-                (mk_cint 0) @@
-                mk_let ["value"]
-                  (mk_apply (mk_var "mod")
-                      (* we hash first. This could seem like it destroys locality,
-                        * but it really doesn't, since we're only concerned about
-                        * point locality *)
-                      [mk_apply' "abs" @@ singleton @@
-                        mk_apply' hash_func [mk_var id_unwrap];
-                      mk_snd @@ mk_var "peek_slice"]) @@
-                mk_apply' "dim_bounds_lookup_hack"
-                  [mk_var "dim_bounds"; mk_var "value"; mk_cint @@ index + 1])
-                acc_code)
-        (mk_cint 0)
-        map_range
-      ) @@
-      if precise then
-        mk_apply' "get_ring_node" [mk_var "bound_bucket"; mk_var "max_val"]
-      else
-        let len = List.length map_range in
-        snd @@
-        (* loop over all dims and get ips for cartesian product *)
+        mk_let ["bound_bucket"]
         (List.fold_left
-          (fun (num, acc_code) index ->
-            let add_idx s = s ^ soi index in
-            num - 1,
-            mk_let ["index"]
-              (mk_if (mk_is_tup_nothing @@ mk_var @@ to_id index)
-                (mk_cint @@ index + 1) @@
-                mk_cint 0) @@
-              mk_case_ns
-                (mk_peek @@ mk_slice' "dim_bounds" [mk_var "index"; mk_cunknown]) (add_idx "dr")
-                (mk_error "whoops") @@
-                mk_let [add_idx "dim_size"; add_idx "rng"] (mk_snd @@ mk_var @@ add_idx "dr") @@
-                acc_code)
-          (len, snd @@
-            List.fold_left
-              (fun (num, acc_code) index ->
-                 let add_idx s = s ^ soi index in
-                 num - 1,
-                 mk_agg
-                  (mk_lambda2' ["acc", result_t] ["x", t_int] @@
-                    mk_let [add_idx "val"]
-                      (mk_mult (mk_var "x") @@ mk_var @@ add_idx "dim_size")
-                      acc_code)
-                  (if num = 1 then mk_empty result_t else mk_var "acc") @@
-                  mk_var @@ add_idx "rng")
-                (* zero: insertion of ip *)
-              (len, mk_insert_block "acc"
-                    [mk_apply' "get_ring_node"
-                      (* add up all the values and the bound_bucket *)
-                      [List.fold_left (fun acc x ->
-                        mk_add (mk_var @@ "val"^soi x) acc) (mk_var "bound_bucket") map_range;
-                        mk_var "max_val"]
-                    ])
-              map_range)
-          map_range)
+          (fun acc_code index ->
+            let temp_id = to_id index in
+            let id_unwrap = temp_id^"_unwrap" in
+            let temp_type = List.nth map_types index in
+            let hash_func = hash_func_for temp_type in
+            mk_add
+              (* check if we have a binding in this index *)
+              (mk_case_tup_ns (mk_var temp_id) id_unwrap
+                (mk_cint 0) @@ (* no contribution *)
+                (* check if we don't partition by this index *)
+                mk_case_ns (mk_peek @@
+                    mk_slice' "pmap" [mk_cint index; mk_cunknown]) "peek_slice"
+                  (mk_cint 0) @@
+                  mk_let ["value"]
+                    (mk_apply (mk_var "mod")
+                        (* we hash first. This could seem like it destroys locality,
+                          * but it really doesn't, since we're only concerned about
+                          * point locality *)
+                        [mk_apply' "abs" @@ singleton @@
+                          mk_apply' hash_func [mk_var id_unwrap];
+                        mk_snd @@ mk_var "peek_slice"]) @@
+                  mk_apply' "dim_bounds_lookup_hack"
+                    [mk_var "dim_bounds"; mk_var "value"; mk_cint @@ index + 1])
+                  acc_code)
+          (mk_cint 0)
+          map_range
+        ) @@
+        if precise then
+          mk_apply' "get_ring_node" [mk_var "bound_bucket"; mk_var "max_val"]
+        else
+          let len = List.length map_range in
+          snd @@
+          (* loop over all dims and get ips for cartesian product *)
+          (List.fold_left
+            (fun (num, acc_code) index ->
+              let add_idx s = s ^ soi index in
+              num - 1,
+              mk_let ["index"]
+                (mk_if (mk_is_tup_nothing @@ mk_var @@ to_id index)
+                  (mk_cint @@ index + 1) @@
+                  mk_cint 0) @@
+                mk_case_ns
+                  (mk_peek @@ mk_slice' "dim_bounds" [mk_var "index"; mk_cunknown]) (add_idx "dr")
+                  (mk_error "whoops") @@
+                  mk_let [add_idx "dim_size"; add_idx "rng"] (mk_snd @@ mk_var @@ add_idx "dr") @@
+                  acc_code)
+            (len, snd @@
+              List.fold_left
+                (fun (num, acc_code) index ->
+                  let add_idx s = s ^ soi index in
+                  num - 1,
+                  mk_agg
+                    (mk_lambda2' ["acc", result_t] ["x", t_int] @@
+                      mk_let [add_idx "val"]
+                        (mk_mult (mk_var "x") @@ mk_var @@ add_idx "dim_size")
+                        acc_code)
+                    (if num = 1 then mk_empty result_t else mk_var "acc") @@
+                    mk_var @@ add_idx "rng")
+                  (* zero: insertion of ip *)
+                (len, mk_insert_block "acc"
+                      [mk_apply' "get_ring_node"
+                        (* add up all the values and the bound_bucket *)
+                        [List.fold_left (fun acc x ->
+                          mk_add (mk_var @@ "val"^soi x) acc) (mk_var "bound_bucket") map_range;
+                          mk_var "max_val"]
+                      ])
+                map_range)
+            map_range)
 
 (* create all code needed for route functions, including foreign funcs*)
 let global_vars p partmap =

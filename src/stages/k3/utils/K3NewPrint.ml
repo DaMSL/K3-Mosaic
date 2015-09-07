@@ -1153,7 +1153,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
       ~arg_info:[def_a]
 
   | AtWith -> let col, idx, lam_none, lam_some = U.decompose_at_with expr in
-    apply_method c ~name:"at_with" ~col
+    apply_method c ~name:"safe_at" ~col
       ~args:[idx; lam_none; lam_some] ~arg_info:[def_a; def_a; [0], false]
 
   | MinWith -> let col, lam_none, lam_some = U.decompose_min_with expr in

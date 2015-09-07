@@ -97,7 +97,7 @@ let check_tag_arity tag children =
     | AtWith        -> 4
     | MinWith       -> 3
     | Insert        -> 2
-    | InsertAt      -> 2
+    | InsertAt      -> 3
     | Extend        -> 2
     | Update        -> 3
     | UpsertWith

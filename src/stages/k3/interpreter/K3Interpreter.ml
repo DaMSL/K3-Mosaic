@@ -564,6 +564,9 @@ and eval_expr (address:address) sched_st cenv texpr =
     | Insert, [_; v] ->
         (env_modify (id_path ()) nenv @@ fun col -> v_insert error v col), temp VUnit
 
+    | InsertAt, [_; idx; v] ->
+        (env_modify (id_path ()) nenv @@ fun col -> v_insert_at error v idx col), temp VUnit
+
     | Update, [_; oldv; newv]->
         (env_modify (id_path ()) nenv @@
           fun col -> v_update error oldv newv col), temp VUnit

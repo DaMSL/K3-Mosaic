@@ -558,11 +558,11 @@ let v_insert ?vidkey err_fn x m =
       end
   | v, c                   -> error v c
 
-let v_insert_at err_fn x i = function
-  | VVector(m, sz) ->
+let v_insert_at err_fn x i m = match m, i with
+  | VVector(m, sz), VInt i ->
       let sz' = if IntMap.mem i m then sz else sz + 1 in
       VVector(IntMap.add i x m, sz')
-  | _ -> err_fn "v_insert_at" "not a vector"
+  | _ -> err_fn "v_insert_at" "bad arguments"
 
 let v_delete err_fn x m = match x, m with
   | _, VSet m                   -> VSet(ValueSet.delete x m)

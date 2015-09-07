@@ -656,7 +656,7 @@ mutation :
     /* Inserts, deletes and sends use a vararg function syntax for their value/payload */
     | EXTEND LPAREN anno_expr COMMA anno_expr RPAREN { mkexpr Extend [$3; $5] }
     | INSERT LPAREN anno_expr COMMA tuple RPAREN { mkexpr Insert [$3; $5] }
-    | INSERT_AT LPAREN anno_expr COMMA anno_expr COMMA tuple RPAREN { mkexpr Insert [$3; $5; $7] }
+    | INSERT_AT LPAREN anno_expr COMMA anno_expr COMMA tuple RPAREN { mkexpr InsertAt [$3; $5; $7] }
     | UPSERT_WITH LPAREN anno_expr COMMA LPAREN tuple RPAREN COMMA anno_expr COMMA anno_expr RPAREN { mkexpr UpsertWith [$3; $6; $9; $11] }
     | UPSERT_WITH_BEFORE LPAREN anno_expr COMMA LPAREN tuple RPAREN COMMA anno_expr COMMA anno_expr RPAREN { mkexpr UpsertWithBefore [$3; $6; $9; $11] }
 

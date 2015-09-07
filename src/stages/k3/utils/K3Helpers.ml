@@ -331,7 +331,7 @@ let mk_slice_geq' col pat = mk_slice_geq (mk_var col) pat
 
 let mk_error s = mk_apply' "error" [mk_apply' "print" [mk_cstring s]]
 
-let _err = mk_error "vector: out of bounds!"
+let _err = mk_lambda' ["_", t_unknown] @@ mk_error "vector: out of bounds!"
 let mk_at_with ?(error=_err) col idx lam = mk_stree AtWith [col; idx; error; lam]
 let mk_at_with' ?error col idx lam = mk_at_with ?error (mk_var col) idx lam
 
