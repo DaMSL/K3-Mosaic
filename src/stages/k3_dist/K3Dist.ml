@@ -754,8 +754,7 @@ let global_vars c dict =
     with Not_found -> ds
   in
   let l =
-    [ my_peers;
-      me_int;
+    [ me_int;
       g_init_vid;
       g_min_vid;
       g_max_vid;
