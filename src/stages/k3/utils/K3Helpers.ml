@@ -822,3 +822,15 @@ let mk_tup_nothing typ = mk_tuple [mk_cfalse; default_value_of_t typ]
 
 let mk_is_tup_nothing x = (mk_not @@ mk_fst x)
 
+let mk_filter_cnt cond ds =
+  let t = wrap_tbag t_int in
+  mk_fst @@
+  mk_agg
+    (mk_lambda2' ["_acc", t; "_cnt", t_int] ds.e @@
+      mk_block [
+        mk_if cond (mk_insert "_acc" [mk_var "_cnt"]) mk_cunit;
+        mk_tuple [mk_var "_acc"; mk_add (mk_var "_cnt") @@ mk_cint 1]
+      ])
+    (mk_tuple [mk_empty t; mk_cint 0]) @@
+    mk_var ds.id
+

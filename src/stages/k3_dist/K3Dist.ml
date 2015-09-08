@@ -388,6 +388,10 @@ let my_peers =
     mk_var "peers" in
   create_ds "my_peers" ~init t ~e
 
+let me_int =
+  let init = mk_apply' "int_of_addr" [G.me_var] in
+  create_ds "me_int" t_int ~init
+
 let num_peers =
   let init = mk_size @@ mk_var my_peers.id in
   create_ds "num_peers" (mut t_int) ~init
@@ -425,8 +429,8 @@ let job_of_str = function
 (* this must be created for the specific run *)
 (* we fill it dynamically in the interpreter *)
 let jobs =
-  let e = ["addr", t_addr; "job", t_int] in
-  let t = mut @@ wrap_tmap' @@ snd_many e in
+  let e = ["job", t_int] in
+  let t = mut @@ wrap_tvector' @@ snd_many e in
   create_ds "jobs" t ~e
 
 (* address of master node *)
@@ -436,39 +440,33 @@ let master_addr = create_ds "master_addr" (mut t_addr)
 let timer_addr =
   let d_init =
     mk_case_sn
-      (mk_peek @@ mk_filter
-        (mk_lambda' (ds_e jobs) @@
-          mk_eq (mk_var "job") @@ mk_var job_timer.id) @@
-        mk_var jobs.id)
+      (mk_peek @@ mk_filter_cnt
+        (mk_eq (mk_var "job") @@ mk_var job_timer.id) jobs)
       "timer"
-      (mk_fst @@ mk_var "timer") @@
+      (mk_apply' "addr_of_int" [mk_var "timer"]) @@
       mk_error "no timer peer found" in
   create_ds "timer_addr" (mut t_addr) ~d_init
 
 let nodes =
   let d_init =
-    mk_fst_many (snd_many @@ ds_e jobs) @@
-      mk_filter
-        (mk_lambda' (ds_e jobs) @@ mk_eq (mk_var job.id) @@ mk_var job_node.id) @@
-        mk_var jobs.id in
-  let e = ["addr", t_addr] in
+    mk_filter_cnt
+      (mk_eq (mk_var job.id) @@ mk_var job_node.id) jobs in
+  let e = ["addr", t_int] in
   create_ds "nodes" (mut @@ wrap_tbag' @@ snd_many e) ~e ~d_init
 
 let switches =
   let d_init =
-    mk_fst_many (snd_many @@ ds_e jobs) @@
-      mk_filter
-        (mk_lambda' (ds_e jobs) @@ mk_eq (mk_var job.id) @@ mk_var job_switch.id) @@
-        mk_var jobs.id in
-  let e = ["addr", t_addr] in
+    mk_filter_cnt
+      (mk_eq (mk_var job.id) @@ mk_var job_switch.id) jobs in
+  let e = ["addr", t_int] in
   create_ds "switches" (mut @@ wrap_tbag' @@ snd_many e) ~e ~d_init
 
 let num_switches =
-  let d_init = mk_size_slow switches in
+  let d_init = mk_size @@ mk_var switches.id in
   create_ds "num_switches" (mut t_int) ~d_init
 
 let num_nodes =
-  let d_init = mk_size_slow nodes in
+  let d_init = mk_size @@ mk_var nodes.id in
   create_ds "num_nodes" (mut t_int) ~d_init
 
 let sw_driver_trig_nm = "sw_driver_trig"
@@ -508,6 +506,21 @@ let nd_rcv_fetch_buffer =
 
 (**** Protocol Init code ****)
 
+(* addr to int translation is inefficient *)
+let int_of_addr = mk_global_fn "int_of_addr" ["addr", t_addr] [t_int] @@
+  mk_fst @@
+  mk_agg (mk_lambda2' ["acc", t_int; "count", t_int] ["addr2", t_addr] @@
+          mk_if (mk_eq (mk_var "addr") @@ mk_var "addr2")
+            (mk_tuple [mk_var "count"; mk_add (mk_var "count") @@ mk_cint 1]) @@
+             mk_tuple [mk_var "acc";   mk_add (mk_var "count") @@ mk_cint 1])
+    (mk_tuple [mk_cint @@ -1; mk_cint 0]) @@
+    mk_var my_peers.id
+
+let addr_of_int = mk_global_fn "addr_of_int" ["i", t_int] [t_addr] @@
+  mk_at_with (mk_var my_peers.id) (mk_var "i") @@ mk_id_fn' [t_addr]
+
+let mk_sendi trig addr args = mk_send trig (mk_apply' "addr_of_int" [addr]) args
+
 let ms_init_counter = create_ds "ms_init_counter" (mut t_int) ~init:(mk_cint 0)
 (* whether we can begin operations on this node/switch *)
 let init_flag = create_ds "init_flag" (mut t_bool) ~init:(mk_cfalse)
@@ -532,7 +545,7 @@ let ms_rcv_init_trig =
       (* send rcv_init to all peers *)
       (mk_iter
         (mk_lambda (wrap_args ["peer", t_addr]) @@
-          mk_send rcv_init_trig_nm (mk_var "peer") [mk_cunit]) @@
+          mk_sendi rcv_init_trig_nm (mk_var "peer") [mk_cunit]) @@
         mk_var "peers")
       mk_cunit
   ]
@@ -714,17 +727,21 @@ let map_latest_vid_vals ?(vid_nm="vid") c slice_col m_pat map_id ~keep_vid : exp
 
 (* --- Useful functions --- *)
 
-let mk_send_all ds trig payload =
+let mk_send_all ?(reg_addr=false) ds trig payload =
+  let send_fn = if reg_addr then mk_send else mk_sendi in
   mk_iter (mk_lambda' (ds_e ds) @@
-      mk_send trig (mk_var "addr") payload) @@
+      send_fn trig (mk_var "addr") payload) @@
     mk_var ds.id
 
 let mk_send_all_nodes trig payload = mk_send_all nodes trig payload
 let mk_send_all_switches trig payload = mk_send_all switches trig payload
-let mk_send_all_peers trig payload = mk_send_all my_peers trig payload
+let mk_send_all_peers trig payload = mk_send_all ~reg_addr:true my_peers trig payload
 
 let mk_send_master ?(payload=[mk_cunit]) trig =
   mk_send trig (mk_var master_addr.id) payload
+
+let mk_send_me ?(payload=[mk_cunit]) trig =
+  mk_send trig G.me_var payload
 
 (**** End of code ****)
 
@@ -738,6 +755,7 @@ let global_vars c dict =
   in
   let l =
     [ my_peers;
+      me_int;
       g_init_vid;
       g_min_vid;
       g_max_vid;
@@ -770,11 +788,16 @@ let global_vars c dict =
       nd_stmt_cntrs_per_map;
       nd_lmap_of_stmt_id c;
     ] @
+
     sw_trig_bufs c @
     log_ds c @
     (* combine generic map inits with ones from the ast *)
     (List.map replace_init @@ maps c) @
     (List.map replace_init @@ map_buffers c)
   in
+  decl_global my_peers ::
+  [ int_of_addr;
+    addr_of_int
+  ] @
   List.map decl_global l
 

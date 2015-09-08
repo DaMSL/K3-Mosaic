@@ -422,21 +422,15 @@ expr :
     | transformers { $1 }
     | mutation     { $1 }
 
-    | SEND LPAREN IDENTIFIER COMMA address COMMA tuple RPAREN {
-        mkexpr Send [mkexpr (Const(CTarget($3))) []; mkexpr (Const($5)) []; $7]
-      }
-    | SEND LPAREN IDENTIFIER COMMA access COMMA tuple RPAREN {
+    | SEND LPAREN IDENTIFIER COMMA anno_expr COMMA tuple RPAREN {
         mkexpr Send [mkexpr (Const(CTarget($3))) []; $5; $7]
-      }
-    | SEND LPAREN IDENTIFIER COMMA variable COMMA tuple RPAREN {
-        mkexpr Send [mkexpr (Const(CTarget($3))) []; mkexpr (Var $5) []; $7]
       }
 
     /* Function application and let notation */
     | anno_expr LPAREN expr_list RPAREN                      { mk_apply $1 $3 }
 
     /* TODO: more error handling */
-    | SEND LPAREN IDENTIFIER COMMA address COMMA error { print_error "Invalid send argument" }
+    | SEND LPAREN IDENTIFIER COMMA anno_expr COMMA error { print_error "Invalid send argument" }
     | SEND LPAREN IDENTIFIER COMMA error { print_error "Invalid send address" }
     | SEND LPAREN error { print_error "Invalid send target" }
     | SEND error { print_error "Invalid send syntax" }

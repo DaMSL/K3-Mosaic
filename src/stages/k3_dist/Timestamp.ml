@@ -20,7 +20,7 @@ let sw_next_switch_addr =
     mk_let ["addr_list"]
       (* get a total ordering: sort ascending by address *)
       (mk_sort
-        (mk_lambda'' ["addr1", t_addr; "addr2", t_addr] @@
+        (mk_lambda'' ["addr1", t_int; "addr2", t_int] @@
           mk_lt (mk_var "addr1") @@ mk_var "addr2") @@
         (* convert to list *)
         mk_convert_col' D.switches.t TList @@ mk_var D.switches.id) @@
@@ -28,11 +28,12 @@ let sw_next_switch_addr =
     mk_case_ns (mk_peek @@ mk_var "addr_list") "first_addr"
       (mk_error "no addresses in addr_list") @@
       (* fold and find the entry after the one that matches ours *)
+      mk_apply' "addr_of_int" @@ singleton @@
       mk_snd @@ mk_agg
-        (mk_assoc_lambda' ["take", t_bool; "result", t_addr] ["x", t_addr] @@
+        (mk_assoc_lambda' ["take", t_bool; "result", t_int] ["x", t_int] @@
           mk_if (mk_var "take")
             (mk_tuple [mk_cfalse; mk_var "x"]) @@
-             mk_if (mk_eq (mk_var "x") G.me_var)
+             mk_if (mk_eq (mk_var "x") @@ mk_var D.me_int.id)
               (mk_tuple [mk_ctrue; mk_var "result"]) @@
                mk_tuple [mk_var "take"; mk_var "result"])
         (mk_tuple [mk_cfalse; mk_var "first_addr"]) @@
@@ -72,7 +73,7 @@ let sw_rcv_token_trig sw_check_done =
         (* check for switch end *)
         sw_check_done;
         (* start the driver *)
-        mk_send D.sw_driver_trig_nm G.me_var [mk_cunit]
+        mk_send_me D.sw_driver_trig_nm;
       ]) @@
     (* if we have nothing to number, pass the token on as is *)
     mk_send sw_rcv_token_nm (mk_var sw_next_switch_addr.id) [mk_var "vid"]

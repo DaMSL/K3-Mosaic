@@ -21,12 +21,13 @@ let add_node_nm = "add_node"
 let replicas = create_ds "replicas" (mut t_int) ~init:(mk_cint 8)
 
 let node_ring =
-  let e = ["hash", t_int; "addr", t_addr] in
+  let e = ["hash", t_int; "addr", t_int] in
   create_ds "node_ring" (wrap_tsortedmap' @@ snd_many e) ~e
 
 let node_ring_init =
   mk_iter (mk_lambda' D.nodes.e @@
-      mk_apply (mk_var add_node_nm) [mk_var "addr"]) @@
+      mk_apply' add_node_nm
+        [mk_apply' "addr_of_int" [mk_var "addr"]]) @@
     mk_var "nodes"
 
 (* function to add a node in the consistent hashing ring *)
@@ -41,8 +42,9 @@ let add_node_fn =
           [mk_apply' "abs" @@ singleton @@ mk_apply' "hash_int" @@ singleton @@
             mk_add
               (mk_mult (mk_var "i") @@ mk_cint 2683) @@
-              mk_apply' "hash_addr" [mk_var "addr"];
-              mk_var "addr"]) @@
+              mk_apply' "hash_addr" [mk_var "addr"]
+           ;
+           mk_apply' "int_of_addr" [mk_var "addr"]]) @@
       mk_var "rng"
 
 (* function to get the node for an int. Returns the node's address *)
@@ -51,7 +53,7 @@ let add_node_fn =
 let get_ring_node_nm = "get_ring_node"
 let get_ring_node_fn =
   mk_global_fn get_ring_node_nm
-  ["data", t_int; "max_val", t_int] [t_addr] @@
+  ["data", t_int; "max_val", t_int] [t_int] @@
     mk_let ["scaled"]
       (mk_apply' "int_of_float" @@ singleton @@
         mk_mult

@@ -237,7 +237,7 @@ let ms_send_gc_req =
   mk_iter
     (mk_lambda' D.switches.e @@
       let addr_var = mk_var @@ fst @@ hd @@ D.switches.e in
-      mk_send rcv_req_gc_vid_nm addr_var [mk_cunit]) @@
+      mk_sendi rcv_req_gc_vid_nm addr_var [mk_cunit]) @@
     (* send to all switches and nodes *)
     (mk_combine (mk_var D.switches.id) @@ mk_var D.nodes.id)
 

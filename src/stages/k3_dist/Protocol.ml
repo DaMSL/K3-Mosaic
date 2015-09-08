@@ -40,7 +40,7 @@ let sw_rcv_init =
   mk_block [
     mk_assign D.sw_init.id mk_ctrue;
     (* start driver for all switches *)
-    mk_send D.sw_driver_trig_nm G.me_var [mk_cunit];
+    D.mk_send_me D.sw_driver_trig_nm;
     (* ack to master *)
     D.mk_send_master ms_rcv_sw_init_ack_nm;
   ]
@@ -140,9 +140,9 @@ let rcv_jobs =
 let ms_rcv_job_cnt = create_ds "ms_rcv_job_cnt" (mut t_int) ~init:(mk_cint 0)
 let ms_rcv_job_nm = "ms_rcv_job"
 let ms_rcv_job =
-  mk_barrier ms_rcv_job_nm ~args:D.jobs.e
+  mk_barrier ms_rcv_job_nm ~args:["addr", t_int; "job", t_int]
     (* insert into jobs *)
-    ~pre:[mk_insert D.jobs.id @@ ids_to_vars @@ fst_many D.jobs.e]
+    ~pre:[mk_insert_at D.jobs.id (mk_var "addr") [mk_var "job"]]
     ~ctr:ms_rcv_job_cnt.id ~total:(mk_var D.num_peers.id)
     ~after:(D.mk_send_all_peers rcv_jobs_nm [mk_var D.jobs.id])
 
@@ -155,7 +155,7 @@ let rcv_master_addr =
     (* assign the master addr *)
     mk_assign D.master_addr.id @@ mk_var addr;
     (* send our job to the master *)
-    mk_send ms_rcv_job_nm (mk_var addr) [G.me_var; mk_var D.job.id]
+    mk_send ms_rcv_job_nm (mk_var addr) [mk_var D.me_int.id; mk_var D.job.id]
   ]
 
 (**** start point for master role ****)
@@ -209,7 +209,7 @@ let ms_rcv_node_done =
              mk_apply' "string_of_int"
               [mk_sub (mk_var D.ms_end_time.id) @@ mk_var D.ms_start_time.id]]];
         (* send ourselves a message to shutdown *)
-        mk_send ms_shutdown_nm G.me_var [mk_cunit];
+        D.mk_send_me ms_shutdown_nm;
       ])
 
 (* node: bool indicating received system done *)

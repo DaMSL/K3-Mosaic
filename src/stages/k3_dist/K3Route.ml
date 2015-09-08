@@ -2,6 +2,7 @@
 
 open Util
 open K3.AST
+open K3.Annotation
 open K3Helpers
 open ProgInfo
 open K3Dist
@@ -35,7 +36,10 @@ let inner_cart_prod_type = wrap_tlist' t_two_ints
 let free_cart_prod_type = wrap_tlist @@ wrap_tlist' t_two_ints
 let free_bucket_type = wrap_tlist' t_two_ints
 let sorted_ip_inner_type = [t_addr; t_unit]
-let output_type precise = if precise then t_addr else wrap_tset t_addr
+let result_t =
+    let t = wrap_tset t_int in
+    {t with anno = [Property "BitSet"]}
+let output_type precise = if precise then t_int else result_t
 
 (* map_parameter starts at 0 *)
 (*             map_name * (map_parameter * modulo)  *)
@@ -250,7 +254,6 @@ let gen_route_fn p ?(precise=false) map_id =
   let key_ids =
     fst @@ List.split @@ map_ids_types_no_val_for ~prefix:prefix p map_id in
   let to_id i = List.nth key_ids i in
-  let result_t = wrap_tset t_addr in
 
   match map_types with
   | [] -> (* if no keys, for now we just route to one place *)
@@ -274,7 +277,7 @@ let gen_route_fn p ?(precise=false) map_id =
         (* handle the case of no partitioning at all *)
         (if precise then id_fn else
           mk_if (mk_eq (mk_size @@ mk_var "pmap") @@ mk_cint 0)
-            (mk_convert_col nodes.t (wrap_tset t_addr) @@ mk_var "nodes")) @@
+            (mk_convert_col nodes.t (wrap_tset t_int) @@ mk_var "nodes")) @@
 
         mk_let ["bound_bucket"]
         (List.fold_left

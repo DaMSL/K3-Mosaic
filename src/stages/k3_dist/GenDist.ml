@@ -308,7 +308,7 @@ let sw_driver_trig (c:config) =
             (* send the msg using dispatch code *)
             dispatch_code;
             (* recurse, trying to get another message *)
-            mk_send sw_driver_trig_nm G.me_var [mk_cunit];
+            D.mk_send_me sw_driver_trig_nm;
           ])
     mk_cunit
 
@@ -376,13 +376,13 @@ let sw_send_fetch_fn c s_rhs_lhs s_rhs trig_name =
   let send_fetches_of_rhs_maps  =
     let ip_pat = [mk_var "ip"; mk_cunknown] in
     let col_t = wrap_tbag' [t_stmt_id; t_map_id] in
-    let map_t = wrap_tmap' [t_addr; col_t] in
+    let map_t = wrap_tmap' [t_int; col_t] in
     if null s_rhs then []
     else
     [mk_iter
       (mk_lambda'
-        ["ip", t_addr; stmt_map_ids.id, stmt_map_ids.t] @@
-        mk_send (rcv_fetch_name_of_t trig_name) (mk_var "ip") @@
+        ["ip", t_int; stmt_map_ids.id, stmt_map_ids.t] @@
+        mk_sendi (rcv_fetch_name_of_t trig_name) (mk_var "ip") @@
           mk_var stmt_map_ids.id ::
           args_of_t_as_vars_with_v c trig_name) @@
         List.fold_left
@@ -390,11 +390,11 @@ let sw_send_fetch_fn c s_rhs_lhs s_rhs trig_name =
             let route_fn = R.route_for c.p rhs_map_id in
             let key = P.partial_key_from_bound c.p stmt_id rhs_map_id in
             mk_agg
-              (mk_lambda2' ["acc", map_t] ["ip", t_addr] @@
+              (mk_lambda2' ["acc", map_t] ["ip", t_int] @@
                 mk_upsert_with_block "acc" ip_pat
                   (mk_lambda'' unit_arg @@ mk_tuple
                     [mk_var "ip"; mk_singleton col_t [mk_cint stmt_id; mk_cint rhs_map_id]])
-                  (mk_lambda' ["y", wrap_ttuple [t_addr; col_t]] @@
+                  (mk_lambda' ["y", wrap_ttuple [t_int; col_t]] @@
                     mk_insert_block ~path:[2] "y" [mk_cint stmt_id; mk_cint rhs_map_id]))
               acc_code @@
               mk_apply (mk_var route_fn) @@ mk_cint rhs_map_id::key)
@@ -413,9 +413,9 @@ let sw_send_fetch_fn c s_rhs_lhs s_rhs trig_name =
             acc_code @
             (* the first do_complete should ack the switch *)
             [mk_ignore @@ mk_agg
-              (mk_lambda2' ["ack", t_bool] ["ip", t_addr] @@
+              (mk_lambda2' ["ack", t_bool] ["ip", t_int] @@
                 mk_block [
-                  mk_send do_complete_trig_name (mk_var "ip") @@
+                  mk_sendi do_complete_trig_name (mk_var "ip") @@
                     G.me_var :: mk_var "ack" :: args_of_t_as_vars_with_v c trig_name;
                   mk_cfalse ])
               mk_ctrue @@
@@ -437,16 +437,16 @@ let sw_send_fetch_fn c s_rhs_lhs s_rhs trig_name =
     * specific IP *)
     [mk_iter
       (mk_lambda'
-        ["addr", t_addr; stmt_cnt_list.id, stmt_cnt_list.t] @@
+        ["addr", t_int; stmt_cnt_list.id, stmt_cnt_list.t] @@
         mk_block @@
           (* send rcv_put *)
-          (mk_send
+          (mk_sendi
             (rcv_put_name_of_t trig_name)
             (mk_var "addr") @@
             G.me_var :: mk_var stmt_cnt_list.id ::
               args_of_t_as_vars_with_v c trig_name) ::
             [GC.sw_update_send ~vid_nm:"vid"]) @@
-        let col_t = wrap_tmap' [t_addr; stmt_cnt_list.t] in
+        let col_t = wrap_tmap' [t_int; stmt_cnt_list.t] in
         List.fold_left
           (fun acc_code (stmt_id, (rhs_map_id, lhs_map_id)) ->
             (* shuffle allows us to recreate the path the data will take from
@@ -466,12 +466,12 @@ let sw_send_fetch_fn c s_rhs_lhs s_rhs trig_name =
                 route_fn @@ mk_cint rhs_map_id::route_key) @@
             mk_agg
               (mk_lambda2'
-                ["acc", col_t] ["ip", t_addr; "tuples", tuple_types] @@
+                ["acc", col_t] ["ip", t_int; "tuples", tuple_types] @@
                   mk_upsert_with_block "acc" [mk_var "ip"; mk_cunknown]
                     (mk_lambda'' unit_arg @@ mk_tuple
                        [mk_var "ip"; mk_singleton stmt_cnt_list.t
                           [mk_cint stmt_id; mk_var "sender_count"]]) @@
-                    mk_lambda' ["ip_stmt_cnts", wrap_ttuple [t_addr; stmt_cnt_list.t]] @@
+                    mk_lambda' ["ip_stmt_cnts", wrap_ttuple [t_int; stmt_cnt_list.t]] @@
                       mk_upsert_with_block "ip_stmt_cnts" ~path:[2] [mk_cint stmt_id; mk_cunknown]
                         (mk_lambda'' unit_arg @@ mk_tuple
                           [mk_cint stmt_id; mk_var "sender_count"]) @@
@@ -644,8 +644,8 @@ let nd_send_push_stmt_map_trig c s_rhs_lhs trig_name =
             nd_log_master_write_nm @@ [mk_cint stmt_id; mk_var "vid"];
           mk_iter
             (mk_lambda'
-              ["ip", t_addr;"tuples", wrap_t_calc' rhs_map_types] @@
-              mk_send
+              ["ip", t_int;"tuples", wrap_t_calc' rhs_map_types] @@
+              mk_sendi
                 (rcv_push_name_of_t c trig_name stmt_id rhs_map_id)
                 (mk_var "ip") @@
                 mk_var "tuples" :: args_of_t_as_vars_with_v c trig_name) @@
@@ -797,11 +797,11 @@ let send_corrective_fns c =
                       * adding deltas anyway, so if there's no stale value,
                       * there's no harm done *)
                     (mk_lambda'
-                      ["ip", t_addr; "vid", t_vid; "tuples", map_ds.t] @@
+                      ["ip", t_int; "vid", t_vid; "tuples", map_ds.t] @@
                         mk_var "ip")
                     (mk_lambda2'
                       ["acc_vid", t_vid_list; "acc_tuples", map_ds.t]
-                      ["ip", t_addr; "vid", t_vid; "tuples", map_ds.t] @@
+                      ["ip", t_int; "vid", t_vid; "tuples", map_ds.t] @@
                         mk_block [
                           mk_insert "acc_vid" [mk_var "vid"];
                           mk_tuple
@@ -823,11 +823,11 @@ let send_corrective_fns c =
                             (mk_apply'
                               (nd_log_get_bound_for target_trig) [mk_var "vid"])
                         else id_fn) @@
-                        let t_col = wrap_t_calc' [t_addr; t_vid; map_ds.t] in
+                        let t_col = wrap_t_calc' [t_int; t_vid; map_ds.t] in
                         (* insert vid into the ip, tuples output of shuffle *)
                         mk_agg (* (ip * vid * tuple list) list *)
                           (mk_lambda2'
-                            ["acc", t_col] ["ip", t_addr; "tuples", delta_tuples2.t] @@
+                            ["acc", t_col] ["ip", t_int; "tuples", delta_tuples2.t] @@
                               mk_insert_block "acc"
                                 [mk_var "ip"; mk_var "vid";
                                 (* get rid of vid NOTE: to reduce number of shuffles *)
@@ -843,10 +843,10 @@ let send_corrective_fns c =
                   (* send to each ip, and count up the vids *)
                   mk_agg
                     (mk_assoc_lambda' ["acc_count", t_int]
-                      ["ip", t_addr;
+                      ["ip", t_int;
                         "vid_send_list_tup", wrap_ttuple [t_vid_list; map_ds.t]] @@
                       mk_block [
-                        mk_send
+                        mk_sendi
                           (* we always send to the same map_id ie. the remote
                             * buffer of the same map we just calculated *)
                           (rcv_corrective_name_of_t c target_trig target_stmt map_id)
@@ -1351,7 +1351,7 @@ let gen_loader_vars ast =
 
 let declare_global_vars c partmap ast =
   (* TODO: dummy map currently needed for MapE generation *)
-  mk_global_val "dummy_map" (wrap_tmap' [t_addr; wrap_tbag' [t_int; t_int]]) ::
+  mk_global_val "dummy_map" (wrap_tmap' [t_int; wrap_tbag' [t_int; t_int]]) ::
   (* dummy switch path variable. Will be filled at cpp stage *)
   decl_global
     (create_ds "switch_path" t_string ~init:(mk_cstring "agenda.csv")) ::
