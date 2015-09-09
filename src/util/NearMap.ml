@@ -404,7 +404,7 @@ module Make(Ord: OrderedType) = struct
 
     let choose = min_binding
 
-    let to_list m = fold (fun k v acc -> (k,v)::acc) m []
+    let to_list m = List.rev @@ fold (fun k v acc -> (k,v)::acc) m []
     let of_list l = List.fold_left (fun acc (k, v) -> add k v acc) empty l
 
     let peek m = try Some(choose m) with Not_found -> None
