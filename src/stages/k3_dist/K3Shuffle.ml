@@ -48,10 +48,12 @@ let gen_shuffle_fn p rmap lmap bindings fn_name =
     List.for_all (function `Lkey _ -> true | _ -> false) full_key_vars' in
   let no_lkeys =
     List.for_all (function `Rkey _ -> true | _ -> false) full_key_vars' in
-  let convert_keys l = List.map (function
+  let convert_keys ?(use_rkeys=true) l = List.map (function
       | `Lkey i -> mk_var @@ to_lkey i
-      | `Rkey i -> mk_tup_just @@ mk_var @@ to_rkey i) l in
+      | `Rkey i when use_rkeys -> mk_tup_just @@ mk_var @@ to_rkey i
+      | `Rkey i -> mk_tup_nothing @@ List.nth tuple_types i) l  in
   let full_key_vars = convert_keys full_key_vars' in
+  let no_rkey_key_vars = convert_keys ~use_rkeys:false full_key_vars' in
 
   (* functions to change behavior for non-key routes *)
   let pred = List.length lkey_types > 0 in
@@ -138,7 +140,7 @@ let gen_shuffle_fn p rmap lmap bindings fn_name =
             mk_apply'
               (route_for p lmap) @@
                 mk_cint lmap ::
-                  if pred then ids_to_vars @@ fst_many l_key_ids_types
+                  if pred then no_rkey_key_vars
                   else [mk_cunit]) @@
           mk_var "normal_targets"
 
