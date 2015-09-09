@@ -124,7 +124,7 @@ let calc_dim_bounds =
             mk_upsert_with "xs" [mk_var "n"; mk_cunknown]
               (mk_lambda'' unit_arg @@
                 mk_tuple [mk_var "n"; mk_tuple [mk_var "next";
-                  mk_singleton rng.t [mk_cint 1]]]) @@
+                  mk_singleton rng.t [mk_cint 0]]]) @@
               mk_id_fn dim_bounds
             ;
             mk_tuple [mk_var "xs"; mk_var "next"]
