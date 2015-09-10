@@ -282,6 +282,9 @@ val mk_fst': id_t -> expr_t
 val mk_snd: expr_t -> expr_t
 val mk_snd': id_t -> expr_t
 
+val mk_thd: expr_t -> expr_t
+val mk_thd': id_t -> expr_t
+
 (* like fst, but for a collection with a tuple of any size *)
 val project_from_col : type_t list -> expr_t -> choice:int -> expr_t
 

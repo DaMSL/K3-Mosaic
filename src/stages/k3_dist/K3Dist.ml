@@ -597,6 +597,7 @@ let nd_stmt_cntrs =
   let ee =
     [["vid", t_vid; "stmt_id", t_int];
      ["counter", t_int;
+      "modify", t_bool;
       "corr_map", wrap_tmap' @@ snd_many @@ ds_e nd_stmt_cntrs_corr_map]] in
   let e = list_zip ["vid_stmt_id"; "ctr_corrs"] @@
     List.map (wrap_ttuple |- snd_many) ee in
