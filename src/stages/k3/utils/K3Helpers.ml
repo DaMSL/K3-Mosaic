@@ -537,9 +537,6 @@ let mk_fst' tuple = mk_subscript 1 (mk_var tuple)
 let mk_snd tuple = mk_subscript 2 tuple
 let mk_snd' tuple = mk_subscript 2 (mk_var tuple)
 
-let mk_thd tuple = mk_subscript 3 tuple
-let mk_thd' tuple = mk_subscript 3 (mk_var tuple)
-
 (* insert and var block, for usual insertion in a lambda *)
 let mk_insert_block ?(path=[]) id x =
   mk_block [mk_insert ~path id x; mk_var id]
