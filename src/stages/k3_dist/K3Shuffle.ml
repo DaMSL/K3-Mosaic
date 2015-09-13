@@ -28,7 +28,9 @@ let gen_shuffle_fn p rmap lmap bindings fn_name =
   let bindings = IntIntSet.elements bindings in
   let tuple_types = map_types_with_v_for p rmap in
   let tuple_col_t = wrap_t_calc' tuple_types in
-  let result_types = wrap_tmap' [t_int; tuple_col_t] in
+  (* whether it's a fake send or a real send *)
+  let tup_option_t = wrap_ttuple [t_bool; tuple_col_t] in
+  let result_types = wrap_tmap' [t_int; tup_option_t] in
   (* deducts the last map type which is the value *)
   let lkey_types = wrap_tupmaybes @@ map_types_no_val_for p lmap in
   (* lkey refers to the access pattern from trig args. rkey is from the tuples*)
@@ -73,7 +75,7 @@ let gen_shuffle_fn p rmap lmap bindings fn_name =
             mk_cint lmap :: if pred then full_key_vars else [mk_cunit]) @@
           mk_agg
             (mk_lambda2' ["acc_col", result_types] ["ip", t_int] @@
-              mk_insert_block "acc_col" [mk_var "ip"; mk_var "tuples"])
+              mk_insert_block "acc_col" [mk_var "ip"; mk_ctrue; mk_var "tuples"])
             (mk_empty result_types) @@
             mk_var "ips"
       (* else, full shuffling *)
@@ -92,17 +94,20 @@ let gen_shuffle_fn p rmap lmap bindings fn_name =
                       mk_cint lmap :: if pred then full_key_vars else [mk_cunit]) @@
                 mk_upsert_with_block "acc" ip_pat
                   (mk_lambda'' unit_arg @@
-                    mk_tuple [mk_var "ip"; mk_singleton tuple_col_t [mk_var "x"]]) @@
-                  mk_lambda' ["y", wrap_ttuple [t_int; tuple_col_t]] @@
-                    mk_insert_block ~path:[2] "y" [mk_var "x"])
-                  (* ip from route -- we assume every piece of data can only go to one place *)
+                   mk_tuple [mk_var "ip";
+                             mk_tuple [mk_ctrue;
+                                       mk_singleton tuple_col_t [mk_var "x"]]]) @@
+                  mk_lambda' ["y", tup_option_t] @@
+                    mk_insert_block ~path:[2; 2] "y" [mk_var "x"])
               (mk_empty result_types) @@
               mk_var "tuples"
           else
             (* we have some lkeys. Pre-aggregate by rkeys *)
             (* find ip of each group of tuples *)
             mk_agg
-              (mk_lambda2' ["acc", result_types] ["_u", wrap_ttuple @@ snd_many used_rkeys; "xs", tuple_col_t] @@
+              (mk_lambda2'
+                 ["acc", result_types]
+                 ["_u", wrap_ttuple @@ snd_many used_rkeys; "xs", tuple_col_t] @@
                 mk_let ["x"] (mk_peek_or_error "whoops2" @@ mk_var "xs") @@
                 mk_destruct_tuple "x" tuple_types id_r @@
                 (* ip from route *)
@@ -111,9 +116,10 @@ let gen_shuffle_fn p rmap lmap bindings fn_name =
                     (route_for ~precise:true p lmap) @@
                       mk_cint lmap :: if pred then full_key_vars else [mk_cunit]) @@
                 mk_upsert_with_block "acc" ip_pat
-                  (mk_lambda'' unit_arg @@ mk_tuple [mk_var "ip"; mk_var "xs"]) @@
-                  mk_lambda' ["y", wrap_ttuple [t_int; tuple_col_t]] @@
-                    mk_extend_block ~path:[2] "y" @@ mk_var "xs")
+                  (mk_lambda'' unit_arg @@ mk_tuple
+                     [mk_var "ip"; mk_tuple [mk_ctrue; mk_var "xs"]]) @@
+                  mk_lambda' ["y", tup_option_t] @@
+                    mk_extend_block ~path:[2; 2] "y" @@ mk_var "xs")
               (mk_empty result_types) @@
               (* group by meaningful rtuple ids *)
               mk_gbagg
@@ -132,8 +138,9 @@ let gen_shuffle_fn p rmap lmap bindings fn_name =
             (mk_lambda2' ["acc", result_types] ["ip", t_int] @@
               mk_block [
                 mk_upsert_with "acc" ip_pat
-                  (mk_lambda'' unit_arg @@ mk_tuple [mk_var "ip"; mk_empty tuple_col_t]) @@
-                  mk_id_fn' [t_int; tuple_col_t]
+                  (mk_lambda'' unit_arg @@ mk_tuple
+                     [mk_var "ip"; mk_tuple [mk_cfalse; mk_empty tuple_col_t]]) @@
+                  mk_id_fn' (unwrap_ttuple tup_option_t)
               ;
               mk_var "acc"])
             (mk_var "normal_targets") @@

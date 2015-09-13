@@ -460,14 +460,16 @@ let sw_send_fetch_fn c s_rhs_lhs s_rhs trig_name =
             (* we need the types for creating empty rhs tuples *)
             let rhs_map_types = P.map_types_with_v_for c.p rhs_map_id in
             let tuple_types = wrap_t_calc' rhs_map_types in
+            let tup_t = wrap_ttuple [t_bool; tuple_types] in
+            let ip_pat = [mk_var "ip"; mk_cunknown] in
             mk_let ["sender_count"]
               (* count up the number of IPs received from route *)
               (mk_size @@ mk_apply'
                 route_fn @@ mk_cint rhs_map_id::route_key) @@
             mk_agg
               (mk_lambda2'
-                ["acc", col_t] ["ip", t_int; "tuples", tuple_types] @@
-                  mk_upsert_with_block "acc" [mk_var "ip"; mk_cunknown]
+                ["acc", col_t] ["ip", t_int; "_u", tup_t] @@
+                  mk_upsert_with_block "acc" ip_pat
                     (mk_lambda'' unit_arg @@ mk_tuple
                        [mk_var "ip"; mk_singleton stmt_cnt_list.t
                           [mk_cint stmt_id; mk_var "sender_count"]]) @@
@@ -643,12 +645,15 @@ let nd_send_push_stmt_map_trig c s_rhs_lhs trig_name =
           mk_apply'
             nd_log_master_write_nm @@ [mk_cint stmt_id; mk_var "vid"];
           mk_iter
-            (mk_lambda'
-              ["ip", t_int;"tuples", wrap_t_calc' rhs_map_types] @@
+            (mk_lambda2'
+               ["ip", t_int]
+               ["empty", t_bool; "tuples", wrap_t_calc' rhs_map_types] @@
               mk_sendi
                 (rcv_push_name_of_t c trig_name stmt_id rhs_map_id)
                 (mk_var "ip") @@
-                mk_var "tuples" :: args_of_t_as_vars_with_v c trig_name) @@
+                mk_var "empty" ::
+                  mk_var "tuples" ::
+                  args_of_t_as_vars_with_v c trig_name) @@
             mk_apply'
               shuffle_fn @@
                 partial_key @ [mk_ctrue] @
@@ -691,7 +696,7 @@ List.fold_left
     acc_code @
     [mk_code_sink'
       (rcv_push_name_of_t c trig_name stmt_id read_map_id)
-      (("tuples", tup_ds.t)::
+      (("empty", t_bool)::("tuples", tup_ds.t)::
         args_of_t_with_v c trig_name)
       [] @@ (* locals *)
       (* save the tuples *)
