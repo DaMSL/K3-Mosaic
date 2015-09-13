@@ -142,6 +142,8 @@ val mk_lambda' : (id_t * type_t) list -> expr_t -> expr_t
 val mk_lambda'' : (id_t * type_t) list -> expr_t -> expr_t
 val mk_lambda2 : arg_t -> arg_t -> expr_t -> expr_t
 val mk_lambda2' : (id_t * type_t) list -> (id_t * type_t) list -> expr_t -> expr_t
+val mk_lambda2'' : (id_t * type_t) list -> (id_t * type_t) list -> expr_t -> expr_t
+val mk_lambda2d' : (id_t * type_t) list list -> (id_t * type_t) list list -> expr_t -> expr_t
 val mk_lambda3 : arg_t -> arg_t -> arg_t -> expr_t -> expr_t
 val mk_lambda3' : (id_t * type_t) list -> (id_t * type_t) list -> (id_t * type_t) list -> expr_t -> expr_t
 val mk_apply : expr_t -> expr_t list -> expr_t
@@ -281,6 +283,9 @@ val mk_fst': id_t -> expr_t
 (* macro similar to snd *)
 val mk_snd: expr_t -> expr_t
 val mk_snd': id_t -> expr_t
+
+val mk_thd: expr_t -> expr_t
+val mk_thd': id_t -> expr_t
 
 (* like fst, but for a collection with a tuple of any size *)
 val project_from_col : type_t list -> expr_t -> choice:int -> expr_t

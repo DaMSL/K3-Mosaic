@@ -96,16 +96,18 @@ let nd_log_get_bound c t =
     mk_snd @@ mk_peek_or_error "failed to find log" @@
       mk_slice' (D.nd_log_for_t t) pat
 
-
 (* function to check to see if we should execute a do_complete *)
 (* params: vid, stmt, count_to_change *)
+let nd_complete_stmt_cntr_check_nm = "nd_complete_stmt_cntr_check"
+
 let nd_check_stmt_cntr_index_nm = "nd_check_stmt_cntr_index"
 let nd_check_stmt_cntr_index c =
   let lookup = "lookup_value" in
   let part_pat = ["vid", t_vid; "stmt_id", t_stmt_id] in
   let part_pat_as_vars = [mk_tuple @@ ids_to_vars @@ fst_many part_pat] in
   let query_pat = part_pat_as_vars @ [mk_cunknown] in
-  let add_to_count, new_count = "add_to_count", "new_count" in
+  let add_to_count, new_count, empty, new_modify =
+    "add_to_count", "new_count", "empty", "new_modify" in
   (* lmap -> stmts *)
   let h = Hashtbl.create 20 in
   List.iter (fun (s,m) ->
@@ -113,25 +115,39 @@ let nd_check_stmt_cntr_index c =
     P.stmts_lhs_maps c.p;
   let lmap_stmts = list_of_hashtbl h in
   mk_global_fn nd_check_stmt_cntr_index_nm
-    (part_pat @ [add_to_count, t_int])
+    (part_pat @ [add_to_count, t_int; empty, t_bool])
     [t_bool] @@ (* return whether we should send the do_complete *)
     (* check if the counter exists *)
     mk_case_sn
       (mk_peek @@ mk_slice' nd_stmt_cntrs.id query_pat) lookup
+      (* calculate the new modify state *)
+      (mk_let [new_modify]
+        (mk_or (mk_not @@ mk_var empty) @@ mk_snd @@ mk_snd @@ mk_var lookup) @@
       (* calculate new_count *)
-      (mk_let [new_count]
+       mk_let [new_count]
         (mk_add (mk_var add_to_count) @@ mk_fst @@ mk_snd @@ mk_var lookup) @@
         mk_block [
           (* upate the counter *)
           mk_update nd_stmt_cntrs.id [mk_var lookup] @@
-            part_pat_as_vars @ [mk_tuple [mk_var new_count; mk_snd @@ mk_snd @@ mk_var lookup]];
-          (* return whether the counter is 0 *)
-          mk_eq (mk_cint 0) @@ mk_var new_count]) @@
+            part_pat_as_vars @ [mk_tuple
+              [mk_var new_count; mk_var new_modify;
+                mk_thd @@ mk_snd @@ mk_var lookup]]
+          ;
+          (* if counter is 0 and no modify, we need to delete here since do_complete
+           * will never execute *)
+          mk_if (mk_and (mk_eq (mk_var new_count) @@ mk_cint 0) @@
+            mk_eq (mk_var new_modify) @@ mk_cfalse)
+              (mk_apply' nd_complete_stmt_cntr_check_nm
+                  [mk_var "vid"; mk_var "stmt_id"])
+              mk_cunit
+          ;
+          (* return whether the counter is 0 and we have some data *)
+          mk_and (mk_eq (mk_cint 0) @@ mk_var new_count) @@ mk_var new_modify]) @@
       (* else: no value in the counter *)
       mk_block [
         (* Initialize *)
         mk_insert nd_stmt_cntrs.id @@ part_pat_as_vars @
-          [mk_tuple [mk_var add_to_count; mk_empty nd_stmt_cntrs_corr_map.t]];
+          [mk_tuple [mk_var add_to_count; mk_not @@ mk_var empty; mk_empty nd_stmt_cntrs_corr_map.t]];
         (* For no-corrective mode, add per-map *)
         mk_if (mk_var D.corrective_mode.id) mk_cunit @@
           List.fold_left (fun acc (m, ss) ->
@@ -594,7 +610,8 @@ mk_code_sink'
         ["stmt_id", t_stmt_id; "count", t_int] @@
         mk_if
           (mk_apply' nd_check_stmt_cntr_index_nm @@
-            [mk_var "vid"; mk_var "stmt_id"; mk_var "count"])
+            (* false: no data is being sent *)
+            [mk_var "vid"; mk_var "stmt_id"; mk_var "count"; mk_cfalse])
           (* we need to create a possible send for each statement in the trigger *)
           (List.fold_left (fun acc_code stmt_id ->
             mk_if
@@ -645,7 +662,7 @@ let nd_send_push_stmt_map_trig c s_rhs_lhs trig_name =
           mk_apply'
             nd_log_master_write_nm @@ [mk_cint stmt_id; mk_var "vid"];
           mk_iter
-            (mk_lambda2'
+            (mk_lambda2''
                ["ip", t_int]
                ["empty", t_bool; "tuples", wrap_t_calc' rhs_map_types] @@
               mk_sendi
@@ -682,7 +699,9 @@ let nd_send_push_stmt_map_trig c s_rhs_lhs trig_name =
  * a good reminder to have it here
  * We write to specific buffer maps to prevent mixing of buffer and non-buffer
  * data, which can cause confusion when the time comes to compute.
- * A later optimization could be lumping maps between statements in a trigger *)
+ * A later optimization could be lumping maps between statements in a trigger,
+ * which can be done on a rmap to lmap with binding basis (like shuffles). Care must be
+ * paid to the corrective updates in this case, which are statement-specific *)
 
 let nd_rcv_push_trig c s_rhs trig_name =
 List.fold_left
@@ -716,7 +735,7 @@ List.fold_left
          (* update and check statment counters to see if we should send a do_complete *)
          mk_if
            (mk_apply' nd_check_stmt_cntr_index_nm @@
-             [mk_var "vid"; mk_cint stmt_id; mk_cint @@ -1])
+            [mk_var "vid"; mk_cint stmt_id; mk_cint @@ -1; mk_var "empty"])
            (* apply local do_complete *)
            (mk_apply' (do_complete_name_of_t trig_name stmt_id) @@
              args_of_t_as_vars_with_v c trig_name)
@@ -831,8 +850,9 @@ let send_corrective_fns c =
                         let t_col = wrap_t_calc' [t_int; t_vid; map_ds.t] in
                         (* insert vid into the ip, tuples output of shuffle *)
                         mk_agg (* (ip * vid * tuple list) list *)
-                          (mk_lambda2'
-                            ["acc", t_col] ["ip", t_int; "tuples", delta_tuples2.t] @@
+                          (mk_lambda2d'
+                             [["acc", t_col]]
+                             [["ip", t_int]; ["empty", t_bool; "tuples", delta_tuples2.t]] @@
                               mk_insert_block "acc"
                                 [mk_var "ip"; mk_var "vid";
                                 (* get rid of vid NOTE: to reduce number of shuffles *)
@@ -927,13 +947,15 @@ let nd_update_stmt_cntr_corr_map =
   ["vid", t_vid; "stmt_id", t_stmt_id; "hop", t_int; "count", t_int; "root", t_bool; "create", t_bool] [] @@
     mk_block [
       (* if requested, we first create an empty entry *)
+      (* this is for stmts w/o rhs maps that still need to keep track of corrective chains *)
       mk_if (mk_var "create")
-        (mk_insert nd_stmt_cntrs.id [mk_tuple lookup_pat; mk_tuple [mk_cint 0; mk_empty nd_stmt_cntrs_corr_map.t]])
+        (mk_insert nd_stmt_cntrs.id
+           [mk_tuple lookup_pat; mk_tuple [mk_cint 0; mk_cfalse; mk_empty nd_stmt_cntrs_corr_map.t]])
         mk_cunit;
       (* we need to decrement the previous hop's value by 1, and increment the hop's values by the count (if it's not 0) *)
       mk_upsert_with_sim nd_stmt_cntrs "lkup" ~k:lookup_pat
         ~default:(mk_error @@ sp "%s: missing stmt_cntrs value" nd_update_stmt_cntr_corr_map_nm)
-        ~v:(mk_let [nd_stmt_cntrs_corr_map.id] (mk_snd @@ mk_snd @@ mk_var "lkup") @@
+        ~v:(mk_let [nd_stmt_cntrs_corr_map.id] (mk_thd @@ mk_snd @@ mk_var "lkup") @@
               mk_block [
                 (* only do this part if count isn't 0 *)
                 mk_if (mk_eq (mk_var "count") @@ mk_cint 0)
@@ -984,7 +1006,9 @@ let nd_update_stmt_cntr_corr_map =
                       (mk_insert nd_stmt_cntrs_corr_map.id [mk_var "hop2"; mk_var "new_count"]));
 
                 (* set the new tuple *)
-                mk_tuple [mk_fst @@ mk_snd @@ mk_var "lkup"; mk_var nd_stmt_cntrs_corr_map.id]
+                mk_tuple [mk_fst @@ mk_snd @@ mk_var "lkup";
+                          mk_snd @@ mk_snd @@ mk_var "lkup";
+                          mk_var nd_stmt_cntrs_corr_map.id]
               ])
     ]
 
@@ -1087,7 +1111,6 @@ let nd_exec_buffered_fetches c =
     ]
 
 (* call from do_complete when done to check if fully done *)
-let nd_complete_stmt_cntr_check_nm = "nd_complete_stmt_cntr_check"
 let nd_complete_stmt_cntr_check c =
   mk_global_fn nd_complete_stmt_cntr_check_nm ["vid", t_vid; "stmt_id", t_stmt_id] [] @@
   (* if we have nothing to send, we can delete our stmt_cntr entry right away *)
@@ -1173,7 +1196,8 @@ let nd_do_complete_fns c ast trig_name corr_maps =
               * since no stmt cntr entry was created *)
               mk_if (mk_eq (mk_var "sent_msgs") @@ mk_cint 0)
                 mk_cunit @@
-                (* else, update and create a stmt counter *)
+                (* else, update and create a stmt counter, since we need to keep track of any
+                 *  correctives we sent on, but we have no rhs maps *)
                 update_corr_code true
         (* no correctives are possible *)
         else
@@ -1201,7 +1225,7 @@ let nd_rcv_corr_done c =
       mk_case_ns (mk_lookup' nd_stmt_cntrs.id lookup_pat) "lkup"
         (mk_error @@ nd_rcv_corr_done_nm^": expected stmt_cntr value") @@
         (* if the corr_cnt map is empty *)
-        mk_is_empty (mk_snd @@ mk_snd @@ mk_var "lkup")
+        mk_is_empty (mk_thd @@ mk_snd @@ mk_var "lkup")
           ~n:mk_cunit
           ~y:(mk_block [
               (* delete the whole stmt_cntr entry *)
@@ -1376,7 +1400,6 @@ let declare_global_funcs c partmap ast =
   nd_log_master_write ::
   (P.for_all_trigs ~sys_init:true ~delete:c.gen_deletes c.p @@ nd_log_write c) @
   (P.for_all_trigs ~sys_init:true ~delete:c.gen_deletes c.p @@ nd_log_get_bound c) @
-  nd_check_stmt_cntr_index c ::
   nd_update_stmt_cntr_corr_map ::
   begin if c.gen_correctives then [nd_filter_corrective_list] else [] end @
   K3Ring.functions @
@@ -1471,6 +1494,7 @@ let gen_dist ?(gen_deletes=true)
     (* we need this here for scope *)
     nd_exec_buffered_fetches c @
     nd_complete_stmt_cntr_check c ::
+    nd_check_stmt_cntr_index c ::
     proto_funcs @
     [mk_flow @@
       Proto.triggers c @
