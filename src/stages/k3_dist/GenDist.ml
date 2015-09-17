@@ -106,8 +106,8 @@ let nd_check_stmt_cntr_index c =
   let part_pat = ["vid", t_vid; "stmt_id", t_stmt_id] in
   let part_pat_as_vars = [mk_tuple @@ ids_to_vars @@ fst_many part_pat] in
   let query_pat = part_pat_as_vars @ [mk_cunknown] in
-  let add_to_count, new_count, empty, new_modify =
-    "add_to_count", "new_count", "empty", "new_modify" in
+  let add_to_count, new_count, has_data, new_modify =
+    "add_to_count", "new_count", "has_data", "new_modify" in
   (* lmap -> stmts *)
   let h = Hashtbl.create 20 in
   List.iter (fun (s,m) ->
@@ -115,14 +115,14 @@ let nd_check_stmt_cntr_index c =
     P.stmts_lhs_maps c.p;
   let lmap_stmts = list_of_hashtbl h in
   mk_global_fn nd_check_stmt_cntr_index_nm
-    (part_pat @ [add_to_count, t_int; empty, t_bool])
+    (part_pat @ [add_to_count, t_int; has_data, t_bool])
     [t_bool] @@ (* return whether we should send the do_complete *)
     (* check if the counter exists *)
     mk_case_sn
       (mk_peek @@ mk_slice' nd_stmt_cntrs.id query_pat) lookup
       (* calculate the new modify state *)
       (mk_let [new_modify]
-        (mk_or (mk_not @@ mk_var empty) @@ mk_snd @@ mk_snd @@ mk_var lookup) @@
+        (mk_or (mk_var has_data) @@ mk_snd @@ mk_snd @@ mk_var lookup) @@
       (* calculate new_count *)
        mk_let [new_count]
         (mk_add (mk_var add_to_count) @@ mk_fst @@ mk_snd @@ mk_var lookup) @@
@@ -147,7 +147,7 @@ let nd_check_stmt_cntr_index c =
       mk_block [
         (* Initialize *)
         mk_insert nd_stmt_cntrs.id @@ part_pat_as_vars @
-          [mk_tuple [mk_var add_to_count; mk_not @@ mk_var empty; mk_empty nd_stmt_cntrs_corr_map.t]];
+          [mk_tuple [mk_var add_to_count; mk_var has_data; mk_empty nd_stmt_cntrs_corr_map.t]];
         (* For no-corrective mode, add per-map *)
         mk_if (mk_var D.corrective_mode.id) mk_cunit @@
           List.fold_left (fun acc (m, ss) ->
@@ -664,11 +664,11 @@ let nd_send_push_stmt_map_trig c s_rhs_lhs trig_name =
           mk_iter
             (mk_lambda2''
                ["ip", t_int]
-               ["empty", t_bool; "tuples", wrap_t_calc' rhs_map_types] @@
+               ["has_data", t_bool; "tuples", wrap_t_calc' rhs_map_types] @@
               mk_sendi
                 (rcv_push_name_of_t c trig_name stmt_id rhs_map_id)
                 (mk_var "ip") @@
-                mk_var "empty" ::
+                mk_var "has_data" ::
                   mk_var "tuples" ::
                   args_of_t_as_vars_with_v c trig_name) @@
             mk_apply'
@@ -715,7 +715,7 @@ List.fold_left
     acc_code @
     [mk_code_sink'
       (rcv_push_name_of_t c trig_name stmt_id read_map_id)
-      (("empty", t_bool)::("tuples", tup_ds.t)::
+      (("has_data", t_bool)::("tuples", tup_ds.t)::
         args_of_t_with_v c trig_name)
       [] @@ (* locals *)
       (* save the tuples *)
@@ -735,7 +735,7 @@ List.fold_left
          (* update and check statment counters to see if we should send a do_complete *)
          mk_if
            (mk_apply' nd_check_stmt_cntr_index_nm @@
-            [mk_var "vid"; mk_cint stmt_id; mk_cint @@ -1; mk_var "empty"])
+            [mk_var "vid"; mk_cint stmt_id; mk_cint @@ -1; mk_var "has_data"])
            (* apply local do_complete *)
            (mk_apply' (do_complete_name_of_t trig_name stmt_id) @@
              args_of_t_as_vars_with_v c trig_name)
@@ -852,7 +852,7 @@ let send_corrective_fns c =
                         mk_agg (* (ip * vid * tuple list) list *)
                           (mk_lambda2d'
                              [["acc", t_col]]
-                             [["ip", t_int]; ["empty", t_bool; "tuples", delta_tuples2.t]] @@
+                             [["ip", t_int]; ["_u", t_bool; "tuples", delta_tuples2.t]] @@
                               mk_insert_block "acc"
                                 [mk_var "ip"; mk_var "vid";
                                 (* get rid of vid NOTE: to reduce number of shuffles *)
