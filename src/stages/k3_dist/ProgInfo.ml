@@ -337,7 +337,8 @@ let slice_key_from_bound (p:prog_data_t) (stmt_id:stmt_id_t) (map_id:map_id_t) =
    This pattern is only for shuffles. For shuffles, only free (ie. loop) variables
    matter. All bound vars are the same as no connection between the lhs and rhs.
    For maps, however, we're still sharding by the rhs pattern on the rhs, and then
-   caching that as a lhs shard pattern on the lhs. *)
+   caching that as a lhs shard pattern on the lhs.
+   returns: rmap, lmap index set *)
 let get_map_bindings_in_stmt p stmt_id rmap lmap =
   let trig_args = fst_many @@ args_of_t p @@ trigger_of_stmt p stmt_id in
   (* make sure we only take bindings not including the value, and not bound args *)
@@ -346,9 +347,28 @@ let get_map_bindings_in_stmt p stmt_id rmap lmap =
   let rmap_bindings = not_in_trig @@ find_rmap_bindings_in_stmt p stmt_id rmap in
   IntIntSet.of_list @@ List.flatten @@ List.map
     (fun (id, index) ->
-      try [index, List.assoc id rmap_bindings]
+      try [index, List.assoc id lmap_bindings]
       with Not_found -> [])
-    lmap_bindings
+    rmap_bindings
+
+(* check if a statement has map bindings that cause conservative routing:
+   2 or more separate loop variables *)
+let has_many_loops_map_bindings p s =
+  let rmaps = rhs_maps_of_stmt p s in
+  let lmap  = lhs_map_of_stmt p s in
+  let binds = List.map (fun r -> get_map_bindings_in_stmt p s r lmap) rmaps in
+  (* our condition is that the lmap has >1 loop var, and that >1 rmaps connect to
+     the lmap *)
+  let lmap_vars, rmap_count = first IntSet.cardinal @@
+    List.fold_left (fun ((acc, count) as a) set ->
+      if IntIntSet.is_empty set then a
+      else
+        let acc = IntIntSet.fold (fun (_,l) acc -> IntSet.add l acc) set acc in
+        acc, count + 1)
+      (IntSet.empty, 0) binds
+  in
+  lmap_vars > 1 && rmap_count > 1
+
 
 module IntSetSetMap = Map.Make(struct type t = IntSetSet.t let compare = IntSetSet.compare end)
 
