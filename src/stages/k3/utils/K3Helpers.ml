@@ -529,8 +529,13 @@ let mk_lambda2 arg1 arg2 expr = mk_lambda (ATuple[arg1; arg2]) expr
 let mk_lambda2' a1 a2 expr = mk_lambda2 (wrap_args a1) (wrap_args a2) expr
 let mk_lambda2'' a1 a2 expr = mk_lambda (ATuple[ATuple[wrap_args a1;wrap_args a2]]) expr
 
+let wrap_atuple = function
+  | []  -> failwith "nothing to wrap"
+  | [x] -> x
+  | xs  -> ATuple xs
+
 let mk_lambda2d' a1 a2 expr =
-  mk_lambda2 (ATuple(List.map wrap_args a1)) (ATuple(List.map wrap_args a2)) expr
+  mk_lambda2 (wrap_atuple @@ List.map wrap_args a1) (wrap_atuple @@ List.map wrap_args a2) expr
 
 let mk_lambda3 arg1 arg2 arg3 expr = mk_lambda (ATuple[arg1; arg2; arg3]) expr
 let mk_lambda3' a1 a2 a3 expr = mk_lambda3 (wrap_args a1) (wrap_args a2) (wrap_args a3) expr
