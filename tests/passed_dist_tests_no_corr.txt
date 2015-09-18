@@ -32,10 +32,7 @@ queries/simple/rstar.sql
 queries/tpch/query1.sql
 queries/tpch/query3.sql
 queries/tpch/query4.sql
-queries/tpch/query5.sql
-queries/tpch/query7.sql
 queries/tpch/query8.sql
-queries/tpch/query9.sql
 queries/tpch/query10.sql
 queries/tpch/query11.sql
 queries/tpch/query11a.sql
