@@ -362,13 +362,13 @@ let delta_action c ast stmt =
   (* we need to know how the map is accessed in the statement. *)
   let lmap_bindings = P.find_lmap_bindings_in_stmt c.p stmt lmap in
   (* let existing_out_tier = ..., which we remove *)
-  let id, calc, expr = U.decompose_let ast in
+  let id, _, expr = U.decompose_let ast in
   if id <> ["existing_out_tier"] then failwith "sanity check fail: expected existing_out_tier" else
   match U.tag_of_expr expr with
   | Let _ ->
     (* simple modification - sending a single tuple of data *)
     (* this is something like prod_ret_x's let *)
-      let delta_names, bound, expr = U.decompose_let expr in
+      let delta_names, calc, expr = U.decompose_let expr in
       let full_names = fst_many lmap_bindings @ delta_names in
       let full_vars = mk_singleton lmap_col_t @@ ids_to_vars full_names in
       (* modify the delta itself *)
