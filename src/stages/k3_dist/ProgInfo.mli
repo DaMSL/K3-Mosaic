@@ -127,6 +127,6 @@ val slice_key_from_bound : prog_data_t ->
  * showing how a lhs map variable corresponds to a rhs variable
  * starting at 0 index *)
 val get_map_bindings_in_stmt : prog_data_t -> stmt_id_t -> map_id_t -> map_id_t
--> IntIntSet.t
+-> int IntMap.t
 
 val map_access_patterns : prog_data_t -> (map_id_t, int * IntSetSet.t) Hashtbl.t

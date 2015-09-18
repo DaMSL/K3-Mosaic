@@ -65,7 +65,7 @@ type shuffle_fn_entry = {
   stmts : IntSet.t;
   rmap : map_id_t;
   lmap : map_id_t;
-  binding : IntIntSet.t; (* rmap idx, lmap idx *)
+  binding : int IntMap.t; (* rmap idx, lmap idx *)
   name : string;
 }
 

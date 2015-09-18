@@ -13,19 +13,19 @@ open K3Route
  * binding patterns is the same, we can use the same shuffle function *)
 let shuffle_for p rhs_map_id lhs_map_id bindings =
   let binds = List.map (fun (r, l) -> sp "%dt%d" r l) @@
-    IntIntSet.elements bindings in
+    IntMap.to_list bindings in
   let bind_s = String.concat "_" binds in
   let bind_s = if bind_s = "" then "" else "_bind_"^bind_s in
   sp "shuffle_%s_to_%s%s" (map_name_of p rhs_map_id) (map_name_of p lhs_map_id) bind_s
 
 let find_shuffle_by_binding shuffle_fns r l b =
-  match List.partition (fun fn -> fn.rmap = r && fn.lmap = l && IntIntSet.equal fn.binding b) shuffle_fns with
+  match List.partition (fun fn ->
+      fn.rmap = r && fn.lmap = l && IntMap.equal (fun x y -> x - y = 0) fn.binding b) shuffle_fns with
   | [], _       -> raise Not_found
   | [is], isnot -> is, isnot
   | _, _        -> failwith "too many functions"
 
 let gen_shuffle_fn p rmap lmap bindings fn_name =
-  let bindings = IntIntSet.elements bindings in
   let tuple_types = map_types_with_v_for p rmap in
   let tuple_col_t = wrap_t_calc' tuple_types in
   (* whether it's a fake send or a real send *)
@@ -37,12 +37,15 @@ let gen_shuffle_fn p rmap lmap bindings fn_name =
   (* lkey refers to the access pattern from trig args. rkey is from the tuples*)
   let id_l, id_r = "lkey_" , "rkey_" in
   let to_rkey, to_lkey = int_to_temp_id id_r, int_to_temp_id id_l in
-  let lmap_range = mk_tuple_range lkey_types in
-  (* use bindings to construct lkey. Also tuple -> just var *)
-  let full_key_vars' = List.map (fun i ->
-      try `Rkey(adjust_key_id_for_v @@ List.assoc i bindings)
-      with Not_found -> `Lkey i)
-    lmap_range in
+  let map_range = Array.of_list @@ List.map (fun x -> `Lkey x) @@ mk_tuple_range lkey_types in
+  (* use bindings to construct lkey. *)
+  List.iteri (fun i _ ->
+      try
+        let dest = IntMap.find i bindings in
+        map_range.(dest) <- `Rkey(adjust_key_id_for_v i)
+      with Not_found -> ()) @@
+    map_types_for p rmap;
+  let full_key_vars' = Array.to_list map_range in
   let used_rkeys = filter_map (function
     | `Rkey i -> Some (mk_var @@ to_rkey i, at tuple_types i)
     | _ -> None) full_key_vars' in

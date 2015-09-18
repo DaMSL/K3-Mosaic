@@ -69,6 +69,8 @@ val singleton : 'a -> 'a list
 
 val list_sum : ('a -> int) -> 'a list -> int
 
+val int_minus : int -> int -> int
+
 (* take the first x values of a list *)
 val list_take : int -> 'a list -> 'a list
 

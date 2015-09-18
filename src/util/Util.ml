@@ -76,6 +76,8 @@ let singleton x = [x]
 
 let list_sum f l = List.fold_left (fun acc x -> acc + f x) 0 l
 
+let int_minus (x:int) y = x - y
+
 (* take the first x elements of a list *)
 let list_take len li =
   let rec take len2 li2 acc_list =

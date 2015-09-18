@@ -331,7 +331,7 @@ let slice_key_from_bound (p:prog_data_t) (stmt_id:stmt_id_t) (map_id:map_id_t) =
     var_list_from_bound p stmt_id map_id
   in match result with [] -> [mk_const CUnit] | _ -> result
 
-(* return a binding pattern for a stmt of (left_index, right_index) list
+(* return a binding pattern for a stmt of (right_index, left_index) list
  * showing how a lhs map variable corresponds to a rhs variable
  * starting at 0 index.
    This pattern is only for shuffles. For shuffles, only free (ie. loop) variables
@@ -345,10 +345,11 @@ let get_map_bindings_in_stmt p stmt_id rmap lmap =
   let not_in_trig = List.filter (fun (s,_) -> not @@ List.mem s trig_args) in
   let lmap_bindings = not_in_trig @@ find_lmap_bindings_in_stmt p stmt_id lmap in
   let rmap_bindings = not_in_trig @@ find_rmap_bindings_in_stmt p stmt_id rmap in
-  IntIntSet.of_list @@ List.flatten @@ List.map
-    (fun (id, index) ->
-      try [index, List.assoc id lmap_bindings]
-      with Not_found -> [])
+  List.fold_left
+    (fun acc (id, index) ->
+      try IntMap.add index (List.assoc id lmap_bindings) acc
+      with Not_found -> acc)
+    IntMap.empty
     rmap_bindings
 
 (* check if a statement has map bindings that cause conservative routing:
@@ -356,18 +357,16 @@ let get_map_bindings_in_stmt p stmt_id rmap lmap =
 let has_many_loops_map_bindings p s =
   let rmaps = rhs_maps_of_stmt p s in
   let lmap  = lhs_map_of_stmt p s in
-  let binds = List.map (fun r -> get_map_bindings_in_stmt p s r lmap) rmaps in
+  let binds = List.filter (not |- IntMap.is_empty) @@
+    List.map (fun r -> get_map_bindings_in_stmt p s r lmap) rmaps in
   (* our condition is that the lmap has >1 loop var, and that >1 rmaps connect to
-     the lmap *)
-  let lmap_vars, rmap_count = first IntSet.cardinal @@
-    List.fold_left (fun ((acc, count) as a) set ->
-      if IntIntSet.is_empty set then a
-      else
-        let acc = IntIntSet.fold (fun (_,l) acc -> IntSet.add l acc) set acc in
-        acc, count + 1)
-      (IntSet.empty, 0) binds
-  in
-  lmap_vars > 1 && rmap_count > 1
+     the lmap with loop vars *)
+  List.length binds > 1 &&
+    (let lmap_loop_vars =
+      List.fold_left (fun acc x ->
+        IntMap.fold (fun _ lidx acc -> IntSet.add lidx acc) x acc) IntSet.empty binds
+    in
+    IntSet.cardinal lmap_loop_vars > 1)
 
 
 module IntSetSetMap = Map.Make(struct type t = IntSetSet.t let compare = IntSetSet.compare end)

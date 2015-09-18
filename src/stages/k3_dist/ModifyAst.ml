@@ -355,14 +355,14 @@ let modify_dist (c:config) ast stmt =
 
 (* this delta extraction is very brittle, since it's tailored to the way the M3
  * to K3 calculations are written. *)
-let delta_action c ast stmt after_fn =
+let delta_action c ast stmt =
   let lmap = P.lhs_map_of_stmt c.p stmt in
   let lmap_id_t = P.map_ids_types_for c.p lmap in
   let lmap_col_t = wrap_t_calc @@ wrap_ttuple @@ snd_many lmap_id_t in
   (* we need to know how the map is accessed in the statement. *)
   let lmap_bindings = P.find_lmap_bindings_in_stmt c.p stmt lmap in
   (* let existing_out_tier = ..., which we remove *)
-  let id, bound, expr = U.decompose_let ast in
+  let id, calc, expr = U.decompose_let ast in
   if id <> ["existing_out_tier"] then failwith "sanity check fail: expected existing_out_tier" else
   match U.tag_of_expr expr with
   | Let _ ->
@@ -370,12 +370,12 @@ let delta_action c ast stmt after_fn =
     (* this is something like prod_ret_x's let *)
       let delta_names, bound, expr = U.decompose_let expr in
       let full_names = fst_many lmap_bindings @ delta_names in
-      let lmap_v_col_t = wrap_t_calc @@ wrap_ttuple @@ P.map_types_with_v_for c.p lmap in
-      let full_vars = mk_singleton lmap_v_col_t @@ ids_to_vars full_names in
+      let full_vars = mk_singleton lmap_col_t @@ ids_to_vars full_names in
       (* modify the delta itself *)
-      mk_let delta_names
-        (* contains original computation code *)
-        bound @@ after_fn full_vars
+      (* calc contains original computation code *)
+      let code = mk_let delta_names calc full_vars in
+      (* TODO: use the boolean to pass only a tuple *)
+      true, code
 
   | Iterate -> (* more complex modification *)
     (* col contains the calculation code, lambda is the delta addition *)
@@ -443,11 +443,8 @@ let delta_action c ast stmt after_fn =
       let wrap_convert col_e = mk_convert_col (wrap_tbag' @@ snd_many lmap_id_t) lmap_col_t col_e in
       if has_concat then wrap_uniq col_e else wrap_convert col_e
     in
-    let delta_name = "delta_values" in
-    (* col2 contains the calculation code *)
-    mk_let [delta_name] (wrap_out @@ wrap_map col) @@
-      (* any function *)
-      after_fn (mk_var delta_name)
+    (* col contains the calculation code *)
+    true, wrap_out @@ wrap_map col
 
   | _ -> raise @@ UnhandledModification(
      Printf.sprintf "Bad tag [%d]: %s" (U.id_of_expr expr) @@ PR.string_of_expr expr)
@@ -460,14 +457,15 @@ let rename_var old_var_name new_var_name ast =
     | _ -> e
 
 (* return a modified version of the original ast for stmt s *)
-let modify_ast_for_s (c:config) ast stmt trig after_fn =
+let modify_ast c ast stmt trig =
   let _, ast = ast_for_s_t c ast stmt trig in
   let ast = modify_dist c ast stmt in
-  let ast = delta_action c ast stmt after_fn in
-  ast
+  let is_col, ast = delta_action c ast stmt in
+  is_col, ast
 
 (* return a modified version of the corrective update *)
-let modify_corr_ast c ast map stmt trig after_fn =
+let modify_corr_ast c ast map stmt trig =
   let args, corr_stmt, ast = corr_ast_for_m_s c ast map stmt trig in
   let ast = modify_dist c ast stmt in
-  args, delta_action c ast corr_stmt after_fn
+  let is_col, ast = delta_action c ast corr_stmt in
+  args, is_col, ast
