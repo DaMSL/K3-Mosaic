@@ -354,7 +354,7 @@ let get_map_bindings_in_stmt p stmt_id rmap lmap =
 
 (* check if a statement has map bindings that cause conservative routing:
    2 or more separate loop variables *)
-let has_many_loops_map_bindings p s =
+let stmt_has_loop_vars p s =
   let rmaps = rhs_maps_of_stmt p s in
   let lmap  = lhs_map_of_stmt p s in
   let binds = List.filter (not |- IntMap.is_empty) @@

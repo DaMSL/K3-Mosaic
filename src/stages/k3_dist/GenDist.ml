@@ -1151,6 +1151,25 @@ let nd_do_complete_trigs c trig_name =
 in
 List.map do_complete_trig @@ P.stmts_without_rhs_maps_in_t c.p trig_name
 
+let let_lmap_filtering c delta stmt_id lmap let_bind body =
+    (* check for complicated double loop vars which necessitate lmap filtering *)
+    let lmap_i_ts = P.map_ids_types_for c.p lmap in
+    let do_action = "do_action" in
+    if P.stmt_has_loop_vars c.p stmt_id then
+      mk_let [do_action; delta]
+        (mk_filter (mk_lambda' (P.map_ids_types_for c.p lmap) @@
+          (* we make sure that a precise route leads to us *)
+          mk_eq
+            (mk_apply' (R.route_for ~precise:true c.p lmap) @@
+              mk_cint lmap::
+                (List.map (fun x -> mk_tuple [mk_ctrue; x]) @@
+                ids_to_vars @@ fst_many @@ list_drop_end 1 lmap_i_ts))
+            G.me_var)
+          let_bind) @@
+        (* if we have no real value, do nothing *)
+        mk_if (mk_var do_action) body mk_cunit
+    else mk_let [delta] let_bind body
+
 (* function versions of do_complete *)
 let nd_do_complete_fns c ast trig_name corr_maps =
   (* @has_rhs: whether this statement has rhs maps *)
@@ -1162,7 +1181,11 @@ let nd_do_complete_fns c ast trig_name corr_maps =
     let snd_hop = mk_cint 2 in
     let delta = "delta_vals" in
     let is_col, ast = M.modify_ast c ast stmt_id trig_name in
-    mk_let [delta] ast @@
+    (* check for complicated double loop vars which necessitate lmap filtering *)
+
+    (* if we have loop vars, we need to filter the lmap values here *)
+    let_lmap_filtering c delta stmt_id lmap
+      ast @@
       mk_block [
         (* add delta *)
         do_add_delta c (mk_var delta) lmap ~corrective:false;
@@ -1170,10 +1193,11 @@ let nd_do_complete_fns c ast trig_name corr_maps =
         then
           let send_corr_t = send_corrective_name_of_t c lmap in
           mk_let ["sent_msgs"]
-            (* we apply send_correctives with our original address, stmt_id, original vid and hop + 1
-            * we double up on vid since send_correctives is also called for do_corrective,
-            * which must send the new vid to be calculated as well as the original complete's vid
-            *)
+            (* we apply send_correctives with our original address, stmt_id, original vid
+             * and hop + 1. We double up on vid since send_correctives is also called for
+             * do_corrective which must send the new vid to be calculated as well as the
+             * original complete's vid
+             *)
             (mk_if
               (* don't do correctives in no-corrective mode *)
               (mk_var D.corrective_mode.id)
@@ -1313,21 +1337,23 @@ let nd_do_corrective_fns c s_rhs ast trig_name corrective_maps =
       [t_int] @@
         let lmap = P.lhs_map_of_stmt c.p stmt_id in
         let send_corr_fn = send_corrective_name_of_t c lmap in
-        let args, is_col, ast = M.modify_corr_ast c ast map_id stmt_id trig_name
-        in
-        mk_let ["new_tuples"]
+        let args, is_col, ast = M.modify_corr_ast c ast map_id stmt_id trig_name in
+        let delta = "delta_vals" in
+
+        (* if we have loop vars, we need to filter the lmap values here *)
+        let_lmap_filtering c delta stmt_id map_id
         (* We *can't* filter out 0 values, because they may add to a map
          * that didn't have any value, and initialize a value at that key *)
           (mk_flatten @@ mk_map (mk_lambda' args ast) @@ mk_var "delta_tuples") @@
             mk_block [
               (* add delta *)
-              do_add_delta c (mk_var "new_tuples") lmap ~corrective:true;
+              do_add_delta c (mk_var delta) lmap ~corrective:true;
               (* send correctives *)
               if List.exists ((=) lmap) corrective_maps
               (* send correctives with hop + 1, and return the num of correctives *)
               then mk_apply' send_corr_fn @@
                 (modify_e orig_vals ["hop", mk_add (mk_cint 1) @@ mk_var "hop"]) @
-                [mk_var "vid"; mk_var "new_tuples"]
+                [mk_var "vid"; mk_var delta]
               (* if we have no more correctives, return 0 *)
               else mk_cint 0
             ]
