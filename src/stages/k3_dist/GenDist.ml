@@ -1151,24 +1151,36 @@ let nd_do_complete_trigs c trig_name =
 in
 List.map do_complete_trig @@ P.stmts_without_rhs_maps_in_t c.p trig_name
 
-let let_lmap_filtering c delta stmt_id lmap let_bind body =
-    (* check for complicated double loop vars which necessitate lmap filtering *)
+(* check for complicated double loop vars which necessitate lmap filtering *)
+(* @alt: alternative return expression *)
+let let_lmap_filtering ?(alt=mk_cunit) c delta stmt_id lmap let_bind body =
     let lmap_i_ts = P.map_ids_types_for c.p lmap in
+    let lmap_ts = snd_many lmap_i_ts in
     let do_action = "do_action" in
     if P.stmt_has_loop_vars c.p stmt_id then
       mk_let [do_action; delta]
-        (mk_filter (mk_lambda' (P.map_ids_types_for c.p lmap) @@
-          (* we make sure that a precise route leads to us *)
-          mk_eq
-            (mk_apply' (R.route_for ~precise:true c.p lmap) @@
-              mk_cint lmap::
-                (List.map (fun x -> mk_tuple [mk_ctrue; x]) @@
-                ids_to_vars @@ fst_many @@ list_drop_end 1 lmap_i_ts))
-            G.me_var)
+        (mk_agg
+           (mk_lambda2' [do_action, t_bool; "acc", wrap_t_calc' lmap_ts]
+                        [delta, wrap_ttuple lmap_ts] @@
+             mk_let (fst_many lmap_i_ts) (mk_var delta) @@
+             (* we make sure that a precise route leads to us *)
+             (* if no match is found, we abort the action *)
+             mk_if
+               (mk_eq
+                 (mk_apply' (R.route_for ~precise:true c.p lmap) @@
+                   mk_cint lmap::
+                     (List.map (fun x -> mk_tuple [mk_ctrue; x]) @@
+                     ids_to_vars @@ fst_many @@ list_drop_end 1 lmap_i_ts)) @@
+                 mk_var D.me_int.id)
+               (mk_tuple [mk_ctrue; mk_insert_block "acc" [mk_var delta]]) @@
+               mk_tuple [mk_var do_action; mk_var "acc"])
+           (mk_tuple [mk_cfalse; mk_empty @@ wrap_t_calc' lmap_ts])
           let_bind) @@
         (* if we have no real value, do nothing *)
-        mk_if (mk_var do_action) body mk_cunit
-    else mk_let [delta] let_bind body
+        mk_if (mk_var do_action) body alt
+    else
+      (* normal pathway - no complex loop vars *)
+      mk_let [delta] let_bind body
 
 (* function versions of do_complete *)
 let nd_do_complete_fns c ast trig_name corr_maps =
@@ -1341,10 +1353,11 @@ let nd_do_corrective_fns c s_rhs ast trig_name corrective_maps =
         let delta = "delta_vals" in
 
         (* if we have loop vars, we need to filter the lmap values here *)
-        let_lmap_filtering c delta stmt_id map_id
+        let_lmap_filtering c delta stmt_id lmap
         (* We *can't* filter out 0 values, because they may add to a map
          * that didn't have any value, and initialize a value at that key *)
-          (mk_flatten @@ mk_map (mk_lambda' args ast) @@ mk_var "delta_tuples") @@
+          (mk_flatten @@ mk_map (mk_lambda' args ast) @@ mk_var "delta_tuples") 
+            ~alt:(mk_cint 0) @@
             mk_block [
               (* add delta *)
               do_add_delta c (mk_var delta) lmap ~corrective:true;

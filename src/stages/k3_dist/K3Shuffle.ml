@@ -94,7 +94,7 @@ let gen_shuffle_fn p rmap lmap bindings fn_name =
                 mk_destruct_tuple "x" tuple_types id_r @@
                 (* fold over ips *)
                 mk_agg
-                  (mk_lambda2' ["acc", result_types] ["ip", t_addr] @@
+                  (mk_lambda2' ["acc", result_types] ["ip", t_int] @@
                     mk_upsert_with_block "acc" ip_pat
                       (mk_lambda'' unit_arg @@
                       mk_tuple [mk_var "ip";
@@ -120,7 +120,7 @@ let gen_shuffle_fn p rmap lmap bindings fn_name =
                 mk_destruct_tuple "x" tuple_types id_r @@
                 (* add xs to ip for group *)
                 mk_agg
-                  (mk_lambda2' ["acc", result_types] ["ip", t_addr] @@
+                  (mk_lambda2' ["acc", result_types] ["ip", t_int] @@
                     mk_upsert_with_block "acc" ip_pat
                       (mk_lambda'' unit_arg @@ mk_tuple
                         [mk_var "ip"; mk_tuple [mk_ctrue; mk_var "xs"]]) @@
