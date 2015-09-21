@@ -1153,7 +1153,7 @@ List.map do_complete_trig @@ P.stmts_without_rhs_maps_in_t c.p trig_name
 
 (* check for complicated double loop vars which necessitate lmap filtering *)
 (* @alt: alternative return expression *)
-let let_lmap_filtering ?(alt=mk_cunit) c delta stmt_id lmap let_bind body =
+let let_lmap_filtering c delta stmt_id lmap let_bind body ~alt =
     let lmap_i_ts = P.map_ids_types_for c.p lmap in
     let lmap_ts = snd_many lmap_i_ts in
     let do_action = "do_action" in
@@ -1193,12 +1193,19 @@ let nd_do_complete_fns c ast trig_name corr_maps =
     let snd_hop = mk_cint 2 in
     let delta = "delta_vals" in
     let is_col, ast = M.modify_ast c ast stmt_id trig_name in
-    (* check for complicated double loop vars which necessitate lmap filtering *)
 
-    (* if we have loop vars, we need to filter the lmap values here *)
+    (* if we have no rhs maps, do nothing *)
+    let no_corr_actions =
+      if not has_rhs then mk_cunit
+      else mk_apply' nd_complete_stmt_cntr_check_nm [mk_var "vid"; mk_cint stmt_id]
+    in
+
+    (* check for complicated double loop vars which necessitate lmap filtering
+     * if we have loop vars, we need to filter the lmap values here
+     *)
     let_lmap_filtering c delta stmt_id lmap
-      ast @@
-      mk_block [
+      ast
+      (mk_block [
         (* add delta *)
         do_add_delta c (mk_var delta) lmap ~corrective:false;
         if c.gen_correctives && List.exists ((=) lmap) corr_maps
@@ -1238,11 +1245,10 @@ let nd_do_complete_fns c ast trig_name corr_maps =
                  *  correctives we sent on, but we have no rhs maps *)
                 update_corr_code true
         (* no correctives are possible *)
-        else
-          (* if we have no rhs maps, do nothing *)
-          if not has_rhs then mk_cunit
-          else mk_apply' nd_complete_stmt_cntr_check_nm [mk_var "vid"; mk_cint stmt_id]
-      ]
+        else no_corr_actions
+      ])
+      (* no valid data: do nothing *)
+      ~alt:no_corr_actions
 in
 (List.map (do_complete_fn true)  @@ P.stmts_with_rhs_maps_in_t c.p trig_name) @
 (List.map (do_complete_fn false) @@ P.stmts_without_rhs_maps_in_t c.p trig_name)
