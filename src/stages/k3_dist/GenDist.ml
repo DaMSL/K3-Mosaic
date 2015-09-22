@@ -497,29 +497,32 @@ let sw_send_fetch_fn c s_rhs_lhs s_rhs trig_name =
         mk_sendi (rcv_fetch_name_of_t trig_name) (mk_var "ip") @@
           mk_var stmt_map_ids.id ::
           args_of_t_as_vars_with_v c trig_name) @@
-        List.fold_left
-          (fun acc_code (stmt_id, rhs_map_id) ->
-            let route_fn = R.route_for c.p rhs_map_id in
-            let key = P.partial_key_from_bound c.p stmt_id rhs_map_id in
-            mk_block [
-              mk_apply (mk_var route_fn) @@ mk_cint rhs_map_id::key;
-              mk_snd @@ mk_agg
-                (mk_lambda2' ["ip", t_int; "acc", map_t] ["has_val", t_bool] @@
-                  mk_block [
-                    mk_if (mk_var "has_val")
-                      (mk_upsert_with "acc" ip_pat
-                        (mk_lambda'' unit_arg @@ mk_tuple
-                          [mk_var "ip"; mk_singleton col_t [mk_cint stmt_id; mk_cint rhs_map_id]])
-                        (mk_lambda' ["y", wrap_ttuple [t_int; col_t]] @@
-                          mk_insert_block ~path:[2] "y" [mk_cint stmt_id; mk_cint rhs_map_id]))
-                      mk_cunit;
-                    mk_tuple [mk_add (mk_var "ip") @@ mk_cint 1; mk_var "acc"]
-                  ])
-                (mk_tuple [mk_cint 0; acc_code]) @@
-                mk_var K3Route.route_bitmap.id
-            ])
-          (mk_empty @@ map_t)
-          s_rhs ]
+        mk_let ["acc"] (mk_empty map_t) @@
+          List.fold_left
+            (fun acc_code (stmt_id, rhs_map_id) ->
+              let route_fn = R.route_for c.p rhs_map_id in
+              let key = P.partial_key_from_bound c.p stmt_id rhs_map_id in
+              mk_block [
+                mk_apply (mk_var route_fn) @@ mk_cint rhs_map_id::key;
+                mk_let ["acc"]
+                  (mk_snd @@ mk_agg
+                    (mk_lambda2' ["ip", t_int; "acc", map_t] ["has_val", t_bool] @@
+                      mk_block [
+                        mk_if (mk_var "has_val")
+                          (mk_upsert_with "acc" ip_pat
+                            (mk_lambda'' unit_arg @@ mk_tuple
+                              [mk_var "ip"; mk_singleton col_t [mk_cint stmt_id; mk_cint rhs_map_id]])
+                            (mk_lambda' ["y", wrap_ttuple [t_int; col_t]] @@
+                              mk_insert_block ~path:[2] "y" [mk_cint stmt_id; mk_cint rhs_map_id]))
+                          mk_cunit;
+                        mk_tuple [mk_add (mk_var "ip") @@ mk_cint 1; mk_var "acc"]
+                      ])
+                    (mk_tuple [mk_cint 0; mk_var "acc"]) @@
+                    mk_var K3Route.route_bitmap.id)
+                  acc_code
+              ])
+            (mk_var "acc")
+            s_rhs ]
   in
   (* Actual SendFetch function *)
   (* We use functions rather than triggers to have better control over
