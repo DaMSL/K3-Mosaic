@@ -407,7 +407,9 @@ let sw_send_fetch_fn c s_rhs_lhs s_rhs trig_name =
                     (mk_sendi do_complete_trig_name (mk_var "ip") @@
                       G.me_var :: mk_var "ack" :: args_of_t_as_vars_with_v c trig_name)
                     mk_cunit;
-                  mk_tuple [mk_add (mk_var "ip") @@ mk_cint 1; mk_cfalse]
+                  (* can only switch to false after we've seen the first one *)
+                  mk_tuple [mk_add (mk_var "ip") @@ mk_cint 1;
+                            mk_if (mk_var "has_val") mk_cfalse @@ mk_var "ack"]
                 ])
               (mk_tuple [mk_cint 0; mk_ctrue]) @@
               mk_var K3Route.route_bitmap.id
