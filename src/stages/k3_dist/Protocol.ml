@@ -132,6 +132,8 @@ let rcv_jobs =
       mk_cunit;
     (* add to node ring *)
     K3Ring.node_ring_init;
+    (* init route's node bitmap *)
+    unwrap_some K3Route.all_nodes_bitmap.d_init;
     (* ack the msg *)
     D.mk_send_master ms_rcv_jobs_ack_nm;
   ]

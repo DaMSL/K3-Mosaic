@@ -74,14 +74,21 @@ let gen_shuffle_fn p rmap lmap bindings fn_name =
 
       (* if we have only lkeys, we only need to route once *)
       if all_lkeys then
-        mk_let ["ips"]
-          (mk_apply' (route_for p lmap) @@
-            mk_cint lmap :: if pred then full_key_vars else [mk_cunit]) @@
-          mk_agg
-            (mk_lambda2' ["acc_col", result_types] ["ip", t_int] @@
-              mk_insert_block "acc_col" [mk_var "ip"; mk_tuple [mk_ctrue; mk_var "tuples"]])
-            (mk_empty result_types) @@
-            mk_var "ips"
+        mk_block [
+          mk_apply' (route_for p lmap) @@
+            mk_cint lmap :: if pred then full_key_vars else [mk_cunit];
+          mk_snd @@ mk_agg
+            (mk_lambda2' ["ip", t_int; "acc", result_types] ["has_val", t_bool] @@
+              mk_block [
+                mk_if (mk_var "has_val")
+                  (mk_insert "acc" [mk_var "ip"; mk_tuple [mk_ctrue; mk_var "tuples"]])
+                  mk_cunit
+                ;
+                mk_tuple [mk_add (mk_var "ip") @@ mk_cint 1; mk_var "acc"]
+              ])
+            (mk_tuple [mk_cint 0; mk_empty result_types]) @@
+            mk_var K3Route.route_bitmap.id
+        ]
       (* else, full shuffling *)
       else
         mk_let ["normal_targets"]
@@ -92,21 +99,28 @@ let gen_shuffle_fn p rmap lmap bindings fn_name =
             mk_agg
               (mk_lambda2' ["acc", result_types] ["x", wrap_ttuple tuple_types] @@
                 mk_destruct_tuple "x" tuple_types id_r @@
-                (* fold over ips *)
-                mk_agg
-                  (mk_lambda2' ["acc", result_types] ["ip", t_int] @@
-                    mk_upsert_with_block "acc" ip_pat
-                      (mk_lambda'' unit_arg @@
-                      mk_tuple [mk_var "ip";
-                                mk_tuple [mk_ctrue;
-                                          mk_singleton tuple_col_t [mk_var "x"]]]) @@
-                      mk_lambda' ["y", map_elem_t] @@
-                        mk_insert_block ~path:[2; 2] "y" [mk_var "x"])
-                  (mk_var "acc") @@
+                mk_block [
                   (* ips from route *)
                   mk_apply'
                     (route_for p lmap) @@
-                      mk_cint lmap :: if pred then full_key_vars else [mk_cunit])
+                      mk_cint lmap :: if pred then full_key_vars else [mk_cunit];
+                  mk_snd @@ mk_agg
+                    (mk_lambda2' ["ip", t_int; "acc", result_types] ["has_val", t_bool] @@
+                      mk_block [
+                        mk_if (mk_var "has_val")
+                          (mk_upsert_with "acc" ip_pat
+                            (mk_lambda'' unit_arg @@
+                              mk_tuple [mk_var "ip";
+                                        mk_tuple [mk_ctrue;
+                                                  mk_singleton tuple_col_t [mk_var "x"]]]) @@
+                            mk_lambda' ["y", map_elem_t] @@
+                              mk_insert_block ~path:[2; 2] "y" [mk_var "x"])
+                          mk_cunit ;
+                        mk_tuple [mk_add (mk_var "ip") @@ mk_cint 1; mk_var "acc"]
+                    ])
+                    (mk_tuple [mk_cint 0; mk_var "acc"]) @@
+                    mk_var @@ K3Route.route_bitmap.id
+                ])
               (mk_empty result_types) @@
               mk_var "tuples"
           else
@@ -118,19 +132,27 @@ let gen_shuffle_fn p rmap lmap bindings fn_name =
                  ["_u", wrap_ttuple @@ snd_many used_rkeys; "xs", tuple_col_t] @@
                 mk_let ["x"] (mk_peek_or_error "whoops2" @@ mk_var "xs") @@
                 mk_destruct_tuple "x" tuple_types id_r @@
-                (* add xs to ip for group *)
-                mk_agg
-                  (mk_lambda2' ["acc", result_types] ["ip", t_int] @@
-                    mk_upsert_with_block "acc" ip_pat
-                      (mk_lambda'' unit_arg @@ mk_tuple
-                        [mk_var "ip"; mk_tuple [mk_ctrue; mk_var "xs"]]) @@
-                      mk_lambda' ["y", map_elem_t] @@
-                        mk_extend_block ~path:[2; 2] "y" @@ mk_var "xs")
-                  (mk_var "acc") @@
+                mk_block [
                   (* ips from route *)
                   mk_apply' (* route a sample tuple *)
                     (route_for p lmap) @@
-                      mk_cint lmap :: if pred then full_key_vars else [mk_cunit])
+                    mk_cint lmap :: if pred then full_key_vars else [mk_cunit];
+                  (* add xs to ip for group *)
+                  mk_snd @@ mk_agg
+                    (mk_lambda2' ["ip", t_int; "acc", result_types] ["has_val", t_bool] @@
+                     mk_block [
+                       mk_if (mk_var "has_val")
+                         (mk_upsert_with "acc" ip_pat
+                           (mk_lambda'' unit_arg @@ mk_tuple
+                             [mk_var "ip"; mk_tuple [mk_ctrue; mk_var "xs"]]) @@
+                           mk_lambda' ["y", map_elem_t] @@
+                             mk_extend_block ~path:[2; 2] "y" @@ mk_var "xs")
+                         mk_cunit ;
+                       mk_tuple [mk_add (mk_var "ip") @@ mk_cint 1; mk_var "acc"]
+                    ])
+                    (mk_tuple [mk_cint 0; mk_var "acc"]) @@
+                    mk_var K3Route.route_bitmap.id
+                ])
               (mk_empty result_types) @@
               (* group by meaningful rtuple ids *)
               mk_gbagg
@@ -145,21 +167,24 @@ let gen_shuffle_fn p rmap lmap bindings fn_name =
         (* extra targets for when we have to send all possible ips *)
         mk_if (mk_var shuffle_on_empty)
           (* if we get shuffle_on_empty, add empty targets for all ips *)
-          (mk_agg
-            (mk_lambda2' ["acc", result_types] ["ip", t_int] @@
+          (mk_block [
+            mk_apply' (route_for p lmap) @@
+                mk_cint lmap :: if pred then no_rkey_key_vars else [mk_cunit];
+            mk_snd @@ mk_agg
+             (mk_lambda2' ["ip", t_int; "acc", result_types] ["has_val", t_bool] @@
               mk_block [
-                mk_upsert_with "acc" ip_pat
-                  (mk_lambda'' unit_arg @@ mk_tuple
-                     [mk_var "ip"; mk_tuple [mk_cfalse; mk_empty tuple_col_t]]) @@
-                  mk_id_fn' (unwrap_ttuple map_elem_t)
-              ;
-              mk_var "acc"])
-            (mk_var "normal_targets") @@
-            mk_apply'
-              (route_for p lmap) @@
-                mk_cint lmap ::
-                  if pred then no_rkey_key_vars
-                  else [mk_cunit]) @@
+                mk_if (mk_var "has_val")
+                  (mk_upsert_with "acc" ip_pat
+                    (mk_lambda'' unit_arg @@ mk_tuple
+                      [mk_var "ip"; mk_tuple [mk_cfalse; mk_empty tuple_col_t]]) @@
+                    mk_id_fn' (unwrap_ttuple map_elem_t))
+                  mk_cunit
+                ;
+                mk_tuple [mk_add (mk_var "ip") @@ mk_cint 1; mk_var "acc"]
+              ])
+             (mk_tuple [mk_cint 0; mk_var "normal_targets"])
+             (mk_var K3Route.route_bitmap.id)
+            ]) @@
           mk_var "normal_targets"
 
 (* generate all meta information about functions *)
