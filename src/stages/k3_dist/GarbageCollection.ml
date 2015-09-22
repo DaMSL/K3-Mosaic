@@ -58,7 +58,7 @@ let sw_ack_rcv_trig sw_check_done =
 
 (* switch: code to update send data structures *)
 let sw_update_send ~vid_nm =
-  mk_block [
+  [
     mk_incr sw_num_sent.id;
     (* increment vid on sw_ack_log *)
     mk_upsert_with sw_ack_log.id [mk_var vid_nm; mk_cunknown]
