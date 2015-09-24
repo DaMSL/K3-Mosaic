@@ -98,6 +98,20 @@ let all_nodes_bitmap =
 let calc_dim_bounds =
   mk_global_fn "calc_dim_bounds"
     ["map_id", t_int; "pmap", inner_plist.t] [dim_bounds.t; t_int] @@
+    (* create full range for all dimensions *)
+    (* also, pre-create the dims vector with the right size *)
+    mk_let ["num_dims"]
+      (mk_thd @@ mk_peek_or_error "range" @@ mk_slice' D.map_ids_id
+        [mk_var "map_id"; mk_cunknown; mk_cunknown]) @@
+    mk_let ["rng"; "pre_dims"]
+      (mk_tuple
+        [mk_convert_col (wrap_tlist t_int) rng.t @@
+           mk_range TList (mk_cint 0) (mk_cint 1) @@ mk_var "num_dims";
+         mk_let ["acc"] (mk_empty dim_bounds.t) @@
+         mk_block [
+           mk_insert_at "acc" (mk_var "num_dims") [mk_cint 0; mk_empty rng.t];
+           mk_var "acc"
+         ]]) @@
     (* calculate the size of the bucket of each dimensioned we're partitioned on
     * This is order-dependent in pmap *)
     mk_let ["dims"; "final_size"]
@@ -116,14 +130,8 @@ let calc_dim_bounds =
             mk_tuple [
               mk_var "xs";
               mk_mult (mk_var "bin_size") @@ mk_var "acc_size"]])
-        (mk_tuple [mk_empty @@ dim_bounds.t; mk_cint 1]) @@
+        (mk_tuple [mk_var "pre_dims"; mk_cint 1]) @@
         mk_var "pmap") @@
-    (* create full range for all dimensions *)
-    mk_let ["rng"]
-      (mk_convert_col (wrap_tlist t_int) rng.t @@
-        mk_range TList (mk_cint 0) (mk_cint 1) @@
-          mk_thd @@ mk_peek_or_error "range" @@ mk_slice' D.map_ids_id
-            [mk_var "map_id"; mk_cunknown; mk_cunknown]) @@
     (* fill in missing dimensions *)
     mk_let ["dims"]
       (mk_agg
