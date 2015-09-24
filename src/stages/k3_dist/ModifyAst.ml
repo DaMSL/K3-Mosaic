@@ -348,7 +348,7 @@ let modify_dist (c:config) ast stmt =
     (* we need to change all singletons into bags *)
     | Singleton t -> let e' = U.decompose_singleton e in
       let _, elem_t = unwrap_tcol t in
-      NopMsg, mk_singleton (wrap_tbag elem_t) [e']
+      NopMsg, mk_singleton (wrap_t_calc elem_t) [e']
 
     | _ -> NopMsg, e
   in Tree.modify_tree_bu_with_path_and_msgs ast modify

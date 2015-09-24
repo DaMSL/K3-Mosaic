@@ -18,7 +18,6 @@ module KT = K3Typechecker
 
 let wrap_map  = KH.wrap_tbag
 let wrap_map' = KH.wrap_tbag'
-let wrap_string_map s = "{|"^s^"|}"
 
 exception M3ToK3Failure of
   Calculus.expr_t option *

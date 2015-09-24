@@ -410,7 +410,8 @@ let v_peek ?(vid=false) err_fn c = match c with
   | VSortedSet m -> ValueSSet.peek m
   | VBag m  -> ValueBag.peek m
   | VList m -> IList.peek m
-  | VVector(m,_,_) -> maybe None (some |- snd) @@ IntMap.peek m
+  | VVector(m,s,v) when s > 0 -> begin try some @@ IntMap.find 0 m with Not_found -> Some v end
+  | VVector(_,_,_) -> None
   | VMap m | VSortedMap m -> maybe None (some |- encode_tuple)  @@ ValueMap.peek m
   | VVMap m -> maybe None (fun (t,k,v) -> some @@ if vid then VTuple[t;k;v] else VTuple[k;v]) @@ ValueVMap.peek m
   | v -> err_fn "v_peek" @@ sp "not a collection: %s" @@ sov v

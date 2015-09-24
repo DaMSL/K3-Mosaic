@@ -1,5 +1,6 @@
 (* Convert a file from a DBToaster trace to a test of values *)
 open Util
+open K3.AST
 
 (* redefine sof (string_of_float) to write integers if possible *)
 let sof f =
@@ -294,16 +295,18 @@ let update_maps maps events =
     ) evt.RelEvent.effects acc
   ) maps events
 
+(* forward *)
+let wrap =  ref (fun (x:string) -> x)
+
 (* dump a map into a string *)
 let dump_map ~is_dist mapname m =
-  let wrap = M3ToK3.wrap_string_map in
   match m with
-  | SingletonMap m -> wrap @@ SingletonMap.val_s m
+  | SingletonMap m -> !wrap @@ SingletonMap.val_s m
   | OutputMap m    ->
       let s = OutputMap.val_s m in
       (* if our map is empty, we need the types *)
-      if s = "" then (wrap "") ^ " : " ^ (wrap @@ OutputMap.types_s m)
-      else wrap @@ OutputMap.val_s m
+      if s = "" then (!wrap "") ^ " : " ^ (!wrap @@ OutputMap.types_s m)
+      else !wrap @@ OutputMap.val_s m
 
 (* return the dimensions of the map *)
 let map_dims = function

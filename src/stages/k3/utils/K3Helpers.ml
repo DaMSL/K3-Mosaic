@@ -86,8 +86,11 @@ let wrap_tvmap ?idx typ = wrap_tcol (TVMap idx) typ
 let wrap_tvmap' ?idx tl = wrap_tvmap ?idx @@ wrap_ttuple tl
 
 (* what the generic type of data carried around is *)
-let wrap_t_calc  = wrap_tbag
-let wrap_t_calc' = wrap_tbag'
+let wrap_t_calc  = wrap_tvector
+let wrap_t_calc' = wrap_tvector'
+let wrap_t_str s = "[#"^s^"#]"
+
+let () = FromTrace.wrap := wrap_t_str
 
 (* wrap a type in a mutable indirection *)
 let wrap_tind t = canonical @@ TIndirect t
