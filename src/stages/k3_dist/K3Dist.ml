@@ -170,11 +170,15 @@ let string_of_ds ds =
 (* @calc: have the type of inner calculation *)
 (* @vid: keep the vid *)
 (* @global: always has vid (indirectly) *)
-let map_ds_of_id ?name ?(suffix="") ?(vid=true) ~global c map_id =
+let map_ds_of_id ?(bag=false) ?(suffix="") ?(vid=true) ?name ~global c map_id =
   let vid = if global then true else vid in
   let nm = unwrap_option (map_name_of c.p map_id) name in
   let e = map_ids_types_for c.p map_id in
-  let wrap = if global then wrap_t_of_map' c map_id else wrap_t_calc' in
+  let wrap =
+    if global then wrap_t_of_map' c map_id
+    else
+      if bag then wrap_tbag'
+      else wrap_t_calc' in
   (* suffix added only to last value *)
   let add_suffix l =
     let k, v = list_split (-1) l in
@@ -314,9 +318,9 @@ let new_val' l x = drop_val' l @ [x]
 let new_vid' s l = (mk_var s) :: drop_vid' l
 
 (* convert a global map to a bag type for calculation *)
-let calc_of_map_t c ~keep_vid map_id col =
+let calc_of_map_t c ?bag ~keep_vid map_id col =
   let map_ds  = map_ds_of_id ~global:true c map_id in
-  let calc_ds = map_ds_of_id ~global:false ~vid:keep_vid c map_id in
+  let calc_ds = map_ds_of_id ?bag ~global:false ~vid:keep_vid c map_id in
   let map_pat = pat_of_ds ~drop_vid:true map_ds in
   let map_flat =
     pat_of_ds ~drop_vid:(not keep_vid) ~flatten:true ~expr:(mk_var "vals") map_ds in

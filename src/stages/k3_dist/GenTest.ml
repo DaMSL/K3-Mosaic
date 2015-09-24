@@ -5,13 +5,15 @@ open K3Dist
 module P = ProgInfo
 module D = K3Dist
 
+let wrap = wrap_tbag'
+
 let map_latest_val_code mt p map_id =
   let c = {D.default_config with p} in
   let map_ids_types_vid = P.map_ids_types_with_v_for p map_id in
   let map_ids_types = P.map_ids_types_for p map_id in
   let map_ids = fst_many map_ids_types in
   let map_types = snd_many map_ids_types in
-  let set_type = wrap_t_calc' map_types in
+  let set_type = wrap map_types in
   let map_ids_types_no_val = P.map_ids_types_no_val_for p map_id in
   let map_ids_no_val = fst_many map_ids_types_no_val in
   let max_vid, vid, acc, project = "max_vid", "vid", "acc", "project" in
@@ -46,12 +48,10 @@ let map_latest_val_code mt p map_id =
         (mk_agg
           inner_assoc
           (mk_tuple [mk_var D.g_min_vid.id; mk_empty set_type]) @@
-          D.calc_of_map_t c ~keep_vid:true map_id @@
+          D.calc_of_map_t c ~bag:true ~keep_vid:true map_id @@
             mk_var mapn_deref) @@
         mk_var project
     else
-      mk_sort (mk_lambda'' ["x", wrap_ttuple map_types; "y", wrap_ttuple map_types] @@
-               mk_lt (mk_var "x") @@ mk_var "y") @@
       mk_flatten @@ mk_map
         (mk_lambda'
           ["x", wrap_ttuple [wrap_ttuple (snd_many map_ids_types_no_val) ; wrap_ttuple [t_vid; set_type]]] @@
@@ -63,7 +63,7 @@ let map_latest_val_code mt p map_id =
           (* find the highest vid *)
           inner_assoc
           (mk_tuple [mk_var D.g_min_vid.id; mk_empty set_type]) @@
-          D.calc_of_map_t c ~keep_vid:true map_id @@
+          D.calc_of_map_t c ~bag:true ~keep_vid:true map_id @@
             mk_var mapn_deref
   in code, mk_empty set_type
 

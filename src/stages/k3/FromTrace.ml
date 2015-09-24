@@ -296,11 +296,11 @@ let update_maps maps events =
   ) maps events
 
 (* forward *)
-let wrap =  ref (fun (x:string) -> x)
+let wrap s =  "{|"^s^"|}"
 
 (* dump a map into a string *)
 let dump_map ~is_dist mapname m =
-  let w = if is_dist then !wrap else fun s -> "{|"^s^"|}" in
+  let w = wrap in
   match m with
   | SingletonMap m -> w @@ SingletonMap.val_s m
   | OutputMap m    ->

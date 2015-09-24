@@ -61,7 +61,6 @@ val wrap_tvmap : ?idx:IntSetSet.t -> type_t -> type_t
 val wrap_tvmap' : ?idx:IntSetSet.t -> type_t list -> type_t
 val wrap_t_calc : type_t -> type_t
 val wrap_t_calc' : type_t list -> type_t
-val wrap_t_str : string -> string
 val wrap_tind : type_t -> type_t
 val wrap_tind_mut : type_t -> type_t
 val wrap_tmaybe : type_t -> type_t
