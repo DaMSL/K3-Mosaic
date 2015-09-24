@@ -142,9 +142,9 @@ module OutputMap = struct
   (* get values of the map in string format *)
   let val_s map =
     let s_list =
-      Hashtbl.fold (fun ovars v acc ->
-        let s = concat_mv ", " (ovars@[v]) in
-        s::acc) map.vs []
+      List.map (concat_mv ", ") @@
+      List.sort compare @@
+      Hashtbl.fold (fun ovars v acc -> (ovars@[v])::acc) map.vs []
     in
     String.concat "; " s_list
 

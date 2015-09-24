@@ -50,6 +50,8 @@ let map_latest_val_code mt p map_id =
             mk_var mapn_deref) @@
         mk_var project
     else
+      mk_sort (mk_lambda'' ["x", wrap_ttuple map_types; "y", wrap_ttuple map_types] @@
+               mk_lt (mk_var "x") @@ mk_var "y") @@
       mk_flatten @@ mk_map
         (mk_lambda'
           ["x", wrap_ttuple [wrap_ttuple (snd_many map_ids_types_no_val) ; wrap_ttuple [t_vid; set_type]]] @@

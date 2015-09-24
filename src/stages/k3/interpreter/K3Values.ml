@@ -673,8 +673,9 @@ let v_empty err_fn = function
   | VVMap m        -> VVMap(ValueVMap.empty)
   | c -> err_fn "v_empty" @@ sp "invalid input: %s" (string_of_value c)
 
-(* sort only applies to list *)
 let v_sort err_fn f = function
+  | VVector(m,s,t) -> VVector(IntMap.of_list @@ insert_index_fst @@
+                        List.sort f @@ snd_many @@ IntMap.bindings m,s,t)
   | VList m -> VList(IList.sort f m)
   | _ -> err_fn "v_sort" "not a list"
 
