@@ -249,8 +249,8 @@ and eval_expr (address:address) sched_st cenv texpr =
     | Nothing _ -> cenv, temp @@ VOption None
 
     | Empty ct ->
-        let ctype, _ = unwrap_tcol ct in
-        cenv, temp @@ v_empty_of_t ctype
+        let ctype, elem = unwrap_tcol ct in
+        cenv, temp @@ v_col_of_t ctype ~elem
 
     (* Conditional execution *)
     | IfThenElse ->
@@ -330,8 +330,8 @@ and eval_expr (address:address) sched_st cenv texpr =
     | Just, [rval]  -> nenv, temp @@ VOption (Some rval)
 
     | Singleton ct, [elem] ->
-        let ctype, _ = unwrap_tcol ct in
-        nenv, temp @@ v_singleton error elem ctype
+        let ctype, telem = unwrap_tcol ct in
+        nenv, temp @@ v_singleton error elem ctype telem
 
     | Combine, [left; right] ->
         nenv, temp @@ v_combine error left right
@@ -351,7 +351,7 @@ and eval_expr (address:address) sched_st cenv texpr =
           | TSet  -> VSet(ValueSet.of_list l)
           | TBag  -> VBag(ValueBag.of_list l)
           | TList -> VList(IList.of_list l)
-          | TVector -> VVector(IntMap.of_list @@ insert_index_fst l, steps)
+          | TVector -> VVector(IntMap.of_list @@ insert_index_fst l, steps, VInt 0)
           | _ -> error name "range: unsupported type"
         in nenv, reval
 
@@ -410,8 +410,8 @@ and eval_expr (address:address) sched_st cenv texpr =
           | Some m -> v_empty error m
           (* the container is empty, so we must use the types *)
           | _ -> let t = type_of_expr texpr in
-                 let tcol, _ = unwrap_tcol t in
-                 v_empty_of_t tcol
+                 let tcol, elem = unwrap_tcol t in
+                 v_col_of_t tcol ~elem
         in
         let new_col = v_fold error (fun acc x -> v_combine error x acc) zero c in
         nenv, VTemp new_col
@@ -638,28 +638,7 @@ and eval_expr (address:address) sched_st cenv texpr =
 (* Declaration interpretation *)
 
 (* Returns a default value for every type in the language *)
-let rec default_value id t = default_base_value id t.typ
-
-and default_collection_value ct et = v_empty_of_t ct
-
-and default_base_value id bt =
-  let error = int_error "default_base_value" in
-  match bt with
-  | TTop | TUnknown     -> VUnknown
-  | TUnit               -> VUnit
-  | TBool               -> VBool false
-  | TByte               -> error "bytes are not implemented"
-  | TInt
-  | TDate               -> VInt 0
-  | TFloat              -> VFloat 0.0
-  | TString             -> VString ""
-  | TMaybe   vt         -> VOption None
-  | TTuple   ft         -> VTuple(List.map (default_value id) ft)
-  | TCollection (ct,et) -> default_collection_value ct et
-  | TIndirect vt        -> VIndirect(ref @@ default_base_value id vt.typ)
-  | TAddress            -> VAddress("0.0.0.0", 0)
-  | TTarget bt          -> error @@ "no default value for a target "^id
-  | TFunction _         -> error @@ "no default value for a function "^id
+let rec default_value id t = v_of_t ~id t
 
 (* Returns a foreign function evaluator *)
 let dispatch_foreign id = K3StdLib.lookup_value id

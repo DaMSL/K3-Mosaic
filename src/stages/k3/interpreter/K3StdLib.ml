@@ -357,7 +357,7 @@ let load_csv_fn err_fn args e =
         loop (v_insert err_fn (VTuple l) v)
       with End_of_file -> v
     in
-    let cont = loop (v_empty_of_t TSet) in
+    let cont = loop (v_col_of_t TSet) in
     close_in chan;
     e, VTemp(cont)
 
