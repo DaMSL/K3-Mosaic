@@ -300,13 +300,14 @@ let wrap =  ref (fun (x:string) -> x)
 
 (* dump a map into a string *)
 let dump_map ~is_dist mapname m =
+  let w = if is_dist then !wrap else fun s -> "{|"^s^"|}" in
   match m with
-  | SingletonMap m -> !wrap @@ SingletonMap.val_s m
+  | SingletonMap m -> w @@ SingletonMap.val_s m
   | OutputMap m    ->
       let s = OutputMap.val_s m in
       (* if our map is empty, we need the types *)
-      if s = "" then (!wrap "") ^ " : " ^ (!wrap @@ OutputMap.types_s m)
-      else !wrap @@ OutputMap.val_s m
+      if s = "" then (w "") ^ " : " ^ (w @@ OutputMap.types_s m)
+      else w @@ OutputMap.val_s m
 
 (* return the dimensions of the map *)
 let map_dims = function
