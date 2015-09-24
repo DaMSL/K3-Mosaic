@@ -635,7 +635,7 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
             t_erroru (TMismatch(wrap_ttuple tn_arg, t_unit, "none lambda")) else
           if not (list_forall2 (<~) ts_arg [telem]) then
             t_erroru (TMismatch(wrap_ttuple [telem], wrap_ttuple ts_arg, "some lambda")) else
-          tn_ret
+          ts_ret
 
       | MinWith ->
           let tcol', tlam_none, tlam_some = bind 0, bind 1, bind 2 in
