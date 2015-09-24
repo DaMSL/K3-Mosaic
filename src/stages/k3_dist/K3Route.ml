@@ -56,8 +56,8 @@ let rng = create_ds "rng" @@ wrap_tvector t_int
 
 (* offset by 1. dim 0 is a default of 1, [0] for code generation purposes *)
 let dim_bounds =
-  let e = ["dim", t_int; "bound_rng", wrap_ttuple [t_int; rng.t]] in
-  let t = wrap_tmap' @@ snd_many e in
+  let e = ["dim_size", t_int; "rng", rng.t] in
+  let t = wrap_tvector' @@ snd_many e in
   create_ds "dim_bounds" t ~e
 
 let free_dims =
@@ -106,13 +106,13 @@ let calc_dim_bounds =
           ["xs", dim_bounds.t; "acc_size", t_int]
           ["pos", t_int; "bin_size", t_int] @@
           mk_block [
-            mk_insert "xs"
+            mk_insert_at "xs"
               (* add 1 for allowing 0 to be the identity *)
-              [mk_add (mk_var "pos") @@ mk_cint 1;
-                mk_tuple [
+              (mk_add (mk_var "pos") @@ mk_cint 1) @@
+                [
                   mk_var "acc_size";
                   mk_convert_col (wrap_tlist t_int) rng.t @@
-                    mk_range TList (mk_cint 0) (mk_cint 1) @@ mk_var "bin_size"]];
+                    mk_range TList (mk_cint 0) (mk_cint 1) @@ mk_var "bin_size"];
             mk_tuple [
               mk_var "xs";
               mk_mult (mk_var "bin_size") @@ mk_var "acc_size"]])
@@ -122,34 +122,26 @@ let calc_dim_bounds =
     mk_let ["rng"]
       (mk_convert_col (wrap_tlist t_int) rng.t @@
         mk_range TList (mk_cint 0) (mk_cint 1) @@
-          mk_subscript 3 @@ mk_peek_or_error "range" @@
-            mk_slice' D.map_ids_id
-              [mk_var "map_id"; mk_cunknown; mk_cunknown]) @@
+          mk_thd @@ mk_peek_or_error "range" @@ mk_slice' D.map_ids_id
+            [mk_var "map_id"; mk_cunknown; mk_cunknown]) @@
     (* fill in missing dimensions *)
     mk_let ["dims"]
-      (mk_fst @@ mk_agg
+      (mk_agg
         (mk_lambda2'
-          ["xs", dim_bounds.t; "last", t_int] ["n", t_int] @@
+          ["xs", dim_bounds.t] ["n", t_int] @@
           (* read the number *)
-          mk_let ["next"]
-            (mk_case_ns
-              (mk_peek @@ mk_slice' "xs" [mk_var "n"; mk_cunknown]) "x"
-              (mk_var "last") @@
-              mk_fst @@ mk_snd @@ mk_var "x") @@
-          (* update the ds *)
+          mk_let ["x"]
+            (mk_at_with' "xs" (mk_var "n") @@ mk_id_fn dim_bounds) @@
+          (* check if unfilled. If so, insert default value *)
           mk_block [
-            mk_upsert_with "xs" [mk_var "n"; mk_cunknown]
-              (mk_lambda'' unit_arg @@
-                mk_tuple [mk_var "n"; mk_tuple [mk_var "next";
-                  mk_singleton rng.t [mk_cint 0]]]) @@
-              mk_id_fn dim_bounds
-            ;
-            mk_tuple [mk_var "xs"; mk_var "next"]
+            mk_if (mk_eq (mk_fst @@ mk_var "x") @@ mk_cint 0)
+              (mk_insert_at "xs" (mk_var "n") [mk_cint 1; mk_singleton rng.t [mk_cint 0]])
+              mk_cunit;
+            mk_var "xs"
           ])
-        (mk_tuple [mk_var "dims"; mk_cint 1]) @@
+        (mk_var "dims") @@
         mk_var "rng") @@
     mk_tuple [mk_var "dims"; mk_var "final_size"]
-
 
 (* map from map_id to inner_pmap *)
 let pmap_data =
@@ -255,10 +247,9 @@ let hash_func_for typ =
 let dim_bounds_fn =
   mk_global_fn "dim_bounds_lookup_hack"
     ["dim_bounds", dim_bounds.t; "value", t_int; "key", t_int] [t_int] @@
-    mk_case_ns (mk_peek @@
-        mk_slice' "dim_bounds" [mk_var "key"; mk_cunknown]) "x"
-      (mk_error @@ sp "can't find dim in dim_bounds") @@
-      mk_mult (mk_var "value") @@ mk_fst @@ mk_snd @@ mk_var "x"
+    mk_at_with' "dim_bounds" (mk_var "key") @@
+      mk_lambda' dim_bounds.e @@
+        mk_mult (mk_var "value") @@ mk_var "dim_size"
 
 let clean_results =
   mk_ignore @@ mk_agg (mk_lambda2' ["i", t_int] ["_", t_unknown] @@
@@ -355,6 +346,7 @@ let gen_route_fn p ?(precise=false) map_id =
             clean_results;
             snd @@
             (* loop over all dims and get ips for cartesian product *)
+            (* for code gen, we need to do all of our let bindings/lookup first *)
             (List.fold_left
               (fun (num, acc_code) index ->
                 let add_idx s = s ^ soi index in
@@ -363,11 +355,8 @@ let gen_route_fn p ?(precise=false) map_id =
                   (mk_if (mk_is_tup_nothing @@ mk_var @@ to_id index)
                     (mk_cint @@ index + 1) @@
                     mk_cint 0) @@
-                  mk_case_ns
-                    (mk_peek @@ mk_slice' "dim_bounds" [mk_var "index"; mk_cunknown]) (add_idx "dr")
-                    (mk_error "whoops") @@
-                    mk_let [add_idx "dim_size"; add_idx "rng"] (mk_snd @@ mk_var @@ add_idx "dr") @@
-                    acc_code)
+                  mk_at_with' "dim_bounds" (mk_var "index") @@
+                    mk_lambda' (List.map (first add_idx) dim_bounds.e) acc_code)
               (len, snd @@
                 List.fold_left
                   (fun (num, acc_code) index ->
