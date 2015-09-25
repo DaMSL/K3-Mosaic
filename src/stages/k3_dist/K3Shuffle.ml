@@ -9,6 +9,15 @@ open K3Route
 (* type for searching for shuffle functions and their bindings *)
 (* stmt list * r_map * l_map * (r_map index * l_map index) list * func_name *)
 
+let shuffle_bitmap = create_ds "shuffle_bitmap" @@ wrap_tvector t_bool
+
+let shuffle_indices =
+  create_ds "shuffle_indices" @@ wrap_tbag t_int
+
+let shuffle_result =
+  let e = ["has_data", t_bool; "indices", shuffle_indices.t] in
+  create_ds "shuffle_result" @@ wrap_tvector' @@ snd_many e
+
 (* Part of the name is the binding pattern. So long as the combination of
  * binding patterns is the same, we can use the same shuffle function *)
 let shuffle_for p rhs_map_id lhs_map_id bindings =
@@ -212,10 +221,6 @@ let gen_meta p =
   ignore(for_all_trigs ~sys_init:true p @@ gen_trig_meta);
   !g_meta
 
-(* generate all shuffle functions *)
-let functions c =
-  List.map (fun x -> gen_shuffle_fn c.p x.rmap x.lmap x.binding x.name) c.shuffle_meta
-
 (* external function to find a shuffle function *)
 let find_shuffle_nm c s rmap lmap =
   try
@@ -229,4 +234,15 @@ let find_shuffle_nm c s rmap lmap =
   with
     Not_found -> failwith @@
       sp "Couldn't find shuffle for stmt %d, rmap %d, lmap %d" s rmap lmap
+
+(* generate all shuffle functions *)
+let functions c =
+  List.map (fun x -> gen_shuffle_fn c.p x.rmap x.lmap x.binding x.name) c.shuffle_meta
+
+let globals =
+  List.map decl_global
+    [ shuffle_bitmap;
+      shuffle_result;
+    ]
+
 

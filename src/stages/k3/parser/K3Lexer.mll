@@ -200,6 +200,7 @@ rule tokenize = parse
     | "update" { UPDATE }
     | "delete" { DELETE }
     | "delete_prefix" { DELETE_PREFIX }
+    | "clear_all"     { CLEAR_ALL }
     | "filter_geq"    { FILTERGEQ }
     | "filter_gt"     { FILTERGT }
     | "filter_lt"     { FILTERLT }

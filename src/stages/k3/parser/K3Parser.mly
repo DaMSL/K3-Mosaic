@@ -124,7 +124,7 @@
 %token COLON
 
 %token QUESTION
-%token EQUIJOIN EXTEND INSERT INSERT_AT UPDATE DELETE UPSERT_WITH UPSERT_WITH_BEFORE UPDATE_SUFFIX DELETE_PREFIX FILTERGEQ FILTERLT FILTERLEQ FILTERGT
+%token EQUIJOIN EXTEND INSERT INSERT_AT UPDATE DELETE CLEAR_ALL UPSERT_WITH UPSERT_WITH_BEFORE UPDATE_SUFFIX DELETE_PREFIX FILTERGEQ FILTERLT FILTERLEQ FILTERGT
 
 %token GETS COLONGETS
 
@@ -656,6 +656,7 @@ mutation :
 
     | DELETE LPAREN anno_expr COMMA tuple RPAREN { mkexpr Delete [$3; $5] }
     | DELETE_PREFIX LPAREN anno_expr COMMA tuple RPAREN { mkexpr DeletePrefix [$3; $5] }
+    | CLEAR_ALL LPAREN anno_expr RPAREN { mkexpr ClearAll [$3] }
 
     /* Updates must explicitly specify their new/old value as a tuple */
     | UPDATE LPAREN anno_expr COMMA anno_expr COMMA anno_expr RPAREN { mkexpr Update [$3; $5; $7] }

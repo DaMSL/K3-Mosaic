@@ -43,11 +43,12 @@ val decompose_aggregatev : expr_t -> expr_t * expr_t * expr_t
 val decompose_apply : expr_t -> expr_t * expr_t list
 val decompose_assign : expr_t -> expr_t * expr_t
 val decompose_at_with : expr_t -> expr_t * expr_t * expr_t * expr_t
+val decompose_bind : expr_t -> expr_t * id_t * expr_t
 val decompose_block : expr_t -> expr_t list
+val decompose_clear_all : expr_t -> expr_t
 val decompose_combine : expr_t -> expr_t * expr_t
 val decompose_const : expr_t -> constant_t
 val decompose_caseof : expr_t -> expr_t * expr_t * expr_t
-val decompose_bind : expr_t -> expr_t * id_t * expr_t
 val decompose_delete : expr_t -> expr_t * expr_t
 val decompose_delete_prefix : expr_t -> expr_t * expr_t
 val decompose_eq : expr_t -> expr_t * expr_t

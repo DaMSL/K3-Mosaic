@@ -99,6 +99,8 @@ let decompose_caseof e = match tag_of_expr e, sub_tree e with
   CaseOf _, [e0; e1; e2] -> e0, e1, e2 | _ -> failwith "not a CaseOf"
 let decompose_bind e = match tag_of_expr e, sub_tree e with
   BindAs x, [e0; e1] -> e0, x, e1 | _ -> failwith "not a BindAs"
+let decompose_clear_all e = match tag_of_expr e, sub_tree e with
+  ClearAll, [x] -> x | _ -> failwith "not ClearAll"
 let decompose_combine e = match tag_of_expr e, sub_tree e with
   Combine, [e0; e1] -> e0, e1 | _ -> failwith "not a Combine"
 let decompose_const e = match tag_of_expr e with

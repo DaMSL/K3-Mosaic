@@ -132,6 +132,7 @@ type expr_tag_t
     | UpdateSuffix      (* update values > vid *)
     | Delete
     | DeletePrefix      (* delete <= a certain vid. save frontier at vid *)
+    | ClearAll          (* clean without releasing ds memory *)
 
     | Assign
     | Indirect

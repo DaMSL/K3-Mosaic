@@ -105,6 +105,7 @@ let check_tag_arity tag children =
     | UpdateSuffix -> 3
     | Delete       -> 2
     | DeletePrefix -> 2
+    | ClearAll     -> 1
     | FilterOp _   -> 2
 
     | Assign -> 2
@@ -732,6 +733,12 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
           if not @@ is_tsorted tcol then t_erroru @@ not_sorted_collection tcol' else
           check_vmap_pat tcol telem told;
           t_unit
+
+      | ClearAll ->
+        let tcol = bind 0 in
+        let _ =
+          try unwrap_tcol tcol with Failure _ -> t_erroru (not_collection tcol) in
+        t_unit
 
       | Assign ->
           let tl, tr = bind 0, bind 1 in

@@ -195,6 +195,7 @@ and eval_expr (address:address) sched_st cenv texpr =
     in
 
     let temp x = VTemp x in
+    let tvunit = temp VUnit in
 
     let eval_binop s l r  bool_op int_op float_op =
       let error = int_erroru uuid "eval_binop" in
@@ -611,11 +612,15 @@ and eval_expr (address:address) sched_st cenv texpr =
 
     | Delete, [_; v] ->
         (env_modify (id_path ()) nenv @@
-          fun col -> v_delete error v col), VTemp VUnit
+          fun col -> v_delete error v col), tvunit
 
     | DeletePrefix, [_; key] ->
         (env_modify (id_path ()) nenv @@
-          fun col -> v_delete_prefix error key col), temp VUnit
+          fun col -> v_delete_prefix error key col), tvunit
+
+    | ClearAll, _ ->
+        (env_modify (id_path ()) nenv @@
+          fun col -> v_empty error col), tvunit
 
     | FilterOp o, [col; key] ->
         let op = match o with

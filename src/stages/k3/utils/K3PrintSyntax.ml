@@ -213,7 +213,7 @@ let rec lazy_expr c expr =
     | _ -> lazy_expr c e
   (* many instructions need to wrap the same way *)
   in let wrap e = match U.tag_of_expr expr with
-    | Insert | InsertAt | Extend | Iterate | Map | Filter | Flatten | Send | Delete
+    | Insert | InsertAt | Extend | Iterate | Map | Filter | Flatten | Send | Delete | ClearAll
     | Update | UpdateSuffix | UpsertWith | UpsertWithBefore | DeletePrefix | FilterOp _
     | Aggregate | AggregateV | GroupByAggregate | Assign | Combine -> wrap_hov 2 e
     | _ -> id_fn e
@@ -373,6 +373,8 @@ let rec lazy_expr c expr =
     lps "delete" <| lazy_paren (lazy_expr c l <| lps " , " <| lazy_expr c r)
   | DeletePrefix -> let l, r = U.decompose_delete_prefix expr in
     lps "delete_prefix" <| lazy_paren (lazy_expr c l <| lps " , " <| lazy_expr c r)
+  | ClearAll -> let e = U.decompose_clear_all expr in
+    lps "clear_all" <| lazy_paren (lazy_expr c e)
   | Update -> let l, o, n = U.decompose_update expr in
     lps "update" <| lazy_paren (lazy_expr c l <| lps " , " <| expr_pair (o,n))
   | UpdateSuffix -> let col, key, lam = U.decompose_update_suffix expr in

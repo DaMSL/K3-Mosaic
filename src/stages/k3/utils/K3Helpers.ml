@@ -359,6 +359,8 @@ let mk_delete ?(path=[]) id x = mk_stree Delete [mk_id_path id path; mk_tuple x]
 (* first part of key contains the vid. Also contains dummy value *)
 let mk_delete_prefix ?(path=[]) id x = mk_stree DeletePrefix [mk_id_path id path; mk_tuple x]
 
+let mk_clear_all ?(path=[]) id = mk_stree ClearAll [mk_id_path id path]
+
 let mk_update ?(path=[]) id old_val new_val =
   mk_stree Update [mk_id_path id path; mk_tuple old_val; mk_tuple new_val]
 

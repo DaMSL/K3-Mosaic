@@ -131,6 +131,7 @@ let string_of_tag_type = function
     | UpsertWithBefore -> "UpsertWithBefore"
     | Delete           -> "Delete"
     | DeletePrefix     -> "DeletePrefix"
+    | ClearAll         -> "ClearAll"
     | FilterOp o       -> sp "FilterOp(%s)" (string_of_op o)
 
     | Indirect         -> "Indirect"
