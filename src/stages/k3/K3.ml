@@ -127,6 +127,7 @@ type expr_tag_t
     | Insert
     | InsertAt
     | Update
+    | UpdateAtWith
     | UpsertWith        (* update with a default handler *)
     | UpsertWithBefore  (* update reading a frontier with a default handler *)
     | UpdateSuffix      (* update values > vid *)

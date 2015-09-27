@@ -124,7 +124,7 @@
 %token COLON
 
 %token QUESTION
-%token EQUIJOIN EXTEND INSERT INSERT_AT UPDATE DELETE CLEAR_ALL UPSERT_WITH UPSERT_WITH_BEFORE UPDATE_SUFFIX DELETE_PREFIX FILTERGEQ FILTERLT FILTERLEQ FILTERGT
+%token EQUIJOIN EXTEND INSERT INSERT_AT UPDATE DELETE CLEAR_ALL UPDATE_AT_WITH UPSERT_WITH UPSERT_WITH_BEFORE UPDATE_SUFFIX DELETE_PREFIX FILTERGEQ FILTERLT FILTERLEQ FILTERGT
 
 %token GETS COLONGETS
 
@@ -661,6 +661,7 @@ mutation :
     /* Updates must explicitly specify their new/old value as a tuple */
     | UPDATE LPAREN anno_expr COMMA anno_expr COMMA anno_expr RPAREN { mkexpr Update [$3; $5; $7] }
     | UPDATE_SUFFIX LPAREN anno_expr COMMA anno_expr COMMA anno_expr RPAREN { mkexpr UpdateSuffix [$3; $5; $7] }
+    | UPDATE_AT_WITH LPAREN anno_expr COMMA anno_expr COMMA anno_expr RPAREN { mkexpr UpdateAtWith [$3; $5; $7] }
 
     | variable LARROW anno_expr { mkexpr Assign [mk_var $1; $3] }
 

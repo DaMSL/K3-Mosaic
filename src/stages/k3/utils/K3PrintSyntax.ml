@@ -355,30 +355,30 @@ let rec lazy_expr c expr =
         | OGt -> ">" | OGeq -> ">=" | OLt  -> "<" | OLeq -> "<=" in
       let _, col, pat = U.decompose_slice_op expr in
       wrap_if_var col (lazy_expr c col) <| lazy_bracket (lazy_op o <| tuple_no_paren c pat)
-  | Insert -> let l, r = U.decompose_insert expr in
-    lps "insert" <| lazy_paren
-      (lazy_expr c l <| lps " ," <| lsp () <| lazy_expr c r)
+  | Insert -> let e = U.decompose_insert expr in
+    lps "insert" <| lazy_paren (expr_pair e)
   | InsertAt -> let t = U.decompose_insert_at expr in
     lps "insert_at" <| lazy_paren (expr_triple t)
-  | Extend -> let l, r = U.decompose_extend expr in
-    lps "extend" <| lazy_paren
-      (lazy_expr c l <| lps " ," <| lsp () <| lazy_expr c r)
+  | Extend -> let e = U.decompose_extend expr in
+    lps "extend" <| lazy_paren (expr_pair e)
   | UpsertWith -> let col, key, lam_no, lam_yes = U.decompose_upsert_with expr in
     lps "upsert_with" <| lazy_paren
       (lazy_expr c col <| lps " ," <| lsp () <| expr_triple (key,lam_no,lam_yes))
   | UpsertWithBefore -> let col, key, lam_no, lam_yes = U.decompose_upsert_with_before expr in
     lps "upsert_with_before" <| lazy_paren
       (lazy_expr c col <| lps " ," <| lsp () <| expr_triple (key,lam_no,lam_yes))
-  | Delete -> let l, r = U.decompose_delete expr in
-    lps "delete" <| lazy_paren (lazy_expr c l <| lps " , " <| lazy_expr c r)
-  | DeletePrefix -> let l, r = U.decompose_delete_prefix expr in
-    lps "delete_prefix" <| lazy_paren (lazy_expr c l <| lps " , " <| lazy_expr c r)
+  | Delete -> let e = U.decompose_delete expr in
+    lps "delete" <| lazy_paren (expr_pair e)
+  | DeletePrefix -> let e = U.decompose_delete_prefix expr in
+    lps "delete_prefix" <| lazy_paren (expr_pair e)
   | ClearAll -> let e = U.decompose_clear_all expr in
     lps "clear_all" <| lazy_paren (lazy_expr c e)
-  | Update -> let l, o, n = U.decompose_update expr in
-    lps "update" <| lazy_paren (lazy_expr c l <| lps " , " <| expr_pair (o,n))
-  | UpdateSuffix -> let col, key, lam = U.decompose_update_suffix expr in
-    lps "update_suffix" <| lazy_paren (lazy_expr c col <| lps " , " <| expr_pair (key, lam))
+  | Update -> let e = U.decompose_update expr in
+    lps "update" <| lazy_paren (expr_triple e)
+  | UpdateSuffix -> let e = U.decompose_update_suffix expr in
+    lps "update_suffix" <| lazy_paren (expr_triple e)
+  | UpdateAtWith -> let e = U.decompose_update_at_with expr in
+    lps "update_at_with" <| lazy_paren (expr_triple e)
   | FilterOp o ->
       let str_op o = match o with
         | OGt -> "gt" | OLt -> "lt" | OLeq -> "leq" | OGeq -> "geq" in

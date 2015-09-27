@@ -133,6 +133,7 @@ type expr_tag_t
     | Insert
     | InsertAt
     | Update
+    | UpdateAtWith
     | UpsertWith        (* insert with a default handler *)
     | UpsertWithBefore  (* insert with a default handler *)
     | UpdateSuffix      (* update past a vid *)

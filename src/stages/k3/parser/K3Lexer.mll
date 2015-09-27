@@ -198,6 +198,7 @@ rule tokenize = parse
     | "upsert_with_before" { UPSERT_WITH_BEFORE }
     | "update_suffix" { UPDATE_SUFFIX }
     | "update" { UPDATE }
+    | "update_at_with" { UPDATE_AT_WITH }
     | "delete" { DELETE }
     | "delete_prefix" { DELETE_PREFIX }
     | "clear_all"     { CLEAR_ALL }

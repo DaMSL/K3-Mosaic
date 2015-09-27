@@ -189,6 +189,8 @@ let decompose_tuple e = match tag_of_expr e with
   Tuple -> sub_tree e  | _ -> failwith "not a Tuple"
 let decompose_update e = match tag_of_expr e, sub_tree e with
   Update, [x; e0; e1] -> x, e0, e1 | _ -> failwith "not Update"
+let decompose_update_at_with e = match tag_of_expr e, sub_tree e with
+  UpdateAtWith, [x; k; l] -> x, k, l | _ -> failwith "not UpdateAtWith"
 let decompose_update_suffix e = match tag_of_expr e, sub_tree e with
   UpdateSuffix, [x; e0; e1] -> x, e0, e1 | _ -> failwith "not an UpdateSuffix"
 let decompose_upsert_with e = match tag_of_expr e, sub_tree e with

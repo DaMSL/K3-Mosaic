@@ -1279,6 +1279,9 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
     | _ -> failwith "UpdateSuffix: bad key"
     end
 
+  | UpdateAtWith -> let col, key, lambda = U.decompose_update_at_with expr in
+    apply_method c ~col ~name:"update_at" ~args:[key; lambda] ~arg_info:[def_a; [0], true]
+
   | UpsertWith -> let col, key, lam_no, lam_yes = U.decompose_upsert_with expr in
     let key = lookup_pat_of_slice ~vid:(is_vmap col) ~col key in
     maybe_vmap c col (light_type c @@ KH.mk_tuple key)

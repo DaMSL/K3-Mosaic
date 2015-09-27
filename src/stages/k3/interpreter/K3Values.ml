@@ -416,10 +416,10 @@ let v_peek ?(vid=false) err_fn c = match c with
   | VVMap m -> maybe None (fun (t,k,v) -> some @@ if vid then VTuple[t;k;v] else VTuple[k;v]) @@ ValueVMap.peek m
   | v -> err_fn "v_peek" @@ sp "not a collection: %s" @@ sov v
 
-let v_at err_fn c idx = match c, idx with
+let v_at ?(extend=false) err_fn c idx = match c, idx with
   | VVector(m,sz,t), VInt i ->
       begin try some @@ IntMap.find i m
-      with Not_found -> if i >= 0 && i < sz then some t else None end
+      with Not_found -> if (i >= 0 && i < sz) || extend then some t else None end
   | VVector _, v -> err_fn "v_at" @@ sp "not an integer: %s" @@ sov v
   | v, _ -> err_fn "v_at" @@ sp "not a vector: %s" @@ sov v
 

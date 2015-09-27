@@ -576,6 +576,14 @@ and eval_expr (address:address) sched_st cenv texpr =
         (env_modify (id_path ()) nenv @@
           fun col -> v_combine error col col'), temp VUnit
 
+    | UpdateAtWith, [_; key; lambda] ->
+      let col_id_path = id_path () in
+      let col = ro_path_lookup col_id_path nenv in
+      let v = unwrap_some @@ v_at ~extend:true error col key in
+      let env, v = eval_fn lambda address sched_st nenv [v] in
+      (env_modify col_id_path env @@
+        fun col -> v_insert_at error v idx col), temp VUnit
+
     (* we can't modify the environment within the lambda *)
     (* semantics for upsertwithbefore:
       * if none results from lookup, update with key's vid

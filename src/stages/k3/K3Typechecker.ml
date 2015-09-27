@@ -711,6 +711,18 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
             t_erroru (TMismatch(tlam_update, tlam_update', "update lambda")) else
           t_unit
 
+      (* upsertwith for vector *)
+      | UpdateAtWith ->
+          let tcol', tkey, tlambda = bind 0, bind 1, bind 2 in
+          if tkey <> t_int then t_erroru @@ TMismatch(tkey, t_int, "key") else
+          let tcol, telem =
+            try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') in
+          if tcol <> TVector then t_erroru @@ TBad(tcol', "not a vector") else
+          let tlambda' = wrap_tfunc [telem] telem in
+          if not (tlambda === tlambda') then
+            t_erroru (TMismatch(tlambda, tlambda', "lambda")) else
+          t_unit
+
       | FilterOp _ ->
           let tcol', telem' = bind 0, bind 1 in
           let tcol, telem =

@@ -197,6 +197,7 @@ val mk_delete_prefix : ?path:int list -> id_t -> expr_t list -> expr_t
 val mk_clear_all : ?path:int list -> id_t -> expr_t
 val mk_update : ?path:int list -> id_t -> expr_t list -> expr_t list -> expr_t
 val mk_update_suffix : ?path:int list -> id_t -> expr_t list -> expr_t -> expr_t
+val mk_update_at_with : ?path:int list -> id_t -> expr_t -> expr_t -> expr_t
 val mk_update_slice : id_t -> expr_t list -> expr_t -> expr_t
 val mk_filter_gt : expr_t -> expr_t list -> expr_t
 val mk_filter_gt' : id_t -> expr_t list -> expr_t
@@ -420,3 +421,4 @@ val mk_upsert_with_block : ?path:int list -> id_t -> expr_t list -> expr_t -> ex
 
 (* easy filtering over vectors *)
 val mk_filter_cnt : expr_t -> data_struct -> expr_t
+

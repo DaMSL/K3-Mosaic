@@ -93,6 +93,7 @@ val decompose_size : expr_t -> expr_t
 val decompose_subscript : expr_t -> int * expr_t
 val decompose_tuple : expr_t -> expr_t list
 val decompose_update : expr_t -> expr_t * expr_t * expr_t
+val decompose_update_at_with : expr_t -> expr_t * expr_t * expr_t
 val decompose_update_suffix : expr_t -> expr_t * expr_t * expr_t
 val decompose_upsert_with : expr_t -> expr_t * expr_t * expr_t * expr_t
 val decompose_upsert_with_before : expr_t -> expr_t * expr_t * expr_t * expr_t

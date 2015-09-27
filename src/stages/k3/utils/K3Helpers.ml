@@ -368,6 +368,10 @@ let mk_update ?(path=[]) id old_val new_val =
 let mk_update_suffix ?(path=[]) id key lambda =
   mk_stree UpdateSuffix [mk_id_path id path; mk_tuple key; lambda]
 
+(* version of upsert_with for vectors *)
+let mk_update_at_with ?(path=[]) id key lambda =
+  mk_stree UpdateAtWith [mk_id_path id path; key; lambda]
+
 let mk_filter_gt collection filter_val =
   mk_stree (FilterOp OGt) [collection; mk_tuple filter_val]
 let mk_filter_gt' col filter_val = mk_filter_gt (mk_var col) filter_val
