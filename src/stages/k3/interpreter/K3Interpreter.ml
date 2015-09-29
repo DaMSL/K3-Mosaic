@@ -582,7 +582,7 @@ and eval_expr (address:address) sched_st cenv texpr =
       let v = unwrap_some @@ v_at ~extend:true error col key in
       let env, v = eval_fn lambda address sched_st nenv [v] in
       (env_modify col_id_path env @@
-        fun col -> v_insert_at error v idx col), temp VUnit
+       fun col -> v_insert_at error (value_of_eval v) key col), temp VUnit
 
     (* we can't modify the environment within the lambda *)
     (* semantics for upsertwithbefore:

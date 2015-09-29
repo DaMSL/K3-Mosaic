@@ -103,6 +103,7 @@ let check_tag_arity tag children =
     | UpsertWith
     | UpsertWithBefore -> 4
     | UpdateSuffix -> 3
+    | UpdateAtWith -> 3
     | Delete       -> 2
     | DeletePrefix -> 2
     | ClearAll     -> 1
