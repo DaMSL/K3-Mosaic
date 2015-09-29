@@ -1460,6 +1460,7 @@ let declare_global_vars c partmap ast =
   K3Ring.global_vars @
   [K3Route.calc_dim_bounds] @ (* needed for global_vars *)
   K3Route.global_vars c.p partmap @
+  K3Shuffle.global_vars @
   GC.global_vars c
 
 let declare_global_funcs c partmap ast =

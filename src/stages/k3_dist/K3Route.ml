@@ -260,13 +260,8 @@ let dim_bounds_fn =
         mk_mult (mk_var "value") @@ mk_var "dim_size"
 
 let clean_results =
-  mk_ignore @@ mk_agg (mk_lambda2' ["i", t_int] ["_", t_unknown] @@
-    mk_block [
-      mk_insert_at route_bitmap.id (mk_var "i") [mk_cfalse];
-      mk_add (mk_var "i") @@ mk_cint 1
-    ])
-    (mk_cint 0) @@
-    mk_var route_bitmap.id
+  mk_iter_bitmap route_bitmap.id @@
+    mk_insert_at route_bitmap.id (mk_var "ip") [mk_cfalse]
 
 (* @precise: return a single address for bound vars only *)
 let gen_route_fn p ?(precise=false) map_id =
@@ -307,14 +302,9 @@ let gen_route_fn p ?(precise=false) map_id =
         (* handle the case of no partitioning at all *)
         (if precise then id_fn else
           mk_if (mk_eq (mk_size @@ mk_var "pmap") @@ mk_cint 0) @@
-            mk_ignore @@ mk_agg
-              (mk_lambda2' ["ip", t_int] ["has_val", t_bool] @@
-                mk_block [
-                  mk_insert_at route_bitmap.id (mk_var "ip") [mk_var "has_val"];
-                  mk_add (mk_var "ip") @@ mk_cint 1
-                ])
-            (mk_cint 0) @@
-             mk_var all_nodes_bitmap.id) @@
+            mk_iter_bitmap all_nodes_bitmap.id @@
+              mk_insert_at route_bitmap.id (mk_var "ip") [mk_var "has_val"]
+        ) @@
 
         mk_let ["bound_bucket"]
         (List.fold_left

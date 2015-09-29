@@ -422,3 +422,6 @@ val mk_upsert_with_block : ?path:int list -> id_t -> expr_t list -> expr_t -> ex
 (* easy filtering over vectors *)
 val mk_filter_cnt : expr_t -> data_struct -> expr_t
 
+(* loop over bitmaps as in route and shuffle *)
+(* @all: all values (even false) or just trues *)
+val mk_iter_bitmap : ?all:bool -> id_t -> expr_t -> expr_t

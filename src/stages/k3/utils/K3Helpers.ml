@@ -852,3 +852,13 @@ let mk_filter_cnt cond ds =
     (mk_tuple [mk_empty t; mk_cint 0]) @@
     mk_var ds.id
 
+(* loop over bitmaps as in route and shuffle *)
+let mk_iter_bitmap ?(all=false) bitmap e =
+  mk_ignore @@
+    mk_agg (mk_lambda2' ["ip", t_int] ["has_val", t_bool] @@
+      mk_block [
+        if all then e else mk_if (mk_var "has_val") e mk_cunit;
+        mk_tuple [mk_add (mk_var "ip") @@ mk_cint 1]
+      ])
+    (mk_cint 0) @@
+    mk_var bitmap
