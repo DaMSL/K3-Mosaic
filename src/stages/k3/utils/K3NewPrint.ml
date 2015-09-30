@@ -282,15 +282,20 @@ let shallow_bind_id ~in_record = function
   | NTuple (i,_)    -> id_of_num i
 
 (* convert args to an arg type containing numbers for binding *)
+(* toplevel args are always a1, a2 etc *)
 let arg_num_of_arg a =
-  let i = ref 1 in
-  let rec loop = function
+  let i = ref 0 in
+  let rec loop n = function
     | AIgnored     -> NIgnored
     (* We assign to variables as well for record unpacking *)
-    | AVar(id, v)  -> NVar((incr i; !i), id, v)
-    | AMaybe x     -> NMaybe((incr i; !i), loop x)
-    | ATuple xs    -> NTuple((incr i; !i), List.map loop xs)
-  in loop a
+    | AVar(id, v)  -> NVar(n, id, v)
+    | AMaybe x     -> incr i; NMaybe(n, loop !i x)
+    | ATuple xs    ->
+      let len = List.length xs in
+      let rng = create_range !i len in
+      i := !i + len;
+      NTuple(n, List.map2 loop rng xs)
+  in loop !i a
 
 (* retrieve the ids from one level of arg_num *)
 let get_id_of_arg = function
