@@ -11,14 +11,20 @@ module R = K3Route
 (* type for searching for shuffle functions and their bindings *)
 (* stmt list * r_map * l_map * (r_map index * l_map index) list * func_name *)
 
-let shuffle_bitmap = create_ds "shuffle_bitmap" @@ wrap_tvector t_bool
+let shuffle_bitmap =
+  let init =
+    mk_map (mk_lambda' unknown_arg mk_cfalse) @@ mk_var D.my_peers.id in
+  create_ds "shuffle_bitmap" ~init @@ wrap_tvector t_bool
 
 let shuffle_indices =
   create_ds "shuffle_indices" @@ wrap_tbag t_int
 
 let shuffle_results =
   let e = ["has_data", t_bool; "indices", shuffle_indices.t] in
-  create_ds "shuffle_results" ~e @@ wrap_tvector' @@ snd_many e
+  let init =
+    mk_map (mk_lambda' unknown_arg @@ mk_tuple
+              [mk_cfalse; mk_empty shuffle_indices.t]) @@ mk_var D.my_peers.id in
+  create_ds "shuffle_results" ~e ~init @@ wrap_tvector' @@ snd_many e
 
 (* Part of the name is the binding pattern. So long as the combination of
  * binding patterns is the same, we can use the same shuffle function *)
@@ -82,7 +88,8 @@ let gen_shuffle_fn p rmap lmap bindings fn_name =
             mk_block [
               mk_clear_all "indices";
               mk_tuple [mk_cfalse; mk_var "indices"]
-            ]) shuffle_bitmap.id
+           ])
+        shuffle_bitmap.id
       ] @
 
       (* if we have only lkeys, we only need to route once *)

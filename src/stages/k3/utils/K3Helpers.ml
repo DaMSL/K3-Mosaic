@@ -749,6 +749,7 @@ let index_e id_t s =
   List.assoc s @@ insert_index_snd ~first:1 @@ fst_many id_t
 
 let unit_arg = ["_u", t_unit]
+let unknown_arg = ["_", t_unknown]
 
 (* code to count the size of a collection *)
 let mk_size_slow col = mk_size (mk_var col.id)
@@ -895,19 +896,25 @@ let build_tuples_from_idxs ?(drop_vid=false) tuples_nm map_type indices =
   let may_drop e =
     if drop_vid then
       List.map (flip mk_subscript e) @@ tl @@ fst_many @@ insert_index_fst ~first:1 ts
-    else [e] in
+    else [e]
+  in
   let map_type =
-    if drop_vid then wrap_tcol col_t @@ wrap_ttuple @@ tl ts else map_type in
-  (* check for -1, which indicates the whole tuples *)
-  mk_if (mk_eq (mk_peek_or_error "empty indices" indices) @@ mk_cint (-1))
-    (if drop_vid then
-       mk_map
-         (mk_lambda'' ["x", tup_t] @@ mk_tuple @@ may_drop @@ mk_var "x") @@
-         mk_var tuples_nm
-     else mk_var tuples_nm) @@
-    mk_agg (mk_lambda2' ["acc", map_type] ["idx", t_int] @@
-      mk_at_with' tuples_nm (mk_var "idx") @@
-        mk_lambda'' ["x", tup_t] @@
-          mk_insert_block "acc" @@ may_drop @@ mk_var "x")
-      (mk_empty map_type)
-      indices
+    if drop_vid then wrap_tcol col_t @@ wrap_ttuple @@ tl ts else map_type
+  in
+  (* check for empty collection *)
+  mk_case_ns (mk_peek indices) "x"
+    (mk_empty map_type) @@
+    (* check for -1, indicating all tuples *)
+    mk_if (mk_eq (mk_var "x") @@ mk_cint (-1))
+      (if drop_vid then
+        mk_map
+          (mk_lambda'' ["x", tup_t] @@ mk_tuple @@ may_drop @@ mk_var "x") @@
+          mk_var tuples_nm
+        else mk_var tuples_nm) @@
+      (* or just regular indices into tuples *)
+      mk_agg (mk_lambda2' ["acc", map_type] ["idx", t_int] @@
+        mk_at_with' tuples_nm (mk_var "idx") @@
+          mk_lambda'' ["x", tup_t] @@
+            mk_insert_block "acc" @@ may_drop @@ mk_var "x")
+        (mk_empty map_type)
+        indices

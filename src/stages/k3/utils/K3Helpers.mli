@@ -370,6 +370,7 @@ val index_e : (string * 'a) list -> string -> int
 
 (* easy access to unit argument for functions/triggers *)
 val unit_arg : (string * type_t) list
+val unknown_arg : (string * type_t) list
 
 (* easy to use error function macro *)
 val mk_error : string -> expr_t
