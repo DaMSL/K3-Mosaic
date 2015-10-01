@@ -399,7 +399,7 @@ let mk_update_slice col slice new_val =
 let mk_ind v = mk_stree Indirect [v]
 
 (* left: TRef, right: T/TRef *)
-let mk_assign left right = mk_stree Assign [mk_var left; right]
+let mk_assign ?(path=[]) id x = mk_stree Assign [mk_id_path id path; x]
 
 (* target:TTarget(T) address:TAdress args:T *)
 let mk_send target address args = mk_stree Send [mk_ctarget target; address; mk_tuple args]
@@ -556,17 +556,20 @@ let mk_thd tuple = mk_subscript 3 tuple
 let mk_thd' tuple = mk_subscript 3 (mk_var tuple)
 
 (* insert and var block, for usual insertion in a lambda *)
-let mk_insert_block ?(path=[]) id x =
-  mk_block [mk_insert ~path id x; mk_var id]
+let mk_insert_block ?path id x =
+  mk_block [mk_insert ?path id x; mk_var id]
 
-let mk_insert_at_block ?(path=[]) id idx x =
-  mk_block [mk_insert_at ~path id idx x; mk_var id]
+let mk_insert_at_block ?path id idx x =
+  mk_block [mk_insert_at ?path id idx x; mk_var id]
 
-let mk_extend_block ?(path=[]) id col =
-  mk_block [mk_extend ~path id col; mk_var id]
+let mk_extend_block ?path id col =
+  mk_block [mk_extend ?path id col; mk_var id]
 
-let mk_upsert_with_block ?(path=[]) id key lam_empty lam_full =
-  mk_block [mk_upsert_with ~path id key lam_empty lam_full; mk_var id]
+let mk_upsert_with_block ?path id key lam_empty lam_full =
+  mk_block [mk_upsert_with ?path id key lam_empty lam_full; mk_var id]
+
+let mk_update_at_with_block ?path id key lambda =
+  mk_block [mk_update_at_with ?path id key lambda; mk_var id]
 
 let project_from_col tuple_types col ~choice =
   let t_col = wrap_t_calc' [hd tuple_types] in
@@ -853,12 +856,48 @@ let mk_filter_cnt cond ds =
     mk_var ds.id
 
 (* loop over bitmaps as in route and shuffle *)
-let mk_iter_bitmap ?(all=false) bitmap e =
-  mk_ignore @@
-    mk_agg (mk_lambda2' ["ip", t_int] ["has_val", t_bool] @@
-      mk_block [
-        if all then e else mk_if (mk_var "has_val") e mk_cunit;
-        mk_tuple [mk_add (mk_var "ip") @@ mk_cint 1]
-      ])
-    (mk_cint 0) @@
-    mk_var bitmap
+let mk_iter_bitmap ?(all=false) e bitmap =
+  mk_block [
+    mk_assign "ip" @@ mk_cint 0;
+    mk_iter (mk_lambda'' ["has_val", t_bool] @@
+        mk_block [
+          if all then e else mk_if (mk_var "has_val") e mk_cunit;
+          mk_assign "ip" @@ mk_add (mk_var "ip") @@ mk_cint 1
+        ]) @@
+      bitmap
+  ]
+
+let mk_iter_bitmap' ?all e bitmap = mk_iter_bitmap ?all e (mk_var bitmap)
+
+let mk_agg_bitmap ?(all=false) args e zero bitmap =
+  mk_block [
+    mk_assign "ip" @@ mk_cint 0;
+    mk_agg (mk_lambda2' args ["has_val", t_bool] @@
+        mk_let ["res"]
+          (if all then e
+            else mk_if (mk_var "has_val")
+                  e @@
+                  mk_tuple @@ ids_to_vars @@ fst_many args) @@
+        mk_block [
+          mk_assign "ip" @@ mk_add (mk_var "ip") @@ mk_cint 1;
+          mk_var "res"
+        ])
+      zero @@
+      bitmap
+  ]
+
+let mk_agg_bitmap' ?all args e zero bitmap = mk_agg_bitmap ?all args e zero (mk_var bitmap)
+
+let build_tuples_from_idxs ?(drop_vid=false) tuples_nm map_type indices =
+  let tup_t = snd @@ unwrap_tcol map_type in
+  let may_drop e =
+    if drop_vid then
+      let ts = unwrap_ttuple tup_t in
+      List.map (flip mk_subscript e) @@ tl @@ fst_many @@ insert_index_fst ~first:1 ts
+    else [e] in
+  mk_agg (mk_lambda2' ["acc", map_type] ["idx", t_int] @@
+    mk_at_with' tuples_nm (mk_var "idx") @@
+      mk_lambda'' ["x", tup_t] @@
+        mk_insert_block "acc" @@ may_drop @@ mk_var "x")
+    (mk_empty map_type)
+    indices

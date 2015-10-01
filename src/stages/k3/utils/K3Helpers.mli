@@ -209,7 +209,7 @@ val mk_filter_leq : expr_t -> expr_t list -> expr_t
 val mk_filter_leq' : id_t -> expr_t list -> expr_t
 
 val mk_ind : expr_t -> expr_t
-val mk_assign : id_t -> expr_t -> expr_t
+val mk_assign : ?path:int list -> id_t -> expr_t -> expr_t
 val mk_send : id_t -> expr_t -> expr_t list -> expr_t
 val mk_send_raw: expr_t -> expr_t -> expr_t -> expr_t
 
@@ -418,10 +418,16 @@ val mk_insert_block : ?path:int list -> id_t -> expr_t list -> expr_t
 val mk_insert_at_block : ?path:int list -> id_t -> expr_t -> expr_t list -> expr_t
 val mk_extend_block : ?path:int list -> id_t -> expr_t -> expr_t
 val mk_upsert_with_block : ?path:int list -> id_t -> expr_t list -> expr_t -> expr_t -> expr_t
+val mk_update_at_with_block : ?path:int list -> id_t -> expr_t -> expr_t -> expr_t
 
 (* easy filtering over vectors *)
 val mk_filter_cnt : expr_t -> data_struct -> expr_t
 
 (* loop over bitmaps as in route and shuffle *)
 (* @all: all values (even false) or just trues *)
-val mk_iter_bitmap : ?all:bool -> id_t -> expr_t -> expr_t
+val mk_iter_bitmap : ?all:bool -> expr_t -> expr_t -> expr_t
+val mk_iter_bitmap' : ?all:bool -> expr_t -> id_t -> expr_t
+val mk_agg_bitmap : ?all:bool -> (id_t * type_t) list -> expr_t -> expr_t -> expr_t -> expr_t
+val mk_agg_bitmap' : ?all:bool -> (id_t * type_t) list -> expr_t -> expr_t -> id_t -> expr_t
+
+val build_tuples_from_idxs : ?drop_vid:bool -> id_t -> type_t -> expr_t -> expr_t

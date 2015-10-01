@@ -76,13 +76,13 @@ let gen_shuffle_fn p rmap lmap bindings fn_name =
 
     mk_block @@
       (* clear all the resuls from the previous run *)
-      [mk_iter_bitmap shuffle_bitmap.id @@
-        mk_update_at_with shuffle_results.id (mk_var "ip") @@
+      [mk_iter_bitmap'
+        (mk_update_at_with shuffle_results.id (mk_var "ip") @@
           mk_lambda' shuffle_results.e @@
             mk_block [
               mk_clear_all "indices";
               mk_tuple [mk_cfalse; mk_var "indices"]
-            ]
+            ]) shuffle_bitmap.id
       ] @
 
       (* if we have only lkeys, we only need to route once *)
@@ -91,25 +91,28 @@ let gen_shuffle_fn p rmap lmap bindings fn_name =
           mk_apply' (route_for p lmap) @@
             mk_cint lmap :: if pred then full_key_vars else [mk_cunit];
           (* get the bitmap from route *)
-          mk_iter_bitmap ~all:true route_bitmap.id @@
-            mk_insert_at shuffle_bitmap.id (mk_var "ip") [mk_var "has_val"];
+          mk_iter_bitmap' ~all:true
+            (mk_insert_at shuffle_bitmap.id (mk_var "ip") [mk_var "has_val"])
+            R.route_bitmap.id;
           (* assign to the appropriate slots *)
-          mk_iter_bitmap shuffle_bitmap.id @@
-            mk_update_at_with shuffle_results.id (mk_var "ip") @@
+          mk_iter_bitmap'
+            (mk_update_at_with shuffle_results.id (mk_var "ip") @@
               mk_lambda' shuffle_results.e @@
                 mk_block [
                   mk_clear_all "indices";
                   (* indicates that all tuples go here *)
                   mk_insert "indices" [mk_cint (-1)];
                   mk_tuple [mk_ctrue; mk_var "indices"]
-                ]
+                ])
+            shuffle_bitmap.id
         ]
       (* else, full shuffling *)
       else
         [
           (* clean the shuffle bitmap *)
-          mk_iter_bitmap ~all:true shuffle_bitmap.id @@
-            mk_insert_at shuffle_bitmap.id (mk_var "ip") [mk_cfalse]
+          mk_iter_bitmap' ~all:true
+            (mk_insert_at shuffle_bitmap.id (mk_var "ip") [mk_cfalse])
+            shuffle_bitmap.id
           ;
           (* first handle the precise routing *)
           (* find ip of each tuple *)
@@ -122,8 +125,8 @@ let gen_shuffle_fn p rmap lmap bindings fn_name =
                 mk_apply'
                   (route_for p lmap) @@
                     mk_cint lmap :: if pred then full_key_vars else [mk_cunit];
-                mk_iter_bitmap route_bitmap.id @@
-                  mk_block [
+                mk_iter_bitmap'
+                  (mk_block [
                     (* copy the marked ip *)
                     mk_insert_at shuffle_bitmap.id (mk_var "ip") [mk_ctrue];
                     (* insert into the corresponding slot *)
@@ -133,7 +136,8 @@ let gen_shuffle_fn p rmap lmap bindings fn_name =
                           mk_insert "indices" [mk_var "tup_idx"];
                           mk_tuple [mk_ctrue; mk_var "indices"]
                         ]
-                  ];
+                   ])
+                  R.route_bitmap.id ;
                 mk_add (mk_var "tup_idx") @@ mk_cint 1
               ])
             (mk_cint 0) @@
@@ -146,8 +150,9 @@ let gen_shuffle_fn p rmap lmap bindings fn_name =
           (mk_block [
             mk_apply' (route_for p lmap) @@
                 mk_cint lmap :: if pred then no_rkey_key_vars else [mk_cunit];
-            mk_iter_bitmap R.route_bitmap.id @@
-              mk_insert_at shuffle_bitmap.id (mk_var "ip") [mk_ctrue]
+            mk_iter_bitmap'
+              (mk_insert_at shuffle_bitmap.id (mk_var "ip") [mk_ctrue])
+              R.route_bitmap.id
           ])
           mk_cunit
         ]
