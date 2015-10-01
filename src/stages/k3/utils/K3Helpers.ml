@@ -889,15 +889,25 @@ let mk_agg_bitmap ?(all=false) args e zero bitmap =
 let mk_agg_bitmap' ?all args e zero bitmap = mk_agg_bitmap ?all args e zero (mk_var bitmap)
 
 let build_tuples_from_idxs ?(drop_vid=false) tuples_nm map_type indices =
-  let tup_t = snd @@ unwrap_tcol map_type in
+  let col_t, tup_t = unwrap_tcol map_type in
+  let ts = unwrap_ttuple tup_t in
+  (* handle dropping vid *)
   let may_drop e =
     if drop_vid then
-      let ts = unwrap_ttuple tup_t in
       List.map (flip mk_subscript e) @@ tl @@ fst_many @@ insert_index_fst ~first:1 ts
     else [e] in
-  mk_agg (mk_lambda2' ["acc", map_type] ["idx", t_int] @@
-    mk_at_with' tuples_nm (mk_var "idx") @@
-      mk_lambda'' ["x", tup_t] @@
-        mk_insert_block "acc" @@ may_drop @@ mk_var "x")
-    (mk_empty map_type)
-    indices
+  let map_type =
+    if drop_vid then wrap_tcol col_t @@ wrap_ttuple @@ tl ts else map_type in
+  (* check for -1, which indicates the whole tuples *)
+  mk_if (mk_eq (mk_peek_or_error "empty indices" indices) @@ mk_cint (-1))
+    (if drop_vid then
+       mk_map
+         (mk_lambda'' ["x", tup_t] @@ mk_tuple @@ may_drop @@ mk_var "x") @@
+         mk_var tuples_nm
+     else mk_var tuples_nm) @@
+    mk_agg (mk_lambda2' ["acc", map_type] ["idx", t_int] @@
+      mk_at_with' tuples_nm (mk_var "idx") @@
+        mk_lambda'' ["x", tup_t] @@
+          mk_insert_block "acc" @@ may_drop @@ mk_var "x")
+      (mk_empty map_type)
+      indices

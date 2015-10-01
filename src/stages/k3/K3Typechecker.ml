@@ -404,11 +404,11 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
       | Let _ -> bind 1
 
       | Block ->
-          let rec validate_block components = match components with
+          let rec validate_block i = function
             | e :: [] -> type_of_expr e
-            | h :: t when type_of_expr h  === canonical TUnit -> validate_block t
-            | _       -> t_erroru (TMsg("Bad or non-TUnit expression"))
-          in validate_block typed_children
+            | h :: t when type_of_expr h  === canonical TUnit -> validate_block (i+1) t
+            | _       -> t_erroru (TMsg(sp "Bad or non-TUnit expression at stmt %d" i))
+          in validate_block 1 typed_children
 
       | Lambda t_a ->
           let t_r = bind 0 in
@@ -715,7 +715,7 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
       (* upsertwith for vector *)
       | UpdateAtWith ->
           let tcol', tkey, tlambda = bind 0, bind 1, bind 2 in
-          if tkey <> t_int then t_erroru @@ TMismatch(tkey, t_int, "key") else
+          if not (tkey === t_int) then t_erroru @@ TMismatch(tkey, t_int, "key") else
           let tcol, telem =
             try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') in
           if tcol <> TVector then t_erroru @@ TBad(tcol', "not a vector") else

@@ -401,19 +401,15 @@ let sw_send_fetch_fn c s_rhs_lhs s_rhs trig_name =
           acc_code @ [
             mk_apply (mk_var route_fn) @@ mk_cint lhs_map_id::key;
             (* the first do_complete should ack the switch *)
-            mk_ignore @@ mk_agg
-              (mk_lambda2' ["ip", t_int; "ack", t_bool] ["has_val", t_bool] @@
-                mk_block [
-                  mk_if (mk_var "has_val")
-                    (mk_sendi do_complete_trig_name (mk_var "ip") @@
-                      G.me_var :: mk_var "ack" :: args_of_t_as_vars_with_v c trig_name)
-                    mk_cunit;
-                  (* can only switch to false after we've seen the first one *)
-                  mk_tuple [mk_add (mk_var "ip") @@ mk_cint 1;
-                            mk_if (mk_var "has_val") mk_cfalse @@ mk_var "ack"]
+            mk_ignore @@ mk_agg_bitmap'
+              ["ack", t_bool]
+                (mk_block [
+                  mk_sendi do_complete_trig_name (mk_var "ip") @@
+                    G.me_var :: mk_var "ack" :: args_of_t_as_vars_with_v c trig_name;
+                  mk_cfalse
                 ])
-              (mk_tuple [mk_cint 0; mk_ctrue]) @@
-              mk_var K3Route.route_bitmap.id
+              mk_ctrue
+              K3Route.route_bitmap.id
           ] @
           (* stmts without puts need to reply *)
           GC.sw_update_send ~vid_nm:"vid")
@@ -458,13 +454,11 @@ let sw_send_fetch_fn c s_rhs_lhs s_rhs trig_name =
               (* count up the number of IPs received from route *)
               (mk_block [
                 mk_apply' route_fn @@ mk_cint rhs_map_id::route_key;
-                mk_agg
-                  (mk_lambda2' ["acc", t_int] ["has_val", t_bool] @@
-                    mk_if (mk_var "has_val")
-                      (mk_add (mk_var "acc") @@ mk_cint 1) @@
-                      mk_var "acc")
-                  (mk_cint 0) @@
-                  mk_var K3Route.route_bitmap.id
+                mk_agg_bitmap'
+                  ["acc", t_int]
+                  (mk_add (mk_var "acc") @@ mk_cint 1)
+                  (mk_cint 0)
+                  R.route_bitmap.id
               ]) @@
             mk_let ["agg"] acc_code @@
             mk_block [
@@ -472,28 +466,21 @@ let sw_send_fetch_fn c s_rhs_lhs s_rhs trig_name =
               mk_apply' shuffle_fn @@
                 shuffle_key @ [mk_cbool true; mk_empty tuple_types] ;
               (* loop over the shuffle bitmap *)
-              mk_snd @@ mk_agg
-                (mk_lambda2'
-                   ["ip_acc", wrap_ttuple [mut t_int; col_t]] ["has_val", t_bool] @@
-                  mk_block [
-                    mk_if (mk_var "has_val")
-                      (mk_upsert_with_block ~path:[2] "ip_acc" [mk_fst @@ mk_var "ip_acc"; mk_cunknown]
-                          (mk_lambda'' unit_arg @@ mk_tuple
-                            [mk_fst @@ mk_var "ip_acc"; mk_singleton stmt_cnt_list.t
-                              [mk_cint stmt_id; mk_var "sender_count"]]) @@
-                          mk_lambda' ["ip_stmt_cnts", wrap_ttuple [t_int; stmt_cnt_list.t]] @@
-                            mk_upsert_with_block "ip_stmt_cnts" ~path:[2]
-                                [mk_cint stmt_id; mk_cunknown]
-                              (mk_lambda'' unit_arg @@ mk_tuple
-                                [mk_cint stmt_id; mk_var "sender_count"]) @@
-                              mk_lambda' ["stmt_id", t_stmt_id; "count", t_int] @@ mk_tuple
-                          [mk_cint stmt_id; mk_add (mk_var "count") @@ mk_var "sender_count"])
-                    mk_cunit;
-                    mk_assign ~path:[1] "ip_acc" @@ mk_add (mk_cint 1) @@ mk_fst @@ mk_var "ip_acc";
-                    mk_var "ip_acc"
-                  ])
-                (mk_tuple [mk_cint 0; mk_var "agg"])
-                (mk_var K3Shuffle.shuffle_bitmap.id)
+              mk_agg_bitmap'
+                ["acc", col_t]
+                  (mk_upsert_with_block "acc" [mk_var "ip"; mk_cunknown]
+                    (mk_lambda'' unit_arg @@ mk_tuple
+                      [mk_var "ip"; mk_singleton stmt_cnt_list.t
+                        [mk_cint stmt_id; mk_var "sender_count"]]) @@
+                    mk_lambda' ["ip_stmt_cnts", wrap_ttuple [t_int; stmt_cnt_list.t]] @@
+                      mk_upsert_with_block "ip_stmt_cnts" ~path:[2]
+                          [mk_cint stmt_id; mk_cunknown]
+                        (mk_lambda'' unit_arg @@ mk_tuple
+                          [mk_cint stmt_id; mk_var "sender_count"]) @@
+                        mk_lambda' ["stmt_id", t_stmt_id; "count", t_int] @@ mk_tuple
+                    [mk_cint stmt_id; mk_add (mk_var "count") @@ mk_var "sender_count"])
+                (mk_var "agg")
+                K3S.shuffle_bitmap.id
             ])
           (mk_empty col_t)
           s_rhs_lhs]
@@ -517,20 +504,15 @@ let sw_send_fetch_fn c s_rhs_lhs s_rhs trig_name =
               mk_block [
                 mk_apply (mk_var route_fn) @@ mk_cint rhs_map_id::key;
                 mk_let ["acc"]
-                  (mk_snd @@ mk_agg
-                    (mk_lambda2' ["ip", t_int; "acc", map_t] ["has_val", t_bool] @@
-                      mk_block [
-                        mk_if (mk_var "has_val")
-                          (mk_upsert_with "acc" ip_pat
-                            (mk_lambda'' unit_arg @@ mk_tuple
-                              [mk_var "ip"; mk_singleton col_t [mk_cint stmt_id; mk_cint rhs_map_id]])
-                            (mk_lambda' ["y", wrap_ttuple [t_int; col_t]] @@
-                              mk_insert_block ~path:[2] "y" [mk_cint stmt_id; mk_cint rhs_map_id]))
-                          mk_cunit;
-                        mk_tuple [mk_add (mk_var "ip") @@ mk_cint 1; mk_var "acc"]
-                      ])
-                    (mk_tuple [mk_cint 0; mk_var "acc"]) @@
-                    mk_var K3Route.route_bitmap.id)
+                  (mk_agg_bitmap'
+                     ["acc", map_t]
+                      (mk_upsert_with_block "acc" ip_pat
+                        (mk_lambda'' unit_arg @@ mk_tuple
+                          [mk_var "ip"; mk_singleton col_t [mk_cint stmt_id; mk_cint rhs_map_id]]) @@
+                        mk_lambda' ["y", wrap_ttuple [t_int; col_t]] @@
+                          mk_insert_block ~path:[2] "y" [mk_cint stmt_id; mk_cint rhs_map_id])
+                    (mk_var "acc") @@
+                    R.route_bitmap.id)
                   acc_code
               ])
             (mk_var "acc")
@@ -719,7 +701,7 @@ let nd_send_push_stmt_map_trig c s_rhs_lhs trig_name =
                 (mk_var "ip") @@
                 mk_var "has_data" ::
                   (* lookup and reconstruct tuples from shuffle results *)
-                  build_tuples_from_idxs "tuple" map_delta.t (mk_var "indices") ::
+                  build_tuples_from_idxs "tuples" map_delta.t (mk_var "indices") ::
                   args_of_t_as_vars_with_v c trig_name)
             K3S.shuffle_bitmap.id
         ]) (* trigger *)
@@ -884,12 +866,11 @@ let send_corrective_fns c =
                                 mk_let ["t_indices"]
                                   (mk_agg
                                     (mk_lambda2' ["acc", wrap_tset t_int] ["i", t_int] @@
-                                      mk_insert "acc" [mk_var "i"])
+                                      mk_insert_block "acc" [mk_var "i"])
                                     (mk_var "t_indices") @@
                                     mk_var "indices") @@
                                 mk_tuple [mk_var "vids"; mk_var "t_indices"]
-                              ];
-                      mk_var "acc"
+                              ]
                     ])
                     (mk_var "acc_col") @@
                     K3S.shuffle_bitmap.id
@@ -916,7 +897,7 @@ let send_corrective_fns c =
                           mk_var "vids";
                           (* reconstruct tuples from indices *)
                           build_tuples_from_idxs ~drop_vid:true
-                            "delta_tuples2" map_ds.t @@ mk_snd @@ mk_var "ips_vids"]
+                            delta_tuples2.id delta_tuples2.t @@ mk_var "t_indices"]
                     ;
                     mk_add (mk_var "count") @@ mk_cint 1
                   ])
