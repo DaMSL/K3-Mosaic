@@ -186,13 +186,11 @@ and eval_expr (address:address) sched_st cenv texpr =
 
     let child_value env i =
       let renv, reval = eval_expr address sched_st env @@ List.nth children i
-      in renv, value_of_eval reval
-    in
-
+      in renv, value_of_eval reval in
     let child_values env =
       let renv, revals = threaded_eval address sched_st env children
-      in renv, List.map value_of_eval revals
-    in
+      in renv, List.map value_of_eval revals in
+    let child_tag n = U.tag_of_expr @@ List.nth children n in
 
     let temp x = VTemp x in
     let tvunit = temp VUnit in
@@ -296,18 +294,28 @@ and eval_expr (address:address) sched_st cenv texpr =
     (* Special ordered execution required *)
     | Let ids ->
         let env, bound = child_value cenv 0 in
+        let add_env env x v =
+            if x = "_" then env
+            else {env with locals=env_add x v env.locals} in
+        let rem_env env x =
+            if x = "_" then env
+            else {env with locals=env_remove x env.locals} in
         begin match ids, bound with
-        | [id], _  ->
-            let env = if id = "_" then env
-                      else {env with locals=env_add id bound env.locals} in
-            eval_expr address sched_st env @@ List.nth children 1
+        | [x], _  ->
+            let env = add_env env x bound in
+            let penv, ret = eval_expr address sched_st env @@ List.nth children 1 in
+            rem_env penv x, ret
         | _, VTuple vs ->
-            let env = List.fold_left2 (fun acc_env id v ->
-              if id = "_" then acc_env
-              else {acc_env with locals=env_add id v acc_env.locals})
-              env ids vs
+            let env = List.fold_left2 add_env env ids vs in
+            let env, ret = eval_expr address sched_st env @@ List.nth children 1 in
+            let env = match child_tag 1 with
+              | Var orig_id ->
+                (* check if we need writeback *)
+                env_modify ([], orig_id) env
+                  (fun x -> VTuple (List.map (fun id -> value_of_eval @@ lookup id env) ids))
+              | _ -> env
             in
-            eval_expr address sched_st env @@ List.nth children 1
+            List.fold_left rem_env env ids, ret
         | _ -> error name "bad let destruction"
         end
 
