@@ -369,8 +369,6 @@ let stmt_many_loop_vars p s =
     then Some lmap_loop_vars
   else None
 
-module IntSetSetMap = Map.Make(struct type t = IntSetSet.t let compare = IntSetSet.compare end)
-
 let all_trig_arg_stmt_binds p f =
   for_all_trigs ~sys_init:true ~corrective:true ~delete:true p @@ fun trig ->
     let t_args = fst_many @@ args_of_t p trig in
@@ -451,11 +449,19 @@ let map_access_patterns (p:prog_data_t) =
 
 (* for route optimization, we need individual map patterns per-map,
    and we need patterns from lmap-rmap, since those can cause free (conservative)
-   variables *)
+   variables.
+   We sort based on set size and number each set *)
 let route_access_patterns p =
   let h = Hashtbl.create 40 in
   ignore(all_trig_arg_stmt_binds p @@ insert_route_binds p h);
-
-
-
+  (* create maps from intset to int. sort the sets by decreasing size *)
+  let h2 = Hashtbl.create 40 in
+  Hashtbl.iter (fun map idx_set ->
+    let l = IntSetSet.elements idx_set in
+    (* deliberately use opposite function for decreasing order *)
+    let l = List.sort (fun s1 s2 ->
+        if IntSet.cardinal s1 > IntSet.cardinal s2 then (-1) else 1) l in
+    let m = IntSetMap.of_list @@ insert_index_snd l in
+    Hashtbl.replace h2 map m) h;
+  h2
 

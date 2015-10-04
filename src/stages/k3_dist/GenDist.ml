@@ -1174,7 +1174,7 @@ let let_lmap_filtering c delta stmt_id lmap let_bind body ~alt =
     let lmap_i_ts = P.map_ids_types_for c.p lmap in
     let lmap_ts = snd_many lmap_i_ts in
     let do_action = "do_action" in
-    if P.stmt_has_loop_vars c.p stmt_id then
+    if P.stmt_many_loop_vars c.p stmt_id <> None then
       mk_let [do_action; delta]
         (mk_agg
            (mk_lambda2' [do_action, t_bool; "acc", wrap_t_calc' lmap_ts]
@@ -1542,6 +1542,7 @@ let gen_dist ?(gen_deletes=true)
       agenda_map;
       unused_trig_args;
       map_indices = P.map_access_patterns p;
+      route_indices = P.route_access_patterns p;
     } in
   (* regular trigs then insert entries into shuffle fn table *)
   let proto_trigs, proto_funcs, proto_funcs2 =

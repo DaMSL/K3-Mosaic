@@ -89,8 +89,10 @@ type config = {
   agenda_map : mapping_t;
   (* unused trig args, calculated once *)
   unused_trig_args : StrSet.t StrMap.t;
-  (* map slice indices for the program *)
-  map_indices: (int, int * IntSetSet.t) Hashtbl.t;
+  (* map slice indices for multi-index maps *)
+  map_indices: (map_id_t, int * IntSetSet.t) Hashtbl.t;
+  (* map bind indices for route memoization *)
+  route_indices: (map_id_t, int IntSetMap.t) Hashtbl.t;
 }
 
 let default_config = {
@@ -105,6 +107,7 @@ let default_config = {
   agenda_map = [], StrMap.empty;
   unused_trig_args = StrMap.empty;
   map_indices = Hashtbl.create 10;
+  route_indices = Hashtbl.create 10;
 }
 
 let get_map_indices c map_id =

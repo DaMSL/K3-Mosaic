@@ -645,7 +645,7 @@ let v_update ?vidkey err_fn oldv newv c =
       end
   | v, v',c -> error v v' c
 
-let dummy_tuple = VTuple(List.map (const VUnit) @@ create_range 1 20)
+let dummy_tuple = VTuple(List.map (const VUnit) @@ create_range ~first:1 20)
 
 let v_update_suffix err_fn key f col = match key, col with
   | VTuple[t;k;_], VVMap m ->

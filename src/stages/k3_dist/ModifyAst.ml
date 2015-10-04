@@ -418,7 +418,7 @@ let delta_action c ast stmt =
       let wrap_uniq col_e =
         let last_id, last_t = list_last lmap_id_t in
         let lmap_t_no_val = P.map_types_no_val_for c.p lmap in
-        let subscript_rng = create_range 1 @@ List.length lmap_t_no_val in
+        let subscript_rng = create_range ~first:1 @@ List.length lmap_t_no_val in
         let subs = match subscript_rng with
           | [_] -> [mk_var "g"]
           | _   -> List.map (flip mk_subscript @@ mk_var "g") subscript_rng in

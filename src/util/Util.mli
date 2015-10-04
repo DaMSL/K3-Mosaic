@@ -4,6 +4,8 @@ module IntIntSet : sig include Set.S with type elt = int * int end
 module IntSetSet : sig include Set.S with type elt = IntSet.t end
 module IntMap : sig include NearMap.S with type key = int end
 module StrMap : sig include NearMap.S with type key = string end
+module IntSetMap : sig include NearMap.S with type key = IntSet.t end
+module IntSetSetMap : sig include NearMap.S with type key = IntSetSet.t end
 
 (* low-precedence function application. Saves ( ) *)
 val foi : int -> float
