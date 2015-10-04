@@ -354,61 +354,108 @@ let get_map_bindings_in_stmt p stmt_id rmap lmap =
 
 (* check if a statement has map bindings that cause conservative routing:
    2 or more separate loop variables *)
-let stmt_has_loop_vars p s =
+let stmt_many_loop_vars p s =
   let rmaps = rhs_maps_of_stmt p s in
   let lmap  = lhs_map_of_stmt p s in
   let binds = List.filter (not |- IntMap.is_empty) @@
     List.map (fun r -> get_map_bindings_in_stmt p s r lmap) rmaps in
   (* our condition is that the lmap has >1 loop var, and that >1 rmaps connect to
      the lmap with loop vars *)
-  List.length binds > 1 &&
-    (let lmap_loop_vars =
-      List.fold_left (fun acc x ->
-        IntMap.fold (fun _ lidx acc -> IntSet.add lidx acc) x acc) IntSet.empty binds
-    in
-    IntSet.cardinal lmap_loop_vars > 1)
-
+  let lmap_loop_vars =
+    List.fold_left (fun acc x ->
+      IntMap.fold (fun _ lidx acc -> IntSet.add lidx acc) x acc) IntSet.empty binds
+  in
+  if List.length binds > 1 && IntSet.cardinal lmap_loop_vars > 1
+    then Some lmap_loop_vars
+  else None
 
 module IntSetSetMap = Map.Make(struct type t = IntSetSet.t let compare = IntSetSet.compare end)
 
-let map_access_patterns (p:prog_data_t) =
-  let h = Hashtbl.create 40 in
-  let insert_from_bind t_args map binds =
-    (* iterate over lmap binds and get index *)
-    let map_ts = map_types_for p map in
-    let idx =
-      List.flatten @@ List.map (fun (nm, i) ->
-        (* only count bound variabls (trig args) *)
-        if List.mem nm t_args then [i] else []) binds in
-    if idx <> [] &&
-      (* prune out indices that have entire key *)
-      List.length idx < List.length map_ts - 1 then
-      (* insert index into hashtable *)
-      let idx = IntSet.of_list idx in
-      hashtbl_replace h map (function
-        | None   -> IntSetSet.singleton idx
-        | Some x -> IntSetSet.add idx x)
-  in
-  ignore(for_all_trigs ~sys_init:true ~corrective:true ~delete:true p @@ fun trig ->
+let all_trig_arg_stmt_binds p f =
+  for_all_trigs ~sys_init:true ~corrective:true ~delete:true p @@ fun trig ->
     let t_args = fst_many @@ args_of_t p trig in
     let ss = List.map (find_stmt p) @@ stmts_of_t p trig in
-    List.iter (fun (_,_,lmap,lbinds,rbinds) ->
-      insert_from_bind t_args lmap lbinds;
-      List.iter (fun (rmap, rbind) ->
-        insert_from_bind t_args rmap rbind) rbinds
-    ) ss);
-  (* enumerate all patterns and number them *)
+    List.iter (fun (s,_,lmap,lbinds,rbinds) -> f s t_args lmap lbinds rbinds) ss
+
+(* generic routine to get individual map bindings *)
+let get_idx t_args binds =
+  (* only count bound variabls *)
+  IntSet.of_list @@ snd_many @@
+    List.filter (fun x -> List.mem (fst x) t_args) binds
+
+let hash_add_intset hash map s =
+  hashtbl_replace hash map @@ maybe (IntSetSet.singleton s) (IntSetSet.add s)
+
+ (* @prune: don't accept full bound/empty. needed for multiindex *)
+let insert_idx ?(prune=false) ?(add_full=false) p hash t_args map binds =
+  let idx = get_idx t_args binds in
+  let map_ts = map_types_for p map in
+  let add s = hash_add_intset hash map s in
+  (* if asked to prune,
+     prune out indices that have no key or entire key *)
+  if prune then
+    if IntSet.is_empty idx || IntSet.cardinal idx >= List.length map_ts - 1 then ()
+    else add idx
+  else add idx;
+  (* add_fully bound *)
+  if add_full then add @@ IntSet.of_list @@ create_range @@ List.length map_ts - 1 else ()
+
+(* generic routine to add left and right map individual bindings to a hash table *)
+(* used by both route and multi-index *)
+let insert_l_r_binds ?prune ?add_full p hash _ t_args lmap lbinds rbinds =
+  let insert_idx = insert_idx ?prune ?add_full in
+  insert_idx p hash t_args lmap lbinds;
+  List.iter (fun (rmap, rbind) ->
+      insert_idx p hash t_args rmap rbind)
+    rbinds
+
+(* routine for route. gets
+   a. individual map bindings
+   b. all fully bound patterns
+   c. patterns that occur when an rmap with 2 loop vars sends to an lmap *)
+let insert_route_binds p hash stmt t_args lmap lbinds rbinds =
+  (* first, insert the individual map bound patterns *)
+  insert_l_r_binds p ~prune:false ~add_full:true hash () t_args lmap lbinds rbinds;
+  (* now, get bound patterns that occur on shuffle to lmap because of double loops *)
+  match stmt_many_loop_vars p stmt with
+  | Some lmap_loop_vars ->
+      (* get the bound vars on the lmap *)
+      let lmap_bound_vars = get_idx t_args lbinds in
+      (* for each loop var, insert the bound vars *)
+      IntSet.iter (fun i ->
+          let s = IntSet.add i lmap_bound_vars in
+          hash_add_intset hash lmap s)
+        lmap_loop_vars
+  | None -> ()
+
+(* For multi-index *)
+(* We need access patterns for maps individually. We don't care about any combination *)
+let map_access_patterns (p:prog_data_t) =
+  let h = Hashtbl.create 40 in
+  ignore(all_trig_arg_stmt_binds p @@ insert_l_r_binds ~prune:true p h);
+  (* enumerate all patterns for all maps and number them *)
   let pats = snd @@
-    Hashtbl.fold (fun nm pat (i,acc) ->
-      try ignore(IntSetSetMap.find pat acc); i, acc
+    Hashtbl.fold (fun map_id pat (i, acc) ->
+      try ignore(IntSetSetMap.find pat acc);
+          i, acc
       with Not_found ->
         i+1, IntSetSetMap.add pat i acc)
-    h (1, IntSetSetMap.empty)
-  in
+    h
+    (1, IntSetSetMap.empty) in
   let h2 = Hashtbl.create 40 in
-  (* create new hashtbl with number for the pattern *)
-  Hashtbl.iter (fun nm idx ->
+  (* create new hashtbl. map_id -> pat_num, set of sets (pattern) *)
+  Hashtbl.iter (fun map_id idx ->
     let num = IntSetSetMap.find idx pats in
-    Hashtbl.add h2 nm (num, idx)) h;
+    Hashtbl.add h2 map_id (num, idx)) h;
   h2
+
+(* for route optimization, we need individual map patterns per-map,
+   and we need patterns from lmap-rmap, since those can cause free (conservative)
+   variables *)
+let route_access_patterns p =
+  let h = Hashtbl.create 40 in
+  ignore(all_trig_arg_stmt_binds p @@ insert_route_binds p h);
+
+
+
 
