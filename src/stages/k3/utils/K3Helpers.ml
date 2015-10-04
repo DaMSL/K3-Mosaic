@@ -587,7 +587,7 @@ let mk_snd_many t col = project_from_col t col ~choice:2
 (* Functions to manipulate tuples in K3 code *)
 let def_tup_prefix = "__temp_"
 
-let mk_tuple_range ?(first=0) types = create_range first @@ List.length types
+let mk_tuple_range ?(first=0) types = create_range ~first @@ List.length types
 
 (* convert a number to an id used for breaking apart tuples *)
 let int_to_temp_id prefix i = prefix^string_of_int i

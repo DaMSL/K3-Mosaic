@@ -269,7 +269,7 @@ let gen_route_fn p ?(precise=false) map_id =
   let map_types = map_types_no_val_for p map_id in
   (* it's very important that the index for ranges start with 0, since we use
    * them for indexing *)
-  let map_range = create_range 0 @@ List.length map_types in
+  let map_range = create_range @@ List.length map_types in
   let key_types = wrap_tupmaybes map_types in
   let prefix = "key_" in
   let key_ids =

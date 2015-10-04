@@ -53,9 +53,9 @@ let null l = match l with [] -> true | _ -> false
 
 let at l i = List.nth l i
 
-let fst_many l = fst @: List.split l
+let fst_many l = fst @@ List.split l
 
-let snd_many l = snd @: List.split l
+let snd_many l = snd @@ List.split l
 
 let fst3 (x,_,_) = x
 let snd3 (_,x,_) = x
@@ -245,10 +245,10 @@ let read_file_lines file =
     | None   -> acc
     | Some x -> read_lines (x::acc)
   in
-  let ls = List.rev @: read_lines [] in
+  let ls = List.rev @@ read_lines [] in
   close_in in_chan; ls
 
-let read_file file = String.concat "\n" @: read_file_lines file
+let read_file file = String.concat "\n" @@ read_file_lines file
 
 let write_file file s =
   let out_chan = open_out file in
@@ -261,7 +261,7 @@ let write_file_lines file l =
   close_out out_chan
 
 (* make a range from first to last. Tail recursive *)
-let create_range ?(step=1) first length =
+let create_range ?(step=1) ?(first=0) length =
     let last = first + ((length-1) * step) in
     let rec range_inner index acc =
         if index > last then acc
@@ -270,21 +270,21 @@ let create_range ?(step=1) first length =
     List.rev(range_inner first [])
 
 (* make a range that corresponds to a given list *)
-let create_corr_range first xs = create_range first @: List.length xs
+let create_corr_range ?(first=0) xs = create_range ~first @@ List.length xs
 
 let insert_index_fst ?(first=0) xs =
-    let is = create_corr_range first xs in
+    let is = create_corr_range ~first xs in
     list_zip is xs
 
 let insert_index_snd ?(first=0) xs =
-    let is = create_corr_range first xs in
+    let is = create_corr_range ~first xs in
     list_zip xs is
 
 (* tail recursive, so more efficient than mapping alone *)
-let list_map f l = List.rev @: List.rev_map f l
+let list_map f l = List.rev @@ List.rev_map f l
 
 (* get an index with every item in a map *)
-let list_mapi f l = List.rev @: snd @: List.fold_left
+let list_mapi f l = List.rev @@ snd @@ List.fold_left
   (fun (i,acc) x -> i+1, (f (i,x))::acc) (0,[]) l
 
 let list_forall2 f x y = try List.for_all2 f x y with Invalid_argument _ -> false
@@ -301,7 +301,7 @@ let mapfold fn init l =
   in a, List.rev b
 
 let filter_map fn l =
-  List.rev @:
+  List.rev @@
     List.fold_left (fun acc x ->
       match fn x with
       | None   -> acc
@@ -326,7 +326,7 @@ let iterate_until f init =
 (* repeat a function many times, building a list from indices *)
 (* do this without instantiating the index list *)
 let list_populate f init num =
-  List.rev @: snd @: iterate
+  List.rev @@ snd @@ iterate
     (fun (i, acc) -> i+1, (f i)::acc)
     (init, [])
     num
@@ -342,7 +342,7 @@ let list_bunch i l =
       match list_drop i l with
       | []    -> taken::acc
       | xs    -> loop (taken::acc) xs
-  in List.rev @: loop [] l
+  in List.rev @@ loop [] l
 
 (* intersperse 2 lists together. When one runs out, continue with the other *)
 let list_intersperse la lb =
@@ -351,7 +351,7 @@ let list_intersperse la lb =
     | x::xs, []    -> loop (x::acc) xs []
     | [],    y::ys -> loop (y::acc) [] ys
     | [], []       -> acc
-  in List.rev @: loop [] la lb
+  in List.rev @@ loop [] la lb
 
 let list_intercalate v = function
   | []     -> []
@@ -435,7 +435,7 @@ let cartesian_product l1 l2 =
 (* efficient function to get unique entities *)
 let nub xs =
     let h = Hashtbl.create 50 in
-    List.rev @:
+    List.rev @@
       List.fold_left (fun acc x ->
         if Hashtbl.mem h x then acc
         else (Hashtbl.replace h x (); x::acc)
@@ -455,7 +455,7 @@ let array_find pred arr =
 
 (* map an array to a list *)
 let array_map f arr =
-  List.rev @: Array.fold_left (fun acc x -> (f x)::acc) [] arr
+  List.rev @@ Array.fold_left (fun acc x -> (f x)::acc) [] arr
 
 (* wrap with some *)
 let some x = Some(x)
@@ -472,7 +472,7 @@ let maybe def f = function None -> def | Some x -> f x
 let maybe_f def f = function None -> def () | Some x -> f x
 
 (* flatten a list of maybes into a list *)
-let flatten_some l = List.rev @:
+let flatten_some l = List.rev @@
   List.fold_left (fun acc -> function
     | Some x -> x::acc
     | None   -> acc
@@ -517,8 +517,8 @@ let r_groups str ~r ~n =
         end
       with
       | Not_found -> None
-      | Invalid_argument _ -> invalid_arg @: Printf.sprintf "Bad group %d for string %s" i str
-    ) @: create_range 1 n
+      | Invalid_argument _ -> invalid_arg @@ Printf.sprintf "Bad group %d for string %s" i str
+    ) @@ create_range ~first:1 n
   else []
 
 let r_match r str = Str.string_match r str 0
@@ -535,7 +535,7 @@ let  make_lst element num =
 
 (* transpose a list of lists *)
 let transpose l =
-  List.rev @: fst @: List.fold_right (fun _ (acc,rem) ->
+  List.rev @@ fst @@ List.fold_right (fun _ (acc,rem) ->
     let newl, rem =
       List.fold_right (fun x (acc2,rem2) ->
         match x with
@@ -555,7 +555,7 @@ let r_date = Str.regexp "\\([0-9]+\\)-\\([0-9]+\\)-\\([0-9]+\\)"
 let int_of_sql_date s = match r_groups s ~n:3 ~r:r_date with
   | [Some y; Some m; Some d] ->
       (ios y)*10000 + (ios m)*100 + (ios d)
-  | l -> invalid_arg @: Printf.sprintf "int_of_sql_date for string %s. Found only %i members" s (List.length l)
+  | l -> invalid_arg @@ Printf.sprintf "int_of_sql_date for string %s. Found only %i members" s (List.length l)
 
   (* extract a part of the date, as represented by an integer *)
 let date_part p i = match p with

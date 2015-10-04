@@ -147,10 +147,10 @@ val write_file : string -> string -> unit
 val write_file_lines : string -> string list -> unit
 
 (* create a numerical range from a to b *)
-val create_range : ?step:int -> int -> int -> int list
+val create_range : ?step:int -> ?first:int -> int -> int list
 
 (* create a numerical range corresponding to the length of a list *)
-val create_corr_range : int -> 'a list -> int list
+val create_corr_range : ?first:int -> 'a list -> int list
 
 (* insert an index for each member of a list *)
 val insert_index_fst : ?first:int -> 'a list -> (int * 'a) list

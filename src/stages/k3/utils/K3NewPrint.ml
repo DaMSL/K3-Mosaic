@@ -292,7 +292,7 @@ let arg_num_of_arg a =
     | AMaybe x     -> incr i; NMaybe(n, loop !i x)
     | ATuple xs    ->
       let len = List.length xs in
-      let rng = create_range !i len in
+      let rng = create_range ~first:!i len in
       i := !i + len;
       NTuple(n, List.map2 loop rng xs)
   in loop !i a
