@@ -301,10 +301,6 @@ val mk_snd_many: type_t list -> expr_t -> expr_t
 (* given an integer and a prefix, create an id for the internals of a tuple *)
 val int_to_temp_id: string -> int -> id_t
 
-(* create a consistent range with which to refer to tuple ids when destructing
- * tuples *)
-val mk_tuple_range: ?first:int -> 'a list -> int list
-
 (* turn a list of types to a list of made up ids and corresponding types *)
 val types_to_ids_types : ?first:int -> string -> type_t list -> (string * type_t) list
 

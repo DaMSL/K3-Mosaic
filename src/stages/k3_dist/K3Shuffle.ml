@@ -51,7 +51,7 @@ let gen_shuffle_fn p rmap lmap bindings fn_name =
   (* lkey refers to the access pattern from trig args. rkey is from the tuples*)
   let id_l, id_r = "lkey_" , "rkey_" in
   let to_rkey, to_lkey = int_to_temp_id id_r, int_to_temp_id id_l in
-  let map_range = Array.of_list @@ List.map (fun x -> `Lkey x) @@ mk_tuple_range lkey_types in
+  let map_range = Array.of_list @@ List.map (fun x -> `Lkey x) @@ create_corr_range lkey_types in
   (* use bindings to construct lkey. *)
   List.iteri (fun i _ ->
       try
@@ -72,12 +72,12 @@ let gen_shuffle_fn p rmap lmap bindings fn_name =
 
   (* functions to change behavior for non-key routes *)
   let pred = List.length lkey_types > 0 in
-  let tuples, shuffle_on_empty = "tuples", "shuffle_on_empty" in
+  let tuples, shuffle_empty_pat = "tuples", "shuffle_empty_pat" in
   let l_key_ids_types = types_to_ids_types id_l lkey_types in
 
   mk_global_fn fn_name
   ((if pred then l_key_ids_types else ["_", t_unit]) @
-    [shuffle_on_empty, t_bool; tuples, tuple_col_t])
+   ["pat_idx", t_int; shuffle_empty_pat, t_int; tuples, tuple_col_t])
     [] @@
 
     mk_block @@
@@ -95,8 +95,10 @@ let gen_shuffle_fn p rmap lmap bindings fn_name =
       (* if we have only lkeys, we only need to route once *)
       if all_lkeys then
         [
-          mk_apply' (route_for p lmap) @@
-            mk_cint lmap :: if pred then full_key_vars else [mk_cunit];
+          route_lookup c lmap
+            (mk_cint lmap :: if pred then full_key_vars else [mk_cunit])
+            (mk_var "pat_idx") @@
+
           (* get the bitmap from route *)
           mk_iter_bitmap' ~all:true
             (mk_insert_at shuffle_bitmap.id (mk_var "ip") [mk_var "has_val"])
@@ -129,9 +131,9 @@ let gen_shuffle_fn p rmap lmap bindings fn_name =
               mk_destruct_tuple "x" tuple_types id_r @@
               mk_block [
                 (* fill ips from route *)
-                mk_apply'
-                  (route_for p lmap) @@
-                    mk_cint lmap :: if pred then full_key_vars else [mk_cunit];
+                route_lookup c lmap
+                  (mk_cint lmap :: if pred then full_key_vars else [mk_cunit])
+                  (mk_var "pat_idx") @@
                 mk_iter_bitmap'
                   (mk_block [
                     (* copy the marked ip *)
@@ -144,7 +146,7 @@ let gen_shuffle_fn p rmap lmap bindings fn_name =
                           mk_tuple [mk_ctrue; mk_var "indices"]
                         ]
                    ])
-                  R.route_bitmap.id ;
+                  R.route_bitmap.id;
                 mk_add (mk_var "tup_idx") @@ mk_cint 1
               ])
             (mk_cint 0) @@
@@ -152,11 +154,12 @@ let gen_shuffle_fn p rmap lmap bindings fn_name =
         ;
 
         (* extra targets for when we have to send all possible ips *)
+        (* shuffle_empty_pat is -1 if negative, or a pattern for pure lmaps *)
         mk_if (mk_var shuffle_on_empty)
           (* if we get shuffle_on_empty, add empty targets for all ips we can route to *)
           (mk_block [
             mk_apply' (route_for p lmap) @@
-                mk_cint lmap :: if pred then no_rkey_key_vars else [mk_cunit];
+              mk_cint lmap :: if pred then no_rkey_key_vars else [mk_cunit];
             mk_iter_bitmap'
               (mk_insert_at shuffle_bitmap.id (mk_var "ip") [mk_ctrue])
               R.route_bitmap.id

@@ -25,10 +25,10 @@ module U = K3Util
   *)
 
 (* route function name *)
-let route_for ?(precise=false) p map_id =
+let route_for ~bound p map_id =
   let m_t = P.map_types_no_val_for p map_id in
-  (if precise then "precise_" else "")^
-  "route_to_"^String.concat "_" @@
+  (if bound then "bound_" else "free_")^
+  "route_"^String.concat "_" @@
     List.map K3PrintSyntax.string_of_type m_t
 
 let t_two_ints = [t_int; t_int]
@@ -178,6 +178,14 @@ let pmap_data =
   in
   create_ds "pmap_data" t ~e ~init
 
+(* create memoization tables for every map *)
+(* vectors of bound_var * pattern -> bitmap *)
+let route_memo_for p map = "route_memo_map_" ^ map_name_of p map
+let route_memo c =
+  for_all_maps c.p (fun map ->
+    let t = wrap_tvector @@ wrap_tvector t_bool in
+    create_ds (route_memo_for c.p map) t)
+
 (* convert human-readable map name to map id *)
 
 (* convert a k3 data structure with partition map data to an ocaml list with the
@@ -264,8 +272,7 @@ let clean_results =
     (mk_insert_at route_bitmap.id (mk_var "ip") [mk_cfalse])
     route_bitmap.id
 
-(* @precise: return a single address for bound vars only *)
-let gen_route_fn p ?(precise=false) map_id =
+let gen_route_fn p map_id =
   let map_types = map_types_no_val_for p map_id in
   (* it's very important that the index for ranges start with 0, since we use
    * them for indexing *)
@@ -275,24 +282,24 @@ let gen_route_fn p ?(precise=false) map_id =
   let key_ids =
     fst @@ List.split @@ map_ids_types_no_val_for ~prefix:prefix p map_id in
   let to_id i = List.nth key_ids i in
-  let return_t = if precise then [t_int] else [] in
 
   match map_types with
   | [] -> (* if no keys, for now we just route to one place *)
-    mk_global_fn (route_for ~precise p map_id)
-      ["_", t_int; "_", t_unit] return_t @@
-    (fun e ->
-      if precise then e
-      else
+    [mk_global_fn (route_for ~bound:true p map_id)
+      ["_", t_int; "_", t_unit] [t_int] @@
+        mk_cint 0
+     ;
+     mk_global_fn (route_for ~bound:false p map_id)
+       ["_", t_int; "_", t_int; "_", t_unit] [] @@
         mk_block [
           clean_results;
-          mk_insert_at route_bitmap.id e [mk_ctrue]
-        ])
-    (mk_apply' "get_ring_node" [mk_cint 1; mk_cint 1])
+          mk_insert_at route_bitmap.id (mk_apply' "get_ring_node" [mk_cint 1; mk_cint 1]) [mk_ctrue]
+        ]
+    ]
 
   | _  -> (* we have keys *)
-    mk_global_fn (route_for ~precise p map_id)
-      (("map_id", t_map_id)::types_to_ids_types prefix key_types) return_t @@
+    [mk_global_fn (route_for ~bound:true p map_id)
+      (("map_id", t_map_id)::types_to_ids_types prefix key_types) [t_int] @@
       (* get the info for the current map and bind it to "pmap" *)
       mk_at_with' pmap_data.id (mk_var "map_id") @@
         mk_lambda' ["pmap_data", pmap.t] @@
@@ -300,16 +307,7 @@ let gen_route_fn p ?(precise=false) map_id =
         (* deep bind *)
         mk_let ["pmap"; "dim_bounds"; "max_val"] (mk_var "pmap_data") @@
 
-        (* handle the case of no partitioning at all *)
-        (if precise then id_fn else
-          mk_if (mk_eq (mk_size @@ mk_var "pmap") @@ mk_cint 0) @@
-            mk_iter_bitmap'
-              (mk_insert_at route_bitmap.id (mk_var "ip") [mk_var "has_val"])
-              all_nodes_bitmap.id
-        ) @@
-
-        mk_let ["bound_bucket"]
-        (List.fold_left
+        List.fold_left
           (fun acc_code index ->
             let temp_id = to_id index in
             let id_unwrap = temp_id^"_unwrap" in
@@ -331,70 +329,150 @@ let gen_route_fn p ?(precise=false) map_id =
                         [mk_apply' "abs" @@ singleton @@
                           mk_apply' hash_func [mk_var id_unwrap];
                         mk_snd @@ mk_var "peek_slice"]) @@
-                  mk_apply' "dim_bounds_lookup_hack"
-                    [mk_var "dim_bounds"; mk_var "value"; mk_cint @@ index + 1])
+                  mk_at_with' "dim_bounds" (mk_cint @@ index + 1) @@
+                    mk_lambda' dim_bounds.e @@
+                      mk_mult (mk_var "value") @@ mk_var "dim_size")
                   acc_code)
           (mk_cint 0)
           map_range
-        ) @@
-        (* if precise, then we're done here with the bound bucket *)
-        if precise then
-          mk_apply' "get_ring_node" [mk_var "bound_bucket"; mk_var "max_val"]
-        else
-          let len = List.length map_range in
-          mk_block [
-            clean_results;
-            snd @@
-            (* loop over all dims and get ips for cartesian product *)
-            (* for code gen, we need to do all of our let bindings/lookup first *)
-            (List.fold_left
-              (fun (num, acc_code) index ->
-                let add_idx s = s ^ soi index in
-                num - 1,
-                mk_let ["index"]
-                  (mk_if (mk_is_tup_nothing @@ mk_var @@ to_id index)
-                    (mk_cint @@ index + 1) @@
-                    mk_cint 0) @@
-                  mk_at_with' "dim_bounds" (mk_var "index") @@
-                    mk_lambda' (List.map (first add_idx) dim_bounds.e) acc_code)
-              (len, snd @@
-                List.fold_left
-                  (fun (num, acc_code) index ->
-                    let add_idx s = s ^ soi index in
-                    num - 1,
-                    mk_iter
-                      (mk_lambda'' ["x", t_int] @@
-                        mk_let [add_idx "val"]
-                          (mk_mult (mk_var "x") @@ mk_var @@ add_idx "dim_size")
-                          acc_code) @@
-                      mk_var @@ add_idx "rng")
-                    (* zero: insertion of ip *)
-                  (len,
-                    mk_insert_at route_bitmap.id
-                      (mk_apply' "get_ring_node"
-                        (* add up all the values and the bound_bucket *)
-                        [List.fold_left (fun acc x ->
-                          mk_add (mk_var @@ "val"^soi x) acc) (mk_var "bound_bucket") map_range;
-                        mk_var "max_val"])
-                      [mk_ctrue])
-                  map_range)
-              map_range)
+     ;
+
+     (* function to get only the free dimensions (and addresses) *)
+     mk_global_fn (route_for ~bound:false p map_id)
+      (["bound_bucket", t_int; "map_id", t_map_id] @ types_to_ids_types prefix key_types) [] @@
+
+      mk_at_with' pmap_data.id (mk_var "map_id") @@
+        mk_lambda' ["pmap_data", pmap.t] @@
+
+        (* deep bind *)
+        mk_let ["pmap"; "dim_bounds"; "max_val"] (mk_var "pmap_data") @@
+
+        (* handle the case of no partitioning. Send to all *)
+        mk_if (mk_eq (mk_size @@ mk_var "pmap") @@ mk_cint 0)
+          (mk_iter_bitmap'
+            (mk_insert_at route_bitmap.id (mk_var "ip") [mk_var "has_val"])
+            all_nodes_bitmap.id) @@
+
+        let len = List.length map_range in
+        mk_block [
+          clean_results;
+          snd @@
+          (* loop over all dims and get ips for cartesian product *)
+          (* for code gen, we need to do all of our let bindings/lookup first *)
+          (List.fold_left
+            (fun (num, acc_code) index ->
+              let add_idx s = s ^ soi index in
+              num - 1,
+              mk_let ["index"]
+                (mk_if (mk_is_tup_nothing @@ mk_var @@ to_id index)
+                  (mk_cint @@ index + 1) @@
+                  mk_cint 0) @@
+                mk_at_with' "dim_bounds" (mk_var "index") @@
+                  mk_lambda' (List.map (first add_idx) dim_bounds.e) acc_code)
+            (len, snd @@
+              List.fold_left
+                (fun (num, acc_code) index ->
+                  let add_idx s = s ^ soi index in
+                  num - 1,
+                  mk_iter
+                    (mk_lambda'' ["x", t_int] @@
+                      mk_let [add_idx "val"]
+                        (mk_mult (mk_var "x") @@ mk_var @@ add_idx "dim_size")
+                        acc_code) @@
+                    mk_var @@ add_idx "rng")
+                  (* zero: insertion of ip *)
+                (len,
+                  mk_insert_at route_bitmap.id
+                    (mk_apply' "get_ring_node"
+                      (* add up all the values and the bound_bucket *)
+                      [List.fold_left (fun acc x ->
+                        mk_add (mk_var @@ "val"^soi x) acc) (mk_var "bound_bucket") map_range;
+                      mk_var "max_val"])
+                    [mk_ctrue])
+                map_range)
+            map_range)
           ]
+    ]
+
+(* convert an index set to a pattern to be fed to route_free *)
+let route_arg_pat_of_index p map_id idx =
+  let i_ts = insert_index_fst @@ P.map_types_no_val_for p map_id in
+  List.map (fun (i, t) ->
+      if IntSet.mem i idx then mk_tuple [mk_ctrue; default_value_of_t t]
+      else mk_tuple [mk_cfalse; default_value_of_t t])
+    i_ts
+
+(* fill in all memoized routes for a map *)
+let memo_init_all_nm = "route_memo_init_all"
+let memo_init_all c =
+  let memo_init c (map_id:map_id_t) =
+    let route_idx = Hashtbl.find c.route_indices map_id in
+    let patterns = IntSetMap.to_list route_idx in
+    let sz = IntSetMap.cardinal route_idx in
+    mk_let ["rng_max"]
+      (mk_at_with' pmap_data.id (mk_cint map_id) @@
+        mk_lambda' pmap.e @@ mk_var "max_val") @@
+    mk_let ["rng_buckets"]
+      (mk_convert_col (wrap_tlist t_int) (wrap_tvector t_int) @@
+      mk_range TList (mk_cint 0) (mk_cint 1) @@ mk_var "rng_max") @@
+    (* get number indices of patterns used for lookup *)
+    mk_let ["rng_patterns"]
+      (k3_container_of_list (wrap_tvector t_int) @@
+       List.map mk_cint @@ List.sort (-) @@ snd_many patterns) @@
+    mk_iter (mk_lambda'' ["i", t_int] @@
+      mk_iter (mk_lambda'' ["j", t_int] @@
+        mk_insert_at (route_memo_for c.p map_id)
+          (mk_add (mk_mult (mk_var "i") @@ mk_cint sz) @@ mk_var "j")
+            [mk_block
+              (* fill in the matching pattern *)
+              [List.fold_left (fun acc_code (pat, pat_idx) ->
+                let args = [mk_var "i"; mk_cint map_id] @ route_arg_pat_of_index c.p map_id pat in
+                mk_if (mk_eq (mk_var "j") @@ mk_cint pat_idx)
+                  (mk_let ["bound"]
+                    (mk_apply' (route_for ~bound:true c.p map_id) args) @@
+                  mk_apply' (route_for ~bound:false c.p map_id) @@ [mk_var "bound"]@args)
+                  acc_code)
+                (mk_error "unsupported pattern")
+                patterns;
+               mk_var "route_bitmap"]
+            ]) @@
+        mk_var "rng_patterns") @@
+      mk_var "rng_buckets"
+  in
+  mk_global_fn memo_init_all_nm [] [] @@
+    mk_block @@ P.for_all_maps c.p (memo_init c)
+
+(* code to perform full route *)
+let route_lookup c map_id key pat_idx lambda_body =
+  let sz = IntSetMap.cardinal @@ Hashtbl.find c.route_indices map_id in
+  mk_at_with' (route_memo_for c.p map_id)
+    (mk_add
+       (mk_mult
+          (mk_apply' (route_for ~bound:true c.p map_id) key) @@ mk_cint sz)
+       pat_idx) @@
+    mk_lambda'' [route_bitmap.id, route_bitmap.t] lambda_body
+
+
+
+
+
+
 
 (* create all code needed for route functions, including foreign funcs*)
-let global_vars p partmap =
-  List.map decl_global
+let global_vars c partmap =
+  List.map decl_global @@
   [ builtin_route;
     route_bitmap;
     all_nodes_bitmap;
-    pmap_input p partmap;
-    pmap_data;
-  ]
+    pmap_input c.p partmap;
+    pmap_data ] @
+    route_memo c
 
 let functions c partmap =
   dim_bounds_fn ::
   (* create a route for each map type, using only the key types *)
-  (List.flatten @@ List.map (fun m ->
-    [gen_route_fn c.p m; gen_route_fn ~precise:true c.p m]) @@
+  (List.flatten @@ List.map (fun m -> gen_route_fn c.p m) @@
     List.map (hd |- snd |- snd) @@
-    D.uniq_types_and_maps ~uniq_indices:false ~type_fn:P.map_types_no_val_for c)
+    D.uniq_types_and_maps ~uniq_indices:false ~type_fn:P.map_types_no_val_for c) @
+  [memo_init_all c]
+
