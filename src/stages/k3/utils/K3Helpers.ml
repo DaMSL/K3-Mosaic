@@ -916,8 +916,7 @@ let build_tuples_from_idxs ?(drop_vid=false) tuples_nm map_type indices =
         else mk_var tuples_nm) @@
       (* or just regular indices into tuples *)
       mk_agg (mk_lambda2' ["acc", map_type] ["idx", t_int] @@
-        mk_at_with' tuples_nm (mk_var "idx") @@
-          mk_lambda'' ["x", tup_t] @@
-            mk_insert_block "acc" @@ may_drop @@ mk_var "x")
+          mk_let ["x"] (mk_at' tuples_nm @@ mk_var "idx") @@
+          mk_insert_block "acc" @@ may_drop @@ mk_var "x")
         (mk_empty map_type)
         indices
