@@ -433,4 +433,4 @@ val mk_iter_bitmap' : ?all:bool -> expr_t -> id_t -> expr_t
 val mk_agg_bitmap : ?all:bool -> (id_t * type_t) list -> expr_t -> expr_t -> expr_t -> expr_t
 val mk_agg_bitmap' : ?all:bool -> (id_t * type_t) list -> expr_t -> expr_t -> id_t -> expr_t
 
-val build_tuples_from_idxs : ?drop_vid:bool -> id_t -> type_t -> expr_t -> expr_t
+val build_tuples_from_idxs : ?drop_vid:bool -> nm:id_t -> id_t -> type_t -> expr_t -> expr_t -> expr_t
