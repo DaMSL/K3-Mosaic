@@ -537,6 +537,12 @@ and eval_expr (address:address) sched_st cenv texpr =
           | _ -> error name "peekwithvid: bad value"
         end
 
+    | At, [c; idx] ->
+      begin match v_at error c idx with
+        | Some x -> nenv, VTemp x
+        | None -> error name "at: out of bounds"
+      end
+
     | AtWith, [c; idx; lam_none; lam_some] ->
         begin match v_at error c idx with
           | Some x ->

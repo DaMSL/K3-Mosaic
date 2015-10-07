@@ -335,6 +335,9 @@ let _err = mk_lambda' ["_", t_unknown] @@ mk_error "vector: out of bounds!"
 let mk_at_with ?(error=_err) col idx lam = mk_stree AtWith [col; idx; error; lam]
 let mk_at_with' ?error col idx lam = mk_at_with ?error (mk_var col) idx lam
 
+let mk_at col idx = mk_stree At [col; idx]
+let mk_at' col idx = mk_at (mk_var col) idx
+
 let mk_min_with col lam_none lam_some = mk_stree MinWith [col; lam_none; lam_some]
 
 (* mk a var acces + subscripting *)

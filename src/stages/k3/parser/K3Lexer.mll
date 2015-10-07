@@ -171,6 +171,7 @@ rule tokenize = parse
     | "csize"     { SIZE }
     | "equijoin"  { EQUIJOIN }
 
+    | "at"      { AT }
     | "at_with" { AT_WITH }
     | "min_with" { MIN_WITH }
     | "peek" { PEEK }
