@@ -696,13 +696,12 @@ let nd_send_push_stmt_map_trig c s_rhs_lhs trig_name =
           mk_iter_bitmap'
             (mk_at_with' K3S.shuffle_results.id (mk_var "ip") @@
               mk_lambda' K3S.shuffle_results.e @@
-              mk_sendi
-                (rcv_push_name_of_t c trig_name stmt_id rhs_map_id)
-                (mk_var "ip") @@
-                mk_var "has_data" ::
-                  (* lookup and reconstruct tuples from shuffle results *)
-                  build_tuples_from_idxs "tuples" map_delta.t (mk_var "indices") ::
-                  args_of_t_as_vars_with_v c trig_name)
+                (* lookup and reconstruct tuples from shuffle results *)
+                (build_tuples_from_idxs ~nm:"data" "tuples" map_delta.t (mk_var "indices") @@
+                  mk_sendi
+                    (rcv_push_name_of_t c trig_name stmt_id rhs_map_id)
+                    (mk_var "ip") @@
+                    [mk_var "has_data"; mk_var "data"] @ args_of_t_as_vars_with_v c trig_name))
             K3S.shuffle_bitmap.id
         ]) (* trigger *)
     s_rhs_lhs
@@ -884,20 +883,19 @@ let send_corrective_fns c =
               (mk_at_with (mk_snd @@ mk_var "ips_vids") (mk_var "ip") @@
                 mk_lambda' result_ds.e @@
                   mk_block [
-                    mk_sendi
-                      (* we always send to the same map_id ie. the remote
-                        * buffer of the same map we just calculated *)
-                      (rcv_corrective_name_of_t c target_trig target_stmt map_id)
-                      (mk_var "ip") @@
-                      (* we send the vid where the update is taking place as
-                        * well as the vids of the sites where corrections must
-                        * be calculated. *)
-                      (ids_to_vars @@ fst_many orig_vals) @
-                        [mk_var "corrective_vid";
-                          mk_var "vids";
-                          (* reconstruct tuples from indices *)
-                          build_tuples_from_idxs ~drop_vid:true
-                            delta_tuples2.id delta_tuples2.t @@ mk_var "t_indices"]
+                   (* reconstruct tuples from indices *)
+                    build_tuples_from_idxs ~nm:"data" ~drop_vid:true
+                        delta_tuples2.id delta_tuples2.t (mk_var "t_indices") @@
+                      mk_sendi
+                        (* we always send to the same map_id ie. the remote
+                          * buffer of the same map we just calculated *)
+                        (rcv_corrective_name_of_t c target_trig target_stmt map_id)
+                        (mk_var "ip") @@
+                        (* we send the vid where the update is taking place as
+                          * well as the vids of the sites where corrections must
+                          * be calculated. *)
+                        (ids_to_vars @@ fst_many orig_vals) @
+                          [mk_var "corrective_vid"; mk_var "vids"; mk_var "data"]
                     ;
                     mk_add (mk_var "count") @@ mk_cint 1
                   ])

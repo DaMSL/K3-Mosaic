@@ -15,3 +15,5 @@ script:
   - bash -ex .travis-ci.sh
 os:
   - linux
+notifications:
+  - slack: damsl:5SNQ0A5PCK67sqUcRj1EI5Kn

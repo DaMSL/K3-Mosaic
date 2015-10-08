@@ -134,7 +134,7 @@
 %token AGGREGATE AGGREGATEV GROUPBYAGGREGATE
 %token SORT RANK SIZE
 
-%token PEEK PEEK_WITH_VID AT_WITH MIN_WITH
+%token PEEK PEEK_WITH_VID AT AT_WITH MIN_WITH
 
 %token IF THEN ELSE LET IN
 
@@ -642,6 +642,7 @@ access :
     | anno_expr LBRACKETLEQ tuple RBRACKET { mkexpr (SliceOp OLeq) [$1; $3] }
     | PEEK LPAREN anno_expr RPAREN { mkexpr Peek [$3] }
     | PEEK_WITH_VID LPAREN anno_expr COMMA anno_expr COMMA anno_expr RPAREN { mkexpr PeekWithVid [$3; $5; $7] }
+    | AT LPAREN anno_expr COMMA anno_expr RPAREN { mkexpr At [$3; $5] }
     | AT_WITH LPAREN anno_expr COMMA anno_expr COMMA anno_expr COMMA anno_expr RPAREN { mkexpr AtWith [$3; $5; $7; $9] }
     | MIN_WITH LPAREN anno_expr COMMA anno_expr COMMA anno_expr RPAREN { mkexpr MinWith [$3; $5; $7] }
 ;

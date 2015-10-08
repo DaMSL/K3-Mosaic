@@ -94,6 +94,7 @@ let check_tag_arity tag children =
     | PeekWithVid   -> 3
     | Slice         -> 2
     | SliceOp _     -> 2
+    | At            -> 2
     | AtWith        -> 4
     | MinWith       -> 3
     | Insert        -> 2
@@ -619,6 +620,16 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
           if not @@ is_tsorted tcol then t_erroru @@ not_sorted_collection tcol' else
           check_vmap_pat tcol telem tpat;
           tcol'
+
+      | At ->
+          let tcol', tidx = bind 0, bind 1 in
+          let tcol, telem =
+            try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') in
+          if not (tidx === t_int) then t_erroru @@ TMismatch(tidx, t_int, "index") else
+          if not (is_tvector tcol) then
+            t_erroru (TMismatch(tcol', wrap_tvector telem, "collection type")) else
+          telem
+
 
       | AtWith ->
           let tcol', tidx, tlam_none, tlam_some = bind 0, bind 1, bind 2, bind 3 in

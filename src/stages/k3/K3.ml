@@ -116,6 +116,7 @@ type expr_tag_t
     | Sort
     | Equijoin
 
+    | At
     | AtWith
     | MinWith
     | Peek

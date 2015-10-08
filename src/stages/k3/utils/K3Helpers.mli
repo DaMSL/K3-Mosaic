@@ -172,6 +172,8 @@ val mk_peek : expr_t -> expr_t
 val mk_peek_with_vid : expr_t -> expr_t -> expr_t -> expr_t
 val mk_at_with : ?error:expr_t -> expr_t -> expr_t -> expr_t -> expr_t
 val mk_at_with' : ?error:expr_t -> id_t -> expr_t -> expr_t -> expr_t
+val mk_at : expr_t -> expr_t -> expr_t
+val mk_at' : id_t -> expr_t -> expr_t
 val mk_min_with : expr_t -> expr_t -> expr_t -> expr_t
 
 val mk_peek' : id_t -> expr_t
@@ -427,4 +429,4 @@ val mk_iter_bitmap' : ?all:bool -> expr_t -> id_t -> expr_t
 val mk_agg_bitmap : ?all:bool -> (id_t * type_t) list -> expr_t -> expr_t -> expr_t -> expr_t
 val mk_agg_bitmap' : ?all:bool -> (id_t * type_t) list -> expr_t -> expr_t -> id_t -> expr_t
 
-val build_tuples_from_idxs : ?drop_vid:bool -> id_t -> type_t -> expr_t -> expr_t
+val build_tuples_from_idxs : ?drop_vid:bool -> nm:id_t -> id_t -> type_t -> expr_t -> expr_t -> expr_t

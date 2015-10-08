@@ -335,6 +335,9 @@ let _err = mk_lambda' ["_", t_unknown] @@ mk_error "vector: out of bounds!"
 let mk_at_with ?(error=_err) col idx lam = mk_stree AtWith [col; idx; error; lam]
 let mk_at_with' ?error col idx lam = mk_at_with ?error (mk_var col) idx lam
 
+let mk_at col idx = mk_stree At [col; idx]
+let mk_at' col idx = mk_at (mk_var col) idx
+
 let mk_min_with col lam_none lam_some = mk_stree MinWith [col; lam_none; lam_some]
 
 (* mk a var acces + subscripting *)
@@ -887,7 +890,7 @@ let mk_agg_bitmap ?(all=false) args e zero bitmap =
 
 let mk_agg_bitmap' ?all args e zero bitmap = mk_agg_bitmap ?all args e zero (mk_var bitmap)
 
-let build_tuples_from_idxs ?(drop_vid=false) tuples_nm map_type indices =
+let build_tuples_from_idxs ?(drop_vid=false) ~nm tuples_nm map_type indices code =
   let col_t, tup_t = unwrap_tcol map_type in
   let ts = unwrap_ttuple tup_t in
   (* handle dropping vid *)
@@ -901,18 +904,19 @@ let build_tuples_from_idxs ?(drop_vid=false) tuples_nm map_type indices =
   in
   (* check for empty collection *)
   mk_case_ns (mk_peek indices) "x"
-    (mk_empty map_type) @@
+    (mk_let [nm] (mk_empty map_type) code) @@
     (* check for -1, indicating all tuples *)
     mk_if (mk_eq (mk_var "x") @@ mk_cint (-1))
       (if drop_vid then
-        mk_map
-          (mk_lambda'' ["x", tup_t] @@ mk_tuple @@ may_drop @@ mk_var "x") @@
-          mk_var tuples_nm
-        else mk_var tuples_nm) @@
+        mk_let [nm]
+          (mk_map
+            (mk_lambda'' ["x", tup_t] @@ mk_tuple @@ may_drop @@ mk_var "x") @@
+            mk_var tuples_nm) code
+       else mk_let [nm] (mk_var tuples_nm) code) @@
       (* or just regular indices into tuples *)
-      mk_agg (mk_lambda2' ["acc", map_type] ["idx", t_int] @@
-        mk_at_with' tuples_nm (mk_var "idx") @@
-          mk_lambda'' ["x", tup_t] @@
+      mk_let [nm]
+        (mk_agg (mk_lambda2' ["acc", map_type] ["idx", t_int] @@
+            mk_let ["x"] (mk_at' tuples_nm @@ mk_var "idx") @@
             mk_insert_block "acc" @@ may_drop @@ mk_var "x")
-        (mk_empty map_type)
-        indices
+          (mk_empty map_type)
+          indices) code
