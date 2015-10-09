@@ -200,7 +200,7 @@ and ValueUtils : (sig val v_to_list : Value.value_t -> Value.value_t list
       | VSet m  -> ValueSet.to_list m
       | VSortedSet m  -> ValueSSet.to_list m
       | VList m -> IList.to_list m
-      | VVector(m,sz,v_def) -> 
+      | VVector(m,sz,v_def) ->
         List.map (fun i -> try IntMap.find i m with Not_found -> v_def) @@ create_range sz
       | VMap m | VSortedMap m -> List.map map_to_tuple @@ ValueMap.to_list m
       | VVMap m -> List.map vmap_to_tuple @@ ValueVMap.to_list m
@@ -530,7 +530,8 @@ let v_fold err_fn f acc = function
   | VSet m       -> ValueSet.fold f acc m
   | VBag m       -> ValueBag.fold f acc m
   | VList m      -> IList.fold f acc m
-  | VVector(m,_,_) -> IntMap.fold (fun _ v acc -> f acc v) m acc
+  | VVector(m,sz,def) ->
+    List.fold_left (fun acc i -> try f acc (IntMap.find i m) with Not_found -> f acc def) acc @@ create_range sz
   | VMap m
   | VSortedMap m   -> ValueMap.fold (fun k v acc -> f acc @@ encode_tuple (k,v)) m acc
   | VSortedSet m   -> ValueSSet.fold (fun k acc -> f acc k) m acc
@@ -564,7 +565,8 @@ let v_iter err_fn f = function
   | VSet m      -> ValueSet.iter f m
   | VBag m      -> ValueBag.iter f m
   | VList m     -> IList.iter f m
-  | VVector(m,_,_) -> IntMap.iter (fun _ v -> f v) m
+  | VVector(m,sz,def) ->
+    List.iter (fun i -> try f (IntMap.find i m) with Not_found -> f def) @@ create_range sz
   | VMap m
   | VSortedMap m   -> ValueMap.iter (fun k v -> f @@ encode_tuple (k,v)) m
   | VSortedSet m   -> ValueSSet.iter f m
