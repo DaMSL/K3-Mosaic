@@ -309,10 +309,11 @@ and eval_expr (address:address) sched_st cenv texpr =
             let env = List.fold_left2 add_env env ids vs in
             let env, ret = eval_expr address sched_st env @@ List.nth children 1 in
             let env = match child_tag 1 with
-              | Var orig_id ->
+              (* disable for now since unnecessary and causing problems on testing *)
+              (* | Var orig_id ->
                 (* check if we need writeback *)
                 env_modify ([], orig_id) env
-                  (fun x -> VTuple (List.map (fun id -> value_of_eval @@ lookup id env) ids))
+                  (fun x -> VTuple (List.map (fun id -> value_of_eval @@ lookup id env) ids)) *)
               | _ -> env
             in
             List.fold_left rem_env env ids, ret
