@@ -426,11 +426,10 @@ let memo_init_all c =
             [mk_block
               (* fill in the matching pattern *)
               [List.fold_left (fun acc_code (pat, pat_idx) ->
-                let args = [mk_var "i"; mk_cint map_id] @ route_arg_pat_of_index c.p map_id pat in
+                let args = [mk_var "i"; mk_cint map_id] @
+                           route_arg_pat_of_index c.p map_id pat in
                 mk_if (mk_eq (mk_var "j") @@ mk_cint pat_idx)
-                  (mk_let ["bound"]
-                    (mk_apply' (route_for ~bound:true c.p map_id) args) @@
-                  mk_apply' (route_for ~bound:false c.p map_id) @@ [mk_var "bound"]@args)
+                  (mk_apply' (route_for ~bound:false c.p map_id) args)
                   acc_code)
                 (mk_error "unsupported pattern")
                 patterns;
@@ -439,7 +438,7 @@ let memo_init_all c =
         mk_var "rng_patterns") @@
       mk_var "rng_buckets"
   in
-  mk_global_fn memo_init_all_nm [] [] @@
+  mk_global_fn memo_init_all_nm unit_arg [] @@
     mk_block @@ P.for_all_maps c.p (memo_init c)
 
 (* code to perform full route *)
