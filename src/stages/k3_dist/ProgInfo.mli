@@ -114,14 +114,13 @@ val adjust_key_id_for_v : int -> int
 val stmts_of_t : prog_data_t -> trig_name_t -> stmt_id_t list
 val trigger_of_stmt : prog_data_t -> stmt_id_t -> trig_name_t
 
-(* returns a k3 list of maybes that has the relevant map pattern *)
-val partial_key_from_bound : prog_data_t ->
-  stmt_id_t -> map_id_t -> expr_t list
+(* returns a k3 list of maybes that has the relevant map pattern, as well as a route pat_idx *)
+val key_pat_from_bound : prog_data_t -> (map_id_t, int IntSetMap.t) Hashtbl.t -> stmt_id_t -> map_id_t -> (expr_t list * int)
 
-(* returns a k3 list of variables or CUnknown. Can't use same types as
- * partial_key *)
-val slice_key_from_bound : prog_data_t ->
-  stmt_id_t -> map_id_t -> expr_t list
+val get_shuffle_pat_idx : prog_data_t -> (map_id_t, int IntSetMap.t) Hashtbl.t -> stmt_id_t -> map_id_t -> map_id_t -> int
+
+(* returns a k3 list of variables or CUnknown. Can't use same types as partial_key *)
+val slice_key_from_bound : prog_data_t -> stmt_id_t -> map_id_t -> expr_t list
 
 (* return a binding pattern for a stmt of (left_index, right_index) list
  * showing how a lhs map variable corresponds to a rhs variable

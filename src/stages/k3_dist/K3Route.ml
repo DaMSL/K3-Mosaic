@@ -452,12 +452,6 @@ let route_lookup c map_id key pat_idx lambda_body =
        pat_idx) @@
     mk_lambda'' [route_bitmap.id, route_bitmap.t] lambda_body
 
-
-
-
-
-
-
 (* create all code needed for route functions, including foreign funcs*)
 let global_vars c partmap =
   List.map decl_global @@

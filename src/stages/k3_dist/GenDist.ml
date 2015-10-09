@@ -394,26 +394,26 @@ let sw_send_fetch_fn c s_rhs_lhs s_rhs trig_name =
     let s_no_rhs = P.stmts_without_rhs_maps_in_t c.p trig_name in
     if null s_no_rhs then []
     else
-      List.fold_left
-        (fun acc_code (stmt_id, lhs_map_id, do_complete_trig_name) ->
-          let route_fn = R.route_for c.p lhs_map_id in
-          let key = P.partial_key_from_bound c.p stmt_id lhs_map_id in
-          acc_code @ [
-            mk_apply (mk_var route_fn) @@ mk_cint lhs_map_id::key;
-            (* the first do_complete should ack the switch *)
-            mk_ignore @@ mk_agg_bitmap'
-              ["ack", t_bool]
-                (mk_block [
-                  mk_sendi do_complete_trig_name (mk_var "ip") @@
-                    G.me_var :: mk_var "ack" :: args_of_t_as_vars_with_v c trig_name;
-                  mk_cfalse
-                ])
-              mk_ctrue
-              K3Route.route_bitmap.id
+      List.flatten @@ List.map
+        (fun (stmt_id, lhs_map_id, do_complete_trig_name) ->
+          let key, pat_idx = P.key_pat_from_bound c.p c.route_indices stmt_id lhs_map_id in
+          [
+            R.route_lookup c lhs_map_id
+              (mk_cint lhs_map_id::key)
+              (mk_cint pat_idx) @@
+              (* the first do_complete should ack the switch *)
+              mk_ignore @@ mk_agg_bitmap'
+                ["ack", t_bool]
+                  (mk_block [
+                    mk_sendi do_complete_trig_name (mk_var "ip") @@
+                      G.me_var :: mk_var "ack" :: args_of_t_as_vars_with_v c trig_name;
+                    mk_cfalse
+                  ])
+                mk_ctrue
+                K3Route.route_bitmap.id
           ] @
           (* stmts without puts need to reply *)
-          GC.sw_update_send ~vid_nm:"vid")
-        [] @@
+          GC.sw_update_send ~vid_nm:"vid") @@
         List.map
           (fun stmt_id ->
             stmt_id, P.lhs_map_of_stmt c.p stmt_id,
@@ -442,29 +442,29 @@ let sw_send_fetch_fn c s_rhs_lhs s_rhs trig_name =
             (* shuffle allows us to recreate the path the data will take from
             * rhs to lhs *)
             let shuffle_fn = K3Shuffle.find_shuffle_nm c stmt_id rhs_map_id lhs_map_id in
-            let shuffle_key = P.partial_key_from_bound c.p stmt_id lhs_map_id in
-            (* route allows us to know how many nodes send data from rhs to lhs
-            * *)
-            let route_fn = R.route_for c.p rhs_map_id in
-            let route_key = P.partial_key_from_bound c.p stmt_id rhs_map_id in
+            let shuffle_key, shuffle_empty_pat =
+              P.key_pat_from_bound c.p c.route_indices stmt_id lhs_map_id in
+            let shuffle_pat = P.get_shuffle_pat_idx c.p c.route_indices stmt_id lhs_map_id rhs_map_id in
+            (* route allows us to know how many nodes send data from rhs to lhs *)
+            let route_key, route_pat_idx = P.key_pat_from_bound c.p c.route_indices stmt_id rhs_map_id in
             (* we need the types for creating empty rhs tuples *)
             let rhs_map_types = P.map_types_with_v_for c.p rhs_map_id in
             let tuple_types = wrap_t_calc' rhs_map_types in
             mk_let ["sender_count"]
               (* count up the number of IPs received from route *)
-              (mk_block [
-                mk_apply' route_fn @@ mk_cint rhs_map_id::route_key;
+              (R.route_lookup c rhs_map_id
+                (mk_cint rhs_map_id::route_key)
+                (mk_cint route_pat_idx) @@
                 mk_agg_bitmap'
                   ["acc", t_int]
                   (mk_add (mk_var "acc") @@ mk_cint 1)
                   (mk_cint 0)
-                  R.route_bitmap.id
-              ]) @@
+                  R.route_bitmap.id) @@
             mk_let ["agg"] acc_code @@
             mk_block [
               (* fill in shuffle globals *)
               mk_apply' shuffle_fn @@
-                shuffle_key @ [mk_cbool true; mk_empty tuple_types] ;
+                shuffle_key @ [mk_cint shuffle_pat; mk_cint shuffle_empty_pat; mk_empty tuple_types] ;
               (* loop over the shuffle bitmap *)
               mk_agg_bitmap'
                 ["acc", col_t]
@@ -499,13 +499,13 @@ let sw_send_fetch_fn c s_rhs_lhs s_rhs trig_name =
         mk_let ["acc"] (mk_empty map_t) @@
           List.fold_left
             (fun acc_code (stmt_id, rhs_map_id) ->
-              let route_fn = R.route_for c.p rhs_map_id in
-              let key = P.partial_key_from_bound c.p stmt_id rhs_map_id in
-              mk_block [
-                mk_apply (mk_var route_fn) @@ mk_cint rhs_map_id::key;
+              let key, pat_idx = P.key_pat_from_bound c.p c.route_indices stmt_id rhs_map_id in
+              R.route_lookup c rhs_map_id
+                (mk_cint rhs_map_id::key)
+                (mk_cint pat_idx) @@
                 mk_let ["acc"]
                   (mk_agg_bitmap'
-                     ["acc", map_t]
+                    ["acc", map_t]
                       (mk_upsert_with_block "acc" ip_pat
                         (mk_lambda'' unit_arg @@ mk_tuple
                           [mk_var "ip"; mk_singleton col_t [mk_cint stmt_id; mk_cint rhs_map_id]]) @@
@@ -513,8 +513,7 @@ let sw_send_fetch_fn c s_rhs_lhs s_rhs trig_name =
                           mk_insert_block ~path:[2] "y" [mk_cint stmt_id; mk_cint rhs_map_id])
                     (mk_var "acc") @@
                     R.route_bitmap.id)
-                  acc_code
-              ])
+                  acc_code)
             (mk_var "acc")
             s_rhs ]
   in
@@ -658,8 +657,9 @@ let nd_send_push_stmt_map_trig c s_rhs_lhs trig_name =
     (fun (stmt_id, (rhs_map_id, lhs_map_id)) ->
       let rhs_map_name = P.map_name_of c.p rhs_map_id in
       let rhsm_deref = rhs_map_name^"_deref" in
-      let shuffle_fn = K3Shuffle.find_shuffle_nm c stmt_id rhs_map_id lhs_map_id in
-      let partial_key = P.partial_key_from_bound c.p stmt_id lhs_map_id in
+      let shuffle_fn = K3S.find_shuffle_nm c stmt_id rhs_map_id lhs_map_id in
+      let shuffle_key, empty_pat_idx = P.key_pat_from_bound c.p c.route_indices stmt_id lhs_map_id in
+      let shuffle_pat_idx = P.get_shuffle_pat_idx c.p c.route_indices stmt_id lhs_map_id rhs_map_id in
       let slice_key = P.slice_key_from_bound c.p stmt_id rhs_map_id in
       let map_delta = D.map_ds_of_id c rhs_map_id ~global:false in
       let map_real  = D.map_ds_of_id c rhs_map_id ~global:true in
@@ -676,10 +676,10 @@ let nd_send_push_stmt_map_trig c s_rhs_lhs trig_name =
               let slice_key =
                 mk_var "vid"::[mk_tuple @@ list_drop_end 1 slice_key]@[mk_cunknown] in
               mk_peek_with_vid
-                  (mk_slice_lt (mk_var rhsm_deref) slice_key)
-                  (mk_lambda'' unit_arg @@ mk_empty map_delta.t) @@
-                  mk_lambda'' ["vid", t_vid; "tuple", snd @@ unwrap_tcol @@ map_real.t] @@
-                    mk_singleton map_delta.t @@ fst_many map_pat
+                (mk_slice_lt (mk_var rhsm_deref) slice_key)
+                (mk_lambda'' unit_arg @@ mk_empty map_delta.t) @@
+                mk_lambda'' ["vid", t_vid; "tuple", snd @@ unwrap_tcol @@ map_real.t] @@
+                  mk_singleton map_delta.t @@ fst_many map_pat
               else
               (* we need the latest vid data that's less than the current vid *)
               D.map_latest_vid_vals c (mk_var rhsm_deref)
@@ -691,7 +691,8 @@ let nd_send_push_stmt_map_trig c s_rhs_lhs trig_name =
           mk_apply'
             nd_log_master_write_nm @@ [mk_cint stmt_id; mk_var "vid"];
           (* fill in the global shuffle data structures *)
-          mk_apply' shuffle_fn @@ partial_key@[mk_ctrue; mk_var "tuples"];
+          mk_apply' shuffle_fn @@
+            shuffle_key@[mk_cint shuffle_pat_idx; mk_cint empty_pat_idx; mk_var "tuples"];
           (* iterate and send *)
           mk_iter_bitmap'
             (mk_at_with' K3S.shuffle_results.id (mk_var "ip") @@
@@ -831,7 +832,8 @@ let send_corrective_fns c =
          (* we already have the map vars for the rhs map in the
           * tuples. Now we try to get some more for the lhs map *)
         let target_map = P.lhs_map_of_stmt c.p target_stmt in
-        let key = P.partial_key_from_bound c.p target_stmt target_map in
+        let key, _ = P.key_pat_from_bound c.p c.route_indices target_stmt target_map in
+        let pat_idx = P.get_shuffle_pat_idx c.p c.route_indices target_stmt target_map map_id in
         let shuffle_fn = K3S.find_shuffle_nm c target_stmt map_id target_map in
 
         mk_global_fn (sub_fn_nm target_stmt) sub_args
@@ -849,7 +851,8 @@ let send_corrective_fns c =
                       (nd_log_get_bound_for target_trig) [mk_var "vid"])
                 else id_fn) @@
                 mk_block [
-                  mk_apply' shuffle_fn @@ key@[mk_cfalse; mk_var "delta_tuples2"];
+                  mk_apply' shuffle_fn @@
+                    key @ [mk_cint pat_idx; mk_cint (-1); mk_var "delta_tuples2"];
                   mk_agg_bitmap'
                     ["acc", wrap_ttuple [t_bitmap; result_ds.t]]
                     (mk_block [
@@ -1171,6 +1174,7 @@ List.map do_complete_trig @@ P.stmts_without_rhs_maps_in_t c.p trig_name
 let let_lmap_filtering c delta stmt_id lmap let_bind body ~alt =
     let lmap_i_ts = P.map_ids_types_for c.p lmap in
     let lmap_ts = snd_many lmap_i_ts in
+    let _, pat_idx = P.key_pat_from_bound c.p c.route_indices stmt_id lmap in
     let do_action = "do_action" in
     if P.stmt_many_loop_vars c.p stmt_id <> None then
       mk_let [do_action; delta]
@@ -1180,13 +1184,12 @@ let let_lmap_filtering c delta stmt_id lmap let_bind body ~alt =
              mk_let (fst_many lmap_i_ts) (mk_var delta) @@
              (* we make sure that a precise route leads to us *)
              (* if no match is found, we abort the action *)
-             mk_if
-               (mk_eq
-                 (mk_apply' (R.route_for ~precise:true c.p lmap) @@
-                   mk_cint lmap::
-                     (List.map (fun x -> mk_tuple [mk_ctrue; x]) @@
-                     ids_to_vars @@ fst_many @@ list_drop_end 1 lmap_i_ts)) @@
-                 mk_var D.me_int.id)
+             R.route_lookup c lmap
+               (mk_cint lmap ::
+                 (List.map (fun x -> mk_tuple [mk_ctrue; x]) @@
+                 ids_to_vars @@ fst_many @@ list_drop_end 1 lmap_i_ts))
+               (mk_cint pat_idx) @@
+             mk_if (mk_at' R.route_bitmap.id @@ mk_var D.me_int.id)
                (mk_tuple [mk_ctrue; mk_insert_block "acc" [mk_var delta]]) @@
                mk_tuple [mk_var do_action; mk_var "acc"])
            (mk_tuple [mk_cfalse; mk_empty @@ wrap_t_calc' lmap_ts])
@@ -1451,7 +1454,7 @@ let declare_global_vars c partmap ast =
   TS.global_vars @
   K3Ring.global_vars @
   [K3Route.calc_dim_bounds] @ (* needed for global_vars *)
-  K3Route.global_vars c.p partmap @
+  K3Route.global_vars c partmap @
   K3Shuffle.global_vars @
   GC.global_vars c
 

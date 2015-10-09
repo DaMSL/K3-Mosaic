@@ -241,7 +241,9 @@ let mk_lambda' argl expr = mk_lambda (wrap_args_deep argl) expr
  * loop over a data structure directly, such as fold or groupby *)
 let mk_lambda'' argl expr = mk_lambda (wrap_args argl) expr
 
-let mk_apply lambda input = mk_stree Apply (lambda :: input)
+let mk_apply lambda input =
+  let input = if input = [] then [mk_cunit] else input in
+  mk_stree Apply (lambda :: input)
 
 let mk_apply' fn input = mk_apply (mk_var fn) input
 
@@ -633,7 +635,7 @@ let start_vid_k3 = mk_tuple [mk_cint 2]
 (* id function for maps *)
 let mk_id tuple_types =
     let prefix = "__id_" in
-    let r = mk_tuple_range @@ tuple_types in
+    let r = create_corr_range @@ tuple_types in
     let ids = List.map (int_to_temp_id prefix) r in
     let ids_types = list_zip ids tuple_types in
     mk_lambda' ids_types @@

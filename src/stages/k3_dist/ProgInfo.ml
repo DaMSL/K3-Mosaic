@@ -298,30 +298,51 @@ let find_map_bindings_in_stmt (p:prog_data_t) (stmt:stmt_id_t) (map:map_id_t) =
       find_rmap_bindings_in_stmt p stmt map
 
 (* returns a k3 list of maybes that has the relevant map pattern *)
-let var_list_from_bound (p:prog_data_t) (stmt_id:stmt_id_t) (map_id:map_id_t) =
+(* rmap_id: use for a shuffle from an rmap *)
+let var_list_from_bound ?rmap_id p stmt_id map_id =
   let map_binds = reduce_l_to_map_size p map_id @@
     find_map_bindings_in_stmt p stmt_id map_id in
   let trig_args = args_of_t p @@ trigger_of_stmt p stmt_id in
-  let map_types = map_types_for p map_id in
-  let idx_types = insert_index_fst map_types in
+  let idx_types = insert_index_fst @@ map_types_for p map_id in
+  let rmap_binds = maybe [] (find_map_bindings_in_stmt p stmt_id) rmap_id in
   List.map
-    (fun (i,typ) -> try
+    (fun (i,typ) ->
+     try
         (* Look for var name with this binding, then check it's part of trig
          * args. If not, it's a loop var, and shouldn't be used *)
-        let id = fst @@ List.find (fun (_, loc) -> loc = i) map_binds in
-        let id2  = fst @@ List.find (fun (n, _) -> n = id) trig_args in
-        id2, typ
-      with Not_found -> "_", typ
-    )
+        let id = fst @@ List.find (fun (_,loc) -> loc = i) map_binds in
+        let id =
+          begin match list_find (fun (n,_) -> n = id) trig_args with
+          | Some x -> fst x
+          | None   -> fst @@ List.find (fun (n,_) -> n = id) rmap_binds
+          end
+        in id, typ
+      with Not_found -> "_", typ)
     idx_types
 
-(* returns a k3 list of maybes that has the relevant map pattern *)
-let partial_key_from_bound (p:prog_data_t) stmt_id map_id =
-  let result = List.map (fun (x, typ) ->
+(* convert a var_list to a pat_idx for routing *)
+let pat_idx_of_var_list route_hash map_id vlist =
+  let map_idx = Hashtbl.find route_hash map_id in
+  (* create set of pattern from vlist *)
+  let s = IntSet.of_list @@ fst_many @@
+    List.filter (fun x -> snd x <> "_") @@ insert_index_fst @@ fst_many @@ vlist in
+  IntSetMap.find s map_idx
+
+(* returns a k3 list of maybes, and a pattern for route lookup, that has the relevant map pattern *)
+let key_pat_from_bound p route_hash stmt_id map_id =
+  let vlist = list_drop_end 1 @@ var_list_from_bound p stmt_id map_id in
+  let keys = List.map (fun (x, typ) ->
       if x = "_" then mk_tup_nothing typ
-      else mk_tup_just @@ mk_var x) @@
-    list_drop_end 1 @@ var_list_from_bound p stmt_id map_id
-  in match result with [] -> [mk_const CUnit] | _ -> result
+      else mk_tup_just @@ mk_var x)
+    vlist in
+  let keys = if keys = [] then [mk_const CUnit] else keys in
+  let pat_idx = pat_idx_of_var_list route_hash map_id vlist in
+  keys, pat_idx
+
+(* get a shuffle pat_idx for a stmt, lmap, rmap combination *)
+let get_shuffle_pat_idx p route_hash stmt_id map_id rmap_id =
+  let vlist = list_drop_end 1 @@ var_list_from_bound p stmt_id map_id ~rmap_id in
+  pat_idx_of_var_list route_hash map_id vlist
 
 (* returns a k3 list of variables or CUnknown. Can't use same types as
  * partial_key *)
@@ -329,7 +350,8 @@ let slice_key_from_bound (p:prog_data_t) (stmt_id:stmt_id_t) (map_id:map_id_t) =
   let result = List.map
     (fun (x,_) -> if x = "_" then mk_const CUnknown else mk_var x) @@
     var_list_from_bound p stmt_id map_id
-  in match result with [] -> [mk_const CUnit] | _ -> result
+  in
+  if result = [] then [mk_const CUnit] else result
 
 (* return a binding pattern for a stmt of (right_index, left_index) list
  * showing how a lhs map variable corresponds to a rhs variable

@@ -135,7 +135,7 @@ let rcv_jobs =
     (* init route's node bitmap *)
     unwrap_some K3Route.all_nodes_bitmap.d_init;
     (* pre-calculate all the route memoization tables *)
-    mk_apply' K3Route.memo_init_all_nm;
+    mk_apply' K3Route.memo_init_all_nm [];
     (* ack the msg *)
     D.mk_send_master ms_rcv_jobs_ack_nm;
   ]
