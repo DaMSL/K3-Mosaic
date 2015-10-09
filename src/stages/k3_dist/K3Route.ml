@@ -152,31 +152,39 @@ let calc_dim_bounds =
     mk_tuple [mk_var "dims"; mk_var "final_size"]
 
 (* map from map_id to inner_pmap *)
-let pmap_data =
+let pmap_data_id = "pmap_data"
+let pmap_data p =
   let e = [pmap.id, pmap.t] in
   let t = wrap_tvector' @@ snd_many e in
+  let num_maps = List.length @@ P.get_map_list p in
   let init =
-    (* partition map as input by the user (with map names) *)
-    (* calculate the size of the bucket of each dimensioned we're partitioned on
-    * This is order-dependent in pmap *)
-    mk_agg
-      (mk_lambda2' ["acc", t]
-                   ["map_name", t_string; "map_types", inner_plist.t] @@
-        mk_let ["map_id"]
-          (mk_fst @@ mk_peek_or_error "can't find map in map_ids" @@
-            mk_slice' K3Dist.map_ids_id
-              [mk_cunknown; mk_var "map_name"; mk_cunknown]) @@
-        mk_let ["dim_bounds"; "last_size"]
-          (mk_apply' "calc_dim_bounds" [mk_var "map_id"; mk_var "map_types"]) @@
-        mk_insert_at_block "acc" (mk_var "map_id")
-          (* convert map_types to map *)
-          [mk_convert_col inner_plist.t inner_pmap.t @@ mk_var "map_types";
-          mk_var "dim_bounds";
-          mk_var "last_size"])
-      (mk_empty t) @@
+    mk_let ["agg"] (mk_empty t) @@
+    (* initialize the map to be the size we need *)
+    mk_block [
+      mk_insert_at "agg" (mk_cint @@ num_maps) (* maps start at 1 *)
+        [mk_empty inner_pmap.t; mk_empty dim_bounds.t; mk_cint 0];
+      (* partition map as input by the user (with map names) *)
+      (* calculate the size of the bucket of each dimensioned we're partitioned on
+      * This is order-dependent in pmap *)
+      mk_agg
+        (mk_lambda2' ["acc", t]
+                    ["map_name", t_string; "map_types", inner_plist.t] @@
+          mk_let ["map_id"]
+            (mk_fst @@ mk_peek_or_error "can't find map in map_ids" @@
+              mk_slice' K3Dist.map_ids_id
+                [mk_cunknown; mk_var "map_name"; mk_cunknown]) @@
+          mk_let ["dim_bounds"; "last_size"]
+            (mk_apply' "calc_dim_bounds" [mk_var "map_id"; mk_var "map_types"]) @@
+          mk_insert_at_block "acc" (mk_var "map_id")
+            (* convert map_types to map *)
+            [mk_convert_col inner_plist.t inner_pmap.t @@ mk_var "map_types";
+            mk_var "dim_bounds";
+            mk_var "last_size"])
+      (mk_var "agg") @@
       mk_var "pmap_input"
+    ]
   in
-  create_ds "pmap_data" t ~e ~init
+  create_ds pmap_data_id t ~e ~init
 
 (* create memoization tables for every map *)
 (* vectors of bound_var * pattern -> bitmap *)
@@ -301,7 +309,7 @@ let gen_route_fn p map_id =
     [mk_global_fn (route_for ~bound:true p map_id)
       (("map_id", t_map_id)::types_to_ids_types prefix key_types) [t_int] @@
       (* get the info for the current map and bind it to "pmap" *)
-      mk_at_with' pmap_data.id (mk_var "map_id") @@
+      mk_at_with' pmap_data_id (mk_var "map_id") @@
         mk_lambda' ["pmap_data", pmap.t] @@
 
         (* deep bind *)
@@ -341,7 +349,7 @@ let gen_route_fn p map_id =
      mk_global_fn (route_for ~bound:false p map_id)
       (["bound_bucket", t_int; "map_id", t_map_id] @ types_to_ids_types prefix key_types) [] @@
 
-      mk_at_with' pmap_data.id (mk_var "map_id") @@
+      mk_at_with' pmap_data_id (mk_var "map_id") @@
         mk_lambda' ["pmap_data", pmap.t] @@
 
         (* deep bind *)
@@ -397,6 +405,7 @@ let gen_route_fn p map_id =
 (* convert an index set to a pattern to be fed to route_free *)
 let route_arg_pat_of_index p map_id idx =
   let i_ts = insert_index_fst @@ P.map_types_no_val_for p map_id in
+  if i_ts = [] then [mk_cunit] else
   List.map (fun (i, t) ->
       if IntSet.mem i idx then mk_tuple [mk_ctrue; default_value_of_t t]
       else mk_tuple [mk_cfalse; default_value_of_t t])
@@ -409,8 +418,9 @@ let memo_init_all c =
     let route_idx = Hashtbl.find c.route_indices map_id in
     let patterns = IntSetMap.to_list route_idx in
     let sz = IntSetMap.cardinal route_idx in
+    let route_keys = P.map_types_no_val_for c.p map_id in
     mk_let ["rng_max"]
-      (mk_at_with' pmap_data.id (mk_cint map_id) @@
+      (mk_at_with' pmap_data_id (mk_cint map_id) @@
         mk_lambda' pmap.e @@ mk_var "max_val") @@
     mk_let ["rng_buckets"]
       (mk_convert_col (wrap_tlist t_int) (wrap_tvector t_int) @@
@@ -419,24 +429,33 @@ let memo_init_all c =
     mk_let ["rng_patterns"]
       (k3_container_of_list (wrap_tvector t_int) @@
        List.map mk_cint @@ List.sort (-) @@ snd_many patterns) @@
-    mk_iter (mk_lambda'' ["i", t_int] @@
-      mk_iter (mk_lambda'' ["j", t_int] @@
-        mk_insert_at (route_memo_for c.p map_id)
-          (mk_add (mk_mult (mk_var "i") @@ mk_cint sz) @@ mk_var "j")
-            [mk_block
-              (* fill in the matching pattern *)
-              [List.fold_left (fun acc_code (pat, pat_idx) ->
-                let args = [mk_var "i"; mk_cint map_id] @
-                           route_arg_pat_of_index c.p map_id pat in
-                mk_if (mk_eq (mk_var "j") @@ mk_cint pat_idx)
-                  (mk_apply' (route_for ~bound:false c.p map_id) args)
-                  acc_code)
-                (mk_error "unsupported pattern")
-                patterns;
-               mk_var "route_bitmap"]
-            ]) @@
-        mk_var "rng_patterns") @@
-      mk_var "rng_buckets"
+    (* handle map with no keys *)
+    if route_keys = [] then
+      mk_insert_at (route_memo_for c.p map_id) (mk_cint 0) @@
+         singleton @@ mk_block [
+           mk_apply' (route_for ~bound:false c.p map_id) [mk_cint 0; mk_cint 0; mk_cunit];
+           mk_var route_bitmap.id
+         ]
+    else
+      (* else, we have keys *)
+      mk_iter (mk_lambda'' ["i", t_int] @@
+        mk_iter (mk_lambda'' ["j", t_int] @@
+          mk_insert_at (route_memo_for c.p map_id)
+            (mk_add (mk_mult (mk_var "i") @@ mk_cint sz) @@ mk_var "j")
+              [mk_block
+                (* fill in the matching pattern *)
+                [List.fold_left (fun acc_code (pat, pat_idx) ->
+                  let args = [mk_var "i"; mk_cint map_id] @
+                            route_arg_pat_of_index c.p map_id pat in
+                  mk_if (mk_eq (mk_var "j") @@ mk_cint pat_idx)
+                    (mk_apply' (route_for ~bound:false c.p map_id) args)
+                    acc_code)
+                  (mk_error "unsupported pattern")
+                  patterns;
+                mk_var "route_bitmap"]
+              ]) @@
+          mk_var "rng_patterns") @@
+        mk_var "rng_buckets"
   in
   mk_global_fn memo_init_all_nm unit_arg [] @@
     mk_block @@ P.for_all_maps c.p (memo_init c)
@@ -458,7 +477,7 @@ let global_vars c partmap =
     route_bitmap;
     all_nodes_bitmap;
     pmap_input c.p partmap;
-    pmap_data ] @
+    pmap_data c.p] @
     route_memo c
 
 let functions c partmap =
