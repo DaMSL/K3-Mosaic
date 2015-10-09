@@ -378,14 +378,23 @@ let sw_demux c =
     t_arg_map
     sentry_code
 
+(* for fetches *)
 let stmt_map_ids =
+  (* this is a bag since no aggregation is done *)
   let e = ["stmt_id", t_stmt_id; "map_id", t_map_id] in
   create_ds ~e "stmt_map_ids" @@ wrap_tbag' @@ snd_many e
+
+let send_fetch_ip_map =
+  let e = ["fetch_bitmap", wrap_tvector t_bool; stmt_map_ids.id, stmt_map_ids.t] in
+  create_ds ~e "send_fetch_ip_map" @@ wrap_tvector' @@ snd_many e
 
 (* for puts *)
 let stmt_cnt_list =
   let e = ["stmt", t_stmt_id; "count", t_map_id] in
   create_ds ~e "stmt_cnt_list" @@ wrap_tmap' @@ snd_many e
+
+let send_put_ip_map =
+  let e = ["stmt_bitmap", wrap_tvector t_bool] in 
 
 (* sending fetches is done from functions *)
 (* each function takes a vid to plant in the arguments, which are in the trig buffers *)
