@@ -88,7 +88,7 @@ let string_of_maps_sizes maps_sizes =
  * product of dimension sizes *)
 let calc_part num_nodes dims =
   (* create a list of 1s *)
-  let initial_list = list_map (fun i -> i, 1) @@ create_range 0 dims in
+  let initial_list = list_map (fun i -> i, 1) @@ create_range dims in
   let rec loop l prod =
     if prod >= num_nodes then l
     else

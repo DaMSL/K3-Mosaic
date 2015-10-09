@@ -90,7 +90,7 @@ let _ =
       {name; handle; sep; r_sep; defs}) files in
   let data_arr = Array.of_list data_l in
   (* array representing remaining data *)
-  let remain = Array.of_list @@ create_range 0 @@ List.length data_l in
+  let remain = Array.of_list @@ create_range @@ List.length data_l in
   let defaults = List.map default_val_of_t @@ fst params.agenda_map in
   let rec loop remain =
     if Array.length remain = 0 then () else
