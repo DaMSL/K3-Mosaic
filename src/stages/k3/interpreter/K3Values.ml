@@ -200,7 +200,8 @@ and ValueUtils : (sig val v_to_list : Value.value_t -> Value.value_t list
       | VSet m  -> ValueSet.to_list m
       | VSortedSet m  -> ValueSSet.to_list m
       | VList m -> IList.to_list m
-      | VVector(m,_,_) -> snd_many @@ IntMap.to_list m
+      | VVector(m,sz,v_def) -> 
+        List.map (fun i -> try IntMap.find i m with Not_found -> v_def) @@ create_range sz
       | VMap m | VSortedMap m -> List.map map_to_tuple @@ ValueMap.to_list m
       | VVMap m -> List.map vmap_to_tuple @@ ValueVMap.to_list m
       | _ -> failwith "(v_to_list): not a collection"
