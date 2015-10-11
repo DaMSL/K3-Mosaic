@@ -598,7 +598,7 @@ let v_insert_at err_fn x i m = match m, i with
   | VVector(m, sz, t), VInt i ->
       let sz' = if i < sz then sz else i + 1 in
       VVector(IntMap.add i x m, sz', t)
-  | _ -> err_fn "v_insert_at" "bad arguments"
+  | x, y -> err_fn "v_insert_at" (sp "bad arguments %s, %s" (sov x) @@ sov y)
 
 let v_delete err_fn x m = match x, m with
   | _, VSet m                   -> VSet(ValueSet.delete x m)

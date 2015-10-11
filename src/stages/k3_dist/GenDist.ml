@@ -388,13 +388,18 @@ let send_put_ip_map =
   let e = ["stmt_bitmap", wrap_tvector t_bool; stmt_cnt_list.id, stmt_cnt_list.t] in
   create_ds ~e "send_put_ip_map" @@ wrap_tvector' @@ snd_many e
 
+(* how the stmt_cnt list gets sent *)
+let stmt_cnt_list_ship =
+  let e = ["stmt_id", t_stmt_id; "count", t_int] in
+  create_ds "stmt_cnt_list" ~e @@ wrap_tbag' @@ snd_many e
+
 let clean_stmt_bitmap_id = "clean_stmt_bitmap"
 let clean_stmt_bitmap p =
   let l = List.length @@ P.get_stmt_list p in
   let t = wrap_tvector t_bool in
   let init =
     k3_container_of_list t @@
-    List.map (const @@ mk_cint 0) @@ create_range @@ l + 1 in
+    List.map (const @@ mk_cfalse) @@ create_range @@ l + 1 in
   create_ds clean_stmt_bitmap_id ~init @@ wrap_tvector t_bool
 
 let send_put_bitmap =
@@ -463,9 +468,9 @@ let sw_send_fetch_fn c s_rhs_lhs s_rhs trig_name =
           (mk_var "ip") @@
           mk_lambda' send_put_ip_map.e @@
             mk_let ["agg"]
-              (mk_agg_bitmap' ~idx:"stmt"
+              (mk_agg_bitmap' ~idx:"stmt_ctr"
                 ["acc", stmt_cnt_list.t]
-                (mk_insert_at "acc" (mk_var "stmt") [mk_cint 0])
+                (mk_insert_at_block "acc" (mk_var "stmt_ctr") [mk_cint 0])
                 (mk_var stmt_cnt_list.id)
                 "stmt_bitmap") @@
             mk_tuple [mk_var clean_stmt_bitmap_id; mk_var "agg"])
@@ -538,7 +543,7 @@ let sw_send_fetch_fn c s_rhs_lhs s_rhs trig_name =
                      "stmt_bitmap") @@
                   (* send rcv_put *)
                   (mk_sendi
-                    (rcv_put_name_of_t trig_name) (mk_var "addr") @@
+                    (rcv_put_name_of_t trig_name) (mk_var "ip") @@
                     [G.me_var; mk_var "stmt_cnts"] @ args_of_t_as_vars_with_v c trig_name)
                 ;
                 mk_add (mk_var "count") @@ mk_cint 1
@@ -679,8 +684,8 @@ let nd_rcv_fetch_trig c trig =
 let nd_rcv_put_trig c trig_name =
 mk_code_sink'
   (rcv_put_name_of_t trig_name)
-  (["sender_ip", t_addr; stmt_cnt_list.id, stmt_cnt_list.t]@
-      (args_of_t_with_v c trig_name))
+  (["sender_ip", t_addr; stmt_cnt_list_ship.id, stmt_cnt_list_ship.t]@
+      args_of_t_with_v c trig_name)
   [] @@
   mk_block
     [mk_iter

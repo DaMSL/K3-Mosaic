@@ -644,7 +644,7 @@ and eval_expr (address:address) sched_st cenv texpr =
         | None -> error name "Out of bounds lookup"
         | Some v ->
           (env_modify (id_path ()) nenv @@
-          fun col -> v_insert_at error col n VUnknown), VTemp v
+          fun col -> v_insert_at error VUnknown n col), VTemp v
       end
 
     | DeletePrefix, [_; key] ->
