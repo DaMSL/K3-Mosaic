@@ -140,6 +140,7 @@ type expr_tag_t
     | UpdateSuffix      (* update past a vid *)
     | Delete
     | DeletePrefix      (* delete before a certain vid. save frontier *)
+    | DeleteAt          (* delete a vector entry and return that entry *)
     | ClearAll          (* delete all in ds but keep memory *)
 
     | Assign

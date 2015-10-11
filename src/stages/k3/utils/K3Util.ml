@@ -110,7 +110,9 @@ let decompose_const e = match tag_of_expr e with
 let decompose_delete e = match tag_of_expr e, sub_tree e with
   Delete, [x; e0] -> x, e0 | _ -> failwith "not a Delete"
 let decompose_delete_prefix e = match tag_of_expr e, sub_tree e with
-  | DeletePrefix, [x; e0] -> x, e0 | _ -> failwith "not a DeletePrefix"
+  DeletePrefix, [x; e0] -> x, e0 | _ -> failwith "not a DeletePrefix"
+let decompose_delete_at e = match tag_of_expr e, sub_tree e with
+  DeleteAt, [col; n] -> col, n | _ -> failwith "not a DeleteAt"
 let decompose_eq e = match tag_of_expr e, sub_tree e with
   Eq, [e0; e1] -> e0, e1 | _ -> failwith "not an Equals"
 let decompose_equijoin e = match tag_of_expr e, sub_tree e with

@@ -40,6 +40,7 @@ let not_function t   = TBad(t, "not a function")
 let not_collection t = TBad(t, "not a collection")
 let not_sorted_collection t = TBad(t, "not a sorted collection")
 let not_collection_bt t = BTBad(t, "not a collection")
+let not_vector t = BTBad(t, "not a vector")
 let error_tuple_small n tl t = TBad(t, Printf.sprintf "tuple has size %d but subscript %d" tl n)
 let wrong_let_size t = TBad(t, "wrong size for let")
 
@@ -107,6 +108,7 @@ let check_tag_arity tag children =
     | UpdateAtWith -> 3
     | Delete       -> 2
     | DeletePrefix -> 2
+    | DeleteAt     -> 2
     | ClearAll     -> 1
     | FilterOp _   -> 2
 
@@ -757,6 +759,14 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
           if not @@ is_tsorted tcol then t_erroru @@ not_sorted_collection tcol' else
           check_vmap_pat tcol telem told;
           t_unit
+
+      | DeleteAt ->
+          let tcol', tidx = bind 0, bind 1 in
+          let tcol, telem =
+            try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') in
+          if not (tcol = TVector) then t_erroru @@ not_vector tcol'.typ else
+          if not (tidx === t_int) then t_erroru @@ TMismatch(tidx, t_int, "index") else
+          telem
 
       | ClearAll ->
         let tcol = bind 0 in

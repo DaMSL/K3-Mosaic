@@ -133,6 +133,7 @@ let string_of_tag_type = function
     | UpdateAtWith     -> "UpdateAtWith"
     | Delete           -> "Delete"
     | DeletePrefix     -> "DeletePrefix"
+    | DeleteAt         -> "DeleteAt"
     | ClearAll         -> "ClearAll"
     | FilterOp o       -> sp "FilterOp(%s)" (string_of_op o)
 

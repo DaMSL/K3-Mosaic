@@ -1251,10 +1251,13 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
     (* get rid of the value for maps *)
     let x = if is_map col then map_mk_unknown c true x else x in
     maybe_vmap c col x
-      (fun x -> lazy_expr c col <| apply_method_nocol c ~name:"erase" ~args:[x]
+      (fun x -> apply_method c ~col ~name:"erase" ~args:[x]
         ~arg_info:[[],true])
-      (fun vid x -> lazy_expr c col <| apply_method_nocol c ~name:"erase" ~args:[vid;x]
+      (fun vid x -> apply_method c ~col ~name:"erase" ~args:[vid;x]
         ~arg_info:[vid_out_arg; [], true])
+
+  | DeleteAt -> let col, n = U.decompose_delete_at expr in
+    apply_method c ~col ~name:"erase_at" ~args:[n] ~arg_info:[def_a]
 
   | DeletePrefix -> let col, x = U.decompose_delete_prefix expr in
     maybe_vmap c col x

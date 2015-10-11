@@ -361,6 +361,8 @@ let mk_upsert_with_before ?(path=[]) id key lam_empty lam_full =
 
 let mk_delete ?(path=[]) id x = mk_stree Delete [mk_id_path id path; mk_tuple x]
 
+let mk_delete_at ?(path=[]) id n = mk_stree DeleteAt [mk_id_path id path; n]
+
 (* first part of key contains the vid. Also contains dummy value *)
 let mk_delete_prefix ?(path=[]) id x = mk_stree DeletePrefix [mk_id_path id path; mk_tuple x]
 

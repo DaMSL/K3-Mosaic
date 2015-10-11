@@ -637,6 +637,16 @@ and eval_expr (address:address) sched_st cenv texpr =
         (env_modify (id_path ()) nenv @@
           fun col -> v_delete error v col), tvunit
 
+    | DeleteAt, [_; n] ->
+      let p = id_path () in
+      let col = ro_path_lookup p nenv in
+      begin match v_at error col n with
+        | None -> error name "Out of bounds lookup"
+        | Some v ->
+          (env_modify (id_path ()) nenv @@
+          fun col -> v_insert_at error col n VUnknown), VTemp v
+      end
+
     | DeletePrefix, [_; key] ->
         (env_modify (id_path ()) nenv @@
           fun col -> v_delete_prefix error key col), tvunit

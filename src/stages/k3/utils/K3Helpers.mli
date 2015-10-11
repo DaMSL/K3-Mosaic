@@ -196,6 +196,7 @@ val mk_upsert_with : ?path:int list -> id_t -> expr_t list -> expr_t -> expr_t -
 val mk_upsert_with_before : ?path:int list -> id_t -> expr_t list -> expr_t -> expr_t -> expr_t
 val mk_delete : ?path:int list -> id_t -> expr_t list -> expr_t
 val mk_delete_prefix : ?path:int list -> id_t -> expr_t list -> expr_t
+val mk_delete_at : ?path:int list -> id_t -> expr_t -> expr_t
 val mk_clear_all : ?path:int list -> id_t -> expr_t
 val mk_update : ?path:int list -> id_t -> expr_t list -> expr_t list -> expr_t
 val mk_update_suffix : ?path:int list -> id_t -> expr_t list -> expr_t -> expr_t
