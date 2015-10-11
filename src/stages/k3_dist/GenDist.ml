@@ -528,7 +528,7 @@ let sw_send_fetch_fn c s_rhs_lhs s_rhs trig_name =
       (* iterate over the result bitmap and send. Also count the number of sent msgs for this vid *)
       [
         let col_t = wrap_tbag' [t_stmt_id; t_int] in
-        mk_let ["count"]
+        mk_let ["add_count"]
          (mk_agg_bitmap'
            ["count", t_int]
            (mk_block [
@@ -550,7 +550,7 @@ let sw_send_fetch_fn c s_rhs_lhs s_rhs trig_name =
             ])
          (mk_cint 0) @@
          send_put_bitmap.id) @@ mk_block @@
-       GC.sw_update_send ~vid_nm:"vid" ~n:(mk_var "count")]
+       GC.sw_update_send ~vid_nm:"vid" ~n:(mk_var "add_count")]
   in
   let send_fetches_of_rhs_maps  =
     if null s_rhs then [] else
