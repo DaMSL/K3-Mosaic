@@ -754,6 +754,9 @@ let mk_send_me ?(payload=[mk_cunit]) trig =
 (* counter for ip *)
 let ip = create_ds "ip" (mut t_int)
 
+(* counter for stmt *)
+let stmt_ctr = create_ds "stmt_ctr" @@ mut t_int
+
 (**** End of code ****)
 
 let global_vars c dict =
@@ -767,6 +770,7 @@ let global_vars c dict =
   let l =
     [ me_int;
       ip;
+      stmt_ctr;
       g_init_vid;
       g_min_vid;
       g_max_vid;

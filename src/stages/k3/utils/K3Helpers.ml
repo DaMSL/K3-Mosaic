@@ -783,8 +783,8 @@ let mk_pop ?cond col_nm bind_nm fail success =
     | Some cond -> mk_if cond action mk_cunit
 
 (* increment a stateful variable *)
-let mk_incr nm = mk_assign nm @@ mk_add (mk_var nm) @@ mk_cint 1
-let mk_decr nm = mk_assign nm @@ mk_sub (mk_var nm) @@ mk_cint 1
+let mk_incr ?(n=mk_cint 1) nm = mk_assign nm @@ mk_add (mk_var nm) n
+let mk_decr ?(n=mk_cint 1) nm = mk_assign nm @@ mk_sub (mk_var nm) n
 
 (* delete one entry in a data structure *)
 let mk_delete_one ds slice =
@@ -862,22 +862,22 @@ let mk_filter_cnt cond ds =
     mk_var ds.id
 
 (* loop over bitmaps as in route and shuffle *)
-let mk_iter_bitmap ?(all=false) e bitmap =
+let mk_iter_bitmap ?(all=false) ?(idx="ip") e bitmap =
   mk_block [
-    mk_assign "ip" @@ mk_cint 0;
+    mk_assign idx @@ mk_cint 0;
     mk_iter (mk_lambda'' ["has_val", t_bool] @@
         mk_block [
           if all then e else mk_if (mk_var "has_val") e mk_cunit;
-          mk_assign "ip" @@ mk_add (mk_var "ip") @@ mk_cint 1
+          mk_assign idx @@ mk_add (mk_var idx) @@ mk_cint 1
         ]) @@
       bitmap
   ]
 
-let mk_iter_bitmap' ?all e bitmap = mk_iter_bitmap ?all e (mk_var bitmap)
+let mk_iter_bitmap' ?all ?idx e bitmap = mk_iter_bitmap ?all ?idx e (mk_var bitmap)
 
-let mk_agg_bitmap ?(all=false) args e zero bitmap =
+let mk_agg_bitmap ?(all=false) ?(idx="ip") args e zero bitmap =
   mk_block [
-    mk_assign "ip" @@ mk_cint 0;
+    mk_assign idx @@ mk_cint 0;
     mk_agg (mk_lambda2' args ["has_val", t_bool] @@
         mk_let ["res"]
           (if all then e
@@ -885,14 +885,17 @@ let mk_agg_bitmap ?(all=false) args e zero bitmap =
                   e @@
                   mk_tuple @@ ids_to_vars @@ fst_many args) @@
         mk_block [
-          mk_assign "ip" @@ mk_add (mk_var "ip") @@ mk_cint 1;
+          mk_assign idx @@ mk_add (mk_var idx) @@ mk_cint 1;
           mk_var "res"
         ])
       zero @@
       bitmap
   ]
 
-let mk_agg_bitmap' ?all args e zero bitmap = mk_agg_bitmap ?all args e zero (mk_var bitmap)
+let mk_agg_bitmap' ?all ?idx args e zero bitmap = mk_agg_bitmap ?all ?idx args e zero (mk_var bitmap)
+
+let mk_clean_bitmap ?(idx="ip") bitmap =
+  mk_iter_bitmap ~all:true ~idx (mk_insert_at bitmap (mk_var idx) [mk_cfalse]) (mk_var bitmap)
 
 let build_tuples_from_idxs ?(drop_vid=false) ~nm tuples_nm map_type indices code =
   let col_t, tup_t = unwrap_tcol map_type in

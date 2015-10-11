@@ -57,13 +57,13 @@ let sw_ack_rcv_trig sw_check_done =
   ]
 
 (* switch: code to update send data structures *)
-let sw_update_send ~vid_nm =
+let sw_update_send ?(n=mk_cint 1) ~vid_nm =
   [
-    mk_incr sw_num_sent.id;
-    (* increment vid on sw_ack_log *)
+    mk_incr ~n sw_num_sent.id;
+    (* increment vid_count on sw_ack_log *)
     mk_upsert_with sw_ack_log.id [mk_var vid_nm; mk_cunknown]
-      (mk_lambda' unit_arg @@ mk_tuple [mk_var vid_nm; mk_cint 1])
-      (mk_lambda' sw_ack_log.e @@ mk_tuple [mk_var "vid"; mk_add (mk_var "count") @@ mk_cint 1])
+      (mk_lambda' unit_arg @@ mk_tuple [mk_var vid_nm; n])
+      (mk_lambda' sw_ack_log.e @@ mk_tuple [mk_var "vid"; mk_add (mk_var "count") n])
   ]
 
 (* node: code to be incorporated in GenDist.rcv_put *)

@@ -380,8 +380,8 @@ val mk_min_max : string -> expr_t -> type_t -> (expr_t -> expr_t -> expr_t) -> e
 
 val mk_pop : ?cond:expr_t -> string -> string -> expr_t -> expr_t -> expr_t
 
-val mk_incr : string -> expr_t
-val mk_decr : string -> expr_t
+val mk_incr : ?n:expr_t -> string -> expr_t
+val mk_decr : ?n:expr_t -> string -> expr_t
 
 (* delete using a slice with unknowns *)
 val mk_delete_one : data_struct -> expr_t list -> expr_t
@@ -425,9 +425,10 @@ val mk_filter_cnt : expr_t -> data_struct -> expr_t
 
 (* loop over bitmaps as in route and shuffle *)
 (* @all: all values (even false) or just trues *)
-val mk_iter_bitmap : ?all:bool -> expr_t -> expr_t -> expr_t
-val mk_iter_bitmap' : ?all:bool -> expr_t -> id_t -> expr_t
-val mk_agg_bitmap : ?all:bool -> (id_t * type_t) list -> expr_t -> expr_t -> expr_t -> expr_t
-val mk_agg_bitmap' : ?all:bool -> (id_t * type_t) list -> expr_t -> expr_t -> id_t -> expr_t
+val mk_iter_bitmap : ?all:bool -> ?idx:string -> expr_t -> expr_t -> expr_t
+val mk_iter_bitmap' : ?all:bool -> ?idx:string -> expr_t -> id_t -> expr_t
+val mk_agg_bitmap : ?all:bool -> ?idx:string -> (id_t * type_t) list -> expr_t -> expr_t -> expr_t -> expr_t
+val mk_agg_bitmap' : ?all:bool -> ?idx:string -> (id_t * type_t) list -> expr_t -> expr_t -> id_t -> expr_t
+val mk_clean_bitmap : ?idx:string -> id_t -> expr_t
 
 val build_tuples_from_idxs : ?drop_vid:bool -> nm:id_t -> id_t -> type_t -> expr_t -> expr_t -> expr_t

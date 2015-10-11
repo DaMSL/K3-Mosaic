@@ -119,10 +119,7 @@ let gen_shuffle_fn c rmap lmap bindings fn_name =
       else
         [
           (* clean the shuffle bitmap *)
-          mk_iter_bitmap' ~all:true
-            (mk_insert_at shuffle_bitmap.id (mk_var "ip") [mk_cfalse])
-            shuffle_bitmap.id
-          ;
+          mk_clean_bitmap shuffle_bitmap.id;
           (* first handle the precise routing *)
           (* find ip of each tuple *)
           (* we save only the index of the tuple *)
