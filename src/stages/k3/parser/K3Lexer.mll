@@ -210,6 +210,15 @@ rule tokenize = parse
     | "filter_lt"     { FILTERLT }
     | "filter_leq"    { FILTERLEQ }
 
+    | "poly_iter"     { POLY_ITER }
+    | "poly_iter_tag" { POLY_ITER_TAG }
+    | "poly_fold"     { POLY_FOLD }
+    | "poly_fold_tag" { POLY_FOLD_TAG }
+    | "poly_at" { POLY_AT }
+    | "poly_at_with" { POLY_AT_WITH }
+    | "poly_append" { POLY_APPEND }
+
+
     | '@' { ANNOTATE }
 
     | "effect"        { EFFECT }

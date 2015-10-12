@@ -133,6 +133,7 @@
 %token MAP ITERATE FILTER FLATTEN
 %token AGGREGATE AGGREGATEV GROUPBYAGGREGATE
 %token SORT RANK SIZE
+%token POLY_ITER POLY_ITER_TAG POLY_FOLD POLY_FOLD_TAG POLY_AT POLY_AT_WITH POLY_APPEND
 
 %token PEEK PEEK_WITH_VID AT AT_WITH MIN_WITH
 
@@ -644,6 +645,8 @@ access :
     | PEEK_WITH_VID LPAREN anno_expr COMMA anno_expr COMMA anno_expr RPAREN { mkexpr PeekWithVid [$3; $5; $7] }
     | AT LPAREN anno_expr COMMA anno_expr RPAREN { mkexpr At [$3; $5] }
     | AT_WITH LPAREN anno_expr COMMA anno_expr COMMA anno_expr COMMA anno_expr RPAREN { mkexpr AtWith [$3; $5; $7; $9] }
+    | POLY_AT LPAREN IDENTIFIER COMMA anno_expr COMMA anno_expr COMMA anno_expr RPAREN { mkexpr (PolyAt $3) [$5; $7; $9] }
+    | POLY_AT_WITH LPAREN IDENTIFIER COMMA anno_expr COMMA anno_expr COMMA anno_expr COMMA anno_expr COMMA anno_expr RPAREN { mkexpr (PolyAtWith $3) [$5; $7; $9; $11; $13] }
     | MIN_WITH LPAREN anno_expr COMMA anno_expr COMMA anno_expr RPAREN { mkexpr MinWith [$3; $5; $7] }
 ;
 
@@ -660,6 +663,7 @@ mutation :
     | DELETE_PREFIX LPAREN anno_expr COMMA tuple RPAREN { mkexpr DeletePrefix [$3; $5] }
     | DELETE_AT LPAREN anno_expr COMMA anno_expr RPAREN { mkexpr DeleteAt [$3; $5] }
     | CLEAR_ALL LPAREN anno_expr RPAREN { mkexpr ClearAll [$3] }
+    | POLY_APPEND LPAREN IDENTIFIER COMMA anno_expr COMMA anno_expr RPAREN { mkexpr (PolyAppend $3) [$5; $7] }
 
     /* Updates must explicitly specify their new/old value as a tuple */
     | UPDATE LPAREN anno_expr COMMA anno_expr COMMA anno_expr RPAREN { mkexpr Update [$3; $5; $7] }
@@ -701,6 +705,11 @@ transformers :
     | FILTERLEQ LPAREN anno_expr COMMA anno_expr RPAREN { mkexpr (FilterOp OLeq) [$3; $5] }
     | EQUIJOIN LPAREN anno_expr COMMA anno_expr COMMA anno_expr COMMA anno_expr COMMA anno_expr COMMA anno_expr RPAREN
       { mkexpr Equijoin [$3; $5; $7; $9; $11; $13] }
+
+    | POLY_ITER LPAREN anno_expr COMMA anno_expr RPAREN { mkexpr PolyIter [$3; $5] }
+    | POLY_FOLD LPAREN anno_expr COMMA anno_expr COMMA anno_expr RPAREN { mkexpr PolyFold [$3; $5; $7] }
+    | POLY_ITER_TAG LPAREN IDENTIFIER COMMA anno_expr COMMA anno_expr COMMA anno_expr COMMA anno_expr RPAREN { mkexpr (PolyIterTag $3) [$5; $7; $9; $11] }
+    | POLY_FOLD_TAG LPAREN IDENTIFIER COMMA anno_expr COMMA anno_expr COMMA anno_expr COMMA anno_expr COMMA anno_expr RPAREN { mkexpr (PolyIterTag $3) [$5; $7; $9; $11; $13] }
 
     /* Error handling */
     | anno_expr CONCAT error { print_error("Expected expression for combine") }
