@@ -72,7 +72,7 @@ let default_config = {
                        trig_env = [];
                        map_to_fold = false;
                        project = StrSet.empty;
-                       singleton_id="i";
+                       singleton_id="elem";
                        use_filemux=false;
                      }
 
@@ -319,8 +319,8 @@ let list_of_top_args = function
 
 (* code to unwrap an option type *)
 (* project: add a projection out of a record *)
-let unwrap_option ?(project=false) f =
-  let p = if project then ".i" else "" in
+let unwrap_option c ?(project=false) f =
+  let p = if project then "."^c.singleton_id else "" in
   lps "case " <| f <| lps " of" <| lsp () <|
   lps (sp "{ Some x -> x%s }" p) <| lsp () <|
   lps "{ None -> error () }"
@@ -442,6 +442,7 @@ let var_translate = List.fold_left (fun acc (x,y) -> StringMap.add x y acc) Stri
    "string_of_int", "itos";
    "string_of_float", "rtos";
    "peers", "my_peers2";
+   "role", "my_role";
    "parse_sql_date", "tpch_date";
    "maxi", "max";
    "maxif", "max"]
@@ -490,7 +491,7 @@ let rec deep_bind ~in_record c arg_n =
         | TTuple _  -> []    (* don't bind if we have an id representing a record *)
         | _         ->
           (* force bind a variable that comes in as a pretend record *)
-          lps "bind " <| lps (id_of_num i) <| lps " as {i:" <| lps id
+          lps "bind " <| lps (id_of_num i) <| lps (" as {"^c.singleton_id^":") <| lps id
           <| lps "} in " <| lcut ()
         end
     | NIgnored
@@ -512,7 +513,7 @@ let rec deep_bind ~in_record c arg_n =
         List.flatten @@ List.map (loop @@ d+1) args
   | NMaybe(i, arg)  ->
       if d < 0 then [] else
-        lps "let " <| lps (get_id_of_arg arg) <| lps " = " <| unwrap_option (lps @@ id_of_num i) <|
+        lps "let " <| lps (get_id_of_arg arg) <| lps " = " <| unwrap_option c (lps @@ id_of_num i) <|
         lps " in" <| lsp () <| loop (d+1) arg
   in loop 0 arg_n
 
@@ -746,7 +747,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
       begin try lps @@ StringMap.find id var_translate
       with Not_found ->
         (* check if we need to do projection *)
-        if StrSet.mem id c.project then lps id <| lps ".i"
+        if StrSet.mem id c.project then lps id <| lps ("."^c.singleton_id)
         else lps id
       end
   | Tuple     -> let es = U.decompose_tuple expr in
@@ -1487,8 +1488,11 @@ declare REGIONLoaderRP : collection {path: string} @Collection -> collection {ra
 typedef filechunks = collection {path: string} @Collection
 declare switch_mux_inputs : collection {seq:filechunks} @Collection
 
-declare my_peers2 : collection { i:address } @ {Collection} =
-  peers.fold (\\acc -> (\\x -> (acc.insert {i:x.addr}; acc))) empty { i:address} @ Collection
+declare my_peers2 : collection { elem:address } @ {Collection} =
+  peers.fold (\\acc -> (\\x -> (acc.insert {elem:x.addr}; acc))) empty { elem:address} @ Collection
+
+declare my_role : collection { elem:string } @ {Collection} =
+  role.fold (\\acc -> (\\x -> (acc.insert {elem:x.i}; acc))) empty { elem:string} @ Collection
 
 "^ string_of_program ?map_to_fold ?use_filemux p' envs
 
