@@ -169,6 +169,8 @@ let decompose_send e =
   in match tag_of_expr e with
   Send -> (nth e 0, nth e 1, rest ((List.length (sub_tree e))-1) [])
   | _ -> failwith "not a Send"
+let decompose_set_all e = match tag_of_expr e, sub_tree e with
+  | SetAll, [e0; e1] -> e0, e1 | _ -> failwith "not a SetAll"
 let decompose_singleton e = match tag_of_expr e, sub_tree e with
   Singleton vt, [e0] -> e0 | _ -> failwith "not a Singleton"
 let decompose_slice e = match tag_of_expr e, sub_tree e with

@@ -1248,6 +1248,9 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
   | InsertAt -> let col, idx, x = U.decompose_insert_at expr in
     apply_method c ~name:"insert_at" ~args:[idx; x] ~arg_info:[def_a; [], true] ~col
 
+  | SetAll -> let col, x = U.decompose_set_all expr in
+    apply_method c ~name:"set_all" ~args:[x] ~arg_info:[[], true] ~col
+
   | Delete -> let col, x = U.decompose_delete expr in
     (* get rid of the value for maps *)
     let x = if is_map col then map_mk_unknown c true x else x in

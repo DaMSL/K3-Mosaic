@@ -275,10 +275,7 @@ let dim_bounds_fn =
       mk_lambda' dim_bounds.e @@
         mk_mult (mk_var "value") @@ mk_var "dim_size"
 
-let clean_results =
-  mk_iter_bitmap'
-    (mk_insert_at route_bitmap.id (mk_var "ip") [mk_cfalse])
-    route_bitmap.id
+let clean_results = mk_set_all route_bitmap.id [mk_cfalse]
 
 let gen_route_fn p map_id =
   let map_types = map_types_no_val_for p map_id in
@@ -357,9 +354,7 @@ let gen_route_fn p map_id =
 
         (* handle the case of no partitioning. Send to all *)
         mk_if (mk_eq (mk_size @@ mk_var "pmap") @@ mk_cint 0)
-          (mk_iter_bitmap'
-            (mk_insert_at route_bitmap.id (mk_var "ip") [mk_var "has_val"])
-            all_nodes_bitmap.id) @@
+          (mk_set_all route_bitmap.id [mk_ctrue]) @@
 
         let len = List.length map_range in
         mk_block [
