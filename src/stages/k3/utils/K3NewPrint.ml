@@ -482,7 +482,7 @@ let map_mk_unknown c get_key pat =
 (* wrap with projection if needed *)
 let wrap_project c col x =
   let ts = KH.unwrap_ttuple @@ snd @@ KH.unwrap_tcol @@ T.type_of_expr col in
-  if List.length ts > 1 then (lazy_paren x) <| lps ("."^c.singleton_id) else x
+  if List.length ts = 1 then (lazy_paren x) <| lps ("."^c.singleton_id) else x
 
 (* create a deep bind for lambdas, triggers, and let statements
  * -in_record indicates that the first level of binding should be a record *)
@@ -908,31 +908,9 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
     let e1, e_some, e_none = U.decompose_caseof expr in
 
     let normal () = (* normal case printout *)
-      (* HACK to make peek work: records of one element still need projection *)
-      (* NOTE: caseOf will only work on peek if peek is the first expr inside,
-      * and projection will only work if the expression is very simple *)
-      let project =
-        try
-          let col = U.decompose_peek e1 in
-          (* get the type of the collection.
-          * If it's a singleton type, we need to add projection *)
-          let _, elem_t = KH.unwrap_tcol @@ T.type_of_expr col in
-          begin match elem_t.typ with
-            | TTuple _             -> false
-            | _ when snd expr_info -> false (* we need a record output *)
-            | _                    -> true
-          end
-        with _ -> false
-      in
-      let c' = {c with project=StrSet.remove id c.project} in
-      let c' =
-        (* if we're projecting, let future expressions know *)
-        if project && id <> "_" then {c' with project=StrSet.add id c'.project}
-        else c' in
       Some(
         lps "case" <| lsp () <| lazy_expr c e1 <| lsp () <| lps "of" <| lsp () <|
-        wrap_indent (lazy_brace (lps ("Some "^id^" ->") <| lsp () <|
-          lazy_expr c' e_some)) <|
+        wrap_indent (lazy_brace (lps ("Some "^id^" ->") <| lsp () <| lazy_expr c e_some)) <|
         wrap_indent (lazy_brace (lps "None ->" <| lsp () <| lazy_expr c e_none)))
     in
     (* helper function to apply lookup_with on a secondary index *)
@@ -1194,8 +1172,8 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
     (* normal peek applications *)
     let normal () =
       let name = if is_vmap col then "peek_now" else "peek" in
-      lazy_paren @@ apply_method c ~name ~col
-      ~args:[light_type c @@ KH.mk_cunit] ~arg_info:[def_a] in
+      wrap_project c col (apply_method c ~name ~col ~args:[light_type c @@ KH.mk_cunit] ~arg_info:[def_a])
+    in
 
     (* to handle the case where we have a full slice over a vmap, we need to look ahead *)
     let tag = U.tag_of_expr col in
