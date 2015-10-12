@@ -65,6 +65,7 @@ type config = {
                 project:StrSet.t;       (* need to project further down *)
                 singleton_id:string;
                 use_filemux:bool;
+                safe_writes:bool;
               }
 
 let default_config = {
@@ -74,6 +75,7 @@ let default_config = {
                        project = StrSet.empty;
                        singleton_id="elem";
                        use_filemux=false;
+                       safe_writes=false;
                      }
 
 let verbose_types_config = default_config
@@ -1142,8 +1144,11 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
       ~arg_info:[def_a]
 
   | AtWith -> let col, idx, lam_none, lam_some = U.decompose_at_with expr in
-    apply_method c ~name:"safe_at" ~col
-      ~args:[idx; lam_none; lam_some] ~arg_info:[def_a; def_a; [0], false]
+    if c.safe_writes then
+      apply_method c ~name:"safe_at" ~col
+        ~args:[idx; lam_none; lam_some] ~arg_info:[def_a; def_a; [0], false]
+    else apply_method c ~name:"unsafe_at" ~col
+        ~args:[idx; lam_some] ~arg_info:[def_a; [0], false]
 
   | At -> let col, idx = U.decompose_at expr in
     (* we need to project since we return a value *)
@@ -1439,15 +1444,15 @@ let filter_incompatible prog =
 
 (* print a K3 program in syntax *)
 (* We get the typechecking environments so we can do incremental typechecking where needed *)
-let string_of_program ?(map_to_fold=false) ?(use_filemux=false) prog (env, trig_env) =
-  let config = {default_config with env; trig_env; map_to_fold; use_filemux} in
+let string_of_program ~map_to_fold ~use_filemux ~safe_writes prog (env, trig_env) =
+  let config = {default_config with env; trig_env; map_to_fold; use_filemux; safe_writes} in
   wrap_f @@ fun () ->
     let l = wrap_hv 0 (lps_list ~sep:"" CutHint (lazy_declaration config |- fst) prog) in
     force_list l
 
 (* print a new k3 program with added sources and feeds *)
 (* envs are the typechecking environments to allow us to do incremental typechecking *)
-let string_of_dist_program ?(file="default.txt") ?map_to_fold ?use_filemux (p, envs) =
+let string_of_dist_program ?(file="default.txt") ~map_to_fold ~use_filemux ~safe_writes (p, envs) =
   let p' = filter_incompatible p in
 "\
 include \"Core/Builtins.k3\"
@@ -1482,5 +1487,5 @@ declare my_peers2 : collection { elem:address } @ {Collection} =
 declare my_role : collection { elem:string } @ {Collection} =
   role.fold (\\acc -> (\\x -> (acc.insert {elem:x.i}; acc))) empty { elem:string} @ Collection
 
-"^ string_of_program ?map_to_fold ?use_filemux p' envs
+"^ string_of_program ~map_to_fold ~use_filemux ~safe_writes p' envs
 
