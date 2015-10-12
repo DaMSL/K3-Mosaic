@@ -442,6 +442,7 @@ let var_translate = List.fold_left (fun acc (x,y) -> StringMap.add x y acc) Stri
    "string_of_int", "itos";
    "string_of_float", "rtos";
    "peers", "my_peers2";
+   "role", "my_role";
    "parse_sql_date", "tpch_date";
    "maxi", "max";
    "maxif", "max"]
@@ -1486,6 +1487,9 @@ declare switch_mux_inputs : collection {seq:filechunks} @Collection
 
 declare my_peers2 : collection { elem:address } @ {Collection} =
   peers.fold (\\acc -> (\\x -> (acc.insert {elem:x.addr}; acc))) empty { elem:address} @ Collection
+
+declare my_role : collection { elem:string } @ {Collection} =
+  role.fold (\\acc -> (\\x -> (acc.insert {elem:x.i}; acc))) empty { elem:string} @ Collection
 
 "^ string_of_program ?map_to_fold ?use_filemux p' envs
 
