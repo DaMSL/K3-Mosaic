@@ -475,7 +475,9 @@ let sw_send_fetch_fn c s_rhs_lhs s_rhs trig_name =
                 "stmt_bitmap") @@
             mk_tuple [mk_var clean_stmt_bitmap_id; mk_var "agg"])
         send_put_bitmap.id;
-      mk_clean_bitmap send_put_bitmap.id] @
+      (* clean bitmap *)
+      mk_set_all send_put_bitmap.id [mk_cfalse]
+      ] @
 
       List.map
         (fun (stmt_id, (rhs_map_id, lhs_map_id)) ->
@@ -558,7 +560,8 @@ let sw_send_fetch_fn c s_rhs_lhs s_rhs trig_name =
      [mk_iter_bitmap'
         (mk_insert_at send_fetch_ip_map.id (mk_var "ip") [mk_empty stmt_map_ids.t])
         send_fetch_bitmap.id;
-      mk_clean_bitmap send_fetch_bitmap.id] @
+      mk_set_all send_fetch_bitmap.id [mk_cfalse]
+     ]@
      (* fill in global data structure from route *)
       (List.map
         (fun (stmt_id, rhs_map_id) ->

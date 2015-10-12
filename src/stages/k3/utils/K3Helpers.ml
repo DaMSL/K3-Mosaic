@@ -896,9 +896,6 @@ let mk_agg_bitmap ?(all=false) ?(idx="ip") args e zero bitmap =
 
 let mk_agg_bitmap' ?all ?idx args e zero bitmap = mk_agg_bitmap ?all ?idx args e zero (mk_var bitmap)
 
-let mk_clean_bitmap ?(idx="ip") bitmap =
-  mk_iter_bitmap ~all:true ~idx (mk_insert_at bitmap (mk_var idx) [mk_cfalse]) (mk_var bitmap)
-
 let build_tuples_from_idxs ?(drop_vid=false) ~nm tuples_nm map_type indices code =
   let col_t, tup_t = unwrap_tcol map_type in
   let ts = unwrap_ttuple tup_t in
