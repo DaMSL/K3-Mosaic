@@ -490,7 +490,7 @@ let rec deep_bind ~in_record c arg_n =
         | TTuple _  -> []    (* don't bind if we have an id representing a record *)
         | _         ->
           (* force bind a variable that comes in as a pretend record *)
-          lps "bind " <| lps (id_of_num i) <| lps " as {i:" <| lps id
+          lps "bind " <| lps (id_of_num i) <| lps (" as {"^c.singleton_id^":") <| lps id
           <| lps "} in " <| lcut ()
         end
     | NIgnored
@@ -1484,7 +1484,7 @@ declare REGIONLoaderRP : collection {path: string} @Collection -> collection {ra
 typedef filechunks = collection {path: string} @Collection
 declare switch_mux_inputs : collection {seq:filechunks} @Collection
 
-declare my_peers2 : collection { i:address } @ {Collection} =
+declare my_peers2 : collection { elem:address } @ {Collection} =
   peers.fold (\\acc -> (\\x -> (acc.insert {elem:x.addr}; acc))) empty { elem:address} @ Collection
 
 "^ string_of_program ?map_to_fold ?use_filemux p' envs
