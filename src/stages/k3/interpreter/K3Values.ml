@@ -538,6 +538,17 @@ let v_fold err_fn f acc = function
   | VVMap m        -> ValueVMap.fold_all (fun _ k v acc -> f acc @@ VTuple[k;v]) m acc
   | v -> err_fn "v_fold" @@ sp "not a collection: %s" @@ sov v
 
+let v_set_all err_fn v = function
+  | VVector(m,sz,def) ->
+      (* use the sparseness if we're resetting to the empty value *)
+      if ValueComp.compare_v v def = 0 then VVector(IntMap.empty,sz,def)
+      else
+        let rec loop acc n =
+          if n >= sz then acc
+          else loop (IntMap.add n v acc) (n+1)
+        in VVector(loop IntMap.empty 0,sz,def)
+  | v -> err_fn "v_set_all" @@ sp "not a vector: %s" @@ sov v
+
 (* fold over values *)
 let rec fold_val f zero v =
   let recur = fold_val f in
