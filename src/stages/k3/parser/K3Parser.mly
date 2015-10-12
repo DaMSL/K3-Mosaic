@@ -110,7 +110,7 @@
 %token LPAREN RPAREN COMMA SEMICOLON PERIOD
 
 %token LBRACE RBRACE LBRACKET RBRACKET
-%token BAR LBRACKETBAR RBRACKETBAR LBRACKETCOLON RBRACKETCOLON LBRACKETLT RBRACKETLT LBRACKETGEQ LBRACKETHASH RBRACKETHASH LBRACEBAR RBRACEBAR LBRACECOLON RBRACECOLON LBRACELT RBRACELT
+%token BAR LBRACKETBAR RBRACKETBAR LBRACKETCOLON RBRACKETCOLON LBRACKETLT RBRACKETLT LBRACKETGEQ LBRACKETHASH RBRACKETHASH LBRACEBAR RBRACEBAR LBRACECOLON RBRACECOLON LBRACELT RBRACELT LBRACKETQ RBRACKETQ
 %token LBRACKETGT LBRACKETLEQ
 
 %token NEG PLUS MINUS TIMES DIVIDE MODULO HASH
@@ -123,7 +123,6 @@
 
 %token COLON
 
-%token QUESTION
 %token EQUIJOIN EXTEND INSERT INSERT_AT SET_ALL UPDATE DELETE DELETE_AT CLEAR_ALL UPDATE_AT_WITH UPSERT_WITH UPSERT_WITH_BEFORE UPDATE_SUFFIX DELETE_PREFIX FILTERGEQ FILTERLT FILTERLEQ FILTERGT
 
 %token GETS COLONGETS
@@ -299,7 +298,6 @@ resource_pattern :
     | IDENTIFIER                       { Terminal($1) }
     | LPAREN resource_pattern RPAREN     { $2 }
 
-    | resource_pattern QUESTION          { Optional($1) }
     | resource_pattern TIMES             { Repeat($1, UntilEOF) }
 
     | resource_pattern OR resource_pattern {
@@ -380,6 +378,7 @@ collection_type :
     | LBRACELT type_expr_tuple RBRACELT { TCollection(TSortedMap, $2) }
     | LBRACECOLON type_expr RBRACECOLON { TCollection(TSortedSet, $2) }
     | LBRACECOLON type_expr_tuple RBRACECOLON { TCollection(TSortedSet, $2) }
+    | LBRACKETQ type_expr_tuple BAR poly_variant_list RBRACKETQ { TCollection(TPoly($4), $2) }
 ;
 
 int_list_list:
@@ -390,6 +389,15 @@ int_list_list:
 int_list:
     | INTEGER {[$1]}
     | INTEGER COMMA int_list { $1::$3 }
+;
+
+poly_variant_list:
+    | poly_variant {[$1]}
+    | poly_variant SEMICOLON poly_variant_list { $1::$3 }
+;
+
+poly_variant:
+    | INTEGER COMMA STRING COMMA type_expr_tuple { ($1, $3, $5) }
 ;
 
 anno_expr :

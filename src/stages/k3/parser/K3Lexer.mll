@@ -108,6 +108,8 @@ rule tokenize = parse
     | "[<="  { LBRACKETLEQ }
     | "[>"  { LBRACKETGT }
     | ">]"  { RBRACKETLT }
+    | "[?"  { LBRACKETQ }
+    | "?]"  { RBRACKETQ }
     | "|"   { BAR }
 
     | '-' { NEG }
@@ -135,7 +137,6 @@ rule tokenize = parse
     | ':'   { COLON }
     | '\\'  { BACKSLASH }
 
-    | '?'  { QUESTION }
     | '='  { GETS }
     | ":=" { COLONGETS }
 
