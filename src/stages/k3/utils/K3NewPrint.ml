@@ -479,6 +479,11 @@ let map_mk_unknown c get_key pat =
   | [_;x]              -> [KH.mk_cunknown; x]
   | _ -> failwith "bad pattern"
 
+(* wrap with projection if needed *)
+let wrap_project c col x =
+  let ts = KH.unwrap_ttuple @@ snd @@ KH.unwrap_tcol @@ T.type_of_expr col in
+  if List.length ts > 1 then (lazy_paren x) <| lps ("."^c.singleton_id) else x
+
 (* create a deep bind for lambdas, triggers, and let statements
  * -in_record indicates that the first level of binding should be a record *)
 let rec deep_bind ~in_record c arg_n =
@@ -1163,7 +1168,8 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
       ~args:[idx; lam_none; lam_some] ~arg_info:[def_a; def_a; [0], false]
 
   | At -> let col, idx = U.decompose_at expr in
-    apply_method c ~name:"at" ~col ~args:[idx] ~arg_info:[def_a]
+    (* we need to project since we return a value *)
+    wrap_project c col (apply_method c ~name:"at" ~col ~args:[idx] ~arg_info:[def_a])
 
   | MinWith -> let col, lam_none, lam_some = U.decompose_min_with expr in
     apply_method c ~name:"min" ~col
@@ -1261,7 +1267,8 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
         ~arg_info:[vid_out_arg; [], true])
 
   | DeleteAt -> let col, n = U.decompose_delete_at expr in
-    apply_method c ~col ~name:"erase_at" ~args:[n] ~arg_info:[def_a]
+    (* project output if needed since we return a value *)
+    wrap_project c col (apply_method c ~col ~name:"erase_at" ~args:[n] ~arg_info:[def_a])
 
   | DeletePrefix -> let col, x = U.decompose_delete_prefix expr in
     maybe_vmap c col x
