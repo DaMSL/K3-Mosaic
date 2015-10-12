@@ -517,7 +517,7 @@ let sw_send_fetch_fn c s_rhs_lhs s_rhs trig_name =
                       (* increment count *)
                       mk_update_at_with stmt_cnt_list.id (mk_cint stmt_id) @@
                         mk_lambda'' stmt_cnt_list.e @@
-                          mk_add (mk_var "count") @@ mk_cint 1;
+                          mk_add (mk_var "count") @@ mk_var "sender_count";
                       (* recreate tuple *)
                       mk_tuple @@ ids_to_vars @@ fst_many @@ send_put_ip_map.e
                     ]
