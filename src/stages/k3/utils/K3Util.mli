@@ -82,6 +82,7 @@ val decompose_peek : expr_t -> expr_t
 val decompose_peek_with_vid : expr_t -> expr_t * expr_t * expr_t
 val decompose_range : expr_t -> expr_t * expr_t * expr_t
 val decompose_send : expr_t -> expr_t * expr_t * (expr_t list)
+val decompose_set_all : expr_t -> expr_t * expr_t
 val decompose_singleton : expr_t -> expr_t
 val decompose_slice : expr_t -> expr_t * expr_t
 val decompose_slice_op : expr_t -> op_t * expr_t * expr_t

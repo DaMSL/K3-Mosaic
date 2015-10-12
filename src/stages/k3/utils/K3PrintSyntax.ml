@@ -213,7 +213,7 @@ let rec lazy_expr c expr =
     | _ -> lazy_expr c e
   (* many instructions need to wrap the same way *)
   in let wrap e = match U.tag_of_expr expr with
-    | Insert | InsertAt | Extend | Iterate | Map | Filter | Flatten | Send | Delete | ClearAll
+    | Insert | InsertAt | SetAll | Extend | Iterate | Map | Filter | Flatten | Send | Delete | ClearAll
     | Update | UpdateSuffix | UpsertWith | UpsertWithBefore | DeletePrefix | FilterOp _
     | Aggregate | AggregateV | GroupByAggregate | Assign | Combine -> wrap_hov 2 e
     | _ -> id_fn e
@@ -361,6 +361,8 @@ let rec lazy_expr c expr =
     lps "insert" <| lazy_paren (expr_pair e)
   | InsertAt -> let t = U.decompose_insert_at expr in
     lps "insert_at" <| lazy_paren (expr_triple t)
+  | SetAll -> let t = U.decompose_set_all expr in
+    lps "set_all" <| lazy_paren (expr_pair t)
   | Extend -> let e = U.decompose_extend expr in
     lps "extend" <| lazy_paren (expr_pair e)
   | UpsertWith -> let col, key, lam_no, lam_yes = U.decompose_upsert_with expr in

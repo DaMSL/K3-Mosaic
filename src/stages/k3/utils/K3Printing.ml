@@ -125,6 +125,7 @@ let string_of_tag_type = function
     | MinWith          -> "MinWith"
     | Insert           -> "Insert"
     | InsertAt         -> "InsertAt"
+    | SetAll           -> "SetAll"
     | Extend           -> "Extend"
     | Update           -> "Update"
     | UpdateSuffix     -> "UpdateSuffix"

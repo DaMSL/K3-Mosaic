@@ -133,6 +133,7 @@ type expr_tag_t
     | Extend
     | Insert
     | InsertAt
+    | SetAll            (* for vector, set all values *)
     | Update
     | UpdateAtWith
     | UpsertWith        (* insert with a default handler *)

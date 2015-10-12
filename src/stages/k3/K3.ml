@@ -127,6 +127,7 @@ type expr_tag_t
     | Extend
     | Insert
     | InsertAt
+    | SetAll
     | Update
     | UpdateAtWith
     | UpsertWith        (* update with a default handler *)
