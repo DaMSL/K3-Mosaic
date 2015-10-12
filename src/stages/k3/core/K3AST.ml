@@ -33,8 +33,9 @@ type container_type_t
     | TSortedSet
     | TVector
     | TVMap of IntSetSet.t option (* indices *)
+    | TPoly of (int * string * type_t) list (* {int,string} tag * possible types *)
 
-type base_type_t
+and base_type_t
     = TTop
     | TUnknown
     | TUnit
@@ -150,6 +151,15 @@ type expr_tag_t
     | Let of id_t list
 
     | Send
+
+    (* polybuffer methods *)
+    | PolyIter
+    | PolyIterTag of string
+    | PolyFold
+    | PolyFoldTag of string
+    | PolyAt of string
+    | PolyAtWith of string
+    | PolyAppend of string
 
 (* Expression Tree *)
 type expr_t = ((int * expr_tag_t) * annotation_t) tree_t
