@@ -564,13 +564,13 @@ and eval_expr (address:address) sched_st cenv texpr =
           | _ -> error name "peekwithvid: bad value"
         end
 
-    | At, [c; idx; _] ->
+    | At, [c; idx] ->
       begin match v_at error c idx with
         | Some x -> nenv, VTemp x
         | None -> error name "at: out of bounds"
       end
 
-    | PolyAt tag, [c; idx] ->
+    | PolyAt tag, [c; idx; _] ->
       begin match v_at ~tag error c idx with
         | Some x -> nenv, VTemp x
         | None -> error name "poly_at: out of bounds"
