@@ -78,7 +78,6 @@ let nd_log_master_write =
          mk_insert_block "x" ~path:[2] [mk_var "wvid"])
 
 (* log_write - save the trigger's arguments *)
-(* TODO: make into map, and reduce args for space *)
 let nd_log_write_for p trig_nm = "nd_log_write_"^trig_nm (* varies with bound *)
 let nd_log_write c t =
   mk_global_fn (nd_log_write_for c.p t) (args_of_t_with_v c t) [] @@
@@ -86,7 +85,6 @@ let nd_log_write c t =
   mk_insert (D.nd_log_for_t t) [mk_var "vid"; mk_tuple @@ args_of_t_as_vars c t]
 
 (* get bound args *)
-(* TODO: make into map *)
 let nd_log_get_bound_for trig_nm = "nd_log_get_bound_"^trig_nm
 let nd_log_get_bound c t =
   (* create a pattern for selecting vid alone *)

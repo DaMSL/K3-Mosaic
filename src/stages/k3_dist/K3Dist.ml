@@ -666,6 +666,28 @@ let sw_trig_buf_idx =
   let e = ["trig_id", t_int] in
   create_ds "sw_trig_buf_idx" (wrap_tlist' @@ snd_many e) ~e
 
+(*** Polyqueues ***)
+
+(* Receive log for events *)
+let sw_event_poly_queue c =
+  let tags =
+    P.for_all_trigs c.p ~corrective:false ~sys_init:false ~delete:true @@
+      fun t -> P.trigger_id_for_name c.p t, t, wrap_ttuple @@ snd_many @@ P.args_of_t c.p t in
+  let tags = (-1, "sentinel", t_unit)::tags in
+  create_ds "sw_event_poly_queue" @@ wrap_tpolyq tags
+
+(* queues for sending from switch *)
+(* let sw_send_poly_queue c =
+  let tags =
+    ["rcv_push_ds"
+
+  create_ds "sw_send_poly_queue" @@ wrap_tpolyq tags *)
+
+let sw_send_poly_bitmap =
+  let init =
+    mk_map (mk_lambda' unknown_arg mk_cfalse) @@ mk_var my_peers.id in
+  create_ds "sw_send_bitmap" ~init @@ wrap_tvector t_bool
+
 (* name for master send request trigger (part of GC) *)
 let ms_send_gc_req_nm = "ms_send_gc_req"
 
