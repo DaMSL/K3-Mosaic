@@ -391,15 +391,6 @@ let stmt_cnt_list_ship =
   let e = ["stmt_id", t_stmt_id; "count", t_int] in
   create_ds "stmt_cnt_list" ~e @@ wrap_tbag' @@ snd_many e
 
-let clean_stmt_bitmap_id = "clean_stmt_bitmap"
-let clean_stmt_bitmap p =
-  let l = List.length @@ P.get_stmt_list p in
-  let t = wrap_tvector t_bool in
-  let init =
-    k3_container_of_list t @@
-    List.map (const @@ mk_cfalse) @@ create_range @@ l + 1 in
-  create_ds clean_stmt_bitmap_id ~init @@ wrap_tvector t_bool
-
 let send_put_bitmap =
   create_ds "send_put_bitmap" @@ wrap_tvector t_bool
 
@@ -471,7 +462,10 @@ let sw_send_fetch_fn c s_rhs_lhs s_rhs trig_name =
                 (mk_insert_at_block "acc" (mk_var "stmt_ctr") [mk_cint 0])
                 (mk_var stmt_cnt_list.id)
                 "stmt_bitmap") @@
-            mk_tuple [mk_var clean_stmt_bitmap_id; mk_var "agg"])
+            mk_block [
+             mk_set_all "stmt_bitmap" [mk_cfalse];
+             mk_tuple [mk_var "stmt_bitmap"; mk_var "agg"]
+           ])
         send_put_bitmap.id;
       (* clean bitmap *)
       mk_set_all send_put_bitmap.id [mk_cfalse]
@@ -1528,7 +1522,6 @@ let declare_global_vars c partmap ast =
   List.map decl_global
     [send_put_bitmap;
      send_put_ip_map;
-     clean_stmt_bitmap c.p;
      send_fetch_bitmap;
      send_fetch_ip_map
     ]
