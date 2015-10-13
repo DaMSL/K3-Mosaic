@@ -1444,7 +1444,7 @@ let filter_incompatible prog =
 
 (* print a K3 program in syntax *)
 (* We get the typechecking environments so we can do incremental typechecking where needed *)
-let string_of_program ~map_to_fold ~use_filemux ~safe_writes prog (env, trig_env) =
+let string_of_program ?(map_to_fold=false) ?(use_filemux=false) ?(safe_writes=false) prog (env, trig_env) =
   let config = {default_config with env; trig_env; map_to_fold; use_filemux; safe_writes} in
   wrap_f @@ fun () ->
     let l = wrap_hv 0 (lps_list ~sep:"" CutHint (lazy_declaration config |- fst) prog) in
