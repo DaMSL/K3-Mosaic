@@ -132,7 +132,7 @@
 %token MAP ITERATE FILTER FLATTEN
 %token AGGREGATE AGGREGATEV GROUPBYAGGREGATE
 %token SORT RANK SIZE
-%token POLY_ITER POLY_ITER_TAG POLY_FOLD POLY_FOLD_TAG POLY_AT POLY_AT_WITH POLY_APPEND
+%token POLY_ITER POLY_ITER_TAG POLY_FOLD POLY_FOLD_TAG POLY_AT POLY_AT_WITH POLY_INSERT
 
 %token PEEK PEEK_WITH_VID AT AT_WITH MIN_WITH
 
@@ -378,7 +378,7 @@ collection_type :
     | LBRACELT type_expr_tuple RBRACELT { TCollection(TSortedMap, $2) }
     | LBRACECOLON type_expr RBRACECOLON { TCollection(TSortedSet, $2) }
     | LBRACECOLON type_expr_tuple RBRACECOLON { TCollection(TSortedSet, $2) }
-    | LBRACKETQ type_expr_tuple BAR poly_variant_list RBRACKETQ { TCollection(TPoly($4), $2) }
+    | LBRACKETQ poly_variant_list RBRACKETQ { TCollection(TPolyQueue($2), t_unit) }
 ;
 
 int_list_list:
@@ -520,6 +520,7 @@ collection :
     | LBRACELT RBRACELT COLON type_expr           { build_collection [] $4 }
     | LBRACKETLT RBRACKETLT COLON type_expr       { build_collection [] $4 }
     | LBRACKETHASH RBRACKETHASH COLON type_expr   { build_collection [] $4 }
+    | LBRACKETQ RBRACKETQ COLON type_expr         { build_collection [] $4 }
 
     | LBRACE RBRACE error       { print_error "missing type for empty set"}
     | LBRACEBAR RBRACEBAR error { print_error "missing type for empty bag"}
@@ -671,7 +672,7 @@ mutation :
     | DELETE_PREFIX LPAREN anno_expr COMMA tuple RPAREN { mkexpr DeletePrefix [$3; $5] }
     | DELETE_AT LPAREN anno_expr COMMA anno_expr RPAREN { mkexpr DeleteAt [$3; $5] }
     | CLEAR_ALL LPAREN anno_expr RPAREN { mkexpr ClearAll [$3] }
-    | POLY_APPEND LPAREN IDENTIFIER COMMA anno_expr COMMA anno_expr RPAREN { mkexpr (PolyAppend $3) [$5; $7] }
+    | POLY_INSERT LPAREN IDENTIFIER COMMA anno_expr COMMA anno_expr RPAREN { mkexpr (PolyInsert $3) [$5; $7] }
 
     /* Updates must explicitly specify their new/old value as a tuple */
     | UPDATE LPAREN anno_expr COMMA anno_expr COMMA anno_expr RPAREN { mkexpr Update [$3; $5; $7] }

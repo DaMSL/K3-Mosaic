@@ -71,7 +71,10 @@ let string_of_int_list s = String.concat ", " @@ List.map soi s
 let lazy_keyset  s = lazy_bracket @@ lps @@ string_of_int_set s
 let lazy_keylist s = lazy_bracket @@ lps @@ string_of_int_list s
 
-let lazy_collection ?(empty=false) _ ct eval = match ct with
+let rec lazy_poly_variant c l =
+  lps_list ~sep:"; " CutHint (fun (i,s,t) -> lps (soi i) <| lps ", " <| lps s <| lps ", " <| lazy_type c t) l
+
+and lazy_collection ?(empty=false) c ct eval = match ct with
     | TSet    -> lps "{" <| eval <| lps "}"
     | TBag    -> lps "{|" <| eval <| lps "|}"
     | TList   -> lps "[" <| eval <| lps "]"
@@ -82,8 +85,9 @@ let lazy_collection ?(empty=false) _ ct eval = match ct with
     | TVMap _ -> lps "[<" <| eval <| lps ">]"
     | TSortedMap -> lps "{<" <| eval <| lps ">}"
     | TSortedSet -> lps "{:" <| eval <| lps ":}"
+    | TPolyQueue x -> lps "[?" <| lazy_poly_variant c x <| lsp () <| lps "?]"
 
-let rec lazy_base_type c ~in_col ?(no_paren=false) ?(paren_complex=false) t =
+and lazy_base_type c ~in_col ?(no_paren=false) ?(paren_complex=false) t =
   let wrap_complex x = if paren_complex then lps "(" <| x <| lps ")" else x in
   match t with
   | TUnit      -> lps "unit"
@@ -164,6 +168,8 @@ let rec lazy_expr c expr =
     w(le e1) <| sep () <| w(le e2) <| sep () <| w(le e3) in
   let expr_quad ?(sep=sep) (e1,e2,e3,e4) =
     w(le e1) <| sep () <| w(le e2) <| sep () <| w(le e3) <| sep () <| w(le e4) in
+  let expr_5 ?(sep=sep) (e1,e2,e3,e4,e5) =
+    w(le e1) <| sep () <| w(le e2) <| sep () <| w(le e3) <| sep () <| w(le e4) <| sep () <| w(le e5) in
   let expr_6 ?(sep=sep) (e1,e2,e3,e4,e5,e6) =
     w(le e1) <| sep () <| w(le e2) <| sep () <| w(le e3) <| sep () <| w(le e4) <|
     sep () <| w(le e5) <| sep () <| w(le e6) in
@@ -215,7 +221,8 @@ let rec lazy_expr c expr =
   in let wrap e = match U.tag_of_expr expr with
     | Insert | InsertAt | SetAll | Extend | Iterate | Map | Filter | Flatten | Send | Delete | DeleteAt | ClearAll
     | Update | UpdateSuffix | UpsertWith | UpsertWithBefore | DeletePrefix | FilterOp _
-    | Aggregate | AggregateV | GroupByAggregate | Assign | Combine -> wrap_hov 2 e
+    | Aggregate | AggregateV | GroupByAggregate | Assign | Combine
+    | PolyIter | PolyFold | PolyFoldTag _ | PolyIterTag _ | PolyAt _ | PolyAtWith _ | PolyInsert _ -> wrap_hov 2 e
     | _ -> id_fn e
   in let out = match U.tag_of_expr expr with
   | Const con  -> lazy_const c con
@@ -407,6 +414,20 @@ let rec lazy_expr c expr =
   | Send -> let e1, e2, es = U.decompose_send expr in
     wrap_indent (lps "send" <| lazy_paren (expr_pair (e1, e2) <| lps ", " <|
       lps_list CutHint (tuple_no_paren c) es))
+  | PolyIter -> let p = U.decompose_poly_iter expr in
+    lps "poly_iter" <| lazy_paren (expr_pair p)
+  | PolyFold -> let p = U.decompose_poly_fold expr in
+    lps "poly_fold" <| lazy_paren (expr_triple p)
+  | PolyIterTag tag -> let _, e0, e1, e2, e3 = U.decompose_poly_iter_tag expr in
+    lps "poly_iter_tag" <| lazy_paren (lps tag <| lcomma () <| expr_quad (e0, e1, e2, e3))
+  | PolyFoldTag tag -> let _, e0, e1, e2, e3, e4 = U.decompose_poly_fold_tag expr in
+    lps "poly_fold_tag" <| lazy_paren (lps tag <| lcomma () <| expr_5(e0,e1,e2,e3,e4))
+  | PolyAt tag -> let _, e0, e1, e2 = U.decompose_poly_at expr in
+    lps "poly_at" <| lazy_paren (lps tag <| lcomma () <| expr_triple(e0,e1,e2))
+  | PolyAtWith tag -> let _, e0, e1, e2, e3, e4 = U.decompose_poly_at_with expr in
+    lps "poly_at_with" <| lazy_paren (lps tag <| lcomma () <| expr_5(e0,e1,e2,e3,e4))
+  | PolyInsert tag -> let _, e0, e1 = U.decompose_poly_insert expr in
+    lps "poly_insert" <| lazy_paren (lps tag <| lcomma () <| expr_pair(e0, e1))
   in
   let out = wrap out in
   (* check for annotations *)

@@ -117,6 +117,15 @@ let check_tag_arity tag children =
     | Indirect -> 1
 
     | Send -> 3
+
+    | PolyIter -> 2
+    | PolyIterTag _ -> 4
+    | PolyFold -> 3
+    | PolyFoldTag _ -> 5
+    | PolyAt _ -> 3
+    | PolyAtWith _ -> 5
+    | PolyInsert _ -> 2
+
   in length = correct_arity
 
 (* similar to haskell's infix `function` *)
@@ -286,11 +295,6 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
     untyped_children
   in
   let attach_type t = mk_tree (((uuid, tag), Type t::aux), typed_children) in
-
-  let is_tvmap = function TVMap _ -> true | _ -> false in
-  let is_tvector = function TVector -> true | _ -> false in
-  let is_tsorted = function TSortedSet | TSortedMap | TVMap _ -> true | _ -> false in
-  let is_tmap = function TVMap _ | TSortedMap | TMap -> true | _ -> false in
 
   let bind n = type_of_expr @@ List.nth typed_children n in
 
@@ -801,11 +805,128 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
               | TTarget t -> t
               | _         -> t_erroru (TBad(target, "not a target"))
           in
-          match taddr.typ with
+          begin match taddr.typ with
           | TAddress ->
               if ttarget === targs then t_unit
               else t_erroru (TMismatch(ttarget, targs, ""))
           | _ -> t_erroru (TBad(taddr, "not an address"))
+          end
+
+      | PolyIter ->
+          let tfun, tcol' = bind 0, bind 1 in
+          let targ, tret =
+            try unwrap_tfun tfun with Failure _ -> t_erroru (not_function tfun) in
+          let tcol, _ =
+            try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') in
+          if not @@ is_tpolyq tcol then t_erroru @@ TBad(tcol', "not a polyqueue") else
+          let targ' = [t_int; t_int; t_int] in
+          if not @@ list_forall2 (<~) targ targ' then
+            t_erroru @@ TMismatch(wrap_ttuple targ, wrap_ttuple targ', "args") else
+          if not (tret === t_unit)
+            then t_erroru (TMismatch(tret, t_unit, "return val")) else
+          t_unit
+
+      | PolyFold ->
+          let tfun, tacc, tcol' = bind 0, bind 1, bind 2 in
+          let targ, tret =
+            try unwrap_tfun tfun with Failure _ -> t_erroru (not_function tfun) in
+          let tcol, _ =
+            try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') in
+          if not @@ is_tpolyq tcol then t_erroru @@ TBad(tcol', "not a polyqueue") else
+          let targ' = [tacc; t_int; t_int; t_int] in
+          if not @@ list_forall2 (<~) targ targ' then
+            t_erroru @@ TMismatch(wrap_ttuple targ, wrap_ttuple targ', "args") else
+          if not (tret === tacc)
+            then t_erroru (TMismatch(tret, tacc, "return val")) else
+          tret
+
+      | PolyIterTag tag ->
+          let tidx, toffset, tfun, tcol' = bind 0, bind 1, bind 2, bind 3 in
+          if not (tidx === t_int) then t_erroru @@ TMismatch(tidx, t_int, "index") else
+          if not (toffset === t_int) then t_erroru @@ TMismatch(toffset, t_int, "offset") else
+          let targ, tret =
+            try unwrap_tfun tfun with Failure _ -> t_erroru (not_function tfun) in
+          let tcol, _ =
+            try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') in
+          begin match get_tpolyq_tags tcol with
+          | None      -> t_erroru @@ TBad(tcol', "not a polyqueue")
+          | Some tags ->
+              let t_tag = thd3 @@ List.find (fun (_,s,_) -> (s:string) = tag) tags in
+              let targ' = [t_int; t_int; t_tag] in
+              if not @@ list_forall2 (<~) targ targ' then
+                t_erroru @@ TMismatch(wrap_ttuple targ, wrap_ttuple targ', "args") else
+              if not (tret === t_unit)
+                then t_erroru (TMismatch(tret, t_unit, "return val")) else
+              t_unit
+          end
+
+      | PolyFoldTag tag ->
+          let tidx, toffset, tfun, tacc, tcol' = bind 0, bind 1, bind 2, bind 3, bind 4 in
+          if not (tidx === t_int) then t_erroru @@ TMismatch(tidx, t_int, "index") else
+          if not (toffset === t_int) then t_erroru @@ TMismatch(toffset, t_int, "offset") else
+          let targ, tret =
+            try unwrap_tfun tfun with Failure _ -> t_erroru (not_function tfun) in
+          let tcol, _ =
+            try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') in
+          begin match get_tpolyq_tags tcol with
+          | None      -> t_erroru @@ TBad(tcol', "not a polyqueue")
+          | Some tags ->
+              let t_tag = thd3 @@ List.find (fun (_,s,_) -> (s:string) = tag) tags in
+              let targ' = [tacc; t_int; t_int; t_tag] in
+              if not @@ list_forall2 (<~) targ targ' then
+                t_erroru @@ TMismatch(wrap_ttuple targ, wrap_ttuple targ', "args") else
+              if not (tret === tacc)
+                then t_erroru (TMismatch(tret, tacc, "return val")) else
+              tacc
+          end
+
+      | PolyAt tag ->
+          let tcol', tidx, toffset = bind 0, bind 1, bind 2 in
+          if not (tidx === t_int) then t_erroru @@ TMismatch(tidx, t_int, "index") else
+          if not (toffset === t_int) then t_erroru @@ TMismatch(toffset, t_int, "offset") else
+          let tcol, _ =
+            try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') in
+          begin match get_tpolyq_tags tcol with
+          | None      -> t_erroru @@ TBad(tcol', "not a polyqueue")
+          | Some tags ->
+              let t_tag = thd3 @@ List.find (fun (_,s,_) -> (s:string) = tag) tags in
+              t_tag
+          end
+
+      | PolyAtWith tag ->
+          let tcol', tidx, toffset, tlam_none, tlam_some = bind 0, bind 1, bind 2, bind 3, bind 4 in
+          if not (tidx === t_int) then t_erroru @@ TMismatch(tidx, t_int, "index") else
+          if not (toffset === t_int) then t_erroru @@ TMismatch(toffset, t_int, "offset") else
+          let tcol, _ =
+            try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') in
+          let tn_arg, tn_ret =
+            try unwrap_tfun tlam_none with Failure _ -> t_erroru (not_function tlam_none) in
+          let ts_arg, ts_ret =
+            try unwrap_tfun tlam_some with Failure _ -> t_erroru (not_function tlam_some) in
+          if not (tn_ret === ts_ret) then
+            t_erroru (TMismatch(tn_ret, ts_ret, "function return types")) else
+          if not (list_forall2 (<~) tn_arg [t_unit]) then
+            t_erroru (TMismatch(wrap_ttuple tn_arg, t_unit, "none lambda")) else
+          begin match get_tpolyq_tags tcol with
+          | None      -> t_erroru @@ TBad(tcol', "not a polyqueue")
+          | Some tags ->
+              let t_tag = thd3 @@ List.find (fun (_,s,_) -> (s:string) = tag) tags in
+              if not (list_forall2 (<~) ts_arg [t_tag]) then
+                t_erroru (TMismatch(wrap_ttuple ts_arg, t_tag, "some lambda")) else
+              ts_ret
+          end
+
+      | PolyInsert tag ->
+          let tcol', telem = bind 0, bind 1 in
+          let tcol, _ =
+            try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') in
+          begin match get_tpolyq_tags tcol with
+          | None      -> t_erroru @@ TBad(tcol', "not a polyqueue")
+          | Some tags ->
+              let t_tag = thd3 @@ List.find (fun (_,s,_) -> (s:string) = tag) tags in
+              if not (telem === t_tag) then t_erroru @@ TMismatch(telem, t_tag, "element") else
+              t_unit
+          end
 
   in
   begin try

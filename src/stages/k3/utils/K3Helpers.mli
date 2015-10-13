@@ -278,8 +278,17 @@ val mk_assoc_lambda : arg_t -> arg_t -> expr_t -> expr_t
 (* same macro, but auto-calls wrap_args *)
 val mk_assoc_lambda' : (id_t * type_t) list -> (id_t * type_t) list -> expr_t -> expr_t
 
-(* macro to create a regular functional let structure *)
+(* let structure *)
 val mk_let : id_t list -> expr_t -> expr_t -> expr_t
+
+(* polyqueue functions *)
+val mk_poly_iter: expr_t -> expr_t -> expr_t
+val mk_poly_fold: expr_t -> expr_t -> expr_t -> expr_t
+val mk_poly_iter_tag: string -> expr_t -> expr_t -> expr_t -> expr_t -> expr_t
+val mk_poly_fold_tag: string -> expr_t -> expr_t -> expr_t -> expr_t -> expr_t -> expr_t
+val mk_poly_at: string -> expr_t -> expr_t -> expr_t -> expr_t
+val mk_poly_at_with: string -> expr_t -> expr_t -> expr_t -> expr_t -> expr_t -> expr_t
+val mk_poly_insert: string -> expr_t -> expr_t -> expr_t
 
 (* macro similar to fst *)
 val mk_fst: expr_t -> expr_t

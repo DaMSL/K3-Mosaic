@@ -162,6 +162,21 @@ let decompose_peek e = match tag_of_expr e, sub_tree e with
   Peek, [e0] -> e0 | _ -> failwith "not a Peek"
 let decompose_peek_with_vid e = match tag_of_expr e, sub_tree e with
   PeekWithVid, [e0; e1; e2] -> e0, e1, e2 | _ -> failwith "not a PeekWithVid"
+let decompose_poly_iter e = match tag_of_expr e, sub_tree e with
+  PolyIter, [e0; e1] -> e0, e1 | _ -> failwith "not a PolyIter"
+let decompose_poly_fold e = match tag_of_expr e, sub_tree e with
+  PolyFold, [e0; e1; e2] -> e0, e1, e2 | _ -> failwith "not a PolyFold"
+let decompose_poly_iter_tag e = match tag_of_expr e, sub_tree e with
+  PolyIterTag x, [e0; e1; e2; e3] -> x, e0, e1, e2, e3 | _ -> failwith "not a PolyIterTag"
+let decompose_poly_fold_tag e = match tag_of_expr e, sub_tree e with
+  PolyFoldTag x, [e0; e1; e2; e3; e4] -> x, e0, e1, e2, e3, e4 | _ -> failwith "not a PolyFoldTag"
+let decompose_poly_at e = match tag_of_expr e, sub_tree e with
+  PolyAt x, [e0; e1; e2] -> x, e0, e1, e2 | _ -> failwith "not a PolyAt"
+let decompose_poly_at_with e = match tag_of_expr e, sub_tree e with
+  PolyAtWith x, [e0; e1; e2; e3; e4] -> x, e0, e1, e2, e3, e4 | _ -> failwith "not a PolyAtWith"
+let decompose_poly_insert e = match tag_of_expr e, sub_tree e with
+  PolyInsert x, [e0; e1] -> x, e0, e1 | _ -> failwith "not a PolyInsert"
+
 let decompose_range e = match tag_of_expr e, sub_tree e with
   Range _, [e0; e1; e2] -> e0, e1, e2 | _ -> failwith "not a Range"
 let decompose_send e =
@@ -452,4 +467,11 @@ let fold_over_exprs f zero p =
     | Global(_, _, Some e) -> f acc e
     | _                    -> acc
   ) zero p
+
+let is_tvmap = function TVMap _ -> true | _ -> false
+let is_tvector = function TVector -> true | _ -> false
+let is_tsorted = function TSortedSet | TSortedMap | TVMap _ -> true | _ -> false
+let is_tmap = function TVMap _ | TSortedMap | TMap -> true | _ -> false
+let is_tpolyq = function TPolyQueue _ -> true | _ -> false
+let get_tpolyq_tags = function TPolyQueue t -> Some t | _ -> None
 

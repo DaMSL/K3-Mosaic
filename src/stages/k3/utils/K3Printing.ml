@@ -42,6 +42,11 @@ let string_of_address_and_role (addr, role_opt, alias_opt) =
 
 let wrap_brackets s = "["^s^"]"
 
+let string_of_type = ref (fun _ -> "")
+
+let string_of_poly_variant l =
+  strcatmap ~sep:"; " (fun (i,s,t) -> sp "%d, %s, %s" i s @@ !string_of_type t) l
+
 let string_of_container_type t_c = match t_c with
     | TSet          -> "TSet"
     | TBag          -> "TBag"
@@ -52,6 +57,7 @@ let string_of_container_type t_c = match t_c with
     | TVMap None    -> "TVMap"
     | TSortedMap    -> "TSortedMap"
     | TSortedSet    -> "TSortedSet"
+    | TPolyQueue x  -> sp "TPolyQueue(%s)" (string_of_poly_variant x)
 
 let string_of_const cn = match cn with
     | CUnit          -> "CUnit"
@@ -143,6 +149,14 @@ let string_of_tag_type = function
 
     | Send             -> "Send"
 
+    | PolyIter         -> "PolyIter"
+    | PolyIterTag s    -> "PolyIterTag("^s^")"
+    | PolyFold         -> "PolyFold"
+    | PolyFoldTag s    -> "PolyFoldTag("^s^")"
+    | PolyAt s         -> "PolyAt("^s^")"
+    | PolyAtWith s     -> "PolyAtWith("^s^")"
+    | PolyInsert s     -> "PolyInsert("^s^")"
+
 
 let sott tag = string_of_tag_type tag
 
@@ -179,6 +193,8 @@ let rec flat_string_of_base_type t = match t with
 and flat_string_of_type t =
   let mut x = if t.mut then "TMutable("^x^")" else x in
   mut @@ flat_string_of_base_type t.typ
+
+let _ = string_of_type := flat_string_of_type
 
 let rec flat_string_of_arg a = match a with
     | AIgnored     -> tag_str "AIgnored" []

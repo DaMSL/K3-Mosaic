@@ -217,7 +217,7 @@ rule tokenize = parse
     | "poly_fold_tag" { POLY_FOLD_TAG }
     | "poly_at" { POLY_AT }
     | "poly_at_with" { POLY_AT_WITH }
-    | "poly_append" { POLY_APPEND }
+    | "poly_insert" { POLY_INSERT }
 
 
     | '@' { ANNOTATE }

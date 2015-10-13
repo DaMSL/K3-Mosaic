@@ -422,6 +422,21 @@ let mk_send_raw target addr args = mk_stree Send [target; addr; args]
 let mk_let var_ids tuple_val expr =
   mk_stree (Let(var_ids)) [tuple_val; expr]
 
+(* Polyqueue functions *)
+
+(* lambda for these functions takes tag, tuple_idx, tuple_offset *)
+let mk_poly_iter lam col = mk_stree PolyIter [lam; col]
+let mk_poly_fold lam zero col = mk_stree PolyFold [lam; zero; col]
+
+(* lambda for these functions takes tuple_idx, tuple_offset, elem *)
+let mk_poly_iter_tag tag idx offset lam col = mk_stree (PolyIterTag tag) [idx; offset; lam; col]
+let mk_poly_fold_tag tag idx offset lam zero col = mk_stree (PolyFoldTag tag) [idx; offset; lam; zero; col]
+
+let mk_poly_at tag col idx offset = mk_stree (PolyAt tag) [col; idx; offset]
+let mk_poly_at_with tag col idx offset lam lam_none = mk_stree (PolyAtWith tag) [col; idx; offset; lam; lam_none]
+
+let mk_poly_insert tag col elem = mk_stree (PolyInsert tag) [col; elem]
+
 (* ----- Converting between ocaml lists and k3 containers ----- *)
 
 let rec list_of_k3_container e =

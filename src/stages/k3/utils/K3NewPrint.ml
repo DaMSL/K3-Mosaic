@@ -173,6 +173,12 @@ and lazy_mape c elem_t =
       lps "value=[:> value=>" <| lazy_type c v <| lps "]")
   | _ -> error ()
 
+and lazy_poly_tags c tags =
+  lps "variants=[:#>" <| lsp () <|
+  lps_list CutHint (fun (i,s,t) ->
+      lps s <| lps " => " <| lazy_type c t <| lps " : " <| lps (soi i)) tags <|
+  lps "]"
+
 and lazy_col c col_t elem_t = match col_t with
   | TSet        -> lps "{Set}"
   | TBag        -> lps "{Collection}"
@@ -183,6 +189,7 @@ and lazy_col c col_t elem_t = match col_t with
   | TVMap(Some ss) -> lazy_multi_index c ss elem_t
   | TSortedMap  -> lps "{SortedMapE" <| lazy_mape c elem_t <| lps "}"
   | TSortedSet  -> lps "{SortedSet}"
+  | TPolyQueue tag -> lps "{FlatPolyBuffer" <| lazy_paren (lazy_poly_tags c tag) <| lps "}"
 
 and lazy_base_type ?(brace=true) ?(mut=false) ?(empty=false) c ~in_col t =
   let wrap_mut f = if mut && not empty then lps "mut " <| f else f in
@@ -1326,6 +1333,21 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
   | Send -> let target, addr, args = U.decompose_send expr in
     wrap_indent @@ lazy_paren (expr_pair (target, addr)) <| lps "<- " <|
       lps_list CutHint (lazy_expr c) args
+
+  | PolyIter -> let fn, col = U.decompose_poly_iter expr in
+    apply_method c ~name:"iterate" ~col ~args:[fn] ~arg_info:[def_a]
+  | PolyFold -> let fn, acc, col = U.decompose_poly_fold expr in
+    apply_method c ~name:"foldl" ~col ~args:[fn; acc] ~arg_info:[def_a; def_a]
+  | PolyIterTag tag -> let _, idx, offset, fn, col = U.decompose_poly_iter_tag expr in
+    apply_method c ~name:("iterate_"^tag) ~col ~args:[idx; offset; fn] ~arg_info:[def_a; def_a; [2], false]
+  | PolyFoldTag tag -> let _, idx, offset, fn, acc, col = U.decompose_poly_fold_tag expr in
+    apply_method c ~name:("foldl_"^tag) ~col ~args:[idx; offset; fn; acc] ~arg_info:[def_a; def_a; [3], false; def_a]
+  | PolyAt tag -> let _, col, idx, offset = U.decompose_poly_at expr in
+    apply_method c ~name:(tag^"_at") ~col ~args:[idx; offset] ~arg_info:[def_a; def_a]
+  | PolyAtWith tag -> let _, col, idx, offset, lam_none, lam_some = U.decompose_poly_at_with expr in
+    apply_method c ~name:(tag^"_safe_at") ~col ~args:[idx; offset; lam_none; lam_some] ~arg_info:[def_a; def_a; def_a; [0], false]
+  | PolyInsert tag -> let _, col, v = U.decompose_poly_insert expr in
+    apply_method c ~name:("append_"^tag) ~col ~args:[col; v] ~arg_info:[def_a; [], true]
   in
   (* check if we need to write a property *)
   let props = U.properties_of_expr expr in

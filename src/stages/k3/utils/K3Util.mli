@@ -81,6 +81,13 @@ val decompose_neg : expr_t -> expr_t
 val decompose_neq : expr_t -> expr_t * expr_t
 val decompose_peek : expr_t -> expr_t
 val decompose_peek_with_vid : expr_t -> expr_t * expr_t * expr_t
+val decompose_poly_iter : expr_t -> expr_t * expr_t
+val decompose_poly_fold : expr_t -> expr_t * expr_t * expr_t
+val decompose_poly_iter_tag : expr_t -> string * expr_t * expr_t * expr_t * expr_t
+val decompose_poly_fold_tag : expr_t -> string * expr_t * expr_t * expr_t * expr_t * expr_t
+val decompose_poly_at : expr_t -> string * expr_t * expr_t * expr_t
+val decompose_poly_at_with : expr_t -> string * expr_t * expr_t * expr_t * expr_t * expr_t
+val decompose_poly_insert : expr_t -> string * expr_t * expr_t
 val decompose_range : expr_t -> expr_t * expr_t * expr_t
 val decompose_send : expr_t -> expr_t * expr_t * (expr_t list)
 val decompose_set_all : expr_t -> expr_t * expr_t
@@ -195,3 +202,10 @@ val fold_over_exprs : ('a -> expr_t -> 'a) -> 'a -> program_t -> 'a
 val add_property : string -> expr_t -> expr_t
 
 val properties_of_expr : expr_t -> string list
+
+val is_tvmap : container_type_t -> bool
+val is_tvector : container_type_t -> bool
+val is_tsorted : container_type_t -> bool
+val is_tmap : container_type_t -> bool
+val is_tpolyq : container_type_t -> bool
+val get_tpolyq_tags : container_type_t -> poly_tags option
