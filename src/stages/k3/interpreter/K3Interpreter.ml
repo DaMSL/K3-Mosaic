@@ -392,6 +392,16 @@ and eval_expr (address:address) sched_st cenv texpr =
         let f' = eval_fn f address sched_st in
         v_fold error (fun env x -> fst @@ f' env [x]) nenv c, temp VUnit
 
+    | PolyIter, [f; c] ->
+        let f = eval_fn f address sched_st in
+        v_fold_poly error
+          (fun idx (itag, _, _) env -> fst @@ f env [itag; VInt idx; VInt 0]) nenv c, tvunit
+
+    | PolyIterTag tag, [idx; offset; f; c] ->
+        let f = eval_fn f address sched_st in
+        v_fold_poly_tag error idx tag
+          (fun idx (_, _, v) env -> fst @@ f env [VInt idx; VInt 0; v]) nenv c, tvunit
+
     | Map, [f; col] ->
         let f' = eval_fn f address sched_st in
         let zero = v_empty error col in
@@ -438,6 +448,22 @@ and eval_expr (address:address) sched_st cenv texpr =
           )
           (nenv, zero)
           col
+        in renv, VTemp rval
+
+    | PolyFold, [f; zero; c] ->
+        let f = eval_fn f address sched_st in
+        let renv, rval = v_fold_poly error (fun idx (itag, _, _) (env, acc) ->
+          let renv, reval = f env [acc; itag; VInt idx; VInt 0] in
+            renv, value_of_eval reval)
+          (nenv, zero) c
+        in renv, VTemp rval
+
+    | PolyFoldTag tag, [idx; offset; f; zero; c] ->
+        let f = eval_fn f address sched_st in
+        let renv, rval = v_fold_poly_tag error idx tag (fun idx (_, _, v) (env, acc) ->
+          let renv, reval = f env [acc; VInt idx; VInt 0; v] in
+            renv, value_of_eval reval)
+          (nenv, zero) c
         in renv, VTemp rval
 
     | Equijoin, [col1; col2; prj1; prj2; f; zero] ->
@@ -538,14 +564,28 @@ and eval_expr (address:address) sched_st cenv texpr =
           | _ -> error name "peekwithvid: bad value"
         end
 
-    | At, [c; idx] ->
+    | At, [c; idx; _] ->
       begin match v_at error c idx with
         | Some x -> nenv, VTemp x
         | None -> error name "at: out of bounds"
       end
 
+    | PolyAt tag, [c; idx] ->
+      begin match v_at ~tag error c idx with
+        | Some x -> nenv, VTemp x
+        | None -> error name "poly_at: out of bounds"
+      end
+
     | AtWith, [c; idx; lam_none; lam_some] ->
         begin match v_at error c idx with
+          | Some x ->
+              eval_fn lam_some address sched_st nenv [x]
+          | None ->
+              eval_fn lam_none address sched_st nenv [VUnit]
+        end
+
+    | PolyAtWith tag, [c; idx; _; lam_none; lam_some] ->
+        begin match v_at ~tag error c idx with
           | Some x ->
               eval_fn lam_some address sched_st nenv [x]
           | None ->
@@ -579,6 +619,9 @@ and eval_expr (address:address) sched_st cenv texpr =
     (* envronmental modifiers *)
     | Insert, [_; v] ->
         (env_modify (id_path ()) nenv @@ fun col -> v_insert error v col), temp VUnit
+
+    | PolyInsert tag, [_; v] ->
+        (env_modify (id_path ()) nenv @@ fun col -> v_insert error ~tag v col), temp VUnit
 
     | InsertAt, [_; idx; v] ->
         (env_modify (id_path ()) nenv @@ fun col -> v_insert_at error v idx col), temp VUnit

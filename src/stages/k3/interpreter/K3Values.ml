@@ -177,6 +177,8 @@ and Value : sig
       | VSortedMap of value_t ValueMap.t
       | VSortedSet of ValueSSet.t
       | VVMap of value_t ValueVMap.t
+      | VPolyQueue of (value_t * string * value_t) IntMap.t * poly_tags
+                      (* itag, stag, value *)
       | VFunction of arg_t * local_env_t * expr_t (* closure *)
       | VForeignFunction of id_t * arg_t * foreign_func_t
       | VAddress of address
@@ -226,6 +228,7 @@ and ValueUtils : (sig val v_to_list : Value.value_t -> Value.value_t list
       | VSortedMap _       -> "VSortedMap"
       | VSortedSet _       -> "VSortedSet"
       | VVMap _            -> "VVMap"
+      | VPolyQueue _       -> "VPolyQueue"
       | VFunction _        -> "VFunction"
       | VForeignFunction _ -> "VForeignFunction"
       | VAddress _         -> "VAddress"
@@ -273,6 +276,7 @@ let rec v_col_of_t ?elem t_col = match t_col with
   | TVMap _     -> VVMap(ValueVMap.empty)
   | TSortedMap  -> VSortedMap(ValueMap.empty)
   | TSortedSet  -> VSortedSet(ValueSSet.empty)
+  | TPolyQueue tags -> VPolyQueue(IntMap.empty, tags)
 
 and v_of_t ?id t = match t.typ with
   | TTop | TUnknown  -> VUnknown
@@ -375,6 +379,7 @@ let rec print_value ?(mark_points=[]) v =
     | VSortedMap _ as vs      -> print_collection ~sort "{<" ">}" vs
     | VSortedSet _ as vs      -> print_collection ~sort "{:" ":}" vs
     | VVMap _ as vs           -> print_collection ~sort "[<" ">]" vs
+    | VPolyQueue _ as vs      -> print_collection "[?" "?]" vs
     | VFunction _             -> ps "<fun>"
     | VForeignFunction (_, a, _) -> ps "<foreignfun>"
     | VAddress (ip,port)      -> ps (ip^":"^ string_of_int port)
@@ -417,12 +422,20 @@ let v_peek ?(vid=false) err_fn c = match c with
   | VVMap m -> maybe None (fun (t,k,v) -> some @@ if vid then VTuple[t;k;v] else VTuple[k;v]) @@ ValueVMap.peek m
   | v -> err_fn "v_peek" @@ sp "not a collection: %s" @@ sov v
 
-let v_at ?(extend=false) err_fn c idx = match c, idx with
+let v_at ?(extend=false) ?tag err_fn c idx = match c, idx with
   | VVector(m,sz,t), VInt i ->
       begin try some @@ IntMap.find i m
       with Not_found -> if (i >= 0 && i < sz) || extend then some t else None end
   | VVector _, v -> err_fn "v_at" @@ sp "not an integer: %s" @@ sov v
-  | v, _ -> err_fn "v_at" @@ sp "not a vector: %s" @@ sov v
+  | VPolyQueue(m,_), VInt i ->
+    begin try
+      let (_,stag,v) = IntMap.find i m in
+      let tag = unwrap_some tag in
+      if stag = tag then some v
+      else err_fn "v_at" @@ sp "wrong tag in polyqueue: asked %s, got %s" tag stag
+    with Not_found -> None end
+
+  | v, i -> err_fn "v_at" @@ sp "improper data: %s, %s" (sov v) (sov i)
 
 let v_min err_fn c = match c with
   | VSortedMap m ->
@@ -538,6 +551,21 @@ let v_fold err_fn f acc = function
   | VVMap m        -> ValueVMap.fold_all (fun _ k v acc -> f acc @@ VTuple[k;v]) m acc
   | v -> err_fn "v_fold" @@ sp "not a collection: %s" @@ sov v
 
+let v_fold_poly err_fn f acc = function
+  | VPolyQueue(m, _) -> IntMap.fold f m acc
+  | v -> err_fn "v_fold_poly" @@ sp "not a polyqueue: %s" @@ sov v
+
+let v_fold_poly_tag err_fn idx tag f acc m = match m, idx with
+  | VPolyQueue(m, _), VInt(idx) ->
+    let rec loop acc i =
+      let v = IntMap.find i m in
+      if snd3 v = tag then loop (f i v acc) (i + 1)
+      else acc
+    in
+    loop acc idx
+
+  | v, _ -> err_fn "v_fold_poly" @@ sp "not a polyqueue: %s" @@ sov v
+
 let v_set_all err_fn v = function
   | VVector(m,sz,def) ->
       (* use the sparseness if we're resetting to the empty value *)
@@ -584,7 +612,7 @@ let v_iter err_fn f = function
   | VVMap m     -> ValueVMap.iter (fun _ k v -> f @@ VTuple[k;v]) m
   | v -> err_fn "v_iter" @@ sp "not a collection: %s" @@ string_of_value v
 
-let v_insert ?vidkey err_fn x m =
+let v_insert ?vidkey ?tag err_fn x m =
   let error v c = err_fn "v_insert" @@
     sp "invalid input: insert: %s\ninto: %s" (sov v) (sov c)
   in
@@ -603,6 +631,12 @@ let v_insert ?vidkey err_fn x m =
       | Some(VTuple(t::_)) -> VVMap(ValueVMap.add t k v m)
       | _                  -> error v' c'
       end
+  | _, VPolyQueue(m, tags)  ->
+    let tag = unwrap_some tag in
+    let itag = fst3 @@ List.find (fun (i,s,_) -> (s:string) = tag) tags in
+    let max_idx = fst @@ IntMap.max_binding m in
+    VPolyQueue(IntMap.add (max_idx + 1) (VInt itag, tag, x) m, tags)
+
   | v, c                   -> error v c
 
 let v_insert_at err_fn x i m = match m, i with
@@ -819,11 +853,13 @@ let rec type_of_value uuid value =
   | VSortedMap _       -> wrap_tsortedmap @@ col_get ()
   | VSortedSet _       -> wrap_tsortedset @@ col_get ()
   | VVMap _            -> wrap_tvmap @@ col_get ()
+  | VPolyQueue(_,tag)  -> wrap_tpolyq tag
   | VIndirect ind      -> type_of_value uuid !ind
   | VFunction _
   | VForeignFunction _ -> raise (RuntimeError (uuid, "type_of_value: cannot apply to function"))
   | VMax | VMin        -> raise (RuntimeError (uuid, "type_of_value: cannot apply to vmax/vmin"))
 
+(*
 let rec expr_of_value uuid value =
   let handle_cols vs =
     let l = List.map (expr_of_value uuid) @@ ValueUtils.v_to_list vs in
@@ -849,4 +885,4 @@ let rec expr_of_value uuid value =
       "expr_of_value: cannot apply to function")
   | VMax | VMin -> raise @@ RuntimeError (uuid,
       "expr_of_value: cannot apply to vmax/vmin")
-
+*)

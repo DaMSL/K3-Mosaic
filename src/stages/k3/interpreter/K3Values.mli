@@ -60,6 +60,8 @@ and Value : sig
       | VSortedMap of value_t ValueMap.t
       | VSortedSet of ValueSSet.t
       | VVMap of value_t ValueVMap.t
+      | VPolyQueue of (value_t * string * value_t) IntMap.t * poly_tags
+                      (* itag, stag, value *)
       | VFunction of arg_t * local_env_t * expr_t (* closure *)
       | VForeignFunction of id_t * arg_t * foreign_func_t
       | VAddress of address
@@ -107,7 +109,7 @@ val string_of_env : ?skip_functions:bool ->
 val value_of_const : constant_t -> value_t
 val value_of_const_expr : expr_t -> value_t
 val type_of_value : int -> value_t -> type_t
-val expr_of_value : int -> value_t -> expr_t
+(* val expr_of_value : int -> value_t -> expr_t *)
 val is_vmap : value_t -> bool
 val strip_vid : value_t -> value_t
 
@@ -118,9 +120,11 @@ val v_combine : value_t t_err_fn -> value_t -> value_t -> value_t
 val v_fold : 'a t_err_fn -> ('a -> value_t -> 'a) -> 'a -> value_t -> 'a
 val v_fold_v : value_t -> 'a t_err_fn -> ('a -> value_t -> 'a) -> 'a -> value_t -> 'a
 val v_fold_all : 'a t_err_fn -> ('a -> value_t -> value_t -> 'a) -> 'a -> value_t -> 'a
+val v_fold_poly : 'a t_err_fn -> (int -> value_t * string * value_t -> 'a -> 'a) -> 'a -> value_t -> 'a
+val v_fold_poly_tag : 'a t_err_fn -> value_t -> string -> (int -> value_t * string * value_t -> 'a -> 'a) -> 'a -> value_t -> 'a
 val v_set_all : value_t t_err_fn -> value_t -> value_t -> value_t
 val v_iter : unit t_err_fn -> (value_t -> unit) -> value_t -> unit
-val v_insert : ?vidkey:value_t -> value_t t_err_fn -> value_t -> value_t -> value_t
+val v_insert : ?vidkey:value_t -> ?tag:string -> value_t t_err_fn -> value_t -> value_t -> value_t
 val v_insert_at : value_t t_err_fn -> value_t -> value_t -> value_t -> value_t
 val v_delete : value_t t_err_fn -> value_t -> value_t -> value_t
 val v_delete_prefix : value_t t_err_fn -> value_t -> value_t -> value_t
@@ -136,6 +140,6 @@ val v_singleton : value_t t_err_fn -> value_t -> container_type_t -> type_t -> v
 val v_slice : value_t t_err_fn -> value_t -> value_t -> value_t
 val v_slice_op : [`LT|`LEQ|`GT|`GEQ|`EQ] -> value_t t_err_fn -> value_t -> value_t -> value_t
 val v_filter_op : value_t t_err_fn -> [`LT|`LEQ|`GT|`GEQ|`EQ] -> value_t -> value_t -> value_t
-val v_at : ?extend:bool -> value_t option t_err_fn -> value_t -> value_t -> value_t option
+val v_at : ?extend:bool -> ?tag:string -> value_t option t_err_fn -> value_t -> value_t -> value_t option
 val v_min : value_t option t_err_fn -> value_t -> value_t option
 val v_is_empty : value_t t_err_fn -> value_t -> value_t

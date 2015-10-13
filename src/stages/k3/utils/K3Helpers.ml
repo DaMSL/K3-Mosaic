@@ -64,10 +64,6 @@ let wrap_tmap' = function
   | [k; v] -> wrap_tmap @@ wrap_ttuple [k; v]
   | _      -> failwith "wrap_tmap': wrong number of arguments"
 
-(* wrap a type in a vmap *)
-let wrap_tvmap ?idx typ = wrap_tcol (TVMap idx) typ
-let wrap_tvmap' ?idx tl = wrap_tvmap ?idx @@ wrap_ttuple tl
-
 (* wrap a type in a sorted map *)
 let wrap_tsortedmap typ = wrap_tcol TSortedMap typ
 let wrap_tsortedmap' = function
@@ -84,6 +80,9 @@ let wrap_tvector' t = wrap_tvector (wrap_ttuple t)
 (* wrap a type in a vmap *)
 let wrap_tvmap ?idx typ = wrap_tcol (TVMap idx) typ
 let wrap_tvmap' ?idx tl = wrap_tvmap ?idx @@ wrap_ttuple tl
+
+(* create polyq *)
+let wrap_tpolyq tags = wrap_tcol (TPolyQueue tags) t_unit
 
 (* what the generic type of data carried around is *)
 let wrap_t_calc  = wrap_tvector
@@ -433,7 +432,7 @@ let mk_poly_iter_tag tag idx offset lam col = mk_stree (PolyIterTag tag) [idx; o
 let mk_poly_fold_tag tag idx offset lam zero col = mk_stree (PolyFoldTag tag) [idx; offset; lam; zero; col]
 
 let mk_poly_at tag col idx offset = mk_stree (PolyAt tag) [col; idx; offset]
-let mk_poly_at_with tag col idx offset lam lam_none = mk_stree (PolyAtWith tag) [col; idx; offset; lam; lam_none]
+let mk_poly_at_with tag col idx offset lam_none lam = mk_stree (PolyAtWith tag) [col; idx; offset; lam_none; lam]
 
 let mk_poly_insert tag col elem = mk_stree (PolyInsert tag) [col; elem]
 
