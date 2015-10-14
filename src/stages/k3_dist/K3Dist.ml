@@ -93,6 +93,8 @@ type config = {
   map_indices: (map_id_t, int * IntSetSet.t) Hashtbl.t;
   (* map bind indices for route memoization *)
   route_indices: (map_id_t, int IntSetMap.t) Hashtbl.t;
+  (* poly tag map for batching. Returns id, type *)
+  poly_tags : (string, int * type_t) Hashtbl.t;
 }
 
 let default_config = {
@@ -108,6 +110,7 @@ let default_config = {
   unused_trig_args = StrMap.empty;
   map_indices = Hashtbl.create 10;
   route_indices = Hashtbl.create 10;
+  poly_tags = Hashtbl.create 100;
 }
 
 let get_map_indices c map_id =
@@ -666,40 +669,6 @@ let sw_trig_buf_idx =
   let e = ["trig_id", t_int] in
   create_ds "sw_trig_buf_idx" (wrap_tlist' @@ snd_many e) ~e
 
-(*** Polyqueues ***)
-
-(* Receive log for events *)
-let sw_event_poly_queue c =
-  let tags =
-    P.for_all_trigs c.p ~corrective:false ~sys_init:false ~delete:true @@
-      fun t -> P.trigger_id_for_name c.p t, t, wrap_ttuple @@ snd_many @@ P.args_of_t c.p t in
-  let tags = (-1, "sentinel", t_unit)::tags in
-  create_ds "sw_event_poly_queue" @@ wrap_tpolyq tags
-
-(* queues for sending from switch *)
-(* let sw_send_poly_queue c =
-  let tags =
-    ["rcv_push_ds"
-
-  create_ds "sw_send_poly_queue" @@ wrap_tpolyq tags *)
-
-let sw_send_poly_bitmap =
-  let init =
-    mk_map (mk_lambda' unknown_arg mk_cfalse) @@ mk_var my_peers.id in
-  create_ds "sw_send_bitmap" ~init @@ wrap_tvector t_bool
-
-(* name for master send request trigger (part of GC) *)
-let ms_send_gc_req_nm = "ms_send_gc_req"
-
-let nd_add_delta_to_buf_nm c map_id =
-  let t = P.map_types_for c.p map_id in
-  let s = maybe "" (soi |- fst) @@ get_map_indices c map_id in
-  Printf.sprintf "nd_add_delta_to_%s%s"
-    (String.concat "_" @@ List.map K3PrintSyntax.string_of_type t) s
-
-let flatten_fn_nm t =
-  "flatten_"^strcatmap ~sep:"_" K3PrintSyntax.string_of_type t
-
 (*** trigger names ***)
 let send_fetch_name_of_t trig_nm = "sw_"^trig_nm^"_send_fetch"
 let rcv_fetch_name_of_t trig_nm = "nd_"^trig_nm^"_rcv_fetch"
@@ -716,6 +685,96 @@ let rcv_corrective_name_of_t c trig_nm stmt_id map_id =
   trig_nm^"_rcv_corrective_s"^string_of_int stmt_id^"_m_"^P.map_name_of c.p map_id
 let do_corrective_name_of_t c trig_nm stmt_id map_id =
   trig_nm^"_do_corrective_s"^string_of_int stmt_id^"_m_"^P.map_name_of c.p map_id
+
+(*** trigger args. Needed here for polyqueues ***)
+
+(* rcv_put: how the stmt_cnt list gets sent in rcv_put *)
+let stmt_cnt_list_ship =
+  let e = ["stmt_id", t_stmt_id; "count", t_int] in
+  create_ds "stmt_cnt_list" ~e @@ wrap_tbag' @@ snd_many e
+
+(* rcv_put includes stmt_cnt_list_ship *)
+let nd_rcv_put_args c t = ("sender_ip", t_int)::args_of_t_with_v c t
+
+(* rcv_fetch: data structure that is send *)
+let stmt_map_ids =
+  (* this is a bag since no aggregation is done *)
+  let e = ["stmt_id", t_stmt_id; "map_id", t_map_id] in
+  create_ds ~e "stmt_map_ids" @@ wrap_tbag' @@ snd_many e
+
+(* also includes stmt_map_ids *)
+let nd_rcv_fetch_args c t = args_of_t_with_v c t
+
+let nd_do_complete_args c t =
+  ["sender_ip", t_int; "ack", t_bool] @ args_of_t_with_v c t
+
+let nd_rcv_push_args c t =
+  ("has_data", t_bool)::args_of_t_with_v c t
+
+let nd_rcv_corr_args =
+  ["orig_addr", t_addr; "orig_stmt_id", t_stmt_id; "orig_vid", t_vid; "hop", t_int; "vid", t_vid]
+
+(*** Polyqueues ***)
+
+(* we create one global tag hashmap, which we use to populate polyqueues *)
+let global_poly_tags c =
+  let l =
+    let for_all_trigs = P.for_all_trigs ~delete:c.gen_deletes in
+    let strip x = wrap_ttuple @@ snd_many x in
+    (* for rcv_push, static sentinel *)
+    ("sentinel", t_unit)::
+    (* event tags *)
+    (P.for_all_trigs c.p ~sys_init:false @@ fun t -> t, strip @@ P.args_of_t c.p t) @
+    (* static ds for sw->nd triggers *)
+    ["nd_rcv_put_ds", strip stmt_cnt_list_ship.e;
+    "nd_rcv_fetch_ds", strip stmt_map_ids.e] @
+    (List.flatten @@ for_all_trigs c.p ~sys_init:true @@ fun t ->
+      let s_rhs = P.s_and_over_stmts_in_t c.p P.rhs_maps_of_stmt t in
+      let s_rhs_corr = List.filter (fun (s, map) -> List.mem map c.corr_maps) s_rhs in
+      [rcv_put_name_of_t t, strip @@ nd_rcv_put_args c t;
+      rcv_fetch_name_of_t t, strip @@ nd_rcv_fetch_args c t] @
+      (List.map (fun s ->
+        do_complete_name_of_t t s, strip @@ nd_do_complete_args c t) @@
+        P.stmts_without_rhs_maps_in_t c.p t) @
+      (* the types for nd_rcv_push *)
+      (List.map (fun (s, m) ->
+        rcv_push_name_of_t c t s m, strip @@ nd_rcv_push_args c t)
+        s_rhs) @
+      (* rcv_corrective types *)
+      (List.map (fun (s, m) ->
+          rcv_corrective_name_of_t c t s m, strip @@ nd_rcv_corr_args)
+        s_rhs_corr)) @
+    (* the types for the maps with vid *)
+    (P.for_all_maps c.p @@ fun m ->
+    P.map_name_of c.p m^"_v", wrap_ttuple @@ P.map_types_with_v_for c.p m) @
+    (* the types for the maps without vid *)
+    (P.for_all_maps c.p @@ fun m ->
+    P.map_name_of c.p m, wrap_ttuple @@ P.map_types_for c.p m) @
+    (* t_vid_list ds for correctives *)
+    ["vid", t_vid]
+  in
+  (* insert list into hashtable *)
+  let h = Hashtbl.create 50 in
+  ignore(List.fold_left (fun i (s,t) -> Hashtbl.replace h s (i,t); i+1) 0 l);
+  h
+  
+
+let send_poly_bitmap =
+  let init =
+    mk_map (mk_lambda' unknown_arg mk_cfalse) @@ mk_var my_peers.id in
+  create_ds "send_bitmap" ~init @@ wrap_tvector t_bool
+
+(* name for master send request trigger (part of GC) *)
+let ms_send_gc_req_nm = "ms_send_gc_req"
+
+let nd_add_delta_to_buf_nm c map_id =
+  let t = P.map_types_for c.p map_id in
+  let s = maybe "" (soi |- fst) @@ get_map_indices c map_id in
+  Printf.sprintf "nd_add_delta_to_%s%s"
+    (String.concat "_" @@ List.map K3PrintSyntax.string_of_type t) s
+
+let flatten_fn_nm t =
+  "flatten_"^strcatmap ~sep:"_" K3PrintSyntax.string_of_type t
 
 (* calling all functions for profiling *)
 let profile_funcs_start =

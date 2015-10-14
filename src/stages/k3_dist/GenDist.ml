@@ -386,20 +386,10 @@ let send_put_ip_map =
   let e = ["stmt_bitmap", wrap_tvector t_bool; stmt_cnt_list.id, stmt_cnt_list.t] in
   create_ds ~e "send_put_ip_map" @@ wrap_tvector' @@ snd_many e
 
-(* how the stmt_cnt list gets sent *)
-let stmt_cnt_list_ship =
-  let e = ["stmt_id", t_stmt_id; "count", t_int] in
-  create_ds "stmt_cnt_list" ~e @@ wrap_tbag' @@ snd_many e
-
 let send_put_bitmap =
   create_ds "send_put_bitmap" @@ wrap_tvector t_bool
 
 (* for fetches *)
-let stmt_map_ids =
-  (* this is a bag since no aggregation is done *)
-  let e = ["stmt_id", t_stmt_id; "map_id", t_map_id] in
-  create_ds ~e "stmt_map_ids" @@ wrap_tbag' @@ snd_many e
-
 let send_fetch_ip_map =
   (* map per ip *)
   let e = [stmt_map_ids.id, stmt_map_ids.t] in
@@ -615,7 +605,7 @@ let sw_send_fetch_fn c s_rhs_lhs s_rhs trig_name =
 let nd_rcv_fetch_trig c trig =
   mk_code_sink'
     (rcv_fetch_name_of_t trig)
-    ((stmt_map_ids.id, stmt_map_ids.t):: args_of_t_with_v c trig)
+    (D.nd_rcv_fetch_args c trig) (* stmt_map_ids are an inner ds *)
     [] @@ (* locals *)
     mk_block [
       (* save the bound variables for this trigger so they're available later *)
@@ -679,8 +669,7 @@ let nd_rcv_fetch_trig c trig =
 let nd_rcv_put_trig c trig_name =
 mk_code_sink'
   (rcv_put_name_of_t trig_name)
-  (["sender_ip", t_addr; stmt_cnt_list_ship.id, stmt_cnt_list_ship.t]@
-      args_of_t_with_v c trig_name)
+  (D.nd_rcv_put_args c trig_name) (* also pull inner ds *)
   [] @@
   mk_block
     [mk_iter
@@ -794,8 +783,8 @@ List.fold_left
     acc_code @
     [mk_code_sink'
       (rcv_push_name_of_t c trig_name stmt_id read_map_id)
-      (("has_data", t_bool)::("tuples", tup_ds.t)::
-        args_of_t_with_v c trig_name)
+      (* we also need to get (tuples, tup_ds.t) from the global polyqueue *)
+      (nd_rcv_push_args c trig_name)
       [] @@ (* locals *)
       (* save the tuples *)
       mk_block
@@ -1598,7 +1587,7 @@ let gen_dist ?(gen_deletes=true)
     (* trigger that's uninvolved in this query *)
     with P.Bad_data _ -> l) agenda_map in
 
-  let c = {
+  let c = { default_config with
       p;
       shuffle_meta=K3Shuffle.gen_meta p;
       map_type;
@@ -1613,6 +1602,8 @@ let gen_dist ?(gen_deletes=true)
       map_indices = P.map_access_patterns p;
       route_indices = P.route_access_patterns p;
     } in
+  (* to get poly_tags, we need c *)
+  let c = { c with poly_tags = D.global_poly_tags c } in
   (* regular trigs then insert entries into shuffle fn table *)
   let proto_trigs, proto_funcs, proto_funcs2 =
     (fun (x,y,z) -> let a = List.flatten in a x, a y, a z) @@ list_unzip3 @@
