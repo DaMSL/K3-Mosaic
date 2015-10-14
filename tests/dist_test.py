@@ -37,7 +37,8 @@ def run(target_file,
         msg_interval=2,
         logging=True,
         correctives=True,
-        filemux=False
+        filemux=False,
+        safe_writes=False
         ):
 
     to_root = ".."
@@ -199,6 +200,8 @@ def run(target_file,
                 arg += '--k3new-folds '
             if filemux:
                 arg += '--filemux '
+            if safe_writes:
+                arg += '--safe-writes '
 
             print("Converting to new k3 file format...")
             cmd = concat([k3o, "-i k3 -l k3new", arg, "--datafile",
@@ -223,7 +226,7 @@ def run(target_file,
             with open(json_file, 'w') as f:
                 json.dump(j, f)
 
-            json_cmd = ("--interp_args " + json_file)
+            json_cmd = ("--interp-args " + json_file)
             msg_cmd  = ("--msg_interval " + str(msg_interval))
             log_cmd = "--no-log" if not logging else ""
 
