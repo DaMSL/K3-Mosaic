@@ -43,7 +43,6 @@ let sw_ack_log  =
   create_ds "sw_ack_log" (wrap_tmap' @@ snd_many e) ~e
 
 (* switch: trigger for receiving an ack from a node *)
-let sw_ack_rcv_trig_nm = "sw_ack_rcv"
 let sw_ack_rcv_trig sw_check_done =
   let address = "addr" in
   let ack_trig_args = [address, t_addr; "vid", t_vid] in
@@ -68,8 +67,8 @@ let sw_update_send ?(n=mk_cint 1) ~vid_nm =
 
 (* node: code to be incorporated in GenDist.rcv_put *)
 (* send ack to switch *)
-let nd_ack_send_code ~addr_nm ~vid_nm =
-  mk_send sw_ack_rcv_trig_nm (mk_var addr_nm) [G.me_var; mk_var vid_nm]
+let nd_ack_send_code c ~addr_nm ~vid_nm =
+  D.buffer_for_send c D.sw_ack_rcv_trig_nm addr_nm [mk_var D.me_int.id; mk_var vid_nm]
 
 (* master: gc delay in seconds *)
 let ms_gc_interval = create_ds "ms_gc_interval" (mut t_int) ~init:(mk_cint 300000)

@@ -35,6 +35,9 @@ let t_top = canonical TTop
 let t_addr = canonical TAddress
 let t_addr_mut = mut t_addr
 
+let unit_arg = ["_u", t_unit]
+let unknown_arg = ["_", t_unknown]
+
 (* wrap a type in an immutable tuple *)
 let wrap_ttuple typ = match typ with
   | []     -> canonical @@ TUnit
@@ -424,17 +427,46 @@ let mk_let var_ids tuple_val expr =
 (* Polyqueue functions *)
 
 (* lambda for these functions takes tag, tuple_idx, tuple_offset *)
+(* return the same idx,offset to increase 1, or another to skip *)
 let mk_poly_iter lam col = mk_stree PolyIter [lam; col]
+let mk_poly_iter' lam = mk_poly_iter lam (mk_var "poly_queue")
 let mk_poly_fold lam zero col = mk_stree PolyFold [lam; zero; col]
 
 (* lambda for these functions takes tuple_idx, tuple_offset, elem *)
 let mk_poly_iter_tag tag idx offset lam col = mk_stree (PolyIterTag tag) [idx; offset; lam; col]
+let mk_poly_iter_tag' tag lam = mk_poly_iter_tag tag (mk_var "idx") (mk_var "offset") lam (mk_var "poly_queue")
+
 let mk_poly_fold_tag tag idx offset lam zero col = mk_stree (PolyFoldTag tag) [idx; offset; lam; zero; col]
+let mk_poly_fold_tag' tag lam zero =
+  mk_poly_fold_tag tag (mk_var "idx") (mk_var "offset") lam zero (mk_var "poly_queue")
 
 let mk_poly_at tag col idx offset = mk_stree (PolyAt tag) [col; idx; offset]
+let mk_poly_at' tag = mk_stree (PolyAt tag) [mk_var "poly_queue"; mk_var "idx"; mk_var "offset"]
 let mk_poly_at_with tag col idx offset lam_none lam = mk_stree (PolyAtWith tag) [col; idx; offset; lam_none; lam]
+let mk_poly_at_with' tag lam =
+  let lam_none = mk_lambda' unit_arg @@ mk_error "oops" in
+  mk_poly_at_with tag (mk_var "poly_queue") (mk_var "idx") (mk_var "offset") lam_none lam
 
-let mk_poly_insert tag col elem = mk_stree (PolyInsert tag) [col; elem]
+let mk_poly_insert ?(path=[]) tag col elem = mk_stree (PolyInsert tag) [mk_id_path col path; mk_tuple elem]
+let mk_poly_insert_block ?path tag col elem = mk_block [ mk_poly_insert ?path tag col elem; mk_var col]
+
+(* TODO: unimplemented yet *)
+let mk_poly_tag_at col idx = mk_cunit
+
+(* skip to the next entry. Returns a tuple of idx, off *)
+let mk_poly_skip tag col idx off = mk_cunit
+
+let mk_poly_skip' tag = mk_cunit
+
+(* do the poly skip and let bind the new values *)
+let mk_poly_skip_let' tag e = mk_let ["idx"; "offset"] (mk_poly_skip' tag) e
+
+(* skip all the tags of this kind *)
+let mk_poly_skip_all tag col idx off = mk_cunit
+
+let mk_poly_skip_all' tag = mk_cunit
+
+let mk_poly_skip_all_let' tag e = mk_cunit
 
 (* ----- Converting between ocaml lists and k3 containers ----- *)
 
@@ -568,6 +600,9 @@ let mk_lambda2d' a1 a2 expr =
 
 let mk_lambda3 arg1 arg2 arg3 expr = mk_lambda (ATuple[arg1; arg2; arg3]) expr
 let mk_lambda3' a1 a2 a3 expr = mk_lambda3 (wrap_args a1) (wrap_args a2) (wrap_args a3) expr
+
+let mk_lambda4 a1 a2 a3 a4 expr = mk_lambda (ATuple[a1; a2; a3; a4]) expr
+let mk_lambda4' a1 a2 a3 a4 expr = mk_lambda4 (wrap_args a1) (wrap_args a2) (wrap_args a3) (wrap_args a4) expr
 
 let mk_fst tuple = mk_subscript 1 tuple
 let mk_fst' tuple = mk_subscript 1 (mk_var tuple)
@@ -769,9 +804,6 @@ let modify_e id_t val_l =
 let index_e id_t s =
   List.assoc s @@ insert_index_snd ~first:1 @@ fst_many id_t
 
-let unit_arg = ["_u", t_unit]
-let unknown_arg = ["_", t_unknown]
-
 (* code to count the size of a collection *)
 let mk_size_slow col = mk_size (mk_var col.id)
 
@@ -910,33 +942,17 @@ let mk_agg_bitmap ?(all=false) ?(idx="ip") args e zero bitmap =
 
 let mk_agg_bitmap' ?all ?idx args e zero bitmap = mk_agg_bitmap ?all ?idx args e zero (mk_var bitmap)
 
-let build_tuples_from_idxs ?(drop_vid=false) ~nm tuples_nm map_type indices code =
-  let col_t, tup_t = unwrap_tcol map_type in
-  let ts = unwrap_ttuple tup_t in
-  (* handle dropping vid *)
-  let may_drop e =
-    if drop_vid then
-      List.map (flip mk_subscript e) @@ tl @@ fst_many @@ insert_index_fst ~first:1 ts
-    else [e]
-  in
-  let map_type =
-    if drop_vid then wrap_tcol col_t @@ wrap_ttuple @@ tl ts else map_type
-  in
-  (* check for empty collection *)
-  mk_case_ns (mk_peek indices) "x"
-    (mk_let [nm] (mk_empty map_type) code) @@
-    (* check for -1, indicating all tuples *)
-    mk_if (mk_eq (mk_var "x") @@ mk_cint (-1))
-      (if drop_vid then
-        mk_let [nm]
-          (mk_map
-            (mk_lambda'' ["x", tup_t] @@ mk_tuple @@ may_drop @@ mk_var "x") @@
-            mk_var tuples_nm) code
-       else mk_let [nm] (mk_var tuples_nm) code) @@
-      (* or just regular indices into tuples *)
-      mk_let [nm]
-        (mk_agg (mk_lambda2' ["acc", map_type] ["idx", t_int] @@
-            mk_let ["x"] (mk_at' tuples_nm @@ mk_var "idx") @@
-            mk_insert_block "acc" @@ may_drop @@ mk_var "x")
-          (mk_empty map_type)
-          indices) code
+(* check for tag validity *)
+let mk_check_tag tag col idx offset e =
+  mk_if (mk_eq (mk_poly_tag_at idx col) @@ mk_cint tag)
+    e
+    (mk_error "wrong tag")
+
+let mk_if_tag tag col idx offset e1 e2 =
+  mk_if (mk_eq (mk_poly_tag_at idx col) @@ mk_cint tag) e1 e2
+
+let mk_check_tag' tag e =
+  mk_check_tag tag (mk_var "poly_queue") (mk_var "idx") (mk_var "offset") e
+
+let mk_if_tag' tag e e2 =
+  mk_if_tag tag (mk_var "poly_queue") (mk_var "idx") (mk_var "offset") e e2

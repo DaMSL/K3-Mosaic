@@ -73,6 +73,8 @@ type map_type =
   | MapVMap
   | MapMultiVMap
 
+type tag_type = Trig | DsTrig | Ds | Event
+
 type config = {
   p : P.prog_data_t;
   shuffle_meta : shuffle_fn_entry list;
@@ -93,8 +95,8 @@ type config = {
   map_indices: (map_id_t, int * IntSetSet.t) Hashtbl.t;
   (* map bind indices for route memoization *)
   route_indices: (map_id_t, int IntSetMap.t) Hashtbl.t;
-  (* poly tag map for batching. Returns id, type *)
-  poly_tags : (string, int * type_t) Hashtbl.t;
+  (* poly tag list for batching: int_tag * (tag * tag_type * types) *)
+  poly_tags : (int * (string * tag_type * (id_t * type_t) list)) list;
 }
 
 let default_config = {
@@ -110,7 +112,7 @@ let default_config = {
   unused_trig_args = StrMap.empty;
   map_indices = Hashtbl.create 10;
   route_indices = Hashtbl.create 10;
-  poly_tags = Hashtbl.create 100;
+  poly_tags = [];
 }
 
 let get_map_indices c map_id =
@@ -531,6 +533,9 @@ let addr_of_int = mk_global_fn "addr_of_int" ["i", t_int] [t_addr] @@
 
 let mk_sendi trig addr args = mk_send trig (mk_apply' "addr_of_int" [addr]) args
 
+let poly_queues_id = "poly_queues"
+let poly_queue_bitmap_id = "poly_queue_bitmap"
+
 let ms_init_counter = create_ds "ms_init_counter" (mut t_int) ~init:(mk_cint 0)
 (* whether we can begin operations on this node/switch *)
 let init_flag = create_ds "init_flag" (mut t_bool) ~init:(mk_cfalse)
@@ -670,6 +675,7 @@ let sw_trig_buf_idx =
   create_ds "sw_trig_buf_idx" (wrap_tlist' @@ snd_many e) ~e
 
 (*** trigger names ***)
+
 let send_fetch_name_of_t trig_nm = "sw_"^trig_nm^"_send_fetch"
 let rcv_fetch_name_of_t trig_nm = "nd_"^trig_nm^"_rcv_fetch"
 let rcv_put_name_of_t trig_nm = "nd_"^trig_nm^"_rcv_put"
@@ -686,6 +692,10 @@ let rcv_corrective_name_of_t c trig_nm stmt_id map_id =
 let do_corrective_name_of_t c trig_nm stmt_id map_id =
   trig_nm^"_do_corrective_s"^string_of_int stmt_id^"_m_"^P.map_name_of c.p map_id
 
+let sw_ack_rcv_trig_nm = "sw_ack_rcv"
+
+let nd_rcv_corr_done_nm = "nd_rcv_corr_done"
+
 (*** trigger args. Needed here for polyqueues ***)
 
 (* rcv_put: how the stmt_cnt list gets sent in rcv_put *)
@@ -696,73 +706,139 @@ let stmt_cnt_list_ship =
 (* rcv_put includes stmt_cnt_list_ship *)
 let nd_rcv_put_args c t = ("sender_ip", t_int)::args_of_t_with_v c t
 
-(* rcv_fetch: data structure that is send *)
+(* rcv_fetch: data structure that is sent *)
 let stmt_map_ids =
   (* this is a bag since no aggregation is done *)
   let e = ["stmt_id", t_stmt_id; "map_id", t_map_id] in
   create_ds ~e "stmt_map_ids" @@ wrap_tbag' @@ snd_many e
 
-(* also includes stmt_map_ids *)
+let get_global_poly_tags c =
+  List.map (fun (i, (s,_,i_ts)) -> i, s, wrap_ttuple @@ snd_many i_ts) c.poly_tags
+
+let poly_args c =
+  let t_poly = wrap_tpolyq @@ get_global_poly_tags c in
+  ["poly_queue", t_poly; "idx", t_int; "offset", t_int]
+
+let poly_args_partial = ["idx", t_int; "offset", t_int]
+
 let nd_rcv_fetch_args c t = args_of_t_with_v c t
 
-let nd_do_complete_args c t =
+let nd_do_complete_trig_args c t =
   ["sender_ip", t_int; "ack", t_bool] @ args_of_t_with_v c t
 
 let nd_rcv_push_args c t =
   ("has_data", t_bool)::args_of_t_with_v c t
 
 let nd_rcv_corr_args =
-  ["orig_addr", t_addr; "orig_stmt_id", t_stmt_id; "orig_vid", t_vid; "hop", t_int; "vid", t_vid]
+  ["orig_addr", t_int; "orig_stmt_id", t_stmt_id; "orig_vid", t_vid; "hop", t_int; "vid", t_vid]
+
+let nd_rcv_corr_done_args = ["vid", t_vid; "stmt_id", t_stmt_id; "hop", t_int; "count", t_int]
+
+(* for GC *)
+let sw_ack_rcv_trig_args = ["addr", t_int; "vid", t_vid]
+
 
 (*** Polyqueues ***)
 
 (* we create one global tag hashmap, which we use to populate polyqueues *)
-let global_poly_tags c =
+(* format (tag, tag_type, types) *)
+let calc_poly_tags c =
   let l =
     let for_all_trigs = P.for_all_trigs ~delete:c.gen_deletes in
-    let strip x = wrap_ttuple @@ snd_many x in
-    (* for rcv_push, static sentinel *)
-    ("sentinel", t_unit)::
+    (* static sentinel *)
+    ("sentinel", Event, ["_", t_unit])::
     (* event tags *)
-    (P.for_all_trigs c.p ~sys_init:false @@ fun t -> t, strip @@ P.args_of_t c.p t) @
+    (P.for_all_trigs c.p ~sys_init:false @@ fun t -> t, Event, P.args_of_t c.p t) @
     (* static ds for sw->nd triggers *)
-    ["nd_rcv_put_ds", strip stmt_cnt_list_ship.e;
-    "nd_rcv_fetch_ds", strip stmt_map_ids.e] @
+    [stmt_cnt_list_ship.id, Ds, stmt_cnt_list_ship.e;
+     stmt_map_ids.id, Ds, stmt_map_ids.e] @
     (List.flatten @@ for_all_trigs c.p ~sys_init:true @@ fun t ->
       let s_rhs = P.s_and_over_stmts_in_t c.p P.rhs_maps_of_stmt t in
       let s_rhs_corr = List.filter (fun (s, map) -> List.mem map c.corr_maps) s_rhs in
-      [rcv_put_name_of_t t, strip @@ nd_rcv_put_args c t;
-      rcv_fetch_name_of_t t, strip @@ nd_rcv_fetch_args c t] @
+      [rcv_put_name_of_t t, DsTrig, nd_rcv_put_args c t;
+      rcv_fetch_name_of_t t, DsTrig, nd_rcv_fetch_args c t] @
+      (* args for do completes without rhs maps *)
       (List.map (fun s ->
-        do_complete_name_of_t t s, strip @@ nd_do_complete_args c t) @@
+          do_complete_name_of_t t s, Trig, nd_do_complete_trig_args c t) @@
         P.stmts_without_rhs_maps_in_t c.p t) @
       (* the types for nd_rcv_push *)
       (List.map (fun (s, m) ->
-        rcv_push_name_of_t c t s m, strip @@ nd_rcv_push_args c t)
+          rcv_push_name_of_t c t s m, DsTrig, nd_rcv_push_args c t)
         s_rhs) @
       (* rcv_corrective types *)
       (List.map (fun (s, m) ->
-          rcv_corrective_name_of_t c t s m, strip @@ nd_rcv_corr_args)
+          rcv_corrective_name_of_t c t s m, DsTrig, nd_rcv_corr_args)
         s_rhs_corr)) @
     (* the types for the maps with vid *)
     (P.for_all_maps c.p @@ fun m ->
-    P.map_name_of c.p m^"_v", wrap_ttuple @@ P.map_types_with_v_for c.p m) @
+      P.map_name_of c.p m^"_v", Ds, P.map_ids_types_with_v_for c.p m) @
     (* the types for the maps without vid *)
     (P.for_all_maps c.p @@ fun m ->
-    P.map_name_of c.p m, wrap_ttuple @@ P.map_types_for c.p m) @
+      P.map_name_of c.p m, Ds, P.map_ids_types_for c.p m) @
     (* t_vid_list ds for correctives *)
-    ["vid", t_vid]
+    ["vids", Ds, ["vid", t_vid];
+     nd_rcv_corr_done_nm, DsTrig, nd_rcv_corr_done_args;
+    (* for GC (node->switch acks) *)
+     sw_ack_rcv_trig_nm, Trig, sw_ack_rcv_trig_args]
   in
-  (* insert list into hashtable *)
-  let h = Hashtbl.create 50 in
-  ignore(List.fold_left (fun i (s,t) -> Hashtbl.replace h s (i,t); i+1) 0 l);
-  h
-  
+  insert_index_fst l
 
-let send_poly_bitmap =
+let poly_queue_t c = wrap_tpolyq @@ get_global_poly_tags c
+
+let poly_queues c =
+  let t_poly = poly_queue_t c in
+  let e = ["queue", poly_queue_t c] in
+  let init =
+    mk_map (mk_lambda' unknown_arg @@ mk_empty t_poly) @@
+      mk_var my_peers.id in
+  create_ds ~e ~init poly_queues_id @@ wrap_tvector' @@ snd_many e
+
+let poly_queue_bitmap =
   let init =
     mk_map (mk_lambda' unknown_arg mk_cfalse) @@ mk_var my_peers.id in
-  create_ds "send_bitmap" ~init @@ wrap_tvector t_bool
+  create_ds poly_queue_bitmap_id ~init @@ wrap_tvector t_bool
+
+(* instead of sending directly, place in the send buffer *)
+(* @bitmap: whether to mark the bitmap *)
+let buffer_for_send ?(wr_bitmap=true) c t addr args =
+  mk_block @@
+    (* mark the bitmap *)
+    (if wr_bitmap then [mk_insert_at poly_queue_bitmap_id (mk_var addr) [mk_ctrue]] else []) @
+    (* insert into buffer *)
+    [mk_update_at_with poly_queues_id (mk_var addr)
+      (mk_lambda' (poly_queues c).e @@ mk_poly_insert_block t "queue" args)
+    ]
+
+(* insert tuples into polyqueues *)
+let buffer_tuples_from_idxs c ?(drop_vid=false) tuples_nm map_type map_tag indices =
+  let col_t, tup_t = unwrap_tcol map_type in
+  let ts = unwrap_ttuple tup_t in
+  (* handle dropping vid *)
+  let may_drop e =
+    if drop_vid then
+      List.map (flip mk_subscript e) @@ tl @@ fst_many @@ insert_index_fst ~first:1 ts
+    else [e]
+  in
+  (* check for empty collection *)
+  mk_case_ns (mk_peek indices) "x"
+    (* check for -1, indicating all tuples *)
+    (mk_if (mk_eq (mk_var "x") @@ mk_cint (-1))
+      (mk_iter
+        (mk_lambda'' ["x", tup_t] @@
+          buffer_for_send ~wr_bitmap:false c map_tag "ip" @@ may_drop @@ mk_var "x") @@
+        mk_var tuples_nm) @@
+      (* or just regular indices into tuples *)
+      mk_iter
+        (mk_lambda'' ["idx", t_int] @@
+          (* get tuples at idx *)
+          mk_at_with' tuples_nm (mk_var "idx") @@
+            mk_lambda' ["x", tup_t] @@
+              buffer_for_send ~wr_bitmap:false c map_tag "ip" @@ may_drop @@ mk_var "x")
+         indices)
+    mk_cunit (* do nothing if empty. we're sending a header anyway *)
+
+let ios_tag c stag = fst @@ List.find (fun (_, (s, _, _)) -> s = stag) c.poly_tags
+let soi_tag c itag = fst3 @@ snd @@ List.find (fun (i, (_, _, _)) -> i = itag) c.poly_tags
 
 (* name for master send request trigger (part of GC) *)
 let ms_send_gc_req_nm = "ms_send_gc_req"
@@ -880,6 +956,8 @@ let global_vars c dict =
       sw_driver_sleep;
       (* for no-corrective mode *)
       corrective_mode;
+      poly_queues c;
+      poly_queue_bitmap;
       nd_rcv_fetch_buffer;
       nd_stmt_cntrs_per_map;
       nd_lmap_of_stmt_id c;
