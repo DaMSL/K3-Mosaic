@@ -155,6 +155,7 @@ and Value : sig
         globals:  global_env_t;
         locals:   local_env_t;
         accessed: StrSet.t ref;
+        type_aliases:(id_t, type_t) Hashtbl.t;
       }
 
   and value_t
@@ -270,7 +271,7 @@ let rec v_col_of_t ?elem t_col = match t_col with
   | TList       -> VList(IList.empty)
   | TVector     -> begin match elem with
     | None   -> failwith "vector requires elem type"
-    | Some t -> VVector(IntMap.empty, 0, v_of_t t)
+    | Some (ta_env, t) -> VVector(IntMap.empty, 0, v_of_t ta_env t)
     end
   | TMap        -> VMap(ValueMap.empty)
   | TVMap _     -> VVMap(ValueVMap.empty)
@@ -278,7 +279,9 @@ let rec v_col_of_t ?elem t_col = match t_col with
   | TSortedSet  -> VSortedSet(ValueSSet.empty)
   | TPolyQueue tags -> VPolyQueue(IntMap.empty, tags)
 
-and v_of_t ?id t = match t.typ with
+and v_of_t ta_env ?id t =
+  let v_of_t = v_of_t ta_env ?id in
+  match t.typ with
   | TTop | TUnknown  -> VUnknown
   | TUnit            -> VUnit
   | TBool            -> VBool false
@@ -289,10 +292,11 @@ and v_of_t ?id t = match t.typ with
   | TTuple l         -> VTuple(List.map v_of_t l)
   | TAddress         -> VAddress("0.0.0.0", 0)
   | TIndirect t      -> VIndirect(ref @@ v_of_t t)
-  | TCollection(c,elem) -> v_col_of_t c ~elem
+  | TCollection(col,elem) -> v_col_of_t col ~elem:(ta_env, elem)
   | TTarget _        -> failwith @@ "No default value for target "^unwrap_option "" id
   | TFunction _      -> failwith @@ "No default value for function "^unwrap_option "" id
   | TByte            -> failwith "Bytes are not implemented"
+  | TAlias id        -> v_of_t @@ Hashtbl.find ta_env id
 
 
 let matching_collections v v' = match v, v' with
@@ -336,6 +340,7 @@ let default_env = {
   globals=IdMap.empty;
   locals=IdMap.empty;
   accessed=ref StrSet.empty;
+  type_aliases=Hashtbl.create 10;
 }
 
 (* mark_points are optional sorted counts of where we want markings *)
@@ -738,11 +743,11 @@ let v_size err_fn = function
   | VBag m      -> VInt(ValueBag.size m)
   | _           -> err_fn "vsize" "not a collection"
 
-let v_singleton err_fn elem c telem = match elem, c with
+let v_singleton err_fn ta_env elem c telem = match elem, c with
   | _,TSet                  -> VSet(ValueSet.singleton elem)
   | _,TBag                  -> VBag(ValueBag.singleton elem)
   | _,TList                 -> VList(IList.singleton elem)
-  | _,TVector               -> VVector(IntMap.singleton 0 elem, 1, v_of_t telem)
+  | _,TVector               -> VVector(IntMap.singleton 0 elem, 1, v_of_t ta_env telem)
   | VTuple[k;v], TMap       -> VMap(ValueMap.singleton k v)
   | VTuple[k;v], TSortedMap -> VSortedMap(ValueMap.singleton k v)
   | _,TSortedSet            -> VSortedSet(ValueSSet.singleton elem)

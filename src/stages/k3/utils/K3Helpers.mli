@@ -24,6 +24,8 @@ val t_top : type_t
 val t_addr : type_t
 val t_addr_mut : type_t
 
+val t_alias : id_t -> type_t
+
 (* K3 types for various things *)
 val t_trig_id : type_t
 val t_stmt_id : type_t
@@ -230,6 +232,7 @@ val mk_net_handle : id_t -> type_t -> address -> ?is_json:bool -> bool ->
 val mk_bind_role : id_t -> id_t -> flow_statement_t * annotation_t
 val mk_consume : id_t -> flow_statement_t * annotation_t
 val mk_role : id_t -> flow_program_t -> declaration_t * annotation_t
+val mk_typedef : id_t -> type_t -> declaration_t * annotation_t
 
 (* take a list of ids and convert it to a list of vars *)
 val ids_to_vars : id_t list -> expr_t list

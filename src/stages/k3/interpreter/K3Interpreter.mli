@@ -13,6 +13,7 @@ val env_of_program :
   ?json:Yojson.Safe.json ->
   role:id_t ->
   peers:K3Global.peer_t list ->
+  type_aliases:(id_t, type_t) Hashtbl.t ->
   scheduler_state ->
   program_t ->
   env_t
@@ -30,6 +31,7 @@ val init_k3_interpreter :
   peers:K3Global.peer_t list ->
   load_path:string ->
   interp_file:string ->
+  type_aliases:(id_t * type_t) list ->
   program_t ->
   interpreter_t
 

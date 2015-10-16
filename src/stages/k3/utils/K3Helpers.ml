@@ -34,6 +34,7 @@ let t_unknown = canonical TUnknown
 let t_top = canonical TTop
 let t_addr = canonical TAddress
 let t_addr_mut = mut t_addr
+let t_alias id = canonical (TAlias id)
 
 let unit_arg = ["_u", t_unit]
 let unknown_arg = ["_", t_unknown]
@@ -516,7 +517,9 @@ let mk_bind_role id1 id2 = mk_no_anno @@ BindFlow(id1, id2)
 
 let mk_consume id = mk_no_anno @@ Instruction(Consume id)
 
-let mk_role id flowprog = mk_no_anno @@ Role (id, flowprog)
+let mk_role id flowprog = mk_no_anno @@ Role(id, flowprog)
+
+let mk_typedef id t = mk_no_anno @@ Typedef(id, t)
 
 
 (* Macros to do more complex tasks ---- *)

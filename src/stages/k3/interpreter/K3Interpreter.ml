@@ -249,7 +249,7 @@ and eval_expr (address:address) sched_st cenv texpr =
 
     | Empty ct ->
         let ctype, elem = unwrap_tcol ct in
-        cenv, temp @@ v_col_of_t ctype ~elem
+        cenv, temp @@ v_col_of_t ~elem:(cenv.type_aliases, elem) ctype
 
     (* Conditional execution *)
     | IfThenElse ->
@@ -341,7 +341,7 @@ and eval_expr (address:address) sched_st cenv texpr =
 
     | Singleton ct, [elem] ->
         let ctype, telem = unwrap_tcol ct in
-        nenv, temp @@ v_singleton error elem ctype telem
+        nenv, temp @@ v_singleton error cenv.type_aliases elem ctype telem
 
     | Combine, [left; right] ->
         nenv, temp @@ v_combine error left right
@@ -431,7 +431,7 @@ and eval_expr (address:address) sched_st cenv texpr =
           (* the container is empty, so we must use the types *)
           | _ -> let t = type_of_expr texpr in
                  let tcol, elem = unwrap_tcol t in
-                 v_col_of_t tcol ~elem
+                 v_col_of_t tcol ~elem:(cenv.type_aliases, elem)
         in
         let new_col = v_fold error (fun acc x -> v_combine error x acc) zero c in
         nenv, VTemp new_col
@@ -722,16 +722,16 @@ and eval_expr (address:address) sched_st cenv texpr =
 (* Declaration interpretation *)
 
 (* Returns a default value for every type in the language *)
-let rec default_value id t = v_of_t ~id t
+let rec default_value type_aliases id t = v_of_t type_aliases ~id t
 
 (* Returns a foreign function evaluator *)
 let dispatch_foreign id = K3StdLib.lookup_value id
 
 (* Returns a trigger evaluator function to serve as a simulation
  * of the trigger *)
-let prepare_trigger sched_st id arg local_decls body =
-  let default (id,t,_) = id, ref @@ default_value id t in
-  let new_vals  = List.map default local_decls in
+let prepare_trigger sched_st env id arg local_decls body =
+  let default (id,t,_) = id, ref @@ default_value env.type_aliases id t in
+  let new_vals = List.map default local_decls in
   (* add a level of wrapping to the argument binder so that when we do the first layer
    * which handles lists of arguments, it only takes one argument *)
   let vfun = VFunction(arg, IdMap.empty, body) in
@@ -749,7 +749,7 @@ let prepare_sinks sched_st env fp =
     (fun e (fs,a) -> match fs with
     | Sink(Resource _) -> failwith "sink resource interpretation not supported"
     | Sink(Code(id, arg, locals, body)) ->
-        {e with triggers=IdMap.add id (prepare_trigger sched_st id arg locals body) e.triggers}
+        {e with triggers=IdMap.add id (prepare_trigger sched_st env id arg locals body) e.triggers}
     | _ -> e)
     env fp
 
@@ -767,7 +767,7 @@ let lookup_json json id = match json with
   | _               -> None
 
 (* Builds a trigger, global value and function environment (ie frames) *)
-let env_of_program ?address ?json ~role ~peers sched_st k3_program =
+let env_of_program ?address ?json ~role ~peers ~type_aliases sched_st k3_program =
   let me_addr = match address with
     | None   -> Constants.default_address
     | Some a -> a in
@@ -790,7 +790,7 @@ let env_of_program ?address ?json ~role ~peers sched_st k3_program =
               | _      -> second value_of_eval @@ eval_expr me_addr (Some sched_st) env e
               end
 
-          | id, None  -> env, maybe (default_value id t) id_fn @@ lookup_json json id
+          | id, None  -> env, maybe (default_value type_aliases id t) id_fn @@ lookup_json json id
         in
         {env with globals=IdMap.add id (ref init_val) env.globals; locals=rf_env.locals}
     | Foreign (id,_) ->
@@ -799,7 +799,8 @@ let env_of_program ?address ?json ~role ~peers sched_st k3_program =
     | _ -> env
   in
   (* triggers, (variables, arg frames) *)
-  List.fold_left env_of_declaration default_env k3_program
+  let env = List.fold_left env_of_declaration default_env k3_program in
+  {env with type_aliases}
 
 
 (* Instruction interpretation *)
@@ -864,8 +865,8 @@ let interpreter_event_loop role k3_program =
    | None        -> get_role role error
 
 (* returns address, (event_loop_t, environment) *)
-let initialize_peer sched_st ~address ~role ~peers ?json k3_program =
-  let prog_env = env_of_program sched_st ~address ~role ~peers ?json k3_program in
+let initialize_peer sched_st ~address ~role ~peers ~type_aliases ?json k3_program =
+  let prog_env = env_of_program sched_st ~address ~role ~peers ~type_aliases ?json k3_program in
   address, (interpreter_event_loop role k3_program, prog_env)
 
 let interpret_k3_program i =
@@ -921,7 +922,7 @@ let interpret_k3_program i =
   prog_state
 
 (* Initialize an interpreter given the parameters *)
-let init_k3_interpreter ?queue_type ?(src_interval=0.002) ~peers ~load_path ~interp_file typed_prog =
+let init_k3_interpreter ?queue_type ?(src_interval=0.002) ~peers ~load_path ~interp_file ~type_aliases typed_prog =
   Log.log (lazy (sp "Initializing scheduler\n")) `Trace;
   let scheduler = init_scheduler_state ?queue_type ~peers in
   let json =
@@ -937,13 +938,12 @@ let init_k3_interpreter ?queue_type ?(src_interval=0.002) ~peers ~load_path ~int
       K3StdLib.g_load_path := load_path;
       let len = List.length peers in
       let envs = Hashtbl.create len in
+      let type_aliases = hashtbl_of_list type_aliases in
       List.iter (fun (address, role) ->
                  (* event_loop_t * program_env_t *)
           let _, ((res_env, fsm_env, instrs), prog_env) =
-            initialize_peer scheduler ~address ~role ~peers ?json typed_prog in
+            initialize_peer scheduler ~address ~role ~peers ~type_aliases ?json typed_prog in
           Hashtbl.replace envs address
             {res_env; fsm_env; prog_env; instrs; disp_env=C.def_dispatcher}
       ) peers;
       {scheduler; peer_list=peers; envs; last_s_time=0.; src_interval}
-
-

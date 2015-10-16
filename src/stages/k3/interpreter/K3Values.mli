@@ -39,6 +39,7 @@ and Value : sig
         globals:global_env_t;
         locals:local_env_t;
         accessed:StrSet.t ref;
+        type_aliases:(id_t, type_t) Hashtbl.t;
       }
   and value_t
       = VMax
@@ -132,11 +133,11 @@ val v_update : ?vidkey:value_t -> value_t t_err_fn -> value_t -> value_t -> valu
 val v_update_suffix : value_t t_err_fn -> value_t -> (value_t -> value_t) -> value_t -> value_t
 val v_empty : value_t t_err_fn -> value_t -> value_t
 (* container, elem type *)
-val v_col_of_t : ?elem:type_t -> container_type_t -> value_t
-val v_of_t : ?id:string -> type_t -> value_t
+val v_col_of_t : ?elem:((id_t, type_t) Hashtbl.t * type_t) -> container_type_t -> value_t
+val v_of_t : (id_t, type_t) Hashtbl.t -> ?id:string -> type_t -> value_t
 val v_sort : value_t t_err_fn -> (value_t -> value_t -> int) -> value_t -> value_t
 val v_size : value_t t_err_fn -> value_t -> value_t
-val v_singleton : value_t t_err_fn -> value_t -> container_type_t -> type_t -> value_t
+val v_singleton : value_t t_err_fn -> (id_t, type_t) Hashtbl.t -> value_t -> container_type_t -> type_t -> value_t
 val v_slice : value_t t_err_fn -> value_t -> value_t -> value_t
 val v_slice_op : [`LT|`LEQ|`GT|`GEQ|`EQ] -> value_t t_err_fn -> value_t -> value_t -> value_t
 val v_filter_op : value_t t_err_fn -> [`LT|`LEQ|`GT|`GEQ|`EQ] -> value_t -> value_t -> value_t

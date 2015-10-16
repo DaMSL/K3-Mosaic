@@ -304,7 +304,7 @@ let interpret_k3 params prog =
 
   (* this not only adds type info, it adds the globals which are crucial
     * for interpretation *)
-  let tp, envs = typed_program_with_globals prog in
+  let tp, (t_env, type_aliases, _) = typed_program_with_globals prog in
   let open K3Interpreter in
   try
     let interp = init_k3_interpreter tp ~peers:p.peers
@@ -312,6 +312,7 @@ let interpret_k3 params prog =
                                         ~load_path:p.load_path
                                         ~src_interval:(foi p.src_interval /. 1000.)
                                         ~interp_file:p.interp_arg_file
+                                        ~type_aliases
     in
     interpret_k3_program interp
   with RuntimeError (uuid,str) -> handle_interpret_error (K3Data tp) uuid str
