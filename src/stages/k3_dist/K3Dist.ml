@@ -783,13 +783,14 @@ let calc_poly_tags c =
   in
   insert_index_fst l
 
-let poly_queue_t c = wrap_tpolyq @@ get_global_poly_tags c
+let poly_queue_typedef_id = "poly_queue_t"
+let poly_queue_typedef c = wrap_tpolyq @@ get_global_poly_tags c
+let poly_queue = create_ds "poly_queue" @@ t_alias poly_queue_typedef_id
 
-let poly_queues c =
-  let t_poly = poly_queue_t c in
-  let e = ["queue", poly_queue_t c] in
+let poly_queues =
+  let e = ["queue", poly_queue.t] in
   let init =
-    mk_map (mk_lambda' unknown_arg @@ mk_empty t_poly) @@
+    mk_map (mk_lambda' unknown_arg @@ mk_empty poly_queue.t) @@
       mk_var my_peers.id in
   create_ds ~e ~init poly_queues_id @@ wrap_tvector' @@ snd_many e
 
@@ -806,7 +807,7 @@ let buffer_for_send ?(wr_bitmap=true) c t addr args =
     (if wr_bitmap then [mk_insert_at poly_queue_bitmap_id (mk_var addr) [mk_ctrue]] else []) @
     (* insert into buffer *)
     [mk_update_at_with poly_queues_id (mk_var addr)
-      (mk_lambda' (poly_queues c).e @@ mk_poly_insert_block t "queue" args)
+      (mk_lambda' poly_queues.e @@ mk_poly_insert_block t "queue" args)
     ]
 
 (* insert tuples into polyqueues *)
@@ -956,7 +957,7 @@ let global_vars c dict =
       sw_driver_sleep;
       (* for no-corrective mode *)
       corrective_mode;
-      poly_queues c;
+      poly_queues;
       poly_queue_bitmap;
       nd_rcv_fetch_buffer;
       nd_stmt_cntrs_per_map;

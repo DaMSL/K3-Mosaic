@@ -1499,13 +1499,11 @@ let nd_do_corrective_fns c s_rhs ast trig_name corrective_maps =
 (*** central triggers to handle dispatch for nodes and switches ***)
 let trig_dispatcher_nm = "trig_dispatcher"
 let trig_dispatcher c =
-  let poly_queues = D.poly_queues c in
-  let t_poly = D.poly_queue_t c in
-  mk_code_sink' trig_dispatcher_nm ["poly_queue", poly_queue_t c] [] @@
+  mk_code_sink' trig_dispatcher_nm ["poly_queue", poly_queue.t] [] @@
   mk_block [
     (* replace all used slots with empty polyqueues *)
     mk_iter_bitmap'
-      (mk_insert_at poly_queues.id (mk_var "ip") [mk_empty t_poly])
+      (mk_insert_at poly_queues.id (mk_var "ip") [mk_empty poly_queue.t])
       D.poly_queue_bitmap.id;
 
     (* clean out the send bitmaps *)
@@ -1700,6 +1698,7 @@ let gen_dist ?(gen_deletes=true)
       P.for_all_trigs ~sys_init:true ~delete:c.gen_deletes c.p @@ gen_dist_for_t c ast
   in
   let prog =
+    mk_typedef poly_queue_typedef_id (poly_queue_typedef c) ::
     declare_global_vars c partmap ast @
     declare_global_funcs c partmap ast @
     (if c.gen_correctives then send_corrective_fns c else []) @
