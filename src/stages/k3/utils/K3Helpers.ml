@@ -748,7 +748,7 @@ let rec default_value_of_t t = match t.typ with
   | TCollection _ -> mk_empty t
   | TAddress      -> mk_caddress ("0.0.0.0", 1)
   | TIndirect t   -> mk_ind @@ default_value_of_t t
-  | _ -> invalid_arg "no default value for type"
+  | _ -> failwith "no default value for type"
 
 (* data structure record to standardize manipulation *)
 type data_struct = { id: string;
@@ -766,9 +766,11 @@ type data_struct = { id: string;
 
 (* also add default values if missing *)
 let create_ds ?(e=[]) ?(ee=[]) ?init ?d_init ?map_id ?(global=false) ?(vid=false) id t =
-  let init =
-    if is_some init then init
-    else some @@ default_value_of_t t
+  (* add default values so we don't have to initialize manually *)
+  let init = match init with
+    | Some _ as x -> x
+    | None -> try some @@ default_value_of_t t
+              with Failure _ -> None
   in
   {id; t; e; ee; init; d_init; map_id; global; vid}
 
