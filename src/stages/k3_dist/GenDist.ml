@@ -530,9 +530,8 @@ let sw_send_fetch_fn c s_rhs_lhs s_rhs t =
          (mk_agg_bitmap'
            ["count", t_int]
            (mk_block [
-             (* create the stmt_cntrs out of the globals *)
-             mk_at_with' send_put_ip_map.id (mk_var "ip") @@
-              mk_lambda' send_put_ip_map.e @@
+             mk_at_with' send_put_ip_map_id (mk_var "ip") @@
+              mk_lambda' send_put_ip_map_e @@
                 mk_block [
                   (* send rcv_put *)
                   buffer_for_send c rcv_put_nm "ip" @@
