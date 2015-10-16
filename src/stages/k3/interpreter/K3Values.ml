@@ -427,17 +427,25 @@ let v_peek ?(vid=false) err_fn c = match c with
   | VVMap m -> maybe None (fun (t,k,v) -> some @@ if vid then VTuple[t;k;v] else VTuple[k;v]) @@ ValueVMap.peek m
   | v -> err_fn "v_peek" @@ sp "not a collection: %s" @@ sov v
 
-let v_at ?(extend=false) ?tag err_fn c idx = match c, idx with
+let v_at ?(extend=false) ?tag ?(get_stag=false) ?(get_itag=false) err_fn c idx = match c, idx with
+  | VVector _ as v, _ when get_itag || get_stag || tag <> None ->
+        err_fn "v_at" @@ "not a polyqueue: "^sov v
+
   | VVector(m,sz,t), VInt i ->
       begin try some @@ IntMap.find i m
       with Not_found -> if (i >= 0 && i < sz) || extend then some t else None end
+
   | VVector _, v -> err_fn "v_at" @@ sp "not an integer: %s" @@ sov v
+
   | VPolyQueue(m,_), VInt i ->
     begin try
-      let (_,stag,v) = IntMap.find i m in
-      let tag = unwrap_some tag in
-      if stag = tag then some v
-      else err_fn "v_at" @@ sp "wrong tag in polyqueue: asked %s, got %s" tag stag
+      let itag, stag, v = IntMap.find i m in
+      if get_itag then some itag
+      else if get_stag then some @@ VString stag
+      else
+        let tag = unwrap_some tag in
+          if stag = tag then some v
+          else err_fn "v_at" @@ sp "wrong tag in polyqueue: asked %s, got %s" tag stag
     with Not_found -> None end
 
   | v, i -> err_fn "v_at" @@ sp "improper data: %s, %s" (sov v) (sov i)
@@ -559,6 +567,22 @@ let v_fold err_fn f acc = function
 let v_fold_poly err_fn f acc = function
   | VPolyQueue(m, _) -> IntMap.fold f m acc
   | v -> err_fn "v_fold_poly" @@ sp "not a polyqueue: %s" @@ sov v
+
+let unwrap_vint err_fn = function VInt i -> i | _ -> err_fn "unwrap_vint" "not an int"
+
+(* traverse starting with i, then proceed to the next location returned by f
+   also accumulate
+*)
+let v_traverse_poly err_fn f i acc = function
+  | VPolyQueue(m, _) ->
+    let rec loop i acc =
+      begin try
+        let j, acc = f i (IntMap.find i m) acc in
+        loop j acc
+      with Not_found -> i, acc end
+    in
+    loop i acc
+  | v -> err_fn "v_traverse_poly" @@ sp "not a polyqueue: %s" @@ sov v
 
 let v_fold_poly_tag err_fn idx tag f acc m = match m, idx with
   | VPolyQueue(m, _), VInt(idx) ->

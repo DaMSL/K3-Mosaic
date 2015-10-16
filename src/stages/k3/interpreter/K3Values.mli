@@ -122,6 +122,7 @@ val v_fold : 'a t_err_fn -> ('a -> value_t -> 'a) -> 'a -> value_t -> 'a
 val v_fold_v : value_t -> 'a t_err_fn -> ('a -> value_t -> 'a) -> 'a -> value_t -> 'a
 val v_fold_all : 'a t_err_fn -> ('a -> value_t -> value_t -> 'a) -> 'a -> value_t -> 'a
 val v_fold_poly : 'a t_err_fn -> (int -> value_t * string * value_t -> 'a -> 'a) -> 'a -> value_t -> 'a
+val v_traverse_poly : (int * 'a) t_err_fn -> (int -> value_t * string * value_t -> 'a -> int * 'a) -> int -> 'a -> value_t -> int * 'a
 val v_fold_poly_tag : 'a t_err_fn -> value_t -> string -> (int -> value_t * string * value_t -> 'a -> 'a) -> 'a -> value_t -> 'a
 val v_set_all : value_t t_err_fn -> value_t -> value_t -> value_t
 val v_iter : unit t_err_fn -> (value_t -> unit) -> value_t -> unit
@@ -141,6 +142,6 @@ val v_singleton : value_t t_err_fn -> (id_t, type_t) Hashtbl.t -> value_t -> con
 val v_slice : value_t t_err_fn -> value_t -> value_t -> value_t
 val v_slice_op : [`LT|`LEQ|`GT|`GEQ|`EQ] -> value_t t_err_fn -> value_t -> value_t -> value_t
 val v_filter_op : value_t t_err_fn -> [`LT|`LEQ|`GT|`GEQ|`EQ] -> value_t -> value_t -> value_t
-val v_at : ?extend:bool -> ?tag:string -> value_t option t_err_fn -> value_t -> value_t -> value_t option
+val v_at : ?extend:bool -> ?tag:string -> ?get_stag:bool -> ?get_itag:bool -> value_t option t_err_fn -> value_t -> value_t -> value_t option
 val v_min : value_t option t_err_fn -> value_t -> value_t option
 val v_is_empty : value_t t_err_fn -> value_t -> value_t

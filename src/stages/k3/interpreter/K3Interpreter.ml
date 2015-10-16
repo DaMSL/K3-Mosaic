@@ -392,10 +392,18 @@ and eval_expr (address:address) sched_st cenv texpr =
         let f' = eval_fn f address sched_st in
         v_fold error (fun env x -> fst @@ f' env [x]) nenv c, temp VUnit
 
-    | PolyIter, [f; c] ->
+     (* really traverse ie doesn't increment automatically *)
+    | PolyIter, [f; col] ->
         let f = eval_fn f address sched_st in
-        v_fold_poly error
-          (fun idx (itag, _, _) env -> fst @@ f env [itag; VInt idx; VInt 0]) nenv c, tvunit
+        let env = snd @@ v_traverse_poly error
+          (fun idx (itag, _, _) env ->
+             let env, v = f env [itag; VInt idx; VInt 0] in
+             match value_of_eval v with
+             | VTuple[VInt i;_] -> i, env
+             | v -> error "polyiter" @@ "bad function result "^sov v
+          ) 0 nenv col
+        in env, tvunit
+
 
     | PolyIterTag tag, [idx; offset; f; c] ->
         let f = eval_fn f address sched_st in
@@ -575,6 +583,33 @@ and eval_expr (address:address) sched_st cenv texpr =
         | Some x -> nenv, VTemp x
         | None -> error name "poly_at: out of bounds"
       end
+
+    | PolyTagAt, [c; idx] ->
+      begin match v_at ~get_itag:true error c idx with
+        | Some x -> nenv, VTemp x
+        | None -> error name "poly_tag_at: out of bounds"
+      end
+
+    | PolySkip(false, tag), [c; VInt idx as i; z] ->
+      begin match v_at ~get_stag:true error c i with
+      | Some(VString tag') when tag = tag' ->
+        let idx' = VInt(idx + 1) in
+        if v_at ~get_stag:true error c idx' <> None then
+          nenv, VTemp(VTuple[idx'; z])
+        else error name "poly_skip: out of bounds"
+      | _ -> error name "poly_skip: mismatched tag"
+      end
+
+      (* loop until we run out of tag *)
+    | PolySkip(true, tag), [c; VInt idx; z] ->
+      let rec loop i =
+        let idx = VInt i in
+        begin match v_at ~get_stag:true error c idx with
+        | Some(VString tag') when tag = tag' -> loop (i + 1)
+        | _ -> i
+        end
+      in
+      nenv, VTemp(VTuple[VInt (loop idx); z])
 
     | AtWith, [c; idx; lam_none; lam_some] ->
         begin match v_at error c idx with
