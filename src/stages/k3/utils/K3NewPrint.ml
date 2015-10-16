@@ -65,6 +65,7 @@ type config = {
                 project:StrSet.t;       (* need to project further down *)
                 singleton_id:string;
                 use_filemux:bool;
+                safe_writes:bool;
               }
 
 let default_config = {
@@ -74,6 +75,7 @@ let default_config = {
                        project = StrSet.empty;
                        singleton_id="elem";
                        use_filemux=false;
+                       safe_writes=false;
                      }
 
 let verbose_types_config = default_config
@@ -485,6 +487,11 @@ let map_mk_unknown c get_key pat =
   | [x;_] when get_key -> [x; KH.mk_cunknown]
   | [_;x]              -> [KH.mk_cunknown; x]
   | _ -> failwith "bad pattern"
+
+(* wrap with projection if needed *)
+let wrap_project c col x =
+  let ts = KH.unwrap_ttuple @@ snd @@ KH.unwrap_tcol @@ T.type_of_expr col in
+  if List.length ts = 1 then (lazy_paren x) <| lps ("."^c.singleton_id) else x
 
 (* create a deep bind for lambdas, triggers, and let statements
  * -in_record indicates that the first level of binding should be a record *)
@@ -910,31 +917,9 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
     let e1, e_some, e_none = U.decompose_caseof expr in
 
     let normal () = (* normal case printout *)
-      (* HACK to make peek work: records of one element still need projection *)
-      (* NOTE: caseOf will only work on peek if peek is the first expr inside,
-      * and projection will only work if the expression is very simple *)
-      let project =
-        try
-          let col = U.decompose_peek e1 in
-          (* get the type of the collection.
-          * If it's a singleton type, we need to add projection *)
-          let _, elem_t = KH.unwrap_tcol @@ T.type_of_expr col in
-          begin match elem_t.typ with
-            | TTuple _             -> false
-            | _ when snd expr_info -> false (* we need a record output *)
-            | _                    -> true
-          end
-        with _ -> false
-      in
-      let c' = {c with project=StrSet.remove id c.project} in
-      let c' =
-        (* if we're projecting, let future expressions know *)
-        if project && id <> "_" then {c' with project=StrSet.add id c'.project}
-        else c' in
       Some(
         lps "case" <| lsp () <| lazy_expr c e1 <| lsp () <| lps "of" <| lsp () <|
-        wrap_indent (lazy_brace (lps ("Some "^id^" ->") <| lsp () <|
-          lazy_expr c' e_some)) <|
+        wrap_indent (lazy_brace (lps ("Some "^id^" ->") <| lsp () <| lazy_expr c e_some)) <|
         wrap_indent (lazy_brace (lps "None ->" <| lsp () <| lazy_expr c e_none)))
     in
     (* helper function to apply lookup_with on a secondary index *)
@@ -1166,11 +1151,15 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
       ~arg_info:[def_a]
 
   | AtWith -> let col, idx, lam_none, lam_some = U.decompose_at_with expr in
-    apply_method c ~name:"safe_at" ~col
-      ~args:[idx; lam_none; lam_some] ~arg_info:[def_a; def_a; [0], false]
+    if c.safe_writes then
+      apply_method c ~name:"safe_at" ~col
+        ~args:[idx; lam_none; lam_some] ~arg_info:[def_a; def_a; [0], false]
+    else apply_method c ~name:"unsafe_at" ~col
+        ~args:[idx; lam_some] ~arg_info:[def_a; [0], false]
 
   | At -> let col, idx = U.decompose_at expr in
-    apply_method c ~name:"at" ~col ~args:[idx] ~arg_info:[def_a]
+    (* we need to project since we return a value *)
+    wrap_project c col (apply_method c ~name:"at" ~col ~args:[idx] ~arg_info:[def_a])
 
   | MinWith -> let col, lam_none, lam_some = U.decompose_min_with expr in
     apply_method c ~name:"min" ~col
@@ -1195,8 +1184,8 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
     (* normal peek applications *)
     let normal () =
       let name = if is_vmap col then "peek_now" else "peek" in
-      lazy_paren @@ apply_method c ~name ~col
-      ~args:[light_type c @@ KH.mk_cunit] ~arg_info:[def_a] in
+      wrap_project c col (apply_method c ~name ~col ~args:[light_type c @@ KH.mk_cunit] ~arg_info:[def_a])
+    in
 
     (* to handle the case where we have a full slice over a vmap, we need to look ahead *)
     let tag = U.tag_of_expr col in
@@ -1268,7 +1257,8 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
         ~arg_info:[vid_out_arg; [], true])
 
   | DeleteAt -> let col, n = U.decompose_delete_at expr in
-    apply_method c ~col ~name:"erase_at" ~args:[n] ~arg_info:[def_a]
+    (* project output if needed since we return a value *)
+    wrap_project c col (apply_method c ~col ~name:"erase_at" ~args:[n] ~arg_info:[def_a])
 
   | DeletePrefix -> let col, x = U.decompose_delete_prefix expr in
     maybe_vmap c col x
@@ -1476,15 +1466,15 @@ let filter_incompatible prog =
 
 (* print a K3 program in syntax *)
 (* We get the typechecking environments so we can do incremental typechecking where needed *)
-let string_of_program ?(map_to_fold=false) ?(use_filemux=false) prog (env, trig_env) =
-  let config = {default_config with env; trig_env; map_to_fold; use_filemux} in
+let string_of_program ?(map_to_fold=false) ?(use_filemux=false) ?(safe_writes=false) prog (env, trig_env) =
+  let config = {default_config with env; trig_env; map_to_fold; use_filemux; safe_writes} in
   wrap_f @@ fun () ->
     let l = wrap_hv 0 (lps_list ~sep:"" CutHint (lazy_declaration config |- fst) prog) in
     force_list l
 
 (* print a new k3 program with added sources and feeds *)
 (* envs are the typechecking environments to allow us to do incremental typechecking *)
-let string_of_dist_program ?(file="default.txt") ?map_to_fold ?use_filemux (p, envs) =
+let string_of_dist_program ?(file="default.txt") ~map_to_fold ~use_filemux ~safe_writes (p, envs) =
   let p' = filter_incompatible p in
 "\
 include \"Core/Builtins.k3\"
@@ -1519,5 +1509,5 @@ declare my_peers2 : collection { elem:address } @ {Collection} =
 declare my_role : collection { elem:string } @ {Collection} =
   role.fold (\\acc -> (\\x -> (acc.insert {elem:x.i}; acc))) empty { elem:string} @ Collection
 
-"^ string_of_program ?map_to_fold ?use_filemux p' envs
+"^ string_of_program ~map_to_fold ~use_filemux ~safe_writes p' envs
 

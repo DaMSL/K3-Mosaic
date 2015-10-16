@@ -12,8 +12,7 @@ module R = K3Route
 (* stmt list * r_map * l_map * (r_map index * l_map index) list * func_name *)
 
 let shuffle_bitmap =
-  let init =
-    mk_map (mk_lambda' unknown_arg mk_cfalse) @@ mk_var D.my_peers.id in
+  let init = mk_map (mk_lambda' unknown_arg mk_cfalse) @@ mk_var D.my_peers.id in
   create_ds "shuffle_bitmap" ~init @@ wrap_tvector t_bool
 
 let shuffle_indices =

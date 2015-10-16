@@ -383,21 +383,35 @@ let stmt_cnt_list =
   let e = ["count", t_map_id] in
   create_ds ~e "stmt_cnt_list" @@ wrap_tvector' @@ snd_many e
 
-let send_put_ip_map =
-  let e = ["stmt_bitmap", wrap_tvector t_bool; stmt_cnt_list.id, stmt_cnt_list.t] in
-  create_ds ~e "send_put_ip_map" @@ wrap_tvector' @@ snd_many e
+let send_put_ip_map_id = "send_put_ip_map"
+let send_put_ip_map_e = ["stmt_bitmap", wrap_tvector t_bool; stmt_cnt_list.id, stmt_cnt_list.t]
+let send_put_ip_map p =
+  let init =
+    mk_let ["stmt_ids"]
+      (k3_container_of_list (wrap_tvector t_int) @@
+       List.map mk_cint @@ create_range @@ 1 + (List.length @@ P.get_stmt_list p)) @@
+    mk_map (mk_lambda' unknown_arg @@ mk_tuple
+              [mk_map (mk_lambda' unknown_arg mk_cfalse) @@ mk_var "stmt_ids";
+               mk_map (mk_lambda' unknown_arg @@ mk_cint 0) @@ mk_var "stmt_ids"]) @@
+      mk_var D.my_peers.id in
+  let e = send_put_ip_map_e in
+  create_ds ~init ~e send_put_ip_map_id @@ wrap_tvector' @@ snd_many e
 
 let send_put_bitmap =
-  create_ds "send_put_bitmap" @@ wrap_tvector t_bool
+  let init = mk_map (mk_lambda' unknown_arg mk_cfalse) @@ mk_var D.my_peers.id in
+  create_ds ~init "send_put_bitmap" @@ wrap_tvector t_bool
 
 (* for fetches *)
 let send_fetch_ip_map =
   (* map per ip *)
   let e = [stmt_map_ids.id, stmt_map_ids.t] in
-  create_ds ~e "send_fetch_ip_map" @@ wrap_tvector' @@ snd_many e
+  let init =
+    mk_map (mk_lambda' unknown_arg @@ mk_empty stmt_map_ids.t) @@ mk_var D.my_peers.id in
+  create_ds ~e ~init "send_fetch_ip_map" @@ wrap_tvector' @@ snd_many e
 
 let send_fetch_bitmap =
-  create_ds "send_fetch_bitmap" @@ wrap_tvector t_bool
+  let init = mk_map (mk_lambda' unknown_arg mk_cfalse) @@ mk_var D.my_peers.id in
+  create_ds ~init "send_fetch_bitmap" @@ wrap_tvector t_bool
 
 (* sending fetches is done from functions *)
 (* each function takes a vid to plant in the arguments, which are in the trig buffers *)
@@ -444,9 +458,9 @@ let sw_send_fetch_fn c s_rhs_lhs s_rhs t =
       (* clean the put globals *)
       [mk_iter_bitmap'
         (mk_update_at_with
-          send_put_ip_map.id
+          send_put_ip_map_id
           (mk_var "ip") @@
-          mk_lambda' send_put_ip_map.e @@
+          mk_lambda' send_put_ip_map_e @@
             mk_let ["agg"]
               (mk_agg_bitmap' ~idx:"stmt_ctr"
                 ["acc", stmt_cnt_list.t]
@@ -454,9 +468,9 @@ let sw_send_fetch_fn c s_rhs_lhs s_rhs t =
                 (mk_var stmt_cnt_list.id)
                 "stmt_bitmap") @@
             mk_block [
-             mk_set_all "stmt_bitmap" [mk_cfalse];
-             mk_tuple [mk_var "stmt_bitmap"; mk_var "agg"]
-           ])
+              mk_set_all "stmt_bitmap" [mk_cfalse];
+              mk_tuple [mk_var "stmt_bitmap"; mk_var "agg"]
+            ])
         send_put_bitmap.id;
       (* clean bitmap *)
       mk_set_all send_put_bitmap.id [mk_cfalse]
@@ -494,8 +508,8 @@ let sw_send_fetch_fn c s_rhs_lhs s_rhs t =
                 (* mark the put bitmap *)
                 mk_insert_at send_put_bitmap.id (mk_var "ip") [mk_ctrue];
                 (* update the relevant stmt_cnt_list *)
-                mk_update_at_with send_put_ip_map.id (mk_var "ip") @@
-                  mk_lambda' send_put_ip_map.e @@
+                mk_update_at_with send_put_ip_map_id (mk_var "ip") @@
+                  mk_lambda' send_put_ip_map_e @@
                     mk_block [
                       mk_insert_at "stmt_bitmap" (mk_cint stmt_id) [mk_ctrue];
                       (* increment count *)
@@ -503,7 +517,7 @@ let sw_send_fetch_fn c s_rhs_lhs s_rhs t =
                         mk_lambda'' stmt_cnt_list.e @@
                           mk_add (mk_var "count") @@ mk_var "sender_count";
                       (* recreate tuple *)
-                      mk_tuple @@ ids_to_vars @@ fst_many @@ send_put_ip_map.e
+                      mk_tuple @@ ids_to_vars @@ fst_many @@ send_put_ip_map_e
                     ]
                 ])
               K3S.shuffle_bitmap.id
@@ -1587,7 +1601,7 @@ let declare_global_vars c partmap ast =
   GC.global_vars c @
   List.map decl_global
     [send_put_bitmap;
-     send_put_ip_map;
+     send_put_ip_map c.p;
      send_fetch_bitmap;
      send_fetch_ip_map
     ]

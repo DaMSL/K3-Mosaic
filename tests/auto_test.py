@@ -55,6 +55,8 @@ def run():
                         default=True, help="Disable correctives")
     parser.add_argument('--filemux', action='store_true', dest='filemux',
                         default=False, help="Enable filemux newprint")
+    parser.add_argument('--safe-writes', action='store_true', dest='safe_writes',
+                        default=False, help="Enable safe array writes")
 
     args = parser.parse_args()
 
@@ -109,7 +111,8 @@ def run():
                                 msg_interval=args.msg_interval,
                                 logging=args.logging,
                                 correctives=args.correctives,
-                                filemux=args.filemux
+                                filemux=args.filemux,
+                                safe_writes=args.safe_writes
                                 )
         # check if a test failed
         if not res:

@@ -170,6 +170,7 @@ type parameters = {
     mutable k3new_data_file: string;
     mutable k3new_folds: bool;   (* output fold instead of map/ext *)
     mutable use_filemux: bool;
+    mutable safe_writes: bool;   (* output safe writes *)
   }
 
 let default_cmd_line_params () = {
@@ -200,6 +201,8 @@ let default_cmd_line_params () = {
     stream_file       = "input.csv";
     agenda_map        = K3Dist.default_mapping;
     use_filemux       = false;
+
+    safe_writes       = false;
   }
 
 let cmd_line_params = default_cmd_line_params ()
@@ -426,7 +429,8 @@ let print params inputs =
        (K3NewPrint.string_of_dist_program
          ~map_to_fold:params.k3new_folds
          ~file:params.k3new_data_file
-         ~use_filemux:params.use_filemux) |- snd
+         ~use_filemux:params.use_filemux
+         ~safe_writes:params.safe_writes) |- snd
     | K3Test | K3DistTest -> print_k3_test_program params
   in List.iter print_fn idx_inputs
 
@@ -554,8 +558,10 @@ let param_specs = Arg.align
       "         Generate deletes";
   "--no-correctives", Arg.Unit (fun () -> cmd_line_params.gen_correctives <- false),
       "         Generate correctives";
-  "--interp_args", Arg.String (fun s -> cmd_line_params.interp_arg_file <- s),
+  "--interp-args", Arg.String (fun s -> cmd_line_params.interp_arg_file <- s),
       "         Load json arg file for interpretation";
+  "--safe-writes", Arg.Unit (fun () -> cmd_line_params.safe_writes <- true),
+      "         Generate safe writes to arrays";
 
   (* Debugging parameters *)
 

@@ -77,8 +77,7 @@ let builtin_route = create_ds "builtin_route" t_bool
 let route_bitmap =
   let e = ["val", t_bool] in
   let init =
-    mk_map (mk_lambda' ["_", t_unknown] mk_cfalse) @@ mk_var D.my_peers.id
-  in
+    mk_map (mk_lambda' ["_", t_unknown] mk_cfalse) @@ mk_var D.my_peers.id in
   create_ds "route_bitmap" (wrap_tvector' @@ snd_many e) ~e ~init
 
 let all_nodes_bitmap =
