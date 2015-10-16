@@ -450,23 +450,22 @@ let mk_poly_at_with' tag lam =
 let mk_poly_insert ?(path=[]) tag col elem = mk_stree (PolyInsert tag) [mk_id_path col path; mk_tuple elem]
 let mk_poly_insert_block ?path tag col elem = mk_block [ mk_poly_insert ?path tag col elem; mk_var col]
 
-(* TODO: unimplemented yet *)
-let mk_poly_tag_at col idx = mk_cunit
+let mk_poly_tag_at col idx = mk_stree PolyTagAt [col; idx]
 
 (* skip to the next entry. Returns a tuple of idx, off *)
-let mk_poly_skip tag col idx off = mk_cunit
+let mk_poly_skip tag col idx off = mk_stree (PolySkip(false, tag)) [col; idx; off]
 
-let mk_poly_skip' tag = mk_cunit
+let mk_poly_skip' tag = mk_poly_skip tag (mk_var "poly_queue") (mk_var "idx") (mk_var "offset")
 
 (* do the poly skip and let bind the new values *)
 let mk_poly_skip_let' tag e = mk_let ["idx"; "offset"] (mk_poly_skip' tag) e
 
 (* skip all the tags of this kind *)
-let mk_poly_skip_all tag col idx off = mk_cunit
+let mk_poly_skip_all tag col idx off = mk_stree (PolySkip(true, tag)) [col; idx; off]
 
-let mk_poly_skip_all' tag = mk_cunit
+let mk_poly_skip_all' tag = mk_poly_skip_all tag (mk_var "poly_queue") (mk_var "idx") (mk_var "offset")
 
-let mk_poly_skip_all_let' tag e = mk_cunit
+let mk_poly_skip_all_let' tag e = mk_let ["idx"; "offset"] (mk_poly_skip_all' tag) e
 
 (* ----- Converting between ocaml lists and k3 containers ----- *)
 

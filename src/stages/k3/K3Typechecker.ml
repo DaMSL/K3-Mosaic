@@ -125,6 +125,8 @@ let check_tag_arity tag children =
     | PolyAt _ -> 3
     | PolyAtWith _ -> 5
     | PolyInsert _ -> 2
+    | PolyTagAt -> 2
+    | PolySkip _ -> 3
 
   in length = correct_arity
 
@@ -242,9 +244,18 @@ let rec gen_arg_bindings = function
   | AMaybe a'   -> gen_arg_bindings a'
   | ATuple args -> List.concat @@ List.map gen_arg_bindings args
 
+let rec descend_type f t = match t.typ with
+  | TMaybe t -> f t
+  | TTuple l -> List.iter f l
+  | TCollection(_,t) -> f t
+  | TTarget t -> f t
+  | TFunction(l, t) -> List.iter f l; f t
+  | TIndirect t -> f t
+  | _ -> ()
+
 (* fill_in: check at each node whether we already have a type annotation.
  * If so, don't go any further down *)
-let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
+let rec deduce_expr_type ?(override=true) trig_env env tenv utexpr : expr_t =
   (* If not overriding, see if we've already got a type *)
   let has_type e =
     try ignore @@ type_of_expr e; true
@@ -258,6 +269,21 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
   let t_erroru = t_error uuid name in (* pre-curry the type error *)
 
   let malformed_tree () = raise @@ MalformedTree (K3Printing.string_of_tag_type tag) in
+
+  (* convert_aliases to types *)
+  let rec subst_aliases t =
+    let rec loop t = match t.typ with
+      | TAlias id ->
+          begin try
+            let t' = List.assoc id tenv in
+            t.typ <- t'.typ
+          with Not_found -> t_erroru @@ TBad(t, sp "Type alias %s not found" id)
+          end
+      | _ -> descend_type loop t
+    in loop t; t
+  in
+  (* redefine type_of_expr to substitute types *)
+  let type_of_expr e = subst_aliases @@ type_of_expr e in
 
   (* Check Tag Arity *)
   if not @@ check_tag_arity tag untyped_children then malformed_tree () else
@@ -289,7 +315,7 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
     | _ -> env
   in
   let typed_children = List.rev @@ fst @@ List.fold_left (fun (acc, i) ch ->
-      let ch' = deduce_expr_type ~override trig_env (env_proc_fn (hd' acc) i) ch
+      let ch' = deduce_expr_type ~override trig_env (env_proc_fn (hd' acc) i) tenv ch
       in ch'::acc, i+1)
     ([], 0)
     untyped_children
@@ -851,7 +877,11 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
           begin match get_tpolyq_tags tcol with
           | None      -> t_erroru @@ TBad(tcol', "not a polyqueue")
           | Some tags ->
-              let t_tag = thd3 @@ List.find (fun (_,s,_) -> (s:string) = tag) tags in
+              let t_tag =
+                try
+                  thd3 @@ List.find (fun (_,s,_) -> (s:string) = tag) tags
+                with Not_found -> t_erroru @@ TBad(tcol', "no tag named "^tag)
+              in
               let targ' = [t_int; t_int; t_tag] in
               if not @@ list_forall2 (<~) targ targ' then
                 t_erroru @@ TMismatch(wrap_ttuple targ, wrap_ttuple targ', "args") else
@@ -871,7 +901,11 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
           begin match get_tpolyq_tags tcol with
           | None      -> t_erroru @@ TBad(tcol', "not a polyqueue")
           | Some tags ->
-              let t_tag = thd3 @@ List.find (fun (_,s,_) -> (s:string) = tag) tags in
+              let t_tag =
+                try
+                  thd3 @@ List.find (fun (_,s,_) -> (s:string) = tag) tags
+                with Not_found -> t_erroru @@ TBad(tcol', "no tag named "^tag)
+              in
               let targ' = [tacc; t_int; t_int; t_tag] in
               if not @@ list_forall2 (<~) targ targ' then
                 t_erroru @@ TMismatch(wrap_ttuple targ, wrap_ttuple targ', "args") else
@@ -889,9 +923,18 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
           begin match get_tpolyq_tags tcol with
           | None      -> t_erroru @@ TBad(tcol', "not a polyqueue")
           | Some tags ->
-              let t_tag = thd3 @@ List.find (fun (_,s,_) -> (s:string) = tag) tags in
-              t_tag
+              try
+                thd3 @@ List.find (fun (_,s,_) -> (s:string) = tag) tags
+              with Not_found -> t_erroru @@ TBad(tcol', "no tag named "^tag)
           end
+
+      | PolyTagAt ->
+          let tcol', tidx = bind 0, bind 1 in
+          if not (tidx === t_int) then t_erroru @@ TMismatch(tidx, t_int, "index") else
+          let tcol, _ =
+            try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') in
+          if not (is_tpolyq tcol) then t_erroru @@ TBad(tcol', "not a polyqueue") else
+          t_int
 
       | PolyAtWith tag ->
           let tcol', tidx, toffset, tlam_none, tlam_some = bind 0, bind 1, bind 2, bind 3, bind 4 in
@@ -910,10 +953,14 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
           begin match get_tpolyq_tags tcol with
           | None      -> t_erroru @@ TBad(tcol', "not a polyqueue")
           | Some tags ->
-              let t_tag = thd3 @@ List.find (fun (_,s,_) -> (s:string) = tag) tags in
-              if not (list_forall2 (<~) ts_arg [t_tag]) then
-                t_erroru (TMismatch(wrap_ttuple ts_arg, t_tag, "some lambda")) else
-              ts_ret
+            let t_tag =
+              try
+                thd3 @@ List.find (fun (_,s,_) -> (s:string) = tag) tags
+              with Not_found -> t_erroru @@ TBad(tcol', "no tag named "^tag)
+            in
+            if not (list_forall2 (<~) ts_arg [t_tag]) then
+              t_erroru (TMismatch(wrap_ttuple ts_arg, t_tag, "some lambda")) else
+            ts_ret
           end
 
       | PolyInsert tag ->
@@ -923,9 +970,27 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
           begin match get_tpolyq_tags tcol with
           | None      -> t_erroru @@ TBad(tcol', "not a polyqueue")
           | Some tags ->
-              let t_tag = thd3 @@ List.find (fun (_,s,_) -> (s:string) = tag) tags in
-              if not (telem === t_tag) then t_erroru @@ TMismatch(telem, t_tag, "element") else
-              t_unit
+            let t_tag =
+              try
+                thd3 @@ List.find (fun (_,s,_) -> (s:string) = tag) tags
+              with Not_found -> t_erroru @@ TBad(tcol', "no tag named "^tag)
+            in
+            if not (telem === t_tag) then t_erroru @@ TMismatch(telem, t_tag, "element") else
+            t_unit
+          end
+
+      | PolySkip(_, tag) ->
+          let tcol', tidx, toffset = bind 0, bind 1, bind 2 in
+          if not (tidx === t_int) then t_erroru @@ TMismatch(tidx, t_int, "index") else
+          if not (toffset === t_int) then t_erroru @@ TMismatch(toffset, t_int, "offset") else
+          let tcol, _ =
+            try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') in
+          begin match get_tpolyq_tags tcol with
+          | None      -> t_erroru @@ TBad(tcol', "not a polyqueue")
+          | Some tags ->
+              if not (List.exists (fun (_,s,_) -> (s:string) = tag) tags) then
+                t_erroru @@ TBad(tcol', sp "no tag named %s" tag) else
+              wrap_ttuple [t_int; t_int]
           end
 
   in
@@ -936,13 +1001,13 @@ let rec deduce_expr_type ?(override=true) trig_env env utexpr : expr_t =
   with Failure _ -> () end;
   attach_type current_type
 
-let check_trigger_type trig_env env id args locals body rebuild_f =
+let check_trigger_type trig_env env tenv id args locals body rebuild_f =
   let name           = "Trigger("^id^")" in
   let self_bindings  = id, canonical @@ TTarget(hd @@ type_of_arg args) in
   let arg_bindings   = gen_arg_bindings args in
   let local_bindings = List.map (fun x -> fst3 x, snd3 x) locals in
   let inner_env = self_bindings :: arg_bindings @ local_bindings @ env in
-  let typed_body = deduce_expr_type trig_env inner_env body in
+  let typed_body = deduce_expr_type trig_env inner_env tenv body in
   let t_b = type_of_expr typed_body in
   match t_b.typ with
   | TUnit ->
@@ -972,7 +1037,7 @@ let type_of_resource (env:(id_t * type_t list) list) r = match r with
   | Handle(t, _, _) -> [t]
   | Stream(t, ConstStream e) ->
     let uuid = id_of_expr e in
-    let tcol' = type_of_expr @@ deduce_expr_type [] [] e in
+    let tcol' = type_of_expr @@ deduce_expr_type [] [] [] e in
     let tcol, telem =
       try unwrap_tcol tcol' with Failure _ -> t_error uuid "Stream" (not_collection tcol') in
     if not (t === telem)
@@ -1014,9 +1079,9 @@ let arg_type_of_trigger error_prefix trig_env trig_id =
   with Not_found ->
     t_error (-1) error_prefix (TMsg("Could not find trigger named "^trig_id))
 
-let typecheck_flow env trig_env resource_env fp =
+let typecheck_flow env tenv trig_env resource_env fp =
   let check_code_type name id args locals body rebuild_f =
-    try check_trigger_type trig_env env id args locals body rebuild_f
+    try check_trigger_type trig_env env tenv id args locals body rebuild_f
     with TypeError(ast_id, inner_name, msg) ->
       raise @@ TypeError(ast_id, name^":"^inner_name, msg)
   in
@@ -1087,73 +1152,78 @@ let source_types_of_roles prog =
 
 let type_bindings_of_program prog =
   (* do a first pass, collecting trigger types and resources *)
+  (* tenv = alias env *)
   let trig_env = trigger_types_of_program prog in
   let resource_env = source_types_of_program prog in
   let rresource_env = source_types_of_roles prog in
-  let prog, env =
-    List.fold_left (fun (nprog, env) (d, meta) ->
-      let nd, nenv = match d with
+  let prog, env, tenv =
+    List.fold_left (fun (nprog, env, tenv) (d, meta) ->
+      let nd, nenv, talias_env = match d with
         | Global(i, t, Some init) ->
           let typed_init =
-            try deduce_expr_type trig_env env init
+            try deduce_expr_type trig_env env tenv init
             with TypeError(ast_id, inner, msg) ->
-              raise (TypeError(ast_id, "Global "^i^":"^inner, msg))
+              raise @@ TypeError(ast_id, "Global "^i^":"^inner, msg)
           in
           let expr_type = type_of_expr typed_init in
-          if not (expr_type === t) then t_error (-1) i
-              (TMismatch(expr_type, t,
-                  "Mismatch in global type declaration."))
+          if not (expr_type === t) then t_error (-1) i @@
+            TMismatch(expr_type, t, "Mismatch in global type declaration.")
           else
-          Global(i, t, Some typed_init), (i, t) :: env
+          Global(i, t, Some typed_init), (i, t) :: env, tenv
 
-        | Global(i, t, None) -> (Global(i, t, None), (i, t) :: env)
+        | Global(i, t, None) as x -> x, (i, t) :: env, tenv
 
-        | Foreign(i, t) ->
+        | Foreign(i, t) as x ->
             begin try let t_f = !lookup_type i in
-              if not (t <~ t_f) then t_error (-1) i
-                (TMismatch(t, t_f, "Mismatch in foreign function type."))
+              if not (t <~ t_f) then t_error (-1) i @@
+                TMismatch(t, t_f, "Mismatch in foreign function type.")
               else
-                (Foreign(i, t), (i, t) :: env)
+                x, (i, t) :: env, tenv
             with Not_found ->
-              t_error (-1) i (TMsg "Foreign function not found") end
+              t_error (-1) i @@ TMsg "Foreign function not found"
+            end
 
         | Flow fp ->
-          let nfp, nenv = typecheck_flow env trig_env resource_env fp
-          in (Flow nfp), nenv
+          let nfp, nenv = typecheck_flow env tenv trig_env resource_env fp in
+          Flow nfp, nenv, tenv
 
-        | Role(id,fp) ->
+        | Role(id, fp) ->
           let role_resource_env =
             try List.assoc id rresource_env with Not_found ->
-              t_error (-1) "Invalid role" (TMsg("No role named "^id^" found"))
+              t_error (-1) "Invalid role" @@ TMsg("No role named "^id^" found")
           in
-          let nfp,nenv = typecheck_flow env trig_env role_resource_env fp
-          in (Role(id, nfp), nenv)
+          let nfp, nenv = typecheck_flow env tenv trig_env role_resource_env fp in
+          Role(id, nfp), nenv, tenv
 
-        | DefaultRole id ->
-          if List.mem_assoc id rresource_env then (DefaultRole(id), env)
-          else t_error (-1) "Invalid default role" (TMsg("No role named "^id^" found"))
+        | DefaultRole id as x->
+          if List.mem_assoc id rresource_env then
+            x, env, tenv
+          else
+            t_error (-1) "Invalid default role" @@ TMsg("No role named "^id^" found")
 
-      in (nprog@[nd, (Type(t_unit)::meta)]), nenv
-    ) ([], []) prog
- in prog, env, trig_env, rresource_env
+        | Typedef(id, t) as x -> x, env, (id, t)::tenv
+
+      in (nprog@[nd, (Type(t_unit)::meta)]), nenv, tenv
+    ) ([], [], []) prog
+ in prog, env, tenv, trig_env, rresource_env
 
 let deduce_program_type program =
-  let prog,_,_,_ = type_bindings_of_program program
+  let prog,_,_,_,_ = type_bindings_of_program program
   in prog
 
 let deduce_program_test_type prog_test =
   let proc p testl =
-    let p', env, trig_env, _ = type_bindings_of_program p in
+    let p', env, tenv, trig_env, _ = type_bindings_of_program p in
     let testl' = list_map (fun (expr, check_expr) ->
       match check_expr with
       | FileExpr s ->
           (* can't check if it's a file *)
-          let expr_t = deduce_expr_type trig_env env expr in
+          let expr_t = deduce_expr_type trig_env env tenv expr in
           expr_t, check_expr
       | InlineExpr (nm, e) ->
           (* create a dummy equals to check both expressions *)
           let e_test = mk_eq expr e in
-          let e_test_t = deduce_expr_type trig_env env e_test in
+          let e_test_t = deduce_expr_type trig_env env tenv e_test in
           let e_l, e_r = decompose_eq e_test_t in
           e_l, InlineExpr (nm, e_r)
       ) testl

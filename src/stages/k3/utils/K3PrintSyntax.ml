@@ -114,6 +114,7 @@ and lazy_base_type c ~in_col ?(no_paren=false) ?(paren_complex=false) t =
       wrap_complex @@
         lazy_concat ~sep:(fun () -> lsp () <| lps "->" <| lsp ())
         (lazy_type c ~in_col:false ~paren_complex:true) (its@[ot])
+  | TAlias s            -> lps s
 
 (* TODO: annotations *)
 (* paren_complex: surround by paren if we're a complex type for clarity *)
@@ -222,7 +223,8 @@ let rec lazy_expr c expr =
     | Insert | InsertAt | SetAll | Extend | Iterate | Map | Filter | Flatten | Send | Delete | DeleteAt | ClearAll
     | Update | UpdateSuffix | UpsertWith | UpsertWithBefore | DeletePrefix | FilterOp _
     | Aggregate | AggregateV | GroupByAggregate | Assign | Combine
-    | PolyIter | PolyFold | PolyFoldTag _ | PolyIterTag _ | PolyAt _ | PolyAtWith _ | PolyInsert _ -> wrap_hov 2 e
+    | PolyIter | PolyFold | PolyFoldTag _ | PolyIterTag _ | PolyAt _ | PolyAtWith _ | PolyInsert _ | PolyTagAt |
+      PolySkip _ -> wrap_hov 2 e
     | _ -> id_fn e
   in let out = match U.tag_of_expr expr with
   | Const con  -> lazy_const c con
@@ -428,6 +430,11 @@ let rec lazy_expr c expr =
     lps "poly_at_with" <| lazy_paren (lps tag <| lcomma () <| expr_5(e0,e1,e2,e3,e4))
   | PolyInsert tag -> let _, e0, e1 = U.decompose_poly_insert expr in
     lps "poly_insert" <| lazy_paren (lps tag <| lcomma () <| expr_pair(e0, e1))
+  | PolyTagAt -> let p = U.decompose_poly_tag_at expr in
+    lps "poly_tag_at" <| lazy_paren (expr_pair p)
+  | PolySkip _ -> let all, tag, e0, e1, e2 = U.decompose_poly_skip expr in
+    let nm = if all then "poly_skip_all" else "poly_skip" in
+    lps nm <| lazy_paren (lps tag <| lcomma () <| expr_triple(e0, e1, e2))
   in
   let out = wrap out in
   (* check for annotations *)
@@ -504,6 +511,8 @@ let lazy_declaration c d =
   | Flow fprog -> lazy_flow_program c fprog
   | DefaultRole id -> lps ("sdefault srole "^id)
   | Foreign(id, t) -> lps ("foreign "^id^" :") <| lsp () <| lazy_type c t
+  | Typedef(id, t) -> lps ("typedef "^id^" :") <| lsp () <| lazy_type c t
+
   in
   wrap_hv 0 out <| lcut ()
 

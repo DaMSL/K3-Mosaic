@@ -61,6 +61,7 @@ let lcomma () = lps "," <| lsp ()
 type config = {
                 env:T.type_bindings_t;  (* type bindings for environment *)
                 trig_env:T.type_bindings_t;
+                tenv:T.type_bindings_t; (* type aliases *)
                 map_to_fold:bool;       (* convert maps and ext to fold, due to k3new limitations *)
                 project:StrSet.t;       (* need to project further down *)
                 singleton_id:string;
@@ -71,6 +72,7 @@ type config = {
 let default_config = {
                        env = [];
                        trig_env = [];
+                       tenv = [];
                        map_to_fold = false;
                        project = StrSet.empty;
                        singleton_id="elem";
@@ -85,12 +87,12 @@ let typecheck e =
     T.type_of_expr e
   with T.TypeError _ ->
     (* try to deduce expression type if missing *)
-    T.type_of_expr @@ T.deduce_expr_type ~override:false [] [] e
+    T.type_of_expr @@ T.deduce_expr_type ~override:false [] [] [] e
 
 (* light type checking for expressions we create *)
 let light_type c e =
   try
-     T.deduce_expr_type ~override:false c.trig_env c.env e
+     T.deduce_expr_type ~override:false c.trig_env c.env c.tenv e
   with T.TypeError (uuid, name, err) as exc ->
     prerr_string @@ sp "Typechecker Error @%d: %s\n%s\n\n%s" uuid name
       (K3TypeError.string_of_error err) (K3PrintSyntax.string_of_expr ~uuid_highlight:uuid e);
@@ -225,6 +227,7 @@ and lazy_base_type ?(brace=true) ?(mut=false) ?(empty=false) c ~in_col t =
     <| lazy_type c ~in_col:true vt <| lps " @ " <| lazy_col c ct vt)
   | TFunction(itl, ot) ->
       lps_list ~sep:" -> " CutHint (lazy_type c) (itl@[ot])
+  | TAlias id -> lps id
 
 and lazy_type ?empty ?(in_col=false) c {typ; mut; anno} =
   lazy_base_type ?empty ~in_col ~mut c typ
@@ -1325,7 +1328,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
       lps_list CutHint (lazy_expr c) args
 
   | PolyIter -> let fn, col = U.decompose_poly_iter expr in
-    apply_method c ~name:"iterate" ~col ~args:[fn] ~arg_info:[def_a]
+    apply_method c ~name:"traverse" ~col ~args:[fn] ~arg_info:[def_a]
   | PolyFold -> let fn, acc, col = U.decompose_poly_fold expr in
     apply_method c ~name:"foldl" ~col ~args:[fn; acc] ~arg_info:[def_a; def_a]
   | PolyIterTag tag -> let _, idx, offset, fn, col = U.decompose_poly_iter_tag expr in
@@ -1337,7 +1340,12 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
   | PolyAtWith tag -> let _, col, idx, offset, lam_none, lam_some = U.decompose_poly_at_with expr in
     apply_method c ~name:(tag^"_safe_at") ~col ~args:[idx; offset; lam_none; lam_some] ~arg_info:[def_a; def_a; def_a; [0], false]
   | PolyInsert tag -> let _, col, v = U.decompose_poly_insert expr in
-    apply_method c ~name:("append_"^tag) ~col ~args:[col; v] ~arg_info:[def_a; [], true]
+    apply_method c ~name:("append_"^tag) ~col ~args:[v] ~arg_info:[[], true]
+  | PolyTagAt   -> let col, i = U.decompose_poly_tag_at expr in
+    apply_method c ~name:("tag_at") ~col ~args:[i] ~arg_info:[def_a]
+  | PolySkip _ -> let all, tag, col, idx, offset = U.decompose_poly_skip expr in
+    let nm = if all then "skip_all_" else "skip_" in
+    apply_method c ~name:(nm^tag) ~col ~args:[idx; offset] ~arg_info:[def_a; def_a]
   in
   (* check if we need to write a property *)
   let props = U.properties_of_expr expr in
@@ -1435,6 +1443,7 @@ let lazy_declaration c d =
   | Flow fprog -> lazy_flow_program c fprog
   | DefaultRole id -> []
   | Foreign(id, t) -> lps ("declare "^id^" :") <| lsp () <| lazy_type c t
+  | Typedef(id, t) -> lps "typedef " <| lps id <| lps " = " <| lazy_type c t
   in
   wrap_hov 0 out <| lcut ()
 
@@ -1466,8 +1475,8 @@ let filter_incompatible prog =
 
 (* print a K3 program in syntax *)
 (* We get the typechecking environments so we can do incremental typechecking where needed *)
-let string_of_program ?(map_to_fold=false) ?(use_filemux=false) ?(safe_writes=false) prog (env, trig_env) =
-  let config = {default_config with env; trig_env; map_to_fold; use_filemux; safe_writes} in
+let string_of_program ?(map_to_fold=false) ?(use_filemux=false) ?(safe_writes=false) prog (env, tenv, trig_env) =
+  let config = {default_config with env; trig_env; tenv; map_to_fold; use_filemux; safe_writes} in
   wrap_f @@ fun () ->
     let l = wrap_hv 0 (lps_list ~sep:"" CutHint (lazy_declaration config |- fst) prog) in
     force_list l

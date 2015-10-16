@@ -55,9 +55,10 @@ and base_type_t
     | TTarget       of type_t
     | TFunction     of type_t list * type_t
     | TIndirect     of type_t
+    | TAlias        of id_t (* a type alias *)
 
 and type_t = {
-  typ: base_type_t;
+  mutable typ: base_type_t;
   mut: bool;
   anno: annotation_t;
 }
@@ -163,6 +164,8 @@ type expr_tag_t
     | PolyAt of string
     | PolyAtWith of string
     | PolyInsert of string
+    | PolyTagAt
+    | PolySkip of bool * string (* all, tag *)
 
 (* Expression Tree *)
 type expr_t = ((int * expr_tag_t) * annotation_t) tree_t
@@ -220,6 +223,7 @@ type declaration_t
     | Flow          of flow_program_t
     | Role          of id_t * flow_program_t
     | DefaultRole   of id_t
+    | Typedef       of id_t * type_t
 
 (* K3 Programs *)
 type program_t = (declaration_t * annotation_t) list

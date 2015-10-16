@@ -156,6 +156,8 @@ let string_of_tag_type = function
     | PolyAt s         -> "PolyAt("^s^")"
     | PolyAtWith s     -> "PolyAtWith("^s^")"
     | PolyInsert s     -> "PolyInsert("^s^")"
+    | PolySkip(b, s)   -> sp "PolySkip(%b, %s)" b s
+    | PolyTagAt        -> "PolyTagAt"
 
 
 let sott tag = string_of_tag_type tag
@@ -177,6 +179,7 @@ let base_type_tag = function
   | TTarget _     -> "TTarget"
   | TIndirect _   -> "TIndirect"
   | TFunction _   -> "TFunction"
+  | TAlias s      -> "TAlias "^s
 
 let btt = base_type_tag
 
@@ -273,8 +276,7 @@ let flat_string_of_flow_program sp =
   "[ "^(String.concat ","
          (List.map (fun (fs,_) -> flat_string_of_flow_statement fs) sp))^" ]"
 
-let flat_string_of_declaration d =
-  match d with
+let flat_string_of_declaration = function
     | Global(i, t, init) ->
       tag_str "Global"
         ([i; flat_string_of_type t]@(string_opt flat_string_of_expr init))
@@ -286,6 +288,8 @@ let flat_string_of_declaration d =
     | Role (id, sp)    -> tag_str "Role" [id; flat_string_of_flow_program sp]
 
     | DefaultRole (id) -> tag_str "DefaultRole" [id]
+
+    | Typedef(id, t) -> tag_str "typedef" [id; flat_string_of_type t]
 
 let flat_string_of_program ss =
   tag_str "K3" (List.map (fun (d,_) ->
@@ -489,6 +493,8 @@ let print_declaration c d =
     | Role (id, sp)   -> my_tag "Role" [lps (quote id); lazy(print_flow_fn sp)]
 
     | DefaultRole id  -> my_tag ~cut:CutHint "DefaultRole" [lps (quote id)]
+
+    | Typedef(id, t)  -> my_tag "typedef" [lps id; lps " = "; lazy_type c t]
 
 let string_of_base_type bt  = wrap_formatter (fun () -> print_base_type def_c bt)
 let string_of_type t        = wrap_formatter (fun () -> print_type def_c t)

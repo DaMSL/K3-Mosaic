@@ -56,6 +56,7 @@ rule tokenize = parse
     | "trigger"  { TRIGGER }
     | "srole"    { ROLE }
     | "sdefault" { DEFAULT }
+    | "typedef"  { TYPEDEF }
 
     | "ssource"   { SOURCE }
     | "ssink"     { SINK }
@@ -218,7 +219,9 @@ rule tokenize = parse
     | "poly_at" { POLY_AT }
     | "poly_at_with" { POLY_AT_WITH }
     | "poly_insert" { POLY_INSERT }
-
+    | "poly_tag_at" { POLY_TAG_AT }
+    | "poly_skip"   { POLY_SKIP }
+    | "poly_skip_all" { POLY_SKIP_ALL }
 
     | '@' { ANNOTATE }
 

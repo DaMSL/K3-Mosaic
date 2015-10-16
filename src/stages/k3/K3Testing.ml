@@ -33,8 +33,8 @@ let parse_expr s = K3Parser.expr K3Lexer.tokenize (Lexing.from_string s)
 (* --- Evaluation --- *)
 (* we pass in an optional interpreter environment, a program for type bindings,
  * and an expression *)
-let eval_test_expr_env tdecl_prog t_env trig_env val_env expr =
-  let typed_expr = deduce_expr_type trig_env t_env expr in
+let eval_test_expr_env tdecl_prog t_env ta_env trig_env val_env expr =
+  let typed_expr = deduce_expr_type trig_env t_env ta_env expr in
   value_of_eval @@ snd @@
     eval_expr ("localhost", 1) None val_env typed_expr
 
@@ -43,12 +43,12 @@ let eval_test_expr_env tdecl_prog t_env trig_env val_env expr =
 let eval_test_expr peers decl_prog expr =
   (* get the type bindings from the typechecker so we have an environment for
    * typechecking *)
-  let tdecl_prog, t_env, trig_env, _ = type_bindings_of_program decl_prog in
+  let tdecl_prog, t_env, ta_env, trig_env, _ = type_bindings_of_program decl_prog in
   (* get the value environment from the interpreter, excluding the trigger
    * functions. if we pass an environment, use that *)
   let val_env =
     env_of_program ~peers ~role:"" (K3Runtime.init_scheduler_state peers) tdecl_prog in
-  eval_test_expr_env tdecl_prog t_env trig_env val_env expr
+  eval_test_expr_env tdecl_prog t_env ta_env trig_env val_env expr
 
 (* Tests *)
 let equals_assertion comp_fn expected actual string_fn =
@@ -181,10 +181,10 @@ let test_program peers globals_k3 interpret_fn file_name test =
   let prog_globals = globals_k3 @ program in
   (* get the type bindings from the typechecker so we have an environment for
    * typechecking *)
-  let tdecl_prog, t_env, trig_env, _ = type_bindings_of_program prog_globals in
+  let tdecl_prog, t_env, ta_env, trig_env, _ = type_bindings_of_program prog_globals in
   let test_cases = list_map (fun (i, (lexp, rexp)) ->
       let name, expr = check_as_expr rexp in
-      let v1 = eval_test_expr_env tdecl_prog t_env trig_env v_env lexp in
+      let v1 = eval_test_expr_env tdecl_prog t_env ta_env trig_env v_env lexp in
       let v2 = eval_test_expr peers [] expr in
       case name @@ v1 @=? v2
     ) numbered_tests

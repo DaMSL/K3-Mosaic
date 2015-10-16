@@ -247,8 +247,8 @@ let typed_program_with_globals p =
   let p' =
     K3StdLib.add_globals p in
   try
-    let p, env, trig_env, _ = type_bindings_of_program p' in
-    p, (env, trig_env)
+    let p, env, tenv, trig_env, _ = type_bindings_of_program p' in
+    p, (env, tenv, trig_env)
   with TypeError (a,b,c) -> handle_type_error (K3Data p') a b c
 
 let typed_program_test_with_globals prog_test =

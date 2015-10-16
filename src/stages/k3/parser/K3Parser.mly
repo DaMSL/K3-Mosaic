@@ -91,7 +91,7 @@
 %}
 
 %token NETWORK EXPECTED
-%token DECLARE FOREIGN TRIGGER ROLE DEFAULT
+%token DECLARE FOREIGN TRIGGER ROLE DEFAULT TYPEDEF
 %token CONSUME BINDFLOW SOURCE SINK PATTERN FILE SOCKET RANDOM STREAM
 
 %token UNIT UNKNOWN TOP NOTHING
@@ -132,7 +132,7 @@
 %token MAP ITERATE FILTER FLATTEN
 %token AGGREGATE AGGREGATEV GROUPBYAGGREGATE
 %token SORT RANK SIZE
-%token POLY_ITER POLY_ITER_TAG POLY_FOLD POLY_FOLD_TAG POLY_AT POLY_AT_WITH POLY_INSERT
+%token POLY_ITER POLY_ITER_TAG POLY_FOLD POLY_FOLD_TAG POLY_AT POLY_AT_WITH POLY_INSERT POLY_TAG_AT POLY_SKIP POLY_SKIP_ALL
 
 %token PEEK PEEK_WITH_VID AT AT_WITH MIN_WITH
 
@@ -201,6 +201,9 @@ declaration :
     | ROLE IDENTIFIER LBRACE flow_program RBRACE   { Role($2, $4) }
     | ROLE IDENTIFIER LBRACE RBRACE                { Role($2, []) }
     | DEFAULT ROLE IDENTIFIER                      { DefaultRole($3) }
+
+    | TYPEDEF IDENTIFIER GETS type_expr            { Typedef($2, $4) }
+
 
     /* Error handling */
     | DECLARE IDENTIFIER COLON type_expr GETS error { expr_error() }
@@ -338,6 +341,7 @@ type_expr :
     | INDIRECT type_expr            { wrap_tind $2 }
     | TYPE                          { canonical $1 }
     | annotated_collection_type     { let c, anno = $1 in { (canonical c) with anno} }
+    | IDENTIFIER                    { canonical (TAlias $1) }
 ;
 
 fn_type_expr_list :
@@ -643,6 +647,7 @@ lambda :
 
 tuple_index :
     | anno_expr PERIOD LBRACKET INTEGER RBRACKET { mkexpr (Subscript $4) [$1] }
+;
 
 access :
     | anno_expr LBRACKET tuple RBRACKET { mkexpr Slice [$1; $3] }
@@ -656,6 +661,9 @@ access :
     | AT_WITH LPAREN anno_expr COMMA anno_expr COMMA anno_expr COMMA anno_expr RPAREN { mkexpr AtWith [$3; $5; $7; $9] }
     | POLY_AT LPAREN IDENTIFIER COMMA anno_expr COMMA anno_expr COMMA anno_expr RPAREN { mkexpr (PolyAt $3) [$5; $7; $9] }
     | POLY_AT_WITH LPAREN IDENTIFIER COMMA anno_expr COMMA anno_expr COMMA anno_expr COMMA anno_expr COMMA anno_expr RPAREN { mkexpr (PolyAtWith $3) [$5; $7; $9; $11; $13] }
+    | POLY_TAG_AT LPAREN anno_expr COMMA anno_expr RPAREN { mkexpr PolyTagAt [$3; $5] }
+    | POLY_SKIP LPAREN IDENTIFIER COMMA anno_expr COMMA anno_expr COMMA anno_expr RPAREN { mkexpr (PolySkip(false, $3)) [$5; $7; $9] }
+    | POLY_SKIP_ALL LPAREN IDENTIFIER COMMA anno_expr COMMA anno_expr COMMA anno_expr RPAREN { mkexpr (PolySkip(true, $3)) [$5; $7; $9] }
     | MIN_WITH LPAREN anno_expr COMMA anno_expr COMMA anno_expr RPAREN { mkexpr MinWith [$3; $5; $7] }
 ;
 

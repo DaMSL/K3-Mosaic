@@ -46,13 +46,14 @@ val deduce_constant_type: int -> (id_t * type_t) list -> constant_t -> type_t
 
 (* takes trigger environment, environment and expression and returns a typed
  * expression *)
-val deduce_expr_type: ?override:bool -> type_bindings_t -> type_bindings_t -> expr_t -> expr_t
+  (* 3rd type_bindings is the type alias environment *)
+val deduce_expr_type: ?override:bool -> type_bindings_t -> type_bindings_t -> type_bindings_t -> expr_t -> expr_t
 
-(* given a program, returns the typechecked program, its environment, trigger
- * environment, and resource environment *)
+(* given a program, returns the typechecked program, its environment, type alias environment,
+   trigger environment, and resource environment *)
 val type_bindings_of_program :
   program_t ->
-  program_t * type_bindings_t * type_bindings_t * event_type_bindings_t
+  program_t * type_bindings_t * type_bindings_t * type_bindings_t * event_type_bindings_t
 
 val deduce_program_type : program_t -> program_t
 
