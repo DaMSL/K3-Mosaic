@@ -948,12 +948,12 @@ let mk_agg_bitmap' ?all ?idx args e zero bitmap = mk_agg_bitmap ?all ?idx args e
 
 (* check for tag validity *)
 let mk_check_tag tag col idx offset e =
-  mk_if (mk_eq (mk_poly_tag_at idx col) @@ mk_cint tag)
+  mk_if (mk_eq (mk_poly_tag_at col idx) @@ mk_cint tag)
     e
     (mk_error "wrong tag")
 
 let mk_if_tag tag col idx offset e1 e2 =
-  mk_if (mk_eq (mk_poly_tag_at idx col) @@ mk_cint tag) e1 e2
+  mk_if (mk_eq (mk_poly_tag_at col idx) @@ mk_cint tag) e1 e2
 
 let mk_check_tag' tag e =
   mk_check_tag tag (mk_var "poly_queue") (mk_var "idx") (mk_var "offset") e

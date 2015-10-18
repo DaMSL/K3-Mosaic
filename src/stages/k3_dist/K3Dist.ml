@@ -715,11 +715,30 @@ let stmt_map_ids =
 let get_global_poly_tags c =
   List.map (fun (i, (s,_,i_ts)) -> i, s, wrap_ttuple @@ snd_many i_ts) c.poly_tags
 
-let poly_args c =
-  let t_poly = wrap_tpolyq @@ get_global_poly_tags c in
-  ["poly_queue", t_poly; "idx", t_int; "offset", t_int]
+let poly_queue_typedef_id = "poly_queue_t"
+let poly_queue_typedef c = wrap_tpolyq @@ get_global_poly_tags c
+let poly_queue = create_ds "poly_queue" @@ t_alias poly_queue_typedef_id
+
+let poly_queues =
+  let e = ["queue", poly_queue.t] in
+  let init =
+    mk_map (mk_lambda' unknown_arg @@ mk_empty poly_queue.t) @@
+      mk_var my_peers.id in
+  create_ds ~e ~init poly_queues_id @@ wrap_tvector' @@ snd_many e
+
+let poly_queue_bitmap =
+  let init =
+    mk_map (mk_lambda' unknown_arg mk_cfalse) @@ mk_var my_peers.id in
+  create_ds poly_queue_bitmap_id ~init @@ wrap_tvector t_bool
+
+let poly_args =
+  ["poly_queue", poly_queue.t; "idx", t_int; "offset", t_int]
 
 let poly_args_partial = ["idx", t_int; "offset", t_int]
+
+let p_idx = ["idx", t_int]
+
+let p_off = ["offset", t_int]
 
 let nd_rcv_fetch_args c t = args_of_t_with_v c t
 
@@ -759,7 +778,7 @@ let calc_poly_tags c =
       rcv_fetch_name_of_t t, DsTrig, nd_rcv_fetch_args c t] @
       (* args for do completes without rhs maps *)
       (List.map (fun s ->
-          do_complete_name_of_t t s, Trig, nd_do_complete_trig_args c t) @@
+          do_complete_name_of_t t s^"_trig", Trig, nd_do_complete_trig_args c t) @@
         P.stmts_without_rhs_maps_in_t c.p t) @
       (* the types for nd_rcv_push *)
       (List.map (fun (s, m) ->
@@ -783,22 +802,6 @@ let calc_poly_tags c =
   in
   insert_index_fst l
 
-let poly_queue_typedef_id = "poly_queue_t"
-let poly_queue_typedef c = wrap_tpolyq @@ get_global_poly_tags c
-let poly_queue = create_ds "poly_queue" @@ t_alias poly_queue_typedef_id
-
-let poly_queues =
-  let e = ["queue", poly_queue.t] in
-  let init =
-    mk_map (mk_lambda' unknown_arg @@ mk_empty poly_queue.t) @@
-      mk_var my_peers.id in
-  create_ds ~e ~init poly_queues_id @@ wrap_tvector' @@ snd_many e
-
-let poly_queue_bitmap =
-  let init =
-    mk_map (mk_lambda' unknown_arg mk_cfalse) @@ mk_var my_peers.id in
-  create_ds poly_queue_bitmap_id ~init @@ wrap_tvector t_bool
-
 (* instead of sending directly, place in the send buffer *)
 (* @bitmap: whether to mark the bitmap *)
 let buffer_for_send ?(wr_bitmap=true) c t addr args =
@@ -821,7 +824,7 @@ let buffer_tuples_from_idxs c ?(drop_vid=false) tuples_nm map_type map_tag indic
     else [e]
   in
   (* check for empty collection *)
-  mk_case_ns (mk_peek indices) "x"
+  mk_case_sn (mk_peek indices) "x"
     (* check for -1, indicating all tuples *)
     (mk_if (mk_eq (mk_var "x") @@ mk_cint (-1))
       (mk_iter

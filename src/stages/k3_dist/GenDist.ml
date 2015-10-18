@@ -535,7 +535,7 @@ let sw_send_fetch_fn c s_rhs_lhs s_rhs t =
                 mk_block [
                   (* send rcv_put *)
                   buffer_for_send c rcv_put_nm "ip" @@
-                    [mk_var D.me_int.id; mk_var "stmt_cnts"] @ args_of_t_as_vars_with_v c t;
+                    [mk_var D.me_int.id] @ args_of_t_as_vars_with_v c t;
                   (* now send stmt_cnt_list *)
                   (mk_iter_bitmap' ~idx:D.stmt_ctr.id
                     (* wr_bitmap: no need to, since we did so above *)
@@ -618,7 +618,7 @@ let sw_send_fetch_fn c s_rhs_lhs s_rhs t =
 let nd_rcv_fetch_trig c trig =
   let fn_name = rcv_fetch_name_of_t trig in
   mk_global_fn fn_name
-    (poly_args c @ D.nd_rcv_fetch_args c trig) (* stmt_map_ids are an inner ds *)
+    (poly_args @ D.nd_rcv_fetch_args c trig) (* stmt_map_ids are an inner ds *)
     [t_int; t_int] @@
     mk_block [
       (* save the bound variables for this trigger so they're available later *)
@@ -626,7 +626,7 @@ let nd_rcv_fetch_trig c trig =
         (mk_var @@ nd_log_write_for c trig) @@
         args_of_t_as_vars_with_v c trig
       ;
-      (* skip to the correct tag *)
+      (* skip over the function tag *)
       mk_poly_skip_let' fn_name @@
       (* check that we have the correct tag *)
       mk_check_tag' (ios_tag c stmt_map_ids.id) @@
@@ -690,13 +690,13 @@ let nd_rcv_fetch_trig c trig =
 let nd_rcv_put_trig c t =
   let fn_name = rcv_put_name_of_t t in
   mk_global_fn fn_name
-    (poly_args c @ D.nd_rcv_put_args c t) (* also pull inner ds *)
+    (poly_args @ D.nd_rcv_put_args c t) (* also pull inner ds *)
     [t_int; t_int] @@
     mk_block [
       (* skip over the calling function slot *)
       mk_poly_skip_let' fn_name @@
-      mk_poly_iter_tag' stmt_cnt_list.id
-        (mk_lambda' (poly_args_partial @ stmt_cnt_list.e) @@
+      mk_poly_iter_tag' stmt_cnt_list_ship.id
+        (mk_lambda3' p_idx p_off stmt_cnt_list_ship.e @@
           mk_if
             (mk_apply' nd_check_stmt_cntr_index_nm @@
               (* false: no data is being sent *)
@@ -712,8 +712,9 @@ let nd_rcv_put_trig c t =
               mk_cunit @@
               P.stmts_of_t c.p t) @@
           mk_cunit);
-      GC.nd_ack_send_code c ~addr_nm:"sender_ip" ~vid_nm:"vid"]
-
+      GC.nd_ack_send_code c ~addr_nm:"sender_ip" ~vid_nm:"vid";
+      mk_poly_skip_all' stmt_cnt_list_ship.id
+    ]
 
 (* Trigger_send_push_stmt_map
  * ----------------------------------------
@@ -807,7 +808,7 @@ List.map
     let fn_name = rcv_push_name_of_t c t s m in
     mk_global_fn fn_name
       (* we also need to get (tuples, tup_ds.t) from the global polyqueue *)
-      (poly_args c @ nd_rcv_push_args c t)
+      (poly_args @ D.nd_rcv_push_args c t)
       (* return idx, offset *)
       [t_int; t_int] @@
       mk_block [
@@ -898,7 +899,8 @@ let send_corrective_fns c =
     let map_ds = D.map_ds_of_id ~global:false c m ~vid:false in
     let delta_tuples2 =
       D.map_ds_of_id ~global:false ~vid:true c m ~name:"delta_tuples2" in
-    let args' = orig_vals @ ["corrective_vid", t_vid] in
+    (* rename vid to corrective_vid for differentiation *)
+    let args' = (list_drop_end 1 D.nd_rcv_corr_args)@["corrective_vid", t_vid] in
     let args = args' @ ["delta_tuples", map_ds.t] in
     let sub_args = args' @ ["delta_tuples2", delta_tuples2.t; "vid_list", t_vid_list] in
     let fn_nm = send_corrective_name_of_t c m in
@@ -981,7 +983,7 @@ let send_corrective_fns c =
                       delta_tuples2.id delta_tuples2.t map_ds.id (mk_var "t_indices");
                     (* buffer vids *)
                     mk_iter (mk_lambda'' ["vid", t_vid] @@
-                      buffer_for_send c "vid" "ip" [mk_var "vid"]) @@ mk_var "vids";
+                      buffer_for_send ~wr_bitmap:false c "vids" "ip" [mk_var "vid"]) @@ mk_var "vids";
                     mk_add (mk_var "count") @@ mk_cint 1
                   ])
               (mk_cint 0) @@
@@ -1392,7 +1394,7 @@ let nd_rcv_correctives_trig c s_rhs t = List.map
     mk_global_fn fn_nm
       (* we always send back acks to the original address, s, vid tuple *)
       (* we also have delta_tuples, as well as corrective vids to extract *)
-      (poly_args c @ nd_rcv_corr_args)
+      (poly_args @ D.nd_rcv_corr_args)
       [t_int; t_int] @@
       (* accumulate delta for this vid and all following vids. This is a very
         * sensitive point in the protocol and it's essential this only be done
