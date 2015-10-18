@@ -868,7 +868,7 @@ let rec deduce_expr_type ?(override=true) trig_env env tenv utexpr : expr_t =
           begin match get_typ taddr with
           | TAddress ->
               if ttarget === targs then t_unit
-              else t_erroru @@ TMismatch(ttarget, targs, "")
+              else t_erroru @@ TMismatch(targs, ttarget, "")
           | _ -> t_erroru @@ TBad(taddr, "not an address")
           end
 
@@ -882,8 +882,9 @@ let rec deduce_expr_type ?(override=true) trig_env env tenv utexpr : expr_t =
           let targ' = [t_int; t_int; t_int] in
           if not @@ list_forall2 (<~) targ targ' then
             t_erroru @@ TMismatch(wrap_ttuple targ, wrap_ttuple targ', "args") else
-          if not (tret === t_unit)
-            then t_erroru (TMismatch(tret, t_unit, "return val")) else
+            let tret' = wrap_ttuple [t_int; t_int] in
+          if not (tret === tret')
+            then t_erroru (TMismatch(tret, tret', "return val")) else
           t_unit
 
       | PolyFold ->

@@ -659,7 +659,7 @@ let maps c =
   in
   P.for_all_maps c.p do_map
 
-let sw_seen_sentry    = create_ds "sw_seen_sentry" (mut t_bool) ~init:mk_cfalse
+let sw_seen_sentinel    = create_ds "sw_seen_sentinel" (mut t_bool) ~init:mk_cfalse
 let sw_init           = create_ds "sw_init" (mut t_bool) ~init:mk_cfalse
 
 (*** trigger names ***)
@@ -719,16 +719,15 @@ let poly_queue_bitmap =
     mk_map (mk_lambda' unknown_arg mk_cfalse) @@ mk_var my_peers.id in
   create_ds poly_queue_bitmap_id ~init @@ wrap_tvector t_bool
 
-let poly_args =
-  ["poly_queue", poly_queue.t; "idx", t_int; "offset", t_int]
-
-let poly_args_partial = ["idx", t_int; "offset", t_int]
-
 let p_idx = ["idx", t_int]
 
 let p_off = ["offset", t_int]
 
 let p_tag = ["tag", t_int]
+
+let poly_args = ["poly_queue", poly_queue.t] @ p_idx @ p_off
+
+let poly_args_partial = ["idx", t_int; "offset", t_int]
 
 (* queue for next message batch -- contains polyqueue *)
 let sw_event_queue =
@@ -743,8 +742,10 @@ let nd_do_complete_trig_args c t =
 let nd_rcv_push_args c t =
   ("has_data", t_bool)::args_of_t_with_v c t
 
-let nd_rcv_corr_args =
-  ["orig_addr", t_int; "orig_stmt_id", t_stmt_id; "orig_vid", t_vid; "hop", t_int; "vid", t_vid]
+(* original values commonly used to send back to original do_complete *)
+let orig_vals = ["orig_addr", t_int; "orig_stmt_id", t_stmt_id; "orig_vid", t_vid; "hop", t_int]
+
+let nd_rcv_corr_args = orig_vals @ ["vid", t_vid]
 
 let nd_rcv_corr_done_args = ["vid", t_vid; "stmt_id", t_stmt_id; "hop", t_int; "count", t_int]
 
@@ -764,8 +765,8 @@ let calc_poly_tags c =
     (* static sentinel *)
     ("sentinel", Event, ["_", t_unit])::
     (* event tags *)
-    (List.map (fun t -> t, Event, try P.args_of_t c.p t with Bad_data _ -> []) events) @
-    (* (P.for_all_trigs c.p ~sys_init:false @@ fun t -> t, Event, P.args_of_t c.p t) @ *)
+    (List.map (fun t -> t, Event, try args_of_t c t with Bad_data _ -> []) events) @
+    (* (P.for_all_trigs c.p ~sys_init:false @@ fun t -> t, Event, args_of_t c t) @ *)
     (* static ds for sw->nd triggers *)
     [stmt_cnt_list_ship.id, Ds, stmt_cnt_list_ship.e;
      stmt_map_ids.id, Ds, stmt_map_ids.e] @
@@ -794,7 +795,7 @@ let calc_poly_tags c =
       P.map_name_of c.p m, Ds, P.map_ids_types_for c.p m) @
     (* t_vid_list ds for correctives *)
     ["vids", Ds, ["vid", t_vid];
-     nd_rcv_corr_done_nm, DsTrig, nd_rcv_corr_done_args;
+     nd_rcv_corr_done_nm, Trig, nd_rcv_corr_done_args;
     (* for GC (node->switch acks) *)
      sw_ack_rcv_trig_nm, Trig, sw_ack_rcv_trig_args]
   in
@@ -951,7 +952,7 @@ let global_vars c dict =
       nd_stmt_cntrs;
       nd_log_master;
       sw_init;
-      sw_seen_sentry;
+      sw_seen_sentinel;
       sw_event_queue;
       ms_start_time;
       ms_end_time;

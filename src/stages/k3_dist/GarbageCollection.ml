@@ -42,11 +42,11 @@ let sw_ack_log  =
   let e = ["vid", t_vid; "count", t_int] in
   create_ds "sw_ack_log" (wrap_tmap' @@ snd_many e) ~e
 
-(* switch: trigger for receiving an ack from a node *)
-let sw_ack_rcv_trig sw_check_done =
+(* switch: ex-trigger for receiving an ack from a node *)
+let sw_ack_rcv sw_check_done =
   let address = "addr" in
-  let ack_trig_args = [address, t_addr; "vid", t_vid] in
-  mk_code_sink' sw_ack_rcv_trig_nm ack_trig_args [] @@
+  let ack_trig_args = [address, t_int; "vid", t_vid] in
+  mk_global_fn sw_ack_rcv_trig_nm ack_trig_args [] @@
   (* increment ack num *)
   mk_block [
     mk_incr sw_num_ack.id;
@@ -260,11 +260,12 @@ let global_vars _ = List.map decl_global
    ms_gc_done_barrier_ctr;
   ]
 
-let functions c =
+let functions c sw_check_done =
+  sw_ack_rcv sw_check_done ::
   do_gc_fns c
 
-let triggers c sw_check_done =
-  [sw_ack_rcv_trig sw_check_done;
+let triggers c =
+  [
    ms_rcv_gc_vid c;
    rcv_req_gc_vid;
    ms_send_gc_req;

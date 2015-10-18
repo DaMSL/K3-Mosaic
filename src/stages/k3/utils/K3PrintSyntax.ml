@@ -71,6 +71,8 @@ let string_of_int_list s = String.concat ", " @@ List.map soi s
 let lazy_keyset  s = lazy_bracket @@ lps @@ string_of_int_set s
 let lazy_keylist s = lazy_bracket @@ lps @@ string_of_int_list s
 
+let lps_tag t = lps (sp "\"%s\"" t)
+
 let rec lazy_poly_variant c l =
   lps_list ~sep:"; " CutHint (fun (i,s,t) -> lps (soi i) <| lps ", " <| lps s <| lps ", " <| lazy_type c t) l
 
@@ -421,20 +423,20 @@ let rec lazy_expr c expr =
   | PolyFold -> let p = U.decompose_poly_fold expr in
     lps "poly_fold" <| lazy_paren (expr_triple p)
   | PolyIterTag tag -> let _, e0, e1, e2, e3 = U.decompose_poly_iter_tag expr in
-    lps "poly_iter_tag" <| lazy_paren (lps tag <| lcomma () <| expr_quad (e0, e1, e2, e3))
+    lps "poly_iter_tag" <| lazy_paren (lps_tag tag <| lcomma () <| expr_quad (e0, e1, e2, e3))
   | PolyFoldTag tag -> let _, e0, e1, e2, e3, e4 = U.decompose_poly_fold_tag expr in
-    lps "poly_fold_tag" <| lazy_paren (lps tag <| lcomma () <| expr_5(e0,e1,e2,e3,e4))
+    lps "poly_fold_tag" <| lazy_paren (lps_tag tag <| lcomma () <| expr_5(e0,e1,e2,e3,e4))
   | PolyAt tag -> let _, e0, e1, e2 = U.decompose_poly_at expr in
-    lps "poly_at" <| lazy_paren (lps tag <| lcomma () <| expr_triple(e0,e1,e2))
+    lps "poly_at" <| lazy_paren (lps_tag tag <| lcomma () <| expr_triple(e0,e1,e2))
   | PolyAtWith tag -> let _, e0, e1, e2, e3, e4 = U.decompose_poly_at_with expr in
-    lps "poly_at_with" <| lazy_paren (lps tag <| lcomma () <| expr_5(e0,e1,e2,e3,e4))
+    lps "poly_at_with" <| lazy_paren (lps_tag tag <| lcomma () <| expr_5(e0,e1,e2,e3,e4))
   | PolyInsert tag -> let _, e0, e1 = U.decompose_poly_insert expr in
-    lps "poly_insert" <| lazy_paren (lps tag <| lcomma () <| expr_pair(e0, e1))
+    lps "poly_insert" <| lazy_paren (lps_tag tag <| lcomma () <| expr_pair(e0, e1))
   | PolyTagAt -> let p = U.decompose_poly_tag_at expr in
     lps "poly_tag_at" <| lazy_paren (expr_pair p)
   | PolySkip _ -> let all, tag, e0, e1, e2 = U.decompose_poly_skip expr in
     let nm = if all then "poly_skip_all" else "poly_skip" in
-    lps nm <| lazy_paren (lps tag <| lcomma () <| expr_triple(e0, e1, e2))
+    lps nm <| lazy_paren (lps_tag tag <| lcomma () <| expr_triple(e0, e1, e2))
   in
   let out = wrap out in
   (* check for annotations *)

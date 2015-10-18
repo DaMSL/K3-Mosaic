@@ -530,7 +530,7 @@ let nd_rcv_fetch_trig c trig =
       mk_check_tag' (ios_tag c stmt_map_ids.id) @@
       (* iterate over the buffered stmt_map data *)
       mk_poly_iter_tag' stmt_map_ids.id @@
-        (mk_lambda' stmt_map_ids.e @@
+        (mk_lambda3' p_idx p_off stmt_map_ids.e @@
           mk_if
             (mk_or
               (* check if we're in corrective mode *)
@@ -755,9 +755,6 @@ let maps_potential_corrective p =
   let rhs_maps = get_maps (P.rhs_maps_of_stmt p) in
   let intersect_maps ts = ListAsSet.inter (lhs_maps ts) (rhs_maps ts) in
   intersect_maps ts
-
-(* original values commonly used to send back to original do_complete *)
-let orig_vals = ["orig_addr", t_addr; "orig_stmt_id", t_stmt_id; "orig_vid", t_vid; "hop", t_int]
 
 (* send_corrective_trigs
  * --------------------------------------
@@ -1257,7 +1254,7 @@ in
 let nd_rcv_corr_done c =
   let lookup_pat = [mk_tuple [mk_var "vid"; mk_var "stmt_id"]; mk_cunknown] in
   let args = nd_rcv_corr_done_args in
-  mk_code_sink' nd_rcv_corr_done_nm args [] @@
+  mk_global_fn nd_rcv_corr_done_nm args [] @@
     mk_block [
       (* update the corrective map. false: not a root of the corrective tree *)
       mk_apply' nd_update_stmt_cntr_corr_map_nm @@
@@ -1306,7 +1303,7 @@ let nd_rcv_correctives_trig c s_rhs t = List.map
       (* convert to delta_tuples *)
       mk_let ["delta_tuples"]
         (mk_poly_fold_tag' map_delta.id
-          (mk_lambda4' ["acc", map_delta.t] ["idx", t_int] ["offset", t_int] map_delta.e @@
+          (mk_lambda4' ["acc", map_delta.t] p_idx p_off map_delta.e @@
             mk_insert_block "acc" @@ ids_to_vars @@ fst_many map_delta.e) @@
           mk_empty map_delta.t) @@
       (* increment the idx, offsets of the map variant *)
@@ -1321,7 +1318,7 @@ let nd_rcv_correctives_trig c s_rhs t = List.map
         (* for every computation vid, only execute if we have all the updates *)
         mk_let ["sent_msgs"]
           (mk_poly_fold_tag' ds_tag
-            (mk_lambda2' ["acc_count", t_int] ["compute_vid", t_vid] @@
+            (mk_lambda4' ["acc_count", t_int] p_idx p_off ["compute_vid", t_vid] @@
               (* get the stmt counter *)
               mk_let ["cntr"]
                 (mk_case_ns (mk_lookup' D.nd_stmt_cntrs.id
@@ -1367,9 +1364,9 @@ let nd_rcv_correctives_trig c s_rhs t = List.map
 let nd_do_corrective_fns c s_rhs ast trig_name corrective_maps =
   let do_corrective_fn (stmt_id, map_id) =
     let tuple_typ = wrap_t_calc' @@ P.map_types_for c.p map_id in
-    mk_global_fn (do_corrective_name_of_t c trig_name stmt_id map_id)
-      (orig_vals @ args_of_t_with_v c trig_name @ ["delta_tuples", tuple_typ])
-      [t_int] @@
+    let fn_nm = do_corrective_name_of_t c trig_name stmt_id map_id in
+    let fn_args = D.orig_vals @ args_of_t_with_v c trig_name @ ["delta_tuples", tuple_typ] in
+    mk_global_fn fn_nm fn_args [t_int] @@
         let lmap = P.lhs_map_of_stmt c.p stmt_id in
         let send_corr_fn = send_corrective_name_of_t c lmap in
         let args, is_col, ast = M.modify_corr_ast c ast map_id stmt_id trig_name in
@@ -1417,13 +1414,13 @@ let trig_dispatcher c =
              | Trig | DsTrig ->
               mk_if (mk_eq (mk_var "tag") @@ mk_cint itag)
                 (* look up this tag *)
-                (mk_poly_at_with' stag @@
+                (mk_poly_at_with' stag @@ mk_lambda' id_ts @@
                   (* if we have subdata, the function must return the new idx, offset *)
-                  let call = mk_lambda'' id_ts @@
-                    mk_apply' stag @@ ids_to_vars @@ fst_many id_ts in
-                  if typ = DsTrig then call
+                  let call l =
+                    mk_apply' stag @@ ids_to_vars @@ fst_many @@ l @ id_ts in
+                  if typ = DsTrig then call D.poly_args
                     (* otherwise we must skip ourselves *)
-                  else mk_block [call; mk_poly_skip' stag])
+                  else mk_block [call []; mk_poly_skip' stag])
                 acc_code
              | _ -> acc_code)
           (mk_error "unmatched tag")
@@ -1439,6 +1436,7 @@ let trig_dispatcher c =
 (* The driver trigger: loop over the even data structures as long as we have spare vids *)
 (* This only fires when we get the token *)
 let sw_event_driver_trig c =
+  let trig_list = StrSet.of_list @@ P.get_trig_list c.p in
   mk_code_sink' sw_event_driver_trig_nm ["vid", t_vid] [] @@
   mk_block [
     mk_let ["next_vid"]
@@ -1466,14 +1464,17 @@ let sw_event_driver_trig c =
                       mk_if (mk_eq (mk_var "tag") @@ mk_cint i)
                         (if nm = "sentinel" then
                           (* don't check size of event queue *)
-                          Proto.sw_seen_sentry ~check_size:false
+                          Proto.sw_seen_sentinel ~check_size:false
                         else
                           mk_poly_at_with' nm @@
                             (* buffer the message *)
-                            mk_apply' (send_fetch_name_of_t nm) @@ ids_to_vars @@ "vid":: fst_many id_ts)
+                            mk_lambda' id_ts @@
+                              mk_apply' (send_fetch_name_of_t nm) @@
+                                ids_to_vars @@ "vid":: fst_many id_ts)
                         acc_code)
                     (mk_error "mismatch on event id") @@
-                    List.filter (function (_,(_,e,_)) -> e = Event) c.poly_tags
+                    List.filter (function (_,(nm,e,_)) ->
+                        e = Event && StrSet.mem nm trig_list) c.poly_tags
                   ;
                   mk_add (mk_cint 1) @@ mk_var "vid"
                   ])
@@ -1521,10 +1522,10 @@ let sw_demux c =
       mk_apply' "parse_sql_date" |- singleton
     else id_fn
   in
-  let sentry_code =
-    (* stash the sentry index in the queue *)
+  let sentinel_code =
+    (* stash the sentinel index in the queue *)
     mk_if (mk_eq (mk_fst @@ mk_var "args") @@ mk_cstring "")
-      (mk_poly_insert "sentry" "sw_demux_poly_queue" [mk_cunit])
+      (mk_poly_insert "sentinel" "sw_demux_poly_queue" [mk_cunit])
       (mk_error "unhandled event")
   in
   mk_code_sink' sw_demux_nm ["args", wrap_ttuple @@ List.map str_of_date_t combo_t] [] @@
@@ -1539,13 +1540,13 @@ let sw_demux c =
       mk_if (mk_eq (mk_fst @@ mk_var "args") @@ mk_cstring trig)
         (mk_if (mk_eq (mk_snd @@ mk_var "args") @@ mk_cint 1)
           (mk_poly_insert ("insert_"^trig) "sw_demux_poly_queue" @@ args) @@
-           mk_poly_insert ("delete"^trig) "sw_demux_poly_queue" @@ args)
+           mk_poly_insert ("delete_"^trig) "sw_demux_poly_queue" @@ args)
         acc)
       t_arg_map
-      sentry_code;
+      sentinel_code;
     (* increment counter *)
     mk_assign sw_demux_ctr.id @@ mk_add (mk_cint 1) @@ mk_var sw_demux_ctr.id;
-    (* ship off if we hit the count or saw the sentry *)
+    (* ship off if we hit the count or saw the sentinel *)
     mk_if (mk_or (mk_geq (mk_var sw_demux_ctr.id) @@ mk_var sw_demux_max.id) @@
                   mk_eq (mk_fst @@ mk_var "args") @@ mk_cstring "")
       (mk_block [
@@ -1642,7 +1643,7 @@ let declare_global_funcs c partmap ast =
   TS.functions @
   K3Route.functions c partmap @
   K3Shuffle.functions c @
-  GC.functions c
+  GC.functions c (Proto.sw_check_done ~check_size:true)
 
 (* Generate all the code for a specific trigger *)
 let gen_dist_for_t c ast trig =
@@ -1735,15 +1736,17 @@ let gen_dist ?(gen_deletes=true)
     nd_check_stmt_cntr_index c ::
     proto_funcs @
     proto_semi_trigs @
+    nd_rcv_corr_done c ::
     [mk_flow @@
       Proto.triggers c @
-      GC.triggers c (Proto.sw_check_done ~check_size:true) @
+      GC.triggers c @
       TS.triggers @
       Timer.triggers c @
-      [trig_dispatcher c;
-       sw_event_driver_trig c;
-       sw_demux c;
-       nd_rcv_corr_done c]
+      [
+        trig_dispatcher c;
+        sw_event_driver_trig c;
+        sw_demux c;
+      ]
     ] @
     roles_of c ast
   in

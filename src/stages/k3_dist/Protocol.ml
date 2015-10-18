@@ -39,8 +39,6 @@ let sw_rcv_init =
   mk_code_sink' sw_rcv_init_nm unit_arg [] @@
   mk_block [
     mk_assign D.sw_init.id mk_ctrue;
-    (* start driver for all switches *)
-    D.mk_send_me D.sw_event_driver_trig_nm;
     (* ack to master *)
     D.mk_send_master ms_rcv_sw_init_ack_nm;
   ]
@@ -176,7 +174,7 @@ let nd_sent_done = create_ds "nd_sent_done" (mut t_bool) ~init:mk_cfalse
 let sw_sent_done = create_ds "sw_sent_done" (mut t_bool) ~init:mk_cfalse
 
 (**** protocol plan ****
- * Switches see sentry and tell master
+ * Switches see sentinel and tell master
  * Master notifies nodes
  * Nodes check when their stmt_cntrs are empty and tell master
  * If all nodes are done, master calls time and ends, but waits
@@ -270,7 +268,7 @@ let sw_check_done ~check_size =
           (mk_eq (mk_size @@ mk_var D.sw_event_queue.id) @@ mk_cint 0) else id_fn) @@
         mk_and
           (mk_eq (mk_var GC.sw_num_ack.id) @@ mk_var GC.sw_num_sent.id) @@
-          mk_eq (mk_var D.sw_seen_sentry.id) mk_ctrue)
+          mk_eq (mk_var D.sw_seen_sentinel.id) mk_ctrue)
     (mk_block [
       (* send *)
       D.mk_send_master ms_rcv_switch_done_nm;
@@ -278,11 +276,10 @@ let sw_check_done ~check_size =
       mk_assign sw_sent_done.id mk_ctrue])
     mk_cunit
 
-(* code for when switches see the sentry *)
-(* TODO: get rid of excess variable *)
-let sw_seen_sentry ~check_size =
+(* code for when switches see the sentinel *)
+let sw_seen_sentinel ~check_size =
   mk_block [
-    mk_assign D.sw_seen_sentry.id mk_ctrue;
+    mk_assign D.sw_seen_sentinel.id mk_ctrue;
     sw_check_done ~check_size
   ]
 
