@@ -152,7 +152,8 @@ let lazy_const c = function
   | CTarget(id)    -> lps id
 
 let lazy_collection_vt ?(empty=false) c bt eval = match bt with
-  | TCollection(ct, _) -> lazy_collection ~empty c ct eval
+  | TCollection(ct, _)  -> lazy_collection ~empty c ct eval
+  | TAlias _ when empty -> lps "[]"
   | _ -> error @@ K3Printing.string_of_base_type bt (* type error *)
 
 let wrap_if_var e = match U.tag_of_expr e with
@@ -514,7 +515,6 @@ let lazy_declaration c d =
   | DefaultRole id -> lps ("sdefault srole "^id)
   | Foreign(id, t) -> lps ("foreign "^id^" :") <| lsp () <| lazy_type c t
   | Typedef(id, t) -> lps ("typedef "^id^" =") <| lsp () <| lazy_type c t
-
   in
   wrap_hv 0 out <| lcut ()
 
