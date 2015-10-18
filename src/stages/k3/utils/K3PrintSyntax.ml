@@ -74,7 +74,7 @@ let lazy_keylist s = lazy_bracket @@ lps @@ string_of_int_list s
 let lps_tag t = lps (sp "\"%s\"" t)
 
 let rec lazy_poly_variant c l =
-  lps_list ~sep:"; " CutHint (fun (i,s,t) -> lps (soi i) <| lps ", " <| lps s <| lps ", " <| lazy_type c t) l
+  lps_list ~sep:"; " CutHint (fun (i,s,t) -> lps (soi i) <| lps ", " <| lps_tag s <| lps ", " <| lazy_type c t) l
 
 and lazy_collection ?(empty=false) c ct eval = match ct with
     | TSet    -> lps "{" <| eval <| lps "}"
@@ -513,7 +513,7 @@ let lazy_declaration c d =
   | Flow fprog -> lazy_flow_program c fprog
   | DefaultRole id -> lps ("sdefault srole "^id)
   | Foreign(id, t) -> lps ("foreign "^id^" :") <| lsp () <| lazy_type c t
-  | Typedef(id, t) -> lps ("typedef "^id^" :") <| lsp () <| lazy_type c t
+  | Typedef(id, t) -> lps ("typedef "^id^" =") <| lsp () <| lazy_type c t
 
   in
   wrap_hv 0 out <| lcut ()

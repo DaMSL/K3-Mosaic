@@ -64,8 +64,8 @@ let k3_decl_of_k3_expr k3exp =
     [mk_global_val_init "pmap_input" pmap_types k3exp]
 
 let k3new_string_of_maps_sizes maps_sizes =
-  let p, env, trig_env, _ = k3_decl_of_k3_expr @@ k3_of_maps_sizes maps_sizes in
-  K3NewPrint.string_of_program p (env, trig_env)
+  let p, env, tenv, trig_env, _ = k3_decl_of_k3_expr @@ k3_of_maps_sizes maps_sizes in
+  K3NewPrint.string_of_program p (env, tenv, trig_env)
 
 let string_of_maps_sizes maps_sizes =
   let module B = Buffer in
