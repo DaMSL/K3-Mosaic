@@ -40,7 +40,7 @@ let sw_rcv_init =
   mk_block [
     mk_assign D.sw_init.id mk_ctrue;
     (* start driver for all switches *)
-    D.mk_send_me D.sw_driver_trig_nm;
+    D.mk_send_me D.sw_event_driver_trig_nm;
     (* ack to master *)
     D.mk_send_master ms_rcv_sw_init_ack_nm;
   ]
@@ -267,7 +267,7 @@ let sw_check_done ~check_size =
       (mk_not @@ mk_var sw_sent_done.id) @@
       (if check_size then
         mk_and
-          (mk_eq (mk_size_slow D.sw_trig_buf_idx) @@ mk_cint 0) else id_fn) @@
+          (mk_eq (mk_size @@ mk_var D.sw_event_queue.id) @@ mk_cint 0) else id_fn) @@
         mk_and
           (mk_eq (mk_var GC.sw_num_ack.id) @@ mk_var GC.sw_num_sent.id) @@
           mk_eq (mk_var D.sw_seen_sentry.id) mk_ctrue)

@@ -286,96 +286,6 @@ let nd_filter_corrective_list =
 
 (**** protocol code ****)
 
-(* The driver trigger: loop over the trigger data structures as long as we have spare vids *)
-let sw_driver_trig c =
-  let trig_id = "trig_id" in
-  (* dispatch code by trigger ids, for the trig buffers *)
-  let dispatch_code =
-    List.fold_left (fun acc (id, nm) ->
-      (* check if we match on the id *)
-      mk_if (mk_eq (mk_var trig_id) @@ mk_cint id)
-        (mk_apply' (send_fetch_name_of_t nm) [mk_var "vid"])
-        (* else, continue *)
-        acc)
-    (mk_error "mismatch on trigger id") @@
-    P.for_all_trigs ~delete:c.gen_deletes c.p (fun x -> P.trigger_id_for_name c.p x, x)
-  in
-  mk_code_sink' sw_driver_trig_nm unit_arg [] @@
-  (* if we're initialized and somebody wants a vid *)
-  mk_if
-    (mk_and
-      (mk_var D.sw_init.id) @@
-       mk_gt (mk_size_slow D.sw_trig_buf_idx) @@ mk_cint 0)
-    (TS.sw_gen_vid mk_cunit @@
-      (* else -- we have a vid *)
-      mk_pop D.sw_trig_buf_idx.id trig_id
-        (* empty: no message to send *)
-        mk_cunit @@
-        (* we have a msg *)
-        (* if it's the sentry, act *)
-        mk_if (mk_eq (mk_var trig_id) @@ mk_cint (-1))
-          (Proto.sw_seen_sentry ~check_size:false) @@ (* don't check size *)
-          (* else *)
-          mk_block [
-            (* for debugging, sleep if we've been asked to *)
-            mk_if (mk_neq (mk_var D.sw_driver_sleep.id) @@ mk_cint 0)
-              (mk_apply' "sleep" [mk_var D.sw_driver_sleep.id])
-              mk_cunit;
-            (* send the msg using dispatch code *)
-            dispatch_code;
-            (* recurse, trying to get another message *)
-            D.mk_send_me sw_driver_trig_nm;
-          ])
-    mk_cunit
-
-(* The start function puts the message in a trig buffer *)
-let sw_start_fn (c:config) trig =
-  let args_t = snd_many @@ D.args_of_t c trig in
-  let args = ["args", wrap_ttuple args_t] in
-  mk_global_fn ("sw_start_"^trig) args [] @@
-    mk_block [
-      (* insert args into trig buffer *)
-      mk_insert (D.sw_trig_buf_prefix^trig) [mk_var "args"];
-      (* insert trig id into trig index buffer *)
-      mk_insert D.sw_trig_buf_idx.id [mk_cint @@ P.trigger_id_for_name c.p trig];
-      (* increment counters for msgs to get vids *)
-      mk_incr TS.sw_need_vid_ctr.id;
-    ]
-
-(* the demux trigger takes the single stream and demuxes it *)
-let sw_demux_nm = "sw_demux"
-let sw_demux c =
-  let combo_t, t_arg_map = D.combine_trig_args c in
-  let combo_arr_t = Array.of_list combo_t in
-  (* for dates, we need to parse to int *)
-  let convert_date i =
-    if combo_arr_t.(i).typ = TDate then
-      mk_apply' "parse_sql_date" |- singleton
-    else id_fn
-  in
-  let sentry_code =
-    (* stash the sentry index in the queue *)
-    mk_if (mk_eq (mk_fst @@ mk_var "args") @@ mk_cstring "")
-      (mk_block [
-        mk_insert D.sw_trig_buf_idx.id [mk_cint @@ -1];
-        mk_incr TS.sw_need_vid_ctr.id]) @@
-      mk_cunit
-  in
-  mk_code_sink' sw_demux_nm ["args", wrap_ttuple @@ List.map str_of_date_t combo_t] [] @@
-  StrMap.fold (fun trig arg_indices acc ->
-    let apply s =
-      mk_apply' (s^trig) @@ singleton @@ mk_tuple @@
-        (* add 1 for tuple access *)
-        List.map (fun i ->
-          convert_date i @@ mk_subscript (i+1) @@ mk_var "args") arg_indices
-    in
-    mk_if (mk_eq (mk_fst @@ mk_var "args") @@ mk_cstring trig)
-      (mk_if (mk_eq (mk_snd @@ mk_var "args") @@ mk_cint 1)
-        (apply "sw_start_insert_") @@
-         apply "sw_start_delete_")
-      acc)
-    t_arg_map
-    sentry_code
 
 (* for puts *)
 let stmt_cnt_list =
@@ -438,7 +348,7 @@ let sw_send_fetch_fn c s_rhs_lhs s_rhs t =
               mk_ignore @@ mk_agg_bitmap'
                 ["ack", t_bool]
                   (mk_block [
-                    buffer_for_send c do_complete_t "ip" @@
+                    buffer_for_send do_complete_t "ip" @@
                       [mk_var D.me_int.id; mk_var "ack"] @ args_of_t_as_vars_with_v c t;
                     mk_cfalse
                   ])
@@ -534,12 +444,12 @@ let sw_send_fetch_fn c s_rhs_lhs s_rhs t =
               mk_lambda' send_put_ip_map_e @@
                 mk_block [
                   (* send rcv_put *)
-                  buffer_for_send c rcv_put_nm "ip" @@
+                  buffer_for_send rcv_put_nm "ip" @@
                     [mk_var D.me_int.id] @ args_of_t_as_vars_with_v c t;
                   (* now send stmt_cnt_list *)
                   (mk_iter_bitmap' ~idx:D.stmt_ctr.id
                     (* wr_bitmap: no need to, since we did so above *)
-                    (buffer_for_send ~wr_bitmap:false c stmt_cnt_list_ship.id "ip"
+                    (buffer_for_send ~wr_bitmap:false stmt_cnt_list_ship.id "ip"
                       [mk_var "stmt_ctr"; mk_at' stmt_cnt_list.id @@ mk_var "stmt_ctr"])
                     "stmt_bitmap")
                 ];
@@ -572,11 +482,11 @@ let sw_send_fetch_fn c s_rhs_lhs s_rhs t =
                     (* mark the send_fetch_bitmap *)
                     mk_insert_at send_fetch_bitmap.id (mk_var "ip") [mk_ctrue];
                     (* buffer the trig args *)
-                    buffer_for_send c target_t "ip" args
+                    buffer_for_send target_t "ip" args
                   ])
                   mk_cunit;
               (* buffer the stmt-map *)
-                buffer_for_send ~wr_bitmap:false c stmt_map_ids.id "ip"
+                buffer_for_send ~wr_bitmap:false stmt_map_ids.id "ip"
                   [mk_cint stmt_id; mk_cint rhs_map_id]
             ])
             R.route_bitmap.id)
@@ -585,20 +495,8 @@ let sw_send_fetch_fn c s_rhs_lhs s_rhs t =
   (* Actual SendFetch function *)
   (* We use functions rather than triggers to have better control over
   * latency *)
-  let buf = D.sw_trig_buf_prefix^t in
   mk_global_fn
-    (send_fetch_name_of_t t) ["vid", t_vid] [] @@
-    let handle_args e =
-      (* handle the case of no arguments (system_ready) *)
-      if D.args_of_t c t = [] then e
-      else (* pop an argument out of the buffers *)
-        mk_pop buf "args"
-          (mk_error @@ "unexpected missing arguments in "^buf) @@
-          (* decompose args *)
-          mk_let (fst_many @@ D.args_of_t c t)
-            (mk_var "args") e
-    in
-    handle_args @@
+    (send_fetch_name_of_t t) (args_of_t_with_v c t) [] @@
       mk_block @@
         send_completes_for_stmts_with_no_fetch @
         send_puts @
@@ -712,7 +610,7 @@ let nd_rcv_put_trig c t =
               mk_cunit @@
               P.stmts_of_t c.p t) @@
           mk_cunit);
-      GC.nd_ack_send_code c ~addr_nm:"sender_ip" ~vid_nm:"vid";
+      GC.nd_ack_send_code ~addr_nm:"sender_ip" ~vid_nm:"vid";
       mk_poly_skip_all' stmt_cnt_list_ship.id
     ]
 
@@ -774,10 +672,10 @@ let nd_send_push_stmt_map_trig c s_rhs_lhs t =
                 mk_block [
                   (* lookup and reconstruct tuples from shuffle results *)
                   (* send the 'header' *)
-                  buffer_for_send c rcv_trig "ip" @@
+                  buffer_for_send rcv_trig "ip" @@
                     mk_var "has_data"::args_of_t_as_vars_with_v c t;
                   (* buffer the map data according to the indices *)
-                  buffer_tuples_from_idxs c "tuples" map_delta.t (rmap_nm^"_v") @@ mk_var "indices"
+                  buffer_tuples_from_idxs "tuples" map_delta.t (rmap_nm^"_v") @@ mk_var "indices"
                ])
             K3S.shuffle_bitmap.id
         ]) (* trigger *)
@@ -976,14 +874,14 @@ let send_corrective_fns c =
                 mk_lambda' result_ds.e @@
                   mk_block [
                     (* buffer header *)
-                    buffer_for_send c rcv_trig "ip" @@
+                    buffer_for_send rcv_trig "ip" @@
                       (ids_to_vars @@ fst_many orig_vals) @ [mk_var "corrective_vid"];
                     (* buffer tuples from indices *)
-                    buffer_tuples_from_idxs c ~drop_vid:true
+                    buffer_tuples_from_idxs ~drop_vid:true
                       delta_tuples2.id delta_tuples2.t map_ds.id (mk_var "t_indices");
                     (* buffer vids *)
                     mk_iter (mk_lambda'' ["vid", t_vid] @@
-                      buffer_for_send ~wr_bitmap:false c "vids" "ip" [mk_var "vid"]) @@ mk_var "vids";
+                      buffer_for_send ~wr_bitmap:false "vids" "ip" [mk_var "vid"]) @@ mk_var "vids";
                     mk_add (mk_var "count") @@ mk_cint 1
                   ])
               (mk_cint 0) @@
@@ -1247,7 +1145,7 @@ let nd_do_complete_trigs c t =
         mk_apply' comp_nm @@ ids_to_vars @@ fst_many @@ args';
         (* if we're asked to acknowledge *)
         mk_if (mk_var "ack")
-          (GC.nd_ack_send_code c ~addr_nm:"sender_ip" ~vid_nm:"vid")
+          (GC.nd_ack_send_code ~addr_nm:"sender_ip" ~vid_nm:"vid")
           mk_cunit
       ]
 in
@@ -1451,7 +1349,7 @@ let nd_rcv_correctives_trig c s_rhs t = List.map
                   mk_var "acc_count")
               (mk_cint 0)) @@
           (* send an ack with how many msgs we sent on *)
-          D.buffer_for_send c nd_rcv_corr_done_nm "orig_addr"
+          D.buffer_for_send nd_rcv_corr_done_nm "orig_addr"
             [mk_var "orig_vid"; mk_var "orig_stmt_id"; mk_var "hop"; mk_var "sent_msgs"];
 
           (* skip the vid section and return the new idx, offset *)
@@ -1538,6 +1436,130 @@ let trig_dispatcher c =
       D.poly_queue_bitmap.id;
   ]
 
+(* The driver trigger: loop over the even data structures as long as we have spare vids *)
+(* This only fires when we get the token *)
+let sw_event_driver_trig c =
+  mk_code_sink' sw_event_driver_trig_nm ["vid", t_vid] [] @@
+  mk_block [
+    mk_let ["next_vid"]
+      (* if we're initialized and we have stuff to send *)
+      (mk_if (mk_var D.sw_init.id)
+        (mk_case_sn (mk_peek @@ mk_var D.sw_event_queue.id) "poly_queue"
+          (mk_block [
+            (* replace all used send slots with empty polyqueues *)
+            mk_iter_bitmap'
+              (mk_insert_at poly_queues.id (mk_var "ip") [mk_empty poly_queue.t])
+              D.poly_queue_bitmap.id;
+            (* clean out the send bitmaps *)
+            mk_set_all D.poly_queue_bitmap.id [mk_cfalse];
+            (* for debugging, sleep if we've been asked to *)
+            mk_if (mk_neq (mk_var D.sw_event_driver_sleep.id) @@ mk_cint 0)
+              (mk_apply' "sleep" [mk_var D.sw_event_driver_sleep.id])
+              mk_cunit;
+            (* calculate the next vid *)
+            mk_let ["next_vid"]
+              (mk_poly_fold
+                (mk_lambda4' ["vid", t_int] p_tag p_idx p_off @@
+                  mk_block [
+                    List.fold_left (fun acc_code (i, (nm,_,id_ts)) ->
+                      (* check if we match on the id *)
+                      mk_if (mk_eq (mk_var "tag") @@ mk_cint i)
+                        (if nm = "sentinel" then
+                          (* don't check size of event queue *)
+                          Proto.sw_seen_sentry ~check_size:false
+                        else
+                          mk_poly_at_with' nm @@
+                            (* buffer the message *)
+                            mk_apply' (send_fetch_name_of_t nm) @@ ids_to_vars @@ "vid":: fst_many id_ts)
+                        acc_code)
+                    (mk_error "mismatch on event id") @@
+                    List.filter (function (_,(_,e,_)) -> e = Event) c.poly_tags
+                  ;
+                  mk_add (mk_cint 1) @@ mk_var "vid"
+                  ])
+                (mk_var "vid") @@
+                mk_var "poly_queue") @@
+            mk_block [
+              (* send (move) the outgoing polyqueues *)
+              mk_iter_bitmap'
+                (* move and delete the poly_queue and ship it out *)
+                (D.mk_sendi trig_dispatcher_nm (mk_var "ip") @@
+                  [mk_delete_at poly_queues.id @@ mk_var "ip"])
+                D.poly_queue_bitmap.id;
+              (* finish popping the incoming queue *)
+              mk_delete D.sw_event_queue.id [mk_var "poly_queue"];
+              (* update highest vid seen *)
+              mk_assign TS.sw_highest_vid.id @@ mk_var "next_vid";
+              (* check if we're done *)
+              Proto.sw_check_done ~check_size:true;
+              mk_var "next_vid"
+            ]]) @@
+          mk_var "vid") @@
+        (* otherwise keep the same vid *)
+        mk_var "vid") @@
+    (* send on the token *)
+    mk_send sw_event_driver_trig_nm (mk_var TS.sw_next_switch_addr.id) [mk_var "next_vid"];
+  ]
+
+let sw_demux_ctr = create_ds "sw_demux_ctr" @@ mut t_int
+let sw_demux_max =
+  let init = mk_cint 5 in
+  create_ds ~init "sw_demux_max" @@ t_int
+let sw_demux_poly_queue =
+  create_ds "sw_demux_poly_queue" @@ poly_queue.t
+
+(* the demux trigger takes the single stream and demuxes it *)
+(* it pushes a certain number of events onto the polybuffer queue *)
+(* this code is specific to the interpreter version *)
+let sw_demux_nm = "sw_demux"
+let sw_demux c =
+  let combo_t, t_arg_map = D.combine_trig_args c in
+  let combo_arr_t = Array.of_list combo_t in
+  (* for dates, we need to parse to int *)
+  let convert_date i =
+    if combo_arr_t.(i).typ = TDate then
+      mk_apply' "parse_sql_date" |- singleton
+    else id_fn
+  in
+  let sentry_code =
+    (* stash the sentry index in the queue *)
+    mk_if (mk_eq (mk_fst @@ mk_var "args") @@ mk_cstring "")
+      (mk_poly_insert "sentry" "sw_demux_poly_queue" [mk_cunit])
+      (mk_error "unhandled event")
+  in
+  mk_code_sink' sw_demux_nm ["args", wrap_ttuple @@ List.map str_of_date_t combo_t] [] @@
+  (* create a poly queue with a given number of messages *)
+  mk_block [
+    StrMap.fold (fun trig arg_indices acc ->
+      let args =
+        (* add 1 for tuple access *)
+        List.map (fun i -> convert_date i @@ mk_subscript (i+1) @@ mk_var "args")
+          arg_indices
+      in
+      mk_if (mk_eq (mk_fst @@ mk_var "args") @@ mk_cstring trig)
+        (mk_if (mk_eq (mk_snd @@ mk_var "args") @@ mk_cint 1)
+          (mk_poly_insert ("insert_"^trig) "sw_demux_poly_queue" @@ args) @@
+           mk_poly_insert ("delete"^trig) "sw_demux_poly_queue" @@ args)
+        acc)
+      t_arg_map
+      sentry_code;
+    (* increment counter *)
+    mk_assign sw_demux_ctr.id @@ mk_add (mk_cint 1) @@ mk_var sw_demux_ctr.id;
+    (* ship off if we hit the count or saw the sentry *)
+    mk_if (mk_or (mk_geq (mk_var sw_demux_ctr.id) @@ mk_var sw_demux_max.id) @@
+                  mk_eq (mk_fst @@ mk_var "args") @@ mk_cstring "")
+      (mk_block [
+        (* copy the polybuffer to the queue *)
+        mk_insert sw_event_queue.id [mk_var sw_demux_poly_queue.id];
+        (* clear the buffer *)
+        mk_clear_all sw_demux_poly_queue.id;
+        (* clear the counter *)
+        mk_assign sw_demux_ctr.id @@ mk_cint 0;
+        ])
+      mk_cunit
+  ]
+
+
 let flatteners c =
   let l = snd_many @@ D.uniq_types_and_maps ~uniq_indices:false c in
   List.map (fun (t, maps) ->
@@ -1602,7 +1624,10 @@ let declare_global_vars c partmap ast =
     [send_put_bitmap;
      send_put_ip_map c.p;
      send_fetch_bitmap;
-     send_fetch_ip_map
+     send_fetch_ip_map;
+     sw_demux_ctr;
+     sw_demux_max;
+     sw_demux_poly_queue;
     ]
 
 let declare_global_funcs c partmap ast =
@@ -1629,7 +1654,6 @@ let gen_dist_for_t c ast trig =
   let s_rhs_lhs = P.s_and_over_stmts_in_t c.p P.rhs_lhs_of_stmt trig in
   (* functions *)
   let functions = [
-    sw_start_fn c trig;
     sw_send_fetch_fn c s_rhs_lhs s_rhs trig;
   ] @
    nd_do_complete_fns c ast trig c.corr_maps @
@@ -1714,10 +1738,11 @@ let gen_dist ?(gen_deletes=true)
     [mk_flow @@
       Proto.triggers c @
       GC.triggers c (Proto.sw_check_done ~check_size:true) @
-      TS.triggers (Proto.sw_check_done ~check_size:true) @
+      TS.triggers @
       Timer.triggers c @
-      [sw_demux c;
-       sw_driver_trig c;
+      [trig_dispatcher c;
+       sw_event_driver_trig c;
+       sw_demux c;
        nd_rcv_corr_done c]
     ] @
     roles_of c ast

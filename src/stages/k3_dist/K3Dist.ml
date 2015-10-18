@@ -481,14 +481,14 @@ let num_nodes =
   let d_init = mk_size @@ mk_var nodes.id in
   create_ds "num_nodes" (mut t_int) ~d_init
 
-let sw_driver_trig_nm = "sw_driver_trig"
+let sw_event_driver_trig_nm = "sw_event_driver_trig"
 
 (* timing data structures *)
 let ms_start_time = create_ds "ms_start_time" @@ mut t_int
 let ms_end_time = create_ds "ms_end_time" @@ mut t_int
 
 (* for debugging, driver pause *)
-let sw_driver_sleep = create_ds "sw_driver_sleep" @@ mut t_int
+let sw_event_driver_sleep = create_ds "sw_event_driver_sleep" @@ mut t_int
 
 (**** No corrective mode ****)
 
@@ -662,18 +662,6 @@ let maps c =
 let sw_seen_sentry    = create_ds "sw_seen_sentry" (mut t_bool) ~init:mk_cfalse
 let sw_init           = create_ds "sw_init" (mut t_bool) ~init:mk_cfalse
 
-(* buffers for insert/delete -- we need a per-trigger list *)
-(* these buffers don't inlude a vid, unlike the logs in the nodes *)
-let sw_trig_buf_prefix = "sw_buf_"
-let sw_trig_bufs (c:config) =
-  P.for_all_trigs ~sys_init:true ~delete:c.gen_deletes c.p @@ fun t ->
-    create_ds (sw_trig_buf_prefix^t) (wrap_tlist' @@ snd_many @@ args_of_t c t)
-
-(* list for next message -- contains trigger id *)
-let sw_trig_buf_idx =
-  let e = ["trig_id", t_int] in
-  create_ds "sw_trig_buf_idx" (wrap_tlist' @@ snd_many e) ~e
-
 (*** trigger names ***)
 
 let send_fetch_name_of_t trig_nm = "sw_"^trig_nm^"_send_fetch"
@@ -740,6 +728,13 @@ let p_idx = ["idx", t_int]
 
 let p_off = ["offset", t_int]
 
+let p_tag = ["tag", t_int]
+
+(* queue for next message batch -- contains polyqueue *)
+let sw_event_queue =
+  let e = ["poly_queue", poly_queue.t] in
+  create_ds "sw_event_queue" (wrap_tlist' @@ snd_many e) ~e
+
 let nd_rcv_fetch_args c t = args_of_t_with_v c t
 
 let nd_do_complete_trig_args c t =
@@ -764,10 +759,13 @@ let sw_ack_rcv_trig_args = ["addr", t_int; "vid", t_vid]
 let calc_poly_tags c =
   let l =
     let for_all_trigs = P.for_all_trigs ~delete:c.gen_deletes in
+    let events = fst_many @@ StrMap.to_list @@ snd c.agenda_map in
+    let events = List.map ((^) "insert_") events @ List.map ((^) "delete_") events in
     (* static sentinel *)
     ("sentinel", Event, ["_", t_unit])::
     (* event tags *)
-    (P.for_all_trigs c.p ~sys_init:false @@ fun t -> t, Event, P.args_of_t c.p t) @
+    (List.map (fun t -> t, Event, try P.args_of_t c.p t with Bad_data _ -> []) events) @
+    (* (P.for_all_trigs c.p ~sys_init:false @@ fun t -> t, Event, P.args_of_t c.p t) @ *)
     (* static ds for sw->nd triggers *)
     [stmt_cnt_list_ship.id, Ds, stmt_cnt_list_ship.e;
      stmt_map_ids.id, Ds, stmt_map_ids.e] @
@@ -804,7 +802,7 @@ let calc_poly_tags c =
 
 (* instead of sending directly, place in the send buffer *)
 (* @bitmap: whether to mark the bitmap *)
-let buffer_for_send ?(wr_bitmap=true) c t addr args =
+let buffer_for_send ?(wr_bitmap=true) t addr args =
   mk_block @@
     (* mark the bitmap *)
     (if wr_bitmap then [mk_insert_at poly_queue_bitmap_id (mk_var addr) [mk_ctrue]] else []) @
@@ -814,7 +812,7 @@ let buffer_for_send ?(wr_bitmap=true) c t addr args =
     ]
 
 (* insert tuples into polyqueues *)
-let buffer_tuples_from_idxs c ?(drop_vid=false) tuples_nm map_type map_tag indices =
+let buffer_tuples_from_idxs ?(drop_vid=false) tuples_nm map_type map_tag indices =
   let col_t, tup_t = unwrap_tcol map_type in
   let ts = unwrap_ttuple tup_t in
   (* handle dropping vid *)
@@ -829,7 +827,7 @@ let buffer_tuples_from_idxs c ?(drop_vid=false) tuples_nm map_type map_tag indic
     (mk_if (mk_eq (mk_var "x") @@ mk_cint (-1))
       (mk_iter
         (mk_lambda'' ["x", tup_t] @@
-          buffer_for_send ~wr_bitmap:false c map_tag "ip" @@ may_drop @@ mk_var "x") @@
+          buffer_for_send ~wr_bitmap:false map_tag "ip" @@ may_drop @@ mk_var "x") @@
         mk_var tuples_nm) @@
       (* or just regular indices into tuples *)
       mk_iter
@@ -837,7 +835,7 @@ let buffer_tuples_from_idxs c ?(drop_vid=false) tuples_nm map_type map_tag indic
           (* get tuples at idx *)
           mk_at_with' tuples_nm (mk_var "idx") @@
             mk_lambda' ["x", tup_t] @@
-              buffer_for_send ~wr_bitmap:false c map_tag "ip" @@ may_drop @@ mk_var "x")
+              buffer_for_send ~wr_bitmap:false map_tag "ip" @@ may_drop @@ mk_var "x")
          indices)
     mk_cunit (* do nothing if empty. we're sending a header anyway *)
 
@@ -954,10 +952,10 @@ let global_vars c dict =
       nd_log_master;
       sw_init;
       sw_seen_sentry;
-      sw_trig_buf_idx;
+      sw_event_queue;
       ms_start_time;
       ms_end_time;
-      sw_driver_sleep;
+      sw_event_driver_sleep;
       (* for no-corrective mode *)
       corrective_mode;
       poly_queues;
@@ -967,7 +965,6 @@ let global_vars c dict =
       nd_lmap_of_stmt_id c;
     ] @
 
-    sw_trig_bufs c @
     log_ds c @
     (* combine generic map inits with ones from the ast *)
     (List.map replace_init @@ maps c) @
