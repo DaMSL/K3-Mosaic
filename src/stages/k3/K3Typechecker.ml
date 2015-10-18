@@ -153,6 +153,10 @@ let type_of_expr e =
 
 (* Type composition/decomposition primitives *)
 
+let lookup_alias tenv = function
+  | TAlias id -> (try some @@ List.assoc id tenv with Not_found -> None)
+  | t -> Some t
+
 (* get a default value for a type *)
 let canonical_value_of_type vt =
   let rec loop vt =
@@ -173,18 +177,20 @@ let canonical_value_of_type vt =
 
 (* Type comparison primitives *)
 
-let rec assignable ?(unknown_ok=false) t_l t_r = match t_l.typ, t_r.typ with
-  | TMaybe t_lm, TMaybe t_rm -> assignable t_lm t_rm
+let rec assignable ?(unknown_ok=false) t_l t_r =
+  let (===) = assignable in
+  match t_l.typ, t_r.typ with
+  | TMaybe t_lm, TMaybe t_rm -> t_lm === t_rm
   | TTuple t_ls, TTuple t_rs ->
-      list_forall2 assignable t_ls t_rs
+      list_forall2 (===) t_ls t_rs
   | TCollection(TVMap(Some s), t_le), TCollection(TVMap(Some s'), t_re) ->
-      IntSetSet.equal s s' && assignable t_le t_re
+      IntSetSet.equal s s' && t_le === t_re
   | TCollection(t_lc, t_le), TCollection(t_rc, t_re) ->
-      t_lc = t_rc && assignable t_le t_re
+      t_lc = t_rc && t_le === t_re
   | TFunction(it, ot), TFunction(it', ot') ->
-      list_forall2 (fun t t' -> assignable t t' && t.mut = t'.mut) it it' &&
-      assignable ot ot' && ot.mut = ot'.mut
-  | TIndirect t, TIndirect t' -> assignable t t'
+      list_forall2 (fun t t' -> t === t' && t.mut = t'.mut) it it' &&
+      ot === ot' && ot.mut = ot'.mut
+  | TIndirect t, TIndirect t' -> t === t'
   | TDate, TInt               -> true
   | TInt, TDate               -> true
   (* ints and floats can be assigned. They'll just be concatentated *)
@@ -204,7 +210,6 @@ and passable t_l t_r =
   else assignable t_l t_r
 
 let (===) = assignable
-
 let (<~) = passable
 
 (* Whether a type contains TUnknown somewhere ie. it's not a fully known type *)
@@ -253,6 +258,18 @@ let rec descend_type f t = match t.typ with
   | TIndirect t -> f t
   | _ -> ()
 
+let rec map f t =
+  let map = map f in
+  let typ = match t.typ with
+    | TMaybe t -> TMaybe (map t)
+    | TTuple l -> TTuple (List.map map l)
+    | TCollection(c,t) -> TCollection(c, map t)
+    | TTarget t -> TTarget(map t)
+    | TFunction(l, t) -> TFunction(List.map map l, map t)
+    | TIndirect t -> TIndirect(map t)
+    | x -> x
+  in f {t with typ}
+
 (* fill_in: check at each node whether we already have a type annotation.
  * If so, don't go any further down *)
 let rec deduce_expr_type ?(override=true) trig_env env tenv utexpr : expr_t =
@@ -271,7 +288,7 @@ let rec deduce_expr_type ?(override=true) trig_env env tenv utexpr : expr_t =
   let malformed_tree () = raise @@ MalformedTree (K3Printing.string_of_tag_type tag) in
 
   (* convert_aliases to types *)
-  let rec subst_aliases t =
+  (* let rec subst_aliases t =
     let rec loop t = match t.typ with
       | TAlias id ->
           begin try
@@ -281,9 +298,27 @@ let rec deduce_expr_type ?(override=true) trig_env env tenv utexpr : expr_t =
           end
       | _ -> descend_type loop t
     in loop t; t
+  in *)
+
+  (* convert_aliases to types *)
+  let repr t = match t.typ with
+      | TAlias id ->
+          begin try
+            List.assoc id tenv
+          with Not_found -> t_erroru @@ TBad(t, sp "Type alias %s not found" id) end
+      | _ -> t
   in
-  (* redefine type_of_expr to substitute types *)
-  let type_of_expr e = subst_aliases @@ type_of_expr e in
+  (* make versions of functions that automatically lookup aliases in env *)
+  let get_typ t = (repr t).typ in
+  (* deep replacement *)
+  let drepr t = map repr t in
+
+  let assignable ?unknown_ok t_l t_r = assignable ?unknown_ok (drepr t_l) (drepr t_r) in
+  let (===) x y = (drepr x) === (drepr y) in
+  let (<~) x y = (drepr x) <~ (drepr y) in
+  let unwrap_tcol c = unwrap_tcol (repr c) in
+  let unwrap_tfun f = unwrap_tfun (repr f) in
+  let unwrap_ttuple t = unwrap_ttuple (repr t) in
 
   (* Check Tag Arity *)
   if not @@ check_tag_arity tag untyped_children then malformed_tree () else
@@ -293,19 +328,19 @@ let rec deduce_expr_type ?(override=true) trig_env env tenv utexpr : expr_t =
     | Lambda a, None, _    -> gen_arg_bindings a @ env
     | CaseOf x, Some ch, 1 ->
         let t = type_of_expr ch in
-        let t_e = match t.typ with
+        let t_e = match get_typ t with
           | TMaybe mt -> mt
           | _         -> t_erroru (not_maybe t) in
         (x, t_e) :: env
     | BindAs x, Some ch, 1 ->
         let t = type_of_expr ch in
-        let t_e = match t.typ with
+        let t_e = match get_typ t with
           | TIndirect it -> it
           | _            -> t_erroru (not_ind t) in
         (x, t_e) :: env
     | Let xs, Some ch, 1 ->
         let t = type_of_expr ch in
-        let ts = match t.typ with
+        let ts = match get_typ t with
           | TTuple ts when List.length ts = List.length xs -> ts
           | _         when List.length xs = 1              -> [t]
           | _                                              -> t_erroru (wrong_let_size t)
@@ -386,8 +421,8 @@ let rec deduce_expr_type ?(override=true) trig_env env tenv utexpr : expr_t =
 
       | Range t_c ->
           let start, stride, steps = bind 0, bind 1, bind 2 in
-          if not (steps.typ = TInt) then t_erroru (BTMismatch(TInt, steps.typ,"steps:")) else
-          let t_e = match start.typ, stride.typ with
+          if not (get_typ steps = TInt) then t_erroru (BTMismatch(TInt, steps.typ,"steps:")) else
+          let t_e = match get_typ start, get_typ stride with
             | TInt, TInt     -> TInt
             | TFloat, TInt
             | TInt, TFloat
@@ -397,9 +432,8 @@ let rec deduce_expr_type ?(override=true) trig_env env tenv utexpr : expr_t =
 
       | Add | Mult ->
           let t_l, t_r = bind 0, bind 1 in
-          let result_type = match t_l.typ, t_r.typ with
-            | TFloat, TFloat -> TFloat
-            | TInt, TFloat   -> TFloat
+          let result_type = match get_typ t_l, get_typ t_r with
+            | (TFloat | TInt), TFloat -> TFloat
             | TFloat, TInt   -> TFloat
             | TInt, TInt     -> TInt
             | TBool, TBool   -> TBool
@@ -408,7 +442,7 @@ let rec deduce_expr_type ?(override=true) trig_env env tenv utexpr : expr_t =
 
       | Neg ->
           let t0 = bind 0 in
-          begin match t0.typ with
+          begin match get_typ t0 with
           | TBool | TInt | TFloat -> t0
           | _ -> t_erroru (not_collection t0)
           end
@@ -423,7 +457,7 @@ let rec deduce_expr_type ?(override=true) trig_env env tenv utexpr : expr_t =
           if canonical TBool === t_p then
               if assignable ~unknown_ok:true t_t t_e then t_t
               else t_erroru @@ TMismatch(t_t, t_e,"")
-          else t_erroru @@ TMismatch(canonical TBool, t_p,"")
+          else t_erroru @@ TMismatch(canonical TBool, t_p, "")
 
       | CaseOf id ->
           (* the expression was handled in the prelude *)
@@ -440,8 +474,8 @@ let rec deduce_expr_type ?(override=true) trig_env env tenv utexpr : expr_t =
       | Block ->
           let rec validate_block i = function
             | e :: [] -> type_of_expr e
-            | h :: t when type_of_expr h  === canonical TUnit -> validate_block (i+1) t
-            | _       -> t_erroru (TMsg(sp "Bad or non-TUnit expression at stmt %d" i))
+            | h :: t when type_of_expr h === canonical TUnit -> validate_block (i+1) t
+            | _       -> t_erroru @@ TMsg(sp "Bad or non-TUnit expression at stmt %d" i)
           in validate_block 1 typed_children
 
       | Lambda t_a ->
@@ -462,7 +496,7 @@ let rec deduce_expr_type ?(override=true) trig_env env tenv utexpr : expr_t =
 
       | Subscript n ->
           let t_e = bind 0 in
-          begin match t_e.typ with
+          begin match get_typ t_e with
           | TTuple l when n <= List.length l -> at l (n - 1)
           | TTuple l -> t_erroru (error_tuple_small n (List.length l) t_e)
           | _ -> t_erroru (not_tuple t_e)
@@ -827,15 +861,15 @@ let rec deduce_expr_type ?(override=true) trig_env env tenv utexpr : expr_t =
 
       | Send ->
           let target, taddr, targs = bind 0, bind 1, bind 2 in
-          let ttarget = match target.typ with
+          let ttarget = match get_typ target with
               | TTarget t -> t
               | _         -> t_erroru (TBad(target, "not a target"))
           in
-          begin match taddr.typ with
+          begin match get_typ taddr with
           | TAddress ->
               if ttarget === targs then t_unit
-              else t_erroru (TMismatch(ttarget, targs, ""))
-          | _ -> t_erroru (TBad(taddr, "not an address"))
+              else t_erroru @@ TMismatch(ttarget, targs, "")
+          | _ -> t_erroru @@ TBad(taddr, "not an address")
           end
 
       | PolyIter ->
@@ -1203,7 +1237,7 @@ let type_bindings_of_program prog =
 
         | Typedef(id, t) as x -> x, env, (id, t)::tenv
 
-      in (nprog@[nd, (Type(t_unit)::meta)]), nenv, tenv
+      in (nprog@[nd, (Type(t_unit)::meta)]), nenv, talias_env
     ) ([], [], []) prog
  in prog, env, tenv, trig_env, rresource_env
 
