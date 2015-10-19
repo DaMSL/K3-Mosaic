@@ -436,7 +436,7 @@ let delta_action c ast stmt =
             (* add is our combination operator *)
             (mk_assoc_lambda' ["acc", last_t] lmap_id_t @@
               mk_add (mk_var "acc") @@ mk_var @@ last_id)
-            (mk_cint 0)
+            (default_value_of_t last_t)
             col_e
       in
       (* we need to convert the bags to the external type *)
