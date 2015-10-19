@@ -207,6 +207,8 @@ and ValueUtils : (sig val v_to_list : Value.value_t -> Value.value_t list
         List.map (fun i -> try IntMap.find i m with Not_found -> v_def) @@ create_range sz
       | VMap m | VSortedMap m -> List.map map_to_tuple @@ ValueMap.to_list m
       | VVMap m -> List.map vmap_to_tuple @@ ValueVMap.to_list m
+      | VPolyQueue(m,_) -> List.map (fun (i,(v,s,v')) -> VTuple[VInt i; v; VString s; v']) @@
+          IntMap.to_list m
       | _ -> failwith "(v_to_list): not a collection"
 
     let tag = function
