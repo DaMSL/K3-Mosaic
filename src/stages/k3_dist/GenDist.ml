@@ -717,16 +717,18 @@ List.map
         mk_apply' (nd_log_write_for c t) @@ args_of_t_as_vars_with_v c t;
 
         (* check if we have an empty map *)
-        mk_if_tag' (ios_tag c @@ tup_ds.id^"_v")
-          (mk_bind (mk_var rbuf_name) rbuf_deref @@
-            (* assign a fold result back to the buffer *)
-            mk_assign rbuf_deref @@ U.add_property "Move" @@
-              mk_poly_fold_tag' (tup_ds.id^"_v")
-                (mk_lambda'' (["acc", map_ds.t] @ poly_args_partial @
-                              ["x", wrap_ttuple @@ snd_many @@ ds_e tup_ds]) @@
-                  mk_let (fst_many @@ ds_e tup_ds) (mk_var "x") @@
-                  mk_insert_block "acc" map_pat) @@
-                mk_var rbuf_deref)
+        mk_if_poly_end_ny
+          (mk_if_tag' (ios_tag c @@ tup_ds.id^"_v")
+            (mk_bind (mk_var rbuf_name) rbuf_deref @@
+              (* assign a fold result back to the buffer *)
+              mk_assign rbuf_deref @@ U.add_property "Move" @@
+                mk_poly_fold_tag' (tup_ds.id^"_v")
+                  (mk_lambda'' (["acc", map_ds.t] @ poly_args_partial @
+                                ["x", wrap_ttuple @@ snd_many @@ ds_e tup_ds]) @@
+                    mk_let (fst_many @@ ds_e tup_ds) (mk_var "x") @@
+                    mk_insert_block "acc" map_pat) @@
+                  mk_var rbuf_deref)
+            mk_cunit)
           mk_cunit;
 
         (* update and check statment counters to see if we should send a do_complete *)
@@ -1305,12 +1307,15 @@ let nd_rcv_correctives_trig c s_rhs t = List.map
           (mk_lambda4' ["acc", map_delta.t] p_idx p_off map_delta.e @@
             mk_insert_block "acc" @@ ids_to_vars @@ fst_many map_delta.e) @@
           mk_empty map_delta.t) @@
+
       (* increment the idx, offsets of the map variant *)
       mk_poly_skip_all_block map_delta.id [
         mk_apply'
           (D.nd_add_delta_to_buf_nm c m) @@
             (* pass the map indirection, false=not corrective *)
           [mk_var buf_map_nm; mk_cbool false; mk_var "vid"; mk_var "delta_tuples"];
+
+        (* this data structure is required *)
         mk_check_tag' (ios_tag c ds_tag) @@
         (* for every computation vid, only execute if we have all the updates *)
         mk_let ["sent_msgs"]

@@ -472,11 +472,14 @@ let v_is_empty err_fn = function
   | VVMap m      -> VBool(ValueVMap.is_empty m)
   | v -> err_fn "v_is_empty" @@ sp "not a collection: %s" @@ sov v
 
+let drop_vars = ["route_memo_"]
+
 (* for a map structure *)
 let print_binding_m ?(skip_functions=true) ?(skip_empty=true) id v =
   let dummy x y = None in
   (* check for conditions *)
   let rec check_print v' =
+    if List.exists (fun x -> str_prefix x id) drop_vars then false else
     match v' with
     | (VFunction _ | VForeignFunction _) when skip_functions -> false
     | (VSet _ | VBag _ | VList _ | VVector _ | VMap _ | VVMap _ | VSortedMap _ | VSortedSet _)

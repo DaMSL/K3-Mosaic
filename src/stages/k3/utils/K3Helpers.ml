@@ -960,3 +960,7 @@ let mk_check_tag' tag e =
 
 let mk_if_tag' tag e e2 =
   mk_if_tag tag (mk_var "poly_queue") (mk_var "idx") (mk_var "offset") e e2
+
+(* check if we've reached the end of the poly buffer *)
+let mk_if_poly_end_ny smaller larger =
+  mk_if (mk_lt (mk_var "idx") @@ mk_size @@ mk_var "poly_queue") smaller larger

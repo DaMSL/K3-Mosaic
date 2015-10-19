@@ -463,3 +463,4 @@ val mk_check_tag : int -> expr_t -> expr_t -> expr_t -> expr_t -> expr_t
 val mk_check_tag' : int -> expr_t -> expr_t
 val mk_if_tag : int -> expr_t -> expr_t -> expr_t -> expr_t -> expr_t -> expr_t
 val mk_if_tag' : int -> expr_t -> expr_t -> expr_t
+val mk_if_poly_end_ny : expr_t -> expr_t -> expr_t

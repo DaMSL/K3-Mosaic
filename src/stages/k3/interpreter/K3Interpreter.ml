@@ -633,8 +633,7 @@ and eval_expr_inner ?(fun_typ=FLambda) (address:address) sched_st cenv texpr =
       begin match v_at ~get_stag:true error c i with
       | Some(VString tag') when tag = tag' ->
         let idx' = VInt(idx + 1) in
-        if v_at ~get_stag:true error c idx' <> None then
-          nenv, VTemp(VTuple[idx'; z])
+        if v_at ~get_stag:true error c i <> None then nenv, VTemp(VTuple[idx'; z])
         else error name "poly_skip: out of bounds"
       | _ -> error name "poly_skip: mismatched tag"
       end

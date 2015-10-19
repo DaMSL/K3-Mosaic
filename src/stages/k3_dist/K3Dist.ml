@@ -774,16 +774,16 @@ let calc_poly_tags c =
       let s_rhs = P.s_and_over_stmts_in_t c.p P.rhs_maps_of_stmt t in
       let s_rhs_corr = List.filter (fun (s, map) -> List.mem map c.corr_maps) s_rhs in
       [rcv_put_name_of_t t, DsTrig, nd_rcv_put_args c t;
-      rcv_fetch_name_of_t t, DsTrig, nd_rcv_fetch_args c t] @
+       rcv_fetch_name_of_t t, DsTrig, nd_rcv_fetch_args c t] @
       (* args for do completes without rhs maps *)
       (List.map (fun s ->
           do_complete_name_of_t t s^"_trig", Trig, nd_do_complete_trig_args c t) @@
         P.stmts_without_rhs_maps_in_t c.p t) @
-      (* the types for nd_rcv_push *)
+      (* the types for nd_rcv_push. includes an optional map component *)
       (List.map (fun (s, m) ->
           rcv_push_name_of_t c t s m, DsTrig, nd_rcv_push_args c t)
         s_rhs) @
-      (* rcv_corrective types *)
+      (* rcv_corrective types. includes an optional map + vid component *)
       (List.map (fun (s, m) ->
           rcv_corrective_name_of_t c t s m, DsTrig, nd_rcv_corr_args)
         s_rhs_corr)) @
