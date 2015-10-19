@@ -130,7 +130,7 @@ let rec unbind_args uuid arg env =
   | ATuple args -> List.fold_left (fun acc a ->
                      unbind_args uuid a acc) env args
 
-let unlog_prefixes = [ "get_ring_node"; "free_route_"]
+let unlog_prefixes = [ "shuffle_"; "bound_route_"; "get_ring_node"; "free_route_"; "int_of_"; "addr_of_"; "calc_dim_bounds"]
 
 let rec eval_fun uuid f =
   let error = int_erroru uuid "eval_fun" in
@@ -150,11 +150,12 @@ let rec eval_fun uuid f =
             let nm = match fun_typ with FGlobal _ -> "Global" | _ -> "Trigger" in
             (* log the state for this function/trigger *)
             if List.exists (fun x -> str_prefix x id) unlog_prefixes then () else
-            Log.log (lazy (sp "\n%s %s@%s\nargs = %s\n%s" nm id
-                             (string_of_address addr)
-                             (string_of_value @@ VTuple al) @@
-                              string_of_env ~skip_empty:false env))
-              ~name:"K3Interpreter.EvalFun" `Debug;
+              Log.log (lazy (sp "\n%s %s@%s\nargs = %s\nresult = %s%s" nm id
+                              (string_of_address addr)
+                              (sov @@ VTuple al)
+                              (sov @@ value_of_eval result) @@
+                                string_of_env ~skip_empty:false env))
+                ~name:"K3Interpreter.EvalFun" `Debug;
             (* reset the access env *)
             {env with accessed = ref StrSet.empty}
           in
