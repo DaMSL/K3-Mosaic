@@ -2,6 +2,8 @@
 
 let _ = Random.self_init ()
 
+exception Stop
+
 module IntSet = Set.Make(struct type t = int let compare = (-) end)
 module StrSet = Set.Make(struct type t = string let compare = String.compare end)
 module IntIntSet = Set.Make(struct type t = int * int let compare = compare end)
@@ -505,6 +507,14 @@ let str_drop_end i s = let l = String.length s in
 let str_take_end i s = let l = String.length s in
   let i' = if i > l then l else i in
   Str.last_chars s i'
+
+let str_prefix x s =
+  try
+    for i = 0 to String.length x - 1 do
+      if x.[i] <> s.[i] then raise Stop
+      else ()
+    done; true
+  with Stop -> false
 
 (* --- regexp helpers --- *)
 

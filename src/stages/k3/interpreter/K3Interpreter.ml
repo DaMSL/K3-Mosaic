@@ -130,6 +130,8 @@ let rec unbind_args uuid arg env =
   | ATuple args -> List.fold_left (fun acc a ->
                      unbind_args uuid a acc) env args
 
+let unlog_prefixes = [ "get_ring_node"; "free_route_"]
+
 let rec eval_fun uuid f =
   let error = int_erroru uuid "eval_fun" in
   match f with
@@ -147,6 +149,7 @@ let rec eval_fun uuid f =
           | FGlobal id | FTrigger id ->
             let nm = match fun_typ with FGlobal _ -> "Global" | _ -> "Trigger" in
             (* log the state for this function/trigger *)
+            if List.exists (fun x -> str_prefix x id) unlog_prefixes then () else
             Log.log (lazy (sp "\n%s %s@%s\nargs = %s\n%s" nm id
                              (string_of_address addr)
                              (string_of_value @@ VTuple al) @@
