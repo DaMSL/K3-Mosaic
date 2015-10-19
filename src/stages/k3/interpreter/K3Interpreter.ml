@@ -133,11 +133,29 @@ let rec unbind_args uuid arg env =
 let rec eval_fun uuid f =
   let error = int_erroru uuid "eval_fun" in
   match f with
-    | VFunction(arg, closure, body) ->
+    | VFunction(fun_typ, arg, closure, body) ->
         fun addr sched env al ->
-          let new_env = {env with locals=bind_args 0 uuid arg al closure} in
+          (* create an environment for the function containing its closure *)
+          let new_env = {env with locals=bind_args 0 uuid arg al closure; accessed = ref StrSet.empty} in
+          (* evaluate the function *)
           let env', result = eval_expr addr sched new_env body in
-          {env' with locals=env.locals}, result
+          (* discard the local environment from the function output *)
+          let env'' = {env' with locals=env.locals} in
+          let env = {env'' with accessed=ref @@ StrSet.union !(env.accessed) !(env'.accessed)} in
+          let env = match fun_typ with
+          | FLambda -> env
+          | FGlobal id | FTrigger id ->
+            let nm = match fun_typ with FGlobal _ -> "Global" | _ -> "Trigger" in
+            (* log the state for this function/trigger *)
+            Log.log (lazy (sp "\n%s %s@%s\nargs = %s\n%s" nm id
+                             (string_of_address addr)
+                             (string_of_value @@ VTuple al) @@
+                              string_of_env ~skip_empty:false env))
+              ~name:"K3Interpreter.EvalFun" `Debug;
+            (* reset the access env *)
+            {env with accessed = ref StrSet.empty}
+          in
+          env, result
 
     | VForeignFunction(id, arg, f) ->
         fun addr sched env al ->
@@ -161,16 +179,18 @@ let rec eval_fun uuid f =
    | _ -> error "eval_fun: Non-function value"
 
     (* function to add uuid to exception *)
-and eval_expr (address:address) sched_st cenv texpr =
+and eval_expr ?fun_typ (address:address) sched_st cenv texpr =
    let ((uuid, _), _), _ = decompose_tree texpr in
    try
-      eval_expr_inner address sched_st cenv texpr
+      eval_expr_inner ?fun_typ address sched_st cenv texpr
    with RuntimeError(-1,x,y) -> raise @@ RuntimeError(uuid,x,y)
 
-and eval_expr_inner (address:address) sched_st cenv texpr =
+    (* @fn_id: name of lambda (for globals) *)
+and eval_expr_inner ?(fun_typ=FLambda) (address:address) sched_st cenv texpr =
 
     let ((uuid, tag), _), children = decompose_tree texpr in
     let error = int_erroru uuid ~extra:(address, cenv) in
+    let eval_expr = eval_expr address sched_st in
     let eval_fn = eval_fun uuid in
 
     let env_modify = env_modify error in
@@ -186,13 +206,13 @@ and eval_expr_inner (address:address) sched_st cenv texpr =
         match texprs with
         | [] -> (ienv, [])
         | h :: t ->
-            let nenv, nval = eval_expr address sched_st ienv h in
+            let nenv, nval = eval_expr ienv h in
             let lenv, vals = threaded_eval address sched_st nenv t in
             (lenv, nval :: vals)
     in
 
     let child_value env i =
-      let renv, reval = eval_expr address sched_st env @@ List.nth children i
+      let renv, reval = eval_expr env @@ List.nth children i
       in renv, value_of_eval reval in
     let child_values env =
       let renv, revals = threaded_eval address sched_st env children
@@ -252,7 +272,7 @@ and eval_expr_inner (address:address) sched_st cenv texpr =
     (* First we list expressions that don't need the environment *)
     | Lambda a ->
       let body = List.nth children 0
-      in cenv, VTemp(VFunction(a, cenv.locals, body))
+      in cenv, VTemp(VFunction(fun_typ, a, cenv.locals, body))
 
     | Const c -> cenv, temp @@ value_of_const c
 
@@ -271,9 +291,9 @@ and eval_expr_inner (address:address) sched_st cenv texpr =
         let penv, pred = child_value cenv 0 in
         begin match pred with
         | VBool true  ->
-            eval_expr address sched_st penv @@ List.nth children 1
+            eval_expr penv @@ List.nth children 1
         | VBool false ->
-            eval_expr address sched_st penv @@ List.nth children 2
+            eval_expr penv @@ List.nth children 2
         | _ -> error name "non-boolean predicate"
         end
 
@@ -283,11 +303,11 @@ and eval_expr_inner (address:address) sched_st cenv texpr =
         begin match pred with
         | VOption(Some v) ->
             let penv = {penv with locals=env_add x v penv.locals} in
-            let penv, v = eval_expr address sched_st penv @@
+            let penv, v = eval_expr penv @@
               List.nth children 1 in
             {penv with locals=env_remove x penv.locals}, v
         | VOption None    ->
-            eval_expr address sched_st penv @@ List.nth children 2
+            eval_expr penv @@ List.nth children 2
         | _ -> error name "non-maybe predicate"
         end
 
@@ -297,7 +317,7 @@ and eval_expr_inner (address:address) sched_st cenv texpr =
         begin match pred with
         | VIndirect rv ->
           let penv = {penv with locals=env_add x !rv penv.locals} in
-          let penv, ret = eval_expr address sched_st penv @@ List.nth children 1
+          let penv, ret = eval_expr penv @@ List.nth children 1
           in
           (* update bound value *)
           let v = value_of_eval @@ lookup x penv in
@@ -318,11 +338,11 @@ and eval_expr_inner (address:address) sched_st cenv texpr =
         begin match ids, bound with
         | [x], _  ->
             let env = add_env env x bound in
-            let penv, ret = eval_expr address sched_st env @@ List.nth children 1 in
+            let penv, ret = eval_expr env @@ List.nth children 1 in
             rem_env penv x, ret
         | _, VTuple vs ->
             let env = List.fold_left2 add_env env ids vs in
-            let env, ret = eval_expr address sched_st env @@ List.nth children 1 in
+            let env, ret = eval_expr env @@ List.nth children 1 in
             let env = match child_tag 1 with
               (* disable for now since unnecessary and causing problems on testing *)
               (* | Var orig_id ->
@@ -337,11 +357,11 @@ and eval_expr_inner (address:address) sched_st cenv texpr =
 
     (* check for a pattern of is_empty *)
     | Eq when is_is_empty true texpr ->
-        let e, v = eval_expr address sched_st cenv @@ get_is_empty true texpr in
+        let e, v = eval_expr cenv @@ get_is_empty true texpr in
         e, VTemp(v_is_empty error @@ value_of_eval v)
 
     | Eq when is_is_empty false texpr ->
-        let e, v = eval_expr address sched_st cenv @@ get_is_empty false texpr in
+        let e, v = eval_expr cenv @@ get_is_empty false texpr in
         e, VTemp(v_is_empty error @@ value_of_eval v)
 
     (* Then we deal with standard environment modifiers *)
@@ -784,7 +804,7 @@ let prepare_trigger sched_st env id arg local_decls body =
   let new_vals = List.map default local_decls in
   (* add a level of wrapping to the argument binder so that when we do the first layer
    * which handles lists of arguments, it only takes one argument *)
-  let vfun = VFunction(arg, IdMap.empty, body) in
+  let vfun = VFunction(FTrigger id, arg, IdMap.empty, body) in
 
   fun address env args ->
     let local_env = {env with globals=add_from_list env.globals new_vals} in
@@ -837,7 +857,7 @@ let env_of_program ?address ?json ~role ~peers ~type_aliases sched_st k3_program
           | id, Some e ->
               begin match lookup_json json id with
               | Some v -> env, v
-              | _      -> second value_of_eval @@ eval_expr me_addr (Some sched_st) env e
+              | _      -> second value_of_eval @@ eval_expr ~fun_typ:(FGlobal id) me_addr (Some sched_st) env e
               end
 
           | id, None  -> env, maybe (default_value type_aliases id t) id_fn @@ lookup_json json id

@@ -157,6 +157,7 @@ and Value : sig
         accessed: StrSet.t ref;
         type_aliases:(id_t, type_t) Hashtbl.t;
       }
+  and fun_typ = FLambda | FGlobal of id_t | FTrigger of id_t
 
   and value_t
       = VMax
@@ -180,7 +181,7 @@ and Value : sig
       | VVMap of value_t ValueVMap.t
       | VPolyQueue of (value_t * string * value_t) IntMap.t * poly_tags
                       (* itag, stag, value *)
-      | VFunction of arg_t * local_env_t * expr_t (* closure *)
+      | VFunction of fun_typ * arg_t * local_env_t * expr_t (* closure *)
       | VForeignFunction of id_t * arg_t * foreign_func_t
       | VAddress of address
       | VTarget of id_t
@@ -255,7 +256,7 @@ and ValueUtils : (sig val v_to_list : Value.value_t -> Value.value_t list
       | VOption(Some x)         -> paren @@ repr_of_value x
       | VSet _ | VBag _ | VList _ | VVector _ | VMap _ | VVMap _ | VSortedMap _ | VSortedSet _
                                 -> paren @@ s_of_col v
-      | VFunction (a, _, b)     -> paren @@ sp "%s -> %s" (string_of_arg a) (string_of_expr b)
+      | VFunction (_, a, _, b)  -> paren @@ sp "%s -> %s" (string_of_arg a) (string_of_expr b)
       | VForeignFunction (i, a, _) -> paren @@ string_of_arg a
       | VAddress (ip, port)     -> paren @@ ip^":"^ string_of_int port
       | VTarget id              -> paren @@ id

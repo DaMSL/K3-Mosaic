@@ -19,7 +19,7 @@ val env_of_program :
   env_t
 
 (* expression evaluation can be done without a scheduler for micro evaluation *)
-val eval_expr : address -> scheduler_state option -> env_t -> expr_t -> env_t * eval_t
+val eval_expr : ?fun_typ:fun_typ -> address -> scheduler_state option -> env_t -> expr_t -> env_t * eval_t
 
 (* Takes an interpreter and runs it, either initialized or after a breakpoint *)
 val interpret_k3_program : interpreter_t -> (address * env_t) list

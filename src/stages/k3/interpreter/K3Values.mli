@@ -41,6 +41,7 @@ and Value : sig
         accessed:StrSet.t ref;
         type_aliases:(id_t, type_t) Hashtbl.t;
       }
+  and fun_typ = FLambda | FGlobal of id_t | FTrigger of id_t
   and value_t
       = VMax
       | VMin
@@ -63,7 +64,7 @@ and Value : sig
       | VVMap of value_t ValueVMap.t
       | VPolyQueue of (value_t * string * value_t) IntMap.t * poly_tags
                       (* itag, stag, value *)
-      | VFunction of arg_t * local_env_t * expr_t (* closure *)
+      | VFunction of fun_typ * arg_t * local_env_t * expr_t (* closure *)
       | VForeignFunction of id_t * arg_t * foreign_func_t
       | VAddress of address
       | VTarget of id_t
