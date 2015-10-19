@@ -777,6 +777,7 @@ let v_size err_fn = function
   | VSortedSet m   -> VInt(ValueSSet.cardinal m)
   | VVMap m     -> VInt(ValueVMap.size m)
   | VBag m      -> VInt(ValueBag.size m)
+  | VPolyQueue(m,_) -> VInt(IntMap.cardinal m)
   | _           -> err_fn "vsize" "not a collection"
 
 let v_singleton err_fn ta_env elem c telem = match elem, c with
