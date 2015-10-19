@@ -32,7 +32,7 @@ let runtime_error = function
 
 let error t =
   let i, s = runtime_error t in
-  raise @@ RuntimeError(i, s)
+  raise @@ RuntimeError(i, "", s)
 
 (* Event queues and scheduling *)
 
@@ -150,8 +150,8 @@ let invoke_trigger s address env trigger_id arg =
   let trig = IdMap.find trigger_id env.triggers in
   begin try trig address env [arg]
     (* re-raise exception with trig name *)
-  with RuntimeError(id, msg) -> raise @@
-    RuntimeError(id, sp "In trigger %s: %s" trigger_id msg) end;
+  with RuntimeError(id, s, msg) -> raise @@
+    RuntimeError(id, s, sp "In trigger %s: %s" trigger_id msg) end;
   (* log the state for this trigger *)
   Log.log (lazy (sp "\nTrigger %s@%s\nargs = %s\n%s" trigger_id (string_of_address address)
     (string_of_value arg) @@

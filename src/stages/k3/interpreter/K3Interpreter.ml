@@ -40,7 +40,7 @@ let int_erroru uuid ?extra fn_name s =
     Log.log (lazy (sp ">>>> Peer %s\n" @@ string_of_address address)) `Error;
     Log.log (lazy (sp "%s\n" @@ string_of_env ~skip_empty:false ~accessed_only:false env)) `Error
   | _ -> ());
-  raise @@ RuntimeError(uuid, msg)
+  raise @@ RuntimeError(uuid, "", msg)
 
 let int_error = int_erroru (-1)
 
@@ -66,25 +66,23 @@ let ro_path_lookup (path, id) env =
   in
   deep_lookup path v
 
-let env_modify (path,id) env f =
+let env_modify error (path, id) env f =
   let rec deep_modify path f v = match path, v with
     | [], _ -> f v
     | i::is, VTuple l -> VTuple(list_modify (i-1) (deep_modify is f) l)
     | _ -> failwith "deep_modify: not a tuple"
   in
-  try
-    begin match IdMap.find id env.locals with
-    | v::vs -> {env with locals=IdMap.add id (deep_modify path f v::vs) env.locals}
-    | []    -> failwith "unexpected"
-    end
-    with Not_found -> (* look in globals *)
-      try
-        let rv = IdMap.find id env.globals in
-        (env.accessed) := StrSet.add id !(env.accessed);
-        rv := deep_modify path f !rv;
-        env
-      with Not_found ->
-        failwith @@ id^" not found in any environment"
+  match IdMap.find id env.locals with
+  | v::vs -> {env with locals=IdMap.add id (deep_modify path f v::vs) env.locals}
+  | []    -> failwith "unexpected"
+  | exception Not_found -> (* look in globals *)
+      let rv =
+        try IdMap.find id env.globals
+        with Not_found -> raise @@ RuntimeError(-1, "env_modify", id^" not found in any environment")
+      in
+      env.accessed := StrSet.add id !(env.accessed);
+      rv := deep_modify path f !rv;
+      env
 
 (* Expression interpretation *)
 
@@ -156,17 +154,26 @@ let rec eval_fun uuid f =
               let env', result = f new_env in
               {env' with locals=unbind_args uuid arg env'.locals}, result
             with Failure x ->
-              raise @@ RuntimeError(uuid, x^"\n"^
+              raise @@ RuntimeError(uuid, "", x^"\n"^
                 string_of_env ~skip_empty:false ~accessed_only:false env) end
           end
 
    | _ -> error "eval_fun: Non-function value"
 
+    (* function to add uuid to exception *)
 and eval_expr (address:address) sched_st cenv texpr =
+   let ((uuid, _), _), _ = decompose_tree texpr in
+   try
+      eval_expr_inner address sched_st cenv texpr
+   with RuntimeError(-1,x,y) -> raise @@ RuntimeError(uuid,x,y)
+
+and eval_expr_inner (address:address) sched_st cenv texpr =
+
     let ((uuid, tag), _), children = decompose_tree texpr in
     let error = int_erroru uuid ~extra:(address, cenv) in
     let eval_fn = eval_fun uuid in
 
+    let env_modify = env_modify error in
     let id_path () =
       let rec loop acc e = match tag_of_expr e with
         | Var id      -> acc, id
@@ -844,7 +851,6 @@ let env_of_program ?address ?json ~role ~peers ~type_aliases sched_st k3_program
   (* triggers, (variables, arg frames) *)
   List.fold_left env_of_declaration {default_env with type_aliases} k3_program
 
-
 (* Instruction interpretation *)
 
 type environments = {
@@ -985,6 +991,7 @@ let init_k3_interpreter ?queue_type ?(src_interval=0.002) ~peers ~load_path ~int
                  (* event_loop_t * program_env_t *)
           let _, ((res_env, fsm_env, instrs), prog_env) =
             initialize_peer scheduler ~address ~role ~peers ~type_aliases ?json typed_prog in
+
           Hashtbl.replace envs address
             {res_env; fsm_env; prog_env; instrs; disp_env=C.def_dispatcher}
       ) peers;

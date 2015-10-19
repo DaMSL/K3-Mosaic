@@ -6,7 +6,7 @@ open K3Util
 open K3Printing
 open K3Helpers
 
-exception RuntimeError of int * string
+exception RuntimeError of int * string * string
 
 (* Interpreter representation of values *)
 
@@ -664,8 +664,13 @@ let v_insert ?vidkey ?tag err_fn x m =
       end
   | _, VPolyQueue(m, tags)  ->
     let tag = unwrap_some tag in
-    let itag = fst3 @@ List.find (fun (i,s,_) -> (s:string) = tag) tags in
-    let max_idx = fst @@ IntMap.max_binding m in
+    let itag =
+      try
+        fst3 @@ List.find (fun (i,s,_) -> (s:string) = tag) tags
+      with Not_found -> raise @@ RuntimeError(-1, "v_insert",
+                                              (sp "tag %s not found in %s" tag @@ string_of_poly_variant tags))
+    in
+    let max_idx = try fst @@ IntMap.max_binding m with Not_found -> -1 in
     VPolyQueue(IntMap.add (max_idx + 1) (VInt itag, tag, x) m, tags)
 
   | v, c                   -> error v c
@@ -887,8 +892,8 @@ let rec type_of_value uuid value =
   | VPolyQueue(_,tag)  -> wrap_tpolyq tag
   | VIndirect ind      -> type_of_value uuid !ind
   | VFunction _
-  | VForeignFunction _ -> raise (RuntimeError (uuid, "type_of_value: cannot apply to function"))
-  | VMax | VMin        -> raise (RuntimeError (uuid, "type_of_value: cannot apply to vmax/vmin"))
+  | VForeignFunction _ -> raise (RuntimeError (uuid, "type_of_value", "cannot apply to function"))
+  | VMax | VMin        -> raise (RuntimeError (uuid, "type_of_value", "cannot apply to vmax/vmin"))
 
 (*
 let rec expr_of_value uuid value =

@@ -45,6 +45,7 @@ val print_declaration : config_t -> declaration_t -> unit
 
 val string_of_base_type: base_type_t -> string
 val string_of_type: type_t -> string
+val string_of_poly_variant : poly_tags -> string
 
 val string_of_arg: arg_t -> string
 val string_of_expr: expr_t -> string

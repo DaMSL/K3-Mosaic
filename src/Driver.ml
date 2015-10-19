@@ -315,7 +315,7 @@ let interpret_k3 params prog =
                                         ~type_aliases
     in
     interpret_k3_program interp
-  with RuntimeError (uuid,str) -> handle_interpret_error (K3Data tp) uuid str
+  with RuntimeError (uuid,s1, str) -> handle_interpret_error (K3Data tp) uuid (s1^":"^str)
 
 let interpret params inputs =
   let f = function

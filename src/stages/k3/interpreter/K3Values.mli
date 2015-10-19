@@ -1,7 +1,7 @@
 open Util
 open K3.AST
 
-exception RuntimeError of int * string
+exception RuntimeError of int * string * string
 
 (* Interpreter representation of values *)
 
