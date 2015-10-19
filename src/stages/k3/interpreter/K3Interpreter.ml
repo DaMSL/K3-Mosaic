@@ -229,6 +229,14 @@ and eval_expr (address:address) sched_st cenv texpr =
       let l, r = U.decompose_eq e in
       if left then U.decompose_size l else U.decompose_size r
     in
+    (* convert_aliases to types *)
+    let repr t = match t.typ with
+      | TAlias id ->
+          begin try
+            Hashtbl.find cenv.type_aliases id
+          with Not_found -> t end
+      | _ -> t
+    in
 
     (* Start of evaluator *)
     let envout, valout = match tag with
@@ -248,7 +256,7 @@ and eval_expr (address:address) sched_st cenv texpr =
     | Nothing _ -> cenv, temp @@ VOption None
 
     | Empty ct ->
-        let ctype, elem = unwrap_tcol ct in
+        let ctype, elem = unwrap_tcol (repr ct) in
         cenv, temp @@ v_col_of_t ~elem:(cenv.type_aliases, elem) ctype
 
     (* Conditional execution *)
@@ -340,7 +348,7 @@ and eval_expr (address:address) sched_st cenv texpr =
     | Just, [rval]  -> nenv, temp @@ VOption (Some rval)
 
     | Singleton ct, [elem] ->
-        let ctype, telem = unwrap_tcol ct in
+        let ctype, telem = unwrap_tcol (repr ct) in
         nenv, temp @@ v_singleton error cenv.type_aliases elem ctype telem
 
     | Combine, [left; right] ->
@@ -438,7 +446,7 @@ and eval_expr (address:address) sched_st cenv texpr =
           | Some m -> v_empty error m
           (* the container is empty, so we must use the types *)
           | _ -> let t = type_of_expr texpr in
-                 let tcol, elem = unwrap_tcol t in
+                 let tcol, elem = unwrap_tcol (repr t) in
                  v_col_of_t tcol ~elem:(cenv.type_aliases, elem)
         in
         let new_col = v_fold error (fun acc x -> v_combine error x acc) zero c in
@@ -834,8 +842,7 @@ let env_of_program ?address ?json ~role ~peers ~type_aliases sched_st k3_program
     | _ -> env
   in
   (* triggers, (variables, arg frames) *)
-  let env = List.fold_left env_of_declaration default_env k3_program in
-  {env with type_aliases}
+  List.fold_left env_of_declaration {default_env with type_aliases} k3_program
 
 
 (* Instruction interpretation *)
@@ -981,4 +988,5 @@ let init_k3_interpreter ?queue_type ?(src_interval=0.002) ~peers ~load_path ~int
           Hashtbl.replace envs address
             {res_env; fsm_env; prog_env; instrs; disp_env=C.def_dispatcher}
       ) peers;
+
       {scheduler; peer_list=peers; envs; last_s_time=0.; src_interval}
