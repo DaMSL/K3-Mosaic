@@ -668,7 +668,7 @@ let v_insert ?vidkey ?tag err_fn x m =
       try
         fst3 @@ List.find (fun (i,s,_) -> (s:string) = tag) tags
       with Not_found -> raise @@ RuntimeError(-1, "v_insert",
-                                              (sp "tag %s not found in %s" tag @@ string_of_poly_variant tags))
+                                              sp "tag %s not found in %s" tag @@ string_of_poly_variant tags)
     in
     let max_idx = try fst @@ IntMap.max_binding m with Not_found -> -1 in
     VPolyQueue(IntMap.add (max_idx + 1) (VInt itag, tag, x) m, tags)
@@ -755,6 +755,7 @@ let v_empty err_fn = function
   | VSortedMap _   -> VSortedMap(ValueMap.empty)
   | VSortedSet _   -> VSortedSet(ValueSSet.empty)
   | VVMap m        -> VVMap(ValueVMap.empty)
+  | VPolyQueue(m,t) -> VPolyQueue(IntMap.empty, t)
   | c -> err_fn "v_empty" @@ sp "invalid input: %s" (string_of_value c)
 
 let v_sort err_fn f = function
