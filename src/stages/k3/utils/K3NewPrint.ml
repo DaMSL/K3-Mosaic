@@ -256,12 +256,12 @@ let lazy_const c v =
   | CTarget id     -> lps id
 
 (* wrap a const collection expression with collection notation *)
-let lazy_collection_vt c vt eval = match vt.typ with
+let lazy_collection_vt c vt eval = match (T.repr c.tenv vt).typ with
   | TCollection(ct, et) ->
       (* preceding list of element types *)
       let mut = et.mut in
       let lazy_elem_list =
-        lazy_base_type ~brace:false ~in_col:true ~mut c et.typ <| lps "|" <| lsp ()
+        lazy_base_type ~brace:false ~in_col:true ~mut c (T.repr c.tenv et).typ <| lps "|" <| lsp ()
       in
       lps "{|" <| lazy_elem_list <| eval <| lps "|}" <| lps " @ " <| lazy_col c ct et
   | _ -> error () (* type error *)
@@ -280,11 +280,11 @@ let rec string_of_anum = function
   | NTuple(i, args) -> sp "NTuple(%d, %s)" i (strcatmap string_of_anum args)
 
 (* get an id for the argument at the shallow level for trigger or lambda *)
-let shallow_bind_id ~in_record = function
+let shallow_bind_id c ~in_record = function
   | NIgnored        -> "_"
   (* A case of a single variable in an in_record (map etc) *)
   | NVar (i, id, vt) when in_record ->
-      begin match vt.typ with
+      begin match (T.repr c.tenv vt).typ with
       | TTuple _ -> id (* we have a single variable representing a tuple -- don't bind *)
       (*| TCollection _ -> id [> single variable representing collection <]*)
       | _        -> id_of_num i
@@ -399,20 +399,20 @@ let try_matching e l =
   in loop "" l
 
 (* check if a collection is a vmap *)
-let is_vmap col = match fst @@ KH.unwrap_tcol @@ T.type_of_expr col with
+let is_vmap c col = match fst @@ KH.unwrap_tcol @@ T.repr c.tenv @@ T.type_of_expr col with
                   | TVMap _ -> true | _ -> false
 
-let verify_vmap c = if is_vmap c then () else failwith "Not a vmap"
+let verify_vmap c col = if is_vmap c col then () else failwith "Not a vmap"
 
-let is_map col = match fst @@ KH.unwrap_tcol @@ T.type_of_expr col with
+let is_map c col = match fst @@ KH.unwrap_tcol @@ T.repr c.tenv @@ T.type_of_expr col with
                   | TSortedMap | TMap -> true | _ -> false
 
-let verify_map c = if is_map c then () else failwith "Not a map"
+let verify_map c col = if is_map c col then () else failwith "Not a map"
 
-let is_sorted_map col = match fst @@ KH.unwrap_tcol @@ T.type_of_expr col with
+let is_sorted_map c col = match fst @@ KH.unwrap_tcol @@ T.repr c.tenv @@ T.type_of_expr col with
                   | TSortedMap -> true | _ -> false
 
-let verify_sorted_map c = if is_sorted_map c then () else failwith "Not a sorted map"
+let verify_sorted_map c col = if is_sorted_map c col then () else failwith "Not a sorted map"
 
 let verify_lookup_pat p = if D.is_lookup_pat p then () else failwith "Not a lookup pattern"
 
@@ -504,7 +504,7 @@ let rec deep_bind ~in_record c arg_n =
     match a with
       (* pretend to unwrap a record *)
     | NVar(i, id, vt) when record ->
-        begin match vt.typ with
+        begin match (T.repr c.tenv vt).typ with
         | TTuple _  -> []    (* don't bind if we have an id representing a record *)
         | _         ->
           (* force bind a variable that comes in as a pretend record *)
@@ -601,7 +601,7 @@ and handle_lambda c ?(expr_info=([],false)) ~prefix_fn arg e =
   let rec loop i bindings arg =
     let in_record = List.mem i in_recs in
     let write_lambda x =
-      lps "\\" <| lps @@ shallow_bind_id ~in_record x <| lps " ->" <| lsp ()
+      lps "\\" <| lps @@ shallow_bind_id c ~in_record x <| lps " ->" <| lsp ()
     in
     match arg with
     | x::xs ->
@@ -744,7 +744,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
     let wrapr = logic_paren er in
     expr_pair ~sep:(lsp () <| lps sym <| lsp ()) ~wl:wrapl ~wr:wrapr (el, er)
   in let expr_type_is_bool e =
-    try begin match (T.type_of_expr e).typ with
+    try begin match (T.repr c.tenv @@ T.type_of_expr e).typ with
         | TBool -> true
         | _     -> false
         end
@@ -786,7 +786,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
     let e = U.decompose_singleton expr in
     let t = typecheck expr in
     (* for vmaps, we need to convert to a sequence with empty *)
-    if is_vmap expr then
+    if is_vmap c expr then
       let e' =
         let open KH in
         mk_let ["x"] (mk_empty t) @@
@@ -817,7 +817,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
     begin match U.tag_of_expr e1, U.tag_of_expr e2 with
       | Singleton vt, Combine
       | Singleton vt, Singleton _
-      | Singleton vt, Empty _ when not @@ is_vmap e1 && not @@ is_vmap e2 ->
+      | Singleton vt, Empty _ when not @@ is_vmap c e1 && not @@ is_vmap c e2 ->
           let t = T.type_of_expr expr in
           lazy_collection_vt c t @@ assemble_list c expr
       | _ -> apply_method c ~name:"combine" ~col:e1 ~args:[e2] ~arg_info:[def_a]
@@ -950,7 +950,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
             (* Slice on VMap and full lookup *)
             (fun () ->
               let col, pat = U.decompose_slice col in
-              verify_vmap col;
+              verify_vmap c col;
               verify_lookup_pat pat;
               handle_lookup_with c ~vmap:true ~id "lookup"
                 col pat e_none e_some);
@@ -958,7 +958,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
             (* Slice frontier on VMap and full lookup *)
             (fun () ->
               let col, pat = U.decompose_slice_lt col in
-              verify_vmap col;
+              verify_vmap c col;
               verify_lookup_pat pat;
               handle_lookup_with c ~vmap:true ~id "lookup_before"
                 col pat e_none e_some);
@@ -966,7 +966,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
             (* Slice op on sortedmap -- full lookup *)
             (fun () ->
               let op, col, pat = U.decompose_slice_op col in
-              verify_sorted_map col;
+              verify_sorted_map c col;
               verify_lookup_pat pat;
               handle_lookup_with c ("lookup_"^str_op op) ~id
                 col pat e_none e_some);
@@ -974,20 +974,20 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
             (* Slice on map and full lookup *)
             (fun () ->
               let col, pat = U.decompose_slice col in
-              verify_map col;
+              verify_map c col;
               verify_lookup_pat pat;
               handle_lookup_with c "lookup" ~id col pat e_none e_some);
 
             (* Slice on VMap with partial key*)
             (fun () ->
               let col, pat = U.decompose_slice col in
-              verify_vmap col;
+              verify_vmap c col;
               handle_slice_lookup_with col pat e_none e_some);
 
             (* Slice frontier on VMap with partial lookup *)
             (fun () ->
               let col, pat = U.decompose_slice_lt col in
-              verify_vmap col;
+              verify_vmap c col;
               handle_slice_lookup_with col pat e_none e_some);
 
             (* AggregateV -> lookup_before *)
@@ -1072,7 +1072,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
         (* ext needs an empty type right now to know what to do if the result is empty
         * flatten should always return a bag type since we can't guarantee uniqueness*)
         let t = T.type_of_expr expr in
-        let t = match t.typ with
+        let t = match (T.repr c.tenv t).typ with
           | TCollection(TList, x) -> KH.canonical @@ TCollection(TList, x)
           | TCollection(_, x)     -> KH.canonical @@ TCollection(TBag, x)
           | _                     -> failwith "not a collection"
@@ -1088,8 +1088,8 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
 
   | Aggregate -> let lambda, acc, col = U.decompose_aggregate expr in
     let args, arg_info = match U.unwrap_tuple acc with
-      | vid::acc when is_vmap col -> [vid; lambda] @ acc, [def_a; [1], false; def_a]
-      | _ when is_vmap col -> failwith "Aggregate: missing vid in vmap fold"
+      | vid::acc when is_vmap c col -> [vid; lambda] @ acc, [def_a; [1], false; def_a]
+      | _ when is_vmap c col -> failwith "Aggregate: missing vid in vmap fold"
       | _ -> [lambda; acc], [[1], false; def_a]
     in
     (* find out if our accumulator is a collection type *)
@@ -1149,7 +1149,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
       ~prefix_fn:(fun e -> light_type c @@ KH.mk_if e (KH.mk_cint (-1)) @@ KH.mk_cint 1)
 
   | Size -> let col = U.decompose_size expr in
-    let name = if is_vmap col then "total_size" else "size" in
+    let name = if is_vmap c col then "total_size" else "size" in
     apply_method c ~name ~col ~args:[light_type c KH.mk_cunit]
       ~arg_info:[def_a]
 
@@ -1186,7 +1186,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
   | Peek -> let col = U.decompose_peek expr in
     (* normal peek applications *)
     let normal () =
-      let name = if is_vmap col then "peek_now" else "peek" in
+      let name = if is_vmap c col then "peek_now" else "peek" in
       wrap_project c col (apply_method c ~name ~col ~args:[light_type c @@ KH.mk_cunit] ~arg_info:[def_a])
     in
 
@@ -1224,7 +1224,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
 
   | SliceOp(OLt) ->
       let col, pat = U.decompose_slice_lt expr in
-      if is_vmap col then
+      if is_vmap c col then
         filter_of_slice ~frontier:true c col pat
       else error ()
 
@@ -1252,7 +1252,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
 
   | Delete -> let col, x = U.decompose_delete expr in
     (* get rid of the value for maps *)
-    let x = if is_map col then map_mk_unknown c true x else x in
+    let x = if is_map c col then map_mk_unknown c true x else x in
     maybe_vmap c col x
       (fun x -> apply_method c ~col ~name:"erase" ~args:[x]
         ~arg_info:[[],true])
@@ -1275,10 +1275,10 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
 
   | Update -> let col, oldx, newx = U.decompose_update expr in
     (* get rid of the value for maps *)
-    let oldx = if is_map col then map_mk_unknown c true oldx else oldx in
+    let oldx = if is_map c col then map_mk_unknown c true oldx else oldx in
     maybe_vmap c col newx
       (fun newx ->
-        let newx = if is_map col then map_mk_unknown c false newx else newx in
+        let newx = if is_map c col then map_mk_unknown c false newx else newx in
         lazy_expr c col <| apply_method_nocol c ~name:"update" ~args:[oldx;newx]
         ~arg_info:[[], true; [], true])
       (fun vid newx ->
@@ -1298,7 +1298,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
     apply_method c ~col ~name:"update_at" ~args:[key; lambda] ~arg_info:[def_a; [0], true]
 
   | UpsertWith -> let col, key, lam_no, lam_yes = U.decompose_upsert_with expr in
-    let key = lookup_pat_of_slice ~vid:(is_vmap col) ~col key in
+    let key = lookup_pat_of_slice ~vid:(is_vmap c col) ~col key in
     maybe_vmap c col (light_type c @@ KH.mk_tuple key)
       (fun key -> lazy_expr c col <| apply_method_nocol  c ~name:"upsert_with" ~args:[key; lam_no; lam_yes]
         ~arg_info:[[], true; [], true; [0], true])
@@ -1306,7 +1306,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
         ~arg_info:[vid_out_arg; [], true; [], true; [0], true])
 
   | UpsertWithBefore -> let col, key, lam_no, lam_yes = U.decompose_upsert_with_before expr in
-    let key = lookup_pat_of_slice ~vid:(is_vmap col) ~col key in
+    let key = lookup_pat_of_slice ~vid:(is_vmap c col) ~col key in
     maybe_vmap c col (light_type c @@ KH.mk_tuple key)
       (fun key -> lazy_expr c col <| apply_method_nocol  c ~name:"upsert_before" ~args:[key; lam_no; lam_yes]
         ~arg_info:[[], true; [], true; [0], true])
@@ -1366,7 +1366,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
           with T.TypeError(id, _, T.UntypedExpression) ->
               raise @@ MissingType(id, K3Printing.string_of_expr expr)
         in
-        begin match t.typ with
+        begin match (T.repr c.tenv t).typ with
         (* unknown is for error function *)
         | TTuple _
         | TUnknown -> analyze () (* no need to wrap *)

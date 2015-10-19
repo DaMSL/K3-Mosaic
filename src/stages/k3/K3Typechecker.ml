@@ -270,6 +270,17 @@ let rec map f t =
     | x -> x
   in f {t with typ}
 
+let repr tenv t = match t.typ with
+  | TAlias id ->
+      begin try
+        List.assoc id tenv
+      with Not_found ->
+        raise @@ TypeError(-1, "", TBad(t, sp "Type alias %s not found" id))
+      end
+  | _ -> t
+
+let drepr tenv t = map (repr tenv) t
+
 (* fill_in: check at each node whether we already have a type annotation.
  * If so, don't go any further down *)
 let rec deduce_expr_type ?(override=true) trig_env env tenv utexpr : expr_t =
@@ -301,17 +312,11 @@ let rec deduce_expr_type ?(override=true) trig_env env tenv utexpr : expr_t =
   in *)
 
   (* convert_aliases to types *)
-  let repr t = match t.typ with
-      | TAlias id ->
-          begin try
-            List.assoc id tenv
-          with Not_found -> t_erroru @@ TBad(t, sp "Type alias %s not found" id) end
-      | _ -> t
-  in
+  let repr t = try repr tenv t with TypeError(_,_,t) -> t_erroru t in
   (* make versions of functions that automatically lookup aliases in env *)
   let get_typ t = (repr t).typ in
   (* deep replacement *)
-  let drepr t = map repr t in
+  let drepr t = drepr tenv t in
 
   let assignable ?unknown_ok t_l t_r = assignable ?unknown_ok (drepr t_l) (drepr t_r) in
   let (===) x y = (drepr x) === (drepr y) in

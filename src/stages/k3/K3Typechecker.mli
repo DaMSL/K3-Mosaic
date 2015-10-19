@@ -58,3 +58,8 @@ val type_bindings_of_program :
 val deduce_program_type : program_t -> program_t
 
 val deduce_program_test_type : program_test_t -> program_test_t
+
+(* convert alias types to regular types *)
+val repr : type_bindings_t -> type_t -> type_t
+(* deep replacement *)
+val drepr : type_bindings_t -> type_t -> type_t
