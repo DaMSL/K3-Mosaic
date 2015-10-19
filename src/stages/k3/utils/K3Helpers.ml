@@ -459,14 +459,14 @@ let mk_poly_skip tag col idx off = mk_stree (PolySkip(false, tag)) [col; idx; of
 let mk_poly_skip' tag = mk_poly_skip tag (mk_var "poly_queue") (mk_var "idx") (mk_var "offset")
 
 (* do the poly skip and let bind the new values *)
-let mk_poly_skip_let' tag e = mk_let ["idx"; "offset"] (mk_poly_skip' tag) e
+let mk_poly_skip_block tag es = mk_let ["idx"; "offset"] (mk_poly_skip' tag) @@ mk_block es
 
 (* skip all the tags of this kind *)
 let mk_poly_skip_all tag col idx off = mk_stree (PolySkip(true, tag)) [col; idx; off]
 
 let mk_poly_skip_all' tag = mk_poly_skip_all tag (mk_var "poly_queue") (mk_var "idx") (mk_var "offset")
 
-let mk_poly_skip_all_let' tag e = mk_let ["idx"; "offset"] (mk_poly_skip_all' tag) e
+let mk_poly_skip_all_block tag es = mk_let ["idx"; "offset"] (mk_poly_skip_all' tag) @@ mk_block es
 
 (* ----- Converting between ocaml lists and k3 containers ----- *)
 

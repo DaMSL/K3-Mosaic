@@ -518,15 +518,14 @@ let nd_rcv_fetch_trig c trig =
   mk_global_fn fn_name
     (poly_args @ D.nd_rcv_fetch_args c trig) (* stmt_map_ids are an inner ds *)
     [t_int; t_int] @@
-    mk_block [
+    (* skip over the function tag *)
+    mk_poly_skip_block fn_name [
       (* save the bound variables for this trigger so they're available later *)
       mk_apply
         (mk_var @@ nd_log_write_for c trig) @@
         args_of_t_as_vars_with_v c trig
       ;
-      (* skip over the function tag *)
-      mk_poly_skip_let' fn_name @@
-      (* check that we have the correct tag *)
+      (* we *must* have a data structure here *)
       mk_check_tag' (ios_tag c stmt_map_ids.id) @@
       (* iterate over the buffered stmt_map data *)
       mk_poly_iter_tag' stmt_map_ids.id @@
@@ -590,9 +589,11 @@ let nd_rcv_put_trig c t =
   mk_global_fn fn_name
     (poly_args @ D.nd_rcv_put_args c t) (* also pull inner ds *)
     [t_int; t_int] @@
-    mk_block [
-      (* skip over the calling function slot *)
-      mk_poly_skip_let' fn_name @@
+    (* skip over the calling function slot *)
+    mk_poly_skip_block fn_name
+    [
+      (* we *must* have a data structure here *)
+      mk_check_tag' (ios_tag c stmt_cnt_list_ship.id) @@
       mk_poly_iter_tag' stmt_cnt_list_ship.id
         (mk_lambda3' p_idx p_off stmt_cnt_list_ship.e @@
           mk_if
@@ -709,13 +710,11 @@ List.map
       (poly_args @ D.nd_rcv_push_args c t)
       (* return idx, offset *)
       [t_int; t_int] @@
-      mk_block [
+      (* skip over the function variant *)
+      mk_poly_skip_block fn_name [
         (* save the bound variables for this vid. This is necessary for both the
          * sending and receiving nodes, which is why we're also doing it here *)
         mk_apply' (nd_log_write_for c t) @@ args_of_t_as_vars_with_v c t;
-
-        (* skip over the main variant *)
-        mk_poly_skip_let' fn_name @@
 
         (* check if we have an empty map *)
         mk_if_tag' (ios_tag c @@ tup_ds.id^"_v")
@@ -1286,6 +1285,7 @@ let nd_rcv_correctives_trig c s_rhs t = List.map
     let buf_map_nm = P.buf_of_stmt_map_id c.p s m in
     let map_delta = D.map_ds_of_id c m ~global:false ~vid:false in
     let fn_nm = rcv_corrective_name_of_t c t s m in
+    let ds_tag = "vids" in
     mk_global_fn fn_nm
       (* we always send back acks to the original address, s, vid tuple *)
       (* we also have delta_tuples, as well as corrective vids to extract *)
@@ -1294,9 +1294,8 @@ let nd_rcv_correctives_trig c s_rhs t = List.map
       (* accumulate delta for this vid and all following vids. This is a very
         * sensitive point in the protocol and it's essential this only be done
         * once for a given corrective *)
-    mk_block [
-      (* skip over function variant *)
-      mk_poly_skip_let' fn_nm @@
+    (* skip over function variant *)
+    mk_poly_skip_block fn_nm [
 
       (* NOTE: don't check tag, because we need to convert to delta tuples, and if cannot
          return 2 different collections for materialization purposes *)
@@ -1307,9 +1306,7 @@ let nd_rcv_correctives_trig c s_rhs t = List.map
             mk_insert_block "acc" @@ ids_to_vars @@ fst_many map_delta.e) @@
           mk_empty map_delta.t) @@
       (* increment the idx, offsets of the map variant *)
-      mk_poly_skip_all_let' map_delta.id @@
-      let ds_tag = "vids" in
-      mk_block [
+      mk_poly_skip_all_block map_delta.id [
         mk_apply'
           (D.nd_add_delta_to_buf_nm c m) @@
             (* pass the map indirection, false=not corrective *)

@@ -304,10 +304,10 @@ val mk_poly_insert_block: ?path:int list -> string -> id_t -> expr_t list -> exp
 val mk_poly_tag_at: expr_t -> expr_t -> expr_t
 val mk_poly_skip: string -> expr_t -> expr_t -> expr_t -> expr_t
 val mk_poly_skip': string -> expr_t
-val mk_poly_skip_let': string -> expr_t -> expr_t
+val mk_poly_skip_block: string -> expr_t list -> expr_t
 val mk_poly_skip_all: string -> expr_t -> expr_t -> expr_t -> expr_t
 val mk_poly_skip_all': string -> expr_t
-val mk_poly_skip_all_let': string -> expr_t -> expr_t
+val mk_poly_skip_all_block: string -> expr_t list -> expr_t
 
 (* macro similar to fst *)
 val mk_fst: expr_t -> expr_t

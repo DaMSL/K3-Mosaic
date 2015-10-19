@@ -642,8 +642,7 @@ and eval_expr_inner ?(fun_typ=FLambda) (address:address) sched_st cenv texpr =
       (* loop until we run out of tag *)
     | PolySkip(true, tag), [c; VInt idx; z] ->
       let rec loop i =
-        let idx = VInt i in
-        begin match v_at ~get_stag:true error c idx with
+        begin match v_at ~get_stag:true error c (VInt i) with
         | Some(VString tag') when tag = tag' -> loop (i + 1)
         | _ -> i
         end
