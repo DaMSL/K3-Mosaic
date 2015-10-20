@@ -110,6 +110,7 @@ let check_tag_arity tag children =
     | Delete       -> 2
     | DeletePrefix -> 2
     | DeleteAt     -> 2
+    | DeleteWith   -> 4
     | ClearAll     -> 1
     | FilterOp _   -> 2
 
@@ -846,6 +847,23 @@ let rec deduce_expr_type ?(override=true) trig_env env tenv utexpr : expr_t =
           if not (tcol = TVector) then t_erroru @@ not_vector tcol'.typ else
           if not (tidx === t_int) then t_erroru @@ TMismatch(tidx, t_int, "index") else
           telem
+
+      | DeleteWith ->
+          let tcol', tkey, tlam_none, tlam_some = bind 0, bind 1, bind 2, bind 3 in
+          let tcol, telem =
+            try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') in
+          if not (tkey <~ telem) then t_erroru @@ TMismatch(tkey, telem, "key") else
+          let tn_arg, tn_ret =
+            try unwrap_tfun tlam_none with Failure _ -> t_erroru (not_function tlam_none) in
+          let ts_arg, ts_ret =
+            try unwrap_tfun tlam_some with Failure _ -> t_erroru (not_function tlam_some) in
+          if not (tn_ret === ts_ret) then
+            t_erroru (TMismatch(tn_ret, ts_ret, "function return types")) else
+          if not (list_forall2 (<~) tn_arg [t_unit]) then
+            t_erroru (TMismatch(wrap_ttuple tn_arg, t_unit, "none lambda")) else
+          if not (list_forall2 (<~) ts_arg [telem]) then
+            t_erroru (TMismatch(wrap_ttuple [telem], wrap_ttuple ts_arg, "some lambda")) else
+          ts_ret
 
       | ClearAll ->
         let tcol = bind 0 in

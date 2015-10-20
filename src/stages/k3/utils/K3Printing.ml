@@ -141,6 +141,7 @@ let string_of_tag_type = function
     | Delete           -> "Delete"
     | DeletePrefix     -> "DeletePrefix"
     | DeleteAt         -> "DeleteAt"
+    | DeleteWith       -> "DeleteWith"
     | ClearAll         -> "ClearAll"
     | FilterOp o       -> sp "FilterOp(%s)" (string_of_op o)
 

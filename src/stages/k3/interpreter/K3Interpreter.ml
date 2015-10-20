@@ -193,7 +193,7 @@ and eval_expr_inner ?(fun_typ=FLambda) (address:address) sched_st cenv texpr =
     let ((uuid, tag), _), children = decompose_tree texpr in
     let error = int_erroru uuid ~extra:(address, cenv) in
     let eval_expr = eval_expr address sched_st in
-    let eval_fn = eval_fun uuid in
+    let eval_fn f v = eval_fun uuid f address sched_st v in
 
     let env_modify = env_modify error in
     let id_path () =
@@ -420,18 +420,18 @@ and eval_expr_inner ?(fun_typ=FLambda) (address:address) sched_st cenv texpr =
     | Leq, [l;r] -> nenv, eval_cmpop l r (<=)
 
     | Apply, (f::args) ->
-        let renv, reval = (eval_fn f) address sched_st nenv args
+        let renv, reval = eval_fn f nenv args
         in renv, temp @@ value_of_eval reval
 
     | Block, vals -> nenv, temp @@ list_last vals
 
     | Iterate, [f; c] ->
-        let f' = eval_fn f address sched_st in
+        let f' = eval_fn f in
         v_fold error (fun env x -> fst @@ f' env [x]) nenv c, temp VUnit
 
      (* really traverse ie doesn't increment automatically *)
     | PolyIter, [f; col] ->
-        let f = eval_fn f address sched_st in
+        let f = eval_fn f in
         let env = snd @@ v_traverse_poly error
           (fun idx (itag, _, _) env ->
              let env, v = f env [itag; VInt idx; VInt 0] in
@@ -442,12 +442,12 @@ and eval_expr_inner ?(fun_typ=FLambda) (address:address) sched_st cenv texpr =
         in env, tvunit
 
     | PolyIterTag tag, [idx; offset; f; col] ->
-        let f = eval_fn f address sched_st in
+        let f = eval_fn f in
         v_fold_poly_tag error idx tag
           (fun idx (_, _, v) env -> fst @@ f env [VInt idx; VInt 0; v]) nenv col, tvunit
 
     | Map, [f; col] ->
-        let f' = eval_fn f address sched_st in
+        let f' = eval_fn f in
         let zero = v_empty error col in
         let env, c' = v_fold error (fun (env, acc) x ->
           let env', y = f' env [x] in
@@ -457,7 +457,7 @@ and eval_expr_inner ?(fun_typ=FLambda) (address:address) sched_st cenv texpr =
         env, temp c'
 
     | Filter, [p; col] ->
-        let p' = eval_fn p address sched_st in
+        let p' = eval_fn p in
         let zero = v_empty error col in
         let env, c' = v_fold error (fun (env, acc) x ->
           let env', filter = p' env [x] in
@@ -481,7 +481,7 @@ and eval_expr_inner ?(fun_typ=FLambda) (address:address) sched_st cenv texpr =
         nenv, VTemp new_col
 
     | Aggregate, [f; zero; col] ->
-        let f' = eval_fn f address sched_st in
+        let f' = eval_fn f in
         let fold_fn, zero = match zero with
           | VTuple [vid; z] when is_vmap col -> v_fold_v vid, z
           | _ -> v_fold, zero
@@ -495,7 +495,7 @@ and eval_expr_inner ?(fun_typ=FLambda) (address:address) sched_st cenv texpr =
         in renv, VTemp rval
 
     | PolyFold, [f; zero; c] ->
-        let f = eval_fn f address sched_st in
+        let f = eval_fn f in
         let renv, rval = v_fold_poly error (fun idx (itag, _, _) (env, acc) ->
           let renv, reval = f env [acc; itag; VInt idx; VInt 0] in
             renv, value_of_eval reval)
@@ -503,7 +503,7 @@ and eval_expr_inner ?(fun_typ=FLambda) (address:address) sched_st cenv texpr =
         in renv, VTemp rval
 
     | PolyFoldTag tag, [idx; offset; f; zero; c] ->
-        let f = eval_fn f address sched_st in
+        let f = eval_fn f in
         let renv, rval = v_fold_poly_tag error idx tag (fun idx (_, _, v) (env, acc) ->
           let renv, reval = f env [acc; VInt idx; VInt 0; v] in
             renv, value_of_eval reval)
@@ -513,8 +513,8 @@ and eval_expr_inner ?(fun_typ=FLambda) (address:address) sched_st cenv texpr =
     | Equijoin, [col1; col2; prj1; prj2; f; zero] ->
         (* a join where one side is a map *)
         let map_join loop_col loop_prj map f zero =
-          let f' = eval_fn f address sched_st in
-          let prj = eval_fn loop_prj address sched_st in
+          let f' = eval_fn f in
+          let prj = eval_fn loop_prj in
           let renv, rval = v_fold error (fun ((env, acc) as a) x ->
               let _, k = prj env [x] in
               let my =
@@ -534,7 +534,7 @@ and eval_expr_inner ?(fun_typ=FLambda) (address:address) sched_st cenv texpr =
         end
 
     | AggregateV, [f; zero; col] ->
-        let f' = eval_fn f address sched_st in
+        let f' = eval_fn f in
         let renv, rval = v_fold_all error (fun (env, acc) vid x ->
             let renv, reval = f' env [acc; vid; x] in
             renv, value_of_eval reval
@@ -544,8 +544,8 @@ and eval_expr_inner ?(fun_typ=FLambda) (address:address) sched_st cenv texpr =
         in renv, VTemp rval
 
     | GroupByAggregate, [g; f; zero; col] ->
-        let g' = eval_fn g address sched_st in
-        let f' = eval_fn f address sched_st in
+        let g' = eval_fn g in
+        let f' = eval_fn f in
         (* result type *)
         let empty = v_empty error col in
 
@@ -573,7 +573,7 @@ and eval_expr_inner ?(fun_typ=FLambda) (address:address) sched_st cenv texpr =
 
     | Sort, [f; c] -> (* only applies to list *)
         let env = ref nenv in
-        let f' = eval_fn f address sched_st in
+        let f' = eval_fn f in
         let sort_fn v1 v2 =
           (* Comparator application propagates an environment *)
           let nenv, r = f' !env [v1; v2] in
@@ -602,9 +602,9 @@ and eval_expr_inner ?(fun_typ=FLambda) (address:address) sched_st cenv texpr =
     | PeekWithVid, [c; lam_none; lam_some] ->
         begin match v_peek ~vid:true error c with
           | Some(VTuple(t::xs)) ->
-              eval_fn lam_some address sched_st nenv [t; VTuple xs]
+              eval_fn lam_some nenv [t; VTuple xs]
           | None ->
-              eval_fn lam_none address sched_st nenv [VUnit]
+              eval_fn lam_none nenv [VUnit]
           | _ -> error name "peekwithvid: bad value"
         end
 
@@ -646,25 +646,25 @@ and eval_expr_inner ?(fun_typ=FLambda) (address:address) sched_st cenv texpr =
     | AtWith, [c; idx; lam_none; lam_some] ->
         begin match v_at error c idx with
           | Some x ->
-              eval_fn lam_some address sched_st nenv [x]
+              eval_fn lam_some nenv [x]
           | None ->
-              eval_fn lam_none address sched_st nenv [VUnit]
+              eval_fn lam_none nenv [VUnit]
         end
 
     | PolyAtWith tag, [c; idx; _; lam_none; lam_some] ->
         begin match v_at ~tag error c idx with
           | Some x ->
-              eval_fn lam_some address sched_st nenv [x]
+              eval_fn lam_some nenv [x]
           | None ->
-              eval_fn lam_none address sched_st nenv [VUnit]
+              eval_fn lam_none nenv [VUnit]
         end
 
     | MinWith, [c; lam_none; lam_some] ->
         begin match v_min error c with
           | Some x ->
-              eval_fn lam_some address sched_st nenv [x]
+              eval_fn lam_some nenv [x]
           | None ->
-              eval_fn lam_none address sched_st nenv [VUnit]
+              eval_fn lam_none nenv [VUnit]
         end
 
     (* Messaging *)
@@ -708,7 +708,7 @@ and eval_expr_inner ?(fun_typ=FLambda) (address:address) sched_st cenv texpr =
       let col_id_path = id_path () in
       let col = ro_path_lookup col_id_path nenv in
       let v = unwrap_some @@ v_at ~extend:true error col key in
-      let env, v = eval_fn lambda address sched_st nenv [v] in
+      let env, v = eval_fn lambda nenv [v] in
       (env_modify col_id_path env @@
        fun col -> v_insert_at error (value_of_eval v) key col), temp VUnit
 
@@ -728,13 +728,13 @@ and eval_expr_inner ?(fun_typ=FLambda) (address:address) sched_st cenv texpr =
         let slice = slice_fn error key col in
         begin match v_peek ~vid:true error slice with
           | None   ->
-              let env, v = eval_fn lam_none address sched_st nenv [VUnit] in
+              let env, v = eval_fn lam_none nenv [VUnit] in
               (env_modify col_id_path env @@
                 fun col -> v_insert ~vidkey:key error (value_of_eval v) col), temp VUnit
           | Some v ->
               (* strip the vid for the lambda *)
               let v_no_vid = if is_vmap col then strip_vid v else v in
-              let env, v' = eval_fn lam_some address sched_st nenv [v_no_vid] in
+              let env, v' = eval_fn lam_some nenv [v_no_vid] in
               let v' = value_of_eval v' in
               (env_modify (id_path ()) env @@
                 fun col -> v_insert ~vidkey:key error v' col), temp VUnit
@@ -742,13 +742,24 @@ and eval_expr_inner ?(fun_typ=FLambda) (address:address) sched_st cenv texpr =
 
     (* we can't modify the environment within the lambda *)
     | UpdateSuffix, [_; key; lam_update] ->
-        let f x = value_of_eval @@ snd @@ eval_fn lam_update address sched_st nenv (unwrap_vtuple x) in
+        let f x = value_of_eval @@ snd @@ eval_fn lam_update nenv (unwrap_vtuple x) in
         (env_modify (id_path ()) nenv @@
           fun col -> v_update_suffix error key f col), VTemp VUnit
 
     | Delete, [_; v] ->
         (env_modify (id_path ()) nenv @@
           fun col -> v_delete error v col), tvunit
+
+    | DeleteWith, [_; pat; lam_none; lam_some] ->
+      let p = id_path () in
+      let col = ro_path_lookup p nenv in
+      begin match v_peek error @@ v_slice error pat col with
+        | Some v ->
+            let env = env_modify p nenv @@ fun col -> v_delete error v col in
+            eval_fn lam_some env (unwrap_vtuple v)
+        | None ->
+            eval_fn lam_none nenv [VUnit]
+      end
 
     | DeleteAt, [_; n] ->
       let p = id_path () in

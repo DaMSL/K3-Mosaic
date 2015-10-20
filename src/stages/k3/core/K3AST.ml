@@ -147,6 +147,7 @@ type expr_tag_t
     | Delete
     | DeletePrefix      (* delete before a certain vid. save frontier *)
     | DeleteAt          (* delete a vector entry and return that entry *)
+    | DeleteWith        (* delete a ds entry and return that entry in a lambda if it exists *)
     | ClearAll          (* delete all in ds but keep memory *)
 
     | Assign

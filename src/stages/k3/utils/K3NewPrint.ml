@@ -1263,6 +1263,9 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
     (* project output if needed since we return a value *)
     wrap_project c col (apply_method c ~col ~name:"erase_at" ~args:[n] ~arg_info:[def_a])
 
+  | DeleteWith -> let col, key, lam_none, lam_some = U.decompose_delete_with expr in
+    apply_method c ~col ~name:"erase_with" ~args:[key; lam_none; lam_some] ~arg_info:[[], true; def_a; [0], false]
+
   | DeletePrefix -> let col, x = U.decompose_delete_prefix expr in
     maybe_vmap c col x
       (fun x -> lazy_expr c col <| apply_method_nocol c ~name:"erase_before" ~args:[x]
