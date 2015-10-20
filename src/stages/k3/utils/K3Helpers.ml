@@ -112,13 +112,12 @@ let wrap_args id_typ =
   in match id_typ with
     | [x]   -> wrap_args_inner x
     | x::xs -> ATuple(List.map wrap_args_inner id_typ)
-    | _     -> invalid_arg "No ids, types for wrap_args"
+    | _     -> AVar("_u", t_unit)
 
 (* for deep arguments (using ATuple) *)
 let wrap_args_deep id_arg =
   match id_arg with
-  | []  -> invalid_arg "Nothing to wrap in wrap_args_deep"
-  | [_] -> wrap_args id_arg
+  | [] | [_] -> wrap_args id_arg
   | _  -> ATuple[wrap_args id_arg]
 
 (* wrap function arguments, turning tmaybes to amaybes *)
