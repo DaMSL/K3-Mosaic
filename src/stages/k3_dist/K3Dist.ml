@@ -773,8 +773,9 @@ let calc_poly_tags c =
     (List.flatten @@ for_all_trigs c.p ~sys_init:true @@ fun t ->
       let s_rhs = P.s_and_over_stmts_in_t c.p P.rhs_maps_of_stmt t in
       let s_rhs_corr = List.filter (fun (s, map) -> List.mem map c.corr_maps) s_rhs in
-      [rcv_put_name_of_t t, DsTrig, nd_rcv_put_args c t;
-       rcv_fetch_name_of_t t, DsTrig, nd_rcv_fetch_args c t] @
+      (if null s_rhs then [] else
+        [rcv_put_name_of_t t, DsTrig, nd_rcv_put_args c t;
+        rcv_fetch_name_of_t t, DsTrig, nd_rcv_fetch_args c t]) @
       (* args for do completes without rhs maps *)
       (List.map (fun s ->
           do_complete_name_of_t t s^"_trig", Trig, nd_do_complete_trig_args c t) @@
