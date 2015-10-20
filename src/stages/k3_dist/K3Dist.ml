@@ -664,6 +664,9 @@ let sw_init           = create_ds "sw_init" (mut t_bool) ~init:mk_cfalse
 
 (*** trigger names ***)
 
+(* main dispatcher for whole protocol *)
+let trig_dispatcher_nm = "trig_dispatcher"
+
 let send_fetch_name_of_t trig_nm = "sw_"^trig_nm^"_send_fetch"
 let rcv_fetch_name_of_t trig_nm = "nd_"^trig_nm^"_rcv_fetch"
 let rcv_put_name_of_t trig_nm = "nd_"^trig_nm^"_rcv_put"

@@ -1396,7 +1396,6 @@ let nd_do_corrective_fns c s_rhs ast trig_name corrective_maps =
   List.map do_corrective_fn s_rhs
 
 (*** central triggers to handle dispatch for nodes and switches ***)
-let trig_dispatcher_nm = "trig_dispatcher"
 let trig_dispatcher c =
   mk_code_sink' trig_dispatcher_nm ["poly_queue", poly_queue.t] [] @@
   mk_block [
