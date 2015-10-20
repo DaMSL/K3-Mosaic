@@ -98,6 +98,9 @@ val wrap_vtuple : value_t list -> value_t
 val repr_of_value : value_t -> string
 val string_of_value : ?mark_points:int list -> value_t -> string
 
+(* functions to drop out of logs *)
+val drop_fn_prefixes : string list
+
 (* Environment stringification *)
 val print_env : ?skip_functions:bool ->
                 ?skip_empty:bool ->

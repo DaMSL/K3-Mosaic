@@ -1476,7 +1476,8 @@ let sw_event_driver_trig c =
                         acc_code)
                     (mk_error "mismatch on event id") @@
                     List.filter (function (_,(nm,e,_)) ->
-                        e = Event && StrSet.mem nm trig_list) c.poly_tags
+                        e = Event && (StrSet.mem nm trig_list || nm = "sentinel"))
+                      c.poly_tags
                   ;
                   mk_add (mk_cint 1) @@ mk_var "vid"
                   ])

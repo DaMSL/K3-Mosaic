@@ -473,6 +473,10 @@ let v_is_empty err_fn = function
   | v -> err_fn "v_is_empty" @@ sp "not a collection: %s" @@ sov v
 
 let drop_vars = ["route_memo_"]
+let drop_fn_prefixes = [ "shuffle_"; "bound_route_"; "get_ring_node";
+                         "free_route_"; "int_of_"; "addr_of_"; "calc_dim_bounds";
+                         "nd_log_master_write"; "nd_log_write_"; "nd_check_stmt_"; "nd_filter_"; "nd_add_delta_"]
+
 
 (* for a map structure *)
 let print_binding_m ?(skip_functions=true) ?(skip_empty=true) id v =
@@ -593,9 +597,13 @@ let v_traverse_poly err_fn f i acc = function
 let v_fold_poly_tag err_fn idx tag f acc m = match m, idx with
   | VPolyQueue(m, _), VInt(idx) ->
     let rec loop acc i =
-      let v = IntMap.find i m in
-      if snd3 v = tag then loop (f i v acc) (i + 1)
-      else acc
+      try
+        let (_,t,_) as v = IntMap.find i m in
+        if t = tag then
+          let acc = f i v acc in
+          loop acc (i + 1)
+        else acc
+      with Not_found -> acc
     in
     loop acc idx
 

@@ -268,7 +268,7 @@ let sw_check_done ~check_size =
           (mk_eq (mk_size @@ mk_var D.sw_event_queue.id) @@ mk_cint 0) else id_fn) @@
         mk_and
           (mk_eq (mk_var GC.sw_num_ack.id) @@ mk_var GC.sw_num_sent.id) @@
-          mk_eq (mk_var D.sw_seen_sentinel.id) mk_ctrue)
+           mk_var D.sw_seen_sentinel.id)
     (mk_block [
       (* send *)
       D.mk_send_master ms_rcv_switch_done_nm;

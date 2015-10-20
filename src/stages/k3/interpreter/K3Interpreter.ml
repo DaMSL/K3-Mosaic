@@ -130,8 +130,6 @@ let rec unbind_args uuid arg env =
   | ATuple args -> List.fold_left (fun acc a ->
                      unbind_args uuid a acc) env args
 
-let unlog_prefixes = [ "shuffle_"; "bound_route_"; "get_ring_node"; "free_route_"; "int_of_"; "addr_of_"; "calc_dim_bounds"]
-
 let rec eval_fun uuid f =
   let error = int_erroru uuid "eval_fun" in
   match f with
@@ -141,23 +139,23 @@ let rec eval_fun uuid f =
           let new_env = {env with locals=bind_args 0 uuid arg al closure; accessed = ref StrSet.empty} in
           (* evaluate the function *)
           let env', result = eval_expr addr sched new_env body in
-          (* discard the local environment from the function output *)
-          let env'' = {env' with locals=env.locals} in
-          let env = {env'' with accessed=ref @@ StrSet.union !(env.accessed) !(env'.accessed)} in
-          let env = match fun_typ with
-          | FLambda -> env
-          | FGlobal id | FTrigger id ->
-            let nm = match fun_typ with FGlobal _ -> "Global" | _ -> "Trigger" in
-            (* log the state for this function/trigger *)
-            if List.exists (fun x -> str_prefix x id) unlog_prefixes then () else
+          (* output log *)
+          let do_log nm id env =
+            if List.exists (fun x -> str_prefix x id) drop_fn_prefixes then () else
               Log.log (lazy (sp "\n%s %s@%s\nargs = %s\nresult = %s%s" nm id
                               (string_of_address addr)
                               (sov @@ VTuple al)
                               (sov @@ value_of_eval result) @@
                                 string_of_env ~skip_empty:false env))
-                ~name:"K3Interpreter.EvalFun" `Debug;
-            (* reset the access env *)
-            {env with accessed = ref StrSet.empty}
+                ~name:"K3Interpreter.EvalFun" `Debug
+          in
+          (* discard the local environment from the function output, and combined access patterns *)
+          let env = {env' with locals = env.locals; accessed=ref @@ StrSet.union !(env.accessed) !(env'.accessed)} in
+          let env = match fun_typ with
+          | FLambda     -> env
+          | FGlobal id  -> do_log "Global" id env'; env
+            (* for triggers, we need to clear the access set *)
+          | FTrigger id -> do_log "Trigger" id env'; {env with accessed = ref StrSet.empty}
           in
           env, result
 
@@ -443,11 +441,10 @@ and eval_expr_inner ?(fun_typ=FLambda) (address:address) sched_st cenv texpr =
           ) 0 nenv col
         in env, tvunit
 
-
-    | PolyIterTag tag, [idx; offset; f; c] ->
+    | PolyIterTag tag, [idx; offset; f; col] ->
         let f = eval_fn f address sched_st in
         v_fold_poly_tag error idx tag
-          (fun idx (_, _, v) env -> fst @@ f env [VInt idx; VInt 0; v]) nenv c, tvunit
+          (fun idx (_, _, v) env -> fst @@ f env [VInt idx; VInt 0; v]) nenv col, tvunit
 
     | Map, [f; col] ->
         let f' = eval_fn f address sched_st in
@@ -632,9 +629,7 @@ and eval_expr_inner ?(fun_typ=FLambda) (address:address) sched_st cenv texpr =
     | PolySkip(false, tag), [c; VInt idx as i; z] ->
       begin match v_at ~get_stag:true error c i with
       | Some(VString tag') when tag = tag' ->
-        let idx' = VInt(idx + 1) in
-        if v_at ~get_stag:true error c i <> None then nenv, VTemp(VTuple[idx'; z])
-        else error name "poly_skip: out of bounds"
+        nenv, VTemp(VTuple[VInt(idx+1); z])
       | _ -> error name "poly_skip: mismatched tag"
       end
 
