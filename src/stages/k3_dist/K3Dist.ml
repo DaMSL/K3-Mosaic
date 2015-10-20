@@ -353,6 +353,7 @@ let g_init_vid =
   let init = mk_tuple [mk_cint 0] in
   create_ds "g_init_vid" t_vid ~init
 
+let g_max_int = create_ds "g_max_int" t_int ~init:(mk_apply' "get_max_int" [mk_cunit])
 let g_min_vid = create_ds "g_min_vid" t_vid ~init:min_vid_k3
 let g_max_vid =
   let init =
@@ -665,7 +666,10 @@ let sw_init           = create_ds "sw_init" (mut t_bool) ~init:mk_cfalse
 (*** trigger names ***)
 
 (* main dispatcher for whole protocol *)
-let trig_dispatcher_nm = "trig_dispatcher"
+let trig_dispatcher_trig_nm = "trig_dispatcher_trig"
+
+(* dispatcher for sw -> node with corrective mode *)
+let nd_trig_dispatcher_trig_nm = "nd_trig_dispatcher_trig"
 
 let send_fetch_name_of_t trig_nm = "sw_"^trig_nm^"_send_fetch"
 let rcv_fetch_name_of_t trig_nm = "nd_"^trig_nm^"_rcv_fetch"
@@ -936,6 +940,7 @@ let global_vars c dict =
       ip;
       stmt_ctr;
       g_init_vid;
+      g_max_int;
       g_min_vid;
       g_max_vid;
       g_start_vid;

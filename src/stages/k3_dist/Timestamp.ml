@@ -44,6 +44,9 @@ let sw_next_switch_addr =
 (* highest seen vid *)
 let sw_highest_vid = create_ds "sw_highest_vid" (mut t_vid)
 
+(* vector clock representing consecutive numbering per node *)
+let sw_vector_clock = create_ds "sw_vector_clock" @@ wrap_tvector t_int
+
 (* only the master starts the protocol *)
 let ms_init =
   mk_send D.sw_event_driver_trig_nm (mk_var sw_next_switch_addr.id)

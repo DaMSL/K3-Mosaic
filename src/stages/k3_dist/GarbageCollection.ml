@@ -50,7 +50,7 @@ let sw_ack_rcv sw_check_done =
   (* increment ack num *)
   mk_block [
     mk_incr sw_num_ack.id;
-    mk_delete_with sw_ack_log "x" ~k:[mk_var "vid"] ~delcond:(mk_eq (mk_snd @@ mk_var "x") @@ mk_cint 1)
+    mk_delete_with_cond sw_ack_log "x" ~k:[mk_var "vid"] ~delcond:(mk_eq (mk_snd @@ mk_var "x") @@ mk_cint 1)
       ~v:(mk_sub (mk_snd @@ mk_var "x") @@ mk_cint 1);
     sw_check_done
   ]

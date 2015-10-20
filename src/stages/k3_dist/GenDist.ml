@@ -1396,8 +1396,10 @@ let nd_do_corrective_fns c s_rhs ast trig_name corrective_maps =
   List.map do_corrective_fn s_rhs
 
 (*** central triggers to handle dispatch for nodes and switches ***)
+
+let trig_dispatcher_nm = "trig_dispatcher"
 let trig_dispatcher c =
-  mk_code_sink' trig_dispatcher_nm ["poly_queue", poly_queue.t] [] @@
+  mk_global_fn trig_dispatcher_nm ["poly_queue", poly_queue.t] [] @@
   mk_block [
     (* replace all used slots with empty polyqueues *)
     mk_iter_bitmap'
@@ -1434,75 +1436,131 @@ let trig_dispatcher c =
       D.poly_queue_bitmap.id;
   ]
 
+(* trigger version of dispatcher. Called by non-corrective mode *)
+let trig_dispatcher_trig c =
+  mk_code_sink' trig_dispatcher_trig_nm ["poly_queue", poly_queue.t] [] @@
+    mk_apply' trig_dispatcher_nm [mk_var "poly_queue"]
+
+(* buffer for dispatcher to reorder poly msgs *)
+let nd_dispatcher_buf =
+  let e = ["num", t_int; "poly_queue", poly_queue.t] in
+  create_ds "dispatcher_buf" ~e @@ wrap_tmap' @@ snd_many e
+
+(* remember the last number we've seen *)
+let nd_dispatcher_last_num = create_ds "nd_dispatcher_last_num" @@ mut t_int
+
+(* trig dispatcher from switch to node. accepts a msg number telling it how to order messages *)
+(* @msg_num: number of consecutive message. Used to order buffers in corrective mode
+   so we avoid having too many correctives. *)
+let nd_trig_dispatcher_trig c =
+  mk_code_sink' nd_trig_dispatcher_trig_nm ["num", t_int; "poly_queue", poly_queue.t] [] @@
+  mk_let ["next_num"]
+    (mk_if (mk_eq (mk_var nd_dispatcher_last_num.id) @@ mk_var g_max_int.id)
+       (mk_cint 0) @@
+       mk_add (mk_var nd_dispatcher_last_num.id) @@ mk_cint 1) @@
+  mk_block [
+    (* check if we're contiguous *)
+    mk_if (mk_eq (mk_var "num") (mk_var "next_num"))
+      (* then dispatch right away *)
+      (mk_block [
+          mk_assign nd_dispatcher_last_num.id @@ mk_var "next_num";
+          mk_apply' trig_dispatcher_nm [mk_var "poly_queue"];
+       ]) @@
+      (* else, stash the poly_queue in our buffer *)
+      mk_insert nd_dispatcher_buf.id [mk_var "num"; mk_var "poly_queue"]
+    ;
+    (* check if the next num is in the buffer *)
+    mk_delete_with nd_dispatcher_buf.id [mk_var "next_num"; mk_cunknown]
+      (mk_lambda' unit_arg @@ mk_cunit)
+      (* recurse with the next number *)
+      (mk_lambda'' ["x", wrap_ttuple @@ snd_many nd_dispatcher_buf.e] @@
+        mk_send nd_trig_dispatcher_trig_nm G.me_var [mk_var "x"])
+  ]
+
 (* The driver trigger: loop over the even data structures as long as we have spare vids *)
 (* This only fires when we get the token *)
 let sw_event_driver_trig c =
   let trig_list = StrSet.of_list @@ P.get_trig_list c.p in
-  mk_code_sink' sw_event_driver_trig_nm ["vid", t_vid] [] @@
-  mk_block [
-    mk_let ["next_vid"]
-      (* if we're initialized and we have stuff to send *)
-      (mk_if (mk_var D.sw_init.id)
-        (mk_case_sn (mk_peek @@ mk_var D.sw_event_queue.id) "poly_queue"
-          (mk_block [
-            (* replace all used send slots with empty polyqueues *)
+  mk_code_sink' sw_event_driver_trig_nm
+    ["vid", t_vid; "vector_clock", TS.sw_vector_clock.t] [] @@
+    (* if we're initialized and we have stuff to send *)
+    mk_if (mk_and (mk_var D.sw_init.id) @@ mk_gt (mk_size @@ mk_var D.sw_event_queue.id) @@ mk_cint 0)
+      (mk_case_sn (mk_peek @@ mk_var D.sw_event_queue.id) "poly_queue"
+        (mk_block [
+          (* replace all used send slots with empty polyqueues *)
+          mk_iter_bitmap'
+            (mk_insert_at poly_queues.id (mk_var "ip") [mk_empty poly_queue.t])
+            D.poly_queue_bitmap.id;
+          (* clean out the send bitmaps *)
+          mk_set_all D.poly_queue_bitmap.id [mk_cfalse];
+          (* for debugging, sleep if we've been asked to *)
+          mk_if (mk_neq (mk_var D.sw_event_driver_sleep.id) @@ mk_cint 0)
+            (mk_apply' "sleep" [mk_var D.sw_event_driver_sleep.id])
+            mk_cunit;
+          (* calculate the next vid *)
+          mk_let ["next_vid"]
+            (mk_poly_fold
+              (mk_lambda4' ["vid", t_int] p_tag p_idx p_off @@
+                mk_block [
+                  List.fold_left (fun acc_code (i, (nm,_,id_ts)) ->
+                    (* check if we match on the id *)
+                    mk_if (mk_eq (mk_var "tag") @@ mk_cint i)
+                      (if nm = "sentinel" then
+                        (* don't check size of event queue *)
+                        Proto.sw_seen_sentinel ~check_size:false
+                      else
+                        mk_poly_at_with' nm @@
+                          (* buffer the message *)
+                          mk_lambda' id_ts @@
+                            mk_apply' (send_fetch_name_of_t nm) @@
+                              ids_to_vars @@ "vid":: fst_many id_ts)
+                      acc_code)
+                  (mk_error "mismatch on event id") @@
+                  List.filter (function (_,(nm,e,_)) ->
+                      e = Event && (StrSet.mem nm trig_list || nm = "sentinel"))
+                    c.poly_tags
+                ;
+                mk_add (mk_cint 1) @@ mk_var "vid"
+                ])
+              (mk_var "vid") @@
+              mk_var "poly_queue") @@
+          mk_block [
+            (* update the vector clock by what we're sending *)
             mk_iter_bitmap'
-              (mk_insert_at poly_queues.id (mk_var "ip") [mk_empty poly_queue.t])
+              (mk_update_at_with "vector_clock" (mk_var "ip") @@
+                mk_lambda' ["x", t_int] @@
+                  (* if we're at max_int, skip to 0 so we don't get negatives *)
+                  mk_if (mk_eq (mk_var "x") @@ mk_var g_max_int.id)
+                    (mk_cint 0) @@
+                    mk_add (mk_cint 1) @@ mk_var "x")
+                  D.poly_queue_bitmap.id;
+            (* send (move) the outgoing polyqueues *)
+            mk_iter_bitmap'
+              (* move and delete the poly_queue and ship it out with the vector clock num,
+                 but only if we're in corrective mode *)
+              (mk_if (mk_var D.corrective_mode.id)
+                (D.mk_sendi nd_trig_dispatcher_trig_nm (mk_var "ip")
+                  [mk_at' "vector_clock" @@ mk_var "ip";
+                    mk_delete_at poly_queues.id @@ mk_var "ip"]) @@
+                D.mk_sendi trig_dispatcher_trig_nm (mk_var "ip")
+                  [mk_delete_at poly_queues.id @@ mk_var "ip"]) @@
               D.poly_queue_bitmap.id;
-            (* clean out the send bitmaps *)
-            mk_set_all D.poly_queue_bitmap.id [mk_cfalse];
-            (* for debugging, sleep if we've been asked to *)
-            mk_if (mk_neq (mk_var D.sw_event_driver_sleep.id) @@ mk_cint 0)
-              (mk_apply' "sleep" [mk_var D.sw_event_driver_sleep.id])
-              mk_cunit;
-            (* calculate the next vid *)
-            mk_let ["next_vid"]
-              (mk_poly_fold
-                (mk_lambda4' ["vid", t_int] p_tag p_idx p_off @@
-                  mk_block [
-                    List.fold_left (fun acc_code (i, (nm,_,id_ts)) ->
-                      (* check if we match on the id *)
-                      mk_if (mk_eq (mk_var "tag") @@ mk_cint i)
-                        (if nm = "sentinel" then
-                          (* don't check size of event queue *)
-                          Proto.sw_seen_sentinel ~check_size:false
-                        else
-                          mk_poly_at_with' nm @@
-                            (* buffer the message *)
-                            mk_lambda' id_ts @@
-                              mk_apply' (send_fetch_name_of_t nm) @@
-                                ids_to_vars @@ "vid":: fst_many id_ts)
-                        acc_code)
-                    (mk_error "mismatch on event id") @@
-                    List.filter (function (_,(nm,e,_)) ->
-                        e = Event && (StrSet.mem nm trig_list || nm = "sentinel"))
-                      c.poly_tags
-                  ;
-                  mk_add (mk_cint 1) @@ mk_var "vid"
-                  ])
-                (mk_var "vid") @@
-                mk_var "poly_queue") @@
-            mk_block [
-              (* send (move) the outgoing polyqueues *)
-              mk_iter_bitmap'
-                (* move and delete the poly_queue and ship it out *)
-                (D.mk_sendi trig_dispatcher_nm (mk_var "ip") @@
-                  [mk_delete_at poly_queues.id @@ mk_var "ip"])
-                D.poly_queue_bitmap.id;
-              (* finish popping the incoming queue *)
-              mk_delete D.sw_event_queue.id [mk_var "poly_queue"];
-              (* update highest vid seen *)
-              mk_assign TS.sw_highest_vid.id @@ mk_var "next_vid";
-              (* check if we're done *)
-              Proto.sw_check_done ~check_size:true;
-              mk_var "next_vid"
-            ]]) @@
-          mk_var "vid") @@
-        (* otherwise keep the same vid *)
-        mk_var "vid") @@
-    (* send on the token *)
-    mk_send sw_event_driver_trig_nm (mk_var TS.sw_next_switch_addr.id) [mk_var "next_vid"];
-  ]
+            (* send the new (vid, vector clock). make sure it's after we use vector
+               clock data so we can move *)
+            mk_send sw_event_driver_trig_nm (mk_var TS.sw_next_switch_addr.id)
+              [mk_var "next_vid"; mk_var "vector_clock"];
+            (* finish popping the incoming queue *)
+            mk_delete D.sw_event_queue.id [mk_var "poly_queue"];
+            (* update highest vid seen *)
+            mk_assign TS.sw_highest_vid.id @@ mk_var "next_vid";
+            (* check if we're done *)
+            Proto.sw_check_done ~check_size:true;
+            mk_var "next_vid"
+          ]]) @@
+        mk_error "oops") @@
+     (* otherwise send the same vid and vector clock *)
+     mk_send sw_event_driver_trig_nm (mk_var TS.sw_next_switch_addr.id)
+       [mk_var "vid"; mk_var "vector_clock"]
 
 let sw_demux_ctr = create_ds "sw_demux_ctr" @@ mut t_int
 let sw_demux_max =
@@ -1631,6 +1689,8 @@ let declare_global_vars c partmap ast =
      sw_demux_ctr;
      sw_demux_max;
      sw_demux_poly_queue;
+     nd_dispatcher_buf;
+     nd_dispatcher_last_num;
     ]
 
 let declare_global_funcs c partmap ast =
@@ -1739,13 +1799,15 @@ let gen_dist ?(gen_deletes=true)
     proto_funcs @
     proto_semi_trigs @
     nd_rcv_corr_done c ::
+    trig_dispatcher c ::
     [mk_flow @@
       Proto.triggers c @
       GC.triggers c @
       TS.triggers @
       Timer.triggers c @
       [
-        trig_dispatcher c;
+        trig_dispatcher_trig c;
+        nd_trig_dispatcher_trig c;
         sw_event_driver_trig c;
         sw_demux c;
       ]
