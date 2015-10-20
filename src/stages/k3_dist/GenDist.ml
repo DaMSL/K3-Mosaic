@@ -1525,16 +1525,19 @@ let sw_event_driver_trig c =
                 ])
               (mk_var "vid") @@
               mk_var "poly_queue") @@
-          mk_block [
-            (* update the vector clock by what we're sending *)
-            mk_iter_bitmap'
-              (mk_update_at_with "vector_clock" (mk_var "ip") @@
+          (* update the vector clock by bits in the outgoing poly_queues *) 
+          mk_let ["vector_clock"]
+            (mk_agg_bitmap'
+              ["acc", TS.sw_vector_clock.t]
+              (mk_update_at_with_block "acc" (mk_var "ip") @@
                 mk_lambda' ["x", t_int] @@
                   (* if we're at max_int, skip to 0 so we don't get negatives *)
                   mk_if (mk_eq (mk_var "x") @@ mk_var g_max_int.id)
                     (mk_cint 0) @@
                     mk_add (mk_cint 1) @@ mk_var "x")
-                  D.poly_queue_bitmap.id;
+              (mk_var "vector_clock")
+              D.poly_queue_bitmap.id) @@
+          mk_block [
             (* send (move) the outgoing polyqueues *)
             mk_iter_bitmap'
               (* move and delete the poly_queue and ship it out with the vector clock num,
@@ -1555,8 +1558,7 @@ let sw_event_driver_trig c =
             (* update highest vid seen *)
             mk_assign TS.sw_highest_vid.id @@ mk_var "next_vid";
             (* check if we're done *)
-            Proto.sw_check_done ~check_size:true;
-            mk_var "next_vid"
+            Proto.sw_check_done ~check_size:true
           ]]) @@
         mk_error "oops") @@
      (* otherwise send the same vid and vector clock *)
