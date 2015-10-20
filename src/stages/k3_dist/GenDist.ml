@@ -1525,7 +1525,7 @@ let sw_event_driver_trig c =
                 ])
               (mk_var "vid") @@
               mk_var "poly_queue") @@
-          (* update the vector clock by bits in the outgoing poly_queues *) 
+          (* update the vector clock by bits in the outgoing poly_queues *)
           mk_let ["vector_clock"]
             (mk_agg_bitmap'
               ["acc", TS.sw_vector_clock.t]
@@ -1623,6 +1623,12 @@ let sw_demux c =
       mk_cunit
   ]
 
+(* demuxer that supports a polyq input *)
+let sw_demux_poly_nm = "sw_demux_poly"
+let sw_demux_poly c =
+  mk_code_sink' sw_demux_poly_nm ["poly_queue", D.poly_queue.t] [] @@
+    (* add the poly queue to our queue of queues *)
+    mk_insert sw_event_queue.id [mk_var "poly_queue"]
 
 let flatteners c =
   let l = snd_many @@ D.uniq_types_and_maps ~uniq_indices:false c in
@@ -1813,6 +1819,7 @@ let gen_dist ?(gen_deletes=true)
         nd_trig_dispatcher_trig c;
         sw_event_driver_trig c;
         sw_demux c;
+        sw_demux_poly c;
       ]
     ] @
     roles_of c ast
