@@ -50,7 +50,9 @@ let sw_vector_clock = create_ds "sw_vector_clock" @@ wrap_tvector t_int
 (* only the master starts the protocol *)
 let ms_init =
   mk_send D.sw_event_driver_trig_nm (mk_var sw_next_switch_addr.id)
-  [mk_var D.g_start_vid.id]
+    [mk_var D.g_start_vid.id;
+     (* start the vector clock *)
+     mk_map (mk_lambda' unknown_arg @@ mk_cint 0) @@ mk_var D.my_peers.id]
 
 (* --- End of code --- *)
 

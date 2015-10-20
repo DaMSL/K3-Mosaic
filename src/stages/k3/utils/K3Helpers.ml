@@ -371,8 +371,9 @@ let mk_delete_at ?(path=[]) id n = mk_stree DeleteAt [mk_id_path id path; n]
 (* first part of key contains the vid. Also contains dummy value *)
 let mk_delete_prefix ?(path=[]) id x = mk_stree DeletePrefix [mk_id_path id path; mk_tuple x]
 
-(* TODO: remove an entry from a data structure (map) *)
-let mk_delete_with ?(path=[]) id x lam_none lam_some = mk_cunit
+(* remove an entry from a data structure (map) *)
+let mk_delete_with ?(path=[]) id x lam_none lam_some =
+  mk_stree DeleteWith [mk_id_path id path; mk_tuple x; lam_none; lam_some]
 
 let mk_clear_all ?(path=[]) id = mk_stree ClearAll [mk_id_path id path]
 

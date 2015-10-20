@@ -1432,7 +1432,8 @@ let trig_dispatcher c =
     (* send (move) the polyqueues *)
     mk_iter_bitmap'
       (* move and delete the poly_queue and ship it out *)
-      (D.mk_sendi trig_dispatcher_nm (mk_var "ip") @@ [mk_delete_at poly_queues.id @@ mk_var "ip"])
+      (D.mk_sendi trig_dispatcher_trig_nm (mk_var "ip")
+         [mk_delete_at poly_queues.id @@ mk_var "ip"])
       D.poly_queue_bitmap.id;
   ]
 
