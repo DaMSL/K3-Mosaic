@@ -1675,18 +1675,27 @@ let roles_of c (ast:program_t) =
      Source(Resource("master",
        Stream(t_unit, ConstStream(mk_singleton (wrap_tlist t_unit) [mk_cunit]))));
      BindFlow("master", Proto.ms_send_addr_self_nm);
-     Instruction(Consume("master")); ] in
-  let sw_flows = List.map mk_no_anno [
+     Instruction(Consume("master"));
+    ] in
+  let sw_flows_old = List.map mk_no_anno [
     Source(Resource("switch_old",
       Handle(wrap_ttuple @@ List.map str_of_date_t @@ fst @@ combine_trig_args c,
         File c.stream_file,
         CSV)));
     BindFlow("switch_old", sw_demux_nm);
-    Instruction(Consume("switch_old")); ]
-  in
+    Instruction(Consume("switch_old"));
+    ] in
+  let sw_flows_new = List.map mk_no_anno [
+    Source(Resource("switch",
+      Handle(D.poly_event_queue.t, PolyFile("files", "inorder"), BIN)));
+    BindFlow("switch", sw_demux_poly_nm);
+    Instruction(Consume("switch"));
+  ] in
+
   List.map mk_no_anno [
     Role("master", ms_flows);
-    Role("switch_old", sw_flows);
+    Role("switch_old", sw_flows_old);
+    Role("switch", sw_flows_new);
     Role("timer", []);
     Role("node", []);
   ]

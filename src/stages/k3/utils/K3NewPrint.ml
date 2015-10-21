@@ -1394,10 +1394,11 @@ let lazy_trigger c id arg vars expr =
 let channel_format c = function
   | CSV  -> "psv"
   | JSON -> "json"
+  | BIN  -> "binary"
 
 let lazy_channel c chan_t chan_f = match chan_t with
-  | File _ when c.use_filemux ->
-      lps @@ sp "polyfile files binary raw inorder"
+  | PolyFile(files, inorder) ->
+      lps @@ sp "polyfile %s binary raw %s" files inorder
   | File _ ->
       lps @@ sp "file switch_path text %s" (channel_format c chan_f)
   | Network(str, port) -> lps @@ "socket(\""^str^"\":"^string_of_int port^")"

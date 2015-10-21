@@ -467,11 +467,15 @@ let lazy_trigger c id arg vars expr =
   lps " =" <| indent (lazy_expr c expr) <| lcut ()
 
 let channel_format c = function
-  | CSV  -> "csv"
+  (* deliberately don't implement bin *)
+  | CSV -> "csv"
+  | BIN -> "binary"
   | JSON -> "json"
 
 let lazy_channel c chan_t chan_f = match chan_t with
+  (* deliberately don't implement polyfile *)
   | File s -> lps @@ "sfile(\""^s^"\", "^channel_format c chan_f^")"
+  | PolyFile(f, i) -> lps @@ sp "spolyfile(%s, %s)" f i
   | Network(str, port) -> lps @@ "socket(\""^str^"\":"^string_of_int port^")"
 
 let rec lazy_resource_pattern c = function

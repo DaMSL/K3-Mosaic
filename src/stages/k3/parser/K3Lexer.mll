@@ -61,6 +61,7 @@ rule tokenize = parse
     | "ssource"   { SOURCE }
     | "ssink"     { SINK }
     | "sfile"     { FILE }
+    | "spolyfile" { POLYFILE }
     | "socket"   { SOCKET }
     | "srandom"  { RANDOM }
     | "stream"   { STREAM }

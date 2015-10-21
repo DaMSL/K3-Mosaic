@@ -223,6 +223,7 @@ let flat_string_of_expr expr =
   flat_string_of_tree (fun ((id, tag), _) -> flat_string_of_expr_tag tag) expr
 
 let flat_string_of_channel_type ct = match ct with
+  | PolyFile(f,inline) -> tag_str "PolyFile" [f; inline]
   | File fp -> tag_str "File" [fp]
   | Network addr -> tag_str "Network" [string_of_address addr]
 
@@ -233,6 +234,7 @@ let flat_string_of_stream_type = function
 let flat_string_of_channel_format cf = match cf with
   | CSV -> "CSV"
   | JSON -> "JSON"
+  | BIN  -> "BIN"
 
 let rec flat_string_of_resource_pattern p =
   let rcr = flat_string_of_resource_pattern in
