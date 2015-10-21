@@ -1624,13 +1624,35 @@ let sw_demux c =
       mk_cunit
   ]
 
-(* demuxer that supports a polyq input *)
-(* we need to loop over the poly_queue, converting to the relevant event tag *)
+(* demuxer that supports an eventq input *)
+(* project out the stuff we don't use *)
 let sw_demux_poly_nm = "sw_demux_poly"
 let sw_demux_poly c =
-  mk_code_sink' sw_demux_poly_nm ["poly_queue", D.poly_queue.t] [] @@
+  let event_trigs = P.get_trig_list c.p ~corrective:false ~delete:false ~sys_init:false in
+  mk_code_sink' sw_demux_poly_nm ["poly_queue", D.poly_event_queue.t] [] @@
+  mk_let ["acc"]
+    (mk_poly_fold
+      (mk_lambda4' ["acc", D.poly_queue.t] p_tag p_idx p_off @@
+       List.fold_left (fun acc_code t ->
+           let wide_args = ("do_insert", t_bool)::P.args_of_t c.p t in
+           let args = ("do_insert", t_bool)::args_of_t c t in
+           let stag = str_drop (String.length "insert_") t in
+           let itag = fst @@ List.find (fun (_,(s,_)) -> stag = s) c.event_tags in
+           mk_if (mk_eq (mk_var "tag") @@ mk_cint itag)
+             (* take a copy hit here because we can't write to closure *)
+             (mk_let (fst_many wide_args) (mk_poly_at' stag) @@
+              mk_poly_insert_block stag "acc" @@ ids_to_vars @@ fst_many args)
+             acc_code)
+         (* base condition *)
+         (mk_if (mk_eq (mk_var "tag") @@ mk_cint 0)
+            (mk_poly_insert_block "sentinel" "acc" [mk_cunit]) @@
+            mk_error "unrecognized tag") @@
+         event_trigs)
+      (mk_empty D.poly_queue.t) @@
+     mk_var "poly_queue") @@
+
     (* add the poly queue to our queue of queues *)
-    mk_insert sw_event_queue.id [mk_var "poly_queue"]
+    mk_insert sw_event_queue.id [mk_var "acc"]
 
 let flatteners c =
   let l = snd_many @@ D.uniq_types_and_maps ~uniq_indices:false c in
@@ -1763,7 +1785,7 @@ let gen_dist ?(gen_deletes=true)
   let unused_trig_args = M.unused_trig_args ast in
 
   (* adjust agenda_map for unused trig args *)
-  let agenda_map = second (StrMap.mapi @@ fun trig_nm l ->
+  let reduced_agenda_map = second (StrMap.mapi @@ fun trig_nm l ->
     try
       let args = fst_many @@ P.args_of_t p ("insert_"^trig_nm) in
       let args = list_zip args l in
@@ -1786,6 +1808,7 @@ let gen_dist ?(gen_deletes=true)
       sys_init;
       stream_file;
       agenda_map;
+      reduced_agenda_map;
       unused_trig_args;
       map_indices = P.map_access_patterns p;
       route_indices = P.route_access_patterns p;
@@ -1799,6 +1822,7 @@ let gen_dist ?(gen_deletes=true)
   in
   let prog =
     mk_typedef poly_queue_typedef_id (poly_queue_typedef c) ::
+    mk_typedef poly_event_typedef_id (poly_event_typedef c) ::
     declare_global_vars c partmap ast @
     declare_global_funcs c partmap ast @
     (if c.gen_correctives then send_corrective_fns c else []) @

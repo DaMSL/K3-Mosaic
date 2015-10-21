@@ -88,6 +88,7 @@ type config = {
   (* a file to use as the stream to switches *)
   stream_file : string;
   (* a mapping for agenda: how the relations map to agenda indices *)
+  reduced_agenda_map : mapping_t;
   agenda_map : mapping_t;
   (* unused trig args, calculated once *)
   unused_trig_args : StrSet.t StrMap.t;
@@ -111,6 +112,7 @@ let default_config = {
   sys_init = false;
   stream_file = "";
   agenda_map = [], StrMap.empty;
+  reduced_agenda_map = [], StrMap.empty;
   unused_trig_args = StrMap.empty;
   map_indices = Hashtbl.create 10;
   route_indices = Hashtbl.create 10;
@@ -594,7 +596,7 @@ let combine_trig_args c =
   let suffix = str_drop (String.length "delete_") in
   (* get only the relevant parts *)
   let trigs = StrSet.of_list @@ List.map suffix @@ P.get_trig_list c.p in
-  second (StrMap.filter @@ fun k _ -> StrSet.mem k trigs) c.agenda_map
+  second (StrMap.filter @@ fun k _ -> StrSet.mem k trigs) c.reduced_agenda_map
 
 let nd_stmt_cntrs_per_map_inner =
   let e = ["vid", t_vid; "stmt_id", t_int] in
@@ -713,6 +715,15 @@ let stmt_map_ids =
 let get_global_poly_tags c =
   List.map (fun (i, (s,_,i_ts)) -> i, s, wrap_ttuple @@ snd_many i_ts) c.poly_tags
 
+let get_poly_event_tags c =
+  List.map (fun (i, (s, ts)) -> i, s, wrap_ttuple ts) c.event_tags
+
+(* the input poly type filled in from the file *)
+let poly_event_typedef_id = "poly_event_t"
+let poly_event_typedef c = wrap_tpolyq @@ get_poly_event_tags c
+let poly_event_queue = create_ds "poly_event" @@ t_alias poly_event_typedef_id
+
+(* the global poly type of the program *)
 let poly_queue_typedef_id = "poly_queue_t"
 let poly_queue_typedef c = wrap_tpolyq @@ get_global_poly_tags c
 let poly_queue = create_ds "poly_queue" @@ t_alias poly_queue_typedef_id

@@ -298,6 +298,7 @@ val mk_poly_iter_tag': string -> expr_t -> expr_t
 val mk_poly_fold_tag: string -> expr_t -> expr_t -> expr_t -> expr_t -> expr_t -> expr_t
 val mk_poly_fold_tag': string -> expr_t -> expr_t -> expr_t
 val mk_poly_at: string -> expr_t -> expr_t -> expr_t -> expr_t
+val mk_poly_at': string -> expr_t
 val mk_poly_at_with: string -> expr_t -> expr_t -> expr_t -> expr_t -> expr_t -> expr_t
 val mk_poly_at_with': string -> expr_t -> expr_t
 val mk_poly_insert: ?path:int list -> string -> id_t -> expr_t list -> expr_t
