@@ -202,9 +202,9 @@ and lazy_col c col_t elem_t = match col_t with
   | TSortedSet  -> lps "{SortedSet}"
   | TPolyQueue tag -> lps "{FlatPolyBuffer" <| lazy_paren (lazy_poly_tags c tag) <| lps "}"
 
-and lazy_type ?(brace=true) ?(empty=false) ?(in_col=false) c t =
+and lazy_type ?(brace=true) ?(in_col=false) c t =
   let wrap_props f = lazy_properties ~symbol:"@::" t.anno f in
-  let wrap_mut f = if t.mut && not empty then lps "mut " <| f else f in
+  let wrap_mut f = if t.mut then lps "mut " <| f else f in
   let wrap_single f =
     let wrap = if brace then lazy_brace else id_fn in
     if in_col then wrap(lps (c.singleton_id^":") <| f) else f
@@ -232,8 +232,7 @@ and lazy_type ?(brace=true) ?(empty=false) ?(in_col=false) c t =
       let wrap = if brace then lazy_brace else id_fn in
       wrap_mut (wrap (lsp () <| inner <| lsp ()))
   | TCollection(ct, vt) -> wrap (
-    (if not empty then lps "collection " else [])
-    <| lazy_type c ~in_col:true vt <| lps " @ " <| lazy_col c ct vt)
+    lps "collection " <| lazy_type c ~in_col:true vt <| lps " @ " <| lazy_col c ct vt)
   | TFunction(itl, ot) ->
       lps_list ~sep:" -> " CutHint (lazy_type c) (itl@[ot])
 
@@ -264,10 +263,12 @@ let lazy_const c v =
 let lazy_collection_vt c vt eval = match (T.repr c.tenv vt).typ with
   | TCollection(ct, et) ->
       (* preceding list of element types *)
-      let lazy_elem_list =
-        lazy_type ~brace:false ~in_col:true c (T.repr c.tenv et) <| lps "|" <| lsp ()
+      let lazy_elem_list = lazy_type ~brace:false ~in_col:true c et in
+      let sep, l, r =
+        if eval = [] then [], "{", "}"
+        else (lps "|" <| lsp () <| eval, "{|", "|}")
       in
-      lps "{|" <| lazy_elem_list <| eval <| lps "|}" <| lps " @ " <| lazy_col c ct et
+      lps l <| lazy_elem_list <| sep <| lps r <| lps " @ " <| lazy_col c ct et
   | _ -> error () (* type error *)
 
 (* arg type with numbers included in tuples and maybes *)
@@ -784,7 +785,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
   | Just -> let e = U.decompose_just expr in
     lps "Some " <| paren_r e (lazy_expr c e)
   | Nothing vt -> lps "None " <| if vt.mut then lps "mut" else lps "immut"
-  | Empty vt   -> lps "empty " <| lazy_type ~empty:true c ~in_col:false vt
+  | Empty vt   -> lps "empty " <| lazy_collection_vt c vt []
   | Singleton _ ->
     (* Singletons are sometimes typed with unknowns (if read from a file) *)
     let e = U.decompose_singleton expr in
