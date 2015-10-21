@@ -223,6 +223,7 @@ and lazy_type ?(brace=true) ?(empty=false) ?(in_col=false) c t =
   | TTarget bt   -> wrap (lps "target" <| lazy_type c ~in_col bt)
   | TUnknown     -> wrap @@ lps "()"
   | TTop         -> wrap @@ lps "top"
+  | TAlias id    -> wrap @@ lps id
   | TIndirect vt -> lazy_paren (wrap (lps "ind " <| lazy_type c ~in_col vt))
   | TTuple(vts)  -> (* tuples become records *)
       let rec_vts = add_record_ids c vts in
@@ -235,7 +236,6 @@ and lazy_type ?(brace=true) ?(empty=false) ?(in_col=false) c t =
     <| lazy_type c ~in_col:true vt <| lps " @ " <| lazy_col c ct vt)
   | TFunction(itl, ot) ->
       lps_list ~sep:" -> " CutHint (lazy_type c) (itl@[ot])
-  | TAlias id -> lps id
 
 let rec lazy_arg c drop_tuple_paren = function
   | AIgnored      -> lps "_"
