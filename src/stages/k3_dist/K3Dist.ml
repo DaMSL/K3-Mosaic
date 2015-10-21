@@ -729,10 +729,16 @@ let poly_event_typedef_id = "poly_event_t"
 let poly_event_typedef c = wrap_tpolyq @@ get_poly_event_tags c
 let poly_event_queue = create_ds "poly_event" @@ t_alias poly_event_typedef_id
 
+(* global for avoiding huge tags *)
+let empty_event_queue = create_ds "empty_event_queue" @@ poly_event_queue.t
+
 (* the global poly type of the program *)
 let poly_queue_typedef_id = "poly_queue_t"
 let poly_queue_typedef c = wrap_tpolyq @@ get_global_poly_tags c
 let poly_queue = create_ds "poly_queue" @@ t_alias poly_queue_typedef_id
+
+(* global for avoiding huge tags *)
+let empty_poly_queue = create_ds "empty_poly_queue" @@ poly_queue.t
 
 let poly_queues =
   let e = ["queue", poly_queue.t] in
@@ -1002,6 +1008,8 @@ let global_vars c dict =
       corrective_mode;
       poly_queues;
       poly_queue_bitmap;
+      empty_poly_queue;
+      empty_event_queue;
       nd_rcv_fetch_buffer;
       nd_stmt_cntrs_per_map;
       nd_lmap_of_stmt_id c;

@@ -1403,7 +1403,7 @@ let trig_dispatcher c =
   mk_block [
     (* replace all used slots with empty polyqueues *)
     mk_iter_bitmap'
-      (mk_insert_at poly_queues.id (mk_var "ip") [mk_empty poly_queue.t])
+      (mk_insert_at poly_queues.id (mk_var "ip") [mk_var empty_poly_queue.id])
       D.poly_queue_bitmap.id;
 
     (* clean out the send bitmaps *)
@@ -1490,7 +1490,7 @@ let sw_event_driver_trig c =
         (mk_block [
           (* replace all used send slots with empty polyqueues *)
           mk_iter_bitmap'
-            (mk_insert_at poly_queues.id (mk_var "ip") [mk_empty poly_queue.t])
+            (mk_insert_at poly_queues.id (mk_var "ip") [mk_var empty_poly_queue.id])
             D.poly_queue_bitmap.id;
           (* clean out the send bitmaps *)
           mk_set_all D.poly_queue_bitmap.id [mk_cfalse];
@@ -1648,7 +1648,7 @@ let sw_demux_poly c =
             (mk_poly_insert_block "sentinel" "acc" [mk_cunit]) @@
             mk_error "unrecognized tag") @@
          event_trigs)
-      (mk_empty D.poly_queue.t) @@
+      (mk_var D.empty_poly_queue.id) @@
      mk_var "poly_queue") @@
 
     (* add the poly queue to our queue of queues *)
