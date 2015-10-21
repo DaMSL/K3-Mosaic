@@ -190,7 +190,7 @@ def run(target_file,
             node_list += ['localhost:{0}/node'.format(port)]
 
         # always add the master, switch and timer
-        peer_list = ["-n localhost:0/master", "localhost:1/switch", "localhost:3/timer", ] + node_list
+        peer_list = ["-n localhost:0/master", "localhost:1/switch_old", "localhost:3/timer", ] + node_list
         peer_cmd = ','.join(peer_list)
 
         if new_k3:

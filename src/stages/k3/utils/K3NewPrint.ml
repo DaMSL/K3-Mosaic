@@ -1397,7 +1397,7 @@ let channel_format c = function
 
 let lazy_channel c chan_t chan_f = match chan_t with
   | File _ when c.use_filemux ->
-      lps @@ sp "filemxsq switch_mux_inputs text %s" (channel_format c chan_f)
+      lps @@ sp "polyfile files binary raw inorder"
   | File _ ->
       lps @@ sp "file switch_path text %s" (channel_format c chan_f)
   | Network(str, port) -> lps @@ "socket(\""^str^"\":"^string_of_int port^")"
@@ -1524,6 +1524,9 @@ declare my_peers2 : collection { elem:address } @ {Collection} =
 
 declare my_role : collection { elem:string } @ {Collection} =
   role.fold (\\acc -> (\\x -> (acc.insert {elem:x.i}; acc))) empty { elem:string} @ Collection
+
+declare files : collection {path: string} @Collection
+declare inorder : mut string = \"in_order.csv\"
 
 "^ string_of_program ~map_to_fold ~use_filemux ~safe_writes p' envs
 
