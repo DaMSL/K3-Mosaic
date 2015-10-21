@@ -97,6 +97,8 @@ type config = {
   route_indices: (map_id_t, int IntSetMap.t) Hashtbl.t;
   (* poly tag list for batching: int_tag * (tag * tag_type * types) *)
   poly_tags : (int * (string * tag_type * (id_t * type_t) list)) list;
+  (* poly tag for incoming events *)
+  event_tags: (int * (string * type_t list)) list;
 }
 
 let default_config = {
@@ -113,6 +115,7 @@ let default_config = {
   map_indices = Hashtbl.create 10;
   route_indices = Hashtbl.create 10;
   poly_tags = [];
+  event_tags = [];
 }
 
 let get_map_indices c map_id =
@@ -762,18 +765,30 @@ let sw_ack_rcv_trig_args = ["addr", t_int; "vid", t_vid]
 
 (*** Polyqueues ***)
 
+(* we create tags for events, with the full width of said events plus insert/delete field *)
+let calc_event_tags c =
+  let flat_types = Array.of_list @@ fst c.agenda_map in
+  let events = StrMap.to_list @@ snd c.agenda_map in
+  (* unmap from flat_types, and add a bool for insert/delete *)
+  let l = ("sentinel", [t_unit]) ::
+    List.map (fun (t, indices) -> t, t_bool :: List.map (fun i -> flat_types.(i)) indices) events
+  in
+  insert_index_fst l
+
 (* we create one global tag hashmap, which we use to populate polyqueues *)
 (* format (tag, tag_type, types) *)
 let calc_poly_tags c =
   let l =
     let for_all_trigs = P.for_all_trigs ~delete:c.gen_deletes in
     let events = fst_many @@ StrMap.to_list @@ snd c.agenda_map in
-    let events = List.map ((^) "insert_") events @ List.map ((^) "delete_") events in
     (* static sentinel *)
     ("sentinel", Event, ["_", t_unit])::
     (* event tags *)
-    (List.map (fun t -> t, Event, try args_of_t c t with Bad_data _ -> []) events) @
-    (* (P.for_all_trigs c.p ~sys_init:false @@ fun t -> t, Event, args_of_t c t) @ *)
+    (List.map (fun t ->
+         let args = try ("do_insert", t_bool)::args_of_t c ("insert_"^t)
+                    with Bad_data _ -> [] in
+         t, Event, args)
+       events) @
     (* static ds for sw->nd triggers *)
     [stmt_cnt_list_ship.id, Ds, stmt_cnt_list_ship.e;
      stmt_map_ids.id, Ds, stmt_map_ids.e] @
@@ -797,10 +812,10 @@ let calc_poly_tags c =
         s_rhs_corr)) @
     (* the types for the maps with vid *)
     (P.for_all_maps c.p @@ fun m ->
-      P.map_name_of c.p m^"_v", Ds, P.map_ids_types_with_v_for c.p m) @
+      P.map_name_of c.p m^"_map_v", Ds, P.map_ids_types_with_v_for c.p m) @
     (* the types for the maps without vid *)
     (P.for_all_maps c.p @@ fun m ->
-      P.map_name_of c.p m, Ds, P.map_ids_types_for c.p m) @
+      P.map_name_of c.p m^"_map", Ds, P.map_ids_types_for c.p m) @
     (* t_vid_list ds for correctives *)
     ["vids", Ds, ["vid", t_vid];
      nd_rcv_corr_done_nm, Trig, nd_rcv_corr_done_args;

@@ -676,7 +676,7 @@ let nd_send_push_stmt_map_trig c s_rhs_lhs t =
                   buffer_for_send rcv_trig "ip" @@
                     mk_var "has_data"::args_of_t_as_vars_with_v c t;
                   (* buffer the map data according to the indices *)
-                  buffer_tuples_from_idxs "tuples" map_delta.t (rmap_nm^"_v") @@ mk_var "indices"
+                  buffer_tuples_from_idxs "tuples" map_delta.t (rmap_nm^"_map_v") @@ mk_var "indices"
                ])
             K3S.shuffle_bitmap.id
         ]) (* trigger *)
@@ -718,11 +718,11 @@ List.map
 
         (* check if we have an empty map *)
         mk_if_poly_end_ny
-          (mk_if_tag' (ios_tag c @@ tup_ds.id^"_v")
+          (mk_if_tag' (ios_tag c @@ tup_ds.id^"_map_v")
             (mk_bind (mk_var rbuf_name) rbuf_deref @@
               (* assign a fold result back to the buffer *)
               mk_assign rbuf_deref @@ U.add_property "Move" @@
-                mk_poly_fold_tag' (tup_ds.id^"_v")
+                mk_poly_fold_tag' (tup_ds.id^"_map_v")
                   (mk_lambda'' (["acc", map_ds.t] @ poly_args_partial @
                                 ["x", wrap_ttuple @@ snd_many @@ ds_e tup_ds]) @@
                     mk_let (fst_many @@ ds_e tup_ds) (mk_var "x") @@
@@ -741,7 +741,7 @@ List.map
           mk_cunit;
 
         (* skip over the data type *)
-        mk_poly_skip_all' @@ tup_ds.id^"_v";
+        mk_poly_skip_all' @@ tup_ds.id^"_map_v";
       ])
   s_rhs
 
@@ -876,7 +876,7 @@ let send_corrective_fns c =
                       (ids_to_vars @@ fst_many orig_vals) @ [mk_var "corrective_vid"];
                     (* buffer tuples from indices *)
                     buffer_tuples_from_idxs ~drop_vid:true
-                      delta_tuples2.id delta_tuples2.t map_ds.id (mk_var "t_indices");
+                      delta_tuples2.id delta_tuples2.t (map_ds.id^"_map") (mk_var "t_indices");
                     (* buffer vids *)
                     mk_iter (mk_lambda'' ["vid", t_vid] @@
                       buffer_for_send ~wr_bitmap:false "vids" "ip" [mk_var "vid"]) @@ mk_var "vids";
@@ -1303,13 +1303,13 @@ let nd_rcv_correctives_trig c s_rhs t = List.map
          return 2 different collections for materialization purposes *)
       (* convert to delta_tuples *)
       mk_let ["delta_tuples"]
-        (mk_poly_fold_tag' map_delta.id
+        (mk_poly_fold_tag' (map_delta.id^"_map")
           (mk_lambda4' ["acc", map_delta.t] p_idx p_off map_delta.e @@
             mk_insert_block "acc" @@ ids_to_vars @@ fst_many map_delta.e) @@
           mk_empty map_delta.t) @@
 
       (* increment the idx, offsets of the map variant *)
-      mk_poly_skip_all_block map_delta.id [
+      mk_poly_skip_all_block (map_delta.id^"_map") [
         mk_apply'
           (D.nd_add_delta_to_buf_nm c m) @@
             (* pass the map indirection, false=not corrective *)
@@ -1511,14 +1511,16 @@ let sw_event_driver_trig c =
                         Proto.sw_seen_sentinel ~check_size:false
                       else
                         mk_poly_at_with' nm @@
-                          (* buffer the message *)
                           mk_lambda' id_ts @@
-                            mk_apply' (send_fetch_name_of_t nm) @@
-                              ids_to_vars @@ "vid":: fst_many id_ts)
+                            mk_if (mk_var "do_insert")
+                              (mk_apply' (send_fetch_name_of_t @@ "insert_"^nm) @@
+                                ids_to_vars @@ "vid":: (fst_many @@ tl id_ts)) @@
+                               mk_apply' (send_fetch_name_of_t @@ "delete_"^nm) @@
+                                ids_to_vars @@ "vid":: (fst_many @@ tl id_ts))
                       acc_code)
                   (mk_error "mismatch on event id") @@
                   List.filter (function (_,(nm,e,_)) ->
-                      e = Event && (StrSet.mem nm trig_list || nm = "sentinel"))
+                      e = Event && (StrSet.mem ("insert_"^nm) trig_list || nm = "sentinel"))
                     c.poly_tags
                 ;
                 mk_add (mk_cint 1) @@ mk_var "vid"
@@ -1601,9 +1603,8 @@ let sw_demux c =
           arg_indices
       in
       mk_if (mk_eq (mk_fst @@ mk_var "args") @@ mk_cstring trig)
-        (mk_if (mk_eq (mk_snd @@ mk_var "args") @@ mk_cint 1)
-          (mk_poly_insert ("insert_"^trig) "sw_demux_poly_queue" @@ args) @@
-           mk_poly_insert ("delete_"^trig) "sw_demux_poly_queue" @@ args)
+        (mk_let ["do_insert"] (mk_eq (mk_snd @@ mk_var "args") @@ mk_cint 1) @@
+         mk_poly_insert trig "sw_demux_poly_queue" @@ (mk_var "do_insert")::args)
         acc)
       t_arg_map
       sentinel_code;
@@ -1624,6 +1625,7 @@ let sw_demux c =
   ]
 
 (* demuxer that supports a polyq input *)
+(* we need to loop over the poly_queue, converting to the relevant event tag *)
 let sw_demux_poly_nm = "sw_demux_poly"
 let sw_demux_poly c =
   mk_code_sink' sw_demux_poly_nm ["poly_queue", D.poly_queue.t] [] @@
@@ -1789,7 +1791,7 @@ let gen_dist ?(gen_deletes=true)
       route_indices = P.route_access_patterns p;
     } in
   (* to get poly_tags, we need c *)
-  let c = { c with poly_tags = D.calc_poly_tags c } in
+  let c = { c with poly_tags = D.calc_poly_tags c; event_tags = D.calc_event_tags c} in
   (* regular trigs then insert entries into shuffle fn table *)
   let proto_semi_trigs, proto_funcs, proto_funcs2 =
     (fun (x,y,z) -> let a = List.flatten in a x, a y, a z) @@ list_unzip3 @@
