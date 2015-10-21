@@ -128,6 +128,13 @@ let add_record_ids c ?prefix l =
     let i_l = insert_index_fst ~first:1 l in
     List.map (fun (i, x) -> record_id_of_num ?prefix i, x) i_l
 
+let lazy_properties ?(symbol="@:") props f =
+  let ps = filter_map (function Property s -> Some s | _ -> None) props in
+  match ps with
+  | []  -> f
+  | [p] -> lazy_paren f <| lps (" "^symbol^" ") <| lps p
+  | ps  -> lazy_paren f <| lps (" "^symbol^"{") <| lps_list NoCut lps ps <| lps "}"
+
 (* Add record ids to a string *)
 let concat_record_str ?(sep=":") l =
   List.map (fun (s,x) -> sp "%s%s%s" s sep x) @@
@@ -195,14 +202,15 @@ and lazy_col c col_t elem_t = match col_t with
   | TSortedSet  -> lps "{SortedSet}"
   | TPolyQueue tag -> lps "{FlatPolyBuffer" <| lazy_paren (lazy_poly_tags c tag) <| lps "}"
 
-and lazy_base_type ?(brace=true) ?(mut=false) ?(empty=false) c ~in_col t =
-  let wrap_mut f = if mut && not empty then lps "mut " <| f else f in
+and lazy_type ?(brace=true) ?(empty=false) ?(in_col=false) c t =
+  let wrap_props f = lazy_properties ~symbol:"@::" t.anno f in
+  let wrap_mut f = if t.mut && not empty then lps "mut " <| f else f in
   let wrap_single f =
     let wrap = if brace then lazy_brace else id_fn in
     if in_col then wrap(lps (c.singleton_id^":") <| f) else f
   in
-  let wrap = wrap_single |- wrap_mut in
-  match t with
+  let wrap = wrap_props |- wrap_single |- wrap_mut in
+  match t.typ with
   | TUnit        -> wrap @@ lps "()"
   | TBool        -> wrap @@ lps "bool"
   | TByte        -> wrap @@ lps "byte"
@@ -219,7 +227,7 @@ and lazy_base_type ?(brace=true) ?(mut=false) ?(empty=false) c ~in_col t =
   | TTuple(vts)  -> (* tuples become records *)
       let rec_vts = add_record_ids c vts in
       let inner = lazy_concat ~sep:lcomma (fun (id, vt) ->
-        lps (id^":") <| lazy_type c ~in_col:false vt) rec_vts in
+        lps (id^":") <| lazy_type c vt) rec_vts in
       let wrap = if brace then lazy_brace else id_fn in
       wrap_mut (wrap (lsp () <| inner <| lsp ()))
   | TCollection(ct, vt) -> wrap (
@@ -228,9 +236,6 @@ and lazy_base_type ?(brace=true) ?(mut=false) ?(empty=false) c ~in_col t =
   | TFunction(itl, ot) ->
       lps_list ~sep:" -> " CutHint (lazy_type c) (itl@[ot])
   | TAlias id -> lps id
-
-and lazy_type ?empty ?(in_col=false) c {typ; mut; anno} =
-  lazy_base_type ?empty ~in_col ~mut c typ
 
 let rec lazy_arg c drop_tuple_paren = function
   | AIgnored      -> lps "_"
@@ -259,9 +264,8 @@ let lazy_const c v =
 let lazy_collection_vt c vt eval = match (T.repr c.tenv vt).typ with
   | TCollection(ct, et) ->
       (* preceding list of element types *)
-      let mut = et.mut in
       let lazy_elem_list =
-        lazy_base_type ~brace:false ~in_col:true ~mut c (T.repr c.tenv et).typ <| lps "|" <| lsp ()
+        lazy_type ~brace:false ~in_col:true c (T.repr c.tenv et) <| lps "|" <| lsp ()
       in
       lps "{|" <| lazy_elem_list <| eval <| lps "|}" <| lps " @ " <| lazy_col c ct et
   | _ -> error () (* type error *)
@@ -1352,10 +1356,10 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
   in
   (* check if we need to write a property *)
   let props = U.properties_of_expr expr in
-  let analyze () =
-    if props <> [] then
-      lazy_paren (analyze ()) <| lps " @: " <| lps_list NoCut lps props
-    else analyze ()
+  let analyze () = match props with
+    | []  -> analyze ()
+    | [p] -> lazy_paren (analyze ()) <| lps " @: " <| lps p
+    | _   -> lazy_paren (analyze ()) <| lps " @:{" <| lps_list NoCut lps props <| lps "}"
   in
   (* check if we need to wrap our output in a tuple (record) *)
   if snd expr_info then
@@ -1454,7 +1458,7 @@ let wrap_f = wrap_formatter ~margin:80
 
 (* print a K3 type in syntax *)
 let string_of_base_type t = wrap_f @@ fun () ->
-  force_list @@ lazy_base_type verbose_types_config false t
+  force_list @@ lazy_type verbose_types_config t
 
 (* print a K3 type in syntax *)
 let string_of_value_type t = wrap_f @@ fun () ->
