@@ -187,7 +187,7 @@ and lazy_mape c elem_t =
 and lazy_poly_tags c tags =
   lps "variants=[:#>" <| lsp () <|
   lps_list CutHint (fun (i,s,t) ->
-      lps s <| lps " => " <| lazy_type c t <| lps " : " <| lps (soi i)) tags <|
+      lps s <| lps " => " <| lazy_type c ~in_col:true t <| lps " : " <| lps (soi i)) tags <|
   lps "]"
 
 and lazy_col c col_t elem_t = match col_t with
