@@ -184,6 +184,8 @@ let decompose_poly_skip e = match tag_of_expr e, sub_tree e with
   PolySkip(all, x), [e0; e1; e2] -> all, x, e0, e1, e2 | _ -> failwith "not a PolySkip"
 let decompose_poly_unpack e = match tag_of_expr e, sub_tree e with
   PolyUnpack, [col] -> col | _ -> failwith "not a PolyUnpack"
+let decompose_pop e = match tag_of_expr e, sub_tree e with
+  Pop, [col] -> col | _ -> failwith "not a Pop"
 
 let decompose_range e = match tag_of_expr e, sub_tree e with
   Range _, [e0; e1; e2] -> e0, e1, e2 | _ -> failwith "not a Range"

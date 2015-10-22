@@ -39,6 +39,8 @@ let iter2 = List.iter2
 
 let at = List.nth
 
+let tail = tl
+
 exception Mismatch of int
 
 let compare f x y =

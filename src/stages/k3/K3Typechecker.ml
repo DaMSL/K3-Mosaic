@@ -111,6 +111,7 @@ let check_tag_arity tag children =
     | DeletePrefix -> 2
     | DeleteAt     -> 2
     | DeleteWith   -> 4
+    | Pop -> 1
     | ClearAll     -> 1
     | FilterOp _   -> 2
 
@@ -848,6 +849,13 @@ let rec deduce_expr_type ?(override=true) trig_env env tenv utexpr : expr_t =
           if not (tcol = TVector) then t_erroru @@ not_vector tcol'.typ else
           if not (tidx === t_int) then t_erroru @@ TMismatch(tidx, t_int, "index") else
           telem
+
+      | Pop ->
+          let tcol' = bind 0 in
+          let tcol, _ =
+            try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') in
+          if not (tcol = TList) then t_erroru @@ TBad(tcol', "not a list") else
+          t_unit
 
       | DeleteWith ->
           let tcol', tkey, tlam_none, tlam_some = bind 0, bind 1, bind 2, bind 3 in

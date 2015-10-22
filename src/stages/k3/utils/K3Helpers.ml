@@ -367,6 +367,8 @@ let mk_delete ?(path=[]) id x = mk_stree Delete [mk_id_path id path; mk_tuple x]
 
 let mk_delete_at ?(path=[]) id n = mk_stree DeleteAt [mk_id_path id path; n]
 
+let mk_pop ?(path=[]) id = mk_stree Pop [mk_id_path id path]
+
 (* first part of key contains the vid. Also contains dummy value *)
 let mk_delete_prefix ?(path=[]) id x = mk_stree DeletePrefix [mk_id_path id path; mk_tuple x]
 
@@ -825,12 +827,12 @@ let mk_min_max v v' v_t comp_fn zero col = mk_agg
   mk_var col.id
 
 (* pop off the front of a list *)
-let mk_pop ?cond col_nm bind_nm fail success =
+let mk_pop_sim ?cond col_nm bind_nm fail success =
   let action =
     mk_block [
       success;
       (* delete should be last so we can bind by reference *)
-      mk_delete col_nm [mk_var bind_nm]
+      mk_pop col_nm
     ]
   in
   mk_case_ns (mk_peek' col_nm) bind_nm

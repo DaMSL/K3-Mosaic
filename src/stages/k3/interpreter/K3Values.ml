@@ -715,6 +715,10 @@ let v_delete err_fn x m = match x, m with
   | v, c                        -> err_fn "v_delete" @@
     sp "invalid input: delete: %s\nfrom: %s" (sov v) (sov c)
 
+let v_pop err_fn = function
+  | VList m -> VList(IList.tail m)
+  | v -> err_fn "v_pop" @@ "not a list "^sov v
+
 (* vidkey: sometimes we need to get the vid from another tuple for vmap *)
 let v_update ?vidkey err_fn oldv newv c =
   let error ?(x="") v v' c = err_fn "v_update" @@

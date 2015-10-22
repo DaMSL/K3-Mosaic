@@ -777,6 +777,10 @@ and eval_expr_inner ?(fun_typ=FLambda) (address:address) sched_st cenv texpr =
         (env_modify (id_path ()) nenv @@
           fun col -> v_delete_prefix error key col), tvunit
 
+    | Pop, _ ->
+        (env_modify (id_path ()) nenv @@
+          fun col -> v_pop error col), tvunit
+
     | ClearAll, _ ->
         (env_modify (id_path ()) nenv @@
           fun col -> v_empty error col), tvunit

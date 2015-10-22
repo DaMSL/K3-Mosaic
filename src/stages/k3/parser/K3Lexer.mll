@@ -208,6 +208,7 @@ rule tokenize = parse
     | "delete_prefix" { DELETE_PREFIX }
     | "delete_at" {DELETE_AT }
     | "delete_with" {DELETE_WITH}
+    | "pop" { POP }
     | "clear_all"     { CLEAR_ALL }
     | "filter_geq"    { FILTERGEQ }
     | "filter_gt"     { FILTERGT }

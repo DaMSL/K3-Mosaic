@@ -390,6 +390,8 @@ let rec lazy_expr c expr =
     lps "delete_prefix" <| lazy_paren (expr_pair e)
   | DeleteWith -> let e = U.decompose_delete_with expr in
     lps "delete_with" <| lazy_paren (expr_quad e)
+  | Pop -> let e = U.decompose_pop expr in
+    lps "pop" <| lazy_paren (lazy_expr c e)
   | ClearAll -> let e = U.decompose_clear_all expr in
     lps "clear_all" <| lazy_paren (lazy_expr c e)
   | Update -> let e = U.decompose_update expr in
