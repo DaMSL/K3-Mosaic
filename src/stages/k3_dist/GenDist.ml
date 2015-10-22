@@ -1564,7 +1564,7 @@ let sw_event_driver_trig c =
             mk_send sw_event_driver_trig_nm (mk_var TS.sw_next_switch_addr.id)
               [mk_var "next_vid"; mk_var "vector_clock"];
             (* finish popping the incoming queue *)
-            mk_pop D.sw_event_queue.id;
+            mk_delete D.sw_event_queue.id [mk_var "poly_queue"];
             (* update highest vid seen *)
             mk_assign TS.sw_highest_vid.id @@ mk_var "next_vid";
             (* check if we're done *)
@@ -1598,26 +1598,35 @@ let sw_demux c =
   let sentinel_code =
     (* stash the sentinel index in the queue *)
     mk_if (mk_eq (mk_fst @@ mk_var "args") @@ mk_cstring "")
-      (mk_poly_insert "sentinel" "sw_demux_poly_queue" [mk_cunit])
-      (mk_error "unhandled event")
+      (mk_block [
+          mk_poly_insert "sentinel" "sw_demux_poly_queue" [mk_cunit];
+          mk_ctrue
+        ])
+      mk_cfalse
   in
   mk_code_sink' sw_demux_nm ["args", wrap_ttuple @@ List.map str_of_date_t combo_t] [] @@
   (* create a poly queue with a given number of messages *)
   mk_block [
-    StrMap.fold (fun trig arg_indices acc ->
-      let args =
-        (* add 1 for tuple access *)
-        List.map (fun i -> convert_date i @@ mk_subscript (i+1) @@ mk_var "args")
-          arg_indices
-      in
-      mk_if (mk_eq (mk_fst @@ mk_var "args") @@ mk_cstring trig)
-        (mk_let ["do_insert"] (mk_eq (mk_snd @@ mk_var "args") @@ mk_cint 1) @@
-         mk_poly_insert trig "sw_demux_poly_queue" @@ (mk_var "do_insert")::args)
-        acc)
-      t_arg_map
-      sentinel_code;
-    (* increment counter *)
-    mk_assign sw_demux_ctr.id @@ mk_add (mk_cint 1) @@ mk_var sw_demux_ctr.id;
+    mk_let ["do_incr"]
+      (StrMap.fold (fun trig arg_indices acc ->
+        let args =
+          (* add 1 for tuple access *)
+          List.map (fun i -> convert_date i @@ mk_subscript (i+1) @@ mk_var "args")
+            arg_indices
+        in
+        mk_if (mk_eq (mk_fst @@ mk_var "args") @@ mk_cstring trig)
+          (mk_let ["do_insert"] (mk_eq (mk_snd @@ mk_var "args") @@ mk_cint 1) @@
+           mk_block [
+             mk_poly_insert trig "sw_demux_poly_queue" @@ (mk_var "do_insert")::args;
+             mk_ctrue
+           ])
+          acc)
+        t_arg_map
+        sentinel_code) @@
+    (* increment counter if we sent a value *)
+    mk_if (mk_var "do_incr")
+      (mk_assign sw_demux_ctr.id @@ mk_add (mk_cint 1) @@ mk_var sw_demux_ctr.id)
+      mk_cunit;
     (* ship off if we hit the count or saw the sentinel *)
     mk_if (mk_or (mk_geq (mk_var sw_demux_ctr.id) @@ mk_var sw_demux_max.id) @@
                   mk_eq (mk_fst @@ mk_var "args") @@ mk_cstring "")
