@@ -1564,7 +1564,7 @@ let sw_event_driver_trig c =
             mk_send sw_event_driver_trig_nm (mk_var TS.sw_next_switch_addr.id)
               [mk_var "next_vid"; mk_var "vector_clock"];
             (* finish popping the incoming queue *)
-            mk_delete D.sw_event_queue.id [mk_var "poly_queue"];
+            mk_pop D.sw_event_queue.id;
             (* update highest vid seen *)
             mk_assign TS.sw_highest_vid.id @@ mk_var "next_vid";
             (* check if we're done *)
