@@ -1432,8 +1432,12 @@ let trig_dispatcher c =
     (* send (move) the polyqueues *)
     mk_iter_bitmap'
       (* move and delete the poly_queue and ship it out *)
-      (D.mk_sendi trig_dispatcher_trig_nm (mk_var "ip")
-         [mk_delete_at poly_queues.id @@ mk_var "ip"])
+      (mk_let ["pq"]
+         (mk_delete_at poly_queues.id @@ mk_var "ip") @@
+      mk_block [
+        mk_poly_unpack @@ mk_var "pq";
+        D.mk_sendi trig_dispatcher_trig_nm (mk_var "ip") [mk_var "pq"]
+      ])
       D.poly_queue_bitmap.id;
   ]
 
@@ -1544,12 +1548,16 @@ let sw_event_driver_trig c =
             mk_iter_bitmap'
               (* move and delete the poly_queue and ship it out with the vector clock num,
                  but only if we're in corrective mode *)
-              (mk_if (mk_var D.corrective_mode.id)
-                (D.mk_sendi nd_trig_dispatcher_trig_nm (mk_var "ip")
-                  [mk_at' "vector_clock" @@ mk_var "ip";
-                    mk_delete_at poly_queues.id @@ mk_var "ip"]) @@
-                D.mk_sendi trig_dispatcher_trig_nm (mk_var "ip")
-                  [mk_delete_at poly_queues.id @@ mk_var "ip"]) @@
+                (* pull out the poly queue *)
+                (mk_let ["pq"] (mk_delete_at poly_queues.id @@ mk_var "ip") @@
+                 mk_block [
+                  mk_poly_unpack (mk_var "pq");
+                  mk_if (mk_var D.corrective_mode.id)
+                    (D.mk_sendi nd_trig_dispatcher_trig_nm (mk_var "ip")
+                        [mk_at' "vector_clock" @@ mk_var "ip"; mk_var "pq"]) @@
+                    (* otherwise just send the polyqueue without the vector clock *)
+                    D.mk_sendi trig_dispatcher_trig_nm (mk_var "ip") [mk_var "pq"]
+                 ]) @@
               D.poly_queue_bitmap.id;
             (* send the new (vid, vector clock). make sure it's after we use vector
                clock data so we can move *)
@@ -1614,6 +1622,8 @@ let sw_demux c =
     mk_if (mk_or (mk_geq (mk_var sw_demux_ctr.id) @@ mk_var sw_demux_max.id) @@
                   mk_eq (mk_fst @@ mk_var "args") @@ mk_cstring "")
       (mk_block [
+        (* unpack before adding *)
+        mk_poly_unpack @@ mk_var sw_demux_poly_queue.id;
         (* copy the polybuffer to the queue *)
         mk_insert sw_event_queue.id [mk_var sw_demux_poly_queue.id];
         (* clear the buffer *)
@@ -1651,8 +1661,12 @@ let sw_demux_poly c =
       (mk_var D.empty_poly_queue.id) @@
      mk_var "poly_queue") @@
 
-    (* add the poly queue to our queue of queues *)
-    mk_insert sw_event_queue.id [mk_var "acc"]
+    mk_block [
+      (* must unpack before use *)
+      mk_poly_unpack @@ mk_var "acc";
+      (* add the poly queue to our queue of queues *)
+      mk_insert sw_event_queue.id [mk_var "acc"]
+    ]
 
 let flatteners c =
   let l = snd_many @@ D.uniq_types_and_maps ~uniq_indices:false c in
