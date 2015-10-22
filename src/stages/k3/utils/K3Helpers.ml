@@ -471,6 +471,8 @@ let mk_poly_skip_all' tag = mk_poly_skip_all tag (mk_var "poly_queue") (mk_var "
 
 let mk_poly_skip_all_block tag es = mk_let ["idx"; "offset"] (mk_poly_skip_all' tag) @@ mk_block es
 
+let mk_poly_unpack col = mk_stree PolyUnpack [col]
+
 (* ----- Converting between ocaml lists and k3 containers ----- *)
 
 let rec list_of_k3_container e =

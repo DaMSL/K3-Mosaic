@@ -128,6 +128,7 @@ let check_tag_arity tag children =
     | PolyInsert _ -> 2
     | PolyTagAt -> 2
     | PolySkip _ -> 3
+    | PolyUnpack -> 1
 
   in length = correct_arity
 
@@ -988,11 +989,17 @@ let rec deduce_expr_type ?(override=true) trig_env env tenv utexpr : expr_t =
 
       | PolyTagAt ->
           let tcol', tidx = bind 0, bind 1 in
-          if not (tidx === t_int) then t_erroru @@ TMismatch(tidx, t_int, "index") else
           let tcol, _ =
             try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') in
           if not (is_tpolyq tcol) then t_erroru @@ TBad(tcol', "not a polyqueue") else
           t_int
+
+      | PolyUnpack ->
+          let tcol' = bind 0 in
+          let tcol, _ =
+            try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') in
+          if not (is_tpolyq tcol) then t_erroru @@ TBad(tcol', "not a polyqueue") else
+          t_unit
 
       | PolyAtWith tag ->
           let tcol', tidx, toffset, tlam_none, tlam_some = bind 0, bind 1, bind 2, bind 3, bind 4 in

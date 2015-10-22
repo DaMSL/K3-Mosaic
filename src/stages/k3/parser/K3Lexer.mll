@@ -224,6 +224,7 @@ rule tokenize = parse
     | "poly_tag_at" { POLY_TAG_AT }
     | "poly_skip"   { POLY_SKIP }
     | "poly_skip_all" { POLY_SKIP_ALL }
+    | "poly_unpack" { POLY_UNPACK }
 
     | '@' { ANNOTATE }
 

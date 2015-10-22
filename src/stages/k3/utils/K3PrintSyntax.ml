@@ -226,8 +226,7 @@ let rec lazy_expr c expr =
     | Insert | InsertAt | SetAll | Extend | Iterate | Map | Filter | Flatten | Send | Delete | DeleteAt | DeleteWith | ClearAll
     | Update | UpdateSuffix | UpsertWith | UpsertWithBefore | DeletePrefix | FilterOp _
     | Aggregate | AggregateV | GroupByAggregate | Assign | Combine
-    | PolyIter | PolyFold | PolyFoldTag _ | PolyIterTag _ | PolyAt _ | PolyAtWith _ | PolyInsert _ | PolyTagAt |
-      PolySkip _ -> wrap_hov 2 e
+    | PolyIter | PolyFold | PolyFoldTag _ | PolyIterTag _ | PolyAt _ | PolyAtWith _ | PolyInsert _ | PolyTagAt | PolyUnpack | PolySkip _ -> wrap_hov 2 e
     | _ -> id_fn e
   in let out = match U.tag_of_expr expr with
   | Const con  -> lazy_const c con
@@ -435,6 +434,8 @@ let rec lazy_expr c expr =
     lps "poly_at_with" <| lazy_paren (lps_tag tag <| lcomma () <| expr_5(e0,e1,e2,e3,e4))
   | PolyInsert tag -> let _, e0, e1 = U.decompose_poly_insert expr in
     lps "poly_insert" <| lazy_paren (lps_tag tag <| lcomma () <| expr_pair(e0, e1))
+  | PolyUnpack -> let col = U.decompose_poly_unpack expr in
+    lps "poly_unpack" <| lazy_paren (lazy_expr c col)
   | PolyTagAt -> let p = U.decompose_poly_tag_at expr in
     lps "poly_tag_at" <| lazy_paren (expr_pair p)
   | PolySkip _ -> let all, tag, e0, e1, e2 = U.decompose_poly_skip expr in

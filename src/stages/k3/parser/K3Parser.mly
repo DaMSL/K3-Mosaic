@@ -132,7 +132,7 @@
 %token MAP ITERATE FILTER FLATTEN
 %token AGGREGATE AGGREGATEV GROUPBYAGGREGATE
 %token SORT RANK SIZE
-%token POLY_ITER POLY_ITER_TAG POLY_FOLD POLY_FOLD_TAG POLY_AT POLY_AT_WITH POLY_INSERT POLY_TAG_AT POLY_SKIP POLY_SKIP_ALL
+%token POLY_ITER POLY_ITER_TAG POLY_FOLD POLY_FOLD_TAG POLY_AT POLY_AT_WITH POLY_INSERT POLY_TAG_AT POLY_SKIP POLY_SKIP_ALL POLY_UNPACK
 
 %token PEEK PEEK_WITH_VID AT AT_WITH MIN_WITH
 
@@ -667,6 +667,7 @@ access :
     | POLY_TAG_AT LPAREN anno_expr COMMA anno_expr RPAREN { mkexpr PolyTagAt [$3; $5] }
     | POLY_SKIP LPAREN STRING COMMA anno_expr COMMA anno_expr COMMA anno_expr RPAREN { mkexpr (PolySkip(false, $3)) [$5; $7; $9] }
     | POLY_SKIP_ALL LPAREN STRING COMMA anno_expr COMMA anno_expr COMMA anno_expr RPAREN { mkexpr (PolySkip(true, $3)) [$5; $7; $9] }
+    | POLY_UNPACK LPAREN anno_expr RPAREN { mkexpr PolyUnpack [$3] }
     | MIN_WITH LPAREN anno_expr COMMA anno_expr COMMA anno_expr RPAREN { mkexpr MinWith [$3; $5; $7] }
 ;
 

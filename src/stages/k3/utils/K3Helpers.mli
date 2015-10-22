@@ -310,6 +310,7 @@ val mk_poly_skip_block: string -> expr_t list -> expr_t
 val mk_poly_skip_all: string -> expr_t -> expr_t -> expr_t -> expr_t
 val mk_poly_skip_all': string -> expr_t
 val mk_poly_skip_all_block: string -> expr_t list -> expr_t
+val mk_poly_unpack : expr_t -> expr_t
 
 (* macro similar to fst *)
 val mk_fst: expr_t -> expr_t

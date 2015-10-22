@@ -159,6 +159,7 @@ let string_of_tag_type = function
     | PolyInsert s     -> "PolyInsert("^s^")"
     | PolySkip(b, s)   -> sp "PolySkip(%b, %s)" b s
     | PolyTagAt        -> "PolyTagAt"
+    | PolyUnpack       -> "PolyUnpack"
 
 
 let sott tag = string_of_tag_type tag
