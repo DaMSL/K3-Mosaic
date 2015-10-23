@@ -707,8 +707,8 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
     wl(lazy_expr c e1) <| sep <| wr(lazy_expr c e2) in
 (* for a stmt of a block *)
  let paren_stmt e = match U.tag_of_expr e with
-   | IfThenElse | CaseOf _ | Apply -> lazy_paren
-   | _ -> id_fn in
+   | Var _ | Const _ -> id_fn
+   | _ -> lazy_paren in
  let is_neg e = match U.tag_of_expr e with
    | Const(CInt i) when i < 0 -> true
    | Const(CFloat f) when f < 0. -> true
