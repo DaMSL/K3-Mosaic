@@ -95,7 +95,7 @@ let all_nodes_bitmap =
   create_ds id (wrap_tvector' @@ snd_many e) ~e ~init ~d_init
 
 let calc_dim_bounds =
-  mk_global_fn "calc_dim_bounds"
+  mk_global_fn ~wr_all:true "calc_dim_bounds"
     ["map_id", t_int; "pmap", inner_plist.t] [dim_bounds.t; t_int] @@
     (* create full range for all dimensions *)
     (* also, pre-create the dims vector with the right size *)
