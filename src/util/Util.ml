@@ -627,3 +627,6 @@ let rec list_modify n f = function
   | x::xs when n = 0 -> f x::xs
   | x::xs -> x::list_modify (n-1) f xs
 
+let uncurry f (x, y) = f x y
+let uncurry3 f (x, y, z) = f x y z
+let uncurry4 f (x, y, z, a) = f x y z a

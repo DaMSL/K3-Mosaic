@@ -305,3 +305,7 @@ val list_of_intsetset : IntSetSet.t -> int list list
 val string_of_int_list : int list -> string
 val string_of_int_set  : IntSet.t -> string
 val string_of_int_set_set : IntSetSet.t -> string
+
+val uncurry: ('a -> 'b -> 'c) -> 'a * 'b -> 'c
+val uncurry3: ('a -> 'b -> 'c -> 'd) -> 'a * 'b * 'c -> 'd
+val uncurry4: ('a -> 'b -> 'c -> 'd -> 'e) -> 'a * 'b * 'c * 'd -> 'e

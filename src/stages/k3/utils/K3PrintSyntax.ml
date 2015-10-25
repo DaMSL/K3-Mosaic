@@ -61,9 +61,13 @@ let lcomma () = lps "," <| lsp ()
 
 let error s = lps @@ "???: "^s
 
-(*let lazy_annos c = function
+let lazy_anno = function
+  | Property x -> lps x
+  | _ -> []
+
+let lazy_annos = function
   | [] -> []
-  | annos -> lps "@ " <| lazy_brace @@ lps_list ~sep:"; " NoCut (lazy_anno c) annos*)
+  | annos -> lps "@ " <| lazy_brace @@ lps_list ~sep:"; " NoCut lazy_anno annos
 
 let string_of_int_set s  = String.concat ", " @@ List.map soi @@ IntSet.elements s
 let string_of_int_list s = String.concat ", " @@ List.map soi s
@@ -122,7 +126,8 @@ and lazy_base_type c ~in_col ?(no_paren=false) ?(paren_complex=false) t =
 (* paren_complex: surround by paren if we're a complex type for clarity *)
 and lazy_type ?(in_col=false) ?(no_paren=false) ?paren_complex c t =
   let mut = if t.mut then lps "mut " else [] in
-  mut <| lazy_base_type ~in_col ~no_paren ?paren_complex c t.typ
+  let anno e = if t.anno <> [] then lazy_paren (e <| lazy_annos t.anno) else e in
+  anno (mut <| lazy_base_type ~in_col ~no_paren ?paren_complex c t.typ)
 
 let rec lazy_arg c drop_tuple_paren a =
   let paren = if drop_tuple_paren then id_fn else lazy_paren in

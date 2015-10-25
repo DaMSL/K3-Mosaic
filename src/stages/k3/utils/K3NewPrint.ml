@@ -132,8 +132,8 @@ let lazy_properties ?(symbol="@:") props f =
   let ps = filter_map (function Property s -> Some s | _ -> None) props in
   match ps with
   | []  -> f
-  | [p] -> lazy_paren f <| lps (" "^symbol^" ") <| lps p
-  | ps  -> lazy_paren f <| lps (" "^symbol^"{") <| lps_list NoCut lps ps <| lps "}"
+  | [p] -> lazy_paren (f <| lps (" "^symbol^" ") <| lps p)
+  | ps  -> lazy_paren (f <| lps (" "^symbol^"{") <| lps_list NoCut lps ps <| lps "}")
 
 (* Add record ids to a string *)
 let concat_record_str ?(sep=":") l =

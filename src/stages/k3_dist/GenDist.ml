@@ -80,7 +80,7 @@ let nd_log_master_write =
 (* log_write - save the trigger's arguments *)
 let nd_log_write_for p trig_nm = "nd_log_write_"^trig_nm (* varies with bound *)
 let nd_log_write c t =
-  mk_global_fn (nd_log_write_for c.p t) (args_of_t_with_v c t) [] @@
+  mk_global_fn ~wr_all:true (nd_log_write_for c.p t) (args_of_t_with_v c t) [] @@
   (* write bound to trigger_specific log *)
   mk_insert (D.nd_log_for_t t) [mk_var "vid"; mk_tuple @@ args_of_t_as_vars c t]
 

@@ -268,7 +268,7 @@ val mk_global_fn_raw:
 
 (* macro to create a global function *)
 val mk_global_fn :
-  id_t -> (id_t * type_t) list -> type_t list -> expr_t -> declaration_t * annotation_t
+  ?wr_all:bool -> ?wr_arg:int list -> id_t -> (id_t * type_t) list -> type_t list -> expr_t -> declaration_t * annotation_t
 
 (* macro to declare a foreign function *)
 val mk_foreign_fn :

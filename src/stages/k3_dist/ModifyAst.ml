@@ -70,7 +70,7 @@ let loader_tables ast =
 (* change the initialization values of global maps to have the vid as well *)
 (* receives the new types to put in and the starting expression to change *)
 (* inserts a reference to the default vid var for that node *)
-let add_vid_to_init_val ds old_ds ~add_unit e =
+let modify_init_vals ds old_ds ~add_unit e =
   let vid_var = mk_var g_init_vid.id in
   let add_u l = if add_unit then mk_cunit :: l else l in
   let rec loop e = match U.tag_of_expr e with
@@ -83,7 +83,7 @@ let add_vid_to_init_val ds old_ds ~add_unit e =
         mk_tuple @@ P.map_add_v vid_var xs
     (* this should only be encountered if there's no tuple *)
     | Const _ | Var _ -> mk_tuple @@ P.map_add_v vid_var @@ add_u [e]
-    (* modify loading from a file *)
+    (* modify loading from a csv file (csv loader) *)
     | Map ->
         let old_pat = pat_of_ds old_ds in
         let new_pat = pat_of_flat_e ~add_vid:true ~vid_nm:g_min_vid.id
@@ -92,7 +92,7 @@ let add_vid_to_init_val ds old_ds ~add_unit e =
             mk_insert_block "acc" new_pat)
           (mk_empty ds.t)
           e
-    | _ -> U.dist_fail e "add_vid_to_init_val: unhandled modification"
+    | _ -> U.dist_fail e "modify_init_vals: unhandled modification"
   in loop e
 
 (* add a vid to global value map declarations *)
@@ -126,7 +126,7 @@ let get_global_map_inits c = function
         | None   -> []
         | Some e ->
             let old_ds = map_ds_of_id ~global:false ~vid:false c map_id in
-            [map_id, mk_ind @@ add_vid_to_init_val ds old_ds ~add_unit @@ change_load_csv e]
+            [map_id, mk_ind @@ modify_init_vals ds old_ds ~add_unit @@ change_load_csv e]
                     (* add a vid *)
       end
     with Not_found | ProgInfo.Bad_data _ -> [] end

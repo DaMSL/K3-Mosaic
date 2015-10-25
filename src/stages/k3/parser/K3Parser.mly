@@ -332,6 +332,11 @@ annotation :
 /* Types */
 
 type_expr :
+    | unanno_type_expr ANNOTATE LBRACE annotations RBRACE     { {$1 with anno=$4} }
+    | unanno_type_expr                                        { $1 }
+;
+
+unanno_type_expr :
     | type_expr RARROW fn_type_expr_list %prec UMINUS { let is, o = list_split (-1) ($1::$3) in
                                            match (hd o).typ with
                                            | TFunction(is', o') -> wrap_tfunc (is@is') o'
@@ -343,7 +348,7 @@ type_expr :
     | MAYBE type_expr               { wrap_tmaybe $2 }
     | INDIRECT type_expr            { wrap_tind $2 }
     | TYPE                          { canonical $1 }
-    | annotated_collection_type     { let c, anno = $1 in { (canonical c) with anno} }
+    | collection_type               { canonical $1 }
     | IDENTIFIER                    { canonical (TAlias $1) }
 ;
 
@@ -359,11 +364,6 @@ type_expr_tuple :
 type_expr_list :
     | type_expr                       { [$1] }
     | type_expr COMMA type_expr_list  { $1 :: $3 }
-;
-
-annotated_collection_type :
-    | collection_type                                     { $1, [] }
-    | collection_type ANNOTATE LBRACE annotations RBRACE  { $1, $4 }
 ;
 
 collection_type :

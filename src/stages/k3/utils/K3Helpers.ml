@@ -568,13 +568,24 @@ let mk_global_fn_raw name input_arg input_types output_types expr =
 
 (* function to declare and define a global function. Assumes the global
  * construct allows for an expr_t as well.
- * The types are expected in list format (always!) *)
-let mk_global_fn name input_names_and_types output_types expr =
-  let output_types = if null output_types then [t_unit] else output_types in
+ * The types are expected in list format (always!)
+ * @wr_arg: list of arguments that we write to
+*)
+let mk_global_fn ?(wr_all=false) ?(wr_arg=[]) name i_ts o_ts expr =
+  let o_ts = if null o_ts then [t_unit] else o_ts in
+  let anno_t n (i, t) =
+    (* check if we specified it as a write arg *)
+    if List.mem n wr_arg || wr_all then i, t
+    else match t.typ with
+      (* don't cause pass by ref on simple types *)
+      | TUnit | TInt | TDate | TBool | TFloat | TIndirect _-> i, t
+      | _ -> i, {t with anno = (Property "CRef")::t.anno}
+    in
+  let i_ts = List.mapi anno_t i_ts in
   mk_global_fn_raw name
-    (wrap_args input_names_and_types)
-    (snd_many input_names_and_types)
-    (wrap_ttuple output_types)
+    (wrap_args i_ts)
+    (snd_many i_ts)
+    (wrap_ttuple o_ts)
     expr
 
 let mk_global_val name val_type =
