@@ -1401,9 +1401,6 @@ let trig_dispatcher_nm = "trig_dispatcher"
 let trig_dispatcher c =
   mk_global_fn trig_dispatcher_nm ["poly_queue", poly_queue.t] [] @@
   mk_block [
-    (* unpack the polyqueue *)
-    mk_poly_unpack (mk_var "poly_queue");
-
     (* replace all used slots with empty polyqueues *)
     mk_iter_bitmap'
       (mk_insert_at poly_queues.id (mk_var "ip") [mk_var empty_poly_queue.id])
@@ -1443,11 +1440,6 @@ let trig_dispatcher c =
       D.poly_queue_bitmap.id;
   ]
 
-(* trigger version of dispatcher. Called by non-corrective mode *)
-let trig_dispatcher_trig c =
-  mk_code_sink' trig_dispatcher_trig_nm ["poly_queue", poly_queue.t] [] @@
-    mk_apply' trig_dispatcher_nm [mk_var "poly_queue"]
-
 (* buffer for dispatcher to reorder poly msgs *)
 let nd_dispatcher_buf =
   let e = ["num", t_int; "poly_queue", poly_queue.t] in
@@ -1455,6 +1447,15 @@ let nd_dispatcher_buf =
 
 (* remember the last number we've seen *)
 let nd_dispatcher_last_num = create_ds "nd_dispatcher_last_num" @@ mut t_int
+
+(* trigger version of dispatcher. Called by other nodes *)
+let trig_dispatcher_trig c =
+  mk_code_sink' trig_dispatcher_trig_nm ["poly_queue", poly_queue.t] [] @@
+  mk_block [
+    (* unpack the polyqueue *)
+    mk_poly_unpack (mk_var "poly_queue");
+    mk_apply' trig_dispatcher_nm [mk_var "poly_queue"]
+  ]
 
 (* trig dispatcher from switch to node. accepts a msg number telling it how to order messages *)
 (* @msg_num: number of consecutive message. Used to order buffers in corrective mode
@@ -1466,6 +1467,9 @@ let nd_trig_dispatcher_trig c =
        (mk_cint 0) @@
        mk_add (mk_var nd_dispatcher_last_num.id) @@ mk_cint 1) @@
   mk_block [
+    (* unpack the polyqueue *)
+    mk_poly_unpack (mk_var "poly_queue");
+
     (* check if we're contiguous *)
     mk_if (mk_eq (mk_var "num") (mk_var "next_num"))
       (* then dispatch right away *)
@@ -1550,17 +1554,12 @@ let sw_event_driver_trig c =
           mk_block [
             (* send (move) the outgoing polyqueues *)
             mk_iter_bitmap'
-              (* move and delete the poly_queue and ship it out with the vector clock num,
-                 but only if we're in corrective mode *)
+              (* move and delete the poly_queue and ship it out with the vector clock num *)
                 (* pull out the poly queue *)
                 (mk_let ["pq"] (mk_delete_at poly_queues.id @@ mk_var "ip") @@
-                 mk_block [
-                  mk_if (mk_var D.corrective_mode.id)
-                    (D.mk_sendi nd_trig_dispatcher_trig_nm (mk_var "ip")
-                        [mk_at' "vector_clock" @@ mk_var "ip"; mk_var "pq"]) @@
-                    (* otherwise just send the polyqueue without the vector clock *)
-                    D.mk_sendi trig_dispatcher_trig_nm (mk_var "ip") [mk_var "pq"]
-                 ]) @@
+                 D.mk_sendi nd_trig_dispatcher_trig_nm (mk_var "ip")
+                    [mk_at' "vector_clock" @@ mk_var "ip"; mk_var "pq"]
+                 ) @@
               D.poly_queue_bitmap.id;
             (* send the new (vid, vector clock). make sure it's after we use vector
                clock data so we can move *)
