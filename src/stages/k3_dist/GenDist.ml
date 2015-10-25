@@ -1401,6 +1401,9 @@ let trig_dispatcher_nm = "trig_dispatcher"
 let trig_dispatcher c =
   mk_global_fn trig_dispatcher_nm ["poly_queue", poly_queue.t] [] @@
   mk_block [
+    (* unpack the polyqueue *)
+    mk_poly_unpack (mk_var "poly_queue");
+
     (* replace all used slots with empty polyqueues *)
     mk_iter_bitmap'
       (mk_insert_at poly_queues.id (mk_var "ip") [mk_var empty_poly_queue.id])
@@ -1435,7 +1438,6 @@ let trig_dispatcher c =
       (mk_let ["pq"]
          (mk_delete_at poly_queues.id @@ mk_var "ip") @@
       mk_block [
-        mk_poly_unpack @@ mk_var "pq";
         D.mk_sendi trig_dispatcher_trig_nm (mk_var "ip") [mk_var "pq"]
       ])
       D.poly_queue_bitmap.id;
@@ -1492,6 +1494,8 @@ let sw_event_driver_trig c =
     mk_if (mk_and (mk_var D.sw_init.id) @@ mk_gt (mk_size @@ mk_var D.sw_event_queue.id) @@ mk_cint 0)
       (mk_case_sn (mk_peek @@ mk_var D.sw_event_queue.id) "poly_queue"
         (mk_block [
+          (* unpack the incoming polyqueue *)
+          mk_poly_unpack @@ mk_var "poly_queue";
           (* replace all used send slots with empty polyqueues *)
           mk_iter_bitmap'
             (mk_insert_at poly_queues.id (mk_var "ip") [mk_var empty_poly_queue.id])
@@ -1551,7 +1555,6 @@ let sw_event_driver_trig c =
                 (* pull out the poly queue *)
                 (mk_let ["pq"] (mk_delete_at poly_queues.id @@ mk_var "ip") @@
                  mk_block [
-                  mk_poly_unpack (mk_var "pq");
                   mk_if (mk_var D.corrective_mode.id)
                     (D.mk_sendi nd_trig_dispatcher_trig_nm (mk_var "ip")
                         [mk_at' "vector_clock" @@ mk_var "ip"; mk_var "pq"]) @@
@@ -1631,8 +1634,6 @@ let sw_demux c =
     mk_if (mk_or (mk_geq (mk_var sw_demux_ctr.id) @@ mk_var sw_demux_max.id) @@
                   mk_eq (mk_fst @@ mk_var "args") @@ mk_cstring "")
       (mk_block [
-        (* unpack before adding *)
-        mk_poly_unpack @@ mk_var sw_demux_poly_queue.id;
         (* copy the polybuffer to the queue *)
         mk_insert sw_event_queue.id [mk_var sw_demux_poly_queue.id];
         (* clear the buffer *)
@@ -1671,8 +1672,6 @@ let sw_demux_poly c =
      mk_var "poly_queue") @@
 
     mk_block [
-      (* must unpack before use *)
-      mk_poly_unpack @@ mk_var "acc";
       (* add the poly queue to our queue of queues *)
       mk_insert sw_event_queue.id [mk_var "acc"]
     ]
