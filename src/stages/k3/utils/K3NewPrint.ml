@@ -229,8 +229,8 @@ and lazy_type ?(brace=true) ?(in_col=false) c t =
       let rec_vts = add_record_ids c vts in
       let inner = lazy_concat ~sep:lcomma (fun (id, vt) ->
         lps (id^":") <| lazy_type c vt) rec_vts in
-      let wrap = if brace then lazy_brace else id_fn in
-      wrap_mut (wrap (lsp () <| inner <| lsp ()))
+      let wrap_tup = if brace then lazy_brace else id_fn in
+      wrap_props @@ wrap_mut (wrap_tup (lsp () <| inner <| lsp ()))
   | TCollection(ct, vt) -> wrap (
     lps "collection " <| lazy_type c ~in_col:true vt <| lps " @ " <| lazy_col c ct vt)
   | TFunction(itl, ot) ->
