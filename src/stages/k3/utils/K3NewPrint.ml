@@ -1356,6 +1356,8 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
     apply_method c ~name:("tag_at") ~col ~args:[i] ~arg_info:[def_a]
   | PolyUnpack   -> let col = U.decompose_poly_unpack expr in
     apply_method c ~name:"unpack" ~col ~args:[KH.mk_cunit] ~arg_info:[def_a]
+  | PolyReserve   -> let col, x, y, z = U.decompose_poly_reserve expr in
+    apply_method c ~name:"reserve" ~col ~args:[x; y; z] ~arg_info:[def_a; def_a; def_a]
   | PolySkip _ -> let all, tag, col, idx, offset = U.decompose_poly_skip expr in
     let nm = if all then "skip_all_" else "skip_" in
     apply_method c ~name:(nm^tag) ~col ~args:[idx; offset] ~arg_info:[def_a; def_a]

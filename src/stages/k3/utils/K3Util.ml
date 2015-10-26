@@ -178,6 +178,8 @@ let decompose_poly_at_with e = match tag_of_expr e, sub_tree e with
   PolyAtWith x, [e0; e1; e2; e3; e4] -> x, e0, e1, e2, e3, e4 | _ -> failwith "not a PolyAtWith"
 let decompose_poly_insert e = match tag_of_expr e, sub_tree e with
   PolyInsert x, [e0; e1] -> x, e0, e1 | _ -> failwith "not a PolyInsert"
+let decompose_poly_reserve e = match tag_of_expr e, sub_tree e with
+  PolyReserve, [x; y; z; w] -> x, y, z, w | _ -> failwith "not a PolyReserve"
 let decompose_poly_tag_at e = match tag_of_expr e, sub_tree e with
   PolyTagAt, [e0; e1] -> e0, e1 | _ -> failwith "not a PolyTagAt"
 let decompose_poly_skip e = match tag_of_expr e, sub_tree e with

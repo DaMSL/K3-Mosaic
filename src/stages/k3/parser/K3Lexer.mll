@@ -24,6 +24,123 @@ let string_error lexbuf msg =
     let column = pos.Lexing.pos_cnum - pos.Lexing.pos_bol in
     Printf.sprintf "Error on line %d character %d : %s" linenum column msg
 
+let keyword_table = Hashtbl.create 20
+let _ =
+    List.iter (fun (k,tok) -> Hashtbl.add keyword_table k tok)
+    [
+        "sexpected",  EXPECTED;
+        "snetwork",   NETWORK;
+
+        "declare",   DECLARE;
+        "foreign",   FOREIGN;
+        "trigger",   TRIGGER;
+        "srole",     ROLE;
+        "sdefault",  DEFAULT;
+        "typedef",   TYPEDEF;
+
+        "ssource",    SOURCE;
+        "ssink",      SINK;
+        "sfile",      FILE;
+        "spolyfile",  POLYFILE;
+        "socket",    SOCKET;
+        "srandom",   RANDOM;
+        "stream",    STREAM;
+        "bindflow",  BINDFLOW;
+        "spattern",   PATTERN;
+        "sconsume",   CONSUME;
+        "nothing",  NOTHING;
+
+        "true",   BOOL true;
+        "false",  BOOL false;
+
+        "ind",    INDIRECT;
+        "do",  DO;
+
+        "unit",     TYPE TUnit;
+        "bool",     TYPE TBool;
+        "byte",     TYPE TByte;
+        "int",      TYPE TInt;
+        "date",     TYPE TDate;
+        "float",    TYPE TFloat;
+        "string",   TYPE TString;
+        "address",  TYPE TAddress;
+        "unknown",  TYPE TUnknown;
+        "top",      TYPE TTop;
+
+        "maybe",   MAYBE;
+        "mut",     MUT;
+        "just",    JUST;
+
+        "range",   RANGE;
+
+        "map",        MAP;
+        "iterate",    ITERATE;
+        "filter",     FILTER;
+        "flatten",    FLATTEN;
+        "fold",       AGGREGATE;
+        "vfold",      AGGREGATEV;
+        "groupby",    GROUPBYAGGREGATE;
+        "sort",       SORT;
+        "csize",      SIZE;
+        "equijoin",   EQUIJOIN;
+
+        "at",       AT;
+        "at_with",  AT_WITH;
+        "min_with",  MIN_WITH;
+        "peek",  PEEK;
+        "peek_with_vid",  PEEK_WITH_VID;
+
+        "if",    IF;
+        "then",  THEN;
+        "else",  ELSE;
+
+        "case",  CASE;
+        "of",    OF;
+
+        "let",   LET;
+        "in",    IN;
+        "bind",  BIND;
+        "as",    AS;
+        "ignore",  IGNORE;
+
+        "send",  SEND;
+
+        "insert",  INSERT;
+        "insert_at", INSERT_AT;
+        "set_all",  SET_ALL;
+        "extend",  EXTEND;
+        "upsert_with",  UPSERT_WITH;
+        "upsert_with_before",  UPSERT_WITH_BEFORE;
+        "update_suffix",  UPDATE_SUFFIX;
+        "update",  UPDATE;
+        "update_at_with",  UPDATE_AT_WITH;
+        "delete",  DELETE;
+        "delete_prefix",  DELETE_PREFIX;
+        "delete_at", DELETE_AT;
+        "delete_with", DELETE_WITH;
+        "pop",  POP;
+        "clear_all",      CLEAR_ALL;
+        "filter_geq",     FILTERGEQ;
+        "filter_gt",      FILTERGT;
+        "filter_lt",      FILTERLT;
+        "filter_leq",     FILTERLEQ;
+
+        "poly_iter",      POLY_ITER;
+        "poly_iter_tag",  POLY_ITER_TAG;
+        "poly_fold",      POLY_FOLD;
+        "poly_fold_tag",  POLY_FOLD_TAG;
+        "poly_at",  POLY_AT;
+        "poly_at_with",  POLY_AT_WITH;
+        "poly_insert",  POLY_INSERT;
+        "poly_tag_at",  POLY_TAG_AT;
+        "poly_skip",    POLY_SKIP;
+        "poly_skip_all",  POLY_SKIP_ALL;
+        "poly_unpack",  POLY_UNPACK;
+        "poly_reserve",  POLY_RESERVE;
+        "effect",         EFFECT;
+        "parallel",       PARALLEL;
+    ]
+
 }
 
 let whitespace = [' ' '\t']
@@ -48,35 +165,9 @@ rule tokenize = parse
     | sl_comment    { tokenize lexbuf }
     | ml_comment_st { comment 1 lexbuf }
 
-    | "sexpected" { EXPECTED }
-    | "snetwork"  { NETWORK }
-
-    | "declare"  { DECLARE }
-    | "foreign"  { FOREIGN }
-    | "trigger"  { TRIGGER }
-    | "srole"    { ROLE }
-    | "sdefault" { DEFAULT }
-    | "typedef"  { TYPEDEF }
-
-    | "ssource"   { SOURCE }
-    | "ssink"     { SINK }
-    | "sfile"     { FILE }
-    | "spolyfile" { POLYFILE }
-    | "socket"   { SOCKET }
-    | "srandom"  { RANDOM }
-    | "stream"   { STREAM }
-    | "bindflow" { BINDFLOW }
-    | "spattern"  { PATTERN }
-    | "sconsume"  { CONSUME }
 
     | "()"      { UNIT }
     | '_'       { UNKNOWN }
-    | "nothing" { NOTHING }
-
-    | "true"  { BOOL true }
-    | "false" { BOOL false }
-
-    | "ind"   { INDIRECT }
 
     | real as value    { FLOAT (float_of_string value) }
     | integer as value { INTEGER (int_of_string value) }
@@ -144,95 +235,12 @@ rule tokenize = parse
 
     | "++" { CONCAT }
 
-    | "do" { DO }
-
-    | "unit"    { TYPE TUnit }
-    | "bool"    { TYPE TBool }
-    | "byte"    { TYPE TByte }
-    | "int"     { TYPE TInt }
-    | "date"    { TYPE TDate }
-    | "float"   { TYPE TFloat }
-    | "string"  { TYPE TString }
-    | "address" { TYPE TAddress }
-    | "unknown" { TYPE TUnknown }
-    | "top"     { TYPE TTop }
-
-    | "maybe"  { MAYBE }
-    | "mut"    { MUT }
-    | "just"   { JUST }
-
-    | "range"  { RANGE }
-
-    | "map"       { MAP }
-    | "iterate"   { ITERATE }
-    | "filter"    { FILTER }
-    | "flatten"   { FLATTEN }
-    | "fold"      { AGGREGATE }
-    | "vfold"     { AGGREGATEV }
-    | "groupby"   { GROUPBYAGGREGATE }
-    | "sort"      { SORT }
-    | "csize"     { SIZE }
-    | "equijoin"  { EQUIJOIN }
-
-    | "at"      { AT }
-    | "at_with" { AT_WITH }
-    | "min_with" { MIN_WITH }
-    | "peek" { PEEK }
-    | "peek_with_vid" { PEEK_WITH_VID }
-
-    | "if"   { IF }
-    | "then" { THEN }
-    | "else" { ELSE }
-
-    | "case" { CASE }
-    | "of"   { OF }
-
-    | "let"  { LET }
-    | "in"   { IN }
-    | "bind" { BIND }
-    | "as"   { AS }
-    | "ignore" { IGNORE }
-
-    | "send" { SEND }
-
-    | "insert" { INSERT }
-    | "insert_at" {INSERT_AT }
-    | "set_all" { SET_ALL }
-    | "extend" { EXTEND }
-    | "upsert_with" { UPSERT_WITH }
-    | "upsert_with_before" { UPSERT_WITH_BEFORE }
-    | "update_suffix" { UPDATE_SUFFIX }
-    | "update" { UPDATE }
-    | "update_at_with" { UPDATE_AT_WITH }
-    | "delete" { DELETE }
-    | "delete_prefix" { DELETE_PREFIX }
-    | "delete_at" {DELETE_AT }
-    | "delete_with" {DELETE_WITH}
-    | "pop" { POP }
-    | "clear_all"     { CLEAR_ALL }
-    | "filter_geq"    { FILTERGEQ }
-    | "filter_gt"     { FILTERGT }
-    | "filter_lt"     { FILTERLT }
-    | "filter_leq"    { FILTERLEQ }
-
-    | "poly_iter"     { POLY_ITER }
-    | "poly_iter_tag" { POLY_ITER_TAG }
-    | "poly_fold"     { POLY_FOLD }
-    | "poly_fold_tag" { POLY_FOLD_TAG }
-    | "poly_at" { POLY_AT }
-    | "poly_at_with" { POLY_AT_WITH }
-    | "poly_insert" { POLY_INSERT }
-    | "poly_tag_at" { POLY_TAG_AT }
-    | "poly_skip"   { POLY_SKIP }
-    | "poly_skip_all" { POLY_SKIP_ALL }
-    | "poly_unpack" { POLY_UNPACK }
-
     | '@' { ANNOTATE }
 
-    | "effect"        { EFFECT }
-    | "parallel"      { PARALLEL }
+    | identifier as name { try
+        Hashtbl.find keyword_table name
+        with Not_found -> IDENTIFIER name }
 
-    | identifier as name { IDENTIFIER (name) }
     | ip4 as ip { IP(ip) }
     | _ as c { failwith (string_error lexbuf (Printf.sprintf "Unrecognized character: %c" c))}
 

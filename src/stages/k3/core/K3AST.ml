@@ -169,6 +169,7 @@ type expr_tag_t
     | PolyTagAt
     | PolySkip of bool * string (* all, tag *)
     | PolyUnpack
+    | PolyReserve
 
 (* Expression Tree *)
 type expr_t = ((int * expr_tag_t) * annotation_t) tree_t

@@ -161,6 +161,7 @@ let string_of_tag_type = function
     | PolySkip(b, s)   -> sp "PolySkip(%b, %s)" b s
     | PolyTagAt        -> "PolyTagAt"
     | PolyUnpack       -> "PolyUnpack"
+    | PolyReserve      -> "PolyReserve"
 
 
 let sott tag = string_of_tag_type tag

@@ -446,7 +446,8 @@ and eval_expr_inner ?(fun_typ=FLambda) (address:address) sched_st cenv texpr =
         v_fold_poly_tag error idx tag
           (fun idx (_, _, v) env -> fst @@ f env [VInt idx; VInt 0; v]) nenv col, tvunit
 
-    | PolyUnpack, _ -> nenv, tvunit
+    | PolyUnpack, _  -> nenv, tvunit
+    | PolyReserve, _ -> nenv, tvunit
 
     | Map, [f; col] ->
         let f' = eval_fn f in

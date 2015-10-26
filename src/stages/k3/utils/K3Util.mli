@@ -89,6 +89,7 @@ val decompose_poly_fold_tag : expr_t -> string * expr_t * expr_t * expr_t * expr
 val decompose_poly_at : expr_t -> string * expr_t * expr_t * expr_t
 val decompose_poly_at_with : expr_t -> string * expr_t * expr_t * expr_t * expr_t * expr_t
 val decompose_poly_insert : expr_t -> string * expr_t * expr_t
+val decompose_poly_reserve : expr_t -> expr_t * expr_t * expr_t * expr_t
 val decompose_poly_tag_at : expr_t -> expr_t * expr_t
 val decompose_poly_skip : expr_t -> bool * string * expr_t * expr_t * expr_t
 val decompose_poly_unpack : expr_t -> expr_t
