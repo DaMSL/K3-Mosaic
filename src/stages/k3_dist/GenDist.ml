@@ -1757,7 +1757,6 @@ let declare_global_vars c partmap ast =
      sw_demux_poly_queue;
      nd_dispatcher_buf;
      nd_dispatcher_last_num;
-     do_poly_reserve;
     ]
 
 let declare_global_funcs c partmap ast =
