@@ -668,7 +668,7 @@ access :
     | POLY_SKIP LPAREN STRING COMMA anno_expr COMMA anno_expr COMMA anno_expr RPAREN { mkexpr (PolySkip(false, $3)) [$5; $7; $9] }
     | POLY_SKIP_ALL LPAREN STRING COMMA anno_expr COMMA anno_expr COMMA anno_expr RPAREN { mkexpr (PolySkip(true, $3)) [$5; $7; $9] }
     | POLY_UNPACK LPAREN anno_expr RPAREN { mkexpr PolyUnpack [$3] }
-    | POLY_RESERVE LPAREN anno_expr COMMA anno_expr COMMA anno_expr RPAREN { mkexpr PolyReserve [$3; $5; $7] }
+    | POLY_RESERVE LPAREN anno_expr COMMA anno_expr COMMA anno_expr COMMA anno_expr RPAREN { mkexpr PolyReserve [$3; $5; $7; $9] }
     | MIN_WITH LPAREN anno_expr COMMA anno_expr COMMA anno_expr RPAREN { mkexpr MinWith [$3; $5; $7] }
 ;
 
