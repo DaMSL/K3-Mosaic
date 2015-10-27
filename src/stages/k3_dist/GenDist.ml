@@ -1397,6 +1397,8 @@ let nd_do_corrective_fns c s_rhs ast trig_name corrective_maps =
 
 (*** central triggers to handle dispatch for nodes and switches ***)
 
+(* do we use reserve to try reduce allocations in polybuffer? *)
+
 let trig_dispatcher_nm = "trig_dispatcher"
 let trig_dispatcher c =
   mk_global_fn trig_dispatcher_nm ["poly_queue", poly_queue.t] [] @@
@@ -1405,6 +1407,9 @@ let trig_dispatcher c =
     mk_iter_bitmap'
       (mk_insert_at poly_queues.id (mk_var "ip") [mk_var empty_poly_queue.id])
       D.poly_queue_bitmap.id;
+
+    (* apply reserve to all the new polybufs *)
+    D.reserve_poly_queue_code c;
 
     (* clean out the send bitmaps *)
     mk_set_all D.poly_queue_bitmap.id [mk_cfalse];
@@ -1504,6 +1509,8 @@ let sw_event_driver_trig c =
           mk_iter_bitmap'
             (mk_insert_at poly_queues.id (mk_var "ip") [mk_var empty_poly_queue.id])
             D.poly_queue_bitmap.id;
+          (* apply reserve to every new polybuf *)
+          D.reserve_poly_queue_code c;
           (* clean out the send bitmaps *)
           mk_set_all D.poly_queue_bitmap.id [mk_cfalse];
           (* for debugging, sleep if we've been asked to *)
@@ -1578,11 +1585,8 @@ let sw_event_driver_trig c =
        [mk_var "vid"; mk_var "vector_clock"]
 
 let sw_demux_ctr = create_ds "sw_demux_ctr" @@ mut t_int
-let sw_demux_max =
-  let init = mk_cint 5 in
-  create_ds ~init "sw_demux_max" @@ t_int
 let sw_demux_poly_queue =
-  create_ds "sw_demux_poly_queue" @@ poly_queue.t
+  create_ds "sw_demux_poly_queue" @@ D.poly_queue.t
 
 (* the demux trigger takes the single stream and demuxes it *)
 (* it pushes a certain number of events onto the polybuffer queue *)
@@ -1630,7 +1634,7 @@ let sw_demux c =
       (mk_assign sw_demux_ctr.id @@ mk_add (mk_cint 1) @@ mk_var sw_demux_ctr.id)
       mk_cunit;
     (* ship off if we hit the count or saw the sentinel *)
-    mk_if (mk_or (mk_geq (mk_var sw_demux_ctr.id) @@ mk_var sw_demux_max.id) @@
+    mk_if (mk_or (mk_geq (mk_var sw_demux_ctr.id) @@ mk_var D.sw_poly_batch_size.id) @@
                   mk_eq (mk_fst @@ mk_var "args") @@ mk_cstring "")
       (mk_block [
         (* copy the polybuffer to the queue *)
@@ -1750,10 +1754,10 @@ let declare_global_vars c partmap ast =
      send_fetch_bitmap;
      send_fetch_ip_map;
      sw_demux_ctr;
-     sw_demux_max;
      sw_demux_poly_queue;
      nd_dispatcher_buf;
      nd_dispatcher_last_num;
+     do_poly_reserve;
     ]
 
 let declare_global_funcs c partmap ast =

@@ -121,7 +121,7 @@ let ms_rcv_jobs_ack c =
 
 (* receive jobs, and calculate all dependent variables *)
 let rcv_jobs_nm = "rcv_jobs"
-let rcv_jobs =
+let rcv_jobs c =
   mk_code_sink' rcv_jobs_nm ["jobs_in", immut D.jobs.t] [] @@
   mk_block [
     (* write the jobs table *)
@@ -151,6 +151,8 @@ let rcv_jobs =
     unwrap_some K3Route.all_nodes_bitmap.d_init;
     (* pre-calculate all the route memoization tables *)
     mk_apply' K3Route.memo_init_all_nm [];
+    (* reserve space in all the polyqueues *)
+    D.reserve_poly_queue_code ~all:true c;
     (* ack the msg *)
     D.mk_send_master ms_rcv_jobs_ack_nm;
   ]
@@ -330,7 +332,7 @@ let triggers c =
     ms_rcv_sw_init_ack c;
     sw_rcv_init;
     ms_rcv_jobs_ack c;
-    rcv_jobs;
+    rcv_jobs c;
     ms_rcv_job;
     rcv_master_addr;
     ms_send_addr_self;

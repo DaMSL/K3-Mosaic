@@ -215,3 +215,5 @@ val is_tsorted : container_type_t -> bool
 val is_tmap : container_type_t -> bool
 val is_tpolyq : container_type_t -> bool
 val get_tpolyq_tags : container_type_t -> poly_tags option
+(* get size of type *)
+val csize_of_type : type_t -> int

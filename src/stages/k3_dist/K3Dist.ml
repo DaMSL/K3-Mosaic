@@ -785,8 +785,43 @@ let nd_rcv_corr_done_args = ["vid", t_vid; "stmt_id", t_stmt_id; "hop", t_int; "
 (* for GC *)
 let sw_ack_rcv_trig_args = ["addr", t_int; "vid", t_vid]
 
-
 (*** Polyqueues ***)
+
+let sw_poly_batch_size = create_ds ~init:(mk_cint 5) "sw_poly_batch_size" @@ t_int
+
+(* whether we carry out a reserve operation on polybuffs *)
+let do_poly_reserve = create_ds ~init:mk_ctrue "do_poly_reserve" @@ t_bool
+
+(* a conservative multiplier for needed space size relative to original batch number
+   Consider the fact that we're going to take the maximum fixed type size *)
+let reserve_mult = 2
+let reserve_str_estimate = 4
+
+
+(* maximum size of polyqueue entries *)
+let max_poly_queue_csize c =
+  let _, max = list_max_op U.csize_of_type @@
+    List.map (wrap_ttuple |- snd_many |- thd3 |- snd) c.poly_tags in
+  max * reserve_mult
+
+let max_event_queue_csize c =
+  let max = list_max_op U.csize_of_type @@
+    List.map (wrap_ttuple |- snd |- snd) c.event_tags in
+  max
+
+(* code to apply poly_reserve to every outgoing polybuffer *)
+let reserve_poly_queue_code ?all c =
+  mk_if (mk_var do_poly_reserve.id)
+    (mk_iter_bitmap' ?all
+      (mk_update_at_with poly_queues.id (mk_var "ip") @@
+        mk_lambda' poly_queues.e @@ mk_block [
+          mk_poly_reserve (mk_var "queue")
+            (mk_mult (mk_var sw_poly_batch_size.id) @@ mk_cint reserve_mult)
+            (mk_mult (mk_var sw_poly_batch_size.id) @@ mk_cint @@ max_poly_queue_csize c) @@
+            mk_mult (mk_var sw_poly_batch_size.id) @@ mk_cint reserve_str_estimate;
+          mk_var "queue" ])
+      poly_queue_bitmap_id)
+    mk_cunit
 
 (* we create tags for events, with the full width of said events plus insert/delete field *)
 let calc_event_tags c =
@@ -1006,6 +1041,9 @@ let global_vars c dict =
       sw_event_driver_sleep;
       (* for no-corrective mode *)
       corrective_mode;
+      (* poly queue stuff *)
+      sw_poly_batch_size;
+      do_poly_reserve;
       poly_queues;
       poly_queue_bitmap;
       empty_poly_queue;

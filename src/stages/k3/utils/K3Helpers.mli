@@ -288,6 +288,7 @@ val mk_assoc_lambda' : (id_t * type_t) list -> (id_t * type_t) list -> expr_t ->
 
 (* let structure *)
 val mk_let : id_t list -> expr_t -> expr_t -> expr_t
+val mk_let_block : id_t list -> expr_t -> expr_t list -> expr_t
 
 (* polyqueue functions *)
 (* lambda returns (idx,off) *)

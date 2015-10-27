@@ -430,6 +430,8 @@ let mk_send_raw target addr args = mk_stree Send [target; addr; args]
 let mk_let var_ids tuple_val expr =
   mk_stree (Let(var_ids)) [tuple_val; expr]
 
+let mk_let_block vars v es = mk_let vars v @@ mk_block es
+
 (* Polyqueue functions *)
 
 (* lambda for these functions takes tag, tuple_idx, tuple_offset *)

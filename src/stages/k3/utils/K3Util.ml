@@ -487,3 +487,10 @@ let is_tmap = function TVMap _ | TSortedMap | TMap -> true | _ -> false
 let is_tpolyq = function TPolyQueue _ -> true | _ -> false
 let get_tpolyq_tags = function TPolyQueue t -> Some t | _ -> None
 
+(* estimate the c++ size of a type *)
+let rec csize_of_type t = match t.typ with
+  | TTuple tl -> List.fold_left (fun acc t -> acc + csize_of_type t) 0 tl
+  | TAddress  -> 16
+  | TCollection _ -> failwith "csize_of_type: collections unsupported"
+  | _ -> 8 (* assume that padding causes everything to be 8 bytes *)
+
