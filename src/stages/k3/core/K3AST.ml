@@ -33,7 +33,8 @@ type container_type_t
     | TSortedSet
     | TVector
     | TVMap of IntSetSet.t option (* indices *)
-    | TPolyQueue of poly_tags
+                  (* unique values per tag? *)
+    | TPolyQueue of bool * poly_tags
 
 (* {int,string} tag * possible types *)
 and poly_tags = (int * string * type_t) list

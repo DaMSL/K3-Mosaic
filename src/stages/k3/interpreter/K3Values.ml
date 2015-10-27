@@ -159,6 +159,14 @@ and Value : sig
       }
   and fun_typ = FLambda | FGlobal of id_t | FTrigger of id_t
 
+  and poly_inner = {
+    data: (value_t * string * value_t) IntMap.t;
+              (* itag, stag, value *)
+    tags: poly_tags;
+    sets: ValueSet.t IntMap.t; (* tag -> set of values for checking uniqueness *)
+    unique: bool;
+  }
+
   and value_t
       = VMax
       | VMin
@@ -179,8 +187,7 @@ and Value : sig
       | VSortedMap of value_t ValueMap.t
       | VSortedSet of ValueSSet.t
       | VVMap of value_t ValueVMap.t
-      | VPolyQueue of (value_t * string * value_t) IntMap.t * poly_tags
-                      (* itag, stag, value *)
+      | VPolyQueue of poly_inner
       | VFunction of fun_typ * arg_t * local_env_t * expr_t (* closure *)
       | VForeignFunction of id_t * arg_t * foreign_func_t
       | VAddress of address
@@ -200,16 +207,16 @@ and ValueUtils : (sig val v_to_list : Value.value_t -> Value.value_t list
 
     (* Value stringification *)
     let v_to_list = function
-      | VBag m  -> ValueBag.to_list m
-      | VSet m  -> ValueSet.to_list m
-      | VSortedSet m  -> ValueSSet.to_list m
-      | VList m -> IList.to_list m
-      | VVector(m,sz,v_def) ->
-        List.map (fun i -> try IntMap.find i m with Not_found -> v_def) @@ create_range sz
+      | VBag m                -> ValueBag.to_list m
+      | VSet m                -> ValueSet.to_list m
+      | VSortedSet m          -> ValueSSet.to_list m
+      | VList m               -> IList.to_list m
+      | VVector(m,sz,v_def)   ->
+          List.map (fun i -> try IntMap.find i m with Not_found -> v_def) @@ create_range sz
       | VMap m | VSortedMap m -> List.map map_to_tuple @@ ValueMap.to_list m
-      | VVMap m -> List.map vmap_to_tuple @@ ValueVMap.to_list m
-      | VPolyQueue(m,_) -> List.map (fun (i,(v,s,v')) -> VTuple[VInt i; v; VString s; v']) @@
-          IntMap.to_list m
+      | VVMap m               -> List.map vmap_to_tuple @@ ValueVMap.to_list m
+      | VPolyQueue m          -> List.map (fun (i,(v,s,v')) -> VTuple[VInt i; v; VString s; v']) @@
+                                   IntMap.to_list m.data
       | _ -> failwith "(v_to_list): not a collection"
 
     let tag = function
@@ -268,19 +275,21 @@ open Value
 
 include ValueUtils
 
+let default_poly_inner = {data=IntMap.empty; tags=[]; sets=IntMap.empty; unique=false}
+
 let rec v_col_of_t ?elem t_col = match t_col with
-  | TSet        -> VSet(ValueSet.empty)
-  | TBag        -> VBag(ValueBag.empty)
-  | TList       -> VList(IList.empty)
+  | TSet        -> VSet ValueSet.empty
+  | TBag        -> VBag ValueBag.empty
+  | TList       -> VList IList.empty
   | TVector     -> begin match elem with
     | None   -> failwith "vector requires elem type"
     | Some (ta_env, t) -> VVector(IntMap.empty, 0, v_of_t ta_env t)
     end
-  | TMap        -> VMap(ValueMap.empty)
-  | TVMap _     -> VVMap(ValueVMap.empty)
-  | TSortedMap  -> VSortedMap(ValueMap.empty)
-  | TSortedSet  -> VSortedSet(ValueSSet.empty)
-  | TPolyQueue tags -> VPolyQueue(IntMap.empty, tags)
+  | TMap        -> VMap ValueMap.empty
+  | TVMap _     -> VVMap ValueVMap.empty
+  | TSortedMap  -> VSortedMap ValueMap.empty
+  | TSortedSet  -> VSortedSet ValueSSet.empty
+  | TPolyQueue tags -> VPolyQueue {default_poly_inner with tags}
 
 and v_of_t ta_env ?id t =
   let v_of_t = v_of_t ta_env ?id in
@@ -440,9 +449,9 @@ let v_at ?(extend=false) ?tag ?(get_stag=false) ?(get_itag=false) err_fn c idx =
 
   | VVector _, v -> err_fn "v_at" @@ sp "not an integer: %s" @@ sov v
 
-  | VPolyQueue(m,_), VInt i ->
+  | VPolyQueue m, VInt i ->
     begin try
-      let itag, stag, v = IntMap.find i m in
+      let itag, stag, v = IntMap.find i m.data in
       if get_itag then some itag
       else if get_stag then some @@ VString stag
       else
@@ -575,7 +584,7 @@ let v_fold err_fn f acc = function
   | v -> err_fn "v_fold" @@ sp "not a collection: %s" @@ sov v
 
 let v_fold_poly err_fn f acc = function
-  | VPolyQueue(m, _) -> IntMap.fold f m acc
+  | VPolyQueue m -> IntMap.fold f m.data acc
   | v -> err_fn "v_fold_poly" @@ sp "not a polyqueue: %s" @@ sov v
 
 let unwrap_vint err_fn = function VInt i -> i | _ -> err_fn "unwrap_vint" "not an int"
@@ -584,10 +593,10 @@ let unwrap_vint err_fn = function VInt i -> i | _ -> err_fn "unwrap_vint" "not a
    also accumulate
 *)
 let v_traverse_poly err_fn f i acc = function
-  | VPolyQueue(m, _) ->
+  | VPolyQueue m ->
     let rec loop i acc =
       begin try
-        let j, acc = f i (IntMap.find i m) acc in
+        let j, acc = f i (IntMap.find i m.data) acc in
         loop j acc
       with Not_found -> i, acc end
     in
@@ -595,10 +604,10 @@ let v_traverse_poly err_fn f i acc = function
   | v -> err_fn "v_traverse_poly" @@ sp "not a polyqueue: %s" @@ sov v
 
 let v_fold_poly_tag err_fn idx tag f acc m = match m, idx with
-  | VPolyQueue(m, _), VInt(idx) ->
+  | VPolyQueue m, VInt(idx) ->
     let rec loop acc i =
       try
-        let (_,t,_) as v = IntMap.find i m in
+        let (_,t,_) as v = IntMap.find i m.data in
         if t = tag then
           let acc = f i v acc in
           loop acc (i + 1)
@@ -674,16 +683,16 @@ let v_insert ?vidkey ?tag err_fn x m =
       | Some(VTuple(t::_)) -> VVMap(ValueVMap.add t k v m)
       | _                  -> error v' c'
       end
-  | _, VPolyQueue(m, tags)  ->
+  | _, VPolyQueue m  ->
     let tag = unwrap_some tag in
     let itag =
       try
-        fst3 @@ List.find (fun (i,s,_) -> (s:string) = tag) tags
+        fst3 @@ List.find (fun (i,s,_) -> (s:string) = tag) m.tags
       with Not_found -> raise @@ RuntimeError(-1, "v_insert",
-                                              sp "tag %s not found in %s" tag @@ string_of_poly_variant tags)
+                                              sp "tag %s not found in %s" tag @@ string_of_poly_variant m.tags)
     in
-    let max_idx = try fst @@ IntMap.max_binding m with Not_found -> -1 in
-    VPolyQueue(IntMap.add (max_idx + 1) (VInt itag, tag, x) m, tags)
+    let next_idx = try 1 + (fst @@ IntMap.max_binding m.data) with Not_found -> 0 in
+    VPolyQueue({m with data=IntMap.add next_idx (VInt itag, tag, x) m.data})
 
   | v, c                   -> error v c
 
