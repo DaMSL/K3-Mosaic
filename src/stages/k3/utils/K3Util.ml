@@ -485,7 +485,7 @@ let is_tvector = function TVector -> true | _ -> false
 let is_tsorted = function TSortedSet | TSortedMap | TVMap _ -> true | _ -> false
 let is_tmap = function TVMap _ | TSortedMap | TMap -> true | _ -> false
 let is_tpolyq = function TPolyQueue _ -> true | _ -> false
-let get_tpolyq_tags = function TPolyQueue t -> Some t | _ -> None
+let get_tpolyq_tags = function TPolyQueue(_,t) -> Some t | _ -> None
 
 (* estimate the c++ size of a type *)
 let rec csize_of_type t = match t.typ with

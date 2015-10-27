@@ -42,6 +42,13 @@ and Value : sig
         type_aliases:(id_t, type_t) Hashtbl.t;
       }
   and fun_typ = FLambda | FGlobal of id_t | FTrigger of id_t
+  and poly_inner = {
+    data: (value_t * string * value_t) IntMap.t;
+              (* itag, stag, value *)
+    tags: poly_tags;
+    sets: ValueSet.t IntMap.t; (* tag -> set of values for checking uniqueness *)
+    unique: bool;
+  }
   and value_t
       = VMax
       | VMin
@@ -62,8 +69,7 @@ and Value : sig
       | VSortedMap of value_t ValueMap.t
       | VSortedSet of ValueSSet.t
       | VVMap of value_t ValueVMap.t
-      | VPolyQueue of (value_t * string * value_t) IntMap.t * poly_tags
-                      (* itag, stag, value *)
+      | VPolyQueue of poly_inner
       | VFunction of fun_typ * arg_t * local_env_t * expr_t (* closure *)
       | VForeignFunction of id_t * arg_t * foreign_func_t
       | VAddress of address

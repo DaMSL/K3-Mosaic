@@ -200,7 +200,9 @@ and lazy_col c col_t elem_t = match col_t with
   | TVMap(Some ss) -> lazy_multi_index c ss elem_t
   | TSortedMap  -> lps "{SortedMapE" <| lazy_mape c elem_t <| lps "}"
   | TSortedSet  -> lps "{SortedSet}"
-  | TPolyQueue tag -> lps "{FlatPolyBuffer" <| lazy_paren (lazy_poly_tags c tag) <| lps "}"
+  | TPolyQueue(unique, tag) ->
+    let nm = if unique then "Unique" else "Flat" in
+    lps (sp "{%sPolyBuffer" nm) <| lazy_paren (lazy_poly_tags c tag) <| lps "}"
 
 and lazy_type ?(brace=true) ?(in_col=false) c t =
   let wrap_props f = lazy_properties ~symbol:"@::" t.anno f in

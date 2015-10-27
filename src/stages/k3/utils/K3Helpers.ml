@@ -86,7 +86,8 @@ let wrap_tvmap ?idx typ = wrap_tcol (TVMap idx) typ
 let wrap_tvmap' ?idx tl = wrap_tvmap ?idx @@ wrap_ttuple tl
 
 (* create polyq *)
-let wrap_tpolyq tags = wrap_tcol (TPolyQueue tags) t_unit
+let wrap_tpolyq tags = wrap_tcol (TPolyQueue (false, tags)) t_unit
+let wrap_tuniqpolyq tags = wrap_tcol (TPolyQueue (true, tags)) t_unit
 
 (* what the generic type of data carried around is *)
 let wrap_t_calc  = wrap_tvector

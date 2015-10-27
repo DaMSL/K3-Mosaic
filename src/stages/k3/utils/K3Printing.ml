@@ -57,7 +57,7 @@ let string_of_container_type t_c = match t_c with
     | TVMap None    -> "TVMap"
     | TSortedMap    -> "TSortedMap"
     | TSortedSet    -> "TSortedSet"
-    | TPolyQueue x  -> sp "TPolyQueue(%s)" (string_of_poly_variant x)
+    | TPolyQueue(u,x) -> sp "TPolyQueue(%s, %s)" (sob u) (string_of_poly_variant x)
 
 let string_of_const cn = match cn with
     | CUnit          -> "CUnit"

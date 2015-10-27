@@ -289,7 +289,7 @@ let rec v_col_of_t ?elem t_col = match t_col with
   | TVMap _     -> VVMap ValueVMap.empty
   | TSortedMap  -> VSortedMap ValueMap.empty
   | TSortedSet  -> VSortedSet ValueSSet.empty
-  | TPolyQueue tags -> VPolyQueue {default_poly_inner with tags}
+  | TPolyQueue(unique, tags) -> VPolyQueue {default_poly_inner with tags; unique}
 
 and v_of_t ta_env ?id t =
   let v_of_t = v_of_t ta_env ?id in
@@ -320,6 +320,7 @@ let matching_collections v v' = match v, v' with
   | VSortedMap _, VSortedMap _
   | VSortedSet _, VSortedSet _
   | VVMap _, VVMap _ -> true
+  | VPolyQueue _, VPolyQueue _ -> true
   | _ -> false
 
 let unwrap_vtuple = function VTuple x -> x | x -> [x]
@@ -479,6 +480,7 @@ let v_is_empty err_fn = function
   | VMap m
   | VSortedMap m -> VBool(ValueMap.is_empty m)
   | VVMap m      -> VBool(ValueVMap.is_empty m)
+  | VPolyQueue m -> VBool(IntMap.is_empty m.data)
   | v -> err_fn "v_is_empty" @@ sp "not a collection: %s" @@ sov v
 
 let drop_vars = ["route_memo_"]
@@ -683,7 +685,7 @@ let v_insert ?vidkey ?tag err_fn x m =
       | Some(VTuple(t::_)) -> VVMap(ValueVMap.add t k v m)
       | _                  -> error v' c'
       end
-  | _, VPolyQueue m  ->
+  | _, (VPolyQueue m as cur) ->
     let tag = unwrap_some tag in
     let itag =
       try
@@ -691,8 +693,21 @@ let v_insert ?vidkey ?tag err_fn x m =
       with Not_found -> raise @@ RuntimeError(-1, "v_insert",
                                               sp "tag %s not found in %s" tag @@ string_of_poly_variant m.tags)
     in
-    let next_idx = try 1 + (fst @@ IntMap.max_binding m.data) with Not_found -> 0 in
-    VPolyQueue({m with data=IntMap.add next_idx (VInt itag, tag, x) m.data})
+    let do_add m =
+      let next_idx = try 1 + (fst @@ IntMap.max_binding m.data) with Not_found -> 0 in
+      VPolyQueue({m with data=IntMap.add next_idx (VInt itag, tag, x) m.data})
+    in
+    (* check if we need to do uniqueness check *)
+    if m.unique then
+      let tag_set = try IntMap.find itag m.sets with Not_found -> ValueSet.empty in
+      (* check if we already have this value *)
+      if ValueSet.mem x tag_set then cur
+      else
+        let tag_set = ValueSet.insert x tag_set in
+        let sets = IntMap.add itag tag_set m.sets in
+        do_add {m with sets}
+    else
+      do_add m
 
   | v, c                   -> error v c
 
@@ -780,7 +795,7 @@ let v_empty err_fn = function
   | VSortedMap _   -> VSortedMap(ValueMap.empty)
   | VSortedSet _   -> VSortedSet(ValueSSet.empty)
   | VVMap m        -> VVMap(ValueVMap.empty)
-  | VPolyQueue(m,t) -> VPolyQueue(IntMap.empty, t)
+  | VPolyQueue m   -> VPolyQueue {m with data=IntMap.empty}
   | c -> err_fn "v_empty" @@ sp "invalid input: %s" (string_of_value c)
 
 let v_sort err_fn f = function
@@ -798,7 +813,7 @@ let v_size err_fn = function
   | VSortedSet m   -> VInt(ValueSSet.cardinal m)
   | VVMap m     -> VInt(ValueVMap.size m)
   | VBag m      -> VInt(ValueBag.size m)
-  | VPolyQueue(m,_) -> VInt(IntMap.cardinal m)
+  | VPolyQueue m -> VInt(IntMap.cardinal m.data)
   | _           -> err_fn "vsize" "not a collection"
 
 let v_singleton err_fn ta_env elem c telem = match elem, c with
@@ -916,7 +931,7 @@ let rec type_of_value uuid value =
   | VSortedMap _       -> wrap_tsortedmap @@ col_get ()
   | VSortedSet _       -> wrap_tsortedset @@ col_get ()
   | VVMap _            -> wrap_tvmap @@ col_get ()
-  | VPolyQueue(_,tag)  -> wrap_tpolyq tag
+  | VPolyQueue m       -> if m.unique then wrap_tuniqpolyq m.tags else wrap_tpolyq m.tags
   | VIndirect ind      -> type_of_value uuid !ind
   | VFunction _
   | VForeignFunction _ -> raise (RuntimeError (uuid, "type_of_value", "cannot apply to function"))

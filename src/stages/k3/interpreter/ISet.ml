@@ -24,6 +24,7 @@ module type S = sig
   val of_list : elt list -> t
   val compare : t -> t -> int
   val to_string : t -> string
+  val mem : elt -> t -> bool
 end
 
 module Make(Ord : ICommon.OrderedKeyType) = struct
@@ -36,6 +37,8 @@ module Make(Ord : ICommon.OrderedKeyType) = struct
   let insert x bag = try
       HMap.find x bag; bag
     with Not_found -> HMap.add x () bag
+
+  let mem x bag = try HMap.find x bag; true with Not_found -> false
 
   let delete x bag = HMap.remove x bag
 
