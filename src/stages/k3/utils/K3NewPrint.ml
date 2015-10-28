@@ -1517,6 +1517,7 @@ include \"Annotation/Seq.k3\"
 include \"Annotation/Sets/SortedSet.k3\"
 include \"Annotation/Vector.k3\"
 include \"Annotation/FlatPolyBuffer.k3\"
+include \"Annotation/UniquePolyBuffer.k3\"
 include \"Core/MosaicBuiltins.k3\"
 
 @:CArgs 2
