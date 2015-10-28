@@ -73,7 +73,7 @@ type map_type =
   | MapVMap
   | MapMultiVMap
 
-type tag_type = Trig | DsTrig | Ds | Event
+type tag_type = Trig | DsTrig | Ds | UniqDs | Event
 
 type config = {
   p : P.prog_data_t;
@@ -545,9 +545,6 @@ let addr_of_int = mk_global_fn "addr_of_int" ["i", t_int] [t_addr] @@
 
 let mk_sendi trig addr args = mk_send trig (mk_apply' "addr_of_int" [addr]) args
 
-let poly_queues_id = "poly_queues"
-let poly_queue_bitmap_id = "poly_queue_bitmap"
-
 let ms_init_counter = create_ds "ms_init_counter" (mut t_int) ~init:(mk_cint 0)
 (* whether we can begin operations on this node/switch *)
 let init_flag = create_ds "init_flag" (mut t_bool) ~init:(mk_cfalse)
@@ -734,33 +731,47 @@ let empty_event_queue = create_ds "empty_event_queue" @@ poly_event_queue.t
 
 (* the global poly type of the program *)
 let poly_queue_typedef_id = "poly_queue_t"
+(* unique poly queue *)
+let upoly_queue_typedef_id = "upoly_queue_t"
+
 let poly_queue_typedef c = wrap_tpolyq @@ get_global_poly_tags c
+let upoly_queue_typedef c = wrap_tuniqpolyq @@ get_global_poly_tags c
+
+(* hypothetical data structures *)
 let poly_queue = create_ds "poly_queue" @@ t_alias poly_queue_typedef_id
+let upoly_queue = create_ds "upoly_queue" @@ t_alias upoly_queue_typedef_id
 
 (* global for avoiding huge tags *)
 let empty_poly_queue = create_ds "empty_poly_queue" @@ poly_queue.t
+let empty_upoly_queue = create_ds "empty_upoly_queue" @@ upoly_queue.t
 
 let poly_queues =
-  let e = ["queue", poly_queue.t] in
+  let e = ["queue", poly_queue.t; "uqueue", upoly_queue.t] in
   let init =
-    mk_map (mk_lambda' unknown_arg @@ mk_empty poly_queue.t) @@
+    mk_map (mk_lambda' unknown_arg @@ mk_tuple [mk_var "empty_poly_queue"; mk_var "empty_upoly_queue"]) @@
       mk_var my_peers.id in
-  create_ds ~e ~init poly_queues_id @@ wrap_tvector' @@ snd_many e
+  create_ds ~e ~init "poly_queues" @@ wrap_tvector' @@ snd_many e
 
 let poly_queue_bitmap =
   let init =
     mk_map (mk_lambda' unknown_arg mk_cfalse) @@ mk_var my_peers.id in
-  create_ds poly_queue_bitmap_id ~init @@ wrap_tvector t_bool
+  create_ds "poly_queue_bitmap" ~init @@ wrap_tvector t_bool
 
-let p_idx = ["idx", t_int]
+(* u is for unique *)
+let p_idx  = ["idx", t_int]
+let up_idx = ["uidx", t_int]
 
 let p_off = ["offset", t_int]
+let up_off = ["uoffset", t_int]
 
 let p_tag = ["tag", t_int]
+let up_tag = ["utag", t_int]
 
 let poly_args = ["poly_queue", poly_queue.t] @ p_idx @ p_off
+let upoly_args = ["upoly_queue", upoly_queue.t] @ up_idx @ up_off
 
-let poly_args_partial = ["idx", t_int; "offset", t_int]
+let poly_args_partial = p_idx @ p_off
+let upoly_args_partial = up_idx @ up_off
 
 (* queue for next message batch -- contains polyqueue *)
 let sw_event_queue =
@@ -797,7 +808,6 @@ let do_poly_reserve = create_ds ~init:mk_ctrue "do_poly_reserve" @@ t_bool
 let reserve_mult = 2
 let reserve_str_estimate = 4
 
-
 (* maximum size of polyqueue entries *)
 let max_poly_queue_csize c =
   let _, max = list_max_op U.csize_of_type @@
@@ -814,13 +824,13 @@ let reserve_poly_queue_code ?all c =
   mk_if (mk_var do_poly_reserve.id)
     (mk_iter_bitmap' ?all
       (mk_update_at_with poly_queues.id (mk_var "ip") @@
-        mk_lambda' poly_queues.e @@ mk_block [
-          mk_poly_reserve (mk_var "queue")
+        mk_lambda' ["pqs", wrap_ttuple @@ snd_many poly_queues.e] @@ mk_block [
+          mk_poly_reserve ~path:[1] "pqs"
             (mk_mult (mk_var sw_poly_batch_size.id) @@ mk_cint reserve_mult)
             (mk_mult (mk_var sw_poly_batch_size.id) @@ mk_cint @@ max_poly_queue_csize c) @@
             mk_mult (mk_var sw_poly_batch_size.id) @@ mk_cint reserve_str_estimate;
-          mk_var "queue" ])
-      poly_queue_bitmap_id)
+          mk_var "pqs" ])
+      poly_queue_bitmap.id)
     mk_cunit
 
 (* we create tags for events, with the full width of said events plus insert/delete field *)
@@ -860,17 +870,19 @@ let calc_poly_tags c =
       (List.map (fun s ->
           do_complete_name_of_t t s^"_trig", Trig, nd_do_complete_trig_args c t) @@
         P.stmts_without_rhs_maps_in_t c.p t) @
-      (* the types for nd_rcv_push. includes an optional map component *)
+      (* the types for nd_rcv_push. includes a separate, optional map component *)
+      (* this isn't a dsTrig anymore since pushes are aggregated at the dispatcher *)
       (List.map (fun (s, m) ->
-          rcv_push_name_of_t c t s m, DsTrig, nd_rcv_push_args c t)
+          rcv_push_name_of_t c t s m, Trig, nd_rcv_push_args c t)
         s_rhs) @
-      (* rcv_corrective types. includes an optional map + vid component *)
+      (* the types for rcv_push's maps *)
+      (List.map (fun (s, m) ->
+           P.buf_of_stmt_map_id c.p s m, UniqDs, P.map_ids_types_with_v_for c.p m)
+          s_rhs) @
+      (* rcv_corrective types. includes a separate, optional map + vids component *)
       (List.map (fun (s, m) ->
           rcv_corrective_name_of_t c t s m, DsTrig, nd_rcv_corr_args)
         s_rhs_corr)) @
-    (* the types for the maps with vid *)
-    (P.for_all_maps c.p @@ fun m ->
-      P.map_name_of c.p m^"_map_v", Ds, P.map_ids_types_with_v_for c.p m) @
     (* the types for the maps without vid *)
     (P.for_all_maps c.p @@ fun m ->
       P.map_name_of c.p m^"_map", Ds, P.map_ids_types_for c.p m) @
@@ -884,17 +896,19 @@ let calc_poly_tags c =
 
 (* instead of sending directly, place in the send buffer *)
 (* @bitmap: whether to mark the bitmap *)
-let buffer_for_send ?(wr_bitmap=true) t addr args =
+let buffer_for_send ?(unique=false) ?(wr_bitmap=true) t addr args =
+  let path = if unique then [2] else [1] in
   mk_block @@
     (* mark the bitmap *)
-    (if wr_bitmap then [mk_insert_at poly_queue_bitmap_id (mk_var addr) [mk_ctrue]] else []) @
+    (if wr_bitmap then [mk_insert_at poly_queue_bitmap.id (mk_var addr) [mk_ctrue]] else []) @
     (* insert into buffer *)
-    [mk_update_at_with poly_queues_id (mk_var addr)
-      (mk_lambda' poly_queues.e @@ mk_poly_insert_block t "queue" args)
+    [mk_update_at_with poly_queues.id (mk_var addr) @@
+      mk_lambda' ["pqs", wrap_ttuple @@ snd_many poly_queues.e] @@
+        mk_poly_insert_block t ~path "pqs" args
     ]
 
 (* insert tuples into polyqueues *)
-let buffer_tuples_from_idxs ?(drop_vid=false) tuples_nm map_type map_tag indices =
+let buffer_tuples_from_idxs ?unique ?(drop_vid=false) tuples_nm map_type map_tag indices =
   let col_t, tup_t = unwrap_tcol map_type in
   let ts = unwrap_ttuple tup_t in
   (* handle dropping vid *)
@@ -909,7 +923,7 @@ let buffer_tuples_from_idxs ?(drop_vid=false) tuples_nm map_type map_tag indices
     (mk_if (mk_eq (mk_var "x") @@ mk_cint (-1))
       (mk_iter
         (mk_lambda'' ["x", tup_t] @@
-          buffer_for_send ~wr_bitmap:false map_tag "ip" @@ may_drop @@ mk_var "x") @@
+          buffer_for_send ?unique ~wr_bitmap:false map_tag "ip" @@ may_drop @@ mk_var "x") @@
         mk_var tuples_nm) @@
       (* or just regular indices into tuples *)
       mk_iter
@@ -917,7 +931,7 @@ let buffer_tuples_from_idxs ?(drop_vid=false) tuples_nm map_type map_tag indices
           (* get tuples at idx *)
           mk_at_with' tuples_nm (mk_var "idx") @@
             mk_lambda' ["x", tup_t] @@
-              buffer_for_send ~wr_bitmap:false map_tag "ip" @@ may_drop @@ mk_var "x")
+          buffer_for_send ?unique ~wr_bitmap:false map_tag "ip" @@ may_drop @@ mk_var "x")
          indices)
     mk_cunit (* do nothing if empty. we're sending a header anyway *)
 
@@ -1044,10 +1058,11 @@ let global_vars c dict =
       (* poly queue stuff *)
       sw_poly_batch_size;
       do_poly_reserve;
+      empty_poly_queue;
+      empty_upoly_queue;
+      empty_event_queue;
       poly_queues;
       poly_queue_bitmap;
-      empty_poly_queue;
-      empty_event_queue;
       nd_rcv_fetch_buffer;
       nd_stmt_cntrs_per_map;
       nd_lmap_of_stmt_id c;

@@ -629,6 +629,7 @@ let nd_send_push_stmt_map_trig c s_rhs_lhs t =
     (fun (s, (rmap, lmap)) ->
       let rmap_nm = P.map_name_of c.p rmap in
       let rmap_deref = "rmap_d" in
+      let buf_nm = P.buf_of_stmt_map_id c.p s rmap in
       let shuffle_fn = K3S.find_shuffle_nm c s rmap lmap in
       let shuffle_key, empty_pat_idx = P.key_pat_from_bound c.p c.route_indices s lmap in
       let shuffle_pat_idx = P.get_shuffle_pat_idx c.p c.route_indices s lmap rmap in
@@ -676,7 +677,8 @@ let nd_send_push_stmt_map_trig c s_rhs_lhs t =
                   buffer_for_send rcv_trig "ip" @@
                     mk_var "has_data"::args_of_t_as_vars_with_v c t;
                   (* buffer the map data according to the indices *)
-                  buffer_tuples_from_idxs "tuples" map_delta.t (rmap_nm^"_map_v") @@ mk_var "indices"
+                  (* no need to write to the bitmap, since there will always be a header to the same ip *)
+                  buffer_tuples_from_idxs ~unique:true "tuples" map_delta.t buf_nm @@ mk_var "indices"
                ])
             K3S.shuffle_bitmap.id
         ]) (* trigger *)
@@ -698,51 +700,26 @@ let nd_send_push_stmt_map_trig c s_rhs_lhs t =
 let nd_rcv_push_trig c s_rhs t =
 List.map
   (fun (s, m) ->
-    let rbuf_name = P.buf_of_stmt_map_id c.p s m in
-    let rbuf_deref = "buf_d" in
-    let map_ds = map_ds_of_id ~global:true c m in
-    let tup_ds = map_ds_of_id ~global:false ~vid:true c m in
-    let tup_pat = pat_of_ds tup_ds in
-    let map_pat = pat_of_flat_e ~add_vid:true ~has_vid:true map_ds @@ fst_many tup_pat in
     let fn_name = rcv_push_name_of_t c t s m in
     mk_global_fn fn_name
-      (* we also need to get (tuples, tup_ds.t) from the global polyqueue *)
-      (poly_args @ D.nd_rcv_push_args c t)
-      (* return idx, offset *)
-      [t_int; t_int] @@
-      (* skip over the function variant *)
-      mk_poly_skip_block fn_name [
-        (* save the bound variables for this vid. This is necessary for both the
-         * sending and receiving nodes, which is why we're also doing it here *)
-        mk_apply' (nd_log_write_for c t) @@ args_of_t_as_vars_with_v c t;
+      (D.nd_rcv_push_args c t)
+      [] @@
+    mk_block [
+      (* save the bound variables for this vid. This is necessary for both the
+        * sending and receiving nodes, which is why we're also doing it here *)
+      mk_apply' (nd_log_write_for c t) @@ args_of_t_as_vars_with_v c t;
 
-        (* check if we have an empty map *)
-        mk_if_poly_end_ny
-          (mk_if_tag' (ios_tag c @@ tup_ds.id^"_map_v")
-            (mk_bind (mk_var rbuf_name) rbuf_deref @@
-              (* assign a fold result back to the buffer *)
-              mk_assign rbuf_deref @@ U.add_property "Move" @@
-                mk_poly_fold_tag' (tup_ds.id^"_map_v")
-                  (mk_lambda'' (["acc", map_ds.t] @ poly_args_partial @
-                                ["x", wrap_ttuple @@ snd_many @@ ds_e tup_ds]) @@
-                    mk_let (fst_many @@ ds_e tup_ds) (mk_var "x") @@
-                    mk_insert_block "acc" map_pat) @@
-                  mk_var rbuf_deref)
-            mk_cunit)
-          mk_cunit;
+      (* inserting into the map has been moved to the aggregated version *)
 
-        (* update and check statment counters to see if we should send a do_complete *)
-        mk_if
-          (mk_apply' nd_check_stmt_cntr_index_nm @@
-            [mk_var "vid"; mk_cint s; mk_cint @@ -1; mk_var "has_data"])
-          (* apply local do_complete *)
-          (mk_apply' (do_complete_name_of_t t s) @@
-            args_of_t_as_vars_with_v c t)
-          mk_cunit;
-
-        (* skip over the data type *)
-        mk_poly_skip_all' @@ tup_ds.id^"_map_v";
-      ])
+      (* update and check statment counters to see if we should send a do_complete *)
+      mk_if
+        (mk_apply' nd_check_stmt_cntr_index_nm @@
+          [mk_var "vid"; mk_cint s; mk_cint @@ -1; mk_var "has_data"])
+        (* apply local do_complete *)
+        (mk_apply' (do_complete_name_of_t t s) @@
+          args_of_t_as_vars_with_v c t)
+        mk_cunit
+    ])
   s_rhs
 
 (* list of potential corrective maps.
@@ -1395,24 +1372,58 @@ let nd_do_corrective_fns c s_rhs ast trig_name corrective_maps =
   in
   List.map do_corrective_fn s_rhs
 
+(* function to write push data *)
+let nd_handle_uniq_poly_nm = "nd_handle_uniq_poly"
+let nd_handle_uniq_poly c =
+  let ts = P.get_trig_list c.p ~sys_init:true ~delete:c.gen_deletes in
+  let s_rhs = List.flatten @@ List.map (P.s_and_over_stmts_in_t c.p P.rhs_maps_of_stmt) ts in
+  let bufs_m = List.map (fun (s,m) -> P.buf_of_stmt_map_id c.p s m, m) s_rhs in
+  let tag_bufs_m = List.map (fun (buf, m) -> fst @@
+                              List.find (fun (i, (s,_,_)) -> s = buf) c.poly_tags, buf, m) bufs_m in
+  mk_global_fn nd_handle_uniq_poly_nm ["poly_queue", upoly_queue.t] [] @@
+  (* iterate over all buffer contents *)
+  mk_poly_iter' @@
+    mk_lambda'' (p_tag @ p_idx @ p_off) @@
+      List.fold_left (fun acc_code (tag, buf, m) ->
+        let map_ds = map_ds_of_id ~global:true c m in
+        let tup_ds = map_ds_of_id ~global:false ~vid:true c m in
+        let tup_pat = pat_of_ds tup_ds in
+        let map_pat = pat_of_flat_e ~add_vid:true ~has_vid:true map_ds @@ fst_many tup_pat in
+        mk_if_eq (mk_var "tag") (mk_cint tag)
+          (mk_block [
+            mk_bind (mk_var buf) "buf_d" @@
+              (* assign a fold result back to the buffer *)
+              mk_assign "buf_d" @@ U.add_property "Move" @@
+                mk_poly_fold_tag' buf
+                  (mk_lambda'' (["acc", map_ds.t] @ poly_args_partial @
+                                ["x", wrap_ttuple @@ snd_many @@ ds_e tup_ds]) @@
+                    mk_let (fst_many @@ ds_e tup_ds) (mk_var "x") @@
+                    mk_insert_block "acc" map_pat) @@
+              mk_var "buf_d";
+            (* skip the tags we just inserted *)
+            mk_poly_skip_all' buf
+            ])
+          acc_code)
+      (mk_error "unhandled unique tag")
+      tag_bufs_m
+
 (*** central triggers to handle dispatch for nodes and switches ***)
-
-(* do we use reserve to try reduce allocations in polybuffer? *)
-
 let trig_dispatcher_nm = "trig_dispatcher"
 let trig_dispatcher c =
-  mk_global_fn trig_dispatcher_nm ["poly_queue", poly_queue.t] [] @@
+  mk_global_fn trig_dispatcher_nm ["poly_queue", poly_queue.t; "upoly_queue", upoly_queue.t] [] @@
   mk_block [
-    (* replace all used slots with empty polyqueues *)
+    (* replace all used send slots with empty polyqueues *)
     mk_iter_bitmap'
-      (mk_insert_at poly_queues.id (mk_var "ip") [mk_var empty_poly_queue.id])
+      (mk_insert_at poly_queues.id (mk_var "ip")
+         [mk_var empty_poly_queue.id; mk_var empty_upoly_queue.id])
       D.poly_queue_bitmap.id;
-
     (* apply reserve to all the new polybufs *)
     D.reserve_poly_queue_code c;
-
     (* clean out the send bitmaps *)
     mk_set_all D.poly_queue_bitmap.id [mk_cfalse];
+
+    (* handle any unique poly data *)
+    mk_apply' nd_handle_uniq_poly_nm [mk_var "upoly_queue"];
 
     (* iterate over all buffer contents *)
     mk_poly_iter' @@
@@ -1437,10 +1448,10 @@ let trig_dispatcher c =
     (* send (move) the polyqueues *)
     mk_iter_bitmap'
       (* move and delete the poly_queue and ship it out *)
-      (mk_let ["pq"]
+      (mk_let ["pqs"]
          (mk_delete_at poly_queues.id @@ mk_var "ip") @@
       mk_block [
-        D.mk_sendi trig_dispatcher_trig_nm (mk_var "ip") [mk_var "pq"]
+        D.mk_sendi trig_dispatcher_trig_nm (mk_var "ip") [mk_var "pqs"]
       ])
       D.poly_queue_bitmap.id;
   ]
@@ -1455,11 +1466,12 @@ let nd_dispatcher_last_num = create_ds "nd_dispatcher_last_num" @@ mut t_int
 
 (* trigger version of dispatcher. Called by other nodes *)
 let trig_dispatcher_trig c =
-  mk_code_sink' trig_dispatcher_trig_nm ["poly_queue", poly_queue.t] [] @@
+  mk_code_sink' trig_dispatcher_trig_nm ["poly_queue", poly_queue.t; "upoly_queue", upoly_queue.t] [] @@
   mk_block [
-    (* unpack the polyqueue *)
+    (* unpack the polyqueues *)
     mk_poly_unpack (mk_var "poly_queue");
-    mk_apply' trig_dispatcher_nm [mk_var "poly_queue"]
+    mk_poly_unpack (mk_var "upoly_queue");
+    mk_apply' trig_dispatcher_nm [mk_var "poly_queue"; mk_var "upoly_queue"]
   ]
 
 (* trig dispatcher from switch to node. accepts a msg number telling it how to order messages *)
@@ -1480,7 +1492,7 @@ let nd_trig_dispatcher_trig c =
       (* then dispatch right away *)
       (mk_block [
           mk_assign nd_dispatcher_last_num.id @@ mk_var "next_num";
-          mk_apply' trig_dispatcher_nm [mk_var "poly_queue"];
+          mk_apply' trig_dispatcher_nm [mk_var "poly_queue"; mk_var "empty_upoly_queue"];
        ]) @@
       (* else, stash the poly_queue in our buffer *)
       mk_insert nd_dispatcher_buf.id [mk_var "num"; mk_var "poly_queue"]
@@ -1507,7 +1519,8 @@ let sw_event_driver_trig c =
           mk_poly_unpack @@ mk_var "poly_queue";
           (* replace all used send slots with empty polyqueues *)
           mk_iter_bitmap'
-            (mk_insert_at poly_queues.id (mk_var "ip") [mk_var empty_poly_queue.id])
+            (mk_insert_at poly_queues.id (mk_var "ip")
+               [mk_var empty_poly_queue.id; mk_var empty_upoly_queue.id])
             D.poly_queue_bitmap.id;
           (* apply reserve to every new polybuf *)
           D.reserve_poly_queue_code c;
@@ -1565,7 +1578,7 @@ let sw_event_driver_trig c =
                 (* pull out the poly queue *)
                 (mk_let ["pq"] (mk_delete_at poly_queues.id @@ mk_var "ip") @@
                  D.mk_sendi nd_trig_dispatcher_trig_nm (mk_var "ip")
-                    [mk_at' "vector_clock" @@ mk_var "ip"; mk_var "pq"]
+                    [mk_at' "vector_clock" @@ mk_var "ip"; mk_fst @@ mk_var "pq"]
                  ) @@
               D.poly_queue_bitmap.id;
             (* send the new (vid, vector clock). make sure it's after we use vector
@@ -1855,6 +1868,7 @@ let gen_dist ?(gen_deletes=true)
   in
   let prog =
     mk_typedef poly_queue_typedef_id (poly_queue_typedef c) ::
+    mk_typedef upoly_queue_typedef_id (upoly_queue_typedef c) ::
     mk_typedef poly_event_typedef_id (poly_event_typedef c) ::
     declare_global_vars c partmap ast @
     declare_global_funcs c partmap ast @
@@ -1867,6 +1881,7 @@ let gen_dist ?(gen_deletes=true)
     proto_funcs @
     proto_semi_trigs @
     nd_rcv_corr_done c ::
+    nd_handle_uniq_poly c ::
     trig_dispatcher c ::
     [mk_flow @@
       Proto.triggers c @

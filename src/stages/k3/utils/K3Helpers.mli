@@ -157,6 +157,7 @@ val mk_apply' : id_t -> expr_t list -> expr_t
 val mk_block : expr_t list -> expr_t
 val mk_iter : expr_t -> expr_t -> expr_t
 val mk_if : expr_t -> expr_t -> expr_t -> expr_t
+val mk_if_eq : expr_t -> expr_t -> expr_t -> expr_t -> expr_t
 val mk_case_sn : expr_t -> id_t -> expr_t -> expr_t -> expr_t
 val mk_case_ns : expr_t -> id_t -> expr_t -> expr_t -> expr_t
 val mk_bind : expr_t -> id_t -> expr_t -> expr_t
@@ -294,27 +295,27 @@ val mk_let_block : id_t list -> expr_t -> expr_t list -> expr_t
 (* polyqueue functions *)
 (* lambda returns (idx,off) *)
 val mk_poly_iter: expr_t -> expr_t -> expr_t
-val mk_poly_iter': expr_t -> expr_t
+val mk_poly_iter': ?unique:bool -> expr_t -> expr_t
 val mk_poly_fold: expr_t -> expr_t -> expr_t -> expr_t
 val mk_poly_iter_tag: string -> expr_t -> expr_t -> expr_t -> expr_t -> expr_t
-val mk_poly_iter_tag': string -> expr_t -> expr_t
+val mk_poly_iter_tag':?unique:bool -> string -> expr_t -> expr_t
 val mk_poly_fold_tag: string -> expr_t -> expr_t -> expr_t -> expr_t -> expr_t -> expr_t
-val mk_poly_fold_tag': string -> expr_t -> expr_t -> expr_t
+val mk_poly_fold_tag': ?unique:bool -> string -> expr_t -> expr_t -> expr_t
 val mk_poly_at: string -> expr_t -> expr_t -> expr_t -> expr_t
-val mk_poly_at': string -> expr_t
+val mk_poly_at': ?unique:bool -> string -> expr_t
 val mk_poly_at_with: string -> expr_t -> expr_t -> expr_t -> expr_t -> expr_t -> expr_t
-val mk_poly_at_with': string -> expr_t -> expr_t
+val mk_poly_at_with': ?unique:bool -> string -> expr_t -> expr_t
 val mk_poly_insert: ?path:int list -> string -> id_t -> expr_t list -> expr_t
 val mk_poly_insert_block: ?path:int list -> string -> id_t -> expr_t list -> expr_t
 val mk_poly_tag_at: expr_t -> expr_t -> expr_t
 val mk_poly_skip: string -> expr_t -> expr_t -> expr_t -> expr_t
-val mk_poly_skip': string -> expr_t
-val mk_poly_skip_block: string -> expr_t list -> expr_t
+val mk_poly_skip': ?unique:bool -> string -> expr_t
+val mk_poly_skip_block: ?unique:bool -> string -> expr_t list -> expr_t
 val mk_poly_skip_all: string -> expr_t -> expr_t -> expr_t -> expr_t
-val mk_poly_skip_all': string -> expr_t
-val mk_poly_skip_all_block: string -> expr_t list -> expr_t
+val mk_poly_skip_all': ?unique:bool -> string -> expr_t
+val mk_poly_skip_all_block: ?unique:bool -> string -> expr_t list -> expr_t
 val mk_poly_unpack : expr_t -> expr_t
-val mk_poly_reserve : expr_t -> expr_t -> expr_t -> expr_t -> expr_t
+val mk_poly_reserve : ?path:int list -> string -> expr_t -> expr_t -> expr_t -> expr_t
 
 (* macro similar to fst *)
 val mk_fst: expr_t -> expr_t
@@ -467,7 +468,7 @@ val mk_agg_bitmap : ?all:bool -> ?idx:string -> (id_t * type_t) list -> expr_t -
 val mk_agg_bitmap' : ?all:bool -> ?idx:string -> (id_t * type_t) list -> expr_t -> expr_t -> id_t -> expr_t
 
 val mk_check_tag : int -> expr_t -> expr_t -> expr_t -> expr_t -> expr_t
-val mk_check_tag' : int -> expr_t -> expr_t
+val mk_check_tag' : ?unique:bool -> int -> expr_t -> expr_t
 val mk_if_tag : int -> expr_t -> expr_t -> expr_t -> expr_t -> expr_t -> expr_t
-val mk_if_tag' : int -> expr_t -> expr_t -> expr_t
-val mk_if_poly_end_ny : expr_t -> expr_t -> expr_t
+val mk_if_tag' : ?unique:bool -> int -> expr_t -> expr_t -> expr_t
+val mk_if_poly_end_ny : ?unique:bool -> expr_t -> expr_t -> expr_t

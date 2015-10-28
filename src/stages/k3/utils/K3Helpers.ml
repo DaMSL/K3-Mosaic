@@ -261,6 +261,8 @@ let mk_iter iter_fun collection =
 let mk_if pred true_exp false_exp =
     mk_stree IfThenElse [pred; true_exp; false_exp]
 
+let mk_if_eq l r yes no = mk_if (mk_eq l r) yes no
+
 let mk_case_sn pred id some none =
     mk_stree (CaseOf id) [pred; some; none]
 
@@ -438,23 +440,32 @@ let mk_let_block vars v es = mk_let vars v @@ mk_block es
 (* lambda for these functions takes tag, tuple_idx, tuple_offset *)
 (* return the same idx,offset to increase 1, or another to skip *)
 let mk_poly_iter lam col = mk_stree PolyIter [lam; col]
-let mk_poly_iter' lam = mk_poly_iter lam (mk_var "poly_queue")
+let mk_poly_iter' ?(unique=false) lam = 
+  let pq = if unique then "upoly_queue" else "poly_queue" in
+  mk_poly_iter lam (mk_var pq)
 let mk_poly_fold lam zero col = mk_stree PolyFold [lam; zero; col]
 
 (* lambda for these functions takes tuple_idx, tuple_offset, elem *)
 let mk_poly_iter_tag tag idx offset lam col = mk_stree (PolyIterTag tag) [idx; offset; lam; col]
-let mk_poly_iter_tag' tag lam = mk_poly_iter_tag tag (mk_var "idx") (mk_var "offset") lam (mk_var "poly_queue")
+let mk_poly_iter_tag' ?(unique=false) tag lam =
+  let idx, offset, pq = if unique then "uidx", "uoffset", "upoly_queue" else "idx", "offset", "poly_queue" in
+  mk_poly_iter_tag tag (mk_var idx) (mk_var offset) lam (mk_var pq) 
 
 let mk_poly_fold_tag tag idx offset lam zero col = mk_stree (PolyFoldTag tag) [idx; offset; lam; zero; col]
-let mk_poly_fold_tag' tag lam zero =
-  mk_poly_fold_tag tag (mk_var "idx") (mk_var "offset") lam zero (mk_var "poly_queue")
+let mk_poly_fold_tag' ?(unique=false) tag lam zero =
+  let idx, offset, pq = if unique then "uidx", "uoffset", "upoly_queue" else "idx", "offset", "poly_queue" in
+  mk_poly_fold_tag tag (mk_var idx) (mk_var offset) lam zero (mk_var pq)
 
 let mk_poly_at tag col idx offset = mk_stree (PolyAt tag) [col; idx; offset]
-let mk_poly_at' tag = mk_stree (PolyAt tag) [mk_var "poly_queue"; mk_var "idx"; mk_var "offset"]
+let mk_poly_at' ?(unique=false) tag =
+  let idx, offset, pq = if unique then "uidx", "uoffset", "upoly_queue" else "idx", "offset", "poly_queue" in
+  mk_stree (PolyAt tag) [mk_var pq; mk_var idx; mk_var offset]
+
 let mk_poly_at_with tag col idx offset lam_none lam = mk_stree (PolyAtWith tag) [col; idx; offset; lam_none; lam]
-let mk_poly_at_with' tag lam =
+let mk_poly_at_with' ?(unique=false) tag lam =
+  let idx, offset, pq = if unique then "uidx", "uoffset", "upoly_queue" else "idx", "offset", "poly_queue" in
   let lam_none = mk_lambda' unit_arg @@ mk_error "oops" in
-  mk_poly_at_with tag (mk_var "poly_queue") (mk_var "idx") (mk_var "offset") lam_none lam
+  mk_poly_at_with tag (mk_var pq) (mk_var idx) (mk_var offset) lam_none lam
 
 let mk_poly_insert ?(path=[]) tag col elem = mk_stree (PolyInsert tag) [mk_id_path col path; mk_tuple elem]
 let mk_poly_insert_block ?path tag col elem = mk_block [ mk_poly_insert ?path tag col elem; mk_var col]
@@ -463,22 +474,29 @@ let mk_poly_tag_at col idx = mk_stree PolyTagAt [col; idx]
 
 (* skip to the next entry. Returns a tuple of idx, off *)
 let mk_poly_skip tag col idx off = mk_stree (PolySkip(false, tag)) [col; idx; off]
-
-let mk_poly_skip' tag = mk_poly_skip tag (mk_var "poly_queue") (mk_var "idx") (mk_var "offset")
+let mk_poly_skip' ?(unique=false) tag =
+  let idx, offset, pq = if unique then "uidx", "uoffset", "upoly_queue" else "idx", "offset", "poly_queue" in
+  mk_poly_skip tag (mk_var pq) (mk_var idx) (mk_var offset)
 
 (* do the poly skip and let bind the new values *)
-let mk_poly_skip_block tag es = mk_let ["idx"; "offset"] (mk_poly_skip' tag) @@ mk_block es
+let mk_poly_skip_block ?(unique=false) tag es =
+  let idx, offset = if unique then "uidx", "uoffset" else "idx", "offset" in
+  mk_let [idx; offset] (mk_poly_skip' ~unique tag) @@ mk_block es
 
 (* skip all the tags of this kind *)
 let mk_poly_skip_all tag col idx off = mk_stree (PolySkip(true, tag)) [col; idx; off]
+let mk_poly_skip_all' ?(unique=false) tag =
+  let idx, offset, pq = if unique then "uidx", "uoffset", "upoly_queue" else "idx", "offset", "poly_queue" in
+  mk_poly_skip_all tag (mk_var pq) (mk_var idx) (mk_var offset)
 
-let mk_poly_skip_all' tag = mk_poly_skip_all tag (mk_var "poly_queue") (mk_var "idx") (mk_var "offset")
-
-let mk_poly_skip_all_block tag es = mk_let ["idx"; "offset"] (mk_poly_skip_all' tag) @@ mk_block es
+let mk_poly_skip_all_block ?(unique=false) tag es =
+  let idx, offset = if unique then "uidx", "uoffset" else "idx", "offset" in
+  mk_let [idx; offset] (mk_poly_skip_all' ~unique tag) @@ mk_block es
 
 let mk_poly_unpack col = mk_stree PolyUnpack [col]
 
-let mk_poly_reserve col num sz_fixed sz_var = mk_stree PolyReserve [col; num; sz_fixed; sz_var]
+let mk_poly_reserve ?(path=[]) col num sz_fixed sz_var =
+  mk_stree PolyReserve [mk_id_path col path; num; sz_fixed; sz_var]
 
 (* ----- Converting between ocaml lists and k3 containers ----- *)
 
@@ -978,12 +996,15 @@ let mk_check_tag tag col idx offset e =
 let mk_if_tag tag col idx offset e1 e2 =
   mk_if (mk_eq (mk_poly_tag_at col idx) @@ mk_cint tag) e1 e2
 
-let mk_check_tag' tag e =
-  mk_check_tag tag (mk_var "poly_queue") (mk_var "idx") (mk_var "offset") e
+let mk_check_tag' ?(unique=false) tag e =
+  let idx, offset, pq = if unique then "uidx", "uoffset", "upoly_queue" else "idx", "offset", "poly_queue" in
+  mk_check_tag tag (mk_var pq) (mk_var idx) (mk_var offset) e
 
-let mk_if_tag' tag e e2 =
-  mk_if_tag tag (mk_var "poly_queue") (mk_var "idx") (mk_var "offset") e e2
+let mk_if_tag' ?(unique=false) tag e e2 =
+  let idx, offset, pq = if unique then "uidx", "uoffset", "upoly_queue" else "idx", "offset", "poly_queue" in
+  mk_if_tag tag (mk_var pq) (mk_var idx) (mk_var offset) e e2
 
 (* check if we've reached the end of the poly buffer *)
-let mk_if_poly_end_ny smaller larger =
-  mk_if (mk_lt (mk_var "idx") @@ mk_size @@ mk_var "poly_queue") smaller larger
+let mk_if_poly_end_ny ?(unique=false) smaller larger =
+  let idx, pq = if unique then "uidx", "upoly_queue" else "idx", "poly_queue" in
+  mk_if (mk_lt (mk_var idx) @@ mk_size @@ mk_var pq) smaller larger
