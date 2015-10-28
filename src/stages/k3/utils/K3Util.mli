@@ -82,7 +82,7 @@ val decompose_neg : expr_t -> expr_t
 val decompose_neq : expr_t -> expr_t * expr_t
 val decompose_peek : expr_t -> expr_t
 val decompose_peek_with_vid : expr_t -> expr_t * expr_t * expr_t
-val decompose_poly_iter : expr_t -> expr_t * expr_t
+val decompose_poly_iter : expr_t -> expr_t * expr_t * expr_t * expr_t
 val decompose_poly_fold : expr_t -> expr_t * expr_t * expr_t
 val decompose_poly_iter_tag : expr_t -> string * expr_t * expr_t * expr_t * expr_t
 val decompose_poly_fold_tag : expr_t -> string * expr_t * expr_t * expr_t * expr_t * expr_t

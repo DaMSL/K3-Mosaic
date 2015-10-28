@@ -165,7 +165,7 @@ let decompose_peek e = match tag_of_expr e, sub_tree e with
 let decompose_peek_with_vid e = match tag_of_expr e, sub_tree e with
   PeekWithVid, [e0; e1; e2] -> e0, e1, e2 | _ -> failwith "not a PeekWithVid"
 let decompose_poly_iter e = match tag_of_expr e, sub_tree e with
-  PolyIter, [e0; e1] -> e0, e1 | _ -> failwith "not a PolyIter"
+  PolyIter, [e0; e1; e2; e3] -> e0, e1, e2, e3 | _ -> failwith "not a PolyIter"
 let decompose_poly_fold e = match tag_of_expr e, sub_tree e with
   PolyFold, [e0; e1; e2] -> e0, e1, e2 | _ -> failwith "not a PolyFold"
 let decompose_poly_iter_tag e = match tag_of_expr e, sub_tree e with

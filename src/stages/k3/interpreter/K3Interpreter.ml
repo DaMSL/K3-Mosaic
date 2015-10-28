@@ -430,7 +430,7 @@ and eval_expr_inner ?(fun_typ=FLambda) (address:address) sched_st cenv texpr =
         v_fold error (fun env x -> fst @@ f' env [x]) nenv c, temp VUnit
 
      (* really traverse ie doesn't increment automatically *)
-    | PolyIter, [f; col] ->
+    | PolyIter, [VInt i; offset; f; col] ->
         let f = eval_fn f in
         let idx, env = v_traverse_poly error
           (fun idx (itag, _, _) env ->
@@ -438,13 +438,13 @@ and eval_expr_inner ?(fun_typ=FLambda) (address:address) sched_st cenv texpr =
              match value_of_eval v with
              | VTuple[VInt i;_] -> i, env
              | v -> error "polyiter" @@ "bad function result "^sov v
-          ) 0 nenv col
-        in env, temp @@ VTuple[VInt idx; VInt 0]
+          ) i nenv col
+        in env, temp @@ VTuple[VInt idx; offset]
 
     | PolyIterTag tag, [idx; offset; f; col] ->
         let f = eval_fn f in
         v_fold_poly_tag error idx tag
-          (fun idx (_, _, v) env -> fst @@ f env [VInt idx; VInt 0; v]) nenv col, tvunit
+          (fun idx (_, _, v) env -> fst @@ f env [VInt idx; offset; v]) nenv col, tvunit
 
     | PolyUnpack, _  -> nenv, tvunit
     | PolyReserve, _ -> nenv, tvunit

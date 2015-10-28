@@ -120,7 +120,7 @@ let check_tag_arity tag children =
 
     | Send -> 3
 
-    | PolyIter -> 2
+    | PolyIter -> 4
     | PolyIterTag _ -> 4
     | PolyFold -> 3
     | PolyFoldTag _ -> 5
@@ -906,7 +906,9 @@ let rec deduce_expr_type ?(override=true) trig_env env tenv utexpr : expr_t =
           end
 
       | PolyIter ->
-          let tfun, tcol' = bind 0, bind 1 in
+          let tidx, toffset, tfun, tcol' = bind 0, bind 1, bind 2, bind 3 in
+          if not (tidx === t_int) then t_erroru @@ TMismatch(tidx, t_int, "index") else
+          if not (toffset === t_int) then t_erroru @@ TMismatch(toffset, t_int, "offset") else
           let targ, tret =
             try unwrap_tfun tfun with Failure _ -> t_erroru (not_function tfun) in
           let tcol, _ =

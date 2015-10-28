@@ -1340,8 +1340,8 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
     wrap_indent @@ lazy_paren (expr_pair (target, addr)) <| lps "<- " <|
       lps_list CutHint (lazy_expr c) args
 
-  | PolyIter -> let fn, col = U.decompose_poly_iter expr in
-    apply_method c ~name:"traverse" ~col ~args:[fn] ~arg_info:[def_a]
+  | PolyIter -> let idx, offset, fn, col = U.decompose_poly_iter expr in
+    apply_method c ~name:"traverse" ~col ~args:[idx; offset; fn] ~arg_info:[def_a]
   | PolyFold -> let fn, acc, col = U.decompose_poly_fold expr in
     apply_method c ~name:"foldl" ~col ~args:[fn; acc] ~arg_info:[def_a; def_a]
   | PolyIterTag tag -> let _, idx, offset, fn, col = U.decompose_poly_iter_tag expr in

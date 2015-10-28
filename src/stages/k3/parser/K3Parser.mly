@@ -731,7 +731,7 @@ transformers :
     | EQUIJOIN LPAREN anno_expr COMMA anno_expr COMMA anno_expr COMMA anno_expr COMMA anno_expr COMMA anno_expr RPAREN
       { mkexpr Equijoin [$3; $5; $7; $9; $11; $13] }
 
-    | POLY_ITER LPAREN anno_expr COMMA anno_expr RPAREN { mkexpr PolyIter [$3; $5] }
+    | POLY_ITER LPAREN anno_expr COMMA anno_expr COMMA anno_expr COMMA anno_expr RPAREN { mkexpr PolyIter [$3; $5; $7; $9] }
     | POLY_FOLD LPAREN anno_expr COMMA anno_expr COMMA anno_expr RPAREN { mkexpr PolyFold [$3; $5; $7] }
     | POLY_ITER_TAG LPAREN STRING COMMA anno_expr COMMA anno_expr COMMA anno_expr COMMA anno_expr RPAREN { mkexpr (PolyIterTag $3) [$5; $7; $9; $11] }
     | POLY_FOLD_TAG LPAREN STRING COMMA anno_expr COMMA anno_expr COMMA anno_expr COMMA anno_expr COMMA anno_expr RPAREN { mkexpr (PolyFoldTag $3) [$5; $7; $9; $11; $13] }

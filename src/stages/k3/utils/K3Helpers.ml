@@ -439,10 +439,10 @@ let mk_let_block vars v es = mk_let vars v @@ mk_block es
 
 (* lambda for these functions takes tag, tuple_idx, tuple_offset *)
 (* return the same idx,offset to increase 1, or another to skip *)
-let mk_poly_iter lam col = mk_stree PolyIter [lam; col]
+let mk_poly_iter idx offset lam col = mk_stree PolyIter [idx; offset; lam; col]
 let mk_poly_iter' ?(unique=false) lam = 
-  let pq = if unique then "upoly_queue" else "poly_queue" in
-  mk_poly_iter lam (mk_var pq)
+  let idx, offset, pq = if unique then "uidx", "uoffset", "upoly_queue" else "idx", "offset", "poly_queue" in
+  mk_poly_iter (mk_var idx) (mk_var offset) lam (mk_var pq)
 let mk_poly_fold lam zero col = mk_stree PolyFold [lam; zero; col]
 
 (* lambda for these functions takes tuple_idx, tuple_offset, elem *)

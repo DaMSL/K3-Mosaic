@@ -429,7 +429,7 @@ let rec lazy_expr c expr =
     wrap_indent (lps "send" <| lazy_paren (expr_pair (e1, e2) <| lps ", " <|
       lps_list CutHint (tuple_no_paren c) es))
   | PolyIter -> let p = U.decompose_poly_iter expr in
-    lps "poly_iter" <| lazy_paren (expr_pair p)
+    lps "poly_iter" <| lazy_paren (expr_quad p)
   | PolyFold -> let p = U.decompose_poly_fold expr in
     lps "poly_fold" <| lazy_paren (expr_triple p)
   | PolyIterTag tag -> let _, e0, e1, e2, e3 = U.decompose_poly_iter_tag expr in

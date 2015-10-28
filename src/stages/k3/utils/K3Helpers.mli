@@ -294,7 +294,7 @@ val mk_let_block : id_t list -> expr_t -> expr_t list -> expr_t
 
 (* polyqueue functions *)
 (* lambda returns (idx,off) *)
-val mk_poly_iter: expr_t -> expr_t -> expr_t
+val mk_poly_iter: expr_t -> expr_t -> expr_t -> expr_t -> expr_t
 val mk_poly_iter': ?unique:bool -> expr_t -> expr_t
 val mk_poly_fold: expr_t -> expr_t -> expr_t -> expr_t
 val mk_poly_iter_tag: string -> expr_t -> expr_t -> expr_t -> expr_t -> expr_t
