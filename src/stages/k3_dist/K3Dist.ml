@@ -73,7 +73,14 @@ type map_type =
   | MapVMap
   | MapMultiVMap
 
-type tag_type = Trig | DsTrig | Ds | UniqDs | Event
+type tag_type =
+    Trig      (* a top-level trigger *)
+  | SubTrig   (* a subtrigger handled by trig_sub_handler *)
+  | DsTrig    (* a trigger containing an in-band data structure *)
+  | DsSubTrig (* a sub-trigger with in-band data structure *)
+  | Ds        (* a data structure *)
+  | UniqDs    (* a unique data structure (uses unique polybuf) *)
+  | Event     (* incoming event *)
 
 type config = {
   p : P.prog_data_t;
@@ -679,21 +686,22 @@ let trig_dispatcher_trig_nm = "trig_dispatcher_trig"
 (* dispatcher for sw -> node with corrective mode *)
 let nd_trig_dispatcher_trig_nm = "nd_trig_dispatcher_trig"
 
-let send_fetch_name_of_t trig_nm = "sw_"^trig_nm^"_send_fetch"
-let rcv_fetch_name_of_t trig_nm = "nd_"^trig_nm^"_rcv_fetch"
-let rcv_put_name_of_t trig_nm = "nd_"^trig_nm^"_rcv_put"
-let send_push_name_of_t c trig_nm stmt_id map_id =
-  "nd_"^trig_nm^"_send_push_s"^soi stmt_id^"_m_"^P.map_name_of c.p map_id
-let rcv_push_name_of_t c trig_nm stmt_id map_id =
-  "nd_"^trig_nm^"_rcv_push_s"^soi stmt_id^"_m_"^P.map_name_of c.p map_id
+(* handler for many other triggers *)
+let trig_sub_handler_name_of_t t = "nd_trig_sub_handler_"^t
+let send_fetch_name_of_t t = "sw_"^t^"_send_fetch"
+let rcv_fetch_name_of_t t = "nd_"^t^"_rcv_fetch"
+let rcv_put_name_of_t t = "nd_"^t^"_rcv_put"
+let send_push_name_of_t c t stmt_id map_id =
+  "nd_"^t^"_send_push_s"^soi stmt_id^"_m_"^P.map_name_of c.p map_id
+let rcv_push_name_of_t c t stmt_id map_id =
+  "nd_"^t^"_rcv_push_s"^soi stmt_id^"_m_"^P.map_name_of c.p map_id
 let send_corrective_name_of_t c map_id =
   "nd_"^P.map_name_of c.p map_id^"_send_correctives"
-let do_complete_name_of_t trig_nm stmt_id =
-  "nd_"^trig_nm^"_do_complete_s"^string_of_int stmt_id
-let rcv_corrective_name_of_t c trig_nm stmt_id map_id =
-  trig_nm^"_rcv_corrective_s"^string_of_int stmt_id^"_m_"^P.map_name_of c.p map_id
-let do_corrective_name_of_t c trig_nm stmt_id map_id =
-  trig_nm^"_do_corrective_s"^string_of_int stmt_id^"_m_"^P.map_name_of c.p map_id
+let do_complete_name_of_t t stmt_id = "nd_"^t^"_do_complete_s"^soi stmt_id
+let rcv_corrective_name_of_t c t stmt_id map_id =
+  t^"_rcv_corrective_s"^soi stmt_id^"_m_"^P.map_name_of c.p map_id
+let do_corrective_name_of_t c t stmt_id map_id =
+  t^"_do_corrective_s"^soi stmt_id^"_m_"^P.map_name_of c.p map_id
 
 let sw_ack_rcv_trig_nm = "sw_ack_rcv"
 
@@ -701,19 +709,41 @@ let nd_rcv_corr_done_nm = "nd_rcv_corr_done"
 
 (*** trigger args. Needed here for polyqueues ***)
 
+(* the trig header marks the args *)
+let trig_sub_handler_args c t = ["save_args", t_bool] @ args_of_t_with_v c t
+
 (* rcv_put: how the stmt_cnt list gets sent in rcv_put *)
 let stmt_cnt_list_ship =
   let e = ["stmt_id", t_stmt_id; "count", t_int] in
   create_ds "stmt_cnt_list" ~e @@ wrap_tbag' @@ snd_many e
 
 (* rcv_put includes stmt_cnt_list_ship *)
-let nd_rcv_put_args c t = ("sender_ip", t_int)::args_of_t_with_v c t
+let nd_rcv_put_args c t = ["sender_ip", t_int]
 
 (* rcv_fetch: data structure that is sent *)
 let stmt_map_ids =
   (* this is a bag since no aggregation is done *)
   let e = ["stmt_id", t_stmt_id; "map_id", t_map_id] in
   create_ds ~e "stmt_map_ids" @@ wrap_tbag' @@ snd_many e
+
+let nd_rcv_fetch_args c t = []
+
+let nd_do_complete_trig_args c t = ["sender_ip", t_int; "ack", t_bool]
+
+let nd_rcv_push_args c t = ["has_data", t_bool]
+
+(* for do_corrective:
+ * original values commonly used to send back to original do_complete *)
+let orig_vals =
+  ["orig_addr", t_int; "orig_stmt_id", t_stmt_id; "orig_vid", t_vid; "hop", t_int]
+
+let nd_rcv_corr_args = orig_vals @ ["vid", t_vid]
+
+let nd_rcv_corr_done_args = ["vid", t_vid; "stmt_id", t_stmt_id; "hop", t_int; "count", t_int]
+
+(* for GC *)
+let sw_ack_rcv_trig_args = ["addr", t_int; "vid", t_vid]
+
 
 let get_global_poly_tags c =
   List.map (fun (i, (s,_,i_ts)) -> i, s, wrap_ttuple @@ snd_many i_ts) c.poly_tags
@@ -757,6 +787,12 @@ let poly_queue_bitmap =
     mk_map (mk_lambda' unknown_arg mk_cfalse) @@ mk_var my_peers.id in
   create_ds "poly_queue_bitmap" ~init @@ wrap_tvector t_bool
 
+(* we use this to make sure a trig header gets sent at least once per sub-trigger handling *)
+let send_trig_header_bitmap =
+  let init =
+    mk_map (mk_lambda' unknown_arg mk_cfalse) @@ mk_var my_peers.id in
+  create_ds "send_trig_header_bitmap" ~init @@ wrap_tvector t_bool
+
 (* u is for unique *)
 let p_idx  = ["idx", t_int]
 let up_idx = ["uidx", t_int]
@@ -777,24 +813,6 @@ let upoly_args_partial = up_idx @ up_off
 let sw_event_queue =
   let e = ["poly_queue", poly_queue.t] in
   create_ds "sw_event_queue" (wrap_tlist' @@ snd_many e) ~e
-
-let nd_rcv_fetch_args c t = args_of_t_with_v c t
-
-let nd_do_complete_trig_args c t =
-  ["sender_ip", t_int; "ack", t_bool] @ args_of_t_with_v c t
-
-let nd_rcv_push_args c t =
-  ("has_data", t_bool)::args_of_t_with_v c t
-
-(* original values commonly used to send back to original do_complete *)
-let orig_vals = ["orig_addr", t_int; "orig_stmt_id", t_stmt_id; "orig_vid", t_vid; "hop", t_int]
-
-let nd_rcv_corr_args = orig_vals @ ["vid", t_vid]
-
-let nd_rcv_corr_done_args = ["vid", t_vid; "stmt_id", t_stmt_id; "hop", t_int; "count", t_int]
-
-(* for GC *)
-let sw_ack_rcv_trig_args = ["addr", t_int; "vid", t_vid]
 
 (*** Polyqueues ***)
 
@@ -863,17 +881,19 @@ let calc_poly_tags c =
     (List.flatten @@ for_all_trigs c.p ~sys_init:true @@ fun t ->
       let s_rhs = P.s_and_over_stmts_in_t c.p P.rhs_maps_of_stmt t in
       let s_rhs_corr = List.filter (fun (s, map) -> List.mem map c.corr_maps) s_rhs in
-      (if null s_rhs then [] else
-        [rcv_put_name_of_t t, DsTrig, nd_rcv_put_args c t;
-        rcv_fetch_name_of_t t, DsTrig, nd_rcv_fetch_args c t]) @
+      (if null s_rhs then [] else [
+        (* carries all the trig arguments + vid *)
+        trig_sub_handler_name_of_t t, DsTrig, trig_sub_handler_args c t;
+        rcv_put_name_of_t t, DsSubTrig, nd_rcv_put_args c t;
+        rcv_fetch_name_of_t t, DsSubTrig, nd_rcv_fetch_args c t]) @
       (* args for do completes without rhs maps *)
       (List.map (fun s ->
-          do_complete_name_of_t t s^"_trig", Trig, nd_do_complete_trig_args c t) @@
+          do_complete_name_of_t t s^"_trig", SubTrig, nd_do_complete_trig_args c t) @@
         P.stmts_without_rhs_maps_in_t c.p t) @
       (* the types for nd_rcv_push. includes a separate, optional map component *)
       (* this isn't a dsTrig anymore since pushes are aggregated at the dispatcher *)
       (List.map (fun (s, m) ->
-          rcv_push_name_of_t c t s m, Trig, nd_rcv_push_args c t)
+          rcv_push_name_of_t c t s m, SubTrig, nd_rcv_push_args c t)
         s_rhs) @
       (* the types for rcv_push's maps *)
       (List.map (fun (s, m) ->
@@ -905,6 +925,19 @@ let buffer_for_send ?(unique=false) ?(wr_bitmap=true) t addr args =
     [mk_update_at_with poly_queues.id (mk_var addr) @@
       mk_lambda' ["pqs", wrap_ttuple @@ snd_many poly_queues.e] @@
         mk_poly_insert_block t ~path "pqs" args
+    ]
+
+(* code to check if we need to write a trig header, and if so, to buffer one *)
+let buffer_trig_header_if_needed t addr args ~save_args =
+  let t = trig_sub_handler_name_of_t t in
+  let save_val = if save_args then mk_ctrue else mk_cfalse in
+  mk_if (mk_at' send_trig_header_bitmap.id @@ mk_var addr)
+    mk_cunit @@
+    mk_block [
+      (* update the bitmap *)
+      mk_insert_at send_trig_header_bitmap.id (mk_var addr) [mk_ctrue];
+      (* buffer trig args *)
+      buffer_for_send t addr (save_val::args)
     ]
 
 (* insert tuples into polyqueues *)
@@ -1063,6 +1096,7 @@ let global_vars c dict =
       empty_event_queue;
       poly_queues;
       poly_queue_bitmap;
+      send_trig_header_bitmap;
       nd_rcv_fetch_buffer;
       nd_stmt_cntrs_per_map;
       nd_lmap_of_stmt_id c;

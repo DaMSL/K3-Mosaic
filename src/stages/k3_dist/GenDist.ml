@@ -326,39 +326,6 @@ let send_fetch_bitmap =
 (* sending fetches is done from functions *)
 (* each function takes a vid to plant in the arguments, which are in the trig buffers *)
 let sw_send_fetch_fn c s_rhs_lhs s_rhs t =
-  let send_completes_for_stmts_with_no_fetch =
-    let s_no_rhs = P.stmts_without_rhs_maps_in_t c.p t in
-    if null s_no_rhs then []
-    else
-      let s_ls =
-        List.map
-          (fun stmt_id ->
-            stmt_id, P.lhs_map_of_stmt c.p stmt_id,
-            do_complete_name_of_t t stmt_id^"_trig")
-          s_no_rhs in
-      let count = List.length s_ls in
-      List.flatten @@ List.map
-        (fun (stmt_id, lhs_map_id, do_complete_t) ->
-          let key, pat_idx = P.key_pat_from_bound c.p c.route_indices stmt_id lhs_map_id in
-          [
-            R.route_lookup c lhs_map_id
-              (mk_cint lhs_map_id::key)
-              (mk_cint pat_idx) @@
-              (* the first do_complete should ack the switch *)
-              mk_ignore @@ mk_agg_bitmap'
-                ["ack", t_bool]
-                  (mk_block [
-                    buffer_for_send do_complete_t "ip" @@
-                      [mk_var D.me_int.id; mk_var "ack"] @ args_of_t_as_vars_with_v c t;
-                    mk_cfalse
-                  ])
-                mk_ctrue
-                K3Route.route_bitmap.id
-          ])
-        s_ls @
-        (* stmts without puts need to reply *)
-        [GC.sw_update_send ~n:(mk_cint count) ~vid_nm:"vid"]
-  in
   let send_puts =
     if null s_rhs_lhs then [] else
     (* send puts
@@ -433,9 +400,11 @@ let sw_send_fetch_fn c s_rhs_lhs s_rhs t =
               K3S.shuffle_bitmap.id
           ])
           s_rhs_lhs @
-      (* iterate over the result bitmap and buffer. Also count the number of sent msgs for this vid *)
+      (* iterate over the result bitmap and buffer.
+         Also count the number of sent msgs for this vid *)
       [
         let rcv_put_nm = rcv_put_name_of_t t in
+        let args = args_of_t_as_vars_with_v c t in
         mk_let ["add_count"]
          (mk_agg_bitmap'
            ["count", t_int]
@@ -443,9 +412,10 @@ let sw_send_fetch_fn c s_rhs_lhs s_rhs t =
              mk_at_with' send_put_ip_map_id (mk_var "ip") @@
               mk_lambda' send_put_ip_map_e @@
                 mk_block [
-                  (* send rcv_put *)
-                  buffer_for_send rcv_put_nm "ip" @@
-                    [mk_var D.me_int.id] @ args_of_t_as_vars_with_v c t;
+                  (* buffer the trig args if needed *)
+                  buffer_trig_header_if_needed t "ip" args ~save_args:true;
+                  (* send rcv_put header *)
+                  buffer_for_send rcv_put_nm "ip" [mk_var D.me_int.id];
                   (* now send stmt_cnt_list *)
                   (mk_iter_bitmap' ~idx:D.stmt_ctr.id
                     (* wr_bitmap: no need to, since we did so above *)
@@ -460,7 +430,9 @@ let sw_send_fetch_fn c s_rhs_lhs s_rhs t =
        GC.sw_update_send ~vid_nm:"vid" ~n:(mk_var "add_count")]
   in
   (* to do this in batched form, we iterate over the send_fetch bitmap and immediately buffer
-     the results *)
+     the results. since we accumulate over many possible statements and don't do any
+     inermediate materialization, we can't automatically
+     know when to send the send_fetch header, and that comes from the bitmap *)
   let send_fetches_of_rhs_maps  =
     let args = args_of_t_as_vars_with_v c t in
     let target_t = rcv_fetch_name_of_t t in
@@ -481,26 +453,69 @@ let sw_send_fetch_fn c s_rhs_lhs s_rhs t =
                   (mk_block [
                     (* mark the send_fetch_bitmap *)
                     mk_insert_at send_fetch_bitmap.id (mk_var "ip") [mk_ctrue];
-                    (* buffer the trig args *)
-                    buffer_for_send target_t "ip" args
+                    (* buffer the trig args if needed *)
+                    buffer_trig_header_if_needed t "ip" args ~save_args:true;
+                    buffer_for_send target_t "ip" [mk_cunit]
                   ])
                   mk_cunit;
-              (* buffer the stmt-map *)
+                (* buffer the stmt-map *)
                 buffer_for_send ~wr_bitmap:false stmt_map_ids.id "ip"
                   [mk_cint stmt_id; mk_cint rhs_map_id]
             ])
             R.route_bitmap.id)
         s_rhs)
   in
+
+  (* must be last in the trigger handler *)
+  let send_completes_for_stmts_with_no_fetch =
+    let s_no_rhs = P.stmts_without_rhs_maps_in_t c.p t in
+    if null s_no_rhs then []
+    else
+      let args = args_of_t_as_vars_with_v c t in
+      let s_ls =
+        List.map
+          (fun stmt_id ->
+            stmt_id, P.lhs_map_of_stmt c.p stmt_id,
+            do_complete_name_of_t t stmt_id^"_trig")
+          s_no_rhs in
+      let count = List.length s_ls in
+      List.flatten @@ List.map
+        (fun (stmt_id, lhs_map_id, do_complete_t) ->
+          let key, pat_idx = P.key_pat_from_bound c.p c.route_indices stmt_id lhs_map_id in
+          [
+            R.route_lookup c lhs_map_id
+              (mk_cint lhs_map_id::key)
+              (mk_cint pat_idx) @@
+              (* the first do_complete should ack the switch *)
+              mk_ignore @@ mk_agg_bitmap'
+                ["ack", t_bool]
+                  (mk_block [
+                    (* buffer the trig args if needed. do_complete_ts don't save the args,
+                       so if we add the header here, we must make sure we're the only msg to
+                       this node by being last in the send fetch
+                    *)
+                    buffer_trig_header_if_needed t "ip" args ~save_args:false;
+                    buffer_for_send do_complete_t "ip" [mk_var D.me_int.id; mk_var "ack"];
+                    mk_cfalse
+                  ])
+                mk_ctrue
+                K3Route.route_bitmap.id
+          ])
+        s_ls @
+        (* stmts without puts need to reply *)
+        [GC.sw_update_send ~n:(mk_cint count) ~vid_nm:"vid"]
+  in
   (* Actual SendFetch function *)
   (* We use functions rather than triggers to have better control over
   * latency *)
   mk_global_fn
-    (send_fetch_name_of_t t) (args_of_t_with_v c t) [] @@
-      mk_block @@
-        send_completes_for_stmts_with_no_fetch @
+    (send_fetch_name_of_t t) (args_of_t_with_v c t) [] @@ mk_block @@
+      (* order is now important here. do_complete_trig makes a trigger header
+         without a save of arguments, while the others save the arguments.
+         If a do_complete_trig appears first, it'll make the wrong header type *)
         send_puts @
-        send_fetches_of_rhs_maps
+        send_fetches_of_rhs_maps @
+        send_completes_for_stmts_with_no_fetch
 
 (* trigger_rcv_fetch
  * -----------------------------------------
@@ -520,11 +535,6 @@ let nd_rcv_fetch_trig c trig =
     [t_int; t_int] @@
     (* skip over the function tag *)
     mk_poly_skip_block fn_name [
-      (* save the bound variables for this trigger so they're available later *)
-      mk_apply
-        (mk_var @@ nd_log_write_for c trig) @@
-        args_of_t_as_vars_with_v c trig
-      ;
       (* we *must* have a data structure here *)
       mk_check_tag' (ios_tag c stmt_map_ids.id) @@
       (* iterate over the buffered stmt_map data *)
@@ -671,13 +681,16 @@ let nd_send_push_stmt_map_trig c s_rhs_lhs t =
           mk_iter_bitmap'
             (mk_at_with' K3S.shuffle_results.id (mk_var "ip") @@
               mk_lambda' K3S.shuffle_results.e @@
+                let t_args = args_of_t_as_vars_with_v c t in
                 mk_block [
-                  (* lookup and reconstruct tuples from shuffle results *)
-                  (* send the 'header' *)
-                  buffer_for_send rcv_trig "ip" @@
-                    mk_var "has_data"::args_of_t_as_vars_with_v c t;
+                  (* send the trig header if needed. dont save args -- they should
+                    already be saved *)
+                  buffer_trig_header_if_needed t "ip" t_args ~save_args:false;
+                  (* send the push header *)
+                  buffer_for_send rcv_trig "ip" [mk_var "has_data"];
                   (* buffer the map data according to the indices *)
-                  (* no need to write to the bitmap, since there will always be a header to the same ip *)
+                  (* no need to write to the bitmap, since there will always be a
+                     header to the same ip *)
                   buffer_tuples_from_idxs ~unique:true "tuples" map_delta.t buf_nm @@ mk_var "indices"
                ])
             K3S.shuffle_bitmap.id
@@ -705,10 +718,6 @@ List.map
       (D.nd_rcv_push_args c t)
       [] @@
     mk_block [
-      (* save the bound variables for this vid. This is necessary for both the
-        * sending and receiving nodes, which is why we're also doing it here *)
-      mk_apply' (nd_log_write_for c t) @@ args_of_t_as_vars_with_v c t;
-
       (* inserting into the map has been moved to the aggregated version *)
 
       (* update and check statment counters to see if we should send a do_complete *)
@@ -1400,17 +1409,59 @@ let nd_handle_uniq_poly c =
                     mk_let (fst_many @@ ds_e tup_ds) (mk_var "x") @@
                     mk_insert_block "acc" map_pat) @@
               mk_var "buf_d";
-            (* skip the tags we just inserted *)
+            (* skip the tags we just handled *)
             mk_poly_skip_all' buf
             ])
           acc_code)
       (mk_error "unhandled unique tag")
       tag_bufs_m
 
+(* handle all sub-trigs that need trigger arguments *)
+let nd_trig_sub_handler c t =
+  let fn_nm = trig_sub_handler_name_of_t t in
+  mk_global_fn fn_nm
+    (trig_sub_handler_args c t)
+    [t_int; t_int] @@
+  (* skip over the entry tag *)
+  mk_poly_skip_block fn_nm [
+    (* save the bound args for this vid *)
+    mk_if (mk_var "save_args")
+      (mk_apply' (nd_log_write_for c t) @@ args_of_t_as_vars_with_v c t)
+      mk_cunit ;
+
+    (* clear the trig send bitmaps. These make sure we output a trig header
+       for any sub-trigger output *)
+    mk_set_all D.send_trig_header_bitmap.id [mk_cfalse] ;
+
+    (* dispatch the sub triggers *)
+    mk_poly_iter' @@
+      mk_lambda'' (p_tag @ p_idx @ p_off) @@
+        List.fold_left
+          (fun acc_code (itag, (stag, typ, id_ts)) -> match typ with
+             (* only match with the sub-triggers *)
+             | SubTrig | DsSubTrig ->
+              mk_if (mk_eq (mk_var "tag") @@ mk_cint itag)
+                (* look up this tag *)
+                (mk_poly_at_with' stag @@ mk_lambda' id_ts @@
+                  (* if we have subdata, the function must return the new idx, offset *)
+                  let call l =
+                    mk_apply' stag @@ ids_to_vars @@ fst_many @@ l @ id_ts in
+                  if typ = DsSubTrig then call D.poly_args
+                    (* otherwise we must skip ourselves *)
+                  else mk_block [call []; mk_poly_skip' stag])
+                acc_code
+             | _ -> acc_code)
+          (* the way to stop is to keep the same idx, offset *)
+          (mk_tuple [mk_var "idx"; mk_var "offset"])
+          c.poly_tags;
+  ]
+
+
 (*** central triggers to handle dispatch for nodes and switches ***)
 let trig_dispatcher_nm = "trig_dispatcher"
 let trig_dispatcher c =
-  mk_global_fn trig_dispatcher_nm ["poly_queue", poly_queue.t; "upoly_queue", upoly_queue.t] [] @@
+  mk_global_fn trig_dispatcher_nm
+    ["poly_queue", poly_queue.t; "upoly_queue", upoly_queue.t] [] @@
   mk_block [
     (* replace all used send slots with empty polyqueues *)
     mk_iter_bitmap'
@@ -1419,14 +1470,14 @@ let trig_dispatcher c =
       D.poly_queue_bitmap.id;
     (* apply reserve to all the new polybufs *)
     D.reserve_poly_queue_code c;
-    (* clean out the send bitmaps *)
+    (* clear the send bitmaps *)
     mk_set_all D.poly_queue_bitmap.id [mk_cfalse];
 
     (* handle any unique poly data *)
     mk_apply' nd_handle_uniq_poly_nm [mk_var "upoly_queue"];
 
     (* iterate over all buffer contents *)
-    mk_poly_iter' @@
+    mk_ignore @@ mk_poly_iter' @@
       mk_lambda'' ["tag", t_int; "idx", t_int; "offset", t_int] @@
         List.fold_left
           (fun acc_code (itag, (stag, typ, id_ts)) -> match typ with
