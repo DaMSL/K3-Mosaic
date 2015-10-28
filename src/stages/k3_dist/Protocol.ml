@@ -89,7 +89,8 @@ let sw_sys_init =
   mk_block [
     (* replace all used slots with empty polyqueues *)
     mk_iter_bitmap'
-      (mk_insert_at poly_queues.id (mk_var "ip") [mk_empty poly_queue.t])
+      (mk_insert_at poly_queues.id (mk_var "ip")
+         [mk_var D.empty_poly_queue.id; mk_var D.empty_upoly_queue.id])
       D.poly_queue_bitmap.id;
 
     (* clean out the send bitmaps *)
