@@ -915,10 +915,10 @@ let rec deduce_expr_type ?(override=true) trig_env env tenv utexpr : expr_t =
           let targ' = [t_int; t_int; t_int] in
           if not @@ list_forall2 (<~) targ targ' then
             t_erroru @@ TMismatch(wrap_ttuple targ, wrap_ttuple targ', "args") else
-            let tret' = wrap_ttuple [t_int; t_int] in
+          let tret' = wrap_ttuple [t_int; t_int] in
           if not (tret === tret')
             then t_erroru (TMismatch(tret, tret', "return val")) else
-          t_unit
+          tret'
 
       | PolyFold ->
           let tfun, tacc, tcol' = bind 0, bind 1, bind 2 in

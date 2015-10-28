@@ -599,7 +599,9 @@ let v_traverse_poly err_fn f i acc = function
     let rec loop i acc =
       begin try
         let j, acc = f i (IntMap.find i m.data) acc in
-        loop j acc
+        (* same value gets us to stop *)
+        if i = j then i, acc
+        else loop j acc
       with Not_found -> i, acc end
     in
     loop i acc

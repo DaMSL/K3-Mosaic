@@ -432,14 +432,14 @@ and eval_expr_inner ?(fun_typ=FLambda) (address:address) sched_st cenv texpr =
      (* really traverse ie doesn't increment automatically *)
     | PolyIter, [f; col] ->
         let f = eval_fn f in
-        let env = snd @@ v_traverse_poly error
+        let idx, env = v_traverse_poly error
           (fun idx (itag, _, _) env ->
              let env, v = f env [itag; VInt idx; VInt 0] in
              match value_of_eval v with
              | VTuple[VInt i;_] -> i, env
              | v -> error "polyiter" @@ "bad function result "^sov v
           ) 0 nenv col
-        in env, tvunit
+        in env, temp @@ VTuple[VInt idx; VInt 0]
 
     | PolyIterTag tag, [idx; offset; f; col] ->
         let f = eval_fn f in
