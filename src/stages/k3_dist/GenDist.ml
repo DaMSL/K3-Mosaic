@@ -255,7 +255,7 @@ let nd_filter_corrective_list =
     (mk_lambda' trig_stmt_list.e @@ mk_var "t_stmt_id")
     (mk_lambda3' ["acc", nd_log_master.t] nd_log_master.e trig_stmt_list.e @@
      mk_insert_block "acc"
-       [mk_var "stmt_id"; mk_filter_geq (mk_var "vid_set") [mk_var "request_vid"]]) @@
+       [mk_var "stmt_id"; mk_filter_gt (mk_var "vid_set") [mk_var "request_vid"]]) @@
     mk_empty nd_log_master.t
 
 (**** protocol code ****)
