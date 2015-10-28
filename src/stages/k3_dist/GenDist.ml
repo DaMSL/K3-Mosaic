@@ -1,32 +1,6 @@
 (* Functions that take K3 code and generate distributed K3 code *)
 
-(* Assumptions:
- * We assume a rhs map can only occur once per statement *)
-
-(* Notes:
- * We currently carry the vid inside tuples all the way *)
-
-
-(* Call Graph *
- * on_insert_<trigger>_switch
- *    on_put_<trigger>
- *    do_complete_<trigger> (* no maps *)
- *    on_insert_<trigger>_fetch
- *        <trigger>_fetch_<rhs_map> ->
- *            <trigger>_push_<rhs_map> ->
- *                get_completed_stmts
- *                do_complete_<trigger>_<stmt>
- *                    get_corrective_list
- *                    On_corrective_<trigger>_<delta_rhs_map>
- *                        get_completed_stmts_corrective
- *                        do_complete_corrective_<trigger>_<stmt>_<delta_rhs_map>
- *                            On_corrective_<trigger>_<delta_rhs_map>
- *                            ...
- *
- * Ordering invariant: the arrival of packets between a pair of nodes must be
- * ordered in one instance: correctives must arrive after the original push of
- * read data. Otherwise, the corrective will be erased.
- *
+(*
  * Protocol Description:
  * ---------------------
  * - Every put packet from a switch to a node must be acked. However, this can be done
@@ -1391,6 +1365,7 @@ let nd_handle_uniq_poly c =
                               List.find (fun (i, (s,_,_)) -> s = buf) c.poly_tags, buf, m) bufs_m in
   mk_global_fn nd_handle_uniq_poly_nm ["poly_queue", upoly_queue.t] [] @@
   (* iterate over all buffer contents *)
+  mk_let ["idx"; "offset"] (mk_tuple [mk_cint 0; mk_cint 0]) @@
   mk_ignore @@ mk_poly_iter' @@
     mk_lambda'' (p_tag @ p_idx @ p_off) @@
       List.fold_left (fun acc_code (tag, buf, m) ->
@@ -1478,6 +1453,7 @@ let trig_dispatcher c =
     mk_apply' nd_handle_uniq_poly_nm [mk_var "upoly_queue"];
 
     (* iterate over all buffer contents *)
+    mk_let ["idx"; "offset"] (mk_tuple [mk_cint 0; mk_cint 0]) @@
     mk_ignore @@ mk_poly_iter' @@
       mk_lambda'' ["tag", t_int; "idx", t_int; "offset", t_int] @@
         List.fold_left
@@ -1587,6 +1563,9 @@ let sw_event_driver_trig c =
             (mk_poly_fold
               (mk_lambda4' ["vid", t_int] p_tag p_idx p_off @@
                 mk_block [
+                  (* clear the trig send bitmaps for each event *) 
+                  mk_set_all D.send_trig_header_bitmap.id [mk_cfalse] ;
+
                   List.fold_left (fun acc_code (i, (nm,_,id_ts)) ->
                     (* check if we match on the id *)
                     mk_if (mk_eq (mk_var "tag") @@ mk_cint i)
