@@ -17,8 +17,8 @@ os:
   - linux
 notifications:
   slack: damsl:5SNQ0A5PCK67sqUcRj1EI5Kn
-    on_success: change
-    on_failure: always
+    on_success: :change
+    on_failure: :change
   email:
     on_success: change
     on_failure: always
