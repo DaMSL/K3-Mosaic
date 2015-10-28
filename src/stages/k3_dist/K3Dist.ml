@@ -73,13 +73,13 @@ type map_type =
   | MapVMap
   | MapMultiVMap
 
+type has_ds = bool
+type unique = bool
+
 type tag_type =
-    Trig      (* a top-level trigger *)
-  | SubTrig   (* a subtrigger handled by trig_sub_handler *)
-  | DsTrig    (* a trigger containing an in-band data structure *)
-  | DsSubTrig (* a sub-trigger with in-band data structure *)
-  | Ds        (* a data structure *)
-  | UniqDs    (* a unique data structure (uses unique polybuf) *)
+    Trig      of has_ds (* a top-level trigger *)
+  | SubTrig   of has_ds * string (* a subtrigger handled by trig_sub_handler *)
+  | Ds        of unique (* a data structure *)
   | Event     (* incoming event *)
 
 type config = {
@@ -718,7 +718,8 @@ let stmt_cnt_list_ship =
   create_ds "stmt_cnt_list" ~e @@ wrap_tbag' @@ snd_many e
 
 (* rcv_put includes stmt_cnt_list_ship *)
-let nd_rcv_put_args c t = ["sender_ip", t_int]
+let nd_rcv_put_args_poly c t = ["sender_ip", t_int]
+let nd_rcv_put_args c t = nd_rcv_put_args_poly c t @ args_of_t_with_v c t
 
 (* rcv_fetch: data structure that is sent *)
 let stmt_map_ids =
@@ -726,11 +727,14 @@ let stmt_map_ids =
   let e = ["stmt_id", t_stmt_id; "map_id", t_map_id] in
   create_ds ~e "stmt_map_ids" @@ wrap_tbag' @@ snd_many e
 
-let nd_rcv_fetch_args c t = []
+let nd_rcv_fetch_args_poly c t = []
+let nd_rcv_fetch_args c t = nd_rcv_fetch_args_poly c t @ args_of_t_with_v c t
 
-let nd_do_complete_trig_args c t = ["sender_ip", t_int; "ack", t_bool]
+let nd_do_complete_trig_args_poly c t = ["sender_ip", t_int; "ack", t_bool]
+let nd_do_complete_trig_args c t = nd_do_complete_trig_args_poly c t @ args_of_t_with_v c t
 
-let nd_rcv_push_args c t = ["has_data", t_bool]
+let nd_rcv_push_args_poly c t = ["has_data", t_bool]
+let nd_rcv_push_args c t = nd_rcv_push_args_poly c t @ args_of_t_with_v c t
 
 (* for do_corrective:
  * original values commonly used to send back to original do_complete *)
@@ -876,41 +880,41 @@ let calc_poly_tags c =
          t, Event, args)
        events) @
     (* static ds for sw->nd triggers *)
-    [stmt_cnt_list_ship.id, Ds, stmt_cnt_list_ship.e;
-     stmt_map_ids.id, Ds, stmt_map_ids.e] @
+    [stmt_cnt_list_ship.id, Ds false, stmt_cnt_list_ship.e;
+     stmt_map_ids.id, Ds false, stmt_map_ids.e] @
     (List.flatten @@ for_all_trigs c.p ~sys_init:true @@ fun t ->
       let s_rhs = P.s_and_over_stmts_in_t c.p P.rhs_maps_of_stmt t in
       let s_rhs_corr = List.filter (fun (s, map) -> List.mem map c.corr_maps) s_rhs in
-      (if null s_rhs then [] else [
-        (* carries all the trig arguments + vid *)
-        trig_sub_handler_name_of_t t, DsTrig, trig_sub_handler_args c t;
-        rcv_put_name_of_t t, DsSubTrig, nd_rcv_put_args c t;
-        rcv_fetch_name_of_t t, DsSubTrig, nd_rcv_fetch_args c t]) @
+      (* carries all the trig arguments + vid *)
+      (trig_sub_handler_name_of_t t, Trig true, trig_sub_handler_args c t)::
+      (if s_rhs = [] then [] else [
+        rcv_put_name_of_t t, SubTrig(true, t), nd_rcv_put_args_poly c t;
+        rcv_fetch_name_of_t t, SubTrig(true, t), nd_rcv_fetch_args_poly c t]) @
       (* args for do completes without rhs maps *)
       (List.map (fun s ->
-          do_complete_name_of_t t s^"_trig", SubTrig, nd_do_complete_trig_args c t) @@
+          do_complete_name_of_t t s^"_trig", SubTrig(false, t), nd_do_complete_trig_args_poly c t) @@
         P.stmts_without_rhs_maps_in_t c.p t) @
       (* the types for nd_rcv_push. includes a separate, optional map component *)
       (* this isn't a dsTrig anymore since pushes are aggregated at the dispatcher *)
       (List.map (fun (s, m) ->
-          rcv_push_name_of_t c t s m, SubTrig, nd_rcv_push_args c t)
+          rcv_push_name_of_t c t s m, SubTrig(false, t), nd_rcv_push_args_poly c t)
         s_rhs) @
       (* the types for rcv_push's maps *)
       (List.map (fun (s, m) ->
-           P.buf_of_stmt_map_id c.p s m, UniqDs, P.map_ids_types_with_v_for c.p m)
+           P.buf_of_stmt_map_id c.p s m, Ds true, P.map_ids_types_with_v_for c.p m)
           s_rhs) @
       (* rcv_corrective types. includes a separate, optional map + vids component *)
       (List.map (fun (s, m) ->
-          rcv_corrective_name_of_t c t s m, DsTrig, nd_rcv_corr_args)
+          rcv_corrective_name_of_t c t s m, Trig true, nd_rcv_corr_args)
         s_rhs_corr)) @
     (* the types for the maps without vid *)
     (P.for_all_maps c.p @@ fun m ->
-      P.map_name_of c.p m^"_map", Ds, P.map_ids_types_for c.p m) @
+      P.map_name_of c.p m^"_map", Ds false, P.map_ids_types_for c.p m) @
     (* t_vid_list ds for correctives *)
-    ["vids", Ds, ["vid", t_vid];
-     nd_rcv_corr_done_nm, Trig, nd_rcv_corr_done_args;
+    ["vids", Ds false, ["vid", t_vid];
+     nd_rcv_corr_done_nm, Trig false, nd_rcv_corr_done_args;
     (* for GC (node->switch acks) *)
-     sw_ack_rcv_trig_nm, Trig, sw_ack_rcv_trig_args]
+     sw_ack_rcv_trig_nm, Trig false, sw_ack_rcv_trig_args]
   in
   insert_index_fst l
 

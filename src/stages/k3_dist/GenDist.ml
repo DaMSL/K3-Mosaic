@@ -1391,7 +1391,7 @@ let nd_handle_uniq_poly c =
                               List.find (fun (i, (s,_,_)) -> s = buf) c.poly_tags, buf, m) bufs_m in
   mk_global_fn nd_handle_uniq_poly_nm ["poly_queue", upoly_queue.t] [] @@
   (* iterate over all buffer contents *)
-  mk_poly_iter' @@
+  mk_ignore @@ mk_poly_iter' @@
     mk_lambda'' (p_tag @ p_idx @ p_off) @@
       List.fold_left (fun acc_code (tag, buf, m) ->
         let map_ds = map_ds_of_id ~global:true c m in
@@ -1419,8 +1419,9 @@ let nd_handle_uniq_poly c =
 (* handle all sub-trigs that need trigger arguments *)
 let nd_trig_sub_handler c t =
   let fn_nm = trig_sub_handler_name_of_t t in
+  let t_args = args_of_t_with_v c t in
   mk_global_fn fn_nm
-    (trig_sub_handler_args c t)
+    (poly_args @ trig_sub_handler_args c t)
     [t_int; t_int] @@
   (* skip over the entry tag *)
   mk_poly_skip_block fn_nm [
@@ -1439,19 +1440,19 @@ let nd_trig_sub_handler c t =
         List.fold_left
           (fun acc_code (itag, (stag, typ, id_ts)) -> match typ with
              (* only match with the sub-triggers *)
-             | SubTrig | DsSubTrig ->
+             | SubTrig(has_ds, t') when t' = t ->
               mk_if (mk_eq (mk_var "tag") @@ mk_cint itag)
                 (* look up this tag *)
                 (mk_poly_at_with' stag @@ mk_lambda' id_ts @@
                   (* if we have subdata, the function must return the new idx, offset *)
                   let call l =
-                    mk_apply' stag @@ ids_to_vars @@ fst_many @@ l @ id_ts in
-                  if typ = DsSubTrig then call D.poly_args
+                    mk_apply' stag @@ ids_to_vars @@ fst_many @@ l @ id_ts @ t_args in
+                  if has_ds then call D.poly_args
                     (* otherwise we must skip ourselves *)
                   else mk_block [call []; mk_poly_skip' stag])
                 acc_code
              | _ -> acc_code)
-          (* the way to stop is to keep the same idx, offset *)
+          (* the way to stop the loop is to keep the same idx, offset *)
           (mk_tuple [mk_var "idx"; mk_var "offset"])
           c.poly_tags;
   ]
@@ -1481,14 +1482,14 @@ let trig_dispatcher c =
       mk_lambda'' ["tag", t_int; "idx", t_int; "offset", t_int] @@
         List.fold_left
           (fun acc_code (itag, (stag, typ, id_ts)) -> match typ with
-             | Trig | DsTrig ->
+             | Trig has_ds ->
               mk_if (mk_eq (mk_var "tag") @@ mk_cint itag)
                 (* look up this tag *)
                 (mk_poly_at_with' stag @@ mk_lambda' id_ts @@
                   (* if we have subdata, the function must return the new idx, offset *)
                   let call l =
                     mk_apply' stag @@ ids_to_vars @@ fst_many @@ l @ id_ts in
-                  if typ = DsTrig then call D.poly_args
+                  if has_ds then call D.poly_args
                     (* otherwise we must skip ourselves *)
                   else mk_block [call []; mk_poly_skip' stag])
                 acc_code
@@ -1838,32 +1839,32 @@ let declare_global_funcs c partmap ast =
   GC.functions c (Proto.sw_check_done ~check_size:true)
 
 (* Generate all the code for a specific trigger *)
-let gen_dist_for_t c ast trig =
+let gen_dist_for_t c ast t =
   (* (stmt_id, rhs_map_id)list *)
-  let s_rhs = P.s_and_over_stmts_in_t c.p P.rhs_maps_of_stmt trig in
+  let s_rhs = P.s_and_over_stmts_in_t c.p P.rhs_maps_of_stmt t in
   (* stmts that can be involved in correctives *)
   let s_rhs_corr = List.filter (fun (s, map) -> List.mem map c.corr_maps) s_rhs in
   (* (stmt_id,rhs_map_id,lhs_map_id) list *)
-  let s_rhs_lhs = P.s_and_over_stmts_in_t c.p P.rhs_lhs_of_stmt trig in
+  let s_rhs_lhs = P.s_and_over_stmts_in_t c.p P.rhs_lhs_of_stmt t in
   (* functions *)
-  let functions = [
-    sw_send_fetch_fn c s_rhs_lhs s_rhs trig;
-  ] @
-   nd_do_complete_fns c ast trig c.corr_maps @
+  let functions =
+   (sw_send_fetch_fn c s_rhs_lhs s_rhs t) ::
+   nd_do_complete_fns c ast t c.corr_maps @
    (if c.gen_correctives then
-     nd_do_corrective_fns c s_rhs_corr ast trig c.corr_maps else [])
+     nd_do_corrective_fns c s_rhs_corr ast t c.corr_maps else [])
   in
-  let functions2 = nd_send_push_stmt_map_trig c s_rhs_lhs trig in
+  let functions2 = nd_send_push_stmt_map_trig c s_rhs_lhs t in
   let ex_trigs =
     (if null s_rhs then []
     else
-      [nd_rcv_put_trig c trig;
-      nd_rcv_fetch_trig c trig])
+      [nd_rcv_put_trig c t;
+      nd_rcv_fetch_trig c t])
     @
-    nd_rcv_push_trig c s_rhs trig @
-    nd_do_complete_trigs c trig @
+    nd_rcv_push_trig c s_rhs t @
+    nd_do_complete_trigs c t @
+    [nd_trig_sub_handler c t] @
     (if c.gen_correctives then
-      nd_rcv_correctives_trig c s_rhs_corr trig
+      nd_rcv_correctives_trig c s_rhs_corr t
     else [])
   in
   ex_trigs, functions, functions2
