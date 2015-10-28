@@ -311,6 +311,8 @@ and v_of_t ta_env ?id t =
   | TAlias id        -> v_of_t @@ Hashtbl.find ta_env id
 
 
+(* Used only by Testing.ml. If you put a collection here, it'll try to combine
+   with collections in other environments *)
 let matching_collections v v' = match v, v' with
   | VList _, VList _
   | VVector _, VVector _
@@ -320,7 +322,6 @@ let matching_collections v v' = match v, v' with
   | VSortedMap _, VSortedMap _
   | VSortedSet _, VSortedSet _
   | VVMap _, VVMap _ -> true
-  | VPolyQueue _, VPolyQueue _ -> true
   | _ -> false
 
 let unwrap_vtuple = function VTuple x -> x | x -> [x]
@@ -571,7 +572,7 @@ let v_combine err_fn x y = match x, y with
   | VSortedMap m, VSortedMap m' -> VSortedMap(ValueMap.combine m m')
   | VSortedSet m, VSortedSet m' -> VSortedSet(ValueSSet.union m m')
   | VVMap m, VVMap m'           -> VVMap(ValueVMap.combine m m')
-  | _ -> err_fn "v_combine" "mismatch in collections"
+  | v, v' -> err_fn "v_combine" @@ sp "mismatch in collections: %s and %s" (sov v) (sov v')
 
 let v_fold err_fn f acc = function
   | VSet m       -> ValueSet.fold f acc m
