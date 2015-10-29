@@ -1370,6 +1370,8 @@ let nd_handle_uniq_poly c =
                               List.find (fun (i, (s,_,_)) -> s = buf) c.poly_tags, buf, m) bufs_m in
   mk_global_fn nd_handle_uniq_poly_nm ["poly_queue", upoly_queue.t] [] @@
   (* iterate over all buffer contents *)
+  mk_if_eq (mk_size @@ mk_var "poly_queue") (mk_cint 0)
+    mk_cunit @@
   mk_let ["idx"; "offset"] (mk_tuple [mk_cint 0; mk_cint 0]) @@
   mk_ignore @@ mk_poly_iter' @@
     mk_lambda'' (p_tag @ p_idx @ p_off) @@
