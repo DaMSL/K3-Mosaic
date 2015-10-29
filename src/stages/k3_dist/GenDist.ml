@@ -484,11 +484,13 @@ let sw_send_fetch_fn c s_rhs_lhs s_rhs t =
   * latency *)
   mk_global_fn
     (send_fetch_name_of_t t) (args_of_t_with_v c t) [] @@ mk_block @@
-      (* order is now important here. do_complete_trig makes a trigger header
+      (* order is now critical here. do_complete_trig makes a trigger header
          without a save of arguments, while the others save the arguments.
-         If a do_complete_trig appears first, it'll make the wrong header type *)
-        send_puts @
+         If a do_complete_trig appears first, it'll make the wrong header type
+        Also, for no corrective mode, only fetches produce output, which can be
+        messed up by an out-of-order buffered push *)
         send_fetches_of_rhs_maps @
+        send_puts @
         send_completes_for_stmts_with_no_fetch
 
 (* trigger_rcv_fetch
@@ -518,7 +520,7 @@ let nd_rcv_fetch_trig c trig =
             (mk_or
               (* check if we're in corrective mode *)
               (mk_var D.corrective_mode.id) @@
-              (* or if the minimum entry in the stmt_cntrs has a >= vid
+              (* or if the minimum entry in the per_map_stmt_cntrs has a >= vid
                * (we can read at the same vid since we read an earlier value *)
               mk_leq (mk_var "vid") @@
                 mk_case_ns
@@ -537,7 +539,8 @@ let nd_rcv_fetch_trig c trig =
                   (fun map_id acc_code2 -> mk_if
                     (mk_eq (mk_var "map_id") @@ mk_cint map_id)
                     (mk_apply' (send_push_name_of_t c trig stmt map_id) @@
-                      args_of_t_as_vars_with_v c trig)
+                      (* @buffered: don't force a trig header *)
+                      mk_cfalse::args_of_t_as_vars_with_v c trig)
                     acc_code2)
                   (P.rhs_maps_of_stmt c.p stmt) @@
                   mk_error "nd_rcv_fetch: invalid map id")
@@ -625,7 +628,7 @@ let nd_send_push_stmt_map_trig c s_rhs_lhs t =
       (* a pattern mapping real map with delta vars *)
       mk_global_fn
         (send_push_name_of_t c t s rmap)
-        (args_of_t_with_v c t) [] @@
+        (("buffered", t_bool)::args_of_t_with_v c t) [] @@
         (* don't convert this to fold b/c we only read *)
         mk_bind (mk_var rmap_nm) rmap_deref @@
         mk_let ["tuples"]
@@ -658,8 +661,9 @@ let nd_send_push_stmt_map_trig c s_rhs_lhs t =
                 let t_args = args_of_t_as_vars_with_v c t in
                 mk_block [
                   (* send the trig header if needed. dont save args -- they should
-                    already be saved *)
-                  buffer_trig_header_if_needed t "ip" t_args ~save_args:false;
+                     already be saved. However, if we're a buffered push, we need to force
+                     the trig header *)
+                  buffer_trig_header_if_needed ~other_cond:(mk_var "buffered") t "ip" t_args ~save_args:false;
                   (* send the push header *)
                   buffer_for_send rcv_trig "ip" [mk_var "has_data"];
                   (* buffer the map data according to the indices *)
@@ -1041,7 +1045,8 @@ let nd_exec_buffered_fetches c =
                         List.fold_left (fun acc m ->
                           mk_if (mk_eq (mk_var "map_id") @@ mk_cint m)
                             (mk_apply' (send_push_name_of_t c t s m) @@
-                              args_of_t_as_vars_with_v c t)
+                              (* @buffered: force output of a trigger header *)
+                              mk_ctrue::args_of_t_as_vars_with_v c t)
                             acc)
                           mk_cunit
                           r_maps)
@@ -1563,7 +1568,7 @@ let sw_event_driver_trig c =
             (mk_poly_fold
               (mk_lambda4' ["vid", t_int] p_tag p_idx p_off @@
                 mk_block [
-                  (* clear the trig send bitmaps for each event *) 
+                  (* clear the trig send bitmaps for each event *)
                   mk_set_all D.send_trig_header_bitmap.id [mk_cfalse] ;
 
                   List.fold_left (fun acc_code (i, (nm,_,id_ts)) ->

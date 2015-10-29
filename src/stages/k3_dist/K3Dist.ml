@@ -932,17 +932,21 @@ let buffer_for_send ?(unique=false) ?(wr_bitmap=true) t addr args =
     ]
 
 (* code to check if we need to write a trig header, and if so, to buffer one *)
-let buffer_trig_header_if_needed t addr args ~save_args =
+(* @other_cond: another condition to output the trig header *)
+let buffer_trig_header_if_needed ?other_cond t addr args ~save_args =
   let t = trig_sub_handler_name_of_t t in
   let save_val = if save_args then mk_ctrue else mk_cfalse in
-  mk_if (mk_at' send_trig_header_bitmap.id @@ mk_var addr)
-    mk_cunit @@
-    mk_block [
+  (* normal condition for adding *)
+  let bitmap_cond = mk_not @@ mk_at' send_trig_header_bitmap.id @@ mk_var addr in
+  let cond = maybe bitmap_cond (fun c -> mk_or c bitmap_cond) other_cond in
+  mk_if cond
+    (mk_block [
       (* update the bitmap *)
       mk_insert_at send_trig_header_bitmap.id (mk_var addr) [mk_ctrue];
       (* buffer trig args *)
       buffer_for_send t addr (save_val::args)
-    ]
+    ])
+    mk_cunit
 
 (* insert tuples into polyqueues *)
 let buffer_tuples_from_idxs ?unique ?(drop_vid=false) tuples_nm map_type map_tag indices =
