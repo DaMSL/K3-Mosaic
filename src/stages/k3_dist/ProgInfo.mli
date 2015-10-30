@@ -128,9 +128,5 @@ val slice_key_from_bound : prog_data_t -> stmt_id_t -> map_id_t -> expr_t list
 val get_map_bindings_in_stmt : prog_data_t -> stmt_id_t -> map_id_t -> map_id_t
 -> int IntMap.t
 
-val map_access_patterns : prog_data_t -> (map_id_t, int * IntSetSet.t) Hashtbl.t
-
 (* whether we have a complex, interlocking loop pattern in this stmt *)
 val stmt_many_loop_vars : prog_data_t -> stmt_id_t -> IntSet.t option
-
-val route_access_patterns : prog_data_t -> (map_id_t, int IntSetMap.t) Hashtbl.t

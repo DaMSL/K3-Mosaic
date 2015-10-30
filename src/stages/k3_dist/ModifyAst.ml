@@ -10,6 +10,23 @@ module D = K3Dist
 
 exception InvalidAst of string
 
+(* find bound slice patterns in ast *)
+let extract_slice_patterns ?(zero=StrMap.empty) ast =
+  let f acc e =
+    try
+      let col, pat = U.decompose_slice e in
+      let id = U.decompose_var col in
+      let es = insert_index_fst @@ U.unwrap_tuple pat in
+      let iset = IntSet.of_list @@ fst_many @@
+        List.filter (not |- is_unknown |- snd) es in
+      StrMap.update_with id (function
+          | None    -> some @@ IntSetSet.singleton iset
+          | Some ss -> some @@ IntSetSet.add iset ss)
+        acc
+    with Failure _ -> acc
+  in
+  Tree.fold_tree_th_bu f zero ast
+
 (* find unused arguments in triggers *)
 let unused_trig_args ast =
   let rec toplevel_args = function
@@ -140,8 +157,8 @@ let map_inits_from_ast c ast : expr_t IntMap.t =
 (* --- Trigger modification --- *)
 
 (* get the relative offset of the stmt in the trigger *)
-let stmt_idx_in_t c trig stmt =
-  let ss = P.stmts_of_t c.p trig in
+let stmt_idx_in_t p trig stmt =
+  let ss = P.stmts_of_t p trig in
   foldl_until (fun acc s -> if s = stmt then Left acc else Right (acc+1)) 0 ss
 
 (* get the nth member in a block. If it's not a block and we only ask for the
@@ -155,16 +172,16 @@ let block_nth exp i = match U.tag_of_expr exp with
   | _            -> raise (InvalidAst("block_nth: Not a block"))
 
 (* return the AST for a given stmt *)
-let ast_for_s_t c ast (stmt:P.stmt_id_t) (trig:P.trig_name_t) =
+let ast_for_s_t p ast (stmt:P.stmt_id_t) (trig:P.trig_name_t) =
   let trig_decl = U.trigger_of_program trig ast in
   let args      = U.args_of_code trig_decl in
   let trig_ast  = U.expr_of_code trig_decl in
-  let s_idx     = stmt_idx_in_t c trig stmt in
+  let s_idx     = stmt_idx_in_t p trig stmt in
   args, block_nth trig_ast s_idx
 
-let ast_for_s c ast (stmt:P.stmt_id_t) =
-  let trig = P.trigger_of_stmt c.p stmt in
-  ast_for_s_t c ast stmt trig
+let ast_for_s p ast (stmt:P.stmt_id_t) =
+  let trig = P.trigger_of_stmt p stmt in
+  ast_for_s_t p ast stmt trig
 
 (* return the corrective (args, stmt_id, AST) for a given stmt, map, trig *)
 let corr_ast_for_m_s c ast map stmt trig =
@@ -456,9 +473,25 @@ let rename_var old_var_name new_var_name ast =
     | Var v when v = old_var_name -> mk_var new_var_name
     | _ -> e
 
+(* get bindings for system_event. we can't use proginfo since it's unreliable in this case *)
+let sys_init_bindings p ast =
+  let h = Hashtbl.create 10 in
+  let t = "system_ready_event" in
+  let ss = try P.stmts_of_t p t with P.Bad_data _ -> [] in
+  let set =
+    List.fold_left (fun acc s ->
+        extract_slice_patterns ~zero:acc @@ snd @@ ast_for_s_t p ast s t)
+      StrMap.empty ss in
+  List.iter (fun (n, s) ->
+      Hashtbl.add h (P.map_id_of_name p n) s) @@
+    StrMap.to_list set;
+  h
+
+let () = K3Dist.sys_init_bindings := sys_init_bindings
+
 (* return a modified version of the original ast for stmt s *)
 let modify_ast c ast stmt trig =
-  let _, ast = ast_for_s_t c ast stmt trig in
+  let _, ast = ast_for_s_t c.p ast stmt trig in
   let ast = modify_dist c ast stmt in
   let is_col, ast = delta_action c ast stmt in
   is_col, ast

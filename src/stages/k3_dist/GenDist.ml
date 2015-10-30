@@ -1894,8 +1894,8 @@ let gen_dist ?(gen_deletes=true)
       agenda_map;
       reduced_agenda_map;
       unused_trig_args;
-      map_indices = P.map_access_patterns p;
-      route_indices = P.route_access_patterns p;
+      map_indices = D.Bindings.multi_idx_access_patterns p ast;
+      route_indices = D.Bindings.route_access_patterns p;
     } in
   (* to get poly_tags, we need c *)
   let c = { c with poly_tags = D.calc_poly_tags c; event_tags = D.calc_event_tags c} in

@@ -1055,6 +1055,111 @@ let stmt_ctr = create_ds "stmt_ctr" @@ mut t_int
 
 (**** End of code ****)
 
+(* forward declaration to prevent circular inclusion *)
+let sys_init_bindings = ref (fun (p:P.prog_data_t) (ast:program_t) -> assert false)
+
+module Bindings = struct
+  let all_trig_arg_stmt_binds ~sys_init p f =
+    for_all_trigs ~sys_init ~corrective:true ~delete:true p @@ fun trig ->
+      let t_args = fst_many @@ P.args_of_t p trig in
+      let ss = List.map (find_stmt p) @@ stmts_of_t p trig in
+      List.iter (fun (s,_,lmap,lbinds,rbinds) -> f s t_args lmap lbinds rbinds) ss
+
+  let get_idx t_args binds =
+    (* only count bound variabls *)
+    IntSet.of_list @@ snd_many @@
+      List.filter (fun x -> List.mem (fst x) t_args) binds
+
+  (* generic routine to get individual map bindings *)
+  let hash_add_intset hash map s =
+    hashtbl_replace hash map @@ maybe (IntSetSet.singleton s) (IntSetSet.add s)
+
+  (* @prune: don't accept full bound/empty. needed for multiindex *)
+  let insert_idx ?(prune=false) ?(add_full=false) p hash t_args map binds =
+    let idx = get_idx t_args binds in
+    let map_ts = P.map_types_for p map in
+    let add s = hash_add_intset hash map s in
+    (* if asked to prune,
+      prune out indices that have no key or entire key *)
+    if prune then
+      if IntSet.is_empty idx || IntSet.cardinal idx >= List.length map_ts - 1 then ()
+      else add idx
+    else add idx;
+    (* add_fully bound *)
+    if add_full then add @@ IntSet.of_list @@ create_range @@ List.length map_ts - 1 else ()
+
+  (* generic routine to add left and right map individual bindings to a hash table *)
+  (* used by both route and multi-index *)
+  let insert_l_r_binds ?prune ?add_full p hash _ t_args lmap lbinds rbinds =
+    let insert_idx = insert_idx ?prune ?add_full in
+    insert_idx p hash t_args lmap lbinds;
+    List.iter (fun (rmap, rbind) ->
+        insert_idx p hash t_args rmap rbind)
+      rbinds
+
+  (* For multi-index *)
+  (* We need access patterns for maps individually. We don't care about any combination *)
+  let multi_idx_access_patterns p ast =
+    let h = Hashtbl.create 40 in
+    (* we can't use this method for sys_init. we must extract from the ast *)
+    ignore(all_trig_arg_stmt_binds ~sys_init:false p @@ insert_l_r_binds ~prune:true p h);
+    let h2 = !sys_init_bindings p ast in
+    Hashtbl.iter (fun m pat -> Hashtbl.replace h m pat) h2;
+    (* enumerate all patterns for all maps and number them *)
+    let pats = snd @@
+      Hashtbl.fold (fun map_id pat (i, acc) ->
+        try ignore(IntSetSetMap.find pat acc);
+            i, acc
+        with Not_found ->
+          i+1, IntSetSetMap.add pat i acc)
+      h
+      (1, IntSetSetMap.empty) in
+    let h2 = Hashtbl.create 40 in
+    (* create new hashtbl. map_id -> pat_num, set of sets (pattern) *)
+    Hashtbl.iter (fun map_id idx ->
+      let num = IntSetSetMap.find idx pats in
+      Hashtbl.add h2 map_id (num, idx)) h;
+    h2
+
+  (* routine for route. gets
+    a. individual map bindings
+    b. all fully bound patterns
+    c. patterns that occur when an rmap with 2 loop vars sends to an lmap *)
+  let insert_route_binds p hash stmt t_args lmap lbinds rbinds =
+    (* first, insert the individual map bound patterns *)
+    insert_l_r_binds p ~prune:false ~add_full:true hash () t_args lmap lbinds rbinds;
+    (* now, get bound patterns that occur on shuffle to lmap because of double loops *)
+    match stmt_many_loop_vars p stmt with
+    | Some lmap_loop_vars ->
+        (* get the bound vars on the lmap *)
+        let lmap_bound_vars = get_idx t_args lbinds in
+        (* for each loop var, insert the bound vars *)
+        IntSet.iter (fun i ->
+            let s = IntSet.add i lmap_bound_vars in
+            hash_add_intset hash lmap s)
+          lmap_loop_vars
+    | None -> ()
+
+  (* for route optimization, we need individual map patterns per-map,
+    and we need patterns from lmap-rmap, since those can cause free (conservative)
+    variables.
+    We sort based on set size and number each set *)
+  let route_access_patterns p =
+    let h = Hashtbl.create 40 in
+    ignore(all_trig_arg_stmt_binds ~sys_init:true p @@ insert_route_binds p h);
+    (* create maps from intset to int. sort the sets by decreasing size *)
+    let h2 = Hashtbl.create 40 in
+    Hashtbl.iter (fun map idx_set ->
+      let l = IntSetSet.elements idx_set in
+      (* deliberately use opposite function for decreasing order *)
+      let l = List.sort (fun s1 s2 ->
+          if IntSet.cardinal s1 > IntSet.cardinal s2 then (-1) else 1) l in
+      let m = IntSetMap.of_list @@ insert_index_snd l in
+      Hashtbl.replace h2 map m) h;
+    h2
+end
+
+
 let global_vars c dict =
   (* replace default inits with ones from ast *)
   let replace_init ds =
