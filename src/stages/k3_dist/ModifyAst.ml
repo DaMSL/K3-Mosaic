@@ -474,7 +474,7 @@ let rename_var old_var_name new_var_name ast =
     | _ -> e
 
 (* get bindings for system_event. we can't use proginfo since it's unreliable in this case *)
-let sys_init_bindings p ast =
+let sys_init_bindings ~prune p ast =
   let h = Hashtbl.create 10 in
   let t = "system_ready_event" in
   let ss = try P.stmts_of_t p t with P.Bad_data _ -> [] in
@@ -482,12 +482,19 @@ let sys_init_bindings p ast =
     List.fold_left (fun acc s ->
         extract_slice_patterns ~zero:acc @@ snd @@ ast_for_s_t p ast s t)
       StrMap.empty ss in
-  List.iter (fun (n, s) ->
-      Hashtbl.add h (P.map_id_of_name p n) s) @@
+  List.iter (fun (nm, ss) ->
+      let m = P.map_id_of_name p nm in
+      let num_ts = List.length @@ P.map_types_no_val_for p m in
+      let ss =
+        if prune then
+          IntSetSet.filter (fun s -> IntSet.cardinal s < num_ts) ss
+        else ss
+      in
+      if not (IntSetSet.is_empty ss) then Hashtbl.add h m ss else ()) @@
     StrMap.to_list set;
   h
 
-let () = K3Dist.sys_init_bindings := sys_init_bindings
+let () = K3Dist.sys_init_bindings := sys_init_bindings ~prune:true
 
 (* return a modified version of the original ast for stmt s *)
 let modify_ast c ast stmt trig =

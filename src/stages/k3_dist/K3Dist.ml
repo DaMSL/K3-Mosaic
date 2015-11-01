@@ -1101,10 +1101,13 @@ module Bindings = struct
   (* We need access patterns for maps individually. We don't care about any combination *)
   let multi_idx_access_patterns p ast =
     let h = Hashtbl.create 40 in
-    (* we can't use this method for sys_init. we must extract from the ast *)
     ignore(all_trig_arg_stmt_binds ~sys_init:false p @@ insert_l_r_binds ~prune:true p h);
+    (* we can't use the above method for sys_init. we must extract from the ast *)
     let h2 = !sys_init_bindings p ast in
-    Hashtbl.iter (fun m pat -> Hashtbl.replace h m pat) h2;
+    (* prune out the full patterns, since they're automatic *)
+    Hashtbl.iter (fun m pat -> hashtbl_replace h m @@ function
+                   | None -> pat
+                   | Some oldp -> IntSetSet.union oldp pat) h2;
     (* enumerate all patterns for all maps and number them *)
     let pats = snd @@
       Hashtbl.fold (fun map_id pat (i, acc) ->
