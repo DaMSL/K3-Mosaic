@@ -257,7 +257,7 @@ type type_t = AST.type_t
 type expr_t = AST.expr_t
 
 type k3_annotation_t =
-  | Property of string
+  | Property of bool * string (* is_anno *)
   | Type    of type_t
 
 type annotation_t = k3_annotation_t list

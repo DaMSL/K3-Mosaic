@@ -602,7 +602,7 @@ let mk_global_fn ?(wr_all=false) ?(wr_arg=[]) name i_ts o_ts expr =
     else match t.typ with
       (* don't cause pass by ref on simple types *)
       | TUnit | TInt | TDate | TBool | TFloat | TIndirect _-> i, t
-      | _ -> i, {t with anno = (Property "CRef")::t.anno}
+      | _ -> i, {t with anno = Property(false,"CRef")::t.anno}
     in
   let i_ts = List.mapi anno_t i_ts in
   mk_global_fn_raw name

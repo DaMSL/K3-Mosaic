@@ -537,7 +537,7 @@ open ASTStrings
 let print_ast_annotation ?(show_type=false) a =
   let my_tag = pretty_tag_str CutHint "" in
   match a with
-  | Property s -> my_tag "Property" [lps s]
+  | Property(b, s) -> my_tag "Property" [lps (sob b); lps s]
   | Type t when show_type -> my_tag "Type" [lazy (print_type def_c t)]
   | _ -> ()
 

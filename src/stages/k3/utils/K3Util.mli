@@ -208,6 +208,8 @@ val fold_over_exprs : ('a -> expr_t -> 'a) -> 'a -> program_t -> 'a
 val add_property : string -> expr_t -> expr_t
 
 val properties_of_expr : expr_t -> string list
+val filter_prop_annos : annotation_t -> annotation_t
+val prop_annos_of_expr : expr_t -> annotation_t
 
 val is_tvmap : container_type_t -> bool
 val is_tvector : container_type_t -> bool
@@ -215,5 +217,7 @@ val is_tsorted : container_type_t -> bool
 val is_tmap : container_type_t -> bool
 val is_tpolyq : container_type_t -> bool
 val get_tpolyq_tags : container_type_t -> poly_tags option
+val is_property : k3_annotation_t -> bool
+val is_annotation : k3_annotation_t -> bool
 (* get size of type *)
 val csize_of_type : type_t -> int

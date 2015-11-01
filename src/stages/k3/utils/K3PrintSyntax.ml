@@ -61,13 +61,15 @@ let lcomma () = lps "," <| lsp ()
 
 let error s = lps @@ "???: "^s
 
-let lazy_anno = function
-  | Property x -> lps x
-  | _ -> []
-
-let lazy_annos = function
-  | [] -> []
-  | annos -> lps "@ " <| lazy_brace @@ lps_list ~sep:"; " NoCut lazy_anno annos
+let lazy_annos ps =
+  let lazy_anno = function | Property(_,s) -> lps s | _ -> assert false in
+  let props = List.filter U.is_property ps in
+  let annos = List.filter U.is_annotation ps in
+  let printer sym = function
+    | [] -> []
+    | xs -> lps sym <| lazy_brace @@ lps_list ~sep:"; " NoCut lazy_anno xs
+  in
+  printer "@ " props <| printer "@@ " annos
 
 let string_of_int_set s  = String.concat ", " @@ List.map soi @@ IntSet.elements s
 let string_of_int_list s = String.concat ", " @@ List.map soi s
@@ -127,7 +129,9 @@ and lazy_base_type c ~in_col ?(no_paren=false) ?(paren_complex=false) t =
 (* paren_complex: surround by paren if we're a complex type for clarity *)
 and lazy_type ?(in_col=false) ?(no_paren=false) ?paren_complex c t =
   let mut = if t.mut then lps "mut " else [] in
-  let anno e = if t.anno <> [] then lazy_paren (e <| lazy_annos t.anno) else e in
+  let anno e = if U.filter_prop_annos t.anno <> [] then
+      lazy_paren (e <| lazy_annos t.anno)
+    else e in
   anno (mut <| lazy_base_type ~in_col ~no_paren ?paren_complex c t.typ)
 
 let rec lazy_arg c drop_tuple_paren a =
@@ -454,9 +458,9 @@ let rec lazy_expr c expr =
   in
   let out = wrap out in
   (* check for annotations *)
-  let props = U.properties_of_expr expr in
+  let pas = U.prop_annos_of_expr expr in
   let out =
-    if props <> [] then lazy_paren out <| lps "@ {" <| lps_list NoCut lps props <| lps "}"
+    if pas <> [] then lazy_paren out <| lazy_annos pas
     else out
   in
   (* if we asked to highlight a uuid, do so now *)

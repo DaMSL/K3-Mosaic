@@ -17,11 +17,12 @@ let add_annos (anno:annotation_t) (e:expr_t) =
   let cur_anno = snd n in
   mk_tree ((fst n, anno@cur_anno), ch)
 
-let add_property s e = add_annos [Property s] e
+let add_property s e = add_annos [Property(false, s)] e
 
 let properties_of_expr e =
-  let get_property = function Property s -> [s] | _ -> [] in
+  let get_property = function Property(false, s) -> [s] | _ -> [] in
   List.flatten @@ List.map get_property @@ meta_of_expr e
+
 
 (* function to fail *)
 let dist_fail e s = raise @@ DistributeError(id_of_expr e, s)
@@ -487,10 +488,20 @@ let is_tmap = function TVMap _ | TSortedMap | TMap -> true | _ -> false
 let is_tpolyq = function TPolyQueue _ -> true | _ -> false
 let get_tpolyq_tags = function TPolyQueue(_,t) -> Some t | _ -> None
 
+let is_annotation = function Property(true, _) -> true | _ -> false
+let is_property = function Property(false, _) -> true | _ -> false
+
 (* estimate the c++ size of a type *)
 let rec csize_of_type t = match t.typ with
   | TTuple tl -> List.fold_left (fun acc t -> acc + csize_of_type t) 0 tl
   | TAddress  -> 16
   | TCollection _ -> failwith "csize_of_type: collections unsupported"
   | _ -> 8 (* assume that padding causes everything to be 8 bytes *)
+
+let filter_prop_annos l =
+  List.filter (fun x -> is_annotation x || is_property x) l
+
+let prop_annos_of_expr e =
+  let m = meta_of_expr e in
+  filter_prop_annos m
 

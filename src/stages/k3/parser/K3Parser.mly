@@ -144,6 +144,7 @@
 %token SEND
 
 %token <string> ANNOTATE
+%token <string> PROPERTY
 %token EFFECT PARALLEL
 
 %token <string> IDENTIFIER IP
@@ -176,6 +177,7 @@
 %left TIMES DIVIDE MODULO
 
 %left ANNOTATE
+%left PROPERTY
 
 %right NEG NOT
 
@@ -318,21 +320,11 @@ resource_pattern :
 ;
 
 
-/* Annotations */
-annotations :
-    | annotation                       { [$1] }
-    | annotation SEMICOLON annotations { $1::$3 }
-;
-
-annotation :
-    | identifier_stream      { Property(String.concat " " $1) }
-;
-
-
 /* Types */
 
 type_expr :
-    | unanno_type_expr ANNOTATE { {$1 with anno=(Property $2)::$1.anno} }
+    | unanno_type_expr ANNOTATE { {$1 with anno=(Property(true, $2))::$1.anno} }
+    | unanno_type_expr PROPERTY { {$1 with anno=(Property(false, $2))::$1.anno} }
     | unanno_type_expr { $1 }
 ;
 
@@ -409,7 +401,8 @@ poly_variant:
 ;
 
 anno_expr :
-    | expr ANNOTATE { K3Util.add_annos [Property $2] $1 }
+    | expr ANNOTATE { K3Util.add_annos [Property(true, $2)] $1 }
+    | expr PROPERTY { K3Util.add_annos [Property(false, $2)] $1 }
     | expr { $1 }
 ;
 

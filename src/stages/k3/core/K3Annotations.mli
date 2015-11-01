@@ -18,7 +18,7 @@ module type AnnotationType = sig
 	type expr_t
 
 	type k3_annotation_t =
-	  | Property of string
+	  | Property of bool * string
 	  | Type    of type_t
 
 	type annotation_t = k3_annotation_t list

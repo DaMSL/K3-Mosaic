@@ -129,11 +129,15 @@ let add_record_ids c ?prefix l =
     List.map (fun (i, x) -> record_id_of_num ?prefix i, x) i_l
 
 let lazy_properties ?(symbol="@:") props f =
-  let ps = filter_map (function Property s -> Some s | _ -> None) props in
-  match ps with
-  | []  -> f
-  | [p] -> lazy_paren (f <| lps (sp " %s " symbol) <| lps p)
-  | ps  -> lazy_paren (f <| lps (sp " %s{" symbol) <| lps_list NoCut lps ps <| lps "}")
+  let lazy_anno = function Property(_,s) -> lps s | _ -> assert false in
+  let props = List.filter U.is_property props in
+  let annos = List.filter U.is_annotation props in
+  let printer symbol l f = match l with
+    | []  -> f
+    | [p] -> lazy_paren (f <| lps (sp " %s " symbol) <| lazy_anno p)
+    | ps  -> lazy_paren (f <| lps (sp " %s{" symbol) <| lps_list NoCut lazy_anno ps <| lps "}")
+  in
+  printer "@" annos (printer symbol props f)
 
 (* Add record ids to a string *)
 let concat_record_str ?(sep=":") l =
