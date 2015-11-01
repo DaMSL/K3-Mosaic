@@ -1162,6 +1162,23 @@ module Bindings = struct
     h2
 end
 
+(* tags for profiling and post-analysis *)
+let do_profiling = create_ds ~init:mk_ctrue "do_profiling" @@ mut t_bool
+
+let prof_tag_pre_send_fetch = 0
+let prof_tag_post_send_fetch = 1
+let prof_tag_rcv_fetch = 2
+let prof_tag_buffered_push = 3
+let prof_tag_push_done = 4
+let prof_tag_do_complete_done = 5
+let prof_tag_corr_done = 6
+
+(* @t_s_id: trig or stmt id *)
+let prof_property (tag:int) (vid_nm:string) (t_s_id:string) =
+  let p =
+    sp "MosaicPreEvent(lbl=[# mosaic], tl=[$%d], ve=[$ %s], ce=[$ %s])" tag vid_nm t_s_id
+  in
+  mk_if (mk_var do_profiling.id) (U.add_property p mk_cunit) mk_cunit
 
 let global_vars c dict =
   (* replace default inits with ones from ast *)
@@ -1216,6 +1233,7 @@ let global_vars c dict =
       nd_rcv_fetch_buffer;
       nd_stmt_cntrs_per_map;
       nd_lmap_of_stmt_id c;
+      do_profiling;
     ] @
 
     log_ds c @

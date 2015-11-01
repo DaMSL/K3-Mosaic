@@ -100,7 +100,7 @@ let nd_check_stmt_cntr_index c =
        mk_let [new_count]
         (mk_add (mk_var add_to_count) @@ mk_fst @@ mk_snd @@ mk_var lookup) @@
         mk_block [
-          (* upate the counter *)
+          (* update the counter *)
           mk_update nd_stmt_cntrs.id [mk_var lookup] @@
             part_pat_as_vars @ [mk_tuple
               [mk_var new_count; mk_var new_modify;
@@ -115,13 +115,19 @@ let nd_check_stmt_cntr_index c =
               mk_cunit
           ;
           (* return whether the counter is 0 and we have some data *)
-          mk_and (mk_eq (mk_cint 0) @@ mk_var new_count) @@ mk_var new_modify]) @@
+          mk_if (mk_and (mk_eq (mk_cint 0) @@ mk_var new_count) @@ mk_var new_modify)
+            (mk_block [
+              (* for profiling: mark the push for the stmt as done *)
+              prof_property D.prof_tag_push_done "vid" "stmt_id";
+              mk_ctrue])
+            mk_cfalse
+          ]) @@
       (* else: no value in the counter *)
       mk_block [
         (* Initialize *)
         mk_insert nd_stmt_cntrs.id @@ part_pat_as_vars @
           [mk_tuple [mk_var add_to_count; mk_var has_data; mk_empty nd_stmt_cntrs_corr_map.t]];
-        (* For no-corrective mode, add per-map *)
+        (* For no-corrective mode, add to per-map stmt cntrs *)
         mk_if (mk_var D.corrective_mode.id) mk_cunit @@
           List.fold_left (fun acc (m, ss) ->
             let mk_check_s s = mk_eq (mk_var "stmt_id") @@ mk_cint s in
@@ -136,7 +142,7 @@ let nd_check_stmt_cntr_index c =
                     mk_singleton D.nd_stmt_cntrs_per_map_inner.t
                       [mk_var "vid"; mk_var "stmt_id"]]) @@
                 mk_lambda' ["x", t_of_e D.nd_stmt_cntrs_per_map.e] @@
-                  mk_insert_block "x" ~path:[2] @@ [mk_var "vid"; mk_var "stmt_id"])
+                  mk_insert_block "x" ~path:[2] [mk_var "vid"; mk_var "stmt_id"])
               acc)
           mk_cunit
           lmap_stmts;
@@ -506,11 +512,16 @@ let sw_send_fetch_fn c s_rhs_lhs s_rhs t =
  *)
 let nd_rcv_fetch_trig c trig =
   let fn_name = rcv_fetch_name_of_t trig in
+  let trig_id = P.trigger_id_for_name c.p trig in
   mk_global_fn fn_name
     (poly_args @ D.nd_rcv_fetch_args c trig) (* stmt_map_ids are an inner ds *)
     [t_int; t_int] @@
     (* skip over the function tag *)
     mk_poly_skip_block fn_name [
+
+      (* for profiling: mark the rcv fetch here *)
+      prof_property prof_tag_rcv_fetch "vid" (soi trig_id);
+
       (* we *must* have a data structure here *)
       mk_check_tag' (ios_tag c stmt_map_ids.id) @@
       (* iterate over the buffered stmt_map data *)
@@ -646,6 +657,10 @@ let nd_send_push_stmt_map_trig c s_rhs_lhs t =
               D.map_latest_vid_vals c (mk_var rmap_deref)
                 (some slice_key) rmap ~keep_vid:true) @@
         mk_block [
+          (* for profiling: mark this as a buffered push if needed *)
+          mk_if (mk_var "buffered")
+            (prof_property prof_tag_buffered_push "vid" (soi s)) mk_cunit;
+
           (* save this particular statement execution in the master log
            * Note that we need to do it here to make sure nothing
            * else can stop us before we send the push *)
@@ -1171,6 +1186,10 @@ let nd_do_complete_fns c ast trig_name corr_maps =
       (mk_block [
         (* add delta *)
         do_add_delta c (mk_var delta) lmap ~corrective:false;
+
+        (* for profiling: mark with tag for do_complete done *)
+        prof_property prof_tag_do_complete_done "vid" (soi stmt_id);
+
         if c.gen_correctives && List.exists ((=) lmap) corr_maps
         then
           let send_corr_t = send_corrective_name_of_t c lmap in
@@ -1232,6 +1251,9 @@ let nd_rcv_corr_done c =
         mk_is_empty (mk_thd @@ mk_snd @@ mk_var "lkup")
           ~n:mk_cunit
           ~y:(mk_block [
+              (* for profiling: mark tag with corrective done *)
+              prof_property prof_tag_corr_done "vid" "stmt_id";
+
               (* delete the whole stmt_cntr entry *)
               mk_delete nd_stmt_cntrs.id [mk_var "lkup"];
               Proto.nd_post_delete_stmt_cntr c])
@@ -1561,10 +1583,14 @@ let sw_event_driver_trig c =
           D.reserve_poly_queue_code c;
           (* clean out the send bitmaps *)
           mk_set_all D.poly_queue_bitmap.id [mk_cfalse];
+
           (* for debugging, sleep if we've been asked to *)
           mk_if (mk_neq (mk_var D.sw_event_driver_sleep.id) @@ mk_cint 0)
             (mk_apply' "sleep" [mk_var D.sw_event_driver_sleep.id])
             mk_cunit;
+          (* for profiling, save the vid and time *)
+          prof_property prof_tag_pre_send_fetch "vid" "-1";
+
           (* calculate the next vid *)
           mk_let ["next_vid"]
             (mk_poly_fold
@@ -1627,6 +1653,10 @@ let sw_event_driver_trig c =
             mk_pop D.sw_event_queue.id;
             (* update highest vid seen *)
             mk_assign TS.sw_highest_vid.id @@ mk_var "next_vid";
+
+            (* for profiling, annotate with the last vid seen *)
+            prof_property prof_tag_post_send_fetch "next_vid" "-1";
+
             (* check if we're done *)
             Proto.sw_check_done ~check_size:true
           ]]) @@

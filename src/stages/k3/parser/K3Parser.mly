@@ -143,7 +143,7 @@
 
 %token SEND
 
-%token ANNOTATE
+%token <string> ANNOTATE
 %token EFFECT PARALLEL
 
 %token <string> IDENTIFIER IP
@@ -332,8 +332,8 @@ annotation :
 /* Types */
 
 type_expr :
-    | unanno_type_expr ANNOTATE LBRACE annotations RBRACE     { {$1 with anno=$4} }
-    | unanno_type_expr                                        { $1 }
+    | unanno_type_expr ANNOTATE { {$1 with anno=(Property $2)::$1.anno} }
+    | unanno_type_expr { $1 }
 ;
 
 unanno_type_expr :
@@ -409,8 +409,8 @@ poly_variant:
 ;
 
 anno_expr :
-    | expr ANNOTATE LBRACE annotations RBRACE     { K3Util.add_annos $4 $1 }
-    | expr                                        { $1 }
+    | expr ANNOTATE { K3Util.add_annos [Property $2] $1 }
+    | expr { $1 }
 ;
 
 /* Expressions */

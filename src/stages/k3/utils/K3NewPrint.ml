@@ -132,8 +132,8 @@ let lazy_properties ?(symbol="@:") props f =
   let ps = filter_map (function Property s -> Some s | _ -> None) props in
   match ps with
   | []  -> f
-  | [p] -> lazy_paren (f <| lps (" "^symbol^" ") <| lps p)
-  | ps  -> lazy_paren (f <| lps (" "^symbol^"{") <| lps_list NoCut lps ps <| lps "}")
+  | [p] -> lazy_paren (f <| lps (sp " %s " symbol) <| lps p)
+  | ps  -> lazy_paren (f <| lps (sp " %s{" symbol) <| lps_list NoCut lps ps <| lps "}")
 
 (* Add record ids to a string *)
 let concat_record_str ?(sep=":") l =
@@ -1365,12 +1365,8 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
     apply_method c ~name:(nm^tag) ~col ~args:[idx; offset] ~arg_info:[def_a; def_a]
   in
   (* check if we need to write a property *)
-  let props = U.properties_of_expr expr in
-  let analyze () = match props with
-    | []  -> analyze ()
-    | [p] -> lazy_paren (analyze ()) <| lps " @: " <| lps p
-    | _   -> lazy_paren (analyze ()) <| lps " @:{" <| lps_list NoCut lps props <| lps "}"
-  in
+  let props = U.meta_of_expr expr in
+  let analyze () = lazy_properties props (analyze ()) in
   (* check if we need to wrap our output in a tuple (record) *)
   if snd expr_info then
     match U.tag_of_expr expr with
