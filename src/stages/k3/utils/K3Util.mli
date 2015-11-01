@@ -206,6 +206,7 @@ val unwrap_tuple : expr_t -> expr_t list
 val fold_over_exprs : ('a -> expr_t -> 'a) -> 'a -> program_t -> 'a
 
 val add_property : string -> expr_t -> expr_t
+val add_annotation : string -> expr_t -> expr_t
 
 val properties_of_expr : expr_t -> string list
 val filter_prop_annos : annotation_t -> annotation_t

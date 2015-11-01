@@ -18,6 +18,7 @@ let add_annos (anno:annotation_t) (e:expr_t) =
   mk_tree ((fst n, anno@cur_anno), ch)
 
 let add_property s e = add_annos [Property(false, s)] e
+let add_annotation s e = add_annos [Property(true, s)] e
 
 let properties_of_expr e =
   let get_property = function Property(false, s) -> [s] | _ -> [] in

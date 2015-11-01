@@ -1176,9 +1176,9 @@ let prof_tag_corr_done = 6
 (* @t_s_id: trig or stmt id *)
 let prof_property (tag:int) (vid_nm:string) (t_s_id:string) =
   let p =
-    sp "MosaicPreEvent(lbl=[# mosaic], tl=[$%d], ve=[$ %s], ce=[$ %s])" tag vid_nm t_s_id
+    sp "MosaicPreEvent(lbl=[# mosaic], tl=[$ %d], ve=[$ %s], ce=[$ %s])" tag vid_nm t_s_id
   in
-  mk_if (mk_var do_profiling.id) (U.add_property p mk_cunit) mk_cunit
+  mk_if (mk_var do_profiling.id) (U.add_annotation p mk_cunit) mk_cunit
 
 let global_vars c dict =
   (* replace default inits with ones from ast *)

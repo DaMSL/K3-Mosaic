@@ -130,14 +130,14 @@ let add_record_ids c ?prefix l =
 
 let lazy_properties ?(symbol="@:") props f =
   let lazy_anno = function Property(_,s) -> lps s | _ -> assert false in
-  let props = List.filter U.is_property props in
+  let ps = List.filter U.is_property props in
   let annos = List.filter U.is_annotation props in
   let printer symbol l f = match l with
     | []  -> f
     | [p] -> lazy_paren (f <| lps (sp " %s " symbol) <| lazy_anno p)
     | ps  -> lazy_paren (f <| lps (sp " %s{" symbol) <| lps_list NoCut lazy_anno ps <| lps "}")
   in
-  printer "@" annos (printer symbol props f)
+  printer "@" annos (printer symbol ps f)
 
 (* Add record ids to a string *)
 let concat_record_str ?(sep=":") l =
