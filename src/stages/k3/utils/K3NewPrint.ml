@@ -1540,5 +1540,7 @@ declare my_role : collection { elem:string } @ {Collection} =
 declare files : collection {path: string} @Collection
 declare inorder : mut string = \"in_order.csv\"
 
+sink mosaic_event_sink : {tag: int, vid: int, component: int, t: int} = file \"events.txt\" text csv
+
 "^ string_of_program ~map_to_fold ~use_filemux ~safe_writes p' envs
 
