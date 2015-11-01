@@ -1408,7 +1408,7 @@ let channel_format c = function
 
 let lazy_channel c chan_t chan_f = match chan_t with
   | PolyFile(files, inorder) ->
-      lps @@ sp "polyfile %s binary raw %s" files inorder
+      lps @@ sp "polyfile %s binary raw %s rebatch tpch_copy" files inorder
   | File _ ->
       lps @@ sp "file switch_path text %s" (channel_format c chan_f)
   | Network(str, port) -> lps @@ "socket(\""^str^"\":"^string_of_int port^")"
@@ -1541,6 +1541,20 @@ declare files : collection {path: string} @Collection
 declare inorder : mut string = \"in_order.csv\"
 
 sink mosaic_event_sink : {tag: int, vid: int, component: int, t: int} = file \"events.txt\" text csv
+
+declare rebatch : mut int = 0
+
+declare tpch_copy : poly_tpch -> poly_tpch -> int -> int -> int -> poly_tpch
+= \\orig -> \\new -> \\tg -> \\idx -> \\offset -> (
+           if tg == 0            then ((new.append_sentinel (orig.sentinel_at idx offset)); new)
+      else if tg == customer_tag then ((new.append_customer (orig.customer_at idx offset)); new)
+      else if tg == lineitem_tag then ((new.append_lineitem (orig.lineitem_at idx offset)); new)
+      else if tg == orders_tag   then ((new.append_orders   (orig.orders_at   idx offset)); new)
+      else if tg == part_tag     then ((new.append_part     (orig.part_at     idx offset)); new)
+      else if tg == partsupp_tag then ((new.append_partsupp (orig.partsupp_at idx offset)); new)
+      else if tg == supplier_tag then ((new.append_supplier (orig.supplier_at idx offset)); new)
+      else new
+  )
 
 "^ string_of_program ~map_to_fold ~use_filemux ~safe_writes p' envs
 
