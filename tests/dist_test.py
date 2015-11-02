@@ -149,14 +149,6 @@ def run(target_file,
 
         agenda_cmd = "--agenda "+ agenda_file
 
-        # create a k3 distributed file
-        cmd = concat([k3o, "-p -i m3 -l k3disttest", m3_file, agenda_cmd, options] +
-                ['>', k3dist_file, "2>", error_file])
-        print_system(cmd, verbose)
-        if check_error(error_file, verbose) or check_error(k3dist_file, verbose, True):
-            os.chdir(saved_dir)
-            return False
-
         # combine the data files
         cmd = concat([combine_tool] + read_files +
                 [agenda_cmd, '>', data_file, '2>', error_file])
@@ -165,7 +157,7 @@ def run(target_file,
             os.chdir(saved_dir)
             return False
 
-        # create another k3 distributed file (with partition map)
+        # create a k3 distributed file
         cmd = concat([k3o, "-p -i m3 -l k3disttest", m3_file, agenda_cmd,
               options, "--sfile", data_file,
               ">", k3dist_file, "2>", error_file])
