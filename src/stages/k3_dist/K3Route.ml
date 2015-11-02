@@ -266,14 +266,6 @@ let hash_func_for typ =
     | x                 -> raise @@ NoHashFunction x
   in "hash_"^inner typ
 
-(* hack to make typechecker play nice. It unifies the lookups on dim_bounds *)
-let dim_bounds_fn =
-  mk_global_fn "dim_bounds_lookup_hack"
-    ["dim_bounds", dim_bounds.t; "value", t_int; "key", t_int] [t_int] @@
-    mk_at_with' "dim_bounds" (mk_var "key") @@
-      mk_lambda' dim_bounds.e @@
-        mk_mult (mk_var "value") @@ mk_var "dim_size"
-
 let clean_results = mk_set_all route_bitmap.id [mk_cfalse]
 
 let gen_route_fn p map_id =
