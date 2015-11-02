@@ -1163,7 +1163,7 @@ let prof_property ?(flush=false) (tag:int) (vid_nm:string) (t_s_id:string) =
   let p =
     sp "MosaicPreEvent(lbl=[# mosaic], tl=[$ %d], ve=[$ %s], ce=[$ %s])" tag vid_nm t_s_id
   in
-  let target_expr = if flush then U.add_property "Flush" mk_cunit else mk_cunit in
+  let target_expr = if flush then mk_tuple ~force:true [U.add_property "Flush" mk_cunit] else mk_cunit in
   mk_if (mk_var do_profiling.id) (U.add_annotation p target_expr) mk_cunit
 
 (* calling all functions for profiling *)
