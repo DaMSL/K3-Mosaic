@@ -201,12 +201,18 @@ let sw_sent_done = create_ds "sw_sent_done" (mut t_bool) ~init:mk_cfalse
  * If a node sees more action, it calls undo on master
  *)
 
+(* we need to flush the msg queue, so we only do shutdown ourselves *)
+let shutdown_trig2_nm = "shutdown_trig2"
+let shutdown_trig2 =
+  mk_code_sink' shutdown_trig2_nm unit_arg [] @@
+    mk_apply' "haltEngine" [mk_cunit]
+
 let shutdown_trig_nm = "shutdown_trig"
 let shutdown_trig =
   mk_code_sink' shutdown_trig_nm unit_arg [] @@
   mk_block [
     D.profile_funcs_stop;
-    mk_apply' "haltEngine" [mk_cunit];
+    mk_send shutdown_trig2_nm G.me_var []
   ]
 
 let ms_rcv_node_done_cnt = mk_counter "ms_rcv_node_done_cnt"
@@ -337,6 +343,7 @@ let triggers c =
     ms_rcv_job;
     rcv_master_addr;
     ms_send_addr_self;
+    shutdown_trig2;
     shutdown_trig;
     ms_shutdown;
     ms_rcv_node_done;
