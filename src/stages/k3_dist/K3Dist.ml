@@ -1004,6 +1004,7 @@ let profile_funcs_stop =
     mk_apply' "jemallocStop" [mk_cunit];
     mk_apply' "tcmallocStop" [mk_cunit];
     mk_apply' "pcmStop" [mk_cunit];
+    prof_property ~flush:true -1 "-1" "-1";
   ]
 
 (* --- Begin frontier function code --- *)
@@ -1174,11 +1175,12 @@ let prof_tag_do_complete_done = 5
 let prof_tag_corr_done = 6
 
 (* @t_s_id: trig or stmt id *)
-let prof_property (tag:int) (vid_nm:string) (t_s_id:string) =
+let prof_property ?(flush=false) (tag:int) (vid_nm:string) (t_s_id:string) =
   let p =
     sp "MosaicPreEvent(lbl=[# mosaic], tl=[$ %d], ve=[$ %s], ce=[$ %s])" tag vid_nm t_s_id
   in
-  mk_if (mk_var do_profiling.id) (U.add_annotation p mk_cunit) mk_cunit
+  let target_expr = if flush then add_property "Flush" mk_cunit else mk_cunit in
+  mk_if (mk_var do_profiling.id) (U.add_annotation p target_expr) mk_cunit
 
 let global_vars c dict =
   (* replace default inits with ones from ast *)
