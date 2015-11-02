@@ -890,6 +890,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
     begin match U.tag_of_expr fn, args with (* can be let *)
       (* divide becomes an infix operator *)
       | Var "divf", _     -> do_pair_paren "/"
+      | Var "divi", _     -> do_pair_paren "/"
       | Var "mod", _      -> do_pair_paren "%"
       | Var "reciprocali", [e] -> arith_paren_pair "/" (light_type c @@ KH.mk_cfloat 1.0, e)
       | Var "reciprocal", [e]  -> arith_paren_pair "/" (light_type c @@ KH.mk_cint 1, e)
