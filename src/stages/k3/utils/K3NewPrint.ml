@@ -1541,8 +1541,9 @@ declare my_role : collection { elem:string } @ {Collection} =
 declare files    : collection {path: string} @Collection
 declare seqfiles : collection {seq: collection {path: string} @Collection} @Collection
 declare inorder  : mut string = \"in_order.csv\"
+declare eventlog : mut string = \"events.csv\"
 
-sink mosaic_event_sink : {tag: int, vid: int, component: int, t: int} = file \"events.txt\" text csv
+sink mosaic_event_sink : {etag: int, evid: int, pcomponent: int, t: int} = file eventlog text csv
 
 declare rebatch : mut int = 0
 
