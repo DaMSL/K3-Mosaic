@@ -452,7 +452,7 @@ let transform_to_k3_dist params p proginfo =
   try
     GenDist.gen_dist ~map_type ~stream_file
       ~gen_deletes ~gen_correctives ~agenda_map
-      proginfo params.partition_map p
+      proginfo p
   with DistributeError(uuid, s) -> handle_distribute_error (K3Data p) uuid s
 
 let process_inputs params =

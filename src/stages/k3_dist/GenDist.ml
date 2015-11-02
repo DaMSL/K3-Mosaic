@@ -1812,7 +1812,7 @@ let gen_loader_vars ast =
   List.map (fun (s, f) ->
     mk_global_val_init (s^"_path") t_string @@ mk_cstring f) tables
 
-let declare_global_vars c partmap ast =
+let declare_global_vars c ast =
   (* TODO: dummy map currently needed for MapE generation *)
   mk_global_val "dummy_map" (wrap_tmap' [t_int; wrap_tbag' [t_int; t_int]]) ::
   (* dummy switch path variable. Will be filled at cpp stage *)
@@ -1826,7 +1826,7 @@ let declare_global_vars c partmap ast =
   TS.global_vars @
   K3Ring.global_vars @
   [K3Route.calc_dim_bounds] @ (* needed for global_vars *)
-  K3Route.global_vars c partmap @
+  K3Route.global_vars c @
   K3Shuffle.global_vars @
   GC.global_vars c @
   List.map decl_global
@@ -1840,7 +1840,7 @@ let declare_global_vars c partmap ast =
      nd_dispatcher_last_num;
     ]
 
-let declare_global_funcs c partmap ast =
+let declare_global_funcs c ast =
   flatteners c @
   nd_log_master_write ::
   (P.for_all_trigs ~sys_init:true ~delete:c.gen_deletes c.p @@ nd_log_write c) @
@@ -1850,7 +1850,7 @@ let declare_global_funcs c partmap ast =
   K3Ring.functions @
   (List.map (fun (i, (_, maps)) -> nd_add_delta_to_buf c (hd maps)) @@ D.uniq_types_and_maps c) @
   TS.functions @
-  K3Route.functions c partmap @
+  K3Route.functions c @
   K3Shuffle.functions c @
   GC.functions c (Proto.sw_check_done ~check_size:true)
 
@@ -1892,7 +1892,7 @@ let gen_dist ?(gen_deletes=true)
              ~stream_file
              ~map_type
              ~(agenda_map: mapping_t)
-             p partmap ast =
+             p ast =
   let sys_init =
     try ignore(P.find_trigger p "system_ready_event"); true
     with Not_found | P.Bad_data _ -> false in
@@ -1938,8 +1938,8 @@ let gen_dist ?(gen_deletes=true)
     mk_typedef poly_queue_typedef_id (poly_queue_typedef c) ::
     mk_typedef upoly_queue_typedef_id (upoly_queue_typedef c) ::
     mk_typedef poly_event_typedef_id (poly_event_typedef c) ::
-    declare_global_vars c partmap ast @
-    declare_global_funcs c partmap ast @
+    declare_global_vars c ast @
+    declare_global_funcs c ast @
     (if c.gen_correctives then send_corrective_fns c else []) @
     proto_funcs2 @
     (* we need this here for scope *)

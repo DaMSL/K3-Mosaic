@@ -1147,6 +1147,42 @@ module Bindings = struct
     h2
 end
 
+(*** partition map ***)
+(* this is a naive partition map *)
+let pmap_factor = 64
+let pmap_buckets = create_ds ~init:(mk_cint pmap_factor) "pmap_buckets" @@ t_int
+let pmap_input p =
+  let t = wrap_tlist' [t_string; wrap_tlist' [t_int; t_int]] in
+  let init =
+    let maps = P.for_all_maps p @@ fun m -> m, insert_index_fst @@ P.map_types_no_val_for p m in
+    let maps = List.map (fun (m, l) ->
+      let initial_list = list_map (fun (i,_) -> i, 1) l in
+      let rec loop l prod =
+        if prod >= pmap_factor then l
+        else
+          (* keep increasing the dimension sizes until we meet our goal *)
+          let prod', l' =
+            mapfold (fun (acc_prod:int) (dim, size) ->
+              if acc_prod >= pmap_factor then acc_prod, (dim, size)
+              else acc_prod * 2, (dim, size * 2) (* double the size of this dimension *)
+            ) prod l
+          in
+          loop l' prod'
+      in
+      let l = loop initial_list 1 in
+      P.map_name_of p m, l) maps
+    in
+    (* translate to k3 *)
+    let maps =
+      List.map (fun (m, l) ->
+          let l = List.map (fun (i,j) ->
+              mk_tuple [mk_cint i; mk_apply' "divi" [mk_var "pmap_buckets"; mk_cint @@ pmap_factor/j]]) l in
+          mk_tuple [mk_cstring m; k3_container_of_list (wrap_tlist' [t_int; t_int]) l]) maps
+    in
+    k3_container_of_list t maps
+  in
+  create_ds "pmap_input" ~init t
+
 (* tags for profiling and post-analysis *)
 let do_profiling = create_ds ~init:mk_ctrue "do_profiling" @@ mut t_bool
 
@@ -1207,6 +1243,8 @@ let global_vars c dict =
       jobs;  (* inserted dynamically by interpreter *)
       master_addr;
       timer_addr;
+      pmap_buckets;
+      pmap_input c.p;
       nodes;
       switches;
       num_peers;

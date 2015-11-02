@@ -245,12 +245,6 @@ let k3_partition_map_of_list p l =
     let new_l = List.map one_map_to_k3 l in
     k3_container_of_list inner_plist.t new_l
 
-let pmap_input p partmap =
-  let e = ["map", t_string; inner_plist.id, inner_plist.t] in
-  let t = wrap_tlist' @@ snd_many e in
-  let init = k3_partition_map_of_list p partmap in
-  create_ds "pmap_input" t ~e ~init
-
 exception NoHashFunction of K3.AST.base_type_t
 
 let hash_func_for typ =
@@ -457,16 +451,15 @@ let route_lookup c map_id key pat_idx lambda_body =
     mk_lambda'' [route_bitmap.id, route_bitmap.t] lambda_body
 
 (* create all code needed for route functions, including foreign funcs*)
-let global_vars c partmap =
+let global_vars c =
   List.map decl_global @@
   [ builtin_route;
     route_bitmap;
     all_nodes_bitmap;
-    pmap_input c.p partmap;
     pmap_data c.p] @
     route_memo c
 
-let functions c partmap =
+let functions c =
   (* create a route for each map type, using only the key types *)
   (List.flatten @@ List.map (fun m -> gen_route_fn c.p m) @@
     List.map (hd |- snd |- snd) @@

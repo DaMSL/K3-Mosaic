@@ -9,10 +9,10 @@ cd $SCRIPTPATH
 if [ ! -d "./bin" ]; then mkdir bin; fi
 
 # partition map tool
-ocamlbuild -use-ocamlfind PartMapTool.native -build-dir ./bin $@
-if [ -f "./bin/src/PartMapTool.native" ]
+ocamlbuild -use-ocamlfind PartMapTool.d.byte -build-dir ./bin $@
+if [ -f "./bin/src/PartMapTool.d.byte" ]
 then echo "#!/bin/bash" > ./bin/partmap_tool
-     echo "$SCRIPTPATH/bin/src/PartMapTool.native \$@" >> ./bin/partmap_tool
+     echo "$SCRIPTPATH/bin/src/PartMapTool.d.byte \$@" >> ./bin/partmap_tool
      chmod +x ./bin/partmap_tool
 fi
 

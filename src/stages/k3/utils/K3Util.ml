@@ -482,6 +482,7 @@ let fold_over_exprs f zero p =
     | _                    -> acc
   ) zero p
 
+let is_tcol t = match t.typ with TCollection _ -> true | _ -> false
 let is_tvmap = function TVMap _ -> true | _ -> false
 let is_tvector = function TVector -> true | _ -> false
 let is_tsorted = function TSortedSet | TSortedMap | TVMap _ -> true | _ -> false

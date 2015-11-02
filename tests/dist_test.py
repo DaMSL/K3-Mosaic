@@ -56,7 +56,6 @@ def run(target_file,
         print("Failed to determine OS")
         return False
     k3o = os.path.join(root_path, "bin/k3")
-    partmap_tool = os.path.join(root_path, "bin/partmap_tool")
     combine_tool = os.path.join(root_path, "bin/combine_data")
 
     saved_dir = os.path.abspath(os.path.curdir)
@@ -82,7 +81,6 @@ def run(target_file,
     check_exists("k3o", k3o)
     check_exists("agenda file", agenda_file)
     if distrib:
-        check_exists("partmap_tool", partmap_tool)
         check_exists("combine_data", combine_tool)
 
     # run dbtoaster to get interpreted updates
@@ -151,18 +149,11 @@ def run(target_file,
 
         agenda_cmd = "--agenda "+ agenda_file
 
-        # create a k3 distributed file (without a partition map)
+        # create a k3 distributed file
         cmd = concat([k3o, "-p -i m3 -l k3disttest", m3_file, agenda_cmd, options] +
                 ['>', k3dist_file, "2>", error_file])
         print_system(cmd, verbose)
         if check_error(error_file, verbose) or check_error(k3dist_file, verbose, True):
-            os.chdir(saved_dir)
-            return False
-
-        # create a partition map
-        cmd = concat([partmap_tool, k3dist_file, "-n", num_nodes, ">", part_file])
-        print_system(cmd, verbose)
-        if check_error(part_file, verbose, True):
             os.chdir(saved_dir)
             return False
 
@@ -176,7 +167,7 @@ def run(target_file,
 
         # create another k3 distributed file (with partition map)
         cmd = concat([k3o, "-p -i m3 -l k3disttest", m3_file, agenda_cmd,
-              options, "-m", part_file, "--sfile", data_file,
+              options, "--sfile", data_file,
               ">", k3dist_file, "2>", error_file])
         print_system(cmd, verbose)
         if check_error(error_file, verbose) or check_error(k3dist_file, verbose, True):
@@ -210,12 +201,6 @@ def run(target_file,
             if check_error(error_file, verbose, False):
                 os.chdir(saved_dir)
                 return False
-
-            # create k3_new partmap
-            print("Creating k3new partition map...\n")
-            cmd = concat([partmap_tool, k3dist_file, "--k3new -n",
-                  num_nodes, ">", k3new_part_file])
-            print_system(cmd, verbose)
 
         if run_interp:
             # create a json file

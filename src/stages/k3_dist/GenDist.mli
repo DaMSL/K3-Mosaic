@@ -12,7 +12,6 @@ val gen_dist :
                map_type:map_type ->
                agenda_map:K3Dist.mapping_t ->
                prog_data_t ->
-               part_map_t ->
                program_t ->
                program_t
 
