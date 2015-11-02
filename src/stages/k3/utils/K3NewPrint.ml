@@ -1545,17 +1545,5 @@ sink mosaic_event_sink : {tag: int, vid: int, component: int, t: int} = file \"e
 
 declare rebatch : mut int = 0
 
-declare tpch_copy : poly_event_t -> poly_event_t -> int -> int -> int -> poly_event_t
-= \\orig -> \\new -> \\tg -> \\idx -> \\offset -> (
-           if tg == 0            then ((new.append_sentinel (orig.sentinel_at idx offset)); new)
-      else if tg == customer_tag then ((new.append_customer (orig.customer_at idx offset)); new)
-      else if tg == lineitem_tag then ((new.append_lineitem (orig.lineitem_at idx offset)); new)
-      else if tg == orders_tag   then ((new.append_orders   (orig.orders_at   idx offset)); new)
-      else if tg == part_tag     then ((new.append_part     (orig.part_at     idx offset)); new)
-      else if tg == partsupp_tag then ((new.append_partsupp (orig.partsupp_at idx offset)); new)
-      else if tg == supplier_tag then ((new.append_supplier (orig.supplier_at idx offset)); new)
-      else new
-  )
-
 "^ string_of_program ~map_to_fold ~use_filemux ~safe_writes p' envs
 
