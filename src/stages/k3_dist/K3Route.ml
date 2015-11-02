@@ -467,7 +467,6 @@ let global_vars c partmap =
     route_memo c
 
 let functions c partmap =
-  dim_bounds_fn ::
   (* create a route for each map type, using only the key types *)
   (List.flatten @@ List.map (fun m -> gen_route_fn c.p m) @@
     List.map (hd |- snd |- snd) @@
