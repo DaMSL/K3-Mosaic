@@ -121,7 +121,7 @@ let divi_fn e =
   | _ -> invalid_arg "divi"
 
 let divi_name = "divi"
-let divi_decl = wrap_tfunc [t_int] t_int
+let divi_decl = wrap_tfunc [t_int; t_int] t_int
 let divi_args = wrap_args ["x", t_int; "y", t_int]
 let _ = Hashtbl.add func_table
   divi_name (divi_decl, divi_args, divi_fn)
