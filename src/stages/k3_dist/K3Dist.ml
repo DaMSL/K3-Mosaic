@@ -1155,6 +1155,7 @@ let pmap_input p =
   let t = wrap_tlist' [t_string; wrap_tlist' [t_int; t_int]] in
   let init =
     let maps = P.for_all_maps p @@ fun m -> m, insert_index_fst @@ P.map_types_no_val_for p m in
+    let maps = List.filter (fun (_,l) -> l <> []) maps in
     let maps = List.map (fun (m, l) ->
       (* 2: make sure we use at least 2 in partitioning so we don't have replication *)
       let initial_list = list_map (fun (i,_) -> i, 2) l in
