@@ -1179,7 +1179,7 @@ let profile_funcs_stop =
     mk_apply' "jemallocStop" [mk_cunit];
     mk_apply' "tcmallocStop" [mk_cunit];
     mk_apply' "pcmStop" [mk_cunit];
-    prof_property ~flush:true -1 "-1" "-1";
+    prof_property ~flush:true (-1) "-1" "-1";
   ]
 
 let global_vars c dict =
