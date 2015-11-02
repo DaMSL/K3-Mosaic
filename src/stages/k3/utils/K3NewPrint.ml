@@ -1407,8 +1407,8 @@ let channel_format c = function
   | BIN  -> "binary"
 
 let lazy_channel c chan_t chan_f = match chan_t with
-  | PolyFile(files, inorder) ->
-      lps @@ sp "polyfile %s binary raw %s rebatch tpch_copy" files inorder
+  | PolyFileSeq(files, inorder) ->
+      lps @@ sp "polyfileseq %s binary raw %s rebatch tpch_copy" files inorder
   | File _ ->
       lps @@ sp "file switch_path text %s" (channel_format c chan_f)
   | Network(str, port) -> lps @@ "socket(\""^str^"\":"^string_of_int port^")"
@@ -1538,8 +1538,9 @@ declare my_peers2 : collection { elem:address } @ {Collection} =
 declare my_role : collection { elem:string } @ {Collection} =
   role.fold (\\acc -> (\\x -> (acc.insert {elem:x.i}; acc))) empty { elem:string} @ Collection
 
-declare files : collection {path: string} @Collection
-declare inorder : mut string = \"in_order.csv\"
+declare files    : collection {path: string} @Collection
+declare seqfiles : collection {seq: collection {path: string} @Collection} @Collection
+declare inorder  : mut string = \"in_order.csv\"
 
 sink mosaic_event_sink : {tag: int, vid: int, component: int, t: int} = file \"events.txt\" text csv
 

@@ -41,7 +41,7 @@ let _ =
         "ssource",    SOURCE;
         "ssink",      SINK;
         "sfile",      FILE;
-        "spolyfile",  POLYFILE;
+        "spolyfileseq",  POLYFILESEQ;
         "socket",    SOCKET;
         "srandom",   RANDOM;
         "stream",    STREAM;

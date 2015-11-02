@@ -1793,7 +1793,7 @@ let roles_of c (ast:program_t) =
     ] in
   let sw_flows_new = List.map mk_no_anno [
     Source(Resource("switch",
-      Handle(D.poly_event_queue.t, PolyFile("files", "inorder"), BIN)));
+      Handle(D.poly_event_queue.t, PolyFileSeq("seqfiles", "inorder"), BIN)));
     BindFlow("switch", sw_demux_poly_nm);
     Instruction(Consume("switch"));
   ] in

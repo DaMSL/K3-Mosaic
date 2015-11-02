@@ -187,9 +187,9 @@ type stop_behavior_t
 type channel_format_t = CSV | JSON | BIN
 
 type channel_type_t
-    = File       of string
-    | PolyFile   of id_t * id_t (* files var, inorder var *)
-    | Network    of address
+    = File          of string
+    | PolyFileSeq   of id_t * id_t (* fileseq var, inorder var *)
+    | Network       of address
 
 type stream_type_t
     = RandomStream of int    (* num of entries *)
