@@ -1408,7 +1408,7 @@ let channel_format c = function
 
 let lazy_channel c chan_t chan_f = match chan_t with
   | PolyFileSeq(files, inorder) ->
-      lps @@ sp "polyfileseq %s binary raw %s rebatch tpch_copy" files inorder
+      lps @@ sp "polyfileseq %s binary raw %s rebatch" files inorder
   | File _ ->
       lps @@ sp "file switch_path text %s" (channel_format c chan_f)
   | Network(str, port) -> lps @@ "socket(\""^str^"\":"^string_of_int port^")"
