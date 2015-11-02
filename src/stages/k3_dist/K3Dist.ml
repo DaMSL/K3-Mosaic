@@ -991,22 +991,6 @@ let nd_add_delta_to_buf_nm c map_id =
 let flatten_fn_nm t =
   "flatten_"^strcatmap ~sep:"_" K3PrintSyntax.string_of_type t
 
-(* calling all functions for profiling *)
-let profile_funcs_start =
-  mk_block [
-    mk_apply' "jemallocStart" [mk_cunit];
-    mk_apply' "tcmallocStart" [mk_cunit];
-    mk_apply' "pcmStart" [mk_cunit];
-  ]
-
-let profile_funcs_stop =
-  mk_block [
-    mk_apply' "jemallocStop" [mk_cunit];
-    mk_apply' "tcmallocStop" [mk_cunit];
-    mk_apply' "pcmStop" [mk_cunit];
-    prof_property ~flush:true -1 "-1" "-1";
-  ]
-
 (* --- Begin frontier function code --- *)
 
 (* Get the latest vals up to a certain vid
@@ -1181,6 +1165,22 @@ let prof_property ?(flush=false) (tag:int) (vid_nm:string) (t_s_id:string) =
   in
   let target_expr = if flush then add_property "Flush" mk_cunit else mk_cunit in
   mk_if (mk_var do_profiling.id) (U.add_annotation p target_expr) mk_cunit
+
+(* calling all functions for profiling *)
+let profile_funcs_start =
+  mk_block [
+    mk_apply' "jemallocStart" [mk_cunit];
+    mk_apply' "tcmallocStart" [mk_cunit];
+    mk_apply' "pcmStart" [mk_cunit];
+  ]
+
+let profile_funcs_stop =
+  mk_block [
+    mk_apply' "jemallocStop" [mk_cunit];
+    mk_apply' "tcmallocStop" [mk_cunit];
+    mk_apply' "pcmStop" [mk_cunit];
+    prof_property ~flush:true -1 "-1" "-1";
+  ]
 
 let global_vars c dict =
   (* replace default inits with ones from ast *)
