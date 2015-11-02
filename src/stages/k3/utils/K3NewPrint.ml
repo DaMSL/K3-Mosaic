@@ -1544,7 +1544,7 @@ sink mosaic_event_sink : {tag: int, vid: int, component: int, t: int} = file \"e
 
 declare rebatch : mut int = 0
 
-declare tpch_copy : poly_tpch -> poly_tpch -> int -> int -> int -> poly_tpch
+declare tpch_copy : poly_event_t -> poly_event_t -> int -> int -> int -> poly_event_t
 = \\orig -> \\new -> \\tg -> \\idx -> \\offset -> (
            if tg == 0            then ((new.append_sentinel (orig.sentinel_at idx offset)); new)
       else if tg == customer_tag then ((new.append_customer (orig.customer_at idx offset)); new)
