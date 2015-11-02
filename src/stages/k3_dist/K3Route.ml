@@ -41,10 +41,11 @@ let sorted_ip_inner_type = [t_addr; t_unit]
 (*             map_name * (map_parameter * modulo)  *)
 type part_map_t = (id_t * (int * int) list) list
 
-let inner_pmap =
-  let e = ["pos", t_int; "mod", t_int] in
-  let t = wrap_tmap' @@ snd_many e in
-  create_ds "inner_pmap" t ~e
+let buckets =
+  (* indexed by dimension *)
+  let e = ["mod", t_int] in
+  let t = wrap_tvector' @@ snd_many e in
+  create_ds "buckets" t ~e
 
 (* list equal to inner_pmap, to preserve ordering *)
 let inner_plist =
@@ -66,7 +67,7 @@ let free_dims =
   create_ds "free_dims" t ~e
 
 let pmap =
-  let e = [inner_pmap.id, inner_pmap.t;
+  let e = [buckets.id, buckets.t;
            "dim_bounds", dim_bounds.t;
            "max_val", t_int] in
   let t = wrap_ttuple @@ snd_many e in
@@ -96,7 +97,7 @@ let all_nodes_bitmap =
 
 let calc_dim_bounds =
   mk_global_fn ~wr_all:true "calc_dim_bounds"
-    ["map_id", t_int; "pmap", inner_plist.t] [dim_bounds.t; t_int] @@
+    ["map_id", t_int; "pmap", inner_plist.t] [buckets.t; dim_bounds.t; t_int] @@
     (* create full range for all dimensions *)
     (* also, pre-create the dims vector with the right size *)
     mk_let ["num_dims"]
@@ -111,6 +112,8 @@ let calc_dim_bounds =
            mk_insert_at "acc" (mk_var "num_dims") [mk_cint 0; mk_empty rng.t];
            mk_var "acc"
          ]]) @@
+    mk_let ["buckets"]
+      (mk_map (mk_lambda' unknown_arg @@ mk_cint 0) @@ mk_var "rng") @@
     (* calculate the size of the bucket of each dimensioned we're partitioned on
     * This is order-dependent in pmap *)
     mk_let ["dims"; "final_size"]
@@ -148,7 +151,7 @@ let calc_dim_bounds =
           ])
         (mk_var "dims") @@
         mk_var "rng") @@
-    mk_tuple [mk_var "dims"; mk_var "final_size"]
+    mk_tuple [mk_var "buckets"; mk_var "dims"; mk_var "final_size"]
 
 (* map from map_id to inner_pmap *)
 let pmap_data_id = "pmap_data"
@@ -161,7 +164,7 @@ let pmap_data p =
     (* initialize the map to be the size we need *)
     mk_block [
       mk_insert_at "agg" (mk_cint @@ num_maps) (* maps start at 1 *)
-        [mk_empty inner_pmap.t; mk_empty dim_bounds.t; mk_cint 0];
+        [mk_empty buckets.t; mk_empty dim_bounds.t; mk_cint 0];
       (* partition map as input by the user (with map names) *)
       (* calculate the size of the bucket of each dimensioned we're partitioned on
       * This is order-dependent in pmap *)
@@ -172,13 +175,10 @@ let pmap_data p =
             (mk_fst @@ mk_peek_or_error "can't find map in map_ids" @@
               mk_slice' K3Dist.map_ids_id
                 [mk_cunknown; mk_var "map_name"; mk_cunknown]) @@
-          mk_let ["dim_bounds"; "last_size"]
+          mk_let ["buckets"; "dim_bounds"; "last_size"]
             (mk_apply' "calc_dim_bounds" [mk_var "map_id"; mk_var "map_types"]) @@
           mk_insert_at_block "acc" (mk_var "map_id")
-            (* convert map_types to map *)
-            [mk_convert_col inner_plist.t inner_pmap.t @@ mk_var "map_types";
-            mk_var "dim_bounds";
-            mk_var "last_size"])
+            [mk_var "buckets"; mk_var "dim_bounds"; mk_var "last_size"])
       (mk_var "agg") @@
       mk_var "pmap_input"
     ]
@@ -309,7 +309,7 @@ let gen_route_fn p map_id =
         mk_lambda' ["pmap_data", pmap.t] @@
 
         (* deep bind *)
-        mk_let ["pmap"; "dim_bounds"; "max_val"] (mk_var "pmap_data") @@
+        mk_let ["buckets"; "dim_bounds"; "max_val"] (mk_var "pmap_data") @@
 
         List.fold_left
           (fun acc_code index ->
@@ -322,8 +322,8 @@ let gen_route_fn p map_id =
               (mk_case_tup_ns (mk_var temp_id) id_unwrap
                 (mk_cint 0) @@ (* no contribution *)
                 (* check if we don't partition by this index *)
-                mk_case_ns (mk_peek @@
-                    mk_slice' "pmap" [mk_cint index; mk_cunknown]) "peek_slice"
+                mk_let ["bucket_mod"] (mk_at' "buckets" @@ mk_cint index) @@
+                mk_if_eq (mk_var "bucket_mod") (mk_cint 0)
                   (mk_cint 0) @@
                   mk_let ["value"]
                     (mk_apply (mk_var "mod")
@@ -332,7 +332,7 @@ let gen_route_fn p map_id =
                           * point locality *)
                         [mk_apply' "abs" @@ singleton @@
                           mk_apply' hash_func [mk_var id_unwrap];
-                        mk_snd @@ mk_var "peek_slice"]) @@
+                        mk_var "bucket_mod"]) @@
                   mk_at_with' "dim_bounds" (mk_cint @@ index + 1) @@
                     mk_lambda' dim_bounds.e @@
                       mk_mult (mk_var "value") @@ mk_var "dim_size")
