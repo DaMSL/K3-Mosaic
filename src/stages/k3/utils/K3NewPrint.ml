@@ -1519,6 +1519,7 @@ include \"Annotation/Vector.k3\"
 include \"Annotation/FlatPolyBuffer.k3\"
 include \"Annotation/UniquePolyBuffer.k3\"
 include \"Core/MosaicBuiltins.k3\"
+include \"Core/Profile.k3\"
 
 @:CArgs 2
 declare NATIONLoaderRP : collection {path: string} @Collection -> collection {ra:int, rb:string, rc:int, rd:string} @Collection -> collection {ra:int, rb:string, rc:int, rd:string} @Collection
