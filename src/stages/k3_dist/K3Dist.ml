@@ -1156,7 +1156,9 @@ let pmap_input p =
   let init =
     let maps = P.for_all_maps p @@ fun m -> m, insert_index_fst @@ P.map_types_no_val_for p m in
     let maps = List.map (fun (m, l) ->
-      let initial_list = list_map (fun (i,_) -> i, 1) l in
+      (* 2: make sure we use at least 2 in partitioning so we don't have replication *)
+      let initial_list = list_map (fun (i,_) -> i, 2) l in
+      let init_val = List.fold_left (fun acc (_,v) -> acc * v) 1 initial_list in
       let rec loop l prod =
         if prod >= pmap_factor then l
         else
@@ -1169,7 +1171,7 @@ let pmap_input p =
           in
           loop l' prod'
       in
-      let l = loop initial_list 1 in
+      let l = loop initial_list init_val in
       P.map_name_of p m, l) maps
     in
     (* translate to k3 *)
