@@ -24,6 +24,12 @@ module U = K3Util
   * Scale the result to the entire hashable range, and find a corresponding node on the clock.
   *)
 
+(* Memoization:
+   We first calculate the bound bucket of the bound variables.
+   We use this value together with the particular bind pattern out of the possible bind patterns
+   for this map, to index into a memoized table of bitmaps representing ips
+   *)
+
 (* route function name *)
 let route_for ~bound p map_id =
   let m_t = P.map_types_no_val_for p map_id in

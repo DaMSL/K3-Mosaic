@@ -1208,16 +1208,16 @@ let prof_property ?(flush=false) (tag:int) (vid_nm:string) (t_s_id:string) =
 (* calling all functions for profiling *)
 let profile_funcs_start =
   mk_block [
-    mk_apply' "jemallocStart" [mk_cunit];
-    mk_apply' "tcmallocStart" [mk_cunit];
-    mk_apply' "pcmStart" [mk_cunit];
+    mk_apply' "jemallocStart" [];
+    mk_apply' "tcmallocStart" [];
+    mk_apply' "pcmStart" [];
   ]
 
 let profile_funcs_stop =
   mk_block [
-    mk_apply' "jemallocStop" [mk_cunit];
-    mk_apply' "tcmallocStop" [mk_cunit];
-    mk_apply' "pcmStop" [mk_cunit];
+    mk_apply' "jemallocStop" [];
+    mk_apply' "tcmallocStop" [];
+    mk_apply' "pcmStop" [];
     prof_property ~flush:true (-1) "-1" "-1";
   ]
 
