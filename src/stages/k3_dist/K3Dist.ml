@@ -1187,7 +1187,7 @@ let pmap_input p =
   create_ds "pmap_input" ~init t
 
 (* tags for profiling and post-analysis *)
-let do_profiling = create_ds ~init:mk_ctrue "do_profiling" @@ mut t_bool
+let do_profiling = create_ds ~init:mk_cfalse "do_profiling" @@ mut t_bool
 
 let prof_tag_pre_send_fetch = 0
 let prof_tag_post_send_fetch = 1
