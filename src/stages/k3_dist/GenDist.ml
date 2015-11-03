@@ -1541,13 +1541,13 @@ let nd_trig_dispatcher_trig c =
        (mk_cint 0) @@
        mk_add (mk_var nd_dispatcher_last_num.id) @@ mk_cint 1) @@
   mk_block [
-    (* unpack the polyqueue *)
-    mk_poly_unpack (mk_var "poly_queue");
-
     (* check if we're contiguous *)
     mk_if (mk_eq (mk_var "num") (mk_var "next_num"))
       (* then dispatch right away *)
       (mk_block [
+          (* unpack the polyqueue *)
+          mk_poly_unpack (mk_var "poly_queue");
+
           mk_assign nd_dispatcher_last_num.id @@ mk_var "next_num";
           mk_apply' trig_dispatcher_nm [mk_var "poly_queue"; mk_var "empty_upoly_queue"];
        ]) @@
