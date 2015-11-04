@@ -107,6 +107,7 @@ let _ = Hashtbl.add func_table
 let divf_fn e =
   match arg_of_env "x" e, arg_of_env "y" e with
   | VFloat x, VFloat y -> e, float_temp @@ x /. y
+  | VInt x, VFloat y -> e, float_temp @@ (foi x) /. y
   | _ -> invalid_arg "divf"
 
 let divf_name = "divf"
