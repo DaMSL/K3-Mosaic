@@ -1166,27 +1166,43 @@ let pmap_shifts_e = ["shift", t_int; "max", t_int]
 let pmap_shifts p =
   let ms = List.sort (-) @@ P.get_map_list p in
   let t = wrap_tvector' @@ snd_many pmap_shifts_e in
-  let info_ds =
-    let e = ["min_map_size", t_int; "map_id", t_int] in
-    create_ds ~e "info" @@ wrap_tvector' @@ snd_many e
-  in
+  (* prune out the maps on which we only do point access. We don't care
+     about sys_init because that's done once so it's cheap *)
+  let route_pats = Bindings.route_access_patterns ~sys_init:false p in
+  let only_point_access =
+    Hashtbl.fold (fun m ism acc ->
+        let num_vars = List.length @@ P.map_types_no_val_for p m in
+        let set = fst @@ IntSetMap.choose ism in
+        (* check that we have no bindings but the full binding *)
+        if IntSetMap.cardinal ism = 1 && IntSet.cardinal set = num_vars then
+          IntSet.add m acc else acc)
+      route_pats
+      IntSet.empty in
   let init =
+    let info_ds =
+      let e = ["min_map_size", t_int; "map_id", t_int; "point_access", t_bool] in
+      create_ds ~e "info" @@ wrap_tvector' @@ snd_many e
+    in
     (* data structure with information *)
     mk_let ["info"]
       (k3_container_of_list info_ds.t @@
-        [mk_tuple [mk_cint 0; mk_cint 0]] @
+        [mk_tuple [mk_cint 0; mk_cint 0; mk_ctrue]] @
         List.map (fun m ->
             (* check if we have a bigger than maximum map dimension *)
             let dims = List.length @@ P.map_types_no_val_for p m in
             (* we know that we have to partition every dimension *)
             let min_size = iof @@ 2. ** (foi dims) in
-            mk_tuple [mk_cint min_size; mk_cint m])
+            let point_access = IntSet.mem m only_point_access in
+            mk_tuple [mk_cint min_size; mk_cint m; mk_cbool point_access])
          ms) @@
     (* process the information *)
     mk_map (mk_lambda' info_ds.e @@
           mk_let ["map_size"]
             (mk_if (mk_gt (mk_var "min_map_size") @@ mk_var pmap_buckets.id)
                (mk_var "min_map_size") @@ mk_var pmap_buckets.id) @@
+          (* for point access maps, keep it simple *)
+          mk_if (mk_var "point_access")
+            (mk_tuple [mk_cint 0; mk_var "map_size"]) @@
           mk_let ["map_scaled_size"]
             (mk_apply' "int_of_float"
                [mk_apply' "divf" [mk_var "map_size"; mk_var pmap_area_factor.id]]) @@
