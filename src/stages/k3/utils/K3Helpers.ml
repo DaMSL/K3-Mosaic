@@ -339,7 +339,18 @@ let mk_slice_geq' col pat = mk_slice_geq (mk_var col) pat
 let mk_error s = mk_apply' "error" [mk_apply' "print" [mk_cstring s]]
 
 let _err = mk_lambda' ["_", t_unknown] @@ mk_error "vector: out of bounds!"
-let mk_at_with ?(error=_err) col idx lam = mk_stree AtWith [col; idx; error; lam]
+let _err_e e =
+  mk_lambda' ["_", t_unknown] @@
+    mk_apply' "error" [
+      mk_apply' "print" [
+        mk_apply' "concat"
+          [mk_apply' "string_of_int" [e]; mk_cstring " out of bounds!"]
+      ]
+    ]
+let mk_at_with ?error col idx lam =
+  let error = maybe (_err_e idx) id_fn error in
+  mk_stree AtWith [col; idx; error; lam]
+
 let mk_at_with' ?error col idx lam = mk_at_with ?error (mk_var col) idx lam
 
 let mk_at col idx = mk_stree At [col; idx]
@@ -440,7 +451,7 @@ let mk_let_block vars v es = mk_let vars v @@ mk_block es
 (* lambda for these functions takes tag, tuple_idx, tuple_offset *)
 (* return the same idx,offset to increase 1, or another to skip *)
 let mk_poly_iter idx offset lam col = mk_stree PolyIter [idx; offset; lam; col]
-let mk_poly_iter' ?(unique=false) lam = 
+let mk_poly_iter' ?(unique=false) lam =
   let idx, offset, pq = if unique then "uidx", "uoffset", "upoly_queue" else "idx", "offset", "poly_queue" in
   mk_poly_iter (mk_var idx) (mk_var offset) lam (mk_var pq)
 let mk_poly_fold lam zero col = mk_stree PolyFold [lam; zero; col]
@@ -449,7 +460,7 @@ let mk_poly_fold lam zero col = mk_stree PolyFold [lam; zero; col]
 let mk_poly_iter_tag tag idx offset lam col = mk_stree (PolyIterTag tag) [idx; offset; lam; col]
 let mk_poly_iter_tag' ?(unique=false) tag lam =
   let idx, offset, pq = if unique then "uidx", "uoffset", "upoly_queue" else "idx", "offset", "poly_queue" in
-  mk_poly_iter_tag tag (mk_var idx) (mk_var offset) lam (mk_var pq) 
+  mk_poly_iter_tag tag (mk_var idx) (mk_var offset) lam (mk_var pq)
 
 let mk_poly_fold_tag tag idx offset lam zero col = mk_stree (PolyFoldTag tag) [idx; offset; lam; zero; col]
 let mk_poly_fold_tag' ?(unique=false) tag lam zero =

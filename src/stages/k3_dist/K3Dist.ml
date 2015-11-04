@@ -1151,6 +1151,52 @@ end
 (* this is a naive partition map *)
 let pmap_factor = 64
 let pmap_buckets = create_ds ~init:(mk_cint pmap_factor) "pmap_buckets" @@ t_int
+
+(* scaled maximum to reduce the coverage of the maps *)
+let pmap_scale_factor = create_ds ~init:(mk_cfloat 1.) "pmap_scale_factor" @@ t_float
+let pmap_shift_factor = create_ds ~init:(mk_cfloat 0.) "pmap_shift_factor" @@ t_float
+
+(* shifts for maps, so that each one covers a fraction of the clock *)
+(* vector of map_id -> [shift, max] *)
+let pmap_shifts_id = "pmap_shifts"
+let pmap_shifts_e = ["shift", t_int; "max", t_int]
+let pmap_shifts p =
+  (* per map, amount of shift, and scaled maximum *)
+  let e = pmap_shifts_e in
+  let t = wrap_tvector' @@ snd_many e in
+  let init =
+    let ms =
+      (* maps start at 1, not 0 *)
+      [mk_tuple [mk_cint 0; mk_cint 0]] @
+      List.map (fun m ->
+          (* check if we have a bigger than maximum map dimension *)
+          let dims = List.length @@ P.map_types_no_val_for p m in
+          (* we know that we have to partition every dimension *)
+          let min_size = iof @@ 2. ** (foi dims) in
+          mk_let ["min_map_size"] (mk_cint min_size) @@
+          mk_let ["map_size"]
+            (mk_if (mk_gt (mk_var "min_map_size") @@ mk_var pmap_buckets.id)
+               (mk_var "min_map_size") @@ mk_var pmap_buckets.id) @@
+          mk_let ["map_scaled_size"]
+            (mk_apply' "int_of_float" [mk_mult (mk_var "map_size") @@ mk_var pmap_scale_factor.id]) @@
+          mk_let ["map_shift"]
+            (mk_apply' "int_of_float" [mk_mult (mk_var "map_scaled_size") @@ mk_var pmap_shift_factor.id]) @@
+          mk_let ["map_delta_size"]
+            (mk_sub (mk_var "map_scaled_size") @@ mk_var "map_size") @@
+          mk_tuple [
+            mk_if_eq (mk_var "map_delta_size") (mk_cint 0)
+              (mk_cint 0) @@
+              mk_apply' "mod"
+                [mk_mult (mk_var "map_shift") @@ mk_cint m;
+                mk_var "map_delta_size"]
+            ;
+            mk_var "map_scaled_size"]) @@
+        List.sort (-) @@ P.get_map_list p
+    in
+    k3_container_of_list t ms
+  in
+  create_ds ~init ~e pmap_shifts_id t
+
 let pmap_input p =
   let t = wrap_tlist' [t_string; wrap_tlist' [t_int; t_int]] in
   let init =
@@ -1247,6 +1293,9 @@ let global_vars c dict =
       master_addr;
       timer_addr;
       pmap_buckets;
+      pmap_scale_factor;
+      pmap_shift_factor;
+      pmap_shifts c.p;
       pmap_input c.p;
       nodes;
       switches;
