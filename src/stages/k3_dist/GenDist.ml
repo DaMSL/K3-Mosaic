@@ -1527,7 +1527,9 @@ let trig_dispatcher_trig c =
   mk_block [
     (* unpack the polyqueues *)
     mk_poly_unpack (mk_var "poly_queue");
-    mk_poly_unpack (mk_var "upoly_queue");
+    (******** Commented out with UPB default state as internalized.
+      mk_poly_unpack (mk_var "upoly_queue");
+    **********)
     mk_apply' trig_dispatcher_nm [mk_var "poly_queue"; mk_var "upoly_queue"]
   ]
 
