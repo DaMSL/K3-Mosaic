@@ -1131,10 +1131,12 @@ module Bindings = struct
   (* for route optimization, we need individual map patterns per-map,
     and we need patterns from lmap-rmap, since those can cause free (conservative)
     variables.
-    We sort based on set size and number each set *)
-  let route_access_patterns p =
+     We sort based on set size and number each set
+    - We also use this to know for partitioning optimization which maps can be
+      spread out around the cluster (the ones without slices) *)
+  let route_access_patterns ?(sys_init=true) p =
     let h = Hashtbl.create 40 in
-    ignore(all_trig_arg_stmt_binds ~sys_init:true p @@ insert_route_binds p h);
+    ignore(all_trig_arg_stmt_binds ~sys_init p @@ insert_route_binds p h);
     (* create maps from intset to int. sort the sets by decreasing size *)
     let h2 = Hashtbl.create 40 in
     Hashtbl.iter (fun map idx_set ->
@@ -1151,6 +1153,77 @@ end
 (* this is a naive partition map *)
 let pmap_factor = 64
 let pmap_buckets = create_ds ~init:(mk_cint pmap_factor) "pmap_buckets" @@ t_int
+
+(* scale factor to reduce the coverage of the maps *)
+let pmap_area_factor  = create_ds ~init:(mk_cfloat 1.) "pmap_area_factor" @@ t_float
+let pmap_shift_factor = create_ds ~init:(mk_cfloat 0.) "pmap_shift_factor" @@ t_float
+
+(* shifts for maps, so that each one covers a fraction of the clock *)
+(* vector of map_id -> [shift, max] *)
+let pmap_shifts_id = "pmap_shifts"
+let pmap_shifts_e = ["shift", t_int; "max", t_int]
+  (* per map: amount of shift and scaled maximum *)
+let pmap_shifts p =
+  let ms = List.sort (-) @@ P.get_map_list p in
+  let t = wrap_tvector' @@ snd_many pmap_shifts_e in
+  (* prune out the maps on which we only do point access. We don't care
+     about sys_init because that's done once so it's cheap *)
+  let route_pats = Bindings.route_access_patterns ~sys_init:false p in
+  let only_point_access =
+    Hashtbl.fold (fun m ism acc ->
+        let num_vars = List.length @@ P.map_types_no_val_for p m in
+        let set = fst @@ IntSetMap.choose ism in
+        (* check that we have no bindings but the full binding *)
+        if IntSetMap.cardinal ism = 1 && IntSet.cardinal set = num_vars then
+          IntSet.add m acc else acc)
+      route_pats
+      IntSet.empty in
+  let init =
+    let info_ds =
+      let e = ["min_map_size", t_int; "map_id", t_int; "point_access", t_bool] in
+      create_ds ~e "info" @@ wrap_tvector' @@ snd_many e
+    in
+    (* data structure with information *)
+    mk_let ["info"]
+      (k3_container_of_list info_ds.t @@
+        [mk_tuple [mk_cint 0; mk_cint 0; mk_ctrue]] @
+        List.map (fun m ->
+            (* check if we have a bigger than maximum map dimension *)
+            let dims = List.length @@ P.map_types_no_val_for p m in
+            (* we know that we have to partition every dimension *)
+            let min_size = iof @@ 2. ** (foi dims) in
+            let point_access = IntSet.mem m only_point_access in
+            mk_tuple [mk_cint min_size; mk_cint m; mk_cbool point_access])
+         ms) @@
+    (* process the information *)
+    mk_map (mk_lambda' info_ds.e @@
+          mk_let ["map_size"]
+            (mk_if (mk_gt (mk_var "min_map_size") @@ mk_var pmap_buckets.id)
+               (mk_var "min_map_size") @@ mk_var pmap_buckets.id) @@
+          (* for point access maps, keep it simple *)
+          mk_if (mk_var "point_access")
+            (mk_tuple [mk_cint 0; mk_var "map_size"]) @@
+          mk_let ["map_scaled_size"]
+            (mk_apply' "int_of_float"
+               [mk_apply' "divf" [mk_var "map_size"; mk_var pmap_area_factor.id]]) @@
+          mk_let ["map_shift"]
+            (mk_apply' "int_of_float"
+               [mk_mult (mk_var "map_scaled_size") @@ mk_var pmap_shift_factor.id]) @@
+          (* scaled size - map size *)
+          mk_let ["map_delta_size"]
+            (mk_sub (mk_var "map_scaled_size") @@ mk_var "map_size") @@
+          mk_tuple [
+            mk_if_eq (mk_var "map_delta_size") (mk_cint 0)
+              (mk_cint 0) @@
+              mk_apply' "mod"
+                [mk_mult (mk_var "map_shift") @@ mk_var "map_id";
+                mk_var "map_delta_size"]
+            ;
+            mk_var "map_scaled_size"]) @@
+        mk_var "info"
+  in
+  create_ds ~init ~e:pmap_shifts_e pmap_shifts_id t
+
 let pmap_input p =
   let t = wrap_tlist' [t_string; wrap_tlist' [t_int; t_int]] in
   let init =
@@ -1247,6 +1320,9 @@ let global_vars c dict =
       master_addr;
       timer_addr;
       pmap_buckets;
+      pmap_area_factor;
+      pmap_shift_factor;
+      pmap_shifts c.p;
       pmap_input c.p;
       nodes;
       switches;

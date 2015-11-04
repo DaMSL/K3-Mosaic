@@ -341,7 +341,10 @@ let gen_route_fn p map_id =
         mk_lambda' ["pmap_data", pmap.t] @@
 
         (* deep bind *)
-        mk_let ["pmap"; "dim_bounds"; "max_val"] (mk_var "pmap_data") @@
+        mk_let ["pmap"; "dim_bounds"; "_m"] (mk_var "pmap_data") @@
+
+      mk_at_with' pmap_shifts_id (mk_var "map_id") @@
+        mk_lambda' pmap_shifts_e @@
 
         (* handle the case of no partitioning. Send to all *)
         mk_if (mk_eq (mk_size @@ mk_var "pmap") @@ mk_cint 0)
@@ -379,9 +382,11 @@ let gen_route_fn p map_id =
                   mk_insert_at route_bitmap.id
                     (mk_apply' "get_ring_node"
                       (* add up all the values and the bound_bucket *)
-                      [List.fold_left (fun acc x ->
+                      (* add the shift for this map id *)
+                      [mk_add (mk_var "shift") @@
+                         List.fold_left (fun acc x ->
                         mk_add (mk_var @@ "val"^soi x) acc) (mk_var "bound_bucket") map_range;
-                      mk_var "max_val"])
+                      mk_var "max"])
                     [mk_ctrue])
                 map_range)
             map_range)

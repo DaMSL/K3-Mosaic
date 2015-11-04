@@ -390,4 +390,3 @@ let stmt_many_loop_vars p s =
   if List.length binds > 1 && IntSet.cardinal lmap_loop_vars > 1
     then Some lmap_loop_vars
   else None
-
