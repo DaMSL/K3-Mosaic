@@ -38,7 +38,9 @@ def run(target_file,
         logging=True,
         correctives=True,
         filemux=False,
-        safe_writes=False
+        safe_writes=False,
+        map_area_factor=None,
+        map_shift_factor=None
         ):
 
     to_root = ".."
@@ -198,6 +200,10 @@ def run(target_file,
             # create a json file
             j = {}
             j["ms_gc_interval"] = gc_interval
+            if map_area_factor:
+                j["pmap_area_factor"] = map_area_factor
+            if map_shift_factor:
+                j["pmap_shift_factor"] = map_shift_factor
             if not correctives:
                 j["corrective_mode"] = False
             with open(json_file, 'w') as f:

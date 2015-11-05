@@ -57,6 +57,10 @@ def run():
                         default=False, help="Enable filemux newprint")
     parser.add_argument('--safe-writes', action='store_true', dest='safe_writes',
                         default=False, help="Enable safe array writes")
+    parser.add_argument('--area-factor', dest='map_area_factor',
+                        default=None, help="Reduce layout of maps on nodes")
+    parser.add_argument('--shift-factor', dest='map_shift_factor',
+                        default=None, help="Shift layout of maps on nodes")
 
     args = parser.parse_args()
 
@@ -112,7 +116,9 @@ def run():
                                 logging=args.logging,
                                 correctives=args.correctives,
                                 filemux=args.filemux,
-                                safe_writes=args.safe_writes
+                                safe_writes=args.safe_writes,
+                                map_area_factor=args.map_area_factor,
+                                map_shift_factor=args.map_shift_factor
                                 )
         # check if a test failed
         if not res:
