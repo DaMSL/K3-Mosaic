@@ -379,6 +379,8 @@ let mk_upsert_with_before ?(path=[]) id key lam_empty lam_full =
 
 let mk_delete ?(path=[]) id x = mk_stree Delete [mk_id_path id path; mk_tuple x]
 
+let mk_delete_block ?path id x = mk_block [mk_delete ?path id x; mk_var id]
+
 let mk_delete_at ?(path=[]) id n = mk_stree DeleteAt [mk_id_path id path; n]
 
 let mk_pop ?(path=[]) id = mk_stree Pop [mk_id_path id path]
@@ -863,13 +865,13 @@ let index_e id_t s =
 (* code to count the size of a collection *)
 let mk_size_slow col = mk_size (mk_var col.id)
 
-let mk_min_max v v' v_t comp_fn zero col = mk_agg
-  (mk_assoc_lambda' [v, v_t] col.e @@
+let mk_min_max v v' v_t comp_fn zero col_e col = mk_agg
+  (mk_assoc_lambda' [v, v_t] col_e @@
     mk_if (comp_fn (mk_var v) v')
       (mk_var v) @@
       v')
   zero @@
-  mk_var col.id
+  mk_var col
 
 (* pop off the front of a list *)
 let mk_pop_sim ?cond col_nm bind_nm fail success =

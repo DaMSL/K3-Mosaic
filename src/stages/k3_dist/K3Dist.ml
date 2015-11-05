@@ -621,18 +621,48 @@ let nd_stmt_cntrs_corr_map =
   let e = ["hop", t_int; "corr_ctr", t_int] in
   create_ds "sc_corr_map" (wrap_tmap' @@ snd_many e) ~e
 
-(* stmt_cntrs - (vid, stmt_id, counter) *)
-(* 1st counter: count messages received until do_complete *)
-(* 2nd counter: map from hop to counter *)
-let nd_stmt_cntrs =
+(* bitmap for stmt_cntrs *)
+let nd_stmt_cntr_size =
+  create_ds ~init:(mk_cint 0) "nd_stmt_cntr_size" @@ mut t_int
+
+(* inner part of stmt counters *)
+let nd_stmt_cntrs_inner =
+  (* indexed by stmt_id *)
   let ee =
-    [["vid", t_vid; "stmt_id", t_int];
+    [["vid", t_int];
      ["counter", t_int;
       "no_info", t_bool;
       "corr_map", wrap_tmap' @@ snd_many @@ ds_e nd_stmt_cntrs_corr_map]] in
-  let e = list_zip ["vid_stmt_id"; "ctr_corrs"] @@
-    List.map (wrap_ttuple |- snd_many) ee in
-  create_ds "nd_stmt_cntrs" (wrap_tmap' @@ snd_many e) ~e
+  let e = ["vid", t_vid; "stmt_cntr_info", wrap_ttuple @@ snd_many @@ at ee 1] in
+  create_ds "nd_stmt_cntrs_inner" ~e ~ee @@ wrap_tmap' @@ snd_many e
+
+(* stmt_cntrs - (vid, stmt_id, counter) *)
+(* 1st counter: count messages received until do_complete *)
+(* 2nd counter: map from hop to counter *)
+let nd_stmt_cntrs_id = "nd_stmt_cntrs"
+let nd_stmt_cntrs_e = [nd_stmt_cntrs_inner.id, nd_stmt_cntrs_inner.t]
+let nd_stmt_cntrs c =
+  let ss = List.map (const @@ mk_empty nd_stmt_cntrs_inner.t) @@
+             create_range @@ P.get_max_stmt c.p + 1 in
+  (* indexed by stmt_id *)
+  let e = nd_stmt_cntrs_e in
+  let t = wrap_tvector' @@ snd_many e in
+  let init = k3_container_of_list t ss in
+  create_ds nd_stmt_cntrs_id ~init ~e t
+
+let find_nd_stmt_cntrs_min_vid =
+  mk_agg (mk_lambda2' ["min_vid", t_vid] nd_stmt_cntrs_e @@
+          mk_agg (mk_lambda2' ["min_vid2", t_vid] nd_stmt_cntrs_inner.e @@
+                  mk_if (mk_lt (mk_var "vid") @@ mk_var "min_vid2")
+                    (mk_var "vid") @@
+                    mk_var "min_vid2")
+            (mk_var "min_vid") @@
+            mk_var nd_stmt_cntrs_inner.id)
+    (mk_var g_max_vid.id) @@
+    mk_var nd_stmt_cntrs_id
+
+            
+
 
 (* master log *)
 (* the master log shows which statements we pushed data for
@@ -759,6 +789,9 @@ let get_poly_event_tags c =
 let poly_event_typedef_id = "poly_event_t"
 let poly_event_typedef c = wrap_tpolyq @@ get_poly_event_tags c
 let poly_event_queue = create_ds "poly_event" @@ t_alias poly_event_typedef_id
+
+(* whether to use a unique poly queue *)
+let use_unique_poly = create_ds ~init:mk_ctrue "use_unique_poly" @@ t_bool
 
 (* global for avoiding huge tags *)
 let empty_event_queue = create_ds "empty_event_queue" @@ poly_event_queue.t
@@ -1330,7 +1363,8 @@ let global_vars c dict =
       num_switches;
       num_nodes;
       map_ids c;
-      nd_stmt_cntrs;
+      nd_stmt_cntr_size;
+      nd_stmt_cntrs c;
       nd_log_master;
       sw_init;
       sw_seen_sentinel;
@@ -1353,6 +1387,7 @@ let global_vars c dict =
       nd_stmt_cntrs_per_map;
       nd_lmap_of_stmt_id c;
       do_profiling;
+      use_unique_poly;
     ] @
 
     log_ds c @

@@ -119,6 +119,9 @@ let get_stmt_list (p:prog_data_t) =
   let l = List.map (fun (s,t,_,_,_) -> (s,trigger_name_for_id p t)) @@ get_stmt_data p in
   fst @@ List.split @@ List.filter (relevant_trig |- snd) l
 
+let get_max_stmt p =
+  List.fold_left (fun max i -> if i > max then i else max) 0 @@ get_stmt_list p
+
 let for_all_stmts (p:prog_data_t) f =
   List.map (fun s -> f s) @@ get_stmt_list p
 

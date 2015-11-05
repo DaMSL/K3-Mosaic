@@ -202,6 +202,7 @@ val mk_extend : ?path:int list -> id_t -> expr_t -> expr_t
 val mk_upsert_with : ?path:int list -> id_t -> expr_t list -> expr_t -> expr_t -> expr_t
 val mk_upsert_with_before : ?path:int list -> id_t -> expr_t list -> expr_t -> expr_t -> expr_t
 val mk_delete : ?path:int list -> id_t -> expr_t list -> expr_t
+val mk_delete_block : ?path:int list -> id_t -> expr_t list -> expr_t
 val mk_delete_prefix : ?path:int list -> id_t -> expr_t list -> expr_t
 val mk_delete_at : ?path:int list -> id_t -> expr_t -> expr_t
 val mk_delete_with : ?path:int list -> id_t -> expr_t list -> expr_t -> expr_t -> expr_t
@@ -412,7 +413,7 @@ val mk_error : string -> expr_t
 
 val mk_size_slow : data_struct -> expr_t
 
-val mk_min_max : string -> expr_t -> type_t -> (expr_t -> expr_t -> expr_t) -> expr_t -> data_struct -> expr_t
+val mk_min_max : string -> expr_t -> type_t -> (expr_t -> expr_t -> expr_t) -> expr_t -> (id_t * type_t) list-> id_t -> expr_t
 
 val mk_pop_sim : ?cond:expr_t -> string -> string -> expr_t -> expr_t -> expr_t
 

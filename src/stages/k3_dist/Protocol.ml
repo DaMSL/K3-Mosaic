@@ -61,7 +61,7 @@ let nd_sys_init_check_barrier =
     (* if a barrier is requested and stmt_cntrs are empty *)
     (mk_and
       (mk_var nd_sys_init_barrier_req.id) @@
-      mk_eq (mk_size_slow D.nd_stmt_cntrs) @@ mk_cint 0)
+      mk_eq (mk_var D.nd_stmt_cntr_size.id) @@ mk_cint 0)
     (mk_block [
       (* send and update flag *)
       D.mk_send_master ms_sys_init_barrier_nm;
@@ -250,7 +250,7 @@ let nd_done_check_barrier =
     (mk_and
       (mk_var nd_sys_done_req.id) @@
       (* no stmt_cntrs *)
-      mk_eq (mk_size_slow D.nd_stmt_cntrs) @@ mk_cint 0)
+      mk_eq (mk_var D.nd_stmt_cntr_size.id) @@ mk_cint 0)
     (mk_block [
       (* notify master *)
       D.mk_send_master ms_rcv_node_done_nm;

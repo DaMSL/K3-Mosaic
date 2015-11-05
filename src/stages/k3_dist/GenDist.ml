@@ -73,12 +73,12 @@ let nd_log_get_bound c t =
 (* params: vid, stmt, count_to_change *)
 let nd_complete_stmt_cntr_check_nm = "nd_complete_stmt_cntr_check"
 
+let nd_check_stmt_cntr_do_delete = create_ds "nd_check_stmt_cntr_do_delete" @@ mut t_bool
+let nd_check_stmt_cntr_ret = create_ds "nd_check_stmt_cntr_ret" @@ mut t_bool
+let nd_check_stmt_cntr_init = create_ds "nd_check_stmt_cntr_init" @@ mut t_bool
+
 let nd_check_stmt_cntr_index_nm = "nd_check_stmt_cntr_index"
 let nd_check_stmt_cntr_index c =
-  let lookup = "lookup_value" in
-  let part_pat = ["vid", t_vid; "stmt_id", t_stmt_id] in
-  let part_pat_as_vars = [mk_tuple @@ ids_to_vars @@ fst_many part_pat] in
-  let query_pat = part_pat_as_vars @ [mk_cunknown] in
   let add_to_count, new_count, has_data, new_modify =
     "add_to_count", "new_count", "has_data", "new_modify" in
   (* lmap -> stmts *)
@@ -88,66 +88,85 @@ let nd_check_stmt_cntr_index c =
     P.stmts_lhs_maps c.p;
   let lmap_stmts = list_of_hashtbl h in
   mk_global_fn nd_check_stmt_cntr_index_nm
-    (part_pat @ [add_to_count, t_int; has_data, t_bool])
-    [t_bool] @@ (* return whether we should send the do_complete *)
-    (* check if the counter exists *)
-    mk_case_sn
-      (mk_peek @@ mk_slice' nd_stmt_cntrs.id query_pat) lookup
-      (* calculate the new modify state *)
-      (mk_let [new_modify]
-        (mk_or (mk_var has_data) @@ mk_snd @@ mk_snd @@ mk_var lookup) @@
-      (* calculate new_count *)
-       mk_let [new_count]
-        (mk_add (mk_var add_to_count) @@ mk_fst @@ mk_snd @@ mk_var lookup) @@
-        mk_block [
-          (* update the counter *)
-          mk_update nd_stmt_cntrs.id [mk_var lookup] @@
-            part_pat_as_vars @ [mk_tuple
-              [mk_var new_count; mk_var new_modify;
-                mk_thd @@ mk_snd @@ mk_var lookup]]
-          ;
-          (* if counter is 0 and no modify, we need to delete here since do_complete
-           * will never execute *)
-          mk_if (mk_and (mk_eq (mk_var new_count) @@ mk_cint 0) @@
-            mk_eq (mk_var new_modify) @@ mk_cfalse)
-              (mk_apply' nd_complete_stmt_cntr_check_nm
-                  [mk_var "vid"; mk_var "stmt_id"])
-              mk_cunit
-          ;
-          (* return whether the counter is 0 and we have some data *)
-          mk_if (mk_and (mk_eq (mk_cint 0) @@ mk_var new_count) @@ mk_var new_modify)
-            (mk_block [
-              (* for profiling: mark the push for the stmt as done *)
-              prof_property D.prof_tag_push_done "vid" "stmt_id";
-              mk_ctrue])
-            mk_cfalse
-          ]) @@
-      (* else: no value in the counter *)
-      mk_block [
-        (* Initialize *)
-        mk_insert nd_stmt_cntrs.id @@ part_pat_as_vars @
-          [mk_tuple [mk_var add_to_count; mk_var has_data; mk_empty nd_stmt_cntrs_corr_map.t]];
-        (* For no-corrective mode, add to per-map stmt cntrs *)
-        mk_if (mk_var D.corrective_mode.id) mk_cunit @@
-          List.fold_left (fun acc (m, ss) ->
-            let mk_check_s s = mk_eq (mk_var "stmt_id") @@ mk_cint s in
-            (* if we have any of the stmts with a given lmap *)
-            mk_if
-              (list_fold_to_last
-                (fun acc s -> mk_or (mk_check_s s) acc) mk_check_s ss)
-              (* add to per-map stmt counters *)
-              (mk_upsert_with D.nd_stmt_cntrs_per_map.id [mk_cint m; mk_cunknown]
-                (mk_lambda' unit_arg @@
-                  mk_tuple [mk_cint m;
-                    mk_singleton D.nd_stmt_cntrs_per_map_inner.t
-                      [mk_var "vid"; mk_var "stmt_id"]]) @@
-                mk_lambda' ["x", t_of_e D.nd_stmt_cntrs_per_map.e] @@
-                  mk_insert_block "x" ~path:[2] [mk_var "vid"; mk_var "stmt_id"])
-              acc)
+    (["vid", t_vid; "stmt_id", t_int; add_to_count, t_int; has_data, t_bool])
+    [t_bool] (* return whether we should send the do_complete *)
+    @@ mk_block [
+
+      (* set do_delete, ret, init to false *)
+      mk_assign nd_check_stmt_cntr_do_delete.id @@ mk_cfalse;
+      mk_assign nd_check_stmt_cntr_ret.id @@ mk_cfalse;
+      mk_assign nd_check_stmt_cntr_init.id @@ mk_cfalse;
+
+      mk_update_at_with nd_stmt_cntrs_id (mk_var "stmt_id") @@
+        mk_lambda' nd_stmt_cntrs_e @@
+
+          mk_upsert_with_block "nd_stmt_cntrs_inner" [mk_var "vid"; mk_cunknown]
+            (mk_lambda' unit_arg @@ mk_block [
+              mk_assign nd_check_stmt_cntr_init.id @@ mk_ctrue;
+              mk_incr nd_stmt_cntr_size.id;
+              mk_tuple [mk_var "vid";
+                        mk_tuple [mk_var add_to_count;
+                                  mk_var has_data;
+                                  mk_empty nd_stmt_cntrs_corr_map.t]]]) @@
+
+            mk_lambda' nd_stmt_cntrs_inner.e @@
+              (* calculate the new modify state *)
+              mk_let [new_modify] (mk_or (mk_var has_data) @@ mk_var "no_info") @@
+              (* calculate new_count *)
+              mk_let [new_count]
+                (mk_add (mk_var add_to_count) @@ mk_var "counter") @@
+
+              (* if counter is 0 and no modify, we need to delete *)
+              mk_if (mk_and (mk_eq (mk_var new_count) @@ mk_cint 0) @@
+                      mk_not @@ mk_var new_modify)
+                (mk_assign nd_check_stmt_cntr_do_delete.id mk_ctrue)
+                mk_cunit;
+
+              (* return whether the counter is 0 and we have some data *)
+              mk_if (mk_and (mk_eq (mk_var new_count) @@ mk_cint 0) @@
+                            mk_var new_modify)
+                (mk_block [
+                  (* for profiling: mark push as done *)
+                  prof_property D.prof_tag_push_done "vid" "stmt_id";
+                  mk_assign nd_check_stmt_cntr_ret.id mk_ctrue
+                ])
+                mk_cunit;
+
+              (* update the counter *)
+              mk_tuple [mk_var new_count; mk_var new_modify; mk_var "corr_map"]
+      ;
+
+      (* carry out delete if needed *)
+      mk_if (mk_var nd_check_stmt_cntr_do_delete.id)
+          (mk_apply' nd_complete_stmt_cntr_check_nm [mk_var "vid"; mk_var "stmt_id"])
           mk_cunit
-          lmap_stmts;
-        mk_cbool false;
-      ]
+      ;
+
+      (* For no-corrective mode, add to per-map stmt cntrs *)
+      mk_if (mk_and (mk_not @@ mk_var D.corrective_mode.id) @@
+                    mk_var nd_check_stmt_cntr_init.id)
+        (List.fold_left (fun acc (m, ss) ->
+          let mk_check_s s = mk_eq (mk_var "stmt_id") @@ mk_cint s in
+          (* if we have any of the stmts with a given lmap *)
+          mk_if
+            (list_fold_to_last
+              (fun acc s -> mk_or (mk_check_s s) acc) mk_check_s ss)
+            (* add to per-map stmt counters *)
+            (mk_upsert_with D.nd_stmt_cntrs_per_map.id [mk_cint m; mk_cunknown]
+              (mk_lambda' unit_arg @@
+                mk_tuple [mk_cint m;
+                  mk_singleton D.nd_stmt_cntrs_per_map_inner.t
+                    [mk_var "vid"; mk_var "stmt_id"]]) @@
+              mk_lambda' ["x", t_of_e D.nd_stmt_cntrs_per_map.e] @@
+                mk_insert_block "x" ~path:[2] [mk_var "vid"; mk_var "stmt_id"])
+            acc)
+          mk_cunit
+          lmap_stmts)
+        mk_cunit
+      ;
+      (* return value *)
+      mk_var nd_check_stmt_cntr_ret.id
+    ]
 
 (* add_delta_to_buffer *)
 (* adds the delta to all subsequent vids following in the buffer so that non
@@ -919,23 +938,31 @@ let send_corrective_fns c =
 (* current hop = hop - 1. next hop = hop *)
 let nd_update_stmt_cntr_corr_map_nm = "nd_update_stmt_cntr_corr_map"
 let nd_update_stmt_cntr_corr_map =
-  let lookup_pat = [mk_var "vid"; mk_var "stmt_id"] in
   mk_global_fn nd_update_stmt_cntr_corr_map_nm
-  ["vid", t_vid; "stmt_id", t_stmt_id; "hop", t_int; "count", t_int; "root", t_bool; "create", t_bool] [] @@
+    ["vid", t_vid; "stmt_id", t_stmt_id;
+     "hop", t_int; "count", t_int;
+     "root", t_bool; "create", t_bool] [] @@
     mk_block [
       (* if requested, we first create an empty entry *)
       (* this is for stmts w/o rhs maps that still need to keep track of corrective chains *)
       mk_if (mk_var "create")
-        (mk_insert nd_stmt_cntrs.id
-           [mk_tuple lookup_pat; mk_tuple [mk_cint 0; mk_cfalse; mk_empty nd_stmt_cntrs_corr_map.t]])
+        (mk_update_at_with nd_stmt_cntrs_id (mk_var "stmt_id") @@
+          mk_lambda' nd_stmt_cntrs_e @@
+            mk_insert_block nd_stmt_cntrs_inner.id
+              [mk_var "vid"; mk_tuple [mk_cint 0; mk_cfalse;
+                                      mk_empty nd_stmt_cntrs_corr_map.t]])
         mk_cunit;
-      (* we need to decrement the previous hop's value by 1, and increment the hop's values by the count (if it's not 0) *)
-      mk_upsert_with_sim nd_stmt_cntrs "lkup" ~k:lookup_pat
-        ~default:(mk_error @@ sp "%s: missing stmt_cntrs value" nd_update_stmt_cntr_corr_map_nm)
-        ~v:(mk_let [nd_stmt_cntrs_corr_map.id] (mk_thd @@ mk_snd @@ mk_var "lkup") @@
+      (* we need to decrement the previous hop's value by 1, and
+       * increment the hop's values by the count (if it's not 0) *)
+      mk_update_at_with nd_stmt_cntrs_id (mk_var "stmt_id") @@
+        mk_lambda' nd_stmt_cntrs_e @@
+          mk_upsert_with_block nd_stmt_cntrs_inner.id [mk_var "vid"; mk_cunknown]
+            (mk_lambda' unit_arg @@ mk_error @@ sp "%s: missing stmt_cntrs value" nd_update_stmt_cntr_corr_map_nm) @@
+             mk_lambda' ["lkup", wrap_ttuple @@ snd_many @@ nd_stmt_cntrs_inner.e] @@
+              mk_let [nd_stmt_cntrs_corr_map.id] (mk_thd @@ mk_snd @@ mk_var "lkup") @@
               mk_block [
                 (* only do this part if count isn't 0 *)
-                mk_if (mk_eq (mk_var "count") @@ mk_cint 0)
+                mk_if_eq (mk_var "count") (mk_cint 0)
                   mk_cunit @@
                   (* increment the next hop by count *)
                   mk_let ["delete_entry"; "new_count"]
@@ -954,8 +981,8 @@ let nd_update_stmt_cntr_corr_map =
                           (* else, return the incremented entry *)
                           (mk_tuple [mk_cfalse; mk_var "new_corr_cnt"])))
                     (mk_if (mk_var "delete_entry")
-                      (mk_delete nd_stmt_cntrs_corr_map.id [mk_var "hop"; mk_cint 0])
-                      (mk_insert nd_stmt_cntrs_corr_map.id [mk_var "hop"; mk_var "new_count"]));
+                      (mk_delete nd_stmt_cntrs_corr_map.id [mk_var "hop"; mk_cint 0]) @@
+                       mk_insert nd_stmt_cntrs_corr_map.id [mk_var "hop"; mk_var "new_count"]);
 
                 (* check if this is from the root of the corrective tree *)
                 mk_if (mk_var "root")
@@ -986,7 +1013,7 @@ let nd_update_stmt_cntr_corr_map =
                 mk_tuple [mk_fst @@ mk_snd @@ mk_var "lkup";
                           mk_snd @@ mk_snd @@ mk_var "lkup";
                           mk_var nd_stmt_cntrs_corr_map.id]
-              ])
+              ]
     ]
 
 (* for no-corrective mode: execute buffered fetches *)
@@ -1093,8 +1120,13 @@ let nd_complete_stmt_cntr_check c =
   mk_global_fn nd_complete_stmt_cntr_check_nm ["vid", t_vid; "stmt_id", t_stmt_id] [] @@
   (* if we have nothing to send, we can delete our stmt_cntr entry right away *)
   mk_block @@
-    [mk_delete nd_stmt_cntrs.id
-      [mk_tuple [mk_var "vid"; mk_var "stmt_id"]; mk_cunknown]] @
+    [mk_update_at_with nd_stmt_cntrs_id (mk_var "stmt_id") @@
+      mk_lambda' nd_stmt_cntrs_e @@ mk_block [
+        mk_delete nd_stmt_cntrs_inner.id [mk_tuple [mk_var "vid"; mk_cunknown]];
+        mk_var nd_stmt_cntrs_inner.id
+      ]
+      ;
+      mk_decr nd_stmt_cntr_size.id] @
     (* if we're in no-corrective mode, we need to execute batched fetches *)
     (if c.corr_maps = [] then [] else singleton @@
       mk_if (mk_var D.corrective_mode.id)
@@ -1237,7 +1269,6 @@ in
 
 (* rcv notification of a corrective finish from other nodes *)
 let nd_rcv_corr_done c =
-  let lookup_pat = [mk_tuple [mk_var "vid"; mk_var "stmt_id"]; mk_cunknown] in
   let args = nd_rcv_corr_done_args in
   mk_global_fn nd_rcv_corr_done_nm args [] @@
     mk_block [
@@ -1245,18 +1276,29 @@ let nd_rcv_corr_done c =
       mk_apply' nd_update_stmt_cntr_corr_map_nm @@
         (ids_to_vars @@ fst_many args) @ [mk_cfalse; mk_cfalse];
       (* check if the corr_cnt structure is empty. If so, we can delete the whole entry *)
-      mk_case_ns (mk_lookup' nd_stmt_cntrs.id lookup_pat) "lkup"
-        (mk_error @@ nd_rcv_corr_done_nm^": expected stmt_cntr value") @@
-        (* if the corr_cnt map is empty *)
-        mk_is_empty (mk_thd @@ mk_snd @@ mk_var "lkup")
-          ~n:mk_cunit
-          ~y:(mk_block [
-              (* for profiling: mark tag with corrective done *)
-              prof_property prof_tag_corr_done "vid" "stmt_id";
+      mk_let ["do_delete"]
+        (mk_at_with' nd_stmt_cntrs_id (mk_var "stmt_id") @@
+          mk_lambda' nd_stmt_cntrs_e @@
+            mk_case_ns (mk_lookup' nd_stmt_cntrs_inner.id [mk_var "vid"; mk_cunknown]) "lkup"
+              (mk_error @@ nd_rcv_corr_done_nm^": expected stmt_cntr value") @@
+              (* if the corr_cnt map is empty *)
+              mk_is_empty (mk_thd @@ mk_snd @@ mk_var "lkup")
+                ~n:mk_cfalse
+                ~y:mk_ctrue) @@
 
-              (* delete the whole stmt_cntr entry *)
-              mk_delete nd_stmt_cntrs.id [mk_var "lkup"];
-              Proto.nd_post_delete_stmt_cntr c])
+      mk_if (mk_var "do_delete")
+        (mk_block [
+          (* for profiling: mark tag with corrective done *)
+          prof_property prof_tag_corr_done "vid" "stmt_id";
+
+          (* delete the whole stmt_cntr entry *)
+          mk_update_at_with nd_stmt_cntrs_id (mk_var "stmt_id") @@
+            mk_lambda' nd_stmt_cntrs_e @@
+              mk_delete_block nd_stmt_cntrs_inner.id [mk_var "vid"; mk_cunknown];
+          mk_decr nd_stmt_cntr_size.id;
+          Proto.nd_post_delete_stmt_cntr c
+        ])
+        mk_cunit
     ]
 
 (* receive_correctives:
@@ -1310,11 +1352,13 @@ let nd_rcv_correctives_trig c s_rhs t = List.map
             (mk_lambda4' ["acc_count", t_int] p_idx p_off ["compute_vid", t_vid] @@
               (* get the stmt counter *)
               mk_let ["cntr"]
-                (mk_case_ns (mk_lookup' D.nd_stmt_cntrs.id
-                  [mk_tuple [mk_var "compute_vid"; mk_cint s]; mk_cunknown]) "lkup"
-                  (* 0 if we have no value *)
-                  (mk_cint 0) @@
-                  mk_fst @@ mk_snd @@ mk_var "lkup") @@
+                (mk_at_with' D.nd_stmt_cntrs_id (mk_cint s) @@
+                 mk_lambda' D.nd_stmt_cntrs_e @@
+                  mk_case_ns (mk_lookup' D.nd_stmt_cntrs_inner.id
+                               [mk_var "compute_vid"; mk_cunknown]) "lkup"
+                    (* 0 if we have no value *)
+                    (mk_cint 0) @@
+                    mk_fst @@ mk_snd @@ mk_var "lkup") @@
                 (* check if our stmt_counter is 0 *)
                 mk_if (mk_eq (mk_var "cntr") @@ mk_cint 0)
                   (* if so, get bound vars from log *)
@@ -1838,6 +1882,9 @@ let declare_global_vars c ast =
      sw_demux_poly_queue;
      nd_dispatcher_buf;
      nd_dispatcher_last_num;
+     nd_check_stmt_cntr_do_delete;
+     nd_check_stmt_cntr_ret;
+     nd_check_stmt_cntr_init;
     ]
 
 let declare_global_funcs c ast =
