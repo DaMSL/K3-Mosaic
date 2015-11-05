@@ -1335,6 +1335,13 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
   | Update -> let col, oldx, newx = U.decompose_update expr in
     (* get rid of the value for maps *)
     let oldx = if is_map c col then map_mk_unknown c true oldx else oldx in
+    if is_intmap c col then
+      maybe_intmap c col oldx
+        (fun _ -> [])
+        (fun o ->
+          lazy_expr c col <| apply_method_nocol c ~name:"update_key" ~args:[o;newx]
+            ~arg_info:[def_a; [], true])
+    else
     maybe_vmap c col newx
       (fun newx ->
         let newx = if is_map c col then map_mk_unknown c false newx else newx in
