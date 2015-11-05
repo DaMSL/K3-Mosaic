@@ -149,6 +149,8 @@ let error () = lps "???"
 
 let lazy_bracket_list f l = lazy_bracket (lps_list NoCut f l)
 
+let has_int_key t = (hd @@ KH.unwrap_ttuple t).typ = TInt
+
 (* print out multi_index. we only support hash indices *)
 let rec lazy_multi_index c ss elem_t =
   (* unwrap all the tuples, and use the relevant record ids *)
@@ -199,6 +201,7 @@ and lazy_col c col_t elem_t = match col_t with
   | TBag        -> lps "{Collection}"
   | TList       -> lps "{Seq}"
   | TVector     -> lps "{Vector}"
+  | TMap when has_int_key elem_t -> lps "{IntMap}"
   | TMap        -> lps "{MapE" <| lazy_mape c elem_t <| lps "}"
   | TVMap None  -> lps "{MultiIndexVMap}"
   | TVMap(Some ss) -> lazy_multi_index c ss elem_t
@@ -423,7 +426,30 @@ let verify_map c col = if is_map c col then () else failwith "Not a map"
 let is_sorted_map c col = match fst @@ KH.unwrap_tcol @@ T.repr c.tenv @@ T.type_of_expr col with
                   | TSortedMap -> true | _ -> false
 
+let is_intmap c col =
+  let t = T.repr c.tenv @@ T.type_of_expr col in
+  try
+    let t_c, t_e = KH.unwrap_tcol t in
+    t_c = TMap && has_int_key t_e
+  with Failure _ -> false
+
+let may_v_or_intmap c col pat fn fn_intmap fn_vmap =
+  if is_intmap c col then
+    match U.decompose_tuple pat with
+    | k::_ -> fn_intmap k
+    | _ -> failwith "oops"
+  else maybe_vmap c col pat fn fn_vmap
+
+let maybe_intmap c col pat fn fn_intmap =
+  if is_intmap c col then
+    match U.decompose_tuple pat with
+    | k::_ -> fn_intmap k
+    | _ -> failwith "oops"
+  else fn pat
+
 let verify_sorted_map c col = if is_sorted_map c col then () else failwith "Not a sorted map"
+
+let verify_intmap c col = if is_intmap c col then () else failwith "Not an intmap"
 
 let verify_lookup_pat p = if D.is_lookup_pat p then () else failwith "Not a lookup pattern"
 
@@ -567,12 +593,14 @@ and apply_method ?prefix_fn c ~name ~col ~args ~arg_info =
 
 (* common pattern for lookup_with *)
 and handle_lookup_with
-  ?(vmap=false) ?some_lam_args c ~id
+  ?(vmap=false) ?(intmap=false) ?some_lam_args c ~id
   name col pat e_none e_some =
     (* NOTE: we don't check for lookup_pat. We assume that's already been done *)
     (* we CAN use lookup_with4 *)
     let _, t_elem = KH.unwrap_tcol @@ T.type_of_expr col in
-    let pat = lookup_pat_of_slice ~vid:vmap ~col pat in
+    let pat =
+      if intmap then [pat]
+      else lookup_pat_of_slice ~vid:vmap ~col pat in
     let lam_args = maybe [id, t_elem] id_fn some_lam_args in
     let arg' =
       [light_type c @@ KH.mk_lambda' ["_", KH.t_unit] e_none;
@@ -964,8 +992,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
               let col, pat = U.decompose_slice col in
               verify_vmap c col;
               verify_lookup_pat pat;
-              handle_lookup_with c ~vmap:true ~id "lookup"
-                col pat e_none e_some);
+              handle_lookup_with c ~vmap:true ~id "lookup" col pat e_none e_some);
 
             (* Slice frontier on VMap and full lookup *)
             (fun () ->
@@ -982,6 +1009,14 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
               verify_lookup_pat pat;
               handle_lookup_with c ("lookup_"^str_op op) ~id
                 col pat e_none e_some);
+
+            (* Slice on int_map and full lookup *)
+            (fun () ->
+              let col, pat = U.decompose_slice col in
+              verify_intmap c col;
+              verify_lookup_pat pat;
+              let key = hd @@ U.decompose_tuple pat in
+              handle_lookup_with c ~intmap:true ~id "lookup_key" col key e_none e_some);
 
             (* Slice on map and full lookup *)
             (fun () ->
@@ -1265,9 +1300,11 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
   | Delete -> let col, x = U.decompose_delete expr in
     (* get rid of the value for maps *)
     let x = if is_map c col then map_mk_unknown c true x else x in
-    maybe_vmap c col x
+    may_v_or_intmap c col x
       (fun x -> apply_method c ~col ~name:"erase" ~args:[x]
         ~arg_info:[[],true])
+      (fun x -> apply_method c ~col ~name:"erase_key" ~args:[x]
+        ~arg_info:[def_a])
       (fun vid x -> apply_method c ~col ~name:"erase" ~args:[vid;x]
         ~arg_info:[vid_out_arg; [], true])
 
@@ -1317,10 +1354,12 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
 
   | UpsertWith -> let col, key, lam_no, lam_yes = U.decompose_upsert_with expr in
     let key = lookup_pat_of_slice ~vid:(is_vmap c col) ~col key in
-    maybe_vmap c col (light_type c @@ KH.mk_tuple key)
-      (fun key -> lazy_expr c col <| apply_method_nocol  c ~name:"upsert_with" ~args:[key; lam_no; lam_yes]
+    may_v_or_intmap c col (light_type c @@ KH.mk_tuple key)
+      (fun key -> lazy_expr c col <| apply_method_nocol c ~name:"upsert_with" ~args:[key; lam_no; lam_yes]
         ~arg_info:[[], true; [], true; [0], true])
-      (fun vid key -> lazy_expr c col <| apply_method_nocol  c ~name:"upsert_with" ~args:[vid; key; lam_no; lam_yes]
+      (fun key -> lazy_expr c col <| apply_method_nocol c ~name:"upsert_with_key" ~args:[key; lam_no; lam_yes]
+        ~arg_info:[def_a; [], true; [0], true])
+      (fun vid key -> lazy_expr c col <| apply_method_nocol c ~name:"upsert_with" ~args:[vid; key; lam_no; lam_yes]
         ~arg_info:[vid_out_arg; [], true; [], true; [0], true])
 
   | UpsertWithBefore -> let col, key, lam_no, lam_yes = U.decompose_upsert_with_before expr in
@@ -1509,6 +1548,7 @@ include \"Core/Builtins.k3\"
 include \"Core/Log.k3\"
 include \"Annotation/Map.k3\"
 include \"Annotation/Maps/MapE.k3\"
+include \"Annotation/Maps/IntMap.k3\"
 include \"Annotation/Maps/SortedMap.k3\"
 include \"Annotation/Maps/SortedMapE.k3\"
 include \"Annotation/Maps/VMap.k3\"

@@ -1854,7 +1854,7 @@ let gen_loader_vars ast =
 
 let declare_global_vars c ast =
   (* TODO: dummy map currently needed for MapE generation *)
-  mk_global_val "dummy_map" (wrap_tmap' [t_int; wrap_tbag' [t_int; t_int]]) ::
+  mk_global_val "dummy_map" (wrap_tmap' [t_string; wrap_tbag' [t_int; t_int]]) ::
   (* dummy switch path variable. Will be filled at cpp stage *)
   decl_global
     (create_ds "switch_path" t_string ~init:(mk_cstring "agenda.csv")) ::
