@@ -383,10 +383,10 @@ let gen_route_fn p map_id =
                     (mk_apply' "get_ring_node"
                       (* add up all the values and the bound_bucket *)
                       (* add the shift for this map id *)
-                      [mk_add (mk_var "shift") @@
+                      [mk_add (mk_var "map_shift") @@
                          List.fold_left (fun acc x ->
                         mk_add (mk_var @@ "val"^soi x) acc) (mk_var "bound_bucket") map_range;
-                      mk_var "max"])
+                      mk_var "map_max"])
                     [mk_ctrue])
                 map_range)
             map_range)

@@ -1161,7 +1161,7 @@ let pmap_shift_factor = create_ds ~init:(mk_cfloat 0.) "pmap_shift_factor" @@ t_
 (* shifts for maps, so that each one covers a fraction of the clock *)
 (* vector of map_id -> [shift, max] *)
 let pmap_shifts_id = "pmap_shifts"
-let pmap_shifts_e = ["shift", t_int; "max", t_int]
+let pmap_shifts_e = ["map_shift", t_int; "map_max", t_int]
   (* per map: amount of shift and scaled maximum *)
 let pmap_shifts p =
   let ms = List.sort (-) @@ P.get_map_list p in
