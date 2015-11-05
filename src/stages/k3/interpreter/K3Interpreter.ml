@@ -838,15 +838,16 @@ let prepare_sinks sched_st env fp =
     | _ -> e)
     env fp
 
-let convert_json = function
-  | `Bool x   -> VBool x
-  | `Float x  -> VFloat x
-  | `Int x    -> VInt x
-  | `String x -> VString x
+let convert_json t j = match t.typ, j with
+  | TFloat, `String s -> VFloat (fos s)
+  | _, `Bool x   -> VBool x
+  | _, `Float x  -> VFloat x
+  | _, `Int x    -> VInt x
+  | TString, `String x -> VString x
   | _         -> failwith "advanced json structure unsupported"
 
-let lookup_json json id = match json with
-  | Some (`Assoc l) -> begin try some @@ convert_json @@ List.assoc id l
+let lookup_json t json id = match json with
+  | Some (`Assoc l) -> begin try some @@ convert_json t @@ List.assoc id l
                        with Not_found -> None end
   | Some _          -> failwith "invalid json format"
   | _               -> None
@@ -870,12 +871,12 @@ let env_of_program ?address ?json ~role ~peers ~type_aliases sched_st k3_program
           | id, _ when id = K3Global.role.id  -> env, VSet(ValueSet.singleton (VString role))
 
           | id, Some e ->
-              begin match lookup_json json id with
+              begin match lookup_json t json id with
               | Some v -> env, v
               | _      -> second value_of_eval @@ eval_expr ~fun_typ:(FGlobal id) me_addr (Some sched_st) env e
               end
 
-          | id, None  -> env, maybe (default_value type_aliases id t) id_fn @@ lookup_json json id
+          | id, None  -> env, maybe (default_value type_aliases id t) id_fn @@ lookup_json t json id
         in
         {env with globals=IdMap.add id (ref init_val) env.globals; locals=rf_env.locals}
     | Foreign (id,_) ->
@@ -1005,7 +1006,8 @@ let interpret_k3_program i =
   prog_state
 
 (* Initialize an interpreter given the parameters *)
-let init_k3_interpreter ?queue_type ?(src_interval=0.002) ~peers ~load_path ~interp_file ~type_aliases typed_prog =
+let init_k3_interpreter ?queue_type ?(src_interval=0.002)
+    ~peers ~load_path ~interp_file ~type_aliases typed_prog =
   Log.log (lazy (sp "Initializing scheduler\n")) `Trace;
   let scheduler = init_scheduler_state ?queue_type ~peers in
   let json =
