@@ -1313,7 +1313,11 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
     wrap_project c col (apply_method c ~col ~name:"erase_at" ~args:[n] ~arg_info:[def_a])
 
   | DeleteWith -> let col, key, lam_none, lam_some = U.decompose_delete_with expr in
-    apply_method c ~col ~name:"erase_with" ~args:[key; lam_none; lam_some] ~arg_info:[[], true; def_a; [0], false]
+    maybe_intmap c col key
+      (fun _ -> apply_method c ~col ~name:"erase_with"
+        ~args:[key; lam_none; lam_some] ~arg_info:[[], true; def_a; [0], false])
+      (fun k -> apply_method c ~col ~name:"erase_with"
+        ~args:[k; lam_none; lam_some] ~arg_info:[def_a; def_a; [0], false])
 
   | Pop -> let col = U.decompose_pop expr in
     apply_method c ~col ~name:"pop" ~args:[KH.mk_cunit] ~arg_info:[def_a]
