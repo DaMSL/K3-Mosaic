@@ -111,37 +111,37 @@ let nd_check_stmt_cntr_index c =
 
             mk_lambda' nd_stmt_cntrs_inner.e @@
               (* calculate the new modify state *)
-              mk_let [new_modify] (mk_or (mk_var has_data) @@ mk_var "no_info") @@
+              mk_let [new_modify] (mk_or (mk_var has_data) @@ mk_snd @@ mk_var "stmt_cntr_info") @@
               (* calculate new_count *)
               mk_let [new_count]
-                (mk_add (mk_var add_to_count) @@ mk_var "counter") @@
-
-              (* if counter is 0 and no modify, we need to delete *)
-              mk_if (mk_and (mk_eq (mk_var new_count) @@ mk_cint 0) @@
-                      mk_not @@ mk_var new_modify)
-                (mk_assign nd_check_stmt_cntr_do_delete.id mk_ctrue)
-                mk_cunit;
-
-              (* return whether the counter is 0 and we have some data *)
-              mk_if (mk_and (mk_eq (mk_var new_count) @@ mk_cint 0) @@
-                            mk_var new_modify)
-                (mk_block [
-                  (* for profiling: mark push as done *)
-                  prof_property D.prof_tag_push_done "vid" "stmt_id";
-                  mk_assign nd_check_stmt_cntr_ret.id mk_ctrue
-                ])
-                mk_cunit;
-
-              (* update the counter *)
-              mk_tuple [mk_var new_count; mk_var new_modify; mk_var "corr_map"]
+                (mk_add (mk_var add_to_count) @@ mk_fst @@ mk_var "stmt_cntr_info") @@
+              mk_block [
+                (* if counter is 0 and no modify, we need to delete *)
+                mk_if (mk_and (mk_eq (mk_var new_count) @@ mk_cint 0) @@
+                        mk_not @@ mk_var new_modify)
+                  (mk_assign nd_check_stmt_cntr_do_delete.id mk_ctrue)
+                  mk_cunit;
+                (* return whether the counter is 0 and we have some data *)
+                mk_if (mk_and (mk_eq (mk_var new_count) @@ mk_cint 0) @@
+                              mk_var new_modify)
+                  (mk_block [
+                    (* for profiling: mark push as done *)
+                    prof_property D.prof_tag_push_done "vid" "stmt_id";
+                    mk_assign nd_check_stmt_cntr_ret.id mk_ctrue
+                  ])
+                  mk_cunit;
+                (* update the counter *)
+                mk_tuple [mk_var "vid";
+                          mk_tuple [mk_var new_count;
+                                    mk_var new_modify;
+                                    mk_thd @@ mk_var "stmt_cntr_info"]]
+              ]
       ;
-
       (* carry out delete if needed *)
       mk_if (mk_var nd_check_stmt_cntr_do_delete.id)
           (mk_apply' nd_complete_stmt_cntr_check_nm [mk_var "vid"; mk_var "stmt_id"])
           mk_cunit
       ;
-
       (* For no-corrective mode, add to per-map stmt cntrs *)
       mk_if (mk_and (mk_not @@ mk_var D.corrective_mode.id) @@
                     mk_var nd_check_stmt_cntr_init.id)
@@ -959,7 +959,6 @@ let nd_update_stmt_cntr_corr_map =
           mk_upsert_with_block nd_stmt_cntrs_inner.id [mk_var "vid"; mk_cunknown]
             (mk_lambda' unit_arg @@ mk_error @@ sp "%s: missing stmt_cntrs value" nd_update_stmt_cntr_corr_map_nm) @@
              mk_lambda' ["lkup", wrap_ttuple @@ snd_many @@ nd_stmt_cntrs_inner.e] @@
-              mk_let [nd_stmt_cntrs_corr_map.id] (mk_thd @@ mk_snd @@ mk_var "lkup") @@
               mk_block [
                 (* only do this part if count isn't 0 *)
                 mk_if_eq (mk_var "count") (mk_cint 0)
@@ -967,8 +966,8 @@ let nd_update_stmt_cntr_corr_map =
                   (* increment the next hop by count *)
                   mk_let ["delete_entry"; "new_count"]
                     (mk_case_ns
-                      (mk_peek @@ mk_slice'
-                          nd_stmt_cntrs_corr_map.id [mk_var "hop"; mk_cunknown]) "lkup2"
+                      (mk_peek @@ mk_slice
+                        (mk_thd @@ mk_snd @@ mk_var "lkup") [mk_var "hop"; mk_cunknown]) "lkup2"
                       (* if no entry, return count *)
                       (mk_tuple [mk_cfalse; mk_var "count"])
                       (* else, calculate new corr count *)
@@ -981,8 +980,8 @@ let nd_update_stmt_cntr_corr_map =
                           (* else, return the incremented entry *)
                           (mk_tuple [mk_cfalse; mk_var "new_corr_cnt"])))
                     (mk_if (mk_var "delete_entry")
-                      (mk_delete nd_stmt_cntrs_corr_map.id [mk_var "hop"; mk_cint 0]) @@
-                       mk_insert nd_stmt_cntrs_corr_map.id [mk_var "hop"; mk_var "new_count"]);
+                      (mk_delete ~path:[2;3] "lkup" [mk_var "hop"; mk_cint 0]) @@
+                       mk_insert ~path:[2;3] "lkup" [mk_var "hop"; mk_var "new_count"]);
 
                 (* check if this is from the root of the corrective tree *)
                 mk_if (mk_var "root")
@@ -992,8 +991,8 @@ let nd_update_stmt_cntr_corr_map =
                   (* else update the current hop *)
                   mk_let ["delete_entry"; "new_count"]
                     (mk_case_ns
-                      (mk_peek @@ mk_slice' nd_stmt_cntrs_corr_map.id
-                                    [mk_var "hop2"; mk_cunknown]) "lkup2"
+                      (mk_peek @@
+                        mk_slice (mk_thd @@ mk_snd @@ mk_var "lkup") [mk_var "hop2"; mk_cunknown]) "lkup2"
                       (* if no entry, return -1 *)
                       (mk_tuple [mk_cfalse; mk_cint @@ -1])
                       (* else, calculate new corr count *)
@@ -1006,13 +1005,10 @@ let nd_update_stmt_cntr_corr_map =
                           (* else, return the incremented entry *)
                           (mk_tuple [mk_cfalse; mk_var "new_corr_cnt"])))
                     (mk_if (mk_var "delete_entry")
-                      (mk_delete nd_stmt_cntrs_corr_map.id [mk_var "hop2"; mk_cint 0])
-                      (mk_insert nd_stmt_cntrs_corr_map.id [mk_var "hop2"; mk_var "new_count"]));
+                      (mk_delete ~path:[2;3] "lkup" [mk_var "hop2"; mk_cint 0])
+                      (mk_insert ~path:[2;3] "lkup" [mk_var "hop2"; mk_var "new_count"]));
 
-                (* set the new tuple *)
-                mk_tuple [mk_fst @@ mk_snd @@ mk_var "lkup";
-                          mk_snd @@ mk_snd @@ mk_var "lkup";
-                          mk_var nd_stmt_cntrs_corr_map.id]
+                mk_var "lkup"
               ]
     ]
 
