@@ -67,6 +67,7 @@ type config = {
                 singleton_id:string;
                 use_filemux:bool;
                 safe_writes:bool;
+                use_intmap:bool;
               }
 
 let default_config = {
@@ -78,6 +79,7 @@ let default_config = {
                        singleton_id="elem";
                        use_filemux=false;
                        safe_writes=false;
+                       use_intmap=false;
                      }
 
 let verbose_types_config = default_config
@@ -201,7 +203,7 @@ and lazy_col c col_t elem_t = match col_t with
   | TBag        -> lps "{Collection}"
   | TList       -> lps "{Seq}"
   | TVector     -> lps "{Vector}"
-  | TMap when has_int_key elem_t -> lps "{IntMap}"
+  | TMap when c.use_intmap && has_int_key elem_t -> lps "{IntMap}"
   | TMap        -> lps "{MapE" <| lazy_mape c elem_t <| lps "}"
   | TVMap None  -> lps "{MultiIndexVMap}"
   | TVMap(Some ss) -> lazy_multi_index c ss elem_t
@@ -427,6 +429,7 @@ let is_sorted_map c col = match fst @@ KH.unwrap_tcol @@ T.repr c.tenv @@ T.type
                   | TSortedMap -> true | _ -> false
 
 let is_intmap c col =
+  if not c.use_intmap then false else
   let t = T.repr c.tenv @@ T.type_of_expr col in
   try
     let t_c, t_e = KH.unwrap_tcol t in
