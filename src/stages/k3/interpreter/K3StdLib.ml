@@ -108,7 +108,7 @@ let divf_fn e =
   match arg_of_env "x" e, arg_of_env "y" e with
   | VFloat x, VFloat y -> e, float_temp @@ x /. y
   | VInt x, VFloat y -> e, float_temp @@ (foi x) /. y
-  | _ -> invalid_arg "divf"
+  | x, y -> invalid_arg (sp "divf: %s, %s" (string_of_value x) (string_of_value y))
 
 let divf_name = "divf"
 let divf_decl = wrap_tfunc [t_float; t_float] t_float
