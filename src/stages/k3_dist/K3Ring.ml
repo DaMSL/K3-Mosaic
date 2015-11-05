@@ -18,7 +18,7 @@ let t_ring = wrap_tsortedmap' t_node
 
 let add_node_nm = "add_node"
 
-let replicas = create_ds "replicas" (mut t_int) ~init:(mk_cint 8)
+let replicas = create_ds "replicas" (mut t_int) ~init:(mk_cint 1)
 
 let node_ring =
   let e = ["hash", t_int; "addr", t_int] in
