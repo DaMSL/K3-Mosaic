@@ -126,7 +126,7 @@ let nd_check_stmt_cntr_index c =
                               mk_var new_modify)
                   (mk_block [
                     (* for profiling: mark push as done *)
-                    prof_property D.prof_tag_push_done "vid" "stmt_id";
+                    prof_property D.prof_tag_push_done @@ ProfLatency("vid", "stmt_id");
                     mk_assign nd_check_stmt_cntr_ret.id mk_ctrue
                   ])
                   mk_cunit;
@@ -539,7 +539,7 @@ let nd_rcv_fetch_trig c trig =
     mk_poly_skip_block fn_name [
 
       (* for profiling: mark the rcv fetch here *)
-      prof_property prof_tag_rcv_fetch "vid" (soi trig_id);
+      prof_property prof_tag_rcv_fetch @@ ProfLatency("vid", soi trig_id);
 
       (* we *must* have a data structure here *)
       mk_check_tag' (ios_tag c stmt_map_ids.id) @@
@@ -678,7 +678,7 @@ let nd_send_push_stmt_map_trig c s_rhs_lhs t =
         mk_block [
           (* for profiling: mark this as a buffered push if needed *)
           mk_if (mk_var "buffered")
-            (prof_property prof_tag_buffered_push "vid" (soi s)) mk_cunit;
+            (prof_property prof_tag_buffered_push @@ ProfLatency("vid", soi s)) mk_cunit;
 
           (* save this particular statement execution in the master log
            * Note that we need to do it here to make sure nothing
@@ -688,6 +688,23 @@ let nd_send_push_stmt_map_trig c s_rhs_lhs t =
           (* fill in the global shuffle data structures *)
           mk_apply' shuffle_fn @@
             shuffle_key@[mk_cint shuffle_pat_idx; mk_cint empty_pat_idx; mk_var "tuples"];
+
+          (* for profiling, count the number of empty and full push messages *)
+          mk_if (mk_var do_profiling.id)
+            (mk_block [
+              mk_assign D.prof_num_empty.id @@ mk_cint 0;
+              mk_assign D.prof_num_full.id @@ mk_cint 0;
+              mk_iter_bitmap'
+                (mk_at_with' K3S.shuffle_results.id (mk_var "ip") @@
+                  mk_lambda' K3S.shuffle_results.e @@
+                    mk_if (mk_var "has_data") 
+                      (mk_incr D.prof_num_full.id) @@
+                       mk_incr D.prof_num_empty.id)
+                K3S.shuffle_bitmap.id;
+              prof_property prof_tag_push_cnts @@ ProfCounts("vid", D.prof_num_empty.id, D.prof_num_full.id)
+            ])
+            mk_cunit;
+
           (* iterate and buffer *)
           mk_iter_bitmap'
             (mk_at_with' K3S.shuffle_results.id (mk_var "ip") @@
@@ -1216,7 +1233,7 @@ let nd_do_complete_fns c ast trig_name corr_maps =
         do_add_delta c (mk_var delta) lmap ~corrective:false;
 
         (* for profiling: mark with tag for do_complete done *)
-        prof_property prof_tag_do_complete_done "vid" (soi stmt_id);
+        prof_property prof_tag_do_complete_done @@ ProfLatency("vid", soi stmt_id);
 
         if c.gen_correctives && List.exists ((=) lmap) corr_maps
         then
@@ -1285,7 +1302,7 @@ let nd_rcv_corr_done c =
       mk_if (mk_var "do_delete")
         (mk_block [
           (* for profiling: mark tag with corrective done *)
-          prof_property prof_tag_corr_done "vid" "stmt_id";
+          prof_property prof_tag_corr_done @@ ProfLatency("vid", "stmt_id");
 
           (* delete the whole stmt_cntr entry *)
           mk_update_at_with nd_stmt_cntrs_id (mk_var "stmt_id") @@
@@ -1629,7 +1646,7 @@ let sw_event_driver_trig c =
             (mk_apply' "sleep" [mk_var D.sw_event_driver_sleep.id])
             mk_cunit;
           (* for profiling, save the vid and time *)
-          prof_property prof_tag_pre_send_fetch "vid" "-1";
+          prof_property prof_tag_pre_send_fetch @@ ProfLatency("vid", "-1");
 
           (* calculate the next vid *)
           mk_let ["next_vid"]
@@ -1695,7 +1712,7 @@ let sw_event_driver_trig c =
             mk_assign TS.sw_highest_vid.id @@ mk_var "next_vid";
 
             (* for profiling, annotate with the last vid seen *)
-            prof_property prof_tag_post_send_fetch "next_vid" "-1";
+            prof_property prof_tag_post_send_fetch @@ ProfLatency("next_vid", "-1");
 
             (* check if we're done *)
             Proto.sw_check_done ~check_size:true

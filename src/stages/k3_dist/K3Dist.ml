@@ -1298,11 +1298,21 @@ let prof_tag_buffered_push = 3
 let prof_tag_push_done = 4
 let prof_tag_do_complete_done = 5
 let prof_tag_corr_done = 6
+let prof_tag_push_cnts = 7
 
 (* @t_s_id: trig or stmt id *)
-let prof_property ?(flush=false) (tag:int) (vid_nm:string) (t_s_id:string) =
-  let p =
-    sp "MosaicPreEvent(lbl=[# mosaic], tl=[$ %d], ve=[$ %s], ce=[$ %s])" tag vid_nm t_s_id
+type prof_event =
+                      (* vid_nm, tag/stmt id *)
+      | ProfLatency of string * string
+                      (* vid_nm, num_empty, num_full *)
+      | ProfCounts of string * string * string
+
+let prof_property ?(flush=false) (tag:int) event =
+  let p = match event with
+    | ProfLatency(vid_nm, t_s_id) ->
+      sp "MosaicPreEvent(lbl=[# mosaic], tl=[$ %d], ve=[$ %s], ce=[$ %s])" tag vid_nm t_s_id
+    | ProfCounts(vid_nm, num_empty, num_full) ->
+      sp "MosaicCounts(lbl=[# mosaic], tl=[$ %d], ve=[$ %s], ce1=[$ %s], ce2=[$ %s])" tag vid_nm num_empty num_full
   in
   let target_expr = if flush then mk_tuple ~force:true [U.add_property "Flush" mk_cunit] else mk_cunit in
   mk_if (mk_var do_profiling.id) (U.add_annotation p target_expr) mk_cunit
@@ -1320,8 +1330,11 @@ let profile_funcs_stop =
     mk_apply' "jemallocStop" [];
     mk_apply' "tcmallocStop" [];
     mk_apply' "pcmStop" [];
-    prof_property ~flush:true (-1) "-1" "-1";
+    prof_property ~flush:true (-1) @@ ProfLatency("-1", "-1");
   ]
+
+let prof_num_empty = create_ds "prof_num_empty" @@ mut t_int
+let prof_num_full  = create_ds "prof_num_full" @@ mut t_int
 
 (* index used to handle multiple switches for csv source *)
 let sw_csv_index = create_ds "sw_csv_index" @@ t_int
@@ -1386,6 +1399,8 @@ let global_vars c dict =
       nd_lmap_of_stmt_id c;
       do_profiling;
       use_unique_poly;
+      prof_num_empty;
+      prof_num_full;
       sw_csv_index;
     ] @
 
