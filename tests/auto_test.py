@@ -29,6 +29,8 @@ def run():
                         default=False, help="Distributed test")
     parser.add_argument('-n', '--nodes', action='store', type=int, dest='num_nodes',
                         default=1, help="Number of data nodes")
+    parser.add_argument('-s', '--switches', action='store', type=int, dest='num_switches',
+                        default=1, help="Number of switch nodes")
     parser.add_argument('-o', '--order', action='store', dest='order_file',
                         default=None, help="Use an order file instead of creating a trace")
     parser.add_argument('-v', '--verbose', action='store_true', dest='verbose',
@@ -61,6 +63,7 @@ def run():
                         default=None, help="Reduce layout of maps on nodes")
     parser.add_argument('--shift-factor', dest='map_shift_factor',
                         default=None, help="Shift layout of maps on nodes")
+    parser.add_argument('--debug', default=False, action='store_true', help="Debug output")
 
     args = parser.parse_args()
 
@@ -103,7 +106,9 @@ def run():
         else:
             res = dist_test.run(test_file,
                                 num_nodes=args.num_nodes,
+                                num_switches=args.num_switches,
                                 order_file=args.order_file,
+                                debug=args.debug,
                                 verbose=verbose,
                                 distrib=True,
                                 new_k3=args.new_k3,

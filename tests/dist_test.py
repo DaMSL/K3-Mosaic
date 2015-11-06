@@ -24,6 +24,7 @@ def get_nice_name(path):
 
 def run(target_file,
         num_nodes=1,
+        num_switches=1,
         order_file=None,
         verbose=True,
         distrib=False,
@@ -40,7 +41,8 @@ def run(target_file,
         filemux=False,
         safe_writes=False,
         map_area_factor=None,
-        map_shift_factor=None
+        map_shift_factor=None,
+        debug=False
         ):
 
     to_root = ".."
@@ -88,7 +90,10 @@ def run(target_file,
     # run dbtoaster to get interpreted updates
     os.chdir(script_path)
     debug_cmd = ''
-    debug_flags = ['PRINT-VERBOSE', 'LOG-INTERPRETER-UPDATES', 'LOG-INTERPRETER-TRIGGERS', 'LOG-M3']
+    debug_flags = ['PRINT-VERBOSE',
+                   'LOG-INTERPRETER-UPDATES',
+                   'LOG-INTERPRETER-TRIGGERS',
+                   'LOG-M3']
     for f in debug_flags:
         debug_cmd += ' -d ' + f
 
@@ -125,29 +130,27 @@ def run(target_file,
         os.chdir(saved_dir)
         return False
 
-    read_files = []
-    for m in matches:
-        read_files += [os.path.join(script_path, m)]
+    read_files = [os.path.join(script_path, m) for m in matches]
 
     load_path = concat(["--load_path", script_path])
 
-    # execution diverges from here
+    # execution diverges from here for distributed and local
     if distrib:
         queue_type = "node"
-        options = ""
+        options = []
 
         # string for k3 distributed file creation: either use a trace file or an order file
         if order_file:
-            options += concat(["--order", order_file, " "])
+            options += ["--order " + order_file]
         else:
-            options += concat(["--trace", trace_file, " "])
+            options += ["--trace " + trace_file]
 
         if map_type == "vmap":
-            options += "--map-vmap "
+            options += ["--map-vmap"]
         if map_type == "multi":
-            options += "--map-multi "
+            options += ["--map-multi"]
         if not gen_deletes:
-            options += "--no-deletes "
+            options += ["--no-deletes"]
 
         agenda_cmd = "--agenda "+ agenda_file
 
@@ -161,21 +164,18 @@ def run(target_file,
 
         # create a k3 distributed file
         cmd = concat([k3o, "-p -i m3 -l k3disttest", m3_file, agenda_cmd,
-              options, "--sfile", data_file,
+              concat(options), "--sfile", data_file,
               ">", k3dist_file, "2>", error_file])
         print_system(cmd, verbose)
         if check_error(error_file, verbose) or check_error(k3dist_file, verbose, True):
             os.chdir(saved_dir)
             return False
 
-        # create node list
-        node_list = []
-        for i in range(num_nodes):
-            port = 10 + (i * 10)
-            node_list += ['localhost:{0}/node'.format(port)]
+        switch_list = ['localhost:{}/switch_old'.format(2 + i) for i in range(num_switches)]
+        node_list = ['localhost:{}/node'.format(20 + (i*10)) for i in range(num_nodes)]
 
-        # always add the master, switch and timer
-        peer_list = ["-n localhost:0/master", "localhost:1/switch_old", "localhost:3/timer", ] + node_list
+        # always add the master and timer
+        peer_list = ['-n localhost:0/master', 'localhost:1/timer'] + node_list + switch_list
         peer_cmd = ','.join(peer_list)
 
         if new_k3:
@@ -209,8 +209,8 @@ def run(target_file,
             with open(json_file, 'w') as f:
                 json.dump(j, f)
 
-            json_cmd = ("--interp-args " + json_file)
-            msg_cmd  = ("--msg_interval " + str(msg_interval))
+            json_cmd = "--interp-args " + json_file
+            msg_cmd = "--msg_interval " + str(msg_interval)
             log_cmd = "--no-log" if not logging else ""
 
             # run the k3 driver on the input
