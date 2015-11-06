@@ -1184,9 +1184,8 @@ end
 let pmap_factor = 64
 let pmap_buckets = create_ds ~init:(mk_cint pmap_factor) "pmap_buckets" @@ t_int
 
-(* scale factor to reduce the coverage of the maps *)
-let pmap_area_factor  = create_ds ~init:(mk_cfloat 1.) "pmap_area_factor" @@ t_float
-let pmap_shift_factor = create_ds ~init:(mk_cfloat 0.) "pmap_shift_factor" @@ t_float
+(* overlap factor to determine how much overlap we have between the maps *)
+let pmap_overlap_factor = create_ds ~init:(mk_cfloat 1.) "pmap_overlap_factor" t_float
 
 (* shifts for maps, so that each one covers a fraction of the clock *)
 (* vector of map_id -> [shift, max] *)
@@ -1208,9 +1207,13 @@ let pmap_shifts p =
           IntSet.add m acc else acc)
       route_pats
       IntSet.empty in
+  (* the relevant maps: the ones that have slices *)
+  let div_maps =
+    insert_index_snd @@ List.filter (fun m -> not @@ IntSet.mem m only_point_access) ms in
+  let num_div_maps = List.length div_maps in
   let init =
     let info_ds =
-      let e = ["min_map_size", t_int; "map_id", t_int; "point_access", t_bool] in
+      let e = ["min_map_size", t_int; "map_index", t_int; "point_access", t_bool] in
       create_ds ~e "info" @@ wrap_tvector' @@ snd_many e
     in
     (* data structure with information *)
@@ -1223,7 +1226,9 @@ let pmap_shifts p =
             (* we know that we have to partition every dimension *)
             let min_size = iof @@ 2. ** (foi dims) in
             let point_access = IntSet.mem m only_point_access in
-            mk_tuple [mk_cint min_size; mk_cint m; mk_cbool point_access])
+            mk_tuple [mk_cint min_size;
+                      mk_cint (try List.assoc m div_maps with Not_found -> 0);
+                      mk_cbool point_access])
          ms) @@
     (* process the information *)
     mk_map (mk_lambda' info_ds.e @@
@@ -1231,25 +1236,19 @@ let pmap_shifts p =
             (mk_if (mk_gt (mk_var "min_map_size") @@ mk_var pmap_buckets.id)
                (mk_var "min_map_size") @@ mk_var pmap_buckets.id) @@
           (* for point access maps, keep it simple *)
-          mk_if (mk_var "point_access")
-            (mk_tuple [mk_cint 0; mk_var "map_size"]) @@
+          mk_if (mk_var "point_access") (mk_tuple [mk_cint 0; mk_var "map_size"]) @@
+          (* shift size from overlap factor *)
+          mk_let ["map_shift_size"]
+            (mk_apply' "int_of_float"
+               [mk_mult (mk_sub (mk_cfloat 1.) @@ mk_var pmap_overlap_factor.id) @@
+                        mk_var "map_size"]) @@
+          (* add up all the shifts plus the map size - a shift, which is the same
+              as reducing the num_div_maps by 1 *)
           mk_let ["map_scaled_size"]
-            (mk_apply' "int_of_float"
-               [mk_apply' "divf" [mk_var "map_size"; mk_var pmap_area_factor.id]]) @@
-          mk_let ["map_shift"]
-            (mk_apply' "int_of_float"
-               [mk_mult (mk_var "map_scaled_size") @@ mk_var pmap_shift_factor.id]) @@
-          (* scaled size - map size *)
-          mk_let ["map_delta_size"]
-            (mk_sub (mk_var "map_scaled_size") @@ mk_var "map_size") @@
-          mk_tuple [
-            mk_if_eq (mk_var "map_delta_size") (mk_cint 0)
-              (mk_cint 0) @@
-              mk_apply' "mod"
-                [mk_mult (mk_var "map_shift") @@ mk_var "map_id";
-                mk_var "map_delta_size"]
-            ;
-            mk_var "map_scaled_size"]) @@
+            (mk_add (mk_var "map_size") @@ mk_mult (mk_cint @@ num_div_maps - 1) @@ mk_var "map_shift_size") @@
+          (* the shift of this particular map, and the total size *)
+          mk_tuple [mk_mult (mk_var "map_index") @@ mk_var "map_shift_size";
+                    mk_var "map_scaled_size"]) @@
         mk_var "info"
   in
   create_ds ~init ~e:pmap_shifts_e pmap_shifts_id t
@@ -1353,8 +1352,7 @@ let global_vars c dict =
       master_addr;
       timer_addr;
       pmap_buckets;
-      pmap_area_factor;
-      pmap_shift_factor;
+      pmap_overlap_factor;
       pmap_shifts c.p;
       pmap_input c.p;
       nodes;

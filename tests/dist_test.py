@@ -40,8 +40,7 @@ def run(target_file,
         correctives=True,
         filemux=False,
         safe_writes=False,
-        map_area_factor=None,
-        map_shift_factor=None,
+        map_overlap_factor=None,
         debug=False
         ):
 
@@ -201,10 +200,8 @@ def run(target_file,
             j = {}
             j["ms_gc_interval"] = gc_interval
             j["num_switches"] = num_switches
-            if map_area_factor:
-                j["pmap_area_factor"] = map_area_factor
-            if map_shift_factor:
-                j["pmap_shift_factor"] = map_shift_factor
+            if map_overlap_factor:
+                j["pmap_overlap_factor"] = map_overlap_factor
             if not correctives:
                 j["corrective_mode"] = False
             # set csv indices
