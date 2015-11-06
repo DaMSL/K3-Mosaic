@@ -10,7 +10,7 @@ val value_of_eval : eval_t -> value_t
 
 val env_of_program :
   ?address:address ->
-  ?json:Yojson.Safe.json ->
+  ?json:(id_t * Yojson.Safe.json) list ->
   role:id_t ->
   peers:K3Global.peer_t list ->
   type_aliases:(id_t, type_t) Hashtbl.t ->

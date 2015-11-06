@@ -1705,7 +1705,8 @@ let sw_event_driver_trig c =
      mk_send sw_event_driver_trig_nm (mk_var TS.sw_next_switch_addr.id)
        [mk_var "vid"; mk_var "vector_clock"]
 
-let sw_demux_ctr = create_ds "sw_demux_ctr" @@ mut t_int
+let sw_sent_demux_ctr = create_ds "sw_sent_demux_ctr" @@ mut t_int
+let sw_total_demux_ctr = create_ds "sw_total_demux_ctr" @@ mut t_int
 let sw_demux_poly_queue =
   create_ds "sw_demux_poly_queue" @@ D.poly_queue.t
 
@@ -1727,43 +1728,46 @@ let sw_demux c =
     mk_if (mk_eq (mk_fst @@ mk_var "args") @@ mk_cstring "")
       (mk_block [
           mk_poly_insert "sentinel" "sw_demux_poly_queue" [mk_cunit];
-          mk_ctrue
-        ])
-      mk_cfalse
+          mk_tuple [mk_ctrue; mk_ctrue]
+        ]) @@
+      mk_tuple [mk_cfalse; mk_cfalse]
   in
   mk_code_sink' sw_demux_nm ["args", wrap_ttuple @@ List.map str_of_date_t combo_t] [] @@
   (* create a poly queue with a given number of messages *)
-  mk_block [
-    mk_let ["do_incr"]
+    mk_let_block ["do_incr"; "do_send"]
       (StrMap.fold (fun trig arg_indices acc ->
         let args =
           (* add 1 for tuple access *)
           List.map (fun i -> convert_date i @@ mk_subscript (i+1) @@ mk_var "args")
             arg_indices
         in
-        mk_if (mk_eq (mk_fst @@ mk_var "args") @@ mk_cstring trig)
-          (mk_let ["do_insert"] (mk_eq (mk_snd @@ mk_var "args") @@ mk_cint 1) @@
-           mk_block [
-             mk_poly_insert trig "sw_demux_poly_queue" @@ (mk_var "do_insert")::args;
-             mk_ctrue
-           ])
+        (* check if we match on the trig id *)
+        mk_if_eq (mk_fst @@ mk_var "args") (mk_cstring trig)
+          (mk_if_eq
+            (mk_apply' "mod" [mk_var sw_total_demux_ctr.id; mk_var num_switches.id])
+              (mk_var D.sw_csv_index.id)
+              (mk_let_block ["do_insert"]
+                 (mk_eq (mk_snd @@ mk_var "args") @@ mk_cint 1) [
+                mk_poly_insert trig "sw_demux_poly_queue" @@ (mk_var "do_insert")::args;
+                mk_tuple [mk_ctrue; mk_ctrue]
+               ]) @@
+              (* if we don't match on the mod, don't insert but increment *)
+            mk_tuple [mk_ctrue; mk_cfalse])
           acc)
         t_arg_map
-        sentinel_code) @@
-    (* increment counter if we sent a value *)
-    mk_if (mk_var "do_incr")
-      (mk_assign sw_demux_ctr.id @@ mk_add (mk_cint 1) @@ mk_var sw_demux_ctr.id)
-      mk_cunit;
-    (* ship off if we hit the count or saw the sentinel *)
-    mk_if (mk_or (mk_geq (mk_var sw_demux_ctr.id) @@ mk_var D.sw_poly_batch_size.id) @@
+        sentinel_code) [
+    (* increment counter if we saw a valid trigger *)
+    mk_if (mk_var "do_incr") (mk_incr sw_total_demux_ctr.id) mk_cunit;
+    mk_if (mk_var "do_send") (mk_incr sw_sent_demux_ctr.id) mk_cunit;
+    (* ship if we hit the count or saw the sentinel *)
+    mk_if (mk_or (mk_eq (mk_cint 0) @@
+                    mk_apply' "mod" [mk_var sw_sent_demux_ctr.id; mk_var D.sw_poly_batch_size.id]) @@
                   mk_eq (mk_fst @@ mk_var "args") @@ mk_cstring "")
       (mk_block [
         (* copy the polybuffer to the queue *)
         mk_insert sw_event_queue.id [mk_var sw_demux_poly_queue.id];
         (* clear the buffer *)
         mk_clear_all sw_demux_poly_queue.id;
-        (* clear the counter *)
-        mk_assign sw_demux_ctr.id @@ mk_cint 0;
         ])
       mk_cunit
   ]
@@ -1874,7 +1878,8 @@ let declare_global_vars c ast =
      send_put_ip_map c.p;
      send_fetch_bitmap;
      send_fetch_ip_map;
-     sw_demux_ctr;
+     sw_total_demux_ctr;
+     sw_sent_demux_ctr;
      sw_demux_poly_queue;
      nd_dispatcher_buf;
      nd_dispatcher_last_num;

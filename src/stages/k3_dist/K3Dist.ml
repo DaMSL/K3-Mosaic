@@ -661,9 +661,6 @@ let find_nd_stmt_cntrs_min_vid =
     (mk_var g_max_vid.id) @@
     mk_var nd_stmt_cntrs_id
 
-            
-
-
 (* master log *)
 (* the master log shows which statements we pushed data for
  * filter_corrective_list calls nd_log_read_geq to figure out which
@@ -1327,6 +1324,9 @@ let profile_funcs_stop =
     prof_property ~flush:true (-1) "-1" "-1";
   ]
 
+(* index used to handle multiple switches for csv source *)
+let sw_csv_index = create_ds "sw_csv_index" @@ t_int
+
 let global_vars c dict =
   (* replace default inits with ones from ast *)
   let replace_init ds =
@@ -1388,6 +1388,7 @@ let global_vars c dict =
       nd_lmap_of_stmt_id c;
       do_profiling;
       use_unique_poly;
+      sw_csv_index;
     ] @
 
     log_ds c @

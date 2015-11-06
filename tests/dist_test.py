@@ -200,12 +200,18 @@ def run(target_file,
             # create a json file
             j = {}
             j["ms_gc_interval"] = gc_interval
+            j["num_switches"] = num_switches
             if map_area_factor:
                 j["pmap_area_factor"] = map_area_factor
             if map_shift_factor:
                 j["pmap_shift_factor"] = map_shift_factor
             if not correctives:
                 j["corrective_mode"] = False
+            # set csv indices
+            for i in range(num_switches):
+                node_j = {}
+                node_j['sw_csv_index'] = i
+                j['localhost:{}'.format(2 + i)] = node_j
             with open(json_file, 'w') as f:
                 json.dump(j, f)
 

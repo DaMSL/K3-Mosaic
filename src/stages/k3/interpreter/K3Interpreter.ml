@@ -846,14 +846,12 @@ let convert_json t j = match t.typ, j with
   | TString, `String x -> VString x
   | _         -> failwith "advanced json structure unsupported"
 
-let lookup_json t json id = match json with
-  | Some (`Assoc l) -> begin try some @@ convert_json t @@ List.assoc id l
-                       with Not_found -> None end
-  | Some _          -> failwith "invalid json format"
-  | _               -> None
+let lookup_json t json id =
+  try some @@ convert_json t @@ List.assoc id json
+  with Not_found -> None
 
 (* Builds a trigger, global value and function environment (ie frames) *)
-let env_of_program ?address ?json ~role ~peers ~type_aliases sched_st k3_program =
+let env_of_program ?address ?(json=[]) ~role ~peers ~type_aliases sched_st k3_program =
   let me_addr = match address with
     | None   -> Constants.default_address
     | Some a -> a in
@@ -949,8 +947,19 @@ let interpreter_event_loop role k3_program =
    | None        -> get_role role error
 
 (* returns address, (event_loop_t, environment) *)
-let initialize_peer sched_st ~address ~role ~peers ~type_aliases ?json k3_program =
-  let prog_env = env_of_program sched_st ~address ~role ~peers ~type_aliases ?json k3_program in
+let initialize_peer sched_st ~address ~role ~peers ~type_aliases ?(json=[]) k3_program =
+  (* find a personal part of the json if it exists *)
+  let json =
+    let s_addr = string_of_address address in
+    let my_json = try some @@ List.assoc s_addr json with Not_found -> None in
+    let my_json = match my_json with
+      | Some (`Assoc l) -> l
+      | Some _ -> failwith "bad deep json format"
+      | None -> []
+    in
+    my_json @ json
+  in
+  let prog_env = env_of_program sched_st ~address ~role ~peers ~type_aliases ~json k3_program in
   address, (interpreter_event_loop role k3_program, prog_env)
 
 let interpret_k3_program i =
@@ -1012,8 +1021,10 @@ let init_k3_interpreter ?queue_type ?(src_interval=0.002)
   let scheduler = init_scheduler_state ?queue_type ~peers in
   let json =
     if interp_file <> "" then
-      some @@ Yojson.Safe.from_file interp_file
-    else None
+      match Yojson.Safe.from_file interp_file with
+      | `Assoc l -> l
+      | _ -> failwith "bad json format"
+    else []
   in
   match peers with
   | []  -> failwith "init_k3_program: Peers list is empty!"
@@ -1027,7 +1038,7 @@ let init_k3_interpreter ?queue_type ?(src_interval=0.002)
       List.iter (fun (address, role) ->
                  (* event_loop_t * program_env_t *)
           let _, ((res_env, fsm_env, instrs), prog_env) =
-            initialize_peer scheduler ~address ~role ~peers ~type_aliases ?json typed_prog in
+            initialize_peer scheduler ~address ~role ~peers ~type_aliases ~json typed_prog in
 
           Hashtbl.replace envs address
             {res_env; fsm_env; prog_env; instrs; disp_env=C.def_dispatcher}
