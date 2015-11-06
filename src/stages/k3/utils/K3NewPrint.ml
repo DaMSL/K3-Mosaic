@@ -1593,12 +1593,14 @@ declare my_peers2 : collection { elem:address } @ {Collection} =
 declare my_role : collection { elem:string } @ {Collection} =
   role.fold (\\acc -> (\\x -> (acc.insert {elem:x.i}; acc))) empty { elem:string} @ Collection
 
-declare files    : collection {path: string} @Collection
-declare seqfiles : collection {seq: collection {path: string} @Collection} @Collection
-declare inorder  : mut string = \"in_order.csv\"
-declare eventlog : mut string = \"events.csv\"
+declare files       : collection {path: string} @Collection
+declare seqfiles    : collection {seq: collection {path: string} @Collection} @Collection
+declare inorder     : mut string = \"in_order.csv\"
+declare eventlog    : mut string = \"events.csv\"
+declare msgcountlog : mut string = \"msgcount.csv\"
 
-sink mosaic_event_sink : {etag: int, evid: int, pcomponent: int, t: int} = file eventlog text csv
+sink mosaic_event_sink    : {etag: int, evid: int, pcomponent: int, t: int}     = file eventlog text csv
+sink mosaic_msgcount_sink : {etag: int, evid: int, msgempty: int, msgfull: int} = file msgcountlog text csv
 
 declare rebatch : mut int = 0
 
