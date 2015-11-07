@@ -237,8 +237,8 @@ rule tokenize = parse
 
     | "++" { CONCAT }
 
-    | "@@ {" ((_)* as s) "}&" { ANNOTATE s }
-    | "@ {" ((_)* as s) "}&" { PROPERTY s }
+    | "@@ &" (([^'&'])* as s) '&' { ANNOTATE s }
+    | "@ &" (([^'&'])* as s) '&' { PROPERTY s }
 
     | identifier as name { try
         Hashtbl.find keyword_table name
