@@ -1529,6 +1529,10 @@ let string_of_base_type t = wrap_f @@ fun () ->
 let string_of_value_type t = wrap_f @@ fun () ->
   force_list @@ lazy_type verbose_types_config t
 
+(* print a K3 expression in syntax *)
+let string_of_expr e = wrap_f @@ fun () ->
+  force_list @@ lazy_expr verbose_types_config e
+
 module StringSet = Set.Make(struct type t=string let compare=String.compare end)
 
 (* remove/convert functions that are renamed in k3new *)
@@ -1598,9 +1602,11 @@ declare seqfiles    : collection {seq: collection {path: string} @Collection} @C
 declare inorder     : mut string = \"in_order.csv\"
 declare eventlog    : mut string = \"events.csv\"
 declare msgcountlog : mut string = \"msgcount.csv\"
+declare routelog    : mut string = \"routelog.csv\"
 
 sink mosaic_event_sink    : {etag: int, evid: int, pcomponent: int, t: int}     = file eventlog text csv
 sink mosaic_msgcount_sink : {etag: int, evid: int, msgempty: int, msgfull: int} = file msgcountlog text csv
+sink mosaic_routelog_sink : {etag: int, evid: int, pcomponent: int, rkey: string, rrbucket: int, rrnode: int} = file routelog text csv
 
 declare rebatch : mut int = 0
 

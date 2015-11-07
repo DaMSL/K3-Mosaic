@@ -1300,24 +1300,35 @@ let prof_tag_do_complete_done = 5
 let prof_tag_corr_done = 6
 let prof_tag_push_cnts = 7
 let prof_tag_push_decr = 8
+let prof_tag_fetch_route = 9
 
 (* @t_s_id: trig or stmt id *)
 type prof_event =
                       (* vid_nm, tag/stmt id *)
       | ProfLatency of string * string
+
                       (* vid_nm, num_empty, num_full *)
       | ProfCounts of string * string * string
+
                       (* vid_nm, tag/stmt id, barrier_count *)
       | ProfPushBarrier of string * string * string
+
+                      (* vid nm, tag/stmt id, route key, bucket, node idx *)
+      | ProfFetchRoute of string * string * string * string * string
 
 let prof_property ?(flush=false) (tag:int) event =
   let p = match event with
     | ProfLatency(vid_nm, t_s_id) ->
       sp "MosaicPreEvent(lbl=[# mosaic], tl=[$ %d], ve=[$ %s], ce=[$ %s])" tag vid_nm t_s_id
+
     | ProfCounts(vid_nm, num_empty, num_full) ->
       sp "MosaicCounts(lbl=[# mosaic], tl=[$ %d], ve=[$ %s], ce1=[$ %s], ce2=[$ %s])" tag vid_nm num_empty num_full
+
     | ProfPushBarrier(vid_nm, t_s_id, barrier_count) ->
       sp "MosaicPushBarrier(lbl=[# mosaic], tl=[$ %d], ve=[$ %s], ce1=[$ %s], ce2=[$ %s])" tag vid_nm t_s_id barrier_count
+
+    | ProfFetchRoute(vid_nm, t_s_id, key, bucket, ip) ->
+      sp "MosaicFetchRoute(lbl=[# mosaic], tl=[$ %d], ve=[$ %s], ce1=[$ %s], ce2=[$ %s], ce3=[$ %s])" tag vid_nm t_s_id key bucket ip
   in
   let target_expr = if flush then mk_tuple ~force:true [U.add_property "Flush" mk_cunit] else mk_cunit in
   mk_if (mk_var do_profiling.id) (U.add_annotation p target_expr) mk_cunit

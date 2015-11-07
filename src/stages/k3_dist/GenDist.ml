@@ -30,7 +30,9 @@ module R = K3Route
 module P = ProgInfo
 module TS = Timestamp
 module Proto = Protocol
+module K3R = K3Route
 module K3S = K3Shuffle
+module K3N = K3NewPrint
 
 let str_of_date_t t = match t.typ with
   | TDate -> {t with typ = TString}
@@ -448,6 +450,12 @@ let sw_send_fetch_fn c s_rhs_lhs s_rhs t =
             (mk_cint pat_idx) @@
           mk_iter_bitmap'
             (mk_block [
+              prof_property D.prof_tag_fetch_route
+                @@ ProfFetchRoute("vid",
+                      K3N.string_of_expr (mk_cint stmt_id),
+                      K3N.string_of_expr (mk_tuple @@ mk_cint rhs_map_id::key),
+                      K3N.string_of_expr (mk_apply' (K3R.route_for ~bound:true c.p rhs_map_id) key),
+                      "ip");
               (* if we haven't sent to this ip yet, add a rcv_fetch header *)
                 mk_if (mk_not @@ mk_at' send_fetch_bitmap.id @@ mk_var "ip")
                   (mk_block [
@@ -698,7 +706,7 @@ let nd_send_push_stmt_map_trig c s_rhs_lhs t =
               mk_iter_bitmap'
                 (mk_at_with' K3S.shuffle_results.id (mk_var "ip") @@
                   mk_lambda' K3S.shuffle_results.e @@
-                    mk_if (mk_var "has_data") 
+                    mk_if (mk_var "has_data")
                       (mk_incr D.prof_num_full.id) @@
                        mk_incr D.prof_num_empty.id)
                 K3S.shuffle_bitmap.id;
