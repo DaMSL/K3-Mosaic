@@ -128,7 +128,7 @@ let calc_dim_bounds =
           ["acc", buckets.t]
           ["pos", t_int; "bin_size", t_int] @@
           mk_block [
-            mk_insert_at "acc" @@ mk_var "pos" @@ mk_var "bin_size";
+            mk_insert_at "acc" @@ mk_var "pos" [mk_var "bin_size"];
             mk_var "acc";
           ]) @@
         mk_var "buckets" @@
