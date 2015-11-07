@@ -454,7 +454,7 @@ let sw_send_fetch_fn c s_rhs_lhs s_rhs t =
                 @@ ProfFetchRoute("vid",
                       K3N.string_of_expr (mk_cint stmt_id),
                       K3N.string_of_expr (mk_tuple @@ mk_cint rhs_map_id::key),
-                      K3N.string_of_expr (mk_apply' (K3R.route_for ~bound:true c.p rhs_map_id) key),
+                      K3N.string_of_expr (mk_apply' (K3R.route_for ~bound:true c.p rhs_map_id) (mk_cint rhs_map_id::key)),
                       "ip");
               (* if we haven't sent to this ip yet, add a rcv_fetch header *)
                 mk_if (mk_not @@ mk_at' send_fetch_bitmap.id @@ mk_var "ip")

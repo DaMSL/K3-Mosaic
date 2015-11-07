@@ -40,7 +40,7 @@ let verbose_types_config = {default_config with verbose_types=true}
 (* low precedence joining of lists *)
 let (<|) a b = a @ b
 
-let lazy_wrap l r f = lps s <| f <| lps r
+let lazy_wrap l r f = lps l <| f <| lps r
 let lazy_paren f = lps "(" <| f <| lps ")"
 let lazy_bracket f = lps "[" <| f <| lps "]"
 let lazy_brace f = lps "{" <| f <| lps "}"
