@@ -385,9 +385,9 @@ let gen_route_fn p map_id =
                   let add_idx s = s ^ soi index in
                   num - 1,
                   mk_iter
-                    (mk_lambda'' ["x", t_int] @@
+                    (mk_lambda'' [add_idx "x", t_int] @@
                       mk_let [add_idx "val"]
-                        (mk_mult (mk_var "x") @@ mk_var @@ add_idx "dim_size")
+                        (mk_mult (mk_var @@ add_idx "x") @@ mk_var @@ add_idx "dim_size")
                         acc_code) @@
                     mk_var @@ add_idx "rng")
                   (* zero: insertion of ip *)
