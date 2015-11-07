@@ -67,7 +67,7 @@ let lazy_annos ps =
   let annos = List.filter U.is_annotation ps in
   let printer sym = function
     | [] -> []
-    | xs -> lps sym <| lazy_brace @@ lps_list ~sep:"; " NoCut lazy_anno xs
+    | xs -> lps sym <| lazy_brace @@ lps_list ~sep:"; " NoCut lazy_anno xs <| lps "&"
   in
   printer "@ " props <| printer "@@ " annos
 
