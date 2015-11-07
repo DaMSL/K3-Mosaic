@@ -1349,6 +1349,7 @@ let profile_funcs_stop =
     prof_property ~flush:true (-1) @@ ProfLatency("-1", "-1");
     prof_property ~flush:true (-1) @@ ProfCounts("-1", "-1", "-1");
     prof_property ~flush:true (-1) @@ ProfPushBarrier("-1", "-1", "-1");
+    prof_property ~flush:true (-1) @@ ProfFetchRoute("-1", "-1", "-1", "-1", "-1");
   ]
 
 let prof_num_empty = create_ds "prof_num_empty" @@ mut t_int
