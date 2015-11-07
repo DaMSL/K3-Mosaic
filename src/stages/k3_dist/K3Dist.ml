@@ -1299,6 +1299,7 @@ let prof_tag_push_done = 4
 let prof_tag_do_complete_done = 5
 let prof_tag_corr_done = 6
 let prof_tag_push_cnts = 7
+let prof_tag_push_decr = 8
 
 (* @t_s_id: trig or stmt id *)
 type prof_event =
@@ -1306,6 +1307,8 @@ type prof_event =
       | ProfLatency of string * string
                       (* vid_nm, num_empty, num_full *)
       | ProfCounts of string * string * string
+                      (* vid_nm, tag/stmt id, barrier_count *)
+      | ProfPushBarrier of string * string * string
 
 let prof_property ?(flush=false) (tag:int) event =
   let p = match event with
@@ -1313,6 +1316,8 @@ let prof_property ?(flush=false) (tag:int) event =
       sp "MosaicPreEvent(lbl=[# mosaic], tl=[$ %d], ve=[$ %s], ce=[$ %s])" tag vid_nm t_s_id
     | ProfCounts(vid_nm, num_empty, num_full) ->
       sp "MosaicCounts(lbl=[# mosaic], tl=[$ %d], ve=[$ %s], ce1=[$ %s], ce2=[$ %s])" tag vid_nm num_empty num_full
+    | ProfPushBarrier(vid_nm, t_s_id, barrier_count) ->
+      sp "MosaicPushBarrier(lbl=[# mosaic], tl=[$ %d], ve=[$ %s], ce1=[$ %s], ce2=[$ %s])" tag vid_nm t_s_id barrier_count
   in
   let target_expr = if flush then mk_tuple ~force:true [U.add_property "Flush" mk_cunit] else mk_cunit in
   mk_if (mk_var do_profiling.id) (U.add_annotation p target_expr) mk_cunit
@@ -1332,6 +1337,7 @@ let profile_funcs_stop =
     mk_apply' "pcmStop" [];
     prof_property ~flush:true (-1) @@ ProfLatency("-1", "-1");
     prof_property ~flush:true (-1) @@ ProfCounts("-1", "-1", "-1");
+    prof_property ~flush:true (-1) @@ ProfPushBarrier("-1", "-1", "-1");
   ]
 
 let prof_num_empty = create_ds "prof_num_empty" @@ mut t_int

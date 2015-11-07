@@ -116,6 +116,7 @@ let nd_check_stmt_cntr_index c =
               mk_let [new_count]
                 (mk_add (mk_var add_to_count) @@ mk_fst @@ mk_var "stmt_cntr_info") @@
               mk_block [
+                prof_property D.prof_tag_push_decr @@ ProfPushBarrier("vid", "stmt_id", new_count);
                 (* if counter is 0 and no modify, we need to delete *)
                 mk_if (mk_and (mk_eq (mk_var new_count) @@ mk_cint 0) @@
                         mk_not @@ mk_var new_modify)
