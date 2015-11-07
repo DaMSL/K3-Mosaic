@@ -129,9 +129,8 @@ let calc_dim_bounds =
           ["pos", t_int; "bin_size", t_int] @@
           mk_block [
             mk_insert_at "acc" (mk_var "pos") [mk_var "bin_size"];
-            mk_var "acc";
-          ]) @@
-        mk_var "buckets" @@
+            mk_var "acc"])
+        (mk_var "buckets") @@
         mk_var "pmap") @@
     (* calculate the size of the bucket of each dimensioned we're partitioned on
     * This is order-dependent in pmap *)
