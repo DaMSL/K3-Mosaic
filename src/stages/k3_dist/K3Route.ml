@@ -118,8 +118,21 @@ let calc_dim_bounds =
            mk_insert_at "acc" (mk_var "num_dims") [mk_cint 0; mk_empty rng.t];
            mk_var "acc"
          ]]) @@
+    (* variable to hold bin sizes. *)
     mk_let ["buckets"]
       (mk_map (mk_lambda' unknown_arg @@ mk_cint 0) @@ mk_var "rng") @@
+    (* populate with bin size of every dimension for use in routing. *)
+    mk_let ["buckets"]
+      (mk_agg
+        (mk_lambda2'
+          ["acc", buckets.t]
+          ["pos", t_int; "bin_size", t_int] @@
+          mk_block [
+            mk_insert_at "acc" @@ mk_var "pos" @@ mk_var "bin_size";
+            mk_var "acc";
+          ]) @@
+        mk_var "buckets" @@
+        mk_var "pmap") @@
     (* calculate the size of the bucket of each dimensioned we're partitioned on
     * This is order-dependent in pmap *)
     mk_let ["dims"; "final_size"]
