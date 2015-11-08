@@ -739,14 +739,14 @@ let nd_rcv_corr_done_nm = "nd_rcv_corr_done"
 (* the trig header marks the args *)
 let trig_sub_handler_args c t = ["save_args", t_bool] @ args_of_t_with_v c t
 
-(* rcv_put: how the stmt_cnt list gets sent in rcv_put *)
-let stmt_cnt_list_ship =
-  let e = ["stmt_id", t_stmt_id; "count", t_int] in
-  create_ds "stmt_cnt_list" ~e @@ wrap_tbag' @@ snd_many e
+(* rcv_put: how the stmt list gets sent in rcv_put *)
+let nd_rcv_put_stmt_poly = ["stmt_id", t_stmt_id]
 
 (* rcv_put includes stmt_cnt_list_ship *)
-let nd_rcv_put_args_poly c t = ["sender_ip", t_int]
-let nd_rcv_put_args c t = nd_rcv_put_args_poly c t @ args_of_t_with_v c t
+(* in batched form, it's no longer part of the trigger message *)
+(* but it still causes trigger headers to form, for the arguments *)
+let nd_rcv_batch_put_args_poly c t = ["sender_ip", t_int; "batch_id", t_vid]
+let nd_rcv_batch_put_args c t = nd_rcv_batch_put_args_poly c t @ args_of_t_with_v c t
 
 (* rcv_fetch: data structure that is sent *)
 let stmt_map_ids =
@@ -754,7 +754,7 @@ let stmt_map_ids =
   let e = ["stmt_id", t_stmt_id; "map_id", t_map_id] in
   create_ds ~e "stmt_map_ids" @@ wrap_tbag' @@ snd_many e
 
-let nd_rcv_fetch_args_poly c t = []
+let nd_rcv_fetch_args_poly c t = ["batch_id", t_vid]
 let nd_rcv_fetch_args c t = nd_rcv_fetch_args_poly c t @ args_of_t_with_v c t
 
 let nd_do_complete_trig_args_poly c t = ["sender_ip", t_int; "ack", t_bool]
@@ -949,7 +949,8 @@ let calc_poly_tags c =
   insert_index_fst l
 
 (* instead of sending directly, place in the send buffer *)
-(* @bitmap: whether to mark the bitmap *)
+(* @wr_bitmap: whether to mark the bitmap *)
+(* @unique: unique poly buffers *)
 let buffer_for_send ?(unique=false) ?(wr_bitmap=true) t addr args =
   let path = if unique then [2] else [1] in
   mk_block @@
@@ -1064,6 +1065,7 @@ let mk_send_me ?(payload=[mk_cunit]) trig =
 
 (* counter for ip *)
 let ip = create_ds "ip" (mut t_int)
+let ip2 = create_ds "ip2" (mut t_int)
 
 (* counter for stmt *)
 let stmt_ctr = create_ds "stmt_ctr" @@ mut t_int
