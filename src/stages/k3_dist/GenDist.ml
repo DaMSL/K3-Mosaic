@@ -1471,9 +1471,9 @@ let nd_trig_sub_handler c t =
 
 
 (*** central triggers to handle dispatch for nodes and switches ***)
-let trig_dispatcher_nm = "trig_dispatcher"
-let trig_dispatcher c =
-  mk_global_fn trig_dispatcher_nm
+let batch_dispatcher_nm = "batch_dispatcher"
+let batch_dispatcher c =
+  mk_global_fn batch_dispatcher_nm
     ["poly_queue", poly_queue.t; "upoly_queue", upoly_queue.t] [] @@
   mk_block [
     (* replace all used send slots with empty polyqueues *)
@@ -1516,7 +1516,7 @@ let trig_dispatcher c =
       (mk_let ["pqs"]
          (mk_delete_at poly_queues.id @@ mk_var "ip") @@
       mk_block [
-        D.mk_sendi trig_dispatcher_trig_nm (mk_var "ip") [mk_var "pqs"]
+        D.mk_sendi batch_dispatcher_trig_nm (mk_var "ip") [mk_var "pqs"]
       ])
       D.poly_queue_bitmap.id;
   ]
@@ -1530,20 +1530,20 @@ let nd_dispatcher_buf =
 let nd_dispatcher_last_num = create_ds "nd_dispatcher_last_num" @@ mut t_int
 
 (* trigger version of dispatcher. Called by other nodes *)
-let trig_dispatcher_trig c =
-  mk_code_sink' trig_dispatcher_trig_nm ["poly_queue", poly_queue.t; "upoly_queue", upoly_queue.t] [] @@
+let batch_dispatcher_trig c =
+  mk_code_sink' batch_dispatcher_trig_nm ["poly_queue", poly_queue.t; "upoly_queue", upoly_queue.t] [] @@
   mk_block [
     (* unpack the polyqueues *)
     mk_poly_unpack (mk_var "poly_queue");
     mk_poly_unpack (mk_var "upoly_queue");
-    mk_apply' trig_dispatcher_nm [mk_var "poly_queue"; mk_var "upoly_queue"]
+    mk_apply' batch_dispatcher_nm [mk_var "poly_queue"; mk_var "upoly_queue"]
   ]
 
 (* trig dispatcher from switch to node. accepts a msg number telling it how to order messages *)
 (* @msg_num: number of consecutive message. Used to order buffers in corrective mode
    so we avoid having too many correctives. *)
-let nd_trig_dispatcher_trig c =
-  mk_code_sink' nd_trig_dispatcher_trig_nm ["num", t_int; "poly_queue", poly_queue.t] [] @@
+let nd_batch_dispatcher_trig c =
+  mk_code_sink' nd_batch_dispatcher_trig_nm ["num", t_int; "poly_queue", poly_queue.t] [] @@
   mk_let ["next_num"]
     (mk_if (mk_eq (mk_var nd_dispatcher_last_num.id) @@ mk_var g_max_int.id)
        (mk_cint 0) @@
@@ -1557,7 +1557,7 @@ let nd_trig_dispatcher_trig c =
           mk_poly_unpack (mk_var "poly_queue");
 
           mk_assign nd_dispatcher_last_num.id @@ mk_var "next_num";
-          mk_apply' trig_dispatcher_nm [mk_var "poly_queue"; mk_var "empty_upoly_queue"];
+          mk_apply' batch_dispatcher_nm [mk_var "poly_queue"; mk_var "empty_upoly_queue"];
        ]) @@
       (* else, stash the poly_queue in our buffer *)
       mk_insert nd_dispatcher_buf.id [mk_var "num"; mk_var "poly_queue"]
@@ -1567,7 +1567,7 @@ let nd_trig_dispatcher_trig c =
       (mk_lambda' unit_arg @@ mk_cunit)
       (* recurse with the next number *)
       (mk_lambda'' ["x", wrap_ttuple @@ snd_many nd_dispatcher_buf.e] @@
-        mk_send nd_trig_dispatcher_trig_nm G.me_var [mk_var "x"])
+        mk_send nd_batch_dispatcher_trig_nm G.me_var [mk_var "x"])
   ]
 
 (* The driver trigger: loop over the even data structures as long as we have spare vids *)
@@ -1681,7 +1681,7 @@ let sw_event_driver_trig c =
               (* move and delete the poly_queue and ship it out with the vector clock num *)
                 (* pull out the poly queue *)
                 (mk_let ["pq"] (mk_delete_at poly_queues.id @@ mk_var "ip") @@
-                 D.mk_sendi nd_trig_dispatcher_trig_nm (mk_var "ip")
+                 D.mk_sendi nd_batch_dispatcher_trig_nm (mk_var "ip")
                     [mk_at' "vector_clock" @@ mk_var "ip"; mk_fst @@ mk_var "pq"]
                  ) @@
               D.poly_queue_bitmap.id;
@@ -1998,15 +1998,15 @@ let gen_dist ?(gen_deletes=true)
     proto_semi_trigs @
     nd_rcv_corr_done c ::
     nd_handle_uniq_poly c ::
-    trig_dispatcher c ::
+    batch_dispatcher c ::
     [mk_flow @@
       Proto.triggers c @
       GC.triggers c @
       TS.triggers @
       Timer.triggers c @
       [
-        trig_dispatcher_trig c;
-        nd_trig_dispatcher_trig c;
+        batch_dispatcher_trig c;
+        nd_batch_dispatcher_trig c;
         sw_event_driver_trig c;
         sw_demux c;
         sw_demux_poly c;

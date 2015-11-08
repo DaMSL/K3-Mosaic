@@ -708,10 +708,10 @@ let sw_init           = create_ds "sw_init" (mut t_bool) ~init:mk_cfalse
 (*** trigger names ***)
 
 (* main dispatcher for whole protocol *)
-let trig_dispatcher_trig_nm = "trig_dispatcher_trig"
+let batch_dispatcher_trig_nm = "batch_dispatcher_trig"
 
 (* dispatcher for sw -> node with corrective mode *)
-let nd_trig_dispatcher_trig_nm = "nd_trig_dispatcher_trig"
+let nd_batch_dispatcher_trig_nm = "nd_batch_dispatcher_trig"
 
 (* handler for many other triggers *)
 let trig_sub_handler_name_of_t t = "nd_trig_sub_handler_"^t
