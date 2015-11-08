@@ -293,16 +293,10 @@ let nd_filter_corrective_list =
 (* for aggregating the puts per batch, we need to get all the sending ips per ip *)
 let send_put_ip_map_senders = create_ds "senders" @@ wrap_tvector t_bool
 
-let send_put_ip_map_stmts = create_ds "stmts" @@ wrap_tvector t_bool
-
 let send_put_ip_map =
-  let e = [send_put_ip_map_senders.id, send_put_ip_map_senders.t;
-           send_put_ip_map_stmts.id, send_put_ip_map_stmts.t] in
+  let e = [send_put_ip_map_senders.id, send_put_ip_map_senders.t] in
   let init = mk_map (mk_lambda' unknown_arg @@
-                     mk_tuple [
-                       mk_map (mk_lambda' unknown_arg @@ mk_cfalse) @@ mk_var D.my_peers.id;
-                       mk_empty send_put_ip_map_stmts.t
-                     ]) @@
+                       mk_map (mk_lambda' unknown_arg @@ mk_cfalse) @@ mk_var D.my_peers.id) @@
               mk_var D.my_peers.id in
   create_ds ~init "send_put_ip_map" @@ wrap_tvector' @@ snd_many e
 
@@ -326,6 +320,7 @@ let send_fetch_bitmap =
 (* sending fetches is done from functions *)
 (* each function takes a vid to plant in the arguments, which are in the trig buffers *)
 let sw_send_fetch_fn c s_rhs_lhs s_rhs t =
+  let args = args_of_t_as_vars_with_v c t in
   let send_puts =
     if null s_rhs_lhs then [] else
     (* send puts
@@ -334,20 +329,21 @@ let sw_send_fetch_fn c s_rhs_lhs s_rhs t =
 
       (* don't clean bitmaps: we aggregate over puts *)
       List.map
-        (fun (stmt_id, (rhs_map_id, lhs_map_id)) ->
+        (fun (s, (rmap, lmap)) ->
           (* shuffle allows us to recreate the path the data will take from rhs to lhs *)
-          let shuffle_fn = K3Shuffle.find_shuffle_nm c stmt_id rhs_map_id lhs_map_id in
+          let shuffle_fn = K3Shuffle.find_shuffle_nm c s rmap lmap in
           let shuffle_key, shuffle_empty_pat =
-            P.key_pat_from_bound c.p c.route_indices stmt_id lhs_map_id in
-          let shuffle_pat = P.get_shuffle_pat_idx c.p c.route_indices stmt_id lhs_map_id rhs_map_id in
+            P.key_pat_from_bound c.p c.route_indices s lmap in
+          let shuffle_pat = P.get_shuffle_pat_idx c.p c.route_indices s lmap rmap in
           (* route allows us to know how many nodes send data from rhs to lhs *)
-          let route_key, route_pat_idx = P.key_pat_from_bound c.p c.route_indices stmt_id rhs_map_id in
+          let route_key, route_pat_idx = P.key_pat_from_bound c.p c.route_indices s rmap in
           (* we need the types for creating empty rhs tuples *)
-          let rhs_map_types = P.map_types_with_v_for c.p rhs_map_id in
+          let rhs_map_types = P.map_types_with_v_for c.p rmap in
           let tuple_types = wrap_t_calc' rhs_map_types in
+          let rcv_put_nm = rcv_put_name_of_t t in
           (* do a route lookup for the rhs map *)
-          R.route_lookup c rhs_map_id
-            (mk_cint rhs_map_id::route_key)
+          R.route_lookup c rmap
+            (mk_cint rmap::route_key)
             (mk_cint route_pat_idx) @@
           (* fill in the send_put_ip_map *)
           mk_block [
@@ -365,17 +361,14 @@ let sw_send_fetch_fn c s_rhs_lhs s_rhs t =
                   (mk_update_at_with send_put_ip_map.id (mk_var "ip") @@
                     mk_lambda' ["acc", wrap_ttuple @@ snd_many send_put_ip_map.e] @@
                       mk_block [
-                        mk_insert_at ~path:[1] "acc" (mk_var "ip2") [mk_ctrue];
+                        mk_insert_at "acc" (mk_var "ip2") [mk_ctrue];
                         mk_var "acc"
                      ])
                   R.route_bitmap.id;
-                (* update with the stmt *)
-                mk_update_at_with send_put_ip_map.id (mk_var "ip") @@
-                  mk_lambda' ["acc", wrap_ttuple @@ snd_many send_put_ip_map.e] @@
-                    mk_block [
-                      mk_insert ~path:[2] "acc" [mk_cint stmt_id];
-                      mk_var "acc"
-                    ]
+                (* buffer the trig args if needed *)
+                buffer_trig_header_if_needed t "ip" args ~save_args:true;
+                (* send rcv_put header, and the statement *)
+                buffer_for_send rcv_put_nm "ip" [mk_cint s];
                 ])
               K3S.shuffle_bitmap.id
           ])
@@ -429,7 +422,6 @@ let sw_send_fetch_fn c s_rhs_lhs s_rhs t =
     let s_no_rhs = P.stmts_without_rhs_maps_in_t c.p t in
     if null s_no_rhs then []
     else
-      let args = args_of_t_as_vars_with_v c t in
       let s_ls =
         List.map
           (fun stmt_id ->
@@ -1644,17 +1636,35 @@ let sw_event_driver_trig c =
                       acc_code)
                   (mk_error "mismatch on event id") @@
                   List.filter (function (_,(nm,e,_)) ->
-                      e = Event && (StrSet.mem ("insert_"^nm) trig_list || nm = "sentinel"))
-                    c.poly_tags
-                ;
-                (* increment the vid *)
-                mk_add (mk_cint 1) @@ mk_var "vid";
+                      e = Event && (StrSet.mem ("insert_"^nm) trig_list || nm = "sentinel"));
+
+                  (* increment the vid *)
+                  mk_add (mk_cint 1) @@ mk_var "vid";
 
                 ])
               (mk_var "vid") @@
-              mk_var "poly_queue"] @@
+              mk_var "poly_queue";
+
+              (* iterate over the batch_put bitmap and count the number for puts *)
+              mk_let ["ack_needed_count"]
+                (mk_agg_bitmap' ["ack_count", t_int]
+                  (* count up the senders for this ip *)
+                    mk_let_block ["sender_count"]
+                      (mk_at_with' send_put_ip_map.id (mk_var "ip") @@
+                          mk_agg_bitmap' ~idx:"ip2" ["count", t_int]
+                            (mk_add (mk_var "count") @@ mk_cint 1)
+                            (mk_cint 0) @@
+                            "senders")
+                      [
+                        buffer_for_send D.rcv_batch_put_nm "ip" [mk_var D.me_int.id; mk_var "sender_count"];
+                        mk_add (mk_var "ack_count") @@ mk_cint 1;
+                      ]
+                  (mk_cint 0) @@
+                send_put_bitmap.id) @@
+              GC.sw_update_send ~vid_nm:"vid" ~n:(mk_var "add_count");
+
           (* update the vector clock by bits in the outgoing poly_queues *)
-          mk_let ["vector_clock"]
+          mk_let_block ["vector_clock"]
             (mk_agg_bitmap'
               ["acc", TS.sw_vector_clock.t]
               (mk_update_at_with_block "acc" (mk_var "ip") @@
@@ -1664,8 +1674,8 @@ let sw_event_driver_trig c =
                     (mk_cint 0) @@
                     mk_add (mk_cint 1) @@ mk_var "x")
               (mk_var "vector_clock")
-              D.poly_queue_bitmap.id) @@
-          mk_block [
+              D.poly_queue_bitmap.id) [
+
             (* send (move) the outgoing polyqueues *)
             mk_iter_bitmap'
               (* move and delete the poly_queue and ship it out with the vector clock num *)
@@ -1688,8 +1698,8 @@ let sw_event_driver_trig c =
             prof_property prof_tag_post_send_fetch @@ ProfLatency("next_vid", "-1");
 
             (* check if we're done *)
-            Proto.sw_check_done ~check_size:true
-          ]]) @@
+            Proto.sw_check_done ~check_size:true;
+        ]]]) @@
         mk_error "oops") @@
      (* otherwise send the same vid and vector clock *)
      mk_send sw_event_driver_trig_nm (mk_var TS.sw_next_switch_addr.id)

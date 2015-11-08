@@ -734,19 +734,20 @@ let sw_ack_rcv_trig_nm = "sw_ack_rcv"
 
 let nd_rcv_corr_done_nm = "nd_rcv_corr_done"
 
+let nd_rcv_batch_put_nm = "nd_rcv_batch_put"
+
 (*** trigger args. Needed here for polyqueues ***)
 
 (* the trig header marks the args *)
 let trig_sub_handler_args c t = ["save_args", t_bool] @ args_of_t_with_v c t
 
-(* rcv_put: how the stmt list gets sent in rcv_put *)
-let nd_rcv_put_stmt_poly = ["stmt_id", t_stmt_id]
-
 (* rcv_put includes stmt_cnt_list_ship *)
 (* in batched form, it's no longer part of the trigger message *)
 (* but it still causes trigger headers to form, for the arguments *)
-let nd_rcv_batch_put_args_poly c t = ["sender_ip", t_int; "batch_id", t_vid]
-let nd_rcv_batch_put_args c t = nd_rcv_batch_put_args_poly c t @ args_of_t_with_v c t
+let nd_rcv_put_args_poly = ["stmt_id", t_stmt_id]
+let nd_rcv_put_args c t = nd_rcv_put_args_poly @ args_of_t_with_v c t
+
+let nd_rcv_batch_put_args_poly = ["sender_ip", t_int; "batch_id", t_vid]
 
 (* rcv_fetch: data structure that is sent *)
 let stmt_map_ids =
@@ -910,15 +911,14 @@ let calc_poly_tags c =
          t, Event, args)
        events) @
     (* static ds for sw->nd triggers *)
-    [stmt_cnt_list_ship.id, Ds false, stmt_cnt_list_ship.e;
-     stmt_map_ids.id, Ds false, stmt_map_ids.e] @
+    [stmt_map_ids.id, Ds false, stmt_map_ids.e] @
     (List.flatten @@ for_all_trigs c.p ~sys_init:true @@ fun t ->
       let s_rhs = P.s_and_over_stmts_in_t c.p P.rhs_maps_of_stmt t in
       let s_rhs_corr = List.filter (fun (s, map) -> List.mem map c.corr_maps) s_rhs in
       (* carries all the trig arguments + vid *)
       (trig_sub_handler_name_of_t t, Trig true, trig_sub_handler_args c t)::
       (if s_rhs = [] then [] else [
-        rcv_put_name_of_t t, SubTrig(true, t), nd_rcv_put_args_poly c t;
+        rcv_put_name_of_t t, SubTrig(false, t), nd_rcv_put_args_poly;
         rcv_fetch_name_of_t t, SubTrig(true, t), nd_rcv_fetch_args_poly c t]) @
       (* args for do completes without rhs maps *)
       (List.map (fun s ->
@@ -944,7 +944,10 @@ let calc_poly_tags c =
     ["vids", Ds false, ["vid", t_vid];
      nd_rcv_corr_done_nm, Trig false, nd_rcv_corr_done_args;
     (* for GC (node->switch acks) *)
-     sw_ack_rcv_trig_nm, Trig false, sw_ack_rcv_trig_args]
+     sw_ack_rcv_trig_nm, Trig false, sw_ack_rcv_trig_args;
+    (* for batch put *)
+     nd_rcv_batch_put_nm, Trig false, nd_rcv_batch_put_args_poly;
+    ]
   in
   insert_index_fst l
 
