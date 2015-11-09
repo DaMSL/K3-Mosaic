@@ -454,6 +454,7 @@ val mk_is_tup_nothing : expr_t -> expr_t
 val mk_insert_block : ?path:int list -> id_t -> expr_t list -> expr_t
 val mk_insert_at_block : ?path:int list -> id_t -> expr_t -> expr_t list -> expr_t
 val mk_set_all : ?path:int list -> id_t -> expr_t list -> expr_t
+val mk_set_all_block : ?path:int list -> id_t -> expr_t list -> expr_t
 val mk_extend_block : ?path:int list -> id_t -> expr_t -> expr_t
 val mk_upsert_with_block : ?path:int list -> id_t -> expr_t list -> expr_t -> expr_t -> expr_t
 val mk_update_at_with_block : ?path:int list -> id_t -> expr_t -> expr_t -> expr_t

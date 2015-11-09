@@ -75,10 +75,11 @@ type map_type =
 
 type has_ds = bool
 type unique = bool
+type push_phase = Push | Put | Both | Neither
 
 type tag_type =
-    Trig      of has_ds (* a top-level trigger *)
-  | SubTrig   of has_ds * string (* a subtrigger handled by trig_sub_handler *)
+    Trig      of has_ds * push_phase (* a top-level trigger *)
+  | SubTrig   of has_ds * string * push_phase (* a subtrigger handled by trig_sub_handler *)
   | Ds        of unique (* a data structure *)
   | Event     (* incoming event *)
 
@@ -636,6 +637,10 @@ let nd_stmt_cntrs_inner =
   let e = ["vid", t_vid; "stmt_cntr_info", wrap_ttuple @@ snd_many @@ at ee 1] in
   create_ds "nd_stmt_cntrs_inner" ~e ~ee @@ wrap_tmap' @@ snd_many e
 
+let nd_batch_cntrs =
+  let e = ["batch_id", t_int; "count", t_int] in
+  create_ds "nd_batch_cntrs" ~e @@ wrap_tmap' @@ snd_many e
+
 (* stmt_cntrs - (vid, stmt_id, counter) *)
 (* 1st counter: count messages received until do_complete *)
 (* 2nd counter: map from hop to counter *)
@@ -735,11 +740,12 @@ let sw_ack_rcv_trig_nm = "sw_ack_rcv"
 let nd_rcv_corr_done_nm = "nd_rcv_corr_done"
 
 let nd_rcv_batch_put_nm = "nd_rcv_batch_put"
+let nd_rcv_batch_push_nm = "nd_rcv_batch_push"
 
 (*** trigger args. Needed here for polyqueues ***)
 
 (* the trig header marks the args *)
-let trig_sub_handler_args c t = ["save_args", t_bool] @ args_of_t_with_v c t
+let trig_sub_handler_args c t = ["push_phase", t_bool; "save_args", t_bool] @ args_of_t_with_v c t
 
 (* rcv_put includes stmt_cnt_list_ship *)
 (* in batched form, it's no longer part of the trigger message *)
@@ -747,7 +753,9 @@ let trig_sub_handler_args c t = ["save_args", t_bool] @ args_of_t_with_v c t
 let nd_rcv_put_args_poly = ["stmt_id", t_stmt_id]
 let nd_rcv_put_args c t = nd_rcv_put_args_poly @ args_of_t_with_v c t
 
-let nd_rcv_batch_put_args_poly = ["sender_ip", t_int; "batch_id", t_vid]
+let nd_rcv_batch_put_args_poly = ["sender_ip", t_int; "batch_id", t_vid; "sender_count", t_int]
+
+let nd_rcv_batch_push_args_poly = ["batch_id", t_vid]
 
 (* rcv_fetch: data structure that is sent *)
 let stmt_map_ids =
@@ -759,9 +767,10 @@ let nd_rcv_fetch_args_poly c t = ["batch_id", t_vid]
 let nd_rcv_fetch_args c t = nd_rcv_fetch_args_poly c t @ args_of_t_with_v c t
 
 let nd_do_complete_trig_args_poly c t = ["sender_ip", t_int; "ack", t_bool]
-let nd_do_complete_trig_args c t = nd_do_complete_trig_args_poly c t @ args_of_t_with_v c t
+let nd_do_complete_trig_args c t =
+  ["push_phase", t_bool] @ nd_do_complete_trig_args_poly c t @ args_of_t_with_v c t
 
-let nd_rcv_push_args_poly c t = ["has_data", t_bool]
+let nd_rcv_push_args_poly c t = ["batch_id", t_vid; "has_data", t_bool]
 let nd_rcv_push_args c t = nd_rcv_push_args_poly c t @ args_of_t_with_v c t
 
 (* for do_corrective:
@@ -809,6 +818,11 @@ let upoly_queue = create_ds "upoly_queue" @@ t_alias upoly_queue_typedef_id
 (* global for avoiding huge tags *)
 let empty_poly_queue = create_ds "empty_poly_queue" @@ poly_queue.t
 let empty_upoly_queue = create_ds "empty_upoly_queue" @@ upoly_queue.t
+
+(* buffer to save batches until pushes can activate them *)
+let nd_batch_buffer =
+  let e = ["batch_id", t_vid; "batch", poly_queue.t] in
+  create_ds "nd_batch_buffer" @@ wrap_tmap' @@ snd_many e
 
 let poly_queues =
   let e = ["queue", poly_queue.t; "uqueue", upoly_queue.t] in
@@ -916,18 +930,18 @@ let calc_poly_tags c =
       let s_rhs = P.s_and_over_stmts_in_t c.p P.rhs_maps_of_stmt t in
       let s_rhs_corr = List.filter (fun (s, map) -> List.mem map c.corr_maps) s_rhs in
       (* carries all the trig arguments + vid *)
-      (trig_sub_handler_name_of_t t, Trig true, trig_sub_handler_args c t)::
+      (trig_sub_handler_name_of_t t, Trig(true, Both) , trig_sub_handler_args c t)::
       (if s_rhs = [] then [] else [
-        rcv_put_name_of_t t, SubTrig(false, t), nd_rcv_put_args_poly;
-        rcv_fetch_name_of_t t, SubTrig(true, t), nd_rcv_fetch_args_poly c t]) @
+        rcv_put_name_of_t t, SubTrig(false, t, Put), nd_rcv_put_args_poly;
+        rcv_fetch_name_of_t t, SubTrig(true, t, Push), nd_rcv_fetch_args_poly c t]) @
       (* args for do completes without rhs maps *)
       (List.map (fun s ->
-          do_complete_name_of_t t s^"_trig", SubTrig(false, t), nd_do_complete_trig_args_poly c t) @@
+          do_complete_name_of_t t s^"_trig", SubTrig(false, t, Neither), nd_do_complete_trig_args_poly c t) @@
         P.stmts_without_rhs_maps_in_t c.p t) @
       (* the types for nd_rcv_push. includes a separate, optional map component *)
       (* this isn't a dsTrig anymore since pushes are aggregated at the dispatcher *)
       (List.map (fun (s, m) ->
-          rcv_push_name_of_t c t s m, SubTrig(false, t), nd_rcv_push_args_poly c t)
+          rcv_push_name_of_t c t s m, SubTrig(false, t, Neither), nd_rcv_push_args_poly c t)
         s_rhs) @
       (* the types for rcv_push's maps *)
       (List.map (fun (s, m) ->
@@ -935,18 +949,19 @@ let calc_poly_tags c =
           s_rhs) @
       (* rcv_corrective types. includes a separate, optional map + vids component *)
       (List.map (fun (s, m) ->
-          rcv_corrective_name_of_t c t s m, Trig true, nd_rcv_corr_args)
+          rcv_corrective_name_of_t c t s m, Trig(true, Neither), nd_rcv_corr_args)
         s_rhs_corr)) @
     (* the types for the maps without vid *)
     (P.for_all_maps c.p @@ fun m ->
       P.map_name_of c.p m^"_map", Ds false, P.map_ids_types_for c.p m) @
     (* t_vid_list ds for correctives *)
     ["vids", Ds false, ["vid", t_vid];
-     nd_rcv_corr_done_nm, Trig false, nd_rcv_corr_done_args;
+     nd_rcv_corr_done_nm, Trig(false, Neither), nd_rcv_corr_done_args;
     (* for GC (node->switch acks) *)
-     sw_ack_rcv_trig_nm, Trig false, sw_ack_rcv_trig_args;
+     sw_ack_rcv_trig_nm, Trig(false, Neither), sw_ack_rcv_trig_args;
     (* for batch put *)
-     nd_rcv_batch_put_nm, Trig false, nd_rcv_batch_put_args_poly;
+     nd_rcv_batch_put_nm, Trig(false, Put), nd_rcv_batch_put_args_poly;
+     nd_rcv_batch_push_nm, Trig(false, Neither), nd_rcv_batch_push_args_poly;
     ]
   in
   insert_index_fst l
@@ -1400,6 +1415,7 @@ let global_vars c dict =
       map_ids c;
       nd_stmt_cntr_size;
       nd_stmt_cntrs c;
+      nd_batch_cntrs;
       nd_log_master;
       sw_init;
       sw_seen_sentinel;
