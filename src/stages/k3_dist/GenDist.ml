@@ -1527,25 +1527,48 @@ let nd_trig_sub_handler c t =
           c.poly_tags;
   ]
 
-
-(*** central triggers to handle dispatch for nodes and switches ***)
-let trig_dispatcher_nm = "trig_dispatcher"
-let trig_dispatcher c =
-  mk_global_fn trig_dispatcher_nm
-    ["poly_queue", poly_queue.t; "upoly_queue", upoly_queue.t] [] @@
+let clear_poly_queues c =
   mk_block [
     (* replace all used send slots with empty polyqueues *)
     mk_iter_bitmap'
       (mk_insert_at poly_queues.id (mk_var "ip")
-         [mk_var empty_poly_queue.id; mk_var empty_upoly_queue.id])
+         [mk_var empty_poly_queue.id])
       D.poly_queue_bitmap.id;
+    mk_iter_bitmap'
+      (mk_insert_at upoly_queues.id (mk_var "ip")
+         [mk_var empty_upoly_queue.id])
+      D.upoly_queue_bitmap.id;
     (* apply reserve to all the new polybufs *)
     D.reserve_poly_queue_code c;
     (* clear the send bitmaps *)
     mk_set_all D.poly_queue_bitmap.id [mk_cfalse];
+    mk_set_all D.upoly_queue_bitmap.id [mk_cfalse];
+  ]
 
-    (* handle any unique poly data *)
-    mk_apply' nd_handle_uniq_poly_nm [mk_var "upoly_queue"];
+let send_poly_queues =
+    (* send (move) the polyqueues *)
+    mk_iter_bitmap'
+      (* check if we have a upoly queue and act accordingly *)
+      (mk_if (mk_at' D.upoly_queue_bitmap.id @@ mk_var "ip")
+        (* move and delete the poly_queue and ship it out *)
+        (mk_let ["pq"]
+          (mk_delete_at poly_queues.id @@ mk_var "ip") @@
+         mk_let ["upq"]
+          (mk_delete_at upoly_queues.id @@ mk_var "ip") @@
+        D.mk_sendi trig_dispatcher_trig_unique_nm (mk_var "ip") [mk_tuple [mk_var "pq"; mk_var "upq"]])
+        (mk_let ["pq"]
+          (mk_delete_at poly_queues.id @@ mk_var "ip") @@
+        D.mk_sendi trig_dispatcher_trig_nm (mk_var "ip") [mk_var "pq"]))
+      D.poly_queue_bitmap.id
+
+(*** central triggers to handle dispatch for nodes and switches ***)
+
+let trig_dispatcher_nm = "trig_dispatcher"
+let trig_dispatcher c =
+  mk_global_fn trig_dispatcher_nm
+    ["do_clear", t_bool; "poly_queue", poly_queue.t] [] @@
+  mk_block [
+    mk_if (mk_var "do_clear") (clear_poly_queues c) mk_cunit;
 
     (* iterate over all buffer contents *)
     mk_let ["idx"; "offset"] (mk_tuple [mk_cint 0; mk_cint 0]) @@
@@ -1568,15 +1591,21 @@ let trig_dispatcher c =
           (mk_error "unmatched tag")
           c.poly_tags;
 
-    (* send (move) the polyqueues *)
-    mk_iter_bitmap'
-      (* move and delete the poly_queue and ship it out *)
-      (mk_let ["pqs"]
-         (mk_delete_at poly_queues.id @@ mk_var "ip") @@
-      mk_block [
-        D.mk_sendi trig_dispatcher_trig_nm (mk_var "ip") [mk_var "pqs"]
-      ])
-      D.poly_queue_bitmap.id;
+    send_poly_queues;
+  ]
+
+let trig_dispatcher_unique_nm = "trig_dispatcher_unique"
+let trig_dispatcher_unique c =
+  mk_global_fn trig_dispatcher_unique_nm
+    ["poly_queue", poly_queue.t; "upoly_queue", upoly_queue.t] [] @@
+  mk_block [
+    clear_poly_queues c;
+
+    (* handle any unique poly data *)
+    mk_apply' nd_handle_uniq_poly_nm [mk_var "upoly_queue"];
+
+    (* continue with regular dispatching *)
+    mk_apply' trig_dispatcher_nm [mk_cfalse; mk_var "poly_queue"];
   ]
 
 (* buffer for dispatcher to reorder poly msgs *)
@@ -1589,12 +1618,22 @@ let nd_dispatcher_last_num = create_ds "nd_dispatcher_last_num" @@ mut t_int
 
 (* trigger version of dispatcher. Called by other nodes *)
 let trig_dispatcher_trig c =
-  mk_code_sink' trig_dispatcher_trig_nm ["poly_queue", poly_queue.t; "upoly_queue", upoly_queue.t] [] @@
+  mk_code_sink' trig_dispatcher_trig_nm
+    ["poly_queue", poly_queue.t] [] @@
+  mk_block [
+    (* unpack the polyqueues *)
+    mk_poly_unpack (mk_var "poly_queue");
+    mk_apply' trig_dispatcher_nm [mk_ctrue; mk_var "poly_queue"]
+  ]
+
+let trig_dispatcher_trig_unique c =
+  mk_code_sink' trig_dispatcher_trig_unique_nm
+    ["poly_queue", poly_queue.t; "upoly_queue", upoly_queue.t] [] @@
   mk_block [
     (* unpack the polyqueues *)
     mk_poly_unpack (mk_var "poly_queue");
     mk_poly_unpack (mk_var "upoly_queue");
-    mk_apply' trig_dispatcher_nm [mk_var "poly_queue"; mk_var "upoly_queue"]
+    mk_apply' trig_dispatcher_unique_nm [mk_var "poly_queue"; mk_var "upoly_queue"]
   ]
 
 (* trig dispatcher from switch to node. accepts a msg number telling it how to order messages *)
@@ -1618,7 +1657,7 @@ let nd_trig_dispatcher_trig c =
 
           mk_assign nd_dispatcher_last_num.id @@ mk_var nd_dispatcher_next_num.id;
           mk_incr nd_dispatcher_next_num.id;
-          mk_apply' trig_dispatcher_nm [mk_var "poly_queue"; mk_var "empty_upoly_queue"];
+          mk_apply' trig_dispatcher_nm [mk_ctrue; mk_var "poly_queue"];
        ]) @@
       (* else, stash the poly_queue in our buffer *)
       mk_insert nd_dispatcher_buf.id [mk_var "num"; mk_var "poly_queue"]
@@ -1643,15 +1682,7 @@ let sw_event_driver_trig c =
         (mk_block [
           (* unpack the incoming polyqueue *)
           mk_poly_unpack @@ mk_var "poly_queue";
-          (* replace all used send slots with empty polyqueues *)
-          mk_iter_bitmap'
-            (mk_insert_at poly_queues.id (mk_var "ip")
-               [mk_var empty_poly_queue.id; mk_var empty_upoly_queue.id])
-            D.poly_queue_bitmap.id;
-          (* apply reserve to every new polybuf *)
-          D.reserve_poly_queue_code c;
-          (* clean out the send bitmaps *)
-          mk_set_all D.poly_queue_bitmap.id [mk_cfalse];
+          clear_poly_queues c;
 
           (* for debugging, sleep if we've been asked to *)
           mk_if (mk_neq (mk_var D.sw_event_driver_sleep.id) @@ mk_cint 0)
@@ -1711,7 +1742,7 @@ let sw_event_driver_trig c =
                 (* pull out the poly queue *)
                 (mk_let ["pq"] (mk_delete_at poly_queues.id @@ mk_var "ip") @@
                  D.mk_sendi nd_trig_dispatcher_trig_nm (mk_var "ip")
-                    [mk_at' "vector_clock" @@ mk_var "ip"; mk_fst @@ mk_var "pq"]
+                    [mk_at' "vector_clock" @@ mk_var "ip"; mk_var "pq"]
                  ) @@
               D.poly_queue_bitmap.id;
             (* send the new (vid, vector clock). make sure it's after we use vector
@@ -2029,6 +2060,7 @@ let gen_dist ?(gen_deletes=true)
     nd_rcv_corr_done c ::
     nd_handle_uniq_poly c ::
     trig_dispatcher c ::
+    trig_dispatcher_unique c ::
     [mk_flow @@
       Proto.triggers c @
       GC.triggers c @
@@ -2036,6 +2068,7 @@ let gen_dist ?(gen_deletes=true)
       Timer.triggers c @
       [
         trig_dispatcher_trig c;
+        trig_dispatcher_trig_unique c;
         nd_trig_dispatcher_trig c;
         sw_event_driver_trig c;
         sw_demux c;

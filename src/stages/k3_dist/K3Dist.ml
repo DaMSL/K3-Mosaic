@@ -709,6 +709,7 @@ let sw_init           = create_ds "sw_init" (mut t_bool) ~init:mk_cfalse
 
 (* main dispatcher for whole protocol *)
 let trig_dispatcher_trig_nm = "trig_dispatcher_trig"
+let trig_dispatcher_trig_unique_nm = "trig_dispatcher_unique_trig"
 
 (* dispatcher for sw -> node with corrective mode *)
 let nd_trig_dispatcher_trig_nm = "nd_trig_dispatcher_trig"
@@ -810,16 +811,26 @@ let empty_poly_queue = create_ds "empty_poly_queue" @@ poly_queue.t
 let empty_upoly_queue = create_ds "empty_upoly_queue" @@ upoly_queue.t
 
 let poly_queues =
-  let e = ["queue", poly_queue.t; "uqueue", upoly_queue.t] in
+  let e = ["queue", poly_queue.t] in
   let init =
-    mk_map (mk_lambda' unknown_arg @@ mk_tuple [mk_var "empty_poly_queue"; mk_var "empty_upoly_queue"]) @@
-      mk_var my_peers.id in
+    mk_map (mk_lambda' unknown_arg @@ mk_var "empty_poly_queue") @@ mk_var my_peers.id in
   create_ds ~e ~init "poly_queues" @@ wrap_tvector' @@ snd_many e
 
 let poly_queue_bitmap =
   let init =
     mk_map (mk_lambda' unknown_arg mk_cfalse) @@ mk_var my_peers.id in
   create_ds "poly_queue_bitmap" ~init @@ wrap_tvector t_bool
+
+let upoly_queues =
+  let e = ["uqueue", upoly_queue.t] in
+  let init =
+    mk_map (mk_lambda' unknown_arg @@ mk_var "empty_upoly_queue") @@ mk_var my_peers.id in
+  create_ds ~e ~init "upoly_queues" @@ wrap_tvector' @@ snd_many e
+
+let upoly_queue_bitmap =
+  let init =
+    mk_map (mk_lambda' unknown_arg mk_cfalse) @@ mk_var my_peers.id in
+  create_ds "upoly_queue_bitmap" ~init @@ wrap_tvector t_bool
 
 (* we use this to make sure a trig header gets sent at least once per sub-trigger handling *)
 let send_trig_header_bitmap =
@@ -876,8 +887,8 @@ let reserve_poly_queue_code ?all c =
   mk_if (mk_var do_poly_reserve.id)
     (mk_iter_bitmap' ?all
       (mk_update_at_with poly_queues.id (mk_var "ip") @@
-        mk_lambda' ["pqs", wrap_ttuple @@ snd_many poly_queues.e] @@ mk_block [
-          mk_poly_reserve ~path:[1] "pqs"
+        mk_lambda' ["pqs", t_of_e poly_queues.e] @@ mk_block [
+          mk_poly_reserve "pqs"
             (mk_mult (mk_var sw_poly_batch_size.id) @@ mk_cint reserve_mult)
             (mk_mult (mk_var sw_poly_batch_size.id) @@ mk_cint @@ max_poly_queue_csize c) @@
             mk_mult (mk_var sw_poly_batch_size.id) @@ mk_cint reserve_str_estimate;
@@ -951,14 +962,16 @@ let calc_poly_tags c =
 (* instead of sending directly, place in the send buffer *)
 (* @bitmap: whether to mark the bitmap *)
 let buffer_for_send ?(unique=false) ?(wr_bitmap=true) t addr args =
-  let path = if unique then [2] else [1] in
+  let queue, bitmap =
+    if unique then upoly_queues, upoly_queue_bitmap.id
+    else poly_queues,  poly_queue_bitmap.id in
   mk_block @@
     (* mark the bitmap *)
-    (if wr_bitmap then [mk_insert_at poly_queue_bitmap.id (mk_var addr) [mk_ctrue]] else []) @
+    (if wr_bitmap then [mk_insert_at bitmap (mk_var addr) [mk_ctrue]] else []) @
     (* insert into buffer *)
-    [mk_update_at_with poly_queues.id (mk_var addr) @@
-      mk_lambda' ["pqs", wrap_ttuple @@ snd_many poly_queues.e] @@
-        mk_poly_insert_block t ~path "pqs" args
+    [mk_update_at_with queue.id (mk_var addr) @@
+      mk_lambda' ["pqs", t_of_e queue.e] @@
+        mk_poly_insert_block t "pqs" args
     ]
 
 (* code to check if we need to write a trig header, and if so, to buffer one *)
@@ -979,8 +992,9 @@ let buffer_trig_header_if_needed ?other_cond t addr args ~save_args =
     mk_cunit
 
 (* insert tuples into polyqueues *)
-let buffer_tuples_from_idxs ?unique ?(drop_vid=false) tuples_nm map_type map_tag indices =
+let buffer_tuples_from_idxs ?(unique=false) ?(drop_vid=false) tuples_nm map_type map_tag indices =
   let col_t, tup_t = unwrap_tcol map_type in
+  let bitmap = if unique then upoly_queue_bitmap else poly_queue_bitmap in
   let ts = unwrap_ttuple tup_t in
   (* handle dropping vid *)
   let may_drop e =
@@ -991,19 +1005,22 @@ let buffer_tuples_from_idxs ?unique ?(drop_vid=false) tuples_nm map_type map_tag
   (* check for empty collection *)
   mk_case_sn (mk_peek indices) "x"
     (* check for -1, indicating all tuples *)
-    (mk_if (mk_eq (mk_var "x") @@ mk_cint (-1))
-      (mk_iter
-        (mk_lambda'' ["x", tup_t] @@
-          buffer_for_send ?unique ~wr_bitmap:false map_tag "ip" @@ may_drop @@ mk_var "x") @@
-        mk_var tuples_nm) @@
-      (* or just regular indices into tuples *)
-      mk_iter
-        (mk_lambda'' ["idx", t_int] @@
-          (* get tuples at idx *)
-          mk_at_with' tuples_nm (mk_var "idx") @@
-            mk_lambda' ["x", tup_t] @@
-          buffer_for_send ?unique ~wr_bitmap:false map_tag "ip" @@ may_drop @@ mk_var "x")
-         indices)
+    (mk_block [
+      mk_insert_at bitmap.id (mk_var "ip") [mk_ctrue];
+      mk_if (mk_eq (mk_var "x") @@ mk_cint (-1))
+        (mk_iter
+          (mk_lambda'' ["x", tup_t] @@
+            (* no need to write bitmap - we did it above *)
+            buffer_for_send ~unique ~wr_bitmap:false map_tag "ip" @@ may_drop @@ mk_var "x") @@
+          mk_var tuples_nm) @@
+        (* or just regular indices into tuples *)
+        mk_iter
+          (mk_lambda'' ["idx", t_int] @@
+            (* get tuples at idx *)
+            mk_at_with' tuples_nm (mk_var "idx") @@
+              mk_lambda' ["x", tup_t] @@
+            buffer_for_send ~unique ~wr_bitmap:false map_tag "ip" @@ may_drop @@ mk_var "x")
+          indices])
     mk_cunit (* do nothing if empty. we're sending a header anyway *)
 
 let ios_tag c stag = fst @@ List.find (fun (_, (s, _, _)) -> s = stag) c.poly_tags
@@ -1412,6 +1429,8 @@ let global_vars c dict =
       empty_event_queue;
       poly_queues;
       poly_queue_bitmap;
+      upoly_queues;
+      upoly_queue_bitmap;
       send_trig_header_bitmap;
       nd_rcv_fetch_buffer;
       nd_stmt_cntrs_per_map;
