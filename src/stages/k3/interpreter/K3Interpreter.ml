@@ -840,6 +840,7 @@ let prepare_sinks sched_st env fp =
 
 let convert_json t j = match t.typ, j with
   | TFloat, `String s -> VFloat (fos s)
+  | TInt, `String s -> VInt (ios s)
   | _, `Bool x   -> VBool x
   | _, `Float x  -> VFloat x
   | _, `Int x    -> VInt x
