@@ -1600,29 +1600,31 @@ let trig_dispatcher_trig c =
 (* trig dispatcher from switch to node. accepts a msg number telling it how to order messages *)
 (* @msg_num: number of consecutive message. Used to order buffers in corrective mode
    so we avoid having too many correctives. *)
+let nd_dispatcher_next_num = create_ds "nd_dispatcher_next_num" @@ mut t_int
+
 let nd_trig_dispatcher_trig c =
   mk_code_sink' nd_trig_dispatcher_trig_nm ["num", t_int; "poly_queue", poly_queue.t] [] @@
-  mk_let ["next_num"]
-    (mk_if (mk_eq (mk_var nd_dispatcher_last_num.id) @@ mk_var g_max_int.id)
-       (mk_cint 0) @@
-       mk_add (mk_var nd_dispatcher_last_num.id) @@ mk_cint 1) @@
   mk_block [
+    mk_assign nd_dispatcher_next_num.id @@
+      (mk_if (mk_eq (mk_var nd_dispatcher_last_num.id) @@ mk_var g_max_int.id)
+        (mk_cint 0) @@
+        mk_add (mk_var nd_dispatcher_last_num.id) @@ mk_cint 1);
     (* check if we're contiguous *)
-    mk_if (mk_eq (mk_var "num") (mk_var "next_num"))
+    mk_if (mk_eq (mk_var "num") (mk_var nd_dispatcher_next_num.id))
       (* then dispatch right away *)
       (mk_block [
           (* unpack the polyqueue *)
           mk_poly_unpack (mk_var "poly_queue");
 
-          mk_assign nd_dispatcher_last_num.id @@ mk_var "next_num";
-          mk_assign "next_num" @@ mk_add (mk_var "next_num") @@ mk_cint 1;
+          mk_assign nd_dispatcher_last_num.id @@ mk_var nd_dispatcher_next_num.id;
+          mk_incr nd_dispatcher_next_num.id;
           mk_apply' trig_dispatcher_nm [mk_var "poly_queue"; mk_var "empty_upoly_queue"];
        ]) @@
       (* else, stash the poly_queue in our buffer *)
       mk_insert nd_dispatcher_buf.id [mk_var "num"; mk_var "poly_queue"]
     ;
     (* check if the next num is in the buffer *)
-    mk_delete_with nd_dispatcher_buf.id [mk_var "next_num"; mk_cunknown]
+    mk_delete_with nd_dispatcher_buf.id [mk_var nd_dispatcher_next_num.id; mk_cunknown]
       (mk_lambda' unit_arg @@ mk_cunit)
       (* recurse with the next number *)
       (mk_lambda'' ["x", wrap_ttuple @@ snd_many nd_dispatcher_buf.e] @@
@@ -1910,6 +1912,7 @@ let declare_global_vars c ast =
      sw_demux_poly_queue;
      nd_dispatcher_buf;
      nd_dispatcher_last_num;
+     nd_dispatcher_next_num;
      nd_check_stmt_cntr_do_delete;
      nd_check_stmt_cntr_ret;
      nd_check_stmt_cntr_init;
