@@ -61,6 +61,8 @@ def run():
                         default=False, help="Enable safe array writes")
     parser.add_argument('--overlap-factor', dest='map_overlap_factor',
                         default=None, help="Reduce layout of maps on nodes")
+    parser.add_argument('--batch-size', dest='batch_size',
+                        default=None, help="Size of batches")
     parser.add_argument('--debug', default=False, action='store_true', help="Debug output")
 
     args = parser.parse_args()
@@ -120,7 +122,8 @@ def run():
                                 correctives=args.correctives,
                                 filemux=args.filemux,
                                 safe_writes=args.safe_writes,
-                                map_overlap_factor=args.map_overlap_factor
+                                map_overlap_factor=args.map_overlap_factor,
+                                batch_size=args.batch_size
                                 )
         # check if a test failed
         if not res:

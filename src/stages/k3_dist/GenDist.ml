@@ -1527,40 +1527,6 @@ let nd_trig_sub_handler c t =
           c.poly_tags;
   ]
 
-let clear_poly_queues c =
-  mk_block [
-    (* replace all used send slots with empty polyqueues *)
-    mk_iter_bitmap'
-      (mk_insert_at poly_queues.id (mk_var "ip")
-         [mk_var empty_poly_queue.id])
-      D.poly_queue_bitmap.id;
-    mk_iter_bitmap'
-      (mk_insert_at upoly_queues.id (mk_var "ip")
-         [mk_var empty_upoly_queue.id])
-      D.upoly_queue_bitmap.id;
-    (* apply reserve to all the new polybufs *)
-    D.reserve_poly_queue_code c;
-    (* clear the send bitmaps *)
-    mk_set_all D.poly_queue_bitmap.id [mk_cfalse];
-    mk_set_all D.upoly_queue_bitmap.id [mk_cfalse];
-  ]
-
-let send_poly_queues =
-    (* send (move) the polyqueues *)
-    mk_iter_bitmap'
-      (* check if we have a upoly queue and act accordingly *)
-      (mk_if (mk_at' D.upoly_queue_bitmap.id @@ mk_var "ip")
-        (* move and delete the poly_queue and ship it out *)
-        (mk_let ["pq"]
-          (mk_delete_at poly_queues.id @@ mk_var "ip") @@
-         mk_let ["upq"]
-          (mk_delete_at upoly_queues.id @@ mk_var "ip") @@
-        D.mk_sendi trig_dispatcher_trig_unique_nm (mk_var "ip") [mk_tuple [mk_var "pq"; mk_var "upq"]])
-        (mk_let ["pq"]
-          (mk_delete_at poly_queues.id @@ mk_var "ip") @@
-        D.mk_sendi trig_dispatcher_trig_nm (mk_var "ip") [mk_var "pq"]))
-      D.poly_queue_bitmap.id
-
 (*** central triggers to handle dispatch for nodes and switches ***)
 
 let trig_dispatcher_nm = "trig_dispatcher"

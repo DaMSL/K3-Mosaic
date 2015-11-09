@@ -41,6 +41,7 @@ def run(target_file,
         filemux=False,
         safe_writes=False,
         map_overlap_factor=None,
+        batch_size=None,
         debug=False
         ):
 
@@ -202,6 +203,8 @@ def run(target_file,
             j["num_switches"] = num_switches
             if map_overlap_factor:
                 j["pmap_overlap_factor"] = map_overlap_factor
+            if batch_size:
+                j["sw_poly_batch_size"] = batch_size
             if not correctives:
                 j["corrective_mode"] = False
             # set csv indices

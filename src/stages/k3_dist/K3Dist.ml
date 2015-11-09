@@ -896,6 +896,41 @@ let reserve_poly_queue_code ?all c =
       poly_queue_bitmap.id)
     mk_cunit
 
+let clear_poly_queues c =
+  mk_block [
+    (* replace all used send slots with empty polyqueues *)
+    mk_iter_bitmap'
+      (mk_insert_at poly_queues.id (mk_var "ip")
+         [mk_var empty_poly_queue.id])
+      poly_queue_bitmap.id;
+    mk_iter_bitmap'
+      (mk_insert_at upoly_queues.id (mk_var "ip")
+         [mk_var empty_upoly_queue.id])
+      upoly_queue_bitmap.id;
+    (* apply reserve to all the new polybufs *)
+    reserve_poly_queue_code c;
+    (* clear the send bitmaps *)
+    mk_set_all poly_queue_bitmap.id [mk_cfalse];
+    mk_set_all upoly_queue_bitmap.id [mk_cfalse];
+  ]
+
+let send_poly_queues =
+    (* send (move) the polyqueues *)
+    mk_iter_bitmap'
+      (* check if we have a upoly queue and act accordingly *)
+      (mk_if (mk_at' upoly_queue_bitmap.id @@ mk_var "ip")
+        (* move and delete the poly_queue and ship it out *)
+        (mk_let ["pq"]
+          (mk_delete_at poly_queues.id @@ mk_var "ip") @@
+          mk_let ["upq"]
+            (mk_delete_at upoly_queues.id @@ mk_var "ip") @@
+          mk_sendi trig_dispatcher_trig_unique_nm (mk_var "ip") [mk_tuple [mk_var "pq"; mk_var "upq"]])
+        (mk_let ["pq"]
+          (mk_delete_at poly_queues.id @@ mk_var "ip") @@
+        mk_sendi trig_dispatcher_trig_nm (mk_var "ip") [mk_var "pq"]))
+      poly_queue_bitmap.id
+
+
 (* we create tags for events, with the full width of said events plus insert/delete field *)
 let calc_event_tags c =
   let flat_types = Array.of_list @@ fst c.agenda_map in

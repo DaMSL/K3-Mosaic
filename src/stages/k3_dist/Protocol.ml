@@ -84,25 +84,14 @@ let nd_sys_init_barrier =
  * should only be created when we have
  * system_ready_event code *)
 let sw_sys_init_nm = "sw_"^D.sys_init
-let sw_sys_init =
+let sw_sys_init c =
   mk_code_sink' sw_sys_init_nm unit_arg [] @@
   mk_block [
-    (* replace all used slots with empty polyqueues *)
-    mk_iter_bitmap'
-      (mk_insert_at poly_queues.id (mk_var "ip")
-         [mk_var D.empty_poly_queue.id; mk_var D.empty_upoly_queue.id])
-      D.poly_queue_bitmap.id;
-
-    (* clean out the send bitmaps *)
-    mk_set_all D.poly_queue_bitmap.id [mk_cfalse];
+    D.clear_poly_queues c;
 
     mk_apply' (D.send_fetch_name_of_t D.sys_init) [sys_init_vid_k3];
 
-    (* send (move) the polyqueues *)
-    mk_iter_bitmap'
-      (* move and delete the poly_queue and ship it out *)
-      (D.mk_sendi D.trig_dispatcher_trig_nm (mk_var "ip") @@ [mk_delete_at D.poly_queues.id @@ mk_var "ip"])
-      D.poly_queue_bitmap.id;
+    D.send_poly_queues;
 
     (* send notifications *)
     D.mk_send_all_nodes nd_sys_init_barrier_nm [mk_cunit]
@@ -333,7 +322,7 @@ let global_vars c =
 let triggers c =
   (if c.sys_init then [
     nd_sys_init_barrier;
-    sw_sys_init;
+    sw_sys_init c;
     ms_sys_init_barrier;
   ] else []) @ [
     ms_rcv_sw_init_ack c;
