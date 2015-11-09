@@ -1615,6 +1615,7 @@ let nd_trig_dispatcher_trig c =
           mk_poly_unpack (mk_var "poly_queue");
 
           mk_assign nd_dispatcher_last_num.id @@ mk_var "next_num";
+          mk_assign "next_num" @@ mk_add (mk_var "next_num") @@ mk_cint 1;
           mk_apply' trig_dispatcher_nm [mk_var "poly_queue"; mk_var "empty_upoly_queue"];
        ]) @@
       (* else, stash the poly_queue in our buffer *)
