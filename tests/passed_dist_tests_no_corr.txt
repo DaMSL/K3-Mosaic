@@ -24,7 +24,6 @@ queries/simple/rs_eqineq.sql
 queries/simple/rs_example2.sql
 queries/simple/rs_joinon.sql
 queries/simple/rs_natjoin.sql
-queries/simple/rs_natjoinineq.sql
 queries/simple/rs_natjoinpartstar.sql
 queries/simple/rs_simple.sql
 queries/simple/rst.sql
