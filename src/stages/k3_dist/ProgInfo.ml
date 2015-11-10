@@ -393,3 +393,26 @@ let stmt_many_loop_vars p s =
   if List.length binds > 1 && IntSet.cardinal lmap_loop_vars > 1
     then Some lmap_loop_vars
   else None
+
+type freevar_info = {
+                      lmap_free: map_id_t * (id_t * int) list;
+                      lmap_bound: map_id_t * (id_t * int) list;
+                      rmaps_free: (map_id_t * (id_t * int) list) list;
+                      rmaps_bound: (map_id_t * (id_t * int) list) list;
+                    }
+
+let free_bound_vars p s =
+  let trig_args = fst_many @@ args_of_t p @@ trigger_of_stmt p s in
+  let not_in_trig = List.partition (fun (s,_) -> not @@ List.mem s trig_args) in
+  let lmap = lhs_map_of_stmt p s in
+  let rmaps = rhs_maps_of_stmt p s in
+  let lfree, lbound = not_in_trig @@ find_lmap_bindings_in_stmt p s lmap in
+  let rmaps_free, rmaps_bound =
+    list_unzip @@
+    List.map (fun (m, (x, y)) -> (m, x), (m, y)) @@
+    List.map (fun m -> m, not_in_trig @@ find_rmap_bindings_in_stmt p s m) rmaps in
+  { lmap_free = lmap, lfree;
+    lmap_bound = lmap, lbound;
+    rmaps_free;
+    rmaps_bound;
+  }

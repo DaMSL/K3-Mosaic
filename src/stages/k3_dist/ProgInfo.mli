@@ -131,3 +131,12 @@ val get_map_bindings_in_stmt : prog_data_t -> stmt_id_t -> map_id_t -> map_id_t
 
 (* whether we have a complex, interlocking loop pattern in this stmt *)
 val stmt_many_loop_vars : prog_data_t -> stmt_id_t -> IntSet.t option
+
+type freevar_info = {
+                      lmap_free: map_id_t * (id_t * int) list;
+                      lmap_bound: map_id_t * (id_t * int) list;
+                      rmaps_free: (map_id_t * (id_t * int) list) list;
+                      rmaps_bound: (map_id_t * (id_t * int) list) list;
+                    }
+
+val free_bound_vars : prog_data_t -> stmt_id_t -> freevar_info
