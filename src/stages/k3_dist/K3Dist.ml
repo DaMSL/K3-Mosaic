@@ -716,6 +716,7 @@ let nd_trig_dispatcher_trig_nm = "nd_trig_dispatcher_trig"
 
 (* handler for many other triggers *)
 let trig_sub_handler_name_of_t t = "nd_trig_sub_handler_"^t
+let trig_slim_sub_handler_name_of_t t = "nd_trig_slim_sub_handler_"^t
 let send_fetch_name_of_t t = "sw_"^t^"_send_fetch"
 let rcv_fetch_name_of_t t = "nd_"^t^"_rcv_fetch"
 let rcv_put_name_of_t t = "nd_"^t^"_rcv_put"
@@ -739,6 +740,9 @@ let nd_rcv_corr_done_nm = "nd_rcv_corr_done"
 
 (* the trig header marks the args *)
 let trig_sub_handler_args c t = ["save_args", t_bool] @ args_of_t_with_v c t
+
+(* slim trig header doesn't carry args *)
+let trig_slim_sub_handler_args c t = []
 
 (* rcv_put: how the stmt_cnt list gets sent in rcv_put *)
 let stmt_cnt_list_ship =
@@ -963,6 +967,7 @@ let calc_poly_tags c =
       let s_rhs_corr = List.filter (fun (s, map) -> List.mem map c.corr_maps) s_rhs in
       (* carries all the trig arguments + vid *)
       (trig_sub_handler_name_of_t t, Trig true, trig_sub_handler_args c t)::
+      (* (trig_slim_sub_handler_name_of_t t, Trig true, trig_slim_sub_handler_args c t):: *)
       (if s_rhs = [] then [] else [
         rcv_put_name_of_t t, SubTrig(true, t), nd_rcv_put_args_poly c t;
         rcv_fetch_name_of_t t, SubTrig(true, t), nd_rcv_fetch_args_poly c t]) @
