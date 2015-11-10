@@ -64,6 +64,7 @@ def run():
     parser.add_argument('--batch-size', dest='batch_size',
                         default=None, help="Size of batches")
     parser.add_argument('--debug', default=False, action='store_true', help="Debug output")
+    parser.add_argument('--dump-info', default=False, action='store_true', help="Output for route generation")
 
     args = parser.parse_args()
 
@@ -123,7 +124,8 @@ def run():
                                 filemux=args.filemux,
                                 safe_writes=args.safe_writes,
                                 map_overlap_factor=args.map_overlap_factor,
-                                batch_size=args.batch_size
+                                batch_size=args.batch_size,
+                                dump_info=args.dump_info
                                 )
         # check if a test failed
         if not res:

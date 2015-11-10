@@ -42,7 +42,8 @@ def run(target_file,
         safe_writes=False,
         map_overlap_factor=None,
         batch_size=None,
-        debug=False
+        debug=False,
+        dump_info=False
         ):
 
     to_root = ".."
@@ -161,6 +162,12 @@ def run(target_file,
         if check_error(error_file, verbose):
             os.chdir(saved_dir)
             return False
+
+        # if asking to dump info, do so now and abort
+        if dump_info:
+            cmd = concat([k3o, "-p -i m3 -l k3disttest", m3_file, "--dump-info"])
+            print_system(cmd, True)
+            return True
 
         # create a k3 distributed file
         cmd = concat([k3o, "-p -i m3 -l k3disttest", m3_file, agenda_cmd,

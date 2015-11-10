@@ -413,6 +413,70 @@ let free_bound_vars p s =
     List.map (fun m -> m, not_in_trig @@ find_rmap_bindings_in_stmt p s m) rmaps in
   { lmap_free = lmap, lfree;
     lmap_bound = lmap, lbound;
-    rmaps_free;
-    rmaps_bound;
+    rmaps_free = List.filter (fun x -> snd x <> []) rmaps_free;
+    rmaps_bound = List.filter (fun x -> snd x <> []) rmaps_bound;
   }
+
+exception Exit
+
+let special_route_stmt p s =
+  let info = free_bound_vars p s in
+  (* check for easy condition *)
+  if snd info.lmap_free = [] || info.rmaps_free = [] then false else
+  (* check that each rmap's free vars are a superset of the lmap *)
+  try
+    List.iter (fun (_, binds) ->
+        List.iter (fun (id, _) ->
+            if not @@ List.exists (fun (s,_) -> s = id) binds
+            then raise Exit
+          ) @@ snd info.lmap_free
+      ) info.rmaps_free;
+    true
+  with Exit -> false
+
+let dump_info p =
+  let ts = get_trig_list p in
+  let ss = get_stmt_list p in
+  let infos = List.filter (fun (_, i) ->
+      snd i.lmap_free <> [] || i.rmaps_free <> []) @@
+    List.map (fun s -> s, free_bound_vars p s) ss in
+  let s_special = List.filter (special_route_stmt p) ss in
+  let t_s = List.map (fun t -> t, stmts_of_t p t) ts in
+  let t_binds = List.map (fun t -> t, fst_many @@ args_of_t p t) ts in
+  let map_ids = List.map (fun m -> map_name_of p m, m) @@ get_map_list p in
+  let s_t_s = sp "[%s]" @@
+              strcatmap (fun (t, ss) -> sp "%s:[%s]" t @@ string_of_int_list ss) t_s in
+  let s_t_binds = sp "[%s]" @@
+    strcatmap (fun (t, args) -> sp "%s:[%s]" t @@ String.concat ", " args) t_binds in
+  let s_map_ids = sp "[%s]" @@
+    strcatmap (fun (m, id) -> sp "%s:%d" m id) map_ids in
+  let s_infos = sp "[%s]" @@
+    strcatmap (fun (s, info) ->
+        sp "%d:[%d:[%s]; %s]" s (fst info.lmap_free)
+          (String.concat ", " @@ fst_many @@ snd info.lmap_free)
+          (strcatmap (fun (m, l) -> sp "%d:[%s]" m @@
+                       String.concat ", " @@ fst_many @@ l) info.rmaps_free)
+      ) infos in
+  sp
+"\
+Statement route generation:
+%s
+
+Trigger stmts:
+%s
+
+Trigger binds:
+%s
+
+Map ids:
+%s
+
+Free vars:
+%s
+"
+(string_of_int_list s_special)
+s_t_s s_t_binds s_map_ids
+s_infos
+
+
+

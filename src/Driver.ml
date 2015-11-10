@@ -171,6 +171,8 @@ type parameters = {
     mutable k3new_folds: bool;   (* output fold instead of map/ext *)
     mutable use_filemux: bool;
     mutable safe_writes: bool;   (* output safe writes *)
+
+    mutable dump_info: bool;  (* dump proginfo data *)
   }
 
 let default_cmd_line_params () = {
@@ -203,6 +205,7 @@ let default_cmd_line_params () = {
     use_filemux       = false;
 
     safe_writes       = false;
+    dump_info         = false;  (* dump info about prog_info and quit *)
   }
 
 let cmd_line_params = default_cmd_line_params ()
@@ -462,6 +465,7 @@ let process_inputs params =
     | M3in, _    ->
         let m3prog = parse_m3_file f in
         let proginfo = M3ProgInfo.prog_data_of_m3 m3prog in
+        if params.dump_info then begin print_endline @@ ProgInfo.dump_info proginfo; exit(0) end;
         if params.debug_info then
           print_endline (ProgInfo.string_of_prog_data proginfo);
         let prog = M3ToK3.m3_to_k3 m3prog in
@@ -570,6 +574,8 @@ let param_specs = Arg.align
       "         Print debug info (context specific)";
   "-v", Arg.Unit (fun () -> cmd_line_params.verbose <- true),
   "             Print verbose output (context specific)";
+  "--dump-info", Arg.Unit (fun () -> cmd_line_params.dump_info <- true),
+  "             Dump info about prog_info";
   (* Interpreter related *)
   "-q", Arg.String (fun q -> cmd_line_params.queue_type <- match q with
     | "global" -> K3Runtime.GlobalQ

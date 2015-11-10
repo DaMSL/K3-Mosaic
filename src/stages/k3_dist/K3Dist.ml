@@ -417,6 +417,9 @@ let me_int =
   let init = mk_apply' "int_of_addr" [G.me_var] in
   create_ds "me_int" t_int ~init
 
+(* whether we're running in the interpreter *)
+let interpreter_mode = create_ds "interpreter_mode" t_bool
+
 let num_peers =
   let init = mk_size @@ mk_var my_peers.id in
   create_ds "num_peers" (mut t_int) ~init
@@ -1235,23 +1238,6 @@ module Bindings = struct
       Hashtbl.replace h2 map m) h;
     h2
 
-  exception Exit
-
-  let special_route_stmt p s =
-    let info = free_bound_vars p s in
-    (* check for easy condition *)
-    if snd info.lmap_free = [] && info.rmaps_free = [] then false else
-    (* check that each rmap's free vars are a superset of the lmap *)
-    try
-      List.iter (fun (_, binds) ->
-          List.iter (fun (id, _) ->
-              if not @@ List.exists (fun (s,_) -> s = id) binds
-              then raise Exit
-            ) @@ snd info.lmap_free
-        ) info.rmaps_free;
-      true
-    with Exit -> false
-
 end
 
 (*** partition map ***)
@@ -1443,6 +1429,7 @@ let global_vars c dict =
   in
   let l =
     [ me_int;
+      interpreter_mode;
       ip;
       stmt_ctr;
       g_init_vid;

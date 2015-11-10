@@ -473,6 +473,21 @@ let route_lookup c map_id key pat_idx lambda_body =
        pat_idx) @@
     mk_lambda'' [route_bitmap.id, route_bitmap.t] lambda_body
 
+(* data structure to load *)
+(*let opt_route_ds =
+  create_ds "opt_route_ds" t_int
+
+let opt_route_final_ds =
+
+
+  create_ds "opt_route_final_ds"
+
+let opt_route_prepare =
+  mk_agg (mk_lambda'' ["acc", 
+    mk_var opt_route_ds.id
+
+  *)
+
 (* create all code needed for route functions, including foreign funcs*)
 let global_vars c =
   List.map decl_global @@
