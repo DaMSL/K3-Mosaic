@@ -107,6 +107,8 @@ type config = {
   poly_tags : (int * (string * tag_type * (id_t * type_t) list)) list;
   (* poly tag for incoming events *)
   event_tags: (int * (string * type_t list)) list;
+  (* freevar info for the program, per stmt *)
+  freevar_info : freevar_info IntMap.t;
 }
 
 let default_config = {
@@ -125,6 +127,7 @@ let default_config = {
   route_indices = Hashtbl.create 10;
   poly_tags = [];
   event_tags = [];
+  freevar_info = IntMap.empty;
 }
 
 let get_map_indices c map_id =
@@ -1348,6 +1351,11 @@ let pmap_input p =
     k3_container_of_list t maps
   in
   create_ds "pmap_input" ~init t
+
+(* use pre-generated info *)
+let special_route_stmt c s =
+  let info = IntMap.find s c.freevar_info in
+  P.special_route_stmt ~info c.p s
 
 (* tags for profiling and post-analysis *)
 let do_profiling = create_ds ~init:mk_cfalse "do_profiling" @@ mut t_bool

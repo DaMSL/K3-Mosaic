@@ -419,8 +419,10 @@ let free_bound_vars p s =
 
 exception Exit
 
-let special_route_stmt p s =
-  let info = free_bound_vars p s in
+let special_route_stmt ?info p s =
+  let info = match info with 
+    | None -> free_bound_vars p s
+    | Some i -> i in
   (* check for easy condition *)
   if snd info.lmap_free = [] || info.rmaps_free = [] then false else
   (* check that each rmap's free vars are a superset of the lmap *)

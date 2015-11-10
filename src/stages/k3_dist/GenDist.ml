@@ -2001,6 +2001,7 @@ let gen_dist ?(gen_deletes=true)
       unused_trig_args;
       map_indices = D.Bindings.multi_idx_access_patterns p ast;
       route_indices = D.Bindings.route_access_patterns p;
+      freevar_info = IntMap.of_list @@ List.map (fun s -> s, P.free_bound_vars p s) @@ P.get_stmt_list p;
     } in
   (* to get poly_tags, we need c *)
   let c = { c with poly_tags = D.calc_poly_tags c; event_tags = D.calc_event_tags c} in
