@@ -380,7 +380,7 @@ let sw_send_fetch_fn c s_rhs_lhs s_rhs t =
                   (* mark the put bitmap *)
                   mk_insert_at send_put_bitmap.id (mk_var "node") [mk_ctrue];
                   (* update the relevant stmt_cnt_list *)
-                  mk_update_at_with send_put_ip_map_id (mk_var "ip") @@
+                  mk_update_at_with send_put_ip_map_id (mk_var "node") @@
                     mk_lambda' send_put_ip_map_e @@
                       mk_block [
                       mk_insert_at "stmt_bitmap" (mk_cint s) [mk_ctrue];
