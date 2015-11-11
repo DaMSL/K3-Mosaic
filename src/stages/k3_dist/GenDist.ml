@@ -358,6 +358,51 @@ let sw_send_fetch_fn c s_rhs_lhs s_rhs t =
       (List.flatten @@ List.map (fun s ->
           let lmap = P.lhs_map_of_stmt c.p s in
           let rmaps = P.rhs_maps_of_stmt c.p s in
+
+          (* optimized route - check if we can do special 1:1 optimized routing *)
+          if special_route_stmt c s then singleton @@
+            (* we need to isolate each of the bound params separately *)
+            let bound_params = insert_index_fst @@ bound_params_of_stmt c s in
+            mk_let ["buckets"]
+              (List.fold_left (fun acc_code (idx, (id, (m, _))) ->
+                  let vars = P.var_list_from_bound c.p s m in
+                  (* filter out anything that isn't the current id *)
+                  let vars = List.map (fun ((v_id, t) as x) ->
+                      if id <> v_id then ("_", t) else x) vars in
+                  let pat = List.map (fun (x,t) ->
+                      if x = "_" then mk_tup_nothing t
+                      else mk_tup_just @@ mk_var x) vars in
+                  mk_let ["bucket_"^soi idx]
+                    (mk_apply' (R.route_for ~bound:true c.p m) pat)
+                    acc_code)
+                (* string the buckets together *)
+                (mk_tuple @@ List.map (fun idx -> mk_var @@ "bucket_"^soi idx) @@
+                  fst_many bound_params)
+                bound_params) @@
+            (* lookup in the optimized route s *)
+            mk_case_ns (mk_lookup' (R.route_opt_ds_nm s) [mk_var "buckets"; mk_cunknown]) "lkup"
+              (mk_error "couldn't find buckets in optimized ds") @@
+              mk_iter (mk_lambda' R.route_opt_inner.e @@
+                mk_block [
+                  (* mark the put bitmap *)
+                  mk_insert_at send_put_bitmap.id (mk_var "node") [mk_ctrue];
+                  (* update the relevant stmt_cnt_list *)
+                  mk_update_at_with send_put_ip_map_id (mk_var "ip") @@
+                    mk_lambda' send_put_ip_map_e @@
+                      mk_block [
+                      mk_insert_at "stmt_bitmap" (mk_cint s) [mk_ctrue];
+                      (* increment count *)
+                      mk_update_at_with stmt_cnt_list.id (mk_cint s) @@
+                        mk_lambda'' stmt_cnt_list.e @@
+                          mk_add (mk_var "count") @@ mk_var "sender_count";
+                      (* recreate tuple *)
+                      mk_tuple @@ ids_to_vars @@ fst_many @@ send_put_ip_map_e
+                    ]
+                ]) @@
+                mk_snd @@ mk_var "lkup"
+
+          (* normal 1:n conservative routing *)
+          else
           List.map (fun rmap ->
             (* shuffle allows us to recreate the path the data will take from rhs to lhs *)
             let shuffle_fn = K3Shuffle.find_shuffle_nm c s rmap lmap in

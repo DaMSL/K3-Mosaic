@@ -1364,8 +1364,13 @@ let special_route_stmts c =
 (* list the bound arguments within the statement *)
 let bound_params_of_stmt c s =
   let info = IntMap.find s c.freevar_info in
-  let bound = snd info.lmap_bound @ List.flatten @@ snd_many info.rmaps_bound in
-  nub @@ snd_many bound
+  let lmap = fst @@ info.lmap_bound in
+  let lbound = List.map (fun (id, n) -> id, (lmap, n)) @@ snd info.lmap_bound in
+  let rbound = List.flatten @@ List.map (fun (rmap, l) -> List.map (fun (id, n) -> id, (rmap, n)) l) @@
+    info.rmaps_bound in
+  let bound = lbound @ rbound in
+  let bound_uniq = nub @@ fst_many bound in
+  List.map (fun b -> b, List.assoc b bound) bound_uniq
 
 (* tags for profiling and post-analysis *)
 let do_profiling = create_ds ~init:mk_cfalse "do_profiling" @@ mut t_bool

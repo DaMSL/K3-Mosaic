@@ -116,6 +116,9 @@ val adjust_key_id_for_v : int -> int
 val stmts_of_t : prog_data_t -> trig_name_t -> stmt_id_t list
 val trigger_of_stmt : prog_data_t -> stmt_id_t -> trig_name_t
 
+val var_list_from_bound : ?rmap_id:map_id_t ->
+  prog_data_t -> stmt_id_t -> map_id_t -> (K3.AST.id_t * K3.AST.type_t) list
+
 (* returns a k3 list of maybes that has the relevant map pattern, as well as a route pat_idx *)
 val key_pat_from_bound : prog_data_t -> (map_id_t, int IntSetMap.t) Hashtbl.t -> stmt_id_t -> map_id_t -> (expr_t list * int)
 

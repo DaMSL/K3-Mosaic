@@ -500,13 +500,14 @@ let route_opt_init_ds c =
   special_route_stmts c
 
 let route_opt_inner =
-  let e = ["node", t_int; "count", t_int] in
+  let e = ["node", t_int; "sender_count", t_int] in
   create_ds "route_opt_inner" @@ wrap_tbag @@ t_of_e e
 
 (* data structures to compute *)
+let route_opt_ds_nm s = "route_opt_ds_"^soi s
 let route_opt_ds c =
   List.map (fun s -> s,
-      let nm = "route_opt_ds_"^soi s in
+      let nm = route_opt_ds_nm s in
       let bound = D.bound_params_of_stmt c s in
       (* unique bound buckets *)
       let key_t = wrap_ttuple @@ List.map (const t_int) bound in
