@@ -365,7 +365,7 @@ let sw_send_fetch_fn c s_rhs_lhs s_rhs t =
             let bound_params = insert_index_fst @@ bound_params_of_stmt c s in
             mk_let ["buckets"]
               (List.fold_left (fun acc_code (idx, (id, (m, _))) ->
-                  let vars = P.var_list_from_bound c.p s m in
+                  let vars = list_drop_end 1 @@ P.var_list_from_bound c.p s m in
                   (* filter out anything that isn't the current id *)
                   let vars = List.map (fun ((v_id, t) as x) ->
                       if id <> v_id then ("_", t) else x) vars in
@@ -373,7 +373,7 @@ let sw_send_fetch_fn c s_rhs_lhs s_rhs t =
                       if x = "_" then mk_tup_nothing t
                       else mk_tup_just @@ mk_var x) vars in
                   mk_let ["bucket_"^soi idx]
-                    (mk_apply' (R.route_for ~bound:true c.p m) pat)
+                    (mk_apply' (R.route_for ~bound:true c.p m) @@ mk_cint m::pat)
                     acc_code)
                 (* string the buckets together *)
                 (mk_tuple @@ List.map (fun idx -> mk_var @@ "bucket_"^soi idx) @@

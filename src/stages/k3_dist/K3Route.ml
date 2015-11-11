@@ -501,7 +501,7 @@ let route_opt_init_ds c =
 
 let route_opt_inner =
   let e = ["node", t_int; "sender_count", t_int] in
-  create_ds "route_opt_inner" @@ wrap_tbag @@ t_of_e e
+  create_ds ~e "route_opt_inner" @@ wrap_tbag @@ t_of_e e
 
 (* data structures to compute *)
 let route_opt_ds_nm s = "route_opt_ds_"^soi s

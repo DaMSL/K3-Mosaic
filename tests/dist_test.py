@@ -43,7 +43,7 @@ def run(target_file,
         map_overlap_factor=None,
         batch_size=None,
         debug=False,
-        no_opt_route=None,
+        no_opt_route=False,
         dump_info=False
         ):
 
@@ -153,6 +153,8 @@ def run(target_file,
             options += ["--map-multi"]
         if not gen_deletes:
             options += ["--no-deletes"]
+        if no_opt_route:
+            options += ['--no-opt-route']
 
         agenda_cmd = "--agenda "+ agenda_file
 
@@ -171,6 +173,7 @@ def run(target_file,
             return True
 
         # create a k3 distributed file
+
         cmd = concat([k3o, "-p -i m3 -l k3disttest", m3_file, agenda_cmd,
               concat(options), "--sfile", data_file,
               ">", k3dist_file, "2>", error_file])
@@ -195,8 +198,6 @@ def run(target_file,
                 arg += '--filemux '
             if safe_writes:
                 arg += '--safe-writes '
-            if no_opt_route:
-                arg += '--no-opt-route '
 
             print("Converting to new k3 file format...")
             cmd = concat([k3o, "-i k3 -l k3new", arg, "--datafile",

@@ -64,7 +64,7 @@ def run():
     parser.add_argument('--batch-size', dest='batch_size',
                         default=None, help="Size of batches")
     parser.add_argument('--debug', default=False, action='store_true', help="Debug output")
-    parser.add_argument('--no-opt-route', default=None, dest='no_opt_route', help='disable optimized routing')
+    parser.add_argument('--no-opt-route', default=False, action='store_true', dest='no_opt_route', help='disable optimized routing')
     parser.add_argument('--dump-info', default=False, action='store_true', help="Output for route generation")
 
     args = parser.parse_args()
