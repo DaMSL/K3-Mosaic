@@ -568,7 +568,7 @@ let route_opt_init c =
               (* aggregate the rhs buckets using bitmaps *)
               (mk_lambda2' ["acc", agg_t] value_e @@
                List.fold_left (fun acc_code (idx, m) ->
-                   route_lookup c lmap [mk_subscript (idx + 1) @@ mk_var "lr_vals"] pat_idx @@
+                   route_lookup c m [mk_subscript (idx + 1) @@ mk_var "lr_vals"] pat_idx @@
                     mk_block [
                       mk_iter_bitmap
                         (mk_insert_at ~path:(swallow [idx]) "acc" (mk_var "ip") [mk_ctrue]) @@
