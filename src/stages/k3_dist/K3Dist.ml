@@ -1423,7 +1423,7 @@ let prof_property ?(flush=false) (tag:int) event =
       sp "MosaicFetchRoute(lbl=[# mosaic], tl=[$ %d], ve=[$ %s], ce1=[$ %s], ce2=[$ %s], ce3=[$ %s], ce4=[$ %s])" tag vid_nm t_s_id key bucket ip
 
     | ProfSendPut(vid_nm, t_s_id, dest, barrier_count) ->
-      sp "MosaicSendPut(lbl=[# mosaic], tl=[$ %d], ve=[$ %s], ce1=[$ %s], ce2=[$ %s])" tag vid_nm t_s_id dest barrier_count
+      sp "MosaicSendPut(lbl=[# mosaic], tl=[$ %d], ve=[$ %s], ce1=[$ %s], ce2=[$ %s], ce3=[$ %s])" tag vid_nm t_s_id dest barrier_count
   in
   let target_expr = if flush then mk_tuple ~force:true [U.add_property "Flush" mk_cunit] else mk_cunit in
   mk_if (mk_var do_profiling.id) (U.add_annotation p target_expr) mk_cunit
