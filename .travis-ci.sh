@@ -21,6 +21,6 @@ echo Running no-corrective tests...
 tests/auto_test.py -d -l tests/passed_dist_tests_no_corr.txt --no-log --no-correctives -n 4 --no-opt-route
 echo Done with no-corrective tests
 echo 'Creating TPCH files (no interpretation)'
-tests/auto_test.py -d -l tests/tpch_tests.txt --no-interp
+tests/auto_test.py -d -l tests/tpch_tests.txt --no-interp --no-opt-route
 echo 'Done with TPCH files (no interpretation)'
 
