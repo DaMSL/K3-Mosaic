@@ -985,6 +985,8 @@ let mk_agg_bitmap ?(all=false) ?(idx="ip") args e zero bitmap =
   mk_block [
     mk_assign idx @@ mk_cint 0;
     mk_agg (mk_lambda2' args ["has_val", t_bool] @@
+        (* beta reducing messes up ordering here *)
+        U.add_property "NoBetaReduce" @@
         mk_let ["res"]
           (if all then e
             else mk_if (mk_var "has_val")

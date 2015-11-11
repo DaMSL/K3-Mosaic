@@ -136,8 +136,8 @@ let lazy_properties ?(symbol="@:") props f =
   let annos = List.filter U.is_annotation props in
   let printer symbol l f = match l with
     | []  -> f
-    | [p] -> lazy_paren (f <| lps (sp " %s " symbol) <| lazy_anno p)
-    | ps  -> lazy_paren (f <| lps (sp " %s{" symbol) <| lps_list NoCut lazy_anno ps <| lps "}")
+    | [p] -> lazy_paren (lazy_paren f <| lps (sp " %s " symbol) <| lazy_anno p)
+    | ps  -> lazy_paren (lazy_paren f <| lps (sp " %s{" symbol) <| lps_list NoCut lazy_anno ps <| lps "}")
   in
   printer "@" annos (printer symbol ps f)
 
