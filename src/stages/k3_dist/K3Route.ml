@@ -286,6 +286,21 @@ let hash_func_for typ =
 
 let clean_results = mk_set_all route_bitmap.id [mk_cfalse]
 
+(* code to get the dimension index (contribution to the bucket at that index) *)
+let get_dim_idx p m index e =
+  let map_types = map_types_no_val_for p m in
+  let temp_type = List.nth map_types index in
+  let hash_func = hash_func_for temp_type in
+  mk_at_with' pmap_data_id (mk_cint m) @@
+    mk_lambda' ["pmap_data", pmap.t] @@
+    (* deep bind *)
+    mk_let ["buckets"; "dim_bounds"; "max_val"] (mk_var "pmap_data") @@
+    mk_let ["bucket_mod"] (mk_at' "buckets" @@ mk_cint index) @@
+    mk_apply' "mod"
+      [mk_apply' "abs" @@ singleton @@
+        mk_apply' hash_func [e];
+        mk_var "bucket_mod"]
+
 let gen_route_fn p map_id =
   let map_types = map_types_no_val_for p map_id in
   (* it's very important that the index for ranges start with 0, since we use

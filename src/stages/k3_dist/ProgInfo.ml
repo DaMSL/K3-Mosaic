@@ -456,12 +456,19 @@ let dump_info p =
     strcatmap (fun (t, args) -> sp "%s:[%s]" t @@ String.concat ", " args) t_binds in
   let s_map_ids = sp "[%s]" @@
     strcatmap (fun (m, id) -> sp "%s:%d" m id) map_ids in
-  let s_infos = sp "[%s]" @@
+  let s_free_infos = sp "[%s]" @@
     strcatmap (fun (s, info) ->
         sp "%d:[%d:[%s]; %s]" s (fst info.lmap_free)
           (String.concat ", " @@ fst_many @@ snd info.lmap_free)
           (strcatmap (fun (m, l) -> sp "%d:[%s]" m @@
                        String.concat ", " @@ fst_many @@ l) info.rmaps_free)
+      ) infos in
+  let s_bound_infos = sp "[%s]" @@
+    strcatmap (fun (s, info) ->
+        sp "%d:[%d:[%s]; %s]" s (fst info.lmap_bound)
+          (String.concat ", " @@ fst_many @@ snd info.lmap_bound)
+          (strcatmap (fun (m, l) -> sp "%d:[%s]" m @@
+                       String.concat ", " @@ fst_many @@ l) info.rmaps_bound)
       ) infos in
   sp
 "\
@@ -479,10 +486,13 @@ Map ids:
 
 Free vars:
 %s
+
+Bound vars:
+%s
 "
 (string_of_int_list s_special)
 s_t_s s_t_binds s_map_ids
-s_infos
+s_free_infos s_bound_infos
 
 
 
