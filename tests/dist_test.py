@@ -42,7 +42,9 @@ def run(target_file,
         safe_writes=False,
         map_overlap_factor=None,
         batch_size=None,
-        debug=False
+        debug=False,
+        no_opt_route=False,
+        dump_info=False
         ):
 
     to_root = ".."
@@ -151,6 +153,8 @@ def run(target_file,
             options += ["--map-multi"]
         if not gen_deletes:
             options += ["--no-deletes"]
+        if no_opt_route:
+            options += ['--no-opt-route']
 
         agenda_cmd = "--agenda "+ agenda_file
 
@@ -162,7 +166,14 @@ def run(target_file,
             os.chdir(saved_dir)
             return False
 
+        # if asking to dump info, do so now and abort
+        if dump_info:
+            cmd = concat([k3o, "-p -i m3 -l k3disttest", m3_file, "--dump-info"])
+            print_system(cmd, True)
+            return True
+
         # create a k3 distributed file
+
         cmd = concat([k3o, "-p -i m3 -l k3disttest", m3_file, agenda_cmd,
               concat(options), "--sfile", data_file,
               ">", k3dist_file, "2>", error_file])

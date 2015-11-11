@@ -8,6 +8,7 @@ open K3Dist
 val gen_dist : 
                ?gen_deletes:bool ->
                ?gen_correctives:bool ->
+               ?use_opt_route:bool ->
                stream_file:string ->
                map_type:map_type ->
                agenda_map:K3Dist.mapping_t ->

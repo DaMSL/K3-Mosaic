@@ -38,6 +38,7 @@ val remove_trig_prefix : trig_name_t -> trig_name_t
 val get_trig_list : ?corrective:bool -> ?sys_init:bool -> ?delete:bool -> prog_data_t -> trig_name_t list
 val for_all_trigs : ?corrective:bool -> ?sys_init:bool -> ?delete:bool -> prog_data_t -> (trig_name_t -> 'a) -> 'a list
 val get_stmt_list : prog_data_t -> stmt_id_t list
+val get_trig_stmt_list : ?corrective:bool -> ?sys_init:bool -> ?delete:bool -> prog_data_t -> (trig_name_t * stmt_id_t) list
 val get_max_stmt : prog_data_t -> stmt_id_t
 val for_all_stmts : prog_data_t -> (stmt_id_t -> 'a) -> 'a list
 val get_map_list : prog_data_t -> map_id_t list
@@ -115,6 +116,9 @@ val adjust_key_id_for_v : int -> int
 val stmts_of_t : prog_data_t -> trig_name_t -> stmt_id_t list
 val trigger_of_stmt : prog_data_t -> stmt_id_t -> trig_name_t
 
+val var_list_from_bound : ?rmap_id:map_id_t ->
+  prog_data_t -> stmt_id_t -> map_id_t -> (K3.AST.id_t * K3.AST.type_t) list
+
 (* returns a k3 list of maybes that has the relevant map pattern, as well as a route pat_idx *)
 val key_pat_from_bound : prog_data_t -> (map_id_t, int IntSetMap.t) Hashtbl.t -> stmt_id_t -> map_id_t -> (expr_t list * int)
 
@@ -131,3 +135,17 @@ val get_map_bindings_in_stmt : prog_data_t -> stmt_id_t -> map_id_t -> map_id_t
 
 (* whether we have a complex, interlocking loop pattern in this stmt *)
 val stmt_many_loop_vars : prog_data_t -> stmt_id_t -> IntSet.t option
+
+type freevar_info = {
+                      lmap_free: map_id_t * (id_t * int) list;
+                      lmap_bound: map_id_t * (id_t * int) list;
+                      rmaps_free: (map_id_t * (id_t * int) list) list;
+                      rmaps_bound: (map_id_t * (id_t * int) list) list;
+                    }
+
+val free_bound_vars : prog_data_t -> stmt_id_t -> freevar_info
+
+val special_route_stmt : ?info:freevar_info -> prog_data_t -> stmt_id_t -> bool
+
+(* dump info about the program *)
+val dump_info : prog_data_t -> string

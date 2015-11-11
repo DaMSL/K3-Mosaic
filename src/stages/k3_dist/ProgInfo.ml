@@ -155,6 +155,10 @@ let stmts_of_t (p:prog_data_t) trig_name =
   let (_, _, _, stmts) = find_trigger p trig_name in
   stmts
 
+let get_trig_stmt_list ?corrective ?sys_init ?delete p =
+  let ts = get_trig_list ?corrective ?sys_init ?delete p in
+  List.flatten @@ List.map (fun t -> List.map (fun s -> t, s) @@ stmts_of_t p t) ts
+
 (* map a function over stmts in a trigger in a specific way *)
 let map_over_stmts_in_t (p:prog_data_t) func map_func trig_name =
   let stmts = stmts_of_t p trig_name in
@@ -393,3 +397,102 @@ let stmt_many_loop_vars p s =
   if List.length binds > 1 && IntSet.cardinal lmap_loop_vars > 1
     then Some lmap_loop_vars
   else None
+
+type freevar_info = {
+                      lmap_free: map_id_t * (id_t * int) list;
+                      lmap_bound: map_id_t * (id_t * int) list;
+                      rmaps_free: (map_id_t * (id_t * int) list) list;
+                      rmaps_bound: (map_id_t * (id_t * int) list) list;
+                    }
+
+let free_bound_vars p s =
+  let trig_args = fst_many @@ args_of_t p @@ trigger_of_stmt p s in
+  let not_in_trig = List.partition (fun (s,_) -> not @@ List.mem s trig_args) in
+  let lmap = lhs_map_of_stmt p s in
+  let rmaps = rhs_maps_of_stmt p s in
+  let lfree, lbound = not_in_trig @@ find_lmap_bindings_in_stmt p s lmap in
+  let rmaps_free, rmaps_bound =
+    list_unzip @@
+    List.map (fun (m, (x, y)) -> (m, x), (m, y)) @@
+    List.map (fun m -> m, not_in_trig @@ find_rmap_bindings_in_stmt p s m) rmaps in
+  { lmap_free = lmap, lfree;
+    lmap_bound = lmap, lbound;
+    rmaps_free = List.filter (fun x -> snd x <> []) rmaps_free;
+    rmaps_bound = List.filter (fun x -> snd x <> []) rmaps_bound;
+  }
+
+exception Exit
+
+let special_route_stmt ?info p s =
+  let info = match info with
+    | None -> free_bound_vars p s
+    | Some i -> i in
+  (* check for easy condition *)
+  if snd info.lmap_free = [] || info.rmaps_free = [] then false else
+  (* check that each rmap's free vars are a superset of the lmap *)
+  try
+    List.iter (fun (_, binds) ->
+        List.iter (fun (id, _) ->
+            if not @@ List.exists (fun (s,_) -> s = id) binds
+            then raise Exit
+          ) @@ snd info.lmap_free
+      ) info.rmaps_free;
+    true
+  with Exit -> false
+
+let dump_info p =
+  let ts = get_trig_list p in
+  let ss = get_stmt_list p in
+  let infos = List.filter (fun (_, i) ->
+      snd i.lmap_free <> [] || i.rmaps_free <> []) @@
+    List.map (fun s -> s, free_bound_vars p s) ss in
+  let s_special = List.filter (special_route_stmt p) ss in
+  let t_s = List.map (fun t -> t, stmts_of_t p t) ts in
+  let t_binds = List.map (fun t -> t, fst_many @@ args_of_t p t) ts in
+  let map_ids = List.map (fun m -> map_name_of p m, m) @@ get_map_list p in
+  let s_t_s = sp "[%s]" @@
+              strcatmap (fun (t, ss) -> sp "%s:[%s]" t @@ string_of_int_list ss) t_s in
+  let s_t_binds = sp "[%s]" @@
+    strcatmap (fun (t, args) -> sp "%s:[%s]" t @@ String.concat ", " args) t_binds in
+  let s_map_ids = sp "[%s]" @@
+    strcatmap (fun (m, id) -> sp "%s:%d" m id) map_ids in
+  let s_free_infos = sp "[%s]" @@
+    strcatmap (fun (s, info) ->
+        sp "%d:[%d:[%s]; %s]" s (fst info.lmap_free)
+          (String.concat ", " @@ fst_many @@ snd info.lmap_free)
+          (strcatmap (fun (m, l) -> sp "%d:[%s]" m @@
+                       String.concat ", " @@ fst_many @@ l) info.rmaps_free)
+      ) infos in
+  let s_bound_infos = sp "[%s]" @@
+    strcatmap (fun (s, info) ->
+        sp "%d:[%d:[%s]; %s]" s (fst info.lmap_bound)
+          (String.concat ", " @@ fst_many @@ snd info.lmap_bound)
+          (strcatmap (fun (m, l) -> sp "%d:[%s]" m @@
+                       String.concat ", " @@ fst_many @@ l) info.rmaps_bound)
+      ) infos in
+  sp
+"\
+Statement route generation:
+%s
+
+Trigger stmts:
+%s
+
+Trigger binds:
+%s
+
+Map ids:
+%s
+
+Free vars:
+%s
+
+Bound vars:
+%s
+"
+(string_of_int_list s_special)
+s_t_s s_t_binds s_map_ids
+s_free_infos s_bound_infos
+
+
+

@@ -107,6 +107,9 @@ type config = {
   poly_tags : (int * (string * tag_type * (id_t * type_t) list)) list;
   (* poly tag for incoming events *)
   event_tags: (int * (string * type_t list)) list;
+  (* freevar info for the program, per stmt *)
+  freevar_info : freevar_info IntMap.t;
+  use_opt_route : bool;
 }
 
 let default_config = {
@@ -125,6 +128,8 @@ let default_config = {
   route_indices = Hashtbl.create 10;
   poly_tags = [];
   event_tags = [];
+  freevar_info = IntMap.empty;
+  use_opt_route = true;
 }
 
 let get_map_indices c map_id =
@@ -416,6 +421,9 @@ let my_peers =
 let me_int =
   let init = mk_apply' "int_of_addr" [G.me_var] in
   create_ds "me_int" t_int ~init
+
+(* whether we're running in the interpreter *)
+let interpreter_mode = create_ds "interpreter_mode" t_bool
 
 let num_peers =
   let init = mk_size @@ mk_var my_peers.id in
@@ -716,6 +724,7 @@ let nd_trig_dispatcher_trig_nm = "nd_trig_dispatcher_trig"
 
 (* handler for many other triggers *)
 let trig_sub_handler_name_of_t t = "nd_trig_sub_handler_"^t
+let trig_slim_sub_handler_name_of_t t = "nd_trig_slim_sub_handler_"^t
 let send_fetch_name_of_t t = "sw_"^t^"_send_fetch"
 let rcv_fetch_name_of_t t = "nd_"^t^"_rcv_fetch"
 let rcv_put_name_of_t t = "nd_"^t^"_rcv_put"
@@ -739,6 +748,9 @@ let nd_rcv_corr_done_nm = "nd_rcv_corr_done"
 
 (* the trig header marks the args *)
 let trig_sub_handler_args c t = ["save_args", t_bool] @ args_of_t_with_v c t
+
+(* slim trig header doesn't carry args *)
+let trig_slim_sub_handler_args c t = []
 
 (* rcv_put: how the stmt_cnt list gets sent in rcv_put *)
 let stmt_cnt_list_ship =
@@ -963,6 +975,7 @@ let calc_poly_tags c =
       let s_rhs_corr = List.filter (fun (s, map) -> List.mem map c.corr_maps) s_rhs in
       (* carries all the trig arguments + vid *)
       (trig_sub_handler_name_of_t t, Trig true, trig_sub_handler_args c t)::
+      (* (trig_slim_sub_handler_name_of_t t, Trig true, trig_slim_sub_handler_args c t):: *)
       (if s_rhs = [] then [] else [
         rcv_put_name_of_t t, SubTrig(true, t), nd_rcv_put_args_poly c t;
         rcv_fetch_name_of_t t, SubTrig(true, t), nd_rcv_fetch_args_poly c t]) @
@@ -1229,6 +1242,7 @@ module Bindings = struct
       let m = IntSetMap.of_list @@ insert_index_snd l in
       Hashtbl.replace h2 map m) h;
     h2
+
 end
 
 (*** partition map ***)
@@ -1340,6 +1354,28 @@ let pmap_input p =
   in
   create_ds "pmap_input" ~init t
 
+(* use pre-generated info for determining if we can use special routing *)
+let special_route_stmt c s =
+  if c.use_opt_route then
+    let info = IntMap.find s c.freevar_info in
+    P.special_route_stmt ~info c.p s
+  else false
+
+let special_route_stmts c =
+  List.filter (special_route_stmt c) @@
+    P.get_stmt_list c.p
+
+(* list the bound arguments within the statement *)
+let bound_params_of_stmt c s =
+  let info = IntMap.find s c.freevar_info in
+  let lmap = fst @@ info.lmap_bound in
+  let lbound = List.map (fun (id, n) -> id, (lmap, n)) @@ snd info.lmap_bound in
+  let rbound = List.flatten @@ List.map (fun (rmap, l) -> List.map (fun (id, n) -> id, (rmap, n)) l) @@
+    info.rmaps_bound in
+  let bound = lbound @ rbound in
+  let bound_uniq = nub @@ fst_many bound in
+  List.map (fun b -> b, List.assoc b bound) bound_uniq
+
 (* tags for profiling and post-analysis *)
 let do_profiling = create_ds ~init:mk_cfalse "do_profiling" @@ mut t_bool
 
@@ -1428,6 +1464,7 @@ let global_vars c dict =
   in
   let l =
     [ me_int;
+      interpreter_mode;
       ip;
       stmt_ctr;
       g_init_vid;

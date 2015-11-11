@@ -251,7 +251,7 @@ let mk_apply lambda input =
 let mk_apply' fn input = mk_apply (mk_var fn) input
 
 let mk_block = function
-  | []  -> failwith "no statements in block"
+  | []  -> mk_cunit
   | [x] -> x
   | xs  -> mk_stree Block xs
 

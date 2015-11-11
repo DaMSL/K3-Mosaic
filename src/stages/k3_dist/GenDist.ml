@@ -355,53 +355,93 @@ let sw_send_fetch_fn c s_rhs_lhs s_rhs t =
       mk_set_all send_put_bitmap.id [mk_cfalse]
       ] @
 
-      List.map
-        (fun (stmt_id, (rhs_map_id, lhs_map_id)) ->
-          (* shuffle allows us to recreate the path the data will take from rhs to lhs *)
-          let shuffle_fn = K3Shuffle.find_shuffle_nm c stmt_id rhs_map_id lhs_map_id in
-          let shuffle_key, shuffle_empty_pat =
-            P.key_pat_from_bound c.p c.route_indices stmt_id lhs_map_id in
-          let shuffle_pat = P.get_shuffle_pat_idx c.p c.route_indices stmt_id lhs_map_id rhs_map_id in
-          (* route allows us to know how many nodes send data from rhs to lhs *)
-          let route_key, route_pat_idx = P.key_pat_from_bound c.p c.route_indices stmt_id rhs_map_id in
-          (* we need the types for creating empty rhs tuples *)
-          let rhs_map_types = P.map_types_with_v_for c.p rhs_map_id in
-          let tuple_types = wrap_t_calc' rhs_map_types in
-          mk_let ["sender_count"]
-            (* count up the number of IPs received from route *)
-            (R.route_lookup c rhs_map_id
-              (mk_cint rhs_map_id::route_key)
-              (mk_cint route_pat_idx) @@
-              mk_agg_bitmap'
-                ["acc", t_int]
-                (mk_add (mk_var "acc") @@ mk_cint 1)
-                (mk_cint 0)
-                R.route_bitmap.id) @@
-          mk_block [
-            (* fill in shuffle globals *)
-            mk_apply' shuffle_fn @@
-              shuffle_key @ [mk_cint shuffle_pat; mk_cint shuffle_empty_pat; mk_empty tuple_types];
-            (* loop over the shuffle bitmap *)
-            mk_iter_bitmap'
-              (mk_block [
-                (* mark the put bitmap *)
-                mk_insert_at send_put_bitmap.id (mk_var "ip") [mk_ctrue];
-                (* update the relevant stmt_cnt_list *)
-                mk_update_at_with send_put_ip_map_id (mk_var "ip") @@
-                  mk_lambda' send_put_ip_map_e @@
-                    mk_block [
-                      mk_insert_at "stmt_bitmap" (mk_cint stmt_id) [mk_ctrue];
+      (List.flatten @@ List.map (fun s ->
+          let lmap = P.lhs_map_of_stmt c.p s in
+          let rmaps = P.rhs_maps_of_stmt c.p s in
+
+          (* optimized route - check if we can do special 1:1 optimized routing *)
+          if special_route_stmt c s then singleton @@
+            (* we need to isolate each of the bound params separately *)
+            let bound_params = insert_index_fst @@ bound_params_of_stmt c s in
+            mk_let ["buckets"]
+              (List.fold_left (fun acc_code (idx, (id, (m, m_idx))) ->
+                  mk_let ["bucket_"^soi idx]
+                    (R.get_dim_idx c.p m m_idx @@ mk_var id)
+                    acc_code)
+                (* string the buckets together *)
+                (mk_tuple @@ List.map (fun idx -> mk_var @@ "bucket_"^soi idx) @@
+                  fst_many bound_params)
+                bound_params) @@
+            (* lookup in the optimized route s *)
+            mk_case_ns (mk_lookup' (R.route_opt_ds_nm s) [mk_var "buckets"; mk_cunknown]) "lkup"
+              (mk_error "couldn't find buckets in optimized ds") @@
+              mk_iter (mk_lambda' R.route_opt_inner.e @@
+                mk_block [
+                  (* mark the put bitmap *)
+                  mk_insert_at send_put_bitmap.id (mk_var "node") [mk_ctrue];
+                  (* update the relevant stmt_cnt_list *)
+                  mk_update_at_with send_put_ip_map_id (mk_var "ip") @@
+                    mk_lambda' send_put_ip_map_e @@
+                      mk_block [
+                      mk_insert_at "stmt_bitmap" (mk_cint s) [mk_ctrue];
                       (* increment count *)
-                      mk_update_at_with stmt_cnt_list.id (mk_cint stmt_id) @@
+                      mk_update_at_with stmt_cnt_list.id (mk_cint s) @@
                         mk_lambda'' stmt_cnt_list.e @@
                           mk_add (mk_var "count") @@ mk_var "sender_count";
                       (* recreate tuple *)
                       mk_tuple @@ ids_to_vars @@ fst_many @@ send_put_ip_map_e
                     ]
-                ])
-              K3S.shuffle_bitmap.id
-          ])
-          s_rhs_lhs @
+                ]) @@
+                mk_snd @@ mk_var "lkup"
+
+          (* normal 1:n conservative routing *)
+          else
+          List.map (fun rmap ->
+            (* shuffle allows us to recreate the path the data will take from rhs to lhs *)
+            let shuffle_fn = K3Shuffle.find_shuffle_nm c s rmap lmap in
+            let shuffle_key, shuffle_empty_pat =
+              P.key_pat_from_bound c.p c.route_indices s lmap in
+            let shuffle_pat = P.get_shuffle_pat_idx c.p c.route_indices s lmap rmap in
+            (* route allows us to know how many nodes send data from rhs to lhs *)
+            let route_key, route_pat_idx = P.key_pat_from_bound c.p c.route_indices s rmap in
+            (* we need the types for creating empty rhs tuples *)
+            let rhs_map_types = P.map_types_with_v_for c.p rmap in
+            let tuple_types = wrap_t_calc' rhs_map_types in
+            mk_let ["sender_count"]
+              (* count up the number of IPs received from route *)
+              (R.route_lookup c rmap
+                (mk_cint rmap::route_key)
+                (mk_cint route_pat_idx) @@
+                mk_agg_bitmap'
+                  ["acc", t_int]
+                  (mk_add (mk_var "acc") @@ mk_cint 1)
+                  (mk_cint 0)
+                  R.route_bitmap.id) @@
+            mk_block [
+              (* fill in shuffle globals *)
+              mk_apply' shuffle_fn @@
+                shuffle_key @ [mk_cint shuffle_pat; mk_cint shuffle_empty_pat; mk_empty tuple_types];
+              (* loop over the shuffle bitmap *)
+              mk_iter_bitmap'
+                (mk_block [
+                  (* mark the put bitmap *)
+                  mk_insert_at send_put_bitmap.id (mk_var "ip") [mk_ctrue];
+                  (* update the relevant stmt_cnt_list *)
+                  mk_update_at_with send_put_ip_map_id (mk_var "ip") @@
+                    mk_lambda' send_put_ip_map_e @@
+                      mk_block [
+                        mk_insert_at "stmt_bitmap" (mk_cint s) [mk_ctrue];
+                        (* increment count *)
+                        mk_update_at_with stmt_cnt_list.id (mk_cint s) @@
+                          mk_lambda'' stmt_cnt_list.e @@
+                            mk_add (mk_var "count") @@ mk_var "sender_count";
+                        (* recreate tuple *)
+                        mk_tuple @@ ids_to_vars @@ fst_many @@ send_put_ip_map_e
+                      ]
+                  ])
+                K3S.shuffle_bitmap.id
+            ]) rmaps) @@
+            P.stmts_of_t c.p t) @
       (* iterate over the result bitmap and buffer.
          Also count the number of sent msgs for this vid *)
       [
@@ -663,6 +703,8 @@ let nd_send_push_stmt_map_trig c s_rhs_lhs t =
       let buf_nm = P.buf_of_stmt_map_id c.p s rmap in
       let shuffle_fn = K3S.find_shuffle_nm c s rmap lmap in
       let shuffle_key, empty_pat_idx = P.key_pat_from_bound c.p c.route_indices s lmap in
+      (* if we use optimized route, no need for conservative shuffling *)
+      let empty_pat_idx = if special_route_stmt c s then -1 else empty_pat_idx in
       let shuffle_pat_idx = P.get_shuffle_pat_idx c.p c.route_indices s lmap rmap in
       let slice_key = P.slice_key_from_bound c.p s rmap in
       let map_delta = D.map_ds_of_id c rmap ~global:false in
@@ -1969,6 +2011,7 @@ let gen_dist_for_t c ast t =
 (* @param force_correctives Attempt to create dist code that encourages correctives *)
 let gen_dist ?(gen_deletes=true)
              ?(gen_correctives=true)
+             ?(use_opt_route=true)
              ~stream_file
              ~map_type
              ~(agenda_map: mapping_t)
@@ -2006,6 +2049,8 @@ let gen_dist ?(gen_deletes=true)
       unused_trig_args;
       map_indices = D.Bindings.multi_idx_access_patterns p ast;
       route_indices = D.Bindings.route_access_patterns p;
+      freevar_info = IntMap.of_list @@ List.map (fun s -> s, P.free_bound_vars p s) @@ P.get_stmt_list p;
+      use_opt_route;
     } in
   (* to get poly_tags, we need c *)
   let c = { c with poly_tags = D.calc_poly_tags c; event_tags = D.calc_event_tags c} in
