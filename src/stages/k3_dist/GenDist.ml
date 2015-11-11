@@ -420,9 +420,14 @@ let sw_send_fetch_fn c s_rhs_lhs s_rhs t =
                   buffer_for_send rcv_put_nm "ip" [mk_var D.me_int.id];
                   (* now send stmt_cnt_list *)
                   (mk_iter_bitmap' ~idx:D.stmt_ctr.id
-                    (* wr_bitmap: no need to, since we did so above *)
-                    (buffer_for_send ~wr_bitmap:false stmt_cnt_list_ship.id "ip"
-                      [mk_var "stmt_ctr"; mk_at' stmt_cnt_list.id @@ mk_var "stmt_ctr"])
+                    (mk_block [
+                      prof_property D.prof_tag_send_put
+                        @@ ProfSendPut("vid", "stmt_ctr", "ip",
+                             K3N.string_of_expr @@ mk_at' stmt_cnt_list.id @@ mk_var "stmt_ctr");
+                      (* wr_bitmap: no need to, since we did so above *)
+                      (buffer_for_send ~wr_bitmap:false stmt_cnt_list_ship.id "ip"
+                        [mk_var "stmt_ctr"; mk_at' stmt_cnt_list.id @@ mk_var "stmt_ctr"])
+                    ])
                     "stmt_bitmap")
                 ];
                 mk_add (mk_var "count") @@ mk_cint 1
@@ -710,7 +715,7 @@ let nd_send_push_stmt_map_trig c s_rhs_lhs t =
                       (mk_incr D.prof_num_full.id) @@
                        mk_incr D.prof_num_empty.id)
                 K3S.shuffle_bitmap.id;
-              prof_property prof_tag_push_cnts @@ ProfCounts("vid", D.prof_num_empty.id, D.prof_num_full.id)
+              prof_property prof_tag_push_cnts @@ ProfMsgCounts("vid", D.prof_num_empty.id, D.prof_num_full.id)
             ])
             mk_cunit;
 

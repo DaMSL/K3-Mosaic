@@ -1343,16 +1343,17 @@ let pmap_input p =
 (* tags for profiling and post-analysis *)
 let do_profiling = create_ds ~init:mk_cfalse "do_profiling" @@ mut t_bool
 
-let prof_tag_pre_send_fetch = 0
-let prof_tag_post_send_fetch = 1
-let prof_tag_rcv_fetch = 2
-let prof_tag_buffered_push = 3
-let prof_tag_push_done = 4
+let prof_tag_pre_send_fetch   = 0
+let prof_tag_post_send_fetch  = 1
+let prof_tag_rcv_fetch        = 2
+let prof_tag_buffered_push    = 3
+let prof_tag_push_done        = 4
 let prof_tag_do_complete_done = 5
-let prof_tag_corr_done = 6
-let prof_tag_push_cnts = 7
-let prof_tag_push_decr = 8
-let prof_tag_fetch_route = 9
+let prof_tag_corr_done        = 6
+let prof_tag_push_cnts        = 7
+let prof_tag_push_decr        = 8
+let prof_tag_fetch_route      = 9
+let prof_tag_send_put         = 10
 
 (* @t_s_id: trig or stmt id *)
 type prof_event =
@@ -1360,7 +1361,7 @@ type prof_event =
       | ProfLatency of string * string
 
                       (* vid_nm, num_empty, num_full *)
-      | ProfCounts of string * string * string
+      | ProfMsgCounts of string * string * string
 
                       (* vid_nm, tag/stmt id, barrier_count *)
       | ProfPushBarrier of string * string * string
@@ -1368,19 +1369,25 @@ type prof_event =
                       (* vid nm, tag/stmt id, route key, bucket, node idx *)
       | ProfFetchRoute of string * string * string * string * string
 
+                      (* vid nm, tag/stmt id, dest node idx, barrier count *)
+      | ProfSendPut of string * string * string * string
+
 let prof_property ?(flush=false) (tag:int) event =
   let p = match event with
     | ProfLatency(vid_nm, t_s_id) ->
       sp "MosaicPreEvent(lbl=[# mosaic], tl=[$ %d], ve=[$ %s], ce=[$ %s])" tag vid_nm t_s_id
 
-    | ProfCounts(vid_nm, num_empty, num_full) ->
-      sp "MosaicCounts(lbl=[# mosaic], tl=[$ %d], ve=[$ %s], ce1=[$ %s], ce2=[$ %s])" tag vid_nm num_empty num_full
+    | ProfMsgCounts(vid_nm, num_empty, num_full) ->
+      sp "MosaicMsgCounts(lbl=[# mosaic], tl=[$ %d], ve=[$ %s], ce1=[$ %s], ce2=[$ %s])" tag vid_nm num_empty num_full
 
     | ProfPushBarrier(vid_nm, t_s_id, barrier_count) ->
       sp "MosaicPushBarrier(lbl=[# mosaic], tl=[$ %d], ve=[$ %s], ce1=[$ %s], ce2=[$ %s])" tag vid_nm t_s_id barrier_count
 
     | ProfFetchRoute(vid_nm, t_s_id, key, bucket, ip) ->
       sp "MosaicFetchRoute(lbl=[# mosaic], tl=[$ %d], ve=[$ %s], ce1=[$ %s], ce2=[$ %s], ce3=[$ %s], ce4=[$ %s])" tag vid_nm t_s_id key bucket ip
+
+    | ProfSendPut(vid_nm, t_s_id, dest, barrier_count) ->
+      sp "MosaicSendPut(lbl=[# mosaic], tl=[$ %d], ve=[$ %s], ce1=[$ %s], ce2=[$ %s])" tag vid_nm t_s_id dest barrier_count
   in
   let target_expr = if flush then mk_tuple ~force:true [U.add_property "Flush" mk_cunit] else mk_cunit in
   mk_if (mk_var do_profiling.id) (U.add_annotation p target_expr) mk_cunit
@@ -1399,9 +1406,10 @@ let profile_funcs_stop =
     mk_apply' "tcmallocStop" [];
     mk_apply' "pcmStop" [];
     prof_property ~flush:true (-1) @@ ProfLatency("-1", "-1");
-    prof_property ~flush:true (-1) @@ ProfCounts("-1", "-1", "-1");
+    prof_property ~flush:true (-1) @@ ProfMsgCounts("-1", "-1", "-1");
     prof_property ~flush:true (-1) @@ ProfPushBarrier("-1", "-1", "-1");
     prof_property ~flush:true (-1) @@ ProfFetchRoute("-1", "-1", "-1", "-1", "-1");
+    prof_property ~flush:true (-1) @@ ProfSendPut("-1", "-1", "-1", "-1");
   ]
 
 let prof_num_empty = create_ds "prof_num_empty" @@ mut t_int
