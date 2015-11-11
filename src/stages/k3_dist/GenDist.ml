@@ -463,7 +463,7 @@ let sw_send_fetch_fn c s_rhs_lhs s_rhs t =
                     (mk_block [
                       prof_property D.prof_tag_send_put
                         @@ ProfSendPut("vid", "stmt_ctr", "ip",
-                             K3N.string_of_expr @@ mk_at' stmt_cnt_list.id @@ mk_var "stmt_ctr");
+                            "("^stmt_cnt_list.id^".at stmt_cntr).elem");
                       (* wr_bitmap: no need to, since we did so above *)
                       (buffer_for_send ~wr_bitmap:false stmt_cnt_list_ship.id "ip"
                         [mk_var "stmt_ctr"; mk_at' stmt_cnt_list.id @@ mk_var "stmt_ctr"])
