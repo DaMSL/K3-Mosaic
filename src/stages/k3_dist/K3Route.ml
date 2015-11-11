@@ -543,6 +543,7 @@ let route_opt_init c =
       let rmaps = P.rhs_maps_of_stmt c.p s in
       let single_rmap = List.length rmaps = 1 in
       let swallow l = if single_rmap then [] else l in
+      let swallow_f f e = if single_rmap then e else f e in
       (* rmaps with access indices *)
       let idx_rmaps = insert_index_fst ~first:1 rmaps in
       let lmap = P.lhs_map_of_stmt c.p s in
@@ -590,7 +591,7 @@ let route_opt_init c =
                         (mk_agg_bitmap [("count"^soi idx), t_int]
                           (mk_add (mk_cint 1) @@ mk_var ("count"^soi idx))
                           (mk_cint 0) @@
-                          mk_subscript idx @@ mk_var "bitmaps")
+                          swallow_f (mk_subscript idx) @@ mk_var "bitmaps")
                         acc_code)
                       (mk_cint 0)
                       idx_rmaps) @@
