@@ -473,20 +473,44 @@ let route_lookup c map_id key pat_idx lambda_body =
        pat_idx) @@
     mk_lambda'' [route_bitmap.id, route_bitmap.t] lambda_body
 
-(* data structure to load *)
-(*let opt_route_ds =
-  create_ds "opt_route_ds" t_int
+(* data structures to load *)
+let route_opt_init_ds c =
+  List.map (fun s ->
+      let nm = "route_opt_init_"^soi s in
+      let bound = D.bound_params_of_stmt c s in
+      let rmaps = P.rhs_maps_of_stmt c.p s in
+      (* number of unique bound buckets *)
+      let key = wrap_ttuple @@ List.map (const t_int) bound in
+      (* lmap buckets, rmap buckets *)
+      let value = wrap_ttuple @@ [t_int] @ List.map (const t_int) rmaps in
+      let t = wrap_tmap' [key; value] in
+      create_ds nm t)
+  @@
+  P.get_stmt_list c.p
 
-let opt_route_final_ds =
+let route_opt_inner =
+  let e = ["node", t_int; "count", t_int] in
+  create_ds "route_opt_inner" @@ t_of_e e
 
+(* data structures to compute *)
+let route_opt_ds c =
+  List.map (fun s ->
+      let nm = "route_opt_"^soi s in
+      let bound = D.bound_params_of_stmt c s in
+      (* unique bound buckets *)
+      let key_t = wrap_ttuple @@ List.map (const t_int) bound in
+      (* value is collection of node id, count *)
+      let e = ["bound", key_t; route_opt_inner.id, route_opt_inner.t] in
+      create_ds nm @@ wrap_tmap @@ t_of_e e
+  ) @@
+  P.get_stmt_list c.p
 
-  create_ds "opt_route_final_ds"
-
-let opt_route_prepare =
-  mk_agg (mk_lambda'' ["acc", 
+  (*
+let opt_route_i =
+  mk_agg (mk_lambda'' ["acc",
     mk_var opt_route_ds.id
+         *)
 
-  *)
 
 (* create all code needed for route functions, including foreign funcs*)
 let global_vars c =
@@ -495,7 +519,9 @@ let global_vars c =
     route_bitmap;
     all_nodes_bitmap;
     pmap_data c.p] @
-    route_memo c
+  route_memo c @
+  route_opt_init_ds c @
+  route_opt_ds c
 
 let functions c =
   (* create a route for each map type, using only the key types *)

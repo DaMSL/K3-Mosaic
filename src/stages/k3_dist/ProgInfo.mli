@@ -38,6 +38,7 @@ val remove_trig_prefix : trig_name_t -> trig_name_t
 val get_trig_list : ?corrective:bool -> ?sys_init:bool -> ?delete:bool -> prog_data_t -> trig_name_t list
 val for_all_trigs : ?corrective:bool -> ?sys_init:bool -> ?delete:bool -> prog_data_t -> (trig_name_t -> 'a) -> 'a list
 val get_stmt_list : prog_data_t -> stmt_id_t list
+val get_trig_stmt_list : ?corrective:bool -> ?sys_init:bool -> ?delete:bool -> prog_data_t -> (trig_name_t * stmt_id_t) list
 val get_max_stmt : prog_data_t -> stmt_id_t
 val for_all_stmts : prog_data_t -> (stmt_id_t -> 'a) -> 'a list
 val get_map_list : prog_data_t -> map_id_t list

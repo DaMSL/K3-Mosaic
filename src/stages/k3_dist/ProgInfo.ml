@@ -155,6 +155,10 @@ let stmts_of_t (p:prog_data_t) trig_name =
   let (_, _, _, stmts) = find_trigger p trig_name in
   stmts
 
+let get_trig_stmt_list ?corrective ?sys_init ?delete p =
+  let ts = get_trig_list ?corrective ?sys_init ?delete p in
+  List.flatten @@ List.map (fun t -> List.map (fun s -> t, s) @@ stmts_of_t p t) ts
+
 (* map a function over stmts in a trigger in a specific way *)
 let map_over_stmts_in_t (p:prog_data_t) func map_func trig_name =
   let stmts = stmts_of_t p trig_name in
@@ -420,7 +424,7 @@ let free_bound_vars p s =
 exception Exit
 
 let special_route_stmt ?info p s =
-  let info = match info with 
+  let info = match info with
     | None -> free_bound_vars p s
     | Some i -> i in
   (* check for easy condition *)

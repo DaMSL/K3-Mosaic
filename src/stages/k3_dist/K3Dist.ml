@@ -1352,10 +1352,16 @@ let pmap_input p =
   in
   create_ds "pmap_input" ~init t
 
-(* use pre-generated info *)
+(* use pre-generated info for determining if we can use special routing *)
 let special_route_stmt c s =
   let info = IntMap.find s c.freevar_info in
   P.special_route_stmt ~info c.p s
+
+(* list the bound arguments within the statement *)
+let bound_params_of_stmt c s =
+  let info = IntMap.find s c.freevar_info in
+  let bound = snd info.lmap_bound @ List.flatten @@ snd_many info.rmaps_bound in
+  nub @@ snd_many bound
 
 (* tags for profiling and post-analysis *)
 let do_profiling = create_ds ~init:mk_cfalse "do_profiling" @@ mut t_bool
