@@ -1357,6 +1357,10 @@ let special_route_stmt c s =
   let info = IntMap.find s c.freevar_info in
   P.special_route_stmt ~info c.p s
 
+let special_route_stmts c =
+  List.filter (special_route_stmt c) @@
+    P.get_stmt_list c.p
+
 (* list the bound arguments within the statement *)
 let bound_params_of_stmt c s =
   let info = IntMap.find s c.freevar_info in

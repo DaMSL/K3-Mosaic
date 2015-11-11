@@ -141,6 +141,7 @@ let rcv_jobs c =
     unwrap_some K3Route.all_nodes_bitmap.d_init;
     (* pre-calculate all the route memoization tables *)
     mk_apply' K3Route.memo_init_all_nm [];
+    mk_apply' K3Route.route_opt_init_all_nm [];
     (* reserve space in all the polyqueues *)
     D.reserve_poly_queue_code ~all:true c;
     (* ack the msg *)
