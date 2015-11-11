@@ -43,6 +43,7 @@ def run(target_file,
         map_overlap_factor=None,
         batch_size=None,
         debug=False,
+        no_opt_route=None,
         dump_info=False
         ):
 
@@ -194,6 +195,8 @@ def run(target_file,
                 arg += '--filemux '
             if safe_writes:
                 arg += '--safe-writes '
+            if no_opt_route:
+                arg += '--no-opt-route '
 
             print("Converting to new k3 file format...")
             cmd = concat([k3o, "-i k3 -l k3new", arg, "--datafile",

@@ -171,6 +171,7 @@ type parameters = {
     mutable k3new_folds: bool;   (* output fold instead of map/ext *)
     mutable use_filemux: bool;
     mutable safe_writes: bool;   (* output safe writes *)
+    mutable use_opt_route: bool; (* use optimized 1:1 routing *)
 
     mutable dump_info: bool;  (* dump proginfo data *)
   }
@@ -206,6 +207,7 @@ let default_cmd_line_params () = {
 
     safe_writes       = false;
     dump_info         = false;  (* dump info about prog_info and quit *)
+    use_opt_route     = true;
   }
 
 let cmd_line_params = default_cmd_line_params ()
@@ -451,10 +453,11 @@ let test params inputs =
 
 let transform_to_k3_dist params p proginfo =
   let {map_type; stream_file;
-       gen_deletes; gen_correctives; agenda_map} = params in
+       gen_deletes; gen_correctives;
+       agenda_map; use_opt_route} = params in
   try
     GenDist.gen_dist ~map_type ~stream_file
-      ~gen_deletes ~gen_correctives ~agenda_map
+      ~gen_deletes ~gen_correctives ~agenda_map ~use_opt_route
       proginfo p
   with DistributeError(uuid, s) -> handle_distribute_error (K3Data p) uuid s
 
@@ -594,6 +597,8 @@ let param_specs = Arg.align
       "         Disable logging";
   "--filemux", Arg.Unit (fun () -> cmd_line_params.use_filemux <- true),
       "         Use filemux mechanism";
+  "--no-opt-route", Arg.Unit (fun () -> cmd_line_params.use_opt_route <- false),
+      "         Don't use optimal routing";
   ])
 
 let usage_msg =

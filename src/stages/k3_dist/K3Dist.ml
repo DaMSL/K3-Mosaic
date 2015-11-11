@@ -109,6 +109,7 @@ type config = {
   event_tags: (int * (string * type_t list)) list;
   (* freevar info for the program, per stmt *)
   freevar_info : freevar_info IntMap.t;
+  use_opt_route : bool;
 }
 
 let default_config = {
@@ -128,6 +129,7 @@ let default_config = {
   poly_tags = [];
   event_tags = [];
   freevar_info = IntMap.empty;
+  use_opt_route = true;
 }
 
 let get_map_indices c map_id =
@@ -1354,8 +1356,10 @@ let pmap_input p =
 
 (* use pre-generated info for determining if we can use special routing *)
 let special_route_stmt c s =
-  let info = IntMap.find s c.freevar_info in
-  P.special_route_stmt ~info c.p s
+  if c.use_opt_route then
+    let info = IntMap.find s c.freevar_info in
+    P.special_route_stmt ~info c.p s
+  else false
 
 let special_route_stmts c =
   List.filter (special_route_stmt c) @@

@@ -705,6 +705,8 @@ let nd_send_push_stmt_map_trig c s_rhs_lhs t =
       let buf_nm = P.buf_of_stmt_map_id c.p s rmap in
       let shuffle_fn = K3S.find_shuffle_nm c s rmap lmap in
       let shuffle_key, empty_pat_idx = P.key_pat_from_bound c.p c.route_indices s lmap in
+      (* if we use optimized route, no need for conservative shuffling *)
+      let empty_pat_idx = if special_route_stmt c s then -1 else empty_pat_idx in
       let shuffle_pat_idx = P.get_shuffle_pat_idx c.p c.route_indices s lmap rmap in
       let slice_key = P.slice_key_from_bound c.p s rmap in
       let map_delta = D.map_ds_of_id c rmap ~global:false in
@@ -2011,6 +2013,7 @@ let gen_dist_for_t c ast t =
 (* @param force_correctives Attempt to create dist code that encourages correctives *)
 let gen_dist ?(gen_deletes=true)
              ?(gen_correctives=true)
+             ?(use_opt_route=true)
              ~stream_file
              ~map_type
              ~(agenda_map: mapping_t)
@@ -2049,6 +2052,7 @@ let gen_dist ?(gen_deletes=true)
       map_indices = D.Bindings.multi_idx_access_patterns p ast;
       route_indices = D.Bindings.route_access_patterns p;
       freevar_info = IntMap.of_list @@ List.map (fun s -> s, P.free_bound_vars p s) @@ P.get_stmt_list p;
+      use_opt_route;
     } in
   (* to get poly_tags, we need c *)
   let c = { c with poly_tags = D.calc_poly_tags c; event_tags = D.calc_event_tags c} in
