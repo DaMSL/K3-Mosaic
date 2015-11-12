@@ -561,7 +561,6 @@ let route_opt_init c =
       let out_ds  = IntMap.find s out_dss in
       let rmaps = P.rhs_maps_of_stmt c.p s in
       let single_rmap = List.length rmaps = 1 in
-      let swallow l = if single_rmap then [] else l in
       let swallow_f f e = if single_rmap then e else f e in
       (* rmaps with access indices *)
       let idx_rmaps = insert_index_fst ~first:1 rmaps in
@@ -573,7 +572,7 @@ let route_opt_init c =
       let value_e = ["lr_vals", wrap_ttuple @@ [t_int] @ List.map (const t_int) rmaps] in
       mk_global_fn nm unit_arg [] @@
         mk_block [
-        mk_apply' "print" [mk_cstring @@ route_opt_init_nm s]
+        mk_apply' "print" [mk_cstring @@ route_opt_init_nm s];
         mk_iter
           (mk_lambda' init_ds.e @@
            mk_let ["newval"]
@@ -591,7 +590,7 @@ let route_opt_init c =
                 mk_tuple @@ List.map (fun (idx, m) ->
                   route_lookup c m [mk_subscript (idx + 1) @@ mk_var "lr_vals"] pat_idx @@
                     mk_agg_bitmap ["acc2", route_bitmap.t]
-                      (mk_insert_at "acc2" (mk_var "ip") [mk_ctrue])
+                      (mk_block [mk_insert_at "acc2" (mk_var "ip") [mk_ctrue]; mk_var "acc2"])
                       (swallow_f (mk_subscript idx) @@ mk_var "acc")
                       (mk_var route_bitmap.id))
                   idx_rmaps)
@@ -660,7 +659,7 @@ let route_opt_push_init c =
                   (mk_lambda2' ["acc", agg_t] value_e @@
                     route_lookup c lmap [mk_fst @@ mk_var "lr_vals"] pat_idx @@
                       mk_agg_bitmap' ["acc2", agg_t]
-                        (mk_block [mk_insert_at "acc2" (mk_var "ip") [mk_ctrue]])
+                        (mk_block [mk_insert_at "acc2" (mk_var "ip") [mk_ctrue]; mk_var "acc2"])
                         (mk_var "acc")
                         route_bitmap.id)
                   (* start with an empty route bitmap *)
