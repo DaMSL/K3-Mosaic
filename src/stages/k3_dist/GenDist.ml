@@ -731,7 +731,7 @@ let nd_send_push_stmt_map_trig c s_rhs_lhs t =
               (* we need the latest vid data that's less than the current vid *)
               D.map_latest_vid_vals c (mk_var rmap_deref)
                 (some slice_key) rmap ~keep_vid:true) @@
-        mk_block [
+        mk_block @@ [
           (* for profiling: mark this as a buffered push if needed *)
           mk_if (mk_var "buffered")
             (prof_property prof_tag_buffered_push @@ ProfLatency("vid", soi s)) mk_cunit;
@@ -739,12 +739,39 @@ let nd_send_push_stmt_map_trig c s_rhs_lhs t =
           (* save this particular statement execution in the master log
            * Note that we need to do it here to make sure nothing
            * else can stop us before we send the push *)
-          mk_apply'
-            nd_log_master_write_nm @@ [mk_cint s; mk_var "vid"];
+          mk_apply' nd_log_master_write_nm @@ [mk_cint s; mk_var "vid"];
           (* fill in the global shuffle data structures *)
           mk_apply' shuffle_fn @@
-            shuffle_key@[mk_cint shuffle_pat_idx; mk_cint empty_pat_idx; mk_var "tuples"];
+            shuffle_key@[mk_cint shuffle_pat_idx; mk_cint empty_pat_idx; mk_var "tuples"]] @
 
+          (* for optimized route, we need to add the destination of the nodes
+           * from the route_opt_push data structure to the shuffle bitmap
+           * for sending empty messages *)
+          (if special_route_stmt c s then singleton @@
+            let bound_params = insert_index_fst @@ bound_params_of_stmt c s in
+            mk_let ["buckets"]
+              (List.fold_left (fun acc_code (idx, (id, (m, m_idx))) ->
+                  mk_let ["bucket_"^soi idx]
+                    (R.get_dim_idx c.p m m_idx @@ mk_var id)
+                    acc_code)
+                (* string the buckets together *)
+                (mk_tuple @@ List.map (fun idx -> mk_var @@ "bucket_"^soi idx) @@
+                  fst_many bound_params)
+                bound_params) @@
+            (* lookup in the optimized route s *)
+            mk_case_ns (mk_lookup' (R.route_opt_ds_nm s)
+                         [mk_var "buckets"; mk_cunknown]) "lkup"
+              (mk_error "couldn't find buckets in optimized ds") @@
+              mk_case_ns (mk_lookup (mk_snd @@ mk_var "lkup")
+                          [mk_var D.me_int.id; mk_cunknown]) "lkup2"
+                (* do nothing if we're not in the ds *)
+                mk_cunit @@
+                (* otherwise add to shuffle bitmap for empty msgs *)
+                mk_iter_bitmap
+                  (mk_insert_at K3S.shuffle_bitmap.id (mk_var "ip") [mk_ctrue]) @@
+                  mk_snd @@ mk_var "lkup2"
+          else []) @
+          [
           (* for profiling, count the number of empty and full push messages *)
           mk_if (mk_var do_profiling.id)
             (mk_block [
