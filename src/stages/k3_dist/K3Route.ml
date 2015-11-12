@@ -572,6 +572,8 @@ let route_opt_init c =
       let agg_t = wrap_ttuple @@ List.map (const route_bitmap.t) rmaps in
       let value_e = ["lr_vals", wrap_ttuple @@ [t_int] @ List.map (const t_int) rmaps] in
       mk_global_fn nm unit_arg [] @@
+        mk_block [
+        mk_apply' "print" [mk_cstring @@ route_opt_init_nm s]
         mk_iter
           (mk_lambda' init_ds.e @@
            mk_let ["newval"]
@@ -586,16 +588,13 @@ let route_opt_init c =
                     route_bitmap.id)
               (* aggregate the rhs buckets using bitmaps *)
               (mk_lambda2' ["acc", agg_t] value_e @@
-               List.fold_left (fun acc_code (idx, m) ->
-                   route_lookup c m [mk_subscript (idx + 1) @@ mk_var "lr_vals"] pat_idx @@
-                    mk_block [
-                      mk_iter_bitmap
-                        (mk_insert_at ~path:(swallow [idx]) "acc" (mk_var "ip") [mk_ctrue]) @@
-                        mk_var route_bitmap.id ;
-                      acc_code
-                    ])
-                 (mk_var "acc")
-                 idx_rmaps)
+                mk_tuple @@ List.map (fun (idx, m) ->
+                  route_lookup c m [mk_subscript (idx + 1) @@ mk_var "lr_vals"] pat_idx @@
+                    mk_agg_bitmap ["acc2", route_bitmap.t]
+                      (mk_insert_at "acc2" (mk_var "ip") [mk_ctrue])
+                      (swallow_f (mk_subscript idx) @@ mk_var "acc")
+                      (mk_var route_bitmap.id))
+                  idx_rmaps)
               (* start with a tuple of empty route bitmaps *)
               (mk_tuple @@ List.map (const @@ mk_var "empty_route_bitmap") rmaps) @@
               mk_var "lr_buckets") @@
@@ -618,7 +617,7 @@ let route_opt_init c =
                 (mk_empty route_opt_inner.t) @@
                 mk_var "newval") @@
             mk_insert out_ds.id [mk_var "bound_buckets"; mk_var "ids_counts"]) @@
-          mk_var init_ds.id
+          mk_var init_ds.id]
   ) @@
   special_route_stmts c
 
@@ -659,12 +658,11 @@ let route_opt_push_init c =
                         route_bitmap.id)
                   (* aggregate lhs buckets as nodes, using bitmaps *)
                   (mk_lambda2' ["acc", agg_t] value_e @@
-                    mk_block [
-                      route_lookup c lmap [mk_fst @@ mk_var "lr_vals"] pat_idx @@
-                        mk_iter_bitmap
-                          (mk_insert_at "acc" (mk_var "ip") [mk_ctrue]) @@
-                          mk_var route_bitmap.id;
-                      mk_var "acc" ])
+                    route_lookup c lmap [mk_fst @@ mk_var "lr_vals"] pat_idx @@
+                      mk_agg_bitmap' ["acc2", agg_t]
+                        (mk_block [mk_insert_at "acc2" (mk_var "ip") [mk_ctrue]])
+                        (mk_var "acc")
+                        route_bitmap.id)
                   (* start with an empty route bitmap *)
                   (mk_var "empty_route_bitmap") @@
                   mk_var "lr_buckets"])
