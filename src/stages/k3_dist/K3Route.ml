@@ -518,7 +518,7 @@ let route_opt_inner =
   let e = ["node", t_int; "sender_count", t_int] in
   create_ds ~e "route_opt_inner" @@ wrap_tbag @@ t_of_e e
 
-(* data structures to compute *)
+(* data structures to compute: for send_put *)
 let route_opt_ds_nm s = "route_opt_ds_"^soi s
 let route_opt_ds c =
   List.map (fun s -> s,
@@ -528,6 +528,25 @@ let route_opt_ds c =
       let key_t = wrap_ttuple @@ List.map (const t_int) bound in
       (* value is collection of node id, count *)
       let e = ["bound", key_t; route_opt_inner.id, route_opt_inner.t] in
+      create_ds ~e nm @@ wrap_tmap @@ t_of_e e) @@
+  special_route_stmts c
+
+let route_opt_push_inner_id = "route_opt_push_inner"
+let route_opt_push_inner n =
+  let e = List.map (fun _ -> "nodes"^soi n, wrap_tvector t_int) @@ create_range n in
+  create_ds route_opt_push_inner_id @@ t_of_e e
+
+(* data structures to compute: for send_push's empty messages *)
+let route_opt_push_ds_nm s = "route_opt_push_ds_"^soi s
+let route_opt_push_ds c =
+  List.map (fun s -> s,
+      let nm = route_opt_push_ds_nm s in
+      let bound = D.bound_params_of_stmt c s in
+      (* unique bound buckets *)
+      let key_t = wrap_ttuple @@ List.map (const t_int) bound in
+      let rmap_num = List.length @@ rhs_maps_of_stmt c.p s in
+      (* value is collection of node id, count *)
+      let e = ["bound", key_t; route_opt_push_inner_id, (route_opt_push_inner rmap_num).t] in
       create_ds ~e nm @@ wrap_tmap @@ t_of_e e) @@
   special_route_stmts c
 
@@ -602,13 +621,88 @@ let route_opt_init c =
           mk_var init_ds.id
   ) @@
   special_route_stmts c
+    
+(* code that gets run in startup time to initialize the optimized route tables *)
+let route_opt_push_init_nm s = "route_opt_push_do_init_s"^soi s
+let route_opt_push_init c =
+  let route_lookup = route_lookup ~no_bound:true in
+  let init_dss = IntMap.of_list @@ route_opt_init_ds c in
+  let out_dss  = IntMap.of_list @@ route_opt_ds c in
+  List.map (fun s ->
+      let init_ds = IntMap.find s init_dss in
+      let out_ds  = IntMap.find s out_dss in
+      let rmaps = P.rhs_maps_of_stmt c.p s in
+      let single_rmap = List.length rmaps = 1 in
+      let swallow l = if single_rmap then [] else l in
+      let swallow_f f e = if single_rmap then e else f e in
+      (* rmaps with access indices *)
+      let idx_rmaps = insert_index_fst ~first:1 rmaps in
+      let lmap = P.lhs_map_of_stmt c.p s in
+      let nm = route_opt_init_nm s in
+      (* 0: pat_idx 0 should always be the fully bound pattern *)
+      let pat_idx = mk_cint 0 in
+      let agg_t = wrap_ttuple @@ List.map (const route_bitmap.t) rmaps in
+      let value_e = ["lr_vals", wrap_ttuple @@ [t_int] @ List.map (const t_int) rmaps] in
+      mk_global_fn nm unit_arg [] @@
+        mk_iter
+          (mk_lambda' init_ds.e @@
+           List.fold_left (fun acc_code r_idx ->
+           mk_let ["newval"]
+            (mk_gbagg
+              (* group by the rmap bucket's node *)
+              (mk_lambda' value_e @@
+                route_lookup c lmap [mk_fst @@ mk_var "lr_vals"] pat_idx @@
+                  (* get the single node *)
+                  mk_agg_bitmap' ["node", t_int]
+                    (mk_var "ip")
+                    (mk_cint 1000000) @@ (* so we can find an error *)
+                    route_bitmap.id)
+              (* aggregate the rhs buckets using bitmaps *)
+              (mk_lambda2' ["acc", agg_t] value_e @@
+               List.fold_left (fun acc_code (idx, m) ->
+                   route_lookup c m [mk_subscript (idx + 1) @@ mk_var "lr_vals"] pat_idx @@
+                    mk_block [
+                      mk_iter_bitmap
+                        (mk_insert_at ~path:(swallow [idx]) "acc" (mk_var "ip") [mk_ctrue]) @@
+                        mk_var route_bitmap.id ;
+                      acc_code
+                    ])
+                 (mk_var "acc")
+                 idx_rmaps)
+              (* start with a tuple of empty route bitmaps *)
+              (mk_tuple @@ List.map (const @@ mk_var "empty_route_bitmap") rmaps) @@
+              mk_var "lr_buckets") @@
+            (* count the separate rnodes *)
+           mk_let ["ids_counts"]
+             (mk_agg
+                (mk_lambda2' ["acc", route_opt_inner.t]
+                             ["node", t_int; "bitmaps", agg_t] @@
+                  mk_let ["count"]
+                    (List.fold_left (fun acc_code (idx, _) ->
+                      mk_add
+                        (mk_agg_bitmap [("count"^soi idx), t_int]
+                          (mk_add (mk_cint 1) @@ mk_var ("count"^soi idx))
+                          (mk_cint 0) @@
+                          swallow_f (mk_subscript idx) @@ mk_var "bitmaps")
+                        acc_code)
+                      (mk_cint 0)
+                      idx_rmaps) @@
+                    mk_insert_block "acc" [mk_var "node"; mk_var "count"])
+                (mk_empty route_opt_inner.t) @@
+                mk_var "newval") @@
+            mk_insert out_ds.id [mk_var "bound_buckets"; mk_var "ids_counts"]) @@
+          mk_var init_ds.id
+  ) @@
+  special_route_stmts c
 
 let route_opt_init_all_nm = "route_opt_init_all"
 let route_opt_init_all c =
   mk_global_fn route_opt_init_all_nm unit_arg [] @@
     mk_block @@
-      List.map (fun s -> mk_apply' (route_opt_init_nm s) []) @@
-      special_route_stmts c
+      (List.map (fun s -> mk_apply' (route_opt_init_nm s) []) @@
+        special_route_stmts c) @
+      (List.map (fun s -> mk_apply' (route_opt_push_init_nm s) []) @@
+        special_route_stmts c)
 
 
 (* create all code needed for route functions, including foreign funcs*)
