@@ -533,7 +533,7 @@ let route_opt_ds c =
 
 let route_opt_push_inner_id = "route_opt_push_inner"
 let route_opt_push_inner n =
-  let e = List.map (fun _ -> "nodes"^soi n, wrap_tvector t_int) @@ create_range n in
+  let e = List.map (fun _ -> "nodes"^soi n, wrap_ttuple [t_int; wrap_tvector t_int]) @@ create_range n in
   create_ds route_opt_push_inner_id @@ t_of_e e
 
 (* data structures to compute: for send_push's empty messages *)
@@ -545,7 +545,7 @@ let route_opt_push_ds c =
       (* unique bound buckets *)
       let key_t = wrap_ttuple @@ List.map (const t_int) bound in
       let rmap_num = List.length @@ rhs_maps_of_stmt c.p s in
-      (* value is collection of node id, count *)
+      (* value is tuple of (node, destinations) pairs for every rmap *)
       let e = ["bound", key_t; route_opt_push_inner_id, (route_opt_push_inner rmap_num).t] in
       create_ds ~e nm @@ wrap_tmap @@ t_of_e e) @@
   special_route_stmts c
@@ -634,7 +634,6 @@ let route_opt_push_init c =
       let rmaps = P.rhs_maps_of_stmt c.p s in
       let single_rmap = List.length rmaps = 1 in
       let swallow l = if single_rmap then [] else l in
-      let swallow_f f e = if single_rmap then e else f e in
       (* rmaps with access indices *)
       let idx_rmaps = insert_index_fst ~first:1 rmaps in
       let lmap = P.lhs_map_of_stmt c.p s in
