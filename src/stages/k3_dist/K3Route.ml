@@ -533,7 +533,7 @@ let route_opt_ds c =
 
 let route_opt_push_inner_id = "route_opt_push_inner"
 let route_opt_push_inner n =
-  let e = List.map (fun _ -> "nodes"^soi n, wrap_ttuple [t_int; wrap_tvector t_bool]) @@ create_range n in
+  let e = List.map (fun _ -> "nodes"^soi n, wrap_tmap' [t_int; wrap_tvector t_bool]) @@ create_range n in
   create_ds route_opt_push_inner_id @@ t_of_e e
 
 (* data structures to compute: for send_push's empty messages *)
@@ -662,7 +662,7 @@ let route_opt_push_init c =
                     mk_block [
                       route_lookup c lmap [mk_fst @@ mk_var "lr_vals"] pat_idx @@
                         mk_iter_bitmap
-                          (mk_insert_at ~path:(swallow [0]) "acc" (mk_var "ip") [mk_ctrue]) @@
+                          (mk_insert_at "acc" (mk_var "ip") [mk_ctrue]) @@
                           mk_var route_bitmap.id;
                       mk_var "acc" ])
                   (* start with an empty route bitmap *)
