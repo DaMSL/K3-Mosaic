@@ -673,7 +673,7 @@ let route_opt_push_init c =
                 idx_rmaps
             in
             mk_let ["nodes_dests"]
-              (wrap_ttuple rmap_pushes)
+              (mk_tuple rmap_pushes)
               (mk_insert out_ds.id [mk_var "bound_buckets"; mk_var "nodes_dests"])) @@
           mk_var init_ds.id
   ) @@
