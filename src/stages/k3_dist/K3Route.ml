@@ -533,7 +533,7 @@ let route_opt_ds c =
 
 let route_opt_push_inner_id = "route_opt_push_inner"
 let route_opt_push_inner n =
-  let e = List.map (fun _ -> "nodes"^soi n, wrap_ttuple [t_int; wrap_tvector t_int]) @@ create_range n in
+  let e = List.map (fun _ -> "nodes"^soi n, wrap_ttuple [t_int; wrap_tvector t_bool]) @@ create_range n in
   create_ds route_opt_push_inner_id @@ t_of_e e
 
 (* data structures to compute: for send_push's empty messages *)
