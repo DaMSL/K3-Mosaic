@@ -749,6 +749,9 @@ let nd_send_push_stmt_map_trig c s_rhs_lhs t =
            * for sending empty messages *)
           (if special_route_stmt c s then singleton @@
             let bound_params = insert_index_fst @@ bound_params_of_stmt c s in
+            let idx_rmaps = insert_index_snd ~first:1 @@ P.rhs_maps_of_stmt c.p s in
+            let single_rmap = List.length idx_rmaps = 1 in
+            let swallow_f f e = if single_rmap then e else f e in
             mk_let ["buckets"]
               (List.fold_left (fun acc_code (idx, (id, (m, m_idx))) ->
                   mk_let ["bucket_"^soi idx]
@@ -758,17 +761,21 @@ let nd_send_push_stmt_map_trig c s_rhs_lhs t =
                 (mk_tuple @@ List.map (fun idx -> mk_var @@ "bucket_"^soi idx) @@
                   fst_many bound_params)
                 bound_params) @@
-            (* lookup in the optimized route s *)
-            mk_case_ns (mk_lookup' (R.route_opt_ds_nm s)
+            (* lookup in the optimized route ds *)
+            let m_idx = List.assoc rmap idx_rmaps in
+            mk_case_ns (mk_lookup' (R.route_opt_push_ds_nm s)
                          [mk_var "buckets"; mk_cunknown]) "lkup"
               (mk_error "couldn't find buckets in optimized ds") @@
-              mk_case_ns (mk_lookup (mk_snd @@ mk_var "lkup")
+              (* look for our entry in the ds *)
+              mk_case_ns (mk_lookup (swallow_f (mk_subscript m_idx) @@
+                                     mk_snd @@ mk_var "lkup")
                           [mk_var D.me_int.id; mk_cunknown]) "lkup2"
                 (* do nothing if we're not in the ds *)
                 mk_cunit @@
                 (* otherwise add to shuffle bitmap for empty msgs *)
                 mk_iter_bitmap
                   (mk_insert_at K3S.shuffle_bitmap.id (mk_var "ip") [mk_ctrue]) @@
+                  (* index the particular tuple that matches our map *)
                   mk_snd @@ mk_var "lkup2"
           else []) @
           [
