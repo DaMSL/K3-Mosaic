@@ -366,6 +366,7 @@ val type_of_arg: arg_t -> type_t list
 (* convert the type of a collection *)
 val mk_convert_col : type_t -> type_t -> expr_t -> expr_t
 
+val mk_convert_col_dst : type_t -> container_type_t -> expr_t -> expr_t
 val mk_convert_col' : type_t -> container_type_t -> expr_t -> expr_t
 
 val mk_peek_or_zero : ?zero:expr_t -> expr_t -> expr_t

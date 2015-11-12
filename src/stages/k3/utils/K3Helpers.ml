@@ -775,6 +775,10 @@ let mk_convert_col src_t dest_t col =
     col
 
 (* supply only the col part of the dst type *)
+let mk_convert_col_dst dst_t src_col_t col =
+  let t_c, t_elem = unwrap_tcol dst_t in
+  mk_convert_col {dst_t with typ=TCollection(src_col_t, t_elem)} dst_t col
+
 let mk_convert_col' src_t dest_col_t col =
   let t_c, t_elem = unwrap_tcol src_t in
   mk_convert_col src_t {src_t with typ=TCollection(dest_col_t, t_elem)} col

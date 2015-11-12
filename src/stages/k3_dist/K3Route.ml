@@ -632,14 +632,13 @@ let route_opt_push_init c =
       let init_ds = IntMap.find s init_dss in
       let out_ds  = IntMap.find s out_dss in
       let rmaps = P.rhs_maps_of_stmt c.p s in
-      let single_rmap = List.length rmaps = 1 in
-      let swallow l = if single_rmap then [] else l in
       (* rmaps with access indices *)
       let idx_rmaps = insert_index_fst ~first:1 rmaps in
       let lmap = P.lhs_map_of_stmt c.p s in
       let nm = route_opt_push_init_nm s in
       (* 0: pat_idx 0 should always be the fully bound pattern *)
       let pat_idx = mk_cint 0 in
+      let inner_map_t = wrap_tmap' [t_int; wrap_tvector t_bool] in
       let agg_t = route_bitmap.t in
       let value_e = ["lr_vals", wrap_ttuple @@ [t_int] @ List.map (const t_int) rmaps] in
       mk_global_fn nm unit_arg [] @@
@@ -648,7 +647,8 @@ let route_opt_push_init c =
             let rmap_pushes =
               List.fold_left (fun acc_fields (ridx,m) ->
                 acc_fields @ [
-                (mk_gbagg
+                mk_convert_col_dst inner_map_t TBag @@
+                mk_gbagg
                   (* group by the rmap bucket's node *)
                   (mk_lambda' value_e @@
                     route_lookup c m [mk_subscript (ridx + 1) @@ mk_var "lr_vals"] pat_idx @@
@@ -667,7 +667,7 @@ let route_opt_push_init c =
                       mk_var "acc" ])
                   (* start with an empty route bitmap *)
                   (mk_var "empty_route_bitmap") @@
-                  mk_var "lr_buckets")])
+                  mk_var "lr_buckets"])
                 []
                 idx_rmaps
             in
