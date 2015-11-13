@@ -874,20 +874,37 @@ let maps_potential_corrective p =
  * for execution together.
  * We return the number of messages sent out. NOT the number of vids.
  *)
+
+(* used by send correctives *)
+let send_corrective_bitmap =
+  (* indexed by ip *)
+  let init = mk_map (mk_lambda' unknown_arg mk_cfalse) @@ mk_var D.my_peers.id in
+  create_ds ~init "send_corrective_bitmap" @@ wrap_tvector t_bool
+
+let send_corrective_ip_map =
+  (* indexed by ip *)
+  let intset_t = wrap_tset t_int in
+  let e = ["vids", t_vid_list; "t_indices", intset_t] in
+  let t = wrap_tvector' @@ snd_many e in
+  let init = mk_map (mk_lambda' unknown_arg @@
+                     mk_tuple [mk_empty t_vid_list; mk_empty intset_t]) @@
+              mk_var D.my_peers.id in
+  create_ds "send_corrective_ip_map" ~init ~e t
+
 let send_corrective_fns c =
   (* for a given lhs map which we just changed, find all statements containing the
    * same map on the rhs. This is crude, but should be enough for a first try *)
-  let send_correctives m =
-    (* list of (trig,stmt) that have this m on the rhs *)
+  let send_correctives rmap =
+    (* list of (trig,stmt) that have this rmap on the rhs *)
     let trigs_stmts_with_matching_rhs_map =
         List.filter
-          (fun (trig, stmt_id) -> P.stmt_has_rhs_map c.p stmt_id m) @@
+          (fun (trig, stmt_id) -> P.stmt_has_rhs_map c.p stmt_id rmap) @@
           List.flatten @@
             P.for_all_trigs ~delete:c.gen_deletes c.p
               (fun trig ->
                 List.map (fun stmt -> trig, stmt) @@ P.stmts_of_t c.p trig) in
     (* turn the ocaml list into a literal k3 list *)
-    let trig_stmt_k3_list_nm = "nd_corr_"^P.map_name_of c.p m^"_list" in
+    let trig_stmt_k3_list_nm = "nd_corr_"^P.map_name_of c.p rmap^"_list" in
     let trig_stmt_k3_list =
       let t = wrap_tbag' [t_trig_id; t_stmt_id] in
       mk_global_val_init trig_stmt_k3_list_nm t @@
@@ -897,23 +914,15 @@ let send_corrective_fns c =
           trigs_stmts_with_matching_rhs_map
     in
     match trigs_stmts_with_matching_rhs_map with [] -> [] | _ ->
-    let map_ds = D.map_ds_of_id ~global:false c m ~vid:false in
+    let map_ds = D.map_ds_of_id ~global:false c rmap ~vid:false in
     let delta_tuples2 =
-      D.map_ds_of_id ~global:false ~vid:true c m ~name:"delta_tuples2" in
+      D.map_ds_of_id ~global:false ~vid:true c rmap ~name:"delta_tuples2" in
     (* rename vid to corrective_vid for differentiation *)
     let args' = (list_drop_end 1 D.nd_rcv_corr_args)@["corrective_vid", t_vid] in
     let args = args' @ ["delta_tuples", map_ds.t] in
     let sub_args = args' @ ["delta_tuples2", delta_tuples2.t; "vid_list", t_vid_list] in
-    let fn_nm = send_corrective_name_of_t c m in
+    let fn_nm = send_corrective_name_of_t c rmap in
     let sub_fn_nm stmt = fn_nm^"_"^soi stmt in
-    (* collection by ip *)
-    let result_ds =
-      let e = ["vids", t_vid_list; "t_indices", wrap_tset t_int] in
-      let t = wrap_tvector' @@ snd_many e in
-      create_ds "result_col" ~e t
-    in
-    let t_bitmap = wrap_tvector t_bool in
-    let acc_col_t = wrap_ttuple [t_bitmap; result_ds.t] in
 
     (* create sub functions for each stmt_id possible, to aid compilation *)
     let sub_fns =
@@ -922,73 +931,93 @@ let send_corrective_fns c =
           * tuples. Now we try to get some more for the lhs map *)
         let target_map = P.lhs_map_of_stmt c.p s in
         let key, _ = P.key_pat_from_bound c.p c.route_indices s target_map in
-        let pat_idx = P.get_shuffle_pat_idx c.p c.route_indices s target_map m in
-        let shuffle_fn = K3S.find_shuffle_nm c s m target_map in
+        let pat_idx = P.get_shuffle_pat_idx c.p c.route_indices s target_map rmap in
+        let shuffle_fn = K3S.find_shuffle_nm c s rmap target_map in
+        (* TODO: fix for query 4
+          let info = IntMap.find s c.freevar_info in
+        (* no bound variables are used for the lhs or rhs *)
+        let no_bound =
+          snd info.P.lmap_bound = [] && List.assoc rmap info.P.rmaps_bound = []
+        in*)
 
         mk_global_fn (sub_fn_nm s) sub_args
         [t_int] @@ (* return num of sends *)
+        mk_block [
+          (* clean the bitmap/collection *)
+          mk_iter_bitmap'
+             (mk_block [
+               mk_update_at_with send_corrective_ip_map.id
+                 (mk_var "ip") @@
+                 mk_lambda' send_corrective_ip_map.e @@
+                  mk_tuple @@ List.map mk_empty @@ snd_many send_corrective_ip_map.e;
+              ])
+             send_corrective_bitmap.id;
+          mk_set_all send_corrective_bitmap.id [mk_cfalse];
+
           (* TODO: if lvars have no impact, only shuffle once *)
-          mk_let ["ips_vids"]
-            (mk_agg
-              (mk_lambda2' ["acc_col", acc_col_t] ["vid", t_vid] @@
-                (* get bound vars from log so we can calculate shuffle *)
-                let args = D.args_of_t c t in
-                (if args <> [] then
-                  mk_let
-                    (fst_many @@ D.args_of_t c t)
-                    (mk_apply'
-                      (nd_log_get_bound_for t) [mk_var "vid"])
-                else id_fn) @@
-                mk_block [
-                  mk_apply' shuffle_fn @@
-                    key @ [mk_cint pat_idx; mk_cint (-1); mk_var "delta_tuples2"];
-                  mk_agg_bitmap'
-                    ["acc", acc_col_t]
-                    (mk_block [
-                      mk_insert_at ~path:[1] "acc" (mk_var "ip") [mk_ctrue];
-                      (* lookup indices *)
-                      mk_at_with' K3S.shuffle_results.id (mk_var "ip") @@
-                        mk_lambda' K3S.shuffle_results.e @@
-                          mk_update_at_with_block ~path:[2] "acc" (mk_var "ip") @@
-                            mk_lambda' result_ds.e @@
-                              mk_block [
-                                mk_insert "vids" [mk_var "vid"];
-                                (* insert indices into index set *)
-                                mk_let ["t_indices"]
-                                  (mk_agg
-                                    (mk_lambda2' ["acc", wrap_tset t_int] ["i", t_int] @@
-                                      mk_insert_block "acc" [mk_var "i"])
-                                    (mk_var "t_indices") @@
-                                    mk_var "indices") @@
-                                mk_tuple [mk_var "vids"; mk_var "t_indices"]
-                              ]
-                    ])
-                    (mk_var "acc_col") @@
-                    K3S.shuffle_bitmap.id
-                ])
-              (mk_tuple [mk_empty t_bitmap; mk_empty result_ds.t]) @@
-              mk_var "vid_list") @@
+          mk_iter
+            (mk_lambda' ["vid", t_vid] @@
+              (* get bound vars from log so we can calculate shuffle *)
+              let args = D.args_of_t c t in
+              (if args <> [] (* && not no_bound *) then
+                mk_let
+                  (fst_many @@ D.args_of_t c t)
+                  (mk_apply'
+                    (nd_log_get_bound_for t) [mk_var "vid"])
+              else id_fn) @@
+              mk_block [
+                mk_apply' shuffle_fn @@
+                  key @ [mk_cint pat_idx; mk_cint (-1); mk_var "delta_tuples2"];
+                mk_iter_bitmap'
+                  (mk_block [
+                    mk_insert_at send_corrective_bitmap.id (mk_var "ip") [mk_ctrue];
+                    (* lookup indices *)
+                    mk_at_with' K3S.shuffle_results.id (mk_var "ip") @@
+                      mk_lambda' K3S.shuffle_results.e @@
+                        mk_update_at_with send_corrective_ip_map.id
+                          (mk_var "ip") @@
+                          mk_lambda' send_corrective_ip_map.e @@
+                            mk_block [
+                              mk_insert "vids" [mk_var "vid"];
+                              (* insert indices into index set *)
+                              mk_let ["t_indices"]
+                                (mk_agg
+                                  (mk_lambda2' ["acc", wrap_tset t_int] ["i", t_int] @@
+                                    mk_insert_block "acc" [mk_var "i"])
+                                  (mk_var "t_indices") @@
+                                  mk_var "indices") @@
+                              mk_tuple [mk_var "vids"; mk_var "t_indices"]
+                            ]
+                  ])
+                  K3S.shuffle_bitmap.id
+              ]) @@
+              mk_var "vid_list"
+          ;
             (* send to each ip, and count up the msgs *)
-            let rcv_trig = rcv_corrective_name_of_t c t s m in
-            mk_agg_bitmap
+            let rcv_trig = rcv_corrective_name_of_t c t s rmap in
+            mk_agg_bitmap'
               ["count", t_int]
               (* lookup ip in vector *)
-              (mk_at_with (mk_snd @@ mk_var "ips_vids") (mk_var "ip") @@
-                mk_lambda' result_ds.e @@
-                  mk_block [
-                    (* buffer header *)
-                    buffer_for_send rcv_trig "ip" @@
-                      (ids_to_vars @@ fst_many orig_vals) @ [mk_var "corrective_vid"];
-                    (* buffer tuples from indices *)
-                    buffer_tuples_from_idxs ~drop_vid:true
-                      delta_tuples2.id delta_tuples2.t (map_ds.id^"_map") (mk_var "t_indices");
-                    (* buffer vids *)
-                    mk_iter (mk_lambda'' ["vid", t_vid] @@
-                      buffer_for_send ~wr_bitmap:false "vids" "ip" [mk_var "vid"]) @@ mk_var "vids";
-                    mk_add (mk_var "count") @@ mk_cint 1
-                  ])
+              (mk_block [
+                  mk_at_with' send_corrective_ip_map.id (mk_var "ip") @@
+                    mk_lambda' send_corrective_ip_map.e @@
+                      mk_block [
+                        (* buffer header *)
+                        buffer_for_send rcv_trig "ip" @@
+                          (ids_to_vars @@ fst_many orig_vals) @ [mk_var "corrective_vid"];
+                        (* buffer tuples from indices *)
+                        buffer_tuples_from_idxs ~drop_vid:true delta_tuples2.id delta_tuples2.t
+                          (map_ds.id^"_map") (mk_var "t_indices");
+                        (* buffer vids *)
+                        mk_iter (mk_lambda'' ["vid", t_vid] @@
+                          buffer_for_send ~wr_bitmap:false "vids" "ip" [mk_var "vid"]) @@
+                          mk_var "vids";
+                      ];
+                  mk_add (mk_var "count") @@ mk_cint 1
+                ])
               (mk_cint 0) @@
-          mk_fst @@ mk_var "ips_vids")
+              send_corrective_bitmap.id
+        ])
         trigs_stmts_with_matching_rhs_map
     in
     let fn = mk_global_fn fn_nm args
@@ -1985,6 +2014,8 @@ let declare_global_vars c ast =
      send_put_ip_map c.p;
      send_fetch_bitmap;
      send_fetch_ip_map;
+     send_corrective_bitmap;
+     send_corrective_ip_map;
      sw_total_demux_ctr;
      sw_sent_demux_ctr;
      sw_demux_poly_queue;
