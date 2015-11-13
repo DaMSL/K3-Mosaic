@@ -572,7 +572,6 @@ let route_opt_init c =
       let value_e = ["lr_vals", wrap_ttuple @@ [t_int] @ List.map (const t_int) rmaps] in
       mk_global_fn nm unit_arg [] @@
         mk_block [
-        mk_apply' "print" [mk_cstring @@ route_opt_init_nm s];
         mk_iter
           (mk_lambda' init_ds.e @@
            mk_let ["newval"]
