@@ -1159,7 +1159,7 @@ let nd_update_stmt_cntr_corr_map =
  * and filtering all reads <= this min_vid. *)
 let nd_exec_buffered_fetches_nm = "nd_exec_buffered_fetches"
 let nd_exec_buffered_fetches c =
-  let t_info = P.for_all_trigs c.p
+  let t_info = P.for_all_trigs ~delete:c.gen_deletes c.p
     (fun t -> t, D.args_of_t c t, P.stmts_with_rhs_maps_in_t c.p t) in
   let t_info = List.filter (fun (_,_,x) -> x <> []) t_info in
   if t_info = [] then [] else singleton @@
