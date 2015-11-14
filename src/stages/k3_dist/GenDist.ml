@@ -1787,8 +1787,10 @@ let sw_event_driver_trig c =
                             mk_if (mk_var "do_insert")
                               (mk_apply' (send_fetch_name_of_t @@ "insert_"^nm) @@
                                 ids_to_vars @@ "vid":: (fst_many @@ tl id_ts)) @@
+                              if c.gen_deletes then
                                mk_apply' (send_fetch_name_of_t @@ "delete_"^nm) @@
-                                ids_to_vars @@ "vid":: (fst_many @@ tl id_ts))
+                                ids_to_vars @@ "vid":: (fst_many @@ tl id_ts)
+                              else mk_cunit)
                       acc_code)
                   (mk_error "mismatch on event id") @@
                   List.filter (function (_,(nm,e,_)) ->
