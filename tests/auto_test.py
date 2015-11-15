@@ -66,6 +66,7 @@ def run():
     parser.add_argument('--debug', default=False, action='store_true', help="Debug output")
     parser.add_argument('--no-opt-route', default=False, action='store_true', dest='no_opt_route', help='disable optimized routing')
     parser.add_argument('--dump-info', default=False, action='store_true', help="Output for route generation")
+    parser.add_argument('--trace', default=False, dest='do_trace', action='store_true', help="Tracing")
 
     args = parser.parse_args()
 
@@ -127,6 +128,7 @@ def run():
                                 map_overlap_factor=args.map_overlap_factor,
                                 batch_size=args.batch_size,
                                 no_opt_route=args.no_opt_route,
+                                do_trace=args.do_trace,
                                 dump_info=args.dump_info
                                 )
         # check if a test failed

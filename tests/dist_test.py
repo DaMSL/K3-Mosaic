@@ -44,6 +44,7 @@ def run(target_file,
         batch_size=None,
         debug=False,
         no_opt_route=False,
+        do_trace=False,
         dump_info=False
         ):
 
@@ -218,6 +219,8 @@ def run(target_file,
                 j["sw_poly_batch_size"] = batch_size
             if not correctives:
                 j["corrective_mode"] = False
+            if do_trace:
+                j["do_tracing"] = True
             # set csv indices
             for i in range(num_switches):
                 node_j = {}
