@@ -715,6 +715,11 @@ let nd_send_push_stmt_map_trig c s_rhs_lhs t =
       let map_real  = D.map_ds_of_id c rmap ~global:true in
       let map_pat = D.pat_of_ds map_real ~flatten:true ~expr:(mk_var "tuple") in
       let rcv_trig = rcv_push_name_of_t c t s rmap in
+      (* for special routing *)
+      let bound_params = insert_index_fst @@ bound_params_of_stmt c s in
+      let idx_rmaps = insert_index_snd ~first:1 @@ P.nonempty_rmaps_of_stmt c.p s in
+      let single_rmap = List.length idx_rmaps = 1 in
+      let swallow_f f e = if single_rmap then e else f e in
       (* a pattern mapping real map with delta vars *)
       mk_global_fn
         (send_push_name_of_t c t s rmap)
@@ -751,11 +756,9 @@ let nd_send_push_stmt_map_trig c s_rhs_lhs t =
           (* for optimized route, we need to add the destination of the nodes
            * from the route_opt_push data structure to the shuffle bitmap
            * for sending empty messages *)
-          (if special_route_stmt c s then singleton @@
-            let bound_params = insert_index_fst @@ bound_params_of_stmt c s in
-            let idx_rmaps = insert_index_snd ~first:1 @@ P.rhs_maps_of_stmt c.p s in
-            let single_rmap = List.length idx_rmaps = 1 in
-            let swallow_f f e = if single_rmap then e else f e in
+          (if special_route_stmt c s &&
+            (* to handle empty key maps on the rhs *)
+            List.mem_assoc rmap idx_rmaps then singleton @@
             mk_let ["buckets"]
               (List.fold_left (fun acc_code (idx, (id, (m, m_idx))) ->
                   mk_let ["bucket_"^soi idx]
