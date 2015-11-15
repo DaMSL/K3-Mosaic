@@ -857,12 +857,12 @@ List.map
 (* list of potential corrective maps.
  * the potential corrective maps and the potential read/write conflicts.
  * Inserts and Deletes really have 2 different graphs, so we return both *)
-let maps_potential_corrective p =
-  let ts = P.get_trig_list ~sys_init:false ~delete:true ~corrective:true p in
+let maps_potential_corrective c =
+  let ts = P.get_trig_list ~sys_init:false ~delete:c.gen_deletes ~corrective:false c.p in
   let get_maps f = ListAsSet.uniq |- List.flatten |- List.map f |- List.flatten
-    |- List.map (P.stmts_of_t p) in
-  let lhs_maps = get_maps (singleton |- P.lhs_map_of_stmt p) in
-  let rhs_maps = get_maps (P.rhs_maps_of_stmt p) in
+    |- List.map (P.stmts_of_t c.p) in
+  let lhs_maps = get_maps (singleton |- P.lhs_map_of_stmt c.p) in
+  let rhs_maps = get_maps (P.rhs_maps_of_stmt c.p) in
   let intersect_maps ts = ListAsSet.inter (lhs_maps ts) (rhs_maps ts) in
   intersect_maps ts
 
@@ -902,11 +902,9 @@ let send_corrective_fns c =
     (* list of (trig,stmt) that have this rmap on the rhs *)
     let trigs_stmts_with_matching_rhs_map =
         List.filter
-          (fun (trig, stmt_id) -> P.stmt_has_rhs_map c.p stmt_id rmap) @@
-          List.flatten @@
-            P.for_all_trigs ~delete:c.gen_deletes c.p
-              (fun trig ->
-                List.map (fun stmt -> trig, stmt) @@ P.stmts_of_t c.p trig) in
+          (fun (t, s) -> P.stmt_has_rhs_map c.p s rmap) @@
+          P.get_trig_stmt_list c.p ~delete:c.gen_deletes
+    in
     (* turn the ocaml list into a literal k3 list *)
     let trig_stmt_k3_list_nm = "nd_corr_"^P.map_name_of c.p rmap^"_list" in
     let trig_stmt_k3_list =
@@ -1358,7 +1356,7 @@ let nd_do_complete_fns c ast trig_name corr_maps =
         (* for profiling: mark with tag for do_complete done *)
         prof_property prof_tag_do_complete_done @@ ProfLatency("vid", soi stmt_id);
 
-        if c.gen_correctives && List.exists ((=) lmap) corr_maps
+        if c.gen_correctives && List.mem lmap corr_maps
         then
           let send_corr_t = send_corrective_name_of_t c lmap in
           mk_let ["sent_msgs"]
@@ -2112,7 +2110,6 @@ let gen_dist ?(gen_deletes=true)
       (* collect all map access patterns for creating indexed maps *)
       gen_deletes;
       gen_correctives;
-      corr_maps = maps_potential_corrective p;
       sys_init;
       stream_file;
       agenda_map;
@@ -2123,8 +2120,10 @@ let gen_dist ?(gen_deletes=true)
       freevar_info = IntMap.of_list @@ List.map (fun s -> s, P.free_bound_vars p s) @@ P.get_stmt_list p;
       use_opt_route;
     } in
+  let c = {c with corr_maps = maps_potential_corrective c} in
   (* to get poly_tags, we need c *)
-  let c = { c with poly_tags = D.calc_poly_tags c; event_tags = D.calc_event_tags c} in
+  let c = { c with poly_tags = D.calc_poly_tags c;
+                   event_tags = D.calc_event_tags c} in
   (* regular trigs then insert entries into shuffle fn table *)
   let proto_semi_trigs, proto_funcs, proto_funcs2 =
     (fun (x,y,z) -> let a = List.flatten in a x, a y, a z) @@ list_unzip3 @@
