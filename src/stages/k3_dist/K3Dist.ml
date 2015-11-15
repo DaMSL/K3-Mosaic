@@ -1358,25 +1358,29 @@ let if_trace print_e e =
   ]
 
 (* for debugging *)
-let do_trace nm l e =
-  let hack = mk_apply' "string_of_int" [mk_cint 0] in
+let do_trace nm l expr =
+  let elem (s, t, e) =
+    let e' = match t.typ with
+      | TInt -> mk_apply' "string_of_int" [e]
+      | TString -> e
+      | TFloat -> mk_apply' "string_of_float" [e]
+      | _ -> failwith "unhandled type"
+    in
+    mk_concat (mk_cstring @@ s ^ ": ") e'
+  in
+  let (s, t, e), rest = hd l, tl l in
+  let first = "In "^nm^": "^s, t, e in
+  let rest, last = list_split (-1) rest in
   if_trace
     (mk_print @@
-     mk_concat (mk_concat (mk_cstring @@ "In "^nm^": ") hack) @@
      List.fold_right
-      (fun (s, t, e) acc ->
-        let e' = match t.typ with
-          | TInt -> mk_apply' "string_of_int" [e]
-          | TString -> e
-          | TFloat -> mk_apply' "string_of_float" [e]
-          | _ -> failwith "unhandled type"
-        in
-        let v  = mk_concat (mk_cstring @@ s ^ ": ") e' in
+      (fun p acc ->
+        let v = elem p in
         let v' = mk_concat v @@ mk_cstring ", " in
         mk_concat v' acc)
-      l @@
-     hack)
-    e
+      (first::rest) @@
+     elem @@ hd last)
+    expr
 
 (* index used to handle multiple switches for csv source *)
 let sw_csv_index = create_ds "sw_csv_index" @@ t_int
