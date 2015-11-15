@@ -474,3 +474,6 @@ val mk_check_tag' : ?unique:bool -> int -> expr_t -> expr_t
 val mk_if_tag : int -> expr_t -> expr_t -> expr_t -> expr_t -> expr_t -> expr_t
 val mk_if_tag' : ?unique:bool -> int -> expr_t -> expr_t -> expr_t
 val mk_if_poly_end_ny : ?unique:bool -> expr_t -> expr_t -> expr_t
+
+val mk_concat : expr_t -> expr_t -> expr_t
+val mk_print : expr_t -> expr_t

@@ -1348,6 +1348,35 @@ let profile_funcs_stop =
 let prof_num_empty = create_ds "prof_num_empty" @@ mut t_int
 let prof_num_full  = create_ds "prof_num_full" @@ mut t_int
 
+(* print out statements about tags, vids etc *)
+let do_tracing = create_ds "do_tracing" t_bool
+
+let if_trace print_e e =
+  mk_block [
+    mk_if (mk_var do_tracing.id) print_e mk_cunit;
+    e
+  ]
+
+(* for debugging *)
+let do_trace nm l e =
+  if_trace
+    (mk_print @@
+     mk_concat (mk_cstring @@ "In "^nm^": ") @@
+     List.fold_right
+      (fun (s, t, e) acc ->
+        let e' = match t.typ with
+          | TInt -> mk_apply' "string_of_int" [e]
+          | TString -> e
+          | TFloat -> mk_apply' "string_of_float" [e]
+          | _ -> failwith "unhandled type"
+        in
+        let v = mk_concat (mk_cstring @@ s ^ ": ") e' in
+        let v' = mk_concat v @@ mk_cstring ", " in
+        mk_concat v' acc)
+      l @@
+     mk_cstring "")
+    e
+
 (* index used to handle multiple switches for csv source *)
 let sw_csv_index = create_ds "sw_csv_index" @@ t_int
 
@@ -1409,6 +1438,7 @@ let global_vars c dict =
       nd_stmt_cntrs_per_map;
       nd_lmap_of_stmt_id c;
       do_profiling;
+      do_tracing;
       use_unique_poly;
       prof_num_empty;
       prof_num_full;

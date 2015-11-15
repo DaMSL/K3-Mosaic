@@ -1027,3 +1027,6 @@ let mk_if_tag' ?(unique=false) tag e e2 =
 let mk_if_poly_end_ny ?(unique=false) smaller larger =
   let idx, pq = if unique then "uidx", "upoly_queue" else "idx", "poly_queue" in
   mk_if (mk_lt (mk_var idx) @@ mk_size @@ mk_var pq) smaller larger
+
+let mk_concat e e' = mk_apply' "concat" [e;e']
+let mk_print e = mk_apply' "print" [e]

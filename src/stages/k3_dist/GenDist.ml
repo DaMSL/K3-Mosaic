@@ -1622,6 +1622,12 @@ let nd_trig_sub_handler c t =
     (* dispatch the sub triggers *)
     mk_poly_iter' @@
       mk_lambda'' (p_tag @ p_idx @ p_off) @@
+        (* print trace if requested *)
+        do_trace fn_nm
+                 ["vid", t_int, mk_var "vid";
+                  "tag", t_int, mk_var "tag";
+                  "idx", t_int, mk_var "idx";
+                  "offset", t_int, mk_var "offset"] @@
         List.fold_left
           (fun acc_code (itag, (stag, typ, id_ts)) -> match typ with
              (* only match with the sub-triggers *)
@@ -1655,6 +1661,11 @@ let trig_dispatcher c =
     mk_let ["idx"; "offset"] (mk_tuple [mk_cint 0; mk_cint 0]) @@
     mk_ignore @@ mk_poly_iter' @@
       mk_lambda'' ["tag", t_int; "idx", t_int; "offset", t_int] @@
+        (* print trace if requested *)
+        do_trace trig_dispatcher_nm
+                 ["tag", t_int, mk_var "tag";
+                  "idx", t_int, mk_var "idx";
+                  "offset", t_int, mk_var "offset"] @@
         List.fold_left
           (fun acc_code (itag, (stag, typ, id_ts)) -> match typ with
              | Trig has_ds ->
@@ -1735,7 +1746,6 @@ let nd_trig_dispatcher_trig c =
       (mk_block [
           (* unpack the polyqueue *)
           mk_poly_unpack (mk_var "poly_queue");
-
           mk_assign nd_dispatcher_last_num.id @@ mk_var nd_dispatcher_next_num.id;
           mk_incr nd_dispatcher_next_num.id;
           mk_apply' trig_dispatcher_nm [mk_ctrue; mk_var "poly_queue"];
@@ -1776,6 +1786,12 @@ let sw_event_driver_trig c =
           mk_let ["next_vid"]
             (mk_poly_fold
               (mk_lambda4' ["vid", t_int] p_tag p_idx p_off @@
+                (* print trace if requested *)
+               do_trace sw_event_driver_trig_nm
+                  ["vid", t_int, mk_var "vid";
+                   "tag", t_int, mk_var "tag";
+                   "idx", t_int, mk_var "idx";
+                   "offset", t_int, mk_var "offset"] @@
                 mk_block [
                   (* clear the trig send bitmaps for each event *)
                   mk_set_all D.send_trig_header_bitmap.id [mk_cfalse] ;
@@ -1924,6 +1940,11 @@ let sw_demux_poly c =
   mk_let ["acc"]
     (mk_poly_fold
       (mk_lambda4' ["acc", D.poly_queue.t] p_tag p_idx p_off @@
+       (* tracing if requested *)
+       do_trace sw_demux_poly_nm
+         ["tag", t_int, mk_var "tag";
+          "idx", t_int, mk_var "idx";
+          "offset", t_int, mk_var "offset"] @@
        List.fold_left (fun acc_code t ->
            let wide_args = ("do_insert", t_bool)::P.args_of_t c.p t in
            let args = ("do_insert", t_bool)::args_of_t c t in
