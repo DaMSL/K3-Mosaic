@@ -149,3 +149,6 @@ val special_route_stmt : ?info:freevar_info -> prog_data_t -> stmt_id_t -> bool
 
 (* dump info about the program *)
 val dump_info : prog_data_t -> string
+
+val nonempty_rmaps_of_stmt : prog_data_t -> stmt_id_t -> map_id_t list
+

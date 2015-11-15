@@ -620,7 +620,7 @@ let route_opt_init_ds c =
   List.map (fun s -> s,
       let nm = "route_opt_init_s"^soi s in
       let bound = D.bound_params_of_stmt c s in
-      let rmaps = P.rhs_maps_of_stmt c.p s in
+      let rmaps = P.nonempty_rmaps_of_stmt c.p s in
       (* number of unique bound buckets *)
       let key_t = wrap_ttuple @@ List.map (const t_int) bound in
       (* lmap buckets, rmap buckets *)
@@ -660,7 +660,7 @@ let route_opt_push_ds c =
       let bound = D.bound_params_of_stmt c s in
       (* unique bound buckets *)
       let key_t = wrap_ttuple @@ List.map (const t_int) bound in
-      let rmap_num = List.length @@ rhs_maps_of_stmt c.p s in
+      let rmap_num = List.length @@ nonempty_rmaps_of_stmt c.p s in
       (* value is tuple of (node, destinations) pairs for every rmap *)
       let e = ["bound", key_t; route_opt_push_inner_id, (route_opt_push_inner rmap_num).t] in
       create_ds ~e nm @@ wrap_tmap @@ t_of_e e) @@
@@ -675,7 +675,7 @@ let route_opt_init c =
   List.map (fun s ->
       let init_ds = IntMap.find s init_dss in
       let out_ds  = IntMap.find s out_dss in
-      let rmaps = P.rhs_maps_of_stmt c.p s in
+      let rmaps = P.nonempty_rmaps_of_stmt c.p s in
       let single_rmap = List.length rmaps = 1 in
       let swallow_f f e = if single_rmap then e else f e in
       (* rmaps with access indices *)
@@ -744,7 +744,7 @@ let route_opt_push_init c =
   List.map (fun s ->
       let init_ds = IntMap.find s init_dss in
       let out_ds  = IntMap.find s out_dss in
-      let rmaps = P.rhs_maps_of_stmt c.p s in
+      let rmaps = P.nonempty_rmaps_of_stmt c.p s in
       (* rmaps with access indices *)
       let idx_rmaps = insert_index_fst ~first:1 rmaps in
       let lmap = P.lhs_map_of_stmt c.p s in
