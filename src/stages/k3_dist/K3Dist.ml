@@ -1359,9 +1359,10 @@ let if_trace print_e e =
 
 (* for debugging *)
 let do_trace nm l e =
+  let hack = mk_apply' "string_of_int" [mk_cint 0] in
   if_trace
     (mk_print @@
-     mk_concat (mk_cstring @@ "In "^nm^": ") @@
+     mk_concat (mk_concat (mk_cstring @@ "In "^nm^": ") hack) @@
      List.fold_right
       (fun (s, t, e) acc ->
         let e' = match t.typ with
@@ -1370,11 +1371,11 @@ let do_trace nm l e =
           | TFloat -> mk_apply' "string_of_float" [e]
           | _ -> failwith "unhandled type"
         in
-        let v = mk_concat (mk_cstring @@ s ^ ": ") e' in
+        let v  = mk_concat (mk_cstring @@ s ^ ": ") e' in
         let v' = mk_concat v @@ mk_cstring ", " in
         mk_concat v' acc)
       l @@
-     mk_cstring "")
+     hack)
     e
 
 (* index used to handle multiple switches for csv source *)
