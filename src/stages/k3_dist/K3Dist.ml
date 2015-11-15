@@ -1365,7 +1365,7 @@ let special_route_stmts c =
   List.filter (special_route_stmt c) @@
     P.get_stmt_list c.p
 
-(* list the bound arguments within the statement *)
+(* list the bound arguments within the statement in trig arg order *)
 let bound_params_of_stmt c s =
   let info = IntMap.find s c.freevar_info in
   let lmap = fst @@ info.lmap_bound in
@@ -1373,8 +1373,14 @@ let bound_params_of_stmt c s =
   let rbound = List.flatten @@ List.map (fun (rmap, l) -> List.map (fun (id, n) -> id, (rmap, n)) l) @@
     info.rmaps_bound in
   let bound = lbound @ rbound in
-  let bound_uniq = nub @@ fst_many bound in
-  List.map (fun b -> b, List.assoc b bound) bound_uniq
+  (* rearrange the bound args in trig order *)
+  let trig_args = fst_many @@ P.args_of_t c.p @@ P.trigger_of_stmt c.p s in
+  List.fold_right (fun arg acc ->
+      try
+        (List.find ((=) arg |- fst) bound)::acc
+      with Not_found -> acc)
+    trig_args
+    []
 
 (* tags for profiling and post-analysis *)
 let do_profiling = create_ds ~init:mk_cfalse "do_profiling" @@ mut t_bool
