@@ -497,5 +497,5 @@ s_free_infos s_bound_infos
 (* get only the rmaps of s that have keys *)
 let nonempty_rmaps_of_stmt p s =
   let rmaps = rhs_maps_of_stmt p s in
-  List.filter (fun m -> map_types_no_val_for p m = []) rmaps
+  List.filter (fun m -> map_types_no_val_for p m <> []) rmaps
 
