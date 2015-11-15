@@ -477,3 +477,6 @@ val mk_if_poly_end_ny : ?unique:bool -> expr_t -> expr_t -> expr_t
 
 val mk_concat : expr_t -> expr_t -> expr_t
 val mk_print : expr_t -> expr_t
+val mk_mod : expr_t -> expr_t -> expr_t
+val mk_divi : expr_t -> expr_t -> expr_t
+val mk_divf : expr_t -> expr_t -> expr_t

@@ -1030,3 +1030,6 @@ let mk_if_poly_end_ny ?(unique=false) smaller larger =
 
 let mk_concat e e' = mk_apply' "concat" [e;e']
 let mk_print e = mk_apply' "print" [e]
+let mk_mod e e' = mk_apply' "mod" [e; e']
+let mk_divi e e' = mk_apply' "divi"  [e; e']
+let mk_divf e e' = mk_apply' "divf"  [e; e']
