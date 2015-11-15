@@ -282,8 +282,12 @@ let nd_filter_corrective_list =
     (mk_lambda' nd_log_master.e @@ mk_var "stmt_id")
     (mk_lambda' trig_stmt_list.e @@ mk_var "t_stmt_id")
     (mk_lambda3' ["acc", nd_log_master.t] nd_log_master.e trig_stmt_list.e @@
-     mk_insert_block "acc"
-       [mk_var "stmt_id"; mk_filter_gt (mk_var "vid_set") [mk_var "request_vid"]]) @@
+     mk_let ["filtered_vids"]
+       (mk_filter_gt (mk_var "vid_set") [mk_var "request_vid"]) @@
+     mk_if (mk_eq (mk_size @@ mk_var "filtered_vids") @@ mk_cint 0)
+       (* if the set is empty, don't add anything *)
+       (mk_var "acc") @@
+        mk_insert_block "acc" [mk_var "stmt_id"; mk_var "filtered_vids"]) @@
     mk_empty nd_log_master.t
 
 (**** protocol code ****)
