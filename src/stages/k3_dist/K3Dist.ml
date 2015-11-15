@@ -1245,115 +1245,6 @@ module Bindings = struct
 
 end
 
-(*** partition map ***)
-(* this is a naive partition map *)
-let pmap_factor = 64
-let pmap_buckets = create_ds ~init:(mk_cint pmap_factor) "pmap_buckets" @@ t_int
-
-(* overlap factor to determine how much overlap we have between the maps *)
-let pmap_overlap_factor = create_ds ~init:(mk_cfloat 1.) "pmap_overlap_factor" t_float
-
-(* shifts for maps, so that each one covers a fraction of the clock *)
-(* vector of map_id -> [shift, max] *)
-let pmap_shifts_id = "pmap_shifts"
-let pmap_shifts_e = ["map_shift", t_int; "map_max", t_int]
-  (* per map: amount of shift and scaled maximum *)
-let pmap_shifts p =
-  let ms = List.sort (-) @@ P.get_map_list p in
-  let t = wrap_tvector' @@ snd_many pmap_shifts_e in
-  (* prune out the maps on which we only do point access. We don't care
-     about sys_init because that's done once so it's cheap *)
-  let route_pats = Bindings.route_access_patterns ~sys_init:false p in
-  let only_point_access =
-    Hashtbl.fold (fun m ism acc ->
-        let num_vars = List.length @@ P.map_types_no_val_for p m in
-        let set = fst @@ IntSetMap.choose ism in
-        (* check that we have no bindings but the full binding *)
-        if IntSetMap.cardinal ism = 1 && IntSet.cardinal set = num_vars then
-          IntSet.add m acc else acc)
-      route_pats
-      IntSet.empty in
-  (* the relevant maps: the ones that have slices *)
-  let div_maps =
-    insert_index_snd @@ List.filter (fun m -> not @@ IntSet.mem m only_point_access) ms in
-  let num_div_maps = List.length div_maps in
-  let init =
-    let info_ds =
-      let e = ["min_map_size", t_int; "map_index", t_int; "point_access", t_bool] in
-      create_ds ~e "info" @@ wrap_tvector' @@ snd_many e
-    in
-    (* data structure with information *)
-    mk_let ["info"]
-      (k3_container_of_list info_ds.t @@
-        [mk_tuple [mk_cint 0; mk_cint 0; mk_ctrue]] @
-        List.map (fun m ->
-            (* check if we have a bigger than maximum map dimension *)
-            let dims = List.length @@ P.map_types_no_val_for p m in
-            (* we know that we have to partition every dimension *)
-            let min_size = iof @@ 2. ** (foi dims) in
-            let point_access = IntSet.mem m only_point_access in
-            mk_tuple [mk_cint min_size;
-                      mk_cint (try List.assoc m div_maps with Not_found -> 0);
-                      mk_cbool point_access])
-         ms) @@
-    (* process the information *)
-    mk_map (mk_lambda' info_ds.e @@
-          mk_let ["map_size"]
-            (mk_if (mk_gt (mk_var "min_map_size") @@ mk_var pmap_buckets.id)
-               (mk_var "min_map_size") @@ mk_var pmap_buckets.id) @@
-          (* for point access maps, keep it simple *)
-          mk_if (mk_var "point_access") (mk_tuple [mk_cint 0; mk_var "map_size"]) @@
-          (* shift size from overlap factor *)
-          mk_let ["map_shift_size"]
-            (mk_apply' "int_of_float"
-               [mk_mult (mk_sub (mk_cfloat 1.) @@ mk_var pmap_overlap_factor.id) @@
-                        mk_var "map_size"]) @@
-          (* add up all the shifts plus the map size - a shift, which is the same
-              as reducing the num_div_maps by 1 *)
-          mk_let ["map_scaled_size"]
-            (mk_add (mk_var "map_size") @@ mk_mult (mk_cint @@ num_div_maps - 1) @@ mk_var "map_shift_size") @@
-          (* the shift of this particular map, and the total size *)
-          mk_tuple [mk_mult (mk_var "map_index") @@ mk_var "map_shift_size";
-                    mk_var "map_scaled_size"]) @@
-        mk_var "info"
-  in
-  create_ds ~init ~e:pmap_shifts_e pmap_shifts_id t
-
-let pmap_input p =
-  let t = wrap_tlist' [t_string; wrap_tlist' [t_int; t_int]] in
-  let init =
-    let maps = P.for_all_maps p @@ fun m -> m, insert_index_fst @@ P.map_types_no_val_for p m in
-    let maps = List.filter (fun (_,l) -> l <> []) maps in
-    let maps = List.map (fun (m, l) ->
-      (* 2: make sure we use at least 2 in partitioning so we don't have replication *)
-      let initial_list = list_map (fun (i,_) -> i, 2) l in
-      let init_val = List.fold_left (fun acc (_,v) -> acc * v) 1 initial_list in
-      let rec loop l prod =
-        if prod >= pmap_factor then l
-        else
-          (* keep increasing the dimension sizes until we meet our goal *)
-          let prod', l' =
-            mapfold (fun (acc_prod:int) (dim, size) ->
-              if acc_prod >= pmap_factor then acc_prod, (dim, size)
-              else acc_prod * 2, (dim, size * 2) (* double the size of this dimension *)
-            ) prod l
-          in
-          loop l' prod'
-      in
-      let l = loop initial_list init_val in
-      P.map_name_of p m, l) maps
-    in
-    (* translate to k3 *)
-    let maps =
-      List.map (fun (m, l) ->
-          let l = List.map (fun (i,j) ->
-              mk_tuple [mk_cint i; mk_apply' "divi" [mk_var "pmap_buckets"; mk_cint @@ pmap_factor/j]]) l in
-          mk_tuple [mk_cstring m; k3_container_of_list (wrap_tlist' [t_int; t_int]) l]) maps
-    in
-    k3_container_of_list t maps
-  in
-  create_ds "pmap_input" ~init t
-
 (* use pre-generated info for determining if we can use special routing *)
 let special_route_stmt c s =
   if c.use_opt_route then
@@ -1486,10 +1377,6 @@ let global_vars c dict =
       jobs;  (* inserted dynamically by interpreter *)
       master_addr;
       timer_addr;
-      pmap_buckets;
-      pmap_overlap_factor;
-      pmap_shifts c.p;
-      pmap_input c.p;
       nodes;
       switches;
       num_peers;
