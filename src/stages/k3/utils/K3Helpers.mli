@@ -435,6 +435,7 @@ val mk_bool_ds : ?init:expr_t -> id_t -> data_struct
 val mk_barrier :
   ?args:(id_t * type_t) list ->
   ?pre:expr_t list ->
+  ?reusable:bool ->
   id_t ->
   ctr:id_t ->
   total:expr_t ->
@@ -480,3 +481,4 @@ val mk_print : expr_t -> expr_t
 val mk_mod : expr_t -> expr_t -> expr_t
 val mk_divi : expr_t -> expr_t -> expr_t
 val mk_divf : expr_t -> expr_t -> expr_t
+val mk_soi: expr_t -> expr_t

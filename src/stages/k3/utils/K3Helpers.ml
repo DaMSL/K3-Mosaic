@@ -929,13 +929,15 @@ let mk_counter nm = create_ds nm (mut t_int) ~init:(mk_cint 0)
 
 let mk_bool_ds ?(init=mk_cfalse) nm = create_ds nm (mut t_bool) ~init
 
-let mk_barrier ?(args=unit_arg) ?(pre=[]) nm ~ctr ~total ~after =
+let mk_barrier ?(args=unit_arg) ?(pre=[]) ?(reusable=false) nm ~ctr ~total ~after =
   mk_code_sink' nm args [] @@
     mk_block @@ pre @ [
       mk_incr ctr;
       mk_if (mk_eq (mk_var ctr) total)
         (* continue with switch init *)
-        after
+        (mk_block @@
+          (if reusable then [mk_assign ctr @@ mk_cint 0] else []) @
+          [after])
         mk_cunit
     ]
 
@@ -1033,3 +1035,4 @@ let mk_print e = mk_apply' "print" [e]
 let mk_mod e e' = mk_apply' "mod" [e; e']
 let mk_divi e e' = mk_apply' "divi"  [e; e']
 let mk_divf e e' = mk_apply' "divf"  [e; e']
+let mk_soi e = mk_apply' "string_of_int" [e]

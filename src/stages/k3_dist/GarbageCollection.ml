@@ -94,7 +94,7 @@ let ms_gc_done_barrier_ctr = mk_counter "ms_gc_done_barrier_ctr"
 
 (* NOTE: gc barrier is only on nodes *)
 let ms_gc_done_barrier_nm = "ms_gc_done_barrier"
-let ms_gc_done_barrier c = mk_barrier ms_gc_done_barrier_nm ~ctr:ms_gc_done_barrier_ctr.id
+let ms_gc_done_barrier c = mk_barrier ~reusable:true ms_gc_done_barrier_nm ~ctr:ms_gc_done_barrier_ctr.id
   ~total:(mk_var D.num_nodes.id)
   ~after:(* tell timer to ping us in X seconds *)
          (mk_send T.tm_insert_timer_trig_nm (mk_var D.timer_addr.id)
@@ -169,9 +169,10 @@ let do_gc_trig c =
     mk_block @@
       (* (mk_apply' "print_env" mk_cunit) :: (* debug *) *)
       [prof_property prof_tag_gc_start @@ ProfLatency("gc_vid", "-1");
-       mk_apply' "print" [mk_cstring "Starting GC"]] @
+       mk_print @@ mk_concat (mk_cstring "Starting GC @ ") @@ mk_soi (mk_var "gc_vid")] @
        (List.map (fun ds -> mk_apply' ("do_gc_"^ds.id) [mk_var min_vid]) @@ ds_to_gc c) @
        [prof_property prof_tag_gc_done @@ ProfLatency("gc_vid", "-1");
+        mk_print @@ mk_concat (mk_cstring "Ending GC @ ") @@ mk_soi (mk_var "gc_vid");
         D.mk_send_master ms_gc_done_barrier_nm]
 
 (* master switch trigger to receive and add to the max vid map *)

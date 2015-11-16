@@ -17,6 +17,9 @@ let timer_trigs _ = [D.ms_send_gc_req_nm]
 let num_of_trig c trig =
   List.assoc trig @@ insert_index_snd @@ timer_trigs c
 
+(* in ms *)
+let tm_resolution = create_ds ~init:(mk_cint 1000) "tm_resolution" @@ t_int
+
 (* We really want to use an ordered map, but we currently don't have that *)
 let tm_timer_list =
   let e = ["time", t_int; "trig_id", t_int; "addr", t_addr] in
@@ -51,7 +54,7 @@ let tm_check_time_trig c =
         (* else, wake ourselves in 1 second *)
         mk_block [
           mk_send_me tm_check_time_trig_nm;
-          mk_apply' "sleep" [mk_cint 1000];
+          mk_apply' "sleep" [mk_var tm_resolution.id];
         ]
 
 (* trig to insert a timer into the timer list. Send time from now *)
@@ -74,8 +77,9 @@ let tm_insert_timer_trig =
     mk_send_me tm_check_time_trig_nm;
   ]
 
-let global_vars = [
-  decl_global tm_timer_list;
+let global_vars = List.map decl_global [
+  tm_resolution;
+  tm_timer_list;
 ]
 
 let triggers c = [
