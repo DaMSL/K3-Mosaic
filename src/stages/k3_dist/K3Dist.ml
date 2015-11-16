@@ -1350,6 +1350,10 @@ let prof_num_full  = create_ds "prof_num_full" @@ mut t_int
 
 (* print out statements about tags, vids etc *)
 let do_tracing = create_ds "do_tracing" t_bool
+(* for trace, use only 2 letters *)
+let trace_trig t =
+  str_take 2 @@
+  str_drop (String.length "insert_") t
 
 let if_trace print_e e =
   mk_block [
@@ -1359,26 +1363,22 @@ let if_trace print_e e =
 
 (* for debugging *)
 let do_trace nm l expr =
-  let elem (s, t, e) =
-    let e' = match t.typ with
+  let elem (t, e) = match t.typ with
       | TInt -> mk_apply' "string_of_int" [e]
       | TString -> e
       | TFloat -> mk_apply' "string_of_float" [e]
       | _ -> failwith "unhandled type"
-    in
-    mk_concat (mk_cstring @@ s ^ ": ") e'
   in
-  let (s, t, e), rest = hd l, tl l in
-  let first = "In "^nm^": "^s, t, e in
-  let rest, last = list_split (-1) rest in
+  let rest, last = list_split (-1) l in
   if_trace
     (mk_print @@
+     mk_concat (mk_cstring @@ nm^" ") @@
      List.fold_right
       (fun p acc ->
-        let v = elem p in
-        let v' = mk_concat v @@ mk_cstring ", " in
+        let v  = elem p in
+        let v' = mk_concat v @@ mk_cstring " " in
         mk_concat v' acc)
-      (first::rest) @@
+      rest @@
      elem @@ hd last)
     expr
 

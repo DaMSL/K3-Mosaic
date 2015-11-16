@@ -1578,6 +1578,10 @@ let nd_handle_uniq_poly c =
   mk_let ["idx"; "offset"] (mk_tuple [mk_cint 0; mk_cint 0]) @@
   mk_ignore @@ mk_poly_iter' @@
     mk_lambda'' (p_tag @ p_idx @ p_off) @@
+      do_trace "nhu"
+                [t_int, mk_var "tag";
+                 t_int, mk_var "idx";
+                 t_int, mk_var "offset"] @@
       List.fold_left (fun acc_code (tag, buf, m) ->
         let map_ds = map_ds_of_id ~global:true c m in
         let tup_ds = map_ds_of_id ~global:false ~vid:true c m in
@@ -1623,11 +1627,11 @@ let nd_trig_sub_handler c t =
     mk_poly_iter' @@
       mk_lambda'' (p_tag @ p_idx @ p_off) @@
         (* print trace if requested *)
-        do_trace fn_nm
-                 ["vid", t_int, mk_var "vid";
-                  "tag", t_int, mk_var "tag";
-                  "idx", t_int, mk_var "idx";
-                  "offset", t_int, mk_var "offset"] @@
+        do_trace ("ntsh"^trace_trig t)
+                 [t_int, mk_var "vid";
+                  t_int, mk_var "tag";
+                  t_int, mk_var "idx";
+                  t_int, mk_var "offset"] @@
         List.fold_left
           (fun acc_code (itag, (stag, typ, id_ts)) -> match typ with
              (* only match with the sub-triggers *)
@@ -1662,10 +1666,10 @@ let trig_dispatcher c =
     mk_ignore @@ mk_poly_iter' @@
       mk_lambda'' ["tag", t_int; "idx", t_int; "offset", t_int] @@
         (* print trace if requested *)
-        do_trace trig_dispatcher_nm
-                 ["tag", t_int, mk_var "tag";
-                  "idx", t_int, mk_var "idx";
-                  "offset", t_int, mk_var "offset"] @@
+        do_trace "td"
+                 [t_int, mk_var "tag";
+                  t_int, mk_var "idx";
+                  t_int, mk_var "offset"] @@
         List.fold_left
           (fun acc_code (itag, (stag, typ, id_ts)) -> match typ with
              | Trig has_ds ->
@@ -1787,11 +1791,11 @@ let sw_event_driver_trig c =
             (mk_poly_fold
               (mk_lambda4' ["vid", t_int] p_tag p_idx p_off @@
                 (* print trace if requested *)
-               do_trace sw_event_driver_trig_nm
-                  ["vid", t_int, mk_var "vid";
-                   "tag", t_int, mk_var "tag";
-                   "idx", t_int, mk_var "idx";
-                   "offset", t_int, mk_var "offset"] @@
+               do_trace "sed"
+                  [t_int, mk_var "vid";
+                   t_int, mk_var "tag";
+                   t_int, mk_var "idx";
+                   t_int, mk_var "offset"] @@
                 mk_block [
                   (* clear the trig send bitmaps for each event *)
                   mk_set_all D.send_trig_header_bitmap.id [mk_cfalse] ;
@@ -1941,10 +1945,10 @@ let sw_demux_poly c =
     (mk_poly_fold
       (mk_lambda4' ["acc", D.poly_queue.t] p_tag p_idx p_off @@
        (* tracing if requested *)
-       do_trace sw_demux_poly_nm
-         ["tag", t_int, mk_var "tag";
-          "idx", t_int, mk_var "idx";
-          "offset", t_int, mk_var "offset"] @@
+       do_trace "demux"
+         [t_int, mk_var "tag";
+          t_int, mk_var "idx";
+          t_int, mk_var "offset"] @@
        List.fold_left (fun acc_code t ->
            let wide_args = ("do_insert", t_bool)::P.args_of_t c.p t in
            let args = ("do_insert", t_bool)::args_of_t c t in
