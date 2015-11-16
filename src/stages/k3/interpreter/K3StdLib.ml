@@ -413,13 +413,13 @@ let () = add_fn "print_env"
     Log.log (lazy (string_of_env ~accessed_only:false ~skip_empty:false e)) `Debug;
     e, VTemp VUnit)
 
-(* dummy functions for *)
-let () = add_fn "jemallocStart"
-let () = add_fn "jemallocStop"
-let () = add_fn "pcmStart"
-let () = add_fn "pcmStop"
-let () = add_fn "tcmallocStart"
-let () = add_fn "tcmallocStop"
+(* dummy functions *)
+let () =
+  add_fn "jemallocStart";
+  add_fn "jemallocStop";
+  add_fn "vmapStart" ~args:["addr", t_addr];
+  add_fn "vmapDump";
+  add_fn "vmapStop"
 
 (* shutdown - dummy here. implemented in Runtime *)
 let () = add_fn "haltEngine"

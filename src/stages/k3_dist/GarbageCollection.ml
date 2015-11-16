@@ -169,9 +169,11 @@ let do_gc_trig c =
     mk_block @@
       (* (mk_apply' "print_env" mk_cunit) :: (* debug *) *)
       [prof_property prof_tag_gc_start @@ ProfLatency("gc_vid", "-1");
+       mk_apply' "vmapDump" [];
        mk_print @@ mk_concat (mk_cstring "Starting GC @ ") @@ mk_soi (mk_var "gc_vid")] @
        (List.map (fun ds -> mk_apply' ("do_gc_"^ds.id) [mk_var min_vid]) @@ ds_to_gc c) @
        [prof_property prof_tag_gc_done @@ ProfLatency("gc_vid", "-1");
+        mk_apply' "vmapDump" [];
         mk_print @@ mk_concat (mk_cstring "Ending GC @ ") @@ mk_soi (mk_var "gc_vid");
         D.mk_send_master ms_gc_done_barrier_nm]
 
