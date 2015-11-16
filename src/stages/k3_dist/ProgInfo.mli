@@ -13,12 +13,30 @@ type trig_id_t = int
 type trig_name_t = string
 type map_id_t = int
 type map_var_binding_t = id_t * int
-type stmt_data_t =
-    stmt_id_t * trig_id_t * map_id_t * map_var_binding_t list *
-    (map_id_t * map_var_binding_t list) list
-type trig_data_t =
-    trig_id_t * string * (id_t * type_t) list * stmt_id_t list
-type map_data_t = map_id_t * string * type_t list
+type stmt_data_t
+  (* stmt_id, trig_id, lhs_map, lhs_map_binding, rhs_maps_with_bindings, update/replace *)
+  = {stmt: stmt_id_t;
+     trig: trig_id_t;
+     lmap: map_id_t;
+     lmap_binds: map_var_binding_t list;
+     rmap_binds: (map_id_t * map_var_binding_t list) list;
+     is_update: bool
+    }
+
+type trig_data_t
+  (* trig_id, name, bound_args, stmts *)
+  = {trig: trig_id_t;
+     trig_nm:string;
+     args: (id_t * type_t) list;
+     stmts: stmt_id_t list;
+    }
+
+  (* map_id, map_name, parameters *)
+type map_data_t =
+  {map: map_id_t;
+   map_nm: string;
+   map_types: type_t list;
+  }
 type prog_data_t = trig_data_t list * stmt_data_t list * map_data_t list
 
 (* Stringification *)

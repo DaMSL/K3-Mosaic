@@ -1143,7 +1143,8 @@ module Bindings = struct
     for_all_trigs ~sys_init ~corrective:true ~delete:true p @@ fun trig ->
       let t_args = fst_many @@ P.args_of_t p trig in
       let ss = List.map (find_stmt p) @@ stmts_of_t p trig in
-      List.iter (fun (s,_,lmap,lbinds,rbinds) -> f s t_args lmap lbinds rbinds) ss
+      List.iter (fun s ->
+          f s.stmt t_args s.P.lmap s.lmap_binds s.rmap_binds) ss
 
   let get_idx t_args binds =
     (* only count bound variabls *)
