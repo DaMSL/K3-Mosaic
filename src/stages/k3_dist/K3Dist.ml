@@ -1283,10 +1283,13 @@ let prof_tag_buffered_push    = 3
 let prof_tag_push_done        = 4
 let prof_tag_do_complete_done = 5
 let prof_tag_corr_done        = 6
-let prof_tag_push_cnts        = 7
-let prof_tag_push_decr        = 8
-let prof_tag_fetch_route      = 9
-let prof_tag_send_put         = 10
+let prof_tag_corr_send        = 7
+let prof_tag_push_cnts        = 8
+let prof_tag_push_decr        = 9
+let prof_tag_fetch_route      = 10
+let prof_tag_send_put         = 11
+let prof_tag_gc_start         = 12
+let prof_tag_gc_done          = 13
 
 (* @t_s_id: trig or stmt id *)
 type prof_event =

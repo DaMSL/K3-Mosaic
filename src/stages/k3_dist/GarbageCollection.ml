@@ -98,7 +98,9 @@ let ms_gc_done_barrier c = mk_barrier ms_gc_done_barrier_nm ~ctr:ms_gc_done_barr
   ~total:(mk_var D.num_nodes.id)
   ~after:(* tell timer to ping us in X seconds *)
          (mk_send T.tm_insert_timer_trig_nm (mk_var D.timer_addr.id)
-           [mk_var ms_gc_interval.id; mk_cint @@ T.num_of_trig c D.ms_send_gc_req_nm; G.me_var])
+            [mk_var ms_gc_interval.id;
+             mk_cint @@ T.num_of_trig c D.ms_send_gc_req_nm;
+             G.me_var])
 
 (* data structures needing gc *)
 let ds_to_gc c =
@@ -166,9 +168,11 @@ let do_gc_trig c =
   mk_code_sink' do_gc_nm [min_vid, t_vid] [] @@
     mk_block @@
       (* (mk_apply' "print_env" mk_cunit) :: (* debug *) *)
-      (mk_apply' "print" [mk_cstring "Starting GC"]) ::
-      (List.map (fun ds -> mk_apply' ("do_gc_"^ds.id) [mk_var min_vid]) @@ ds_to_gc c) @
-      [D.mk_send_master ms_gc_done_barrier_nm]
+      [prof_property prof_tag_gc_start @@ ProfLatency("gc_vid", "-1");
+       mk_apply' "print" [mk_cstring "Starting GC"]] @
+       (List.map (fun ds -> mk_apply' ("do_gc_"^ds.id) [mk_var min_vid]) @@ ds_to_gc c) @
+       [prof_property prof_tag_gc_done @@ ProfLatency("gc_vid", "-1");
+        D.mk_send_master ms_gc_done_barrier_nm]
 
 (* master switch trigger to receive and add to the max vid map *)
 let ms_rcv_gc_vid_nm = "ms_rcv_gc_vid"

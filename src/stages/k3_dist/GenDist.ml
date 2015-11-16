@@ -1047,29 +1047,34 @@ let send_corrective_fns c =
         (mk_map (mk_lambda' (ds_e map_ds) @@ mk_tuple @@
                   (mk_var g_min_vid.id)::(ids_to_vars' @@ ds_e map_ds)) @@
           mk_var "delta_tuples") @@
-      mk_agg
-        (mk_lambda2'
-          ["acc_count", t_int] ["stmt_id", t_stmt_id; "vid_set", t_vid_sortedset] @@
-          mk_let ["vid_list"]
-            (mk_agg
-              (mk_lambda2' ["vid_acc", t_vid_list] ["v", t_vid] @@
-                mk_insert_block "vid_acc" [mk_var "v"])
-              (mk_empty t_vid_list) @@
-              mk_var "vid_set")
-          (List.fold_left
-            (* loop over all possible read map matches *)
-            (fun acc_code (_, s) ->
-              mk_if (* if match, send data *)
-                (mk_eq (mk_var "stmt_id") @@ mk_cint s)
-                (* call the specific function for this statement *)
-                (mk_add (mk_var "acc_count") @@
-                  mk_apply' (sub_fn_nm s) @@ ids_to_vars' sub_args)
-                acc_code)
-            (mk_var "acc_count") (* base case *)
-            trigs_stmts_with_matching_rhs_map))
-            (* base number of msgs *)
-          (mk_cint 0) @@
-          mk_var "corrective_list")
+      mk_let ["count"]
+        (mk_agg
+          (mk_lambda2'
+            ["acc_count", t_int] ["stmt_id", t_stmt_id; "vid_set", t_vid_sortedset] @@
+            mk_let ["vid_list"]
+              (mk_agg
+                (mk_lambda2' ["vid_acc", t_vid_list] ["v", t_vid] @@
+                  mk_insert_block "vid_acc" [mk_var "v"])
+                (mk_empty t_vid_list) @@
+                mk_var "vid_set")
+            (List.fold_left
+              (* loop over all possible read map matches *)
+              (fun acc_code (_, s) ->
+                mk_if (* if match, send data *)
+                  (mk_eq (mk_var "stmt_id") @@ mk_cint s)
+                  (* call the specific function for this statement *)
+                  (mk_add (mk_var "acc_count") @@
+                    mk_apply' (sub_fn_nm s) @@ ids_to_vars' sub_args)
+                  acc_code)
+              (mk_var "acc_count") (* base case *)
+              trigs_stmts_with_matching_rhs_map))
+              (* base number of msgs *)
+            (mk_cint 0) @@
+            mk_var "corrective_list") @@
+       mk_block [
+         prof_property prof_tag_corr_send @@ ProfLatency("corrective_vid", "count");
+         mk_var "count"
+       ])
     in
     trig_stmt_k3_list :: sub_fns @ [fn]
   in
