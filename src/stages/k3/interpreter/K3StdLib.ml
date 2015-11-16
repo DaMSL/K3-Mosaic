@@ -397,6 +397,9 @@ let ret  = t_unit
 let fn e = e, VTemp VUnit
 let decl = wrap_tfunc (snd_many args) ret
 let _ = Hashtbl.add func_table name (decl, wrap_args args, fn)
+    
+(* sleep in us *)
+let () = add_fn "usleep" ~args:["us", t_int]
 
 (* builtin function for k3new routing *)
 let () =

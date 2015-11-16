@@ -1786,7 +1786,7 @@ let sw_event_driver_trig c =
 
           (* for debugging, sleep if we've been asked to *)
           mk_if (mk_neq (mk_var D.sw_event_driver_sleep.id) @@ mk_cint 0)
-            (mk_apply' "sleep" [mk_var D.sw_event_driver_sleep.id])
+            (mk_apply' "usleep" [mk_var D.sw_event_driver_sleep.id])
             mk_cunit;
           (* for profiling, save the vid and time *)
           prof_property prof_tag_pre_send_fetch @@ ProfLatency("vid", "-1");
