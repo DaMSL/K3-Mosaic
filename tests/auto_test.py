@@ -45,9 +45,9 @@ def run():
                         default=True, help="Run the interpreter")
     parser.add_argument('--workdir', action='store', type=str, dest='workdir',
                         default="temp", help="Directory to store work files")
-    parser.add_argument('--gc_interval', action='store',
+    parser.add_argument('--gc-interval', action='store',
                         default=20000, type=int, help="Change gc interval (ms)")
-    parser.add_argument('--msg_interval', action='store',
+    parser.add_argument('--msg-interval', action='store',
                         default=2, type=int, help="Change message interval (ms)")
     parser.add_argument('--no-log', action='store_false', dest='logging',
                         default=True, help="Disable logging")
