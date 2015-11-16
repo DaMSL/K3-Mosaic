@@ -1608,6 +1608,13 @@ sink mosaic_event_sink    : {etag: int, evid: int, pcomponent: int, t: int}     
 sink mosaic_msgcount_sink : {etag: int, evid: int, msgempty: int, msgfull: int} = file msgcountlog text csv
 sink mosaic_routelog_sink : {etag: int, evid: int, pcomponent: int, rkey: string, rrbucket: int, rrnode: int} = file routelog text csv
 
+declare peer_masters : collection {key: address, value: address} @Map
+
+control IfMachineMaster {
+  ?e => (peer_masters.lookup {key: me, value: me} (\\x -> ()) (\\r -> ((if me == r.value then ((print (atos me)); $.[e]) else ()))))
+     +> {}
+}
+
 declare rebatch : mut int = 0
 
 "^ string_of_program ~map_to_fold ~use_filemux ~safe_writes p' envs

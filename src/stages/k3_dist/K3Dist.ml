@@ -1328,16 +1328,12 @@ let prof_property ?(flush=false) (tag:int) event =
 (* calling all functions for profiling *)
 let profile_funcs_start =
   mk_block [
-    mk_apply' "jemallocStart" [];
-    mk_apply' "tcmallocStart" [];
-    mk_apply' "pcmStart" [];
+    U.add_annotation "IfMachineMaster" @@ mk_apply' "jemallocStart" [];
   ]
 
 let profile_funcs_stop =
   mk_block [
-    mk_apply' "jemallocStop" [];
-    mk_apply' "tcmallocStop" [];
-    mk_apply' "pcmStop" [];
+    U.add_annotation "IfMachineMaster" @@ mk_apply' "jemallocStop" [];
     prof_property ~flush:true (-1) @@ ProfLatency("-1", "-1");
     prof_property ~flush:true (-1) @@ ProfMsgCounts("-1", "-1", "-1");
     prof_property ~flush:true (-1) @@ ProfPushBarrier("-1", "-1", "-1");
