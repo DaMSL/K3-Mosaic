@@ -86,7 +86,7 @@ let nd_sys_init_barrier =
 let sw_sys_init_nm = "sw_"^D.sys_init
 let sw_sys_init c =
   mk_code_sink' sw_sys_init_nm unit_arg [] @@
-  mk_block [
+  mk_let_block ["batch_id"] (mk_cint 1) [
     D.clear_poly_queues c;
 
     mk_apply' (D.send_fetch_name_of_t D.sys_init) [sys_init_vid_k3];
