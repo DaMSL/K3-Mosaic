@@ -926,22 +926,6 @@ let clear_poly_queues c =
     mk_set_all upoly_queue_bitmap.id [mk_cfalse];
   ]
 
-let send_poly_queues =
-    (* send (move) the polyqueues *)
-    mk_iter_bitmap'
-      (* check if we have a upoly queue and act accordingly *)
-      (mk_if (mk_at' upoly_queue_bitmap.id @@ mk_var "ip")
-        (* move and delete the poly_queue and ship it out *)
-        (mk_let ["pq"]
-          (mk_delete_at poly_queues.id @@ mk_var "ip") @@
-          mk_let ["upq"]
-            (mk_delete_at upoly_queues.id @@ mk_var "ip") @@
-          mk_sendi trig_dispatcher_trig_unique_nm (mk_var "ip") [mk_tuple [mk_var "pq"; mk_var "upq"]])
-        (mk_let ["pq"]
-          (mk_delete_at poly_queues.id @@ mk_var "ip") @@
-        mk_sendi trig_dispatcher_trig_nm (mk_var "ip") [mk_var "pq"]))
-      poly_queue_bitmap.id
-
 
 (* we create tags for events, with the full width of said events plus insert/delete field *)
 let calc_event_tags c =
@@ -1309,6 +1293,12 @@ type prof_event =
                       (* vid nm, tag/stmt id, dest node idx, barrier count *)
       | ProfSendPut of string * string * string * string
 
+                      (* batch_id, ip,     poly *)
+      | ProfSendPoly of string * string * string
+
+                      (* batch_id, ip,      poly,    upoly *)
+      | ProfSendUPoly of string * string * string * string
+
 let prof_property ?(flush=false) (tag:int) event =
   let p = match event with
     | ProfLatency(vid_nm, t_s_id) ->
@@ -1325,6 +1315,12 @@ let prof_property ?(flush=false) (tag:int) event =
 
     | ProfSendPut(vid_nm, t_s_id, dest, barrier_count) ->
       sp "MosaicSendPut(lbl=[# mosaic], tl=[$ %d], ve=[$ %s], ce1=[$ %s], ce2=[$ %s], ce3=[$ %s])" tag vid_nm t_s_id dest barrier_count
+
+    | ProfSendPoly(vid_nm, ip, poly) ->
+      sp "MosaicSendPut(lbl=[# mosaic], = ce1=[$ %s], ce2=[$ %s], ce3=[$ %s])" vid_nm ip poly
+
+    | ProfSendUPoly(vid_nm, ip, poly, upoly) ->
+      sp "MosaicSendPut(lbl=[# mosaic], = ce1=[$ %s], ce2=[$ %s], ce3=[$ %s], ce4=[$ %s])" vid_nm ip poly upoly
   in
   let target_expr = if flush then mk_tuple ~force:true [U.add_property "Flush" mk_cunit] else mk_cunit in
   mk_if (mk_var do_profiling.id) (U.add_annotation p target_expr) mk_cunit
@@ -1345,10 +1341,37 @@ let profile_funcs_stop =
     prof_property ~flush:true (-1) @@ ProfPushBarrier("-1", "-1", "-1");
     prof_property ~flush:true (-1) @@ ProfFetchRoute("-1", "-1", "-1", "-1", "-1");
     prof_property ~flush:true (-1) @@ ProfSendPut("-1", "-1", "-1", "-1");
+    prof_property ~flush:true (-1) @@ ProfSendPoly("-1", "me", "empty_poly_queue");
+    prof_property ~flush:true (-1) @@ ProfSendUPoly("-1", "me", "empty_poly_queue", "empty_upoly_queue");
   ]
 
 let prof_num_empty = create_ds "prof_num_empty" @@ mut t_int
 let prof_num_full  = create_ds "prof_num_full" @@ mut t_int
+
+let send_poly_queues =
+    (* send (move) the polyqueues *)
+    mk_iter_bitmap'
+      (* check if we have a upoly queue and act accordingly *)
+      (mk_let ["ip_addr"]
+            (mk_apply' "addr_of_int" [mk_var "ip"]) @@
+        mk_if (mk_at' upoly_queue_bitmap.id @@ mk_var "ip")
+        (* move and delete the poly_queue and ship it out *)
+          (mk_let ["pq"]
+            (mk_delete_at poly_queues.id @@ mk_var "ip") @@
+          mk_let_block ["upq"]
+            (mk_delete_at upoly_queues.id @@ mk_var "ip")
+            [ prof_property 0 @@ ProfSendUPoly("batch_id", "ip_addr", "pq", "upq");
+              mk_send trig_dispatcher_trig_unique_nm (mk_var "ip_addr")
+                [mk_tuple [mk_var "batch_id"; mk_var "pq"; mk_var "upq"]]
+            ])
+        (mk_let_block ["pq"]
+          (mk_delete_at poly_queues.id @@ mk_var "ip")
+          [ prof_property 0 @@ ProfSendPoly("batch_id", "ip_addr", "pq");
+            mk_send trig_dispatcher_trig_nm (mk_var "ip_addr")
+              [mk_var "batch_id"; mk_var "pq"]
+          ]))
+      poly_queue_bitmap.id
+
 
 (* print out statements about tags, vids etc *)
 let do_tracing = create_ds "do_tracing" t_bool

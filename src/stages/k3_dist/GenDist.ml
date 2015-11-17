@@ -1662,7 +1662,7 @@ let nd_trig_sub_handler c t =
 let trig_dispatcher_nm = "trig_dispatcher"
 let trig_dispatcher c =
   mk_global_fn trig_dispatcher_nm
-    ["do_clear", t_bool; "poly_queue", poly_queue.t] [] @@
+    ["batch_id", t_vid; "do_clear", t_bool; "poly_queue", poly_queue.t] [] @@
   mk_block [
     mk_if (mk_var "do_clear") (clear_poly_queues c) mk_cunit;
 
@@ -1698,7 +1698,7 @@ let trig_dispatcher c =
 let trig_dispatcher_unique_nm = "trig_dispatcher_unique"
 let trig_dispatcher_unique c =
   mk_global_fn trig_dispatcher_unique_nm
-    ["poly_queue", poly_queue.t; "upoly_queue", upoly_queue.t] [] @@
+    ["batch_id", t_vid; "poly_queue", poly_queue.t; "upoly_queue", upoly_queue.t] [] @@
   mk_block [
     clear_poly_queues c;
 
@@ -1706,12 +1706,16 @@ let trig_dispatcher_unique c =
     mk_apply' nd_handle_uniq_poly_nm [mk_var "upoly_queue"];
 
     (* continue with regular dispatching *)
-    mk_apply' trig_dispatcher_nm [mk_cfalse; mk_var "poly_queue"];
+    mk_apply' trig_dispatcher_nm [mk_var "batch_id"; mk_cfalse; mk_var "poly_queue"];
   ]
+
+let nd_dispatcher_buf_inner =
+  let e = ["batch_id", t_vid; "poly_queue", poly_queue.t] in
+  create_ds ~e "inner_dispatcher_buf" @@ t_of_e e
 
 (* buffer for dispatcher to reorder poly msgs *)
 let nd_dispatcher_buf =
-  let e = ["num", t_int; "poly_queue", poly_queue.t] in
+  let e = ["num", t_int; "batch_info", nd_dispatcher_buf_inner.t] in
   create_ds "dispatcher_buf" ~e @@ wrap_tmap' @@ snd_many e
 
 (* remember the last number we've seen *)
@@ -1720,21 +1724,22 @@ let nd_dispatcher_last_num = create_ds "nd_dispatcher_last_num" @@ mut t_int
 (* trigger version of dispatcher. Called by other nodes *)
 let trig_dispatcher_trig c =
   mk_code_sink' trig_dispatcher_trig_nm
-    ["poly_queue", poly_queue.t] [] @@
+    ["batch_id", t_vid; "poly_queue", poly_queue.t] [] @@
   mk_block [
     (* unpack the polyqueues *)
     mk_poly_unpack (mk_var "poly_queue");
-    mk_apply' trig_dispatcher_nm [mk_ctrue; mk_var "poly_queue"]
+    mk_apply' trig_dispatcher_nm [mk_var "batch_id"; mk_ctrue; mk_var "poly_queue"]
   ]
 
 let trig_dispatcher_trig_unique c =
   mk_code_sink' trig_dispatcher_trig_unique_nm
-    ["poly_queue", poly_queue.t; "upoly_queue", upoly_queue.t] [] @@
+    ["batch_id", t_vid; "poly_queue", poly_queue.t; "upoly_queue", upoly_queue.t] [] @@
   mk_block [
     (* unpack the polyqueues *)
     mk_poly_unpack (mk_var "poly_queue");
     mk_poly_unpack (mk_var "upoly_queue");
-    mk_apply' trig_dispatcher_unique_nm [mk_var "poly_queue"; mk_var "upoly_queue"]
+    mk_apply' trig_dispatcher_unique_nm
+      [mk_var "batch_id"; mk_var "poly_queue"; mk_var "upoly_queue"]
   ]
 
 (* trig dispatcher from switch to node. accepts a msg number telling it how to order messages *)
@@ -1743,8 +1748,10 @@ let trig_dispatcher_trig_unique c =
 let nd_dispatcher_next_num = create_ds "nd_dispatcher_next_num" @@ mut t_int
 
 let nd_trig_dispatcher_trig c =
-  mk_code_sink' nd_trig_dispatcher_trig_nm ["num", t_int; "poly_queue", poly_queue.t] [] @@
-  mk_block [
+  mk_code_sink' nd_trig_dispatcher_trig_nm
+    ["num", t_int; "batch_data", nd_dispatcher_buf_inner.t] [] @@
+  mk_let_block ["batch_id"; "poly_queue"] (mk_var "batch_data")
+  [
     mk_assign nd_dispatcher_next_num.id @@
       (mk_if (mk_eq (mk_var nd_dispatcher_last_num.id) @@ mk_var g_max_int.id)
         (mk_cint 0) @@
@@ -1757,10 +1764,12 @@ let nd_trig_dispatcher_trig c =
           mk_poly_unpack (mk_var "poly_queue");
           mk_assign nd_dispatcher_last_num.id @@ mk_var nd_dispatcher_next_num.id;
           mk_incr nd_dispatcher_next_num.id;
-          mk_apply' trig_dispatcher_nm [mk_ctrue; mk_var "poly_queue"];
+          mk_apply' trig_dispatcher_nm
+            [mk_var "batch_id"; mk_ctrue; mk_var "poly_queue"];
        ]) @@
       (* else, stash the poly_queue in our buffer *)
-      mk_insert nd_dispatcher_buf.id [mk_var "num"; mk_var "poly_queue"]
+      mk_insert nd_dispatcher_buf.id
+        [mk_var "num"; mk_tuple [mk_var "batch_id"; mk_var "poly_queue"]]
     ;
     (* check if the next num is in the buffer *)
     mk_delete_with nd_dispatcher_buf.id [mk_var nd_dispatcher_next_num.id; mk_cunknown]
@@ -1848,9 +1857,14 @@ let sw_event_driver_trig c =
             mk_iter_bitmap'
               (* move and delete the poly_queue and ship it out with the vector clock num *)
                 (* pull out the poly queue *)
-                (mk_let ["pq"] (mk_delete_at poly_queues.id @@ mk_var "ip") @@
-                 D.mk_sendi nd_trig_dispatcher_trig_nm (mk_var "ip")
-                    [mk_at' "vector_clock" @@ mk_var "ip"; mk_var "pq"]
+                (mk_let ["ip_addr"] (mk_apply' "addr_of_int" [mk_var "ip"]) @@
+                 mk_let_block ["pq"] (mk_delete_at poly_queues.id @@ mk_var "ip")
+                   [
+                    prof_property 0 @@ ProfSendPoly("vid", "ip_addr", "pq");
+                    mk_send nd_trig_dispatcher_trig_nm (mk_var "ip_addr")
+                      [mk_at' "vector_clock" @@ mk_var "ip"; mk_tuple
+                         [mk_var "vid"; mk_var "pq"]]
+                   ]
                  ) @@
               D.poly_queue_bitmap.id;
             (* send the new (vid, vector clock). make sure it's after we use vector
