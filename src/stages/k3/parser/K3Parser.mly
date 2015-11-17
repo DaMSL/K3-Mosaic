@@ -677,7 +677,7 @@ mutation :
 
     | DELETE LPAREN anno_expr COMMA tuple RPAREN { mkexpr Delete [$3; $5] }
     | DELETE_PREFIX LPAREN anno_expr COMMA tuple RPAREN { mkexpr DeletePrefix [$3; $5] }
-    | DELETE_ALL_PREFIX LPAREN anno_expr RPAREN { mkexpr DeleteAllPrefix [$3] }
+    | DELETE_ALL_PREFIX LPAREN anno_expr COMMA anno_expr RPAREN { mkexpr DeleteAllPrefix [$3; $5] }
     | DELETE_AT LPAREN anno_expr COMMA anno_expr RPAREN { mkexpr DeleteAt [$3; $5] }
     | DELETE_WITH LPAREN anno_expr COMMA anno_expr COMMA anno_expr COMMA anno_expr RPAREN { mkexpr DeleteWith [$3; $5; $7; $9] }
     | POP LPAREN anno_expr RPAREN { mkexpr Pop [$3] }
