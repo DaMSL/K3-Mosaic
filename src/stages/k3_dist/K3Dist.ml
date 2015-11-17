@@ -1354,22 +1354,20 @@ let send_poly_queues =
     (* send (move) the polyqueues *)
     mk_iter_bitmap'
       (* check if we have a upoly queue and act accordingly *)
-      (mk_let ["ip_addr"]
-            (mk_apply' "addr_of_int" [mk_var "ip"]) @@
-        mk_if (mk_at' upoly_queue_bitmap.id @@ mk_var "ip")
+        (mk_if (mk_at' upoly_queue_bitmap.id @@ mk_var "ip")
         (* move and delete the poly_queue and ship it out *)
           (mk_let ["pq"]
             (mk_delete_at poly_queues.id @@ mk_var "ip") @@
           mk_let_block ["upq"]
             (mk_delete_at upoly_queues.id @@ mk_var "ip")
-            [ prof_property 0 @@ ProfSendUPoly("batch_id", "ip_addr", "pq", "upq");
-              mk_send trig_dispatcher_trig_unique_nm (mk_var "ip_addr")
+            [ prof_property 0 @@ ProfSendUPoly("batch_id", "ip", "pq", "upq");
+              mk_sendi trig_dispatcher_trig_unique_nm (mk_var "ip")
                 [mk_tuple [mk_var "batch_id"; mk_var "pq"; mk_var "upq"]]
             ])
         (mk_let_block ["pq"]
           (mk_delete_at poly_queues.id @@ mk_var "ip")
-          [ prof_property 0 @@ ProfSendPoly("batch_id", "ip_addr", "pq");
-            mk_send trig_dispatcher_trig_nm (mk_var "ip_addr")
+          [ prof_property 0 @@ ProfSendPoly("batch_id", "ip", "pq");
+            mk_sendi trig_dispatcher_trig_nm (mk_var "ip")
               [mk_var "batch_id"; mk_var "pq"]
           ]))
       poly_queue_bitmap.id

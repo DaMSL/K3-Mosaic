@@ -1857,11 +1857,10 @@ let sw_event_driver_trig c =
             mk_iter_bitmap'
               (* move and delete the poly_queue and ship it out with the vector clock num *)
                 (* pull out the poly queue *)
-                (mk_let ["ip_addr"] (mk_apply' "addr_of_int" [mk_var "ip"]) @@
-                 mk_let_block ["pq"] (mk_delete_at poly_queues.id @@ mk_var "ip")
+                (mk_let_block ["pq"] (mk_delete_at poly_queues.id @@ mk_var "ip")
                    [
-                    prof_property 0 @@ ProfSendPoly("vid", "ip_addr", "pq");
-                    mk_send nd_trig_dispatcher_trig_nm (mk_var "ip_addr")
+                    prof_property 0 @@ ProfSendPoly("vid", "ip", "pq");
+                    mk_sendi nd_trig_dispatcher_trig_nm (mk_var "ip")
                       [mk_at' "vector_clock" @@ mk_var "ip"; mk_tuple
                          [mk_var "vid"; mk_var "pq"]]
                    ]
