@@ -1317,10 +1317,10 @@ let prof_property ?(flush=false) (tag:int) event =
       sp "MosaicSendPut(lbl=[# mosaic], tl=[$ %d], ve=[$ %s], ce1=[$ %s], ce2=[$ %s], ce3=[$ %s])" tag vid_nm t_s_id dest barrier_count
 
     | ProfSendPoly(vid_nm, ip, poly) ->
-      sp "MosaicSendPut(lbl=[# mosaic], = ce1=[$ %s], ce2=[$ %s], ce3=[$ %s])" vid_nm ip poly
+      sp "MosaicSendPoly(lbl=[# mosaic], = ce1=[$ %s], ce2=[$ %s], ce3=[$ %s])" vid_nm ip poly
 
     | ProfSendUPoly(vid_nm, ip, poly, upoly) ->
-      sp "MosaicSendPut(lbl=[# mosaic], = ce1=[$ %s], ce2=[$ %s], ce3=[$ %s], ce4=[$ %s])" vid_nm ip poly upoly
+      sp "MosaicSendUPoly(lbl=[# mosaic], = ce1=[$ %s], ce2=[$ %s], ce3=[$ %s], ce4=[$ %s])" vid_nm ip poly upoly
   in
   let target_expr = if flush then mk_tuple ~force:true [U.add_property "Flush" mk_cunit] else mk_cunit in
   mk_if (mk_var do_profiling.id) (U.add_annotation p target_expr) mk_cunit
