@@ -23,6 +23,7 @@ module type S = sig
   val singleton : vid -> key -> 'a -> 'a t
   val remove : vid -> key -> 'a t -> 'a t
   val remove_prefix : vid -> key -> 'a t -> 'a t
+  val remove_all_prefix : vid -> 'a t -> 'a t
   val combine : 'a t -> 'a t -> 'a t
   val fold_all : (vid -> key -> 'a -> 'b -> 'b) -> 'a t -> 'b -> 'b
   val fold : vid -> (key -> 'a -> 'b -> 'b) -> 'a t -> 'b -> 'b
@@ -147,6 +148,26 @@ module Make(OrdVid: ICommon.OrderedKeyType)(OrdKey: ICommon.OrderedKeyType) = st
     | Some(t,v) -> VIDMap.add t v vidmap
     in
     HMap.add key vidmap m
+
+  let remove_all_prefix vid (m: 'a t) : 'a t =
+    HMap.filter (fun key vidmap ->
+        vidmap <> VIDMap.empty) @@
+    HMap.map (fun key vidmap ->
+      let keep = ref None in
+      let vidmap = VIDMap.filter (fun t v ->
+        (* keep last frontier vid value *)
+        if OrdVid.compare t vid <= 0 then begin
+          (match !keep with
+          | None    -> keep := Some(t,v)
+          | Some (t',v') -> if OrdVid.compare t t' > 0 then keep := Some(t, v));
+          false
+        end else true) vidmap
+      in
+      (* add back frontier value *)
+      match !keep with
+      | None      -> vidmap
+      | Some(t,v) -> VIDMap.add t v vidmap)
+      m
 
   let fold_all f m zero =
     HMap.fold (fun k vidm acc ->

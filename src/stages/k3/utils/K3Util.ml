@@ -115,6 +115,8 @@ let decompose_delete_at e = match tag_of_expr e, sub_tree e with
   DeleteAt, [col; n] -> col, n | _ -> failwith "not a DeleteAt"
 let decompose_delete_prefix e = match tag_of_expr e, sub_tree e with
   DeletePrefix, [x; e0] -> x, e0 | _ -> failwith "not a DeletePrefix"
+let decompose_delete_all_prefix e = match tag_of_expr e, sub_tree e with
+  DeleteAllPrefix, [x; e0] -> x, e0 | _ -> failwith "not a DeleteAllPrefix"
 let decompose_delete_with e = match tag_of_expr e, sub_tree e with
   DeleteWith, [col; e0; e1; e2] -> col, e0, e1, e2 | _ -> failwith "not a DeleteWith"
 let decompose_eq e = match tag_of_expr e, sub_tree e with

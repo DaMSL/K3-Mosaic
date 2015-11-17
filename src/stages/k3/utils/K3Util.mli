@@ -53,6 +53,7 @@ val decompose_caseof : expr_t -> expr_t * expr_t * expr_t
 val decompose_delete : expr_t -> expr_t * expr_t
 val decompose_delete_at : expr_t -> expr_t * expr_t
 val decompose_delete_prefix : expr_t -> expr_t * expr_t
+val decompose_delete_all_prefix : expr_t -> expr_t * expr_t
 val decompose_delete_with : expr_t -> expr_t * expr_t * expr_t * expr_t
 val decompose_eq : expr_t -> expr_t * expr_t
 val decompose_equijoin : expr_t -> expr_t * expr_t * expr_t * expr_t * expr_t * expr_t

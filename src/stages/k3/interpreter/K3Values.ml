@@ -789,6 +789,10 @@ let v_delete_prefix err_fn key col = match key, col with
   | VTuple[t;k;_], VVMap m -> VVMap(ValueVMap.remove_prefix t k m)
   | _ -> failwith "v_update_suffix: only supported on vmap"
 
+let v_delete_all_prefix err_fn vid col = match col with
+  | VVMap m -> VVMap(ValueVMap.remove_all_prefix vid m)
+  | _ -> failwith "v_update_suffix: only supported on vmap"
+
 let v_empty err_fn = function
   | VSet _         -> VSet(ValueSet.empty)
   | VBag _         -> VBag(ValueBag.empty)

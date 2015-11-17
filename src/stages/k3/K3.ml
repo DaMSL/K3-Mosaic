@@ -141,6 +141,7 @@ type expr_tag_t
     | UpdateSuffix      (* update values > vid *)
     | Delete
     | DeletePrefix      (* delete <= a certain vid. save frontier at vid *)
+    | DeleteAllPrefix   (* delete all values <= certain vid. save frontier at vid *)
     | DeleteAt          (* delete a vector entry and return that entry *)
     | DeleteWith        (* delete a ds entry and return that entry in a lambda if it exists *)
     | Pop

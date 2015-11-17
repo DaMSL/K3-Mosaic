@@ -388,6 +388,8 @@ let mk_pop ?(path=[]) id = mk_stree Pop [mk_id_path id path]
 (* first part of key contains the vid. Also contains dummy value *)
 let mk_delete_prefix ?(path=[]) id x = mk_stree DeletePrefix [mk_id_path id path; mk_tuple x]
 
+let mk_delete_all_prefix ?(path=[]) id x = mk_stree DeleteAllPrefix [mk_id_path id path; x]
+
 (* remove an entry from a data structure (map) *)
 let mk_delete_with ?(path=[]) id x lam_none lam_some =
   mk_stree DeleteWith [mk_id_path id path; mk_tuple x; lam_none; lam_some]

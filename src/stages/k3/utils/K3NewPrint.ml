@@ -1332,6 +1332,10 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
       (fun vid x -> lazy_expr c col <| apply_method_nocol c ~name:"erase_before" ~args:[vid;x]
         ~arg_info:[vid_out_arg; [], true])
 
+  | DeleteAllPrefix -> let col, vid = U.decompose_delete_all_prefix expr in
+      lazy_expr c col <| apply_method_nocol c ~name:"erase_all_before" ~args:[vid]
+        ~arg_info:[vid_out_arg]
+
   | ClearAll -> let col = U.decompose_clear_all expr in
       apply_method c ~col ~name:"clear" ~args:[KH.mk_cunit] ~arg_info:[def_a]
 

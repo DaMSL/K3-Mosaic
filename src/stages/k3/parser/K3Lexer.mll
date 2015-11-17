@@ -116,6 +116,7 @@ let _ =
         "update_at_with",  UPDATE_AT_WITH;
         "delete",  DELETE;
         "delete_prefix",  DELETE_PREFIX;
+        "delete_all_prefix",  DELETE_ALL_PREFIX;
         "delete_at", DELETE_AT;
         "delete_with", DELETE_WITH;
         "pop",  POP;

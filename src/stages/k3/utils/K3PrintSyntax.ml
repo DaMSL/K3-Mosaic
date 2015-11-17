@@ -235,7 +235,7 @@ let rec lazy_expr c expr =
   (* many instructions need to wrap the same way *)
   in let wrap e = match U.tag_of_expr expr with
     | Insert | InsertAt | SetAll | Extend | Iterate | Map | Filter | Flatten | Send | Delete | DeleteAt | DeleteWith | ClearAll
-    | Update | UpdateSuffix | UpsertWith | UpsertWithBefore | DeletePrefix | FilterOp _
+    | Update | UpdateSuffix | UpsertWith | UpsertWithBefore | DeletePrefix | DeleteAllPrefix | FilterOp _
     | Aggregate | AggregateV | GroupByAggregate | Assign | Combine
     | PolyIter | PolyFold | PolyFoldTag _ | PolyIterTag _ | PolyAt _ | PolyAtWith _ | PolyInsert _ | PolyTagAt | PolyUnpack | PolyReserve | PolySkip _ -> wrap_hov 2 e
     | _ -> id_fn e
@@ -399,6 +399,8 @@ let rec lazy_expr c expr =
     lps "delete_at" <| lazy_paren (expr_pair p)
   | DeletePrefix -> let e = U.decompose_delete_prefix expr in
     lps "delete_prefix" <| lazy_paren (expr_pair e)
+  | DeleteAllPrefix -> let e = U.decompose_delete_all_prefix expr in
+    lps "delete_all_prefix" <| lazy_paren (expr_pair e)
   | DeleteWith -> let e = U.decompose_delete_with expr in
     lps "delete_with" <| lazy_paren (expr_quad e)
   | Pop -> let e = U.decompose_pop expr in

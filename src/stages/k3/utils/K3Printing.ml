@@ -140,6 +140,7 @@ let string_of_tag_type = function
     | UpdateAtWith     -> "UpdateAtWith"
     | Delete           -> "Delete"
     | DeletePrefix     -> "DeletePrefix"
+    | DeleteAllPrefix  -> "DeleteAllPrefix"
     | DeleteAt         -> "DeleteAt"
     | DeleteWith       -> "DeleteWith"
     | Pop              -> "Pop"

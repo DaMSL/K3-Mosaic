@@ -109,6 +109,7 @@ let check_tag_arity tag children =
     | UpdateAtWith -> 3
     | Delete       -> 2
     | DeletePrefix -> 2
+    | DeleteAllPrefix -> 2
     | DeleteAt     -> 2
     | DeleteWith   -> 4
     | Pop -> 1
@@ -841,6 +842,14 @@ let rec deduce_expr_type ?(override=true) trig_env env tenv utexpr : expr_t =
             try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') in
           if not @@ is_tsorted tcol then t_erroru @@ not_sorted_collection tcol' else
           check_vmap_pat tcol telem told;
+          t_unit
+
+      | DeleteAllPrefix ->
+          let tcol', tvid = bind 0, bind 1 in
+          let tcol, _ =
+            try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') in
+          if not @@ is_tvmap tcol then t_erroru @@ TBad(tcol', "not a vmap") else
+          if not (tvid === t_vid) then t_erroru @@ TMismatch(tvid, t_vid, "vid") else
           t_unit
 
       | DeleteAt ->
