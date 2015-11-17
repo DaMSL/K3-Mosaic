@@ -124,23 +124,12 @@ let do_gc_fns c =
     match ds.map_id with
       | Some _ ->
           let map_deref = "map_d" in
-          let pat   = D.pat_of_ds ~vid_nm:min_vid ds in
           (* local bind to prevent bind-in-bind *)
           let do_bind = mk_bind (mk_var ds.id) map_deref in
           (* get frontier *)
           do_bind @@
-            mk_assign map_deref @@ U.add_property "Move" @@
-          mk_let ["frontier"]
-            (mk_slice_lt (mk_var map_deref) @@ vid_and_unknowns' pat) @@
-            (* delete all prefixes in ds. min_vid comes from pattern *)
-            mk_aggv
-              (mk_lambda3' ["acc", ds.t] ["_", t_vid] (ds_e ds) @@
-                mk_block [
-                  mk_delete_prefix "acc" @@ fst_many pat;
-                  mk_var "acc"]
-                )
-              (mk_var map_deref) @@
-              mk_var "frontier"
+            mk_delete_all_prefix map_deref @@ mk_var min_vid
+
       | None -> (* non-map ds *)
         (* look for any entry in the ds containing vid *)
         let vid = fst @@ List.find (r_match r_vid |- fst) (ds_e ds) in
