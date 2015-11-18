@@ -740,7 +740,7 @@ let rcv_corrective_name_of_t c t stmt_id map_id =
 let do_corrective_name_of_t c t stmt_id map_id =
   t^"_do_corrective_s"^soi stmt_id^"_m_"^P.map_name_of c.p map_id
 
-let rcv_do_trig_name_of_t t = "rcv_do_trig_"^t
+let nd_rcv_do_trig_name_of_t t = "nd_rcv_do_trig_"^t
 
 let sw_ack_rcv_trig_nm = "sw_ack_rcv"
 
@@ -751,7 +751,7 @@ let nd_rcv_corr_done_nm = "nd_rcv_corr_done"
 (* the trig header marks the args *)
 let trig_sub_handler_args c t = ["save_args", t_bool] @ args_of_t_with_v c t
 
-let rcv_do_trig_args c t = args_of_t_with_v c t
+let nd_rcv_do_trig_args c t = args_of_t_with_v c t
 
 (* slim trig header doesn't carry args *)
 let trig_slim_sub_handler_args c t = []
@@ -963,15 +963,15 @@ let calc_poly_tags c =
       let s_rhs_corr = List.filter (fun (s, map) -> List.mem map c.corr_maps) s_rhs in
       (* carries all the trig arguments + vid *)
       (trig_sub_handler_name_of_t t, Trig true, trig_sub_handler_args c t)::
-      (rcv_do_trig_name_of_t t, Trig false, rcv_do_trig_args c t)::
+      (nd_rcv_do_trig_name_of_t t, Trig false, nd_rcv_do_trig_args c t)::
       (* (trig_slim_sub_handler_name_of_t t, Trig true, trig_slim_sub_handler_args c t):: *)
-      (if s_rhs = [] then [] else [
+      (*(if s_rhs = [] then [] else [
         rcv_put_name_of_t t, SubTrig(true, t), nd_rcv_put_args_poly c t;
         rcv_fetch_name_of_t t, SubTrig(true, t), nd_rcv_fetch_args_poly c t]) @
       (* args for do completes without rhs maps *)
       (List.map (fun s ->
           do_complete_name_of_t t s^"_trig", SubTrig(false, t), nd_do_complete_trig_args_poly c t) @@
-        P.stmts_without_rhs_maps_in_t c.p t) @
+        P.stmts_without_rhs_maps_in_t c.p t) @ *)
       (* the types for nd_rcv_push. includes a separate, optional map component *)
       (* this isn't a dsTrig anymore since pushes are aggregated at the dispatcher *)
       (List.map (fun (s, m) ->
