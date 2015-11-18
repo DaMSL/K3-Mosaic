@@ -850,7 +850,7 @@ List.map
         (mk_apply' nd_check_stmt_cntr_index_nm @@
           [mk_var "vid"; mk_cint s; mk_cint @@ -1; mk_ctrue])
         (* apply local do_complete *)
-        (mk_let (fst_many @@ args_of_t_with_v c t)
+        (mk_let (fst_many @@ args_of_t c t)
            (mk_apply' (nd_log_get_bound_for t) [mk_var "vid"]) @@
           mk_apply' (do_complete_name_of_t t s) @@
           args_of_t_as_vars_with_v c t)
@@ -874,7 +874,7 @@ List.map
           (* @has_data:false *)
           [mk_var "vid"; mk_cint s; mk_cint @@ -1; mk_cfalse])
         (* apply local do_complete *)
-        (mk_let (fst_many @@ args_of_t_with_v c t)
+        (mk_let (fst_many @@ args_of_t c t)
            (mk_apply' (nd_log_get_bound_for t) [mk_var "vid"]) @@
           mk_apply' (do_complete_name_of_t t s) @@
           args_of_t_as_vars_with_v c t)
