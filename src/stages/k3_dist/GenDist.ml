@@ -360,15 +360,11 @@ let sw_send_do_trig_fn c t =
 
       (* send out the do_trig *)
       [
-        mk_let_block ["count"]
-          (mk_agg_bitmap' ["count", t_int]
+          (mk_iter_bitmap'
             (mk_block [
                 buffer_for_send rcv_do_trig_nm "ip" args;
-                mk_add (mk_cint 1) @@ mk_var "count"
               ])
-            (mk_cint 0)
-            send_do_trig_bitmap.id) @@
-        GC.sw_update_send ~n:(mk_var "count") ~vid_nm:"batch_id"
+            send_do_trig_bitmap.id)
       ]
 
 (* for fetches *)
@@ -1782,11 +1778,13 @@ let nd_trig_dispatcher_trig c =
           mk_assign nd_dispatcher_last_num.id @@ mk_var nd_dispatcher_next_num.id;
           mk_incr nd_dispatcher_next_num.id;
 
-          mk_apply' trig_dispatcher_nm
-            [mk_var "batch_id"; mk_ctrue; mk_var "poly_queue"];
+          clear_poly_queues c;
 
           (* acknowledge the batch id *)
           GC.nd_ack_send_code ~addr_nm:"sender_ip" ~vid_nm:"batch_id";
+
+          mk_apply' trig_dispatcher_nm
+            [mk_var "batch_id"; mk_cfalse; mk_var "poly_queue"];
        ]) @@
       (* else, stash the poly_queue in our buffer *)
       mk_insert nd_dispatcher_buf.id
@@ -1873,20 +1871,25 @@ let sw_event_driver_trig c =
                     mk_add (mk_cint 1) @@ mk_var "x")
               (mk_var "vector_clock")
               D.poly_queue_bitmap.id) @@
-          mk_block [
-            (* send (move) the outgoing polyqueues *)
-            mk_iter_bitmap'
-              (* move and delete the poly_queue and ship it out with the vector clock num *)
-                (* pull out the poly queue *)
-                (mk_let_block ["pq"] (mk_delete_at poly_queues.id @@ mk_var "ip")
-                   [
-                    prof_property 0 @@ ProfSendPoly("batch_id", "ip", "pq");
-                    mk_sendi nd_trig_dispatcher_trig_nm (mk_var "ip")
-                      [mk_at' "vector_clock" @@ mk_var "ip"; mk_tuple
-                         [mk_var D.me_int.id; mk_var "batch_id"; mk_var "pq"]]
-                   ]
-                 ) @@
-              D.poly_queue_bitmap.id;
+          (* send (move) the outgoing polyqueues *)
+          mk_let_block ["count"]
+              (mk_agg_bitmap' ["count", t_int]
+                (* move and delete the poly_queue and ship it out with the vector clock num *)
+                  (* pull out the poly queue *)
+                  (mk_let_block ["pq"] (mk_delete_at poly_queues.id @@ mk_var "ip")
+                    [
+                      prof_property 0 @@ ProfSendPoly("batch_id", "ip", "pq");
+                      mk_sendi nd_trig_dispatcher_trig_nm (mk_var "ip")
+                        [mk_at' "vector_clock" @@ mk_var "ip"; mk_tuple
+                          [mk_var D.me_int.id; mk_var "batch_id"; mk_var "pq"]];
+                      mk_add (mk_cint 1) @@ mk_var "count";
+                    ]
+                  )
+                (mk_cint 0)
+                D.poly_queue_bitmap.id) @@ [
+              mk_if_eq (mk_var "count") (mk_cint 0)
+                mk_cunit
+                (mk_block @@ GC.sw_update_send ~n:(mk_var "count") ~vid_nm:"batch_id");
             (* send the new (vid, vector clock). make sure it's after we use vector
                clock data so we can move *)
             mk_send sw_event_driver_trig_nm (mk_var TS.sw_next_switch_addr.id)
