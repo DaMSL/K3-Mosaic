@@ -777,8 +777,8 @@ let nd_rcv_fetch_args c t = nd_rcv_fetch_args_poly c t @ args_of_t_with_v c t
 let nd_do_complete_trig_args_poly c t = ["sender_ip", t_int; "ack", t_bool]
 let nd_do_complete_trig_args c t = nd_do_complete_trig_args_poly c t @ args_of_t_with_v c t
 
-let nd_rcv_push_args_poly c t = ["has_data", t_bool]
-let nd_rcv_push_args c t = nd_rcv_push_args_poly c t @ args_of_t_with_v c t
+let nd_rcv_push_args_poly c t = ["vid", t_vid]
+let nd_rcv_push_args c t = nd_rcv_push_args_poly c t
 
 (* for do_corrective:
  * original values commonly used to send back to original do_complete *)
@@ -975,7 +975,10 @@ let calc_poly_tags c =
       (* the types for nd_rcv_push. includes a separate, optional map component *)
       (* this isn't a dsTrig anymore since pushes are aggregated at the dispatcher *)
       (List.map (fun (s, m) ->
-          rcv_push_name_of_t c t s m, SubTrig(false, t), nd_rcv_push_args_poly c t)
+          rcv_push_name_of_t c t s m, Trig false, nd_rcv_push_args_poly c t)
+        s_rhs) @
+      (List.map (fun (s, m) ->
+          rcv_push_name_of_t c t s m^"_no_data", Trig false, nd_rcv_push_args_poly c t)
         s_rhs) @
       (* the types for rcv_push's maps *)
       (List.map (fun (s, m) ->

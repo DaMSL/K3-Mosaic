@@ -576,6 +576,8 @@ let nd_rcv_do_trig c s_rhs_lhs s_rhs t =
   * latency *)
   mk_global_fn
     (nd_rcv_do_trig_name_of_t t) (nd_rcv_do_trig_args c t) [] @@ mk_block @@
+        (* save the arguments *)
+        [mk_apply' (nd_log_write_for c t) @@ args_of_t_as_vars_with_v c t] @
       (* order is now critical here. do_complete_trig makes a trigger header
          without a save of arguments, while the others save the arguments.
          If a do_complete_trig appears first, it'll make the wrong header type
@@ -802,14 +804,15 @@ let nd_send_push_stmt_map_trig c s_rhs_lhs t =
           mk_iter_bitmap'
             (mk_at_with' K3S.shuffle_results.id (mk_var "ip") @@
               mk_lambda' K3S.shuffle_results.e @@
-                let t_args = args_of_t_as_vars_with_v c t in
                 mk_block [
                   (* send the trig header if needed. dont save args -- they should
                      already be saved. However, if we're a buffered push, we need to force
                      the trig header *)
-                  buffer_trig_header_if_needed ~other_cond:(mk_var "buffered") t "ip" t_args ~save_args:false;
                   (* send the push header *)
-                  buffer_for_send rcv_trig "ip" [mk_var "has_data"];
+                  mk_if (mk_var "has_data")
+                    (buffer_for_send rcv_trig "ip" [mk_var "vid"]) @@
+                    buffer_for_send (rcv_trig^"_no_data") "ip" [mk_var "vid"]
+                  ;
                   (* buffer the map data according to the indices *)
                   (* no need to write to the bitmap, since there will always be a
                      header to the same ip *)
@@ -832,7 +835,7 @@ let nd_send_push_stmt_map_trig c s_rhs_lhs t =
  * which can be done on a rmap to lmap with binding basis (like shuffles). Care must be
  * paid to the corrective updates in this case, which are statement-specific *)
 
-let nd_rcv_push_trig c s_rhs t =
+let nd_rcv_push_trig_has_data c s_rhs t =
 List.map
   (fun (s, m) ->
     let fn_name = rcv_push_name_of_t c t s m in
@@ -845,9 +848,35 @@ List.map
       (* update and check statment counters to see if we should send a do_complete *)
       mk_if
         (mk_apply' nd_check_stmt_cntr_index_nm @@
-          [mk_var "vid"; mk_cint s; mk_cint @@ -1; mk_var "has_data"])
+          [mk_var "vid"; mk_cint s; mk_cint @@ -1; mk_ctrue])
         (* apply local do_complete *)
-        (mk_apply' (do_complete_name_of_t t s) @@
+        (mk_let (fst_many @@ args_of_t_with_v c t)
+           (mk_apply' (nd_log_get_bound_for t) [mk_var "vid"]) @@
+          mk_apply' (do_complete_name_of_t t s) @@
+          args_of_t_as_vars_with_v c t)
+        mk_cunit
+    ])
+  s_rhs
+
+let nd_rcv_push_trig_no_data c s_rhs t =
+List.map
+  (fun (s, m) ->
+    let fn_name = (rcv_push_name_of_t c t s m)^"_no_data" in
+    mk_global_fn fn_name
+      (D.nd_rcv_push_args c t)
+      [] @@
+    mk_block [
+      (* inserting into the map has been moved to the aggregated version *)
+
+      (* update and check statment counters to see if we should send a do_complete *)
+      mk_if
+        (mk_apply' nd_check_stmt_cntr_index_nm @@
+          (* @has_data:false *)
+          [mk_var "vid"; mk_cint s; mk_cint @@ -1; mk_cfalse])
+        (* apply local do_complete *)
+        (mk_let (fst_many @@ args_of_t_with_v c t)
+           (mk_apply' (nd_log_get_bound_for t) [mk_var "vid"]) @@
+          mk_apply' (do_complete_name_of_t t s) @@
           args_of_t_as_vars_with_v c t)
         mk_cunit
     ])
@@ -1611,10 +1640,6 @@ let nd_trig_sub_handler c t =
     [t_int; t_int] @@
   (* skip over the entry tag *)
   mk_poly_skip_block fn_nm [
-    (* save the bound args for this vid *)
-    mk_if (mk_var "save_args")
-      (mk_apply' (nd_log_write_for c t) @@ args_of_t_as_vars_with_v c t)
-      mk_cunit ;
 
     (* clear the trig send bitmaps. These make sure we output a trig header
        for any sub-trigger output *)
@@ -2113,7 +2138,8 @@ let gen_dist_for_t c ast t =
         nd_rcv_do_trig c s_rhs_lhs s_rhs t;
       ])
     @
-    nd_rcv_push_trig c s_rhs t @
+    nd_rcv_push_trig_no_data c s_rhs t @
+    nd_rcv_push_trig_has_data c s_rhs t @
     nd_do_complete_trigs c t @
     [nd_trig_sub_handler c t] @
     (if c.gen_correctives then
