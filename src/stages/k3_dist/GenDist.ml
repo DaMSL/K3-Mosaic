@@ -1817,7 +1817,7 @@ let sw_event_driver_trig c =
             (mk_apply' "usleep" [mk_var D.sw_event_driver_sleep.id])
             mk_cunit;
           (* for profiling, save the vid and time *)
-          prof_property prof_tag_pre_send_fetch @@ ProfLatency("vid", "-1");
+          prof_property prof_tag_pre_send_fetch @@ ProfLatency("batch_id", "-1");
 
           (* calculate the next vid *)
           mk_let ["next_vid"]
