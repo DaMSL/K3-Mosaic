@@ -7,6 +7,9 @@ open K3Helpers
 module D = K3Dist
 module G = K3Global
 
+(* disable the hashing if desired. Default = off *)
+let use_consistent_hashing = create_ds ~init:mk_cfalse "use_consistent_hashing" @@ t_bool
+
 (* address, job, hash *)
 let id_t_node_for hash_name = D.my_peers.e @ [hash_name, t_int]
 let id_t_node = id_t_node_for "hash"
@@ -25,10 +28,24 @@ let node_ring =
   create_ds "node_ring" (wrap_tsortedmap' @@ snd_many e) ~e
 
 let node_ring_init =
-  mk_iter (mk_lambda' D.nodes.e @@
-      mk_apply' add_node_nm
-        [mk_apply' "addr_of_int" [mk_var "addr"]]) @@
-    mk_var "nodes"
+  mk_if (mk_var use_consistent_hashing.id)
+    (* hashing mode *)
+    (mk_iter (mk_lambda' D.nodes.e @@
+        mk_apply' add_node_nm
+          [mk_apply' "addr_of_int" [mk_var "addr"]]) @@
+      mk_var "nodes") @@
+
+    (* no hashing mode - just spread throughout the ring *)
+    mk_let ["node_chord"]
+      (mk_divi (mk_apply' "get_max_int" []) @@ mk_var D.num_nodes.id) @@
+    mk_ignore @@
+    mk_agg (mk_lambda2' ["loc", t_int] ["addr", t_int] @@
+            mk_block [
+              mk_insert node_ring.id [mk_var "loc"; mk_var "addr"];
+              mk_add (mk_var "loc") @@ mk_var "node_chord"
+            ])
+      (mk_cint 0) @@
+      mk_var D.nodes.id
 
 (* function to add a node in the consistent hashing ring *)
 let add_node_fn =
@@ -78,6 +95,7 @@ let functions =
 
 let global_vars =
   List.map decl_global
-  [ node_ring;
+  [ use_consistent_hashing;
+    node_ring;
     replicas
   ]
