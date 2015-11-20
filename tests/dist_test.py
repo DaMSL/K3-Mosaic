@@ -180,6 +180,10 @@ def run(target_file,
             print_system(cmd, True)
             cmd = concat([k3o, "-p -i m3 -l k3dist", m3_file, "--print-warmup", "> dist_warmup.k3o"])
             print_system(cmd, True)
+            cmd = concat([k3o, "-p -i k3 -l k3new", "warmup.k3o", "> warmup.k3 2>", error_file])
+            print_system(cmd, True)
+            cmd = concat([k3o, "-p -i k3 -l k3new", "dist_warmup.k3o", "> dist_warmup.k3 2>", error_file])
+            print_system(cmd, True)
             return True
 
 
