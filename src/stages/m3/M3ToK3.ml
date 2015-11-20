@@ -1503,12 +1503,12 @@ let m3_to_k3 ?(generate_init = false) ?(role = "client")
         let ovar_types = mvar_btypes output_vars in
 
         (* Map definition expression *)
-        let argt = ["_", t_unit] in
-        let rt = [t_unit] in
+        let argt = ["_", KH.t_unit] in
+        let rt = [KH.t_unit] in
         let (_, _, defn_expr), _ =
           calc_to_k3_expr [] ~generate_init:false [] ds.Plan.ds_definition
         in
-        let booststrap_expr = mk_assign ("bs_"^map_nm) defn_expr in
+        let booststrap_expr = KH.mk_assign ("bs_"^map_nm) defn_expr in
         acc @
           [K.Global("bs_"^map_nm, mk_k3_collection ivar_types ovar_types element_type, None);
            fst @@ KH.mk_global_fn ("bootstrap_"^map_nm) argt rt booststrap_expr]
