@@ -340,16 +340,23 @@ let print_event_loop (id, (res_env, ds_env, instrs)) =
 
 let string_of_typed_meta (t,a) = string_of_annotation a
 
+let print_program_and_event_loop ?(no_roles=false) f p =
+  let tp, envs = typed_program p in
+  let event_loops, default = roles_of_program tp in
+    print_endline @@ f (tp, envs);
+    if not no_roles then (
+      List.iter print_event_loop event_loops;
+      (match default with None -> ()
+        | Some (_,x) -> print_event_loop ("DEFAULT", x))
+    )
+
 let print_k3_program ?(no_roles=false) f = function
-  | K3Data p | K3DistData (p,_,_,_) ->
-    let tp, envs = typed_program p in
-    let event_loops, default = roles_of_program tp in
-      print_endline @@ f (tp, envs);
-      if not no_roles then (
-        List.iter print_event_loop event_loops;
-        (match default with None -> ()
-          | Some (_,x) -> print_event_loop ("DEFAULT", x))
-      )
+  | K3Data p -> print_program_and_event_loop ~no_roles f p
+  | K3DistData (p,_,_,wp) ->
+    begin
+      print_program_and_event_loop ~no_roles f p;
+      print_program_and_event_loop ~no_roles f wp
+    end
   | _ -> error "Cannot print this type of data"
 
 (* create and print a k3 program with an expected section *)

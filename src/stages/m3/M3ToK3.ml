@@ -1400,6 +1400,7 @@ let k3_demuxes stream_rels =
   in
   k3_prog_demux_calls, k3_prog_demux_deep
 
+
 (**[m3_to_k3 generate_init m3_program]
 
    Transforms a M3 program into a K3 program.
@@ -1482,12 +1483,51 @@ let m3_to_k3 ?(generate_init = false) ?(role = "client")
   let k3_prog_client_role =
     add_empty @@ k3_prog_sources @ k3_prog_bindings @ k3_prog_consumes
   in
-  let k3_warmup_prog = [] in
+
+  (* Warmup program construction *)
+  let k3_warmup_rel (src, rels) =
+    let (_, (nm, schema, _)) = hd rels in
+    let ty = mk_k3_collection [] (mvar_btypes schema) K.TInt
+    in K.Global(nm, ty, None)
+  in
+
+  let k3_warmup_of_m3_map acc m3_map =
+    begin match m3_map with
+      | M3.DSView(ds) ->
+        (* Global map declaration *)
+        let map_nm, input_vars, output_vars, map_type, _ =
+          Plan.expand_ds_name ds.Plan.ds_name
+        in
+        let element_type = m3_type_to_k3_base_type map_type in
+        let ivar_types = mvar_btypes input_vars in
+        let ovar_types = mvar_btypes output_vars in
+
+        (* Map definition expression *)
+        let argt = ["_", t_unit] in
+        let rt = [t_unit] in
+        let (_, _, defn_expr), _ =
+          calc_to_k3_expr [] ~generate_init:false [] ds.Plan.ds_definition
+        in
+        let booststrap_expr = mk_assign ("bs_"^map_nm) defn_expr
+        acc @
+          [K.Global("bs_"^map_nm, mk_k3_collection ivar_types ovar_types element_type, None);
+           fst @@ KH.mk_global_fn ("bootstrap_"^map_nm) argt rt booststrap_expr]
+
+      | M3.DSTable(_, _, _) -> acc
+    end
+  in
+
+  let k3_warmup_prog =
+    List.map k3_warmup_rel stream_rels
+    @ List.map k3_warmup_rel table_rels
+    @ List.fold_left k3_warmup_of_m3_map [] !m3_prog_schema
+  in
+
   ((add_empty @@
      k3_prog_schema @
      [ K.Flow(k3_prog_trigs @ k3_prog_demux) ] @
      [ K.Role(role, k3_prog_client_role);
        K.DefaultRole(role);
      ]),
-   k3_warmup_prog)
+   add_empty k3_warmup_prog)
 
