@@ -45,7 +45,8 @@ def run(target_file,
         debug=False,
         no_opt_route=False,
         do_trace=False,
-        dump_info=False
+        dump_info=False,
+        print_warmup=False
         ):
 
     to_root = ".."
@@ -172,6 +173,15 @@ def run(target_file,
             cmd = concat([k3o, "-p -i m3 -l k3disttest", m3_file, "--dump-info"])
             print_system(cmd, True)
             return True
+
+        # if asked to print the warmup, do so now
+        if print_warmup:
+            cmd = concat([k3o, "-p -i m3 -l k3", m3_file, "--print-warmup", "> warmup.k3o"])
+            print_system(cmd, True)
+            cmd = concat([k3o, "-p -i m3 -l k3dist", m3_file, "--print-warmup", "> dist_warmup.k3o"])
+            print_system(cmd, True)
+            return True
+
 
         # create a k3 distributed file
 

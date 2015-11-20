@@ -174,6 +174,7 @@ type parameters = {
     mutable use_opt_route: bool; (* use optimized 1:1 routing *)
 
     mutable dump_info: bool;  (* dump proginfo data *)
+    mutable print_warmup: bool;  (* print the warmup program *)
   }
 
 let default_cmd_line_params () = {
@@ -207,6 +208,7 @@ let default_cmd_line_params () = {
 
     safe_writes       = false;
     dump_info         = false;  (* dump info about prog_info and quit *)
+    print_warmup      = false;
     use_opt_route     = true;
   }
 
@@ -350,13 +352,13 @@ let print_program_and_event_loop ?(no_roles=false) f p =
         | Some (_,x) -> print_event_loop ("DEFAULT", x))
     )
 
-let print_k3_program ?(no_roles=false) f = function
+let print_k3_program ?(print_warmup=false) ?(no_roles=false) f = function
   | K3Data p -> print_program_and_event_loop ~no_roles f p
   | K3DistData (p,_,_,warmup) ->
-    begin
-      print_program_and_event_loop ~no_roles f p;
+    if print_warmup then
       print_program_and_event_loop ~no_roles f warmup
-    end
+    else
+      print_program_and_event_loop ~no_roles f p
   | _ -> error "Cannot print this type of data"
 
 (* create and print a k3 program with an expected section *)
@@ -435,6 +437,7 @@ let print_k3_test_program params = function
 let print params inputs =
   let idx_inputs = insert_index_fst inputs in
   let sofp = string_of_program ~verbose:cmd_line_params.verbose ~print_id:true in
+  let print_k3_program = print_k3_program ~print_warmup:params.print_warmup in
   let print_fn = match params.out_lang with
     | AstK3 | AstK3Dist   -> print_k3_program (sofp |- fst) |- snd
     | K3 | K3Dist         -> print_k3_program (PS.string_of_program |- fst) |- snd
@@ -587,6 +590,9 @@ let param_specs = Arg.align
   "             Print verbose output (context specific)";
   "--dump-info", Arg.Unit (fun () -> cmd_line_params.dump_info <- true),
   "             Dump info about prog_info";
+  "--print-warmup", Arg.Unit (fun () -> cmd_line_params.print_warmup <- true),
+  "             Print warmup code";
+
   (* Interpreter related *)
   "-q", Arg.String (fun q -> cmd_line_params.queue_type <- match q with
     | "global" -> K3Runtime.GlobalQ
