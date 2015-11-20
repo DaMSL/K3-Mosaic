@@ -50,9 +50,9 @@ let out_lang_descs = [
 (* types of data carried around  by the driver *)
 type data_t =
   | K3Data of program_t
-  (* for distributed programs, we also need the metadata of the maps, and we include
-   * the non-distributed program *)
-  | K3DistData of program_t * ProgInfo.prog_data_t * program_t
+  (* for distributed programs, we also need the metadata of the maps, the
+   * non-distributed program, and the map warmup program *)
+  | K3DistData of program_t * ProgInfo.prog_data_t * program_t * program_t
   | K3TestData of program_test_t
 
 let string_of_data = function
@@ -217,7 +217,7 @@ let handle_error heading p uuid ?name msg =
   prerr_endline heading;
   prerr_endline @@ "Error("^(string_of_int uuid)^"): "^n^msg;
   (match p with
-  | K3Data p | K3DistData(p,_,_)->
+  | K3Data p | K3DistData(p,_,_,_)->
       if cmd_line_params.debug_info then
         prerr_endline @@ string_of_program ~print_id:true p
       else
@@ -325,7 +325,7 @@ let interpret_k3 params prog =
 let interpret params inputs =
   let f = function
     | K3Data p
-    | K3DistData(p,_,_)
+    | K3DistData(p,_,_,_)
     | K3TestData(ProgTest(p, _))
     | K3TestData(NetworkTest(p, _)) -> ignore @@ interpret_k3 params p
     | _ -> failwith "data type not supported for interpretation"
@@ -341,7 +341,7 @@ let print_event_loop (id, (res_env, ds_env, instrs)) =
 let string_of_typed_meta (t,a) = string_of_annotation a
 
 let print_k3_program ?(no_roles=false) f = function
-  | K3Data p | K3DistData (p,_,_) ->
+  | K3Data p | K3DistData (p,_,_,_) ->
     let tp, envs = typed_program p in
     let event_loops, default = roles_of_program tp in
       print_endline @@ f (tp, envs);
@@ -354,7 +354,7 @@ let print_k3_program ?(no_roles=false) f = function
 
 (* create and print a k3 program with an expected section *)
 let print_k3_test_program params = function
-  | idx, K3DistData (p, meta, orig_p) ->
+  | idx, K3DistData (p, meta, orig_p, _) ->
       (* get the folded expressions comparing values for latest vid.
        * These go in the expected statements at the end *)
       let tests_by_map = GenTest.expected_code_all_maps params.map_type meta in
@@ -471,17 +471,17 @@ let process_inputs params =
         if params.dump_info then begin print_endline @@ ProgInfo.dump_info proginfo; exit(0) end;
         if params.debug_info then
           print_endline (ProgInfo.string_of_prog_data proginfo);
-        let prog = M3ToK3.m3_to_k3 m3prog in
+        let (prog, warmup_prog) = M3ToK3.m3_to_k3 m3prog in
         if params.out_lang = K3Test then K3Data(prog)
-        else K3DistData(prog, proginfo, prog)
+        else K3DistData(prog, proginfo, prog, warmup_prog)
   in List.map proc_fn params.input_files
 
 (* this function can only transform to another k3 format *)
 let transform params ds =
   let proc_fn input = match params.out_lang, input with
-   | (AstK3Dist | K3Dist | K3DistTest), K3DistData(p, proginfo, _) ->
+   | (AstK3Dist | K3Dist | K3DistTest), K3DistData(p, proginfo, _, warmup_prog) ->
        let p' = transform_to_k3_dist params p proginfo in
-       K3DistData(p', proginfo, p)
+       K3DistData(p', proginfo, p, warmup_prog)
    | (AstK3Dist | K3Dist | K3DistTest), _ ->
        failwith "Missing metadata for distributed version"
    | _, data -> data
