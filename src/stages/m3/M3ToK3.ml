@@ -1510,7 +1510,7 @@ let m3_to_k3 ?(generate_init = false) ?(role = "client")
         in
         let booststrap_expr = KH.mk_assign ("bs_"^map_nm) defn_expr in
         acc @
-          [K.Global("bs_"^map_nm, mk_k3_collection ivar_types ovar_types element_type, None);
+          [K.Global("bs_"^map_nm, (KH.mut @@ mk_k3_collection ivar_types ovar_types element_type), None);
            fst @@ KH.mk_global_fn ("bootstrap_"^map_nm) argt rt booststrap_expr]
 
       | M3.DSTable(_, _, _) -> acc
