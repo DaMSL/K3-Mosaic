@@ -520,12 +520,12 @@ let modify_warmup (ast:program_t) =
         let col, t_elem = unwrap_tcol t in
         let t_l = unwrap_ttuple t_elem in
         let t' = mut @@ wrap_tcol col @@ wrap_ttuple @@ t_vid::t_l in
-        Hashtbl.add h nm t_l;
+        Hashtbl.add h (str_drop (String.length "bs_") nm) t_l;
         Global(nm, t', None)
 
       (* modify bootstrap functions by adding a vid of 0 *)
       | Global(nm, u_t, Some e) when str_prefix "bootstrap_" nm ->
-        let t_l = try Hashtbl.find h nm with Not_found -> [] in
+        let t_l = try Hashtbl.find h (str_drop (String.length "bootstrap_") nm) with Not_found -> [] in
         let t_l = List.map (fun (i,t) -> "map_"^soi i, t) @@ insert_index_fst t_l in
         let arg, body = U.decompose_lambda e in
         let l, r = U.decompose_assign body in
@@ -535,7 +535,7 @@ let modify_warmup (ast:program_t) =
             mk_map (mk_lambda' t_l @@ mk_tuple @@
                     (mk_cint 0)::(ids_to_vars @@ fst_many t_l)) r
         in
-        Global(nm, u_t, Some e')
+        Global(nm, u_t, Some(mk_lambda' ["_", t_unit] e'))
 
       | x -> x
       in

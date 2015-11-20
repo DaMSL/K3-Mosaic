@@ -466,8 +466,10 @@ let transform_to_k3_dist params p warmup_p proginfo =
        gen_deletes; gen_correctives;
        agenda_map; use_opt_route} = params in
   try
-    GenDist.gen_dist ~map_type ~stream_file ~gen_deletes ~gen_correctives
-      ~agenda_map ~use_opt_route proginfo p,
+    (if params.print_warmup
+       then p
+       else GenDist.gen_dist ~map_type ~stream_file ~gen_deletes ~gen_correctives
+                             ~agenda_map ~use_opt_route proginfo p),
     ModifyAst.modify_warmup warmup_p
 
   with DistributeError(uuid, s) -> handle_distribute_error (K3Data p) uuid s
