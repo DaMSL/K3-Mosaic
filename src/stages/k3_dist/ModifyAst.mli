@@ -22,3 +22,7 @@ val modify_corr_ast : config -> program_t ->
 
 (* return global ast for map declarations, adding the vid *)
 val map_inits_from_ast : config -> program_t -> expr_t IntMap.t
+
+(* modify the warmup program *)
+val modify_warmup : program_t -> program_t
+

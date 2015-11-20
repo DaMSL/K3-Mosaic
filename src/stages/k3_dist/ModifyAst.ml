@@ -509,3 +509,35 @@ let modify_corr_ast c ast map stmt trig =
   let ast = modify_dist c ast stmt in
   let is_col, ast = delta_action c ast corr_stmt in
   args, is_col, ast
+
+(* modify the warmup ast, adding vids *)
+let modify_warmup (ast:program_t) =
+  let h = Hashtbl.create 10 in
+  List.map (fun (d, a) ->
+      let d' = match d with
+      (* modify bootstrap collections to have a vid *)
+      | Global(nm, t, None) when str_prefix "bs_" nm ->
+        let col, t_elem = unwrap_tcol t in
+        let t_l = unwrap_ttuple t_elem in
+        let t' = mut @@ wrap_tcol col @@ wrap_ttuple @@ t_vid::t_l in
+        Hashtbl.add h nm t_l;
+        Global(nm, t', None)
+
+      (* modify bootstrap functions by adding a vid of 0 *)
+      | Global(nm, u_t, Some e) when str_prefix "bootstrap_" nm ->
+        let t_l = try Hashtbl.find h nm with Not_found -> [] in
+        let t_l = List.map (fun (i,t) -> "map_"^soi i, t) @@ insert_index_fst t_l in
+        let arg, body = U.decompose_lambda e in
+        let l, r = U.decompose_assign body in
+        let v = U.decompose_var l in
+        let e' =
+          mk_assign v @@
+            mk_map (mk_lambda' t_l @@ mk_tuple @@
+                    (mk_cint 0)::(ids_to_vars @@ fst_many t_l)) r
+        in
+        Global(nm, u_t, Some e')
+
+      | x -> x
+      in
+      d', a) ast
+

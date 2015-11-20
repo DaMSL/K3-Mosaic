@@ -44,6 +44,7 @@ val immut : type_t -> type_t
 (* wrap in a specific type *)
 val wrap_ttuple : type_t list -> type_t
 val wrap_ttuple_mut : type_t list -> type_t
+val wrap_tcol : container_type_t -> type_t -> type_t
 val wrap_tlist : type_t -> type_t
 (* a version that wraps in a tuple if necessary *)
 val wrap_tlist' : type_t list -> type_t

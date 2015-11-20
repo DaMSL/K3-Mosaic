@@ -352,10 +352,10 @@ let print_program_and_event_loop ?(no_roles=false) f p =
 
 let print_k3_program ?(no_roles=false) f = function
   | K3Data p -> print_program_and_event_loop ~no_roles f p
-  | K3DistData (p,_,_,wp) ->
+  | K3DistData (p,_,_,warmup) ->
     begin
       print_program_and_event_loop ~no_roles f p;
-      print_program_and_event_loop ~no_roles f wp
+      print_program_and_event_loop ~no_roles f warmup
     end
   | _ -> error "Cannot print this type of data"
 
@@ -458,14 +458,15 @@ let test params inputs =
     | x -> error @@ "testing not yet implemented for "^string_of_data x
   in List.iter2 test_fn params.input_files inputs
 
-let transform_to_k3_dist params p proginfo =
+let transform_to_k3_dist params p warmup_p proginfo =
   let {map_type; stream_file;
        gen_deletes; gen_correctives;
        agenda_map; use_opt_route} = params in
   try
-    GenDist.gen_dist ~map_type ~stream_file
-      ~gen_deletes ~gen_correctives ~agenda_map ~use_opt_route
-      proginfo p
+    GenDist.gen_dist ~map_type ~stream_file ~gen_deletes ~gen_correctives
+      ~agenda_map ~use_opt_route proginfo p,
+    ModifyAst.modify_warmup warmup_p
+
   with DistributeError(uuid, s) -> handle_distribute_error (K3Data p) uuid s
 
 let process_inputs params =
@@ -487,8 +488,8 @@ let process_inputs params =
 let transform params ds =
   let proc_fn input = match params.out_lang, input with
    | (AstK3Dist | K3Dist | K3DistTest), K3DistData(p, proginfo, _, warmup_prog) ->
-       let p' = transform_to_k3_dist params p proginfo in
-       K3DistData(p', proginfo, p, warmup_prog)
+       let p', warmup' = transform_to_k3_dist params p warmup_prog proginfo in
+       K3DistData(p', proginfo, p, warmup')
    | (AstK3Dist | K3Dist | K3DistTest), _ ->
        failwith "Missing metadata for distributed version"
    | _, data -> data
