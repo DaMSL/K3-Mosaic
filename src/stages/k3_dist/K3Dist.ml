@@ -1277,6 +1277,9 @@ let prof_tag_gc_start         = 12
 let prof_tag_gc_done          = 13
 let prof_tag_poly_send        = 14
 let prof_tag_upoly_send       = 15
+let prof_tag_poly_send_msg    = 16
+let prof_tag_poly_send2       = 17
+let prof_tag_poly_send_msg2   = 18
 
 (* @t_s_id: trig or stmt id *)
 type prof_event =
