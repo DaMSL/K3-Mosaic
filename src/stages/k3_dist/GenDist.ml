@@ -459,7 +459,7 @@ let sw_send_fetch_fn c s_rhs_lhs s_rhs t =
               mk_lambda' send_put_ip_map_e @@
                 mk_block [
                   (* buffer the trig args if needed *)
-                  buffer_trig_header_if_needed t "ip" args ~save_args:true;
+                  buffer_trig_header_if_needed t "ip" args;
                   (* send rcv_put header *)
                   buffer_for_send rcv_put_nm "ip" [mk_var D.me_int.id];
                   (* now send stmt_cnt_list *)
@@ -511,7 +511,7 @@ let sw_send_fetch_fn c s_rhs_lhs s_rhs t =
                     (* mark the send_fetch_bitmap *)
                     mk_insert_at send_fetch_bitmap.id (mk_var "ip") [mk_ctrue];
                     (* buffer the trig args if needed *)
-                    buffer_trig_header_if_needed t "ip" args ~save_args:true;
+                    buffer_trig_header_if_needed t "ip" args;
                     buffer_for_send target_t "ip" [mk_cunit]
                   ])
                   mk_cunit;
@@ -551,7 +551,7 @@ let sw_send_fetch_fn c s_rhs_lhs s_rhs t =
                        so if we add the header here, we must make sure we're the only msg to
                        this node by being last in the send fetch
                     *)
-                    buffer_trig_header_if_needed t "ip" args ~save_args:false;
+                    buffer_trig_header_if_needed t "ip" args;
                     buffer_for_send do_complete_t "ip" [mk_var D.me_int.id; mk_var "ack"];
                     mk_cfalse
                   ])
@@ -806,14 +806,15 @@ let nd_send_push_stmt_map_trig c s_rhs_lhs t =
           mk_iter_bitmap'
             (mk_at_with' K3S.shuffle_results.id (mk_var "ip") @@
               mk_lambda' K3S.shuffle_results.e @@
-                let t_args = args_of_t_as_vars_with_v c t in
                 mk_block [
                   (* send the trig header if needed. dont save args -- they should
                      already be saved. However, if we're a buffered push, we need to force
                      the trig header *)
-                  buffer_trig_header_if_needed ~other_cond:(mk_var "buffered") t "ip" t_args ~save_args:false;
+                  buffer_trig_header_if_needed ~other_cond:(mk_var "buffered") ~slim_trig:true t "ip" [mk_var "vid"];
                   (* send the push header *)
-                  buffer_for_send rcv_trig "ip" [mk_var "has_data"];
+                  mk_if (mk_var "has_data")
+                    (buffer_for_send ~wr_bitmap:false rcv_trig "ip" []) @@
+                    (buffer_for_send ~wr_bitmap:false (rcv_trig^"_no_data") "ip" []);
                   (* buffer the map data according to the indices *)
                   (* no need to write to the bitmap, since there will always be a
                      header to the same ip *)
@@ -840,9 +841,8 @@ let nd_rcv_push_trig c s_rhs t =
 List.map
   (fun (s, m) ->
     let fn_name = rcv_push_name_of_t c t s m in
-    mk_global_fn fn_name
-      (D.nd_rcv_push_args c t)
-      [] @@
+    let args = args_of_t c t in
+    mk_global_fn fn_name D.nd_rcv_push_args [] @@
     mk_block [
       (* inserting into the map has been moved to the aggregated version *)
 
@@ -851,8 +851,13 @@ List.map
         (mk_apply' nd_check_stmt_cntr_index_nm @@
           [mk_var "vid"; mk_cint s; mk_cint @@ -1; mk_var "has_data"])
         (* apply local do_complete *)
-        (mk_apply' (do_complete_name_of_t t s) @@
-          args_of_t_as_vars_with_v c t)
+        ((if args <> [] then
+          mk_let
+            (fst_many @@ D.args_of_t c t)
+            (mk_apply'
+              (nd_log_get_bound_for t) [mk_var "vid"])
+          else id_fn) @@
+          mk_apply' (do_complete_name_of_t t s) @@ args_of_t_as_vars_with_v c t)
         mk_cunit
     ])
   s_rhs
@@ -1575,7 +1580,7 @@ let nd_handle_uniq_poly c =
   let s_rhs = List.flatten @@ List.map (P.s_and_over_stmts_in_t c.p P.rhs_maps_of_stmt) ts in
   let bufs_m = List.map (fun (s,m) -> P.buf_of_stmt_map_id c.p s m, m) s_rhs in
   let tag_bufs_m = List.map (fun (buf, m) -> fst @@
-                              List.find (fun (i, (s,_,_)) -> s = buf) c.poly_tags, buf, m) bufs_m in
+                              List.find (fun (i, ti) -> ti.tag = buf) c.poly_tags, buf, m) bufs_m in
   mk_global_fn nd_handle_uniq_poly_nm ["poly_queue", upoly_queue.t] [] @@
   (* iterate over all buffer contents *)
   mk_if_eq (mk_size @@ mk_var "poly_queue") (mk_cint 0)
@@ -1610,23 +1615,64 @@ let nd_handle_uniq_poly c =
       (mk_error "unhandled unique tag")
       tag_bufs_m
 
+let sub_trig_dispatch c fn_nm t_args =
+  List.fold_left
+    (fun acc_code (itag, ti) -> match ti.tag_typ with
+        (* only match with the sub-triggers *)
+        | SubTrig(has_ds, t') when t' = fn_nm ->
+        mk_if (mk_eq (mk_var "tag") @@ mk_cint itag)
+          (* look up this tag *)
+          (mk_poly_at_with' ti.tag @@ mk_lambda' ti.args @@
+            (* if we have subdata, the function must return the new idx, offset *)
+            let call l = mk_apply' ti.fn @@
+                ti.const_args @ ids_to_vars @@ fst_many @@ l @ ti.args @ t_args in
+            if has_ds then call D.poly_args
+              (* otherwise we must skip ourselves *)
+            else mk_block [call []; mk_poly_skip' ti.tag])
+          acc_code
+        | _ -> acc_code)
+    (* the way to stop the loop is to keep the same idx, offset *)
+    (mk_tuple [mk_var "idx"; mk_var "offset"])
+    c.poly_tags
+
+(* handle all sub-trigs that need only a vid (pushes) *)
+let nd_slim_trig_sub_handler c t =
+  let fn_nm = trig_slim_sub_handler_name_of_t t in
+  let t_args = trig_slim_sub_handler_args in
+  mk_global_fn fn_nm
+    (poly_args @ t_args)
+    [t_int; t_int] @@
+  (* skip over the entry tag *)
+  mk_poly_skip_block fn_nm [
+
+    (* clear the trig send bitmaps. These make sure we output a slim trig header
+       for any sub-trigger output (ie. pushes) *)
+    mk_set_all D.send_trig_header_bitmap.id [mk_cfalse];
+
+    (* dispatch the sub triggers (pushes) *)
+    mk_poly_iter' @@
+      mk_lambda'' (p_tag @ p_idx @ p_off) @@
+        (* print trace if requested *)
+        do_trace ("nstsh"^trace_trig t)
+                  [t_int, mk_var "vid"] @@
+        sub_trig_dispatch c fn_nm t_args;
+  ]
+
 (* handle all sub-trigs that need trigger arguments *)
 let nd_trig_sub_handler c t =
   let fn_nm = trig_sub_handler_name_of_t t in
-  let t_args = args_of_t_with_v c t in
+  let t_args = trig_sub_handler_args c t in
   mk_global_fn fn_nm
-    (poly_args @ trig_sub_handler_args c t)
+    (poly_args @ t_args)
     [t_int; t_int] @@
   (* skip over the entry tag *)
   mk_poly_skip_block fn_nm [
     (* save the bound args for this vid *)
-    mk_if (mk_var "save_args")
-      (mk_apply' (nd_log_write_for c t) @@ args_of_t_as_vars_with_v c t)
-      mk_cunit ;
+    mk_apply' (nd_log_write_for c t) @@ args_of_t_as_vars_with_v c t;
 
     (* clear the trig send bitmaps. These make sure we output a trig header
-       for any sub-trigger output *)
-    mk_set_all D.send_trig_header_bitmap.id [mk_cfalse] ;
+       for any sub-trigger output (ie. pushes) *)
+    mk_set_all D.send_trig_header_bitmap.id [mk_cfalse];
 
     (* dispatch the sub triggers *)
     mk_poly_iter' @@
@@ -1637,24 +1683,7 @@ let nd_trig_sub_handler c t =
                   t_int, mk_var "tag";
                   t_int, mk_var "idx";
                   t_int, mk_var "offset"] @@
-        List.fold_left
-          (fun acc_code (itag, (stag, typ, id_ts)) -> match typ with
-             (* only match with the sub-triggers *)
-             | SubTrig(has_ds, t') when t' = t ->
-              mk_if (mk_eq (mk_var "tag") @@ mk_cint itag)
-                (* look up this tag *)
-                (mk_poly_at_with' stag @@ mk_lambda' id_ts @@
-                  (* if we have subdata, the function must return the new idx, offset *)
-                  let call l =
-                    mk_apply' stag @@ ids_to_vars @@ fst_many @@ l @ id_ts @ t_args in
-                  if has_ds then call D.poly_args
-                    (* otherwise we must skip ourselves *)
-                  else mk_block [call []; mk_poly_skip' stag])
-                acc_code
-             | _ -> acc_code)
-          (* the way to stop the loop is to keep the same idx, offset *)
-          (mk_tuple [mk_var "idx"; mk_var "offset"])
-          c.poly_tags;
+        sub_trig_dispatch c fn_nm t_args;
   ]
 
 (*** central triggers to handle dispatch for nodes and switches ***)
@@ -1676,17 +1705,18 @@ let trig_dispatcher c =
                   t_int, mk_var "idx";
                   t_int, mk_var "offset"] @@
         List.fold_left
-          (fun acc_code (itag, (stag, typ, id_ts)) -> match typ with
+          (fun acc_code (itag, ti) -> match ti.tag_typ with
              | Trig has_ds ->
               mk_if (mk_eq (mk_var "tag") @@ mk_cint itag)
                 (* look up this tag *)
-                (mk_poly_at_with' stag @@ mk_lambda' id_ts @@
+                (mk_poly_at_with' ti.tag @@ mk_lambda' ti.args @@
                   (* if we have subdata, the function must return the new idx, offset *)
                   let call l =
-                    mk_apply' stag @@ ids_to_vars @@ fst_many @@ l @ id_ts in
+                    mk_apply' ti.fn @@
+                      ti.const_args @ ids_to_vars @@ fst_many @@ l @ ti.args in
                   if has_ds then call D.poly_args
                     (* otherwise we must skip ourselves *)
-                  else mk_block [call []; mk_poly_skip' stag])
+                  else mk_block [call []; mk_poly_skip' ti.tag])
                 acc_code
              | _ -> acc_code)
           (mk_error "unmatched tag")
@@ -1814,26 +1844,27 @@ let sw_event_driver_trig c =
                   (* clear the trig send bitmaps for each event *)
                   mk_set_all D.send_trig_header_bitmap.id [mk_cfalse] ;
 
-                  List.fold_left (fun acc_code (i, (nm,_,id_ts)) ->
+                  List.fold_left (fun acc_code (i, ti) ->
                     (* check if we match on the id *)
                     mk_if (mk_eq (mk_var "tag") @@ mk_cint i)
-                      (if nm = "sentinel" then
+                      (if ti.tag = "sentinel" then
                         (* don't check size of event queue *)
                         Proto.sw_seen_sentinel ~check_size:false
                       else
-                        mk_poly_at_with' nm @@
-                          mk_lambda' id_ts @@
+                        mk_poly_at_with' ti.tag @@
+                          mk_lambda' ti.args @@
                             mk_if (mk_var "do_insert")
-                              (mk_apply' (send_fetch_name_of_t @@ "insert_"^nm) @@
-                                ids_to_vars @@ "vid":: (fst_many @@ tl id_ts)) @@
+                              (mk_apply' (send_fetch_name_of_t @@ "insert_"^ti.tag) @@
+                                ids_to_vars @@ "vid":: (fst_many @@ tl ti.args)) @@
                               if c.gen_deletes then
-                               mk_apply' (send_fetch_name_of_t @@ "delete_"^nm) @@
-                                ids_to_vars @@ "vid":: (fst_many @@ tl id_ts)
+                               mk_apply' (send_fetch_name_of_t @@ "delete_"^ti.tag) @@
+                                ids_to_vars @@ "vid":: (fst_many @@ tl ti.args)
                               else mk_cunit)
                       acc_code)
                   (mk_error "mismatch on event id") @@
-                  List.filter (function (_,(nm,e,_)) ->
-                      e = Event && (StrSet.mem ("insert_"^nm) trig_list || nm = "sentinel"))
+                  List.filter (fun (_, ti) ->
+                      ti.tag_typ = Event &&
+                      (StrSet.mem ("insert_"^ti.tag) trig_list || ti.tag = "sentinel"))
                     c.poly_tags
                 ;
                 mk_add (mk_cint 1) @@ mk_var "vid"
@@ -2115,7 +2146,8 @@ let gen_dist_for_t c ast t =
     @
     nd_rcv_push_trig c s_rhs t @
     nd_do_complete_trigs c t @
-    [nd_trig_sub_handler c t] @
+    [nd_trig_sub_handler c t;
+     nd_slim_trig_sub_handler c t] @
     (if c.gen_correctives then
       nd_rcv_correctives_trig c s_rhs_corr t
     else [])

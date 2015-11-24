@@ -75,12 +75,21 @@ type map_type =
 
 type has_ds = bool
 type unique = bool
+type sub_handler = string
 
 type tag_type =
-    Trig      of has_ds (* a top-level trigger *)
-  | SubTrig   of has_ds * string (* a subtrigger handled by trig_sub_handler *)
+  | Trig      of has_ds (* a top-level trigger *)
+  | SubTrig   of has_ds * sub_handler (* a subtrigger handled by a high-level trigger *)
   | Ds        of unique (* a data structure *)
   | Event     (* incoming event *)
+
+type tag_info = {
+  tag: id_t;
+  fn: id_t;
+  tag_typ: tag_type;
+  args: (id_t * type_t) list;
+  const_args: expr_t list;
+}
 
 type config = {
   p : P.prog_data_t;
@@ -104,7 +113,7 @@ type config = {
   (* map bind indices for route memoization *)
   route_indices: (map_id_t, int IntSetMap.t) Hashtbl.t;
   (* poly tag list for batching: int_tag * (tag * tag_type * types) *)
-  poly_tags : (int * (string * tag_type * (id_t * type_t) list)) list;
+  poly_tags : (int * tag_info) list;
   (* poly tag for incoming events *)
   event_tags: (int * (string * type_t list)) list;
   (* freevar info for the program, per stmt *)
@@ -747,10 +756,11 @@ let nd_rcv_corr_done_nm = "nd_rcv_corr_done"
 (*** trigger args. Needed here for polyqueues ***)
 
 (* the trig header marks the args *)
-let trig_sub_handler_args c t = ["save_args", t_bool] @ args_of_t_with_v c t
+let trig_sub_handler_args c t = args_of_t_with_v c t
 
-(* slim trig header doesn't carry args *)
-let trig_slim_sub_handler_args c t = []
+(* slim trig header for pushes *)
+(* TODO: make vid 16-bit offset from batch_id *)
+let trig_slim_sub_handler_args = ["vid", t_vid]
 
 (* rcv_put: how the stmt_cnt list gets sent in rcv_put *)
 let stmt_cnt_list_ship =
@@ -773,8 +783,8 @@ let nd_rcv_fetch_args c t = nd_rcv_fetch_args_poly c t @ args_of_t_with_v c t
 let nd_do_complete_trig_args_poly c t = ["sender_ip", t_int; "ack", t_bool]
 let nd_do_complete_trig_args c t = nd_do_complete_trig_args_poly c t @ args_of_t_with_v c t
 
-let nd_rcv_push_args_poly c t = ["has_data", t_bool]
-let nd_rcv_push_args c t = nd_rcv_push_args_poly c t @ args_of_t_with_v c t
+let nd_rcv_push_args_poly = []
+let nd_rcv_push_args = nd_rcv_push_args_poly @ ["has_data", t_bool; "vid", t_vid]
 
 (* for do_corrective:
  * original values commonly used to send back to original do_complete *)
@@ -788,9 +798,8 @@ let nd_rcv_corr_done_args = ["vid", t_vid; "stmt_id", t_stmt_id; "hop", t_int; "
 (* for GC *)
 let sw_ack_rcv_trig_args = ["addr", t_int; "vid", t_vid]
 
-
 let get_global_poly_tags c =
-  List.map (fun (i, (s,_,i_ts)) -> i, s, wrap_ttuple @@ snd_many i_ts) c.poly_tags
+  List.map (fun (i, ti) -> i, ti.tag, wrap_ttuple @@ snd_many ti.args) c.poly_tags
 
 let get_poly_event_tags c =
   List.map (fun (i, (s, ts)) -> i, s, wrap_ttuple ts) c.event_tags
@@ -886,7 +895,7 @@ let reserve_str_estimate = 4
 (* maximum size of polyqueue entries *)
 let max_poly_queue_csize c =
   let _, max = list_max_op U.csize_of_type @@
-    List.map (wrap_ttuple |- snd_many |- thd3 |- snd) c.poly_tags in
+    List.map (fun (_, ti) -> wrap_ttuple @@ snd_many ti.args) c.poly_tags in
   max * reserve_mult
 
 let max_event_queue_csize c =
@@ -937,6 +946,10 @@ let calc_event_tags c =
   in
   insert_index_fst l
 
+let ti ?(fn="") ?(const=[]) tag tag_typ args =
+  let fn = if fn = "" then tag else fn in
+  {tag; tag_typ; args; fn; const_args=const}
+
 (* we create one global tag hashmap, which we use to populate polyqueues *)
 (* format (tag, tag_type, types) *)
 let calc_poly_tags c =
@@ -944,50 +957,61 @@ let calc_poly_tags c =
     let for_all_trigs = P.for_all_trigs ~delete:c.gen_deletes in
     let events = fst_many @@ StrMap.to_list @@ snd c.agenda_map in
     (* static sentinel *)
-    ("sentinel", Event, ["_", t_unit])::
+    (ti "sentinel" Event ["_", t_unit])::
     (* event tags *)
     (List.map (fun t ->
          let args = try ("do_insert", t_bool)::args_of_t c ("insert_"^t)
                     with Bad_data _ -> [] in
-         t, Event, args)
+         ti t Event args)
        events) @
     (* static ds for sw->nd triggers *)
-    [stmt_cnt_list_ship.id, Ds false, stmt_cnt_list_ship.e;
-     stmt_map_ids.id, Ds false, stmt_map_ids.e] @
+    [ti stmt_cnt_list_ship.id (Ds false) stmt_cnt_list_ship.e;
+     ti stmt_map_ids.id (Ds false) stmt_map_ids.e] @
     (List.flatten @@ for_all_trigs c.p ~sys_init:true @@ fun t ->
       let s_rhs = P.s_and_over_stmts_in_t c.p P.rhs_maps_of_stmt t in
       let s_rhs_corr = List.filter (fun (s, map) -> List.mem map c.corr_maps) s_rhs in
+      let sub_handler_nm = trig_sub_handler_name_of_t t in
+      let slim_handler_nm = trig_slim_sub_handler_name_of_t t in
       (* carries all the trig arguments + vid *)
-      (trig_sub_handler_name_of_t t, Trig true, trig_sub_handler_args c t)::
-      (* (trig_slim_sub_handler_name_of_t t, Trig true, trig_slim_sub_handler_args c t):: *)
+      (ti sub_handler_nm (Trig true) @@ trig_sub_handler_args c t)::
+      (ti slim_handler_nm (Trig true) trig_slim_sub_handler_args)::
       (if s_rhs = [] then [] else [
-        rcv_put_name_of_t t, SubTrig(true, t), nd_rcv_put_args_poly c t;
-        rcv_fetch_name_of_t t, SubTrig(true, t), nd_rcv_fetch_args_poly c t]) @
+        ti (rcv_put_name_of_t t) (SubTrig(true, sub_handler_nm)) @@ nd_rcv_put_args_poly c t;
+        ti (rcv_fetch_name_of_t t) (SubTrig(true, sub_handler_nm)) @@ nd_rcv_fetch_args_poly c t
+        ]) @
       (* args for do completes without rhs maps *)
       (List.map (fun s ->
-          do_complete_name_of_t t s^"_trig", SubTrig(false, t), nd_do_complete_trig_args_poly c t) @@
+           ti (do_complete_name_of_t t s^"_trig") (SubTrig(false, sub_handler_nm)) @@
+           nd_do_complete_trig_args_poly c t) @@
         P.stmts_without_rhs_maps_in_t c.p t) @
       (* the types for nd_rcv_push. includes a separate, optional map component *)
       (* this isn't a dsTrig anymore since pushes are aggregated at the dispatcher *)
       (List.map (fun (s, m) ->
-          rcv_push_name_of_t c t s m, SubTrig(false, t), nd_rcv_push_args_poly c t)
+           ti (rcv_push_name_of_t c t s m) ~const:[mk_ctrue]
+             (SubTrig(false, slim_handler_nm)) @@ nd_rcv_push_args_poly)
+        s_rhs) @
+      (* version of rcv_push without data *)
+      (List.map (fun (s, m) ->
+           let nm = rcv_push_name_of_t c t s m in
+           ti (nm^"_no_data") ~fn:nm ~const:[mk_cfalse]
+           (SubTrig(false, slim_handler_nm)) @@ nd_rcv_push_args_poly)
         s_rhs) @
       (* the types for rcv_push's maps *)
       (List.map (fun (s, m) ->
-           P.buf_of_stmt_map_id c.p s m, Ds true, P.map_ids_types_with_v_for c.p m)
+           ti (P.buf_of_stmt_map_id c.p s m) (Ds true) @@ P.map_ids_types_with_v_for c.p m)
           s_rhs) @
       (* rcv_corrective types. includes a separate, optional map + vids component *)
       (List.map (fun (s, m) ->
-          rcv_corrective_name_of_t c t s m, Trig true, nd_rcv_corr_args)
+          ti (rcv_corrective_name_of_t c t s m) (Trig true) nd_rcv_corr_args)
         s_rhs_corr)) @
     (* the types for the maps without vid *)
     (P.for_all_maps c.p @@ fun m ->
-      P.map_name_of c.p m^"_map", Ds false, P.map_ids_types_for c.p m) @
+      ti (P.map_name_of c.p m^"_map") (Ds false) @@ P.map_ids_types_for c.p m) @
     (* t_vid_list ds for correctives *)
-    ["vids", Ds false, ["vid", t_vid];
-     nd_rcv_corr_done_nm, Trig false, nd_rcv_corr_done_args;
+    [ti "vids" (Ds false) ["vid", t_vid];
+     ti nd_rcv_corr_done_nm (Trig false) nd_rcv_corr_done_args;
     (* for GC (node->switch acks) *)
-     sw_ack_rcv_trig_nm, Trig false, sw_ack_rcv_trig_args]
+     ti sw_ack_rcv_trig_nm (Trig false) sw_ack_rcv_trig_args]
   in
   insert_index_fst l
 
@@ -1008,18 +1032,19 @@ let buffer_for_send ?(unique=false) ?(wr_bitmap=true) t addr args =
 
 (* code to check if we need to write a trig header, and if so, to buffer one *)
 (* @other_cond: another condition to output the trig header *)
-let buffer_trig_header_if_needed ?other_cond t addr args ~save_args =
-  let t = trig_sub_handler_name_of_t t in
-  let save_val = if save_args then mk_ctrue else mk_cfalse in
+let buffer_trig_header_if_needed ?other_cond ?(slim_trig=false) t addr args =
   (* normal condition for adding *)
   let bitmap_cond = mk_not @@ mk_at' send_trig_header_bitmap.id @@ mk_var addr in
   let cond = maybe bitmap_cond (fun c -> mk_or c bitmap_cond) other_cond in
+  let t_nm =
+    if slim_trig then trig_slim_sub_handler_name_of_t t
+    else trig_sub_handler_name_of_t t in
   mk_if cond
     (mk_block [
       (* update the bitmap *)
       mk_insert_at send_trig_header_bitmap.id (mk_var addr) [mk_ctrue];
       (* buffer trig args *)
-      buffer_for_send t addr (save_val::args)
+      buffer_for_send t_nm addr args
     ])
     mk_cunit
 
@@ -1055,8 +1080,8 @@ let buffer_tuples_from_idxs ?(unique=false) ?(drop_vid=false) tuples_nm map_type
           indices])
     mk_cunit (* do nothing if empty. we're sending a header anyway *)
 
-let ios_tag c stag = fst @@ List.find (fun (_, (s, _, _)) -> s = stag) c.poly_tags
-let soi_tag c itag = fst3 @@ snd @@ List.find (fun (i, (_, _, _)) -> i = itag) c.poly_tags
+let ios_tag c stag = fst @@ List.find (fun (_, ti) -> ti.tag = stag) c.poly_tags
+let soi_tag c itag = (snd @@ List.find (fun (i, _) -> i = itag) c.poly_tags).tag
 
 (* name for master send request trigger (part of GC) *)
 let ms_send_gc_req_nm = "ms_send_gc_req"
@@ -1392,9 +1417,9 @@ let if_trace print_e e =
 (* for debugging *)
 let do_trace nm l expr =
   let elem (t, e) = match t.typ with
-      | TInt -> mk_apply' "string_of_int" [e]
+      | TInt    -> mk_apply' "string_of_int" [e]
       | TString -> e
-      | TFloat -> mk_apply' "string_of_float" [e]
+      | TFloat  -> mk_apply' "string_of_float" [e]
       | _ -> failwith "unhandled type"
   in
   let rest, last = list_split (-1) l in
