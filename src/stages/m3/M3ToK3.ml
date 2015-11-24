@@ -474,20 +474,32 @@ let map_access_to_expr mapn ins outs map_ret_t theta_vars_k init_expr_opt =
               @@ List.fold_left (fun acc (s, (t,u)) -> if t then acc @ [s, "t."^s] else acc) []
                 @@ add_record_ids @@ List.map (fun x -> List.mem x bound_vars, x) all_vars
           in
-          let prj_expr = List.map typed_var_pair free_vars_k @
-                           [KU.id_of_var map_ret_ve, map_ret_kt]
+          let probe_key = stringify_record ["key", mk_slice_key outs_k bound_vars_k] in
+          let new_key = mk_slice_key outs_k bound_vars_k
+          in
+          let prj_expr = List.map typed_var_pair free_vars_k @ [KU.id_of_var map_ret_ve, map_ret_kt]
           in
           let prj_types = (List.map (fun v -> K3N.string_of_base_type @@ KH.canonical @@ List.assoc v type_map) free_vars_k) @
                             [K3N.string_of_base_type map_ret_kt]
           in
           let prj_vars = free_vars_k @ [KU.id_of_var map_ret_ve] in
+          let idx_key_type =
+            add_record_ids @@
+              List.map (fun v -> K3N.string_of_base_type @@ KH.canonical @@ List.assoc v type_map) bound_vars_k
+          in
           KU.add_property
-            (sp ("MapAccess(lbl=[# %s], probe=[$ %s], missing_fn=[$ (\\_ -> {key: %s, value: empty %s @Collection})], present_fn=[$ (\\acc -> ((acc.value.insert %s); acc)) ])")
+            (sp ("MapAccess(lbl=[# %s], probe=[$ %s], "^
+                 "missing_fn=[$ (\\_ -> {key: %s, value: empty %s @Collection})], "^
+                 "present_fn=[$ (\\acc -> ((acc.value.insert %s); acc)) ], "^
+                 "index_key=[:> key=>%s], "^
+                 "index_value=[:> value=>collection %s @Collection])")
                   (KU.id_of_var coll_ve)
-                  (mk_slice_key outs_k bound_vars_k)
-                  (mk_slice_key outs_k bound_vars_k)
+                  probe_key
+                  new_key
                   (stringify_record @@ add_record_ids prj_types)
-                  (stringify_record @@ add_record_ids prj_vars))
+                  (stringify_record @@ add_record_ids prj_vars)
+                  (singleton_record idx_key_type)
+                  (stringify_record @@ add_record_ids prj_types))
             (KH.mk_map
                (project_fn
                  (List.map typed_var_pair outs_k @ [KU.id_of_var map_ret_ve, map_ret_kt]) @@ prj_expr) @@
