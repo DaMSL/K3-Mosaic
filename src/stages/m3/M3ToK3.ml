@@ -392,6 +392,7 @@ let gen_prod_ret_sym =
 (**/**)
 (**********************************************************************)
 
+let abc_str = "abcdefghijklmnopqrstuvwxyz"
 (**[map_access_to_expr mapn ins outs map_ret_t theta_vars_el init_expr_opt]
 
   Generates a K3 expression for accessing a map.
@@ -471,14 +472,12 @@ let map_access_to_expr mapn ins outs map_ret_t theta_vars_k init_expr_opt =
           let prj_expr = List.map typed_var_pair free_vars_k @
                            [KU.id_of_var map_ret_ve, map_ret_kt]
           in
-          let prj_types = (List.map (\v -> K3N.force_list @@ K3N.lazy_type K3N.default_config @@ List.assoc v type_map) free_vars_k) @
-                            [K3N.force_list @@ K3N.lazy_type K3N.default_config @@ map_ret_kt]
+          let prj_types = (List.map (fun v -> K3N.string_of_base_type @@ KH.canonical @@ List.assoc v type_map) free_vars_k) @
+                            [K3N.string_of_base_type map_ret_kt]
           in
           let prj_vars = free_vars_k @ [KU.id_of_var map_ret_ve] in
           KU.add_property
-            (sp ("MapAccess(lbl=[# %s], probe=[$ %s],"
-                 ^"missing_fn=[$ (\\_ -> {key: %s, value: empty %s @Collection})],"
-                 ^"present_fn=[$ (\\acc -> ((acc.value.insert %s); acc)) ])")
+            (sp ("MapAccess(lbl=[# %s], probe=[$ %s], missing_fn=[$ (\\_ -> {key: %s, value: empty %s @Collection})], present_fn=[$ (\\acc -> ((acc.value.insert %s); acc)) ])")
                   (KU.id_of_var coll_ve)
                   (singleton_record bound_vars_k)
                   (singleton_record bound_vars_k)
@@ -486,7 +485,7 @@ let map_access_to_expr mapn ins outs map_ret_t theta_vars_k init_expr_opt =
                   (add_record_ids prj_vars))
             (KH.mk_map
                (project_fn
-                 (List.map typed_var_pair outs_k @ [KU.id_of_var map_ret_ve, map_ret_kt]) @@ prj_expr]) @@
+                 (List.map typed_var_pair outs_k @ [KU.id_of_var map_ret_ve, map_ret_kt]) @@ prj_expr) @@
                mk_slice coll_ve outs_k bound_vars_k)
     in
     let map_expr = KH.mk_var mapn in
