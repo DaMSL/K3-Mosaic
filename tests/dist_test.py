@@ -186,7 +186,7 @@ def run(target_file,
                 return False
             cmd = concat([k3o, "-p -i k3 -l k3new", "warmup.k3o", "> warmup.k3 2>", error_file])
             print_system(cmd, True)
-            cmd = concat([k3o, "-p -i k3 -l k3new", "dist_warmup.k3o", "> dist_warmup.k3 2>", error_file])
+            cmd = concat([k3o, "-p -i k3 -l k3new --k3new-folds", "dist_warmup.k3o", "> dist_warmup.k3 2>", error_file])
             print_system(cmd, True)
             return True
 
