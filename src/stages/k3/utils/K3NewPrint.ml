@@ -1565,6 +1565,21 @@ let string_of_program ?(map_to_fold=false) ?(use_filemux=false) ?(safe_writes=fa
 (* envs are the typechecking environments to allow us to do incremental typechecking *)
 let string_of_dist_program ?(file="default.txt") ~map_to_fold ~use_filemux ~safe_writes warmup_maps (p, envs) =
   let p' = filter_incompatible p in
+  let map_template (nm, ty) =
+"\
+ declare warmup_map_inpath_"^nm^" : mut string
+"
+  in
+  let map_load_fn wm =
+"\
+ declare load_warmup_maps : () -> () = \\_ -> (
+  "^(List.fold_left (fun acc (nm,_) ->
+      (if acc == "" then "    " else ";\n    ")^
+        "    openFile me \"chan"^nm^"\" warmup_map_inpath_"^nm^" \"k3\" false \"r\";\n"
+       ^"    "^nm^" = doRead me \"chan"^nm^"\"") "" wm)^"
+ )
+"
+  in
 "\
 include \"Core/Builtins.k3\"
 include \"Core/Log.k3\"
@@ -1621,11 +1636,32 @@ control IfMachineMaster {
 
 declare rebatch : mut int = 0
 
-"^ string_of_program ~map_to_fold ~use_filemux ~safe_writes p' envs
+"^ (match warmup_maps with
+    | Some(wm) -> String.concat "\n" @@ List.map map_template nm @ [map_load_fn wm]
+    | _ -> "")
+ ^ string_of_program ~map_to_fold ~use_filemux ~safe_writes p' envs
 
 let string_of_dist_warmup_program ?(file="default.txt") ~map_to_fold ~use_filemux ~safe_writes warmup_maps (p, envs) =
   let p' = filter_incompatible p in
-  let map_template = ""
+  let map_template (nm, ty) =
+"\
+ declare warmup_map_outpath_"^nm^" : mut string
+ sink sink_"^nm^" : "^(force_list @@ lazy_type ty)^" = file warmup_map_outpath_"^nm^" binary k3
+"
+  in
+  let map_save_fn wm =
+"\
+ declare save_warmup_maps : () -> () = \\_ -> (
+  "^(List.fold_left (fun acc (nm,_) -> (if acc == "" then "    " else ";\n    ")^"(sink_"^nm^", me) <- "^nm) "" wm)^"
+ )
+
+ trigger compute_warmup_maps : () = \\_ -> (
+    "^(List.fold_left (fun acc (nm,_) -> (if acc == "" then "    " else ";\n    ")^nm^"_create()") "" wm)^"
+ )
+
+ source go : () = value ()
+ feed go |> compute_warmup_maps
+"
   in
 "\
 include \"Core/Builtins.k3\"
@@ -1636,4 +1672,7 @@ include \"Core/Profile.k3\"
 include \"Annotation/Maps/MapE.k3\"
 include \"Annotation/MultiIndex/MultiIndexVMap.k3\"
 
-"^ string_of_program ~map_to_fold ~use_filemux ~safe_writes p' envs
+"^(match warmup_maps with
+    | Some(wm) -> String.concat "\n" @@ List.map map_template nm @ [map_save_fn wm]
+    | _ -> "")
+ ^(string_of_program ~map_to_fold ~use_filemux ~safe_writes p' envs)

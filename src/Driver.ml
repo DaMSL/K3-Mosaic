@@ -358,7 +358,7 @@ let print_k3_program ?(print_warmup=false) ?(no_roles=false) f = function
     if print_warmup then
       print_program_and_event_loop ~no_roles (f (Some wmap_idt)) warmup
     else
-      print_program_and_event_loop ~no_roles (f None) p
+      print_program_and_event_loop ~no_roles (f (Some wmap_idt)) p
   | _ -> error "Cannot print this type of data"
 
 (* create and print a k3 program with an expected section *)
