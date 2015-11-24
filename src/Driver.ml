@@ -461,18 +461,15 @@ let test params inputs =
     | x -> error @@ "testing not yet implemented for "^string_of_data x
   in List.iter2 test_fn params.input_files inputs
 
-let transform_to_k3_dist params p warmup_p proginfo =
+let transform_to_k3_dist params proginfo warmup_p ast =
   let {map_type; stream_file;
        gen_deletes; gen_correctives;
        agenda_map; use_opt_route} = params in
   try
-    (if params.print_warmup
-       then p
-       else GenDist.gen_dist ~map_type ~stream_file ~gen_deletes ~gen_correctives
-                             ~agenda_map ~use_opt_route proginfo p),
-    ModifyAst.modify_warmup warmup_p
+    GenDist.gen_dist ~map_type ~stream_file ~gen_deletes ~gen_correctives
+                     ~agenda_map ~use_opt_route proginfo warmup_p ast
 
-  with DistributeError(uuid, s) -> handle_distribute_error (K3Data p) uuid s
+  with DistributeError(uuid, s) -> handle_distribute_error (K3Data ast) uuid s
 
 let process_inputs params =
   let proc_fn f = match params.in_lang, !(params.action) with
@@ -493,7 +490,7 @@ let process_inputs params =
 let transform params ds =
   let proc_fn input = match params.out_lang, input with
    | (AstK3Dist | K3Dist | K3DistTest), K3DistData(p, proginfo, _, warmup_prog) ->
-       let p', warmup' = transform_to_k3_dist params p warmup_prog proginfo in
+       let warmup', p' = transform_to_k3_dist params proginfo warmup_prog p in
        K3DistData(p', proginfo, p, warmup')
    | (AstK3Dist | K3Dist | K3DistTest), _ ->
        failwith "Missing metadata for distributed version"

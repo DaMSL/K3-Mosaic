@@ -2124,13 +2124,14 @@ let gen_dist_for_t c ast t =
 
 (* Function to generate the whole distributed program *)
 (* @param force_correctives Attempt to create dist code that encourages correctives *)
+(* @warmup_p: warmup program *)
 let gen_dist ?(gen_deletes=true)
              ?(gen_correctives=true)
              ?(use_opt_route=true)
              ~stream_file
              ~map_type
              ~(agenda_map: mapping_t)
-             p ast =
+             p warmup_p ast =
   let sys_init =
     try ignore(P.find_trigger p "system_ready_event"); true
     with Not_found | P.Bad_data _ -> false in
@@ -2209,5 +2210,7 @@ let gen_dist ?(gen_deletes=true)
     ] @
     roles_of c ast
   in
-  snd @@ U.renumber_program_ids prog
+  let warmup = M.modify_warmup c warmup_p in
+
+  warmup, snd @@ U.renumber_program_ids prog
 

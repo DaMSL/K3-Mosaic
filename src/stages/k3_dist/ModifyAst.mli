@@ -24,5 +24,5 @@ val modify_corr_ast : config -> program_t ->
 val map_inits_from_ast : config -> program_t -> expr_t IntMap.t
 
 (* modify the warmup program *)
-val modify_warmup : program_t -> program_t
+val modify_warmup : config -> program_t -> program_t
 

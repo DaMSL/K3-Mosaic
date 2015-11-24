@@ -14,6 +14,7 @@ val gen_dist :
                agenda_map:K3Dist.mapping_t ->
                prog_data_t ->
                program_t ->
-               program_t
+               program_t ->
+               program_t * program_t
 
 val sw_demux_nm : id_t
