@@ -454,20 +454,25 @@ let map_access_to_expr mapn ins outs map_ret_t theta_vars_k init_expr_opt =
             "r" ^ (s_of_i "" i)
           in
           let add_record_ids l =
-            let rl = match l with
-                      | []    -> failwith "No list to add record ids to"
-                      | [x]   -> ["elem", x]
-                      | [x;y] -> ["key", x; "value", y]
-                      | _     ->
-                        let i_l = insert_index_fst ~first:1 l in
-                        List.map (fun (i, x) -> record_id_of_num i, x) i_l
-            in "{" ^ (String.concat "," @@ List.map (fun (s,t) -> s^": "^t) rl) ^ "}"
+            match l with
+            | []    -> failwith "No list to add record ids to"
+            | [x]   -> ["elem", x]
+            | [x;y] -> ["key", x; "value", y]
+            | _     ->
+              let i_l = insert_index_fst ~first:1 l in
+              List.map (fun (i, x) -> record_id_of_num i, x) i_l
           in
+          let stringify_record l = "{" ^ (String.concat "," @@ List.map (fun (s,t) -> s^": "^t) l) ^ "}" in
           let singleton_record l =
             match l with
             | [] -> failwith "Invalid record wrapping"
-            | [x] -> x
-            | _ -> add_record_ids l
+            | [x,y] -> y
+            | _ -> stringify_record l
+          in
+          let mk_slice_key all_vars bound_vars =
+            singleton_record
+              @@ List.fold_left (fun acc (s, (t,u)) -> if t then acc @ [s, "t."^s] else acc) []
+                @@ add_record_ids @@ List.map (fun x -> List.mem x bound_vars, x) all_vars
           in
           let prj_expr = List.map typed_var_pair free_vars_k @
                            [KU.id_of_var map_ret_ve, map_ret_kt]
@@ -479,10 +484,10 @@ let map_access_to_expr mapn ins outs map_ret_t theta_vars_k init_expr_opt =
           KU.add_property
             (sp ("MapAccess(lbl=[# %s], probe=[$ %s], missing_fn=[$ (\\_ -> {key: %s, value: empty %s @Collection})], present_fn=[$ (\\acc -> ((acc.value.insert %s); acc)) ])")
                   (KU.id_of_var coll_ve)
-                  (singleton_record bound_vars_k)
-                  (singleton_record bound_vars_k)
-                  (add_record_ids prj_types)
-                  (add_record_ids prj_vars))
+                  (mk_slice_key outs_k bound_vars_k)
+                  (mk_slice_key outs_k bound_vars_k)
+                  (stringify_record @@ add_record_ids prj_types)
+                  (stringify_record @@ add_record_ids prj_vars))
             (KH.mk_map
                (project_fn
                  (List.map typed_var_pair outs_k @ [KU.id_of_var map_ret_ve, map_ret_kt]) @@ prj_expr) @@
