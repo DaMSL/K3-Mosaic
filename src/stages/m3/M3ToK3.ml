@@ -442,7 +442,8 @@ let map_access_to_expr mapn ins outs map_ret_t theta_vars_k init_expr_opt =
         if free_vars_k = [] then
           error ("M3ToK3: We shouldn't slice if all variables are bound."^
                   " We should Lookup instead.");
-        if free_vars_k = outs_k then coll_ve
+        if free_vars_k = outs_k
+        then KU.add_property "BaseRelation" coll_ve
         else
           let record_id_of_num i =
             let rec s_of_i acc i =
@@ -499,7 +500,7 @@ let map_access_to_expr mapn ins outs map_ret_t theta_vars_k init_expr_opt =
             (KH.mk_map
                (project_fn
                  (List.map typed_var_pair outs_k @ [KU.id_of_var map_ret_ve, map_ret_kt]) @@ prj_expr) @@
-               mk_slice coll_ve outs_k bound_vars_k)
+               mk_slice (KU.add_property "BaseRelation" coll_ve) outs_k bound_vars_k)
     in
     let map_expr = KH.mk_var mapn in
 
