@@ -353,10 +353,10 @@ let print_program_and_event_loop ?(no_roles=false) f p =
     )
 
 let print_k3_program ?(print_warmup=false) ?(no_roles=false) f = function
-  | K3Data p -> print_program_and_event_loop ~no_roles f p
+  | K3Data p -> print_program_and_event_loop ~no_roles (f None) p
   | K3DistData (p,_,_,(warmup, wmap_idt)) ->
     if print_warmup then
-      print_program_and_event_loop ~no_roles (f @@ Some wmap_idt) warmup
+      print_program_and_event_loop ~no_roles (f (Some wmap_idt)) warmup
     else
       print_program_and_event_loop ~no_roles (f None) p
   | _ -> error "Cannot print this type of data"
@@ -439,8 +439,8 @@ let print params inputs =
   let sofp = string_of_program ~verbose:cmd_line_params.verbose ~print_id:true in
   let print_k3_program = print_k3_program ~print_warmup:params.print_warmup in
   let print_fn = match params.out_lang with
-    | AstK3 | AstK3Dist   -> print_k3_program (sofp |- fst) |- snd
-    | K3 | K3Dist         -> print_k3_program (PS.string_of_program |- fst) |- snd
+    | AstK3 | AstK3Dist   -> print_k3_program (fun _ -> (sofp |- fst)) |- snd
+    | K3 | K3Dist         -> print_k3_program (fun _ -> (PS.string_of_program |- fst)) |- snd
     | K3New               -> print_k3_program ~no_roles:true
        (if params.print_warmup
           then K3NewPrint.string_of_dist_warmup_program

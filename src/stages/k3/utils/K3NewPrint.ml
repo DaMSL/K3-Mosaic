@@ -1563,7 +1563,7 @@ let string_of_program ?(map_to_fold=false) ?(use_filemux=false) ?(safe_writes=fa
 
 (* print a new k3 program with added sources and feeds *)
 (* envs are the typechecking environments to allow us to do incremental typechecking *)
-let string_of_dist_program ?(file="default.txt") ~map_to_fold ~use_filemux ~safe_writes ?(warmup_maps=None) (p, envs) =
+let string_of_dist_program ?(file="default.txt") ~map_to_fold ~use_filemux ~safe_writes warmup_maps (p, envs) =
   let p' = filter_incompatible p in
 "\
 include \"Core/Builtins.k3\"
@@ -1623,7 +1623,7 @@ declare rebatch : mut int = 0
 
 "^ string_of_program ~map_to_fold ~use_filemux ~safe_writes p' envs
 
-let string_of_dist_warmup_program ?(file="default.txt") ~map_to_fold ~use_filemux ~safe_writes ?(warmup_maps=None) (p, envs) =
+let string_of_dist_warmup_program ?(file="default.txt") ~map_to_fold ~use_filemux ~safe_writes warmup_maps (p, envs) =
   let p' = filter_incompatible p in
   let map_template = ""
   in
