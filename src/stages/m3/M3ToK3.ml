@@ -15,6 +15,7 @@ module KS = K3PrintSyntax
 module KH = K3Helpers
 module KU = K3Util
 module KT = K3Typechecker
+module K3N = K3NewPrint
 
 let wrap_map  = KH.wrap_tbag
 let wrap_map' = KH.wrap_tbag'
@@ -442,12 +443,51 @@ let map_access_to_expr mapn ins outs map_ret_t theta_vars_k init_expr_opt =
                   " We should Lookup instead.");
         if free_vars_k = outs_k then coll_ve
         else
-          KH.mk_map
-            (project_fn
-              (List.map typed_var_pair outs_k @ [KU.id_of_var map_ret_ve, map_ret_kt]) @@
-              List.map typed_var_pair free_vars_k @
-              [KU.id_of_var map_ret_ve, map_ret_kt]) @@
-            mk_slice coll_ve outs_k bound_vars_k
+          let record_id_of_num i =
+            let rec s_of_i acc i =
+              if i <= String.length abc_str then
+                sp "%s%c" acc (abc_str.[i-1])
+              else
+                s_of_i (acc ^ "z") (i-String.length abc_str)
+            in
+            "r" ^ (s_of_i "" i)
+          in
+          let add_record_ids l =
+            let rl = match l with
+                      | []    -> failwith "No list to add record ids to"
+                      | [x]   -> ["elem", x]
+                      | [x;y] -> ["key", x; "value", y]
+                      | _     ->
+                        let i_l = insert_index_fst ~first:1 l in
+                        List.map (fun (i, x) -> record_id_of_num i, x) i_l
+            in "{" ^ (String.concat "," @@ List.map (fun (s,t) -> s^": "^t) rl) ^ "}"
+          in
+          let singleton_record l =
+            match l with
+            | [] -> failwith "Invalid record wrapping"
+            | [x] -> x
+            | _ -> add_record_ids l
+          in
+          let prj_expr = List.map typed_var_pair free_vars_k @
+                           [KU.id_of_var map_ret_ve, map_ret_kt]
+          in
+          let prj_types = (List.map (\v -> K3N.force_list @@ K3N.lazy_type K3N.default_config @@ List.assoc v type_map) free_vars_k) @
+                            [K3N.force_list @@ K3N.lazy_type K3N.default_config @@ map_ret_kt]
+          in
+          let prj_vars = free_vars_k @ [KU.id_of_var map_ret_ve] in
+          KU.add_property
+            (sp ("MapAccess(lbl=[# %s], probe=[$ %s],"
+                 ^"missing_fn=[$ (\\_ -> {key: %s, value: empty %s @Collection})],"
+                 ^"present_fn=[$ (\\acc -> ((acc.value.insert %s); acc)) ])")
+                  (KU.id_of_var coll_ve)
+                  (singleton_record bound_vars_k)
+                  (singleton_record bound_vars_k)
+                  (add_record_ids prj_types)
+                  (add_record_ids prj_vars))
+            (KH.mk_map
+               (project_fn
+                 (List.map typed_var_pair outs_k @ [KU.id_of_var map_ret_ve, map_ret_kt]) @@ prj_expr]) @@
+               mk_slice coll_ve outs_k bound_vars_k)
     in
     let map_expr = KH.mk_var mapn in
 
@@ -468,7 +508,7 @@ let map_access_to_expr mapn ins outs map_ret_t theta_vars_k init_expr_opt =
                     (List.map KH.canonical outs_tl)
                     map_ret_kt)
                   (mk_lookup map_expr (map_ret_kt.K.typ) outs_k outs_tl)
-                          init_expr
+                  init_expr
           | _ -> slice_and_project map_expr
           end
 
