@@ -477,7 +477,7 @@ let map_access_to_expr mapn ins outs map_ret_t theta_vars_k init_expr_opt =
           let mk_slice_prj all_vars free_vars extra_vars =
             singleton_record @@ add_record_ids
               @@ List.fold_left (fun acc (s, (t,u)) -> if t then acc @ ["t."^s] else acc) []
-                  @@ add_record_ids ((List.map (fun x -> List.mem x bound_vars, x) all_vars) @ extra_vars)
+                  @@ add_record_ids ((List.map (fun x -> List.mem x free_vars, x) all_vars) @ extra_vars)
           in
           let new_key = mk_slice_key outs_k bound_vars_k in
           let lkp_probe_key = stringify_record ["key", singleton_record @@ add_record_ids bound_vars_k] in
