@@ -469,27 +469,30 @@ let map_access_to_expr mapn ins outs map_ret_t theta_vars_k init_expr_opt =
             | [x,y] -> y
             | _ -> stringify_record l
           in
-          let mk_slice_key all_vars bound_vars extra_vars =
+          let mk_slice_key all_vars bound_vars =
             singleton_record
               @@ List.fold_left (fun acc (s, (t,u)) -> if t then acc @ [s, "t."^s] else acc) []
-                    @@ add_record_ids ((List.map (fun x -> List.mem x bound_vars, x) all_vars) @ extra_vars)
+                    @@ add_record_ids @@ List.map (fun x -> List.mem x bound_vars, x) all_vars
           in
+          let mk_slice_prj all_vars free_vars extra_vars =
+            singleton_record @@ add_record_ids
+              @@ List.fold_left (fun acc (s, (t,u)) -> if t then acc @ ["t."^s] else acc) []
+                  @@ add_record_ids ((List.map (fun x -> List.mem x bound_vars, x) all_vars) @ extra_vars)
+          in
+          let new_key = mk_slice_key outs_k bound_vars_k in
           let lkp_probe_key = stringify_record ["key", singleton_record @@ add_record_ids bound_vars_k] in
-          let idx_probe_key = stringify_record ["key", mk_slice_key outs_k bound_vars_k []] in
-          let new_key = mk_slice_key outs_k bound_vars_k []
-          in
-          let prj_expr = List.map typed_var_pair free_vars_k @ [KU.id_of_var map_ret_ve, map_ret_kt]
-          in
+          let idx_probe_key = stringify_record ["key", new_key] in
+          let prj_expr = List.map typed_var_pair free_vars_k @ [KU.id_of_var map_ret_ve, map_ret_kt] in
           let prj_types = (List.map (fun v -> K3N.string_of_base_type @@ KH.canonical @@ List.assoc v type_map) free_vars_k) @
                             [K3N.string_of_base_type map_ret_kt]
           in
-          let prj_vars = mk_slice_key outs_k free_vars_k [true, KU.id_of_var map_ret_ve] in
+          let prj_vars = mk_slice_prj outs_k free_vars_k [true, KU.id_of_var map_ret_ve] in
           let idx_key_type =
             add_record_ids @@
               List.map (fun v -> K3N.string_of_base_type @@ KH.canonical @@ List.assoc v type_map) bound_vars_k
           in
           let key_type = singleton_record idx_key_type in
-          let val_type = stringify_record @@ add_record_ids prj_types in
+          let val_type = singleton_record @@ add_record_ids prj_types in
           KU.add_annotation
             (sp ("MosaicIndex(lbl=[# %s], key_type=[: %s], lookup_probe=[$ %s], index_probe=[$ %s], missing_fn=[$ (\\_ -> {key: %s, value: empty %s @Collection})], present_fn=[$ (\\acc -> ((acc.value.insert %s); acc)) ], index_key=[:> key=>%s], index_value=[:> value=>collection %s @Collection])")
                   (KU.id_of_var coll_ve) key_type lkp_probe_key idx_probe_key new_key val_type prj_vars key_type val_type)
