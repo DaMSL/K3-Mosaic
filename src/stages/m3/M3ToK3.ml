@@ -1561,9 +1561,7 @@ let m3_to_k3 ?(generate_init = false) ?(role = "client")
         let (_, _, defn_expr), _ =
           calc_to_k3_expr [] ~generate_init:false [] ds.Plan.ds_definition
         in
-        let booststrap_expr =
-          KU.add_annotation (sp "MosaicMaterialization(lbl=[# bs_%s ], cnt=[$ 0])" map_nm)
-            @@ KH.mk_assign ("bs_"^map_nm) @@ KU.add_annotation "MosaicFusion" defn_expr
+        let booststrap_expr = KH.mk_assign ("bs_"^map_nm) defn_expr
         in
         acc @
           [K.Global("bs_"^map_nm, (KH.mut @@ mk_k3_collection ivar_types ovar_types element_type), None);

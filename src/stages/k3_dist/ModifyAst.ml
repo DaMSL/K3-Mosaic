@@ -528,20 +528,21 @@ let modify_warmup c (ast:program_t) =
 
       (* modify bootstrap functions by adding a vid of 0 *)
       | Global(nm, u_t, Some e) when str_prefix "bootstrap_" nm ->
-        let t_l, map_t =
-          try Hashtbl.find h @@
-            str_drop (String.length "bootstrap_") nm with Not_found -> [], t_unit in
+        let map_nm = str_drop (String.length "bootstrap_") nm in
+        let t_l, map_t = try Hashtbl.find h @@ map_nm with Not_found -> [], t_unit in
         let t_l = List.map (fun (i,t) -> "map_"^soi i, t) @@ insert_index_fst t_l in
         let arg, body = U.decompose_lambda e in
         let l, r = U.decompose_assign body in
         let assign_v = U.decompose_var l in
         let key, v = list_split (-1) @@ ids_to_vars @@ fst_many t_l in
         let e' =
-          mk_assign assign_v @@
-            mk_agg (mk_lambda2' ["acc", map_t] t_l @@
-              mk_insert_block "acc" [mk_cint 0; mk_tuple key; hd v])
-              (mk_empty map_t)
-              r
+          U.add_annotation (sp "MosaicMaterialization(lbl=[# bs_%s ], cnt=[$ 0])" @@ map_nm) @@
+            mk_assign assign_v @@
+              U.add_annotation "MosaicFusion" @@
+                mk_agg (mk_lambda2' ["acc", map_t] t_l @@
+                  mk_insert_block "acc" [mk_cint 0; mk_tuple key; hd v])
+                  (mk_empty map_t)
+                  r
         in
         Global(nm, u_t, Some(mk_lambda' ["_", t_unit] e'))
 
