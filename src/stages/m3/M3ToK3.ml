@@ -483,7 +483,7 @@ let map_access_to_expr mapn ins outs map_ret_t theta_vars_k init_expr_opt =
           let prj_types = (List.map (fun v -> K3N.string_of_base_type @@ KH.canonical @@ List.assoc v type_map) free_vars_k) @
                             [K3N.string_of_base_type map_ret_kt]
           in
-          let prj_vars = mk_slice_key outs_k free_vars_k [True, KU.id_of_var map_ret_ve] in
+          let prj_vars = mk_slice_key outs_k free_vars_k [true, KU.id_of_var map_ret_ve] in
           let idx_key_type =
             add_record_ids @@
               List.map (fun v -> K3N.string_of_base_type @@ KH.canonical @@ List.assoc v type_map) bound_vars_k
