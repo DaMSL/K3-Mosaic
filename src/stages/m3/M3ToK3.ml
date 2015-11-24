@@ -488,11 +488,7 @@ let map_access_to_expr mapn ins outs map_ret_t theta_vars_k init_expr_opt =
               List.map (fun v -> K3N.string_of_base_type @@ KH.canonical @@ List.assoc v type_map) bound_vars_k
           in
           KU.add_property
-            (sp ("MapAccess(lbl=[# %s], probe=[$ %s], "^
-                 "missing_fn=[$ (\\_ -> {key: %s, value: empty %s @Collection})], "^
-                 "present_fn=[$ (\\acc -> ((acc.value.insert %s); acc)) ], "^
-                 "index_key=[:> key=>%s], "^
-                 "index_value=[:> value=>collection %s @Collection])")
+            (sp ("MapAccess(lbl=[# %s], probe=[$ %s], missing_fn=[$ (\\_ -> {key: %s, value: empty %s @Collection})], present_fn=[$ (\\acc -> ((acc.value.insert %s); acc)) ], index_key=[:> key=>%s], index_value=[:> value=>collection %s @Collection])")
                   (KU.id_of_var coll_ve)
                   probe_key
                   new_key
