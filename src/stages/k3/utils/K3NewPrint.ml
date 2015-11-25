@@ -1648,7 +1648,7 @@ let string_of_dist_warmup_program ?(file="default.txt") ~map_to_fold ~use_filemu
 "\
 declare warmup_map_outpath_"^nm^" : mut string
 
-sink sink_"^nm^" : "^(string_of_base_type ty)^" = file warmup_map_outpath_"^nm^" binary k3
+sink sink_"^nm^" : "^(string_of_base_type @@ KH.immut ty)^" = file warmup_map_outpath_"^nm^" binary k3
 "
   in
   let map_save_fn wm =
