@@ -52,7 +52,7 @@ type data_t =
   | K3Data of program_t
   (* for distributed programs, we also need the metadata of the maps, the
    * non-distributed program, and the map warmup program *)
-  | K3DistData of program_t * ProgInfo.prog_data_t * program_t * program_t)
+  | K3DistData of program_t * ProgInfo.prog_data_t * program_t * program_t
   | K3TestData of program_test_t
 
 let string_of_data = function
