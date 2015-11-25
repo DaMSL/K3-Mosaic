@@ -536,7 +536,7 @@ let modify_warmup c (ast:program_t) =
         let assign_v = U.decompose_var l in
         let key, v = list_split (-1) @@ ids_to_vars @@ fst_many t_l in
         let e' =
-          U.add_annotation (sp "MosaicMaterialization(lbl=[# bs_%s ], cnt=[$ 0], finaltrg=[$ halt])" @@ map_nm) @@
+          U.add_annotation (sp "MosaicMaterialization(lbl=[# bs_%s ], cnt=[$ 0], finaltrg=[$ save_warmup_maps])" @@ map_nm) @@
             mk_assign assign_v @@
               U.add_annotation "MosaicFusion" @@
                 mk_agg (mk_lambda2' ["acc", map_t] t_l @@

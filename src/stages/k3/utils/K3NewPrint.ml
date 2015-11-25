@@ -1654,7 +1654,10 @@ sink sink_"^nm^" : "^(string_of_base_type ty)^" = file warmup_map_outpath_"^nm^"
   let map_save_fn wm =
 "\
 trigger save_warmup_maps : () = \\_ -> (
-  "^(List.fold_left (fun acc (nm,_) -> (if acc = "" then "  " else acc^";\n    ")^"(sink_"^nm^", me) <- "^nm) "" wm)^"
+  (
+  "^(List.fold_left (fun acc (nm,_) -> (if acc = "" then "  " else acc^";\n    ")^"(sink_"^nm^", me) <- "^nm) "" wm)^";
+    (halt, me) <- ()
+  ) @OnCounter(id=[# shutdown], eq=[$ "^(string_of_int @@ List.length wm)^"], reset=[$ false], profile=[$ false])
 )
 
 trigger compute_warmup_maps : () = \\_ -> (
@@ -1664,10 +1667,7 @@ trigger compute_warmup_maps : () = \\_ -> (
         ^(str_drop (String.length "bs_") nm)^" ()") "" wm)^"
 )
 
-trigger halt : () = \\_ -> (
-  ( haltEngine()
-  ) @OnCounter(id=[# shutdown], eq=[$ "^(string_of_int @@ List.length wm)^"], reset=[$ false], profile=[$ false])
-)
+trigger halt : () = \\_ -> haltEngine()
 
 source go : () = value ()
 feed go |> compute_warmup_maps
