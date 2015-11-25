@@ -1653,7 +1653,7 @@ sink sink_"^nm^" : "^(string_of_base_type ty)^" = file warmup_map_outpath_"^nm^"
   in
   let map_save_fn wm =
 "\
-declare save_warmup_maps : () -> () = \\_ -> (
+trigger save_warmup_maps : () = \\_ -> (
   "^(List.fold_left (fun acc (nm,_) -> (if acc = "" then "  " else acc^";\n    ")^"(sink_"^nm^", me) <- "^nm) "" wm)^"
 )
 
