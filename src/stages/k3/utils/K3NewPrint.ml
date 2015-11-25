@@ -1658,7 +1658,7 @@ trigger save_warmup_maps : () = \\_ -> (
 )
 
 trigger compute_warmup_maps : () = \\_ -> (
-  "^(List.fold_left (fun acc (nm,_) -> (if acc = "" then "  " else acc^";\n    bootstrap_")^(str_drop "bs_" nm)^" ()") "" wm)^"
+  "^(List.fold_left (fun acc (nm,_) -> (if acc = "" then "  " else acc^";\n    bootstrap_")^(str_drop (String.length "bs_") nm)^" ()") "" wm)^"
 )
 
 trigger halt : () = \\_ -> (
