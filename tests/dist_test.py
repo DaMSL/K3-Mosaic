@@ -176,17 +176,20 @@ def run(target_file,
 
         # if asked to print the warmup, do so now
         if print_warmup:
-            cmd = concat([k3o, "-p -i m3 -l k3", m3_file, "--print-warmup", "> warmup.k3o 2>", error_file])
-            print_system(cmd, True)
-            cmd = concat([k3o, "-p -i m3 -l k3dist", m3_file, agenda_cmd,
-              concat(options), "--sfile", data_file, "--print-warmup", "> dist_warmup.k3o 2>", error_file])
-            print_system(cmd, True)
-            if check_error(error_file, verbose):
-                os.chdir(saved_dir)
-                return False
-            cmd = concat([k3o, "-p -i k3 -l k3new", "warmup.k3o", "> warmup.k3 2>", error_file])
-            print_system(cmd, True)
-            cmd = concat([k3o, "-p -i k3 -l k3new --k3new-folds", "dist_warmup.k3o", "> dist_warmup.k3 2>", error_file])
+            #cmd = concat([k3o, "-p -i m3 -l k3", m3_file, "--print-warmup", "> warmup.k3o 2>", error_file])
+            #print_system(cmd, True)
+            #cmd = concat([k3o, "-p -i m3 -l k3dist", m3_file, agenda_cmd,
+            #  concat(options), "--sfile", data_file, "--print-warmup", "> dist_warmup.k3o 2>", error_file])
+            #print_system(cmd, True)
+            #if check_error(error_file, verbose):
+            #    os.chdir(saved_dir)
+            #    return False
+            #cmd = concat([k3o, "-p -i k3 -l k3new", "warmup.k3o", "> warmup.k3 2>", error_file])
+            #print_system(cmd, True)
+            #cmd = concat([k3o, "-p -i k3 -l k3new --k3new-folds", "dist_warmup.k3o", "> dist_warmup.k3 2>", error_file])
+            #print_system(cmd, True)
+            cmd = concat([k3o, "-p -i m3 -l k3new --k3new-folds", m3_file, agenda_cmd,
+              concat(options), "--sfile", data_file, "--print-warmup", "> dist_warmup.k3 2>", error_file])
             print_system(cmd, True)
             return True
 

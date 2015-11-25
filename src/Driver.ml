@@ -355,10 +355,15 @@ let print_program_and_event_loop ?(no_roles=false) f p =
 let print_k3_program ?(print_warmup=false) ?(no_roles=false) f = function
   | K3Data p -> print_program_and_event_loop ~no_roles (f None) p
   | K3DistData (p,_,_,(warmup, wmap_idt)) ->
+    let wmap_idt' = List.fold_left (fun acc (d,a) ->
+      match d with
+       | Global(nm,t,_) when str_prefix "bs_" nm -> acc@[nm,t]
+       | _ -> acc) [] warmup
+    in
     if print_warmup then
-      print_program_and_event_loop ~no_roles (f (Some wmap_idt)) warmup
+      print_program_and_event_loop ~no_roles (f (Some wmap_idt')) warmup
     else
-      print_program_and_event_loop ~no_roles (f (Some wmap_idt)) p
+      print_program_and_event_loop ~no_roles (f (Some wmap_idt')) p
   | _ -> error "Cannot print this type of data"
 
 (* create and print a k3 program with an expected section *)
@@ -495,7 +500,7 @@ let process_inputs params =
 (* this function can only transform to another k3 format *)
 let transform params ds =
   let proc_fn input = match params.out_lang, input with
-   | (AstK3Dist | K3Dist | K3DistTest), K3DistData(p, proginfo, _, (warmup_prog, wmap_idt)) ->
+   | (AstK3Dist | K3Dist | K3DistTest | K3New), K3DistData(p, proginfo, _, (warmup_prog, wmap_idt)) ->
        let warmup', p' = transform_to_k3_dist params proginfo warmup_prog p in
        K3DistData(p', proginfo, p, (warmup', wmap_idt))
    | (AstK3Dist | K3Dist | K3DistTest), _ ->

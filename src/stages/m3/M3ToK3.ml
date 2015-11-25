@@ -1584,6 +1584,7 @@ let m3_to_k3 ?(generate_init = false) ?(role = "client")
         acc @ ["bs_"^map_nm, (KH.mut @@ mk_k3_collection ivar_types ovar_types element_type)]
 
       | M3.DSTable(_, _, _) -> acc
+    end
   in
 
   let k3_warmup_prog =
