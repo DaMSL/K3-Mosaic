@@ -1658,7 +1658,12 @@ trigger save_warmup_maps : () = \\_ -> (
 )
 
 trigger compute_warmup_maps : () = \\_ -> (
-  "^(List.fold_left (fun acc (nm,_) -> (if acc = "" then "  " else acc^";\n    ")^nm^"_create()") "" wm)^"
+  "^(List.fold_left (fun acc (nm,_) -> (if acc = "" then "  " else acc^";\n    bootstrap_")^(str_drop "bs_" nm)^" ()") "" wm)^"
+)
+
+trigger halt : () = \\_ -> (
+  ( haltEngine()
+  ) @OnCounter(id=[# shutdown], eq=[$ "^(string_of_int @@ List.length wm)^"], reset=[$ false], profile=[$ false])
 )
 
 source go : () = value ()
@@ -1666,6 +1671,7 @@ feed go |> compute_warmup_maps
 "
   in
 "\
+include \"Core/Barrier.k3\"
 include \"Core/Builtins.k3\"
 include \"Core/Log.k3\"
 include \"Core/MosaicBuiltins.k3\"
