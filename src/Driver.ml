@@ -52,7 +52,7 @@ type data_t =
   | K3Data of program_t
   (* for distributed programs, we also need the metadata of the maps, the
    * non-distributed program, and the map warmup program *)
-  | K3DistData of program_t * ProgInfo.prog_data_t * program_t * (program_t * (id_t * type_t) list)
+  | K3DistData of program_t * ProgInfo.prog_data_t * program_t * program_t)
   | K3TestData of program_test_t
 
 let string_of_data = function
@@ -354,16 +354,16 @@ let print_program_and_event_loop ?(no_roles=false) f p =
 
 let print_k3_program ?(print_warmup=false) ?(no_roles=false) f = function
   | K3Data p -> print_program_and_event_loop ~no_roles (f None) p
-  | K3DistData (p,_,_,(warmup, wmap_idt)) ->
-    let wmap_idt' = List.fold_left (fun acc (d,a) ->
+  | K3DistData (p,_,_,warmup) ->
+    let wmap_idt = List.fold_left (fun acc (d,a) ->
       match d with
        | Global(nm,t,_) when str_prefix "bs_" nm -> acc@[nm,t]
        | _ -> acc) [] warmup
     in
     if print_warmup then
-      print_program_and_event_loop ~no_roles (f (Some wmap_idt')) warmup
+      print_program_and_event_loop ~no_roles (f (Some wmap_idt)) warmup
     else
-      print_program_and_event_loop ~no_roles (f (Some wmap_idt')) p
+      print_program_and_event_loop ~no_roles (f (Some wmap_idt)) p
   | _ -> error "Cannot print this type of data"
 
 (* create and print a k3 program with an expected section *)
@@ -492,17 +492,17 @@ let process_inputs params =
         if params.dump_info then begin print_endline @@ ProgInfo.dump_info proginfo; exit(0) end;
         if params.debug_info then
           print_endline (ProgInfo.string_of_prog_data proginfo);
-        let (prog, (warmup_prog, wmap_idt)) = M3ToK3.m3_to_k3 m3prog in
+        let (prog, warmup_prog) = M3ToK3.m3_to_k3 m3prog in
         if params.out_lang = K3Test then K3Data(prog)
-        else K3DistData(prog, proginfo, prog, (warmup_prog, wmap_idt))
+        else K3DistData(prog, proginfo, prog, warmup_prog)
   in List.map proc_fn params.input_files
 
 (* this function can only transform to another k3 format *)
 let transform params ds =
   let proc_fn input = match params.out_lang, input with
-   | (AstK3Dist | K3Dist | K3DistTest | K3New), K3DistData(p, proginfo, _, (warmup_prog, wmap_idt)) ->
+   | (AstK3Dist | K3Dist | K3DistTest | K3New), K3DistData(p, proginfo, _, warmup_prog) ->
        let warmup', p' = transform_to_k3_dist params proginfo warmup_prog p in
-       K3DistData(p', proginfo, p, (warmup', wmap_idt))
+       K3DistData(p', proginfo, p, warmup')
    | (AstK3Dist | K3Dist | K3DistTest), _ ->
        failwith "Missing metadata for distributed version"
    | _, data -> data

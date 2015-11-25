@@ -1463,7 +1463,7 @@ let k3_demuxes stream_rels =
    @return The [m3_program] translated into K3.
 *)
 let m3_to_k3 ?(generate_init = false) ?(role = "client")
-             (m3_program: M3.prog_t) : (K.program_t * (K.program_t * (K.id_t * K.type_t) list)) =
+             (m3_program: M3.prog_t) : (K.program_t * K.program_t) =
   let {
         M3.maps = m3_prog_schema; M3.triggers = m3_prog_trigs;
         M3.queries = m3_prog_tlqs; M3.db = m3_database
@@ -1571,22 +1571,6 @@ let m3_to_k3 ?(generate_init = false) ?(role = "client")
     end
   in
 
-  let k3_warmup_name_types acc m3_map =
-    begin match m3_map with
-      | M3.DSView(ds) ->
-        (* Global map declaration *)
-        let map_nm, input_vars, output_vars, map_type, _ =
-          Plan.expand_ds_name ds.Plan.ds_name
-        in
-        let element_type = m3_type_to_k3_base_type map_type in
-        let ivar_types = mvar_btypes input_vars in
-        let ovar_types = mvar_btypes output_vars in
-        acc @ ["bs_"^map_nm, (KH.mut @@ mk_k3_collection ivar_types ovar_types element_type)]
-
-      | M3.DSTable(_, _, _) -> acc
-    end
-  in
-
   let k3_warmup_prog =
     List.map k3_warmup_rel stream_rels
     @ List.map k3_warmup_rel table_rels
@@ -1599,5 +1583,5 @@ let m3_to_k3 ?(generate_init = false) ?(role = "client")
      [ K.Role(role, k3_prog_client_role);
        K.DefaultRole(role);
      ]),
-   (add_empty k3_warmup_prog, List.fold_left k3_warmup_name_types [] !m3_prog_schema))
+   add_empty k3_warmup_prog)
 
