@@ -393,10 +393,11 @@ let gen_prod_ret_sym =
 (**********************************************************************)
 
 let abc_str = "abcdefghijklmnopqrstuvwxyz"
-(**[map_access_to_expr mapn ins outs map_ret_t theta_vars_el init_expr_opt]
+(**[map_access_to_expr mapn resultn ins outs map_ret_t theta_vars_el init_expr_opt]
 
   Generates a K3 expression for accessing a map.
   @param mapn          The name of the map being accessed.
+  @param resultn       The name of the result map for which this map is accessed.
   @param ins           The input variables of the map access.
   @param outs          The output variables of the map access.
   @param map_ret_t     The type of the value associated with each tuple of
@@ -411,7 +412,7 @@ let abc_str = "abcdefghijklmnopqrstuvwxyz"
                         the value
                         associated with each element of the map,
                       - the K3 expression for accessing the map. *)
-let map_access_to_expr mapn ins outs map_ret_t theta_vars_k init_expr_opt =
+let map_access_to_expr mapn resultn ins outs map_ret_t theta_vars_k init_expr_opt =
 
     let ins_k:K.id_t list  = fst_many ins in
     let outs_k:K.id_t list = fst_many outs in
@@ -496,7 +497,7 @@ let map_access_to_expr mapn ins outs map_ret_t theta_vars_k init_expr_opt =
           let val_type = singleton_record @@ add_record_ids prj_types in
           KU.add_annotation
             (sp ("MosaicIndex(lbl=[# %s], key_type=[: %s], lookup_probe=[$ %s], index_probe=[$ %s], missing_fn=[$ (\\_ -> {key: %s, value: empty %s @Collection})], present_fn=[$ (\\acc -> ((acc.value.insert %s); acc)) ], index_key=[:> key=>%s], index_value=[:> value=>collection %s @Collection])")
-                  (KU.id_of_var coll_ve) key_type lkp_probe_key idx_probe_key new_key val_type prj_vars key_type val_type)
+                  ((KU.id_of_var coll_ve)^"_"^resultn) key_type lkp_probe_key idx_probe_key new_key val_type prj_vars key_type val_type)
             (KH.mk_map
                (project_fn
                  (List.map typed_var_pair outs_k @ [KU.id_of_var map_ret_ve, map_ret_kt]) @@ prj_expr) @@
@@ -691,6 +692,8 @@ let meta_append_init_keys meta init_keys = meta@[init_keys]
                      [meta_t] definition above.
    @param generate_init Flag specifying whether to generate initial value
                         computation or not. By default is set to false.
+   @param resultn An optional name for the result map which this calculus
+                  expression is maintaining.
    @param theta_vars The variables that are in scope when evaluating the
                      expression.
    @param calc       The calculus expression being translated.
@@ -705,11 +708,11 @@ let meta_append_init_keys meta init_keys = meta@[init_keys]
                        the value associated with each tuple in the collection
                        represented by the expression.
                      - the K3 expression itself *)
-let rec calc_to_k3_expr meta ?(generate_init = false) theta_vars_k calc :
+let rec calc_to_k3_expr meta ?(generate_init = false) ?(resultn="") theta_vars_k calc :
   ((K.id_t * K.type_t) list * (K.expr_t * K.type_t) * K.expr_t) * meta_t =
-  let rcr = calc_to_k3_expr meta  ~generate_init theta_vars_k in
+  let rcr = calc_to_k3_expr meta  ~generate_init ~resultn theta_vars_k in
   let rcr2 meta2 =
-    calc_to_k3_expr meta2 ~generate_init theta_vars_k in
+    calc_to_k3_expr meta2 ~generate_init ~resultn theta_vars_k in
 
   let ins, outs = schema_of_expr calc in
   let ins_k = fst_many ins in
@@ -751,7 +754,7 @@ let rec calc_to_k3_expr meta ?(generate_init = false) theta_vars_k calc :
 
         | Rel(reln, rel_schema) ->
           let rel_outs_el, rel_ret_ve, expr =
-                map_access_to_expr reln [] rel_schema T.TInt theta_vars_k None
+                map_access_to_expr reln resultn [] rel_schema T.TInt theta_vars_k None
           in
           (rel_outs_el, (rel_ret_ve, KH.t_int), expr), meta
 
@@ -777,7 +780,7 @@ let rec calc_to_k3_expr meta ?(generate_init = false) theta_vars_k calc :
                     theta_vars_k
               in
               let (init_outs_el, (init_ret_ve, init_ret_vt), init_expr), nm_1 =
-                calc_to_k3_expr meta ~generate_init init_theta_vars_k init_calc
+                calc_to_k3_expr meta ~generate_init ~resultn init_theta_vars_k init_calc
               in
               let init_outs_k = fst_many init_outs_el in
 
@@ -833,7 +836,7 @@ let rec calc_to_k3_expr meta ?(generate_init = false) theta_vars_k calc :
           in
           let map_outs_el, map_ret_ve, expr =
             map_access_to_expr
-              mapn eins eouts ext_type theta_vars_k init_expr_opt
+              mapn resultn eins eouts ext_type theta_vars_k init_expr_opt
           in
           (map_outs_el,
             (map_ret_ve, m3_type_to_k3_type ext_type), expr), nm
@@ -1034,7 +1037,7 @@ let rec calc_to_k3_expr meta ?(generate_init = false) theta_vars_k calc :
       (* their return values have numerical types *)
       let prepare_fn (old_meta, old_scope) c =
         let (e_outs_el, e_ret_ve, e), new_meta =
-          calc_to_k3_expr old_meta ~generate_init old_scope c
+          calc_to_k3_expr old_meta ~generate_init ~resultn old_scope c
         in
         let new_scope = ListAsSet.union old_scope @@ fst_many e_outs_el in
         (e_outs_el, e_ret_ve, e), (new_meta, new_scope)
@@ -1559,7 +1562,7 @@ let m3_to_k3 ?(generate_init = false) ?(role = "client")
         let argt = ["_", KH.t_unit] in
         let rt = [KH.t_unit] in
         let (_, _, defn_expr), _ =
-          calc_to_k3_expr [] ~generate_init:false [] ds.Plan.ds_definition
+          calc_to_k3_expr [] ~generate_init:false ~resultn:map_nm [] ds.Plan.ds_definition
         in
         let booststrap_expr = KH.mk_assign ("bs_"^map_nm) defn_expr
         in
