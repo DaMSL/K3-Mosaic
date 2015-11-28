@@ -496,8 +496,8 @@ let map_access_to_expr mapn resultn ins outs map_ret_t theta_vars_k init_expr_op
           let key_type = singleton_record idx_key_type in
           let val_type = singleton_record @@ add_record_ids prj_types in
           KU.add_annotation
-            (sp ("MosaicIndex(lbl=[# %s], key_type=[: %s], lookup_probe=[$ %s], index_probe=[$ %s], missing_fn=[$ (\\_ -> {key: %s, value: empty %s @Collection})], present_fn=[$ (\\acc -> ((acc.value.insert %s); acc)) ], index_key=[:> key=>%s], index_value=[:> value=>collection %s @Collection])")
-                  ((KU.id_of_var coll_ve)^"_"^resultn) key_type lkp_probe_key idx_probe_key new_key val_type prj_vars key_type val_type)
+            (sp ("MosaicIndex(lbl=[# %s], relation=[# %s], key_type=[: %s], lookup_probe=[$ %s], index_probe=[$ %s], missing_fn=[$ (\\_ -> {key: %s, value: empty %s @Collection})], present_fn=[$ (\\acc -> ((acc.value.insert %s); acc)) ], index_key=[:> key=>%s], index_value=[:> value=>collection %s @Collection])")
+                  ((KU.id_of_var coll_ve)^"_"^resultn) mapn key_type lkp_probe_key idx_probe_key new_key val_type prj_vars key_type val_type)
             (KH.mk_map
                (project_fn
                  (List.map typed_var_pair outs_k @ [KU.id_of_var map_ret_ve, map_ret_kt]) @@ prj_expr) @@
