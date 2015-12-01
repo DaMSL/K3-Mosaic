@@ -1682,6 +1682,7 @@ include \"Core/Optimization.k3\"
 include \"Core/Profile.k3\"
 include \"Annotation/Maps/MapE.k3\"
 include \"Annotation/MultiIndex/MultiIndexVMap.k3\"
+include \"Distributed/Mosaic.k3\"
 
 " ^(string_of_program ~map_to_fold ~use_filemux ~safe_writes p' envs)^"\n"
   ^(match warmup_maps with
