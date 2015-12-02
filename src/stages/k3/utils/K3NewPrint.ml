@@ -1684,6 +1684,30 @@ include \"Annotation/Maps/MapE.k3\"
 include \"Annotation/MultiIndex/MultiIndexVMap.k3\"
 include \"Distributed/Mosaic.k3\"
 
+@:CArgs 2
+declare ORDERSLoaderMosaic : collection {path: string} @Collection
+  -> collection { ra:int, rb:int, rc:string, rd:real, re:int, rf:string, rg:string, rh:int, ri:string, rj:int } @ {Collection}
+  -> ()
+  with effects \\_ -> \\_ -> io
+
+@:CArgs 2
+declare CUSTOMERLoaderMosaic : collection {path: string} @Collection
+  -> collection { ra:int, rb:string, rc:string, rd:int, re:string, rf:real, rg:string, rh:string, ri:int } @ {Collection}
+  -> ()
+  with effects \\_ -> \\_ -> io
+
+@:CArgs 2
+declare LINEITEMLoaderMosaic : collection {path: string} @Collection
+  -> collection { ra:int, rb:int, rc:int, rd:int, re:real, rf:real, rg:real, rh:real, ri:string, rj:string, rk:int, rl:int, rm:int, rn:string, ro:string, rp:string, rq:int } @ {Collection}
+  -> ()
+  with effects \\_ -> \\_ -> io
+
+declare ORDERSPaths : collection {path: string} @Collection
+
+declare CUSTOMERPaths : collection {path: string} @Collection
+
+declare LINEITEMPaths : collection {path: string} @Collection
+
 " ^(string_of_program ~map_to_fold ~use_filemux ~safe_writes p' envs)^"\n"
   ^(match warmup_maps with
     | Some(wm) -> String.concat "\n" @@ List.map map_template wm @ [map_save_fn wm]
