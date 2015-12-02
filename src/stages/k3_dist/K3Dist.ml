@@ -739,8 +739,7 @@ let rcv_fetch_name_of_t t = "nd_"^t^"_rcv_fetch"
 let rcv_put_name_of_t t = "nd_"^t^"_rcv_put"
 let send_push_name_of_t c t stmt_id map_id =
   "nd_"^t^"_send_push_s"^soi stmt_id^"_m_"^P.map_name_of c.p map_id
-let rcv_push_name_of_t c t stmt_id map_id =
-  "nd_"^t^"_rcv_push_s"^soi stmt_id^"_m_"^P.map_name_of c.p map_id
+let rcv_push_name_of_t c t s = sp "nd_%s_rcv_push_s%d" t s
 let send_corrective_name_of_t c map_id =
   "nd_"^P.map_name_of c.p map_id^"_send_correctives"
 let do_complete_name_of_t t stmt_id = "nd_"^t^"_do_complete_s"^soi stmt_id
@@ -784,7 +783,7 @@ let nd_do_complete_trig_args_poly c t = ["sender_ip", t_int; "ack", t_bool]
 let nd_do_complete_trig_args c t = nd_do_complete_trig_args_poly c t @ args_of_t_with_v c t
 
 let nd_rcv_push_args_poly = []
-let nd_rcv_push_args = nd_rcv_push_args_poly @ ["has_data", t_bool; "vid", t_vid]
+let nd_rcv_push_args = nd_rcv_push_args_poly @ ["has_data", t_bool; "count", t_int; "vid", t_vid]
 
 (* for do_corrective:
  * original values commonly used to send back to original do_complete *)
@@ -985,17 +984,23 @@ let calc_poly_tags c =
            nd_do_complete_trig_args_poly c t) @@
         P.stmts_without_rhs_maps_in_t c.p t) @
       (* the types for nd_rcv_push. includes a separate, optional map component *)
-      (* this isn't a dsTrig anymore since pushes are aggregated at the dispatcher *)
-      (List.map (fun (s, m) ->
-           ti (rcv_push_name_of_t c t s m) ~const:[mk_ctrue]
-             (SubTrig(false, slim_handler_nm)) @@ nd_rcv_push_args_poly)
-        s_rhs) @
-      (* version of rcv_push without data *)
-      (List.map (fun (s, m) ->
-           let nm = rcv_push_name_of_t c t s m in
-           ti (nm^"_no_data") ~fn:nm ~const:[mk_cfalse]
-           (SubTrig(false, slim_handler_nm)) @@ nd_rcv_push_args_poly)
-        s_rhs) @
+      (* this isn't a dsTrig since pushes are aggregated at the dispatcher *)
+      (List.flatten @@ List.flatten @@ List.map (fun has_data ->
+        let d = if has_data then "" else "_no_data" in
+        List.map (fun s ->
+          (* get all possible numbers of messages. we create a tag per number of
+             messages and has_bool value *)
+          let num_maps = List.length @@ P.rhs_maps_of_stmt c.p s in
+          let r_maps = create_range ~first:1 @@ num_maps in
+          List.map (fun n ->
+              ti (rcv_push_name_of_t c t s^"_"^soi n^d)
+                ~fn:(rcv_push_name_of_t c t s)
+                ~const:[mk_cbool has_data; mk_cint n]
+                (SubTrig(false, slim_handler_nm))
+                nd_rcv_push_args_poly)
+            r_maps) @@
+           P.stmts_with_rhs_maps_in_t c.p t)
+        [true; false])@
       (* the types for rcv_push's maps *)
       (List.map (fun (s, m) ->
            ti (P.buf_of_stmt_map_id c.p s m) (Ds true) @@ P.map_ids_types_with_v_for c.p m)
@@ -1032,21 +1037,20 @@ let buffer_for_send ?(unique=false) ?(wr_bitmap=true) t addr args =
 
 (* code to check if we need to write a trig header, and if so, to buffer one *)
 (* @other_cond: another condition to output the trig header *)
-let buffer_trig_header_if_needed ?other_cond ?(slim_trig=false) t addr args =
+let buffer_trig_header_if_needed ?(force=false) ?(slim_trig=false) t addr args =
   (* normal condition for adding *)
   let bitmap_cond = mk_not @@ mk_at' send_trig_header_bitmap.id @@ mk_var addr in
-  let cond = maybe bitmap_cond (fun c -> mk_or c bitmap_cond) other_cond in
+  let cond e = if force then e else mk_if bitmap_cond e mk_cunit in
   let t_nm =
     if slim_trig then trig_slim_sub_handler_name_of_t t
     else trig_sub_handler_name_of_t t in
-  mk_if cond
+  cond
     (mk_block [
       (* update the bitmap *)
       mk_insert_at send_trig_header_bitmap.id (mk_var addr) [mk_ctrue];
       (* buffer trig args *)
       buffer_for_send t_nm addr args
     ])
-    mk_cunit
 
 (* insert tuples into polyqueues *)
 let buffer_tuples_from_idxs ?(unique=false) ?(drop_vid=false) tuples_nm map_type map_tag indices =

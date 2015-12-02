@@ -309,3 +309,5 @@ val string_of_int_set_set : IntSetSet.t -> string
 val uncurry: ('a -> 'b -> 'c) -> 'a * 'b -> 'c
 val uncurry3: ('a -> 'b -> 'c -> 'd) -> 'a * 'b * 'c -> 'd
 val uncurry4: ('a -> 'b -> 'c -> 'd -> 'e) -> 'a * 'b * 'c * 'd -> 'e
+
+val bools_of_bits : ?num_bits:int -> int -> bool list

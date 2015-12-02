@@ -630,3 +630,19 @@ let rec list_modify n f = function
 let uncurry f (x, y) = f x y
 let uncurry3 f (x, y, z) = f x y z
 let uncurry4 f (x, y, z, a) = f x y z a
+
+(* convert an int (bit pattern) to a list of bools *)
+(* @num_bits: mandatory minimum number of bits *)
+let bools_of_bits ?(num_bits=0) b =
+  let rec loop acc b =
+    if b > 0 then
+      let v = if b land 1 = 1 then true else false in
+      loop (v::acc) (b/2)
+    else acc
+  in
+  let bs = loop [] b in
+  let len = List.length bs in
+  if len < num_bits then
+    (List.map (const false) @@ create_range @@ len - num_bits) @ bs
+  else bs
+
