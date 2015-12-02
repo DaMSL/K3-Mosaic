@@ -577,20 +577,29 @@ let sw_send_fetch_fn c s_rhs_lhs s_rhs t =
         send_completes_for_stmts_with_no_fetch
 
 let send_push_stmt_cnts =
-  let e = ["count2", mut t_int; "has_data2", mut t_bool] in
+  let e = ["count2", t_int; "has_data2", t_bool] in
   create_ds ~e "stmt_cnts" @@ wrap_tvector @@ t_of_e e
 
+(* bit per stmt *)
+let send_push_inner_bitmap =
+  create_ds "inner_bitmap" @@ wrap_tvector t_bool
+
 let send_push_cntrs_id = "send_push_cntrs"
-let send_push_cntrs_e = [send_push_stmt_cnts.id, send_push_stmt_cnts.t]
+let send_push_cntrs_e = ["inner_bitmap", send_push_inner_bitmap.t;
+                         "stmt_cnts", send_push_stmt_cnts.t]
 let send_push_cntrs p =
   (* stmt array per ip *)
   let e = send_push_cntrs_e in
   let init =
     (* add for stmt 0 *)
     let tup = mk_tuple [mk_cint 0; mk_cfalse] in
-    let ss = tup :: List.map (const @@ tup) (P.get_stmt_list p) in
+    let ss = P.get_stmt_list p in
+    let sb = mk_cfalse :: List.map (const mk_cfalse) ss in
+    let ss = tup :: List.map (const @@ tup) ss in
     mk_map (mk_lambda' unknown_arg @@
-            k3_container_of_list send_push_stmt_cnts.t ss) @@
+            mk_tuple [
+              k3_container_of_list send_push_inner_bitmap.t sb;
+              k3_container_of_list send_push_stmt_cnts.t ss]) @@
       mk_var D.my_peers.id in
   create_ds ~e ~init send_push_cntrs_id @@ wrap_tvector' @@ snd_many e
 
@@ -629,15 +638,15 @@ let nd_rcv_fetch_trig c t =
       mk_iter_bitmap'
         (mk_update_at_with send_push_cntrs_id (mk_var "ip") @@
          mk_lambda' send_push_cntrs_e @@
-          mk_agg (mk_lambda2' ["acc", send_push_stmt_cnts.t] ["x", t_of_e send_push_stmt_cnts.e] @@
-                  mk_block [
-                    mk_assign ~path:[1] "x" @@ mk_cint 0;
-                    mk_assign ~path:[2] "x" @@ mk_cfalse;
-                    mk_insert "acc" [mk_var "x"];
-                    mk_var "acc"
-                  ])
-            (mk_empty send_push_stmt_cnts.t) @@
-            mk_var send_push_stmt_cnts.id)
+          mk_let_block ["acc"]
+            (mk_agg_bitmap' ~idx:D.stmt_ctr.id ["acc", send_push_stmt_cnts.t]
+              (mk_insert_at_block "acc" (mk_var D.stmt_ctr.id) [mk_cint 0; mk_cfalse])
+              (mk_var "stmt_cnts") @@
+              "inner_bitmap")
+            [
+              mk_set_all "inner_bitmap" [mk_cfalse];
+              mk_tuple [mk_var "inner_bitmap"; mk_var "acc"]
+            ])
         send_push_bitmap.id;
       mk_set_all send_push_bitmap.id [mk_cfalse];
 
@@ -710,35 +719,28 @@ let nd_rcv_fetch_trig c t =
       mk_iter_bitmap'
         (mk_at_with' send_push_cntrs_id (mk_var "ip") @@
          mk_lambda' send_push_cntrs_e @@
-         mk_block [
-           mk_assign "stmt_ctr" @@ mk_cint 0;
-           mk_iter (mk_lambda' send_push_stmt_cnts.e @@
+         mk_iter_bitmap' ~idx:D.stmt_ctr.id
+           (mk_at_with' "stmt_cnts" (mk_var D.stmt_ctr.id) @@
+             mk_lambda' send_push_stmt_cnts.e @@
              mk_block [
-              (* check if we have any value *)
-              mk_if_eq (mk_var "count2") (mk_cint 0)
-                mk_cunit @@
-                mk_block [
-                  buffer_trig_header_if_needed ~slim_trig:true t "ip" [mk_var "vid"];
-                  (* convert counts to messages *)
-                  List.fold_left (fun acc_code (s, rng) ->
-                      let rcv_push_nm = rcv_push_name_of_t c t s in
-                      mk_if_eq (mk_var "stmt_ctr") (mk_cint s)
-                        (List.fold_left (fun acc_code n ->
-                          mk_if_eq (mk_var "count2") (mk_cint n)
-                            (mk_if (mk_var "has_data2")
-                              (buffer_for_send ~wr_bitmap:false (rcv_push_nm^"_"^soi n) "ip" []) @@
-                               buffer_for_send ~wr_bitmap:false (rcv_push_nm^"_"^soi n^"_no_data") "ip" [])
-                            acc_code)
-                          (mk_error "oops") @@
-                          rng)
-                        acc_code)
-                    (mk_error "oops") @@
-                  s_r
-                ];
-                mk_incr "stmt_ctr"
+                buffer_trig_header_if_needed ~slim_trig:true t "ip" [mk_var "vid"];
+                (* convert counts to messages *)
+                List.fold_left (fun acc_code (s, rng) ->
+                    let rcv_push_nm = rcv_push_name_of_t c t s in
+                    mk_if_eq (mk_var "stmt_ctr") (mk_cint s)
+                      (List.fold_left (fun acc_code n ->
+                        mk_if_eq (mk_var "count2") (mk_cint n)
+                          (mk_if (mk_var "has_data2")
+                            (buffer_for_send ~wr_bitmap:false (rcv_push_nm^"_"^soi n) "ip" []) @@
+                              buffer_for_send ~wr_bitmap:false (rcv_push_nm^"_"^soi n^"_no_data") "ip" [])
+                          acc_code)
+                        (mk_error "oops") @@
+                        rng)
+                      acc_code)
+                  (mk_error "oops") @@
+                s_r
              ]) @@
-            mk_var send_push_stmt_cnts.id
-        ])
+            "inner_bitmap")
         send_push_bitmap.id
       ;
       (* skip the tags we iterated over *)
@@ -911,10 +913,14 @@ let nd_send_push_stmt_map_trig c s_rhs_lhs t =
                       mk_insert_at send_push_bitmap.id (mk_var "ip") [mk_ctrue];
                       mk_update_at_with send_push_cntrs_id (mk_var "ip") @@
                         mk_lambda' send_push_cntrs_e @@
-                          mk_update_at_with_block send_push_stmt_cnts.id (mk_cint s) @@
-                            mk_lambda' send_push_stmt_cnts.e @@
-                              mk_tuple [mk_add (mk_var "count2") @@ mk_cint 1;
-                                        mk_or (mk_var "has_data2") @@ mk_var "has_data"]
+                          mk_block [
+                            mk_insert_at "inner_bitmap" (mk_cint s) [mk_ctrue];
+                            mk_update_at_with "stmt_cnts" (mk_cint s) @@
+                              mk_lambda' send_push_stmt_cnts.e @@
+                                mk_tuple [mk_add (mk_var "count2") @@ mk_cint 1;
+                                          mk_or (mk_var "has_data2") @@ mk_var "has_data"];
+                            mk_tuple @@ ids_to_vars @@ fst_many send_push_cntrs_e
+                          ]
                     ];
 
                   (* buffer the map data according to the indices *)
