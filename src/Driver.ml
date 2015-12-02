@@ -353,7 +353,7 @@ let print_program_and_event_loop ?(no_roles=false) f p =
     )
 
 let print_k3_program ?(print_warmup=false) ?(no_roles=false) f = function
-  | K3Data p -> print_program_and_event_loop ~no_roles (f None) p
+  | K3Data p -> print_program_and_event_loop ~no_roles (f None []) p
   | K3DistData (p,_,_,warmup,wrelnames) ->
     let wmap_idt = List.fold_left (fun acc (d,a) ->
       match d with
@@ -361,9 +361,9 @@ let print_k3_program ?(print_warmup=false) ?(no_roles=false) f = function
        | _ -> acc) [] warmup
     in
     if print_warmup then
-      print_program_and_event_loop ~no_roles (f (Some wmap_idt)) wrelnames warmup
+      print_program_and_event_loop ~no_roles (f (Some wmap_idt) wrelnames) warmup
     else
-      print_program_and_event_loop ~no_roles (f (Some wmap_idt)) wrelnames p
+      print_program_and_event_loop ~no_roles (f (Some wmap_idt) wrelnames) p
   | _ -> error "Cannot print this type of data"
 
 (* create and print a k3 program with an expected section *)
@@ -444,8 +444,8 @@ let print params inputs =
   let sofp = string_of_program ~verbose:cmd_line_params.verbose ~print_id:true in
   let print_k3_program = print_k3_program ~print_warmup:params.print_warmup in
   let print_fn = match params.out_lang with
-    | AstK3 | AstK3Dist   -> print_k3_program (fun _ -> (sofp |- fst)) |- snd
-    | K3 | K3Dist         -> print_k3_program (fun _ -> (PS.string_of_program |- fst)) |- snd
+    | AstK3 | AstK3Dist   -> print_k3_program (fun _ _ -> (sofp |- fst)) |- snd
+    | K3 | K3Dist         -> print_k3_program (fun _ _ -> (PS.string_of_program |- fst)) |- snd
     | K3New               -> print_k3_program ~no_roles:true
        (if params.print_warmup
           then K3NewPrint.string_of_dist_warmup_program
@@ -492,7 +492,7 @@ let process_inputs params =
         if params.dump_info then begin print_endline @@ ProgInfo.dump_info proginfo; exit(0) end;
         if params.debug_info then
           print_endline (ProgInfo.string_of_prog_data proginfo);
-        let (prog, warmup_prog, warmup_relnames) = M3ToK3.m3_to_k3 m3prog in
+        let (prog, (warmup_prog, warmup_relnames)) = M3ToK3.m3_to_k3 m3prog in
         if params.out_lang = K3Test then K3Data(prog)
         else K3DistData(prog, proginfo, prog, warmup_prog, warmup_relnames)
   in List.map proc_fn params.input_files

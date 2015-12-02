@@ -1661,7 +1661,7 @@ trigger save_warmup_maps : () = \\_ -> (
 )
 
 trigger load_inputs : () = \\_ -> (
-  "^(List.fold_left (fun acc (nm,_) ->
+  "^(List.fold_left (fun acc nm ->
       (if acc = "" then "  " else acc^";\n    ")
         ^nm^"LoaderMosaic "^nm^"Paths "^nm) "" wrelnames)^"
   (compute_warmup_maps, me) <- ()

@@ -1466,7 +1466,7 @@ let k3_demuxes stream_rels =
    @return The [m3_program] translated into K3.
 *)
 let m3_to_k3 ?(generate_init = false) ?(role = "client")
-             (m3_program: M3.prog_t) : (K.program_t * (K.program_t * K.id_t list)) =
+             (m3_program: M3.prog_t) : (K.program_t * (K.program_t * string list)) =
   let {
         M3.maps = m3_prog_schema; M3.triggers = m3_prog_trigs;
         M3.queries = m3_prog_tlqs; M3.db = m3_database
@@ -1580,7 +1580,7 @@ let m3_to_k3 ?(generate_init = false) ?(role = "client")
     @ List.fold_left k3_warmup_of_m3_map [] !m3_prog_schema
   in
 
-  let k3_warmup_relname =
+  let k3_warmup_relname (src, rels) =
     let (_, (nm, _, _)) = hd rels in nm
   in
 
