@@ -1466,7 +1466,7 @@ let k3_demuxes stream_rels =
    @return The [m3_program] translated into K3.
 *)
 let m3_to_k3 ?(generate_init = false) ?(role = "client")
-             (m3_program: M3.prog_t) : (K.program_t * K.program_t) =
+             (m3_program: M3.prog_t) : (K.program_t * (K.program_t * K.id_t list)) =
   let {
         M3.maps = m3_prog_schema; M3.triggers = m3_prog_trigs;
         M3.queries = m3_prog_tlqs; M3.db = m3_database
@@ -1580,11 +1580,19 @@ let m3_to_k3 ?(generate_init = false) ?(role = "client")
     @ List.fold_left k3_warmup_of_m3_map [] !m3_prog_schema
   in
 
+  let k3_warmup_relname =
+    let (_, (nm, _, _)) = hd rels in nm
+  in
+
+  let k3_wrelnames =
+    List.map k3_warmup_relname stream_rels @ List.map k3_warmup_relname table_rels
+  in
+
   ((add_empty @@
      k3_prog_schema @
      [ K.Flow(k3_prog_trigs @ k3_prog_demux) ] @
      [ K.Role(role, k3_prog_client_role);
        K.DefaultRole(role);
      ]),
-   add_empty k3_warmup_prog)
+   (add_empty k3_warmup_prog, k3_wrelnames))
 
