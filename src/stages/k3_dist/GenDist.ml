@@ -577,7 +577,7 @@ let sw_send_fetch_fn c s_rhs_lhs s_rhs t =
         send_completes_for_stmts_with_no_fetch
 
 let send_push_stmt_cnts =
-  let e = ["count2", t_int; "has_data2", t_bool] in
+  let e = ["count2", mut t_int; "has_data2", mut t_bool] in
   create_ds ~e "stmt_cnts" @@ wrap_tvector @@ t_of_e e
 
 let send_push_cntrs_id = "send_push_cntrs"
@@ -629,7 +629,14 @@ let nd_rcv_fetch_trig c t =
       mk_iter_bitmap'
         (mk_update_at_with send_push_cntrs_id (mk_var "ip") @@
          mk_lambda' send_push_cntrs_e @@
-          mk_map (mk_lambda' unknown_arg @@ mk_tuple [mk_cint 0; mk_cfalse]) @@
+          mk_agg (mk_lambda2' ["acc", send_push_stmt_cnts.t] ["x", t_of_e send_push_stmt_cnts.e] @@
+                  mk_block [
+                    mk_assign ~path:[1] "x" @@ mk_cint 0;
+                    mk_assign ~path:[2] "x" @@ mk_cfalse;
+                    mk_insert "acc" [mk_var "x"];
+                    mk_var "acc"
+                  ])
+            (mk_empty send_push_stmt_cnts.t) @@
             mk_var send_push_stmt_cnts.id)
         send_push_bitmap.id;
       mk_set_all send_push_bitmap.id [mk_cfalse];
