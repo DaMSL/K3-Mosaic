@@ -1655,7 +1655,7 @@ sink sink_"^nm^" : "^(string_of_base_type @@ KH.immut @@ (snd @@ KH.unwrap_tcol 
 "\
 trigger save_warmup_maps : () = \\_ -> (
   (
-  "^(List.fold_left (fun acc (nm,_) -> (if acc = "" then "  " else acc^";\n    ")^nm^".iterate 0 (\\x -> (sink_"^nm^", me) <- x) ") "" wm)^";
+  "^(List.fold_left (fun acc (nm,_) -> (if acc = "" then "  " else acc^";\n    ")^nm^".iterate 1 (\\x -> (sink_"^nm^", me) <- x) ") "" wm)^";
     (halt, me) <- ()
   ) @OnCounter(id=[# shutdown], eq=[$ "^(string_of_int @@ List.length wm)^"], reset=[$ false], profile=[$ false])
 )
