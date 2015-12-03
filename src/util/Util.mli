@@ -261,6 +261,7 @@ val str_take_end : int -> string -> string
 val str_drop_end : int -> string -> string
 
 val str_prefix : string -> string -> bool
+val str_suffix : string -> string -> bool
 
 (* --- regexp helpers --- *)
 

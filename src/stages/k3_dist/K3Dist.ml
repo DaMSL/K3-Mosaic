@@ -744,6 +744,8 @@ let sw_ack_rcv_trig_nm = "sw_ack_rcv"
 
 let nd_rcv_corr_done_nm = "nd_rcv_corr_done"
 
+let nd_rcv_warmup_push_nm = "rcv_warmup_push"
+
 (*** trigger args. Needed here for polyqueues ***)
 
 (* the trig header marks the args *)
@@ -908,23 +910,26 @@ let reserve_poly_queue_code ?all c =
       poly_queue_bitmap.id)
     mk_cunit
 
-let clear_poly_queues c =
-  mk_block [
+let clear_poly_queues ?(unique=true) c =
+  mk_block @@
     (* replace all used send slots with empty polyqueues *)
+  [
     mk_iter_bitmap'
       (mk_insert_at poly_queues.id (mk_var "ip")
          [mk_var empty_poly_queue.id])
       poly_queue_bitmap.id;
+    mk_set_all poly_queue_bitmap.id [mk_cfalse]
+  ] @
+  (if unique then
+  [
     mk_iter_bitmap'
       (mk_insert_at upoly_queues.id (mk_var "ip")
          [mk_var empty_upoly_queue.id])
       upoly_queue_bitmap.id;
-    (* apply reserve to all the new polybufs *)
-    reserve_poly_queue_code c;
-    (* clear the send bitmaps *)
-    mk_set_all poly_queue_bitmap.id [mk_cfalse];
-    mk_set_all upoly_queue_bitmap.id [mk_cfalse];
-  ]
+    mk_set_all upoly_queue_bitmap.id [mk_cfalse]
+  ] else []) @
+  (* apply reserve to all the new polybufs *)
+  [reserve_poly_queue_code c]
 
 
 (* we create tags for events, with the full width of said events plus insert/delete field *)
@@ -980,9 +985,15 @@ let calc_poly_tags c =
       (List.map (fun (s, m) ->
           rcv_corrective_name_of_t c t s m, Trig true, nd_rcv_corr_args)
         s_rhs_corr)) @
-    (* the types for the maps without vid *)
+    (* the types for the maps without vid (for correctives) *)
     (P.for_all_maps c.p @@ fun m ->
-      P.map_name_of c.p m^"_map", Ds false, P.map_ids_types_for c.p m) @
+       P.map_name_of c.p m^"_map", Ds false, P.map_ids_types_for c.p m) @
+    (* warmup header *)
+    (nd_rcv_warmup_push_nm, Trig true, []) ::
+    (* the types for the maps without vid (for warmup) *)
+    (P.for_all_maps c.p @@ fun m ->
+       P.map_name_of c.p m^"_warmup", Ds false, P.map_ids_types_for c.p m)
+    @
     (* t_vid_list ds for correctives *)
     ["vids", Ds false, ["vid", t_vid];
      nd_rcv_corr_done_nm, Trig false, nd_rcv_corr_done_args;
@@ -1410,6 +1421,18 @@ let do_trace nm l expr =
 (* index used to handle multiple switches for csv source *)
 let sw_csv_index = create_ds "sw_csv_index" @@ t_int
 
+(*** warmup ***)
+
+let do_warmup = create_ds "do_warmup" @@ t_bool
+
+(* map paths for warmup *)
+let sw_warmup_paths c =
+  List.map (fun s -> create_ds s t_string) @@
+  List.map (fun m -> P.map_name_of c.p m ^ "_warmup_path") @@
+  P.get_map_list c.p
+
+let sw_warmup_block_size = create_ds "sw_warmup_block_size" @@ t_int
+
 let global_vars c dict =
   (* replace default inits with ones from ast *)
   let replace_init ds =
@@ -1476,6 +1499,9 @@ let global_vars c dict =
     ] @
 
     log_ds c @
+    do_warmup ::
+    sw_warmup_paths c @
+    sw_warmup_block_size ::
     (* combine generic map inits with ones from the ast *)
     (List.map replace_init @@ maps c) @
     (List.map replace_init @@ map_buffers c)

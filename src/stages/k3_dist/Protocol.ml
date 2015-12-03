@@ -78,6 +78,12 @@ let nd_sys_init_barrier =
     nd_sys_init_check_barrier;
   ]
 
+(*let warmup_barrier_nm = "warmup_barrier"
+let warmup_barrier =
+  mk_code_sink' warmup_barrier_nm unit_arg [] @@
+  *)
+
+
 (* switch: system ready event handling.
  * before the queues turn on, bypass them and send the fetch for sys_read_evt
  * from only the first switch.
@@ -97,17 +103,30 @@ let sw_sys_init c =
     D.mk_send_all_nodes nd_sys_init_barrier_nm [mk_cunit]
   ]
 
+let ms_post_warmup_nm = "ms_post_warmup"
+let ms_post_warmup c =
+  mk_code_sink' ms_post_warmup_nm [] [] @@
+  (* if we have a sys_ready event, we need to activate that first *)
+    if c.sys_init then
+      mk_send sw_sys_init_nm (mk_var TS.sw_next_switch_addr.id) []
+    else (* else, tell switches to init *)
+      ms_tell_sw_to_init
+
+(* warmup consists of reading from the files *)
+let sw_warmup_nm = "sw_warmup"
+
 let ms_rcv_jobs_ack_cnt = create_ds "ms_rcv_jobs_ack_cnt" (mut t_int) ~init:(mk_cint 0)
 let ms_rcv_jobs_ack_nm = "ms_rcv_jobs_ack"
 let ms_rcv_jobs_ack c =
   mk_barrier ms_rcv_jobs_ack_nm ~ctr:ms_rcv_jobs_ack_cnt.id
     ~total:(mk_var D.num_peers.id)
     ~after:
-      (* if we have a sys_ready event, we need to activate that first *)
-      (if c.sys_init then
-         mk_send sw_sys_init_nm (mk_var TS.sw_next_switch_addr.id) []
-       else (* else, tell switches to init *)
-         ms_tell_sw_to_init)
+      (mk_block [
+          mk_if (mk_var D.do_warmup.id)
+            (mk_send sw_warmup_nm (mk_var TS.sw_next_switch_addr.id) [])
+            mk_cunit;
+          mk_send_me ms_post_warmup_nm
+        ])
 
 (* receive jobs, and calculate all dependent variables *)
 let rcv_jobs_nm = "rcv_jobs"
@@ -326,6 +345,7 @@ let triggers c =
     sw_sys_init c;
     ms_sys_init_barrier;
   ] else []) @ [
+    ms_post_warmup c;
     ms_rcv_sw_init_ack c;
     sw_rcv_init;
     ms_rcv_jobs_ack c;

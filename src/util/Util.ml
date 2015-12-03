@@ -509,9 +509,20 @@ let str_take_end i s = let l = String.length s in
   Str.last_chars s i'
 
 let str_prefix x s =
+  if String.length x < String.length s then false else
   try
     for i = 0 to String.length x - 1 do
       if x.[i] <> s.[i] then raise Stop
+      else ()
+    done; true
+  with Stop -> false
+
+let str_suffix x s =
+  let shift = String.length s - String.length x in
+  if shift < 0 then false else
+  try
+    for i = 0 to String.length x - 1 do
+      if x.[i] <> s.[shift + i] then raise Stop
       else ()
     done; true
   with Stop -> false

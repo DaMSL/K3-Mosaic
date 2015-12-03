@@ -509,6 +509,7 @@ let rec deduce_expr_type ?(override=true) trig_env env tenv utexpr : expr_t =
           begin match get_typ t_e with
           | TTuple l when n <= List.length l -> at l (n - 1)
           | TTuple l -> t_erroru (error_tuple_small n (List.length l) t_e)
+          | TTop -> canonical TTop
           | _ -> t_erroru (not_tuple t_e)
           end
 

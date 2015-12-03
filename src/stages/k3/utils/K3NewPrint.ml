@@ -488,16 +488,18 @@ let is_id_lambda e =
 
 (* Variable names to translate *)
 module StringMap = Map.Make(struct type t = string let compare = String.compare end)
-let var_translate = List.fold_left (fun acc (x,y) -> StringMap.add x y acc) StringMap.empty @@
-  ["int_of_float", "truncate";
-   "float_of_int", "real_of_int";
-   "string_of_int", "itos";
-   "string_of_float", "rtos";
-   "peers", "my_peers2";
-   "role", "my_role";
-   "parse_sql_date", "tpch_date";
-   "maxi", "max";
-   "maxif", "max"]
+let r = Str.regexp
+let var_translate =
+  [r "int_of_float", "truncate";
+   r "float_of_int", "real_of_int";
+   r "string_of_int", "itos";
+   r "string_of_float", "rtos";
+   r "peers", "my_peers2";
+   r "role", "my_role";
+   r "parse_sql_date", "tpch_date";
+   r "maxi", "max";
+   r "maxif", "max";
+   r "doRead.*", "doRead"]
 
   (* descriptions of how to pass variables. {In,Out}Rec implies that even if we see a non-tuple
    * value, we should turn it into a record (with an 'i' label). This is necessary because of the
@@ -803,7 +805,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
   let analyze () = match U.tag_of_expr expr with
   | Const con -> lazy_const c con
   | Var id    ->
-      begin try lps @@ StringMap.find id var_translate
+      begin try lps @@ snd @@ List.find (fun (r,_) -> r_match r id) var_translate
       with Not_found ->
         (* check if we need to do projection *)
         if StrSet.mem id c.project then lps id <| lps ("."^c.singleton_id)
@@ -1539,16 +1541,17 @@ let string_of_expr e = wrap_f @@ fun () ->
 
 module StringSet = Set.Make(struct type t=string let compare=String.compare end)
 
+let drop_global_r =
+  Str.regexp
+    "error\\|divf\\|mod\\|float_of_int\\|int_of_float\\|get_max_int\\|parse_sql_date\\|peers\\|doRead.*"
+
 (* remove/convert functions that are renamed in k3new *)
 let filter_incompatible prog =
-  let drop_globals = List.fold_left (flip StringSet.add) StringSet.empty
-    ["error"; "divf"; "mod"; "float_of_int"; "int_of_float"; "get_max_int"; "parse_sql_date"; "peers"; ]
-  in
   filter_map (fun ((d,a) as dec) ->
     (* we don't want the monomorphic hash functions *)
     match d with
     | Foreign(id, _)   -> None
-    | Global(id, _, _) when StringSet.mem id drop_globals -> None
+    | Global(id, _, _) when Str.string_match drop_global_r id 0 -> None
     | DefaultRole _ -> None
     | _             -> Some dec
   ) prog

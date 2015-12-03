@@ -397,7 +397,7 @@ let ret  = t_unit
 let fn e = e, VTemp VUnit
 let decl = wrap_tfunc (snd_many args) ret
 let _ = Hashtbl.add func_table name (decl, wrap_args args, fn)
-    
+
 (* sleep in us *)
 let () = add_fn "usleep" ~args:["us", t_int]
 
@@ -422,7 +422,8 @@ let () =
   add_fn "jemallocStop";
   add_fn "vmapStart" ~args:["addr", t_addr];
   add_fn "vmapDump";
-  add_fn "vmapStop"
+  add_fn "vmapStop";
+  add_fn "hasRead" ~args:["addr", t_addr; "s", t_string] ~ret:t_bool
 
 (* shutdown - dummy here. implemented in Runtime *)
 let () = add_fn "haltEngine"

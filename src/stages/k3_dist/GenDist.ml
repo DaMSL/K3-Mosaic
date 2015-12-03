@@ -1657,6 +1657,87 @@ let nd_trig_sub_handler c t =
           c.poly_tags;
   ]
 
+(* receive warmup push *)
+let nd_rcv_warmup_push c =
+  let fn_nm = D.nd_rcv_warmup_push_nm in
+  let m_tags =
+    List.filter (fun (_, (stag, _, _)) -> str_suffix "_warmup" stag) c.poly_tags in
+  mk_global_fn fn_nm
+    poly_args
+    [t_int; t_int] @@
+  mk_poly_skip_block fn_nm [
+    mk_poly_fold
+      (mk_lambda4' ["i", t_int; "o", t_int] p_tag p_idx p_off @@
+        List.fold_left (fun acc_code (itag, (stag,_,ts)) ->
+          let m_nm = str_drop_end (String.length "_warmup") stag in
+          let m_i_ts = P.map_ids_types_for c.p @@ P.map_id_of_name c.p m_nm in
+          let k, v = list_split (-1) @@ ids_to_vars @@ fst_many m_i_ts in
+          mk_if_eq (mk_var "tag") (mk_cint itag)
+            (mk_block [
+                mk_poly_at_with' stag @@
+                mk_lambda' m_i_ts @@
+                  mk_bind (mk_var m_nm) "d" @@
+                mk_insert "d" [mk_cint 0; mk_tuple k; mk_tuple v] ;
+
+                mk_tuple [mk_var "idx"; mk_var "offset"]
+            ])
+            acc_code)
+        (mk_error "unrecognized map name")
+        m_tags)
+     (mk_tuple [mk_var "idx"; mk_var "offset"]) @@
+     mk_var "poly_queue"
+  ]
+
+(* dummy do_reads to handle typechecking etc *)
+let do_reads c =
+  let m_nm_ts = List.map (fun m -> m, P.map_name_of c.p m, P.map_ids_types_for c.p m) @@
+    P.get_map_list c.p in
+  List.map (fun (m, m_nm, id_ts) ->
+      let k_t, v_t = list_split (-1) @@ snd_many id_ts in
+      let ts = [wrap_ttuple k_t; wrap_ttuple v_t] in
+      mk_global_fn ("doRead"^m_nm) ["addr", t_addr; "s", t_string] ts @@
+        default_value_of_t @@ wrap_ttuple ts
+    )
+    m_nm_ts
+
+(* loop trigger per map *)
+let sw_warmup_loops c =
+  let m_nm_ts = List.map (fun m -> m, P.map_name_of c.p m, P.map_ids_types_for c.p m) @@
+    P.get_map_list c.p in
+  List.map (fun (m, m_nm, id_ts) ->
+    let k, v = list_split (-1) @@ fst_many @@ id_ts in
+    mk_global_fn (m_nm^"_warmup_loop") unit_arg [] @@
+    mk_let ["batch_id"] (mk_cint 0) @@
+    mk_block [
+      clear_poly_queues ~unique:false c;
+      mk_iter (mk_lambda' unknown_arg @@
+        mk_if (mk_apply' "hasRead" [G.me_var; mk_cstring m_nm])
+          (mk_let ["tuple"] (mk_apply' ("doRead"^m_nm) [G.me_var; mk_cstring m_nm]) @@
+           mk_let k (mk_fst @@ mk_var "tuple") @@
+           mk_let v (mk_snd @@ mk_var "tuple") @@
+           R.route_lookup c m (mk_cint m :: (List.map mk_tup_just @@ ids_to_vars k)) (mk_cint 0) @@
+             mk_iter_bitmap'
+               (buffer_for_send (m_nm^"_warmup") "ip" (ids_to_vars @@ k @ v))
+               R.route_bitmap.id)
+          mk_cunit
+      ) @@
+      mk_range TList (mk_cint 0) (mk_cint 1) @@ mk_var sw_warmup_block_size.id;
+      send_poly_queues;
+  ])
+  m_nm_ts
+
+(* code for the switch to send warmup pushes *)
+let sw_warmup c =
+  let m_nm_ts = List.map (fun m -> m, P.map_name_of c.p m, P.map_types_for c.p m) @@
+    P.get_map_list c.p in
+  mk_code_sink' Proto.sw_warmup_nm [] [] @@
+  mk_block @@
+    (List.map (fun (m, m_nm, ts) ->
+      mk_apply' (m_nm^"_warmup_loop") [])
+      m_nm_ts) @
+    (* continue with protocol *)
+    [D.mk_send_master Proto.ms_post_warmup_nm]
+
 (*** central triggers to handle dispatch for nodes and switches ***)
 
 let trig_dispatcher_nm = "trig_dispatcher"
@@ -2192,6 +2273,9 @@ let gen_dist ?(gen_deletes=true)
     proto_semi_trigs @
     nd_rcv_corr_done c ::
     nd_handle_uniq_poly c ::
+    nd_rcv_warmup_push c ::
+    do_reads c @
+    sw_warmup_loops c @
     trig_dispatcher c ::
     trig_dispatcher_unique c ::
     [mk_flow @@
@@ -2206,6 +2290,7 @@ let gen_dist ?(gen_deletes=true)
         sw_event_driver_trig c;
         sw_demux c;
         sw_demux_poly c;
+        sw_warmup c
       ]
     ] @
     roles_of c ast
