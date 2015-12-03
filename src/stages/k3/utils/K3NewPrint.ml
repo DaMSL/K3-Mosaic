@@ -1689,6 +1689,8 @@ include \"Annotation/Maps/MapE.k3\"
 include \"Annotation/MultiIndex/MultiIndexVMap.k3\"
 include \"Distributed/Mosaic.k3\"
 
+declare do_not_use_this_map : collection {key: int, value: int} @Map
+
 @:CArgs 2
 declare ORDERSLoaderMosaic : collection {path: string} @Collection
   -> collection { ra:int, rb:int, rc:string, rd:real, re:int, rf:string, rg:string, rh:int, ri:string, rj:int } @ {Collection}
