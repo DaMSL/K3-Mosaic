@@ -490,16 +490,15 @@ let is_id_lambda e =
 module StringMap = Map.Make(struct type t = string let compare = String.compare end)
 let r = Str.regexp
 let var_translate =
-  [r "int_of_float", "truncate";
-   r "float_of_int", "real_of_int";
-   r "string_of_int", "itos";
-   r "string_of_float", "rtos";
-   r "peers", "my_peers2";
-   r "role", "my_role";
-   r "parse_sql_date", "tpch_date";
-   r "maxi", "max";
-   r "maxif", "max";
-   r "doRead.*", "doRead"]
+  [r "^int_of_float$", "truncate";
+   r "^float_of_int$", "real_of_int";
+   r "^string_of_int$", "itos";
+   r "^string_of_float$", "rtos";
+   r "^peers$", "my_peers2";
+   r "^role$", "my_role";
+   r "^parse_sql_date$", "tpch_date";
+   r "^max.*$", "max";
+   r "^doRead.*$", "doRead"]
 
   (* descriptions of how to pass variables. {In,Out}Rec implies that even if we see a non-tuple
    * value, we should turn it into a record (with an 'i' label). This is necessary because of the
@@ -1543,7 +1542,7 @@ module StringSet = Set.Make(struct type t=string let compare=String.compare end)
 
 let drop_global_r =
   Str.regexp
-    "error\\|divf\\|mod\\|float_of_int\\|int_of_float\\|get_max_int\\|parse_sql_date\\|peers\\|doRead.*"
+    {|^error$\|^divf$\|^mod$\|^float_of_int$\|^int_of_float$\|^get_max_int$\|^parse_sql_date$\|^peers$\|^doRead.*$|}
 
 (* remove/convert functions that are renamed in k3new *)
 let filter_incompatible prog =
