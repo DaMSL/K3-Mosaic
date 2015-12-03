@@ -497,7 +497,8 @@ let var_translate =
    r "^peers$", "my_peers2";
    r "^role$", "my_role";
    r "^parse_sql_date$", "tpch_date";
-   r "^max.*$", "max";
+   r "^maxi$", "max";
+   r "^maxif$", "max";
    r "^doRead.*$", "doRead"]
 
   (* descriptions of how to pass variables. {In,Out}Rec implies that even if we see a non-tuple
