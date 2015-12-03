@@ -1648,14 +1648,14 @@ let string_of_dist_warmup_program ?(file="default.txt") ~map_to_fold ~use_filemu
 "\
 declare warmup_map_outpath_"^nm^" : mut string
 
-sink sink_"^nm^" : "^(string_of_base_type @@ KH.immut ty)^" = file warmup_map_outpath_"^nm^" binary k3
+sink sink_"^nm^" : "^(string_of_base_type @@ KH.immut @@ (snd @@ KH.unwrap_col @@ KH.canonical ty))^" = file warmup_map_outpath_"^nm^" binary k3
 "
   in
   let map_save_fn wm =
 "\
 trigger save_warmup_maps : () = \\_ -> (
   (
-  "^(List.fold_left (fun acc (nm,_) -> (if acc = "" then "  " else acc^";\n    ")^"(sink_"^nm^", me) <- "^nm) "" wm)^";
+  "^(List.fold_left (fun acc (nm,_) -> (if acc = "" then "  " else acc^";\n    ")^nm^".iterate 0 (\\x -> (sink_"^nm^", me) <- x) ") "" wm)^";
     (halt, me) <- ()
   ) @OnCounter(id=[# shutdown], eq=[$ "^(string_of_int @@ List.length wm)^"], reset=[$ false], profile=[$ false])
 )
