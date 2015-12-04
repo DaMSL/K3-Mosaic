@@ -1691,7 +1691,7 @@ let nd_rcv_warmup_push c =
 (* dummy do_reads to handle typechecking etc *)
 let do_reads c =
   let m_nm_ts = List.map (fun m -> m, P.map_name_of c.p m, P.map_ids_types_for c.p m) @@
-    P.get_map_list c.p in
+    P.get_maps_with_keys c.p in
   List.map (fun (m, m_nm, id_ts) ->
       let k_t, v_t = list_split (-1) @@ snd_many id_ts in
       let ts = [wrap_ttuple k_t; wrap_ttuple v_t] in
@@ -1700,10 +1700,14 @@ let do_reads c =
     )
     m_nm_ts
 
+let sw_warmup_push_bitmap =
+  let init = mk_map (mk_lambda' unknown_arg mk_cfalse) @@ mk_var D.my_peers.id in
+  create_ds ~init "warmup_push_bitmap" @@ wrap_tvector t_bool
+
 (* loop trigger per map *)
 let sw_warmup_loops c =
   let m_nm_ts = List.map (fun m -> m, P.map_name_of c.p m, P.map_ids_types_for c.p m) @@
-    P.get_map_list c.p in
+    P.get_maps_with_keys c.p in
   List.map (fun (m, m_nm, id_ts) ->
     let fn_nm = m_nm^"_warmup_loop" in
     let k, v = list_split (-1) @@ fst_many @@ id_ts in
@@ -1711,6 +1715,7 @@ let sw_warmup_loops c =
     mk_let ["batch_id"] (mk_cint 0) @@
     mk_block [
       clear_poly_queues ~unique:false c;
+      mk_set_all sw_warmup_push_bitmap.id [mk_cfalse];
       mk_iter (mk_lambda' unknown_arg @@
         mk_if (mk_apply' "hasRead" [G.me_var; mk_cstring m_nm])
           (mk_let ["tuple"] (mk_apply' ("doRead"^m_nm) [G.me_var; mk_cstring m_nm]) @@
@@ -1718,7 +1723,16 @@ let sw_warmup_loops c =
            mk_let v (mk_snd @@ mk_var "tuple") @@
            R.route_lookup c m (mk_cint m :: (List.map mk_tup_just @@ ids_to_vars k)) (mk_cint 0) @@
              mk_iter_bitmap'
-               (buffer_for_send (m_nm^"_warmup") "ip" (ids_to_vars @@ k @ v))
+               (mk_block [
+                   (* if we need to, send the warmup push header *)
+                   mk_if (mk_at' sw_warmup_push_bitmap.id (mk_var "ip"))
+                     (mk_block [
+                         buffer_for_send nd_rcv_warmup_push_nm "ip" [];
+                         mk_insert_at sw_warmup_push_bitmap.id (mk_var "ip") [mk_ctrue]
+                     ])
+                     mk_cunit;
+                  buffer_for_send (m_nm^"_warmup") "ip" (ids_to_vars @@ k @ v)
+               ])
                R.route_bitmap.id)
           mk_cunit
       ) @@
@@ -1733,7 +1747,7 @@ let sw_warmup_loops c =
 (* code for the switch to send warmup pushes *)
 let sw_warmup c =
   let m_nm_ts = List.map (fun m -> m, P.map_name_of c.p m, P.map_types_for c.p m) @@
-    P.get_map_list c.p in
+    P.get_maps_with_keys c.p in
   mk_code_sink' Proto.sw_warmup_nm [] [] @@
   mk_block @@
     (List.map (fun (m, m_nm, ts) ->
@@ -2160,6 +2174,7 @@ let declare_global_vars c ast =
      nd_check_stmt_cntr_do_delete;
      nd_check_stmt_cntr_ret;
      nd_check_stmt_cntr_init;
+     sw_warmup_push_bitmap;
     ]
 
 let declare_global_funcs c ast =

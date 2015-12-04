@@ -60,6 +60,7 @@ val get_trig_stmt_list : ?corrective:bool -> ?sys_init:bool -> ?delete:bool -> p
 val get_max_stmt : prog_data_t -> stmt_id_t
 val for_all_stmts : prog_data_t -> (stmt_id_t -> 'a) -> 'a list
 val get_map_list : prog_data_t -> map_id_t list
+val get_maps_with_keys : prog_data_t -> map_id_t list
 val for_all_maps : prog_data_t -> (map_id_t -> 'a) -> 'a list
 val for_all_rhs_lhs_maps : prog_data_t -> (map_id_t * map_id_t -> 'a) -> 'a list
 val find_trigger : prog_data_t -> trig_name_t -> trig_data_t

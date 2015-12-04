@@ -139,6 +139,9 @@ let for_all_stmts (p:prog_data_t) f =
 let get_map_list (p:prog_data_t) =
   List.map (fun m -> m.map) @@ get_map_data p
 
+let get_maps_with_keys p =
+  List.map (fun m -> m.map) @@ List.filter (fun m -> List.length m.map_types > 1) @@ get_map_data p
+
 let for_all_maps (p:prog_data_t) f =
   List.map (fun m -> f m) @@ get_map_list p
 
