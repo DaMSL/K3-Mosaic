@@ -1671,7 +1671,7 @@ trigger warmup_"^exactnm^" : () = \\_ -> (
 )
 
 source go_"^exactnm^" : () = value ()
-feed go"^exactnm^" |> warmup_"^exactnm^"
+feed go_"^exactnm^" |> warmup_"^exactnm^"
 ") "" wm)
 (* Warmup trigger for all maps. *)
 ^
