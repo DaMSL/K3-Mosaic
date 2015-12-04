@@ -1654,12 +1654,15 @@ declare warmup_map_outpath_"^nm^" : mut string
 sink sink_"^nm^" : "^(string_of_base_type @@ KH.immut @@ (snd @@ KH.unwrap_tcol ty))^" = file warmup_map_outpath_"^nm^" binary k3
 "
   in
-  let load_all_maps = List.fold_left (fun acc nm -> "\n"^acc^nm^"LoaderMosaic "^nm^"Paths "^nm^";") "" wrelnames in
+  let load_all_maps = List.fold_left (fun acc nm ->
+                        (if acc = "" then acc else acc^"  ")^
+                        nm^"LoaderMosaic "^nm^"Paths "^nm^";\n") "" wrelnames
+  in
   let warmup_toplevel_fn wm =
 (* Warmup trigger per map. *)
 (List.fold_left (fun acc (nm,_) ->
 let exactnm = (str_drop (String.length "bs_") nm) in
-"\n"^acc^
+acc^
 "
 trigger warmup_"^exactnm^" : () = \\_ -> (
   "^load_all_maps^"
@@ -1681,8 +1684,8 @@ trigger save_warmup_maps : () = \\_ -> (
   ) @OnCounter(id=[# shutdown], eq=[$ "^(string_of_int @@ List.length wm)^"], reset=[$ false], profile=[$ false])
 )
 
-trigger warmup_all_maps : () = \\_ -> ("
-  ^load_all_maps^"\n  "
+trigger warmup_all_maps : () = \\_ -> (
+  "^load_all_maps^"\n  "
   ^(List.fold_left (fun acc (nm,_) ->
       let exactnm = (str_drop (String.length "bs_") nm)
       in acc^"bootstrap_"^exactnm^" ();\n  ") "" wm)^"
