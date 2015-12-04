@@ -39,6 +39,9 @@ let sw_rcv_init =
   mk_code_sink' sw_rcv_init_nm unit_arg [] @@
   mk_block [
     mk_assign D.sw_init.id mk_ctrue;
+    (* functions to start switch role. dummy in interpreter *)
+    mk_apply' "switchInit" [];
+    mk_apply' "switchStart" [];
     (* ack to master *)
     D.mk_send_master ms_rcv_sw_init_ack_nm;
   ]

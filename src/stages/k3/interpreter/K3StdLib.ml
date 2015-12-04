@@ -423,6 +423,8 @@ let () =
   add_fn "vmapStart" ~args:["addr", t_addr];
   add_fn "vmapDump";
   add_fn "vmapStop";
+  add_fn "switchInit";
+  add_fn "switchStart";
   add_fn "hasRead" ~args:["addr", t_addr; "s", t_string] ~ret:t_bool
 
 (* shutdown - dummy here. implemented in Runtime *)
