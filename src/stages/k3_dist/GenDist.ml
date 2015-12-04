@@ -1705,8 +1705,9 @@ let sw_warmup_loops c =
   let m_nm_ts = List.map (fun m -> m, P.map_name_of c.p m, P.map_ids_types_for c.p m) @@
     P.get_map_list c.p in
   List.map (fun (m, m_nm, id_ts) ->
+    let fn_nm = m_nm^"_warmup_loop" in
     let k, v = list_split (-1) @@ fst_many @@ id_ts in
-    mk_global_fn (m_nm^"_warmup_loop") unit_arg [] @@
+    mk_code_sink' fn_nm unit_arg [] @@
     mk_let ["batch_id"] (mk_cint 0) @@
     mk_block [
       clear_poly_queues ~unique:false c;
@@ -1723,7 +1724,10 @@ let sw_warmup_loops c =
       ) @@
       mk_range TList (mk_cint 0) (mk_cint 1) @@ mk_var sw_warmup_block_size.id;
       send_poly_queues;
-  ])
+      mk_if (mk_apply' "hasRead" [G.me_var; mk_cstring m_nm])
+        (mk_send_me fn_nm)
+        mk_cunit
+    ])
   m_nm_ts
 
 (* code for the switch to send warmup pushes *)
@@ -1733,7 +1737,7 @@ let sw_warmup c =
   mk_code_sink' Proto.sw_warmup_nm [] [] @@
   mk_block @@
     (List.map (fun (m, m_nm, ts) ->
-      mk_apply' (m_nm^"_warmup_loop") [])
+      mk_send (m_nm^"_warmup_loop") G.me_var [])
       m_nm_ts) @
     (* continue with protocol *)
     [D.mk_send_master Proto.ms_post_warmup_nm]
@@ -2275,7 +2279,6 @@ let gen_dist ?(gen_deletes=true)
     nd_handle_uniq_poly c ::
     nd_rcv_warmup_push c ::
     do_reads c @
-    sw_warmup_loops c @
     trig_dispatcher c ::
     trig_dispatcher_unique c ::
     [mk_flow @@
@@ -2283,6 +2286,7 @@ let gen_dist ?(gen_deletes=true)
       GC.triggers c @
       TS.triggers @
       Timer.triggers c @
+      sw_warmup_loops c @
       [
         trig_dispatcher_trig c;
         trig_dispatcher_trig_unique c;
