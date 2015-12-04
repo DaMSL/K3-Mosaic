@@ -1654,8 +1654,26 @@ declare warmup_map_outpath_"^nm^" : mut string
 sink sink_"^nm^" : "^(string_of_base_type @@ KH.immut @@ (snd @@ KH.unwrap_tcol ty))^" = file warmup_map_outpath_"^nm^" binary k3
 "
   in
-  let map_save_fn wm =
-"\
+  let load_all_maps = List.fold_left (fun acc nm -> "\n"^acc^nm^"LoaderMosaic "^nm^"Paths "^nm^";") "" wrelnames in
+  let warmup_toplevel_fn wm =
+(* Warmup trigger per map. *)
+(List.fold_left (fun acc (nm,_) ->
+let exactnm = (str_drop (String.length "bs_") nm) in
+"\n"^acc^
+"
+trigger warmup_"^exactnm^" : () = \\_ -> (
+  "^load_all_maps^"
+  bootstrap_"^exactnm^" ();
+  (range "^(string_of_int @@ (List.length wm) - 1)^").iterate (\\_ -> (save_warmup_maps, me) <- ())
+)
+
+source go_"^exactnm^" : () = value ()
+feed go"^exactnm^" |> warmup_"^exactnm^"
+") "" wm)
+(* Warmup trigger for all maps. *)
+^
+"
+
 trigger save_warmup_maps : () = \\_ -> (
   (
   "^(List.fold_left (fun acc (nm,_) -> (if acc = "" then "  " else acc^";\n    ")^nm^".iterate 1 (\\x -> (sink_"^nm^", me) <- x) ") "" wm)^";
@@ -1663,22 +1681,18 @@ trigger save_warmup_maps : () = \\_ -> (
   ) @OnCounter(id=[# shutdown], eq=[$ "^(string_of_int @@ List.length wm)^"], reset=[$ false], profile=[$ false])
 )
 
-trigger load_inputs : () = \\_ -> (
-  "^(List.fold_left (fun acc nm -> acc^nm^"LoaderMosaic "^nm^"Paths "^nm^";\n  ") "" wrelnames)
-  ^"(compute_warmup_maps, me) <- ()
-)
-
-trigger compute_warmup_maps : () = \\_ -> (
-  "^(List.fold_left (fun acc (nm,_) ->
-      (if acc = "" then "  " else acc^";\n    ")
-        ^"bootstrap_"
-        ^(str_drop (String.length "bs_") nm)^" ()") "" wm)^"
+trigger warmup_all_maps : () = \\_ -> ("
+  ^load_all_maps^"\n  "
+  ^(List.fold_left (fun acc (nm,_) ->
+      let exactnm = (str_drop (String.length "bs_") nm)
+      in acc^"bootstrap_"^exactnm^" ();\n  ") "" wm)^"
+  ()
 )
 
 trigger halt : () = \\_ -> haltEngine()
 
 source go : () = value ()
-feed go |> load_inputs
+feed go |> warmup_all_maps
 "
   in
 "\
@@ -1720,6 +1734,6 @@ declare LINEITEMPaths : collection {path: string} @Collection
 
 " ^(string_of_program ~map_to_fold ~use_filemux ~safe_writes p' envs)^"\n"
   ^(match warmup_maps with
-    | Some(wm) -> String.concat "\n" @@ List.map map_template wm @ [map_save_fn wm]
+    | Some(wm) -> String.concat "\n" @@ List.map map_template wm @ [warmup_toplevel_fn wm]
     | _ -> "")
 
