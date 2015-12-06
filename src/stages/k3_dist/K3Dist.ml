@@ -634,9 +634,14 @@ let nd_stmt_cntrs_per_map =
   create_ds "nd_stmt_cntrs_per_map" (wrap_tmap' @@ snd_many e) ~e
 
 (* not a real ds. only inside stmt_cntrs *)
-let nd_stmt_cntrs_corr_map =
-  let e = ["hop", t_int; "corr_ctr", t_int] in
+let nd_corr_map_inner =
+  let e = ["hop2", t_int; "count2", t_int] in
   create_ds "sc_corr_map" (wrap_tmap' @@ snd_many e) ~e
+
+let nd_corr_map =
+  let ee = [["vid", t_vid; "stmt_id", t_stmt_id]; ["tree", nd_corr_map_inner.t]] in
+  let e = ["vid_stmt", wrap_ttuple [t_vid; t_stmt_id]; "tree", nd_corr_map_inner.t] in
+  create_ds "nd_corr_map" ~e ~ee @@ wrap_tmap @@ t_of_e e
 
 (* bitmap for stmt_cntrs *)
 let nd_stmt_cntr_size =
@@ -648,8 +653,7 @@ let nd_stmt_cntrs_inner =
   let ee =
     [["vid", t_int];
      ["counter", t_int;
-      "no_info", t_bool;
-      "corr_map", wrap_tmap' @@ snd_many @@ ds_e nd_stmt_cntrs_corr_map]] in
+      "no_info", t_bool]] in
   let e = ["vid", t_vid; "stmt_cntr_info", wrap_ttuple @@ snd_many @@ at ee 1] in
   create_ds "nd_stmt_cntrs_inner" ~e ~ee @@ wrap_tmap' @@ snd_many e
 
@@ -1476,6 +1480,7 @@ let global_vars c dict =
       map_ids c;
       nd_stmt_cntr_size;
       nd_stmt_cntrs c;
+      nd_corr_map;
       nd_log_master;
       sw_init;
       sw_seen_sentinel;
