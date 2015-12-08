@@ -1739,8 +1739,9 @@ let sw_warmup_loops c =
       mk_range TList (mk_cint 0) (mk_cint 1) @@ mk_var sw_warmup_block_size.id;
       send_poly_queues;
       mk_if (mk_apply' "hasRead" [G.me_var; mk_cstring m_nm])
-        (mk_send_me fn_nm)
-        mk_cunit
+        (mk_send_me fn_nm) @@
+        (* if no more values, send to barrier *)
+        mk_send_master Proto.ms_post_warmup_barrier_nm
     ])
   m_nm_ts
 
@@ -1750,11 +1751,11 @@ let sw_warmup c =
     P.get_maps_with_keys c.p in
   mk_code_sink' Proto.sw_warmup_nm [] [] @@
   mk_block @@
-    (List.map (fun (m, m_nm, ts) ->
-      mk_send (m_nm^"_warmup_loop") G.me_var [])
-      m_nm_ts) @
-    (* continue with protocol *)
-    [D.mk_send_master Proto.ms_post_warmup_nm]
+    List.flatten @@ List.map (fun (m, m_nm, ts) ->
+        [mk_apply' "openFile" [G.me_var; mk_cstring m_nm; mk_var @@ m_nm^"_warmup_path";
+                              mk_cstring "k3"; mk_cfalse; mk_cstring "r"];
+         mk_send_me @@ m_nm^"_warmup_loop"])
+      m_nm_ts
 
 (*** central triggers to handle dispatch for nodes and switches ***)
 

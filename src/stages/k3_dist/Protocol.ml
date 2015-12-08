@@ -115,6 +115,14 @@ let ms_post_warmup c =
     else (* else, tell switches to init *)
       ms_tell_sw_to_init
 
+let ms_post_warmup_barrier_cnt = create_ds "ms_post_warmup_barrier_cnt" @@ mut t_int
+
+let ms_post_warmup_barrier_nm = "ms_post_warmup_barrier"
+let ms_post_warmup_barrier c =
+  mk_barrier ms_post_warmup_barrier_nm ~ctr:ms_post_warmup_barrier_cnt.id
+    ~total:(mk_cint @@ List.length @@ P.get_maps_with_keys c.p)
+    ~after:(mk_send_me ms_post_warmup_nm)
+
 (* warmup consists of reading from the files *)
 let sw_warmup_nm = "sw_warmup"
 
@@ -123,13 +131,9 @@ let ms_rcv_jobs_ack_nm = "ms_rcv_jobs_ack"
 let ms_rcv_jobs_ack c =
   mk_barrier ms_rcv_jobs_ack_nm ~ctr:ms_rcv_jobs_ack_cnt.id
     ~total:(mk_var D.num_peers.id)
-    ~after:
-      (mk_block [
-          mk_if (mk_var D.do_warmup.id)
-            (mk_send sw_warmup_nm (mk_var TS.sw_next_switch_addr.id) [])
-            mk_cunit;
-          mk_send_me ms_post_warmup_nm
-        ])
+    ~after:(mk_if (mk_var D.do_warmup.id)
+             (mk_send sw_warmup_nm (mk_var TS.sw_next_switch_addr.id) []) @@
+              mk_send_me ms_post_warmup_nm)
 
 (* receive jobs, and calculate all dependent variables *)
 let rcv_jobs_nm = "rcv_jobs"
@@ -340,6 +344,7 @@ let global_vars c =
     ms_rcv_job_cnt;
     ms_rcv_node_done_cnt;
     ms_rcv_switch_done_cnt;
+    ms_post_warmup_barrier_cnt;
   ]
 
 let triggers c =
@@ -349,6 +354,7 @@ let triggers c =
     ms_sys_init_barrier;
   ] else []) @ [
     ms_post_warmup c;
+    ms_post_warmup_barrier c;
     ms_rcv_sw_init_ack c;
     sw_rcv_init;
     ms_rcv_jobs_ack c;

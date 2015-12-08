@@ -425,6 +425,8 @@ let () =
   add_fn "vmapStop";
   add_fn "switchInit";
   add_fn "switchStart";
+  add_fn "openFile" ~args:["a", t_addr; "lbl", t_string; "f", t_string;
+                           "fmt", t_string; "bin", t_bool; "rw", t_string];
   add_fn "hasRead" ~args:["addr", t_addr; "s", t_string] ~ret:t_bool
 
 (* shutdown - dummy here. implemented in Runtime *)
