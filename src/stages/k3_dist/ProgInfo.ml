@@ -461,6 +461,11 @@ let dump_info p =
   let t_s = List.map (fun t -> t, stmts_of_t p t) ts in
   let t_binds = List.map (fun t -> t, fst_many @@ args_of_t p t) ts in
   let map_ids = List.map (fun m -> map_name_of p m, m) @@ get_map_list p in
+  let t_s_m =
+    List.map (fun (t, ss) ->
+        t, List.map (fun s -> s, map_name_of p @@ lhs_map_of_stmt p s,
+                                 List.map (map_name_of p) @@ rhs_maps_of_stmt p s) ss)
+      t_s in
   let s_t_s = sp "[%s]" @@
               strcatmap (fun (t, ss) -> sp "%s:[%s]" t @@ string_of_int_list ss) t_s in
   let s_t_binds = sp "[%s]" @@
@@ -481,7 +486,14 @@ let dump_info p =
           (strcatmap (fun (m, l) -> sp "%d:[%s]" m @@
                        String.concat ", " @@ fst_many @@ l) info.rmaps_bound)
       ) infos in
-  sp
+  (* simplified version of program map dependency *)
+  let map_dependencies =
+    strcatmap ~sep:"\n" (fun (t, s_m) ->
+      sp "%s:\n%s" t @@ strcatmap ~sep:"\n" (fun (s, l, rs) ->
+        if rs <> [] then
+          sp "%d, %s <= %s" s l @@ String.concat ", " rs
+        else sp "%d, %s" s l) s_m) t_s_m
+  in sp
 "\
 Statement route generation:
 %s
@@ -500,10 +512,17 @@ Free vars:
 
 Bound vars:
 %s
+
+Map dependencies:
+%s
 "
-(string_of_int_list s_special)
-s_t_s s_t_binds s_map_ids
-s_free_infos s_bound_infos
+  (string_of_int_list s_special)
+  s_t_s
+  s_t_binds
+  s_map_ids
+  s_free_infos
+  s_bound_infos
+  map_dependencies
 
 (* get only the rmaps of s that have keys *)
 let nonempty_rmaps_of_stmt p s =
