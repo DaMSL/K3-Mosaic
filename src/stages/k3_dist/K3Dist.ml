@@ -736,21 +736,18 @@ let trig_dispatcher_trig_unique_nm = "trig_dispatcher_unique_trig"
 let nd_trig_dispatcher_trig_nm = "nd_trig_dispatcher_trig"
 
 (* handler for many other triggers *)
+let m_nm = P.map_name_of
 let trig_sub_handler_name_of_t t = "nd_trig_sub_handler_"^t
 let trig_slim_sub_handler_name_of_t t = "nd_trig_slim_sub_handler_"^t
-let send_fetch_name_of_t t = "sw_"^t^"_send_fetch"
-let rcv_fetch_name_of_t t = "nd_"^t^"_rcv_fetch"
-let rcv_put_name_of_t t = "nd_"^t^"_rcv_put"
-let send_push_name_of_t c t stmt_id map_id =
-  "nd_"^t^"_send_push_s"^soi stmt_id^"_m_"^P.map_name_of c.p map_id
-let rcv_push_name_of_t c t s = sp "nd_%s_rcv_push_s%d" t s
-let send_corrective_name_of_t c map_id =
-  "nd_"^P.map_name_of c.p map_id^"_send_correctives"
-let do_complete_name_of_t t stmt_id = "nd_"^t^"_do_complete_s"^soi stmt_id
-let rcv_corrective_name_of_t c t stmt_id map_id =
-  t^"_rcv_corrective_s"^soi stmt_id^"_m_"^P.map_name_of c.p map_id
-let do_corrective_name_of_t c t stmt_id map_id =
-  t^"_do_corrective_s"^soi stmt_id^"_m_"^P.map_name_of c.p map_id
+let send_fetch_name_of_t t s = sp "sw_%s_%d_send_fetch" t s
+let rcv_fetch_name_of_t t s = sp "nd_%s_%d_rcv_fetch" t s
+let rcv_put_name_of_t t s = sp "nd_%s_%d_rcv_put" t s
+let send_push_name_of_t c t s m = sp "nd_%s_%d_send_push_%s" t s (m_nm c.p m)
+let rcv_push_name_of_t t s = sp "nd_%s_%d_rcv_push" t s
+let send_corrective_name_of_t c m = sp "nd_%s_send_correctives" (m_nm c.p m)
+let do_complete_name_of_t t s = sp "nd_%s_%d__do_complete" t s
+let rcv_corrective_name_of_t c t s m = sp "nd_%s_%d_rcv_corrective_%s" t s (m_nm c.p m)
+let do_corrective_name_of_t c t s m = sp "nd_%s_%d_do_corrective_%s" t s (m_nm c.p m)
 
 let sw_ack_rcv_trig_nm = "sw_ack_rcv"
 
@@ -775,10 +772,10 @@ let nd_rcv_put_args_poly c t = ["sender_ip", t_int]
 let nd_rcv_put_args c t = nd_rcv_put_args_poly c t @ args_of_t_with_v c t
 
 (* rcv_fetch: data structure that is sent *)
-let stmt_map_ids =
+let send_map_ids =
   (* this is a bag since no aggregation is done *)
-  let e = ["stmt_id", t_stmt_id; "map_id", t_map_id] in
-  create_ds ~e "stmt_map_ids" @@ wrap_tbag' @@ snd_many e
+  let e = ["map_id", t_map_id] in
+  create_ds ~e "send_map_ids" @@ wrap_tbag' @@ snd_many e
 
 let nd_rcv_fetch_args_poly c t = []
 let nd_rcv_fetch_args c t = nd_rcv_fetch_args_poly c t @ args_of_t_with_v c t
@@ -968,8 +965,11 @@ let calc_poly_tags c =
          ti t Event args)
        events) @
     (* static ds for sw->nd triggers *)
-    [ti stmt_cnt_list_ship.id (Ds false) stmt_cnt_list_ship.e;
-     ti stmt_map_ids.id (Ds false) stmt_map_ids.e] @
+    [ti stmt_cnt_list_ship.id (Ds false) stmt_cnt_list_ship.e] @
+    (* map ids for send fetch *)
+    (List.map (fun m ->
+         ti (P.map_name_of c.p m^"_id") (Ds false) []) @@
+     P.get_map_list c.p) @
     (List.flatten @@ for_all_trigs c.p ~sys_init:true @@ fun t ->
       let s_rhs = P.s_and_over_stmts_in_t c.p P.rhs_maps_of_stmt t in
       let s_rhs_corr = List.filter (fun (s, map) -> List.mem map c.corr_maps) s_rhs in
@@ -977,11 +977,12 @@ let calc_poly_tags c =
       let slim_handler_nm = trig_slim_sub_handler_name_of_t t in
       (* carries all the trig arguments + vid *)
       (ti sub_handler_nm (Trig true) @@ trig_sub_handler_args c t)::
+      (* slim version of trigger: pull args from log, just vid *)
       (ti slim_handler_nm (Trig true) trig_slim_sub_handler_args)::
-      (if s_rhs = [] then [] else [
-        ti (rcv_put_name_of_t t) (SubTrig(true, sub_handler_nm)) @@ nd_rcv_put_args_poly c t;
-        ti (rcv_fetch_name_of_t t) (SubTrig(true, sub_handler_nm)) @@ nd_rcv_fetch_args_poly c t
-        ]) @
+      (List.flatten @@ List.map (fun s ->
+          [ti (rcv_put_name_of_t t s) (SubTrig(true, sub_handler_nm)) @@ nd_rcv_put_args_poly c t;
+          ti (rcv_fetch_name_of_t t s) (SubTrig(true, sub_handler_nm)) @@ nd_rcv_fetch_args_poly c t]) @@
+       P.stmts_with_rhs_maps_in_t c.p t) @
       (* args for do completes without rhs maps *)
       (List.map (fun s ->
            ti (do_complete_name_of_t t s^"_trig") (SubTrig(false, sub_handler_nm)) @@
@@ -997,8 +998,8 @@ let calc_poly_tags c =
           let num_maps = List.length @@ P.rhs_maps_of_stmt c.p s in
           let r_maps = create_range ~first:1 @@ num_maps in
           List.map (fun n ->
-              ti (rcv_push_name_of_t c t s^"_"^soi n^d)
-                ~fn:(rcv_push_name_of_t c t s)
+              ti (rcv_push_name_of_t t s^"_"^soi n^d)
+                ~fn:(rcv_push_name_of_t t s)
                 ~const:[mk_cbool has_data; mk_cint n]
                 (SubTrig(false, slim_handler_nm))
                 nd_rcv_push_args_poly)

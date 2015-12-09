@@ -262,6 +262,8 @@ val str_drop_end : int -> string -> string
 
 val str_prefix : string -> string -> bool
 
+val str_suffix : string -> string -> bool
+
 (* --- regexp helpers --- *)
 
 (* returns a list of groups of a regexp *)

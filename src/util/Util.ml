@@ -516,6 +516,16 @@ let str_prefix x s =
     done; true
   with Stop -> false
 
+let str_suffix x s =
+  let shift = String.length s - String.length x in
+  if shift < 0 then false else
+  try
+    for i = 0 to String.length x - 1 do
+      if x.[i] <> s.[shift + i] then raise Stop
+      else ()
+    done; true
+  with Stop -> false
+
 (* --- regexp helpers --- *)
 
 (* returns a list of groups of a regexp *)
