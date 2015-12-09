@@ -1725,7 +1725,7 @@ let sw_warmup_loops c =
              mk_iter_bitmap'
                (mk_block [
                    (* if we need to, send the warmup push header *)
-                   mk_if (mk_at' sw_warmup_push_bitmap.id (mk_var "ip"))
+                   mk_if (mk_not @@ mk_at' sw_warmup_push_bitmap.id @@ mk_var "ip")
                      (mk_block [
                          buffer_for_send nd_rcv_warmup_push_nm "ip" [];
                          mk_insert_at sw_warmup_push_bitmap.id (mk_var "ip") [mk_ctrue]
