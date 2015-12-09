@@ -1616,8 +1616,10 @@ declare switch_mux_inputs : collection {seq:filechunks} @Collection
 declare my_peers2 : collection { elem:address } @ {Collection} =
   peers.fold (\\acc -> (\\x -> (acc.insert {elem:x.addr}; acc))) empty { elem:address} @ Collection
 
+declare role2 : collection { i:string } @ {Collection}
+
 declare my_role : collection { elem:string } @ {Collection} =
-  role.fold (\\acc -> (\\x -> (acc.insert {elem:x.i}; acc))) empty { elem:string} @ Collection
+  role2.fold (\\acc -> (\\x -> (acc.insert {elem:x.i}; acc))) empty { elem:string} @ Collection
 
 declare files       : collection {path: string} @Collection
 declare seqfiles    : collection {seq: collection {path: string} @Collection} @Collection
