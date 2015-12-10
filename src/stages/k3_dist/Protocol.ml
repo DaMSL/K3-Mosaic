@@ -85,17 +85,21 @@ let nd_sys_init_barrier =
  * system_ready_event code *)
 let sw_sys_init_nm = "sw_"^D.sys_init
 let sw_sys_init c =
+  let ss = P.stmts_of_t c.p D.sys_init in
   mk_code_sink' sw_sys_init_nm unit_arg [] @@
-  mk_let_block ["batch_id"] (mk_cint 1) [
-    D.clear_poly_queues c;
+  mk_let_block ["batch_id"] (mk_cint 1) @@
+    [ D.clear_poly_queues c ] @
 
-    mk_apply' (D.send_fetch_name_of_t D.sys_init) [sys_init_vid_k3];
+    (List.map (fun s ->
+        mk_apply' (D.send_fetch_name_of_t D.sys_init s) [sys_init_vid_k3])
+      ss) @
 
-    D.send_poly_queues;
+    [
+      D.send_poly_queues;
 
-    (* send notifications *)
-    D.mk_send_all_nodes nd_sys_init_barrier_nm [mk_cunit]
-  ]
+      (* send notifications *)
+      D.mk_send_all_nodes nd_sys_init_barrier_nm [mk_cunit]
+    ]
 
 let ms_rcv_jobs_ack_cnt = create_ds "ms_rcv_jobs_ack_cnt" (mut t_int) ~init:(mk_cint 0)
 let ms_rcv_jobs_ack_nm = "ms_rcv_jobs_ack"

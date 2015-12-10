@@ -762,14 +762,9 @@ let trig_sub_handler_args c t = args_of_t_with_v c t
 (* TODO: make vid 16-bit offset from batch_id *)
 let trig_slim_sub_handler_args = ["vid", t_vid]
 
-(* rcv_put: how the stmt_cnt list gets sent in rcv_put *)
-let stmt_cnt_list_ship =
-  let e = ["stmt_id", t_stmt_id; "count", t_int] in
-  create_ds "stmt_cnt_list" ~e @@ wrap_tbag' @@ snd_many e
-
 (* rcv_put includes stmt_cnt_list_ship *)
-let nd_rcv_put_args_poly c t = ["sender_ip", t_int]
-let nd_rcv_put_args c t = nd_rcv_put_args_poly c t @ args_of_t_with_v c t
+let nd_rcv_put_args_poly = ["sender_ip", t_int; "count2", t_int]
+let nd_rcv_put_args c t = nd_rcv_put_args_poly @ args_of_t_with_v c t
 
 (* rcv_fetch: data structure that is sent *)
 let send_map_ids =
@@ -780,7 +775,7 @@ let send_map_ids =
 let nd_rcv_fetch_args_poly c t = []
 let nd_rcv_fetch_args c t = nd_rcv_fetch_args_poly c t @ args_of_t_with_v c t
 
-let nd_do_complete_trig_args_poly c t = ["sender_ip", t_int; "ack", t_bool]
+let nd_do_complete_trig_args_poly c t = []
 let nd_do_complete_trig_args c t = nd_do_complete_trig_args_poly c t @ args_of_t_with_v c t
 
 let nd_rcv_push_args_poly = []
@@ -964,8 +959,6 @@ let calc_poly_tags c =
                     with Bad_data _ -> [] in
          ti t Event args)
        events) @
-    (* static ds for sw->nd triggers *)
-    [ti stmt_cnt_list_ship.id (Ds false) stmt_cnt_list_ship.e] @
     (* map ids for send fetch *)
     (List.map (fun m ->
          ti (P.map_name_of c.p m^"_id") (Ds false) []) @@
@@ -980,7 +973,7 @@ let calc_poly_tags c =
       (* slim version of trigger: pull args from log, just vid *)
       (ti slim_handler_nm (Trig true) trig_slim_sub_handler_args)::
       (List.flatten @@ List.map (fun s ->
-          [ti (rcv_put_name_of_t t s) (SubTrig(true, sub_handler_nm)) @@ nd_rcv_put_args_poly c t;
+          [ti (rcv_put_name_of_t t s) (SubTrig(false, sub_handler_nm)) @@ nd_rcv_put_args_poly;
           ti (rcv_fetch_name_of_t t s) (SubTrig(true, sub_handler_nm)) @@ nd_rcv_fetch_args_poly c t]) @@
        P.stmts_with_rhs_maps_in_t c.p t) @
       (* args for do completes without rhs maps *)
