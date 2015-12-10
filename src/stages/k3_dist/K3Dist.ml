@@ -733,7 +733,7 @@ let trig_dispatcher_trig_nm = "trig_dispatcher_trig"
 let trig_dispatcher_trig_unique_nm = "trig_dispatcher_unique_trig"
 
 (* dispatcher for sw -> node with corrective mode *)
-let nd_trig_dispatcher_trig_nm = "nd_trig_dispatcher_trig"
+let nd_from_sw_trig_dispatcher_trig_nm = "nd_from_sw_trig_dispatcher_trig"
 
 (* handler for many other triggers *)
 let m_nm = P.map_name_of
@@ -745,7 +745,7 @@ let rcv_put_name_of_t t s = sp "nd_%s_%d_rcv_put" t s
 let send_push_name_of_t c t s m = sp "nd_%s_%d_send_push_%s" t s (m_nm c.p m)
 let rcv_push_name_of_t t s = sp "nd_%s_%d_rcv_push" t s
 let send_corrective_name_of_t c m = sp "nd_%s_send_correctives" (m_nm c.p m)
-let do_complete_name_of_t t s = sp "nd_%s_%d__do_complete" t s
+let do_complete_name_of_t t s = sp "nd_%s_%d_do_complete" t s
 let rcv_corrective_name_of_t c t s m = sp "nd_%s_%d_rcv_corrective_%s" t s (m_nm c.p m)
 let do_corrective_name_of_t c t s m = sp "nd_%s_%d_do_corrective_%s" t s (m_nm c.p m)
 
