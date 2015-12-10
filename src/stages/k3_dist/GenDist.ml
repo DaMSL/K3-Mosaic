@@ -1666,8 +1666,8 @@ let nd_rcv_warmup_push c =
     poly_args
     [t_int; t_int] @@
   mk_poly_skip_block fn_nm [
-    mk_poly_fold
-      (mk_lambda4' ["i", t_int; "o", t_int] p_tag p_idx p_off @@
+    mk_poly_iter'
+      (mk_lambda3' p_tag p_idx p_off @@
         List.fold_left (fun acc_code (itag, (stag,_,ts)) ->
           let m_nm = str_drop_end (String.length "_warmup") stag in
           let m_i_ts = P.map_ids_types_for c.p @@ P.map_id_of_name c.p m_nm in
@@ -1679,13 +1679,11 @@ let nd_rcv_warmup_push c =
                   mk_bind (mk_var m_nm) "d" @@
                 mk_insert "d" [mk_cint 0; mk_tuple k; mk_tuple v] ;
 
-                mk_tuple [mk_var "idx"; mk_var "offset"]
+                mk_poly_skip' stag
             ])
             acc_code)
         (mk_error "unrecognized map name")
         m_tags)
-     (mk_tuple [mk_var "idx"; mk_var "offset"]) @@
-     mk_var "poly_queue"
   ]
 
 (* dummy do_reads to handle typechecking etc *)
