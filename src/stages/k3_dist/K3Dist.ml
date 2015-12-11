@@ -79,7 +79,7 @@ type sub_handler = string
 
 type tag_type =
   | Trig      of has_ds (* a top-level trigger *)
-  | SubTrig   of has_ds * sub_handler (* a subtrigger handled by a high-level trigger *)
+  | SubTrig   of has_ds * sub_handler list (* a subtrigger handled by a high-level trigger *)
   | Ds        of unique (* a data structure *)
   | Event     (* incoming event *)
 
@@ -737,8 +737,9 @@ let nd_from_sw_trig_dispatcher_trig_nm = "nd_from_sw_trig_dispatcher_trig"
 
 (* handler for many other triggers *)
 let m_nm = P.map_name_of
-let trig_sub_handler_name_of_t t = "nd_trig_sub_handler_"^t
-let trig_slim_sub_handler_name_of_t t = "nd_trig_slim_sub_handler_"^t
+let trig_save_arg_sub_handler_name_of_t t = "nd_trig_save_arg_sub_handler_"^t
+let trig_load_arg_sub_handler_name_of_t t = "nd_trig_load_arg_sub_handler_"^t
+let trig_no_arg_sub_handler_name_of_t t   = "nd_trig_no_arg_sub_handler_"^t
 let send_fetch_name_of_t t s = sp "sw_%s_%d_send_fetch" t s
 let rcv_fetch_name_of_t t s = sp "nd_%s_%d_rcv_fetch" t s
 let rcv_put_name_of_t t s = sp "nd_%s_%d_rcv_put" t s
@@ -756,11 +757,13 @@ let nd_rcv_corr_done_nm = "nd_rcv_corr_done"
 (*** trigger args. Needed here for polyqueues ***)
 
 (* the trig header marks the args *)
-let trig_sub_handler_args c t = args_of_t_with_v c t
+let trig_save_arg_sub_handler_args c t = args_of_t_with_v c t
 
 (* slim trig header for pushes *)
 (* TODO: make vid 16-bit offset from batch_id *)
-let trig_slim_sub_handler_args = ["vid", t_vid]
+let trig_load_arg_sub_handler_args = ["vid", t_vid]
+
+let trig_no_arg_sub_handler_args = ["vid", t_vid]
 
 (* rcv_put includes stmt_cnt_list_ship *)
 let nd_rcv_put_args_poly = ["sender_ip", t_int; "count2", t_int]
@@ -853,6 +856,11 @@ let send_trig_header_bitmap =
   let init =
     mk_map (mk_lambda' unknown_arg mk_cfalse) @@ mk_var my_peers.id in
   create_ds "send_trig_header_bitmap" ~init @@ wrap_tvector t_bool
+
+(* keep track of which vid args we've sent in this batch *)
+let send_trig_args_map =
+  let e = ["vid", t_vid; "_u", t_unit] in
+  create_ds ~e "send_trig_args_map" @@ wrap_tmap @@ t_of_e e
 
 (* u is for unique *)
 let p_idx  = ["idx", t_int]
@@ -966,20 +974,27 @@ let calc_poly_tags c =
     (List.flatten @@ for_all_trigs c.p ~sys_init:true @@ fun t ->
       let s_rhs = P.s_and_over_stmts_in_t c.p P.rhs_maps_of_stmt t in
       let s_rhs_corr = List.filter (fun (s, map) -> List.mem map c.corr_maps) s_rhs in
-      let sub_handler_nm = trig_sub_handler_name_of_t t in
-      let slim_handler_nm = trig_slim_sub_handler_name_of_t t in
-      (* carries all the trig arguments + vid *)
-      (ti sub_handler_nm (Trig true) @@ trig_sub_handler_args c t)::
+      let save_handler_nm = trig_save_arg_sub_handler_name_of_t t in
+      let load_handler_nm = trig_load_arg_sub_handler_name_of_t t in
+      let no_arg_handler_nm = trig_no_arg_sub_handler_name_of_t t in
+      (* full trigger handler: saves args *)
+      (ti save_handler_nm (Trig true) @@ trig_save_arg_sub_handler_args c t)::
       (* slim version of trigger: pull args from log, just vid *)
-      (ti slim_handler_nm (Trig true) trig_slim_sub_handler_args)::
+      (ti load_handler_nm (Trig true) trig_load_arg_sub_handler_args)::
+      (ti no_arg_handler_nm (Trig true) trig_no_arg_sub_handler_args)::
       (List.flatten @@ List.map (fun s ->
-          [ti (rcv_put_name_of_t t s) (SubTrig(false, sub_handler_nm)) @@ nd_rcv_put_args_poly;
-          ti (rcv_fetch_name_of_t t s) (SubTrig(true, sub_handler_nm)) @@ nd_rcv_fetch_args_poly c t]) @@
+          [ti (rcv_put_name_of_t t s)
+             (SubTrig(false, [save_handler_nm; load_handler_nm])) @@
+             nd_rcv_put_args_poly;
+           ti (rcv_fetch_name_of_t t s)
+             (SubTrig(true, [save_handler_nm; load_handler_nm])) @@
+             nd_rcv_fetch_args_poly c t]) @@
        P.stmts_with_rhs_maps_in_t c.p t) @
       (* args for do completes without rhs maps *)
       (List.map (fun s ->
-           ti (do_complete_name_of_t t s^"_trig") (SubTrig(false, sub_handler_nm)) @@
-           nd_do_complete_trig_args_poly c t) @@
+           ti (do_complete_name_of_t t s^"_trig")
+             (SubTrig(false, [save_handler_nm; load_handler_nm])) @@
+             nd_do_complete_trig_args_poly c t) @@
         P.stmts_without_rhs_maps_in_t c.p t) @
       (* the types for nd_rcv_push. includes a separate, optional map component *)
       (* this isn't a dsTrig since pushes are aggregated at the dispatcher *)
@@ -994,7 +1009,7 @@ let calc_poly_tags c =
               ti (rcv_push_name_of_t t s^"_"^soi n^d)
                 ~fn:(rcv_push_name_of_t t s)
                 ~const:[mk_cbool has_data; mk_cint n]
-                (SubTrig(false, slim_handler_nm))
+                (SubTrig(false, [no_arg_handler_nm]))
                 nd_rcv_push_args_poly)
             r_maps) @@
            P.stmts_with_rhs_maps_in_t c.p t)
@@ -1033,22 +1048,34 @@ let buffer_for_send ?(unique=false) ?(wr_bitmap=true) t addr args =
         mk_poly_insert_block t "pqs" args
     ]
 
-(* code to check if we need to write a trig header, and if so, to buffer one *)
-(* @other_cond: another condition to output the trig header *)
-let buffer_trig_header_if_needed ?(force=false) ?(slim_trig=false) t addr args =
+(* code to check if we need to write trig args and a trig header, and if so, to buffer them *)
+let buffer_trig_header_if_needed ?(force=false) ?(need_args=true) vid t addr args =
   (* normal condition for adding *)
-  let bitmap_cond = mk_not @@ mk_at' send_trig_header_bitmap.id @@ mk_var addr in
-  let cond e = if force then e else mk_if bitmap_cond e mk_cunit in
-  let t_nm =
-    if slim_trig then trig_slim_sub_handler_name_of_t t
-    else trig_sub_handler_name_of_t t in
-  cond
-    (mk_block [
+  let save_handler = trig_save_arg_sub_handler_name_of_t t in
+  let load_handler = trig_load_arg_sub_handler_name_of_t t in
+  let no_arg_handler = trig_no_arg_sub_handler_name_of_t t in
+  (* check bitmap for current header *)
+  (if not force then
+    mk_if (mk_at' send_trig_header_bitmap.id @@ mk_var addr) mk_cunit
+   else id_fn) @@
+    mk_block @@
       (* update the bitmap *)
-      mk_insert_at send_trig_header_bitmap.id (mk_var addr) [mk_ctrue];
-      (* buffer trig args *)
-      buffer_for_send t_nm addr args
-    ])
+      [mk_insert_at send_trig_header_bitmap.id (mk_var addr) [mk_ctrue]] @
+      (if need_args && not force then
+        (* check map for the last batch to see if we need args *)
+          [
+          mk_case_ns (mk_lookup (mk_var send_trig_args_map.id) [vid; mk_cunknown]) "x"
+          (mk_block [
+              (* update map *)
+              mk_insert send_trig_args_map.id [vid; mk_cunit];
+              (* use full handler (which also saves) *)
+              buffer_for_send save_handler addr args
+          ]) @@
+          (* we already have the args saved, so just use slim handler *)
+          buffer_for_send load_handler addr args
+        ]
+      else
+        [buffer_for_send no_arg_handler addr args])
 
 (* insert tuples into polyqueues *)
 let buffer_tuples_from_idxs ?(unique=false) ?(drop_vid=false) tuples_nm map_type map_tag indices =
@@ -1495,6 +1522,7 @@ let global_vars c dict =
       upoly_queues;
       upoly_queue_bitmap;
       send_trig_header_bitmap;
+      send_trig_args_map;
       nd_rcv_fetch_buffer;
       nd_stmt_cntrs_per_map;
       nd_lmap_of_stmt_id c;

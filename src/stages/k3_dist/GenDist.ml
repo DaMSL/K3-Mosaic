@@ -405,7 +405,7 @@ let sw_send_fetch_fn c t s =
               mk_lambda' send_put_ip_map_e @@
                 mk_block [
                   (* buffer the trig args if needed *)
-                  buffer_trig_header_if_needed t "ip" t_args;
+                  buffer_trig_header_if_needed (mk_var "vid") t "ip" t_args;
                   (* property *)
                   mk_let ["stmt_id"] (mk_cint s) @@
                   prof_property D.prof_tag_send_put
@@ -448,7 +448,7 @@ let sw_send_fetch_fn c t s =
                     (* mark the send_fetch_bitmap *)
                     mk_insert_at send_fetch_bitmap.id (mk_var "ip") [mk_ctrue];
                     (* buffer the trig args if needed *)
-                    buffer_trig_header_if_needed t "ip" t_args;
+                    buffer_trig_header_if_needed (mk_var "vid") t "ip" t_args;
                     buffer_for_send target_t "ip" [mk_cunit]
                   ])
                   mk_cunit;
@@ -476,7 +476,7 @@ let sw_send_fetch_fn c t s =
                     so if we add the header here, we must make sure we're the only msg to
                     this node by being last in the send fetch
                 *)
-                buffer_trig_header_if_needed t "ip" t_args;
+                buffer_trig_header_if_needed (mk_var "vid") t "ip" t_args;
                 buffer_for_send do_complete_t "ip" []
               ])
             K3Route.route_bitmap.id
@@ -609,7 +609,7 @@ let nd_rcv_fetch_trig c t s =
           (mk_at_with' send_push_cntrs.id (mk_var "ip") @@
           mk_lambda' send_push_cntrs.e @@
             mk_block [
-              buffer_trig_header_if_needed ~slim_trig:true t "ip" [mk_var "vid"];
+              buffer_trig_header_if_needed ~need_args:false (mk_var "vid") t "ip" [mk_var "vid"];
               (* convert counts to messages *)
               List.fold_left (fun acc_code n ->
                   let rcv_push_nm = rcv_push_name_of_t t s in
@@ -767,7 +767,7 @@ let nd_send_push_stmt_map_trig c t s =
                   mk_if (mk_var "buffered")
                     (mk_block [
                       (* we need to force a trig header *)
-                      buffer_trig_header_if_needed ~force:true ~slim_trig:true t "ip" [mk_var "vid"];
+                      buffer_trig_header_if_needed ~force:true ~need_args:false (mk_var "vid") t "ip" [mk_var "vid"];
                       mk_if (mk_var "has_data")
                         (buffer_for_send ~wr_bitmap:false (rcv_push_nm^"_1") "ip" []) @@
                          buffer_for_send ~wr_bitmap:false (rcv_push_nm^"_1_no_data") "ip" [];
@@ -1573,7 +1573,7 @@ let sub_trig_dispatch c fn_nm t_args =
   List.fold_left
     (fun acc_code (itag, ti) -> match ti.tag_typ with
         (* only match with the sub-triggers *)
-        | SubTrig(has_ds, t') when t' = fn_nm ->
+        | SubTrig(has_ds, ts) when List.mem fn_nm ts ->
         mk_if (mk_eq (mk_var "tag") @@ mk_cint itag)
           (* look up this tag *)
           (mk_poly_at_with' ti.tag @@ mk_lambda' ti.args @@
@@ -1590,19 +1590,15 @@ let sub_trig_dispatch c fn_nm t_args =
     c.poly_tags
 
 (* handle all sub-trigs that need only a vid (pushes) *)
-let nd_slim_trig_sub_handler c t =
-  let fn_nm = trig_slim_sub_handler_name_of_t t in
-  let t_args = trig_slim_sub_handler_args in
-  mk_global_fn fn_nm
-    (poly_args @ t_args)
-    [t_int; t_int] @@
+let nd_no_arg_trig_sub_handler c t =
+  let fn_nm = trig_no_arg_sub_handler_name_of_t t in
+  let t_args = trig_no_arg_sub_handler_args in
+  mk_global_fn fn_nm (poly_args @ t_args) [t_int; t_int] @@
   (* skip over the entry tag *)
   mk_poly_skip_block fn_nm [
-
     (* clear the trig send bitmaps. These make sure we output a slim trig header
        for any sub-trigger output (ie. pushes) *)
     mk_set_all D.send_trig_header_bitmap.id [mk_cfalse];
-
     (* dispatch the sub triggers (pushes) *)
     mk_poly_iter' @@
       mk_lambda'' (p_tag @ p_idx @ p_off) @@
@@ -1612,22 +1608,40 @@ let nd_slim_trig_sub_handler c t =
         sub_trig_dispatch c fn_nm t_args;
   ]
 
+(* handle all sub-trigs that need only a vid (pushes) *)
+let nd_load_arg_trig_sub_handler c t =
+  let fn_nm = trig_load_arg_sub_handler_name_of_t t in
+  let t_args = trig_load_arg_sub_handler_args in
+  mk_global_fn fn_nm (poly_args @ t_args) [t_int; t_int] @@
+  (* skip over the entry tag *)
+  mk_poly_skip_block fn_nm [
+    (* clear the trig send bitmaps. These make sure we output a slim trig header
+       for any sub-trigger output (ie. pushes) *)
+    mk_set_all D.send_trig_header_bitmap.id [mk_cfalse];
+    (* load the trig args *)
+    mk_let (fst_many @@ D.args_of_t c t)
+      (mk_apply' (nd_log_get_bound_for t) [mk_var "vid"]) @@
+    (* dispatch the sub triggers *)
+    mk_poly_iter' @@
+      mk_lambda'' (p_tag @ p_idx @ p_off) @@
+        (* print trace if requested *)
+        do_trace ("nstsh"^trace_trig t)
+                  [t_int, mk_var "vid"] @@
+        sub_trig_dispatch c fn_nm t_args;
+  ]
+
 (* handle all sub-trigs that need trigger arguments *)
-let nd_trig_sub_handler c t =
-  let fn_nm = trig_sub_handler_name_of_t t in
-  let t_args = trig_sub_handler_args c t in
-  mk_global_fn fn_nm
-    (poly_args @ t_args)
-    [t_int; t_int] @@
+let nd_save_arg_trig_sub_handler c t =
+  let fn_nm = trig_save_arg_sub_handler_name_of_t t in
+  let t_args = trig_save_arg_sub_handler_args c t in
+  mk_global_fn fn_nm (poly_args @ t_args) [t_int; t_int] @@
   (* skip over the entry tag *)
   mk_poly_skip_block fn_nm [
     (* save the bound args for this vid *)
     mk_apply' (nd_log_write_for c t) @@ args_of_t_as_vars_with_v c t;
-
     (* clear the trig send bitmaps. These make sure we output a trig header
        for any sub-trigger output (ie. pushes) *)
     mk_set_all D.send_trig_header_bitmap.id [mk_cfalse];
-
     (* dispatch the sub triggers *)
     mk_poly_iter' @@
       mk_lambda'' (p_tag @ p_idx @ p_off) @@
@@ -1648,6 +1662,9 @@ let trig_dispatcher c =
     ["batch_id", t_vid; "do_clear", t_bool; "poly_queue", poly_queue.t] [] @@
   mk_block [
     mk_if (mk_var "do_clear") (clear_poly_queues c) mk_cunit;
+
+    (* clear out the trig arg map *)
+    mk_clear_all send_trig_args_map.id;
 
     (* iterate over all buffer contents *)
     mk_let ["idx"; "offset"] (mk_tuple [mk_cint 0; mk_cint 0]) @@
@@ -2110,8 +2127,9 @@ let gen_dist_for_t c ast t =
          nd_rcv_fetch_trig c t s;
          nd_rcv_push_trig c t s]) s_r) @
     (List.map (fun s -> nd_do_complete_trigs c t s) s_no_r) @
-    [nd_trig_sub_handler c t;
-     nd_slim_trig_sub_handler c t] @
+    [nd_save_arg_trig_sub_handler c t;
+     nd_load_arg_trig_sub_handler c t;
+     nd_no_arg_trig_sub_handler c t] @
     (if c.gen_correctives then
        List.flatten @@ List.map (fun s -> nd_rcv_correctives_trig c t s) @@
         P.stmts_with_rhs_maps_in_t c.p t
