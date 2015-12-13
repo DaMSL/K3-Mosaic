@@ -1613,6 +1613,7 @@ let nd_load_arg_trig_sub_handler c t =
   let fn_nm = trig_load_arg_sub_handler_name_of_t t in
   let t_args = trig_load_arg_sub_handler_args in
   let trig_args = args_of_t_with_v c t in
+  let load_args = D.args_of_t c t in
   mk_global_fn fn_nm (poly_args @ t_args) [t_int; t_int] @@
   (* skip over the entry tag *)
   mk_poly_skip_block fn_nm [
@@ -1620,8 +1621,10 @@ let nd_load_arg_trig_sub_handler c t =
        for any sub-trigger output (ie. pushes) *)
     mk_set_all D.send_trig_header_bitmap.id [mk_cfalse];
     (* load the trig args *)
-    mk_let (fst_many @@ D.args_of_t c t)
-      (mk_apply' (nd_log_get_bound_for t) [mk_var "vid"]) @@
+    (if load_args <> [] then
+      mk_let (fst_many @@ D.args_of_t c t)
+        (mk_apply' (nd_log_get_bound_for t) [mk_var "vid"])
+     else id_fn) @@
     (* dispatch the sub triggers *)
     mk_poly_iter' @@
       mk_lambda'' (p_tag @ p_idx @ p_off) @@
