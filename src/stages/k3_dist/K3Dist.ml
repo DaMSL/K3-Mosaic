@@ -851,16 +851,29 @@ let upoly_queue_bitmap =
     mk_map (mk_lambda' unknown_arg mk_cfalse) @@ mk_var my_peers.id in
   create_ds "upoly_queue_bitmap" ~init @@ wrap_tvector t_bool
 
-(* we use this to make sure a trig header gets sent at least once per sub-trigger handling *)
+(* we use this to make sure some trig header gets sent at least once per sub-trigger handling *)
 let send_trig_header_bitmap =
   let init =
     mk_map (mk_lambda' unknown_arg mk_cfalse) @@ mk_var my_peers.id in
   create_ds "send_trig_header_bitmap" ~init @@ wrap_tvector t_bool
 
 (* keep track of which vid args we've sent in this batch *)
-let send_trig_args_map =
+let send_trig_args_inner =
   let e = ["vid", t_vid; "_u", t_unit] in
-  create_ds ~e "send_trig_args_map" @@ wrap_tmap @@ t_of_e e
+  create_ds ~e "inner_map" @@ wrap_tmap @@ t_of_e e
+
+(* indexed by IP *)
+let send_trig_args_map =
+  let e = [send_trig_args_inner.id, send_trig_args_inner.t] in
+  let init =
+    mk_map (mk_lambda' unknown_arg @@ mk_empty send_trig_args_inner.t) @@
+    mk_var my_peers.id in
+  create_ds ~e ~init "send_trig_args_map" @@ wrap_tvector @@ t_of_e e
+
+let send_trig_args_bitmap =
+  let init =
+    mk_map (mk_lambda' unknown_arg mk_cfalse) @@ mk_var my_peers.id in
+  create_ds "send_trig_header_bitmap" ~init @@ wrap_tvector t_bool
 
 (* u is for unique *)
 let p_idx  = ["idx", t_int]
@@ -1062,18 +1075,25 @@ let buffer_trig_header_if_needed ?(force=false) ?(need_args=true) vid t addr arg
       (* update the bitmap *)
       [mk_insert_at send_trig_header_bitmap.id (mk_var addr) [mk_ctrue]] @
       (if need_args && not force then
-        (* check map for the last batch to see if we need args *)
           [
-          mk_case_ns (mk_lookup (mk_var send_trig_args_map.id) [vid; mk_cunknown]) "x"
-          (mk_block [
-              (* update map *)
-              mk_insert send_trig_args_map.id [vid; mk_cunit];
-              (* use full handler (which also saves) *)
-              buffer_for_send save_handler addr args
-          ]) @@
-          (* we already have the args saved, so just use slim handler *)
-          buffer_for_send load_handler addr args
-        ]
+            (* check map for the last batch to see if we need args *)
+            mk_let ["has_args"]
+              (mk_at_with' send_trig_args_map.id (mk_var addr) @@
+               mk_lambda' send_trig_args_map.e @@
+               mk_case_ns (mk_lookup (mk_var send_trig_args_inner.id) [vid; mk_cunknown])
+                  "x" mk_cfalse mk_ctrue) @@
+            mk_if (mk_var "has_args")
+              (buffer_for_send load_handler addr [mk_var "vid"]) @@
+               mk_block [
+                  (* update map *)
+                  mk_insert_at send_trig_args_bitmap.id (mk_var addr) [mk_ctrue];
+                  mk_update_at_with send_trig_args_map.id (mk_var addr) @@
+                    mk_lambda' send_trig_args_map.e @@
+                      mk_insert_block send_trig_args_inner.id [vid; mk_cunit];
+                  (* use full handler (which also saves) *)
+                  buffer_for_send save_handler addr args
+              ]
+          ]
       else
         [buffer_for_send no_arg_handler addr args])
 

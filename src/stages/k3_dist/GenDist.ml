@@ -1612,6 +1612,7 @@ let nd_no_arg_trig_sub_handler c t =
 let nd_load_arg_trig_sub_handler c t =
   let fn_nm = trig_load_arg_sub_handler_name_of_t t in
   let t_args = trig_load_arg_sub_handler_args in
+  let trig_args = args_of_t_with_v c t in
   mk_global_fn fn_nm (poly_args @ t_args) [t_int; t_int] @@
   (* skip over the entry tag *)
   mk_poly_skip_block fn_nm [
@@ -1627,7 +1628,7 @@ let nd_load_arg_trig_sub_handler c t =
         (* print trace if requested *)
         do_trace ("nstsh"^trace_trig t)
                   [t_int, mk_var "vid"] @@
-        sub_trig_dispatch c fn_nm t_args;
+        sub_trig_dispatch c fn_nm trig_args;
   ]
 
 (* handle all sub-trigs that need trigger arguments *)
@@ -1664,7 +1665,15 @@ let trig_dispatcher c =
     mk_if (mk_var "do_clear") (clear_poly_queues c) mk_cunit;
 
     (* clear out the trig arg map *)
-    mk_clear_all send_trig_args_map.id;
+    mk_iter_bitmap'
+      (mk_update_at_with send_trig_args_map.id (mk_var "ip") @@
+        mk_lambda' send_trig_args_map.e @@
+          mk_block [
+            mk_clear_all send_trig_args_inner.id;
+            mk_var send_trig_args_inner.id
+          ])
+      send_trig_args_bitmap.id;
+    mk_set_all send_trig_args_bitmap.id [mk_cfalse];
 
     (* iterate over all buffer contents *)
     mk_let ["idx"; "offset"] (mk_tuple [mk_cint 0; mk_cint 0]) @@
