@@ -451,6 +451,12 @@ let special_route_stmt ?info p s =
     true
   with Exit -> false
 
+let max_stmts_per_trig p =
+  List.fold_left (fun max t ->
+      let n = List.length @@ stmts_of_t p t in
+      if n > max then n else max)
+    0 @@ get_trig_list p
+
 let dump_info p =
   let ts = get_trig_list p in
   let ss = get_stmt_list p in

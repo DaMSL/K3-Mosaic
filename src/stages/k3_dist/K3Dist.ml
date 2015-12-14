@@ -743,6 +743,7 @@ let trig_no_arg_sub_handler_name_of_t t   = "nd_trig_no_arg_sub_handler_"^t
 let send_fetch_name_of_t t s = sp "sw_%s_%d_send_fetch" t s
 let rcv_fetch_name_of_t t s = sp "nd_%s_%d_rcv_fetch" t s
 let rcv_put_name_of_t t s = sp "nd_%s_%d_rcv_put" t s
+let rcv_vid_list_name_of_t t s = sp "nd_%s_%d_rcv_vid_list" t s
 let send_push_name_of_t c t s m = sp "nd_%s_%d_send_push_%s" t s (m_nm c.p m)
 let rcv_push_name_of_t t s = sp "nd_%s_%d_rcv_push" t s
 let send_corrective_name_of_t c m = sp "nd_%s_send_correctives" (m_nm c.p m)
@@ -766,8 +767,10 @@ let trig_load_arg_sub_handler_args = ["vid", t_vid]
 let trig_no_arg_sub_handler_args = ["vid", t_vid]
 
 (* rcv_put includes stmt_cnt_list_ship *)
-let nd_rcv_put_args_poly = ["sender_ip", t_int; "count2", t_int]
+let nd_rcv_put_args_poly = ["count2", t_int]
 let nd_rcv_put_args c t = nd_rcv_put_args_poly @ args_of_t_with_v c t
+
+let rcv_vid_list_args = ["vid", t_vid]
 
 (* rcv_fetch: data structure that is sent *)
 let send_map_ids =
@@ -933,23 +936,24 @@ let reserve_poly_queue_code ?all c =
       poly_queue_bitmap.id)
     mk_cunit
 
-let clear_poly_queues c =
-  mk_block [
+let clear_poly_queues ?(unique=true) c =
+  mk_block @@ [
     (* replace all used send slots with empty polyqueues *)
     mk_iter_bitmap'
       (mk_insert_at poly_queues.id (mk_var "ip")
          [mk_var empty_poly_queue.id])
       poly_queue_bitmap.id;
-    mk_iter_bitmap'
-      (mk_insert_at upoly_queues.id (mk_var "ip")
-         [mk_var empty_upoly_queue.id])
-      upoly_queue_bitmap.id;
-    (* apply reserve to all the new polybufs *)
-    reserve_poly_queue_code c;
-    (* clear the send bitmaps *)
     mk_set_all poly_queue_bitmap.id [mk_cfalse];
-    mk_set_all upoly_queue_bitmap.id [mk_cfalse];
-  ]
+  ] @
+  (if unique then
+    [mk_iter_bitmap'
+      (mk_insert_at upoly_queues.id (mk_var "ip")
+        [mk_var empty_upoly_queue.id])
+      upoly_queue_bitmap.id;
+      mk_set_all upoly_queue_bitmap.id [mk_cfalse];]
+    else []) @
+  (* apply reserve to all the new polybufs *)
+  [reserve_poly_queue_code c]
 
 
 (* we create tags for events, with the full width of said events plus insert/delete field *)
@@ -999,6 +1003,8 @@ let calc_poly_tags c =
           [ti (rcv_put_name_of_t t s)
              (SubTrig(false, [save_handler_nm; load_handler_nm])) @@
              nd_rcv_put_args_poly;
+           (* for isobatch mode: receive the vids of the isobatch *)
+           ti (rcv_vid_list_name_of_t t s) (Trig false) rcv_vid_list_args;
            ti (rcv_fetch_name_of_t t s)
              (SubTrig(true, [save_handler_nm; load_handler_nm])) @@
              nd_rcv_fetch_args_poly c t]) @@
@@ -1187,6 +1193,7 @@ let mk_send_me ?(payload=[mk_cunit]) trig =
 
 (* counter for ip *)
 let ip = create_ds "ip" (mut t_int)
+let ip2 = create_ds "ip2" (mut t_int)
 
 (* counter for stmt *)
 let stmt_ctr = create_ds "stmt_ctr" @@ mut t_int
@@ -1331,6 +1338,17 @@ let bound_params_of_stmt c s =
       with Not_found -> acc)
     trig_args
     []
+
+(* vids have a lower bit = 0, isobatch ids have 1 *)
+let is_isobatch_id id = mk_neq (mk_var id) @@ (mk_mult (mk_divi (mk_var id) @@ mk_cint 2) @@ mk_cint 2)
+
+(* whether we do isobatches *)
+let isobatch_mode = create_ds ~init:(mk_ctrue) "isobatch_mode" @@ t_bool
+
+let isobatch_threshold = create_ds ~init:(mk_cint 4) "isobatch_threshold" @@ t_int
+
+let next_vid vid = mk_mult (mk_add (mk_divi vid @@ mk_cint 2) @@ mk_cint 1) @@ mk_cint 2
+let next_isobatch_id vid = mk_add (mk_cint 1) @@ mk_mult (mk_add (mk_divi vid @@ mk_cint 2) @@ mk_cint 1) @@ mk_cint 2
 
 (* tags for profiling and post-analysis *)
 let do_profiling = create_ds ~init:mk_cfalse "do_profiling" @@ mut t_bool
@@ -1499,6 +1517,7 @@ let global_vars c dict =
     [ me_int;
       interpreter_mode;
       ip;
+      ip2;
       stmt_ctr;
       g_init_vid;
       g_max_int;
@@ -1552,6 +1571,8 @@ let global_vars c dict =
       prof_num_empty;
       prof_num_full;
       sw_csv_index;
+      isobatch_mode;
+      isobatch_threshold;
     ] @
 
     log_ds c @
