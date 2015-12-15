@@ -741,9 +741,10 @@ let trig_save_arg_sub_handler_name_of_t t = "nd_trig_save_arg_sub_handler_"^t
 let trig_load_arg_sub_handler_name_of_t t = "nd_trig_load_arg_sub_handler_"^t
 let trig_no_arg_sub_handler_name_of_t t   = "nd_trig_no_arg_sub_handler_"^t
 let send_fetch_name_of_t t s = sp "sw_%s_%d_send_fetch" t s
+let send_fetch_isobatch_name_of_t t = sp "sw_%s_send_fetch_isobatch" t
 let rcv_fetch_name_of_t t s = sp "nd_%s_%d_rcv_fetch" t s
 let rcv_put_name_of_t t s = sp "nd_%s_%d_rcv_put" t s
-let rcv_vid_list_name_of_t t s = sp "nd_%s_%d_rcv_vid_list" t s
+let rcv_stmt_name_of_t t s = sp "nd_%s_%d_rcv_stmt" t s
 let send_push_name_of_t c t s m = sp "nd_%s_%d_send_push_%s" t s (m_nm c.p m)
 let rcv_push_name_of_t t s = sp "nd_%s_%d_rcv_push" t s
 let send_corrective_name_of_t c m = sp "nd_%s_send_correctives" (m_nm c.p m)
@@ -754,6 +755,8 @@ let do_corrective_name_of_t c t s m = sp "nd_%s_%d_do_corrective_%s" t s (m_nm c
 let sw_ack_rcv_trig_nm = "sw_ack_rcv"
 
 let nd_rcv_corr_done_nm = "nd_rcv_corr_done"
+
+let nd_rcv_stmt_nm = "nd_rcv_stmt"
 
 (*** trigger args. Needed here for polyqueues ***)
 
@@ -769,8 +772,6 @@ let trig_no_arg_sub_handler_args = ["vid", t_vid]
 (* rcv_put includes stmt_cnt_list_ship *)
 let nd_rcv_put_args_poly = ["count2", t_int]
 let nd_rcv_put_args c t = nd_rcv_put_args_poly @ args_of_t_with_v c t
-
-let rcv_vid_list_args = ["vid", t_vid]
 
 (* rcv_fetch: data structure that is sent *)
 let send_map_ids =
@@ -1004,7 +1005,8 @@ let calc_poly_tags c =
              (SubTrig(false, [save_handler_nm; load_handler_nm])) @@
              nd_rcv_put_args_poly;
            (* for isobatch mode: receive the vids of the isobatch *)
-           ti (rcv_vid_list_name_of_t t s) (Trig false) rcv_vid_list_args;
+           ti (rcv_stmt_name_of_t t s) ~fn:nd_rcv_stmt_nm ~const:[mk_cint s]
+             (SubTrig(false, [save_handler_nm; load_handler_nm; no_arg_handler_nm])) [];
            ti (rcv_fetch_name_of_t t s)
              (SubTrig(true, [save_handler_nm; load_handler_nm])) @@
              nd_rcv_fetch_args_poly c t]) @@
@@ -1339,6 +1341,41 @@ let bound_params_of_stmt c s =
     trig_args
     []
 
+(* inner member of isobatch_vid_map *)
+let isobatch_map_inner2 = create_ds "inner2" @@ wrap_tbag t_vid
+
+let isobatch_helper_bitmap_id = "isobatch_helper_bitmap"
+let isobatch_helper_bitmap c =
+  let init = k3_container_of_list (wrap_tvector t_bool) @@
+    List.map (const @@ mk_cfalse) @@ 0 :: P.get_stmt_list c.p in
+  create_ds ~init isobatch_helper_bitmap_id @@ wrap_tvector t_bool
+
+(* singleton vector for creating isobatch_vid_map easily *)
+(* indexed by stmt_id *)
+let isobatch_map_helper_id = "isobatch_map_helper"
+let isobatch_map_helper_e = [isobatch_map_inner2.id, isobatch_map_inner2.t]
+let isobatch_map_helper c =
+  let e = isobatch_map_helper_e in
+  let init = mk_map (mk_lambda' unknown_arg @@ mk_empty isobatch_map_inner2.t) @@
+    k3_container_of_list (wrap_tvector t_int) @@
+    List.map (const @@ mk_cint 0) @@ 0 :: P.get_stmt_list c.p in
+  create_ds ~init ~e isobatch_map_helper_id @@ wrap_tvector @@ t_of_e e
+
+let isobatch_map_inner =
+  let e = ["batch_id", t_vid; isobatch_map_inner2.id, isobatch_map_inner2.t] in
+  create_ds ~e "inner" @@ wrap_tmap @@ t_of_e e
+
+(* map from batch, stmt to list of vids *)
+let isobatch_vid_map_id = "isobatch_vid_map"
+let isobatch_vid_map_e = [isobatch_map_inner.id, isobatch_map_inner.t]
+let isobatch_vid_map c =
+  (* indexed by stmt_id *)
+  let e = isobatch_vid_map_e in
+  let init = mk_map (mk_lambda' unknown_arg @@ mk_empty isobatch_map_inner.t) @@
+    k3_container_of_list (wrap_tvector t_int) @@
+    List.map (const @@ mk_cint 0) @@ 0 :: P.get_stmt_list c.p in
+  create_ds ~init ~e isobatch_vid_map_id @@ wrap_tvector @@ t_of_e e
+
 (* vids have a lower bit = 0, isobatch ids have 1 *)
 let is_isobatch_id id = mk_neq (mk_var id) @@ (mk_mult (mk_divi (mk_var id) @@ mk_cint 2) @@ mk_cint 2)
 
@@ -1573,6 +1610,8 @@ let global_vars c dict =
       sw_csv_index;
       isobatch_mode;
       isobatch_threshold;
+      isobatch_map_helper c;
+      isobatch_vid_map c;
     ] @
 
     log_ds c @

@@ -427,6 +427,7 @@ let sw_send_puts_isobatch_nm t s = sp "sw_%s_%d_send_puts_isobatch" t s
 let sw_send_puts_isobatch c t s =
   let rmap_lmaps = P.rhs_lhs_of_stmt c.p s in
   let lmap, rmaps = P.lhs_map_of_stmt c.p s, P.rhs_maps_of_stmt c.p s in
+  let t_args = args_of_t_as_vars_with_v c t in
   mk_global_fn (sw_send_puts_isobatch_nm t s) (args_of_t_with_v c t) [] @@
     if null rmap_lmaps then mk_cunit else
     (* for isobatch, we need to track the exact ips sending to other ips *)
@@ -466,11 +467,15 @@ let sw_send_puts_isobatch c t s =
                   (* do nothing if we're not in the ds *)
                   mk_cunit @@
                   (* otherwise add to result bitmap *)
-                  mk_block [
-                    mk_insert_at send_put_bitmap.id (mk_fst @@ mk_var "lkup2") [mk_ctrue];
-                    mk_update_at_with send_put_isobatch_bitmap.id (mk_fst @@ mk_var "lkup2") @@
+                  mk_let_block ["ip_dest"] (mk_fst @@ mk_var "lkup2") [
+                    mk_insert_at send_put_bitmap.id (mk_var "ip_dest") [mk_ctrue];
+                    mk_update_at_with send_put_isobatch_bitmap.id (mk_var "ip_dest") @@
                       mk_lambda' send_put_isobatch_bitmap.e @@
-                        (mk_insert_at "inner" (mk_var "ip") [mk_ctrue])
+                        mk_insert_at "inner" (mk_var "ip") [mk_ctrue];
+                    (* buffer the trig args if needed *)
+                    buffer_trig_header_if_needed (mk_var "vid") t "ip_dest" t_args;
+                    (* buffer this stmt *)
+                    buffer_for_send (rcv_stmt_name_of_t t s) "ip_dest" [mk_var "vid"];
                  ])
               R.route_bitmap.id
            else
@@ -497,8 +502,10 @@ let sw_send_puts_isobatch c t s =
                       mk_update_at_with send_put_isobatch_bitmap.id (mk_var "ip2") @@
                         mk_lambda' send_put_isobatch_bitmap.e @@
                           mk_insert_at_block "inner" (mk_var "ip") [mk_ctrue];
-                      (* buffer this vid *)
-                      buffer_for_send (rcv_vid_list_name_of_t t s) "ip2" [mk_var "vid"];
+                      (* buffer the trig args if needed *)
+                      buffer_trig_header_if_needed (mk_var "vid") t "ip" t_args;
+                      (* buffer this stmt *)
+                      buffer_for_send (rcv_stmt_name_of_t t s) "ip2" [mk_var "vid"];
                     ])
                     K3S.shuffle_bitmap.id
                   ])
@@ -745,10 +752,35 @@ let nd_rcv_put_trig c t s =
         (mk_apply' nd_check_stmt_cntr_index_nm @@
           (* false: no data is being sent *)
           [mk_var "vid"; mk_cint s; mk_var "count2"; mk_cfalse])
-        (mk_apply'
-          (do_complete_name_of_t t s) @@ args_of_t_as_vars_with_v c t) @@
+        (* check if this is an isobatch vid *)
+        (mk_if (is_isobatch_id "vid")
+           (mk_at_with' isobatch_vid_map_id (mk_cint s) @@
+              mk_lambda' isobatch_vid_map_e @@
+                mk_case_ns (mk_lookup (mk_var "inner") [mk_var "vid"; mk_cunknown])
+                  "vids"
+                  (mk_error "missing vid in isobatch_vid_map") @@
+                  (* iterate over all the vids in this batch and complete them *)
+                  mk_iter
+                    (mk_lambda' ["vid", t_vid] @@
+                    mk_apply' (do_complete_name_of_t t s) @@ args_of_t_as_vars_with_v c t) @@
+                    mk_snd @@ mk_var "vids") @@
+           (* else, just apply the one vid *)
+           mk_apply'
+            (do_complete_name_of_t t s) @@ args_of_t_as_vars_with_v c t) @@
         mk_cunit
     ]
+
+(* receive isobatch stmt list *)
+(* we buffer the vid/stmts in the helper ds *)
+let nd_rcv_stmt =
+  mk_global_fn nd_rcv_stmt_nm ["stmt_id", t_stmt_id; "vid", t_vid] [] @@
+  mk_block [
+      mk_insert_at isobatch_helper_bitmap_id (mk_var "stmt_id") [mk_ctrue];
+      mk_update_at_with isobatch_map_helper_id (mk_var "stmt_id") @@
+        mk_lambda' isobatch_map_helper_e @@
+          mk_insert_block "inner2" [mk_var "vid"]
+  ]
+
 
 (* Trigger_send_push_stmt_map
  * ----------------------------------------
@@ -1882,8 +1914,20 @@ let nd_from_sw_trig_dispatcher_trig c =
           (* buffer the ack to the switch *)
           mk_if_eq (mk_var "sender_ip") (mk_cint @@ -1) mk_cunit @@
             GC.nd_ack_send_code ~addr_nm:"sender_ip" ~vid_nm:"batch_id";
+
+          (* clear out the isobatch_map_helper bitmap *)
+          mk_set_all isobatch_helper_bitmap_id [mk_cfalse];
+
           mk_apply' trig_dispatcher_nm
             [mk_var "batch_id"; mk_cfalse; mk_var "poly_queue"];
+
+          (* iterate over the isobatch map helper, and move its contents to the isobatch_map *)
+          mk_iter_bitmap' ~idx:stmt_ctr.id
+            (mk_let ["x"] (mk_delete_at isobatch_map_helper_id @@ mk_var stmt_ctr.id) @@
+              mk_update_at_with isobatch_vid_map_id (mk_var stmt_ctr.id) @@
+              mk_lambda' isobatch_vid_map_e @@
+                mk_insert_at "inner" (mk_var "batch_id") [mk_var "x"])
+            isobatch_helper_bitmap_id;
        ]) @@
       (* else, stash the poly_queue in our buffer *)
       mk_insert nd_dispatcher_buf.id
@@ -1900,13 +1944,14 @@ let nd_from_sw_trig_dispatcher_trig c =
 
 (* loop over the statements of a trigger for all vids, working backwards from last
  * stmt to first *)
-let sw_event_driver_isobatch_nm = "sw_event_driver_isobatch"
-let sw_event_driver_isobatch c t =
+let sw_send_fetch_isobatch c t =
   let ss = List.rev @@ P.stmts_of_t c.p t in (* reverse to do last stmt first *)
   let t_args = args_of_t c t in
   let call_args = ids_to_vars @@ fst_many @@ args_of_t_with_v c t in
-  mk_global_fn sw_event_driver_isobatch_nm
-    ["batch_id", t_vid; "poly_queue", poly_queue.t] @@
+  mk_global_fn (send_fetch_isobatch_name_of_t t)
+    ["batch_id", t_vid; "poly_queue", poly_queue.t]
+    [t_vid]
+  @@
   mk_block @@ List.flatten @@ List.map (fun s ->
         (* clear the full ds *)
         [
@@ -1944,10 +1989,82 @@ let sw_event_driver_isobatch c t =
             send_put_bitmap.id
         ]) ss
 
+let sw_event_driver_isobatch_nm = "sw_event_driver_isobatch"
+let sw_event_driver_isobatch c =
+  let trig_list = StrSet.of_list @@ P.get_trig_list c.p in
+  let tags = List.filter (fun (_, ti) ->
+      ti.tag_typ = Event && (StrSet.mem ("insert_"^ti.tag) trig_list || ti.tag = "sentinel"))
+    c.poly_tags in
+  mk_global_fn sw_event_driver_isobatch_nm
+    ["batch_id", t_vid; "poly_queue", poly_queue.t] [t_vid] @@
+  mk_let ["tag"] (mk_poly_tag_at (mk_var "poly_queue") @@ mk_cint 0) @@
+  List.fold_left (fun acc_code (i, ti) ->
+      mk_if_eq (mk_var "tag") (mk_cint i)
+        (if ti.tag = "sentinel" then
+           Proto.sw_seen_sentinel ~check_size:false
+        else
+          mk_poly_at_with' ti.tag @@ mk_lambda' ti.args @@
+          mk_if (mk_var "do_insert")
+            (mk_apply' (send_fetch_isobatch_name_of_t @@ "insert_"^ti.tag)
+               [mk_var "batch_id"; mk_var "poly_queue"]) @@
+             mk_apply' (send_fetch_isobatch_name_of_t @@ "delete_"^ti.tag)
+               [mk_var "batch_id"; mk_var "poly_queue"])
+        acc_code)
+    (mk_error "mismatch on event id")
+    tags
+
+let sw_event_driver_single_vid_nm = "sw_event_driver_single_vid"
+let sw_event_driver_single_vid c =
+  let trig_list = StrSet.of_list @@ P.get_trig_list c.p in
+  mk_global_fn sw_event_driver_single_vid_nm
+    ["batch_id", t_vid; "poly_queue", poly_queue.t] [t_vid] @@
+  mk_poly_fold
+    (mk_lambda4' ["vid", t_vid] p_tag p_idx p_off @@
+
+      (* print trace if requested *)
+      do_trace "sed"
+        [t_int, mk_var "vid";
+        t_int, mk_var "tag";
+        t_int, mk_var "idx";
+        t_int, mk_var "offset"] @@
+
+        mk_block [
+          (* clear the trig send bitmaps for each event *)
+          mk_set_all D.send_trig_header_bitmap.id [mk_cfalse] ;
+
+          List.fold_left (fun acc_code (i, ti) ->
+            (* check if we match on the id *)
+            mk_if_eq (mk_var "tag") (mk_cint i)
+              (if ti.tag = "sentinel" then
+                (* don't check size of event queue *)
+                Proto.sw_seen_sentinel ~check_size:false
+              else
+                let send_fetches pref =
+                  let ss = P.stmts_of_t c.p @@ pref^ti.tag in
+                  (mk_block @@ List.map (fun s ->
+                    mk_apply' (send_fetch_name_of_t (pref^ti.tag) s) @@
+                      ids_to_vars @@ "vid":: (fst_many @@ tl ti.args)) ss)
+                in
+                mk_poly_at_with' ti.tag @@
+                  mk_lambda' ti.args @@
+                      mk_if (mk_var "do_insert")
+                        (send_fetches "insert_")
+                        (if c.gen_deletes then send_fetches "delete_" else mk_cunit))
+              acc_code)
+          (mk_error "mismatch on event id") @@
+          List.filter (fun (_, ti) ->
+              ti.tag_typ = Event &&
+              (StrSet.mem ("insert_"^ti.tag) trig_list || ti.tag = "sentinel"))
+            c.poly_tags
+        ;
+        mk_add (mk_cint 1) @@ mk_var "vid"
+      ])
+  (mk_var "batch_id") @@
+  mk_var "poly_queue"
+
 (* The driver trigger: loop over the even data structures as long as we have spare vids *)
 (* This only fires when we get the token *)
 let sw_event_driver_trig c =
-  let trig_list = StrSet.of_list @@ P.get_trig_list c.p in
   mk_code_sink' sw_event_driver_trig_nm
     ["batch_id", t_vid; "vector_clock", TS.sw_vector_clock.t] [] @@
     (* if we're initialized and we have stuff to send *)
@@ -1979,50 +2096,8 @@ let sw_event_driver_trig c =
           (* calculate the next vid *)
           mk_let ["next_vid"]
             (mk_if (mk_var isobatch_mode.id)
-              (mk_apply sw_event_driver_isobatch_nm [mk_var "batch_id"; mk_var "poly_queue"]) @@
-              (mk_poly_fold
-                (mk_lambda4' ["vid", t_vid] p_tag p_idx p_off @@
-
-                  (* print trace if requested *)
-                  do_trace "sed"
-                    [t_int, mk_var "vid";
-                    t_int, mk_var "tag";
-                    t_int, mk_var "idx";
-                    t_int, mk_var "offset"] @@
-
-                    mk_block [
-                      (* clear the trig send bitmaps for each event *)
-                      mk_set_all D.send_trig_header_bitmap.id [mk_cfalse] ;
-
-                      List.fold_left (fun acc_code (i, ti) ->
-                        (* check if we match on the id *)
-                        mk_if_eq (mk_var "tag") (mk_cint i)
-                          (if ti.tag = "sentinel" then
-                            (* don't check size of event queue *)
-                            Proto.sw_seen_sentinel ~check_size:false
-                          else
-                            let send_fetches pref =
-                              let ss = P.stmts_of_t c.p @@ pref^ti.tag in
-                              (mk_block @@ List.map (fun s ->
-                                mk_apply' (send_fetch_name_of_t (pref^ti.tag) s) @@
-                                  ids_to_vars @@ "vid":: (fst_many @@ tl ti.args)) ss)
-                            in
-                            mk_poly_at_with' ti.tag @@
-                              mk_lambda' ti.args @@
-                                  mk_if (mk_var "do_insert")
-                                    (send_fetches "insert_")
-                                    (if c.gen_deletes then send_fetches "delete_" else mk_cunit))
-                          acc_code)
-                      (mk_error "mismatch on event id") @@
-                      List.filter (fun (_, ti) ->
-                          ti.tag_typ = Event &&
-                          (StrSet.mem ("insert_"^ti.tag) trig_list || ti.tag = "sentinel"))
-                        c.poly_tags
-                    ;
-                    mk_add (mk_cint 1) @@ mk_var "vid"
-                  ])
-              (mk_var "batch_id") @@
-              mk_var "poly_queue") @@
+              (mk_apply' sw_event_driver_isobatch_nm [mk_var "batch_id"; mk_var "poly_queue"]) @@
+               mk_apply' sw_event_driver_single_vid_nm [mk_var "batch_id"; mk_var "poly_queue"]) @@
           (* update the vector clock by bits in the outgoing poly_queues *)
           mk_let ["vector_clock"]
             (mk_agg_bitmap'
@@ -2291,7 +2366,8 @@ let gen_dist_for_t c ast t =
         [sw_send_rhs_fetches c t s;
         sw_send_puts c t s;
         sw_send_rhs_completes c t s;
-        sw_send_fetch_fn c t s]) ss) @
+        sw_send_fetch_fn c t s;
+        ]) ss) @
    (if c.gen_correctives then
       List.flatten @@ List.map (fun s -> nd_do_corrective_fns c t s ast) s_r
     else []) @
@@ -2305,7 +2381,8 @@ let gen_dist_for_t c ast t =
          nd_rcv_fetch_trig c t s;
          nd_rcv_push_trig c t s]) s_r) @
     (List.map (fun s -> nd_do_complete_trigs c t s) s_no_r) @
-    [nd_save_arg_trig_sub_handler c t;
+    [sw_send_fetch_isobatch c t;
+     nd_save_arg_trig_sub_handler c t;
      nd_load_arg_trig_sub_handler c t;
      nd_no_arg_trig_sub_handler c t] @
     (if c.gen_correctives then
@@ -2381,10 +2458,15 @@ let gen_dist ?(gen_deletes=true)
      nd_complete_stmt_cntr_check c; (* depends: exec_buffered *)
      nd_check_stmt_cntr_index c] @
     fns2 @
-    [nd_rcv_corr_done c;
+    [
+     nd_rcv_corr_done c;
      nd_handle_uniq_poly c;
      trig_dispatcher c;
-     trig_dispatcher_unique c] @
+     trig_dispatcher_unique c;
+     sw_event_driver_isobatch c;
+     sw_event_driver_single_vid c;
+     nd_rcv_stmt;
+    ] @
     [mk_flow @@
       Proto.triggers c @
       GC.triggers c @
