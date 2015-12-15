@@ -13,6 +13,12 @@
  *   When receiving said message, the originating node deducts one for every received message. The
  *   result should be 0 before we count this vid as having fully completed and being ready for GC.
  * - In termination mode, we do the acks for GC right away.
+ *
+ * - Isobatch mode:
+ *  - we run the whole batch in reverse statement order to control dependencies and eliminate intra-batch dependencies
+ *  - isobatch_map: stmt_id -> isobatch_id -> bag of stmts
+ *   - This is how we maintain the connection between isobatch ids and vids
+ *  - isobatch_helper: singleton array to move out of, to update the isobatch_map in the sw->nd trigger handler
  *)
 
 open Util
@@ -1915,7 +1921,10 @@ let nd_from_sw_trig_dispatcher_trig c =
           mk_if_eq (mk_var "sender_ip") (mk_cint @@ -1) mk_cunit @@
             GC.nd_ack_send_code ~addr_nm:"sender_ip" ~vid_nm:"batch_id";
 
-          (* clear out the isobatch_map_helper bitmap *)
+          (* replace, clear out the isobatch_map_helper *)
+          mk_iter_bitmap' ~idx:stmt_ctr.id
+            (mk_insert_at isobatch_map_helper_id (mk_var stmt_ctr.id) [mk_empty isobatch_map_inner2.t])
+            isobatch_helper_bitmap_id;
           mk_set_all isobatch_helper_bitmap_id [mk_cfalse];
 
           mk_apply' trig_dispatcher_nm
