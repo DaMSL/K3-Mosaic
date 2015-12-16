@@ -523,6 +523,21 @@ let send_fetch_bitmap =
   let init = mk_map (mk_lambda' unknown_arg mk_cfalse) @@ mk_var D.my_peers.id in
   create_ds ~init "send_fetch_bitmap" @@ wrap_tvector t_bool
 
+(* per map *)
+let send_fetch_isobatch_inner =
+  create_ds "inner" @@ wrap_tvector t_bool
+
+(* map -> peer -> bool *)
+let send_fetch_isobatch_bitmap c =
+  let e = [send_fetch_isobatch_inner.id, send_fetch_isobatch_inner.t] in
+  let init =
+    mk_map (mk_lambda' unknown_arg @@
+      mk_map (mk_lambda' unknown_arg mk_cfalse) @@ mk_var D.my_peers.id) @@
+        k3_container_of_list (wrap_tvector t_bool) @@ List.map (const mk_cfalse) @@ 0::P.get_map_list c.p
+  in
+  create_ds ~e ~init "send_fetch_isobatch_bitmap" @@ wrap_tvector @@ t_of_e e
+
+(* for isobatches, we need to create a batch_fetch message and make decisions at the batch level *)
 let sw_send_rhs_fetches_nm t s = sp "sw_%s_%d_send_rhs_fetches" t s
 let sw_send_rhs_fetches c t s =
   (* to do this in batched form, we iterate over the send_fetch bitmap and immediately buffer
@@ -531,7 +546,8 @@ let sw_send_rhs_fetches c t s =
      know when to send the send_fetch header, and that comes from the bitmap *)
     let target_t = rcv_fetch_name_of_t t s in
     let rmaps = P.rhs_maps_of_stmt c.p s in
-    let t_args = args_of_t_as_vars_with_v c t in
+    let t_args = args_of_t_as_vars_with_v c t
+    in
     mk_global_fn (sw_send_rhs_fetches_nm t s) (args_of_t_with_v c t) [] @@
     if null rmaps then mk_cunit else mk_block @@
       let m_tags = List.filter (fun (_, ti) -> str_suffix "_id" ti.tag && ti.tag_typ = Ds false) c.poly_tags in
@@ -742,6 +758,177 @@ let nd_rcv_fetch_trig c t s =
       ]
     ]
 
+(* whether we have a decision already on sending a push *)
+let rcv_fetch_isobatch_bitmap_id = "rcv_fetch_isobatch_bitmap"
+let rcv_fetch_isobatch_bitmap c =
+  let init = k3_container_of_list (wrap_tvector t_bool) @@
+    List.map (const mk_cfalse) @@ 0::P.get_map_list c.p in
+  create_ds ~init rcv_fetch_isobatch_bitmap_id @@ wrap_tvector t_bool
+
+(* what our decision is regarding a map for the whole isobatch *)
+(* true = send the pushes now *)
+let rcv_fetch_decision_isobatch_bitmap_id = "rcv_fetch_decision_isobatch_bitmap2"
+let rcv_fetch_decision_isobatch_bitmap c =
+  let init = k3_container_of_list (wrap_tvector t_bool) @@
+    List.map (const mk_cfalse) @@ 0::P.get_map_list c.p in
+  create_ds ~init rcv_fetch_decision_isobatch_bitmap_id @@ wrap_tvector t_bool
+
+let send_batch_push_bitmap =
+  let init = mk_map (mk_lambda' unknown_arg @@ mk_cfalse) @@ mk_var D.my_peers.id in
+  create_ds ~init "send_batch_push_bitmap" @@ wrap_tvector t_bool
+
+(* trigger_rcv_fetch_isobatch
+ * -----------------------------------------
+ * Receive a fetch at a node.
+ * Reuses switch-side computation of which maps this node should read.
+ * This could be done entirely at the node, but would repeat work done
+ * at the switch anyway.
+ * The assumption is that the "stmts_and_map_id" data is not large.
+ * We have this as a multiplexer to the different fetch functions, because we
+ * need to record only one trigger in the log, and because it reduces messages
+ * between nodes.
+ *)
+
+(* send the push *)
+let nd_rcv_fetch_isobatch_do_push_nm t s = sp "nd_%s_%d_rcv_fetch_isobatch_do_push" t s
+let nd_rcv_fetch_isobatch_do_push c t s =
+  let args = args_of_t_with_v c t in
+  let rmaps = P.rhs_maps_of_stmt c.p s in
+  mk_global_fn (nd_rcv_fetch_isobatch_do_push_nm t s)
+    (["map_id", t_map_id]@args) [] @@
+  mk_block [
+    mk_apply' nd_log_master_write_nm @@ [mk_cint s; mk_var "vid"];
+    (* apply all the per-map pushes *)
+    List.fold_right
+      (fun m acc_code2 ->
+        mk_if_eq (mk_var "map_id") (mk_cint m)
+          (mk_apply' (send_push_name_of_t c t s m) @@
+            (* @buffered: don't force a t header *)
+            mk_cfalse::args_of_t_as_vars_with_v c t)
+        acc_code2)
+      rmaps
+      (mk_error "nd_rcv_fetch: invalid map id")
+    ]
+
+(* buffer the isobatch push into the temporary helper ds *)
+let nd_rcv_fetch_isobatch_buffer_push_nm = "nd_rcv_fetch_isobatch_buffer_push"
+let nd_rcv_fetch_isobatch_buffer_push =
+  mk_global_fn nd_rcv_fetch_isobatch_buffer_push_nm ["vid", t_vid; "stmt_map_id", t_int] [] @@
+    mk_block [
+      mk_insert_at isobatch_buffered_fetch_helper_bitmap_id (mk_var "stmt_map_id") [mk_ctrue];
+      mk_update_at_with isobatch_buffered_fetch_helper_id (mk_var "stmt_map_id") @@
+        mk_lambda' isobatch_buffered_helper_e @@
+          mk_insert_block "inner2" [mk_var "vid"]
+    ]
+
+
+(* whether we have a decision on push/buffer *)
+(* stmt_map_id -> bool *)
+let rcv_fetch_isobatch_bitmap_id = "rcv_fetch_isobatch_bitmap"
+let rcv_fetch_isobatch_bitmap c =
+  let init = k3_container_of_list t_bool_vector @@
+    List.map (const mk_cfalse) @@ 0::P.stmt_map_ids c.p in
+  create_ds ~init rcv_fetch_isobatch_bitmap_id t_bool_vector
+
+(* the actual decision on push/buffer *)
+let rcv_fetch_isobatch_decision_bitmap_id = "rcv_fetch_isobatch_decision"
+let rcv_fetch_isobatch_decision_bitmap c =
+  let init = k3_container_of_list t_bool_vector @@
+    List.map (const mk_cfalse) @@ 0::P.stmt_map_ids c.p in
+  create_ds ~init rcv_fetch_isobatch_decision_bitmap_id t_bool_vector
+
+let nd_rcv_fetch_trig_isobatch c t s =
+  let fn_name = rcv_fetch_isobatch_name_of_t t s in
+  let trig_id = P.trigger_id_for_name c.p t in
+  let rmaps = P.rhs_maps_of_stmt c.p s in
+  let m_tags = List.filter (fun (_,ti) -> str_suffix "_id" ti.tag && ti.tag_typ = Ds false) c.poly_tags in
+  let s_ms = P.stmt_map_ids c.p in
+  let rmap_tags = filter_map (fun (itag, ti) ->
+      let m = P.map_id_of_name c.p @@ str_drop_end (String.length "_id") ti.tag in
+      let s_m = fst3 @@ List.find (fun (_,s2,m2) -> s2 = s && m2 = m) s_ms in
+      if List.mem m rmaps then Some (m, s_m, itag, ti.tag) else None) m_tags
+  in
+  let var_args = args_of_t_as_vars_with_v c t in
+  mk_global_fn fn_name
+    (poly_args @ D.nd_rcv_fetch_args c t) (* stmt_map_ids are an inner ds *)
+    [t_int; t_int] @@
+    (* skip over the function tag *)
+    mk_poly_skip_block fn_name [
+
+      (* TODO: remove duplication. for profiling: mark the rcv fetch here *)
+      prof_property prof_tag_rcv_fetch @@ ProfLatency("vid", soi trig_id);
+
+      mk_let ["is_isobatch"] (is_isobatch_id "batch_id") @@
+
+      (* iterate over the buffered map_id data *)
+      mk_poly_iter' @@
+        mk_lambda3' p_tag p_idx p_off @@
+          (* translate tag to map_id, and skip this tag *)
+        mk_let ["map_id"; "stmt_map_id"; "idx"; "offset"]
+            (List.fold_left (fun acc_code (m, s_m, itag, stag) ->
+                mk_if_eq (mk_var "tag") (mk_cint itag)
+                  (mk_poly_skip_block stag
+                     [mk_tuple [mk_cint m; mk_cint s_m; mk_var "idx"; mk_var "offset"]])
+                  acc_code)
+                (mk_tuple [mk_cint (-1); mk_cint (-1); mk_var "idx"; mk_var "offset"])
+                rmap_tags) @@
+          (* check for termination *)
+          mk_if_eq (mk_var "map_id") (mk_cint (-1))
+            (mk_tuple [mk_var "idx"; mk_var "offset"]) @@
+            mk_block [
+              mk_if
+                (mk_var D.corrective_mode.id)
+                (* then send the push right now *)
+                (mk_apply' (nd_rcv_fetch_do_push_nm t s) @@ [mk_var "map_id"]@var_args) @@
+                (* check if we have a decision already made for this map *)
+                mk_let ["made_decision"]
+                  (mk_at' rcv_fetch_isobatch_bitmap_id @@ mk_var "stmt_map_id") @@
+                mk_if (mk_var "made_decision")
+                  (mk_let ["do_push"]
+                    (mk_at' rcv_fetch_decision_isobatch_bitmap_id @@ mk_var "stmt_map_id") @@
+                  mk_if (mk_var "do_push")
+                    (* then send the push right now *)
+                    (mk_apply' (nd_rcv_fetch_do_push_nm t s) @@ [mk_var "map_id"]@var_args) @@
+                    (* else buffer the push *)
+                    mk_apply' (nd_rcv_fetch_buffer_push_nm t s) []) @@
+                  (* we need to make a decision regarding this map *)
+                  mk_let_block ["do_push"]
+                    (* check if the minimum entry in the per_map_stmt_cntrs has a > vid
+                      * we *CAN'T* read at the same vid since that's an inner batch conflict *)
+                    (mk_leq (mk_var "batch_id") @@
+                      mk_at_with' D.nd_stmt_cntrs_per_map_id (mk_var "map_id") @@
+                        mk_lambda' nd_stmt_cntrs_per_map_e @@
+                          mk_min_with (mk_var "inner")
+                            (* if empty, return max *)
+                            (mk_lambda'' unit_arg @@ mk_var g_max_vid.id) @@
+                            mk_lambda' nd_stmt_cntrs_per_map_inner.e @@ mk_var "vid")
+                  [
+                    (* save the decision *)
+                    mk_insert_at send_push_isobatch_bitmap_id (mk_var "map_id") [mk_ctrue];
+                    mk_insert_at send_push_decision_isobatch_bitmap_id (mk_var "map_id") [mk_var "do_push"];
+                    (* act on the decision *)
+                    mk_if (mk_var "do_push")
+                      (mk_apply' nd_rcv_fetch_do_push_nm []) @@
+                      (* write a buffer decision *)
+                      mk_block [
+                        mk_update_at_with nd_rcv_fetch_buffer.id (mk_var "map_id") @@
+                          mk_lambda' nd_rcv_fetch_buffer.e @@
+                            mk_upsert_with_block "inner" [mk_var "vid"; mk_cunknown]
+                              (mk_lambda'' unit_arg @@ mk_tuple
+                                [mk_var "vid"; mk_singleton D.nd_rcv_fetch_buffer_inner2.t [mk_cint s]]) @@
+                              mk_lambda' nd_rcv_fetch_buffer_inner.e @@
+                                mk_block [
+                                  mk_insert "stmt_ids" [mk_cint s];
+                                  tup_of_e nd_rcv_fetch_buffer_inner.e
+                                ];
+                      (* buffer into temporary helper ds *)
+                      (mk_apply' nd_rcv_fetch_buffer_push_nm [])
+                      ]
+                    ;
+                    mk_tuple [mk_var "idx"; mk_var "offset"]
+                  ]
+            ]
+
 (* Receive Put trigger
  * --------------------------------------- *
  * Update the statement counters with the received values
@@ -787,6 +974,10 @@ let nd_rcv_stmt =
           mk_insert_block "inner2" [mk_var "vid"]
   ]
 
+
+let nd_send_batch_push_bitmap =
+  let init = mk_map (mk_lambda' unknown_arg mk_cfalse) @@ mk_var D.my_peers.id in
+  create_ds ~init "nd_send_batch_push_bitmap" @@ wrap_tvector t_bool
 
 (* Trigger_send_push_stmt_map
  * ----------------------------------------
@@ -897,19 +1088,28 @@ let nd_send_push_stmt_map_trig c t s =
             mk_cunit;
 
           (* iterate and buffer *)
+          mk_let ["is_isobatch"] (is_isobatch "batch_id") @@
           mk_iter_bitmap'
             (mk_at_with' K3S.shuffle_results.id (mk_var "ip") @@
               mk_lambda' K3S.shuffle_results.e @@
                 mk_block [
+                  mk_if (mk_var "is_isobatch")
+                    (* have we already sent batch_push? *)
+                    (mk_if (mk_at' nd_batch_push_bitmap.id @@ mk_var "ip") mk_cunit @@
+                      mk_block [
+                        buffer_for_send rcv_batch_push_nm "ip" [];
+                        mk_insert_at nd_batch_push_bitmap.id (mk_var "ip") [mk_ctrue]
+                      ]) @@
                   (* buffered pushes need to do a lot of the work themselves, rather than in rcv_fetch *)
-                  (* TODO: buffered pushes will be better if we block on whole statements, and send those *)
                   mk_if (mk_var "buffered")
                     (mk_block [
                       (* we need to force a trig header *)
                       buffer_trig_header_if_needed ~force:true ~need_args:false (mk_var "vid") t "ip" [mk_var "vid"];
-                      mk_if (mk_var "has_data")
-                        (buffer_for_send ~wr_bitmap:false (rcv_push_nm^"_1") "ip" []) @@
-                         buffer_for_send ~wr_bitmap:false (rcv_push_nm^"_1_no_data") "ip" [];
+                      (* check what metadata we need to send: batch_push or push metadata *)
+                        (* single vid metadata *)
+                        mk_if (mk_var "has_data")
+                          (buffer_for_send ~wr_bitmap:false (rcv_push_nm^"_1") "ip" []) @@
+                          buffer_for_send ~wr_bitmap:false (rcv_push_nm^"_1_no_data") "ip" [];
                     ]) @@
                     (* unbuffered *)
                     mk_block [
@@ -928,6 +1128,29 @@ let nd_send_push_stmt_map_trig c t s =
         ]) @@ (* trigger *)
     P.rhs_lhs_of_stmt c.p s
 
+(* receive isobatch: load the vids for the batch id and run them if needed *)
+let nd_rcv_isobatch_push_trig c t s =
+  let fn_name = rcv_batch_push_name_of_t t s in
+  mk_global_fn fn_name ["batch_id", t_vid] [] @@
+    (* lookup the batch in the isobatch_map. ctrue: has_data *)
+    mk_if
+      (mk_apply' nd_check_stmt_cntr_index_nm @@
+        [mk_var "batch_id"; mk_cint s; mk_neg @@ mk_var "count"; mk_ctrue])
+      (mk_at_with' isobatch_vid_map_id (mk_cint s) @@
+        mk_lambda' isobatch_vid_map_e @@
+          mk_case_ns (mk_lookup "inner" [mk_var "batch_id"; mk_cunknown]) "vids"
+            (mk_error "missing batch id") @@
+            mk_iter' "vids"
+              mk_lambda ["vid", t_vid] @@
+                (* apply local do_complete *)
+                ((if args <> [] then
+                  mk_let
+                    (fst_many @@ D.args_of_t c t)
+                    (mk_apply'
+                      (nd_log_get_bound_for t) [mk_var "vid"])
+                  else id_fn) @@
+                  mk_apply' (do_complete_name_of_t t s) @@ args_of_t_as_vars_with_v c t)
+      mk_cunit
 
 (* rcv_push_trig
  * --------------------------------------
@@ -940,7 +1163,6 @@ let nd_send_push_stmt_map_trig c t s =
  * A later optimization could be lumping maps between statements in a trigger,
  * which can be done on a rmap to lmap with binding basis (like shuffles). Care must be
  * paid to the corrective updates in this case, which are statement-specific *)
-
 let nd_rcv_push_trig c t s =
     let fn_name = rcv_push_name_of_t t s in
     let args = args_of_t c t in

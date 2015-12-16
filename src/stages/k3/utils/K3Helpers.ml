@@ -36,6 +36,8 @@ let t_addr = canonical TAddress
 let t_addr_mut = mut t_addr
 let t_alias id = canonical (TAlias id)
 
+let t_bool_vector = wrap_tvector t_bool
+
 let unit_arg = ["_u", t_unit]
 let unknown_arg = ["_", t_unknown]
 

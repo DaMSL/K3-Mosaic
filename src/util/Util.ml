@@ -57,13 +57,13 @@ let null l = match l with [] -> true | _ -> false
 
 let at l i = List.nth l i
 
-let fst_many l = fst @@ List.split l
-
-let snd_many l = snd @@ List.split l
-
 let fst3 (x,_,_) = x
 let snd3 (_,x,_) = x
 let thd3 (_,_,x) = x
+
+let fst_many l = List.map fst l
+
+let snd_many l = List.map snd l
 
 let curry f (a,b) = f a b
 let curry3 f (a,b,c) = f a b c

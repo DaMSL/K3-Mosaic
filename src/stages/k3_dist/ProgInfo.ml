@@ -535,3 +535,14 @@ let nonempty_rmaps_of_stmt p s =
   let rmaps = rhs_maps_of_stmt p s in
   List.filter (fun m -> map_types_no_val_for p m <> []) rmaps
 
+(* enumerate all rstmt_maps, giving them ids *)
+let stmt_map_ids p =
+  let n = ref 0 in
+  List.flatten @@
+  List.map (fun s ->
+      List.map (fun rmap ->
+          incr n;
+          !n, (s, rmap)) @@
+      rhs_maps_of_stmt p s) @@
+  get_stmt_list p
+

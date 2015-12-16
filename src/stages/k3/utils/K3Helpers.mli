@@ -26,6 +26,8 @@ val t_addr_mut : type_t
 
 val t_alias : id_t -> type_t
 
+val t_bool_vector : type_t
+
 (* K3 types for various things *)
 val t_trig_id : type_t
 val t_stmt_id : type_t
