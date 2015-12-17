@@ -554,8 +554,8 @@ let nd_fetch_buffer_inner =
 let nd_fetch_buffer_id = "nd_fetch_buffer"
 let nd_fetch_buffer_e = ["inner", nd_fetch_buffer_inner.t]
 let nd_fetch_buffer c =
-  let e = nd_rcv_fetch_buffer_e in
-  let init = 
+  let e = nd_fetch_buffer_e in
+  let init =
     k3_container_of_list (wrap_tvector nd_fetch_buffer_inner.t) @@
     List.map (const @@ mk_empty nd_fetch_buffer_inner.t) @@ 0::P.get_map_list c.p in
   create_ds ~init ~e nd_fetch_buffer_id @@ wrap_tvector @@ t_of_e e
@@ -755,12 +755,14 @@ let trig_save_arg_sub_handler_name_of_t t = "nd_trig_save_arg_sub_handler_"^t
 let trig_load_arg_sub_handler_name_of_t t = "nd_trig_load_arg_sub_handler_"^t
 let trig_no_arg_sub_handler_name_of_t t   = "nd_trig_no_arg_sub_handler_"^t
 let send_fetch_name_of_t t s = sp "sw_%s_%d_send_fetch" t s
-let send_fetch_isobatch_name_of_t t = sp "sw_%s_send_fetch_isobatch" t
+let send_fetches_isobatch_name_of_t t = sp "sw_%s_send_fetches_isobatch" t
 let rcv_fetch_name_of_t t s = sp "nd_%s_%d_rcv_fetch" t s
+let rcv_fetch_isobatch_name_of_t t s = sp "nd_%s_%d_rcv_fetch_isobatch" t s
 let rcv_put_name_of_t t s = sp "nd_%s_%d_rcv_put" t s
 let rcv_stmt_name_of_t t s = sp "nd_%s_%d_rcv_stmt" t s
 let send_push_name_of_t c t s m = sp "nd_%s_%d_send_push_%s" t s (m_nm c.p m)
 let rcv_push_name_of_t t s = sp "nd_%s_%d_rcv_push" t s
+let rcv_isobatch_push_name_of_t t s = sp "nd_%s_%d_rcv_isobatch_push" t s
 let send_corrective_name_of_t c m = sp "nd_%s_send_correctives" (m_nm c.p m)
 let do_complete_name_of_t t s = sp "nd_%s_%d_do_complete" t s
 let rcv_corrective_name_of_t c t s m = sp "nd_%s_%d_rcv_corrective_%s" t s (m_nm c.p m)
@@ -1213,6 +1215,7 @@ let ip2 = create_ds "ip2" (mut t_int)
 
 (* counter for stmt *)
 let stmt_ctr = create_ds "stmt_ctr" @@ mut t_int
+let map_ctr = create_ds "map_ctr" @@ mut t_int
 
 (**** End of code ****)
 
@@ -1358,22 +1361,22 @@ let bound_params_of_stmt c s =
 (* inner member of isobatch_vid_map *)
 let isobatch_map_inner2 = create_ds "inner2" @@ wrap_tbag t_vid
 
-let isobatch_helper_bitmap_id = "isobatch_helper_bitmap"
-let isobatch_helper_bitmap c =
+let isobatch_stmt_helper_bitmap_id = "isobatch_stmt_helper_bitmap"
+let isobatch_stmt_helper_bitmap c =
   let init = k3_container_of_list (wrap_tvector t_bool) @@
     List.map (const @@ mk_cfalse) @@ 0 :: P.get_stmt_list c.p in
-  create_ds ~init isobatch_helper_bitmap_id @@ wrap_tvector t_bool
+  create_ds ~init isobatch_stmt_helper_bitmap_id @@ wrap_tvector t_bool
 
 (* singleton vector for creating isobatch_vid_map easily *)
 (* indexed by stmt_id *)
-let isobatch_map_helper_id = "isobatch_map_helper"
-let isobatch_map_helper_e = [isobatch_map_inner2.id, isobatch_map_inner2.t]
-let isobatch_map_helper c =
-  let e = isobatch_map_helper_e in
+let isobatch_stmt_helper_id = "isobatch_stmt_helper"
+let isobatch_stmt_helper_e = [isobatch_map_inner2.id, isobatch_map_inner2.t]
+let isobatch_stmt_helper c =
+  let e = isobatch_stmt_helper_e in
   let init = mk_map (mk_lambda' unknown_arg @@ mk_empty isobatch_map_inner2.t) @@
     k3_container_of_list (wrap_tvector t_int) @@
     List.map (const @@ mk_cint 0) @@ 0 :: P.get_stmt_list c.p in
-  create_ds ~init ~e isobatch_map_helper_id @@ wrap_tvector @@ t_of_e e
+  create_ds ~init ~e isobatch_stmt_helper_id @@ wrap_tvector @@ t_of_e e
 
 let isobatch_map_inner =
   let e = ["batch_id", t_vid; isobatch_map_inner2.id, isobatch_map_inner2.t] in
@@ -1401,21 +1404,16 @@ let isobatch_buffered_fetch_helper c =
     List.map (const @@ mk_cint 0) @@ 0 :: P.get_stmt_list c.p in
   create_ds ~init ~e isobatch_buffered_fetch_helper_id @@ wrap_tvector @@ t_of_e e
 
-let isobatch_buffered_fetch_helper_bitmap_id = "isobatch_buffered_fetch_helper_bitmap"
-let isobatch_buffered_fetch_helper_bitmap c =
-  let init = k3_container_of_list (wrap_tvector t_bool) @@
-    List.map (const @@ mk_cfalse) @@ 0 :: fst_many @@ stmt_map_ids c.p in
-  create_ds ~init isobatch_buffered_fetch_helper_bitmap_id @@ wrap_tvector t_bool
-
 (* map from stmt_map_id, batch to list of vids *)
 (* for saving info about buffered fetches *)
+let isobatch_buffered_fetch_vid_map_id = "isobatch_buffered_fetch_vid_map"
 let isobatch_buffered_fetch_vid_map c =
   (* indexed by stmt_map_id *)
   let e = isobatch_vid_map_e in
   let init = mk_map (mk_lambda' unknown_arg @@ mk_empty isobatch_map_inner.t) @@
     k3_container_of_list (wrap_tvector t_int) @@
     List.map (const @@ mk_cint 0) @@ 0 :: (fst_many @@ P.stmt_map_ids c.p) in
-  create_ds ~init ~e isobatch_vid_map_id @@ wrap_tvector @@ t_of_e e
+  create_ds ~init ~e isobatch_buffered_fetch_vid_map_id @@ wrap_tvector @@ t_of_e e
 
 (* vids have a lower bit = 0, isobatch ids have 1 *)
 let is_isobatch_id id = mk_neq (mk_var id) @@ (mk_mult (mk_divi (mk_var id) @@ mk_cint 2) @@ mk_cint 2)
@@ -1598,6 +1596,7 @@ let global_vars c dict =
       ip;
       ip2;
       stmt_ctr;
+      map_ctr;
       g_init_vid;
       g_max_int;
       g_min_vid;
@@ -1641,7 +1640,7 @@ let global_vars c dict =
       upoly_queue_bitmap;
       send_trig_header_bitmap;
       send_trig_args_map;
-      nd_rcv_fetch_buffer;
+      nd_fetch_buffer c;
       nd_stmt_cntrs_per_map c;
       nd_lmap_of_stmt_id c;
       do_profiling;
@@ -1652,7 +1651,8 @@ let global_vars c dict =
       sw_csv_index;
       isobatch_mode;
       isobatch_threshold;
-      isobatch_map_helper c;
+      isobatch_stmt_helper_bitmap c;
+      isobatch_stmt_helper c;
       isobatch_vid_map c;
     ] @
 

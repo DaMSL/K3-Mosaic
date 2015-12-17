@@ -36,8 +36,6 @@ let t_addr = canonical TAddress
 let t_addr_mut = mut t_addr
 let t_alias id = canonical (TAlias id)
 
-let t_bool_vector = wrap_tvector t_bool
-
 let unit_arg = ["_u", t_unit]
 let unknown_arg = ["_", t_unknown]
 
@@ -82,6 +80,8 @@ let wrap_tsortedset' tl = wrap_tsortedset @@ wrap_ttuple tl
 
 let wrap_tvector t = wrap_tcol TVector t
 let wrap_tvector' t = wrap_tvector (wrap_ttuple t)
+
+let t_bool_vector = wrap_tvector t_bool
 
 (* wrap a type in a vmap *)
 let wrap_tvmap ?idx typ = wrap_tcol (TVMap idx) typ
@@ -369,6 +369,7 @@ let mk_insert ?(path=[]) id x = mk_stree Insert [mk_id_path id path; mk_tuple x]
 let mk_insert_at ?(path=[]) id idx x = mk_stree InsertAt [mk_id_path id path; idx; mk_tuple x]
 
 let mk_set_all ?(path=[]) id x = mk_stree SetAll [mk_id_path id path; mk_tuple x]
+let mk_set_all_block ?path id x = mk_block [mk_set_all ?path id x; mk_var id]
 
 let mk_extend ?(path=[]) id x = mk_stree Extend [mk_id_path id path; x]
 
