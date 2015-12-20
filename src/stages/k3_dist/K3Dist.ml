@@ -533,12 +533,13 @@ let sw_event_driver_sleep = create_ds "sw_event_driver_sleep" @@ mut t_int
 let corrective_mode = create_ds "corrective_mode" t_bool ~init:mk_ctrue
 
 (* map stmt_id to lmap *)
+let nd_lmap_of_stmt_id_id = "nd_lmap_of_stmt_id"
 let nd_lmap_of_stmt_id c =
-  let e = ["stmt_id", t_int; "map_id", t_int] in
-  let t = wrap_tmap' @@ snd_many e in
+  let e = ["map_id", t_int] in
+  let t = wrap_tvector t_int in
   let init = k3_container_of_list t @@
     List.map (fun (x,y) ->
-      mk_tuple [mk_cint x; mk_cint y]) @@ P.stmts_lhs_maps c.p in
+      mk_tuple [mk_cint x; mk_cint y]) @@ (0,0)::P.stmts_lhs_maps c.p in
   create_ds "nd_lmap_of_stmt_id" t ~e ~init
 
 (* for buffered fetches in no-corrective mode *)
@@ -761,8 +762,9 @@ let rcv_fetch_isobatch_name_of_t t s = sp "nd_%s_%d_rcv_fetch_isobatch" t s
 let rcv_put_name_of_t t s = sp "nd_%s_%d_rcv_put" t s
 let rcv_stmt_name_of_t t s = sp "nd_%s_%d_rcv_stmt" t s
 let send_push_name_of_t c t s m = sp "nd_%s_%d_send_push_%s" t s (m_nm c.p m)
+let send_push_isobatch_name_of_t c t s m = sp "nd_%s_%d_send_push_%s" t s (m_nm c.p m)
 let rcv_push_name_of_t t s = sp "nd_%s_%d_rcv_push" t s
-let rcv_isobatch_push_name_of_t t s = sp "nd_%s_%d_rcv_isobatch_push" t s
+let rcv_push_isobatch_name_of_t t s = sp "nd_%s_%d_rcv_push_isobatch" t s
 let send_corrective_name_of_t c m = sp "nd_%s_send_correctives" (m_nm c.p m)
 let do_complete_name_of_t t s = sp "nd_%s_%d_do_complete" t s
 let rcv_corrective_name_of_t c t s m = sp "nd_%s_%d_rcv_corrective_%s" t s (m_nm c.p m)
@@ -1407,9 +1409,10 @@ let isobatch_buffered_fetch_helper c =
 (* map from stmt_map_id, batch to list of vids *)
 (* for saving info about buffered fetches *)
 let isobatch_buffered_fetch_vid_map_id = "isobatch_buffered_fetch_vid_map"
+let isobatch_buffered_fetch_vid_map_e = isobatch_vid_map_e 
 let isobatch_buffered_fetch_vid_map c =
   (* indexed by stmt_map_id *)
-  let e = isobatch_vid_map_e in
+  let e = isobatch_buffered_fetch_vid_map_e in
   let init = mk_map (mk_lambda' unknown_arg @@ mk_empty isobatch_map_inner.t) @@
     k3_container_of_list (wrap_tvector t_int) @@
     List.map (const @@ mk_cint 0) @@ 0 :: (fst_many @@ P.stmt_map_ids c.p) in

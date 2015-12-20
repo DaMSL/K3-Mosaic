@@ -194,6 +194,7 @@ let stmts_rhs_maps (p:prog_data_t) =
   (get_stmt_data p)
 
 let stmts_lhs_maps (p:prog_data_t) =
+  List.sort (fun x y -> fst x - fst y) @@
   List.map (fun s -> s.stmt, s.lmap) @@ get_stmt_data p
 
 let for_all_stmts_rhs_maps p f = List.map f @@ stmts_rhs_maps p

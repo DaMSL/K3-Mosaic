@@ -31,6 +31,7 @@ val t_bool_vector : type_t
 (* K3 types for various things *)
 val t_trig_id : type_t
 val t_stmt_id : type_t
+val t_stmt_map_id : type_t
 val t_map_id : type_t
 val t_vid : type_t
 

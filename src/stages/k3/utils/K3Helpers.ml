@@ -730,6 +730,7 @@ let mk_rebuild_tuple ?(prefix=def_tup_prefix) tup_name types f =
 (* K3 types for various elements of a k3 program *)
 let t_trig_id = t_int (* In K3, triggers are always handled by numerical id *)
 let t_stmt_id = t_int
+let t_stmt_map_id = t_int
 let t_map_id = t_int
 
 (* --- vids --- *)
