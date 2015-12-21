@@ -45,7 +45,8 @@ def run(target_file,
         debug=False,
         no_opt_route=False,
         do_trace=False,
-        dump_info=False
+        dump_info=False,
+        isobatch=True
         ):
 
     to_root = ".."
@@ -221,6 +222,8 @@ def run(target_file,
                 j["corrective_mode"] = False
             if do_trace:
                 j["do_tracing"] = True
+            if not isobatch:
+                j["isobatch_mode"] = False
             # set csv indices
             for i in range(num_switches):
                 node_j = {}
