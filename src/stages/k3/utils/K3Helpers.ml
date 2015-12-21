@@ -622,7 +622,7 @@ let mk_global_fn ?(wr_all=false) ?(wr_arg=[]) name i_ts o_ts expr =
       | TUnit | TInt | TDate | TBool | TFloat | TIndirect _-> i, t
       | _ -> i, {t with anno = Property(false,"CRef")::t.anno}
     in
-  let i_ts = List.mapi anno_t i_ts in
+  let i_ts = if i_ts = [] then ["_u", t_unit] else List.mapi anno_t i_ts in
   mk_global_fn_raw name
     (wrap_args i_ts)
     (snd_many i_ts)

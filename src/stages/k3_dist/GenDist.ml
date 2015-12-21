@@ -419,7 +419,7 @@ let send_put_isobatch_inner2 = create_ds "inner2" t_bool_vector
 (* vector of source ips *)
 let send_put_isobatch_inner =
   let e = ["inner2", send_put_isobatch_inner2.t] in
-  create_ds "inner" @@ wrap_tvector @@ t_of_e e
+  create_ds ~e "inner" @@ wrap_tvector @@ t_of_e e
 
 (* (dest ip -> source ip vector) *)
 let send_put_isobatch_map_id = "send_put_isobatch_map"
@@ -428,12 +428,36 @@ let send_put_isobatch_map c =
   let e = send_put_isobatch_map_e in
   let init =
     mk_map (mk_lambda' unknown_arg @@
-      mk_map (mk_lambda' unknown_arg @@
-          k3_container_of_list t_bool_vector @@
-            List.map (const mk_cfalse) @@ 0::P.get_map_list c.p) @@
-        mk_var D.my_peers.id) @@
+      mk_tuple [
+        mk_map (mk_lambda' unknown_arg @@ mk_cfalse) @@ mk_var D.my_peers.id;
+        mk_map (mk_lambda' unknown_arg @@
+            k3_container_of_list t_bool_vector @@
+              List.map (const mk_cfalse) @@ 0::P.get_map_list c.p) @@
+          mk_var D.my_peers.id
+      ]) @@
       mk_var D.my_peers.id in
   create_ds ~init ~e "send_put_isobatch_map" @@ wrap_tvector @@ t_of_e e
+
+let clear_send_put_isobatch_map_nm = "clear_send_put_isobatch_map"
+let clear_send_put_isobatch_map =
+  mk_global_fn clear_send_put_isobatch_map_nm [] [] @@
+  mk_block [
+    mk_iter_bitmap'
+      (mk_update_at_with send_put_isobatch_map_id (mk_var "ip") @@
+        mk_lambda' send_put_isobatch_map_e @@
+          mk_let_block ["inner"]
+            (mk_agg_bitmap' ~idx:"ip2" ["acc", send_put_isobatch_inner.t]
+              (mk_update_at_with_block "acc" (mk_var "ip2") @@
+                mk_lambda' send_put_isobatch_inner.e @@
+                  mk_set_all_block "inner2" [mk_cfalse])
+              (mk_var "inner")
+              "bitmap") [
+            mk_set_all "bitmap" [mk_cfalse];
+            tup_of_e send_put_isobatch_map_e
+          ])
+      send_put_bitmap.id;
+    mk_set_all send_put_bitmap.id [mk_cfalse];
+  ]
 
 let sw_send_puts_isobatch_nm t s = sp "sw_%s_%d_send_puts_isobatch" t s
 let sw_send_puts_isobatch c t s =
@@ -638,7 +662,8 @@ let sw_send_fetch_fn c t s =
  * stmt to first *)
 let sw_send_fetches_isobatch c t =
   let ss = List.rev @@ P.stmts_of_t c.p t in (* reverse to do last stmt first *)
-  let t_args = args_of_t c t in
+  let drop_insert t = str_drop (String.length "insert_") t in
+  let t_args = ("do_insert", t_bool)::args_of_t c t in
   let call_args = ids_to_vars @@ fst_many @@ args_of_t_with_v c t in
   mk_global_fn (send_fetches_isobatch_name_of_t t)
     ["batch_id", t_vid; "poly_queue", poly_queue.t]
@@ -647,28 +672,13 @@ let sw_send_fetches_isobatch c t =
   mk_block @@ List.flatten @@ List.map (fun s ->
     (* clear the full ds *)
     [
-      (* clear the ds *)
-      mk_iter_bitmap'
-        (mk_update_at_with send_put_isobatch_map_id (mk_var "ip") @@
-          mk_lambda' send_put_isobatch_map_e @@
-            mk_let_block ["inner"]
-              (mk_agg_bitmap' ~idx:"ip2" ["acc", send_put_isobatch_inner.t]
-                (mk_update_at_with "acc" (mk_var "ip2") @@
-                 mk_lambda' send_put_isobatch_inner.e @@
-                  mk_set_all_block "inner2" [mk_cfalse])
-                (mk_var "inner")
-                "bitmap") [
-              mk_set_all "bitmap" [mk_cfalse];
-              tup_of_e send_put_isobatch_map_e
-            ])
-        send_put_bitmap.id;
-      mk_set_all send_put_bitmap.id [mk_cfalse];
+      mk_apply' clear_send_put_isobatch_map_nm [];
 
       (* execute all statements *)
       mk_poly_fold
         (mk_lambda4' ["vid", t_vid] p_tag p_idx p_off @@
           mk_block [
-            mk_poly_at_with' t @@
+            mk_poly_at_with' (drop_insert t) @@
               mk_lambda' t_args @@
                 mk_block [
                   (* true: is_isobatch *)
@@ -679,9 +689,10 @@ let sw_send_fetches_isobatch c t =
             next_vid (mk_var "vid")
           ])
         (mk_var "batch_id") @@
-        mk_var "poly_queue";
-
-      (* calculate counts, send puts for the batch based on the ds *)
+        mk_var "poly_queue"
+    ] @
+    (* calculate counts, send puts for the batch based on the ds *)
+    (if P.rhs_maps_of_stmt c.p s = [] then [] else singleton @@
       mk_iter_bitmap'
           (mk_let ["count"]
             (mk_at_with' send_put_isobatch_map_id (mk_var "ip") @@
@@ -696,8 +707,8 @@ let sw_send_fetches_isobatch c t =
                   (mk_cint 0)
                   "bitmap") @@
           buffer_for_send (rcv_put_name_of_t t s) "ip" [mk_var "count"])
-        send_put_bitmap.id
-    ]) ss
+        send_put_bitmap.id)
+    ) ss
 
 
 (* indexed by ip *)
@@ -924,6 +935,17 @@ let rcv_fetch_isobatch_decision_bitmap c =
   let init = k3_container_of_list t_bool_vector @@
     List.map (const mk_cfalse) @@ 0::(fst_many @@ P.stmt_map_ids c.p) in
   create_ds ~init rcv_fetch_isobatch_decision_bitmap_id t_bool_vector
+
+let clear_buffered_fetch_helper_nm = "clear_buffered_fetch_helper"
+let clear_buffered_fetch_helper =
+  mk_global_fn clear_buffered_fetch_helper_nm [] [] @@
+  mk_block [
+    mk_iter_bitmap' ~idx:stmt_ctr.id
+      (mk_insert_at isobatch_buffered_fetch_helper_id (mk_var stmt_ctr.id)
+          [mk_empty isobatch_map_inner2.t]) rcv_fetch_isobatch_decision_bitmap_id;
+    mk_set_all rcv_fetch_isobatch_bitmap_id [mk_cfalse];
+    mk_set_all rcv_fetch_isobatch_decision_bitmap_id [mk_cfalse];
+  ]
 
 let nd_rcv_fetch_trig_isobatch c t s =
   let fn_name = rcv_fetch_isobatch_name_of_t t s in
@@ -1890,7 +1912,8 @@ let nd_do_complete_trigs c t s =
     let args = nd_do_complete_trig_args c t in
     mk_global_fn (comp_nm^"_trig") args [] @@
       mk_block [
-        mk_apply' comp_nm @@ ids_to_vars @@ fst_many @@ args;
+        (* false: not isobatch. not relevant since no rhs maps *)
+        mk_apply' comp_nm @@ mk_cfalse :: (ids_to_vars @@ fst_many @@ args);
       ]
 
 (* check for complicated double loop vars which necessitate lmap filtering *)
@@ -2283,15 +2306,9 @@ let trig_dispatcher c =
     ["batch_id", t_vid; "poly_queue", poly_queue.t] [] @@
   mk_let_block ["is_isobatch"] (is_isobatch_id "batch_id") [
     mk_if (mk_and (mk_not @@ mk_var corrective_mode.id) @@ mk_var "is_isobatch")
-      (mk_block [
-          (* clear dses *)
-          mk_iter_bitmap' ~idx:stmt_ctr.id
-            (mk_insert_at isobatch_buffered_fetch_helper_id (mk_var stmt_ctr.id)
-               [mk_empty isobatch_map_inner2.t]) rcv_fetch_isobatch_decision_bitmap_id;
-          mk_set_all rcv_fetch_isobatch_bitmap_id [mk_cfalse];
-          mk_set_all rcv_fetch_isobatch_decision_bitmap_id [mk_cfalse];
-      ])
-      mk_cunit;
+      (* clear dses *)
+      (mk_apply' clear_buffered_fetch_helper_nm []) mk_cunit;
+
     (* iterate over all buffer contents *)
     mk_let ["idx"; "offset"] (mk_tuple [mk_cint 0; mk_cint 0]) @@
     mk_ignore @@ mk_poly_iter' @@
@@ -2335,7 +2352,7 @@ let trig_dispatcher c =
             mk_cunit;
           (* for pushes, send the batch_push messages last, so all data pushes have
            * already been received *)
-          mk_apply' nd_send_isobatch_push_meta_nm [];
+          mk_apply' nd_send_isobatch_push_meta_nm [mk_var "batch_id"];
         ])
       mk_cunit;
 
@@ -2424,8 +2441,7 @@ let nd_from_sw_trig_dispatcher_trig c =
               ])
             mk_cunit;
 
-          mk_apply' trig_dispatcher_nm
-            [mk_var "batch_id"; mk_var "poly_queue"];
+          mk_apply' trig_dispatcher_nm [mk_var "batch_id"; mk_var "poly_queue"];
 
           mk_if (mk_var "is_isobatch")
             (* iterate over the isobatch map helper, and move its contents to the isobatch_map *)
@@ -2458,6 +2474,8 @@ let sw_event_driver_isobatch c =
     c.poly_tags in
   mk_global_fn sw_event_driver_isobatch_nm
     ["batch_id", t_vid; "poly_queue", poly_queue.t] [t_vid] @@
+  mk_let ["idx"] (mk_cint 0) @@
+  mk_let ["offset"] (mk_cint 0) @@
   mk_let ["tag"] (mk_poly_tag_at (mk_var "poly_queue") @@ mk_cint 0) @@
   List.fold_left (fun acc_code (i, ti) ->
       mk_if_eq (mk_var "tag") (mk_cint i)
@@ -2786,9 +2804,11 @@ let declare_global_vars c ast =
   List.map decl_global
     [send_put_bitmap;
      send_put_ip_map c.p;
+     send_put_isobatch_map c;
      send_fetch_bitmap;
      send_push_bitmap;
      send_push_cntrs;
+     send_push_isobatch_map c;
      send_corrective_bitmap;
      send_corrective_ip_map;
      sw_total_demux_ctr;
@@ -2801,6 +2821,9 @@ let declare_global_vars c ast =
      nd_check_stmt_cntr_ret;
      nd_check_stmt_cntr_init;
      nd_update_corr_delete;
+     (* delayed buffered fetch decisions *)
+     rcv_fetch_isobatch_bitmap c;
+     rcv_fetch_isobatch_decision_bitmap c;
     ]
 
 let declare_global_funcs c ast =
@@ -2826,6 +2849,7 @@ let gen_dist_for_t c ast t =
   (List.flatten @@ List.map (fun s ->
         [sw_send_rhs_fetches c t s;
         sw_send_puts c t s;
+        sw_send_puts_isobatch c t s;
         sw_send_rhs_completes c t s;
         sw_send_fetch_fn c t s;
         ]) ss) @
@@ -2914,6 +2938,7 @@ let gen_dist ?(gen_deletes=true)
     declare_global_funcs c ast @
     (if c.gen_correctives then send_corrective_fns c else []) @
     (* we need this here for scope *)
+    clear_send_put_isobatch_map ::
     fns1 @
     [nd_exec_buffered_fetches c;  (* depends: send_push *)
      nd_complete_stmt_cntr_check c; (* depends: exec_buffered *)
@@ -2922,6 +2947,8 @@ let gen_dist ?(gen_deletes=true)
     [
      nd_rcv_corr_done c;
      nd_handle_uniq_poly c;
+     clear_buffered_fetch_helper;
+     nd_send_isobatch_push_meta c;
      trig_dispatcher c;
      trig_dispatcher_unique c;
      sw_event_driver_isobatch c;

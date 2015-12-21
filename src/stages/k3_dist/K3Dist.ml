@@ -538,8 +538,7 @@ let nd_lmap_of_stmt_id c =
   let e = ["map_id", t_int] in
   let t = wrap_tvector t_int in
   let init = k3_container_of_list t @@
-    List.map (fun (x,y) ->
-      mk_tuple [mk_cint x; mk_cint y]) @@ (0,0)::P.stmts_lhs_maps c.p in
+    List.map mk_cint @@ 0::(snd_many @@ P.stmts_lhs_maps c.p) in
   create_ds "nd_lmap_of_stmt_id" t ~e ~init
 
 (* for buffered fetches in no-corrective mode *)
@@ -1409,7 +1408,7 @@ let isobatch_buffered_fetch_helper c =
 (* map from stmt_map_id, batch to list of vids *)
 (* for saving info about buffered fetches *)
 let isobatch_buffered_fetch_vid_map_id = "isobatch_buffered_fetch_vid_map"
-let isobatch_buffered_fetch_vid_map_e = isobatch_vid_map_e 
+let isobatch_buffered_fetch_vid_map_e = isobatch_vid_map_e
 let isobatch_buffered_fetch_vid_map c =
   (* indexed by stmt_map_id *)
   let e = isobatch_buffered_fetch_vid_map_e in
@@ -1656,7 +1655,9 @@ let global_vars c dict =
       isobatch_threshold;
       isobatch_stmt_helper_bitmap c;
       isobatch_stmt_helper c;
-      isobatch_vid_map c;
+      isobatch_vid_map c; (* stmt, batch -> vids *)
+      isobatch_buffered_fetch_helper c;
+      isobatch_buffered_fetch_vid_map c;
     ] @
 
     log_ds c @
