@@ -2833,6 +2833,7 @@ let declare_global_funcs c ast =
   (P.for_all_trigs ~sys_init:true ~delete:c.gen_deletes c.p @@ nd_log_get_bound c) @
   nd_update_corr_map ::
   begin if c.gen_correctives then [nd_filter_corrective_list] else [] end @
+  D.functions c @
   K3Ring.functions @
   (List.map (fun (i, (_, maps)) -> nd_add_delta_to_buf c (hd maps)) @@ D.uniq_types_and_maps c) @
   TS.functions @

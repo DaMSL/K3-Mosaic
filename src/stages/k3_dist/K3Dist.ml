@@ -954,25 +954,31 @@ let reserve_poly_queue_code ?all c =
       poly_queue_bitmap.id)
     mk_cunit
 
-let clear_poly_queues ?(unique=true) c =
-  mk_block @@ [
+let clear_poly_queues_fn_nm = "clear_poly_queues"
+let clear_poly_queues_fn c =
+  mk_global_fn clear_poly_queues_fn_nm ["unique", t_bool] [] @@
+  mk_block [
     (* replace all used send slots with empty polyqueues *)
     mk_iter_bitmap'
       (mk_insert_at poly_queues.id (mk_var "ip")
          [mk_var empty_poly_queue.id])
       poly_queue_bitmap.id;
+    (* unique polys *)
+    mk_if (mk_var "unique")
+      (mk_iter_bitmap'
+        (mk_insert_at upoly_queues.id (mk_var "ip")
+          [mk_var empty_upoly_queue.id])
+        upoly_queue_bitmap.id)
+      mk_cunit;
+    (* apply reserve to all the new polybufs *)
+    reserve_poly_queue_code c;
     mk_set_all poly_queue_bitmap.id [mk_cfalse];
-  ] @
-  (if unique then
-    [mk_iter_bitmap'
-      (mk_insert_at upoly_queues.id (mk_var "ip")
-        [mk_var empty_upoly_queue.id])
-      upoly_queue_bitmap.id;
-      mk_set_all upoly_queue_bitmap.id [mk_cfalse];]
-    else []) @
-  (* apply reserve to all the new polybufs *)
-  [reserve_poly_queue_code c]
+    mk_if (mk_var "unique")
+      (mk_set_all upoly_queue_bitmap.id [mk_cfalse]) mk_cunit;
+  ]
 
+let clear_poly_queues ?(unique=true) c =
+  mk_apply' clear_poly_queues_fn_nm [mk_cbool unique]
 
 (* we create tags for events, with the full width of said events plus insert/delete field *)
 let calc_event_tags c =
@@ -1583,6 +1589,9 @@ let do_trace nm l expr =
 
 (* index used to handle multiple switches for csv source *)
 let sw_csv_index = create_ds "sw_csv_index" @@ t_int
+
+let functions c =
+  [clear_poly_queues_fn c]
 
 let global_vars c dict =
   (* replace default inits with ones from ast *)
