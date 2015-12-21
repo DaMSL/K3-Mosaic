@@ -651,12 +651,14 @@ let sw_send_fetch_fn c t s =
   let args = args_of_t_with_v c t in
   let arg_vars = ids_to_vars @@ fst_many args in
   mk_global_fn
-    (send_fetch_name_of_t t s) (("batch_id", t_vid)::args_of_t_with_v c t) [] @@
+    (send_fetch_name_of_t t s) (args_of_t_with_v c t) [] @@
     mk_block [
         mk_apply' (sw_send_rhs_fetches_nm t s) @@ mk_cfalse::arg_vars;
         mk_apply' (sw_send_puts_nm t s) arg_vars;
         mk_apply' (sw_send_rhs_completes_nm t s) arg_vars;
     ]
+
+let sw_send_fetch_isobatch_next_vid = create_ds "sw_send_fetch_isobatch_next_vid" @@ mut t_vid
 
 (* loop over the statements of a trigger for all vids, working backwards from last
  * stmt to first *)
@@ -669,46 +671,51 @@ let sw_send_fetches_isobatch c t =
     ["batch_id", t_vid; "poly_queue", poly_queue.t]
     [t_vid]
   @@
-  mk_block @@ List.flatten @@ List.map (fun s ->
+  mk_block @@ List.flatten (List.map (fun s ->
     (* clear the full ds *)
     [
       mk_apply' clear_send_put_isobatch_map_nm [];
 
       (* execute all statements *)
-      mk_poly_fold
-        (mk_lambda4' ["vid", t_vid] p_tag p_idx p_off @@
-          mk_block [
-            mk_poly_at_with' (drop_insert t) @@
-              mk_lambda' t_args @@
-                mk_block [
-                  (* true: is_isobatch *)
-                  mk_apply' (sw_send_rhs_fetches_nm t s) @@ mk_ctrue::call_args;
-                  mk_apply' (sw_send_rhs_completes_nm t s) call_args;
-                  mk_apply' (sw_send_puts_isobatch_nm t s) call_args;
-                ];
-            next_vid (mk_var "vid")
-          ])
-        (mk_var "batch_id") @@
-        mk_var "poly_queue"
+      mk_let ["next_vid"]
+        (mk_poly_fold
+          (mk_lambda4' ["vid", t_vid] p_tag p_idx p_off @@
+            mk_block [
+              mk_poly_at_with' (drop_insert t) @@
+                mk_lambda' t_args @@
+                  mk_block [
+                    (* true: is_isobatch *)
+                    mk_apply' (sw_send_rhs_fetches_nm t s) @@ mk_ctrue::call_args;
+                    mk_apply' (sw_send_rhs_completes_nm t s) call_args;
+                    mk_apply' (sw_send_puts_isobatch_nm t s) call_args;
+                  ];
+              next_vid (mk_var "vid")
+            ])
+          (mk_var "batch_id") @@
+          mk_var "poly_queue") @@
+      mk_assign sw_send_fetch_isobatch_next_vid.id (mk_var "next_vid")
     ] @
-    (* calculate counts, send puts for the batch based on the ds *)
-    (if P.rhs_maps_of_stmt c.p s = [] then [] else singleton @@
-      mk_iter_bitmap'
-          (mk_let ["count"]
-            (mk_at_with' send_put_isobatch_map_id (mk_var "ip") @@
-              mk_lambda' send_put_isobatch_map_e @@
-                mk_agg_bitmap' ~idx:"ip2" ["count", t_int]
-                  (mk_at_with' "inner" (mk_var "ip2") @@
-                    mk_lambda' send_put_isobatch_inner.e @@
-                      mk_agg_bitmap' ~idx:map_ctr.id ["count2", t_int]
-                        (mk_add (mk_var "count2") @@ mk_cint 1)
-                        (mk_var "count")
-                        "inner2")
-                  (mk_cint 0)
-                  "bitmap") @@
-          buffer_for_send (rcv_put_name_of_t t s) "ip" [mk_var "count"])
-        send_put_bitmap.id)
-    ) ss
+
+      (* calculate counts, send puts for the batch based on the ds *)
+      (if P.rhs_maps_of_stmt c.p s = [] then [] else singleton @@
+        mk_iter_bitmap'
+            (mk_let ["count"]
+              (mk_at_with' send_put_isobatch_map_id (mk_var "ip") @@
+                mk_lambda' send_put_isobatch_map_e @@
+                  mk_agg_bitmap' ~idx:"ip2" ["count", t_int]
+                    (mk_at_with' "inner" (mk_var "ip2") @@
+                      mk_lambda' send_put_isobatch_inner.e @@
+                        mk_agg_bitmap' ~idx:map_ctr.id ["count2", t_int]
+                          (mk_add (mk_var "count2") @@ mk_cint 1)
+                          (mk_var "count")
+                          "inner2")
+                    (mk_cint 0)
+                    "bitmap") @@
+            buffer_for_send (rcv_put_name_of_t t s) "ip" [mk_var "count"])
+          send_put_bitmap.id)
+    ) ss) @
+    (* return next vid *)
+    [mk_var sw_send_fetch_isobatch_next_vid.id]
 
 
 (* indexed by ip *)
@@ -2448,8 +2455,8 @@ let nd_from_sw_trig_dispatcher_trig c =
             (mk_iter_bitmap' ~idx:stmt_ctr.id
               (mk_let ["x"] (mk_delete_at isobatch_stmt_helper_id @@ mk_var stmt_ctr.id) @@
                 mk_update_at_with isobatch_vid_map_id (mk_var stmt_ctr.id) @@
-                mk_lambda' isobatch_vid_map_e @@
-                  mk_insert_at "inner" (mk_var "batch_id") [mk_var "x"])
+                  mk_lambda' isobatch_vid_map_e @@
+                    mk_insert_block "inner" [mk_var "batch_id"; mk_var "x"])
               isobatch_stmt_helper_bitmap_id)
              mk_cunit;
        ]) @@
@@ -2480,7 +2487,10 @@ let sw_event_driver_isobatch c =
   List.fold_left (fun acc_code (i, ti) ->
       mk_if_eq (mk_var "tag") (mk_cint i)
         (if ti.tag = "sentinel" then
-           Proto.sw_seen_sentinel ~check_size:false
+           mk_block [
+             Proto.sw_seen_sentinel ~check_size:false;
+             mk_var "batch_id"
+           ]
         else
           mk_poly_at_with' ti.tag @@ mk_lambda' ti.args @@
           mk_if (mk_var "do_insert")
@@ -2824,6 +2834,7 @@ let declare_global_vars c ast =
      (* delayed buffered fetch decisions *)
      rcv_fetch_isobatch_bitmap c;
      rcv_fetch_isobatch_decision_bitmap c;
+     sw_send_fetch_isobatch_next_vid;
     ]
 
 let declare_global_funcs c ast =
