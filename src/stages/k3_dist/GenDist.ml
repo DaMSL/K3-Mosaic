@@ -2648,7 +2648,8 @@ let sw_demux_poly_queues =
   create_ds ~init ~e "sw_demux_poly_queues" @@ wrap_tvector D.poly_queue.t
 
 (* for isobatch creation, keep track of last trigger/action (insert/delete) *)
-let sw_demux_last_trig = create_ds "sw_demux_last_trig" @@ mut t_string
+let sw_demux_last_trig =
+  create_ds ~init:(mk_cstring "first") "sw_demux_last_trig" @@ mut t_string
 let sw_demux_last_action = create_ds "sw_demux_last_action" @@ mut t_int
 (* switch polybuffers for isobatch creation *)
 let sw_demux_poly_target = create_ds "sw_demux_poly_target" @@ mut t_int
@@ -2702,9 +2703,10 @@ let sw_demux c =
             (* check if we match on the trig id *)
             mk_if_eq (mk_var "trig_id") (mk_cstring trig)
               (mk_let ["do_insert"] (mk_eq (mk_var "action") @@ mk_cint 1) @@
-               mk_if (mk_and (mk_var isobatch_mode.id)
-                        (mk_or (mk_neq (mk_var "trig_id") @@ mk_var sw_demux_last_trig.id) @@
-                                mk_neq (mk_var "action")  @@ mk_var sw_demux_last_action.id))
+               mk_if (mk_and (mk_var isobatch_mode.id) @@
+                       mk_and (mk_neq (mk_var sw_demux_last_trig.id) @@ mk_cstring "first") @@
+                         mk_or (mk_neq (mk_var "trig_id") @@ mk_var sw_demux_last_trig.id) @@
+                           mk_neq (mk_var "action")  @@ mk_var sw_demux_last_action.id)
                 (mk_block [
                     (* alternate to other buffer *)
                     mk_assign sw_demux_poly_target.id @@
@@ -2735,11 +2737,11 @@ let sw_demux c =
                     mk_apply' "mod" [mk_var sw_sent_demux_ctr.id; mk_var D.sw_poly_batch_size.id]) @@
                   mk_var "force_split")
       (mk_let_block ["target"]
-          (* alternate target if force_split *)
-          (mk_if (mk_var "force_split")
-             (mk_if_eq (mk_var sw_demux_poly_target.id) (mk_cint 0) (mk_cint 1) @@ mk_cint 0) @@
-             (* else, same target *)
-             mk_var sw_demux_poly_target.id) [
+        (* alternate target if force_split *)
+        (mk_if (mk_var "force_split")
+            (mk_if_eq (mk_var sw_demux_poly_target.id) (mk_cint 0) (mk_cint 1) @@ mk_cint 0) @@
+            (* else, same target *)
+            mk_var sw_demux_poly_target.id) [
           (* copy the polybuffer to the queue *)
           mk_insert sw_event_queue.id [mk_delete_at sw_demux_poly_queues.id (mk_var "target")];
           (* insert an empty poly_queue *)
