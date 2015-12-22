@@ -881,11 +881,11 @@ let send_trig_header_bitmap =
 (* keep track of which vid args we've sent in this batch *)
 let send_trig_args_inner =
   let e = ["vid", t_vid; "_u", t_unit] in
-  create_ds ~e "inner_map" @@ wrap_tmap @@ t_of_e e
+  create_ds ~e "inner" @@ wrap_tmap @@ t_of_e e
 
-(* indexed by IP *)
+(* IP -> vid -> () : which args have been sent *) 
 let send_trig_args_map =
-  let e = [send_trig_args_inner.id, send_trig_args_inner.t] in
+  let e = ["inner", send_trig_args_inner.t] in
   let init =
     mk_map (mk_lambda' unknown_arg @@ mk_empty send_trig_args_inner.t) @@
     mk_var my_peers.id in
@@ -894,7 +894,7 @@ let send_trig_args_map =
 let send_trig_args_bitmap =
   let init =
     mk_map (mk_lambda' unknown_arg mk_cfalse) @@ mk_var my_peers.id in
-  create_ds "send_trig_header_bitmap" ~init @@ wrap_tvector t_bool
+  create_ds "send_trig_args_bitmap" ~init @@ wrap_tvector t_bool
 
 let clear_send_trig_args_map_nm = "clear_send_trig_args_map"
 let clear_send_trig_args_map =
@@ -1118,16 +1118,16 @@ let buffer_trig_header_if_needed ?(force=false) ?(need_args=true) vid t addr arg
     mk_if (mk_at' send_trig_header_bitmap.id @@ mk_var addr) mk_cunit
    else id_fn) @@
     mk_block @@
-      (* update the bitmap *)
+      (* update the header bitmap *)
       [mk_insert_at send_trig_header_bitmap.id (mk_var addr) [mk_ctrue]] @
-      (if need_args && not force then
+      (
+        if need_args && not force then
           [
             (* check map for the last batch to see if we need args *)
             mk_let ["has_args"]
               (mk_at_with' send_trig_args_map.id (mk_var addr) @@
                mk_lambda' send_trig_args_map.e @@
-               mk_case_ns (mk_lookup (mk_var send_trig_args_inner.id) [vid; mk_cunknown])
-                  "x" mk_cfalse mk_ctrue) @@
+               mk_case_ns (mk_lookup' "inner" [vid; mk_cunknown]) "x" mk_cfalse mk_ctrue) @@
             mk_if (mk_var "has_args")
               (buffer_for_send load_handler addr [mk_var "vid"]) @@
                mk_block [
@@ -1668,6 +1668,7 @@ let global_vars c dict =
       upoly_queue_bitmap;
       send_trig_header_bitmap;
       send_trig_args_map;
+      send_trig_args_bitmap;
       nd_fetch_buffer c;
       nd_stmt_cntrs_per_map c;
       nd_lmap_of_stmt_id c;

@@ -421,7 +421,7 @@ let send_put_isobatch_inner =
   let e = ["inner2", send_put_isobatch_inner2.t] in
   create_ds ~e "inner" @@ wrap_tvector @@ t_of_e e
 
-(* (dest ip -> source ip vector) *)
+(* dest ip -> source ip vector, for a whole batch *)
 let send_put_isobatch_map_id = "send_put_isobatch_map"
 let send_put_isobatch_map_e = ["bitmap", t_bool_vector; "inner", send_put_isobatch_inner.t]
 let send_put_isobatch_map c =
@@ -550,22 +550,9 @@ let sw_send_puts_isobatch c t s =
       ) rmaps
 
 (* for fetches *)
-let send_fetch_bitmap =
+let rcv_fetch_header_bitmap =
   let init = mk_map (mk_lambda' unknown_arg mk_cfalse) @@ mk_var D.my_peers.id in
-  create_ds ~init "send_fetch_bitmap" @@ wrap_tvector t_bool
-
-(* per map *)
-let send_fetch_isobatch_inner = create_ds "inner" @@ wrap_tvector t_bool
-
-(* map -> peer -> bool *)
-let send_fetch_isobatch_bitmap c =
-  let e = [send_fetch_isobatch_inner.id, send_fetch_isobatch_inner.t] in
-  let init =
-    mk_map (mk_lambda' unknown_arg @@
-      mk_map (mk_lambda' unknown_arg mk_cfalse) @@ mk_var D.my_peers.id) @@
-        k3_container_of_list (wrap_tvector t_bool) @@ List.map (const mk_cfalse) @@ 0::P.get_map_list c.p
-  in
-  create_ds ~e ~init "send_fetch_isobatch_bitmap" @@ wrap_tvector @@ t_of_e e
+  create_ds ~init "rcv_fetch_header_bitmap" @@ wrap_tvector t_bool
 
 (* for isobatches, we need to create a batch_fetch message and make decisions at the batch level *)
 let sw_send_rhs_fetches_nm t s = sp "sw_%s_%d_send_rhs_fetches" t s
@@ -584,8 +571,7 @@ let sw_send_rhs_fetches c t s =
           let m = P.map_id_of_name c.p @@ str_drop_end (String.length "_id") ti.tag in
           if List.mem m rmaps then Some(m, ti.tag) else None) m_tags in
       mk_block @@
-     (* clean send_fetch bitmap *)
-      [mk_set_all send_fetch_bitmap.id [mk_cfalse]] @
+      [mk_set_all rcv_fetch_header_bitmap.id [mk_cfalse]] @
      (* fill in global data structure from route *)
       (List.map
         (fun (rmap, stag) ->
@@ -600,10 +586,10 @@ let sw_send_rhs_fetches c t s =
                       K3N.string_of_expr (mk_apply' (K3R.route_for ~bound:true c.p rmap) (mk_cint rmap::key)),
                       "ip");
               (* if we haven't sent to this ip yet, add a rcv_fetch header *)
-                mk_if (mk_not @@ mk_at' send_fetch_bitmap.id @@ mk_var "ip")
+                mk_if (mk_not @@ mk_at' rcv_fetch_header_bitmap.id @@ mk_var "ip")
                   (mk_block [
                     (* mark the send_fetch_bitmap *)
-                    mk_insert_at send_fetch_bitmap.id (mk_var "ip") [mk_ctrue];
+                    mk_insert_at rcv_fetch_header_bitmap.id (mk_var "ip") [mk_ctrue];
                     (* buffer the trig args if needed *)
                     buffer_trig_header_if_needed (mk_var "vid") t "ip" t_args;
                     mk_if (mk_var "is_isobatch")
@@ -634,10 +620,6 @@ let sw_send_rhs_completes c t s =
           (mk_cint pat_idx) @@
           mk_ignore @@ mk_iter_bitmap'
               (mk_block [
-                (* buffer the trig args if needed. do_complete_ts don't save the args,
-                    so if we add the header here, we must make sure we're the only msg to
-                    this node by being last in the send fetch
-                *)
                 buffer_trig_header_if_needed (mk_var "vid") t "ip" t_args;
                 buffer_for_send do_complete_t "ip" []
               ])
@@ -677,7 +659,6 @@ let sw_send_fetches_isobatch c t =
   mk_let ["first_vid"] (next_vid @@ mk_var "batch_id") @@
   mk_block @@ List.flatten (List.map (fun s ->
     let has_rhs = P.rhs_maps_of_stmt c.p s <> [] in
-    (* clear the full ds *)
     [
       mk_apply' clear_send_put_isobatch_map_nm [];
 
@@ -691,10 +672,13 @@ let sw_send_fetches_isobatch c t =
                   mk_block @@
                     (* true: is_isobatch *)
                     if has_rhs then
-                      [mk_apply' (sw_send_rhs_fetches_nm t s) @@ mk_ctrue::call_args;
+                      [ mk_set_all D.send_trig_header_bitmap.id [mk_cfalse];
+                       mk_apply' (sw_send_rhs_fetches_nm t s) @@ mk_ctrue::call_args;
                        mk_apply' (sw_send_puts_isobatch_nm t s) call_args;
                       ] else
-                      [ mk_apply' (sw_send_rhs_completes_nm t s) call_args]
+                      [ mk_set_all D.send_trig_header_bitmap.id [mk_cfalse];
+                        mk_apply' (sw_send_rhs_completes_nm t s) call_args
+                      ]
                   ;
               next_vid (mk_var "vid")
             ])
@@ -702,27 +686,26 @@ let sw_send_fetches_isobatch c t =
           mk_var "poly_queue") @@
       mk_assign sw_send_fetch_isobatch_next_vid.id (mk_var "next_vid")
     ] @
-
-      (* calculate counts, send puts for the batch based on the ds *)
-      (if P.rhs_maps_of_stmt c.p s = [] then [] else singleton @@
-        mk_iter_bitmap'
-            (mk_let ["count"]
-              (mk_at_with' send_put_isobatch_map_id (mk_var "ip") @@
-                mk_lambda' send_put_isobatch_map_e @@
-                  mk_agg_bitmap' ~idx:"ip2" ["count", t_int]
-                    (mk_at_with' "inner" (mk_var "ip2") @@
-                      mk_lambda' send_put_isobatch_inner.e @@
-                        mk_agg_bitmap' ~idx:map_ctr.id ["count2", t_int]
-                          (mk_add (mk_var "count2") @@ mk_cint 1)
-                          (mk_var "count")
-                          "inner2")
-                    (mk_cint 0)
-                    "bitmap") @@
-            buffer_for_send (rcv_put_name_of_t t s) "ip" [mk_var "count"])
-          send_put_bitmap.id)
-    ) ss) @
-    (* return next vid *)
-    [mk_var sw_send_fetch_isobatch_next_vid.id]
+    (* calculate counts, send puts for the batch based on the ds *)
+    (if P.rhs_maps_of_stmt c.p s = [] then [] else singleton @@
+      mk_iter_bitmap'
+          (mk_let ["count"]
+            (mk_at_with' send_put_isobatch_map_id (mk_var "ip") @@
+              mk_lambda' send_put_isobatch_map_e @@
+                mk_agg_bitmap' ~idx:"ip2" ["count", t_int]
+                  (mk_at_with' "inner" (mk_var "ip2") @@
+                    mk_lambda' send_put_isobatch_inner.e @@
+                      mk_agg_bitmap' ~idx:map_ctr.id ["count2", t_int]
+                        (mk_add (mk_var "count2") @@ mk_cint 1)
+                        (mk_var "count")
+                        "inner2")
+                  (mk_cint 0)
+                  "bitmap") @@
+          buffer_for_send (rcv_put_name_of_t t s) "ip" [mk_var "count"])
+        send_put_bitmap.id)
+  ) ss) @
+  (* return next vid *)
+  [mk_var sw_send_fetch_isobatch_next_vid.id]
 
 
 (* indexed by ip *)
@@ -2582,7 +2565,7 @@ let sw_event_driver_trig c =
           (* for profiling, save the vid and time *)
           prof_property prof_tag_pre_send_fetch @@ ProfLatency("batch_id", "-1");
 
-          (* clear out the trig arg map *)
+          (* clear out the trig arg map: it's batch-specific *)
           mk_apply' clear_send_trig_args_map_nm [];
 
           (* calculate the next vid *)
@@ -2881,7 +2864,7 @@ let declare_global_vars c ast =
     [send_put_bitmap;
      send_put_ip_map c.p;
      send_put_isobatch_map c;
-     send_fetch_bitmap;
+     rcv_fetch_header_bitmap;
      send_push_bitmap;
      send_push_cntrs;
      send_push_isobatch_map c;
