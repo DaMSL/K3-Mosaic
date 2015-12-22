@@ -2560,7 +2560,6 @@ let sw_event_driver_trig c =
     mk_if (mk_and (mk_var D.sw_init.id) @@ mk_gt (mk_size @@ mk_var D.sw_event_queue.id) @@ mk_cint 0)
       (mk_case_sn (mk_peek @@ mk_var D.sw_event_queue.id) "poly_queue"
         (mk_block [
-          (* unpack the incoming polyqueue *)
           mk_poly_unpack @@ mk_var "poly_queue";
           clear_poly_queues ~unique:false c;
 
@@ -2572,15 +2571,7 @@ let sw_event_driver_trig c =
           prof_property prof_tag_pre_send_fetch @@ ProfLatency("batch_id", "-1");
 
           (* clear out the trig arg map *)
-          mk_iter_bitmap'
-            (mk_update_at_with send_trig_args_map.id (mk_var "ip") @@
-              mk_lambda' send_trig_args_map.e @@
-                mk_block [
-                  mk_clear_all send_trig_args_inner.id;
-                  mk_var send_trig_args_inner.id
-                ])
-            send_trig_args_bitmap.id;
-          mk_set_all send_trig_args_bitmap.id [mk_cfalse];
+          mk_apply' clear_send_trig_args_map_nm [];
 
           (* calculate the next vid *)
           mk_let ["next_vid"]
@@ -2671,12 +2662,12 @@ let sw_demux c =
     (* stash the sentinel index in the queue *)
     mk_if (mk_eq (mk_fst @@ mk_var "args") @@ mk_cstring "")
       (mk_block [
-          mk_update_at_with sw_demux_poly_queues.id (mk_var sw_demux_poly_target.id) @@
-            mk_lambda' sw_demux_poly_queues.e @@
-              mk_poly_insert_block "sentinel" "inner" [mk_cunit];
           (* switch target *)
           mk_assign sw_demux_poly_target.id @@
             mk_if_eq (mk_var sw_demux_poly_target.id) (mk_cint 0) (mk_cint 1) (mk_cint 0);
+          mk_update_at_with sw_demux_poly_queues.id (mk_var sw_demux_poly_target.id) @@
+            mk_lambda' sw_demux_poly_queues.e @@
+              mk_poly_insert_block "sentinel" "inner" [];
           mk_tuple [mk_ctrue; mk_ctrue; mk_ctrue]
         ])
       e
@@ -2721,6 +2712,8 @@ let sw_demux c =
                  ]) @@
                 (* stay in current buffer *)
                  mk_block [
+                  mk_assign sw_demux_last_trig.id @@ mk_var "trig_id";
+                  mk_assign sw_demux_last_action.id @@ mk_var "action";
                   mk_update_at_with sw_demux_poly_queues.id (mk_var sw_demux_poly_target.id) @@
                     mk_lambda' sw_demux_poly_queues.e @@
                       mk_poly_insert_block trig "inner" @@ (mk_var "do_insert")::args;
@@ -2742,10 +2735,26 @@ let sw_demux c =
             (mk_if_eq (mk_var sw_demux_poly_target.id) (mk_cint 0) (mk_cint 1) @@ mk_cint 0) @@
             (* else, same target *)
             mk_var sw_demux_poly_target.id) [
-          (* copy the polybuffer to the queue *)
-          mk_insert sw_event_queue.id [mk_delete_at sw_demux_poly_queues.id (mk_var "target")];
-          (* insert an empty poly_queue *)
-          mk_insert_at sw_demux_poly_queues.id (mk_var "target") [mk_empty D.poly_queue.t];
+         (* check that we have some content *)
+         mk_if (mk_at_with' sw_demux_poly_queues.id (mk_var "target") @@
+                  mk_lambda' sw_demux_poly_queues.e @@
+                    mk_neq (mk_size @@ mk_var "inner") @@ mk_cint 0)
+          (mk_block [
+            (* copy the polybuffer to the queue *)
+            mk_insert sw_event_queue.id [mk_delete_at sw_demux_poly_queues.id (mk_var "target")];
+            (* insert an empty poly_queue *)
+            mk_insert_at sw_demux_poly_queues.id (mk_var "target") [mk_empty D.poly_queue.t];
+           ]) mk_cunit;
+          (* check for sentinel, in which case we need to send the new buffer as well *)
+          mk_if_eq (mk_var "trig_id") (mk_cstring "")
+            (mk_block [
+              (* copy the extra sentinel polybuffer to the queue *)
+              mk_insert sw_event_queue.id [mk_delete_at sw_demux_poly_queues.id @@ mk_var sw_demux_poly_target.id];
+              (* insert an empty poly_queue *)
+              mk_insert_at sw_demux_poly_queues.id (mk_var sw_demux_poly_target.id) [mk_empty D.poly_queue.t];
+              ]
+            )
+            mk_cunit
         ])
       mk_cunit
   ]

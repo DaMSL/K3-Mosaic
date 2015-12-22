@@ -896,6 +896,21 @@ let send_trig_args_bitmap =
     mk_map (mk_lambda' unknown_arg mk_cfalse) @@ mk_var my_peers.id in
   create_ds "send_trig_header_bitmap" ~init @@ wrap_tvector t_bool
 
+let clear_send_trig_args_map_nm = "clear_send_trig_args_map"
+let clear_send_trig_args_map =
+  mk_global_fn clear_send_trig_args_map_nm [] [] @@
+  mk_block [
+    mk_iter_bitmap'
+      (mk_update_at_with send_trig_args_map.id (mk_var "ip") @@
+        mk_lambda' send_trig_args_map.e @@
+          mk_block [
+            mk_clear_all send_trig_args_inner.id;
+            mk_var send_trig_args_inner.id
+          ])
+      send_trig_args_bitmap.id;
+    mk_set_all send_trig_args_bitmap.id [mk_cfalse];
+  ]
+
 (* u is for unique *)
 let p_idx  = ["idx", t_int]
 let up_idx = ["uidx", t_int]
@@ -1591,7 +1606,8 @@ let do_trace nm l expr =
 let sw_csv_index = create_ds "sw_csv_index" @@ t_int
 
 let functions c =
-  [clear_poly_queues_fn c]
+  [clear_send_trig_args_map;
+   clear_poly_queues_fn c]
 
 let global_vars c dict =
   (* replace default inits with ones from ast *)
