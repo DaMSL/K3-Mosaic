@@ -650,13 +650,16 @@ let sw_send_rhs_completes c t s =
 let sw_send_fetch_fn c t s =
   let args = args_of_t_with_v c t in
   let arg_vars = ids_to_vars @@ fst_many args in
+  let has_rhs = P.rhs_maps_of_stmt c.p s <> [] in
   mk_global_fn
     (send_fetch_name_of_t t s) (args_of_t_with_v c t) [] @@
-    mk_block [
+    if has_rhs then
+      mk_block [
         mk_apply' (sw_send_rhs_fetches_nm t s) @@ mk_cfalse::arg_vars;
-        mk_apply' (sw_send_puts_nm t s) arg_vars;
-        mk_apply' (sw_send_rhs_completes_nm t s) arg_vars;
-    ]
+        mk_apply' (sw_send_puts_nm t s) arg_vars
+      ]
+    else
+       mk_apply' (sw_send_rhs_completes_nm t s) arg_vars
 
 let sw_send_fetch_isobatch_next_vid = create_ds "sw_send_fetch_isobatch_next_vid" @@ mut t_vid
 
@@ -672,6 +675,7 @@ let sw_send_fetches_isobatch c t =
     [t_vid]
   @@
   mk_block @@ List.flatten (List.map (fun s ->
+    let has_rhs = P.rhs_maps_of_stmt c.p s <> [] in
     (* clear the full ds *)
     [
       mk_apply' clear_send_put_isobatch_map_nm [];
@@ -683,12 +687,14 @@ let sw_send_fetches_isobatch c t =
             mk_block [
               mk_poly_at_with' (drop_insert t) @@
                 mk_lambda' t_args @@
-                  mk_block [
+                  mk_block @@
                     (* true: is_isobatch *)
-                    mk_apply' (sw_send_rhs_fetches_nm t s) @@ mk_ctrue::call_args;
-                    mk_apply' (sw_send_rhs_completes_nm t s) call_args;
-                    mk_apply' (sw_send_puts_isobatch_nm t s) call_args;
-                  ];
+                    if has_rhs then
+                      [mk_apply' (sw_send_rhs_fetches_nm t s) @@ mk_ctrue::call_args;
+                       mk_apply' (sw_send_puts_isobatch_nm t s) call_args;
+                      ] else
+                      [ mk_apply' (sw_send_rhs_completes_nm t s) call_args]
+                  ;
               next_vid (mk_var "vid")
             ])
           (mk_var "batch_id") @@
@@ -2915,18 +2921,16 @@ let gen_dist_for_t c ast t =
   let s_no_r = P.stmts_without_rhs_maps_in_t c.p t in
   let ss = P.stmts_of_t c.p t in
   let fns1 =
-  (List.flatten @@ List.map (fun s ->
-        [sw_send_rhs_fetches c t s;
-        sw_send_puts c t s;
-        sw_send_puts_isobatch c t s;
-        sw_send_rhs_completes c t s;
-        sw_send_fetch_fn c t s;
-        ]) ss) @
-   (if c.gen_correctives then
-      List.flatten @@ List.map (fun s -> nd_do_corrective_fns c t s ast) s_r
-    else []) @
-   (List.flatten @@ List.map (fun s ->
-      nd_send_push_stmt_map_trig c t s) s_r)
+    (List.flatten @@ List.map (fun s ->
+          [sw_send_rhs_fetches c t s;
+           sw_send_puts c t s;
+           sw_send_puts_isobatch c t s]) s_r) @
+    (List.map (sw_send_rhs_completes c t) s_no_r) @
+    (List.map (sw_send_fetch_fn c t) ss) @
+    (if c.gen_correctives then
+       List.flatten @@ List.map (fun s -> nd_do_corrective_fns c t s ast) s_r
+     else []) @
+    (List.flatten @@ List.map (nd_send_push_stmt_map_trig c t) s_r)
   in
   let fns2 =
     nd_do_complete_fns c ast t @
