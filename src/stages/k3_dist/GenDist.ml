@@ -674,6 +674,7 @@ let sw_send_fetches_isobatch c t =
     ["batch_id", t_vid; "poly_queue", poly_queue.t]
     [t_vid]
   @@
+  mk_let ["first_vid"] (next_vid @@ mk_var "batch_id") @@
   mk_block @@ List.flatten (List.map (fun s ->
     let has_rhs = P.rhs_maps_of_stmt c.p s <> [] in
     (* clear the full ds *)
@@ -697,7 +698,7 @@ let sw_send_fetches_isobatch c t =
                   ;
               next_vid (mk_var "vid")
             ])
-          (mk_var "batch_id") @@
+          (mk_var "first_vid") @@
           mk_var "poly_queue") @@
       mk_assign sw_send_fetch_isobatch_next_vid.id (mk_var "next_vid")
     ] @
@@ -2562,6 +2563,11 @@ let sw_event_driver_single_vid c =
 let sw_event_driver_trig c =
   mk_code_sink' sw_event_driver_trig_nm
     ["batch_id", t_vid; "vector_clock", TS.sw_vector_clock.t] [] @@
+    (* convert to isobatch batch id if needed *)
+    mk_let ["batch_id"]
+      (mk_if (mk_var isobatch_mode.id)
+         (to_isobatch @@ mk_var "batch_id") @@
+         mk_var "batch_id") @@
     (* if we're initialized and we have stuff to send *)
     mk_if (mk_and (mk_var D.sw_init.id) @@ mk_gt (mk_size @@ mk_var D.sw_event_queue.id) @@ mk_cint 0)
       (mk_case_sn (mk_peek @@ mk_var D.sw_event_queue.id) "poly_queue"

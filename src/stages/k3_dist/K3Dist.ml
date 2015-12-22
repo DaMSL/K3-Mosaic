@@ -1449,6 +1449,7 @@ let isobatch_threshold = create_ds ~init:(mk_cint 4) "isobatch_threshold" @@ t_i
 
 let next_vid vid = mk_mult (mk_add (mk_divi vid @@ mk_cint 2) @@ mk_cint 1) @@ mk_cint 2
 let next_isobatch_id vid = mk_add (mk_cint 1) @@ mk_mult (mk_add (mk_divi vid @@ mk_cint 2) @@ mk_cint 1) @@ mk_cint 2
+let to_isobatch vid = mk_add (mk_mult (mk_divi vid @@ mk_cint 2) @@ mk_cint 2) @@ mk_cint 1
 
 (* tags for profiling and post-analysis *)
 let do_profiling = create_ds ~init:mk_cfalse "do_profiling" @@ mut t_bool
