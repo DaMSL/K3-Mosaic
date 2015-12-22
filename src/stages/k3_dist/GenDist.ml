@@ -483,7 +483,7 @@ let sw_send_puts_isobatch c t s =
                     mk_insert_at "bitmap" (mk_var ip_src) [mk_ctrue];
                     mk_update_at_with "inner" (mk_var ip_src) @@
                       mk_lambda' send_put_isobatch_inner.e @@
-                        mk_insert_at "inner2" (mk_cint rmap) [mk_ctrue];
+                        mk_insert_at_block "inner2" (mk_cint rmap) [mk_ctrue];
                     tup_of_e send_put_isobatch_map_e;
                   ];
               (* buffer the trig args if needed *)
@@ -735,12 +735,14 @@ let nd_rcv_fetch_trig c t s =
   let trig_id = P.trigger_id_for_name c.p t in
   let rmaps = P.rhs_maps_of_stmt c.p s in
   let rmap_rng = create_range ~first:1 @@ List.length @@ rmaps in
+  (* filter to get only the map tags *)
   let m_tags = List.filter (fun (_,ti) -> str_suffix "_id" ti.tag && ti.tag_typ = Ds false) c.poly_tags in
   let s_ms = P.stmt_map_ids c.p in
   let rmap_tags = filter_map (fun (itag, ti) ->
       let m = P.map_id_of_name c.p @@ str_drop_end (String.length "_id") ti.tag in
+      if not @@ List.mem m rmaps then None else
       let s_m = fst @@ List.find (fun (_,(s2,m2)) -> s2 = s && m2 = m) s_ms in
-      if List.mem m rmaps then Some (m, s_m, itag, ti.tag) else None) m_tags
+      Some(m, s_m, itag, ti.tag)) m_tags
   in
   mk_global_fn fn_name
     (poly_args @ D.nd_rcv_fetch_args c t) (* stmt_map_ids are an inner ds *)
@@ -767,9 +769,9 @@ let nd_rcv_fetch_trig c t s =
               (List.fold_left (fun acc_code (m, s_m, itag, stag) ->
                   mk_if_eq (mk_var "tag") (mk_cint itag)
                     (mk_poly_skip_block stag
-                        [mk_tuple [mk_cint m; mk_var "idx"; mk_var "offset"]])
+                       [mk_tuple [mk_cint m; mk_cint s_m; mk_var "idx"; mk_var "offset"]])
                     acc_code)
-                  (mk_tuple [mk_cint (-1); mk_var "idx"; mk_var "offset"])
+                  (mk_tuple [mk_cint @@ -1; mk_cint @@ -1; mk_var "idx"; mk_var "offset"])
                   rmap_tags) @@
             mk_if_eq (mk_var "map_id") (mk_cint (-1))
               (mk_tuple [mk_var "idx"; mk_var "offset"]) @@
@@ -781,14 +783,12 @@ let nd_rcv_fetch_trig c t s =
                     (* or if the minimum entry in the per_map_stmt_cntrs has a >= vid
                     * (we can read at the same vid since we read an earlier value *)
                     mk_lt (mk_var "vid") @@
-                      mk_case_ns
-                        (mk_peek @@ mk_slice' D.nd_stmt_cntrs_per_map_id
-                          [mk_var "map_id"; mk_cunknown]) "x"
-                        (mk_var D.g_max_vid.id) @@
-                        mk_min_with (mk_snd @@ mk_var "x")
-                          (* if empty, return max *)
-                          (mk_lambda'' unit_arg @@ mk_var g_max_vid.id) @@
-                          mk_lambda' nd_stmt_cntrs_per_map_inner.e @@ mk_var "vid")
+                      mk_at_with' nd_stmt_cntrs_per_map_id (mk_var "map_id") @@
+                        mk_lambda' nd_stmt_cntrs_per_map_e @@
+                          mk_min_with (mk_var "inner")
+                            (* if empty, return max *)
+                            (mk_lambda'' unit_arg @@ mk_var g_max_vid.id) @@
+                            mk_lambda' nd_stmt_cntrs_per_map_inner.e @@ mk_var "vid")
                   (* then send the push right now *)
                   (mk_block [
                     mk_apply' nd_log_master_write_nm @@ [mk_cint s; mk_var "vid"];
@@ -1061,11 +1061,11 @@ let nd_rcv_put_trig c t s =
                   (* iterate over all the vids in this batch and complete them *)
                   mk_iter
                     (mk_lambda' ["vid", t_vid] @@
-                    mk_apply' (do_complete_name_of_t t s) @@ args_of_t_as_vars_with_v c t) @@
+                    mk_apply' (do_complete_name_of_t t s) @@ mk_ctrue::args_of_t_as_vars_with_v c t) @@
                     mk_snd @@ mk_var "vids") @@
            (* else, just apply the one vid *)
            mk_apply'
-            (do_complete_name_of_t t s) @@ args_of_t_as_vars_with_v c t) @@
+            (do_complete_name_of_t t s) @@ mk_cfalse::args_of_t_as_vars_with_v c t) @@
         mk_cunit
     ]
 
@@ -1439,7 +1439,7 @@ let nd_rcv_push_trig c t s =
             (mk_apply'
               (nd_log_get_bound_for t) [mk_var "vid"])
           else id_fn) @@
-          mk_apply' (do_complete_name_of_t t s) @@ args_of_t_as_vars_with_v c t)
+          mk_apply' (do_complete_name_of_t t s) @@ mk_cfalse::args_of_t_as_vars_with_v c t)
         mk_cunit
     ]
 
@@ -1850,13 +1850,13 @@ let nd_exec_buffered_fetches c =
                                 (mk_error "missing buffered batch") @@
                                 mk_iter
                                   (mk_lambda' ["vid", t_vid] push_code) @@
-                                  mk_var "vids";
+                                  mk_snd @@ mk_var "vids";
                           (* send metadata for this batch *)
                           mk_apply' nd_send_isobatch_push_meta_nm [mk_var "vid"];
                           (* delete the batch data *)
                           mk_update_at_with isobatch_buffered_fetch_vid_map_id (mk_var "stmt_map_id") @@
                             mk_lambda' isobatch_buffered_fetch_vid_map_e @@
-                              mk_delete "inner" [mk_var "vid"; mk_cunknown];
+                              mk_delete_block "inner" [mk_var "vid"; mk_cunknown];
                         ])
                         (* single vids *)
                         push_code)
@@ -1949,7 +1949,7 @@ let nd_do_complete_fns c ast trig_name =
   (* @has_rhs: whether this statement has rhs maps *)
   let do_complete_fn has_rhs stmt_id =
     mk_global_fn (do_complete_name_of_t trig_name stmt_id)
-      (["is_isobatch", t_bool]@args_of_t_with_v c trig_name) [] @@
+      (("is_isobatch", t_bool)::args_of_t_with_v c trig_name) [] @@
     let lmap = P.lhs_map_of_stmt c.p stmt_id in
     let fst_hop, snd_hop = mk_cint 1, mk_cint 2 in
     let delta = "delta_vals" in
@@ -1990,9 +1990,8 @@ let nd_do_complete_fns c ast trig_name =
               mk_cint 0) @@
             mk_if (mk_eq (mk_var "sent_msgs") @@ mk_cint 0)
               (if has_rhs then
-                  (* if our sent_msgs is 0, we need to delete the stmt cntr entry *)
-                  mk_if (mk_var "is_isobatch")
-                    mk_cunit @@
+                  mk_if (mk_var "is_isobatch") mk_cunit @@
+                    (* if our sent_msgs is 0, we need to delete the stmt cntr entry *)
                     mk_apply' nd_complete_stmt_cntr_check_nm
                       [mk_var "vid"; mk_cint stmt_id]
                 else
@@ -2921,12 +2920,15 @@ let gen_dist_for_t c ast t =
      else []) @
     (List.flatten @@ List.map (nd_send_push_stmt_map_trig c t) s_r)
   in
+  (* split for scope *)
   let fns2 =
     nd_do_complete_fns c ast t @
     (List.flatten @@ List.map (fun s ->
         [nd_rcv_put_trig c t s;
          nd_rcv_fetch_trig c t s;
-         nd_rcv_push_trig c t s]) s_r) @
+         nd_rcv_fetch_trig_isobatch c t s;
+         nd_rcv_push_trig c t s;
+        ]) s_r) @
     (List.map (fun s -> nd_do_complete_trigs c t s) s_no_r) @
     [sw_send_fetches_isobatch c t;
      nd_save_arg_trig_sub_handler c t;
@@ -3002,7 +3004,8 @@ let gen_dist ?(gen_deletes=true)
     (* we need this here for scope *)
     clear_send_put_isobatch_map ::
     fns1 @
-    [nd_exec_buffered_fetches c;  (* depends: send_push *)
+    [nd_send_isobatch_push_meta c;
+     nd_exec_buffered_fetches c;    (* depends: send_push *)
      nd_complete_stmt_cntr_check c; (* depends: exec_buffered *)
      nd_check_stmt_cntr_index c] @
     fns2 @

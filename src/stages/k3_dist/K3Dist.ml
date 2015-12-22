@@ -805,6 +805,9 @@ let nd_do_complete_trig_args c t = nd_do_complete_trig_args_poly c t @ args_of_t
 let nd_rcv_push_args_poly = []
 let nd_rcv_push_args = nd_rcv_push_args_poly @ ["has_data", t_bool; "count", t_int; "vid", t_vid]
 
+let nd_rcv_push_isobatch_args_poly = ["batch_id", t_vid]
+let nd_rcv_push_isobatch_args = nd_rcv_push_isobatch_args_poly @ ["count", t_int]
+
 (* for do_corrective:
  * original values commonly used to send back to original do_complete *)
 let orig_vals =
@@ -883,7 +886,7 @@ let send_trig_args_inner =
   let e = ["vid", t_vid; "_u", t_unit] in
   create_ds ~e "inner" @@ wrap_tmap @@ t_of_e e
 
-(* IP -> vid -> () : which args have been sent *) 
+(* IP -> vid -> () : which args have been sent *)
 let send_trig_args_map =
   let e = ["inner", send_trig_args_inner.t] in
   let init =
@@ -1028,6 +1031,8 @@ let calc_poly_tags c =
          ti (P.map_name_of c.p m^"_id") (Ds false) []) @@
      P.get_map_list c.p) @
     (List.flatten @@ for_all_trigs c.p ~sys_init:true @@ fun t ->
+      let s_r = P.stmts_with_rhs_maps_in_t c.p t in
+      let s_no_r = P.stmts_without_rhs_maps_in_t c.p t in
       let s_rhs = P.s_and_over_stmts_in_t c.p P.rhs_maps_of_stmt t in
       let s_rhs_corr = List.filter (fun (s, map) -> List.mem map c.corr_maps) s_rhs in
       let save_handler_nm = trig_save_arg_sub_handler_name_of_t t in
@@ -1047,14 +1052,15 @@ let calc_poly_tags c =
              (SubTrig(false, [save_handler_nm; load_handler_nm; no_arg_handler_nm])) [];
            ti (rcv_fetch_name_of_t t s)
              (SubTrig(true, [save_handler_nm; load_handler_nm])) @@
-             nd_rcv_fetch_args_poly c t]) @@
-       P.stmts_with_rhs_maps_in_t c.p t) @
+              nd_rcv_fetch_args_poly c t;
+           ti (rcv_fetch_isobatch_name_of_t t s)
+             (SubTrig(true, [save_handler_nm; load_handler_nm])) @@
+              nd_rcv_fetch_args_poly c t;
+          ]) s_r) @
       (* args for do completes without rhs maps *)
-      (List.map (fun s ->
-           ti (do_complete_name_of_t t s^"_trig")
+      (List.map (fun s -> ti (do_complete_name_of_t t s^"_trig")
              (SubTrig(false, [save_handler_nm; load_handler_nm])) @@
-             nd_do_complete_trig_args_poly c t) @@
-        P.stmts_without_rhs_maps_in_t c.p t) @
+              nd_do_complete_trig_args_poly c t) s_no_r) @
       (* the types for nd_rcv_push. includes a separate, optional map component *)
       (* this isn't a dsTrig since pushes are aggregated at the dispatcher *)
       (List.flatten @@ List.flatten @@ List.map (fun has_data ->
@@ -1064,12 +1070,14 @@ let calc_poly_tags c =
              messages and has_bool value *)
           let num_maps = List.length @@ P.rhs_maps_of_stmt c.p s in
           let r_maps = create_range ~first:1 @@ num_maps in
-          List.map (fun n ->
-              ti (rcv_push_name_of_t t s^"_"^soi n^d)
-                ~fn:(rcv_push_name_of_t t s)
-                ~const:[mk_cbool has_data; mk_cint n]
-                (SubTrig(false, [no_arg_handler_nm]))
-                nd_rcv_push_args_poly)
+          List.flatten @@ List.map (fun n ->
+              [ti (rcv_push_name_of_t t s^"_"^soi n^d)
+                ~fn:(rcv_push_name_of_t t s) ~const:[mk_cbool has_data; mk_cint n]
+                (SubTrig(false, [no_arg_handler_nm])) nd_rcv_push_args_poly;
+               ti (rcv_push_isobatch_name_of_t t s^"_"^soi n)
+                ~fn:(rcv_push_isobatch_name_of_t t s) ~const:[mk_cint n]
+                (SubTrig(false, [no_arg_handler_nm])) nd_rcv_push_isobatch_args_poly;
+              ])
             r_maps) @@
            P.stmts_with_rhs_maps_in_t c.p t)
         [true; false])@
@@ -1439,8 +1447,13 @@ let isobatch_buffered_fetch_vid_map c =
   create_ds ~init ~e isobatch_buffered_fetch_vid_map_id @@ wrap_tvector @@ t_of_e e
 
 (* vids have a lower bit = 0, isobatch ids have 1 *)
-let is_isobatch_id id = mk_neq (mk_var id) @@ (mk_mult (mk_divi (mk_var id) @@ mk_cint 2) @@ mk_cint 2)
-let is_single_vid id  =  mk_eq (mk_var id) @@ (mk_mult (mk_divi (mk_var id) @@ mk_cint 2) @@ mk_cint 2)
+let is_isobatch_nm = "is_isobatch"
+let is_isobatch_fn =
+  mk_global_fn "is_isobatch" ["vid", t_vid] [t_bool] @@
+    mk_neq (mk_var "vid") @@ (mk_mult (mk_divi (mk_var "vid") @@ mk_cint 2) @@ mk_cint 2)
+
+let is_isobatch_id id = mk_apply' is_isobatch_nm [mk_var id]
+let is_single_vid id  = mk_not @@ mk_apply' is_isobatch_nm [mk_var id]
 
 (* whether we do isobatches *)
 let isobatch_mode = create_ds ~init:(mk_ctrue) "isobatch_mode" @@ t_bool
@@ -1607,7 +1620,8 @@ let do_trace nm l expr =
 let sw_csv_index = create_ds "sw_csv_index" @@ t_int
 
 let functions c =
-  [clear_send_trig_args_map;
+  [is_isobatch_fn;
+   clear_send_trig_args_map;
    clear_poly_queues_fn c]
 
 let global_vars c dict =
