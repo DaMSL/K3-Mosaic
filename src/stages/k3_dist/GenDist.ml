@@ -929,7 +929,7 @@ let clear_buffered_fetch_helper =
     mk_set_all rcv_fetch_isobatch_decision_bitmap_id [mk_cfalse];
   ]
 
-let nd_rcv_fetch_trig_isobatch c t s =
+let nd_rcv_fetch_isobatch_trig c t s =
   let fn_name = rcv_fetch_isobatch_name_of_t t s in
   let trig_id = P.trigger_id_for_name c.p t in
   let rmaps = P.rhs_maps_of_stmt c.p s in
@@ -2188,6 +2188,7 @@ let nd_handle_uniq_poly c =
       (mk_error "unhandled unique tag")
       tag_bufs_m
 
+(* arg order: poly_args, const_args(count etc), trig specific_args, batch_id, vid, trig_args *)
 let sub_trig_dispatch c fn_nm t_args =
   List.fold_left
     (fun acc_code (itag, ti) -> match ti.tag_typ with
@@ -2912,7 +2913,7 @@ let gen_dist_for_t c ast t =
         [nd_rcv_put_trig c t s;
          nd_rcv_fetch_trig c t s;
          nd_rcv_fetch_isobatch_do_push c t s;
-         nd_rcv_fetch_trig_isobatch c t s;
+         nd_rcv_fetch_isobatch_trig c t s;
          nd_rcv_push_trig c t s;
          nd_rcv_push_isobatch_trig c t s;
         ]) s_r) @

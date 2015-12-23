@@ -811,7 +811,7 @@ let nd_rcv_push_args_poly = []
 let nd_rcv_push_args = nd_rcv_push_args_poly @ ["has_data", t_bool; "count", t_int; "vid", t_vid]
 
 let nd_rcv_push_isobatch_args_poly = ["batch_id", t_vid]
-let nd_rcv_push_isobatch_args = nd_rcv_push_isobatch_args_poly @ ["count", t_int]
+let nd_rcv_push_isobatch_args = ["count", t_int] @ nd_rcv_push_isobatch_args_poly 
 
 (* for do_corrective:
  * original values commonly used to send back to original do_complete *)
