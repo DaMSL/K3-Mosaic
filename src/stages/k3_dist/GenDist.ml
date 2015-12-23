@@ -843,21 +843,6 @@ let nd_rcv_fetch_trig c t s =
       ]
     ]
 
-(* whether we have a decision already on sending a push *)
-let rcv_fetch_isobatch_bitmap_id = "rcv_fetch_isobatch_bitmap"
-let rcv_fetch_isobatch_bitmap c =
-  let init = k3_container_of_list (wrap_tvector t_bool) @@
-    List.map (const mk_cfalse) @@ 0::P.get_map_list c.p in
-  create_ds ~init rcv_fetch_isobatch_bitmap_id @@ wrap_tvector t_bool
-
-(* what our decision is regarding a map for the whole isobatch *)
-(* true = send the pushes now *)
-let rcv_fetch_decision_isobatch_bitmap_id = "rcv_fetch_decision_isobatch_bitmap2"
-let rcv_fetch_decision_isobatch_bitmap c =
-  let init = k3_container_of_list (wrap_tvector t_bool) @@
-    List.map (const mk_cfalse) @@ 0::P.get_map_list c.p in
-  create_ds ~init rcv_fetch_decision_isobatch_bitmap_id @@ wrap_tvector t_bool
-
 (* indexed by map_id *)
 let send_push_isobatch_inner = create_ds "inner" t_bool_vector
 
@@ -952,12 +937,13 @@ let nd_rcv_fetch_trig_isobatch c t s =
   let s_ms = P.stmt_map_ids c.p in
   let rmap_tags = filter_map (fun (itag, ti) ->
       let m = P.map_id_of_name c.p @@ str_drop_end (String.length "_id") ti.tag in
-      let s_m = fst @@ List.find (fun (_,(s2,m2)) -> s2 = s && m2 = m) s_ms in
-      if List.mem m rmaps then Some (m, s_m, itag, ti.tag) else None) m_tags
+      if not @@ List.mem m rmaps then None else
+        let s_m = fst @@ List.find (fun (_,(s2,m2)) -> s2 = s && m2 = m) s_ms in
+        Some(m, s_m, itag, ti.tag)) m_tags
   in
   let var_args = args_of_t_as_vars_with_v c t in
   mk_global_fn fn_name
-    (poly_args @ D.nd_rcv_fetch_args c t) (* stmt_map_ids are an inner ds *)
+    (poly_args @ ["batch_id", t_vid] @ D.nd_rcv_fetch_args c t) (* stmt_map_ids are an inner ds *)
     [t_int; t_int] @@
     (* skip over the function tag *)
     mk_poly_skip_block fn_name [
@@ -978,8 +964,7 @@ let nd_rcv_fetch_trig_isobatch c t s =
                 (mk_tuple [mk_cint (-1); mk_cint (-1); mk_var "idx"; mk_var "offset"])
                 rmap_tags) @@
           (* check for termination *)
-          mk_if_eq (mk_var "map_id") (mk_cint (-1))
-            (mk_tuple [mk_var "idx"; mk_var "offset"]) @@
+          mk_if_eq (mk_var "map_id") (mk_cint (-1)) (mk_tuple [mk_var "idx"; mk_var "offset"]) @@
             mk_block [
               mk_if
                 (mk_var D.corrective_mode.id)
@@ -990,10 +975,11 @@ let nd_rcv_fetch_trig_isobatch c t s =
                   (mk_at' rcv_fetch_isobatch_bitmap_id @@ mk_var "stmt_map_id") @@
                 mk_if (mk_var "made_decision")
                   (mk_let ["do_buffer"]
-                    (mk_at' rcv_fetch_decision_isobatch_bitmap_id @@ mk_var "stmt_map_id") @@
+                    (mk_at' rcv_fetch_isobatch_decision_bitmap_id @@ mk_var "stmt_map_id") @@
+                  (* else - no decision has been made, so make one *)
                   mk_if (mk_var "do_buffer")
                     (* buffer the push *)
-                    (mk_apply' (nd_rcv_fetch_isobatch_buffer_push_nm) [mk_var "vid"]) @@
+                    (mk_apply' (nd_rcv_fetch_isobatch_buffer_push_nm) [mk_var "vid"; mk_var "stmt_map_id"]) @@
                     (* send the push right now *)
                      mk_apply' (nd_rcv_fetch_isobatch_do_push_nm t s) @@ [mk_var "map_id"]@var_args) @@
                   (* we need to make a decision regarding this map *)
@@ -1010,7 +996,7 @@ let nd_rcv_fetch_trig_isobatch c t s =
                   [
                     (* save the decision *)
                     mk_insert_at rcv_fetch_isobatch_bitmap_id (mk_var "stmt_map_id") [mk_ctrue];
-                    mk_insert_at rcv_fetch_decision_isobatch_bitmap_id (mk_var "stmt_map_id") [mk_var "do_buffer"];
+                    mk_insert_at rcv_fetch_isobatch_decision_bitmap_id (mk_var "stmt_map_id") [mk_var "do_buffer"];
                     (* act on the decision and save into the helper *)
                     mk_if (mk_var "do_buffer")
                       (* write a buffer decision *)
@@ -1026,12 +1012,11 @@ let nd_rcv_fetch_trig_isobatch c t s =
                                   tup_of_e nd_fetch_buffer_inner.e
                                 ];
                         (* buffer into temporary helper ds *)
-                        mk_apply' nd_rcv_fetch_isobatch_buffer_push_nm []
+                        mk_apply' (nd_rcv_fetch_isobatch_buffer_push_nm) [mk_var "vid"; mk_var "stmt_map_id"]
                       ])
                       (mk_apply' (nd_rcv_fetch_isobatch_do_push_nm t s) @@ [mk_var "map_id"]@var_args)
-                    ;
-                    mk_tuple [mk_var "idx"; mk_var "offset"]
-                  ]
+                  ];
+                  mk_tuple [mk_var "idx"; mk_var "offset"]
             ]
     ]
 
@@ -1381,10 +1366,10 @@ let nd_send_isobatch_push_meta c =
       send_push_bitmap.id
 
 (* receive isobatch push: load the vids for the batch id and run them if needed *)
-let nd_rcv_isobatch_push_trig c t s =
+let nd_rcv_push_isobatch_trig c t s =
   let fn_name = rcv_push_isobatch_name_of_t t s in
   let args = D.args_of_t c t in
-  mk_global_fn fn_name ["batch_id", t_vid; "count", t_int] [] @@
+  mk_global_fn fn_name ["count", t_int; "batch_id", t_vid; "_v", t_vid] [] @@
     (* lookup the batch in the isobatch_map. true: has_data *)
     mk_if
       (mk_apply' nd_check_stmt_cntr_index_nm @@
@@ -2212,9 +2197,11 @@ let sub_trig_dispatch c fn_nm t_args =
           (* look up this tag *)
           (mk_poly_at_with' ti.tag @@ mk_lambda' ti.args @@
             (* if we have subdata, the function must return the new idx, offset *)
+            let batch_arg = if ti.batch_id then [mk_var "batch_id"] else [] in
+            let trig_args = if ti.trig_args then t_args else [mk_var "vid"] in
             let call l = mk_apply' ti.fn @@
-                ti.const_args @ ids_to_vars @@ fst_many @@ l @ ti.args @ t_args in
-            if has_ds then call D.poly_args
+                l @ ti.const_args @ (ids_to_vars @@ fst_many @@ ti.args) @ batch_arg @ trig_args in
+            if has_ds then call @@ ids_to_vars @@ fst_many D.poly_args
               (* otherwise we must skip ourselves *)
             else mk_block [call []; mk_poly_skip' ti.tag])
           acc_code
@@ -2226,8 +2213,7 @@ let sub_trig_dispatch c fn_nm t_args =
 (* handle all sub-trigs that need only a vid (pushes) *)
 let nd_no_arg_trig_sub_handler c t =
   let fn_nm = trig_no_arg_sub_handler_name_of_t t in
-  let t_args = trig_no_arg_sub_handler_args in
-  mk_global_fn fn_nm (poly_args @ t_args) [t_int; t_int] @@
+  mk_global_fn fn_nm (poly_args @ trig_no_arg_sub_handler_args) [t_int; t_int] @@
   (* skip over the entry tag *)
   mk_poly_skip_block fn_nm [
     (* clear the trig send bitmaps. These make sure we output a slim trig header
@@ -2239,16 +2225,14 @@ let nd_no_arg_trig_sub_handler c t =
         (* print trace if requested *)
         do_trace ("nstsh"^trace_trig t)
                   [t_int, mk_var "vid"] @@
-        sub_trig_dispatch c fn_nm t_args;
+        sub_trig_dispatch c fn_nm @@ args_of_t_as_vars_with_v c t;
   ]
 
 (* handle all sub-trigs that need only a vid (pushes) *)
 let nd_load_arg_trig_sub_handler c t =
   let fn_nm = trig_load_arg_sub_handler_name_of_t t in
-  let t_args = trig_load_arg_sub_handler_args in
-  let trig_args = args_of_t_with_v c t in
   let load_args = D.args_of_t c t in
-  mk_global_fn fn_nm (poly_args @ t_args) [t_int; t_int] @@
+  mk_global_fn fn_nm (poly_args @ trig_load_arg_sub_handler_args) [t_int; t_int] @@
   (* skip over the entry tag *)
   mk_poly_skip_block fn_nm [
     (* clear the trig send bitmaps. These make sure we output a slim trig header
@@ -2265,7 +2249,7 @@ let nd_load_arg_trig_sub_handler c t =
         (* print trace if requested *)
         do_trace ("nstsh"^trace_trig t)
                   [t_int, mk_var "vid"] @@
-        sub_trig_dispatch c fn_nm trig_args;
+          sub_trig_dispatch c fn_nm @@ args_of_t_as_vars_with_v c t;
   ]
 
 (* handle all sub-trigs that need trigger arguments *)
@@ -2289,7 +2273,7 @@ let nd_save_arg_trig_sub_handler c t =
                   t_int, mk_var "tag";
                   t_int, mk_var "idx";
                   t_int, mk_var "offset"] @@
-        sub_trig_dispatch c fn_nm t_args;
+        sub_trig_dispatch c fn_nm @@ args_of_t_as_vars_with_v c t;
   ]
 
 (*** central triggers to handle dispatch for nodes and switches ***)
@@ -2321,9 +2305,10 @@ let trig_dispatcher c =
                 (* look up this tag *)
                 (mk_poly_at_with' ti.tag @@ mk_lambda' ti.args @@
                   (* if we have subdata, the function must return the new idx, offset *)
+                  let batch_arg = if ti.batch_id then ["batch_id", t_vid] else [] in
                   let call l =
                     mk_apply' ti.fn @@
-                      ti.const_args @ ids_to_vars @@ fst_many @@ l @ ti.args in
+                      ti.const_args @ ids_to_vars @@ fst_many @@ l @ batch_arg @ ti.args in
                   if has_ds then call D.poly_args
                     (* otherwise we must skip ourselves *)
                   else mk_block [call []; mk_poly_skip' ti.tag])
@@ -2926,8 +2911,10 @@ let gen_dist_for_t c ast t =
     (List.flatten @@ List.map (fun s ->
         [nd_rcv_put_trig c t s;
          nd_rcv_fetch_trig c t s;
+         nd_rcv_fetch_isobatch_do_push c t s;
          nd_rcv_fetch_trig_isobatch c t s;
          nd_rcv_push_trig c t s;
+         nd_rcv_push_isobatch_trig c t s;
         ]) s_r) @
     (List.map (fun s -> nd_do_complete_trigs c t s) s_no_r) @
     [sw_send_fetches_isobatch c t;
@@ -3007,7 +2994,10 @@ let gen_dist ?(gen_deletes=true)
     [nd_send_isobatch_push_meta c;
      nd_exec_buffered_fetches c;    (* depends: send_push *)
      nd_complete_stmt_cntr_check c; (* depends: exec_buffered *)
-     nd_check_stmt_cntr_index c] @
+     nd_check_stmt_cntr_index c;
+     nd_rcv_fetch_isobatch_buffer_push;
+     nd_rcv_stmt;
+    ] @
     fns2 @
     [
      nd_rcv_corr_done c;
@@ -3018,7 +3008,6 @@ let gen_dist ?(gen_deletes=true)
      trig_dispatcher_unique c;
      sw_event_driver_isobatch c;
      sw_event_driver_single_vid c;
-     nd_rcv_stmt;
     ] @
     [mk_flow @@
       Proto.triggers c @

@@ -89,6 +89,8 @@ type tag_info = {
   tag_typ: tag_type;
   args: (id_t * type_t) list;
   const_args: expr_t list;
+  batch_id: bool;
+  trig_args: bool;
 }
 
 type config = {
@@ -778,13 +780,16 @@ let nd_rcv_stmt_nm = "nd_rcv_stmt"
 (*** trigger args. Needed here for polyqueues ***)
 
 (* the trig header marks the args *)
-let trig_save_arg_sub_handler_args c t = args_of_t_with_v c t
+let trig_save_arg_sub_handler_args_poly c t = args_of_t_with_v c t
+let trig_save_arg_sub_handler_args c t = ["batch_id", t_vid] @ trig_save_arg_sub_handler_args_poly c t
 
 (* slim trig header for pushes *)
 (* TODO: make vid 16-bit offset from batch_id *)
-let trig_load_arg_sub_handler_args = ["vid", t_vid]
+let trig_load_arg_sub_handler_args_poly = ["vid", t_vid]
+let trig_load_arg_sub_handler_args = ["batch_id", t_vid] @ trig_load_arg_sub_handler_args_poly
 
-let trig_no_arg_sub_handler_args = ["vid", t_vid]
+let trig_no_arg_sub_handler_args_poly = ["vid", t_vid]
+let trig_no_arg_sub_handler_args = ["batch_id", t_vid] @ trig_no_arg_sub_handler_args_poly
 
 (* rcv_put includes stmt_cnt_list_ship *)
 let nd_rcv_put_args_poly = ["count2", t_int]
@@ -1008,9 +1013,9 @@ let calc_event_tags c =
   in
   insert_index_fst l
 
-let ti ?(fn="") ?(const=[]) tag tag_typ args =
+let ti ?(fn="") ?(const_args=[]) ?(batch_id=false) ?(vid=false) ?(trig_args=false) tag tag_typ args =
   let fn = if fn = "" then tag else fn in
-  {tag; tag_typ; args; fn; const_args=const}
+  {tag; tag_typ; args; fn; batch_id; trig_args; const_args}
 
 (* we create one global tag hashmap, which we use to populate polyqueues *)
 (* format (tag, tag_type, types) *)
@@ -1039,26 +1044,26 @@ let calc_poly_tags c =
       let load_handler_nm = trig_load_arg_sub_handler_name_of_t t in
       let no_arg_handler_nm = trig_no_arg_sub_handler_name_of_t t in
       (* full trigger handler: saves args *)
-      (ti save_handler_nm (Trig true) @@ trig_save_arg_sub_handler_args c t)::
+      (ti save_handler_nm ~batch_id:true (Trig true) @@ trig_save_arg_sub_handler_args_poly c t)::
       (* slim version of trigger: pull args from log, just vid *)
-      (ti load_handler_nm (Trig true) trig_load_arg_sub_handler_args)::
-      (ti no_arg_handler_nm (Trig true) trig_no_arg_sub_handler_args)::
+      (ti load_handler_nm ~batch_id:true (Trig true) trig_load_arg_sub_handler_args_poly)::
+      (ti no_arg_handler_nm ~batch_id:true (Trig true) trig_no_arg_sub_handler_args_poly)::
       (List.flatten @@ List.map (fun s ->
-          [ti (rcv_put_name_of_t t s)
+          [ti (rcv_put_name_of_t t s) ~trig_args:true
              (SubTrig(false, [save_handler_nm; load_handler_nm])) @@
              nd_rcv_put_args_poly;
            (* for isobatch mode: receive the vids of the isobatch *)
-           ti (rcv_stmt_name_of_t t s) ~fn:nd_rcv_stmt_nm ~const:[mk_cint s]
+           ti (rcv_stmt_name_of_t t s) ~fn:nd_rcv_stmt_nm ~const_args:[mk_cint s]
              (SubTrig(false, [save_handler_nm; load_handler_nm; no_arg_handler_nm])) [];
-           ti (rcv_fetch_name_of_t t s)
+           ti (rcv_fetch_name_of_t t s) ~trig_args:true
              (SubTrig(true, [save_handler_nm; load_handler_nm])) @@
               nd_rcv_fetch_args_poly c t;
-           ti (rcv_fetch_isobatch_name_of_t t s)
+           ti (rcv_fetch_isobatch_name_of_t t s) ~batch_id:true ~trig_args:true
              (SubTrig(true, [save_handler_nm; load_handler_nm])) @@
               nd_rcv_fetch_args_poly c t;
           ]) s_r) @
       (* args for do completes without rhs maps *)
-      (List.map (fun s -> ti (do_complete_name_of_t t s^"_trig")
+      (List.map (fun s -> ti (do_complete_name_of_t t s^"_trig") ~trig_args:true
              (SubTrig(false, [save_handler_nm; load_handler_nm])) @@
               nd_do_complete_trig_args_poly c t) s_no_r) @
       (* the types for nd_rcv_push. includes a separate, optional map component *)
@@ -1072,10 +1077,10 @@ let calc_poly_tags c =
           let r_maps = create_range ~first:1 @@ num_maps in
           List.flatten @@ List.map (fun n ->
               [ti (rcv_push_name_of_t t s^"_"^soi n^d)
-                ~fn:(rcv_push_name_of_t t s) ~const:[mk_cbool has_data; mk_cint n]
+                ~fn:(rcv_push_name_of_t t s) ~const_args:[mk_cbool has_data; mk_cint n]
                 (SubTrig(false, [no_arg_handler_nm])) nd_rcv_push_args_poly;
                ti (rcv_push_isobatch_name_of_t t s^"_"^soi n)
-                ~fn:(rcv_push_isobatch_name_of_t t s) ~const:[mk_cint n]
+                ~fn:(rcv_push_isobatch_name_of_t t s) ~const_args:[mk_cint n]
                 (SubTrig(false, [no_arg_handler_nm])) nd_rcv_push_isobatch_args_poly;
               ])
             r_maps) @@
