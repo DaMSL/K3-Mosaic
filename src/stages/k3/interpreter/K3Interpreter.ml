@@ -709,9 +709,11 @@ and eval_expr_inner ?(fun_typ=FLambda) (address:address) sched_st cenv texpr =
 
     | UpdateAtWith, [_; key; lambda] ->
       let col_id_path = id_path () in
-      let col = ro_path_lookup col_id_path nenv in
-      let v = unwrap_some @@ v_at ~extend:true error col key in
-      let env, v = eval_fn lambda nenv [v] in
+      let col' = ro_path_lookup col_id_path nenv in
+      let v' = match v_at ~extend:false error col' key with
+        | Some v -> v
+        | _ -> error "update_at_with" "Out of bounds access" in
+      let env, v = eval_fn lambda nenv [v'] in
       (env_modify col_id_path env @@
        fun col -> v_insert_at error (value_of_eval v) key col), temp VUnit
 
