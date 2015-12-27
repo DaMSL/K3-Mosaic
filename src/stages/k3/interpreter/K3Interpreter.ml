@@ -104,22 +104,22 @@ let env_remove i env =
 
 (* Given an arg_t and a value_t list, bind the values to their corresponding argument names. *)
 (* l: level *)
-let rec bind_args l uuid arg vs env =
-  let error = int_erroru uuid "bind_args" in
+let rec bind_args ?extra l uuid arg vs env =
+  let error = int_erroru ?extra uuid "bind_args" in
   try
     begin match arg, vs with
     | AIgnored, _                 -> env
     | AVar(i, _), [v]             -> env_add i v env
-    | AMaybe a', [VOption(Some v')] -> bind_args (l+1) uuid a' [v'] env
+    | AMaybe a', [VOption(Some v')] -> bind_args ?extra (l+1) uuid a' [v'] env
     | AMaybe _,  [VOption None]     -> error "missing VOption value"
     | ATuple args, _ when l=0     -> list_fold2 (fun acc a v ->
-                                    bind_args (l+1) uuid a [v] acc) env args vs
+                                    bind_args ?extra (l+1) uuid a [v] acc) env args vs
     | ATuple args, [VTuple vs]    -> list_fold2 (fun acc a v ->
-                                      bind_args (l+1) uuid a [v] acc) env args vs
-    | _                           -> error @@ sp "bind args: bad values.\n Args:%s\n Values:%s\n"
+                                      bind_args ?extra (l+1) uuid a [v] acc) env args vs
+    | _                           -> error @@ sp "bad values.\n Args:%s\n Values:%s\n"
                                        (KP.flat_string_of_arg arg) (strcatmap string_of_value vs)
     end
-  with Invalid_argument _ -> error @@ sp "bind args: values length mismatch.\n Args:%s Values:%s\n"
+  with Invalid_argument _ -> error @@ sp "values length mismatch.\n Args:%s Values:%s\n"
                                (KP.flat_string_of_arg arg) (strcatmap string_of_value vs)
 
 let rec unbind_args uuid arg env =
@@ -136,7 +136,7 @@ let rec eval_fun uuid f =
     | VFunction(fun_typ, arg, closure, body) ->
         fun addr sched env al ->
           (* create an environment for the function containing its closure *)
-          let new_env = {env with locals=bind_args 0 uuid arg al closure; accessed = ref StrSet.empty} in
+          let new_env = {env with locals=bind_args ~extra:(addr, env) 0 uuid arg al closure; accessed = ref StrSet.empty} in
           (* evaluate the function *)
           let env', result = eval_expr addr sched new_env body in
           (* output log *)
@@ -169,7 +169,7 @@ let rec eval_fun uuid f =
               Log.log (lazy ("shutting down "^string_of_address addr)) ();
               R.halt s addr; env, VTemp VUnit
           | _ ->
-            let new_env = {env with locals=bind_args 0 uuid arg al env.locals} in
+            let new_env = {env with locals=bind_args ~extra:(addr, env) 0 uuid arg al env.locals} in
             begin try
               let env', result = f new_env in
               {env' with locals=unbind_args uuid arg env'.locals}, result
@@ -225,7 +225,7 @@ and eval_expr_inner ?(fun_typ=FLambda) (address:address) sched_st cenv texpr =
     let tvunit = temp VUnit in
 
     let eval_binop s l r  bool_op int_op float_op =
-      let error = int_erroru uuid "eval_binop" in
+      let error = error "eval_binop" in
       temp @@ match l, r with
         | VBool b1,  VBool b2  -> VBool(bool_op b1 b2)
         | VInt i1,   VInt i2   -> VInt(int_op i1 i2)
