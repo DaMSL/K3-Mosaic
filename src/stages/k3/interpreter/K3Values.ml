@@ -484,10 +484,11 @@ let v_is_empty err_fn = function
   | VPolyQueue m -> VBool(IntMap.is_empty m.data)
   | v -> err_fn "v_is_empty" @@ sp "not a collection: %s" @@ sov v
 
-let drop_vars = ["route_memo_"]
+let drop_vars = ["route_memo_"; "pmap_data"]
 let drop_fn_prefixes = [ "shuffle_"; "bound_route_"; "get_ring_node";
                          "free_route_"; "int_of_"; "addr_of_"; "calc_dim_bounds";
-                         "nd_log_master_write"; "nd_log_write_"; "nd_check_stmt_"; "nd_filter_"; "nd_add_delta_"]
+                         "nd_log_master_write"; "nd_log_write_"; "nd_check_stmt_"; "nd_filter_"; "nd_add_delta_";
+                         "clear_"; "tm_check_time"; "is_isobatch"]
 
 
 (* for a map structure *)
