@@ -459,6 +459,10 @@ let clear_send_put_isobatch_map =
     mk_set_all send_put_bitmap.id [mk_cfalse];
   ]
 
+let sw_send_stmt_bitmap =
+  let init = mk_map (mk_lambda' unknown_arg @@ mk_cfalse) @@ mk_var D.my_peers.id in
+  create_ds ~init "sw_send_stmt_ds" t_bool_vector
+
 let sw_send_puts_isobatch_nm t s = sp "sw_%s_%d_send_puts_isobatch" t s
 let sw_send_puts_isobatch c t s =
   let rmap_lmaps = P.rhs_lhs_of_stmt c.p s in
@@ -468,6 +472,7 @@ let sw_send_puts_isobatch c t s =
     if null rmap_lmaps then mk_cunit else
     (* for isobatch, we need to track the exact ips sending to other ips *)
     mk_block @@
+      [mk_set_all sw_send_stmt_bitmap.id [mk_cfalse]] @
       (* route allows us to know how many nodes send data from rhs to lhs *)
       List.map (fun rmap ->
         let route_key, route_pat_idx = P.key_pat_from_bound c.p c.route_indices s rmap in
@@ -488,8 +493,16 @@ let sw_send_puts_isobatch c t s =
                   ];
               (* buffer the trig args if needed *)
               buffer_trig_header_if_needed (mk_var "vid") t ip_dest t_args;
-              (* buffer this stmt *)
-              buffer_for_send (rcv_stmt_name_of_t t s) ip_dest [];
+
+              (* if we haven't sent this stmt, buffer it *)
+              mk_if
+                (mk_at' sw_send_stmt_bitmap.id @@ mk_var ip_dest)
+                  mk_cunit @@
+                  mk_block [
+                    buffer_for_send (rcv_stmt_name_of_t t s) ip_dest [];
+                    (* mark this ip *)
+                    mk_insert_at sw_send_stmt_bitmap.id (mk_var ip_dest) [mk_ctrue];
+                  ]
              ]
           in
 
@@ -2846,7 +2859,8 @@ let declare_global_vars c ast =
   K3Shuffle.global_vars @
   GC.global_vars c @
   List.map decl_global
-    [send_put_bitmap;
+    [sw_send_stmt_bitmap;
+     send_put_bitmap;
      send_put_ip_map c.p;
      send_put_isobatch_map c;
      rcv_fetch_header_bitmap;
