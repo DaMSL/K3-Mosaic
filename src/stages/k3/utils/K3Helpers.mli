@@ -415,6 +415,7 @@ val unknown_arg : (string * type_t) list
 
 (* easy to use error function macro *)
 val mk_error : string -> expr_t
+val mk_error' : expr_t -> expr_t
 
 val mk_size_slow : data_struct -> expr_t
 

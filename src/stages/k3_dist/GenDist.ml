@@ -1382,7 +1382,7 @@ let nd_send_isobatch_push_meta c =
 let nd_rcv_push_isobatch_trig c t s =
   let fn_name = rcv_push_isobatch_name_of_t t s in
   let args = D.args_of_t c t in
-  mk_global_fn fn_name ["count", t_int; "batch_id", t_vid; "_v", t_vid] [] @@
+  mk_global_fn fn_name ["count", t_int; "batch_id", t_vid] [] @@
     (* lookup the batch in the isobatch_map. true: has_data *)
     mk_if
       (mk_apply' nd_check_stmt_cntr_index_nm @@
@@ -2328,7 +2328,7 @@ let trig_dispatcher c =
                   else mk_block [call []; mk_poly_skip' ti.tag])
                 acc_code
              | _ -> acc_code)
-          (mk_error "unmatched tag")
+          (mk_error' @@ mk_concat (mk_cstring "unmatched tag: ") @@ mk_soi @@ mk_var "tag")
           c.poly_tags;
 
     mk_if (mk_var "is_isobatch")
@@ -2384,7 +2384,7 @@ let trig_dispatcher_trig c =
     ["batch_id", t_vid; "poly_queue", poly_queue.t] [] @@
   mk_block [
     mk_poly_unpack (mk_var "poly_queue");
-    clear_poly_queues ~unique:false c;
+    clear_poly_queues c;
     mk_apply' trig_dispatcher_nm [mk_var "batch_id"; mk_var "poly_queue"]
   ]
 
@@ -2554,7 +2554,7 @@ let sw_event_driver_trig c =
       (mk_case_sn (mk_peek @@ mk_var D.sw_event_queue.id) "poly_queue"
         (mk_block [
           mk_poly_unpack @@ mk_var "poly_queue";
-          clear_poly_queues ~unique:false c;
+          clear_poly_queues c;
 
           (* for debugging, sleep if we've been asked to *)
           mk_if (mk_neq (mk_var D.sw_event_driver_sleep.id) @@ mk_cint 0)
@@ -2918,7 +2918,8 @@ let gen_dist_for_t c ast t =
     (if c.gen_correctives then
        List.flatten @@ List.map (fun s -> nd_do_corrective_fns c t s ast) s_r
      else []) @
-    (List.flatten @@ List.map (nd_send_push_stmt_map_trig c t) s_r)
+    (List.flatten @@ List.map (nd_send_push_stmt_map_trig c t) s_r) @
+    (List.flatten @@ List.map (nd_isobatch_send_push_stmt_map_trig c t) s_r)
   in
   (* split for scope *)
   let fns2 =

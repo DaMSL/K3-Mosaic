@@ -763,7 +763,7 @@ let rcv_fetch_isobatch_name_of_t t s = sp "nd_%s_%d_rcv_fetch_isobatch" t s
 let rcv_put_name_of_t t s = sp "nd_%s_%d_rcv_put" t s
 let rcv_stmt_name_of_t t s = sp "nd_%s_%d_rcv_stmt" t s
 let send_push_name_of_t c t s m = sp "nd_%s_%d_send_push_%s" t s (m_nm c.p m)
-let send_push_isobatch_name_of_t c t s m = sp "nd_%s_%d_send_push_%s" t s (m_nm c.p m)
+let send_push_isobatch_name_of_t c t s m = sp "nd_%s_%d_send_push_isobatch_%s" t s (m_nm c.p m)
 let rcv_push_name_of_t t s = sp "nd_%s_%d_rcv_push" t s
 let rcv_push_isobatch_name_of_t t s = sp "nd_%s_%d_rcv_push_isobatch" t s
 let send_corrective_name_of_t c m = sp "nd_%s_send_correctives" (m_nm c.p m)
@@ -811,7 +811,7 @@ let nd_rcv_push_args_poly = []
 let nd_rcv_push_args = nd_rcv_push_args_poly @ ["has_data", t_bool; "count", t_int; "vid", t_vid]
 
 let nd_rcv_push_isobatch_args_poly = ["batch_id", t_vid]
-let nd_rcv_push_isobatch_args = ["count", t_int] @ nd_rcv_push_isobatch_args_poly 
+let nd_rcv_push_isobatch_args = ["count", t_int] @ nd_rcv_push_isobatch_args_poly
 
 (* for do_corrective:
  * original values commonly used to send back to original do_complete *)
@@ -979,29 +979,26 @@ let reserve_poly_queue_code ?all c =
 
 let clear_poly_queues_fn_nm = "clear_poly_queues"
 let clear_poly_queues_fn c =
-  mk_global_fn clear_poly_queues_fn_nm ["unique", t_bool] [] @@
+  mk_global_fn clear_poly_queues_fn_nm [] [] @@
   mk_block [
     (* replace all used send slots with empty polyqueues *)
     mk_iter_bitmap'
       (mk_insert_at poly_queues.id (mk_var "ip")
          [mk_var empty_poly_queue.id])
       poly_queue_bitmap.id;
-    (* unique polys *)
-    mk_if (mk_var "unique")
-      (mk_iter_bitmap'
+    mk_iter_bitmap'
         (mk_insert_at upoly_queues.id (mk_var "ip")
           [mk_var empty_upoly_queue.id])
-        upoly_queue_bitmap.id)
-      mk_cunit;
+        upoly_queue_bitmap.id ;
     (* apply reserve to all the new polybufs *)
     reserve_poly_queue_code c;
     mk_set_all poly_queue_bitmap.id [mk_cfalse];
-    mk_if (mk_var "unique")
-      (mk_set_all upoly_queue_bitmap.id [mk_cfalse]) mk_cunit;
+    mk_set_all upoly_queue_bitmap.id [mk_cfalse];
   ]
 
-let clear_poly_queues ?(unique=true) c =
-  mk_apply' clear_poly_queues_fn_nm [mk_cbool unique]
+(* we must always clear both upoly and poly queues -- we don't know when we'll need them *)
+let clear_poly_queues c =
+  mk_apply' clear_poly_queues_fn_nm []
 
 (* we create tags for events, with the full width of said events plus insert/delete field *)
 let calc_event_tags c =
@@ -1081,7 +1078,7 @@ let calc_poly_tags c =
                 (SubTrig(false, [no_arg_handler_nm])) nd_rcv_push_args_poly;
                ti (rcv_push_isobatch_name_of_t t s^"_"^soi n)
                 ~fn:(rcv_push_isobatch_name_of_t t s) ~const_args:[mk_cint n]
-                (SubTrig(false, [no_arg_handler_nm])) nd_rcv_push_isobatch_args_poly;
+                (Trig false) nd_rcv_push_isobatch_args_poly;
               ])
             r_maps) @@
            P.stmts_with_rhs_maps_in_t c.p t)

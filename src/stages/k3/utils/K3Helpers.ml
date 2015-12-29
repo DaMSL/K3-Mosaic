@@ -338,6 +338,7 @@ let mk_slice_gt' col pat = mk_slice_gt (mk_var col) pat
 let mk_slice_geq col pat = mk_slice_gen (SliceOp OGeq) col @@ mk_tuple pat
 let mk_slice_geq' col pat = mk_slice_geq (mk_var col) pat
 
+let mk_error' e = mk_apply' "error" [mk_apply' "print" [e]]
 let mk_error s = mk_apply' "error" [mk_apply' "print" [mk_cstring s]]
 
 let _err = mk_lambda' ["_", t_unknown] @@ mk_error "vector: out of bounds!"
