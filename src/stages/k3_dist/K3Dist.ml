@@ -761,6 +761,7 @@ let send_fetches_isobatch_name_of_t t = sp "sw_%s_send_fetches_isobatch" t
 let rcv_fetch_name_of_t t s = sp "nd_%s_%d_rcv_fetch" t s
 let rcv_fetch_isobatch_name_of_t t s = sp "nd_%s_%d_rcv_fetch_isobatch" t s
 let rcv_put_name_of_t t s = sp "nd_%s_%d_rcv_put" t s
+let rcv_put_isobatch_name_of_t t s = sp "nd_%s_%d_rcv_put_isobatch" t s
 let rcv_stmt_name_of_t t s = sp "nd_%s_%d_rcv_stmt" t s
 let send_push_name_of_t c t s m = sp "nd_%s_%d_send_push_%s" t s (m_nm c.p m)
 let send_push_isobatch_name_of_t c t s m = sp "nd_%s_%d_send_push_isobatch_%s" t s (m_nm c.p m)
@@ -794,6 +795,9 @@ let trig_no_arg_sub_handler_args = ["batch_id", t_vid] @ trig_no_arg_sub_handler
 (* rcv_put includes stmt_cnt_list_ship *)
 let nd_rcv_put_args_poly = ["count2", t_int]
 let nd_rcv_put_args c t = nd_rcv_put_args_poly @ args_of_t_with_v c t
+
+let nd_rcv_put_isobatch_poly = ["count2", t_int]
+let nd_rcv_put_isobatch_args c t = nd_rcv_put_isobatch_poly @ ["batch_id", t_vid]
 
 (* rcv_fetch: data structure that is sent *)
 let send_map_ids =
@@ -1049,6 +1053,9 @@ let calc_poly_tags c =
           [ti (rcv_put_name_of_t t s) ~trig_args:true
              (SubTrig(false, [save_handler_nm; load_handler_nm])) @@
              nd_rcv_put_args_poly;
+           (* rcv_put for isobatch: no trig args, just batch_id *)
+           ti (rcv_put_isobatch_name_of_t t s) ~batch_id:true
+             (Trig false) nd_rcv_put_isobatch_poly;
            (* for isobatch mode: receive the vids of the isobatch *)
            ti (rcv_stmt_name_of_t t s) ~fn:nd_rcv_stmt_nm ~const_args:[mk_cint s]
              (SubTrig(false, [save_handler_nm; load_handler_nm; no_arg_handler_nm])) [];

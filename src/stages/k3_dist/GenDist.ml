@@ -714,7 +714,7 @@ let sw_send_fetches_isobatch c t =
                         "inner2")
                   (mk_cint 0)
                   "bitmap") @@
-          buffer_for_send (rcv_put_name_of_t t s) "ip" [mk_var "count"])
+          buffer_for_send (rcv_put_isobatch_name_of_t t s) "ip" [mk_var "count"])
         send_put_bitmap.id)
   ) ss) @
   (* return next vid *)
@@ -1049,22 +1049,44 @@ let nd_rcv_put_trig c t s =
         (mk_apply' nd_check_stmt_cntr_index_nm @@
           (* false: no data is being sent *)
           [mk_var "vid"; mk_cint s; mk_var "count2"; mk_cfalse])
-        (* check if this is an isobatch vid *)
-        (mk_if (is_isobatch_id "vid")
+        (mk_apply'
+          (do_complete_name_of_t t s) @@ mk_cfalse::args_of_t_as_vars_with_v c t) @@
+        mk_cunit
+    ]
+
+
+(* Receive Put Isobatch trigger
+ * --------------------------------------- *
+ * Update the statement counters with the received values
+ * If the counter is 0, we need to call do_complete
+ * - One of the triggers fed from the poly queue
+ *)
+let nd_rcv_put_isobatch_trig c t s =
+  let fn_name = rcv_put_isobatch_name_of_t t s in
+  let args = D.args_of_t c t in
+  mk_global_fn fn_name
+    (D.nd_rcv_put_isobatch_args c t) (* also pull inner ds *)
+    [] @@ mk_block
+    [
+      mk_if
+        (mk_apply' nd_check_stmt_cntr_index_nm
+          (* false: no data is being sent *)
+          [mk_var "batch_id"; mk_cint s; mk_var "count2"; mk_cfalse])
            (mk_at_with' isobatch_vid_map_id (mk_cint s) @@
               mk_lambda' isobatch_vid_map_e @@
-                mk_case_ns (mk_lookup (mk_var "inner") [mk_var "vid"; mk_cunknown])
+                mk_case_ns (mk_lookup (mk_var "inner") [mk_var "batch_id"; mk_cunknown])
                   "vids"
-                  (mk_error "missing vid in isobatch_vid_map") @@
+                  (mk_error "missing batch id in isobatch_vid_map") @@
                   (* iterate over all the vids in this batch and complete them *)
                   mk_iter
                     (mk_lambda' ["vid", t_vid] @@
-                    mk_apply' (do_complete_name_of_t t s) @@ mk_ctrue::args_of_t_as_vars_with_v c t) @@
+                      (if args <> [] then
+                        mk_let (fst_many args)
+                          (mk_apply' (nd_log_get_bound_for t) [mk_var "vid"])
+                      else id_fn) @@
+                        mk_apply' (do_complete_name_of_t t s) @@ mk_ctrue::args_of_t_as_vars_with_v c t) @@
                     mk_snd @@ mk_var "vids") @@
-           (* else, just apply the one vid *)
-           mk_apply'
-            (do_complete_name_of_t t s) @@ mk_cfalse::args_of_t_as_vars_with_v c t) @@
-        mk_cunit
+            mk_cunit
     ]
 
 (* receive isobatch stmt list *)
@@ -2926,6 +2948,7 @@ let gen_dist_for_t c ast t =
     nd_do_complete_fns c ast t @
     (List.flatten @@ List.map (fun s ->
         [nd_rcv_put_trig c t s;
+         nd_rcv_put_isobatch_trig c t s;
          nd_rcv_fetch_trig c t s;
          nd_rcv_fetch_isobatch_do_push c t s;
          nd_rcv_fetch_isobatch_trig c t s;
