@@ -797,7 +797,7 @@ let nd_rcv_put_args_poly = ["count2", t_int]
 let nd_rcv_put_args c t = nd_rcv_put_args_poly @ args_of_t_with_v c t
 
 let nd_rcv_put_isobatch_poly = ["count2", t_int]
-let nd_rcv_put_isobatch_args c t = nd_rcv_put_isobatch_poly @ ["batch_id", t_vid]
+let nd_rcv_put_isobatch_args c t = ["batch_id", t_vid] @ nd_rcv_put_isobatch_poly 
 
 (* rcv_fetch: data structure that is sent *)
 let send_map_ids =
