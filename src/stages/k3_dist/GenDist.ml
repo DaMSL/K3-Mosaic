@@ -731,6 +731,18 @@ let send_push_bitmap =
   let init = mk_map (mk_lambda' unknown_arg mk_cfalse) @@ mk_var D.my_peers.id in
   create_ds ~init "send_push_bitmap" @@ wrap_tvector t_bool
 
+let clear_push_ds_nm = "clear_push_ds"
+let clear_push_ds =
+  mk_global_fn clear_push_ds_nm [] [] @@
+  mk_block [
+    (* clear the data structures *)
+    mk_iter_bitmap'
+      (mk_update_at_with send_push_cntrs.id (mk_var "ip") @@
+        mk_lambda' send_push_cntrs.e @@ mk_tuple [mk_cint 0; mk_cfalse])
+      send_push_bitmap.id;
+    mk_set_all send_push_bitmap.id [mk_cfalse];
+  ]
+
 (* trigger_rcv_fetch
  * -----------------------------------------
  * Receive a fetch at a node.
@@ -764,13 +776,6 @@ let nd_rcv_fetch_trig c t s =
 
       (* TODO: remove duplication. for profiling: mark the rcv fetch here *)
       prof_property prof_tag_rcv_fetch @@ ProfLatency("vid", soi trig_id);
-
-      (* clear the data structures *)
-      mk_iter_bitmap'
-        (mk_update_at_with send_push_cntrs.id (mk_var "ip") @@
-         mk_lambda' send_push_cntrs.e @@ mk_tuple [mk_cint 0; mk_cfalse])
-        send_push_bitmap.id;
-      mk_set_all send_push_bitmap.id [mk_cfalse];
 
       (* iterate over the buffered map_id data *)
       mk_let ["idx"; "offset"]
@@ -1371,33 +1376,47 @@ let nd_isobatch_send_push_stmt_map_trig c t s =
         ]) @@ (* trigger *)
     P.rhs_lhs_of_stmt c.p s
 
+let nd_send_isobatch_push_sent = create_ds "nd_send_isobatch_push_meta_sent" @@ mut t_bool
+
 (* generic function to send the metadata of the batch pushes *)
 let nd_send_isobatch_push_meta_nm = "nd_send_isobatch_push_meta"
 let nd_send_isobatch_push_meta c =
   let s_m = P.stmt_map_ids c.p in
   mk_global_fn nd_send_isobatch_push_meta_nm ["batch_id", t_vid] [] @@
-    mk_iter_bitmap'
-      (mk_at_with' send_push_isobatch_map_id (mk_var "ip") @@
-          mk_lambda' send_push_isobatch_map_e @@ mk_block @@
-          List.map (fun s ->
-              let t = P.trigger_of_stmt c.p s in
-              let num_rmaps = create_range ~first:1 @@ List.length @@ P.rhs_maps_of_stmt c.p s in
-              mk_let ["count"]
-                (List.fold_left (fun acc_code (s_m, (_, m)) ->
-                    mk_add
-                      (mk_if (mk_at' "inner" @@ mk_cint s_m) (mk_cint 1) @@ mk_cint 0)
-                      acc_code)
-                  (mk_cint 0) @@
-                  List.filter (fun (_,(s',_)) -> s' = s) s_m) @@
-              mk_if_eq (mk_var "count") (mk_cint 0)
-                mk_cunit @@
-                List.fold_left (fun acc_code n ->
-                  mk_if_eq (mk_var "count") (mk_cint n)
-                    (buffer_for_send (rcv_push_isobatch_name_of_t t s^"_"^soi n) "ip"
-                       [mk_var "batch_id"]) @@
-                    acc_code) (mk_error "oops") num_rmaps) @@
-            P.get_stmt_list c.p)
-      send_push_bitmap.id
+    mk_block [
+      mk_assign nd_send_isobatch_push_sent.id mk_cfalse;
+      mk_iter_bitmap'
+        (mk_at_with' send_push_isobatch_map_id (mk_var "ip") @@
+            mk_lambda' send_push_isobatch_map_e @@ mk_block @@
+            List.map (fun s ->
+                let t = P.trigger_of_stmt c.p s in
+                let num_rmaps = create_range ~first:1 @@ List.length @@ P.rhs_maps_of_stmt c.p s in
+                mk_let ["count"]
+                  (List.fold_left (fun acc_code (s_m, (_, m)) ->
+                      mk_add
+                        (mk_if (mk_at' "inner" @@ mk_cint s_m) (mk_cint 1) @@ mk_cint 0)
+                        acc_code)
+                    (mk_cint 0) @@
+                    List.filter (fun (_,(s',_)) -> s' = s) s_m) @@
+                mk_if_eq (mk_var "count") (mk_cint 0)
+                  mk_cunit @@
+                  mk_block [
+                    mk_assign nd_send_isobatch_push_sent.id mk_ctrue;
+                    List.fold_left (fun acc_code n ->
+                      mk_if_eq (mk_var "count") (mk_cint n)
+                        (buffer_for_send (rcv_push_isobatch_name_of_t t s^"_"^soi n) "ip"
+                              [mk_var "batch_id"])
+                        acc_code)
+                      (mk_error "oops")
+                      num_rmaps;
+                  ]) @@
+              P.get_stmt_list c.p)
+        send_push_bitmap.id;
+
+      (* prepare the ds for next time if we used it *)
+      mk_if (mk_var nd_send_isobatch_push_sent.id)
+        (mk_apply' clear_push_ds_nm []) mk_cunit
+    ]
 
 (* receive isobatch push: load the vids for the batch id and run them if needed *)
 let nd_rcv_push_isobatch_trig c t s =
@@ -2888,6 +2907,7 @@ let declare_global_vars c ast =
      send_push_bitmap;
      send_push_cntrs;
      send_push_isobatch_map c;
+     nd_send_isobatch_push_sent;
      send_corrective_bitmap;
      send_corrective_ip_map;
      sw_total_demux_ctr;
@@ -3028,6 +3048,7 @@ let gen_dist ?(gen_deletes=true)
     (if c.gen_correctives then send_corrective_fns c else []) @
     (* we need this here for scope *)
     clear_send_put_isobatch_map ::
+    clear_push_ds ::
     fns1 @
     [nd_send_isobatch_push_meta c;
      nd_exec_buffered_fetches c;    (* depends: send_push *)
