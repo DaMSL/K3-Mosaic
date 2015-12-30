@@ -542,8 +542,9 @@ let stmt_map_ids p =
   List.flatten @@
   List.map (fun s ->
       List.map (fun rmap ->
+          let n' = !n in
           incr n;
-          !n, (s, rmap)) @@
+          n', (s, rmap)) @@
       rhs_maps_of_stmt p s) @@
   get_stmt_list p
 

@@ -870,7 +870,7 @@ let send_push_isobatch_map c =
   let e = send_push_isobatch_map_e in
   let init =
     mk_map (mk_lambda' unknown_arg @@ k3_container_of_list t_bool_vector @@
-          List.map (const mk_cfalse) @@ 0::(fst_many @@ P.stmt_map_ids c.p)) @@
+          List.map (const mk_cfalse) @@ fst_many @@ P.stmt_map_ids c.p) @@
     mk_var D.my_peers.id in
   create_ds ~e ~init send_push_isobatch_map_id @@ wrap_tvector @@ t_of_e e
 
@@ -925,14 +925,14 @@ let nd_rcv_fetch_isobatch_buffer_push =
 let rcv_fetch_isobatch_bitmap_id = "rcv_fetch_isobatch_bitmap"
 let rcv_fetch_isobatch_bitmap c =
   let init = k3_container_of_list t_bool_vector @@
-    List.map (const mk_cfalse) @@ 0::(fst_many @@ P.stmt_map_ids c.p) in
+    List.map (const mk_cfalse) @@ fst_many @@ P.stmt_map_ids c.p in
   create_ds ~init rcv_fetch_isobatch_bitmap_id t_bool_vector
 
 (* the actual decision on buffer=true/push=false *)
 let rcv_fetch_isobatch_decision_bitmap_id = "rcv_fetch_isobatch_decision"
 let rcv_fetch_isobatch_decision_bitmap c =
   let init = k3_container_of_list t_bool_vector @@
-    List.map (const mk_cfalse) @@ 0::(fst_many @@ P.stmt_map_ids c.p) in
+    List.map (const mk_cfalse) @@ fst_many @@ P.stmt_map_ids c.p in
   create_ds ~init rcv_fetch_isobatch_decision_bitmap_id t_bool_vector
 
 let clear_buffered_fetch_helper_nm = "clear_buffered_fetch_helper"
