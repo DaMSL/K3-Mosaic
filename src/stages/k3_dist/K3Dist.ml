@@ -385,9 +385,8 @@ let g_init_vid =
 let g_max_int = create_ds "g_max_int" t_int ~init:(mk_apply' "get_max_int" [mk_cunit])
 let g_min_vid = create_ds "g_min_vid" t_vid ~init:min_vid_k3
 let g_max_vid =
-  let init =
-    let max = mk_apply' "get_max_int" [mk_cunit] in
-    mk_tuple [max] in
+  (* get rid of lowest bit *)
+  let init = mk_mult (mk_divi (mk_apply' "get_max_int" [mk_cunit]) @@ mk_cint 2) @@ mk_cint 2 in
   create_ds "g_max_vid" t_vid ~init
 let g_start_vid = create_ds "g_start_vid" t_vid ~init:start_vid_k3
 
@@ -797,7 +796,7 @@ let nd_rcv_put_args_poly = ["count2", t_int]
 let nd_rcv_put_args c t = nd_rcv_put_args_poly @ args_of_t_with_v c t
 
 let nd_rcv_put_isobatch_poly = ["count2", t_int]
-let nd_rcv_put_isobatch_args c t = ["batch_id", t_vid] @ nd_rcv_put_isobatch_poly 
+let nd_rcv_put_isobatch_args c t = ["batch_id", t_vid] @ nd_rcv_put_isobatch_poly
 
 (* rcv_fetch: data structure that is sent *)
 let send_map_ids =
