@@ -113,8 +113,7 @@ let nd_check_stmt_cntr_index c =
               mk_assign nd_check_stmt_cntr_init.id @@ mk_ctrue;
               mk_incr nd_stmt_cntr_size.id;
               mk_tuple [mk_var "vid";
-                        mk_tuple [mk_var add_to_count;
-                                  mk_var has_data]]]) @@
+                        mk_tuple [mk_var add_to_count; mk_var has_data]]]) @@
 
             mk_lambda' nd_stmt_cntrs_inner.e @@
               (* calculate the new modify state *)
@@ -1423,7 +1422,7 @@ let nd_rcv_push_isobatch_trig c t s =
                       (mk_apply' (nd_log_get_bound_for t) [mk_var "vid"])
                     else id_fn) @@
                   mk_apply' (do_complete_name_of_t t s) @@
-                    mk_cfalse::args_of_t_as_vars_with_v c t) @@
+                    mk_ctrue::args_of_t_as_vars_with_v c t) @@
                 mk_snd @@ mk_var "vids";
               (* do stmt_cntr_check for the batch *)
               mk_apply' nd_complete_stmt_cntr_check_nm [mk_var "batch_id"; mk_cint s]
@@ -1901,10 +1900,8 @@ let nd_complete_stmt_cntr_check c =
   (* if we have nothing to send, we can delete our stmt_cntr entry right away *)
   mk_block @@
     [mk_update_at_with nd_stmt_cntrs_id (mk_var "stmt_id") @@
-      mk_lambda' nd_stmt_cntrs_e @@ mk_block [
-        mk_delete nd_stmt_cntrs_inner.id [mk_var "vid"; mk_cunknown];
-        mk_var nd_stmt_cntrs_inner.id
-      ] ;
+      mk_lambda' nd_stmt_cntrs_e @@
+        mk_delete_block nd_stmt_cntrs_inner.id [mk_var "vid"; mk_cunknown];
       mk_decr nd_stmt_cntr_size.id] @
     (* if we're in no-corrective mode, we need to execute batched fetches *)
     (if c.corr_maps = [] then [] else singleton @@
@@ -1978,7 +1975,9 @@ let nd_do_complete_fns c ast trig_name =
     (* if we have no rhs maps, do nothing *)
     let no_corr_actions =
       if not has_rhs then mk_cunit
-      else mk_apply' nd_complete_stmt_cntr_check_nm [mk_var "vid"; mk_cint stmt_id]
+      else
+        mk_if (mk_var "is_isobatch") mk_cunit @@
+          mk_apply' nd_complete_stmt_cntr_check_nm [mk_var "vid"; mk_cint stmt_id]
     in
 
     (* check for complicated double loop vars which necessitate lmap filtering
