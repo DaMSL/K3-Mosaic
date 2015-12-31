@@ -2969,6 +2969,7 @@ let gen_dist_for_t c ast t =
   let s_r = P.stmts_with_rhs_maps_in_t c.p t in
   let s_no_r = P.stmts_without_rhs_maps_in_t c.p t in
   let ss = P.stmts_of_t c.p t in
+  let sre = t = "system_ready_event" in
   let fns1 =
     (List.flatten @@ List.map (fun s ->
           [sw_send_rhs_fetches c t s;
@@ -2986,16 +2987,22 @@ let gen_dist_for_t c ast t =
   let fns2 =
     nd_do_complete_fns c ast t @
     (List.flatten @@ List.map (fun s ->
-        [nd_rcv_put_trig c t s;
+        (* no isobatch functions for system_ready_event *)
+        (if sre then [] else
+        [
          nd_rcv_put_isobatch_trig c t s;
-         nd_rcv_fetch_trig c t s;
          nd_rcv_fetch_isobatch_do_push c t s;
          nd_rcv_fetch_isobatch_trig c t s;
-         nd_rcv_push_trig c t s;
          nd_rcv_push_isobatch_trig c t s;
-        ]) s_r) @
+        ]) @
+        [nd_rcv_put_trig c t s;
+         nd_rcv_fetch_trig c t s;
+         nd_rcv_push_trig c t s;
+        ])
+        s_r) @
     (List.map (fun s -> nd_do_complete_trigs c t s) s_no_r) @
-    [sw_send_fetches_isobatch c t;
+    (if sre then [] else [sw_send_fetches_isobatch c t]) @
+    [
      nd_save_arg_trig_sub_handler c t;
      nd_load_arg_trig_sub_handler c t;
      nd_no_arg_trig_sub_handler c t] @
