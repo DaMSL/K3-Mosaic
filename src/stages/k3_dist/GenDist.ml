@@ -886,7 +886,7 @@ let clear_send_push_isobatch_ds =
   mk_block [
     (* clear the data structures *)
     mk_iter_bitmap'
-      (mk_update_at_with send_push_isobatch_map_id (mk_var stmt_ctr.id) @@
+      (mk_update_at_with send_push_isobatch_map_id (mk_var ip.id) @@
         mk_lambda' send_push_isobatch_map_e @@
           mk_set_all_block "inner" [mk_cfalse])
       send_push_isobatch_bitmap.id;
