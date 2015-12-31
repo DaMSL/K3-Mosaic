@@ -731,9 +731,9 @@ let send_push_bitmap =
   let init = mk_map (mk_lambda' unknown_arg mk_cfalse) @@ mk_var D.my_peers.id in
   create_ds ~init "send_push_bitmap" @@ wrap_tvector t_bool
 
-let clear_push_ds_nm = "clear_push_ds"
-let clear_push_ds =
-  mk_global_fn clear_push_ds_nm [] [] @@
+let clear_send_push_ds_nm = "clear_send_push_ds"
+let clear_send_push_ds =
+  mk_global_fn clear_send_push_ds_nm [] [] @@
   mk_block [
     (* clear the data structures *)
     mk_iter_bitmap'
@@ -776,6 +776,8 @@ let nd_rcv_fetch_trig c t s =
 
       (* TODO: remove duplication. for profiling: mark the rcv fetch here *)
       prof_property prof_tag_rcv_fetch @@ ProfLatency("vid", soi trig_id);
+
+      mk_apply' clear_send_push_ds_nm [];
 
       (* iterate over the buffered map_id data *)
       mk_let ["idx"; "offset"]
@@ -873,6 +875,24 @@ let send_push_isobatch_map c =
           List.map (const mk_cfalse) @@ fst_many @@ P.stmt_map_ids c.p) @@
     mk_var D.my_peers.id in
   create_ds ~e ~init send_push_isobatch_map_id @@ wrap_tvector @@ t_of_e e
+
+let send_push_isobatch_bitmap =
+  let init = mk_map (mk_lambda' unknown_arg mk_cfalse) @@ mk_var D.my_peers.id in
+  create_ds ~init "send_push_isobatch_bitmap" @@ wrap_tvector t_bool
+
+let clear_send_push_isobatch_ds_nm = "clear_send_push_isobatch_ds"
+let clear_send_push_isobatch_ds =
+  mk_global_fn clear_send_push_isobatch_ds_nm [] [] @@
+  mk_block [
+    (* clear the data structures *)
+    mk_iter_bitmap'
+      (mk_update_at_with send_push_isobatch_map_id (mk_var stmt_ctr.id) @@
+        mk_lambda' send_push_isobatch_map_e @@
+          mk_set_all_block "inner" [mk_cfalse])
+      send_push_isobatch_bitmap.id;
+    mk_set_all send_push_isobatch_bitmap.id [mk_cfalse];
+  ]
+
 
 (* trigger_rcv_fetch_isobatch
  * -----------------------------------------
@@ -1363,7 +1383,7 @@ let nd_isobatch_send_push_stmt_map_trig c t s =
               mk_lambda' K3S.shuffle_results.e @@
                 mk_block [
                   (* mark the push data structure *)
-                  mk_insert_at send_push_bitmap.id (mk_var "ip") [mk_ctrue];
+                  mk_insert_at send_push_isobatch_bitmap.id (mk_var "ip") [mk_ctrue];
                   (* insert the relevant stmt_map *)
                   mk_update_at_with send_push_isobatch_map_id (mk_var "ip") @@
                     mk_lambda' send_push_isobatch_map_e @@
@@ -1411,11 +1431,11 @@ let nd_send_isobatch_push_meta c =
                       num_rmaps;
                   ]) @@
               P.get_stmt_list c.p)
-        send_push_bitmap.id;
+        send_push_isobatch_bitmap.id;
 
       (* prepare the ds for next time if we used it *)
       mk_if (mk_var nd_send_isobatch_push_sent.id)
-        (mk_apply' clear_push_ds_nm []) mk_cunit
+        (mk_apply' clear_send_push_isobatch_ds_nm []) mk_cunit
     ]
 
 (* receive isobatch push: load the vids for the batch id and run them if needed *)
@@ -2905,6 +2925,7 @@ let declare_global_vars c ast =
      send_put_isobatch_map c;
      rcv_fetch_header_bitmap;
      send_push_bitmap;
+     send_push_isobatch_bitmap;
      send_push_cntrs;
      send_push_isobatch_map c;
      nd_send_isobatch_push_sent;
@@ -3048,7 +3069,8 @@ let gen_dist ?(gen_deletes=true)
     (if c.gen_correctives then send_corrective_fns c else []) @
     (* we need this here for scope *)
     clear_send_put_isobatch_map ::
-    clear_push_ds ::
+    clear_send_push_ds ::
+    clear_send_push_isobatch_ds ::
     fns1 @
     [nd_send_isobatch_push_meta c;
      nd_exec_buffered_fetches c;    (* depends: send_push *)
