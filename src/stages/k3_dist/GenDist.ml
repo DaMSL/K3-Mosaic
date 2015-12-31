@@ -555,7 +555,7 @@ let sw_send_puts_isobatch c t s =
                     shuffle_key @ [mk_cint shuffle_pat; mk_cint shuffle_empty_pat; mk_empty tuple_types];
                   (* loop over the shuffle bitmap and insert into the ds *)
                   mk_iter_bitmap' ~idx:"ip2"
-                    (update_and_send "ip2" "ip")
+                    (update_and_send "ip" "ip2")
                     K3S.shuffle_bitmap.id
                   ])
                   R.route_bitmap.id)
@@ -671,9 +671,8 @@ let sw_send_fetches_isobatch c t =
   mk_let ["first_vid"] (next_vid @@ mk_var "batch_id") @@
   mk_block @@ List.flatten (List.map (fun s ->
     let has_rhs = P.rhs_maps_of_stmt c.p s <> [] in
+    (if has_rhs then [mk_apply' clear_send_put_isobatch_map_nm []] else []) @
     [
-      mk_apply' clear_send_put_isobatch_map_nm [];
-
       (* execute all statements *)
       mk_let ["next_vid"]
         (mk_poly_fold
@@ -701,18 +700,18 @@ let sw_send_fetches_isobatch c t =
     (* calculate counts, send puts for the batch based on the ds *)
     (if P.rhs_maps_of_stmt c.p s = [] then [] else singleton @@
       mk_iter_bitmap'
-          (mk_let ["count"]
-            (mk_at_with' send_put_isobatch_map_id (mk_var "ip") @@
-              mk_lambda' send_put_isobatch_map_e @@
-                mk_agg_bitmap' ~idx:"ip2" ["count", t_int]
-                  (mk_at_with' "inner" (mk_var "ip2") @@
-                    mk_lambda' send_put_isobatch_inner.e @@
-                      mk_agg_bitmap' ~idx:map_ctr.id ["count2", t_int]
-                        (mk_add (mk_var "count2") @@ mk_cint 1)
-                        (mk_var "count")
-                        "inner2")
-                  (mk_cint 0)
-                  "bitmap") @@
+        (mk_let ["count"]
+          (mk_at_with' send_put_isobatch_map_id (mk_var "ip") @@
+            mk_lambda' send_put_isobatch_map_e @@
+              mk_agg_bitmap' ~idx:"ip2" ["count", t_int]
+                (mk_at_with' "inner" (mk_var "ip2") @@
+                  mk_lambda' send_put_isobatch_inner.e @@
+                    mk_agg_bitmap' ~idx:map_ctr.id ["count2", t_int]
+                      (mk_add (mk_var "count2") @@ mk_cint 1)
+                      (mk_var "count")
+                      "inner2")
+                (mk_cint 0)
+                "bitmap") @@
           buffer_for_send (rcv_put_isobatch_name_of_t t s) "ip" [mk_var "count"])
         send_put_bitmap.id)
   ) ss) @
