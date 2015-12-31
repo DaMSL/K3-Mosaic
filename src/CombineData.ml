@@ -83,9 +83,14 @@ let _ =
         if String.contains s '_' then String.sub s 0 (String.index s '_')
         else s in
       (* note: this isn't necessary now, but we'll leave it in anyway *)
-      let sample = input_line handle in
-      let sep, r_sep    = if String.contains sample '|' then '|', r_pipe else ',', r_comma in
-      let defs   = get_defaults sep r_sep sample in
+      let sep, r_sep, defs =
+        try
+          let sample = input_line handle in
+          let sep, r_sep = if String.contains sample '|' then '|', r_pipe else ',', r_comma in
+          let defs = get_defaults sep r_sep sample in
+          sep, r_sep, defs
+        with End_of_file -> '|', r_pipe, ["0"]
+      in
       seek_in handle 0; (* rewind handle *)
       {name; handle; sep; r_sep; defs}) files in
   let data_arr = Array.of_list data_l in
@@ -116,4 +121,4 @@ let _ =
   in loop remain;
   (* sentry line *)
   print_endline @@ String.concat "|" defaults
-    
+
