@@ -40,6 +40,7 @@ and Value : sig
         locals:local_env_t;
         accessed:StrSet.t ref;
         type_aliases:(id_t, type_t) Hashtbl.t;
+        stack:id_t list;
       }
   and fun_typ = FLambda | FGlobal of id_t | FTrigger of id_t
   and poly_inner = {

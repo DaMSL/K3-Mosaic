@@ -156,6 +156,7 @@ and Value : sig
         locals:   local_env_t;
         accessed: StrSet.t ref;
         type_aliases:(id_t, type_t) Hashtbl.t;
+        stack: id_t list;
       }
   and fun_typ = FLambda | FGlobal of id_t | FTrigger of id_t
 
@@ -355,6 +356,7 @@ let default_env = {
   locals=IdMap.empty;
   accessed=ref StrSet.empty;
   type_aliases=Hashtbl.create 10;
+  stack=[];
 }
 
 (* mark_points are optional sorted counts of where we want markings *)
@@ -518,9 +520,13 @@ let print_env ?skip_functions ?skip_empty ?(accessed_only=true) env =
   in
   ps "----Globals----"; fnl();
   IdMap.iter (fun k v -> print k !v) env.globals;
+  if env.stack <> [] then begin
+    fnl(); ps "----Stack----"; fnl();
+    List.iter (fun s -> ps s; fnl()) env.stack
+    end;
   if not @@ IdMap.is_empty env.locals then begin
-      fnl(); ps "----Locals----"; fnl();
-      IdMap.iter (fun k v -> print k @@ hd v) env.locals
+    fnl(); ps "----Locals----"; fnl();
+    IdMap.iter (fun k v -> print k @@ hd v) env.locals
     end;
   fnl ()
 

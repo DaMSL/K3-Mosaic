@@ -136,7 +136,12 @@ let rec eval_fun uuid f =
     | VFunction(fun_typ, arg, closure, body) ->
         fun addr sched env al ->
           (* create an environment for the function containing its closure *)
-          let new_env = {env with locals=bind_args ~extra:(addr, env) 0 uuid arg al closure; accessed = ref StrSet.empty} in
+          let new_env = {env with locals=bind_args ~extra:(addr, env) 0 uuid arg al closure;
+                                  accessed = ref StrSet.empty;
+                                  stack = match fun_typ with
+                                    | FGlobal id -> id::env.stack
+                                    | FTrigger id -> [id]
+                                    | _ -> env.stack } in
           (* evaluate the function *)
           let env', result = eval_expr addr sched new_env body in
           (* output log *)
@@ -150,7 +155,9 @@ let rec eval_fun uuid f =
                 ~name:"K3Interpreter.EvalFun" `Debug
           in
           (* discard the local environment from the function output, and combined access patterns *)
-          let env = {env' with locals = env.locals; accessed=ref @@ StrSet.union !(env.accessed) !(env'.accessed)} in
+          let env = {env' with locals = env.locals;
+                               accessed=ref @@ StrSet.union !(env.accessed) !(env'.accessed);
+                               stack = env.stack} in
           let env = match fun_typ with
           | FLambda     -> env
           | FGlobal id  -> do_log "Global" id env'; env
@@ -169,10 +176,11 @@ let rec eval_fun uuid f =
               Log.log (lazy ("shutting down "^string_of_address addr)) ();
               R.halt s addr; env, VTemp VUnit
           | _ ->
-            let new_env = {env with locals=bind_args ~extra:(addr, env) 0 uuid arg al env.locals} in
+            let new_env = {env with locals=bind_args ~extra:(addr, env) 0 uuid arg al env.locals;
+                                    stack=id::env.stack} in
             begin try
               let env', result = f new_env in
-              {env' with locals=unbind_args uuid arg env'.locals}, result
+              {env' with locals=unbind_args uuid arg env'.locals; stack=env.stack}, result
             with Failure x ->
               raise @@ RuntimeError(uuid, "", x^"\n"^
                 string_of_env ~skip_empty:false ~accessed_only:false env) end
