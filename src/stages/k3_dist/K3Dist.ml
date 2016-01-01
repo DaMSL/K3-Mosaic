@@ -1043,6 +1043,7 @@ let calc_poly_tags c =
       let save_handler_nm = trig_save_arg_sub_handler_name_of_t t in
       let load_handler_nm = trig_load_arg_sub_handler_name_of_t t in
       let no_arg_handler_nm = trig_no_arg_sub_handler_name_of_t t in
+      let sre = t = sys_init in
       (* full trigger handler: saves args *)
       (ti save_handler_nm ~batch_id:true (Trig true) @@ trig_save_arg_sub_handler_args_poly c t)::
       (* slim version of trigger: pull args from log, just vid *)
@@ -1051,20 +1052,22 @@ let calc_poly_tags c =
       (List.flatten @@ List.map (fun s ->
           [ti (rcv_put_name_of_t t s) ~trig_args:true
              (SubTrig(false, [save_handler_nm; load_handler_nm])) @@
-             nd_rcv_put_args_poly;
+              nd_rcv_put_args_poly;
+           ti (rcv_fetch_name_of_t t s) ~trig_args:true
+             (SubTrig(true, [save_handler_nm; load_handler_nm])) @@
+              nd_rcv_fetch_args_poly c t
+          ] @
+           (* for isobatch mode: receive the vids of the isobatch *)
+          (if sre then [] else [
+           ti (rcv_stmt_name_of_t t s) ~fn:nd_rcv_stmt_nm ~const_args:[mk_cint s]
+             (SubTrig(false, [save_handler_nm; load_handler_nm; no_arg_handler_nm])) [];
            (* rcv_put for isobatch: no trig args, just batch_id *)
            ti (rcv_put_isobatch_name_of_t t s) ~batch_id:true
              (Trig false) nd_rcv_put_isobatch_poly;
-           (* for isobatch mode: receive the vids of the isobatch *)
-           ti (rcv_stmt_name_of_t t s) ~fn:nd_rcv_stmt_nm ~const_args:[mk_cint s]
-             (SubTrig(false, [save_handler_nm; load_handler_nm; no_arg_handler_nm])) [];
-           ti (rcv_fetch_name_of_t t s) ~trig_args:true
-             (SubTrig(true, [save_handler_nm; load_handler_nm])) @@
-              nd_rcv_fetch_args_poly c t;
            ti (rcv_fetch_isobatch_name_of_t t s) ~batch_id:true ~trig_args:true
              (SubTrig(true, [save_handler_nm; load_handler_nm])) @@
               nd_rcv_fetch_args_poly c t;
-          ]) s_r) @
+          ])) s_r) @
       (* args for do completes without rhs maps *)
       (List.map (fun s -> ti (do_complete_name_of_t t s^"_trig") ~trig_args:true
              (SubTrig(false, [save_handler_nm; load_handler_nm])) @@
@@ -1081,11 +1084,12 @@ let calc_poly_tags c =
           List.flatten @@ List.map (fun n ->
               [ti (rcv_push_name_of_t t s^"_"^soi n^d)
                 ~fn:(rcv_push_name_of_t t s) ~const_args:[mk_cbool has_data; mk_cint n]
-                (SubTrig(false, [no_arg_handler_nm])) nd_rcv_push_args_poly;
+                (SubTrig(false, [no_arg_handler_nm])) nd_rcv_push_args_poly] @
+              (if sre then [] else [
                ti (rcv_push_isobatch_name_of_t t s^"_"^soi n)
                 ~fn:(rcv_push_isobatch_name_of_t t s) ~const_args:[mk_cint n]
                 (Trig false) nd_rcv_push_isobatch_args_poly;
-              ])
+              ]))
             r_maps) @@
            P.stmts_with_rhs_maps_in_t c.p t)
         [true; false])@

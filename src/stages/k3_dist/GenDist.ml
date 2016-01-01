@@ -574,8 +574,9 @@ let sw_send_rhs_fetches c t s =
      inermediate materialization, we can't automatically
      know when to send the send_fetch header, and that comes from the bitmap *)
     let rmaps = P.rhs_maps_of_stmt c.p s in
-    let t_args = args_of_t_as_vars_with_v c t
-    in
+    let t_args = args_of_t_as_vars_with_v c t in
+    let sre = t = D.sys_init in
+
     mk_global_fn (sw_send_rhs_fetches_nm t s) (["is_isobatch", t_bool]@args_of_t_with_v c t) [] @@
     if null rmaps then mk_cunit else
       let m_tags = List.filter (fun (_, ti) -> str_suffix "_id" ti.tag && ti.tag_typ = Ds false) c.poly_tags in
@@ -599,15 +600,19 @@ let sw_send_rhs_fetches c t s =
                       "ip");
               (* if we haven't sent to this ip yet, add a rcv_fetch header *)
                 mk_if (mk_not @@ mk_at' rcv_fetch_header_bitmap.id @@ mk_var "ip")
-                  (mk_block [
+                  (mk_block @@ [
                     (* mark the send_fetch_bitmap *)
                     mk_insert_at rcv_fetch_header_bitmap.id (mk_var "ip") [mk_ctrue];
                     (* buffer the trig args if needed *)
-                    buffer_trig_header_if_needed (mk_var "vid") t "ip" t_args;
-                    mk_if (mk_var "is_isobatch")
-                      (buffer_for_send (rcv_fetch_isobatch_name_of_t t s) "ip" []) @@
-                      buffer_for_send (rcv_fetch_name_of_t t s) "ip" []
-                  ])
+                    buffer_trig_header_if_needed (mk_var "vid") t "ip" t_args] @
+                    (if sre then
+                        [buffer_for_send (rcv_fetch_name_of_t t s) "ip" []]
+                      else
+                        [mk_if (mk_var "is_isobatch")
+                          (buffer_for_send (rcv_fetch_isobatch_name_of_t t s) "ip" []) @@
+                          buffer_for_send (rcv_fetch_name_of_t t s) "ip" []]
+                    )
+                  )
                   mk_cunit;
                 (* buffer the map id *)
                 buffer_for_send ~wr_bitmap:false stag "ip" []
@@ -1407,9 +1412,10 @@ let nd_send_isobatch_push_meta c =
       mk_iter_bitmap'
         (mk_at_with' send_push_isobatch_map_id (mk_var "ip") @@
             mk_lambda' send_push_isobatch_map_e @@ mk_block @@
-            List.map (fun s ->
+            List.flatten @@ List.map (fun s ->
                 let t = P.trigger_of_stmt c.p s in
                 let num_rmaps = create_range ~first:1 @@ List.length @@ P.rhs_maps_of_stmt c.p s in
+                if t = D.sys_init then [] else singleton @@
                 mk_let ["count"]
                   (List.fold_left (fun acc_code (s_m, (_, m)) ->
                       mk_add
@@ -2973,8 +2979,9 @@ let gen_dist_for_t c ast t =
   let fns1 =
     (List.flatten @@ List.map (fun s ->
           [sw_send_rhs_fetches c t s;
-           sw_send_puts c t s;
-           sw_send_puts_isobatch c t s]) s_r) @
+           sw_send_puts c t s] @
+          (if sre then [] else [sw_send_puts_isobatch c t s])
+       ) s_r) @
     (List.map (sw_send_rhs_completes c t) s_no_r) @
     (List.map (sw_send_fetch_fn c t) ss) @
     (if c.gen_correctives then
