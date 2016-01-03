@@ -3107,7 +3107,6 @@ let gen_dist ?(gen_deletes=true)
      nd_rcv_corr_done c;
      nd_handle_uniq_poly c;
      clear_buffered_fetch_helper;
-     nd_send_isobatch_push_meta c;
      trig_dispatcher c;
      trig_dispatcher_unique c;
      sw_event_driver_isobatch c;
