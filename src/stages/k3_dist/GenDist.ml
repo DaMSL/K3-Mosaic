@@ -1414,8 +1414,11 @@ let nd_send_isobatch_push_meta c =
             mk_lambda' send_push_isobatch_map_e @@ mk_block @@
             List.flatten @@ List.map (fun s ->
                 let t = P.trigger_of_stmt c.p s in
-                let num_rmaps = create_range ~first:1 @@ List.length @@ P.rhs_maps_of_stmt c.p s in
-                if t = D.sys_init then [] else singleton @@
+                let num_rmaps = create_range ~first:1 @@ List.length @@
+                  P.rhs_maps_of_stmt c.p s in
+                if t = D.sys_init then [] else
+                if str_prefix "delete_" t && not c.gen_deletes then [] else
+                singleton @@
                 mk_let ["count"]
                   (List.fold_left (fun acc_code (s_m, (_, m)) ->
                       mk_add
@@ -2546,11 +2549,18 @@ let sw_event_driver_isobatch c =
            ]
         else
           mk_poly_at_with' ti.tag @@ mk_lambda' ti.args @@
-          mk_if (mk_var "do_insert")
-            (mk_apply' (send_fetches_isobatch_name_of_t @@ "insert_"^ti.tag)
-               [mk_var "batch_id"; mk_var "poly_queue"]) @@
-             mk_apply' (send_fetches_isobatch_name_of_t @@ "delete_"^ti.tag)
-               [mk_var "batch_id"; mk_var "poly_queue"])
+          (* different if we produce deletes *)
+          let wrap_check e =
+            mk_if (mk_var "do_insert")
+              e @@
+              mk_apply' (send_fetches_isobatch_name_of_t @@ "delete_"^ti.tag)
+                [mk_var "batch_id"; mk_var "poly_queue"]
+          in
+          let do_insert =
+            mk_apply' (send_fetches_isobatch_name_of_t @@ "insert_"^ti.tag)
+              [mk_var "batch_id"; mk_var "poly_queue"]
+          in
+          if c.gen_deletes then wrap_check do_insert else do_insert)
         acc_code)
     (mk_error "mismatch on event id")
     tags
