@@ -1923,7 +1923,8 @@ let nd_exec_buffered_fetches c =
                             mk_at_with' isobatch_buffered_fetch_vid_map_id (mk_var "stmt_map_id") @@
                               mk_lambda' isobatch_buffered_fetch_vid_map_e @@
                                 mk_case_ns (mk_lookup' "inner" [mk_var "vid"; mk_cunknown]) "vids"
-                                  (mk_error "missing buffered batch") @@
+                                  (mk_error' @@ mk_concat (mk_cstring "missing buffered batch ") @@
+                                                           mk_soi @@ mk_var "vid") @@
                                   mk_iter
                                     (mk_lambda' ["vid", t_vid] push_code) @@
                                     mk_snd @@ mk_var "vids";
@@ -2626,7 +2627,7 @@ let sw_event_driver_single_vid c =
               (StrSet.mem ("insert_"^ti.tag) trig_list || ti.tag = "sentinel"))
             c.poly_tags
         ;
-        mk_add (mk_cint 1) @@ mk_var "vid"
+        next_vid @@ mk_var "vid"
       ])
   (mk_var "batch_id") @@
   mk_var "poly_queue"
