@@ -1074,25 +1074,24 @@ let calc_poly_tags c =
               nd_do_complete_trig_args_poly c t) s_no_r) @
       (* the types for nd_rcv_push. includes a separate, optional map component *)
       (* this isn't a dsTrig since pushes are aggregated at the dispatcher *)
-      (List.flatten @@ List.flatten @@ List.map (fun has_data ->
-        let d = if has_data then "" else "_no_data" in
-        List.map (fun s ->
+      (List.flatten @@ List.map (fun s ->
           (* get all possible numbers of messages. we create a tag per number of
              messages and has_bool value *)
           let num_maps = List.length @@ P.rhs_maps_of_stmt c.p s in
           let r_maps = create_range ~first:1 @@ num_maps in
           List.flatten @@ List.map (fun n ->
-              [ti (rcv_push_name_of_t t s^"_"^soi n^d)
-                ~fn:(rcv_push_name_of_t t s) ~const_args:[mk_cbool has_data; mk_cint n]
-                (SubTrig(false, [no_arg_handler_nm])) nd_rcv_push_args_poly] @
+              (List.map (fun has_data ->
+                let d = if has_data then "" else "_no_data" in
+                ti (rcv_push_name_of_t t s^"_"^soi n^d)
+                  ~fn:(rcv_push_name_of_t t s) ~const_args:[mk_cbool has_data; mk_cint n]
+                  (SubTrig(false, [no_arg_handler_nm])) nd_rcv_push_args_poly) [true; false]) @
               (if sre then [] else [
                ti (rcv_push_isobatch_name_of_t t s^"_"^soi n)
                 ~fn:(rcv_push_isobatch_name_of_t t s) ~const_args:[mk_cint n]
                 (Trig false) nd_rcv_push_isobatch_args_poly;
               ]))
-            r_maps) @@
-           P.stmts_with_rhs_maps_in_t c.p t)
-        [true; false])@
+            r_maps)
+          s_r)@
       (* the types for rcv_push's maps *)
       (List.map (fun (s, m) ->
            ti (P.buf_of_stmt_map_id c.p s m) (Ds true) @@ P.map_ids_types_with_v_for c.p m)
