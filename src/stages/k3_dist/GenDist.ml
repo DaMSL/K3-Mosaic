@@ -1861,15 +1861,24 @@ let nd_exec_buffered_fetches c =
           mk_min_with (mk_var "inner")
             (mk_lambda'' unit_arg @@ mk_var D.g_max_vid.id) @@
             mk_lambda' D.nd_stmt_cntrs_per_map_inner.e @@ mk_var "vid") @@
+    (* check if this is the min vid for the map in stmt_cntrs_per_map. if not, do nothing,
+    * since we're not changing anything *)
+    mk_if (mk_gt (mk_var "vid") @@ mk_var "min_vid") mk_cunit @@
+    (* a crude estimation: if my min_vid (pending write) is an isobatch *)
+    mk_let ["min_is_isobatch"] (is_isobatch_id "min_vid") @@
     (* check if there are any pushes to send *)
     mk_let ["pending_fetches"]
       (mk_at_with' nd_fetch_buffer_id (mk_var "map_id") @@
         mk_lambda' nd_fetch_buffer_e @@
-        mk_case_ns
-          (mk_peek @@ mk_slice_leq (mk_var "inner") [mk_var "min_vid"; mk_cunknown])
-          "_u" mk_cfalse mk_ctrue) @@
-      (* check if this is the min vid for the map in stmt_cntrs_per_map. if not, do nothing,
-      * since we're not changing anything *)
+       (* if the min_vid(write) is an isobatche, we need to be stricter in our tests,
+          since an isobatch can be split between statements *)
+        mk_if (mk_var "min_is_isobatch")
+          (mk_case_ns
+            (mk_peek @@ mk_slice_lt  (mk_var "inner") [mk_var "min_vid"; mk_cunknown])
+            "_u" mk_cfalse mk_ctrue) @@
+          mk_case_ns
+            (mk_peek @@ mk_slice_leq (mk_var "inner") [mk_var "min_vid"; mk_cunknown])
+            "_u" mk_cfalse mk_ctrue) @@
       mk_if (mk_var "pending_fetches")
         (mk_block [
           (* filter only those entries we can run *)
@@ -1877,65 +1886,73 @@ let nd_exec_buffered_fetches c =
             mk_lambda' nd_fetch_buffer_e @@
               (* execute any fetches that precede pending writes for a map *)
               mk_iter (mk_lambda' nd_fetch_buffer_inner.e @@
-                mk_let ["is_isobatch"] (is_isobatch_id "vid") @@
-                mk_iter (mk_lambda' ["stmt_map_id", t_stmt_map_id] @@
-                  (* check for all triggers *)
-                  List.fold_left (fun acc_code (t, args, ss, s_ms) ->
-                    let mk_check_s s_m = mk_eq (mk_var "stmt_map_id") @@ mk_cint s_m in
-                    (* common code *)
-                    let push_code =
-                        (* pull arguments out of log (if needed) *)
-                        (if args = [] then id_fn else
-                          mk_let (fst_many args)
-                            (mk_apply' (nd_log_get_bound_for t) [mk_var "vid"])) @@
-                        List.fold_left (fun acc (s, s_m) ->
-                          mk_if (mk_eq (mk_var "stmt_map_id") @@ mk_cint s_m)
-                            (let rmaps = P.rhs_maps_of_stmt c.p s in
-                            List.fold_left (fun acc m ->
-                              mk_if (mk_eq (mk_var "map_id") @@ mk_cint m)
-                                (mk_apply' (send_push_name_of_t c t s m) @@
-                                  (* @buffered: force output of a trigger header *)
-                                  mk_ctrue::args_of_t_as_vars_with_v c t)
-                                acc)
-                              mk_cunit
-                              rmaps)
-                            acc)
-                          mk_cunit @@
-                          list_zip ss s_ms
-                    in
-                    (* check if the stmts_maps are in this trigger *)
-                    mk_if
-                      (list_fold_to_last (fun acc s_m -> mk_or (mk_check_s s_m) acc) mk_check_s s_ms)
-                      (* handle isobatches *)
-                      (mk_if (mk_var "is_isobatch")
-                        (mk_block [
-                          (* pull the list of batch vids out *)
-                          mk_at_with' isobatch_buffered_fetch_vid_map_id (mk_var "stmt_map_id") @@
-                            mk_lambda' isobatch_buffered_fetch_vid_map_e @@
-                              mk_case_ns (mk_lookup' "inner" [mk_var "vid"; mk_cunknown]) "vids"
-                                (mk_error "missing buffered batch") @@
-                                mk_iter
-                                  (mk_lambda' ["vid", t_vid] push_code) @@
-                                  mk_snd @@ mk_var "vids";
-                          (* send metadata for this batch *)
-                          mk_apply' nd_send_isobatch_push_meta_nm [mk_var "vid"];
-                          (* delete the batch data *)
-                          mk_update_at_with isobatch_buffered_fetch_vid_map_id (mk_var "stmt_map_id") @@
-                            mk_lambda' isobatch_buffered_fetch_vid_map_e @@
-                              mk_delete_block "inner" [mk_var "vid"; mk_cunknown];
-                        ])
-                        (* single vids *)
-                        push_code)
-                      acc_code)
+                mk_block [
+                  mk_let ["is_isobatch"] (is_isobatch_id "vid") @@
+                  mk_iter (mk_lambda' ["stmt_map_id", t_stmt_map_id] @@
+                    (* check for all triggers *)
+                    List.fold_left (fun acc_code (t, args, ss, s_ms) ->
+                      let mk_check_s s_m = mk_eq (mk_var "stmt_map_id") @@ mk_cint s_m in
+                      (* common code *)
+                      let push_code =
+                          (* pull arguments out of log (if needed) *)
+                          (if args = [] then id_fn else
+                            mk_let (fst_many args)
+                              (mk_apply' (nd_log_get_bound_for t) [mk_var "vid"])) @@
+                          List.fold_left (fun acc (s, s_m) ->
+                            mk_if (mk_eq (mk_var "stmt_map_id") @@ mk_cint s_m)
+                              (let rmaps = P.rhs_maps_of_stmt c.p s in
+                              List.fold_left (fun acc m ->
+                                mk_if (mk_eq (mk_var "map_id") @@ mk_cint m)
+                                  (mk_apply' (send_push_name_of_t c t s m) @@
+                                    (* @buffered: force output of a trigger header *)
+                                    mk_ctrue::args_of_t_as_vars_with_v c t)
+                                  acc)
+                                mk_cunit
+                                rmaps)
+                              acc)
+                            mk_cunit @@
+                            list_zip ss s_ms
+                      in
+                      (* check if the stmts_maps are in this trigger *)
+                      mk_if
+                        (list_fold_to_last (fun acc s_m -> mk_or (mk_check_s s_m) acc) mk_check_s s_ms)
+                        (* handle isobatches *)
+                        (mk_if (mk_var "is_isobatch")
+                          (mk_block [
+                            (* pull the list of batch vids out *)
+                            mk_at_with' isobatch_buffered_fetch_vid_map_id (mk_var "stmt_map_id") @@
+                              mk_lambda' isobatch_buffered_fetch_vid_map_e @@
+                                mk_case_ns (mk_lookup' "inner" [mk_var "vid"; mk_cunknown]) "vids"
+                                  (mk_error "missing buffered batch") @@
+                                  mk_iter
+                                    (mk_lambda' ["vid", t_vid] push_code) @@
+                                    mk_snd @@ mk_var "vids";
+                            (* send metadata for this batch *)
+                            mk_apply' nd_send_isobatch_push_meta_nm [mk_var "vid"];
+                            (* delete the batch data *)
+                            mk_update_at_with isobatch_buffered_fetch_vid_map_id (mk_var "stmt_map_id") @@
+                              mk_lambda' isobatch_buffered_fetch_vid_map_e @@
+                                mk_delete_block "inner" [mk_var "vid"; mk_cunknown];
+                          ])
+                          (* single vids *)
+                          push_code)
+                        acc_code)
                     mk_cunit
                   t_info) @@
-                  mk_var "stmt_map_ids") @@
-                mk_filter_leq (mk_var "inner") [mk_var "min_vid"; mk_cunknown]
+                  mk_var "stmt_map_ids"
+                ]) @@
+                (* if the min_vid(write) is an isobatche, we need to be stricter in our tests,
+                    since an isobatch can be split between statements *)
+                mk_if (mk_var "min_is_isobatch")
+                  (mk_filter_lt  (mk_var "inner") [mk_var "min_vid"; mk_cunknown]) @@
+                   mk_filter_leq (mk_var "inner") [mk_var "min_vid"; mk_cunknown]
           ;
           (* delete these entries from the fetch buffer *)
           mk_update_at_with nd_fetch_buffer_id (mk_var "map_id") @@
             mk_lambda' nd_fetch_buffer_e @@
-              mk_filter_gt (mk_var "inner") [mk_var "min_vid"; mk_cunknown]
+              mk_if (mk_var "min_is_isobatch")
+                (mk_filter_geq (mk_var "inner") [mk_var "min_vid"; mk_cunknown]) @@
+                mk_filter_gt   (mk_var "inner") [mk_var "min_vid"; mk_cunknown]
         ])
         (* else do nothing *)
         mk_cunit

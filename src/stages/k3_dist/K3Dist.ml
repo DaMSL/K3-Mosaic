@@ -551,7 +551,7 @@ let nd_fetch_buffer_inner =
   let e = ["vid", t_vid; "stmt_map_ids", wrap_tset' [t_int]] in
   create_ds "inner" (wrap_tsortedmap' @@ snd_many e) ~e
 
-(* indexed by map_id *)
+(* map_id -> vid -> stmt_map_id set *)
 let nd_fetch_buffer_id = "nd_fetch_buffer"
 let nd_fetch_buffer_e = ["inner", nd_fetch_buffer_inner.t]
 let nd_fetch_buffer c =
@@ -1445,7 +1445,7 @@ let isobatch_buffered_fetch_helper c =
     List.map (const @@ mk_cint 0) @@ P.get_stmt_list c.p in
   create_ds ~init ~e isobatch_buffered_fetch_helper_id @@ wrap_tvector @@ t_of_e e
 
-(* map from stmt_map_id, batch to list of vids *)
+(* stmt_map_id -> batch -> list of vids *)
 (* for saving info about buffered fetches *)
 let isobatch_buffered_fetch_vid_map_id = "isobatch_buffered_fetch_vid_map"
 let isobatch_buffered_fetch_vid_map_e = isobatch_vid_map_e
