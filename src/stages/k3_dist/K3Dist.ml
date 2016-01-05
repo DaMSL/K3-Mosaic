@@ -1458,9 +1458,9 @@ let isobatch_buffered_fetch_vid_map c =
   create_ds ~init ~e isobatch_buffered_fetch_vid_map_id @@ wrap_tvector @@ t_of_e e
 
 (* vids have a lower bit = 0, isobatch ids have 1 *)
-let is_isobatch_nm = "is_isobatch"
+let is_isobatch_nm = "is_isobatch_id"
 let is_isobatch_fn =
-  mk_global_fn "is_isobatch" ["vid", t_vid] [t_bool] @@
+  mk_global_fn is_isobatch_nm ["vid", t_vid] [t_bool] @@
     mk_neq (mk_var "vid") @@ (mk_mult (mk_divi (mk_var "vid") @@ mk_cint 2) @@ mk_cint 2)
 
 let is_isobatch_id id = mk_apply' is_isobatch_nm [mk_var id]
