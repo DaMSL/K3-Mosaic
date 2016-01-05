@@ -2636,12 +2636,12 @@ let sw_event_driver_single_vid c =
 (* This only fires when we get the token *)
 let sw_event_driver_trig c =
   mk_code_sink' sw_event_driver_trig_nm
-    ["batch_id", t_vid; "vector_clock", TS.sw_vector_clock.t] [] @@
+    ["batch_id2", t_vid; "vector_clock", TS.sw_vector_clock.t] [] @@
     (* convert to isobatch batch id if needed *)
     mk_let ["batch_id"]
       (mk_if (mk_var isobatch_mode.id)
-         (to_isobatch @@ mk_var "batch_id") @@
-         mk_var "batch_id") @@
+         (to_isobatch @@ mk_var "batch_id2") @@
+         mk_var "batch_id2") @@
     (* if we're initialized and we have stuff to send *)
     mk_if (mk_and (mk_var D.sw_init.id) @@ mk_gt (mk_size @@ mk_var D.sw_event_queue.id) @@ mk_cint 0)
       (mk_case_sn (mk_peek @@ mk_var D.sw_event_queue.id) "poly_queue"
