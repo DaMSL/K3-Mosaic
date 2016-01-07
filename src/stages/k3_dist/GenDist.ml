@@ -462,6 +462,8 @@ let sw_send_stmt_bitmap =
   let init = mk_map (mk_lambda' unknown_arg @@ mk_cfalse) @@ mk_var D.my_peers.id in
   create_ds ~init "sw_send_stmt_ds" t_bool_vector
 
+(* constraint: puts must be sent after all the statements, so that if the pushes are already done,
+   the puts can execute (pull out the batches batch_id -> vid mapping) *)
 let sw_send_puts_isobatch_nm t s = sp "sw_%s_%d_send_puts_isobatch" t s
 let sw_send_puts_isobatch c t s =
   let rmap_lmaps = P.rhs_lhs_of_stmt c.p s in
@@ -1100,7 +1102,14 @@ let nd_rcv_put_isobatch_trig c t s =
         (mk_apply' nd_check_stmt_cntr_index_nm
           (* false: no data is being sent *)
           [mk_var "batch_id"; mk_cint s; mk_var "count2"; mk_cfalse])
-           (mk_at_with' isobatch_vid_map_id (mk_cint s) @@
+          (mk_block [
+            (* move stmt helper content to main ds first if needed
+               (if the pushes arrived first) *)
+            mk_if (mk_var isobatch_stmt_helper_has_content.id)
+              (mk_apply' move_isobatch_stmt_helper_nm [mk_var "batch_id"])
+              mk_cunit;
+
+            mk_at_with' isobatch_vid_map_id (mk_cint s) @@
               mk_lambda' isobatch_vid_map_e @@
                 mk_case_ns (mk_lookup (mk_var "inner") [mk_var "batch_id"; mk_cunknown])
                   "vids"
@@ -1113,7 +1122,7 @@ let nd_rcv_put_isobatch_trig c t s =
                           (mk_apply' (nd_log_get_bound_for t) [mk_var "vid"])
                       else id_fn) @@
                         mk_apply' (do_complete_name_of_t t s) @@ mk_ctrue::args_of_t_as_vars_with_v c t) @@
-                    mk_snd @@ mk_var "vids") @@
+                    mk_snd @@ mk_var "vids"]) @@
             mk_cunit
     ]
 
@@ -1122,6 +1131,7 @@ let nd_rcv_put_isobatch_trig c t s =
 let nd_rcv_stmt =
   mk_global_fn nd_rcv_stmt_nm ["stmt_id", t_stmt_id; "vid", t_vid] [] @@
   mk_block [
+      mk_assign isobatch_stmt_helper_has_content.id mk_ctrue;
       mk_insert_at isobatch_stmt_helper_bitmap_id (mk_var "stmt_id") [mk_ctrue];
       mk_update_at_with isobatch_stmt_helper_id (mk_var "stmt_id") @@
         mk_lambda' isobatch_stmt_helper_e @@
@@ -2513,26 +2523,15 @@ let nd_from_sw_trig_dispatcher_trig c =
             GC.nd_ack_send_code ~addr_nm:"sender_ip" ~vid_nm:"batch_id";
 
           mk_if (mk_var "is_isobatch")
-            (mk_block [
-              (* replace, clear out the isobatch_map_helper *)
-              mk_iter_bitmap' ~idx:stmt_ctr.id
-                (mk_insert_at isobatch_stmt_helper_id (mk_var stmt_ctr.id) [mk_empty isobatch_map_inner2.t])
-                isobatch_stmt_helper_bitmap_id;
-              mk_set_all isobatch_stmt_helper_bitmap_id [mk_cfalse];
-              ])
+            (mk_apply' clear_isobatch_stmt_helper_nm [])
             mk_cunit;
 
           mk_apply' trig_dispatcher_nm [mk_var "batch_id"; mk_var "poly_queue"];
 
-          mk_if (mk_var "is_isobatch")
-            (* iterate over the isobatch map helper, and move its contents to the isobatch_map *)
-            (mk_iter_bitmap' ~idx:stmt_ctr.id
-              (mk_let ["x"] (mk_delete_at isobatch_stmt_helper_id @@ mk_var stmt_ctr.id) @@
-                mk_update_at_with isobatch_vid_map_id (mk_var stmt_ctr.id) @@
-                  mk_lambda' isobatch_vid_map_e @@
-                    mk_insert_block "inner" [mk_var "batch_id"; mk_var "x"])
-              isobatch_stmt_helper_bitmap_id)
-             mk_cunit;
+          (* check if we need to move stuff from the isobatch stmt helper *)
+          mk_if (mk_and (mk_var "is_isobatch") @@ mk_var isobatch_stmt_helper_has_content.id)
+            (mk_apply' move_isobatch_stmt_helper_nm [mk_var "batch_id"])
+            mk_cunit;
        ]) @@
       (* else, stash the poly_queue in our buffer *)
       mk_insert nd_dispatcher_buf.id

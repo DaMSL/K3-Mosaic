@@ -678,8 +678,7 @@ let nd_stmt_cntrs_inner =
 let nd_stmt_cntrs_id = "nd_stmt_cntrs"
 let nd_stmt_cntrs_e = [nd_stmt_cntrs_inner.id, nd_stmt_cntrs_inner.t]
 let nd_stmt_cntrs c =
-  let ss = List.map (const @@ mk_empty nd_stmt_cntrs_inner.t) @@
-             create_range @@ P.get_max_stmt c.p + 1 in
+  let ss = List.map (const @@ mk_empty nd_stmt_cntrs_inner.t) @@ P.get_stmt_list c.p in
   (* indexed by stmt_id *)
   let e = nd_stmt_cntrs_e in
   let t = wrap_tvector' @@ snd_many e in
@@ -1408,6 +1407,9 @@ let isobatch_stmt_helper_bitmap c =
     List.map (const @@ mk_cfalse) @@ P.get_stmt_list c.p in
   create_ds ~init isobatch_stmt_helper_bitmap_id @@ wrap_tvector t_bool
 
+let isobatch_stmt_helper_has_content =
+  create_ds "isobatch_stmt_helper_has_content" @@ mut t_bool
+
 (* singleton vector for creating isobatch_vid_map easily *)
 (* indexed by stmt_id *)
 let isobatch_stmt_helper_id = "isobatch_stmt_helper"
@@ -1418,6 +1420,18 @@ let isobatch_stmt_helper c =
     k3_container_of_list (wrap_tvector t_int) @@
     List.map (const @@ mk_cint 0) @@ P.get_stmt_list c.p in
   create_ds ~init ~e isobatch_stmt_helper_id @@ wrap_tvector @@ t_of_e e
+
+let clear_isobatch_stmt_helper_nm = "clear_isobatch_stmt_helper"
+let clear_isobatch_stmt_helper =
+  mk_global_fn clear_isobatch_stmt_helper_nm [] [] @@
+    mk_block [
+      (* replace, clear out the isobatch_map_helper *)
+      mk_iter_bitmap' ~idx:stmt_ctr.id
+        (mk_insert_at isobatch_stmt_helper_id (mk_var stmt_ctr.id) [mk_empty isobatch_map_inner2.t])
+        isobatch_stmt_helper_bitmap_id;
+      mk_set_all isobatch_stmt_helper_bitmap_id [mk_cfalse];
+      mk_assign isobatch_stmt_helper_has_content.id mk_cfalse;
+      ]
 
 let isobatch_map_inner =
   let e = ["batch_id", t_vid; isobatch_map_inner2.id, isobatch_map_inner2.t] in
@@ -1433,6 +1447,22 @@ let isobatch_vid_map c =
     k3_container_of_list (wrap_tvector t_int) @@
     List.map (const @@ mk_cint 0) @@ P.get_stmt_list c.p in
   create_ds ~init ~e isobatch_vid_map_id @@ wrap_tvector @@ t_of_e e
+
+(* function to move batch,vids,stmts from the helper to the real ds *)
+let move_isobatch_stmt_helper_nm = "move_isobatch_stmt_helper"
+let move_isobatch_stmt_helper =
+  mk_global_fn move_isobatch_stmt_helper_nm ["batch_id", t_vid] [] @@
+  mk_block [
+    (* iterate over the isobatch map helper, and move its contents to the isobatch_map *)
+    mk_iter_bitmap' ~idx:stmt_ctr.id
+      (mk_let ["x"] (mk_delete_at isobatch_stmt_helper_id @@ mk_var stmt_ctr.id) @@
+        mk_update_at_with isobatch_vid_map_id (mk_var stmt_ctr.id) @@
+          mk_lambda' isobatch_vid_map_e @@
+            mk_insert_block "inner" [mk_var "batch_id"; mk_var "x"])
+      isobatch_stmt_helper_bitmap_id;
+    mk_assign isobatch_stmt_helper_has_content.id mk_cfalse;
+  ]
+
 
 (* singleton vector for creating isobatch_vid_map easily *)
 (* indexed by stmt_id *)
@@ -1632,6 +1662,8 @@ let sw_csv_index = create_ds "sw_csv_index" @@ t_int
 
 let functions c =
   [is_isobatch_fn;
+   move_isobatch_stmt_helper;
+   clear_isobatch_stmt_helper;
    clear_send_trig_args_map;
    clear_poly_queues_fn c]
 
@@ -1707,6 +1739,7 @@ let global_vars c dict =
       isobatch_threshold;
       isobatch_stmt_helper_bitmap c;
       isobatch_stmt_helper c;
+      isobatch_stmt_helper_has_content;
       isobatch_vid_map c; (* stmt, batch -> vids *)
       isobatch_buffered_fetch_helper c;
       isobatch_buffered_fetch_vid_map c;
