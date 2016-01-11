@@ -2463,7 +2463,7 @@ let trig_dispatcher_unique c =
   ]
 
 let nd_dispatcher_buf_inner =
-  let e = ["batch_id", t_vid; "poly_queue", poly_queue.t] in
+  let e = ["batch_id", t_vid; "sender_ip", t_int; "poly_queue", poly_queue.t] in
   create_ds ~e "inner_dispatcher_buf" @@ t_of_e e
 
 (* buffer for dispatcher to reorder poly msgs *)
@@ -2501,8 +2501,8 @@ let nd_dispatcher_next_num = create_ds "nd_dispatcher_next_num" @@ mut t_int
 
 let nd_from_sw_trig_dispatcher_trig c =
   mk_code_sink' nd_from_sw_trig_dispatcher_trig_nm
-    ["sender_ip", t_int; "num", t_int; "batch_data", nd_dispatcher_buf_inner.t] [] @@
-  mk_let ["batch_id"; "poly_queue"] (mk_var "batch_data") @@
+    ["num", t_int; "batch_data", nd_dispatcher_buf_inner.t] [] @@
+  mk_let ["batch_id"; "sender_ip"; "poly_queue"] (mk_var "batch_data") @@
   mk_let_block ["is_isobatch"] (is_isobatch_id "batch_id")
   [
     mk_assign nd_dispatcher_next_num.id @@
@@ -2519,8 +2519,7 @@ let nd_from_sw_trig_dispatcher_trig c =
           mk_incr nd_dispatcher_next_num.id;
           clear_poly_queues c;
           (* buffer the ack to the switch *)
-          mk_if_eq (mk_var "sender_ip") (mk_cint @@ -1) mk_cunit @@
-            GC.nd_ack_send_code ~addr_nm:"sender_ip" ~vid_nm:"batch_id";
+          GC.nd_ack_send_code ~addr_nm:"sender_ip" ~vid_nm:"batch_id";
 
           mk_if (mk_var "is_isobatch")
             (mk_apply' clear_isobatch_stmt_helper_nm [])
@@ -2535,7 +2534,8 @@ let nd_from_sw_trig_dispatcher_trig c =
        ]) @@
       (* else, stash the poly_queue in our buffer *)
       mk_insert nd_dispatcher_buf.id
-        [mk_var "num"; mk_tuple [mk_var "batch_id"; mk_var "poly_queue"]]
+        [mk_var "num"; mk_tuple
+           [mk_var "batch_id"; mk_var "sender_ip"; mk_var "poly_queue"]]
     ;
     (* check if the next num is in the buffer *)
     mk_delete_with nd_dispatcher_buf.id [mk_var nd_dispatcher_next_num.id; mk_cunknown]
@@ -2543,7 +2543,7 @@ let nd_from_sw_trig_dispatcher_trig c =
       (* recurse with the next number *)
       (mk_lambda' nd_dispatcher_buf.e @@
        mk_send nd_from_sw_trig_dispatcher_trig_nm G.me_var
-         [mk_cint (-1); mk_var "num"; mk_var "batch_info"])
+         [mk_var "num"; mk_var "batch_info"])
   ]
 
 let sw_event_driver_isobatch_nm = "sw_event_driver_isobatch"
@@ -2685,9 +2685,8 @@ let sw_event_driver_trig c =
                     [
                       prof_property 0 @@ ProfSendPoly("batch_id", "ip", "pq");
                       mk_sendi nd_from_sw_trig_dispatcher_trig_nm (mk_var "ip")
-                        [mk_var D.me_int.id;
-                         mk_at' "vector_clock" @@ mk_var "ip";
-                         mk_tuple [mk_var "batch_id"; mk_var "pq"]];
+                        [mk_at' "vector_clock" @@ mk_var "ip";
+                         mk_tuple [mk_var "batch_id"; mk_var D.me_int.id; mk_var "pq"]];
                       mk_add (mk_var "count") @@ mk_cint 1
                     ])
                 (mk_cint 0) @@
