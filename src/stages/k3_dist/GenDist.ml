@@ -420,7 +420,7 @@ let send_put_isobatch_inner =
   let e = ["inner2", send_put_isobatch_inner2.t] in
   create_ds ~e "inner" @@ wrap_tvector @@ t_of_e e
 
-(* dest ip -> source ip vector, for a whole batch *)
+(* dest ip -> source ip -> map vector, for a whole batch *)
 let send_put_isobatch_map_id = "send_put_isobatch_map"
 let send_put_isobatch_map_e = ["bitmap", t_bool_vector; "inner", send_put_isobatch_inner.t]
 let send_put_isobatch_map c =
@@ -479,7 +479,8 @@ let sw_send_puts_isobatch c t s =
         let route_key, route_pat_idx = P.key_pat_from_bound c.p c.route_indices s rmap in
         R.route_lookup c rmap
           (mk_cint rmap::route_key) (mk_cint route_pat_idx) @@
-          (* common block *)
+          (* common block
+             for each destination, we mark up the sources *)
           (let update_and_send ip_src ip_dest =
              mk_block [
               mk_insert_at send_put_bitmap.id (mk_var ip_dest) [mk_ctrue];
@@ -511,10 +512,12 @@ let sw_send_puts_isobatch c t s =
           if special_route_stmt c s then
             (* we need to isolate each of the bound params separately *)
             let idx_rmaps = insert_index_snd ~first:1 @@ P.nonempty_rmaps_of_stmt c.p s in
-            let m_idx = List.assoc rmap idx_rmaps in
+            let m_idx_in_s = List.assoc rmap idx_rmaps in
             let bound_params = insert_index_fst @@ bound_params_of_stmt c s in
             let single_rmap = List.length idx_rmaps = 1 in
             let swallow_f f e = if single_rmap then e else f e in
+            (* @idx is the number of bound param in the trigger
+               @m_idx is the location of the variable in the map *)
             mk_let ["buckets"]
               (List.fold_left (fun acc_code (idx, (id, (m, m_idx))) ->
                   mk_let ["bucket_"^soi idx]
@@ -531,14 +534,15 @@ let sw_send_puts_isobatch c t s =
                          [mk_var "buckets"; mk_cunknown]) "lkup"
                 (mk_error "couldn't find buckets in optimized ds") @@
                 (* look for our entry in the ds *)
-                mk_case_ns (mk_lookup (swallow_f (mk_subscript m_idx) @@
+                mk_case_ns (mk_lookup (swallow_f (mk_subscript m_idx_in_s) @@
                                       mk_snd @@ mk_var "lkup")
-                            [mk_var "ip"; mk_cunknown]) "lkup2"
+                            [mk_var ip.id; mk_cunknown]) "lkup2"
                   (* do nothing if we're not in the ds *)
                   mk_cunit @@
-                  (* otherwise add to result bitmap *)
-                  mk_let ["ip_dest"] (mk_fst @@ mk_var "lkup2") @@
-                    update_and_send "ip" "ip_dest")
+                  (* otherwise add all dest ips to result bitmap *)
+                  mk_iter_bitmap' ~idx:ip2.id
+                    (update_and_send ip.id ip2.id)
+                    "lkup2")
               R.route_bitmap.id
            else
              (* shuffle allows us to recreate the path the data will take from rhs to lhs,
@@ -871,7 +875,7 @@ let nd_rcv_fetch_trig c t s =
 (* indexed by map_id *)
 let send_push_isobatch_inner = create_ds "inner" t_bool_vector
 
-(* ip -> stmt_map_id -> bool *)
+(* dest_ip -> stmt_map_id -> bool *)
 let send_push_isobatch_map_id = "send_push_isobatch_map"
 let send_push_isobatch_map_e = ["inner", send_push_isobatch_inner.t]
 let send_push_isobatch_map c =

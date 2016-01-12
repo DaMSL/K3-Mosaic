@@ -1384,7 +1384,7 @@ let special_route_stmts c =
 (* list the bound arguments within the statement in trig arg order *)
 let bound_params_of_stmt c s =
   let info = IntMap.find s c.freevar_info in
-  let lmap = fst @@ info.lmap_bound in
+  let lmap = fst info.lmap_bound in
   let lbound = List.map (fun (id, n) -> id, (lmap, n)) @@ snd info.lmap_bound in
   let rbound = List.flatten @@ List.map (fun (rmap, l) -> List.map (fun (id, n) -> id, (rmap, n)) l) @@
     info.rmaps_bound in

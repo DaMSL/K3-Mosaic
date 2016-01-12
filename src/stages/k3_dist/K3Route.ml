@@ -634,7 +634,8 @@ let route_opt_inner =
   let e = ["node", t_int; "sender_count", t_int] in
   create_ds ~e "route_opt_inner" @@ wrap_tbag @@ t_of_e e
 
-(* data structures to compute: for send_put *)
+(* data structures to compute for non-isobatch send_put *)
+(* bound_buckets -> dest_node, sender_count bag *)
 let route_opt_ds_nm s = "route_opt_ds_"^soi s
 let route_opt_ds c =
   List.map (fun s -> s,
@@ -653,6 +654,7 @@ let route_opt_push_inner n =
   create_ds route_opt_push_inner_id @@ t_of_e e
 
 (* data structures to compute: for send_push's empty messages *)
+(* bound_buckets -> tuple idx of map -> src_node -> dest_node vector *)
 let route_opt_push_ds_nm s = "route_opt_push_ds_"^soi s
 let route_opt_push_ds c =
   List.map (fun s -> s,
