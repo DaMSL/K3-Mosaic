@@ -540,9 +540,9 @@ let sw_send_puts_isobatch c t s =
                   (* do nothing if we're not in the ds *)
                   mk_cunit @@
                   (* otherwise add all dest ips to result bitmap *)
-                  mk_iter_bitmap' ~idx:ip2.id
-                    (update_and_send ip.id ip2.id)
-                    "lkup2")
+                  mk_iter_bitmap ~idx:ip2.id
+                    (update_and_send ip.id ip2.id) @@
+                    mk_snd @@ mk_var "lkup2")
               R.route_bitmap.id
            else
              (* shuffle allows us to recreate the path the data will take from rhs to lhs,
