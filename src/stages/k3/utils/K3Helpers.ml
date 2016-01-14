@@ -994,26 +994,27 @@ let mk_iter_bitmap ?(all=false) ?(idx="ip") e bitmap =
 
 let mk_iter_bitmap' ?all ?idx e bitmap = mk_iter_bitmap ?all ?idx e (mk_var bitmap)
 
-let mk_agg_bitmap ?(all=false) ?(idx="ip") args e zero bitmap =
+let mk_agg_bitmap ?(all=false) ?(idx="ip") ?(move=false) args e zero bitmap =
   mk_block [
     mk_assign idx @@ mk_cint 0;
-    mk_agg (mk_lambda2' args ["has_val", t_bool] @@
-        (* beta reducing messes up ordering here *)
-        U.add_property "NoBetaReduce" @@
-        mk_let ["res"]
-          (if all then e
-            else mk_if (mk_var "has_val")
-                  e @@
-                  mk_tuple @@ ids_to_vars @@ fst_many args) @@
-        mk_block [
-          mk_assign idx @@ mk_add (mk_var idx) @@ mk_cint 1;
-          mk_var "res"
-        ])
-      zero @@
-      bitmap
+    (if move then U.add_property "Move" else id_fn) @@
+      mk_agg (mk_lambda2' args ["has_val", t_bool] @@
+          (* beta reducing messes up ordering here *)
+          U.add_property "NoBetaReduce" @@
+          mk_let ["res"]
+            (if all then e
+              else mk_if (mk_var "has_val")
+                    e @@
+                    mk_tuple @@ ids_to_vars @@ fst_many args) @@
+          mk_block [
+            mk_assign idx @@ mk_add (mk_var idx) @@ mk_cint 1;
+            mk_var "res"
+          ])
+        zero @@
+        bitmap
   ]
 
-let mk_agg_bitmap' ?all ?idx args e zero bitmap = mk_agg_bitmap ?all ?idx args e zero (mk_var bitmap)
+let mk_agg_bitmap' ?all ?idx ?move args e zero bitmap = mk_agg_bitmap ?all ?idx ?move args e zero (mk_var bitmap)
 
 (* check for tag validity *)
 let mk_check_tag tag col idx offset e =

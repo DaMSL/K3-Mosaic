@@ -473,8 +473,8 @@ val mk_filter_cnt : expr_t -> data_struct -> expr_t
 (* @all: all values (even false) or just trues *)
 val mk_iter_bitmap : ?all:bool -> ?idx:string -> expr_t -> expr_t -> expr_t
 val mk_iter_bitmap' : ?all:bool -> ?idx:string -> expr_t -> id_t -> expr_t
-val mk_agg_bitmap : ?all:bool -> ?idx:string -> (id_t * type_t) list -> expr_t -> expr_t -> expr_t -> expr_t
-val mk_agg_bitmap' : ?all:bool -> ?idx:string -> (id_t * type_t) list -> expr_t -> expr_t -> id_t -> expr_t
+val mk_agg_bitmap : ?all:bool -> ?idx:string -> ?move:bool -> (id_t * type_t) list -> expr_t -> expr_t -> expr_t -> expr_t
+val mk_agg_bitmap' : ?all:bool -> ?idx:string -> ?move:bool -> (id_t * type_t) list -> expr_t -> expr_t -> id_t -> expr_t
 
 val mk_check_tag : int -> expr_t -> expr_t -> expr_t -> expr_t -> expr_t
 val mk_check_tag' : ?unique:bool -> int -> expr_t -> expr_t

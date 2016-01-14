@@ -2669,7 +2669,7 @@ let sw_event_driver_trig c =
                mk_apply' sw_event_driver_single_vid_nm [mk_var "batch_id"; mk_var "poly_queue"]) @@
           (* update the vector clock by bits in the outgoing poly_queues *)
           mk_let ["vector_clock"]
-            (mk_agg_bitmap'
+            (mk_agg_bitmap' ~move:true
               ["acc", TS.sw_vector_clock.t]
               (mk_update_at_with_block "acc" (mk_var "ip") @@
                 mk_lambda' ["x", t_int] @@
