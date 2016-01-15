@@ -519,7 +519,8 @@ let num_nodes =
   let d_init = mk_size @@ mk_var nodes.id in
   create_ds "num_nodes" (mut t_int) ~d_init
 
-let sw_event_driver_trig_nm = "sw_event_driver_trig"
+let sw_rcv_token_trig_nm = "sw_rcv_token_trig"
+let sw_rcv_vector_clock_nm = "sw_rcv_vector_clock"
 
 (* timing data structures *)
 let ms_start_time = create_ds "ms_start_time" @@ mut t_int

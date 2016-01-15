@@ -2635,87 +2635,115 @@ let sw_event_driver_single_vid c =
   (mk_var "batch_id") @@
   mk_var "poly_queue"
 
-(* The driver trigger: loop over the even data structures as long as we have spare vids *)
-(* This only fires when we get the token *)
-let sw_event_driver_trig c =
-  mk_code_sink' sw_event_driver_trig_nm
-    ["batch_id2", t_vid; "vector_clock", TS.sw_vector_clock.t] [] @@
+(* save the current_batch_id between receiving the token and vector clock *)
+let sw_token_current_batch_id = create_ds "sw_token_current_batch_id" @@ mut t_vid
+
+(* The rcv_token trigger: loop over the event data structures as long as we have spare vids *)
+(* We essentially have 2 loops to allow concurrent switch operation: the next_vid loop (token),
+   and the vector_clock loop *)
+let sw_rcv_token_trig c =
+  mk_code_sink' sw_rcv_token_trig_nm
+    ["batch_id2", t_vid] [] @@
     (* convert to isobatch batch id if needed *)
-    mk_let ["batch_id"]
+    mk_let_block ["batch_id"]
       (mk_if (mk_var isobatch_mode.id)
          (to_isobatch @@ mk_var "batch_id2") @@
-         mk_var "batch_id2") @@
-    (* if we're initialized and we have stuff to send *)
-    mk_if (mk_and (mk_var D.sw_init.id) @@ mk_gt (mk_size @@ mk_var D.sw_event_queue.id) @@ mk_cint 0)
-      (mk_case_sn (mk_peek @@ mk_var D.sw_event_queue.id) "poly_queue"
-        (mk_block [
-          mk_poly_unpack @@ mk_var "poly_queue";
-          clear_poly_queues c;
+         mk_var "batch_id2")
+    [
+      mk_assign sw_token_current_batch_id.id @@ mk_var "batch_id";
+      (* if we're initialized and we have stuff to send *)
+      mk_if (mk_and (mk_var D.sw_init.id) @@
+                    mk_gt (mk_size @@ mk_var D.sw_event_queue.id) @@ mk_cint 0)
+        (mk_case_sn (mk_peek @@ mk_var D.sw_event_queue.id) "poly_queue"
+          (mk_block [
+            mk_poly_unpack @@ mk_var "poly_queue";
+            clear_poly_queues c;
 
-          (* for debugging, sleep if we've been asked to *)
-          mk_if (mk_neq (mk_var D.sw_event_driver_sleep.id) @@ mk_cint 0)
-            (mk_apply' "usleep" [mk_var D.sw_event_driver_sleep.id])
-            mk_cunit;
-          (* for profiling, save the vid and time *)
-          prof_property prof_tag_pre_send_fetch @@ ProfLatency("batch_id", "-1");
+            (* for debugging, sleep if we've been asked to *)
+            mk_if (mk_neq (mk_var D.sw_event_driver_sleep.id) @@ mk_cint 0)
+              (mk_apply' "usleep" [mk_var D.sw_event_driver_sleep.id])
+              mk_cunit;
+            (* for profiling, save the vid and time *)
+            prof_property prof_tag_pre_send_fetch @@ ProfLatency("batch_id", "-1");
 
-          (* clear out the trig arg map: it's batch-specific *)
-          mk_apply' clear_send_trig_args_map_nm [];
+            (* clear out the trig arg map: it's batch-specific *)
+            mk_apply' clear_send_trig_args_map_nm [];
 
-          (* calculate the next vid *)
-          mk_let ["next_vid"]
-            (mk_if (mk_var isobatch_mode.id)
-              (mk_apply' sw_event_driver_isobatch_nm [mk_var "batch_id"; mk_var "poly_queue"]) @@
-               mk_apply' sw_event_driver_single_vid_nm [mk_var "batch_id"; mk_var "poly_queue"]) @@
-          (* update the vector clock by bits in the outgoing poly_queues *)
-          mk_let ["vector_clock"]
-            (mk_agg_bitmap' ~move:true
-              ["acc", TS.sw_vector_clock.t]
-              (mk_update_at_with_block "acc" (mk_var "ip") @@
-                mk_lambda' ["x", t_int] @@
-                  (* if we're at max_int, skip to 0 so we don't get negatives *)
-                  mk_if (mk_eq (mk_var "x") @@ mk_var g_max_int.id)
-                    (mk_cint 0) @@
-                    mk_add (mk_cint 1) @@ mk_var "x")
-              (mk_var "vector_clock")
-              D.poly_queue_bitmap.id) @@
-          mk_block [
-            (* send (move) the outgoing polyqueues *)
-            mk_let ["send_count"]
-              (mk_agg_bitmap' ["count", t_int]
-                (* move and delete the poly_queue and ship it out with the vector clock num *)
-                  (* pull out the poly queue *)
-                  (mk_let_block ["pq"] (mk_delete_at poly_queues.id @@ mk_var "ip")
-                    [
-                      prof_property 0 @@ ProfSendPoly("batch_id", "ip", "pq");
-                      mk_sendi nd_from_sw_trig_dispatcher_trig_nm (mk_var "ip")
-                        [mk_at' "vector_clock" @@ mk_var "ip";
-                         mk_tuple [mk_var "batch_id"; mk_var D.me_int.id; mk_var "pq"]];
-                      mk_add (mk_var "count") @@ mk_cint 1
-                    ])
+            (* calculate the next vid using the size of the poly_queue and send it on *)
+            mk_let_block ["next_vid"]
+              (mk_mult
+                (mk_add (mk_divi (mk_var "batch_id") @@ mk_cint 2) @@
+                  mk_size @@ mk_var "poly_queue") @@
+                mk_cint 2)
+              [
+                (* send the token to the next switch for low latency and parallelism *)
+                mk_send sw_rcv_token_trig_nm (mk_var TS.sw_next_switch_addr.id) [mk_var "next_vid"];
+
+                (* dispatch the events, preparing the poly_queues *)
+                mk_ignore
+                  (mk_if (mk_var isobatch_mode.id)
+                    (mk_apply' sw_event_driver_isobatch_nm   [mk_var "batch_id"; mk_var "poly_queue"]) @@
+                    mk_apply' sw_event_driver_single_vid_nm [mk_var "batch_id"; mk_var "poly_queue"]);
+
+                (* finish popping the incoming queue *)
+                mk_pop D.sw_event_queue.id;
+                (* update highest vid seen *)
+                mk_assign TS.sw_highest_vid.id @@ mk_var "next_vid";
+
+                (* for profiling, annotate with the last vid seen *)
+                prof_property prof_tag_post_send_fetch @@ ProfLatency("next_vid", "-1");
+            ]]) @@
+          mk_error "oops") @@
+        (* otherwise send the same vid *)
+        mk_send sw_rcv_token_trig_nm (mk_var TS.sw_next_switch_addr.id) [mk_var "batch_id"]
+    ]
+
+(* The vector clock is sent separately after the token, to make sure that the switches
+   don't have to wait for each other and can process in parallel *)
+let sw_rcv_vector_clock_trig =
+  mk_code_sink' sw_rcv_vector_clock_nm
+    ["vector_clock2", TS.sw_vector_clock.t] [] @@
+      (* update the vector clock by bits in the outgoing poly_queues *)
+      (* convert to isobatch batch id if needed *)
+      mk_let_block ["vector_clock"]
+        (mk_agg_bitmap' ~move:true
+          ["acc", TS.sw_vector_clock.t]
+          (mk_update_at_with_block "acc" (mk_var "ip") @@
+            mk_lambda' ["x", t_int] @@
+              (* if we're at max_int, skip to 0 so we don't get negatives *)
+              mk_if (mk_eq (mk_var "x") @@ mk_var g_max_int.id)
                 (mk_cint 0) @@
-               D.poly_queue_bitmap.id) @@
-            (* save the latest ack info *)
-            GC.sw_update_send ~n:(mk_var "send_count") ~vid_nm:"batch_id";
-            (* send the new (vid, vector clock). make sure it's after we use vector
-               clock data so we can move *)
-            mk_send sw_event_driver_trig_nm (mk_var TS.sw_next_switch_addr.id)
-              [mk_var "next_vid"; mk_var "vector_clock"];
-            (* finish popping the incoming queue *)
-            mk_pop D.sw_event_queue.id;
-            (* update highest vid seen *)
-            mk_assign TS.sw_highest_vid.id @@ mk_var "next_vid";
+                mk_add (mk_cint 1) @@ mk_var "x")
+          (mk_var "vector_clock2")
+          D.poly_queue_bitmap.id)
+      [
+        (* send (move) the outgoing polyqueues *)
+        mk_let ["send_count"]
+          (mk_agg_bitmap' ["count", t_int]
+            (* move and delete the poly_queue and ship it out with the vector clock num *)
+              (* pull out the poly queue *)
+              (mk_let_block ["pq"] (mk_delete_at poly_queues.id @@ mk_var "ip")
+                [
+                  prof_property 0 @@ ProfSendPoly(sw_token_current_batch_id.id, "ip", "pq");
+                  mk_sendi nd_from_sw_trig_dispatcher_trig_nm (mk_var "ip")
+                    [mk_at' "vector_clock" @@ mk_var "ip";
+                     mk_tuple
+                       [mk_var sw_token_current_batch_id.id;
+                        mk_var D.me_int.id;
+                        mk_var "pq"]];
+                  mk_add (mk_var "count") @@ mk_cint 1
+                ])
+            (mk_cint 0) @@
+            D.poly_queue_bitmap.id) @@
+        (* save the latest ack send info *)
+        GC.sw_update_send ~n:(mk_var "send_count") ~vid_nm:sw_token_current_batch_id.id;
+        (* send the new (vid, vector clock). make sure it's after we use vector
+            clock data so we can move *)
+        mk_send sw_rcv_vector_clock_nm (mk_var TS.sw_next_switch_addr.id) [mk_var "vector_clock"];
 
-            (* for profiling, annotate with the last vid seen *)
-            prof_property prof_tag_post_send_fetch @@ ProfLatency("next_vid", "-1");
-
-            (* check if we're done *)
-            Proto.sw_check_done ~check_size:true
-          ]]) @@
-        mk_error "oops") @@
-     (* otherwise send the same vid and vector clock *)
-     mk_send sw_event_driver_trig_nm (mk_var TS.sw_next_switch_addr.id)
-       [mk_var "batch_id"; mk_var "vector_clock"]
+        (* check if we're done *)
+        Proto.sw_check_done ~check_size:true
+      ]
 
 let sw_sent_demux_ctr = create_ds "sw_sent_demux_ctr" @@ mut t_int
 let sw_total_demux_ctr = create_ds "sw_total_demux_ctr" @@ mut t_int
@@ -2983,6 +3011,7 @@ let declare_global_vars c ast =
      rcv_fetch_isobatch_bitmap c;
      rcv_fetch_isobatch_decision_bitmap c;
      sw_send_fetch_isobatch_next_vid;
+     sw_token_current_batch_id;
     ]
 
 let declare_global_funcs c ast =
@@ -3141,7 +3170,8 @@ let gen_dist ?(gen_deletes=true)
         trig_dispatcher_trig c;
         trig_dispatcher_trig_unique c;
         nd_from_sw_trig_dispatcher_trig c;
-        sw_event_driver_trig c;
+        sw_rcv_token_trig c;
+        sw_rcv_vector_clock_trig;
         sw_demux c;
         sw_demux_poly c;
       ]

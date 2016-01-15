@@ -139,6 +139,9 @@ let rcv_jobs c =
       (* set next switch addr *)
       (delayed_init TS.sw_next_switch_addr)
       mk_cunit;
+    (* if we're master *)
+    mk_if_eq (mk_var D.job.id) (mk_var D.job_master.id)
+      (delayed_init TS.ms_last_switch_addr) mk_cunit;
     (* add to node ring *)
     K3Ring.node_ring_init;
     (* init route's node bitmap *)
