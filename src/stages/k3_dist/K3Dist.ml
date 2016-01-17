@@ -883,6 +883,18 @@ let upoly_queue_bitmap =
     mk_map (mk_lambda' unknown_arg mk_cfalse) @@ mk_var my_peers.id in
   create_ds "upoly_queue_bitmap" ~init @@ wrap_tvector t_bool
 
+(* switch poly queues - move into it between token ring triggers *)
+let sw_poly_queues =
+  let e = ["queue", poly_queue.t] in
+  let init =
+    mk_map (mk_lambda' unknown_arg @@ mk_var "empty_poly_queue") @@ mk_var my_peers.id in
+  create_ds ~e ~init "sw_poly_queues" @@ wrap_tvector' @@ snd_many e
+
+let sw_poly_queue_bitmap =
+  let init =
+    mk_map (mk_lambda' unknown_arg mk_cfalse) @@ mk_var my_peers.id in
+  create_ds "sw_poly_queue_bitmap" ~init @@ wrap_tvector t_bool
+
 (* we use this to make sure some trig header gets sent at least once per sub-trigger handling *)
 let send_trig_header_bitmap =
   let init =
@@ -1724,6 +1736,8 @@ let global_vars c dict =
       poly_queue_bitmap;
       upoly_queues;
       upoly_queue_bitmap;
+      sw_poly_queues;
+      sw_poly_queue_bitmap;
       send_trig_header_bitmap;
       send_trig_args_map;
       send_trig_args_bitmap;
