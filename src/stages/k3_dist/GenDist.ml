@@ -2730,7 +2730,7 @@ let sw_rcv_vector_clock_trig =
                 (mk_cint 0) @@
                 mk_add (mk_cint 1) @@ mk_var "x")
           (mk_var "vector_clock2")
-          D.poly_queue_bitmap.id)
+          sw_poly_queue_bitmap.id)
         [
           (* send (move) the outgoing polyqueues *)
           mk_let ["send_count"]
@@ -2749,7 +2749,7 @@ let sw_rcv_vector_clock_trig =
                     mk_add (mk_var "count") @@ mk_cint 1
                   ])
               (mk_cint 0) @@
-              D.sw_poly_queue_bitmap.id) @@
+              sw_poly_queue_bitmap.id) @@
           (* save the latest ack send info *)
           GC.sw_update_send ~n:(mk_var "send_count") ~vid_nm:sw_token_current_batch_id.id;
           (* send the new (vid, vector clock). make sure it's after we use vector
