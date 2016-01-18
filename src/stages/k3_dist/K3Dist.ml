@@ -99,6 +99,7 @@ type config = {
   map_type : map_type;
   gen_deletes : bool;
   gen_correctives : bool;
+  gen_single_vid : bool;
   (* optimize figuring out corrective map possiblities *)
   corr_maps : map_id_t list;
   (* whether there's a sys_ready_event trigger *)
@@ -129,6 +130,7 @@ let default_config = {
   map_type = MapVMap;
   gen_deletes = true;
   gen_correctives = true;
+  gen_single_vid = true;
   corr_maps = [];
   sys_init = false;
   stream_file = "";
@@ -755,14 +757,14 @@ let m_nm = P.map_name_of
 let trig_save_arg_sub_handler_name_of_t t = "nd_trig_save_arg_sub_handler_"^t
 let trig_load_arg_sub_handler_name_of_t t = "nd_trig_load_arg_sub_handler_"^t
 let trig_no_arg_sub_handler_name_of_t t   = "nd_trig_no_arg_sub_handler_"^t
-let send_fetch_name_of_t t s = sp "sw_%s_%d_send_fetch" t s
+let send_fetch_single_vid_name_of_t t s = sp "sw_%s_%d_send_fetch_single_vid" t s
 let send_fetches_isobatch_name_of_t t = sp "sw_%s_send_fetches_isobatch" t
-let rcv_fetch_name_of_t t s = sp "nd_%s_%d_rcv_fetch" t s
+let rcv_fetch_single_vid_name_of_t t s = sp "nd_%s_%d_rcv_fetch_single_vid" t s
 let rcv_fetch_isobatch_name_of_t t s = sp "nd_%s_%d_rcv_fetch_isobatch" t s
-let rcv_put_name_of_t t s = sp "nd_%s_%d_rcv_put" t s
+let rcv_put_single_vid_name_of_t t s = sp "nd_%s_%d_rcv_put_single_vid" t s
 let rcv_put_isobatch_name_of_t t s = sp "nd_%s_%d_rcv_put_isobatch" t s
-let rcv_stmt_name_of_t t s = sp "nd_%s_%d_rcv_stmt" t s
-let send_push_name_of_t c t s m = sp "nd_%s_%d_send_push_%s" t s (m_nm c.p m)
+let rcv_stmt_isobatch_name_of_t t s = sp "nd_%s_%d_rcv_stmt_isobatch" t s
+let send_push_name_of_t c t s m = sp "nd_%s_%d_send_push_single_vid_%s" t s (m_nm c.p m)
 let send_push_isobatch_name_of_t c t s m = sp "nd_%s_%d_send_push_isobatch_%s" t s (m_nm c.p m)
 let rcv_push_name_of_t t s = sp "nd_%s_%d_rcv_push" t s
 let rcv_push_isobatch_name_of_t t s = sp "nd_%s_%d_rcv_push_isobatch" t s
@@ -775,7 +777,7 @@ let sw_ack_rcv_trig_nm = "sw_ack_rcv"
 
 let nd_rcv_corr_done_nm = "nd_rcv_corr_done"
 
-let nd_rcv_stmt_nm = "nd_rcv_stmt"
+let nd_rcv_stmt_isobatch_nm = "nd_rcv_stmt_isobatch"
 
 (*** trigger args. Needed here for polyqueues ***)
 
@@ -1062,16 +1064,17 @@ let calc_poly_tags c =
       (ti load_handler_nm ~batch_id:true (Trig true) trig_load_arg_sub_handler_args_poly)::
       (ti no_arg_handler_nm ~batch_id:true (Trig true) trig_no_arg_sub_handler_args_poly)::
       (List.flatten @@ List.map (fun s ->
-          [ti (rcv_put_name_of_t t s) ~trig_args:true
-             (SubTrig(false, [save_handler_nm; load_handler_nm])) @@
-              nd_rcv_put_args_poly;
-           ti (rcv_fetch_name_of_t t s) ~trig_args:true
-             (SubTrig(true, [save_handler_nm; load_handler_nm])) @@
-              nd_rcv_fetch_args_poly c t
-          ] @
+          (if c.gen_single_vid then
+            [ti (rcv_put_single_vid_name_of_t t s) ~trig_args:true
+              (SubTrig(false, [save_handler_nm; load_handler_nm])) @@
+                nd_rcv_put_args_poly;
+            ti (rcv_fetch_single_vid_name_of_t t s) ~trig_args:true
+              (SubTrig(true, [save_handler_nm; load_handler_nm])) @@
+                nd_rcv_fetch_args_poly c t
+            ] else []) @
            (* for isobatch mode: receive the vids of the isobatch *)
           (if sre then [] else [
-           ti (rcv_stmt_name_of_t t s) ~fn:nd_rcv_stmt_nm ~const_args:[mk_cint s]
+           ti (rcv_stmt_isobatch_name_of_t t s) ~fn:nd_rcv_stmt_isobatch_nm ~const_args:[mk_cint s]
              (SubTrig(false, [save_handler_nm; load_handler_nm; no_arg_handler_nm])) [];
            (* rcv_put for isobatch: no trig args, just batch_id *)
            ti (rcv_put_isobatch_name_of_t t s) ~batch_id:true

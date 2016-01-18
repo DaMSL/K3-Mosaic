@@ -91,7 +91,7 @@ let sw_sys_init c =
     [ D.clear_poly_queues c ] @
 
     (List.map (fun s ->
-        mk_apply' (D.send_fetch_name_of_t D.sys_init s) [sys_init_vid_k3])
+        mk_apply' (D.send_fetch_single_vid_name_of_t D.sys_init s) [sys_init_vid_k3])
       ss) @
 
     [
