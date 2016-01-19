@@ -88,12 +88,10 @@ let sw_sys_init c =
   let ss = P.stmts_of_t c.p D.sys_init in
   mk_code_sink' sw_sys_init_nm unit_arg [] @@
   mk_let_block ["batch_id"] (mk_cint 1) @@
-    [ D.clear_poly_queues c ] @
-
+    [D.clear_poly_queues c] @
     (List.map (fun s ->
         mk_apply' (D.send_fetch_single_vid_name_of_t D.sys_init s) [sys_init_vid_k3])
       ss) @
-
     [
       D.send_poly_queues;
 

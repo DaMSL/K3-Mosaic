@@ -37,10 +37,8 @@ def run():
                         default=False, help="See test results in detail")
     parser.add_argument('-m', '--map', action='store', dest='map_type',
                         default='set', help="Use vmap/multi maps")
-    parser.add_argument('--no_new', action='store_false', dest='new_k3',
+    parser.add_argument('--no-new', action='store_false', dest='new_k3',
                         default=True, help="Create k3new file")
-    parser.add_argument('--no-deletes', action='store_false', dest='gen_deletes',
-                        default=True, help="Create delete triggers")
     parser.add_argument('--no-interp', action='store_false', dest='run_interp',
                         default=True, help="Run the interpreter")
     parser.add_argument('--workdir', action='store', type=str, dest='workdir',
@@ -53,8 +51,6 @@ def run():
                         default=True, help="Disable logging")
     parser.add_argument('--no-multiidx', action='store_false', dest='multiidx',
                         default=True, help="Disable multi-index maps")
-    parser.add_argument('--no-correctives', action='store_false', dest='correctives',
-                        default=True, help="Disable correctives")
     parser.add_argument('--filemux', action='store_true', dest='filemux',
                         default=False, help="Enable filemux newprint")
     parser.add_argument('--safe-writes', action='store_true', dest='safe_writes',
@@ -64,11 +60,19 @@ def run():
     parser.add_argument('--batch-size', dest='batch_size',
                         default=None, help="Size of batches")
     parser.add_argument('--debug', default=False, action='store_true', help="Debug output")
-    parser.add_argument('--no-opt-route', default=False, action='store_true', dest='no_opt_route', help='disable optimized routing')
+    parser.add_argument('--no-opt-route', default=True, action='store_false', dest='opt_route', help='disable optimized routing')
     parser.add_argument('--dump-info', default=False, action='store_true', help="Output for route generation")
     parser.add_argument('--trace', default=False, dest='do_trace', action='store_true', help="Tracing")
-    parser.add_argument('--no-isobatch', default=True, dest='isobatch', action='store_false', help="Isobatch mode")
-
+    parser.add_argument('--no-gen-deletes', action='store_false', dest='gen_deletes',
+                        default=True, help="Don't generate delete triggers")
+    parser.add_argument('--no-gen-correctives', action='store_false', dest='gen_correctives',
+                        default=True, help="Don't generate correctives")
+    parser.add_argument('--no-gen-single-vid', action='store_false', dest='gen_single_vid',
+                        default=True, help="Don't generate non-isobatch mode")
+    parser.add_argument('--run-correctives', action='store_true', dest='run_correctives',
+                        default=False, help="Run with correctives")
+    parser.add_argument('--no-run-isobatch', action='store_false', dest='run_isobatch',
+                        default=True, help="Don't run in isobatch mode")
     args = parser.parse_args()
 
     test_list = []
@@ -116,22 +120,24 @@ def run():
                                 verbose=verbose,
                                 distrib=True,
                                 new_k3=args.new_k3,
+                                gen_correctives=args.gen_correctives,
                                 gen_deletes=args.gen_deletes,
+                                gen_single_vid=args.gen_single_vid,
+                                run_correctives=args.run_correctives,
+                                run_isobatch=args.run_isobatch,
                                 map_type=args.map_type,
                                 workdir=args.workdir,
                                 run_interp=args.run_interp,
                                 gc_interval=args.gc_interval,
                                 msg_interval=args.msg_interval,
                                 logging=args.logging,
-                                correctives=args.correctives,
                                 filemux=args.filemux,
                                 safe_writes=args.safe_writes,
                                 map_overlap_factor=args.map_overlap_factor,
                                 batch_size=args.batch_size,
-                                no_opt_route=args.no_opt_route,
+                                opt_route=args.opt_route,
                                 do_trace=args.do_trace,
-                                dump_info=args.dump_info,
-                                isobatch=args.isobatch
+                                dump_info=args.dump_info
                                 )
         # check if a test failed
         if not res:

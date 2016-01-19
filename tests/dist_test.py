@@ -30,23 +30,25 @@ def run(target_file,
         distrib=False,
         new_k3=True,
         folds_only=True,
-        gen_deletes=True,
         map_type="vmap",
         workdir="temp",
         run_interp=True,
         gc_interval=20000,
         msg_interval=2,
         logging=True,
-        correctives=True,
+        gen_deletes=True,
+        gen_correctives=True,
+        gen_single_vid=True,
+        run_correctives=False,
+        run_isobatch=True,
         filemux=False,
         safe_writes=False,
         map_overlap_factor=None,
         batch_size=None,
         debug=False,
-        no_opt_route=False,
+        opt_route=True,
         do_trace=False,
-        dump_info=False,
-        isobatch=True
+        dump_info=False
         ):
 
     to_root = ".."
@@ -151,11 +153,15 @@ def run(target_file,
 
         if map_type == "vmap":
             options += ["--map-vmap"]
-        if map_type == "multi":
+        elif map_type == "multi":
             options += ["--map-multi"]
         if not gen_deletes:
             options += ["--no-deletes"]
-        if no_opt_route:
+        if not gen_correctives:
+            options += ["--no-correctives"]
+        if not gen_single_vid:
+            options += ["--no-single-vid"]
+        if not opt_route:
             options += ['--no-opt-route']
 
         agenda_cmd = "--agenda "+ agenda_file
@@ -218,12 +224,10 @@ def run(target_file,
                 j["pmap_overlap_factor"] = map_overlap_factor
             if batch_size:
                 j["sw_poly_batch_size"] = batch_size
-            if not correctives:
-                j["corrective_mode"] = False
+            j["corrective_mode"] = run_correctives
+            j["isobatch_mode"] = run_isobatch
             if do_trace:
                 j["do_tracing"] = True
-            if not isobatch:
-                j["isobatch_mode"] = False
             # set csv indices
             for i in range(num_switches):
                 node_j = {}

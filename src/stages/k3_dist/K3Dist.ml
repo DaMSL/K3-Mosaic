@@ -534,7 +534,7 @@ let sw_event_driver_sleep = create_ds "sw_event_driver_sleep" @@ mut t_int
 (**** No corrective mode ****)
 
 (* whether we're operating with correctives on *)
-let corrective_mode = create_ds "corrective_mode" t_bool ~init:mk_ctrue
+let corrective_mode = create_ds "corrective_mode" t_bool
 
 (* map stmt_id to lmap *)
 let nd_lmap_of_stmt_id_id = "nd_lmap_of_stmt_id"
@@ -1068,7 +1068,7 @@ let calc_poly_tags c =
             [ti (rcv_put_single_vid_name_of_t t s) ~trig_args:true
               (SubTrig(false, [save_handler_nm; load_handler_nm])) @@
                 nd_rcv_put_args_poly;
-            ti (rcv_fetch_single_vid_name_of_t t s) ~trig_args:true
+             ti (rcv_fetch_single_vid_name_of_t t s) ~trig_args:true
               (SubTrig(true, [save_handler_nm; load_handler_nm])) @@
                 nd_rcv_fetch_args_poly c t
             ] else []) @
@@ -1112,17 +1112,19 @@ let calc_poly_tags c =
            ti (P.buf_of_stmt_map_id c.p s m) (Ds true) @@ P.map_ids_types_with_v_for c.p m)
           s_rhs) @
       (* rcv_corrective types. includes a separate, optional map + vids component *)
-      (List.map (fun (s, m) ->
-          ti (rcv_corrective_name_of_t c t s m) (Trig true) nd_rcv_corr_args)
-        s_rhs_corr)) @
+      (if c.gen_correctives then
+         List.map (fun (s, m) ->
+            ti (rcv_corrective_name_of_t c t s m) (Trig true) nd_rcv_corr_args)
+          s_rhs_corr else [])) @
     (* the types for the maps without vid *)
     (P.for_all_maps c.p @@ fun m ->
       ti (P.map_name_of c.p m^"_map") (Ds false) @@ P.map_ids_types_for c.p m) @
     (* t_vid_list ds for correctives *)
-    [ti "vids" (Ds false) ["vid", t_vid];
-     ti nd_rcv_corr_done_nm (Trig false) nd_rcv_corr_done_args;
+    [ti "vids" (Ds false) ["vid", t_vid]] @
+    (if c.gen_correctives then
+       [ti nd_rcv_corr_done_nm (Trig false) nd_rcv_corr_done_args] else []) @
     (* for GC (node->switch acks) *)
-     ti sw_ack_rcv_trig_nm (Trig false) sw_ack_rcv_trig_args]
+    [ti sw_ack_rcv_trig_nm (Trig false) sw_ack_rcv_trig_args]
   in
   insert_index_fst l
 

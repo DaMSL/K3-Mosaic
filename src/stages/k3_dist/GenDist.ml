@@ -611,12 +611,18 @@ let sw_send_rhs_fetches c t s =
                     mk_insert_at rcv_fetch_header_bitmap.id (mk_var "ip") [mk_ctrue];
                     (* buffer the trig args if needed *)
                     buffer_trig_header_if_needed (mk_var "vid") t "ip" t_args] @
+                    (* in case we have system_ready, we'll always keep single_vid. Otherwise, we can disable it *)
                     (if sre then
                         [buffer_for_send (rcv_fetch_single_vid_name_of_t t s) "ip" []]
                       else
-                        [mk_if (mk_var "is_isobatch")
-                          (buffer_for_send (rcv_fetch_isobatch_name_of_t t s) "ip" []) @@
-                           buffer_for_send (rcv_fetch_single_vid_name_of_t t s) "ip" []]
+                        let test_isobatch e =
+                          if not c.gen_single_vid then e
+                          else
+                            mk_if (mk_var "is_isobatch") e @@
+                              buffer_for_send (rcv_fetch_single_vid_name_of_t t s) "ip" []
+                        in
+                        [test_isobatch @@
+                           buffer_for_send (rcv_fetch_isobatch_name_of_t t s) "ip" []]
                     )
                   )
                   mk_cunit;
@@ -2682,10 +2688,11 @@ let sw_rcv_token_trig c =
                 mk_send sw_rcv_token_trig_nm (mk_var TS.sw_next_switch_addr.id) [mk_var "next_vid"];
 
                 (* dispatch the events, preparing the poly_queues *)
-                mk_ignore
-                  (mk_if (mk_var isobatch_mode.id)
-                    (mk_apply' sw_event_driver_isobatch_nm   [mk_var "batch_id"; mk_var "poly_queue"]) @@
-                    mk_apply' sw_event_driver_single_vid_nm [mk_var "batch_id"; mk_var "poly_queue"]);
+                (let e = mk_apply' sw_event_driver_isobatch_nm [mk_var "batch_id"; mk_var "poly_queue"] in
+                if not c.gen_single_vid then mk_ignore e
+                else
+                  mk_ignore @@ mk_if (mk_var isobatch_mode.id) e @@
+                      mk_apply' sw_event_driver_single_vid_nm [mk_var "batch_id"; mk_var "poly_queue"]);
 
                 (* finish popping the incoming queue *)
                 mk_pop D.sw_event_queue.id;
@@ -3036,8 +3043,7 @@ let declare_global_funcs c ast =
   nd_log_master_write ::
   (P.for_all_trigs ~sys_init:true ~delete:c.gen_deletes c.p @@ nd_log_write c) @
   (P.for_all_trigs ~sys_init:true ~delete:c.gen_deletes c.p @@ nd_log_get_bound c) @
-  nd_update_corr_map ::
-  begin if c.gen_correctives then [nd_filter_corrective_list] else [] end @
+  (if c.gen_correctives then [nd_update_corr_map; nd_filter_corrective_list] else []) @
   D.functions c @
   K3Ring.functions @
   (List.map (fun (i, (_, maps)) -> nd_add_delta_to_buf c (hd maps)) @@ D.uniq_types_and_maps c) @
@@ -3077,8 +3083,9 @@ let gen_dist_for_t c ast t =
          nd_rcv_fetch_isobatch_trig c t s;
          nd_rcv_push_isobatch_trig c t s;
         ]) @
-        (if c.gen_single_vid then [nd_rcv_put_single_vid_trig c t s]   else []) @
-        (if c.gen_single_vid then [nd_rcv_fetch_single_vid_trig c t s] else []) @
+        (if c.gen_single_vid then
+           [nd_rcv_put_single_vid_trig c t s;
+            nd_rcv_fetch_single_vid_trig c t s] else []) @
         [nd_rcv_push_trig c t s]
        )
         s_r) @
@@ -3108,6 +3115,10 @@ let gen_dist ?(gen_deletes=true)
   let sys_init =
     try ignore(P.find_trigger p "system_ready_event"); true
     with Not_found | P.Bad_data _ -> false in
+
+  (* if we need sys_init, we must generate single_vid *)
+  let gen_single_vid = gen_single_vid || sys_init in
+
   let unused_trig_args = M.unused_trig_args ast in
 
   (* adjust agenda_map for unused trig args *)
@@ -3170,8 +3181,8 @@ let gen_dist ?(gen_deletes=true)
      nd_rcv_stmt_isobatch;
     ] @
     fns2 @
+    (if c.gen_correctives then [nd_rcv_corr_done c] else []) @
     [
-     nd_rcv_corr_done c;
      nd_handle_uniq_poly c;
      clear_buffered_fetch_helper;
      trig_dispatcher c;
