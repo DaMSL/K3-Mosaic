@@ -982,6 +982,11 @@ let clear_buffered_fetch_helper =
     mk_set_all rcv_fetch_isobatch_decision_bitmap_id [mk_cfalse];
   ]
 
+(* If we need to buffer the fetches, the ones that apply to us as a node
+ * are very specific and are routed from the send_fetch node. We need to
+ * preserve the exact vids that are requested to be sent for this stmt_map
+ * so that we can reproduce it when we can finally send the desired push.
+ *)
 let nd_rcv_fetch_isobatch_trig c t s =
   let fn_name = rcv_fetch_isobatch_name_of_t t s in
   let trig_id = P.trigger_id_for_name c.p t in
@@ -1112,28 +1117,31 @@ let nd_rcv_put_isobatch_trig c t s =
         (mk_apply' nd_check_stmt_cntr_index_nm
           (* false: no data is being sent *)
           [mk_var "batch_id"; mk_cint s; mk_var "count2"; mk_cfalse])
-          (mk_block [
-            (* move stmt helper content to main ds first if needed
-               (if the pushes arrived first) *)
-            mk_if (mk_var isobatch_stmt_helper_has_content.id)
-              (mk_apply' move_isobatch_stmt_helper_nm [mk_var "batch_id"])
-              mk_cunit;
+        (mk_block [
+          (* move stmt helper content to main ds first if needed
+              (if the pushes arrived first) *)
+          mk_if (mk_var isobatch_stmt_helper_has_content.id)
+            (mk_apply' move_isobatch_stmt_helper_nm [mk_var "batch_id"])
+            mk_cunit;
 
-            mk_at_with' isobatch_vid_map_id (mk_cint s) @@
-              mk_lambda' isobatch_vid_map_e @@
-                mk_case_ns (mk_lookup (mk_var "inner") [mk_var "batch_id"; mk_cunknown])
-                  "vids"
-                  (mk_error "missing batch id in isobatch_vid_map") @@
-                  (* iterate over all the vids in this batch and complete them *)
-                  mk_iter
-                    (mk_lambda' ["vid", t_vid] @@
-                      (if args <> [] then
-                        mk_let (fst_many args)
-                          (mk_apply' (nd_log_get_bound_for t) [mk_var "vid"])
-                      else id_fn) @@
-                        mk_apply' (do_complete_name_of_t t s) @@ mk_ctrue::args_of_t_as_vars_with_v c t) @@
-                    mk_snd @@ mk_var "vids"]) @@
-            mk_cunit
+          mk_at_with' isobatch_vid_map_id (mk_cint s) @@
+            mk_lambda' isobatch_vid_map_e @@
+              mk_case_ns (mk_lookup' "inner" [mk_var "batch_id"; mk_cunknown]) "vids"
+                (mk_error "missing batch id") @@
+                (* iterate over all the vids in this batch and complete them *)
+                mk_iter
+                  (mk_lambda' ["vid", t_vid] @@
+                    (if args <> [] then
+                      mk_let (fst_many args)
+                        (mk_apply' (nd_log_get_bound_for t) [mk_var "vid"])
+                    else id_fn) @@
+                      mk_apply' (do_complete_name_of_t t s) @@
+                        mk_ctrue::args_of_t_as_vars_with_v c t) @@
+                  mk_snd @@ mk_var "vids";
+                  (* do stmt_cntr_check, exec_buffered_fetches for the batch *)
+                  mk_apply' nd_complete_stmt_cntr_check_nm [mk_var "batch_id"; mk_cint s]
+              ]) @@
+          mk_cunit
     ]
 
 (* receive isobatch stmt list *)
@@ -1422,7 +1430,7 @@ let nd_isobatch_send_push_stmt_map_trig c t s =
 
 let nd_send_isobatch_push_sent = create_ds "nd_send_isobatch_push_meta_sent" @@ mut t_bool
 
-(* generic function to send the metadata of the batch pushes *)
+(* generic function to send the metadata of the batch pushes that have been built up so far *)
 let nd_send_isobatch_push_meta_nm = "nd_send_isobatch_push_meta"
 let nd_send_isobatch_push_meta c =
   let s_m = P.stmt_map_ids c.p in
@@ -1491,7 +1499,7 @@ let nd_rcv_push_isobatch_trig c t s =
                   mk_apply' (do_complete_name_of_t t s) @@
                     mk_ctrue::args_of_t_as_vars_with_v c t) @@
                 mk_snd @@ mk_var "vids";
-              (* do stmt_cntr_check for the batch *)
+              (* do stmt_cntr_check, exec_buffered_fetches for the batch *)
               mk_apply' nd_complete_stmt_cntr_check_nm [mk_var "batch_id"; mk_cint s]
             ])
       mk_cunit
@@ -1525,7 +1533,8 @@ let nd_rcv_push_trig c t s =
             (mk_apply'
               (nd_log_get_bound_for t) [mk_var "vid"])
           else id_fn) @@
-          mk_apply' (do_complete_name_of_t t s) @@ mk_cfalse::args_of_t_as_vars_with_v c t)
+         mk_apply' (do_complete_name_of_t t s) @@
+          mk_cfalse::args_of_t_as_vars_with_v c t)
         mk_cunit
     ]
 
@@ -1847,7 +1856,7 @@ let nd_update_corr_map =
       mk_var nd_update_corr_delete.id
     ]
 
-(* for no-corrective mode: execute buffered fetches *)
+(* For no-corrective mode: execute buffered fetches *)
 (* we have a balance between reads and writes. Reads are buffered in the
  * buffered_fetches, and writes are tracked in the stmt_cntrs. We split both
  * per-map to give us better granularity barriers, though even better ones could
@@ -1855,7 +1864,12 @@ let nd_update_corr_map =
  * for correctives). In no-corrective mode, the only state that is legal is to read
  * before or at the same time as a write to the same map (simultaneous reads read earlier
  * values, which is ok). We ensure this by checking the min_vid of the writes
- * and filtering all reads <= this min_vid. *)
+ * and filtering all reads <= this min_vid.
+ *
+ * The big problem with buffered pushes is that they disturb the packet that's formed.
+ * In Isobatch mode, this isn't a huge issue for rcv_push_isobatch since that happens at
+ * the end of the packet, and the same applies for rcv_put_isobatch: we're not producing
+ * any outgoing packet at this point *)
 let nd_exec_buffered_fetches_nm = "nd_exec_buffered_fetches"
 let nd_exec_buffered_fetches c =
   let s_m = P.stmt_map_ids c.p in
@@ -1913,7 +1927,9 @@ let nd_exec_buffered_fetches c =
                     List.fold_left (fun acc_code (t, args, ss, s_ms) ->
                       let mk_check_s s_m = mk_eq (mk_var "stmt_map_id") @@ mk_cint s_m in
                       (* common code *)
-                      let push_code =
+                      let push_code isobatch =
+                          let push_fn = if isobatch then send_push_isobatch_name_of_t
+                                        else send_push_name_of_t in
                           (* pull arguments out of log (if needed) *)
                           (if args = [] then id_fn else
                             mk_let (fst_many args)
@@ -1923,7 +1939,7 @@ let nd_exec_buffered_fetches c =
                               (let rmaps = P.rhs_maps_of_stmt c.p s in
                               List.fold_left (fun acc m ->
                                 mk_if (mk_eq (mk_var "map_id") @@ mk_cint m)
-                                  (mk_apply' (send_push_name_of_t c t s m) @@
+                                  (mk_apply' (push_fn c t s m) @@
                                     (* @buffered: force output of a trigger header *)
                                     mk_ctrue::args_of_t_as_vars_with_v c t)
                                   acc)
@@ -1946,17 +1962,17 @@ let nd_exec_buffered_fetches c =
                                   (mk_error' @@ mk_concat (mk_cstring "missing buffered batch ") @@
                                                            mk_soi @@ mk_var "vid") @@
                                   mk_iter
-                                    (mk_lambda' ["vid", t_vid] push_code) @@
+                                    (mk_lambda' ["vid", t_vid] @@ push_code true) @@
                                     mk_snd @@ mk_var "vids";
-                            (* send metadata for this batch *)
+                            (* send all built up metadata for this batch *)
                             mk_apply' nd_send_isobatch_push_meta_nm [mk_var "vid"];
-                            (* delete the batch data *)
+                            (* delete the buffered_fetch batch data, including requested fetch vids in the batch *)
                             mk_update_at_with isobatch_buffered_fetch_vid_map_id (mk_var "stmt_map_id") @@
                               mk_lambda' isobatch_buffered_fetch_vid_map_e @@
                                 mk_delete_block "inner" [mk_var "vid"; mk_cunknown];
-                          ])
+                          ]) @@
                           (* single vids *)
-                          push_code)
+                          push_code false)
                         acc_code)
                     mk_cunit
                   t_info) @@
