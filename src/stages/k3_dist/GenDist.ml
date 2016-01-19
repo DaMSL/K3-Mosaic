@@ -1061,9 +1061,9 @@ let nd_rcv_fetch_isobatch_trig c t s =
                       (mk_block [
                         mk_update_at_with nd_fetch_buffer_id (mk_var "map_id") @@
                           mk_lambda' nd_fetch_buffer_e @@
-                            mk_upsert_with_block "inner" [mk_var "vid"; mk_cunknown]
+                            mk_upsert_with_block "inner" [mk_var "batch_id"; mk_cunknown]
                               (mk_lambda'' unit_arg @@ mk_tuple
-                                [mk_var "vid"; mk_singleton D.nd_fetch_buffer_inner2.t [mk_var "stmt_map_id"]]) @@
+                                [mk_var "batch_id"; mk_singleton D.nd_fetch_buffer_inner2.t [mk_var "stmt_map_id"]]) @@
                               mk_lambda' nd_fetch_buffer_inner.e @@
                                 mk_block [
                                   mk_insert "stmt_map_ids" [mk_var "stmt_map_id"];
