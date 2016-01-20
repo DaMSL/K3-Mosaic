@@ -1693,7 +1693,7 @@ declare save_"^nm^" : mut bool = false
 trigger save_warmup_maps : () = \\_ -> (
   (
   "^(List.fold_left (fun acc (nm,_) ->
-        (if acc = "" then "    " else acc^";\n    ")^
+        (if acc = "" then "  " else acc^";\n    ")^
         "(if save_"^nm^" then ("^nm^".iterate 1 (\\x -> (sink_"^nm^", me) <- x)) else ())")
       "" wm)^";
     (halt, me) <- ()
@@ -1703,11 +1703,12 @@ trigger save_warmup_maps : () = \\_ -> (
 trigger warmup_all_maps : () = \\_ -> (
   "^load_all_maps^"\n"^
   (List.fold_left (fun acc (nm,_) -> acc^"(save_"^nm^" = true);\n  ") "" wm)^"
-  peers.iterate (\\p -> "
-  ^(List.fold_left (fun acc (nm,_) ->
-      let exactnm = (str_drop (String.length "bs_") nm)
-      in acc^"((bootstrap_"^exactnm^" , p.addr) <- ());\n  ") "" wm)^"
-  ())
+  peers.iterate (\\p -> (
+    "^(List.fold_left (fun acc (nm,_) ->
+        let exactnm = (str_drop (String.length "bs_") nm) in
+        acc^"((bootstrap_"^exactnm^" , p.addr) <- ());\n    ") "" wm)^"
+    ())
+  )
 )
 
 source go : () = value ()
