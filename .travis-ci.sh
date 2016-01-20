@@ -24,3 +24,4 @@ echo 'Creating TPCH files (no interpretation)'
 tests/auto_test.py -d -l tests/tpch_tests.txt --no-interp --no-opt-route
 echo 'Done with TPCH files (no interpretation)'
 
+
