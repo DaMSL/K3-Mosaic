@@ -513,21 +513,10 @@ let modify_corr_ast c ast map stmt trig =
 (* modify the warmup ast, adding vids *)
 let modify_warmup c (ast:program_t) =
   let h = Hashtbl.create 10 in
-  List.map (fun (d, a) ->
-      let d' = match d with
-      (* modify bootstrap collections to have a vid *)
-      | Global(nm, t, None) when str_prefix "bs_" nm ->
-        let map_nm = str_drop (String.length "bs_") nm in
-        let map_id = P.map_id_of_name c.p map_nm in
-        let col, t_elem = unwrap_tcol t in
-        let t_l = unwrap_ttuple t_elem in
-        let key, v = list_split (-1) t_l in
-        let t' = mut @@ D.wrap_t_of_map' c map_id @@ [wrap_ttuple key] @ v in
-        Hashtbl.add h (str_drop (String.length "bs_") nm) (t_l, t');
-        Global(nm, t', None)
-
-      (* modify bootstrap functions by adding a vid of 0 *)
-      | Global(nm, u_t, Some e) when str_prefix "bootstrap_" nm ->
+  let modf (fs,a) =
+    match fs with
+    (* modify bootstrap functions by adding a vid of 0 *)
+    | Sink(Code(nm, u_t, locals, e) ->
         let map_nm = str_drop (String.length "bootstrap_") nm in
         let t_l, map_t = try Hashtbl.find h @@ map_nm with Not_found -> [], t_unit in
         let t_l = List.map (fun (i,t) -> "map_"^soi i, t) @@ insert_index_fst t_l in
@@ -544,9 +533,24 @@ let modify_warmup c (ast:program_t) =
                   (mk_empty map_t)
                   r
         in
-        Global(nm, u_t, Some(mk_lambda' ["_", t_unit] e'))
+        (Sink(Code(nm, u_t, locals, e')), a)
 
-      | x -> x
-      in
-      d', a) ast
+    | _ -> (fs,a)
+  in
+  List.map (fun (d,a) ->
+      match d with
+      | Flow(l) -> let nl = List.map modf l in (Flow(nl), a)
 
+      (* modify bootstrap collections to have a vid *)
+      | Global(nm, t, None) when str_prefix "bs_" nm ->
+        let map_nm = str_drop (String.length "bs_") nm in
+        let map_id = P.map_id_of_name c.p map_nm in
+        let col, t_elem = unwrap_tcol t in
+        let t_l = unwrap_ttuple t_elem in
+        let key, v = list_split (-1) t_l in
+        let t' = mut @@ D.wrap_t_of_map' c map_id @@ [wrap_ttuple key] @ v in
+        Hashtbl.add h (str_drop (String.length "bs_") nm) (t_l, t');
+        (Global(nm, t', None), a)
+
+      | _ -> (d,a)
+    ) ast
