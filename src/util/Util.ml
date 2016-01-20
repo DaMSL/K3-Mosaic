@@ -656,3 +656,12 @@ let bools_of_bits ?(num_bits=0) b =
     (List.map (const false) @@ create_range @@ len - num_bits) @ bs
   else bs
 
+let list_groupby grp_f acc_f zero l =
+  let h = Hashtbl.create 10 in
+  List.iter (fun x ->
+      hashtbl_replace h (grp_f x) (function 
+      | None -> acc_f x zero
+      | Some old -> acc_f x old)
+  ) l;
+  list_of_hashtbl h
+

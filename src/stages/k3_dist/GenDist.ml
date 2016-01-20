@@ -1872,13 +1872,15 @@ let nd_update_corr_map =
  * any outgoing packet at this point *)
 let nd_exec_buffered_fetches_nm = "nd_exec_buffered_fetches"
 let nd_exec_buffered_fetches c =
-  let s_m = P.stmt_map_ids c.p in
+  (* stmt_map_ids are for rhs maps only. group by the statement *)
+  let s_ms = list_groupby (fun (_,(s,_)) -> s) (fun (s_m,(_,m)) l -> (s_m, m)::l) [] @@
+            P.stmt_map_ids c.p in
   let t_info =
-    let find_s_m s = fst @@ List.find (fun (_,(s',_)) -> s = s') s_m in
-    List.map (fun (x,y,ss) -> x,y,ss,List.map find_s_m ss) @@
-    List.filter (fun (_,_,x) -> x <> []) @@
-    P.for_all_trigs ~delete:c.gen_deletes c.p
-    (fun t -> t, D.args_of_t c t, P.stmts_with_rhs_maps_in_t c.p t) in
+    (* get the relevant map_ids/stmt_map_ids for each statement in the trigger *)
+    List.map (fun (x,y,ss) -> x,y, List.map (fun s -> s, List.assoc s s_ms) ss) @@
+    List.filter (fun (_,_,ss) -> ss <> []) @@
+    P.for_all_trigs ~delete:c.gen_deletes c.p @@
+      fun t -> t, D.args_of_t c t, P.stmts_with_rhs_maps_in_t c.p t in
   mk_global_fn nd_exec_buffered_fetches_nm ["vid", t_vid; "stmt_id", t_vid] [] @@
   if t_info = [] then mk_cunit else
   (* get lmap id *)
@@ -1924,7 +1926,9 @@ let nd_exec_buffered_fetches c =
                   mk_let ["is_isobatch"] (is_isobatch_id "vid") @@
                   mk_iter (mk_lambda' ["stmt_map_id", t_stmt_map_id] @@
                     (* check for all triggers *)
-                    List.fold_left (fun acc_code (t, args, ss, s_ms) ->
+                    List.fold_left (fun acc_code (t, args, (s_sm_m:((P.stmt_id_t * (int * P.map_id_t) list) list))) ->
+                      (* get all stmt_maps in the trigger *)
+                      let t_sms = List.flatten @@ List.map (fun (s, sm_m) -> fst_many sm_m) s_sm_m in
                       let mk_check_s s_m = mk_eq (mk_var "stmt_map_id") @@ mk_cint s_m in
                       (* common code *)
                       let push_code isobatch =
@@ -1934,24 +1938,22 @@ let nd_exec_buffered_fetches c =
                           (if args = [] then id_fn else
                             mk_let (fst_many args)
                               (mk_apply' (nd_log_get_bound_for t) [mk_var "vid"])) @@
-                          List.fold_left (fun acc (s, s_m) ->
-                            mk_if (mk_eq (mk_var "stmt_map_id") @@ mk_cint s_m)
-                              (let rmaps = P.rhs_maps_of_stmt c.p s in
-                              List.fold_left (fun acc m ->
-                                mk_if (mk_eq (mk_var "map_id") @@ mk_cint m)
+                          List.fold_left (fun acc_code2 (s, sm_m) ->
+                              List.fold_left (fun acc_code (sm, m) ->
+                                mk_if (mk_eq (mk_var "stmt_map_id") @@ mk_cint sm)
                                   (mk_apply' (push_fn c t s m) @@
-                                    (* @buffered: force output of a trigger header *)
+                                   (* @buffered=true: force output of a trigger header for single_vid mode
+                                    * isobatch mode doesn't need trig header for send_push *)
                                     mk_ctrue::args_of_t_as_vars_with_v c t)
-                                  acc)
-                                mk_cunit
-                                rmaps)
-                              acc)
-                            mk_cunit @@
-                            list_zip ss s_ms
+                                  acc_code)
+                                acc_code2
+                                sm_m)
+                              (mk_error "unhandled stmt_map_id")
+                              s_sm_m
                       in
                       (* check if the stmts_maps are in this trigger *)
                       mk_if
-                        (list_fold_to_last (fun acc s_m -> mk_or (mk_check_s s_m) acc) mk_check_s s_ms)
+                        (list_fold_to_last (fun acc s_m -> mk_or (mk_check_s s_m) acc) mk_check_s t_sms)
                         (* handle isobatches *)
                         (mk_if (mk_var "is_isobatch")
                           (mk_block [

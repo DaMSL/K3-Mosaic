@@ -458,6 +458,23 @@ let max_stmts_per_trig p =
       if n > max then n else max)
     0 @@ get_trig_list p
 
+(* get only the rmaps of s that have keys *)
+let nonempty_rmaps_of_stmt p s =
+  let rmaps = rhs_maps_of_stmt p s in
+  List.filter (fun m -> map_types_no_val_for p m <> []) rmaps
+
+(* enumerate all rstmt_maps, giving them ids *)
+let stmt_map_ids p =
+  let n = ref 0 in
+  List.flatten @@
+  List.map (fun s ->
+      List.map (fun rmap ->
+          let n' = !n in
+          incr n;
+          n', (s, rmap)) @@
+      rhs_maps_of_stmt p s) @@
+  get_stmt_list p
+
 let dump_info p =
   let ts = get_trig_list p in
   let ss = get_stmt_list p in
@@ -468,6 +485,7 @@ let dump_info p =
   let t_s = List.map (fun t -> t, stmts_of_t p t) ts in
   let t_binds = List.map (fun t -> t, fst_many @@ args_of_t p t) ts in
   let map_ids = List.map (fun m -> map_name_of p m, m) @@ get_map_list p in
+  let stmt_map_ids = stmt_map_ids p in
   let t_s_m =
     List.map (fun (t, ss) ->
         t, List.map (fun s -> s, map_name_of p @@ lhs_map_of_stmt p s,
@@ -479,6 +497,8 @@ let dump_info p =
     strcatmap (fun (t, args) -> sp "%s:[%s]" t @@ String.concat ", " args) t_binds in
   let s_map_ids = sp "[%s]" @@
     strcatmap (fun (m, id) -> sp "%s:%d" m id) map_ids in
+  let s_s_map_ids =
+    strcatmap ~sep:"; " (fun (s_m, (s, m)) -> sp "s%d, m%d: %d" s m s_m) stmt_map_ids in
   let s_free_infos = sp "[%s]" @@
     strcatmap (fun (s, info) ->
         sp "%d:[%d:[%s]; %s]" s (fst info.lmap_free)
@@ -514,6 +534,9 @@ Trigger binds:
 Map ids:
 %s
 
+Stmt_map ids:
+%s
+
 Free vars:
 %s
 
@@ -527,24 +550,8 @@ Map dependencies:
   s_t_s
   s_t_binds
   s_map_ids
+  s_s_map_ids
   s_free_infos
   s_bound_infos
   map_dependencies
-
-(* get only the rmaps of s that have keys *)
-let nonempty_rmaps_of_stmt p s =
-  let rmaps = rhs_maps_of_stmt p s in
-  List.filter (fun m -> map_types_no_val_for p m <> []) rmaps
-
-(* enumerate all rstmt_maps, giving them ids *)
-let stmt_map_ids p =
-  let n = ref 0 in
-  List.flatten @@
-  List.map (fun s ->
-      List.map (fun rmap ->
-          let n' = !n in
-          incr n;
-          n', (s, rmap)) @@
-      rhs_maps_of_stmt p s) @@
-  get_stmt_list p
 

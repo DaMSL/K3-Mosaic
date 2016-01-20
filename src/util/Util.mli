@@ -313,3 +313,5 @@ val uncurry3: ('a -> 'b -> 'c -> 'd) -> 'a * 'b * 'c -> 'd
 val uncurry4: ('a -> 'b -> 'c -> 'd -> 'e) -> 'a * 'b * 'c * 'd -> 'e
 
 val bools_of_bits : ?num_bits:int -> int -> bool list
+
+val list_groupby : ('a -> 'b) -> ('a -> 'c -> 'c) -> 'c -> 'a list -> ('b * 'c) list
