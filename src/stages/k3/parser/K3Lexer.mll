@@ -206,6 +206,8 @@ rule tokenize = parse
     | "?]"  { RBRACKETQ }
     | "{?"  { LBRACEQ }
     | "?}"  { RBRACEQ }
+    | "{^"  { LBRACEHAT }
+    | "^}"  { RBRACEHAT }
     | "|"   { BAR }
 
     | '-' { NEG }

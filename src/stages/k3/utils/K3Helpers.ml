@@ -81,6 +81,7 @@ let wrap_tsortedset' tl = wrap_tsortedset @@ wrap_ttuple tl
 let wrap_tvector t = wrap_tcol TVector t
 let wrap_tvector' t = wrap_tvector (wrap_ttuple t)
 
+let t_bitset = wrap_tcol TBitSet t_int
 let t_bool_vector = wrap_tvector t_bool
 let t_int_vector = wrap_tvector t_int
 

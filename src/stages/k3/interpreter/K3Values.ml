@@ -289,7 +289,8 @@ let rec v_col_of_t ?elem t_col = match t_col with
   | TMap        -> VMap ValueMap.empty
   | TVMap _     -> VVMap ValueVMap.empty
   | TSortedMap  -> VSortedMap ValueMap.empty
-  | TSortedSet  -> VSortedSet ValueSSet.empty
+  | TSortedSet
+  | TBitSet     -> VSortedSet ValueSSet.empty
   | TPolyQueue(unique, tags) -> VPolyQueue {default_poly_inner with tags; unique}
 
 and v_of_t ta_env ?id t =

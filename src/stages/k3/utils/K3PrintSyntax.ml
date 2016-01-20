@@ -94,6 +94,7 @@ and lazy_collection ?(empty=false) c ct eval = match ct with
     | TVMap _ -> lps "[<" <| eval <| lps ">]"
     | TSortedMap -> lps "{<" <| eval <| lps ">}"
     | TSortedSet -> lps "{:" <| eval <| lps ":}"
+    | TBitSet -> lps "{^" <| eval <| lps "^}" 
     | TPolyQueue(false, x) -> lps "[?" <| lazy_poly_variant c x <| lsp () <| lps "?]"
     | TPolyQueue(true, x)  -> lps "{?" <| lazy_poly_variant c x <| lsp () <| lps "?}"
 

@@ -209,6 +209,7 @@ and lazy_col c col_t elem_t = match col_t with
   | TVMap(Some ss) -> lazy_multi_index c ss elem_t
   | TSortedMap  -> lps "{SortedMapE" <| lazy_mape c elem_t <| lps "}"
   | TSortedSet  -> lps "{SortedSet}"
+  | TBitSet     -> lps "{BitSet}"
   | TPolyQueue(unique, tag) ->
     let nm = if unique then "Unique" else "Flat" in
     lps (sp "{%sPolyBuffer" nm) <| lazy_paren (lazy_poly_tags c tag) <| lps "}"

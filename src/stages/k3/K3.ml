@@ -27,6 +27,7 @@ type container_type_t
     | TVMap of IntSetSet.t option
                   (* unique values per tag? *)
     | TPolyQueue of bool * poly_tags
+    | TBitSet
 
 (* {int,string} tag * possible types *)
 and poly_tags = (int * string * type_t) list
