@@ -516,11 +516,10 @@ let modify_warmup c (ast:program_t) =
   let modf (fs,a) =
     match fs with
     (* modify bootstrap functions by adding a vid of 0 *)
-    | Sink(Code(nm, u_t, locals, e) ->
+    | Sink(Code(nm, u_t, locals, body)) ->
         let map_nm = str_drop (String.length "bootstrap_") nm in
         let t_l, map_t = try Hashtbl.find h @@ map_nm with Not_found -> [], t_unit in
         let t_l = List.map (fun (i,t) -> "map_"^soi i, t) @@ insert_index_fst t_l in
-        let arg, body = U.decompose_lambda e in
         let l, r = U.decompose_assign body in
         let assign_v = U.decompose_var l in
         let key, v = list_split (-1) @@ ids_to_vars @@ fst_many t_l in
