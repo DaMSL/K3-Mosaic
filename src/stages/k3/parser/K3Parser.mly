@@ -377,7 +377,7 @@ collection_type :
     | LBRACELT type_expr_tuple RBRACELT { TCollection(TSortedMap, $2) }
     | LBRACECOLON type_expr RBRACECOLON { TCollection(TSortedSet, $2) }
     | LBRACECOLON type_expr_tuple RBRACECOLON { TCollection(TSortedSet, $2) }
-    | LBRACEHAT type_expr RBRACEHAT { TCollection(TBitSet, t_int) }
+    | LBRACEHAT type_expr RBRACEHAT { TCollection(TBitSet, $2) }
     | LBRACKETQ poly_variant_list RBRACKETQ { TCollection(TPolyQueue(false, $2), t_unit) }
     | LBRACEQ poly_variant_list RBRACEQ { TCollection(TPolyQueue(true, $2), t_unit) }
 ;
@@ -519,7 +519,7 @@ collection :
     | LBRACKET RBRACKET COLON type_expr           { build_collection [] $4 }
     | LBRACKETCOLON RBRACKETCOLON COLON type_expr { build_collection [] $4 }
     | LBRACECOLON RBRACECOLON COLON type_expr     { build_collection [] $4 }
-    | LBRACEHAT RBRACEHAT COLON type_expr         { build_collection [] $5 }
+    | LBRACEHAT RBRACEHAT COLON type_expr         { build_collection [] $4 }
     | LBRACELT RBRACELT COLON type_expr           { build_collection [] $4 }
     | LBRACKETLT RBRACKETLT COLON type_expr       { build_collection [] $4 }
     | LBRACKETHASH RBRACKETHASH COLON type_expr   { build_collection [] $4 }
