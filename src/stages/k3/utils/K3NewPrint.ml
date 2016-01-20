@@ -1668,7 +1668,8 @@ acc^
 "
 trigger warmup_"^exactnm^" : () = \\_ -> (
   "^load_all_maps^"
-  bootstrap_"^exactnm^" ();
+  (save_"^nm^" = true);
+  (peers.iterate (\\p -> (bootstrap_"^exactnm^", p.addr) <- ()));
   (range "^(string_of_int @@ (List.length wm) - 1)^").iterate (\\_ -> (save_warmup_maps, me) <- ())
 )
 
@@ -1679,22 +1680,35 @@ feed go_"^exactnm^" |> warmup_"^exactnm^"
 ^
 "
 
+"
+^
+(List.fold_left (fun acc (nm,_) ->
+acc^
+"
+declare save_"^nm^" : mut bool = false
+") "" wm)
+^
+"
+
 trigger save_warmup_maps : () = \\_ -> (
   (
-  "^(List.fold_left (fun acc (nm,_) -> (if acc = "" then "  " else acc^";\n    ")^nm^".iterate 1 (\\x -> (sink_"^nm^", me) <- x) ") "" wm)^";
+  "^(List.fold_left (fun acc (nm,_) ->
+        (if acc = "" then "    " else acc^";\n    ")^
+        "(if save_"^nm^" then ("^nm^".iterate 1 (\\x -> (sink_"^nm^", me) <- x)) else ())")
+      "" wm)^";
     (halt, me) <- ()
   ) @OnCounter(id=[# shutdown], eq=[$ "^(string_of_int @@ List.length wm)^"], reset=[$ false], profile=[$ false])
 )
 
 trigger warmup_all_maps : () = \\_ -> (
-  "^load_all_maps^"\n  "
+  "^load_all_maps^"\n"^
+  (List.fold_left (fun acc (nm,_) -> acc^"(save_"^nm^" = true);\n  ") "" wm)^"
+  peers.iterate (\\p -> "
   ^(List.fold_left (fun acc (nm,_) ->
       let exactnm = (str_drop (String.length "bs_") nm)
-      in acc^"bootstrap_"^exactnm^" ();\n  ") "" wm)^"
-  ()
+      in acc^"((bootstrap_"^exactnm^" , p.addr) <- ());\n  ") "" wm)^"
+  ())
 )
-
-trigger halt : () = \\_ -> haltEngine()
 
 source go : () = value ()
 feed go |> warmup_all_maps
@@ -1711,7 +1725,7 @@ include \"Annotation/Maps/MapE.k3\"
 include \"Annotation/MultiIndex/MultiIndexVMap.k3\"
 include \"Distributed/Mosaic.k3\"
 
-declare do_not_use_this_map : collection {key: int, value: int} @Map
+declare master : mut address
 
 @:CArgs 2
 declare ORDERSLoaderMosaic : collection {path: string} @Collection
@@ -1736,6 +1750,8 @@ declare ORDERSPaths : collection {path: string} @Collection
 declare CUSTOMERPaths : collection {path: string} @Collection
 
 declare LINEITEMPaths : collection {path: string} @Collection
+
+trigger halt : () = \\_ -> haltEngine()
 
 " ^(string_of_program ~map_to_fold ~use_filemux ~safe_writes p' envs)^"\n"
   ^(match warmup_maps with

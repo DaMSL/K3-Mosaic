@@ -1547,7 +1547,7 @@ let m3_to_k3 ?(generate_init = false) ?(role = "client")
     in K.Global(nm, ty, None)
   in
 
-  let k3_warmup_of_m3_map acc m3_map =
+  let k3_warmup_of_m3_map (dacc, flacc) m3_map =
     begin match m3_map with
       | M3.DSView(ds) ->
         (* Global map declaration *)
@@ -1564,20 +1564,20 @@ let m3_to_k3 ?(generate_init = false) ?(role = "client")
         let (_, _, defn_expr), _ =
           calc_to_k3_expr [] ~generate_init:false ~resultn:map_nm [] ds.Plan.ds_definition
         in
-        let booststrap_expr = KH.mk_assign ("bs_"^map_nm) defn_expr
+        let bootstrap_expr = KH.mk_assign ("bs_"^map_nm) defn_expr
         in
-        acc @
-          [K.Global("bs_"^map_nm, (KH.mut @@ mk_k3_collection ivar_types ovar_types element_type), None);
-           fst @@ KH.mk_global_fn ("bootstrap_"^map_nm) argt rt booststrap_expr]
+        (dacc @ [K.Global("bs_"^map_nm, (KH.mut @@ mk_k3_collection ivar_types ovar_types element_type), None)],
+         flacc @ [KH.mk_code_sink' ("bootstrap_"^map_nm) argt [] booststrap_expr])
 
       | M3.DSTable(_, _, _) -> acc
     end
   in
 
   let k3_warmup_prog =
+    let (warmup_ds, warmup_trigs) = List.fold_left k3_warmup_of_m3_map [] !m3_prog_schema in
     List.map k3_warmup_rel stream_rels
     @ List.map k3_warmup_rel table_rels
-    @ List.fold_left k3_warmup_of_m3_map [] !m3_prog_schema
+    @ warmup_ds @ [K.Flow(warmup_trigs)]
   in
 
   let k3_warmup_relname (src, rels) =
