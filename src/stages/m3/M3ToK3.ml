@@ -1560,21 +1560,20 @@ let m3_to_k3 ?(generate_init = false) ?(role = "client")
 
         (* Map definition expression *)
         let argt = ["_", KH.t_unit] in
-        let rt = [KH.t_unit] in
         let (_, _, defn_expr), _ =
           calc_to_k3_expr [] ~generate_init:false ~resultn:map_nm [] ds.Plan.ds_definition
         in
         let bootstrap_expr = KH.mk_assign ("bs_"^map_nm) defn_expr
         in
         (dacc @ [K.Global("bs_"^map_nm, (KH.mut @@ mk_k3_collection ivar_types ovar_types element_type), None)],
-         flacc @ [KH.mk_code_sink' ("bootstrap_"^map_nm) argt [] booststrap_expr])
+         flacc @ [KH.mk_code_sink' ("bootstrap_"^map_nm) argt [] bootstrap_expr])
 
-      | M3.DSTable(_, _, _) -> acc
+      | M3.DSTable(_, _, _) -> (dacc, flacc)
     end
   in
 
   let k3_warmup_prog =
-    let (warmup_ds, warmup_trigs) = List.fold_left k3_warmup_of_m3_map [] !m3_prog_schema in
+    let (warmup_ds, warmup_trigs) = List.fold_left k3_warmup_of_m3_map ([],[]) !m3_prog_schema in
     List.map k3_warmup_rel stream_rels
     @ List.map k3_warmup_rel table_rels
     @ warmup_ds @ [K.Flow(warmup_trigs)]
