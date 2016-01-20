@@ -1973,8 +1973,9 @@ let nd_exec_buffered_fetches c =
                           ]) @@
                           (* single vids *)
                           push_code false)
+                        (* else, we didn't match here *)
                         acc_code)
-                    mk_cunit
+                    (mk_error "unhandled stmt_map_id")
                   t_info) @@
                   mk_var "stmt_map_ids"
                 ]) @@
