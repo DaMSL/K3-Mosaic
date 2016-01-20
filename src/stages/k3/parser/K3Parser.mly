@@ -134,7 +134,7 @@
 %token SORT RANK SIZE
 %token POLY_ITER POLY_ITER_TAG POLY_FOLD POLY_FOLD_TAG POLY_AT POLY_AT_WITH POLY_INSERT POLY_TAG_AT POLY_SKIP POLY_SKIP_ALL POLY_UNPACK POLY_RESERVE
 
-%token PEEK PEEK_WITH_VID AT AT_WITH MIN_WITH
+%token PEEK PEEK_WITH_VID AT AT_WITH MIN_WITH IS_MEMBER
 
 %token IF THEN ELSE LET IN
 
@@ -668,6 +668,7 @@ access :
     | POLY_UNPACK LPAREN anno_expr RPAREN { mkexpr PolyUnpack [$3] }
     | POLY_RESERVE LPAREN anno_expr COMMA anno_expr COMMA anno_expr COMMA anno_expr RPAREN { mkexpr PolyReserve [$3; $5; $7; $9] }
     | MIN_WITH LPAREN anno_expr COMMA anno_expr COMMA anno_expr RPAREN { mkexpr MinWith [$3; $5; $7] }
+    | IS_MEMBER LPAREN anno_expr COMMA anno_expr RPAREN { mkexpr IsMember [$3; $5] }
 ;
 
 mutation :

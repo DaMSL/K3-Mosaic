@@ -129,6 +129,7 @@ let string_of_tag_type = function
     | SliceOp o        -> sp "SliceOp(%s)" (string_of_op o)
     | AtWith           -> "AtWith"
     | At               -> "At"
+    | IsMember         -> "IsMember"
     | MinWith          -> "MinWith"
     | Insert           -> "Insert"
     | InsertAt         -> "InsertAt"

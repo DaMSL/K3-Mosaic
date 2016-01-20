@@ -625,6 +625,8 @@ and eval_expr_inner ?(fun_typ=FLambda) (address:address) sched_st cenv texpr =
         | None -> error name "at: out of bounds"
       end
 
+    | IsMember, [c; key] -> nenv, VTemp(v_mem error c key)
+
     | PolyAt tag, [c; idx; _] ->
       begin match v_at ~tag error c idx with
         | Some x -> nenv, VTemp x

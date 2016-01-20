@@ -310,6 +310,9 @@ let mk_peek' col = mk_peek (mk_var col)
 
 let mk_peek_with_vid col lam_none lam_some = mk_stree PeekWithVid [col;lam_none;lam_some]
 
+let mk_is_member col key = mk_stree IsMember [col; key]
+let mk_is_member' col key = mk_is_member (mk_var col) key
+
 (* generic version of slice used by multiple functions *)
 let mk_slice_gen tag collection pattern =
   (* don't create a slice if we only have unknowns *)

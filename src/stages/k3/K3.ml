@@ -128,6 +128,7 @@ type expr_tag_t
     | MinWith
     | Peek
     | PeekWithVid       (* retain the vid for a vmap *)
+    | IsMember          (* check for set membership *)
     | Slice
     | SliceOp of op_t     (* slice with frontier (one value >, <, etc) *)
     | FilterOp of op_t    (* all the values <, > etc *)

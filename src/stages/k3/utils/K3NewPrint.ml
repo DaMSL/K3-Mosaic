@@ -1215,6 +1215,9 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
     (* we need to project since we return a value *)
     wrap_project c col (apply_method c ~name:"at" ~col ~args:[idx] ~arg_info:[def_a])
 
+  | IsMember -> let col, key = U.decompose_is_member expr in
+    apply_method c ~name:"is_member" ~col ~args:[key] ~arg_info:[[0], false]
+
   | MinWith -> let col, lam_none, lam_some = U.decompose_min_with expr in
     apply_method c ~name:"min" ~col
       ~args:[lam_none; lam_some] ~arg_info:[def_a; [0], false]

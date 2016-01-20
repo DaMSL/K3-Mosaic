@@ -921,6 +921,11 @@ let v_filter_op err_fn op pat m = match m, pat, op with
   | VSortedMap m, VTuple[k;_], `LEQ -> VSortedMap(ValueMap.filter_leq k m)
   | _ -> err_fn "v_filter_op" "not implemented"
 
+let v_mem err_fn m key = match m with
+  | VSortedSet m -> VBool(ValueSSet.mem key m)
+  | VSet m -> VBool(ValueSet.mem key m)
+  | _ -> err_fn "v_mem" "not a set"
+
 let rec type_of_value uuid value =
   let get_typ v = type_of_value uuid v in
   let dummy_err _ _ = None in
@@ -952,30 +957,3 @@ let rec type_of_value uuid value =
   | VForeignFunction _ -> raise (RuntimeError (uuid, "type_of_value", "cannot apply to function"))
   | VMax | VMin        -> raise (RuntimeError (uuid, "type_of_value", "cannot apply to vmax/vmin"))
 
-(*
-let rec expr_of_value uuid value =
-  let handle_cols vs =
-    let l = List.map (expr_of_value uuid) @@ ValueUtils.v_to_list vs in
-    k3_container_of_list (type_of_value uuid value) l
-  in
-  match value with
-  | VUnknown -> mk_const CUnknown
-  | VUnit -> mk_const CUnit
-  | VBool b -> mk_const @@ CBool b
-  | VInt i -> mk_const @@ CInt i
-  | VFloat f -> mk_const @@ CFloat f
-  | VByte b -> mk_const @@ CString(string_of_int @@ Char.code b)
-  | VString s -> mk_const @@ CString s
-  | VAddress (ip,port) -> mk_const @@ CAddress (ip,port)
-  | VTarget id -> mk_const @@ CTarget id
-  | VOption(None) -> mk_nothing t_unknown
-  | VOption(Some v) -> mk_just @@ expr_of_value uuid v
-  | VTuple vs -> mk_tuple @@ List.map (expr_of_value uuid) vs
-  | VSet _ | VList _ | VBag _ | VVector _ | VMap _ | VSortedMap _ | VSortedSet _ | VVMap _ -> handle_cols value
-  | VIndirect ind -> mk_ind @@ expr_of_value uuid !ind
-  | VFunction _
-  | VForeignFunction _ -> raise @@ RuntimeError (uuid,
-      "expr_of_value: cannot apply to function")
-  | VMax | VMin -> raise @@ RuntimeError (uuid,
-      "expr_of_value: cannot apply to vmax/vmin")
-*)

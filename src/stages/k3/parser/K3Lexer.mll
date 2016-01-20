@@ -89,6 +89,7 @@ let _ =
         "min_with",  MIN_WITH;
         "peek",  PEEK;
         "peek_with_vid",  PEEK_WITH_VID;
+        "is_member", IS_MEMBER;
 
         "if",    IF;
         "then",  THEN;

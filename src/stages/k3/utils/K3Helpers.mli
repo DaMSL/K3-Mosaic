@@ -28,6 +28,7 @@ val t_alias : id_t -> type_t
 
 val t_bool_vector : type_t
 val t_int_vector : type_t
+val t_bitset : type_t
 
 (* K3 types for various things *)
 val t_trig_id : type_t
@@ -186,6 +187,8 @@ val mk_at_with' : ?error:expr_t -> id_t -> expr_t -> expr_t -> expr_t
 val mk_at : expr_t -> expr_t -> expr_t
 val mk_at' : id_t -> expr_t -> expr_t
 val mk_min_with : expr_t -> expr_t -> expr_t -> expr_t
+val mk_is_member : expr_t -> expr_t -> expr_t
+val mk_is_member' : id_t -> expr_t -> expr_t
 
 val mk_peek' : id_t -> expr_t
 val mk_slice : expr_t -> expr_t list -> expr_t

@@ -367,6 +367,8 @@ let rec lazy_expr c expr =
     lps "at_with" <| lcut () <| lazy_paren @@ expr_quad (col, idx, lam_none, lam_some)
   | At -> let p = U.decompose_at expr in
     lps "at" <| lcut () <| lazy_paren @@ expr_pair p
+  | IsMember -> let p = U.decompose_is_member expr in
+    lps "is_member" <| lcut () <| lazy_paren @@ expr_pair p
   | MinWith -> let col, lam_none, lam_some = U.decompose_min_with expr in
     lps "min_with" <| lcut () <| lazy_paren @@ expr_triple (col, lam_none, lam_some)
   | Peek -> let col = U.decompose_peek expr in
