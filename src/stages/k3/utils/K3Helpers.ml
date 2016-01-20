@@ -82,6 +82,7 @@ let wrap_tvector t = wrap_tcol TVector t
 let wrap_tvector' t = wrap_tvector (wrap_ttuple t)
 
 let t_bool_vector = wrap_tvector t_bool
+let t_int_vector = wrap_tvector t_int
 
 (* wrap a type in a vmap *)
 let wrap_tvmap ?idx typ = wrap_tcol (TVMap idx) typ

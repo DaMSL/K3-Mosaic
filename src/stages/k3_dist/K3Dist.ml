@@ -540,7 +540,7 @@ let corrective_mode = create_ds "corrective_mode" t_bool
 let nd_lmap_of_stmt_id_id = "nd_lmap_of_stmt_id"
 let nd_lmap_of_stmt_id c =
   let e = ["map_id", t_int] in
-  let t = wrap_tvector t_int in
+  let t = t_int_vector in
   let init = k3_container_of_list t @@
     List.map mk_cint @@ snd_many @@ P.stmts_lhs_maps c.p in
   create_ds "nd_lmap_of_stmt_id" t ~e ~init
@@ -1435,7 +1435,7 @@ let isobatch_stmt_helper_e = [isobatch_map_inner2.id, isobatch_map_inner2.t]
 let isobatch_stmt_helper c =
   let e = isobatch_stmt_helper_e in
   let init = mk_map (mk_lambda' unknown_arg @@ mk_empty isobatch_map_inner2.t) @@
-    k3_container_of_list (wrap_tvector t_int) @@
+    k3_container_of_list (t_int_vector) @@
     List.map (const @@ mk_cint 0) @@ P.get_stmt_list c.p in
   create_ds ~init ~e isobatch_stmt_helper_id @@ wrap_tvector @@ t_of_e e
 
@@ -1451,18 +1451,19 @@ let clear_isobatch_stmt_helper =
       mk_assign isobatch_stmt_helper_has_content.id mk_cfalse;
       ]
 
+(* batch_id -> vids *)
 let isobatch_map_inner =
   let e = ["batch_id", t_vid; isobatch_map_inner2.id, isobatch_map_inner2.t] in
   create_ds ~e "inner" @@ wrap_tmap @@ t_of_e e
 
-(* map from stmt, batch to list of vids *)
+(* stmt -> batch_id -> [vids] *)
 let isobatch_vid_map_id = "isobatch_vid_map"
 let isobatch_vid_map_e = [isobatch_map_inner.id, isobatch_map_inner.t]
 let isobatch_vid_map c =
   (* indexed by stmt_id *)
   let e = isobatch_vid_map_e in
   let init = mk_map (mk_lambda' unknown_arg @@ mk_empty isobatch_map_inner.t) @@
-    k3_container_of_list (wrap_tvector t_int) @@
+    k3_container_of_list (t_int_vector) @@
     List.map (const @@ mk_cint 0) @@ P.get_stmt_list c.p in
   create_ds ~init ~e isobatch_vid_map_id @@ wrap_tvector @@ t_of_e e
 
@@ -1483,17 +1484,17 @@ let move_isobatch_stmt_helper =
 
 
 (* singleton vector for creating isobatch_vid_map easily *)
-(* indexed by stmt_id *)
+(* stmt_map_id -> [vids] *)
 let isobatch_buffered_fetch_helper_id = "isobatch_buffered_fetch_helper"
 let isobatch_buffered_fetch_helper_e = [isobatch_map_inner2.id, isobatch_map_inner2.t]
 let isobatch_buffered_fetch_helper c =
   let e = isobatch_buffered_fetch_helper_e in
   let init = mk_map (mk_lambda' unknown_arg @@ mk_empty isobatch_map_inner2.t) @@
-    k3_container_of_list (wrap_tvector t_int) @@
-    List.map (const @@ mk_cint 0) @@ P.get_stmt_list c.p in
+    k3_container_of_list t_int_vector @@
+    List.map mk_cint @@ fst_many @@ P.stmt_map_ids c.p in
   create_ds ~init ~e isobatch_buffered_fetch_helper_id @@ wrap_tvector @@ t_of_e e
 
-(* stmt_map_id -> batch -> list of vids *)
+(* stmt_map_id -> batch -> [vids] *)
 (* for saving info about buffered fetches *)
 let isobatch_buffered_fetch_vid_map_id = "isobatch_buffered_fetch_vid_map"
 let isobatch_buffered_fetch_vid_map_e = isobatch_vid_map_e
@@ -1501,8 +1502,8 @@ let isobatch_buffered_fetch_vid_map c =
   (* indexed by stmt_map_id *)
   let e = isobatch_buffered_fetch_vid_map_e in
   let init = mk_map (mk_lambda' unknown_arg @@ mk_empty isobatch_map_inner.t) @@
-    k3_container_of_list (wrap_tvector t_int) @@
-    List.map (const @@ mk_cint 0) @@ fst_many @@ P.stmt_map_ids c.p in
+    k3_container_of_list t_int_vector @@
+    List.map mk_cint @@ fst_many @@ P.stmt_map_ids c.p in
   create_ds ~init ~e isobatch_buffered_fetch_vid_map_id @@ wrap_tvector @@ t_of_e e
 
 (* vids have a lower bit = 0, isobatch ids have 1 *)

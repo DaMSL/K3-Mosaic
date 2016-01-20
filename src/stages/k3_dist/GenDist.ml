@@ -302,7 +302,7 @@ let send_put_ip_map p =
 
 let send_put_bitmap =
   let init = mk_map (mk_lambda' unknown_arg mk_cfalse) @@ mk_var D.my_peers.id in
-  create_ds ~init "send_put_bitmap" @@ wrap_tvector t_bool
+  create_ds ~init "send_put_bitmap" @@ t_bool_vector
 
 let sw_send_puts_single_vid_nm t s = sp "sw_%s_%d_send_puts_single_vid" t s
 let sw_send_puts_single_vid c t s =
@@ -570,7 +570,7 @@ let sw_send_puts_isobatch c t s =
 (* for fetches *)
 let rcv_fetch_header_bitmap =
   let init = mk_map (mk_lambda' unknown_arg mk_cfalse) @@ mk_var D.my_peers.id in
-  create_ds ~init "rcv_fetch_header_bitmap" @@ wrap_tvector t_bool
+  create_ds ~init "rcv_fetch_header_bitmap" @@ t_bool_vector
 
 (* for isobatches, we need to create a batch_fetch message and make decisions at the batch level *)
 let sw_send_rhs_fetches_nm t s = sp "sw_%s_%d_send_rhs_fetches" t s
@@ -745,7 +745,7 @@ let send_push_cntrs =
 
 let send_push_bitmap =
   let init = mk_map (mk_lambda' unknown_arg mk_cfalse) @@ mk_var D.my_peers.id in
-  create_ds ~init "send_push_bitmap" @@ wrap_tvector t_bool
+  create_ds ~init "send_push_bitmap" @@ t_bool_vector
 
 let clear_send_push_ds_nm = "clear_send_push_ds"
 let clear_send_push_ds =
@@ -894,7 +894,7 @@ let send_push_isobatch_map c =
 
 let send_push_isobatch_bitmap =
   let init = mk_map (mk_lambda' unknown_arg mk_cfalse) @@ mk_var D.my_peers.id in
-  create_ds ~init "send_push_isobatch_bitmap" @@ wrap_tvector t_bool
+  create_ds ~init "send_push_isobatch_bitmap" @@ t_bool_vector
 
 let clear_send_push_isobatch_ds_nm = "clear_send_push_isobatch_ds"
 let clear_send_push_isobatch_ds =
@@ -1158,7 +1158,7 @@ let nd_rcv_stmt_isobatch =
 
 let nd_send_batch_push_bitmap =
   let init = mk_map (mk_lambda' unknown_arg mk_cfalse) @@ mk_var D.my_peers.id in
-  create_ds ~init "nd_send_batch_push_bitmap" @@ wrap_tvector t_bool
+  create_ds ~init "nd_send_batch_push_bitmap" @@ t_bool_vector
 
 (* Trigger_send_push_stmt_map
  * ----------------------------------------
@@ -1567,7 +1567,7 @@ let maps_potential_corrective c =
 let send_corrective_bitmap =
   (* indexed by ip *)
   let init = mk_map (mk_lambda' unknown_arg mk_cfalse) @@ mk_var D.my_peers.id in
-  create_ds ~init "send_corrective_bitmap" @@ wrap_tvector t_bool
+  create_ds ~init "send_corrective_bitmap" t_bool_vector
 
 let send_corrective_ip_map =
   (* indexed by ip *)
