@@ -1668,10 +1668,6 @@ acc^
 declare save_"^nm^" : mut bool = false
 ") "" wm)
 ^
-"
-
-"
-^
 (* Warmup trigger per map. *)
 (List.fold_left (fun acc (nm,_) ->
 let exactnm = (str_drop (String.length "bs_") nm) in
