@@ -1661,6 +1661,17 @@ sink sink_"^nm^" : "^(string_of_base_type @@ KH.immut @@ (snd @@ KH.unwrap_tcol 
                         nm^"LoaderMosaic "^nm^"Paths "^nm^";\n") "" wrelnames
   in
   let warmup_toplevel_fn wm =
+(* Save variable per map. *)
+(List.fold_left (fun acc (nm,_) ->
+acc^
+"
+declare save_"^nm^" : mut bool = false
+") "" wm)
+^
+"
+
+"
+^
 (* Warmup trigger per map. *)
 (List.fold_left (fun acc (nm,_) ->
 let exactnm = (str_drop (String.length "bs_") nm) in
@@ -1680,16 +1691,6 @@ feed go_"^exactnm^" |> warmup_"^exactnm^"
 ^
 "
 
-"
-^
-(List.fold_left (fun acc (nm,_) ->
-acc^
-"
-declare save_"^nm^" : mut bool = false
-") "" wm)
-^
-"
-
 trigger save_warmup_maps : () = \\_ -> (
   (
   "^(List.fold_left (fun acc (nm,_) ->
@@ -1702,7 +1703,7 @@ trigger save_warmup_maps : () = \\_ -> (
 
 trigger warmup_all_maps : () = \\_ -> (
   "^load_all_maps^"\n"^
-  (List.fold_left (fun acc (nm,_) -> acc^"(save_"^nm^" = true);\n  ") "" wm)^"
+  (List.fold_left (fun acc (nm,_) -> (if acc = "" then "  " else "")^acc^"(save_"^nm^" = true);\n  ") "" wm)^"
   peers.iterate (\\p -> (
     "^(List.fold_left (fun acc (nm,_) ->
         let exactnm = (str_drop (String.length "bs_") nm) in
