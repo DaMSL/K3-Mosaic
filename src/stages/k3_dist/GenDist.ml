@@ -2451,8 +2451,7 @@ let do_reads c =
       let k_t, v_t = list_split (-1) @@ snd_many id_ts in
       let ts = [wrap_ttuple k_t; wrap_ttuple v_t] in
       mk_global_fn ("doRead"^m_nm) ["addr", t_addr; "s", t_string] ts @@
-        default_value_of_t @@ wrap_ttuple ts
-    )
+        default_value_of_t @@ wrap_ttuple ts)
     m_nm_ts
 
 let sw_warmup_push_bitmap =
@@ -3153,6 +3152,7 @@ let declare_global_vars c ast =
      sw_send_fetch_isobatch_next_vid;
      sw_token_has_data;
      sw_token_current_batch_id;
+     sw_warmup_push_bitmap;
     ]
 
 let declare_global_funcs c ast =
@@ -3308,6 +3308,7 @@ let gen_dist ?(gen_deletes=true)
      trig_dispatcher_unique c;
      sw_event_driver_isobatch c;
     ] @
+    do_reads c @
     (if c.gen_single_vid then [sw_event_driver_single_vid c] else []) @
     [mk_flow @@
       Proto.triggers c @

@@ -427,7 +427,7 @@ let () =
   add_fn "switchStart";
   add_fn "openFile" ~args:["a", t_addr; "lbl", t_string; "f", t_string;
                            "fmt", t_string; "bin", t_bool; "rw", t_string];
-  add_fn "hasRead" ~args:["addr", t_addr; "s", t_string] ~ret:t_bool
+  add_fn "hasRead" ~args:["addr", t_addr; "s", t_string] ~ret:t_bool ~fn:(fun env -> env, bool_temp false)
 
 (* shutdown - dummy here. implemented in Runtime *)
 let () = add_fn "haltEngine"
