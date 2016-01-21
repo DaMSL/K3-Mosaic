@@ -8,6 +8,7 @@ open K3Dist
 val gen_dist : 
                ?gen_deletes:bool ->
                ?gen_correctives:bool ->
+               ?gen_single_vid:bool ->
                ?use_opt_route:bool ->
                stream_file:string ->
                map_type:map_type ->

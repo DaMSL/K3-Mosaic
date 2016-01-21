@@ -26,9 +26,13 @@ val t_addr_mut : type_t
 
 val t_alias : id_t -> type_t
 
+val t_bool_vector : type_t
+val t_int_vector : type_t
+
 (* K3 types for various things *)
 val t_trig_id : type_t
 val t_stmt_id : type_t
+val t_stmt_map_id : type_t
 val t_map_id : type_t
 val t_vid : type_t
 
@@ -413,6 +417,7 @@ val unknown_arg : (string * type_t) list
 
 (* easy to use error function macro *)
 val mk_error : string -> expr_t
+val mk_error' : expr_t -> expr_t
 
 val mk_size_slow : data_struct -> expr_t
 
@@ -458,6 +463,7 @@ val mk_is_tup_nothing : expr_t -> expr_t
 val mk_insert_block : ?path:int list -> id_t -> expr_t list -> expr_t
 val mk_insert_at_block : ?path:int list -> id_t -> expr_t -> expr_t list -> expr_t
 val mk_set_all : ?path:int list -> id_t -> expr_t list -> expr_t
+val mk_set_all_block : ?path:int list -> id_t -> expr_t list -> expr_t
 val mk_extend_block : ?path:int list -> id_t -> expr_t -> expr_t
 val mk_upsert_with_block : ?path:int list -> id_t -> expr_t list -> expr_t -> expr_t -> expr_t
 val mk_update_at_with_block : ?path:int list -> id_t -> expr_t -> expr_t -> expr_t
@@ -469,8 +475,8 @@ val mk_filter_cnt : expr_t -> data_struct -> expr_t
 (* @all: all values (even false) or just trues *)
 val mk_iter_bitmap : ?all:bool -> ?idx:string -> expr_t -> expr_t -> expr_t
 val mk_iter_bitmap' : ?all:bool -> ?idx:string -> expr_t -> id_t -> expr_t
-val mk_agg_bitmap : ?all:bool -> ?idx:string -> (id_t * type_t) list -> expr_t -> expr_t -> expr_t -> expr_t
-val mk_agg_bitmap' : ?all:bool -> ?idx:string -> (id_t * type_t) list -> expr_t -> expr_t -> id_t -> expr_t
+val mk_agg_bitmap : ?all:bool -> ?idx:string -> ?move:bool -> (id_t * type_t) list -> expr_t -> expr_t -> expr_t -> expr_t
+val mk_agg_bitmap' : ?all:bool -> ?idx:string -> ?move:bool -> (id_t * type_t) list -> expr_t -> expr_t -> id_t -> expr_t
 
 val mk_check_tag : int -> expr_t -> expr_t -> expr_t -> expr_t -> expr_t
 val mk_check_tag' : ?unique:bool -> int -> expr_t -> expr_t

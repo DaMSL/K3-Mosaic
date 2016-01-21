@@ -12,8 +12,8 @@ let handle_local_parse_error lexbuf =
   let diff = curr-bol in
   let line = curpos.Lexing.pos_lnum in
   let tok = Lexing.lexeme lexbuf in
-  Printf.printf "\nError on line %d , character %d , token %s\n"
-      line diff tok; print_newline (); raise Parsing.Parse_error
+  Printf.eprintf "\nError on line %d , character %d , token %s\n"
+    line diff tok; print_newline (); exit 1
 
 let handle_parse_error ?(msg = "") lexbuf =
   print_endline ("Lexer reached: '"^(Lexing.lexeme lexbuf)^"'; "^msg);

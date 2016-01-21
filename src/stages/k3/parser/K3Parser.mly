@@ -689,7 +689,7 @@ mutation :
     | UPDATE_SUFFIX LPAREN anno_expr COMMA anno_expr COMMA anno_expr RPAREN { mkexpr UpdateSuffix [$3; $5; $7] }
     | UPDATE_AT_WITH LPAREN anno_expr COMMA anno_expr COMMA anno_expr RPAREN { mkexpr UpdateAtWith [$3; $5; $7] }
 
-    | variable LARROW anno_expr { mkexpr Assign [mk_var $1; $3] }
+    | anno_expr LARROW anno_expr { mkexpr Assign [$1; $3] }
 
     /* Error handling */
     | UPSERT_WITH_BEFORE LPAREN anno_expr COMMA tuple COMMA anno_expr COMMA error { upsert_with_before_error "lambda some"}
@@ -702,7 +702,7 @@ mutation :
     | UPDATE LPAREN error      { coll_error 1 }
     | DELETE LPAREN anno_expr error { value_error 2 }
     | DELETE LPAREN error      { coll_error 1 }
-    | variable LARROW error        { assign_error "reference" }
+    | anno_expr LARROW error        { assign_error "reference" }
 ;
 
 transformers :

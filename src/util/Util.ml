@@ -57,13 +57,13 @@ let null l = match l with [] -> true | _ -> false
 
 let at l i = List.nth l i
 
-let fst_many l = fst @@ List.split l
-
-let snd_many l = snd @@ List.split l
-
 let fst3 (x,_,_) = x
 let snd3 (_,x,_) = x
 let thd3 (_,_,x) = x
+
+let fst_many l = List.map fst l
+
+let snd_many l = List.map snd l
 
 let curry f (a,b) = f a b
 let curry3 f (a,b,c) = f a b c
@@ -641,3 +641,28 @@ let rec list_modify n f = function
 let uncurry f (x, y) = f x y
 let uncurry3 f (x, y, z) = f x y z
 let uncurry4 f (x, y, z, a) = f x y z a
+
+(* convert an int (bit pattern) to a list of bools *)
+(* @num_bits: mandatory minimum number of bits *)
+let bools_of_bits ?(num_bits=0) b =
+  let rec loop acc b =
+    if b > 0 then
+      let v = if b land 1 = 1 then true else false in
+      loop (v::acc) (b/2)
+    else acc
+  in
+  let bs = loop [] b in
+  let len = List.length bs in
+  if len < num_bits then
+    (List.map (const false) @@ create_range @@ len - num_bits) @ bs
+  else bs
+
+let list_groupby grp_f acc_f zero l =
+  let h = Hashtbl.create 10 in
+  List.iter (fun x ->
+      hashtbl_replace h (grp_f x) (function 
+      | None -> acc_f x zero
+      | Some old -> acc_f x old)
+  ) l;
+  list_of_hashtbl h
+

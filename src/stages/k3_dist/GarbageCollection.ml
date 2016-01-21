@@ -56,8 +56,9 @@ let sw_ack_rcv sw_check_done =
   ]
 
 (* switch: code to update send data structures *)
-let sw_update_send ?(n=mk_cint 1) ~vid_nm =
-  [
+let sw_update_send ~n ~vid_nm =
+  mk_if_eq n (mk_cint 0) mk_cunit @@
+  mk_block [
     mk_incr ~n sw_num_sent.id;
     (* increment vid_count on sw_ack_log *)
     mk_upsert_with sw_ack_log.id [mk_var vid_nm; mk_cunknown]

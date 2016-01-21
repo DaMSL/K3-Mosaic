@@ -263,6 +263,8 @@ val str_drop_end : int -> string -> string
 val str_prefix : string -> string -> bool
 val str_suffix : string -> string -> bool
 
+val str_suffix : string -> string -> bool
+
 (* --- regexp helpers --- *)
 
 (* returns a list of groups of a regexp *)
@@ -310,3 +312,7 @@ val string_of_int_set_set : IntSetSet.t -> string
 val uncurry: ('a -> 'b -> 'c) -> 'a * 'b -> 'c
 val uncurry3: ('a -> 'b -> 'c -> 'd) -> 'a * 'b * 'c -> 'd
 val uncurry4: ('a -> 'b -> 'c -> 'd -> 'e) -> 'a * 'b * 'c * 'd -> 'e
+
+val bools_of_bits : ?num_bits:int -> int -> bool list
+
+val list_groupby : ('a -> 'b) -> ('a -> 'c -> 'c) -> 'c -> 'a list -> ('b * 'c) list

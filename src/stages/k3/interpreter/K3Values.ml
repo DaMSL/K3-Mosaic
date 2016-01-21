@@ -156,6 +156,7 @@ and Value : sig
         locals:   local_env_t;
         accessed: StrSet.t ref;
         type_aliases:(id_t, type_t) Hashtbl.t;
+        stack: id_t list;
       }
   and fun_typ = FLambda | FGlobal of id_t | FTrigger of id_t
 
@@ -355,6 +356,7 @@ let default_env = {
   locals=IdMap.empty;
   accessed=ref StrSet.empty;
   type_aliases=Hashtbl.create 10;
+  stack=[];
 }
 
 (* mark_points are optional sorted counts of where we want markings *)
@@ -484,10 +486,11 @@ let v_is_empty err_fn = function
   | VPolyQueue m -> VBool(IntMap.is_empty m.data)
   | v -> err_fn "v_is_empty" @@ sp "not a collection: %s" @@ sov v
 
-let drop_vars = ["route_memo_"]
+let drop_vars = ["route_memo_"; "pmap_data"]
 let drop_fn_prefixes = [ "shuffle_"; "bound_route_"; "get_ring_node";
                          "free_route_"; "int_of_"; "addr_of_"; "calc_dim_bounds";
-                         "nd_log_master_write"; "nd_log_write_"; "nd_check_stmt_"; "nd_filter_"; "nd_add_delta_"]
+                         "nd_log_master_write"; "nd_log_write_"; "nd_check_stmt_"; "nd_filter_"; "nd_add_delta_";
+                         "clear_"; "tm_check_time"; "is_isobatch"]
 
 
 (* for a map structure *)
@@ -517,9 +520,13 @@ let print_env ?skip_functions ?skip_empty ?(accessed_only=true) env =
   in
   ps "----Globals----"; fnl();
   IdMap.iter (fun k v -> print k !v) env.globals;
+  if env.stack <> [] then begin
+    fnl(); ps "----Stack----"; fnl();
+    List.iter (fun s -> ps s; fnl()) env.stack
+    end;
   if not @@ IdMap.is_empty env.locals then begin
-      fnl(); ps "----Locals----"; fnl();
-      IdMap.iter (fun k v -> print k @@ hd v) env.locals
+    fnl(); ps "----Locals----"; fnl();
+    IdMap.iter (fun k v -> print k @@ hd v) env.locals
     end;
   fnl ()
 

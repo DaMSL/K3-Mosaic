@@ -171,3 +171,7 @@ val dump_info : prog_data_t -> string
 
 val nonempty_rmaps_of_stmt : prog_data_t -> stmt_id_t -> map_id_t list
 
+(* get the max number of stmts per trigger in the program *)
+val max_stmts_per_trig : prog_data_t -> int
+
+val stmt_map_ids : prog_data_t -> (int * (stmt_id_t * map_id_t)) list

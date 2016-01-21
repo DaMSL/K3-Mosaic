@@ -41,6 +41,8 @@ let find_shuffle_by_binding shuffle_fns r l b =
   | [is], isnot -> is, isnot
   | _, _        -> failwith "too many functions"
 
+let shuffle_ip = create_ds "shuffle_ip" @@ mut t_int
+
 let gen_shuffle_fn c rmap lmap bindings fn_name =
   let tuple_types = map_types_with_v_for c.p rmap in
   let tuple_col_t = wrap_t_calc' tuple_types in
@@ -81,8 +83,8 @@ let gen_shuffle_fn c rmap lmap bindings fn_name =
 
     mk_block @@
       (* clear all the results from the previous run *)
-      [mk_iter_bitmap'
-        (mk_update_at_with shuffle_results.id (mk_var "ip") @@
+      [mk_iter_bitmap' ~idx:shuffle_ip.id
+        (mk_update_at_with shuffle_results.id (mk_var shuffle_ip.id) @@
           mk_lambda' shuffle_results.e @@
             mk_block [
               mk_clear_all "indices";
@@ -103,12 +105,12 @@ let gen_shuffle_fn c rmap lmap bindings fn_name =
             (mk_var "pat_idx") @@
 
             (* get the bitmap from route *)
-            mk_iter_bitmap'
-              (mk_insert_at shuffle_bitmap.id (mk_var "ip") [mk_var "has_val"])
+            mk_iter_bitmap' ~idx:shuffle_ip.id
+              (mk_insert_at shuffle_bitmap.id (mk_var shuffle_ip.id) [mk_var "has_val"])
               R.route_bitmap.id;
           (* assign to the appropriate slots *)
-          mk_iter_bitmap'
-            (mk_update_at_with shuffle_results.id (mk_var "ip") @@
+          mk_iter_bitmap' ~idx:shuffle_ip.id
+            (mk_update_at_with shuffle_results.id (mk_var shuffle_ip.id) @@
               mk_lambda' shuffle_results.e @@
                 mk_block [
                   mk_clear_all "indices";
@@ -132,12 +134,12 @@ let gen_shuffle_fn c rmap lmap bindings fn_name =
                 R.route_lookup c lmap
                   (mk_cint lmap :: if pred then full_key_vars else [mk_cunit])
                   (mk_var "pat_idx") @@
-                  mk_iter_bitmap'
+                  mk_iter_bitmap' ~idx:shuffle_ip.id
                     (mk_block [
                       (* copy the marked ip *)
-                      mk_insert_at shuffle_bitmap.id (mk_var "ip") [mk_ctrue];
+                      mk_insert_at shuffle_bitmap.id (mk_var shuffle_ip.id) [mk_ctrue];
                       (* insert into the corresponding slot *)
-                      mk_update_at_with "shuffle_results" (mk_var "ip") @@
+                      mk_update_at_with "shuffle_results" (mk_var shuffle_ip.id) @@
                         mk_lambda' shuffle_results.e @@
                           mk_block [
                             mk_insert "indices" [mk_var "tup_idx"];
@@ -158,8 +160,8 @@ let gen_shuffle_fn c rmap lmap bindings fn_name =
           (R.route_lookup c lmap
             (mk_cint lmap :: if pred then no_rkey_key_vars else [mk_cunit])
             (mk_var shuffle_empty_pat) @@
-            mk_iter_bitmap'
-              (mk_insert_at shuffle_bitmap.id (mk_var "ip") [mk_ctrue])
+            mk_iter_bitmap' ~idx:shuffle_ip.id
+              (mk_insert_at shuffle_bitmap.id (mk_var shuffle_ip.id) [mk_ctrue])
               R.route_bitmap.id)
           mk_cunit
         ]
@@ -211,6 +213,7 @@ let global_vars =
   List.map decl_global
     [ shuffle_bitmap;
       shuffle_results;
+      shuffle_ip;
     ]
 
 

@@ -81,6 +81,9 @@ let wrap_tsortedset' tl = wrap_tsortedset @@ wrap_ttuple tl
 let wrap_tvector t = wrap_tcol TVector t
 let wrap_tvector' t = wrap_tvector (wrap_ttuple t)
 
+let t_bool_vector = wrap_tvector t_bool
+let t_int_vector = wrap_tvector t_int
+
 (* wrap a type in a vmap *)
 let wrap_tvmap ?idx typ = wrap_tcol (TVMap idx) typ
 let wrap_tvmap' ?idx tl = wrap_tvmap ?idx @@ wrap_ttuple tl
@@ -336,6 +339,7 @@ let mk_slice_gt' col pat = mk_slice_gt (mk_var col) pat
 let mk_slice_geq col pat = mk_slice_gen (SliceOp OGeq) col @@ mk_tuple pat
 let mk_slice_geq' col pat = mk_slice_geq (mk_var col) pat
 
+let mk_error' e = mk_apply' "error" [mk_apply' "print" [e]]
 let mk_error s = mk_apply' "error" [mk_apply' "print" [mk_cstring s]]
 
 let _err = mk_lambda' ["_", t_unknown] @@ mk_error "vector: out of bounds!"
@@ -367,6 +371,7 @@ let mk_insert ?(path=[]) id x = mk_stree Insert [mk_id_path id path; mk_tuple x]
 let mk_insert_at ?(path=[]) id idx x = mk_stree InsertAt [mk_id_path id path; idx; mk_tuple x]
 
 let mk_set_all ?(path=[]) id x = mk_stree SetAll [mk_id_path id path; mk_tuple x]
+let mk_set_all_block ?path id x = mk_block [mk_set_all ?path id x; mk_var id]
 
 let mk_extend ?(path=[]) id x = mk_stree Extend [mk_id_path id path; x]
 
@@ -619,7 +624,7 @@ let mk_global_fn ?(wr_all=false) ?(wr_arg=[]) name i_ts o_ts expr =
       | TUnit | TInt | TDate | TBool | TFloat | TIndirect _-> i, t
       | _ -> i, {t with anno = Property(false,"CRef")::t.anno}
     in
-  let i_ts = List.mapi anno_t i_ts in
+  let i_ts = if i_ts = [] then ["_u", t_unit] else List.mapi anno_t i_ts in
   mk_global_fn_raw name
     (wrap_args i_ts)
     (snd_many i_ts)
@@ -727,6 +732,7 @@ let mk_rebuild_tuple ?(prefix=def_tup_prefix) tup_name types f =
 (* K3 types for various elements of a k3 program *)
 let t_trig_id = t_int (* In K3, triggers are always handled by numerical id *)
 let t_stmt_id = t_int
+let t_stmt_map_id = t_int
 let t_map_id = t_int
 
 (* --- vids --- *)
@@ -740,8 +746,8 @@ let vid_increment ?(vid_expr=mk_var "vid") () =
   mk_tuple [mk_add vid_expr (mk_cint 1)]
 
 let min_vid_k3 = mk_tuple [mk_cint 0]
-let sys_init_vid_k3 = mk_tuple [mk_cint 1]
-let start_vid_k3 = mk_tuple [mk_cint 2]
+let sys_init_vid_k3 = mk_tuple [mk_cint 2]
+let start_vid_k3 = mk_tuple [mk_cint 4]
 
 (* id function for maps *)
 let mk_id tuple_types =
@@ -989,26 +995,27 @@ let mk_iter_bitmap ?(all=false) ?(idx="ip") e bitmap =
 
 let mk_iter_bitmap' ?all ?idx e bitmap = mk_iter_bitmap ?all ?idx e (mk_var bitmap)
 
-let mk_agg_bitmap ?(all=false) ?(idx="ip") args e zero bitmap =
+let mk_agg_bitmap ?(all=false) ?(idx="ip") ?(move=false) args e zero bitmap =
   mk_block [
     mk_assign idx @@ mk_cint 0;
-    mk_agg (mk_lambda2' args ["has_val", t_bool] @@
-        (* beta reducing messes up ordering here *)
-        U.add_property "NoBetaReduce" @@
-        mk_let ["res"]
-          (if all then e
-            else mk_if (mk_var "has_val")
-                  e @@
-                  mk_tuple @@ ids_to_vars @@ fst_many args) @@
-        mk_block [
-          mk_assign idx @@ mk_add (mk_var idx) @@ mk_cint 1;
-          mk_var "res"
-        ])
-      zero @@
-      bitmap
+    (if move then U.add_property "Move" else id_fn) @@
+      mk_agg (mk_lambda2' args ["has_val", t_bool] @@
+          (* beta reducing messes up ordering here *)
+          U.add_property "NoBetaReduce" @@
+          mk_let ["res"]
+            (if all then e
+              else mk_if (mk_var "has_val")
+                    e @@
+                    mk_tuple @@ ids_to_vars @@ fst_many args) @@
+          mk_block [
+            mk_assign idx @@ mk_add (mk_var idx) @@ mk_cint 1;
+            mk_var "res"
+          ])
+        zero @@
+        bitmap
   ]
 
-let mk_agg_bitmap' ?all ?idx args e zero bitmap = mk_agg_bitmap ?all ?idx args e zero (mk_var bitmap)
+let mk_agg_bitmap' ?all ?idx ?move args e zero bitmap = mk_agg_bitmap ?all ?idx ?move args e zero (mk_var bitmap)
 
 (* check for tag validity *)
 let mk_check_tag tag col idx offset e =

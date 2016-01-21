@@ -155,6 +155,7 @@ type parameters = {
     mutable map_type: K3Dist.map_type; (* UNUSED whether to generate code that uses vmaps (no other option now)*)
     mutable gen_deletes: bool;
     mutable gen_correctives: bool;
+    mutable gen_single_vid: bool;
     mutable agenda_map: K3Dist.mapping_t; (* mapping from agenda to stream sources *)
     mutable stream_file: string;
       (* file to stream from (into switches). UNUSED -- we splice a varialbe (stream_path) instead *)
@@ -197,6 +198,7 @@ let default_cmd_line_params () = {
     map_type          = K3Dist.MapMultiVMap;
     gen_deletes       = true;
     gen_correctives   = true;
+    gen_single_vid    = true;
 
     src_interval      = 2;
     interp_arg_file   = "";
@@ -474,10 +476,10 @@ let test params inputs =
 
 let transform_to_k3_dist params proginfo warmup_p ast =
   let {map_type; stream_file;
-       gen_deletes; gen_correctives;
+       gen_deletes; gen_correctives; gen_single_vid;
        agenda_map; use_opt_route} = params in
   try
-    GenDist.gen_dist ~map_type ~stream_file ~gen_deletes ~gen_correctives
+    GenDist.gen_dist ~map_type ~stream_file ~gen_deletes ~gen_correctives ~gen_single_vid
                      ~agenda_map ~use_opt_route proginfo warmup_p ast
 
   with DistributeError(uuid, s) -> handle_distribute_error (K3Data ast) uuid s
@@ -587,6 +589,8 @@ let param_specs = Arg.align
       "         Generate deletes";
   "--no-correctives", Arg.Unit (fun () -> cmd_line_params.gen_correctives <- false),
       "         Generate correctives";
+  "--no-single-vid", Arg.Unit (fun () -> cmd_line_params.gen_single_vid <- false),
+      "         Generate non-isobatch code";
   "--interp-args", Arg.String (fun s -> cmd_line_params.interp_arg_file <- s),
       "         Load json arg file for interpretation";
   "--safe-writes", Arg.Unit (fun () -> cmd_line_params.safe_writes <- true),

@@ -197,6 +197,7 @@ let stmts_rhs_maps (p:prog_data_t) =
   (get_stmt_data p)
 
 let stmts_lhs_maps (p:prog_data_t) =
+  List.sort (fun x y -> fst x - fst y) @@
   List.map (fun s -> s.stmt, s.lmap) @@ get_stmt_data p
 
 let for_all_stmts_rhs_maps p f = List.map f @@ stmts_rhs_maps p
@@ -454,6 +455,29 @@ let special_route_stmt ?info p s =
     true
   with Exit -> false
 
+let max_stmts_per_trig p =
+  List.fold_left (fun max t ->
+      let n = List.length @@ stmts_of_t p t in
+      if n > max then n else max)
+    0 @@ get_trig_list p
+
+(* get only the rmaps of s that have keys *)
+let nonempty_rmaps_of_stmt p s =
+  let rmaps = rhs_maps_of_stmt p s in
+  List.filter (fun m -> map_types_no_val_for p m <> []) rmaps
+
+(* enumerate all rstmt_maps, giving them ids *)
+let stmt_map_ids p =
+  let n = ref 0 in
+  List.flatten @@
+  List.map (fun s ->
+      List.map (fun rmap ->
+          let n' = !n in
+          incr n;
+          n', (s, rmap)) @@
+      rhs_maps_of_stmt p s) @@
+  get_stmt_list p
+
 let dump_info p =
   let ts = get_trig_list p in
   let ss = get_stmt_list p in
@@ -464,12 +488,20 @@ let dump_info p =
   let t_s = List.map (fun t -> t, stmts_of_t p t) ts in
   let t_binds = List.map (fun t -> t, fst_many @@ args_of_t p t) ts in
   let map_ids = List.map (fun m -> map_name_of p m, m) @@ get_map_list p in
+  let stmt_map_ids = stmt_map_ids p in
+  let t_s_m =
+    List.map (fun (t, ss) ->
+        t, List.map (fun s -> s, map_name_of p @@ lhs_map_of_stmt p s,
+                                 List.map (map_name_of p) @@ rhs_maps_of_stmt p s) ss)
+      t_s in
   let s_t_s = sp "[%s]" @@
               strcatmap (fun (t, ss) -> sp "%s:[%s]" t @@ string_of_int_list ss) t_s in
   let s_t_binds = sp "[%s]" @@
     strcatmap (fun (t, args) -> sp "%s:[%s]" t @@ String.concat ", " args) t_binds in
   let s_map_ids = sp "[%s]" @@
     strcatmap (fun (m, id) -> sp "%s:%d" m id) map_ids in
+  let s_s_map_ids =
+    strcatmap ~sep:"; " (fun (s_m, (s, m)) -> sp "s%d, m%d: %d" s m s_m) stmt_map_ids in
   let s_free_infos = sp "[%s]" @@
     strcatmap (fun (s, info) ->
         sp "%d:[%d:[%s]; %s]" s (fst info.lmap_free)
@@ -484,7 +516,14 @@ let dump_info p =
           (strcatmap (fun (m, l) -> sp "%d:[%s]" m @@
                        String.concat ", " @@ fst_many @@ l) info.rmaps_bound)
       ) infos in
-  sp
+  (* simplified version of program map dependency *)
+  let map_dependencies =
+    strcatmap ~sep:"\n" (fun (t, s_m) ->
+      sp "%s:\n%s" t @@ strcatmap ~sep:"\n" (fun (s, l, rs) ->
+        if rs <> [] then
+          sp "%d, %s <= %s" s l @@ String.concat ", " rs
+        else sp "%d, %s" s l) s_m) t_s_m
+  in sp
 "\
 Statement route generation:
 %s
@@ -498,18 +537,24 @@ Trigger binds:
 Map ids:
 %s
 
+Stmt_map ids:
+%s
+
 Free vars:
 %s
 
 Bound vars:
 %s
-"
-(string_of_int_list s_special)
-s_t_s s_t_binds s_map_ids
-s_free_infos s_bound_infos
 
-(* get only the rmaps of s that have keys *)
-let nonempty_rmaps_of_stmt p s =
-  let rmaps = rhs_maps_of_stmt p s in
-  List.filter (fun m -> map_types_no_val_for p m <> []) rmaps
+Map dependencies:
+%s
+"
+  (string_of_int_list s_special)
+  s_t_s
+  s_t_binds
+  s_map_ids
+  s_s_map_ids
+  s_free_infos
+  s_bound_infos
+  map_dependencies
 

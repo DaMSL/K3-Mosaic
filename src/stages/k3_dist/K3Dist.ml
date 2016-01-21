@@ -75,12 +75,23 @@ type map_type =
 
 type has_ds = bool
 type unique = bool
+type sub_handler = string
 
 type tag_type =
-    Trig      of has_ds (* a top-level trigger *)
-  | SubTrig   of has_ds * string (* a subtrigger handled by trig_sub_handler *)
+  | Trig      of has_ds (* a top-level trigger *)
+  | SubTrig   of has_ds * sub_handler list (* a subtrigger handled by a high-level trigger *)
   | Ds        of unique (* a data structure *)
   | Event     (* incoming event *)
+
+type tag_info = {
+  tag: id_t;
+  fn: id_t;
+  tag_typ: tag_type;
+  args: (id_t * type_t) list;
+  const_args: expr_t list;
+  batch_id: bool;
+  trig_args: bool;
+}
 
 type config = {
   p : P.prog_data_t;
@@ -88,6 +99,7 @@ type config = {
   map_type : map_type;
   gen_deletes : bool;
   gen_correctives : bool;
+  gen_single_vid : bool;
   (* optimize figuring out corrective map possiblities *)
   corr_maps : map_id_t list;
   (* whether there's a sys_ready_event trigger *)
@@ -104,7 +116,7 @@ type config = {
   (* map bind indices for route memoization *)
   route_indices: (map_id_t, int IntSetMap.t) Hashtbl.t;
   (* poly tag list for batching: int_tag * (tag * tag_type * types) *)
-  poly_tags : (int * (string * tag_type * (id_t * type_t) list)) list;
+  poly_tags : (int * tag_info) list;
   (* poly tag for incoming events *)
   event_tags: (int * (string * type_t list)) list;
   (* freevar info for the program, per stmt *)
@@ -118,6 +130,7 @@ let default_config = {
   map_type = MapVMap;
   gen_deletes = true;
   gen_correctives = true;
+  gen_single_vid = true;
   corr_maps = [];
   sys_init = false;
   stream_file = "";
@@ -174,6 +187,7 @@ let read_e ~vid ~global e =
 let ds_e ds = read_e ~vid:ds.vid ~global:ds.global ds.e
 
 let t_of_e e = wrap_ttuple @@ snd_many e
+let tup_of_e e = mk_tuple @@ ids_to_vars @@ fst_many e
 
 let string_of_pat pat =
   let open K3PrintSyntax in
@@ -373,9 +387,8 @@ let g_init_vid =
 let g_max_int = create_ds "g_max_int" t_int ~init:(mk_apply' "get_max_int" [mk_cunit])
 let g_min_vid = create_ds "g_min_vid" t_vid ~init:min_vid_k3
 let g_max_vid =
-  let init =
-    let max = mk_apply' "get_max_int" [mk_cunit] in
-    mk_tuple [max] in
+  (* get rid of lowest bit *)
+  let init = mk_mult (mk_divi (mk_apply' "get_max_int" [mk_cunit]) @@ mk_cint 2) @@ mk_cint 2 in
   create_ds "g_max_vid" t_vid ~init
 let g_start_vid = create_ds "g_start_vid" t_vid ~init:start_vid_k3
 
@@ -508,7 +521,8 @@ let num_nodes =
   let d_init = mk_size @@ mk_var nodes.id in
   create_ds "num_nodes" (mut t_int) ~d_init
 
-let sw_event_driver_trig_nm = "sw_event_driver_trig"
+let sw_rcv_token_trig_nm = "sw_rcv_token_trig"
+let sw_rcv_vector_clock_nm = "sw_rcv_vector_clock"
 
 (* timing data structures *)
 let ms_start_time = create_ds "ms_start_time" @@ mut t_int
@@ -520,28 +534,35 @@ let sw_event_driver_sleep = create_ds "sw_event_driver_sleep" @@ mut t_int
 (**** No corrective mode ****)
 
 (* whether we're operating with correctives on *)
-let corrective_mode = create_ds "corrective_mode" t_bool ~init:mk_ctrue
+let corrective_mode = create_ds "corrective_mode" t_bool
 
 (* map stmt_id to lmap *)
+let nd_lmap_of_stmt_id_id = "nd_lmap_of_stmt_id"
 let nd_lmap_of_stmt_id c =
-  let e = ["stmt_id", t_int; "map_id", t_int] in
-  let t = wrap_tmap' @@ snd_many e in
+  let e = ["map_id", t_int] in
+  let t = t_int_vector in
   let init = k3_container_of_list t @@
-    List.map (fun (x,y) ->
-      mk_tuple [mk_cint x; mk_cint y]) @@ P.stmts_lhs_maps c.p in
+    List.map mk_cint @@ snd_many @@ P.stmts_lhs_maps c.p in
   create_ds "nd_lmap_of_stmt_id" t ~e ~init
 
-let nd_rcv_fetch_buffer_inner2 =
-  let e = ["stmt_id", t_stmt_id] in
-  create_ds "nd_rcv_fetch_buffer_inner2" (wrap_tset' @@ snd_many e) ~e
+(* for buffered fetches in no-corrective mode *)
+let nd_fetch_buffer_inner2 =
+  let e = ["stmt_map_id", t_int] in
+  create_ds "inner2" (wrap_tset @@ t_of_e e) ~e
 
-let nd_rcv_fetch_buffer_inner =
-  let e = ["vid", t_vid; "stmt_ids", wrap_tset' [t_int]] in
-  create_ds "nd_rcv_fetch_buffer_inner" (wrap_tsortedmap' @@ snd_many e) ~e
+let nd_fetch_buffer_inner =
+  let e = ["vid", t_vid; "stmt_map_ids", wrap_tset' [t_int]] in
+  create_ds "inner" (wrap_tsortedmap' @@ snd_many e) ~e
 
-let nd_rcv_fetch_buffer =
-  let e = ["map_id", t_int; "vid_stmt", nd_rcv_fetch_buffer_inner.t] in
-  create_ds "nd_rcv_fetch_buffer" (wrap_tmap' @@ snd_many e) ~e
+(* map_id -> vid -> stmt_map_id set *)
+let nd_fetch_buffer_id = "nd_fetch_buffer"
+let nd_fetch_buffer_e = ["inner", nd_fetch_buffer_inner.t]
+let nd_fetch_buffer c =
+  let e = nd_fetch_buffer_e in
+  let init =
+    k3_container_of_list (wrap_tvector nd_fetch_buffer_inner.t) @@
+    List.map (const @@ mk_empty nd_fetch_buffer_inner.t) @@ 0::P.get_map_list c.p in
+  create_ds ~init ~e nd_fetch_buffer_id @@ wrap_tvector @@ t_of_e e
 
 (**** Protocol Init code ****)
 
@@ -618,16 +639,27 @@ let combine_trig_args c =
 
 let nd_stmt_cntrs_per_map_inner =
   let e = ["vid", t_vid; "stmt_id", t_int] in
-  create_ds "nd_stmt_cntrs_per_map_inner" (wrap_tsortedmap' @@ snd_many e) ~e
+  create_ds "inner" (wrap_tsortedmap' @@ snd_many e) ~e
 
-let nd_stmt_cntrs_per_map =
-  let e = ["map_id", t_int; "vid_stmt", nd_stmt_cntrs_per_map_inner.t] in
-  create_ds "nd_stmt_cntrs_per_map" (wrap_tmap' @@ snd_many e) ~e
+(* indexed by map_id *)
+let nd_stmt_cntrs_per_map_id = "nd_stmt_cntrs_per_map"
+let nd_stmt_cntrs_per_map_e = ["inner", nd_stmt_cntrs_per_map_inner.t]
+let nd_stmt_cntrs_per_map c =
+  let e = nd_stmt_cntrs_per_map_e in
+  let init =
+    k3_container_of_list (wrap_tvector nd_stmt_cntrs_per_map_inner.t) @@
+    List.map (const @@ mk_empty nd_stmt_cntrs_per_map_inner.t) @@ 0::P.get_map_list c.p in
+  create_ds ~e ~init nd_stmt_cntrs_per_map_id @@ wrap_tvector @@ t_of_e e
 
 (* not a real ds. only inside stmt_cntrs *)
-let nd_stmt_cntrs_corr_map =
-  let e = ["hop", t_int; "corr_ctr", t_int] in
+let nd_corr_map_inner =
+  let e = ["hop2", t_int; "count2", t_int] in
   create_ds "sc_corr_map" (wrap_tmap' @@ snd_many e) ~e
+
+let nd_corr_map =
+  let ee = [["vid", t_vid; "stmt_id", t_stmt_id]; ["tree", nd_corr_map_inner.t]] in
+  let e = ["vid_stmt", wrap_ttuple [t_vid; t_stmt_id]; "tree", nd_corr_map_inner.t] in
+  create_ds "nd_corr_map" ~e ~ee @@ wrap_tmap @@ t_of_e e
 
 (* bitmap for stmt_cntrs *)
 let nd_stmt_cntr_size =
@@ -639,8 +671,7 @@ let nd_stmt_cntrs_inner =
   let ee =
     [["vid", t_int];
      ["counter", t_int;
-      "no_info", t_bool;
-      "corr_map", wrap_tmap' @@ snd_many @@ ds_e nd_stmt_cntrs_corr_map]] in
+      "no_info", t_bool]] in
   let e = ["vid", t_vid; "stmt_cntr_info", wrap_ttuple @@ snd_many @@ at ee 1] in
   create_ds "nd_stmt_cntrs_inner" ~e ~ee @@ wrap_tmap' @@ snd_many e
 
@@ -650,8 +681,7 @@ let nd_stmt_cntrs_inner =
 let nd_stmt_cntrs_id = "nd_stmt_cntrs"
 let nd_stmt_cntrs_e = [nd_stmt_cntrs_inner.id, nd_stmt_cntrs_inner.t]
 let nd_stmt_cntrs c =
-  let ss = List.map (const @@ mk_empty nd_stmt_cntrs_inner.t) @@
-             create_range @@ P.get_max_stmt c.p + 1 in
+  let ss = List.map (const @@ mk_empty nd_stmt_cntrs_inner.t) @@ P.get_stmt_list c.p in
   (* indexed by stmt_id *)
   let e = nd_stmt_cntrs_e in
   let t = wrap_tvector' @@ snd_many e in
@@ -720,25 +750,28 @@ let trig_dispatcher_trig_nm = "trig_dispatcher_trig"
 let trig_dispatcher_trig_unique_nm = "trig_dispatcher_unique_trig"
 
 (* dispatcher for sw -> node with corrective mode *)
-let nd_trig_dispatcher_trig_nm = "nd_trig_dispatcher_trig"
+let nd_from_sw_trig_dispatcher_trig_nm = "nd_from_sw_trig_dispatcher_trig"
 
 (* handler for many other triggers *)
-let trig_sub_handler_name_of_t t = "nd_trig_sub_handler_"^t
-let trig_slim_sub_handler_name_of_t t = "nd_trig_slim_sub_handler_"^t
-let send_fetch_name_of_t t = "sw_"^t^"_send_fetch"
-let rcv_fetch_name_of_t t = "nd_"^t^"_rcv_fetch"
-let rcv_put_name_of_t t = "nd_"^t^"_rcv_put"
-let send_push_name_of_t c t stmt_id map_id =
-  "nd_"^t^"_send_push_s"^soi stmt_id^"_m_"^P.map_name_of c.p map_id
-let rcv_push_name_of_t c t stmt_id map_id =
-  "nd_"^t^"_rcv_push_s"^soi stmt_id^"_m_"^P.map_name_of c.p map_id
-let send_corrective_name_of_t c map_id =
-  "nd_"^P.map_name_of c.p map_id^"_send_correctives"
-let do_complete_name_of_t t stmt_id = "nd_"^t^"_do_complete_s"^soi stmt_id
-let rcv_corrective_name_of_t c t stmt_id map_id =
-  t^"_rcv_corrective_s"^soi stmt_id^"_m_"^P.map_name_of c.p map_id
-let do_corrective_name_of_t c t stmt_id map_id =
-  t^"_do_corrective_s"^soi stmt_id^"_m_"^P.map_name_of c.p map_id
+let m_nm = P.map_name_of
+let trig_save_arg_sub_handler_name_of_t t = "nd_trig_save_arg_sub_handler_"^t
+let trig_load_arg_sub_handler_name_of_t t = "nd_trig_load_arg_sub_handler_"^t
+let trig_no_arg_sub_handler_name_of_t t   = "nd_trig_no_arg_sub_handler_"^t
+let send_fetch_single_vid_name_of_t t s = sp "sw_%s_%d_send_fetch_single_vid" t s
+let send_fetches_isobatch_name_of_t t = sp "sw_%s_send_fetches_isobatch" t
+let rcv_fetch_single_vid_name_of_t t s = sp "nd_%s_%d_rcv_fetch_single_vid" t s
+let rcv_fetch_isobatch_name_of_t t s = sp "nd_%s_%d_rcv_fetch_isobatch" t s
+let rcv_put_single_vid_name_of_t t s = sp "nd_%s_%d_rcv_put_single_vid" t s
+let rcv_put_isobatch_name_of_t t s = sp "nd_%s_%d_rcv_put_isobatch" t s
+let rcv_stmt_isobatch_name_of_t t s = sp "nd_%s_%d_rcv_stmt_isobatch" t s
+let send_push_name_of_t c t s m = sp "nd_%s_%d_send_push_single_vid_%s" t s (m_nm c.p m)
+let send_push_isobatch_name_of_t c t s m = sp "nd_%s_%d_send_push_isobatch_%s" t s (m_nm c.p m)
+let rcv_push_name_of_t t s = sp "nd_%s_%d_rcv_push" t s
+let rcv_push_isobatch_name_of_t t s = sp "nd_%s_%d_rcv_push_isobatch" t s
+let send_corrective_name_of_t c m = sp "nd_%s_send_correctives" (m_nm c.p m)
+let do_complete_name_of_t t s = sp "nd_%s_%d_do_complete" t s
+let rcv_corrective_name_of_t c t s m = sp "nd_%s_%d_rcv_corrective_%s" t s (m_nm c.p m)
+let do_corrective_name_of_t c t s m = sp "nd_%s_%d_do_corrective_%s" t s (m_nm c.p m)
 
 let sw_ack_rcv_trig_nm = "sw_ack_rcv"
 
@@ -746,37 +779,46 @@ let nd_rcv_corr_done_nm = "nd_rcv_corr_done"
 
 let nd_rcv_warmup_push_nm = "rcv_warmup_push"
 
+let nd_rcv_stmt_isobatch_nm = "nd_rcv_stmt_isobatch"
+
 (*** trigger args. Needed here for polyqueues ***)
 
 (* the trig header marks the args *)
-let trig_sub_handler_args c t = ["save_args", t_bool] @ args_of_t_with_v c t
+let trig_save_arg_sub_handler_args_poly c t = args_of_t_with_v c t
+let trig_save_arg_sub_handler_args c t = ["batch_id", t_vid] @ trig_save_arg_sub_handler_args_poly c t
 
-(* slim trig header doesn't carry args *)
-let trig_slim_sub_handler_args c t = []
+(* slim trig header for pushes *)
+(* TODO: make vid 16-bit offset from batch_id *)
+let trig_load_arg_sub_handler_args_poly = ["vid", t_vid]
+let trig_load_arg_sub_handler_args = ["batch_id", t_vid] @ trig_load_arg_sub_handler_args_poly
 
-(* rcv_put: how the stmt_cnt list gets sent in rcv_put *)
-let stmt_cnt_list_ship =
-  let e = ["stmt_id", t_stmt_id; "count", t_int] in
-  create_ds "stmt_cnt_list" ~e @@ wrap_tbag' @@ snd_many e
+let trig_no_arg_sub_handler_args_poly = ["vid", t_vid]
+let trig_no_arg_sub_handler_args = ["batch_id", t_vid] @ trig_no_arg_sub_handler_args_poly
 
 (* rcv_put includes stmt_cnt_list_ship *)
-let nd_rcv_put_args_poly c t = ["sender_ip", t_int]
-let nd_rcv_put_args c t = nd_rcv_put_args_poly c t @ args_of_t_with_v c t
+let nd_rcv_put_args_poly = ["count2", t_int]
+let nd_rcv_put_args c t = nd_rcv_put_args_poly @ args_of_t_with_v c t
+
+let nd_rcv_put_isobatch_poly = ["count2", t_int]
+let nd_rcv_put_isobatch_args c t = ["batch_id", t_vid] @ nd_rcv_put_isobatch_poly
 
 (* rcv_fetch: data structure that is sent *)
-let stmt_map_ids =
+let send_map_ids =
   (* this is a bag since no aggregation is done *)
-  let e = ["stmt_id", t_stmt_id; "map_id", t_map_id] in
-  create_ds ~e "stmt_map_ids" @@ wrap_tbag' @@ snd_many e
+  let e = ["map_id", t_map_id] in
+  create_ds ~e "send_map_ids" @@ wrap_tbag' @@ snd_many e
 
 let nd_rcv_fetch_args_poly c t = []
 let nd_rcv_fetch_args c t = nd_rcv_fetch_args_poly c t @ args_of_t_with_v c t
 
-let nd_do_complete_trig_args_poly c t = ["sender_ip", t_int; "ack", t_bool]
+let nd_do_complete_trig_args_poly c t = []
 let nd_do_complete_trig_args c t = nd_do_complete_trig_args_poly c t @ args_of_t_with_v c t
 
-let nd_rcv_push_args_poly c t = ["has_data", t_bool]
-let nd_rcv_push_args c t = nd_rcv_push_args_poly c t @ args_of_t_with_v c t
+let nd_rcv_push_args_poly = []
+let nd_rcv_push_args = nd_rcv_push_args_poly @ ["has_data", t_bool; "count", t_int; "vid", t_vid]
+
+let nd_rcv_push_isobatch_args_poly = ["batch_id", t_vid]
+let nd_rcv_push_isobatch_args = ["count", t_int] @ nd_rcv_push_isobatch_args_poly
 
 (* for do_corrective:
  * original values commonly used to send back to original do_complete *)
@@ -790,9 +832,8 @@ let nd_rcv_corr_done_args = ["vid", t_vid; "stmt_id", t_stmt_id; "hop", t_int; "
 (* for GC *)
 let sw_ack_rcv_trig_args = ["addr", t_int; "vid", t_vid]
 
-
 let get_global_poly_tags c =
-  List.map (fun (i, (s,_,i_ts)) -> i, s, wrap_ttuple @@ snd_many i_ts) c.poly_tags
+  List.map (fun (i, ti) -> i, ti.tag, wrap_ttuple @@ snd_many ti.args) c.poly_tags
 
 let get_poly_event_tags c =
   List.map (fun (i, (s, ts)) -> i, s, wrap_ttuple ts) c.event_tags
@@ -846,11 +887,56 @@ let upoly_queue_bitmap =
     mk_map (mk_lambda' unknown_arg mk_cfalse) @@ mk_var my_peers.id in
   create_ds "upoly_queue_bitmap" ~init @@ wrap_tvector t_bool
 
-(* we use this to make sure a trig header gets sent at least once per sub-trigger handling *)
+(* switch poly queues - move into it between token ring triggers *)
+let sw_poly_queues =
+  let e = ["queue", poly_queue.t] in
+  let init =
+    mk_map (mk_lambda' unknown_arg @@ mk_var "empty_poly_queue") @@ mk_var my_peers.id in
+  create_ds ~e ~init "sw_poly_queues" @@ wrap_tvector' @@ snd_many e
+
+let sw_poly_queue_bitmap =
+  let init =
+    mk_map (mk_lambda' unknown_arg mk_cfalse) @@ mk_var my_peers.id in
+  create_ds "sw_poly_queue_bitmap" ~init @@ wrap_tvector t_bool
+
+(* we use this to make sure some trig header gets sent at least once per sub-trigger handling *)
 let send_trig_header_bitmap =
   let init =
     mk_map (mk_lambda' unknown_arg mk_cfalse) @@ mk_var my_peers.id in
   create_ds "send_trig_header_bitmap" ~init @@ wrap_tvector t_bool
+
+(* keep track of which vid args we've sent in this batch *)
+let send_trig_args_inner =
+  let e = ["vid", t_vid; "_u", t_unit] in
+  create_ds ~e "inner" @@ wrap_tmap @@ t_of_e e
+
+(* IP -> vid -> () : which args have been sent *)
+let send_trig_args_map =
+  let e = ["inner", send_trig_args_inner.t] in
+  let init =
+    mk_map (mk_lambda' unknown_arg @@ mk_empty send_trig_args_inner.t) @@
+    mk_var my_peers.id in
+  create_ds ~e ~init "send_trig_args_map" @@ wrap_tvector @@ t_of_e e
+
+let send_trig_args_bitmap =
+  let init =
+    mk_map (mk_lambda' unknown_arg mk_cfalse) @@ mk_var my_peers.id in
+  create_ds "send_trig_args_bitmap" ~init @@ wrap_tvector t_bool
+
+let clear_send_trig_args_map_nm = "clear_send_trig_args_map"
+let clear_send_trig_args_map =
+  mk_global_fn clear_send_trig_args_map_nm [] [] @@
+  mk_block [
+    mk_iter_bitmap'
+      (mk_update_at_with send_trig_args_map.id (mk_var "ip") @@
+        mk_lambda' send_trig_args_map.e @@
+          mk_block [
+            mk_clear_all send_trig_args_inner.id;
+            mk_var send_trig_args_inner.id
+          ])
+      send_trig_args_bitmap.id;
+    mk_set_all send_trig_args_bitmap.id [mk_cfalse];
+  ]
 
 (* u is for unique *)
 let p_idx  = ["idx", t_int]
@@ -888,7 +974,7 @@ let reserve_str_estimate = 4
 (* maximum size of polyqueue entries *)
 let max_poly_queue_csize c =
   let _, max = list_max_op U.csize_of_type @@
-    List.map (wrap_ttuple |- snd_many |- thd3 |- snd) c.poly_tags in
+    List.map (fun (_, ti) -> wrap_ttuple @@ snd_many ti.args) c.poly_tags in
   max * reserve_mult
 
 let max_event_queue_csize c =
@@ -910,27 +996,28 @@ let reserve_poly_queue_code ?all c =
       poly_queue_bitmap.id)
     mk_cunit
 
-let clear_poly_queues ?(unique=true) c =
-  mk_block @@
+let clear_poly_queues_fn_nm = "clear_poly_queues"
+let clear_poly_queues_fn c =
+  mk_global_fn clear_poly_queues_fn_nm [] [] @@
+  mk_block [
     (* replace all used send slots with empty polyqueues *)
-  [
     mk_iter_bitmap'
       (mk_insert_at poly_queues.id (mk_var "ip")
          [mk_var empty_poly_queue.id])
       poly_queue_bitmap.id;
-    mk_set_all poly_queue_bitmap.id [mk_cfalse]
-  ] @
-  (if unique then
-  [
     mk_iter_bitmap'
-      (mk_insert_at upoly_queues.id (mk_var "ip")
-         [mk_var empty_upoly_queue.id])
-      upoly_queue_bitmap.id;
-    mk_set_all upoly_queue_bitmap.id [mk_cfalse]
-  ] else []) @
-  (* apply reserve to all the new polybufs *)
-  [reserve_poly_queue_code c]
+        (mk_insert_at upoly_queues.id (mk_var "ip")
+          [mk_var empty_upoly_queue.id])
+        upoly_queue_bitmap.id ;
+    (* apply reserve to all the new polybufs *)
+    reserve_poly_queue_code c;
+    mk_set_all poly_queue_bitmap.id [mk_cfalse];
+    mk_set_all upoly_queue_bitmap.id [mk_cfalse];
+  ]
 
+(* we must always clear both upoly and poly queues -- we don't know when we'll need them *)
+let clear_poly_queues c =
+  mk_apply' clear_poly_queues_fn_nm []
 
 (* we create tags for events, with the full width of said events plus insert/delete field *)
 let calc_event_tags c =
@@ -942,6 +1029,10 @@ let calc_event_tags c =
   in
   insert_index_fst l
 
+let ti ?(fn="") ?(const_args=[]) ?(batch_id=false) ?(vid=false) ?(trig_args=false) tag tag_typ args =
+  let fn = if fn = "" then tag else fn in
+  {tag; tag_typ; args; fn; batch_id; trig_args; const_args}
+
 (* we create one global tag hashmap, which we use to populate polyqueues *)
 (* format (tag, tag_type, types) *)
 let calc_poly_tags c =
@@ -949,56 +1040,98 @@ let calc_poly_tags c =
     let for_all_trigs = P.for_all_trigs ~delete:c.gen_deletes in
     let events = fst_many @@ StrMap.to_list @@ snd c.agenda_map in
     (* static sentinel *)
-    ("sentinel", Event, ["_", t_unit])::
+    (ti "sentinel" Event ["_", t_unit])::
     (* event tags *)
     (List.map (fun t ->
          let args = try ("do_insert", t_bool)::args_of_t c ("insert_"^t)
                     with Bad_data _ -> [] in
-         t, Event, args)
+         ti t Event args)
        events) @
-    (* static ds for sw->nd triggers *)
-    [stmt_cnt_list_ship.id, Ds false, stmt_cnt_list_ship.e;
-     stmt_map_ids.id, Ds false, stmt_map_ids.e] @
+    (* map ids for send fetch *)
+    (List.map (fun m ->
+         ti (P.map_name_of c.p m^"_id") (Ds false) []) @@
+     P.get_map_list c.p) @
     (List.flatten @@ for_all_trigs c.p ~sys_init:true @@ fun t ->
+      let s_r = P.stmts_with_rhs_maps_in_t c.p t in
+      let s_no_r = P.stmts_without_rhs_maps_in_t c.p t in
       let s_rhs = P.s_and_over_stmts_in_t c.p P.rhs_maps_of_stmt t in
       let s_rhs_corr = List.filter (fun (s, map) -> List.mem map c.corr_maps) s_rhs in
-      (* carries all the trig arguments + vid *)
-      (trig_sub_handler_name_of_t t, Trig true, trig_sub_handler_args c t)::
-      (* (trig_slim_sub_handler_name_of_t t, Trig true, trig_slim_sub_handler_args c t):: *)
-      (if s_rhs = [] then [] else [
-        rcv_put_name_of_t t, SubTrig(true, t), nd_rcv_put_args_poly c t;
-        rcv_fetch_name_of_t t, SubTrig(true, t), nd_rcv_fetch_args_poly c t]) @
+      let save_handler_nm = trig_save_arg_sub_handler_name_of_t t in
+      let load_handler_nm = trig_load_arg_sub_handler_name_of_t t in
+      let no_arg_handler_nm = trig_no_arg_sub_handler_name_of_t t in
+      let sre = t = sys_init in
+      (* full trigger handler: saves args *)
+      (ti save_handler_nm ~batch_id:true (Trig true) @@ trig_save_arg_sub_handler_args_poly c t)::
+      (* slim version of trigger: pull args from log, just vid *)
+      (ti load_handler_nm ~batch_id:true (Trig true) trig_load_arg_sub_handler_args_poly)::
+      (ti no_arg_handler_nm ~batch_id:true (Trig true) trig_no_arg_sub_handler_args_poly)::
+      (List.flatten @@ List.map (fun s ->
+          (if c.gen_single_vid then
+            [ti (rcv_put_single_vid_name_of_t t s) ~trig_args:true
+              (SubTrig(false, [save_handler_nm; load_handler_nm])) @@
+                nd_rcv_put_args_poly;
+             ti (rcv_fetch_single_vid_name_of_t t s) ~trig_args:true
+              (SubTrig(true, [save_handler_nm; load_handler_nm])) @@
+                nd_rcv_fetch_args_poly c t
+            ] else []) @
+           (* for isobatch mode: receive the vids of the isobatch *)
+          (if sre then [] else [
+           ti (rcv_stmt_isobatch_name_of_t t s) ~fn:nd_rcv_stmt_isobatch_nm ~const_args:[mk_cint s]
+             (SubTrig(false, [save_handler_nm; load_handler_nm; no_arg_handler_nm])) [];
+           (* rcv_put for isobatch: no trig args, just batch_id *)
+           ti (rcv_put_isobatch_name_of_t t s) ~batch_id:true
+             (Trig false) nd_rcv_put_isobatch_poly;
+           ti (rcv_fetch_isobatch_name_of_t t s) ~batch_id:true ~trig_args:true
+             (SubTrig(true, [save_handler_nm; load_handler_nm])) @@
+              nd_rcv_fetch_args_poly c t;
+          ])) s_r) @
       (* args for do completes without rhs maps *)
-      (List.map (fun s ->
-          do_complete_name_of_t t s^"_trig", SubTrig(false, t), nd_do_complete_trig_args_poly c t) @@
-        P.stmts_without_rhs_maps_in_t c.p t) @
+      (List.map (fun s -> ti (do_complete_name_of_t t s^"_trig") ~trig_args:true
+             (SubTrig(false, [save_handler_nm; load_handler_nm])) @@
+              nd_do_complete_trig_args_poly c t) s_no_r) @
       (* the types for nd_rcv_push. includes a separate, optional map component *)
-      (* this isn't a dsTrig anymore since pushes are aggregated at the dispatcher *)
-      (List.map (fun (s, m) ->
-          rcv_push_name_of_t c t s m, SubTrig(false, t), nd_rcv_push_args_poly c t)
-        s_rhs) @
+      (* this isn't a dsTrig since pushes are aggregated at the dispatcher *)
+      (List.flatten @@ List.map (fun s ->
+          (* get all possible numbers of messages. we create a tag per number of
+             messages and has_bool value *)
+          let num_maps = List.length @@ P.rhs_maps_of_stmt c.p s in
+          let r_maps = create_range ~first:1 @@ num_maps in
+          List.flatten @@ List.map (fun n ->
+              (List.map (fun has_data ->
+                let d = if has_data then "" else "_no_data" in
+                ti (rcv_push_name_of_t t s^"_"^soi n^d)
+                  ~fn:(rcv_push_name_of_t t s) ~const_args:[mk_cbool has_data; mk_cint n]
+                  (SubTrig(false, [no_arg_handler_nm])) nd_rcv_push_args_poly) [true; false]) @
+              (if sre then [] else [
+               ti (rcv_push_isobatch_name_of_t t s^"_"^soi n)
+                ~fn:(rcv_push_isobatch_name_of_t t s) ~const_args:[mk_cint n]
+                (Trig false) nd_rcv_push_isobatch_args_poly;
+              ]))
+            r_maps)
+          s_r)@
       (* the types for rcv_push's maps *)
       (List.map (fun (s, m) ->
-           P.buf_of_stmt_map_id c.p s m, Ds true, P.map_ids_types_with_v_for c.p m)
+           ti (P.buf_of_stmt_map_id c.p s m) (Ds true) @@ P.map_ids_types_with_v_for c.p m)
           s_rhs) @
       (* rcv_corrective types. includes a separate, optional map + vids component *)
-      (List.map (fun (s, m) ->
-          rcv_corrective_name_of_t c t s m, Trig true, nd_rcv_corr_args)
-        s_rhs_corr)) @
-    (* the types for the maps without vid (for correctives) *)
+      (if c.gen_correctives then
+         List.map (fun (s, m) ->
+            ti (rcv_corrective_name_of_t c t s m) (Trig true) nd_rcv_corr_args)
+          s_rhs_corr else [])) @
+    (* the types for the maps without vid *)
     (P.for_all_maps c.p @@ fun m ->
-       P.map_name_of c.p m^"_map", Ds false, P.map_ids_types_for c.p m) @
-    (* warmup header *)
-    (nd_rcv_warmup_push_nm, Trig true, []) ::
+      ti (P.map_name_of c.p m^"_map") (Ds false) @@ P.map_ids_types_for c.p m) @    (* warmup header *)
+    (ti nd_rcv_warmup_push_nm (Trig true) []) ::
     (* the types for the maps without vid (for warmup) *)
     (P.for_all_maps c.p @@ fun m ->
-       P.map_name_of c.p m^"_warmup", Ds false, P.map_ids_types_for c.p m)
+       ti (P.map_name_of c.p m^"_warmup") (Ds false) (P.map_ids_types_for c.p m))
     @
     (* t_vid_list ds for correctives *)
-    ["vids", Ds false, ["vid", t_vid];
-     nd_rcv_corr_done_nm, Trig false, nd_rcv_corr_done_args;
+    [ti "vids" (Ds false) ["vid", t_vid]] @
+    (if c.gen_correctives then
+       [ti nd_rcv_corr_done_nm (Trig false) nd_rcv_corr_done_args] else []) @
     (* for GC (node->switch acks) *)
-     sw_ack_rcv_trig_nm, Trig false, sw_ack_rcv_trig_args]
+    [ti sw_ack_rcv_trig_nm (Trig false) sw_ack_rcv_trig_args]
   in
   insert_index_fst l
 
@@ -1017,22 +1150,41 @@ let buffer_for_send ?(unique=false) ?(wr_bitmap=true) t addr args =
         mk_poly_insert_block t "pqs" args
     ]
 
-(* code to check if we need to write a trig header, and if so, to buffer one *)
-(* @other_cond: another condition to output the trig header *)
-let buffer_trig_header_if_needed ?other_cond t addr args ~save_args =
-  let t = trig_sub_handler_name_of_t t in
-  let save_val = if save_args then mk_ctrue else mk_cfalse in
+(* code to check if we need to write trig args and a trig header, and if so, to buffer them *)
+let buffer_trig_header_if_needed ?(force=false) ?(need_args=true) vid t addr args =
   (* normal condition for adding *)
-  let bitmap_cond = mk_not @@ mk_at' send_trig_header_bitmap.id @@ mk_var addr in
-  let cond = maybe bitmap_cond (fun c -> mk_or c bitmap_cond) other_cond in
-  mk_if cond
-    (mk_block [
-      (* update the bitmap *)
-      mk_insert_at send_trig_header_bitmap.id (mk_var addr) [mk_ctrue];
-      (* buffer trig args *)
-      buffer_for_send t addr (save_val::args)
-    ])
-    mk_cunit
+  let save_handler = trig_save_arg_sub_handler_name_of_t t in
+  let load_handler = trig_load_arg_sub_handler_name_of_t t in
+  let no_arg_handler = trig_no_arg_sub_handler_name_of_t t in
+  (* check bitmap for current header *)
+  (if not force then
+    mk_if (mk_at' send_trig_header_bitmap.id @@ mk_var addr) mk_cunit
+   else id_fn) @@
+    mk_block @@
+      (* update the header bitmap *)
+      [mk_insert_at send_trig_header_bitmap.id (mk_var addr) [mk_ctrue]] @
+      (
+        if need_args && not force then
+          [
+            (* check map for the last batch to see if we need args *)
+            mk_let ["has_args"]
+              (mk_at_with' send_trig_args_map.id (mk_var addr) @@
+               mk_lambda' send_trig_args_map.e @@
+               mk_case_ns (mk_lookup' "inner" [vid; mk_cunknown]) "x" mk_cfalse mk_ctrue) @@
+            mk_if (mk_var "has_args")
+              (buffer_for_send load_handler addr [mk_var "vid"]) @@
+               mk_block [
+                  (* update map *)
+                  mk_insert_at send_trig_args_bitmap.id (mk_var addr) [mk_ctrue];
+                  mk_update_at_with send_trig_args_map.id (mk_var addr) @@
+                    mk_lambda' send_trig_args_map.e @@
+                      mk_insert_block send_trig_args_inner.id [vid; mk_cunit];
+                  (* use full handler (which also saves) *)
+                  buffer_for_send save_handler addr args
+              ]
+          ]
+      else
+        [buffer_for_send no_arg_handler addr args])
 
 (* insert tuples into polyqueues *)
 let buffer_tuples_from_idxs ?(unique=false) ?(drop_vid=false) tuples_nm map_type map_tag indices =
@@ -1066,8 +1218,8 @@ let buffer_tuples_from_idxs ?(unique=false) ?(drop_vid=false) tuples_nm map_type
           indices])
     mk_cunit (* do nothing if empty. we're sending a header anyway *)
 
-let ios_tag c stag = fst @@ List.find (fun (_, (s, _, _)) -> s = stag) c.poly_tags
-let soi_tag c itag = fst3 @@ snd @@ List.find (fun (i, (_, _, _)) -> i = itag) c.poly_tags
+let ios_tag c stag = fst @@ List.find (fun (_, ti) -> ti.tag = stag) c.poly_tags
+let soi_tag c itag = (snd @@ List.find (fun (i, _) -> i = itag) c.poly_tags).tag
 
 (* name for master send request trigger (part of GC) *)
 let ms_send_gc_req_nm = "ms_send_gc_req"
@@ -1124,9 +1276,11 @@ let mk_send_me ?(payload=[mk_cunit]) trig =
 
 (* counter for ip *)
 let ip = create_ds "ip" (mut t_int)
+let ip2 = create_ds "ip2" (mut t_int)
 
 (* counter for stmt *)
 let stmt_ctr = create_ds "stmt_ctr" @@ mut t_int
+let map_ctr = create_ds "map_ctr" @@ mut t_int
 
 (**** End of code ****)
 
@@ -1255,7 +1409,7 @@ let special_route_stmts c =
 (* list the bound arguments within the statement in trig arg order *)
 let bound_params_of_stmt c s =
   let info = IntMap.find s c.freevar_info in
-  let lmap = fst @@ info.lmap_bound in
+  let lmap = fst info.lmap_bound in
   let lbound = List.map (fun (id, n) -> id, (lmap, n)) @@ snd info.lmap_bound in
   let rbound = List.flatten @@ List.map (fun (rmap, l) -> List.map (fun (id, n) -> id, (rmap, n)) l) @@
     info.rmaps_bound in
@@ -1268,6 +1422,114 @@ let bound_params_of_stmt c s =
       with Not_found -> acc)
     trig_args
     []
+
+(* inner member of isobatch_vid_map *)
+let isobatch_map_inner2 = create_ds "inner2" @@ wrap_tbag t_vid
+
+let isobatch_stmt_helper_bitmap_id = "isobatch_stmt_helper_bitmap"
+let isobatch_stmt_helper_bitmap c =
+  let init = k3_container_of_list (wrap_tvector t_bool) @@
+    List.map (const @@ mk_cfalse) @@ P.get_stmt_list c.p in
+  create_ds ~init isobatch_stmt_helper_bitmap_id @@ wrap_tvector t_bool
+
+let isobatch_stmt_helper_has_content =
+  create_ds "isobatch_stmt_helper_has_content" @@ mut t_bool
+
+(* singleton vector for creating isobatch_vid_map easily *)
+(* indexed by stmt_id *)
+let isobatch_stmt_helper_id = "isobatch_stmt_helper"
+let isobatch_stmt_helper_e = [isobatch_map_inner2.id, isobatch_map_inner2.t]
+let isobatch_stmt_helper c =
+  let e = isobatch_stmt_helper_e in
+  let init = mk_map (mk_lambda' unknown_arg @@ mk_empty isobatch_map_inner2.t) @@
+    k3_container_of_list (t_int_vector) @@
+    List.map (const @@ mk_cint 0) @@ P.get_stmt_list c.p in
+  create_ds ~init ~e isobatch_stmt_helper_id @@ wrap_tvector @@ t_of_e e
+
+let clear_isobatch_stmt_helper_nm = "clear_isobatch_stmt_helper"
+let clear_isobatch_stmt_helper =
+  mk_global_fn clear_isobatch_stmt_helper_nm [] [] @@
+    mk_block [
+      (* replace, clear out the isobatch_map_helper *)
+      mk_iter_bitmap' ~idx:stmt_ctr.id
+        (mk_insert_at isobatch_stmt_helper_id (mk_var stmt_ctr.id) [mk_empty isobatch_map_inner2.t])
+        isobatch_stmt_helper_bitmap_id;
+      mk_set_all isobatch_stmt_helper_bitmap_id [mk_cfalse];
+      mk_assign isobatch_stmt_helper_has_content.id mk_cfalse;
+      ]
+
+(* batch_id -> vids *)
+let isobatch_map_inner =
+  let e = ["batch_id", t_vid; isobatch_map_inner2.id, isobatch_map_inner2.t] in
+  create_ds ~e "inner" @@ wrap_tmap @@ t_of_e e
+
+(* stmt -> batch_id -> [vids] *)
+let isobatch_vid_map_id = "isobatch_vid_map"
+let isobatch_vid_map_e = [isobatch_map_inner.id, isobatch_map_inner.t]
+let isobatch_vid_map c =
+  (* indexed by stmt_id *)
+  let e = isobatch_vid_map_e in
+  let init = mk_map (mk_lambda' unknown_arg @@ mk_empty isobatch_map_inner.t) @@
+    k3_container_of_list (t_int_vector) @@
+    List.map (const @@ mk_cint 0) @@ P.get_stmt_list c.p in
+  create_ds ~init ~e isobatch_vid_map_id @@ wrap_tvector @@ t_of_e e
+
+(* function to move batch,vids,stmts from the helper to the real ds *)
+let move_isobatch_stmt_helper_nm = "move_isobatch_stmt_helper"
+let move_isobatch_stmt_helper =
+  mk_global_fn move_isobatch_stmt_helper_nm ["batch_id", t_vid] [] @@
+  mk_block [
+    (* iterate over the isobatch map helper, and move its contents to the isobatch_map *)
+    mk_iter_bitmap' ~idx:stmt_ctr.id
+      (mk_let ["x"] (mk_delete_at isobatch_stmt_helper_id @@ mk_var stmt_ctr.id) @@
+        mk_update_at_with isobatch_vid_map_id (mk_var stmt_ctr.id) @@
+          mk_lambda' isobatch_vid_map_e @@
+            mk_insert_block "inner" [mk_var "batch_id"; mk_var "x"])
+      isobatch_stmt_helper_bitmap_id;
+    mk_assign isobatch_stmt_helper_has_content.id mk_cfalse;
+  ]
+
+
+(* singleton vector for creating isobatch_vid_map easily *)
+(* stmt_map_id -> [vids] *)
+let isobatch_buffered_fetch_helper_id = "isobatch_buffered_fetch_helper"
+let isobatch_buffered_fetch_helper_e = [isobatch_map_inner2.id, isobatch_map_inner2.t]
+let isobatch_buffered_fetch_helper c =
+  let e = isobatch_buffered_fetch_helper_e in
+  let init = mk_map (mk_lambda' unknown_arg @@ mk_empty isobatch_map_inner2.t) @@
+    k3_container_of_list t_int_vector @@
+    List.map mk_cint @@ fst_many @@ P.stmt_map_ids c.p in
+  create_ds ~init ~e isobatch_buffered_fetch_helper_id @@ wrap_tvector @@ t_of_e e
+
+(* stmt_map_id -> batch -> [vids] *)
+(* for saving info about buffered fetches *)
+let isobatch_buffered_fetch_vid_map_id = "isobatch_buffered_fetch_vid_map"
+let isobatch_buffered_fetch_vid_map_e = isobatch_vid_map_e
+let isobatch_buffered_fetch_vid_map c =
+  (* indexed by stmt_map_id *)
+  let e = isobatch_buffered_fetch_vid_map_e in
+  let init = mk_map (mk_lambda' unknown_arg @@ mk_empty isobatch_map_inner.t) @@
+    k3_container_of_list t_int_vector @@
+    List.map mk_cint @@ fst_many @@ P.stmt_map_ids c.p in
+  create_ds ~init ~e isobatch_buffered_fetch_vid_map_id @@ wrap_tvector @@ t_of_e e
+
+(* vids have a lower bit = 0, isobatch ids have 1 *)
+let is_isobatch_nm = "is_isobatch_id"
+let is_isobatch_fn =
+  mk_global_fn is_isobatch_nm ["vid", t_vid] [t_bool] @@
+    mk_neq (mk_var "vid") @@ (mk_mult (mk_divi (mk_var "vid") @@ mk_cint 2) @@ mk_cint 2)
+
+let is_isobatch_id id = mk_apply' is_isobatch_nm [mk_var id]
+let is_single_vid id  = mk_not @@ mk_apply' is_isobatch_nm [mk_var id]
+
+(* whether we do isobatches *)
+let isobatch_mode = create_ds ~init:(mk_ctrue) "isobatch_mode" @@ t_bool
+
+let isobatch_threshold = create_ds ~init:(mk_cint 4) "isobatch_threshold" @@ t_int
+
+let next_vid vid = mk_mult (mk_add (mk_divi vid @@ mk_cint 2) @@ mk_cint 1) @@ mk_cint 2
+let next_isobatch_id vid = mk_add (mk_cint 1) @@ mk_mult (mk_add (mk_divi vid @@ mk_cint 2) @@ mk_cint 1) @@ mk_cint 2
+let to_isobatch vid = mk_add (mk_mult (mk_divi vid @@ mk_cint 2) @@ mk_cint 2) @@ mk_cint 1
 
 (* tags for profiling and post-analysis *)
 let do_profiling = create_ds ~init:mk_cfalse "do_profiling" @@ mut t_bool
@@ -1288,6 +1550,9 @@ let prof_tag_gc_start         = 12
 let prof_tag_gc_done          = 13
 let prof_tag_poly_send        = 14
 let prof_tag_upoly_send       = 15
+let prof_tag_poly_send_msg    = 16
+let prof_tag_poly_send2       = 17
+let prof_tag_poly_send_msg2   = 18
 
 (* @t_s_id: trig or stmt id *)
 type prof_event =
@@ -1400,9 +1665,9 @@ let if_trace print_e e =
 (* for debugging *)
 let do_trace nm l expr =
   let elem (t, e) = match t.typ with
-      | TInt -> mk_apply' "string_of_int" [e]
+      | TInt    -> mk_apply' "string_of_int" [e]
       | TString -> e
-      | TFloat -> mk_apply' "string_of_float" [e]
+      | TFloat  -> mk_apply' "string_of_float" [e]
       | _ -> failwith "unhandled type"
   in
   let rest, last = list_split (-1) l in
@@ -1433,6 +1698,13 @@ let sw_warmup_paths c =
 
 let sw_warmup_block_size = create_ds "sw_warmup_block_size" @@ t_int
 
+let functions c =
+  [is_isobatch_fn;
+   move_isobatch_stmt_helper;
+   clear_isobatch_stmt_helper;
+   clear_send_trig_args_map;
+   clear_poly_queues_fn c]
+
 let global_vars c dict =
   (* replace default inits with ones from ast *)
   let replace_init ds =
@@ -1445,7 +1717,9 @@ let global_vars c dict =
     [ me_int;
       interpreter_mode;
       ip;
+      ip2;
       stmt_ctr;
+      map_ctr;
       g_init_vid;
       g_max_int;
       g_min_vid;
@@ -1467,6 +1741,7 @@ let global_vars c dict =
       map_ids c;
       nd_stmt_cntr_size;
       nd_stmt_cntrs c;
+      nd_corr_map;
       nd_log_master;
       sw_init;
       sw_seen_sentinel;
@@ -1486,9 +1761,13 @@ let global_vars c dict =
       poly_queue_bitmap;
       upoly_queues;
       upoly_queue_bitmap;
+      sw_poly_queues;
+      sw_poly_queue_bitmap;
       send_trig_header_bitmap;
-      nd_rcv_fetch_buffer;
-      nd_stmt_cntrs_per_map;
+      send_trig_args_map;
+      send_trig_args_bitmap;
+      nd_fetch_buffer c;
+      nd_stmt_cntrs_per_map c;
       nd_lmap_of_stmt_id c;
       do_profiling;
       do_tracing;
@@ -1496,6 +1775,14 @@ let global_vars c dict =
       prof_num_empty;
       prof_num_full;
       sw_csv_index;
+      isobatch_mode;
+      isobatch_threshold;
+      isobatch_stmt_helper_bitmap c;
+      isobatch_stmt_helper c;
+      isobatch_stmt_helper_has_content;
+      isobatch_vid_map c; (* stmt, batch -> vids *)
+      isobatch_buffered_fetch_helper c;
+      isobatch_buffered_fetch_vid_map c;
     ] @
 
     log_ds c @
