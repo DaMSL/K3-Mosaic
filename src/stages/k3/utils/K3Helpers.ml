@@ -262,6 +262,8 @@ let mk_block = function
 let mk_iter iter_fun collection =
     mk_stree Iterate [iter_fun; collection]
 
+let mk_iter' f c = mk_iter f (mk_var c)
+
 let mk_if pred true_exp false_exp =
     mk_stree IfThenElse [pred; true_exp; false_exp]
 
@@ -404,6 +406,7 @@ let mk_delete_with ?(path=[]) id x lam_none lam_some =
   mk_stree DeleteWith [mk_id_path id path; mk_tuple x; lam_none; lam_some]
 
 let mk_clear_all ?(path=[]) id = mk_stree ClearAll [mk_id_path id path]
+let mk_clear_all_block ?path id = mk_block [mk_clear_all ?path id; mk_var id]
 
 let mk_update ?(path=[]) id old_val new_val =
   mk_stree Update [mk_id_path id path; mk_tuple old_val; mk_tuple new_val]
@@ -986,40 +989,16 @@ let mk_filter_cnt cond ds =
     mk_var ds.id
 
 (* loop over bitmaps as in route and shuffle *)
-let mk_iter_bitmap ?(all=false) ?(idx="ip") e bitmap =
-  mk_block [
-    mk_assign idx @@ mk_cint 0;
-    mk_iter (mk_lambda'' ["has_val", t_bool] @@
-        mk_block [
-          if all then e else mk_if (mk_var "has_val") e mk_cunit;
-          mk_assign idx @@ mk_add (mk_var idx) @@ mk_cint 1
-        ]) @@
-      bitmap
-  ]
+let mk_iter_bitmap ?(idx="ip") e bitmap =
+    mk_iter (mk_lambda' [idx, t_int] e) bitmap
 
-let mk_iter_bitmap' ?all ?idx e bitmap = mk_iter_bitmap ?all ?idx e (mk_var bitmap)
+let mk_iter_bitmap' ?idx e bitmap = mk_iter_bitmap ?idx e (mk_var bitmap)
 
-let mk_agg_bitmap ?(all=false) ?(idx="ip") ?(move=false) args e zero bitmap =
-  mk_block [
-    mk_assign idx @@ mk_cint 0;
+let mk_agg_bitmap ?(idx="ip") ?(move=false) args e zero bitmap =
     (if move then U.add_property "Move" else id_fn) @@
-      mk_agg (mk_lambda2' args ["has_val", t_bool] @@
-          (* beta reducing messes up ordering here *)
-          U.add_property "NoBetaReduce" @@
-          mk_let ["res"]
-            (if all then e
-              else mk_if (mk_var "has_val")
-                    e @@
-                    mk_tuple @@ ids_to_vars @@ fst_many args) @@
-          mk_block [
-            mk_assign idx @@ mk_add (mk_var idx) @@ mk_cint 1;
-            mk_var "res"
-          ])
-        zero @@
-        bitmap
-  ]
+      mk_agg (mk_lambda2' args [idx, t_int] e) zero bitmap
 
-let mk_agg_bitmap' ?all ?idx ?move args e zero bitmap = mk_agg_bitmap ?all ?idx ?move args e zero (mk_var bitmap)
+let mk_agg_bitmap' ?idx ?move args e zero bitmap = mk_agg_bitmap ?idx ?move args e zero (mk_var bitmap)
 
 (* check for tag validity *)
 let mk_check_tag tag col idx offset e =

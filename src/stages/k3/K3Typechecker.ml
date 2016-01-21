@@ -763,7 +763,7 @@ let rec deduce_expr_type ?(override=true) trig_env env tenv utexpr : expr_t =
           if not (tidx === t_int) then t_erroru (TMismatch(tidx, t_int, "index")) else
           let tcol, telem =
             try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') in
-          if not (tcol = TVector) then
+          if not (is_tvector tcol) then
             t_erroru (TMismatch(tcol', wrap_tvector telem, "not a vector")) else
           check_vmap_pat tcol telem telem';
           t_unit
@@ -772,7 +772,7 @@ let rec deduce_expr_type ?(override=true) trig_env env tenv utexpr : expr_t =
           let tcol', telem' = bind 0, bind 1 in
           let tcol, telem =
             try unwrap_tcol tcol' with Failure _ -> t_erroru (not_collection tcol') in
-          if not (tcol = TVector) then
+          if not (is_tvector tcol) then
             t_erroru (TMismatch(tcol', wrap_tvector telem, "not a vector")) else
           check_vmap_pat tcol telem telem';
           t_unit

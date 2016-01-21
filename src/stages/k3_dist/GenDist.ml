@@ -300,9 +300,8 @@ let send_put_ip_map p =
   let e = send_put_ip_map_e in
   create_ds ~init ~e send_put_ip_map_id @@ wrap_tvector' @@ snd_many e
 
-let send_put_bitmap =
-  let init = mk_map (mk_lambda' unknown_arg mk_cfalse) @@ mk_var D.my_peers.id in
-  create_ds ~init "send_put_bitmap" @@ t_bool_vector
+(* {ip} *)
+let send_put_bitmap = create_ds "send_put_bitmap" t_bitset
 
 let sw_send_puts_single_vid_nm t s = sp "sw_%s_%d_send_puts_single_vid" t s
 let sw_send_puts_single_vid c t s =
@@ -321,8 +320,8 @@ let sw_send_puts_single_vid c t s =
       [mk_iter_bitmap'
         (mk_insert_at send_put_ip_map_id (mk_var "ip") [mk_cint 0])
         send_put_bitmap.id ;
-        (* clean bitmap *)
-        mk_set_all send_put_bitmap.id [mk_cfalse]
+        (* clear bitmap *)
+        mk_clear_all send_put_bitmap.id;
       ] @
       (* optimized route - check if we can do special 1:1 optimized routing *)
       (if special_route_stmt c s then singleton @@
@@ -343,7 +342,7 @@ let sw_send_puts_single_vid c t s =
           mk_iter (mk_lambda' R.route_opt_inner.e @@
             mk_block [
               (* mark the put bitmap *)
-              mk_insert_at send_put_bitmap.id (mk_var "node") [mk_ctrue];
+              mk_insert send_put_bitmap.id [mk_var "node"];
               (* update the relevant stmt_cnt_list *)
               mk_update_at_with send_put_ip_map_id (mk_var "node") @@
                 mk_lambda' send_put_ip_map_e @@
@@ -383,7 +382,7 @@ let sw_send_puts_single_vid c t s =
               mk_iter_bitmap'
                 (mk_block [
                   (* mark the put bitmap *)
-                  mk_insert_at send_put_bitmap.id (mk_var "ip") [mk_ctrue];
+                  mk_insert send_put_bitmap.id [mk_var "ip"];
                   (* update the relevant stmt_cnt_list *)
                   mk_update_at_with send_put_ip_map_id (mk_var "ip") @@
                     mk_lambda' send_put_ip_map_e @@
@@ -448,19 +447,18 @@ let clear_send_put_isobatch_map =
             (mk_agg_bitmap' ~idx:"ip2" ["acc", send_put_isobatch_inner.t]
               (mk_update_at_with_block "acc" (mk_var "ip2") @@
                 mk_lambda' send_put_isobatch_inner.e @@
-                  mk_set_all_block "inner2" [mk_cfalse])
+                  mk_clear_all_block "inner2")
               (mk_var "inner")
               "bitmap") [
-            mk_set_all "bitmap" [mk_cfalse];
+            mk_clear_all "bitmap";
             tup_of_e send_put_isobatch_map_e
           ])
       send_put_bitmap.id;
-    mk_set_all send_put_bitmap.id [mk_cfalse];
+    mk_clear_all send_put_bitmap.id;
   ]
 
-let sw_send_stmt_bitmap =
-  let init = mk_map (mk_lambda' unknown_arg @@ mk_cfalse) @@ mk_var D.my_peers.id in
-  create_ds ~init "sw_send_stmt_ds" t_bool_vector
+(* {ip} *)
+let sw_send_stmt_bitmap = create_ds "sw_send_stmt_bitmap" t_bitset
 
 (* constraint: puts must be sent after all the statements, so that if the pushes are already done,
    the puts can execute (pull out the batches batch_id -> vid mapping) *)
@@ -473,7 +471,7 @@ let sw_send_puts_isobatch c t s =
     if null rmap_lmaps then mk_cunit else
     (* for isobatch, we need to track the exact ips sending to other ips *)
     mk_block @@
-      [mk_set_all sw_send_stmt_bitmap.id [mk_cfalse]] @
+      [mk_clear_all sw_send_stmt_bitmap.id] @
       (* route allows us to know how many nodes send data from rhs to lhs *)
       List.map (fun rmap ->
         let route_key, route_pat_idx = P.key_pat_from_bound c.p c.route_indices s rmap in
@@ -483,11 +481,11 @@ let sw_send_puts_isobatch c t s =
              for each destination, we mark up the sources *)
           (let update_and_send ip_src ip_dest =
              mk_block [
-              mk_insert_at send_put_bitmap.id (mk_var ip_dest) [mk_ctrue];
+              mk_insert send_put_bitmap.id [mk_var ip_dest];
               mk_update_at_with send_put_isobatch_map_id (mk_var ip_dest) @@
                 mk_lambda' send_put_isobatch_map_e @@
                   mk_block [
-                    mk_insert_at "bitmap" (mk_var ip_src) [mk_ctrue];
+                    mk_insert "bitmap" [mk_var ip_src];
                     mk_update_at_with "inner" (mk_var ip_src) @@
                       mk_lambda' send_put_isobatch_inner.e @@
                         mk_insert_at_block "inner2" (mk_cint rmap) [mk_ctrue];
@@ -498,12 +496,12 @@ let sw_send_puts_isobatch c t s =
 
               (* if we haven't sent this stmt, buffer it *)
               mk_if
-                (mk_at' sw_send_stmt_bitmap.id @@ mk_var ip_dest)
+                (mk_is_member' sw_send_stmt_bitmap.id @@ mk_var ip_dest)
                   mk_cunit @@
                   mk_block [
                     buffer_for_send (rcv_stmt_isobatch_name_of_t t s) ip_dest [];
                     (* mark this ip *)
-                    mk_insert_at sw_send_stmt_bitmap.id (mk_var ip_dest) [mk_ctrue];
+                    mk_insert sw_send_stmt_bitmap.id [mk_var ip_dest];
                   ]
              ]
           in
@@ -567,10 +565,8 @@ let sw_send_puts_isobatch c t s =
                   R.route_bitmap.id)
       ) rmaps
 
-(* for fetches *)
-let rcv_fetch_header_bitmap =
-  let init = mk_map (mk_lambda' unknown_arg mk_cfalse) @@ mk_var D.my_peers.id in
-  create_ds ~init "rcv_fetch_header_bitmap" @@ t_bool_vector
+(* {ip} for fetches *)
+let rcv_fetch_header_bitmap = create_ds "rcv_fetch_header_bitmap" t_bitset
 
 (* for isobatches, we need to create a batch_fetch message and make decisions at the batch level *)
 let sw_send_rhs_fetches_nm t s = sp "sw_%s_%d_send_rhs_fetches" t s
@@ -590,7 +586,7 @@ let sw_send_rhs_fetches c t s =
           let m = P.map_id_of_name c.p @@ str_drop_end (String.length "_id") ti.tag in
           if List.mem m rmaps then Some(m, ti.tag) else None) m_tags in
       mk_block @@
-      [mk_set_all rcv_fetch_header_bitmap.id [mk_cfalse]] @
+      [mk_clear_all rcv_fetch_header_bitmap.id] @
      (* fill in global data structure from route *)
       (List.map
         (fun (rmap, stag) ->
@@ -605,10 +601,10 @@ let sw_send_rhs_fetches c t s =
                       K3N.string_of_expr (mk_apply' (K3R.route_for ~bound:true c.p rmap) (mk_cint rmap::key)),
                       "ip");
               (* if we haven't sent to this ip yet, add a rcv_fetch header *)
-                mk_if (mk_not @@ mk_at' rcv_fetch_header_bitmap.id @@ mk_var "ip")
+                mk_if (mk_not @@ mk_is_member' rcv_fetch_header_bitmap.id @@ mk_var "ip")
                   (mk_block @@ [
                     (* mark the send_fetch_bitmap *)
-                    mk_insert_at rcv_fetch_header_bitmap.id (mk_var "ip") [mk_ctrue];
+                    mk_insert rcv_fetch_header_bitmap.id [mk_var "ip"];
                     (* buffer the trig args if needed *)
                     buffer_trig_header_if_needed (mk_var "vid") t "ip" t_args] @
                     (* in case we have system_ready, we'll always keep single_vid. Otherwise, we can disable it *)
@@ -700,11 +696,11 @@ let sw_send_fetches_isobatch c t =
                   mk_block @@
                     (* true: is_isobatch *)
                     if has_rhs then
-                      [ mk_set_all D.send_trig_header_bitmap.id [mk_cfalse];
+                      [mk_clear_all D.send_trig_header_bitmap.id;
                        mk_apply' (sw_send_rhs_fetches_nm t s) @@ mk_ctrue::call_args;
                        mk_apply' (sw_send_puts_isobatch_nm t s) call_args;
                       ] else
-                      [ mk_set_all D.send_trig_header_bitmap.id [mk_cfalse];
+                      [ mk_clear_all D.send_trig_header_bitmap.id;
                         mk_apply' (sw_send_rhs_completes_nm t s) call_args
                       ]
                   ;
@@ -743,9 +739,8 @@ let send_push_cntrs =
     mk_var D.my_peers.id in
   create_ds ~e ~init "send_push_cntrs" @@ wrap_tvector @@ t_of_e e
 
-let send_push_bitmap =
-  let init = mk_map (mk_lambda' unknown_arg mk_cfalse) @@ mk_var D.my_peers.id in
-  create_ds ~init "send_push_bitmap" @@ t_bool_vector
+(* {ip} *)
+let send_push_bitmap = create_ds "send_push_bitmap" t_bitset
 
 let clear_send_push_ds_nm = "clear_send_push_ds"
 let clear_send_push_ds =
@@ -756,7 +751,7 @@ let clear_send_push_ds =
       (mk_update_at_with send_push_cntrs.id (mk_var "ip") @@
         mk_lambda' send_push_cntrs.e @@ mk_tuple [mk_cint 0; mk_cfalse])
       send_push_bitmap.id;
-    mk_set_all send_push_bitmap.id [mk_cfalse];
+    mk_clear_all send_push_bitmap.id;
   ]
 
 (* trigger_rcv_fetch
@@ -887,14 +882,12 @@ let send_push_isobatch_map_e = ["inner", send_push_isobatch_inner.t]
 let send_push_isobatch_map c =
   let e = send_push_isobatch_map_e in
   let init =
-    mk_map (mk_lambda' unknown_arg @@ k3_container_of_list t_bool_vector @@
-          List.map (const mk_cfalse) @@ fst_many @@ P.stmt_map_ids c.p) @@
-    mk_var D.my_peers.id in
+    mk_map (mk_lambda' unknown_arg @@ mk_empty t_bitset) @@
+      mk_var D.my_peers.id in
   create_ds ~e ~init send_push_isobatch_map_id @@ wrap_tvector @@ t_of_e e
 
-let send_push_isobatch_bitmap =
-  let init = mk_map (mk_lambda' unknown_arg mk_cfalse) @@ mk_var D.my_peers.id in
-  create_ds ~init "send_push_isobatch_bitmap" @@ t_bool_vector
+(* {ip} *)
+let send_push_isobatch_bitmap = create_ds "send_push_isobatch_bitmap" t_bitset
 
 let clear_send_push_isobatch_ds_nm = "clear_send_push_isobatch_ds"
 let clear_send_push_isobatch_ds =
@@ -904,9 +897,9 @@ let clear_send_push_isobatch_ds =
     mk_iter_bitmap'
       (mk_update_at_with send_push_isobatch_map_id (mk_var ip.id) @@
         mk_lambda' send_push_isobatch_map_e @@
-          mk_set_all_block "inner" [mk_cfalse])
+          mk_clear_all_block "inner")
       send_push_isobatch_bitmap.id;
-    mk_set_all send_push_isobatch_bitmap.id [mk_cfalse];
+    mk_clear_all send_push_isobatch_bitmap.id;
   ]
 
 
@@ -957,12 +950,9 @@ let nd_rcv_fetch_isobatch_buffer_push =
     ]
 
 (* whether we have an isobatch decision on push/buffer *)
-(* stmt_map_id -> bool *)
+(* {stmt_map_id} *)
 let rcv_fetch_isobatch_bitmap_id = "rcv_fetch_isobatch_bitmap"
-let rcv_fetch_isobatch_bitmap c =
-  let init = k3_container_of_list t_bool_vector @@
-    List.map (const mk_cfalse) @@ fst_many @@ P.stmt_map_ids c.p in
-  create_ds ~init rcv_fetch_isobatch_bitmap_id t_bool_vector
+let rcv_fetch_isobatch_bitmap c = create_ds rcv_fetch_isobatch_bitmap_id t_bitset
 
 (* the actual decision on buffer=true/push=false *)
 let rcv_fetch_isobatch_decision_bitmap_id = "rcv_fetch_isobatch_decision"
@@ -977,9 +967,10 @@ let clear_buffered_fetch_helper =
   mk_block [
     mk_iter_bitmap' ~idx:stmt_ctr.id
       (mk_insert_at isobatch_buffered_fetch_helper_id (mk_var stmt_ctr.id)
-          [mk_empty isobatch_map_inner2.t]) rcv_fetch_isobatch_decision_bitmap_id;
-    mk_set_all rcv_fetch_isobatch_bitmap_id [mk_cfalse];
-    mk_set_all rcv_fetch_isobatch_decision_bitmap_id [mk_cfalse];
+         [mk_empty isobatch_map_inner2.t])
+      rcv_fetch_isobatch_decision_bitmap_id;
+    mk_clear_all rcv_fetch_isobatch_bitmap_id;
+    mk_clear_all rcv_fetch_isobatch_decision_bitmap_id;
   ]
 
 (* If we need to buffer the fetches, the ones that apply to us as a node
@@ -1638,7 +1629,7 @@ let send_corrective_fns c =
                   mk_tuple @@ List.map mk_empty @@ snd_many send_corrective_ip_map.e;
               ])
              send_corrective_bitmap.id;
-          mk_set_all send_corrective_bitmap.id [mk_cfalse];
+          mk_clear_all send_corrective_bitmap.id;
 
           (* TODO: if lvars have no impact, only shuffle once *)
           mk_iter
@@ -2356,7 +2347,7 @@ let nd_no_arg_trig_sub_handler c t =
   mk_poly_skip_block fn_nm [
     (* clear the trig send bitmaps. These make sure we output a slim trig header
        for any sub-trigger output (ie. pushes) *)
-    mk_set_all D.send_trig_header_bitmap.id [mk_cfalse];
+    mk_clear_all D.send_trig_header_bitmap.id;
     (* dispatch the sub triggers (pushes) *)
     mk_poly_iter' @@
       mk_lambda'' (p_tag @ p_idx @ p_off) @@
@@ -2375,7 +2366,7 @@ let nd_load_arg_trig_sub_handler c t =
   mk_poly_skip_block fn_nm [
     (* clear the trig send bitmaps. These make sure we output a slim trig header
        for any sub-trigger output (ie. pushes) *)
-    mk_set_all D.send_trig_header_bitmap.id [mk_cfalse];
+    mk_clear_all D.send_trig_header_bitmap.id;
     (* load the trig args *)
     (if load_args <> [] then
       mk_let (fst_many @@ D.args_of_t c t)
@@ -2401,7 +2392,7 @@ let nd_save_arg_trig_sub_handler c t =
     mk_apply' (nd_log_write_for c t) @@ args_of_t_as_vars_with_v c t;
     (* clear the trig send bitmaps. These make sure we output a trig header
        for any sub-trigger output (ie. pushes) *)
-    mk_set_all D.send_trig_header_bitmap.id [mk_cfalse];
+    mk_clear_all D.send_trig_header_bitmap.id;
     (* dispatch the sub triggers *)
     mk_poly_iter' @@
       mk_lambda'' (p_tag @ p_idx @ p_off) @@
@@ -2627,7 +2618,7 @@ let sw_event_driver_single_vid c =
 
         mk_block [
           (* clear the trig send bitmaps for each event *)
-          mk_set_all D.send_trig_header_bitmap.id [mk_cfalse] ;
+          mk_clear_all D.send_trig_header_bitmap.id ;
 
           List.fold_left (fun acc_code (i, ti) ->
             (* check if we match on the id *)
@@ -2720,7 +2711,7 @@ let sw_rcv_token_trig c =
 
                 (* move the used poly_queues to the sw_poly_queues so global state
                    doesn't get interrupted until the rcv_vector_clock *)
-                mk_set_all sw_poly_queue_bitmap.id [mk_cfalse];
+                mk_clear_all sw_poly_queue_bitmap.id;
                 mk_iter_bitmap'
                   (mk_block [
                     mk_let ["pq"] (mk_delete_at poly_queues.id @@ mk_var "ip") @@

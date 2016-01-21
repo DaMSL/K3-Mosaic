@@ -161,6 +161,7 @@ val mk_apply : expr_t -> expr_t list -> expr_t
 val mk_apply' : id_t -> expr_t list -> expr_t
 val mk_block : expr_t list -> expr_t
 val mk_iter : expr_t -> expr_t -> expr_t
+val mk_iter' : expr_t -> id_t -> expr_t
 val mk_if : expr_t -> expr_t -> expr_t -> expr_t
 val mk_if_eq : expr_t -> expr_t -> expr_t -> expr_t -> expr_t
 val mk_case_sn : expr_t -> id_t -> expr_t -> expr_t -> expr_t
