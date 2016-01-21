@@ -585,8 +585,8 @@ let sw_send_rhs_fetches c t s =
 
     mk_global_fn (sw_send_rhs_fetches_nm t s) (["is_isobatch", t_bool]@args_of_t_with_v c t) [] @@
     if null rmaps then mk_cunit else
-      let m_tags = List.filter (fun (_, ti) -> str_suffix "_id" ti.tag && ti.tag_typ = Ds false) c.poly_tags in
-      let rmap_tags = filter_map (fun (_, ti) ->
+      let m_tags = List.filter (fun ti -> str_suffix "_id" ti.tag && ti.tag_typ = Ds false) c.poly_tags in
+      let rmap_tags = filter_map (fun ti ->
           let m = P.map_id_of_name c.p @@ str_drop_end (String.length "_id") ti.tag in
           if List.mem m rmaps then Some(m, ti.tag) else None) m_tags in
       mk_block @@
@@ -776,13 +776,13 @@ let nd_rcv_fetch_single_vid_trig c t s =
   let rmaps = P.rhs_maps_of_stmt c.p s in
   let rmap_rng = create_range ~first:1 @@ List.length @@ rmaps in
   (* filter to get only the map tags *)
-  let m_tags = List.filter (fun (_,ti) -> str_suffix "_id" ti.tag && ti.tag_typ = Ds false) c.poly_tags in
+  let m_tags = List.filter (fun ti -> str_suffix "_id" ti.tag && ti.tag_typ = Ds false) c.poly_tags in
   let s_ms = P.stmt_map_ids c.p in
-  let rmap_tags = filter_map (fun (itag, ti) ->
+  let rmap_tags = filter_map (fun ti ->
       let m = P.map_id_of_name c.p @@ str_drop_end (String.length "_id") ti.tag in
       if not @@ List.mem m rmaps then None else
       let s_m = fst @@ List.find (fun (_,(s2,m2)) -> s2 = s && m2 = m) s_ms in
-      Some(m, s_m, itag, ti.tag)) m_tags
+      Some(m, s_m, ti.itag, ti.tag)) m_tags
   in
   mk_global_fn fn_name
     (poly_args @ D.nd_rcv_fetch_args c t) (* stmt_map_ids are an inner ds *)
@@ -991,13 +991,13 @@ let nd_rcv_fetch_isobatch_trig c t s =
   let fn_name = rcv_fetch_isobatch_name_of_t t s in
   let trig_id = P.trigger_id_for_name c.p t in
   let rmaps = P.rhs_maps_of_stmt c.p s in
-  let m_tags = List.filter (fun (_,ti) -> str_suffix "_id" ti.tag && ti.tag_typ = Ds false) c.poly_tags in
+  let m_tags = List.filter (fun ti -> str_suffix "_id" ti.tag && ti.tag_typ = Ds false) c.poly_tags in
   let s_ms = P.stmt_map_ids c.p in
-  let rmap_tags = filter_map (fun (itag, ti) ->
+  let rmap_tags = filter_map (fun ti ->
       let m = P.map_id_of_name c.p @@ str_drop_end (String.length "_id") ti.tag in
       if not @@ List.mem m rmaps then None else
         let s_m = fst @@ List.find (fun (_,(s2,m2)) -> s2 = s && m2 = m) s_ms in
-        Some(m, s_m, itag, ti.tag)) m_tags
+        Some(m, s_m, ti.itag, ti.tag)) m_tags
   in
   let var_args = args_of_t_as_vars_with_v c t in
   mk_global_fn fn_name
@@ -2289,8 +2289,8 @@ let nd_handle_uniq_poly c =
   let ts = P.get_trig_list c.p ~sys_init:true ~delete:c.gen_deletes in
   let s_rhs = List.flatten @@ List.map (P.s_and_over_stmts_in_t c.p P.rhs_maps_of_stmt) ts in
   let bufs_m = List.map (fun (s,m) -> P.buf_of_stmt_map_id c.p s m, m) s_rhs in
-  let tag_bufs_m = List.map (fun (buf, m) -> fst @@
-                              List.find (fun (i, ti) -> ti.tag = buf) c.poly_tags, buf, m) bufs_m in
+  let tag_bufs_m = List.map (fun (buf, m) ->
+                      (List.find (fun ti -> ti.tag = buf) c.poly_tags).itag, buf, m) bufs_m in
   mk_global_fn nd_handle_uniq_poly_nm ["poly_queue", upoly_queue.t] [] @@
   (* iterate over all buffer contents *)
   mk_if_eq (mk_size @@ mk_var "poly_queue") (mk_cint 0)
@@ -2328,10 +2328,10 @@ let nd_handle_uniq_poly c =
 (* arg order: poly_args, const_args(count etc), trig specific_args, batch_id, vid, trig_args *)
 let sub_trig_dispatch c fn_nm t_args =
   List.fold_left
-    (fun acc_code (itag, ti) -> match ti.tag_typ with
+    (fun acc_code ti -> match ti.tag_typ with
         (* only match with the sub-triggers *)
         | SubTrig(has_ds, ts) when List.mem fn_nm ts ->
-        mk_if (mk_eq (mk_var "tag") @@ mk_cint itag)
+        mk_if_eq (mk_var "tag") (mk_cint ti.itag)
           (* look up this tag *)
           (mk_poly_at_with' ti.tag @@ mk_lambda' ti.args @@
             (* if we have subdata, the function must return the new idx, offset *)
@@ -2418,25 +2418,25 @@ let nd_save_arg_trig_sub_handler c t =
 let nd_rcv_warmup_push c =
   let fn_nm = D.nd_rcv_warmup_push_nm in
   let m_tags =
-    List.filter (fun (_, (stag, _, _)) -> str_suffix "_warmup" stag) c.poly_tags in
+    List.filter (fun t -> str_suffix "_warmup" t.tag) c.poly_tags in
   mk_global_fn fn_nm
     poly_args
     [t_int; t_int] @@
   mk_poly_skip_block fn_nm [
     mk_poly_iter'
       (mk_lambda3' p_tag p_idx p_off @@
-        List.fold_left (fun acc_code (itag, (stag,_,ts)) ->
-          let m_nm = str_drop_end (String.length "_warmup") stag in
+        List.fold_left (fun acc_code ti ->
+          let m_nm = str_drop_end (String.length "_warmup") ti.tag in
           let m_i_ts = P.map_ids_types_for c.p @@ P.map_id_of_name c.p m_nm in
           let k, v = list_split (-1) @@ ids_to_vars @@ fst_many m_i_ts in
-          mk_if_eq (mk_var "tag") (mk_cint itag)
+          mk_if_eq (mk_var "tag") (mk_cint ti.itag)
             (mk_block [
-                mk_poly_at_with' stag @@
+                mk_poly_at_with' ti.tag @@
                 mk_lambda' m_i_ts @@
                   mk_bind (mk_var m_nm) "d" @@
                 mk_insert "d" [mk_cint 0; mk_tuple k; mk_tuple v] ;
 
-                mk_poly_skip' stag
+                mk_poly_skip' ti.tag
             ])
             acc_code)
         (mk_error "unrecognized map name")
@@ -2469,7 +2469,7 @@ let sw_warmup_loops c =
     mk_code_sink' fn_nm unit_arg [] @@
     mk_let ["batch_id"] (mk_cint 0) @@
     mk_block [
-      clear_poly_queues ~unique:false c;
+      clear_poly_queues c;
       mk_set_all sw_warmup_push_bitmap.id [mk_cfalse];
       mk_iter (mk_lambda' unknown_arg @@
         mk_if (mk_apply' "hasRead" [G.me_var; mk_cstring m_nm])
@@ -2535,9 +2535,9 @@ let trig_dispatcher c =
                   t_int, mk_var "idx";
                   t_int, mk_var "offset"] @@
         List.fold_left
-          (fun acc_code (itag, ti) -> match ti.tag_typ with
+          (fun acc_code ti -> match ti.tag_typ with
              | Trig has_ds ->
-              mk_if (mk_eq (mk_var "tag") @@ mk_cint itag)
+              mk_if (mk_eq (mk_var "tag") @@ mk_cint ti.itag)
                 (* look up this tag *)
                 (mk_poly_at_with' ti.tag @@ mk_lambda' ti.args @@
                   (* if we have subdata, the function must return the new idx, offset *)
@@ -2675,7 +2675,7 @@ let nd_from_sw_trig_dispatcher_trig c =
 let sw_event_driver_isobatch_nm = "sw_event_driver_isobatch"
 let sw_event_driver_isobatch c =
   let trig_list = StrSet.of_list @@ P.get_trig_list c.p in
-  let tags = List.filter (fun (_, ti) ->
+  let tags = List.filter (fun ti ->
       ti.tag_typ = Event && (StrSet.mem ("insert_"^ti.tag) trig_list || ti.tag = "sentinel"))
     c.poly_tags in
   mk_global_fn sw_event_driver_isobatch_nm
@@ -2683,8 +2683,8 @@ let sw_event_driver_isobatch c =
   mk_let ["idx"] (mk_cint 0) @@
   mk_let ["offset"] (mk_cint 0) @@
   mk_let ["tag"] (mk_poly_tag_at (mk_var "poly_queue") @@ mk_cint 0) @@
-  List.fold_left (fun acc_code (i, ti) ->
-      mk_if_eq (mk_var "tag") (mk_cint i)
+  List.fold_left (fun acc_code ti ->
+      mk_if_eq (mk_var "tag") (mk_cint ti.itag)
         (if ti.tag = "sentinel" then
            mk_block [
              Proto.sw_seen_sentinel ~check_size:false;
@@ -2727,9 +2727,9 @@ let sw_event_driver_single_vid c =
           (* clear the trig send bitmaps for each event *)
           mk_set_all D.send_trig_header_bitmap.id [mk_cfalse] ;
 
-          List.fold_left (fun acc_code (i, ti) ->
+          List.fold_left (fun acc_code ti ->
             (* check if we match on the id *)
-            mk_if_eq (mk_var "tag") (mk_cint i)
+            mk_if_eq (mk_var "tag") (mk_cint ti.itag)
               (if ti.tag = "sentinel" then
                 (* don't check size of event queue *)
                 Proto.sw_seen_sentinel ~check_size:false
@@ -2747,7 +2747,7 @@ let sw_event_driver_single_vid c =
                         (if c.gen_deletes then send_fetches "delete_" else mk_cunit))
               acc_code)
           (mk_error "mismatch on event id") @@
-          List.filter (fun (_, ti) ->
+          List.filter (fun ti ->
               ti.tag_typ = Event &&
               (StrSet.mem ("insert_"^ti.tag) trig_list || ti.tag = "sentinel"))
             c.poly_tags
@@ -3302,7 +3302,7 @@ let gen_dist ?(gen_deletes=true)
     (if c.gen_correctives then [nd_rcv_corr_done c] else []) @
     [
      nd_handle_uniq_poly c;
-     nd_rcv_warmup_push c ::
+     nd_rcv_warmup_push c;
      clear_buffered_fetch_helper;
      trig_dispatcher c;
      trig_dispatcher_unique c;

@@ -85,6 +85,7 @@ type tag_type =
 
 type tag_info = {
   tag: id_t;
+  itag: int;
   fn: id_t;
   tag_typ: tag_type;
   args: (id_t * type_t) list;
@@ -116,7 +117,7 @@ type config = {
   (* map bind indices for route memoization *)
   route_indices: (map_id_t, int IntSetMap.t) Hashtbl.t;
   (* poly tag list for batching: int_tag * (tag * tag_type * types) *)
-  poly_tags : (int * tag_info) list;
+  poly_tags : tag_info list;
   (* poly tag for incoming events *)
   event_tags: (int * (string * type_t list)) list;
   (* freevar info for the program, per stmt *)
@@ -833,7 +834,7 @@ let nd_rcv_corr_done_args = ["vid", t_vid; "stmt_id", t_stmt_id; "hop", t_int; "
 let sw_ack_rcv_trig_args = ["addr", t_int; "vid", t_vid]
 
 let get_global_poly_tags c =
-  List.map (fun (i, ti) -> i, ti.tag, wrap_ttuple @@ snd_many ti.args) c.poly_tags
+  List.map (fun ti -> ti.itag, ti.tag, wrap_ttuple @@ snd_many ti.args) c.poly_tags
 
 let get_poly_event_tags c =
   List.map (fun (i, (s, ts)) -> i, s, wrap_ttuple ts) c.event_tags
@@ -974,7 +975,7 @@ let reserve_str_estimate = 4
 (* maximum size of polyqueue entries *)
 let max_poly_queue_csize c =
   let _, max = list_max_op U.csize_of_type @@
-    List.map (fun (_, ti) -> wrap_ttuple @@ snd_many ti.args) c.poly_tags in
+    List.map (fun ti -> wrap_ttuple @@ snd_many ti.args) c.poly_tags in
   max * reserve_mult
 
 let max_event_queue_csize c =
@@ -1031,7 +1032,7 @@ let calc_event_tags c =
 
 let ti ?(fn="") ?(const_args=[]) ?(batch_id=false) ?(vid=false) ?(trig_args=false) tag tag_typ args =
   let fn = if fn = "" then tag else fn in
-  {tag; tag_typ; args; fn; batch_id; trig_args; const_args}
+  {tag; itag=0; tag_typ; args; fn; batch_id; trig_args; const_args}
 
 (* we create one global tag hashmap, which we use to populate polyqueues *)
 (* format (tag, tag_type, types) *)
@@ -1133,7 +1134,7 @@ let calc_poly_tags c =
     (* for GC (node->switch acks) *)
     [ti sw_ack_rcv_trig_nm (Trig false) sw_ack_rcv_trig_args]
   in
-  insert_index_fst l
+  List.map (fun (i,t) -> {t with itag=i}) @@ insert_index_fst l
 
 (* instead of sending directly, place in the send buffer *)
 (* @bitmap: whether to mark the bitmap *)
@@ -1218,8 +1219,8 @@ let buffer_tuples_from_idxs ?(unique=false) ?(drop_vid=false) tuples_nm map_type
           indices])
     mk_cunit (* do nothing if empty. we're sending a header anyway *)
 
-let ios_tag c stag = fst @@ List.find (fun (_, ti) -> ti.tag = stag) c.poly_tags
-let soi_tag c itag = (snd @@ List.find (fun (i, _) -> i = itag) c.poly_tags).tag
+let ios_tag c stag = (List.find (fun ti -> ti.tag = stag) c.poly_tags).itag
+let soi_tag c itag = (List.find (fun ti -> ti.itag = itag) c.poly_tags).tag
 
 (* name for master send request trigger (part of GC) *)
 let ms_send_gc_req_nm = "ms_send_gc_req"
