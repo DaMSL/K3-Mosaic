@@ -874,7 +874,7 @@ let nd_rcv_fetch_single_vid_trig c t s =
 (* indexed by map_id *)
 let send_push_isobatch_inner = create_ds "inner" t_bitset
 
-(* dest_ip -> stmt_map_id -> bool *)
+(* dest_ip -> {stmt_map_id} *)
 let send_push_isobatch_map_id = "send_push_isobatch_map"
 let send_push_isobatch_map_e = ["inner", send_push_isobatch_inner.t]
 let send_push_isobatch_map c =
@@ -1042,7 +1042,9 @@ let nd_rcv_fetch_isobatch_trig c t s =
                   [
                     (* save the decision *)
                     mk_insert rcv_fetch_isobatch_bitmap_id [mk_var "stmt_map_id"];
-                    mk_insert rcv_fetch_isobatch_decision_bitmap_id [mk_var "stmt_map_id"];
+                    mk_if (mk_var "do_buffer")
+                      (mk_insert rcv_fetch_isobatch_decision_bitmap_id [mk_var "stmt_map_id"])
+                      mk_cunit;
                     (* act on the decision and save into the helper *)
                     mk_if (mk_var "do_buffer")
                       (* write a buffer decision *)
