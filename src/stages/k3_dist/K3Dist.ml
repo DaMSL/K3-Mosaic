@@ -973,15 +973,20 @@ let max_event_queue_csize c =
 (* code to apply poly_reserve to every outgoing polybuffer *)
 let reserve_poly_queue_code ?all c =
   mk_if (mk_var do_poly_reserve.id)
-    (mk_iter_bitmap' ?all
-      (mk_update_at_with poly_queues.id (mk_var "ip") @@
-        mk_lambda' ["pqs", t_of_e poly_queues.e] @@ mk_block [
-          mk_poly_reserve "pqs"
-            (mk_mult (mk_var sw_poly_batch_size.id) @@ mk_cint reserve_mult)
-            (mk_mult (mk_var sw_poly_batch_size.id) @@ mk_cint @@ max_poly_queue_csize c) @@
-            mk_mult (mk_var sw_poly_batch_size.id) @@ mk_cint reserve_str_estimate;
-          mk_var "pqs" ])
-      poly_queue_bitmap.id)
+    (mk_ignore @@ mk_agg
+      (mk_lambda2' ["ip", t_int] unknown_arg @@
+       mk_block [
+        mk_update_at_with poly_queues.id (mk_var "ip") @@
+          mk_lambda' ["pqs", t_of_e poly_queues.e] @@ mk_block [
+            mk_poly_reserve "pqs"
+              (mk_mult (mk_var sw_poly_batch_size.id) @@ mk_cint reserve_mult)
+              (mk_mult (mk_var sw_poly_batch_size.id) @@ mk_cint @@ max_poly_queue_csize c) @@
+              mk_mult (mk_var sw_poly_batch_size.id) @@ mk_cint reserve_str_estimate;
+            mk_var "pqs" ];
+        mk_add (mk_cint 1) @@ mk_var "ip"
+       ])
+      (mk_cint 0) @@
+      mk_var my_peers.id)
     mk_cunit
 
 let clear_poly_queues_fn_nm = "clear_poly_queues"
@@ -1609,7 +1614,7 @@ let send_poly_queues =
     (* send (move) the polyqueues *)
     mk_iter_bitmap'
       (* check if we have a upoly queue and act accordingly *)
-        (mk_if (mk_at' upoly_queue_bitmap.id @@ mk_var "ip")
+        (mk_if (mk_is_member' upoly_queue_bitmap.id @@ mk_var "ip")
         (* move and delete the poly_queue and ship it out *)
           (mk_let ["pq"]
             (mk_delete_at poly_queues.id @@ mk_var "ip") @@

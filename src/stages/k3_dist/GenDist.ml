@@ -412,7 +412,7 @@ let sw_send_puts_single_vid c t s =
       ]
 
 (* vector of maps *)
-let send_put_isobatch_inner2 = create_ds "inner2" t_bool_vector
+let send_put_isobatch_inner2 = create_ds "inner2" t_bitset
 
 (* vector of source ips *)
 let send_put_isobatch_inner =
@@ -421,16 +421,14 @@ let send_put_isobatch_inner =
 
 (* dest ip -> source ip -> map vector, for a whole batch *)
 let send_put_isobatch_map_id = "send_put_isobatch_map"
-let send_put_isobatch_map_e = ["bitmap", t_bool_vector; "inner", send_put_isobatch_inner.t]
+let send_put_isobatch_map_e = ["bitmap", t_bitset; "inner", send_put_isobatch_inner.t]
 let send_put_isobatch_map c =
   let e = send_put_isobatch_map_e in
   let init =
     mk_map (mk_lambda' unknown_arg @@
       mk_tuple [
-        mk_map (mk_lambda' unknown_arg @@ mk_cfalse) @@ mk_var D.my_peers.id;
-        mk_map (mk_lambda' unknown_arg @@
-            k3_container_of_list t_bool_vector @@
-              List.map (const mk_cfalse) @@ 0::P.get_map_list c.p) @@
+        mk_empty t_bitset; (* {ips} *)
+        mk_map (mk_lambda' unknown_arg @@ mk_empty t_bitset) @@ (* {maps} *)
           mk_var D.my_peers.id
       ]) @@
       mk_var D.my_peers.id in
@@ -488,7 +486,7 @@ let sw_send_puts_isobatch c t s =
                     mk_insert "bitmap" [mk_var ip_src];
                     mk_update_at_with "inner" (mk_var ip_src) @@
                       mk_lambda' send_put_isobatch_inner.e @@
-                        mk_insert_at_block "inner2" (mk_cint rmap) [mk_ctrue];
+                        mk_insert_block "inner2" [mk_cint rmap];
                     tup_of_e send_put_isobatch_map_e;
                   ];
               (* buffer the trig args if needed *)
@@ -874,7 +872,7 @@ let nd_rcv_fetch_single_vid_trig c t s =
     ]
 
 (* indexed by map_id *)
-let send_push_isobatch_inner = create_ds "inner" t_bool_vector
+let send_push_isobatch_inner = create_ds "inner" t_bitset
 
 (* dest_ip -> stmt_map_id -> bool *)
 let send_push_isobatch_map_id = "send_push_isobatch_map"
@@ -955,11 +953,10 @@ let rcv_fetch_isobatch_bitmap_id = "rcv_fetch_isobatch_bitmap"
 let rcv_fetch_isobatch_bitmap c = create_ds rcv_fetch_isobatch_bitmap_id t_bitset
 
 (* the actual decision on buffer=true/push=false *)
+(* {stmt_map_id} *)
 let rcv_fetch_isobatch_decision_bitmap_id = "rcv_fetch_isobatch_decision"
 let rcv_fetch_isobatch_decision_bitmap c =
-  let init = k3_container_of_list t_bool_vector @@
-    List.map (const mk_cfalse) @@ fst_many @@ P.stmt_map_ids c.p in
-  create_ds ~init rcv_fetch_isobatch_decision_bitmap_id t_bool_vector
+  create_ds rcv_fetch_isobatch_decision_bitmap_id t_bitset
 
 let clear_buffered_fetch_helper_nm = "clear_buffered_fetch_helper"
 let clear_buffered_fetch_helper =
@@ -1021,10 +1018,10 @@ let nd_rcv_fetch_isobatch_trig c t s =
                 (mk_apply' (nd_rcv_fetch_isobatch_do_push_nm t s) @@ [mk_var "map_id"]@var_args) @@
                 (* check if we have a decision already made for this map *)
                 mk_let ["made_decision"]
-                  (mk_at' rcv_fetch_isobatch_bitmap_id @@ mk_var "stmt_map_id") @@
+                  (mk_is_member' rcv_fetch_isobatch_bitmap_id @@ mk_var "stmt_map_id") @@
                 mk_if (mk_var "made_decision")
                   (mk_let ["do_buffer"]
-                    (mk_at' rcv_fetch_isobatch_decision_bitmap_id @@ mk_var "stmt_map_id") @@
+                    (mk_is_member' rcv_fetch_isobatch_decision_bitmap_id @@ mk_var "stmt_map_id") @@
                   (* else - no decision has been made, so make one *)
                   mk_if (mk_var "do_buffer")
                     (* buffer the push *)
@@ -1044,8 +1041,8 @@ let nd_rcv_fetch_isobatch_trig c t s =
                             mk_lambda' nd_stmt_cntrs_per_map_inner.e @@ mk_var "vid")
                   [
                     (* save the decision *)
-                    mk_insert_at rcv_fetch_isobatch_bitmap_id (mk_var "stmt_map_id") [mk_ctrue];
-                    mk_insert_at rcv_fetch_isobatch_decision_bitmap_id (mk_var "stmt_map_id") [mk_var "do_buffer"];
+                    mk_insert rcv_fetch_isobatch_bitmap_id [mk_var "stmt_map_id"];
+                    mk_insert rcv_fetch_isobatch_decision_bitmap_id [mk_var "stmt_map_id"];
                     (* act on the decision and save into the helper *)
                     mk_if (mk_var "do_buffer")
                       (* write a buffer decision *)
@@ -1141,7 +1138,7 @@ let nd_rcv_stmt_isobatch =
   mk_global_fn nd_rcv_stmt_isobatch_nm ["stmt_id", t_stmt_id; "vid", t_vid] [] @@
   mk_block [
       mk_assign isobatch_stmt_helper_has_content.id mk_ctrue;
-      mk_insert_at isobatch_stmt_helper_bitmap_id (mk_var "stmt_id") [mk_ctrue];
+      mk_insert isobatch_stmt_helper_bitmap_id [mk_var "stmt_id"];
       mk_update_at_with isobatch_stmt_helper_id (mk_var "stmt_id") @@
         mk_lambda' isobatch_stmt_helper_e @@
           mk_insert_block "inner2" [mk_var "vid"]
@@ -1278,7 +1275,7 @@ let nd_send_push_stmt_map_trig c t s =
                     (* unbuffered *)
                     mk_block [
                       (* mark the push data structure *)
-                      mk_insert_at send_push_bitmap.id (mk_var "ip") [mk_ctrue];
+                      mk_insert send_push_bitmap.id [mk_var "ip"];
                       mk_update_at_with send_push_cntrs.id (mk_var "ip") @@
                         mk_lambda' send_push_cntrs.e @@
                           mk_tuple [mk_add (mk_var "count2") @@ mk_cint 1;
@@ -1406,11 +1403,11 @@ let nd_isobatch_send_push_stmt_map_trig c t s =
               mk_lambda' K3S.shuffle_results.e @@
                 mk_block [
                   (* mark the push data structure *)
-                  mk_insert_at send_push_isobatch_bitmap.id (mk_var "ip") [mk_ctrue];
+                  mk_insert send_push_isobatch_bitmap.id [mk_var "ip"];
                   (* insert the relevant stmt_map *)
                   mk_update_at_with send_push_isobatch_map_id (mk_var "ip") @@
                     mk_lambda' send_push_isobatch_map_e @@
-                      mk_insert_at_block "inner" (mk_cint s_m) [mk_ctrue];
+                      mk_insert_block "inner" [mk_cint s_m];
 
                   (* buffer the map data according to the indices *)
                   buffer_tuples_from_idxs ~unique:true "tuples" map_delta.t buf_nm @@ mk_var "indices"
@@ -1441,7 +1438,7 @@ let nd_send_isobatch_push_meta c =
                 mk_let ["count"]
                   (List.fold_left (fun acc_code (s_m, (_, m)) ->
                       mk_add
-                        (mk_if (mk_at' "inner" @@ mk_cint s_m) (mk_cint 1) @@ mk_cint 0)
+                        (mk_if (mk_is_member' "inner" @@ mk_cint s_m) (mk_cint 1) @@ mk_cint 0)
                         acc_code)
                     (mk_cint 0) @@
                     List.filter (fun (_,(s',_)) -> s' = s) s_m) @@
@@ -1554,11 +1551,8 @@ let maps_potential_corrective c =
  * We return the number of messages sent out. NOT the number of vids.
  *)
 
-(* used by send correctives *)
-let send_corrective_bitmap =
-  (* indexed by ip *)
-  let init = mk_map (mk_lambda' unknown_arg mk_cfalse) @@ mk_var D.my_peers.id in
-  create_ds ~init "send_corrective_bitmap" t_bool_vector
+(* used by send correctives: {ip} *)
+let send_corrective_bitmap = create_ds "send_corrective_bitmap" t_bitset
 
 let send_corrective_ip_map =
   (* indexed by ip *)
@@ -1647,7 +1641,7 @@ let send_corrective_fns c =
                   key @ [mk_cint pat_idx; mk_cint (-1); mk_var "delta_tuples2"];
                 mk_iter_bitmap'
                   (mk_block [
-                    mk_insert_at send_corrective_bitmap.id (mk_var "ip") [mk_ctrue];
+                    mk_insert send_corrective_bitmap.id [mk_var "ip"];
                     (* lookup indices *)
                     mk_at_with' K3S.shuffle_results.id (mk_var "ip") @@
                       mk_lambda' K3S.shuffle_results.e @@
@@ -2716,7 +2710,7 @@ let sw_rcv_token_trig c =
                   (mk_block [
                     mk_let ["pq"] (mk_delete_at poly_queues.id @@ mk_var "ip") @@
                       mk_insert_at sw_poly_queues.id (mk_var "ip") [mk_var "pq"];
-                    mk_insert_at sw_poly_queue_bitmap.id (mk_var "ip") [mk_ctrue];
+                    mk_insert sw_poly_queue_bitmap.id [mk_var "ip"];
                   ])
                  D.poly_queue_bitmap.id;
 

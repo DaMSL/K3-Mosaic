@@ -998,7 +998,8 @@ let mk_agg_bitmap ?(idx="ip") ?(move=false) args e zero bitmap =
     (if move then U.add_property "Move" else id_fn) @@
       mk_agg (mk_lambda2' args [idx, t_int] e) zero bitmap
 
-let mk_agg_bitmap' ?idx ?move args e zero bitmap = mk_agg_bitmap ?idx ?move args e zero (mk_var bitmap)
+let mk_agg_bitmap' ?idx ?move args e zero bitmap =
+  mk_agg_bitmap ?idx ?move args e zero (mk_var bitmap)
 
 (* check for tag validity *)
 let mk_check_tag tag col idx offset e =
