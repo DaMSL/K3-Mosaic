@@ -1237,7 +1237,7 @@ let nd_send_push_stmt_map_trig c t s =
                 mk_cunit @@
                 (* otherwise add to shuffle bitmap for empty msgs *)
                 mk_iter_bitmap
-                  (mk_insert_at K3S.shuffle_bitmap.id (mk_var "ip") [mk_ctrue]) @@
+                  (mk_insert K3S.shuffle_bitmap.id [mk_var "ip"]) @@
                   (* index the particular tuple that matches our map *)
                   mk_snd @@ mk_var "lkup2"
           else []) @
@@ -1378,7 +1378,7 @@ let nd_isobatch_send_push_stmt_map_trig c t s =
                 mk_cunit @@
                 (* otherwise add to shuffle bitmap for empty msgs *)
                 mk_iter_bitmap
-                  (mk_insert_at K3S.shuffle_bitmap.id (mk_var "ip") [mk_ctrue]) @@
+                  (mk_insert K3S.shuffle_bitmap.id [mk_var "ip"]) @@
                   (* index the particular tuple that matches our map *)
                   mk_snd @@ mk_var "lkup2"
           else []) @

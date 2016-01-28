@@ -640,7 +640,7 @@ let route_opt_ds c =
 
 let route_opt_push_inner_id = "route_opt_push_inner"
 let route_opt_push_inner n =
-  let e = List.map (fun i -> "nodes"^soi i, wrap_tmap' [t_int; wrap_tvector t_bool]) @@ create_range n in
+  let e = List.map (fun i -> "nodes"^soi i, wrap_tmap' [t_int; t_bitset]) @@ create_range n in
   create_ds route_opt_push_inner_id @@ t_of_e e
 
 (* data structures to compute: for send_push's empty messages *)
@@ -697,7 +697,7 @@ let route_opt_init c =
                 mk_tuple @@ List.map (fun (idx, m) ->
                   route_lookup c m [mk_subscript (idx + 1) @@ mk_var "lr_vals"] pat_idx @@
                     mk_agg_bitmap ["acc2", route_bitmap.t]
-                      (mk_block [mk_insert_at "acc2" (mk_var "ip") [mk_ctrue]; mk_var "acc2"])
+                      (mk_block [mk_insert "acc2" [mk_var "ip"]; mk_var "acc2"])
                       (swallow_f (mk_subscript idx) @@ mk_var "acc")
                       (mk_var route_bitmap.id))
                   idx_rmaps)
@@ -743,7 +743,7 @@ let route_opt_push_init c =
       let nm = route_opt_push_init_nm s in
       (* 0: pat_idx 0 should always be the fully bound pattern *)
       let pat_idx = mk_cint 0 in
-      let inner_map_t = wrap_tmap' [t_int; wrap_tvector t_bool] in
+      let inner_map_t = wrap_tmap' [t_int; t_bitset] in
       let agg_t = route_bitmap.t in
       let value_e = ["lr_vals", wrap_ttuple @@ [t_int] @ List.map (const t_int) rmaps] in
       mk_global_fn nm unit_arg [] @@
@@ -766,7 +766,7 @@ let route_opt_push_init c =
                   (mk_lambda2' ["acc", agg_t] value_e @@
                     route_lookup c lmap [mk_fst @@ mk_var "lr_vals"] pat_idx @@
                       mk_agg_bitmap' ["acc2", agg_t]
-                        (mk_block [mk_insert_at "acc2" (mk_var "ip") [mk_ctrue]; mk_var "acc2"])
+                        (mk_block [mk_insert "acc2" [mk_var "ip"]; mk_var "acc2"])
                         (mk_var "acc")
                         route_bitmap.id)
                   (* start with an empty route bitmap *)
