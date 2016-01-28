@@ -1148,7 +1148,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
       | _ -> "fold", [lambda; acc], [[1], false; def_a]
     in
     (* find out if our accumulator is a collection type *)
-    apply_method c ~name:"fold" ~col ~args ~arg_info
+    apply_method c ~name ~col ~args ~arg_info
 
   | Equijoin -> let c1, c2, prj1, prj2, f, zero = U.decompose_equijoin expr in
     apply_method c ~name:"equijoinkf_kv" ~col:c1
