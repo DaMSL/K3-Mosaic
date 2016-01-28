@@ -1220,7 +1220,7 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
     wrap_project c col (apply_method c ~name:"at" ~col ~args:[idx] ~arg_info:[def_a])
 
   | IsMember -> let col, key = U.decompose_is_member expr in
-    let name, arg_info = if is_bitset c col then "is_member_b", [def_a] else "is_member", [[], true] in
+    let name, arg_info = if is_bitset c col then "member_b", [def_a] else "member", [[], true] in
     apply_method c ~name ~col ~args:[key] ~arg_info
 
   | MinWith -> let col, lam_none, lam_some = U.decompose_min_with expr in
