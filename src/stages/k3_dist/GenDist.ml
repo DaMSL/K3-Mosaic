@@ -441,7 +441,7 @@ let clear_send_put_isobatch_map =
     mk_iter_bitmap'
       (mk_update_at_with send_put_isobatch_map_id (mk_var "ip") @@
         mk_lambda' send_put_isobatch_map_e @@
-          mk_let_block ["inner"]
+          mk_let_block ["inner3"]
             (mk_agg_bitmap' ~idx:"ip2" ["acc", send_put_isobatch_inner.t]
               (mk_update_at_with_block "acc" (mk_var "ip2") @@
                 mk_lambda' send_put_isobatch_inner.e @@
@@ -449,7 +449,7 @@ let clear_send_put_isobatch_map =
               (mk_var "inner")
               "bitmap") [
             mk_clear_all "bitmap";
-            tup_of_e send_put_isobatch_map_e
+            mk_tuple [mk_var "bitmap"; mk_var "inner3"]
           ])
       send_put_bitmap.id;
     mk_clear_all send_put_bitmap.id;
