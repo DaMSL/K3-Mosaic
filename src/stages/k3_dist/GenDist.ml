@@ -2041,7 +2041,7 @@ let let_lmap_filtering c delta stmt_id lmap let_bind body ~alt =
                  (List.map (fun x -> mk_tuple [mk_ctrue; x]) @@
                  ids_to_vars @@ fst_many @@ list_drop_end 1 lmap_i_ts))
                (mk_cint pat_idx) @@
-             mk_if (mk_at' R.route_bitmap.id @@ mk_var D.me_int.id)
+             mk_if (mk_is_member' R.route_bitmap.id @@ mk_var D.me_int.id)
                (mk_tuple [mk_ctrue; mk_insert_block "acc" [mk_var delta]]) @@
                mk_tuple [mk_var do_action; mk_var "acc"])
            (mk_tuple [mk_cfalse; mk_empty @@ wrap_t_calc' lmap_ts])
