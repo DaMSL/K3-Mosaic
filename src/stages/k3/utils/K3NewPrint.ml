@@ -416,8 +416,7 @@ let try_matching e l =
   in loop "" l
 
 (* check if a collection is a vmap *)
-let is_vmap c col = match fst @@ KH.unwrap_tcol @@ T.repr c.tenv @@ T.type_of_expr col with
-                  | TVMap _ -> true | _ -> false
+let is_vmap c col = U.is_tvmap @@ fst @@ KH.unwrap_tcol @@ T.repr c.tenv @@ T.type_of_expr col
 
 let verify_vmap c col = if is_vmap c col then () else failwith "Not a vmap"
 
@@ -428,6 +427,9 @@ let verify_map c col = if is_map c col then () else failwith "Not a map"
 
 let is_sorted_map c col = match fst @@ KH.unwrap_tcol @@ T.repr c.tenv @@ T.type_of_expr col with
                   | TSortedMap -> true | _ -> false
+
+let is_bitset c col = match fst @@ KH.unwrap_tcol @@ T.repr c.tenv @@ T.type_of_expr col with
+  | TBitSet -> true | _ -> false
 
 let is_intmap c col =
   if not c.use_intmap then false else
@@ -1102,7 +1104,8 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
       end
 
   | Iterate -> let lambda, col = U.decompose_iterate expr in
-    apply_method c ~name:"iterate" ~col ~args:[lambda] ~arg_info:[[0], false]
+    let name, arg0 = if is_bitset c col then "iterate_b", [] else "iterate", [0] in
+    apply_method c ~name ~col ~args:[lambda] ~arg_info:[arg0, false]
 
   | Map ->
       if c.map_to_fold then fold_of_map_ext c expr
@@ -1138,10 +1141,11 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
         end
 
   | Aggregate -> let lambda, acc, col = U.decompose_aggregate expr in
-    let args, arg_info = match U.unwrap_tuple acc with
-      | vid::acc when is_vmap c col -> [vid; lambda] @ acc, [def_a; [1], false; def_a]
+    let name, args, arg_info = match U.unwrap_tuple acc with
+      | vid::acc when is_vmap c col -> "fold", [vid; lambda] @ acc, [def_a; [1], false; def_a]
       | _ when is_vmap c col -> failwith "Aggregate: missing vid in vmap fold"
-      | _ -> [lambda; acc], [[1], false; def_a]
+      | _ when is_bitset c col -> "fold_b", [lambda; acc], [def_a; def_a]
+      | _ -> "fold", [lambda; acc], [[1], false; def_a]
     in
     (* find out if our accumulator is a collection type *)
     apply_method c ~name:"fold" ~col ~args ~arg_info
@@ -1216,7 +1220,8 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
     wrap_project c col (apply_method c ~name:"at" ~col ~args:[idx] ~arg_info:[def_a])
 
   | IsMember -> let col, key = U.decompose_is_member expr in
-    apply_method c ~name:"is_member" ~col ~args:[key] ~arg_info:[[0], false]
+    let name, arg_info = if is_bitset c col then "is_member_b", [def_a] else "is_member", [[], true] in
+    apply_method c ~name ~col ~args:[key] ~arg_info
 
   | MinWith -> let col, lam_none, lam_some = U.decompose_min_with expr in
     apply_method c ~name:"min" ~col
@@ -1293,8 +1298,9 @@ and lazy_expr ?(prefix_fn=id_fn) ?(expr_info=([],false)) c expr =
 
   | Insert -> let col, x = U.decompose_insert expr in
     maybe_vmap c col x
-      (fun x -> lazy_expr c col <| apply_method_nocol c ~name:"insert" ~args:[x]
-          ~arg_info:[[], true])
+      (fun x ->
+         let name, arg_info = if is_bitset c col then "insert_b", [def_a] else "insert", [[], true] in
+         lazy_expr c col <| apply_method_nocol c ~name ~args:[x] ~arg_info)
       (fun vid x -> lazy_expr c col <| apply_method_nocol c ~name:"insert" ~args:[vid;x]
           ~arg_info:[vid_out_arg; [], true])
 
@@ -1580,6 +1586,7 @@ include \"Annotation/Maps/SortedMapE.k3\"
 include \"Annotation/Maps/VMap.k3\"
 include \"Annotation/MultiIndex/MultiIndexVMap.k3\"
 include \"Annotation/Set.k3\"
+include \"Annotation/BitSet.k3\"
 include \"Annotation/Seq.k3\"
 include \"Annotation/Sets/SortedSet.k3\"
 include \"Annotation/Vector.k3\"
