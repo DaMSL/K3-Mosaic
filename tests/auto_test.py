@@ -53,6 +53,8 @@ def run():
                         default=True, help="Disable multi-index maps")
     parser.add_argument('--filemux', action='store_true', dest='filemux',
                         default=False, help="Enable filemux newprint")
+    parser.add_argument('--gen-intmap', action='store_true', dest='gen_intmap',
+                        default=False, help="Enable intmap-based newprint")
     parser.add_argument('--safe-writes', action='store_true', dest='safe_writes',
                         default=False, help="Enable safe array writes")
     parser.add_argument('--overlap-factor', dest='map_overlap_factor',
@@ -133,6 +135,7 @@ def run():
                                 msg_interval=args.msg_interval,
                                 logging=args.logging,
                                 filemux=args.filemux,
+                                gen_intmap=args.gen_intmap,
                                 safe_writes=args.safe_writes,
                                 map_overlap_factor=args.map_overlap_factor,
                                 batch_size=args.batch_size,

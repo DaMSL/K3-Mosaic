@@ -171,6 +171,7 @@ type parameters = {
     mutable k3new_data_file: string;
     mutable k3new_folds: bool;   (* output fold instead of map/ext *)
     mutable use_filemux: bool;
+    mutable use_intmap: bool;
     mutable safe_writes: bool;   (* output safe writes *)
     mutable use_opt_route: bool; (* use optimized 1:1 routing *)
 
@@ -207,6 +208,7 @@ let default_cmd_line_params () = {
     stream_file       = "input.csv";
     agenda_map        = K3Dist.default_mapping;
     use_filemux       = false;
+    use_intmap        = false;
 
     safe_writes       = false;
     dump_info         = false;  (* dump info about prog_info and quit *)
@@ -454,11 +456,13 @@ let print params inputs =
                  ~map_to_fold:params.k3new_folds
                  ~file:params.k3new_data_file
                  ~use_filemux:params.use_filemux
+                 ~use_intmap:params.use_intmap
                  ~safe_writes:params.safe_writes
           else K3NewPrint.string_of_dist_program
                  ~map_to_fold:params.k3new_folds
                  ~file:params.k3new_data_file
                  ~use_filemux:params.use_filemux
+                 ~use_intmap:params.use_intmap
                  ~safe_writes:params.safe_writes) |- snd
     | K3Test | K3DistTest -> print_k3_test_program params
   in List.iter print_fn idx_inputs
@@ -625,6 +629,8 @@ let param_specs = Arg.align
       "         Disable logging";
   "--filemux", Arg.Unit (fun () -> cmd_line_params.use_filemux <- true),
       "         Use filemux mechanism";
+  "--intmap", Arg.Unit (fun () -> cmd_line_params.use_intmap <- true),
+      "         Use intmap ds";
   "--no-opt-route", Arg.Unit (fun () -> cmd_line_params.use_opt_route <- false),
       "         Don't use optimal routing";
   ])

@@ -42,6 +42,7 @@ def run(target_file,
         run_correctives=False,
         run_isobatch=True,
         filemux=False,
+        gen_intmap=False,
         safe_writes=False,
         map_overlap_factor=None,
         batch_size=None,
@@ -213,6 +214,8 @@ def run(target_file,
                 arg += '--k3new-folds '
             if filemux:
                 arg += '--filemux '
+            if gen_intmap:
+                arg += '--intmap '
             if safe_writes:
                 arg += '--safe-writes '
 

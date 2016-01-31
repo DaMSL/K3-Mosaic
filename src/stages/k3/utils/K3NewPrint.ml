@@ -1568,15 +1568,15 @@ let filter_incompatible prog =
 
 (* print a K3 program in syntax *)
 (* We get the typechecking environments so we can do incremental typechecking where needed *)
-let string_of_program ?(map_to_fold=false) ?(use_filemux=false) ?(safe_writes=false) prog (env, tenv, trig_env) =
-  let config = {default_config with env; trig_env; tenv; map_to_fold; use_filemux; safe_writes} in
+let string_of_program ?(map_to_fold=false) ?(use_filemux=false) ?(safe_writes=false) ?(use_intmap=false) prog (env, tenv, trig_env) =
+  let config = {default_config with env; trig_env; tenv; map_to_fold; use_filemux; safe_writes; use_intmap} in
   wrap_f @@ fun () ->
     let l = wrap_hv 0 (lps_list ~sep:"" CutHint (lazy_declaration config |- fst) prog) in
     force_list l
 
 (* print a new k3 program with added sources and feeds *)
 (* envs are the typechecking environments to allow us to do incremental typechecking *)
-let string_of_dist_program ?(file="default.txt") ~map_to_fold ~use_filemux ~safe_writes warmup_maps wrelnames (p, envs) =
+let string_of_dist_program ?(file="default.txt") ~map_to_fold ~use_filemux ~use_intmap ~safe_writes warmup_maps wrelnames (p, envs) =
   let p' = filter_incompatible p in
   let map_template (nm, ty) =
 "\
@@ -1652,13 +1652,13 @@ control IfMachineMaster {
 
 declare rebatch : mut int = 0
 
-" ^ (string_of_program ~map_to_fold ~use_filemux ~safe_writes p' envs)^"\n"
+" ^ (string_of_program ~map_to_fold ~use_filemux ~use_intmap ~safe_writes p' envs)^"\n"
   ^ (match warmup_maps with
      | Some(wm) -> String.concat "\n" @@ List.map map_template wm @ [map_load_fn wm]
      | _ -> "")
 
 
-let string_of_dist_warmup_program ?(file="default.txt") ~map_to_fold ~use_filemux ~safe_writes warmup_maps wrelnames (p, envs) =
+let string_of_dist_warmup_program ?(file="default.txt") ~map_to_fold ~use_filemux ~use_intmap ~safe_writes warmup_maps wrelnames (p, envs) =
   let p' = filter_incompatible p in
   let map_template (nm, ty) =
 "\
@@ -1762,7 +1762,7 @@ declare LINEITEMPaths : collection {path: string} @Collection
 
 trigger halt : () = \\_ -> haltEngine()
 
-" ^(string_of_program ~map_to_fold ~use_filemux ~safe_writes p' envs)^"\n"
+" ^(string_of_program ~map_to_fold ~use_filemux ~use_intmap ~safe_writes p' envs)^"\n"
   ^(match warmup_maps with
     | Some(wm) -> String.concat "\n" @@ List.map map_template wm @ [warmup_toplevel_fn wm]
     | _ -> "")
