@@ -11,9 +11,7 @@ module R = K3Route
 (* type for searching for shuffle functions and their bindings *)
 (* stmt list * r_map * l_map * (r_map index * l_map index) list * func_name *)
 
-let shuffle_bitmap =
-  let init = mk_map (mk_lambda' unknown_arg mk_cfalse) @@ mk_var D.my_peers.id in
-  create_ds "shuffle_bitmap" ~init @@ wrap_tvector t_bool
+let shuffle_bitmap = create_ds "shuffle_bitmap" t_bitset
 
 let shuffle_indices =
   create_ds "shuffle_indices" @@ wrap_tbag t_int
@@ -92,8 +90,7 @@ let gen_shuffle_fn c rmap lmap bindings fn_name =
            ])
         shuffle_bitmap.id;
 
-      (* clean the shuffle bitmap *)
-      mk_set_all shuffle_bitmap.id [mk_cfalse];
+      mk_clear_all shuffle_bitmap.id;
 
       ] @
 
@@ -106,7 +103,7 @@ let gen_shuffle_fn c rmap lmap bindings fn_name =
 
             (* get the bitmap from route *)
             mk_iter_bitmap' ~idx:shuffle_ip.id
-              (mk_insert_at shuffle_bitmap.id (mk_var shuffle_ip.id) [mk_var "has_val"])
+              (mk_insert shuffle_bitmap.id [mk_var shuffle_ip.id])
               R.route_bitmap.id;
           (* assign to the appropriate slots *)
           mk_iter_bitmap' ~idx:shuffle_ip.id
@@ -137,7 +134,7 @@ let gen_shuffle_fn c rmap lmap bindings fn_name =
                   mk_iter_bitmap' ~idx:shuffle_ip.id
                     (mk_block [
                       (* copy the marked ip *)
-                      mk_insert_at shuffle_bitmap.id (mk_var shuffle_ip.id) [mk_ctrue];
+                      mk_insert shuffle_bitmap.id [mk_var shuffle_ip.id];
                       (* insert into the corresponding slot *)
                       mk_update_at_with "shuffle_results" (mk_var shuffle_ip.id) @@
                         mk_lambda' shuffle_results.e @@
@@ -161,7 +158,7 @@ let gen_shuffle_fn c rmap lmap bindings fn_name =
             (mk_cint lmap :: if pred then no_rkey_key_vars else [mk_cunit])
             (mk_var shuffle_empty_pat) @@
             mk_iter_bitmap' ~idx:shuffle_ip.id
-              (mk_insert_at shuffle_bitmap.id (mk_var shuffle_ip.id) [mk_ctrue])
+              (mk_insert shuffle_bitmap.id [mk_var shuffle_ip.id])
               R.route_bitmap.id)
           mk_cunit
         ]

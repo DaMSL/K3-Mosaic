@@ -158,3 +158,4 @@ val v_filter_op : value_t t_err_fn -> [`LT|`LEQ|`GT|`GEQ|`EQ] -> value_t -> valu
 val v_at : ?extend:bool -> ?tag:string -> ?get_stag:bool -> ?get_itag:bool -> value_t option t_err_fn -> value_t -> value_t -> value_t option
 val v_min : value_t option t_err_fn -> value_t -> value_t option
 val v_is_empty : value_t t_err_fn -> value_t -> value_t
+val v_mem : value_t t_err_fn -> value_t -> value_t -> value_t

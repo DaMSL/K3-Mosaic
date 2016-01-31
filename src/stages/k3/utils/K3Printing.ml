@@ -57,6 +57,7 @@ let string_of_container_type t_c = match t_c with
     | TVMap None    -> "TVMap"
     | TSortedMap    -> "TSortedMap"
     | TSortedSet    -> "TSortedSet"
+    | TBitSet       -> "TBitSet"
     | TPolyQueue(u,x) -> sp "TPolyQueue(%s, %s)" (sob u) (string_of_poly_variant x)
 
 let string_of_const cn = match cn with
@@ -128,6 +129,7 @@ let string_of_tag_type = function
     | SliceOp o        -> sp "SliceOp(%s)" (string_of_op o)
     | AtWith           -> "AtWith"
     | At               -> "At"
+    | IsMember         -> "IsMember"
     | MinWith          -> "MinWith"
     | Insert           -> "Insert"
     | InsertAt         -> "InsertAt"

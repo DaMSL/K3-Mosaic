@@ -28,6 +28,7 @@ val t_alias : id_t -> type_t
 
 val t_bool_vector : type_t
 val t_int_vector : type_t
+val t_bitset : type_t
 
 (* K3 types for various things *)
 val t_trig_id : type_t
@@ -161,6 +162,7 @@ val mk_apply : expr_t -> expr_t list -> expr_t
 val mk_apply' : id_t -> expr_t list -> expr_t
 val mk_block : expr_t list -> expr_t
 val mk_iter : expr_t -> expr_t -> expr_t
+val mk_iter' : expr_t -> id_t -> expr_t
 val mk_if : expr_t -> expr_t -> expr_t -> expr_t
 val mk_if_eq : expr_t -> expr_t -> expr_t -> expr_t -> expr_t
 val mk_case_sn : expr_t -> id_t -> expr_t -> expr_t -> expr_t
@@ -187,6 +189,8 @@ val mk_at_with' : ?error:expr_t -> id_t -> expr_t -> expr_t -> expr_t
 val mk_at : expr_t -> expr_t -> expr_t
 val mk_at' : id_t -> expr_t -> expr_t
 val mk_min_with : expr_t -> expr_t -> expr_t -> expr_t
+val mk_is_member : expr_t -> expr_t -> expr_t
+val mk_is_member' : id_t -> expr_t -> expr_t
 
 val mk_peek' : id_t -> expr_t
 val mk_slice : expr_t -> expr_t list -> expr_t
@@ -214,6 +218,7 @@ val mk_delete_at : ?path:int list -> id_t -> expr_t -> expr_t
 val mk_delete_with : ?path:int list -> id_t -> expr_t list -> expr_t -> expr_t -> expr_t
 val mk_pop : ?path:int list -> id_t -> expr_t
 val mk_clear_all : ?path:int list -> id_t -> expr_t
+val mk_clear_all_block : ?path:int list -> id_t -> expr_t
 val mk_update : ?path:int list -> id_t -> expr_t list -> expr_t list -> expr_t
 val mk_update_suffix : ?path:int list -> id_t -> expr_t list -> expr_t -> expr_t
 val mk_update_at_with : ?path:int list -> id_t -> expr_t -> expr_t -> expr_t
@@ -473,10 +478,10 @@ val mk_filter_cnt : expr_t -> data_struct -> expr_t
 
 (* loop over bitmaps as in route and shuffle *)
 (* @all: all values (even false) or just trues *)
-val mk_iter_bitmap : ?all:bool -> ?idx:string -> expr_t -> expr_t -> expr_t
-val mk_iter_bitmap' : ?all:bool -> ?idx:string -> expr_t -> id_t -> expr_t
-val mk_agg_bitmap : ?all:bool -> ?idx:string -> ?move:bool -> (id_t * type_t) list -> expr_t -> expr_t -> expr_t -> expr_t
-val mk_agg_bitmap' : ?all:bool -> ?idx:string -> ?move:bool -> (id_t * type_t) list -> expr_t -> expr_t -> id_t -> expr_t
+val mk_iter_bitmap : ?idx:string -> expr_t -> expr_t -> expr_t
+val mk_iter_bitmap' : ?idx:string -> expr_t -> id_t -> expr_t
+val mk_agg_bitmap : ?idx:string -> ?move:bool -> (id_t * type_t) list -> expr_t -> expr_t -> expr_t -> expr_t
+val mk_agg_bitmap' : ?idx:string -> ?move:bool -> (id_t * type_t) list -> expr_t -> expr_t -> id_t -> expr_t
 
 val mk_check_tag : int -> expr_t -> expr_t -> expr_t -> expr_t -> expr_t
 val mk_check_tag' : ?unique:bool -> int -> expr_t -> expr_t

@@ -142,6 +142,8 @@ let decompose_insert e = match tag_of_expr e, sub_tree e with
   Insert, [x; e0] -> x, e0 | _ -> failwith "not an Insert"
 let decompose_insert_at e = match tag_of_expr e, sub_tree e with
   InsertAt, [x; e0; e1] -> x, e0, e1 | _ -> failwith "not an InsertAt"
+let decompose_is_member e = match tag_of_expr e, sub_tree e with
+  IsMember, [x; e1] -> x, e1 | _ -> failwith "not an IsMember"
 let decompose_iterate e = match tag_of_expr e, sub_tree e with
   Iterate, [e0; e1] -> e0, e1 | _ -> failwith "not an Iterate"
 let decompose_just e = match tag_of_expr e, sub_tree e with
@@ -487,6 +489,7 @@ let fold_over_exprs f zero p =
 let is_tcol t = match t.typ with TCollection _ -> true | _ -> false
 let is_tvmap = function TVMap _ -> true | _ -> false
 let is_tvector = function TVector -> true | _ -> false
+let is_tset = function TBitSet | TSortedSet | TSet -> true | _ -> false
 let is_tsorted = function TSortedSet | TSortedMap | TVMap _ -> true | _ -> false
 let is_tmap = function TVMap _ | TSortedMap | TMap -> true | _ -> false
 let is_tpolyq = function TPolyQueue _ -> true | _ -> false

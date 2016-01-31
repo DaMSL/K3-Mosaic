@@ -662,7 +662,6 @@ let nd_corr_map =
   let e = ["vid_stmt", wrap_ttuple [t_vid; t_stmt_id]; "tree", nd_corr_map_inner.t] in
   create_ds "nd_corr_map" ~e ~ee @@ wrap_tmap @@ t_of_e e
 
-(* bitmap for stmt_cntrs *)
 let nd_stmt_cntr_size =
   create_ds ~init:(mk_cint 0) "nd_stmt_cntr_size" @@ mut t_int
 
@@ -872,10 +871,7 @@ let poly_queues =
     mk_map (mk_lambda' unknown_arg @@ mk_var "empty_poly_queue") @@ mk_var my_peers.id in
   create_ds ~e ~init "poly_queues" @@ wrap_tvector' @@ snd_many e
 
-let poly_queue_bitmap =
-  let init =
-    mk_map (mk_lambda' unknown_arg mk_cfalse) @@ mk_var my_peers.id in
-  create_ds "poly_queue_bitmap" ~init @@ wrap_tvector t_bool
+let poly_queue_bitmap = create_ds "poly_queue_bitmap" t_bitset
 
 let upoly_queues =
   let e = ["uqueue", upoly_queue.t] in
@@ -883,10 +879,7 @@ let upoly_queues =
     mk_map (mk_lambda' unknown_arg @@ mk_var "empty_upoly_queue") @@ mk_var my_peers.id in
   create_ds ~e ~init "upoly_queues" @@ wrap_tvector' @@ snd_many e
 
-let upoly_queue_bitmap =
-  let init =
-    mk_map (mk_lambda' unknown_arg mk_cfalse) @@ mk_var my_peers.id in
-  create_ds "upoly_queue_bitmap" ~init @@ wrap_tvector t_bool
+let upoly_queue_bitmap = create_ds "upoly_queue_bitmap" t_bitset
 
 (* switch poly queues - move into it between token ring triggers *)
 let sw_poly_queues =
@@ -895,16 +888,11 @@ let sw_poly_queues =
     mk_map (mk_lambda' unknown_arg @@ mk_var "empty_poly_queue") @@ mk_var my_peers.id in
   create_ds ~e ~init "sw_poly_queues" @@ wrap_tvector' @@ snd_many e
 
-let sw_poly_queue_bitmap =
-  let init =
-    mk_map (mk_lambda' unknown_arg mk_cfalse) @@ mk_var my_peers.id in
-  create_ds "sw_poly_queue_bitmap" ~init @@ wrap_tvector t_bool
+let sw_poly_queue_bitmap = create_ds "sw_poly_queue_bitmap" t_bitset
 
 (* we use this to make sure some trig header gets sent at least once per sub-trigger handling *)
-let send_trig_header_bitmap =
-  let init =
-    mk_map (mk_lambda' unknown_arg mk_cfalse) @@ mk_var my_peers.id in
-  create_ds "send_trig_header_bitmap" ~init @@ wrap_tvector t_bool
+(* ip -> bool *)
+let send_trig_header_bitmap = create_ds "send_trig_header_bitmap" t_bitset
 
 (* keep track of which vid args we've sent in this batch *)
 let send_trig_args_inner =
@@ -919,10 +907,12 @@ let send_trig_args_map =
     mk_var my_peers.id in
   create_ds ~e ~init "send_trig_args_map" @@ wrap_tvector @@ t_of_e e
 
-let send_trig_args_bitmap =
-  let init =
-    mk_map (mk_lambda' unknown_arg mk_cfalse) @@ mk_var my_peers.id in
-  create_ds "send_trig_args_bitmap" ~init @@ wrap_tvector t_bool
+let ip_arg = ["ip", t_int]
+let ip_arg2 = ["ip2", t_int]
+let stmt_arg = ["stmt", t_int]
+
+(* {ip} *)
+let send_trig_args_bitmap = create_ds "send_trig_args_bitmap" t_bitset
 
 let clear_send_trig_args_map_nm = "clear_send_trig_args_map"
 let clear_send_trig_args_map =
@@ -936,7 +926,7 @@ let clear_send_trig_args_map =
             mk_var send_trig_args_inner.id
           ])
       send_trig_args_bitmap.id;
-    mk_set_all send_trig_args_bitmap.id [mk_cfalse];
+    mk_clear_all send_trig_args_bitmap.id;
   ]
 
 (* u is for unique *)
@@ -986,15 +976,20 @@ let max_event_queue_csize c =
 (* code to apply poly_reserve to every outgoing polybuffer *)
 let reserve_poly_queue_code ?all c =
   mk_if (mk_var do_poly_reserve.id)
-    (mk_iter_bitmap' ?all
-      (mk_update_at_with poly_queues.id (mk_var "ip") @@
-        mk_lambda' ["pqs", t_of_e poly_queues.e] @@ mk_block [
-          mk_poly_reserve "pqs"
-            (mk_mult (mk_var sw_poly_batch_size.id) @@ mk_cint reserve_mult)
-            (mk_mult (mk_var sw_poly_batch_size.id) @@ mk_cint @@ max_poly_queue_csize c) @@
-            mk_mult (mk_var sw_poly_batch_size.id) @@ mk_cint reserve_str_estimate;
-          mk_var "pqs" ])
-      poly_queue_bitmap.id)
+    (mk_ignore @@ mk_agg
+      (mk_lambda2' ["ip", t_int] unknown_arg @@
+       mk_block [
+        mk_update_at_with poly_queues.id (mk_var "ip") @@
+          mk_lambda' ["pqs", t_of_e poly_queues.e] @@ mk_block [
+            mk_poly_reserve "pqs"
+              (mk_mult (mk_var sw_poly_batch_size.id) @@ mk_cint reserve_mult)
+              (mk_mult (mk_var sw_poly_batch_size.id) @@ mk_cint @@ max_poly_queue_csize c) @@
+              mk_mult (mk_var sw_poly_batch_size.id) @@ mk_cint reserve_str_estimate;
+            mk_var "pqs" ];
+        mk_add (mk_cint 1) @@ mk_var "ip"
+       ])
+      (mk_cint 0) @@
+      mk_var my_peers.id)
     mk_cunit
 
 let clear_poly_queues_fn_nm = "clear_poly_queues"
@@ -1012,13 +1007,12 @@ let clear_poly_queues_fn c =
         upoly_queue_bitmap.id ;
     (* apply reserve to all the new polybufs *)
     reserve_poly_queue_code c;
-    mk_set_all poly_queue_bitmap.id [mk_cfalse];
-    mk_set_all upoly_queue_bitmap.id [mk_cfalse];
+    mk_clear_all poly_queue_bitmap.id;
+    mk_clear_all upoly_queue_bitmap.id;
   ]
 
 (* we must always clear both upoly and poly queues -- we don't know when we'll need them *)
-let clear_poly_queues c =
-  mk_apply' clear_poly_queues_fn_nm []
+let clear_poly_queues c = mk_apply' clear_poly_queues_fn_nm []
 
 (* we create tags for events, with the full width of said events plus insert/delete field *)
 let calc_event_tags c =
@@ -1144,7 +1138,7 @@ let buffer_for_send ?(unique=false) ?(wr_bitmap=true) t addr args =
     else poly_queues,  poly_queue_bitmap.id in
   mk_block @@
     (* mark the bitmap *)
-    (if wr_bitmap then [mk_insert_at bitmap (mk_var addr) [mk_ctrue]] else []) @
+    (if wr_bitmap then [mk_insert bitmap [mk_var addr]] else []) @
     (* insert into buffer *)
     [mk_update_at_with queue.id (mk_var addr) @@
       mk_lambda' ["pqs", t_of_e queue.e] @@
@@ -1159,11 +1153,11 @@ let buffer_trig_header_if_needed ?(force=false) ?(need_args=true) vid t addr arg
   let no_arg_handler = trig_no_arg_sub_handler_name_of_t t in
   (* check bitmap for current header *)
   (if not force then
-    mk_if (mk_at' send_trig_header_bitmap.id @@ mk_var addr) mk_cunit
+    mk_if (mk_is_member' send_trig_header_bitmap.id @@ mk_var addr) mk_cunit
    else id_fn) @@
     mk_block @@
       (* update the header bitmap *)
-      [mk_insert_at send_trig_header_bitmap.id (mk_var addr) [mk_ctrue]] @
+      [mk_insert send_trig_header_bitmap.id [mk_var addr]] @
       (
         if need_args && not force then
           [
@@ -1176,7 +1170,7 @@ let buffer_trig_header_if_needed ?(force=false) ?(need_args=true) vid t addr arg
               (buffer_for_send load_handler addr [mk_var "vid"]) @@
                mk_block [
                   (* update map *)
-                  mk_insert_at send_trig_args_bitmap.id (mk_var addr) [mk_ctrue];
+                  mk_insert send_trig_args_bitmap.id [mk_var addr];
                   mk_update_at_with send_trig_args_map.id (mk_var addr) @@
                     mk_lambda' send_trig_args_map.e @@
                       mk_insert_block send_trig_args_inner.id [vid; mk_cunit];
@@ -1202,7 +1196,7 @@ let buffer_tuples_from_idxs ?(unique=false) ?(drop_vid=false) tuples_nm map_type
   mk_case_sn (mk_peek indices) "x"
     (* check for -1, indicating all tuples *)
     (mk_block [
-      mk_insert_at bitmap.id (mk_var "ip") [mk_ctrue];
+      mk_insert bitmap.id [mk_var "ip"];
       mk_if (mk_eq (mk_var "x") @@ mk_cint (-1))
         (mk_iter
           (mk_lambda'' ["x", tup_t] @@
@@ -1427,11 +1421,9 @@ let bound_params_of_stmt c s =
 (* inner member of isobatch_vid_map *)
 let isobatch_map_inner2 = create_ds "inner2" @@ wrap_tbag t_vid
 
+(* stmt -> bool *)
 let isobatch_stmt_helper_bitmap_id = "isobatch_stmt_helper_bitmap"
-let isobatch_stmt_helper_bitmap c =
-  let init = k3_container_of_list (wrap_tvector t_bool) @@
-    List.map (const @@ mk_cfalse) @@ P.get_stmt_list c.p in
-  create_ds ~init isobatch_stmt_helper_bitmap_id @@ wrap_tvector t_bool
+let isobatch_stmt_helper_bitmap c = create_ds isobatch_stmt_helper_bitmap_id t_bitset
 
 let isobatch_stmt_helper_has_content =
   create_ds "isobatch_stmt_helper_has_content" @@ mut t_bool
@@ -1455,7 +1447,7 @@ let clear_isobatch_stmt_helper =
       mk_iter_bitmap' ~idx:stmt_ctr.id
         (mk_insert_at isobatch_stmt_helper_id (mk_var stmt_ctr.id) [mk_empty isobatch_map_inner2.t])
         isobatch_stmt_helper_bitmap_id;
-      mk_set_all isobatch_stmt_helper_bitmap_id [mk_cfalse];
+      mk_clear_all isobatch_stmt_helper_bitmap_id;
       mk_assign isobatch_stmt_helper_has_content.id mk_cfalse;
       ]
 
@@ -1489,7 +1481,6 @@ let move_isobatch_stmt_helper =
       isobatch_stmt_helper_bitmap_id;
     mk_assign isobatch_stmt_helper_has_content.id mk_cfalse;
   ]
-
 
 (* singleton vector for creating isobatch_vid_map easily *)
 (* stmt_map_id -> [vids] *)
@@ -1631,7 +1622,7 @@ let send_poly_queues =
     (* send (move) the polyqueues *)
     mk_iter_bitmap'
       (* check if we have a upoly queue and act accordingly *)
-        (mk_if (mk_at' upoly_queue_bitmap.id @@ mk_var "ip")
+        (mk_if (mk_is_member' upoly_queue_bitmap.id @@ mk_var "ip")
         (* move and delete the poly_queue and ship it out *)
           (mk_let ["pq"]
             (mk_delete_at poly_queues.id @@ mk_var "ip") @@
@@ -1717,10 +1708,6 @@ let global_vars c dict =
   let l =
     [ me_int;
       interpreter_mode;
-      ip;
-      ip2;
-      stmt_ctr;
-      map_ctr;
       g_init_vid;
       g_max_int;
       g_min_vid;

@@ -110,7 +110,7 @@
 %token LPAREN RPAREN COMMA SEMICOLON PERIOD
 
 %token LBRACE RBRACE LBRACKET RBRACKET
-%token BAR LBRACKETBAR RBRACKETBAR LBRACKETCOLON RBRACKETCOLON LBRACKETLT RBRACKETLT LBRACKETGEQ LBRACKETHASH RBRACKETHASH LBRACEBAR RBRACEBAR LBRACECOLON RBRACECOLON LBRACELT RBRACELT LBRACKETQ RBRACKETQ LBRACEQ RBRACEQ
+%token BAR LBRACKETBAR RBRACKETBAR LBRACKETCOLON RBRACKETCOLON LBRACKETLT RBRACKETLT LBRACKETGEQ LBRACKETHASH RBRACKETHASH LBRACEBAR RBRACEBAR LBRACECOLON RBRACECOLON LBRACEHAT RBRACEHAT LBRACELT RBRACELT LBRACKETQ RBRACKETQ LBRACEQ RBRACEQ
 %token LBRACKETGT LBRACKETLEQ
 
 %token NEG PLUS MINUS TIMES DIVIDE MODULO HASH
@@ -134,7 +134,7 @@
 %token SORT RANK SIZE
 %token POLY_ITER POLY_ITER_TAG POLY_FOLD POLY_FOLD_TAG POLY_AT POLY_AT_WITH POLY_INSERT POLY_TAG_AT POLY_SKIP POLY_SKIP_ALL POLY_UNPACK POLY_RESERVE
 
-%token PEEK PEEK_WITH_VID AT AT_WITH MIN_WITH
+%token PEEK PEEK_WITH_VID AT AT_WITH MIN_WITH IS_MEMBER
 
 %token IF THEN ELSE LET IN
 
@@ -377,6 +377,7 @@ collection_type :
     | LBRACELT type_expr_tuple RBRACELT { TCollection(TSortedMap, $2) }
     | LBRACECOLON type_expr RBRACECOLON { TCollection(TSortedSet, $2) }
     | LBRACECOLON type_expr_tuple RBRACECOLON { TCollection(TSortedSet, $2) }
+    | LBRACEHAT type_expr RBRACEHAT { TCollection(TBitSet, $2) }
     | LBRACKETQ poly_variant_list RBRACKETQ { TCollection(TPolyQueue(false, $2), t_unit) }
     | LBRACEQ poly_variant_list RBRACEQ { TCollection(TPolyQueue(true, $2), t_unit) }
 ;
@@ -518,6 +519,7 @@ collection :
     | LBRACKET RBRACKET COLON type_expr           { build_collection [] $4 }
     | LBRACKETCOLON RBRACKETCOLON COLON type_expr { build_collection [] $4 }
     | LBRACECOLON RBRACECOLON COLON type_expr     { build_collection [] $4 }
+    | LBRACEHAT RBRACEHAT COLON type_expr         { build_collection [] $4 }
     | LBRACELT RBRACELT COLON type_expr           { build_collection [] $4 }
     | LBRACKETLT RBRACKETLT COLON type_expr       { build_collection [] $4 }
     | LBRACKETHASH RBRACKETHASH COLON type_expr   { build_collection [] $4 }
@@ -528,6 +530,7 @@ collection :
     | LBRACKET RBRACKET error   { print_error "missing type for empty list"}
     | LBRACKETCOLON RBRACKETCOLON error   { print_error "missing type for empty map"}
     | LBRACECOLON RBRACECOLON error   { print_error "missing type for empty sortedmap"}
+    | LBRACEHAT RBRACEHAT COLON error   { print_error "missing type for empty bitset"}
     | LBRACKETLT RBRACKETLT error   { print_error "missing type for empty vmap"}
     | LBRACKETHASH RBRACKETHASH error   { print_error "missing type for empty vector"}
 
@@ -538,6 +541,7 @@ collection :
     | LBRACKETCOLON expr_seq RBRACKETCOLON             { build_collection $2 (mk_unknown_collection TMap) }
     | LBRACELT expr_seq RBRACELT                       { build_collection $2 (mk_unknown_collection TSortedMap) }
     | LBRACECOLON expr_seq RBRACECOLON                 { build_collection $2 (mk_unknown_collection TSortedSet) }
+    | LBRACEHAT expr_seq RBRACEHAT                     { build_collection $2 (mk_unknown_collection TBitSet) }
     | LBRACKETLT expr_seq BAR int_list_list RBRACKETLT { build_collection $2 (mk_unknown_collection (TVMap(Some(intsetset_of_list $4)))) }
     | LBRACKETLT expr_seq RBRACKETLT                   { build_collection $2 (mk_unknown_collection (TVMap None)) }
 ;
@@ -664,6 +668,7 @@ access :
     | POLY_UNPACK LPAREN anno_expr RPAREN { mkexpr PolyUnpack [$3] }
     | POLY_RESERVE LPAREN anno_expr COMMA anno_expr COMMA anno_expr COMMA anno_expr RPAREN { mkexpr PolyReserve [$3; $5; $7; $9] }
     | MIN_WITH LPAREN anno_expr COMMA anno_expr COMMA anno_expr RPAREN { mkexpr MinWith [$3; $5; $7] }
+    | IS_MEMBER LPAREN anno_expr COMMA anno_expr RPAREN { mkexpr IsMember [$3; $5] }
 ;
 
 mutation :

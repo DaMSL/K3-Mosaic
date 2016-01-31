@@ -70,6 +70,7 @@ val decompose_ifthenelse : expr_t -> expr_t * expr_t * expr_t
 val decompose_ignore : expr_t -> expr_t
 val decompose_insert : expr_t -> expr_t * expr_t
 val decompose_insert_at : expr_t -> expr_t * expr_t * expr_t
+val decompose_is_member : expr_t -> expr_t * expr_t
 val decompose_iterate : expr_t -> expr_t * expr_t
 val decompose_just : expr_t -> expr_t
 val decompose_lambda : expr_t -> arg_t * expr_t
@@ -216,6 +217,7 @@ val prop_annos_of_expr : expr_t -> annotation_t
 val is_tcol : type_t -> bool
 val is_tvmap : container_type_t -> bool
 val is_tvector : container_type_t -> bool
+val is_tset : container_type_t -> bool
 val is_tsorted : container_type_t -> bool
 val is_tmap : container_type_t -> bool
 val is_tpolyq : container_type_t -> bool

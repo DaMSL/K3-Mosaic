@@ -81,31 +81,20 @@ let pmap =
 
 let builtin_route = create_ds "builtin_route" t_bool
 
-let route_bitmap =
-  let e = ["val", t_bool] in
-  let init =
-    mk_map (mk_lambda' ["_", t_unknown] mk_cfalse) @@ mk_var D.my_peers.id in
-  create_ds "route_bitmap" (wrap_tvector' @@ snd_many e) ~e ~init
+(* {ip} *)
+let route_bitmap = create_ds "route_bitmap" t_bitset
 
-let empty_route_bitmap =
-  let e = ["val", t_bool] in
-  let init =
-    mk_map (mk_lambda' ["_", t_unknown] mk_cfalse) @@ mk_var D.my_peers.id in
-  create_ds "empty_route_bitmap" (wrap_tvector' @@ snd_many e) ~e ~init
+let empty_route_bitmap = create_ds "empty_route_bitmap" t_bitset
 
 let all_nodes_bitmap =
-  let e = ["val", t_bool] in
   (* create an equal number of bits to my_peers *)
-  let init =
-    mk_map (mk_lambda' ["_", t_unknown] mk_cfalse) @@ mk_var D.my_peers.id
-  in
   let id = "route_nodes_bitmap" in
   (* populate only the nodes *)
   let d_init =
     mk_iter (mk_lambda'' ["i", t_int] @@
-             mk_insert_at id (mk_var "i") [mk_ctrue]) @@
+             mk_insert id [mk_var "i"]) @@
     mk_var D.nodes.id in
-  create_ds id (wrap_tvector' @@ snd_many e) ~e ~init ~d_init
+  create_ds id t_bitset ~d_init
 
 let calc_dim_bounds =
   mk_global_fn ~wr_all:true "calc_dim_bounds"
@@ -329,9 +318,8 @@ let pmap_shifts p =
 (* vectors of bound_var * pattern -> bitmap *)
 let route_memo_for p map = "route_memo_map_" ^ map_name_of p map
 let route_memo c =
-  for_all_maps c.p (fun map ->
-    let t = wrap_tvector @@ wrap_tvector t_bool in
-    create_ds (route_memo_for c.p map) t)
+  for_all_maps c.p (fun m ->
+    create_ds (route_memo_for c.p m) @@ wrap_tvector t_bitset)
 
 (* convert human-readable map name to map id *)
 
@@ -400,7 +388,7 @@ let hash_func_for typ =
     | x                 -> raise @@ NoHashFunction x
   in "hash_"^inner typ
 
-let clean_results = mk_set_all route_bitmap.id [mk_cfalse]
+let clean_results = mk_clear_all route_bitmap.id
 
 (* code to get the dimension index (contribution to the bucket at that index) *)
 let get_dim_idx p m index e =
@@ -438,7 +426,7 @@ let gen_route_fn p map_id =
        ["_", t_int; "_", t_int; "_", t_unit] [] @@
         mk_block [
           clean_results;
-          mk_insert_at route_bitmap.id (mk_apply' "get_ring_node" [mk_cint 1; mk_cint 1]) [mk_ctrue]
+          mk_insert route_bitmap.id [mk_apply' "get_ring_node" [mk_cint 1; mk_cint 1]]; 
         ]
     ]
 
@@ -497,7 +485,7 @@ let gen_route_fn p map_id =
 
         (* handle the case of no partitioning. Send to all *)
         mk_if (mk_eq (mk_size @@ mk_var "pmap") @@ mk_cint 0)
-          (mk_set_all route_bitmap.id [mk_ctrue]) @@
+          (mk_clear_all route_bitmap.id) @@
 
         let len = List.length map_range in
         mk_block [
@@ -528,15 +516,17 @@ let gen_route_fn p map_id =
                     mk_var @@ add_idx "rng")
                   (* zero: insertion of ip *)
                 (len,
-                  mk_insert_at route_bitmap.id
-                    (mk_apply' "get_ring_node"
-                      (* add up all the values and the bound_bucket *)
-                      (* add the shift for this map id *)
-                      [mk_add (mk_var "map_shift") @@
-                         List.fold_left (fun acc x ->
-                        mk_add (mk_var @@ "val"^soi x) acc) (mk_var "bound_bucket") map_range;
-                      mk_var "map_max"])
-                    [mk_ctrue])
+                  mk_insert route_bitmap.id
+                    [mk_apply' "get_ring_node"
+                       (* add up all the values and the bound_bucket *)
+                       (* add the shift for this map id *)
+                       [mk_add (mk_var "map_shift") @@
+                        List.fold_left (fun acc x ->
+                            mk_add (mk_var @@ "val"^soi x) acc)
+                          (mk_var "bound_bucket")
+                          map_range;
+                        mk_var "map_max"]]
+                    )
                 map_range)
             map_range)
           ]
@@ -650,7 +640,7 @@ let route_opt_ds c =
 
 let route_opt_push_inner_id = "route_opt_push_inner"
 let route_opt_push_inner n =
-  let e = List.map (fun i -> "nodes"^soi i, wrap_tmap' [t_int; wrap_tvector t_bool]) @@ create_range n in
+  let e = List.map (fun i -> "nodes"^soi i, wrap_tmap' [t_int; t_bitset]) @@ create_range n in
   create_ds route_opt_push_inner_id @@ t_of_e e
 
 (* data structures to compute: for send_push's empty messages *)
@@ -707,7 +697,7 @@ let route_opt_init c =
                 mk_tuple @@ List.map (fun (idx, m) ->
                   route_lookup c m [mk_subscript (idx + 1) @@ mk_var "lr_vals"] pat_idx @@
                     mk_agg_bitmap ["acc2", route_bitmap.t]
-                      (mk_block [mk_insert_at "acc2" (mk_var "ip") [mk_ctrue]; mk_var "acc2"])
+                      (mk_block [mk_insert "acc2" [mk_var "ip"]; mk_var "acc2"])
                       (swallow_f (mk_subscript idx) @@ mk_var "acc")
                       (mk_var route_bitmap.id))
                   idx_rmaps)
@@ -753,7 +743,7 @@ let route_opt_push_init c =
       let nm = route_opt_push_init_nm s in
       (* 0: pat_idx 0 should always be the fully bound pattern *)
       let pat_idx = mk_cint 0 in
-      let inner_map_t = wrap_tmap' [t_int; wrap_tvector t_bool] in
+      let inner_map_t = wrap_tmap' [t_int; t_bitset] in
       let agg_t = route_bitmap.t in
       let value_e = ["lr_vals", wrap_ttuple @@ [t_int] @ List.map (const t_int) rmaps] in
       mk_global_fn nm unit_arg [] @@
@@ -776,7 +766,7 @@ let route_opt_push_init c =
                   (mk_lambda2' ["acc", agg_t] value_e @@
                     route_lookup c lmap [mk_fst @@ mk_var "lr_vals"] pat_idx @@
                       mk_agg_bitmap' ["acc2", agg_t]
-                        (mk_block [mk_insert_at "acc2" (mk_var "ip") [mk_ctrue]; mk_var "acc2"])
+                        (mk_block [mk_insert "acc2" [mk_var "ip"]; mk_var "acc2"])
                         (mk_var "acc")
                         route_bitmap.id)
                   (* start with an empty route bitmap *)

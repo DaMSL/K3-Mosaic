@@ -35,6 +35,7 @@ type container_type_t
     | TVMap of IntSetSet.t option (* indices *)
                   (* unique values per tag? *)
     | TPolyQueue of bool * poly_tags
+    | TBitSet
 
 (* {int,string} tag * possible types *)
 and poly_tags = (int * string * type_t) list
@@ -133,6 +134,7 @@ type expr_tag_t
     | MinWith
     | Peek
     | PeekWithVid       (* retain the vid for a vmap *)
+    | IsMember          (* check for set membership *)
     | Slice
     | SliceOp of op_t   (* slice with frontier (one value >, <, etc) *)
     | FilterOp of op_t  (* all the values <, > etc *)
