@@ -605,7 +605,15 @@ let route_lookup ?(no_bound=false) c map_id key pat_idx lambda_body =
        pat_idx) @@
     mk_lambda'' [route_bitmap.id, route_bitmap.t] lambda_body
 
+(* Optimized route *)
+(* Uses knowledge of the partition maps to find the 1:1 or 1:k route patterns,
+   which would all be n:n otherwise *)
+
 (* data structures to load *)
+(* bound buckets -> [lhs bucket, rhs bucket per map ...]
+   this data structure allows us to find the simple paths that exist 
+   from rhs maps to lhs maps when we have 1:1 routing
+*)
 let route_opt_init_ds c =
   List.map (fun s -> s,
       let nm = "route_opt_init_s"^soi s in
@@ -625,7 +633,7 @@ let route_opt_inner =
   create_ds ~e "route_opt_inner" @@ wrap_tbag @@ t_of_e e
 
 (* data structures to compute for non-isobatch send_put *)
-(* bound_buckets -> dest_node, sender_count bag *)
+(* bound_buckets -> [dest_node, sender_count] *)
 let route_opt_ds_nm s = "route_opt_ds_"^soi s
 let route_opt_ds c =
   List.map (fun s -> s,
@@ -644,7 +652,7 @@ let route_opt_push_inner n =
   create_ds route_opt_push_inner_id @@ t_of_e e
 
 (* data structures to compute: for send_push's empty messages *)
-(* bound_buckets -> tuple idx of map -> src_node -> dest_node vector *)
+(* bound_buckets -> idx of map (generated) -> src_node -> dest_node vector *)
 let route_opt_push_ds_nm s = "route_opt_push_ds_"^soi s
 let route_opt_push_ds c =
   List.map (fun s -> s,
@@ -728,6 +736,7 @@ let route_opt_init c =
   special_route_stmts c
 
 (* code that gets run in startup time to initialize the optimized route tables *)
+(* specifically for pushes *)
 let route_opt_push_init_nm s = "route_opt_push_do_init_s"^soi s
 let route_opt_push_init c =
   let route_lookup = route_lookup ~no_bound:true in
@@ -746,6 +755,7 @@ let route_opt_push_init c =
       let inner_map_t = wrap_tmap' [t_int; t_bitset] in
       let agg_t = route_bitmap.t in
       let value_e = ["lr_vals", wrap_ttuple @@ [t_int] @ List.map (const t_int) rmaps] in
+      (* for each rmap, we groupby, calculating the r->l patterns *)
       mk_global_fn nm unit_arg [] @@
         mk_iter
           (mk_lambda' init_ds.e @@
