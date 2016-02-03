@@ -1391,15 +1391,20 @@ module Bindings = struct
 end
 
 (* use pre-generated info for determining if we can use special routing *)
-let special_route_stmt c s =
+let is_opt_route_stmt c s =
   if c.use_opt_route then
     let info = IntMap.find s c.freevar_info in
-    P.special_route_stmt ~info c.p s
+    P.is_opt_route_stmt ~info c.p s
   else false
 
-let special_route_stmts c =
-  List.filter (special_route_stmt c) @@
-    P.get_stmt_list c.p
+let opt_route_stmts c =
+  List.filter (is_opt_route_stmt c) @@ P.get_stmt_list c.p
+
+(* check if a particular stmt/map combo can have optimized routing *)
+let is_opt_route_stmt_map c s m =
+  is_opt_route_stmt c s &&
+  (* we don't do optimized routing for maps without keys *)
+  List.mem m @@ P.nonempty_rmaps_of_stmt c.p s
 
 (* list the bound arguments within the statement in trig arg order *)
 let bound_params_of_stmt c s =

@@ -426,7 +426,7 @@ let gen_route_fn p map_id =
        ["_", t_int; "_", t_int; "_", t_unit] [] @@
         mk_block [
           clean_results;
-          mk_insert route_bitmap.id [mk_apply' "get_ring_node" [mk_cint 1; mk_cint 1]]; 
+          mk_insert route_bitmap.id [mk_apply' "get_ring_node" [mk_cint 1; mk_cint 1]];
         ]
     ]
 
@@ -611,7 +611,7 @@ let route_lookup ?(no_bound=false) c map_id key pat_idx lambda_body =
 
 (* data structures to load *)
 (* bound buckets -> [lhs bucket, rhs bucket per map ...]
-   this data structure allows us to find the simple paths that exist 
+   this data structure allows us to find the simple paths that exist
    from rhs maps to lhs maps when we have 1:1 routing
 *)
 let route_opt_init_ds c =
@@ -626,13 +626,15 @@ let route_opt_init_ds c =
       let e = ["bound_buckets", key_t; "lr_buckets", value_t] in
       create_ds ~e nm @@ wrap_tmap @@ t_of_e e)
   @@
-  special_route_stmts c
+  opt_route_stmts c
 
 let route_opt_inner =
   let e = ["node", t_int; "sender_count", t_int] in
   create_ds ~e "route_opt_inner" @@ wrap_tbag @@ t_of_e e
 
-(* data structures to compute for non-isobatch send_put *)
+(* data structures to compute for non-isobatch send_put.
+   not useful for isobatch mode since the numbers are per-vid, and we need to
+   calculate per isobatch (ie. with overlap) *)
 (* bound_buckets -> [dest_node, sender_count] *)
 let route_opt_ds_nm s = "route_opt_ds_"^soi s
 let route_opt_ds c =
@@ -644,7 +646,7 @@ let route_opt_ds c =
       (* value is collection of node id, count *)
       let e = ["bound", key_t; route_opt_inner.id, route_opt_inner.t] in
       create_ds ~e nm @@ wrap_tmap @@ t_of_e e) @@
-  special_route_stmts c
+  opt_route_stmts c
 
 let route_opt_push_inner_id = "route_opt_push_inner"
 let route_opt_push_inner n =
@@ -664,7 +666,7 @@ let route_opt_push_ds c =
       (* value is tuple of (node, destinations) pairs for every rmap *)
       let e = ["bound", key_t; route_opt_push_inner_id, (route_opt_push_inner rmap_num).t] in
       create_ds ~e nm @@ wrap_tmap @@ t_of_e e) @@
-  special_route_stmts c
+  opt_route_stmts c
 
 (* code that gets run in startup time to initialize the optimized route tables *)
 let route_opt_init_nm s = "route_opt_do_init_s"^soi s
@@ -733,7 +735,7 @@ let route_opt_init c =
             mk_insert out_ds.id [mk_var "bound_buckets"; mk_var "ids_counts"]) @@
           mk_var init_ds.id]
   ) @@
-  special_route_stmts c
+  opt_route_stmts c
 
 (* code that gets run in startup time to initialize the optimized route tables *)
 (* specifically for pushes *)
@@ -790,16 +792,16 @@ let route_opt_push_init c =
               (mk_insert out_ds.id [mk_var "bound_buckets"; mk_var "nodes_dests"])) @@
           mk_var init_ds.id
   ) @@
-  special_route_stmts c
+  opt_route_stmts c
 
 let route_opt_init_all_nm = "route_opt_init_all"
 let route_opt_init_all c =
   mk_global_fn route_opt_init_all_nm unit_arg [] @@
     mk_block @@
       (List.map (fun s -> mk_apply' (route_opt_init_nm s) []) @@
-        special_route_stmts c) @
+        opt_route_stmts c) @
       (List.map (fun s -> mk_apply' (route_opt_push_init_nm s) []) @@
-        special_route_stmts c)
+        opt_route_stmts c)
 
 
 (* create all code needed for route functions, including foreign funcs*)

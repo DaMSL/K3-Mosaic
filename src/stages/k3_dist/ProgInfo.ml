@@ -438,7 +438,7 @@ let free_bound_vars p s =
 
 exception Exit
 
-let special_route_stmt ?info p s =
+let is_opt_route_stmt ?info p s =
   let info = match info with
     | None -> free_bound_vars p s
     | Some i -> i in
@@ -484,7 +484,7 @@ let dump_info p =
   let infos = List.filter (fun (_, i) ->
       snd i.lmap_free <> [] || i.rmaps_free <> []) @@
     List.map (fun s -> s, free_bound_vars p s) ss in
-  let s_special = List.filter (special_route_stmt p) ss in
+  let s_special = List.filter (is_opt_route_stmt p) ss in
   let t_s = List.map (fun t -> t, stmts_of_t p t) ts in
   let t_binds = List.map (fun t -> t, fst_many @@ args_of_t p t) ts in
   let map_ids = List.map (fun m -> map_name_of p m, m) @@ get_map_list p in

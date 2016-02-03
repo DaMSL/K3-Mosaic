@@ -324,7 +324,7 @@ let sw_send_puts_single_vid c t s =
         mk_clear_all send_put_bitmap.id;
       ] @
       (* optimized route - check if we can do special 1:1 optimized routing *)
-      (if special_route_stmt c s then singleton @@
+      (if is_opt_route_stmt c s then singleton @@
         (* we need to isolate each of the bound params separately *)
         let bound_params = insert_index_fst @@ bound_params_of_stmt c s in
         mk_let ["buckets"]
@@ -505,7 +505,7 @@ let sw_send_puts_isobatch c t s =
           in
 
           (* optimized route - check if we can do special 1:1 optimized routing *)
-          if special_route_stmt c s then
+          if is_opt_route_stmt c s then
             (* we need to isolate each of the bound params separately *)
             let idx_rmaps = insert_index_snd ~first:1 @@ P.nonempty_rmaps_of_stmt c.p s in
             let m_idx_in_s = List.assoc rmap idx_rmaps in
@@ -1168,7 +1168,7 @@ let nd_send_push_stmt_map_trig c t s =
       let shuffle_fn = K3S.find_shuffle_nm c s rmap lmap in
       let shuffle_key, empty_pat_idx = P.key_pat_from_bound c.p c.route_indices s lmap in
       (* if we use optimized route, no need for conservative shuffling *)
-      let empty_pat_idx = if special_route_stmt c s then -1 else empty_pat_idx in
+      let empty_pat_idx = if is_opt_route_stmt c s then -1 else empty_pat_idx in
       let shuffle_pat_idx = P.get_shuffle_pat_idx c.p c.route_indices s lmap rmap in
       let slice_key = P.slice_key_from_bound c.p s rmap in
       let map_delta = D.map_ds_of_id c rmap ~global:false in
@@ -1212,7 +1212,7 @@ let nd_send_push_stmt_map_trig c t s =
           (* for optimized route, we need to add the destination of the nodes
            * from the route_opt_push data structure to the shuffle bitmap
            * for sending empty messages *)
-          (if special_route_stmt c s &&
+          (if is_opt_route_stmt c s &&
             (* to handle empty key maps on the rhs *)
             List.mem_assoc rmap idx_rmaps then singleton @@
             mk_let ["buckets"]
@@ -1310,7 +1310,7 @@ let nd_isobatch_send_push_stmt_map_trig c t s =
       let shuffle_fn = K3S.find_shuffle_nm c s rmap lmap in
       let shuffle_key, empty_pat_idx = P.key_pat_from_bound c.p c.route_indices s lmap in
       (* if we use optimized route, no need for conservative shuffling *)
-      let empty_pat_idx = if special_route_stmt c s then -1 else empty_pat_idx in
+      let empty_pat_idx = if is_opt_route_stmt c s then -1 else empty_pat_idx in
       let shuffle_pat_idx = P.get_shuffle_pat_idx c.p c.route_indices s lmap rmap in
       let slice_key = P.slice_key_from_bound c.p s rmap in
       let map_delta = D.map_ds_of_id c rmap ~global:false in
@@ -1353,7 +1353,7 @@ let nd_isobatch_send_push_stmt_map_trig c t s =
           (* for optimized route, we need to add the destination of the nodes
            * from the route_opt_push data structure to the shuffle bitmap
            * for sending empty messages *)
-          (if special_route_stmt c s &&
+          (if is_opt_route_stmt c s &&
             (* to handle empty key maps on the rhs *)
             List.mem_assoc rmap idx_rmaps then singleton @@
             mk_let ["buckets"]
