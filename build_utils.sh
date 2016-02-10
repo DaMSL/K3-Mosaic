@@ -1,3 +1,4 @@
+#!/bin/bash
 # Build all the ocaml utilities
 
 #get directory of script
