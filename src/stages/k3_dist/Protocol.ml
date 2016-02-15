@@ -261,8 +261,12 @@ let ms_rcv_node_done =
         D.mk_send_me ms_shutdown_nm;
       ])
 
-(* node: bool indicating received system done *)
+(* node: bool indicating received system done request that needs to be handled.
+         bool is reset after handling *)
 let nd_sys_done_req = mk_bool_ds "nd_sys_done_req"
+
+(* switch: bool indicating received system done *)
+let sw_all_done = mk_bool_ds "sw_all_done"
 
 (* whether a node should notify the master that it's done *)
 let nd_done_check_barrier =
@@ -283,10 +287,16 @@ let nd_rcv_done_nm = "nd_rcv_done"
 let nd_rcv_done =
   mk_code_sink' nd_rcv_done_nm unit_arg [] @@
   mk_block [
-    (* set done state *)
+    (* set done signal *)
     mk_assign nd_sys_done_req.id mk_ctrue;
     nd_done_check_barrier;
   ]
+
+(* after all switched are done, stop sending vector clock *)
+let sw_rcv_done_nm = "sw_rcv_done"
+let sw_rcv_done =
+  mk_code_sink' sw_rcv_done_nm unit_arg [] @@
+    mk_assign sw_all_done.id mk_ctrue
 
 (* Code for after deletion from stmt_cntrs *)
 let nd_post_delete_stmt_cntr c =
@@ -303,7 +313,10 @@ let ms_rcv_switch_done_nm = "ms_rcv_switch_done"
 let ms_rcv_switch_done =
   mk_barrier ms_rcv_switch_done_nm ~ctr:ms_rcv_switch_done_cnt.id
     ~total:(mk_var D.num_switches.id)
-    ~after:(D.mk_send_all_nodes nd_rcv_done_nm [mk_cunit])
+    ~after:(mk_block [
+              D.mk_send_all_switches sw_rcv_done_nm [];
+              D.mk_send_all_nodes nd_rcv_done_nm []
+            ])
 
 (* check that the switch is done with its work *)
 let sw_check_done ~check_size =
@@ -342,6 +355,7 @@ let global_vars c =
   [
     init_profiling;
     nd_sys_done_req;
+    sw_all_done;
     nd_sent_done;
     sw_sent_done;
     ms_rcv_sw_init_ack_cnt;
@@ -372,5 +386,6 @@ let triggers c =
     ms_shutdown;
     ms_rcv_node_done;
     nd_rcv_done;
+    sw_rcv_done;
     ms_rcv_switch_done;
   ]

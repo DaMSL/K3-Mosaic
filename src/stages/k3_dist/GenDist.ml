@@ -2752,6 +2752,8 @@ let sw_token_current_batch_id = create_ds "sw_token_current_batch_id" @@ mut t_v
 let sw_rcv_token_trig c =
   mk_code_sink' sw_rcv_token_trig_nm
     ["batch_id2", t_vid] [] @@
+    (* check if we're done *)
+    mk_if (mk_var Proto.sw_all_done.id) mk_cunit @@
     (* convert to isobatch batch id if needed *)
     mk_let_block ["batch_id"]
       (mk_if (mk_var isobatch_mode.id)
@@ -2825,6 +2827,8 @@ let sw_rcv_token_trig c =
 let sw_rcv_vector_clock_trig =
   mk_code_sink' sw_rcv_vector_clock_nm
     ["vector_clock2", TS.sw_vector_clock.t] [] @@
+    (* check if we're done *)
+    mk_if (mk_var Proto.sw_all_done.id) mk_cunit @@
     mk_if (mk_var sw_token_has_data.id)
       (* update the vector clock by bits in the outgoing poly_queues *)
       (* convert to isobatch batch id if needed *)
