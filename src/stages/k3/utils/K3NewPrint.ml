@@ -667,6 +667,7 @@ and handle_lambda c ?(expr_info=([],false)) ~prefix_fn arg e =
 and fold_of_map_ext c expr =
   let open KH in
   let t_out = T.type_of_expr expr in
+  let _, t_elem = unwrap_tcol t_out in
   (* customize for the different operations *)
   let (lambda, col), suffix = match U.tag_of_expr expr with
     | Map     -> U.decompose_map expr, "map"
@@ -683,7 +684,12 @@ and fold_of_map_ext c expr =
   let args' = ATuple(acc_arg :: args') in
   let body' = match U.tag_of_expr expr with
     | Map     -> mk_insert_block acc_id [body]
-    | Flatten -> mk_extend_block acc_id body
+    | Flatten -> let acc_id2 = acc_id^"2" in
+                 mk_agg
+                   (mk_lambda2' [acc_id2, t_out] ["x", t_elem] @@
+                      mk_insert_block acc_id2 [mk_var "x"])
+                   (mk_var acc_id)
+                   body
     | _       -> failwith "Can only convert flatten-map or map to fold"
   in
   lazy_expr c @@ light_type c @@
