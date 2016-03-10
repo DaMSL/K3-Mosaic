@@ -595,12 +595,11 @@ let sw_send_rhs_fetches c t s =
           R.route_lookup c rmap (mk_cint rmap::key) (mk_cint pat_idx) @@
           mk_iter_bitmap'
             (mk_block [
-              prof_property D.prof_tag_fetch_route
-                @@ ProfFetchRoute("vid",
-                      K3N.string_of_expr (mk_cint s),
-                      K3N.string_of_expr (mk_tuple @@ mk_cint rmap::key),
-                      K3N.string_of_expr (mk_apply' (K3R.route_for ~bound:true c.p rmap) (mk_cint rmap::key)),
-                      "ip");
+              prof_property D.prof_tag_fetch_route @@ ProfFetchRoute("vid",
+                K3N.string_of_expr (mk_cint s),
+                K3N.string_of_expr (mk_tuple @@ mk_cint rmap::key),
+                K3N.string_of_expr (mk_apply' (K3R.route_for ~bound:true c.p rmap) (mk_cint rmap::key)),
+                "ip");
               (* if we haven't sent to this ip yet, add a rcv_fetch header *)
                 mk_if (mk_not @@ mk_is_member' rcv_fetch_header_bitmap.id @@ mk_var "ip")
                   (mk_block @@ [
@@ -615,7 +614,8 @@ let sw_send_rhs_fetches c t s =
                         let test_isobatch e =
                           if not c.gen_single_vid then e
                           else
-                            mk_if (mk_var "is_isobatch") e @@
+                            mk_if (mk_var "is_isobatch")
+                              e @@
                               buffer_for_send (rcv_fetch_single_vid_name_of_t t s) "ip" []
                         in
                         [test_isobatch @@
@@ -726,7 +726,11 @@ let sw_send_fetches_isobatch c t =
                       "inner2")
                 (mk_cint 0)
                 "bitmap") @@
-          buffer_for_send (rcv_put_isobatch_name_of_t t s) "ip" [mk_var "count"])
+         mk_block [
+           prof_property D.prof_tag_send_put
+             @@ ProfSendPut("batch_id", soi s, "ip", "count");
+           buffer_for_send (rcv_put_isobatch_name_of_t t s) "ip" [mk_var "count"]
+         ])
         send_put_bitmap.id)
   ) ss) @
   (* return next vid *)
