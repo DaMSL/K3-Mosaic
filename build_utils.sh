@@ -9,27 +9,22 @@ cd $SCRIPTPATH
 
 if [ ! -d "./bin" ]; then mkdir bin; fi
 
-# partition map tool
-ocamlbuild -use-ocamlfind PartMapTool.d.byte -build-dir ./bin $@
-if [ -f "./bin/src/PartMapTool.d.byte" ]
-then echo "#!/bin/bash" > ./bin/partmap_tool
-     echo "$SCRIPTPATH/bin/src/PartMapTool.d.byte \$@" >> ./bin/partmap_tool
-     chmod +x ./bin/partmap_tool
-fi
+targets='PartMapTool,partmap_tool SanitizeLog,sanitize_log CombineData,combine_data'
+ext=native
+for i in $targets
+do
+  target=${i%,*}
+  lower=${i#*,}
+  if [ ! -f "./bin/src/$target.$ext" ]
+  then
+    ocamlbuild -use-ocamlfind $target.$ext -build-dir ./bin $@
+    if [ -f "./bin/src/$target.$ext" ]
+    then
+      echo "#!/bin/bash" > ./bin/$lower
+      echo "$SCRIPTPATH/bin/src/$target.$ext \$@" >> ./bin/$lower
+      chmod +x ./bin/$lower
+    fi
+  fi
+done
 
-# log sanitization tool
-ocamlbuild -use-ocamlfind SanitizeLog.native -build-dir ./bin $@
-if [ -f "./bin/src/SanitizeLog.native" ]
-then echo "#!/bin/bash" > ./bin/sanitize_log
-     echo "$SCRIPTPATH/bin/src/SanitizeLog.native \$@" >> ./bin/sanitize_log
-     chmod +x ./bin/sanitize_log
-fi
-
-# data combining tool
-ocamlbuild -use-ocamlfind CombineData.native -build-dir ./bin $@
-if [ -f "./bin/src/CombineData.native" ]
-then echo "#!/bin/bash" > ./bin/combine_data
-     echo "$SCRIPTPATH/bin/src/CombineData.native \$@" >> ./bin/combine_data
-     chmod +x ./bin/combine_data
-fi
-
+cd -
