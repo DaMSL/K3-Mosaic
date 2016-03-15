@@ -1574,7 +1574,8 @@ type prof_event =
                       (* batch_id, ip,      poly,    upoly *)
       | ProfSendUPoly of string * string * string * string
 
-let prof_property ?(flush=false) (tag:int) event =
+(* @cond_mod: modifier function for condition *)                                                    
+let prof_property ?(cond_mod=id_fn) ?(flush=false) (tag:int) event =
   let p = match event with
     | ProfLatency(vid_nm, t_s_id) ->
       sp "MosaicPreEvent(lbl=[# mosaic], tl=[$ %d], ve=[$ %s], ce=[$ %s])" tag vid_nm t_s_id
@@ -1597,8 +1598,13 @@ let prof_property ?(flush=false) (tag:int) event =
     | ProfSendUPoly(vid_nm, ip, poly, upoly) ->
       sp "MosaicSendUPoly(lbl=[# mosaic], ce1=[$ %s], ce2=[$ %s], ce3=[$ %s], ce4=[$ %s])" vid_nm ip poly upoly
   in
-  let target_expr = if flush then mk_tuple ~force:true [U.add_property "Flush" mk_cunit] else mk_cunit in
-  mk_if (mk_var do_profiling.id) (U.add_annotation p target_expr) mk_cunit
+  let target_expr =
+    if flush then
+      mk_tuple ~force:true [U.add_property "Flush" mk_cunit]
+    else mk_cunit in
+  mk_if (cond_mod @@ mk_var do_profiling.id)
+    (U.add_annotation p target_expr)
+    mk_cunit
 
 (* calling all functions for profiling *)
 let profile_funcs_start =

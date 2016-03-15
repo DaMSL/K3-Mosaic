@@ -1135,10 +1135,14 @@ let nd_rcv_put_isobatch_trig c t s =
                       mk_apply' (do_complete_name_of_t t s) @@
                         mk_ctrue::args_of_t_as_vars_with_v c t) @@
                   mk_snd @@ mk_var "vids";
-                  (* do stmt_cntr_check, exec_buffered_fetches for the batch *)
-                  mk_apply' nd_complete_stmt_cntr_check_nm [mk_var "batch_id"; mk_cint s]
-              ]) @@
-          mk_cunit
+
+          (* profiling: this is where we say we're done completing the batch *)
+          prof_property prof_tag_do_complete_done @@ ProfLatency("batch_id", soi s);
+
+          (* do stmt_cntr_check, exec_buffered_fetches for the batch *)
+          mk_apply' nd_complete_stmt_cntr_check_nm [mk_var "batch_id"; mk_cint s]
+        ]) @@
+        mk_cunit
     ]
 
 (* receive isobatch stmt list *)
@@ -2070,7 +2074,8 @@ let nd_do_complete_fns c ast trig_name =
     let no_corr_actions =
       if not has_rhs then mk_cunit
       else
-        mk_if (mk_var "is_isobatch") mk_cunit @@
+        mk_if (mk_var "is_isobatch")
+          mk_cunit @@
           mk_apply' nd_complete_stmt_cntr_check_nm [mk_var "vid"; mk_cint stmt_id]
     in
 
@@ -2083,8 +2088,10 @@ let nd_do_complete_fns c ast trig_name =
         (* add delta *)
         do_add_delta c (mk_var delta) lmap ~corrective:false;
 
-        (* for profiling: mark with tag for do_complete done *)
-        prof_property prof_tag_do_complete_done @@ ProfLatency("vid", soi stmt_id);
+        (* for profiling: mark with tag for do_complete done, but only for non-isobatch *)
+        prof_property prof_tag_do_complete_done
+          ~cond_mod:(fun e -> mk_and e @@ mk_not @@ mk_var "is_isobatch") @@
+          ProfLatency("vid", soi stmt_id);
 
         if c.gen_correctives && List.mem lmap c.corr_maps
         then
@@ -2103,9 +2110,10 @@ let nd_do_complete_fns c ast trig_name =
               mk_cint 0) @@
             mk_if (mk_eq (mk_var "sent_msgs") @@ mk_cint 0)
               (if has_rhs then
-                  mk_if (mk_var "is_isobatch") mk_cunit @@
-                    (* if our sent_msgs is 0, we need to delete the stmt cntr entry *)
-                    mk_apply' nd_complete_stmt_cntr_check_nm [mk_var "vid"; mk_cint stmt_id]
+                 mk_if (mk_var "is_isobatch")
+                   mk_cunit @@
+                   (* if our sent_msgs is 0, we need to delete the stmt cntr entry *)
+                   mk_apply' nd_complete_stmt_cntr_check_nm [mk_var "vid"; mk_cint stmt_id]
                 else
                   (* no rhs maps = no need to update anything, no stmt cntr entry *)
                   mk_cunit) @@
