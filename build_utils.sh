@@ -15,15 +15,12 @@ for i in $targets
 do
   target=${i%,*}
   lower=${i#*,}
-  if [ ! -f "./bin/src/$target.$ext" ]
+  ocamlbuild -use-ocamlfind $target.$ext -build-dir ./bin $@
+  if [ -f "./bin/src/$target.$ext" ]
   then
-    ocamlbuild -use-ocamlfind $target.$ext -build-dir ./bin $@
-    if [ -f "./bin/src/$target.$ext" ]
-    then
-      echo "#!/bin/bash" > ./bin/$lower
-      echo "$SCRIPTPATH/bin/src/$target.$ext \$@" >> ./bin/$lower
-      chmod +x ./bin/$lower
-    fi
+    echo "#!/bin/bash" > ./bin/$lower
+    echo "$SCRIPTPATH/bin/src/$target.$ext \$@" >> ./bin/$lower
+    chmod +x ./bin/$lower
   fi
 done
 
