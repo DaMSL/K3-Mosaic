@@ -1136,9 +1136,6 @@ let nd_rcv_put_isobatch_trig c t s =
                         mk_ctrue::args_of_t_as_vars_with_v c t) @@
                   mk_snd @@ mk_var "vids";
 
-          (* profiling: this is where we say we're done completing the batch *)
-          prof_property prof_tag_do_complete_done @@ ProfLatency("batch_id", soi s);
-
           (* do stmt_cntr_check, exec_buffered_fetches for the batch *)
           mk_apply' nd_complete_stmt_cntr_check_nm [mk_var "batch_id"; mk_cint s]
         ]) @@
@@ -2089,9 +2086,7 @@ let nd_do_complete_fns c ast trig_name =
         do_add_delta c (mk_var delta) lmap ~corrective:false;
 
         (* for profiling: mark with tag for do_complete done, but only for non-isobatch *)
-        prof_property prof_tag_do_complete_done
-          ~cond_mod:(fun e -> mk_and e @@ mk_not @@ mk_var "is_isobatch") @@
-          ProfLatency("vid", soi stmt_id);
+        prof_property prof_tag_do_complete_done @@ ProfLatency("vid", soi stmt_id);
 
         if c.gen_correctives && List.mem lmap c.corr_maps
         then
