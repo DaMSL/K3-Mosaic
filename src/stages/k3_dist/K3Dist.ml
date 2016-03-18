@@ -1611,12 +1611,14 @@ let profile_funcs_start =
   mk_block [
     mk_apply' "vmapStart" [G.me_var];
     U.add_annotation "IfMachineMaster" @@ mk_apply' "jemallocStart" [];
+    U.add_annotation "IfMachineMaster" @@ mk_apply' "jemallocTotalSizeStart" [];
   ]
 
 let profile_funcs_stop =
   mk_block [
     mk_apply' "vmapStop" [];
     U.add_annotation "IfMachineMaster" @@ mk_apply' "jemallocStop" [];
+    U.add_annotation "IfMachineMaster" @@ mk_apply' "jemallocTotalSizeStop" [];
     prof_property ~flush:true (-1) @@ ProfLatency("-1", "-1");
     prof_property ~flush:true (-1) @@ ProfMsgCounts("-1", "-1", "-1");
     prof_property ~flush:true (-1) @@ ProfPushBarrier("-1", "-1", "-1");

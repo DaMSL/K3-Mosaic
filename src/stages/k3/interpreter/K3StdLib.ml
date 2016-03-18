@@ -420,6 +420,8 @@ let () = add_fn "print_env"
 let () =
   add_fn "jemallocStart";
   add_fn "jemallocStop";
+  add_fn "jemallocTotalSizeStart";
+  add_fn "jemallocTotalSizeStop";
   add_fn "vmapStart" ~args:["addr", t_addr];
   add_fn "vmapDump";
   add_fn "vmapStop";
