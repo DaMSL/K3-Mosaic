@@ -226,7 +226,14 @@ let sw_sent_done = create_ds "sw_sent_done" (mut t_bool) ~init:mk_cfalse
 let shutdown_trig2_nm = "shutdown_trig2"
 let shutdown_trig2 =
   mk_code_sink' shutdown_trig2_nm unit_arg [] @@
-    mk_apply' "haltEngine" [mk_cunit]
+    mk_block [
+      mk_if_eq (mk_var job.id) (mk_var job_node.id)
+        (mk_print @@ mk_concat
+           (mk_cstring "Number of batches stashed: ") @@
+           mk_soi @@ mk_var nd_num_stashed.id)
+        mk_cunit;
+      mk_apply' "haltEngine" [mk_cunit]
+    ]
 
 let shutdown_trig_nm = "shutdown_trig"
 let shutdown_trig =
@@ -252,11 +259,10 @@ let ms_rcv_node_done =
       (mk_block [
         (* update end time *)
         mk_assign D.ms_end_time.id @@ mk_apply' "now_int" [mk_cunit];
-        mk_apply' "print"
-          [mk_apply' "concat"
-            [mk_cstring "Total time (ms): ";
-             mk_apply' "string_of_int"
-              [mk_sub (mk_var D.ms_end_time.id) @@ mk_var D.ms_start_time.id]]];
+        mk_print @@ mk_concat
+            (mk_cstring "Total time (ms): ") @@
+             mk_soi @@
+               mk_sub (mk_var D.ms_end_time.id) @@ mk_var D.ms_start_time.id;
         (* send ourselves a message to shutdown *)
         D.mk_send_me ms_shutdown_nm;
       ])

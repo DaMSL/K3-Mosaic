@@ -2631,6 +2631,8 @@ let nd_from_sw_trig_dispatcher_trig c =
     mk_if_eq (mk_var "num") (mk_var nd_dispatcher_next_num.id)
       (* then dispatch right away *)
       (mk_block [
+          (* profiling: point of starting to deal with this batch at the node *)
+          prof_property prof_tag_node_process @@ ProfLatency("batch_id", "-1");
           (* unpack the polyqueue *)
           mk_poly_unpack (mk_var "poly_queue");
           mk_assign nd_dispatcher_last_num.id @@ mk_var nd_dispatcher_next_num.id;
@@ -2650,10 +2652,14 @@ let nd_from_sw_trig_dispatcher_trig c =
             (mk_apply' move_isobatch_stmt_helper_nm [mk_var "batch_id"])
             mk_cunit;
        ]) @@
-      (* else, stash the poly_queue in our buffer *)
-      mk_insert nd_dispatcher_buf.id
-        [mk_var "num"; mk_tuple
-           [mk_var "batch_id"; mk_var "sender_ip"; mk_var "poly_queue"]]
+      mk_block [
+        (* else, stash the poly_queue in our buffer *)
+        mk_insert nd_dispatcher_buf.id
+          [mk_var "num"; mk_tuple
+            [mk_var "batch_id"; mk_var "sender_ip"; mk_var "poly_queue"]];
+        (* keep track of stashed number *)
+        mk_assign nd_num_stashed.id @@ mk_add (mk_var @@ nd_num_stashed.id) @@ mk_cint 1
+      ]
     ;
     (* check if the next num is in the buffer *)
     mk_delete_with nd_dispatcher_buf.id [mk_var nd_dispatcher_next_num.id; mk_cunknown]

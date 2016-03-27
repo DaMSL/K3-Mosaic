@@ -502,20 +502,22 @@ let dump_info p =
     strcatmap (fun (m, id) -> sp "%s:%d" m id) map_ids in
   let s_s_map_ids =
     strcatmap ~sep:"; " (fun (s_m, (s, m)) -> sp "s%d, m%d: %d" s m s_m) stmt_map_ids in
-  let s_free_infos = sp "[%s]" @@
-    strcatmap (fun (s, info) ->
-        sp "%d:[%d:[%s]; %s]" s (fst info.lmap_free)
+  let s_free_infos =
+    strcatmap ~sep:"\n" (fun (s, info) ->
+        sp "s%d: %s:[%s] <- %s" s (map_name_of p @@ fst info.lmap_free)
           (String.concat ", " @@ fst_many @@ snd info.lmap_free)
-          (strcatmap (fun (m, l) -> sp "%d:[%s]" m @@
+          (strcatmap (fun (m, l) -> sp "%s:[%s]" (map_name_of p m) @@
                        String.concat ", " @@ fst_many @@ l) info.rmaps_free)
       ) infos in
-  let s_bound_infos = sp "[%s]" @@
-    strcatmap (fun (s, info) ->
-        sp "%d:[%d:[%s]; %s]" s (fst info.lmap_bound)
+  let s_bound_infos =
+    strcatmap ~sep:"\n" (fun (s, info) ->
+        sp "s%d: %s:[%s] <- %s" s (map_name_of p @@ fst info.lmap_bound)
           (String.concat ", " @@ fst_many @@ snd info.lmap_bound)
-          (strcatmap (fun (m, l) -> sp "%d:[%s]" m @@
+          (strcatmap (fun (m, l) -> sp "%s:[%s]" (map_name_of p m) @@
                        String.concat ", " @@ fst_many @@ l) info.rmaps_bound)
       ) infos in
+  let s_opt_route = List.filter (is_opt_route_stmt p) ss in
+  let m_opt_route = nub @@ List.flatten @@ List.map (map_names_ids_of_stmt p) s_opt_route in
   (* simplified version of program map dependency *)
   let map_dependencies =
     strcatmap ~sep:"\n" (fun (t, s_m) ->
@@ -546,6 +548,9 @@ Free vars:
 Bound vars:
 %s
 
+Opt route maps:
+%s
+
 Map dependencies:
 %s
 "
@@ -556,5 +561,6 @@ Map dependencies:
   s_s_map_ids
   s_free_infos
   s_bound_infos
+  (String.concat ", " @@ fst_many m_opt_route)
   map_dependencies
 

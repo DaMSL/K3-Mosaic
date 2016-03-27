@@ -529,6 +529,9 @@ let sw_rcv_vector_clock_nm = "sw_rcv_vector_clock"
 let ms_start_time = create_ds "ms_start_time" @@ mut t_int
 let ms_end_time = create_ds "ms_end_time" @@ mut t_int
 
+(* number of stashed batches *)
+let nd_num_stashed = create_ds "num_stashed" @@ mut t_int
+
 (* for debugging, driver pause *)
 let sw_event_driver_sleep = create_ds "sw_event_driver_sleep" @@ mut t_int
 
@@ -1550,6 +1553,7 @@ let prof_tag_upoly_send       = 15
 let prof_tag_poly_send_msg    = 16
 let prof_tag_poly_send2       = 17
 let prof_tag_poly_send_msg2   = 18
+let prof_tag_node_process     = 19
 
 (* @t_s_id: trig or stmt id *)
 type prof_event =
@@ -1574,7 +1578,7 @@ type prof_event =
                       (* batch_id, ip,      poly,    upoly *)
       | ProfSendUPoly of string * string * string * string
 
-(* @cond_mod: modifier function for condition *)                                                    
+(* @cond_mod: modifier function for condition *)
 let prof_property ?(cond_mod=id_fn) ?(flush=false) (tag:int) event =
   let p = match event with
     | ProfLatency(vid_nm, t_s_id) ->
@@ -1749,6 +1753,7 @@ let global_vars c dict =
       sw_event_queue;
       ms_start_time;
       ms_end_time;
+      nd_num_stashed;
       sw_event_driver_sleep;
       (* for no-corrective mode *)
       corrective_mode;
