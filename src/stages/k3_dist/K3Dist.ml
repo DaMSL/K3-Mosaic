@@ -1548,12 +1548,7 @@ let prof_tag_fetch_route      = 10
 let prof_tag_send_put         = 11
 let prof_tag_gc_start         = 12
 let prof_tag_gc_done          = 13
-let prof_tag_poly_send        = 14
-let prof_tag_upoly_send       = 15
-let prof_tag_poly_send_msg    = 16
-let prof_tag_poly_send2       = 17
-let prof_tag_poly_send_msg2   = 18
-let prof_tag_node_process     = 19
+let prof_tag_node_process     = 14
 
 (* @t_s_id: trig or stmt id *)
 type prof_event =
