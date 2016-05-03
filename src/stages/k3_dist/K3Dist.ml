@@ -9,6 +9,10 @@ module P = ProgInfo
 
 module IdMap = Map.Make(struct type t = id_t let compare = String.compare end)
 
+let str_of_date_t t = match t.typ with
+  | TDate -> {t with typ = TString}
+  | _ -> t
+
 let sys_init = "system_ready_event"
 
 (* an agenda mapping type *)
