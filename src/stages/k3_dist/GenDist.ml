@@ -150,6 +150,7 @@ let declare_global_vars c ast =
   gen_loader_vars ast @
   Proto.global_vars c @
   D.global_vars c (ModifyAst.map_inits_from_ast c ast) @
+  GenWarmup.global_vars c @
   Timer.global_vars @
   TS.global_vars @
   K3Ring.global_vars @

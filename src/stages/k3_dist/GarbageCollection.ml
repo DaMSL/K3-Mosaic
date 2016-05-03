@@ -8,6 +8,8 @@ module G = K3Global
 module Std = K3StdLib
 module T = Timer
 module TS = Timestamp
+module C = GenCommon
+
 
 (* Description of GC protocol
  * --------------------------
@@ -69,7 +71,7 @@ let sw_update_send ~n ~vid_nm =
 (* node: code to be incorporated in GenDist.rcv_put *)
 (* send ack to switch *)
 let nd_ack_send_code ~addr_nm ~vid_nm =
-  D.buffer_for_send D.sw_ack_rcv_trig_nm addr_nm [mk_var D.me_int.id; mk_var vid_nm]
+  C.buffer_for_send D.sw_ack_rcv_trig_nm addr_nm [mk_var D.me_int.id; mk_var vid_nm]
 
 (* master: gc delay in seconds *)
 let ms_gc_interval = create_ds "ms_gc_interval" (mut t_int) ~init:(mk_cint 300000)

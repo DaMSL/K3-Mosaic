@@ -4,6 +4,7 @@ open K3Helpers
 open K3Dist
 
 module D = K3Dist
+module C = GenCommon
 module G = K3Global
 module U = K3Util
 module T = K3Typechecker
@@ -183,14 +184,14 @@ let send_corrective_fns c =
                     mk_lambda' send_corrective_ip_map.e @@
                       mk_block [
                         (* buffer header *)
-                        buffer_for_send rcv_trig "ip" @@
+                        C.buffer_for_send rcv_trig "ip" @@
                           (ids_to_vars @@ fst_many orig_vals) @ [mk_var "corrective_vid"];
                         (* buffer tuples from indices *)
                         buffer_tuples_from_idxs ~drop_vid:true delta_tuples2.id delta_tuples2.t
                           (map_ds.id^"_map") (mk_var "t_indices");
                         (* buffer vids *)
                         mk_iter (mk_lambda'' ["vid", t_vid] @@
-                          buffer_for_send ~wr_bitmap:false "vids" "ip" [mk_var "vid"]) @@
+                          C.buffer_for_send ~wr_bitmap:false "vids" "ip" [mk_var "vid"]) @@
                           mk_var "vids";
                       ];
                   mk_add (mk_var "count") @@ mk_cint 1
@@ -456,7 +457,7 @@ let nd_rcv_correctives_trig c t s =
                   mk_var "acc_count")
               (mk_cint 0)) @@
           (* send an ack with how many msgs we sent on *)
-          D.buffer_for_send nd_rcv_corr_done_nm "orig_addr"
+          C.buffer_for_send nd_rcv_corr_done_nm "orig_addr"
             [mk_var "orig_vid"; mk_var "orig_stmt_id"; mk_var "hop"; mk_var "sent_msgs"];
 
           (* skip the vid section and return the new idx, offset *)

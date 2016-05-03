@@ -4,6 +4,7 @@ open K3Helpers
 open K3Dist
 
 module D = K3Dist
+module C = GenCommon
 module G = K3Global
 module U = K3Util
 module T = K3Typechecker
@@ -127,13 +128,13 @@ let sw_send_puts_single_vid c t s =
               mk_lambda' send_put_ip_map_e @@
                 mk_block [
                   (* buffer the trig args if needed *)
-                  buffer_trig_header_if_needed (mk_var "vid") t "ip" t_args;
+                  C.buffer_trig_header_if_needed (mk_var "vid") t "ip" t_args;
                   (* property *)
                   mk_let ["stmt_id"] (mk_cint s) @@
                   prof_property D.prof_tag_send_put
                     @@ ProfSendPut("vid", "stmt_id", "ip", "count");
                   (* send rcv_put header *)
-                  buffer_for_send rcv_put_nm "ip" [mk_var "count"];
+                  C.buffer_for_send rcv_put_nm "ip" [mk_var "count"];
                 ])
          send_put_bitmap.id
       ]
@@ -217,14 +218,14 @@ let sw_send_puts_isobatch c t s =
                     tup_of_e send_put_isobatch_map_e;
                   ];
               (* buffer the trig args if needed *)
-              buffer_trig_header_if_needed (mk_var "vid") t ip_dest t_args;
+              C.buffer_trig_header_if_needed (mk_var "vid") t ip_dest t_args;
 
               (* if we haven't sent this stmt, buffer it *)
               mk_if
                 (mk_is_member' sw_send_stmt_bitmap.id @@ mk_var ip_dest)
                   mk_cunit @@
                   mk_block [
-                    buffer_for_send (rcv_stmt_isobatch_name_of_t t s) ip_dest [];
+                    C.buffer_for_send (rcv_stmt_isobatch_name_of_t t s) ip_dest [];
                     (* mark this ip *)
                     mk_insert sw_send_stmt_bitmap.id [mk_var ip_dest];
                   ]
@@ -330,25 +331,25 @@ let sw_send_rhs_fetches c t s =
                     (* mark the send_fetch_bitmap *)
                     mk_insert rcv_fetch_header_bitmap.id [mk_var "ip"];
                     (* buffer the trig args if needed *)
-                    buffer_trig_header_if_needed (mk_var "vid") t "ip" t_args] @
+                    C.buffer_trig_header_if_needed (mk_var "vid") t "ip" t_args] @
                     (* in case we have system_ready, we'll always keep single_vid. Otherwise, we can disable it *)
                     (if sre then
-                        [buffer_for_send (rcv_fetch_single_vid_name_of_t t s) "ip" []]
+                        [C.buffer_for_send (rcv_fetch_single_vid_name_of_t t s) "ip" []]
                       else
                         let test_isobatch e =
                           if not c.gen_single_vid then e
                           else
                             mk_if (mk_var "is_isobatch")
                               e @@
-                              buffer_for_send (rcv_fetch_single_vid_name_of_t t s) "ip" []
+                              C.buffer_for_send (rcv_fetch_single_vid_name_of_t t s) "ip" []
                         in
                         [test_isobatch @@
-                           buffer_for_send (rcv_fetch_isobatch_name_of_t t s) "ip" []]
+                           C.buffer_for_send (rcv_fetch_isobatch_name_of_t t s) "ip" []]
                     )
                   )
                   mk_cunit;
                 (* buffer the map id *)
-                buffer_for_send ~wr_bitmap:false stag "ip" []
+                C.buffer_for_send ~wr_bitmap:false stag "ip" []
             ])
             R.route_bitmap.id)
         rmap_tags)
@@ -370,8 +371,8 @@ let sw_send_rhs_completes c t s =
           (mk_cint pat_idx) @@
           mk_ignore @@ mk_iter_bitmap'
               (mk_block [
-                buffer_trig_header_if_needed (mk_var "vid") t "ip" t_args;
-                buffer_for_send do_complete_t "ip" []
+                C.buffer_trig_header_if_needed (mk_var "vid") t "ip" t_args;
+                C.buffer_for_send do_complete_t "ip" []
               ])
             K3Route.route_bitmap.id
       ]
@@ -453,7 +454,7 @@ let sw_send_fetches_isobatch c t =
          mk_block [
            prof_property D.prof_tag_send_put
              @@ ProfSendPut("batch_id", soi s, "ip", "count");
-           buffer_for_send (rcv_put_isobatch_name_of_t t s) "ip" [mk_var "count"]
+           C.buffer_for_send (rcv_put_isobatch_name_of_t t s) "ip" [mk_var "count"]
          ])
         send_put_bitmap.id)
   ) ss) @

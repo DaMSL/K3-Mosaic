@@ -5,6 +5,7 @@ open Util
 open K3Dist
 
 module D = K3Dist
+module C = GenCommon
 module G = K3Global
 module Std = K3StdLib
 module P = ProgInfo
@@ -97,12 +98,12 @@ let sw_sys_init c =
   let ss = P.stmts_of_t c.p D.sys_init in
   mk_code_sink' sw_sys_init_nm unit_arg [] @@
   mk_let_block ["batch_id"] (mk_cint 1) @@
-    [D.clear_poly_queues c] @
+    [C.clear_poly_queues c] @
     (List.map (fun s ->
         mk_apply' (D.send_fetch_single_vid_name_of_t D.sys_init s) [sys_init_vid_k3])
       ss) @
     [
-      D.send_poly_queues;
+      C.send_poly_queues;
 
       (* send notifications *)
       D.mk_send_all_nodes nd_sys_init_barrier_nm [mk_cunit]
@@ -174,7 +175,7 @@ let rcv_jobs c =
     mk_apply' K3Route.memo_init_all_nm [];
     mk_apply' K3Route.route_opt_init_all_nm [];
     (* reserve space in all the polyqueues *)
-    D.reserve_poly_queue_code ~all:true c;
+    C.reserve_poly_queue_code ~all:true c;
     (* ack the msg *)
     D.mk_send_master ms_rcv_jobs_ack_nm;
   ]

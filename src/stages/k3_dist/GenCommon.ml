@@ -272,3 +272,156 @@ let do_add_delta c e lmap ~corrective =
     [mk_var @@ P.map_name_of c.p lmap;
       if corrective then mk_ctrue else mk_cfalse; mk_var "vid"; e]
 
+(*** Poly queues ***)
+
+(* common functionality to move out the poly queues *)
+let send_poly_queues =
+    (* send (move) the polyqueues *)
+    mk_iter_bitmap'
+      (* check if we have a upoly queue and act accordingly *)
+        (mk_if (mk_is_member' upoly_queue_bitmap.id @@ mk_var "ip")
+        (* move and delete the poly_queue and ship it out *)
+          (mk_let ["pq"]
+            (mk_delete_at poly_queues.id @@ mk_var "ip") @@
+          mk_let_block ["upq"]
+            (mk_delete_at upoly_queues.id @@ mk_var "ip")
+            [ prof_property 0 @@ ProfSendUPoly("batch_id", "ip", "pq", "upq");
+              mk_sendi trig_dispatcher_trig_unique_nm (mk_var "ip")
+                [mk_tuple [mk_var "batch_id"; mk_var "pq"; mk_var "upq"]]
+            ])
+        (mk_let_block ["pq"]
+          (mk_delete_at poly_queues.id @@ mk_var "ip")
+          [ prof_property 0 @@ ProfSendPoly("batch_id", "ip", "pq");
+            mk_sendi trig_dispatcher_trig_nm (mk_var "ip")
+              [mk_var "batch_id"; mk_var "pq"]
+          ]))
+      poly_queue_bitmap.id
+
+(* code to apply poly_reserve to every outgoing polybuffer *)
+let reserve_poly_queue_code ?all c =
+  mk_if (mk_var do_poly_reserve.id)
+    (mk_ignore @@ mk_agg
+      (mk_lambda2' ["ip", t_int] unknown_arg @@
+       mk_block [
+        mk_update_at_with poly_queues.id (mk_var "ip") @@
+          mk_lambda' ["pqs", t_of_e poly_queues.e] @@ mk_block [
+            mk_poly_reserve "pqs"
+              (mk_mult (mk_var sw_poly_batch_size.id) @@ mk_cint reserve_mult)
+              (mk_mult (mk_var sw_poly_batch_size.id) @@ mk_cint @@ max_poly_queue_csize c) @@
+              mk_mult (mk_var sw_poly_batch_size.id) @@ mk_cint reserve_str_estimate;
+            mk_var "pqs" ];
+        mk_add (mk_cint 1) @@ mk_var "ip"
+       ])
+      (mk_cint 0) @@
+      mk_var my_peers.id)
+    mk_cunit
+
+let clear_poly_queues_fn_nm = "clear_poly_queues"
+let clear_poly_queues_fn c =
+  mk_global_fn clear_poly_queues_fn_nm [] [] @@
+  mk_block [
+    (* replace all used send slots with empty polyqueues *)
+    mk_iter_bitmap'
+      (mk_insert_at poly_queues.id (mk_var "ip")
+         [mk_var empty_poly_queue.id])
+      poly_queue_bitmap.id;
+    mk_iter_bitmap'
+        (mk_insert_at upoly_queues.id (mk_var "ip")
+          [mk_var empty_upoly_queue.id])
+        upoly_queue_bitmap.id ;
+    (* apply reserve to all the new polybufs *)
+    reserve_poly_queue_code c;
+    mk_clear_all poly_queue_bitmap.id;
+    mk_clear_all upoly_queue_bitmap.id;
+  ]
+
+(* we must always clear both upoly and poly queues -- we don't know when we'll need them *)
+let clear_poly_queues c = mk_apply' clear_poly_queues_fn_nm []
+
+(*** Buffering snippets ***)
+
+(* instead of sending directly, place in the send buffer *)
+(* @bitmap: whether to mark the bitmap *)
+let buffer_for_send ?(unique=false) ?(wr_bitmap=true) t addr args =
+  let queue, bitmap =
+    if unique then upoly_queues, upoly_queue_bitmap.id
+    else poly_queues,  poly_queue_bitmap.id in
+  mk_block @@
+    (* mark the bitmap *)
+    (if wr_bitmap then [mk_insert bitmap [mk_var addr]] else []) @
+    (* insert into buffer *)
+    [mk_update_at_with queue.id (mk_var addr) @@
+      mk_lambda' ["pqs", t_of_e queue.e] @@
+        mk_poly_insert_block t "pqs" args
+    ]
+
+(* code to check if we need to write trig args and a trig header, and if so, to buffer them *)
+let buffer_trig_header_if_needed ?(force=false) ?(need_args=true) vid t addr args =
+  (* normal condition for adding *)
+  let save_handler = trig_save_arg_sub_handler_name_of_t t in
+  let load_handler = trig_load_arg_sub_handler_name_of_t t in
+  let no_arg_handler = trig_no_arg_sub_handler_name_of_t t in
+  (* check bitmap for current header *)
+  (if not force then
+    mk_if (mk_is_member' send_trig_header_bitmap.id @@ mk_var addr) mk_cunit
+   else id_fn) @@
+    mk_block @@
+      (* update the header bitmap *)
+      [mk_insert send_trig_header_bitmap.id [mk_var addr]] @
+      (
+        if need_args && not force then
+          [
+            (* check map for the last batch to see if we need args *)
+            mk_let ["has_args"]
+              (mk_at_with' send_trig_args_map.id (mk_var addr) @@
+               mk_lambda' send_trig_args_map.e @@
+               mk_case_ns (mk_lookup' "inner" [vid; mk_cunknown]) "x" mk_cfalse mk_ctrue) @@
+            mk_if (mk_var "has_args")
+              (buffer_for_send load_handler addr [mk_var "vid"]) @@
+               mk_block [
+                  (* update map *)
+                  mk_insert send_trig_args_bitmap.id [mk_var addr];
+                  mk_update_at_with send_trig_args_map.id (mk_var addr) @@
+                    mk_lambda' send_trig_args_map.e @@
+                      mk_insert_block send_trig_args_inner.id [vid; mk_cunit];
+                  (* use full handler (which also saves) *)
+                  buffer_for_send save_handler addr args
+              ]
+          ]
+      else
+        [buffer_for_send no_arg_handler addr args])
+
+(* insert tuples into polyqueues *)
+let buffer_tuples_from_idxs ?(unique=false) ?(drop_vid=false) tuples_nm map_type map_tag indices =
+  let col_t, tup_t = unwrap_tcol map_type in
+  let bitmap = if unique then upoly_queue_bitmap else poly_queue_bitmap in
+  let ts = unwrap_ttuple tup_t in
+  (* handle dropping vid *)
+  let may_drop e =
+    if drop_vid then
+      List.map (flip mk_subscript e) @@ tl @@ fst_many @@ insert_index_fst ~first:1 ts
+    else [e]
+  in
+  (* check for empty collection *)
+  mk_case_sn (mk_peek indices) "x"
+    (* check for -1, indicating all tuples *)
+    (mk_block [
+      mk_insert bitmap.id [mk_var "ip"];
+      mk_if (mk_eq (mk_var "x") @@ mk_cint (-1))
+        (mk_iter
+          (mk_lambda'' ["x", tup_t] @@
+            (* no need to write bitmap - we did it above *)
+            buffer_for_send ~unique ~wr_bitmap:false map_tag "ip" @@ may_drop @@ mk_var "x") @@
+          mk_var tuples_nm) @@
+        (* or just regular indices into tuples *)
+        mk_iter
+          (mk_lambda'' ["idx", t_int] @@
+            (* get tuples at idx *)
+            mk_at_with' tuples_nm (mk_var "idx") @@
+              mk_lambda' ["x", tup_t] @@
+            buffer_for_send ~unique ~wr_bitmap:false map_tag "ip" @@ may_drop @@ mk_var "x")
+          indices])
+    mk_cunit (* do nothing if empty. we're sending a header anyway *)
+
+let functions c =
+   clear_poly_queues_fn c
