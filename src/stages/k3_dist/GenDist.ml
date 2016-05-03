@@ -27,6 +27,7 @@ open K3Helpers
 open K3Dist
 
 module D = K3Dist
+module C = GenCommon
 module G = K3Global
 module M = ModifyAst
 module U = K3Util
@@ -180,6 +181,7 @@ let declare_global_funcs c ast =
   (P.for_all_trigs ~sys_init:true ~delete:c.gen_deletes c.p @@ nd_log_get_bound c) @
   (if c.gen_correctives then [nd_update_corr_map; nd_filter_corrective_list] else []) @
   D.functions c @
+  C.functions c @
   GenDispatch.functions @
   K3Ring.functions @
   (List.map (fun (i, (_, maps)) -> nd_add_delta_to_buf c (hd maps)) @@ D.uniq_types_and_maps c) @

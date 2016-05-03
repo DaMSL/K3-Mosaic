@@ -442,4 +442,4 @@ let mk_send_me ?(payload=[mk_cunit]) trig =
 
 
 let functions c =
-   clear_poly_queues_fn c
+  [ clear_poly_queues_fn c ]
