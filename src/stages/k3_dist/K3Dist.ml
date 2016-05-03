@@ -589,42 +589,6 @@ let addr_of_int = mk_global_fn "addr_of_int" ["i", t_int] [t_addr] @@
 
 let mk_sendi trig addr args = mk_send trig (mk_apply' "addr_of_int" [addr]) args
 
-let ms_init_counter = create_ds "ms_init_counter" (mut t_int) ~init:(mk_cint 0)
-(* whether we can begin operations on this node/switch *)
-let init_flag = create_ds "init_flag" (mut t_bool) ~init:(mk_cfalse)
-
-let ms_rcv_init_trig_nm = "ms_init_trig"
-let rcv_init_trig_nm = "init_trig"
-
-(* code for all nodes+switches to check in before starting *)
-let send_init_to_master =
-  let init = mk_send ms_rcv_init_trig_nm (mk_var master_addr.id) [G.me_var] in
-  create_ds "send_init_to_master" t_unit ~init
-
-(* code for master to verify that all peers have answered and to begin *)
-let ms_rcv_init_trig =
-  mk_code_sink' ms_rcv_init_trig_nm ["_", t_addr] [] @@
-  mk_block [
-    (* increment init counter *)
-    mk_assign ms_init_counter.id @@
-      mk_add (mk_var ms_init_counter.id) (mk_cint 1);
-    (* check if >= to num_peers *)
-    mk_if (mk_geq (mk_var ms_init_counter.id) @@ mk_var num_peers.id)
-      (* send rcv_init to all peers *)
-      (mk_iter
-        (mk_lambda (wrap_args ["peer", t_addr]) @@
-          mk_sendi rcv_init_trig_nm (mk_var "peer") [mk_cunit]) @@
-        mk_var "peers")
-      mk_cunit
-  ]
-
-(* code for nodes/switches to set init to true *)
-let rcv_ms_init_trig =
-  mk_code_sink' rcv_init_trig_nm ["_", t_unit] [] @@
-  mk_assign init_flag.id (mk_cbool true)
-
-(**** End of init code ****)
-
 (* global containing mapping of map_id to map_name and dimensionality *)
 let map_ids_id = "map_ids"
 let map_ids c =
