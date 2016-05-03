@@ -48,26 +48,6 @@ open GenComplete
 open GenCorrective
 open GenWarmup
 
-(**** protocol code ****)
-
-(*  TODO: unused? *)
-(* receive isobatch stmt list *)
-(* we buffer the vid/stmts in the helper ds *)
-let nd_rcv_stmt_isobatch =
-  mk_global_fn nd_rcv_stmt_isobatch_nm ["stmt_id", t_stmt_id; "vid", t_vid] [] @@
-  mk_block [
-      mk_assign isobatch_stmt_helper_has_content.id mk_ctrue;
-      mk_insert isobatch_stmt_helper_bitmap_id [mk_var "stmt_id"];
-      mk_update_at_with isobatch_stmt_helper_id (mk_var "stmt_id") @@
-        mk_lambda' isobatch_stmt_helper_e @@
-          mk_insert_block "inner2" [mk_var "vid"]
-  ]
-
-(*  TODO: unused? *)
-let nd_send_batch_push_bitmap =
-  let init = mk_map (mk_lambda' unknown_arg mk_cfalse) @@ mk_var D.my_peers.id in
-  create_ds ~init "nd_send_batch_push_bitmap" @@ t_bool_vector
-
 (* list of potential corrective maps.
  * the potential corrective maps and the potential read/write conflicts.
  * Inserts and Deletes really have 2 different graphs, so we return both *)
@@ -200,6 +180,7 @@ let declare_global_funcs c ast =
   (P.for_all_trigs ~sys_init:true ~delete:c.gen_deletes c.p @@ nd_log_get_bound c) @
   (if c.gen_correctives then [nd_update_corr_map; nd_filter_corrective_list] else []) @
   D.functions c @
+  GenDispatch.functions @
   K3Ring.functions @
   (List.map (fun (i, (_, maps)) -> nd_add_delta_to_buf c (hd maps)) @@ D.uniq_types_and_maps c) @
   TS.functions @

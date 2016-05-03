@@ -167,7 +167,7 @@ let do_gc_trig c =
        [prof_property prof_tag_gc_done @@ ProfLatency("gc_vid", "-1");
         mk_apply' "vmapDump" [];
         mk_print @@ mk_concat (mk_cstring "Ending GC @ ") @@ mk_soi (mk_var "gc_vid");
-        D.mk_send_master ms_gc_done_barrier_nm]
+        C.mk_send_master ms_gc_done_barrier_nm]
 
 (* master switch trigger to receive and add to the max vid map *)
 let ms_rcv_gc_vid_nm = "ms_rcv_gc_vid"
@@ -198,7 +198,7 @@ let ms_rcv_gc_vid c =
                 (* send gc notices to nodes only *)
                 (* NOTE: currently there's no need to send do_gc to the switches. If that changes, this check needs
                  * to change as wel *)
-                mk_send_all_nodes do_gc_nm [mk_var min_vid];
+                C.mk_send_all_nodes do_gc_nm [mk_var min_vid];
                 (* overwrite last gc vid *)
                 mk_assign ms_last_gc_vid.id @@ mk_var min_vid; ])
               mk_cunit; (* else nothing *)
@@ -215,14 +215,14 @@ let rcv_req_gc_vid =
   mk_if (mk_or (mk_eq (mk_var D.job.id) @@ mk_var D.job_switch.id) @@
                 mk_eq (mk_var D.job.id) @@ mk_var D.job_master.id)
     (* send our min vid: this would be much faster with a min function *)
-    (D.mk_send_master ms_rcv_gc_vid_nm
+    (C.mk_send_master ms_rcv_gc_vid_nm
       ~payload:[G.me_var;
                 mk_min_max "min_vid" (mk_var "vid") t_vid mk_lt
                   (mk_var TS.sw_highest_vid.id) sw_ack_log.e sw_ack_log.id]) @@
     (* else, if we're a node *)
     mk_if (mk_eq (mk_var D.job.id) @@ mk_var D.job_node.id)
       (* send out node min vid: much faster if we had a min function *)
-      (mk_send_master ms_rcv_gc_vid_nm
+      (C.mk_send_master ms_rcv_gc_vid_nm
         (* default is max_vid (infinity), to allow anything to go on *)
          ~payload:[G.me_var; D.find_nd_stmt_cntrs_min_vid])
       mk_cunit

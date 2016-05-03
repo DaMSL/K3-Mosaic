@@ -401,6 +401,21 @@ let sw_event_driver_single_vid c =
   (mk_var "batch_id") @@
   mk_var "poly_queue"
 
+let clear_send_trig_args_map_nm = "clear_send_trig_args_map"
+let clear_send_trig_args_map =
+  mk_global_fn clear_send_trig_args_map_nm [] [] @@
+  mk_block [
+    mk_iter_bitmap'
+      (mk_update_at_with send_trig_args_map.id (mk_var "ip") @@
+        mk_lambda' send_trig_args_map.e @@
+          mk_block [
+            mk_clear_all send_trig_args_inner.id;
+            mk_var send_trig_args_inner.id
+          ])
+      send_trig_args_bitmap.id;
+    mk_clear_all send_trig_args_bitmap.id;
+  ]
+
 (* save the current_batch_id between receiving the token and vector clock *)
 let sw_token_has_data = create_ds "sw_token_has_data" @@ mut t_bool
 let sw_token_current_batch_id = create_ds "sw_token_current_batch_id" @@ mut t_vid
@@ -699,3 +714,8 @@ let sw_demux_poly c =
       (* add the poly queue to our queue of queues *)
       mk_insert sw_event_queue.id [mk_var "acc"]
     ]
+
+let functions = [
+  clear_send_trig_args_map
+]
+

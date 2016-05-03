@@ -7,6 +7,7 @@ open K3Helpers
 open Util
 
 module D = K3Dist
+module C = GenCommon
 module G = K3Global
 module Std = K3StdLib
 
@@ -47,13 +48,13 @@ let tm_check_time_trig c =
           (* activate the lambda and send ourselves a message *)
           mk_let (fst_many tm_timer_list.e) (mk_var "timer") dispatch_code;
           (* check for another expired timer *)
-          mk_send_me tm_check_time_trig_nm;
+          C.mk_send_me tm_check_time_trig_nm;
           (* delete this entry *)
           mk_delete tm_timer_list.id [mk_var "timer"];
         ]) @@
         (* else, wake ourselves in 1 second *)
         mk_block [
-          mk_send_me tm_check_time_trig_nm;
+          C.mk_send_me tm_check_time_trig_nm;
           mk_apply' "sleep" [mk_var tm_resolution.id];
         ]
 
@@ -74,7 +75,7 @@ let tm_insert_timer_trig =
           mk_lt (mk_var "time1") @@ mk_var "time2") @@
         mk_var tm_timer_list.id;
     (* start to check the time *)
-    mk_send_me tm_check_time_trig_nm;
+    C.mk_send_me tm_check_time_trig_nm;
   ]
 
 let global_vars = List.map decl_global [

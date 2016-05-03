@@ -379,7 +379,6 @@ let buffer_trig_header_if_needed ?(force=false) ?(need_args=true) vid t addr arg
             mk_if (mk_var "has_args")
               (buffer_for_send load_handler addr [mk_var "vid"]) @@
                mk_block [
-                  (* update map *)
                   mk_insert send_trig_args_bitmap.id [mk_var addr];
                   mk_update_at_with send_trig_args_map.id (mk_var addr) @@
                     mk_lambda' send_trig_args_map.e @@
@@ -422,6 +421,25 @@ let buffer_tuples_from_idxs ?(unique=false) ?(drop_vid=false) tuples_nm map_type
             buffer_for_send ~unique ~wr_bitmap:false map_tag "ip" @@ may_drop @@ mk_var "x")
           indices])
     mk_cunit (* do nothing if empty. we're sending a header anyway *)
+
+(*** Send functions ***)
+
+let mk_send_all ?(reg_addr=false) ds trig payload =
+  let send_fn = if reg_addr then mk_send else mk_sendi in
+  mk_iter (mk_lambda' (ds_e ds) @@
+      send_fn trig (mk_var "addr") payload) @@
+    mk_var ds.id
+
+let mk_send_all_nodes trig payload = mk_send_all nodes trig payload
+let mk_send_all_switches trig payload = mk_send_all switches trig payload
+let mk_send_all_peers trig payload = mk_send_all ~reg_addr:true my_peers trig payload
+
+let mk_send_master ?(payload=[mk_cunit]) trig =
+  mk_send trig (mk_var master_addr.id) payload
+
+let mk_send_me ?(payload=[mk_cunit]) trig =
+  mk_send trig G.me_var payload
+
 
 let functions c =
    clear_poly_queues_fn c

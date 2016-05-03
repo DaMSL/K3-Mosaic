@@ -885,21 +885,6 @@ let stmt_arg = ["stmt", t_int]
 (* {ip} *)
 let send_trig_args_bitmap = create_ds "send_trig_args_bitmap" t_bitset
 
-let clear_send_trig_args_map_nm = "clear_send_trig_args_map"
-let clear_send_trig_args_map =
-  mk_global_fn clear_send_trig_args_map_nm [] [] @@
-  mk_block [
-    mk_iter_bitmap'
-      (mk_update_at_with send_trig_args_map.id (mk_var "ip") @@
-        mk_lambda' send_trig_args_map.e @@
-          mk_block [
-            mk_clear_all send_trig_args_inner.id;
-            mk_var send_trig_args_inner.id
-          ])
-      send_trig_args_bitmap.id;
-    mk_clear_all send_trig_args_bitmap.id;
-  ]
-
 (* u is for unique *)
 let p_idx  = ["idx", t_int]
 let up_idx = ["uidx", t_int]
@@ -943,6 +928,8 @@ let max_event_queue_csize c =
   let max = list_max_op U.csize_of_type @@
     List.map (wrap_ttuple |- snd |- snd) c.event_tags in
   max
+
+(*** Tags ***)
 
 (* we create tags for events, with the full width of said events plus insert/delete field *)
 let calc_event_tags c =
@@ -1098,24 +1085,6 @@ let map_latest_vid_vals ?(vid_nm="vid") c slice_col m_pat map_id ~keep_vid : exp
 
 (* End of frontier function code *)
 
-(* --- Useful functions --- *)
-
-let mk_send_all ?(reg_addr=false) ds trig payload =
-  let send_fn = if reg_addr then mk_send else mk_sendi in
-  mk_iter (mk_lambda' (ds_e ds) @@
-      send_fn trig (mk_var "addr") payload) @@
-    mk_var ds.id
-
-let mk_send_all_nodes trig payload = mk_send_all nodes trig payload
-let mk_send_all_switches trig payload = mk_send_all switches trig payload
-let mk_send_all_peers trig payload = mk_send_all ~reg_addr:true my_peers trig payload
-
-let mk_send_master ?(payload=[mk_cunit]) trig =
-  mk_send trig (mk_var master_addr.id) payload
-
-let mk_send_me ?(payload=[mk_cunit]) trig =
-  mk_send trig G.me_var payload
-
 (* counter for ip *)
 let ip = create_ds "ip" (mut t_int)
 let ip2 = create_ds "ip2" (mut t_int)
@@ -1123,8 +1092,6 @@ let ip2 = create_ds "ip2" (mut t_int)
 (* counter for stmt *)
 let stmt_ctr = create_ds "stmt_ctr" @@ mut t_int
 let map_ctr = create_ds "map_ctr" @@ mut t_int
-
-(**** End of code ****)
 
 (* forward declaration to prevent circular inclusion *)
 let sys_init_bindings = ref (fun (p:P.prog_data_t) (ast:program_t) -> assert false)
@@ -1516,8 +1483,7 @@ let do_warmup = create_ds "do_warmup" @@ t_bool
 let functions c =
   [is_isobatch_fn;
    move_isobatch_stmt_helper;
-   clear_isobatch_stmt_helper;
-   clear_send_trig_args_map ]
+   clear_isobatch_stmt_helper ]
 
 let global_vars c dict =
   (* replace default inits with ones from ast *)

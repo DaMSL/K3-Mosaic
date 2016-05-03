@@ -44,12 +44,12 @@ let sw_rcv_init =
     mk_apply' "switchInit" [];
     mk_apply' "switchStart" [];
     (* ack to master *)
-    D.mk_send_master ms_rcv_sw_init_ack_nm;
+    C.mk_send_master ms_rcv_sw_init_ack_nm;
   ]
 
 let ms_sys_init_barrier_cnt = mk_counter "ms_sys_init_barrier_cnt"
 
-let ms_tell_sw_to_init = D.mk_send_all_switches sw_rcv_init_nm [mk_cunit]
+let ms_tell_sw_to_init = C.mk_send_all_switches sw_rcv_init_nm [mk_cunit]
 
 (* master: barrier for system_ready_event. *)
 let ms_sys_init_barrier_nm = "ms_"^D.sys_init^"_barrier"
@@ -68,7 +68,7 @@ let nd_sys_init_check_barrier =
       mk_eq (mk_var D.nd_stmt_cntr_size.id) @@ mk_cint 0)
     (mk_block [
       (* send and update flag *)
-      D.mk_send_master ms_sys_init_barrier_nm;
+      C.mk_send_master ms_sys_init_barrier_nm;
       mk_assign nd_sys_init_barrier_req.id mk_cfalse])
     mk_cunit
 
@@ -106,7 +106,7 @@ let sw_sys_init c =
       C.send_poly_queues;
 
       (* send notifications *)
-      D.mk_send_all_nodes nd_sys_init_barrier_nm [mk_cunit]
+      C.mk_send_all_nodes nd_sys_init_barrier_nm [mk_cunit]
     ]
 
 let ms_post_warmup_nm = "ms_post_warmup"
@@ -124,7 +124,7 @@ let ms_post_warmup_barrier_nm = "ms_post_warmup_barrier"
 let ms_post_warmup_barrier c =
   mk_barrier ms_post_warmup_barrier_nm ~ctr:ms_post_warmup_barrier_cnt.id
     ~total:(mk_cint @@ List.length @@ P.get_maps_with_keys c.p)
-    ~after:(mk_send_me ms_post_warmup_nm)
+    ~after:(C.mk_send_me ms_post_warmup_nm)
 
 (* warmup consists of reading from the files *)
 let sw_warmup_nm = "sw_warmup"
@@ -136,7 +136,7 @@ let ms_rcv_jobs_ack c =
     ~total:(mk_var D.num_peers.id)
     ~after:(mk_if (mk_var D.do_warmup.id)
              (mk_send sw_warmup_nm (mk_var TS.sw_next_switch_addr.id) []) @@
-              mk_send_me ms_post_warmup_nm)
+              C.mk_send_me ms_post_warmup_nm)
 
 (* receive jobs, and calculate all dependent variables *)
 let rcv_jobs_nm = "rcv_jobs"
@@ -177,7 +177,7 @@ let rcv_jobs c =
     (* reserve space in all the polyqueues *)
     C.reserve_poly_queue_code ~all:true c;
     (* ack the msg *)
-    D.mk_send_master ms_rcv_jobs_ack_nm;
+    C.mk_send_master ms_rcv_jobs_ack_nm;
   ]
 
 (* receive the role from everybody *)
@@ -188,7 +188,7 @@ let ms_rcv_job =
     (* insert into jobs *)
     ~pre:[mk_insert_at D.jobs.id (mk_var "addr") [mk_var "job"]]
     ~ctr:ms_rcv_job_cnt.id ~total:(mk_var D.num_peers.id)
-    ~after:(D.mk_send_all_peers rcv_jobs_nm [mk_var D.jobs.id])
+    ~after:(C.mk_send_all_peers rcv_jobs_nm [mk_var D.jobs.id])
 
 (* rcv the master's address and send him our role *)
 let rcv_master_addr_nm = "rcv_master_addr"
@@ -207,7 +207,7 @@ let rcv_master_addr =
 let ms_send_addr_self_nm = "ms_send_addr_self"
 let ms_send_addr_self =
   mk_code_sink' ms_send_addr_self_nm unit_arg [] @@
-    D.mk_send_all_peers rcv_master_addr_nm [G.me_var]
+    C.mk_send_all_peers rcv_master_addr_nm [G.me_var]
 
 
 (**** shutdown protocol ****)
@@ -250,7 +250,7 @@ let ms_shutdown_nm = "ms_shutdown"
 let ms_shutdown =
   mk_code_sink' ms_shutdown_nm unit_arg [] @@
     (* notify everyone to shut down *)
-    D.mk_send_all_peers shutdown_trig_nm [mk_cunit]
+    C.mk_send_all_peers shutdown_trig_nm [mk_cunit]
 
 (* master: receive notification that nodes are done with their work (stmt_cntrs empty) *)
 let ms_rcv_node_done_nm = "ms_rcv_node_done"
@@ -265,7 +265,7 @@ let ms_rcv_node_done =
              mk_soi @@
                mk_sub (mk_var D.ms_end_time.id) @@ mk_var D.ms_start_time.id;
         (* send ourselves a message to shutdown *)
-        D.mk_send_me ms_shutdown_nm;
+        C.mk_send_me ms_shutdown_nm;
       ])
 
 (* node: bool indicating received system done request that needs to be handled.
@@ -285,7 +285,7 @@ let nd_done_check_barrier =
       mk_eq (mk_var D.nd_stmt_cntr_size.id) @@ mk_cint 0)
     (mk_block [
       (* notify master *)
-      D.mk_send_master ms_rcv_node_done_nm;
+      C.mk_send_master ms_rcv_node_done_nm;
       (* mark as done *)
       mk_assign nd_sys_done_req.id mk_cfalse]) @@
     mk_cunit
@@ -321,8 +321,8 @@ let ms_rcv_switch_done =
   mk_barrier ms_rcv_switch_done_nm ~ctr:ms_rcv_switch_done_cnt.id
     ~total:(mk_var D.num_switches.id)
     ~after:(mk_block [
-              D.mk_send_all_switches sw_rcv_done_nm [];
-              D.mk_send_all_nodes nd_rcv_done_nm []
+              C.mk_send_all_switches sw_rcv_done_nm [];
+              C.mk_send_all_nodes nd_rcv_done_nm []
             ])
 
 (* check that the switch is done with its work *)
@@ -338,7 +338,7 @@ let sw_check_done ~check_size =
            mk_var D.sw_seen_sentinel.id)
     (mk_block [
       (* send *)
-      D.mk_send_master ms_rcv_switch_done_nm;
+      C.mk_send_master ms_rcv_switch_done_nm;
       (* mark as sent *)
       mk_assign sw_sent_done.id mk_ctrue])
     mk_cunit

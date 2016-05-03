@@ -18,6 +18,19 @@ open GenPush
 open GenCommon
 open GenCorrective
 
+(* receive isobatch stmt list -- targeted by tag from a dispatcher *)
+(* we buffer the vid/stmts in the helper ds *)
+let nd_rcv_stmt_isobatch =
+  mk_global_fn nd_rcv_stmt_isobatch_nm ["stmt_id", t_stmt_id; "vid", t_vid] [] @@
+  mk_block [
+      mk_assign isobatch_stmt_helper_has_content.id mk_ctrue;
+      mk_insert isobatch_stmt_helper_bitmap_id [mk_var "stmt_id"];
+      mk_update_at_with isobatch_stmt_helper_id (mk_var "stmt_id") @@
+        mk_lambda' isobatch_stmt_helper_e @@
+          mk_insert_block "inner2" [mk_var "vid"]
+  ]
+
+
 (* Receive Put trigger
  * --------------------------------------- *
  * Update the statement counters with the received values
