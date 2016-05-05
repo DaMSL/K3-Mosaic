@@ -166,8 +166,7 @@ let stmt_idx_in_t p trig stmt =
 let block_nth exp i = match U.tag_of_expr exp with
   | Block        -> begin
           try List.nth (U.decompose_block exp) i
-          with Failure "nth" -> raise (InvalidAst("block_nth: Block has no "^
-                                string_of_int i^"th member")) end
+          with Failure _ -> raise (InvalidAst(sp "block_nth: Block has no %dth member" i)) end
   | _ when i = 0 -> exp
   | _            -> raise (InvalidAst("block_nth: Not a block"))
 

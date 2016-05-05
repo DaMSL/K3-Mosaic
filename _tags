@@ -15,3 +15,4 @@ true: use_unix
 true: use_dynlink
 true: package(yojson)
 true: bin_annot
+true: warn(-3)

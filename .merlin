@@ -1,3 +1,4 @@
+FLG -w -3
 PKG yojson
 B bin
 B bin/src
