@@ -82,12 +82,6 @@ let nd_sys_init_barrier =
     nd_sys_init_check_barrier;
   ]
 
-(*let warmup_barrier_nm = "warmup_barrier"
-let warmup_barrier =
-  mk_code_sink' warmup_barrier_nm unit_arg [] @@
-  *)
-
-
 (* switch: system ready event handling.
  * before the queues turn on, bypass them and send the fetch for sys_read_evt
  * from only the first switch.
@@ -287,7 +281,7 @@ let nd_done_check_barrier =
       (* notify master *)
       C.mk_send_master ms_rcv_node_done_nm;
       (* mark as done *)
-      mk_assign nd_sys_done_req.id mk_cfalse]) @@
+      mk_assign nd_sys_done_req.id mk_cfalse])
     mk_cunit
 
 let nd_rcv_done_nm = "nd_rcv_done"
