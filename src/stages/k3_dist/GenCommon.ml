@@ -440,6 +440,20 @@ let mk_send_master ?(payload=[mk_cunit]) trig =
 let mk_send_me ?(payload=[mk_cunit]) trig =
   mk_send trig G.me_var payload
 
+(* vids have a lower bit = 0, isobatch ids have 1 *)
+let is_isobatch_nm = "is_isobatch_id"
+let is_isobatch_fn =
+  mk_global_fn is_isobatch_nm ["vid", t_vid] [t_bool] @@
+    mk_neq (mk_var "vid") @@ (mk_mult (mk_divi (mk_var "vid") @@ mk_cint 2) @@ mk_cint 2)
 
-let functions c =
-  [ clear_poly_queues_fn c ]
+let is_isobatch_id id = mk_apply' is_isobatch_nm [mk_var id]
+let is_single_vid id  = mk_not @@ mk_apply' is_isobatch_nm [mk_var id]
+
+let next_vid vid = mk_mult (mk_add (mk_divi vid @@ mk_cint 2) @@ mk_cint 1) @@ mk_cint 2
+let next_isobatch_id vid = mk_add (mk_cint 1) @@ mk_mult (mk_add (mk_divi vid @@ mk_cint 2) @@ mk_cint 1) @@ mk_cint 2
+let to_isobatch vid = mk_add (mk_mult (mk_divi vid @@ mk_cint 2) @@ mk_cint 2) @@ mk_cint 1
+
+let functions c = [
+  clear_poly_queues_fn c;
+  is_isobatch_fn
+]

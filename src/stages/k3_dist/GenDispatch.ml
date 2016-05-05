@@ -263,6 +263,18 @@ let trig_dispatcher_trig_unique c =
    so we avoid having too many correctives. *)
 let nd_dispatcher_next_num = create_ds "nd_dispatcher_next_num" @@ mut t_int
 
+let clear_isobatch_stmt_helper_nm = "clear_isobatch_stmt_helper"
+let clear_isobatch_stmt_helper =
+  mk_global_fn clear_isobatch_stmt_helper_nm [] [] @@
+    mk_block [
+      (* replace, clear out the isobatch_map_helper *)
+      mk_iter_bitmap' ~idx:stmt_ctr.id
+        (mk_insert_at isobatch_stmt_helper_id (mk_var stmt_ctr.id) [mk_empty isobatch_map_inner2.t])
+        isobatch_stmt_helper_bitmap_id;
+      mk_clear_all isobatch_stmt_helper_bitmap_id;
+      mk_assign isobatch_stmt_helper_has_content.id mk_cfalse;
+      ]
+
 let nd_from_sw_trig_dispatcher_trig c =
   mk_code_sink' nd_from_sw_trig_dispatcher_trig_nm
     ["num", t_int; "batch_data", nd_dispatcher_buf_inner.t] [] @@
@@ -716,6 +728,7 @@ let sw_demux_poly c =
     ]
 
 let functions = [
-  clear_send_trig_args_map
+  clear_send_trig_args_map;
+  clear_isobatch_stmt_helper
 ]
 

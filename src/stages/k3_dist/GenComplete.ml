@@ -73,7 +73,7 @@ let nd_rcv_put_isobatch_trig c t s =
           (* move stmt helper content to main ds first if needed
               (if the pushes arrived first) *)
           mk_if (mk_var isobatch_stmt_helper_has_content.id)
-            (mk_apply' move_isobatch_stmt_helper_nm [mk_var "batch_id"])
+            (mk_apply' D.move_isobatch_stmt_helper_nm [mk_var "batch_id"])
             mk_cunit;
 
           mk_at_with' isobatch_vid_map_id (mk_cint s) @@

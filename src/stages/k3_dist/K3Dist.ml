@@ -1086,12 +1086,12 @@ let map_latest_vid_vals ?(vid_nm="vid") c slice_col m_pat map_id ~keep_vid : exp
 (* End of frontier function code *)
 
 (* counter for ip *)
-let ip = create_ds "ip" (mut t_int)
-let ip2 = create_ds "ip2" (mut t_int)
+let ip = create_ds "ip" t_int_mut
+let ip2 = create_ds "ip2" t_int_mut
 
 (* counter for stmt *)
-let stmt_ctr = create_ds "stmt_ctr" @@ mut t_int
-let map_ctr = create_ds "map_ctr" @@ mut t_int
+let stmt_ctr = create_ds "stmt_ctr" t_int_mut
+let map_ctr = create_ds "map_ctr" t_int_mut
 
 (* forward declaration to prevent circular inclusion *)
 let sys_init_bindings = ref (fun (p:P.prog_data_t) (ast:program_t) -> assert false)
@@ -1211,8 +1211,7 @@ let is_opt_route_stmt c s =
     P.is_opt_route_stmt ~info c.p s
   else false
 
-let opt_route_stmts c =
-  List.filter (is_opt_route_stmt c) @@ P.get_stmt_list c.p
+let opt_route_stmts c = List.filter (is_opt_route_stmt c) @@ P.get_stmt_list c.p
 
 (* check if a particular stmt/map combo can have optimized routing *)
 let is_opt_route_stmt_map c s m =
@@ -1258,23 +1257,12 @@ let isobatch_stmt_helper c =
     List.map (const @@ mk_cint 0) @@ P.get_stmt_list c.p in
   create_ds ~init ~e isobatch_stmt_helper_id @@ wrap_tvector @@ t_of_e e
 
-let clear_isobatch_stmt_helper_nm = "clear_isobatch_stmt_helper"
-let clear_isobatch_stmt_helper =
-  mk_global_fn clear_isobatch_stmt_helper_nm [] [] @@
-    mk_block [
-      (* replace, clear out the isobatch_map_helper *)
-      mk_iter_bitmap' ~idx:stmt_ctr.id
-        (mk_insert_at isobatch_stmt_helper_id (mk_var stmt_ctr.id) [mk_empty isobatch_map_inner2.t])
-        isobatch_stmt_helper_bitmap_id;
-      mk_clear_all isobatch_stmt_helper_bitmap_id;
-      mk_assign isobatch_stmt_helper_has_content.id mk_cfalse;
-      ]
-
 (* batch_id -> vids *)
 let isobatch_map_inner =
   let e = ["batch_id", t_vid; isobatch_map_inner2.id, isobatch_map_inner2.t] in
   create_ds ~e "inner" @@ wrap_tmap @@ t_of_e e
 
+(* Keep track of the vids in an isobatch *)
 (* stmt -> batch_id -> [vids] *)
 let isobatch_vid_map_id = "isobatch_vid_map"
 let isobatch_vid_map_e = [isobatch_map_inner.id, isobatch_map_inner.t]
@@ -1301,7 +1289,7 @@ let move_isobatch_stmt_helper =
     mk_assign isobatch_stmt_helper_has_content.id mk_cfalse;
   ]
 
-(* singleton vector for creating isobatch_vid_map easily *)
+(* singleton vector for creating isobatch_buffered_fetch quickly *)
 (* stmt_map_id -> [vids] *)
 let isobatch_buffered_fetch_helper_id = "isobatch_buffered_fetch_helper"
 let isobatch_buffered_fetch_helper_e = [isobatch_map_inner2.id, isobatch_map_inner2.t]
@@ -1312,8 +1300,8 @@ let isobatch_buffered_fetch_helper c =
     List.map mk_cint @@ fst_many @@ P.stmt_map_ids c.p in
   create_ds ~init ~e isobatch_buffered_fetch_helper_id @@ wrap_tvector @@ t_of_e e
 
+(* for saving the vids of buffered fetches *)
 (* stmt_map_id -> batch -> [vids] *)
-(* for saving info about buffered fetches *)
 let isobatch_buffered_fetch_vid_map_id = "isobatch_buffered_fetch_vid_map"
 let isobatch_buffered_fetch_vid_map_e = isobatch_vid_map_e
 let isobatch_buffered_fetch_vid_map c =
@@ -1324,23 +1312,10 @@ let isobatch_buffered_fetch_vid_map c =
     List.map mk_cint @@ fst_many @@ P.stmt_map_ids c.p in
   create_ds ~init ~e isobatch_buffered_fetch_vid_map_id @@ wrap_tvector @@ t_of_e e
 
-(* vids have a lower bit = 0, isobatch ids have 1 *)
-let is_isobatch_nm = "is_isobatch_id"
-let is_isobatch_fn =
-  mk_global_fn is_isobatch_nm ["vid", t_vid] [t_bool] @@
-    mk_neq (mk_var "vid") @@ (mk_mult (mk_divi (mk_var "vid") @@ mk_cint 2) @@ mk_cint 2)
-
-let is_isobatch_id id = mk_apply' is_isobatch_nm [mk_var id]
-let is_single_vid id  = mk_not @@ mk_apply' is_isobatch_nm [mk_var id]
-
 (* whether we do isobatches *)
 let isobatch_mode = create_ds ~init:(mk_ctrue) "isobatch_mode" @@ t_bool
 
 let isobatch_threshold = create_ds ~init:(mk_cint 4) "isobatch_threshold" @@ t_int
-
-let next_vid vid = mk_mult (mk_add (mk_divi vid @@ mk_cint 2) @@ mk_cint 1) @@ mk_cint 2
-let next_isobatch_id vid = mk_add (mk_cint 1) @@ mk_mult (mk_add (mk_divi vid @@ mk_cint 2) @@ mk_cint 1) @@ mk_cint 2
-let to_isobatch vid = mk_add (mk_mult (mk_divi vid @@ mk_cint 2) @@ mk_cint 2) @@ mk_cint 1
 
 (* tags for profiling and post-analysis *)
 let do_profiling = create_ds ~init:mk_cfalse "do_profiling" @@ mut t_bool
@@ -1481,9 +1456,7 @@ let sw_csv_index = create_ds "sw_csv_index" @@ t_int
 let do_warmup = create_ds "do_warmup" @@ t_bool
 
 let functions c =
-  [is_isobatch_fn;
-   move_isobatch_stmt_helper;
-   clear_isobatch_stmt_helper ]
+  [ move_isobatch_stmt_helper; ]
 
 let global_vars c dict =
   (* replace default inits with ones from ast *)

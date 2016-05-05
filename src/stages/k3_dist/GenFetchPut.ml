@@ -407,7 +407,7 @@ let sw_send_fetches_isobatch c t =
     ["batch_id", t_vid; "poly_queue", poly_queue.t]
     [t_vid]
   @@
-  mk_let ["first_vid"] (next_vid @@ mk_var "batch_id") @@
+  mk_let ["first_vid"] (C.next_vid @@ mk_var "batch_id") @@
   mk_block @@ List.flatten (List.map (fun s ->
     let has_rhs = P.rhs_maps_of_stmt c.p s <> [] in
     (if has_rhs then [mk_apply' clear_send_put_isobatch_map_nm []] else []) @
@@ -430,7 +430,7 @@ let sw_send_fetches_isobatch c t =
                         mk_apply' (sw_send_rhs_completes_nm t s) call_args
                       ]
                   ;
-              next_vid (mk_var "vid")
+              C.next_vid (mk_var "vid")
             ])
           (mk_var "first_vid") @@
           mk_var "poly_queue") @@
