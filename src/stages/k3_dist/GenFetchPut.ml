@@ -17,6 +17,8 @@ module K3N = K3NewPrint
 (*** Switch -> Node ***)
 (*** Puts, Fetches, Do_completes ***)
 
+let debug_run_test_tuples = debug_run_test_var debug_run_sw_send_tuples
+
 (* normal put data structure *)
 let send_put_ip_map_id = "send_put_ip_map"
 let send_put_ip_map_e = ["count", t_int]
@@ -134,7 +136,8 @@ let sw_send_puts_single_vid c t s =
                   prof_property D.prof_tag_send_put
                     @@ ProfSendPut("vid", "stmt_id", "ip", "count");
                   (* send rcv_put header *)
-                  C.buffer_for_send rcv_put_nm "ip" [mk_var "count"];
+                  debug_run_test_tuples @@
+                    C.buffer_for_send rcv_put_nm "ip" [mk_var "count"];
                 ])
          send_put_bitmap.id
       ]
@@ -225,7 +228,8 @@ let sw_send_puts_isobatch c t s =
                 (mk_is_member' sw_send_stmt_bitmap.id @@ mk_var ip_dest)
                   mk_cunit @@
                   mk_block [
-                    C.buffer_for_send (rcv_stmt_isobatch_name_of_t t s) ip_dest [];
+                    debug_run_test_tuples @@
+                      C.buffer_for_send (rcv_stmt_isobatch_name_of_t t s) ip_dest [];
                     (* mark this ip *)
                     mk_insert sw_send_stmt_bitmap.id [mk_var ip_dest];
                   ]
@@ -303,7 +307,7 @@ let sw_send_rhs_fetches c t s =
      know when to send the send_fetch header, and that comes from the bitmap *)
     let rmaps = P.rhs_maps_of_stmt c.p s in
     let t_args = args_of_t_as_vars_with_v c t in
-    let sre = t = D.sys_init in
+    let is_sys_init = t = D.sys_init in
 
     mk_global_fn (sw_send_rhs_fetches_nm t s) (["is_isobatch", t_bool]@args_of_t_with_v c t) [] @@
     if null rmaps then mk_cunit else
@@ -333,7 +337,7 @@ let sw_send_rhs_fetches c t s =
                     (* buffer the trig args if needed *)
                     C.buffer_trig_header_if_needed (mk_var "vid") t "ip" t_args] @
                     (* in case we have system_ready, we'll always keep single_vid. Otherwise, we can disable it *)
-                    (if sre then
+                    (if is_sys_init then
                         [C.buffer_for_send (rcv_fetch_single_vid_name_of_t t s) "ip" []]
                       else
                         let test_isobatch e =
@@ -343,13 +347,14 @@ let sw_send_rhs_fetches c t s =
                               e @@
                               C.buffer_for_send (rcv_fetch_single_vid_name_of_t t s) "ip" []
                         in
-                        [test_isobatch @@
+                        [debug_run_test_tuples @@ test_isobatch @@
                            C.buffer_for_send (rcv_fetch_isobatch_name_of_t t s) "ip" []]
                     )
                   )
                   mk_cunit;
                 (* buffer the map id *)
-                C.buffer_for_send ~wr_bitmap:false stag "ip" []
+                debug_run_test_tuples @@
+                  C.buffer_for_send ~wr_bitmap:false stag "ip" []
             ])
             R.route_bitmap.id)
         rmap_tags)
@@ -372,7 +377,7 @@ let sw_send_rhs_completes c t s =
           mk_ignore @@ mk_iter_bitmap'
               (mk_block [
                 C.buffer_trig_header_if_needed (mk_var "vid") t "ip" t_args;
-                C.buffer_for_send do_complete_t "ip" []
+                debug_run_test_tuples @@ C.buffer_for_send do_complete_t "ip" []
               ])
             K3Route.route_bitmap.id
       ]
@@ -454,7 +459,8 @@ let sw_send_fetches_isobatch c t =
          mk_block [
            prof_property D.prof_tag_send_put
              @@ ProfSendPut("batch_id", soi s, "ip", "count");
-           C.buffer_for_send (rcv_put_isobatch_name_of_t t s) "ip" [mk_var "count"]
+           debug_run_test_tuples @@
+             C.buffer_for_send (rcv_put_isobatch_name_of_t t s) "ip" [mk_var "count"]
          ])
         send_put_bitmap.id)
   ) ss) @

@@ -316,7 +316,7 @@ let nd_rcv_fetch_isobatch_trig c t s =
                   (* we need to make a decision regarding this map *)
                   mk_let_block ["do_buffer"]
                     (* check if the minimum entry in the per_map_stmt_cntrs has a > vid
-                      * we *CAN'T* read at the same vid since that's an inner batch conflict *)
+                     * we *CAN'T* read at the same vid since that's an inner batch conflict *)
                     (mk_gt (mk_var "batch_id") @@
                       mk_at_with' D.nd_stmt_cntrs_per_map_id (mk_var "map_id") @@
                         mk_lambda' nd_stmt_cntrs_per_map_e @@
