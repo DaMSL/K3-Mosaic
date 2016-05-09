@@ -303,8 +303,9 @@ let nd_from_sw_trig_dispatcher_trig c =
             (mk_apply' clear_isobatch_stmt_helper_nm [])
             mk_cunit;
 
-          (* debug_run: disable handling if requested. No processing *)
-          debug_run_test_var debug_run_sw_send_all @@
+          (* debug_run: disable handling if requested. *)
+          debug_run_test_var debug_run_sw_send_all
+            ~default:send_poly_queues @@
             mk_apply' trig_dispatcher_nm [mk_var "batch_id"; mk_var "poly_queue"];
 
           (* check if we need to move stuff from the isobatch stmt helper *)

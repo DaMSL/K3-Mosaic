@@ -20,62 +20,65 @@ def check_exists(name, path):
 def run():
     parser = argparse.ArgumentParser()
     parser.add_argument('-p', '--path', action='store', dest='test_path',
-                        default=None, help="Do all tests in a given directory")
+            default=None, help="Do all tests in a given directory")
     parser.add_argument('-f', '--file', action='append', dest='test_name',
-                        help="Run a specific test file")
+            help="Run a specific test file")
     parser.add_argument('-l', '--list', action='store', dest='test_list_name',
-                        default=None, help="Execute tests from a list file")
+            default=None, help="Execute tests from a list file")
     parser.add_argument('-d', '--dist', action='store_true', dest='distributed',
-                        default=False, help="Distributed test")
+            default=False, help="Distributed test")
     parser.add_argument('-n', '--nodes', action='store', type=int, dest='num_nodes',
-                        default=1, help="Number of data nodes")
+            default=1, help="Number of data nodes")
     parser.add_argument('-s', '--switches', action='store', type=int, dest='num_switches',
-                        default=1, help="Number of switch nodes")
+            default=1, help="Number of switch nodes")
     parser.add_argument('-o', '--order', action='store', dest='order_file',
-                        default=None, help="Use an order file instead of creating a trace")
+            default=None, help="Use an order file instead of creating a trace")
     parser.add_argument('-v', '--verbose', action='store_true', dest='verbose',
-                        default=False, help="See test results in detail")
+            default=False, help="See test results in detail")
     parser.add_argument('-m', '--map', action='store', dest='map_type',
-                        default='set', help="Use vmap/multi maps")
+            default='set', help="Use vmap/multi maps")
     parser.add_argument('--no-new', action='store_false', dest='new_k3',
-                        default=True, help="Create k3new file")
+            default=True, help="Create k3new file")
     parser.add_argument('--no-interp', action='store_false', dest='run_interp',
-                        default=True, help="Run the interpreter")
+            default=True, help="Run the interpreter")
     parser.add_argument('--workdir', action='store', type=str, dest='workdir',
-                        default="temp", help="Directory to store work files")
+            default="temp", help="Directory to store work files")
     parser.add_argument('--gc-interval', action='store',
-                        default=20000, type=int, help="Change gc interval (ms)")
+            default=20000, type=int, help="Change gc interval (ms)")
     parser.add_argument('--msg-interval', action='store',
-                        default=2, type=int, help="Change message interval (ms)")
+            default=2, type=int, help="Change message interval (ms)")
     parser.add_argument('--no-log', action='store_false', dest='logging',
-                        default=True, help="Disable logging")
+            default=True, help="Disable logging")
     parser.add_argument('--no-multiidx', action='store_false', dest='multiidx',
-                        default=True, help="Disable multi-index maps")
+            default=True, help="Disable multi-index maps")
     parser.add_argument('--filemux', action='store_true', dest='filemux',
-                        default=False, help="Enable filemux newprint")
+            default=False, help="Enable filemux newprint")
     parser.add_argument('--gen-intmap', action='store_true', dest='gen_intmap',
-                        default=False, help="Enable intmap-based newprint")
+            default=False, help="Enable intmap-based newprint")
     parser.add_argument('--safe-writes', action='store_true', dest='safe_writes',
-                        default=False, help="Enable safe array writes")
+            default=False, help="Enable safe array writes")
     parser.add_argument('--overlap-factor', dest='map_overlap_factor',
-                        default=None, help="Reduce layout of maps on nodes")
+            default=None, help="Reduce layout of maps on nodes")
     parser.add_argument('--batch-size', dest='batch_size',
-                        default=None, help="Size of batches")
+            default=None, help="Size of batches")
     parser.add_argument('--debug', default=False, action='store_true', help="Debug output")
     parser.add_argument('--no-opt-route', default=True, action='store_false', dest='opt_route', help='disable optimized routing')
     parser.add_argument('--dump-info', default=False, action='store_true', help="Output for route generation")
-    parser.add_argument('--print-warmup', dest='print_warmup', default=False, action='store_true', help="Print the warmup program")
+    parser.add_argument('--print-warmup', dest='print_warmup', default=False, action='store_true',
+            help="Print the warmup program")
     parser.add_argument('--trace', default=False, dest='do_trace', action='store_true', help="Tracing")
     parser.add_argument('--no-gen-deletes', action='store_false', dest='gen_deletes',
-                        default=True, help="Don't generate delete triggers")
+            default=True, help="Don't generate delete triggers")
     parser.add_argument('--no-gen-correctives', action='store_false', dest='gen_correctives',
-                        default=True, help="Don't generate correctives")
+            default=True, help="Don't generate correctives")
     parser.add_argument('--no-gen-single-vid', action='store_false', dest='gen_single_vid',
-                        default=True, help="Don't generate non-isobatch mode")
+            default=True, help="Don't generate non-isobatch mode")
     parser.add_argument('--run-correctives', action='store_true', dest='run_correctives',
-                        default=False, help="Run with correctives")
+            default=False, help="Run with correctives")
     parser.add_argument('--no-run-isobatch', action='store_false', dest='run_isobatch',
-                        default=True, help="Don't run in isobatch mode")
+            default=True, help="Don't run in isobatch mode")
+    parser.add_argument('--debug-run', type=str, dest='debug_run',
+            default=None, help="cause a limited run: sw/sw-tuples")
     args = parser.parse_args()
 
     test_list = []
@@ -142,7 +145,8 @@ def run():
                                 opt_route=args.opt_route,
                                 do_trace=args.do_trace,
                                 dump_info=args.dump_info,
-                                print_warmup=args.print_warmup
+                                print_warmup=args.print_warmup,
+                                debug_run=args.debug_run
                                 )
         # check if a test failed
         if not res:

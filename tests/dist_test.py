@@ -50,7 +50,8 @@ def run(target_file,
         opt_route=True,
         do_trace=False,
         dump_info=False,
-        print_warmup=False
+        print_warmup=False,
+        debug_run=None
         ):
 
     to_root = ".."
@@ -240,6 +241,11 @@ def run(target_file,
             j["isobatch_mode"] = run_isobatch
             if do_trace:
                 j["do_tracing"] = True
+            if debug_run is not None:
+                if debug_run == "sw":
+                    j["debug_run"] = 2
+                elif debug_run == "sw-tuples":
+                    j["debug_run"] = 1
             # set csv indices
             for i in range(num_switches):
                 node_j = {}

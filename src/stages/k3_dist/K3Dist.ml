@@ -1452,14 +1452,14 @@ let do_trace nm l expr =
 
 (* debugging: only run protocol to some stage *)
 let debug_run_sw_send_tuples = create_ds "debug_run_sw_send_tuples" t_int ~init:(mk_cint 1)
-let debug_run_sw_send_all   = create_ds "debug_run_sw_send_all" t_int ~init:(mk_cint 2)
-let debug_run_normal        = create_ds "debug_run_normal" t_int ~init:(mk_cint 255)
+let debug_run_sw_send_all = create_ds "debug_run_sw_send_all" t_int ~init:(mk_cint 2)
+let debug_run_normal = create_ds "debug_run_normal" t_int ~init:(mk_cint 255)
 let debug_run = create_ds "debug_run" t_int ~init:(mk_var debug_run_normal.id)
 
 (* debug_run: check if we only want certain message types *)
-let debug_run_test_var var e =
+let debug_run_test_var ?(default=mk_cunit) var e  =
   mk_if (mk_leq (mk_var debug_run.id) @@ mk_var var.id)
-    mk_cunit
+    default
     e
 
 (* index used to handle multiple switches for csv source *)

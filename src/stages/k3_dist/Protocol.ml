@@ -316,7 +316,11 @@ let ms_rcv_switch_done =
     ~total:(mk_var D.num_switches.id)
     ~after:(mk_block [
               C.mk_send_all_switches sw_rcv_done_nm [];
-              C.mk_send_all_nodes nd_rcv_done_nm []
+              (* if we're in debug_run, directly send done to master *)
+              debug_run_test_var
+                ~default:(C.mk_send_master ms_rcv_node_done_nm)
+                debug_run_sw_send_all @@
+                C.mk_send_all_nodes nd_rcv_done_nm []
             ])
 
 (* check that the switch is done with its work *)
