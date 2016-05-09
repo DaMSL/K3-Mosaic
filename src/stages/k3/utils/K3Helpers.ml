@@ -944,7 +944,7 @@ let mk_counter nm = create_ds nm (mut t_int) ~init:(mk_cint 0)
 
 let mk_bool_ds ?(init=mk_cfalse) nm = create_ds nm (mut t_bool) ~init
 
-let mk_barrier ?(args=unit_arg) ?(pre=[]) ?(reusable=false) nm ~ctr ~total ~after =
+let mk_barrier ?(args=[]) ?(pre=[]) ?(reusable=false) nm ~ctr ~total ~after =
   mk_code_sink' nm args [] @@
     mk_block @@ pre @ [
       mk_incr ctr;

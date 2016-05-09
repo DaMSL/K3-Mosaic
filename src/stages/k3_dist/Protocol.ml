@@ -249,8 +249,14 @@ let ms_shutdown =
 (* master: receive notification that nodes are done with their work (stmt_cntrs empty) *)
 let ms_rcv_node_done_nm = "ms_rcv_node_done"
 let ms_rcv_node_done =
+  let ctr = ms_rcv_node_done_cnt.id in
+  let total = mk_var D.num_nodes.id in
   mk_barrier ms_rcv_node_done_nm
-    ~ctr:ms_rcv_node_done_cnt.id ~total:(mk_var D.num_nodes.id) ~after:
+    ~ctr ~total
+    ~args:["bypass", t_bool]
+    (* put total-1 in ctr, which will be incremented by 1 *)
+    ~pre:[mk_if (mk_var "bypass") (mk_assign ctr (mk_sub total @@ mk_cint 1)) mk_cunit]
+    ~after:
       (mk_block [
         (* update end time *)
         mk_assign D.ms_end_time.id @@ mk_apply' "now_int" [mk_cunit];
@@ -279,7 +285,7 @@ let nd_done_check_barrier =
       mk_eq (mk_var D.nd_stmt_cntr_size.id) @@ mk_cint 0)
     (mk_block [
       (* notify master *)
-      C.mk_send_master ms_rcv_node_done_nm;
+      C.mk_send_master ms_rcv_node_done_nm ~payload:[mk_cfalse];
       (* mark as done *)
       mk_assign nd_sys_done_req.id mk_cfalse])
     mk_cunit
@@ -317,9 +323,9 @@ let ms_rcv_switch_done =
     ~after:(mk_block [
               C.mk_send_all_switches sw_rcv_done_nm [];
               (* if we're in debug_run, directly send done to master *)
-              debug_run_test_var
-                ~default:(C.mk_send_master ms_rcv_node_done_nm)
-                debug_run_sw_send_all @@
+              debug_run_test_var debug_run_sw_send_all
+                (* default: bypass counter *)
+                ~default:(C.mk_send_master ms_rcv_node_done_nm ~payload:[mk_ctrue]) @@
                 C.mk_send_all_nodes nd_rcv_done_nm []
             ])
 
