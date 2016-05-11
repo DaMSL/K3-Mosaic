@@ -1366,22 +1366,22 @@ let prof_property ?(cond_mod=id_fn) ?(flush=false) (tag:int) event =
       sp "MosaicPreEvent(lbl=[# mosaic], tl=[$ %d], ve=[$ %s], ce=[$ %s])" tag vid_nm t_s_id
 
     | ProfMsgCounts(vid_nm, num_empty, num_full) ->
-      sp "MosaicMsgCounts(lbl=[# mosaic], tl=[$ %d], ve=[$ %s], ce1=[$ %s], ce2=[$ %s])" tag vid_nm num_empty num_full
+      sp "MosaicMsgCounts(lbl=[# mosaic], tl=[$ %d], ve=[$ %s], ace=[$ %s], bce=[$ %s])" tag vid_nm num_empty num_full
 
     | ProfPushBarrier(vid_nm, t_s_id, barrier_count) ->
-      sp "MosaicPushBarrier(lbl=[# mosaic], tl=[$ %d], ve=[$ %s], ce1=[$ %s], ce2=[$ %s])" tag vid_nm t_s_id barrier_count
+      sp "MosaicPushBarrier(lbl=[# mosaic], tl=[$ %d], ve=[$ %s], ace=[$ %s], bce=[$ %s])" tag vid_nm t_s_id barrier_count
 
     | ProfFetchRoute(vid_nm, t_s_id, key, bucket, ip) ->
-      sp "MosaicFetchRoute(lbl=[# mosaic], tl=[$ %d], ve=[$ %s], ce1=[$ %s], ce2=[$ %s], ce3=[$ %s], ce4=[$ %s])" tag vid_nm t_s_id key bucket ip
+      sp "MosaicFetchRoute(lbl=[# mosaic], tl=[$ %d], ve=[$ %s], ace=[$ %s], bce=[$ %s], cce=[$ %s], dce=[$ %s])" tag vid_nm t_s_id key bucket ip
 
     | ProfSendPut(vid_nm, t_s_id, dest, barrier_count) ->
-      sp "MosaicSendPut(lbl=[# mosaic], tl=[$ %d], ve=[$ %s], ce1=[$ %s], ce2=[$ %s], ce3=[$ %s])" tag vid_nm t_s_id dest barrier_count
+      sp "MosaicSendPut(lbl=[# mosaic], tl=[$ %d], ve=[$ %s], ace=[$ %s], bce=[$ %s], cce=[$ %s])" tag vid_nm t_s_id dest barrier_count
 
     | ProfSendPoly(vid_nm, ip, poly) ->
-      sp "MosaicSendPoly(lbl=[# mosaic], ce1=[$ %s], ce2=[$ %s], ce3=[$ %s])" vid_nm ip poly
+      sp "MosaicSendPoly(lbl=[# mosaic], ace=[$ %s], bce=[$ %s], cce=[$ %s])" vid_nm ip poly
 
     | ProfSendUPoly(vid_nm, ip, poly, upoly) ->
-      sp "MosaicSendUPoly(lbl=[# mosaic], ce1=[$ %s], ce2=[$ %s], ce3=[$ %s], ce4=[$ %s])" vid_nm ip poly upoly
+      sp "MosaicSendUPoly(lbl=[# mosaic], ace=[$ %s], bce=[$ %s], cce=[$ %s], dce=[$ %s])" vid_nm ip poly upoly
   in
   let target_expr =
     if flush then
