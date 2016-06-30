@@ -124,30 +124,29 @@ module Make(Ord: OrderedType) = struct
           if c = 0 then d
           else find x (if c < 0 then l else r)
 
-    type comp = GT | GTEQ | LT | LTEQ
-
     (* find the one value just greater than/less than x *)
     let find_comp comp x m =
+      let comp_fn = match comp with
+        | `GT   -> ((>):int -> int -> bool)
+        | `GTEQ -> (>=)
+        | `LT   -> (<)
+        | `LTEQ -> (<=)
+      in
       let rec loop last m =
         match m, last with
         | Empty, None   -> raise Not_found
         | Empty, Some x -> x
         | Node(l, v, d, r, _), _ ->
-            let op, s, t = match comp with
-              | GT   -> ((>):int -> int -> bool),  l, r
-              | GTEQ -> (>=), l, r
-              | LT   -> (<),  r, l
-              | LTEQ -> (<=), r, l
-            in
-            let c = Ord.compare v x in
-            if op c 0 then loop (Some(v,d)) s
-            else loop last t
+            let c = comp_fn (Ord.compare v x) 0 in
+            match comp with
+            | `GT | `GTEQ -> if c then loop (Some(v,d)) l else loop last r
+            | `LT | `LTEQ -> if c then loop (Some(v,d)) r else loop last l
       in loop None m
 
-    let find_gt x m = find_comp GT x m
-    let find_lt x m = find_comp LT x m
-    let find_geq x m = find_comp GTEQ x m
-    let find_leq x m = find_comp LTEQ x m
+    let find_gt x m = find_comp `GT x m
+    let find_lt x m = find_comp `LT x m
+    let find_geq x m = find_comp `GTEQ x m
+    let find_leq x m = find_comp `LTEQ x m
 
     (* find all values between x and y, exclusive *)
     let find_range x y m =
@@ -327,26 +326,25 @@ module Make(Ord: OrderedType) = struct
           if pvd then join l' v d r' else concat l' r'
 
     let filter_comp comp x m =
+      let comp_fn = match comp with
+        | `GT   -> ((>):int -> int -> bool)
+        | `GTEQ -> (>=)
+        | `LT   -> (<)
+        | `LTEQ -> (<=)
+      in
       let rec loop = function
         | Empty -> Empty
         | Node(l, v, d, r, _) ->
-            let op, do_l, do_r, other =  match comp with
-              | GT   -> ((>):int -> int -> bool),  true, false, r
-              | GTEQ -> (>=), true, false, r
-              | LT   -> (<),  false, true, l
-              | LTEQ -> (<=), false, true, l
-            in
-            let c = Ord.compare v x in
-            if op c 0 then
-              join (if do_l then loop l else l) v d (if do_r then loop r else r)
-            else
-              loop other
+            let c = comp_fn (Ord.compare v x) 0 in
+            match comp with
+            | `GT | `GTEQ -> if c then join (loop l) v d r else loop r
+            | `LT | `LTEQ -> if c then join l v d (loop r) else loop l
       in loop m
 
-    let filter_lt x m = filter_comp LT x m
-    let filter_gt x m = filter_comp GT x m
-    let filter_geq x m = filter_comp GTEQ x m
-    let filter_leq x m = filter_comp LTEQ x m
+    let filter_lt x m = filter_comp `LT x m
+    let filter_gt x m = filter_comp `GT x m
+    let filter_geq x m = filter_comp `GTEQ x m
+    let filter_leq x m = filter_comp `LTEQ x m
 
     let rec partition p = function
         Empty -> (Empty, Empty)
