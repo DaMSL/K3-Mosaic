@@ -213,6 +213,8 @@ val add_annotation : string -> expr_t -> expr_t
 val properties_of_expr : expr_t -> string list
 val filter_prop_annos : annotation_t -> annotation_t
 val prop_annos_of_expr : expr_t -> annotation_t
+val has_property : string -> expr_t -> bool
+val property_in_list : string -> annotation_t -> bool
 
 val is_tcol : type_t -> bool
 val is_tvmap : container_type_t -> bool

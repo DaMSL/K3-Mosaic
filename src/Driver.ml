@@ -141,8 +141,8 @@ type parameters = {
     mutable in_lang: in_lang_t;
     mutable out_lang: out_lang_t;
     mutable input_files: string list;
-    mutable peers: K3Global.peer_t list;
-    mutable default_peer: bool; (* whether we're using the default peer *)
+    (* split peers into lists of local peers with shared data *)
+    mutable peers: K3Global.peer_t list list;
     mutable debug_info: bool;
     mutable verbose: bool;
 
@@ -184,8 +184,7 @@ let default_cmd_line_params () = {
     in_lang           = K3in;
     out_lang          = K3;
     input_files       = [];
-    peers             = default_peers;
-    default_peer      = true;
+    peers             = [default_peers];
     partition_map     = [];
     debug_info        = default_debug_info;
     verbose           = default_verbose;
@@ -468,7 +467,7 @@ let test params inputs =
     match input with
     | K3TestData((ProgTest _ | NetworkTest _) as x) ->
         let globals_k3 = K3Global.globals in
-        test_program params.peers globals_k3 (interpret_k3 params) fname x
+        test_program (List.flatten params.peers) globals_k3 (interpret_k3 params) fname x
     | x -> error @@ "testing not yet implemented for "^string_of_data x
   in List.iter2 test_fn params.input_files inputs
 
@@ -527,22 +526,29 @@ let process_parameters params =
   | Test      -> test params inputs
 
 (* General parameter setters *)
-let append_peers ipr_str_list =
-  let ip_roles = Str.split (Str.regexp @@ Str.quote ",") ipr_str_list in
-  let new_peers = List.map parse_ip_role ip_roles in
-  if cmd_line_params.default_peer then
-    cmd_line_params.peers <- new_peers
-  else
-    cmd_line_params.peers <- cmd_line_params.peers @ new_peers
+let append_peers peer_str =
+  let r_comma, r_semi = Str.regexp ",", Str.regexp ";" in
+  let peers =
+    List.map (List.map parse_ip_role |- Str.split r_comma) @@
+    Str.split r_semi peer_str
+  in
+  cmd_line_params.peers <- peers
 
-(* Load peer address from file
- * NOTE does not contain localhost if peers are specified*)
+(* Load peer address from file. Blank lines indicate peer groups *)
 let load_peer file =
   let line_lst = read_file_lines file in
-  if (List.length line_lst) = 0 then
-    error "Empty node file"
+  if line_lst = [] then error "Empty node file"
   else
-    cmd_line_params.peers <- List.map parse_ip_role line_lst
+    let acc, grp =
+      List.fold_right (fun l (acc, grp) ->
+        if l = "" then
+          if grp <> [] then (grp::acc, [])
+          else (acc, grp)
+        else (acc, parse_ip_role l::grp))
+      line_lst ([], [])
+    in
+    let acc = if grp <> [] then grp::acc else acc in
+    cmd_line_params.peers <- acc
 
 let load_partition_map file =
   let str = read_file file in
@@ -647,7 +653,7 @@ let parse_cmd_line () =
 (* --- Start --- *)
 let main () =
   parse_cmd_line();
-  if (List.length cmd_line_params.input_files) < 1 then
+  if cmd_line_params.input_files = [] then
     (Arg.usage param_specs usage_msg;
      error "\nNo input files specified");
 

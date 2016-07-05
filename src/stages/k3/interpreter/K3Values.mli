@@ -37,8 +37,9 @@ and Value : sig
   and env_t = {
         triggers:trigger_env_t;
         globals:global_env_t;
+        shared: global_env_t;
         locals:local_env_t;
-        accessed:StrSet.t ref;
+        mutable accessed:StrSet.t;
         type_aliases:(id_t, type_t) Hashtbl.t;
         stack:id_t list;
       }

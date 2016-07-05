@@ -11,6 +11,7 @@ exception RuntimeError of int * string * string
 (* Interpreter representation of values *)
 
 module IdMap = Map.Make(struct type t = id_t let compare = String.compare end)
+module IdAddrMap = Map.Make(struct type t = id_t let compare = String.compare end)
 
 (* add to the id_map from a list *)
 let add_from_list map l =
@@ -152,9 +153,10 @@ and Value : sig
   (* keep track of what was modified *)
   and env_t = {
         triggers: trigger_env_t;
-        globals:  global_env_t;
-        locals:   local_env_t;
-        accessed: StrSet.t ref;
+        globals: global_env_t;
+        shared: global_env_t;
+        locals: local_env_t;
+        mutable accessed: StrSet.t;
         type_aliases:(id_t, type_t) Hashtbl.t;
         stack: id_t list;
       }
@@ -354,8 +356,9 @@ let split_tkv = function
 let default_env = {
   triggers=IdMap.empty;
   globals=IdMap.empty;
+  shared=IdMap.empty;
   locals=IdMap.empty;
-  accessed=ref StrSet.empty;
+  accessed=StrSet.empty;
   type_aliases=Hashtbl.create 10;
   stack=[];
 }
@@ -516,7 +519,7 @@ let print_env ?skip_functions ?skip_empty ?(accessed_only=true) env =
   let print id v =
     let action () = print_binding_m ?skip_functions ?skip_empty id v in
     if accessed_only then
-      if StrSet.mem id !(env.accessed) then action () else ()
+      if StrSet.mem id env.accessed then action () else ()
     else action ()
   in
   ps "----Globals----"; fnl();

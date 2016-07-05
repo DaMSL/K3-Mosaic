@@ -510,3 +510,11 @@ let prop_annos_of_expr e =
   let m = meta_of_expr e in
   filter_prop_annos m
 
+let property_in_list s l =
+  let f = function
+    | Property(_, s2) when s2 = s -> true
+    | _ -> false
+  in
+  List.exists f l
+
+let has_property s e = property_in_list s @@ meta_of_expr e

@@ -50,7 +50,7 @@ let lookup id env =
   try
     VTemp(hd @@ IdMap.find id env.locals)
   with Not_found ->
-    (env.accessed) := StrSet.add id !(env.accessed);
+    env.accessed <- StrSet.add id env.accessed;
     VDeclared(IdMap.find id env.globals)
 
 (* lookup that's read-only but allows for paths *)
@@ -80,7 +80,7 @@ let env_modify error (path, id) env f =
         try IdMap.find id env.globals
         with Not_found -> raise @@ RuntimeError(-1, "env_modify", id^" not found in any environment")
       in
-      env.accessed := StrSet.add id !(env.accessed);
+      env.accessed <- StrSet.add id env.accessed;
       rv := deep_modify path f !rv;
       env
 
@@ -137,7 +137,7 @@ let rec eval_fun uuid f =
         fun addr sched env al ->
           (* create an environment for the function containing its closure *)
           let new_env = {env with locals=bind_args ~extra:(addr, env) 0 uuid arg al closure;
-                                  accessed = ref StrSet.empty;
+                                  accessed = StrSet.empty;
                                   stack = match fun_typ with
                                     | FGlobal id -> id::env.stack
                                     | FTrigger id -> [id]
@@ -156,13 +156,13 @@ let rec eval_fun uuid f =
           in
           (* discard the local environment from the function output, and combined access patterns *)
           let env = {env' with locals = env.locals;
-                               accessed=ref @@ StrSet.union !(env.accessed) !(env'.accessed);
+                               accessed = StrSet.union env.accessed env'.accessed;
                                stack = env.stack} in
           let env = match fun_typ with
           | FLambda     -> env
           | FGlobal id  -> do_log "Global" id env'; env
             (* for triggers, we need to clear the access set *)
-          | FTrigger id -> do_log "Trigger" id env'; {env with accessed = ref StrSet.empty}
+          | FTrigger id -> do_log "Trigger" id env'; {env with accessed = StrSet.empty}
           in
           env, result
 
@@ -868,11 +868,20 @@ let lookup_json t json id =
   with Not_found -> None
 
 (* Builds a trigger, global value and function environment (ie frames) *)
-let env_of_program ?address ?(json=[]) ~role ~peers ~type_aliases sched_st k3_program =
-  let me_addr = match address with
-    | None   -> Constants.default_address
-    | Some a -> a in
-  let env_of_declaration env (d,_) = match d with
+let env_of_program ?address ?(json=[]) ~role ~peers ~type_aliases ~do_shared sched_st k3_program =
+  let me_addr = maybe Constants.default_address id_fn address in
+  (* check the annotations for shared item *)
+  let env_of_declaration env (d,a) =
+    (* add to shared or to global? *)
+    let add_global env id v = {env with globals=IdMap.add id (ref v) env.globals} in
+    let add_shared env id v = {env with shared=IdMap.add id (ref v) env.shared} in
+    let skip, add_fn = match U.property_in_list "Shared" a with
+      | false -> false, add_global
+      | true when do_shared -> false, add_shared
+      | true -> true, add_global (* skip *)
+    in
+    if skip then env
+    else match d with
     | K3.AST.Global (id, t, init_opt) ->
         let rf_env, init_val = match id, init_opt with
 
@@ -893,9 +902,8 @@ let env_of_program ?address ?(json=[]) ~role ~peers ~type_aliases sched_st k3_pr
 
           | id, None  -> env, maybe (default_value type_aliases id t) id_fn @@ lookup_json t json id
         in
-        {env with globals=IdMap.add id (ref init_val) env.globals; locals=rf_env.locals}
-    | Foreign (id,_) ->
-        {env with globals=IdMap.add id (ref @@ dispatch_foreign id) env.globals}
+        add_fn rf_env id init_val
+    | Foreign (id,_) -> add_global env id @@ dispatch_foreign id
     | Flow fp -> prepare_sinks sched_st env fp
     | _ -> env
   in
@@ -916,7 +924,7 @@ type environments = {
 type interpreter_t = {
   scheduler : R.scheduler_state;
   (* metadata including remaining resources and instructions *)
-  peer_list : K3Global.peer_t list;
+  peers : K3Global.peer_t list;
   envs : (address, environments) Hashtbl.t;
 
   (* how often (in sec) to consume a source *)
@@ -964,8 +972,10 @@ let interpreter_event_loop role k3_program =
    | None        -> get_role role error
 
 (* returns address, (event_loop_t, environment) *)
-let initialize_peer sched_st ~address ~role ~peers ~type_aliases ?(json=[]) k3_program =
+(* @do_shared: create shared environment *)
+let initialize_peer sched_st ~peer ~peers ~type_aliases ~do_shared ?(json=[]) k3_program =
   (* find a personal part of the json if it exists *)
+  let address, role = peer in
   let json =
     let s_addr = string_of_address address in
     let my_json = try some @@ List.assoc s_addr json with Not_found -> None in
@@ -976,8 +986,18 @@ let initialize_peer sched_st ~address ~role ~peers ~type_aliases ?(json=[]) k3_p
     in
     my_json @ json
   in
-  let prog_env = env_of_program sched_st ~address ~role ~peers ~type_aliases ~json k3_program in
-  address, (interpreter_event_loop role k3_program, prog_env)
+  let prog_env = env_of_program sched_st ~address ~role ~peers ~type_aliases ~do_shared ~json k3_program in
+  address, interpreter_event_loop role k3_program, prog_env
+
+(* init a group of local peers (on same machine) *)
+let initialize_local_peers sched_st ~local_peers ~peers ~type_aliases ~json typed_prog =
+  thd3 @@ List.fold_right (fun peer (do_shared, shared, acc) ->
+      let addr, other_env, env = initialize_peer sched_st ~do_shared ~peer ~peers ~type_aliases ~json typed_prog in
+      (* take shared_env from first peer *)
+      let shared = maybe env.shared id_fn shared in
+      false, Some shared, (addr, other_env, {env with shared})::acc)
+    local_peers
+    (true, None, [])
 
 let interpret_k3_program i =
   (* Continue running until all peers have finished their instructions,
@@ -1035,7 +1055,8 @@ let interpret_k3_program i =
 let init_k3_interpreter ?queue_type ?(src_interval=0.002)
     ~peers ~load_path ~interp_file ~type_aliases typed_prog =
   Log.log (lazy (sp "Initializing scheduler\n")) `Trace;
-  let scheduler = init_scheduler_state ?queue_type ~peers in
+  let flat_peers = List.flatten peers in
+  let scheduler = init_scheduler_state ?queue_type ~peers:flat_peers in
   let json =
     if interp_file <> "" then
       match Yojson.Safe.from_file interp_file with
@@ -1043,22 +1064,25 @@ let init_k3_interpreter ?queue_type ?(src_interval=0.002)
       | _ -> failwith "bad json format"
     else []
   in
-  match peers with
-  | []  -> failwith "init_k3_program: Peers list is empty!"
-  | _   ->
-      Log.log (lazy (sp "Initializing interpreter\n")) `Trace;
-      (* Initialize an environment for each peer *)
-      K3StdLib.g_load_path := load_path;
-      let len = List.length peers in
-      let envs = Hashtbl.create len in
-      let type_aliases = hashtbl_of_list type_aliases in
-      List.iter (fun (address, role) ->
-                 (* event_loop_t * program_env_t *)
-          let _, ((res_env, fsm_env, instrs), prog_env) =
-            initialize_peer scheduler ~address ~role ~peers ~type_aliases ~json typed_prog in
+  if peers = [] then failwith "init_k3_program: Peers list is empty!" else
 
-          Hashtbl.replace envs address
-            {res_env; fsm_env; prog_env; instrs; disp_env=C.def_dispatcher}
-      ) peers;
+  Log.log (lazy (sp "Initializing interpreter\n")) `Trace;
 
-      {scheduler; peer_list=peers; envs; last_s_time=0.; src_interval}
+  (* Initialize an environment for each peer *)
+  K3StdLib.g_load_path := load_path;
+  let total_len = List.length flat_peers in
+  let envs = Hashtbl.create total_len in
+  let type_aliases = hashtbl_of_list type_aliases in
+  let peer_data =
+    List.flatten @@
+    List.map (fun local_peers ->
+      initialize_local_peers scheduler ~local_peers ~peers:flat_peers ~type_aliases ~json typed_prog)
+      peers
+  in
+  (* save created environments *)
+                              (* event_loop_t * program_env_t *)
+  List.iter (fun (address, (res_env, fsm_env, instrs), prog_env) ->
+      Hashtbl.replace envs address
+        {res_env; fsm_env; prog_env; instrs; disp_env=C.def_dispatcher}
+  ) peer_data;
+  {scheduler; peers=flat_peers; envs; last_s_time=0.; src_interval}

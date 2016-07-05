@@ -14,6 +14,7 @@ val env_of_program :
   role:id_t ->
   peers:K3Global.peer_t list ->
   type_aliases:(id_t, type_t) Hashtbl.t ->
+  do_shared:bool ->
   scheduler_state ->
   program_t ->
   env_t
@@ -28,7 +29,7 @@ val interpret_k3_program : interpreter_t -> (address * env_t) list
 val init_k3_interpreter :
   ?queue_type:K3Runtime.queue_type ->
   ?src_interval:float ->
-  peers:K3Global.peer_t list ->
+  peers:K3Global.peer_t list list -> (* local peer groups *)
   load_path:string ->
   interp_file:string ->
   type_aliases:(id_t * type_t) list ->
