@@ -442,8 +442,8 @@ let print params inputs =
   let sofp = string_of_program ~verbose:cmd_line_params.verbose ~print_id:true in
   let print_k3_program = print_k3_program ~print_warmup:params.print_warmup in
   let print_fn = match params.out_lang with
-    | AstK3 | AstK3Dist   -> print_k3_program (fun _ _ -> (sofp |- fst)) |- snd
-    | K3 | K3Dist         -> print_k3_program (fun _ _ -> (PS.string_of_program |- fst)) |- snd
+    | AstK3 | AstK3Dist   -> print_k3_program ~no_roles:true (fun _ _ -> (sofp |- fst)) |- snd
+    | K3 | K3Dist         -> print_k3_program ~no_roles:true (fun _ _ -> (PS.string_of_program |- fst)) |- snd
     | K3New               -> print_k3_program ~no_roles:true
        (if params.print_warmup
           then K3NewPrint.string_of_dist_warmup_program
