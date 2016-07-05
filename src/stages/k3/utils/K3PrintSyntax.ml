@@ -599,5 +599,4 @@ let string_of_program_test ?uuid_highlight ptest =
       sp "%s\n\nsexpected\n\n%s"
         (string_of_program ?uuid_highlight p)
         (String.concat ",\n\n" @@ list_map string_of_test_expr checklist)
-  | ExprTest _ -> failwith "can't print an expression test"
 

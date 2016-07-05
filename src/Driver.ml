@@ -73,7 +73,7 @@ let r = Str.regexp @@
   sp "\\(%s\\|localhost\\):\\(%s\\)/\\(%s\\)" ip num ident
 
 (* ip-role format is 'ip:port/role' *)
-let parse_ip_role ipr_str =
+let parse_ip_role ipr_str : address * string =
   let error () = invalid_arg "invalid ip string format" in
   if Str.string_match r ipr_str 0 then
     match r_groups ipr_str ~r ~n:3 with
@@ -111,16 +111,15 @@ let setter_specs param spec_desc = List.map (fun (param_val, flag, desc) ->
   in (flag, Arg.Unit fn, "         "^desc)) spec_desc
 
 (* Testing modes *)
-type test_mode_t = ExpressionTest | ProgramTest
+type test_mode_t = ProgramTest
 
 let test_descriptions = [
-    ExpressionTest,   "--expr",  "Use expression test input";
     ProgramTest,      "--prog",  "Use program test input";
   ]
 
 let test_specs test_mode_param = setter_specs test_mode_param test_descriptions
 
-let string_of_test_mode = function ExpressionTest -> "Expression" | ProgramTest -> "Program"
+let string_of_test_mode = function ProgramTest -> "Program"
 
 (* Actions *)
 type action_t = REPL | Compile | Interpret | Print | Test
@@ -250,7 +249,6 @@ let parse_program_from_string parsefn lexfn str =
     | Pervasives.Exit -> raise Parsing.Parse_error
 
 let parse_test_file params = match !(params.test_mode) with
-  | ExpressionTest -> parse_program K3Parser.expression_test K3Lexer.tokenize
   | ProgramTest    -> parse_program K3Parser.program_test K3Lexer.tokenize
 
 (* Program transformers *)
@@ -281,7 +279,6 @@ let typed_program_test_with_globals prog_test =
         try deduce_program_test_type p_t
         with TypeError (a,b,c) -> handle_type_error (K3TestData p_t)  a b c
       end
-  | ExprTest(p_ts) -> failwith "expr_test unhandled"
 
 
 (* for most functions, we don't need the globals included *)
@@ -299,7 +296,6 @@ let typed_program_test prog_test =
   match prog_test' with
   | ProgTest(p, tl)    -> ProgTest(remove_g p, tl)
   | NetworkTest(p, tl) -> NetworkTest(remove_g p, tl)
-  | ExprTest(p_ts)     -> failwith "expr_test unhandled"
 
 (* Action handlers *)
 (* TODO *)
@@ -334,7 +330,6 @@ let interpret params inputs =
     | K3DistData(p,_,_,_,_)
     | K3TestData(ProgTest(p, _))
     | K3TestData(NetworkTest(p, _)) -> ignore @@ interpret_k3 params p
-    | _ -> failwith "data type not supported for interpretation"
   in
   List.iter f inputs
 
@@ -471,7 +466,6 @@ let print params inputs =
 let test params inputs =
   let test_fn fname input =
     match input with
-    | K3TestData(ExprTest _ as x) -> test_expressions params.peers fname x
     | K3TestData((ProgTest _ | NetworkTest _) as x) ->
         let globals_k3 = K3Global.globals in
         test_program params.peers globals_k3 (interpret_k3 params) fname x

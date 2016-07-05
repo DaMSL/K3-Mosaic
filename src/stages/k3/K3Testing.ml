@@ -92,18 +92,6 @@ let check_as_expr ce = match ce with
   | InlineExpr (nm, e) -> nm, e
   | FileExpr (fp)      -> fp, parse_expr @@ read_file fp
 
-let test_expressions peers file_name = function
-  | ExprTest expr_tests ->
-    let test_cases = snd @@
-      List.fold_left (fun (i, test_acc) (decls, e, x) ->
-        let name, expr = check_as_expr x in
-        let test_case  = case name @@
-          eval_test_expr peers decls e @=? eval_test_expr peers decls expr
-        in i+1, test_acc@[test_case]
-      ) (0, []) expr_tests
-    in print_tests test_cases
-  | _ -> failwith "not expression tests"
-
 let env_deref_refs env = List.rev_map (fun (id, v) -> (id, !v)) env
 
 let extract_first_env = function

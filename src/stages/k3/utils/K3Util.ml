@@ -461,8 +461,6 @@ let renumber_test_program_ids ?(start=0) test_p =
   | NetworkTest(p, testl) ->
       let n, (p', t_l) = proc p testl in
       n, NetworkTest(p', t_l)
-  | _ -> failwith "can't renumber expression test"
-
 
 (* Attach a type annotation to an expr *)
 let attach_type t e =

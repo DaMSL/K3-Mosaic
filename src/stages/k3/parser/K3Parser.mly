@@ -151,12 +151,10 @@
 
 %start program
 %start program_test
-%start expression_test
 %start expr
 
 %type <K3.AST.program_t>            program
 %type <K3.AST.program_test_t>       program_test
-%type <K3.AST.program_test_t>       expression_test
 %type <K3.AST.expr_t>               expr
 
 %right RARROW
@@ -799,9 +797,6 @@ expression_test_list :
     | expression_test_list SEMICOLON expression_test_list { $1@$3 }
     | anno_expr EXPECTED error                  { print_error "invalid expected expression"}
 ;
-
-expression_test :
-    | expression_test_list                          { ExprTest $1 }
 
 named_expr_list :
     | anno_expr GETS check_expr                          { [$1, $3] }

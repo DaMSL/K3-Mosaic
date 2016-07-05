@@ -238,7 +238,6 @@ type program_test_t =
     | ProgTest    of program_t * (expr_t * check_expr_t) list
     | NetworkTest of program_t * (expr_t * check_expr_t) list
       (* Declarations, expression to evaluate, expected value *)
-    | ExprTest    of (program_t * expr_t * check_expr_t) list
 end
 
 

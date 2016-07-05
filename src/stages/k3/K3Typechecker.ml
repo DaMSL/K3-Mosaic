@@ -1340,13 +1340,4 @@ let deduce_program_test_type prog_test =
   | NetworkTest(p, testl) ->
       let p', tl' = proc p testl in
       NetworkTest(p', tl')
-  | ExprTest p_t_l ->
-      (* change format so we can still use proc *)
-      let p_t_l' = list_map (fun (p, e, check) ->
-        let p', testl = proc p [e, check] in
-        let e', check' = hd testl in
-        p', e', check'
-      ) p_t_l
-      in
-      ExprTest p_t_l'
 
