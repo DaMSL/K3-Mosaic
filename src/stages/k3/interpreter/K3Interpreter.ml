@@ -50,8 +50,14 @@ let lookup id env =
   try
     VTemp(hd @@ IdMap.find id env.locals)
   with Not_found ->
-    env.accessed <- StrSet.add id env.accessed;
-    VDeclared(IdMap.find id env.globals)
+      env.accessed <- StrSet.add id env.accessed;
+    try
+      VDeclared(IdMap.find id env.globals)
+    with Not_found ->
+      try
+        VDeclared(IdMap.find id env.shared)
+      with Not_found ->
+        raise @@ RuntimeError(-1, "lookup", id^" not found in any environment")
 
 (* lookup that's read-only but allows for paths *)
 let ro_path_lookup (path, id) env =
@@ -78,7 +84,10 @@ let env_modify error (path, id) env f =
   | exception Not_found -> (* look in globals *)
       let rv =
         try IdMap.find id env.globals
-        with Not_found -> raise @@ RuntimeError(-1, "env_modify", id^" not found in any environment")
+        with Not_found ->
+          try IdMap.find id env.shared
+          with Not_found ->
+            raise @@ RuntimeError(-1, "env_modify", id^" not found in any environment")
       in
       env.accessed <- StrSet.add id env.accessed;
       rv := deep_modify path f !rv;
@@ -830,16 +839,14 @@ let dispatch_foreign id = K3StdLib.lookup_value id
 
 (* Returns a trigger evaluator function to serve as a simulation
  * of the trigger *)
-let prepare_trigger sched_st env id arg local_decls body =
-  let default (id,t,_) = id, ref @@ default_value env.type_aliases id t in
-  let new_vals = List.map default local_decls in
+let prepare_trigger sched_st env id arg body =
   (* add a level of wrapping to the argument binder so that when we do the first layer
    * which handles lists of arguments, it only takes one argument *)
   let vfun = VFunction(FTrigger id, arg, IdMap.empty, body) in
+  let sched_st = Some sched_st in
 
   fun address env args ->
-    let local_env = {env with globals=add_from_list env.globals new_vals} in
-    let _, reval  = eval_fun (-1) vfun address (Some sched_st) local_env args in
+    let _, reval  = eval_fun (-1) vfun address sched_st env args in
     match value_of_eval reval with
       | VUnit -> ()
       | _ -> int_error "prepare_trigger" @@ "trigger "^id^" returns non-unit"
@@ -849,8 +856,8 @@ let prepare_sinks sched_st env fp =
   List.fold_left
     (fun e (fs,a) -> match fs with
     | Sink(Resource _) -> failwith "sink resource interpretation not supported"
-    | Sink(Code(id, arg, locals, body)) ->
-        {e with triggers=IdMap.add id (prepare_trigger sched_st env id arg locals body) e.triggers}
+    | Sink(Code(id, arg, _, body)) ->
+        {e with triggers=IdMap.add id (prepare_trigger sched_st env id arg body) e.triggers}
     | _ -> e)
     env fp
 
