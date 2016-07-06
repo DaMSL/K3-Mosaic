@@ -147,7 +147,6 @@ let test_program peers globals_k3 interpret_fn file_name test =
      * the environments, and rename all node variables to be node_var (TODO) *)
     | ProgTest(prog, checkl)    -> extract_first_env, prog, checkl
     | NetworkTest(prog, checkl) -> unify_envs, prog, checkl
-    | _ -> failwith "unsupported test"
   in
   let node_envs = interpret_fn program in
 
