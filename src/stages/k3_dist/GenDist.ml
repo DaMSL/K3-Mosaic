@@ -43,7 +43,8 @@ module K3N = K3NewPrint
 
 open GenCommon
 open GenDispatch
-open GenFetchPut
+open GenSendFetchPut
+open GenRcvFetchPut
 open GenPush
 open GenComplete
 open GenCorrective
@@ -230,7 +231,7 @@ let gen_dist_for_t c ast t =
     (List.map (fun s -> nd_do_complete_trigs c t s) s_no_r) @
     (if sre then [] else [sw_send_fetches_isobatch c t]) @
     [
-     nd_save_arg_trig_sub_handler c t;
+     lm_save_arg_trig c t;
      nd_load_arg_trig_sub_handler c t;
      nd_no_arg_trig_sub_handler c t] @
     (if c.gen_correctives then

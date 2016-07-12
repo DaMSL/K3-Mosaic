@@ -18,6 +18,7 @@ module TS = Timestamp
 
 open GenCommon
 open GenPush
+open GenRcvFetchPut
 
 (* function to handle dispatch with push data *)
 let nd_handle_uniq_poly_nm = "nd_handle_uniq_poly"
@@ -124,30 +125,6 @@ let nd_load_arg_trig_sub_handler c t =
         do_trace ("nstsh"^trace_trig t)
                   [t_int, mk_var "vid"] @@
           sub_trig_dispatch c fn_nm @@ args_of_t_as_vars_with_v c t;
-  ]
-
-(* handle all sub-trigs that need trigger arguments *)
-let nd_save_arg_trig_sub_handler c t =
-  let fn_nm = trig_save_arg_sub_handler_name_of_t t in
-  let t_args = trig_save_arg_sub_handler_args c t in
-  mk_global_fn fn_nm (poly_args @ t_args) [t_int; t_int] @@
-  (* skip over the entry tag *)
-  mk_poly_skip_block fn_nm [
-    (* save the bound args for this vid *)
-    mk_apply' (nd_log_write_for c t) @@ args_of_t_as_vars_with_v c t;
-    (* clear the trig send bitmaps. These make sure we output a trig header
-       for any sub-trigger output (ie. pushes) *)
-    mk_clear_all D.send_trig_header_bitmap.id;
-    (* dispatch the sub triggers *)
-    mk_poly_iter' @@
-      mk_lambda'' (p_tag @ p_idx @ p_off) @@
-        (* print trace if requested *)
-        do_trace ("ntsh"^trace_trig t)
-                 [t_int, mk_var "vid";
-                  t_int, mk_var "tag";
-                  t_int, mk_var "idx";
-                  t_int, mk_var "offset"] @@
-        sub_trig_dispatch c fn_nm @@ args_of_t_as_vars_with_v c t;
   ]
 
 (*** central triggers to handle dispatch for nodes and switches ***)

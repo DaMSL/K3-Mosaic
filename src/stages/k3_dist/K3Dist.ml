@@ -425,20 +425,37 @@ let args_of_t_as_vars_with_v ?(vid="vid") c trig_nm =
 
 (**** global data structures ****)
 
+let mk_sort_vector ds new_t =
+  mk_convert_col (wrap_tlist t_addr) new_t @@
+  mk_sort (mk_lambda'' ["a1", t_addr; "a2", t_addr] @@
+            mk_lt (mk_var "a1") @@ mk_var "a2") @@
+  mk_convert_col ds.t (wrap_tlist t_addr) @@
+  mk_var ds.id
+
+(* sorted version of peers *)
 let my_peers =
   let e = ["addr", t_addr] in
   let t = wrap_tvector' @@ snd_many e in
-  let init =
-    mk_convert_col (wrap_tlist t_addr) t @@
-    mk_sort (mk_lambda'' ["a1", t_addr; "a2", t_addr] @@
-              mk_lt (mk_var "a1") @@ mk_var "a2") @@
-    mk_convert_col G.peers.t (wrap_tlist t_addr) @@
-    mk_var "peers" in
+  let init = mk_sort_vector G.peers t in
   create_ds "my_peers" ~init t ~e
+
+(* sorted locally, and converted to integers *)
+let my_local_peers =
+  let init =
+    mk_sort_vector G.local_peers (wrap_tvector t_addr) |>
+    mk_map (mk_lambda' ["addr", t_addr] @@
+        mk_apply' "int_of_addr" [mk_var "addr"])
+  in
+  create_ds "my_local_peers" t_int_vector ~init
 
 let me_int =
   let init = mk_apply' "int_of_addr" [G.me_var] in
   create_ds "me_int" t_int ~init
+
+(* the first peer in the local peers is the local master *)
+let local_master =
+  let init = mk_at (mk_var my_local_peers.id) @@ mk_cint 0 in
+  create_ds "local_master" t_int ~init
 
 (* whether we're running in the interpreter *)
 let interpreter_mode = create_ds "interpreter_mode" t_bool
@@ -450,28 +467,34 @@ let num_peers =
 (* specifies the job of a node: master/switch/node *)
 let job_master_v = 0
 let job_switch_v = 1
-let job_node_v   = 2
-let job_timer_v  = 3
-let job_none_v   = 4
+(* local_master is determined from the local peers, NOT from the role alone *)
+let job_local_master_v = 2
+let job_node_v   = 3
+let job_timer_v  = 4
+let job_none_v   = 5
 
 let job_master = create_ds "job_master" t_int ~init:(mk_cint job_master_v)
 let job_switch = create_ds "job_switch" t_int ~init:(mk_cint job_switch_v)
+let job_local_master = create_ds "job_local_master" t_int ~init:(mk_cint job_local_master_v)
 let job_node   = create_ds "job_node"   t_int ~init:(mk_cint job_node_v)
 let job_timer  = create_ds "job_timer"  t_int ~init:(mk_cint job_timer_v)
 
 let job =
-  let do_if regex job_id e =
+  let do_if regex e_if e_ifnot =
     mk_if
       (mk_eq (mk_apply' "regex_match_int" [mk_cstring regex; mk_var "role2"]) @@ mk_cint 1)
-      (mk_var job_id)
-      e
+      e_if
+      e_ifnot
   in
   let init =
     mk_let ["role2"] (mk_peek_or_error "bad role" @@ mk_var "role") @@
-      do_if "master.*" job_master.id @@
-      do_if "switch.*" job_switch.id @@
-      do_if "node.*" job_node.id @@
-      do_if "timer.*" job_timer.id @@
+      do_if "master.*" (mk_var job_master.id) @@
+      do_if "switch.*" (mk_var job_switch.id) @@
+      do_if "node.*"
+        (mk_if_eq (mk_var me_int.id) (mk_var local_master.id)
+          (mk_var job_local_master.id) @@
+          mk_var job_node.id) @@
+      do_if "timer.*" (mk_var job_timer.id) @@
       mk_error "failed to find proper role"
   in
   create_ds "job" (mut t_int) ~init
@@ -479,6 +502,7 @@ let job =
 let job_of_str = function
   | "master" -> job_master_v
   | "switch" -> job_switch_v
+  | "local_master" -> job_local_master_v
   | "node"   -> job_node_v
   | "timer"  -> job_timer_v
   | _        -> job_none_v
@@ -517,6 +541,12 @@ let switches =
       (mk_eq (mk_var job.id) @@ mk_var job_switch.id) jobs in
   let e = ["addr", t_int] in
   create_ds "switches" (mut @@ wrap_tbag' @@ snd_many e) ~e ~d_init
+
+(* peer_addr -> master_addr *)
+let peer_master_map =
+  let init =
+    mk_map (mk_lambda' unknown_arg @@ mk_cint 0) @@ mk_var my_peers.id in
+  create_ds "peer_master_map" (mut t_int_vector) ~init
 
 let num_switches =
   let d_init = mk_size @@ mk_var switches.id in
@@ -586,6 +616,9 @@ let int_of_addr = mk_global_fn "int_of_addr" ["addr", t_addr] [t_int] @@
 
 let addr_of_int = mk_global_fn "addr_of_int" ["i", t_int] [t_addr] @@
   mk_at_with (mk_var my_peers.id) (mk_var "i") @@ mk_id_fn' [t_addr]
+
+let local_master_of_peer = mk_global_fn "local_master_of_peer" ["i", t_int] [t_addr] @@
+  mk_at_with (mk_var peer_master_map.id) (mk_var "i") @@ mk_id_fn' [t_addr]
 
 let mk_sendi trig addr args = mk_send trig (mk_apply' "addr_of_int" [addr]) args
 
@@ -725,7 +758,7 @@ let nd_from_sw_trig_dispatcher_trig_nm = "nd_from_sw_trig_dispatcher_trig"
 
 (* handler for many other triggers *)
 let m_nm = P.map_name_of
-let trig_save_arg_sub_handler_name_of_t t = "nd_trig_save_arg_sub_handler_"^t
+let trig_save_arg_name_of_t t = "lm_trig_save_args_"^t
 let trig_load_arg_sub_handler_name_of_t t = "nd_trig_load_arg_sub_handler_"^t
 let trig_no_arg_sub_handler_name_of_t t   = "nd_trig_no_arg_sub_handler_"^t
 let send_fetch_single_vid_name_of_t t s = sp "sw_%s_%d_send_fetch_single_vid" t s
@@ -755,8 +788,8 @@ let nd_rcv_stmt_isobatch_nm = "nd_rcv_stmt_isobatch"
 (*** trigger args. Needed here for polyqueues ***)
 
 (* the trig header marks the args *)
-let trig_save_arg_sub_handler_args_poly c t = args_of_t_with_v c t
-let trig_save_arg_sub_handler_args c t = ["batch_id", t_vid] @ trig_save_arg_sub_handler_args_poly c t
+let trig_save_arg_args_poly c t = args_of_t_with_v c t
+let trig_save_arg_args c t = ["batch_id", t_vid] @ trig_save_arg_args_poly c t
 
 (* slim trig header for pushes *)
 (* TODO: make vid 16-bit offset from batch_id *)
@@ -882,6 +915,7 @@ let ip_arg = ["ip", t_int]
 let ip_arg2 = ["ip2", t_int]
 let stmt_arg = ["stmt", t_int]
 
+(* Assistive data structure for easily clearing send_trig_args_map *)
 (* {ip} *)
 let send_trig_args_bitmap = create_ds "send_trig_args_bitmap" t_bitset
 
@@ -968,38 +1002,38 @@ let calc_poly_tags c =
       let s_no_r = P.stmts_without_rhs_maps_in_t c.p t in
       let s_rhs = P.s_and_over_stmts_in_t c.p P.rhs_maps_of_stmt t in
       let s_rhs_corr = List.filter (fun (s, map) -> List.mem map c.corr_maps) s_rhs in
-      let save_handler_nm = trig_save_arg_sub_handler_name_of_t t in
+      let save_handler_nm = trig_save_arg_name_of_t t in
       let load_handler_nm = trig_load_arg_sub_handler_name_of_t t in
       let no_arg_handler_nm = trig_no_arg_sub_handler_name_of_t t in
       let sre = t = sys_init in
-      (* full trigger handler: saves args *)
-      (ti save_handler_nm ~batch_id:true (Trig true) @@ trig_save_arg_sub_handler_args_poly c t)::
+      (* save args *)
+      (ti save_handler_nm ~batch_id:true (Trig false) @@ trig_save_arg_args_poly c t)::
       (* slim version of trigger: pull args from log, just vid *)
       (ti load_handler_nm ~batch_id:true (Trig true) trig_load_arg_sub_handler_args_poly)::
       (ti no_arg_handler_nm ~batch_id:true (Trig true) trig_no_arg_sub_handler_args_poly)::
       (List.flatten @@ List.map (fun s ->
           (if c.gen_single_vid then
             [ti (rcv_put_single_vid_name_of_t t s) ~trig_args:true
-              (SubTrig(false, [save_handler_nm; load_handler_nm])) @@
+              (SubTrig(false, [load_handler_nm])) @@
                 nd_rcv_put_args_poly;
              ti (rcv_fetch_single_vid_name_of_t t s) ~trig_args:true
-              (SubTrig(true, [save_handler_nm; load_handler_nm])) @@
+              (SubTrig(true, [load_handler_nm])) @@
                 nd_rcv_fetch_args_poly c t
             ] else []) @
            (* for isobatch mode: receive the vids of the isobatch *)
           (if sre then [] else [
            ti (rcv_stmt_isobatch_name_of_t t s) ~fn:nd_rcv_stmt_isobatch_nm ~const_args:[mk_cint s]
-             (SubTrig(false, [save_handler_nm; load_handler_nm; no_arg_handler_nm])) [];
+             (SubTrig(false, [load_handler_nm; no_arg_handler_nm])) [];
            (* rcv_put for isobatch: no trig args, just batch_id *)
            ti (rcv_put_isobatch_name_of_t t s) ~batch_id:true
              (Trig false) nd_rcv_put_isobatch_poly;
            ti (rcv_fetch_isobatch_name_of_t t s) ~batch_id:true ~trig_args:true
-             (SubTrig(true, [save_handler_nm; load_handler_nm])) @@
+             (SubTrig(true, [load_handler_nm])) @@
               nd_rcv_fetch_args_poly c t;
           ])) s_r) @
       (* args for do completes without rhs maps *)
       (List.map (fun s -> ti (do_complete_name_of_t t s^"_trig") ~trig_args:true
-             (SubTrig(false, [save_handler_nm; load_handler_nm])) @@
+             (SubTrig(false, [load_handler_nm])) @@
               nd_do_complete_trig_args_poly c t) s_no_r) @
       (* the types for nd_rcv_push. includes a separate, optional map component *)
       (* this isn't a dsTrig since pushes are aggregated at the dispatcher *)
@@ -1479,7 +1513,9 @@ let global_vars c dict =
     with Not_found -> ds
   in
   let l =
-    [ me_int;
+    [ my_local_peers;
+      me_int;
+      local_master;
       interpreter_mode;
       g_init_vid;
       g_max_int;
@@ -1488,6 +1524,7 @@ let global_vars c dict =
       g_start_vid;
       job_master;
       job_switch;
+      job_local_master;
       job_node;
       job_timer;
       job;
@@ -1559,7 +1596,8 @@ let global_vars c dict =
   in
   decl_global my_peers ::
   [ int_of_addr;
-    addr_of_int
+    addr_of_int;
+    local_master_of_peer
   ] @
   List.map decl_global l
 

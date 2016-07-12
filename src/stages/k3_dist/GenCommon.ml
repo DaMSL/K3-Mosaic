@@ -358,7 +358,7 @@ let buffer_for_send ?(unique=false) ?(wr_bitmap=true) t addr args =
 (* code to check if we need to write trig args and a trig header, and if so, to buffer them *)
 let buffer_trig_header_if_needed ?(force=false) ?(need_args=true) vid t addr args =
   (* normal condition for adding *)
-  let save_handler = trig_save_arg_sub_handler_name_of_t t in
+  let save_handler = trig_save_arg_name_of_t t in
   let load_handler = trig_load_arg_sub_handler_name_of_t t in
   let no_arg_handler = trig_no_arg_sub_handler_name_of_t t in
   (* check bitmap for current header *)
@@ -372,20 +372,26 @@ let buffer_trig_header_if_needed ?(force=false) ?(need_args=true) vid t addr arg
         if need_args && not force then
           [
             (* check map for the last batch to see if we need args *)
+            (* lookup in the local master of this peer, who will receive the trig args *)
+            mk_let ["local_master"]
+              (mk_apply' "local_master_of_peer" [mk_var addr]) @@
             mk_let ["has_args"]
-              (mk_at_with' send_trig_args_map.id (mk_var addr) @@
+              (mk_at_with' send_trig_args_map.id (mk_var "local_master") @@
                mk_lambda' send_trig_args_map.e @@
                mk_case_ns (mk_lookup' "inner" [vid; mk_cunknown]) "x" mk_cfalse mk_ctrue) @@
             mk_if (mk_var "has_args")
-              (buffer_for_send load_handler addr [mk_var "vid"]) @@
-               mk_block [
-                  mk_insert send_trig_args_bitmap.id [mk_var addr];
-                  mk_update_at_with send_trig_args_map.id (mk_var addr) @@
-                    mk_lambda' send_trig_args_map.e @@
-                      mk_insert_block send_trig_args_inner.id [vid; mk_cunit];
-                  (* use full handler (which also saves) *)
-                  buffer_for_send save_handler addr args
-              ]
+              (buffer_for_send load_handler addr [mk_var "vid"])
+              (mk_block [
+                 (* update index *)
+                 mk_insert send_trig_args_bitmap.id [mk_var "master_addr"];
+                 (* update real map *)
+                 mk_update_at_with send_trig_args_map.id (mk_var "master_addr") @@
+                   mk_lambda' send_trig_args_map.e @@
+                     mk_insert_block send_trig_args_inner.id [vid; mk_cunit];
+                 (* use saving handler *)
+                 buffer_for_send save_handler "master_addr" args;
+                 buffer_for_send load_handler addr [mk_var "vid"]
+              ])
           ]
       else
         [buffer_for_send no_arg_handler addr args])

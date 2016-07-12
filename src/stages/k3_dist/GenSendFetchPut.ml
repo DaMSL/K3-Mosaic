@@ -466,3 +466,20 @@ let sw_send_fetches_isobatch c t =
   ) ss) @
   (* return next vid *)
   [mk_var sw_send_fetch_isobatch_next_vid.id]
+
+(* clear the map of sending trig args. Done on a per-batch basis *)
+let sw_clear_send_trig_args_map_nm = "sw_clear_send_trig_args_map"
+let sw_clear_send_trig_args_map =
+  mk_global_fn sw_clear_send_trig_args_map_nm [] [] @@
+  mk_block [
+    mk_iter_bitmap'
+      (mk_update_at_with send_trig_args_map.id (mk_var "ip") @@
+        mk_lambda' send_trig_args_map.e @@
+          mk_block [
+            mk_clear_all send_trig_args_inner.id;
+            mk_var send_trig_args_inner.id
+          ])
+      send_trig_args_bitmap.id;
+    mk_clear_all send_trig_args_bitmap.id;
+  ]
+

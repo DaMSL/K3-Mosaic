@@ -135,10 +135,13 @@ let ms_rcv_jobs_ack c =
 (* receive jobs, and calculate all dependent variables *)
 let rcv_jobs_nm = "rcv_jobs"
 let rcv_jobs c =
-  mk_code_sink' rcv_jobs_nm ["jobs_in", immut D.jobs.t] [] @@
+  mk_code_sink' rcv_jobs_nm ["jobs_in", immut D.jobs.t;
+                             "local_master_map", immut D.peer_master_map.t] [] @@
   mk_block [
     (* write the jobs table *)
     mk_assign D.jobs.id @@ mk_var "jobs_in";
+    (* write the peer_master_map *)
+    mk_assign D.peer_master_map.id @@ mk_var "local_master_map";
     (* init the things that depend on jobs *)
     (* set timer addr *)
     delayed_init D.timer_addr;
@@ -174,17 +177,27 @@ let rcv_jobs c =
     C.mk_send_master ms_rcv_jobs_ack_nm;
   ]
 
-(* receive the role from everybody *)
+(* receive the job from everybody
+ * also receive the list of peers, which should be empty except for local masters
+ *)
 let ms_rcv_job_cnt = create_ds "ms_rcv_job_cnt" (mut t_int) ~init:(mk_cint 0)
 let ms_rcv_job_nm = "ms_rcv_job"
 let ms_rcv_job =
-  mk_barrier ms_rcv_job_nm ~args:["addr", t_int; "job", t_int]
-    (* insert into jobs *)
-    ~pre:[mk_insert_at D.jobs.id (mk_var "addr") [mk_var "job"]]
-    ~ctr:ms_rcv_job_cnt.id ~total:(mk_var D.num_peers.id)
-    ~after:(C.mk_send_all_peers rcv_jobs_nm [mk_var D.jobs.id])
+  mk_barrier ms_rcv_job_nm ~args:["addr", t_int; "job", t_int; "local_peers", t_int_vector]
+    ~pre:[mk_block [
+            (* insert into jobs *)
+            mk_insert_at D.jobs.id (mk_var "addr") [mk_var "job"];
+            (* insert peers, master into peer_master_map *)
+            mk_iter (mk_lambda' ["peer", t_int] @@
+              mk_insert_at (peer_master_map.id) (mk_var "peer") [mk_var "addr"]) @@
+              mk_var "local_peers"
+          ]
+      ]
+    ~ctr:ms_rcv_job_cnt.id
+    ~total:(mk_var D.num_peers.id)
+    ~after:(C.mk_send_all_peers rcv_jobs_nm [mk_var D.jobs.id; mk_var D.peer_master_map.id])
 
-(* rcv the master's address and send him our role *)
+(* rcv the master's address and send him our job, and local_peers if needed *)
 let rcv_master_addr_nm = "rcv_master_addr"
 let rcv_master_addr =
   let addr = "addr" in
@@ -192,8 +205,13 @@ let rcv_master_addr =
   mk_block [
     (* assign the master addr *)
     mk_assign D.master_addr.id @@ mk_var addr;
-    (* send our job to the master *)
-    mk_send ms_rcv_job_nm (mk_var addr) [mk_var D.me_int.id; mk_var D.job.id]
+    (* send our job to the master. if we're the local master, send local_peers *)
+    mk_let ["send_peers"]
+      (mk_if_eq (mk_var job.id) (mk_var job_local_master.id)
+        (mk_var my_local_peers.id) @@
+        mk_empty t_int_vector) @@
+      mk_send ms_rcv_job_nm (mk_var addr)
+        [mk_var D.me_int.id; mk_var D.job.id; mk_var "send_peers"]
   ]
 
 (**** start point for master role ****)

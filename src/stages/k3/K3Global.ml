@@ -21,11 +21,16 @@ let peers =
   let t = wrap_tset' @@ snd_many e in
   create_ds "peers" t ~e
 
+let local_peers =
+  let e = ["addr", t_addr] in
+  let t = wrap_tset' @@ snd_many e in
+  create_ds "local_peers" t ~e
 
 (* create k3 globals for the address and peers *)
 let globals = List.map decl_global
   [ me;          (* me *)
     peers;       (* peers *)
+    local_peers; (* peers on a single machine *)
     role;
   ]
 
