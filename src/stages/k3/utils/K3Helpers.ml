@@ -401,7 +401,8 @@ let mk_delete_prefix ?(path=[]) id x = mk_stree DeletePrefix [mk_id_path id path
 
 let mk_delete_all_prefix ?(path=[]) id x = mk_stree DeleteAllPrefix [mk_id_path id path; x]
 
-(* remove an entry from a data structure (map) *)
+(* remove an entry from a data structure (map) 
+   notify if not there or move it into something *)
 let mk_delete_with ?(path=[]) id x lam_none lam_some =
   mk_stree DeleteWith [mk_id_path id path; mk_tuple x; lam_none; lam_some]
 
@@ -834,25 +835,27 @@ type data_struct = { id: string;
                      map_id: int option;
                      global: bool; (* real global ds *)
                      vid: bool; (* contains vids *)
+                     shared: bool; (* shared across the peer *)
                    }
 
 
 (* also add default values if missing *)
-let create_ds ?(e=[]) ?(ee=[]) ?init ?d_init ?map_id ?(global=false) ?(vid=false) id t =
+let create_ds ?(e=[]) ?(ee=[]) ?init ?d_init ?map_id ?(global=false) ?(vid=false) ?(shared=false) id t =
   (* add default values so we don't have to initialize manually *)
   let init = match init with
     | Some _ as x -> x
     | None -> try some @@ default_value_of_t t
               with Failure _ -> None
   in
-  {id; t; e; ee; init; d_init; map_id; global; vid}
+  {id; t; e; ee; init; d_init; map_id; global; vid; shared}
 
 (* utility functions *)
 let decl_global x =
   let wrap = if x.global then wrap_tind else id_fn in
+  let wrap_shared d = if x.shared then U.add_dproperty "Shared" d else d in
   match x.init with
-  | Some init -> mk_global_val_init x.id (wrap x.t) init
-  | None      -> mk_global_val x.id (wrap x.t)
+  | Some init -> wrap_shared @@ mk_global_val_init x.id (wrap x.t) init
+  | None      -> wrap_shared @@ mk_global_val x.id (wrap x.t)
 
 let delayed_init x = match x.d_init with
   | Some init -> mk_assign x.id init

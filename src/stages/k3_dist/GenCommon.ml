@@ -35,18 +35,21 @@ let nd_log_write_for p trig_nm = "nd_log_write_"^trig_nm (* varies with bound *)
 let nd_log_write c t =
   mk_global_fn ~wr_all:true (nd_log_write_for c.p t) (args_of_t_with_v c t) [] @@
   (* write bound to trigger_specific log *)
-  mk_insert (D.nd_log_for_t t) [mk_var "vid"; mk_tuple @@ args_of_t_as_vars c t]
+  mk_update_at_with (D.lm_log_buffer_for_t t)
+    (mk_cint 0) @@ (* we always write to 0. Vector's for a move *)
+    mk_lambda' ["inner", t_of_e (log_buffer_for c t).e] @@
+      mk_insert_block "inner" [mk_var "vid"; mk_tuple @@ args_of_t_as_vars c t]
 
-(* get bound args *)
+(* load bound args from shared ds *)
 let nd_log_get_bound_for trig_nm = "nd_log_get_bound_"^trig_nm
 let nd_log_get_bound c t =
   (* create a pattern for selecting vid alone *)
   let pat = [mk_var "vid"; mk_cunknown] in
   mk_global_fn (nd_log_get_bound_for t)
-    ["vid", t_vid]
+    ["batch_id", t_vid; "vid", t_vid]
     (arg_types_of_t c t) @@
     mk_snd @@ mk_peek_or_error "failed to find log" @@
-      mk_slice' (D.nd_log_for_t t) pat
+      mk_slice' (D.lm_log_for_t t) pat
 
 
 (* function to check to see if we should execute a do_complete *)
@@ -436,9 +439,10 @@ let mk_send_all ?(reg_addr=false) ds trig payload =
       send_fn trig (mk_var "addr") payload) @@
     mk_var ds.id
 
-let mk_send_all_nodes trig payload = mk_send_all nodes trig payload
-let mk_send_all_switches trig payload = mk_send_all switches trig payload
-let mk_send_all_peers trig payload = mk_send_all ~reg_addr:true my_peers trig payload
+let mk_send_all_nodes trig = mk_send_all nodes trig
+let mk_send_all_switches trig = mk_send_all switches trig
+let mk_send_all_peers trig = mk_send_all ~reg_addr:true my_peers trig
+let mk_send_all_local_peers = mk_send_all my_local_peers
 
 let mk_send_master ?(payload=[mk_cunit]) trig =
   mk_send trig (mk_var master_addr.id) payload

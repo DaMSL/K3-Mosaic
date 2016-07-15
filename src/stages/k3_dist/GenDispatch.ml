@@ -138,7 +138,8 @@ let trig_dispatcher c =
   mk_let_block ["is_isobatch"] (is_isobatch_id "batch_id") [
     mk_if (mk_and (mk_not @@ mk_var corrective_mode.id) @@ mk_var "is_isobatch")
       (* clear dses *)
-      (mk_apply' clear_buffered_fetch_helper_nm []) mk_cunit;
+      (mk_apply' clear_buffered_fetch_helper_nm [])
+      mk_cunit;
 
     (* iterate over all buffer contents *)
     mk_let ["idx"; "offset"] (mk_tuple [mk_cint 0; mk_cint 0]) @@
@@ -203,17 +204,21 @@ let trig_dispatcher_unique c =
     mk_apply' trig_dispatcher_nm [mk_var "batch_id"; mk_var "poly_queue"];
   ]
 
-let nd_dispatcher_buf_inner =
-  let e = ["batch_id", t_vid; "sender_ip", t_int; "poly_queue", poly_queue.t] in
-  create_ds ~e "inner_dispatcher_buf" @@ t_of_e e
-
 (* buffer for dispatcher to reorder poly msgs *)
 let nd_dispatcher_buf =
-  let e = ["num", t_int; "batch_info", nd_dispatcher_buf_inner.t] in
-  create_ds "dispatcher_buf" ~e @@ wrap_tmap' @@ snd_many e
+  let e = ["seq", t_int; "poly_queue", poly_queue.t] in
+  create_ds "dispatcher_buf" ~e @@ wrap_tmap @@ t_of_e e
+
+(* we split the buffer for efficiency purposed *)
+(* these 2 must be synchronized *)
+let nd_dispatcher_bid_buf =
+  let e' = ["batch_id", t_vid; "sender_ip", t_int] in
+  let e = ["seq", t_int; "inner", t_of_e e'] in
+  create_ds "nd_dispatcher_bid_buf" ~e @@ wrap_tmap @@ t_of_e e
 
 (* remember the last number we've seen *)
-let nd_dispatcher_last_num = create_ds "nd_dispatcher_last_num" @@ mut t_int
+let nd_dispatcher_last_seq =
+  create_ds "nd_dispatcher_last_seq" t_int_mut
 
 (* trigger version of dispatcher. Called by other nodes *)
 let trig_dispatcher_trig c =
@@ -238,7 +243,7 @@ let trig_dispatcher_trig_unique c =
 (* trig dispatcher from switch to node. accepts a msg number telling it how to order messages *)
 (* @msg_num: number of consecutive message. Used to order buffers in corrective mode
    so we avoid having too many correctives. *)
-let nd_dispatcher_next_num = create_ds "nd_dispatcher_next_num" @@ mut t_int
+let nd_dispatcher_next_seq = create_ds "nd_dispatcher_next_seq" @@ mut t_int
 
 let clear_isobatch_stmt_helper_nm = "clear_isobatch_stmt_helper"
 let clear_isobatch_stmt_helper =
@@ -252,26 +257,58 @@ let clear_isobatch_stmt_helper =
       mk_assign isobatch_stmt_helper_has_content.id mk_cfalse;
       ]
 
+
+(* check to see if we have another batch available to send *)
+(* used to recurse in nd_from_sw_dispatcher and for getting args from the lm *)
+let nd_send_next_batch_if_available =
+    (* check if the next num is in the buffer and if we've already received an arg
+     * notification for it *)
+  let pat_next_seq = [mk_var "seq"; mk_cunknown] in
+  mk_global_fn nd_send_next_batch_if_available_nm [] [] @@
+    mk_let ["seq"] (mk_var nd_dispatcher_next_seq.id) @@
+    mk_let ["do_delete"]
+      (mk_case_ns (mk_peek @@ mk_lookup' nd_dispatcher_bid_buf.id pat_next_seq) "x"
+         mk_cfalse @@ (* don't delete, no next sequence *)
+         mk_let ["batch_id"; "sender_ip"] (mk_snd @@ mk_var "x") @@
+          (* are args available for this trigger? *)
+          mk_if (mk_is_member' nd_trig_arg_notifications.id @@ mk_var "batch_id")
+            (mk_block [
+              (* remove from notification set *)
+              mk_delete nd_trig_arg_notifications.id [mk_var "batch_id"];
+              (* get and delete stored polyqueue *)
+              mk_delete_with nd_dispatcher_buf.id pat_next_seq
+                (mk_lambda' unit_arg @@ mk_error "missing polyqueue!")
+                (* recurse with the sequence *)
+                (mk_lambda' nd_dispatcher_buf.e @@
+                  mk_send nd_from_sw_trig_dispatcher_trig_nm G.me_var
+                    [mk_var "seq"; mk_var "batch_id"; mk_var "sender_ip"; mk_var "poly_queue"]);
+              mk_ctrue (* do_delete *)
+              ])
+            mk_cfalse) @@ (* do nothing. wait for notification *)
+      mk_if (mk_var "do_delete")
+        (mk_delete nd_dispatcher_bid_buf.id pat_next_seq)
+        mk_cunit
+
+(* sw -> nd: fetch/put/docomplete *)
 let nd_from_sw_trig_dispatcher_trig c =
   mk_code_sink' nd_from_sw_trig_dispatcher_trig_nm
-    ["num", t_int; "batch_data", nd_dispatcher_buf_inner.t] [] @@
-  mk_let ["batch_id"; "sender_ip"; "poly_queue"] (mk_var "batch_data") @@
+    ["seq", t_int; "batch_id", t_int; "sender_ip", t_int ; "poly_queue", poly_queue.t] [] @@
   mk_let_block ["is_isobatch"] (is_isobatch_id "batch_id")
   [
-    mk_assign nd_dispatcher_next_num.id @@
-      (mk_if_eq (mk_var nd_dispatcher_last_num.id) (mk_var g_max_int.id)
+    mk_assign nd_dispatcher_next_seq.id @@
+      (mk_if_eq (mk_var nd_dispatcher_last_seq.id) (mk_var g_max_int.id)
         (mk_cint 0) @@
-        mk_add (mk_var nd_dispatcher_last_num.id) @@ mk_cint 1);
+        mk_add (mk_var nd_dispatcher_last_seq.id) @@ mk_cint 1);
     (* check if we're contiguous *)
-    mk_if_eq (mk_var "num") (mk_var nd_dispatcher_next_num.id)
+    mk_if_eq (mk_var "seq") (mk_var nd_dispatcher_next_seq.id)
       (* then dispatch right away *)
       (mk_block [
           (* profiling: point of starting to deal with this batch at the node *)
           prof_property prof_tag_node_process @@ ProfLatency("batch_id", "-1");
           (* unpack the polyqueue *)
           mk_poly_unpack (mk_var "poly_queue");
-          mk_assign nd_dispatcher_last_num.id @@ mk_var nd_dispatcher_next_num.id;
-          mk_incr nd_dispatcher_next_num.id;
+          mk_assign nd_dispatcher_last_seq.id @@ mk_var nd_dispatcher_next_seq.id;
+          mk_incr nd_dispatcher_next_seq.id;
           clear_poly_queues c;
           (* buffer the ack to the switch *)
           GC.nd_ack_send_code ~addr_nm:"sender_ip" ~vid_nm:"batch_id";
@@ -285,6 +322,17 @@ let nd_from_sw_trig_dispatcher_trig c =
             ~default:send_poly_queues @@
             mk_apply' trig_dispatcher_nm [mk_var "batch_id"; mk_var "poly_queue"];
 
+          (* check if we're a local master and therefore
+             need to notify local peers about new batch trig_args *)
+          mk_if_eq (mk_var job.id) (mk_var job_local_master.id)
+            (mk_block [
+                (* move trig args from buffer to log *)
+                lm_move_trig_arg_from_buf c;
+                (* notify localpeers that the args have been received *)
+                mk_send_all_local_peers nd_rcv_trig_args_notify_nm [mk_var "batch_id"]
+              ])
+            mk_cunit;
+
           (* check if we need to move stuff from the isobatch stmt helper *)
           mk_if (mk_and (mk_var "is_isobatch") @@ mk_var isobatch_stmt_helper_has_content.id)
             (mk_apply' move_isobatch_stmt_helper_nm [mk_var "batch_id"])
@@ -292,20 +340,15 @@ let nd_from_sw_trig_dispatcher_trig c =
        ]) @@
       mk_block [
         (* else, stash the poly_queue in our buffer *)
-        mk_insert nd_dispatcher_buf.id
-          [mk_var "num"; mk_tuple
-            [mk_var "batch_id"; mk_var "sender_ip"; mk_var "poly_queue"]];
-        (* keep track of stashed number *)
+        mk_insert nd_dispatcher_buf.id [mk_var "seq"; mk_var "poly_queue"];
+        mk_insert nd_dispatcher_bid_buf.id
+          [mk_var "seq"; mk_tuple [mk_var "batch_id"; mk_var "sender_ip"]];
+        (* statistic: keep track of stashed number *)
         mk_assign nd_num_stashed.id @@ mk_add (mk_var @@ nd_num_stashed.id) @@ mk_cint 1
       ]
     ;
-    (* check if the next num is in the buffer *)
-    mk_delete_with nd_dispatcher_buf.id [mk_var nd_dispatcher_next_num.id; mk_cunknown]
-      (mk_lambda' unit_arg @@ mk_cunit)
-      (* recurse with the next number *)
-      (mk_lambda' nd_dispatcher_buf.e @@
-       mk_send nd_from_sw_trig_dispatcher_trig_nm G.me_var
-         [mk_var "num"; mk_var "batch_info"])
+    (* recurse into next batch if possible *)
+    mk_apply' nd_send_next_batch_if_available_nm [];
   ]
 
 let sw_event_driver_isobatch_nm = "sw_event_driver_isobatch"
@@ -520,12 +563,11 @@ let sw_rcv_vector_clock_trig =
                     prof_property 0 @@ ProfSendPoly(sw_token_current_batch_id.id, "ip", "pq");
                     mk_sendi nd_from_sw_trig_dispatcher_trig_nm (mk_var "ip")
                       [mk_at' "vector_clock" @@ mk_var "ip";
-                      mk_tuple
-                        [mk_var sw_token_current_batch_id.id;
-                          mk_var D.me_int.id;
-                          mk_var "pq"]];
+                       mk_var sw_token_current_batch_id.id;
+                       mk_var D.me_int.id;
+                       mk_var "pq"];
                     mk_add (mk_var "count") @@ mk_cint 1
-                  ])
+                ])
               (mk_cint 0) @@
               sw_poly_queue_bitmap.id) @@
           (* save the latest ack send info *)

@@ -423,6 +423,7 @@ let arg_types_of_t_with_v c trig_nm = t_vid::arg_types_of_t c trig_nm
 let args_of_t_as_vars_with_v ?(vid="vid") c trig_nm =
   mk_var vid::args_of_t_as_vars c trig_nm
 
+
 (**** global data structures ****)
 
 let mk_sort_vector ds new_t =
@@ -555,6 +556,8 @@ let num_switches =
 let num_nodes =
   let d_init = mk_size @@ mk_var nodes.id in
   create_ds "num_nodes" (mut t_int) ~d_init
+
+let nd_send_next_batch_if_available_nm = "nd_send_next_batch_if_available"
 
 let sw_rcv_token_trig_nm = "sw_rcv_token_trig"
 let sw_rcv_vector_clock_nm = "sw_rcv_vector_clock"
@@ -713,16 +716,50 @@ let nd_log_master =
   create_ds "nd_log_master" (mut @@ wrap_tmap' @@ snd_many e) ~e
 
 (* names for log *)
-let nd_log_for_t t = "nd_log_"^t
+let lm_log_for_t t = "lm_log_"^t
+let lm_log_buffer_for_t t = "lm_log_buffer_"^t
+let nd_log_buffer_ind_for_t t = "nd_log_buffer_ind_"^t
 
-(* log data structures *)
-let log_ds c : data_struct list =
+let log_buffer_for c t =
+  let e' = args_of_t c t in
+  let e  = ["vid", t_vid; "args", wrap_ttuple @@ snd_many e'] in
+  create_ds (lm_log_buffer_for_t t) (wrap_tmap' @@ snd_many e) ~e
+
+(* log buffers: hold vid-based args for fast shared access *)
+(* unfortunately this means we need to use a vector to hold a single element so we can move it out *)
+let lm_log_buffer_ds c : data_struct list =
+  let log_vec_for trig =
+    let sub_ds = log_buffer_for c trig in
+    let e = ["inner", sub_ds.t] in
+    let t = wrap_tvector' @@ snd_many e in
+    let init = mk_singleton t [mk_empty sub_ds.t] in
+    create_ds (lm_log_buffer_for_t trig) t ~init ~e
+  in
+  P.for_all_trigs ~sys_init:true ~delete:c.gen_deletes c.p log_vec_for
+
+(* ds to hold the pointer to the local master's block of args *)
+let nd_log_buffer_ind_ds c : data_struct list =
+  let log_ptr_for t =
+    create_ds (nd_log_buffer_ind_for_t t) (wrap_tind (log_buffer_for c t).t)
+  in
+  P.for_all_trigs ~sys_init:true ~delete:c.gen_deletes c.p log_ptr_for
+
+(* log data structures: contains indirect log_buffers per batch_id *)
+let lm_log_ds c : data_struct list =
   let log_struct_for trig =
-    let e' = args_of_t c trig in
-    let e  = ["vid", t_vid; "args", wrap_ttuple @@ snd_many e'] in
-    create_ds (nd_log_for_t trig) (mut @@ wrap_tmap' @@ snd_many e) ~e
+    let inner_ds = log_buffer_for c trig in
+    let e  = ["batch_id", t_vid; "inner", wrap_tind inner_ds.t] in
+    (* must be shared across peers *)
+    let t = mut @@ wrap_tmap' @@ snd_many e in
+    create_ds (lm_log_for_t trig) t ~shared:true ~e
   in
   P.for_all_trigs ~sys_init:true ~delete:c.gen_deletes c.p log_struct_for
+
+(* ds to track whether arguments arrived *)
+(* when the count hits 2, we execute the batch_id from the switch *)
+let nd_trig_arg_notifications =
+  let e = ["batch_id", t_vid] in
+  create_ds "nd_trig_arg_notifications" (wrap_tset' @@ snd_many e)
 
 (* Buffer versions of maps per statement (to prevent mixing values) *)
 (* NOTE: doesn't contain special inits from AST *)
@@ -1589,7 +1626,11 @@ let global_vars c dict =
       debug_run;
     ] @
 
-    log_ds c @
+    lm_log_ds c @
+    (* buffers for efficient trig arg saving *)
+    lm_log_buffer_ds c @
+    (* indirections for nds to hold the trig args for a batch *)
+    nd_log_buffer_ind_ds c @
     (* combine generic map inits with ones from the ast *)
     (List.map replace_init @@ maps c) @
     (List.map replace_init @@ map_buffers c)

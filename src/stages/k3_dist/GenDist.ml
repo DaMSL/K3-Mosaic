@@ -146,6 +146,7 @@ let declare_global_vars c ast =
      send_put_ip_map c.p;
      send_put_isobatch_map c;
      rcv_fetch_header_bitmap;
+     lm_rcv_args_bitmap;
      send_push_bitmap;
      send_push_isobatch_bitmap;
      send_push_cntrs;
@@ -160,8 +161,9 @@ let declare_global_vars c ast =
      sw_demux_last_trig;
      sw_demux_last_action;
      nd_dispatcher_buf;
-     nd_dispatcher_last_num;
-     nd_dispatcher_next_num;
+     nd_dispatcher_bid_buf;
+     nd_dispatcher_last_seq;
+     nd_dispatcher_next_seq;
      nd_check_stmt_cntr_do_delete;
      nd_check_stmt_cntr_ret;
      nd_check_stmt_cntr_init;
@@ -313,7 +315,9 @@ let gen_dist ?(gen_deletes=true)
     clear_send_push_ds ::
     clear_send_push_isobatch_ds ::
     fns1 @
-    [nd_send_isobatch_push_meta c;
+    [
+     nd_send_next_batch_if_available;
+     nd_send_isobatch_push_meta c;
      nd_exec_buffered_fetches c;    (* depends: send_push *)
      nd_complete_stmt_cntr_check c; (* depends: exec_buffered *)
      nd_check_stmt_cntr_index c;
@@ -339,6 +343,7 @@ let gen_dist ?(gen_deletes=true)
       Timer.triggers c @
       sw_warmup_loops c @
       [
+        nd_rcv_trig_args_notify;
         trig_dispatcher_trig c;
         trig_dispatcher_trig_unique c;
         nd_from_sw_trig_dispatcher_trig c;

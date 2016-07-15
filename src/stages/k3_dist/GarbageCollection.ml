@@ -108,7 +108,7 @@ let ms_gc_done_barrier c = mk_barrier ~reusable:true ms_gc_done_barrier_nm ~ctr:
 (* data structures needing gc *)
 let ds_to_gc c =
   D.nd_log_master ::
-  D.log_ds c @
+  D.lm_log_ds c @
   D.map_buffers c @
   D.maps c
 

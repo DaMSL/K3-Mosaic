@@ -400,9 +400,10 @@ type data_struct = { id: string;
                      map_id: int option;
                      global: bool;
                      vid: bool;
+                     shared: bool; (* shared across peers *)
                    }
 
-val create_ds : ?e:(string * type_t) list -> ?ee:(string * type_t) list list -> ?init:expr_t -> ?d_init:expr_t -> ?map_id:int -> ?global:bool -> ?vid:bool -> string -> type_t -> data_struct
+val create_ds : ?e:(string * type_t) list -> ?ee:(string * type_t) list list -> ?init:expr_t -> ?d_init:expr_t -> ?map_id:int -> ?global:bool -> ?vid:bool -> ?shared:bool -> string -> type_t -> data_struct
 
 val decl_global : data_struct -> declaration_t * annotation_t
 val delayed_init : data_struct -> expr_t

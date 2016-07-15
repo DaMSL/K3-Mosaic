@@ -19,9 +19,12 @@ open GenCommon
 
 (* ----- Receive trigger args ----- *)
 
-let lm_rcv_args_flag = create_ds "lm_rcv_args_flag" t_int_mut
+(* trigger_id -> bool *)
+(* index for quickly copying the correct trig arg buffers *)
+let lm_rcv_args_bitmap = create_ds "lm_rcv_args_flag" t_bitset
 
-(* save the trigger arguments *)
+(* Save the trigger arguments in a temporary buffer.
+ * This allows us to reduce contention for the shared log ds *)
 let lm_save_arg_trig c t =
   let fn_nm = trig_save_arg_name_of_t t in
   let t_args = trig_save_arg_args c t in
@@ -29,8 +32,38 @@ let lm_save_arg_trig c t =
     (* save the bound args for this vid *)
     mk_block [
       mk_apply' (nd_log_write_for c t) @@ args_of_t_as_vars_with_v c t;
-      mk_assign lm_rcv_args_flag.id mk_ctrue
+      (* mark as having received arguments *)
+      mk_insert lm_rcv_args_bitmap.id [mk_cint @@ P.trigger_id_for_name c.p t]
     ]
+
+(* copy trig args from the buffer to the log ds *)
+(* handle all trigger possiblities *)
+let lm_move_trig_arg_from_buf c =
+    (* always access at 0 -- just for move *)
+  let trigs = P.get_trig_list ~sys_init:true ~delete:c.gen_deletes c.p in
+  let gen_move t =
+    let t_id = P.trigger_id_for_name c.p t in
+    (* check for this trigger in the bitmap *)
+    mk_if (mk_is_member' lm_rcv_args_bitmap.id @@ mk_cint t_id)
+      (mk_let ["inner"] (mk_delete_at (lm_log_buffer_for_t t) @@ mk_cint 0) @@
+        (* insert an indirection to the moved inner ds *)
+        mk_insert (lm_log_for_t t) [mk_var "batch_id"; mk_ind @@ mk_var "inner"])
+      mk_cunit
+  in
+  mk_block @@
+    List.map gen_move trigs @
+    [mk_clear_all lm_rcv_args_bitmap.id]
+
+let nd_rcv_trig_args_notify_nm = "nd_rcv_trig_args_notify"
+let nd_rcv_trig_args_notify =
+  mk_code_sink' nd_rcv_trig_args_notify_nm
+    ["batch_id", t_vid] [] @@
+  mk_block [
+    (* set in ds *)
+    mk_insert D.nd_trig_arg_notifications.id [mk_var "batch_id"];
+    (* check if we've already received a batch for this, and if so, handle it *)
+    mk_apply' D.nd_send_next_batch_if_available_nm [];
+  ]
 
 (* ----- Receive fetch ----- *)
 
