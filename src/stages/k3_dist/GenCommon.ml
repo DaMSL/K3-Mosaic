@@ -40,17 +40,51 @@ let nd_log_write c t =
     mk_lambda' ["inner", t_of_e (log_buffer_for c t).e] @@
       mk_insert_block "inner" [mk_var "vid"; mk_tuple @@ args_of_t_as_vars c t]
 
-(* load bound args from shared ds *)
-let nd_log_get_bound_for trig_nm = "nd_log_get_bound_"^trig_nm
-let nd_log_get_bound c t =
-  (* create a pattern for selecting vid alone *)
-  let pat = [mk_var "vid"; mk_cunknown] in
-  mk_global_fn (nd_log_get_bound_for t)
-    ["batch_id", t_vid; "vid", t_vid]
-    (arg_types_of_t c t) @@
-    mk_snd @@ mk_peek_or_error "failed to find log" @@
-      mk_slice' (D.lm_log_for_t t) pat
+(* Function to copy the trig arg ptr from the shared log to the local buffer.
+   This allows shared reads to be as short as possible *)
+let nd_log_copy_to_buffer_nm t = "nd_log_copy_to_buffer_" ^ t
+let nd_log_copy_to_buffer c t =
+  let t_id = P.trigger_id_for_name c.p t in
+  mk_global_fn (nd_log_copy_to_buffer_nm t) ["batch_id", t_vid] [] @@
+  mk_if (mk_not @@ mk_is_member' D.nd_log_buffer_bitmap.id @@ mk_cint t_id)
+    (mk_block [
+      (* copy the ptr into the buffer *)
+      mk_case_ns (mk_slice' (D.lm_log_for_t t) [mk_var "batch_id"; mk_cunknown]) "ptr"
+        (mk_error "failed to find batch id") @@
+        mk_insert (nd_log_buffer_ind_for_t t) [mk_var "ptr"];
+      (* mark the buffer as copied *)
+      mk_insert nd_log_buffer_bitmap.id [mk_cint t_id]
+    ])
+    mk_cunit
 
+(* load bound args from shared ds *)
+(* needs to move the pointer to batch into the buffer ds *)
+(* this must be inlined to avoid the cost of returning across a function boundary *)
+(* assumes "batch_id" and "vid" in scope *)
+(* @isobatch: if false, directly query the batch_id and vid *)
+let nd_log_get_bound ?(batch_nm="batch_id") c t expr =
+  (* create a pattern for selecting vid alone *)
+  mk_block [
+    (* check if we need to load batch into read buffer *)
+    mk_apply' (nd_log_copy_to_buffer_nm t) [mk_var batch_nm];
+    mk_bind (mk_var @@ nd_log_buffer_ind_for_t t) "buf" @@
+      mk_let (fst_many @@ D.args_of_t c t)
+        (mk_slice' ("buf") [mk_var "vid"; mk_cunknown])
+        expr
+  ]
+
+(* immediately access both the batch and the trig level *)
+(* assumes both batch_id and vid in the environment *)
+(* causes more contention *)
+let nd_log_get_bound_immed ?(batch_nm="batch_id") c t expr =
+  (* pulling the batch out is cheap: just a copy of a pointer *)
+  mk_let ["batch_ind"]
+    (mk_peek_or_error "no batch_id found" @@
+      mk_lookup' (lm_log_buffer_for_t t) [mk_var batch_nm; mk_cunknown]) @@
+  mk_bind (mk_var "batch_ind") "buf" @@
+    mk_let (fst_many @@ D.args_of_t c t)
+      (mk_slice' ("buf") [mk_var "vid"; mk_cunknown])
+      expr
 
 (* function to check to see if we should execute a do_complete *)
 (* params: vid, stmt, count_to_change *)

@@ -143,13 +143,11 @@ let declare_global_vars c ast =
   List.map decl_global
     [sw_send_stmt_bitmap;
      send_put_bitmap;
-     send_put_ip_map c.p;
      send_put_isobatch_map c;
      rcv_fetch_header_bitmap;
      lm_rcv_args_bitmap;
      send_push_bitmap;
      send_push_isobatch_bitmap;
-     send_push_cntrs;
      send_push_isobatch_map c;
      nd_send_isobatch_push_sent;
      send_corrective_bitmap;
@@ -181,7 +179,7 @@ let declare_global_funcs c ast =
   flatteners c @
   nd_log_master_write ::
   (P.for_all_trigs ~sys_init:true ~delete:c.gen_deletes c.p @@ nd_log_write c) @
-  (P.for_all_trigs ~sys_init:true ~delete:c.gen_deletes c.p @@ nd_log_get_bound c) @
+  (P.for_all_trigs ~sys_init:true ~delete:c.gen_deletes c.p @@ nd_log_copy_to_buffer c) @
   (if c.gen_correctives then [nd_update_corr_map; nd_filter_corrective_list] else []) @
   D.functions c @
   C.functions c @
@@ -197,19 +195,15 @@ let declare_global_funcs c ast =
 let gen_dist_for_t c ast t =
   let s_r = P.stmts_with_rhs_maps_in_t c.p t in
   let s_no_r = P.stmts_without_rhs_maps_in_t c.p t in
-  let ss = P.stmts_of_t c.p t in
   let sre = t = "system_ready_event" in
   let fns1 =
     (List.flatten @@ List.map (fun s ->
          [sw_send_rhs_fetches c t s] @
-          (if c.gen_single_vid then [sw_send_puts_single_vid c t s] else []) @
           (if sre then [] else [sw_send_puts_isobatch c t s])
        ) s_r) @
     (List.map (sw_send_rhs_completes c t) s_no_r) @
-    (if c.gen_single_vid then List.map (sw_send_fetch_single_vid_fn c t) ss else []) @
     (if c.gen_correctives then
        List.flatten @@ List.map (fun s -> nd_do_corrective_fns c t s ast) s_r else []) @
-    (List.flatten @@ List.map (nd_send_push_stmt_map_trig c t) s_r) @
     (List.flatten @@ List.map (nd_isobatch_send_push_stmt_map_trig c t) s_r)
   in
   (* split for scope *)
@@ -217,17 +211,13 @@ let gen_dist_for_t c ast t =
     nd_do_complete_fns c ast t @
     (List.flatten @@ List.map (fun s ->
         (* no isobatch functions for system_ready_event *)
-        (if sre then [] else
+        if sre then [] else
         [
          nd_rcv_put_isobatch_trig c t s;
          nd_rcv_fetch_isobatch_do_push c t s;
          nd_rcv_fetch_isobatch_trig c t s;
          nd_rcv_push_isobatch_trig c t s;
-        ]) @
-        (if c.gen_single_vid then
-           [nd_rcv_put_single_vid_trig c t s;
-            nd_rcv_fetch_single_vid_trig c t s] else []) @
-        [nd_rcv_push_trig c t s]
+        ]
        )
         s_r) @
     (List.map (fun s -> nd_do_complete_trigs c t s) s_no_r) @
@@ -312,7 +302,6 @@ let gen_dist ?(gen_deletes=true)
     (if c.gen_correctives then send_corrective_fns c else []) @
     (* we need this here for scope *)
     clear_send_put_isobatch_map ::
-    clear_send_push_ds ::
     clear_send_push_isobatch_ds ::
     fns1 @
     [
@@ -335,7 +324,6 @@ let gen_dist ?(gen_deletes=true)
      sw_event_driver_isobatch c;
     ] @
     do_reads c @
-    (if c.gen_single_vid then [sw_event_driver_single_vid c] else []) @
     [mk_flow @@
       Proto.triggers c @
       GC.triggers c @

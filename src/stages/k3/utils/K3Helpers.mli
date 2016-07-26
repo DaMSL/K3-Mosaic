@@ -40,6 +40,7 @@ val t_vid : type_t
 val vid_increment : ?vid_expr:expr_t -> unit -> expr_t
 val min_vid_k3 : expr_t
 val sys_init_vid_k3 : expr_t
+val sys_init_batch_id_k3 : expr_t
 val start_vid_k3 : expr_t
 
 (* convert a type to mutable *)
@@ -382,7 +383,7 @@ val mk_convert_col' : type_t -> container_type_t -> expr_t -> expr_t
 
 val mk_peek_or_zero : ?zero:expr_t -> expr_t -> expr_t
 
-val mk_peek_or_error : string -> expr_t -> expr_t
+val mk_peek_or_error : ?id:id_t -> string -> expr_t -> expr_t
 
 val mk_lookup : expr_t -> expr_t list -> expr_t
 val mk_lookup' : id_t -> expr_t list -> expr_t

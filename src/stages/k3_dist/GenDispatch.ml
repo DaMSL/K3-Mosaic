@@ -21,6 +21,7 @@ open GenPush
 open GenRcvFetchPut
 
 (* function to handle dispatch with push data *)
+(* insert all the push data into the appropriate maps *)
 let nd_handle_uniq_poly_nm = "nd_handle_uniq_poly"
 let nd_handle_uniq_poly c =
   let ts = P.get_trig_list c.p ~sys_init:true ~delete:c.gen_deletes in
@@ -106,7 +107,7 @@ let nd_no_arg_trig_sub_handler c t =
 (* handle all sub-trigs that need only a vid (pushes) *)
 let nd_load_arg_trig_sub_handler c t =
   let fn_nm = trig_load_arg_sub_handler_name_of_t t in
-  let load_args = D.args_of_t c t in
+  let args = D.args_of_t c t in
   mk_global_fn fn_nm (poly_args @ trig_load_arg_sub_handler_args) [t_int; t_int] @@
   (* skip over the entry tag *)
   mk_poly_skip_block fn_nm [
@@ -114,10 +115,7 @@ let nd_load_arg_trig_sub_handler c t =
        for any sub-trigger output (ie. pushes) *)
     mk_clear_all D.send_trig_header_bitmap.id;
     (* load the trig args *)
-    (if load_args <> [] then
-      mk_let (fst_many @@ D.args_of_t c t)
-        (mk_apply' (nd_log_get_bound_for t) [mk_var "vid"])
-     else id_fn) @@
+    (if args = [] then id_fn else nd_log_get_bound c t) @@
     (* dispatch the sub triggers *)
     mk_poly_iter' @@
       mk_lambda'' (p_tag @ p_idx @ p_off) @@
@@ -129,7 +127,7 @@ let nd_load_arg_trig_sub_handler c t =
 
 (*** central triggers to handle dispatch for nodes and switches ***)
 
-(* handles rcv_fetch, rcv_put, rcv_do_complete, rcv_push, rcv_corrective, rcv_ack *)
+(* handles rcv_fetch, rcv_put, rcv_do_complete, rcv_push, rcv_corrective, rcv_ack for a whole batch *)
 (* we need to handle buffering fetches (rcv_fetch) at the aggregate level *)
 let trig_dispatcher_nm = "trig_dispatcher"
 let trig_dispatcher c =
@@ -140,6 +138,9 @@ let trig_dispatcher c =
       (* clear dses *)
       (mk_apply' clear_buffered_fetch_helper_nm [])
       mk_cunit;
+
+    (* clear bitmap for moving args to log buffers for this batch *)
+    mk_clear_all D.nd_log_buffer_bitmap.id;
 
     (* iterate over all buffer contents *)
     mk_let ["idx"; "offset"] (mk_tuple [mk_cint 0; mk_cint 0]) @@
@@ -387,55 +388,6 @@ let sw_event_driver_isobatch c =
     (mk_error "mismatch on event id")
     tags
 
-let sw_event_driver_single_vid_nm = "sw_event_driver_single_vid"
-let sw_event_driver_single_vid c =
-  let trig_list = StrSet.of_list @@ P.get_trig_list c.p in
-  mk_global_fn sw_event_driver_single_vid_nm
-    ["batch_id", t_vid; "poly_queue", poly_queue.t] [t_vid] @@
-  mk_poly_fold
-    (mk_lambda4' ["vid", t_vid] p_tag p_idx p_off @@
-
-      (* print trace if requested *)
-      do_trace "sed"
-        [t_int, mk_var "vid";
-        t_int, mk_var "tag";
-        t_int, mk_var "idx";
-        t_int, mk_var "offset"] @@
-
-        mk_block [
-          (* clear the trig send bitmaps for each event *)
-          mk_clear_all D.send_trig_header_bitmap.id ;
-
-          List.fold_left (fun acc_code ti ->
-            (* check if we match on the id *)
-            mk_if_eq (mk_var "tag") (mk_cint ti.itag)
-              (if ti.tag = "sentinel" then
-                (* don't check size of event queue *)
-                Proto.sw_seen_sentinel ~check_size:false
-              else
-                let send_fetches pref =
-                  let ss = P.stmts_of_t c.p @@ pref^ti.tag in
-                  (mk_block @@ List.map (fun s ->
-                    mk_apply' (send_fetch_single_vid_name_of_t (pref^ti.tag) s) @@
-                      ids_to_vars @@ "vid":: (fst_many @@ tl ti.args)) ss)
-                in
-                mk_poly_at_with' ti.tag @@
-                  mk_lambda' ti.args @@
-                      mk_if (mk_var "do_insert")
-                        (send_fetches "insert_")
-                        (if c.gen_deletes then send_fetches "delete_" else mk_cunit))
-              acc_code)
-          (mk_error "mismatch on event id") @@
-          List.filter (fun ti ->
-              ti.tag_typ = Event &&
-              (StrSet.mem ("insert_"^ti.tag) trig_list || ti.tag = "sentinel"))
-            c.poly_tags
-        ;
-        next_vid @@ mk_var "vid"
-      ])
-  (mk_var "batch_id") @@
-  mk_var "poly_queue"
-
 let clear_send_trig_args_map_nm = "clear_send_trig_args_map"
 let clear_send_trig_args_map =
   mk_global_fn clear_send_trig_args_map_nm [] [] @@
@@ -501,11 +453,7 @@ let sw_rcv_token_trig c =
                 mk_send sw_rcv_token_trig_nm (mk_var TS.sw_next_switch_addr.id) [mk_var "next_vid"];
 
                 (* dispatch the events, preparing the poly_queues *)
-                (let e = mk_apply' sw_event_driver_isobatch_nm [mk_var "batch_id"; mk_var "poly_queue"] in
-                if not c.gen_single_vid then mk_ignore e
-                else
-                  mk_ignore @@ mk_if (mk_var isobatch_mode.id) e @@
-                      mk_apply' sw_event_driver_single_vid_nm [mk_var "batch_id"; mk_var "poly_queue"]);
+                mk_ignore @@ mk_apply' sw_event_driver_isobatch_nm [mk_var "batch_id"; mk_var "poly_queue"];
 
                 (* finish popping the incoming queue *)
                 mk_pop D.sw_event_queue.id;

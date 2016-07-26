@@ -89,18 +89,20 @@ let nd_sys_init_barrier =
  * system_ready_event code *)
 let sw_sys_init_nm = "sw_"^D.sys_init
 let sw_sys_init c =
-  let ss = P.stmts_of_t c.p D.sys_init in
   mk_code_sink' sw_sys_init_nm unit_arg [] @@
-  mk_let_block ["batch_id"] (mk_cint 1) @@
-    [C.clear_poly_queues c] @
-    (List.map (fun s ->
-        mk_apply' (D.send_fetch_single_vid_name_of_t D.sys_init s) [sys_init_vid_k3])
-      ss) @
-    [
-      C.send_poly_queues;
+  mk_let_block ["batch_id"] (sys_init_batch_id_k3) @@
+    [C.clear_poly_queues c;
+     mk_let_block ["poly_queue"] (mk_empty poly_queue.t)
+       [
+         mk_poly_insert D.sys_init "poly_queue" [sys_init_vid_k3];
+         mk_apply' (D.send_fetches_isobatch_name_of_t D.sys_init)
+           [mk_var "batch_id"; mk_var "poly_queue"]
+       ];
 
-      (* send notifications *)
-      C.mk_send_all_nodes nd_sys_init_barrier_nm [mk_cunit]
+     C.send_poly_queues;
+
+     (* send notifications *)
+     C.mk_send_all_nodes nd_sys_init_barrier_nm [mk_cunit]
     ]
 
 let ms_post_warmup_nm = "ms_post_warmup"

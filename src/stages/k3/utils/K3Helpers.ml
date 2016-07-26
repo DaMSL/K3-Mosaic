@@ -755,6 +755,7 @@ let vid_increment ?(vid_expr=mk_var "vid") () =
 
 let min_vid_k3 = mk_tuple [mk_cint 0]
 let sys_init_vid_k3 = mk_tuple [mk_cint 2]
+let sys_init_batch_id_k3 = mk_tuple [mk_cint 1]
 let start_vid_k3 = mk_tuple [mk_cint 4]
 
 (* id function for maps *)
@@ -803,9 +804,9 @@ let mk_peek_or_zero ?(zero=(mk_cint 0)) e =
   mk_case_ns (mk_peek e) "x"
     zero (mk_var "x")
 
-let mk_peek_or_error s e = mk_case_ns (mk_peek e) "x"
+let mk_peek_or_error ?(id="x") s e = mk_case_ns (mk_peek e) id
   (mk_error s) @@
-  mk_var "x"
+  mk_var id
 
 let mk_lookup col pat = mk_peek @@ mk_slice col pat
 let mk_lookup' col pat = mk_peek @@ mk_slice' col pat

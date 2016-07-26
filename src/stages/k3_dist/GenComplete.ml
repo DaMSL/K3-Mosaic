@@ -36,10 +36,7 @@ let nd_rcv_push_isobatch_trig c t s =
               mk_iter
                 (mk_lambda' ["vid", t_vid] @@
                   (* apply local do_complete *)
-                  (if args <> [] then
-                    mk_let (fst_many args)
-                      (mk_apply' (nd_log_get_bound_for t) [mk_var "vid"])
-                    else id_fn) @@
+                  (if args = [] then id_fn else nd_log_get_bound c t) @@
                   mk_apply' (do_complete_name_of_t t s) @@
                     mk_ctrue::args_of_t_as_vars_with_v c t) @@
                 mk_snd @@ mk_var "vids";
@@ -47,40 +44,6 @@ let nd_rcv_push_isobatch_trig c t s =
               mk_apply' nd_complete_stmt_cntr_check_nm [mk_var "batch_id"; mk_cint s]
             ])
       mk_cunit
-
-(* rcv_push_trig
- * --------------------------------------
- * Receive a push at a node
- * Also called for virtual pushes: local data transfers to allow tracking of
- * present data w/ counters params can be moved to the put statement, but it's
- * a good reminder to have it here
- * We write to specific buffer maps to prevent mixing of buffer and non-buffer
- * data, which can cause confusion when the time comes to compute.
- * A later optimization could be lumping maps between statements in a trigger,
- * which can be done on a rmap to lmap with binding basis (like shuffles). Care must be
- * paid to the corrective updates in this case, which are statement-specific *)
-let nd_rcv_push_trig c t s =
-    let fn_name = rcv_push_name_of_t t s in
-    let args = args_of_t c t in
-    mk_global_fn fn_name D.nd_rcv_push_args [] @@
-    mk_block [
-      (* inserting into the map has been moved to the aggregated version *)
-
-      (* update and check statment counters to see if we should send a do_complete *)
-      mk_if
-        (mk_apply' nd_check_stmt_cntr_index_nm @@
-          [mk_var "vid"; mk_cint s; mk_neg @@ mk_var "count"; mk_var "has_data"])
-        (* apply local do_complete *)
-        ((if args <> [] then
-          mk_let
-            (fst_many @@ D.args_of_t c t)
-            (mk_apply'
-              (nd_log_get_bound_for t) [mk_var "vid"])
-          else id_fn) @@
-         mk_apply' (do_complete_name_of_t t s) @@
-          mk_cfalse::args_of_t_as_vars_with_v c t)
-        mk_cunit
-    ]
 
 (* function versions of do_complete *)
 let nd_do_complete_fns c ast trig_name =

@@ -744,6 +744,10 @@ let nd_log_buffer_ind_ds c : data_struct list =
   in
   P.for_all_trigs ~sys_init:true ~delete:c.gen_deletes c.p log_ptr_for
 
+(* bitmap to tell us which triggers have already been loaded into buffers *)
+(* trig_id -> bool *)
+let nd_log_buffer_bitmap = create_ds "nd_log_buffer_bitmap" t_bitset
+
 (* log data structures: contains indirect log_buffers per batch_id *)
 let lm_log_ds c : data_struct list =
   let log_struct_for trig =
@@ -798,16 +802,11 @@ let m_nm = P.map_name_of
 let trig_save_arg_name_of_t t = "lm_trig_save_args_"^t
 let trig_load_arg_sub_handler_name_of_t t = "nd_trig_load_arg_sub_handler_"^t
 let trig_no_arg_sub_handler_name_of_t t   = "nd_trig_no_arg_sub_handler_"^t
-let send_fetch_single_vid_name_of_t t s = sp "sw_%s_%d_send_fetch_single_vid" t s
 let send_fetches_isobatch_name_of_t t = sp "sw_%s_send_fetches_isobatch" t
-let rcv_fetch_single_vid_name_of_t t s = sp "nd_%s_%d_rcv_fetch_single_vid" t s
 let rcv_fetch_isobatch_name_of_t t s = sp "nd_%s_%d_rcv_fetch_isobatch" t s
-let rcv_put_single_vid_name_of_t t s = sp "nd_%s_%d_rcv_put_single_vid" t s
 let rcv_put_isobatch_name_of_t t s = sp "nd_%s_%d_rcv_put_isobatch" t s
 let rcv_stmt_isobatch_name_of_t t s = sp "nd_%s_%d_rcv_stmt_isobatch" t s
-let send_push_name_of_t c t s m = sp "nd_%s_%d_send_push_single_vid_%s" t s (m_nm c.p m)
 let send_push_isobatch_name_of_t c t s m = sp "nd_%s_%d_send_push_isobatch_%s" t s (m_nm c.p m)
-let rcv_push_name_of_t t s = sp "nd_%s_%d_rcv_push" t s
 let rcv_push_isobatch_name_of_t t s = sp "nd_%s_%d_rcv_push_isobatch" t s
 let send_corrective_name_of_t c m = sp "nd_%s_send_correctives" (m_nm c.p m)
 let do_complete_name_of_t t s = sp "nd_%s_%d_do_complete" t s
@@ -1049,14 +1048,6 @@ let calc_poly_tags c =
       (ti load_handler_nm ~batch_id:true (Trig true) trig_load_arg_sub_handler_args_poly)::
       (ti no_arg_handler_nm ~batch_id:true (Trig true) trig_no_arg_sub_handler_args_poly)::
       (List.flatten @@ List.map (fun s ->
-          (if c.gen_single_vid then
-            [ti (rcv_put_single_vid_name_of_t t s) ~trig_args:true
-              (SubTrig(false, [load_handler_nm])) @@
-                nd_rcv_put_args_poly;
-             ti (rcv_fetch_single_vid_name_of_t t s) ~trig_args:true
-              (SubTrig(true, [load_handler_nm])) @@
-                nd_rcv_fetch_args_poly c t
-            ] else []) @
            (* for isobatch mode: receive the vids of the isobatch *)
           (if sre then [] else [
            ti (rcv_stmt_isobatch_name_of_t t s) ~fn:nd_rcv_stmt_isobatch_nm ~const_args:[mk_cint s]
@@ -1080,11 +1071,6 @@ let calc_poly_tags c =
           let num_maps = List.length @@ P.rhs_maps_of_stmt c.p s in
           let r_maps = create_range ~first:1 @@ num_maps in
           List.flatten @@ List.map (fun n ->
-              (List.map (fun has_data ->
-                let d = if has_data then "" else "_no_data" in
-                ti (rcv_push_name_of_t t s^"_"^soi n^d)
-                  ~fn:(rcv_push_name_of_t t s) ~const_args:[mk_cbool has_data; mk_cint n]
-                  (SubTrig(false, [no_arg_handler_nm])) nd_rcv_push_args_poly) [true; false]) @
               (if sre then [] else [
                ti (rcv_push_isobatch_name_of_t t s^"_"^soi n)
                 ~fn:(rcv_push_isobatch_name_of_t t s) ~const_args:[mk_cint n]
@@ -1110,7 +1096,7 @@ let calc_poly_tags c =
        ti (P.map_name_of c.p m^"_warmup") (Ds false) (P.map_ids_types_for c.p m))
     @
     (* t_vid_list ds for correctives *)
-    [ti "vids" (Ds false) ["vid", t_vid]] @
+    [ti "vids" (Ds false) ["batch_id", t_vid; "vid", t_vid]] @
     (if c.gen_correctives then
        [ti nd_rcv_corr_done_nm (Trig false) nd_rcv_corr_done_args] else []) @
     (* for GC (node->switch acks) *)
@@ -1631,6 +1617,7 @@ let global_vars c dict =
     lm_log_buffer_ds c @
     (* indirections for nds to hold the trig args for a batch *)
     nd_log_buffer_ind_ds c @
+    nd_log_buffer_bitmap ::
     (* combine generic map inits with ones from the ast *)
     (List.map replace_init @@ maps c) @
     (List.map replace_init @@ map_buffers c)

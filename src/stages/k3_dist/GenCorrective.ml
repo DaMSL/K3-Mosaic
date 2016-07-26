@@ -141,10 +141,7 @@ let send_corrective_fns c =
               (* get bound vars from log so we can calculate shuffle *)
               let args = D.args_of_t c t in
               (if args <> [] (* && not no_bound *) then
-                mk_let
-                  (fst_many @@ D.args_of_t c t)
-                  (mk_apply'
-                    (nd_log_get_bound_for t) [mk_var "vid"])
+                nd_log_get_bound c t
               else id_fn) @@
               mk_block [
                 mk_apply' shuffle_fn @@
@@ -440,11 +437,9 @@ let nd_rcv_correctives_trig c t s =
                 (* check if our stmt_counter is 0 *)
                 mk_if_eq (mk_var "cntr") (mk_cint 0)
                   (* if so, get bound vars from log *)
-                  (let args = fst_many @@ D.args_of_t c t in
-                  (if args <> [] then
-                    mk_let args
-                      (mk_apply'
-                        (nd_log_get_bound_for t) [mk_var "compute_vid"])
+                  (* TODO: no access to batch id/vid here *)
+                  ((if D.args_of_t c t <> [] then
+                    nd_log_get_bound_immed ~batch_nm:"compute_vid" c t
                   else id_fn) @@
                     (* do_corrective, return number of msgs *)
                     mk_add (mk_var "acc_count") @@
