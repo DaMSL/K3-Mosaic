@@ -190,10 +190,15 @@ let rec eval_fun uuid f =
             begin try
               let env', result = f new_env in
               {env' with locals=unbind_args uuid arg env'.locals; stack=env.stack}, result
-            with Failure x ->
-              raise @@ RuntimeError(uuid, "", x^"\n"^
-                string_of_env ~skip_empty:false ~accessed_only:false env) end
-          end
+            with
+            | Failure x ->
+                raise @@ RuntimeError(uuid, "", x^"\n"^
+                                                string_of_env ~skip_empty:false ~accessed_only:false env)
+            | Division_by_zero ->
+                raise @@ RuntimeError(uuid, "", "Divide by zero\n"^
+                                                string_of_env ~skip_empty:false ~accessed_only:false env)
+            end
+        end
 
    | _ -> error "eval_fun: Non-function value"
 

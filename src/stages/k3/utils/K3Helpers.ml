@@ -401,7 +401,7 @@ let mk_delete_prefix ?(path=[]) id x = mk_stree DeletePrefix [mk_id_path id path
 
 let mk_delete_all_prefix ?(path=[]) id x = mk_stree DeleteAllPrefix [mk_id_path id path; x]
 
-(* remove an entry from a data structure (map) 
+(* remove an entry from a data structure (map)
    notify if not there or move it into something *)
 let mk_delete_with ?(path=[]) id x lam_none lam_some =
   mk_stree DeleteWith [mk_id_path id path; mk_tuple x; lam_none; lam_some]
@@ -837,18 +837,20 @@ type data_struct = { id: string;
                      global: bool; (* real global ds *)
                      vid: bool; (* contains vids *)
                      shared: bool; (* shared across the peer *)
+                     gc_vid_nm: string; (* id of vid for GC *)
                    }
 
 
 (* also add default values if missing *)
-let create_ds ?(e=[]) ?(ee=[]) ?init ?d_init ?map_id ?(global=false) ?(vid=false) ?(shared=false) id t =
+let create_ds ?(e=[]) ?(ee=[]) ?init ?d_init ?map_id ?(global=false)
+    ?(vid=false) ?(shared=false) ?(gc_vid_nm="vid") id t =
   (* add default values so we don't have to initialize manually *)
   let init = match init with
     | Some _ as x -> x
     | None -> try some @@ default_value_of_t t
               with Failure _ -> None
   in
-  {id; t; e; ee; init; d_init; map_id; global; vid; shared}
+  {id; t; e; ee; init; d_init; map_id; global; vid; shared; gc_vid_nm}
 
 (* utility functions *)
 let decl_global x =

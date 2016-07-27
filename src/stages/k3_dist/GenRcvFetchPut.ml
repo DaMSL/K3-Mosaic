@@ -21,17 +21,17 @@ open GenCommon
 
 (* trigger_id -> bool *)
 (* index for quickly copying the correct trig arg buffers *)
-let lm_rcv_args_bitmap = create_ds "lm_rcv_args_flag" t_bitset
+let lm_rcv_args_bitmap = create_ds "lm_rcv_args_bitmap" t_bitset
 
 (* Save the trigger arguments in a temporary buffer.
  * This allows us to reduce contention for the shared log ds *)
 let lm_save_arg_trig c t =
   let fn_nm = trig_save_arg_name_of_t t in
   let t_args = trig_save_arg_args c t in
-  mk_global_fn fn_nm (poly_args @ t_args) [t_int; t_int] @@
+  mk_global_fn fn_nm t_args [] @@
     (* save the bound args for this vid *)
     mk_block [
-      mk_apply' (nd_log_write_for c t) @@ args_of_t_as_vars_with_v c t;
+      mk_apply' (lm_log_write_for c t) @@ args_of_t_as_vars_with_v c t;
       (* mark as having received arguments *)
       mk_insert lm_rcv_args_bitmap.id [mk_cint @@ P.trigger_id_for_name c.p t]
     ]

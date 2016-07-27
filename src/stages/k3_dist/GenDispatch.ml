@@ -268,7 +268,7 @@ let nd_send_next_batch_if_available =
   mk_global_fn nd_send_next_batch_if_available_nm [] [] @@
     mk_let ["seq"] (mk_var nd_dispatcher_next_seq.id) @@
     mk_let ["do_delete"]
-      (mk_case_ns (mk_peek @@ mk_lookup' nd_dispatcher_bid_buf.id pat_next_seq) "x"
+      (mk_case_ns (mk_lookup' nd_dispatcher_bid_buf.id pat_next_seq) "x"
          mk_cfalse @@ (* don't delete, no next sequence *)
          mk_let ["batch_id"; "sender_ip"] (mk_snd @@ mk_var "x") @@
           (* are args available for this trigger? *)

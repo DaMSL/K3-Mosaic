@@ -13,8 +13,8 @@ module C = GenCommon
 
 (* Description of GC protocol
  * --------------------------
- * Master switch must be aware of all nodes and switches
- * Master switch keeps track of min vid from each switch and node
+ * Master must be aware of all nodes and switches
+ * Master keeps track of min vid from each switch and node
  * Each node acks its received Put message to the sending switch.
  * Each switch keeps track of its max ack vid and sends it X seconds after GC.
  * Each node keeps track of its max executed vid and sends it X seconds after GC.
@@ -29,7 +29,8 @@ module C = GenCommon
 
 (* prefixes:
   * sw: switch
-  * ms: master switch
+  * ms: master
+  * lm: local master
   * nd: node
   * tm: timer
 *)
@@ -106,11 +107,13 @@ let ms_gc_done_barrier c = mk_barrier ~reusable:true ms_gc_done_barrier_nm ~ctr:
              G.me_var])
 
 (* data structures needing gc *)
-let ds_to_gc c =
+let nd_ds_to_gc c =
   D.nd_log_master ::
-  D.lm_log_ds c @
   D.map_buffers c @
   D.maps c
+
+let lm_ds_to_gc c =
+  D.lm_log_ds c
 
 (* functions to perform garbage collection *)
 (* NOTE: TODO: for now, we use an intermediate ds. A filterInPlace would be better *)
@@ -135,7 +138,10 @@ let do_gc_fns c =
 
       | None -> (* non-map ds *)
         (* look for any entry in the ds containing vid *)
-        let vid = fst @@ List.find (r_match r_vid |- fst) (ds_e ds) in
+        let regex = Str.regexp ds.gc_vid_nm in
+        let vid = fst @@
+          try List.find (r_match regex |- fst) (ds_e ds)
+          with Not_found -> failwith @@ sp "Failed to find vid in %s\n" ds.id in
         let t' = ds.t in
         let ds_ids = fst_many @@ ds_e ds in
         let temp = "temp" in
@@ -153,7 +159,8 @@ let do_gc_fns c =
         mk_assign ds.id @@ U.add_property "Move" @@
         mk_agg agg_fn (mk_empty ds.t) @@ mk_var ds.id
   in
-  List.map gc_std @@ ds_to_gc c
+  List.map gc_std @@
+    nd_ds_to_gc c @ lm_ds_to_gc c
 
 let do_gc_trig c =
   let min_vid = "gc_vid" in
@@ -162,12 +169,21 @@ let do_gc_trig c =
       (* (mk_apply' "print_env" mk_cunit) :: (* debug *) *)
       [prof_property prof_tag_gc_start @@ ProfLatency("gc_vid", "-1");
        mk_apply' "vmapDump" [];
-       mk_print @@ mk_concat (mk_cstring "Starting GC @ ") @@ mk_soi (mk_var "gc_vid")] @
-       (List.map (fun ds -> mk_apply' ("do_gc_"^ds.id) [mk_var min_vid]) @@ ds_to_gc c) @
-       [prof_property prof_tag_gc_done @@ ProfLatency("gc_vid", "-1");
-        mk_apply' "vmapDump" [];
-        mk_print @@ mk_concat (mk_cstring "Ending GC @ ") @@ mk_soi (mk_var "gc_vid");
-        C.mk_send_master ms_gc_done_barrier_nm]
+       mk_print @@ mk_concat (mk_cstring "Starting GC @ ") @@ mk_soi (mk_var "gc_vid");
+       (* GC for nodes *)
+       mk_if_eq (mk_var D.job.id) (mk_var D.job_node.id)
+         (mk_block @@
+           List.map (fun ds -> mk_apply' ("do_gc_"^ds.id) [mk_var min_vid]) @@ nd_ds_to_gc c)
+         mk_cunit;
+       (* GC for local masters *)
+       mk_if_eq (mk_var D.job.id) (mk_var D.job_local_master.id)
+         (mk_block @@
+           List.map (fun ds -> mk_apply' ("do_gc_"^ds.id) [mk_var min_vid]) @@ lm_ds_to_gc c)
+         mk_cunit;
+       prof_property prof_tag_gc_done @@ ProfLatency("gc_vid", "-1");
+       mk_apply' "vmapDump" [];
+       mk_print @@ mk_concat (mk_cstring "Ending GC @ ") @@ mk_soi (mk_var "gc_vid");
+       C.mk_send_master ms_gc_done_barrier_nm]
 
 (* master switch trigger to receive and add to the max vid map *)
 let ms_rcv_gc_vid_nm = "ms_rcv_gc_vid"
@@ -195,10 +211,10 @@ let ms_rcv_gc_vid c =
             (* if we've advanced since last gc *)
             mk_if (mk_gt (mk_var min_vid) @@ mk_var ms_last_gc_vid.id)
               (mk_block [ (* then *)
-                (* send gc notices to nodes only *)
+                (* send gc notices to nodes and local masters only *)
                 (* NOTE: currently there's no need to send do_gc to the switches. If that changes, this check needs
                  * to change as wel *)
-                C.mk_send_all_nodes do_gc_nm [mk_var min_vid];
+                C.mk_send_all_nodes ~local_masters:true do_gc_nm [mk_var min_vid];
                 (* overwrite last gc vid *)
                 mk_assign ms_last_gc_vid.id @@ mk_var min_vid; ])
               mk_cunit; (* else nothing *)

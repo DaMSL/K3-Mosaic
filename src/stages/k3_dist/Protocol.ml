@@ -149,6 +149,7 @@ let rcv_jobs c =
     delayed_init D.timer_addr;
     (* set nodes *)
     delayed_init D.nodes;
+    delayed_init D.local_masters;
     delayed_init D.num_nodes;
     (* set switches *)
     delayed_init D.switches;

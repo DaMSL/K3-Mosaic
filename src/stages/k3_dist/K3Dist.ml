@@ -442,12 +442,13 @@ let my_peers =
 
 (* sorted locally, and converted to integers *)
 let my_local_peers =
+  let e = ["addr", t_int] in
   let init =
-    mk_sort_vector G.local_peers (wrap_tvector t_addr) |>
     mk_map (mk_lambda' ["addr", t_addr] @@
-        mk_apply' "int_of_addr" [mk_var "addr"])
+        mk_apply' "int_of_addr" [mk_var "addr"]) @@
+      mk_sort_vector G.local_peers (wrap_tvector t_addr)
   in
-  create_ds "my_local_peers" t_int_vector ~init
+  create_ds "my_local_peers" t_int_vector ~init ~e
 
 let me_int =
   let init = mk_apply' "int_of_addr" [G.me_var] in
@@ -455,7 +456,11 @@ let me_int =
 
 (* the first peer in the local peers is the local master *)
 let local_master =
-  let init = mk_at (mk_var my_local_peers.id) @@ mk_cint 0 in
+  let init =
+    mk_if (mk_gt (mk_size @@ mk_var my_local_peers.id) @@ mk_cint 0)
+      (mk_at (mk_var my_local_peers.id) @@ mk_cint 0)
+      (mk_cint (-1))
+  in
   create_ds "local_master" t_int ~init
 
 (* whether we're running in the interpreter *)
@@ -533,6 +538,13 @@ let nodes =
   let d_init =
     mk_filter_cnt
       (mk_eq (mk_var job.id) @@ mk_var job_node.id) jobs in
+  let e = ["addr", t_int] in
+  create_ds "nodes" (mut @@ wrap_tbag' @@ snd_many e) ~e ~d_init
+
+let local_masters =
+  let d_init =
+    mk_filter_cnt
+      (mk_eq (mk_var job.id) @@ mk_var job_local_master.id) jobs in
   let e = ["addr", t_int] in
   create_ds "nodes" (mut @@ wrap_tbag' @@ snd_many e) ~e ~d_init
 
@@ -620,8 +632,8 @@ let int_of_addr = mk_global_fn "int_of_addr" ["addr", t_addr] [t_int] @@
 let addr_of_int = mk_global_fn "addr_of_int" ["i", t_int] [t_addr] @@
   mk_at_with (mk_var my_peers.id) (mk_var "i") @@ mk_id_fn' [t_addr]
 
-let local_master_of_peer = mk_global_fn "local_master_of_peer" ["i", t_int] [t_addr] @@
-  mk_at_with (mk_var peer_master_map.id) (mk_var "i") @@ mk_id_fn' [t_addr]
+let local_master_of_peer = mk_global_fn "local_master_of_peer" ["i", t_int] [t_int] @@
+  mk_at_with (mk_var peer_master_map.id) (mk_var "i") @@ mk_id_fn' [t_int]
 
 let mk_sendi trig addr args = mk_send trig (mk_apply' "addr_of_int" [addr]) args
 
@@ -740,7 +752,7 @@ let lm_log_buffer_ds c : data_struct list =
 (* ds to hold the pointer to the local master's block of args *)
 let nd_log_buffer_ind_ds c : data_struct list =
   let log_ptr_for t =
-    create_ds (nd_log_buffer_ind_for_t t) (wrap_tind (log_buffer_for c t).t)
+    create_ds (nd_log_buffer_ind_for_t t) (mut @@ wrap_tind (log_buffer_for c t).t)
   in
   P.for_all_trigs ~sys_init:true ~delete:c.gen_deletes c.p log_ptr_for
 
@@ -755,7 +767,7 @@ let lm_log_ds c : data_struct list =
     let e  = ["batch_id", t_vid; "inner", wrap_tind inner_ds.t] in
     (* must be shared across peers *)
     let t = mut @@ wrap_tmap' @@ snd_many e in
-    create_ds (lm_log_for_t trig) t ~shared:true ~e
+    create_ds (lm_log_for_t trig) t ~shared:true ~e ~gc_vid_nm:"batch_id"
   in
   P.for_all_trigs ~sys_init:true ~delete:c.gen_deletes c.p log_struct_for
 
@@ -825,7 +837,7 @@ let nd_rcv_stmt_isobatch_nm = "nd_rcv_stmt_isobatch"
 
 (* the trig header marks the args *)
 let trig_save_arg_args_poly c t = args_of_t_with_v c t
-let trig_save_arg_args c t = ["batch_id", t_vid] @ trig_save_arg_args_poly c t
+let trig_save_arg_args c t = trig_save_arg_args_poly c t
 
 (* slim trig header for pushes *)
 (* TODO: make vid 16-bit offset from batch_id *)
@@ -939,7 +951,7 @@ let send_trig_args_inner =
   let e = ["vid", t_vid; "_u", t_unit] in
   create_ds ~e "inner" @@ wrap_tmap @@ t_of_e e
 
-(* IP -> vid -> () : which args have been sent *)
+(* ip -> vid -> () : which args have been sent *)
 let send_trig_args_map =
   let e = ["inner", send_trig_args_inner.t] in
   let init =
@@ -1043,7 +1055,7 @@ let calc_poly_tags c =
       let no_arg_handler_nm = trig_no_arg_sub_handler_name_of_t t in
       let sre = t = sys_init in
       (* save args *)
-      (ti save_handler_nm ~batch_id:true (Trig false) @@ trig_save_arg_args_poly c t)::
+      (ti save_handler_nm ~batch_id:false (Trig false) @@ trig_save_arg_args_poly c t)::
       (* slim version of trigger: pull args from log, just vid *)
       (ti load_handler_nm ~batch_id:true (Trig true) trig_load_arg_sub_handler_args_poly)::
       (ti no_arg_handler_nm ~batch_id:true (Trig true) trig_no_arg_sub_handler_args_poly)::
@@ -1555,8 +1567,10 @@ let global_vars c dict =
       master_addr;
       timer_addr;
       nodes;
+      local_masters;
       switches;
       num_peers;
+      peer_master_map;
       num_switches;
       num_nodes;
       map_ids c;
@@ -1610,8 +1624,8 @@ let global_vars c dict =
       debug_run_sw_send_all;
       debug_run_normal;
       debug_run;
+      nd_trig_arg_notifications;
     ] @
-
     lm_log_ds c @
     (* buffers for efficient trig arg saving *)
     lm_log_buffer_ds c @
@@ -1625,7 +1639,7 @@ let global_vars c dict =
   decl_global my_peers ::
   [ int_of_addr;
     addr_of_int;
-    local_master_of_peer
   ] @
-  List.map decl_global l
+  List.map decl_global l @
+  [local_master_of_peer]
 

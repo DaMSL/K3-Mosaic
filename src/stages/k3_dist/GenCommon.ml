@@ -31,14 +31,15 @@ let nd_log_master_write =
          mk_insert_block "x" ~path:[2] [mk_var "wvid"])
 
 (* log_write - save the trigger's arguments *)
-let nd_log_write_for p trig_nm = "nd_log_write_"^trig_nm (* varies with bound *)
-let nd_log_write c t =
-  mk_global_fn ~wr_all:true (nd_log_write_for c.p t) (args_of_t_with_v c t) [] @@
-  (* write bound to trigger_specific log *)
-  mk_update_at_with (D.lm_log_buffer_for_t t)
+let lm_log_write_for p trig_nm = "lm_log_write_"^trig_nm (* varies with bound *)
+let lm_log_write c trig =
+  mk_global_fn ~wr_all:true (lm_log_write_for c.p trig) (args_of_t_with_v c trig) [] @@
+  (* write bound to trigger_specific log buffer. We'll move to the proper log later
+     to minimize contention *)
+  mk_update_at_with (D.lm_log_buffer_for_t trig)
     (mk_cint 0) @@ (* we always write to 0. Vector's for a move *)
-    mk_lambda' ["inner", t_of_e (log_buffer_for c t).e] @@
-      mk_insert_block "inner" [mk_var "vid"; mk_tuple @@ args_of_t_as_vars c t]
+    mk_lambda' ["inner", (log_buffer_for c trig).t] @@
+      mk_insert_block "inner" [mk_var "vid"; mk_tuple @@ args_of_t_as_vars c trig]
 
 (* Function to copy the trig arg ptr from the shared log to the local buffer.
    This allows shared reads to be as short as possible *)
@@ -49,9 +50,9 @@ let nd_log_copy_to_buffer c t =
   mk_if (mk_not @@ mk_is_member' D.nd_log_buffer_bitmap.id @@ mk_cint t_id)
     (mk_block [
       (* copy the ptr into the buffer *)
-      mk_case_ns (mk_slice' (D.lm_log_for_t t) [mk_var "batch_id"; mk_cunknown]) "ptr"
+      mk_case_ns (mk_lookup' (D.lm_log_for_t t) [mk_var "batch_id"; mk_cunknown]) "ptr"
         (mk_error "failed to find batch id") @@
-        mk_insert (nd_log_buffer_ind_for_t t) [mk_var "ptr"];
+        mk_assign (nd_log_buffer_ind_for_t t) @@ mk_snd @@ mk_var "ptr";
       (* mark the buffer as copied *)
       mk_insert nd_log_buffer_bitmap.id [mk_cint t_id]
     ])
@@ -69,7 +70,8 @@ let nd_log_get_bound ?(batch_nm="batch_id") c t expr =
     mk_apply' (nd_log_copy_to_buffer_nm t) [mk_var batch_nm];
     mk_bind (mk_var @@ nd_log_buffer_ind_for_t t) "buf" @@
       mk_let (fst_many @@ D.args_of_t c t)
-        (mk_slice' ("buf") [mk_var "vid"; mk_cunknown])
+        (mk_snd @@ mk_peek_or_error "nd_log_get_bound: no vid found" @@
+           mk_slice' "buf" [mk_var "vid"; mk_cunknown])
         expr
   ]
 
@@ -80,10 +82,11 @@ let nd_log_get_bound_immed ?(batch_nm="batch_id") c t expr =
   (* pulling the batch out is cheap: just a copy of a pointer *)
   mk_let ["batch_ind"]
     (mk_peek_or_error "no batch_id found" @@
-      mk_lookup' (lm_log_buffer_for_t t) [mk_var batch_nm; mk_cunknown]) @@
-  mk_bind (mk_var "batch_ind") "buf" @@
+      mk_slice' (lm_log_for_t t) [mk_var batch_nm; mk_cunknown]) @@
+  mk_bind (mk_snd @@ mk_var "batch_ind") "buf" @@
     mk_let (fst_many @@ D.args_of_t c t)
-      (mk_slice' ("buf") [mk_var "vid"; mk_cunknown])
+      (mk_snd @@ mk_peek_or_error "nd_log_get_bound_immed: no vid found" @@
+        mk_slice' "buf" [mk_var "vid"; mk_cunknown])
       expr
 
 (* function to check to see if we should execute a do_complete *)
@@ -395,7 +398,6 @@ let buffer_for_send ?(unique=false) ?(wr_bitmap=true) t addr args =
 (* code to check if we need to write trig args and a trig header, and if so, to buffer them *)
 let buffer_trig_header_if_needed ?(force=false) ?(need_args=true) vid t addr args =
   (* normal condition for adding *)
-  let save_handler = trig_save_arg_name_of_t t in
   let load_handler = trig_load_arg_sub_handler_name_of_t t in
   let no_arg_handler = trig_no_arg_sub_handler_name_of_t t in
   (* check bitmap for current header *)
@@ -418,15 +420,16 @@ let buffer_trig_header_if_needed ?(force=false) ?(need_args=true) vid t addr arg
                mk_case_ns (mk_lookup' "inner" [vid; mk_cunknown]) "x" mk_cfalse mk_ctrue) @@
             mk_if (mk_var "has_args")
               (buffer_for_send load_handler addr [mk_var "vid"])
+              (* otherwise, update the trig args *)
               (mk_block [
                  (* update index *)
-                 mk_insert send_trig_args_bitmap.id [mk_var "master_addr"];
+                 mk_insert send_trig_args_bitmap.id [mk_var "local_master"];
                  (* update real map *)
-                 mk_update_at_with send_trig_args_map.id (mk_var "master_addr") @@
+                 mk_update_at_with send_trig_args_map.id (mk_var "local_master") @@
                    mk_lambda' send_trig_args_map.e @@
                      mk_insert_block send_trig_args_inner.id [vid; mk_cunit];
                  (* use saving handler *)
-                 buffer_for_send save_handler "master_addr" args;
+                 buffer_for_send (trig_save_arg_name_of_t t) "local_master" args;
                  buffer_for_send load_handler addr [mk_var "vid"]
               ])
           ]
@@ -473,7 +476,9 @@ let mk_send_all ?(reg_addr=false) ds trig payload =
       send_fn trig (mk_var "addr") payload) @@
     mk_var ds.id
 
-let mk_send_all_nodes trig = mk_send_all nodes trig
+let mk_send_all_nodes ?(local_masters=false) trig m =
+  if local_masters then mk_block [mk_send_all D.local_masters trig m; mk_send_all nodes trig m]
+  else mk_send_all nodes trig m
 let mk_send_all_switches trig = mk_send_all switches trig
 let mk_send_all_peers trig = mk_send_all ~reg_addr:true my_peers trig
 let mk_send_all_local_peers = mk_send_all my_local_peers

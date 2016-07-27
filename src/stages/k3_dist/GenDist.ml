@@ -178,7 +178,7 @@ let declare_global_vars c ast =
 let declare_global_funcs c ast =
   flatteners c @
   nd_log_master_write ::
-  (P.for_all_trigs ~sys_init:true ~delete:c.gen_deletes c.p @@ nd_log_write c) @
+  (P.for_all_trigs ~sys_init:true ~delete:c.gen_deletes c.p @@ lm_log_write c) @
   (P.for_all_trigs ~sys_init:true ~delete:c.gen_deletes c.p @@ nd_log_copy_to_buffer c) @
   (if c.gen_correctives then [nd_update_corr_map; nd_filter_corrective_list] else []) @
   D.functions c @
