@@ -202,11 +202,30 @@ def run(target_file,
             return False
 
         switch_list = ['localhost:{}/switch_old'.format(2 + i) for i in range(num_switches)]
-        node_list = ['localhost:{}/node'.format(20 + (i*10)) for i in range(num_nodes)]
+
+        # create nodes in groups
+        num_groups = 1
+        if num_nodes >= 2:
+            num_groups = 2
+        elif num_nodes >= 6:
+            num_groups = 3
+        elif num_nodes >= 10:
+            num_groups = 4
+        num_nodes = num_nodes + num_groups # local masters
+        group_size = num_nodes / num_groups
+
+        # round robin
+        node_lists = [[] for i in range(num_groups)]
+        j = 0
+        for i in range(num_nodes):
+            node_lists[j].append('localhost:{}/node'.format(20 + (i*10)))
+            j = j + 1 if j < num_groups - 1 else 0
+
+        node_list = [','.join(l) for l in node_lists]
 
         # always add the master and timer
-        peer_list = ['-n localhost:0/master', 'localhost:1/timer'] + node_list + switch_list
-        peer_cmd = ','.join(peer_list)
+        peer_list = ['localhost:0/master', 'localhost:1/timer'] + node_list + switch_list
+        peer_cmd = '-n ' + ';'.join(peer_list)
 
         if new_k3:
             # convert to the new k3 file format
