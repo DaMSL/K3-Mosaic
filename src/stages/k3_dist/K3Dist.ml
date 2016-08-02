@@ -546,7 +546,7 @@ let local_masters =
     mk_filter_cnt
       (mk_eq (mk_var job.id) @@ mk_var job_local_master.id) jobs in
   let e = ["addr", t_int] in
-  create_ds "nodes" (mut @@ wrap_tbag' @@ snd_many e) ~e ~d_init
+  create_ds "local_masters" (mut @@ wrap_tbag' @@ snd_many e) ~e ~d_init
 
 let switches =
   let d_init =

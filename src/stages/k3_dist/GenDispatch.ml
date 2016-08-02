@@ -296,11 +296,6 @@ let nd_from_sw_trig_dispatcher_trig c =
     ["seq", t_int; "batch_id", t_int; "sender_ip", t_int ; "poly_queue", poly_queue.t] [] @@
   mk_let_block ["is_isobatch"] (is_isobatch_id "batch_id")
   [
-    (* roll over to 0 if we exceed possible space of seqs *)
-    mk_assign nd_dispatcher_next_seq.id @@
-      (mk_if_eq (mk_var nd_dispatcher_last_seq.id) (mk_var g_max_int.id)
-        (mk_cint 0) @@
-        mk_add (mk_var nd_dispatcher_last_seq.id) @@ mk_cint 1);
     mk_if
       (* If we're local masters, always process.
         Otherwise, check that we have arguments available, and that we're in sequence.
@@ -315,6 +310,11 @@ let nd_from_sw_trig_dispatcher_trig c =
             mk_is_member' nd_trig_arg_notifications.id @@ mk_var "batch_id")
       (* then dispatch right away *)
       (mk_block [
+          (* increment next seq. Roll over to 0 if we exceed possible space of seqs *)
+          mk_assign nd_dispatcher_next_seq.id @@
+            (mk_if_eq (mk_var nd_dispatcher_last_seq.id) (mk_var g_max_int.id)
+              (mk_cint 0) @@
+              mk_add (mk_var nd_dispatcher_last_seq.id) @@ mk_cint 1);
           (* profiling: point of starting to deal with this batch at the node *)
           prof_property prof_tag_node_process @@ ProfLatency("batch_id", "-1");
           (* unpack the polyqueue *)
