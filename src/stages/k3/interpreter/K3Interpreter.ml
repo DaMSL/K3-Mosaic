@@ -880,7 +880,7 @@ let lookup_json t json id =
   with Not_found -> None
 
 (* Builds a trigger, global value and function environment (ie frames) *)
-let env_of_program ?address ?(json=[]) ~role ~peers ~type_aliases ~do_shared sched_st k3_program =
+let env_of_program ?address ?(json=[]) ~role ~local_peers ~peers ~type_aliases ~do_shared sched_st k3_program =
   let me_addr = maybe Constants.default_address id_fn address in
   (* check the annotations for shared item *)
   let env_of_declaration env (d,a) =
@@ -903,6 +903,10 @@ let env_of_program ?address ?(json=[]) ~role ~peers ~type_aliases ~do_shared sch
           (* substitute for peers *)
           | id, _ when id = K3Global.peers.id ->
               env, VSet (ValueSet.of_list @@ List.map (fun x -> VAddress x) @@ fst_many peers)
+
+          (* substitute for local_peers *)
+          | id, _ when id = K3Global.local_peers.id ->
+              env, VSet (ValueSet.of_list @@ List.map (fun x -> VAddress x) @@ fst_many local_peers)
 
           | id, _ when id = K3Global.role.id  -> env, VSet(ValueSet.singleton (VString role))
 
@@ -985,7 +989,7 @@ let interpreter_event_loop role k3_program =
 
 (* returns address, (event_loop_t, environment) *)
 (* @do_shared: create shared environment *)
-let initialize_peer sched_st ~peer ~peers ~type_aliases ~do_shared ?(json=[]) k3_program =
+let initialize_peer sched_st ~local_peers ~peer ~peers ~type_aliases ~do_shared ?(json=[]) k3_program =
   (* find a personal part of the json if it exists *)
   let address, role = peer in
   let json =
@@ -998,13 +1002,14 @@ let initialize_peer sched_st ~peer ~peers ~type_aliases ~do_shared ?(json=[]) k3
     in
     my_json @ json
   in
-  let prog_env = env_of_program sched_st ~address ~role ~peers ~type_aliases ~do_shared ~json k3_program in
+  let prog_env = env_of_program sched_st ~address ~role ~local_peers ~peers ~type_aliases ~do_shared ~json k3_program in
   address, interpreter_event_loop role k3_program, prog_env
 
 (* init a group of local peers (on same machine) *)
 let initialize_local_peers sched_st ~local_peers ~peers ~type_aliases ~json typed_prog =
   thd3 @@ List.fold_right (fun peer (do_shared, shared, acc) ->
-      let addr, other_env, env = initialize_peer sched_st ~do_shared ~peer ~peers ~type_aliases ~json typed_prog in
+      let addr, other_env, env = initialize_peer sched_st ~do_shared ~local_peers ~peer
+          ~peers ~type_aliases ~json typed_prog in
       (* take shared_env from first peer *)
       let shared = maybe env.shared id_fn shared in
       false, Some shared, (addr, other_env, {env with shared})::acc)

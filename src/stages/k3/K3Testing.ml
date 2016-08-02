@@ -40,14 +40,14 @@ let eval_test_expr_env tdecl_prog t_env ta_env trig_env val_env expr =
 
 (* we pass in an optional interpreter environment, a program for type bindings,
  * and an expression *)
-let eval_test_expr peers decl_prog expr =
+let eval_test_expr local_peers peers decl_prog expr =
   (* get the type bindings from the typechecker so we have an environment for
    * typechecking *)
   let tdecl_prog, t_env, ta_env, trig_env, _ = type_bindings_of_program decl_prog in
   (* get the value environment from the interpreter, excluding the trigger
    * functions. if we pass an environment, use that *)
   let val_env =
-    env_of_program ~do_shared:true ~peers ~role:"" ~type_aliases:(hashtbl_of_list ta_env)
+    env_of_program ~do_shared:true ~local_peers ~peers ~role:"" ~type_aliases:(hashtbl_of_list ta_env)
       (K3Runtime.init_scheduler_state peers) tdecl_prog in
   eval_test_expr_env tdecl_prog t_env ta_env trig_env val_env expr
 
@@ -141,7 +141,7 @@ let unify_envs (envs : (address * env_t) list) =
  * function that expects an untyped AST (this takes care of handling any extra
  * information needed by the interpreter) also takes a program_test data
  * structure indicating the kind of test desired *)
-let test_program peers globals_k3 interpret_fn file_name test =
+let test_program local_peers peers globals_k3 interpret_fn file_name test =
   let op_fn, program, tests = match test with
     (* for a single-site test, we just extract the env. For multi-site, we unify
      * the environments, and rename all node variables to be node_var (TODO) *)
@@ -173,7 +173,7 @@ let test_program peers globals_k3 interpret_fn file_name test =
   let test_cases = list_map (fun (i, (lexp, rexp)) ->
       let name, expr = check_as_expr rexp in
       let v1 = eval_test_expr_env tdecl_prog t_env ta_env trig_env v_env lexp in
-      let v2 = eval_test_expr peers [] expr in
+      let v2 = eval_test_expr local_peers peers [] expr in
       case name @@ v1 @=? v2
     ) numbered_tests
   in print_tests test_cases

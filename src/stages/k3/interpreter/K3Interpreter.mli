@@ -12,6 +12,7 @@ val env_of_program :
   ?address:address ->
   ?json:(id_t * Yojson.Safe.json) list ->
   role:id_t ->
+  local_peers:K3Global.peer_t list ->
   peers:K3Global.peer_t list ->
   type_aliases:(id_t, type_t) Hashtbl.t ->
   do_shared:bool ->
