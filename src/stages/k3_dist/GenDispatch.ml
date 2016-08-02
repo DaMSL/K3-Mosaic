@@ -296,12 +296,23 @@ let nd_from_sw_trig_dispatcher_trig c =
     ["seq", t_int; "batch_id", t_int; "sender_ip", t_int ; "poly_queue", poly_queue.t] [] @@
   mk_let_block ["is_isobatch"] (is_isobatch_id "batch_id")
   [
+    (* roll over to 0 if we exceed possible space of seqs *)
     mk_assign nd_dispatcher_next_seq.id @@
       (mk_if_eq (mk_var nd_dispatcher_last_seq.id) (mk_var g_max_int.id)
         (mk_cint 0) @@
         mk_add (mk_var nd_dispatcher_last_seq.id) @@ mk_cint 1);
-    (* check if we're contiguous *)
-    mk_if_eq (mk_var "seq") (mk_var nd_dispatcher_next_seq.id)
+    mk_if
+      (* If we're local masters, always process.
+        Otherwise, check that we have arguments available, and that we're in sequence.
+          If so, process and recurse. Else, stop *)
+      (mk_or
+         (* local_master always proceeds *)
+         (mk_eq (mk_var job.id) @@ mk_var job_local_master.id) @@
+         mk_and
+            (* we're continuous *)
+            (mk_eq (mk_var "seq") @@ mk_var nd_dispatcher_next_seq.id) @@
+            (* we have this batch in our args *)
+            mk_is_member' nd_trig_arg_notifications.id @@ mk_var "batch_id")
       (* then dispatch right away *)
       (mk_block [
           (* profiling: point of starting to deal with this batch at the node *)
@@ -338,6 +349,9 @@ let nd_from_sw_trig_dispatcher_trig c =
           mk_if (mk_and (mk_var "is_isobatch") @@ mk_var isobatch_stmt_helper_has_content.id)
             (mk_apply' move_isobatch_stmt_helper_nm [mk_var "batch_id"])
             mk_cunit;
+
+          (* recurse into next batch if possible *)
+          mk_apply' nd_send_next_batch_if_available_nm [];
        ]) @@
       mk_block [
         (* else, stash the poly_queue in our buffer *)
@@ -347,9 +361,6 @@ let nd_from_sw_trig_dispatcher_trig c =
         (* statistic: keep track of stashed number *)
         mk_assign nd_num_stashed.id @@ mk_add (mk_var @@ nd_num_stashed.id) @@ mk_cint 1
       ]
-    ;
-    (* recurse into next batch if possible *)
-    mk_apply' nd_send_next_batch_if_available_nm [];
   ]
 
 let sw_event_driver_isobatch_nm = "sw_event_driver_isobatch"
