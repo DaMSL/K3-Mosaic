@@ -225,7 +225,7 @@ def run(target_file,
 
         # always add the master and timer
         peer_list = ['localhost:0/master', 'localhost:1/timer'] + node_list + switch_list
-        peer_cmd = '-n ' + ';'.join(peer_list)
+        peer_cmd = "-n '" + ';'.join(peer_list) + "'"
 
         if new_k3:
             # convert to the new k3 file format
