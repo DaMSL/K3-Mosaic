@@ -264,27 +264,35 @@ let clear_isobatch_stmt_helper =
 let nd_send_next_batch_if_available =
     (* check if the next num is in the buffer and if we've already received an arg
      * notification for it *)
-  let pat_next_seq = [mk_var "seq"; mk_cunknown] in
-  mk_global_fn nd_send_next_batch_if_available_nm [] [] @@
-    mk_let ["seq"] (mk_var nd_dispatcher_next_seq.id) @@
+  let pat_next_seq = [mk_var "next_seq"; mk_cunknown] in
+  mk_global_fn nd_send_next_batch_if_available_nm ["notify_batch_id", t_int] [] @@
+    mk_let ["next_seq"] (mk_var nd_dispatcher_next_seq.id) @@
     mk_let ["do_delete"]
+      (* see if there's a next sequence buffered batch available *)
       (mk_case_ns (mk_lookup' nd_dispatcher_bid_buf.id pat_next_seq) "x"
          mk_cfalse @@ (* don't delete, no next sequence *)
          mk_let ["batch_id"; "sender_ip"] (mk_snd @@ mk_var "x") @@
           (* are args available for this trigger? *)
-          mk_if (mk_is_member' nd_trig_arg_notifications.id @@ mk_var "batch_id")
+         mk_if
+           (* either notify_batch = batch_id, or notify_batch is -1 and the batch_id comes from
+              the buffered batches *)
+           (mk_or
+             (mk_eq (mk_var "batch_id") @@ mk_var "notify_batch_id") @@
+              mk_and
+               (mk_eq (mk_var "batch_id") @@ mk_cint (-1)) @@
+                mk_is_member' nd_trig_arg_notifications.id @@ mk_var "batch_id")
             (mk_block [
-              (* remove from notification set *)
-              mk_delete nd_trig_arg_notifications.id [mk_var "batch_id"];
+              (* don't remove from notification set - nd_from_sw... will do it *)
               (* get and delete stored polyqueue *)
               mk_delete_with nd_dispatcher_buf.id pat_next_seq
                 (mk_lambda' unit_arg @@ mk_error "missing polyqueue!")
                 (* recurse with the sequence *)
                 (mk_lambda' nd_dispatcher_buf.e @@
                   mk_send nd_from_sw_trig_dispatcher_trig_nm G.me_var
-                    [mk_var "seq"; mk_var "batch_id"; mk_var "sender_ip"; mk_var "poly_queue"]);
+                    [mk_var "next_seq"; mk_var "batch_id";
+                     mk_var "sender_ip"; mk_var "poly_queue"]);
               mk_ctrue (* do_delete *)
-              ])
+            ])
             mk_cfalse) @@ (* do nothing. wait for notification *)
       mk_if (mk_var "do_delete")
         (mk_delete nd_dispatcher_bid_buf.id pat_next_seq)
@@ -310,17 +318,22 @@ let nd_from_sw_trig_dispatcher_trig c =
             mk_is_member' nd_trig_arg_notifications.id @@ mk_var "batch_id")
       (* then dispatch right away *)
       (mk_block [
-          (* increment next seq. Roll over to 0 if we exceed possible space of seqs *)
-          mk_assign nd_dispatcher_next_seq.id @@
-            (mk_if_eq (mk_var nd_dispatcher_last_seq.id) (mk_var g_max_int.id)
-              (mk_cint 0) @@
-              mk_add (mk_var nd_dispatcher_last_seq.id) @@ mk_cint 1);
+          (* if not local_master *)
+          mk_if_eq (mk_var job.id) (mk_var job_local_master.id)
+            mk_cunit @@
+            (* remove from trig_arg notification set *)
+            mk_delete nd_trig_arg_notifications.id [mk_var "batch_id"];
+
           (* profiling: point of starting to deal with this batch at the node *)
           prof_property prof_tag_node_process @@ ProfLatency("batch_id", "-1");
           (* unpack the polyqueue *)
           mk_poly_unpack (mk_var "poly_queue");
           mk_assign nd_dispatcher_last_seq.id @@ mk_var nd_dispatcher_next_seq.id;
-          mk_incr nd_dispatcher_next_seq.id;
+          (* increment next seq. Roll over to 0 if we exceed possible space of seqs *)
+          mk_assign nd_dispatcher_next_seq.id @@
+            (mk_if_eq (mk_var nd_dispatcher_last_seq.id) (mk_var g_max_int.id)
+              (mk_cint 0) @@
+              mk_add (mk_var nd_dispatcher_last_seq.id) @@ mk_cint 1);
           clear_poly_queues c;
           (* buffer the ack to the switch *)
           GC.nd_ack_send_code ~addr_nm:"sender_ip" ~vid_nm:"batch_id";
@@ -329,7 +342,7 @@ let nd_from_sw_trig_dispatcher_trig c =
             (mk_apply' clear_isobatch_stmt_helper_nm [])
             mk_cunit;
 
-          (* debug_run: disable handling if requested. *)
+          (* main handler. debug_run: disable handling if requested. *)
           debug_run_test_var debug_run_sw_send_all
             ~default:send_poly_queues @@
             mk_apply' trig_dispatcher_nm [mk_var "batch_id"; mk_var "poly_queue"];
@@ -346,12 +359,13 @@ let nd_from_sw_trig_dispatcher_trig c =
             mk_cunit;
 
           (* check if we need to move stuff from the isobatch stmt helper *)
-          mk_if (mk_and (mk_var "is_isobatch") @@ mk_var isobatch_stmt_helper_has_content.id)
+          mk_if (mk_and (mk_var "is_isobatch") @@
+                 mk_var isobatch_stmt_helper_has_content.id)
             (mk_apply' move_isobatch_stmt_helper_nm [mk_var "batch_id"])
             mk_cunit;
 
           (* recurse into next batch if possible *)
-          mk_apply' nd_send_next_batch_if_available_nm [];
+          mk_apply' nd_send_next_batch_if_available_nm [mk_cint (-1)];
        ]) @@
       mk_block [
         (* else, stash the poly_queue in our buffer *)
