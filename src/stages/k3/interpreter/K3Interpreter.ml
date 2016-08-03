@@ -785,7 +785,7 @@ and eval_expr_inner ?(fun_typ=FLambda) (address:address) sched_st cenv texpr =
       begin match v_peek error @@ v_slice error pat col with
         | Some v ->
             let env = env_modify p nenv @@ fun col -> v_delete error v col in
-            eval_fn lam_some env (unwrap_vtuple v)
+            eval_fn lam_some env [v]
         | None ->
             eval_fn lam_none nenv [VUnit]
       end
