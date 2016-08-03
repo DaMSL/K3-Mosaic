@@ -482,6 +482,7 @@ let mk_send_all_nodes ?(local_masters=false) trig m =
 let mk_send_all_switches trig = mk_send_all switches trig
 let mk_send_all_peers trig = mk_send_all ~reg_addr:true my_peers trig
 let mk_send_all_local_peers = mk_send_all my_local_peers
+let mk_send_all_local_nodes = mk_send_all local_nodes
 
 let mk_send_master ?(payload=[mk_cunit]) trig =
   mk_send trig (mk_var master_addr.id) payload

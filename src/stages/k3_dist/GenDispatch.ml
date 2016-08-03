@@ -341,7 +341,7 @@ let nd_from_sw_trig_dispatcher_trig c =
                 (* move trig args from buffer to log *)
                 lm_move_trig_arg_from_buf c;
                 (* notify localpeers that the args have been received *)
-                mk_send_all_local_peers nd_rcv_trig_args_notify_nm [mk_var "batch_id"]
+                mk_send_all_local_nodes nd_rcv_trig_args_notify_nm [mk_var "batch_id"]
               ])
             mk_cunit;
 

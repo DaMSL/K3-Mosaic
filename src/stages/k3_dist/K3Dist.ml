@@ -463,6 +463,16 @@ let local_master =
   in
   create_ds "local_master" t_int ~init
 
+(* local peers excluding local master *)
+let local_nodes =
+  let e = ["addr", t_int] in
+  let init =
+    mk_filter (mk_lambda' e @@
+               mk_neq (mk_var "addr") @@ mk_var local_master.id) @@
+    mk_var my_local_peers.id
+  in
+  create_ds "local_nodes" t_int_vector ~init ~e
+
 (* whether we're running in the interpreter *)
 let interpreter_mode = create_ds "interpreter_mode" t_bool
 
@@ -1551,6 +1561,7 @@ let global_vars c dict =
     [ my_local_peers;
       me_int;
       local_master;
+      local_nodes;
       interpreter_mode;
       g_init_vid;
       g_max_int;
