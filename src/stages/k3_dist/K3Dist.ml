@@ -738,7 +738,7 @@ let log_buffer_for c t =
   create_ds (lm_log_buffer_for_t t) (wrap_tmap' @@ snd_many e) ~e
 
 (* log buffers: hold vid-based args for fast shared access *)
-(* unfortunately this means we need to use a vector to hold a single element so we can move it out *)
+(* unfortunately this means we need to use a vector to hold a single element so we can move it out globally *)
 let lm_log_buffer_ds c : data_struct list =
   let log_vec_for trig =
     let sub_ds = log_buffer_for c trig in

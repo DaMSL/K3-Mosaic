@@ -43,11 +43,17 @@ let lm_move_trig_arg_from_buf c =
   let trigs = P.get_trig_list ~sys_init:true ~delete:c.gen_deletes c.p in
   let gen_move t =
     let t_id = P.trigger_id_for_name c.p t in
+    let log_buf = log_buffer_for c t in
     (* check for this trigger in the bitmap *)
     mk_if (mk_is_member' lm_rcv_args_bitmap.id @@ mk_cint t_id)
-      (mk_let ["inner"] (mk_delete_at (lm_log_buffer_for_t t) @@ mk_cint 0) @@
-        (* insert an indirection to the moved inner ds *)
-        mk_insert (lm_log_for_t t) [mk_var "batch_id"; mk_ind @@ mk_var "inner"])
+      (mk_block [
+       (* move buf inner ds into log *)
+       mk_let ["inner"] (mk_delete_at log_buf.id @@ mk_cint 0) @@
+         (* insert an indirection to the moved inner ds *)
+         mk_insert (lm_log_for_t t) [mk_var "batch_id"; mk_ind @@ mk_var "inner"];
+       (* replace empty inner ds *)
+       mk_insert_at log_buf.id (mk_cint 0) [mk_empty log_buf.t]
+      ])
       mk_cunit
   in
   mk_block @@
