@@ -113,18 +113,18 @@ let env_remove i env =
 
 (* Given an arg_t and a value_t list, bind the values to their corresponding argument names. *)
 (* l: level *)
-let rec bind_args ?extra l uuid arg vs env =
-  let error = int_erroru ?extra uuid "bind_args" in
+let rec bind_args ~extra l uuid arg vs env =
+  let error = int_erroru ~extra uuid "bind_args" in
   try
     begin match arg, vs with
     | AIgnored, _                 -> env
     | AVar(i, _), [v]             -> env_add i v env
-    | AMaybe a', [VOption(Some v')] -> bind_args ?extra (l+1) uuid a' [v'] env
+    | AMaybe a', [VOption(Some v')] -> bind_args ~extra (l+1) uuid a' [v'] env
     | AMaybe _,  [VOption None]     -> error "missing VOption value"
     | ATuple args, _ when l=0     -> list_fold2 (fun acc a v ->
-                                    bind_args ?extra (l+1) uuid a [v] acc) env args vs
+                                    bind_args ~extra (l+1) uuid a [v] acc) env args vs
     | ATuple args, [VTuple vs]    -> list_fold2 (fun acc a v ->
-                                      bind_args ?extra (l+1) uuid a [v] acc) env args vs
+                                      bind_args ~extra (l+1) uuid a [v] acc) env args vs
     | _                           -> error @@ sp "bad values.\n Args:%s\n Values:%s\n"
                                        (KP.flat_string_of_arg arg) (strcatmap string_of_value vs)
     end
