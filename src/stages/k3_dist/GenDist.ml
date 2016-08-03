@@ -305,7 +305,7 @@ let gen_dist ?(gen_deletes=true)
     clear_send_push_isobatch_ds ::
     fns1 @
     [
-     nd_send_next_batch_if_available;
+     nd_send_buffered_batch_if_available;
      nd_send_isobatch_push_meta c;
      nd_exec_buffered_fetches c;    (* depends: send_push *)
      nd_complete_stmt_cntr_check c; (* depends: exec_buffered *)

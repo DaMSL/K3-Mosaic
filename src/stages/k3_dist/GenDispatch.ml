@@ -244,7 +244,9 @@ let trig_dispatcher_trig_unique c =
 (* trig dispatcher from switch to node. accepts a msg number telling it how to order messages *)
 (* @msg_num: number of consecutive message. Used to order buffers in corrective mode
    so we avoid having too many correctives. *)
-let nd_dispatcher_next_seq = create_ds "nd_dispatcher_next_seq" @@ mut t_int
+let nd_dispatcher_next_seq =
+  let init = mk_cint 1 in
+  create_ds "nd_dispatcher_next_seq" (mut t_int) ~init
 
 let clear_isobatch_stmt_helper_nm = "clear_isobatch_stmt_helper"
 let clear_isobatch_stmt_helper =
@@ -261,11 +263,11 @@ let clear_isobatch_stmt_helper =
 
 (* check to see if we have another batch available to send *)
 (* used to recurse in nd_from_sw_dispatcher and for getting args from the lm *)
-let nd_send_next_batch_if_available =
+let nd_send_buffered_batch_if_available =
     (* check if the next num is in the buffer and if we've already received an arg
      * notification for it *)
   let pat_next_seq = [mk_var "next_seq"; mk_cunknown] in
-  mk_global_fn nd_send_next_batch_if_available_nm ["notify_batch_id", t_int] [] @@
+  mk_global_fn nd_send_buffered_batch_if_available_nm ["notify_batch_id", t_int] [] @@
     mk_let ["next_seq"] (mk_var nd_dispatcher_next_seq.id) @@
     mk_let ["do_delete"]
       (* see if there's a next sequence buffered batch available *)
@@ -365,7 +367,7 @@ let nd_from_sw_trig_dispatcher_trig c =
             mk_cunit;
 
           (* recurse into next batch if possible *)
-          mk_apply' nd_send_next_batch_if_available_nm [mk_cint (-1)];
+          mk_apply' nd_send_buffered_batch_if_available_nm [mk_cint (-1)];
        ]) @@
       mk_block [
         (* else, stash the poly_queue in our buffer *)

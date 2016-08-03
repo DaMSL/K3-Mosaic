@@ -68,7 +68,7 @@ let nd_rcv_trig_args_notify =
     (* set in ds *)
     mk_insert D.nd_trig_arg_notifications.id [mk_var "batch_id"];
     (* check if we've already received a batch for this, and if so, handle it *)
-    mk_apply' D.nd_send_next_batch_if_available_nm [mk_var "batch_id"];
+    mk_apply' D.nd_send_buffered_batch_if_available_nm [mk_var "batch_id"];
   ]
 
 (* ----- Receive fetch ----- *)
