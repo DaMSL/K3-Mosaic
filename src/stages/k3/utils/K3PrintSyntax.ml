@@ -94,7 +94,7 @@ and lazy_collection ?(empty=false) c ct eval = match ct with
     | TVMap _ -> lps "[<" <| eval <| lps ">]"
     | TSortedMap -> lps "{<" <| eval <| lps ">}"
     | TSortedSet -> lps "{:" <| eval <| lps ":}"
-    | TBitSet -> lps "{^" <| eval <| lps "^}" 
+    | TBitSet -> lps "{^" <| eval <| lps "^}"
     | TPolyQueue(false, x) -> lps "[?" <| lazy_poly_variant c x <| lsp () <| lps "?]"
     | TPolyQueue(true, x)  -> lps "{?" <| lazy_poly_variant c x <| lsp () <| lps "?}"
 
@@ -529,19 +529,20 @@ let lazy_flow c = function
 
 let lazy_flow_program c fas = lps_list ~sep:"" CutHint (lazy_flow c |- fst) fas
 
-let lazy_declaration c d =
+let lazy_declaration c (d, a) =
   let out = match d with
-  | Global(id, t, expr) -> let end_part = begin match expr with
+    | Global(id, t, expr) ->
+      let end_part = begin match expr with
       | None -> []
       | Some e -> lps " =" <| lsp () <| lazy_expr c e
-    end in
-    wrap_hov 2 (lps @@ "declare "^id^" :" <| lsp () <| lazy_type c t <| end_part)
-  | Role(id, fprog) ->
-      lps ("srole "^id^" ") <| lazy_box_brace (lazy_flow_program c fprog)
-  | Flow fprog -> lazy_flow_program c fprog
-  | DefaultRole id -> lps ("sdefault srole "^id)
-  | Foreign(id, t) -> lps ("foreign "^id^" :") <| lsp () <| lazy_type c t
-  | Typedef(id, t) -> lps ("typedef "^id^" =") <| lsp () <| lazy_type c t
+      end in
+      wrap_hov 2 (lps @@ "declare "^id^" " <| lazy_annos a <| lps " :" <| lsp () <| lazy_type c t <| end_part)
+    | Role(id, fprog) ->
+        lps ("srole "^id^" ") <| lazy_box_brace (lazy_flow_program c fprog)
+    | Flow fprog -> lazy_flow_program c fprog
+    | DefaultRole id -> lps ("sdefault srole "^id)
+    | Foreign(id, t) -> lps ("foreign "^id^" :") <| lsp () <| lazy_type c t
+    | Typedef(id, t) -> lps ("typedef "^id^" =") <| lsp () <| lazy_type c t
   in
   wrap_hv 0 out <| lcut ()
 
@@ -572,7 +573,7 @@ let string_of_program ?uuid_highlight prog =
     | _    -> {config with uuid=uuid_highlight}
   in
   wrap_f @@ fun () ->
-    let l = lps_list ~sep:"" CutHint (lazy_declaration config |- fst) prog in
+    let l = lps_list ~sep:"" CutHint (lazy_declaration config) prog in
     obx 0;  (* vertical box *)
     force_list l;
     cb

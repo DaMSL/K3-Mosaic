@@ -186,23 +186,25 @@
 %%
 
 program :
-    | declaration         { if !numerrors>=1 then raise Exit else [$1, []] }
-    | declaration program { ($1, []) :: $2 }
+    | declaration         { if !numerrors>=1 then raise Exit else [$1] }
+    | declaration program { $1 :: $2 }
 ;
 
 declaration :
-    | DECLARE IDENTIFIER COLON type_expr { Global($2, $4, None) }
-    | DECLARE IDENTIFIER COLON type_expr GETS anno_expr { Global($2, $4, Some $6) }
+    | DECLARE IDENTIFIER COLON type_expr { Global($2, $4, None), [] }
+    | DECLARE IDENTIFIER PROPERTY COLON type_expr { Global($2, $5, None), [Property(true, $3)] }
+    | DECLARE IDENTIFIER COLON type_expr GETS anno_expr { Global($2, $4, Some $6), [] }
+    | DECLARE IDENTIFIER PROPERTY COLON type_expr GETS anno_expr { Global($2, $5, Some $7), [Property(true, $3)] }
 
-    | FOREIGN IDENTIFIER COLON type_expr { Foreign($2, $4) }
+    | FOREIGN IDENTIFIER COLON type_expr { Foreign($2, $4), [] }
 
-    | flow_program  { Flow($1) }
+    | flow_program  { Flow($1), [] }
 
-    | ROLE IDENTIFIER LBRACE flow_program RBRACE   { Role($2, $4) }
-    | ROLE IDENTIFIER LBRACE RBRACE                { Role($2, []) }
-    | DEFAULT ROLE IDENTIFIER                      { DefaultRole($3) }
+    | ROLE IDENTIFIER LBRACE flow_program RBRACE   { Role($2, $4), [] }
+    | ROLE IDENTIFIER LBRACE RBRACE                { Role($2, []), [] }
+    | DEFAULT ROLE IDENTIFIER                      { DefaultRole($3), [] }
 
-    | TYPEDEF IDENTIFIER GETS type_expr            { Typedef($2, $4) }
+    | TYPEDEF IDENTIFIER GETS type_expr            { Typedef($2, $4), [] }
 
 
     /* Error handling */
