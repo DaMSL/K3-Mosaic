@@ -69,10 +69,8 @@ def run():
     parser.add_argument('--trace', default=False, dest='do_trace', action='store_true', help="Tracing")
     parser.add_argument('--no-gen-deletes', action='store_false', dest='gen_deletes',
             default=True, help="Don't generate delete triggers")
-    parser.add_argument('--no-gen-correctives', action='store_false', dest='gen_correctives',
-            default=True, help="Don't generate correctives")
-    parser.add_argument('--no-gen-single-vid', action='store_false', dest='gen_single_vid',
-            default=True, help="Don't generate non-isobatch mode")
+    parser.add_argument('--gen-correctives', action='store_true', dest='gen_correctives',
+            default=False, help="Don't generate correctives")
     parser.add_argument('--run-correctives', action='store_true', dest='run_correctives',
             default=False, help="Run with correctives")
     parser.add_argument('--no-run-isobatch', action='store_false', dest='run_isobatch',
@@ -128,7 +126,6 @@ def run():
                                 new_k3=args.new_k3,
                                 gen_correctives=args.gen_correctives,
                                 gen_deletes=args.gen_deletes,
-                                gen_single_vid=args.gen_single_vid,
                                 run_correctives=args.run_correctives,
                                 run_isobatch=args.run_isobatch,
                                 map_type=args.map_type,
