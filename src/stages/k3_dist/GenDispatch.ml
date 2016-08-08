@@ -281,7 +281,7 @@ let nd_send_buffered_batch_if_available =
            (mk_or
              (mk_eq (mk_var "batch_id") @@ mk_var "notify_batch_id") @@
               mk_and
-               (mk_eq (mk_var "batch_id") @@ mk_cint (-1)) @@
+               (mk_eq (mk_var "notify_batch_id") @@ mk_cint (-1)) @@
                 mk_is_member' nd_trig_arg_notifications.id @@ mk_var "batch_id")
             (mk_block [
               (* don't remove from notification set - nd_from_sw... will do it *)
@@ -365,9 +365,6 @@ let nd_from_sw_trig_dispatcher_trig c =
                  mk_var isobatch_stmt_helper_has_content.id)
             (mk_apply' move_isobatch_stmt_helper_nm [mk_var "batch_id"])
             mk_cunit;
-
-          (* recurse into next batch if possible *)
-          mk_apply' nd_send_buffered_batch_if_available_nm [mk_cint (-1)];
        ]) @@
       mk_block [
         (* else, stash the poly_queue in our buffer *)
@@ -376,7 +373,11 @@ let nd_from_sw_trig_dispatcher_trig c =
           [mk_var "seq"; mk_tuple [mk_var "batch_id"; mk_var "sender_ip"]];
         (* statistic: keep track of stashed number *)
         mk_assign nd_num_stashed.id @@ mk_add (mk_var @@ nd_num_stashed.id) @@ mk_cint 1
-      ]
+      ];
+
+    (* recurse into next batch if possible. We do this even if we didn't match, because
+       maybe the next element is good *)
+    mk_apply' nd_send_buffered_batch_if_available_nm [mk_cint (-1)];
   ]
 
 let sw_event_driver_isobatch_nm = "sw_event_driver_isobatch"
