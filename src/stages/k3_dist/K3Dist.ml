@@ -1360,10 +1360,14 @@ let move_isobatch_stmt_helper =
   mk_block [
     (* iterate over the isobatch map helper, and move its contents to the isobatch_map *)
     mk_iter_bitmap' ~idx:stmt_ctr.id
-      (mk_let ["x"] (mk_delete_at isobatch_stmt_helper_id @@ mk_var stmt_ctr.id) @@
-        mk_update_at_with isobatch_vid_map_id (mk_var stmt_ctr.id) @@
-          mk_lambda' isobatch_vid_map_e @@
-            mk_insert_block "inner" [mk_var "batch_id"; mk_var "x"])
+      (mk_block [
+          mk_let ["x"] (mk_delete_at isobatch_stmt_helper_id @@ mk_var stmt_ctr.id) @@
+          mk_update_at_with isobatch_vid_map_id (mk_var stmt_ctr.id) @@
+            mk_lambda' isobatch_vid_map_e @@
+              mk_insert_block "inner" [mk_var "batch_id"; mk_var "x"];
+          (* replace inner collection *)
+          mk_insert_at isobatch_stmt_helper_id (mk_var stmt_ctr.id) [mk_empty isobatch_map_inner2.t]
+        ])
       isobatch_stmt_helper_bitmap_id;
     mk_assign isobatch_stmt_helper_has_content.id mk_cfalse;
   ]
